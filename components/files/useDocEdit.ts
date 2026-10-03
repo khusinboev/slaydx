@@ -12,6 +12,7 @@ import {
 } from "@/lib/api-edit";
 import { UNDO_DEPTH } from "@/lib/generation/slide-limits";
 import type { AcademicDoc } from "@/lib/generation/types";
+import { useLeaveGuard } from "@/components/nav/useLeaveGuard";
 
 /**
  * Ko'ruvchidagi tahrirning KLIENT OQIMI — hujjat TURIDAN mustaqil.
@@ -28,8 +29,10 @@ import type { AcademicDoc } from "@/lib/generation/types";
  * Endi operatsiyalar navbatda YIG'ILADI, `pending` ularning sonini
  * beradi, `save()` esa ularni ≤{@link EDIT_CHUNK_OPS} lik bo'laklarda
  * (server bitta so'rovda 50 tadan ortig'ini rad etadi) ketma-ket
- * yuboradi va oxirida bir marta `rebuild` qiladi. Sahifadan chiqishda
- * saqlanmagan navbat bo'lsa brauzer ogohlantiradi (`beforeunload`).
+ * yuboradi va oxirida bir marta `rebuild` qiladi. Ilova ichida sahifadan
+ * chiqishda (telefonning «orqaga» tugmasi, «←», havola) navbat AVVAL
+ * saqlanadi (`useLeaveGuard`); yorliq yopilganda brauzer ogohlantiradi
+ * (`beforeunload`).
  *
  * Serverdan kelgan `generation` — YAGONA haqiqat: uning `doc` i
  * optimistik nusxaning o'rniga qo'yiladi (server chegara bo'yicha
@@ -50,6 +53,9 @@ import type { AcademicDoc } from "@/lib/generation/types";
  * vositalar, hujjatda model bormi, oplar qanday qo'llanadi va
  * teskarilanadi. `useSlideEdit`/`useResumeEdit` — yupqa o'ramlar.
  */
+
+/** `useLeaveGuard` xatosi: matnni `saveQueue` allaqachon `error` ga yozgan. */
+const noop = () => {};
 
 /** Bitta undo qadami — oldinga va orqaga operatsiyalar juftligi. */
 type UndoEntry<Op> = { forward: Op[]; inverse: Op[] };
@@ -509,7 +515,12 @@ export function useDocEdit<Op>({
     return { kind, removed: head.length };
   }, [genId, adoptKeepingQueue, bump]);
 
-  const save = useCallback(async (): Promise<boolean> => {
+  /**
+   * `rebuild: false` — sahifadan chiqishdagi saqlash (`useLeaveGuard`):
+   * navigatsiya faqat PATCH larni kutadi, fayl fonda qayta yasaladi
+   * (server eskirgan faylni baribir bermaydi — `file/route.ts`).
+   */
+  const saveQueue = useCallback(async (rebuild: boolean): Promise<boolean> => {
     if (inflightRef.current) await inflightRef.current;
     if (!genId) return true;
     let total = queueRef.current.length;
@@ -598,6 +609,10 @@ export function useDocEdit<Op>({
       }
       inflightRef.current = null;
       if (aliveRef.current) setSaving(false);
+      if (!rebuild) {
+        void doRebuild();
+        return true;
+      }
       // Fayl darhol quvib yetadi: «Saqlash» dan keyin «Yuklab olish»
       // eski faylni bermasligi kerak.
       await doRebuild();
@@ -612,6 +627,19 @@ export function useDocEdit<Op>({
     inflightRef.current = p;
     return p;
   }, [genId, adoptKeepingQueue, settleFailure, reconcileLost, doRebuild, savedFlashMs]);
+
+  const save = useCallback(() => saveQueue(true), [saveQueue]);
+
+  /*
+   * Sahifadan chiqish — AVTOMATIK SAQLASH, keyin chiqish (egasining
+   * qarori 1, docs/nav/PLAN.md). Telefonning «orqaga» tugmasi, «←»,
+   * Telegram BackButton va ichki havola navbat bo'lsa avval saqlaydi;
+   * saqlash yiqilsa foydalanuvchi SAHIFADA qoladi va xato odatdagi joyda
+   * (`error`/`saveFailed` ni `saveQueue` o'zi qo'yadi). Yorliqni yopish
+   * uchun `beforeunload` (yuqorida) o'z joyida.
+   */
+  const leaveSave = useCallback(() => saveQueue(false), [saveQueue]);
+  useLeaveGuard(pending, leaveSave, { onError: noop });
 
   const saveRef = useRef(save);
   saveRef.current = save;
