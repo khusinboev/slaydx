@@ -226,7 +226,8 @@ test("WordViewer: sahifa hisoblagichi viewport bo'yicha — root null, rootMargi
   assert.ok(n >= 3, `kamida 3 varaq kerak: ${n}`);
   const io = ios.find((r) => r.els.some((e) => e.hasAttribute("data-page")));
   assert.ok(io, "varaqlar kuzatilmayapti");
-  assert.equal(io.opts.root, null, "ildiz — viewport (sahifa scroll'i)");
+  // `assert.equal(el, null)` EMAS: xatoda jsdom daraxti serializatsiya qilinadi (CLAUDE.md).
+  assert.ok(io.opts.root === null, "ildiz — viewport (sahifa scroll'i)");
   assert.equal(io.opts.rootMargin, "-196px 0px 0px 0px", "56 (topbar) + 100 (sarlavha) + 40 (toolbar)");
   assert.ok(Array.isArray(io.opts.threshold) && io.opts.threshold.length >= 10, "zich chegaralar — ekrandan baland varaq ham");
   assert.equal(counter(container), `1 / ${n}`);
