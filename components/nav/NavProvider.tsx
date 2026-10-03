@@ -147,7 +147,7 @@ export function useNav() {
       /** «←»: back when the previous entry is in-app, else replace with `fallback ?? parentOf(path)`. */
       backTo: (fallback?: string) => backTo(fallback, { router: ref.current }),
       /** Leave an open overlay for `href`; the overlay's entry is replaced (see `lib/nav/history.ts`). */
-      navigateFromOverlay: (href: string, opts?: { external?: boolean }) =>
+      navigateFromOverlay: (href: string, opts?: { external?: boolean | "replace" }) =>
         navigateFromOverlay(href, { ...opts, router: ref.current }),
       /** System back (Telegram BackButton): close the top overlay, else `backTo()`. */
       systemBack: () => systemBack({ router: ref.current }),

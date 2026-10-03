@@ -24,7 +24,7 @@
  * One engine per tab (module scope), mirrored to sessionStorage for the
  * cross-document cases (reload, hard navigation).
  */
-import { adminListOf, isAdminListPath, parentOf } from "./parents";
+import { isListPath, listParentOf, listUrlToRemember, parentOf } from "./parents";
 
 export type LayerKind = "overlay" | "guard";
 export type PopReason = "back" | "navigate";
@@ -50,7 +50,15 @@ type Layer = {
 };
 type Sx = { i: number; o?: string };
 /** A traversal we started ourselves: matched FIFO by its delta, not by a user press. */
-type Expected = { delta: number; at: number; seq: number; swallow?: boolean; then?: () => void };
+type Expected = {
+  delta: number;
+  at: number;
+  seq: number;
+  swallow?: boolean;
+  /** The pop also crosses a page entry (backTo): Next must render it, never a layer carry. */
+  page?: boolean;
+  then?: () => void;
+};
 
 /** The subset of the app router the engine needs (`AppRouterInstance` satisfies it). */
 export type NavRouter = { push: (href: string) => void; replace: (href: string) => void };
@@ -442,10 +450,11 @@ function onPopState(e: PopStateEvent) {
     layers = layers.filter((l) => l.index < 0 || l.index <= toIndex);
     if (exp.swallow || toHref === fromHref) {
       e.stopImmediatePropagation();
-    } else if (pathOf(toHref) === pathOf(fromHref)) {
+    } else if (!exp.page && pathOf(toHref) === pathOf(fromHref)) {
+      // Only layer entries were popped: the page's own URL change is carried down.
       carryUrl(e, fromHref, fromState);
     } else {
-      // `backTo` crossed pages: Next renders the arrived entry.
+      // `backTo` left the page (possibly for the same path, `?id=` → list): Next renders it.
       navSeq += 1;
       rememberListUrl(toHref);
       emitNavigate("traverse", fromHref);
@@ -683,9 +692,12 @@ export function setNavRouter(r: NavRouter | null): void {
   router = r;
 }
 
-/** Parent of `pathname`, with the remembered admin list URL (`/admin/users?q=…`). */
+/**
+ * Parent of `pathname`, with the remembered list URL for detail pages
+ * (`/admin/users?q=…`, home `/uz?filter=docs&sort=name` for `/uz/files/[id]`).
+ */
 export function parentHref(pathname: string, search?: string): string | null {
-  const list = adminListOf(pathname);
+  const list = listParentOf(pathname);
   if (list) {
     const remembered = storageGet(LIST_KEY + list);
     if (remembered && (remembered === list || remembered.startsWith(`${list}?`))) return remembered;
@@ -696,7 +708,7 @@ export function parentHref(pathname: string, search?: string): string | null {
 function rememberListUrl(href: string) {
   try {
     const u = new URL(href);
-    if (isAdminListPath(u.pathname)) storageSet(LIST_KEY + u.pathname, u.pathname + u.search);
+    if (isListPath(u.pathname)) storageSet(LIST_KEY + u.pathname, listUrlToRemember(u.pathname, u.search));
   } catch {
     /* ignore */
   }
@@ -737,7 +749,7 @@ function backToUnguarded(fallback?: string, r: NavRouter | null = router): boole
   if (base > 0) {
     layers = [];
     closeLater(leaving, ["overlay"]);
-    go(-(k + 1));
+    go(-(k + 1), { page: true });
     notify();
     return true;
   }
@@ -760,12 +772,15 @@ function backToUnguarded(fallback?: string, r: NavRouter | null = router): boole
  * Navigates away from an open overlay (search result, login `returnTo`, drawer
  * link). The overlay's entry is REPLACED by `href`, so back from the new page
  * returns to the page under the overlay, not to the overlay. With no layer on
- * the current entry it is a normal push. `external` (payment checkout): pops
- * the layer entries first, then `location.assign(href)`.
+ * the current entry it is a normal push. `external`: pops the layer entries
+ * first, then leaves the site with `location.assign(href)`; `external:
+ * "replace"` (payment checkout) uses `location.replace`, so the provider takes
+ * the page's entry instead of stacking on top of it (back from the return URL
+ * does not walk through the provider).
  *
  * Call your own `close()` as usual; open overlays are closed here too.
  */
-export function navigateFromOverlay(href: string, opts?: NavOpts & { external?: boolean }): void {
+export function navigateFromOverlay(href: string, opts?: NavOpts & { external?: boolean | "replace" }): void {
   installNav();
   const r = opts?.router ?? router;
   if (!hasWindow()) return;
@@ -779,13 +794,31 @@ export function navigateFromOverlay(href: string, opts?: NavOpts & { external?: 
     notify();
   }
   if (opts?.external) {
-    if (k > 0) go(-k, { swallow: true, then: () => window.location.assign(href) });
-    else window.location.assign(href);
+    const replace = opts.external === "replace";
+    const leave = () => leaveSite(href, replace);
+    if (k > 0) go(-k, { swallow: true, then: leave });
+    else leave();
     return;
   }
   if (k > 0) replaceTo(href, r);
   else if (r) r.push(href);
   else window.location.assign(href);
+}
+
+/** Full-page exit; swappable in tests (jsdom cannot navigate and `Location` is unforgeable). */
+let leaveSite = (href: string, replace: boolean) => {
+  if (replace) window.location.replace(href);
+  else window.location.assign(href);
+};
+
+/** Test-only: observe external exits instead of navigating. */
+export function __setLeaveSiteForTests(fn: ((href: string, replace: boolean) => void) | null): void {
+  leaveSite =
+    fn ??
+    ((href, replace) => {
+      if (replace) window.location.replace(href);
+      else window.location.assign(href);
+    });
 }
 
 /** Telegram BackButton / any system back: close the top overlay, else `backTo()`. */

@@ -60,7 +60,8 @@ export function PayDialog() {
       // Provayder sahifasi — qaytganda `/uz/purchase?order=...` ochiladi.
       // Dialog tarix yozuvi avval olib tashlanadi: aks holda provayderdan
       // «orqaga» o'lik (dialogsiz) yozuvga tushardi.
-      nav.navigateFromOverlay(checkoutUrl, { external: true });
+      // `replace`: provayder sahifa yozuvini egallaydi — `?order=` dan «orqaga» provayderga qaytmaydi.
+      nav.navigateFromOverlay(checkoutUrl, { external: "replace" });
     } catch (e) {
       setError(e instanceof Error ? e.message : "To'lov boshlanmadi");
       setBusy(null);

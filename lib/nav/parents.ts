@@ -124,3 +124,33 @@ export function isAdminListPath(pathname: string): boolean {
   const p = normalize(pathname);
   return ADMIN_LISTS.some((l) => p === `/admin/${l}`);
 }
+
+/** Home («Mening fayllarim»): its view (`?filter&sort&desc`) is remembered for `/uz/files/[id]` «←». */
+export const HOME_LIST = "/uz";
+/** Query keys of the home list view; anything else (`returnTo`, …) is not remembered. */
+export const HOME_VIEW_KEYS = ["filter", "sort", "desc"] as const;
+
+/** List pages whose last URL (filters) the engine remembers: admin lists and home. */
+export function isListPath(pathname: string): boolean {
+  return isAdminListPath(pathname) || normalize(pathname) === HOME_LIST;
+}
+
+/** The list page a detail page goes back to (`/admin/users/1` → `/admin/users`, `/uz/files/x` → `/uz`), else `null`. */
+export function listParentOf(pathname: string): string | null {
+  if (/^\/uz\/files\/[^/]+$/.test(normalize(pathname))) return HOME_LIST;
+  return adminListOf(pathname);
+}
+
+/** The part of a list URL worth remembering: home keeps only its view keys. */
+export function listUrlToRemember(pathname: string, search: string): string {
+  const p = normalize(pathname);
+  if (p !== HOME_LIST) return p + search;
+  const src = new URLSearchParams(search);
+  const kept = new URLSearchParams();
+  for (const k of HOME_VIEW_KEYS) {
+    const v = src.get(k);
+    if (v != null) kept.set(k, v);
+  }
+  const qs = kept.toString();
+  return qs ? `${p}?${qs}` : p;
+}
