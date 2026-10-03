@@ -1,12 +1,13 @@
 "use client";
 
-import { lazy, Suspense } from "react";
+import { Suspense, useCallback, useState } from "react";
 import type { Generation } from "@/lib/types";
 import type { AcademicDoc } from "@/lib/generation/types";
 import type { EditActionsState } from "../files/EditActions";
 import { academicDocFromHtml } from "@/lib/viewers/from-html";
 import { viewerKind } from "@/lib/viewers/kind";
 import { frameClass, viewerFrame } from "../files/result-layout/frame";
+import { resetViewerChunks, retryableLazy, ViewerBoundary, ViewerLoading } from "./ViewerBoundary";
 
 /*
  * Har ko'ruvchi ALOHIDA bo'lakda (FE-11): ilgari hujjat sahifasi har
@@ -14,16 +15,15 @@ import { frameClass, viewerFrame } from "../files/result-layout/frame";
  * `planResume`, `planTeacher`, `planGame` — bitta ~530 KB bo'lak)
  * birinchi yuklanishda olardi. Endi faqat shu hujjat turining ko'ruvchisi.
  */
-const ResumeViewer = lazy(() => import("./ResumeViewer").then((m) => ({ default: m.ResumeViewer })));
+const ResumeViewer = retryableLazy(() => import("./ResumeViewer").then((m) => ({ default: m.ResumeViewer })));
 // Bitta `lazy` o'rami — `ResultView` (jonli) ham shuni ishlatadi: jonli → tayyor o'tishda
 // ikkinchi o'ram bir kadr «Yuklanmoqda...» ko'rsatmasin (W4-D N3).
-export const SlideViewer = lazy(() => import("./SlideViewer").then((m) => ({ default: m.SlideViewer })));
-const WordViewer = lazy(() => import("./WordViewer").then((m) => ({ default: m.WordViewer })));
-const TranslationViewer = lazy(() => import("./TranslationViewer").then((m) => ({ default: m.TranslationViewer })));
-const ImageViewer = lazy(() => import("./ImageViewer").then((m) => ({ default: m.ImageViewer })));
-const AudioViewer = lazy(() => import("./AudioViewer").then((m) => ({ default: m.AudioViewer })));
+export const SlideViewer = retryableLazy(() => import("./SlideViewer").then((m) => ({ default: m.SlideViewer })));
+const WordViewer = retryableLazy(() => import("./WordViewer").then((m) => ({ default: m.WordViewer })));
+const TranslationViewer = retryableLazy(() => import("./TranslationViewer").then((m) => ({ default: m.TranslationViewer })));
+const ImageViewer = retryableLazy(() => import("./ImageViewer").then((m) => ({ default: m.ImageViewer })));
+const AudioViewer = retryableLazy(() => import("./AudioViewer").then((m) => ({ default: m.AudioViewer })));
 
-const VIEWER_LOADING = <div className="text-muted-foreground p-8 text-sm">Yuklanmoqda...</div>;
 
 export function ArtifactViewer({
   gen,
@@ -56,6 +56,11 @@ export function ArtifactViewer({
    */
   const kind = viewerKind(gen.type);
   const frame = viewerFrame(kind);
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => {
+    resetViewerChunks();
+    setAttempt((a) => a + 1);
+  }, []);
   return (
     <div
       className={frameClass(frame)}
@@ -63,7 +68,14 @@ export function ArtifactViewer({
       data-viewer-kind={kind}
       data-viewer-boxed={frame.boxed ? "1" : undefined}
     >
-      <Suspense fallback={VIEWER_LOADING}>{viewerFor({ gen, doc, detail, onDetail, onEditState, pdf })}</Suspense>
+      {/*
+        Xato chegarasi + qayta urinish (V5b): `key` o'zgarganda chegara ham,
+        Suspense ham qayta o'rnatiladi, `resetViewerChunks()` esa keshlangan
+        rad etilgan `lazy` o'rniga yangisini beradi → `import()` qayta bajariladi.
+      */}
+      <ViewerBoundary key={attempt} onRetry={retry}>
+        <Suspense fallback={<ViewerLoading onRetry={retry} />}>{viewerFor({ gen, doc, detail, onDetail, onEditState, pdf })}</Suspense>
+      </ViewerBoundary>
     </div>
   );
 }
