@@ -85,6 +85,25 @@ test("Mini App: to'g'ri initData qabul qilinadi", () => {
   assert.equal(profile?.name, "Dilnoza");
 });
 
+/*
+ * Bot API 8.0+ clients add `signature` (Ed25519, for third-party checks) to
+ * initData. The bot-token HMAC `hash` covers every field except `hash`,
+ * `signature` included (core.telegram.org/bots/webapps; aiogram 3.x
+ * `check_webapp_signature` pops only `hash`). Dropping `signature` from the
+ * data-check-string rejected every real Mini App login.
+ */
+test("Mini App: initData with Bot API 8.0 `signature` is accepted (HMAC covers it)", () => {
+  const initData = signInitData({
+    auth_date: String(now()),
+    query_id: "AAA",
+    signature: "c2lnbmF0dXJlLWJ5dGVzLWZvci10ZXN0cw",
+    user: JSON.stringify({ id: 43, first_name: "Aziz" }),
+  });
+  assert.equal(verifyMiniAppInitData(initData)?.telegramId, "43");
+  // ...and `signature` is signed: changing it breaks the hash.
+  assert.equal(verifyMiniAppInitData(initData.replace(/signature=[^&]+/, "signature=forged")), null);
+});
+
 test("Mini App: buzilgan user maydoni rad etiladi", () => {
   const initData = signInitData({
     auth_date: String(now()),
