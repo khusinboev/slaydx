@@ -287,6 +287,8 @@ export function ResumeViewer({
         onPage={go}
         onFit={fit}
         right={right}
+        // Template/palette selects + photo + undo/redo + «Tahrirlash» need ~42rem: below 64rem of toolbar they go to «Boshqa amallar».
+        rightWidth="wide"
       />
       {ed.error ? (
         <div className="no-print bg-rose-900/80 flex items-center gap-2 px-3 py-1.5 text-[12px] text-white">
