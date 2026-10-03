@@ -49,7 +49,7 @@ function setup(opts: { failWith?: () => Error } = {}) {
     }, []);
     return h(
       ViewerBoundary,
-      { key: attempt, onRetry: retry },
+      { key: attempt, attempt, onRetry: retry },
       h(Suspense, { fallback: h(ViewerLoading, { onRetry: retry }) }, h(Viewer, { text: "Hujjat" })),
     );
   }
@@ -103,6 +103,22 @@ test("qayta urinish yana yiqilsa — xato holati qaytadi (cheksiz skelet emas)",
   await waitFor(() => assert.ok(q("[data-viewer-error]")));
 });
 
+test("Turbopack keshlagan rad etish: bo'lak xatosida qayta urinish ham yiqilsa — «Sahifani yangilash» asosiy tugma bo'ladi", async () => {
+  window.sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()));
+  const { state, Host } = setup(); // fail doim true — qayta urinish ham yiqiladi
+  render(h(Host));
+  await waitFor(() => assert.ok(q("[data-viewer-error]")));
+  // Birinchi xatoda «Qayta urinish» asosiy.
+  assert.match(q("[data-viewer-retry]")!.className, /bg-primary/);
+  assert.ok(!/bg-primary/.test(q("[data-viewer-reload]")!.className));
+  await act(async () => fireEvent.click(q("[data-viewer-retry]")!));
+  await waitFor(() => assert.equal(state.calls, 2));
+  await waitFor(() => assert.ok(q("[data-viewer-error]")));
+  assert.match(q("[data-viewer-reload]")!.className, /bg-primary/, "MUTATSIYA: `stuck` olib tashlansa yangilash tugmasi ikkinchi darajali qolardi");
+  assert.match(q("[data-viewer-error]")!.textContent ?? "", /Qayta urinish yordam bermadi/);
+  assert.ok(q("[data-viewer-retry]"), "qayta urinish baribir turadi");
+});
+
 test("skelet: yuklanayotganda ramkani to'ldiradi (role=status, aria-busy), 10 s gacha maslahat yo'q", async () => {
   render(h(ViewerLoading, { onRetry() {} }));
   const box = q("[data-viewer-loading]")!;
@@ -145,7 +161,7 @@ test("ArtifactViewer: haqiqiy rasm ko'ruvchisi chegara ichida yuklanadi (ramka +
 
 test("ArtifactViewer manbasi: chegara + zaxira skelet + resetViewerChunks ulangan (`key` bo'yicha qayta o'rnatish)", () => {
   const src = readFileSync(new URL("../../components/viewers/ArtifactViewer.tsx", import.meta.url), "utf8");
-  assert.match(src, /<ViewerBoundary key=\{attempt\} onRetry=\{retry\}>/);
+  assert.match(src, /<ViewerBoundary key=\{attempt\} attempt=\{attempt\} onRetry=\{retry\}>/);
   assert.match(src, /fallback=\{<ViewerLoading onRetry=\{retry\} \/>\}/);
   assert.match(src, /resetViewerChunks\(\);\s*\n\s*setAttempt/);
   assert.ok(!/\blazy\(/.test(src.replace(/retryableLazy\(/g, "")), "to'g'ridan-to'g'ri `lazy(` yo'q — hammasi qayta urinadigan o'ramda");

@@ -73,7 +73,7 @@ export function ArtifactViewer({
         Suspense ham qayta o'rnatiladi, `resetViewerChunks()` esa keshlangan
         rad etilgan `lazy` o'rniga yangisini beradi → `import()` qayta bajariladi.
       */}
-      <ViewerBoundary key={attempt} onRetry={retry}>
+      <ViewerBoundary key={attempt} attempt={attempt} onRetry={retry}>
         <Suspense fallback={<ViewerLoading onRetry={retry} />}>{viewerFor({ gen, doc, detail, onDetail, onEditState, pdf })}</Suspense>
       </ViewerBoundary>
     </div>

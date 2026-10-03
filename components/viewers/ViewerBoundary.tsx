@@ -40,7 +40,12 @@ export function resetViewerChunks(): void {
   for (const r of resetters) r();
 }
 
-type BoundaryProps = { onRetry: () => void; children?: ReactNode };
+type BoundaryProps = {
+  onRetry: () => void;
+  /** Necha marta «Qayta urinish» bosilgan (chegaraning `key` i). */
+  attempt?: number;
+  children?: ReactNode;
+};
 
 export class ViewerBoundary extends Component<BoundaryProps, { error: unknown }> {
   state: { error: unknown } = { error: null };
@@ -58,33 +63,39 @@ export class ViewerBoundary extends Component<BoundaryProps, { error: unknown }>
   render() {
     if (this.state.error == null) return this.props.children;
     const chunk = isChunkLoadError(this.state.error);
+    /*
+     * Turbopack ish vaqti rad etilgan bo'lak yuklashni KESHLAYDI: ikkinchi
+     * `import()` tarmoqqa chiqmasdan o'sha xatoni qaytaradi (V5b smoke:
+     * so'rovlar 1 → 1). Shuning uchun bo'lak xatosida qayta urinish bir
+     * marta sinab ko'riladi (boshqa yuklagichlarda va oddiy xatolarda
+     * ishlaydi); u ham yiqilsa — asosiy tugma «Sahifani yangilash».
+     */
+    const stuck = chunk && (this.props.attempt ?? 0) >= 1;
+    const primary = "bg-primary text-primary-foreground inline-flex h-9 items-center rounded-lg px-4 text-sm font-medium";
+    const secondary = "bg-card inline-flex h-9 items-center rounded-lg border px-4 text-sm";
+    const retry = (
+      <button type="button" data-viewer-retry onClick={this.props.onRetry} className={stuck ? secondary : primary}>
+        Qayta urinish
+      </button>
+    );
+    const reload = chunk ? (
+      <button type="button" data-viewer-reload onClick={() => window.location.reload()} className={stuck ? primary : secondary}>
+        Sahifani yangilash
+      </button>
+    ) : null;
     return (
       <div role="alert" data-viewer-error={chunk ? "chunk" : "render"} className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
         <p className="text-sm font-medium">Ko‘ruvchini yuklab bo‘lmadi</p>
         <p className="text-muted-foreground max-w-sm text-xs">
-          {chunk
-            ? "Aloqa uzilgan yoki sayt yangilangan bo‘lishi mumkin. Qayta urinib ko‘ring; yordam bermasa sahifani yangilang."
-            : "Kutilmagan xato yuz berdi. Qayta urinib ko‘ring."}
+          {stuck
+            ? "Qayta urinish yordam bermadi — sayt yangilangan yoki aloqa uzilgan bo‘lishi mumkin. Sahifani yangilang."
+            : chunk
+              ? "Aloqa uzilgan yoki sayt yangilangan bo‘lishi mumkin. Qayta urinib ko‘ring; yordam bermasa sahifani yangilang."
+              : "Kutilmagan xato yuz berdi. Qayta urinib ko‘ring."}
         </p>
         <div className="flex flex-wrap justify-center gap-2">
-          <button
-            type="button"
-            data-viewer-retry
-            onClick={this.props.onRetry}
-            className="bg-primary text-primary-foreground inline-flex h-9 items-center rounded-lg px-4 text-sm font-medium"
-          >
-            Qayta urinish
-          </button>
-          {chunk ? (
-            <button
-              type="button"
-              data-viewer-reload
-              onClick={() => window.location.reload()}
-              className="bg-card inline-flex h-9 items-center rounded-lg border px-4 text-sm"
-            >
-              Sahifani yangilash
-            </button>
-          ) : null}
+          {stuck ? reload : retry}
+          {stuck ? retry : reload}
         </div>
       </div>
     );
