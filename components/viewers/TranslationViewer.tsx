@@ -51,10 +51,12 @@ export function TranslationViewer({ doc, gen, pdf = false }: { doc: AcademicDoc;
   if (!t) return <WordViewer doc={doc} />;
   const isFile = t.sourceKind !== "text" && t.sourceKind !== "pdf";
   /*
-   * Fayl rejimida sahifa OQIMDA (`ResultView` `data-result-flow`): ichki
-   * scroll qutisi yo'q, butun sahifa scroll bo'ladi — peshtoq ham yuqoriga
-   * chiqib ketadi, iframe esa ekran balandligini oladi. Matn rejimida (juftlar
-   * ro'yxati) ham xuddi shunday: ro'yxat sahifa bilan birga scroll bo'ladi.
+   * Sahifa OQIMDA (`[data-viewer-frame="flow"][data-viewer-kind="translation"]`,
+   * `result-layout/frame.ts`): ichki scroll qutisi yo'q, butun sahifa scroll
+   * bo'ladi — sarlavha chiplari ham yuqoriga chiqib ketadi, iframe esa
+   * sticky natija sarlavhasi ostidagi qolgan ekran balandligini oladi
+   * (`--result-fill-h`). Matn rejimida (juftlar ro'yxati) ham xuddi shunday:
+   * ro'yxat sahifa bilan birga scroll bo'ladi.
    */
   return (
     <div className="flex flex-col gap-3">
@@ -75,7 +77,7 @@ export function TranslationViewer({ doc, gen, pdf = false }: { doc: AcademicDoc;
           ))}
         </div>
       ) : null}
-      {/* Scroll — sahifada (`ResultView` oqim rejimi); bu quti faqat mazmunni o'raydi. */}
+      {/* Scroll — sahifada (flow ramka); bu quti faqat mazmunni o'raydi. */}
       <div data-translation-scroll>
         {isFile && tab === "file" ? <FilePane t={t} gen={gen} pdf={pdf} /> : <Pairs t={t} />}
       </div>
@@ -133,7 +135,7 @@ function Pairs({ t }: { t: TranslationReport }) {
   let lastCtx: string | undefined;
   return (
     <div className="bg-card rounded-xl border" data-pairs>
-      <div className="text-muted-foreground grid grid-cols-2 gap-3 border-b px-3 py-2 text-[11.5px] font-semibold tracking-wide uppercase">
+      <div className="text-muted-foreground hidden grid-cols-2 gap-3 border-b px-3 py-2 text-[11.5px] md:grid font-semibold tracking-wide uppercase">
         <span>Asl</span>
         <span>Tarjima</span>
       </div>
@@ -147,14 +149,14 @@ function Pairs({ t }: { t: TranslationReport }) {
               <div
                 data-pair={p.id}
                 className={cn(
-                  "grid grid-cols-2 gap-3 px-3 py-2 text-[13.5px] leading-relaxed",
+                  "grid grid-cols-1 gap-1.5 px-3 py-2 text-[13.5px] leading-relaxed md:grid-cols-2 md:gap-3",
                   p.kind === "h" || p.kind === "title" ? "font-semibold" : "",
                   p.kind === "cell" ? "text-[12.5px]" : "",
                   p.warn ? "border-l-2 border-amber-400" : "",
                 )}
               >
-                <div className="text-muted-foreground whitespace-pre-wrap">{p.src}</div>
-                <div className="whitespace-pre-wrap">{p.dst}</div>
+                <div className="text-muted-foreground break-words whitespace-pre-wrap">{p.src}</div>
+                <div className="break-words whitespace-pre-wrap">{p.dst}</div>
               </div>
             </div>
           );
@@ -184,7 +186,7 @@ function FilePane({ t, gen, pdf }: { t: TranslationReport; gen?: { id: string; f
           </a>
           .
         </p>
-        <iframe src={fileUrl(gen.id, "pdf", { inline: true })} title="Tarjima qilingan fayl (PDF ko‘rinishi)" className="bg-card h-[calc(100vh-4.5rem)] w-full rounded-xl border" data-file-preview />
+        <iframe src={fileUrl(gen.id, "pdf", { inline: true })} title="Tarjima qilingan fayl (PDF ko‘rinishi)" className="bg-card h-[var(--result-fill-h,100svh)] min-h-80 w-full rounded-xl border" data-file-preview />
       </div>
     );
   }

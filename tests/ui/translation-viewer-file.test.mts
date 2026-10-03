@@ -39,6 +39,9 @@ test("«Fayl» tabi: iframe manzili format=pdf&inline=1, yangi oyna havolasi ham
   const frame = document.querySelector("iframe[data-file-preview]") as HTMLIFrameElement | null;
   assert.ok(frame, "iframe chizilmadi");
   assert.equal(frame!.getAttribute("src"), `/api/generations/${GEN}/file?format=pdf&inline=1`);
+  // V4: iframe balandligi sticky sarlavha ostidagi qolgan ekran (`--result-fill-h`), 100vh emas.
+  assert.ok(frame!.className.includes("h-[var(--result-fill-h,100svh)]"), "iframe balandligi --result-fill-h dan");
+  assert.ok(!/100vh/.test(frame!.className));
   const link = document.querySelector('a[target="_blank"]') as HTMLAnchorElement | null;
   assert.ok(link && link.getAttribute("href")!.includes("inline=1"), "yangi oyna havolasi inline bo'lishi kerak");
 });

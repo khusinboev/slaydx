@@ -52,8 +52,9 @@ test("ResultView: insho uchun «Tuzatish yo'q» izohi hisobot panelida (AUDIT-24
   assert.match(src, /Insho bitta matn — «Hammasini tuzatish» butun matnni qayta ko‘radi\./, "izoh matni");
 });
 
-test("TranslationViewer: iframe ekran balandligini oladi (peshtoq scroll bilan chiqib ketgach)", () => {
+test("TranslationViewer: iframe sticky sarlavha ostidagi qolgan ekranni oladi (--result-fill-h, V4)", () => {
   const src = readFileSync(new URL("../../components/viewers/TranslationViewer.tsx", import.meta.url), "utf8");
-  assert.match(src, /h-\[calc\(100vh-4\.5rem\)\][^"]*"[^>]*data-file-preview/, "iframe balandligi 100vh ga bog'liq");
+  assert.match(src, /h-\[var\(--result-fill-h,100svh\)\][^"]*"[^>]*data-file-preview/, "iframe balandligi --result-fill-h dan");
+  assert.doesNotMatch(src, /calc\(100vh/, "100vh ga bog'lanish qolmasin (sticky sarlavha hisobga olinmasdi)");
   assert.doesNotMatch(src, /<div className="min-h-0 flex-1 overflow-y-auto" data-translation-scroll>/, "ichki scroll qutisi olib tashlangan");
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Mic } from "lucide-react";
+import { Mic } from "lucide-react";
 import type { AcademicDoc } from "@/lib/generation/types";
 
 /**
@@ -16,6 +16,14 @@ import type { AcademicDoc } from "@/lib/generation/types";
  * `inline=1` SHART: `attachment` bilan Chrome `<audio>` manbasini
  * o'ynatmasdan yuklab olishga o'tadi (Tarjimon 2 dagi PDF iframe bilan
  * bir xil sabab). CSP `media-src 'self'` — `next.config.ts` da.
+ *
+ * Viewer redesign V4: `flow` ramka — ichki scroll qutisi yo'q, transkript
+ * sahifa oqimida (sahifa scroll bo'ladi); pleer bloki natija sarlavhasi
+ * ostida `sticky` (md+; telefonda oqimda, balandlikni yemasin) — uzun transkript o'qilayotganda ham to'xtatish/surish
+ * qo'l ostida. Yuklab olish: natija sarlavhasidagi «Yuklab olish» (MP3)
+ * BITTA aniq yuklash; ko'ruvchi ichidagi ikkinchi «MP3 yuklab olish»
+ * havolasi olib tashlandi (ikkilanish). Ekspire bo'lgan/faylsiz
+ * generatsiyada sarlavha tugmasi ham, pleer ham ishlamaydi — mos.
  */
 export function AudioViewer({ doc, gen }: { doc: AcademicDoc; gen: { id: string; fileName?: string } }) {
   const audio = doc.audio;
@@ -25,8 +33,11 @@ export function AudioViewer({ doc, gen }: { doc: AcademicDoc; gen: { id: string;
   const speakers = [...new Set(script.map((l) => l.speaker))];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-[var(--bg,#fafafa)]">
-      <div className="no-print flex shrink-0 flex-col gap-3 border-b border-black/10 px-4 py-3 sm:px-6">
+    <div className="flex flex-1 flex-col bg-[var(--bg,#fafafa)]" data-audio-viewer>
+      <div
+        className="no-print z-10 flex shrink-0 flex-col gap-3 border-b border-black/10 bg-[var(--bg,#fafafa)] px-4 py-3 sm:px-6 md:sticky md:top-[var(--result-header-h,0px)]"
+        data-audio-player
+      >
         <div className="flex items-center gap-2 text-[13px] text-black/70">
           <Mic className="size-4 shrink-0" />
           <span className="truncate font-medium">{doc.meta.topic}</span>
@@ -37,16 +48,9 @@ export function AudioViewer({ doc, gen }: { doc: AcademicDoc; gen: { id: string;
             Brauzeringiz audio pleerni qo‘llab-quvvatlamaydi.
           </audio>
         ) : null}
-        <a
-          href={`/api/generations/${gen.id}/file`}
-          className="inline-flex w-fit items-center gap-2 rounded-lg border border-black/10 px-3 py-1.5 text-[13px] text-black/70 hover:bg-black/5"
-          rel="noopener"
-        >
-          <Download className="size-4" /> MP3 yuklab olish
-        </a>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto px-4 py-5 sm:px-6">
+      <div className="flex-1 px-4 py-5 sm:px-6" data-audio-transcript>
         <div className="mx-auto max-w-3xl">
           <h2 className="mb-3 text-[13px] font-semibold tracking-wide text-black/50 uppercase">Transkript</h2>
           {script.length === 0 ? (
