@@ -78,11 +78,12 @@ const SECTIONS: PanelSection[] = [
 
 function layout(sections: PanelSection[] = SECTIONS) {
   return render(
-    h(
-      ResultLayout,
-      { header: h("nav", { "data-test-nav": "" }, h("button", { type: "button" }, "Orqaga")), sections, frame: "flow" },
-      h("div", { "data-test-content": "" }, "Hujjat"),
-    ),
+    h(ResultLayout, {
+      header: h("nav", { "data-test-nav": "" }, h("button", { type: "button" }, "Orqaga")),
+      sections,
+      frame: "flow",
+      children: h("div", { "data-test-content": "" }, "Hujjat"),
+    }),
   );
 }
 
