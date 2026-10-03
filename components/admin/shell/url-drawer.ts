@@ -49,8 +49,8 @@ export function useUrlDrawer() {
 
   const close = useCallback(() => {
     const listHref = hrefWith({ id: null });
-    // A plain history.back(), not `backTo()`: the engine treats its own pop between two same-path
-    // entries (list ↔ list?id=) as a layer carry and hides it from Next, so the drawer would stay open.
+    // This page pushed `?id=`, so the list entry is right below: a plain back pops exactly it
+    // (equivalent to `backTo()` here, minus the leave-guard check, which the panel does not use).
     if (pushed.current) window.history.back();
     else router.replace(listHref, { scroll: false });
   }, [hrefWith, router]);

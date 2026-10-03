@@ -493,6 +493,32 @@ test("overlay: a same-page URL change while open (`?id=`) is carried to the entr
   assert.deepEqual(nextSaw, []);
 });
 
+test("backTo between same-path entries (`?id=` pushed → list): Next sees the pop (no layer carry)", async () => {
+  fresh("/admin/audit");
+  router.push("/admin/audit?id=5");
+  nextSaw.length = 0;
+  await act(async () => {
+    await nav.backTo();
+  });
+  await settle();
+  assert.equal(here(), "/admin/audit");
+  assert.deepEqual(nextSaw, ["/admin/audit"], "Next must render the list (useSearchParams updates)");
+
+  // Same with a dialog open over the `?id=` page: the dialog pops with it, Next still sees the page change.
+  fresh("/admin/audit");
+  router.push("/admin/audit?id=7");
+  mount(h(Pair));
+  act(() => ctl.a!(true));
+  nextSaw.length = 0;
+  await act(async () => {
+    await nav.backTo();
+  });
+  await settle();
+  assert.equal(here(), "/admin/audit");
+  assert.ok(!isOpen("A"));
+  assert.deepEqual(nextSaw, ["/admin/audit"]);
+});
+
 test("useDialog {history:false}: no entry, Escape still closes", async () => {
   fresh("/uz");
   function UrlDrawer() {

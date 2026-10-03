@@ -50,7 +50,15 @@ type Layer = {
 };
 type Sx = { i: number; o?: string };
 /** A traversal we started ourselves: matched FIFO by its delta, not by a user press. */
-type Expected = { delta: number; at: number; seq: number; swallow?: boolean; then?: () => void };
+type Expected = {
+  delta: number;
+  at: number;
+  seq: number;
+  swallow?: boolean;
+  /** The pop also crosses a page entry (backTo): Next must render it, never a layer carry. */
+  page?: boolean;
+  then?: () => void;
+};
 
 /** The subset of the app router the engine needs (`AppRouterInstance` satisfies it). */
 export type NavRouter = { push: (href: string) => void; replace: (href: string) => void };
@@ -442,10 +450,11 @@ function onPopState(e: PopStateEvent) {
     layers = layers.filter((l) => l.index < 0 || l.index <= toIndex);
     if (exp.swallow || toHref === fromHref) {
       e.stopImmediatePropagation();
-    } else if (pathOf(toHref) === pathOf(fromHref)) {
+    } else if (!exp.page && pathOf(toHref) === pathOf(fromHref)) {
+      // Only layer entries were popped: the page's own URL change is carried down.
       carryUrl(e, fromHref, fromState);
     } else {
-      // `backTo` crossed pages: Next renders the arrived entry.
+      // `backTo` left the page (possibly for the same path, `?id=` → list): Next renders it.
       navSeq += 1;
       rememberListUrl(toHref);
       emitNavigate("traverse", fromHref);
@@ -737,7 +746,7 @@ function backToUnguarded(fallback?: string, r: NavRouter | null = router): boole
   if (base > 0) {
     layers = [];
     closeLater(leaving, ["overlay"]);
-    go(-(k + 1));
+    go(-(k + 1), { page: true });
     notify();
     return true;
   }
