@@ -5,7 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { Check } from "lucide-react";
 import * as api from "@/lib/api-client";
 import { creditTotal, useAppStore } from "@/lib/store";
-import { useUi } from "@/lib/ui";
+import { replaceSearch, useUi } from "@/lib/ui";
+import { PageBack } from "../shell/PageBack";
 
 const FEATURES = [
   "Har bir hujjat narxi yaratishdan oldin ko'rsatiladi",
@@ -23,7 +24,18 @@ export function PurchasePage() {
   const params = useSearchParams();
 
   const [orders, setOrders] = useState<api.PaymentOrder[] | null>(null);
-  const orderId = params.get("order");
+  /*
+   * `?order=` — provayderdan qaytish belgisi. Buyurtma hal bo'lgach (to'langan /
+   * bekor) URLdan olib tashlanadi (`replace`): yangilash yoki tarixdan qaytish
+   * eski buyurtma bannerini qayta ochmaydi. Banner holati shu sahifada
+   * mahalliy saqlanadi, shuning uchun URL tozalansa ham yo'qolmaydi.
+   */
+  const urlOrder = params.get("order");
+  const [seenOrder, setSeenOrder] = useState<string | null>(urlOrder);
+  useEffect(() => {
+    if (urlOrder) setSeenOrder(urlOrder);
+  }, [urlOrder]);
+  const orderId = urlOrder ?? seenOrder;
 
   useEffect(() => {
     if (!loggedIn) {
@@ -75,6 +87,11 @@ export function PurchasePage() {
         if (state === "paid" || state === "cancelled") {
           // Balans (sarlavhadagi raqam) ham yangilansin.
           if (state === "paid") void refreshSession();
+          const rest = new URLSearchParams(window.location.search);
+          if (rest.has("order")) {
+            rest.delete("order");
+            replaceSearch(rest);
+          }
           setCheck("idle");
           return;
         }
@@ -93,6 +110,9 @@ export function PurchasePage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 pt-8 pb-16 sm:px-6 sm:pt-12 lg:px-8">
+      <div className="mb-4">
+        <PageBack />
+      </div>
       <div className="mb-8 text-center sm:mb-10">
         <h1 className="mb-3 text-3xl font-bold tracking-tight sm:text-4xl">Balansni to&apos;ldirish</h1>
         <p className="text-muted-foreground mx-auto max-w-2xl text-[15.5px] sm:text-base">

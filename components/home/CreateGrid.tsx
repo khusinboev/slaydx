@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { TOOLS, clientAdjustedPrice, toolBlockedReason, visibleToolGroups } from "@/lib/tools";
 import { TOOL_ICONS } from "../shell/icons";
+import { PageBack } from "../shell/PageBack";
 import { useAppStore, usePricingVersion } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 
@@ -35,7 +36,10 @@ export function CreateGrid() {
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8">
-      <h1 className="mb-2 text-2xl font-semibold tracking-tight">Nima yaratamiz?</h1>
+      <div className="mb-2 flex items-center gap-2.5">
+        <PageBack />
+        <h1 className="text-2xl font-semibold tracking-tight">Nima yaratamiz?</h1>
+      </div>
       <p className="text-muted-foreground mb-8 text-sm">
         AI yordamida bir necha soniyada professional kontent yarating
       </p>
