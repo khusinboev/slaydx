@@ -41,6 +41,7 @@ export const SlideRail = memo(function SlideRail({
   reorderOn = false,
   onReorder,
   variant = "side",
+  compact = false,
   onMove,
 }: {
   slides: SlideModel[];
@@ -78,6 +79,14 @@ export const SlideRail = memo(function SlideRail({
    * o'zgaradi.
    */
   variant?: "side" | "strip";
+  /**
+   * Faqat `strip`: `true` — bir qatorli gorizontal tasma (slayd kattalashtirilgan,
+   * sahnaga joy kerak); `false` (standart) — eskizlar to'r ko'rinishida,
+   * qolgan balandlikni egallaydi va vertikal aylanadi (mobilda slayd
+   * kengligi bo'yicha sig'adi, ostida qora bo'shliq o'rniga ishlatiladigan
+   * eskizlar turadi).
+   */
+  compact?: boolean;
   /** Tasmadagi ◀/▶ — joriy slaydni bir qadam suradi (`SlideViewer.onMove`). */
   onMove?: (dir: -1 | 1) => void;
 }) {
@@ -98,7 +107,7 @@ export const SlideRail = memo(function SlideRail({
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [slides.length]);
+  }, [slides.length, variant, compact]);
 
   /*
    * Tasmada joriy eskiz KO'RINISHDA qolsin: gorizontal ro'yxatda
@@ -153,14 +162,24 @@ export const SlideRail = memo(function SlideRail({
       <aside
         ref={railRef}
         data-rail="strip"
-        className="slx-strip no-print flex shrink-0 gap-2 overflow-x-auto border-t border-white/10 bg-[#171717] p-2 md:hidden"
-        style={{ scrollSnapType: "x proximity" }}
+        data-strip-layout={compact ? "row" : "grid"}
+        className={cn(
+          "slx-strip no-print border-t border-white/10 bg-[#171717] p-2 md:hidden",
+          compact
+            ? "flex shrink-0 gap-2 overflow-x-auto"
+            : "grid min-h-0 flex-1 auto-rows-min grid-cols-3 content-start gap-2 overflow-y-auto sm:grid-cols-4",
+        )}
+        style={compact ? { scrollSnapType: "x proximity" } : undefined}
       >
         {slides.map((s, idx) => {
           const pending = marks !== undefined && marks[idx] !== "done";
           const active = idx === i;
           return (
-            <div key={s.id} className="w-24 shrink-0" style={{ scrollSnapAlign: "center" }}>
+            <div
+              key={s.id}
+              className={compact ? "w-24 shrink-0" : "min-w-0"}
+              style={compact ? { scrollSnapAlign: "center" } : undefined}
+            >
               <button
                 type="button"
                 data-strip-index={idx}
@@ -196,7 +215,7 @@ export const SlideRail = memo(function SlideRail({
                       type="button"
                       aria-label="Slaydni chapga surish"
                       disabled={idx === 0}
-                      className="hover:bg-white/10 ml-auto rounded p-0.5 disabled:opacity-40"
+                      className="hover:bg-white/10 ml-auto rounded p-1 disabled:opacity-40"
                       onClick={() => onMove?.(-1)}
                     >
                       <ChevronLeft className="size-3" />
@@ -205,7 +224,7 @@ export const SlideRail = memo(function SlideRail({
                       type="button"
                       aria-label="Slaydni o‘ngga surish"
                       disabled={idx >= slides.length - 1}
-                      className="hover:bg-white/10 rounded p-0.5 disabled:opacity-40"
+                      className="hover:bg-white/10 rounded p-1 disabled:opacity-40"
                       onClick={() => onMove?.(1)}
                     >
                       <ChevronRight className="size-3" />

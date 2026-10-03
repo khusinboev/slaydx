@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Presentation, RotateCcw, Trash2, X } from "lucide-react";
+import { Pause, Play, Presentation, RotateCcw, X } from "lucide-react";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { slideNotes } from "@/lib/generation/slide-layout";
 import type { SlideSrc } from "@/lib/generation/slide-types";
@@ -15,7 +15,7 @@ import { getSlideTheme } from "@/lib/generation/slide-themes";
 import { buildSlideDeck } from "@/lib/generation/slides";
 import { SLIDE } from "@/lib/viewers/metrics";
 import { cn } from "@/lib/cn";
-import { ViewerToolbar } from "./toolbar";
+import { SlideToolbar } from "./SlideToolbar";
 import { SlideCanvas } from "./SlideCanvas";
 import { SlideRail } from "./SlideRail";
 import { SlideStage, type SlideStageOverlayCtx } from "./SlideStage";
@@ -25,6 +25,18 @@ import { LiveStrip } from "./LiveStrip";
 import { totalChars } from "@/lib/viewers/reveal";
 import { planSlide } from "@/lib/generation/slide-layout";
 import { asLiveView } from "./live-view";
+
+/**
+ * Slayd masshtab pog'onalari (foizda). «Moslash» o'lchangan foiz bo'ladi
+ * (masalan 43), shuning uchun ± shu qiymatdan KEYINGI/OLDINGI pog'onaga
+ * o'tadi — `ZOOM_STEPS` dagi `indexOf` esa moslashda -1 berardi.
+ */
+export const SLIDE_ZOOM_STEPS = [25, 50, 75, 90, 100, 125, 150, 200] as const;
+export function zoomStep(pct: number, dir: -1 | 1): number | null {
+  if (dir > 0) return SLIDE_ZOOM_STEPS.find((z) => z > pct + 0.5) ?? null;
+  const lower = SLIDE_ZOOM_STEPS.filter((z) => z < pct - 0.5);
+  return lower.length ? lower[lower.length - 1] : null;
+}
 
 export type { LiveView };
 // Shakl tekshiruvi barg modulda (FE-11) — bu yerda eski import yo'li uchun.
@@ -99,6 +111,15 @@ export function SlideViewer({
   const [presenter, setPresenter] = useState(false);
   const [zoom, setZoom] = useState(75);
   const [fitOn, setFitOn] = useState(true);
+  /** `SlideStage` o'lchagan «moslash» masshtabi (0..1) — yorliqdagi HAQIQIY foiz manbai. */
+  const [fitScale, setFitScale] = useState(0.6);
+  const zoomPct = fitOn ? Math.round(fitScale * 100) : zoom;
+  const stepZoom = (dir: -1 | 1) => {
+    const to = zoomStep(zoomPct, dir);
+    if (to == null) return;
+    setFitOn(false);
+    setZoom(to);
+  };
 
   const lv = useMemo(() => asLiveView(live), [live]);
   /**
@@ -436,54 +457,38 @@ export function SlideViewer({
           </button>
         </div>
       ) : (
-        <ViewerToolbar
-          zoom={zoom}
-          onZoom={(n) => {
-            setFitOn(false);
-            setZoom(n);
-          }}
+        <SlideToolbar
           page={i + 1}
           pages={slides.length}
           onPage={(n) => go(n - 1)}
+          pct={zoomPct}
+          fitOn={fitOn}
+          canDec={zoomStep(zoomPct, -1) != null}
+          canInc={zoomStep(zoomPct, 1) != null}
+          onDec={() => stepZoom(-1)}
+          onInc={() => stepZoom(1)}
           onFit={() => setFitOn(true)}
           /*
            * Jonli generatsiya paytida taqdimot/to'liq ekran YO'Q: deka
            * hali yarim, uni proyektorga chiqarish ma'nosiz.
            */
-          onFullscreen={lv ? undefined : () => setPresent(true)}
-          extra={
-            <>
-              {ed.legacy && !lv ? (
-                <span className="text-xs text-white/40">
-                  Bu deka eski formatda — tahrirlab bo‘lmaydi
-                </span>
-              ) : null}
-
-              {/* Slayd ustidagi YAGONA amal — o'chirish (ikki bosishda).
-                  Qolgan hamma tahrir slaydning o'zida yoki sahifa sarlavhasida. */}
-              {editOn && slide ? (
-                <button
-                  type="button"
-                  title={slides.length <= 1 ? "Oxirgi slaydni o‘chirib bo‘lmaydi" : "Slaydni o‘chirish"}
-                  disabled={slides.length <= 1}
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded px-2 py-1 text-xs disabled:opacity-40",
-                    delSlide.armed ? "bg-red-500/80 text-white" : "hover:bg-white/10",
-                  )}
-                  onClick={delSlide.trigger}
-                >
-                  <Trash2 className="size-3.5" />
-                  {delSlide.armed ? "Rostdan?" : "O‘chirish"}
-                </button>
-              ) : null}
-
-              {/* Interfeys o'zbekcha: xom `id` («magazine», «problem») emas,
-                  shablonning formada ko'ringan nomi. */}
-              <span className="hidden text-xs text-white/50 lg:inline">
-                {SLIDE_TEMPLATE_BY_ID[deck.templateId]?.nameUz ?? deck.templateId} · {theme.nameUz}
-              </span>
-            </>
+          onPresent={lv ? undefined : () => setPresent(true)}
+          legacy={Boolean(ed.legacy && !lv)}
+          /* Slayd ustidagi YAGONA amal — o'chirish (ikki bosishda).
+             Qolgan hamma tahrir slaydning o'zida yoki sahifa sarlavhasida. */
+          del={
+            editOn && slide
+              ? {
+                  armed: delSlide.armed,
+                  disabled: slides.length <= 1,
+                  title: slides.length <= 1 ? "Oxirgi slaydni o‘chirib bo‘lmaydi" : "Slaydni o‘chirish",
+                  onClick: delSlide.trigger,
+                }
+              : null
           }
+          /* Interfeys o'zbekcha: xom `id` («magazine», «problem») emas,
+             shablonning formada ko'ringan nomi. */
+          info={`${SLIDE_TEMPLATE_BY_ID[deck.templateId]?.nameUz ?? deck.templateId} · ${theme.nameUz}`}
         />
       )}
 
@@ -521,6 +526,7 @@ export function SlideViewer({
             zoom={zoom}
             fitOn={fitOn}
             presenter={presenter}
+            onFitScale={setFitScale}
             onAdvance={() => go(i + 1)}
             hideSrc={editOn && !present && editingKey ? editingKey : undefined}
             /*
@@ -583,6 +589,7 @@ export function SlideViewer({
               templateId={deck.templateId}
               bodyType={deck.bodyType}
               logo={deck.logo} custom={deck.custom}
+              compact={!fitOn}
               i={i}
               go={lv ? railGo : go}
               roles={lv?.roles}
@@ -593,34 +600,24 @@ export function SlideViewer({
           ) : null}
 
           {!present ? (
-            <div className="no-print flex h-9 shrink-0 items-center gap-2 border-t border-white/10 bg-[#252525] px-3 text-[12px] text-white/70">
-              <button type="button" className="hover:bg-white/10 rounded p-1" onClick={() => go(i - 1)}>
-                <ChevronLeft className="size-3.5" />
-              </button>
-              <span className="tabular-nums">
-                Slayd {i + 1} / {slides.length}
-              </span>
-              <button type="button" className="hover:bg-white/10 rounded p-1" onClick={() => go(i + 1)}>
-                <ChevronRight className="size-3.5" />
-              </button>
-              {/* Holat satri — hujjat saqlanmoqdami yoki PPTX hali eski.
-                  Saqlanmagan soni sahifa sarlavhasida (`EditActions`). */}
+            /*
+              Holat satri: sahifa navigatsiyasi YO'Q (asboblar panelidagi
+              yagona navigatsiya) va to'liq ekran tugmasi ham yo'q (u ham
+              panelda). Faqat holat: saqlanmoqda / fayl yangilanmoqda /
+              xato va dekaning mavzusi.
+            */
+            <div className="no-print flex h-8 shrink-0 items-center gap-2 border-t border-white/10 bg-[#252525] px-3 text-[12px] text-white/70">
               {ed.saving ? (
-                <span className="ml-3 shrink-0 text-white/50">Saqlanmoqda…</span>
+                <span className="shrink-0 text-white/50">Saqlanmoqda…</span>
               ) : ed.rebuilding ? (
-                <span className="ml-3 shrink-0 text-white/50">Fayl yangilanmoqda…</span>
+                <span className="shrink-0 text-white/50">Fayl yangilanmoqda…</span>
               ) : null}
               {ed.error ? (
-                <span role="alert" className="ml-3 min-w-0 truncate text-amber-300">
+                <span role="alert" className="min-w-0 truncate text-amber-300">
                   {ed.error}
                 </span>
               ) : null}
-              <span className="ml-auto truncate">{deck.topic}</span>
-              {lv ? null : (
-                <button type="button" className="hover:bg-white/10 ml-2 rounded p-1" onClick={() => setPresent(true)}>
-                  {present ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-                </button>
-              )}
+              <span className="ml-auto min-w-0 truncate">{deck.topic}</span>
             </div>
           ) : null}
         </div>

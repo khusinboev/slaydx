@@ -460,6 +460,7 @@ export function SlideEditor({
 
       {imgPos ? (
         <div
+          data-slide-image-controls
           className="pointer-events-auto absolute flex flex-wrap items-start gap-1 p-1"
           style={{ left: imgPos.left, top: imgPos.top, width: imgPos.width }}
         >
