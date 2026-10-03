@@ -21,8 +21,9 @@ import { cn } from "@/lib/cn";
 import { useResumeEdit } from "../files/useResumeEdit";
 import type { EditActionsState } from "../files/EditActions";
 import { useMeasuredPages } from "./measure";
-import { ZoomFrame, Workspace } from "./sheet";
-import { ViewerToolbar } from "./toolbar";
+import { PageRow, ZoomFrame, Workspace } from "./sheet";
+import { VIEWER_TOOLBAR_H, ViewerToolbar } from "./toolbar";
+import { useFitZoom } from "./useFitZoom";
 import { useVisiblePage } from "./useVisiblePage";
 import { ResumeItemView, ResumePage } from "./resume/ResumePage";
 import { ResumeEditor } from "./resume/ResumeEditor";
@@ -72,7 +73,13 @@ export function ResumeViewer({
   const model = useMemo(() => docNow.resume ?? legacyResumeModel(docNow), [docNow]);
   const layout = useMemo(() => planResume(model), [model]);
 
-  const [zoom, setZoom] = useState(100);
+  /*
+   * Viewer redesign V1: rezyume ham ustun eniga sig'diriladi (Word
+   * ko'ruvchisi bilan UMUMIY `useFitZoom`). Ilgari qat'iy 100 % edi —
+   * 390 px telefonda 794 px varaqning yarmi kesilardi (R2).
+   */
+  const workRef = useRef<HTMLDivElement>(null);
+  const { zoom, setZoom, fit, wide } = useFitZoom(workRef, A4.wPx);
   const [editOn, setEditOn] = useState(false);
   const editable = ed.editable && !ed.legacy;
   const editing = editOn && editable;
@@ -110,14 +117,14 @@ export function ResumeViewer({
   const total = pages.length;
 
   const refs = useRef<(HTMLDivElement | null)[]>([]);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [page, setPage] = useVisiblePage(scrollRef, () => refs.current, [total, zoom]);
+  const [page, setPage] = useVisiblePage(workRef, () => refs.current, [total, zoom], { topInset: VIEWER_TOOLBAR_H });
 
   const go = useCallback(
     (n: number) => {
       const next = Math.max(1, Math.min(total, n));
       setPage(next);
-      refs.current[next - 1]?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const el = refs.current[next - 1];
+      (el?.closest<HTMLElement>("[data-page-row]") ?? el)?.scrollIntoView({ behavior: "smooth", block: "start" });
     },
     [total, setPage],
   );
@@ -268,15 +275,17 @@ export function ResumeViewer({
     </>
   ) : null;
 
+  /* Viewer redesign V1 — `flow` ramka: `WordViewer` bilan bir xil qobiq (izohi o'sha yerda). */
   return (
-    <div className="flex h-full min-h-[70vh] flex-col">
+    <div className="flex grow flex-col" data-viewer-root="resume">
       <ViewerToolbar
+        sticky
         zoom={zoom}
         onZoom={setZoom}
         page={page}
         pages={total}
         onPage={go}
-        onFit={() => setZoom(100)}
+        onFit={fit}
         right={right}
       />
       {ed.error ? (
@@ -287,10 +296,11 @@ export function ResumeViewer({
           </button>
         </div>
       ) : null}
-      <Workspace ref={scrollRef}>
+      <Workspace ref={workRef} className="grow">
         <div className="flex flex-col items-center gap-8">
           {pages.map((chunk, i) => (
-            <ZoomFrame key={i} zoom={zoom / 100} width={A4.wPx} height={A4.hPx}>
+            <PageRow key={i} wide={wide}>
+            <ZoomFrame zoom={zoom / 100} width={A4.wPx} height={A4.hPx}>
               <div
                 ref={(el) => {
                   refs.current[i] = el;
@@ -311,6 +321,7 @@ export function ResumeViewer({
                 )}
               </div>
             </ZoomFrame>
+            </PageRow>
           ))}
         </div>
       </Workspace>

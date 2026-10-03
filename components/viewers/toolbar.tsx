@@ -2,8 +2,11 @@
 
 import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Maximize2, Minus, Plus } from "lucide-react";
-import { ZOOM_STEPS } from "@/lib/viewers/metrics";
+import { zoomStep } from "@/lib/viewers/metrics";
 import { cn } from "@/lib/cn";
+
+/** Toolbar balandligi (`h-10`) — sahifa hisoblagichi uning ostidan sanaydi. */
+export const VIEWER_TOOLBAR_H = 40;
 
 export function ViewerToolbar({
   zoom,
@@ -15,6 +18,7 @@ export function ViewerToolbar({
   onFullscreen,
   extra,
   right,
+  sticky = false,
 }: {
   zoom: number;
   onZoom: (n: number) => void;
@@ -31,13 +35,30 @@ export function ViewerToolbar({
    * Berilmasa hech narsa chizilmaydi — mavjud chaqiruvchilar o'zgarmaydi.
    */
   right?: ReactNode;
+  /**
+   * Sahifa scroll'ida natija sarlavhasi ostiga yopishadi (viewer redesign
+   * V1: `flow` ko'ruvchilar — Word, rezyume). `z-10` — sarlavhadan
+   * (`z-20`) PASTDA. Standart `false`: slayd `fill` ramkada o'z sahnasini
+   * boshqaradi va sahifaga yopishmaydi — mavjud chaqiruvchilar o'zgarmaydi.
+   */
+  sticky?: boolean;
 }) {
-  const idx = ZOOM_STEPS.indexOf(zoom as (typeof ZOOM_STEPS)[number]);
-  const dec = () => onZoom(idx > 0 ? ZOOM_STEPS[idx - 1] : ZOOM_STEPS[0]);
-  const inc = () => onZoom(idx >= 0 && idx < ZOOM_STEPS.length - 1 ? ZOOM_STEPS[idx + 1] : ZOOM_STEPS[ZOOM_STEPS.length - 1]);
+  /*
+   * Qo'shni zina JORIY qiymatdan: «sig'dirish» endi zinada bo'lmagan
+   * qiymat berishi mumkin (telefonda 46 %) — ilgari `indexOf` -1 qaytarib,
+   * «−» 50 % ga (ya'ni KATTAROQ) sakrardi.
+   */
+  const dec = () => onZoom(zoomStep(zoom, -1));
+  const inc = () => onZoom(zoomStep(zoom, 1));
 
   return (
-    <div className="no-print bg-[#3b3b3b] text-[#f3f3f3] flex h-10 shrink-0 items-center gap-1 px-2 text-[13px]">
+    <div
+      data-viewer-toolbar={sticky ? "sticky" : undefined}
+      className={cn(
+        "no-print bg-[#3b3b3b] text-[#f3f3f3] flex h-10 shrink-0 items-center gap-1 px-2 text-[13px]",
+        sticky && "sticky top-[var(--result-header-h,0px)] z-10",
+      )}
+    >
       <button type="button" className="hover:bg-white/10 rounded p-1.5 disabled:opacity-30" onClick={() => onPage(page - 1)} disabled={page <= 1} aria-label="Oldingi sahifa">
         <ChevronLeft className="size-4" />
       </button>
