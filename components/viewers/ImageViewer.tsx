@@ -66,7 +66,9 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
   return (
     <div className="flex flex-1 flex-col bg-[#111]" data-image-viewer>
       <div
-        className="no-print sticky top-[var(--result-header-h,0px)] z-10 flex min-h-10 shrink-0 items-center gap-3 border-b border-white/10 bg-[#111] px-4 py-1 text-[13px] text-white/80"
+        className="no-print sticky top-[var(--result-header-h,0px)] z-10 flex min-h-10 shrink-0 items-center gap-3 border-b bg-[#111] px-4 py-1 text-[13px] text-white/80"
+        // Global `* { border-color }` (qatlamsiz) utility'ni bosadi — krem chiziq chiqardi; inline qiymat ustun.
+        style={{ borderBottomColor: "rgb(255 255 255 / 0.1)" }}
         data-image-bar
       >
         <span className="min-w-0 truncate font-medium">{poster ? poster.spec.title || doc.meta.topic : doc.imagePrompt || doc.meta.topic}</span>
