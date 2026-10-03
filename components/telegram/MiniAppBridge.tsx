@@ -45,6 +45,17 @@ function loadTelegramWebApp(win: TelegramWindow): Promise<TelegramWebApp | null>
  * «Telegram orqali kirish»). `initData` is read at call time and never stored.
  */
 export function MiniAppBridge() {
+  // Detect first, without touching the router: outside a genuine Telegram webview
+  // (every normal visitor, and any tree rendered without the app router) this
+  // component stays inert and never calls `useRouter`.
+  const [inTelegram, setInTelegram] = useState(false);
+  useEffect(() => {
+    setInTelegram(isTelegramWebApp(window as unknown as LaunchEnv));
+  }, []);
+  return inTelegram ? <MiniAppSession /> : null;
+}
+
+function MiniAppSession() {
   const router = useRouter();
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const loggedIn = useAppStore((s) => s.loggedIn);
@@ -54,7 +65,6 @@ export function MiniAppBridge() {
   const attempted = useRef(false);
 
   useEffect(() => {
-    if (!isTelegramWebApp(window as unknown as LaunchEnv)) return;
     let cancelled = false;
     void loadTelegramWebApp(window as TelegramWindow).then((wa) => {
       if (cancelled || !wa) return;
