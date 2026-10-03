@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { ChevronLeft, ChevronRight, Maximize2, Minus, MoreHorizontal, Plus } from "lucide-react";
 import { zoomStep } from "@/lib/viewers/metrics";
 import { cn } from "@/lib/cn";
+import { useOverlayHistory } from "../nav/useOverlayHistory";
 import type { DocView } from "./reading/prefs";
 
 /** Toolbar balandligi (`h-10`) — sahifa hisoblagichi uning ostidan sanaydi. */
@@ -205,6 +206,9 @@ const FOCUSABLE = 'button:not([disabled]), select:not([disabled]), input:not([di
  */
 function MoreMenu({ className, children }: { className?: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  // Its own history entry: the phone's back (and Telegram's) closes the menu, not the page.
+  const close = useCallback(() => setOpen(false), []);
+  useOverlayHistory(open, close);
   const id = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -225,7 +229,17 @@ function MoreMenu({ className, children }: { className?: string; children: React
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("pointerdown", onDown);
-    return () => document.removeEventListener("pointerdown", onDown);
+    // The trigger got hidden by a breakpoint (rotation, wider window): close, so
+    // no invisible menu is left holding a history entry for the next back press.
+    const onResize = () => {
+      const t = triggerRef.current;
+      if (t && t.isConnected && t.getClientRects().length === 0) setOpen(false);
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("resize", onResize);
+    };
   }, [open, controls]);
 
   return (

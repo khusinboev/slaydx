@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BackLink } from "@/components/nav/BackLink";
 import { cn } from "@/lib/cn";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -180,7 +181,8 @@ export function ResultView({ id }: { id: string }) {
       await api.deleteGeneration(id);
       drop(id);
       void useAppStore.getState().refreshSession();
-      router.push("/uz");
+      // REPLACE: the deleted document's page must not stay in history (back would land on a 404).
+      router.replace("/uz");
     } catch (e) {
       setError(e instanceof Error ? e.message : "O'chirilmadi");
       setBusy(false);
@@ -504,13 +506,17 @@ export function ResultView({ id }: { id: string }) {
 
   const header = (
     <nav className="flex items-center gap-2 px-3 py-2 group-data-[compact=1]/hdr:py-1 sm:px-4">
-      <Link
-        href="/uz"
-        aria-label="Orqaga"
+      {/*
+       * «←» = in-app back (docs/nav/PLAN.md): back to the page we came from
+       * (the filled form after generation), or the parent `/uz`
+       * (`parentOf`) in a fresh tab / deep link — replaced, so it never leaves
+       * the site and never ping-pongs.
+       */}
+      <BackLink
         className="text-muted-foreground hover:bg-muted flex size-8 items-center justify-center rounded-full"
       >
         <ArrowLeft className="size-5" />
-      </Link>
+      </BackLink>
       <div className="min-w-0 flex-1">
         <h1 className="truncate text-[15px] font-semibold">{gen.topic}</h1>
         <p className="text-muted-foreground truncate text-xs group-data-[compact=1]/hdr:hidden">

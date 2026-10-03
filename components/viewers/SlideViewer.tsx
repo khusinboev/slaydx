@@ -20,6 +20,7 @@ import { SlideCanvas } from "./SlideCanvas";
 import { SlideRail } from "./SlideRail";
 import { SlideStage, type SlideStageOverlayCtx } from "./SlideStage";
 import { useSlideKeys } from "./useSlideKeys";
+import { useOverlayHistory } from "../nav/useOverlayHistory";
 import { useReveal, type LiveView } from "./useReveal";
 import { LiveStrip } from "./LiveStrip";
 import { totalChars } from "@/lib/viewers/reveal";
@@ -224,6 +225,17 @@ export function SlideViewer({
       if (present && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
     };
   }, [present]);
+
+  /*
+   * Taqdimot — overlay: o'z tarix yozuvi bor (docs/nav/PLAN.md). Telefonning
+   * «orqaga» tugmasi (va Telegram BackButton) sahifani emas, taqdimotni
+   * yopadi. Yopishning HAR QANDAY yo'li (X, Esc/F, to'liq ekrandan chiqish,
+   * Android Chrome'da birinchi «orqaga» fullscreen'ni o'zi yopadi) faqat
+   * `present=false` qiladi; yozuvni hook AYNAN BIR MARTA olib tashlaydi —
+   * «orqaga» bilan yopilgan bo'lsa qayta `back()` qilmaydi.
+   */
+  const closePresent = useCallback(() => setPresent(false), []);
+  useOverlayHistory(present, closePresent);
 
   // Brauzer to'liq ekrandan chiqsa (Esc, F11) — holat mos kelib qolsin.
   useEffect(() => {
