@@ -156,10 +156,12 @@ if [ -n "${BACKUP_REMOTE:-}" ]; then
       fi
       ;;
     *)
+      # rclone check compares directories, not single files: check the backup dir
+      # against the remote one-way, limited to this dump (verified on Google Drive, 2026-10-03).
       # rclone masofaviy nomi: masalan b2:slaydx-backups. `rclone check`
       # hajm/hash bo'yicha haqiqiy tasdiqlaydi.
       if rclone copy "$final" "$BACKUP_REMOTE/" \
-        && rclone check "$final" "$BACKUP_REMOTE/$(basename "$final")" >/dev/null 2>&1; then
+        && rclone check "$BACKUP_DIR" "$BACKUP_REMOTE" --one-way --include "$(basename "$final")" >/dev/null 2>&1; then
         remote_status="ok"
       fi
       ;;

@@ -157,6 +157,7 @@ Deploying earlier would leave the owner without a working admin UI. Migration `0
 
 | Date | Stage | Result |
 |---|---|---|
+| 2026-10-03 | Ops | Daily DB backup: `/etc/cron.d/slaydx-backup` 01:30 server time → `/usr/local/bin/slaydx-backup` (flock) → `scripts/backup.sh` (verify, 7-day local rotation, Telegram alert to the owner on failure) → off-site Google Drive `slaydx-gdrive:slaydx-backups` (rclone, `drive.file` scope, 30-day remote retention). Settings in `/etc/slaydx/backup.env` (600). Note: rclone's shared Google client_id is being retired in 2026 — if uploads start failing, create an own OAuth client_id and re-authorise. |
 | 2026-10-03 | DEPLOYED #3 | `cdb54d6`: new admins are picked from the users list (search picker) or made from the user page («Admin qilish», rank-limited); server refuses blocked users (409 `blocked`). Rollback `7e766fd` + images `slaydx-{web,worker}:pre-pickuser`. Prod smoke: auto entry, picker search, admins and user pages 200; 0 errors. |
 | 2026-10-02 | DEPLOYED #2 | `7e766fd`: subscriptions removed (`docs/SUBS-REMOVAL.md`, migration 034 quota→balance verified on prod) and `ADMIN_2FA_REQUIRED` switch (default off: admins enter from the site's Admin panel button; 2FA flow kept behind the switch). Rollback `e57ffa5` + images `slaydx-{web,worker}:pre-subs`. |
 | 2026-10-02 | DEPLOYED | `main` = `e57ffa5` deployed to prod (<SERVER_IP>, see the deploy notes outside the repo) by deploy.sh: backup `/root/slaydx-backups/slaydx-20261002160932.dump`, rollback `857b8b8` + images `slaydx-{web,worker}:pre-admin`, `ADMIN_TOTP_KEY` added to prod `.env` (TRUST_PROXY already true). Smoke: migrations 028–033 applied, heartbeats fresh, 404 cloak, admin headers, 0 errors. Owner admin #1 created (pending enroll). Next sprint: remove subscriptions (`feat/remove-subscriptions`, `docs/SUBS-REMOVAL.md`). |
@@ -188,7 +189,7 @@ Deploying earlier would leave the owner without a working admin UI. Migration `0
 - [ ] Extract `cancelQueuedInTx` from lib/server/admin-job-actions.ts; switch admin-users setUserBlocked to it (WP2 repeats F6's QUEUED→REVOKED update).
 - [ ] users sort last_seen_desc ≈480 ms at 50k users, balance_desc no index (03-report; index needs a migration).
 - [ ] UX: pricing table at 1280 px pushes the recommendation column into the table's own scroll; consider compacting (Phase 4 UX).
-- [ ] Pricing product calls to confirm with owner: pages unit = package midpoint; glossary without termCount excluded from per-unit cost; avg AI cost over jobs WITH cost data.
+- [x] Pricing product calls CONFIRMED by owner 2026-10-03: pages unit = package midpoint; glossary without termCount excluded from per-unit cost; avg AI cost over jobs WITH cost data.
 
 ## 9. Admin 2FA switch (2026-10-02)
 
