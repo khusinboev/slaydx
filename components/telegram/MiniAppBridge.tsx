@@ -65,6 +65,8 @@ function MiniAppSession() {
   const attempted = useRef(false);
 
   useEffect(() => {
+    // Defence in depth: the script is injected only after the same detection.
+    if (!isTelegramWebApp(window as unknown as LaunchEnv)) return;
     let cancelled = false;
     void loadTelegramWebApp(window as TelegramWindow).then((wa) => {
       if (cancelled || !wa) return;
