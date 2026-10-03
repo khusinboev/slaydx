@@ -1,6 +1,7 @@
 "use client";
 
 import type { FormValues } from "@/lib/types";
+import { AutoTextarea } from "@/components/common/AutoTextarea";
 import {
   AUDIENCE_RULES,
   SLIDE_AUDIENCES,
@@ -444,26 +445,28 @@ export function renderSlideParam(
     case "keyIdeas":
       return (
         <Row key={id} label="Asosiy g‘oyalar" hint="Har biri yangi qatordan, 3 tagacha — promptga aynan shu fikrlar kiritiladi." wide>
-          <textarea
+          <AutoTextarea
             aria-label="Asosiy g‘oyalar"
             value={String(values.keyIdeas ?? "")}
             onChange={(e) => set("keyIdeas", e.target.value)}
-            rows={2}
+            minRows={2}
+            maxRows={6}
             placeholder={"Suv bug‘lanadi\nBulut hosil bo‘ladi"}
-            className="border-input bg-card focus:ring-ring w-full resize-y rounded-lg border px-2.5 py-2 text-[13px] outline-none focus:ring-2"
+            className="border-input bg-card focus:ring-ring w-full rounded-lg border px-2.5 py-2 text-[13px] outline-none focus:ring-2"
           />
         </Row>
       );
     case "extra":
       return (
         <Row key={id} label="Qo‘shimcha" hint="Rejalar, uslub, auditoriya — erkin matn." wide>
-          <textarea
+          <AutoTextarea
             aria-label="Qo‘shimcha talablar"
             value={String(values.extra ?? "")}
             onChange={(e) => set("extra", e.target.value)}
-            rows={2}
+            minRows={2}
+            maxRows={6}
             placeholder="Rejalar, uslub, auditoriya..."
-            className="border-input bg-card focus:ring-ring w-full resize-y rounded-lg border px-2.5 py-2 text-[13px] outline-none focus:ring-2"
+            className="border-input bg-card focus:ring-ring w-full rounded-lg border px-2.5 py-2 text-[13px] outline-none focus:ring-2"
           />
         </Row>
       );

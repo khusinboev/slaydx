@@ -2,6 +2,7 @@
 
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AutoTextarea } from "@/components/common/AutoTextarea";
 import type { FormValues, ToolConfig } from "@/lib/types";
 import { defaultPages, fieldVisible, missingRequired, priceFor, profileDefaults, toolBlockedReason } from "@/lib/tools";
 import { draftOutline, type ServerUser } from "@/lib/api-client";
@@ -263,11 +264,12 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
             ))}
             <fieldset className="mb-4">
               <Legend>Qo&apos;shimcha talablar</Legend>
-              <textarea
+              <AutoTextarea
                 value={String(values.extra ?? "")}
                 onChange={(e) => set("extra", e.target.value)}
                 className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 text-[15px] outline-none focus:ring-2"
-                rows={3}
+                minRows={3}
+                maxRows={8}
                 placeholder="Mavzu, yo'nalish va boshqa qo'shimchalar"
               />
             </fieldset>
@@ -275,11 +277,12 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
         ) : tool.extraOptional ? (
           <fieldset>
             <Legend>Qo&apos;shimcha talablar</Legend>
-            <textarea
+            <AutoTextarea
               value={String(values.extra ?? "")}
               onChange={(e) => set("extra", e.target.value)}
               className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 text-[15px] outline-none focus:ring-2"
-              rows={3}
+              minRows={3}
+              maxRows={8}
             />
           </fieldset>
         ) : null
@@ -354,10 +357,11 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
           >
             {outlineBusy ? "Reja tuzilmoqda…" : "AI reja tuzsin"}
           </button>
-          <textarea
+          <AutoTextarea
             value={String(values.tocText ?? "")}
             onChange={(e) => setOutline(e.target.value)}
-            rows={String(values.tocText ?? "") ? 9 : 4}
+            minRows={4}
+            maxRows={12}
             className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 font-mono text-[13px] outline-none focus:ring-2"
             placeholder={"1. Birinchi bob\n  1.1 Ostmavzu\n  1.2 Ostmavzu\n2. Ikkinchi bob"}
           />

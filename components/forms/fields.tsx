@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ESSAY_DESIGNS, SOURCE_LANGUAGES, TARGET_LANGUAGES } from "@/lib/languages";
 import { cn } from "@/lib/cn";
+import { AutoTextarea } from "@/components/common/AutoTextarea";
 import type { FieldOption, FormValues, ToolField } from "@/lib/types";
 
 export function Legend({ children }: { children: React.ReactNode }) {
@@ -41,12 +42,13 @@ export function TextArea({
   placeholder?: string;
 }) {
   return (
-    <textarea
+    <AutoTextarea
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      rows={4}
-      className="border-input bg-card focus:ring-ring w-full resize-y rounded-xl border px-3.5 py-2.5 text-[15px] outline-none focus:ring-2"
+      minRows={2}
+      maxRows={8}
+      className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 text-[15px] outline-none focus:ring-2"
     />
   );
 }
