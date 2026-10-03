@@ -104,6 +104,20 @@ test("Mini App: initData with Bot API 8.0 `signature` is accepted (HMAC covers i
   assert.equal(verifyMiniAppInitData(initData.replace(/signature=[^&]+/, "signature=forged")), null);
 });
 
+test("Mini App: a hash computed without `signature` is also accepted; the user field stays protected", () => {
+  // Some clients sign the data-check-string without `signature`; both forms are
+  // HMACs under the bot-token key, so the fallback adds no forgery path.
+  const signed = signInitData({
+    auth_date: String(now()),
+    query_id: "AAA",
+    user: JSON.stringify({ id: 44, first_name: "Kamola" }),
+  });
+  const initData = `${signed}&signature=c2lnbmF0dXJlLWJ5dGVzLWZvci10ZXN0cw`;
+  assert.equal(verifyMiniAppInitData(initData)?.telegramId, "44");
+  const tampered = initData.replace(/user=[^&]+/, `user=${encodeURIComponent('{"id":1,"first_name":"Admin"}')}`);
+  assert.equal(verifyMiniAppInitData(tampered), null);
+});
+
 test("Mini App: buzilgan user maydoni rad etiladi", () => {
   const initData = signInitData({
     auth_date: String(now()),

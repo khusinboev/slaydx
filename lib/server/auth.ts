@@ -82,8 +82,17 @@ export function verifyMiniAppInitData(initData: string): TelegramProfile | null 
   params.forEach((v, k) => pairs.set(k, v));
 
   const secret = createHmac("sha256", "WebAppData").update(env.telegramBotToken).digest();
-  const expected = createHmac("sha256", secret).update(checkString(pairs)).digest("hex");
-  if (!safeEqual(expected, hash)) return null;
+  const sign = (m: Map<string, string>) => createHmac("sha256", secret).update(checkString(m)).digest("hex");
+  // Clients differ on whether `signature` (Bot API 8.0+) is part of the HMAC'd
+  // data-check-string; accept either form. Both are HMACs under the bot-token
+  // key, so neither variant is easier to forge.
+  let valid = safeEqual(sign(pairs), hash);
+  if (!valid && pairs.has("signature")) {
+    const withoutSignature = new Map(pairs);
+    withoutSignature.delete("signature");
+    valid = safeEqual(sign(withoutSignature), hash);
+  }
+  if (!valid) return null;
 
   const authDate = Number(params.get("auth_date") ?? 0);
   if (!Number.isFinite(authDate) || Date.now() / 1000 - authDate > 86_400) return null;
