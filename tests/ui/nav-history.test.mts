@@ -616,3 +616,84 @@ test("NavProvider: the overlay store closes on a route change unless opened by t
   assert.equal(useUi.getState().overlay, "login");
   act(() => useUi.getState().close());
 });
+
+test("navigateFromOverlay external: pops the overlay entry, then leaves; \"replace\" uses location.replace", async () => {
+  const exits: Array<[string, boolean]> = [];
+  nav.__setLeaveSiteForTests((href, replace) => exits.push([href, replace]));
+  try {
+    fresh("/uz/purchase");
+    mount(h(Pair));
+    act(() => ctl.a!(true));
+    act(() => nav.navigateFromOverlay("https://pay.example/checkout?o=1", { external: "replace" }));
+    await settle();
+    assert.deepEqual(exits, [["https://pay.example/checkout?o=1", true]]);
+    assert.equal(sx()?.i, 0, "the overlay entry was popped before leaving: the provider replaces the page entry");
+    assert.equal(sx()?.o, undefined);
+
+    act(() => nav.navigateFromOverlay("https://pay.example/other", { external: true }));
+    assert.deepEqual(exits[1], ["https://pay.example/other", false], "plain external = assign");
+  } finally {
+    nav.__setLeaveSiteForTests(null);
+  }
+});
+
+test("PayDialog sends the user to the checkout with location.replace", async () => {
+  const { PayDialog } = await import("../../components/overlays/PayDialog.tsx");
+  const { useUi } = await import("../../lib/ui.ts");
+  const { useAppStore } = await import("../../lib/store.ts");
+  const exits: Array<[string, boolean]> = [];
+  nav.__setLeaveSiteForTests((href, replace) => exits.push([href, replace]));
+  const realFetch = globalThis.fetch;
+  try {
+    fresh("/uz/purchase");
+    useAppStore.setState({
+      loggedIn: true,
+      features: { llm: true, images: true, telegram: false, telegramBot: null, devLogin: false, pdf: true, payments: { click: true, payme: false } },
+    } as never);
+    (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown) =>
+      new Response(JSON.stringify(String(input) === "/api/payments/orders" ? { checkoutUrl: "https://my.click.uz/pay?x=1", orderId: "o1" } : {}), {
+        status: String(input) === "/api/payments/orders" ? 200 : 404,
+        headers: { "content-type": "application/json" },
+      });
+    mount(h(PayDialog));
+    await act(async () => {
+      useUi.getState().open("pay");
+    });
+    await settle();
+    assert.ok(sx()?.o);
+    const click = Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.includes("Click"))!;
+    fireEvent.click(click);
+    await settle();
+    await settle();
+    assert.deepEqual(exits, [["https://my.click.uz/pay?x=1", true]]);
+    assert.equal(sx()?.o, undefined, "dialog entry popped first");
+  } finally {
+    nav.__setLeaveSiteForTests(null);
+    globalThis.fetch = realFetch;
+    useUi.getState().close();
+  }
+});
+
+test("/uz/files/[id] «←» restores the home view (?filter&sort&desc) the user last had", async () => {
+  fresh("/uz");
+  router.replace("/uz?filter=docs&sort=name&desc=0&returnTo=%2Fuz%2Fcreate");
+  router.push("/uz/files/9");
+  assert.equal(nav.parentHref("/uz/files/9"), "/uz?filter=docs&sort=name&desc=0", "view keys only, no returnTo");
+  assert.equal(nav.parentHref("/uz/create"), "/uz", "only the file page goes back to the filtered list");
+
+  // A later visit to home without filters resets the memory.
+  router.push("/uz");
+  assert.equal(nav.parentHref("/uz/files/9"), "/uz");
+  router.replace("/uz?filter=image");
+
+  // Reload on the file page with no in-app history (memory lives in sessionStorage): backTo replaces with it.
+  nav.__resetNavForTests();
+  window.history.pushState(null, "", "/uz/files/9");
+  nav.installNav();
+  nav.setNavRouter(router);
+  calls.length = 0;
+  await act(async () => {
+    await nav.backTo();
+  });
+  assert.deepEqual(calls, ["replace /uz?filter=image"]);
+});
