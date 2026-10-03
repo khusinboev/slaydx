@@ -28,6 +28,9 @@ import { ArticleEditor, articleEditTargets, isTeacherEditorOp, isWorkOp, legacyE
 import { PageRow, ZoomFrame, Workspace } from "./sheet";
 import { TitlePage } from "./TitlePage";
 import { VIEWER_TOOLBAR_H, ViewerToolbar } from "./toolbar";
+import { useDocView, type DocView } from "./reading/prefs";
+import { ReadingScroll, ReadingTitle, ReadingView } from "./reading/ReadingView";
+import { readingSections } from "./reading/sections";
 import { useFitZoom } from "./useFitZoom";
 import { useVisiblePage } from "./useVisiblePage";
 
@@ -311,6 +314,17 @@ export function WordViewer({
   /** Varaqlar foni (`Workspace`) — scroll qutisi EMAS (viewer redesign V1). */
   const workRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
+  /*
+   * V5a «O‘qish / Varaq»: phones open in reading mode (reflowed text from
+   * the SAME flow items), desktop in the sheets. The sheets stay mounted
+   * (hidden on screen) while reading: printing always uses them, the fit
+   * zoom keeps tracking the column, and switching back is instant.
+   */
+  const [view, setView] = useDocView();
+  const reading = view === "reading";
+  /** Reading sections by FILE page (index = page − 1): the counter means the same page in both modes. */
+  const readingRefs = useRef<(HTMLElement | null)[]>([]);
+  const sections = useMemo(() => (reading ? readingSections(items, pages) : []), [reading, items, pages]);
 
   /*
    * Standart zoom — ustun eniga sig'dirish (`useFitZoom`: ramka
@@ -340,14 +354,27 @@ export function WordViewer({
 
   // Scroll paytida ko'rinib turgan varaqni kuzatish — barcha ko'ruvchilar
   // uchun yagona hook (`useVisiblePage`).
-  const [page, setPage] = useVisiblePage(workRef, () => pageRefs.current, [pages, zoom], { topInset: VIEWER_TOOLBAR_H });
+  const [page, setPage] = useVisiblePage(workRef, () => (reading ? readingRefs.current : pageRefs.current), [pages, zoom, reading], {
+    topInset: VIEWER_TOOLBAR_H,
+  });
+
+  function scrollToPage(n: number, behavior: ScrollBehavior) {
+    if (reading) {
+      // A page fully inside a long table has no section of its own: use the one it continues.
+      let i = n - 1;
+      while (i > 0 && !readingRefs.current[i]) i--;
+      readingRefs.current[i]?.scrollIntoView({ behavior, block: "start" });
+      return;
+    }
+    // Qator (`PageRow`) — `scroll-mt` u yerda: varaq sarlavha/toolbar ostida qolmasin.
+    const el = pageRefs.current[n - 1];
+    (el?.closest<HTMLElement>("[data-page-row]") ?? el)?.scrollIntoView({ behavior, block: "start" });
+  }
 
   function go(n: number) {
     const next = Math.max(1, Math.min(pages?.length ?? 1, n));
     setPage(next);
-    // Qator (`PageRow`) — `scroll-mt` u yerda: varaq sarlavha/toolbar ostida qolmasin.
-    const el = pageRefs.current[next - 1];
-    (el?.closest<HTMLElement>("[data-page-row]") ?? el)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    scrollToPage(next, "smooth");
   }
 
   /* ═══ tahrir (Maqola 2 WP7; talaba ishi — AUDIT-19 WP-C) ═══ */
@@ -355,7 +382,8 @@ export function WordViewer({
   /** Faol tahrir oqimi: maqola yoki talaba ishi (ikkalasi birga bo'lmaydi). */
   const active = ed.editable ? ed : wed.editable ? wed : ted.editable ? ted : null;
   const editable = Boolean(active) && !(active === ed && ed.legacy);
-  const editing = editOn && editable;
+  // Editing only in «Varaq» (owner decision): reading mode has no edit layer at all.
+  const editing = editOn && editable && !reading;
   const { undo, redo, save, pending, discard, saving, saveFailed, justSaved } = active ?? ed;
   const runArticle = ed.run;
   const runWork = wed.run;
@@ -402,6 +430,21 @@ export function WordViewer({
         : null,
     [editing, sheet, work, teacher, items, doc],
   );
+
+  /* Switching modes keeps the reader on the same file page. */
+  const jumpTo = useRef<number | null>(null);
+  function changeView(v: DocView) {
+    if (v === view) return;
+    jumpTo.current = page > 1 ? page : null;
+    if (v === "reading") setEditOn(false);
+    setView(v);
+  }
+  useEffect(() => {
+    const n = jumpTo.current;
+    jumpTo.current = null;
+    if (n) scrollToPage(n, "auto");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per mode switch, after the new mode is in the DOM.
+  }, [view]);
 
   const onEditStateRef = useRef(onEditState);
   onEditStateRef.current = onEditState;
@@ -481,7 +524,9 @@ export function WordViewer({
         pages={pages?.length ?? 1}
         onPage={go}
         onFit={fit}
-        right={right}
+        right={reading ? null : right}
+        view={view}
+        onView={changeView}
       />
       {(active ?? ed).error ? (
         <div className="no-print bg-rose-900/80 flex items-center gap-2 px-3 py-1.5 text-[12px] text-white">
@@ -491,7 +536,33 @@ export function WordViewer({
           </button>
         </div>
       ) : null}
-      <Workspace ref={workRef} className="grow">
+      {reading ? (
+        <ReadingView article={Boolean(profiled)} sheetStyle={profiled?.style}>
+          {sections.map((s) => (
+            <section
+              key={s.page}
+              data-reading-page={s.page}
+              ref={(el) => {
+                readingRefs.current[s.page - 1] = el;
+              }}
+              className="scroll-mt-[calc(var(--result-header-h,0px)+3rem)]"
+            >
+              {s.items.some((it) => it.type === "title") ? <ReadingTitle title={title} /> : null}
+              <PageBody
+                items={s.items.filter((it) => it.type !== "title")}
+                continuation={null}
+                continuedLabel={continuedLabel}
+                toc={toc}
+                labels={labels}
+                tableCaptionAlign={sheet ? sheet.plan.tableCaptionAlign : work || teacher ? "center" : undefined}
+                reading
+              />
+            </section>
+          ))}
+        </ReadingView>
+      ) : null}
+      {/* In «O‘qish» the sheets are hidden on screen but still print (`print:block`). */}
+      <Workspace ref={workRef} className={cn("grow", reading && "hidden print:block")}>
           {/*
             Tahrir qatlami iqtibos rejasini (`refs`/`cite`) so'raydi —
             o'qituvchi hujjatida manba ro'yxati YO'Q, shuning uchun u
@@ -624,6 +695,7 @@ function PageBody({
   labels,
   tableCaptionAlign,
   edit,
+  reading = false,
 }: {
   items: FlowItem[];
   continuation: DocTable | null;
@@ -634,6 +706,8 @@ function PageBody({
   tableCaptionAlign?: "left" | "right" | "center";
   /** Tahrir nishonlari (band id → nishon) — faqat tahrir rejimida (WP7). */
   edit?: Map<string, EditTarget> | null;
+  /** «O‘qish» (V5a): tables and printed grids go into their own horizontal scroll block. */
+  reading?: boolean;
 }) {
   const nodes: React.ReactNode[] = [];
   let buf: Extract<FlowItem, { type: "table-head" | "table-row" }>[] = [];
@@ -655,6 +729,7 @@ function PageBody({
           captionAlign={head?.captionAlign ?? tableCaptionAlign}
           edit={edit}
           headId={head?.id}
+          reading={reading}
         />,
       );
     }
@@ -667,6 +742,14 @@ function PageBody({
       continue;
     }
     flushTable();
+    if (reading && (it.type === "game-clues" || it.type === "game-cards")) {
+      nodes.push(
+        <ReadingScroll key={it.id} cols={it.type === "game-clues" ? it.columns.length : undefined} paper={it.type === "game-cards"}>
+          <FlowBlock item={it} toc={toc} labels={labels} edit={edit} />
+        </ReadingScroll>,
+      );
+      continue;
+    }
     nodes.push(<FlowBlock key={it.id} item={it} toc={toc} labels={labels} edit={edit} />);
   }
   flushTable();
@@ -731,6 +814,7 @@ function TableGroup({
   captionAlign,
   edit,
   headId,
+  reading = false,
 }: {
   table: DocTable;
   rows: Extract<FlowItem, { type: "table-row" }>[];
@@ -740,6 +824,8 @@ function TableGroup({
   edit?: Map<string, EditTarget> | null;
   /** `table-head` bandining id si — sarlavha/ustun nishonlari shundan. */
   headId?: string;
+  /** «O‘qish»: the table scrolls inside its own block (caption stays outside it). */
+  reading?: boolean;
 }) {
   const cols = tableCols(table);
   // Tahrir nishonlari (WP7): sarlavha `caption:table:<id>`, kataklar `cell:<id>:<r>:<c>` (ustun sarlavhasi r = -1).
@@ -758,6 +844,7 @@ function TableGroup({
           attr={tableId !== null && !continued ? { "data-path": `caption:table:${tableId}` } : undefined}
         />
       ) : null}
+      <ScrollIf reading={reading} cols={cols.length}>
       <table className="word-table" style={{ tableLayout: "fixed" }}>
         <colgroup>
           {cols.map((w, i) => (
@@ -788,8 +875,14 @@ function TableGroup({
           })}
         </tbody>
       </table>
+      </ScrollIf>
     </div>
   );
+}
+
+/** Reading mode wraps a table in {@link ReadingScroll}; the sheet keeps the bare table (same DOM as before). */
+function ScrollIf({ reading, cols, children }: { reading: boolean; cols: number; children: React.ReactNode }) {
+  return reading ? <ReadingScroll cols={cols}>{children}</ReadingScroll> : <>{children}</>;
 }
 
 function FlowBlock({
