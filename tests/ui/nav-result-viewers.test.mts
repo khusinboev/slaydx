@@ -393,10 +393,18 @@ test("viewer toolbar «⋯» menu: back closes it; an outside tap closes and pop
 
 // ═══════════════════════════════════════════════ useDocEdit: auto-save, then leave
 
-type Srv = { version: number; doc: AcademicDoc; patches: string[]; failPatch: boolean; holdRebuild: boolean; rebuilds: number };
+type Srv = {
+  version: number;
+  doc: AcademicDoc;
+  patches: string[];
+  failPatch: boolean;
+  /** Set: `/rebuild` waits for it (a slow server-side rebuild). */
+  rebuildGate: Promise<void> | null;
+  rebuilds: number;
+};
 
 function stubEditServer(): Srv {
-  const s: Srv = { version: 1, doc: makeDoc(), patches: [], failPatch: false, holdRebuild: false, rebuilds: 0 };
+  const s: Srv = { version: 1, doc: makeDoc(), patches: [], failPatch: false, rebuildGate: null, rebuilds: 0 };
   (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, opts?: RequestInit) => {
     const url = String(input);
     const method = opts?.method ?? "GET";
@@ -412,7 +420,7 @@ function stubEditServer(): Srv {
     }
     if (method === "POST" && url.endsWith("/rebuild")) {
       s.rebuilds += 1;
-      if (s.holdRebuild) await new Promise(() => {}); // a slow server-side rebuild
+      if (s.rebuildGate) await s.rebuildGate;
       return json(200, { fileVersion: s.version, docVersion: s.version, rebuilt: true });
     }
     return json(200, { generation: slideGen(s.doc, s.version) });
@@ -453,17 +461,23 @@ test("useDocEdit: phone back with «Saqlash · 1» pending saves first, then goe
 
 test("useDocEdit: «←» (backTo) saves first; the file rebuild is not awaited", async () => {
   const s = stubEditServer();
-  s.holdRebuild = true;
+  let release = () => {};
+  s.rebuildGate = new Promise<void>((r) => (release = r));
   await typeChange(s);
-  let started = false;
-  await act(async () => {
-    started = await nav.backTo();
+  let started: Promise<boolean> = Promise.resolve(false);
+  act(() => {
+    started = nav.backTo();
   });
   for (let k = 0; k < 4; k++) await settle();
-  assert.equal(started, true);
-  assert.equal(s.patches.length, 1);
-  assert.equal(s.rebuilds, 1, "the rebuild still starts (in the background)");
-  assert.equal(here(), "/uz/slide", "navigation did not wait for the rebuild");
+  try {
+    assert.equal(s.patches.length, 1);
+    assert.equal(s.rebuilds, 1, "the rebuild still starts (in the background)");
+    assert.equal(here(), "/uz/slide", "navigation did not wait for the rebuild");
+  } finally {
+    release();
+    await settle();
+  }
+  assert.equal(await started, true);
 });
 
 test("useDocEdit: internal link with pending edits saves first, then navigates", async () => {
