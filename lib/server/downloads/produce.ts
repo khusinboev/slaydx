@@ -59,7 +59,7 @@ export const PREPARE_RETRY_MS = 1_500;
 /** Background jobs: total and per user (beyond → 503 / 429 with Retry-After). */
 const MAX_JOBS = 16;
 const MAX_JOBS_PER_USER = 3;
-/** A finished job's metadata stays this long (ready answer without a second conversion). */
+/** A finished job nobody polled for is forgotten after this long. */
 const DONE_TTL_MS = 120_000;
 /** A failed job is reported to the next poll, or forgotten after this long. */
 const FAILED_TTL_MS = 60_000;
@@ -370,7 +370,12 @@ export async function prepareDownload(
     jobs().delete(key);
     throw toDownloadError(job.failed.error);
   }
-  if (job?.done) return readyOf(job.done);
+  if (job?.done) {
+    // Finished after the previous poll answered `preparing`. Reported once: from then on the
+    // derived cache (checked above) is the source of truth.
+    jobs().delete(key);
+    return readyOf(job.done);
+  }
   if (!job) {
     const live = running();
     if (live.filter((j) => j.userId === userId).length >= MAX_JOBS_PER_USER) {
@@ -398,6 +403,9 @@ export async function prepareDownload(
     jobs().delete(key);
     throw toDownloadError(job.failed.error);
   }
-  if (job.done) return readyOf(job.done);
+  if (job.done) {
+    jobs().delete(key);
+    return readyOf(job.done);
+  }
   return { state: "preparing", retryAfterMs: PREPARE_RETRY_MS };
 }

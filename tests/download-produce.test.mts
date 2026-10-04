@@ -369,6 +369,22 @@ test("producers (Postgres)", { skip: hasDb ? false : "DATABASE_URL yo'q" }, asyn
     assert.equal(g.state === "ready" && g.size, Buffer.byteLength('\uFEFF"Atama","Ta’rif"\r\n"Xlorofill","Yashil pigment"\r\n'));
   });
 
+  await t.test("prepare: `ready` for a derived file always means it is in the cache now (no stale job memo)", async () => {
+    const counters = { convert: 0, raster: 0, jpeg: 0 };
+    const mkCache = async () => new DerivedDiskCache({ dir: await mkdtemp(join(tmpdir(), "slaydx-dlp-memo-")), maxBytes: 64 << 20, maxAgeMs: 60_000 });
+    const id = await mkGen({ tool: "slide", format: "pptx", mime: PPTX, fileName: "M.pptx", bytes: Buffer.from("memo") });
+    const first = await prepareDownload(id, user, "pdf", { ...stubDeps(counters, await mkCache()), prepareBudgetMs: 2_000 });
+    assert.equal(first.state, "ready");
+    assert.equal(counters.convert, 1);
+    // The cache lost the file (eviction, new container without the volume): convert again.
+    const cache2 = await mkCache();
+    const second = await prepareDownload(id, user, "pdf", { ...stubDeps(counters, cache2), prepareBudgetMs: 2_000 });
+    assert.equal(second.state, "ready");
+    assert.equal(counters.convert, 2);
+    const { derivedCacheKey } = await import("../lib/server/pdf-cache.ts");
+    assert.ok((await cache2.size(derivedCacheKey(id, Buffer.from("memo")), "pdf")) !== null);
+  });
+
   const soffice = ["/usr/bin/soffice", "/usr/bin/libreoffice", "/usr/local/bin/soffice"].some((p) => existsSync(p));
   const pdftoppm = ["/usr/bin/pdftoppm", "/usr/local/bin/pdftoppm"].some((p) => existsSync(p));
   await t.test(
