@@ -139,3 +139,9 @@ Order: F0 ∥ G → (A ∥ B ∥ D) → C → E → P → integration + reviews 
 | WP | Status |
 |---|---|
 | Research R1–R5 | R1–R4 done; R5 running |
+| F0 Foundation | ✅ merged (`cb5abaf`; registry 16, accessor 21, hooks 18 tests; boundary lock `cd15619`) |
+| G Essay level | running (`wip/mobile-g`) |
+| A Download server | running (`wip/mobile-a`) |
+| B Telegram server | running (`wip/mobile-b`) |
+| D Slide editing | running (`wip/mobile-d`) |
+| C, E, P, reviews | waiting |
