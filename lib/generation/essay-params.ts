@@ -64,6 +64,14 @@ export const ESSAY_PARAMS: EssayParam[] = [
   { id: "design", encode: "string", probeA: "iris", probeB: "vintage", impacts: ["layout"] },
   { id: "person", encode: "string", probeA: "first", probeB: "third", impacts: ["prompt", "review"] },
   { id: "extra", encode: "string", probeA: "", probeB: "Jonli tilda, uzun jumlalarsiz yozing.", impacts: ["prompt"] },
+  /*
+   * CEFR level (mobile sprint, `essay/level.ts`): prompt block, review rule
+   * «Til darajasi» (+ level-scaled thesis/topic minimums) and
+   * `doc.essay.level`. NOT `price` — the price loop below proves it.
+   * Probed outside IELTS: IELTS has no level (owner decision O3), A/B
+   * would be identical there.
+   */
+  { id: "essayLevel", encode: "string", probeA: "A2", probeB: "C1", probeWith: { essayContext: "academic", essayKind: "argumentative" }, impacts: ["prompt", "review", "layout"] },
 ];
 
 export const ESSAY_FORM_FIELDS = ESSAY_PARAMS.map((p) => p.id);
