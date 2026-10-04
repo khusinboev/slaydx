@@ -506,5 +506,5 @@ export function saveCapability(s: {
 }
 
 function atLeast(version: string | null, min: string): boolean {
-  return typeof version === "string" && version.trim() !== "" && compareVersions(version, min) >= 0;
+  return typeof version === "string" && compareVersions(version, min) >= 0;
 }
