@@ -96,7 +96,7 @@ export function revealDelta(target: Rect, view: Rect, margin = REVEAL_MARGIN): {
 
 function axis(start: number, size: number, vStart: number, vSize: number, margin: number): number {
   if (vSize <= 0) return 0;
-  const m = Math.min(margin, Math.max(0, (vSize - size) / 2));
+  const m = Math.min(margin, vSize / 4);
   const end = start + size;
   const vEnd = vStart + vSize;
   if (size > vSize - 2 * m) return Math.round(start - (vStart + m));

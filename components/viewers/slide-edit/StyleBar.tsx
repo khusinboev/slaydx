@@ -193,7 +193,7 @@ export function SlideEditStyleBar({
         aria-haspopup="dialog"
         aria-expanded={sheetOpen}
         aria-controls={sheetId}
-        className={cn(hit, "w-10 min-w-10 font-medium tabular-nums hover:bg-white/10", sheetOpen && "bg-white/15")}
+        className={cn(hit, "font-medium tabular-nums hover:bg-white/10", sheetOpen && "bg-white/15")}
         onClick={onToggleSheet}
       >
         {size}
@@ -214,7 +214,7 @@ export function SlideEditStyleBar({
         aria-expanded={sheetOpen}
         aria-controls={sheetId}
         className={cn(
-          "inline-flex h-11 min-w-11 flex-1 items-center justify-between gap-1 rounded-md px-2 hover:bg-white/10",
+          "inline-flex h-11 min-w-11 flex-1 items-center justify-between gap-1 rounded-md px-1.5 hover:bg-white/10",
           sheetOpen && "bg-white/15",
         )}
         onClick={onToggleSheet}
@@ -237,7 +237,7 @@ export function SlideEditStyleBar({
       <button
         type="button"
         data-slide-edit-done
-        className="ml-0.5 inline-flex h-11 shrink-0 items-center rounded-md bg-sky-600 px-3 font-semibold text-white hover:bg-sky-500"
+        className="ml-0.5 inline-flex h-11 min-w-11 shrink-0 items-center rounded-md bg-sky-600 px-2.5 font-semibold text-white hover:bg-sky-500"
         onClick={onDone}
       >
         Tayyor
