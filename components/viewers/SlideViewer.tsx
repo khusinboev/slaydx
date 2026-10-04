@@ -26,6 +26,12 @@ import { LiveStrip } from "./LiveStrip";
 import { totalChars } from "@/lib/viewers/reveal";
 import { planSlide } from "@/lib/generation/slide-layout";
 import { asLiveView } from "./live-view";
+import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
+import type { VisualViewportState } from "@/lib/hooks/useVisualViewport";
+import { useCompactHeaderWhile } from "../files/ResultLayout";
+import { SlideEditHint, readEditHintSeen, writeEditHintSeen } from "./slide-edit/EditHint";
+import { VisualViewportWatch } from "./slide-edit/viewport";
+import type { Rect } from "./slide-edit/geometry";
 
 /**
  * Slayd masshtab pog'onalari (foizda). «Moslash» o'lchangan foiz bo'ladi
@@ -340,7 +346,56 @@ export function SlideViewer({
    * matn ustma-ust tushmasin). Slayd almashsa tozalanadi.
    */
   const [editingKey, setEditingKey] = useState<string | null>(null);
-  useEffect(() => setEditingKey(null), [i]);
+  /** Edited box in slide px — the phone focus zoom target (`SlideStage.focus`). */
+  const [editBox, setEditBox] = useState<Rect | null>(null);
+  useEffect(() => {
+    setEditingKey(null);
+    setEditBox(null);
+  }, [i]);
+
+  /*
+   * ═══ PHONE EDITING (mobile sprint, docs/mobile/PLAN.md §3 O4, R3 S2) ═══
+   *
+   * While a text is edited on a phone: the toolbar becomes the slot of the
+   * editor's 44 px style bar (`barSlot`), the stage focus-zooms on the box,
+   * the thumbnail strip and the status row are hidden, the result header
+   * takes its compact form, and the viewer is capped to the visible
+   * viewport (keyboard) so the stage never runs under it. Before the first
+   * edit a one-time hint tells touch users about the double tap.
+   */
+  const coarse = useCoarsePointer();
+  const phoneEditing = coarse && editOn && !present && editingKey !== null;
+  const [barSlot, setBarSlot] = useState<HTMLElement | null>(null);
+  useCompactHeaderWhile(phoneEditing);
+
+  // Hidden on the server and until storage is read (no hydration mismatch, no flash for returning users).
+  const [hintSeen, setHintSeen] = useState(true);
+  useEffect(() => setHintSeen(readEditHintSeen()), []);
+  const dismissHint = useCallback(() => {
+    setHintSeen(true);
+    writeEditHintSeen();
+  }, []);
+
+  const onEditing = useCallback(
+    (key: string | null, box?: Rect | null) => {
+      setEditingKey(key);
+      setEditBox(key ? (box ?? null) : null);
+      // The user found the gesture: the hint has done its job.
+      if (key && coarse) dismissHint();
+    },
+    [coarse, dismissHint],
+  );
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  const capToViewport = useCallback((vv: VisualViewportState) => {
+    const el = rootRef.current;
+    if (!el || !(vv.height > 0)) return;
+    const top = el.getBoundingClientRect().top;
+    el.style.maxHeight = `${Math.max(160, Math.round(vv.offsetTop + vv.height - top))}px`;
+  }, []);
+  useEffect(() => {
+    if (!phoneEditing) rootRef.current?.style.removeProperty("max-height");
+  }, [phoneEditing]);
 
   /*
    * Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y. `useSlideKeys` bu ilgakni
@@ -450,7 +505,12 @@ export function SlideViewer({
   const notes = slide ? slideNotes(slide, deck.speakerNotes) : "";
 
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col", present && "fixed inset-0 z-50 bg-black")}>
+    <div
+      ref={rootRef}
+      className={cn("flex min-h-0 flex-1 flex-col", present && "fixed inset-0 z-50 bg-black")}
+      data-slide-editing={phoneEditing ? "" : undefined}
+    >
+      {phoneEditing ? <VisualViewportWatch onChange={capToViewport} /> : null}
       {present ? (
         <div className="no-print absolute top-0 right-0 z-20 flex items-center gap-1 p-3 text-white/80">
           <span className="mr-2 text-sm tabular-nums">
@@ -501,6 +561,9 @@ export function SlideViewer({
           /* Interfeys o'zbekcha: xom `id` («magazine», «problem») emas,
              shablonning formada ko'ringan nomi. */
           info={`${SLIDE_TEMPLATE_BY_ID[deck.templateId]?.nameUz ?? deck.templateId} · ${theme.nameUz}`}
+          editBar={
+            phoneEditing ? <div ref={setBarSlot} data-slide-editbar-slot className="flex w-full min-w-0 flex-col" /> : undefined
+          }
         />
       )}
 
@@ -541,6 +604,7 @@ export function SlideViewer({
             onFitScale={setFitScale}
             onAdvance={() => go(i + 1)}
             hideSrc={editOn && !present && editingKey ? editingKey : undefined}
+            focus={phoneEditing ? editBox : null}
             /*
               Tahrir qatlami — `overlay` slotida. Tashqi `overlay` propi
               (agar berilgan bo'lsa) ustun: uni jonli paket ishlatadi va
@@ -571,7 +635,8 @@ export function SlideViewer({
                       onImage={onSlideImage}
                       onRestoreImage={onRestoreImage}
                       onUpload={(f) => void ed.uploadImage(ctx.index, f)}
-                      onEditing={setEditingKey}
+                      onEditing={onEditing}
+                      editBarSlot={phoneEditing ? barSlot : null}
                     />
                   )
                 : undefined)
@@ -591,7 +656,18 @@ export function SlideViewer({
             qoladi. Ishlab turgan IKKALA yo'l ham tasmani oladi:
             `ArtifactViewer` → `gen`, `RunningPanel` → `live`.
           */}
+          {/*
+            One-time touch hint — in-flow under the stage (never over the
+            slide), only before the first edit.
+          */}
+          {coarse && editOn && !present && !hintSeen && !phoneEditing ? <SlideEditHint onDismiss={dismissHint} /> : null}
+
+          {/*
+            Phone editing hides the strip (kept mounted: its scroll position
+            survives) and the status row — the stage gets the room.
+          */}
           {!present && connected ? (
+            <div className={phoneEditing ? "hidden" : "contents"} data-slide-strip-wrap>
             <SlideRail
               variant="strip"
               slides={slides}
@@ -609,6 +685,7 @@ export function SlideViewer({
               reorderOn={editOn}
               onMove={onMove}
             />
+            </div>
           ) : null}
 
           {!present ? (
@@ -618,7 +695,13 @@ export function SlideViewer({
               panelda). Faqat holat: saqlanmoqda / fayl yangilanmoqda /
               xato va dekaning mavzusi.
             */
-            <div className="no-print flex h-8 shrink-0 items-center gap-2 border-t border-white/10 bg-[#252525] px-3 text-[12px] text-white/70">
+            <div
+              data-slide-status
+              className={cn(
+                "no-print flex h-8 shrink-0 items-center gap-2 border-t border-white/10 bg-[#252525] px-3 text-[12px] text-white/70",
+                phoneEditing && "hidden",
+              )}
+            >
               {ed.saving ? (
                 <span className="shrink-0 text-white/50">Saqlanmoqda…</span>
               ) : ed.rebuilding ? (
