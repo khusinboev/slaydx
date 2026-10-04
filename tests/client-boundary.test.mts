@@ -75,6 +75,11 @@ const ENTRIES = [
   "components/game/Player.tsx",
   // Telegram Mini App bridge: mounted from `Providers` on every consumer page.
   "components/telegram/MiniAppBridge.tsx",
+  // Mobile sprint F0: client-safe modules the result page and editors import.
+  "lib/downloads/formats.ts",
+  "lib/telegram-webapp.ts",
+  "lib/hooks/useCoarsePointer.ts",
+  "lib/hooks/useVisualViewport.ts",
 ];
 
 for (const e of ENTRIES) {
