@@ -510,10 +510,10 @@ export type CefrUi = { id: CefrLevel; name: string; phrase: string };
 
 /** Form labels: buttons show only the code; the caption under the control shows name + phrase. */
 export const CEFR_UI: readonly CefrUi[] = [
-  { id: "A1", name: "Boshlang‘ich", phrase: "juda qisqa, sodda gaplar, atamasiz" },
+  { id: "A1", name: "Boshlang‘ich", phrase: "juda sodda gaplar, atamasiz" },
   { id: "A2", name: "Sodda", phrase: "qisqa gaplar, oddiy bog‘lovchilar" },
   { id: "B1", name: "O‘rta", phrase: "ravshan gaplar, atamalar izohli" },
-  { id: "B2", name: "O‘rta-yuqori", phrase: "qo‘shma gaplar, atamalar erkin" },
+  { id: "B2", name: "O‘rta-yuqori", phrase: "qo‘shma gaplar, atamalar" },
   { id: "C1", name: "Ilg‘or", phrase: "tarkibli gaplar, aniq atamalar" },
   { id: "C2", name: "Mukammal", phrase: "boy leksika, ritorik vositalar" },
 ];

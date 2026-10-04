@@ -266,7 +266,7 @@ test("level-scaled minimums: thesis range ≤ cap and monotone; claim minimums l
 test("UI table: six Uzbek rows in level order; caption quotes the prompt's own target for the language", () => {
   assert.deepEqual(CEFR_UI.map((u) => u.id), [...CEFR_LEVELS]);
   for (const u of CEFR_UI) assert.ok(u.name && u.phrase);
-  assert.equal(levelCaption("A1", "uz"), `Boshlang‘ich: juda qisqa, sodda gaplar, atamasiz, gap ~${LEVEL_BANDS.uz.A1.target} so‘z`);
+  assert.equal(levelCaption("A1", "uz"), `Boshlang‘ich: juda sodda gaplar, atamasiz, gap ~${LEVEL_BANDS.uz.A1.target} so‘z`);
   assert.match(levelCaption("C1", "en"), new RegExp(`~${LEVEL_BANDS.en.C1.target} so‘z$`));
-  assert.ok(levelCaption("B2", "uz").length <= 60, "caption fits one line at 360 px");
+  for (const l of CEFR_LEVELS) for (const lang of LANGS) assert.ok(levelCaption(l, lang).length <= 56, `${l}/${lang}: caption fits one line at 360 px (measured in the Chromium smoke)`);
 });
