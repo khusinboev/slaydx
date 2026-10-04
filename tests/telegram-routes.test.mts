@@ -259,3 +259,15 @@ test(`per-user rate limit: save ${TELEGRAM_LIMITS.save.count}/h, then 429 with R
   // Share has its own bucket.
   assert.equal((await post("share", h.deps, u.cookie, gen)).status, 200);
 });
+
+test("route files: bind the action to package A's produceDownload, nodejs runtime, maxDuration sized for uploads", async () => {
+  const { readFileSync } = await import("node:fs");
+  for (const action of ["save", "share"] as const) {
+    const src = readFileSync(new URL(`../app/api/generations/[id]/telegram/${action}/route.ts`, import.meta.url), "utf8");
+    assert.match(src, /import \{ produceDownload \} from "@\/lib\/server\/downloads\/produce";/, action);
+    assert.match(src, new RegExp(`export const POST = telegramActionHandler\\("${action}", \\{ produce: produceDownload \\}\\);`), action);
+    assert.match(src, /export const runtime = "nodejs";/, action);
+    const max = Number(/export const maxDuration = (\d+);/.exec(src)?.[1]);
+    assert.ok(max >= 90, `${action}: maxDuration ${max} < 90 s (upload timeout + conversion)`);
+  }
+});
