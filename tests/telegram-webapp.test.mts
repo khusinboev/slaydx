@@ -326,13 +326,16 @@ test("onEvent/offEvent wrap Telegram's bus, isolate handler errors, dedupe the s
   offEvent("viewportChanged", bad);
   assert.equal(fake.handlers.get("viewportChanged")!.size, 0);
   // The same function may listen to two types independently.
-  const any = () => seen.push("x");
+  const tags: string[] = [];
+  const any = () => tags.push("x");
   onEvent("activated", any);
   onEvent("deactivated", any);
   offEvent("activated", any);
   fake.client.emit("activated");
   fake.client.emit("deactivated");
-  assert.deepEqual(seen, [true, false, "x"]);
+  fake.client.emit("viewportChanged", { isStateStable: true });
+  assert.deepEqual(tags, ["x"]);
+  assert.deepEqual(seen, [true, false], "removed viewport handlers no longer fire");
   offEvent("deactivated", any);
 });
 
