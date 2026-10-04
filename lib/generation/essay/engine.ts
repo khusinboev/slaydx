@@ -196,11 +196,16 @@ export async function buildEssayDoc(meta: DocMeta, values: FormValues, opts: Ess
         timeoutMs: writeTimeout(ctx.words.aim, deadline),
       });
       const again = essayBlocksFromLlm(raw);
+      let outcome = "javob yo'q";
       if (again.length) {
         const re = guardSection(again, { refs: [], userFacts: input.userFacts, wordRange: range });
-        if (levelRepairAccepted(guarded, re, input.level, input.language, range)) guarded = re;
-        else console.warn(`[essay] daraja ta'miri rad etildi (${input.level})`);
+        const after = measureLevel(re.blocks.map((b) => b.text).join("\n\n"), input.language);
+        const accepted = levelRepairAccepted(guarded, re, input.level, input.language, range);
+        outcome = `${accepted ? "qabul" : "rad"}, keyin ${after.mean.toFixed(1)} so'z/gap, ${re.report.words} so'z`;
+        if (accepted) guarded = re;
       }
+      // One line per repair — the live matrix (R4 §5) counts how often the repair fires and wins.
+      console.warn(`[essay] daraja ta'miri ${input.level}/${input.language}: oldin ${measure.mean.toFixed(1)} so'z/gap (${verdict.level}, ${verdict.direction ?? "—"}) → ${outcome}`);
     }
   }
   blocks = guarded.blocks;
