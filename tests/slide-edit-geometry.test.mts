@@ -9,7 +9,7 @@ import {
   placeFloatingPanel,
   revealDelta,
 } from "../components/viewers/slide-edit/geometry.ts";
-import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, TAP_MAX_MS, TAP_SLOP_PX, createDoubleTapDetector } from "../components/viewers/slide-edit/doubleTap.ts";
+import { TAP_MAX_MS, TAP_SLOP_PX, createDoubleTapDetector } from "../components/viewers/slide-edit/doubleTap.ts";
 
 /**
  * Slide text editing on phones (docs/mobile/PLAN.md §3 O4, R3 S1/S2) — the
@@ -115,6 +115,11 @@ test("intersect: overlap rect or null", () => {
 });
 
 // ════════════════════════════════════════ double tap
+
+// The contract (PLAN §5 row D, R3): two taps < 300 ms and < 24 px apart. Literals on
+// purpose — a test reading the module constants would follow a broken window.
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_PX = 24;
 
 function tap(d: ReturnType<typeof createDoubleTapDetector>, x: number, y: number, t: number, id = 1, hold = 40, move = 0) {
   d.down(id, x, y, t);

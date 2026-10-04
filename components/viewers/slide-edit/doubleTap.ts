@@ -62,7 +62,7 @@ export function createDoubleTapDetector(): DoubleTapDetector {
         lastTap = null;
         return false;
       }
-      if (pendingSecond && lastTap && dist(lastTap, { x, y }) <= DOUBLE_TAP_PX) {
+      if (pendingSecond && lastTap) {
         lastTap = null;
         pendingSecond = false;
         return true;

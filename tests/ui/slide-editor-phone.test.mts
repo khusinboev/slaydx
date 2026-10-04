@@ -167,13 +167,13 @@ test("phone: the bar never takes focus — pointerdown/mousedown cancelled, the 
   const { calls } = mount();
   fireEvent.doubleClick(titleEl());
   const field = box();
-  assert.equal(document.activeElement, field, "field focused");
+  assert.ok(document.activeElement === field, "field focused");
   const plus = screen.getByLabelText("Shriftni kattalashtirish");
   assert.equal(fireEvent.pointerDown(plus, { pointerType: "touch" }), false, "pointerdown default prevented (no focus move)");
   assert.equal(fireEvent.mouseDown(plus), false, "mousedown default prevented");
   fireEvent.click(plus);
   assert.ok(boxOpen(), "a bar press is not an outside press");
-  assert.equal(document.activeElement, field, "focus (and the phone keyboard) stays on the text");
+  assert.ok(document.activeElement === field, "focus (and the phone keyboard) stays on the text");
   assert.equal(calls.style.length, 1);
   assert.ok(typeof calls.style[0][1].size === "number");
 });
@@ -206,7 +206,7 @@ test("phone sheet: opens ABOVE the bar (in-flow, same slot), chips for 9 fonts a
     [{ f: "title" }, { size: 24 }],
   ]);
   assert.ok(boxOpen() && sheet(), "choosing keeps the edit and the sheet open");
-  assert.equal(document.activeElement, box(), "focus still on the text");
+  assert.ok(document.activeElement === box(), "focus still on the text");
 });
 
 test("phone sheet: «Standart» chip resets the family; current size chip pressed; size toggle opens the same sheet", () => {
@@ -290,7 +290,7 @@ test("double TAP (touch pointers) opens the text without `dblclick`; the second 
   const notCancelled = tapAt(titleEl(), 2);
   assert.ok(boxOpen(), "second tap opened the text");
   assert.equal(notCancelled, false, "second touchend prevented: no compat mousedown/click/dblclick");
-  assert.equal(document.activeElement, box(), "focused inside the gesture (iOS keyboard)");
+  assert.ok(document.activeElement === box(), "focused inside the gesture (iOS keyboard)");
   // A compat mousedown that slipped through right after the tap does not close the box.
   fireEvent.mouseDown(titleEl());
   assert.ok(boxOpen());
@@ -320,9 +320,9 @@ test("focus zoom / keyboard rescale: the field node, the typed text and the care
   resetRenders();
   rerender(0.62);
   rerender(0.48);
-  assert.equal(box(), field, "same DOM node");
+  assert.ok(box() === field, "same DOM node");
   assert.equal(field.textContent, "Kursor joyida", "typed text kept");
-  assert.equal(sel.anchorNode, textNode);
+  assert.ok(sel.anchorNode === textNode, "caret in the same text node");
   assert.equal(sel.anchorOffset, 6, "caret did not move");
   assert.equal(renders("EditField"), 0, "the memoised field was not re-rendered by the scale change");
   assert.ok(renders("SlideEditor") >= 2, "the editor itself did re-render (new scale)");
