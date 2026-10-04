@@ -84,7 +84,7 @@ function okMessage(c: Call): Record<string, unknown> {
   return { ok: true, result: { message_id: fileSeq, [field]: { file_id: fileId, file_unique_id: `U-${fileId}`, file_size: 4096 } } };
 }
 
-function harness(o: { replies?: Reply[]; file?: Partial<Produced>; now?: Date } = {}) {
+function harness(o: { replies?: Reply[]; file?: Partial<Produced>; now?: Date; produceDelayMs?: number } = {}) {
   const calls: Call[] = [];
   const produced: { genId: string; userId: string; format: string }[] = [];
   const replies = [...(o.replies ?? [])];
@@ -109,6 +109,7 @@ function harness(o: { replies?: Reply[]; file?: Partial<Produced>; now?: Date } 
     now: () => now,
     produce: async (genId, userId, format) => {
       produced.push({ genId, userId, format });
+      if (o.produceDelayMs) await new Promise((r) => setTimeout(r, o.produceDelayMs));
       return {
         bytes: Buffer.alloc(4096, 7),
         fileName: "Quyosh tizimi.pptx",
@@ -199,7 +200,9 @@ test("a tap within the debounce window: duplicate, nothing sent", { skip }, asyn
 test("parallel double tap: one upload, the second request joins it (duplicate)", { skip }, async () => {
   const u = await mkUser();
   const gen = await mkGen(u.id);
-  const h = harness();
+  // Slow bytes: both requests are past their DB read before the first upload lands,
+  // so only the in-process single-flight can stop the second upload.
+  const h = harness({ produceDelayMs: 100 });
   const [a, b] = await Promise.all([saveToBot(gen, u, "native", h.deps), saveToBot(gen, u, "native", h.deps)]);
   assert.deepEqual([a, b].map((r) => r.duplicate).sort(), [false, true]);
   assert.equal(h.calls.length, 1);
