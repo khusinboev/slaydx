@@ -6,6 +6,7 @@
  *   registry.ts  kontekst × tur: hajm, tuzilma, `guidance`, `JudgeSpec`
  *   rubric.ts    DTM 24 → 100 · akademik 100 · IELTS band — VAZNLAR BITTA JOYDA
  *   input.ts     forma ↔ `EssayInput` (`essayInputFromValues` / `encodeEssayValues`)
+ *   level.ts     CEFR A1–C2: prompt block, measure, thresholds, UI table (mobile sprint)
  *   prompts.ts   inglizcha tizim prompti, reja, insho, qayta yozish
  *   parse.ts     model javobi → bandlar
  *   engine.ts    `buildEssayDoc` — reja → matn → qo'riqchi → hisobot → sayqal
@@ -41,9 +42,41 @@ export type { EssayInput } from "./input";
 export { ESSAY_FILLER, ESSAY_FILLER_EXTRA, ESSAY_SINGLE_CALL_WORDS, essayCtx, essayLengthLine, essayNeedsTwoParts, essayPrompt, essaySystemPrompt, outlinePrompt, rewritePrompt, wordRangePrompt } from "./prompts";
 export type { EssayCtx, EssayParagraphPlan, EssayPart, EssayRewriteTarget } from "./prompts";
 
+export { LEVEL_REPAIR_HEADER, levelRepairPrompt } from "./prompts";
+
+export {
+  CEFR_LEVELS,
+  CEFR_SPECS,
+  CEFR_UI,
+  DEFAULT_ESSAY_LEVEL,
+  LEVEL_BANDS,
+  LEVEL_CONNECTORS,
+  LEVEL_HINT,
+  OVER_CAP_ALLOWED,
+  claimMinWords,
+  essayLevelOf,
+  isCefrLevel,
+  levelAppliesTo,
+  levelCaption,
+  levelDetail,
+  levelDistance,
+  levelGuidance,
+  levelJudgeNote,
+  levelPromptBlock,
+  levelReminder,
+  levelRepairInstruction,
+  levelTargets,
+  levelVerdict,
+  measureLevel,
+  parseCefrLevel,
+  splitSentences,
+  thesisWordRange,
+} from "./level";
+export type { CefrLevel, LevelBand, LevelMeasure, LevelVerdict } from "./level";
+
 export { essayBlocksFromLlm } from "./parse";
 
-export { buildEssayDoc, fallbackOutline, outlineFromLlm } from "./engine";
+export { buildEssayDoc, fallbackOutline, levelRepairAccepted, outlineFromLlm } from "./engine";
 export type { EssayBuildOpts, EssayBuildResult, EssayCost, EssayStage } from "./engine";
 
 export {
