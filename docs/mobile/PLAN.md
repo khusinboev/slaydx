@@ -1,0 +1,141 @@
+# Mobile sprint — plan, owner decisions, contracts
+
+Branch `feat/mobile` (from `main` = prod `060e731`). Most users open SlaydX as a Telegram Mini App on a phone,
+so every change is designed for 360–412 px touch screens inside the Telegram webview first; desktop must not regress.
+
+Research (read-only, local test DB, synthetic data): `R1-download.md`, `R2-telegram-share.md`,
+`R3-mobile-editing.md`, `R4-essay-level.md`, `R5-phone-audit.md`.
+
+## 1. Owner requests
+1. One «Yuklab olish» button → sheet with the formats that fit the tool → file saved on the device; slow
+   downloads must show progress (today users think the app froze).
+2. «Ulashish» → Telegram chat picker → the content itself is posted into the chosen chat.
+3. «Saqlash» → the Mini App closes and the bot sends the material into the user's bot chat.
+4. Phone-friendly slide text editing: the style block must be compact and never cover the edited text.
+5. Essay CEFR level A1–C2 that controls sentence complexity and terminology.
+6. Main condition: every screen optimal on a phone inside the Mini App.
+
+## 2. Key findings
+- **Downloads save nothing inside the Telegram Mini App on phones** (R1 §4): we fetch → blob → `<a download>`;
+  Android bot webviews have no download handler, iOS only handles `.pkpass`. The fix is `WebApp.downloadFile`
+  (Bot API 8.0) with a short-lived signed HTTPS URL (the Telegram client downloads without our cookie; iOS sends HEAD
+  first; Android ignores calls later than 10 s after a touch).
+- The PPTX itself is served in ~0.1–0.2 s; the felt slowness is network (5–10 MB decks, no progress) plus synchronous
+  PDF (LibreOffice 1.5–3 s locally, queue up to 20 s, 90 s timeout above nginx's 60 s → 504 risk).
+- Bot transport is JSON-only, swallows error codes; no upload path; `/start <payload>` is always treated as a login nonce;
+  inline mode of `@SlaydX_bot` is **off** (`getMe.supports_inline_queries = false`, checked 2026-10-04).
+- Slide style panel covers the edited text by 33–100 % at 390 px (R3 §2), 16/16 controls < 44 px, runs off-screen in
+  zoom mode; no keyboard (visualViewport) handling anywhere; editing opens only on double tap without a hint.
+- Essay: no level today; polish/«Tuzatish» rebuild from `doc.essay`, so the level must live in `EssayModel`; four
+  places push text upward (judge, thesis/topic-sentence minimums, figurative/hedging guidance, free-text `extra`).
+
+## 3. Owner decisions (2026-10-04)
+| # | Question | Decision |
+|---|---|---|
+| O1 | Formats per tool | **Wide set** (R1 §3): native + PDF where it applies; slides also PNG images (ZIP); images PNG/JPG; glossary and game results CSV; audio transcript TXT |
+| O2 | Where the file is uploaded for «Ulashish» | **Into the user's own bot chat** (share ⇒ also saved; no storage channel) |
+| O3 | Essay level default / IELTS | **B2 default; IELTS has no level control** (band-style C1) |
+| O4 | Slide text edit gesture on touch | **Double tap (reliable detector) + one-time hint**; the edited text auto-zooms on phones |
+| — | Already stated by the owner | «Saqlash» closes the Mini App; style controls sit at the top edge of the frame |
+
+Lead decisions (recommended options from the research, owner may override):
+- PDF/derived files are prepared when the sheet opens; 24 h derived-file disk cache moved to a docker volume.
+- Resume lists PDF first. Slide images ZIP at 150 dpi.
+- Fallback when `downloadFile` is unavailable/refused: «Botga yuborish» (same server path as «Saqlash»), then «Brauzerda ochish».
+- Share targets: users, groups, channels (no bot chats). Caption button links to `https://t.me/<bot>`.
+- After «Saqlash» in Telegram: toast, then `WebApp.close()` after ~1 s. Outside Telegram «Saqlash» is hidden for
+  accounts without `telegram_id`.
+- Phone style bar replaces the slide toolbar while editing (in-flow, 44 px); font list and size presets in a small
+  sheet (chips, no native `<select>` on touch); «Tayyor» commits. Desktop keeps the floating panel with a measured-height
+  placement fix.
+- Document editors (Word/article/teacher/resume) get a phone «Bekor / Tayyor» bar above the keyboard and a visible
+  «Tahrirlash» entry; no global `interactive-widget` viewport change.
+- Essay level is shown only in the report panel (not printed in the document); one automatic repair pass when the
+  measured text misses the level; a visible one-line caption under the level control; languages uz/ru/en as today.
+- Owner action required: enable inline mode for `@SlaydX_bot` in @BotFather (`/setinline`, placeholder «SlaydX…»);
+  `shareMessage` may need it. Until then «Ulashish» falls back to save + forward.
+
+## 4. Contracts (binding for all packages)
+
+### 4.1 Format registry — `lib/downloads/formats.ts` (pure, client-safe, single source of truth)
+```ts
+export type DownloadFormatId =
+  | "native" | "pdf" | "slides-png" | "jpg" | "transcript-txt" | "glossary-csv" | "results-csv";
+export type DownloadFormat = {
+  id: DownloadFormatId; label: string; hint?: string; ext: string; mime: string;
+  cost: "instant" | "convert"; needs?: "pdf" | "pdftoppm";
+};
+export function downloadFormats(
+  g: { type: string; format: string; translationKind?: string | null; imageCount?: number; hasResults?: boolean },
+  features: { pdf: boolean },
+): DownloadFormat[];
+```
+UI lists exactly these rows; the server rejects any format not returned for that generation. Every id has a server
+producer and a differential test (project rule: no decorative options).
+
+### 4.2 Download server
+- `POST /api/generations/{id}/download {format}` (cookie, ownership in SQL) → `{state:"ready", url:"/api/dl/<token>",
+  fileName, size, mime, expiresAt}` or `{state:"preparing", retryAfterMs}`; 429/503 with Retry-After. No request is held
+  longer than ~8 s; soffice timeout ≤ 50 s.
+- `GET|HEAD /api/dl/{token}` (no cookie): HMAC token (HKDF from `SESSION_SECRET`, info `download-v1`) binding
+  `{g,u,f,v:file_version,exp:+15 min}`; multi-use within TTL; HEAD never converts and never counts; headers
+  `Content-Disposition: attachment` (ASCII fallback), `Content-Length`, `Access-Control-Allow-Origin: https://web.telegram.org`,
+  `Cache-Control: private, no-store`, `nosniff`, `Referrer-Policy: no-referrer`. Stale `file_version` → 410.
+- Producers in `lib/server/downloads/`; derived files cached by `{genId, sha(bytes), format}`.
+- Server-side bytes for any format: `produceDownload(genId, userId, format) → {bytes, fileName, mime}` — the Telegram
+  package (4.4) calls this, never its own conversion.
+
+### 4.3 Telegram Mini App client accessor — `lib/telegram-webapp.ts`
+Typed `getTelegramWebApp()`, `tgVersionAtLeast(v)`, `downloadFile(params)`, `shareMessage(id)`, `requestWriteAccess()`,
+`close()`, `onEvent/offEvent` wrappers, plus pure `shareCapability(...)` / `saveCapability(...)` /
+`downloadCapability(...)`. Only this module touches `window.Telegram.WebApp` for these APIs (MiniAppBridge keeps login + BackButton).
+
+### 4.4 Telegram server
+- `lib/server/telegram.ts`: `callBot(method, payload, {multipart?, timeoutMs?})` → `{ok:true,result} | {ok:false,code,description}`;
+  keep 429-once retry and `TelegramTransientError`; `/start <payload>` that is not a login nonce → welcome, not «eskirgan».
+- Migration `035_telegram_files.sql` (additive): `(generation_id, format)` → `file_id`, `file_version`, `media`, counters.
+- `lib/server/telegram-files.ts`: `saveToBot(genId, user, format)`, `prepareShare(genId, user, format)` (upload into the
+  user's own bot chat when no valid `file_id`, then `savePreparedInlineMessage` with users/groups/channels allowed).
+- Routes `POST /api/generations/{id}/telegram/save {format?}` and `.../telegram/share {format?}`; errors
+  `409 no_telegram|bot_unreachable|not_ready`, `429`, `503 telegram_unavailable`, `501 share_unavailable`.
+  Recipient is always the session user's `telegram_id`; the client additionally refuses when the Mini App user differs.
+
+### 4.5 Result actions (client)
+`components/files/ResultActions.tsx` owns the result header actions: one «Yuklab olish» button (label visible on
+phones) + «Ulashish» + «Saqlash» (+ existing delete in the overflow). `DownloadSheet` (`useDialog`, phone bottom sheet /
+desktop popover, ≥ 44 px rows, per-row state machine idle → preparing → ready → delivering → done | error) is reused with
+`mode: "download" | "share" | "save"`; one-format tools skip the sheet. `lib/downloads/deliver.ts` picks
+Telegram `downloadFile` (gesture window tracking, `fileDownloadRequested`), browser fetch with % progress, navigation fallback.
+
+### 4.6 Phone hooks — `lib/hooks/useCoarsePointer.ts`, `lib/hooks/useVisualViewport.ts`
+SSR/jsdom-safe (false / window size); `useVisualViewport` returns `{height, offsetTop, keyboardOpen}`, writes `--vv-h`
+and `--kb-h` on `<html>`, listens to `visualViewport` and Telegram `viewportChanged`.
+
+## 5. Work packages
+| WP | Scope | Files (exclusive) | Model | Depends |
+|---|---|---|---|---|
+| F0 Foundation | 4.1 registry + tests, 4.3 accessor + tests, 4.6 hooks + tests | `lib/downloads/formats.ts`, `lib/telegram-webapp.ts`, `lib/hooks/*`, tests | opus | — |
+| A Download server | 4.2: token, prepare route, `/api/dl`, producers (native, pdf, slides-png, jpg, transcript-txt, glossary-csv, results-csv), derived cache, soffice timeout, `next.config.ts` header rules, compose volume | `lib/server/downloads/*`, `app/api/generations/[id]/download/`, `app/api/dl/`, `lib/server/pdf-cache.ts`, `lib/server/pdf.ts`, `next.config.ts`, `docker-compose*.yml` (volume only), tests | opus | F0 |
+| B Telegram server | 4.4 | `lib/server/telegram.ts`, `lib/server/telegram-files.ts`, `lib/server/migrations/035_telegram_files.sql`, `app/api/generations/[id]/telegram/`, tests | opus | F0, A's `produceDownload` signature |
+| C Result actions | 4.5: driver, sheet, Share/Save buttons, header integration; ImageViewer tiles, GameSharePanel CSV and TranslationViewer via the driver | `lib/downloads/deliver.ts`, `lib/api-client.ts` (download section), `components/files/{ResultActions,DownloadSheet,ShareButton,SaveToBotButton,ResultView,GameSharePanel}.tsx`, `components/viewers/{ImageViewer,TranslationViewer}.tsx`, tests | opus | F0 (A/B via contract stubs) |
+| D Slide editing on phones | R3 S1+S2 | `components/viewers/SlideEditor.tsx`, `components/viewers/slide-edit/*`, `SlideToolbar.tsx`, `SlideStage.tsx`, `SlideViewer.tsx`, `ResultLayout.tsx` (compact-while-editing prop only), tests | opus | F0 hooks |
+| E Document editors on phones | R3 D1 | `components/viewers/EditDoneBar.tsx`, `WordViewer.tsx`, `ArticleEditor.tsx`, `resume/ResumeEditor.tsx`, `ResumeViewer.tsx`, `toolbar.tsx`, `editable.ts`, tests | sonnet | F0 hooks, after D merges `ResultLayout` |
+| G Essay level | R4 WP1–3 (core level module, engine/review/polish wiring, EssayComposer UI); live harness cases (no runs) | `lib/generation/essay/*`, `lib/generation/essay-params.ts`, `components/forms/EssayComposer.tsx`, `scripts/live-engine.mts` (cases), `scripts/level-measure.mts`, tests | opus | — |
+| P Phone audit fixes | from R5, shared primitives | decided after R5 | sonnet | after C/D/E merge where files overlap |
+| R Reviews | independent reviewers per package: security (A, B), correctness (A–G), UX/phone smoke (C, D, E, P) | read-only | fable / opus | each package |
+
+Order: F0 ∥ G → (A ∥ B ∥ D) → C → E → P → integration + reviews → owner device check → deploy on owner's word.
+
+## 6. Verification
+- Every package: typecheck, its own test files, mutation checks on new assertions, Playwright smoke in a Telegram stub at
+  360×740, 390×844 (touch, DPR 3) and 1366×768; the stub records `web_app_request_file_download`, `shareMessage`,
+  `close`, `requestWriteAccess` calls.
+- Integration: full `npm test`, `test:ui`, `test:viewer`, build; CI green.
+- Essay level: `npm run live` matrix from R4 §5 (paid, small) before release, with the level measurer.
+- Owner device check before deploy: Android + iPhone Telegram — download a PPTX and a PDF, «Ulashish» to a chat,
+  «Saqlash», slide text editing with the real keyboard.
+
+## 7. Status
+| WP | Status |
+|---|---|
+| Research R1–R5 | R1–R4 done; R5 running |
