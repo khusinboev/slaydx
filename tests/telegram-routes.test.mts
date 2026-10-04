@@ -165,6 +165,9 @@ test("account without Telegram → 409 no_telegram", { skip }, async () => {
     assert.equal(r.body.code, "no_telegram");
   }
   assert.equal(h.calls.length, 0);
+  // Refused before any work: no rate-limit bucket was spent.
+  const spent = await query("SELECT 1 FROM rate_limits WHERE bucket = ANY($1::text[])", [[`tgsave:${local.id}`, `tgshare:${local.id}`]]);
+  assert.equal(spent.length, 0);
 });
 
 test("format validation: unknown id → 400 unknown_format; not offered for this generation → 400 unsupported", { skip }, async () => {
