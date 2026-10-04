@@ -84,6 +84,21 @@ test("focus zoom never zooms OUT below the user's scale and tolerates zero sizes
   assert.equal(focusZoomScale({ boxW: 300, boxH: 30, viewW: 0, viewH: 0, base: 0.5 }), 0.5);
 });
 
+test("focus zoom (glyphs): a wide single-line footer with 4 px glyphs zooms to readable text, wider than the stage", () => {
+  // Footer 1014 slide px wide, 10 pt (13.3 px) text at phone fit 0.282 → 3.8 px glyphs.
+  const s = focusZoomScale({ boxW: 1014, boxH: 23, viewW: 374, viewH: 600, base: 0.282, fontPx: 13.3, singleLine: true });
+  assert.ok(13.3 * s >= 14 - 0.05, `glyphs ≥ 14 px (got ${(13.3 * s).toFixed(1)})`);
+  assert.ok(1014 * s > 374, "a single-line field may run past the stage (the caret is followed)");
+});
+
+test("focus zoom (glyphs): a wrapping list grows its text but never past the stage width", () => {
+  const s = focusZoomScale({ boxW: 1032, boxH: 418, viewW: 374, viewH: 600, base: 0.282, fontPx: 26.7, singleLine: false });
+  assert.ok(s > 0.282, "zoomed for readability");
+  assert.ok(1032 * s <= 374 + 0.5, "no sideways panning per line");
+  const big = focusZoomScale({ boxW: 1032, boxH: 418, viewW: 374, viewH: 600, base: 0.282, fontPx: 64, singleLine: false });
+  assert.equal(big, 0.282, "large text and a wide box: nothing to do");
+});
+
 // ════════════════════════════════════════ revealDelta
 
 const view = { left: 0, top: 100, width: 390, height: 200 }; // visible stage band 100..300

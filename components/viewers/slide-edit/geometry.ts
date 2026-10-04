@@ -54,22 +54,49 @@ export const FOCUS_TARGET_SHARE = 0.9;
 /** Never zoom further than this (the toolbar's own maximum is 200 %). */
 export const FOCUS_MAX_SCALE = 2;
 
+/** Smallest glyph size (CSS px) the focus zoom aims for — readable while typing. */
+export const FOCUS_MIN_GLYPH = 14;
+
+/** The edited box handed to the stage (slide px) plus what the zoom needs to know about its text. */
+export type FocusBox = Rect & {
+  /** Font size of the layer in slide px (`ptToPx(layer.size)`). */
+  fontPx?: number;
+  /** One field that does not wrap by design (title, footer…): it may grow wider than the stage. */
+  singleLine?: boolean;
+};
+
 /**
  * Phone focus zoom: the stage scale while a text box is edited.
  *
  * `box` is in slide px (unscaled), `viewW`/`viewH` the stage's inner size in
- * screen px, `base` the scale the user had. Returns `base` when the box is
- * already at least 60 % of the stage width (or when zooming would not help);
- * otherwise a scale that makes the box ~90 % of the stage width, capped so
- * the whole box still fits the visible stage height and at 200 %. Never
- * returns less than `base` (no zooming out under the user's finger).
+ * screen px, `base` the scale the user had. Two goals, the larger wins:
+ *  - width: a box under 60 % of the stage width grows to ~90 % of it;
+ *  - glyphs: text smaller than `FOCUS_MIN_GLYPH` px grows to it — a wrapping
+ *    box (lists, subtitles) never beyond the stage width (no sideways panning
+ *    per line), a single-line field (footer: 10 pt ≈ 4 px glyphs at phone
+ *    fit) up to the cap, the caret is then followed sideways.
+ * Capped so a wrapping box still fits the visible stage height, and at 200 %.
+ * Never returns less than `base` (no zooming out under the user's finger).
  */
-export function focusZoomScale(input: { boxW: number; boxH: number; viewW: number; viewH: number; base: number }): number {
-  const { boxW, boxH, viewW, viewH, base } = input;
+export function focusZoomScale(input: {
+  boxW: number;
+  boxH: number;
+  viewW: number;
+  viewH: number;
+  base: number;
+  fontPx?: number;
+  singleLine?: boolean;
+}): number {
+  const { boxW, boxH, viewW, viewH, base, fontPx, singleLine } = input;
   if (!(boxW > 0) || !(viewW > 0) || !(base > 0)) return base;
-  if (boxW * base >= FOCUS_MIN_SHARE * viewW) return base;
-  let s = (FOCUS_TARGET_SHARE * viewW) / boxW;
-  if (viewH > 0 && boxH > 0) s = Math.min(s, (0.9 * viewH) / boxH);
+  let s = base;
+  if (boxW * base < FOCUS_MIN_SHARE * viewW) s = (FOCUS_TARGET_SHARE * viewW) / boxW;
+  if (fontPx && fontPx > 0 && fontPx * s < FOCUS_MIN_GLYPH) {
+    let g = FOCUS_MIN_GLYPH / fontPx;
+    if (!singleLine) g = Math.min(g, viewW / boxW);
+    s = Math.max(s, g);
+  }
+  if (!singleLine && viewH > 0 && boxH > 0) s = Math.min(s, (0.9 * viewH) / boxH);
   s = Math.min(s, FOCUS_MAX_SCALE);
   if (s <= base) return base;
   return Math.round(s * 1000) / 1000;

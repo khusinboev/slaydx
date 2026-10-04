@@ -41,7 +41,7 @@ import { useOverlayHistory } from "../nav/useOverlayHistory";
 import { SlideEditFloatingPanel, SlideEditStyleBar, keepEditorFocus } from "./slide-edit/StyleBar";
 import { SlideEditFontSheet } from "./slide-edit/FontSheet";
 import { createDoubleTapDetector } from "./slide-edit/doubleTap";
-import { placeFloatingPanel, type Rect } from "./slide-edit/geometry";
+import { placeFloatingPanel, type FocusBox } from "./slide-edit/geometry";
 import { VisualViewportWatch, scrollEditBoxIntoView } from "./slide-edit/viewport";
 
 /*
@@ -136,7 +136,7 @@ export type SlideEditorProps = {
    * o'sha qatlamni yashiradi. `box` — qatlam qutisi slayd px da (phone focus
    * zoom uses it, `SlideStage.focus`).
    */
-  onEditing?: (key: string | null, box?: Rect | null) => void;
+  onEditing?: (key: string | null, box?: FocusBox | null) => void;
   /**
    * Phone only: the toolbar slot the style bar is portalled into
    * (`SlideToolbar.editBar`). Without it (desktop, or before the slot
@@ -357,7 +357,14 @@ export function SlideEditor({
       editRef.current = next;
       setEdit(next);
       const b = boxStyle(layer.box);
-      onEditing?.(key, { left: b.left, top: b.top, width: b.width, height: b.height });
+      onEditing?.(key, {
+        left: b.left,
+        top: b.top,
+        width: b.width,
+        height: b.height,
+        fontPx: ptToPx(layer.size),
+        singleLine: next.kind === "text" && !next.multiline,
+      });
       return true;
     },
     [keyOf, layerByKey, slide, onEditing],

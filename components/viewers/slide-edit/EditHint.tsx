@@ -33,7 +33,7 @@ export function SlideEditHint({ onDismiss }: { onDismiss: () => void }) {
     <div
       data-slide-edit-hint
       role="note"
-      className="no-print flex min-h-11 shrink-0 items-center gap-2 border-t border-white/10 bg-[#252525] pl-3 text-[13px] text-white/80"
+      className="no-print flex min-h-11 shrink-0 items-center gap-2 bg-[#252525] shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] pl-3 text-[13px] text-white/80"
     >
       <Pencil className="size-4 shrink-0 text-sky-300" aria-hidden />
       <span className="min-w-0 flex-1">{EDIT_HINT_TEXT}</span>

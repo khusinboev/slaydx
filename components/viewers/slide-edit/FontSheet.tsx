@@ -26,9 +26,9 @@ export function SlideEditFontSheet({
   onFont,
 }: Omit<StyleControlsProps, "min" | "max"> & { id: string }) {
   const chip =
-    "inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-full border px-3 text-[13px] whitespace-nowrap disabled:opacity-35";
-  const on = "border-sky-400 bg-sky-500 text-white";
-  const off = "border-white/15 bg-white/5 text-white/90 hover:bg-white/15";
+    "inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-full px-3 text-[13px] ring-1 ring-inset whitespace-nowrap disabled:opacity-35";
+  const on = "bg-sky-500 text-white ring-sky-300";
+  const off = "bg-white/5 text-white/90 ring-white/15 hover:bg-white/15";
   const fonts: { id: SlideFontId | ""; label: string; css?: string }[] = [
     { id: "", label: "Standart" },
     ...SLIDE_FONTS.map((f) => ({ id: f.id, label: f.label, css: f.css })),
@@ -39,7 +39,7 @@ export function SlideEditFontSheet({
       data-slide-edit-sheet
       role="group"
       aria-label={wholeList ? "Barcha bandlar: shrift va o‘lcham" : "Shrift va o‘lcham"}
-      className="flex w-full flex-col gap-1 overflow-y-auto overscroll-contain border-b border-white/10 bg-[#2b2b2b] py-1 text-white"
+      className="flex w-full flex-col gap-1 overflow-y-auto overscroll-contain bg-[#2b2b2b] shadow-[inset_0_-1px_0_rgba(255,255,255,0.1)] py-1 text-white"
       style={{ maxHeight: "calc(var(--vv-h, 100svh) * 0.4)" }}
     >
       <div className="flex gap-1.5 overflow-x-auto px-2 [scrollbar-width:none]" data-slide-edit-fonts aria-label="Shrift oilasi" role="group">

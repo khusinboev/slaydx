@@ -31,7 +31,7 @@ import type { VisualViewportState } from "@/lib/hooks/useVisualViewport";
 import { useCompactHeaderWhile } from "../files/ResultLayout";
 import { SlideEditHint, readEditHintSeen, writeEditHintSeen } from "./slide-edit/EditHint";
 import { VisualViewportWatch } from "./slide-edit/viewport";
-import type { Rect } from "./slide-edit/geometry";
+import type { FocusBox } from "./slide-edit/geometry";
 
 /**
  * Slayd masshtab pog'onalari (foizda). «Moslash» o'lchangan foiz bo'ladi
@@ -347,7 +347,7 @@ export function SlideViewer({
    */
   const [editingKey, setEditingKey] = useState<string | null>(null);
   /** Edited box in slide px — the phone focus zoom target (`SlideStage.focus`). */
-  const [editBox, setEditBox] = useState<Rect | null>(null);
+  const [editBox, setEditBox] = useState<FocusBox | null>(null);
   useEffect(() => {
     setEditingKey(null);
     setEditBox(null);
@@ -377,7 +377,7 @@ export function SlideViewer({
   }, []);
 
   const onEditing = useCallback(
-    (key: string | null, box?: Rect | null) => {
+    (key: string | null, box?: FocusBox | null) => {
       setEditingKey(key);
       setEditBox(key ? (box ?? null) : null);
       // The user found the gesture: the hint has done its job.

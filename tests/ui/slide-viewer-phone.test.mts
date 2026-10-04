@@ -247,7 +247,11 @@ test("touch hint: storage that throws never breaks the viewer (hint still dismis
 test("result header is compact while editing on a phone (frozen outer height — no jump), full again after", async () => {
   phone();
   render(
-    h(ResultLayout, { header: h("div", { style: { height: 55 } }, "Sarlavha"), frame: "fill" }, h(SlideViewer, { doc: makeDoc(), gen: gen(makeDoc()) })),
+    h(ResultLayout, {
+      header: h("div", { style: { height: 55 } }, "Sarlavha"),
+      frame: "fill",
+      children: h(SlideViewer, { doc: makeDoc(), gen: gen(makeDoc()) }),
+    }),
   );
   await sizeStage();
   const inner = () => document.querySelector("[data-result-header-inner]") as HTMLElement;

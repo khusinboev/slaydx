@@ -10,7 +10,7 @@ import { cn } from "@/lib/cn";
 import { SlideCanvas } from "./SlideCanvas";
 import { SkeletonSlide } from "./SkeletonSlide";
 import { ImageWaitPlaque } from "./ImageWaitPlaque";
-import { focusZoomScale, type Rect } from "./slide-edit/geometry";
+import { focusZoomScale, type FocusBox } from "./slide-edit/geometry";
 
 export type SlideStageOverlayCtx = { index: number; scale: number; slide: SlideModel };
 
@@ -91,7 +91,7 @@ export function SlideStage({
    */
   onFitScale?: (scale: number) => void;
   /** Edited box in slide px (phone only) — temporary focus zoom; `null`/absent = normal view. */
-  focus?: Rect | null;
+  focus?: FocusBox | null;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [fitScale, setFitScale] = useState(0.6);
@@ -143,6 +143,8 @@ export function SlideStage({
   const fy = focus?.top;
   const fw = focus?.width;
   const fh = focus?.height;
+  const fFont = focus?.fontPx;
+  const fSingle = focus?.singleLine;
   useLayoutEffect(() => {
     const el = stageRef.current;
     if (present || !el || fw === undefined || fh === undefined) {
@@ -162,9 +164,11 @@ export function SlideStage({
         viewW: (el.clientWidth || r.width) - padX,
         viewH: Math.max(0, visibleBottom - r.top - padY),
         base: baseRef.current,
+        fontPx: fFont,
+        singleLine: fSingle,
       }),
     );
-  }, [present, fx, fy, fw, fh]);
+  }, [present, fx, fy, fw, fh, fFont, fSingle]);
 
   const focused = !present && focusScale !== null;
   const scale = focused ? focusScale : baseScale;
