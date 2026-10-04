@@ -131,13 +131,32 @@ const USER_COLUMNS = userColumns();
  * jurnal) beriladi — ya'ni har holda bir martadan ortiq emas.
  */
 export async function upsertTelegramUser(p: TelegramProfile): Promise<SessionUser> {
+  return upsertUser(p, "EXCLUDED.photo_url");
+}
+
+/**
+ * Botga yozgan (`/start`, `/login` va h.k.) foydalanuvchini bazaga yozadi —
+ * saytga hali kirmagan bo'lsa ham admin panelda ko'rinsin va unga ball
+ * berish, xabar yuborish kabi amallar qilinsin. Yangi akkaunt saytdagi
+ * kabi bir martalik ro'yxatdan o'tish bonusini oladi (`signup:<id>` —
+ * keyingi kirishda takrorlanmaydi). Bot surat manzilini bilmaydi, shuning
+ * uchun mavjud `photo_url` (Login Widget / Mini App'dan) o'chirilmaydi.
+ */
+export async function registerBotUser(p: TelegramProfile): Promise<SessionUser> {
+  return upsertUser(p, "COALESCE(EXCLUDED.photo_url, users.photo_url)");
+}
+
+async function upsertUser(
+  p: TelegramProfile,
+  photoOnConflict: "EXCLUDED.photo_url" | "COALESCE(EXCLUDED.photo_url, users.photo_url)",
+): Promise<SessionUser> {
   return transaction(async (client) => {
     const res = await client.query<{ id: string; inserted: boolean }>(
       `INSERT INTO users (telegram_id, username, name, photo_url, points, author)
        VALUES ($1, $2, $3, $4, 0, $3)
        ON CONFLICT (telegram_id) DO UPDATE
           SET username = EXCLUDED.username, name = EXCLUDED.name,
-              photo_url = EXCLUDED.photo_url, updated_at = now()
+              photo_url = ${photoOnConflict}, updated_at = now()
        RETURNING id, (xmax = 0) AS inserted`,
       [p.telegramId, p.username, p.name, p.photoUrl],
     );

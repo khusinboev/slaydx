@@ -32,6 +32,7 @@ const { createBotLoginLink, handleUpdate, createTicket, redeemLoginToken } = awa
   "../lib/server/telegram.ts"
 );
 const { query } = await import("../lib/server/db.ts");
+const { upsertTelegramUser, SIGNUP_BONUS_POINTS } = await import("../lib/server/auth.ts");
 
 function extractToken(link: string): string {
   return new URL(link).searchParams.get("t") ?? "";
@@ -281,4 +282,107 @@ test("loginButton — lokal manzil holati manba skani bilan qulflangan", async (
       sendMatch![0].includes("${link}`"),
     "tugma bo'lmasa havola matnga qo'shilishi kodda qulflangan bo'lishi kerak",
   );
+});
+
+/*
+ * Botga /start bosgan odam saytga kirmasa ham bazaga yoziladi — admin panel
+ * uni ko'radi va ball bera oladi. Bonus bir marta, mavjud surat saqlanadi,
+ * guruh chati va botlar yozilmaydi.
+ */
+
+type UserRow = { id: string; points: string; name: string; username: string | null; photo_url: string | null };
+
+async function userByTelegramId(telegramId: string): Promise<UserRow | undefined> {
+  const rows = await query<UserRow>(
+    "SELECT id, points::text AS points, name, username, photo_url FROM users WHERE telegram_id = $1",
+    [telegramId],
+  );
+  return rows[0];
+}
+
+async function signupBonusCount(userId: string): Promise<number> {
+  const rows = await query<{ n: string }>(
+    "SELECT count(*)::text AS n FROM transactions WHERE user_id = $1 AND reference = $2",
+    [userId, `signup:${userId}`],
+  );
+  return Number(rows[0]!.n);
+}
+
+test("handleUpdate: /start — saytga kirmagan foydalanuvchi bazaga yoziladi, bonus BIR MARTA, keyingi kirish o'sha akkauntga", async () => {
+  installFetchMock();
+  const fromId = 700000201;
+  const telegramId = trackId(String(fromId));
+  const message = {
+    chat: { id: fromId, type: "private" },
+    text: "/start",
+    from: { id: fromId, username: "bot_only", first_name: "Bot", last_name: "Only" },
+  };
+
+  await handleUpdate({ update_id: nextUpdateId(), message });
+  const user = await userByTelegramId(telegramId);
+  assert.ok(user, "/start dan keyin users qatori bo'lishi kerak");
+  assert.equal(user.name, "Bot Only");
+  assert.equal(user.username, "bot_only");
+  assert.equal(Number(user.points), SIGNUP_BONUS_POINTS);
+  assert.equal(await signupBonusCount(user.id), 1);
+
+  await handleUpdate({ update_id: nextUpdateId(), message });
+  const again = await userByTelegramId(telegramId);
+  assert.equal(again!.id, user.id);
+  assert.equal(Number(again!.points), SIGNUP_BONUS_POINTS, "ikkinchi /start bonus bermaydi");
+  assert.equal(await signupBonusCount(user.id), 1);
+
+  const result = await redeemLoginToken(extractToken(buttonUrl(calls[1]!.body)!));
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.user.id, user.id, "saytga kirish o'sha akkauntni ochadi");
+  assert.equal(await signupBonusCount(user.id), 1, "saytga kirish ham bonusni takrorlamaydi");
+});
+
+test("handleUpdate: istalgan shaxsiy xabar (/login, oddiy matn) ham foydalanuvchini yozadi", async () => {
+  installFetchMock();
+  for (const [fromId, text] of [[700000202, "/login"], [700000203, "salom"]] as const) {
+    const telegramId = trackId(String(fromId));
+    await handleUpdate({
+      update_id: nextUpdateId(),
+      message: { chat: { id: fromId, type: "private" }, text, from: { id: fromId, first_name: "Matn" } },
+    });
+    assert.ok(await userByTelegramId(telegramId), `${text} dan keyin users qatori bo'lishi kerak`);
+  }
+});
+
+test("handleUpdate: /start mavjud akkauntning suratini o'chirmaydi, ism/username yangilanadi", async () => {
+  installFetchMock();
+  const fromId = 700000204;
+  const telegramId = trackId(String(fromId));
+  await upsertTelegramUser({ telegramId, username: "old_name", name: "Eski", photoUrl: "https://t.me/i/userpic/a.jpg" });
+
+  await handleUpdate({
+    update_id: nextUpdateId(),
+    message: { chat: { id: fromId, type: "private" }, text: "/start", from: { id: fromId, username: "new_name", first_name: "Yangi" } },
+  });
+
+  const user = await userByTelegramId(telegramId);
+  assert.equal(user!.photo_url, "https://t.me/i/userpic/a.jpg");
+  assert.equal(user!.name, "Yangi");
+  assert.equal(user!.username, "new_name");
+  assert.equal(await signupBonusCount(user!.id), 1);
+});
+
+test("handleUpdate: guruh chati va bot jo'natuvchi bazaga YOZILMAYDI", async () => {
+  installFetchMock();
+  const groupFrom = 700000205;
+  trackId(String(groupFrom));
+  await handleUpdate({
+    update_id: nextUpdateId(),
+    message: { chat: { id: -100700000205, type: "group" }, text: "/start", from: { id: groupFrom, first_name: "Guruh" } },
+  });
+  assert.equal(await userByTelegramId(String(groupFrom)), undefined);
+
+  const botFrom = 700000206;
+  trackId(String(botFrom));
+  await handleUpdate({
+    update_id: nextUpdateId(),
+    message: { chat: { id: botFrom, type: "private" }, text: "/start", from: { id: botFrom, is_bot: true, first_name: "Bot" } },
+  });
+  assert.equal(await userByTelegramId(String(botFrom)), undefined);
 });

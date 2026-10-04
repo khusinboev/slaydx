@@ -3,7 +3,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { env } from "./env";
 import { query, transaction } from "./db";
 
-import { upsertTelegramUser, type TelegramProfile } from "./auth";
+import { registerBotUser, upsertTelegramUser, type TelegramProfile } from "./auth";
 import { isAdminPhone } from "./admin-phones";
 import type { SessionUser } from "./session";
 
@@ -324,7 +324,7 @@ export type TelegramUpdate = {
     // raqami" bo'la olmaydi (reviewer nit — chat.type === "private").
     chat: { id: number; type?: string };
     text?: string;
-    from?: { id: number; username?: string; first_name?: string; last_name?: string };
+    from?: { id: number; is_bot?: boolean; username?: string; first_name?: string; last_name?: string };
     contact?: { phone_number: string; user_id?: number };
     // Forward qilingan xabar belgilari (Bot API): SECA-01 — forward qilingan
     // kontaktni ham "o'ziniki" deb qabul qilib bo'lmaydi, hattoki uning
@@ -576,6 +576,12 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
     name: [msg.from.first_name, msg.from.last_name].filter(Boolean).join(" ").trim() || "Foydalanuvchi",
     photoUrl: null,
   };
+
+  // Botga shaxsiy chatda yozgan har bir odam (avvalo `/start`) darhol
+  // bazaga yoziladi — saytga kirmagan bo'lsa ham admin panelda ko'rinadi.
+  if (msg.chat.type === "private" && !msg.from.is_bot) {
+    await registerBotUser(profile);
+  }
 
   const text = msg.text.trim();
 
