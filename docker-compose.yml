@@ -114,6 +114,11 @@ services:
     # 45–60 s cho'zilishi mumkin (INFRA-08/.claude/deploy.md §2a). Docker'ning
     # standart 10 s grace'i buni kesib tashlar edi.
     stop_grace_period: 60s
+    # Derived-file cache (DERIVED_CACHE_DIR below): survives deploys. The image
+    # must create this directory owned by `nextjs` so the new volume inherits
+    # that owner; until it does, the cache logs a warning and falls back to /tmp.
+    volumes:
+      - derived-cache:/var/cache/slaydx-derived
     depends_on:
       postgres:
         condition: service_healthy
@@ -203,6 +208,11 @@ services:
       QUEUE_TTL_SEC: ${QUEUE_TTL_SEC:-}
       RETENTION_BONUS_DAYS: ${RETENTION_BONUS_DAYS:-}
       PDF_MAX_CONCURRENCY: ${PDF_MAX_CONCURRENCY:-}
+      # Mobile sprint (docs/mobile/PLAN.md §4.2): derived-file cache (PDF, slide
+      # PNG ZIP, JPG) on the `derived-cache` volume below, so a deploy does not
+      # make every first PDF slow again. Not overridable from `.env`: the path
+      # must match the mount.
+      DERIVED_CACHE_DIR: /var/cache/slaydx-derived
       PAYME_SANDBOX: ${PAYME_SANDBOX:-}
       DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-}
       # W3-E (db.ts): so'rov/ulanish shiftlari — standart 30000/5000 ms
@@ -339,3 +349,4 @@ services:
 
 volumes:
   pgdata:
+  derived-cache:

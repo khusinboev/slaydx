@@ -1,6 +1,8 @@
 import { ApiError, handler, requireUser } from "@/lib/server/api";
 import { ensureFreshFileShared } from "@/lib/server/fresh-file";
-import { contentDisposition, pdfResponse } from "@/lib/server/pdf-serve";
+import { downloadErrorResponse } from "@/lib/server/downloads/errors";
+import { produceDownload, recordDownload } from "@/lib/server/downloads/produce";
+import { contentDisposition } from "@/lib/server/pdf-serve";
 import { getGenerationFile } from "@/lib/server/storage";
 import { bytesBody } from "@/lib/server/http-bytes";
 
@@ -43,28 +45,45 @@ export const GET = handler("generations/file", async (req, ctx: Ctx) => {
    */
   await ensureFreshFileShared(id, user.id);
 
-  const file = await getGenerationFile(id, user.id);
-  if (!file) throw new ApiError("Fayl topilmadi yoki muddati tugagan", 404);
-
-  /**
-   * `?format=pdf` — DOCX/PPTX ni PDF ga o'giradi.
-   *
-   * O'girish talab bo'yicha: PDF bazada saqlanmaydi, aks holda har
-   * hujjatning ikkinchi nusxasi `BYTEA` ni ikki barobar og'irlashtirardi.
-   * C07: disk keshi, foydalanuvchi limiti (429) va umumiy LibreOffice
-   * darvozasi (503) — `lib/server/pdf-serve.ts`.
-   */
   const params = new URL(req.url).searchParams;
-  const wantsPdf = params.get("format") === "pdf";
   /*
    * `inline=1` — brauzer ichida ko'rsatish uchun (Tarjimon 2 «Fayl» tabi
    * iframe'i, yangi oynada ochish). `attachment` bilan Chrome iframe'da
    * ko'rsatmay, faylni yuklab olishga o'tardi. Standart — yuklab olish.
    */
   const inline = params.get("inline") === "1";
-  if (wantsPdf) {
-    return pdfResponse({ userId: user.id, generationId: id, file, inline });
+
+  /**
+   * `?format=pdf` — DOCX/PPTX ni PDF ga o'giradi.
+   *
+   * O'girish talab bo'yicha: PDF bazada saqlanmaydi, aks holda har
+   * hujjatning ikkinchi nusxasi `BYTEA` ni ikki barobar og'irlashtirardi.
+   * Mobile sprint (PLAN §4.2): yagona yuklab olish ishlab chiqaruvchisi
+   * (`produceDownload`) — reyestr tekshiruvi, hosila keshi, foydalanuvchi
+   * limiti (429) va umumiy LibreOffice darvozasi (503 + `Retry-After`)
+   * `POST …/download` bilan bir xil.
+   */
+  if (params.get("format") === "pdf") {
+    let pdf: Awaited<ReturnType<typeof produceDownload>>;
+    try {
+      pdf = await produceDownload(id, user.id, "pdf");
+    } catch (e) {
+      return downloadErrorResponse(e);
+    }
+    await recordDownload(id).catch(() => {});
+    return new Response(bytesBody(pdf.bytes), {
+      headers: {
+        "Content-Type": pdf.mime,
+        "Content-Length": String(pdf.bytes.byteLength),
+        "Content-Disposition": contentDisposition(pdf.fileName, inline ? "inline" : "attachment"),
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
   }
+
+  const file = await getGenerationFile(id, user.id);
+  if (!file) throw new ApiError("Fayl topilmadi yoki muddati tugagan", 404);
 
   /*
    * AUDIO (AUDIT-22): `<audio>` elementi faylni SAHIFA ICHIDA o'ynatadi

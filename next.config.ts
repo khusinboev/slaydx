@@ -174,6 +174,26 @@ const nextConfig: NextConfig = {
         source: "/api/generations/:id/file",
         headers: [{ key: "Content-Security-Policy", value: "frame-ancestors 'self'" }],
       },
+      {
+        /*
+         * Signed download URL (docs/mobile/PLAN.md §4.2): a bearer link the
+         * Telegram client fetches without our cookie. Config headers overwrite
+         * the route's own, so the values that differ from the site rules live
+         * here: the token in the path must never leak through `Referer`;
+         * Telegram Web reads the file cross-origin (CORP `same-origin` would
+         * block a no-cors read); the file is not a page (no scripts, not
+         * framable, not indexed). `Cache-Control: private, no-store` comes
+         * from the `/api/` rule; the route adds `Access-Control-Allow-Origin`.
+         * `tests/download-routes.test.mts` checks the merged result.
+         */
+        source: "/api/dl/:token",
+        headers: [
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
+          { key: "Content-Security-Policy", value: "default-src 'none'; frame-ancestors 'none'; sandbox" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      },
       /*
        * Admin panel and API (§10 T16, T17): not framable, not indexed, and
        * pages are never stored by a browser or proxy cache. Listed last so
