@@ -155,6 +155,10 @@ test("A1 fixture is green at A1 and red at C2; C1 fixture is green at C1 and red
   }
   const b1 = measureLevel(FIXTURES.en.B1!, "en");
   assert.equal(levelVerdict(b1, "B1", "en").level, "green", `en B1@B1 mean ${b1.mean}`);
+  // A B1 text is NOT an A1 text (a too-wide A1 band would wave it through).
+  const b1AtA1 = levelVerdict(b1, "A1", "en");
+  assert.notEqual(b1AtA1.level, "green", `en B1@A1 mean ${b1.mean}`);
+  assert.equal(b1AtA1.direction, "high");
 });
 
 test("verdict boundaries: mean just outside the band → yellow, > 25 % outside → red; over-cap share counts", () => {

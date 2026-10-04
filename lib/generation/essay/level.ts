@@ -387,8 +387,7 @@ function isAbbreviationBefore(before: string): boolean {
   if (!m) return false;
   const tok = m[1];
   const letters = tok.replace(/['’‘ʻʼ`]/g, "");
-  if (/^\p{Lu}$/u.test(letters)) return true; // «A.»
-  if (/^\p{Lu}['’‘ʻʼ`]$/u.test(tok)) return true; // «G‘.», «O‘.»
+  if (/^\p{Lu}$/u.test(letters)) return true; // «A.», «G‘.», «O‘.» (apostrophe stripped)
   if (/^(Sh|Ch|Ng)$/u.test(letters)) return true; // Uzbek digraph initials
   return ABBREVIATIONS.has(tok.toLowerCase());
 }
