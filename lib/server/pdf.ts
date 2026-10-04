@@ -24,7 +24,14 @@ import { type Gate, runGroup, sofficeGate } from "./soffice-gate";
  */
 
 const CANDIDATES = ["/usr/bin/soffice", "/usr/bin/libreoffice", "/usr/local/bin/soffice"];
-const TIMEOUT_MS = 90_000;
+/**
+ * Conversion timeout. It was 90 s, above nginx's `proxy_read_timeout 60s`, so a
+ * slow conversion surfaced as a 504 HTML page (docs/mobile/R1-download.md §2).
+ * The download prepare route (`POST …/download`) never holds a request while
+ * converting; this bound keeps the background job and the legacy synchronous
+ * `GET …/file?format=pdf` path under the proxy limit. `tests/download-produce.test.mts` pins it.
+ */
+export const PDF_TIMEOUT_MS = 50_000;
 /** Kirish fayli chegarasi — o'girish xotira va vaqt talab qiladi. */
 const MAX_INPUT_BYTES = 30 * 1024 * 1024;
 
@@ -46,7 +53,7 @@ export function pdfFileName(name: string): string {
 export type ToPdfDeps = {
   /** Test seam: umumiy darvoza o'rniga. */
   gate?: Gate;
-  /** Test seam: vaqt chegarasi (standart 90 s). */
+  /** Test seam: vaqt chegarasi (standart `PDF_TIMEOUT_MS`, 50 s). */
   timeoutMs?: number;
   /**
    * Slot OLINGANDAN KEYIN, `soffice` dan oldin (masalan foydalanuvchi
@@ -69,7 +76,7 @@ export async function toPdf(bytes: Uint8Array, fileName: string, deps: ToPdfDeps
   const gate = deps.gate ?? sofficeGate();
   return gate.run(async () => {
     await deps.beforeRun?.();
-    return convert(bin, bytes, fileName, deps.timeoutMs ?? TIMEOUT_MS);
+    return convert(bin, bytes, fileName, deps.timeoutMs ?? PDF_TIMEOUT_MS);
   });
 }
 
