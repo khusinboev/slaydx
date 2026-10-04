@@ -50,7 +50,9 @@ function makeFake(version = "8.0", user: Record<string, unknown> | null = { id: 
   let writeOpen: false | { cb?: (ok: boolean) => void } = false;
   let closed = 0;
   const opened: string[] = [];
-  const emit = (type: string, payload?: unknown) => {
+  /** Every invocation of a gated method, also ones that throw (real clients log an error for those). */
+  const calls: string[] = [];
+  const emit =(type: string, payload?: unknown) => {
     for (const h of [...(handlers.get(type) ?? [])]) h(payload);
   };
   const WebApp = {
@@ -66,6 +68,7 @@ function makeFake(version = "8.0", user: Record<string, unknown> | null = { id: 
       handlers.get(type)?.delete(h);
     },
     downloadFile(params: { url: string; file_name: string }, cb?: (ok: boolean) => void) {
+      calls.push("downloadFile");
       if (!versionAtLeast(version, "8.0")) throw Error("WebAppMethodUnsupported");
       if (downloadOpen) throw Error("WebAppDownloadFilePopupOpened");
       if (!params?.url || !params.url.startsWith("https:")) throw Error("WebAppDownloadFileParamInvalid");
@@ -74,12 +77,14 @@ function makeFake(version = "8.0", user: Record<string, unknown> | null = { id: 
       posted.push({ type: "web_app_request_file_download", data: params });
     },
     shareMessage(id: string, cb?: (ok: boolean) => void) {
+      calls.push("shareMessage");
       if (!versionAtLeast(version, "8.0")) throw Error("WebAppMethodUnsupported");
       if (shareOpen) throw Error("WebAppShareMessageOpened");
       shareOpen = { cb };
       posted.push({ type: "web_app_send_prepared_message", data: { id } });
     },
     requestWriteAccess(cb?: (ok: boolean) => void) {
+      calls.push("requestWriteAccess");
       if (!versionAtLeast(version, "6.9")) throw Error("WebAppMethodUnsupported");
       if (writeOpen) throw Error("WebAppWriteAccessRequested");
       writeOpen = { cb };
@@ -129,7 +134,7 @@ function makeFake(version = "8.0", user: Record<string, unknown> | null = { id: 
     },
     emit,
   };
-  return { WebApp, WebView, client, posted, handlers, get closed() { return closed; }, opened };
+  return { WebApp, WebView, client, posted, handlers, calls, get closed() { return closed; }, opened };
 }
 
 /** Installs a Telegram-webview-like `window` (proxy signal + launch hash) carrying the fake. */
@@ -264,6 +269,13 @@ test("inside a Mini App: accessor, version, user id, write access flag", () => {
   assert.equal(miniAppUserId(), "42");
   assert.equal(allowsWriteToPm(), true);
 
+  install(makeFake("8.0", { id: "77" }));
+  assert.equal(miniAppUserId(), "77", "numeric string id");
+  install(makeFake("8.0", { id: "77abc" }));
+  assert.equal(miniAppUserId(), null, "non-numeric id is ignored");
+  install(makeFake("8.0", { id: Number.NaN }));
+  assert.equal(miniAppUserId(), null);
+
   install(makeFake("7.0", null));
   assert.equal(miniAppUserId(), null);
   assert.equal(allowsWriteToPm(), null);
@@ -356,14 +368,14 @@ test("requestDownload: unsupported below 8.0, without the method, or for a non-H
   const old = makeFake("7.10");
   install(old);
   assert.equal(await requestDownload(PARAMS), "unsupported");
-  assert.equal(old.posted.length, 0, "never called on an old client");
+  assert.deepEqual(old.calls, [], "never called on an old client");
 
   const fake = makeFake();
   install(fake);
   assert.equal(await requestDownload({ url: "http://slaydx.test/a", file_name: "a.pdf" }), "unsupported");
   assert.equal(await requestDownload({ url: "/api/dl/tok", file_name: "a.pdf" }), "unsupported");
   assert.equal(await requestDownload({ url: PARAMS.url, file_name: "" }), "unsupported");
-  assert.equal(fake.posted.length, 0);
+  assert.deepEqual(fake.calls, [], "invalid params are refused before calling Telegram");
   (fake.WebApp as Record<string, unknown>).downloadFile = undefined;
   assert.equal(await requestDownload(PARAMS), "unsupported");
 });
@@ -372,7 +384,8 @@ test("requestDownload: a dropped request times out, and a retry is re-sent throu
   const fake = makeFake();
   install(fake);
   // Android drops the call (no touch in the last 10 s): no answer at all.
-  assert.equal(await requestDownload(PARAMS, { timeoutMs: 5 }), "no-response");
+  const hung = new Promise((r) => setTimeout(() => r("hung"), 500));
+  assert.equal(await Promise.race([requestDownload(PARAMS, { timeoutMs: 5 }), hung]), "no-response");
   assert.equal(fake.handlers.get("fileDownloadRequested")!.size, 0, "listener removed after timeout");
   // tg-web-app.js still has the request "open": downloadFile would throw, so the retry posts directly.
   const retry = requestDownload(PARAMS);
@@ -441,7 +454,7 @@ test("shareMessageResult: unsupported (old client), busy (dialog open), error", 
   const old = makeFake("7.9");
   install(old);
   assert.equal(await shareMessageResult("p"), "unsupported");
-  assert.equal(old.posted.length, 0);
+  assert.deepEqual(old.calls, [], "never called below 8.0");
 
   const fake = makeFake();
   install(fake);
@@ -471,7 +484,7 @@ test("requestWriteAccess: allowed / cancelled / unsupported below 6.9 / pending"
   const old = makeFake("6.8");
   install(old);
   assert.equal(await requestWriteAccess(), false);
-  assert.equal(old.posted.length, 0);
+  assert.deepEqual(old.calls, [], "never called below 6.9");
 });
 
 test("closeApp and openExternalLink call Telegram and swallow throws", () => {
