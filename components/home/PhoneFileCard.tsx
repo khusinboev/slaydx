@@ -51,7 +51,7 @@ export function PhoneFileCard({
           aria-label={gen.topic}
           data-file-title
           data-clamp="2"
-          className="line-clamp-2 block min-h-10 text-sm leading-5 font-medium break-words"
+          className="line-clamp-2 min-h-11 text-sm leading-5 font-medium break-words"
         >
           {gen.topic}
         </Link>

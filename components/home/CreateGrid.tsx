@@ -52,45 +52,43 @@ export function CreateGrid() {
       <p className="text-muted-foreground mb-8 text-sm">
         AI yordamida bir necha soniyada professional kontent yarating
       </p>
-      <div
-        data-catalogue-bar
-        className="bg-[var(--page-bg)] sticky top-0 z-10 -mx-4 mb-4 px-4 pt-1 pb-2"
-      >
-        <div className="relative">
-          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur();
-            }}
-            enterKeyHint="search"
-            autoComplete="off"
-            aria-label="Vositalarni qidirish"
-            placeholder="Vosita qidirish…"
-            data-catalogue-search
-            className={cn(
-              "border-input bg-background w-full rounded-full border pr-11 pl-10 text-base outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
-              phone ? "h-11" : "h-10",
-            )}
-          />
-          {query ? (
-            <button
-              type="button"
-              aria-label="Qidiruvni tozalash"
-              onClick={() => setQuery("")}
-              className="text-muted-foreground absolute top-1/2 right-0 flex size-11 -translate-y-1/2 items-center justify-center"
-            >
-              <X className="size-4" />
-            </button>
-          ) : null}
-        </div>
+      <div className="relative mb-2">
+        <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2" />
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
+          enterKeyHint="search"
+          autoComplete="off"
+          aria-label="Vositalarni qidirish"
+          placeholder="Vosita qidirish…"
+          data-catalogue-search
+          className={cn(
+            "border-input bg-background w-full rounded-full border pr-11 pl-10 text-base outline-none focus-visible:ring-2 focus-visible:ring-primary/30 [&::-webkit-search-cancel-button]:appearance-none",
+            phone ? "h-11" : "h-10",
+          )}
+        />
+        {query ? (
+          <button
+            type="button"
+            aria-label="Qidiruvni tozalash"
+            onClick={() => setQuery("")}
+            className="text-muted-foreground absolute top-1/2 right-0 flex size-11 -translate-y-1/2 items-center justify-center"
+          >
+            <X className="size-4" />
+          </button>
+        ) : null}
+      </div>
+      {/* Only the chips stick under the top bar; the search field scrolls away (keeps the viewport free). */}
+      <div data-catalogue-bar className="bg-[var(--page-bg)] sticky top-0 z-10 -mx-4 mb-4 px-4 py-2">
         <div
           role="group"
           aria-label="Bo'limlar"
           data-group-chips
-          className="-mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {([{ id: "all", label: "Hammasi" }, ...groups] as { id: CatalogueGroup; label: string }[]).map((g) => (
             <button

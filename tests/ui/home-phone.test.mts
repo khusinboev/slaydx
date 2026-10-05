@@ -125,6 +125,9 @@ test("phone: 2-column cards, title clamped to 2 lines with the full text in aria
   assert.equal(title.getAttribute("data-clamp"), "2");
   assert.match(title.className, /line-clamp-2/, "title clamped to two lines");
   assert.doesNotMatch(title.className, /\btruncate\b/, "no single-line truncate on phones");
+  // `line-clamp-N` is `display:-webkit-box`; any other display utility silently disables the clamp
+  // (found in the Chromium smoke: a stray `block` showed all 5 lines).
+  assert.doesNotMatch(title.className, /(^|\s)(block|flex|inline|inline-block|inline-flex|grid)(\s|$)/, "display utility would break the clamp");
   assert.equal(title.getAttribute("aria-label"), `${LONG} a1`, "full title for assistive tech");
   assert.equal(title.textContent, `${LONG} a1`, "full text stays in the DOM (CSS clamps it)");
   const meta = cards[0].querySelector("[data-file-meta]") as HTMLElement;

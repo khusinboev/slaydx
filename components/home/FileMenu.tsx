@@ -83,7 +83,7 @@ export function FileMenu({
               <button
                 type="button"
                 data-file-menu-confirm-delete
-                className="bg-destructive min-h-12 flex-1 rounded-xl px-3 text-base font-medium text-white"
+                className="bg-destructive text-destructive-foreground dark:text-primary-foreground min-h-12 flex-1 rounded-xl px-3 text-base font-semibold"
                 onClick={(e) => {
                   if (!confirmAccepted(armedAt.current, e)) return;
                   onDelete(gen.id);
