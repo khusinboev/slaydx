@@ -349,7 +349,11 @@ jobs:
   promote:
     name: promote (<sha> tag + deploy command)
     needs: [ci-ok, images]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Explicit results + !cancelled(): the implicit success() also looks at ci-ok's own dependencies, and
+    # `images-check` is skipped on push by design — that silently skipped promote on the first main run.
+    if: >-
+      !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      needs.ci-ok.result == 'success' && needs.images.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

@@ -91,7 +91,9 @@ test("ci.yml: least privilege — contents: read by default, packages: write onl
   const writers = [...j].filter(([, body]) => /\n\s+permissions:\n(?:\s+[a-z-]+: [a-z]+\n)*?\s+packages: write\n/.test(body)).map(([name]) => name).sort();
   assert.deepEqual(writers, ["images", "promote"]);
   assert.match(j.get("images")!, /if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);
-  assert.match(j.get("promote")!, /if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);
+  // promote must not rely on the implicit success(): images-check is skipped on push (first main run skipped promote).
+  assert.match(j.get("promote")!, /!cancelled\(\) && github\.event_name == 'push' && github\.ref == 'refs\/heads\/main' &&/);
+  assert.match(j.get("promote")!, /needs\.ci-ok\.result == 'success' && needs\.images\.result == 'success'/);
   assert.match(j.get("images-check")!, /push: false/);
   assert.doesNotMatch(j.get("images-check")!, /permissions:|docker login/);
   assert.match(j.get("ci-ok")!, /permissions: \{\}/);
