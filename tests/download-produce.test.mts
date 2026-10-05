@@ -37,7 +37,8 @@ test("soffice timeout and the link budget stay under nginx's proxy_read_timeout 
   const conf = readFileSync(new URL("../deploy/nginx/slaydx.conf.example", import.meta.url), "utf8");
   // The server-level default (the first one) applies to /api/generations/{id}/download.
   const nginxSec = Number(/proxy_read_timeout\s+(\d+)s;/.exec(conf)?.[1]);
-  assert.equal(nginxSec, 60);
+  // Ops sprint: the example follows production (server-level 300 s); the invariant is "never below 60 s".
+  assert.ok(nginxSec >= 60, `proxy_read_timeout=${nginxSec}s`);
   assert.ok(PDF_TIMEOUT_MS <= 50_000, `PDF_TIMEOUT_MS=${PDF_TIMEOUT_MS}`);
   assert.ok(PDF_TIMEOUT_MS < nginxSec * 1000);
   // The token route never relies on a longer proxy window: its regeneration budget is under the default…
@@ -45,7 +46,9 @@ test("soffice timeout and the link budget stay under nginx's proxy_read_timeout 
   assert.ok(LINK_BUDGET_MS < 50_000, `LINK_BUDGET_MS=${LINK_BUDGET_MS}`);
   // …and /api/dl/ gets 120 s for streaming large files to slow phones (m1).
   const dlBlock = /location \/api\/dl\/ \{([^}]*)\}/.exec(conf)?.[1] ?? "";
-  assert.match(dlBlock, /proxy_pass http:\/\/127\.0\.0\.1:3000;/);
+  // Ops sprint: every location proxies to the keepalive upstream, which points at the web container.
+  assert.match(dlBlock, /proxy_pass http:\/\/slaydx_web;/);
+  assert.match(conf, /upstream slaydx_web \{[^}]*server 127\.0\.0\.1:3000/);
   assert.match(dlBlock, /proxy_read_timeout 120s;/);
   assert.match(dlBlock, /proxy_cache off;/);
 });
