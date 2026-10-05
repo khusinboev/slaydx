@@ -9,7 +9,7 @@ import { useAppStore } from "@/lib/store";
 import { defaultShareFormat, downloadFormats, downloadSubject, type DownloadFormatId } from "@/lib/downloads/formats";
 import { DELIVER_TEXT, IDLE, markGesture, rowBusy, rowPercent, elapsedSeconds, type RowState } from "@/lib/downloads/deliver";
 import { useDialog } from "../overlays/useDialog";
-import { DownloadSheet, useDownloads, useKnownSizes, type SheetMode } from "./DownloadSheet";
+import { DownloadSheet, useDownloads, type SheetMode } from "./DownloadSheet";
 import { openBotLink, SaveToBotButton, useSaveAction, type ActionToast } from "./SaveToBotButton";
 import { ShareButton, useShareAction } from "./ShareButton";
 
@@ -69,7 +69,6 @@ export function ResultActions({
   const single = formats.length === 1;
 
   const downloads = useDownloads(gen.id, gen.fileVersion ?? 0, { canSendToBot: Boolean(sessionTelegramId) });
-  const sizes = useKnownSizes(downloads);
   const [sheet, setSheet] = useState<SheetMode | null>(null);
   const closeSheet = useCallback(() => setSheet(null), []);
   const dlRef = useRef<HTMLButtonElement>(null);
@@ -142,7 +141,7 @@ export function ResultActions({
   };
 
   const btn =
-    "inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-medium disabled:opacity-70 md:h-9 md:pointer-coarse:h-11";
+    "inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg text-sm font-medium disabled:opacity-70 md:h-9 md:pointer-coarse:h-11";
 
   return (
     <nav
@@ -172,14 +171,14 @@ export function ResultActions({
             onClick={onDownloadClick}
             className={cn(
               btn,
-              "bg-primary text-primary-foreground min-w-11 flex-[1.4] md:flex-none",
+              "bg-primary text-primary-foreground min-w-11 flex-[1.4] px-2.5 md:flex-none md:px-3",
               "group-data-[compact=1]/hdr:flex-none group-data-[compact=1]/hdr:px-0 group-data-[compact=1]/hdr:w-11",
               singleState.s === "ready" && "ring-primary/50 ring-2 ring-offset-1",
             )}
           >
             {busyDl ? <Loader2 className="size-4 shrink-0 animate-spin" /> : singleState.s === "done" ? <Check className="size-4 shrink-0" /> : <Download className="size-4 shrink-0" />}
             <span className="truncate group-data-[compact=1]/hdr:sr-only">{dlLabel}</span>
-            {!single ? <ChevronDown className="size-4 shrink-0 opacity-80 group-data-[compact=1]/hdr:hidden" aria-hidden /> : null}
+            {!single ? <ChevronDown className="hidden size-4 shrink-0 opacity-80 group-data-[compact=1]/hdr:hidden md:inline" aria-hidden /> : null}
             {single && singleState.s === "idle" ? (
               <span className="text-primary-foreground/80 hidden text-xs md:inline">{formats[0].ext.toUpperCase()}</span>
             ) : null}
@@ -196,7 +195,7 @@ export function ResultActions({
             data-delete-confirm
             disabled={deleting}
             onClick={(e) => del.trigger(e)}
-            className={cn(btn, "bg-destructive text-destructive-foreground")}
+            className={cn(btn, "bg-destructive text-destructive-foreground px-3")}
           >
             <Trash2 className="size-4" />
             Rostdan?
@@ -249,7 +248,7 @@ export function ResultActions({
         formats={formats}
         downloads={downloads}
         anchorRef={dlRef}
-        sizes={sizes}
+        sizes={downloads.sizes}
         onPick={pick}
       />
 

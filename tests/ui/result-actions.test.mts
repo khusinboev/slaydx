@@ -202,6 +202,9 @@ test("sheet: rows from the registry (slide: PPTX, PDF, PNG ZIP), PDF and the sto
   assert.match(row("slides-png").textContent ?? "", /Slaydlar rasm \(PNG, ZIP\)/);
   await waitFor(() => assert.equal(posts("/download").length, 2));
   assert.deepEqual(posts("/download").map((c) => JSON.parse(c.body!).format).sort(), ["native", "pdf"]);
+  // The prepared size shows on the row (R1 §5: «PPTX · 8,1 MB» before downloading).
+  await waitFor(() => assert.equal(row("native").querySelector("[data-row-status]")!.textContent, "Tahrirlash uchun · 2 KB"));
+  assert.equal(state("native"), "idle", "prewarming does not change the row state");
   await act(async () => {
     fireEvent.keyDown(window, { key: "Escape" });
   });

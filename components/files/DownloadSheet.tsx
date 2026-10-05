@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { AlertCircle, Check, ChevronRight, Download, ExternalLink, FileText, Loader2, RefreshCw, Send, X } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -68,6 +68,8 @@ export function useDownloads(genId: string, version: number, opts: { canSendToBo
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
   const warm = useRef(new Map<DownloadFormatId, Warm>());
+  /** Sizes the server reported (prepared on open or on tap): the row shows «PPTX · 8,1 MB». */
+  const [sizes, setSizes] = useState<Partial<Record<DownloadFormatId, number>>>({});
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -79,6 +81,7 @@ export function useDownloads(genId: string, version: number, opts: { canSendToBo
   useEffect(() => {
     warm.current.clear();
     setRows({});
+    setSizes({});
   }, [genId, version]);
 
   const dispatch = useCallback((id: DownloadFormatId, e: RowEvent) => {
@@ -98,6 +101,7 @@ export function useDownloads(genId: string, version: number, opts: { canSendToBo
       entry.promise = prepareDownload(genId, id).then(
         (file) => {
           entry.file = file;
+          if (alive.current) setSizes((s) => (s[id] === file.size ? s : { ...s, [id]: file.size }));
           return file;
         },
         (e: unknown) => {
@@ -204,7 +208,7 @@ export function useDownloads(genId: string, version: number, opts: { canSendToBo
     [dispatch],
   );
 
-  return { rows, tap, prewarm, sendRowToBot, openRowInBrowser, canSendToBot: opts.canSendToBot };
+  return { rows, sizes, tap, prewarm, sendRowToBot, openRowInBrowser, canSendToBot: opts.canSendToBot };
 }
 
 export type Downloads = ReturnType<typeof useDownloads>;
@@ -539,16 +543,4 @@ export function DirectDownloadButton({
       ) : null}
     </span>
   );
-}
-
-/** Known sizes per format, from rows that reached the server (prepared or delivered). */
-export function useKnownSizes(downloads: Downloads): Partial<Record<DownloadFormatId, number>> {
-  const { rows } = downloads;
-  return useMemo(() => {
-    const out: Partial<Record<DownloadFormatId, number>> = {};
-    for (const [id, st] of Object.entries(rows) as [DownloadFormatId, RowState | undefined][]) {
-      if (st && (st.s === "ready" || st.s === "fallback" || st.s === "sending")) out[id] = st.file.size;
-    }
-    return out;
-  }, [rows]);
 }
