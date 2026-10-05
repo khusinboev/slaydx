@@ -422,7 +422,7 @@ test("watchdog.sh (haqiqiy Postgres + stub docker/curl/df)", { skip }, async (t)
     inspect("slaydx-worker-2", "running", "unhealthy");
     for (let i = 0; i < 2; i++) run(on);
     const locked = spawnSync("flock", [baseEnv.SLAYDX_LOCK_FILE, "bash", SCRIPT], {
-      env: { ...baseEnv, ...on } as NodeJS.ProcessEnv,
+      env: { ...baseEnv, ...(on as Record<string, string>) } as NodeJS.ProcessEnv,
       encoding: "utf8",
       timeout: 60_000,
     });
