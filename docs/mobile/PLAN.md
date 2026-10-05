@@ -183,3 +183,13 @@ Order: F0 ∥ G → (A ∥ B ∥ D) → C → E → P → integration + reviews 
 | GPU smoke launcher | `scripts/smoke/gpu-launch.cjs` (owner-approved, 351fd65) |
 | P5 Home + catalogue | ✅ merged (title chars 16→37 @390, small targets 25→0) |
 | E, P3, P4, P9, UX review, live essay calibration | next |
+
+## 8. Essay level — live calibration (2026-10-05, 9 essays, gemini-3.7-flash)
+| Case | Lang | Level | Mean words/sentence | Verdict (after calibration) |
+|---|---|---|---|---|
+| acad-en-a2 / b2 / c2 | en | A2 / B2 / C2 | 10.8 / 18.7 / 23.8 | green / green / green |
+| acad-ru-b1 / c1 | ru | B1 / C1 | 13.3 / 20.6 | green / green |
+| dtm-a1 / default(B2) / c1 | uz | A1 / B2 / C1 | 5.4 / 13.7 / 20.2 | green / green / green (was yellow: uz C1 hi 20 → 23) |
+Means rise monotonically with ≥ 20 % gaps in every language. uz C1/C2 bands raised (C1 14–23 target 18, C2 16–28
+target 22); other bands unchanged. Not run: `essay-lvl-acad-uz-a2` (paused), `essay-lvl-dtm-b1` doc not saved.
+Native-reader check of A1 and C2 Uzbek texts still recommended.
