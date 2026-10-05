@@ -170,6 +170,22 @@ test("account without Telegram → 409 no_telegram", { skip }, async () => {
   assert.equal(spent.length, 0);
 });
 
+test("m2: account with a Telegram id above 2^53 → share 409 telegram_id_unsupported (nothing sent); save still works (chat_id travels as a string)", { skip }, async () => {
+  const big = "9007199254740993";
+  const row = await queryOne<{ id: string }>("INSERT INTO users (telegram_id, name) VALUES ($1, 'Katta id') RETURNING id::text AS id", [big]);
+  userIds.push(row!.id);
+  const cookie = `${SESSION_COOKIE}=${(await createSession(row!.id)).token}`;
+  const gen = await mkGen(row!.id);
+  const h = harness();
+  const share = await post("share", h.deps, cookie, gen);
+  assert.equal(share.status, 409);
+  assert.equal(share.body.code, "telegram_id_unsupported");
+  assert.equal(h.calls.length, 0);
+  const save = await post("save", h.deps, cookie, gen);
+  assert.equal(save.status, 200);
+  assert.equal(h.calls.length, 1);
+});
+
 test("format validation: unknown id → 400 unknown_format; not offered for this generation → 400 unsupported", { skip }, async () => {
   const u = await mkUser();
   const gen = await mkGen(u.id, { tool: "essay", format: "docx" });

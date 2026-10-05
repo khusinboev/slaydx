@@ -397,6 +397,27 @@ test("dead cached file_id (400 wrong file identifier) → re-upload and overwrit
   assert.notEqual((await cached(gen))!.file_id, dead);
 });
 
+test("m2: a Telegram id above 2^53 → telegram_id_unsupported (buildPrepared and prepareShare), never a rounded user_id", async () => {
+  const big = "9007199254740993"; // 2^53 + 1: Number() would make it ...992
+  const args = {
+    resultId: "r",
+    kind: tf.mediaKindFor(PPTX),
+    fileId: "F",
+    title: "t",
+    description: "d",
+    presentation: { caption: "c" },
+  };
+  assert.throws(() => tf.buildPrepared({ ...args, telegramId: big }), (e: unknown) => (e as { code?: string }).code === "telegram_id_unsupported");
+  assert.throws(() => tf.telegramUserId("12345678901234567890"), (e: unknown) => (e as { code?: string }).code === "telegram_id_unsupported");
+  assert.equal(tf.buildPrepared({ ...args, telegramId: "6123456789" }).user_id, 6_123_456_789);
+  assert.equal(tf.telegramUserId(String(Number.MAX_SAFE_INTEGER)), Number.MAX_SAFE_INTEGER);
+  // Refused before anything is produced, uploaded or read.
+  const h = harness();
+  await rejectsWith(prepareShare(randomUUID(), { id: "1", telegramId: big }, "native", h.deps), "telegram_id_unsupported");
+  assert.equal(h.calls.length, 0);
+  assert.equal(h.produced.length, 0);
+});
+
 test("no telegram_id → no_telegram before any DB/Bot/produce work; foreign or unfinished generation", { skip }, async () => {
   const owner = await mkUser();
   const stranger = await mkUser();

@@ -92,6 +92,17 @@ test("/start <nonce-shaped payload with no ticket> → still «Bu havola eskirga
   assert.equal(buttons(calls[0].body).length, 0);
 });
 
+test("m2: an update whose from/chat id is above 2^53 (already rounded by JSON.parse) is ignored — no reply, no user", { skip }, async () => {
+  installFetch();
+  const unsafe = 2 ** 53 + 2; // what JSON.parse makes of 9007199254740993: a DIFFERENT id
+  assert.equal(Number.isSafeInteger(unsafe), false);
+  await handleUpdate({ update_id: ++seq, message: { chat: { id: unsafe, type: "private" }, from: { id: unsafe, first_name: "Katta" }, text: "/start" } });
+  await handleUpdate({ update_id: ++seq, message: { chat: { id: unsafe, type: "private" }, from: { id: 720_999_010, first_name: "Katta" }, text: "/start" } });
+  assert.equal(calls.length, 0);
+  const users = await query("SELECT 1 FROM users WHERE telegram_id = ANY($1::bigint[])", [[String(unsafe), "720999010"]]);
+  assert.equal(users.length, 0, "nothing registered under a rounded id");
+});
+
 test("inline_query → one empty answerInlineQuery with a Mini App button, nothing else", { skip }, async () => {
   installFetch();
   const id = ++seq;

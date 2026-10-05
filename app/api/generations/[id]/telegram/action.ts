@@ -34,7 +34,8 @@ import {
  *   save  200 `{ ok: true, duplicate: boolean, format, botUrl: string | null }`
  *   share 200 `{ preparedId, expiresAt, format, botUrl: string | null }`
  *   400 `unknown_format` | `unsupported`; 404 not found / not the owner;
- *   409 `no_telegram` | `bot_unreachable` (+ `botUrl`) | `not_ready`;
+ *   409 `no_telegram` | `bot_unreachable` (+ `botUrl`) | `not_ready` |
+ *       `telegram_id_unsupported` (share only: a Telegram id above 2^53);
  *   413 `too_large`; 429 (Retry-After); 501 `share_unavailable`;
  *   503 `telegram_unavailable`. Producer failures (PDF busy, …) keep their own
  *   status and `code` (`DownloadError`, package A).
@@ -60,6 +61,7 @@ const STATUS: Record<TelegramFileErrorCode, number> = {
   too_large: 413,
   share_unavailable: 501,
   telegram_unavailable: 503,
+  telegram_id_unsupported: 409,
 };
 
 /** The body is optional: an empty POST means the default format. */

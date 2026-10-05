@@ -62,7 +62,8 @@ export type TelegramFileErrorCode =
   | "bot_unreachable"
   | "telegram_unavailable"
   | "share_unavailable"
-  | "too_large";
+  | "too_large"
+  | "telegram_id_unsupported";
 
 /** A failure the route maps to an HTTP status + `code` (PLAN §4.4). */
 export class TelegramFileError extends Error {
@@ -205,6 +206,22 @@ export function fileFromMessage(kind: MediaKind, msg: SentMessage | null | undef
   };
 }
 
+/**
+ * A Telegram user id as the JSON number the Bot API expects (m2).
+ *
+ * `users.telegram_id` is BIGINT and Telegram ids are 64-bit; `Number()` above
+ * 2^53 silently rounds to a DIFFERENT id, which would bind a prepared message
+ * to the wrong user. Such an id is refused with its own code instead.
+ * (`chat_id` travels as a string elsewhere, which Telegram accepts.)
+ */
+export function telegramUserId(id: string): number {
+  const n = Number(id);
+  if (!/^\d{1,20}$/.test(id) || !Number.isSafeInteger(n) || String(n) !== id) {
+    throw new TelegramFileError("telegram_id_unsupported", "Bu Telegram akkaunti bilan ulashib bo'lmadi — «Saqlash» yoki «Yuklab olish» dan foydalaning.");
+  }
+  return n;
+}
+
 /** `savePreparedInlineMessage` body (Bot API 8.0): users, groups and channels; never bot chats. */
 export function buildPrepared(args: {
   telegramId: string;
@@ -228,7 +245,7 @@ export function buildPrepared(args: {
     result.description = args.description;
   }
   return {
-    user_id: Number(args.telegramId),
+    user_id: telegramUserId(args.telegramId),
     result,
     allow_user_chats: true,
     allow_bot_chats: false,
@@ -517,6 +534,8 @@ export async function prepareShare(
   deps: TelegramFilesDeps,
 ): Promise<ShareResult> {
   const telegramId = chatOf(user);
+  // Refused before anything is produced or uploaded (the prepared message needs a JSON-number id).
+  telegramUserId(telegramId);
   const { value } = await singleFlight(`share:${user.id}:${genId}:${format}`, () =>
     shareOnce(telegramId, genId, user, format, deps),
   );
