@@ -495,9 +495,8 @@ export function ResultView({ id }: { id: string }) {
         <h1 className="line-clamp-2 text-[15px] leading-snug font-semibold break-words group-data-[compact=1]/hdr:line-clamp-1 md:line-clamp-1" data-result-title>
           {gen.topic}
         </h1>
-        <p className="text-muted-foreground truncate text-xs group-data-[compact=1]/hdr:hidden">
-          {tool?.title} · {completed ? (expired ? "Topilmadi" : "Tayyor") : gen.step} ·{" "}
-          {gen.price.toLocaleString("uz-UZ")} tanga
+        <p className="text-muted-foreground truncate text-xs group-data-[compact=1]/hdr:hidden" data-result-subtitle>
+          {resultSubtitle(gen, tool?.title, completed, expired)}
         </p>
       </div>
     </>
@@ -650,6 +649,29 @@ export function ResultView({ id }: { id: string }) {
     </ResultLayout>
     </DownloadSheetContext.Provider>
   );
+}
+
+/**
+ * Header subtitle «Kurs ishi · Tayyor · 12 000 tanga». Empty parts are
+ * dropped (a FAILED row has no step: it read «Kurs ishi · · 12 000»), and a
+ * failed/revoked result says so (UX review m2).
+ */
+export function resultSubtitle(
+  gen: Pick<api.GenerationDetail, "status" | "step" | "price">,
+  toolTitle: string | undefined,
+  completed: boolean,
+  expired: boolean,
+): string {
+  const state = completed
+    ? expired
+      ? "Topilmadi"
+      : "Tayyor"
+    : gen.status === "FAILED"
+      ? "Xato"
+      : gen.status === "REVOKED"
+        ? "Bekor qilindi"
+        : gen.step;
+  return [toolTitle, state, `${gen.price.toLocaleString("uz-UZ")} tanga`].filter((p) => p && p.trim()).join(" · ");
 }
 
 /** Hisobot xulosasi → chip (`ResultLayout` sarlavhasida). */

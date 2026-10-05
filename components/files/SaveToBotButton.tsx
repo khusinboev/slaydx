@@ -130,6 +130,29 @@ export function useSaveAction(args: {
   return { busy, since, run };
 }
 
+/**
+ * Button label while the route converts (202 preparing): never a bare «2 s»
+ * (UX review m3). Phones keep the verb (the button is ~100 px wide) and the
+ * spinner; md+ shows «Tayyorlanmoqda… 2 s»; screen readers get the live line.
+ */
+export function ActionLabel({ verb, since, now }: { verb: string; since: number | null; now: number }) {
+  if (since === null) return <span className="truncate">{verb}</span>;
+  const line = `${DELIVER_TEXT.preparing} ${elapsedSeconds(since, now)} s`;
+  return (
+    <>
+      <span className="truncate md:hidden" aria-hidden>
+        {verb}
+      </span>
+      <span className="hidden truncate md:inline" aria-hidden>
+        {line}
+      </span>
+      <span role="status" className="sr-only" data-action-progress>
+        {line}
+      </span>
+    </>
+  );
+}
+
 /** «Saqlash» button. `visible` = the session account has a Telegram id (`saveCapability` ≠ hidden). */
 export function SaveToBotButton({
   action,
@@ -149,7 +172,6 @@ export function SaveToBotButton({
     return () => clearInterval(t);
   }, [action.since]);
   if (!visible) return null;
-  const label = action.since !== null ? `${elapsedSeconds(action.since, now)} s` : "Saqlash";
   return (
     <button
       type="button"
@@ -166,7 +188,7 @@ export function SaveToBotButton({
       )}
     >
       {action.busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-      {iconOnly ? null : <span className="truncate">{action.busy && action.since === null ? "Saqlash" : label}</span>}
+      {iconOnly ? null : <ActionLabel verb="Saqlash" since={action.since} now={now} />}
     </button>
   );
 }

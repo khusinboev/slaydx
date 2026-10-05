@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { AlertCircle, Check, ChevronRight, Download, ExternalLink, FileText, Loader2, RefreshCw, Send, X } from "lucide-react";
+import { Check, ChevronRight, Download, ExternalLink, FileText, Loader2, RefreshCw, Send, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { DownloadFormat, DownloadFormatId } from "@/lib/downloads/formats";
 import {
@@ -12,6 +12,7 @@ import {
   downloadToDevice,
   DELIVER_TEXT,
   gestureFresh,
+  gestureRequired,
   IDLE,
   lastGesture,
   markGesture,
@@ -70,38 +71,45 @@ export function useDownloads(genId: string, version: number, opts: { canSendToBo
   const warm = useRef(new Map<DownloadFormatId, Warm>());
   /** Sizes the server reported (prepared on open or on tap): the row shows «PPTX · 8,1 MB». */
   const [sizes, setSizes] = useState<Partial<Record<DownloadFormatId, number>>>({});
-  const alive = useRef(true);
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-    };
-  }, []);
+  /**
+   * One abort scope per {generation, file version}: leaving the page or an
+   * edit (new file version) stops polling and body reads, and a late answer
+   * of the old scope never lands in the new rows.
+   */
+  const scope = useRef(new AbortController());
 
   useEffect(() => {
+    const c = new AbortController();
+    scope.current = c;
     warm.current.clear();
     setRows({});
     setSizes({});
+    return () => c.abort();
   }, [genId, version]);
 
-  const dispatch = useCallback((id: DownloadFormatId, e: RowEvent) => {
-    if (!alive.current) return;
-    setRows((r) => {
-      const next = rowReducer(r[id] ?? IDLE, e);
-      rowsRef.current = { ...r, [id]: next };
-      return rowsRef.current;
-    });
-  }, []);
+  /** A dispatcher bound to the scope the action started in. */
+  const dispatcher = useCallback(
+    (signal: AbortSignal) => (id: DownloadFormatId, e: RowEvent) => {
+      if (signal.aborted) return;
+      setRows((r) => {
+        const next = rowReducer(r[id] ?? IDLE, e);
+        rowsRef.current = { ...r, [id]: next };
+        return rowsRef.current;
+      });
+    },
+    [],
+  );
 
   const prepare = useCallback(
     (id: DownloadFormatId): Warm => {
       const have = warm.current.get(id);
       if (have && (!have.file || readyFresh(have.file))) return have;
+      const signal = scope.current.signal;
       const entry: Warm = { since: Date.now(), promise: Promise.resolve(null as unknown as ReadyFile) };
-      entry.promise = prepareDownload(genId, id).then(
+      entry.promise = prepareDownload(genId, id, undefined, { signal }).then(
         (file) => {
           entry.file = file;
-          if (alive.current) setSizes((s) => (s[id] === file.size ? s : { ...s, [id]: file.size }));
+          if (!signal.aborted) setSizes((s) => (s[id] === file.size ? s : { ...s, [id]: file.size }));
           return file;
         },
         (e: unknown) => {
@@ -128,9 +136,11 @@ export function useDownloads(genId: string, version: number, opts: { canSendToBo
   );
 
   const deliverRow = useCallback(
-    async (id: DownloadFormatId, file: ReadyFile) => {
+    async (id: DownloadFormatId, file: ReadyFile, signal: AbortSignal) => {
+      const dispatch = dispatcher(signal);
       const env = currentDeliveryEnv();
-      if (env.capability === "tg-download" && !gestureFresh(lastGesture(), performance.now())) {
+      // Android only (R1 §4): iOS / desktop / web Telegram take a late `downloadFile` without a fresh tap.
+      if (env.capability === "tg-download" && gestureRequired(env.platform) && !gestureFresh(lastGesture(), performance.now())) {
         dispatch(id, { t: "await-tap", file });
         return;
       }
@@ -138,6 +148,7 @@ export function useDownloads(genId: string, version: number, opts: { canSendToBo
       try {
         const result = await deliver(file, {
           ...env,
+          signal,
           lastGestureAt: lastGesture(),
           onProgress: (loaded, total) => dispatch(id, { t: "progress", loaded, total }),
         });
@@ -154,16 +165,18 @@ export function useDownloads(genId: string, version: number, opts: { canSendToBo
         dispatch(id, { t: "fail", text: deliverErrorText(e) });
       }
     },
-    [dispatch],
+    [dispatcher],
   );
 
   /** A tap on a row (or on the one-format header button). Double-tap safe. */
   const tap = useCallback(
     async (id: DownloadFormatId) => {
+      const signal = scope.current.signal;
+      const dispatch = dispatcher(signal);
       const st = rowsRef.current[id] ?? IDLE;
       if (rowBusy(st)) return;
       if ((st.s === "ready" || st.s === "fallback") && readyFresh(st.file)) {
-        await deliverRow(id, st.file);
+        await deliverRow(id, st.file, signal);
         return;
       }
       const w = prepare(id);
@@ -177,35 +190,38 @@ export function useDownloads(genId: string, version: number, opts: { canSendToBo
           return;
         }
       }
-      await deliverRow(id, file);
+      await deliverRow(id, file, signal);
     },
-    [deliverRow, dispatch, prepare],
+    [deliverRow, dispatcher, prepare],
   );
 
   const sendRowToBot = useCallback(
     async (id: DownloadFormatId) => {
+      const signal = scope.current.signal;
+      const dispatch = dispatcher(signal);
       const st = rowsRef.current[id] ?? IDLE;
       if (st.s !== "fallback") return;
       dispatch(id, { t: "send" });
       try {
         const started = Date.now();
-        await sendToBot(genId, id, () => dispatch(id, { t: "send-wait", since: started }));
+        await sendToBot(genId, id, () => dispatch(id, { t: "send-wait", since: started }), signal);
         dispatch(id, { t: "sent" });
       } catch (e) {
         dispatch(id, { t: "fail", text: deliverErrorText(e) });
       }
     },
-    [dispatch, genId],
+    [dispatcher, genId],
   );
 
   const openRowInBrowser = useCallback(
     (id: DownloadFormatId) => {
+      const dispatch = dispatcher(scope.current.signal);
       const st = rowsRef.current[id] ?? IDLE;
       if (st.s !== "fallback") return;
       if (openInBrowser(st.file)) dispatch(id, { t: "opened" });
       else dispatch(id, { t: "fail", text: DELIVER_TEXT.failed });
     },
-    [dispatch],
+    [dispatcher],
   );
 
   return { rows, sizes, tap, prewarm, sendRowToBot, openRowInBrowser, canSendToBot: opts.canSendToBot };
@@ -396,10 +412,11 @@ function Row({
         data-download-row={f.id}
         data-row-state={state.s}
         aria-busy={busy || undefined}
-        disabled={busy}
-        onClick={onTap}
+        // Not `disabled`: a disabled button drops focus to <body> and breaks the dialog's Tab trap; busy rows ignore taps.
+        aria-disabled={busy || undefined}
+        onClick={busy ? undefined : onTap}
         className={cn(
-          "hover:bg-muted focus-visible:bg-muted flex min-h-14 w-full items-center gap-3 rounded-xl px-3 py-2 text-left outline-none disabled:cursor-progress",
+          "hover:bg-muted focus-visible:bg-muted flex min-h-14 w-full items-center gap-3 rounded-xl px-3 py-2 text-left outline-none aria-disabled:cursor-progress",
           tone === "ready" && "bg-primary/10 ring-primary/40 ring-1",
         )}
       >
@@ -445,19 +462,13 @@ function Row({
       </button>
       {state.s === "fallback" || state.s === "sending" ? (
         <div className="flex flex-wrap gap-2 px-3 pt-1 pb-2" data-download-fallback>
-          {state.s === "fallback" ? (
-            <p className="text-muted-foreground flex w-full items-center gap-1.5 text-[13px]">
-              <AlertCircle className="size-4 shrink-0" aria-hidden />
-              {state.text}
-            </p>
-          ) : null}
           {canSendToBot ? (
             <button
               type="button"
               data-fallback-bot
-              disabled={state.s === "sending"}
+              aria-disabled={state.s === "sending" || undefined}
               onClick={onSendToBot}
-              className="bg-primary text-primary-foreground inline-flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-medium disabled:opacity-60"
+              className="bg-primary text-primary-foreground inline-flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-medium aria-disabled:opacity-60"
             >
               {state.s === "sending" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
               {DELIVER_TEXT.sendToBot}
@@ -466,9 +477,9 @@ function Row({
           <button
             type="button"
             data-fallback-browser
-            disabled={state.s === "sending"}
+            aria-disabled={state.s === "sending" || undefined}
             onClick={onOpenInBrowser}
-            className="bg-card inline-flex h-11 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60"
+            className="bg-card inline-flex h-11 items-center gap-1.5 rounded-lg border px-3 text-sm aria-disabled:opacity-60"
           >
             <ExternalLink className="size-4" />
             {DELIVER_TEXT.openInBrowser}

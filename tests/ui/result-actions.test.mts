@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createElement as h } from "react";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import { ResultActions } from "../../components/files/ResultActions.tsx";
+import { ResultActions, toastDuration } from "../../components/files/ResultActions.tsx";
 import { useAppStore } from "../../lib/store.ts";
 import { compareVersions } from "../../lib/telegram-webapp.ts";
 import { resetGesture } from "../../lib/downloads/deliver.ts";
@@ -57,7 +57,7 @@ function stub(route: Route = () => undefined) {
 
 const posts = (suffix: string) => calls.filter((c) => c.method === "POST" && c.url === `/api/generations/${ID}${suffix}`);
 
-function fakeTelegram(o: { version?: string; platform?: string; userId?: number; share?: boolean; writeAccess?: boolean } = {}) {
+function fakeTelegram(o: { version?: string; platform?: string; userId?: number; share?: boolean; shareError?: string; writeAccess?: boolean } = {}) {
   const version = o.version ?? "8.0";
   const listeners: Record<string, ((p?: unknown) => void)[]> = {};
   w.TelegramWebviewProxy = { postEvent() {} };
@@ -74,7 +74,9 @@ function fakeTelegram(o: { version?: string; platform?: string; userId?: number;
       },
       shareMessage: (id: string, cb: (ok: boolean) => void) => {
         tgCalls.push(`share ${id}`);
-        cb(o.share ?? true);
+        cb(o.shareError ? false : (o.share ?? true));
+        // tg-web-app.js: callback first, then `shareMessageFailed {error}`.
+        if (o.shareError) for (const f of listeners.shareMessageFailed ?? []) f({ error: o.shareError });
       },
       requestWriteAccess: (cb: (ok: boolean) => void) => {
         tgCalls.push("writeAccess");
@@ -403,7 +405,8 @@ test("«Saqlash» errors → Uzbek server text (503 telegram_unavailable, 413 to
   stub((c) => (c.url.endsWith("/telegram/save") ? json(503, { error: "Telegram hozir javob bermayapti. Birozdan keyin qayta urinib ko'ring.", code: "telegram_unavailable", retryAfter: 30 }) : undefined));
   mount();
   await tap(q("[data-save-to-bot]")!);
-  await waitFor(() => assert.match(toast()?.textContent ?? "", /^Telegram hozir javob bermayapti\. Birozdan keyin qayta urinib ko'ring\. \(qayta urinish: 30 soniyadan keyin\)/));
+  // UX review m12: the exact time replaces «Birozdan keyin», no second «(qayta urinish: …)».
+  await waitFor(() => assert.match(toast()?.textContent ?? "", /^Telegram hozir javob bermayapti\. 30 soniyadan keyin qayta urinib ko'ring\.(?!.*qayta urinish)/));
   assert.ok(!tgCalls.includes("close"));
 });
 
@@ -462,6 +465,9 @@ test("«Ulashish» with no share capability falls back to the download sheet", a
   mount({ telegramId: null });
   await tap(q("[data-share-button]")!);
   assert.equal(q("[data-download-sheet]")?.getAttribute("data-download-sheet"), "download");
+  // UX review m13: the user asked to share — say why a download list opened.
+  assert.equal(toast()?.textContent?.replace(/\s+$/, ""), "Bu brauzer faylni ulasha olmaydi — yuklab olib, o‘zingiz yuboring");
+  assert.equal(toast()!.getAttribute("data-result-toast"), "info");
 });
 
 test("overflow «Boshqa formatda saqlash…» → sheet in save mode → PDF → POST save {format:pdf}", async () => {
@@ -501,4 +507,140 @@ test("contract additions: share 409 telegram_id_unsupported → saved to the bot
   await tap(q("[data-save-to-bot]")!);
   await waitFor(() => assert.match(toast()?.textContent ?? "", /^Fayl Telegram uchun juda katta — «Yuklab olish» dan foydalaning\./));
   assert.equal(toast()!.getAttribute("role"), "alert");
+});
+
+/* ───────────────────────────── UX review fixes ───────────────────────────── */
+
+test("M1 toastDuration: a toast with an action stays until dismissed; errors 10 s; confirmations 4.5 s", () => {
+  assert.equal(toastDuration({ tone: "error", link: { label: "Botni ochish", href: "https://t.me/SlaydX_bot" } }), null);
+  assert.equal(toastDuration({ tone: "ok", link: { label: "Botni ochish", href: "https://t.me/SlaydX_bot" } }), null);
+  assert.equal(toastDuration({ tone: "error" }), 10_000);
+  assert.equal(toastDuration({ tone: "ok" }), 4_500);
+  assert.equal(toastDuration({ tone: "info" }), 4_500);
+});
+
+test("M1 «Botni ochish» toast is still there after 5 s; acting on the link dismisses it", async () => {
+  fakeTelegram({ writeAccess: false });
+  stub((c) => (c.url.endsWith("/telegram/save") ? json(409, { error: "x", code: "bot_unreachable", botUrl: "https://t.me/SlaydX_bot" }) : undefined));
+  mount();
+  await tap(q("[data-save-to-bot]")!);
+  await waitFor(() => assert.ok(toast()?.querySelector("[data-toast-link]")));
+  await act(async () => new Promise((r) => setTimeout(r, 5_000)));
+  assert.ok(toast(), "an actionable toast does not auto-hide after 4.5 s");
+  await click(toast()!.querySelector("[data-toast-link]")!);
+  assert.ok(tgCalls.includes("openTg https://t.me/SlaydX_bot"));
+  assert.ok(!toast(), "acting on it closes it");
+});
+
+test("M2 iOS Telegram: a click with no recent tap does not ask for a second tap (no «Tayyor — yuklab olish»)", async () => {
+  fakeTelegram({ platform: "ios" });
+  stub();
+  mount();
+  await click(q("[data-download-button]")!);
+  await waitFor(() => assert.equal(posts("/download").length, 2));
+  await click(row("native")); // no pointerdown → the gesture is stale
+  // jsdom is http: Telegram answers «unsupported» → fallback; the point is it went straight to delivery.
+  await waitFor(() => assert.equal(state("native"), "fallback"));
+  cleanup();
+  fakeTelegram({ platform: "android" });
+  stub();
+  mount();
+  await click(q("[data-download-button]")!);
+  await waitFor(() => assert.equal(posts("/download").length, 2));
+  await click(row("native"));
+  await waitFor(() => assert.equal(state("native"), "ready"), { timeout: 2000 });
+});
+
+test("m1 fallback text is shown once", async () => {
+  fakeTelegram({ version: "7.0" });
+  stub();
+  mount();
+  await click(q("[data-download-button]")!);
+  await tap(row("native"));
+  await waitFor(() => assert.equal(state("native"), "fallback"));
+  const text = q('[data-download-item="native"]')!.textContent ?? "";
+  assert.equal(text.split("Telegram ilovangiz eski").length - 1, 1);
+  assert.ok(q('[data-download-item="native"] [data-fallback-bot]'));
+});
+
+test("m4 a busy row keeps focus (aria-disabled, not disabled) and ignores taps", async () => {
+  let release!: (r: Response) => void;
+  stub((c) => (c.body && JSON.parse(c.body).format === "slides-png" ? new Promise((r) => (release = r)) : undefined));
+  mount();
+  await click(q("[data-download-button]")!);
+  const r = row("slides-png") as HTMLButtonElement;
+  r.focus();
+  await tap(r);
+  assert.equal(state("slides-png"), "preparing");
+  assert.equal(r.disabled, false);
+  assert.equal(r.getAttribute("aria-disabled"), "true");
+  assert.equal(document.activeElement, r, "focus stays on the row (the dialog's Tab trap keeps working)");
+  await tap(r);
+  assert.equal(posts("/download").filter((c) => JSON.parse(c.body!).format === "slides-png").length, 1);
+  await act(async () => release(ready("slides-png")));
+  await waitFor(() => assert.equal(state("slides-png"), "done"));
+  assert.equal(document.activeElement, r);
+});
+
+test("m3 while the route converts the button never shows a bare «N s»", async () => {
+  fakeTelegram();
+  let hold!: (r: Response) => void;
+  let n = 0;
+  stub((c) => {
+    if (!c.url.endsWith("/telegram/save")) return undefined;
+    n++;
+    return n === 1 ? json(202, { state: "preparing", retryAfterMs: 500, format: "native" }) : new Promise((r) => (hold = r));
+  });
+  mount();
+  const b = q("[data-save-to-bot]")!;
+  await tap(b);
+  await waitFor(() => assert.ok(b.querySelector("[data-action-progress]")), { timeout: 3000 });
+  await waitFor(() => assert.equal(n, 2), { timeout: 3000 });
+  assert.match(b.querySelector("[data-action-progress]")!.textContent ?? "", /^Tayyorlanmoqda… \d+ s$/);
+  assert.match(b.textContent ?? "", /Saqlash/, "phones keep the verb");
+  assert.doesNotMatch(b.textContent ?? "", /^\d+ s$/);
+  await act(async () => hold(json(200, { ok: true, duplicate: false, format: "native", botUrl: null })));
+  await waitFor(() => assert.ok(!b.querySelector("[data-action-progress]")));
+});
+
+test("m5 a second MESSAGE_EXPIRED in a row ends with a message, not silence", async () => {
+  fakeTelegram({ shareError: "MESSAGE_EXPIRED" });
+  stub((c) => (c.url.endsWith("/telegram/share") ? json(200, { preparedId: `p${calls.length}`, expiresAt: exp(), format: "native", botUrl: null }) : undefined));
+  mount();
+  await tap(q("[data-share-button]")!);
+  await waitFor(() => assert.match(toast()?.textContent ?? "", /Ulashish havolasi eskirdi — qayta urinib ko‘ring/));
+  assert.equal(posts("/telegram/share").length, 2, "one re-prepare, then the message");
+});
+
+test("m6 leaving the page aborts the preparation polling", async () => {
+  // The first answer per format is `preparing`; the poll after it hangs until its signal aborts.
+  const hanging: AbortSignal[] = [];
+  const seen = new Set<string>();
+  calls = [];
+  globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+    const url = String(input);
+    const body = typeof init?.body === "string" ? init.body : undefined;
+    calls.push({ url, method: init?.method ?? "GET", body });
+    if (url.endsWith("/download")) {
+      if (!seen.has(body ?? "")) {
+        seen.add(body ?? "");
+        return json(200, { state: "preparing", retryAfterMs: 500 });
+      }
+      return new Promise<Response>((_, reject) => {
+        const s = init!.signal!;
+        hanging.push(s);
+        s.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      });
+    }
+    return json(404, {});
+  }) as typeof fetch;
+  mount();
+  await click(q("[data-download-button]")!);
+  await waitFor(() => assert.equal(hanging.length, 2), { timeout: 3000 });
+  assert.ok(hanging.every((s) => !s.aborted));
+  cleanup();
+  assert.ok(hanging.every((s) => s.aborted), "every in-flight prepare request aborted on unmount");
+  const before = posts("/download").length;
+  await act(async () => new Promise((r) => setTimeout(r, 1_200)));
+  assert.equal(posts("/download").length, before, "no polling after unmount");
 });

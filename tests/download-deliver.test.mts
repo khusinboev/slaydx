@@ -370,3 +370,52 @@ test("formatBytes", () => {
   assert.equal(d.formatBytes(1024 * 1024 * 12.6), "13 MB");
   assert.equal(d.formatBytes(1024 * 1024 * 1.25), "1,3 MB");
 });
+
+/* ─────────────────────────── UX review fixes ─────────────────────────── */
+
+test("M2 gestureRequired: Android (and unknown) need a fresh tap; iOS / desktop / web do not", () => {
+  for (const p of ["android", "android_x", null, undefined, ""]) assert.equal(d.gestureRequired(p), true, String(p));
+  for (const p of ["ios", "macos", "tdesktop", "weba", "webk", "unigram"]) assert.equal(d.gestureRequired(p), false, p);
+});
+
+test("M2 iOS / desktop Telegram: a stale tap (long preparation) still sends downloadFile right away", async () => {
+  for (const platform of ["ios", "tdesktop"]) {
+    const asked: string[] = [];
+    const r = await d.deliver(FILE, {
+      capability: "tg-download",
+      platform,
+      lastGestureAt: 0,
+      now: () => 60_000,
+      origin: "https://slaydx.uz/",
+      requestDownloadImpl: (p) => (asked.push(p.url), Promise.resolve("downloading" as const)),
+    });
+    assert.deepEqual(r, { kind: "tg-downloading" }, platform);
+    assert.deepEqual(asked, ["https://slaydx.uz/api/dl/tok123"], platform);
+  }
+});
+
+test("m12 retryText: «birozdan keyin» becomes the exact time (no second hint); other texts get the hint; no Retry-After → unchanged", () => {
+  assert.equal(
+    d.retryText("Telegram hozir javob bermayapti. Birozdan keyin qayta urinib ko'ring.", 30),
+    "Telegram hozir javob bermayapti. 30 soniyadan keyin qayta urinib ko'ring.",
+  );
+  assert.equal(d.retryText("Juda ko'p so'rov — birozdan keyin qayta urinib ko'ring", 120), "Juda ko'p so'rov — 2 daqiqadan keyin qayta urinib ko'ring");
+  assert.equal(d.retryText("PDF xizmati band", 20), "PDF xizmati band (qayta urinish: 20 soniyadan keyin)");
+  assert.equal(d.retryText("Birozdan keyin qayta urinib ko'ring", null), "Birozdan keyin qayta urinib ko'ring");
+  assert.equal(
+    d.deliverErrorText(new ApiError("Telegram hozir javob bermayapti. Birozdan keyin qayta urinib ko'ring.", 503, { code: "telegram_unavailable", retryAfter: 30 })),
+    "Telegram hozir javob bermayapti. 30 soniyadan keyin qayta urinib ko'ring.",
+  );
+});
+
+test("m6 telegramAction passes the abort signal to every request", async () => {
+  const ctrl = new AbortController();
+  ctrl.abort();
+  const e = await d
+    .telegramAction("save", "g1", "pdf", undefined, {
+      signal: ctrl.signal,
+      request: async (_i, _f, s) => (s?.aborted ? Promise.reject(new DOMException("x", "AbortError")) : { ok: true }),
+    })
+    .catch((x: unknown) => x);
+  assert.ok(e instanceof DOMException && e.name === "AbortError");
+});

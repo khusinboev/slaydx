@@ -8,7 +8,6 @@ import {
   apiErrorCode,
   deliverErrorText,
   DELIVER_TEXT,
-  elapsedSeconds,
   fetchFileBlob,
   markGesture,
   prepareDownload,
@@ -22,7 +21,7 @@ import {
   tgVersion,
   type ShareCapability,
 } from "@/lib/telegram-webapp";
-import { miniAppMismatch, telegramFailureToast, type ActionToast } from "./SaveToBotButton";
+import { ActionLabel, miniAppMismatch, telegramFailureToast, type ActionToast } from "./SaveToBotButton";
 
 /**
  * «Ulashish» (docs/mobile/PLAN.md §1.2, §4.5; R2 §2, §5).
@@ -111,6 +110,8 @@ export function useShareAction(args: {
         const outcome = await shareMessageResult(preparedId);
         if (outcome === "sent") onToast({ text: DELIVER_TEXT.shared, tone: "ok" });
         else if (outcome === "expired" && !retriedExpiry) return attempt(retriedAccess, true);
+        // A second expiry in a row: say so instead of ending silently (UX review m5).
+        else if (outcome === "expired") onToast({ text: DELIVER_TEXT.shareExpired, tone: "error" });
         else if (outcome === "unsupported") return saveForward(format, started);
         else if (outcome === "error") onToast({ text: DELIVER_TEXT.failed, tone: "error" });
         // `failed` (picker closed) and `busy` (a picker is already open): nothing to say.
@@ -125,6 +126,8 @@ export function useShareAction(args: {
       if (inFlight.current) return;
       const cap = currentShareCapability(f, Boolean(sessionTelegramId));
       if (cap === "download-only") {
+        // Say why a download list opens when the user asked to share (UX review m13).
+        onToast({ text: isInTelegramWebApp() ? DELIVER_TEXT.shareNoAccount : DELIVER_TEXT.shareNoBrowser, tone: "info" });
         onDownload(f.id);
         return;
       }
@@ -190,7 +193,6 @@ export function ShareButton({
     return () => clearInterval(t);
   }, [action.since]);
   const ready = action.readyFor === format.id;
-  const label = action.since !== null ? `${elapsedSeconds(action.since, now)} s` : "Ulashish";
   return (
     <button
       type="button"
@@ -209,7 +211,7 @@ export function ShareButton({
       )}
     >
       {action.busy ? <Loader2 className="size-4 animate-spin" /> : <Share2 className="size-4" />}
-      {iconOnly ? null : <span className="truncate">{label}</span>}
+      {iconOnly ? null : <ActionLabel verb="Ulashish" since={action.since} now={now} />}
     </button>
   );
 }

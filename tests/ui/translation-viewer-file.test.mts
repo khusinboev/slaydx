@@ -35,6 +35,8 @@ const GEN = "11111111-1111-4111-8111-111111111111";
 
 test("«Fayl» tabi: iframe manzili format=pdf&inline=1, yangi oyna havolasi ham inline", () => {
   render(h(TranslationViewer, { doc, gen: { id: GEN, format: "pptx" }, pdf: true }));
+  // UX review m7: the tabs are 44 px tall on touch.
+  for (const t of screen.getAllByRole("tab")) assert.ok(t.className.split(/\s+/).includes("pointer-coarse:min-h-11"), t.textContent ?? "");
   fireEvent.click(screen.getByRole("tab", { name: "Fayl" }));
   const frame = document.querySelector("iframe[data-file-preview]") as HTMLIFrameElement | null;
   assert.ok(frame, "iframe chizilmadi");

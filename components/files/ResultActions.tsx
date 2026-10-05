@@ -32,8 +32,16 @@ import { ShareButton, useShareAction } from "./ShareButton";
  * an error opens the sheet with that row's fallback / «Qayta urinish».
  */
 
-/** Toast stays this long (ms). */
-const TOAST_MS = 4_500;
+/**
+ * How long a toast stays (ms), or `null` = until dismissed or acted on.
+ * A toast with an action («Botni ochish») must not vanish while the user
+ * reads three lines and reaches for the link (UX review M1); a plain error
+ * stays longer than a confirmation.
+ */
+export function toastDuration(t: Pick<ActionToast, "tone" | "link">): number | null {
+  if (t.link) return null;
+  return t.tone === "error" ? 10_000 : 4_500;
+}
 
 export function ResultActions({
   gen,
@@ -76,7 +84,9 @@ export function ResultActions({
   const [toast, setToast] = useState<ActionToast | null>(null);
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), TOAST_MS);
+    const ms = toastDuration(toast);
+    if (ms === null) return;
+    const t = setTimeout(() => setToast(null), ms);
     return () => clearTimeout(t);
   }, [toast]);
   const onToast = useCallback((t: ActionToast) => setToast(t), []);
@@ -352,6 +362,7 @@ function Toast({ toast, onClose }: { toast: ActionToast; onClose: () => void }) 
           onClick={(e) => {
             e.preventDefault();
             openBotLink(toast.link!.href);
+            onClose();
           }}
           className="text-primary inline-flex h-11 shrink-0 items-center px-2 font-medium"
         >

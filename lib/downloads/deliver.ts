@@ -32,6 +32,7 @@ import {
   prepareGenerationDownload,
   saveGenerationToBot,
   shareGenerationToTelegram,
+  retryAfterText,
   withRetryHint,
   type DownloadPrepareResponse,
   type TelegramPreparing,
@@ -103,6 +104,9 @@ export const DELIVER_TEXT = {
   botUnreachable: "Bot sizga yoza olmadi. Botni ochib /start bosing, so‘ng qayta urinib ko‘ring.",
   openBot: "Botni ochish",
   shareReady: "Tayyor — «Ulashish»ni yana bir bor bosing",
+  shareExpired: "Ulashish havolasi eskirdi — qayta urinib ko‘ring",
+  shareNoBrowser: "Bu brauzer faylni ulasha olmaydi — yuklab olib, o‘zingiz yuboring",
+  shareNoAccount: "Telegram akkaunti bog‘lanmagan — faylni yuklab olib, o‘zingiz yuboring",
   tooLarge: "Fayl Telegram uchun juda katta — «Yuklab olish» dan foydalaning.",
   idUnsupported: "Bu Telegram akkaunti bilan ulashib bo‘lmadi — «Saqlash» yoki «Yuklab olish» dan foydalaning.",
 } as const;
@@ -143,7 +147,7 @@ export function deliverErrorText(e: unknown): string {
     if (code === "too_large") return e.message || DELIVER_TEXT.tooLarge;
     if (code === "telegram_id_unsupported") return e.message || DELIVER_TEXT.idUnsupported;
     if (e.status === 410) return DELIVER_TEXT.expired;
-    return withRetryHint(e.message || DELIVER_TEXT.failed, e.retryAfterSec);
+    return retryText(e.message || DELIVER_TEXT.failed, e.retryAfterSec);
   }
   return DELIVER_TEXT.failed;
 }
@@ -181,6 +185,33 @@ export function lastGesture(): number | null {
 /** Test seam: forget the recorded tap. */
 export function resetGesture(): void {
   lastGestureAt = null;
+}
+
+/**
+ * Pure: when the server sent Retry-After, say WHEN to retry once. A text that
+ * already says «birozdan keyin» gets the exact time in its place (no second
+ * «(qayta urinish: …)» after «…qayta urinib ko‘ring.»); others get the hint appended.
+ */
+export function retryText(message: string, sec: number | null): string {
+  if (!sec) return message;
+  const vague = /birozdan keyin/i;
+  if (vague.test(message)) {
+    return message.replace(vague, (m) => {
+      const t = retryAfterText(sec);
+      return m[0] === "B" ? t[0].toUpperCase() + t.slice(1) : t;
+    });
+  }
+  return withRetryHint(message, sec);
+}
+
+/**
+ * Pure: the Telegram client needs a fresh tap for `downloadFile` (Android drops
+ * requests > 10 s after the last touch). iOS, desktop and web clients have no
+ * such rule, so a long preparation is delivered straight away there. Unknown
+ * platform: keep the rule (safe side).
+ */
+export function gestureRequired(platform: string | null | undefined): boolean {
+  return !platform || /^android/i.test(platform);
 }
 
 /** Pure: a Telegram download may be sent now (the last tap is recent enough). */
@@ -318,11 +349,11 @@ export async function deliver(file: ReadyFile, opts: DeliverOptions): Promise<De
 async function deliverTelegram(file: ReadyFile, opts: DeliverOptions): Promise<DeliverResult> {
   const now = (opts.now ?? nowMs)();
   const last = opts.lastGestureAt === undefined ? lastGesture() : opts.lastGestureAt;
-  if (!gestureFresh(last, now)) return { kind: "needs-tap" };
+  if (gestureRequired(opts.platform) && !gestureFresh(last, now)) return { kind: "needs-tap" };
   const ask = opts.requestDownloadImpl ?? requestDownload;
   const pending = ask({ url: absoluteUrl(file.url, opts.origin), file_name: file.fileName });
   const outcome =
-    opts.platform === "android"
+    gestureRequired(opts.platform)
       ? await Promise.race([
           pending,
           new Promise<"wait">((r) => setTimeout(() => r("wait"), opts.eventWaitMs ?? TG_EVENT_WAIT_MS)),
@@ -408,7 +439,7 @@ async function responseBlob(
     const msg =
       res.status === 410
         ? DELIVER_TEXT.expired
-        : withRetryHint(
+        : retryText(
             typeof data.error === "string" && data.error ? data.error : DELIVER_TEXT.failed,
             Number.isFinite(header) && header > 0 ? Math.ceil(header) : null,
           );
@@ -495,8 +526,13 @@ function isPreparing(r: unknown): r is TelegramPreparing {
 }
 
 /** «Botga yuborish»: the same server path as «Saqlash», with the row's format (polls while it converts). */
-export function sendToBot(genId: string, format: DownloadFormatId, onState?: (s: { state: "preparing"; elapsedMs: number }) => void) {
-  return telegramAction("save", genId, format, onState);
+export function sendToBot(
+  genId: string,
+  format: DownloadFormatId,
+  onState?: (s: { state: "preparing"; elapsedMs: number }) => void,
+  signal?: AbortSignal,
+) {
+  return telegramAction("save", genId, format, onState, { signal });
 }
 
 /**
