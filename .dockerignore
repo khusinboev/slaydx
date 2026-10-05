@@ -27,3 +27,28 @@ docs
 # `COPY . .` orqali image qatlamiga (BACKUP_REMOTE/TELEGRAM_BOT_TOKEN) kirmasin.
 .backup.env
 *.backup.env
+# Ops sprint (docs/ops/O1-deploy-pipeline.md §3.2): not needed by `next build`
+# or by any runtime stage. In the context they only invalidate `COPY . .` (a
+# test-only commit re-ran the whole `next build`) and Next file tracing could
+# drag them into `standalone/`. KEEP in the context: `scripts/` (`npm run
+# build` runs `scripts/guard-build.mjs`; the worker runs `scripts/*.ts`),
+# `data/`, `public/`, `brand/`, `lib/` (incl. `lib/server/migrations`), `app/`,
+# `components/`, `tsconfig.json`, `next.config.ts`, `postcss.config.mjs`,
+# `eslint.config.mjs`. `tests/docker-image-slim.test.mts` locks both lists.
+tests
+loadtests
+.github
+deploy
+docker-compose*.yml
+docker-bake.hcl
+.dockerignore
+tsconfig.viewer.json
+coverage
+.vscode
+.idea
+# Root-level notes only (CLAUDE.md, README.md). NOT `**/*.md`: license and
+# attribution files ship with the code they cover (`data/ICONS-LICENSE.md`,
+# `public/samples/CREDITS.md` is served next to the sample images).
+*.md
+# ESLint cache written by `npm run lint` (P-CI).
+.eslintcache

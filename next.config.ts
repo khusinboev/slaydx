@@ -119,6 +119,21 @@ const nextConfig: NextConfig = {
   // Konteynerda ishlash uchun minimal server to'plami.
   output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
 
+  /*
+   * `/` → `/uz` on the server (docs/ops/O4-frontend-speed.md WP-G, item 11).
+   * `app/page.tsx` redirects with `redirect()`, but the page is prerendered,
+   * so the redirect happened in the browser AFTER the whole ~200 kB root
+   * bundle loaded — on every launch through a bare `/` link (an old
+   * BotFather menu URL, a typed address). A config redirect is a plain 307
+   * before any page work. Temporary (not 308): browsers must not cache it,
+   * the landing locale may change. Next keeps the query string and the
+   * browser keeps the `#tgWebAppData` fragment, so Mini App launch data
+   * survives the hop.
+   */
+  async redirects() {
+    return [{ source: "/", destination: "/uz", permanent: false }];
+  },
+
   async headers() {
     return [
       {
