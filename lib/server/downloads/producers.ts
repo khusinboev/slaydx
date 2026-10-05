@@ -1,6 +1,6 @@
 import "server-only";
 import { execFile } from "node:child_process";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -16,7 +16,7 @@ import { pdfAvailable, pdfFileName, PDF_TIMEOUT_MS } from "../pdf";
 import { derivedSize, getOrConvertPdf, getOrDerive, touchDerived, type DerivedDiskCache, type PdfConverter } from "../pdf-cache";
 import { Gate } from "../soffice-gate";
 import { pdftoppmBin } from "../thumb";
-import { DownloadError } from "./errors";
+import { DownloadError, isDownloadError } from "./errors";
 
 const run = promisify(execFile);
 
@@ -59,7 +59,9 @@ export type ProduceDeps = {
   /** DOCX/PPTX → PDF (default `toPdf` through the shared soffice gate). */
   convertPdf?: PdfConverter;
   /** PDF → one PNG per page (default pdftoppm). `null` = failed. */
-  rasterize?: (pdf: Buffer, dpi: number) => Promise<Buffer[] | null>;
+  rasterize?: (pdf: Buffer, dpi: number, cap: SlidesPngCap) => Promise<Buffer[] | null>;
+  /** `slides-png` page-count / total-size cap (default `SLIDES_PNG_CAP`). */
+  slidesPngCap?: SlidesPngCap;
   /** PNG → JPG (default sharp). */
   toJpeg?: (png: Buffer) => Promise<Buffer>;
   cache?: DerivedDiskCache;
@@ -110,8 +112,33 @@ function rasterGate(): Gate {
   return g.__slaydxRasterGate;
 }
 
-/** PDF → PNG per page with pdftoppm (page order kept). */
-export async function pdftoppmPages(pdf: Buffer, dpi: number): Promise<Buffer[] | null> {
+/**
+ * `slides-png` bounds (m4): page images are held in memory and zipped there,
+ * so the deck is capped by page count and by total uncompressed PNG size
+ * (peak ≈ 2 × bytes while the ZIP is built). A 30-slide deck at 150 dpi is
+ * ~10–45 MB; beyond the cap the user gets a clear 413 (PDF still works).
+ */
+export type SlidesPngCap = { pages: number; bytes: number };
+export const SLIDES_PNG_CAP: SlidesPngCap = { pages: 100, bytes: 100 * 1024 * 1024 };
+
+function tooManySlides(cap: SlidesPngCap): DownloadError {
+  return new DownloadError("too_large", {
+    message: `Slayd rasmlari uchun juda katta (${cap.pages} slayd / ${Math.round(cap.bytes / 1024 / 1024)} MB dan ortiq) — PDF yuklab oling`,
+  });
+}
+
+/** Refuses a page set above the cap (applies to any rasterizer, stubs included). */
+export function checkSlidesPngCap(pages: readonly Buffer[], cap: SlidesPngCap): void {
+  if (pages.length > cap.pages) throw tooManySlides(cap);
+  if (pages.reduce((n, p) => n + p.byteLength, 0) > cap.bytes) throw tooManySlides(cap);
+}
+
+/**
+ * PDF → PNG per page with pdftoppm (page order kept). Renders at most
+ * `cap.pages + 1` pages (`-l`: one more only to detect an oversized deck) and
+ * checks the total size on disk before reading anything into memory.
+ */
+export async function pdftoppmPages(pdf: Buffer, dpi: number, cap: SlidesPngCap = SLIDES_PNG_CAP): Promise<Buffer[] | null> {
   const bin = pdftoppmBin();
   if (!bin) return null;
   return rasterGate().run(async () => {
@@ -119,14 +146,22 @@ export async function pdftoppmPages(pdf: Buffer, dpi: number): Promise<Buffer[] 
     try {
       const src = join(dir, "d.pdf");
       await writeFile(src, pdf);
-      await run(bin, ["-r", String(dpi), "-png", src, join(dir, "p")], { timeout: RASTER_TIMEOUT_MS, killSignal: "SIGKILL" });
+      await run(bin, ["-r", String(dpi), "-l", String(cap.pages + 1), "-png", src, join(dir, "p")], {
+        timeout: RASTER_TIMEOUT_MS,
+        killSignal: "SIGKILL",
+      });
       const pages = (await readdir(dir))
         .map((name) => ({ name, n: Number(/^p-(\d+)\.png$/.exec(name)?.[1] ?? NaN) }))
         .filter((p) => Number.isFinite(p.n))
         .sort((a, b) => a.n - b.n);
       if (!pages.length) return null;
+      if (pages.length > cap.pages) throw tooManySlides(cap);
+      let total = 0;
+      for (const p of pages) total += (await stat(join(dir, p.name))).size;
+      if (total > cap.bytes) throw tooManySlides(cap);
       return Promise.all(pages.map((p) => readFile(join(dir, p.name))));
     } catch (e) {
+      if (isDownloadError(e)) throw e;
       console.warn("[downloads] pdftoppm:", e instanceof Error ? e.message : e);
       return null;
     } finally {
@@ -260,8 +295,11 @@ export const PRODUCERS: Readonly<Record<DownloadFormatId, ProducerSpec>> = {
         produce: async () => {
           const pdf = await cachedPdf(ctx, bytes);
           await (deps.rasterLimit ?? ((u) => limit(`raster:${u}`, RASTER_LIMIT, LIMIT_WINDOW_SEC)))(meta.userId);
-          const pages = await (deps.rasterize ?? pdftoppmPages)(pdf, SLIDES_PNG_DPI);
+          const cap = deps.slidesPngCap ?? SLIDES_PNG_CAP;
+          const pages = await (deps.rasterize ?? pdftoppmPages)(pdf, SLIDES_PNG_DPI, cap);
           if (!pages?.length) return null;
+          // m4: bounded in-memory ZIP — refuse before building it.
+          checkSlidesPngCap(pages, cap);
           const z = new JSZip();
           // PNG is already deflated: STORE zips 12 MB in ~35 ms.
           pages.forEach((png, i) => z.file(pageName(i, pages.length), png, { compression: "STORE" }));

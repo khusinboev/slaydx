@@ -74,6 +74,42 @@ test("pure serializers: glossary CSV (BOM, CRLF, optional columns, formula escap
   assert.equal(baseName(null), "fayl");
 });
 
+test("m4: pdftoppmPages renders at most cap+1 pages (-l) and refuses an oversized deck before reading it", async (t) => {
+  const { pdftoppmPages } = await import("../lib/server/downloads/producers.ts");
+  const { writeFile: write, readFile: read, chmod } = await import("node:fs/promises");
+  const dir = await mkdtemp(join(tmpdir(), "slaydx-fake-pdftoppm-"));
+  const prevBin = process.env.PDFTOPPM_BIN;
+  t.after(async () => {
+    if (prevBin === undefined) delete process.env.PDFTOPPM_BIN;
+    else process.env.PDFTOPPM_BIN = prevBin;
+    delete process.env.FAKE_PAGES;
+    delete process.env.FAKE_SIZE;
+    delete process.env.FAKE_ARGS;
+    await rm(dir, { recursive: true, force: true });
+  });
+  // A stand-in pdftoppm: records its arguments, writes FAKE_PAGES pages of FAKE_SIZE bytes at the prefix.
+  const bin = join(dir, "pdftoppm");
+  await write(
+    bin,
+    '#!/bin/sh\necho "$@" > "$FAKE_ARGS"\nfor last; do :; done\ni=1\nwhile [ $i -le "$FAKE_PAGES" ]; do head -c "$FAKE_SIZE" /dev/zero > "$last-$i.png"; i=$((i+1)); done\n',
+  );
+  await chmod(bin, 0o755);
+  process.env.PDFTOPPM_BIN = bin;
+  process.env.FAKE_ARGS = join(dir, "args.txt");
+  const run = async (pages: number, size: number, cap: { pages: number; bytes: number }) => {
+    process.env.FAKE_PAGES = String(pages);
+    process.env.FAKE_SIZE = String(size);
+    return pdftoppmPages(Buffer.from("%PDF-1.4"), 150, cap).catch((e: unknown) => e);
+  };
+  const ok = await run(3, 100, { pages: 3, bytes: 300 });
+  assert.ok(Array.isArray(ok) && ok.length === 3, String(ok));
+  assert.match(await read(process.env.FAKE_ARGS!, "utf8"), /-r 150 -l 4 -png /, "renders at most cap + 1 pages");
+  const tooMany = (await run(4, 100, { pages: 3, bytes: 10_000 })) as { code?: string; status?: number };
+  assert.deepEqual([tooMany.code, tooMany.status], ["too_large", 413]);
+  const tooBig = (await run(3, 100, { pages: 3, bytes: 299 })) as { code?: string };
+  assert.equal(tooBig.code, "too_large");
+});
+
 test("producers (Postgres)", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t) => {
   const { query, migrate, pool } = await import("../lib/server/db.ts");
   const { putGenerationFile } = await import("../lib/server/storage.ts");
@@ -336,6 +372,33 @@ test("producers (Postgres)", { skip: hasDb ? false : "DATABASE_URL yo'q" }, asyn
     assert.equal(err.code, "busy");
     assert.equal(err.status, 503);
     assert.equal(err.retryAfterSec, 15);
+  });
+
+  await t.test("m4: slides-png above the page or total-size cap → 413 too_large, no ZIP built or cached", async () => {
+    const counters = { convert: 0, raster: 0, jpeg: 0 };
+    const cache = new DerivedDiskCache({ dir: await mkdtemp(join(tmpdir(), "slaydx-dlp-cap-")), maxBytes: 64 << 20, maxAgeMs: 60_000 });
+    const id = await mkGen({ tool: "slide", format: "pptx", mime: PPTX, fileName: "Katta.pptx", bytes: Buffer.from("big-deck") });
+    const pages = await Promise.all([1, 2, 3].map(pagePng));
+    const total = pages.reduce((n, p) => n + p.byteLength, 0);
+    let capSeen: unknown = null;
+    const base = { ...stubDeps(counters, cache), rasterize: async (_pdf: Buffer, _dpi: number, cap: unknown) => ((capSeen = cap), pages) };
+    for (const cap of [{ pages: 2, bytes: 1 << 20 }, { pages: 10, bytes: total - 1 }]) {
+      const err = await produceWith(id, user, "slides-png", { ensureFresh: false }, { ...base, slidesPngCap: cap }).catch((e: unknown) => e);
+      assert.ok(isDownloadError(err), String(err));
+      assert.equal(err.code, "too_large");
+      assert.equal(err.status, 413);
+      assert.match(err.message, /PDF yuklab oling/);
+      assert.deepEqual(capSeen, cap, "the rasterizer gets the cap (pdftoppm -l)");
+    }
+    const { derivedCacheKey } = await import("../lib/server/pdf-cache.ts");
+    assert.equal(await cache.size(derivedCacheKey(id, Buffer.from("big-deck")), "slides-png"), null, "nothing cached");
+    // Exactly at the cap: produced.
+    const ok = await produceWith(id, user, "slides-png", { ensureFresh: false }, { ...base, slidesPngCap: { pages: 3, bytes: total } });
+    assert.equal(Object.keys((await JSZip.loadAsync(ok.bytes)).files).length, 3);
+    // The default cap is a real bound.
+    const { SLIDES_PNG_CAP } = await import("../lib/server/downloads/producers.ts");
+    assert.ok(SLIDES_PNG_CAP.pages >= 30 && SLIDES_PNG_CAP.pages <= 200, "30-slide decks fit, runaway decks do not");
+    assert.ok(SLIDES_PNG_CAP.bytes <= 150 * 1024 * 1024);
   });
 
   await t.test("token mode: exact file_version and a current file, else stale (410)", async () => {

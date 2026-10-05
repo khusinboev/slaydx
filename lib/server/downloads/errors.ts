@@ -19,7 +19,8 @@ export type DownloadErrorCode =
   | "busy"
   | "rate_limited"
   | "stale"
-  | "expired";
+  | "expired"
+  | "too_large";
 
 const MESSAGES: Record<DownloadErrorCode, string> = {
   unknown_format: "Noma'lum fayl formati",
@@ -33,6 +34,7 @@ const MESSAGES: Record<DownloadErrorCode, string> = {
   rate_limited: "Juda ko'p so'rov — birozdan keyin qayta urinib ko'ring",
   stale: "Fayl yangilangan — qayta yuklab oling",
   expired: "Havola muddati tugagan — qayta yuklab oling",
+  too_large: "Fayl bu format uchun juda katta",
 };
 
 const STATUS: Record<DownloadErrorCode, number> = {
@@ -47,6 +49,7 @@ const STATUS: Record<DownloadErrorCode, number> = {
   rate_limited: 429,
   stale: 410,
   expired: 410,
+  too_large: 413,
 };
 
 /** `Retry-After` of a 503 that names no better value (e.g. `unavailable`). */
