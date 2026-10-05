@@ -339,7 +339,7 @@ export const LEVEL_REPAIR_HEADER = "LEVEL REPAIR:";
  * The engine's ONE level repair call (R4 §3.6 step 2), made only when the
  * measured text misses the level. Mirrors `wordRangePrompt`.
  */
-export function levelRepairPrompt(ctx: EssayCtx, m: LevelMeasure, v: LevelVerdict, current: string): string {
+export function levelRepairPrompt(ctx: EssayCtx, m: LevelMeasure, v: LevelVerdict, current: string, o: { thesisStatement?: string; paragraphs: number }): string {
   const level = ctx.input.level!;
   const lang = ctx.input.language;
   const off =
@@ -349,7 +349,10 @@ export function levelRepairPrompt(ctx: EssayCtx, m: LevelMeasure, v: LevelVerdic
   return [
     `${LEVEL_REPAIR_HEADER} the essay you wrote is ${off}.`,
     levelRepairInstruction(level, lang, v.direction),
-    `Keep ${ctx.context.thesisStatement ? "the thesis statement's claim, " : ""}the paragraph order and count, every USER FACT verbatim and about ${ctx.words.aim} words in total (${ctx.words.min}–${ctx.words.max}).`,
+    // The engine rejects a repair that makes any readiness rule worse (review G-1) — say exactly what must survive.
+    ...(o.thesisStatement ? [`Keep the THESIS STATEMENT VERBATIM, word for word, as the LAST sentence of the introduction: «${o.thesisStatement}»`] : []),
+    `Return EXACTLY ${o.paragraphs} paragraphs, in the same order, each developing the same thought as now (do not merge or split paragraphs).`,
+    `Keep every number, name and quotation from USER FACTS verbatim, and about ${ctx.words.aim} words in total (${ctx.words.min}–${ctx.words.max}).`,
     `CURRENT ESSAY:\n${current.slice(0, 12_000)}`,
     `Return JSON: {"blocks":[{"kind":"p","text":"…"}]}`,
   ].join("\n");

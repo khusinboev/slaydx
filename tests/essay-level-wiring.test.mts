@@ -7,7 +7,7 @@ import type { AcademicDoc } from "../lib/generation/types.ts";
 import type { LlmRole } from "../lib/generation/llm-roles.ts";
 import type { DocReview } from "../lib/generation/report/types.ts";
 import { extractMeta } from "../lib/generation/meta.ts";
-import { buildEssayDoc } from "../lib/generation/essay/engine.ts";
+import { LEVEL_REPAIR_MIN_MS, LEVEL_REPAIR_RESERVE_MS, buildEssayDoc, levelRepairTimeout } from "../lib/generation/essay/engine.ts";
 import { essayInputFromValues } from "../lib/generation/essay/input.ts";
 import { LEVEL_REPAIR_HEADER, essayCtx, essaySystemPrompt, outlinePrompt } from "../lib/generation/essay/prompts.ts";
 import { contextOf, planEssayPolish, rewriteEssayFix } from "../lib/generation/essay/polish.ts";
@@ -268,4 +268,129 @@ test("polish plan picks up the level fix (not filtered as «needs user data»)",
   const plan = planEssayPolish(review, d);
   assert.ok(plan.fixes.some((f) => /CEFR C1/.test(f.instruction)), JSON.stringify(plan));
   assert.ok(!plan.skipped.some((s) => s.id === "level"));
+});
+
+/* ────────────────────────── review G-1 / G-2 / G-3 ────────────────────────── */
+
+/*
+ * Academic A1 essay, 500 words (425–575): thesis declared in the outline,
+ * one user number («120»), 5 paragraphs. Words are letter-only and unique
+ * per paragraph so no rule other than the one under test can move.
+ */
+const ACAD_A1: FormValues = { topic: "Source checking at university", essayContext: "academic", essayKind: "argumentative", language: "en", wordTarget: "500", essayLevel: "A1", userFacts: "Exactly 120 students joined my survey." };
+const THESIS = "Universities should teach source checking to students.";
+const OUTLINE_ACAD = JSON.stringify({
+  title: "Source checking",
+  thesisStatement: THESIS,
+  paragraphs: Array.from({ length: 5 }, (_, i) => ({ id: `p${i + 1}`, role: i === 0 ? "intro" : i === 4 ? "conclusion" : "body", ...(i > 0 && i < 4 ? { topicSentence: "Claim." } : {}), brief: `Band ${i + 1}`, words: 100 })),
+});
+const PFX = ["q", "x", "z", "v", "k", "j"];
+const letters = (n: number) => {
+  let s = "";
+  let k = n + 26;
+  while (k > 0) {
+    s = String.fromCharCode(97 + (k % 26)) + s;
+    k = Math.floor(k / 26);
+  }
+  return s;
+};
+function enPara(p: number, len: number, count: number): string {
+  let i = 0;
+  const out: string[] = [];
+  for (let s = 0; s < count; s++) {
+    const w = Array.from({ length: len }, () => `${PFX[p]}${letters(i++)}`);
+    w[0] = w[0][0].toUpperCase() + w[0].slice(1);
+    out.push(`${w.join(" ")}.`);
+  }
+  return out.join(" ");
+}
+/** 5 paragraphs; intro ends with the thesis (or `thesis`), paragraph 2 carries the user number unless dropped. */
+function acadJson(len: number, o: { thesis?: string; dropFact?: boolean; merge?: "two" | "four" } = {}): string {
+  const count = Math.round(100 / len);
+  const paras = [0, 1, 2, 3, 4].map((p) => enPara(p, len, count));
+  paras[0] = `${paras[0]} ${o.thesis ?? THESIS}`;
+  paras[1] = `${paras[1]} ${o.dropFact ? "Many students joined the survey." : "Exactly 120 students joined the survey."}`;
+  let blocks = paras;
+  if (o.merge === "two") blocks = [paras.slice(0, 2).join(" "), paras.slice(2).join(" ")];
+  if (o.merge === "four") blocks = [paras[0], `${paras[1]} ${paras[2]}`, paras[3], paras[4]];
+  return JSON.stringify({ blocks: blocks.map((text) => ({ kind: "p", text })) });
+}
+function acadStub(repair: string) {
+  const calls: Call[] = [];
+  const fn = (async (role: LlmRole, system: string, user: string) => {
+    calls.push({ role, system, user });
+    if (role === "judge") return null;
+    if (user.startsWith("Plan the essay")) return { text: OUTLINE_ACAD };
+    if (user.startsWith(LEVEL_REPAIR_HEADER)) return { text: repair };
+    return { text: acadJson(25) };
+  }) as never;
+  return { fn, calls, repairs: () => calls.filter((c) => c.user.startsWith(LEVEL_REPAIR_HEADER)) };
+}
+const buildAcad = (s: ReturnType<typeof acadStub>) =>
+  buildEssayDoc(extractMeta(TOOL_BY_ID.essay, ACAD_A1), ACAD_A1, { deadline: Date.now() + 180_000, complete: s.fn, judge: false, polish: false });
+const meanOf = (d: AcademicDoc) => measureLevel(textOf(d), "en").mean;
+
+test("G-1 control: a repair that keeps thesis verbatim, the user number and 5 paragraphs is accepted; the prompt demands exactly that", async () => {
+  const s = acadStub(acadJson(5));
+  const built = await buildAcad(s);
+  assert.equal(s.repairs().length, 1);
+  assert.ok(meanOf(built!.doc) < 8, "accepted");
+  const prompt = s.repairs()[0].user;
+  assert.ok(prompt.includes(`VERBATIM, word for word, as the LAST sentence of the introduction: «${THESIS}»`));
+  assert.match(prompt, /Return EXACTLY 5 paragraphs/);
+  assert.match(prompt, /Keep every number, name and quotation from USER FACTS verbatim/);
+  assert.equal(built!.doc.essay?.review?.checks.find((c) => c.id === "thesisStatement")?.level, "green");
+});
+
+test("G-1: repair rejected when it paraphrases the thesis (thesis rule would go red)", async () => {
+  const s = acadStub(acadJson(5, { thesis: "Checking sources is something many people think matters today?" }));
+  const built = await buildAcad(s);
+  assert.equal(s.repairs().length, 1);
+  assert.ok(meanOf(built!.doc) > 20, "original kept");
+  assert.equal(built!.doc.essay?.review?.checks.find((c) => c.id === "thesisStatement")?.level, "green");
+});
+
+test("G-1: repair rejected when it drops the user's number («120» → «Many»)", async () => {
+  const s = acadStub(acadJson(5, { dropFact: true }));
+  const built = await buildAcad(s);
+  assert.equal(s.repairs().length, 1);
+  assert.ok(textOf(built!.doc).includes("120"), "the user's number survives");
+});
+
+test("G-1: repair rejected when paragraphs collapse (5 → 2, and 5 → 4 that the paragraph rule alone would allow)", async () => {
+  for (const merge of ["two", "four"] as const) {
+    const s = acadStub(acadJson(5, { merge }));
+    const built = await buildAcad(s);
+    assert.equal(s.repairs().length, 1, merge);
+    assert.equal(built!.doc.sections[0].blocks.length, 5, `${merge}: structure kept`);
+  }
+});
+
+test("G-2: amber (slightly off) → no repair; a very simple A1/A2 text is on level, never «too simple»", async () => {
+  // uz A1 band 3–6 (cap 9): 7-word sentences are 17 % above → yellow, not red.
+  const amber = stub({ write: () => essayJson(7, 230) });
+  const built = await build(SCHOOL_A1, amber);
+  assert.equal(amber.repairs().length, 0, "no paid repair on amber");
+  assert.equal(built!.doc.essay?.review?.checks.find((c) => c.id === "level")?.level, "yellow", "the report still shows it");
+
+  const tiny = stub({ write: () => essayJson(2, 230) });
+  const t = await build(SCHOOL_A1, tiny);
+  assert.equal(tiny.repairs().length, 0);
+  assert.equal(t!.doc.essay?.review?.checks.find((c) => c.id === "level")?.level, "green", "2-word A1 sentences are fine");
+  const a2 = await build({ ...SCHOOL_A1, essayLevel: "A2" }, stub({ write: () => essayJson(2, 230) }));
+  assert.equal(a2!.doc.essay?.review?.checks.find((c) => c.id === "level")?.level, "green");
+});
+
+test("G-3: the repair leaves the report + polish budget; skipped when the window is too small, report still built", async () => {
+  assert.equal(LEVEL_REPAIR_RESERVE_MS, 70_000 + 8_000 + 8_000);
+  assert.equal(levelRepairTimeout(100_000, 60_000), 0, "100 s left − 86 s reserve < 30 s → skip");
+  assert.equal(levelRepairTimeout(LEVEL_REPAIR_RESERVE_MS + LEVEL_REPAIR_MIN_MS, 90_000), LEVEL_REPAIR_MIN_MS);
+  assert.equal(levelRepairTimeout(170_000, 60_000), 60_000, "write timeout when there is room");
+  assert.equal(levelRepairTimeout(130_000, 90_000), 44_000, "capped so the reserve survives");
+
+  const s = stub({ write: () => essayJson(28, 230), repair: () => essayJson(5, 230) });
+  const values = SCHOOL_A1;
+  const built = await buildEssayDoc(extractMeta(TOOL_BY_ID.essay, values), values, { deadline: Date.now() + 110_000, complete: s.fn, judge: false, polish: false });
+  assert.equal(s.repairs().length, 0, "no repair inside a tight budget");
+  assert.ok(built!.doc.essay?.review, "the readiness report is still built");
 });

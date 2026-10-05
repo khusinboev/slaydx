@@ -176,6 +176,18 @@ test("verdict boundaries: mean just outside the band → yellow, > 25 % outside 
   assert.notEqual(v.level, "green");
   // Too short to judge.
   assert.equal(levelVerdict(synthetic([40, 40]), "A1", "en").unmeasured, true);
+  // Review G-2: A1/A2 have no "too simple" — a 3.7-word beginner text is on level; B1 still flags it.
+  const beginner = measureLevel("I like my school. It is big. My teacher is kind. We read books. I play with friends. I am happy.", "en");
+  assert.ok(beginner.mean < 4, `mean ${beginner.mean}`);
+  for (const l of ["A1", "A2"] as const) {
+    const v1 = levelVerdict(beginner, l, "en");
+    assert.equal(v1.level, "green", `${l}`);
+    assert.equal(v1.direction, null);
+  }
+  assert.equal(levelVerdict(beginner, "B1", "en").direction, "low");
+  // Review G-5: short mean but over-cap sentences → "high" (combining sentences would worsen them).
+  const mixed = levelVerdict(synthetic([...Array(8).fill(3), 30, 30]), "B1", "en");
+  assert.equal(mixed.direction, "high");
 });
 
 test("report detail: Uzbek numbers with comma decimal, band, direction", () => {
