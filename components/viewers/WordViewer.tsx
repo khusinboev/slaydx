@@ -34,6 +34,7 @@ import { useDocView, type DocView } from "./reading/prefs";
 import { ReadingScroll, ReadingTitle, ReadingView } from "./reading/ReadingView";
 import { readingSections } from "./reading/sections";
 import { useFitZoom } from "./useFitZoom";
+import { useFontEpoch } from "./fonts-ready";
 import { useVisiblePage } from "./useVisiblePage";
 
 /**
@@ -295,8 +296,15 @@ export function WordViewer({
   // yuqoridagi `FLOW_SPLITTER` izohiga qarang.
   // Bo'lingan ro'yxat O'Z `items` iga bog'lanadi: hujjat tahrirdan keyin
   // o'zgarsa eski bo'laklar ishlatilmaydi (aks holda varaqda eski matn qolardi).
-  const [flow, setFlow] = useState<{ base: FlowItem[]; list: FlowItem[] } | null>(null);
-  const renderItems = flow && flow.base === items ? flow.list : items;
+  /*
+   * Finished web-font loads (ops sprint WP-A: Tinos is not preloaded, so the
+   * first measurement may run on the fallback face). A new epoch drops the
+   * split list made with the old metrics and measures the flow again, so the
+   * pages match the DOCX once the real face is in.
+   */
+  const fontEpoch = useFontEpoch();
+  const [flow, setFlow] = useState<{ base: FlowItem[]; list: FlowItem[]; fonts: number } | null>(null);
+  const renderItems = flow && flow.base === items && flow.fonts === fontEpoch ? flow.list : items;
   const title = useMemo(() => titleModel(doc), [doc]);
   const toc = useMemo(() => tocRows(doc), [doc]);
   const labels = useMemo(() => docLabels(doc.meta.language), [doc.meta.language]);
@@ -359,12 +367,12 @@ export function WordViewer({
     if (next.changed) {
       // Uzun band bo'lingan — bo'laklar o'lchanishi uchun qayta chizamiz.
       // Keyingi aylanishda `hs` yangi bo'laklarga mos keladi.
-      setFlow({ base: items, list: next.list });
+      setFlow({ base: items, list: next.list, fonts: fontEpoch });
       return;
     }
     setPages(packPages(renderItems, hs, limit, { abstractBreak: !profiled }));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- renderItems barqaror (flow ?? items), `flow` deps'da.
-  }, [items, flow, limit, profiled]);
+  }, [items, flow, limit, profiled, fontEpoch]);
 
   // Sof funksiya `paginate.ts` da (mutatsiya bilan tekshirilgan).
   const continuationTables = useMemo(() => (pages ? continuationTableFor(pages) : []), [pages]);

@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { contentHeightPx } from "@/lib/viewers/metrics";
 import { splitByHeight, type TextSplitter } from "@/lib/viewers/split";
+import { useFontEpoch } from "./fonts-ready";
 
 /**
  * Bandlarni HAQIQIY balandligi bo'yicha varaqlarga joylaydi.
@@ -46,7 +47,13 @@ export function useMeasuredPages<T>(
   // yangi `items` ishlatiladi (eski bo'lingan ro'yxat yangisiga tegishli emas).
   const [flow, setFlow] = useState<{ sig: string; list: T[] } | null>(null);
   const limit = opts.limit ?? contentHeightPx({ footer: true });
-  const signature = opts.key ?? String(items.length);
+  /*
+   * A finished web-font load (Tinos is not preloaded) makes every measured
+   * height stale: it is part of the signature, so the split pieces made with
+   * the fallback face are dropped and the whole flow is measured again.
+   */
+  const fontEpoch = useFontEpoch();
+  const signature = `${opts.key ?? String(items.length)}|f${fontEpoch}`;
   const renderItems = flow?.sig === signature ? flow.list : items;
 
   useLayoutEffect(() => {

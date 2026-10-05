@@ -9,9 +9,18 @@ const geist = Geist({
   subsets: ["latin", "latin-ext"],
 });
 
+/*
+ * Not preloaded (ops sprint WP-A): Geist Mono is used only by admin and a few
+ * code fields, Tinos only by the document viewer (`--font-doc`). Preloading
+ * them put 15 font files (~310 KB) in front of the JS on every cold start,
+ * login and home included. The @font-face rules stay, so each face loads on
+ * first use; the viewer re-measures its pages once it has loaded
+ * (`components/viewers/fonts-ready.ts`).
+ */
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  preload: false,
 });
 
 const tinos = Tinos({
@@ -19,6 +28,7 @@ const tinos = Tinos({
   subsets: ["latin", "latin-ext", "cyrillic"],
   weight: ["400", "700"],
   style: ["normal", "italic"],
+  preload: false,
 });
 
 /**
