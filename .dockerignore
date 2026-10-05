@@ -50,3 +50,5 @@ coverage
 # attribution files ship with the code they cover (`data/ICONS-LICENSE.md`,
 # `public/samples/CREDITS.md` is served next to the sample images).
 *.md
+# ESLint cache written by `npm run lint` (P-CI).
+.eslintcache

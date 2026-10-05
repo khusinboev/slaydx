@@ -94,17 +94,14 @@ test("Dockerfile: web image copies migrations and orders layers stable → volat
   }
 });
 
-test("Dockerfile: only non-secret build args, revision metadata after the last COPY", () => {
-  const args = [...df.matchAll(/^ARG\s+([A-Z0-9_]+)/gm)].map((m) => m[1]);
-  assert.deepEqual([...new Set(args)].sort(), ["GIT_SHA", "NODE_IMAGE"], `unexpected build args: ${args}`);
-  assert.ok(!/--mount=type=secret/.test(df), "no build secrets are needed to build the images");
-  for (const t of ["runner", "worker"]) {
-    const lines = instr(byName.get(t)!.text);
-    const lastCopy = lines.map((l) => /^COPY\b/.test(l)).lastIndexOf(true);
-    const sha = lines.findIndex((l) => /^ARG GIT_SHA\b/.test(l));
-    assert.ok(sha > lastCopy, `${t}: ARG GIT_SHA must come after the last COPY (it changes every commit)`);
-    assert.ok(lines.some((l) => /^LABEL org\.opencontainers\.image\.revision=\$\{GIT_SHA\}/.test(l)), `${t}: revision label`);
-  }
+test("Dockerfile: the only build arg is the base image pin; no build secrets, no BuildKit-only syntax", () => {
+  // Images are pushed to a registry: every ARG value is readable there. OCI
+  // source/revision labels come from the CI Bake file, not from build args.
+  const args = [...df.matchAll(/^ARG\s+([A-Za-z0-9_]+)/gm)].map((m) => m[1]);
+  assert.deepEqual([...new Set(args)], ["NODE_IMAGE"], `unexpected build args: ${args}`);
+  // No `RUN --mount` (secret or cache): no secret is needed to build, and the
+  // legacy builder (fallback on-server build, hosts without buildx) rejects it.
+  assert.ok(!/^RUN\s+--mount/m.test(df), "RUN --mount is BuildKit-only / a build secret");
 });
 
 /* ───────────────────────── .dockerignore ───────────────────────── */
@@ -155,6 +152,7 @@ test(".dockerignore: tests, load tests, CI, docs and deploy files stay out of th
     ".claude/deploy.md",
     "audit/AUDITOR-BRIEF.md",
     ".backup.env",
+    ".eslintcache",
     "node_modules/next/package.json",
     ".next/BUILD_ID",
   ]) {

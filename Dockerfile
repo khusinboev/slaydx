@@ -16,7 +16,8 @@
 # Layer order (ops sprint, docs/ops/O1-deploy-pipeline.md §3.1): every stage
 # goes from the most stable layer to the most volatile one, so a normal code
 # commit only rebuilds/pulls the last few small COPY layers. Build args are
-# metadata only (`NODE_IMAGE`, `GIT_SHA`) — NEVER add a secret as a build arg:
+# metadata only (`NODE_IMAGE`; OCI source/revision labels come from the CI
+# Bake file) — NEVER add a secret as a build arg:
 # the images are pushed to a registry and every layer and ARG is readable there.
 ARG NODE_IMAGE=node:22.23.2-alpine3.24
 
@@ -32,16 +33,14 @@ ARG NODE_IMAGE=node:22.23.2-alpine3.24
 FROM ${NODE_IMAGE} AS os-base
 RUN apk add --no-cache fontconfig ttf-liberation font-noto && fc-cache -f >/dev/null 2>&1 || true
 RUN addgroup -g 1001 -S nodejs
-LABEL org.opencontainers.image.source="https://github.com/khusinboev/slaydx"
 
 # ─── Bog'liqliklar ────────────────────────────────────────────────────
 FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-# The npm download cache lives in a BuildKit cache mount, not in the layer:
-# a lockfile change re-downloads only the changed tarballs on a box that has
-# built before (CI runners start empty, which is the same as before).
-RUN --mount=type=cache,target=/root/.npm,sharing=locked npm ci
+# No BuildKit-only syntax (`RUN --mount`, heredocs) anywhere in this file: the
+# fallback on-server build and a laptop without buildx use the legacy builder.
+RUN npm ci
 
 # ─── Prod bog'liqliklar (worker) ──────────────────────────────────────
 # Tarix (INFRA-12/DEPS-06): ilgari worker'da `npm ci --include=dev` turardi,
@@ -143,12 +142,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/lib/server/migrations ./lib/serve
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Which commit this image is (deploy script, admin system page). Metadata only,
-# placed last so it never invalidates a heavy layer. NOT a secret.
-ARG GIT_SHA=unknown
-ENV APP_GIT_SHA=${GIT_SHA}
-LABEL org.opencontainers.image.revision=${GIT_SHA}
-
 USER nextjs
 EXPOSE 3000
 
@@ -184,10 +177,6 @@ COPY --chown=worker:nodejs package.json package-lock.json tsconfig.json ./
 COPY --chown=worker:nodejs data ./data
 COPY --chown=worker:nodejs scripts ./scripts
 COPY --chown=worker:nodejs lib ./lib
-
-ARG GIT_SHA=unknown
-ENV APP_GIT_SHA=${GIT_SHA}
-LABEL org.opencontainers.image.revision=${GIT_SHA}
 
 USER worker
 
