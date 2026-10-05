@@ -168,10 +168,11 @@ test("HomeFiles: filtr/tartib URLga yoziladi (replace — tarixda yangi yozuv yo
   const i = sx()?.i;
   fireEvent.click(screen.getByRole("button", { name: "Hujjatlar" }));
   assert.equal(here(), "/uz?filter=docs");
-  fireEvent.click(screen.getByLabelText("Tartibni o'zgartirish"));
+  // P5 (mobile sprint): the direction toggle's accessible name now states the current order.
+  fireEvent.click(screen.getByLabelText("Tartib: yangisi birinchi. O'zgartirish"));
   assert.equal(here(), "/uz?filter=docs&desc=0");
   fireEvent.click(screen.getByRole("button", { name: "Barchasi" }));
-  fireEvent.click(screen.getByLabelText("Tartibni o'zgartirish"));
+  fireEvent.click(screen.getByLabelText("Tartib: eskisi birinchi. O'zgartirish"));
   assert.equal(here(), "/uz", "standart qiymatlar URLda qolmaydi");
   assert.equal(window.history.length, len, "tarixga yozuv qo'shilmadi");
   assert.equal(sx()?.i, i);
