@@ -28,7 +28,8 @@ const RIGHT_IN_MENU = { narrow: "@2xl:hidden", wide: "@3xl:hidden" } as const;
  * - Row icons (prev/next, «⋯») keep their 28 px look and get a 44×44 hit
  *   area from `.hit-44` (globals.css); their neighbours are text or ≥ 8 px
  *   away, so expanded areas never overlap a neighbouring control.
- * - Controls that also live in the «⋯» panel (zoom) grow for real.
+ * - Controls that also live in the «⋯» panel (zoom) and the «O‘qish / Varaq»
+ *   segments (4 px apart, so expanded areas would overlap) grow for real.
  * `TOUCH_BOX` is exported for the viewers' own `right`/`pinned` buttons.
  */
 export const TOUCH_BOX = "pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center";
@@ -195,9 +196,9 @@ export function ViewerToolbar({
  */
 function ViewToggle({ view, onView }: { view: DocView; onView: (v: DocView) => void }) {
   const seg = (on: boolean) =>
-    cn("hit-44 rounded-[3px] px-2 py-0.5 text-[12px] leading-5", on ? "bg-white text-[#2b2b2b] font-medium" : "text-white/80 hover:bg-white/10");
+    cn("rounded-[3px] px-2 py-0.5 text-[12px] leading-5 pointer-coarse:min-h-11", on ? "bg-white text-[#2b2b2b] font-medium" : "text-white/80 hover:bg-white/10");
   return (
-    <div role="group" aria-label="Ko‘rinish" data-view-toggle data-view-mode={view} className="flex shrink-0 rounded bg-black/30 p-0.5">
+    <div role="group" aria-label="Ko‘rinish" data-view-toggle data-view-mode={view} className="flex shrink-0 rounded bg-black/30 p-0.5 pointer-coarse:p-0">
       <button
         type="button"
         aria-pressed={view === "reading"}

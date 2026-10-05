@@ -480,6 +480,11 @@ test("revealOpenField scrolls the page so a field under the bar ends up above it
 /* ═══════════════════════════════════════ focus zoom */
 
 const zoomLabel = () => (document.querySelector("[data-zoom-inline] button[title]")?.textContent ?? "").trim();
+/** The zoom restore waits for a quiet finger (`DOUBLE_TAP_MS` = 300 ms, review E1). */
+const quiet = () =>
+  act(async () => {
+    await new Promise((r) => setTimeout(r, 360));
+  });
 
 function smallField(el: HTMLElement) {
   el.style.fontSize = "10px";
@@ -500,6 +505,8 @@ test("resume focus zoom: a small field zooms the sheet while editing (glyphs ≥
     fireEvent.click(within(bar()!).getByText("Tayyor"));
   });
   await settle();
+  assert.equal(zoomLabel(), "140%", "restore waits for the double-tap window");
+  await quiet();
   assert.equal(zoomLabel(), "100%", "fit restored");
 });
 
@@ -519,7 +526,7 @@ test("resume focus zoom restores the user's own zoom (manual), not fit; desktop 
   await act(async () => {
     fireEvent.click(within(bar()!).getByText("Bekor"));
   });
-  await settle();
+  await quiet();
   assert.equal(zoomLabel(), manual, "manual zoom back");
   cleanup();
   delete win.matchMedia;
@@ -542,8 +549,28 @@ test("Word sheet: the same focus zoom on a phone", async () => {
   await act(async () => {
     fireEvent.click(within(bar()!).getByText("Tayyor"));
   });
-  await settle();
+  await quiet();
   assert.equal(zoomLabel(), "100%");
+});
+
+test("review E2: a «−/+» during the edit is kept — the restore does not jump back to the pre-edit zoom", async () => {
+  phone();
+  await mount(stubResume(), true);
+  await enableEdit();
+  const name = byPath("identity.fullName", "[data-resume-editor]");
+  smallField(name);
+  await openField(name);
+  assert.equal(zoomLabel(), "140%");
+  await act(async () => {
+    fireEvent.click(document.querySelector("[data-zoom-inline] [aria-label='Kattalashtirish']")!);
+  });
+  const chosen = zoomLabel();
+  assert.notEqual(chosen, "140%");
+  await act(async () => {
+    fireEvent.click(within(bar()!).getByText("Tayyor"));
+  });
+  await quiet();
+  assert.equal(zoomLabel(), chosen, "the user's own zoom stays");
 });
 
 test("docFocusZoom: glyphs to 14 px, wrapping fields capped at the column width, max 200 %, never zooms out", () => {
@@ -601,6 +628,114 @@ test("double-tap echo (Chromium smoke): the compat mousedown is cancelled and th
   assert.equal(fireEvent.mouseDown(document.body), true, "only ONE mousedown is swallowed");
 });
 
+test("review E1: double TAP on field B while A is open → A saved once, B open; the zoom does not jump between the taps", async () => {
+  phone();
+  await mount(stubResume(), true);
+  await enableEdit();
+  const a = byPath("identity.fullName", "[data-resume-editor]");
+  smallField(a);
+  // Touch taps, not `dblclick`: a dblclick right after the previous test's tap-open is treated as its echo.
+  await act(async () => tap(a, 19));
+  await act(async () => tap(a, 20));
+  await settle();
+  assert.equal(a.getAttribute("contenteditable"), "true");
+  // The browser's compat mousedown of A's own second tap (consumes the opening swallow).
+  fireEvent.mouseDown(a);
+  assert.equal(zoomLabel(), "140%");
+  a.textContent = "Avval saqlanadi";
+  const b = byPath("identity.headline", "[data-resume-editor]");
+  smallField(b);
+  // First tap on B: its compat mousedown is cancelled, so A keeps the focus — no blur, no commit, no re-render under the finger.
+  // No waits between the taps: the detector's 300 ms window must not depend on machine load.
+  await act(async () => {
+    tap(b, 21);
+  });
+  assert.equal(fireEvent.mouseDown(b), false, "first tap's compat mousedown cancelled");
+  assert.equal(a.getAttribute("contenteditable"), "true", "A still open after one tap on B");
+  assert.ok(!saveBtn(), "nothing committed yet");
+  assert.equal(zoomLabel(), "140%", "sheet unchanged under the finger");
+  // Second tap, inside the double-tap window.
+  await act(async () => tap(b, 22));
+  assert.equal(b.getAttribute("contenteditable"), "true", "B opened by the double tap");
+  await quiet();
+  assert.equal(zoomLabel(), "140%", "B open: zoom kept after the window");
+  assert.match(saveBtn()?.textContent ?? "", /· 1\b/, "exactly one op for A");
+  await act(async () => {
+    fireEvent.click(within(bar()!).getByText("Tayyor"));
+  });
+  await quiet();
+  assert.equal(zoomLabel(), "100%", "restored after the last edit");
+});
+
+test("review E1 (Word sheet): a double tap on B with A open → A saved once, B open", async () => {
+  phone();
+  await mount(stubTeacher());
+  await enableEdit();
+  const a = byPath(HOMEWORK);
+  await act(async () => tap(a, 51));
+  await act(async () => tap(a, 52));
+  assert.equal(a.getAttribute("contenteditable"), "true");
+  fireEvent.mouseDown(a);
+  a.textContent = "Word: avval saqlanadi.";
+  const b = byPath("heading:goal");
+  await act(async () => tap(b, 53));
+  assert.equal(fireEvent.mouseDown(b), false, "first tap's compat mousedown cancelled");
+  assert.equal(a.getAttribute("contenteditable"), "true", "A kept open by one tap on B");
+  await act(async () => tap(b, 54));
+  assert.equal(b.getAttribute("contenteditable"), "true", "B open");
+  assert.match(saveBtn()?.textContent ?? "", /· 1\b/, "A committed once");
+});
+
+test("review E1 fallback: if the browser still blurs A on the first tap, the zoom waits and the second tap opens B", async () => {
+  phone();
+  await mount(stubResume(), true);
+  await enableEdit();
+  const a = byPath("identity.fullName", "[data-resume-editor]");
+  smallField(a);
+  await act(async () => tap(a, 41));
+  await act(async () => tap(a, 42));
+  await settle();
+  a.textContent = "Blur bilan saqlandi";
+  const b = byPath("identity.headline", "[data-resume-editor]");
+  await act(async () => {
+    tap(b, 43);
+    fireEvent.focusOut(a);
+  });
+  assert.ok(!a.hasAttribute("contenteditable"), "A committed by the blur");
+  assert.equal(zoomLabel(), "140%", "no restore while a double tap may be in progress");
+  await act(async () => tap(b, 44));
+  assert.equal(b.getAttribute("contenteditable"), "true", "B opened");
+  assert.match(saveBtn()?.textContent ?? "", /· 1\b/);
+});
+
+test("review E1: a finger still down pauses the restore; it runs 300 ms after the finger lifts", async () => {
+  phone();
+  await mount(stubResume(), true);
+  await enableEdit();
+  const a = byPath("identity.fullName", "[data-resume-editor]");
+  smallField(a);
+  await act(async () => tap(a, 31));
+  await act(async () => tap(a, 32));
+  await settle();
+  assert.equal(zoomLabel(), "140%");
+  await act(async () => {
+    fireEvent.click(within(bar()!).getByText("Tayyor"));
+  });
+  const b = byPath("identity.headline", "[data-resume-editor]");
+  await act(async () => {
+    fireEvent.pointerDown(b, { pointerType: "touch", pointerId: 33, isPrimary: true, clientX: 40, clientY: 40 });
+  });
+  await quiet();
+  assert.equal(zoomLabel(), "140%", "finger down: no restore under it");
+  await act(async () => {
+    fireEvent.pointerUp(b, { pointerType: "touch", pointerId: 33, isPrimary: true, clientX: 40, clientY: 40 });
+  });
+  await settle();
+  assert.equal(zoomLabel(), "140%", "just lifted: still waiting");
+  await quiet();
+  assert.equal(zoomLabel(), "100%", "restored after the quiet window");
+});
+
 /* ═══════════════════════════════════════ toolbar touch sizes */
 
 test("viewer toolbar on touch: 44 px row, hit-44 on row icons and view toggle, real 44 px zoom controls", () => {
@@ -611,7 +746,11 @@ test("viewer toolbar on touch: 44 px row, hit-44 on row icons and view toggle, r
   assert.ok(classes(bar).includes("pointer-coarse:h-11"), "row 44 px on touch");
   assert.ok(classes(bar).includes("h-10"), "desktop row unchanged");
   for (const l of ["Oldingi sahifa", "Keyingi sahifa", "Boshqa amallar"]) assert.ok(classes(screen.getByLabelText(l)).includes("hit-44"), `${l}: hit-44`);
-  for (const t of ["O‘qish", "Varaq"]) assert.ok(classes(screen.getByText(t)).includes("hit-44"), `${t}: hit-44`);
+  // Review E3: the two segments are 4 px apart — real 44 px height, not overlapping `.hit-44` areas.
+  for (const t of ["O‘qish", "Varaq"]) {
+    const c = classes(screen.getByText(t));
+    assert.ok(c.includes("pointer-coarse:min-h-11") && !c.includes("hit-44"), `${t}: real 44 px`);
+  }
   for (const l of ["Kichraytirish", "Kattalashtirish"]) {
     const c = classes(screen.getByLabelText(l));
     assert.ok(c.includes("pointer-coarse:min-h-11") && c.includes("pointer-coarse:min-w-11"), `${l}: 44 px`);
