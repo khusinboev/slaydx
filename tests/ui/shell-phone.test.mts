@@ -206,7 +206,7 @@ test("Sidebar phone: tool rows, brand, «Yaratish» and footer rows are ≥ 48 p
   assert.ok(has(container.querySelector('a[href="/uz/create"]'), "h-12"));
   // Chromium smoke: inside the scrolling flex column «Yaratish» was squeezed to 16 px — rows must not shrink.
   assert.ok(has(container.querySelector('a[href="/uz/create"]'), "shrink-0") && has(toolLink, "shrink-0"));
-  assert.ok(has(container.querySelector('a[href="/admin"]'), "min-h-12"));
+  assert.ok(has(container.querySelector('a[href="/admin"]'), "h-12"), "admin row uses the shared 48 px row (UX review m10)");
   assert.ok(has(container.querySelector('a[href="/uz/profile"]'), "min-h-14"));
   assert.match(root?.getAttribute("style") ?? "", /--tg-safe-bottom/, "footer clears the home indicator");
   cleanup();

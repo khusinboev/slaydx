@@ -118,15 +118,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <Link
             href="/admin"
             onClick={onNavigate}
-            className={cn(
-              "hover:bg-white/70 dark:hover:bg-sidebar-accent mb-1 flex items-center gap-2.5 rounded-md px-3 py-2",
-              phone && "min-h-12",
-            )}
+            className={cn(itemClass(false, phone), "mb-1")}
           >
-            <span className="bg-muted flex size-8 items-center justify-center rounded-lg">
-              <Shield className="text-muted-foreground size-4" />
-            </span>
-            <span className="text-[15px] font-medium">Admin panel</span>
+            <Shield className="text-muted-foreground size-[18px] shrink-0" />
+            <span className="truncate font-medium">Admin panel</span>
           </Link>
         ) : null}
         {loggedIn ? (
