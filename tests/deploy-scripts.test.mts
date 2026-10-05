@@ -128,6 +128,7 @@ function sandbox(t: { after(fn: () => void): void }, extra: Record<string, strin
   writeFileSync(log, "");
   const lock = path.join(dir, "deploy.lock");
   const env: NodeJS.ProcessEnv = {
+    NODE_ENV: "test",
     PATH: `${bin}:/usr/bin:/bin`,
     HOME: dir,
     LANG: "C.UTF-8",
