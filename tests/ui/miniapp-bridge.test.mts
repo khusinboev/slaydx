@@ -38,6 +38,7 @@ const pushed: string[] = [];
 const replaced: string[] = [];
 let logouts = 0;
 let loginStatus = 200;
+let loginCode: string | null = null;
 /** When set, `/api/auth/telegram` waits for it (the switch in flight). */
 let loginGate: Promise<void> | null = null;
 /** `/api/generations` answers 503 (the list cannot be re-fetched): the store must still drop the old list. */
@@ -55,6 +56,7 @@ function setup(opts: { webview: boolean; session: typeof user | null }) {
   replaced.length = 0;
   logouts = 0;
   loginStatus = 200;
+  loginCode = null;
   loginGate = null;
   listDown = false;
   window.location.hash = HASH;
@@ -66,7 +68,8 @@ function setup(opts: { webview: boolean; session: typeof user | null }) {
       posts.push(String(init.body));
       if (loginGate) await loginGate;
       if (loginStatus !== 200) {
-        return new Response(JSON.stringify({ error: "Telegram imzosi tekshiruvdan o'tmadi" }), { status: loginStatus, headers: { "content-type": "application/json" } });
+        const error = loginCode === "switch_stale" ? "Telegram ma'lumotlari eskirgan. Mini ilovani yopib, qayta oching." : "Telegram imzosi tekshiruvdan o'tmadi";
+        return new Response(JSON.stringify({ error, ...(loginCode ? { code: loginCode } : {}) }), { status: loginStatus, headers: { "content-type": "application/json" } });
       }
       return new Response(JSON.stringify({ user }), { status: 200, headers: { "content-type": "application/json" } });
     }
@@ -79,8 +82,10 @@ function setup(opts: { webview: boolean; session: typeof user | null }) {
   };
 }
 
+const afterEachHooks: Array<() => void> = [];
 afterEach(() => {
   cleanup();
+  for (const f of afterEachHooks.splice(0)) f();
   globalThis.fetch = realFetch;
   delete win.TelegramWebviewProxy;
   delete win.Telegram;
@@ -159,7 +164,30 @@ test("Telegram webview + the same user already signed in: no login call", async 
   assert.equal(posts.length, 0);
 });
 
-test("Telegram webview + a DIFFERENT Telegram user signed in: switches to the Mini App user, old state cleared, home rendered", async () => {
+const dialog = () => document.querySelector("[data-account-switch]");
+async function tap(sel: string) {
+  await act(async () => {
+    (document.querySelector(sel) as HTMLButtonElement | null)?.click();
+    await new Promise((r) => setTimeout(r, 30));
+  });
+}
+
+test("DIFFERENT Telegram user signed in: asks first — no request until «O'tish» (security review B1)", async () => {
+  setup({ webview: true, session: other });
+  await mount();
+  await scriptLoads();
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 30));
+  });
+  assert.ok(dialog(), "confirm dialog shown");
+  assert.equal(posts.length, 0, "MUTATION: the switch went out silently");
+  const text = document.querySelector("[data-switch-text]")?.textContent ?? "";
+  assert.match(text, /Siz hozir Boshqa \(@ali\) sifatida kirgansiz\. Telegram'dagi Ali akkauntiga o'tasizmi\?/);
+  assert.ok(document.querySelector("[data-switch-go]") && document.querySelector("[data-switch-stay]"));
+  assert.equal(useAppStore.getState().user?.telegramId, "77", "nothing changes while asking");
+});
+
+test("«O'tish»: switches to the Mini App user, old state cleared, home rendered; mismatch guard holds while in flight", async () => {
   setup({ webview: true, session: other });
   useAppStore.setState({ generations: [{ id: "g-of-77" }] as never, generationsLoaded: true });
   useUi.setState({ overlay: "notifications", returnTo: null });
@@ -168,36 +196,103 @@ test("Telegram webview + a DIFFERENT Telegram user signed in: switches to the Mi
   listDown = true;
   await mount();
   await scriptLoads();
+  await tap("[data-switch-go]");
+  assert.equal(posts.length, 1, "one switch request after the tap");
   // In flight: the old account stays in the store, so «Saqlash»/«Ulashish» refuse (mismatch).
   assert.equal(useAppStore.getState().user?.telegramId, "77");
   assert.equal(isMiniAppUserMismatch(useAppStore.getState().user?.telegramId, "42"), true);
   await act(async () => {
     open();
-    await new Promise((r) => setTimeout(r, 20));
+    await new Promise((r) => setTimeout(r, 30));
   });
-  assert.equal(posts.length, 1, "one switch request");
   assert.deepEqual(JSON.parse(posts[0]!), { initData: INIT });
   assert.equal(useAppStore.getState().user?.telegramId, "42", "now the Mini App user");
   assert.ok(!useAppStore.getState().generations.some((g) => g.id === "g-of-77"), "the other account's files are gone");
   assert.equal(useUi.getState().overlay, null, "overlay of the other account closed");
+  assert.ok(!dialog(), "dialog closed");
   assert.deepEqual(replaced, ["/uz"]);
   assert.ok(refreshed >= 1, "server components re-rendered for the new user");
-  // No loop: the store now says 42, and the id was tried once.
+  // No loop: the id was tried once.
   await act(async () => {
     useAppStore.setState({ user: other as never });
-    await new Promise((r) => setTimeout(r, 20));
+    await new Promise((r) => setTimeout(r, 30));
   });
   assert.equal(posts.length, 1, "one attempt per Mini App user id per page load");
+  assert.ok(!dialog(), "not asked again");
 });
 
-test("Telegram webview + a DIFFERENT user, switch refused (401): signed out and sent to login, never the other account", async () => {
+test("«Yo'q, qolaman»: session kept, no request, not asked again this page load, Saqlash/Ulashish stay blocked", async () => {
+  setup({ webview: true, session: other });
+  await mount();
+  await scriptLoads();
+  await tap("[data-switch-stay]");
+  assert.ok(!dialog());
+  assert.equal(posts.length, 0);
+  assert.equal(logouts, 0);
+  assert.equal(useAppStore.getState().user?.telegramId, "77", "still the signed-in account");
+  assert.equal(isMiniAppUserMismatch(useAppStore.getState().user?.telegramId, "42"), true, "mismatch keeps blocking delivery");
+  await act(async () => {
+    useAppStore.setState({ user: { ...other } as never });
+    await new Promise((r) => setTimeout(r, 30));
+  });
+  assert.ok(!dialog(), "MUTATION: asked again after «Yo'q»");
+});
+
+test("phone back / Escape on the prompt = «Yo'q, qolaman»", async () => {
+  setup({ webview: true, session: other });
+  await mount();
+  await scriptLoads();
+  assert.ok(dialog());
+  await act(async () => {
+    document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await new Promise((r) => setTimeout(r, 30));
+  });
+  assert.ok(!dialog(), "closed");
+  assert.equal(posts.length, 0);
+  assert.equal(useAppStore.getState().user?.telegramId, "77");
+});
+
+test("phone back (history pop) on the prompt = «Yo'q, qolaman»", async () => {
+  const navMod = await import("../../lib/nav/history.ts");
+  navMod.__resetNavForTests();
+  navMod.installNav();
+  navMod.setNavRouter(router);
+  afterEachHooks.push(() => navMod.__resetNavForTests());
+  setup({ webview: true, session: other });
+  await mount();
+  await scriptLoads();
+  assert.ok(dialog());
+  await act(async () => {
+    window.history.back();
+    await new Promise((r) => setTimeout(r, 60));
+  });
+  assert.ok(!dialog(), "MUTATION: back did not close the prompt");
+  assert.equal(posts.length, 0);
+  assert.equal(useAppStore.getState().user?.telegramId, "77");
+});
+
+test("«O'tish» refused by the server (409 switch_stale): calm message, session kept, not signed out", async () => {
+  setup({ webview: true, session: other });
+  loginStatus = 409;
+  loginCode = "switch_stale";
+  await mount();
+  await scriptLoads();
+  await tap("[data-switch-go]");
+  assert.equal(posts.length, 1);
+  assert.match(document.querySelector("[data-switch-text]")?.textContent ?? "", /eskirgan/);
+  assert.equal(logouts, 0);
+  assert.equal(useAppStore.getState().user?.telegramId, "77");
+  await tap("[data-switch-ok]");
+  assert.ok(!dialog());
+  assert.deepEqual(replaced, []);
+});
+
+test("«O'tish» then 401: signed out and sent to login, never the other account", async () => {
   setup({ webview: true, session: other });
   loginStatus = 401;
   await mount();
   await scriptLoads();
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 30));
-  });
+  await tap("[data-switch-go]");
   assert.equal(posts.length, 1);
   assert.equal(logouts, 1, "this webview's session is ended");
   assert.equal(useAppStore.getState().loggedIn, false);

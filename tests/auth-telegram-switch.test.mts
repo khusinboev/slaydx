@@ -107,13 +107,20 @@ async function login(body: unknown, cookie?: string) {
   return { status: result.status, json: (await result.json()) as { user?: { id: string; telegramId: string | null } }, newToken };
 }
 
-test("miniAppSessionAction: create / reuse / replace, ids compared as strings", () => {
-  assert.equal(miniAppSessionAction(null, "42"), "create");
-  assert.equal(miniAppSessionAction({ telegramId: "42" }, "42"), "reuse");
-  assert.equal(miniAppSessionAction({ telegramId: 42 as unknown as string }, "42"), "reuse");
-  assert.equal(miniAppSessionAction({ telegramId: "77" }, "42"), "replace");
-  assert.equal(miniAppSessionAction({ telegramId: "4" }, "42"), "replace");
-  assert.equal(miniAppSessionAction({ telegramId: null }, "42"), "replace");
+test("miniAppSessionAction: create / reuse / replace / refuse, ids compared as strings, fresh auth_date for replace", () => {
+  const now = 1_800_000_000;
+  assert.equal(miniAppSessionAction(null, "42", now - 23 * 3600, now), "create", "no session: the 24 h window is kept");
+  assert.equal(miniAppSessionAction({ telegramId: "42" }, "42", now - 23 * 3600, now), "reuse");
+  assert.equal(miniAppSessionAction({ telegramId: 42 as unknown as string }, "42", now, now), "reuse");
+  assert.equal(miniAppSessionAction({ telegramId: "77" }, "42", now, now), "replace");
+  assert.equal(miniAppSessionAction({ telegramId: "77" }, "42", now - 600, now), "replace", "10 minutes: still fresh");
+  assert.equal(miniAppSessionAction({ telegramId: "77" }, "42", now - 601, now), "refuse_stale");
+  assert.equal(miniAppSessionAction({ telegramId: "77" }, "42", now - 23 * 3600, now), "refuse_stale", "reviewer S2.1: 23 h replay");
+  assert.equal(miniAppSessionAction({ telegramId: "77" }, "42", now + 3600, now), "refuse_stale", "far future");
+  assert.equal(miniAppSessionAction({ telegramId: "77" }, "42", undefined, now), "refuse_stale", "no auth_date (widget profile)");
+  assert.equal(miniAppSessionAction({ telegramId: "4" }, "42", now, now), "replace");
+  assert.equal(miniAppSessionAction({ telegramId: null }, "42", now, now), "refuse_phone", "reviewer M1: phone login never replaced");
+  assert.equal(miniAppSessionAction({ telegramId: "" }, "42", now, now), "refuse_phone");
 });
 
 test("different Telegram account on this cookie + valid initData → new cookie for the Mini App user, only this session revoked", { skip }, async () => {
@@ -155,10 +162,30 @@ test("same Telegram account → no new session (no churn), no Set-Cookie", { ski
   assert.equal(await revoked(a.here), false);
 });
 
-test("no session → today's behaviour: a new session for the Mini App user", { skip }, async () => {
+test("no session → today's behaviour: a new session for the Mini App user, 23 h old launch data still accepted", { skip }, async () => {
   const id = tgId();
-  const r = await login({ initData: initData(id) });
+  const r = await login({ initData: initData(id, { authDate: Math.floor(Date.now() / 1000) - 23 * 3600 }) });
   assert.equal(r.status, 200);
   assert.equal(r.json.user?.telegramId, id);
   assert.ok(r.newToken);
+});
+
+test("reviewer S2.1 (B1): victim cookie + someone else's 23 h old initData → 409 switch_stale, victim untouched, no cookie", { skip }, async () => {
+  const victim = await userWithSession(tgId());
+  for (const age of [23 * 3600, 11 * 60]) {
+    const r = await login({ initData: initData(tgId(), { authDate: Math.floor(Date.now() / 1000) - age }) }, victim.cookie);
+    assert.equal(r.status, 409, `MUTATION: stale launch data (${age} s) swapped the session`);
+    assert.equal((r.json as { code?: string }).code, "switch_stale");
+    assert.ok(!r.newToken);
+    assert.equal(await revoked(victim.here), false);
+  }
+});
+
+test("reviewer S2.4 (M1): phone-login session + valid fresh initData → 409 switch_phone_session, phone session untouched", { skip }, async () => {
+  const phone = await userWithSession(null);
+  const r = await login({ initData: initData(tgId()) }, phone.cookie);
+  assert.equal(r.status, 409, "MUTATION: a phone-login session was replaced");
+  assert.equal((r.json as { code?: string }).code, "switch_phone_session");
+  assert.ok(!r.newToken);
+  assert.equal(await revoked(phone.here), false);
 });

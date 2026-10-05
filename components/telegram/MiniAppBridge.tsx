@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
@@ -15,6 +15,8 @@ import {
   normalizeHexColor,
   safeAreaCssVars,
   setMiniAppShellState,
+  accountLabel,
+  initDataUserLabel,
   miniAppLoginAction,
   signedInitDataUserId,
   telegramBackState,
@@ -24,6 +26,7 @@ import {
 import { isGenuineMiniApp, type MiniAppEnv } from "@/lib/telegram-webapp";
 import { getNavSnapshot, getServerNavSnapshot, subscribeNav } from "@/lib/nav/history";
 import { useNav } from "@/components/nav/NavProvider";
+import { AccountSwitchDialog, type AccountSwitchPrompt } from "./AccountSwitchDialog";
 
 type TelegramBackButton = {
   show?: () => void;
@@ -152,6 +155,7 @@ function MiniAppSession() {
   const [webApp, setWebApp] = useState<TelegramWebApp | null>(null);
   /** The Mini App user id already tried in this page load (one attempt per id). */
   const attemptedFor = useRef<string | null>(null);
+  const [prompt, setPrompt] = useState<AccountSwitchPrompt | null>(null);
 
   useEffect(() => {
     // Defence in depth: the script is injected only after the same detection.
@@ -202,14 +206,24 @@ function MiniAppSession() {
         .catch((e) => console.warn("[miniapp] login:", e instanceof Error ? e.message : e));
       return;
     }
-    // Switch: this webview's session is another Telegram account. Until the
-    // server answers, the old user stays in the store, so «Saqlash» /
-    // «Ulashish» keep refusing via `isMiniAppUserMismatch`.
+    // Switch: this webview's session is another Telegram account. ASK first
+    // (never silent, security review B1). Until «O'tish» succeeds the old
+    // user stays in the store, so «Saqlash» / «Ulashish» keep refusing via
+    // `isMiniAppUserMismatch`; «Yo'q» is not asked again for this id.
+    const from = accountLabel(useAppStore.getState().user) ?? "boshqa akkaunt";
+    const to = initDataUserLabel(initData) ?? "boshqa Telegram akkaunti";
+    setPrompt({ from, to, status: "ask" });
+  }, [webAppReady, sessionChecked, loggedIn, sessionTelegramId, setUser, refreshGenerations, router, nav]);
+
+  const confirmSwitch = useCallback(() => {
+    const initData = (window as TelegramWindow).Telegram?.WebApp?.initData ?? "";
+    setPrompt((p) => (p ? { ...p, status: "busy" } : p));
     api
       .loginWithTelegram({ initData })
       .then(({ user }) => {
         // Nothing of the previous account survives: its user, file list and
         // any open overlay go; the home page is rendered again for the new one.
+        setPrompt(null);
         useAppStore.setState({ user, loggedIn: true, generations: [], generationsLoaded: false, generationsCursor: null });
         void refreshGenerations();
         useUi.getState().close();
@@ -218,17 +232,23 @@ function MiniAppSession() {
       })
       .catch(async (e) => {
         console.warn("[miniapp] account switch:", e instanceof Error ? e.message : e);
-        // Never keep showing the other account: sign this webview out and ask to log in.
+        if (e instanceof api.ApiError && e.status === 409) {
+          // The server kept this session (stale launch data / phone login): say so calmly.
+          setPrompt((p) => (p ? { ...p, status: "refused", message: e.message } : p));
+          return;
+        }
+        // The user asked to leave this account: never keep showing it — sign out, ask to log in.
+        setPrompt(null);
         await signOut().catch(() => {});
         router.replace("/uz/login");
         router.refresh();
       });
-  }, [webAppReady, sessionChecked, loggedIn, sessionTelegramId, setUser, signOut, refreshGenerations, router, nav]);
+  }, [refreshGenerations, signOut, router]);
 
   useTelegramBack(webApp);
   useTelegramChrome(webApp);
   useTelegramSafeArea(webApp);
-  return null;
+  return <AccountSwitchDialog prompt={prompt} onConfirm={confirmSwitch} onCancel={() => setPrompt(null)} />;
 }
 
 /** The app's page colour (`--page-bg`, else the body background) as `#rrggbb`, or `null`. */

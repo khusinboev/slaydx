@@ -88,12 +88,26 @@ export const POST = handler("auth/telegram", async (req) => {
    * cookies, so this browser may still carry account 1's session while
    * account 2 signs in. Same account → keep that session (no churn); another
    * account → revoke ONLY this cookie's session row (account 1's other
-   * devices stay signed in) before the new cookie replaces it. The Login
-   * Widget (browsers) keeps its old behaviour.
+   * devices stay signed in) before the new cookie replaces it. A replace
+   * needs FRESH launch data and a session that has a Telegram account: a
+   * chat link with someone's old initData opened in Telegram Android's
+   * in-app browser (same cookies) must not swap the victim's session
+   * (security review B1/M1; the client also asks first). The Login Widget
+   * (browsers) keeps its old behaviour.
    */
   const viaMiniApp = typeof body.initData === "string" && body.initData !== "";
   const current = viaMiniApp ? await currentSessionRef() : null;
-  const sessionAction = miniAppSessionAction(current?.user ?? null, profile.telegramId);
+  const sessionAction = miniAppSessionAction(current?.user ?? null, profile.telegramId, profile.authDate);
+  if (viaMiniApp && sessionAction === "refuse_stale") {
+    throw new ApiError("Telegram ma'lumotlari eskirgan. Mini ilovani yopib, qayta oching.", 409, { code: "switch_stale" });
+  }
+  if (viaMiniApp && sessionAction === "refuse_phone") {
+    throw new ApiError(
+      "Siz telefon raqami orqali kirgansiz. Boshqa akkauntga o'tish uchun avval hisobdan chiqing.",
+      409,
+      { code: "switch_phone_session" },
+    );
+  }
 
   const user = await upsertTelegramUser(profile);
   if (viaMiniApp && sessionAction === "reuse") return json({ user });

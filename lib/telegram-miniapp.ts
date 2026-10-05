@@ -23,11 +23,12 @@
  * somebody pre-filled the fragment, and we refuse to guess which one
  * `telegram-web-app.js` would pick.
  *
- * Even then the bridge logs in when there is NO session, and replaces an
- * existing session only when that session belongs to ANOTHER Telegram account
- * (`miniAppLoginAction`): two Telegram accounts on one phone share the
- * webview's cookie jar, and account 2 must never see account 1's files.
- * A session without a Telegram account (phone login) is never replaced.
+ * Even then the bridge logs in silently only when there is NO session. A
+ * session of ANOTHER Telegram account (two accounts on one phone share the
+ * webview's cookie jar) is replaced only after the user confirms it
+ * (`miniAppLoginAction` → `switch`), because Telegram Android's ordinary
+ * in-app browser injects `TelegramWebviewProxy` too. A session without a
+ * Telegram account (phone login) is never replaced.
  */
 import { isRootPath } from "./nav/parents";
 
@@ -100,6 +101,31 @@ export function signedInitDataUserId(initData: string): string | null {
   }
 }
 
+/** «Name (@username)», «Name», «@username» or `null` — the account switch prompt's wording. */
+export function accountLabel(u: { name?: unknown; username?: unknown } | null | undefined): string | null {
+  const name = typeof u?.name === "string" ? u.name.trim() : "";
+  const raw = typeof u?.username === "string" ? u.username.trim().replace(/^@/, "") : "";
+  const at = raw ? `@${raw}` : "";
+  if (name && at) return `${name} (${at})`;
+  return name || at || null;
+}
+
+/**
+ * The Mini App user's display label from the launch data (UNVERIFIED, shown
+ * only in the switch prompt — the person deciding sees both names), or `null`.
+ */
+export function initDataUserLabel(initData: string): string | null {
+  try {
+    const raw = new URLSearchParams(initData).get("user");
+    if (!raw) return null;
+    const u = JSON.parse(raw) as { first_name?: unknown; last_name?: unknown; username?: unknown } | null;
+    const name = [u?.first_name, u?.last_name].filter((x): x is string => typeof x === "string" && x.trim() !== "").join(" ");
+    return accountLabel({ name, username: u?.username });
+  } catch {
+    return null;
+  }
+}
+
 export type MiniAppLoginState = {
   /** The genuine-webview check held and `telegram-web-app.js` has loaded. */
   webAppReady: boolean;
@@ -118,8 +144,12 @@ export type MiniAppLoginState = {
  * What the bridge does with the launch data:
  *  - `login` — no session: sign in silently;
  *  - `switch` — the session is ANOTHER Telegram account (two accounts on one
- *    phone share the webview cookies): sign in as the Mini App user, which
- *    replaces this browser's session;
+ *    phone share the webview cookies): ASK first, and only on «O'tish» sign in
+ *    as the Mini App user (replacing this browser's session). Never silent:
+ *    Telegram Android's ordinary in-app browser also injects
+ *    `TelegramWebviewProxy` and shares the cookies, so a chat link carrying
+ *    someone else's `#tgWebAppData` passes the genuine check (login-CSRF,
+ *    security review B1);
  *  - `none` — not ready, unsigned data, same account, an account without
  *    Telegram (never replaced automatically), or this id was already tried.
  */

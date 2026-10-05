@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
  * Telegram-injected environment plus exactly one launch-data entry does.
  */
 
-const { telegramWebviewSignal, hasLaunchData, isTelegramWebApp, miniAppLoginAction, signedInitDataUserId, TELEGRAM_WEB_APP_SCRIPT } =
+const { telegramWebviewSignal, hasLaunchData, isTelegramWebApp, miniAppLoginAction, signedInitDataUserId, accountLabel, initDataUserLabel, TELEGRAM_WEB_APP_SCRIPT } =
   await import("../lib/telegram-miniapp.ts");
 type LaunchEnv = import("../lib/telegram-miniapp.ts").LaunchEnv;
 
@@ -100,6 +100,30 @@ test("miniAppLoginAction: decision table (login / switch / none), one attempt pe
   assert.equal(miniAppLoginAction({ ...signedIn, sessionTelegramId: "77", attemptedFor: "42" }), "none", "one switch attempt per id");
   assert.equal(miniAppLoginAction({ ...signedIn, sessionTelegramId: "77", webAppReady: false }), "none");
   assert.equal(miniAppLoginAction({ ...signedIn, sessionTelegramId: "77", initData: "user=%7B%22id%22%3A42%7D" }), "none", "unsigned: no switch");
+});
+
+test("reviewer S1 (B1): Android in-app browser + a chat link with someone else's initData looks genuine — so `switch` may only ever PROMPT", async () => {
+  const { isGenuineMiniApp } = await import("../lib/telegram-webapp.ts");
+  const attacker = "user=%7B%22id%22%3A7000000001%7D&auth_date=1&hash=abc";
+  const env = { TelegramWebviewProxy: { postEvent() {} }, location: { hash: `#tgWebAppData=${encodeURIComponent(attacker)}` }, document: { referrer: "" } };
+  assert.equal(isGenuineMiniApp(env as never), true, "the webview signal cannot tell the in-app browser from a Mini App");
+  const s = { webAppReady: true, initData: attacker, sessionChecked: true, loggedIn: true, sessionTelegramId: "6000000001", attemptedFor: null };
+  assert.equal(miniAppLoginAction(s), "switch");
+  // The bridge turns `switch` into a confirm dialog (tests/ui/miniapp-bridge.test.mts: no request before «O'tish»),
+  // and the server refuses stale launch data (tests/auth-telegram-switch.test.mts).
+  const bridge = readFileSync(new URL("../components/telegram/MiniAppBridge.tsx", import.meta.url), "utf8");
+  assert.match(bridge, /setPrompt\(\{ from, to, status: "ask" \}\)/, "switch opens the prompt");
+});
+
+test("accountLabel / initDataUserLabel: prompt wording", () => {
+  assert.equal(accountLabel({ name: "Ali Valiyev", username: "ali" }), "Ali Valiyev (@ali)");
+  assert.equal(accountLabel({ name: "Ali", username: null }), "Ali");
+  assert.equal(accountLabel({ name: "", username: "@ali" }), "@ali");
+  assert.equal(accountLabel({ name: " ", username: "" }), null);
+  assert.equal(accountLabel(null), null);
+  assert.equal(initDataUserLabel(INIT), null, "id only");
+  assert.equal(initDataUserLabel("user=%7B%22id%22%3A1%2C%22first_name%22%3A%22Ali%22%2C%22last_name%22%3A%22V%22%2C%22username%22%3A%22av%22%7D"), "Ali V (@av)");
+  assert.equal(initDataUserLabel("user=broken"), null);
 });
 
 test("signedInitDataUserId: only signed data with a positive integer user id", () => {
