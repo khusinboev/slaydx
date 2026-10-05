@@ -6,7 +6,7 @@
     "dev": "next dev --turbopack",
     "build": "node scripts/guard-build.mjs && next build --turbopack",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint --cache --cache-strategy content",
     "typecheck": "tsc --noEmit",
     "test": "tsx --env-file-if-exists=.env.local --import ./tests/helpers/hermetic-env.mts --conditions=react-server --test --test-concurrency=2 tests/*.test.mts",
     "db:migrate": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/migrate.ts",

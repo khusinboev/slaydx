@@ -44,6 +44,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# eslint --cache (package.json "lint")
+.eslintcache
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
