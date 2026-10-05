@@ -38,6 +38,17 @@ Research (read-only, local test DB, synthetic data): `R1-download.md`, `R2-teleg
 | O4 | Slide text edit gesture on touch | **Double tap (reliable detector) + one-time hint**; the edited text auto-zooms on phones |
 | — | Already stated by the owner | «Saqlash» closes the Mini App; style controls sit at the top edge of the frame |
 
+Phone audit decisions (R5, owner 2026-10-05):
+| # | Question | Decision |
+|---|---|---|
+| O5 | Touch targets | **44 px everywhere on touch** (global coarse-pointer rule; some chip rows get taller) |
+| O6 | Duplicate back inside the Mini App | **Hide the in-app «←» inside Telegram**, keep Telegram's BackButton; browsers keep «←» |
+| O7 | Home file list on phones | **2-column cards with a 2-line title clamp** |
+| O8 | Swipe-to-minimise | **Disable vertical swipes app-wide in the Mini App** (`disableVerticalSwipes`, Bot API 7.7) |
+Lead (R5 recommended): form ⓘ hints become tap-to-expand inline hints on touch; inputs ≥ 16 px on touch (no iOS focus
+zoom); result header title 2 lines + the single «Yuklab olish»; topbar keeps all icons with 44 px hit areas;
+fullscreen Mini App mode out of scope.
+
 Lead decisions (recommended options from the research, owner may override):
 - PDF/derived files are prepared when the sheet opens; 24 h derived-file disk cache moved to a docker volume.
 - Resume lists PDF first. Slide images ZIP at 150 dpi.
@@ -121,7 +132,14 @@ and `--kb-h` on `<html>`, listens to `visualViewport` and Telegram `viewportChan
 | D Slide editing on phones | R3 S1+S2 | `components/viewers/SlideEditor.tsx`, `components/viewers/slide-edit/*`, `SlideToolbar.tsx`, `SlideStage.tsx`, `SlideViewer.tsx`, `ResultLayout.tsx` (compact-while-editing prop only), tests | opus | F0 hooks |
 | E Document editors on phones | R3 D1 | `components/viewers/EditDoneBar.tsx`, `WordViewer.tsx`, `ArticleEditor.tsx`, `resume/ResumeEditor.tsx`, `ResumeViewer.tsx`, `toolbar.tsx`, `editable.ts`, tests | sonnet | F0 hooks, after D merges `ResultLayout` |
 | G Essay level | R4 WP1–3 (core level module, engine/review/polish wiring, EssayComposer UI); live harness cases (no runs) | `lib/generation/essay/*`, `lib/generation/essay-params.ts`, `components/forms/EssayComposer.tsx`, `scripts/live-engine.mts` (cases), `scripts/level-measure.mts`, tests | opus | — |
-| P Phone audit fixes | from R5, shared primitives | decided after R5 | sonnet | after C/D/E merge where files overlap |
+| P12 Touch layer + form primitives | R5 P1+P2: coarse-pointer CSS (44 px hit areas, 16 px inputs), fix the unlayered `* { border-color }` rule that overrides `border-*` utilities, form primitives sizes, tap-to-expand hints | `app/globals.css`, `components/forms/fields.tsx`, `components/forms/compact.tsx`, `components/forms/shared/index.tsx`, tests | sonnet | — |
+| P3 Form chrome + keyboard | R5 P3: sticky submit bar vs keyboard, scroll padding, suggestion chips | `components/forms/ToolChrome.tsx`, `components/forms/useKeyboardInset.ts`, `components/shell/AppShell.tsx` (scroll padding only), tests | opus | P12 |
+| P4 Shell + topbar | R5 P4: 44 px topbar, drawer, search, notifications, pay/login dialogs | `components/shell/TopBar.tsx`, `Sidebar.tsx`, `components/overlays/*` (not `useDialog.ts` logic), tests | sonnet | P12 |
+| P5 Home + catalogue | R5 P5 + O7: 2-column cards, 2-line titles, delete in overflow, catalogue group chips + search | `components/home/*`, `CreateGrid.tsx`, tests | sonnet | — |
+| P8 Telegram shell | R5 P8 + O6 + O8: disableVerticalSwipes, header/background colours from theme, hide in-app «←» in Telegram, safe-area vars | `components/telegram/MiniAppBridge.tsx`, `lib/telegram-miniapp.ts`, `components/nav/BackLink.tsx`, tests | opus | — |
+| P9 Guard | phone audit script + touch-target tests | `scripts/phone-audit.mts`, `tests/ui/touch-targets.test.mts` | sonnet | P12–P5 |
+| (C) | also R5 P6: compact phone result header, 2-line title, FAILED page retry/back | (C files) | | |
+| (E) | also R5 P7: viewer toolbars 44 px, resume reading mode, rail text sizes | + `components/viewers/toolbar.tsx`, `reading/*` | | |
 | R Reviews | independent reviewers per package: security (A, B), correctness (A–G), UX/phone smoke (C, D, E, P) | read-only | fable / opus | each package |
 
 Order: F0 ∥ G → (A ∥ B ∥ D) → C → E → P → integration + reviews → owner device check → deploy on owner's word.
@@ -138,10 +156,11 @@ Order: F0 ∥ G → (A ∥ B ∥ D) → C → E → P → integration + reviews 
 ## 7. Status
 | WP | Status |
 |---|---|
-| Research R1–R5 | R1–R4 done; R5 running |
+| Research R1–R5 | ✅ done |
 | F0 Foundation | ✅ merged (`cb5abaf`; registry 16, accessor 21, hooks 18 tests; boundary lock `cd15619`) |
-| G Essay level | running (`wip/mobile-g`) |
-| A Download server | running (`wip/mobile-a`) |
-| B Telegram server | running (`wip/mobile-b`) |
-| D Slide editing | running (`wip/mobile-d`) |
-| C, E, P, reviews | waiting |
+| G Essay level | ✅ merged (19 mutations caught; thresholds to calibrate in the live run) |
+| A Download server | ✅ merged (24 mutations; bench: PDF cold 1.4–2.1 s, cached 4–81 ms) |
+| B Telegram server | ✅ merged (31/32 mutations; migration 035) |
+| D Slide editing | ✅ merged (overlap 33–100 % → 0 % at 360/390) |
+| Integration 1 | full suites running on `feat/mobile` |
+| C, E, P*, reviews | next |
