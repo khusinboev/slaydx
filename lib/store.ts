@@ -5,7 +5,8 @@ import { persist } from "zustand/middleware";
 import * as api from "./api-client";
 import type { Features, ServerGeneration, ServerUser } from "./api-client";
 import type { UserProfile } from "./types";
-import { parsePriceAdjustments, setClientPriceAdjustments, type PriceAdjustMap } from "./tools";
+// Not `./tools`: this store is in every route's client layer, the tool registry is not (ops WP-B).
+import { parsePriceAdjustments, setClientPriceAdjustments, type PriceAdjustMap } from "./price-adjust";
 
 export type ThemeMode = "light" | "dark";
 

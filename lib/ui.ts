@@ -2,8 +2,8 @@
 
 import { create } from "zustand";
 import { safeReturnTo } from "./safe-return";
-import { TOOL_BY_ID } from "./tools";
-import type { ToolConfig } from "./types";
+// Not `./tools` (the full registry): this module is in every route's client layer (ops WP-B).
+import { toolKindOf } from "./tool-kinds";
 
 export type Overlay =
   | "login"
@@ -51,8 +51,8 @@ export const FILE_FILTERS = [
 export type FileFilterId = (typeof FILE_FILTERS)[number]["id"];
 
 /**
- * Hujjat turi → «Mening fayllarim» filtri (bitta joyda, `lib/tools.ts`
- * dan olinadi).
+ * Hujjat turi → «Mening fayllarim» filtri (bitta joyda; guruh va chiqish
+ * `lib/tool-kinds.ts` dan — `TOOLS` bilan `tests/tool-kinds.test.mts` da qulflangan).
  *
  * FE-08: ilgari «Testlar» va «O'yinlar» QAT'IY `false` qaytarardi —
  * sotilayotgan test, krossvord, kartochka va boshqa o'yinlar u yerda
@@ -63,10 +63,10 @@ export type FileFilterId = (typeof FILE_FILTERS)[number]["id"];
  * tushadi (`all` dan tashqari) — hech biri ko'rinmay qolmaydi.
  */
 export function fileCategory(type: string): Exclude<FileFilterId, "all"> {
-  const tool = (TOOL_BY_ID as Record<string, ToolConfig | undefined>)[type];
+  const tool = toolKindOf(type);
   if (!tool) return "docs";
   if (tool.group === "oyinlar") return "games";
-  if (tool.id === "test") return "tests";
+  if (type === "test") return "tests";
   if (tool.output === "pptx") return "slide";
   if (tool.output === "png") return "image";
   return "docs";
