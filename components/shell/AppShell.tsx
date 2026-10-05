@@ -84,7 +84,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--page-bg)]">
         <TopBar onMenu={() => setMobileOpen((v) => !v)} />
         <SessionBanner />
-        <main id="main" className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--page-bg)]">{children}</main>
+        {/*
+         * Scroll padding for tool forms (mobile P3): focus and caret reveals stop
+         * 16 px above the sticky submit bar (73 px + safe area), or 16 px above
+         * the visible bottom while the bar is in the flow (keyboard open).
+         * Other pages carry no `[data-submit-bar]` and keep no padding.
+         */}
+        <main
+          id="main"
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--page-bg)] has-[[data-submit-bar=inline]]:scroll-pb-4 has-[[data-submit-bar=sticky]]:scroll-pb-[calc(6rem+env(safe-area-inset-bottom))]"
+        >
+          {children}
+        </main>
       </div>
 
       <LoginModal />
