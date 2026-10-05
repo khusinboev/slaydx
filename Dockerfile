@@ -81,6 +81,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 # Migratsiyalar `process.cwd()/lib/server/migrations` dan o'qiladi.
 COPY --from=builder --chown=nextjs:nodejs /app/lib/server/migrations ./lib/server/migrations
+# Derived-file cache mount point (docker-compose `derived-cache` volume): a new
+# named volume copies this directory's owner, so `nextjs` can write to it.
+RUN mkdir -p /var/cache/slaydx-derived && chown nextjs:nodejs /var/cache/slaydx-derived
 
 USER nextjs
 EXPOSE 3000
