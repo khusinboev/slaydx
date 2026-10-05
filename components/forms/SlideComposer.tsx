@@ -13,7 +13,7 @@ import { cn } from "@/lib/cn";
 import { LanguagePicker } from "./fields";
 import { Card, Row } from "./compact";
 import { ClearFormButton, SettingsDetails, SourceFileRow } from "./shared";
-import { ToolChrome } from "./ToolChrome";
+import { ToolChrome, TopicChips } from "./ToolChrome";
 import { runGeneration } from "./runGeneration";
 import { TemplateGallery } from "./TemplateGallery";
 import { useFormDraft } from "./useFormDraft";
@@ -276,18 +276,7 @@ export function SlideComposer({
               className="border-input bg-card focus:ring-ring h-11 w-full rounded-xl border px-3.5 text-[15px] outline-none focus:ring-2"
             />
             {pro ? null : (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {TOPIC_EXAMPLES.map((ex) => (
-                  <button
-                    key={ex}
-                    type="button"
-                    className="text-muted-foreground hover:text-foreground hover:border-foreground/30 pointer-coarse:min-h-11 pointer-coarse:px-3 rounded-full border px-2.5 py-0.5 text-[11.5px]"
-                    onClick={() => set("topic", ex)}
-                  >
-                    {ex}
-                  </button>
-                ))}
-              </div>
+              <TopicChips examples={TOPIC_EXAMPLES} onPick={(ex) => set("topic", ex)} />
             )}
           </>
         )}

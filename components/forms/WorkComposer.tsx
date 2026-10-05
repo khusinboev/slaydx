@@ -45,7 +45,7 @@ import {
   TopicRow,
   type AuthorFieldId,
 } from "./shared";
-import { ToolChrome } from "./ToolChrome";
+import { ToolChrome, TopicChips } from "./ToolChrome";
 import { useFormDraft } from "./useFormDraft";
 import { runGeneration } from "./runGeneration";
 
@@ -465,15 +465,7 @@ export function WorkComposer({
     <ToolChrome title={tool.pageTitle} submitLabel={tool.submitLabel} price={price} loading={loading} onSubmit={submit} error={error}>
       <Card title="Mavzu va tur">
         <TopicRow value={ui.topic} onChange={(v) => set("topic", v)} placeholder={tool.topicPlaceholder} limit={WORK_LIMITS.topicChars} />
-        {tool.topicExamples?.length ? (
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {tool.topicExamples.map((ex) => (
-              <button key={ex} type="button" onClick={() => set("topic", ex.slice(0, WORK_LIMITS.topicChars))} className="bg-muted hover:bg-muted/70 rounded-md px-2 py-1 text-left text-[11px]">
-                {ex}
-              </button>
-            ))}
-          </div>
-        ) : null}
+        <TopicChips examples={tool.topicExamples ?? []} onPick={(ex) => set("topic", ex.slice(0, WORK_LIMITS.topicChars))} />
         <Row label="Tur" hint={kind.hint} wide>
           <Field id="workKind">
             <Segmented ariaLabel="Tur" options={workKindsOf(genre).map((k) => ({ value: k.id, label: k.label.uz }))} value={ui.workKind} onChange={onWorkKindChange} />

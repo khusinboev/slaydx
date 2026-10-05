@@ -2,6 +2,7 @@ import "./setup.ts";
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createElement as h } from "react";
+import { readFileSync } from "node:fs";
 import { render, fireEvent, screen, cleanup, act } from "@testing-library/react";
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
@@ -17,6 +18,7 @@ import { SlideForm } from "../../components/forms/SlideForm.tsx";
 import { TeacherComposer } from "../../components/forms/teacher/TeacherComposer.tsx";
 import { TranslationForm } from "../../components/forms/TranslationForm.tsx";
 import { ImageStudio } from "../../components/forms/ImageStudio.tsx";
+import { WorkComposer } from "../../components/forms/WorkComposer.tsx";
 import { TOOL_BY_ID } from "../../lib/tools.ts";
 import type { UserProfile } from "../../lib/types.ts";
 
@@ -218,4 +220,46 @@ test("ImageStudio: prompt example chips are 44 px on touch", () => {
   const chips = [...document.querySelectorAll("button")].filter((b) => /rounded-full border/.test(cls(b)) && /truncate/.test(cls(b)));
   assert.ok(chips.length >= 3, "example chips rendered");
   for (const c of chips) assertTouch(c, `example «${c.textContent}»`);
+});
+
+/* ───────────────────── TopicChips (P3 primitive) in every composer ───────────────────── */
+
+const EX = ["Fotosintez jarayoni", "Nyuton qonunlari"];
+const chipsOf = () => [...document.querySelectorAll("[data-topic-chips] button")] as HTMLButtonElement[];
+
+test("every composer with topic suggestions renders the shared TopicChips and picking fills the field", async () => {
+  stubApi();
+  await login();
+  const cases: Array<{ name: string; el: () => ReturnType<typeof h>; input: () => HTMLInputElement | HTMLTextAreaElement; expect: string[] }> = [
+    { name: "article", el: () => h(ArticleComposer, { tool: TOOL_BY_ID.article, profile, user: null }), input: () => document.querySelector('[data-field="topic"] input, [data-field="topic"] textarea') as HTMLInputElement, expect: TOOL_BY_ID.article.topicExamples ?? [] },
+    { name: "work", el: () => h(WorkComposer, { tool: { ...TOOL_BY_ID.coursework, topicExamples: EX }, profile, user: null }), input: () => document.querySelector("input[type=text], textarea") as HTMLInputElement, expect: EX },
+    { name: "teacher", el: () => h(TeacherComposer, { tool: { ...TOOL_BY_ID["lesson-plan"], topicExamples: EX }, profile, user: null }), input: () => document.querySelector('[data-field="topic"] input, [data-field="topic"] textarea') as HTMLInputElement, expect: EX },
+    { name: "slide", el: () => h(SlideForm, { tool: TOOL_BY_ID.slide, profile }), input: () => document.querySelector('input[type="text"]') as HTMLInputElement, expect: [] },
+    { name: "image", el: () => h(ImageStudio, { tool: TOOL_BY_ID.image }), input: () => document.querySelector("textarea") as HTMLTextAreaElement, expect: [] },
+  ];
+  for (const c of cases) {
+    render(withRouter(c.el()));
+    await act(async () => {});
+    const chips = chipsOf();
+    assert.ok(document.querySelector("[data-topic-chips]"), `${c.name}: TopicChips container rendered`);
+    assert.ok(chips.length >= 2, `${c.name}: chips rendered`);
+    for (const e of c.expect) assert.ok(chips.some((b) => b.textContent === e), `${c.name}: example «${e}» present`);
+    for (const b of chips) assertTouch(b, `${c.name} chip`);
+    const pick = chips[1];
+    await act(async () => {
+      fireEvent.click(pick);
+    });
+    assert.ok(c.input(), `${c.name}: topic input found`);
+    assert.equal(c.input().value.trim(), (pick.textContent ?? "").trim(), `${c.name}: picking a chip fills the field`);
+    cleanup();
+  }
+});
+
+test("ToolWorkspace's fallback StandardForm also uses TopicChips (no inline chip map left in any composer)", () => {
+  const dir = new URL("../../components/forms/", import.meta.url);
+  const src = (f: string) => readFileSync(new URL(f, dir), "utf8");
+  assert.match(src("ToolWorkspace.tsx"), /<TopicChips /);
+  for (const f of ["ArticleComposer.tsx", "WorkComposer.tsx", "SlideComposer.tsx", "ImageStudio.tsx", "teacher/TeacherComposer.tsx", "ToolWorkspace.tsx"]) {
+    assert.doesNotMatch(src(f), /topicExamples\.map|TOPIC_EXAMPLES\.map|EXAMPLES\.map/, `${f}: inline suggestion chip map`);
+  }
 });

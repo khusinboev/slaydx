@@ -15,7 +15,7 @@ import { Card, Row } from "../compact";
 import { AuthorRows, ClearFormButton, Field, LimitedTextarea, SettingsDetails, TopicRow } from "../shared";
 import { TextInput } from "../fields";
 import type { CurriculumSelection } from "../CurriculumPicker";
-import { ToolChrome } from "../ToolChrome";
+import { ToolChrome, TopicChips } from "../ToolChrome";
 import { useFormDraft } from "../useFormDraft";
 import { runGeneration } from "../runGeneration";
 import { CurriculumRow, DateRow, SubjectGradeLanguage, curriculumSubjectLabel, emptyUi, toValues, uiFromValues, type KindProps, type Ui } from "./common";
@@ -261,15 +261,7 @@ export function TeacherComposer({
             placeholder={tool.topicPlaceholder}
             limit={TEACHER_LIMITS.topicChars}
           />
-          {tool.topicExamples?.length ? (
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {tool.topicExamples.map((ex) => (
-                <button key={ex} type="button" onClick={() => onTopicChange(ex)} className="bg-muted hover:bg-muted/70 pointer-coarse:min-h-11 pointer-coarse:px-3 rounded-md px-2 py-1 text-left text-[11px]">
-                  {ex}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          <TopicChips examples={tool.topicExamples ?? []} onPick={onTopicChange} />
         </div>
         {kind === "test" ? <TestSourceRows {...kindProps} onCurriculumChange={onCurriculumChange} onBusyChange={setFileBusy} /> : null}
       </Card>

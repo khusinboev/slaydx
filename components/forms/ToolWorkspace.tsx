@@ -10,7 +10,7 @@ import { useAppStore, usePricingVersion, writerProfile } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import type { UserProfile } from "@/lib/types";
 import { FieldBlock, ModeSwitch, TextInput, Legend } from "./fields";
-import { ToolChrome } from "./ToolChrome";
+import { ToolChrome, TopicChips } from "./ToolChrome";
 import { runGeneration } from "./runGeneration";
 import { SourceFileField } from "./SourceFileField";
 import { gameDefaultTypeId } from "@/lib/generation/games/registry";
@@ -325,20 +325,7 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
             placeholder={tool.topicPlaceholder}
             onChange={(v) => set("topic", v)}
           />
-          {tool.topicExamples?.length ? (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {tool.topicExamples.map((ex) => (
-                <button
-                  key={ex}
-                  type="button"
-                  className="text-muted-foreground hover:text-foreground text-xs underline-offset-2 hover:underline"
-                  onClick={() => set("topic", ex)}
-                >
-                  {ex}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          <TopicChips examples={tool.topicExamples ?? []} onPick={(ex) => set("topic", ex)} />
         </fieldset>
       ) : null}
 

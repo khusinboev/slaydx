@@ -9,7 +9,7 @@ import { IMAGE_RATIOS, IMAGE_STYLES } from "@/lib/generation/image-studio-option
 import { IMAGE_PROMPT_LIMIT } from "@/lib/generation/image-params";
 import { Card, Row, Segmented, SelectField } from "./compact";
 import { ClearFormButton, Field, LimitedTextarea, SettingsDetails } from "./shared";
-import { ToolChrome } from "./ToolChrome";
+import { ToolChrome, TopicChips } from "./ToolChrome";
 import { runGeneration } from "./runGeneration";
 
 /*
@@ -91,18 +91,7 @@ export function ImageStudio({ tool }: { tool: ToolConfig }) {
             placeholder="Masalan: ertalabki Buxoro ko‘chasi, quyosh nuri, odamlar yo‘q, kino uslubi..."
           />
         </Field>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {EXAMPLES.map((ex) => (
-            <button
-              key={ex}
-              type="button"
-              className="text-muted-foreground hover:text-foreground pointer-coarse:min-h-11 pointer-coarse:px-3 max-w-full truncate rounded-full border px-2.5 py-0.5 text-[11.5px]"
-              onClick={() => set("prompt", ex)}
-            >
-              {ex}
-            </button>
-          ))}
-        </div>
+        <TopicChips examples={EXAMPLES} onPick={(ex) => set("prompt", ex)} />
       </Card>
 
       <Card title="Uslub">
