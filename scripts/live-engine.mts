@@ -17,6 +17,8 @@
  *   npm run live -- article-oak essay-dtm  — faqat nomlanganlar
  *   npm run live -- article-oak --article-type analytical --profile university  — maqola turi/profili
  *   npm run live -- essay-dtm essay-academic essay-ielts  — insho (AUDIT-19)
+ *   npm run live -- essay-lvl-dtm-a1 essay-lvl-dtm-b1 …   — insho CEFR darajasi matritsasi (mobile sprint, R4 §5);
+ *                                                           keyin `npx tsx scripts/level-measure.mts eval-out/live`
  *   npm run live -- article-oak --no-polish  — avto-sayqalsiz (AUDIT-18/19)
  *   npm run live -- --list       — holatlar ro'yxati, LLM chaqiruvisiz
  *   npm run live -- lesson map map-quarters glossary keys  — o'qituvchi (AUDIT-20)
@@ -48,6 +50,8 @@ import { factNumbers } from "../lib/generation/article/guard.ts";
 import { PUBLICATION_PROFILES, isPublicationProfileId } from "../lib/generation/article/profiles.ts";
 import { isArticleTypeId } from "../lib/generation/article/types-registry.ts";
 import { ESSAY_FILLER } from "../lib/generation/essay/prompts.ts";
+import { DEFAULT_ESSAY_LEVEL, levelDetail, levelVerdict, measureLevel, type CefrLevel } from "../lib/generation/essay/level.ts";
+import { essayModelOf, essayTextOf } from "../lib/generation/essay/review.ts";
 import type { ArticleTypeId, PublicationProfileId } from "../lib/generation/article/types.ts";
 import type { FormValues } from "../lib/types.ts";
 import { countGridCrossings } from "../lib/generation/games/crossword/review.ts";
@@ -74,6 +78,31 @@ type Case = {
 
 const OUT = path.resolve(process.cwd(), "eval-out", "live");
 const ok = (label: string, cond: boolean, detail: string): Check => ({ label, ok: cond, detail });
+
+/*
+ * Essay CEFR level matrix (mobile sprint, `docs/mobile/R4-essay-level.md` §5).
+ * `null` level = the field is not sent → must behave as the default (B2).
+ */
+const LEVEL_DTM: FormValues = { topic: "Kitob o‘qish yoshlarga nima beradi?", essayContext: "school_dtm", essayKind: "reflective", pages: "2", language: "uz" };
+const LEVEL_ACAD = (language: string): FormValues => ({
+  topic: language === "ru" ? "Нужно ли университетам обучать студентов проверке онлайн-источников?" : language === "uz" ? "Universitetlar talabalarga onlayn manbalarni tekshirishni o‘rgatishi kerakmi?" : "Should universities teach students to verify online sources?",
+  essayContext: "academic",
+  essayKind: "argumentative",
+  wordTarget: "700",
+  language,
+});
+const LEVEL_CASES: [string, CefrLevel | null, FormValues][] = [
+  ["essay-lvl-dtm-a1", "A1", LEVEL_DTM],
+  ["essay-lvl-dtm-b1", "B1", LEVEL_DTM],
+  ["essay-lvl-dtm-c1", "C1", LEVEL_DTM],
+  ["essay-lvl-dtm-default", null, LEVEL_DTM],
+  ["essay-lvl-acad-en-a2", "A2", LEVEL_ACAD("en")],
+  ["essay-lvl-acad-en-b2", "B2", LEVEL_ACAD("en")],
+  ["essay-lvl-acad-en-c2", "C2", LEVEL_ACAD("en")],
+  ["essay-lvl-acad-ru-b1", "B1", LEVEL_ACAD("ru")],
+  ["essay-lvl-acad-ru-c1", "C1", LEVEL_ACAD("ru")],
+  ["essay-lvl-acad-uz-a2", "A2", LEVEL_ACAD("uz")],
+];
 
 const TRANSLATION_SAMPLE = [
   "Orol dengizi fojiasi va uni tiklash choralari",
@@ -1315,8 +1344,24 @@ const CASES: Case[] = [
        */
       ok("1 bet ham qabul (sahifa darvozasi yo'q)", pages === null || pages >= 1, `${pages ?? "—"} bet`),
       ok("band → ball o'girmasi (IELTS rubrikasi)", f.doc.essay?.rubric === "ielts_band", f.doc.essay?.rubric ?? "—"),
+      ok("IELTS da CEFR darajasi yo'q (egasi qarori O3)", !f.doc.essay?.level && !(f.doc.essay?.review?.checks ?? []).some((c) => c.id === "level"), f.doc.essay?.level ?? "yo'q"),
     ]),
   },
+  /*
+   * CEFR level matrix (mobile sprint, R4 §5 step 1) — ~10 cheap essays.
+   * Same topic per language so the measure compares levels, not topics.
+   * After the run: `scripts/heavy.sh npx tsx scripts/level-measure.mts eval-out/live`
+   * prints the per-language table (means must rise A1 → C2 with ≥ 20 % gaps).
+   */
+  ...LEVEL_CASES.map(
+    ([name, level, values]): Case => ({
+      name,
+      tool: "essay",
+      budgetMs: 200_000,
+      values: { ...values, ...(level ? { essayLevel: level } : {}) },
+      checks: (f, pages) => essayChecks(f, pages, { criteria: 5, context: String(values.essayContext) }).concat(levelChecks(f, level ?? DEFAULT_ESSAY_LEVEL)),
+    }),
+  ),
   /* ── Talaba ishlari 2 (AUDIT-19): `work/` dvigateli — kurs ishi / referat / mustaqil ish ── */
   ...(["coursework-theory", "coursework-applied", "referat", "independent"] as const).map((name): Case => {
     const common = {
@@ -1625,6 +1670,16 @@ async function runCase(c: Case) {
       await writeFile(path.join(OUT, `${c.name}.doc.json`), JSON.stringify(file.doc, null, 2));
     }
     /*
+     * Insho (mobile sprint, R4 §5): `doc.json` — `scripts/level-measure.mts`
+     * reads it (sentence-length baseline and level matrix, no API cost).
+     */
+    if (file.doc.essay) {
+      const e = file.doc.essay;
+      const m = measureLevel(essayTextOf(file.doc, e).paragraphs.join("\n"), e.language);
+      process.stdout.write(`   insho: ${e.context}/${e.kind}/${e.language} · daraja ${e.level ?? "yo'q"} · ${m.sentences} gap, o'rtacha ${m.mean.toFixed(1)} so'z/gap, eng uzun ${m.max}\n`);
+      await writeFile(path.join(OUT, `${c.name}.doc.json`), JSON.stringify(file.doc, null, 2));
+    }
+    /*
      * Slayd (AUDIT-25 P5, review item 7b): boshqa oilalar kabi `doc.json`
      * yozamiz — `scripts/slide-audit.mts` shu faylni o'qiydi
      * (`npm run slide-audit -- eval-out/live`). Buni qo'shmaguncha CLI'ni
@@ -1685,6 +1740,25 @@ function profileArg(fallback: PublicationProfileId): PublicationProfileId {
   const i = process.argv.indexOf("--profile");
   const v = i > 0 ? process.argv[i + 1] : "";
   return isPublicationProfileId(v) ? v : fallback;
+}
+
+/**
+ * CEFR level checks (R4 §5 pass criteria): the level is stored, the report
+ * carries «Til darajasi», and the measured text is green or yellow at worst
+ * (red = the prompt + one repair pass missed the level). The detail line is
+ * the same measure the report shows — compare it across the matrix.
+ */
+function levelChecks(f: BuiltFile, want: CefrLevel): Check[] {
+  const model = essayModelOf(f.doc);
+  const text = essayTextOf(f.doc, model).paragraphs.join("\n");
+  const m = measureLevel(text, model.language);
+  const v = levelVerdict(m, want, model.language);
+  const rule = (model.review?.checks ?? []).find((c) => c.id === "level");
+  return [
+    ok("daraja modelda saqlangan", model.level === want, `${model.level ?? "yo'q"} (kutilgan ${want})`),
+    ok("hisobotda «Til darajasi» bandi", Boolean(rule), rule ? `${rule.level}: ${rule.detail}` : "yo'q"),
+    ok("o'lchov yashil yoki sariq (qizil emas)", v.level !== "red", `${v.level} · ${levelDetail(m, v, want)}`),
+  ];
 }
 
 /** Inshoning butun matni (epigraf bilan) — klişe/shaxs tekshiruvlari uchun. */

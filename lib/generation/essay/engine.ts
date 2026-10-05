@@ -7,6 +7,9 @@
  *                      ikki qismda (kirish+tana / tana+xulosa)
  *   3 guard    60→65   `guardSection` — klişe, manbasiz raqam, iqtibos yo'q,
  *                      hajm oralig'i (kam bo'lsa BIR marta qayta so'rov)
+ *   3b level   ~62    CEFR level (mobile sprint): the text is measured
+ *                      (`level.ts`); off-level → ONE repair call, accepted
+ *                      only when closer and nothing else got worse
  *   4 review   65→82   `review.ts` qoidalar + `judge` → `doc.essay.review`
  *   5 polish   82→94   `polish.ts runEssayPolish` — ball < 90 bo'lsa (Q-3, `acceptDelta: 1`)
  *   6 done     94→100
@@ -35,11 +38,14 @@ import {
   essayNeedsTwoParts,
   essayPrompt,
   essaySystemPrompt,
+  levelRepairPrompt,
   outlinePrompt,
   wordRangePrompt,
   type EssayCtx,
   type EssayParagraphPlan,
 } from "./prompts";
+import { levelDistance, levelVerdict, measureLevel, type CefrLevel } from "./level";
+import type { EssayLang } from "./registry";
 import { ESSAY_POLISH_BELOW, ESSAY_POLISH_MIN_MS, runEssayPolish } from "./polish";
 import { reviewEssay, type CompleteFn } from "./review";
 import { ESSAY_LIMITS, type EssayModel, type EssayParagraph } from "./types";
@@ -178,6 +184,30 @@ export async function buildEssayDoc(meta: DocMeta, values: FormValues, opts: Ess
       if (distance(re.report.words, range) < distance(guarded.report.words, range)) guarded = re;
     }
   }
+  /* ── 3b. level repair: ONE extra call, only when the measured text misses the level ── */
+  if (input.level && guarded.blocks.length && remainingMs(deadline) > 25_000) {
+    const current = guarded.blocks.map((b) => b.text).join("\n\n");
+    const measure = measureLevel(current, input.language);
+    const verdict = levelVerdict(measure, input.level, input.language);
+    if (verdict.level !== "green") {
+      stage(62, "Til darajasi");
+      const raw = await ask("writer", system, levelRepairPrompt(ctx, measure, verdict, current), {
+        maxTokens: Math.min(8000, Math.max(1500, Math.round(ctx.words.max * 2.6))),
+        timeoutMs: writeTimeout(ctx.words.aim, deadline),
+      });
+      const again = essayBlocksFromLlm(raw);
+      let outcome = "javob yo'q";
+      if (again.length) {
+        const re = guardSection(again, { refs: [], userFacts: input.userFacts, wordRange: range });
+        const after = measureLevel(re.blocks.map((b) => b.text).join("\n\n"), input.language);
+        const accepted = levelRepairAccepted(guarded, re, input.level, input.language, range);
+        outcome = `${accepted ? "qabul" : "rad"}, keyin ${after.mean.toFixed(1)} so'z/gap, ${re.report.words} so'z`;
+        if (accepted) guarded = re;
+      }
+      // One line per repair — the live matrix (R4 §5) counts how often the repair fires and wins.
+      console.warn(`[essay] daraja ta'miri ${input.level}/${input.language}: oldin ${measure.mean.toFixed(1)} so'z/gap (${verdict.level}, ${verdict.direction ?? "—"}) → ${outcome}`);
+    }
+  }
   blocks = guarded.blocks;
   if (guarded.report.filler.length) console.warn(`[essay] klişe iboralar: ${[...new Set(guarded.report.filler)].join(", ")}`);
   if (guarded.report.unsourcedNumbers.length) console.warn(`[essay] manbasiz foizlar: ${guarded.report.unsourcedNumbers.join(", ")}`);
@@ -196,6 +226,8 @@ export async function buildEssayDoc(meta: DocMeta, values: FormValues, opts: Ess
     ...(input.workTitle ? { workTitle: input.workTitle } : {}),
     paragraphs: paragraphsOf(outline.plans),
     person: input.person,
+    // Stored for polish/«Tuzatish»/judge; IELTS (null) keeps the old model shape.
+    ...(input.level ? { level: input.level } : {}),
     ...(input.design ? { design: input.design } : {}),
     rubric: ctx.context.rubric,
     ...(input.userFacts ? { userFacts: input.userFacts } : {}),
@@ -260,6 +292,22 @@ export async function buildEssayDoc(meta: DocMeta, values: FormValues, opts: Ess
 
 function distance(n: number, range: [number, number]): number {
   return n < range[0] ? range[0] - n : n > range[1] ? n - range[1] : 0;
+}
+
+type Guarded = ReturnType<typeof guardSection>;
+
+/**
+ * Level repair acceptance (R4 §3.6): the rewrite replaces the text only if
+ *   (a) it is strictly closer to the level band,
+ *   (b) it does not break the word range (or, if already broken, is not further off),
+ *   (c) the guard is not worse (no new cliché, no new unsourced number).
+ */
+export function levelRepairAccepted(prev: Guarded, next: Guarded, level: CefrLevel, lang: EssayLang, range: [number, number]): boolean {
+  const text = (g: Guarded) => g.blocks.map((b) => b.text).join("\n\n");
+  const closer = levelDistance(measureLevel(text(next), lang), level, lang) < levelDistance(measureLevel(text(prev), lang), level, lang);
+  const words = prev.report.wordRangeOk ? next.report.wordRangeOk : distance(next.report.words, range) <= distance(prev.report.words, range);
+  const guard = next.report.unsourcedNumbers.length <= prev.report.unsourcedNumbers.length && next.report.filler.length <= prev.report.filler.length;
+  return closer && words && guard;
 }
 
 /** Epigraf — birinchi blok (`quote`); band sifatida sanalmaydi. */

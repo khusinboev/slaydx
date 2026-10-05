@@ -26,6 +26,7 @@
  * — metama'lumot (tur, hajm, thesis statement, hisobot), `AcademicDoc.essay`.
  */
 import type { DocReview } from "../report/types";
+import type { CefrLevel } from "./level";
 
 /* ────────────────────────── kontekst va turlar ────────────────────────── */
 
@@ -115,6 +116,13 @@ export type EssayModel = {
    * hujjatdan o'qiydi, forma qiymatlari o'sha paytda yo'q.
    */
   person?: "first" | "third";
+  /**
+   * CEFR level the essay was written at (mobile sprint, `level.ts`). Stored
+   * in the MODEL like `person`: polish/«Tuzatish» and the judge rebuild the
+   * context from the document. Absent → legacy document or IELTS: no level
+   * block, no level rule — behaviour exactly as before.
+   */
+  level?: CefrLevel;
   /** Hujjat ramkasi (`ESSAY_DESIGNS`) — render o'zgarmaydi. */
   design?: string;
   review?: DocReview;

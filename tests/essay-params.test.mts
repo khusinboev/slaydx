@@ -93,8 +93,9 @@ async function probe(values: FormValues): Promise<Probe> {
 
 /* ────────────────────────── testlar ────────────────────────── */
 
-test("reyestr: 12 parametr, forma qamrovi ro'yxati bilan mos", () => {
-  assert.equal(ESSAY_PARAMS.length, 12);
+test("reyestr: 13 parametr (mobile sprint: + essayLevel), forma qamrovi ro'yxati bilan mos", () => {
+  assert.equal(ESSAY_PARAMS.length, 13);
+  assert.ok(ESSAY_PARAMS.some((p) => p.id === "essayLevel" && !p.impacts.includes("price")), "essayLevel — narxga ta'sirsiz");
   assert.deepEqual(ESSAY_FORM_FIELDS, ESSAY_PARAMS.map((p) => p.id));
   assert.equal(new Set(ESSAY_FORM_FIELDS).size, ESSAY_PARAMS.length, "id lar takrorlanmasin");
 });
@@ -143,4 +144,20 @@ test("narx faqat varaqdan — boshqa parametrlar narxni qimirlatmaydi (narx o'zg
   assert.equal(priceFor(essay, { ...BASE, essayContext: "academic", wordTarget: 1000, pages: "2" }), 3500);
   // Forma yuboradigan juftlik (`pages = pagesForWords(1000)` = 4) — narx avvalgidek.
   assert.equal(priceFor(essay, { ...BASE, essayContext: "academic", wordTarget: 1000, pages: "4" }), 3500);
+});
+
+test("essayLevel narxni o'zgartirmaydi: har daraja × kontekst × hajm — narx darajasiz bilan bir xil (mobile sprint)", () => {
+  const levels = ["A1", "A2", "B1", "B2", "C1", "C2", "junk", ""];
+  const shapes: FormValues[] = [
+    { ...BASE, pages: "1" },
+    { ...BASE, pages: "5" },
+    { ...BASE, essayContext: "academic", essayKind: "argumentative", wordTarget: 1000, pages: "4" },
+    { ...BASE, essayContext: "ielts_task2", essayKind: "opinion", pages: "1" },
+  ];
+  for (const shape of shapes) {
+    const base = priceFor(essay, shape);
+    for (const l of levels) assert.equal(priceFor(essay, { ...shape, essayLevel: l }), base, `${shape.essayContext}/${shape.pages} @ ${l}`);
+  }
+  // Eski jadval o'z joyida: 2 varaq — 2 500, daraja bilan ham.
+  assert.equal(priceFor(essay, { ...BASE, pages: "2", essayLevel: "C2" }), 2500);
 });

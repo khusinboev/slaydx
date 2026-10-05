@@ -34,6 +34,7 @@ import {
 } from "./registry";
 import type { EssayInput } from "./input";
 import type { EssayWords } from "./types";
+import { levelGuidance, levelPromptBlock, levelRepairInstruction, levelReminder, thesisWordRange, type LevelMeasure, type LevelVerdict } from "./level";
 
 /* ────────────────────────── klişelar ────────────────────────── */
 
@@ -164,17 +165,24 @@ export function essaySystemPrompt(ctx: EssayCtx): string {
     `STYLE: no slogans, no praise of the topic in general terms, no repetition of the title inside the text, no meta-commentary about the essay itself.`,
     `OUTPUT: return ONLY the JSON requested — no markdown fences, no commentary.`,
     `TYPE RULES (${kind.label.en}):`,
-    ...kind.guidance.map((g, i) => `${i + 1}. ${g}`),
+    // Level (R4 §2 #3): figurative/hedging wishes are replaced at low levels; `null` → unchanged.
+    ...levelGuidance(kind.guidance, input.level).map((g, i) => `${i + 1}. ${g}`),
   ];
   if (input.workTitle) lines.push(`LITERARY WORK: «${input.workTitle}» — the essay is about this work; use only what the passage below and general knowledge of the work support.`);
   if (input.epigraph?.text) lines.push(`EPIGRAPH (verbatim):\n«${input.epigraph.text}»${input.epigraph.author ? `\n— ${input.epigraph.author}` : ""}`);
-  if (input.extra) lines.push(`Additional author requirements: ${input.extra}`);
+  if (input.extra) lines.push(input.level ? `Additional author requirements (they never change the WRITING LEVEL below): ${input.extra}` : `Additional author requirements: ${input.extra}`);
   if (input.userFacts) {
     lines.push(`USER FACTS — the author's own thoughts, arguments, quotations or experience (reproduce every number, name and quotation VERBATIM; build the essay around them):\n--- FACTS ---\n${input.userFacts}\n--- END FACTS ---`);
   }
   if (input.sourceText) {
     lines.push(`SOURCE DOCUMENT uploaded by the author (context; use its facts and terms; do not copy verbatim):\n--- SOURCE ---\n${input.sourceText.slice(0, 12_000)}\n--- END SOURCE ---`);
   }
+  /*
+   * Level block AFTER the author's free text (R4 §2 #4): the later, explicit
+   * constraint wins on sentence/vocabulary complexity. `null` (legacy doc,
+   * IELTS) → nothing is added and the prompt is byte-identical to before.
+   */
+  if (input.level) lines.push(levelPromptBlock(input.level, input.language));
   lines.push(HONESTY_LIMIT);
   return lines.join("\n");
 }
@@ -206,7 +214,8 @@ export function outlinePrompt(ctx: EssayCtx): string {
     `Give a TITLE for the essay in ${langInfo(ctx.input.language).name}: a short noun phrase specific to the topic (not the bare topic string, not a sentence).`,
   ];
   if (c.thesisStatement) {
-    lines.push(`Give the THESIS STATEMENT: one arguable sentence (12–35 words) that the essay will defend; it will be the last sentence of the introduction.`);
+    const [lo, hi] = thesisWordRange(ctx.input.level, ctx.input.language);
+    lines.push(`Give the THESIS STATEMENT: one arguable sentence (${lo}–${hi} words) that the essay will defend; it will be the last sentence of the introduction.`);
   }
   lines.push(
     `Plan ${total} paragraphs: 1 «intro», ${ctx.bodyCount} «body», 1 «conclusion».`,
@@ -266,6 +275,7 @@ export function essayPrompt(ctx: EssayCtx, plans: EssayParagraphPlan[], o: { par
   }
   lines.push(essayLengthLine(aim, range, plans.length));
   if (o.written) lines.push(`ALREADY WRITTEN (for continuity — do not repeat, rephrase or summarise it):\n${o.written.slice(0, 8000)}`);
+  if (ctx.input.level) lines.push(levelReminder(ctx.input.level, ctx.input.language));
   lines.push(
     `Write continuous prose: no headings, no numbering, no bullet lists — one JSON block per paragraph, in order.`,
     `Return JSON: {"blocks":[{"kind":"p","text":"…"}]}`,
@@ -312,8 +322,35 @@ export function rewritePrompt(ctx: EssayCtx, target: EssayRewriteTarget, instruc
     `EDITOR INSTRUCTION (highest priority): ${instruction}`,
     `Keep the essay's language, its ${ctx.context.thesisStatement ? "thesis statement, " : ""}structure and every USER FACT verbatim; do not add statistics, sources or quotations that are not already there.`,
     essayLengthLine(ctx.words.aim, [ctx.words.min, ctx.words.max], Math.max(3, ctx.bodyCount + 2)),
+    // Polish/«Tuzatish» must not drift the level (judge fixes used to pull the text up).
+    ...(ctx.input.level ? [levelReminder(ctx.input.level, ctx.input.language)] : []),
     `CURRENT ESSAY:\n${current.slice(0, 12_000)}`,
     HONESTY_LIMIT,
+    `Return JSON: {"blocks":[{"kind":"p","text":"…"}]}`,
+  ].join("\n");
+}
+
+/* ────────────────────────── level repair (engine) ────────────────────────── */
+
+/** First line of the repair prompt — tests and logs recognise the call by it. */
+export const LEVEL_REPAIR_HEADER = "LEVEL REPAIR:";
+
+/**
+ * The engine's ONE level repair call (R4 §3.6 step 2), made only when the
+ * measured text misses the level. Mirrors `wordRangePrompt`.
+ */
+export function levelRepairPrompt(ctx: EssayCtx, m: LevelMeasure, v: LevelVerdict, current: string): string {
+  const level = ctx.input.level!;
+  const lang = ctx.input.language;
+  const off =
+    v.direction === "low"
+      ? `too simple for CEFR ${level}: average ${m.mean.toFixed(1)} words per sentence, the target band is ${v.band.lo}–${v.band.hi}`
+      : `too complex for CEFR ${level}: average ${m.mean.toFixed(1)} words per sentence (target band ${v.band.lo}–${v.band.hi}), longest ${m.max}, ${Math.round(v.overCapShare * 100)} % of sentences longer than ${v.band.cap} words`;
+  return [
+    `${LEVEL_REPAIR_HEADER} the essay you wrote is ${off}.`,
+    levelRepairInstruction(level, lang, v.direction),
+    `Keep ${ctx.context.thesisStatement ? "the thesis statement's claim, " : ""}the paragraph order and count, every USER FACT verbatim and about ${ctx.words.aim} words in total (${ctx.words.min}–${ctx.words.max}).`,
+    `CURRENT ESSAY:\n${current.slice(0, 12_000)}`,
     `Return JSON: {"blocks":[{"kind":"p","text":"…"}]}`,
   ].join("\n");
 }
@@ -321,6 +358,10 @@ export function rewritePrompt(ctx: EssayCtx, target: EssayRewriteTarget, instruc
 /* ────────────────────────── baholovchi ────────────────────────── */
 
 /** Baholovchiga beriladigan matn (`review.ts` `sampleForJudge` bilan kesadi). */
-export function judgeHeader(ctx: { topic: string; context: string; kind: string; language: string; words: number }): string {
-  return [`TITLE: ${ctx.topic}`, `CONTEXT: ${ctx.context} · TYPE: ${ctx.kind} · LANGUAGE: ${ctx.language} · WORDS: ${ctx.words}`].join("\n");
+export function judgeHeader(ctx: { topic: string; context: string; kind: string; language: string; words: number; level?: string | null }): string {
+  return [
+    `TITLE: ${ctx.topic}`,
+    `CONTEXT: ${ctx.context} · TYPE: ${ctx.kind} · LANGUAGE: ${ctx.language} · WORDS: ${ctx.words}`,
+    ...(ctx.level ? [`TARGET LEVEL: CEFR ${ctx.level}`] : []),
+  ].join("\n");
 }

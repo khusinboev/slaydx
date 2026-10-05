@@ -32,6 +32,7 @@ import {
   type EssayEpigraph,
   type EssayKindId,
 } from "./types";
+import { essayLevelOf, type CefrLevel } from "./level";
 
 export type EssayInput = {
   topic: string;
@@ -54,6 +55,12 @@ export type EssayInput = {
   extra: string;
   /** Yuklangan fayl matni (`meta.sourceText`) — kontekst. */
   sourceText: string;
+  /**
+   * CEFR level (mobile sprint, `level.ts`). `null` — no level: IELTS (own
+   * band scale, owner decision O3) and legacy documents rebuilt by
+   * `polish.ts contextOf`; prompts are then byte-identical to the pre-level code.
+   */
+  level: CefrLevel | null;
 };
 
 /* ────────────────────────── yordamchilar ────────────────────────── */
@@ -132,6 +139,8 @@ export function essayInputFromValues(values: FormValues): EssayInput {
     person: person === "first" || person === "third" ? person : spec.person,
     extra: text(values.extra, ESSAY_LIMITS.extraChars),
     sourceText: typeof values.sourceText === "string" ? values.sourceText : "",
+    // IELTS → null whatever a stale draft carries; missing/invalid → B2.
+    level: essayLevelOf(context, values.essayLevel),
   };
 }
 
@@ -158,5 +167,6 @@ export function encodeEssayValues(input: Partial<EssayInput>): FormValues {
   if (input.design !== undefined) out.design = input.design;
   if (input.person !== undefined) out.person = input.person;
   if (input.extra !== undefined) out.extra = input.extra;
+  if (input.level !== undefined) out.essayLevel = input.level ?? "";
   return out;
 }

@@ -27,6 +27,7 @@ import { ESSAY_CONTEXTS, IELTS_LINKERS, essayCitationPolicy, essayEpigraphPolicy
 import { ESSAY_FILLER, judgeHeader } from "./prompts";
 import { essayJudgeDetail, essayRubric, essayScore, type EssayJudge } from "./rubric";
 import { ESSAY_LIMITS, type EssayContextId, type EssayModel } from "./types";
+import { claimMinWords, levelDetail, levelJudgeNote, levelRepairInstruction, levelVerdict, measureLevel, thesisWordRange, type CefrLevel } from "./level";
 
 export type CompleteFn = typeof completeRole;
 
@@ -61,6 +62,8 @@ export const ESSAY_RULE_IDS = [
   "workQuote",
   "linking",
   "title",
+  // Mobile sprint (R4): CEFR level of the text — only when `model.level` is set.
+  "level",
 ] as const;
 
 export type EssayRuleId = (typeof ESSAY_RULE_IDS)[number];
@@ -187,6 +190,9 @@ export function ruleChecks(o: EssayRuleInput): ReviewCheck[] {
   const words = model.words;
   const paras = text.paragraphs;
   const out: ReviewCheck[] = [];
+  const level: CefrLevel | null = model.level ?? null;
+  // Level-scaled claim minimums (R4 §2 #2); no level → the old fixed 8/5.
+  const claimMin = claimMinWords(level, model.language);
 
   /* ── words: hajm oralig'i ── */
   {
@@ -235,7 +241,7 @@ export function ruleChecks(o: EssayRuleInput): ReviewCheck[] {
     const declared = model.thesisStatement?.trim();
     const inText = declared ? intro.includes(declared.slice(0, Math.min(40, declared.length))) : false;
     if (!intro) out.push(check("thesisStatement", "red", "Thesis statement", "Kirish yo‘q", rewrite("intro", "Write an introduction that ends with an explicit, arguable thesis statement.")));
-    else if (isClaimSentence(last, 8, 45) && (!declared || inText)) out.push(check("thesisStatement", "green", "Thesis statement", `«${last.slice(0, 120)}»`));
+    else if (isClaimSentence(last, claimMin.thesis, 45) && (!declared || inText)) out.push(check("thesisStatement", "green", "Thesis statement", `«${last.slice(0, 120)}»`));
     else {
       out.push(
         check(
@@ -243,7 +249,7 @@ export function ruleChecks(o: EssayRuleInput): ReviewCheck[] {
           "red",
           "Thesis statement",
           last ? `Kirishning oxirgi jumlasi aniq da'vo emas: «${last.slice(0, 120)}»` : "Kirishning oxirgi jumlasi topilmadi",
-          rewrite("intro", "Rewrite the introduction so that its LAST sentence is one explicit, arguable thesis statement (12–35 words, not a question, not a definition) that the essay defends."),
+          rewrite("intro", `Rewrite the introduction so that its LAST sentence is one explicit, arguable thesis statement (${thesisWordRange(level, model.language).join("–")} words, not a question, not a definition) that the essay defends.`),
         ),
       );
     }
@@ -252,7 +258,7 @@ export function ruleChecks(o: EssayRuleInput): ReviewCheck[] {
   /* ── topicSentences: har tana bandi da'vo bilan boshlanadi ── */
   if (c.topicSentences) {
     const body = paras.slice(1, -1);
-    const weak = body.filter((p) => !isClaimSentence(sentencesOf(p)[0] ?? "", 5, 45));
+    const weak = body.filter((p) => !isClaimSentence(sentencesOf(p)[0] ?? "", claimMin.topic, 45));
     if (!body.length) out.push(check("topicSentences", "red", "Topic sentence", "Tana bandlari yo‘q", rewrite("essay", "Write body paragraphs, each opening with a topic sentence.")));
     else if (!weak.length) out.push(check("topicSentences", "green", "Topic sentence", `${body.length} ta tana bandining hammasi da'vo bilan boshlanadi`));
     else
@@ -356,6 +362,17 @@ export function ruleChecks(o: EssayRuleInput): ReviewCheck[] {
     else out.push(check("title", "green", "Sarlavha", `«${t}»${kind.needsWork && model.workTitle ? ` · asar: «${model.workTitle}»` : ""}`));
   }
 
+  /* ── level: measured CEFR level of the text (skipped without a level: legacy, IELTS) ── */
+  if (level) {
+    const m = measureLevel(paras.join("\n"), model.language);
+    const v = levelVerdict(m, level, model.language);
+    out.push(
+      v.level === "green"
+        ? check("level", "green", "Til darajasi", levelDetail(m, v, level))
+        : check("level", v.level, "Til darajasi", levelDetail(m, v, level), rewrite("essay", levelRepairInstruction(level, model.language, v.direction))),
+    );
+  }
+
   return out;
 }
 
@@ -368,7 +385,7 @@ export function judgeUserPrompt(doc: AcademicDoc, model: EssayModel, maxChars = 
     .map((g) => `[${g.title}] ${g.text}${g.truncated ? " […truncated]" : ""}`)
     .join("\n\n");
   return [
-    judgeHeader({ topic: text.title || doc.meta.topic, context: model.context, kind: model.kind, language: model.language, words: text.words }),
+    judgeHeader({ topic: text.title || doc.meta.topic, context: model.context, kind: model.kind, language: model.language, words: text.words, level: model.level ?? null }),
     model.thesisStatement ? `THESIS STATEMENT: ${model.thesisStatement}` : "",
     text.epigraph ? `EPIGRAPH: ${text.epigraph}` : "",
     "",
@@ -391,9 +408,18 @@ export function essayJudgeChecks(context: EssayContextId, j: EssayJudge): Review
   return out;
 }
 
-export function essayJudgeSystemPrompt(context: EssayContextId, kindLabel?: string): string {
+/**
+ * Judge system prompt. With a level (R4 §2 #1) a calibration line follows
+ * the role line: the DTM «til boyligi» and academic «language» criteria
+ * otherwise score a deliberate A2 text low and their fixes rewrite it upward.
+ */
+export function essayJudgeSystemPrompt(context: EssayContextId, kindLabel?: string, level?: CefrLevel | null): string {
   const spec = ESSAY_CONTEXTS[context].judge;
-  return judgeSystemPromptFor({ ...spec, ...(kindLabel ? { typeLabel: kindLabel } : {}) }, ["essay"], ["intro", "conclusion"]);
+  const base = judgeSystemPromptFor({ ...spec, ...(kindLabel ? { typeLabel: kindLabel } : {}) }, ["essay"], ["intro", "conclusion"]);
+  if (!level) return base;
+  const lines = base.split("\n");
+  lines.splice(1, 0, levelJudgeNote(level));
+  return lines.join("\n");
 }
 
 export function parseEssayJudge(context: EssayContextId, raw: string | null | undefined): EssayJudge | null {
@@ -423,7 +449,7 @@ export async function reviewEssay(doc: AcademicDoc, opts: EssayReviewOpts = {}):
     if (timeoutMs >= JUDGE_MIN_MS) {
       try {
         const kind = essayKindSpec(model.context, model.kind);
-        const r = await opts.complete("judge", essayJudgeSystemPrompt(model.context, kind.label.en), judgeUserPrompt(doc, model), { json: true, deadline: opts.deadline, maxTokens: 1200, timeoutMs });
+        const r = await opts.complete("judge", essayJudgeSystemPrompt(model.context, kind.label.en, model.level), judgeUserPrompt(doc, model), { json: true, deadline: opts.deadline, maxTokens: 1200, timeoutMs });
         if (r?.usage) opts.onUsage?.(r.usage);
         judge = parseEssayJudge(model.context, r?.text);
       } catch (e) {

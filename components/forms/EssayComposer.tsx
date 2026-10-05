@@ -17,6 +17,8 @@ import { ESSAY_DESIGNS } from "@/lib/languages";
 import { ESSAY_CONTEXT_IDS, ESSAY_LIMITS, essayKindsOf, type EssayContextId, type EssayKindId } from "@/lib/generation/essay/types";
 import { ESSAY_CONTEXTS, essayKindSpec, essayWords, type EssayLang, type EssayPerson } from "@/lib/generation/essay/registry";
 import { encodeEssayValues, essayInputFromValues, type EssayInput } from "@/lib/generation/essay/input";
+// CEFR level (mobile sprint): pure data + caption — the caption's «~N so‘z» is the prompt's own target.
+import { CEFR_UI, DEFAULT_ESSAY_LEVEL, LEVEL_HINT, levelAppliesTo, levelCaption, type CefrLevel } from "@/lib/generation/essay/level";
 import { Card, Row, Segmented, SelectField } from "./compact";
 import { TextInput } from "./fields";
 import { ToolChrome } from "./ToolChrome";
@@ -70,9 +72,17 @@ type Ui = {
   design: string;
   person: EssayPerson;
   extra: string;
+  /**
+   * CEFR level. Kept while IELTS is selected (the control is hidden there and
+   * `toValues` sends no level), so switching back restores the user's choice.
+   */
+  level: CefrLevel;
 };
 
 /* ────────────────────────── yorliqlar ────────────────────────── */
+
+/** Buttons show only the code (one row at 360 px); the name lives in the caption. */
+const LEVEL_OPTIONS = CEFR_UI.map((u) => ({ value: u.id, label: u.id }));
 
 const CONTEXT_OPTIONS = ESSAY_CONTEXT_IDS.map((id) => ({ value: id, label: ESSAY_CONTEXTS[id].label.uz }));
 
@@ -118,6 +128,7 @@ function emptyUi(): Ui {
     design: "iris",
     person: ESSAY_CONTEXTS.school_dtm.person,
     extra: "",
+    level: DEFAULT_ESSAY_LEVEL,
   };
 }
 
@@ -151,6 +162,8 @@ function toValues(ui: Ui): FormValues {
     design: ui.design,
     person: ui.person,
     extra: ui.extra,
+    // IELTS has no level (owner decision O3) — the server would ignore it anyway.
+    level: levelAppliesTo(ui.context) ? ui.level : null,
   };
   return encodeEssayValues(input);
 }
@@ -181,6 +194,8 @@ function uiFromValues(values: FormValues, base: Ui): Ui {
     design: input.design,
     person: input.person,
     extra: input.extra,
+    // Server rule: junk/missing → B2; IELTS → null → keep the last choice for the other contexts.
+    level: input.level ?? base.level,
   };
 }
 
@@ -245,7 +260,8 @@ export function EssayComposer({ tool }: { tool: ToolConfig }) {
    * adabiy tahlil (maktab turi)» kabi holat umuman yuzaga kelmaydi va
    * qoida forma bilan dvigatelda IKKI joyda yozilmaydi.
    */
-  const onContext = (id: EssayContextId) => setUi((s) => uiFromValues({ ...toValues(s), essayContext: id }, s));
+  // The level is the user's choice, independent of context: an IELTS detour (no level sent) must not reset it.
+  const onContext = (id: EssayContextId) => setUi((s) => ({ ...uiFromValues({ ...toValues(s), essayContext: id }, s), level: s.level }));
   const onKind = (id: EssayKindId) => setUi((s) => uiFromValues({ ...toValues(s), essayKind: id }, s));
 
   const spec = ESSAY_CONTEXTS[ui.context];
@@ -362,6 +378,25 @@ export function EssayComposer({ tool }: { tool: ToolConfig }) {
             />
           </Field>
         </Row>
+        {levelAppliesTo(ui.context) ? (
+          /*
+           * CEFR level (mobile sprint, R4 §3.8): 6 options → Segmented with
+           * the bare codes, so one row fits a 360 px phone. The level's
+           * description is a VISIBLE caption, not only the ⓘ tooltip —
+           * tooltips do not exist on touch (deliberate deviation from etalon
+           * rule #3, lead decision). Touch pointers get 44 px buttons.
+           */
+          <Row label="Til darajasi" hint={LEVEL_HINT}>
+            <Field id="essayLevel">
+              <span className="block pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11">
+                <Segmented ariaLabel="Til darajasi (CEFR)" options={LEVEL_OPTIONS} value={ui.level} onChange={(v) => set("level", v as CefrLevel)} />
+              </span>
+            </Field>
+            <p data-level-caption className="text-muted-foreground mt-1 text-[11px] leading-snug">
+              {levelCaption(ui.level, ui.language)}
+            </p>
+          </Row>
+        ) : null}
       </Card>
 
       {/*

@@ -111,6 +111,8 @@ export function contextOf(doc: AcademicDoc): EssayCtx {
     person: model.person ?? contextPerson(model),
     extra: meta.extra ?? "",
     sourceText: "",
+    // From the MODEL (form values are gone): a legacy doc has none → `null` → prompts as before.
+    level: model.level ?? null,
   };
   const ctx = essayCtx(meta, input);
   // Hajm MODELDAN (hujjat qanday va'da bilan yozilgan bo'lsa shu bilan baholanadi).

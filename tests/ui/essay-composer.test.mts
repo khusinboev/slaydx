@@ -10,6 +10,7 @@ import { ToolWorkspace } from "../../components/forms/ToolWorkspace.tsx";
 import { TOOL_BY_ID } from "../../lib/tools.ts";
 import { ESSAY_PARAMS } from "../../lib/generation/essay-params.ts";
 import { ESSAY_LIMITS } from "../../lib/generation/essay/types.ts";
+import { CEFR_UI, LEVEL_BANDS } from "../../lib/generation/essay/level.ts";
 
 /**
  * Insho formasi (Talaba ishlari 2 / AUDIT-19, WP-E1) — interaktiv.
@@ -374,4 +375,99 @@ test("«Materiallar» endi alohida karta emas — mazmuni Sozlamalar ichida (O'z
     fireEvent.click(screen.getByText("Sozlamalar"));
   });
   assert.ok(screen.getByText("Formani tozalash"), "«Tozalash» tugmasi Sozlamalar ichida");
+});
+
+/* ══════════════════════════════ CEFR daraja (mobile sprint, package G) ══════════════════════════════ */
+
+const caption = () => document.querySelector("[data-level-caption]")?.textContent ?? "";
+
+test("Til darajasi: maktab va akademikda 6 ta kod (A1…C2), standart B2, ko'rinadigan izoh; IELTS da YO'Q", async () => {
+  stubApi();
+  await login();
+  mount();
+  assert.deepEqual(chipText("essayLevel"), ["A1", "A2", "B1", "B2", "C1", "C2"]);
+  assert.equal(checked("essayLevel"), "B2", "egasi qarori O3: standart B2");
+  assert.equal(caption(), `${CEFR_UI[3].name}: ${CEFR_UI[3].phrase}, gap ~${LEVEL_BANDS.uz.B2.target} so‘z`);
+
+  await pick("essayContext", /akademik/i);
+  assert.ok(field("essayLevel"), "akademik esseda ham bor");
+  await pick("essayContext", /IELTS/i);
+  /*
+   * MUTATSIYA: `levelAppliesTo` sharti olib tashlansa IELTS da ham daraja
+   * ko'rinardi (o'z band shkalasi bor, egasi qarori O3).
+   */
+  assert.ok(!field("essayLevel"), "IELTS da daraja tanlovi yo'q");
+  assert.ok(!document.querySelector("[data-level-caption]"));
+});
+
+test("Til darajasi: tanlov izohni almashtiradi; izohdagi raqam insho tiliga ergashadi (promptning o'z maqsadi)", async () => {
+  stubApi();
+  await login();
+  mount();
+  await pick("essayLevel", /^A1$/);
+  assert.equal(checked("essayLevel"), "A1");
+  assert.match(caption(), new RegExp(`^${CEFR_UI[0].name}: .*~${LEVEL_BANDS.uz.A1.target} so‘z$`));
+  await pick("essayContext", /akademik/i);
+  await pick("language", /English/);
+  // MUTATSIYA: izoh tilni hisobga olmasa (doim uz) — bu yerda en maqsadi kutiladi.
+  assert.match(caption(), new RegExp(`~${LEVEL_BANDS.en.A1.target} so‘z$`));
+});
+
+test("Til darajasi: kontekst almashganda (IELTS orqali ham) tanlov saqlanadi; submit tanasida essayLevel", async () => {
+  const calls = stubApi();
+  await login();
+  mount();
+  await pick("essayLevel", /^C1$/);
+  await pick("essayContext", /IELTS/i);
+  await pick("essayContext", /akademik/i);
+  // MUTATSIYA: `onContext` dagi `level: s.level` olib tashlansa IELTS aylanmasi B2 ga qaytarardi.
+  assert.equal(checked("essayLevel"), "C1", "IELTS aylanmasi tanlovni o'chirmaydi");
+  await act(async () => {
+    fireEvent.change(topicInput(), { target: { value: "Raqamli savodxonlik" } });
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByText(tool.submitLabel));
+  });
+  await waitFor(() => assert.ok(calls.some((c) => c.url === "/api/generations" && c.method === "POST")));
+  const values = (calls.find((c) => c.url === "/api/generations" && c.method === "POST")!.body as { values: Record<string, unknown> }).values;
+  assert.equal(values.essayLevel, "C1");
+  assert.equal(values.essayContext, "academic");
+});
+
+test("Til darajasi: IELTS submit — daraja yuborilmaydi (bo'sh), narx o'zgarmaydi", async () => {
+  const calls = stubApi();
+  await login();
+  mount();
+  await pick("essayLevel", /^A1$/);
+  await pick("essayContext", /IELTS/i);
+  await act(async () => {
+    fireEvent.change(topicInput(), { target: { value: "Universities and practical skills" } });
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByText(tool.submitLabel));
+  });
+  await waitFor(() => assert.ok(calls.some((c) => c.url === "/api/generations" && c.method === "POST")));
+  const values = (calls.find((c) => c.url === "/api/generations" && c.method === "POST")!.body as { values: Record<string, unknown> }).values;
+  assert.equal(values.essayLevel, "");
+  assert.ok(/2\s000 tanga/.test(document.body.textContent ?? ""), "IELTS narxi avvalgidek 2 000");
+});
+
+test("Til darajasi: qoralama tiklaydi (c1 → C1), yaroqsiz qiymat → B2; narx darajadan qimirlamaydi", async () => {
+  stubApi({ topic: "Tiklangan", essayContext: "academic", essayKind: "argumentative", language: "ru", wordTarget: "750", pages: "3", essayLevel: "c1" });
+  await login();
+  mount();
+  await waitFor(() => assert.equal(topicInput().value, "Tiklangan"));
+  assert.equal(checked("essayLevel"), "C1", "qoralamadagi daraja (kichik harf ham) tiklanadi");
+  assert.match(caption(), new RegExp(`~${LEVEL_BANDS.ru.C1.target} so‘z$`), "rus tili maqsadi");
+  const priceText = () => document.body.textContent?.match(/(\d[\d\s]*) tanga/)?.[1];
+  const before = priceText();
+  assert.ok(before, "narx ko'rinadi");
+  await pick("essayLevel", /^A1$/);
+  assert.equal(priceText(), before, "daraja narxga ta'sir qilmaydi");
+  cleanup();
+
+  stubApi({ topic: "Eski", essayContext: "school_dtm", essayLevel: "junk" });
+  mount();
+  await waitFor(() => assert.equal(topicInput().value, "Eski"));
+  assert.equal(checked("essayLevel"), "B2", "yaroqsiz qiymat → server qoidasi (B2)");
 });
