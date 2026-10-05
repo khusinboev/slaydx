@@ -178,8 +178,8 @@ Order: F0 ∥ G → (A ∥ B ∥ D) → C → E → P → integration + reviews 
 | P8 Telegram shell | ✅ merged (smoke 78/78; 17 mutations) |
 | P3 Form keyboard | ✅ merged (15/15; mutation results re-checked by the UX reviewer) |
 | P4 Shell + overlays | ✅ merged (all phone targets < 44 px → 0; 21 mutations) |
-| E Document editors | running |
-| UX review (fable) | running |
+| E Document editors | ✅ merged (30/30 after review fixes; E1 double-tap switch fixed) |
+| UX review (fable) | APPROVE WITH FIXES → C fixes (M1, M2 + 9 minors), E fixes (E1–E3), lead fixes (m8–m10, rail text, CSP test) |
 | GPU smoke launcher | `scripts/smoke/gpu-launch.cjs` (owner-approved, 351fd65) |
 | P5 Home + catalogue | ✅ merged (title chars 16→37 @390, small targets 25→0) |
 | E, P3, P4, P9, UX review, live essay calibration | next |
@@ -193,3 +193,12 @@ Order: F0 ∥ G → (A ∥ B ∥ D) → C → E → P → integration + reviews 
 Means rise monotonically with ≥ 20 % gaps in every language. uz C1/C2 bands raised (C1 14–23 target 18, C2 16–28
 target 22); other bands unchanged. Not run: `essay-lvl-acad-uz-a2` (paused), `essay-lvl-dtm-b1` doc not saved.
 Native-reader check of A1 and C2 Uzbek texts still recommended.
+
+## 9. Release (2026-10-05)
+- CI green on `e6383b9` (npm test, test:viewer, test:ui, build); `main` fast-forwarded; DEPLOYED to production.
+- Backup `slaydx-20261005-151845.dump` (+ Google Drive); rollback `060e731` + images `slaydx-{web,worker}:pre-mobile`.
+- Prod smoke: health 200, pages 200, `/api/dl` 404 with `private, no-store` + ACAO web.telegram.org, 0 errors in web/worker logs,
+  migration 035 applied, `derived-cache` volume mounted, ledger mismatch 0.
+- nginx unchanged: production `location /` already has `proxy_read_timeout 300s`.
+- Bot: inline mode ON (owner); webhook `allowed_updates` = message, callback_query (inline_query answers inactive — optional).
+- Pending: owner device check (Android + iPhone): download PPTX/PDF in the Mini App, «Ulashish», «Saqlash», slide/doc editing with the real keyboard.
