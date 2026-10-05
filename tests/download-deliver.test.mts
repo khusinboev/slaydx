@@ -408,6 +408,21 @@ test("m12 retryText: «birozdan keyin» becomes the exact time (no second hint);
   );
 });
 
+test("hotfix: Telegram's downloadFile answer is awaited with a timeout (a dropped answer never leaves the row delivering)", async () => {
+  const seen: Array<{ timeoutMs?: number } | undefined> = [];
+  const r = await d.deliver(FILE, {
+    capability: "tg-download",
+    platform: "ios",
+    lastGestureAt: 0,
+    now: () => 1,
+    origin: "https://a.uz/",
+    requestDownloadImpl: (_p, o) => (seen.push(o), Promise.resolve("no-response" as const)),
+  });
+  assert.deepEqual(seen, [{ timeoutMs: d.TG_DOWNLOAD_TIMEOUT_MS }]);
+  assert.equal(d.TG_DOWNLOAD_TIMEOUT_MS, 60_000);
+  assert.equal(r.kind, "needs-tap", "no answer → the row offers the tap again");
+});
+
 test("m6 telegramAction passes the abort signal to every request", async () => {
   const ctrl = new AbortController();
   ctrl.abort();

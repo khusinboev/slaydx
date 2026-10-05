@@ -323,10 +323,12 @@ export async function downloadFile(params: DownloadFileParams, opts: { timeoutMs
  *  - `failed` — closed or failed without a specific reason;
  *  - `expired` — the prepared message expired (`MESSAGE_EXPIRED`): prepare a new one;
  *  - `unsupported` — no Mini App, client < 8.0, or the client answered `UNSUPPORTED`;
- *  - `busy` — a share dialog is already open;
- *  - `error` — the call threw for another reason.
+ *  - `busy` — a share dialog is already open and the request could not be re-sent;
+ *  - `error` — the call threw for another reason;
+ *  - `unknown` — Telegram never answered: the user came back to the Mini App (or 20 s passed)
+ *    without an event. The message may have been sent; callers must not report an error or success.
  */
-export type ShareOutcome = "sent" | "failed" | "expired" | "unsupported" | "busy" | "error";
+export type ShareOutcome = "sent" | "failed" | "expired" | "unsupported" | "busy" | "error" | "unknown";
 
 /**
  * Opens Telegram's chat picker for a prepared inline message
@@ -334,7 +336,7 @@ export type ShareOutcome = "sent" | "failed" | "expired" | "unsupported" | "busy
  * callback before it dispatches `shareMessageFailed {error}`, so the result is
  * settled one microtask after the callback to include the error code.
  */
-export function shareMessageResult(id: string): Promise<ShareOutcome> {
+export function shareMessageResult(id: string, opts: { timeoutMs?: number; graceMs?: number } = {}): Promise<ShareOutcome> {
   const wa = getTelegramWebApp();
   if (!wa || typeof wa.shareMessage !== "function" || !tgVersionAtLeast(TG_SHARE_MESSAGE_VERSION)) {
     return Promise.resolve("unsupported");
@@ -342,20 +344,32 @@ export function shareMessageResult(id: string): Promise<ShareOutcome> {
   return new Promise<ShareOutcome>((resolve) => {
     let done = false;
     let error: string | null = null;
+    let grace: ReturnType<typeof setTimeout> | undefined;
+    const cleanups: Array<() => void> = [];
     const finish = (o: ShareOutcome) => {
       if (done) return;
       done = true;
-      offSent();
-      offFailed();
+      if (grace !== undefined) clearTimeout(grace);
+      for (const c of cleanups) c();
       resolve(o);
     };
     const failedOutcome = (): ShareOutcome =>
       error === "MESSAGE_EXPIRED" ? "expired" : error === "UNSUPPORTED" ? "unsupported" : "failed";
-    const offSent = onEvent("shareMessageSent", () => finish("sent"));
-    const offFailed = onEvent("shareMessageFailed", (p) => {
-      error = typeof p?.error === "string" ? p.error : null;
-      finish(failedOutcome());
-    });
+    cleanups.push(onEvent("shareMessageSent", () => finish("sent")));
+    cleanups.push(
+      onEvent("shareMessageFailed", (p) => {
+        error = typeof p?.error === "string" ? p.error : null;
+        finish(failedOutcome());
+      }),
+    );
+    // Telegram may drop the answer (owner report, Android): never wait forever.
+    cleanups.push(watchPickerReturn(() => {
+      if (done || grace !== undefined) return;
+      // A late `shareMessageSent` / `shareMessageFailed` still wins within the grace period.
+      grace = setTimeout(() => finish("unknown"), opts.graceMs ?? SHARE_RETURN_GRACE_MS);
+    }));
+    const hard = setTimeout(() => finish("unknown"), opts.timeoutMs ?? SHARE_TIMEOUT_MS);
+    cleanups.push(() => clearTimeout(hard));
     try {
       wa.shareMessage!(id, (sent) => {
         if (sent) finish("sent");
@@ -363,9 +377,60 @@ export function shareMessageResult(id: string): Promise<ShareOutcome> {
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      // tg-web-app.js keeps `WebAppShareMessageOpened` set when an answer was dropped, so every
+      // later `shareMessage` throws. Send the request directly (same pattern as `requestDownload`):
+      // the client answers with the same events, which tg-web-app.js still dispatches.
+      if (msg === "WebAppShareMessageOpened" && postWebViewEvent("web_app_send_prepared_message", { id })) return;
       finish(msg === "WebAppMethodUnsupported" ? "unsupported" : msg === "WebAppShareMessageOpened" ? "busy" : "error");
     }
   });
+}
+
+/** `shareMessageResult` gives up after this long without an answer (→ `unknown`). */
+export const SHARE_TIMEOUT_MS = 20_000;
+/** After the user is back in the Mini App, a late answer may still arrive within this long. */
+export const SHARE_RETURN_GRACE_MS = 1_500;
+
+/**
+ * Calls `onReturn` when the user is evidently back in the Mini App after a
+ * native picker: a touch on the page (the picker is modal), or an active
+ * signal (`activated`, `visibilitychange` → visible, window `focus`) after an
+ * inactive one (`deactivated`, hidden, `blur`). Returns the cleanup.
+ */
+function watchPickerReturn(onReturn: () => void): () => void {
+  if (typeof window === "undefined" || typeof document === "undefined") return () => {};
+  let away = false;
+  const leave = () => {
+    away = true;
+  };
+  const back = () => {
+    if (away) onReturn();
+  };
+  const onVisibility = () => (document.visibilityState === "hidden" ? leave() : back());
+  const offs = [onEvent("deactivated", leave), onEvent("activated", back)];
+  document.addEventListener("visibilitychange", onVisibility);
+  window.addEventListener("blur", leave);
+  window.addEventListener("focus", back);
+  document.addEventListener("pointerdown", onReturn, true);
+  return () => {
+    for (const off of offs) off();
+    document.removeEventListener("visibilitychange", onVisibility);
+    window.removeEventListener("blur", leave);
+    window.removeEventListener("focus", back);
+    document.removeEventListener("pointerdown", onReturn, true);
+  };
+}
+
+/** Posts a Mini App event directly through `Telegram.WebView.postEvent`. `false` when impossible. */
+function postWebViewEvent(type: string, data: Record<string, unknown>): boolean {
+  try {
+    const post = currentEnv()?.Telegram?.WebView?.postEvent;
+    if (typeof post !== "function") return false;
+    post(type, false, data);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** `shareMessageResult` as a boolean: `true` only when the message was sent. */
@@ -378,19 +443,28 @@ export async function shareMessage(id: string): Promise<boolean> {
  * allowed; `false` when declined, unsupported, already pending or failed.
  * Callers check `allowsWriteToPm()` first and skip the popup when it is `true`.
  */
-export function requestWriteAccess(): Promise<boolean> {
+export function requestWriteAccess(opts: { timeoutMs?: number } = {}): Promise<boolean> {
   const wa = getTelegramWebApp();
   if (!wa || typeof wa.requestWriteAccess !== "function" || !tgVersionAtLeast(TG_WRITE_ACCESS_VERSION)) {
     return Promise.resolve(false);
   }
   return new Promise<boolean>((resolve) => {
+    // A dropped answer must not leave «Saqlash»/«Ulashish» loading forever: no answer = not allowed.
+    const t = setTimeout(() => resolve(false), opts.timeoutMs ?? WRITE_ACCESS_TIMEOUT_MS);
+    const done = (v: boolean) => {
+      clearTimeout(t);
+      resolve(v);
+    };
     try {
-      wa.requestWriteAccess!((allowed) => resolve(allowed === true));
+      wa.requestWriteAccess!((allowed) => done(allowed === true));
     } catch {
-      resolve(false);
+      done(false);
     }
   });
 }
+
+/** `requestWriteAccess` resolves `false` after this long without an answer. */
+export const WRITE_ACCESS_TIMEOUT_MS = 30_000;
 
 /** Closes the Mini App. Returns `false` when there is no Mini App or the call threw. */
 export function closeApp(): boolean {

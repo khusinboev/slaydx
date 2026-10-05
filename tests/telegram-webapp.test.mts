@@ -459,10 +459,27 @@ test("shareMessageResult: unsupported (old client), busy (dialog open), error", 
   assert.equal(await shareMessageResult("p"), "unsupported");
   assert.deepEqual(old.calls, [], "never called below 8.0");
 
+  /*
+   * Rewritten (production hotfix tg-share-stuck): a second share while tg-web-app.js still has a
+   * picker "open" (its flag survives a dropped answer) used to answer `busy` forever. Now the
+   * request is re-sent through `Telegram.WebView.postEvent` and settles on the client's answer;
+   * `busy` remains only when there is no WebView bridge.
+   */
   const fake = makeFake();
-  install(fake);
-  void shareMessageResult("p1");
-  assert.equal(await shareMessageResult("p2"), "busy");
+  const win = install(fake);
+  const first = shareMessageResult("p1");
+  const second = shareMessageResult("p2");
+  assert.deepEqual(
+    fake.posted.filter((p) => p.type === "web_app_send_prepared_message").map((p) => p.data),
+    [{ id: "p1" }, { id: "p2" }],
+    "the second request was re-sent past the open flag",
+  );
+  fake.client.preparedMessageSent();
+  assert.equal(await second, "sent");
+  assert.equal(await first, "sent");
+  void shareMessageResult("p4");
+  (win.Telegram as Record<string, unknown>).WebView = undefined;
+  assert.equal(await shareMessageResult("p5"), "busy", "no bridge to re-send through");
   fake.client.preparedMessageSent();
   (fake.WebApp as Record<string, unknown>).shareMessage = () => {
     throw new Error("odd");
