@@ -172,9 +172,14 @@ Order: F0 ∥ G → (A ∥ B ∥ D) → C → E → P → integration + reviews 
 | Integration 1 | ✅ npm test 4289/4289, test:ui 1092/1092, test:viewer 251/251 |
 | Security review A+B (fable) | APPROVE WITH FIXES → fixed in ABF (`053f011..d75be29`) → re-verified **APPROVE** (proofs 11/11) |
 | Correctness review G+D | APPROVE WITH FIXES → fixed (d6666a3, 463792e, e58b39c) → re-verified **APPROVE** |
-| C Result actions | running |
-| P12 Touch layer | running |
-| P8 Telegram shell | running |
+| C Result actions | ✅ merged (smoke 459/459; 23 mutations) |
+| P12 Touch layer | ✅ merged (form targets < 44 px 1378 → 474, inputs < 16 px 336 → 0) |
+| P12b Composer targets | ✅ merged (code + tests); TopicChips wiring + audit running |
+| P8 Telegram shell | ✅ merged (smoke 78/78; 17 mutations) |
+| P3 Form keyboard | ✅ merged (15/15; mutation results re-checked by the UX reviewer) |
+| P4 Shell + overlays | ✅ merged (all phone targets < 44 px → 0; 21 mutations) |
+| E Document editors | running |
+| UX review (fable) | running |
+| GPU smoke launcher | `scripts/smoke/gpu-launch.cjs` (owner-approved, 351fd65) |
 | P5 Home + catalogue | ✅ merged (title chars 16→37 @390, small targets 25→0) |
-| P4 Shell + topbar | running |
 | E, P3, P4, P9, UX review, live essay calibration | next |
