@@ -477,3 +477,28 @@ test("overflow «Boshqa formatda saqlash…» → sheet in save mode → PDF →
   assert.equal(posts("/telegram/save")[0].body, JSON.stringify({ format: "pdf" }));
   assert.ok(!q("[data-download-sheet]"), "the picker closed");
 });
+
+test("contract additions: share 409 telegram_id_unsupported → saved to the bot instead; 202 {state, retryAfterMs, format} polled; save 413 too_large → Uzbek text", async () => {
+  fakeTelegram();
+  let saves = 0;
+  stub((c) => {
+    if (c.url.endsWith("/telegram/share")) {
+      return json(409, { error: "Bu Telegram akkaunti bilan ulashib bo'lmadi — «Saqlash» yoki «Yuklab olish» dan foydalaning.", code: "telegram_id_unsupported" });
+    }
+    if (c.url.endsWith("/telegram/save")) {
+      saves++;
+      if (saves === 1) return json(202, { state: "preparing", retryAfterMs: 500, format: "native" });
+      if (saves === 2) return json(200, { ok: true, duplicate: false, format: "native", botUrl: null });
+      return json(413, { error: "Fayl Telegram uchun juda katta — «Yuklab olish» dan foydalaning.", code: "too_large" });
+    }
+    return undefined;
+  });
+  mount();
+  await tap(q("[data-share-button]")!);
+  await waitFor(() => assert.match(toast()?.textContent ?? "", /Fayl bot chatiga yuborildi — u yerdan uzating/), { timeout: 3000 });
+  assert.equal(saves, 2, "202 then 200 (the same request repeated)");
+  assert.ok(!tgCalls.some((c) => c.startsWith("share")), "no picker without a prepared message");
+  await tap(q("[data-save-to-bot]")!);
+  await waitFor(() => assert.match(toast()?.textContent ?? "", /^Fayl Telegram uchun juda katta — «Yuklab olish» dan foydalaning\./));
+  assert.equal(toast()!.getAttribute("role"), "alert");
+});

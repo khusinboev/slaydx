@@ -103,7 +103,8 @@ export function useShareAction(args: {
           preparedId = (await telegramAction("share", genId, format, () => setSince((s) => s ?? started))).preparedId;
         } catch (e) {
           const code = apiErrorCode(e);
-          if (code === "share_unavailable") return saveForward(format, started);
+          // Inline mode off, or a Telegram id the prepared-message API cannot take: the file goes to the bot chat instead.
+          if (code === "share_unavailable" || code === "telegram_id_unsupported") return saveForward(format, started);
           if (code === "bot_unreachable" && !retriedAccess && (await requestWriteAccess())) return attempt(true, retriedExpiry);
           throw e;
         }

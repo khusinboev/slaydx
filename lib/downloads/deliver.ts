@@ -103,6 +103,8 @@ export const DELIVER_TEXT = {
   botUnreachable: "Bot sizga yoza olmadi. Botni ochib /start bosing, so‘ng qayta urinib ko‘ring.",
   openBot: "Botni ochish",
   shareReady: "Tayyor — «Ulashish»ni yana bir bor bosing",
+  tooLarge: "Fayl Telegram uchun juda katta — «Yuklab olish» dan foydalaning.",
+  idUnsupported: "Bu Telegram akkaunti bilan ulashib bo‘lmadi — «Saqlash» yoki «Yuklab olish» dan foydalaning.",
 } as const;
 
 /* ───────────────────────────── errors ───────────────────────────── */
@@ -137,6 +139,9 @@ export function deliverErrorText(e: unknown): string {
     const code = typeof e.data.code === "string" ? e.data.code : null;
     if (code === "no_telegram") return DELIVER_TEXT.noTelegram;
     if (code === "bot_unreachable") return DELIVER_TEXT.botUnreachable;
+    // The server's Uzbek text first; ours when it sent none.
+    if (code === "too_large") return e.message || DELIVER_TEXT.tooLarge;
+    if (code === "telegram_id_unsupported") return e.message || DELIVER_TEXT.idUnsupported;
     if (e.status === 410) return DELIVER_TEXT.expired;
     return withRetryHint(e.message || DELIVER_TEXT.failed, e.retryAfterSec);
   }
