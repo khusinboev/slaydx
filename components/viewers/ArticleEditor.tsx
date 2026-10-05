@@ -10,7 +10,7 @@ import type { TeacherPlan } from "@/lib/generation/teacher/layout";
 import type { WorkPlan } from "@/lib/generation/work/layout";
 import type { AcademicDoc } from "@/lib/generation/types";
 import type { FlowItem } from "@/lib/viewers/flow";
-import { announceOpenField, focusAtEnd, isTapEcho, releaseOpenField, swallowTapMouseDown } from "./editable";
+import { announceOpenField, focusAtEnd, isTapEcho, releaseOpenField, swallowNextMouseDown, swallowTapMouseDown } from "./editable";
 import { createDoubleTapDetector } from "./slide-edit/doubleTap";
 
 /**
@@ -692,6 +692,10 @@ export function ArticleEditor({ doc, plan, onOps, children }: ArticleEditorProps
     const onPointerDown = (ev: PointerEvent) => {
       if (ev.pointerType === "mouse") return;
       taps.down(ev.pointerId, ev.clientX, ev.clientY, ev.timeStamp);
+      // Review E1: a touch on another field keeps the open one until a double tap switches (`swallowNextMouseDown`).
+      const cur = openRef.current;
+      const t = (ev.target as HTMLElement | null)?.closest?.("[data-path]");
+      if (cur && t && t !== cur.el && host.contains(t)) swallowNextMouseDown();
     };
     const onPointerUp = (ev: PointerEvent) => {
       if (ev.pointerType === "mouse") return;

@@ -174,6 +174,19 @@ let tapOpenedAt = -Infinity;
 export function swallowTapMouseDown(): void {
   if (typeof document === "undefined") return;
   tapOpenedAt = Date.now();
+  swallowNextMouseDown();
+}
+
+/**
+ * Cancels the next `mousedown` (within `TAP_SWALLOW_MS`): the compat event
+ * of a touch tap, so it does not move the focus. Review E1: a tap on ANOTHER
+ * field while one is open keeps the open one (no blur, no commit, no
+ * re-render under the finger) — if it is the first half of a double tap,
+ * `open(next)` commits the open field and opens the next one; a single tap
+ * changes nothing (the slide editor's rule; «Tayyor» or back end the edit).
+ */
+export function swallowNextMouseDown(): void {
+  if (typeof document === "undefined") return;
   // No clock check inside: under load the compat event can be late; the timer below bounds the window.
   const onDown = (e: Event) => {
     document.removeEventListener("mousedown", onDown, true);

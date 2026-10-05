@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import type { ResumeItem, ResumeLayout } from "@/lib/generation/resume/layout";
 import type { ResumeOp } from "@/lib/generation/resume/edit";
 import type { ResumeModel } from "@/lib/generation/resume/model";
-import { announceOpenField, focusAtEnd, readText, isTapEcho, releaseOpenField, swallowTapMouseDown } from "../editable";
+import { announceOpenField, focusAtEnd, readText, isTapEcho, releaseOpenField, swallowNextMouseDown, swallowTapMouseDown } from "../editable";
 import { createDoubleTapDetector } from "../slide-edit/doubleTap";
 import { ResumePage, type ResumeEditEvent } from "./ResumePage";
 
@@ -136,6 +136,10 @@ export function ResumeEditor({ layout, model, pageItems, pageIndex, total, onOps
     const onPointerDown = (ev: PointerEvent) => {
       if (ev.pointerType === "mouse") return;
       taps.down(ev.pointerId, ev.clientX, ev.clientY, ev.timeStamp);
+      // Review E1: a touch on another field keeps the open one until a double tap switches (`swallowNextMouseDown`).
+      const cur = openRef.current;
+      const t = (ev.target as HTMLElement | null)?.closest?.("[data-path]");
+      if (cur && t && t !== cur.el && host.contains(t)) swallowNextMouseDown();
     };
     const onPointerUp = (ev: PointerEvent) => {
       if (ev.pointerType === "mouse") return;

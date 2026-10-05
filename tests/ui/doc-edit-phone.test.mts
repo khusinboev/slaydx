@@ -639,18 +639,21 @@ test("review E1: double TAP on field B while A is open → A saved once, B open;
   await act(async () => tap(a, 20));
   await settle();
   assert.equal(a.getAttribute("contenteditable"), "true");
+  // The browser's compat mousedown of A's own second tap (consumes the opening swallow).
+  fireEvent.mouseDown(a);
   assert.equal(zoomLabel(), "140%");
   a.textContent = "Avval saqlanadi";
   const b = byPath("identity.headline", "[data-resume-editor]");
   smallField(b);
-  // First tap on B: its compat mousedown blurs A in a real browser → `focusout` commits A.
+  // First tap on B: its compat mousedown is cancelled, so A keeps the focus — no blur, no commit, no re-render under the finger.
   // No waits between the taps: the detector's 300 ms window must not depend on machine load.
   await act(async () => {
     tap(b, 21);
-    fireEvent.focusOut(a);
   });
-  assert.ok(!a.hasAttribute("contenteditable"), "A committed by the blur");
-  assert.equal(zoomLabel(), "140%", "no restore while a double tap may be in progress (the sheet stays under the finger)");
+  assert.equal(fireEvent.mouseDown(b), false, "first tap's compat mousedown cancelled");
+  assert.equal(a.getAttribute("contenteditable"), "true", "A still open after one tap on B");
+  assert.ok(!saveBtn(), "nothing committed yet");
+  assert.equal(zoomLabel(), "140%", "sheet unchanged under the finger");
   // Second tap, inside the double-tap window.
   await act(async () => tap(b, 22));
   assert.equal(b.getAttribute("contenteditable"), "true", "B opened by the double tap");
@@ -662,6 +665,47 @@ test("review E1: double TAP on field B while A is open → A saved once, B open;
   });
   await quiet();
   assert.equal(zoomLabel(), "100%", "restored after the last edit");
+});
+
+test("review E1 (Word sheet): a double tap on B with A open → A saved once, B open", async () => {
+  phone();
+  await mount(stubTeacher());
+  await enableEdit();
+  const a = byPath(HOMEWORK);
+  await act(async () => tap(a, 51));
+  await act(async () => tap(a, 52));
+  assert.equal(a.getAttribute("contenteditable"), "true");
+  fireEvent.mouseDown(a);
+  a.textContent = "Word: avval saqlanadi.";
+  const b = byPath("heading:goal");
+  await act(async () => tap(b, 53));
+  assert.equal(fireEvent.mouseDown(b), false, "first tap's compat mousedown cancelled");
+  assert.equal(a.getAttribute("contenteditable"), "true", "A kept open by one tap on B");
+  await act(async () => tap(b, 54));
+  assert.equal(b.getAttribute("contenteditable"), "true", "B open");
+  assert.match(saveBtn()?.textContent ?? "", /· 1\b/, "A committed once");
+});
+
+test("review E1 fallback: if the browser still blurs A on the first tap, the zoom waits and the second tap opens B", async () => {
+  phone();
+  await mount(stubResume(), true);
+  await enableEdit();
+  const a = byPath("identity.fullName", "[data-resume-editor]");
+  smallField(a);
+  await act(async () => tap(a, 41));
+  await act(async () => tap(a, 42));
+  await settle();
+  a.textContent = "Blur bilan saqlandi";
+  const b = byPath("identity.headline", "[data-resume-editor]");
+  await act(async () => {
+    tap(b, 43);
+    fireEvent.focusOut(a);
+  });
+  assert.ok(!a.hasAttribute("contenteditable"), "A committed by the blur");
+  assert.equal(zoomLabel(), "140%", "no restore while a double tap may be in progress");
+  await act(async () => tap(b, 44));
+  assert.equal(b.getAttribute("contenteditable"), "true", "B opened");
+  assert.match(saveBtn()?.textContent ?? "", /· 1\b/);
 });
 
 test("review E1: a finger still down pauses the restore; it runs 300 ms after the finger lifts", async () => {
