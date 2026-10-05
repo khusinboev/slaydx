@@ -85,7 +85,7 @@ test("shouldAutoLogin: only a ready webview, no session of anyone, one attempt",
 test("the Telegram script URL lives only in the gated bridge and is never imported statically", () => {
   assert.equal(TELEGRAM_WEB_APP_SCRIPT, "https://telegram.org/js/telegram-web-app.js");
   const bridge = readFileSync(new URL("../components/telegram/MiniAppBridge.tsx", import.meta.url), "utf8");
-  assert.match(bridge, /if \(!isTelegramWebApp\(/, "script injection is gated by the detection");
+  assert.match(bridge, /if \(!isGenuineMiniApp\(/, "script injection is gated by the detection");
   for (const f of ["../app/layout.tsx", "../components/providers.tsx", "../lib/store.ts"]) {
     const src = readFileSync(new URL(f, import.meta.url), "utf8");
     assert.ok(!src.includes("telegram-web-app.js"), `${f} must not load the Telegram script`);
