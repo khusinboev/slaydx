@@ -19,7 +19,7 @@ const GROUPS = visibleToolGroups();
 /** Telefonda qator 48 px (docs/mobile/PLAN.md O5), ish stolida 40 px. */
 function itemClass(active: boolean, phone = false) {
   return cn(
-    "peer/menu-button flex w-full items-center gap-2.5 overflow-hidden rounded-xl px-3 py-2 text-start outline-hidden transition-colors",
+    "peer/menu-button flex w-full shrink-0 items-center gap-2.5 overflow-hidden rounded-xl px-3 py-2 text-start outline-hidden transition-colors",
     phone ? "h-12 text-[15.5px]" : "h-10 text-[15.5px]",
     active
       ? "bg-white font-medium text-sidebar-accent-foreground shadow-sm dark:bg-sidebar-accent"
