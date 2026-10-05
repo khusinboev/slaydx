@@ -5,12 +5,11 @@ import { BackLink } from "@/components/nav/BackLink";
 import { cn } from "@/lib/cn";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Download, Loader2, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, RefreshCw } from "lucide-react";
 import * as api from "@/lib/api-client";
 import {
   editErrorCode,
   editErrorText,
-  ensureGenerationFresh,
   isUnpaidError,
   polishArticle,
   rewriteArticle,
@@ -22,6 +21,8 @@ import { TOOL_BY_ID } from "@/lib/tools";
 import { useConfirmClick } from "../overlays/useConfirmClick";
 import { EditActions, type EditActionsState } from "./EditActions";
 import { GameSharePanel } from "./GameSharePanel";
+import { DownloadSheetContext, type SheetMode } from "./DownloadSheet";
+import { ResultActions } from "./ResultActions";
 import { ResultLayout, type PanelSection } from "./ResultLayout";
 import { frameClass, viewerFrame } from "./result-layout/frame";
 import { reviewSummary, type ChipSummary, type ShareSummary } from "./result-layout/summary";
@@ -68,8 +69,6 @@ export function ResultView({ id }: { id: string }) {
   const [issue, setIssue] = useState<api.PollIssue | null>(null);
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [pollKey, setPollKey] = useState(0);
-  /** Qaysi yuklab olish ketmoqda — PDF o'girish 1 daqiqagacha (UX-08). */
-  const [downloading, setDownloading] = useState<"file" | "pdf" | null>(null);
   /**
    * 402 `unpaid` (W1-E): hujjat bonus ball bilan to'langan — bepul AI
    * tahrir unga ishlamaydi. Sabab bir marta aytiladi va «Tuzatish»/
@@ -95,6 +94,15 @@ export function ResultView({ id }: { id: string }) {
   const [shareSum, setShareSum] = useState<ShareSummary | null>(null);
   const genRef = useRef<api.GenerationDetail | null>(null);
   genRef.current = gen;
+  /*
+   * Viewers (image tiles) open the header's «Yuklab olish» sheet through
+   * `DownloadSheetContext`; `ResultActions` registers its opener here.
+   */
+  const openDownloadsRef = useRef<((mode?: SheetMode) => void) | null>(null);
+  const registerOpen = useCallback((fn: ((mode?: SheetMode) => void) | null) => {
+    openDownloadsRef.current = fn;
+  }, []);
+  const openDownloads = useCallback((mode?: SheetMode) => openDownloadsRef.current?.(mode), []);
   /** Sahifadan chiqilganda uzoq AI tahrirning natija tekshiruvi to'xtaydi (FE-15, W4-D N2). */
   const alive = useRef<AbortController | null>(null);
   useEffect(() => {
@@ -138,42 +146,6 @@ export function ResultView({ id }: { id: string }) {
   }, [id, loggedIn, sessionChecked, upsert, pollKey]);
 
   const recheck = useCallback(() => setPollKey((k) => k + 1), []);
-
-  const onDownload = useCallback(
-    async (format?: "pdf") => {
-      setBusy(true);
-      setDownloading(format ?? "file");
-      setError(null);
-      try {
-        /*
-         * Ko'ruvchida tahrir qilingan bo'lsa PPTX hali ESKI bo'lishi
-         * mumkin (qayta yasash oxirgi tahrirdan 3 s keyin). Yuklab
-         * olishdan oldin faylni hujjat bilan tenglaymiz — «ko'rdim =
-         * oldim» aynan shu yerda buzilardi. Fayl yangi bo'lsa so'rov
-         * umuman ketmaydi.
-         */
-        if (gen) {
-          const r = await ensureGenerationFresh(gen);
-          if (r) {
-            /*
-             * Faqat `fileVersion` (review R3): `docVersion` ni `doc` siz
-             * oshirish tahrir navbatini eski hujjatga «yangi versiya» deb
-             * bog'lab, serverga yetgan bo'lakni ikki marta qo'llatardi.
-             */
-            setGen((prev) => (prev ? { ...prev, fileVersion: r.fileVersion } : prev));
-          }
-        }
-        await api.downloadGeneration(id, format);
-      } catch (e) {
-        // 429/503 (PDF band) — server matni + «qachon qayta» (`downloadGeneration`).
-        setError(e instanceof Error ? e.message : "Yuklab olinmadi");
-      } finally {
-        setBusy(false);
-        setDownloading(null);
-      }
-    },
-    [id, gen],
-  );
 
   const onDelete = useCallback(async () => {
     setBusy(true);
@@ -504,137 +476,65 @@ export function ResultView({ id }: { id: string }) {
       : []),
   ];
 
-  const header = (
-    <nav className="flex items-center gap-2 px-3 py-2 group-data-[compact=1]/hdr:py-1 sm:px-4">
+  /*
+   * «←» + title (R5 P6): the title wraps to 2 lines on phones (1 when the
+   * header is compact); `ResultActions` places the actions around it.
+   */
+  const lead = (
+    <>
       {/*
        * «←» = in-app back (docs/nav/PLAN.md): back to the page we came from
        * (the filled form after generation), or the parent `/uz`
        * (`parentOf`) in a fresh tab / deep link — replaced, so it never leaves
        * the site and never ping-pongs.
        */}
-      <BackLink
-        className="text-muted-foreground hover:bg-muted flex size-8 items-center justify-center rounded-full"
-      >
+      <BackLink className="text-muted-foreground hover:bg-muted order-1 -ml-1.5 flex size-11 shrink-0 items-center justify-center rounded-full md:size-9 md:pointer-coarse:size-11">
         <ArrowLeft className="size-5" />
       </BackLink>
-      <div className="min-w-0 flex-1">
-        <h1 className="truncate text-[15px] font-semibold">{gen.topic}</h1>
+      <div className="order-2 min-w-0 flex-1">
+        <h1 className="line-clamp-2 text-[15px] leading-snug font-semibold break-words group-data-[compact=1]/hdr:line-clamp-1 md:line-clamp-1" data-result-title>
+          {gen.topic}
+        </h1>
         <p className="text-muted-foreground truncate text-xs group-data-[compact=1]/hdr:hidden">
           {tool?.title} · {completed ? (expired ? "Topilmadi" : "Tayyor") : gen.step} ·{" "}
           {gen.price.toLocaleString("uz-UZ")} tanga
         </p>
       </div>
-      {completed ? (
-        <div className="flex shrink-0 items-center gap-2">
-          <EditActions state={editState} />
-          {!expired ? (
-          <button
-            type="button"
-            className="bg-primary text-primary-foreground inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium disabled:opacity-60"
-            disabled={busy || !gen.hasFile}
-            onClick={() => void onDownload()}
-            data-file-stale={fileStale ? "1" : undefined}
-            title={fileStale ? "Fayl oxirgi tahrirlar bilan yangilanib yuklanadi" : undefined}
-          >
-            <Download className="size-4" />
-            {/*
-              «Fayl yangilanmoqda…» FAQAT fayl haqiqatan qayta yasalayotganda
-              (bosilgandan keyin `ensureGenerationFresh` → yuklash). Ilgari
-              `fileStale` ning o'zi ham shu yozuvni chiqarardi: server AI
-              tahriri (`rewrite`/`polish`) `doc_version` ni oshiradi, faylni
-              esa yuklashgacha qayta yasamaydi — yozuv abadiy turardi (R2,
-              maqola). Eski fayl baribir olib ketilmaydi: bosishda avval
-              qayta yasaladi.
-            */}
-            <span className="hidden sm:inline">
-              {downloading === "file" ? "Fayl yangilanmoqda…" : "Yuklab olish"}
-            </span>
-            <span className="text-primary-foreground/80 hidden text-xs md:inline">
-              {gen.format.toUpperCase()}
-            </span>
-          </button>
-          ) : null}
-          {/*
-            PDF talab bo'yicha o'giriladi va bazada saqlanmaydi.
-            Server LibreOffice'siz bo'lsa bayroq `false` va tugma chiqmaydi.
-
-            Ro'yxat RUXSAT ETILGANLAR, taqiqlanganlar emas (AUDIT-5 P1-9):
-            shart `format !== "png"` edi, ya'ni bir nechta rasm uchun
-            chiqadigan ZIP ham o'tib ketardi. Tugma ko'rinar, bosilganda
-            esa server 400 qaytarardi («Bu fayl allaqachon tayyor
-            formatda») — ishlamaydigan tugma ko'rsatilmagani yaxshi.
-          */}
-          {!expired && features?.pdf && PDF_CONVERTIBLE.has(gen.format) ? (
-            /*
-              O'girish 1 daqiqagacha davom etadi (UX-08): tugma shuni
-              AYTADI — aylanuvchi belgi + «PDF tayyorlanmoqda…» —
-              aks holda o'chgan tugma «ishlamay qoldi» deb o'qilardi.
-            */
-            <button
-              type="button"
-              className="bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60 group-data-[compact=1]/hdr:hidden"
-              disabled={busy || !gen.hasFile}
-              aria-busy={downloading === "pdf"}
-              data-pdf-busy={downloading === "pdf" ? "1" : undefined}
-              onClick={() => void onDownload("pdf")}
-              title="PDF ga o‘girib yuklab olish"
-            >
-              {downloading === "pdf" ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  <span className="hidden sm:inline">PDF tayyorlanmoqda…</span>
-                  <span className="sm:hidden">PDF…</span>
-                </>
-              ) : (
-                <>
-                  <Download className="size-4" />
-                  PDF
-                </>
-              )}
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className={
-              del.armed
-                ? "bg-destructive text-destructive-foreground inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium disabled:opacity-60"
-                : "bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60 group-data-[compact=1]/hdr:hidden"
-            }
-            disabled={busy}
-            onClick={del.trigger}
-          >
-            <Trash2 className="size-4" />
-            <span className={del.armed ? "inline" : "hidden sm:inline"}>
-              {del.armed ? "Rostdan?" : "O’chirish"}
-            </span>
-          </button>
-        </div>
-      ) : null}
+    </>
+  );
+  const showEdit = Boolean(editState && (editState.pending > 0 || editState.saving || editState.justSaved));
+  const header = completed ? (
+    <ResultActions
+      gen={gen}
+      lead={lead}
+      editActions={showEdit ? <EditActions state={editState} /> : null}
+      fileStale={fileStale}
+      expired={expired}
+      hasResults={(shareSum?.results ?? 0) > 0}
+      del={del}
+      deleting={busy}
+      registerOpen={registerOpen}
+    />
+  ) : (
+    <nav className="flex items-center gap-x-2 px-3 py-2 group-data-[compact=1]/hdr:py-1 sm:px-4" data-result-nav>
+      {lead}
     </nav>
   );
 
   /*
-   * Qisqa holat qatorlari sticky sarlavha ICHIDA: sahifa endi scroll
-   * bo'ladi, ya'ni hujjat oxirida bosilgan «PDF» ning holati yoki xatosi
-   * tepada, ko'rinmaydigan joyda qolib ketmasin.
+   * Qisqa holat qatori sticky sarlavha ICHIDA: sahifa scroll bo'ladi, ya'ni
+   * xato tepada, ko'rinmaydigan joyda qolib ketmasin. Yuklab olish holati
+   * endi «Yuklab olish» varag'ining qatorlarida (PDF izohi yo'q).
    */
   const notices =
-    downloading === "pdf" || (error && !running) ? (
-      <>
-        {downloading === "pdf" ? (
-          <p role="status" className="text-muted-foreground px-4 pb-2 text-sm" data-pdf-status>
-            PDF tayyorlanmoqda — bu 1 daqiqagacha davom etishi mumkin.
-          </p>
-        ) : null}
-        {error && !running ? (
-          <p role="alert" className="text-destructive px-4 pb-2 text-sm">
-            {error}
-          </p>
-        ) : null}
-      </>
+    error && !running ? (
+      <p role="alert" className="text-destructive px-4 pb-2 text-sm">
+        {error}
+      </p>
     ) : null;
 
   return (
+    <DownloadSheetContext.Provider value={openDownloads}>
     <ResultLayout header={header} notices={notices} sections={sections} frame={completed && !expired ? frame.mode : undefined}>
       {/*
         C20: polling taslim bo'lsa (`error`) yoki qiynalsa (`issue` —
@@ -662,6 +562,29 @@ export function ResultView({ id }: { id: string }) {
             <p className="text-muted-foreground mt-3 text-xs">
               Yechilgan tanga hisobingizga qaytarildi.
             </p>
+            {/*
+              R5 P6/F8: no dead end. The form's values are not kept after a
+              submit (the draft is cleared), so this opens the same tool's form
+              fresh («Yangi yaratish»), plus «Orqaga».
+            */}
+            <div className="mt-4 flex flex-wrap gap-2" data-failed-actions>
+              <Link
+                href={tool ? `/uz/${tool.slug}` : "/uz/create"}
+                data-failed-new
+                className="bg-primary text-primary-foreground inline-flex h-11 items-center gap-1.5 rounded-lg px-4 text-sm font-medium"
+              >
+                <Plus className="size-4" />
+                Yangi yaratish
+              </Link>
+              <BackLink
+                aria-label="Orqaga qaytish"
+                data-failed-back
+                className="bg-card hover:bg-muted inline-flex h-11 items-center gap-1.5 rounded-lg border px-4 text-sm font-medium"
+              >
+                <ArrowLeft className="size-4" />
+                Orqaga
+              </BackLink>
+            </div>
           </div>
         </div>
       ) : null}
@@ -725,6 +648,7 @@ export function ResultView({ id }: { id: string }) {
         </>
       ) : null}
     </ResultLayout>
+    </DownloadSheetContext.Provider>
   );
 }
 
@@ -809,14 +733,6 @@ export function RunningPanel({ gen }: { gen: api.GenerationDetail }) {
     </div>
   );
 }
-
-/**
- * LibreOffice PDF ga o'gira oladigan formatlar.
- *
- * Server tomonidagi `CONVERTIBLE` (mime bo'yicha) bilan juftlik —
- * bu yerda foydalanuvchi ko'radigan yorliq bo'yicha.
- */
-const PDF_CONVERTIBLE = new Set<Generation["format"]>(["docx", "pptx"]);
 
 /** Ko'ruvchilar hali eski `Generation` shaklini kutadi. */
 function toLegacyShape(g: api.GenerationDetail): Generation {

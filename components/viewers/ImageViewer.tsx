@@ -7,6 +7,8 @@ import { imageExt } from "@/lib/viewers/kind";
 import { imageRatioById, imageStyleById } from "@/lib/generation/image-studio-options";
 import { cn } from "@/lib/cn";
 import { useDialog } from "../overlays/useDialog";
+import { useOpenDownloads, type SheetMode } from "../files/DownloadSheet";
+import { currentDeliveryEnv, deliver, markGesture, type ReadyFile } from "@/lib/downloads/deliver";
 
 /**
  * Rasm / infografika ko'ruvchisi.
@@ -38,6 +40,7 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
    * bilan bitta naqsh), qattiq yozilgan matn emas.
    */
   const poster = doc.infographic;
+  const openDownloads = useOpenDownloads();
 
   const openAt = (i: number, full = false) => {
     setActual(full);
@@ -60,7 +63,7 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
 
   const single = images.length <= 1;
   const act =
-    "inline-flex size-10 items-center justify-center rounded-lg bg-black/70 text-white hover:bg-black/85 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none disabled:opacity-40";
+    "inline-flex size-11 items-center justify-center rounded-lg bg-black/70 text-white hover:bg-black/85 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none disabled:opacity-40";
   const barBtn = "inline-flex h-8 items-center gap-1.5 rounded-lg bg-white/10 px-2.5 text-[12.5px] text-white hover:bg-white/20";
 
   return (
@@ -109,7 +112,7 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
                 onOpen={() => openAt(i)}
                 // Bitta rasm: sarlavhadagi «Yuklab olish» AYNAN shu PNG ni beradi — takror yo'q.
                 // Bir nechta rasm: sarlavha ZIP beradi, bu esa BITTA PNG — boshqa fayl, shuning uchun qoladi.
-                onDownload={single ? undefined : () => downloadImage(im, i)}
+                onDownload={single ? undefined : () => void downloadImage(im, i, openDownloads)}
                 actClass={act}
               />
             ))}
@@ -172,7 +175,7 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
                 {actual ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
               </button>
               {single ? null : (
-                <button type="button" className={act} onClick={() => downloadImage(images[open], open)} aria-label="Yuklab olish">
+                <button type="button" className={act} onClick={() => void downloadImage(images[open], open, openDownloads)} aria-label="Yuklab olish">
                   <Download className="size-4" />
                 </button>
               )}
@@ -280,15 +283,35 @@ function ImageTile({
   );
 }
 
-function downloadImage(im: GenImage, i: number) {
-  const a = document.createElement("a");
-  a.href = im.url;
-  // Kengaytma haqiqiy turdan olinadi: PNG rasm `.jpg` nomi bilan
-  // yuklanganda ba'zi dasturlar uni ochmasdi.
-  a.download = `rasm-${i + 1}.${imageExt(im.mime)}`;
-  a.rel = "noopener";
-  // Firefox `a.click()` ni faqat element DOM da bo'lsa bajaradi.
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+/**
+ * One image of a multi-image result (mobile sprint, PLAN §4.5).
+ *
+ * Browser: through the delivery driver (`deliver`, browser branch: fetch with
+ * the session cookie → blob → `<a download>`), the extension from the real
+ * type (a PNG named `.jpg` did not open in some apps). Inside Telegram a
+ * single asset has no signed, cookie-free URL (the registry offers the whole
+ * set as the stored ZIP), so the page's «Yuklab olish» sheet opens instead —
+ * `<a download>` saves nothing in the Mini App webview (R1 §4).
+ */
+async function downloadImage(im: GenImage, i: number, openDownloads: ((mode?: SheetMode) => void) | null): Promise<void> {
+  markGesture();
+  const env = currentDeliveryEnv();
+  if (env.capability !== "browser") {
+    openDownloads?.("download");
+    return;
+  }
+  const file: ReadyFile = {
+    format: "native",
+    url: im.url,
+    fileName: `rasm-${i + 1}.${imageExt(im.mime)}`,
+    size: 0,
+    mime: im.mime ?? "image/png",
+    expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+  };
+  try {
+    await deliver(file, env);
+  } catch {
+    // The asset failed (network, gone): the sheet offers the registry formats with «Qayta urinish».
+    openDownloads?.("download");
+  }
 }

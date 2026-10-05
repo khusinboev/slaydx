@@ -7,6 +7,7 @@ import { GAME_KIND_LABEL } from "@/lib/game/engine";
 import type { PublicGameKind } from "@/lib/game/public";
 import { cn } from "@/lib/cn";
 import { shareSummary, type ShareSummary } from "./result-layout/summary";
+import { DirectDownloadButton } from "./DownloadSheet";
 
 /**
  * O'YIN HAVOLASI PANELI (AUDIT-22 WP-C) — EGASI tomoni.
@@ -345,14 +346,12 @@ export function GameSharePanel({
                 Yangilash
               </button>
               {rows.length ? (
-                <a
-                  data-results-csv
-                  href={`/api/generations/${id}/results?format=csv`}
-                  className="bg-card inline-flex h-8 items-center rounded-lg border px-2.5 text-xs font-medium"
-                  download
-                >
-                  CSV
-                </a>
+                /*
+                 * Registry format `results-csv` through the delivery driver
+                 * (mobile sprint): a plain `<a download>` saved nothing inside
+                 * the Telegram Mini App.
+                 */
+                <DirectDownloadButton genId={id} format="results-csv" label="CSV" data-results-csv="" className="text-xs" />
               ) : null}
             </span>
           </div>
