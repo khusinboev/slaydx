@@ -7,12 +7,20 @@ import { useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { safeReturnTo } from "@/lib/safe-return";
 import {
+  SAFE_AREA_CSS_VARS,
   TELEGRAM_WEB_APP_SCRIPT,
-  isTelegramWebApp,
+  TG_SAFE_AREA_VERSION,
+  TG_VERTICAL_SWIPES_VERSION,
+  clientSupports,
+  normalizeHexColor,
+  safeAreaCssVars,
+  setMiniAppShellState,
   shouldAutoLogin,
   telegramBackState,
-  type LaunchEnv,
+  telegramChromeColors,
+  type SafeAreaInset,
 } from "@/lib/telegram-miniapp";
+import { isGenuineMiniApp, type MiniAppEnv } from "@/lib/telegram-webapp";
 import { getNavSnapshot, getServerNavSnapshot, subscribeNav } from "@/lib/nav/history";
 import { useNav } from "@/components/nav/NavProvider";
 
@@ -27,10 +35,19 @@ type TelegramWebApp = {
   version?: string;
   ready?: () => void;
   expand?: () => void;
+  isExpanded?: boolean;
   isVersionAtLeast?: (version: string) => boolean;
   BackButton?: TelegramBackButton;
   enableClosingConfirmation?: () => void;
   disableClosingConfirmation?: () => void;
+  disableVerticalSwipes?: () => void;
+  setHeaderColor?: (color: string) => void;
+  setBackgroundColor?: (color: string) => void;
+  setBottomBarColor?: (color: string) => void;
+  safeAreaInset?: SafeAreaInset;
+  contentSafeAreaInset?: SafeAreaInset;
+  onEvent?: (type: string, handler: () => void) => void;
+  offEvent?: (type: string, handler: () => void) => void;
 };
 type TelegramWindow = Window & { Telegram?: { WebApp?: TelegramWebApp } };
 
@@ -66,6 +83,11 @@ function loadTelegramWebApp(win: TelegramWindow): Promise<TelegramWebApp | null>
  * A session that already exists — even for a different Telegram user — is
  * kept as is: switching accounts stays an explicit action (sign out, then
  * «Telegram orqali kirish»). `initData` is read at call time and never stored.
+ *
+ * Shell (docs/mobile/PLAN.md O6, O8): vertical swipes off, Telegram's header /
+ * background / bottom bar in the app's page colour (follows light/dark),
+ * safe-area CSS variables, and the shell state that hides the in-app «←»
+ * (`useMiniAppShell.ts`).
  */
 export function MiniAppBridge() {
   // Detect first, without touching the router: outside a genuine Telegram webview
@@ -73,9 +95,44 @@ export function MiniAppBridge() {
   // component stays inert and never calls `useRouter`.
   const [inTelegram, setInTelegram] = useState(false);
   useEffect(() => {
-    setInTelegram(isTelegramWebApp(window as unknown as LaunchEnv));
+    const genuine = isGenuineMiniApp(window as unknown as MiniAppEnv);
+    setInTelegram(genuine);
+    if (!genuine) return;
+    // O6: the in-app «←» hides from the first client frame; the session then
+    // confirms Telegram's BackButton or gives the «←» back.
+    setMiniAppShellState({ active: true, backButton: "pending" });
+    return () => setMiniAppShellState(null);
   }, []);
   return inTelegram ? <MiniAppSession /> : null;
+}
+
+/** `Telegram.WebApp.isVersionAtLeast`, called on its object; `false` when missing. */
+function versionCheck(wa: TelegramWebApp): (v: string) => boolean {
+  return (v) => wa.isVersionAtLeast?.(v) === true;
+}
+
+/** WebApp objects already set up (`disableVerticalSwipes` runs once per Mini App). */
+const shellStarted = new WeakSet<object>();
+
+/**
+ * `ready()`, `expand()` unless already expanded, and — once per WebApp, Bot
+ * API 7.7+ — `disableVerticalSwipes()` (O8: a downward drag on the price
+ * slider, slide stage or a game must not minimise the app).
+ */
+function startWebApp(wa: TelegramWebApp) {
+  try {
+    wa.ready?.();
+    if (wa.isExpanded !== true) wa.expand?.();
+  } catch (e) {
+    console.warn("[miniapp] ready/expand:", e instanceof Error ? e.message : e);
+  }
+  if (shellStarted.has(wa)) return;
+  shellStarted.add(wa);
+  try {
+    if (clientSupports(versionCheck(wa), TG_VERTICAL_SWIPES_VERSION)) wa.disableVerticalSwipes?.();
+  } catch (e) {
+    console.warn("[miniapp] disableVerticalSwipes:", e instanceof Error ? e.message : e);
+  }
 }
 
 function MiniAppSession() {
@@ -91,16 +148,16 @@ function MiniAppSession() {
 
   useEffect(() => {
     // Defence in depth: the script is injected only after the same detection.
-    if (!isTelegramWebApp(window as unknown as LaunchEnv)) return;
+    if (!isGenuineMiniApp(window as unknown as MiniAppEnv)) return;
     let cancelled = false;
     void loadTelegramWebApp(window as TelegramWindow).then((wa) => {
-      if (cancelled || !wa) return;
-      try {
-        wa.ready?.();
-        wa.expand?.();
-      } catch (e) {
-        console.warn("[miniapp] ready/expand:", e instanceof Error ? e.message : e);
+      if (cancelled) return;
+      if (!wa) {
+        // No Telegram BackButton without the script: give the in-app «←» back.
+        setMiniAppShellState({ backButton: false });
+        return;
       }
+      startWebApp(wa);
       setWebApp(wa);
       setWebAppReady(true);
     });
@@ -130,7 +187,97 @@ function MiniAppSession() {
   }, [webAppReady, sessionChecked, loggedIn, setUser, refreshGenerations, router, nav]);
 
   useTelegramBack(webApp);
+  useTelegramChrome(webApp);
+  useTelegramSafeArea(webApp);
   return null;
+}
+
+/** The app's page colour (`--page-bg`, else the body background) as `#rrggbb`, or `null`. */
+function readPageColor(): string | null {
+  try {
+    const fromToken = normalizeHexColor(window.getComputedStyle(document.documentElement).getPropertyValue("--page-bg"));
+    return fromToken ?? normalizeHexColor(window.getComputedStyle(document.body).backgroundColor);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Telegram's header, background and bottom bar in the app's page colour, so
+ * the Telegram chrome and the page read as one surface. Re-applied when the
+ * app theme changes (`applyTheme` toggles `.dark` on `<html>`); an unchanged
+ * colour is not re-sent. Each member is version-gated (`telegramChromeColors`).
+ */
+function useTelegramChrome(wa: TelegramWebApp | null) {
+  useEffect(() => {
+    if (!wa) return;
+    let last: string | null = null;
+    const set = (name: string, fn: ((color: string) => void) | undefined, value: string | null) => {
+      if (value === null || typeof fn !== "function") return;
+      try {
+        fn.call(wa, value);
+      } catch (e) {
+        console.warn(`[miniapp] ${name}:`, e instanceof Error ? e.message : e);
+      }
+    };
+    const apply = () => {
+      const color = readPageColor();
+      if (color === null || color === last) return;
+      last = color;
+      const c = telegramChromeColors(color, versionCheck(wa));
+      set("setHeaderColor", wa.setHeaderColor, c.header);
+      set("setBackgroundColor", wa.setBackgroundColor, c.background);
+      set("setBottomBarColor", wa.setBottomBarColor, c.bottomBar);
+    };
+    apply();
+    const Observer = window.MutationObserver;
+    if (typeof Observer !== "function") return;
+    const observer = new Observer(apply);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, [wa]);
+}
+
+/**
+ * `--tg-safe-*` / `--tg-content-safe-*` on `<html>` (contract:
+ * `SAFE_AREA_CSS_VARS` in `lib/telegram-miniapp.ts`): Telegram's insets on
+ * 8.0+, updated on `safeAreaChanged` / `contentSafeAreaChanged`; `env()`
+ * fallbacks on older clients. Removed on unmount.
+ */
+function useTelegramSafeArea(wa: TelegramWebApp | null) {
+  useEffect(() => {
+    if (!wa) return;
+    const root = document.documentElement;
+    const supported = clientSupports(versionCheck(wa), TG_SAFE_AREA_VERSION);
+    const write = () => {
+      let vars = safeAreaCssVars(null, null);
+      try {
+        if (supported) vars = safeAreaCssVars(wa.safeAreaInset, wa.contentSafeAreaInset);
+      } catch {
+        /* foreign object: keep the fallbacks */
+      }
+      for (const k of SAFE_AREA_CSS_VARS) root.style.setProperty(k, vars[k]);
+    };
+    write();
+    const events = supported ? ["safeAreaChanged", "contentSafeAreaChanged"] : [];
+    for (const ev of events) {
+      try {
+        wa.onEvent?.(ev, write);
+      } catch (e) {
+        console.warn(`[miniapp] onEvent ${ev}:`, e instanceof Error ? e.message : e);
+      }
+    }
+    return () => {
+      for (const ev of events) {
+        try {
+          wa.offEvent?.(ev, write);
+        } catch {
+          /* the webview is going away */
+        }
+      }
+      for (const k of SAFE_AREA_CSS_VARS) root.style.removeProperty(k);
+    };
+  }, [wa]);
 }
 
 /**
@@ -154,6 +301,8 @@ function useTelegramBack(wa: TelegramWebApp | null) {
   const back = state?.backButton ?? null;
   const confirm = state?.closingConfirmation ?? null;
   const supportsBack = back !== null;
+  /** `BackButton.onClick` was registered: a shown button really navigates. */
+  const clickWired = useRef(false);
 
   useEffect(() => {
     const bb = wa?.BackButton;
@@ -161,7 +310,9 @@ function useTelegramBack(wa: TelegramWebApp | null) {
     const onBack = () => nav.systemBack();
     try {
       bb.onClick?.(onBack);
+      clickWired.current = typeof bb.onClick === "function";
     } catch (e) {
+      clickWired.current = false;
       console.warn("[miniapp] BackButton.onClick:", e instanceof Error ? e.message : e);
     }
     return () => {
@@ -174,12 +325,21 @@ function useTelegramBack(wa: TelegramWebApp | null) {
   }, [wa, supportsBack, nav]);
 
   useEffect(() => {
-    const bb = wa?.BackButton;
-    if (back === null || !bb) return;
+    if (!wa) return;
+    const bb = wa.BackButton;
+    // O6: the in-app «←» hides only while this button works (supported, wired,
+    // show() did not throw). It is shown on every non-root page — exactly where
+    // a «←» exists — so the «←» does not flash on a root → page navigation.
+    if (back === null || !bb) {
+      setMiniAppShellState({ backButton: false });
+      return;
+    }
     try {
       if (back) bb.show?.();
       else bb.hide?.();
+      setMiniAppShellState({ backButton: typeof bb.show === "function" && clickWired.current });
     } catch (e) {
+      setMiniAppShellState({ backButton: false });
       console.warn("[miniapp] BackButton:", e instanceof Error ? e.message : e);
     }
   }, [wa, back]);
