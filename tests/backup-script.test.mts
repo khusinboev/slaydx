@@ -28,6 +28,17 @@ function dockerAvailable(): boolean {
 
 const hasDocker = dockerAvailable();
 
+/**
+ * Security review O1: the drill restores the whole production database into the scratch
+ * container's data volume. After a run (success or failure) no `slaydx-restore-check-*` volume
+ * may remain on the real Docker daemon. Mutation: `docker rm -f` without `-v` and no
+ * `docker volume rm` — red.
+ */
+function assertNoScratchVolume(when: string): void {
+  const left = execFileSync("docker", ["volume", "ls", "-q", "--filter", "name=slaydx-restore-check-"], { encoding: "utf8" }).trim();
+  assert.equal(left, "", `${when}: restore-check volume qoldi: ${left}`);
+}
+
 test("backup.sh: bash -n sintaksis xato bermaydi", () => {
   execFileSync("bash", ["-n", "scripts/backup.sh"], { stdio: "pipe" });
 });
@@ -281,6 +292,7 @@ test(
       /Command failed/,
       "buzilgan dump bilan restore-check.sh XATO berishi kerak",
     );
+    assertNoScratchVolume("buzilgan dump");
   },
 );
 
@@ -358,6 +370,7 @@ test(
       encoding: "utf8",
     });
     assert.match(stdout, /restore-check: OK/, `exit 0 va "OK" chiqishi kerak edi:\n${stdout}`);
+    assertNoScratchVolume("muvaffaqiyatli tiklash");
     assert.match(stdout, /users=1/);
     assert.match(stdout, /transactions=1/);
   },

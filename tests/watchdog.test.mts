@@ -167,6 +167,7 @@ test("watchdog.sh (haqiqiy Postgres + stub docker/curl/df)", { skip }, async (t)
     WATCHDOG_COMPOSE_DIR: composeDir,
     WATCHDOG_CERT_FILE: certOk,
     BACKUP_DIR: backups,
+    SLAYDX_LOCK_FILE: path.join(dir, "deploy.lock"),
   };
 
   const inspect = (name: string, status = "running", health = "healthy", oom = "false", restarts = 0, project = "slaydx") => {
@@ -414,6 +415,23 @@ test("watchdog.sh (haqiqiy Postgres + stub docker/curl/df)", { skip }, async (t)
     utimesSync(path.join(state, "restarted-worker"), old, old);
     run(on);
     assert.equal(composeCalls().length, 2, "cooldown tugagach yana restart");
+
+    // Security review O2: no restart while a deploy holds its lock (same file deploy-pull.sh flocks).
+    // Mutation: drop the `flock -n` guard — the compose call appears (red).
+    await reset();
+    inspect("slaydx-worker-2", "running", "unhealthy");
+    for (let i = 0; i < 2; i++) run(on);
+    const locked = spawnSync("flock", [baseEnv.SLAYDX_LOCK_FILE, "bash", SCRIPT], {
+      env: { ...baseEnv, ...on } as NodeJS.ProcessEnv,
+      encoding: "utf8",
+      timeout: 60_000,
+    });
+    assert.equal(locked.status, 0, locked.stderr);
+    assert.match(locked.stdout, /a deploy holds .*deploy\.lock — not restarting 'worker' now/);
+    assert.doesNotMatch(readFileSync(path.join(stub, "docker.log"), "utf8"), /^compose /m, "deploy paytida restart yo'q");
+    assert.ok(!existsSync(path.join(state, "restarted-worker")), "o'tkazib yuborilgan restart cooldown'ni boshlamasligi kerak");
+    run(on);
+    assert.match(readFileSync(path.join(stub, "docker.log"), "utf8"), /^compose -p slaydx restart worker$/m, "lock bo'shagach restart");
 
     await reset();
     inspect("slaydx-web-1", "running", "unhealthy", "false", 0, "other-project");

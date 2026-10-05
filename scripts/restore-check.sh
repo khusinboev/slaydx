@@ -33,6 +33,11 @@ COMPOSE_FILE="${RESTORE_CHECK_COMPOSE_FILE:-$(cd "$(dirname "$0")/.." && pwd)/do
 PG_PASSWORD="restore-check-$$"
 PG_DB="restorecheck"
 container="slaydx-restore-check-$$"
+# The postgres image declares VOLUME /var/lib/postgresql/data: without an explicit mount Docker
+# creates an anonymous volume that holds the whole restored production database and survives
+# `docker rm -f` (security review O1). The data goes into this named volume instead, and finish()
+# removes container AND volume on every exit path (success, failure, signal).
+data_volume="slaydx-restore-check-$$-data"
 
 notify_failure() {
   if [ -n "${BACKUP_TG_CHAT:-}" ] && [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
@@ -44,7 +49,7 @@ notify_failure() {
 }
 
 json_escape() {
-  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+  printf '%s' "$1" | tr '\000-\037' ' ' | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
 # One JSON line per run in the backup log (only when the directory is writable).
@@ -63,14 +68,27 @@ fail() {
   exit 1
 }
 
+# Removes the scratch container and its data volume; returns 1 when the volume is still there.
+# Idempotent — the success path calls it before writing its marker, finish() on every exit.
+remove_scratch() {
+  docker rm -f -v "$container" >/dev/null 2>&1 || true
+  docker volume rm -f "$data_volume" >/dev/null 2>&1 || true
+  if docker volume inspect "$data_volume" >/dev/null 2>&1; then
+    echo "restore-check: OGOHLANTIRISH — $data_volume volume o'chmadi (qo'lda: docker volume rm $data_volume)" >&2
+    return 1
+  fi
+  return 0
+}
+
 finish() {
   local rc=$?
-  docker rm -f "$container" >/dev/null 2>&1 || true
+  remove_scratch || true
   if [ "$rc" -ne 0 ]; then
     [ -n "$fail_msg" ] || fail_msg="kutilmagan xato (exit $rc)"
     log_run error "$fail_msg"
     notify_failure "$fail_msg"
   fi
+  exit "$rc"
 }
 trap finish EXIT
 
@@ -99,6 +117,7 @@ echo "restore-check: $dump_file -> $container ($IMAGE)"
 docker run -d --name "$container" \
   --network none \
   --memory 1g \
+  --mount "type=volume,src=$data_volume,dst=/var/lib/postgresql/data" \
   -e POSTGRES_PASSWORD="$PG_PASSWORD" \
   -e POSTGRES_DB="$PG_DB" \
   "$IMAGE" >/dev/null
@@ -150,6 +169,7 @@ if ! [[ "$mismatches" =~ ^[0-9]+$ ]] || [ "$mismatches" -ne 0 ]; then
   fail "${mismatches:-?} foydalanuvchida balans jurnal (transactions) bilan mos emas"
 fi
 
+remove_scratch || fail "vaqtinchalik $data_volume volume o'chmadi (tiklangan baza diskda qoldi)"
 duration=$(($(date +%s) - started))
 log_run ok ""
 if [ -d "$BACKUP_DIR" ] && [ -w "$BACKUP_DIR" ]; then

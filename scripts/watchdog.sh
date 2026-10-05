@@ -4,8 +4,9 @@
 # owner decision D3 in docs/ops/PLAN.md). Runs from cron every 3 minutes as root:
 #
 #   /etc/cron.d/slaydx-watchdog
-#   */3 * * * * root /opt/slaydx/scripts/watchdog.sh >>/var/log/slaydx-watchdog.log 2>&1
-#   0 6 * * *   root /opt/slaydx/scripts/watchdog.sh --digest >>/var/log/slaydx-watchdog.log 2>&1
+#   */3 * * * * root umask 077; /opt/slaydx/scripts/watchdog.sh >>/var/log/slaydx-watchdog.log 2>&1
+#   0 6 * * *   root umask 077; /opt/slaydx/scripts/watchdog.sh --digest >>/var/log/slaydx-watchdog.log 2>&1
+# (`umask 077`: the log can carry error_log text when Telegram fails — keep it root-only.)
 #
 # Checks: public /api/health through the local nginx + TLS, slaydx container state/health/
 # restarts/OOM kills, disk %, RAM and swap, oldest ready QUEUED job, FAILED ratio, new error
@@ -27,7 +28,9 @@
 # service of a `slaydx-*` container that stayed `unhealthy` for WATCHDOG_RESTART_AFTER runs,
 # at most once per WATCHDOG_RESTART_COOLDOWN_MIN per service, with
 # `docker compose -p slaydx restart <service>` (all replicas of that service). Nothing outside
-# the slaydx compose project is ever touched; the script never prunes, stops or removes.
+# the slaydx compose project is ever touched; the script never prunes, stops or removes. A restart
+# is skipped while a deploy holds its lock (SLAYDX_LOCK_FILE, the same file deploy/deploy-pull.sh
+# and deploy-build.sh flock) and the lock is held during the restart, so neither can interleave.
 #
 #   --dry-run   print what would be sent/restarted; never writes state, never sends, never restarts
 #   --digest    send one daily summary instead of running the checks
@@ -66,6 +69,7 @@ HEALTH_RESOLVE="${WATCHDOG_HEALTH_RESOLVE-slaydxx.uz:443:127.0.0.1}"
 CONTAINERS="${WATCHDOG_CONTAINERS:-slaydx-web-1 slaydx-worker-1 slaydx-worker-2 slaydx-postgres-1}"
 PROJECT="${WATCHDOG_COMPOSE_PROJECT:-slaydx}"
 COMPOSE_DIR="${WATCHDOG_COMPOSE_DIR:-/opt/slaydx}"
+DEPLOY_LOCK="${SLAYDX_LOCK_FILE:-/run/lock/slaydx-deploy.lock}"
 AUTO_RESTART="${WATCHDOG_AUTO_RESTART:-0}"
 RESTART_AFTER="${WATCHDOG_RESTART_AFTER:-3}"
 RESTART_COOLDOWN_MIN="${WATCHDOG_RESTART_COOLDOWN_MIN:-30}"
@@ -207,9 +211,21 @@ auto_restart() {
     echo "watchdog: [dry-run] would run: docker compose -p $PROJECT restart $svc"
     return 0
   fi
-  # Mark first: a restart that fails is not retried every 3 minutes, only after the cooldown.
+  # Never restart in the middle of a deploy: take the deploy lock without waiting and hold it for
+  # the restart. Exit 75 = the lock is busy (a deploy is running) — try again on a later run.
+  local rc=0
+  mkdir -p "$(dirname "$DEPLOY_LOCK")" 2>/dev/null || true
+  (
+    flock -n 8 || exit 75
+    cd "$COMPOSE_DIR" && docker compose -p "$PROJECT" restart "$svc"
+  ) 8>>"$DEPLOY_LOCK" >/dev/null 2>&1 || rc=$?
+  if [ "$rc" = 75 ]; then
+    echo "watchdog: a deploy holds $DEPLOY_LOCK — not restarting '$svc' now"
+    return 0
+  fi
+  # Mark after an attempt: a restart that failed is not retried every 3 minutes, only after the cooldown.
   mark "restarted-$svc"
-  if (cd "$COMPOSE_DIR" && docker compose -p "$PROJECT" restart "$svc") >/dev/null 2>&1; then
+  if [ "$rc" = 0 ]; then
     send "[ACTION] $NAME: $c sog'lom emas edi — '$svc' xizmati qayta ishga tushirildi" || true
     del "unhealthy-$c"
   else

@@ -31,7 +31,7 @@ notify_failure() {
 
 json_escape() {
   # Tirnoq va backslash'ni JSON uchun qochiradi — bitta qatorli xabarlar yetarli.
-  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+  printf '%s' "$1" | tr '\000-\037' ' ' | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
 # HAR qanday kutilmagan xato (docker cp, mv, mkdir, stat, ...) ham shu

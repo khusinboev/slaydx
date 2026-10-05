@@ -6,7 +6,10 @@
 # `slaydx-worker`, or registry `ghcr.io/<owner>/slaydx-web` …).
 #
 # For each slaydx repository it keeps
-#   - every image used by any container (running or stopped), and
+#   - every image used by any container (running or stopped),
+#   - the protected deploy images: tags `rollback`, `local`, `main`, the deployed sha
+#     (`$CLEANUP_DEPLOY_STATE_DIR/current`, written by deploy/deploy-pull.sh) and the previous sha +
+#     image ids recorded in ROLLBACK.txt (line 1, `web_image=`, `worker_image=`) — security review O3,
 #   - the newest CLEANUP_KEEP_ROLLBACK (default 2) other images — the rollback candidates,
 # and removes the remaining tags with a plain `docker rmi <repo>:<tag>` (no -f: Docker itself
 # refuses to delete an image a container still uses). Untagged (dangling) images are pruned only
@@ -20,6 +23,8 @@ set -euo pipefail
 APPLY=0
 KEEP="${CLEANUP_KEEP_ROLLBACK:-2}"
 PROJECT="${CLEANUP_COMPOSE_PROJECT:-slaydx}"
+DEPLOY_STATE_DIR="${CLEANUP_DEPLOY_STATE_DIR:-/var/lib/slaydx-deploy}"
+ROLLBACK_FILE="${CLEANUP_ROLLBACK_FILE:-/root/slaydx-backups/ROLLBACK.txt}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --apply) APPLY=1 ;;
@@ -49,6 +54,23 @@ while IFS= read -r id; do
   [ -z "$id" ] || used[$id]=1
 done < <(docker ps -aq --no-trunc | xargs -r docker inspect -f '{{.Image}}')
 
+# Protected tags and image ids (see the header). Missing files simply protect nothing extra.
+declare -A protected_tag=([rollback]=1 [local]=1 [main]=1) protected_id=()
+if [ -r "$DEPLOY_STATE_DIR/current" ]; then
+  t=$(head -n 1 "$DEPLOY_STATE_DIR/current" | tr -d '[:space:]')
+  [ -z "$t" ] || protected_tag[$t]=1
+fi
+if [ -r "$ROLLBACK_FILE" ]; then
+  t=$(head -n 1 "$ROLLBACK_FILE" | tr -d '[:space:]')
+  [ -z "$t" ] || protected_tag[$t]=1
+  while IFS='=' read -r k v; do
+    case "$k" in
+      tag) [ -z "$v" ] || protected_tag[$v]=1 ;;
+      web_image | worker_image) [ -z "$v" ] || protected_id[$v]=1 ;;
+    esac
+  done <"$ROLLBACK_FILE"
+fi
+
 # Tagged slaydx images: "<created>\t<repo>\t<tag>\t<id>".
 declare -A created=() repos=()
 rows=()
@@ -60,6 +82,7 @@ while IFS=$'\t' read -r repo tag id; do
     created[$id]=$(docker image inspect -f '{{.Created}}' "$id")
   fi
   repos[$repo]=1
+  [ -z "${protected_tag[$tag]:-}" ] || protected_id[$id]=1
   rows+=("${created[$id]}"$'\t'"$repo"$'\t'"$tag"$'\t'"$id")
 done < <(docker images --no-trunc --format '{{.Repository}}\t{{.Tag}}\t{{.ID}}')
 
@@ -72,6 +95,8 @@ for repo in "${!repos[@]}"; do
   while IFS=$'\t' read -r _ r tag id; do
     if [ -n "${used[$id]:-}" ]; then
       echo "  keep   $r:$tag (in use)"
+    elif [ -n "${protected_id[$id]:-}" ]; then
+      echo "  keep   $r:$tag (protected: deploy/rollback)"
     elif [ -n "${keep_id[$id]:-}" ]; then
       echo "  keep   $r:$tag (rollback)"
     elif [ "$kept" -lt "$KEEP" ]; then

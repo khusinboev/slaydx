@@ -376,6 +376,11 @@ printf '%s\\n' "$*" >>"$S/docker.log"
 case "$1" in
   run) echo cafe; exit 0 ;;
   cp|rm) exit 0 ;;
+  volume)
+    case "$2" in
+      rm) exit 0 ;;
+      inspect) [ -f "$S/volume-stuck" ] && exit 0; exit 1 ;;
+    esac ;;
   exec)
     case "$3" in
       pg_isready) exit 0 ;;
@@ -408,6 +413,26 @@ test("restore-check.sh: compose'dagi postgres image, vaqt o'lchovi, belgi; har x
   const composeImage = /^\s*image:\s*(postgres:\S+)/m.exec(readFileSync(path.join(ROOT, "docker-compose.yml"), "utf8"))![1];
   assert.match(composeImage, /^postgres:\d+\.\d+-alpine\d/, "compose postgres image aniq versiyaga qulflangan bo'lishi kerak");
 
+  /**
+   * Security review O1: the restored production data must not outlive the drill. It lives in an
+   * explicitly named volume mounted at the image's VOLUME path (no anonymous volume), and both the
+   * container (`rm -f -v`) and that volume are removed on every exit path.
+   * Mutations: drop `-v`, drop the `volume rm`, or drop the `--mount` (anonymous volume again) — red.
+   */
+  const assertCleaned = (when: string) => {
+    const log = s.read("docker.log").split("\n");
+    const runLine = log.find((l) => l.startsWith("run "));
+    const vol = runLine && /--mount type=volume,src=(slaydx-restore-check-\d+-data),dst=\/var\/lib\/postgresql\/data /.exec(runLine)?.[1];
+    if (runLine) {
+      assert.ok(vol, `${when}: ma'lumot nomlangan volume'ga yozilmaydi: ${runLine}`);
+      const ctr = vol!.replace(/-data$/, "");
+      assert.ok(log.includes(`rm -f -v ${ctr}`), `${when}: konteyner -v bilan o'chirilmadi`);
+      assert.ok(log.includes(`volume rm -f ${vol}`), `${when}: ${vol} volume o'chirilmadi`);
+    } else {
+      assert.ok(log.some((l) => /^rm -f -v slaydx-restore-check-\d+$/.test(l)), `${when}: tozalash chaqirilmadi`);
+    }
+  };
+
   /** Mutation: an unpinned default (`postgres:16-alpine`) instead of the compose image — red. */
   let r = run();
   assert.equal(r.status, 0, r.stderr + r.stdout);
@@ -417,6 +442,7 @@ test("restore-check.sh: compose'dagi postgres image, vaqt o'lchovi, belgi; har x
   assert.ok(existsSync(path.join(backups, ".restore-check-ok")), ".restore-check-ok yozilmadi");
   assert.match(readFileSync(path.join(backups, "backup.log"), "utf8"), /"kind":"restore-check","status":"ok","durationSec":\d+,"restoreSec":\d+/);
   assert.deepEqual(s.tg(), []);
+  assertCleaned("muvaffaqiyatli run");
 
   rmSync(path.join(s.stub, "docker.log"));
   r = run({ RESTORE_CHECK_IMAGE: "postgres:16.99-test" });
@@ -426,6 +452,7 @@ test("restore-check.sh: compose'dagi postgres image, vaqt o'lchovi, belgi; har x
   /** Mutations: drop notify_failure from the EXIT trap, or touch the marker before the checks — red. */
   const failCase = (setup: () => void, extra: Record<string, string>, re: RegExp) => {
     rmSync(path.join(s.stub, "tg.log"), { force: true });
+    rmSync(path.join(s.stub, "docker.log"), { force: true });
     rmSync(path.join(backups, ".restore-check-ok"), { force: true });
     setup();
     const rf = run(extra);
@@ -434,6 +461,7 @@ test("restore-check.sh: compose'dagi postgres image, vaqt o'lchovi, belgi; har x
     assert.equal(msgs.length, 1, msgs.join(" | "));
     assert.match(msgs[0], re);
     assert.ok(!existsSync(path.join(backups, ".restore-check-ok")), "xatoda belgi yozilmasligi kerak");
+    assertCleaned(`xato: ${re}`);
   };
   failCase(() => writeFileSync(path.join(s.stub, "restore-fail"), ""), {}, /^SlaydX tiklash sinovi MUVAFFAQIYATSIZ: pg_restore muvaffaqiyatsiz tugadi \(slaydx-20261004-013000\.dump\)$/);
   rmSync(path.join(s.stub, "restore-fail"));
@@ -441,9 +469,11 @@ test("restore-check.sh: compose'dagi postgres image, vaqt o'lchovi, belgi; har x
   writeFileSync(path.join(s.stub, "mismatches"), "0\n");
   failCase(() => {}, { BACKUP_DIR: path.join(s.dir, "empty") }, /tiklash uchun dump topilmadi/);
   failCase(() => {}, { RESTORE_CHECK_COMPOSE_FILE: path.join(s.dir, "missing.yml") }, /Postgres image'ini .* aniqlab bo'lmadi/);
+  // A volume that refuses to go away turns an otherwise good drill into an alert.
+  failCase(() => writeFileSync(path.join(s.stub, "volume-stuck"), ""), {}, /vaqtinchalik slaydx-restore-check-\d+-data volume o'chmadi/);
+  rmSync(path.join(s.stub, "volume-stuck"));
   assert.match(readFileSync(path.join(backups, "backup.log"), "utf8"), /"kind":"restore-check","status":"error".*"error":"3 foydalanuvchida/);
   assert.ok(!s.read("curl-argv.log").includes(FAKE_TOKEN), "token curl argv'ida");
-  assert.ok(s.read("docker.log").includes("rm -f slaydx-restore-check-"), "vaqtinchalik konteyner o'chirilmadi");
 });
 
 // ─────────────────────────────── docker-cleanup.sh ───────────────────────────────
@@ -461,6 +491,7 @@ case "$1" in
       $'slaydx-web\\tpre-hotfix1\\tsha256:web2' \\
       $'slaydx-web\\tpre-audit25\\tsha256:web1' \\
       $'slaydx-web\\tpre-old\\tsha256:web0' \\
+      $'slaydx-web\\trollback\\tsha256:webR' \\
       $'ghcr.io/owner/slaydx-worker\\tmain\\tsha256:wk3' \\
       $'ghcr.io/owner/slaydx-worker\\taaa333\\tsha256:wk3' \\
       $'ghcr.io/owner/slaydx-worker\\taaa222\\tsha256:wk2' \\
@@ -488,8 +519,14 @@ exit 0
 
 test("docker-cleanup.sh: faqat slaydx-*, ishlatilayotgan va oxirgi 2 ta rollback image qoladi, global prune yo'q", async (t) => {
   const s = stubDir(t, { docker: STUB_DOCKER_IMAGES });
+  const stateDir = path.join(s.dir, "deploy-state");
+  const rollbackFile = path.join(s.dir, "ROLLBACK.txt");
   const run = (args: string[]) =>
-    spawnSync("bash", [path.join(ROOT, "scripts/docker-cleanup.sh"), ...args], { env: s.env(), encoding: "utf8", timeout: 30_000 });
+    spawnSync("bash", [path.join(ROOT, "scripts/docker-cleanup.sh"), ...args], {
+      env: s.env({ CLEANUP_DEPLOY_STATE_DIR: stateDir, CLEANUP_ROLLBACK_FILE: rollbackFile }),
+      encoding: "utf8",
+      timeout: 30_000,
+    });
   const calls = () => s.read("docker.log").split("\n").filter(Boolean);
 
   /** Mutation: default to apply — rmi calls appear in the dry run (red). */
@@ -528,6 +565,23 @@ test("docker-cleanup.sh: faqat slaydx-*, ishlatilayotgan va oxirgi 2 ta rollback
   assert.match(r.stderr, /FAILED slaydx-web:pre-old \(left in place\)/);
 
   assert.notEqual(run(["--keep", "0"]).status, 0, "--keep 0 rad etilishi kerak");
+  rmSync(path.join(s.stub, "rmi-fail"));
+
+  /**
+   * Security review O3: the deployed sha (deploy state `current`), the previous sha and image ids
+   * from ROLLBACK.txt and the `rollback` tag are never removed, whatever their age.
+   * Mutations: ignore the state file, ROLLBACK.txt or the protected tag list — red.
+   */
+  mkdirSync(stateDir);
+  writeFileSync(path.join(stateDir, "current"), "aaa000\n");
+  writeFileSync(rollbackFile, "aaa111\ntag=aaa111\nweb_image=sha256:web0\nworker_image=sha256:wk1\nat=x\nreplaced_by=aaa000\n");
+  rmSync(path.join(s.stub, "docker.log"));
+  r = run(["--apply", "--keep", "1"]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(calls().filter((c) => c.startsWith("rmi")).sort(), ["rmi slaydx-web:pre-audit25"]);
+  assert.match(r.stdout, /keep {3}ghcr\.io\/owner\/slaydx-worker:aaa000 \(protected: deploy\/rollback\)/);
+  assert.match(r.stdout, /keep {3}slaydx-web:pre-old \(protected: deploy\/rollback\)/);
+  assert.match(r.stdout, /keep {3}slaydx-web:rollback \(protected: deploy\/rollback\)/);
 });
 
 // ─────────────────────────────── .github/workflows/uptime.yml ───────────────────────────────

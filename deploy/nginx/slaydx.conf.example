@@ -104,6 +104,9 @@ server {
     # HTTPS hali barcha yo'llarda sinalmagan bosqichda xavfli.
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
+    # Do not advertise the nginx version (security review O6).
+    server_tokens off;
+
     # Yuklash chegaralari: `SOURCE_MAX_BYTES`/`TEMPLATE_MAX_BYTES` = 20 MB
     # (`lib/server/source-upload.ts`, `lib/server/template-upload.ts`).
     # 32m — shu chegaradan YUQORI, ya'ni nginx emas, ilovaning O'ZI aniq

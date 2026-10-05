@@ -7,7 +7,7 @@
 # money movements:
 #
 #   /etc/cron.d/slaydx-backup
-#   5 * * * * root /opt/slaydx/scripts/backup-ledger.sh >>/var/log/slaydx-backup.log 2>&1
+#   5 * * * * root umask 077; /opt/slaydx/scripts/backup-ledger.sh >>/var/log/slaydx-backup.log 2>&1
 #
 # Output: `$LEDGER_DIR/ledger-YYYYMMDD-HH.dump` (pg_dump custom format, verified with
 # `pg_restore --list`). One file per hour — a re-run in the same hour atomically replaces it.
@@ -56,7 +56,7 @@ fail() {
   echo "backup-ledger: XATO — $msg" >&2
   if [ -n "${log:-}" ]; then
     printf '{"ts":"%s","status":"error","error":"%s","durationSec":%s}\n' \
-      "$(date -Iseconds)" "$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g')" "$(($(date +%s) - started))" >>"$log" 2>/dev/null
+      "$(date -Iseconds)" "$(printf '%s' "$msg" | tr '\000-\037' ' ' | sed 's/\\/\\\\/g; s/"/\\"/g')" "$(($(date +%s) - started))" >>"$log" 2>/dev/null
   fi
   notify_failure "$msg"
   exit 1
