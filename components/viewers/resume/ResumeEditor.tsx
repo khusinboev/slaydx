@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef } from "react";
 import type { ResumeItem, ResumeLayout } from "@/lib/generation/resume/layout";
 import type { ResumeOp } from "@/lib/generation/resume/edit";
 import type { ResumeModel } from "@/lib/generation/resume/model";
-import { focusAtEnd, readText } from "../editable";
+import { announceOpenField, focusAtEnd, readText, releaseOpenField } from "../editable";
+import { createDoubleTapDetector } from "../slide-edit/doubleTap";
 import { ResumePage, type ResumeEditEvent } from "./ResumePage";
 
 /**
@@ -56,6 +57,7 @@ export function ResumeEditor({ layout, model, pageItems, pageIndex, total, onOps
     openRef.current = null;
     el.removeAttribute("contenteditable");
     el.removeAttribute("data-resume-editing");
+    releaseOpenField(el);
   }, []);
 
   const commit = useCallback(() => {
@@ -105,6 +107,8 @@ export function ResumeEditor({ layout, model, pageItems, pageIndex, total, onOps
       el.setAttribute("contenteditable", "true");
       el.setAttribute("data-resume-editing", "1");
       focusAtEnd(el);
+      // Phone «Bekor / Tayyor» bar and phone back end the edit through the same paths as Enter/Esc.
+      announceOpenField({ el, commit: () => commitRef.current(), cancel: () => cancelRef.current() });
     },
     [],
   );
@@ -123,6 +127,18 @@ export function ResumeEditor({ layout, model, pageItems, pageIndex, total, onOps
       ev.preventDefault();
       open(target);
     };
+    // Touch/pen double TAP — same detector and reasoning as `ArticleEditor`.
+    const taps = createDoubleTapDetector();
+    const onPointerDown = (ev: PointerEvent) => {
+      if (ev.pointerType === "mouse") return;
+      taps.down(ev.pointerId, ev.clientX, ev.clientY, ev.timeStamp);
+    };
+    const onPointerUp = (ev: PointerEvent) => {
+      if (ev.pointerType === "mouse") return;
+      if (!taps.up(ev.pointerId, ev.clientX, ev.clientY, ev.timeStamp)) return;
+      onDbl(ev);
+    };
+    const onPointerCancel = (ev: PointerEvent) => taps.cancel(ev.pointerId);
     const onKey = (ev: KeyboardEvent) => {
       const cur = openRef.current;
       if (!cur) return;
@@ -145,14 +161,31 @@ export function ResumeEditor({ layout, model, pageItems, pageIndex, total, onOps
     };
 
     host.addEventListener("dblclick", onDbl);
+    host.addEventListener("pointerdown", onPointerDown);
+    host.addEventListener("pointerup", onPointerUp);
+    host.addEventListener("pointercancel", onPointerCancel);
     host.addEventListener("keydown", onKey);
     host.addEventListener("focusout", onFocusOut);
     return () => {
       host.removeEventListener("dblclick", onDbl);
+      host.removeEventListener("pointerdown", onPointerDown);
+      host.removeEventListener("pointerup", onPointerUp);
+      host.removeEventListener("pointercancel", onPointerCancel);
       host.removeEventListener("keydown", onKey);
       host.removeEventListener("focusout", onFocusOut);
     };
   }, [open]);
+
+  // Edit mode switched off with a field open: the bar and phone back must not keep a detached field.
+  useEffect(
+    () => () => {
+      const cur = openRef.current;
+      if (!cur) return;
+      openRef.current = null;
+      releaseOpenField(cur.el);
+    },
+    [],
+  );
 
   /** Hover boshqaruvlari (`ResumePage`) → operatsiyalar. */
   const onEdit = useCallback(

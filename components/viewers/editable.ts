@@ -1,5 +1,7 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
+
 /**
  * contentEditable yordamchilari — slayd va rezyume muharrirlari uchun
  * BITTA nusxa (Rezyume 2, AUDIT-15 da `SlideEditor.tsx` dan ajratildi).
@@ -92,4 +94,63 @@ export function focusAtEnd(el: HTMLElement) {
   } catch {
     // jsdom/eski brauzer — kursor joyi muhim emas
   }
+}
+
+/* ───────────────────────── open field (phone «Bekor / Tayyor» bar) ───────────────────────── */
+
+/**
+ * The field a document editor (`ArticleEditor`, `ResumeEditor`) has open
+ * right now, with the SAME `commit`/`cancel` its Enter/Esc keys run. The
+ * phone «Bekor / Tayyor» bar (`EditDoneBar`) and phone back read it from
+ * here, so the bar never needs props drilled through the sheets and there is
+ * exactly one end-of-edit path per editor (docs/mobile/PLAN.md, R3 «Contract»).
+ *
+ * Only one contentEditable can hold the focus, so one module-level slot is
+ * enough. Editors announce on open and release on close; a release of a
+ * field that is no longer the current one is ignored (opening field B
+ * commits field A first).
+ */
+export type OpenField = {
+  el: HTMLElement;
+  /** Save the text (Enter, «Tayyor», phone back). */
+  commit: () => void;
+  /** Drop the text and restore the original (Esc, «Bekor»). */
+  cancel: () => void;
+};
+
+let openField: OpenField | null = null;
+const openFieldListeners = new Set<() => void>();
+
+function notifyOpenField() {
+  for (const l of [...openFieldListeners]) l();
+}
+
+/** An editor opened a field. */
+export function announceOpenField(f: OpenField): void {
+  openField = f;
+  notifyOpenField();
+}
+
+/** An editor closed the field `el` (commit, cancel, unmount). */
+export function releaseOpenField(el: HTMLElement): void {
+  if (openField?.el !== el) return;
+  openField = null;
+  notifyOpenField();
+}
+
+/** The currently open field (event handlers, effects). */
+export function getOpenField(): OpenField | null {
+  return openField;
+}
+
+function subscribeOpenField(cb: () => void): () => void {
+  openFieldListeners.add(cb);
+  return () => {
+    openFieldListeners.delete(cb);
+  };
+}
+
+/** React binding: re-renders when a field opens or closes. `null` on the server. */
+export function useOpenField(): OpenField | null {
+  return useSyncExternalStore(subscribeOpenField, getOpenField, () => null);
 }

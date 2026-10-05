@@ -1,7 +1,7 @@
 "use client";
 
 import katex from "katex";
-import { Redo2, Undo2 } from "lucide-react";
+import { Pencil, Redo2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { planArticle, type CiteSpan } from "@/lib/generation/article/layout";
 import { planWork } from "@/lib/generation/work/layout";
@@ -27,7 +27,9 @@ import { ArticleHeadItem, CiteText } from "./ArticleHead";
 import { ArticleEditor, articleEditTargets, isTeacherEditorOp, isWorkOp, legacyEditTargets, targetAttr, teacherEditTargets, workEditTargets, type EditCitePlan, type EditTarget } from "./ArticleEditor";
 import { PageRow, ZoomFrame, Workspace } from "./sheet";
 import { TitlePage } from "./TitlePage";
-import { VIEWER_TOOLBAR_H, ViewerToolbar } from "./toolbar";
+import { TOUCH_BOX, VIEWER_TOOLBAR_H, ViewerToolbar } from "./toolbar";
+import { DocEditHint, EditDoneBar, useDocEditHint, useEditFocusZoom } from "./EditDoneBar";
+import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
 import { useDocView, type DocView } from "./reading/prefs";
 import { ReadingScroll, ReadingTitle, ReadingView } from "./reading/ReadingView";
 import { readingSections } from "./reading/sections";
@@ -332,6 +334,21 @@ export function WordViewer({
    * Albom varaq kengroq — «sig'dirish» uning O'Z enidan hisoblanadi.
    */
   const { zoom, setZoom, fit, wide } = useFitZoom(workRef, sheetW);
+  /** The user picked a zoom by hand (toolbar «−/+»); «%» goes back to fit. The phone focus zoom restores either. */
+  const manualZoom = useRef(false);
+  const onToolbarZoom = useCallback(
+    (n: number) => {
+      manualZoom.current = true;
+      setZoom(n);
+    },
+    [setZoom],
+  );
+  const onToolbarFit = useCallback(() => {
+    manualZoom.current = false;
+    fit();
+  }, [fit]);
+  /** Phone layout (coarse pointer or < 768 px): «Tahrirlash» pinned, «Bekor / Tayyor» bar, focus zoom, hint. */
+  const coarse = useCoarsePointer();
 
   useLayoutEffect(() => {
     const root = measureRef.current;
@@ -446,6 +463,28 @@ export function WordViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per mode switch, after the new mode is in the DOM.
   }, [view]);
 
+  /*
+   * Phones: «Tahrirlash» is always visible (never in «⋯»), also in «O‘qish»,
+   * where it switches to «Varaq» and turns editing on in one tap (editing
+   * exists only on the sheets). While a field is open the sheet focus-zooms
+   * and the «Bekor / Tayyor» bar sits above the keyboard (`EditDoneBar`).
+   */
+  function toggleEdit() {
+    if (reading) {
+      changeView("page");
+      setEditOn(true);
+      return;
+    }
+    setEditOn((v) => !v);
+  }
+  useEditFocusZoom({
+    active: coarse && editing,
+    zoom,
+    apply: setZoom,
+    restore: (prev) => (manualZoom.current ? setZoom(prev) : fit()),
+  });
+  const hint = useDocEditHint(coarse && editing);
+
   const onEditStateRef = useRef(onEditState);
   onEditStateRef.current = onEditState;
   useEffect(() => {
@@ -475,23 +514,27 @@ export function WordViewer({
     return () => window.removeEventListener("keydown", onKey);
   }, [editing, undo, redo, save, pending]);
 
+  const editButton = editable ? (
+    <button
+      type="button"
+      aria-pressed={editing}
+      title="Ikki bosib tahrirlang · Enter — saqlash · Esc — bekor · bo‘sh qoldirib Enter — blokni o‘chirish · iqtibos ustida ikki bosish — manbani olib tashlash"
+      className={cn("rounded px-2 py-1 text-[12px]", TOUCH_BOX, "pointer-coarse:gap-1.5 pointer-coarse:text-[13px]", editing ? "bg-sky-500 text-white" : "hover:bg-white/10")}
+      onClick={toggleEdit}
+    >
+      {coarse ? <Pencil className="size-4 shrink-0" aria-hidden /> : null}
+      Tahrirlash
+    </button>
+  ) : null;
   const right = editable ? (
     <>
-      <button type="button" aria-label="Bekor qilish" title="Bekor qilish (Ctrl+Z)" className="hover:bg-white/10 rounded p-1.5 disabled:opacity-30" disabled={!(active ?? ed).canUndo} onClick={undo}>
+      <button type="button" aria-label="Bekor qilish" title="Bekor qilish (Ctrl+Z)" className={cn("hover:bg-white/10 rounded p-1.5 disabled:opacity-30", TOUCH_BOX)} disabled={!(active ?? ed).canUndo} onClick={undo}>
         <Undo2 className="size-4" />
       </button>
-      <button type="button" aria-label="Qaytarish" title="Qaytarish (Ctrl+Shift+Z)" className="hover:bg-white/10 rounded p-1.5 disabled:opacity-30" disabled={!(active ?? ed).canRedo} onClick={redo}>
+      <button type="button" aria-label="Qaytarish" title="Qaytarish (Ctrl+Shift+Z)" className={cn("hover:bg-white/10 rounded p-1.5 disabled:opacity-30", TOUCH_BOX)} disabled={!(active ?? ed).canRedo} onClick={redo}>
         <Redo2 className="size-4" />
       </button>
-      <button
-        type="button"
-        aria-pressed={editing}
-        title="Ikki bosib tahrirlang · Enter — saqlash · Esc — bekor · bo‘sh qoldirib Enter — blokni o‘chirish · iqtibos ustida ikki bosish — manbani olib tashlash"
-        className={cn("rounded px-2 py-1 text-[12px]", editing ? "bg-sky-500 text-white" : "hover:bg-white/10")}
-        onClick={() => setEditOn((v) => !v)}
-      >
-        Tahrirlash
-      </button>
+      {coarse ? null : editButton}
     </>
   ) : null;
 
@@ -519,15 +562,17 @@ export function WordViewer({
       <ViewerToolbar
         sticky
         zoom={zoom}
-        onZoom={setZoom}
+        onZoom={onToolbarZoom}
         page={page}
         pages={pages?.length ?? 1}
         onPage={go}
-        onFit={fit}
+        onFit={onToolbarFit}
         right={reading ? null : right}
+        pinned={coarse ? editButton : undefined}
         view={view}
         onView={changeView}
       />
+      {hint.show ? <DocEditHint onDismiss={hint.dismiss} /> : null}
       {(active ?? ed).error ? (
         <div className="no-print bg-rose-900/80 flex items-center gap-2 px-3 py-1.5 text-[12px] text-white">
           <span className="flex-1">{(active ?? ed).error}</span>
@@ -641,6 +686,7 @@ export function WordViewer({
           </div>
         ))}
       </div>
+      {editing ? <EditDoneBar revealKey={zoom} /> : null}
     </div>
   );
 }
