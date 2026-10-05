@@ -6,6 +6,7 @@ import type { ServerGeneration } from "@/lib/api-client";
 import type { ToolConfig } from "@/lib/types";
 import { FilePreview } from "./FilePreview";
 import { formatFileDate } from "./file-meta";
+import { cn } from "@/lib/cn";
 
 /**
  * File card for phones (docs/mobile/PLAN.md O7): two to a row, preview on
@@ -24,7 +25,9 @@ export function PhoneFileCard({
 }) {
   const done = gen.status === "COMPLETED";
   const when = formatFileDate(gen.finishedAt ?? gen.createdAt);
-  const meta = [tool?.title, done ? when : gen.step].filter(Boolean).join(" · ");
+  // A failed or revoked card must say so (UX review m8) — otherwise it looks like a finished file.
+  const ended = gen.status === "FAILED" ? "Xato" : gen.status === "REVOKED" ? "Bekor qilindi" : null;
+  const meta = [tool?.title, done ? when : (ended ?? gen.step)].filter(Boolean).join(" · ");
   return (
     <div
       data-file-card
@@ -32,7 +35,7 @@ export function PhoneFileCard({
       className="border-border/60 bg-card relative overflow-hidden rounded-xl border"
     >
       {tool ? <div className="h-1" style={{ background: `rgb(${tool.tc})` }} /> : null}
-      <Link href={`/uz/files/${gen.id}`} tabIndex={-1} aria-hidden className="bg-muted block h-28 overflow-hidden">
+      <Link href={`/uz/files/${gen.id}`} tabIndex={-1} aria-hidden className="bg-muted block h-28 overflow-hidden [&_[data-preview-title]]:pr-9">
         {gen.filesPurgedAt ? (
           <div
             className="text-muted-foreground flex h-full flex-col items-center justify-center gap-1.5 text-xs"
@@ -55,7 +58,11 @@ export function PhoneFileCard({
         >
           {gen.topic}
         </Link>
-        <div data-file-meta className="text-muted-foreground mt-1 truncate text-xs">
+        <div
+          data-file-meta
+          data-file-status={ended ? gen.status.toLowerCase() : undefined}
+          className={cn("mt-1 truncate text-xs", gen.status === "FAILED" ? "text-destructive" : "text-muted-foreground")}
+        >
           {meta}
         </div>
       </div>

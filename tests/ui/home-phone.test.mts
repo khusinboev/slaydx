@@ -391,3 +391,18 @@ test("catalogue: the chip bar is sticky, prices and routes of the cards are unch
   );
   assert.ok(document.body.textContent?.includes("tanga dan"));
 });
+
+test("PhoneFileCard: a failed or revoked file says so in the meta line; the preview title clears the «⋯» button (UX review m8, m9)", async () => {
+  const { render } = await import("@testing-library/react");
+  const { createElement } = await import("react");
+  const { PhoneFileCard } = await import("../../components/home/PhoneFileCard.tsx");
+  const base = { id: "00000000-0000-4000-8000-000000000001", topic: "Kurs ishi mavzusi", format: "docx", createdAt: "2026-10-05T10:00:00Z", finishedAt: null, step: "", filesPurgedAt: null };
+  for (const [status, word] of [["FAILED", "Xato"], ["REVOKED", "Bekor qilindi"]] as const) {
+    const { container, unmount } = render(createElement(PhoneFileCard, { gen: { ...base, status } as never, tool: undefined, onMenu: () => {} }));
+    const meta = container.querySelector("[data-file-meta]");
+    assert.ok(meta && (meta.textContent ?? "").includes(word), `${status} → «${word}»`);
+    assert.equal(meta!.getAttribute("data-file-status"), status.toLowerCase());
+    assert.ok(container.querySelector("a[aria-hidden]")!.className.includes("[&_[data-preview-title]]:pr-9"));
+    unmount();
+  }
+});

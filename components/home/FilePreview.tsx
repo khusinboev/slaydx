@@ -63,7 +63,7 @@ export const FilePreview = memo(function FilePreview({ gen }: { gen: ServerGener
   const lines = gen.preview?.lines ?? [];
   const linesView = lines.length ? (
     <div className="h-full overflow-hidden bg-[#f7f4ec] px-3 py-2.5 text-left">
-      <div className="mb-1.5 line-clamp-2 text-[11px] leading-tight font-bold text-[#1a2744]">{gen.topic}</div>
+      <div data-preview-title className="mb-1.5 line-clamp-2 text-[11px] leading-tight font-bold text-[#1a2744]">{gen.topic}</div>
       {lines.map((t, i) => (
         <p key={i} className="mb-1 line-clamp-2 text-[9px] leading-snug text-[#334155]">
           {t}
@@ -91,7 +91,7 @@ export const FilePreview = memo(function FilePreview({ gen }: { gen: ServerGener
   if (gen.format === "mp3") {
     return (
       <div className="flex h-full flex-col bg-[#f5f3ff] px-3 py-2.5 text-left">
-        <div className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-[#5b21b6]">
+        <div data-preview-title className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-[#5b21b6]">
           <Mic className="size-3.5 shrink-0" />
           <span className="line-clamp-1">{gen.topic}</span>
         </div>
