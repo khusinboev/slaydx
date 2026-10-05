@@ -202,3 +202,12 @@ Native-reader check of A1 and C2 Uzbek texts still recommended.
 - nginx unchanged: production `location /` already has `proxy_read_timeout 300s`.
 - Bot: inline mode ON (owner); webhook `allowed_updates` = message, callback_query (inline_query answers inactive — optional).
 - Pending: owner device check (Android + iPhone): download PPTX/PDF in the Mini App, «Ulashish», «Saqlash», slide/doc editing with the real keyboard.
+
+## 10. Hotfix 1 (2026-10-05) — DEPLOYED `926fcc7`
+Owner feedback: (1) saved file in the bot chat now carries «📤 Ulashish» (`switch_inline_query f_<gen32>_<format>`; the bot answers
+the owner's inline query with the cached file, ownership in SQL); (2) «Ulashish» never stays loading (settles on return/timeout,
+recovers tg-web-app.js's stuck flag via postEvent, Android 10-s gesture re-tap); (3) two Telegram accounts on one phone: a genuine
+Mini App whose signed user differs from the session asks «Akkauntni almashtirasizmi?» and switches only on «O'tish» (server:
+auth_date ≤ 10 min, never for phone-login sessions). Security review: first REJECT (Android in-app browser login-CSRF) → fixed →
+APPROVE. CI green; backup slaydx-20261005-171149.dump; rollback e6383b9 + images :pre-hotfix1 + webhook allowed_updates back to
+[message, callback_query]. Webhook allowed_updates now [message, inline_query, callback_query]. Prod smoke: health 200, errors 0, ledger 0.
