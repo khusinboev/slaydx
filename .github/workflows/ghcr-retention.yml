@@ -1,0 +1,124 @@
+# GHCR retention for ghcr.io/khusinboev/slaydx-{web,worker} (ops sprint P-CI; O1 §3.5).
+#
+# Storage is free today, but if GitHub ever bills container storage from the Packages quota (500 MB on Free) the
+# images would exceed it quickly — this keeps the registry bounded. A package VERSION is one digest; after `promote`
+# the same version carries `build-<sha>`, `<sha>` and possibly `main`.
+#
+# Policy (per package), a version is KEPT when any of these holds — everything else is deleted:
+#   1. it carries the `main` tag (never deleted);
+#   2. it is among the newest KEEP_BUILDS versions carrying a `build-*` tag (covers recent rollback targets even if
+#      they are older than MAX_AGE_DAYS, and the in-flight candidate of a running CI);
+#   3. it carries a promoted `<sha>` tag (40 hex) and is at most MAX_AGE_DAYS old;
+#   4. it is untagged and at most MAX_AGE_DAYS old (a re-run that moved a tag; kept for a while for safety).
+# So: failed/untested `build-<sha>` candidates beyond the newest KEEP_BUILDS go; deployable `<sha>` versions live
+# 30 days (or longer while among the newest builds). A deleted version can still be rolled back to on the server
+# (deploy keeps the previous images locally) — it just can no longer be pulled again.
+#
+# Dry run by default: scheduled runs only REPORT until the owner sets the repository variable
+# GHCR_RETENTION_APPLY=true (Settings → Secrets and variables → Actions → Variables); a manual run deletes only with
+# `apply: true`. Token: the automatic GITHUB_TOKEN (packages: write). The packages are created by this repo's CI, so the
+# repo has admin access to them, which version deletion requires. No other secret.
+name: GHCR retention
+
+on:
+  schedule:
+    - cron: "17 3 * * 1" # Mondays 03:17 UTC
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Really delete (unchecked = dry run: only list what would be deleted)"
+        type: boolean
+        default: false
+      keep_builds:
+        description: "How many newest build-* versions to keep per package"
+        type: number
+        default: 20
+
+concurrency:
+  group: ghcr-retention
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  prune:
+    name: prune ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [slaydx-web, slaydx-worker]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OWNER: ${{ github.repository_owner }}
+      PACKAGE: ${{ matrix.package }}
+      APPLY: ${{ (github.event_name == 'workflow_dispatch' && inputs.apply) || (github.event_name == 'schedule' && vars.GHCR_RETENTION_APPLY == 'true') }}
+      KEEP_BUILDS: ${{ inputs.keep_builds || 20 }}
+      MAX_AGE_DAYS: "30"
+      # Input: array of package versions (GitHub REST). Args: $now (epoch s), $keep (int), $maxAge (days).
+      # Output: [{id, name, created_at, tags, keep}] where keep is the reason string, or null = delete.
+      RETENTION_JQ: |
+        def tags: (.metadata.container.tags // []);
+        def age_days: ($now - (.created_at | sub("\\.[0-9]+"; "") | fromdateiso8601)) / 86400;
+        (map(select(any(tags[]; startswith("build-")))) | sort_by(.created_at) | reverse | .[:$keep] | map(.id))
+          as $recent
+        | map(
+            . as $v
+            | (if any(tags[]; . == "main") then "main tag"
+               elif any($recent[]; . == $v.id) then "newest \($keep) build-*"
+               elif any(tags[]; test("^[0-9a-f]{40}$")) and age_days <= $maxAge then "promoted sha, <= \($maxAge) days"
+               elif (tags | length) == 0 and age_days <= $maxAge then "untagged, <= \($maxAge) days"
+               else null end) as $reason
+            | {id, name, created_at, tags: tags, keep: $reason}
+          )
+    steps:
+      - name: Plan and apply retention
+        run: |
+          set -euo pipefail
+          [[ "$KEEP_BUILDS" =~ ^[0-9]+$ ]] && [ "$KEEP_BUILDS" -ge 1 ] || { echo "::error::keep_builds must be >= 1"; exit 1; }
+          base="users/$OWNER/packages/container/$PACKAGE"
+          if ! gh api "$base" --silent 2>"$RUNNER_TEMP/err"; then
+            if grep -q "404" "$RUNNER_TEMP/err"; then
+              echo "::notice::$PACKAGE does not exist yet (no main push since CI images were added); nothing to do"
+              exit 0
+            fi
+            cat "$RUNNER_TEMP/err"; exit 1
+          fi
+          gh api --paginate "$base/versions?per_page=100" | jq -s 'add // []' >"$RUNNER_TEMP/versions.json"
+          jq --argjson now "$(date +%s)" --argjson keep "$KEEP_BUILDS" --argjson maxAge "$MAX_AGE_DAYS" \
+            "$RETENTION_JQ" "$RUNNER_TEMP/versions.json" >"$RUNNER_TEMP/plan.json"
+
+          total=$(jq 'length' "$RUNNER_TEMP/plan.json")
+          kept=$(jq '[.[] | select(.keep != null)] | length' "$RUNNER_TEMP/plan.json")
+          delete_ids=$(jq -r '.[] | select(.keep == null) | .id' "$RUNNER_TEMP/plan.json")
+          {
+            echo "### $PACKAGE: $total versions, keep $kept, delete $((total - kept)) (apply: $APPLY)"
+            echo
+            echo "| version | created | tags | decision |"
+            echo "|---|---|---|---|"
+            jq -r '.[] | "| \(.id) | \(.created_at) | \(.tags | join(", ")) | \(.keep // "**delete**") |"' "$RUNNER_TEMP/plan.json"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+          # Belt and braces: never empty a package, and never delete anything when no version carries `main`
+          # while promoted versions exist (would indicate a broken promote; investigate first).
+          if [ "$total" -gt 0 ] && [ "$kept" -eq 0 ]; then
+            echo "::error::plan would delete every version of $PACKAGE; refusing"; exit 1
+          fi
+          if jq -e 'any(.[]; any(.tags[]; test("^[0-9a-f]{40}$"))) and (any(.[]; any(.tags[]; . == "main")) | not)' \
+              "$RUNNER_TEMP/plan.json" >/dev/null; then
+            echo "::error::$PACKAGE has promoted versions but no main tag; refusing to delete"; exit 1
+          fi
+
+          if [ -z "$delete_ids" ]; then echo "nothing to delete"; exit 0; fi
+          if [ "$APPLY" != "true" ]; then
+            echo "dry run — would delete version ids: $(echo "$delete_ids" | tr '\n' ' ')"
+            exit 0
+          fi
+          while read -r id; do
+            [[ "$id" =~ ^[0-9]+$ ]] || { echo "::error::unexpected version id '$id'"; exit 1; }
+            gh api -X DELETE "$base/versions/$id" --silent
+            echo "deleted version $id"
+          done <<<"$delete_ids"
