@@ -1,14 +1,14 @@
 import { handler } from "@/lib/server/api";
 import { ensureMigrated } from "@/lib/server/db";
 import { DownloadError, downloadErrorResponse, isDownloadError } from "@/lib/server/downloads/errors";
-import { peekWith, produceWith, recordDownload } from "@/lib/server/downloads/produce";
+import { peekForLink, produceForLink, recordDownload } from "@/lib/server/downloads/produce";
 import { verifyDownloadToken, type DownloadClaims } from "@/lib/server/downloads/token";
 import { bytesBody } from "@/lib/server/http-bytes";
 import { contentDisposition } from "@/lib/server/pdf-serve";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-/** Usually stored/cached bytes; a derived file evicted from the cache is converted again (≤ 50 s). */
+/** Usually stored/cached bytes; an evicted derived file is regenerated within `LINK_BUDGET_MS` (45 s) or 503. */
 export const maxDuration = 60;
 
 type Ctx = { params: Promise<{ token: string }> };
@@ -24,7 +24,13 @@ type Ctx = { params: Promise<{ token: string }> };
  *
  * HEAD is explicit (Next would otherwise run GET for it): iOS asks for the
  * size first, so HEAD answers from the stored size / derived cache, never
- * converts and never counts a download. Multi-use within the 15 min TTL.
+ * converts and never counts a download (a derived file not in the cache →
+ * 503 + Retry-After). Multi-use within the 15 min TTL.
+ *
+ * No request outlives nginx (m1): minting a link pins its derived file in the
+ * cache for 20 min; if it is gone anyway, GET regenerates it only within
+ * `LINK_BUDGET_MS` (45 s, soffice gate wait included) and otherwise answers
+ * 503 + Retry-After while the conversion finishes in the background.
  *
  * Headers that `next.config.ts` would otherwise overwrite (Referrer-Policy,
  * Cross-Origin-Resource-Policy, CSP) are set there for `/api/dl/:token`.
@@ -72,14 +78,15 @@ async function serve(req: Request, ctx: Ctx, head: boolean): Promise<Response> {
   const { token } = await ctx.params;
   try {
     const c = claimsOf(token);
-    const mode = { ensureFresh: false, expectVersion: c.v };
     if (head) {
-      const p = await peekWith(c.g, c.u, c.f, mode).catch((e: unknown) => {
+      // Never converts, never counts; a derived file not in the cache → 503 + Retry-After.
+      const p = await peekForLink(c).catch((e: unknown) => {
         throw goneIfMissing(e);
       });
       return new Response(null, { status: 200, headers: fileHeaders(p.fileName, p.mime, p.size) });
     }
-    const out = await produceWith(c.g, c.u, c.f, mode, undefined, req.signal).catch((e: unknown) => {
+    // An evicted derived file is regenerated only within LINK_BUDGET_MS, else 503 + Retry-After.
+    const out = await produceForLink(c, req.signal).catch((e: unknown) => {
       throw goneIfMissing(e);
     });
     await recordDownload(c.g).catch(() => {});

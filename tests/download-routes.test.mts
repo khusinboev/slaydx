@@ -239,14 +239,76 @@ test("download routes (Postgres)", { skip: hasDb ? false : "DATABASE_URL yo'q" }
     assert.equal(done.body.size, get.bytes.byteLength);
     assert.equal(conv.calls, 1, "GET serves the cached PDF");
 
-    // A token whose PDF is not in the cache (evicted): HEAD answers without converting or a length.
+    // A token whose PDF is not in the cache (evicted): HEAD never converts — 503 + Retry-After, no body, not counted.
     cache = new DerivedDiskCache({ dir: await mkdtemp(join(tmpdir(), "slaydx-dlr-empty-")), maxBytes: 64 << 20, maxAgeMs: 60_000 });
     setDownloadDeps(deps());
+    const countedBefore = await downloads(id);
     const head = await dl(String(done.body.url), "HEAD");
-    assert.equal(head.status, 200);
-    assert.equal(head.headers.get("content-length"), null);
-    assert.equal(head.headers.get("content-type"), "application/pdf");
+    assert.equal(head.status, 503);
+    assert.equal(head.headers.get("retry-after"), "5");
+    assert.equal(head.bytes.byteLength, 0, "HEAD has no body");
+    assert.equal(head.headers.get("access-control-allow-origin"), "https://web.telegram.org");
     assert.equal(conv.calls, 1, "HEAD never converts");
+    assert.equal(await downloads(id), countedBefore, "HEAD never counts");
+  });
+
+  await t.test("m1: GET after eviction regenerates within the budget; past it → 503 + Retry-After (never a 504), then the background result is served", async () => {
+    cache = new DerivedDiskCache({ dir: await mkdtemp(join(tmpdir(), "slaydx-dlr-evict-")), maxBytes: 64 << 20, maxAgeMs: 60_000 });
+    Object.assign(conv, { calls: 0, delayMs: 0, result: "ok" });
+    setDownloadDeps(deps());
+    const id = await mkGen({ bytes: Buffer.from("evicted-deck") });
+    const r = await ready(id, "pdf");
+    assert.equal(conv.calls, 1);
+
+    // Evicted, fast converter: regenerated inside the budget.
+    cache = new DerivedDiskCache({ dir: await mkdtemp(join(tmpdir(), "slaydx-dlr-evict2-")), maxBytes: 64 << 20, maxAgeMs: 60_000 });
+    setDownloadDeps({ ...deps(), linkBudgetMs: 2_000 });
+    const fast = await dl(String(r.body.url));
+    assert.equal(fast.status, 200);
+    assert.equal(fast.bytes.toString(), "%PDF-1.4 evicted-deck");
+    assert.equal(conv.calls, 2);
+
+    // Evicted again, slow converter (the soffice gate is busy): the GET gives up at the budget.
+    cache = new DerivedDiskCache({ dir: await mkdtemp(join(tmpdir(), "slaydx-dlr-evict3-")), maxBytes: 64 << 20, maxAgeMs: 60_000 });
+    conv.delayMs = 700;
+    setDownloadDeps({ ...deps(), linkBudgetMs: 150 });
+    const t0 = Date.now();
+    const slow = await dl(String(r.body.url));
+    const took = Date.now() - t0;
+    assert.equal(slow.status, 503);
+    assert.equal(JSON.parse(slow.bytes.toString()).code, "busy");
+    assert.equal(slow.headers.get("retry-after"), "15");
+    assert.ok(took < 650, `answered at the budget, not after the conversion (${took} ms)`);
+    // The conversion finished in the background and landed in the cache: the retry is served without a new one.
+    await new Promise((res) => setTimeout(res, 800));
+    const retry = await dl(String(r.body.url));
+    assert.equal(retry.status, 200);
+    assert.equal(retry.bytes.toString(), "%PDF-1.4 evicted-deck");
+    assert.equal(conv.calls, 3, "one background conversion, reused by the retry");
+    conv.delayMs = 0;
+  });
+
+  await t.test("m1: minting a link pins its derived file — LRU pressure does not evict it before the token expires", async () => {
+    const pinDir = await mkdtemp(join(tmpdir(), "slaydx-dlr-pin-"));
+    cache = new DerivedDiskCache({ dir: pinDir, maxBytes: 200, maxAgeMs: 60_000, hardMaxBytes: 10_000 });
+    Object.assign(conv, { calls: 0, delayMs: 0, result: "ok" });
+    setDownloadDeps({ ...deps(), prepareBudgetMs: 2_000 });
+    const id = await mkGen({ bytes: Buffer.from("pinned") });
+    const r = await ready(id, "pdf");
+    assert.equal(conv.calls, 1);
+    // Other users' conversions fill the cache past maxBytes.
+    for (let i = 0; i < 4; i++) await cache.put(`filler-${i}`, Buffer.alloc(100, i));
+    const get = await dl(String(r.body.url));
+    assert.equal(get.status, 200);
+    assert.equal(conv.calls, 1, "served from the pinned cache entry, not converted again");
+    // After a restart (pins are in memory) a prepare that hits the cache pins the entry again.
+    cache = new DerivedDiskCache({ dir: pinDir, maxBytes: 200, maxAgeMs: 60_000, hardMaxBytes: 10_000 });
+    setDownloadDeps({ ...deps(), prepareBudgetMs: 2_000 });
+    const again = await prepare(id, "pdf");
+    assert.equal(again.body.state, "ready");
+    for (let i = 4; i < 8; i++) await cache.put(`filler-${i}`, Buffer.alloc(100, i));
+    assert.equal((await dl(String(again.body.url))).status, 200);
+    assert.equal(conv.calls, 1);
   });
 
   await t.test("background failure is reported to the next poll (502), busy gate → 503 + Retry-After", async () => {

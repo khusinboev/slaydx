@@ -13,7 +13,7 @@ import { CSV_BOM, csvHeadLine, csvRecord, csvRowLine } from "../csv";
 import { env } from "../env";
 import { iterateAllResultRows, type GameResult } from "../game-sessions";
 import { pdfAvailable, pdfFileName, PDF_TIMEOUT_MS } from "../pdf";
-import { derivedSize, getOrConvertPdf, getOrDerive, type DerivedDiskCache, type PdfConverter } from "../pdf-cache";
+import { derivedSize, getOrConvertPdf, getOrDerive, touchDerived, type DerivedDiskCache, type PdfConverter } from "../pdf-cache";
 import { Gate } from "../soffice-gate";
 import { pdftoppmBin } from "../thumb";
 import { DownloadError } from "./errors";
@@ -335,6 +335,15 @@ export const PRODUCERS: Readonly<Record<DownloadFormatId, ProducerSpec>> = {
  */
 export async function cachedDerivedSize(ctx: ProducerCtx): Promise<number | null> {
   return derivedSize(ctx.meta.id, await ctx.nativeBytes(), ctx.format.id, ctx.deps.cache);
+}
+
+/**
+ * `cachedDerivedSize` for a link about to be minted: also pins the entry
+ * (20 min, LRU-safe) and refreshes its age, so the 15-minute `/api/dl` URL
+ * finds it (mobile sprint m1). Never converts.
+ */
+export async function touchCachedDerived(ctx: ProducerCtx): Promise<number | null> {
+  return touchDerived(ctx.meta.id, await ctx.nativeBytes(), ctx.format.id, ctx.deps.cache);
 }
 
 /** Whether the server can produce `id` right now (tools installed). */

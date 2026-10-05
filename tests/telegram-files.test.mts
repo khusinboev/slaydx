@@ -268,6 +268,43 @@ test("formats are cached separately: pdf has its own row and its own upload", { 
   assert.notEqual((await cached(gen, "pdf"))!.file_id, (await cached(gen, "native"))!.file_id);
 });
 
+test("m6: an upload of a converted format asks prepare first — preparing → TelegramFileError('preparing', retryAfterMs), nothing produced or sent; a cached file_id needs no prepare", { skip }, async () => {
+  const u = await mkUser();
+  const gen = await mkGen(u.id);
+  const h = harness({ file: { mime: "application/pdf", fileName: "Quyosh tizimi.pdf" } });
+  const asked: string[] = [];
+  let ready = false;
+  const deps: Deps = {
+    ...h.deps,
+    prepare: async (_g, _u, format) => {
+      asked.push(format);
+      return ready ? { state: "ready" } : { state: "preparing", retryAfterMs: 1500 };
+    },
+  };
+  for (const run of [() => saveToBot(gen, u, "pdf", deps), () => prepareShare(gen, u, "pdf", deps)]) {
+    await assert.rejects(run(), (e: unknown) => {
+      assert.ok(e instanceof TelegramFileError);
+      assert.equal(e.code, "preparing");
+      assert.equal(e.retryAfterMs, 1500);
+      return true;
+    });
+  }
+  assert.equal(h.produced.length, 0);
+  assert.equal(h.calls.length, 0);
+  assert.equal(await cached(gen, "pdf"), null);
+  // Formats without a conversion never ask.
+  await saveToBot(gen, u, "native", deps);
+  assert.deepEqual(asked, ["pdf", "pdf"]);
+  ready = true;
+  assert.deepEqual(await saveToBot(gen, u, "pdf", deps), { duplicate: false, uploaded: true });
+  assert.deepEqual(asked, ["pdf", "pdf", "pdf"]);
+  // A valid cached file_id: resent by id, no preparation needed.
+  h.advance(SAVE_DEBOUNCE_MS + 1);
+  ready = false;
+  assert.deepEqual(await saveToBot(gen, u, "pdf", deps), { duplicate: false, uploaded: false });
+  assert.equal(asked.length, 3);
+});
+
 /* ─────────── M1: content that changes without a file_version bump ─────────── */
 
 /** A producer whose bytes change on every call (new game results keep arriving). */

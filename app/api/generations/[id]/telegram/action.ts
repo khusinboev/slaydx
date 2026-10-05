@@ -7,7 +7,8 @@ import {
   isDownloadFormatId,
   type DownloadFormatId,
 } from "@/lib/downloads/formats";
-import { hasResults } from "@/lib/server/downloads/produce";
+import { hasResults, PREPARE_POLL_LIMIT, PREPARE_RETRY_MS } from "@/lib/server/downloads/produce";
+import { refundRate } from "@/lib/server/rate-peek";
 import { getGeneration } from "@/lib/server/jobs";
 import { pdfAvailable } from "@/lib/server/pdf";
 import { botConfigured } from "@/lib/server/telegram";
@@ -33,6 +34,11 @@ import {
  * Responses:
  *   save  200 `{ ok: true, duplicate: boolean, format, botUrl: string | null }`
  *   share 200 `{ preparedId, expiresAt, format, botUrl: string | null }`
+ *   202 `{ state: "preparing", retryAfterMs, format }` — a `cost: "convert"`
+ *       format (pdf, slides-png, jpg) whose derived file is not ready and
+ *       which has no valid cached `file_id`: the shared background
+ *       preparation (`prepareDownload`) was started; repeat the same POST after
+ *       `retryAfterMs`. Spends a `dlprep` poll, not a save/share (m6);
  *   400 `unknown_format` | `unsupported`; 404 not found / not the owner;
  *   409 `no_telegram` | `bot_unreachable` (+ `botUrl`) | `not_ready` |
  *       `telegram_id_unsupported` (share only: a Telegram id above 2^53);
@@ -62,6 +68,8 @@ const STATUS: Record<TelegramFileErrorCode, number> = {
   share_unavailable: 501,
   telegram_unavailable: 503,
   telegram_id_unsupported: 409,
+  // Not an error: answered as 202 {state: "preparing"} before toApiError is reached.
+  preparing: 202,
 };
 
 /** The body is optional: an empty POST means the default format. */
@@ -102,7 +110,9 @@ export function telegramActionHandler(action: TelegramAction, deps: TelegramFile
     if (!user.telegramId) throw new ApiError("Telegram akkaunti bog'lanmagan", 409, { code: "no_telegram" });
 
     const { count, windowSec } = TELEGRAM_LIMITS[action];
-    await limit(`tg${action}:${user.id}`, count, windowSec);
+    const bucket = `tg${action}:${user.id}`;
+    const chargedAt = Date.now();
+    await limit(bucket, count, windowSec);
 
     const gen = await getGeneration(id, user.id, { lean: true });
     if (!gen) throw new ApiError("Topilmadi", 404);
@@ -136,6 +146,13 @@ export function telegramActionHandler(action: TelegramAction, deps: TelegramFile
       const r = await prepareShare(id, user, format, deps);
       return json({ preparedId: r.preparedId, expiresAt: r.expiresAt, format, botUrl });
     } catch (e) {
+      if (e instanceof TelegramFileError && e.code === "preparing") {
+        // m6: the derived file is converting in the background (the same job as POST …/download).
+        // Nothing was sent: the poll does not spend a save/share, it spends a prepare poll instead.
+        await refundRate(bucket, windowSec, chargedAt);
+        await limit(`dlprep:${user.id}`, PREPARE_POLL_LIMIT.count, PREPARE_POLL_LIMIT.windowSec);
+        return json({ state: "preparing", retryAfterMs: e.retryAfterMs ?? PREPARE_RETRY_MS, format }, { status: 202 });
+      }
       if (e instanceof TelegramFileError) throw toApiError(e);
       throw e;
     }

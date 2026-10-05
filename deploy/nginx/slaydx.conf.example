@@ -163,6 +163,23 @@ server {
         proxy_cache off;
     }
 
+    # Signed download links (docs/mobile/PLAN.md §4.2, mobile sprint m1):
+    # `GET /api/dl/<token>` — the Telegram client / Android DownloadManager
+    # downloads without our cookie. The app never holds it longer than 45 s
+    # (an evicted derived file is regenerated within that budget, else 503 +
+    # Retry-After), but a 25 MB file over a slow phone link can take longer
+    # to stream: 120 s instead of the default 60 s.
+    location /api/dl/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_cache off;
+    }
+
     # Tahrir yo'nalishlari (INFRA-08, deploy.md §2a): `POST
     # /api/generations/{id}/rebuild` (30 slaydli PPTX qayta yasash) va
     # `…/image/regenerate` (Gemini rasm ~35–45 s) standart 60s'ga

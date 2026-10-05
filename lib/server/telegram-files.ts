@@ -17,7 +17,12 @@ import { callBot, isTransientBotFailure, type BotResult } from "./telegram";
  * - «Saqlash» (`saveToBot`): the file lands in the user's OWN bot chat. The
  *   first time the bytes are uploaded (multipart); the returned `file_id` is
  *   cached in `telegram_files` per (generation, format, file_version), and
- *   every later save is a tiny JSON resend by `file_id`.
+ *   every later save is a tiny JSON resend by `file_id` — except instant
+ *   serializations (results CSV, transcript, glossary CSV), whose content
+ *   changes without a version bump: always uploaded fresh (`reusesFileId`).
+ * - A format that needs a conversion is never converted inside the request:
+ *   `deps.prepare` starts the shared background preparation and the route
+ *   answers `202 preparing` until the derived file exists (`needsConversion`).
  * - «Ulashish» (`prepareShare`): owner decision O2 — the file is uploaded into
  *   the user's own bot chat when no valid `file_id` exists (share implies
  *   save, no storage channel), then `savePreparedInlineMessage` returns an id
@@ -44,9 +49,22 @@ export type ProduceDownload = (
   opts?: { signal?: AbortSignal },
 ) => Promise<ProducedFile>;
 
+/** Starts (or reports) the background preparation of a derived file (`prepareDownload`, package A). */
+export type PrepareDownload = (
+  genId: string,
+  userId: string,
+  format: DownloadFormatId,
+) => Promise<{ state: "ready" } | { state: "preparing"; retryAfterMs: number }>;
+
 export type TelegramFilesDeps = {
   /** The download producer (production: `produceDownload`). */
   produce: ProduceDownload;
+  /**
+   * Before an upload of a format that needs a conversion: start/poll the
+   * shared preparation instead of converting inside the request (m6;
+   * production: `prepareDownload`). Absent â produce directly.
+   */
+  prepare?: PrepareDownload;
   /** Bot API transport `fetch` (tests stub it; default: global `fetch`). */
   fetch?: typeof fetch;
   /** Clock (debounce window). */
@@ -63,7 +81,9 @@ export type TelegramFileErrorCode =
   | "telegram_unavailable"
   | "share_unavailable"
   | "too_large"
-  | "telegram_id_unsupported";
+  | "telegram_id_unsupported"
+  /** Not an error: the derived file is being prepared â the route answers 202 and the client repeats. */
+  | "preparing";
 
 /** A failure the route maps to an HTTP status + `code` (PLAN §4.4). */
 export class TelegramFileError extends Error {
@@ -72,6 +92,8 @@ export class TelegramFileError extends Error {
     message: string,
     /** Telegram's `error_code` when the failure came from the Bot API. */
     readonly tgCode?: number,
+    /** `preparing`: when the client should repeat the same request. */
+    readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = "TelegramFileError";
@@ -318,6 +340,11 @@ export function reusesFileId(format: DownloadFormatId): boolean {
   return PRODUCERS[format].kind !== "instant";
 }
 
+/** Formats converted from the stored file (registry `cost: "convert"`: pdf, slides-png, jpg). */
+export function needsConversion(format: DownloadFormatId): boolean {
+  return PRODUCERS[format].kind === "derived";
+}
+
 /** The stored file is behind an edit waiting for a re-render (only editable tools re-render). */
 function behindEdit(row: GenRow): boolean {
   return row.file_version < row.doc_version && adapterFor(row.tool_id) !== null;
@@ -361,6 +388,14 @@ async function uploadInto(
   row: GenRow,
   deps: TelegramFilesDeps,
 ): Promise<{ kind: MediaKind; fileId: string }> {
+  if (deps.prepare && needsConversion(format)) {
+    // m6: never convert inside this request (soffice up to 70 s + a 60 s upload > nginx's 120 s).
+    // The shared preparation runs in the background; the client repeats after `retryAfterMs`.
+    const p = await deps.prepare(genId, user.id, format);
+    if (p.state === "preparing") {
+      throw new TelegramFileError("preparing", "Fayl tayyorlanmoqda", undefined, p.retryAfterMs);
+    }
+  }
   const file = await deps.produce(genId, user.id, format);
   if (file.bytes.byteLength > TELEGRAM_UPLOAD_MAX_BYTES) {
     throw new TelegramFileError("too_large", "Fayl Telegram uchun juda katta — «Yuklab olish» dan foydalaning.");
