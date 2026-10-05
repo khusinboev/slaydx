@@ -5,6 +5,7 @@ import type { BodyRules } from "@/lib/generation/slide-audience";
 import type { SlideModel, SlideTheme } from "@/lib/generation/slide-types";
 import { fontCss } from "@/lib/generation/slide-fonts";
 import { cn } from "@/lib/cn";
+import { viewSrc } from "@/lib/asset-view";
 import {
   boxStyle,
   cssColor,
@@ -176,10 +177,20 @@ export function LayerView({ layer, budget, hidden = false }: { layer: SlideLayer
         // Dumaloq rasm — PPTX `rounding: true` bilan bir xil.
         style={layer.shape === "circle" ? { ...box, borderRadius: "50%" } : box}
       >
+        {/*
+          Screen copy (ops D5): own assets are asked with `?view=1` — the
+          server answers with the light copy (1024 px, q80) or the original.
+          The model URL is unchanged, so PPTX and downloads keep the original.
+          `lazy`/`async`: the rail and home cards draw every slide in full —
+          off-screen images are not fetched and decoding stays off the main
+          thread.
+        */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={layer.url}
+          src={viewSrc(layer.url)}
           alt=""
+          loading="lazy"
+          decoding="async"
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: fit, objectPosition: "center" }}
         />
       </div>

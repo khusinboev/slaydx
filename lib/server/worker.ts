@@ -22,7 +22,7 @@ import {
 } from "./jobs";
 import { refund, refundPartial } from "./credits";
 import { deleteGenerationFile } from "./storage";
-import { deleteAssets, extractAssets, putAssetBytes } from "./assets";
+import { deleteAssets, extractAssets, putAssetBytes, slideViewCopies } from "./assets";
 import { buildPreview } from "./preview";
 import { logoDataUrl } from "./logo";
 import { photoDataUrl, purgeOldPhotos } from "./photo";
@@ -597,6 +597,13 @@ async function execute(
     // olgan. Ko'ruvchi uchun `data:` URL larni alohida aktivga chiqaramiz,
     // shunda JSONB va HTML kichik qoladi.
     const extracted = extractAssets(job.id, scrubDoc(job, file.doc ?? null), file.html);
+    /*
+     * Screen copies of the slide images (ops D5): written with the result in
+     * one transaction below, never instead of the originals (PPTX rebuild and
+     * downloads read those). Never throws; a slide without a copy is served
+     * the original.
+     */
+    const viewCopies = await slideViewCopies(job.id, extracted.doc, extracted.assets);
 
     /*
      * Fayl + aktivlar + COMPLETED — bitta tranzaksiyada va FAQAT qulf hali
@@ -608,7 +615,7 @@ async function execute(
       job.id,
       job.lease,
       { bytes: file.bytes, mime: file.mime, fileName: file.fileName },
-      extracted.assets,
+      [...extracted.assets, ...viewCopies],
       {
         html: extracted.html,
         doc: extracted.doc,
