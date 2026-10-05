@@ -106,7 +106,7 @@ function mount(slide = bulletsSlide(), scale = 0.3) {
   document.body.appendChild(slot);
   const calls: Calls = { text: [], list: [], style: [], footer: [] };
   const r = render(tree(slide, scale, calls));
-  return { calls, rerender: (s: number) => r.rerender(tree(slide, s, calls)) };
+  return { calls, rerender: (s: number) => r.rerender(tree(slide, s, calls)), rerenderSlide: (next: SlideModel) => r.rerender(tree(next, scale, calls)) };
 }
 
 const box = () => screen.getByLabelText("Matnni tahrirlash");
@@ -294,6 +294,62 @@ test("double TAP (touch pointers) opens the text without `dblclick`; the second 
   // A compat mousedown that slipped through right after the tap does not close the box.
   fireEvent.mouseDown(titleEl());
   assert.ok(boxOpen());
+});
+
+const firstBullet = () => document.querySelector(`[data-src='{"f":"bullets","i":0}']`) as HTMLElement;
+function pointerTap(el: HTMLElement, id: number, pointerType: "touch" | "pen") {
+  const r = { clientX: 50, clientY: 40 };
+  fireEvent.pointerDown(el, { pointerType, pointerId: id, isPrimary: true, ...r });
+  fireEvent.pointerUp(el, { pointerType, pointerId: id, isPrimary: true, ...r });
+}
+
+test("review D-1: double-tapping ANOTHER text with no compat mousedown first saves the open one", () => {
+  coarse();
+  const { calls } = mount();
+  fireEvent.doubleClick(titleEl());
+  type(box(), "Yozilgan yangi sarlavha");
+  const oldField = box();
+  // Pointer events only — no mousedown reaches the outside-press handler.
+  pointerTap(firstBullet(), 1, "touch");
+  pointerTap(firstBullet(), 2, "touch");
+  assert.deepEqual(calls.text, [[{ f: "title" }, "Yozilgan yangi sarlavha"]], "typed title saved before switching");
+  assert.equal(box().tagName, "UL", "the list is now open");
+  assert.equal(box().getAttribute("data-edit-key"), '{"f":"bullets","i":0}');
+  // Browsers that blur a removed focused node: the OLD field's blur must not end the new session.
+  fireEvent.blur(oldField);
+  assert.ok(boxOpen() && box().tagName === "UL", "new session survives the old field's blur");
+  assert.equal(calls.list.length, 0, "and nothing was committed for it");
+  fireEvent.click(screen.getByText("Tayyor"));
+  assert.equal(calls.text.length, 1);
+  assert.equal(calls.list.length, 0, "list unchanged → no op");
+});
+
+test("review D-3: a pen double tap never arms the touchend cancel; a missing touchend is forgotten on the next contact", () => {
+  coarse();
+  mount();
+  pointerTap(titleEl(), 1, "pen");
+  pointerTap(titleEl(), 2, "pen");
+  assert.ok(boxOpen(), "pen double tap opens");
+  assert.equal(fireEvent.touchEnd(titleEl(), { cancelable: true }), true, "an unrelated touchend after a pen open is not cancelled");
+  cleanup();
+  slot?.remove();
+  mount();
+  // Finger double tap whose touchend never arrives (webview quirk)…
+  pointerTap(titleEl(), 3, "touch");
+  pointerTap(titleEl(), 4, "touch");
+  assert.ok(boxOpen());
+  // …the next contact (e.g. «O‘z rasmim») keeps its click.
+  fireEvent.pointerDown(document.querySelector("[data-slide-frame]")!, { pointerType: "touch", pointerId: 5, clientX: 300, clientY: 300 });
+  assert.equal(fireEvent.touchEnd(document.querySelector("[data-slide-frame]")!, { cancelable: true }), true);
+});
+
+test("review D-4: a slide update between the two taps (optimistic style op) does not reset the detector", () => {
+  coarse();
+  const { rerenderSlide } = mount();
+  pointerTap(titleEl(), 1, "touch");
+  rerenderSlide({ ...bulletsSlide(), fontSize: { '{"f":"bullets","i":0}': 30 } });
+  pointerTap(titleEl(), 2, "touch");
+  assert.ok(boxOpen(), "the second tap still completes the double tap");
 });
 
 test("mouse pointers never trigger the tap detector (desktop keeps dblclick only)", () => {

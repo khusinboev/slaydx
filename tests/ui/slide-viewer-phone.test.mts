@@ -158,6 +158,32 @@ test("phone focus zoom: a small box zooms the stage while editing; «✕» resto
   assert.equal(document.querySelector("[data-zoom-label]")!.textContent, label, "zoom label unchanged");
 });
 
+test("review D-2: in zoom mode the user's stage scroll position is restored after the focus-zoomed edit", async () => {
+  phone();
+  await mountViewer();
+  await act(async () => {
+    fireEvent.click(screen.getByLabelText("Kattalashtirish"));
+  });
+  assert.equal(stage().getAttribute("data-slide-stage"), "zoom");
+  const zoomW = parseFloat(frame().style.width);
+  stage().scrollLeft = 120;
+  stage().scrollTop = 40;
+  const footer = document.querySelector(`[data-slide-frame] [data-src='{"f":"footer"}']`) as HTMLElement;
+  await act(async () => {
+    fireEvent.doubleClick(footer);
+  });
+  assert.ok(stage().hasAttribute("data-focus-zoom"), "focus zoom on (small footer glyphs)");
+  // Focus zoom + keep-visible move the stage while editing.
+  stage().scrollLeft = 900;
+  stage().scrollTop = 300;
+  await act(async () => {
+    fireEvent.click(screen.getByText("Tayyor"));
+  });
+  assert.equal(parseFloat(frame().style.width), zoomW, "the user's zoom is back");
+  assert.equal(stage().scrollLeft, 120, "horizontal scroll restored");
+  assert.equal(stage().scrollTop, 40, "vertical scroll restored");
+});
+
 test("phone editing hides the thumbnail strip and the status row (kept mounted), shows them again after", async () => {
   phone();
   await mountViewer();
