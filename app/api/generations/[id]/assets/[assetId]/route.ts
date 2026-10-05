@@ -31,8 +31,8 @@ export const GET = noStoreOnError(
      * light copy when the worker stored one, else the original. Without the
      * flag: the original, exactly as before (downloads, PPTX, image tools).
      */
-    const view = wantsViewCopy(new URL(req.url));
-    const asset = view ? await getViewAsset(id, assetId, user.id) : await getAsset(id, assetId, user.id);
+    const viewed = wantsViewCopy(new URL(req.url)) ? await getViewAsset(id, assetId, user.id) : undefined;
+    const asset = viewed === undefined ? await getAsset(id, assetId, user.id) : viewed;
     if (!asset) throw new ApiError("Topilmadi", 404);
 
     const mime = ALLOWED.has(asset.mime) ? asset.mime : "application/octet-stream";
@@ -44,7 +44,7 @@ export const GET = noStoreOnError(
      * not exist yet, so the original must not be pinned under this URL for a
      * day — a short cache lets the next open get the copy.
      */
-    const pending = "variant" in asset && asset.variant === "original" && !asset.final;
+    const pending = viewed?.variant === "original" && !viewed.final;
     const cache =
       assetId.toLowerCase() === THUMB_ASSET_ID
         ? NO_STORE
@@ -56,7 +56,7 @@ export const GET = noStoreOnError(
         "Content-Type": mime,
         "Content-Length": String(asset.bytes.byteLength),
         "Cache-Control": cache,
-        ...("variant" in asset ? { "X-Asset-Variant": asset.variant } : {}),
+        ...(viewed ? { "X-Asset-Variant": viewed.variant } : {}),
         "X-Content-Type-Options": "nosniff",
         "Content-Security-Policy": "default-src 'none'; sandbox",
       },
