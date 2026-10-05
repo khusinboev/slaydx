@@ -6,7 +6,7 @@ import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
 import type { VisualViewportState } from "@/lib/hooks/useVisualViewport";
 import { useOverlayHistory } from "../nav/useOverlayHistory";
 import { getOpenField, useOpenField, type OpenField } from "./editable";
-import { focusZoomScale, intersect, revealDelta, type Rect } from "./slide-edit/geometry";
+import { FOCUS_MAX_SCALE, FOCUS_MIN_GLYPH, intersect, revealDelta, type Rect } from "./slide-edit/geometry";
 import { keepEditorFocus } from "./slide-edit/StyleBar";
 import { VisualViewportWatch, visibleBand } from "./slide-edit/viewport";
 
@@ -88,7 +88,7 @@ export function EditDoneBar({ revealKey }: { revealKey?: unknown }) {
         style={{
           bottom: "var(--kb-h, 0px)",
           // Above the keyboard the home-indicator inset is covered anyway.
-          paddingBottom: keyboard ? 0 : "env(safe-area-inset-bottom, 0px)",
+          paddingBottom: keyboard ? 0 : "var(--tg-safe-bottom, env(safe-area-inset-bottom, 0px))",
         }}
         onPointerDown={keepEditorFocus}
         onMouseDown={keepEditorFocus}
@@ -216,11 +216,11 @@ export function revealOpenField(
  *
  * A sheet fitted to a 360–390 px screen is ~43–46 %: resume body text is
  * 5–6 px and a lesson-plan line ~8 px — unreadable while typing. When a
- * field opens on a phone, the viewer zooms in (the slide editor's
- * `focusZoomScale`: a short single-line field until its glyphs reach 14 px,
- * a wrapping field only until it fills the column width, so nobody pans
- * sideways per line); when the edit ends the previous zoom (fit or the
- * user's own) and the scroll positions come back exactly.
+ * field opens on a phone, the viewer zooms in (`docFocusZoom`: until the
+ * glyphs reach the slide editor's 14 px; a wrapping field only until it
+ * fills the column width, so nobody pans sideways per line); when the edit
+ * ends the previous zoom (fit or the user's own) and the scroll positions
+ * come back exactly.
  *
  * Chosen over a resume «O‘qish» reflow mode: it edits the SAME sheet node
  * in place (WYSIWYG, no second renderer to keep in parity with the DOCX),
@@ -272,6 +272,24 @@ export function useEditFocusZoom(opts: {
   }, [active, field]);
 }
 
+/**
+ * Pure: the sheet scale while a field is edited. `fontPx`, `boxW` in sheet
+ * px (unscaled), `viewW` the column width on screen, `base` the current
+ * scale. Glyphs grow to `FOCUS_MIN_GLYPH` px; a wrapping field never grows
+ * wider than the column (a single-line one may — the row then scrolls
+ * sideways to it); at most `FOCUS_MAX_SCALE`; never below `base`.
+ * Unlike slides there is no "small box" rule: a short resume chip must not
+ * blow the sheet up to 200 % just because it is narrow.
+ */
+export function docFocusZoom(input: { fontPx: number; boxW: number; viewW: number; base: number; singleLine: boolean }): number {
+  const { fontPx, boxW, viewW, base, singleLine } = input;
+  if (!(fontPx > 0) || !(base > 0) || fontPx * base >= FOCUS_MIN_GLYPH) return base;
+  let s = FOCUS_MIN_GLYPH / fontPx;
+  if (!singleLine && boxW > 0 && viewW > 0) s = Math.min(s, viewW / boxW);
+  s = Math.min(s, FOCUS_MAX_SCALE);
+  return s > base ? Math.round(s * 1000) / 1000 : base;
+}
+
 /** The zoom (percent) a field needs, or `null` when the current one is enough. */
 export function focusZoomFor(field: OpenField, zoom: number): number | null {
   const el = field.el;
@@ -285,7 +303,7 @@ export function focusZoomFor(field: OpenField, zoom: number): number | null {
   const boxH = r.height / base;
   const row = el.closest<HTMLElement>("[data-page-row]");
   const viewW = row?.clientWidth || window.innerWidth;
-  const s = focusZoomScale({ boxW, boxH, viewW, viewH: 0, base, fontPx, singleLine: lineH > 0 && boxH <= lineH * 1.5 });
+  const s = docFocusZoom({ fontPx, boxW, viewW, base, singleLine: lineH > 0 && boxH <= lineH * 1.5 });
   const next = Math.round(s * 100);
   return next > zoom ? next : null;
 }
