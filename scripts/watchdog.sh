@@ -123,6 +123,13 @@ if [ "$DRY_RUN" = 0 ]; then
   fi
 fi
 
+# A deploy in progress (it holds the deploy lock): its container swap makes /api/health and the
+# container states fail for a while — those checks are paused instead of paging, the rest runs.
+DEPLOYING=0
+if [ -e "$DEPLOY_LOCK" ] && ! (flock -n 8) 8<"$DEPLOY_LOCK" 2>/dev/null; then
+  DEPLOYING=1
+fi
+
 # ── state helpers (no writes in --dry-run) ─────────────────────────────────────────────
 get() { cat -- "$STATE_DIR/$1" 2>/dev/null || true; }
 put() { [ "$DRY_RUN" = 1 ] || printf '%s\n' "$2" >"$STATE_DIR/$1"; }
@@ -186,6 +193,10 @@ newest_mtime() {
 # ── checks ──────────────────────────────────────────────────────────────────────────────
 check_health() {
   local code args=()
+  if [ "$DEPLOYING" = 1 ]; then
+    echo "watchdog: deploy in progress ($DEPLOY_LOCK) — health check paused"
+    return 0
+  fi
   [ -z "$HEALTH_RESOLVE" ] || args+=(--resolve "$HEALTH_RESOLVE")
   code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 "${args[@]}" "$HEALTH_URL" 2>/dev/null) || true
   num "$code" || code=000
@@ -245,13 +256,16 @@ check_containers() {
     esac
     info=$(docker inspect -f "$fmt" "$c" 2>/dev/null) || info=""
     if [ -z "$info" ]; then
-      check "ctr-$c" 0 "$c konteyneri topilmadi" 2
+      [ "$DEPLOYING" = 1 ] || check "ctr-$c" 0 "$c konteyneri topilmadi" 2
       continue
     fi
     IFS='|' read -r st hs oom rc started id proj svc <<<"$info"
 
     # `starting` is the health-check grace period after a (re)start — not a failure yet.
-    if [ "$st" = running ] && [ "$hs" != unhealthy ]; then
+    # During a deploy the swap is expected: state checks pause (restart/OOM events still count).
+    if [ "$DEPLOYING" = 1 ]; then
+      :
+    elif [ "$st" = running ] && [ "$hs" != unhealthy ]; then
       check "ctr-$c" 1 "$c yana ishlayapti ($st/$hs)"
     else
       check "ctr-$c" 0 "$c holati: $st/$hs$note" 2

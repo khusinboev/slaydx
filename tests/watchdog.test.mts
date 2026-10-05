@@ -263,6 +263,35 @@ test("watchdog.sh (haqiqiy Postgres + stub docker/curl/df)", { skip }, async (t)
     assert.deepEqual(run().tg, [], "[OK] faqat bir marta");
   });
 
+  /**
+   * While a deploy holds its lock (deploy/deploy-pull.sh flocks SLAYDX_LOCK_FILE), the container
+   * swap must not page: health and container-state checks pause; other checks keep running.
+   * Mutation: DEPLOYING never set (or the pause removed from check_health) — red.
+   */
+  await t.test("deploy lock ushlanganda health/konteyner tekshiruvi pauza, disk alerti ishlayveradi", async () => {
+    await reset();
+    writeFileSync(path.join(stub, "health-code"), "502");
+    rmSync(path.join(stub, "inspect-slaydx-web-1"));
+    writeFileSync(path.join(stub, "disk-pct"), "95");
+    const underLock = () => {
+      rmSync(path.join(stub, "tg.log"), { force: true });
+      const r = spawnSync("flock", [baseEnv.SLAYDX_LOCK_FILE, "bash", SCRIPT], { env: baseEnv as NodeJS.ProcessEnv, encoding: "utf8", timeout: 60_000 });
+      const log = path.join(stub, "tg.log");
+      return { ...r, tg: existsSync(log) ? readFileSync(log, "utf8").split("\x1e").filter(Boolean) : [] };
+    };
+    for (let i = 0; i < 3; i++) {
+      const r = underLock();
+      assert.equal(r.status, 0, r.stderr);
+      assert.match(r.stdout, /deploy in progress .* health check paused/);
+      assert.equal(r.tg.filter((m) => /api\/health|slaydx-web-1/.test(m)).length, 0, r.tg.join(" | "));
+      if (i === 0) assert.equal(r.tg.filter((m) => /disk 95%/.test(m)).length, 1, "boshqa tekshiruvlar ishlayveradi");
+    }
+    run();
+    const r = run();
+    assert.equal(alerts(r, /\/api\/health -> 502/).length, 1, "lock bo'shagach 2 ketma-ket xatodan keyin alert");
+    assert.equal(alerts(r, /slaydx-web-1 konteyneri topilmadi/).length, 1, r.tg.join(" | "));
+  });
+
   await t.test("Telegram yuborilmasa holat yozilmaydi — keyingi run qayta urinadi", async () => {
     await reset();
     writeFileSync(path.join(stub, "disk-pct"), "91");
