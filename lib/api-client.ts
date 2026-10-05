@@ -5,6 +5,7 @@ import type { FormValues, Generation, JobStatus, ToolId } from "./types";
 import type { SlideModel, SlideThemeId } from "./generation/slide-types";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "./generation/slide-templates";
 import type { BodyRules } from "./generation/slide-audience";
+import type { DownloadFormatId } from "./downloads/formats";
 
 /**
  * Server API bilan yagona aloqa nuqtasi.
@@ -562,75 +563,75 @@ export function fileUrl(id: string, format?: "pdf", opts: { inline?: boolean } =
   return `/api/generations/${id}/file${q ? `?${q}` : ""}`;
 }
 
-/**
- * Faylni yuklab oladi.
- *
- * `<a download>` to'g'ridan-to'g'ri ishlatilmaydi: xato bo'lsa brauzer
- * jimgina JSON xato sahifasini `.docx` nomi bilan saqlab qo'yardi.
- */
-export async function downloadGeneration(
-  id: string,
-  format?: "pdf",
-  opts: { headerTimeoutMs?: number } = {},
-): Promise<void> {
-  /*
-   * PDF LibreOffice da o'giriladi (≤90 s) va band bo'lsa bo'sh slotni
-   * kutadi — shuning uchun chegara uzun; baribir CHEKSIZ emas (FE-14).
-   */
-  const link = linkedSignal(opts.headerTimeoutMs ?? (format === "pdf" ? 180_000 : 120_000));
-  try {
-    let res: Response;
-    try {
-      res = await fetch(fileUrl(id, format), { credentials: "same-origin", signal: link.signal });
-    } catch {
-      throw new ApiError(link.timedOut() ? TIMEOUT_TEXT : OFFLINE_TEXT, 0, { timeout: link.timedOut() });
-    }
-    /*
-     * Chegara faqat SARLAVHALARGACHA (server javob berdimi). Tana esa
-     * cheklanmaydi: 10–15 MB deka ~1 Mbit/s mobil aloqada 80–120 s
-     * keladi — normal ketayotgan yuklash «vaqt tugadi» bilan uzilmasin
-     * (review R2). Uzilgan aloqada `blob()` o'zi xato beradi.
-     */
-    link.done();
-    if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      /*
-       * 429 (kishi boshiga PDF chegarasi) va 503 (hamma PDF sloti band) —
-       * W2-A shartnomasi: o'zbekcha matn `{error}` da, `Retry-After`
-       * sarlavhada. Matn va «qachon qayta urinish» birga ko'rsatiladi.
-       */
-      const header = positiveSec(res.headers.get("retry-after"));
-      const withRetry = header && data.retryAfterSec == null ? { ...data, retryAfterSec: header } : data;
-      const base = typeof data.error === "string" && data.error ? data.error : "Fayl yuklab olinmadi";
-      throw new ApiError(withRetryHint(base, retrySecOf(withRetry)), res.status, withRetry);
-    }
-    const disposition = res.headers.get("content-disposition") ?? "";
-    const match = /filename\*=UTF-8''([^;]+)/.exec(disposition) ?? /filename="([^"]+)"/.exec(disposition);
-    const name = match ? decodeURIComponent(match[1]) : "hujjat";
+/* ─────────────────────── Downloads, «Saqlash», «Ulashish» ─────────────────────── */
 
-    let blob: Blob;
-    try {
-      blob = await res.blob();
-    } catch {
-      throw new ApiError(OFFLINE_TEXT, 0);
-    }
-    saveBlob(blob, name);
-  } finally {
-    link.done();
-  }
+/**
+ * `POST /api/generations/{id}/download {format}` (docs/mobile/PLAN.md §4.2):
+ * `ready` — a signed, cookie-free URL (`/api/dl/<token>`, 15 min, multi-use);
+ * `preparing` — the server converts, ask again after `retryAfterMs`.
+ * Polling, delivery and progress live in `lib/downloads/deliver.ts`.
+ */
+export type DownloadPrepareResponse =
+  | { state: "ready"; url: string; fileName: string; size: number; mime: string; expiresAt: string }
+  | { state: "preparing"; retryAfterMs: number };
+
+/** The server answers within ~7 s (then `preparing`); headroom for slow mobile lines. */
+export const PREPARE_TIMEOUT_MS = 20_000;
+
+export function prepareGenerationDownload(id: string, format: DownloadFormatId, opts: { signal?: AbortSignal } = {}) {
+  return request<DownloadPrepareResponse>(`/api/generations/${id}/download`, {
+    method: "POST",
+    body: JSON.stringify({ format }),
+    signal: opts.signal,
+    timeoutMs: PREPARE_TIMEOUT_MS,
+  });
 }
 
-function saveBlob(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Safari yuklashni boshlashi uchun bir oz kutamiz.
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+/**
+ * The Telegram routes may convert (PDF ≤ 50 s) and upload up to 25 MB before
+ * they answer (`maxDuration = 120`), so the client waits as long.
+ */
+export const TELEGRAM_ACTION_TIMEOUT_MS = 125_000;
+
+/**
+ * A converted format (`pdf`, `slides-png`, `jpg`) that is not ready yet: the
+ * Telegram routes answer `202 {state:"preparing", retryAfterMs}` and the client
+ * polls the same endpoint with the same body (`lib/downloads/deliver.ts telegramAction`).
+ */
+export type TelegramPreparing = { state: "preparing"; retryAfterMs: number };
+export type TelegramSaveResult = { ok: true; duplicate: boolean; format: DownloadFormatId; botUrl: string | null };
+export type TelegramShareResult = { preparedId: string; expiresAt: string; format: DownloadFormatId; botUrl: string | null };
+
+/** `POST …/telegram/save {format?}` — «Saqlash»: the file into the user's own bot chat (PLAN §4.4). One request; see `telegramAction` for polling. */
+export function saveGenerationToBot(id: string, format?: DownloadFormatId, opts: { signal?: AbortSignal } = {}) {
+  return request<TelegramSaveResult | TelegramPreparing>(`/api/generations/${id}/telegram/save`, {
+    method: "POST",
+    body: JSON.stringify(format ? { format } : {}),
+    signal: opts.signal,
+    timeoutMs: TELEGRAM_ACTION_TIMEOUT_MS,
+  });
+}
+
+/** `POST …/telegram/share {format?}` — «Ulashish»: a prepared inline message for `shareMessage` (PLAN §4.4). One request; see `telegramAction`. */
+export function shareGenerationToTelegram(id: string, format?: DownloadFormatId, opts: { signal?: AbortSignal } = {}) {
+  return request<TelegramShareResult | TelegramPreparing>(`/api/generations/${id}/telegram/share`, {
+    method: "POST",
+    body: JSON.stringify(format ? { format } : {}),
+    signal: opts.signal,
+    timeoutMs: TELEGRAM_ACTION_TIMEOUT_MS,
+  });
+}
+
+/**
+ * Downloads the stored file (or its PDF) to the device through the delivery
+ * driver (`lib/downloads/deliver.ts downloadToDevice`): signed URL, Telegram
+ * `downloadFile` inside the Mini App, fetch with progress in a browser.
+ * Kept for the `components/forms/runGeneration.ts` re-export; the result page
+ * uses `ResultActions` / `DownloadSheet`.
+ */
+export async function downloadGeneration(id: string, format?: "pdf"): Promise<void> {
+  const { downloadToDevice } = await import("./downloads/deliver");
+  await downloadToDevice(id, format === "pdf" ? "pdf" : "native");
 }
 
 /** Polling UI ga aytadigan holat (C20): uzilish yoki odatdan uzoq kutish. */
