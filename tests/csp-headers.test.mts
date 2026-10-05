@@ -39,7 +39,8 @@ test("Content-Disposition: standart attachment, inline faqat so'ralganda; nom UT
   const { contentDisposition } = await import("../app/api/generations/[id]/file/route.ts");
   assert.match(contentDisposition("hisobot-ja.pdf"), /^attachment; filename="hisobot-ja\.pdf"; filename\*=UTF-8''hisobot-ja\.pdf$/);
   assert.match(contentDisposition("hisobot-ja.pdf", "inline"), /^inline; filename="hisobot-ja\.pdf"/);
-  assert.match(contentDisposition("Ichki yonuv (1)-ja.pdf", "inline"), /filename\*=UTF-8''Ichki%20yonuv%20\(1\)-ja\.pdf$/);
+  // RFC 8187 attr-char excludes "(" and ")": they are percent-encoded in filename* (mobile sprint ABF n3).
+  assert.match(contentDisposition("Ichki yonuv (1)-ja.pdf", "inline"), /filename\*=UTF-8''Ichki%20yonuv%20%281%29-ja\.pdf$/);
 });
 
 /**
