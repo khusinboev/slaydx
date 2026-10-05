@@ -59,22 +59,55 @@ export function isRetryableUpdateError(e: unknown): boolean {
   return /Connection terminated|timeout exceeded when trying to connect|connect ECONN/i.test(msg);
 }
 
-async function call<T>(
+/** Default timeout of a JSON Bot API call. */
+const JSON_TIMEOUT_MS = 15_000;
+/**
+ * Default timeout of a multipart upload. Stored files are capped at 25 MB
+ * (`storage.ts MAX_FILE_BYTES`); from a data-centre uplink that is a few
+ * seconds, so one minute leaves room for a slow Telegram edge without
+ * holding the request forever.
+ */
+export const UPLOAD_TIMEOUT_MS = 60_000;
+
+/**
+ * Bot API outcome. `code` is Telegram's `error_code` (400, 403, 429, 5xx);
+ * `0` means no usable answer: network error, timeout, a non-JSON body
+ * (a proxy's HTML 502) or the bot is not configured.
+ */
+export type BotResult<T> = { ok: true; result: T } | { ok: false; code: number; description: string };
+
+export type CallBotOptions = {
+  /** `payload` is a `FormData` (file upload); fetch sets the multipart boundary itself. */
+  multipart?: boolean;
+  /** Abort after this many ms (default 15 s for JSON, `UPLOAD_TIMEOUT_MS` for multipart). */
+  timeoutMs?: number;
+  /** Injected for tests (default: the global `fetch`). */
+  fetch?: typeof fetch;
+};
+
+/** A failure worth retrying later: no answer, rate limit or Telegram 5xx. */
+export function isTransientBotFailure(r: { ok: false; code: number }): boolean {
+  return r.code === 0 || r.code === 429 || r.code >= 500;
+}
+
+/**
+ * Generic Bot API call (JSON or multipart) that keeps Telegram's error code.
+ *
+ * 429 with `parameters.retry_after` <= 5 s is retried ONCE after waiting
+ * (audit EXT-05: many simultaneous `/start` must not silently lose the login
+ * link); a longer wait would most likely hit 429 again, so it is returned.
+ * Nothing else is retried. Never throws.
+ *
+ * The token lives only in the URL path; only the method and Telegram's
+ * description are logged, never the URL or the body.
+ */
+export async function callBot<T = unknown>(
   method: string,
   payload: unknown,
-  opts: { throwTransient?: boolean } = {},
-): Promise<T | null> {
-  if (!botConfigured()) return null;
-  /*
-   * 429 (`parameters.retry_after`) — BITTA cheklangan qayta urinish (audit
-   * EXT-05): ko'p `/start` bir paytda kelganda (~30 xabar/s chegarasi)
-   * kirish havolasi jimgina yo'qolmasin. Boshqa xatolar qayta urinilmaydi.
-   *
-   * `throwTransient` — vaqtinchalik xatoda `null` o'rniga
-   * `TelegramTransientError` (BEA-17). Doimiy xato (400/403 — masalan
-   * foydalanuvchi botni bloklagan) baribir `null`: uni qayta urinish
-   * foydasiz.
-   */
+  opts: CallBotOptions = {},
+): Promise<BotResult<T>> {
+  if (!botConfigured()) return { ok: false, code: 0, description: "bot is not configured" };
+  const timeoutMs = opts.timeoutMs ?? (opts.multipart ? UPLOAD_TIMEOUT_MS : JSON_TIMEOUT_MS);
   for (let attempt = 0; attempt < 2; attempt++) {
     let data: {
       ok: boolean;
@@ -84,35 +117,58 @@ async function call<T>(
       parameters?: { retry_after?: number };
     };
     try {
-      const res = await fetch(api(method), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(15_000),
-      });
-      // 502 da proxy HTML qaytarishi mumkin — `json()` xatosi ham tarmoq xatosi.
+      const res = await (opts.fetch ?? fetch)(
+        api(method),
+        opts.multipart
+          ? { method: "POST", body: payload as FormData, signal: AbortSignal.timeout(timeoutMs) }
+          : {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+              signal: AbortSignal.timeout(timeoutMs),
+            },
+      );
+      // A proxy may answer 502 with HTML — a `json()` failure is a network failure too.
       data = (await res.json()) as typeof data;
     } catch (e) {
       const why = e instanceof Error ? e.message : "tarmoq xatosi";
       console.warn(`[telegram] ${method}:`, why);
-      if (opts.throwTransient) throw new TelegramTransientError(`${method}: ${why}`);
-      return null;
+      return { ok: false, code: 0, description: why };
     }
     if (!data.ok) {
       console.warn(`[telegram] ${method}:`, data.description ?? "xato");
       const after = Number(data.parameters?.retry_after);
-      // Uzunroq `retry_after` — 5 s dan keyingi urinish ham 429 bo'lardi, kutmaymiz.
       if (attempt === 0 && data.error_code === 429 && Number.isFinite(after) && after >= 0 && after <= TELEGRAM_RETRY_AFTER_CAP_S) {
         await new Promise((r) => setTimeout(r, after * 1000));
         continue;
       }
-      const code = Number(data.error_code ?? 0);
-      if (opts.throwTransient && (code === 429 || code >= 500)) {
-        throw new TelegramTransientError(`${method}: ${code} ${data.description ?? ""}`.trim());
-      }
-      return null;
+      return { ok: false, code: Number(data.error_code ?? 0), description: data.description ?? "" };
     }
-    return data.result ?? null;
+    return { ok: true, result: data.result as T };
+  }
+  // Unreachable: the loop either returns or retries exactly once.
+  return { ok: false, code: 429, description: "Too Many Requests" };
+}
+
+/**
+ * Legacy wrapper used by `sendMessage`, `getMe`, `setBotCommands`:
+ * the result or `null`.
+ *
+ * `throwTransient` — on a transient failure throw `TelegramTransientError`
+ * instead of returning `null` (BEA-17), so the webhook answers 500 and
+ * Telegram redelivers the update. A permanent error (400/403 — e.g. the
+ * user blocked the bot) is still `null`: retrying it is useless.
+ */
+async function call<T>(
+  method: string,
+  payload: unknown,
+  opts: { throwTransient?: boolean } = {},
+): Promise<T | null> {
+  if (!botConfigured()) return null;
+  const r = await callBot<T>(method, payload);
+  if (r.ok) return r.result ?? null;
+  if (opts.throwTransient && isTransientBotFailure(r)) {
+    throw new TelegramTransientError(`${method}: ${r.code ? `${r.code} ` : ""}${r.description}`.trim());
   }
   return null;
 }
@@ -169,9 +225,24 @@ function hashToken(token: string): string {
 
 export type Ticket = { nonce: string; url: string; expiresAt: string };
 
+/** Login nonce bytes: `createTicket` / `createBotLoginLink` use `randomBytes(24)`. */
+const NONCE_BYTES = 24;
+/** base64url of `NONCE_BYTES` bytes: exactly 32 characters of `[A-Za-z0-9_-]`. */
+const NONCE_RE = new RegExp(`^[A-Za-z0-9_-]{${Math.ceil((NONCE_BYTES * 4) / 3)}}$`);
+
+/**
+ * Whether a `/start` payload has the shape of a login nonce. Only such a
+ * payload can be an (expired) login ticket; anything else — a future share
+ * payload (`s_…`), the inline-mode button (`inline`), random text — is not
+ * a login attempt and gets the welcome message instead of «eskirgan».
+ */
+export function isLoginNonce(payload: string): boolean {
+  return NONCE_RE.test(payload);
+}
+
 export async function createTicket(botUsername: string): Promise<Ticket> {
   await purgeExpiredTickets();
-  const nonce = randomBytes(24).toString("base64url");
+  const nonce = randomBytes(NONCE_BYTES).toString("base64url");
   const expiresAt = new Date(Date.now() + TICKET_TTL_MS);
   await query(
     "INSERT INTO login_tickets (nonce, expires_at) VALUES ($1, $2)",
@@ -234,7 +305,7 @@ export async function attachTicket(nonce: string, profile: TelegramProfile): Pro
  */
 export async function createBotLoginLink(profile: TelegramProfile): Promise<string> {
   await purgeExpiredTickets();
-  const nonce = randomBytes(24).toString("base64url");
+  const nonce = randomBytes(NONCE_BYTES).toString("base64url");
   const token = randomBytes(32).toString("base64url");
   await query(
     `INSERT INTO login_tickets (nonce, expires_at, telegram_id, username, name, photo_url, token_hash)
@@ -335,6 +406,18 @@ export type TelegramUpdate = {
     forward_date?: number;
     forward_from?: { id: number };
   };
+  /**
+   * Inline mode (`@bot …` typed in any chat). Arrives only when inline mode
+   * is enabled in @BotFather; we have no inline results, so it gets an empty
+   * answer with a button that opens the Mini App (`answerStrayInlineQuery`).
+   */
+  inline_query?: {
+    id: string;
+    from: { id: number; is_bot?: boolean; username?: string; first_name?: string };
+    query: string;
+    offset: string;
+    chat_type?: string;
+  };
 };
 
 /**
@@ -364,6 +447,11 @@ async function releaseUpdate(updateId: number): Promise<void> {
   await query("DELETE FROM telegram_updates WHERE update_id = $1", [updateId]);
 }
 
+/** Telegram accepts only public https URLs in `url` / `web_app` buttons («Wrong HTTP URL»). */
+function isPublicHttps(url: string): boolean {
+  return /^https:\/\//.test(url) && !/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(url);
+}
+
 /**
  * Sayt havolasi tugmasi.
  *
@@ -373,8 +461,7 @@ async function releaseUpdate(updateId: number): Promise<void> {
  */
 function publicSiteButton(path = "/uz", label = "Saytni ochish"): Record<string, unknown> {
   const url = `${env.appUrl}${path}`;
-  const isPublic = /^https:\/\//.test(url) && !/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(url);
-  if (!isPublic) return {};
+  if (!isPublicHttps(url)) return {};
   return { reply_markup: { inline_keyboard: [[{ text: label, url }]] } };
 }
 
@@ -558,7 +645,35 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
   }
 }
 
+/** `/start` payload of the inline-mode button when no public Mini App URL exists (local dev). */
+const INLINE_START_PARAMETER = "inline";
+
+/**
+ * Empty answer to an inline query, so the user's Telegram client does not spin.
+ * The button opens the Mini App (`web_app`) on a public https deployment; on a
+ * local one (Telegram rejects such URLs) it opens the bot chat with
+ * `/start inline`, which gets the welcome message. Not retried: an inline
+ * query expires within seconds, a late answer is useless.
+ */
+async function answerStrayInlineQuery(inlineQueryId: string): Promise<void> {
+  const app = `${env.appUrl}${WEB_APP_PATH}`;
+  const button = isPublicHttps(app)
+    ? { text: "SlaydX'ni ochish", web_app: { url: app } }
+    : { text: "SlaydX'ni ochish", start_parameter: INLINE_START_PARAMETER };
+  await callBot("answerInlineQuery", {
+    inline_query_id: inlineQueryId,
+    results: [],
+    cache_time: 300,
+    is_personal: false,
+    button,
+  });
+}
+
 async function processUpdate(update: TelegramUpdate): Promise<void> {
+  if (update.inline_query) {
+    await answerStrayInlineQuery(update.inline_query.id);
+    return;
+  }
   const msg = update.message;
   if (!msg?.from) return;
 
@@ -612,10 +727,12 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
   }
 
   const nonce = text.slice("/start".length).trim();
-  if (!nonce) {
+  if (!isLoginNonce(nonce)) {
     // Oddiy /start — foydalanuvchi botga saytdan emas, to'g'ridan-to'g'ri
     // keldi. Uni saytga «bor va u yerdan qayta kel» deb yubormaymiz:
     // kirish havolasini shu yerning o'zida beramiz.
+    // A payload that is not nonce-shaped (a share/inline deep link, random
+    // text) is not a login attempt either: welcome, never «eskirgan».
     await sendLoginLink(msg.chat.id, await createBotLoginLink(profile), WELCOME);
     return;
   }
