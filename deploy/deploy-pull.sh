@@ -9,17 +9,29 @@
 #
 # Install (lead/owner, once and after every change — never run it from the checkout, `git reset`
 # rewrites the checkout while the deploy runs):   deploy/install-deploy.sh
-# Usage:   slaydx-deploy <sha>            (40-hex or an unambiguous 7+ hex prefix)
+# Usage:   slaydx-deploy <sha> [--allow-destructive]   (40-hex or an unambiguous 7+ hex prefix)
 #
-# Order: validate → lock → fetch + ancestry → registry tag exists → disk → backup →
-#        ROLLBACK.txt (+ local `:rollback` tags) → checkout → pull → migrate → up → health →
-#        state file. A failure before `up` leaves the running containers untouched.
+# The deploy itself runs DETACHED (`setsid nohup`, stdin /dev/null, output to
+# $LOG_DIR/deploy-<run>-<sha7>.log): a dropped SSH session can no longer kill it between the swap and
+# the automatic rollback (security review D1). The command you typed only follows the log file and
+# exits with the deploy's exit code; if it dies, the deploy goes on — `tail -f` the log, the result
+# is in $STATE_DIR/last-run.env and history.log.
+#
+# Order: validate → lock → fetch + ancestry → registry tag exists → destructive-migration guard →
+#        disk → backup → ROLLBACK.txt (+ local `:rollback` tags) → checkout → pull (+ revision
+#        label) → stale one-off cleanup → migrate → up web worker → health → state file.
+#        A failure before `up` leaves the running containers untouched.
 #
 # Shared box rules (.claude/deploy.md): every compose call uses `-p slaydx`; nothing here prunes,
 # stops or inspects containers of other projects. Registry credentials live only in
 # DOCKER_CONFIG=/etc/slaydx/docker (root 700), so other projects' docker commands never see them.
+# The lock ($SLAYDX_LOCK_FILE, default /run/lock/slaydx-deploy.lock) is held for the whole deploy:
+# other automation (watchdog auto-restart) must skip while `flock -n` on it fails.
 set -Eeuo pipefail
 umask 077
+# A lost terminal must not kill the deploy: writes to a closed pipe fail (EPIPE) instead of
+# killing bash, and the hang-up is ignored. `log` never fails the script on a write error.
+trap '' PIPE HUP
 
 PROJECT=slaydx
 # Must match `image:` in docker-compose.yml.
@@ -27,13 +39,19 @@ REG=ghcr.io/khusinboev
 APP_DIR=${SLAYDX_APP_DIR:-/opt/slaydx}
 STATE_DIR=${SLAYDX_STATE_DIR:-/var/lib/slaydx-deploy}
 BACKUP_DIR=${SLAYDX_BACKUP_DIR:-/root/slaydx-backups}
+LOG_DIR=${SLAYDX_LOG_DIR:-$BACKUP_DIR}
 BACKUP_CMD=${SLAYDX_BACKUP_CMD:-/usr/local/bin/slaydx-backup}
 LOCK_FILE=${SLAYDX_LOCK_FILE:-/run/lock/slaydx-deploy.lock}
 HEALTH_URL=${SLAYDX_HEALTH_URL:-http://127.0.0.1:3000/api/health}
 HEALTH_TRIES=${SLAYDX_HEALTH_TRIES:-48}
 HEALTH_INTERVAL=${SLAYDX_HEALTH_INTERVAL:-5}
+FOLLOW_INTERVAL=${SLAYDX_FOLLOW_INTERVAL:-1}
+START_TIMEOUT=${SLAYDX_START_TIMEOUT:-60}
 MIN_FREE_GB=${SLAYDX_MIN_FREE_GB:-5}
 export DOCKER_CONFIG=${SLAYDX_DOCKER_CONFIG:-/etc/slaydx/docker}
+# Added migration lines matching this (SQL comments stripped) need --allow-destructive: after a
+# failed health check the OLD code runs on the NEW schema, so migrations must stay additive.
+DESTRUCTIVE_RE='(^|[^A-Z_])(DROP|RENAME|TRUNCATE)([^A-Z_]|$)|SET NOT NULL|ALTER COLUMN .* TYPE'
 
 T0=$(date +%s)
 STEP_T=$T0
@@ -44,15 +62,32 @@ PREV_SHA=""
 PREV_HEAD=""
 PREV_TAG=""
 HAVE_ROLLBACK=0
+HAVE_LOCK=0
+ARG=""
+ALLOW_DESTRUCTIVE=0
+RUN_ID=${SLAYDX_RUN_ID:-}
 
-log() { printf '%s [+%ss] %s\n' "$(date +%T)" "$(( $(date +%s) - T0 ))" "$*"; }
-die() { log "ERROR: $*" >&2; exit 1; }
-usage() { echo "usage: slaydx-deploy <sha>   (commit on origin/main whose images CI promoted)" >&2; exit 2; }
+log() { printf '%s [+%ss] %s\n' "$(date +%T)" "$(( $(date +%s) - T0 ))" "$*" 2>/dev/null || true; }
+die() { log "ERROR: $*"; exit 1; }
+usage() { echo "usage: slaydx-deploy <sha> [--allow-destructive]   (commit on origin/main whose images CI promoted)" >&2; exit 2; }
 dc() { docker compose -p "$PROJECT" "$@"; }
 step() {  # close the previous step's timer under name $1
   local now; now=$(date +%s)
   TIMINGS="$TIMINGS $1=$(( now - STEP_T ))s"
   STEP_T=$now
+}
+
+parse_args() {
+  local a
+  for a in "$@"; do
+    case "$a" in
+      -h|--help) usage ;;
+      --allow-destructive) ALLOW_DESTRUCTIVE=1 ;;
+      *) [ -z "$ARG" ] || usage; ARG=${a,,} ;;
+    esac
+  done
+  [ -n "$ARG" ] || usage
+  [[ "$ARG" =~ ^[0-9a-f]{7,40}$ ]] || { echo "not a commit sha: $ARG" >&2; usage; }
 }
 
 state_get() {  # $1=key → value from $STATE_DIR/current.env (empty if missing)
@@ -74,13 +109,16 @@ set_env_tag() {
 
 # 0 = healthy; 1 = not yet; 2 = a container crashed (fail fast instead of waiting).
 # $1 = expected image tag, or empty to skip the image check (rollback to a build-mode version,
-# whose compose file has no `image:` key).
+# whose compose file has no `image:` key). One-off `compose run` containers (`slaydx-<svc>-run-*`,
+# e.g. an interrupted migration or a manual admin script) are not part of the service: ignored
+# (security review D2 — an exited one-off used to fail every deploy and its rollback).
 health_once() {
-  local want_tag=$1 svc img state health web=0 worker=0
+  local want_tag=$1 name svc img state health web=0 worker=0
   local out
-  out=$(dc ps -a --format '{{.Service}}|{{.Image}}|{{.State}}|{{.Health}}' web worker) || return 1
-  while IFS='|' read -r svc img state health; do
+  out=$(dc ps -a --format '{{.Name}}|{{.Service}}|{{.Image}}|{{.State}}|{{.Health}}' web worker) || return 1
+  while IFS='|' read -r name svc img state health; do
     [ -n "$svc" ] || continue
+    case "$name" in *-run-*) continue ;; esac
     case "$state" in restarting|exited|dead) return 2 ;; esac
     [ "$state" = running ] || return 1
     [ "$health" = healthy ] || return 1
@@ -111,8 +149,9 @@ rollback() {
   dc logs --tail=60 web worker
   git reset --quiet --hard "$PREV_HEAD"
   if [ "$HAVE_ROLLBACK" = 1 ]; then
-    if SLAYDX_TAG=rollback dc up -d --no-build && SLAYDX_TAG=rollback wait_healthy ""; then
+    if SLAYDX_TAG=rollback dc up -d --no-build --no-deps web worker && SLAYDX_TAG=rollback wait_healthy ""; then
       log "rolled back: previous images are serving again"
+      log "note: .env keeps SLAYDX_TAG=$PREV_TAG (same images as :rollback); run 'slaydx-deploy ${PREV_SHA:0:7}' or fix forward"
     else
       log "!!! previous version is NOT healthy either — check by hand (ROLLBACK.txt: $BACKUP_DIR/ROLLBACK.txt)"
     fi
@@ -133,19 +172,35 @@ on_exit() {
       swapped) rollback ;;
     esac
   fi
+  # The exit code is recorded for whoever follows the run (and for later inspection).
+  if [ -n "$RUN_ID" ]; then
+    printf 'rc=%s\n' "$rc" > "$STATE_DIR/runs/$RUN_ID" 2>/dev/null || true
+  fi
+  if [ -n "$RUN_ID" ] && [ "$HAVE_LOCK" = 1 ]; then
+    printf 'run=%s\nsha=%s\nrc=%s\nlog=%s\nat=%s\n' "$RUN_ID" "${SHA:-$ARG}" "$rc" "${SLAYDX_RUN_LOG:-}" "$(date -Is)" \
+      > "$STATE_DIR/last-run.env" 2>/dev/null || true
+  fi
   exit "$rc"
 }
 
-main() {
-  [ "$#" -eq 1 ] || usage
-  case "$1" in -h|--help) usage ;; esac
-  local arg=${1,,}
-  [[ "$arg" =~ ^[0-9a-f]{7,40}$ ]] || { echo "not a commit sha: $1" >&2; usage; }
+# Destructive statements among the ADDED lines of migration files between the running checkout
+# and the target commit (comments stripped).
+destructive_migrations() {
+  local diff
+  diff=$(git diff "$PREV_HEAD" "$SHA" -- lib/server/migrations) || return 2
+  printf '%s\n' "$diff" | sed -n 's/^+\([^+]\)/\1/p' | sed 's/--.*$//' | tr '[:lower:]' '[:upper:]' \
+    | grep -E "$DESTRUCTIVE_RE" || true
+}
 
+# The detached deploy.
+run_deploy() {
+  if [ -n "$RUN_ID" ]; then mkdir -p "$STATE_DIR/runs"; fi
+  trap on_exit EXIT
   mkdir -p "$STATE_DIR" "$BACKUP_DIR" "$(dirname "$LOCK_FILE")"
   exec 9>"$LOCK_FILE"
   flock -n 9 || die "another deploy is running (lock $LOCK_FILE)"
-  trap on_exit EXIT
+  HAVE_LOCK=1
+  if [ -n "$RUN_ID" ]; then printf 'running\n' > "$STATE_DIR/runs/$RUN_ID"; fi
 
   cd "$APP_DIR"
   [ -f .env ] || die "$APP_DIR/.env is missing"
@@ -154,7 +209,7 @@ main() {
 
   # 1) The commit: must resolve, be a full sha and be on origin/main.
   git fetch --quiet origin main || die "git fetch failed"
-  SHA=$(git rev-parse --verify --quiet "${arg}^{commit}") || die "commit not found: $arg"
+  SHA=$(git rev-parse --verify --quiet "${ARG}^{commit}") || die "commit not found: $ARG"
   [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || die "unexpected rev-parse result: $SHA"
   git merge-base --is-ancestor "$SHA" origin/main || die "$SHA is not on origin/main — refusing"
 
@@ -166,22 +221,33 @@ main() {
       || die "$REG/slaydx-$s:$SHA not in the registry — did CI promote it? (or the registry token expired)"
   done
 
-  local free_gb
-  free_gb=$(df --output=avail -BG "$APP_DIR" | tail -n 1 | tr -dc 0-9)
-  [ "${free_gb:-0}" -ge "$MIN_FREE_GB" ] || die "only ${free_gb:-0} GB free (< $MIN_FREE_GB GB)"
-
   PREV_HEAD=$(git rev-parse HEAD)
   PREV_SHA=$(state_get sha); PREV_SHA=${PREV_SHA:-$PREV_HEAD}
   PREV_TAG=$(state_get tag); PREV_TAG=${PREV_TAG:-local}
+
+  # 3) Additive-migrations rule (expand/contract), enforced.
+  local bad rc=0
+  bad=$(destructive_migrations) || rc=$?
+  [ "$rc" -eq 0 ] || die "git diff of lib/server/migrations failed"
+  if [ -n "$bad" ]; then
+    log "destructive migration statements between ${PREV_HEAD:0:7} and ${SHA:0:7}:"
+    printf '%s\n' "$bad" | while IFS= read -r l; do log "  $l"; done
+    [ "$ALLOW_DESTRUCTIVE" = 1 ] || die "refusing: an automatic rollback would run the old code on this schema (re-run with --allow-destructive after review)"
+    log "--allow-destructive given: continuing"
+  fi
+
+  local free_gb
+  free_gb=$(df --output=avail -BG "$APP_DIR" | tail -n 1 | tr -dc 0-9)
+  [ "${free_gb:-0}" -ge "$MIN_FREE_GB" ] || die "only ${free_gb:-0} GB free (< $MIN_FREE_GB GB)"
   log "deploy ${SHA:0:7} (previous ${PREV_SHA:0:7}, tag $PREV_TAG)"
   step validate
 
-  # 3) Backup first (daily cron's script; it verifies the dump). A failed backup stops the deploy.
+  # 4) Backup first (daily cron's script; it verifies the dump). A failed backup stops the deploy.
   "$BACKUP_CMD" || die "backup failed ($BACKUP_CMD) — nothing changed"
   log "backup done"
   step backup
 
-  # 4) Rollback point: tag the images that are running now as local `:rollback` (never pushed),
+  # 5) Rollback point: tag the images that are running now as local `:rollback` (never pushed),
   #    so the automatic rollback restores exactly them whatever the previous mode was.
   # First id only, without `| head` (SIGPIPE under pipefail with 2 worker replicas).
   local web_id="" worker_id="" cid
@@ -201,7 +267,7 @@ main() {
     "$PREV_SHA" "$PREV_TAG" "$web_id" "$worker_id" "$(date -Is)" "$SHA" > "$BACKUP_DIR/ROLLBACK.txt"
   step rollback-point
 
-  # 5) Compose file of the same commit as the images (image refs, env list, flags) — before the
+  # 6) Compose file of the same commit as the images (image refs, env list, flags) — before the
   #    pull, because a pre-ops compose file has no `image:` key to pull. Containers do not read
   #    the checkout, so the old ones keep serving; any failure until `up` restores it (EXIT trap).
   PHASE=checkout
@@ -209,31 +275,49 @@ main() {
   git reset --quiet --hard "$SHA"
   dc config -q || die "compose config invalid at $SHA"
 
-  # 6) Pull while the old containers keep serving.
+  # 7) Pull while the old containers keep serving. The OCI revision label must name this commit
+  #    (tags are mutable for anyone with packages:write); a missing label is only a warning.
   dc pull web worker || die "pull failed"
+  local rev
   for s in web worker; do
     docker image inspect "$REG/slaydx-$s:$SHA" >/dev/null 2>&1 || die "$REG/slaydx-$s:$SHA missing after pull"
+    rev=$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$REG/slaydx-$s:$SHA" 2>/dev/null || true)
+    case "$rev" in
+      "$SHA") ;;
+      ""|"<no value>") log "WARNING: $REG/slaydx-$s:$SHA has no revision label" ;;
+      *) die "$REG/slaydx-$s:$SHA is labelled revision=$rev, expected $SHA — refusing" ;;
+    esac
   done
   log "images pulled"
   step pull
 
-  # 7) Migrations with the NEW image while the OLD containers still serve: a failing migration
-  #    costs no downtime. Migrations are additive by rule (expand/contract); boot-time
-  #    ensureMigrated stays as a safety net and is a no-op after this.
+  # 8) Migrations with the NEW image while the OLD containers still serve: a failing migration
+  #    costs no downtime. Exited one-off containers of this project (an interrupted earlier
+  #    `compose run`) are removed first; running ones (someone's admin script) are left alone.
+  local stale
+  stale=$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" \
+    --filter label=com.docker.compose.oneoff=True --filter status=exited)
+  if [ -n "$stale" ]; then
+    log "removing exited one-off containers: $(printf '%s' "$stale" | tr '\n' ' ')"
+    # shellcheck disable=SC2086  # ids are hex, one per line
+    docker rm $stale >/dev/null || log "WARNING: could not remove some one-off containers"
+  fi
   dc run --rm --no-deps -T worker ./node_modules/.bin/tsx --conditions=react-server scripts/migrate.ts \
     || die "migration failed — old version keeps serving"
   log "migrations done"
   step migrate
 
-  # 8) Swap. From here on any failure rolls back (EXIT trap).
+  # 9) Swap web + worker only (`--no-deps`): postgres is NOT recreated by a deploy. A changed
+  #    postgres `command:` is applied as its own step: `docker compose -p slaydx up -d postgres`.
+  #    From here on any failure rolls back (EXIT trap).
   PHASE=swapped
-  dc up -d --no-build || die "compose up failed"
+  dc up -d --no-build --no-deps web worker || die "compose up failed"
   log "containers recreated, waiting for health"
   step up
   wait_healthy "$SHA" || die "health check failed (web /api/health + Docker health of web and worker)"
   step health
 
-  # 9) Record.
+  # 10) Record.
   PHASE=finished
   set_env_tag "$SHA"
   printf '%s\n' "$SHA" > "$STATE_DIR/current"
@@ -242,4 +326,61 @@ main() {
   log "deployed ${SHA:0:7} in $(( $(date +%s) - T0 ))s —$TIMINGS"
 }
 
-main "$@"
+# Print the bytes of $1 between offset $2 and its current size; echo the new offset.
+# `head -c` reads the file (never a pipe writer that can be cut short), `tail -c +N` reads all.
+follow_chunk() {
+  local size
+  size=$(stat -c %s "$1" 2>/dev/null || echo "$2")
+  if [ "$size" -gt "$2" ]; then
+    head -c "$size" "$1" | tail -c +"$(( $2 + 1 ))" >&3 2>/dev/null || true
+  fi
+  echo "$size"
+}
+
+# The command the operator typed: start the deploy detached and follow its log.
+launch() {
+  mkdir -p "$STATE_DIR/runs" "$LOG_DIR" "$(dirname "$LOCK_FILE")"
+  flock -n "$LOCK_FILE" true || die "another deploy is running (lock $LOCK_FILE)"
+  RUN_ID="$(date +%Y%m%d-%H%M%S)-$$"
+  local logf="$LOG_DIR/deploy-$RUN_ID-${ARG:0:7}.log" status="$STATE_DIR/runs/$RUN_ID" self
+  self=$(readlink -f "${BASH_SOURCE[0]}")
+  : > "$logf"
+  find "$LOG_DIR" -maxdepth 1 -name 'deploy-*.log' -mtime +30 -delete 2>/dev/null || true
+  find "$STATE_DIR/runs" -maxdepth 1 -type f -mtime +30 -delete 2>/dev/null || true
+  local args=("$ARG")
+  [ "$ALLOW_DESTRUCTIVE" = 0 ] || args+=(--allow-destructive)
+  SLAYDX_DEPLOY_DETACHED=1 SLAYDX_RUN_ID=$RUN_ID SLAYDX_RUN_LOG=$logf \
+    setsid nohup bash "$self" "${args[@]}" </dev/null >>"$logf" 2>&1 &
+  log "deploy started detached (run $RUN_ID); log: $logf"
+  log "if this session drops, the deploy continues: tail -f $logf"
+
+  local off=0 st started
+  started=$(date +%s)
+  exec 3>&1
+  while :; do
+    off=$(follow_chunk "$logf" "$off")
+    st=$(cat "$status" 2>/dev/null || true)
+    case "$st" in rc=*) break ;; esac
+    if [ -z "$st" ]; then
+      [ $(( $(date +%s) - started )) -le "$START_TIMEOUT" ] \
+        || { log "ERROR: the deploy did not start within ${START_TIMEOUT}s — see $logf"; exit 1; }
+    elif flock -n "$LOCK_FILE" true; then
+      # Lock free but no exit status: the deploy process died (killed). Re-check once for a late rc.
+      st=$(cat "$status" 2>/dev/null || true)
+      case "$st" in rc=*) break ;; esac
+      off=$(follow_chunk "$logf" "$off")
+      log "ERROR: the deploy process ended without an exit status — see $logf"; exit 1
+    fi
+    sleep "$FOLLOW_INTERVAL"
+  done
+  follow_chunk "$logf" "$off" >/dev/null
+  rm -f "$status"
+  exit "${st#rc=}"
+}
+
+parse_args "$@"
+if [ "${SLAYDX_DEPLOY_DETACHED:-}" = 1 ]; then
+  run_deploy
+else
+  launch
+fi

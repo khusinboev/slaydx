@@ -6,6 +6,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -39,7 +40,7 @@ const STUB_DOCKER = String.raw`#!/usr/bin/env bash
 printf '%s\t%s\t%s\t%s\n' docker "${"$"}{SLAYDX_TAG:--}" "${"$"}{DOCKER_CONFIG:--}" "$*" >> "$STUB_LOG"
 args="$*"
 case "$args" in
-  "compose version") exit 0 ;;
+  "compose version") exit "${"$"}{STUB_COMPOSE_VERSION_RC:-0}" ;;
   "manifest inspect "*)
     ref=${"$"}{args#manifest inspect }
     if [ -n "${"$"}{STUB_MISSING_MANIFEST:-}" ] && [[ "$ref" == *"$STUB_MISSING_MANIFEST"* ]]; then
@@ -54,16 +55,20 @@ case "$args" in
   "inspect -f {{.Image}} cid-worker1") echo sha256:oldworker ;;
   "compose -p slaydx run "*) exit "${"$"}{STUB_MIGRATE_RC:-0}" ;;
   "compose -p slaydx pull "*) exit "${"$"}{STUB_PULL_RC:-0}" ;;
+  "image inspect -f "*) printf '%s\n' "${"$"}{STUB_REVISION-$STUB_SHA}" ;;
   "image inspect "*) [ -z "${"$"}{STUB_IMAGE_ABSENT:-}" ] ;;
+  "ps -aq --filter label=com.docker.compose.project=slaydx --filter label=com.docker.compose.oneoff=True --filter status=exited")
+    [ -z "${"$"}{STUB_STALE_ONEOFF:-}" ] || printf '%s\n' $STUB_STALE_ONEOFF ;;
   "compose -p slaydx build"*) exit "${"$"}{STUB_BUILD_RC:-0}" ;;
   "compose -p slaydx ps -a --format "*)
     tag=${"$"}{SLAYDX_TAG:-local}; shown=$tag; st=running; h=healthy
     [ "${"$"}{STUB_UNHEALTHY_TAG:-}" = "$tag" ] && h=unhealthy
     [ "${"$"}{STUB_CRASH_TAG:-}" = "$tag" ] && { st=restarting; h=starting; }
     [ "${"$"}{STUB_STALE_TAG:-}" = "$tag" ] && shown=old
-    echo "web|${REG}/slaydx-web:$shown|$st|$h"
-    echo "worker|${REG}/slaydx-worker:$tag|running|healthy"
-    echo "worker|${REG}/slaydx-worker:$tag|running|healthy" ;;
+    echo "slaydx-web-1|web|${REG}/slaydx-web:$shown|$st|$h"
+    echo "slaydx-worker-1|worker|${REG}/slaydx-worker:$tag|running|healthy"
+    echo "slaydx-worker-2|worker|${REG}/slaydx-worker:$tag|running|healthy"
+    [ -z "${"$"}{STUB_ONEOFF_EXITED:-}" ] || echo "slaydx-worker-run-0a1b2c3d4e5f|worker|${REG}/slaydx-worker:$tag|exited|" ;;
   *) exit 0 ;;
 esac
 `;
@@ -77,6 +82,7 @@ case "$1" in
     if [ "$ref" = origin/main ] || [[ "$STUB_SHA" == "$ref"* ]]; then echo "$STUB_SHA"; exit 0; fi
     exit 1 ;;
   merge-base) [ "${"$"}{STUB_ON_MAIN:-1}" = 1 ] ;;
+  diff) printf '%s' "${"$"}{STUB_MIGRATION_DIFF:-}" ;;
   *) exit 0 ;;
 esac
 `;
@@ -84,6 +90,7 @@ esac
 const STUB_CURL = String.raw`#!/usr/bin/env bash
 state=absent; [ -f "$SLAYDX_STATE_DIR/current" ] && state=present
 printf '%s\t%s\t%s\tstate=%s %s\n' curl "${"$"}{SLAYDX_TAG:--}" - "$state" "$*" >> "$STUB_LOG"
+[ -z "${"$"}{STUB_CURL_SLEEP:-}" ] || sleep "$STUB_CURL_SLEEP"
 [ -n "${"$"}{STUB_CURL_FAIL:-}" ] && exit 22
 echo '{"status":"ok"}'
 [ -z "${"$"}{STUB_BIG_OUTPUT:-}" ] || seq 1 200000
@@ -146,6 +153,7 @@ function sandbox(t: { after(fn: () => void): void }, extra: Record<string, strin
     SLAYDX_HEALTH_TRIES: "3",
     SLAYDX_HEALTH_INTERVAL: "0",
     SLAYDX_MIN_FREE_GB: "0",
+    SLAYDX_FOLLOW_INTERVAL: "0.05",
     ...extra,
   };
   return {
@@ -181,7 +189,7 @@ const isCompose = (c: Call, sub: string) => c.tool === "docker" && c.args.starts
 
 test("deploy-pull: invalid arguments exit 2 before touching anything", (t) => {
   const sb = sandbox(t);
-  for (const args of [[], ["main"], ["xyz1234"], ["abc12"], ["--help"], [SHA, SHA], [`${SHA}0`], ["0123456;id"]]) {
+  for (const args of [[], ["main"], ["xyz1234"], ["abc12"], ["--help"], [SHA, SHA], [`${SHA}0`], ["0123456;id"], ["--allow-destructive"], [SHA, "--force"]]) {
     const r = run(PULL, args, sb);
     assert.equal(r.code, 2, `args ${JSON.stringify(args)}: ${r.out}`);
     assert.match(r.out, /usage: slaydx-deploy <sha>/);
@@ -391,6 +399,138 @@ test("deploy-pull and deploy-build: long command output never SIGPIPEs the scrip
   }
 });
 
+function deployLog(sb: Sandbox): string {
+  const names = existsSync(sb.backups) ? readdirSync(sb.backups).filter((n) => /^deploy-.*\.log$/.test(n)) : [];
+  assert.equal(names.length, 1, `one deploy log expected, got ${JSON.stringify(names)}`);
+  return path.join(sb.backups, names[0]);
+}
+
+async function waitFor(what: string, cond: () => boolean, ms = 20_000): Promise<void> {
+  const until = Date.now() + ms;
+  while (!cond()) {
+    if (Date.now() > until) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((res) => setTimeout(res, 50));
+  }
+}
+
+test("deploy-pull: runs detached — log file under the backup dir, exit code in last-run.env, swap leaves postgres alone", (t) => {
+  const sb = sandbox(t);
+  const r = run(PULL, [SHA], sb);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /deploy started detached \(run [0-9-]+\); log: .*\/backups\/deploy-[0-9-]+-0123456\.log/);
+  const logText = readFileSync(deployLog(sb), "utf8");
+  assert.match(logText, /deployed 0123456 in \d+s/);
+  assert.ok(r.out.includes("deployed 0123456"), "the launcher relays the log");
+  assert.match(readFileSync(path.join(sb.state, "last-run.env"), "utf8"), new RegExp(`^run=[0-9-]+\nsha=${SHA}\nrc=0\nlog=.*deploy-`));
+  assert.deepEqual(readdirSync(path.join(sb.state, "runs")), [], "the per-run status file is consumed");
+  const ups = sb.calls().filter((c) => isCompose(c, "up"));
+  assert.deepEqual(ups.map((c) => c.args), ["compose -p slaydx up -d --no-build --no-deps web worker"]);
+});
+
+test("deploy-pull: the deploy survives the operator's session dying after the swap and still rolls back", async (t) => {
+  // = an SSH drop: the launcher (the process attached to the session) is killed mid-health-check.
+  const sb = sandbox(t, { STUB_UNHEALTHY_TAG: SHA, SLAYDX_HEALTH_TRIES: "6", SLAYDX_HEALTH_INTERVAL: "0.3" });
+  // `detached: true` puts the launcher in its own process group, standing in for the SSH session;
+  // the whole group is then killed, as a session teardown would.
+  const launcher = spawn("bash", [PULL, SHA], { env: sb.env, stdio: ["ignore", "pipe", "pipe"], detached: true });
+  launcher.stdout.resume();
+  launcher.stderr.resume();
+  await waitFor("the swap", () => sb.calls().some((c) => isCompose(c, "up") && c.tag === SHA));
+  assert.ok(!sb.calls().some((c) => c.tag === "rollback" && isCompose(c, "up")), "killed before the rollback");
+  process.kill(-launcher.pid!, "SIGHUP");
+  process.kill(-launcher.pid!, "SIGKILL");
+  await waitFor("the detached deploy to finish", () => existsSync(path.join(sb.state, "last-run.env")));
+  assert.match(readFileSync(path.join(sb.state, "last-run.env"), "utf8"), /\nrc=1\n/);
+  assert.ok(sb.calls().some((c) => c.tag === "rollback" && c.args === "compose -p slaydx up -d --no-build --no-deps web worker"));
+  assert.match(readFileSync(path.join(sb.state, "history.log"), "utf8"), new RegExp(`${SHA} FAILED rolled_back_to=${PREV}`));
+  assert.match(readFileSync(deployLog(sb), "utf8"), /rolled back: previous images are serving again/);
+});
+
+test("deploy-pull: with its own stdout closed mid-deploy (no detach) the script still rolls back instead of dying of SIGPIPE", async (t) => {
+  const sb = sandbox(t, { STUB_UNHEALTHY_TAG: SHA, SLAYDX_DEPLOY_DETACHED: "1" });
+  const child = spawn("bash", [PULL, SHA], { env: sb.env, stdio: ["ignore", "pipe", "pipe"] });
+  const closed = new Promise<void>((res) => {
+    child.stdout.once("data", () => {
+      child.stdout.destroy();
+      child.stderr.destroy();
+      res();
+    });
+  });
+  const code = await new Promise<number | null>((res) => child.on("exit", (c) => res(c)));
+  await closed;
+  assert.equal(code, 1, "rolled back and exited 1 (141 = killed by SIGPIPE)");
+  assert.ok(sb.calls().some((c) => c.tag === "rollback" && isCompose(c, "up")));
+  assert.match(readFileSync(path.join(sb.state, "history.log"), "utf8"), /FAILED rolled_back_to=/);
+});
+
+test("deploy-pull: exited one-off containers neither fail the health check nor survive the next migration", (t) => {
+  const sb = sandbox(t, { STUB_ONEOFF_EXITED: "1", STUB_STALE_ONEOFF: "0a1b2c3d4e5f 9f8e7d6c5b4a" });
+  const r = run(PULL, [SHA], sb);
+  assert.equal(r.code, 0, r.out);
+  const calls = sb.calls();
+  const rm = idx(calls, (c) => c.args === "rm 0a1b2c3d4e5f 9f8e7d6c5b4a");
+  const migrate = idx(calls, (c) => isCompose(c, "run --rm"));
+  assert.ok(rm >= 0 && rm < migrate, JSON.stringify({ rm, migrate }));
+  assert.equal(idx(calls, (c) => c.tag === "rollback" && isCompose(c, "up")), -1);
+  // Nothing stale → nothing removed.
+  const clean = sandbox(t);
+  assert.equal(run(PULL, [SHA], clean).code, 0);
+  assert.equal(idx(clean.calls(), (c) => c.args.startsWith("rm ")), -1);
+});
+
+test("deploy-pull: destructive migration statements are refused unless --allow-destructive", (t) => {
+  const drop = "diff --git a/x b/x\n+++ b/lib/server/migrations/040_x.sql\n+-- comment: DROP is fine here\n+ALTER TABLE users DROP COLUMN legacy;\n";
+  const refused = sandbox(t, { STUB_MIGRATION_DIFF: drop });
+  const r = run(PULL, [SHA], refused);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /ALTER TABLE USERS DROP COLUMN LEGACY;/);
+  assert.match(r.out, /refusing: an automatic rollback would run the old code on this schema/);
+  assert.ok(refused.calls().some((c) => c.tool === "git" && c.args === `diff ${PREV} ${SHA} -- lib/server/migrations`));
+  assert.equal(idx(refused.calls(), (c) => c.tool === "slaydx-backup"), -1);
+
+  for (const sql of ["+alter table x alter column y type bigint;\n", "+ALTER TABLE x RENAME TO y;\n", "+truncate t;\n", "+ALTER TABLE x ALTER COLUMN y SET NOT NULL;\n"]) {
+    const sb = sandbox(t, { STUB_MIGRATION_DIFF: sql });
+    assert.equal(run(PULL, [SHA], sb).code, 1, sql);
+  }
+
+  const allowed = sandbox(t, { STUB_MIGRATION_DIFF: drop });
+  const ok = run(PULL, [SHA, "--allow-destructive"], allowed);
+  assert.equal(ok.code, 0, ok.out);
+  assert.match(ok.out, /--allow-destructive given: continuing/);
+
+  // Additive changes and comment-only mentions pass; removed lines (`-`) do not count.
+  const additive = sandbox(t, {
+    STUB_MIGRATION_DIFF: "+++ b/lib/server/migrations/040_x.sql\n+-- we never DROP here\n+CREATE TABLE dropbox_links (id int);\n-DROP TABLE old;\n",
+  });
+  const r3 = run(PULL, [SHA], additive);
+  assert.equal(r3.code, 0, r3.out);
+});
+
+test("deploy-pull: the pulled images must carry this commit's revision label (missing label = warning)", (t) => {
+  const wrong = sandbox(t, { STUB_REVISION: PREV });
+  const r = run(PULL, [SHA], wrong);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, new RegExp(`slaydx-web:${SHA} is labelled revision=${PREV}, expected ${SHA}`));
+  assert.equal(idx(wrong.calls(), (c) => isCompose(c, "run") || isCompose(c, "up")), -1);
+
+  const missing = sandbox(t, { STUB_REVISION: "" });
+  const r2 = run(PULL, [SHA], missing);
+  assert.equal(r2.code, 0, r2.out);
+  assert.match(r2.out, /WARNING: .*slaydx-worker:\w+ has no revision label/);
+});
+
+test("install-deploy: refuses to copy a compose plugin that is not owned by root", (t) => {
+  const sb = sandbox(t, { STUB_COMPOSE_VERSION_RC: "1" });
+  const plugin = path.join(sb.dir, ".docker/cli-plugins/docker-compose");
+  mkdirSync(path.dirname(plugin), { recursive: true });
+  writeFileSync(plugin, "#!/bin/sh\n");
+  chmodSync(plugin, 0o755);
+  const r = spawnSync("bash", [INSTALL], { env: { ...sb.env, SLAYDX_BIN_DIR: path.join(sb.dir, "bin2") }, encoding: "utf8" });
+  assert.equal(r.status, 1, `${r.stdout}${r.stderr}`);
+  assert.match(r.stderr, /is not owned by root — refusing/);
+  assert.ok(!existsSync(path.join(sb.dir, "docker-auth/cli-plugins/docker-compose")));
+});
+
 async function holdLock(lock: string): Promise<ChildProcess> {
   const holder = spawn("flock", [lock, "sleep", "30"], { stdio: "ignore" });
   for (let i = 0; i < 100; i++) {
@@ -411,6 +551,10 @@ test("deploy-pull and deploy-build: a concurrent deploy is refused (shared lock)
     assert.equal(r.code, 1, r.out);
     assert.match(r.out, /another deploy is running/);
   }
+  // The detached deploy re-checks the lock itself (the launcher's check is only a fast path).
+  const direct = run(PULL, [SHA], { ...sb, env: { ...sb.env, SLAYDX_DEPLOY_DETACHED: "1" } });
+  assert.equal(direct.code, 1, direct.out);
+  assert.match(direct.out, /another deploy is running/);
   assert.deepEqual(sb.calls(), []);
 });
 
