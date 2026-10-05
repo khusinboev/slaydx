@@ -53,6 +53,8 @@ case "$args" in
   "inspect -f {{.Image}} cid-web") echo sha256:oldweb ;;
   "inspect -f {{.Image}} cid-worker1") echo sha256:oldworker ;;
   "compose -p slaydx run "*) exit "${"$"}{STUB_MIGRATE_RC:-0}" ;;
+  "compose -p slaydx pull "*) exit "${"$"}{STUB_PULL_RC:-0}" ;;
+  "image inspect "*) [ -z "${"$"}{STUB_IMAGE_ABSENT:-}" ] ;;
   "compose -p slaydx build"*) exit "${"$"}{STUB_BUILD_RC:-0}" ;;
   "compose -p slaydx ps -a --format "*)
     tag=${"$"}{SLAYDX_TAG:-local}; shown=$tag; st=running; h=healthy
@@ -235,11 +237,11 @@ test("deploy-pull: success path runs backup → pull → migrate → up → heal
   const up = idx(calls, (c) => isCompose(c, "up -d --no-build"));
   const health = idx(calls, (c) => isCompose(c, "ps -a --format"));
   const curl = idx(calls, (c) => c.tool === "curl");
-  const order = { manifest, backup, tagRollback, pull, checkout, migrate, up, health, curl };
+  const order = { manifest, backup, tagRollback, checkout, pull, migrate, up, health, curl };
   for (const [k, v] of Object.entries(order)) assert.ok(v >= 0, `${k} missing:\n${r.out}`);
   assert.ok(
-    manifest < backup && backup < tagRollback && tagRollback < pull && pull < checkout &&
-      checkout < migrate && migrate < up && up < health && health < curl,
+    manifest < backup && backup < tagRollback && tagRollback < checkout && checkout < pull &&
+      pull < migrate && migrate < up && up < health && health < curl,
     `order ${JSON.stringify(order)}`,
   );
   assert.ok(calls.some((c) => c.args === `tag sha256:oldworker ${REG}/slaydx-worker:rollback`));
@@ -340,6 +342,24 @@ test("deploy-pull: a failing migration aborts before the swap and restores the c
   const back = idx(calls, (c) => c.tool === "git" && c.args === `reset --quiet --hard ${PREV}`);
   assert.ok(fwd >= 0 && back > fwd);
   assert.ok(!existsSync(path.join(sb.state, "current")));
+});
+
+test("deploy-pull: a failed pull (or an image still absent after it) aborts before the swap and restores the checkout", (t) => {
+  for (const [extra, msg] of [
+    [{ STUB_PULL_RC: "1" }, /pull failed/],
+    [{ STUB_IMAGE_ABSENT: "1" }, new RegExp(`slaydx-web:${SHA} missing after pull`)],
+  ] as const) {
+    const sb = sandbox(t, extra);
+    const r = run(PULL, [SHA], sb);
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, msg);
+    assert.match(r.out, /aborted before the swap/);
+    const calls = sb.calls();
+    assert.equal(idx(calls, (c) => isCompose(c, "run") || isCompose(c, "up")), -1);
+    const fwd = idx(calls, (c) => c.tool === "git" && c.args === `reset --quiet --hard ${SHA}`);
+    const back = idx(calls, (c) => c.tool === "git" && c.args === `reset --quiet --hard ${PREV}`);
+    assert.ok(fwd >= 0 && back > fwd, JSON.stringify({ fwd, back }));
+  }
 });
 
 test("deploy-pull: a failing backup stops the deploy before pull", (t) => {

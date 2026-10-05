@@ -12,7 +12,7 @@
 # Usage:   slaydx-deploy <sha>            (40-hex or an unambiguous 7+ hex prefix)
 #
 # Order: validate → lock → fetch + ancestry → registry tag exists → disk → backup →
-#        ROLLBACK.txt (+ local `:rollback` tags) → pull → checkout → migrate → up → health →
+#        ROLLBACK.txt (+ local `:rollback` tags) → checkout → pull → migrate → up → health →
 #        state file. A failure before `up` leaves the running containers untouched.
 #
 # Shared box rules (.claude/deploy.md): every compose call uses `-p slaydx`; nothing here prunes,
@@ -201,8 +201,15 @@ main() {
     "$PREV_SHA" "$PREV_TAG" "$web_id" "$worker_id" "$(date -Is)" "$SHA" > "$BACKUP_DIR/ROLLBACK.txt"
   step rollback-point
 
-  # 5) Pull while the old containers keep serving.
+  # 5) Compose file of the same commit as the images (image refs, env list, flags) — before the
+  #    pull, because a pre-ops compose file has no `image:` key to pull. Containers do not read
+  #    the checkout, so the old ones keep serving; any failure until `up` restores it (EXIT trap).
+  PHASE=checkout
   export SLAYDX_TAG=$SHA
+  git reset --quiet --hard "$SHA"
+  dc config -q || die "compose config invalid at $SHA"
+
+  # 6) Pull while the old containers keep serving.
   dc pull web worker || die "pull failed"
   for s in web worker; do
     docker image inspect "$REG/slaydx-$s:$SHA" >/dev/null 2>&1 || die "$REG/slaydx-$s:$SHA missing after pull"
@@ -210,19 +217,15 @@ main() {
   log "images pulled"
   step pull
 
-  # 6) Compose file of the same commit as the images (env list, flags), then migrations with
-  #    the NEW image while the OLD containers still serve: a failing migration costs no downtime.
-  #    Migrations are additive by rule (expand/contract); boot-time ensureMigrated stays as a
-  #    safety net and is a no-op after this.
-  PHASE=checkout
-  git reset --quiet --hard "$SHA"
-  dc config -q || die "compose config invalid at $SHA"
+  # 7) Migrations with the NEW image while the OLD containers still serve: a failing migration
+  #    costs no downtime. Migrations are additive by rule (expand/contract); boot-time
+  #    ensureMigrated stays as a safety net and is a no-op after this.
   dc run --rm --no-deps -T worker ./node_modules/.bin/tsx --conditions=react-server scripts/migrate.ts \
     || die "migration failed — old version keeps serving"
   log "migrations done"
   step migrate
 
-  # 7) Swap. From here on any failure rolls back (EXIT trap).
+  # 8) Swap. From here on any failure rolls back (EXIT trap).
   PHASE=swapped
   dc up -d --no-build || die "compose up failed"
   log "containers recreated, waiting for health"
@@ -230,7 +233,7 @@ main() {
   wait_healthy "$SHA" || die "health check failed (web /api/health + Docker health of web and worker)"
   step health
 
-  # 8) Record.
+  # 9) Record.
   PHASE=finished
   set_env_tag "$SHA"
   printf '%s\n' "$SHA" > "$STATE_DIR/current"
