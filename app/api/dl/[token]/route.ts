@@ -103,14 +103,19 @@ async function serve(req: Request, ctx: Ctx, head: boolean): Promise<Response> {
 export const GET = handler("dl", (req: Request, ctx: Ctx) => serve(req, ctx, false));
 export const HEAD = handler("dl/head", (req: Request, ctx: Ctx) => serve(req, ctx, true));
 
-/** CORS preflight (a plain GET from Telegram Web needs none, but a client adding a header would). */
-export async function OPTIONS(): Promise<Response> {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      ...BASE_HEADERS,
-      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-      "Access-Control-Max-Age": "600",
-    },
-  });
-}
+/**
+ * CORS preflight (a plain GET from Telegram Web needs none, but a client adding a header would).
+ * Through `handler()` like GET/HEAD, so it carries an `x-request-id` too (n7).
+ */
+export const OPTIONS = handler(
+  "dl/options",
+  async (): Promise<Response> =>
+    new Response(null, {
+      status: 204,
+      headers: {
+        ...BASE_HEADERS,
+        "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+        "Access-Control-Max-Age": "600",
+      },
+    }),
+);

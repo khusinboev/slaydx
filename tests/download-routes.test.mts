@@ -60,6 +60,26 @@ test("next.config: /api/dl gets no-referrer, cross-origin CORP, no-store, locked
   assert.equal(prepare["cross-origin-resource-policy"], "same-origin");
 });
 
+test("n3: Content-Disposition filename* is RFC 8187 (' ( ) * percent-encoded); CR/LF/quotes never reach the header", async () => {
+  const { contentDisposition } = await import("../lib/server/pdf-serve.ts");
+  const h = contentDisposition(`O'zbek (tarix) *1*.pptx`, "attachment");
+  assert.equal(h, `attachment; filename="O'zbek (tarix) *1*.pptx"; filename*=UTF-8''O%27zbek%20%28tarix%29%20%2A1%2A.pptx`);
+  const star = /filename\*=UTF-8''(.*)$/.exec(contentDisposition(`a"b\\c\r\nX: 1 ʻ'()*.pdf`))![1];
+  assert.match(star, /^[A-Za-z0-9!#$&+\-.^_`|~%]+$/, "only RFC 8187 attr-chars and %XX");
+  assert.equal(decodeURIComponent(star), `a"b\\c\r\nX: 1 ʻ'()*.pdf`, "round-trips to the exact name");
+  assert.ok(!/[\r\n]/.test(contentDisposition(`a\r\nb`)));
+});
+
+test("n7: OPTIONS /api/dl/<token> goes through handler(): 204, CORS for Telegram Web, x-request-id", async () => {
+  const dlRoute = await import("../app/api/dl/[token]/route.ts");
+  const req = new Request("http://localhost:3000/api/dl/x.y", { method: "OPTIONS", headers: { host: "localhost:3000" } });
+  const res = await dlRoute.OPTIONS(req);
+  assert.equal(res.status, 204);
+  assert.equal(res.headers.get("access-control-allow-origin"), "https://web.telegram.org");
+  assert.equal(res.headers.get("access-control-allow-methods"), "GET, HEAD, OPTIONS");
+  assert.match(res.headers.get("x-request-id") ?? "", /^[A-Za-z0-9._:-]{8,128}$/);
+});
+
 test("download routes (Postgres)", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t) => {
   const { query, migrate, pool } = await import("../lib/server/db.ts");
   const { putGenerationFile } = await import("../lib/server/storage.ts");

@@ -479,6 +479,16 @@ test("a file above Telegram's 50 MB upload limit → too_large, no Bot API call"
   assert.equal(h.calls.length, 0);
 });
 
+test("n4: telegram_files.media accepts only what the code writes (document, audio) — 'photo' is refused", { skip }, async () => {
+  const u = await mkUser();
+  const gen = await mkGen(u.id);
+  const ins = (media: string, format: string) =>
+    query("INSERT INTO telegram_files (generation_id, format, file_version, media, file_id) VALUES ($1, $2, 1, $3, 'F')", [gen, format, media]);
+  await ins("document", "native");
+  await ins("audio", "pdf");
+  await assert.rejects(ins("photo", "jpg"), /check constraint/i);
+});
+
 test("generation deleted → its telegram_files rows go with it (FK cascade)", { skip }, async () => {
   const u = await mkUser();
   const gen = await mkGen(u.id);
