@@ -162,5 +162,11 @@ Order: F0 ∥ G → (A ∥ B ∥ D) → C → E → P → integration + reviews 
 | A Download server | ✅ merged (24 mutations; bench: PDF cold 1.4–2.1 s, cached 4–81 ms) |
 | B Telegram server | ✅ merged (31/32 mutations; migration 035) |
 | D Slide editing | ✅ merged (overlap 33–100 % → 0 % at 360/390) |
-| Integration 1 | full suites running on `feat/mobile` |
-| C, E, P*, reviews | next |
+| Integration 1 | ✅ npm test 4289/4289, test:ui 1092/1092, test:viewer 251/251 |
+| Security review A+B (fable) | APPROVE WITH FIXES (M1 stale results CSV via file_id cache; m1–m6) → fixes in ABF (running) |
+| Correctness review G+D | APPROVE WITH FIXES → fixed (d6666a3, 463792e, e58b39c) → re-verified **APPROVE** |
+| C Result actions | running |
+| P12 Touch layer | running |
+| P8 Telegram shell | running |
+| P5 Home + catalogue | running |
+| E, P3, P4, P9, UX review, live essay calibration | next |
