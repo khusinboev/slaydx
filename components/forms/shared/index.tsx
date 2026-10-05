@@ -75,8 +75,8 @@ export function SettingsDetails({
       {...(open === undefined ? {} : { open })}
       onToggle={onToggle ? (e) => onToggle((e.currentTarget as HTMLDetailsElement).open) : undefined}
     >
-      <summary className="flex cursor-pointer list-none items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
-        <span className="text-muted-foreground text-[11.5px] font-semibold tracking-wide uppercase">{title}</span>
+      <summary className="pointer-coarse:min-h-12 flex cursor-pointer list-none items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
+        <span className="text-muted-foreground pointer-coarse:text-xs text-[11.5px] font-semibold tracking-wide uppercase">{title}</span>
         <span aria-hidden className="text-muted-foreground text-xs transition group-open:rotate-90">
           ▸
         </span>
@@ -142,7 +142,7 @@ export function Counter({ len, limit }: { len: number; limit: number }) {
   const near = len >= limit * 0.9;
   return (
     <span
-      className={cn("mt-1 block text-right text-[11px] tabular-nums", near ? "text-amber-600 dark:text-amber-500" : "text-muted-foreground")}
+      className={cn("pointer-coarse:text-xs mt-1 block text-right text-[11px] tabular-nums", near ? "text-amber-600 dark:text-amber-500" : "text-muted-foreground")}
       data-counter
     >
       {len.toLocaleString("uz-UZ")} / {limit.toLocaleString("uz-UZ")}
@@ -345,7 +345,7 @@ export function SourceFileRow({
   return (
     <Row label={label} hint={hint} wide>
       <Field id={id}>
-        <div className="border-input bg-card flex min-h-9 flex-wrap items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[13px]" data-upload>
+        <div className="border-input bg-card pointer-coarse:min-h-12 flex min-h-9 flex-wrap items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[13px]" data-upload>
           {reading ? <Loader2 className="text-muted-foreground size-4 animate-spin" /> : <FileText className="text-muted-foreground size-4" />}
           {fileName ? (
             <>
@@ -355,13 +355,13 @@ export function SourceFileRow({
               {badge !== undefined
                 ? badge
                 : sourceText
-                  ? <span className="bg-muted rounded-md px-1.5 py-0.5 text-[11px] tabular-nums">{sourceText.length.toLocaleString("uz-UZ")} belgi</span>
+                  ? <span className="bg-muted pointer-coarse:text-xs rounded-md px-1.5 py-0.5 text-[11px] tabular-nums">{sourceText.length.toLocaleString("uz-UZ")} belgi</span>
                   : null}
             </>
           ) : (
             <span className="text-muted-foreground min-w-0 flex-1 truncate">{reading ? "Matn olinmoqda…" : "Fayl tanlanmagan"}</span>
           )}
-          <label className="text-primary cursor-pointer text-[12.5px] underline-offset-2 hover:underline">
+          <label className="text-primary pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center pointer-coarse:px-1 cursor-pointer text-[12.5px] underline-offset-2 hover:underline">
             {fileName ? "Boshqa fayl" : "Fayl tanlash"}
             <input
               type="file"
@@ -377,14 +377,14 @@ export function SourceFileRow({
             />
           </label>
           {fileName ? (
-            <button type="button" className="text-destructive text-[12.5px]" onClick={() => onChange({ fileName: "", sourceText: "" })}>
+            <button type="button" className="text-destructive pointer-coarse:min-h-11 pointer-coarse:px-1 text-[12.5px]" onClick={() => onChange({ fileName: "", sourceText: "" })}>
               Olib tashlash
             </button>
           ) : null}
         </div>
         {error ? <p className="text-destructive mt-1 text-[12px]">{error}</p> : null}
         {tooLong ? (
-          <p className="mt-1 text-[11.5px] text-amber-600 dark:text-amber-500">
+          <p className="pointer-coarse:text-xs mt-1 text-[11.5px] text-amber-600 dark:text-amber-500">
             Matn uzun: faqat birinchi {SOURCE_TEXT_LIMIT.toLocaleString("uz-UZ")} belgisi ishlatiladi
             {sourceText.length > MAX_SOURCE_CHARS ? `; serverga eng ko‘pi ${MAX_SOURCE_CHARS.toLocaleString("uz-UZ")} belgi yuboriladi` : ""}.
           </p>
@@ -443,7 +443,7 @@ export function RangeRow({
             step={step}
             value={value}
             onChange={(e) => onChange(Number(e.target.value))}
-            className="accent-primary min-w-0 flex-1"
+            className="accent-primary pointer-coarse:h-11 min-w-0 flex-1"
           />
           {price === undefined ? null : (
             <span className="bg-muted rounded-md px-2 py-0.5 text-[12px] font-medium tabular-nums whitespace-nowrap" data-price>
@@ -452,7 +452,7 @@ export function RangeRow({
           )}
         </div>
         {rule ? (
-          <p className="text-muted-foreground mt-1 text-[11px]" data-price-rule>
+          <p className="text-muted-foreground pointer-coarse:text-xs mt-1 text-[11px]" data-price-rule>
             {rule}
           </p>
         ) : null}
@@ -495,7 +495,7 @@ export function NumberInput({
       step={step}
       value={String(value)}
       onChange={(e) => onChange(Math.max(min, Math.min(max, Math.round(Number(e.target.value) || 0))))}
-      className="border-input bg-card focus:ring-ring h-9 w-24 rounded-lg border px-2.5 text-[13px] outline-none focus:ring-2"
+      className="border-input bg-card focus:ring-ring pointer-coarse:h-11 h-9 w-24 rounded-lg border px-2.5 text-[13px] outline-none focus:ring-2"
     />
   );
 }
@@ -526,7 +526,7 @@ export const FIGURE_KIND_LABEL: Record<SelectableFigureKind, string> = {
  */
 export function FigureKindChips({ value, onChange, disabled }: { value: SelectableFigureKind[]; onChange: (v: SelectableFigureKind[]) => void; disabled: boolean }) {
   const chip = (on: boolean) =>
-    `rounded-full border px-3 py-1 text-[12.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted"}`;
+    `pointer-coarse:min-h-11 rounded-full border px-3 py-1 text-[12.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted"}`;
   return (
     <div className="flex flex-wrap gap-1.5" role="group" aria-label="Sxema turlari">
       <button type="button" aria-pressed={value.length === 0} disabled={disabled} onClick={() => onChange([])} className={chip(value.length === 0)}>
@@ -566,7 +566,7 @@ export function ColorDots({
   ariaLabel?: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={ariaLabel} className="flex flex-wrap items-center gap-1.5">
+    <div role="radiogroup" aria-label={ariaLabel} className="pointer-coarse:gap-0 flex flex-wrap items-center gap-1.5">
       {options.map((o) => {
         const on = o.id === value;
         return (
@@ -578,9 +578,18 @@ export function ColorDots({
             aria-label={o.label}
             title={o.label}
             onClick={() => onChange(o.id)}
-            className={cn("size-6 rounded-full border-2 transition", on ? "border-foreground scale-110" : "border-transparent hover:scale-105")}
-            style={{ background: o.hex }}
-          />
+            className="group pointer-coarse:size-11 grid size-6 shrink-0 place-items-center"
+          >
+            {/* Sensorda tugma 44 px, ko'rinadigan doira 28 px — qatorlar shishib ketmaydi. */}
+            <span
+              aria-hidden
+              className={cn(
+                "pointer-coarse:size-7 size-6 rounded-full border-2 transition",
+                on ? "border-foreground scale-110" : "border-transparent group-hover:scale-105",
+              )}
+              style={{ background: o.hex }}
+            />
+          </button>
         );
       })}
     </div>
@@ -592,7 +601,7 @@ export function ColorDots({
 /** Ikki bosqichli «Formani tozalash» (`useConfirmClick` bilan). */
 export function ClearFormButton({ armed, onClick }: { armed: boolean; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="text-muted-foreground hover:text-destructive text-[12px]" data-clear-form>
+    <button type="button" onClick={onClick} className="text-muted-foreground hover:text-destructive pointer-coarse:min-h-11 pointer-coarse:text-[13px] text-[12px]" data-clear-form>
       {armed ? "Ishonchingiz komilmi? Yana bosing" : "Formani tozalash"}
     </button>
   );

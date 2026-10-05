@@ -177,8 +177,72 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-* {
-  border-color: var(--border);
+/*
+ * Default border colour — MUST live in `@layer base`.
+ *
+ * Tailwind v4 emits every utility inside `@layer utilities`, and an
+ * UNLAYERED rule beats every layered one regardless of specificity. The old
+ * unlayered `* { border-color }` therefore overrode all `border-*` colour
+ * utilities (`border-white/10` rendered cream, `border-primary`,
+ * `border-transparent`, `border-foreground` too). In the base layer it is
+ * still the default for plain `border` / `border-t` / `divide-*` but every
+ * colour utility now wins (tests/ui/touch-layer.test.mts locks this).
+ */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+}
+
+/*
+ * ── Touch layer (mobile sprint P12, docs/mobile/PLAN.md O5) ──
+ *
+ * Everything here is gated by `(pointer: coarse)`: the fine-pointer desktop
+ * is visually unchanged. The rules are deliberately UNLAYERED so they beat
+ * the layered utilities (`text-[13px]`, `h-8`) the form controls carry.
+ *
+ *  - Inputs, selects and textareas are 16 px: iOS Safari/Telegram zooms the
+ *    page on focus when the font is smaller (R5 F2). Inline `style` still
+ *    wins (the slide editor sizes its overlay text itself).
+ *  - `touch-action: manipulation` drops the 300 ms tap delay and the
+ *    double-tap zoom on controls.
+ *  - `.hit-44`: reusable hit-area expander for small VISUAL controls
+ *    (topbar icons, toolbar buttons, row delete icons) that must not grow:
+ *    an invisible ::after enlarges the tappable area to 44 x 44 px,
+ *    centred on the control (and never shrinks a larger one). Callers keep
+ *    >= 8 px between expanded neighbours so areas do not overlap. Where
+ *    growing the control itself is fine, prefer real `pointer-coarse:min-h-11`
+ *    sizes — they are measurable by rect-based audits.
+ */
+@media (pointer: coarse) {
+  input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  button,
+  [role="button"],
+  [role="radio"],
+  [role="switch"],
+  summary,
+  select,
+  label {
+    touch-action: manipulation;
+  }
+
+  .hit-44:not(.absolute):not(.fixed):not(.sticky) {
+    position: relative;
+  }
+
+  .hit-44::after {
+    content: "";
+    position: absolute;
+    top: min(0px, calc((100% - 44px) / 2));
+    bottom: min(0px, calc((100% - 44px) / 2));
+    left: min(0px, calc((100% - 44px) / 2));
+    right: min(0px, calc((100% - 44px) / 2));
+  }
 }
 
 html,
