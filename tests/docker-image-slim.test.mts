@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { createRequire } from "node:module";
 import { imageText, readDockerfile, stageChain, stages } from "./helpers/dockerfile.mts";
 
 /**
@@ -15,7 +16,8 @@ import { imageText, readDockerfile, stageChain, stages } from "./helpers/dockerf
  */
 
 const ROOT = new URL("../", import.meta.url);
-const picomatch = (await import("next/dist/compiled/picomatch/index.js")).default as unknown as (
+// The glob matcher Next itself uses (no type declarations shipped → require).
+const picomatch = createRequire(import.meta.url)("next/dist/compiled/picomatch") as (
   glob: string | string[],
   opts?: { dot?: boolean; contains?: boolean },
 ) => (s: string) => boolean;

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
+import { createRequire } from "node:module";
 
 /**
  * next.config.ts ops rules (ops sprint P-IMG; docs/ops/O4-frontend-speed.md
@@ -23,7 +24,8 @@ const { buildCustomRoute } = (await import("next/dist/server/lib/router-utils/fi
 const { getRedirectStatus } = (await import("next/dist/lib/redirect-status.js")) as unknown as {
   getRedirectStatus: (r: RedirectRule) => number;
 };
-const picomatch = (await import("next/dist/compiled/picomatch/index.js")).default as unknown as (
+// The glob matcher Next itself uses (no type declarations shipped → require).
+const picomatch = createRequire(import.meta.url)("next/dist/compiled/picomatch") as (
   glob: string | string[],
   opts?: { dot?: boolean; contains?: boolean },
 ) => (s: string) => boolean;
