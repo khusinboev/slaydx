@@ -37,6 +37,7 @@ export function SlideToolbar({
   del,
   legacy = false,
   info,
+  editBar,
 }: {
   page: number;
   pages: number;
@@ -58,8 +59,27 @@ export function SlideToolbar({
   legacy?: boolean;
   /** Shablon · mavzu nomi. */
   info?: ReactNode;
+  /**
+   * Phone text editing (docs/mobile/PLAN.md, R3 «Slot owner»): while given,
+   * it REPLACES the toolbar contents — the slot (`[data-slide-editbar-slot]`)
+   * the editor portals its 44 px style bar (and the font sheet above it)
+   * into. In-flow, same place as the toolbar, so nothing covers the slide.
+   */
+  editBar?: ReactNode;
 }) {
   const btn = "hover:bg-white/10 rounded p-1.5 disabled:opacity-30";
+
+  if (editBar) {
+    return (
+      <div
+        data-slide-toolbar
+        data-slide-toolbar-mode="edit"
+        className="no-print relative z-10 flex min-h-11 shrink-0 flex-col bg-[#2b2b2b] text-[#f3f3f3]"
+      >
+        {editBar}
+      </div>
+    );
+  }
 
   return (
     <div

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronRight, MoreHorizontal, PanelRightClose, PanelRightOpen, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useDialog } from "../overlays/useDialog";
@@ -73,6 +73,24 @@ const TONE_DOT: Record<ChipTone, string> = {
   neutral: "bg-muted-foreground/50",
 };
 
+/**
+ * Compact header while editing (mobile sprint, R3 S2): a viewer inside the
+ * layout calls `useCompactHeaderWhile(true)` while a text is being edited
+ * on a phone; the sticky header then takes its compact form exactly like
+ * on scroll — the outer box keeps its full height (frozen), so nothing
+ * below it moves. No-op outside a `ResultLayout` and on wide screens.
+ */
+const CompactLockContext = createContext<((on: boolean) => void) | null>(null);
+
+export function useCompactHeaderWhile(on: boolean): void {
+  const lock = useContext(CompactLockContext);
+  useEffect(() => {
+    if (!lock || !on) return;
+    lock(true);
+    return () => lock(false);
+  }, [lock, on]);
+}
+
 export function ResultLayout({
   header,
   notices,
@@ -106,13 +124,20 @@ export function ResultLayout({
    * tepada tiklanadi. Gisterezis (`COMPACT_*`) chegarada titramasligi uchun.
    */
   const [compact, setCompact] = useState(false);
-  const compactNow = compact && phone;
+  /** Active `useCompactHeaderWhile` callers (editing on a phone). */
+  const [compactLocks, setCompactLocks] = useState(0);
+  const compactNow = (compact || compactLocks > 0) && phone;
   /*
    * Ixchamlashishdan OLDINGI to'liq balandlik: tashqi sticky quti shuncha
    * turadi (shaffof), faqat ICHKI qatlam qisqaradi — oqim balandligi
    * o'zgarmaydi, mazmun barmoq ostidan siljimaydi (scroll anchoring kerak emas).
    */
   const [frozenH, setFrozenH] = useState<number | null>(null);
+  const lockCompact = useCallback((on: boolean) => {
+    // Freeze the full height in the same batch (measured before the header shrinks).
+    if (on) setFrozenH(outerRef.current?.getBoundingClientRect().height ?? null);
+    setCompactLocks((n) => Math.max(0, n + (on ? 1 : -1)));
+  }, []);
 
   /*
    * Sarlavha balandligi → `--result-header-h`. To'g'ridan-to'g'ri
@@ -321,7 +346,7 @@ export function ResultLayout({
 
       <div className="flex grow items-start" data-result-body>
         <div className="flex min-w-0 grow flex-col self-stretch" data-result-content>
-          {children}
+          <CompactLockContext.Provider value={lockCompact}>{children}</CompactLockContext.Provider>
         </div>
 
         {hasPanel ? (

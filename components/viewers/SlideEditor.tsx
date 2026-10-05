@@ -1,13 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ClipboardEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ClipboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MutableRefObject,
+} from "react";
+import { createPortal, flushSync } from "react-dom";
 import type { CustomTemplate } from "@/lib/generation/pptx-template";
-import { Check, ImagePlus, Minus, Plus, RotateCcw, XCircle } from "lucide-react";
+import { Check, ImagePlus, RotateCcw, XCircle } from "lucide-react";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
 import type { BodyRules } from "@/lib/generation/slide-audience";
 import type { SlideModel, SlideSrc, SlideTheme } from "@/lib/generation/slide-types";
 import { FONT_MAX, FONT_MIN, listCap, readSlideField, type ListField } from "@/lib/generation/slide-edit";
-import { SLIDE_FONTS, isSlideFontId, type SlideFontId } from "@/lib/generation/slide-fonts";
+import { isSlideFontId, type SlideFontId } from "@/lib/generation/slide-fonts";
 import { QUIZ_LETTERS } from "@/lib/generation/slide-quiz";
 import { SLIDE } from "@/lib/viewers/metrics";
 import { cn } from "@/lib/cn";
@@ -21,6 +35,14 @@ import {
 } from "@/lib/generation/slide-layout";
 import { textLayerStyle, type TextLayer } from "./SlideCanvas";
 import { focusAtEnd, insertAtCaret, readItems, readText } from "./editable";
+import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
+import type { VisualViewportState } from "@/lib/hooks/useVisualViewport";
+import { useOverlayHistory } from "../nav/useOverlayHistory";
+import { SlideEditFloatingPanel, SlideEditStyleBar, keepEditorFocus } from "./slide-edit/StyleBar";
+import { SlideEditFontSheet } from "./slide-edit/FontSheet";
+import { createDoubleTapDetector } from "./slide-edit/doubleTap";
+import { placeFloatingPanel, type FocusBox } from "./slide-edit/geometry";
+import { VisualViewportWatch, scrollEditBoxIntoView } from "./slide-edit/viewport";
 
 /*
  * `readText`/`readItems`/`insertAtCaret` `editable.ts` ga ko'chdi
@@ -62,6 +84,17 @@ export { readItems, readText } from "./editable";
  * ostidagi `SlideCanvas` elementiga tegadi va SAHNA ramkasiga
  * ko'tariladi; biz shu ramkada tinglaymiz va `closest("[data-src]")`
  * bilan manbani topamiz.
+ *
+ * PHONE (mobile sprint, docs/mobile/PLAN.md §3 O4, R3 S1): with a coarse
+ * pointer or < 768 px the floating panel is replaced by a 44 px style bar
+ * portalled into the slide toolbar's slot (`editBarSlot`, in-flow above the
+ * stage — it can never cover the slide), with «Tayyor» (commit) and «✕»
+ * (cancel); font family and size presets open as a chip sheet in-flow above
+ * the bar. A text also opens on a pointer double tap (`doubleTap.ts`), and
+ * while it is edited the box is kept inside the visible part of the stage
+ * (keyboard, `scrollEditBoxIntoView`). Phone back closes the sheet first,
+ * then ends the edit (commit — the same «auto-save, then leave» rule as the
+ * page, docs/nav/PLAN.md decision 1).
  */
 
 export type StylePatch = { size?: number | null; font?: SlideFontId | null };
@@ -98,9 +131,22 @@ export type SlideEditorProps = {
   /** «Rasmni qaytarish» — asl AI rasm (`imageOrig`). */
   onRestoreImage: () => void;
   onUpload: (file: File) => void;
-  /** Tahrir ochilganda qatlam kaliti (`layerKey`), yopilganda `null` — sahna o'sha qatlamni yashiradi. */
-  onEditing?: (key: string | null) => void;
+  /**
+   * Tahrir ochilganda qatlam kaliti (`layerKey`), yopilganda `null` — sahna
+   * o'sha qatlamni yashiradi. `box` — qatlam qutisi slayd px da (phone focus
+   * zoom uses it, `SlideStage.focus`).
+   */
+  onEditing?: (key: string | null, box?: FocusBox | null) => void;
+  /**
+   * Phone only: the toolbar slot the style bar is portalled into
+   * (`SlideToolbar.editBar`). Without it (desktop, or before the slot
+   * mounts) no phone bar is drawn.
+   */
+  editBarSlot?: HTMLElement | null;
 };
+
+/** Mobile UI parts that belong to the edit (a press there is not "outside"). */
+const EDIT_UI = "[data-slide-edit-box], [data-slide-font-panel], [data-slide-edit-ui]";
 
 /** Ko'p qatorli tahrirga ruxsat etilgan maydonlar (Shift+Enter → yangi qator). */
 function isMultiline(src: SlideSrc): boolean {
@@ -118,23 +164,112 @@ type EditState =
   | { kind: "list"; key: string; field: ListField; initial: string[] };
 
 /**
- * Panelda taklif qilinadigan o'lchamlar (pt) — matn muharrirlaridagi
- * odatiy qator. Oraliq `FONT_MIN..FONT_MAX` ichida, ya'ni har tanlov
- * serverdan o'tadi.
+ * Panelda taklif qilinadigan o'lchamlar (pt) — `slide-edit/StyleBar.tsx`
+ * da (desktop panel and phone sheet share them); re-exported here for the
+ * old import path.
  */
-export const FONT_PRESETS = [12, 14, 16, 18, 20, 24, 28, 32, 36, 44, 54, 66] as const;
+export { FONT_PRESETS } from "./slide-edit/StyleBar";
 
-/** «−»/«+» qadami (pt). */
-const FONT_STEP = 2;
-
-function clampFont(n: number): number {
-  return Math.max(FONT_MIN, Math.min(FONT_MAX, Math.round(n)));
-}
+/** After a touch double tap opened a text, its compat mouse events are ignored this long (ms). */
+const TAP_SWALLOW_MS = 600;
 
 function sameList(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((x, i) => x === b[i]);
 }
 
+
+type FieldHandlers = {
+  onKeyDown: (e: ReactKeyboardEvent<HTMLElement>) => void;
+  onPaste: (e: ClipboardEvent<HTMLElement>) => void;
+  onBlur: (e: { relatedTarget: EventTarget | null }) => void;
+};
+
+/**
+ * The contentEditable itself. Memoised on the edit session and the list
+ * styling only: a stage scale change (phone focus zoom, keyboard) or the
+ * style bar re-renders the twin container around it, never this node — the
+ * field is uncontrolled, and a re-render must not move the caret.
+ */
+const EditField = memo(
+  function EditField({
+    edit,
+    bullets,
+    paraSpacePx,
+    inputRef,
+    handlers,
+  }: {
+    edit: EditState;
+    bullets: boolean;
+    paraSpacePx: number;
+    inputRef: MutableRefObject<HTMLElement | null>;
+    handlers: FieldHandlers;
+  }) {
+    const setRef = (el: HTMLElement | null) => {
+      inputRef.current = el;
+    };
+    if (edit.kind === "text") {
+      return (
+        <div
+          ref={setRef}
+          contentEditable
+          suppressContentEditableWarning
+          role="textbox"
+          aria-multiline={edit.multiline}
+          aria-label="Matnni tahrirlash"
+          data-slide-edit-input
+          style={{ width: "100%", minHeight: "1em", outline: "none" }}
+          onKeyDown={handlers.onKeyDown}
+          onPaste={handlers.onPaste}
+          onBlur={handlers.onBlur}
+        >
+          {edit.initial}
+        </div>
+      );
+    }
+    return (
+      <ul
+        ref={setRef}
+        contentEditable
+        suppressContentEditableWarning
+        role="textbox"
+        aria-multiline
+        aria-label="Matnni tahrirlash"
+        data-slide-edit-input
+        className={bullets ? "w-full list-disc pl-[1.15em]" : "w-full list-none"}
+        style={{ margin: 0, paddingLeft: bullets ? "1.15em" : 0, outline: "none", minHeight: "1em" }}
+        onKeyDown={handlers.onKeyDown}
+        onPaste={handlers.onPaste}
+        onBlur={handlers.onBlur}
+      >
+        {edit.initial.map((line, i) => (
+          <li key={i} style={{ marginBottom: paraSpacePx }}>
+            {line}
+          </li>
+        ))}
+      </ul>
+    );
+  },
+  (a, b) =>
+    a.edit === b.edit && a.bullets === b.bullets && a.paraSpacePx === b.paraSpacePx && a.inputRef === b.inputRef && a.handlers === b.handlers,
+);
+
+/** `data-src` of the slide text under `target` (null when none or malformed). */
+function srcAt(target: EventTarget | null): SlideSrc | null {
+  const el = (target as HTMLElement | null)?.closest?.("[data-src]") as HTMLElement | null;
+  const raw = el?.getAttribute("data-src");
+  if (!raw) return null;
+  try {
+    const src = JSON.parse(raw) as SlideSrc;
+    if (!src || typeof src !== "object" || typeof (src as { f?: unknown }).f !== "string") return null;
+    return src;
+  } catch {
+    return null;
+  }
+}
+
+function now(): number {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
 
 export function SlideEditor({
   slide,
@@ -158,15 +293,22 @@ export function SlideEditor({
   onRestoreImage,
   onUpload,
   onEditing,
+  editBarSlot,
 }: SlideEditorProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLElement | null>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [edit, setEdit] = useState<EditState | null>(null);
   const editRef = useRef<EditState | null>(null);
   editRef.current = edit;
   // Esc dan keyin `blur` saqlab yubormasligi uchun bir martalik bayroq.
   const skipBlurRef = useRef(false);
+  /** Phone: coarse pointer or < 768 px (bar instead of the floating panel). */
+  const coarse = useCoarsePointer();
+  /** Until when the compat mouse events of an opening double tap are ignored (`now()` ms). */
+  const swallowUntilRef = useRef(0);
 
   const plan = useMemo(
     () => planSlide(slide, theme, visual, index, total, audience, templateId, { bodyType, logo, custom }),
@@ -198,18 +340,32 @@ export function SlideEditor({
     [plan.layers],
   );
 
+  /** Opens `src`; `false` when the slide has no such text. */
   const open = useCallback(
-    (src: SlideSrc) => {
+    (src: SlideSrc): boolean => {
       const key = keyOf(src);
       const layer = key ? layerByKey(key) : null;
-      if (!key || !layer) return;
+      if (!key || !layer) return false;
+      // The same text again (a `dblclick` after the pointer detector already
+      // opened it): keep the session — the typed text and the caret stay.
+      if (editRef.current?.key === key) return true;
       const field = listFieldOf(layer.srcLines?.find(Boolean));
-      if (field && layer.srcLines && !layer.src) {
-        setEdit({ kind: "list", key, field, initial: (slide[field] ?? []).slice() });
-      } else {
-        setEdit({ kind: "text", key, src, initial: readSlideField(slide, src) ?? "", multiline: isMultiline(src) });
-      }
-      onEditing?.(key);
+      const next: EditState =
+        field && layer.srcLines && !layer.src
+          ? { kind: "list", key, field, initial: (slide[field] ?? []).slice() }
+          : { kind: "text", key, src, initial: readSlideField(slide, src) ?? "", multiline: isMultiline(src) };
+      editRef.current = next;
+      setEdit(next);
+      const b = boxStyle(layer.box);
+      onEditing?.(key, {
+        left: b.left,
+        top: b.top,
+        width: b.width,
+        height: b.height,
+        fontPx: ptToPx(layer.size),
+        singleLine: next.kind === "text" && !next.multiline,
+      });
+      return true;
     },
     [keyOf, layerByKey, slide, onEditing],
   );
@@ -251,6 +407,8 @@ export function SlideEditor({
     [styleSrc, onStyle],
   );
 
+  const [sheetOpen, setSheetOpen] = useState(false);
+
   const commit = useCallback(() => {
     const e = editRef.current;
     const el = inputRef.current;
@@ -259,6 +417,7 @@ export function SlideEditor({
     // jim qaytadi, aks holda BIR tahrir ikki marta saqlanardi.
     editRef.current = null;
     setEdit(null);
+    setSheetOpen(false);
     onEditing?.(null);
     if (!e || !el) return;
     if (e.kind === "text") {
@@ -280,47 +439,85 @@ export function SlideEditor({
     skipBlurRef.current = true;
     editRef.current = null;
     setEdit(null);
+    setSheetOpen(false);
     onEditing?.(null);
   }, [onEditing]);
 
   /*
-   * Ikki bosish — SAHNA ramkasida (overlay ning ota elementi). Aynan shu
-   * tugun `SlideCanvas` ni ham, bizni ham o'z ichiga oladi. Tahrir
-   * maydonining o'zida ikki bosish (so'z tanlash) `data-src` ga tegmaydi.
+   * Ochish — SAHNA ramkasida (overlay ning ota elementi). Aynan shu tugun
+   * `SlideCanvas` ni ham, bizni ham o'z ichiga oladi. Tahrir maydonining
+   * o'zida ikki bosish (so'z tanlash) `data-src` ga tegmaydi.
+   *
+   * Two ways in: `dblclick` (mouse, and touch where the browser synthesises
+   * it) and a pointer double TAP (`doubleTap.ts`) for touch/pen, which does
+   * not depend on the synthetic event (iOS WKWebView, Telegram). The tap path
+   * renders synchronously and focuses inside the gesture (iOS raises the
+   * keyboard only then), and cancels the second tap's `touchend` so its
+   * compat `mousedown`/`click`/`dblclick` neither blur nor close the box.
    */
   useEffect(() => {
     const host = rootRef.current?.closest("[data-slide-frame]") ?? rootRef.current?.parentElement;
     if (!host) return;
     const onDbl = (ev: Event) => {
-      const target = ev.target as HTMLElement | null;
-      const el = target?.closest?.("[data-src]") as HTMLElement | null;
-      if (!el) return;
-      const raw = el.getAttribute("data-src");
-      if (!raw) return;
-      let src: SlideSrc;
-      try {
-        src = JSON.parse(raw) as SlideSrc;
-      } catch {
-        return;
-      }
-      if (!src || typeof src !== "object" || typeof (src as { f?: unknown }).f !== "string") return;
+      const src = srcAt(ev.target);
+      if (!src) return;
       ev.preventDefault();
       open(src);
     };
+    const taps = createDoubleTapDetector();
+    let swallowTouchEnd = false;
+    const touchy = (e: PointerEvent) => e.pointerType === "touch" || e.pointerType === "pen";
+    const onDown = (e: PointerEvent) => {
+      if (touchy(e)) taps.down(e.pointerId, e.clientX, e.clientY, e.timeStamp);
+    };
+    const onUp = (e: PointerEvent) => {
+      if (!touchy(e) || !taps.up(e.pointerId, e.clientX, e.clientY, e.timeStamp)) return;
+      const src = srcAt(e.target);
+      if (!src) return;
+      let opened = false;
+      flushSync(() => {
+        opened = open(src);
+      });
+      if (!opened) return;
+      swallowTouchEnd = true;
+      swallowUntilRef.current = now() + TAP_SWALLOW_MS;
+      const el = inputRef.current;
+      if (el && document.activeElement !== el) focusAtEnd(el);
+    };
+    const onCancel = (e: PointerEvent) => {
+      if (touchy(e)) taps.cancel(e.pointerId);
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!swallowTouchEnd) return;
+      swallowTouchEnd = false;
+      if (e.cancelable) e.preventDefault();
+    };
     host.addEventListener("dblclick", onDbl);
-    return () => host.removeEventListener("dblclick", onDbl);
+    host.addEventListener("pointerdown", onDown as EventListener);
+    host.addEventListener("pointerup", onUp as EventListener);
+    host.addEventListener("pointercancel", onCancel as EventListener);
+    host.addEventListener("touchend", onTouchEnd as EventListener, { passive: false });
+    return () => {
+      host.removeEventListener("dblclick", onDbl);
+      host.removeEventListener("pointerdown", onDown as EventListener);
+      host.removeEventListener("pointerup", onUp as EventListener);
+      host.removeEventListener("pointercancel", onCancel as EventListener);
+      host.removeEventListener("touchend", onTouchEnd as EventListener);
+    };
   }, [open]);
 
   /*
    * TASHQARIGA BITTA bosish tahrirni yopadi (va saqlaydi). Shrift
-   * PANELI ichidagi bosish tashqari HISOBLANMAYDI — u tahrirning o'z
-   * qismi.
+   * PANELI (desktop), phone bar and sheet ichidagi bosish tashqari
+   * HISOBLANMAYDI — ular tahrirning o'z qismi.
    */
   useEffect(() => {
     if (!edit) return;
     const onDown = (ev: Event) => {
       const t = ev.target as HTMLElement | null;
-      if (t?.closest?.("[data-slide-edit-box]") || t?.closest?.("[data-slide-font-panel]")) return;
+      if (t?.closest?.(EDIT_UI)) return;
+      // The opening double tap's own compat mousedown (browsers that ignore the touchend cancel).
+      if (now() < swallowUntilRef.current) return;
       commit();
     };
     document.addEventListener("mousedown", onDown, true);
@@ -367,11 +564,85 @@ export function SlideEditor({
       skipBlurRef.current = false;
       return;
     }
-    // Fokus shrift paneliga (masalan `<select>`) o'tsa — tahrir davom etadi.
+    // Fokus shrift paneliga (masalan `<select>`) yoki phone bar'ga o'tsa — tahrir davom etadi.
     const to = e.relatedTarget as HTMLElement | null;
-    if (to?.closest?.("[data-slide-font-panel]")) return;
+    if (to?.closest?.(EDIT_UI)) return;
     commit();
   };
+
+  // Stable handlers for the memoised field; they always call the latest closures.
+  const handlersRef = useRef<FieldHandlers>({ onKeyDown, onPaste, onBlur });
+  handlersRef.current = { onKeyDown, onPaste, onBlur };
+  const handlers = useMemo<FieldHandlers>(
+    () => ({
+      onKeyDown: (e) => handlersRef.current.onKeyDown(e),
+      onPaste: (e) => handlersRef.current.onPaste(e),
+      onBlur: (e) => handlersRef.current.onBlur(e),
+    }),
+    [],
+  );
+
+  /* ───────────── phone: bar + sheet, history entries, keep-visible ───────────── */
+
+  const editing = Boolean(edit && editLayer && styleSrc);
+  const phoneEdit = coarse && editing;
+  const sheetId = useId();
+  const closeSheet = useCallback(() => setSheetOpen(false), []);
+  /*
+   * Phone back (and Telegram's BackButton): the edit session and the sheet
+   * each own a history entry, LIFO — the first back closes the sheet, the
+   * next one ends the edit with a commit (docs/nav/PLAN.md decision 1:
+   * auto-save, then leave). Desktop keeps no entry (unchanged behaviour).
+   * The sheet uses `useOverlayHistory`, not `useDialog`: `useDialog` moves
+   * the focus into the panel, which would blur the text and close the
+   * phone keyboard.
+   */
+  useOverlayHistory(coarse && Boolean(edit), commit);
+  useOverlayHistory(phoneEdit && sheetOpen, closeSheet);
+
+  const vvRef = useRef<Pick<VisualViewportState, "height" | "offsetTop">>({ height: 0, offsetTop: 0 });
+  const rafRef = useRef<number | null>(null);
+  const revealSoon = useCallback(() => {
+    if (rafRef.current !== null) return;
+    // After layout: the stage resizes when the bar, the sheet or the focus zoom land.
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const b = boxRef.current;
+      if (b) scrollEditBoxIntoView(b, vvRef.current, inputRef.current);
+    });
+  }, []);
+  useEffect(
+    () => () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    },
+    [],
+  );
+  useEffect(() => {
+    if (phoneEdit) revealSoon();
+  }, [phoneEdit, edit, scale, sheetOpen, revealSoon]);
+  const onViewport = useCallback(
+    (vv: VisualViewportState) => {
+      vvRef.current = vv;
+      revealSoon();
+    },
+    [revealSoon],
+  );
+
+  /* ───────────── desktop: floating panel placed from its measured height ───────────── */
+
+  const showPanel = !coarse && editing;
+  const [panelH, setPanelH] = useState(0);
+  useLayoutEffect(() => {
+    const el = panelRef.current;
+    if (!showPanel || !el) return;
+    const measure = () => setPanelH(el.offsetHeight);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [showPanel, edit]);
 
   /*
    * TEST KALITI — variant qutilari ustidagi «✓» tugmalari.
@@ -425,9 +696,16 @@ export function SlideEditor({
         cursor: "text",
       }
     : null;
-  const panelTop = editLayer ? Math.round(boxStyle(editLayer.box).top * scale) : 0;
-  const panelLeft = editLayer ? Math.round(boxStyle(editLayer.box).left * scale) : 0;
-  const panelH = editLayer ? Math.round(boxStyle(editLayer.box).height * scale) : 0;
+  const boxPx = editLayer ? boxStyle(editLayer.box) : null;
+  const panelAt =
+    showPanel && boxPx
+      ? placeFloatingPanel({
+          box: { left: boxPx.left * scale, top: boxPx.top * scale, width: boxPx.width * scale, height: boxPx.height * scale },
+          panelH,
+          frameW: SLIDE.w * scale,
+          frameH: SLIDE.h * scale,
+        })
+      : null;
 
   return (
     <div ref={rootRef} className="pointer-events-none absolute inset-0" data-slide-editor>
@@ -511,87 +789,69 @@ export function SlideEditor({
         </div>
       ) : null}
 
-      {edit && editLayer && styleSrc ? (
+      {panelAt ? (
         /*
-          Suzuvchi panel — maydonning USTIDA, masshtabsiz (o'qish uchun).
-          Joy yetmasa (yuqori qatlam) maydonning ostiga tushadi.
+          Suzuvchi panel (desktop) — maydonning USTIDA, masshtabsiz (o'qish
+          uchun). Joy O'LCHANGAN balandlik bo'yicha: sig'masa ostiga, u ham
+          sig'masa ramka ichida pastga (`placeFloatingPanel`).
         */
-        <div
-          data-slide-font-panel
-          className="pointer-events-auto absolute z-10 flex max-w-[min(640px,95%)] flex-wrap items-center gap-1 rounded-md bg-[#2b2b2b] px-1.5 py-1 text-[11px] text-white/85 shadow-lg"
-          style={{ left: panelLeft, top: panelTop >= 34 ? panelTop - 34 : panelTop + panelH + 4 }}
-          // Panelga bosganda maydon fokusni yo'qotmasin — `<select>` bundan
-          // mustasno (u fokus olmasa ochilmaydi; `onBlur` uni tanib turadi).
-          onMouseDown={(e) => {
-            if ((e.target as HTMLElement).tagName !== "SELECT") e.preventDefault();
-          }}
-        >
-          <span className="px-1 text-white/45">{wholeList ? "Barcha bandlar" : "Shrift"}</span>
-          <select
-            aria-label="Shrift oilasi"
-            className="rounded bg-white/10 px-1 py-0.5 text-[11px] text-white outline-none"
-            value={curFont}
-            onChange={(e) => {
-              const v = e.target.value;
-              setFont(isSlideFontId(v) ? v : null);
-            }}
-          >
-            <option value="" className="text-black">
-              Standart (Arial)
-            </option>
-            {SLIDE_FONTS.map((f) => (
-              <option key={f.id} value={f.id} className="text-black">
-                {f.label}
-              </option>
-            ))}
-          </select>
-          <span className="mx-0.5 h-3.5 w-px bg-white/20" />
-          <button
-            type="button"
-            aria-label="Shriftni kichraytirish"
-            className="hover:bg-white/15 rounded p-1 disabled:opacity-40"
-            disabled={curSize <= FONT_MIN}
-            onClick={() => setSize(clampFont(curSize - FONT_STEP))}
-          >
-            <Minus className="size-3" />
-          </button>
-          <span className="min-w-6 text-center tabular-nums" aria-label="Joriy shrift o‘lchami">
-            {curSize}
-          </span>
-          <button
-            type="button"
-            aria-label="Shriftni kattalashtirish"
-            className="hover:bg-white/15 rounded p-1 disabled:opacity-40"
-            disabled={curSize >= FONT_MAX}
-            onClick={() => setSize(clampFont(curSize + FONT_STEP))}
-          >
-            <Plus className="size-3" />
-          </button>
-          <span className="mx-0.5 h-3.5 w-px bg-white/20" />
-          {FONT_PRESETS.map((n) => (
-            <button
-              key={n}
-              type="button"
-              aria-label={`Shrift ${n} pt`}
-              className={cn(
-                "rounded px-1 py-0.5 tabular-nums",
-                curSize === n ? "bg-sky-500 text-white" : "hover:bg-white/15",
-              )}
-              onClick={() => setSize(n)}
-            >
-              {n}
-            </button>
-          ))}
-          <button
-            type="button"
-            className={cn("rounded px-1.5 py-0.5", hasOverride ? "hover:bg-white/15" : "text-white/35")}
-            disabled={!hasOverride}
-            onClick={() => setSize(null)}
-          >
-            Standart
-          </button>
-        </div>
+        <SlideEditFloatingPanel
+          ref={panelRef}
+          style={{ left: panelAt.left, top: panelAt.top }}
+          size={curSize}
+          min={FONT_MIN}
+          max={FONT_MAX}
+          hasOverride={hasOverride}
+          font={curFont}
+          wholeList={wholeList}
+          onSize={setSize}
+          onFont={setFont}
+        />
       ) : null}
+
+      {phoneEdit && editBarSlot
+        ? createPortal(
+            <div
+              data-slide-edit-ui
+              className="flex w-full min-w-0 flex-col"
+              onPointerDown={(e) => {
+                keepEditorFocus(e);
+                // Not a press on the slide (the stage's own touch selection must not react).
+                e.stopPropagation();
+              }}
+              onMouseDown={keepEditorFocus}
+            >
+              {sheetOpen ? (
+                <SlideEditFontSheet
+                  id={sheetId}
+                  size={curSize}
+                  hasOverride={hasOverride}
+                  font={curFont}
+                  wholeList={wholeList}
+                  onSize={setSize}
+                  onFont={setFont}
+                />
+              ) : null}
+              <SlideEditStyleBar
+                size={curSize}
+                min={FONT_MIN}
+                max={FONT_MAX}
+                hasOverride={hasOverride}
+                font={curFont}
+                wholeList={wholeList}
+                onSize={setSize}
+                onFont={setFont}
+                sheetOpen={sheetOpen}
+                sheetId={sheetId}
+                onToggleSheet={() => setSheetOpen((v) => !v)}
+                onDone={commit}
+                onCancel={cancel}
+              />
+            </div>,
+            editBarSlot,
+          )
+        : null}
+      {phoneEdit ? <VisualViewportWatch onChange={onViewport} /> : null}
 
       {/*
         EGIZAK konteyner — sahna bilan bir xil masshtab. Tahrir qutisi
@@ -603,49 +863,14 @@ export function SlideEditor({
         style={{ width: SLIDE.w, height: SLIDE.h, transform: `scale(${scale})` }}
       >
         {edit && editLayer && boxStyleNow ? (
-          <div data-slide-edit-box style={boxStyleNow}>
-            {edit.kind === "text" ? (
-              <div
-                ref={(el) => {
-                  inputRef.current = el;
-                }}
-                contentEditable
-                suppressContentEditableWarning
-                role="textbox"
-                aria-multiline={edit.multiline}
-                aria-label="Matnni tahrirlash"
-                data-slide-edit-input
-                style={{ width: "100%", minHeight: "1em", outline: "none" }}
-                onKeyDown={onKeyDown}
-                onPaste={onPaste}
-                onBlur={onBlur}
-              >
-                {edit.initial}
-              </div>
-            ) : (
-              <ul
-                ref={(el) => {
-                  inputRef.current = el;
-                }}
-                contentEditable
-                suppressContentEditableWarning
-                role="textbox"
-                aria-multiline
-                aria-label="Matnni tahrirlash"
-                data-slide-edit-input
-                className={editLayer.bullets ? "w-full list-disc pl-[1.15em]" : "w-full list-none"}
-                style={{ margin: 0, paddingLeft: editLayer.bullets ? "1.15em" : 0, outline: "none", minHeight: "1em" }}
-                onKeyDown={onKeyDown}
-                onPaste={onPaste}
-                onBlur={onBlur}
-              >
-                {edit.initial.map((line, i) => (
-                  <li key={i} style={{ marginBottom: ptToPx(editLayer.paraSpace ?? 8) }}>
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            )}
+          <div ref={boxRef} data-slide-edit-box style={boxStyleNow}>
+            <EditField
+              edit={edit}
+              bullets={Boolean(editLayer.bullets)}
+              paraSpacePx={ptToPx(editLayer.paraSpace ?? 8)}
+              inputRef={inputRef}
+              handlers={handlers}
+            />
           </div>
         ) : null}
       </div>

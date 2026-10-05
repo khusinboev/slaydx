@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { CustomTemplate } from "@/lib/generation/pptx-template";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
 import type { BodyRules } from "@/lib/generation/slide-audience";
@@ -10,6 +10,7 @@ import { cn } from "@/lib/cn";
 import { SlideCanvas } from "./SlideCanvas";
 import { SkeletonSlide } from "./SkeletonSlide";
 import { ImageWaitPlaque } from "./ImageWaitPlaque";
+import { focusZoomScale, type FocusBox } from "./slide-edit/geometry";
 
 export type SlideStageOverlayCtx = { index: number; scale: number; slide: SlideModel };
 
@@ -20,6 +21,14 @@ export type SlideStageOverlayCtx = { index: number; scale: number; slide: SlideM
  * `overlay` — tahrirlash qatlami (`SlideEditor`) sahna ustiga `absolute
  * inset-0` qatlamda o'z elementini chizishi uchun. Berilmasa hech narsa
  * qo'shilmaydi.
+ *
+ * `focus` (phone text editing, docs/mobile/PLAN.md §3 O4): while a text box
+ * is edited on a phone the stage switches to its scrollable (zoom) form and
+ * TEMPORARILY uses `focusZoomScale` — the box becomes ≥ 60 % (aims at 90 %)
+ * of the stage width. The scale is computed once per box and frozen while
+ * editing (the keyboard resizing the stage must not rescale under the
+ * caret); the viewer's own `zoom`/`fitOn` are never touched, so ending the
+ * edit restores exactly the previous view.
  */
 export function SlideStage({
   slide,
@@ -44,6 +53,7 @@ export function SlideStage({
   reveal,
   hideSrc,
   onFitScale,
+  focus,
 }: {
   slide?: SlideModel;
   theme: SlideTheme;
@@ -80,6 +90,8 @@ export function SlideStage({
    * (`setState`) kutiladi.
    */
   onFitScale?: (scale: number) => void;
+  /** Edited box in slide px (phone only) — temporary focus zoom; `null`/absent = normal view. */
+  focus?: FocusBox | null;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [fitScale, setFitScale] = useState(0.6);
@@ -118,7 +130,50 @@ export function SlideStage({
   }, [present, presenter]);
 
   const fitEff = Math.round(Math.max(0.18, fitScale) * 1000) / 1000;
-  const scale = present || fitOn ? fitEff : zoom / 100;
+  const baseScale = present || fitOn ? fitEff : zoom / 100;
+  const baseRef = useRef(baseScale);
+  baseRef.current = baseScale;
+
+  /*
+   * Focus zoom: measured when the edited box changes (layout effect — the
+   * zoomed slide is painted in the same frame as the opened box).
+   */
+  const [focusScale, setFocusScale] = useState<number | null>(null);
+  const fx = focus?.left;
+  const fy = focus?.top;
+  const fw = focus?.width;
+  const fh = focus?.height;
+  const fFont = focus?.fontPx;
+  const fSingle = focus?.singleLine;
+  useLayoutEffect(() => {
+    const el = stageRef.current;
+    if (present || !el || fw === undefined || fh === undefined) {
+      setFocusScale(null);
+      return;
+    }
+    const cs = getComputedStyle(el);
+    const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    const r = el.getBoundingClientRect();
+    const vv = window.visualViewport;
+    const visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+    setFocusScale(
+      focusZoomScale({
+        boxW: fw,
+        boxH: fh,
+        viewW: (el.clientWidth || r.width) - padX,
+        viewH: Math.max(0, visibleBottom - r.top - padY),
+        base: baseRef.current,
+        fontPx: fFont,
+        singleLine: fSingle,
+      }),
+    );
+  }, [present, fx, fy, fw, fh, fFont, fSingle]);
+
+  const focused = !present && focusScale !== null;
+  const scale = focused ? focusScale : baseScale;
+  /** Fit layout (aspect box, no scrollbars) — not while focus-zoomed. */
+  const fitLayout = fitOn && !focused;
 
   useEffect(() => {
     onFitScale?.(fitEff);
@@ -138,16 +193,17 @@ export function SlideStage({
   return (
     <div
       ref={stageRef}
-      data-slide-stage={present ? "present" : fitOn ? "fit" : "zoom"}
+      data-slide-stage={present ? "present" : fitLayout ? "fit" : "zoom"}
+      data-focus-zoom={focused ? "" : undefined}
       className={cn(
         "flex min-h-0 flex-1",
         present
           ? "items-center justify-center"
           : cn(
               // Mobil: slayd kengligi bo'yicha (16:9) — pastda eskizlar uchun joy qoladi.
-              fitOn && "max-md:aspect-video max-md:flex-none",
+              fitLayout && "max-md:aspect-video max-md:flex-none",
               "p-2 md:p-4",
-              fitOn ? "overflow-hidden" : "overflow-auto",
+              fitLayout ? "overflow-hidden" : "overflow-auto",
             ),
       )}
       onClick={() => present && onAdvance?.()}
