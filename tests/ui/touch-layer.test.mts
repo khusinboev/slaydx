@@ -2,7 +2,7 @@ import "./setup.ts";
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createElement as h } from "react";
+import { createElement as h, type ReactNode } from "react";
 import { render, fireEvent, cleanup } from "@testing-library/react";
 import { Card, Row, Segmented, SelectField, Switch, SummaryChips } from "../../components/forms/compact.tsx";
 import { ChipGroup, MultiChipGroup, RangeField } from "../../components/forms/fields.tsx";
@@ -21,6 +21,7 @@ import { ClearFormButton, ColorDots, Counter, NumberInput, RangeRow } from "../.
  *    keep their desktop classes (fine-pointer visuals unchanged).
  */
 
+const R = (p: { label: string; hint?: string }, children: ReactNode) => h(Row, { ...p, children });
 const win = window as unknown as Record<string, unknown>;
 afterEach(() => {
   cleanup();
@@ -72,7 +73,7 @@ function topLevelBlocks(src: string): Array<{ head: string; body: string }> {
 
 test("Row hint, desktop (fine pointer): `title` tooltip stays, no button, no inline hint", () => {
   stubCoarse(false);
-  const { container } = render(h(Row, { label: "Tur", hint: "Hujjat turi" }, h("span", null, "ctl")));
+  const { container } = render(R({ label: "Tur", hint: "Hujjat turi" }, h("span", null, "ctl")));
   const tip = container.querySelector("[title]");
   assert.ok(tip, "ⓘ with title");
   assert.equal(tip!.getAttribute("title"), "Hujjat turi");
@@ -81,14 +82,14 @@ test("Row hint, desktop (fine pointer): `title` tooltip stays, no button, no inl
 });
 
 test("Row hint, no matchMedia at all (SSR/jsdom default) behaves like desktop", () => {
-  const { container } = render(h(Row, { label: "Tur", hint: "Hujjat turi" }, h("span", null, "ctl")));
+  const { container } = render(R({ label: "Tur", hint: "Hujjat turi" }, h("span", null, "ctl")));
   assert.ok(container.querySelector("[title]"));
   assert.ok(!container.querySelector("button"));
 });
 
 test("Row hint, touch: ⓘ is a button[aria-expanded]; tap toggles the inline hint under the row", () => {
   stubCoarse(true);
-  const { container } = render(h(Row, { label: "Tur", hint: "Hujjat turi: referat yoki kurs ishi" }, h("span", { "data-ctl": "" }, "ctl")));
+  const { container } = render(R({ label: "Tur", hint: "Hujjat turi: referat yoki kurs ishi" }, h("span", { "data-ctl": "" }, "ctl")));
   const btn = container.querySelector("button") as HTMLButtonElement;
   assert.ok(btn, "tap-to-expand button");
   assert.ok(!container.querySelector("[title]"), "no hover-only tooltip on touch");
@@ -113,7 +114,7 @@ test("Row hint, touch: ⓘ is a button[aria-expanded]; tap toggles the inline hi
 test("Row hint, touch: hint state is per row; a row without a hint renders no button", () => {
   stubCoarse(true);
   const { container } = render(
-    h("div", null, h(Row, { label: "A", hint: "izoh A" }, "a"), h(Row, { label: "B", hint: "izoh B" }, "b"), h(Row, { label: "C" }, "c")),
+    h("div", null, R({ label: "A", hint: "izoh A" }, "a"), R({ label: "B", hint: "izoh B" }, "b"), R({ label: "C" }, "c")),
   );
   const buttons = container.querySelectorAll("button");
   assert.equal(buttons.length, 2);
@@ -124,7 +125,7 @@ test("Row hint, touch: hint state is per row; a row without a hint renders no bu
 
 test("Row hint, touch: the ⓘ button is a 44 px target (size-11) that does not grow the row (negative margin)", () => {
   stubCoarse(true);
-  const { container } = render(h(Row, { label: "Tur", hint: "izoh" }, "x"));
+  const { container } = render(R({ label: "Tur", hint: "izoh" }, "x"));
   const cls = container.querySelector("button")!.className;
   assert.match(cls, /\bsize-11\b/);
   assert.match(cls, /-m-3\b/);
@@ -153,7 +154,10 @@ test("globals.css: coarse-pointer layer — 16 px inputs/selects/textareas, hit-
   const hit = topLevelBlocks(all).find((r) => /\.hit-44::after/.test(r.head));
   assert.ok(hit, ".hit-44::after expander rule");
   assert.match(hit!.body, /position:\s*absolute/);
-  assert.match(hit!.body, /44px/);
+  // centred 44 px box on every axis, never shrinking an already larger control
+  for (const side of ["top", "bottom", "left", "right"]) {
+    assert.match(hit!.body, new RegExp(`${side}:\\s*min\\(0px,\\s*calc\\(\\(100% - 44px\\) / 2\\)\\)`), `${side} inset`);
+  }
   // the fine-pointer desktop must not be affected: no 16px rule outside the coarse query
   const outside = topLevelBlocks(css).filter((b) => b.head !== "@media (pointer: coarse)" && /^(input|textarea|select)/.test(b.head));
   assert.equal(outside.length, 0);
@@ -237,7 +241,7 @@ test("Chip groups, range inputs, number input, clear button: 44 px on touch", ()
 
 test("Card title, summary chips and counter are >= 12 px on touch", () => {
   const { container } = render(
-    h("div", null, h(Card, { title: "Mavzu" }, "x"), h(SummaryChips, { items: ["a"] }), h(Counter, { len: 1, limit: 10 })),
+    h("div", null, h(Card, { title: "Mavzu", children: "x" }), h(SummaryChips, { items: ["a"] }), h(Counter, { len: 1, limit: 10 })),
   );
   assert.match(container.querySelector("h2")!.className, /pointer-coarse:text-xs/);
   assert.match(container.querySelector("[data-summary-chips]")!.className, /pointer-coarse:text-xs/);
