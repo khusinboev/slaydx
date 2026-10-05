@@ -7,6 +7,9 @@ import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { safeReturnTo } from "@/lib/safe-return";
+import { cn } from "@/lib/cn";
+import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
+import { OverlayFrame } from "./OverlayFrame";
 import { useDialog } from "./useDialog";
 
 export function LoginModal() {
@@ -17,22 +20,36 @@ export function LoginModal() {
   // Escape, fokus tsikli va fon aylanishini bloklash — barcha
   // oynalar uchun bitta joyda.
   const panelRef = useDialog(open, close);
+  /**
+   * Telefon (docs/mobile/PLAN.md O5): 44 px yopish tugmasi, 360×740 ga sig'adi
+   * va ichida aylanadi, klaviatura ochilganda kiritish maydoni ko'rinib turadi
+   * (`OverlayFrame`).
+   */
+  const phone = useCoarsePointer();
 
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Kirish"
+    <OverlayFrame
+      label="Kirish"
+      phone={phone}
+      className={cn("flex items-end justify-center sm:items-center", !phone && "p-4")}
     >
       <button type="button" className="absolute inset-0 bg-black/40" aria-label="Yopish" onClick={close} />
-      <div ref={panelRef} className="bg-card relative z-10 w-full max-w-md rounded-2xl border p-6 shadow-xl">
+      <div
+        ref={panelRef}
+        className={cn(
+          "bg-card relative z-10 w-full max-w-md rounded-2xl border shadow-xl",
+          phone ? "max-h-full overflow-y-auto overscroll-contain p-5 pt-6 [&_h1]:pr-10" : "p-6",
+        )}
+      >
         <button
           type="button"
           onClick={close}
-          className="hover:bg-muted absolute top-3 right-3 flex size-8 items-center justify-center rounded-full"
+          className={cn(
+            "hover:bg-muted absolute flex items-center justify-center rounded-full",
+            phone ? "top-1 right-1 size-11" : "top-3 right-3 size-8",
+          )}
           aria-label="Yopish"
         >
           <X className="size-4" />
@@ -49,7 +66,7 @@ export function LoginModal() {
           }}
         />
       </div>
-    </div>
+    </OverlayFrame>
   );
 }
 
@@ -60,6 +77,8 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
   const features = useAppStore((s) => s.features);
   const setUser = useAppStore((s) => s.setUser);
   const refreshGenerations = useAppStore((s) => s.refreshGenerations);
+  /** Telefon: har tugma ≥ 44 px, kiritish 16 px (iOS fokusda yaqinlashtirmasin). */
+  const touch = useCoarsePointer();
 
   const [stage, setStage] = useState<Stage>("start");
   const [ticket, setTicket] = useState<api.Ticket | null>(null);
@@ -220,7 +239,10 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
             setError(null);
             setHint(null);
           }}
-          className="text-muted-foreground hover:text-foreground text-xs underline"
+          className={cn(
+            "text-muted-foreground hover:text-foreground underline",
+            touch ? "-mx-2 inline-flex min-h-11 items-center px-2 text-sm" : "text-xs",
+          )}
         >
           Telefon raqami orqali kirish
         </button>
@@ -247,7 +269,7 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
           disabled={busy || stage === "phoneCode"}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="+998901234567"
-          className="border-input bg-background mb-3 h-11 w-full rounded-xl border px-3 disabled:opacity-60"
+          className="border-input bg-background mb-3 h-11 w-full rounded-xl border px-3 text-base disabled:opacity-60"
         />
 
         {stage === "phoneCode" ? (
@@ -289,7 +311,10 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
             setError(null);
             setHint(null);
           }}
-          className="text-muted-foreground hover:text-foreground h-10 px-1 text-xs"
+          className={cn(
+            "text-muted-foreground hover:text-foreground",
+            touch ? "h-11 min-w-11 px-2 text-sm" : "h-10 px-1 text-xs",
+          )}
         >
           Orqaga
         </button>
@@ -368,11 +393,13 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
                 target="_blank"
                 rel="noopener noreferrer"
                 data-ticket-link
-                className={
+                className={cn(
+                  "flex flex-1 items-center px-3 py-2 text-center justify-center rounded-xl text-sm",
+                  touch ? "min-h-11" : "min-h-10",
                   popupBlocked
-                    ? "bg-primary text-primary-foreground flex min-h-10 flex-1 items-center px-3 py-2 text-center justify-center rounded-xl text-sm font-medium"
-                    : "bg-background hover:bg-muted flex min-h-10 flex-1 items-center px-3 py-2 text-center justify-center rounded-xl border text-sm"
-                }
+                    ? "bg-primary text-primary-foreground font-medium"
+                    : "bg-background hover:bg-muted border",
+                )}
               >
                 {popupBlocked ? "Telegram’da ochish" : "Telegram’ni qayta ochish"}
               </a>
@@ -386,7 +413,10 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
                 setHint(null);
                 setPopupBlocked(false);
               }}
-              className="text-muted-foreground hover:text-foreground h-10 px-3 text-xs"
+              className={cn(
+                "text-muted-foreground hover:text-foreground px-3",
+                touch ? "h-11 min-w-11 text-sm" : "h-10 text-xs",
+              )}
             >
               Bekor qilish
             </button>
