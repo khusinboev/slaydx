@@ -469,9 +469,15 @@ test("watchdog.sh (haqiqiy Postgres + stub docker/curl/df)", { skip }, async (t)
     assert.deepEqual(r.tg, [], "dry-run Telegram'ga yubormaydi");
     assert.match(r.stdout, /\[dry-run\] would run: docker compose -p slaydx restart worker/);
     assert.doesNotMatch(readFileSync(path.join(stub, "docker.log"), "utf8"), /^compose /m);
-    const before = readdirSync(state).sort();
+    // Names and contents (failure counters, restart counts, error ids) must stay byte-identical.
+    const snapshot = () =>
+      readdirSync(state)
+        .sort()
+        .map((f) => `${f}=${readFileSync(path.join(state, f), "utf8")}`);
+    const before = snapshot();
+    assert.ok(before.some((l) => l.startsWith("fail-disk=")), "holat fayllari kutilgan edi");
     run({}, ["--dry-run"]);
-    assert.deepEqual(readdirSync(state).sort(), before, "dry-run holat fayllarini o'zgartirmaydi");
+    assert.deepEqual(snapshot(), before, "dry-run holat fayllarini o'zgartirmaydi");
   });
 
   await t.test("--digest: bitta xulosa xabari", async () => {
