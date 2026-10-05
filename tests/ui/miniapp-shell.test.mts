@@ -140,7 +140,7 @@ function App(props: { path: string }) {
     h(
       PathnameContext.Provider,
       { value: path },
-      h(Fragment, null, h(BackLink, { "data-testid": "back" }, "←"), h(Probe), h(MiniAppBridge)),
+      h(Fragment, null, h(BackLink, { "data-testid": "back" } as Parameters<typeof BackLink>[0], "←"), h(Probe), h(MiniAppBridge)),
     ),
   );
 }
@@ -393,7 +393,7 @@ test("BackLink: the bridge unmounting (e.g. leaving for /admin) restores it", as
       h(
         PathnameContext.Provider,
         { value: "/uz/create" },
-        h(Fragment, null, h(BackLink, { "data-testid": "back" }, "←"), bridge ? h(MiniAppBridge) : null),
+        h(Fragment, null, h(BackLink, { "data-testid": "back" } as Parameters<typeof BackLink>[0], "←"), bridge ? h(MiniAppBridge) : null),
       ),
     );
   }
