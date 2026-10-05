@@ -12,6 +12,10 @@ import {
   markGesture,
   prepareDownload,
   telegramAction,
+  currentDeliveryEnv,
+  gestureFresh,
+  gestureRequired,
+  lastGesture,
 } from "@/lib/downloads/deliver";
 import {
   isInTelegramWebApp,
@@ -70,6 +74,8 @@ export type ShareAction = {
 };
 
 type WebReady = { format: DownloadFormatId; file: File };
+/** Telegram (Android): prepared, but the tap is too old for the client — the next tap opens the picker. */
+type TgReady = { format: DownloadFormatId; preparedId: string; expiresAt: string };
 
 export function useShareAction(args: {
   genId: string;
@@ -83,8 +89,12 @@ export function useShareAction(args: {
   const [busy, setBusy] = useState(false);
   const [since, setSince] = useState<number | null>(null);
   const [web, setWeb] = useState<WebReady | null>(null);
+  const [tgReady, setTgReady] = useState<TgReady | null>(null);
   const inFlight = useRef(false);
-  useEffect(() => setWeb(null), [genId]);
+  useEffect(() => {
+    setWeb(null);
+    setTgReady(null);
+  }, [genId]);
 
   const saveForward = useCallback(
     async (format: DownloadFormatId, started: number) => {
@@ -95,11 +105,12 @@ export function useShareAction(args: {
   );
 
   const shareInTelegram = useCallback(
-    async (format: DownloadFormatId, started: number) => {
+    async (format: DownloadFormatId, started: number, pending: TgReady | null) => {
       const attempt = async (retriedAccess: boolean, retriedExpiry: boolean): Promise<void> => {
         let preparedId: string;
+        let expiresAt: string;
         try {
-          preparedId = (await telegramAction("share", genId, format, () => setSince((s) => s ?? started))).preparedId;
+          ({ preparedId, expiresAt } = await telegramAction("share", genId, format, () => setSince((s) => s ?? started)));
         } catch (e) {
           const code = apiErrorCode(e);
           // Inline mode off, or a Telegram id the prepared-message API cannot take: the file goes to the bot chat instead.
@@ -107,15 +118,31 @@ export function useShareAction(args: {
           if (code === "bot_unreachable" && !retriedAccess && (await requestWriteAccess())) return attempt(true, retriedExpiry);
           throw e;
         }
+        // Android drops `web_app_send_prepared_message` > 10 s after the last touch, silently
+        // (BotWebViewContainer `lastClickMs`): after a long upload ask for one more tap instead.
+        if (gestureRequired(currentDeliveryEnv().platform) && !gestureFresh(lastGesture(), performance.now())) {
+          setTgReady({ format, preparedId, expiresAt });
+          onToast({ text: DELIVER_TEXT.shareReady, tone: "info" });
+          return;
+        }
+        await openPicker(preparedId, retriedAccess, retriedExpiry);
+      };
+      const openPicker = async (preparedId: string, retriedAccess: boolean, retriedExpiry: boolean): Promise<void> => {
         const outcome = await shareMessageResult(preparedId);
         if (outcome === "sent") onToast({ text: DELIVER_TEXT.shared, tone: "ok" });
         else if (outcome === "expired" && !retriedExpiry) return attempt(retriedAccess, true);
         // A second expiry in a row: say so instead of ending silently (UX review m5).
         else if (outcome === "expired") onToast({ text: DELIVER_TEXT.shareExpired, tone: "error" });
         else if (outcome === "unsupported") return saveForward(format, started);
-        else if (outcome === "error") onToast({ text: DELIVER_TEXT.failed, tone: "error" });
-        // `failed` (picker closed) and `busy` (a picker is already open): nothing to say.
+        else if (outcome === "error" || outcome === "busy") onToast({ text: DELIVER_TEXT.failed, tone: "error" });
+        // `failed` (picker closed) and `unknown` (Telegram never answered — maybe sent, maybe not):
+        // nothing to claim; the button is usable again and the next tap prepares a new message.
       };
+      if (pending && pending.format === format && Date.parse(pending.expiresAt) - Date.now() > 60_000) {
+        // The second tap of the Android flow: open the picker within this tap.
+        await openPicker(pending.preparedId, false, false);
+        return;
+      }
       await attempt(false, false);
     },
     [genId, onToast, saveForward],
@@ -152,7 +179,11 @@ export function useShareAction(args: {
       setBusy(true);
       const started = Date.now();
       try {
-        if (cap === "tg-prepared") await shareInTelegram(f.id, started);
+        if (cap === "tg-prepared") {
+          const pending = tgReady;
+          setTgReady(null); // a prepared id is used at most once; any later tap prepares a new one
+          await shareInTelegram(f.id, started, pending);
+        }
         else if (cap === "tg-save-forward") await saveForward(f.id, started);
         else {
           const ready = await prepareDownload(genId, f.id, () => setSince((s) => s ?? started));
@@ -168,10 +199,10 @@ export function useShareAction(args: {
         setSince(null);
       }
     },
-    [genId, title, sessionTelegramId, web, onToast, onDownload, shareInTelegram, saveForward],
+    [genId, title, sessionTelegramId, web, tgReady, onToast, onDownload, shareInTelegram, saveForward],
   );
 
-  return { busy, since, readyFor: web?.format ?? null, run };
+  return { busy, since, readyFor: web?.format ?? tgReady?.format ?? null, run };
 }
 
 /** «Ulashish» button (the stored file by default: `format`). */

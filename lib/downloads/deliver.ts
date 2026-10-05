@@ -60,6 +60,8 @@ export const PREPARE_BUDGET_MS = 60_000;
 export const GESTURE_WINDOW_MS = 8_000;
 /** Android: no `fileDownloadRequested` within this long → the request was dropped, ask for a tap. */
 export const TG_EVENT_WAIT_MS = 2_000;
+/** Telegram's `downloadFile` answer (popup accepted/declined) is awaited at most this long. */
+export const TG_DOWNLOAD_TIMEOUT_MS = 60_000;
 /** A prepared URL is reused only while it has at least this long left (TTL is 15 min). */
 export const READY_MARGIN_MS = 60_000;
 
@@ -327,6 +329,7 @@ export type DeliverOptions = DeliveryEnv & {
   /** Test seams. */
   now?: () => number;
   eventWaitMs?: number;
+  answerTimeoutMs?: number;
   fetchImpl?: typeof fetch;
   requestDownloadImpl?: (p: DownloadFileParams, o?: { timeoutMs?: number }) => Promise<DownloadOutcome>;
   saveBlobImpl?: (blob: Blob, name: string) => void;
@@ -351,7 +354,12 @@ async function deliverTelegram(file: ReadyFile, opts: DeliverOptions): Promise<D
   const last = opts.lastGestureAt === undefined ? lastGesture() : opts.lastGestureAt;
   if (gestureRequired(opts.platform) && !gestureFresh(last, now)) return { kind: "needs-tap" };
   const ask = opts.requestDownloadImpl ?? requestDownload;
-  const pending = ask({ url: absoluteUrl(file.url, opts.origin), file_name: file.fileName });
+  // No answer ever (a dropped event) must not leave the row «delivering» forever: the popup answer
+  // may take a while on iOS/desktop, but after TG_DOWNLOAD_TIMEOUT_MS the row offers the tap again.
+  const pending = ask(
+    { url: absoluteUrl(file.url, opts.origin), file_name: file.fileName },
+    { timeoutMs: opts.answerTimeoutMs ?? TG_DOWNLOAD_TIMEOUT_MS },
+  );
   const outcome =
     gestureRequired(opts.platform)
       ? await Promise.race([
