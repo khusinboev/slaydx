@@ -150,3 +150,47 @@ test("inline_query answer failing (query too old, 400) does not throw — the up
   const rows = await query("SELECT 1 FROM telegram_updates WHERE update_id = $1", [id]);
   assert.equal(rows.length, 1, "the update stays claimed (not redelivered)");
 });
+
+test("inline query f_<gen>_<format> («📤 Ulashish» under a saved file): owner gets the cached file, personal and uncached; others get []", { skip }, async () => {
+  const { randomUUID } = await import("node:crypto");
+  const ownerTg = 720_998_000 + Math.floor(Math.random() * 900);
+  fromIds.push(ownerTg);
+  const owner = (await query<{ id: string }>("INSERT INTO users (telegram_id, name) VALUES ($1, 'Egasi') RETURNING id::text AS id", [String(ownerTg)]))[0];
+  const gen = randomUUID();
+  await query(
+    `INSERT INTO generations (id, user_id, tool_id, topic, status, format, file_name, file_version, doc_version)
+     VALUES ($1, $2, 'referat', 'Suv aylanishi', 'COMPLETED', 'docx', 'referat.docx', 1, 1)`,
+    [gen, owner.id],
+  );
+  await query(
+    "INSERT INTO telegram_files (generation_id, format, file_version, media, file_id) VALUES ($1, 'native', 1, 'document', 'BQ-OWNER-FILE')",
+    [gen],
+  );
+  const q = `f_${gen.replace(/-/g, "")}_native`;
+
+  installFetch();
+  await handleUpdate({ update_id: ++seq, inline_query: { id: "iq-own", from: { id: ownerTg }, query: q, offset: "" } });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].method, "answerInlineQuery");
+  const body = calls[0].body as { inline_query_id: string; results: Record<string, unknown>[]; cache_time: number; is_personal: boolean };
+  assert.equal(body.inline_query_id, "iq-own");
+  assert.equal(body.cache_time, 0);
+  assert.equal(body.is_personal, true);
+  assert.equal(body.results.length, 1);
+  assert.equal(body.results[0].type, "document");
+  assert.equal(body.results[0].document_file_id, "BQ-OWNER-FILE");
+  assert.equal(body.results[0].title, "Suv aylanishi");
+  assert.equal(body.results[0].parse_mode, "HTML");
+  assert.match(String(body.results[0].caption), /^<b>Suv aylanishi<\/b>\n/);
+
+  installFetch();
+  await handleUpdate({ update_id: ++seq, inline_query: { id: "iq-other", from: { id: ownerTg + 1 }, query: q, offset: "" } });
+  assert.deepEqual(calls, [{ method: "answerInlineQuery", body: { inline_query_id: "iq-other", results: [], cache_time: 0, is_personal: true } }]);
+
+  installFetch();
+  await handleUpdate({ update_id: ++seq, inline_query: { id: "iq-bad", from: { id: ownerTg }, query: `${q}x`, offset: "" } });
+  assert.equal(calls.length, 1);
+  assert.deepEqual((calls[0].body as { results: unknown[] }).results, [], "malformed query: default empty answer");
+  assert.equal((calls[0].body as { cache_time: number }).cache_time, 300);
+  await query("DELETE FROM generations WHERE id = $1", [gen]);
+});

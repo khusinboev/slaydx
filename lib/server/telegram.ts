@@ -669,9 +669,27 @@ async function answerStrayInlineQuery(inlineQueryId: string): Promise<void> {
   });
 }
 
+/**
+ * Inline query. `f_<generation>_<format>` (typed by the «📤 Ulashish» button
+ * under a saved file, `telegram-files.ts shareQuery`) answers with that file
+ * for its owner only — personal, never cached by Telegram, empty for anyone
+ * else. Anything else gets the default empty answer.
+ */
+async function answerInlineQuery(q: NonNullable<TelegramUpdate["inline_query"]>): Promise<void> {
+  // Loaded lazily: the file module pulls in the download producers, which the
+  // login/contact paths of the webhook never need.
+  const { inlineFileResults } = await import("./telegram-files");
+  const results = await inlineFileResults(q.query ?? "", q.from?.id);
+  if (results === null) {
+    await answerStrayInlineQuery(q.id);
+    return;
+  }
+  await callBot("answerInlineQuery", { inline_query_id: q.id, results, cache_time: 0, is_personal: true });
+}
+
 async function processUpdate(update: TelegramUpdate): Promise<void> {
   if (update.inline_query) {
-    await answerStrayInlineQuery(update.inline_query.id);
+    await answerInlineQuery(update.inline_query);
     return;
   }
   const msg = update.message;

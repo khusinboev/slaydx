@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import type { DownloadFormatId } from "../downloads/formats";
+import { isDownloadFormatId, type DownloadFormatId } from "../downloads/formats";
 import { TOOL_BY_ID } from "../tools";
 import type { ToolId } from "../types";
 import { query, queryOne } from "./db";
@@ -192,7 +192,40 @@ export function backLinkMarkup(url: string | null): { inline_keyboard: { text: s
   return url ? { inline_keyboard: [[{ text: "SlaydX'da ochish", url }]] } : undefined;
 }
 
-type Presentation = { caption: string; replyMarkup?: ReturnType<typeof backLinkMarkup> };
+/**
+ * Inline query that identifies one saved file: `f_<generation uuid, 32 hex,
+ * no dashes>_<format id>` (<= 49 chars; Telegram allows 256 in a
+ * `switch_inline_query`). Typed by the «📤 Ulashish» button under a saved
+ * message; `inlineFileResults` resolves it for the file's owner only.
+ */
+export function shareQuery(genId: string, format: DownloadFormatId): string {
+  return `f_${genId.replace(/-/g, "").toLowerCase()}_${format}`;
+}
+
+const SHARE_QUERY_RE = /^f_([0-9a-f]{32})_([a-z-]{1,32})$/;
+
+/** `shareQuery` back to (dashed generation id, format); `null` for anything else. */
+export function parseShareQuery(q: string): { genId: string; format: DownloadFormatId } | null {
+  const m = SHARE_QUERY_RE.exec(q.trim());
+  if (!m || !isDownloadFormatId(m[2])) return null;
+  const h = m[1];
+  return { genId: `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`, format: m[2] };
+}
+
+/**
+ * Button under the copy saved into the user's OWN bot chat: a «SlaydX'da
+ * ochish» link is useless there (the user is already in the bot), so it is
+ * «📤 Ulashish», which opens the chat picker and types `@bot <shareQuery>`
+ * there; the inline answer is the same file (hotfix after e6383b9).
+ */
+export function savedMarkup(genId: string, format: DownloadFormatId): { inline_keyboard: { text: string; switch_inline_query: string }[][] } {
+  return { inline_keyboard: [[{ text: "📤 Ulashish", switch_inline_query: shareQuery(genId, format) }]] };
+}
+
+type Presentation = {
+  caption: string;
+  replyMarkup?: ReturnType<typeof backLinkMarkup> | ReturnType<typeof savedMarkup>;
+};
 
 /** First upload: multipart form for `sendDocument` / `sendAudio`. */
 export function buildUploadForm(chatId: string, file: ProducedFile, p: Presentation): { kind: MediaKind; form: FormData } {
@@ -346,7 +379,7 @@ export function needsConversion(format: DownloadFormatId): boolean {
 }
 
 /** The stored file is behind an edit waiting for a re-render (only editable tools re-render). */
-function behindEdit(row: GenRow): boolean {
+function behindEdit(row: Pick<GenRow, "file_version" | "doc_version" | "tool_id">): boolean {
   return row.file_version < row.doc_version && adapterFor(row.tool_id) !== null;
 }
 
@@ -364,10 +397,16 @@ function cacheValid(row: GenRow, format: DownloadFormatId): MediaKind | null {
   return kindOfMedia(row.media);
 }
 
-function presentationOf(row: GenRow): Presentation & { title: string; toolLabel: string } {
+/** Caption + «SlaydX'da ochish» link: what RECIPIENTS of a shared message see. */
+function presentationOf(row: Pick<GenRow, "tool_id" | "topic" | "file_name">): Presentation & { title: string; toolLabel: string } {
   const toolLabel = TOOL_BY_ID[row.tool_id as ToolId]?.title ?? "SlaydX";
   const title = row.topic.trim() || row.file_name.replace(/\.[^.]+$/, "") || "SlaydX";
   return { caption: buildCaption(title, toolLabel), replyMarkup: backLinkMarkup(botChatUrl()), title, toolLabel };
+}
+
+/** The copy in the owner's own bot chat: same caption, «📤 Ulashish» button. */
+function savedPresentation(row: GenRow, genId: string, format: DownloadFormatId): Presentation {
+  return { caption: presentationOf(row).caption, replyMarkup: savedMarkup(genId, format) };
 }
 
 function chatOf(user: TelegramUser): string {
@@ -400,7 +439,7 @@ async function uploadInto(
   if (file.bytes.byteLength > TELEGRAM_UPLOAD_MAX_BYTES) {
     throw new TelegramFileError("too_large", "Fayl Telegram uchun juda katta — «Yuklab olish» dan foydalaning.");
   }
-  const { kind, form } = buildUploadForm(chatId, file, presentationOf(row));
+  const { kind, form } = buildUploadForm(chatId, file, savedPresentation(row, genId, format));
   const r = await callBot<SentMessage>(kind.method, form, { multipart: true, fetch: deps.fetch });
   if (!r.ok) throw failureOf(r);
   const sent = fileFromMessage(kind, r.result);
@@ -535,7 +574,7 @@ async function saveOnce(
 
   const r: BotResult<SentMessage> = await callBot<SentMessage>(
     kind.method,
-    buildResendJson(chatId, kind, row.file_id, presentationOf(row)),
+    buildResendJson(chatId, kind, row.file_id, savedPresentation(row, genId, format)),
     { fetch: deps.fetch },
   );
   if (r.ok) {
@@ -621,4 +660,65 @@ async function shareOnce(
   }
   await query("UPDATE telegram_files SET shares = shares + 1 WHERE generation_id = $1 AND format = $2", [genId, format]);
   return { preparedId: id, expiresAt: new Date(exp * 1000).toISOString(), uploaded: file.uploaded };
+}
+
+/* ───────────────────────── inline «📤 Ulashish» ───────────────────────── */
+
+/**
+ * Inline results for a `shareQuery` typed by the «📤 Ulashish» button.
+ *
+ * - `null`: not a file query — the caller keeps the default empty answer.
+ * - `[]`: a file query that must not resolve: the sender is not the file's
+ *   owner (ownership in SQL: `users.telegram_id` of the generation's owner
+ *   equals the inline query's `from.id`), an id above 2^53 (already rounded,
+ *   could equal another user's id), the generation is gone/not completed, or
+ *   the cached file is not the current version.
+ * - one cached document/audio result otherwise: same caption as the saved
+ *   copy, «SlaydX'da ochish» link for the recipients.
+ *
+ * Instant formats (results/glossary CSV, transcript) change without a version
+ * bump; their latest stored `file_id` is used — the save that showed this
+ * button has just uploaded it.
+ */
+export async function inlineFileResults(queryText: string, fromId: number): Promise<Record<string, unknown>[] | null> {
+  const q = parseShareQuery(queryText);
+  if (!q) return null;
+  if (!Number.isSafeInteger(fromId) || fromId <= 0) return [];
+  const row = await queryOne<{
+    file_id: string;
+    media: string;
+    tf_version: number;
+    file_version: number;
+    doc_version: number;
+    tool_id: string;
+    topic: string;
+    file_name: string;
+  }>(
+    `SELECT tf.file_id, tf.media, tf.file_version AS tf_version,
+            g.file_version, g.doc_version, g.tool_id, g.topic, g.file_name
+       FROM telegram_files tf
+       JOIN generations g ON g.id = tf.generation_id
+       JOIN users u ON u.id = g.user_id
+      WHERE tf.generation_id = $1 AND tf.format = $2
+        AND u.telegram_id = $3 AND g.status = 'COMPLETED'`,
+    [q.genId, q.format, String(fromId)],
+  );
+  if (!row) return [];
+  if (reusesFileId(q.format) && (row.tf_version !== row.file_version || behindEdit(row))) return [];
+  const kind = kindOfMedia(row.media);
+  if (!kind) return [];
+  const p = presentationOf(row);
+  const result: Record<string, unknown> = {
+    type: kind.media,
+    id: `${q.format}-v${row.tf_version}`,
+    [kind.idField]: row.file_id,
+    caption: p.caption,
+    parse_mode: "HTML",
+  };
+  if (p.replyMarkup) result.reply_markup = p.replyMarkup;
+  if (kind === DOCUMENT) {
+    result.title = clipChars(p.title.trim() || "SlaydX", RESULT_TITLE_CHARS);
+    result.description = p.toolLabel;
+  }
+  return [result];
 }

@@ -154,7 +154,8 @@ test("first save: one multipart upload into the user's own chat; file_id cached 
     document: { name: "Quyosh tizimi.pptx", type: PPTX, size: 4096 },
     caption: "<b>Quyosh &lt;tizimi&gt; &amp; &quot;yo‘ldoshlar&quot;</b>\nSlayd · SlaydX yordamida tayyorlandi",
     parse_mode: "HTML",
-    reply_markup: JSON.stringify({ inline_keyboard: [[{ text: "SlaydX'da ochish", url: "https://t.me/slaydx_test_bot" }]] }),
+    // Hotfix after e6383b9: the copy in the user's own bot chat carries «📤 Ulashish», not a link back to the bot.
+    reply_markup: JSON.stringify({ inline_keyboard: [[{ text: "📤 Ulashish", switch_inline_query: `f_${gen.replace(/-/g, "")}_native` }]] }),
     disable_content_type_detection: "true",
   });
   const row = await cached(gen);
@@ -183,6 +184,9 @@ test("second save after the debounce window: JSON resend by file_id, no bytes, n
   assert.equal(h.calls[1].json!.document, fileId);
   assert.equal(h.calls[1].json!.chat_id, u.telegramId);
   assert.equal(h.calls[1].json!.parse_mode, "HTML");
+  assert.deepEqual(h.calls[1].json!.reply_markup, {
+    inline_keyboard: [[{ text: "📤 Ulashish", switch_inline_query: `f_${gen.replace(/-/g, "")}_native` }]],
+  });
   assert.equal((await cached(gen))!.saves, 2);
 });
 
@@ -623,4 +627,103 @@ test("media kind: mp3 → audio, everything else (images included) → document"
   for (const m of [PPTX, "application/pdf", "image/png", "image/jpeg", "application/zip", "text/csv; charset=utf-8", "audio/wav"]) {
     assert.equal(tf.mediaKindFor(m).method, "sendDocument", m);
   }
+});
+
+/* ───────────────────── hotfix: «📤 Ulashish» under saved files ───────────────────── */
+
+const { shareQuery, parseShareQuery, inlineFileResults } = tf;
+
+test("share query: f_<uuid hex>_<format>, <= 64 chars, round-trips; malformed → null", () => {
+  const gen = "0a1b2c3d-4e5f-4061-8a9b-0c1d2e3f4a5b";
+  assert.equal(shareQuery(gen, "native"), "f_0a1b2c3d4e5f40618a9b0c1d2e3f4a5b_native");
+  for (const f of ["native", "pdf", "slides-png", "jpg", "transcript-txt", "glossary-csv", "results-csv"] as const) {
+    assert.ok(shareQuery(gen, f).length <= 64, f);
+    assert.deepEqual(parseShareQuery(shareQuery(gen, f)), { genId: gen, format: f });
+  }
+  for (const bad of ["", "slayd", "f_", "f_0a1b2c3d4e5f40618a9b0c1d2e3f4a5b", "f_0a1b2c3d4e5f40618a9b0c1d2e3f4a5b_exe", "f_0a1b2c3d4e5f40618a9b0c1d2e3f4a5_native", "f_0A1B2C3D4E5F40618A9B0C1D2E3F4A5B_native", "x_0a1b2c3d4e5f40618a9b0c1d2e3f4a5b_native", "f_0a1b2c3d4e5f40618a9b0c1d2e3f4a5b_native extra"]) {
+    assert.equal(parseShareQuery(bad), null, bad);
+  }
+});
+
+test("upload of a pdf save: the Ulashish query names that format", { skip }, async () => {
+  const u = await mkUser();
+  const gen = await mkGen(u.id);
+  const h = harness({ file: { mime: "application/pdf", fileName: "Quyosh tizimi.pdf" } });
+  await saveToBot(gen, u, "pdf", { ...h.deps, prepare: undefined });
+  assert.deepEqual(JSON.parse(String(h.calls[0].form!.reply_markup)), {
+    inline_keyboard: [[{ text: "📤 Ulashish", switch_inline_query: `f_${gen.replace(/-/g, "")}_pdf` }]],
+  });
+});
+
+test("«Ulashish» that uploads first: the copy in the user's chat gets «📤 Ulashish», the prepared message keeps the url button", { skip }, async () => {
+  const u = await mkUser();
+  const gen = await mkGen(u.id);
+  const h = harness();
+  await prepareShare(gen, u, "native", h.deps);
+  assert.deepEqual(h.calls.map((c) => c.method), ["sendDocument", "savePreparedInlineMessage"]);
+  assert.deepEqual(JSON.parse(String(h.calls[0].form!.reply_markup)), {
+    inline_keyboard: [[{ text: "📤 Ulashish", switch_inline_query: `f_${gen.replace(/-/g, "")}_native` }]],
+  });
+  assert.deepEqual((h.calls[1].json!.result as Record<string, unknown>).reply_markup, {
+    inline_keyboard: [[{ text: "SlaydX'da ochish", url: "https://t.me/slaydx_test_bot" }]],
+  });
+});
+
+test("inline query by the owner → one cached document: file_id, title, caption, url button for recipients", { skip }, async () => {
+  const u = await mkUser();
+  const gen = await mkGen(u.id, { topic: "Quyosh <tizimi>" });
+  await saveToBot(gen, u, "native", harness().deps);
+  const row = (await cached(gen))!;
+  const results = await inlineFileResults(shareQuery(gen, "native"), Number(u.telegramId));
+  assert.deepEqual(results, [
+    {
+      type: "document",
+      id: "native-v1",
+      document_file_id: row.file_id,
+      caption: "<b>Quyosh &lt;tizimi&gt;</b>\nSlayd · SlaydX yordamida tayyorlandi",
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: [[{ text: "SlaydX'da ochish", url: "https://t.me/slaydx_test_bot" }]] },
+      title: "Quyosh <tizimi>",
+      description: "Slayd",
+    },
+  ]);
+});
+
+test("inline query: another Telegram user, unknown format row, unsafe id, deleted or revoked generation → []", { skip }, async () => {
+  const owner = await mkUser();
+  const other = await mkUser();
+  const gen = await mkGen(owner.id);
+  await saveToBot(gen, owner, "native", harness().deps);
+  const q = shareQuery(gen, "native");
+  assert.deepEqual(await inlineFileResults(q, Number(other.telegramId)), [], "never another user's file");
+  assert.deepEqual(await inlineFileResults(shareQuery(gen, "pdf"), Number(owner.telegramId)), [], "no row for that format");
+  // An id above 2^53 arrives already rounded and may equal a stored id of SOMEONE ELSE: never resolve it.
+  const bigTg = String(2 ** 53);
+  await query("DELETE FROM users WHERE telegram_id = $1", [bigTg]);
+  const big = (await queryOne<{ id: string }>("INSERT INTO users (telegram_id, name) VALUES ($1, 'Katta') RETURNING id::text AS id", [bigTg]))!;
+  userIds.push(big.id);
+  const bigGen = await mkGen(big.id);
+  await query("INSERT INTO telegram_files (generation_id, format, file_version, media, file_id) VALUES ($1, 'native', 1, 'document', 'BQ-BIG')", [bigGen]);
+  assert.deepEqual(await inlineFileResults(shareQuery(bigGen, "native"), 2 ** 53), [], "id above 2^53");
+  assert.equal(await inlineFileResults("slayd", Number(owner.telegramId)), null, "not a file query");
+  assert.equal(await inlineFileResults("", Number(owner.telegramId)), null);
+
+  await query("UPDATE generations SET status = 'REVOKED' WHERE id = $1", [gen]);
+  assert.deepEqual(await inlineFileResults(q, Number(owner.telegramId)), [], "revoked");
+  await query("UPDATE generations SET status = 'COMPLETED' WHERE id = $1", [gen]);
+  assert.equal((await inlineFileResults(q, Number(owner.telegramId)))!.length, 1);
+  await query("UPDATE generations SET file_version = 2, doc_version = 2 WHERE id = $1", [gen]);
+  assert.deepEqual(await inlineFileResults(q, Number(owner.telegramId)), [], "cached file is an older version");
+  await query("DELETE FROM generations WHERE id = $1", [gen]);
+  assert.deepEqual(await inlineFileResults(q, Number(owner.telegramId)), [], "deleted");
+});
+
+test("inline query for audio → cached audio result (no title)", { skip }, async () => {
+  const u = await mkUser();
+  const gen = await mkGen(u.id, { tool: "podcast", format: "mp3" });
+  await saveToBot(gen, u, "native", harness({ file: { mime: "audio/mpeg", fileName: "podcast.mp3" } }).deps);
+  const [r] = (await inlineFileResults(shareQuery(gen, "native"), Number(u.telegramId)))!;
+  assert.equal(r.type, "audio");
+  assert.equal(r.audio_file_id, (await cached(gen))!.file_id);
+  assert.equal(r.title, undefined);
 });
