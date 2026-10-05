@@ -127,6 +127,31 @@ test("makeViewCopy: no saving → null; non-image mime → null; broken bytes th
   await assert.rejects(makeViewCopy(Buffer.from("not an image at all"), "image/jpeg"));
 });
 
+test("makeViewCopy: a Display-P3 photo keeps its colour profile (review m3)", async () => {
+  const noisy = await sharp({
+    create: { width: 1280, height: 960, channels: 3, background: { r: 40, g: 200, b: 60 }, noise: { type: "gaussian", mean: 128, sigma: 20 } },
+  })
+    .png()
+    .toBuffer();
+  const p3 = await sharp(noisy).withIccProfile("p3").jpeg({ quality: 95 }).toBuffer();
+  const copy = await makeViewCopy(p3, "image/jpeg");
+  assert.ok(copy);
+  // MUTATION: drop `.keepIccProfile()` → no profile, P3 pixels read as sRGB (dull colours).
+  assert.ok((await sharp(copy!).metadata()).icc, "ICC profile kept");
+  // An untagged (sRGB) photo gets no profile bytes added.
+  assert.ok(!(await sharp((await makeViewCopy(await photoJpeg(), "image/jpeg"))!).metadata()).icc);
+});
+
+test("viewCopyBudget (review M1): never reaches the hard stop; too little time → 0 (skip)", () => {
+  const { viewCopyBudget, VIEW_BUDGET_MS, VIEW_STOP_MARGIN_MS, VIEW_MIN_BUDGET_MS } = assets;
+  assert.equal(viewCopyBudget(Number.POSITIVE_INFINITY), VIEW_BUDGET_MS);
+  assert.equal(viewCopyBudget(60_000), VIEW_BUDGET_MS);
+  assert.equal(viewCopyBudget(VIEW_STOP_MARGIN_MS + 5_000), 5_000);
+  assert.equal(viewCopyBudget(VIEW_STOP_MARGIN_MS + VIEW_MIN_BUDGET_MS - 1), 0);
+  assert.equal(viewCopyBudget(800), 0);
+  assert.equal(viewCopyBudget(-5_000), 0);
+});
+
 // ───────────────────────────── which assets get copies (worker step, pure)
 
 test("slideViewCopies: one copy per distinct slide image; logos, figures and broken images skipped", async (t) => {
@@ -322,5 +347,65 @@ test("route + resolver + worker (Postgres)", { skip }, async (t) => {
     assert.equal(rows.length, 4);
     const file = (await query<{ bytes: Buffer }>(`SELECT bytes FROM generation_files WHERE generation_id = $1`, [id]))[0];
     assert.ok(same(file.bytes, pptx), "the stored file (downloads) is the build output, untouched");
+  });
+
+  await t.test("worker near the hard stop (review M1): the deck is COMMITTED without copies, not failed", async (tt) => {
+    quiet(tt);
+    const id = crypto.randomUUID();
+    await query(
+      `INSERT INTO generations (id, user_id, tool_id, topic, step, budget_ms, values_json)
+       VALUES ($1, $2, 'pro-slide', 'Sinov', 'q', 60000, '{"topic":"Sinov"}'::jsonb)`,
+      [id, uid],
+    );
+    const job = await worker.claimNext();
+    assert.equal(job?.id, id);
+    // 8 photo-sized images ≈ 2 s of copying; the build returns 800 ms before the hard stop.
+    const imgs: Buffer[] = [];
+    for (let i = 0; i < 8; i++) imgs.push(await photoJpeg(1280, 960, 20 + i * 25));
+    const pptx = Buffer.from("PPTX-late-deck");
+    const build = async () => {
+      await new Promise((r) => setTimeout(r, 400));
+      return {
+        html: "",
+        bytes: new Uint8Array(pptx),
+        fileName: "deck.pptx",
+        mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        doc: {
+          meta: {},
+          sections: [],
+          slides: imgs.map((img, i) => ({ id: `s${i}`, layout: "bullets", title: `S${i}`, image: { url: dataUrl(img) } })),
+        },
+      };
+    };
+    await worker.runJob(job!, { build: build as never, hardStopMs: 1_200 });
+
+    const gen = (await query<{ status: string; error: string | null }>(`SELECT status, error FROM generations WHERE id = $1`, [id]))[0];
+    // MUTATION: uncapped budget (`viewCopyBudget(Infinity)`) → FAILED «Ish vaqti tugadi», refunded, deck lost.
+    assert.equal(gen.status, "COMPLETED", `status ${gen.status} (${gen.error})`);
+    const file = (await query<{ bytes: Buffer }>(`SELECT bytes FROM generation_files WHERE generation_id = $1`, [id]))[0];
+    assert.ok(file && same(file.bytes, pptx), "result file committed");
+    const counts = (
+      await query<{ originals: string; copies: string }>(
+        `SELECT count(*) FILTER (WHERE length(asset_id) = 24) AS originals, count(*) FILTER (WHERE length(asset_id) = 26) AS copies
+           FROM generation_assets WHERE generation_id = $1`,
+        [id],
+      )
+    )[0];
+    assert.equal(Number(counts.originals), imgs.length, "originals committed");
+    assert.equal(Number(counts.copies), 0, "copies skipped — the viewer falls back to originals");
+  });
+
+  await t.test("`?view=1` never aliases: a 22-hex id + d1 does not reach a 24-hex content asset (review n1)", async () => {
+    const gen = await mkGen("COMPLETED");
+    const contentId = "0123456789abcdef012345d1";
+    await assets.putAssets(gen, [{ assetId: contentId, mime: "image/jpeg", bytes: orig }]);
+    const short = contentId.slice(0, 22);
+    // MUTATION: `viewId = viewAssetId(assetId)` for every id → 200 with the content asset.
+    const res = await call(gen, short, ownerCookie, true);
+    assert.equal(res.status, 404);
+    // The content id itself still serves normally with the flag (no copy → original).
+    const ok = await call(gen, contentId, ownerCookie, true);
+    assert.equal(ok.status, 200);
+    assert.equal(ok.headers.get("x-asset-variant"), "original");
   });
 });

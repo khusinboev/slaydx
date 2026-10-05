@@ -213,7 +213,28 @@ export const VIEW_JPEG_QUALITY = 80;
 export const VIEW_MAX_RATIO = 0.8;
 /** Time the worker may spend on copies per deck; slides left over fall back to the original. */
 export const VIEW_BUDGET_MS = 20_000;
+/**
+ * Time kept free between the end of the copy step and the job's hard stop
+ * (review M1): the commit (file + originals + copies) must still land, and
+ * one image may run past the per-image deadline check by ~1 s.
+ */
+export const VIEW_STOP_MARGIN_MS = 10_000;
+/** Below this the step is skipped outright — the viewer falls back to the originals. */
+export const VIEW_MIN_BUDGET_MS = 1_000;
 const VIEW_SUFFIX = "d1";
+/** Content asset ids (`assetIdFor`) — only these have screen copies (review n1). */
+const CONTENT_ID = /^[0-9a-f]{24}$/;
+
+/**
+ * Copy budget for a job with `msLeft` until its hard stop: never reaches the
+ * stop (`VIEW_STOP_MARGIN_MS` kept free), `0` = skip the step. Before this cap
+ * a deck finishing near the hard stop was failed and refunded while its
+ * copies were still being made (review M1).
+ */
+export function viewCopyBudget(msLeft: number): number {
+  const budget = Math.min(VIEW_BUDGET_MS, msLeft - VIEW_STOP_MARGIN_MS);
+  return budget >= VIEW_MIN_BUDGET_MS ? budget : 0;
+}
 const VIEW_SOURCES = new Set(["image/jpeg", "image/png", "image/webp"]);
 /** Decode guard: a slide image is ~1 Mpx; anything near this is not a photo we made. */
 const VIEW_MAX_INPUT_PIXELS = 40_000_000;
@@ -232,6 +253,12 @@ export function viewAssetId(assetId: string): string {
 export async function makeViewCopy(bytes: Buffer, mime: string): Promise<Buffer | null> {
   if (!VIEW_SOURCES.has(mime)) return null;
   const sharp = (await import("sharp")).default;
+  /*
+   * Review m2: libvips' operation cache (default 50 MB) only helps repeated
+   * operations on the same input — every copy is a new image, so in the
+   * worker it is dead memory on a 2 GB container. Only the worker calls this.
+   */
+  sharp.cache(false);
   const opts = { failOn: "error" as const, limitInputPixels: VIEW_MAX_INPUT_PIXELS };
   const meta = await sharp(bytes, opts).metadata();
   if (meta.hasAlpha && !(await sharp(bytes, opts).stats()).isOpaque) return null;
@@ -239,6 +266,9 @@ export async function makeViewCopy(bytes: Buffer, mime: string): Promise<Buffer 
     .rotate()
     .resize({ width: VIEW_MAX_WIDTH, withoutEnlargement: true })
     .flatten({ background: "#ffffff" })
+    // Review m3: sharp strips the ICC profile WITHOUT converting the pixels, so a
+    // Display-P3 / Adobe RGB photo would look dull; keep the tag (untagged sRGB adds nothing).
+    .keepIccProfile()
     .jpeg({
       quality: VIEW_JPEG_QUALITY,
       mozjpeg: true,
@@ -306,7 +336,9 @@ export async function getViewAsset(
   assetId: string,
   userId: string,
 ): Promise<{ bytes: Buffer; mime: string; variant: "view" | "original"; final: boolean } | null> {
-  const viewId = viewAssetId(assetId);
+  // Not a content id (thumbnail, a copy id itself, odd length) → no copy lookup, so
+  // a 22-hex id + "d1" can never alias a 24-hex content asset (review n1).
+  const viewId = CONTENT_ID.test(assetId) ? viewAssetId(assetId) : null;
   const row = await queryOne<{ bytes: Buffer; mime: string; is_view: boolean; final: boolean }>(
     `SELECT a.bytes, a.mime, a.asset_id = $4 AS is_view, g.status = 'COMPLETED' AS final
        FROM generation_assets a
