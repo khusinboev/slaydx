@@ -230,6 +230,39 @@ test("fayl yo'q, lekin `filesPurgedAt` yo'q — eski umumiy matn", async () => {
   assert.ok(!document.querySelector("[data-files-purged]"));
 });
 
+test("FAILED: no dead end — «Yangi yaratish» opens the same tool's form, «Orqaga» goes back; no download actions (R5 P6/F8)", async () => {
+  stub((url, method) =>
+    method === "GET" ? json(200, { generation: gen({ status: "FAILED", error: "Xizmat vaqtincha javob bermadi", progress: 0 }) }) : json(404, {}),
+  );
+  mount();
+  const box = await waitFor(() => {
+    const b = document.querySelector("[data-failed-actions]");
+    assert.ok(b, "failed actions");
+    return b;
+  }, { timeout: 3000 });
+  const fresh = box.querySelector("[data-failed-new]") as HTMLAnchorElement;
+  assert.equal(fresh.getAttribute("href"), "/uz/referat");
+  assert.match(fresh.textContent ?? "", /Yangi yaratish/);
+  const back = box.querySelector("[data-failed-back]") as HTMLAnchorElement;
+  assert.ok(back, "«Orqaga»");
+  assert.match(back.textContent ?? "", /Orqaga/);
+  assert.ok(!document.querySelector("[data-download-button]"), "no download on a failed result");
+  assert.match(document.body.textContent ?? "", /Xizmat vaqtincha javob bermadi/);
+});
+
+test("COMPLETED header: one «Yuklab olish», the title clamps to 2 lines on phones, delete is not a header button", async () => {
+  stub((url, method) => (method === "GET" ? json(200, { generation: gen({ status: "COMPLETED", hasFile: true, progress: 100, step: "Tayyor" }) }) : json(404, {})));
+  mount();
+  await waitFor(() => assert.ok(document.querySelector("[data-download-button]")), { timeout: 3000 });
+  assert.equal(document.querySelectorAll("[data-download-button]").length, 1);
+  const title = document.querySelector("[data-result-title]")!;
+  assert.ok(title.className.split(/\s+/).includes("line-clamp-2"), "2-line title on phones");
+  assert.ok(!title.className.split(/\s+/).includes("truncate"), "not cut to one line");
+  const buttons = [...document.querySelectorAll("[data-result-nav] button")].map((b) => b.textContent ?? "");
+  assert.ok(!buttons.some((t) => /O’chirish/.test(t)), "delete lives in «⋯»");
+  assert.ok(document.querySelector('[data-more-button][aria-label="Boshqa amallar"]'));
+});
+
 // ─────────────────────────── 402 unpaid (W1-E follow-up)
 
 const META = { topic: "Sun’iy intellekt", author: "K", workLabel: "Maqola", language: "uz", toolId: "article" } as unknown as DocMeta;
