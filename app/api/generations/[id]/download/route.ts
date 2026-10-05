@@ -1,7 +1,7 @@
 import { handler, json, limit, readJson, requireUser } from "@/lib/server/api";
 import { isDownloadFormatId } from "@/lib/downloads/formats";
 import { DownloadError, downloadErrorResponse } from "@/lib/server/downloads/errors";
-import { prepareDownload } from "@/lib/server/downloads/produce";
+import { PREPARE_POLL_LIMIT, prepareDownload } from "@/lib/server/downloads/produce";
 import { downloadUrl, signDownloadToken } from "@/lib/server/downloads/token";
 
 export const runtime = "nodejs";
@@ -10,10 +10,6 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 type Ctx = { params: Promise<{ id: string }> };
-
-/** Prepare calls per user (the client polls every 1.5 s while a file converts). */
-const PREPARE_LIMIT = 300;
-const PREPARE_WINDOW_SEC = 600;
 
 /**
  * `POST /api/generations/{id}/download {format}` (docs/mobile/PLAN.md §4.2).
@@ -32,7 +28,7 @@ export const POST = handler("generations/download", async (req, ctx: Ctx) => {
   const body = await readJson<{ format?: unknown }>(req, 4096);
   try {
     if (!isDownloadFormatId(body.format)) throw new DownloadError("unknown_format");
-    await limit(`dlprep:${user.id}`, PREPARE_LIMIT, PREPARE_WINDOW_SEC);
+    await limit(`dlprep:${user.id}`, PREPARE_POLL_LIMIT.count, PREPARE_POLL_LIMIT.windowSec);
     const r = await prepareDownload(id, String(user.id), body.format);
     if (r.state === "preparing") return json({ state: "preparing", retryAfterMs: r.retryAfterMs });
     const { token, expiresAt } = signDownloadToken({ g: id, u: String(user.id), f: body.format, v: r.fileVersion });

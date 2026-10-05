@@ -676,6 +676,12 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
   }
   const msg = update.message;
   if (!msg?.from) return;
+  // m2: the update was parsed as JSON numbers; an id above 2^53 is already rounded to a
+  // DIFFERENT id (it could match another user's `telegram_id`). Never act on it.
+  if (!Number.isSafeInteger(msg.from.id) || !Number.isSafeInteger(msg.chat.id)) {
+    console.warn(`[telegram] update ${update.update_id}: unsafe integer id ignored`);
+    return;
+  }
 
   if (msg.contact) {
     const forwarded = msg.forward_origin != null || msg.forward_date != null || msg.forward_from != null;

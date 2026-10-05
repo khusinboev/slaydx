@@ -19,7 +19,8 @@ export type DownloadErrorCode =
   | "busy"
   | "rate_limited"
   | "stale"
-  | "expired";
+  | "expired"
+  | "too_large";
 
 const MESSAGES: Record<DownloadErrorCode, string> = {
   unknown_format: "Noma'lum fayl formati",
@@ -33,6 +34,7 @@ const MESSAGES: Record<DownloadErrorCode, string> = {
   rate_limited: "Juda ko'p so'rov — birozdan keyin qayta urinib ko'ring",
   stale: "Fayl yangilangan — qayta yuklab oling",
   expired: "Havola muddati tugagan — qayta yuklab oling",
+  too_large: "Fayl bu format uchun juda katta",
 };
 
 const STATUS: Record<DownloadErrorCode, number> = {
@@ -47,14 +49,19 @@ const STATUS: Record<DownloadErrorCode, number> = {
   rate_limited: 429,
   stale: 410,
   expired: 410,
+  too_large: 413,
 };
+
+/** `Retry-After` of a 503 that names no better value (e.g. `unavailable`). */
+export const DEFAULT_RETRY_AFTER_SEC = 30;
 
 export class DownloadError extends ApiError {
   readonly code: DownloadErrorCode;
   readonly retryAfterSec: number | null;
 
   constructor(code: DownloadErrorCode, opts: { retryAfterSec?: number; message?: string } = {}) {
-    const retryAfterSec = opts.retryAfterSec ?? null;
+    // Every 503 carries Retry-After (a client or proxy must not hammer a server that said "later").
+    const retryAfterSec = opts.retryAfterSec ?? (STATUS[code] === 503 ? DEFAULT_RETRY_AFTER_SEC : null);
     super(opts.message ?? MESSAGES[code], STATUS[code], {
       code,
       ...(retryAfterSec !== null ? { retryAfter: retryAfterSec } : {}),

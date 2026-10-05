@@ -1,4 +1,4 @@
-import { produceDownload } from "@/lib/server/downloads/produce";
+import { prepareDownload, produceDownload } from "@/lib/server/downloads/produce";
 import { telegramActionHandler } from "../action";
 
 export const runtime = "nodejs";
@@ -10,4 +10,4 @@ export const maxDuration = 120;
  * «Ulashish»: a prepared inline message for `Telegram.WebApp.shareMessage`
  * (docs/mobile/PLAN.md §4.4; shapes in `../action.ts`).
  */
-export const POST = telegramActionHandler("share", { produce: produceDownload });
+export const POST = telegramActionHandler("share", { produce: produceDownload, prepare: prepareDownload });
