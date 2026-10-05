@@ -464,6 +464,8 @@ case "$1" in
       $'ghcr.io/owner/slaydx-worker\\taaa000\\tsha256:wk0' \\
       $'other-app\\tlatest\\tsha256:other' \\
       $'other-app\\told\\tsha256:other0' \\
+      $'other-app\\told2\\tsha256:other1' \\
+      $'other-app\\told3\\tsha256:other2' \\
       $'postgres\\t16.15-alpine3.24\\tsha256:pg' \\
       $'<none>\\t<none>\\tsha256:dang' ;;
   image)
