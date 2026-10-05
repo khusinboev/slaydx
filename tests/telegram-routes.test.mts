@@ -223,6 +223,7 @@ test("Bot API 403 → 409 bot_unreachable with botUrl; 5xx → 503 telegram_unav
   const down = await post("save", reply({ ok: false, error_code: 502, description: "Bad Gateway" }), u.cookie, gen);
   assert.equal(down.status, 503);
   assert.equal(down.body.code, "telegram_unavailable");
+  assert.equal(down.headers.get("retry-after"), "30", "every 503 carries Retry-After");
 
   await post("save", harness().deps, u.cookie, gen); // cache the file
   const refused = await post("share", reply({ ok: false, error_code: 400, description: "Bad Request: BOT_INLINE_DISABLED" }), u.cookie, gen);
@@ -243,6 +244,7 @@ test("producer errors keep their own status and code (e.g. PDF converter busy �
   const r = await post("save", deps, u.cookie, gen, { format: "native" });
   assert.equal(r.status, 503);
   assert.equal(r.body.code, "busy");
+  assert.equal(r.headers.get("retry-after"), "5", "the producer's Retry-After reaches the client");
 });
 
 test(`per-user rate limit: save ${TELEGRAM_LIMITS.save.count}/h, then 429 with Retry-After`, { skip }, async () => {

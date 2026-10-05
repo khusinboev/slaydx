@@ -1,21 +1,21 @@
 import "server-only";
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import JSZip from "jszip";
-import { csvCell, csvHeadLine, csvRowLine } from "@/app/api/generations/[id]/results/route";
 import type { DownloadFormat, DownloadFormatId } from "@/lib/downloads/formats";
 import type { AcademicDoc } from "@/lib/generation/types";
 import type { GlossaryTerm } from "@/lib/generation/teacher/types";
 import { limit } from "../api";
+import { CSV_BOM, csvHeadLine, csvRecord, csvRowLine } from "../csv";
 import { env } from "../env";
 import { iterateAllResultRows, type GameResult } from "../game-sessions";
 import { pdfAvailable, pdfFileName, PDF_TIMEOUT_MS } from "../pdf";
 import { derivedSize, getOrConvertPdf, getOrDerive, type DerivedDiskCache, type PdfConverter } from "../pdf-cache";
 import { Gate } from "../soffice-gate";
+import { pdftoppmBin } from "../thumb";
 import { DownloadError } from "./errors";
 
 const run = promisify(execFile);
@@ -96,12 +96,6 @@ const PDF_LIMIT = 10;
 const RASTER_LIMIT = 10;
 const LIMIT_WINDOW_SEC = 600;
 
-export function pdftoppmBinary(): string | null {
-  const explicit = process.env.PDFTOPPM_BIN?.trim();
-  if (explicit) return existsSync(explicit) ? explicit : null;
-  return ["/usr/bin/pdftoppm", "/usr/local/bin/pdftoppm"].find((p) => existsSync(p)) ?? null;
-}
-
 type Globals = typeof globalThis & { __slaydxRasterGate?: Gate };
 const g = globalThis as Globals;
 
@@ -118,7 +112,7 @@ function rasterGate(): Gate {
 
 /** PDF → PNG per page with pdftoppm (page order kept). */
 export async function pdftoppmPages(pdf: Buffer, dpi: number): Promise<Buffer[] | null> {
-  const bin = pdftoppmBinary();
+  const bin = pdftoppmBin();
   if (!bin) return null;
   return rasterGate().run(async () => {
     const dir = await mkdtemp(join(tmpdir(), "slaydx-raster-"));
@@ -159,14 +153,6 @@ function pageName(i: number, total: number): string {
   return `slayd-${String(i + 1).padStart(Math.max(2, String(total).length), "0")}.png`;
 }
 
-const CRLF = "\r\n";
-/** UTF-8 BOM: Excel opens CSV as UTF-8 only with it (Uzbek names otherwise break). */
-const BOM = "﻿";
-
-function csvLine(cells: unknown[]): string {
-  return cells.map(csvCell).join(",") + CRLF;
-}
-
 /** Glossary terms: the teacher model (AUDIT-20); older documents — `h3` term + following `p` definition. */
 export function glossaryTerms(doc: AcademicDoc | null): GlossaryTerm[] {
   const model = doc?.teacher?.glossary?.terms;
@@ -197,7 +183,7 @@ export function glossaryCsv(terms: readonly GlossaryTerm[]): string {
     ...(hasRu ? [t.ru ?? ""] : []),
     ...(hasEn ? [t.en ?? ""] : []),
   ]);
-  return BOM + csvLine(head) + rows.map(csvLine).join("");
+  return CSV_BOM + csvRecord(head) + rows.map(csvRecord).join("");
 }
 
 /**
@@ -224,7 +210,7 @@ export function transcriptText(doc: AcademicDoc | null): string {
 }
 
 async function resultsCsv(rows: AsyncGenerator<GameResult>): Promise<string> {
-  let out = BOM + csvHeadLine();
+  let out = CSV_BOM + csvHeadLine();
   for await (const r of rows) out += csvRowLine(r);
   return out;
 }
@@ -356,5 +342,5 @@ export function producerAvailable(id: DownloadFormatId, deps: ProduceDeps): bool
   if (id !== "pdf" && id !== "slides-png") return true;
   const pdf = (deps.pdfAvailable ?? pdfAvailable)();
   if (id === "pdf") return pdf;
-  return pdf && (deps.rasterAvailable ?? (() => pdftoppmBinary() !== null))();
+  return pdf && (deps.rasterAvailable ?? (() => pdftoppmBin() !== null))();
 }

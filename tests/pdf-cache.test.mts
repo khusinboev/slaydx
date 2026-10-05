@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
- * C07: o'girilgan PDF keshi (disk, LRU, hajm chegarasi) va `?format=pdf`
- * javobi. Konvertor soxta — LibreOffice ishlatilmaydi, baza ham yo'q
+ * C07: o'girilgan PDF keshi (disk, LRU, hajm chegarasi). `?format=pdf`
+ * javobi endi `produceDownload` orqali (`download-routes.test.mts`). Konvertor soxta — LibreOffice ishlatilmaydi, baza ham yo'q
  * (per-user 429 — `pdf-limits-db.test.mts`).
  */
 
@@ -14,11 +14,9 @@ process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://unused/unused";
 
 const { PdfDiskCache, getOrConvertPdf, pdfCacheKey } = await import("../lib/server/pdf-cache.ts");
-const { pdfResponse } = await import("../lib/server/pdf-serve.ts");
 const { SofficeBusyError } = await import("../lib/server/soffice-gate.ts");
 
 const GEN = "a1b2c3d4-0000-4000-8000-0000000000c7";
-const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 async function freshCache(t: TestContext, maxBytes = 1024 * 1024, maxAgeMs = 60_000) {
   const dir = await mkdtemp(join(tmpdir(), "slaydx-pdfc-test-"));
@@ -119,52 +117,19 @@ test("kesh: muddati o'tgan yozuv va yarim yozilgan .tmp tashlanadi", async (t) =
   assert.deepEqual(files.filter((f) => f.endsWith(".tmp")), []);
 });
 
-test("pdfResponse: keshda bo'lsa soffice chaqirilmaydi; sarlavhalar to'g'ri", async (t) => {
-  const { cache } = await freshCache(t);
-  const { calls, convert } = countingConverter();
-  const file = { bytes: Buffer.from([1, 1, 1]), fileName: "Referat.docx", mime: DOCX_MIME };
-  const deps = { available: () => true, convert, cache, limitFn: async () => {} };
-  const r1 = await pdfResponse({ userId: "u1", generationId: GEN, file, inline: true }, deps);
-  const r2 = await pdfResponse({ userId: "u1", generationId: GEN, file, inline: false }, deps);
-  assert.equal(calls.length, 1);
-  assert.equal(r1.status, 200);
-  assert.equal(r1.headers.get("content-type"), "application/pdf");
-  assert.match(r1.headers.get("content-disposition") ?? "", /^inline; filename="Referat\.pdf"/);
-  assert.match(r2.headers.get("content-disposition") ?? "", /^attachment;/);
-  assert.equal((await r2.arrayBuffer()).byteLength, Number(r2.headers.get("content-length")));
-});
-
-test("pdfResponse: hamma slot band — 503 + Retry-After + o'zbekcha xato; limit SARFLANMAYDI (R2)", async (t) => {
+test("kesh: hamma slot band — SofficeBusyError chaqiruvchiga o'tadi, limit SARFLANMAYDI (R2), hech narsa keshlanmaydi", async (t) => {
   const { cache } = await freshCache(t);
   // Haqiqiy `toPdf` kabi: slot olinmadi → `beforeRun` hech qachon chaqirilmaydi.
   const convert = async () => {
     throw new SofficeBusyError(15);
   };
   let charged = 0;
-  const file = { bytes: Buffer.from([2, 2, 2]), fileName: "a.docx", mime: DOCX_MIME };
-  const res = await pdfResponse(
-    { userId: "u1", generationId: GEN, file, inline: false },
-    { available: () => true, convert, cache, limitFn: async () => void (charged += 1) },
+  const bytes = new Uint8Array([2, 2, 2]);
+  await assert.rejects(
+    getOrConvertPdf({ generationId: GEN, bytes, fileName: "a.docx", convert, cache, beforeConvert: async () => void (charged += 1) }),
+    (e: unknown) => e instanceof SofficeBusyError && e.retryAfterSec === 15,
   );
   assert.equal(charged, 0, "503 (Retry-After) ga amal qilgan foydalanuvchi kvotasi yonmasligi kerak");
-  assert.equal(res.status, 503);
-  assert.equal(res.headers.get("retry-after"), "15");
-  const body = (await res.json()) as { error: string; code: string; retryAfterSec: number };
-  assert.equal(body.code, "pdf_busy");
-  assert.equal(body.retryAfterSec, 15);
-  assert.match(body.error, /band/);
+  assert.equal(await cache.get(pdfCacheKey(GEN, bytes)), null);
 });
 
-test("pdfResponse: o'giriladigan tur emas — 400, limit sarflanmaydi", async (t) => {
-  const { cache } = await freshCache(t);
-  let charged = 0;
-  const file = { bytes: Buffer.from([3]), fileName: "a.zip", mime: "application/zip" };
-  await assert.rejects(
-    pdfResponse(
-      { userId: "u1", generationId: GEN, file, inline: false },
-      { available: () => true, convert: countingConverter().convert, cache, limitFn: async () => void (charged += 1) },
-    ),
-    (e: unknown) => (e as { status?: number }).status === 400,
-  );
-  assert.equal(charged, 0);
-});

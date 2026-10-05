@@ -302,6 +302,8 @@ test("producers (Postgres)", { skip: hasDb ? false : "DATABASE_URL yo'q" }, asyn
     // LibreOffice / pdftoppm missing → 503, not "unsupported".
     assert.equal(await code(produceWith(fixtures.slide, user, "pdf", { ensureFresh: false }, { ...deps, pdfAvailable: () => false })), "unavailable:503");
     assert.equal(await code(produceWith(fixtures.slide, user, "slides-png", { ensureFresh: false }, { ...deps, rasterAvailable: () => false })), "unavailable:503");
+    const unavailable = await produceWith(fixtures.slide, user, "pdf", { ensureFresh: false }, { ...deps, pdfAvailable: () => false }).catch((e: unknown) => e);
+    assert.ok(isDownloadError(unavailable) && unavailable.retryAfterSec === 30, "every 503 carries Retry-After");
 
     // Ownership in SQL: another user's id, a random id, a malformed id.
     assert.equal(await code(produceWith(fixtures.slide, other, "native", { ensureFresh: false }, deps)), "not_found:404");

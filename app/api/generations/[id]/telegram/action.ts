@@ -7,7 +7,7 @@ import {
   isDownloadFormatId,
   type DownloadFormatId,
 } from "@/lib/downloads/formats";
-import { queryOne } from "@/lib/server/db";
+import { hasResults } from "@/lib/server/downloads/produce";
 import { getGeneration } from "@/lib/server/jobs";
 import { pdfAvailable } from "@/lib/server/pdf";
 import { botConfigured } from "@/lib/server/telegram";
@@ -81,17 +81,6 @@ async function readBody(req: Request): Promise<Record<string, unknown>> {
   return body as Record<string, unknown>;
 }
 
-async function gameHasResults(genId: string, userId: string): Promise<boolean> {
-  const r = await queryOne<{ ok: boolean }>(
-    `SELECT EXISTS (
-       SELECT 1 FROM game_results r
-         JOIN game_sessions s ON s.id = r.session_id
-        WHERE s.generation_id = $1 AND s.user_id = $2) AS ok`,
-    [genId, userId],
-  );
-  return r?.ok === true;
-}
-
 function toApiError(e: TelegramFileError): ApiError {
   const extra: Record<string, unknown> = { code: e.code };
   if (e.code === "bot_unreachable") extra.botUrl = botChatUrl();
@@ -125,7 +114,7 @@ export function telegramActionHandler(action: TelegramAction, deps: TelegramFile
         throw new ApiError("Noma'lum fayl formati", 400, { code: "unknown_format" });
       }
       const subject = downloadSubject(gen, {
-        hasResults: body.format === "results-csv" ? await gameHasResults(id, user.id) : undefined,
+        hasResults: body.format === "results-csv" ? await hasResults(id, user.id) : undefined,
       });
       const row = formatById(subject, { pdf: pdfAvailable() }, body.format);
       if (!row) throw new ApiError("Bu format ushbu natija uchun mavjud emas", 400, { code: "unsupported" });
@@ -133,7 +122,7 @@ export function telegramActionHandler(action: TelegramAction, deps: TelegramFile
     }
 
     if (!botConfigured()) {
-      throw new ApiError("Telegram hozir javob bermayapti. Birozdan keyin qayta urinib ko'ring.", 503, { code: "telegram_unavailable" });
+      throw new ApiError("Telegram hozir javob bermayapti. Birozdan keyin qayta urinib ko'ring.", 503, { code: "telegram_unavailable", retryAfter: 30 });
     }
 
     const botUrl = botChatUrl();

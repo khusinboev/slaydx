@@ -1,4 +1,5 @@
 import { ApiError, handler, json, requireUser } from "@/lib/server/api";
+import { CSV_BOM, csvHeadLine, csvRecord, csvRowLine } from "@/lib/server/csv";
 import { iterateAllResultRows, listResults, type GameResult } from "@/lib/server/game-sessions";
 import { scorePercent } from "@/lib/game/score";
 import { parseIsoInstant } from "@/lib/server/validate";
@@ -10,57 +11,12 @@ type Ctx = { params: Promise<{ id: string }> };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/**
- * CSV maydonini qochirish.
- *
- * `=`, `+`, `-`, `@` bilan boshlanadigan qiymat Excel/Sheets da
- * FORMULA bo'lib ishga tushadi (CSV injection): o'quvchi ismini
- * `=HYPERLINK(...)` deb yozsa, o'qituvchi faylni ochganda uni
- * bosardi. Shuning uchun bunday qiymat oldiga apostrof qo'yiladi.
- */
-export function csvCell(v: unknown): string {
-  const s = String(v ?? "").replace(/\r?\n/g, " ");
-  const safe = /^[=+\-@\t]/.test(s) ? `'${s}` : s;
-  return `"${safe.replace(/"/g, '""')}"`;
-}
-
-const CSV_HEAD = ["Ism", "Ball", "Jami", "Foiz", "Soniya", "Sana"];
-const csvLine = (cells: unknown[]): string => cells.map(csvCell).join(",");
-
-/** Sarlavha qatori — CRLF bilan (CSV standarti, Excel talab qiladi). */
-export function csvHeadLine(): string {
-  return `${csvLine(CSV_HEAD)}\r\n`;
-}
-
-/** Toshkent: UTC+5, yozgi vaqt yo'q (`spend.ts` `TASHKENT_UTC_OFFSET_SEC` bilan bir qiymat). */
-const TASHKENT_OFFSET_MS = 5 * 3600 * 1000;
-
-/**
- * UTC instant → `YYYY-MM-DD HH:mm` Toshkent vaqtida (BEA-14).
- *
- * Server UTC da ishlaydi; ilgari CSV da `2026-09-23T04:12:00.000Z` turardi —
- * o'qituvchi uchun 5 soat orqada va Excel uni matn deb o'qirdi. Bu shakl
- * Excel/Sheets da sana-vaqt katagi bo'lib ochiladi. Siljish qat'iy (+5 soat):
- * `Intl` ning vaqt mintaqasi bazasiga (konteyner ICU) bog'lanmaydi.
- * Yaroqsiz qiymat o'zgarmasdan qaytadi — eksport bitta qator uchun yiqilmaydi.
- */
-export function tashkentDateTime(iso: string): string {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return iso;
-  return new Date(t + TASHKENT_OFFSET_MS).toISOString().slice(0, 16).replace("T", " ");
-}
-
-/** Bitta natija qatori — `resultsCsv` ham, oqim eksporti ham shundan foydalanadi. */
-export function csvRowLine(r: GameResult): string {
-  return `${csvLine([r.playerName, r.score, r.total, scorePercent(r), r.seconds, tashkentDateTime(r.createdAt)])}\r\n`;
-}
-
 export function resultsCsv(rows: GameResult[]): string {
   /*
    * BOM (`﻿`) — Excel CSV ni UTF-8 deb tanishi uchun: usiz
    * o'zbekcha ismlar («Zulfiya») krakozyabra bo'lib ochilardi.
    */
-  return `﻿${csvHeadLine()}${rows.map(csvRowLine).join("")}`;
+  return `${CSV_BOM}${csvHeadLine()}${rows.map(csvRowLine).join("")}`;
 }
 
 /**
@@ -72,7 +28,7 @@ export function resultsCsv(rows: GameResult[]): string {
  * ochsa ham, oxiri KESILGAN emas, ANIQ XABARLI ekanini ko'radi.
  */
 export function csvErrorMarkerLine(): string {
-  return csvLine(["#XATOLIK: eksport oqim o'rtasida uzildi — qayta urinib ko'ring yoki o'qituvchi qo'llab-quvvatlashga murojaat qiling", "", "", "", "", ""]) + "\r\n";
+  return csvRecord(["#XATOLIK: eksport oqim o'rtasida uzildi — qayta urinib ko'ring yoki o'qituvchi qo'llab-quvvatlashga murojaat qiling", "", "", "", "", ""]);
 }
 
 /**
@@ -112,7 +68,7 @@ export function csvStream(rows: AsyncGenerator<GameResult>, onError: (e: unknown
     async pull(controller) {
       try {
         if (!headSent) {
-          controller.enqueue(encoder.encode(`﻿${csvHeadLine()}`));
+          controller.enqueue(encoder.encode(`${CSV_BOM}${csvHeadLine()}`));
           headSent = true;
         }
         const { value, done } = await rows.next();

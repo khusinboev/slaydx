@@ -221,7 +221,7 @@ export function handler<A extends unknown[]>(
       } catch (e) {
         if (e instanceof ApiError) {
           const headers: Record<string, string> = {};
-          if (e.status === 429 && typeof e.extra.retryAfter === "number") {
+          if ((e.status === 429 || e.status === 503) && typeof e.extra.retryAfter === "number") {
             headers["Retry-After"] = String(e.extra.retryAfter);
           }
           res = NextResponse.json({ error: e.message, ...e.extra }, { status: e.status, headers });

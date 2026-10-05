@@ -49,12 +49,16 @@ const STATUS: Record<DownloadErrorCode, number> = {
   expired: 410,
 };
 
+/** `Retry-After` of a 503 that names no better value (e.g. `unavailable`). */
+export const DEFAULT_RETRY_AFTER_SEC = 30;
+
 export class DownloadError extends ApiError {
   readonly code: DownloadErrorCode;
   readonly retryAfterSec: number | null;
 
   constructor(code: DownloadErrorCode, opts: { retryAfterSec?: number; message?: string } = {}) {
-    const retryAfterSec = opts.retryAfterSec ?? null;
+    // Every 503 carries Retry-After (a client or proxy must not hammer a server that said "later").
+    const retryAfterSec = opts.retryAfterSec ?? (STATUS[code] === 503 ? DEFAULT_RETRY_AFTER_SEC : null);
     super(opts.message ?? MESSAGES[code], STATUS[code], {
       code,
       ...(retryAfterSec !== null ? { retryAfter: retryAfterSec } : {}),

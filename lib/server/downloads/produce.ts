@@ -133,7 +133,12 @@ async function loadBytes(generationId: string, userId: string, fileVersion: numb
   return r?.bytes ?? null;
 }
 
-async function hasResults(generationId: string, userId: string): Promise<boolean> {
+/**
+ * Whether the owner's game has any player result (the registry offers
+ * `results-csv` only then). Ownership in SQL (`s.user_id`). The one query the
+ * download routes and the Telegram save/share action share.
+ */
+export async function hasResults(generationId: string, userId: string): Promise<boolean> {
   const r = await queryOne<{ ok: boolean }>(
     `SELECT EXISTS (
        SELECT 1 FROM game_results r
