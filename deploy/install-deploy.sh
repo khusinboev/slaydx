@@ -24,13 +24,18 @@ echo "installed: $BIN_DIR/slaydx-deploy, $BIN_DIR/slaydx-deploy-build"
 
 # The CLI looks for plugins (compose) under $DOCKER_CONFIG/cli-plugins too. If compose was
 # installed per-user (~/.docker/cli-plugins) it disappears once DOCKER_CONFIG is redirected —
-# link it so `docker compose` keeps working inside slaydx-deploy.
+# COPY it (root-owned source only — root must never execute a user-writable binary, e.g. under
+# `sudo` with a preserved HOME) so `docker compose` keeps working inside slaydx-deploy.
 if ! DOCKER_CONFIG=$DOCKER_CONFIG_DIR docker compose version >/dev/null 2>&1; then
   user_plugin="$HOME/.docker/cli-plugins/docker-compose"
   if [ -x "$user_plugin" ]; then
+    if [ "$(stat -L -c %u "$user_plugin")" != 0 ]; then
+      echo "ERROR: $user_plugin is not owned by root — refusing to copy it into $DOCKER_CONFIG_DIR" >&2
+      exit 1
+    fi
     install -d -m 0700 "$DOCKER_CONFIG_DIR/cli-plugins"
-    ln -sfn "$user_plugin" "$DOCKER_CONFIG_DIR/cli-plugins/docker-compose"
-    echo "linked $user_plugin into $DOCKER_CONFIG_DIR/cli-plugins"
+    install -m 0755 "$user_plugin" "$DOCKER_CONFIG_DIR/cli-plugins/docker-compose"
+    echo "copied $user_plugin into $DOCKER_CONFIG_DIR/cli-plugins"
   fi
   DOCKER_CONFIG=$DOCKER_CONFIG_DIR docker compose version >/dev/null 2>&1 \
     || { echo "ERROR: 'docker compose' does not work with DOCKER_CONFIG=$DOCKER_CONFIG_DIR" >&2; exit 1; }

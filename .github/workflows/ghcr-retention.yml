@@ -4,15 +4,19 @@
 # images would exceed it quickly — this keeps the registry bounded. A package VERSION is one digest; after `promote`
 # the same version carries `build-<sha>`, `<sha>` and possibly `main`.
 #
-# Policy (per package), a version is KEPT when any of these holds — everything else is deleted:
-#   1. it carries the `main` tag (never deleted);
-#   2. it is among the newest KEEP_BUILDS versions carrying a `build-*` tag (covers recent rollback targets even if
-#      they are older than MAX_AGE_DAYS, and the in-flight candidate of a running CI);
-#   3. it carries a promoted `<sha>` tag (40 hex) and is at most MAX_AGE_DAYS old;
-#   4. it is untagged and at most MAX_AGE_DAYS old (a re-run that moved a tag; kept for a while for safety).
-# So: failed/untested `build-<sha>` candidates beyond the newest KEEP_BUILDS go; deployable `<sha>` versions live
-# 30 days (or longer while among the newest builds). A deleted version can still be rolled back to on the server
-# (deploy keeps the previous images locally) — it just can no longer be pulled again.
+# GitHub cannot know which sha production runs (deploys are manual), so the policy keeps every plausible deployed or
+# rollback version generously. Per package, a version is KEPT when any of these holds — everything else is deleted:
+#   1. it carries the `main` tag, or a `keep-*` tag (manual pin, e.g. `keep-prod`; never deleted);
+#   2. it is among the newest KEEP_PROMOTED (>= 10) versions carrying a promoted `<sha>` tag (40 hex), REGARDLESS of
+#      age — an owner who stays on one deploy while CI keeps pushing `main` still has it and older rollback targets;
+#   3. its digest equals the digest of a version kept by 1 or 2;
+#   4. it is among the newest KEEP_BUILDS versions carrying a `build-*` tag (incl. the in-flight CI candidate);
+#   5. it carries a promoted `<sha>` tag and is at most PROMOTED_MAX_AGE_DAYS (90) old;
+#   6. it is untagged and at most UNTAGGED_MAX_AGE_DAYS (30) old (a re-run that moved a tag).
+# So a deployable `<sha>` is deleted only when it is > 90 days old AND at least KEEP_PROMOTED newer promoted versions
+# exist AND it is not among the newest KEEP_BUILDS builds. To pin a deploy forever:
+#   docker buildx imagetools create -t ghcr.io/khusinboev/slaydx-web:keep-prod ghcr.io/khusinboev/slaydx-web:<sha>
+# (same for slaydx-worker). Images on the server are unaffected by registry deletion; only re-pulling needs the version.
 #
 # Dry run by default: scheduled runs only REPORT until the owner sets the repository variable
 # GHCR_RETENTION_APPLY=true (Settings → Secrets and variables → Actions → Variables); a manual run deletes only with
@@ -56,21 +60,31 @@ jobs:
       OWNER: ${{ github.repository_owner }}
       PACKAGE: ${{ matrix.package }}
       APPLY: ${{ (github.event_name == 'workflow_dispatch' && inputs.apply) || (github.event_name == 'schedule' && vars.GHCR_RETENTION_APPLY == 'true') }}
-      KEEP_BUILDS: ${{ inputs.keep_builds || 20 }}
-      MAX_AGE_DAYS: "30"
-      # Input: array of package versions (GitHub REST). Args: $now (epoch s), $keep (int), $maxAge (days).
-      # Output: [{id, name, created_at, tags, keep}] where keep is the reason string, or null = delete.
+      # format(): a dispatched 0 stays "0" (and is rejected below) instead of silently becoming the default.
+      KEEP_BUILDS: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.keep_builds) || '20' }}
+      KEEP_PROMOTED: "10"
+      PROMOTED_MAX_AGE_DAYS: "90"
+      UNTAGGED_MAX_AGE_DAYS: "30"
+      # Input: array of package versions (GitHub REST). Args: $now (epoch s), $keepBuilds, $keepPromoted (int),
+      # $promotedMaxAge, $untaggedMaxAge (days). Output: [{id, name, created_at, tags, keep}], keep = reason or null = delete.
       RETENTION_JQ: |
         def tags: (.metadata.container.tags // []);
+        def promoted: any(tags[]; test("^[0-9a-f]{40}$"));
+        def pinned: any(tags[]; . == "main" or startswith("keep-"));
         def age_days: ($now - (.created_at | sub("\\.[0-9]+"; "") | fromdateiso8601)) / 86400;
-        (map(select(any(tags[]; startswith("build-")))) | sort_by(.created_at) | reverse | .[:$keep] | map(.id))
-          as $recent
+        def newest($n): sort_by(.created_at) | reverse | .[:$n] | map(.id);
+        (map(select(any(tags[]; startswith("build-")))) | newest($keepBuilds)) as $recentBuilds
+        | (map(select(promoted)) | newest($keepPromoted)) as $recentPromoted
+        | ([.[] | select(pinned or (.id as $id | any($recentPromoted[]; . == $id))) | .name]) as $protectedDigests
         | map(
             . as $v
             | (if any(tags[]; . == "main") then "main tag"
-               elif any($recent[]; . == $v.id) then "newest \($keep) build-*"
-               elif any(tags[]; test("^[0-9a-f]{40}$")) and age_days <= $maxAge then "promoted sha, <= \($maxAge) days"
-               elif (tags | length) == 0 and age_days <= $maxAge then "untagged, <= \($maxAge) days"
+               elif any(tags[]; startswith("keep-")) then "keep-* tag"
+               elif any($recentPromoted[]; . == $v.id) then "newest \($keepPromoted) promoted"
+               elif any($protectedDigests[]; . == $v.name) then "same digest as a protected version"
+               elif any($recentBuilds[]; . == $v.id) then "newest \($keepBuilds) build-*"
+               elif promoted and age_days <= $promotedMaxAge then "promoted sha, <= \($promotedMaxAge) days"
+               elif (tags | length) == 0 and age_days <= $untaggedMaxAge then "untagged, <= \($untaggedMaxAge) days"
                else null end) as $reason
             | {id, name, created_at, tags: tags, keep: $reason}
           )
@@ -79,6 +93,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$KEEP_BUILDS" =~ ^[0-9]+$ ]] && [ "$KEEP_BUILDS" -ge 1 ] || { echo "::error::keep_builds must be >= 1"; exit 1; }
+          [[ "$KEEP_PROMOTED" =~ ^[0-9]+$ ]] && [ "$KEEP_PROMOTED" -ge 10 ] || { echo "::error::KEEP_PROMOTED must be >= 10"; exit 1; }
           base="users/$OWNER/packages/container/$PACKAGE"
           if ! gh api "$base" --silent 2>"$RUNNER_TEMP/err"; then
             if grep -q "404" "$RUNNER_TEMP/err"; then
@@ -88,7 +103,8 @@ jobs:
             cat "$RUNNER_TEMP/err"; exit 1
           fi
           gh api --paginate "$base/versions?per_page=100" | jq -s 'add // []' >"$RUNNER_TEMP/versions.json"
-          jq --argjson now "$(date +%s)" --argjson keep "$KEEP_BUILDS" --argjson maxAge "$MAX_AGE_DAYS" \
+          jq --argjson now "$(date +%s)" --argjson keepBuilds "$KEEP_BUILDS" --argjson keepPromoted "$KEEP_PROMOTED" \
+            --argjson promotedMaxAge "$PROMOTED_MAX_AGE_DAYS" --argjson untaggedMaxAge "$UNTAGGED_MAX_AGE_DAYS" \
             "$RETENTION_JQ" "$RUNNER_TEMP/versions.json" >"$RUNNER_TEMP/plan.json"
 
           total=$(jq 'length' "$RUNNER_TEMP/plan.json")

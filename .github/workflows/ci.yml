@@ -40,7 +40,8 @@ env:
   REGISTRY: ghcr.io/khusinboev
   # Bake definition shared by `images` and `images-check` (written to $RUNNER_TEMP; HCL `${VAR}` is not a GitHub
   # expression). `web` = Dockerfile target `runner`. Separate gha cache scopes per target; each target reads both.
-  # Labels: `source` links the package to the repo; `revision` is checked by deploy/deploy-pull.sh after the pull.
+  # Labels: `source` links the package to the repo; `revision` = the commit sha. `images` verifies the pushed images
+  # carry it; deploy/deploy-pull.sh should compare it with the requested sha after the pull (tags are mutable).
   SLAYDX_BAKE_HCL: |
     variable "REGISTRY" { default = "ghcr.io/khusinboev" }
     variable "GIT_SHA" { default = "unknown" }
@@ -261,6 +262,15 @@ jobs:
             echo "$t=$d" >>"$GITHUB_OUTPUT"
             echo "$t: \`$d\`"
           done
+      # Fail if a pushed image lacks the revision label (the deploy script's integrity check relies on it).
+      - name: Verify revision labels
+        run: |
+          set -euo pipefail
+          for s in web worker; do
+            rev=$(docker buildx imagetools inspect "$REGISTRY/slaydx-$s:build-$GITHUB_SHA" --format '{{json .Image}}' \
+              | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty')
+            [ "$rev" = "$GITHUB_SHA" ] || { echo "::error::slaydx-$s revision label is '$rev', expected $GITHUB_SHA"; exit 1; }
+          done
       - name: Image sizes -> summary
         continue-on-error: true
         run: |
@@ -353,6 +363,17 @@ jobs:
         run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
       # Re-tag by DIGEST (the exact bytes this run built and tested), no rebuild. `--prefer-index=false` makes
       # imagetools carbon-copy the single manifest, so `<sha>` has the same digest as `build-<sha>`.
+      # D1: packages must stay private. Fails before any tag moves if one was made public.
+      - name: Packages are private
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          for s in web worker; do
+            vis=$(gh api "users/$OWNER/packages/container/slaydx-$s" -q .visibility)
+            [ "$vis" = "private" ] || { echo "::error::package slaydx-$s is '$vis', must be private (owner decision D1)"; exit 1; }
+          done
       - name: Tag tested images as <sha>
         env:
           WEB_DIGEST: ${{ needs.images.outputs.web-digest }}

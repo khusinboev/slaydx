@@ -99,7 +99,10 @@ const panel = (gen: api.GenerationDetail) => h(AppRouterContext.Provider, { valu
 test("FE-13 (b): o'zgarishsiz polling tiki eskizlarni qayta chizmaydi", async () => {
   const lv = live(N - 1);
   const view = render(panel(detail(lv)));
-  await waitFor(() => assert.ok(document.querySelector("[data-live-strip]"), "jonli ko'ruvchi yuklandi"));
+  await waitFor(() => assert.ok(document.querySelector("[data-live-strip]"), "jonli ko'ruvchi yuklandi"), {
+    // The lazy slide viewer's first load can exceed the 1 s default on a busy laptop (passes in CI).
+    timeout: 10_000,
+  });
   await realTime(50);
 
   resetRenders();
@@ -113,7 +116,10 @@ test("FE-13 (b): o'zgarishsiz polling tiki eskizlarni qayta chizmaydi", async ()
 
 test("FE-13 (a): yozish animatsiyasi kadrlari faqat sahnani chizadi, eskiz panellarini emas", async (t) => {
   const view = render(panel(detail(live(N - 2))));
-  await waitFor(() => assert.ok(document.querySelector("[data-live-strip]"), "jonli ko'ruvchi yuklandi"));
+  await waitFor(() => assert.ok(document.querySelector("[data-live-strip]"), "jonli ko'ruvchi yuklandi"), {
+    // The lazy slide viewer's first load can exceed the 1 s default on a busy laptop (passes in CI).
+    timeout: 10_000,
+  });
   await realTime(50);
 
   let frames = 0;
