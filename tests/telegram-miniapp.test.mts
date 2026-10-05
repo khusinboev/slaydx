@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
  * Telegram-injected environment plus exactly one launch-data entry does.
  */
 
-const { telegramWebviewSignal, hasLaunchData, isTelegramWebApp, shouldAutoLogin, TELEGRAM_WEB_APP_SCRIPT } =
+const { telegramWebviewSignal, hasLaunchData, isTelegramWebApp, miniAppLoginAction, signedInitDataUserId, TELEGRAM_WEB_APP_SCRIPT } =
   await import("../lib/telegram-miniapp.ts");
 type LaunchEnv = import("../lib/telegram-miniapp.ts").LaunchEnv;
 
@@ -72,14 +72,46 @@ test("launch data must be present exactly once and non-empty", () => {
   assert.equal(hasLaunchData(`${HASH}&tgWebAppData=${encodeURIComponent(INIT)}`), false, "pre-filled duplicate refused");
 });
 
-test("shouldAutoLogin: only a ready webview, no session of anyone, one attempt", () => {
-  const base = { webAppReady: true, initData: INIT, sessionChecked: true, loggedIn: false, attempted: false };
-  assert.equal(shouldAutoLogin(base), true);
-  assert.equal(shouldAutoLogin({ ...base, webAppReady: false }), false, "plain browser: script never loaded");
-  assert.equal(shouldAutoLogin({ ...base, loggedIn: true }), false, "already signed in (same or other user)");
-  assert.equal(shouldAutoLogin({ ...base, sessionChecked: false }), false, "session not known yet");
-  assert.equal(shouldAutoLogin({ ...base, attempted: true }), false, "no second attempt (e.g. after sign-out)");
-  assert.equal(shouldAutoLogin({ ...base, initData: "" }), false);
+test("miniAppLoginAction: decision table (login / switch / none), one attempt per Mini App user id", () => {
+  const base = {
+    webAppReady: true,
+    initData: INIT,
+    sessionChecked: true,
+    loggedIn: false,
+    sessionTelegramId: null as string | null | undefined,
+    attemptedFor: null as string | null,
+  };
+  // No session → silent login (was `shouldAutoLogin` true).
+  assert.equal(miniAppLoginAction(base), "login");
+  assert.equal(miniAppLoginAction({ ...base, webAppReady: false }), "none", "plain browser / non-genuine: script never loaded");
+  assert.equal(miniAppLoginAction({ ...base, sessionChecked: false }), "none", "session not known yet");
+  assert.equal(miniAppLoginAction({ ...base, attemptedFor: "42" }), "none", "no second attempt for this id (e.g. after sign-out)");
+  assert.equal(miniAppLoginAction({ ...base, initData: "" }), "none");
+  assert.equal(miniAppLoginAction({ ...base, initData: "user=%7B%22id%22%3A42%7D&auth_date=1" }), "none", "unsigned launch data");
+  assert.equal(miniAppLoginAction({ ...base, initData: "auth_date=1&hash=abc" }), "none", "no user in launch data");
+  // Signed in.
+  const signedIn = { ...base, loggedIn: true };
+  assert.equal(miniAppLoginAction({ ...signedIn, sessionTelegramId: "42" }), "none", "same Telegram account");
+  assert.equal(miniAppLoginAction({ ...signedIn, sessionTelegramId: 42 as unknown as string }), "none", "ids compare as strings");
+  assert.equal(miniAppLoginAction({ ...signedIn, sessionTelegramId: "77" }), "switch", "another Telegram account on the same phone");
+  assert.equal(miniAppLoginAction({ ...signedIn, sessionTelegramId: "420" }), "switch", "no prefix match");
+  assert.equal(miniAppLoginAction({ ...signedIn, sessionTelegramId: "4" }), "switch", "no prefix match");
+  assert.equal(miniAppLoginAction({ ...signedIn, sessionTelegramId: null }), "none", "account without Telegram is never replaced");
+  assert.equal(miniAppLoginAction({ ...signedIn, sessionTelegramId: "77", attemptedFor: "42" }), "none", "one switch attempt per id");
+  assert.equal(miniAppLoginAction({ ...signedIn, sessionTelegramId: "77", webAppReady: false }), "none");
+  assert.equal(miniAppLoginAction({ ...signedIn, sessionTelegramId: "77", initData: "user=%7B%22id%22%3A42%7D" }), "none", "unsigned: no switch");
+});
+
+test("signedInitDataUserId: only signed data with a positive integer user id", () => {
+  assert.equal(signedInitDataUserId(INIT), "42");
+  assert.equal(signedInitDataUserId("user=%7B%22id%22%3A%227001%22%7D&hash=x"), "7001");
+  assert.equal(signedInitDataUserId("user=%7B%22id%22%3A42%7D"), null);
+  assert.equal(signedInitDataUserId("user=%7B%22id%22%3A0%7D&hash=x"), null);
+  assert.equal(signedInitDataUserId("user=%7B%22id%22%3A-5%7D&hash=x"), null);
+  assert.equal(signedInitDataUserId("user=%7B%22id%22%3A%2242abc%22%7D&hash=x"), null);
+  assert.equal(signedInitDataUserId("user=notjson&hash=x"), null);
+  assert.equal(signedInitDataUserId("user=null&hash=x"), null);
+  assert.equal(signedInitDataUserId(""), null);
 });
 
 test("the Telegram script URL lives only in the gated bridge and is never imported statically", () => {

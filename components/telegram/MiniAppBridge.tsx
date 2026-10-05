@@ -15,7 +15,8 @@ import {
   normalizeHexColor,
   safeAreaCssVars,
   setMiniAppShellState,
-  shouldAutoLogin,
+  miniAppLoginAction,
+  signedInitDataUserId,
   telegramBackState,
   telegramChromeColors,
   type SafeAreaInset,
@@ -80,9 +81,12 @@ function loadTelegramWebApp(win: TelegramWindow): Promise<TelegramWebApp | null>
  * calls `ready()`/`expand()` and, when nobody is signed in, logs in once with
  * `Telegram.WebApp.initData` (verified server-side by `/api/auth/telegram`).
  *
- * A session that already exists — even for a different Telegram user — is
- * kept as is: switching accounts stays an explicit action (sign out, then
- * «Telegram orqali kirish»). `initData` is read at call time and never stored.
+ * A session of the same Telegram user, or of an account without Telegram
+ * (phone login), is kept. A session of ANOTHER Telegram user is replaced
+ * (`miniAppLoginAction` → `switch`): two Telegram accounts on one phone share
+ * this webview's cookies, and account 2 must not see account 1's files. The
+ * server revokes only this browser's old session. `initData` is read at call
+ * time and never stored.
  *
  * Shell (docs/mobile/PLAN.md O6, O8): vertical swipes off, Telegram's header /
  * background / bottom bar in the app's page colour (follows light/dark),
@@ -142,9 +146,12 @@ function MiniAppSession() {
   const loggedIn = useAppStore((s) => s.loggedIn);
   const setUser = useAppStore((s) => s.setUser);
   const refreshGenerations = useAppStore((s) => s.refreshGenerations);
+  const signOut = useAppStore((s) => s.signOut);
+  const sessionTelegramId = useAppStore((s) => s.user?.telegramId ?? null);
   const [webAppReady, setWebAppReady] = useState(false);
   const [webApp, setWebApp] = useState<TelegramWebApp | null>(null);
-  const attempted = useRef(false);
+  /** The Mini App user id already tried in this page load (one attempt per id). */
+  const attemptedFor = useRef<string | null>(null);
 
   useEffect(() => {
     // Defence in depth: the script is injected only after the same detection.
@@ -168,23 +175,55 @@ function MiniAppSession() {
 
   useEffect(() => {
     const initData = (window as TelegramWindow).Telegram?.WebApp?.initData ?? "";
-    if (!shouldAutoLogin({ webAppReady, initData, sessionChecked, loggedIn, attempted: attempted.current })) return;
-    attempted.current = true;
+    const action = miniAppLoginAction({
+      webAppReady,
+      initData,
+      sessionChecked,
+      loggedIn,
+      sessionTelegramId,
+      attemptedFor: attemptedFor.current,
+    });
+    if (action === "none") return;
+    attemptedFor.current = signedInitDataUserId(initData);
+    if (action === "login") {
+      api
+        .loginWithTelegram({ initData })
+        .then(({ user }) => {
+          // Same follow-up as `LoginForm.finish` / `LoginModal.onDone`.
+          setUser(user);
+          void refreshGenerations();
+          const ui = useUi.getState();
+          const target = ui.overlay === "login" ? safeReturnTo(ui.returnTo) : null;
+          if (ui.overlay === "login") ui.close();
+          // The login modal's history entry is replaced by the target (back does not reopen it).
+          if (target) nav.navigateFromOverlay(target);
+          else router.refresh();
+        })
+        .catch((e) => console.warn("[miniapp] login:", e instanceof Error ? e.message : e));
+      return;
+    }
+    // Switch: this webview's session is another Telegram account. Until the
+    // server answers, the old user stays in the store, so «Saqlash» /
+    // «Ulashish» keep refusing via `isMiniAppUserMismatch`.
     api
       .loginWithTelegram({ initData })
       .then(({ user }) => {
-        // Same follow-up as `LoginForm.finish` / `LoginModal.onDone`.
-        setUser(user);
+        // Nothing of the previous account survives: its user, file list and
+        // any open overlay go; the home page is rendered again for the new one.
+        useAppStore.setState({ user, loggedIn: true, generations: [], generationsLoaded: false, generationsCursor: null });
         void refreshGenerations();
-        const ui = useUi.getState();
-        const target = ui.overlay === "login" ? safeReturnTo(ui.returnTo) : null;
-        if (ui.overlay === "login") ui.close();
-        // The login modal's history entry is replaced by the target (back does not reopen it).
-        if (target) nav.navigateFromOverlay(target);
-        else router.refresh();
+        useUi.getState().close();
+        router.replace("/uz");
+        router.refresh();
       })
-      .catch((e) => console.warn("[miniapp] login:", e instanceof Error ? e.message : e));
-  }, [webAppReady, sessionChecked, loggedIn, setUser, refreshGenerations, router, nav]);
+      .catch(async (e) => {
+        console.warn("[miniapp] account switch:", e instanceof Error ? e.message : e);
+        // Never keep showing the other account: sign this webview out and ask to log in.
+        await signOut().catch(() => {});
+        router.replace("/uz/login");
+        router.refresh();
+      });
+  }, [webAppReady, sessionChecked, loggedIn, sessionTelegramId, setUser, signOut, refreshGenerations, router, nav]);
 
   useTelegramBack(webApp);
   useTelegramChrome(webApp);

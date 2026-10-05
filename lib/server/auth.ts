@@ -22,6 +22,24 @@ export type TelegramProfile = {
   photoUrl: string | null;
 };
 
+/**
+ * Mini App sign-in over this browser's current session (verified initData):
+ *  - `create` — no session: a new one;
+ *  - `reuse` — the session already belongs to this Telegram account: keep it;
+ *  - `replace` — it belongs to another account (two Telegram accounts on one
+ *    phone share the webview cookies) or to one without Telegram: revoke this
+ *    session row only, then a new one. Ids compare as strings.
+ */
+export type MiniAppSessionAction = "create" | "reuse" | "replace";
+
+export function miniAppSessionAction(
+  current: { telegramId: string | null } | null,
+  telegramId: string,
+): MiniAppSessionAction {
+  if (!current) return "create";
+  return current.telegramId != null && String(current.telegramId) === String(telegramId) ? "reuse" : "replace";
+}
+
 /*
  * Data-check-string: every received field except `hash`. Mini App initData
  * from Bot API 8.0+ clients also carries `signature` (Ed25519, meant for

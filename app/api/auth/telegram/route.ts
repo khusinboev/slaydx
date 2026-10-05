@@ -1,7 +1,7 @@
 import { ApiError, checkOrigin, handler, json, limit, readJson } from "@/lib/server/api";
 import { ensureMigrated } from "@/lib/server/db";
-import { upsertTelegramUser, verifyLoginWidget, verifyMiniAppInitData } from "@/lib/server/auth";
-import { createSession, setSessionCookie } from "@/lib/server/session";
+import { miniAppSessionAction, upsertTelegramUser, verifyLoginWidget, verifyMiniAppInitData } from "@/lib/server/auth";
+import { createSession, currentSessionRef, revokeSessionById, setSessionCookie } from "@/lib/server/session";
 import { clientIp, rateLimit } from "@/lib/server/ratelimit";
 import { IP_LIMITS } from "@/lib/server/ip-limits";
 import { peekRate } from "@/lib/server/rate-peek";
@@ -83,7 +83,21 @@ export const POST = handler("auth/telegram", async (req) => {
   }
   await limit(`tg:uid:${profile.telegramId}`, tgPerAccount.count, tgPerAccount.windowSec);
 
+  /*
+   * Mini App on a phone with two Telegram accounts: both share the webview's
+   * cookies, so this browser may still carry account 1's session while
+   * account 2 signs in. Same account → keep that session (no churn); another
+   * account → revoke ONLY this cookie's session row (account 1's other
+   * devices stay signed in) before the new cookie replaces it. The Login
+   * Widget (browsers) keeps its old behaviour.
+   */
+  const viaMiniApp = typeof body.initData === "string" && body.initData !== "";
+  const current = viaMiniApp ? await currentSessionRef() : null;
+  const sessionAction = miniAppSessionAction(current?.user ?? null, profile.telegramId);
+
   const user = await upsertTelegramUser(profile);
+  if (viaMiniApp && sessionAction === "reuse") return json({ user });
+  if (viaMiniApp && sessionAction === "replace") await revokeSessionById(current!.sessionId);
   const { token, expiresAt } = await createSession(user.id, {
     userAgent: req.headers.get("user-agent"),
     ip,

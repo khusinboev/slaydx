@@ -264,6 +264,11 @@ export async function revokeCurrentSession(): Promise<void> {
   await query("UPDATE sessions SET revoked_at = now() WHERE token_hash = $1", [hashToken(token)]);
 }
 
+/** Revokes one `sessions` row (the caller's own, from `currentSessionRef`); other devices are untouched. */
+export async function revokeSessionById(sessionId: string): Promise<void> {
+  await query("UPDATE sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL", [sessionId]);
+}
+
 export async function revokeAllSessions(userId: string): Promise<void> {
   await query(
     "UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL",

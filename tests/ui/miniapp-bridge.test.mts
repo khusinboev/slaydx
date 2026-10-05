@@ -16,6 +16,7 @@ import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/a
 const { MiniAppBridge } = await import("../../components/telegram/MiniAppBridge.tsx");
 const { useAppStore } = await import("../../lib/store.ts");
 const { useUi } = await import("../../lib/ui.ts");
+const { isMiniAppUserMismatch } = await import("../../lib/telegram-webapp.ts");
 
 const SRC = "https://telegram.org/js/telegram-web-app.js";
 const INIT = "query_id=AAH1&user=%7B%22id%22%3A42%2C%22first_name%22%3A%22Ali%22%7D&auth_date=1790000000&hash=abc123";
@@ -34,8 +35,16 @@ const other = { ...user, id: "u2", telegramId: "77", name: "Boshqa" };
 let posts: string[] = [];
 let refreshed = 0;
 const pushed: string[] = [];
+const replaced: string[] = [];
+let logouts = 0;
+let loginStatus = 200;
+/** When set, `/api/auth/telegram` waits for it (the switch in flight). */
+let loginGate: Promise<void> | null = null;
+/** `/api/generations` answers 503 (the list cannot be re-fetched): the store must still drop the old list. */
+let listDown = false;
 const router: AppRouterInstance = {
-  back() {}, forward() {}, refresh() { refreshed++; }, push(href: string) { pushed.push(href); }, replace() {}, prefetch() {},
+  back() {}, forward() {}, refresh() { refreshed++; }, push(href: string) { pushed.push(href); },
+  replace(href: string) { replaced.push(href); }, prefetch() {},
 };
 const realFetch = globalThis.fetch;
 
@@ -43,6 +52,11 @@ function setup(opts: { webview: boolean; session: typeof user | null }) {
   posts = [];
   refreshed = 0;
   pushed.length = 0;
+  replaced.length = 0;
+  logouts = 0;
+  loginStatus = 200;
+  loginGate = null;
+  listDown = false;
   window.location.hash = HASH;
   if (opts.webview) win.TelegramWebviewProxy = { postEvent() {} };
   useAppStore.setState({ sessionChecked: true, loggedIn: Boolean(opts.session), user: opts.session as never });
@@ -50,8 +64,17 @@ function setup(opts: { webview: boolean; session: typeof user | null }) {
     const url = String(input);
     if (url === "/api/auth/telegram" && init?.method === "POST") {
       posts.push(String(init.body));
+      if (loginGate) await loginGate;
+      if (loginStatus !== 200) {
+        return new Response(JSON.stringify({ error: "Telegram imzosi tekshiruvdan o'tmadi" }), { status: loginStatus, headers: { "content-type": "application/json" } });
+      }
       return new Response(JSON.stringify({ user }), { status: 200, headers: { "content-type": "application/json" } });
     }
+    if (url.startsWith("/api/auth/session") && init?.method === "DELETE") {
+      logouts++;
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (listDown) return new Response(JSON.stringify({ error: "down" }), { status: 503, headers: { "content-type": "application/json" } });
     return new Response(JSON.stringify({ generations: [] }), { status: 200, headers: { "content-type": "application/json" } });
   };
 }
@@ -136,12 +159,58 @@ test("Telegram webview + the same user already signed in: no login call", async 
   assert.equal(posts.length, 0);
 });
 
-test("Telegram webview + a DIFFERENT user signed in: session kept, no login call", async () => {
+test("Telegram webview + a DIFFERENT Telegram user signed in: switches to the Mini App user, old state cleared, home rendered", async () => {
   setup({ webview: true, session: other });
+  useAppStore.setState({ generations: [{ id: "g-of-77" }] as never, generationsLoaded: true });
+  useUi.setState({ overlay: "notifications", returnTo: null });
+  let open!: () => void;
+  loginGate = new Promise((r) => (open = r));
+  listDown = true;
+  await mount();
+  await scriptLoads();
+  // In flight: the old account stays in the store, so «Saqlash»/«Ulashish» refuse (mismatch).
+  assert.equal(useAppStore.getState().user?.telegramId, "77");
+  assert.equal(isMiniAppUserMismatch(useAppStore.getState().user?.telegramId, "42"), true);
+  await act(async () => {
+    open();
+    await new Promise((r) => setTimeout(r, 20));
+  });
+  assert.equal(posts.length, 1, "one switch request");
+  assert.deepEqual(JSON.parse(posts[0]!), { initData: INIT });
+  assert.equal(useAppStore.getState().user?.telegramId, "42", "now the Mini App user");
+  assert.ok(!useAppStore.getState().generations.some((g) => g.id === "g-of-77"), "the other account's files are gone");
+  assert.equal(useUi.getState().overlay, null, "overlay of the other account closed");
+  assert.deepEqual(replaced, ["/uz"]);
+  assert.ok(refreshed >= 1, "server components re-rendered for the new user");
+  // No loop: the store now says 42, and the id was tried once.
+  await act(async () => {
+    useAppStore.setState({ user: other as never });
+    await new Promise((r) => setTimeout(r, 20));
+  });
+  assert.equal(posts.length, 1, "one attempt per Mini App user id per page load");
+});
+
+test("Telegram webview + a DIFFERENT user, switch refused (401): signed out and sent to login, never the other account", async () => {
+  setup({ webview: true, session: other });
+  loginStatus = 401;
+  await mount();
+  await scriptLoads();
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 30));
+  });
+  assert.equal(posts.length, 1);
+  assert.equal(logouts, 1, "this webview's session is ended");
+  assert.equal(useAppStore.getState().loggedIn, false);
+  assert.equal(useAppStore.getState().user, null);
+  assert.deepEqual(replaced, ["/uz/login"]);
+});
+
+test("Telegram webview + an account without Telegram (phone login) signed in: kept, no request", async () => {
+  setup({ webview: true, session: { ...other, telegramId: null } as never });
   await mount();
   await scriptLoads();
   assert.equal(posts.length, 0);
-  assert.equal(useAppStore.getState().user?.telegramId, "77");
+  assert.equal(useAppStore.getState().user?.id, "u2");
 });
 
 test("Telegram webview but the session check has not answered: waits, then logs in", async () => {

@@ -23,8 +23,11 @@
  * somebody pre-filled the fragment, and we refuse to guess which one
  * `telegram-web-app.js` would pick.
  *
- * Even then the bridge logs in only when there is NO session at all, so an
- * existing session (the same or a different user) is never replaced.
+ * Even then the bridge logs in when there is NO session, and replaces an
+ * existing session only when that session belongs to ANOTHER Telegram account
+ * (`miniAppLoginAction`): two Telegram accounts on one phone share the
+ * webview's cookie jar, and account 2 must never see account 1's files.
+ * A session without a Telegram account (phone login) is never replaced.
  */
 import { isRootPath } from "./nav/parents";
 
@@ -76,21 +79,60 @@ export function isTelegramWebApp(win: LaunchEnv): boolean {
   return telegramWebviewSignal(win) !== null && hasLaunchData(win.location.hash);
 }
 
-export type AutoLoginState = {
-  /** `isTelegramWebApp` held and `telegram-web-app.js` has loaded. */
+/**
+ * The Telegram user id inside SIGNED launch data (`user.id`, with a `hash`
+ * present), as a string; `null` for empty, unsigned or malformed data. Only a
+ * decision input — the server verifies the signature before anything happens.
+ */
+export function signedInitDataUserId(initData: string): string | null {
+  try {
+    if (!initData) return null;
+    const p = new URLSearchParams(initData);
+    if (!p.get("hash")) return null;
+    const raw = p.get("user");
+    if (!raw) return null;
+    const id = (JSON.parse(raw) as { id?: unknown } | null)?.id;
+    if (typeof id === "number" && Number.isSafeInteger(id) && id > 0) return String(id);
+    if (typeof id === "string" && /^[1-9]\d*$/.test(id)) return id;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export type MiniAppLoginState = {
+  /** The genuine-webview check held and `telegram-web-app.js` has loaded. */
   webAppReady: boolean;
   /** `Telegram.WebApp.initData` (read at call time, never stored). */
   initData: string;
   /** The server answered the session check (a transient error leaves it false). */
   sessionChecked: boolean;
   loggedIn: boolean;
-  /** One attempt per page load: no retry loop, no re-login after sign-out. */
-  attempted: boolean;
+  /** The session user's `telegramId` (`null`: an account without Telegram, e.g. phone login). */
+  sessionTelegramId: string | null | undefined;
+  /** The Mini App user id already tried in this page load: one attempt per id, no loop, no re-login after sign-out. */
+  attemptedFor: string | null;
 };
 
-/** Silent Mini App login only for a genuine webview with no session of any user. */
-export function shouldAutoLogin(s: AutoLoginState): boolean {
-  return s.webAppReady && s.initData.length > 0 && s.sessionChecked && !s.loggedIn && !s.attempted;
+/**
+ * What the bridge does with the launch data:
+ *  - `login` — no session: sign in silently;
+ *  - `switch` — the session is ANOTHER Telegram account (two accounts on one
+ *    phone share the webview cookies): sign in as the Mini App user, which
+ *    replaces this browser's session;
+ *  - `none` — not ready, unsigned data, same account, an account without
+ *    Telegram (never replaced automatically), or this id was already tried.
+ */
+export type MiniAppLoginAction = "none" | "login" | "switch";
+
+export function miniAppLoginAction(s: MiniAppLoginState): MiniAppLoginAction {
+  if (!s.webAppReady || !s.sessionChecked) return "none";
+  const id = signedInitDataUserId(s.initData);
+  if (id === null || s.attemptedFor === id) return "none";
+  if (!s.loggedIn) return "login";
+  const sessionId = s.sessionTelegramId == null ? "" : String(s.sessionTelegramId);
+  if (sessionId === "") return "none";
+  return sessionId === id ? "none" : "switch";
 }
 
 /**
