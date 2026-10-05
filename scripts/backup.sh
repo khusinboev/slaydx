@@ -21,9 +21,11 @@ started=$(date +%s)
 notify_failure() {
   local msg="$1"
   if [ -n "${BACKUP_TG_CHAT:-}" ] && [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
-    curl -s -m 10 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-      --data-urlencode "chat_id=${BACKUP_TG_CHAT}" \
-      --data-urlencode "text=SlaydX backup MUVAFFAQIYATSIZ: ${msg}" >/dev/null 2>&1 || true
+    # The token goes to curl on stdin (`-K -`), not on the command line (`ps` shows argv).
+    printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$TELEGRAM_BOT_TOKEN" |
+      curl -s -m 10 -o /dev/null -K - \
+        --data-urlencode "chat_id=${BACKUP_TG_CHAT}" \
+        --data-urlencode "text=SlaydX backup MUVAFFAQIYATSIZ: ${msg}" >/dev/null 2>&1 || true
   fi
 }
 
@@ -64,7 +66,7 @@ trap 'fail "kutilmagan xato (satr $LINENO)"' ERR
 # (muvaffaqiyat, xato, signal) tozalansin — muvaffaqiyatda `.tmp` allaqachon
 # `$final`ga ko'chirilgan bo'ladi, shuning uchun `rm -f` xavfsiz. `${x:-}`
 # — bular hali tayinlanmagan bo'lsa ham (erta chiqishda) xavfsiz.
-trap 'rm -f -- "${tmp:-}" "${errfile:-}" 2>/dev/null; [ -n "${PG_CONTAINER:-}" ] && [ -n "${check_name:-}" ] && docker exec "$PG_CONTAINER" rm -f "/tmp/$check_name" >/dev/null 2>&1; true' EXIT
+trap 'rm -f -- "${tmp:-}" "${errfile:-}" "${gfs_list:-}" 2>/dev/null; [ -n "${PG_CONTAINER:-}" ] && [ -n "${check_name:-}" ] && docker exec "$PG_CONTAINER" rm -f "/tmp/$check_name" >/dev/null 2>&1; true' EXIT
 
 # ── Sozlama fayli (reviewer topilmasi) ──────────────────────────────────
 # `cron` BO'SH muhitda ishga tushadi — `.env`ni O'QIMAYDI. `BACKUP_REMOTE`/
@@ -99,6 +101,54 @@ BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-7}"
 # Haqiqiy productionda ~MB o'lchamli bo'ladi; faqat sinov/bo'sh bazalarda
 # (masalan CI'ning tashlama Postgres'i) kichikroq shift kerak bo'lishi mumkin.
 BACKUP_MIN_SIZE_BYTES="${BACKUP_MIN_SIZE_BYTES:-1048576}"
+# Off-box retention (owner decision D6, docs/ops/PLAN.md): `gfs` keeps 7 daily + 4 weekly +
+# 6 monthly dumps on an rclone remote; `off` never deletes anything remote. rsync targets are
+# never pruned by this script.
+BACKUP_REMOTE_RETENTION="${BACKUP_REMOTE_RETENTION:-gfs}"
+BACKUP_GFS_DAILY="${BACKUP_GFS_DAILY:-7}"
+BACKUP_GFS_WEEKLY="${BACKUP_GFS_WEEKLY:-4}"
+BACKUP_GFS_MONTHLY="${BACKUP_GFS_MONTHLY:-6}"
+# Test seam: the day (YYYYMMDD) the GFS policy counts from (default: today).
+BACKUP_GFS_TODAY="${BACKUP_GFS_TODAY:-$(date +%Y%m%d)}"
+
+for v in BACKUP_KEEP_DAYS BACKUP_GFS_DAILY BACKUP_GFS_WEEKLY BACKUP_GFS_MONTHLY; do
+  [[ "${!v}" =~ ^[0-9]+$ ]] || fail "$v butun son bo'lishi kerak"
+done
+[ "$BACKUP_GFS_DAILY" -ge 1 ] || fail "BACKUP_GFS_DAILY kamida 1 bo'lishi kerak"
+[[ "$BACKUP_GFS_TODAY" =~ ^[0-9]{8}$ ]] || fail "BACKUP_GFS_TODAY YYYYMMDD ko'rinishida bo'lishi kerak"
+case "$BACKUP_REMOTE_RETENTION" in gfs | off) ;; *) fail "BACKUP_REMOTE_RETENTION faqat gfs yoki off" ;; esac
+
+# GFS: reads remote file names on stdin and prints the dumps the policy no longer needs.
+# Kept: every dump dated within the last BACKUP_GFS_DAILY days, plus the newest dump of each of
+# the latest BACKUP_GFS_DAILY days, BACKUP_GFS_WEEKLY ISO weeks and BACKUP_GFS_MONTHLY months
+# that have one. Only names shaped `slaydx-YYYYMMDD-HHMMSS.dump` can ever be listed; anything
+# else on the remote is left alone.
+gfs_prune_list() {
+  local cutoff name d w m keep nd=0 nw=0 nm=0 last_d="" last_w="" last_m=""
+  cutoff=$(date -d "$BACKUP_GFS_TODAY - $BACKUP_GFS_DAILY days" +%Y%m%d) || return 1
+  # Newest first: the dumps of one day / ISO week / month are adjacent, and the first of each
+  # group is its newest.
+  while IFS= read -r name; do
+    d=${name:7:8}
+    if ! w=$(date -d "$d" +%G%V 2>/dev/null); then continue; fi
+    m=${d:0:6}
+    keep=0
+    if [[ "$d" > "$cutoff" ]]; then keep=1; fi
+    if [ "$d" != "$last_d" ]; then
+      nd=$((nd + 1)); last_d=$d
+      if [ "$nd" -le "$BACKUP_GFS_DAILY" ]; then keep=1; fi
+    fi
+    if [ "$w" != "$last_w" ]; then
+      nw=$((nw + 1)); last_w=$w
+      if [ "$nw" -le "$BACKUP_GFS_WEEKLY" ]; then keep=1; fi
+    fi
+    if [ "$m" != "$last_m" ]; then
+      nm=$((nm + 1)); last_m=$m
+      if [ "$nm" -le "$BACKUP_GFS_MONTHLY" ]; then keep=1; fi
+    fi
+    if [ "$keep" = 0 ]; then printf '%s\n' "$name"; fi
+  done < <(grep -E '^slaydx-[0-9]{8}-[0-9]{6}\.dump$' | sort -r || true)
+}
 
 umask 077
 mkdir -p "$BACKUP_DIR"
@@ -134,7 +184,10 @@ echo "backup: OK — $final ($size bayt, $duration s)"
 
 # Eskirgan lokal nusxalarni tozalash (eng yomon holatda YAXSHI dump'ni
 # yo'qotmasin deb — bu qadam FATAL emas, faqat ogohlantiradi).
-find "$BACKUP_DIR" -maxdepth 1 -type f -name 'slaydx-*.dump' -mtime "+$BACKUP_KEEP_DAYS" -delete 2>/dev/null \
+# Pre-deploy dumps (`slaydx-<ts>.sql` from the deploy guide, `slaydx-predeploy-<ts>.dump`) follow
+# the same local retention — they used to pile up forever (docs/ops/O3-robustness-ops.md §2).
+find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'slaydx-*.dump' -o -name 'slaydx-*.sql' -o -name 'slaydx-*.sql.gz' \) \
+  -mtime "+$BACKUP_KEEP_DAYS" -delete 2>/dev/null \
   || echo "backup: OGOHLANTIRISH — eskirgan nusxalarni tozalash muvaffaqiyatsiz" >&2
 
 # Box tashqarisiga nusxa — sozlanmagan bo'lsa ochiq ogohlantiramiz (jim
@@ -176,7 +229,38 @@ else
   echo "backup: OGOHLANTIRISH — BACKUP_REMOTE sozlanmagan ($BACKUP_ENV_FILE), box TASHQARISIGA nusxa YO'Q (disk/server yo'qolsa zaxira ham yo'qoladi)" >&2
 fi
 
-printf '{"ts":"%s","status":"ok","file":"%s","sizeBytes":%s,"durationSec":%s,"remote":"%s"}\n' \
-  "$(date -Iseconds)" "$final" "$size" "$duration" "$remote_status" >> "$log"
+# Off-box GFS retention — only after this run's copy was verified, only on rclone remotes.
+# Two independent guards keep recent dumps: the computed list never contains a dump dated
+# within BACKUP_GFS_DAILY days, and rclone's own `--min-age` filter skips anything younger even
+# if it were listed. A failed prune is not fatal (the backup itself is good) but is reported.
+retention_status="skipped"
+pruned=0
+if [ "$remote_status" = ok ] && [ "$BACKUP_REMOTE_RETENTION" = gfs ]; then
+  case "$BACKUP_REMOTE" in
+    *@*:*) ;;
+    *)
+      retention_status="failed"
+      gfs_list=$(mktemp "${TMPDIR:-/tmp}/slaydx-gfs.XXXXXX")
+      if listing=$(rclone lsf --files-only --max-depth 1 "$BACKUP_REMOTE" 2>/dev/null) \
+        && printf '%s\n' "$listing" | gfs_prune_list > "$gfs_list"; then
+        pruned=$(grep -c . "$gfs_list" || true)
+        if [ "$pruned" -eq 0 ]; then
+          retention_status="ok"
+        elif rclone delete "$BACKUP_REMOTE" --files-from-raw "$gfs_list" --min-age "${BACKUP_GFS_DAILY}d" --max-depth 1 >/dev/null 2>&1; then
+          retention_status="ok"
+          echo "backup: GFS — box tashqarisidagi $pruned ta eskirgan nusxa o'chirildi"
+        fi
+      fi
+      if [ "$retention_status" != ok ]; then
+        echo "backup: OGOHLANTIRISH — box tashqarisidagi GFS tozalash muvaffaqiyatsiz ($BACKUP_REMOTE), dump o'zi yaxshi" >&2
+      fi
+      ;;
+  esac
+fi
+
+printf '{"ts":"%s","status":"ok","file":"%s","sizeBytes":%s,"durationSec":%s,"remote":"%s","retention":"%s","pruned":%s}\n' \
+  "$(date -Iseconds)" "$final" "$size" "$duration" "$remote_status" "$retention_status" "$pruned" >> "$log"
+# scripts/watchdog.sh alerts when this marker is older than 26 h (verified dump + off-box copy).
+touch "$BACKUP_DIR/.last-ok"
 
 exit 0
