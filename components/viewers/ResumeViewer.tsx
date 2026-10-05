@@ -215,7 +215,8 @@ export function ResumeViewer({
       onClick={() => setEditOn((v) => !v)}
     >
       {coarse ? <Pencil className="size-4 shrink-0" aria-hidden /> : null}
-      Tahrirlash
+      {/* Under 24rem of toolbar (a 360 px phone) only the pencil shows; the name stays for screen readers. */}
+      <span className={coarse ? "@max-sm:sr-only" : undefined}>Tahrirlash</span>
     </button>
   ) : null;
   const right = editable ? (

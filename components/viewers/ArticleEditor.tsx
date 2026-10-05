@@ -10,7 +10,7 @@ import type { TeacherPlan } from "@/lib/generation/teacher/layout";
 import type { WorkPlan } from "@/lib/generation/work/layout";
 import type { AcademicDoc } from "@/lib/generation/types";
 import type { FlowItem } from "@/lib/viewers/flow";
-import { announceOpenField, focusAtEnd, releaseOpenField } from "./editable";
+import { announceOpenField, focusAtEnd, isTapEcho, releaseOpenField, swallowTapMouseDown } from "./editable";
 import { createDoubleTapDetector } from "./slide-edit/doubleTap";
 
 /**
@@ -672,6 +672,10 @@ export function ArticleEditor({ doc, plan, onOps, children }: ArticleEditorProps
     if (!host) return;
 
     const onDbl = (ev: Event) => {
+      if (ev.type === "dblclick" && isTapEcho()) {
+        ev.preventDefault();
+        return;
+      }
       const target = (ev.target as HTMLElement | null)?.closest?.("[data-path]") as HTMLElement | null;
       if (!target || !host.contains(target)) return;
       ev.preventDefault();
@@ -692,7 +696,10 @@ export function ArticleEditor({ doc, plan, onOps, children }: ArticleEditorProps
     const onPointerUp = (ev: PointerEvent) => {
       if (ev.pointerType === "mouse") return;
       if (!taps.up(ev.pointerId, ev.clientX, ev.clientY, ev.timeStamp)) return;
+      const before = openRef.current?.el ?? null;
       onDbl(ev);
+      // Opened by this tap: its compat mousedown must not blur (and commit) the new field.
+      if (openRef.current && openRef.current.el !== before) swallowTapMouseDown();
     };
     const onPointerCancel = (ev: PointerEvent) => taps.cancel(ev.pointerId);
     const onKey = (ev: KeyboardEvent) => {

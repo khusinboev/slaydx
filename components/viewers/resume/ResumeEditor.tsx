@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import type { ResumeItem, ResumeLayout } from "@/lib/generation/resume/layout";
 import type { ResumeOp } from "@/lib/generation/resume/edit";
 import type { ResumeModel } from "@/lib/generation/resume/model";
-import { announceOpenField, focusAtEnd, readText, releaseOpenField } from "../editable";
+import { announceOpenField, focusAtEnd, readText, isTapEcho, releaseOpenField, swallowTapMouseDown } from "../editable";
 import { createDoubleTapDetector } from "../slide-edit/doubleTap";
 import { ResumePage, type ResumeEditEvent } from "./ResumePage";
 
@@ -122,6 +122,10 @@ export function ResumeEditor({ layout, model, pageItems, pageIndex, total, onOps
     if (!host) return;
 
     const onDbl = (ev: Event) => {
+      if (ev.type === "dblclick" && isTapEcho()) {
+        ev.preventDefault();
+        return;
+      }
       const target = (ev.target as HTMLElement | null)?.closest?.("[data-path]") as HTMLElement | null;
       if (!target || !host.contains(target)) return;
       ev.preventDefault();
@@ -136,7 +140,10 @@ export function ResumeEditor({ layout, model, pageItems, pageIndex, total, onOps
     const onPointerUp = (ev: PointerEvent) => {
       if (ev.pointerType === "mouse") return;
       if (!taps.up(ev.pointerId, ev.clientX, ev.clientY, ev.timeStamp)) return;
+      const before = openRef.current?.el ?? null;
       onDbl(ev);
+      // Opened by this tap: its compat mousedown must not blur (and commit) the new field.
+      if (openRef.current && openRef.current.el !== before) swallowTapMouseDown();
     };
     const onPointerCancel = (ev: PointerEvent) => taps.cancel(ev.pointerId);
     const onKey = (ev: KeyboardEvent) => {

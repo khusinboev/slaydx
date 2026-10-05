@@ -6,7 +6,7 @@ import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
 import type { VisualViewportState } from "@/lib/hooks/useVisualViewport";
 import { useOverlayHistory } from "../nav/useOverlayHistory";
 import { getOpenField, useOpenField, type OpenField } from "./editable";
-import { FOCUS_MAX_SCALE, FOCUS_MIN_GLYPH, intersect, revealDelta, type Rect } from "./slide-edit/geometry";
+import { FOCUS_MAX_SCALE, FOCUS_MIN_GLYPH, REVEAL_MARGIN, intersect, revealDelta, type Rect } from "./slide-edit/geometry";
 import { keepEditorFocus } from "./slide-edit/StyleBar";
 import { VisualViewportWatch, visibleBand } from "./slide-edit/viewport";
 
@@ -217,8 +217,8 @@ export function revealOpenField(
  * A sheet fitted to a 360–390 px screen is ~43–46 %: resume body text is
  * 5–6 px and a lesson-plan line ~8 px — unreadable while typing. When a
  * field opens on a phone, the viewer zooms in (`docFocusZoom`: until the
- * glyphs reach the slide editor's 14 px; a wrapping field only until it
- * fills the column width, so nobody pans sideways per line); when the edit
+ * glyphs reach the slide editor's 14 px, but never wider than the column,
+ * so nobody pans sideways per line); when the edit
  * ends the previous zoom (fit or the user's own) and the scroll positions
  * come back exactly.
  *
@@ -275,17 +275,22 @@ export function useEditFocusZoom(opts: {
 /**
  * Pure: the sheet scale while a field is edited. `fontPx`, `boxW` in sheet
  * px (unscaled), `viewW` the column width on screen, `base` the current
- * scale. Glyphs grow to `FOCUS_MIN_GLYPH` px; a wrapping field never grows
- * wider than the column (a single-line one may — the row then scrolls
- * sideways to it); at most `FOCUS_MAX_SCALE`; never below `base`.
+ * scale. Glyphs grow to `FOCUS_MIN_GLYPH` px, but the field box never
+ * grows wider than the column: a block field (paragraph, caption, heading)
+ * is as wide as the sheet's text column even while it holds one line, and
+ * text typed into it wraps at that width — wider than the screen would
+ * mean panning sideways per line (smoke: a caption at 75 % ran 100 px off
+ * a 390 px screen). An inline field (resume name, chip) is only as wide as
+ * its text, so it still reaches 14 px glyphs. At most `FOCUS_MAX_SCALE`;
+ * never below `base`.
  * Unlike slides there is no "small box" rule: a short resume chip must not
  * blow the sheet up to 200 % just because it is narrow.
  */
-export function docFocusZoom(input: { fontPx: number; boxW: number; viewW: number; base: number; singleLine: boolean }): number {
-  const { fontPx, boxW, viewW, base, singleLine } = input;
+export function docFocusZoom(input: { fontPx: number; boxW: number; viewW: number; base: number }): number {
+  const { fontPx, boxW, viewW, base } = input;
   if (!(fontPx > 0) || !(base > 0) || fontPx * base >= FOCUS_MIN_GLYPH) return base;
   let s = FOCUS_MIN_GLYPH / fontPx;
-  if (!singleLine && boxW > 0 && viewW > 0) s = Math.min(s, viewW / boxW);
+  if (boxW > 0 && viewW > 0) s = Math.min(s, viewW / boxW);
   s = Math.min(s, FOCUS_MAX_SCALE);
   return s > base ? Math.round(s * 1000) / 1000 : base;
 }
@@ -297,13 +302,13 @@ export function focusZoomFor(field: OpenField, zoom: number): number | null {
   if (!(base > 0)) return null;
   const r = el.getBoundingClientRect();
   const cs = getComputedStyle(el);
+  // Computed font size is the sheet's own (the zoom is a transform), box width is on screen.
   const fontPx = parseFloat(cs.fontSize) || 0;
-  const lineH = parseFloat(cs.lineHeight) || fontPx * 1.3;
   const boxW = r.width / base;
-  const boxH = r.height / base;
   const row = el.closest<HTMLElement>("[data-page-row]");
-  const viewW = row?.clientWidth || window.innerWidth;
-  const s = docFocusZoom({ fontPx, boxW, viewW, base, singleLine: lineH > 0 && boxH <= lineH * 1.5 });
+  // Minus the keep-visible margins on both sides, so the revealed field is not clipped by the row edge.
+  const viewW = Math.max(0, (row?.clientWidth || window.innerWidth) - 2 * REVEAL_MARGIN);
+  const s = docFocusZoom({ fontPx, boxW, viewW, base });
   const next = Math.round(s * 100);
   return next > zoom ? next : null;
 }

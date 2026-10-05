@@ -547,11 +547,12 @@ test("Word sheet: the same focus zoom on a phone", async () => {
 });
 
 test("docFocusZoom: glyphs to 14 px, wrapping fields capped at the column width, max 200 %, never zooms out", () => {
-  assert.equal(docFocusZoom({ fontPx: 10, boxW: 100, viewW: 360, base: 0.46, singleLine: true }), 1.4);
-  assert.equal(docFocusZoom({ fontPx: 13.3, boxW: 600, viewW: 340, base: 0.43, singleLine: false }), Math.round((340 / 600) * 1000) / 1000, "paragraph: column width");
-  assert.equal(docFocusZoom({ fontPx: 5, boxW: 50, viewW: 360, base: 0.46, singleLine: true }), 2, "cap");
-  assert.equal(docFocusZoom({ fontPx: 10, boxW: 100, viewW: 360, base: 1.5, singleLine: true }), 1.5, "already readable");
-  assert.equal(docFocusZoom({ fontPx: 13.3, boxW: 900, viewW: 340, base: 0.43, singleLine: false }), 0.43, "never below base");
+  assert.equal(docFocusZoom({ fontPx: 10, boxW: 100, viewW: 360, base: 0.46 }), 1.4, "inline field: 14 px glyphs");
+  assert.equal(docFocusZoom({ fontPx: 13.3, boxW: 600, viewW: 340, base: 0.43 }), Math.round((340 / 600) * 1000) / 1000, "block field: column width");
+  assert.equal(docFocusZoom({ fontPx: 18.67, boxW: 624, viewW: 366, base: 0.46 }), Math.round((366 / 624) * 1000) / 1000, "one-line caption is a block too (smoke)");
+  assert.equal(docFocusZoom({ fontPx: 5, boxW: 50, viewW: 360, base: 0.46 }), 2, "cap");
+  assert.equal(docFocusZoom({ fontPx: 10, boxW: 100, viewW: 360, base: 1.5 }), 1.5, "already readable");
+  assert.equal(docFocusZoom({ fontPx: 13.3, boxW: 900, viewW: 340, base: 0.43 }), 0.43, "never below base");
 });
 
 /* ═══════════════════════════════════════ double tap */
@@ -578,6 +579,26 @@ test("touch double TAP opens a field without `dblclick` (Word and resume); a sin
   await act(async () => tap(name, 3));
   await act(async () => tap(name, 4));
   assert.equal(name.getAttribute("contenteditable"), "true");
+});
+
+test("double-tap echo (Chromium smoke): the compat mousedown is cancelled and the late dblclick does not open another field", async () => {
+  phone();
+  await mount(stubTeacher());
+  await enableEdit();
+  const el = byPath(HOMEWORK);
+  await act(async () => tap(el, 11));
+  await act(async () => tap(el, 12));
+  assert.equal(el.getAttribute("contenteditable"), "true");
+  // The browser's compat mousedown lands elsewhere after the focus zoom: it must not blur the new field.
+  assert.equal(fireEvent.mouseDown(document.body), false, "compat mousedown cancelled");
+  // …and its synthetic dblclick (also elsewhere) must not open another field.
+  const other = byPath("heading:goal");
+  await act(async () => {
+    fireEvent.dblClick(other);
+  });
+  assert.ok(!other.hasAttribute("contenteditable"), "echo dblclick ignored");
+  assert.equal(el.getAttribute("contenteditable"), "true", "the tapped field stays open");
+  assert.equal(fireEvent.mouseDown(document.body), true, "only ONE mousedown is swallowed");
 });
 
 /* ═══════════════════════════════════════ toolbar touch sizes */

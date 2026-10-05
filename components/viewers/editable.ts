@@ -154,3 +154,36 @@ function subscribeOpenField(cb: () => void): () => void {
 export function useOpenField(): OpenField | null {
   return useSyncExternalStore(subscribeOpenField, getOpenField, () => null);
 }
+
+/** How long after a double-tap open its compat mouse events are ignored (ms). */
+export const TAP_SWALLOW_MS = 1500;
+
+let tapOpenedAt = -Infinity;
+
+/**
+ * Call right after a touch double TAP opened a field. The browser follows
+ * the second tap with compat `mousedown`/`click`/`dblclick` at the tap
+ * point — after the focus zoom and the swapped field children that point
+ * is often ANOTHER element: the `mousedown` would move the focus to it (or
+ * `<body>`), `focusout` commits and closes the field just opened, and the
+ * `dblclick` opens a different one. The cancelable `touchend` cannot be
+ * relied on (its target node may have been replaced), so: one capture
+ * listener cancels the next `mousedown` within `TAP_SWALLOW_MS`, and the
+ * editors ignore a `dblclick` in that window (`isTapEcho`).
+ */
+export function swallowTapMouseDown(): void {
+  if (typeof document === "undefined") return;
+  tapOpenedAt = Date.now();
+  // No clock check inside: under load the compat event can be late; the timer below bounds the window.
+  const onDown = (e: Event) => {
+    document.removeEventListener("mousedown", onDown, true);
+    e.preventDefault();
+  };
+  document.addEventListener("mousedown", onDown, true);
+  setTimeout(() => document.removeEventListener("mousedown", onDown, true), TAP_SWALLOW_MS);
+}
+
+/** A `dblclick` right after a double-tap open is that tap's echo, not a new gesture. */
+export function isTapEcho(): boolean {
+  return Date.now() - tapOpenedAt < TAP_SWALLOW_MS;
+}
