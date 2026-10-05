@@ -8,6 +8,8 @@ import { useOverlayHistory } from "../nav/useOverlayHistory";
 import { getOpenField, useOpenField, type OpenField } from "./editable";
 import { FOCUS_MAX_SCALE, FOCUS_MIN_GLYPH, REVEAL_MARGIN, intersect, revealDelta, type Rect } from "./slide-edit/geometry";
 import { keepEditorFocus } from "./slide-edit/StyleBar";
+import { DOUBLE_TAP_MS } from "./slide-edit/doubleTap";
+import { EDIT_HINT_TEXT } from "./slide-edit/EditHint";
 import { VisualViewportWatch, visibleBand } from "./slide-edit/viewport";
 
 /**
@@ -243,24 +245,83 @@ export function useEditFocusZoom(opts: {
     fnRef.current = opts;
   });
   const saved = useRef<{ zoom: number; scroller: HTMLElement | null; top: number; row: HTMLElement | null; left: number } | null>(null);
+  /** The zoom this hook applied last: a different current zoom means the user zoomed by hand while editing. */
+  const applied = useRef<number | null>(null);
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
+  const pending = useRef<{ timer: ReturnType<typeof setTimeout> | null; detach: () => void } | null>(null);
+
+  const cancelPending = useCallback(() => {
+    const p = pending.current;
+    if (!p) return;
+    pending.current = null;
+    if (p.timer !== null) clearTimeout(p.timer);
+    p.detach();
+  }, []);
+
+  const restoreNow = useCallback(() => {
+    cancelPending();
+    const s = saved.current;
+    saved.current = null;
+    const mine = applied.current;
+    applied.current = null;
+    // Review E2: a «−/+» during the edit is the user's new choice — keep it (and its scroll).
+    if (!s || (mine !== null && zoomRef.current !== mine)) return;
+    fnRef.current.restore(s.zoom);
+    const back = () => {
+      if (s.scroller) s.scroller.scrollTop = s.top;
+      if (s.row) s.row.scrollLeft = s.left;
+    };
+    back();
+    // The restored sheet size lands on the next render.
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(back);
+  }, [cancelPending]);
+
+  /*
+   * Review E1: a field closes on the FIRST tap of a double tap on the next
+   * field (its compat mousedown blurs and commits the open one). Restoring
+   * the zoom right then shrinks the sheet under the finger and the second
+   * tap misses. So the restore waits until the finger has been quiet for
+   * `DOUBLE_TAP_MS` (every `pointerdown` pauses it, every `pointerup`
+   * restarts it); a field that opens meanwhile keeps the zoom.
+   */
+  const scheduleRestore = useCallback(() => {
+    if (pending.current) return;
+    const p: { timer: ReturnType<typeof setTimeout> | null; detach: () => void } = { timer: null, detach: () => {} };
+    const arm = () => {
+      if (p.timer !== null) clearTimeout(p.timer);
+      p.timer = setTimeout(() => {
+        if (!getOpenField()) restoreNow();
+        else cancelPending();
+      }, DOUBLE_TAP_MS);
+    };
+    const onDown = () => {
+      if (p.timer !== null) clearTimeout(p.timer);
+      p.timer = null;
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    document.addEventListener("pointerup", arm, true);
+    document.addEventListener("pointercancel", arm, true);
+    p.detach = () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      document.removeEventListener("pointerup", arm, true);
+      document.removeEventListener("pointercancel", arm, true);
+    };
+    pending.current = p;
+    arm();
+  }, [restoreNow, cancelPending]);
 
   useLayoutEffect(() => {
-    if (!active || !field) {
-      const s = saved.current;
-      if (!s) return;
-      saved.current = null;
-      fnRef.current.restore(s.zoom);
-      const back = () => {
-        if (s.scroller) s.scroller.scrollTop = s.top;
-        if (s.row) s.row.scrollLeft = s.left;
-      };
-      back();
-      // The restored sheet size lands on the next render.
-      if (typeof requestAnimationFrame === "function") requestAnimationFrame(back);
+    if (!active) {
+      // Edit mode off: nothing can reopen — restore at once.
+      restoreNow();
       return;
     }
+    if (!field) {
+      if (saved.current) scheduleRestore();
+      return;
+    }
+    cancelPending();
     const next = focusZoomFor(field, zoomRef.current);
     if (next === null) return;
     if (!saved.current) {
@@ -268,8 +329,12 @@ export function useEditFocusZoom(opts: {
       const scroller = verticalScroller(field.el);
       saved.current = { zoom: zoomRef.current, scroller, top: scroller?.scrollTop ?? 0, row, left: row?.scrollLeft ?? 0 };
     }
+    applied.current = next;
     fnRef.current.apply(next);
-  }, [active, field]);
+  }, [active, field, restoreNow, scheduleRestore, cancelPending]);
+
+  // Unmount (viewer gone): drop the listeners; there is no sheet left to restore.
+  useEffect(() => cancelPending, [cancelPending]);
 }
 
 /**
@@ -316,7 +381,8 @@ export function focusZoomFor(field: OpenField, zoom: number): number | null {
 /* ───────────────────────────────────────────────────── one-time hint ─── */
 
 export const DOC_EDIT_HINT_KEY = "slaydx:doc-edit-hint";
-export const DOC_EDIT_HINT_TEXT = "Matnni tahrirlash uchun ustiga ikki marta bosing";
+/** Same words as the slide editor's hint (one gesture, one sentence). */
+export const DOC_EDIT_HINT_TEXT = EDIT_HINT_TEXT;
 
 function readSeen(): boolean {
   try {
