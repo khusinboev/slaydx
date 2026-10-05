@@ -71,7 +71,7 @@ export function TranslationViewer({ doc, gen, pdf = false }: { doc: AcademicDoc;
               role="tab"
               aria-selected={tab === k}
               onClick={() => setTab(k)}
-              className={cn("rounded-lg px-3 py-1.5 text-[13px] font-medium", tab === k ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/70")}
+              className={cn("rounded-lg px-3 py-1.5 text-[13px] font-medium pointer-coarse:min-h-11", tab === k ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/70")}
             >
               {k === "pairs" ? "Taqqoslash" : "Fayl"}
             </button>
