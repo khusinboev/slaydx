@@ -171,7 +171,7 @@ export function ResultActions({
             onClick={onDownloadClick}
             className={cn(
               btn,
-              "bg-primary text-primary-foreground min-w-11 flex-[1.4] px-2.5 md:flex-none md:px-3",
+              "bg-primary text-primary-foreground min-w-11 flex-none px-3",
               "group-data-[compact=1]/hdr:flex-none group-data-[compact=1]/hdr:px-0 group-data-[compact=1]/hdr:w-11",
               singleState.s === "ready" && "ring-primary/50 ring-2 ring-offset-1",
             )}

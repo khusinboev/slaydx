@@ -203,7 +203,7 @@ export function ShareButton({
       onPointerDown={() => markGesture()}
       onClick={() => void action.run(format)}
       className={cn(
-        "hover:bg-muted inline-flex h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium disabled:opacity-70 md:h-9 md:pointer-coarse:h-11",
+        "hover:bg-muted inline-flex h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-lg border px-2 text-[13px] font-medium disabled:opacity-70 md:h-9 md:gap-1.5 md:px-3 md:text-sm md:pointer-coarse:h-11",
         ready ? "border-primary bg-primary/10 text-primary ring-primary/40 ring-2" : "bg-card",
         className,
       )}
