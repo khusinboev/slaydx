@@ -34,8 +34,13 @@ services:
     #   idle_in_transaction_session_timeout=60s — osilib qolgan
     #     tranzaksiya qulfni abadiy ushlab turmasin (`chargeInTx`/
     #     `claimJob` qator qulflariga bog'liq — TEST-03/TEST-04).
+    #   effective_cache_size=640MB — planner hint only (no allocation):
+    #     the default 4GB is larger than the whole 1g container, so the
+    #     planner over-trusted the OS cache (docs/ops/O3-robustness-ops.md §4).
+    #   random_page_cost=1.1 — SSD-backed volume; the default 4 is for spinning disks.
+    #   log_autovacuum_min_duration=5s — log autovacuum runs slower than 5 s.
     # `PG_MEM_LIMIT` boshqacha sozlansa, shared_buffers/work_mem'ni ham
-    # mutanosib oshiring — bir-biriga bog'liq.
+    # mutanosib oshiring — bir-biriga bog'liq (effective_cache_size ≈ 60 % of it).
     command:
       - postgres
       - -c
@@ -52,6 +57,12 @@ services:
       - autovacuum_vacuum_scale_factor=0.05
       - -c
       - idle_in_transaction_session_timeout=60s
+      - -c
+      - effective_cache_size=640MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - log_autovacuum_min_duration=5s
     # Resurs chegarasi (INFRA-04): box UCHTA loyiha bilan umumiy — chegarasiz
     # konteyner Postgres yoki qo'shni loyihalarni OOM bilan yiqitishi mumkin.
     # `PG_MEM_LIMIT`/`PG_CPUS` orqali sozlanadi. CPU 2: 1 CPU'da bayt yuklab
@@ -86,6 +97,11 @@ services:
       - "5432"
 
   web:
+    # Pull deploy (docs/ops/PLAN.md, O1): production runs the image CI built and
+    # promoted to `:<sha>` (`deploy/deploy-pull.sh` sets SLAYDX_TAG and records it in
+    # `.env`). `build:` stays for the fallback `deploy/deploy-build.sh` and local
+    # use: without SLAYDX_TAG the build is tagged `:local` and never pushed.
+    image: ghcr.io/khusinboev/slaydx-web:${SLAYDX_TAG:-local}
     build:
       context: .
       # `target` MAJBURIY: Dockerfile dagi oxirgi bosqich `worker`, ya'ni
@@ -234,6 +250,8 @@ services:
       - "127.0.0.1:${PORT:-3000}:3000"
 
   worker:
+    # Same tag as `web` — both images come from one commit (see the web comment).
+    image: ghcr.io/khusinboev/slaydx-worker:${SLAYDX_TAG:-local}
     build:
       context: .
       target: worker

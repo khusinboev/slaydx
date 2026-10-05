@@ -1,40 +1,124 @@
-# CI (INFRA-13): oldin testlar FAQAT dasturchi noutbukida, prod build esa
-# HAR DEPLOY'DA umumiy VPS'da (uch loyiha bilan bir box, `.claude/deploy.md`)
-# ishlardi — birlashtirish (merge) oldidan hech qanday darvoza yo'q edi.
+# CI + production images (ops sprint, docs/ops/PLAN.md P-CI; research: docs/ops/O2-ci-dev-loop.md, O1 §3.5).
 #
-# Bu workflow HECH QANDAY sirni talab qilmaydi (brief talabi) — barcha
-# testlar `fetch`ni stub qiladi (`CLAUDE.md` testlash standarti), DATABASE_URL
-# esa shu yerdagi vaqtinchalik Postgres xizmat konteyneriga ishora qiladi.
-# `SESSION_SECRET` ham kerak emas — `lib/server/env.ts` faqat `NODE_ENV=
-# production`da uni talab qiladi, CI esa hech qachon prod rejimida
-# ishlamaydi.
+# Jobs run in parallel; wall time = slowest job (~3–4 min tests, images ~4–8 min):
+#   static        tsc ‖ eslint (eslint cache restored from actions/cache)
+#   unit (1–4)    root tests, each shard with its OWN Postgres service (no shared DB between shards)
+#   ui (1–3)      jsdom UI tests; viewer tests on shard 1 (no DB)
+#   build         native `next build` (+ .next/cache)
+#   images        main pushes only: build web + worker in ONE BuildKit (shared stages built once, byte-identical
+#                 shared layers), push `build-<sha>` candidate tags to GHCR
+#   images-check  PRs / manual runs: the same image build with no push and no cache export, read-only token —
+#                 catches Dockerfile / lockfile / docker-only (esbuild parse-worker) breakage before merge
+#   ci-ok         the single aggregate status (require this one in branch protection)
+#   promote       main only, after ci-ok: re-tag the tested digests as `<sha>` (+ `main` if still the tip);
+#                 prints the deploy command. Only `<sha>` tags are deployable, so untested code never reaches prod.
 #
-# Atayilab QILINMAGAN: prod image qurish/push qilish. Bu build hali ham
-# `deploy.sh` orqali prod box'da bo'ladi (INFRA-13 topilmasi buni ham
-# tavsiya qiladi — "image'ni prod box'dan chiqarish" — lekin bu alohida,
-# kattaroq o'zgarish: registry, `deploy.sh`ni `build`dan `pull`ga
-# almashtirish. Hozircha faqat "birlashtirish oldidan tekshiruv" darvozasi.
+# Secrets: none besides the automatic GITHUB_TOKEN. Tests stub `fetch` (CLAUDE.md testing standard); DATABASE_URL points
+# at the throwaway service container; SESSION_SECRET is only required in NODE_ENV=production, which CI never uses.
+# All third-party actions are pinned to full commit SHAs (version in the trailing comment); bump them together.
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch: # `gh workflow run ci.yml --ref <branch>` — CI for a branch without a PR (images are not pushed)
 
-# Bitta branch/PR uchun eskirgan ishga tushirishni bekor qiladi — bir nechta
-# push ketma-ket kelsa, faqat oxirgisi tugagunча ishlaydi.
+# PR runs: a newer push cancels the stale run. Push/dispatch runs get a unique group (run_id): a `main` run is never
+# cancelled NOR left pending behind another one (a plain shared group would cancel a queued middle run), so every
+# merge commit is verified and gets images. `promote` only moves `main` when the sha is still the branch tip.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  # Lowercase (GHCR rejects uppercase). Packages: slaydx-web, slaydx-worker (private, D1).
+  REGISTRY: ghcr.io/khusinboev
+  # Bake definition shared by `images` and `images-check` (written to $RUNNER_TEMP; HCL `${VAR}` is not a GitHub
+  # expression). `web` = Dockerfile target `runner`. Separate gha cache scopes per target; each target reads both.
+  # Labels: `source` links the package to the repo; `revision` is checked by deploy/deploy-pull.sh after the pull.
+  SLAYDX_BAKE_HCL: |
+    variable "REGISTRY" { default = "ghcr.io/khusinboev" }
+    variable "GIT_SHA" { default = "unknown" }
+    variable "CACHE_EXPORT" { default = "false" }
+    group "default" { targets = ["web", "worker"] }
+    target "_common" {
+      context    = "."
+      dockerfile = "Dockerfile"
+      platforms  = ["linux/amd64"]
+      args       = { GIT_SHA = GIT_SHA }
+      labels = {
+        "org.opencontainers.image.source"   = "https://github.com/khusinboev/slaydx"
+        "org.opencontainers.image.revision" = GIT_SHA
+      }
+      cache-from = ["type=gha,scope=web", "type=gha,scope=worker"]
+    }
+    target "web" {
+      inherits = ["_common"]
+      target   = "runner"
+      tags     = ["${REGISTRY}/slaydx-web:build-${GIT_SHA}"]
+      cache-to = CACHE_EXPORT == "true" ? ["type=gha,scope=web,mode=max"] : []
+    }
+    target "worker" {
+      inherits = ["_common"]
+      target   = "worker"
+      tags     = ["${REGISTRY}/slaydx-worker:build-${GIT_SHA}"]
+      cache-to = CACHE_EXPORT == "true" ? ["type=gha,scope=worker,mode=max"] : []
+    }
 
 jobs:
-  check:
+  static:
+    name: static (tsc + eslint)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      # `npm run lint` uses `--cache --cache-strategy content` (mtimes change on every checkout, content hashes do not).
+      # The key includes lockfile + config, so a plugin/config change starts cold; eslint also hashes its config itself.
+      - name: Restore eslint cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .eslintcache
+          key: eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.mjs') }}-${{ github.sha }}
+          restore-keys: eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.mjs') }}-
+      - name: typecheck + lint (in parallel)
+        run: |
+          set +e
+          npm run typecheck >"$RUNNER_TEMP/tsc.log" 2>&1 &
+          tsc_pid=$!
+          npm run lint >"$RUNNER_TEMP/eslint.log" 2>&1 &
+          lint_pid=$!
+          wait "$tsc_pid"; tsc_rc=$?
+          wait "$lint_pid"; lint_rc=$?
+          echo "::group::typecheck (exit $tsc_rc)"; cat "$RUNNER_TEMP/tsc.log"; echo "::endgroup::"
+          echo "::group::lint (exit $lint_rc)"; cat "$RUNNER_TEMP/eslint.log"; echo "::endgroup::"
+          [ "$tsc_rc" -eq 0 ] || echo "::error::typecheck failed (exit $tsc_rc)"
+          [ "$lint_rc" -eq 0 ] || echo "::error::lint failed (exit $lint_rc)"
+          [ "$tsc_rc" -eq 0 ] && [ "$lint_rc" -eq 0 ]
 
+  unit:
+    name: unit ${{ matrix.shard }}/4
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     services:
       postgres:
-        # `docker-compose.yml`dagi pin bilan bir xil versiya (INFRA-14/DEPS-05).
+        # Same pin as docker-compose.yml. One service per shard job → shards never share a database.
+        # tmpfs data dir: throwaway DB, no fsync to disk (56 test files create their own isolated databases).
         image: postgres:16.15-alpine3.24
         env:
           POSTGRES_USER: slaydx
@@ -43,41 +127,279 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U slaydx"
-          --health-interval 10s
+          --health-cmd "pg_isready -U slaydx -h 127.0.0.1"
+          --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
-
+          --health-retries 12
+          --tmpfs /var/lib/postgresql/data:rw
     env:
-      # Test bazasi — throwaway, xizmat konteyneri har run'da yangidan
-      # yaratiladi. `.env.local` bu yerda YO'Q (gitignore'da, checkout'da
-      # ham topilmaydi), shuning uchun provayder kalitlarining sizib
-      # chiqishi (`tests/helpers/hermetic-env.mts`) bu yerda muammo emas —
-      # baribir ular process.env'da yo'q.
       DATABASE_URL: postgres://slaydx:slaydx@localhost:5432/slaydx
-      NEXT_TELEMETRY_DISABLED: "1"
-
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
           cache: npm
-
       - run: npm ci
+      # Same flags as the package.json "test" script, but `--test-shard` MUST come before the file list:
+      # after the glob (e.g. `npm run test -- --test-shard=1/4`) node silently ignores it and runs every file.
+      - name: npm test (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+        run: >-
+          npx tsx --env-file-if-exists=.env.local --import ./tests/helpers/hermetic-env.mts --conditions=react-server
+          --test --test-concurrency=2 --test-shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          tests/*.test.mts
 
-      - run: npm run typecheck
+  ui:
+    name: ui ${{ matrix.shard }}/3
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      # Same flags as the package.json "test:ui" script with `--test-shard` before the file list (see unit).
+      - name: test:ui (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+        run: >-
+          npx tsx --tsconfig tsconfig.viewer.json --test --test-concurrency=2
+          --test-shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          tests/ui/*.test.mts
+      # ~250 viewer tests take ~16 s: run them once, on shard 1.
+      - name: test:viewer
+        if: matrix.shard == 1
+        run: npm run test:viewer
 
-      - run: npm run lint
-
-      # `--test-concurrency=2` `package.json` skriptlarida allaqachon bor
-      # (CLAUDE.md qoidasi) — GitHub Actions standart runner'i 4 yadroli,
-      # lekin loyiha konvensiyasini shu yerda ham buzmaymiz.
-      - run: npm run test
-      - run: npm run test:viewer
-      - run: npm run test:ui
-
-      # `scripts/guard-build.mjs` `process.env.CI` bo'lsa portni tekshirmasdan
-      # o'tadi (dev server bu runner'da baribir yo'q).
+  build:
+    name: build (next build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      # Next's own build cache. Per-sha key (always saves a fresh one), restored by lockfile prefix.
+      - name: Restore .next/cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+      # scripts/guard-build.mjs skips its dev-server port check when CI is set (it is, on GitHub runners).
       - run: npm run build
+
+  images:
+    name: images (push build-<sha>)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      web-digest: ${{ steps.digests.outputs.web }}
+      worker-digest: ${{ steps.digests.outputs.worker }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Nothing secret may be baked into an image (O1 F10): no secret-named ARG/ENV, no .env file in the context.
+      - name: Guard - no secrets in the image build
+        run: |
+          if grep -nEi '^\s*(ARG|ENV)\s+\S*(KEY|SECRET|TOKEN|PASSWORD)' Dockerfile; then
+            echo "::error::Dockerfile declares a secret-looking ARG/ENV"; exit 1
+          fi
+          for f in .env .env.local .env.production; do
+            if [ -e "$f" ]; then echo "::error::$f must not exist in the build context"; exit 1; fi
+          done
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Log in to GHCR
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+      - name: Write bake definition
+        run: printf '%s' "$SLAYDX_BAKE_HCL" >"$RUNNER_TEMP/slaydx-bake.hcl"
+      # Both targets in one Bake run: BuildKit solves them concurrently and builds shared stages once.
+      # provenance off → plain single-platform manifests, so `promote` can carbon-copy them by digest.
+      - name: Build and push web + worker
+        id: bake
+        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+        with:
+          source: .
+          files: ${{ runner.temp }}/slaydx-bake.hcl
+          push: true
+          provenance: false
+          vars: |
+            REGISTRY=${{ env.REGISTRY }}
+            GIT_SHA=${{ github.sha }}
+            CACHE_EXPORT=true
+      - name: Record digests
+        id: digests
+        env:
+          METADATA: ${{ steps.bake.outputs.metadata }}
+        run: |
+          for t in web worker; do
+            d=$(jq -r --arg t "$t" '.[$t]["containerimage.digest"] // empty' <<<"$METADATA")
+            if ! [[ "$d" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::no pushed digest for $t in bake metadata"; exit 1
+            fi
+            echo "$t=$d" >>"$GITHUB_OUTPUT"
+            echo "$t: \`$d\`"
+          done
+      - name: Image sizes -> summary
+        continue-on-error: true
+        run: |
+          {
+            echo "### Images (build-$GITHUB_SHA)"
+            for s in web worker; do
+              docker buildx imagetools inspect --raw "$REGISTRY/slaydx-$s:build-$GITHUB_SHA" \
+                | jq -r --arg s "$s" '"- \($s): \([.layers[].size] | add / 1048576 | floor) MiB compressed, \(.layers | length) layers"'
+            done
+          } >>"$GITHUB_STEP_SUMMARY"
+      - name: Log out of GHCR
+        if: always()
+        run: docker logout ghcr.io
+
+  images-check:
+    # Decision: PRs build both images WITHOUT pushing (instead of skipping). It costs no server or laptop resources,
+    # proves the Dockerfile still builds before merge (P-IMG reshapes it this sprint; the parse-worker esbuild bundle
+    # only exists in the image), reads main's gha cache but never writes PR-scoped cache entries, and runs with a
+    # read-only token — no job that executes PR code ever holds `packages: write`.
+    name: images (build only, no push)
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Guard - no secrets in the image build
+        run: |
+          if grep -nEi '^\s*(ARG|ENV)\s+\S*(KEY|SECRET|TOKEN|PASSWORD)' Dockerfile; then
+            echo "::error::Dockerfile declares a secret-looking ARG/ENV"; exit 1
+          fi
+          for f in .env .env.local .env.production; do
+            if [ -e "$f" ]; then echo "::error::$f must not exist in the build context"; exit 1; fi
+          done
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Write bake definition
+        run: printf '%s' "$SLAYDX_BAKE_HCL" >"$RUNNER_TEMP/slaydx-bake.hcl"
+      - name: Build web + worker (no push)
+        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+        with:
+          source: .
+          files: ${{ runner.temp }}/slaydx-bake.hcl
+          push: false
+          provenance: false
+          vars: |
+            REGISTRY=${{ env.REGISTRY }}
+            GIT_SHA=${{ github.sha }}
+            CACHE_EXPORT=false
+
+  ci-ok:
+    # The one required status. `always()` (not `!cancelled()`): a skipped required check counts as passing in branch
+    # protection, so this job must run and FAIL when anything upstream failed or was cancelled.
+    name: ci-ok
+    if: always()
+    needs: [static, unit, ui, build, images, images-check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: All required jobs passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
+          # Every job must succeed; only the image job that does not apply to this event may be skipped,
+          # and the one that applies must have succeeded.
+          if ! jq -e '
+            (to_entries | all(.value.result == "success"
+              or (.value.result == "skipped" and (.key == "images" or .key == "images-check"))))
+            and ([.images.result, .["images-check"].result] | any(. == "success"))
+          ' <<<"$NEEDS" >/dev/null; then
+            echo "::error::a required CI job failed, was cancelled or was skipped"; exit 1
+          fi
+
+  promote:
+    name: promote (<sha> tag + deploy command)
+    needs: [ci-ok, images]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Log in to GHCR
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+      # Re-tag by DIGEST (the exact bytes this run built and tested), no rebuild. `--prefer-index=false` makes
+      # imagetools carbon-copy the single manifest, so `<sha>` has the same digest as `build-<sha>`.
+      - name: Tag tested images as <sha>
+        env:
+          WEB_DIGEST: ${{ needs.images.outputs.web-digest }}
+          WORKER_DIGEST: ${{ needs.images.outputs.worker-digest }}
+        run: |
+          set -euo pipefail
+          declare -A digest=([web]="$WEB_DIGEST" [worker]="$WORKER_DIGEST")
+          for s in web worker; do
+            d="${digest[$s]}"
+            [[ "$d" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::missing digest for $s"; exit 1; }
+            docker buildx imagetools create --prefer-index=false \
+              -t "$REGISTRY/slaydx-$s:$GITHUB_SHA" "$REGISTRY/slaydx-$s@$d"
+            got=$(docker buildx imagetools inspect "$REGISTRY/slaydx-$s:$GITHUB_SHA" --format '{{json .Manifest}}' | jq -r .digest)
+            [ "$got" = "$d" ] || { echo "::error::$s:$GITHUB_SHA is $got, expected $d"; exit 1; }
+            echo "$s:$GITHUB_SHA -> $d"
+          done
+      # Parallel main runs can finish out of order: move `main` only if this sha is still the branch tip.
+      - name: Move main tag (only if still the tip)
+        id: main_tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tip=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" -q .sha)
+          if [ "$tip" = "$GITHUB_SHA" ]; then
+            for s in web worker; do
+              docker buildx imagetools create --prefer-index=false \
+                -t "$REGISTRY/slaydx-$s:main" "$REGISTRY/slaydx-$s:$GITHUB_SHA"
+            done
+            echo "moved=yes" >>"$GITHUB_OUTPUT"
+          else
+            echo "main is now $tip; leaving the main tag to that run"
+            echo "moved=no (main is now $tip)" >>"$GITHUB_OUTPUT"
+          fi
+      - name: Deploy command -> summary
+        env:
+          MOVED: ${{ steps.main_tag.outputs.moved }}
+        run: |
+          {
+            echo "### Ready to deploy \`$GITHUB_SHA\`"
+            echo
+            echo "Images: \`$REGISTRY/slaydx-web:$GITHUB_SHA\`, \`$REGISTRY/slaydx-worker:$GITHUB_SHA\` (main tag moved: $MOVED)"
+            echo
+            echo '```sh'
+            echo "ssh root@<SERVER_IP> slaydx-deploy $GITHUB_SHA"
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"
+      - name: Log out of GHCR
+        if: always()
+        run: docker logout ghcr.io
