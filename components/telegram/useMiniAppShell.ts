@@ -21,8 +21,8 @@ export function useInTelegramMiniApp(): boolean {
 
 /**
  * O6 (docs/mobile/PLAN.md): hide the in-app «←» because Telegram's BackButton
- * is shown (or is being set up). The single decision every in-app back
- * control uses — see `shouldHideInAppBack`.
+ * works (or is being set up). The single decision every in-app back control
+ * uses — `BackLink` already does; see `shouldHideInAppBack`.
  */
 export function useHideInAppBack(): boolean {
   return shouldHideInAppBack(useSyncExternalStore(subscribeMiniAppShell, getMiniAppShellState, getServerMiniAppShellState));
