@@ -160,35 +160,101 @@ const version = (id: number, daysAgo: number, tags: string[]) => ({
   metadata: { package_type: "container", container: { tags } },
 });
 
-test("ghcr-retention: keeps main, newest N builds, recent promoted shas; deletes the rest", { skip: hasJq() ? false : "jq not installed" }, () => {
+/** A numeric env value of the retention job (`NAME: "10"` or the `|| '20'` default of KEEP_BUILDS). */
+function retentionEnv(name: string): number {
+  const m = new RegExp(`\\n {6}${name}: [^\\n]*?"?'?(\\d+)'?"?(?: \\}\\})?\\n`).exec(retention);
+  assert.ok(m, `${name} not found in ghcr-retention.yml`);
+  return Number(m[1]);
+}
+
+type Params = { keepBuilds: number; keepPromoted: number; promotedMaxAge: number; untaggedMaxAge: number };
+const workflowParams = (): Params => ({
+  keepBuilds: retentionEnv("KEEP_BUILDS"),
+  keepPromoted: retentionEnv("KEEP_PROMOTED"),
+  promotedMaxAge: retentionEnv("PROMOTED_MAX_AGE_DAYS"),
+  untaggedMaxAge: retentionEnv("UNTAGGED_MAX_AGE_DAYS"),
+});
+
+function plan(versions: ReturnType<typeof version>[], p: Params): Record<number, string | null> {
+  const args = ["--argjson", "now", String(NOW)];
+  for (const [k, v] of Object.entries(p)) args.push("--argjson", k, String(v));
+  const out = execFileSync("jq", [...args, retentionJq()], { input: JSON.stringify(versions), encoding: "utf8" });
+  return Object.fromEntries((JSON.parse(out) as { id: number; keep: string | null }[]).map((x) => [x.id, x.keep]));
+}
+const deleted = (pl: Record<number, string | null>) =>
+  Object.entries(pl).filter(([, k]) => k === null).map(([id]) => Number(id)).sort((a, b) => a - b);
+
+const jqSkip = { skip: hasJq() ? false : "jq not installed" };
+
+test("ghcr-retention: workflow keeps >= 10 newest promoted versions and promoted shas for >= 90 days", () => {
+  const p = workflowParams();
+  assert.equal(p.keepBuilds, 20);
+  assert.ok(p.keepPromoted >= 10, `KEEP_PROMOTED=${p.keepPromoted}`);
+  assert.ok(p.promotedMaxAge >= 90, `PROMOTED_MAX_AGE_DAYS=${p.promotedMaxAge}`);
+  assert.equal(p.untaggedMaxAge, 30);
+});
+
+test("ghcr-retention (review C1): the deployed sha survives 21 newer main pushes and 40 days", jqSkip, () => {
+  // Reviewer scenario: the owner stays on a deploy promoted 40 days ago while CI promotes 21 newer main pushes.
+  const versions = [version(1, 40, [`build-${sha(1)}`, sha(1)])];
+  for (let i = 2; i <= 22; i++) {
+    versions.push(version(i, 22 - i, [`build-${sha(i)}`, sha(i), ...(i === 22 ? ["main"] : [])]));
+  }
+  const pl = plan(versions, workflowParams());
+  assert.notEqual(pl[1], null, "the deployed version would be deleted");
+  assert.deepEqual(deleted(pl), []);
+});
+
+test("ghcr-retention: the newest promoted versions are kept regardless of age", jqSkip, () => {
+  // 11 promoted versions, all ancient; builds/age rules disabled so only the promoted rule can keep them.
+  const versions = Array.from({ length: 11 }, (_, k) => version(k + 1, 1000 - k, [sha(k + 1)]));
+  versions.push(version(12, 0, [`build-${sha(12)}`, sha(12), "main"]));
+  const pl = plan(versions, { keepBuilds: 1, keepPromoted: 10, promotedMaxAge: 90, untaggedMaxAge: 30 });
+  // newest 10 promoted = 12 (main) + ids 11..3; id 2 and 1 are the 11th/12th -> deleted
+  assert.deepEqual(deleted(pl), [1, 2]);
+  assert.equal(pl[3], "newest 10 promoted");
+  assert.equal(pl[12], "main tag");
+});
+
+test("ghcr-retention: rule by rule (main, keep-*, same digest, builds, age, untagged)", jqSkip, () => {
   const versions = [
-    version(1, 90, [`build-${sha(1)}`, sha(1)]), // old promoted, beyond N -> delete
+    version(1, 90, [`build-${sha(1)}`, sha(1)]), // old promoted, beyond the newest 2 promoted -> delete
     version(2, 60, [`build-${sha(2)}`, sha(2), "main"]), // main tag, however old -> keep
     version(3, 40, [`build-${sha(3)}`]), // old failed candidate -> delete
-    version(4, 20, [`build-${sha(4)}`, sha(4)]), // promoted, 20 days, beyond N -> keep (age)
-    version(5, 10, [`build-${sha(5)}`]), // failed candidate beyond N -> delete
+    version(4, 20, [`build-${sha(4)}`, sha(4)]), // promoted, 20 days -> keep (age)
+    version(5, 10, [`build-${sha(5)}`]), // failed candidate beyond the newest 2 builds -> delete
     version(6, 3, [`build-${sha(6)}`]), // newest 2 builds -> keep
-    version(7, 1, [`build-${sha(7)}`, sha(7)]), // newest 2 builds -> keep
+    version(7, 1, [`build-${sha(7)}`, sha(7)]), // newest 2 promoted -> keep
     version(8, 2, []), // untagged, recent -> keep
     version(9, 45, []), // untagged, old -> delete
-    version(10, 35, [sha(10)]), // promoted sha without build tag, 35 days -> delete
+    version(10, 35, [sha(10)]), // promoted sha, 35 days, beyond the newest 2 promoted -> delete
+    version(11, 0.5, [sha(11)]), // newest promoted -> keep
+    version(12, 500, ["keep-prod", sha(12)]), // manual pin -> keep
+    { ...version(13, 400, []), name: version(2, 0, []).name }, // same digest as the main version -> keep
   ];
-  const out = execFileSync(
-    "jq",
-    ["--argjson", "now", String(NOW), "--argjson", "keep", "2", "--argjson", "maxAge", "30", retentionJq()],
-    { input: JSON.stringify(versions), encoding: "utf8" },
-  );
-  const plan = JSON.parse(out) as { id: number; keep: string | null }[];
-  const keep = Object.fromEntries(plan.map((p) => [p.id, p.keep]));
-  assert.deepEqual(
-    plan.filter((p) => p.keep === null).map((p) => p.id).sort((a, b) => a - b),
-    [1, 3, 5, 9, 10],
-  );
-  assert.equal(keep[2], "main tag");
-  assert.equal(keep[6], "newest 2 build-*");
-  assert.equal(keep[7], "newest 2 build-*");
-  assert.equal(keep[4], "promoted sha, <= 30 days");
-  assert.equal(keep[8], "untagged, <= 30 days");
+  const pl = plan(versions, { keepBuilds: 2, keepPromoted: 2, promotedMaxAge: 30, untaggedMaxAge: 30 });
+  assert.deepEqual(deleted(pl), [1, 3, 5, 9, 10]);
+  assert.equal(pl[2], "main tag");
+  assert.equal(pl[12], "keep-* tag");
+  assert.equal(pl[13], "same digest as a protected version");
+  assert.equal(pl[11], "newest 2 promoted");
+  assert.equal(pl[7], "newest 2 promoted");
+  assert.equal(pl[6], "newest 2 build-*");
+  assert.equal(pl[4], "promoted sha, <= 30 days");
+  assert.equal(pl[8], "untagged, <= 30 days");
+});
+
+test("ci.yml (review C2/C3/D3): provenance off, carbon-copy promote, private packages, revision label checked", () => {
+  const j = jobs(ci);
+  assert.match(j.get("images")!, /provenance: false/);
+  assert.match(j.get("images-check")!, /provenance: false/);
+  assert.equal((j.get("promote")!.match(/imagetools create --prefer-index=false/g) ?? []).length, 2);
+  const promote = j.get("promote")!;
+  const vis = promote.indexOf("-q .visibility");
+  assert.ok(vis > 0 && vis < promote.indexOf("imagetools create"), "visibility check must run before any tag moves");
+  assert.match(promote, /\[ "\$vis" = "private" \] \|\|/);
+  assert.match(j.get("images")!, /\.config\.Labels\["org\.opencontainers\.image\.revision"\]/);
+  assert.match(j.get("images")!, /\[ "\$rev" = "\$GITHUB_SHA" \] \|\|/);
 });
 
 test("ghcr-retention: dry run unless explicitly applied; only packages: write", () => {
