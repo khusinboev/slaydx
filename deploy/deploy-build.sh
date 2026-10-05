@@ -52,18 +52,18 @@ main() {
 
   local prev_head prev_sha prev_tag
   prev_head=$(git rev-parse HEAD)
-  prev_sha=$( [ -f "$STATE_DIR/current.env" ] && sed -n 's/^sha=//p' "$STATE_DIR/current.env" | head -n 1 || true)
+  prev_sha=$( [ -f "$STATE_DIR/current.env" ] && sed -n '/^sha=/{s/^sha=//p;q}' "$STATE_DIR/current.env" || true)
   prev_sha=${prev_sha:-$prev_head}
-  prev_tag=$( [ -f "$STATE_DIR/current.env" ] && sed -n 's/^tag=//p' "$STATE_DIR/current.env" | head -n 1 || true)
+  prev_tag=$( [ -f "$STATE_DIR/current.env" ] && sed -n '/^tag=/{s/^tag=//p;q}' "$STATE_DIR/current.env" || true)
   prev_tag=${prev_tag:-local}
   log "build deploy ${sha:0:7} (previous ${prev_sha:0:7}, tag $prev_tag)"
 
   "$BACKUP_CMD" || die "backup failed ($BACKUP_CMD) — nothing changed"
 
   local web_id="" worker_id="" cid
-  cid=$(dc ps -q web | head -n 1)
+  cid=$(dc ps -q web); cid=${cid%%$'\n'*}
   [ -z "$cid" ] || web_id=$(docker inspect -f '{{.Image}}' "$cid")
-  cid=$(dc ps -q worker | head -n 1)
+  cid=$(dc ps -q worker); cid=${cid%%$'\n'*}
   [ -z "$cid" ] || worker_id=$(docker inspect -f '{{.Image}}' "$cid")
   if [ -n "$web_id" ] && [ -n "$worker_id" ]; then
     docker tag "$web_id" "$REG/slaydx-web:rollback"
@@ -77,9 +77,10 @@ main() {
   dc build || die "build failed — still serving the previous containers; checkout is at ${sha:0:7}, reset with: git -C $APP_DIR reset --hard $prev_head"
   dc up -d
 
-  local i
+  local i body
   for (( i = 1; i <= HEALTH_TRIES; i++ )); do
-    if curl -fsS -m 5 "$HEALTH_URL" 2>/dev/null | grep -q '"status":"ok"'; then
+    body=$(curl -fsS -m 5 "$HEALTH_URL" 2>/dev/null || true)
+    if [[ "$body" == *'"status":"ok"'* ]]; then
       # Persist the tag only when healthy, so manual compose commands keep running `:local`.
       if grep -q '^SLAYDX_TAG=' .env; then
         sed -i 's/^SLAYDX_TAG=.*/SLAYDX_TAG=local/' .env

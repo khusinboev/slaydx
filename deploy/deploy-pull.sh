@@ -57,7 +57,7 @@ step() {  # close the previous step's timer under name $1
 
 state_get() {  # $1=key → value from $STATE_DIR/current.env (empty if missing)
   [ -f "$STATE_DIR/current.env" ] || return 0
-  sed -n "s/^$1=//p" "$STATE_DIR/current.env" | head -n 1
+  sed -n "/^$1=/{s/^$1=//p;q}" "$STATE_DIR/current.env"
 }
 
 # `.env` is the compose interpolation file, so a manual `docker compose -p slaydx up -d` or
@@ -88,7 +88,10 @@ health_once() {
     case "$svc" in web) web=$((web + 1)) ;; worker) worker=$((worker + 1)) ;; esac
   done <<< "$out"
   [ "$web" -ge 1 ] && [ "$worker" -ge 1 ] || return 1
-  curl -fsS -m 5 "$HEALTH_URL" 2>/dev/null | grep -q '"status":"ok"'
+  # No `curl | grep -q`: grep exiting early can SIGPIPE curl, and pipefail turns that into a failure.
+  local body
+  body=$(curl -fsS -m 5 "$HEALTH_URL" 2>/dev/null) || return 1
+  [[ "$body" == *'"status":"ok"'* ]]
 }
 
 wait_healthy() {
@@ -180,10 +183,11 @@ main() {
 
   # 4) Rollback point: tag the images that are running now as local `:rollback` (never pushed),
   #    so the automatic rollback restores exactly them whatever the previous mode was.
+  # First id only, without `| head` (SIGPIPE under pipefail with 2 worker replicas).
   local web_id="" worker_id="" cid
-  cid=$(dc ps -q web | head -n 1)
+  cid=$(dc ps -q web); cid=${cid%%$'\n'*}
   [ -z "$cid" ] || web_id=$(docker inspect -f '{{.Image}}' "$cid")
-  cid=$(dc ps -q worker | head -n 1)
+  cid=$(dc ps -q worker); cid=${cid%%$'\n'*}
   [ -z "$cid" ] || worker_id=$(docker inspect -f '{{.Image}}' "$cid")
   if [ -n "$web_id" ] && [ -n "$worker_id" ]; then
     docker tag "$web_id" "$REG/slaydx-web:rollback"

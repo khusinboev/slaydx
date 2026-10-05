@@ -47,7 +47,9 @@ case "$args" in
     fi
     echo '{}' ;;
   "compose -p slaydx ps -q web") [ -n "${"$"}{STUB_NO_RUNNING:-}" ] || echo cid-web ;;
-  "compose -p slaydx ps -q worker") [ -n "${"$"}{STUB_NO_RUNNING:-}" ] || printf 'cid-worker1\ncid-worker2\n' ;;
+  "compose -p slaydx ps -q worker")
+    [ -n "${"$"}{STUB_NO_RUNNING:-}" ] || printf 'cid-worker1\ncid-worker2\n'
+    [ -z "${"$"}{STUB_BIG_OUTPUT:-}" ] || seq 1 200000 ;;
   "inspect -f {{.Image}} cid-web") echo sha256:oldweb ;;
   "inspect -f {{.Image}} cid-worker1") echo sha256:oldworker ;;
   "compose -p slaydx run "*) exit "${"$"}{STUB_MIGRATE_RC:-0}" ;;
@@ -82,6 +84,7 @@ state=absent; [ -f "$SLAYDX_STATE_DIR/current" ] && state=present
 printf '%s\t%s\t%s\tstate=%s %s\n' curl "${"$"}{SLAYDX_TAG:--}" - "$state" "$*" >> "$STUB_LOG"
 [ -n "${"$"}{STUB_CURL_FAIL:-}" ] && exit 22
 echo '{"status":"ok"}'
+[ -z "${"$"}{STUB_BIG_OUTPUT:-}" ] || seq 1 200000
 `;
 
 const STUB_BACKUP = String.raw`#!/usr/bin/env bash
@@ -353,6 +356,18 @@ test("deploy-pull: without running containers it deploys but reports that no rol
   assert.match(r.out, /no automatic rollback possible/);
   assert.match(r.out, /nothing to roll back to/);
   assert.equal(idx(sb.calls(), (c) => c.tag === "rollback"), -1);
+});
+
+test("deploy-pull and deploy-build: long command output never SIGPIPEs the script under pipefail", (t) => {
+  // `cmd | head -n 1` / `curl | grep -q` exit early and kill the writer with SIGPIPE (exit 141
+  // under pipefail) — seen once with 2 worker ids; a long output makes it deterministic.
+  for (const script of [PULL, BUILD]) {
+    const sb = sandbox(t, { STUB_BIG_OUTPUT: "1" });
+    const r = run(script, [SHA], sb);
+    assert.equal(r.code, 0, `${path.basename(script)}: ${r.out}`);
+    assert.match(readFileSync(path.join(sb.backups, "ROLLBACK.txt"), "utf8"), /\nworker_image=sha256:oldworker\n/);
+    assert.equal(readFileSync(path.join(sb.state, "current"), "utf8"), `${SHA}\n`);
+  }
 });
 
 async function holdLock(lock: string): Promise<ChildProcess> {
