@@ -207,7 +207,7 @@ export const SlideRail = memo(function SlideRail({
                   </span>
                 </span>
               </button>
-              <div className="mt-0.5 flex items-center gap-0.5 text-[10px] text-white/60">
+              <div className="mt-0.5 flex items-center gap-0.5 text-[10px] pointer-coarse:text-xs text-white/60">
                 <span className="tabular-nums">{idx + 1}</span>
                 {reorderOn && active ? (
                   <>
@@ -315,7 +315,7 @@ export const SlideRail = memo(function SlideRail({
               style={dragging > idx ? { top: -2 } : { bottom: 2 }}
             />
           ) : null}
-          <span className="w-5 shrink-0 pt-6 text-right text-[11px] tabular-nums text-white/50">{idx + 1}</span>
+          <span className="w-5 shrink-0 pt-6 text-right text-[11px] pointer-coarse:text-xs tabular-nums text-white/50">{idx + 1}</span>
           <span className="min-w-0 flex-1">
             <span
               data-thumb
@@ -342,9 +342,9 @@ export const SlideRail = memo(function SlideRail({
               jonli belgilar bilan og'irlashmaydi.
             */}
             {marks === undefined ? (
-              <span className="mt-1 block truncate text-[11px] text-white/70">{s.title}</span>
+              <span className="mt-1 block truncate text-[11px] pointer-coarse:text-xs text-white/70">{s.title}</span>
             ) : (
-              <span className="mt-1 flex items-center gap-1 text-[11px] text-white/70">
+              <span className="mt-1 flex items-center gap-1 text-[11px] pointer-coarse:text-xs text-white/70">
                 {mark === "writing" ? (
                   <span className="slx-typing inline-block size-1.5 shrink-0 rounded-full bg-emerald-400" aria-hidden="true" />
                 ) : null}
