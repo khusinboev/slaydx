@@ -22,6 +22,17 @@ export const VIEWER_TOOLBAR_H = 40;
 const RIGHT_INLINE = { narrow: "hidden @2xl:flex", wide: "hidden @3xl:flex" } as const;
 const RIGHT_IN_MENU = { narrow: "@2xl:hidden", wide: "@3xl:hidden" } as const;
 
+/**
+ * Touch sizes (mobile sprint O5: 44 px on touch; desktop unchanged).
+ * - The toolbar row is 44 px high on a coarse pointer.
+ * - Row icons (prev/next, «⋯») keep their 28 px look and get a 44×44 hit
+ *   area from `.hit-44` (globals.css); their neighbours are text or ≥ 8 px
+ *   away, so expanded areas never overlap a neighbouring control.
+ * - Controls that also live in the «⋯» panel (zoom) grow for real.
+ * `TOUCH_BOX` is exported for the viewers' own `right`/`pinned` buttons.
+ */
+export const TOUCH_BOX = "pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center";
+
 export function ViewerToolbar({
   zoom,
   onZoom,
@@ -33,6 +44,7 @@ export function ViewerToolbar({
   extra,
   right,
   rightWidth = "narrow",
+  pinned,
   view,
   onView,
   sticky = false,
@@ -56,6 +68,12 @@ export function ViewerToolbar({
   right?: ReactNode;
   /** How much room `right` needs inline (see `RIGHT_INLINE`). */
   rightWidth?: keyof typeof RIGHT_INLINE;
+  /**
+   * Controls that stay in the row at EVERY width, never in «⋯» (phones:
+   * «Tahrirlash», mobile sprint E). Rendered before `right`, in both view
+   * modes. Omitted = nothing changes for existing callers.
+   */
+  pinned?: ReactNode;
   /**
    * «O‘qish / Varaq» toggle (V5a). Omitted (resume) = no toggle. In
    * «O‘qish» the zoom controls are gone (text reflows) and the counter
@@ -81,20 +99,22 @@ export function ViewerToolbar({
   const reading = view === "reading";
   const hasZoom = !reading;
   const btn = "hover:bg-white/10 rounded p-1.5";
+  const navBtn = cn(btn, "hit-44");
+  const zoomBtn = cn(btn, TOUCH_BOX);
 
   const zoomControls = (
     <>
-      <button type="button" className={btn} onClick={dec} aria-label="Kichraytirish">
+      <button type="button" className={zoomBtn} onClick={dec} aria-label="Kichraytirish">
         <Minus className="size-4" />
       </button>
-      <button type="button" className="hover:bg-white/10 min-w-12 rounded px-1 py-1 tabular-nums" onClick={onFit} title="Ustun eniga sig‘dirish">
+      <button type="button" className={cn("hover:bg-white/10 min-w-12 rounded px-1 py-1 tabular-nums", TOUCH_BOX)} onClick={onFit} title="Ustun eniga sig‘dirish">
         {zoom}%
       </button>
-      <button type="button" className={btn} onClick={inc} aria-label="Kattalashtirish">
+      <button type="button" className={zoomBtn} onClick={inc} aria-label="Kattalashtirish">
         <Plus className="size-4" />
       </button>
       {onFullscreen ? (
-        <button type="button" className={cn(btn, "ml-1")} onClick={onFullscreen} aria-label="To‘liq ekran">
+        <button type="button" className={cn(zoomBtn, "ml-1")} onClick={onFullscreen} aria-label="To‘liq ekran">
           <Maximize2 className="size-4" />
         </button>
       ) : null}
@@ -108,11 +128,11 @@ export function ViewerToolbar({
     <div
       data-viewer-toolbar={sticky ? "sticky" : undefined}
       className={cn(
-        "no-print @container bg-[#3b3b3b] text-[#f3f3f3] flex h-10 shrink-0 items-center gap-1 px-2 text-[13px]",
+        "no-print @container bg-[#3b3b3b] text-[#f3f3f3] flex h-10 shrink-0 items-center gap-1 px-2 text-[13px] pointer-coarse:h-11",
         sticky && "sticky top-[var(--result-header-h,0px)] z-10",
       )}
     >
-      <button type="button" className={cn(btn, "disabled:opacity-30")} onClick={() => onPage(page - 1)} disabled={page <= 1} aria-label="Oldingi sahifa">
+      <button type="button" className={cn(navBtn, "disabled:opacity-30")} onClick={() => onPage(page - 1)} disabled={page <= 1} aria-label="Oldingi sahifa">
         <ChevronLeft className="size-4" />
       </button>
       <span
@@ -122,7 +142,7 @@ export function ViewerToolbar({
       >
         {page} / {Math.max(1, pages)}
       </span>
-      <button type="button" className={cn(btn, "disabled:opacity-30")} onClick={() => onPage(page + 1)} disabled={page >= pages} aria-label="Keyingi sahifa">
+      <button type="button" className={cn(navBtn, "disabled:opacity-30")} onClick={() => onPage(page + 1)} disabled={page >= pages} aria-label="Keyingi sahifa">
         <ChevronRight className="size-4" />
       </button>
       {view && onView ? (
@@ -139,13 +159,19 @@ export function ViewerToolbar({
       ) : null}
       {/* Mobil ekranda maket chiplari + tugmalar sig'masa gorizontal aylantiriladi (kesilmaydi). */}
       {extra ? <div className="ml-auto flex max-w-full items-center gap-2 overflow-x-auto">{extra}</div> : null}
+      {pinned ? (
+        <div data-toolbar-pinned className={cn("flex shrink-0 items-center gap-1.5", extra ? "ml-2" : "ml-auto")}>
+          {pinned}
+        </div>
+      ) : null}
       {right ? (
-        <div data-toolbar-right className={cn("min-w-0 items-center gap-1.5", RIGHT_INLINE[rightWidth], extra ? "ml-2" : "ml-auto")}>
+        <div data-toolbar-right className={cn("min-w-0 items-center gap-1.5", RIGHT_INLINE[rightWidth], extra || pinned ? "ml-2" : "ml-auto")}>
           {right}
         </div>
       ) : null}
       {moreClass ? (
-        <MoreMenu className={cn(moreClass, !extra && "ml-auto")}>
+        // After `pinned` the trigger keeps 8 px so its expanded hit area never overlaps it.
+        <MoreMenu className={cn(moreClass, pinned ? "ml-2" : !extra && "ml-auto")}>
           {hasZoom ? (
             <div data-more-zoom className="flex items-center gap-1 @lg:hidden">
               <span className="mr-auto px-1 text-xs text-white/60">Masshtab</span>
@@ -169,7 +195,7 @@ export function ViewerToolbar({
  */
 function ViewToggle({ view, onView }: { view: DocView; onView: (v: DocView) => void }) {
   const seg = (on: boolean) =>
-    cn("rounded-[3px] px-2 py-0.5 text-[12px] leading-5", on ? "bg-white text-[#2b2b2b] font-medium" : "text-white/80 hover:bg-white/10");
+    cn("hit-44 rounded-[3px] px-2 py-0.5 text-[12px] leading-5", on ? "bg-white text-[#2b2b2b] font-medium" : "text-white/80 hover:bg-white/10");
   return (
     <div role="group" aria-label="Ko‘rinish" data-view-toggle data-view-mode={view} className="flex shrink-0 rounded bg-black/30 p-0.5">
       <button
@@ -252,7 +278,7 @@ function MoreMenu({ className, children }: { className?: string; children: React
         aria-haspopup="true"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
-        className={cn("hover:bg-white/10 rounded p-1.5", open && "bg-white/15")}
+        className={cn("hit-44 hover:bg-white/10 rounded p-1.5", open && "bg-white/15")}
         onClick={() => setOpen((v) => !v)}
       >
         <MoreHorizontal className="size-4" />

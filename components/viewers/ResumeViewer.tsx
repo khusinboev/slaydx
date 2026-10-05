@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ImagePlus, Redo2, Trash2, Undo2 } from "lucide-react";
+import { ImagePlus, Pencil, Redo2, Trash2, Undo2 } from "lucide-react";
 import type { AcademicDoc } from "@/lib/generation/types";
 import type { ResumeOp } from "@/lib/generation/resume/edit";
 import { planResume, type ResumeItem, type ResumeLayout } from "@/lib/generation/resume/layout";
@@ -22,7 +22,9 @@ import { useResumeEdit } from "../files/useResumeEdit";
 import type { EditActionsState } from "../files/EditActions";
 import { useMeasuredPages } from "./measure";
 import { PageRow, ZoomFrame, Workspace } from "./sheet";
-import { VIEWER_TOOLBAR_H, ViewerToolbar } from "./toolbar";
+import { TOUCH_BOX, VIEWER_TOOLBAR_H, ViewerToolbar } from "./toolbar";
+import { DocEditHint, EditDoneBar, useDocEditHint, useEditFocusZoom } from "./EditDoneBar";
+import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
 import { useFitZoom } from "./useFitZoom";
 import { useVisiblePage } from "./useVisiblePage";
 import { ResumeItemView, ResumePage } from "./resume/ResumePage";
@@ -83,6 +85,34 @@ export function ResumeViewer({
   const [editOn, setEditOn] = useState(false);
   const editable = ed.editable && !ed.legacy;
   const editing = editOn && editable;
+  /** The user picked a zoom by hand (toolbar «−/+»); «%» goes back to fit. The phone focus zoom restores either. */
+  const manualZoom = useRef(false);
+  const onToolbarZoom = useCallback(
+    (n: number) => {
+      manualZoom.current = true;
+      setZoom(n);
+    },
+    [setZoom],
+  );
+  const onToolbarFit = useCallback(() => {
+    manualZoom.current = false;
+    fit();
+  }, [fit]);
+  /*
+   * Phones (coarse pointer or < 768 px): «Tahrirlash» pinned in the row, a
+   * one-time double-tap hint, the «Bekor / Tayyor» bar above the keyboard
+   * and a temporary focus zoom — the A4 fitted to 390 px is 46 % (body text
+   * ≈ 5 px), so the edited field zooms in and the previous view comes back
+   * after the edit (`useEditFocusZoom` explains why not a reflow mode).
+   */
+  const coarse = useCoarsePointer();
+  useEditFocusZoom({
+    active: coarse && editing,
+    zoom,
+    apply: setZoom,
+    restore: (prev) => (manualZoom.current ? setZoom(prev) : fit()),
+  });
+  const hint = useDocEditHint(coarse && editing);
 
   const items = useMemo(() => mainItemsOf(layout), [layout]);
   const pad = resumeMainPadMm(layout.template, 0);
@@ -177,12 +207,24 @@ export function ResumeViewer({
     return () => window.removeEventListener("keydown", onKey);
   }, [editing, undo, redo, save, pending]);
 
+  const editButton = editable ? (
+    <button
+      type="button"
+      aria-pressed={editing}
+      className={cn("rounded px-2 py-1 text-[12px]", TOUCH_BOX, "pointer-coarse:gap-1.5 pointer-coarse:text-[13px]", editing ? "bg-sky-500 text-white" : "hover:bg-white/10")}
+      onClick={() => setEditOn((v) => !v)}
+    >
+      {coarse ? <Pencil className="size-4 shrink-0" aria-hidden /> : null}
+      {/* Under 24rem of toolbar (a 360 px phone) only the pencil shows; the name stays for screen readers. */}
+      <span className={coarse ? "@max-sm:sr-only" : undefined}>Tahrirlash</span>
+    </button>
+  ) : null;
   const right = editable ? (
     <>
       <select
         aria-label="Shablon"
         title="Shablon"
-        className="rounded bg-white/10 px-1.5 py-1 text-[12px] text-white outline-none"
+        className="rounded bg-white/10 px-1.5 py-1 text-[12px] text-white outline-none pointer-coarse:min-h-11"
         value={model.template}
         onChange={(e) => {
           const v = e.target.value;
@@ -208,7 +250,7 @@ export function ResumeViewer({
       <select
         aria-label="Rang"
         title="Rang"
-        className="rounded bg-white/10 px-1.5 py-1 text-[12px] text-white outline-none"
+        className="rounded bg-white/10 px-1.5 py-1 text-[12px] text-white outline-none pointer-coarse:min-h-11"
         value={model.palette}
         onChange={(e) => {
           const v = e.target.value;
@@ -225,7 +267,7 @@ export function ResumeViewer({
         type="button"
         aria-label="Rasm yuklash"
         title="Rasm yuklash"
-        className="hover:bg-white/10 rounded p-1.5 disabled:opacity-40"
+        className={cn("hover:bg-white/10 rounded p-1.5 disabled:opacity-40", TOUCH_BOX)}
         disabled={saving}
         onClick={pickPhoto}
       >
@@ -236,7 +278,7 @@ export function ResumeViewer({
           type="button"
           aria-label="Rasmni olib tashlash"
           title="Rasmni olib tashlash"
-          className="hover:bg-white/10 rounded p-1.5 disabled:opacity-40"
+          className={cn("hover:bg-white/10 rounded p-1.5 disabled:opacity-40", TOUCH_BOX)}
           disabled={saving}
           onClick={() => void ed.removePhoto()}
         >
@@ -248,7 +290,7 @@ export function ResumeViewer({
         type="button"
         aria-label="Bekor qilish"
         title="Bekor qilish (Ctrl+Z)"
-        className="hover:bg-white/10 rounded p-1.5 disabled:opacity-30"
+        className={cn("hover:bg-white/10 rounded p-1.5 disabled:opacity-30", TOUCH_BOX)}
         disabled={!ed.canUndo}
         onClick={undo}
       >
@@ -258,20 +300,13 @@ export function ResumeViewer({
         type="button"
         aria-label="Qaytarish"
         title="Qaytarish (Ctrl+Shift+Z)"
-        className="hover:bg-white/10 rounded p-1.5 disabled:opacity-30"
+        className={cn("hover:bg-white/10 rounded p-1.5 disabled:opacity-30", TOUCH_BOX)}
         disabled={!ed.canRedo}
         onClick={redo}
       >
         <Redo2 className="size-4" />
       </button>
-      <button
-        type="button"
-        aria-pressed={editing}
-        className={cn("rounded px-2 py-1 text-[12px]", editing ? "bg-sky-500 text-white" : "hover:bg-white/10")}
-        onClick={() => setEditOn((v) => !v)}
-      >
-        Tahrirlash
-      </button>
+      {coarse ? null : editButton}
     </>
   ) : null;
 
@@ -281,15 +316,17 @@ export function ResumeViewer({
       <ViewerToolbar
         sticky
         zoom={zoom}
-        onZoom={setZoom}
+        onZoom={onToolbarZoom}
         page={page}
         pages={total}
         onPage={go}
-        onFit={fit}
+        onFit={onToolbarFit}
         right={right}
+        pinned={coarse ? editButton : undefined}
         // Template/palette selects + photo + undo/redo + «Tahrirlash» need ≈ 670 px: below 48rem of toolbar they go to «Boshqa amallar».
         rightWidth="wide"
       />
+      {hint.show ? <DocEditHint onDismiss={hint.dismiss} /> : null}
       {ed.error ? (
         <div className="no-print bg-rose-900/80 flex items-center gap-2 px-3 py-1.5 text-[12px] text-white">
           <span className="flex-1">{ed.error}</span>
@@ -340,6 +377,7 @@ export function ResumeViewer({
         }}
       />
       {measureNode}
+      {editing ? <EditDoneBar revealKey={zoom} /> : null}
     </div>
   );
 }

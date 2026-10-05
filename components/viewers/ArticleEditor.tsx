@@ -10,7 +10,8 @@ import type { TeacherPlan } from "@/lib/generation/teacher/layout";
 import type { WorkPlan } from "@/lib/generation/work/layout";
 import type { AcademicDoc } from "@/lib/generation/types";
 import type { FlowItem } from "@/lib/viewers/flow";
-import { focusAtEnd } from "./editable";
+import { announceOpenField, focusAtEnd, isTapEcho, releaseOpenField, swallowTapMouseDown } from "./editable";
+import { createDoubleTapDetector } from "./slide-edit/doubleTap";
 
 /**
  * Tahrir qatlami REJADAN faqat iqtibos ko'rinishi uchun kerak bo'lgan
@@ -620,6 +621,7 @@ export function ArticleEditor({ doc, plan, onOps, children }: ArticleEditorProps
     cur.el.removeAttribute("data-article-editing");
     // React tugunlari qaytadi — undan keyingi render ularni yangilaydi.
     cur.el.replaceChildren(...cur.keep);
+    releaseOpenField(cur.el);
   }, []);
 
   const commit = useCallback(() => {
@@ -653,6 +655,8 @@ export function ArticleEditor({ doc, plan, onOps, children }: ArticleEditorProps
     el.setAttribute("contenteditable", "true");
     el.setAttribute("data-article-editing", "1");
     focusAtEnd(el);
+    // Phone «Bekor / Tayyor» bar and phone back end the edit through the same paths as Enter/Esc.
+    announceOpenField({ el, commit: () => commitRef.current(), cancel: () => cancelRef.current() });
   }, []);
 
   const disarm = useCallback(() => {
@@ -668,11 +672,36 @@ export function ArticleEditor({ doc, plan, onOps, children }: ArticleEditorProps
     if (!host) return;
 
     const onDbl = (ev: Event) => {
+      if (ev.type === "dblclick" && isTapEcho()) {
+        ev.preventDefault();
+        return;
+      }
       const target = (ev.target as HTMLElement | null)?.closest?.("[data-path]") as HTMLElement | null;
       if (!target || !host.contains(target)) return;
       ev.preventDefault();
       open(target);
     };
+    /*
+     * Touch/pen double TAP (mobile sprint, the slide editor's detector):
+     * synthetic `dblclick` is not guaranteed on touch (iOS WKWebView,
+     * Telegram). Opening inside `pointerup` keeps it in the user gesture,
+     * so iOS raises the keyboard. A following `dblclick` finds the field
+     * already open and does nothing.
+     */
+    const taps = createDoubleTapDetector();
+    const onPointerDown = (ev: PointerEvent) => {
+      if (ev.pointerType === "mouse") return;
+      taps.down(ev.pointerId, ev.clientX, ev.clientY, ev.timeStamp);
+    };
+    const onPointerUp = (ev: PointerEvent) => {
+      if (ev.pointerType === "mouse") return;
+      if (!taps.up(ev.pointerId, ev.clientX, ev.clientY, ev.timeStamp)) return;
+      const before = openRef.current?.el ?? null;
+      onDbl(ev);
+      // Opened by this tap: its compat mousedown must not blur (and commit) the new field.
+      if (openRef.current && openRef.current.el !== before) swallowTapMouseDown();
+    };
+    const onPointerCancel = (ev: PointerEvent) => taps.cancel(ev.pointerId);
     const onKey = (ev: KeyboardEvent) => {
       const cur = openRef.current;
       if (!cur) return;
@@ -717,11 +746,17 @@ export function ArticleEditor({ doc, plan, onOps, children }: ArticleEditorProps
     };
 
     host.addEventListener("dblclick", onDbl);
+    host.addEventListener("pointerdown", onPointerDown);
+    host.addEventListener("pointerup", onPointerUp);
+    host.addEventListener("pointercancel", onPointerCancel);
     host.addEventListener("keydown", onKey);
     host.addEventListener("focusout", onFocusOut);
     host.addEventListener("click", onClick);
     return () => {
       host.removeEventListener("dblclick", onDbl);
+      host.removeEventListener("pointerdown", onPointerDown);
+      host.removeEventListener("pointerup", onPointerUp);
+      host.removeEventListener("pointercancel", onPointerCancel);
       host.removeEventListener("keydown", onKey);
       host.removeEventListener("focusout", onFocusOut);
       host.removeEventListener("click", onClick);
