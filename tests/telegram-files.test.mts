@@ -268,6 +268,120 @@ test("formats are cached separately: pdf has its own row and its own upload", { 
   assert.notEqual((await cached(gen, "pdf"))!.file_id, (await cached(gen, "native"))!.file_id);
 });
 
+test("m6: an upload of a converted format asks prepare first — preparing → TelegramFileError('preparing', retryAfterMs), nothing produced or sent; a cached file_id needs no prepare", { skip }, async () => {
+  const u = await mkUser();
+  const gen = await mkGen(u.id);
+  const h = harness({ file: { mime: "application/pdf", fileName: "Quyosh tizimi.pdf" } });
+  const asked: string[] = [];
+  let ready = false;
+  const deps: Deps = {
+    ...h.deps,
+    prepare: async (_g, _u, format) => {
+      asked.push(format);
+      return ready ? { state: "ready" } : { state: "preparing", retryAfterMs: 1500 };
+    },
+  };
+  for (const run of [() => saveToBot(gen, u, "pdf", deps), () => prepareShare(gen, u, "pdf", deps)]) {
+    await assert.rejects(run(), (e: unknown) => {
+      assert.ok(e instanceof TelegramFileError);
+      assert.equal(e.code, "preparing");
+      assert.equal(e.retryAfterMs, 1500);
+      return true;
+    });
+  }
+  assert.equal(h.produced.length, 0);
+  assert.equal(h.calls.length, 0);
+  assert.equal(await cached(gen, "pdf"), null);
+  // Formats without a conversion never ask.
+  await saveToBot(gen, u, "native", deps);
+  assert.deepEqual(asked, ["pdf", "pdf"]);
+  ready = true;
+  assert.deepEqual(await saveToBot(gen, u, "pdf", deps), { duplicate: false, uploaded: true });
+  assert.deepEqual(asked, ["pdf", "pdf", "pdf"]);
+  // A valid cached file_id: resent by id, no preparation needed.
+  h.advance(SAVE_DEBOUNCE_MS + 1);
+  ready = false;
+  assert.deepEqual(await saveToBot(gen, u, "pdf", deps), { duplicate: false, uploaded: false });
+  assert.equal(asked.length, 3);
+});
+
+/* ─────────── M1: content that changes without a file_version bump ─────────── */
+
+/** A producer whose bytes change on every call (new game results keep arriving). */
+function growingCsv(h: ReturnType<typeof harness>): Deps {
+  let players = 0;
+  return {
+    ...h.deps,
+    produce: async (genId, userId, format) => {
+      h.produced.push({ genId, userId, format });
+      players += 5;
+      const csv = `﻿"Ism","Ball"\r\n${Array.from({ length: players }, (_, i) => `"O'quvchi ${i + 1}","${i}"\r\n`).join("")}`;
+      return { bytes: Buffer.from(csv), fileName: "Saralash-natijalar.csv", mime: "text/csv; charset=utf-8", fileVersion: 1 };
+    },
+  };
+}
+
+test("M1: every registry id — instant serializations never reuse a cached file_id, stored/derived ones do", { skip }, async () => {
+  const { DOWNLOAD_FORMAT_IDS } = await import("../lib/downloads/formats.ts");
+  const instant = ["transcript-txt", "glossary-csv", "results-csv"];
+  assert.deepEqual(DOWNLOAD_FORMAT_IDS.filter((f) => !tf.reusesFileId(f)).sort(), [...instant].sort());
+  const u = await mkUser();
+  const gen = await mkGen(u.id, { tool: "sorting", format: "docx" });
+  for (const format of DOWNLOAD_FORMAT_IDS) {
+    const h = harness();
+    const deps = growingCsv(h);
+    assert.equal((await saveToBot(gen, u, format, deps)).uploaded, true, `${format}: first save uploads`);
+    h.advance(SAVE_DEBOUNCE_MS + 1);
+    const second = await saveToBot(gen, u, format, deps);
+    assert.equal(second.duplicate, false, format);
+    if (instant.includes(format)) {
+      assert.equal(second.uploaded, true, `${format}: the second save uploads the CURRENT bytes`);
+      assert.equal(h.produced.length, 2, `${format}: produced again`);
+      assert.ok(h.calls[1].form, `${format}: multipart, not a resend by file_id`);
+      assert.ok((h.calls[1].form!.document as { size: number }).size > (h.calls[0].form!.document as { size: number }).size, `${format}: new content`);
+      assert.equal((await cached(gen, format))!.file_id, `FILE-${fileSeq}`, `${format}: row points at the new upload`);
+    } else {
+      assert.equal(second.uploaded, false, `${format}: resend by file_id`);
+      assert.equal(h.produced.length, 1, format);
+      assert.equal(h.calls[1].form, undefined, format);
+    }
+  }
+});
+
+test("M1: results-csv share after new results uploads the current table; the prepared message never carries the old file_id", { skip }, async () => {
+  const u = await mkUser();
+  const gen = await mkGen(u.id, { tool: "sorting", format: "docx" });
+  const h = harness();
+  const deps = growingCsv(h);
+  await saveToBot(gen, u, "results-csv", deps);
+  const old = (await cached(gen, "results-csv"))!.file_id;
+  h.advance(60_000);
+  const r = await prepareShare(gen, u, "results-csv", deps);
+  assert.equal(r.uploaded, true);
+  assert.deepEqual(h.calls.map((c) => c.method), ["sendDocument", "sendDocument", "savePreparedInlineMessage"]);
+  const sent = (h.calls[2].json!.result as Record<string, unknown>).document_file_id;
+  assert.notEqual(sent, old);
+  assert.equal(sent, (await cached(gen, "results-csv"))!.file_id);
+});
+
+test("n5: an always-uploaded format is still debounced in the DB (tap within 20 s → duplicate); a failed upload frees the slot", { skip }, async () => {
+  const u = await mkUser();
+  const gen = await mkGen(u.id, { tool: "sorting", format: "docx" });
+  const h = harness();
+  const deps = growingCsv(h);
+  await saveToBot(gen, u, "results-csv", deps);
+  h.advance(SAVE_DEBOUNCE_MS - 1_000);
+  assert.deepEqual(await saveToBot(gen, u, "results-csv", deps), { duplicate: true, uploaded: false });
+  assert.equal(h.produced.length, 1, "a double tap does not upload a second copy");
+
+  h.advance(5_000);
+  const failing = harness({ replies: [{ ok: false, error_code: 403, description: "Forbidden: bot was blocked by the user" }] });
+  await rejectsWith(saveToBot(gen, u, "results-csv", { ...growingCsv(failing), now: deps.now }), "bot_unreachable");
+  // Nothing was delivered: an immediate retry sends.
+  assert.equal((await saveToBot(gen, u, "results-csv", deps)).uploaded, true);
+  assert.equal(h.produced.length, 2);
+});
+
 test("403 on upload → bot_unreachable, nothing cached", { skip }, async () => {
   const u = await mkUser();
   const gen = await mkGen(u.id);
@@ -320,6 +434,27 @@ test("dead cached file_id (400 wrong file identifier) → re-upload and overwrit
   assert.notEqual((await cached(gen))!.file_id, dead);
 });
 
+test("m2: a Telegram id above 2^53 → telegram_id_unsupported (buildPrepared and prepareShare), never a rounded user_id", async () => {
+  const big = "9007199254740993"; // 2^53 + 1: Number() would make it ...992
+  const args = {
+    resultId: "r",
+    kind: tf.mediaKindFor(PPTX),
+    fileId: "F",
+    title: "t",
+    description: "d",
+    presentation: { caption: "c" },
+  };
+  assert.throws(() => tf.buildPrepared({ ...args, telegramId: big }), (e: unknown) => (e as { code?: string }).code === "telegram_id_unsupported");
+  assert.throws(() => tf.telegramUserId("12345678901234567890"), (e: unknown) => (e as { code?: string }).code === "telegram_id_unsupported");
+  assert.equal(tf.buildPrepared({ ...args, telegramId: "6123456789" }).user_id, 6_123_456_789);
+  assert.equal(tf.telegramUserId(String(Number.MAX_SAFE_INTEGER)), Number.MAX_SAFE_INTEGER);
+  // Refused before anything is produced, uploaded or read.
+  const h = harness();
+  await rejectsWith(prepareShare(randomUUID(), { id: "1", telegramId: big }, "native", h.deps), "telegram_id_unsupported");
+  assert.equal(h.calls.length, 0);
+  assert.equal(h.produced.length, 0);
+});
+
 test("no telegram_id → no_telegram before any DB/Bot/produce work; foreign or unfinished generation", { skip }, async () => {
   const owner = await mkUser();
   const stranger = await mkUser();
@@ -342,6 +477,16 @@ test("a file above Telegram's 50 MB upload limit → too_large, no Bot API call"
   const h = harness({ file: { bytes: Buffer.alloc(50 * 1024 * 1024 + 1) } });
   await rejectsWith(saveToBot(gen, u, "native", h.deps), "too_large");
   assert.equal(h.calls.length, 0);
+});
+
+test("n4: telegram_files.media accepts only what the code writes (document, audio) — 'photo' is refused", { skip }, async () => {
+  const u = await mkUser();
+  const gen = await mkGen(u.id);
+  const ins = (media: string, format: string) =>
+    query("INSERT INTO telegram_files (generation_id, format, file_version, media, file_id) VALUES ($1, $2, 1, $3, 'F')", [gen, format, media]);
+  await ins("document", "native");
+  await ins("audio", "pdf");
+  await assert.rejects(ins("photo", "jpg"), /check constraint/i);
 });
 
 test("generation deleted → its telegram_files rows go with it (FK cascade)", { skip }, async () => {

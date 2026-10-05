@@ -1,22 +1,22 @@
 import "server-only";
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import JSZip from "jszip";
-import { csvCell, csvHeadLine, csvRowLine } from "@/app/api/generations/[id]/results/route";
 import type { DownloadFormat, DownloadFormatId } from "@/lib/downloads/formats";
 import type { AcademicDoc } from "@/lib/generation/types";
 import type { GlossaryTerm } from "@/lib/generation/teacher/types";
 import { limit } from "../api";
+import { CSV_BOM, csvHeadLine, csvRecord, csvRowLine } from "../csv";
 import { env } from "../env";
 import { iterateAllResultRows, type GameResult } from "../game-sessions";
 import { pdfAvailable, pdfFileName, PDF_TIMEOUT_MS } from "../pdf";
-import { derivedSize, getOrConvertPdf, getOrDerive, type DerivedDiskCache, type PdfConverter } from "../pdf-cache";
+import { derivedSize, getOrConvertPdf, getOrDerive, touchDerived, type DerivedDiskCache, type PdfConverter } from "../pdf-cache";
 import { Gate } from "../soffice-gate";
-import { DownloadError } from "./errors";
+import { pdftoppmBin } from "../thumb";
+import { DownloadError, isDownloadError } from "./errors";
 
 const run = promisify(execFile);
 
@@ -59,7 +59,9 @@ export type ProduceDeps = {
   /** DOCX/PPTX → PDF (default `toPdf` through the shared soffice gate). */
   convertPdf?: PdfConverter;
   /** PDF → one PNG per page (default pdftoppm). `null` = failed. */
-  rasterize?: (pdf: Buffer, dpi: number) => Promise<Buffer[] | null>;
+  rasterize?: (pdf: Buffer, dpi: number, cap: SlidesPngCap) => Promise<Buffer[] | null>;
+  /** `slides-png` page-count / total-size cap (default `SLIDES_PNG_CAP`). */
+  slidesPngCap?: SlidesPngCap;
   /** PNG → JPG (default sharp). */
   toJpeg?: (png: Buffer) => Promise<Buffer>;
   cache?: DerivedDiskCache;
@@ -96,12 +98,6 @@ const PDF_LIMIT = 10;
 const RASTER_LIMIT = 10;
 const LIMIT_WINDOW_SEC = 600;
 
-export function pdftoppmBinary(): string | null {
-  const explicit = process.env.PDFTOPPM_BIN?.trim();
-  if (explicit) return existsSync(explicit) ? explicit : null;
-  return ["/usr/bin/pdftoppm", "/usr/local/bin/pdftoppm"].find((p) => existsSync(p)) ?? null;
-}
-
 type Globals = typeof globalThis & { __slaydxRasterGate?: Gate };
 const g = globalThis as Globals;
 
@@ -116,23 +112,56 @@ function rasterGate(): Gate {
   return g.__slaydxRasterGate;
 }
 
-/** PDF → PNG per page with pdftoppm (page order kept). */
-export async function pdftoppmPages(pdf: Buffer, dpi: number): Promise<Buffer[] | null> {
-  const bin = pdftoppmBinary();
+/**
+ * `slides-png` bounds (m4): page images are held in memory and zipped there,
+ * so the deck is capped by page count and by total uncompressed PNG size
+ * (peak ≈ 2 × bytes while the ZIP is built). A 30-slide deck at 150 dpi is
+ * ~10–45 MB; beyond the cap the user gets a clear 413 (PDF still works).
+ */
+export type SlidesPngCap = { pages: number; bytes: number };
+export const SLIDES_PNG_CAP: SlidesPngCap = { pages: 100, bytes: 100 * 1024 * 1024 };
+
+function tooManySlides(cap: SlidesPngCap): DownloadError {
+  return new DownloadError("too_large", {
+    message: `Slayd rasmlari uchun juda katta (${cap.pages} slayd / ${Math.round(cap.bytes / 1024 / 1024)} MB dan ortiq) — PDF yuklab oling`,
+  });
+}
+
+/** Refuses a page set above the cap (applies to any rasterizer, stubs included). */
+export function checkSlidesPngCap(pages: readonly Buffer[], cap: SlidesPngCap): void {
+  if (pages.length > cap.pages) throw tooManySlides(cap);
+  if (pages.reduce((n, p) => n + p.byteLength, 0) > cap.bytes) throw tooManySlides(cap);
+}
+
+/**
+ * PDF → PNG per page with pdftoppm (page order kept). Renders at most
+ * `cap.pages + 1` pages (`-l`: one more only to detect an oversized deck) and
+ * checks the total size on disk before reading anything into memory.
+ */
+export async function pdftoppmPages(pdf: Buffer, dpi: number, cap: SlidesPngCap = SLIDES_PNG_CAP): Promise<Buffer[] | null> {
+  const bin = pdftoppmBin();
   if (!bin) return null;
   return rasterGate().run(async () => {
     const dir = await mkdtemp(join(tmpdir(), "slaydx-raster-"));
     try {
       const src = join(dir, "d.pdf");
       await writeFile(src, pdf);
-      await run(bin, ["-r", String(dpi), "-png", src, join(dir, "p")], { timeout: RASTER_TIMEOUT_MS, killSignal: "SIGKILL" });
+      await run(bin, ["-r", String(dpi), "-l", String(cap.pages + 1), "-png", src, join(dir, "p")], {
+        timeout: RASTER_TIMEOUT_MS,
+        killSignal: "SIGKILL",
+      });
       const pages = (await readdir(dir))
         .map((name) => ({ name, n: Number(/^p-(\d+)\.png$/.exec(name)?.[1] ?? NaN) }))
         .filter((p) => Number.isFinite(p.n))
         .sort((a, b) => a.n - b.n);
       if (!pages.length) return null;
+      if (pages.length > cap.pages) throw tooManySlides(cap);
+      let total = 0;
+      for (const p of pages) total += (await stat(join(dir, p.name))).size;
+      if (total > cap.bytes) throw tooManySlides(cap);
       return Promise.all(pages.map((p) => readFile(join(dir, p.name))));
     } catch (e) {
+      if (isDownloadError(e)) throw e;
       console.warn("[downloads] pdftoppm:", e instanceof Error ? e.message : e);
       return null;
     } finally {
@@ -157,14 +186,6 @@ export function baseName(fileName: string | null, fallback = "fayl"): string {
 /** Two-digit page numbers keep ZIP entries sorted in every file manager. */
 function pageName(i: number, total: number): string {
   return `slayd-${String(i + 1).padStart(Math.max(2, String(total).length), "0")}.png`;
-}
-
-const CRLF = "\r\n";
-/** UTF-8 BOM: Excel opens CSV as UTF-8 only with it (Uzbek names otherwise break). */
-const BOM = "﻿";
-
-function csvLine(cells: unknown[]): string {
-  return cells.map(csvCell).join(",") + CRLF;
 }
 
 /** Glossary terms: the teacher model (AUDIT-20); older documents — `h3` term + following `p` definition. */
@@ -197,7 +218,7 @@ export function glossaryCsv(terms: readonly GlossaryTerm[]): string {
     ...(hasRu ? [t.ru ?? ""] : []),
     ...(hasEn ? [t.en ?? ""] : []),
   ]);
-  return BOM + csvLine(head) + rows.map(csvLine).join("");
+  return CSV_BOM + csvRecord(head) + rows.map(csvRecord).join("");
 }
 
 /**
@@ -224,7 +245,7 @@ export function transcriptText(doc: AcademicDoc | null): string {
 }
 
 async function resultsCsv(rows: AsyncGenerator<GameResult>): Promise<string> {
-  let out = BOM + csvHeadLine();
+  let out = CSV_BOM + csvHeadLine();
   for await (const r of rows) out += csvRowLine(r);
   return out;
 }
@@ -274,8 +295,11 @@ export const PRODUCERS: Readonly<Record<DownloadFormatId, ProducerSpec>> = {
         produce: async () => {
           const pdf = await cachedPdf(ctx, bytes);
           await (deps.rasterLimit ?? ((u) => limit(`raster:${u}`, RASTER_LIMIT, LIMIT_WINDOW_SEC)))(meta.userId);
-          const pages = await (deps.rasterize ?? pdftoppmPages)(pdf, SLIDES_PNG_DPI);
+          const cap = deps.slidesPngCap ?? SLIDES_PNG_CAP;
+          const pages = await (deps.rasterize ?? pdftoppmPages)(pdf, SLIDES_PNG_DPI, cap);
           if (!pages?.length) return null;
+          // m4: bounded in-memory ZIP — refuse before building it.
+          checkSlidesPngCap(pages, cap);
           const z = new JSZip();
           // PNG is already deflated: STORE zips 12 MB in ~35 ms.
           pages.forEach((png, i) => z.file(pageName(i, pages.length), png, { compression: "STORE" }));
@@ -351,10 +375,19 @@ export async function cachedDerivedSize(ctx: ProducerCtx): Promise<number | null
   return derivedSize(ctx.meta.id, await ctx.nativeBytes(), ctx.format.id, ctx.deps.cache);
 }
 
+/**
+ * `cachedDerivedSize` for a link about to be minted: also pins the entry
+ * (20 min, LRU-safe) and refreshes its age, so the 15-minute `/api/dl` URL
+ * finds it (mobile sprint m1). Never converts.
+ */
+export async function touchCachedDerived(ctx: ProducerCtx): Promise<number | null> {
+  return touchDerived(ctx.meta.id, await ctx.nativeBytes(), ctx.format.id, ctx.deps.cache);
+}
+
 /** Whether the server can produce `id` right now (tools installed). */
 export function producerAvailable(id: DownloadFormatId, deps: ProduceDeps): boolean {
   if (id !== "pdf" && id !== "slides-png") return true;
   const pdf = (deps.pdfAvailable ?? pdfAvailable)();
   if (id === "pdf") return pdf;
-  return pdf && (deps.rasterAvailable ?? (() => pdftoppmBinary() !== null))();
+  return pdf && (deps.rasterAvailable ?? (() => pdftoppmBin() !== null))();
 }

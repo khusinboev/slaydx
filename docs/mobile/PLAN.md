@@ -92,6 +92,8 @@ producer and a differential test (project rule: no decorative options).
   `{g,u,f,v:file_version,exp:+15 min}`; multi-use within TTL; HEAD never converts and never counts; headers
   `Content-Disposition: attachment` (ASCII fallback), `Content-Length`, `Access-Control-Allow-Origin: https://web.telegram.org`,
   `Cache-Control: private, no-store`, `nosniff`, `Referrer-Policy: no-referrer`. Stale `file_version` → 410.
+  Minting a link pins its derived file for 20 min; a GET miss regenerates within 45 s, else `503 busy` + Retry-After;
+  a HEAD miss never converts (`503` + Retry-After). nginx: `location /api/dl/` with `proxy_read_timeout 120s`.
 - Producers in `lib/server/downloads/`; derived files cached by `{genId, sha(bytes), format}`.
 - Server-side bytes for any format: `produceDownload(genId, userId, format) → {bytes, fileName, mime}` — the Telegram
   package (4.4) calls this, never its own conversion.
@@ -110,6 +112,11 @@ Typed `getTelegramWebApp()`, `tgVersionAtLeast(v)`, `downloadFile(params)`, `sha
 - Routes `POST /api/generations/{id}/telegram/save {format?}` and `.../telegram/share {format?}`; errors
   `409 no_telegram|bot_unreachable|not_ready`, `429`, `503 telegram_unavailable`, `501 share_unavailable`.
   Recipient is always the session user's `telegram_id`; the client additionally refuses when the Mini App user differs.
+  Also `409 telegram_id_unsupported` (id above 2^53) and `413 too_large`. For a `cost:"convert"` format with neither a
+  valid cached `file_id` nor a ready derived file: `202 {state:"preparing", retryAfterMs, format}` — the shared
+  background preparation was started; the client repeats the same POST after `retryAfterMs`. Instant serializations
+  whose bytes can change without a `file_version` bump (results-csv, transcript-txt, glossary-csv) never reuse a cached
+  `file_id`.
 
 ### 4.5 Result actions (client)
 `components/files/ResultActions.tsx` owns the result header actions: one «Yuklab olish» button (label visible on
@@ -163,10 +170,11 @@ Order: F0 ∥ G → (A ∥ B ∥ D) → C → E → P → integration + reviews 
 | B Telegram server | ✅ merged (31/32 mutations; migration 035) |
 | D Slide editing | ✅ merged (overlap 33–100 % → 0 % at 360/390) |
 | Integration 1 | ✅ npm test 4289/4289, test:ui 1092/1092, test:viewer 251/251 |
-| Security review A+B (fable) | APPROVE WITH FIXES (M1 stale results CSV via file_id cache; m1–m6) → fixes in ABF (running) |
+| Security review A+B (fable) | APPROVE WITH FIXES → fixed in ABF (`053f011..d75be29`) → re-verified **APPROVE** (proofs 11/11) |
 | Correctness review G+D | APPROVE WITH FIXES → fixed (d6666a3, 463792e, e58b39c) → re-verified **APPROVE** |
 | C Result actions | running |
 | P12 Touch layer | running |
 | P8 Telegram shell | running |
-| P5 Home + catalogue | running |
+| P5 Home + catalogue | ✅ merged (title chars 16→37 @390, small targets 25→0) |
+| P4 Shell + topbar | running |
 | E, P3, P4, P9, UX review, live essay calibration | next |

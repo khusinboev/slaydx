@@ -95,7 +95,8 @@ export function thumbAvailable(): boolean {
   return pdfAvailable() && Boolean(pdftoppmBin());
 }
 
-function pdftoppmBin(): string | null {
+/** pdftoppm binary (`PDFTOPPM_BIN` or the usual paths); thumbnails and the `slides-png` download share it. */
+export function pdftoppmBin(): string | null {
   const explicit = process.env.PDFTOPPM_BIN?.trim();
   if (explicit) return existsSync(explicit) ? explicit : null;
   return ["/usr/bin/pdftoppm", "/usr/local/bin/pdftoppm"].find((p) => existsSync(p)) ?? null;

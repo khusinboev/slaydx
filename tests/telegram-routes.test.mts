@@ -39,7 +39,7 @@ const userIds: string[] = [];
 after(async () => {
   if (!hasDb) return;
   if (userIds.length) {
-    await query("DELETE FROM rate_limits WHERE bucket = ANY($1::text[])", [userIds.flatMap((id) => [`tgsave:${id}`, `tgshare:${id}`])]).catch(() => {});
+    await query("DELETE FROM rate_limits WHERE bucket = ANY($1::text[])", [userIds.flatMap((id) => [`tgsave:${id}`, `tgshare:${id}`, `dlprep:${id}`])]).catch(() => {});
     await query("DELETE FROM users WHERE id = ANY($1::bigint[])", [userIds]);
   }
   await pool().end();
@@ -170,6 +170,22 @@ test("account without Telegram → 409 no_telegram", { skip }, async () => {
   assert.equal(spent.length, 0);
 });
 
+test("m2: account with a Telegram id above 2^53 → share 409 telegram_id_unsupported (nothing sent); save still works (chat_id travels as a string)", { skip }, async () => {
+  const big = "9007199254740993";
+  const row = await queryOne<{ id: string }>("INSERT INTO users (telegram_id, name) VALUES ($1, 'Katta id') RETURNING id::text AS id", [big]);
+  userIds.push(row!.id);
+  const cookie = `${SESSION_COOKIE}=${(await createSession(row!.id)).token}`;
+  const gen = await mkGen(row!.id);
+  const h = harness();
+  const share = await post("share", h.deps, cookie, gen);
+  assert.equal(share.status, 409);
+  assert.equal(share.body.code, "telegram_id_unsupported");
+  assert.equal(h.calls.length, 0);
+  const save = await post("save", h.deps, cookie, gen);
+  assert.equal(save.status, 200);
+  assert.equal(h.calls.length, 1);
+});
+
 test("format validation: unknown id → 400 unknown_format; not offered for this generation → 400 unsupported", { skip }, async () => {
   const u = await mkUser();
   const gen = await mkGen(u.id, { tool: "essay", format: "docx" });
@@ -223,6 +239,7 @@ test("Bot API 403 → 409 bot_unreachable with botUrl; 5xx → 503 telegram_unav
   const down = await post("save", reply({ ok: false, error_code: 502, description: "Bad Gateway" }), u.cookie, gen);
   assert.equal(down.status, 503);
   assert.equal(down.body.code, "telegram_unavailable");
+  assert.equal(down.headers.get("retry-after"), "30", "every 503 carries Retry-After");
 
   await post("save", harness().deps, u.cookie, gen); // cache the file
   const refused = await post("share", reply({ ok: false, error_code: 400, description: "Bad Request: BOT_INLINE_DISABLED" }), u.cookie, gen);
@@ -243,6 +260,7 @@ test("producer errors keep their own status and code (e.g. PDF converter busy �
   const r = await post("save", deps, u.cookie, gen, { format: "native" });
   assert.equal(r.status, 503);
   assert.equal(r.body.code, "busy");
+  assert.equal(r.headers.get("retry-after"), "5", "the producer's Retry-After reaches the client");
 });
 
 test(`per-user rate limit: save ${TELEGRAM_LIMITS.save.count}/h, then 429 with Retry-After`, { skip }, async () => {
@@ -260,12 +278,56 @@ test(`per-user rate limit: save ${TELEGRAM_LIMITS.save.count}/h, then 429 with R
   assert.equal((await post("share", h.deps, u.cookie, gen)).status, 200);
 });
 
-test("route files: bind the action to package A's produceDownload, nodejs runtime, maxDuration sized for uploads", async () => {
+test("m6: save/share of an unconverted pdf → 202 {state:'preparing', retryAfterMs} (no conversion in the request); spends a dlprep poll, not a save; ready → 200", { skip }, async (t) => {
+  const u = await mkUser();
+  const gen = await mkGen(u.id, { tool: "essay", format: "docx" });
+  const h = harness();
+  const prepared: string[] = [];
+  let state: "preparing" | "ready" = "preparing";
+  const deps: Deps = {
+    ...h.deps,
+    prepare: async (_g, _u, format) => {
+      prepared.push(format);
+      return state === "ready" ? { state } : { state, retryAfterMs: 1500 };
+    },
+  };
+  const { pdfAvailable } = await import("../lib/server/pdf.ts");
+  const prevBin = process.env.SOFFICE_BIN;
+  // The registry offers pdf only with LibreOffice; nothing is converted here, any existing file will do.
+  if (!pdfAvailable()) process.env.SOFFICE_BIN = process.execPath;
+  t.after(() => {
+    if (prevBin === undefined) delete process.env.SOFFICE_BIN;
+    else process.env.SOFFICE_BIN = prevBin;
+  });
+  for (const action of ["save", "share"] as const) {
+    const r = await post(action, deps, u.cookie, gen, { format: "pdf" });
+    assert.equal(r.status, 202, action);
+    assert.deepEqual(r.body, { state: "preparing", retryAfterMs: 1500, format: "pdf" }, action);
+  }
+  assert.deepEqual(prepared, ["pdf", "pdf"]);
+  assert.equal(h.produced.length, 0, "nothing converted inside the request");
+  assert.equal(h.calls.length, 0, "nothing sent");
+  const hits = async (bucket: string) =>
+    Number((await queryOne<{ n: string }>("SELECT COALESCE(SUM(hits), 0)::text AS n FROM rate_limits WHERE bucket = $1", [bucket]))!.n);
+  assert.equal(await hits(`tgsave:${u.id}`), 0, "a preparing poll does not spend a save");
+  assert.equal(await hits(`tgshare:${u.id}`), 0);
+  assert.equal(await hits(`dlprep:${u.id}`), 2, "it spends a prepare poll");
+  // Native needs no conversion: never asks prepare.
+  assert.equal((await post("save", deps, u.cookie, gen, { format: "native" })).status, 200);
+  assert.deepEqual(prepared, ["pdf", "pdf"]);
+  state = "ready";
+  const done = await post("save", deps, u.cookie, gen, { format: "pdf" });
+  assert.equal(done.status, 200);
+  assert.deepEqual(h.produced, ["native", "pdf"]);
+  assert.equal(await hits(`tgsave:${u.id}`), 2);
+});
+
+test("route files: bind the action to package A's produceDownload and prepareDownload, nodejs runtime, maxDuration sized for uploads", async () => {
   const { readFileSync } = await import("node:fs");
   for (const action of ["save", "share"] as const) {
     const src = readFileSync(new URL(`../app/api/generations/[id]/telegram/${action}/route.ts`, import.meta.url), "utf8");
-    assert.match(src, /import \{ produceDownload \} from "@\/lib\/server\/downloads\/produce";/, action);
-    assert.match(src, new RegExp(`export const POST = telegramActionHandler\\("${action}", \\{ produce: produceDownload \\}\\);`), action);
+    assert.match(src, /import \{ prepareDownload, produceDownload \} from "@\/lib\/server\/downloads\/produce";/, action);
+    assert.match(src, new RegExp(`export const POST = telegramActionHandler\\("${action}", \\{ produce: produceDownload, prepare: prepareDownload \\}\\);`), action);
     assert.match(src, /export const runtime = "nodejs";/, action);
     const max = Number(/export const maxDuration = (\d+);/.exec(src)?.[1]);
     assert.ok(max >= 90, `${action}: maxDuration ${max} < 90 s (upload timeout + conversion)`);

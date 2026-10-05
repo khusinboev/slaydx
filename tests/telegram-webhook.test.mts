@@ -223,8 +223,9 @@ test("EXT-14: TELEGRAM_WEBHOOK_SECRET web konteyneriga uzatiladi va .env.example
 });
 
 test("N1: aniq (deterministik) xato — 200 (Telegram qayta yubormaydi), xabar yo'q, belgi yo'q", { skip }, async () => {
-  // `from.id` BIGINT ga sig'maydi → `login_tickets` INSERT 22003 — har urinishda takrorlanadi.
-  const u = { update_id: ++seq, message: { chat: { id: 1 }, from: { id: 1e20, first_name: "Katta" }, text: "/login" } };
+  // Ismda NUL bayt → `login_tickets` INSERT 22021 — har urinishda takrorlanadi. (Ilgari `from.id: 1e20`
+  // → 22003 edi; endi xavfsiz butun son bo'lmagan id umuman qayta ishlanmaydi — telegram-start-inline m2.)
+  const u = { update_id: ++seq, message: { chat: { id: 1 }, from: { id: 1, first_name: "Katta\u0000" }, text: "/login" } };
   stubTelegram("ok");
   const res = await hook(u);
   assert.equal(res.status, 200, "MUTATSIYA: aniq xato 500 bilan qayta-qayta yuborilardi");
