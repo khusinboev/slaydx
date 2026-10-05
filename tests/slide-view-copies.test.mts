@@ -51,6 +51,9 @@ async function rgbaPng(alpha: number): Promise<Buffer> {
   return sharp(noisy).ensureAlpha(alpha).png().toBuffer();
 }
 
+/** Byte equality without `assert` diffing megabyte buffers (a failing diff can exhaust the heavy.sh memory cap). */
+const same = (a: Buffer | undefined, b: Buffer) => Boolean(a && a.equals(b));
+
 const dataUrl = (bytes: Buffer, mime = "image/jpeg") => `data:${mime};base64,${bytes.toString("base64")}`;
 
 function quiet(t: TestContext) {
@@ -110,7 +113,7 @@ test("makeViewCopy: a narrower image is not enlarged", async () => {
 
 test("makeViewCopy: real transparency → null (original kept); opaque RGBA PNG → JPEG copy", async () => {
   // MUTATION: drop the `isOpaque` check → transparent PNG gets a flattened JPEG.
-  assert.equal(await makeViewCopy(await rgbaPng(0.5), "image/png"), null);
+  assert.ok((await makeViewCopy(await rgbaPng(0.5), "image/png")) === null, "transparent PNG must keep its original");
   const opaque = await makeViewCopy(await rgbaPng(1), "image/png");
   assert.ok(opaque, "opaque PNG gets a copy");
   assert.equal((await sharp(opaque!).metadata()).format, "jpeg");
@@ -119,8 +122,8 @@ test("makeViewCopy: real transparency → null (original kept); opaque RGBA PNG 
 test("makeViewCopy: no saving → null; non-image mime → null; broken bytes throw", async () => {
   const small = await sharp(await photoJpeg(640, 480)).jpeg({ quality: 40 }).toBuffer();
   // MUTATION: drop the `VIEW_MAX_RATIO` check → a copy BIGGER than the original is stored.
-  assert.equal(await makeViewCopy(small, "image/jpeg"), null);
-  assert.equal(await makeViewCopy(await photoJpeg(), "audio/mpeg"), null);
+  assert.ok((await makeViewCopy(small, "image/jpeg")) === null, "no saving → original");
+  assert.ok((await makeViewCopy(await photoJpeg(), "audio/mpeg")) === null, "non-image mime");
   await assert.rejects(makeViewCopy(Buffer.from("not an image at all"), "image/jpeg"));
 });
 
@@ -157,10 +160,10 @@ test("slideViewCopies: one copy per distinct slide image; logos, figures and bro
   // The model keeps the ORIGINAL url (PPTX rebuild reads it).
   assert.equal(extracted.doc!.slides![0].image!.url, assetUrl(GID, idA));
   // Budget exhausted → no copies, no throw.
-  assert.deepEqual(await slideViewCopies(GID, extracted.doc, extracted.assets, 0), []);
+  assert.equal((await slideViewCopies(GID, extracted.doc, extracted.assets, 0)).length, 0);
   // A url of another generation is not ours.
   const foreign = { ...extracted.doc!, slides: [{ id: "x", layout: "title", title: "X", image: { url: assetUrl(crypto.randomUUID(), idA) } }] } as never;
-  assert.deepEqual(await slideViewCopies(GID, foreign, extracted.assets), []);
+  assert.equal((await slideViewCopies(GID, foreign, extracted.assets)).length, 0);
 });
 
 // ───────────────────────────── DB: route, resolver, worker
@@ -212,7 +215,7 @@ test("route + resolver + worker (Postgres)", { skip }, async (t) => {
     assert.equal(res.status, 200);
     const body = Buffer.from(await res.arrayBuffer());
     // MUTATION: route ignoring the flag (always `getAsset`) → the original bytes.
-    assert.deepEqual(body, copy);
+    assert.ok(body.equals(copy), `copy bytes expected, got ${body.byteLength} B (copy ${copy.byteLength} B, original ${orig.byteLength} B)`);
     assert.equal(res.headers.get("x-asset-variant"), "view");
     assert.equal(res.headers.get("content-type"), "image/jpeg");
     assert.equal(res.headers.get("content-length"), String(copy.byteLength));
@@ -222,7 +225,7 @@ test("route + resolver + worker (Postgres)", { skip }, async (t) => {
   await t.test("no flag → the original, byte for byte (downloads, image tools, direct links)", async () => {
     const res = await call(done, assetId, ownerCookie, false);
     assert.equal(res.status, 200);
-    assert.deepEqual(Buffer.from(await res.arrayBuffer()), orig);
+    assert.ok(same(Buffer.from(await res.arrayBuffer()), orig), "original bytes expected");
     assert.equal(res.headers.get("x-asset-variant"), null);
     assert.equal(res.headers.get("cache-control"), "private, max-age=86400, immutable");
   });
@@ -231,7 +234,7 @@ test("route + resolver + worker (Postgres)", { skip }, async (t) => {
     const resolved = await assets.assetImageResolver(done, uid)(assetUrl(done, assetId));
     assert.ok(resolved);
     // MUTATION: resolver switched to `getViewAsset` → the 1024 px copy lands in the PPTX.
-    assert.equal(resolved!.data, `image/jpeg;base64,${orig.toString("base64")}`);
+    assert.ok(resolved!.data === `image/jpeg;base64,${orig.toString("base64")}`, `original expected, got ${resolved!.data.length} chars`);
   });
 
   await t.test("old deck (no copy) → `?view=1` falls back to the original, cached long", async () => {
@@ -239,7 +242,7 @@ test("route + resolver + worker (Postgres)", { skip }, async (t) => {
     await assets.putAssets(old, [{ assetId, mime: "image/jpeg", bytes: orig }]);
     const res = await call(old, assetId, ownerCookie, true);
     assert.equal(res.status, 200);
-    assert.deepEqual(Buffer.from(await res.arrayBuffer()), orig);
+    assert.ok(same(Buffer.from(await res.arrayBuffer()), orig), "original bytes expected");
     assert.equal(res.headers.get("x-asset-variant"), "original");
     assert.equal(res.headers.get("cache-control"), "private, max-age=86400, immutable");
   });
@@ -306,7 +309,7 @@ test("route + resolver + worker (Postgres)", { skip }, async (t) => {
     const byId = new Map(rows.map((r) => [r.asset_id, r]));
     for (const [i, img] of imgs.entries()) {
       const aid = assetFromDataUrl(dataUrl(img))!.assetId;
-      assert.deepEqual(byId.get(aid)?.bytes, img, `original ${i} stored untouched`);
+      assert.ok(same(byId.get(aid)?.bytes, img), `original ${i} stored untouched`);
       const c = byId.get(viewAssetId(aid));
       // MUTATION: worker passing only `extracted.assets` → no copy rows.
       assert.ok(c, `copy ${i} stored`);
@@ -318,6 +321,6 @@ test("route + resolver + worker (Postgres)", { skip }, async (t) => {
     }
     assert.equal(rows.length, 4);
     const file = (await query<{ bytes: Buffer }>(`SELECT bytes FROM generation_files WHERE generation_id = $1`, [id]))[0];
-    assert.deepEqual(file.bytes, pptx, "the stored file (downloads) is the build output, untouched");
+    assert.ok(same(file.bytes, pptx), "the stored file (downloads) is the build output, untouched");
   });
 });
