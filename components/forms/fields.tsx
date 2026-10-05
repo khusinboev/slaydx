@@ -72,7 +72,7 @@ export function ChipGroup({
             type="button"
             onClick={() => onChange(o.value)}
             className={cn(
-              "rounded-full border px-3.5 py-1.5 text-sm transition-colors",
+              "pointer-coarse:min-h-11 rounded-full border px-3.5 py-1.5 text-sm transition-colors",
               on
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-input bg-card hover:bg-muted",
@@ -119,7 +119,7 @@ export function MultiChipGroup({
             aria-pressed={on}
             onClick={() => toggle(o.value)}
             className={cn(
-              "rounded-full border px-3.5 py-1.5 text-sm transition-colors",
+              "pointer-coarse:min-h-11 rounded-full border px-3.5 py-1.5 text-sm transition-colors",
               on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted",
             )}
           >
@@ -183,7 +183,7 @@ export function LanguagePicker({
             type="button"
             onClick={() => onChange(l.value)}
             className={cn(
-              "rounded-full border px-3 py-1.5 text-sm transition-colors",
+              "pointer-coarse:min-h-11 rounded-full border px-3 py-1.5 text-sm transition-colors",
               on
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-input bg-card hover:bg-muted",
@@ -197,7 +197,7 @@ export function LanguagePicker({
         <button
           type="button"
           onClick={() => setMore((v) => !v)}
-          className="border-input bg-card hover:bg-muted rounded-full border px-3 py-1.5 text-sm"
+          className="border-input bg-card hover:bg-muted pointer-coarse:min-h-11 rounded-full border px-3 py-1.5 text-sm"
         >
           {more ? "Kamroq" : `Ko'proq (+${rest})`}
         </button>
@@ -230,7 +230,7 @@ export function RangeField({
         max={max}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-primary"
+        className="w-full accent-primary pointer-coarse:h-11"
       />
     </div>
   );
