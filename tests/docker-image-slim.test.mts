@@ -86,6 +86,9 @@ test("Dockerfile: web image copies migrations and orders layers stable → volat
   const lines = instr(byName.get("runner")!.text);
   const at = (re: RegExp) => lines.findIndex((l) => re.test(l));
   assert.ok(at(/\/app\/lib\/server\/migrations \.\/lib\/server\/migrations/) >= 0, "runner must copy the migrations");
+  assert.ok(at(/\/app\/public \.\/public/) >= 0, "runner must copy public/");
+  assert.ok(at(/\/app\/\.next\/static \.\/\.next\/static/) >= 0, "runner must copy .next/static");
+  assert.ok(at(/\/app\/\.next\/standalone \.\//) >= 0, "runner must copy the standalone server");
   assert.ok(at(/^RUN apk add .*libreoffice/) < at(/\.next\/standalone/), "LibreOffice layer must precede app layers");
   assert.ok(at(/\/app\/public/) < at(/\.next\/standalone/), "public must precede standalone");
   assert.ok(at(/lib\/server\/migrations/) < at(/\.next\/standalone/), "migrations must precede standalone");
