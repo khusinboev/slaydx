@@ -534,11 +534,23 @@ export function SlideEditor({
       if (t?.closest?.(EDIT_UI)) return;
       // The opening double tap's own compat mousedown (browsers that ignore the touchend cancel).
       if (now() < swallowUntilRef.current) return;
+      /*
+       * Phone: a tap ON THE SLIDE keeps the edit (and the focus zoom). It is
+       * usually the first tap of a double tap on another text: committing
+       * here would unzoom the stage and move that text away from the second
+       * tap. The switch itself commits (`open`); «Tayyor», back, or a press
+       * outside the slide end the edit. The focus must not move either
+       * (blur would commit), hence `preventDefault`.
+       */
+      if (coarse && t?.closest?.("[data-slide-frame]")) {
+        ev.preventDefault();
+        return;
+      }
       commit();
     };
     document.addEventListener("mousedown", onDown, true);
     return () => document.removeEventListener("mousedown", onDown, true);
-  }, [edit, commit]);
+  }, [edit, commit, coarse]);
 
   /** Ro'yxatda Enter — brauzer yangi `<li>` yaratadi; chegarada bloklanadi. */
   const listMax = edit?.kind === "list" ? listCap(slide, edit.field, bodyType).max : 0;

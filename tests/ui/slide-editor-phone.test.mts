@@ -324,6 +324,26 @@ test("review D-1: double-tapping ANOTHER text with no compat mousedown first sav
   assert.equal(calls.list.length, 0, "list unchanged → no op");
 });
 
+test("phone: a tap on the slide (first tap of a double tap on another text) keeps the edit and the focus; the switch then saves", async () => {
+  coarse();
+  const { calls } = mount();
+  fireEvent.doubleClick(titleEl());
+  type(box(), "Sarlavha (tahrir)");
+  const field = box();
+  // Real touch: first tap's compat mousedown on the bullets.
+  assert.equal(fireEvent.mouseDown(firstBullet()), false, "default prevented: focus (keyboard) stays on the text");
+  assert.ok(boxOpen() && box() === field, "the edit (and the focus zoom) survive the first tap");
+  assert.deepEqual(calls.text, []);
+  pointerTap(firstBullet(), 1, "touch");
+  pointerTap(firstBullet(), 2, "touch");
+  assert.deepEqual(calls.text, [[{ f: "title" }, "Sarlavha (tahrir)"]]);
+  assert.equal(box().tagName, "UL");
+  // A press outside the slide still ends the edit (after the opening tap's swallow window).
+  await new Promise((r) => setTimeout(r, 650));
+  fireEvent.mouseDown(document.body);
+  assert.ok(!boxOpen());
+});
+
 test("review D-3: a pen double tap never arms the touchend cancel; a missing touchend is forgotten on the next contact", () => {
   coarse();
   mount();
