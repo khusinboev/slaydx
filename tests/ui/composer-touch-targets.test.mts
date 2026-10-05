@@ -198,6 +198,14 @@ test("TeacherComposer (glossary): kind chips are 44 px on touch", async () => {
   for (const c of chips) assertTouch(c, `chip «${c.textContent}»`);
 });
 
+test("TeacherComposer: topic example chips (a tool that ships examples) are 44 px on touch", async () => {
+  stubApi();
+  await login();
+  const tool = { ...TOOL_BY_ID["lesson-plan"], topicExamples: ["Fotosintez jarayoni", "Nyuton qonunlari"] };
+  render(withRouter(h(TeacherComposer, { tool, profile, user: null })));
+  for (const ex of tool.topicExamples) assertTouch(byText(document, "button", new RegExp(ex)), `example «${ex}»`);
+});
+
 test("TranslationForm: the language-swap button is 44 px on touch", () => {
   stubApi();
   render(withRouter(h(TranslationForm, { tool: TOOL_BY_ID.translation })));
