@@ -8,6 +8,7 @@ import { adapterFor } from "./edit-adapters";
 import { env } from "./env";
 import { log } from "./log";
 import type { SessionUser } from "./session";
+import { PRODUCERS } from "./downloads/producers";
 import { callBot, isTransientBotFailure, type BotResult } from "./telegram";
 
 /**
@@ -286,14 +287,36 @@ async function loadRow(genId: string, userId: string, format: DownloadFormatId):
 }
 
 /**
- * The cached file is the current one: same `file_version`, and that version
- * is not behind an edit waiting for a re-render (the same staleness rule as
- * `fresh-file.ts`: only editable tools re-render).
+ * Whether a cached `file_id` may stand for the current bytes of `format` (M1).
+ *
+ * Stored and derived formats (native, pdf, slides-png, jpg) are built from the
+ * stored file, whose bytes change only together with `file_version` — the
+ * cache key. Instant serializations (results CSV, transcript, glossary CSV) are
+ * rebuilt per request from data that changes WITHOUT a version bump (every new
+ * game result, a `doc_json` change), so a cached `file_id` could carry an old
+ * table: they are always produced and uploaded again. They are a few KB, so an
+ * upload costs the same as a resend; no content hash column is needed.
  */
-function cacheValid(row: GenRow): MediaKind | null {
+export function reusesFileId(format: DownloadFormatId): boolean {
+  return PRODUCERS[format].kind !== "instant";
+}
+
+/** The stored file is behind an edit waiting for a re-render (only editable tools re-render). */
+function behindEdit(row: GenRow): boolean {
+  return row.file_version < row.doc_version && adapterFor(row.tool_id) !== null;
+}
+
+/**
+ * The cached file is the current one: a format whose bytes follow
+ * `file_version`, the same `file_version`, and that version is not behind an
+ * edit waiting for a re-render (the same staleness rule as `fresh-file.ts`:
+ * only editable tools re-render).
+ */
+function cacheValid(row: GenRow, format: DownloadFormatId): MediaKind | null {
+  if (!reusesFileId(format)) return null;
   if (!row.file_id || row.tf_version === null || row.media === null) return null;
   if (row.tf_version !== row.file_version) return null;
-  if (row.file_version < row.doc_version && adapterFor(row.tool_id)) return null;
+  if (behindEdit(row)) return null;
   return kindOfMedia(row.media);
 }
 
@@ -381,7 +404,7 @@ export async function ensureTelegramFile(
 ): Promise<{ kind: MediaKind; fileId: string; uploaded: boolean; row: GenRow }> {
   const chatId = chatOf(user);
   const row = await loadRow(genId, user.id, format);
-  const kind = opts.forceUpload ? null : cacheValid(row);
+  const kind = opts.forceUpload ? null : cacheValid(row, format);
   if (kind && row.file_id) return { kind, fileId: row.file_id, uploaded: false, row };
   const up = await uploadInto(chatId, genId, user, format, row, deps);
   return { ...up, uploaded: true, row };
@@ -416,22 +439,47 @@ async function saveOnce(
 ): Promise<SaveResult> {
   const now = (deps.now ?? (() => new Date()))();
   const row = await loadRow(genId, user.id, format);
-  const kind = cacheValid(row);
+  const kind = cacheValid(row, format);
+
+  /*
+   * Double-tap debounce (n5). When a row for this file version exists (a
+   * resend by `file_id`, or an instant format that is always uploaded again)
+   * the slot is claimed atomically in the DB: a request in another process, or
+   * a tap right after the previous save, finds `saved_at` fresh and stops. The
+   * very first upload of a (generation, format, file_version) has no row yet;
+   * it is guarded by the in-process single-flight only — enough with the one
+   * `web` container this service runs (a second container could send one extra
+   * copy on a double tap, never a wrong file).
+   */
+  const sameVersionRow = row.tf_version !== null && row.tf_version === row.file_version && !behindEdit(row);
+  if (sameVersionRow) {
+    const claimed = await query(
+      `UPDATE telegram_files SET saved_at = $4
+        WHERE generation_id = $1 AND format = $2 AND file_version = $3
+          AND (saved_at IS NULL OR saved_at <= $4::timestamptz - make_interval(secs => $5))
+        RETURNING 1`,
+      [genId, format, row.tf_version, now, SAVE_DEBOUNCE_MS / 1000],
+    );
+    if (!claimed.length) return { duplicate: true, uploaded: false };
+  }
+  // Nothing was delivered: give the slot back so the user can retry at once.
+  const release = async () => {
+    if (!sameVersionRow) return;
+    await query(
+      "UPDATE telegram_files SET saved_at = $3 WHERE generation_id = $1 AND format = $2 AND saved_at = $4",
+      [genId, format, row.saved_at, now],
+    );
+  };
+
   if (!kind || !row.file_id) {
-    await uploadInto(chatId, genId, user, format, row, deps);
+    try {
+      await uploadInto(chatId, genId, user, format, row, deps);
+    } catch (e) {
+      await release();
+      throw e;
+    }
     return { duplicate: false, uploaded: true };
   }
-
-  // Claim the debounce slot atomically: a parallel request in another process
-  // (or a tap right after the previous save) finds `saved_at` fresh and stops.
-  const claimed = await query(
-    `UPDATE telegram_files SET saved_at = $4
-      WHERE generation_id = $1 AND format = $2 AND file_version = $3
-        AND (saved_at IS NULL OR saved_at <= $4::timestamptz - make_interval(secs => $5))
-      RETURNING 1`,
-    [genId, format, row.tf_version, now, SAVE_DEBOUNCE_MS / 1000],
-  );
-  if (!claimed.length) return { duplicate: true, uploaded: false };
 
   const r: BotResult<SentMessage> = await callBot<SentMessage>(
     kind.method,
@@ -444,14 +492,15 @@ async function saveOnce(
   }
   if (isStaleFileId(r)) {
     // The cached id is dead (bot token changed): upload again and overwrite the row.
-    await uploadInto(chatId, genId, user, format, row, deps);
+    try {
+      await uploadInto(chatId, genId, user, format, row, deps);
+    } catch (e) {
+      await release();
+      throw e;
+    }
     return { duplicate: false, uploaded: true };
   }
-  // Nothing was delivered: give the slot back so the user can retry at once.
-  await query(
-    "UPDATE telegram_files SET saved_at = $3 WHERE generation_id = $1 AND format = $2 AND saved_at = $4",
-    [genId, format, row.saved_at, now],
-  );
+  await release();
   throw failureOf(r);
 }
 

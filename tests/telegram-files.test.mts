@@ -268,6 +268,83 @@ test("formats are cached separately: pdf has its own row and its own upload", { 
   assert.notEqual((await cached(gen, "pdf"))!.file_id, (await cached(gen, "native"))!.file_id);
 });
 
+/* ─────────── M1: content that changes without a file_version bump ─────────── */
+
+/** A producer whose bytes change on every call (new game results keep arriving). */
+function growingCsv(h: ReturnType<typeof harness>): Deps {
+  let players = 0;
+  return {
+    ...h.deps,
+    produce: async (genId, userId, format) => {
+      h.produced.push({ genId, userId, format });
+      players += 5;
+      const csv = `﻿"Ism","Ball"\r\n${Array.from({ length: players }, (_, i) => `"O'quvchi ${i + 1}","${i}"\r\n`).join("")}`;
+      return { bytes: Buffer.from(csv), fileName: "Saralash-natijalar.csv", mime: "text/csv; charset=utf-8", fileVersion: 1 };
+    },
+  };
+}
+
+test("M1: every registry id — instant serializations never reuse a cached file_id, stored/derived ones do", { skip }, async () => {
+  const { DOWNLOAD_FORMAT_IDS } = await import("../lib/downloads/formats.ts");
+  const instant = ["transcript-txt", "glossary-csv", "results-csv"];
+  assert.deepEqual(DOWNLOAD_FORMAT_IDS.filter((f) => !tf.reusesFileId(f)).sort(), [...instant].sort());
+  const u = await mkUser();
+  const gen = await mkGen(u.id, { tool: "sorting", format: "docx" });
+  for (const format of DOWNLOAD_FORMAT_IDS) {
+    const h = harness();
+    const deps = growingCsv(h);
+    assert.equal((await saveToBot(gen, u, format, deps)).uploaded, true, `${format}: first save uploads`);
+    h.advance(SAVE_DEBOUNCE_MS + 1);
+    const second = await saveToBot(gen, u, format, deps);
+    assert.equal(second.duplicate, false, format);
+    if (instant.includes(format)) {
+      assert.equal(second.uploaded, true, `${format}: the second save uploads the CURRENT bytes`);
+      assert.equal(h.produced.length, 2, `${format}: produced again`);
+      assert.ok(h.calls[1].form, `${format}: multipart, not a resend by file_id`);
+      assert.ok((h.calls[1].form!.document as { size: number }).size > (h.calls[0].form!.document as { size: number }).size, `${format}: new content`);
+      assert.equal((await cached(gen, format))!.file_id, `FILE-${fileSeq}`, `${format}: row points at the new upload`);
+    } else {
+      assert.equal(second.uploaded, false, `${format}: resend by file_id`);
+      assert.equal(h.produced.length, 1, format);
+      assert.equal(h.calls[1].form, undefined, format);
+    }
+  }
+});
+
+test("M1: results-csv share after new results uploads the current table; the prepared message never carries the old file_id", { skip }, async () => {
+  const u = await mkUser();
+  const gen = await mkGen(u.id, { tool: "sorting", format: "docx" });
+  const h = harness();
+  const deps = growingCsv(h);
+  await saveToBot(gen, u, "results-csv", deps);
+  const old = (await cached(gen, "results-csv"))!.file_id;
+  h.advance(60_000);
+  const r = await prepareShare(gen, u, "results-csv", deps);
+  assert.equal(r.uploaded, true);
+  assert.deepEqual(h.calls.map((c) => c.method), ["sendDocument", "sendDocument", "savePreparedInlineMessage"]);
+  const sent = (h.calls[2].json!.result as Record<string, unknown>).document_file_id;
+  assert.notEqual(sent, old);
+  assert.equal(sent, (await cached(gen, "results-csv"))!.file_id);
+});
+
+test("n5: an always-uploaded format is still debounced in the DB (tap within 20 s → duplicate); a failed upload frees the slot", { skip }, async () => {
+  const u = await mkUser();
+  const gen = await mkGen(u.id, { tool: "sorting", format: "docx" });
+  const h = harness();
+  const deps = growingCsv(h);
+  await saveToBot(gen, u, "results-csv", deps);
+  h.advance(SAVE_DEBOUNCE_MS - 1_000);
+  assert.deepEqual(await saveToBot(gen, u, "results-csv", deps), { duplicate: true, uploaded: false });
+  assert.equal(h.produced.length, 1, "a double tap does not upload a second copy");
+
+  h.advance(5_000);
+  const failing = harness({ replies: [{ ok: false, error_code: 403, description: "Forbidden: bot was blocked by the user" }] });
+  await rejectsWith(saveToBot(gen, u, "results-csv", { ...growingCsv(failing), now: deps.now }), "bot_unreachable");
+  // Nothing was delivered: an immediate retry sends.
+  assert.equal((await saveToBot(gen, u, "results-csv", deps)).uploaded, true);
+  assert.equal(h.produced.length, 2);
+});
+
 test("403 on upload → bot_unreachable, nothing cached", { skip }, async () => {
   const u = await mkUser();
   const gen = await mkGen(u.id);
