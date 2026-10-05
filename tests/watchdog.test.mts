@@ -207,7 +207,7 @@ test("watchdog.sh (haqiqiy Postgres + stub docker/curl/df)", { skip }, async (t)
   type Run = { code: number | null; stdout: string; stderr: string; tg: string[] };
   const run = (env: Record<string, string> = {}, args: string[] = []): Run => {
     rmSync(path.join(stub, "tg.log"), { force: true });
-    const r = spawnSync("bash", [SCRIPT, ...args], { env: { ...baseEnv, ...env }, encoding: "utf8", timeout: 60_000 });
+    const r = spawnSync("bash", [SCRIPT, ...args], { env: { ...baseEnv, ...env } as NodeJS.ProcessEnv, encoding: "utf8", timeout: 60_000 });
     const log = path.join(stub, "tg.log");
     const tg = existsSync(log) ? readFileSync(log, "utf8").split("\x1e").filter(Boolean) : [];
     return { code: r.status, stdout: r.stdout, stderr: r.stderr, tg };

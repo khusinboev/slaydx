@@ -31,14 +31,18 @@ function stubDir(t: TestContext, stubs: Record<string, string>) {
   }
   const envFile = path.join(dir, "backup.env");
   writeFileSync(envFile, `TELEGRAM_BOT_TOKEN=${FAKE_TOKEN}\nBACKUP_TG_CHAT=12345\n`, { mode: 0o600 });
-  const env = (extra: Record<string, string> = {}) => ({
-    PATH: `${bin}:${process.env.PATH}`,
-    HOME: dir,
-    LANG: "C.UTF-8",
-    STUB_DIR: stub,
-    BACKUP_ENV_FILE: envFile,
-    ...extra,
-  });
+  // A minimal environment on purpose (no inherited secrets or DATABASE_URL).
+  const env = (extra: Record<string, string> = {}): NodeJS.ProcessEnv => {
+    const e: Record<string, string> = {
+      PATH: `${bin}:${process.env.PATH}`,
+      HOME: dir,
+      LANG: "C.UTF-8",
+      STUB_DIR: stub,
+      BACKUP_ENV_FILE: envFile,
+      ...extra,
+    };
+    return e as NodeJS.ProcessEnv;
+  };
   const read = (f: string) => (existsSync(path.join(stub, f)) ? readFileSync(path.join(stub, f), "utf8") : "");
   const tg = () => read("tg.log").split("\x1e").filter(Boolean);
   return { dir, bin, stub, env, read, tg };
