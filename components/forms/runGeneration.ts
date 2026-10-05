@@ -118,4 +118,3 @@ export async function forgetGeneration(id: string): Promise<void> {
   void store.refreshSession();
 }
 
-export const downloadGeneration = api.downloadGeneration;

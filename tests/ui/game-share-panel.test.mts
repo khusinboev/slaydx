@@ -51,7 +51,7 @@ const ROW = {
   createdAt: "2026-09-17T09:30:00.000Z",
 };
 
-type Call = { url: string; method: string };
+type Call = { url: string; method: string; body?: string };
 
 const json = (status: number, data: unknown) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -63,7 +63,14 @@ function stubApi(opts: { sessions?: (typeof SESSION)[]; results?: (typeof ROW)[]
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
-    calls.push({ url, method });
+    calls.push({ url, method, body: typeof init?.body === "string" ? init.body : undefined });
+    // Mobile sprint: the results CSV is a registry format (`results-csv`) — prepare → signed URL.
+    if (url.endsWith("/download") && method === "POST") {
+      return json(200, { state: "ready", url: "/api/dl/tok-csv", fileName: "test-natijalar.csv", size: 12, mime: "text/csv; charset=utf-8", expiresAt: new Date(Date.now() + 900_000).toISOString() });
+    }
+    if (url === "/api/dl/tok-csv") {
+      return new Response("ism,ball\nZ,8", { status: 200, headers: { "content-type": "text/csv; charset=utf-8", "content-length": "12" } });
+    }
     if (url.endsWith("/share") && method === "POST") {
       if (opts.shareStatus) return json(opts.shareStatus, { error: "Bu vosita uchun o'yin havolasi yo'q" });
       sessions = [SESSION, ...sessions];
@@ -163,12 +170,40 @@ test("natijasiz havola: bo'sh holat matni, CSV havolasi YO'Q", async () => {
   assert.ok(!q("[data-results-table]"));
 });
 
-test("CSV havolasi natijalar bo'lganda chiqadi va route'ga ishora qiladi", async () => {
-  await open({ sessions: [SESSION], results: [ROW] });
-  await waitFor(() => assert.ok(q("[data-results-csv]")));
-  const a = q("[data-results-csv]") as HTMLAnchorElement;
-  assert.match(a.getAttribute("href") ?? "", new RegExp(`^/api/generations/${ID}/results\\?format=csv$`));
-  assert.ok(a.hasAttribute("download"), "tabda ochilmaydi — yuklab olinadi");
+test("CSV tugmasi natijalar bo'lganda chiqadi: `results-csv` formati prepare → imzolangan URL → fayl saqlanadi (Telegram'da ham ishlaydigan yo'l)", async () => {
+  // Rewritten (mobile sprint): was «<a href=/results?format=csv download>» — `<a download>` saves nothing in the Mini App.
+  const saved: { name: string; size: number }[] = [];
+  const blobs = new Map<string, Blob>();
+  const realCreate = URL.createObjectURL;
+  const realClick = window.HTMLAnchorElement.prototype.click;
+  URL.createObjectURL = (b: Blob | MediaSource) => {
+    const u = `blob:t${blobs.size}`;
+    blobs.set(u, b as Blob);
+    return u;
+  };
+  window.HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+    saved.push({ name: this.download, size: blobs.get(this.getAttribute("href") ?? "")?.size ?? -1 });
+  };
+  try {
+    const api = await open({ sessions: [SESSION], results: [ROW] });
+    await waitFor(() => assert.ok(q("[data-results-csv]")));
+    const btn = q("[data-results-csv]")!;
+    assert.equal(btn.tagName, "BUTTON");
+    assert.equal(btn.getAttribute("data-file-download-button"), "results-csv");
+    assert.match(btn.textContent ?? "", /CSV/);
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+    await waitFor(() => assert.equal(saved.length, 1));
+    const post = api.calls.find((c) => c.method === "POST" && c.url === `/api/generations/${ID}/download`);
+    assert.ok(post, "prepare so'rovi ketdi");
+    assert.equal(post!.body, JSON.stringify({ format: "results-csv" }));
+    assert.ok(api.calls.some((c) => c.url === "/api/dl/tok-csv"), "imzolangan URL dan olindi");
+    assert.deepEqual(saved, [{ name: "test-natijalar.csv", size: 12 }]);
+  } finally {
+    URL.createObjectURL = realCreate;
+    window.HTMLAnchorElement.prototype.click = realClick;
+  }
 });
 
 test("«Yangilash» natijalarni QAYTA so'raydi (avtomatik yangilanish yo'q)", async () => {

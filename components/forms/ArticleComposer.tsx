@@ -33,7 +33,7 @@ import {
 } from "@/lib/generation/article/input";
 import { Card, Row, Segmented, SelectField, Switch, SummaryChips } from "./compact";
 // AUDIT-24 WP-A: sxema chiplari umumiy bo'laklarga ko'chdi (`shared/index.tsx`).
-import { FIGURE_KIND_LABEL, FigureKindChips } from "./shared";
+import { ClearFormButton, FIGURE_KIND_LABEL, FigureKindChips } from "./shared";
 import { TextArea, TextInput } from "./fields";
 import { Combobox } from "./Combobox";
 import { RowList } from "./RowList";
@@ -490,7 +490,7 @@ export function ArticleComposer({
                 key={ex}
                 type="button"
                 onClick={() => set("topic", ex)}
-                className="bg-muted hover:bg-muted/70 rounded-md px-2 py-1 text-left text-[11px]"
+                className="bg-muted hover:bg-muted/70 pointer-coarse:min-h-11 pointer-coarse:px-3 rounded-md px-2 py-1 text-left text-[11px]"
               >
                 {ex}
               </button>
@@ -591,7 +591,7 @@ export function ArticleComposer({
         onToggle={(e) => setSettingsOpen((e.currentTarget as HTMLDetailsElement).open)}
         className="bg-card mb-3 rounded-2xl border p-4"
       >
-        <summary className="flex cursor-pointer items-center justify-between gap-2">
+        <summary className="pointer-coarse:min-h-11 flex cursor-pointer items-center justify-between gap-2">
           <span className="text-muted-foreground text-[11.5px] font-semibold tracking-wide uppercase">Sozlamalar</span>
           {!settingsOpen ? (
             <SummaryChips
@@ -615,7 +615,7 @@ export function ArticleComposer({
               </span>
               <button
                 type="button"
-                className="bg-card shrink-0 rounded-md border px-2.5 py-1.5 text-xs disabled:opacity-50"
+                className="bg-card pointer-coarse:min-h-11 pointer-coarse:px-3 shrink-0 rounded-md border px-2.5 py-1.5 text-xs disabled:opacity-50"
                 disabled={udkBusy || ui.topic.trim().length < 3}
                 title={ui.topic.trim().length < 3 ? "Avval mavzuni kiriting" : "AI mavzudan UDK taklif qiladi"}
                 onClick={() => void onSuggestUdk()}
@@ -687,9 +687,7 @@ export function ArticleComposer({
             </span>
           </Row>
           <div className="mt-2">
-            <button type="button" onClick={clearConfirm.trigger} className="text-muted-foreground hover:text-destructive text-[12px]">
-              {clearConfirm.armed ? "Ishonchingiz komilmi? Yana bosing" : "Formani tozalash"}
-            </button>
+            <ClearFormButton armed={clearConfirm.armed} onClick={clearConfirm.trigger} />
           </div>
         </div>
       </details>

@@ -406,7 +406,7 @@ export function DateRow({ value, onChange }: { value: string; onChange: (v: stri
     setSeen(iso);
     onChange(iso);
   };
-  const cls = "border-input bg-card focus:ring-ring h-8 rounded-lg border px-1.5 text-[12.5px] outline-none focus:ring-2";
+  const cls = "border-input bg-card focus:ring-ring pointer-coarse:h-11 h-8 rounded-lg border px-1.5 text-[12.5px] outline-none focus:ring-2";
   return (
     <Row label="Sana" hint="Ixtiyoriy — shapkadagi sana">
       <Field id="date">

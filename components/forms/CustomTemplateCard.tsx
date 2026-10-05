@@ -211,7 +211,7 @@ export function CustomTemplateCard({
           <span className="text-muted-foreground min-w-0 flex-1 truncate" title={current.name}>
             {current.name}
           </span>
-          <label className="cursor-pointer underline-offset-2 hover:underline">
+          <label className="pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center pointer-coarse:px-1 cursor-pointer underline-offset-2 hover:underline">
             {busy ? "Yuklanmoqda…" : "Boshqa fayl"}
             <input
               type="file"
@@ -228,7 +228,7 @@ export function CustomTemplateCard({
           </label>
           <button
             type="button"
-            className="text-destructive"
+            className="text-destructive pointer-coarse:min-h-11 pointer-coarse:px-1"
             onClick={() => {
               setTpl(null);
               onClear();
@@ -243,7 +243,7 @@ export function CustomTemplateCard({
             <span key={t.assetId} className="bg-muted inline-flex max-w-full items-center gap-1 rounded-full pr-1 text-[11px]">
               <button
                 type="button"
-                className="max-w-[9rem] truncate py-0.5 pl-2"
+                className="pointer-coarse:min-h-11 max-w-[9rem] truncate py-0.5 pl-2"
                 title={t.name}
                 onClick={() => {
                   setTpl(t);
@@ -252,7 +252,7 @@ export function CustomTemplateCard({
               >
                 {t.name}
               </button>
-              <button type="button" aria-label={`${t.name} — o‘chirish`} className="text-muted-foreground hover:text-destructive px-1" onClick={() => void remove(t)}>
+              <button type="button" aria-label={`${t.name} — o‘chirish`} className="text-muted-foreground hover:text-destructive pointer-coarse:min-h-11 pointer-coarse:min-w-11 px-1" onClick={() => void remove(t)}>
                 ×
               </button>
             </span>

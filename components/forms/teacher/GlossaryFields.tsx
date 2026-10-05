@@ -77,7 +77,7 @@ export function GlossarySettings({ ui, set }: KindProps) {
                     aria-pressed={on}
                     data-lang={l}
                     onClick={() => set("translationLangs", on ? ui.translationLangs.filter((x) => x !== l) : [...ui.translationLangs, l])}
-                    className={`rounded-full border px-2.5 py-1 text-[12px] transition-colors ${on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted"}`}
+                    className={`pointer-coarse:min-h-11 pointer-coarse:px-3 rounded-full border px-2.5 py-1 text-[12px] transition-colors ${on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted"}`}
                   >
                     {l.toUpperCase()}
                   </button>

@@ -96,8 +96,10 @@ export const LEVEL_BANDS: Record<EssayLang, Record<CefrLevel, LevelBand>> = {
     A2: { lo: 5, hi: 9, cap: 14, target: 7 },
     B1: { lo: 8, hi: 12, cap: 18, target: 10 },
     B2: { lo: 10, hi: 16, cap: 24, target: 13 },
-    C1: { lo: 13, hi: 20, cap: 32, target: 16 },
-    C2: { lo: 14, hi: 24, cap: 39, target: 20 },
+    // Calibrated 2026-10-05 on the live run (docs/mobile/PLAN.md §7): the model's uz C1 mean was 20.2 against
+    // the first estimate's hi 20; B2 (13.7) and A1 (5.4) landed on target, so only C1/C2 move up.
+    C1: { lo: 14, hi: 23, cap: 34, target: 18 },
+    C2: { lo: 16, hi: 28, cap: 42, target: 22 },
   },
 };
 

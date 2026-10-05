@@ -74,17 +74,18 @@ function gen(patch: Record<string, unknown> = {}) {
   };
 }
 
-type Call = { url: string; method: string };
+type Call = { url: string; method: string; body?: string };
 
 /** `route(url, method)` → Response (yoki Promise). Hamma chaqiruv yoziladi. */
-function stub(route: (url: string, method: string, n: number) => Response | Promise<Response>): Call[] {
+function stub(route: (url: string, method: string, n: number, body?: string) => Response | Promise<Response>): Call[] {
   const calls: Call[] = [];
   (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, opts?: RequestInit) => {
     const url = String(input);
     const method = opts?.method ?? "GET";
-    calls.push({ url, method });
+    const body = typeof opts?.body === "string" ? opts.body : undefined;
+    calls.push({ url, method, body });
     if (url === "/api/auth/session") return json(200, { user: null, features: null });
-    return route(url, method, calls.filter((c) => c.url.startsWith(`/api/generations/${ID}`) && c.method === "GET").length);
+    return route(url, method, calls.filter((c) => c.url.startsWith(`/api/generations/${ID}`) && c.method === "GET").length, body);
   };
   return calls;
 }
@@ -150,30 +151,61 @@ test("eski server (queuePosition yo'q) — navbat qatori chizilmaydi", async () 
   assert.ok(!document.querySelector("[data-queue-position]"));
 });
 
-test("PDF: o'girish davomida tugma «PDF tayyorlanmoqda…», 503 da server matni + qachon qayta (UX-08, W2-A)", async () => {
+/*
+ * Rewritten for the mobile sprint (PLAN §4.5): the header PDF button and the
+ * «PDF tayyorlanmoqda — bu 1 daqiqagacha…» notice are gone; the PDF is a row of
+ * the «Yuklab olish» sheet, prepared as soon as the sheet opens, with its own
+ * state (spinner + elapsed seconds), and a 503 shows the server text + «qachon
+ * qayta» on that row with «Qayta urinish». The other rows stay usable.
+ */
+test("PDF (varaq qatori): ochilganda tayyorlanadi, «PDF tayyorlanmoqda… N s», 503 da server matni + qachon qayta (UX-08, W2-A)", async () => {
   let release!: (r: Response) => void;
-  stub((url, method) => {
-    if (url.includes("/file?format=pdf")) return new Promise<Response>((r) => (release = r));
+  const calls = stub((url, method, _n, body) => {
+    if (method === "POST" && url === `/api/generations/${ID}/download`) {
+      if (body === JSON.stringify({ format: "pdf" })) return new Promise<Response>((r) => (release = r));
+      return json(200, { state: "ready", url: "/api/dl/tok-native", fileName: "referat.docx", size: 48_000, mime: "application/octet-stream", expiresAt: new Date(Date.now() + 900_000).toISOString() });
+    }
     if (method === "GET") return json(200, { generation: gen({ status: "COMPLETED", hasFile: true, progress: 100, step: "Tayyor" }) });
     return json(404, { error: "yo'q" });
   });
   mount();
-  const pdf = await waitFor(() => screen.getByTitle("PDF ga o‘girib yuklab olish"), { timeout: 3000 });
-  assert.ok(!pdf.hasAttribute("data-pdf-busy"));
+  const button = await waitFor(() => {
+    const b = document.querySelector("[data-download-button]") as HTMLElement | null;
+    assert.ok(b);
+    return b;
+  }, { timeout: 3000 });
+  assert.ok(!screen.queryByTitle("PDF ga o‘girib yuklab olish"), "alohida PDF tugmasi yo'q");
+  assert.match(button.textContent ?? "", /Yuklab olish/);
   await act(async () => {
-    fireEvent.click(pdf);
+    fireEvent.click(button);
   });
-  await waitFor(() => assert.ok(document.querySelector("[data-pdf-busy]")), { timeout: 2000 });
-  assert.match(pdf.textContent ?? "", /PDF tayyorlanmoqda…/);
-  assert.equal(pdf.getAttribute("aria-busy"), "true");
-  assert.ok(document.querySelector("[data-pdf-status]"), "holat qatori");
+  const row = await waitFor(() => {
+    const r = document.querySelector('[data-download-row="pdf"]') as HTMLElement | null;
+    assert.ok(r, "PDF qatori");
+    return r;
+  });
+  // Prepared on open (lead decision): the PDF request is already in flight.
+  await waitFor(() => assert.ok(calls.some((c) => c.method === "POST" && c.body === JSON.stringify({ format: "pdf" }))));
   await act(async () => {
-    release(json(503, { error: "PDF xizmati hozir band" }, { "retry-after": "30" }));
+    fireEvent.click(row);
   });
-  const alert = await waitFor(() => screen.getByRole("alert"), { timeout: 2000 });
-  assert.match(alert.textContent ?? "", /PDF xizmati hozir band/);
-  assert.match(alert.textContent ?? "", /30 soniyadan keyin/);
-  assert.ok(!document.querySelector("[data-pdf-busy]"), "tugma odatiy holatga qaytdi");
+  assert.equal(row.getAttribute("data-row-state"), "preparing");
+  assert.equal(row.getAttribute("aria-busy"), "true");
+  assert.match(row.querySelector("[data-row-status]")!.textContent ?? "", /^PDF tayyorlanmoqda… \(odatda 5–15 soniya\) \d+ s$/);
+  assert.equal(calls.filter((c) => c.method === "POST" && c.body === JSON.stringify({ format: "pdf" })).length, 1, "bosish o'sha tayyorlashga ulanadi (ikkinchi so'rov yo'q)");
+  const native = document.querySelector('[data-download-row="native"]') as HTMLButtonElement;
+  assert.equal(native.disabled, false, "boshqa qator ishlaydi");
+  await act(async () => {
+    release(json(503, { error: "PDF xizmati hozir band", code: "busy" }, { "retry-after": "30" }));
+  });
+  await waitFor(() => assert.equal(row.getAttribute("data-row-state"), "error"), { timeout: 2000 });
+  const status = row.querySelector("[data-row-status]")!;
+  assert.equal(status.getAttribute("role"), "alert");
+  assert.match(status.textContent ?? "", /PDF xizmati hozir band/);
+  assert.match(status.textContent ?? "", /30 soniyadan keyin/);
+  assert.match(row.textContent ?? "", /Qayta urinish/);
+  assert.ok(!row.hasAttribute("aria-busy"), "qator odatiy holatga qaytdi (qayta bosish mumkin)");
+  assert.ok(!document.querySelector("[data-pdf-status]"), "eski PDF izohi yo'q");
 });
 
 test("fayl retention bilan o'chirilgan (`filesPurgedAt`) — 180 kun izohi (W2-D2)", async () => {
@@ -196,6 +228,39 @@ test("fayl yo'q, lekin `filesPurgedAt` yo'q — eski umumiy matn", async () => {
   mount();
   await waitFor(() => assert.ok(screen.getByText(/Bu hujjatning fayli topilmadi/)), { timeout: 3000 });
   assert.ok(!document.querySelector("[data-files-purged]"));
+});
+
+test("FAILED: no dead end — «Yangi yaratish» opens the same tool's form, «Orqaga» goes back; no download actions (R5 P6/F8)", async () => {
+  stub((url, method) =>
+    method === "GET" ? json(200, { generation: gen({ status: "FAILED", error: "Xizmat vaqtincha javob bermadi", progress: 0 }) }) : json(404, {}),
+  );
+  mount();
+  const box = await waitFor(() => {
+    const b = document.querySelector("[data-failed-actions]");
+    assert.ok(b, "failed actions");
+    return b;
+  }, { timeout: 3000 });
+  const fresh = box.querySelector("[data-failed-new]") as HTMLAnchorElement;
+  assert.equal(fresh.getAttribute("href"), "/uz/referat");
+  assert.match(fresh.textContent ?? "", /Yangi yaratish/);
+  const back = box.querySelector("[data-failed-back]") as HTMLAnchorElement;
+  assert.ok(back, "«Orqaga»");
+  assert.match(back.textContent ?? "", /Orqaga/);
+  assert.ok(!document.querySelector("[data-download-button]"), "no download on a failed result");
+  assert.match(document.body.textContent ?? "", /Xizmat vaqtincha javob bermadi/);
+});
+
+test("COMPLETED header: one «Yuklab olish», the title clamps to 2 lines on phones, delete is not a header button", async () => {
+  stub((url, method) => (method === "GET" ? json(200, { generation: gen({ status: "COMPLETED", hasFile: true, progress: 100, step: "Tayyor" }) }) : json(404, {})));
+  mount();
+  await waitFor(() => assert.ok(document.querySelector("[data-download-button]")), { timeout: 3000 });
+  assert.equal(document.querySelectorAll("[data-download-button]").length, 1);
+  const title = document.querySelector("[data-result-title]")!;
+  assert.ok(title.className.split(/\s+/).includes("line-clamp-2"), "2-line title on phones");
+  assert.ok(!title.className.split(/\s+/).includes("truncate"), "not cut to one line");
+  const buttons = [...document.querySelectorAll("[data-result-nav] button")].map((b) => b.textContent ?? "");
+  assert.ok(!buttons.some((t) => /O’chirish/.test(t)), "delete lives in «⋯»");
+  assert.ok(document.querySelector('[data-more-button][aria-label="Boshqa amallar"]'));
 });
 
 // ─────────────────────────── 402 unpaid (W1-E follow-up)

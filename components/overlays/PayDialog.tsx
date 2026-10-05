@@ -6,6 +6,9 @@ import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { useNav } from "@/components/nav/NavProvider";
 import { useUi } from "@/lib/ui";
+import { cn } from "@/lib/cn";
+import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
+import { OverlayFrame } from "./OverlayFrame";
 import { useDialog } from "./useDialog";
 
 const TOPUP_PRESETS = [10_000, 25_000, 50_000, 100_000];
@@ -29,6 +32,8 @@ export function PayDialog() {
   const [error, setError] = useState<string | null>(null);
   const panelRef = useDialog(open, close);
   const nav = useNav();
+  /** Telefon (docs/mobile/PLAN.md O5): 44 px tugmalar, ekranga sig'adi va ichida aylanadi. */
+  const phone = useCoarsePointer();
 
   // Har ochilganda oldingi xato/kutish holati tozalansin.
   useEffect(() => {
@@ -69,17 +74,27 @@ export function PayDialog() {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
-      role="dialog"
-      aria-modal="true"
-      aria-label="To'lov usuli"
+    <OverlayFrame
+      label="To'lov usuli"
+      phone={phone}
+      className={cn("flex items-end justify-center sm:items-center", !phone && "p-4")}
     >
       <button type="button" className="absolute inset-0 bg-black/40" aria-label="Yopish" onClick={close} />
-      <div ref={panelRef} className="bg-card relative z-10 w-full max-w-md rounded-2xl border p-6 shadow-xl">
+      <div
+        ref={panelRef}
+        className={cn(
+          "bg-card relative z-10 w-full max-w-md rounded-2xl border shadow-xl",
+          phone ? "max-h-full overflow-y-auto overscroll-contain p-4" : "p-6",
+        )}
+      >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">To&apos;lov usuli</h2>
-          <button type="button" onClick={close} className="hover:bg-muted rounded-full p-1.5" aria-label="Yopish">
+          <button
+            type="button"
+            onClick={close}
+            className={cn("hover:bg-muted flex items-center justify-center rounded-full", phone ? "-mr-2 size-11" : "p-1.5")}
+            aria-label="Yopish"
+          >
             <X className="size-4" />
           </button>
         </div>
@@ -97,7 +112,7 @@ export function PayDialog() {
                   type="button"
                   aria-pressed={amount === v}
                   onClick={() => setAmount(v)}
-                  className={`h-10 rounded-lg border text-xs font-medium ${
+                  className={`${phone ? "h-11 text-sm" : "h-10 text-xs"} rounded-lg border font-medium ${
                     amount === v ? "border-primary bg-primary text-primary-foreground" : "bg-background"
                   }`}
                 >
@@ -135,6 +150,6 @@ export function PayDialog() {
           </p>
         ) : null}
       </div>
-    </div>
+    </OverlayFrame>
   );
 }

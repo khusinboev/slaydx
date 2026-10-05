@@ -73,7 +73,7 @@ export function RowList<T>({
         type="button"
         disabled={rows.length >= max}
         onClick={() => onChange([...rows, add()])}
-        className="text-primary mt-2 text-[12px] font-medium disabled:opacity-40"
+        className="text-primary pointer-coarse:min-h-11 pointer-coarse:px-1 pointer-coarse:text-[13px] mt-2 text-[12px] font-medium disabled:opacity-40"
       >
         + {addLabel}
       </button>
@@ -100,7 +100,7 @@ function IconBtn({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "text-muted-foreground hover:bg-muted hover:text-foreground flex size-6 items-center justify-center rounded-md text-[13px]",
+        "text-muted-foreground hover:bg-muted hover:text-foreground pointer-coarse:size-11 pointer-coarse:text-base flex size-6 items-center justify-center rounded-md text-[13px]",
         disabled && "opacity-30",
       )}
     >
