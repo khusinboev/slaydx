@@ -16,6 +16,7 @@ import type { GenerationDetail, PollIssue } from "../lib/api-client.ts";
 
 const api = await import("../lib/api-client.ts");
 const edit = await import("../lib/api-edit.ts");
+const deliver = await import("../lib/downloads/deliver.ts");
 const { ApiError, pollGeneration, request } = api;
 
 function gen(patch: Partial<GenerationDetail> = {}): GenerationDetail {
@@ -274,71 +275,79 @@ test("listGenerations: eski server (`nextCursor` yo'q) — kursor null", async (
   assert.equal(page.nextCursor, null);
 });
 
-// ─────────────────────────── downloadGeneration: PDF 429/503 (W2-A shartnomasi)
+// ─────────────── downloads: prepare 429/503, body without a timeout (W2-A, review R2 → mobile sprint)
+//
+// Rewritten for the mobile sprint (PLAN §4.2/§4.5): the old `downloadGeneration`
+// fetch → blob path is replaced by `prepareGenerationDownload` (POST prepare,
+// signed URL) + `deliver` (browser branch). The same three guarantees are pinned
+// on the new path.
 
-test("downloadGeneration: 503 — server matni va Retry-After", async (t) => {
+test("prepare: 503 — server matni va Retry-After (xato matnida «qachon qayta»)", async (t) => {
   let seen: AbortSignal | null | undefined;
+  let body: unknown;
   t.mock.method(globalThis, "fetch", async (_u: unknown, init?: RequestInit) => {
     seen = init?.signal;
-    return json(503, { error: "PDF xizmati band" }, { "retry-after": "20" });
+    body = init?.body;
+    return json(503, { error: "PDF xizmati band", code: "busy" }, { "retry-after": "20" });
   });
-  const err = (await api.downloadGeneration("g1", "pdf").catch((e: unknown) => e)) as InstanceType<typeof ApiError>;
+  const err = (await api.prepareGenerationDownload("g1", "pdf").catch((e: unknown) => e)) as InstanceType<typeof ApiError>;
   assert.ok(err instanceof ApiError);
   assert.equal(err.status, 503);
   assert.equal(err.retryAfterSec, 20);
   assert.match(err.message, /^PDF xizmati band/);
-  assert.match(err.message, /20 soniya/);
-  assert.ok(seen instanceof AbortSignal, "yuklab olishda ham vaqt chegarasi bor");
+  assert.match(deliver.deliverErrorText(err), /^PDF xizmati band \(qayta urinish: 20 soniyadan keyin\)$/);
+  assert.equal(body, JSON.stringify({ format: "pdf" }));
+  assert.ok(seen instanceof AbortSignal, "prepare so'rovida ham vaqt chegarasi bor");
 });
 
-test("downloadGeneration: vaqt chegarasi faqat sarlavhalargacha — sekin tana (katta deka, mobil) uzilmaydi (review R2)", { timeout: 3000 }, async (t) => {
-  const keepAlive = setInterval(() => {}, 1000);
-  const clicked: string[] = [];
-  const g = globalThis as unknown as Record<string, unknown>;
-  const hadDoc = "document" in g;
-  g.document = {
-    createElement: () => ({ click: () => clicked.push("a"), remove() {} }),
-    body: { appendChild() {} },
-  };
+test("deliver (brauzer): tanaga vaqt chegarasi yo'q — sekin tana (katta deka, mobil) uzilmaydi (review R2)", { timeout: 3000 }, async (t) => {
+  const saved: { name: string; size: number }[] = [];
+  let seen: AbortSignal | null | undefined = null;
   t.mock.method(globalThis, "fetch", async (_u: unknown, init?: RequestInit) => {
+    seen = init?.signal;
     const body = new ReadableStream<Uint8Array>({
       start(ctrl) {
-        init?.signal?.addEventListener("abort", () => ctrl.error(new DOMException("aborted", "AbortError")));
-        // Tana chegaradan (30 ms) ancha keyin tugaydi.
+        // Tana 120 ms dan keyin keladi — eski sarlavha chegarasidan (30 ms) ancha keyin.
         setTimeout(() => {
-          try {
-            ctrl.enqueue(new Uint8Array([1, 2, 3]));
-            ctrl.close();
-          } catch {
-            // Oqim allaqachon uzilgan — test pastda buni xato sifatida ko'radi.
-          }
+          ctrl.enqueue(new Uint8Array([1, 2, 3]));
+          ctrl.close();
         }, 120);
       },
     });
-    return new Response(body, { status: 200, headers: { "content-disposition": 'attachment; filename="d.pptx"' } });
+    return new Response(body, { status: 200, headers: { "content-length": "3" } });
   });
-  try {
-    await api.downloadGeneration("g1", undefined, { headerTimeoutMs: 30 });
-    assert.deepEqual(clicked, ["a"], "fayl saqlandi");
-  } finally {
-    clearInterval(keepAlive);
-    if (!hadDoc) delete g.document;
-  }
+  const progress: number[] = [];
+  const r = await deliver.deliver(
+    { format: "native", url: "/api/dl/tok", fileName: "d.pptx", size: 3, mime: "application/octet-stream", expiresAt: new Date(Date.now() + 900_000).toISOString() },
+    { capability: "browser", platform: null, saveBlobImpl: (b, name) => saved.push({ name, size: b.size }), onProgress: (l) => progress.push(l) },
+  );
+  assert.equal(r.kind, "saved");
+  assert.deepEqual(saved, [{ name: "d.pptx", size: 3 }], "fayl saqlandi");
+  assert.deepEqual(progress, [0, 3]);
+  assert.equal(seen, undefined, "yuklash so'roviga vaqt chegarasi signali berilmaydi");
 });
 
-test("downloadGeneration: sarlavhalar kelmasa — vaqt tugadi xatosi", { timeout: 3000 }, async (t) => {
-  const keepAlive = setInterval(() => {}, 1000);
+test("prepare: javob kelmasa — vaqt tugadi xatosi (PREPARE_TIMEOUT_MS chegarasi)", { timeout: 3000 }, async (t) => {
+  const asked: number[] = [];
+  const real = AbortSignal.timeout.bind(AbortSignal);
+  t.mock.method(AbortSignal, "timeout", (ms: number) => {
+    asked.push(ms);
+    return real(30);
+  });
   t.mock.method(globalThis, "fetch", (_u: unknown, init?: RequestInit) => {
     return new Promise((_, rej) => {
       init?.signal?.addEventListener("abort", () => rej(new DOMException("x", "AbortError")));
     });
   });
+  // `AbortSignal.timeout` timers do not keep the event loop alive.
+  const keepAlive = setInterval(() => {}, 1000);
   const err = (await api
-    .downloadGeneration("g1", "pdf", { headerTimeoutMs: 30 })
+    .prepareGenerationDownload("g1", "pdf")
     .catch((e: unknown) => e)
     .finally(() => clearInterval(keepAlive))) as InstanceType<typeof ApiError>;
   assert.ok(err instanceof ApiError);
   assert.equal(err.data.timeout, true);
+  assert.deepEqual(asked, [api.PREPARE_TIMEOUT_MS]);
 });
 
 // ─────────────────────────── api-edit: server matni (W1-E follow-up)

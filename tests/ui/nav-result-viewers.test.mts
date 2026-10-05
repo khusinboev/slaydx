@@ -201,15 +201,29 @@ test("ResultView delete replaces the page with /uz (the deleted page leaves hist
   router.push(`/uz/files/${ID}`);
   calls.length = 0;
   await mountResult();
-  const del = () => screen.getAllByRole("button").find((b) => /O’chirish|Rostdan\?/.test(b.textContent ?? ""))!;
+  // Mobile sprint (PLAN §4.5): delete lives in the «⋯» overflow; the menu item arms the
+  // two-step confirm and closes the menu (its history entry), «Rostdan?» replaces «⋯».
   await act(async () => {
-    fireEvent.click(del());
+    fireEvent.click(document.querySelector("[data-more-button]")!);
   });
+  await settle();
+  const item = document.querySelector('[data-menu-item="delete"]') as HTMLElement | null;
+  assert.ok(item, "«O’chirish» is in the overflow menu");
+  assert.match(item!.textContent ?? "", /O’chirish/);
+  await act(async () => {
+    fireEvent.click(item!);
+  });
+  await settle();
+  assert.ok(!document.querySelector("[data-result-menu]"), "the menu closed");
+  assert.ok(!seen.includes(`DELETE /api/generations/${ID}`), "the first step only arms");
   await act(async () => {
     await new Promise((r) => setTimeout(r, CONFIRM_MIN_MS + 20));
   });
+  const confirm = document.querySelector("[data-delete-confirm]") as HTMLElement | null;
+  assert.ok(confirm, "«Rostdan?» replaced «⋯»");
+  assert.match(confirm!.textContent ?? "", /Rostdan\?/);
   await act(async () => {
-    fireEvent.click(del());
+    fireEvent.click(confirm!);
   });
   await settle();
   assert.ok(seen.includes(`DELETE /api/generations/${ID}`));

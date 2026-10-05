@@ -9,15 +9,18 @@ import { creditTotal, useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { TOOL_ICONS } from "./icons";
 import { BRAND_LOGO, BRAND_NAME } from "@/lib/brand";
+import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
+import { SAFE_BOTTOM, SAFE_LEFT, TOP_INSET } from "./safe-area";
 
 // Bo'lim yorliqlari `lib/tools.ts` dan (AUDIT-21 R0) — `CreateGrid`
 // bilan bitta manbadan; vositasi yo'q bo'lim (hozir `media`) chizilmaydi.
 const GROUPS = visibleToolGroups();
 
-function itemClass(active: boolean) {
+/** Telefonda qator 48 px (docs/mobile/PLAN.md O5), ish stolida 40 px. */
+function itemClass(active: boolean, phone = false) {
   return cn(
-    "peer/menu-button flex w-full items-center gap-2.5 overflow-hidden rounded-xl px-3 py-2 text-start outline-hidden transition-colors",
-    "h-10 text-[15.5px]",
+    "peer/menu-button flex w-full shrink-0 items-center gap-2.5 overflow-hidden rounded-xl px-3 py-2 text-start outline-hidden transition-colors",
+    phone ? "h-12 text-[15.5px]" : "h-10 text-[15.5px]",
     active
       ? "bg-white font-medium text-sidebar-accent-foreground shadow-sm dark:bg-sidebar-accent"
       : "hover:bg-white/70 dark:hover:bg-sidebar-accent",
@@ -31,6 +34,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const open = useUi((s) => s.open);
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const total = creditTotal(user);
+  const phone = useCoarsePointer();
 
   function onToolClick(href: string) {
     onNavigate?.();
@@ -41,12 +45,18 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   return (
-    <div className="bg-sidebar flex h-full w-full flex-col">
+    <div
+      data-sidebar
+      data-phone={phone ? "" : undefined}
+      className="bg-sidebar flex h-full w-full flex-col"
+      // Telefonda: notch / Telegram sarlavhasi va uy indikatori ostida qolmasin (bo'lmasa 0).
+      style={phone ? { paddingTop: TOP_INSET, paddingLeft: SAFE_LEFT, paddingBottom: SAFE_BOTTOM } : undefined}
+    >
       <div className="flex flex-col gap-2 p-2">
         <Link
           href="/uz"
           onClick={onNavigate}
-          className={itemClass(pathname === "/uz")}
+          className={itemClass(pathname === "/uz", phone)}
           aria-label={BRAND_NAME}
           style={{ height: 48 }}
         >
@@ -64,7 +74,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <Link
           href="/uz/create"
           onClick={() => onToolClick("/uz/create")}
-          className={itemClass(pathname === "/uz/create")}
+          className={itemClass(pathname === "/uz/create", phone)}
         >
           <Plus className="size-[18px] shrink-0" />
           <span>Yaratish</span>
@@ -85,7 +95,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                     <Link
                       href={href}
                       onClick={() => onToolClick(href)}
-                      className={itemClass(active)}
+                      className={itemClass(active, phone)}
                     >
                       {Icon ? (
                         <Icon
@@ -108,7 +118,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <Link
             href="/admin"
             onClick={onNavigate}
-            className="hover:bg-white/70 dark:hover:bg-sidebar-accent mb-1 flex items-center gap-2.5 rounded-md px-3 py-2"
+            className={cn(
+              "hover:bg-white/70 dark:hover:bg-sidebar-accent mb-1 flex items-center gap-2.5 rounded-md px-3 py-2",
+              phone && "min-h-12",
+            )}
           >
             <span className="bg-muted flex size-8 items-center justify-center rounded-lg">
               <Shield className="text-muted-foreground size-4" />
@@ -120,7 +133,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <Link
             href="/uz/profile"
             onClick={onNavigate}
-            className="bg-sidebar-accent border-sidebar-border flex items-center gap-2.5 rounded-2xl border px-3 py-2.5 hover:opacity-90"
+            className={cn(
+              "bg-sidebar-accent border-sidebar-border flex items-center gap-2.5 rounded-2xl border px-3 py-2.5 hover:opacity-90",
+              phone && "min-h-14",
+            )}
           >
             <div className="bg-primary text-primary-foreground ring-primary ring-offset-sidebar-accent flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ring-2 ring-offset-2">
               {(user?.name || "?").slice(0, 1).toUpperCase()}
@@ -143,7 +159,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               onNavigate?.();
               open("login");
             }}
-            className="hover:bg-white/70 dark:hover:bg-sidebar-accent flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-start"
+            className={cn(
+              "hover:bg-white/70 dark:hover:bg-sidebar-accent flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-start",
+              phone && "min-h-12",
+            )}
           >
             <span className="bg-muted flex size-8 items-center justify-center rounded-lg">
               <User className="text-muted-foreground size-4" />

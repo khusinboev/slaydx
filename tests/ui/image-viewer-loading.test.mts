@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { createElement as h } from "react";
 import { render, cleanup, fireEvent, act } from "@testing-library/react";
 import { ImageViewer } from "../../components/viewers/ImageViewer.tsx";
+import { DownloadSheetContext } from "../../components/files/DownloadSheet.tsx";
 import type { AcademicDoc } from "../../lib/generation/types.ts";
 
 /**
@@ -114,18 +115,66 @@ test("bir nechta rasm: sarlavha ZIP beradi, shuning uchun har rasmda BITTA PNG y
   assert.ok(q('[data-image-lightbox] button[aria-label="Yuklab olish"]'), "lightbox: joriy rasmni yuklash");
 });
 
-test("yuklash tugmasi tanlangan rasmning o'zini yuklaydi (a.download = rasm-N.png)", async () => {
+/*
+ * Rewritten (mobile sprint, PLAN §4.5): the tile download goes through the
+ * delivery driver. Browser: fetch (session cookie) → blob → `<a download>`
+ * named from the real type; was a bare `<a href download>`, which saves nothing
+ * inside the Telegram Mini App. In Telegram the page's sheet opens instead
+ * (a single asset has no signed URL; the registry's ZIP has).
+ */
+test("yuklash tugmasi tanlangan rasmning o'zini yuklaydi (fetch → blob, a.download = rasm-N.png)", async () => {
   render(h(ImageViewer, { doc: doc([img("a"), img("b")]) }));
-  const clicked: Array<{ href: string; download: string }> = [];
+  const clicked: Array<{ href: string; download: string; size: number }> = [];
+  const fetched: Array<{ url: string; credentials?: string }> = [];
+  const realFetch = globalThis.fetch;
+  const realCreate = URL.createObjectURL;
+  const blobs = new Map<string, Blob>();
+  globalThis.fetch = (async (u: unknown, init?: RequestInit) => {
+    fetched.push({ url: String(u), credentials: init?.credentials });
+    return new Response(new Uint8Array([1, 2, 3, 4]), { status: 200, headers: { "content-length": "4" } });
+  }) as typeof fetch;
+  URL.createObjectURL = (b: Blob | MediaSource) => {
+    const id = `blob:img${blobs.size}`;
+    blobs.set(id, b as Blob);
+    return id;
+  };
   const proto = window.HTMLAnchorElement.prototype as unknown as { click: () => void };
   const orig = proto.click;
   proto.click = function (this: HTMLAnchorElement) {
-    clicked.push({ href: this.getAttribute("href") ?? "", download: this.download });
+    const href = this.getAttribute("href") ?? "";
+    clicked.push({ href, download: this.download, size: blobs.get(href)?.size ?? -1 });
   };
   try {
     await act(async () => fireEvent.click(qa('[data-image-actions] button[aria-label="Yuklab olish"]')[1]));
+    for (let i = 0; i < 20 && clicked.length === 0; i++) await act(async () => new Promise((r) => setTimeout(r, 5)));
   } finally {
     proto.click = orig;
+    globalThis.fetch = realFetch;
+    URL.createObjectURL = realCreate;
   }
-  assert.deepEqual(clicked, [{ href: "/b.png", download: "rasm-2.png" }]);
+  assert.deepEqual(fetched, [{ url: "/b.png", credentials: "same-origin" }]);
+  assert.deepEqual(clicked, [{ href: "blob:img0", download: "rasm-2.png", size: 4 }]);
+});
+
+test("Telegram Mini App ichida rasm yuklash tugmasi sahifa varag'ini ochadi (fetch/`<a download>` yo'q)", async () => {
+  const w = window as unknown as Record<string, unknown>;
+  w.TelegramWebviewProxy = { postEvent() {} };
+  w.Telegram = { WebApp: { initData: "user=1", version: "8.0", platform: "android", isVersionAtLeast: () => true } };
+  const opened: Array<string | undefined> = [];
+  const fetched: string[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (u: unknown) => {
+    fetched.push(String(u));
+    return new Response("x");
+  }) as typeof fetch;
+  try {
+    render(h(DownloadSheetContext.Provider, { value: (m?: string) => void opened.push(m) }, h(ImageViewer, { doc: doc([img("a"), img("b")]) })));
+    await act(async () => fireEvent.click(qa('[data-image-actions] button[aria-label="Yuklab olish"]')[0]));
+  } finally {
+    delete w.TelegramWebviewProxy;
+    delete w.Telegram;
+    globalThis.fetch = realFetch;
+  }
+  assert.deepEqual(opened, ["download"]);
+  assert.deepEqual(fetched, []);
 });
