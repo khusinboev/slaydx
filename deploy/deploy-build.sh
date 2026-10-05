@@ -52,9 +52,13 @@ main() {
 
   local prev_head prev_sha prev_tag
   prev_head=$(git rev-parse HEAD)
-  prev_sha=$( [ -f "$STATE_DIR/current.env" ] && sed -n '/^sha=/{s/^sha=//p;q}' "$STATE_DIR/current.env" || true)
+  prev_sha=""
+  prev_tag=""
+  if [ -f "$STATE_DIR/current.env" ]; then
+    prev_sha=$(sed -n '/^sha=/{s/^sha=//p;q}' "$STATE_DIR/current.env")
+    prev_tag=$(sed -n '/^tag=/{s/^tag=//p;q}' "$STATE_DIR/current.env")
+  fi
   prev_sha=${prev_sha:-$prev_head}
-  prev_tag=$( [ -f "$STATE_DIR/current.env" ] && sed -n '/^tag=/{s/^tag=//p;q}' "$STATE_DIR/current.env" || true)
   prev_tag=${prev_tag:-local}
   log "build deploy ${sha:0:7} (previous ${prev_sha:0:7}, tag $prev_tag)"
 
