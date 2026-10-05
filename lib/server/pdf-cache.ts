@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
-import { access, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, chmod, lstat, mkdir, mkdtemp, open, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { toPdf } from "./pdf";
@@ -23,10 +23,20 @@ import { toPdf } from "./pdf";
  *   - yozuv atomar: `.tmp` ga yoziladi va `rename` — yarim fayl berilmaydi;
  *   - bir xil kalit + formatga parallel so'rovlar BITTA o'girishni kutadi.
  *
- * Papka `DERIVED_CACHE_DIR` dan (prod: docker volume — deploy keshni
- * o'chirmaydi); berilmasa avvalgidek `/tmp/slaydx-pdf-cache`. Sozlangan
- * papkaga yozib bo'lmasa (masalan volume root egaligida), kesh
- * ogohlantirish bilan standart papkaga qaytadi — o'girish baribir ishlaydi.
+ * Live download links (mobile sprint m1): `touch` (called when a signed
+ * `/api/dl` URL is minted) pins an entry for `pinMs` (20 min > the 15 min
+ * token TTL) — LRU size eviction skips pinned entries unless the cache grows
+ * past `hardMaxBytes` — and refreshes its mtime, so the age limit counts from
+ * the last mint, not from the conversion. Pins live in memory: after a
+ * restart the token route regenerates within its budget or answers 503.
+ *
+ * Papka (m5): `DERIVED_CACHE_DIR` (prod: docker volume — deploy keshni
+ * o'chirmaydi). U HAQIQIY papka (symlink emas), shu jarayon egasiniki va
+ * yozish mumkin bo'lishi shart; o'zimiz yaratsak yoki egasi bo'lsak `0700`
+ * qilinadi. Berilmagan yoki yaroqsiz bo'lsa — jarayonga xos, `mkdtemp`
+ * bilan yaratilgan yopiq papka (`/tmp/slaydx-derived-XXXXXX`, oldindan
+ * taxmin qilib bo'lmaydigan nom; umumiy `/tmp` dagi sobit nom emas).
+ * Kesh fayllari symlink orqali o'qilmaydi (`O_NOFOLLOW`, `lstat`).
  *
  * Kesh jarayon bo'yicha (bazada emas — `BYTEA` ikkinchi nusxasi bazani
  * og'irlashtirardi); qayta ishga tushganda diskdagi fayllar qayta
@@ -34,26 +44,32 @@ import { toPdf } from "./pdf";
  * baytlar egalik SQL dan o'tgan qatordan keladi.
  */
 
-const DEFAULT_DIR = join(tmpdir(), "slaydx-pdf-cache");
 const DEFAULT_MAX_BYTES = 500 * 1024 * 1024;
 const DEFAULT_MAX_AGE_MS = 24 * 3600 * 1000;
 /** `get` dagi yosh supurishi oralig'i. */
 const SWEEP_EVERY_MS = 60_000;
+/** A minted download link lives 15 min (`token.ts`); its derived file stays pinned a bit longer. */
+export const DERIVED_PIN_MS = 20 * 60 * 1000;
+/** Private per-process fallback directory prefix (under `os.tmpdir()`). */
+const PRIVATE_DIR_PREFIX = "slaydx-derived-";
 
-/** Kesh papkasi: `DERIVED_CACHE_DIR`, bo'sh bo'lsa standart `/tmp/slaydx-pdf-cache`. */
-export function derivedCacheDir(): string {
-  return process.env.DERIVED_CACHE_DIR?.trim() || DEFAULT_DIR;
+/** Sozlangan kesh papkasi (`DERIVED_CACHE_DIR`) yoki `null` — jarayonga xos yopiq papka ishlatiladi. */
+export function derivedCacheDir(): string | null {
+  return process.env.DERIVED_CACHE_DIR?.trim() || null;
 }
 
 export type PdfCacheOptions = {
-  dir: string;
+  /** Configured directory; `null` → the private per-process directory. Unusable → the same fallback. */
+  dir: string | null;
   maxBytes: number;
   maxAgeMs: number;
-  /** `dir` ga yozib bo'lmasa shu papka ishlatiladi (ogohlantirish bilan). */
-  fallbackDir?: string;
+  /** How long `touch` pins an entry against LRU eviction (default `DERIVED_PIN_MS`). */
+  pinMs?: number;
+  /** Ceiling above which even pinned entries are evicted (default `2 × maxBytes`). */
+  hardMaxBytes?: number;
 };
 
-type Entry = { size: number; mtimeMs: number };
+type Entry = { size: number; mtimeMs: number; pinnedUntil?: number };
 
 /** Yozuv formati — fayl kengaytmasi sifatida (`[a-z0-9-]`, fayl nomiga xavfsiz). */
 const FORMAT_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
@@ -77,6 +93,49 @@ function entryName(key: string, format: string): string {
   return `${key}.${format}`;
 }
 
+type Globals = typeof globalThis & {
+  __slaydxPdfCache?: DerivedDiskCache;
+  __slaydxPdfInflight?: Map<string, Promise<Buffer | null>>;
+  __slaydxPrivateCacheDir?: Promise<string>;
+};
+const g = globalThis as Globals;
+
+/**
+ * The per-process private cache directory: `mkdtemp` (random suffix, mode
+ * 0700) under `os.tmpdir()`, created once per process. Never a fixed,
+ * guessable path on a shared `/tmp` (m5).
+ */
+export function privateCacheDir(): Promise<string> {
+  g.__slaydxPrivateCacheDir ??= mkdtemp(join(tmpdir(), PRIVATE_DIR_PREFIX)).then(async (dir) => {
+    await chmod(dir, 0o700);
+    return dir;
+  });
+  g.__slaydxPrivateCacheDir.catch(() => {
+    g.__slaydxPrivateCacheDir = undefined;
+  });
+  return g.__slaydxPrivateCacheDir;
+}
+
+/**
+ * A configured cache directory is used only when it is a real directory (not
+ * a symlink) owned by this process's user; it is created 0700, and tightened
+ * to 0700 when we own it with a looser mode (a Dockerfile `mkdir` makes 0755).
+ */
+async function openConfiguredDir(dir: string): Promise<void> {
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  const st = await lstat(dir);
+  if (!st.isDirectory()) throw new Error("not a real directory (symlink or file)");
+  const uid = typeof process.getuid === "function" ? process.getuid() : null;
+  if (uid !== null && st.uid !== uid) throw new Error(`owned by uid ${st.uid}, not ${uid}`);
+  if ((st.mode & 0o777) !== 0o700) await chmod(dir, 0o700);
+  await access(dir, fsConstants.W_OK);
+}
+
+/** Opens a cache file without following a symlink planted in its place (ELOOP). */
+async function openNoFollow(path: string, flags: number) {
+  return open(path, flags | fsConstants.O_NOFOLLOW);
+}
+
 /**
  * Hosila fayllar disk keshi. `get(key)`/`put(key, bytes)` — PDF (avvalgi
  * API); `get(key, "slides-png")` — boshqa format, alohida yozuv
@@ -88,17 +147,15 @@ export class DerivedDiskCache {
   private total = 0;
   private ready: Promise<void> | null = null;
   private lastSweep = Date.now();
-  private dir: string;
+  private dir = "";
 
-  constructor(private readonly opts: PdfCacheOptions) {
-    this.dir = opts.dir;
-  }
+  constructor(private readonly opts: PdfCacheOptions) {}
 
   totalBytes(): number {
     return this.total;
   }
 
-  /** Amalda ishlatilayotgan papka (`fallbackDir` bo'lishi mumkin). */
+  /** Amalda ishlatilayotgan papka (sozlangani yoki jarayonga xos yopiq papka). */
   async activeDir(): Promise<string> {
     await this.init();
     return this.dir;
@@ -108,23 +165,28 @@ export class DerivedDiskCache {
     return join(this.dir, name);
   }
 
-  private async openDir(dir: string): Promise<void> {
-    await mkdir(dir, { recursive: true, mode: 0o700 });
-    await access(dir, fsConstants.W_OK);
+  private get pinMs(): number {
+    return this.opts.pinMs ?? DERIVED_PIN_MS;
+  }
+
+  private get hardMaxBytes(): number {
+    return this.opts.hardMaxBytes ?? this.opts.maxBytes * 2;
   }
 
   /** Birinchi murojaatda: papka, yarim yozuvlarni tozalash, mavjud fayllarni indekslash. */
   private init(): Promise<void> {
     this.ready ??= (async () => {
-      try {
-        await this.openDir(this.opts.dir);
-        this.dir = this.opts.dir;
-      } catch (e) {
-        const fallback = this.opts.fallbackDir;
-        if (!fallback || fallback === this.opts.dir) throw e;
-        warn(`${this.opts.dir} ga yozib bo'lmadi, ${fallback} ishlatiladi`, e);
-        await this.openDir(fallback);
-        this.dir = fallback;
+      const configured = this.opts.dir;
+      if (configured) {
+        try {
+          await openConfiguredDir(configured);
+          this.dir = configured;
+        } catch (e) {
+          this.dir = await privateCacheDir();
+          warn(`${configured} ishlatilmadi, jarayonga xos ${this.dir} ishlatiladi`, e);
+        }
+      } else {
+        this.dir = await privateCacheDir();
       }
       const found: [string, Entry][] = [];
       for (const name of await readdir(this.dir)) {
@@ -135,7 +197,8 @@ export class DerivedDiskCache {
         }
         const dot = name.lastIndexOf(".");
         if (dot <= 0 || !FORMAT_RE.test(name.slice(dot + 1))) continue;
-        const st = await stat(path).catch(() => null);
+        // `lstat`: a symlink planted under an entry name is never indexed (nor read).
+        const st = await lstat(path).catch(() => null);
         if (st?.isFile()) found.push([name, { size: st.size, mtimeMs: st.mtimeMs }]);
       }
       found.sort((a, b) => a[1].mtimeMs - b[1].mtimeMs);
@@ -160,15 +223,24 @@ export class DerivedDiskCache {
     await rm(this.file(name), { force: true }).catch((err) => warn("o'chmadi", err));
   }
 
-  private async evict(): Promise<void> {
+  /** `keep` — the entry `put` just wrote: never its own eviction victim (it is about to be minted). */
+  private async evict(keep?: string): Promise<void> {
     const now = Date.now();
-    for (const [name, e] of this.index) {
-      if (this.total <= this.opts.maxBytes && now - e.mtimeMs <= this.opts.maxAgeMs) break;
-      await this.drop(name);
-    }
-    // Yoshi o'tganlar LRU boshida bo'lmasligi mumkin (yaqinda o'qilgan) — alohida.
+    // Yoshi o'tganlar (LRU boshida bo'lmasligi mumkin — yaqinda o'qilgan). `touch` mtime ni yangilaydi.
     for (const [name, e] of [...this.index]) {
       if (now - e.mtimeMs > this.opts.maxAgeMs) await this.drop(name);
+    }
+    // Hajm: eng kam ishlatilgani birinchi; tirik havolaga bog'langan (pinned) yozuv o'tkazib yuboriladi…
+    for (const [name, e] of [...this.index]) {
+      if (this.total <= this.opts.maxBytes) break;
+      if (name === keep || (e.pinnedUntil ?? 0) > now) continue;
+      await this.drop(name);
+    }
+    // …faqat qattiq shiftdan oshganda pinned yozuvlar ham (eng eskisi birinchi) chiqariladi.
+    for (const [name] of [...this.index]) {
+      if (this.total <= this.hardMaxBytes) break;
+      if (name === keep) continue;
+      await this.drop(name);
     }
   }
 
@@ -197,9 +269,44 @@ export class DerivedDiskCache {
     return e;
   }
 
+  /** LRU: oxiriga ko'chiramiz (eng yangi ishlatilgan). */
+  private bump(name: string, e: Entry): void {
+    this.index.delete(name);
+    this.index.set(name, e);
+  }
+
   /** Yozuv hajmi baytni o'qimasdan (`HEAD /api/dl/…` shu bilan javob beradi) yoki `null`. */
   async size(key: string, format = "pdf"): Promise<number | null> {
     return (await this.live(entryName(key, format)))?.size ?? null;
+  }
+
+  /**
+   * A signed download link for this entry was just minted: pin it against LRU
+   * eviction for `pinMs`, move it to the LRU tail and refresh its mtime (the
+   * age limit then counts from now; survives a restart's re-index). Returns
+   * the size, or `null` when the entry is not cached.
+   */
+  async touch(key: string, format = "pdf"): Promise<number | null> {
+    const name = entryName(key, format);
+    const e = await this.live(name);
+    if (!e) return null;
+    const now = Date.now();
+    try {
+      const fh = await openNoFollow(this.file(name), fsConstants.O_RDONLY);
+      try {
+        await fh.utimes(now / 1000, now / 1000);
+      } finally {
+        await fh.close();
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") warn("touch", err);
+      await this.drop(name);
+      return null;
+    }
+    e.mtimeMs = now;
+    e.pinnedUntil = now + this.pinMs;
+    this.bump(name, e);
+    return e.size;
   }
 
   async get(key: string, format = "pdf"): Promise<Buffer | null> {
@@ -207,15 +314,19 @@ export class DerivedDiskCache {
     const e = await this.live(name);
     if (!e) return null;
     try {
-      const buf = await readFile(this.file(name));
-      // LRU: oxiriga ko'chiramiz (eng yangi ishlatilgan).
-      this.index.delete(name);
-      this.index.set(name, e);
+      const fh = await openNoFollow(this.file(name), fsConstants.O_RDONLY);
+      let buf: Buffer;
+      try {
+        buf = await fh.readFile();
+      } finally {
+        await fh.close();
+      }
+      this.bump(name, e);
       return buf;
     } catch (err) {
+      // ELOOP: a symlink replaced the entry — never read through it; drop the link.
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") warn("o'qilmadi", err);
-      this.index.delete(name);
-      this.total -= e.size;
+      await this.drop(name);
       return null;
     }
   }
@@ -227,7 +338,8 @@ export class DerivedDiskCache {
     if (bytes.byteLength > this.opts.maxBytes / 2) return;
     const tmp = join(this.dir, `${key}.${process.pid}.${randomUUID()}.tmp`);
     try {
-      await writeFile(tmp, bytes, { mode: 0o600 });
+      // `wx` = O_CREAT | O_EXCL: never follows (or reuses) anything already at that path.
+      await writeFile(tmp, bytes, { mode: 0o600, flag: "wx" });
       await rename(tmp, this.file(name));
     } catch (e) {
       await rm(tmp, { force: true }).catch(() => undefined);
@@ -238,9 +350,9 @@ export class DerivedDiskCache {
       this.index.delete(name);
       this.total -= prev.size;
     }
-    this.index.set(name, { size: bytes.byteLength, mtimeMs: Date.now() });
+    this.index.set(name, { size: bytes.byteLength, mtimeMs: Date.now(), pinnedUntil: prev?.pinnedUntil });
     this.total += bytes.byteLength;
-    await this.evict();
+    await this.evict(name);
   }
 }
 
@@ -248,17 +360,10 @@ export class DerivedDiskCache {
 export const PdfDiskCache = DerivedDiskCache;
 export type PdfDiskCache = DerivedDiskCache;
 
-type Globals = typeof globalThis & {
-  __slaydxPdfCache?: DerivedDiskCache;
-  __slaydxPdfInflight?: Map<string, Promise<Buffer | null>>;
-};
-const g = globalThis as Globals;
-
 /** Web jarayonining umumiy hosila keshi (500 MB, 24 soat, `DERIVED_CACHE_DIR`). */
 export function pdfCache(): DerivedDiskCache {
   g.__slaydxPdfCache ??= new DerivedDiskCache({
     dir: derivedCacheDir(),
-    fallbackDir: DEFAULT_DIR,
     maxBytes: DEFAULT_MAX_BYTES,
     maxAgeMs: DEFAULT_MAX_AGE_MS,
   });
@@ -323,6 +428,19 @@ export async function derivedSize(
   cache: DerivedDiskCache = pdfCache(),
 ): Promise<number | null> {
   return cache.size(derivedCacheKey(generationId, bytes), format).catch((e) => {
+    warn("kesh o'qilmadi", e);
+    return null;
+  });
+}
+
+/** `derivedSize` + pin the entry for a link being minted (`DerivedDiskCache.touch`). Never converts. */
+export async function touchDerived(
+  generationId: string,
+  bytes: Uint8Array,
+  format: string,
+  cache: DerivedDiskCache = pdfCache(),
+): Promise<number | null> {
+  return cache.touch(derivedCacheKey(generationId, bytes), format).catch((e) => {
     warn("kesh o'qilmadi", e);
     return null;
   });

@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://unused/unused";
 
-const { csvRowLine, tashkentDateTime } = await import("../app/api/generations/[id]/results/route.ts");
+const { csvRowLine, tashkentDateTime } = await import("../lib/server/csv.ts");
 
 const row = (createdAt: string) => ({ id: "r1", playerName: "Ali", score: 7, total: 10, seconds: 63, answers: {}, createdAt });
 

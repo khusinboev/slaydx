@@ -8,6 +8,7 @@ import { adapterFor } from "./edit-adapters";
 import { env } from "./env";
 import { log } from "./log";
 import type { SessionUser } from "./session";
+import { PRODUCERS } from "./downloads/producers";
 import { callBot, isTransientBotFailure, type BotResult } from "./telegram";
 
 /**
@@ -16,7 +17,12 @@ import { callBot, isTransientBotFailure, type BotResult } from "./telegram";
  * - «Saqlash» (`saveToBot`): the file lands in the user's OWN bot chat. The
  *   first time the bytes are uploaded (multipart); the returned `file_id` is
  *   cached in `telegram_files` per (generation, format, file_version), and
- *   every later save is a tiny JSON resend by `file_id`.
+ *   every later save is a tiny JSON resend by `file_id` — except instant
+ *   serializations (results CSV, transcript, glossary CSV), whose content
+ *   changes without a version bump: always uploaded fresh (`reusesFileId`).
+ * - A format that needs a conversion is never converted inside the request:
+ *   `deps.prepare` starts the shared background preparation and the route
+ *   answers `202 preparing` until the derived file exists (`needsConversion`).
  * - «Ulashish» (`prepareShare`): owner decision O2 — the file is uploaded into
  *   the user's own bot chat when no valid `file_id` exists (share implies
  *   save, no storage channel), then `savePreparedInlineMessage` returns an id
@@ -43,9 +49,22 @@ export type ProduceDownload = (
   opts?: { signal?: AbortSignal },
 ) => Promise<ProducedFile>;
 
+/** Starts (or reports) the background preparation of a derived file (`prepareDownload`, package A). */
+export type PrepareDownload = (
+  genId: string,
+  userId: string,
+  format: DownloadFormatId,
+) => Promise<{ state: "ready" } | { state: "preparing"; retryAfterMs: number }>;
+
 export type TelegramFilesDeps = {
   /** The download producer (production: `produceDownload`). */
   produce: ProduceDownload;
+  /**
+   * Before an upload of a format that needs a conversion: start/poll the
+   * shared preparation instead of converting inside the request (m6;
+   * production: `prepareDownload`). Absent â produce directly.
+   */
+  prepare?: PrepareDownload;
   /** Bot API transport `fetch` (tests stub it; default: global `fetch`). */
   fetch?: typeof fetch;
   /** Clock (debounce window). */
@@ -61,7 +80,10 @@ export type TelegramFileErrorCode =
   | "bot_unreachable"
   | "telegram_unavailable"
   | "share_unavailable"
-  | "too_large";
+  | "too_large"
+  | "telegram_id_unsupported"
+  /** Not an error: the derived file is being prepared â the route answers 202 and the client repeats. */
+  | "preparing";
 
 /** A failure the route maps to an HTTP status + `code` (PLAN §4.4). */
 export class TelegramFileError extends Error {
@@ -70,6 +92,8 @@ export class TelegramFileError extends Error {
     message: string,
     /** Telegram's `error_code` when the failure came from the Bot API. */
     readonly tgCode?: number,
+    /** `preparing`: when the client should repeat the same request. */
+    readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = "TelegramFileError";
@@ -204,6 +228,22 @@ export function fileFromMessage(kind: MediaKind, msg: SentMessage | null | undef
   };
 }
 
+/**
+ * A Telegram user id as the JSON number the Bot API expects (m2).
+ *
+ * `users.telegram_id` is BIGINT and Telegram ids are 64-bit; `Number()` above
+ * 2^53 silently rounds to a DIFFERENT id, which would bind a prepared message
+ * to the wrong user. Such an id is refused with its own code instead.
+ * (`chat_id` travels as a string elsewhere, which Telegram accepts.)
+ */
+export function telegramUserId(id: string): number {
+  const n = Number(id);
+  if (!/^\d{1,20}$/.test(id) || !Number.isSafeInteger(n) || String(n) !== id) {
+    throw new TelegramFileError("telegram_id_unsupported", "Bu Telegram akkaunti bilan ulashib bo'lmadi — «Saqlash» yoki «Yuklab olish» dan foydalaning.");
+  }
+  return n;
+}
+
 /** `savePreparedInlineMessage` body (Bot API 8.0): users, groups and channels; never bot chats. */
 export function buildPrepared(args: {
   telegramId: string;
@@ -227,7 +267,7 @@ export function buildPrepared(args: {
     result.description = args.description;
   }
   return {
-    user_id: Number(args.telegramId),
+    user_id: telegramUserId(args.telegramId),
     result,
     allow_user_chats: true,
     allow_bot_chats: false,
@@ -286,14 +326,41 @@ async function loadRow(genId: string, userId: string, format: DownloadFormatId):
 }
 
 /**
- * The cached file is the current one: same `file_version`, and that version
- * is not behind an edit waiting for a re-render (the same staleness rule as
- * `fresh-file.ts`: only editable tools re-render).
+ * Whether a cached `file_id` may stand for the current bytes of `format` (M1).
+ *
+ * Stored and derived formats (native, pdf, slides-png, jpg) are built from the
+ * stored file, whose bytes change only together with `file_version` — the
+ * cache key. Instant serializations (results CSV, transcript, glossary CSV) are
+ * rebuilt per request from data that changes WITHOUT a version bump (every new
+ * game result, a `doc_json` change), so a cached `file_id` could carry an old
+ * table: they are always produced and uploaded again. They are a few KB, so an
+ * upload costs the same as a resend; no content hash column is needed.
  */
-function cacheValid(row: GenRow): MediaKind | null {
+export function reusesFileId(format: DownloadFormatId): boolean {
+  return PRODUCERS[format].kind !== "instant";
+}
+
+/** Formats converted from the stored file (registry `cost: "convert"`: pdf, slides-png, jpg). */
+export function needsConversion(format: DownloadFormatId): boolean {
+  return PRODUCERS[format].kind === "derived";
+}
+
+/** The stored file is behind an edit waiting for a re-render (only editable tools re-render). */
+function behindEdit(row: GenRow): boolean {
+  return row.file_version < row.doc_version && adapterFor(row.tool_id) !== null;
+}
+
+/**
+ * The cached file is the current one: a format whose bytes follow
+ * `file_version`, the same `file_version`, and that version is not behind an
+ * edit waiting for a re-render (the same staleness rule as `fresh-file.ts`:
+ * only editable tools re-render).
+ */
+function cacheValid(row: GenRow, format: DownloadFormatId): MediaKind | null {
+  if (!reusesFileId(format)) return null;
   if (!row.file_id || row.tf_version === null || row.media === null) return null;
   if (row.tf_version !== row.file_version) return null;
-  if (row.file_version < row.doc_version && adapterFor(row.tool_id)) return null;
+  if (behindEdit(row)) return null;
   return kindOfMedia(row.media);
 }
 
@@ -321,6 +388,14 @@ async function uploadInto(
   row: GenRow,
   deps: TelegramFilesDeps,
 ): Promise<{ kind: MediaKind; fileId: string }> {
+  if (deps.prepare && needsConversion(format)) {
+    // m6: never convert inside this request (soffice up to 70 s + a 60 s upload > nginx's 120 s).
+    // The shared preparation runs in the background; the client repeats after `retryAfterMs`.
+    const p = await deps.prepare(genId, user.id, format);
+    if (p.state === "preparing") {
+      throw new TelegramFileError("preparing", "Fayl tayyorlanmoqda", undefined, p.retryAfterMs);
+    }
+  }
   const file = await deps.produce(genId, user.id, format);
   if (file.bytes.byteLength > TELEGRAM_UPLOAD_MAX_BYTES) {
     throw new TelegramFileError("too_large", "Fayl Telegram uchun juda katta — «Yuklab olish» dan foydalaning.");
@@ -381,7 +456,7 @@ export async function ensureTelegramFile(
 ): Promise<{ kind: MediaKind; fileId: string; uploaded: boolean; row: GenRow }> {
   const chatId = chatOf(user);
   const row = await loadRow(genId, user.id, format);
-  const kind = opts.forceUpload ? null : cacheValid(row);
+  const kind = opts.forceUpload ? null : cacheValid(row, format);
   if (kind && row.file_id) return { kind, fileId: row.file_id, uploaded: false, row };
   const up = await uploadInto(chatId, genId, user, format, row, deps);
   return { ...up, uploaded: true, row };
@@ -416,22 +491,47 @@ async function saveOnce(
 ): Promise<SaveResult> {
   const now = (deps.now ?? (() => new Date()))();
   const row = await loadRow(genId, user.id, format);
-  const kind = cacheValid(row);
+  const kind = cacheValid(row, format);
+
+  /*
+   * Double-tap debounce (n5). When a row for this file version exists (a
+   * resend by `file_id`, or an instant format that is always uploaded again)
+   * the slot is claimed atomically in the DB: a request in another process, or
+   * a tap right after the previous save, finds `saved_at` fresh and stops. The
+   * very first upload of a (generation, format, file_version) has no row yet;
+   * it is guarded by the in-process single-flight only — enough with the one
+   * `web` container this service runs (a second container could send one extra
+   * copy on a double tap, never a wrong file).
+   */
+  const sameVersionRow = row.tf_version !== null && row.tf_version === row.file_version && !behindEdit(row);
+  if (sameVersionRow) {
+    const claimed = await query(
+      `UPDATE telegram_files SET saved_at = $4
+        WHERE generation_id = $1 AND format = $2 AND file_version = $3
+          AND (saved_at IS NULL OR saved_at <= $4::timestamptz - make_interval(secs => $5))
+        RETURNING 1`,
+      [genId, format, row.tf_version, now, SAVE_DEBOUNCE_MS / 1000],
+    );
+    if (!claimed.length) return { duplicate: true, uploaded: false };
+  }
+  // Nothing was delivered: give the slot back so the user can retry at once.
+  const release = async () => {
+    if (!sameVersionRow) return;
+    await query(
+      "UPDATE telegram_files SET saved_at = $3 WHERE generation_id = $1 AND format = $2 AND saved_at = $4",
+      [genId, format, row.saved_at, now],
+    );
+  };
+
   if (!kind || !row.file_id) {
-    await uploadInto(chatId, genId, user, format, row, deps);
+    try {
+      await uploadInto(chatId, genId, user, format, row, deps);
+    } catch (e) {
+      await release();
+      throw e;
+    }
     return { duplicate: false, uploaded: true };
   }
-
-  // Claim the debounce slot atomically: a parallel request in another process
-  // (or a tap right after the previous save) finds `saved_at` fresh and stops.
-  const claimed = await query(
-    `UPDATE telegram_files SET saved_at = $4
-      WHERE generation_id = $1 AND format = $2 AND file_version = $3
-        AND (saved_at IS NULL OR saved_at <= $4::timestamptz - make_interval(secs => $5))
-      RETURNING 1`,
-    [genId, format, row.tf_version, now, SAVE_DEBOUNCE_MS / 1000],
-  );
-  if (!claimed.length) return { duplicate: true, uploaded: false };
 
   const r: BotResult<SentMessage> = await callBot<SentMessage>(
     kind.method,
@@ -444,14 +544,15 @@ async function saveOnce(
   }
   if (isStaleFileId(r)) {
     // The cached id is dead (bot token changed): upload again and overwrite the row.
-    await uploadInto(chatId, genId, user, format, row, deps);
+    try {
+      await uploadInto(chatId, genId, user, format, row, deps);
+    } catch (e) {
+      await release();
+      throw e;
+    }
     return { duplicate: false, uploaded: true };
   }
-  // Nothing was delivered: give the slot back so the user can retry at once.
-  await query(
-    "UPDATE telegram_files SET saved_at = $3 WHERE generation_id = $1 AND format = $2 AND saved_at = $4",
-    [genId, format, row.saved_at, now],
-  );
+  await release();
   throw failureOf(r);
 }
 
@@ -468,6 +569,8 @@ export async function prepareShare(
   deps: TelegramFilesDeps,
 ): Promise<ShareResult> {
   const telegramId = chatOf(user);
+  // Refused before anything is produced or uploaded (the prepared message needs a JSON-number id).
+  telegramUserId(telegramId);
   const { value } = await singleFlight(`share:${user.id}:${genId}:${format}`, () =>
     shareOnce(telegramId, genId, user, format, deps),
   );

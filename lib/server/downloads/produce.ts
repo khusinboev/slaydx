@@ -11,9 +11,10 @@ import { query, queryOne } from "../db";
 import { adapterFor } from "../edit-adapters";
 import { ensureFreshFileShared } from "../fresh-file";
 import { pdfAvailable } from "../pdf";
-import { DownloadError, toDownloadError } from "./errors";
+import { DownloadError, isDownloadError, toDownloadError } from "./errors";
 import {
   cachedDerivedSize,
+  touchCachedDerived,
   PRODUCERS,
   producerAvailable,
   type ProduceDeps,
@@ -50,12 +51,19 @@ export type DownloadDeps = ProduceDeps & {
   ensureFresh?: (generationId: string, userId: string) => Promise<void>;
   /** How long `prepareDownload` waits before answering `preparing` (default 7 s). */
   prepareBudgetMs?: number;
+  /** How long a token GET may regenerate an evicted derived file (default `LINK_BUDGET_MS`, 45 s). */
+  linkBudgetMs?: number;
 };
 
 /** The prepare route never holds a request longer than this (PLAN: "~8 s"). */
 export const PREPARE_BUDGET_MS = 7_000;
 /** Client poll interval while preparing (R1 §5: "polls every 1.5 s"). */
 export const PREPARE_RETRY_MS = 1_500;
+/**
+ * Prepare polls per user (`dlprep:<user>`): `POST …/download` and the Telegram
+ * save/share `202 preparing` answers share this bucket.
+ */
+export const PREPARE_POLL_LIMIT = { count: 300, windowSec: 600 } as const;
 /** Background jobs: total and per user (beyond → 503 / 429 with Retry-After). */
 const MAX_JOBS = 16;
 const MAX_JOBS_PER_USER = 3;
@@ -133,7 +141,12 @@ async function loadBytes(generationId: string, userId: string, fileVersion: numb
   return r?.bytes ?? null;
 }
 
-async function hasResults(generationId: string, userId: string): Promise<boolean> {
+/**
+ * Whether the owner's game has any player result (the registry offers
+ * `results-csv` only then). Ownership in SQL (`s.user_id`). The one query the
+ * download routes and the Telegram save/share action share.
+ */
+export async function hasResults(generationId: string, userId: string): Promise<boolean> {
   const r = await queryOne<{ ok: boolean }>(
     `SELECT EXISTS (
        SELECT 1 FROM game_results r
@@ -305,6 +318,56 @@ export async function peekDownload(genId: string, userId: string, format: Downlo
   return peekWith(genId, userId, format, { ensureFresh: false });
 }
 
+/* ─────────────── the signed link (`GET|HEAD /api/dl/<token>`) ─────────────── */
+
+/**
+ * A token GET regenerates a derived file that left the cache (eviction past
+ * the hard ceiling, restart without the volume) only within this budget —
+ * soffice gate wait included — then answers 503 + Retry-After while the
+ * conversion finishes in the background (single-flight, lands in the cache).
+ * Below nginx's default 60 s, so a phone never gets a 504 HTML page (m1).
+ */
+export const LINK_BUDGET_MS = 45_000;
+/** Retry-After when the link's regeneration ran out of budget. */
+export const LINK_RETRY_SEC = 15;
+/** HEAD never converts: a derived file not in the cache → 503 with this Retry-After. */
+export const HEAD_MISS_RETRY_SEC = 5;
+
+export type LinkClaims = { g: string; u: string; f: string; v: number };
+
+/** Bytes for a token GET: exactly the token's `file_version`, bounded by `LINK_BUDGET_MS`. Does not count. */
+export async function produceForLink(
+  c: LinkClaims,
+  signal?: AbortSignal,
+  deps: DownloadDeps = currentDeps(),
+): Promise<DownloadResult> {
+  const budget = AbortSignal.timeout(deps.linkBudgetMs ?? LINK_BUDGET_MS);
+  const combined = signal ? AbortSignal.any([signal, budget]) : budget;
+  try {
+    return await produceWith(c.g, c.u, c.f, { ensureFresh: false, expectVersion: c.v }, deps, combined);
+  } catch (e) {
+    if (budget.aborted && !signal?.aborted && !isDownloadError(e)) {
+      throw new DownloadError("busy", {
+        retryAfterSec: LINK_RETRY_SEC,
+        message: "Fayl qayta tayyorlanmoqda — birozdan keyin qayta urinib ko'ring",
+      });
+    }
+    throw e;
+  }
+}
+
+/** Name, type and size for a token HEAD — never converts; a derived file not in the cache → 503 busy. */
+export async function peekForLink(c: LinkClaims, deps: DownloadDeps = currentDeps()): Promise<PeekResult & { size: number }> {
+  const p = await peekWith(c.g, c.u, c.f, { ensureFresh: false, expectVersion: c.v }, deps);
+  if (p.size === null) {
+    throw new DownloadError("busy", {
+      retryAfterSec: HEAD_MISS_RETRY_SEC,
+      message: "Fayl hali tayyorlanmagan — birozdan keyin qayta urinib ko'ring",
+    });
+  }
+  return { ...p, size: p.size };
+}
+
 type Job = {
   userId: string;
   promise: Promise<void>;
@@ -356,12 +419,18 @@ export async function prepareDownload(
     if (r.spec.kind === "instant") {
       return { state: "ready", size: (await r.spec.produce(r.ctx)).byteLength, ...info };
     }
-    const cached = await cachedDerivedSize(r.ctx);
+    // A link is about to be minted for this entry: pin it (m1) â never converts.
+    const cached = await touchCachedDerived(r.ctx);
     if (cached !== null) return { state: "ready", size: cached, ...info };
   } catch (e) {
     throw toDownloadError(e);
   }
 
+  // The background job just wrote the file: pin it for the link the route mints now (m1).
+  const pinned = async (d: NonNullable<Job["done"]>): Promise<PrepareResult> => {
+    await touchCachedDerived(r.ctx).catch(() => null);
+    return readyOf(d);
+  };
   const now = Date.now();
   sweepJobs(now);
   const key = `${r.meta.id}:${format}:${r.meta.fileVersion}`;
@@ -374,7 +443,7 @@ export async function prepareDownload(
     // Finished after the previous poll answered `preparing`. Reported once: from then on the
     // derived cache (checked above) is the source of truth.
     jobs().delete(key);
-    return readyOf(job.done);
+    return pinned(job.done);
   }
   if (!job) {
     const live = running();
@@ -405,7 +474,7 @@ export async function prepareDownload(
   }
   if (job.done) {
     jobs().delete(key);
-    return readyOf(job.done);
+    return pinned(job.done);
   }
   return { state: "preparing", retryAfterMs: PREPARE_RETRY_MS };
 }

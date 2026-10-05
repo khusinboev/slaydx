@@ -181,7 +181,7 @@ function sameList(a: string[], b: string[]): boolean {
 type FieldHandlers = {
   onKeyDown: (e: ReactKeyboardEvent<HTMLElement>) => void;
   onPaste: (e: ClipboardEvent<HTMLElement>) => void;
-  onBlur: (e: { relatedTarget: EventTarget | null }) => void;
+  onBlur: (e: { relatedTarget: EventTarget | null; currentTarget?: EventTarget | null }) => void;
 };
 
 /**
@@ -217,6 +217,7 @@ const EditField = memo(
           aria-multiline={edit.multiline}
           aria-label="Matnni tahrirlash"
           data-slide-edit-input
+          data-edit-key={edit.key}
           style={{ width: "100%", minHeight: "1em", outline: "none" }}
           onKeyDown={handlers.onKeyDown}
           onPaste={handlers.onPaste}
@@ -235,6 +236,7 @@ const EditField = memo(
         aria-multiline
         aria-label="Matnni tahrirlash"
         data-slide-edit-input
+        data-edit-key={edit.key}
         className={bullets ? "w-full list-disc pl-[1.15em]" : "w-full list-none"}
         style={{ margin: 0, paddingLeft: bullets ? "1.15em" : 0, outline: "none", minHeight: "1em" }}
         onKeyDown={handlers.onKeyDown}
@@ -309,6 +311,9 @@ export function SlideEditor({
   const coarse = useCoarsePointer();
   /** Until when the compat mouse events of an opening double tap are ignored (`now()` ms). */
   const swallowUntilRef = useRef(0);
+  /** Latest `commit` / `open` for callbacks and listeners bound once (no re-bind per slide edit). */
+  const commitRef = useRef<() => void>(() => {});
+  const openRef = useRef<(src: SlideSrc) => boolean>(() => false);
 
   const plan = useMemo(
     () => planSlide(slide, theme, visual, index, total, audience, templateId, { bodyType, logo, custom }),
@@ -349,6 +354,9 @@ export function SlideEditor({
       // The same text again (a `dblclick` after the pointer detector already
       // opened it): keep the session — the typed text and the caret stay.
       if (editRef.current?.key === key) return true;
+      // Another text is open: save it first. Never rely on the first tap's
+      // compat `mousedown` (swallow window, pen, webviews that drop it).
+      if (editRef.current) commitRef.current();
       const field = listFieldOf(layer.srcLines?.find(Boolean));
       const next: EditState =
         field && layer.srcLines && !layer.src
@@ -455,6 +463,11 @@ export function SlideEditor({
    * keyboard only then), and cancels the second tap's `touchend` so its
    * compat `mousedown`/`click`/`dblclick` neither blur nor close the box.
    */
+  useLayoutEffect(() => {
+    commitRef.current = commit;
+    openRef.current = open;
+  });
+  // Bound once: slide edits (new `open`) must not rebuild the detector mid-gesture.
   useEffect(() => {
     const host = rootRef.current?.closest("[data-slide-frame]") ?? rootRef.current?.parentElement;
     if (!host) return;
@@ -462,12 +475,14 @@ export function SlideEditor({
       const src = srcAt(ev.target);
       if (!src) return;
       ev.preventDefault();
-      open(src);
+      openRef.current(src);
     };
     const taps = createDoubleTapDetector();
     let swallowTouchEnd = false;
     const touchy = (e: PointerEvent) => e.pointerType === "touch" || e.pointerType === "pen";
     const onDown = (e: PointerEvent) => {
+      // A new contact: a `touchend` that never came (pen, webview quirk) must not eat this one.
+      swallowTouchEnd = false;
       if (touchy(e)) taps.down(e.pointerId, e.clientX, e.clientY, e.timeStamp);
     };
     const onUp = (e: PointerEvent) => {
@@ -476,10 +491,11 @@ export function SlideEditor({
       if (!src) return;
       let opened = false;
       flushSync(() => {
-        opened = open(src);
+        opened = openRef.current(src);
       });
       if (!opened) return;
-      swallowTouchEnd = true;
+      // Only a finger produces the compat `touchend` to cancel; pen/mouse never arm it.
+      swallowTouchEnd = e.pointerType === "touch";
       swallowUntilRef.current = now() + TAP_SWALLOW_MS;
       const el = inputRef.current;
       if (el && document.activeElement !== el) focusAtEnd(el);
@@ -504,7 +520,7 @@ export function SlideEditor({
       host.removeEventListener("pointercancel", onCancel as EventListener);
       host.removeEventListener("touchend", onTouchEnd as EventListener);
     };
-  }, [open]);
+  }, []);
 
   /*
    * TASHQARIGA BITTA bosish tahrirni yopadi (va saqlaydi). Shrift
@@ -518,11 +534,23 @@ export function SlideEditor({
       if (t?.closest?.(EDIT_UI)) return;
       // The opening double tap's own compat mousedown (browsers that ignore the touchend cancel).
       if (now() < swallowUntilRef.current) return;
+      /*
+       * Phone: a tap ON THE SLIDE keeps the edit (and the focus zoom). It is
+       * usually the first tap of a double tap on another text: committing
+       * here would unzoom the stage and move that text away from the second
+       * tap. The switch itself commits (`open`); «Tayyor», back, or a press
+       * outside the slide end the edit. The focus must not move either
+       * (blur would commit), hence `preventDefault`.
+       */
+      if (coarse && t?.closest?.("[data-slide-frame]")) {
+        ev.preventDefault();
+        return;
+      }
       commit();
     };
     document.addEventListener("mousedown", onDown, true);
     return () => document.removeEventListener("mousedown", onDown, true);
-  }, [edit, commit]);
+  }, [edit, commit, coarse]);
 
   /** Ro'yxatda Enter — brauzer yangi `<li>` yaratadi; chegarada bloklanadi. */
   const listMax = edit?.kind === "list" ? listCap(slide, edit.field, bodyType).max : 0;
@@ -559,11 +587,14 @@ export function SlideEditor({
     if (inputRef.current) insertAtCaret(inputRef.current, text.replace(/\r\n?/g, "\n"));
   };
 
-  const onBlur = (e: { relatedTarget: EventTarget | null }) => {
+  const onBlur = (e: { relatedTarget: EventTarget | null; currentTarget?: EventTarget | null }) => {
     if (skipBlurRef.current) {
       skipBlurRef.current = false;
       return;
     }
+    // The previous field of a switch (already committed) leaving the DOM is not the open edit.
+    const from = e.currentTarget as HTMLElement | null | undefined;
+    if (from?.getAttribute && from.getAttribute("data-edit-key") !== (editRef.current?.key ?? null)) return;
     // Fokus shrift paneliga (masalan `<select>`) yoki phone bar'ga o'tsa — tahrir davom etadi.
     const to = e.relatedTarget as HTMLElement | null;
     if (to?.closest?.(EDIT_UI)) return;
@@ -865,6 +896,7 @@ export function SlideEditor({
         {edit && editLayer && boxStyleNow ? (
           <div ref={boxRef} data-slide-edit-box style={boxStyleNow}>
             <EditField
+              key={edit.key}
               edit={edit}
               bullets={Boolean(editLayer.bullets)}
               paraSpacePx={ptToPx(editLayer.paraSpace ?? 8)}

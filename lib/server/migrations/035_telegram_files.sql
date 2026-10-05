@@ -20,8 +20,9 @@ CREATE TABLE IF NOT EXISTS telegram_files (
   -- lib/downloads/formats.ts DownloadFormatId: 'native' | 'pdf' | 'slides-png' | …
   format         TEXT NOT NULL,
   file_version   INT  NOT NULL,
-  -- Bot API media the file_id belongs to (a file_id cannot change type).
-  media          TEXT NOT NULL CHECK (media IN ('document', 'photo', 'audio')),
+  -- Bot API media the file_id belongs to (a file_id cannot change type). Images go as
+  -- documents (original quality), so only these two are ever written.
+  media          TEXT NOT NULL CHECK (media IN ('document', 'audio')),
   file_id        TEXT NOT NULL,
   file_unique_id TEXT,
   size_bytes     BIGINT,

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowDownUp, ChevronDown, FileX, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowDownUp, ArrowUp, ChevronDown, FileX, FolderOpen, Plus, Trash2 } from "lucide-react";
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { TOOL_BY_ID } from "@/lib/tools";
@@ -20,7 +20,10 @@ import {
 } from "@/lib/ui";
 import { useOverlayHistory } from "@/components/nav/useOverlayHistory";
 import { cn } from "@/lib/cn";
+import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
 import { FilePreview } from "./FilePreview";
+import { FileMenu } from "./FileMenu";
+import { PhoneFileCard } from "./PhoneFileCard";
 import { confirmAccepted, confirmClock } from "../overlays/useConfirmClick";
 
 export function HomeFiles() {
@@ -45,6 +48,13 @@ export function HomeFiles() {
   const [view, setView] = useState<FileView>(() => readFileView(params));
   const { filter, sort, desc } = view;
   const [error, setError] = useState<string | null>(null);
+  /*
+   * Telefon/sensorli ekran (docs/mobile/PLAN.md O7): 2 ustunli kartalar,
+   * 2 qatorli sarlavha, o'chirish «⋯» menyusida, 44 px nishonlar. Kompyuter
+   * ko'rinishi (jsdom, SSR ham) o'zgarmaydi.
+   */
+  const phone = useCoarsePointer();
+  const [menuId, setMenuId] = useState<string | null>(null);
 
   function changeView(patch: Partial<FileView>) {
     const next = { ...view, ...patch };
@@ -197,6 +207,7 @@ export function HomeFiles() {
     return rows;
   }, [all, filter, sort, desc]);
 
+  const menuGen = menuId ? all.find((g) => g.id === menuId) : undefined;
   const sortLabel = FILE_SORTS.find((s) => s.id === sort)?.label ?? FILE_SORTS[0].label;
 
   return (
@@ -211,7 +222,10 @@ export function HomeFiles() {
           onClick={() => {
             if (!loggedIn) open("login", { returnTo: "/uz/create" });
           }}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-10 w-full items-center justify-center gap-2 rounded-full px-5 text-[15.5px] font-medium shadow-sm sm:w-auto"
+          className={cn(
+            "bg-primary text-primary-foreground hover:bg-primary/90 inline-flex w-full items-center justify-center gap-2 rounded-full px-5 text-[15.5px] font-medium shadow-sm sm:w-auto",
+            phone ? "h-11" : "h-10",
+          )}
         >
           <Plus className="size-4" />
           Yaratish
@@ -227,7 +241,8 @@ export function HomeFiles() {
               aria-pressed={filter === f.id}
               onClick={() => changeView({ filter: f.id })}
               className={cn(
-                "inline-flex h-9 flex-none items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap transition-colors",
+                "inline-flex flex-none items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap transition-colors",
+                phone ? "h-11" : "h-9",
                 filter === f.id
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-border/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -239,7 +254,11 @@ export function HomeFiles() {
         </div>
         <div className="flex min-w-0 flex-1 sm:hidden">
           <select
-            className="border-input bg-background h-10 w-full rounded-full border px-4 text-sm font-medium"
+            aria-label="Hujjat turi"
+            className={cn(
+              "border-input bg-background w-full rounded-full border px-4 font-medium",
+              phone ? "h-11 text-base" : "h-10 text-sm",
+            )}
             value={filter}
             onChange={(e) => changeView({ filter: e.target.value as FileFilterId })}
           >
@@ -254,19 +273,37 @@ export function HomeFiles() {
           <button
             type="button"
             onClick={() => (overlay === "sort" ? close() : open("sort"))}
-            className="border-input bg-background hover:bg-accent inline-flex h-10 items-center gap-2 rounded-full border px-5 text-[15.5px] font-medium"
+            aria-label={`Saralash: ${sortLabel}`}
+            aria-haspopup="menu"
+            aria-expanded={overlay === "sort"}
+            className={cn(
+              "border-input bg-background hover:bg-accent inline-flex items-center gap-2 rounded-full border text-[15.5px] font-medium",
+              phone ? "h-11 min-w-11 justify-center px-3" : "h-10 px-5",
+            )}
           >
             <span className="hidden sm:inline">{sortLabel}</span>
             <ArrowDownUp className="size-4 sm:hidden" />
             <ChevronDown className="hidden size-4 opacity-70 sm:inline" />
           </button>
           {overlay === "sort" ? (
-            <div className="bg-popover absolute top-12 right-10 z-20 min-w-48 rounded-xl border p-1 shadow-lg">
+            <div
+              role="menu"
+              className={cn(
+                "bg-popover absolute z-20 min-w-48 rounded-xl border p-1 shadow-lg",
+                phone ? "top-12 right-0" : "top-12 right-10",
+              )}
+            >
               {FILE_SORTS.map((s) => (
                 <button
                   key={s.id}
                   type="button"
-                  className="hover:bg-muted w-full rounded-lg px-3 py-2 text-left text-sm"
+                  role="menuitemradio"
+                  aria-checked={sort === s.id}
+                  className={cn(
+                    "hover:bg-muted w-full rounded-lg px-3 text-left",
+                    phone ? "min-h-11 text-base" : "py-2 text-sm",
+                    sort === s.id && "font-medium",
+                  )}
                   onClick={() => {
                     changeView({ sort: s.id });
                     close();
@@ -280,10 +317,13 @@ export function HomeFiles() {
           <button
             type="button"
             onClick={() => changeView({ desc: !desc })}
-            className="border-input bg-background hover:bg-accent flex size-10 items-center justify-center rounded-full border"
-            aria-label="Tartibni o'zgartirish"
+            className={cn(
+              "border-input bg-background hover:bg-accent flex items-center justify-center rounded-full border",
+              phone ? "size-11" : "size-10",
+            )}
+            aria-label={desc ? "Tartib: yangisi birinchi. O'zgartirish" : "Tartib: eskisi birinchi. O'zgartirish"}
           >
-            <ArrowDownUp className="size-4" />
+            {phone ? desc ? <ArrowDown className="size-4" /> : <ArrowUp className="size-4" /> : <ArrowDownUp className="size-4" />}
           </button>
         </div>
       </div>
@@ -333,9 +373,10 @@ export function HomeFiles() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className={cn("grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4", phone ? "gap-3" : "gap-2")}>
             {list.map((g) => {
               const tool = TOOL_BY_ID[g.type];
+              if (phone) return <PhoneFileCard key={g.id} gen={g} tool={tool} onMenu={setMenuId} />;
               // Fayl/hujjat endi MUDDATSIZ saqlanadi — avtomatik "muddati
               // tugagan" holati yo'q (`011_no_expiry.sql`).
               return (
@@ -398,13 +439,27 @@ export function HomeFiles() {
               disabled={loadingMore}
               aria-busy={loadingMore}
               data-load-more
-              className="border-input bg-background hover:bg-accent inline-flex h-10 items-center rounded-full border px-6 text-sm font-medium disabled:opacity-60"
+              className={cn(
+                "border-input bg-background hover:bg-accent inline-flex items-center rounded-full border px-6 text-sm font-medium disabled:opacity-60",
+                phone ? "h-11" : "h-10",
+              )}
             >
               {loadingMore ? "Yuklanmoqda…" : "Yana ko‘rsatish"}
             </button>
           </div>
         ) : null}
       </div>
+      {phone && menuGen ? (
+        <FileMenu
+          key={menuGen.id}
+          gen={menuGen}
+          onClose={() => setMenuId(null)}
+          onDelete={(id) => {
+            setMenuId(null);
+            void onDelete(id);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

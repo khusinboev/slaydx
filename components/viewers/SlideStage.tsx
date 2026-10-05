@@ -139,6 +139,8 @@ export function SlideStage({
    * zoomed slide is painted in the same frame as the opened box).
    */
   const [focusScale, setFocusScale] = useState<number | null>(null);
+  /** The user's stage scroll before the focus zoom (zoom mode), put back when the edit ends. */
+  const savedScrollRef = useRef<{ left: number; top: number } | null>(null);
   const fx = focus?.left;
   const fy = focus?.top;
   const fw = focus?.width;
@@ -151,6 +153,8 @@ export function SlideStage({
       setFocusScale(null);
       return;
     }
+    // First box of the session only (switching texts keeps the original position).
+    if (!savedScrollRef.current) savedScrollRef.current = { left: el.scrollLeft, top: el.scrollTop };
     const cs = getComputedStyle(el);
     const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
     const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
@@ -171,6 +175,16 @@ export function SlideStage({
   }, [present, fx, fy, fw, fh, fFont, fSingle]);
 
   const focused = !present && focusScale !== null;
+  // Edit ended: the previous scale is back (viewer state untouched) — put the scroll back too.
+  useLayoutEffect(() => {
+    if (focused) return;
+    const s = savedScrollRef.current;
+    const el = stageRef.current;
+    savedScrollRef.current = null;
+    if (!s || !el) return;
+    el.scrollLeft = s.left;
+    el.scrollTop = s.top;
+  }, [focused]);
   const scale = focused ? focusScale : baseScale;
   /** Fit layout (aspect box, no scrollbars) — not while focus-zoomed. */
   const fitLayout = fitOn && !focused;

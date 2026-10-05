@@ -20,7 +20,8 @@ test("C07 bazali", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t) => {
   const { query, migrate, pool } = await import("../lib/server/db.ts");
   const { handler } = await import("../lib/server/api.ts");
   const { putGenerationFile } = await import("../lib/server/storage.ts");
-  const { pdfResponse } = await import("../lib/server/pdf-serve.ts");
+  const { produceWith } = await import("../lib/server/downloads/produce.ts");
+  const { downloadErrorResponse } = await import("../lib/server/downloads/errors.ts");
   const { PdfDiskCache } = await import("../lib/server/pdf-cache.ts");
   const { getOrBuildThumb } = await import("../lib/server/thumb.ts");
 
@@ -61,14 +62,19 @@ test("C07 bazali", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t) => {
       converted += 1;
       return Buffer.from("%PDF-1.4 stub");
     };
-    const gen = randomUUID();
-    const route = handler("test/pdf", async (_req: Request, n: number) =>
-      pdfResponse(
-        // Har chaqiruvda boshqa bayt — kesh urilmaydi, har biri haqiqiy o'girish.
-        { userId: user, generationId: gen, file: { bytes: Buffer.from([n, 7, 7]), fileName: "a.docx", mime: DOCX_MIME }, inline: false },
-        { available: () => true, convert, cache },
-      ),
-    );
+    // `GET …/file?format=pdf` yo'li: umumiy producer (`produceWith`), standart `pdf:<user>` limiti
+    // (stub YO'Q), xato `downloadErrorResponse` bilan. Har so'rov boshqa generatsiya — kesh urilmaydi.
+    const deps = { pdfAvailable: () => true, convertPdf: convert, cache, ensureFresh: async () => {} };
+    const gens: string[] = [];
+    for (let i = 0; i < 11; i++) gens.push(await mkGeneration("COMPLETED"));
+    const route = handler("test/pdf", async (_req: Request, n: number) => {
+      try {
+        const out = await produceWith(gens[n - 1], user, "pdf", { ensureFresh: false }, deps);
+        return new Response(new Uint8Array(out.bytes), { headers: { "Content-Type": out.mime } });
+      } catch (e) {
+        return downloadErrorResponse(e);
+      }
+    });
     const req = new Request("http://x/api/generations/x/file?format=pdf");
     for (let i = 1; i <= 10; i++) {
       const res = await route(req, i);

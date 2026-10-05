@@ -114,6 +114,9 @@ export const LEVEL_YELLOW_MARGIN = 0.25;
 /** Fewer sentences than this → the text is too short to judge (verdict green, "not measured"). */
 export const LEVEL_MIN_SENTENCES = 3;
 
+/** Levels where the band's lower edge is informational only (prompt target), never a "too simple" verdict. */
+export const NO_LOWER_BOUND: ReadonlySet<CefrLevel> = new Set<CefrLevel>(["A1", "A2"]);
+
 /**
  * "Long word" length per language — INFORMATIONAL only (shown in the report,
  * never gates). Not computed for Uzbek: agglutination makes word length
@@ -477,10 +480,13 @@ export function levelVerdict(m: LevelMeasure, level: CefrLevel, lang: EssayLang)
   const band = levelTargets(level, lang);
   const overCapShare = m.sentences ? m.lengths.filter((n) => n > band.cap).length / m.sentences : 0;
   if (m.sentences < LEVEL_MIN_SENTENCES) return { level: "green", direction: null, band, overCapShare, distance: 0, unmeasured: true };
-  const meanOff = m.mean < band.lo ? (band.lo - m.mean) / band.lo : m.mean > band.hi ? (m.mean - band.hi) / band.hi : 0;
+  // A1/A2 have no meaningful lower bound (review G-2): a very simple beginner text is ON level, never "too simple".
+  const tooSimple = m.mean < band.lo && !NO_LOWER_BOUND.has(level);
+  const meanOff = tooSimple ? (band.lo - m.mean) / band.lo : m.mean > band.hi ? (m.mean - band.hi) / band.hi : 0;
   const capOff = Math.max(0, overCapShare - OVER_CAP_ALLOWED[level]);
   const distance = meanOff + capOff;
-  const direction: LevelVerdict["direction"] = m.mean < band.lo ? "low" : m.mean > band.hi || capOff > 0 ? "high" : null;
+  // Over-cap sentences always mean "too complex" (review G-5): asking to combine sentences would worsen them.
+  const direction: LevelVerdict["direction"] = m.mean > band.hi || capOff > 0 ? "high" : tooSimple ? "low" : null;
   const level3: LevelVerdict["level"] = distance === 0 ? "green" : meanOff > LEVEL_YELLOW_MARGIN || capOff > LEVEL_YELLOW_MARGIN ? "red" : "yellow";
   return { level: level3, direction, band, overCapShare, distance, unmeasured: false };
 }

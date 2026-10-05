@@ -47,7 +47,9 @@ import {
 import { levelDistance, levelVerdict, measureLevel, type CefrLevel } from "./level";
 import type { EssayLang } from "./registry";
 import { ESSAY_POLISH_BELOW, ESSAY_POLISH_MIN_MS, runEssayPolish } from "./polish";
-import { reviewEssay, type CompleteFn } from "./review";
+import { essayTextOf, reviewEssay, ruleChecks, type CompleteFn } from "./review";
+import { JUDGE_MIN_MS } from "../report/judge";
+import type { ReviewCheck } from "../report/types";
 import { ESSAY_LIMITS, type EssayModel, type EssayParagraph } from "./types";
 
 export type EssayStage = { progress: number; step: string };
@@ -184,37 +186,7 @@ export async function buildEssayDoc(meta: DocMeta, values: FormValues, opts: Ess
       if (distance(re.report.words, range) < distance(guarded.report.words, range)) guarded = re;
     }
   }
-  /* ── 3b. level repair: ONE extra call, only when the measured text misses the level ── */
-  if (input.level && guarded.blocks.length && remainingMs(deadline) > 25_000) {
-    const current = guarded.blocks.map((b) => b.text).join("\n\n");
-    const measure = measureLevel(current, input.language);
-    const verdict = levelVerdict(measure, input.level, input.language);
-    if (verdict.level !== "green") {
-      stage(62, "Til darajasi");
-      const raw = await ask("writer", system, levelRepairPrompt(ctx, measure, verdict, current), {
-        maxTokens: Math.min(8000, Math.max(1500, Math.round(ctx.words.max * 2.6))),
-        timeoutMs: writeTimeout(ctx.words.aim, deadline),
-      });
-      const again = essayBlocksFromLlm(raw);
-      let outcome = "javob yo'q";
-      if (again.length) {
-        const re = guardSection(again, { refs: [], userFacts: input.userFacts, wordRange: range });
-        const after = measureLevel(re.blocks.map((b) => b.text).join("\n\n"), input.language);
-        const accepted = levelRepairAccepted(guarded, re, input.level, input.language, range);
-        outcome = `${accepted ? "qabul" : "rad"}, keyin ${after.mean.toFixed(1)} so'z/gap, ${re.report.words} so'z`;
-        if (accepted) guarded = re;
-      }
-      // One line per repair — the live matrix (R4 §5) counts how often the repair fires and wins.
-      console.warn(`[essay] daraja ta'miri ${input.level}/${input.language}: oldin ${measure.mean.toFixed(1)} so'z/gap (${verdict.level}, ${verdict.direction ?? "—"}) → ${outcome}`);
-    }
-  }
-  blocks = guarded.blocks;
-  if (guarded.report.filler.length) console.warn(`[essay] klişe iboralar: ${[...new Set(guarded.report.filler)].join(", ")}`);
-  if (guarded.report.unsourcedNumbers.length) console.warn(`[essay] manbasiz foizlar: ${guarded.report.unsourcedNumbers.join(", ")}`);
-  if (guarded.report.removedCitations.length) console.warn(`[essay] iqtibos id lari o'chirildi: ${guarded.report.removedCitations.join(", ")}`);
-  stage(65, "Matn tekshirildi");
-
-  /* ── hujjat ── */
+  /* ── hujjat modeli (matndan mustaqil — daraja ta'miri qoidalarni shu bilan solishtiradi) ── */
   const model: EssayModel = {
     v: 1,
     context: input.context,
@@ -232,14 +204,50 @@ export async function buildEssayDoc(meta: DocMeta, values: FormValues, opts: Ess
     rubric: ctx.context.rubric,
     ...(input.userFacts ? { userFacts: input.userFacts } : {}),
   };
-  const section: DocSection = { id: "essay", title: outline.title, blocks: withEpigraph(input, blocks) };
-  let doc: AcademicDoc = {
+  const docFor = (body: Block[]): AcademicDoc => ({
     meta: { ...meta, language: input.language, design: input.design },
     titlePage: ctx.context.titlePage,
     toc: false,
-    sections: [section],
+    sections: [{ id: "essay", title: outline.title, blocks: withEpigraph(input, body) } satisfies DocSection],
     essay: model,
-  };
+  });
+
+  /* ── 3b. level repair: ONE extra call, only when the text is clearly (RED) off-level ── */
+  const repairMs = levelRepairTimeout(remainingMs(deadline), writeTimeout(ctx.words.aim, deadline));
+  if (input.level && guarded.blocks.length && repairMs > 0) {
+    const current = guarded.blocks.map((b) => b.text).join("\n\n");
+    const measure = measureLevel(current, input.language);
+    const verdict = levelVerdict(measure, input.level, input.language);
+    if (verdict.level === "red") {
+      stage(62, "Til darajasi");
+      const raw = await ask("writer", system, levelRepairPrompt(ctx, measure, verdict, current, { thesisStatement: outline.thesisStatement, paragraphs: guarded.blocks.length }), {
+        maxTokens: Math.min(8000, Math.max(1500, Math.round(ctx.words.max * 2.6))),
+        timeoutMs: repairMs,
+      });
+      const again = essayBlocksFromLlm(raw);
+      let outcome = "javob yo'q";
+      if (again.length) {
+        const re = guardSection(again, { refs: [], userFacts: input.userFacts, wordRange: range });
+        const after = measureLevel(re.blocks.map((b) => b.text).join("\n\n"), input.language);
+        const rulesOf = (g: Guarded) => {
+          const d = docFor(g.blocks);
+          return ruleChecks({ doc: d, model, text: essayTextOf(d, model) }).filter((c) => c.id !== "level");
+        };
+        const accepted = levelRepairAccepted(guarded, re, { level: input.level, lang: input.language, range, rulesOf });
+        outcome = `${accepted ? "qabul" : "rad"}, keyin ${after.mean.toFixed(1)} so'z/gap, ${re.report.words} so'z`;
+        if (accepted) guarded = re;
+      }
+      // One line per repair — the live matrix (R4 §5) counts how often the repair fires and wins.
+      console.warn(`[essay] daraja ta'miri ${input.level}/${input.language}: oldin ${measure.mean.toFixed(1)} so'z/gap (${verdict.level}, ${verdict.direction ?? "—"}) → ${outcome}`);
+    }
+  }
+  blocks = guarded.blocks;
+  if (guarded.report.filler.length) console.warn(`[essay] klişe iboralar: ${[...new Set(guarded.report.filler)].join(", ")}`);
+  if (guarded.report.unsourcedNumbers.length) console.warn(`[essay] manbasiz foizlar: ${guarded.report.unsourcedNumbers.join(", ")}`);
+  if (guarded.report.removedCitations.length) console.warn(`[essay] iqtibos id lari o'chirildi: ${guarded.report.removedCitations.join(", ")}`);
+  stage(65, "Matn tekshirildi");
+
+  let doc: AcademicDoc = docFor(blocks);
 
   /* ── 4. hisobot ── */
   let review: DocReview | null = null;
@@ -297,17 +305,55 @@ function distance(n: number, range: [number, number]): number {
 type Guarded = ReturnType<typeof guardSection>;
 
 /**
- * Level repair acceptance (R4 §3.6): the rewrite replaces the text only if
+ * Time the level repair must leave for what follows (review G-3): the
+ * readiness report (one call ≥ `MIN_CALL_MS` with a judge ≥ `JUDGE_MIN_MS`)
+ * and the polish budget (`ESSAY_POLISH_MIN_MS`). The repair is a nicety; the
+ * report is not — it is the only place the level is shown.
+ */
+export const LEVEL_REPAIR_RESERVE_MS = ESSAY_POLISH_MIN_MS + JUDGE_MIN_MS + MIN_CALL_MS;
+/** A shorter repair window than this is not worth a full-essay rewrite. */
+export const LEVEL_REPAIR_MIN_MS = 30_000;
+
+/** Repair timeout inside the budget, or 0 → skip the repair. */
+export function levelRepairTimeout(remaining: number, writeMs: number): number {
+  const ms = Math.min(writeMs, remaining - LEVEL_REPAIR_RESERVE_MS);
+  return ms >= LEVEL_REPAIR_MIN_MS ? ms : 0;
+}
+
+const RANK: Record<ReviewCheck["level"], number> = { green: 0, yellow: 1, red: 2 };
+
+export type LevelRepairCheck = {
+  level: CefrLevel;
+  lang: EssayLang;
+  range: [number, number];
+  /** Deterministic review rules (without `level`) for a candidate text. */
+  rulesOf: (g: Guarded) => ReviewCheck[];
+};
+
+/**
+ * Level repair acceptance (R4 §3.6 + review G-1). The rewrite replaces the
+ * text only if
  *   (a) it is strictly closer to the level band,
  *   (b) it does not break the word range (or, if already broken, is not further off),
- *   (c) the guard is not worse (no new cliché, no new unsourced number).
+ *   (c) the guard is not worse (no new cliché, no new unsourced number),
+ *   (d) the paragraph count is unchanged (no collapse),
+ *   (e) every number from USER FACTS that the original carried is still there,
+ *   (f) NO deterministic readiness rule got worse (thesis verbatim, topic
+ *       sentences, paragraphs, person, repetition, … — the same `ruleChecks`
+ *       the report runs), so an "accepted" repair never lowers the report.
  */
-export function levelRepairAccepted(prev: Guarded, next: Guarded, level: CefrLevel, lang: EssayLang, range: [number, number]): boolean {
+export function levelRepairAccepted(prev: Guarded, next: Guarded, o: LevelRepairCheck): boolean {
+  const { level, lang, range } = o;
   const text = (g: Guarded) => g.blocks.map((b) => b.text).join("\n\n");
   const closer = levelDistance(measureLevel(text(next), lang), level, lang) < levelDistance(measureLevel(text(prev), lang), level, lang);
   const words = prev.report.wordRangeOk ? next.report.wordRangeOk : distance(next.report.words, range) <= distance(prev.report.words, range);
   const guard = next.report.unsourcedNumbers.length <= prev.report.unsourcedNumbers.length && next.report.filler.length <= prev.report.filler.length;
-  return closer && words && guard;
+  const paragraphs = next.blocks.length === prev.blocks.length;
+  const found = new Set(next.report.factNumbersFound);
+  const facts = prev.report.factNumbersFound.every((n) => found.has(n));
+  if (!(closer && words && guard && paragraphs && facts)) return false;
+  const before = new Map(o.rulesOf(prev).map((c) => [c.id, RANK[c.level]]));
+  return o.rulesOf(next).every((c) => RANK[c.level] <= (before.get(c.id) ?? RANK[c.level]));
 }
 
 /** Epigraf — birinchi blok (`quote`); band sifatida sanalmaydi. */
