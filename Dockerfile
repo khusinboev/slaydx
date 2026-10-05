@@ -9,21 +9,76 @@
 # Yangilash tartibi (ataylab, tasodifiy emas): `curl -s
 # "https://registry.hub.docker.com/v2/repositories/library/node/tags?page_size=100&name=22." | jq -r '.results[].name' | grep alpine`
 # dan eng so'nggi `22.x.y-alpineN.NN` ni tanlang, pastdagi `ARG`
-# qiymatini shunga yangilang (to'rtta `FROM` shu bitta manbadan o'qiydi),
+# qiymatini shunga yangilang (barcha `FROM` shu bitta manbadan o'qiydi),
 # `docker compose -p slaydx build` bilan sinab ko'ring va alohida
 # commitda kiriting — boshqa o'zgarish bilan aralashtirmang.
+#
+# Layer order (ops sprint, docs/ops/O1-deploy-pipeline.md §3.1): every stage
+# goes from the most stable layer to the most volatile one, so a normal code
+# commit only rebuilds/pulls the last few small COPY layers. Build args are
+# metadata only (`NODE_IMAGE`, `GIT_SHA`) — NEVER add a secret as a build arg:
+# the images are pushed to a registry and every layer and ARG is readable there.
 ARG NODE_IMAGE=node:22.23.2-alpine3.24
+
+# ─── OS base (shared by `runner` and `worker`) ─────────────────────────
+# Sxema (SVG → PNG, `sharp`/librsvg — Maqola 2) WORKER konteynerida, PDF
+# (LibreOffice) esa WEB konteynerida chiziladi: shriftsiz matn «□□□» bo'lib
+# chiqadi (2026-09-12 prod: birinchi maqolada sxema yorliqlari tofu).
+# `ttf-liberation` Times New Roman va Arial bilan METRIK MOS (hujjat maketi
+# o'zgarmaydi), `font-noto` kirill va boshqa yozuvlarni yopadi.
+# Both final stages start FROM this stage, so the font layers and the
+# `nodejs` group (gid 1001 — owner of the `derived-cache` volume) are stored
+# and pulled once on the server instead of once per image.
+FROM ${NODE_IMAGE} AS os-base
+RUN apk add --no-cache fontconfig ttf-liberation font-noto && fc-cache -f >/dev/null 2>&1 || true
+RUN addgroup -g 1001 -S nodejs
+LABEL org.opencontainers.image.source="https://github.com/khusinboev/slaydx"
 
 # ─── Bog'liqliklar ────────────────────────────────────────────────────
 FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# The npm download cache lives in a BuildKit cache mount, not in the layer:
+# a lockfile change re-downloads only the changed tarballs on a box that has
+# built before (CI runners start empty, which is the same as before).
+RUN --mount=type=cache,target=/root/.npm,sharing=locked npm ci
+
+# ─── Prod bog'liqliklar (worker) ──────────────────────────────────────
+# Tarix (INFRA-12/DEPS-06): ilgari worker'da `npm ci --include=dev` turardi,
+# chunki `tsx` `devDependencies`da edi va `ENV NODE_ENV=production` uni
+# bayroqsiz tashlab ketardi — o'sha holatda `CMD`dagi `npx tsx` har
+# konteyner ishga tushganda tsx ni INTERNETDAN yuklashga urinardi:
+#
+# npm warn exec The following package was not found and will be
+# installed: tsx@4.23.13
+#
+# Registry yetib bo'lmasa worker umuman ko'tarilmasdi — BARCHA
+# generatsiya navbatda abadiy qotib qolardi. `--include=dev` o'sha
+# muammoni to'g'ri hal qilgan edi, lekin haddan tashqari keng: `tsx`
+# bilan birga eslint/jsdom/tailwindcss/typescript/@testing-library/* —
+# ~430 hech qachon ishlatilmaydigan paket ham prod worker image'iga
+# tushardi (kattaroq attack surface, kattaroq image, foydasiz).
+#
+# Endi `tsx` `package.json`da `dependencies`da (worker CMD va admin
+# skriptlari — `topup`/`seed-demo`/`seed-images`/`bot` — unga to'g'ridan
+# to'g'ri tayanadi), shuning uchun `--omit=dev` xotirjam ishlatiladi:
+# tsx (va uning yagona bog'liqligi `esbuild`) HAR DOIM local diskda,
+# tarmoqqa chiqmasdan bor — aynan o'sha tuzatish, faqat torroq ko'lamda.
+#
+# Pruned from `deps` (same lockfile, no second download). `@next/swc-*` is
+# Next's build-time compiler binary (~140 MB): the worker imports
+# `next/server`/`next/headers` through `lib/`, which never load SWC, and the
+# worker never runs `next build`/`next dev`.
+FROM deps AS prod-deps
+RUN npm prune --omit=dev && rm -rf node_modules/@next/swc-*
 
 # ─── Qurish ───────────────────────────────────────────────────────────
 FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+# `.dockerignore` keeps tests/loadtests/docs/.github/deploy out of the context,
+# so a commit that touches only those does not invalidate this layer and the
+# `next build` below stays cached.
 COPY . .
 # `standalone` — kerakli modullarni bitta papkaga yig'adi, natijada
 # ishlash imiji ~10 barobar kichik bo'ladi.
@@ -44,7 +99,7 @@ RUN npx esbuild lib/server/parse-worker.ts --bundle --platform=node --format=esm
   --banner:js="import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);"
 
 # ─── Ishlash ──────────────────────────────────────────────────────────
-FROM ${NODE_IMAGE} AS runner
+FROM os-base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -55,13 +110,11 @@ ENV HOSTNAME=0.0.0.0
 # PDF eksport uchun LibreOffice.
 #
 # Faqat Writer va Impress filtrlari kerak — to'liq to'plam emas.
-# `ttf-liberation` Times New Roman va Arial bilan METRIK MOS: hujjat
-# maketi o'zgarmaydi, `font-noto` esa kirill va boshqa yozuvlarni yopadi.
-# Ular bo'lmasa PDF da matn kvadratchalarga aylanadi.
+# `ttf-liberation`, `font-noto` va `fontconfig` `os-base`dan keladi.
 #
-# Bu tasvirga ~400 MB qo'shadi. PDF kerak bo'lmasa shu qatorni olib
-# tashlash mumkin: `pdfAvailable()` `false` qaytaradi va UI da PDF
-# tugmasi umuman chiqmaydi.
+# Bu tasvirga ~1 GB qo'shadi (docs/ops/O1 §3.4). PDF kerak bo'lmasa shu
+# qatorni olib tashlash mumkin: `pdfAvailable()` `false` qaytaradi va UI da
+# PDF tugmasi umuman chiqmaydi.
 # `poppler-utils` (`pdftoppm`) — «O'z shablonim» uchun layout fonlarini
 # rasterlash (yuklash paytida, web konteynerida: `lib/server/template-upload.ts`).
 #
@@ -71,19 +124,30 @@ ENV HOSTNAME=0.0.0.0
 # PDF ko'rinishi va eskizi (LibreOffice shu konteynerda o'giradi) butunlay
 # «□□□» bo'lib chiqardi. Faylning o'zi to'g'ri edi — foydalanuvchi
 # kompyuterida shrift bor — lekin saytdagi ko'rinish buzuq. ~+60 MB.
-RUN apk add --no-cache       libreoffice-writer libreoffice-impress       ttf-liberation font-noto font-noto-cjk font-noto-arabic poppler-utils   && fc-cache -f >/dev/null 2>&1 || true   && soffice --headless --version >/dev/null 2>&1 || true
+RUN apk add --no-cache libreoffice-writer libreoffice-impress font-noto-cjk font-noto-arabic poppler-utils \
+  && fc-cache -f >/dev/null 2>&1 || true \
+  && soffice --headless --version >/dev/null 2>&1 || true
 
 # Root ostida ishlatmaymiz.
-RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
-
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-# Migratsiyalar `process.cwd()/lib/server/migrations` dan o'qiladi.
-COPY --from=builder --chown=nextjs:nodejs /app/lib/server/migrations ./lib/server/migrations
+RUN adduser -S nextjs -u 1001
 # Derived-file cache mount point (docker-compose `derived-cache` volume): a new
 # named volume copies this directory's owner, so `nextjs` can write to it.
 RUN mkdir -p /var/cache/slaydx-derived && chown nextjs:nodejs /var/cache/slaydx-derived
+
+# Least volatile first: public assets and migrations change rarely, the
+# compiled server (`standalone`) and hashed client chunks (`static`) change on
+# every code commit.
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# Migratsiyalar `process.cwd()/lib/server/migrations` dan o'qiladi.
+COPY --from=builder --chown=nextjs:nodejs /app/lib/server/migrations ./lib/server/migrations
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Which commit this image is (deploy script, admin system page). Metadata only,
+# placed last so it never invalidates a heavy layer. NOT a secret.
+ARG GIT_SHA=unknown
+ENV APP_GIT_SHA=${GIT_SHA}
+LABEL org.opencontainers.image.revision=${GIT_SHA}
 
 USER nextjs
 EXPOSE 3000
@@ -96,51 +160,35 @@ CMD ["node", "server.js"]
 # ─── Worker ───────────────────────────────────────────────────────────
 # Alohida target: worker Next.js server emas, oddiy Node processi.
 # Standalone to'plamda `scripts/` va `tsx` yo'q, shuning uchun bu yerda
-# to'liq manba va bog'liqliklar saqlanadi.
-FROM ${NODE_IMAGE} AS worker
+# manba va prod bog'liqliklar saqlanadi. Shriftlar (fontconfig,
+# ttf-liberation, font-noto) `os-base`dan keladi.
+FROM os-base AS worker
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Sxema (SVG → PNG, `sharp`/librsvg — Maqola 2) SHU konteynerda chiziladi:
-# shriftsiz matn «□□□» bo'lib chiqadi (2026-09-12 prod: birinchi maqolada
-# sxema yorliqlari tofu). `runner` dagi to'plam bilan bir xil oila:
-# lotin/kirill (Liberation = TNR metrikasi, Noto), fontconfig keshi.
-RUN apk add --no-cache fontconfig ttf-liberation font-noto && fc-cache -f >/dev/null 2>&1 || true
-
-COPY package.json package-lock.json ./
-# Tarix (INFRA-12/DEPS-06): ilgari bu yerda `npm ci --include=dev` turardi,
-# chunki `tsx` `devDependencies`da edi va `ENV NODE_ENV=production` uni
-# bayroqsiz tashlab ketardi — o'sha holatda `CMD`dagi `npx tsx` har
-# konteyner ishga tushganda tsx ni INTERNETDAN yuklashga urinardi:
-#
-# npm warn exec The following package was not found and will be
-# installed: tsx@4.23.13
-#
-# Registry yetib bo'lmasa worker umuman ko'tarilmasdi — BARCHA
-# generatsiya navbatda abadiy qotib qolardi. `--include=dev` o'sha
-# muammoni to'g'ri hal qilgan edi, lekin haddan tashqari keng: `tsx`
-# bilan birga eslint/jsdom/tailwindcss/typescript/@testing-library/* —
-# ~430 hech qachon ishlatilmaydigan paket ham prod worker image'iga
-# tushardi (kattaroq attack surface, kattaroq image, foydasiz).
-#
-# Endi `tsx` `package.json`da `dependencies`da (worker CMD va admin
-# skriptlari — `topup`/`seed-demo`/`seed-images`/`bot` — unga to'g'ridan
-# to'g'ri tayanadi), shuning uchun `--omit=dev` xotirjam ishlatiladi:
-# tsx (va uning yagona bog'liqligi `esbuild`) HAR DOIM local diskda,
-# tarmoqqa chiqmasdan bor — aynan o'sha tuzatish, faqat torroq ko'lamda.
-RUN npm ci --omit=dev && npm cache clean --force
-COPY lib ./lib
-COPY scripts ./scripts
-COPY tsconfig.json ./
+# The user exists BEFORE the files, which are copied with `COPY --chown`.
+# Before: a final `chown -R worker:nodejs /app` layer rewrote every file of
+# node_modules (97 s on the prod box and a second full copy of node_modules in
+# the image). The worker never writes into /app (heartbeat in /tmp, temp files
+# via mkdtemp); ownership stays worker:nodejs as before for admin scripts run
+# with `docker compose exec worker`.
+RUN adduser -S worker -u 1001
+COPY --chown=worker:nodejs --from=prod-deps /app/node_modules ./node_modules
+COPY --chown=worker:nodejs package.json package-lock.json tsconfig.json ./
 # `data/` — kasblar ro'yxati (Rezyume 2). Hozir uni faqat FORMA o'qiydi,
 # ya'ni worker'ga kerak emas; lekin `lib/` ichidagi biror modul kelajakda
 # uni import qilsa (masalan ko'nikma tavsiyasi promptga qo'shilsa), fayl
 # yo'qligi worker'ni ishga tushishida yiqitardi — 6 KB uchun bu xavf
 # arzimaydi.
-COPY data ./data
+COPY --chown=worker:nodejs data ./data
+COPY --chown=worker:nodejs scripts ./scripts
+COPY --chown=worker:nodejs lib ./lib
 
-RUN addgroup -g 1001 -S nodejs && adduser -S worker -u 1001 && chown -R worker:nodejs /app
+ARG GIT_SHA=unknown
+ENV APP_GIT_SHA=${GIT_SHA}
+LABEL org.opencontainers.image.revision=${GIT_SHA}
+
 USER worker
 
 # Worker tarmoq porti tinglamaydi, shuning uchun `web`dagi kabi HTTP

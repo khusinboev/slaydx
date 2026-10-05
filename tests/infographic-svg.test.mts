@@ -6,6 +6,7 @@ import { INFOGRAPHIC_FONT, fillOf, inkOf, mix, renderInfographic } from "../lib/
 import { DRAWN_ICONS, ICON_GRID, ICON_PATHS, ICON_STROKE, iconPaths } from "../lib/generation/infographic/icons.ts";
 import { ICONS, ICON_FALLBACK, PALETTES, PALETTE_BY_ID, SIZE_MM, type InfographicSpec } from "../lib/generation/infographic/types.ts";
 import { figurePng, svgWidthPx, targetWidthPx } from "../lib/generation/figures/png.ts";
+import { apkLines, imageText, readDockerfile } from "./helpers/dockerfile.mts";
 
 /**
  * INFOGRAFIKA SVG VA IKONLAR (AUDIT-21 WP-C).
@@ -116,10 +117,9 @@ test("SVG: shrift ro'yxati worker konteyneridagi paketlarga tayanadi", () => {
   assert.ok(INFOGRAPHIC_FONT.startsWith("Liberation Sans"), "birinchi shrift Liberation Sans bo'lishi kerak");
   assert.ok(/Noto Sans/.test(INFOGRAPHIC_FONT), "kirill/kengaytirilgan lotin uchun Noto Sans kerak");
   assert.ok(svgOf().includes(`font-family="${INFOGRAPHIC_FONT.replace(/&/g, "&amp;")}"`));
-  const df = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
-  // Base image endi `ARG NODE_IMAGE` orqali qulflangan (INFRA-14/DEPS-05) —
-  // qattiq yozilgan "node:22-alpine" emas, `${NODE_IMAGE}` o'zgaruvchisi.
-  const worker = df.slice(df.search(/^FROM \S+ AS worker$/m));
+  // The worker IMAGE = its stage + the stages it is built on (`FROM os-base
+  // AS worker` since the ops sprint shares the font layers with `runner`).
+  const worker = apkLines(imageText(readDockerfile(), "worker"));
   for (const pkg of ["ttf-liberation", "font-noto"]) {
     assert.ok(worker.includes(pkg), `worker bosqichida ${pkg} yo'q — plakat matni «□□□» chiqadi`);
   }

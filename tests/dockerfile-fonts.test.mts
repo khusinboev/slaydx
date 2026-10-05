@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { apkLines, hasPackage, imageText, readDockerfile, stageChain } from "./helpers/dockerfile.mts";
 
 /**
  * Tasvirdagi shriftlar (AUDIT-16 §7): Tarjimon 18 tilga o'giradi — lotin
@@ -10,32 +10,40 @@ import { readFileSync } from "node:fs";
  * yetishmasa matn «□□□» bo'lib chiqadi (yaponcha PPTX'da shunday bo'ldi).
  * 2026-09-11 da prod konteynerida 18 tilli DOCX va PPTX o'girilib ko'zdan
  * kechirildi — hammasi to'g'ri. Bu test paketlar ro'yxatini qulflaydi.
+ *
+ * Ops sprint: `runner` and `worker` both start `FROM os-base` (shared font
+ * layers). The packages are therefore checked in the image's whole stage
+ * chain (own stage + bases, `tests/helpers/dockerfile.mts`) — stricter than
+ * the old whole-file scan, which also counted unrelated stages.
  */
-test("Dockerfile: lotin/kirill (font-noto), CJK (font-noto-cjk) va arab (font-noto-arabic) shriftlari o'rnatiladi", () => {
-  const df = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
-  const apk = df.split("\n").filter((l) => /^RUN apk add/.test(l)).join("\n");
-  for (const pkg of ["ttf-liberation", "font-noto", "font-noto-cjk", "font-noto-arabic"]) {
-    assert.ok(new RegExp(`(^|\\s)${pkg.replace(/-/g, "\\-")}(\\s|$)`).test(apk), `${pkg} paketi Dockerfile'da yo'q`);
+test("Dockerfile: web (`runner`) image has latin/cyrillic (font-noto), CJK (font-noto-cjk) and arabic (font-noto-arabic) fonts", () => {
+  const df = readDockerfile();
+  const text = imageText(df, "runner");
+  const apk = apkLines(text);
+  for (const pkg of ["fontconfig", "ttf-liberation", "font-noto", "font-noto-cjk", "font-noto-arabic"]) {
+    assert.ok(hasPackage(apk, pkg), `runner: ${pkg} paketi Dockerfile'da yo'q`);
   }
-  assert.ok(df.includes("fc-cache"), "shrift keshi (fc-cache) yangilanishi kerak");
+  assert.ok(text.includes("fc-cache"), "shrift keshi (fc-cache) yangilanishi kerak");
 });
 
 /**
  * Sxema PNG (`figures/png.ts`, sharp/librsvg) WORKER konteynerida chiziladi —
  * shriftlar faqat `runner` (web) bosqichida bo'lsa, prod'da sxema yorliqlari
- * «□□□» chiqadi (2026-09-12, AUDIT-17 birinchi prod maqolasi). Har bosqich
- * o'z `apk add` qatoriga ega bo'lishi kerak.
+ * «□□□» chiqadi (2026-09-12, AUDIT-17 birinchi prod maqolasi). Worker image
+ * (o'z bosqichi + `os-base`) shriftlarni o'zi o'rnatishi kerak.
  */
-test("Dockerfile: worker bosqichida ham lotin/kirill shriftlari (ttf-liberation, font-noto) va fontconfig o'rnatiladi", () => {
-  const df = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
-  // Base image endi `ARG NODE_IMAGE` orqali qulflangan (INFRA-14/DEPS-05) —
-  // qattiq yozilgan "node:22-alpine" emas, `${NODE_IMAGE}` o'zgaruvchisi.
-  const start = df.search(/^FROM \S+ AS worker$/m);
-  assert.ok(start >= 0, "worker bosqichi yo'q");
-  const worker = df.slice(start);
-  const apk = worker.split("\n").filter((l) => /^RUN apk add/.test(l)).join("\n");
+test("Dockerfile: worker image also installs latin/cyrillic fonts (ttf-liberation, font-noto) and fontconfig", () => {
+  const df = readDockerfile();
+  const chain = stageChain(df, "worker");
+  assert.equal(chain[0].name, "worker", "worker bosqichi yo'q");
+  assert.ok(
+    chain.every((s) => s.name !== "runner"),
+    "worker must not be built on the web stage (it would inherit LibreOffice, ~1 GB)",
+  );
+  const text = imageText(df, "worker");
+  const apk = apkLines(text);
   for (const pkg of ["fontconfig", "ttf-liberation", "font-noto"]) {
-    assert.ok(new RegExp(`(^|\\s)${pkg.replace(/-/g, "\\-")}(\\s|$)`).test(apk), `worker: ${pkg} paketi yo'q`);
+    assert.ok(hasPackage(apk, pkg), `worker: ${pkg} paketi yo'q`);
   }
-  assert.ok(worker.includes("fc-cache"), "worker: shrift keshi (fc-cache) yo'q");
+  assert.ok(text.includes("fc-cache"), "worker: shrift keshi (fc-cache) yo'q");
 });
