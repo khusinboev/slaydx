@@ -1,0 +1,85 @@
+# External uptime probe (owner decision D3, docs/ops/PLAN.md; docs/ops/O3-robustness-ops.md §1B).
+# The box-local watchdog (scripts/watchdog.sh) cannot report "the whole server / nginx / DNS is
+# down" — this probe runs from GitHub every 10 minutes and alerts the owner on Telegram.
+#
+# Owner setup (repository → Settings → Secrets and variables → Actions → New repository secret):
+#   UPTIME_TG_TOKEN  the Telegram bot token that sends the alert
+#   UPTIME_TG_CHAT   the owner's chat id
+# Without them the probe still runs and a DOWN run still fails (GitHub e-mails the failure).
+#
+# Alerts: first failed probe → "[DOWN]", then once an hour while it stays down, and one "[OK]"
+# when it recovers (decided from the previous runs of this workflow). Caveats: GitHub may start
+# scheduled runs 5–20 min late, and disables schedules after 60 days without repository activity.
+name: uptime
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+# Only reads this workflow's own run history (alert de-duplication).
+permissions:
+  actions: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe /api/health
+        env:
+          UPTIME_URL: https://slaydxx.uz/api/health
+          TG_TOKEN: ${{ secrets.UPTIME_TG_TOKEN }}
+          TG_CHAT: ${{ secrets.UPTIME_TG_CHAT }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          notify() {
+            if [ -z "${TG_TOKEN:-}" ] || [ -z "${TG_CHAT:-}" ]; then
+              echo "Telegram secrets are not set — alert not sent: $1"
+              return 0
+            fi
+            # Token on stdin (-K -), never on the command line; curl output is discarded.
+            printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$TG_TOKEN" |
+              curl -sS -m 10 -o /dev/null -K - \
+                --data-urlencode "chat_id=$TG_CHAT" --data-urlencode "text=$1" 2>/dev/null ||
+              echo "Telegram send failed"
+          }
+
+          code=000
+          for attempt in 1 2 3; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -m 15 "$UPTIME_URL" 2>/dev/null) || true
+            [[ "$code" =~ ^[0-9]{3}$ ]] || code=000
+            echo "attempt $attempt: HTTP $code"
+            [ "$code" = 200 ] && break
+            [ "$attempt" = 3 ] || sleep 30
+          done
+
+          # Conclusions of the previous finished runs of this workflow, newest first.
+          history=$(gh run list --workflow uptime.yml --status completed --limit 12 \
+            --json conclusion --jq '.[].conclusion' 2>/dev/null) || history=""
+          streak=0
+          while IFS= read -r c; do
+            [ "$c" = failure ] || break
+            streak=$((streak + 1))
+          done <<<"$history"
+          echo "previous consecutive failures: $streak"
+
+          if [ "$code" = 200 ]; then
+            if [ "$streak" -gt 0 ]; then
+              notify "[OK] slaydxx.uz yana ishlayapti (/api/health 200, GitHub probe)"
+            fi
+            exit 0
+          fi
+
+          # Alert on the first failure, then every 6th run (≈ hourly) while it stays down.
+          if [ $((streak % 6)) -eq 0 ]; then
+            notify "[DOWN] slaydxx.uz /api/health -> $code (3 urinish, GitHub probe)"
+          fi
+          exit 1
