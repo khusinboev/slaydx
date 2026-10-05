@@ -54,4 +54,9 @@ Wave 2 (after measuring): KaTeX split (O4 WP-D), Telegram startup (WP-E), zero-g
 | WP | Status |
 |---|---|
 | Research O1–O4 | ✅ |
-| Wave 1 | starting |
+| P-CI | ✅ merged — first real sharded run green (096aabb): longest job 186 s (was ~13 min total) |
+| P-DEP | ✅ merged (20/20 + shellcheck fix 71a2af2; compose v2 behaviour to verify on the server) |
+| P-FE | ✅ merged (shared layer 56→15 kB gz, /uz 109→75 kB, page counts unchanged) |
+| P-SLIDEIMG | ✅ merged (10-slide deck 7.5 MB → 1.1 MB in the viewer; originals for PPTX/downloads) |
+| P-IMG, P-OPS | running |
+| Reviews | security (CI + deploy) and correctness (FE + slide images) running |
