@@ -313,7 +313,8 @@ test("ResultView: o'yin chipi `onSummary` orqali (`setShareSum`), standart matn 
   const src = readFileSync(new URL("../../components/files/ResultView.tsx", import.meta.url), "utf8");
   assert.match(src, /const \[shareSum, setShareSum\] = useState<ShareSummary \| null>\(null\);/);
   assert.match(src, /\.\.\.\(shareSum \? chipOf\(shareSum\) : \{ chip: "O‘yin havolasi" \}\),/);
-  assert.match(src, /<GameSharePanel id=\{gen\.id\} kind=\{shareKind\} onSummary=\{setShareSum\} \/>/);
+  // Ops WP-C: lazy panel chunk, same props.
+  assert.match(src, /<LazyGameSharePanel id=\{gen\.id\} kind=\{shareKind\} onSummary=\{setShareSum\} \/>/);
   assert.match(src, /\.\.\.chipOf\(reviewSummary\(review\)\)/);
   // Panel chaqiruvi: `noFix`/`noPolish`/`hideGroups` va `data-*` ilgaklari joyida.
   assert.match(src, /<div data-article-review-panel>/);

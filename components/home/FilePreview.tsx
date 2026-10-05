@@ -1,12 +1,32 @@
 "use client";
 
-import { memo, useEffect, useRef, useState } from "react";
+import { lazy, memo, Suspense, useState } from "react";
 import { FileText, Image as ImageIcon, Mic, Presentation } from "lucide-react";
-import type { GenerationPreviewSlide, ServerGeneration } from "@/lib/api-client";
-import { getSlideTheme } from "@/lib/generation/slide-themes";
-import { SLIDE } from "@/lib/viewers/metrics";
-import { SlideCanvas } from "../viewers/SlideCanvas";
+import type { ServerGeneration } from "@/lib/api-client";
 import { thumbUrl } from "@/lib/api-client";
+
+/*
+ * First-slide thumbnail in its own chunk (ops sprint WP-C): it carries the
+ * whole slide layout engine (`SlideCanvas` → `planSlide`, visuals; ~34 kB gz)
+ * that `/uz` used to ship to everyone, decks or not. It is requested only
+ * when a card with `preview.slide` renders. If the chunk cannot load
+ * (offline, a deploy replaced the hashes) the card shows the deck icon
+ * instead of taking the whole file list down with it.
+ */
+const SlideThumb = lazy(() => import("./SlideThumb").catch(() => ({ default: SlideThumbUnavailable })));
+
+/** Same box as the thumbnail while its chunk loads — the card does not jump. */
+function SlideThumbLoading() {
+  return <div aria-hidden className="bg-muted h-full w-full animate-pulse" data-slide-thumb="loading" />;
+}
+
+function SlideThumbUnavailable() {
+  return (
+    <div className="flex h-full items-center justify-center bg-[#eef1f4]" data-slide-thumb="unavailable">
+      <Presentation className="text-muted-foreground size-8" />
+    </div>
+  );
+}
 
 /**
  * Ro'yxatdagi kartochka ko'rinishi.
@@ -47,7 +67,11 @@ export const FilePreview = memo(function FilePreview({ gen }: { gen: ServerGener
 
   const slide = gen.preview?.slide;
   if (slide) {
-    return <SlideThumb slide={slide} />;
+    return (
+      <Suspense fallback={<SlideThumbLoading />}>
+        <SlideThumb slide={slide} />
+      </Suspense>
+    );
   }
 
   const url = gen.preview?.url;
@@ -114,57 +138,6 @@ export const FilePreview = memo(function FilePreview({ gen }: { gen: ServerGener
     </div>
   );
 });
-
-/**
- * Birinchi slaydning haqiqiy renderi — `SlideCanvas` (1280×720) kartochka
- * kengligiga `scale` bilan kichraytiriladi. `SlideRail.tsx` eskizi bilan
- * AYNAN bir xil naqsh: chin o'lcham `absolute`/`top:0,left:0` bilan
- * chiziladi, atrofdagi qop (`overflow:hidden`) ortiqchasini kesadi.
- *
- * Standart `scale` (0.13) — o'lchov effektidan OLDIN SSR/birinchi
- * render uchun taxminiy qiymat (`tests/viewer/file-preview.test.mts`
- * SSR HTML da `SlideCanvas` chiqishini shu holatda tekshiradi);
- * `ResizeObserver` haqiqiy kengligini o'lchagach aniqlaydi.
- */
-function SlideThumb({ slide }: { slide: GenerationPreviewSlide }) {
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(0.13);
-
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const measure = () => {
-      const w = el.getBoundingClientRect().width;
-      if (w > 0) setScale(w / SLIDE.w);
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const theme = getSlideTheme(slide.themeId);
-  return (
-    <div ref={wrapRef} className="relative h-full w-full overflow-hidden bg-black">
-      <div
-        className="pointer-events-none absolute top-0 left-0"
-        style={{ width: SLIDE.w, height: SLIDE.h, transform: `scale(${scale})`, transformOrigin: "top left" }}
-      >
-        <SlideCanvas
-          slide={slide.model}
-          theme={theme}
-          visual={slide.visual}
-          audience={slide.audience}
-          templateId={slide.templateId}
-          bodyType={slide.bodyType}
-          logo={slide.logo}
-          index={0}
-          total={1}
-        />
-      </div>
-    </div>
-  );
-}
 
 /**
  * Hujjat eskizi: `<img>` yuklanguncha `fallback` (matn qatorlari) turadi,

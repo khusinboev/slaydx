@@ -307,7 +307,10 @@ test("sahifalash: eski server (`total`/`nextCursor` yo'q) — son qatorlardan, t
 test("shartnoma: `ResultView` panelni `publicGameKindOf` bo'yicha chizadi", () => {
   const src = readFileSync(new URL("../../components/files/ResultView.tsx", import.meta.url), "utf8");
   assert.match(src, /const shareKind = completed && !expired \? publicGameKindOf\(gen\.type\) : null;/, "ro'yxat share route bilan BITTA manbadan");
-  assert.match(src, /<GameSharePanel id=\{gen\.id\} kind=\{shareKind\} onSummary=\{setShareSum\} \/>/, "panel ulangan");
+  // Ops WP-C: the panel is a lazy chunk (`lazy-panels.tsx` → `import("./GameSharePanel")`), same props.
+  assert.match(src, /<LazyGameSharePanel id=\{gen\.id\} kind=\{shareKind\} onSummary=\{setShareSum\} \/>/, "panel ulangan");
+  const lazy = readFileSync(new URL("../../components/files/lazy-panels.tsx", import.meta.url), "utf8");
+  assert.match(lazy, /LazyGameSharePanel = retryableLazy\(\(\) => import\("\.\/GameSharePanel"\)\.then\(\(m\) => \(\{ default: m\.GameSharePanel \}\)\)\)/, "lazy panel loads GameSharePanel");
   assert.match(src, /\.\.\.\(shareKind\s*\?\s*\[/, "faqat o'ynaladigan vositada");
   /*
    * V0 (viewer redesign): havola ko'ruvchi USTIDA emas — `ResultLayout`
@@ -322,7 +325,8 @@ test("shartnoma: `ResultView` panelni `publicGameKindOf` bo'yicha chizadi", () =
   assert.ok(layoutAt > 0 && viewerAt > layoutAt, "ko'ruvchi ResultLayout mazmunida");
   assert.ok(!src.slice(layoutAt, viewerAt).includes("GameSharePanel"), "havola ko'ruvchi ustida (mazmun ustunida) emas");
   assert.ok(!/sections\.map|\.content\b/.test(src.slice(layoutAt, viewerAt)), "panel bo'limlari mazmun ustunida qayta chizilmaydi");
-  assert.match(src, /id: "share",[\s\S]{0,200}?content: <GameSharePanel id=\{gen\.id\} kind=\{shareKind\} onSummary=\{setShareSum\} \/>/, "«O‘yin havolasi» bo'limi");
+  assert.match(src, /id: "share",[\s\S]{0,260}?content: \(\s*<PanelChunk>\s*<LazyGameSharePanel id=\{gen\.id\} kind=\{shareKind\} onSummary=\{setShareSum\} \/>/, "«O‘yin havolasi» bo'limi");
   assert.ok(src.indexOf('id: "review"') < src.indexOf('id: "share"') && src.indexOf('id: "share"') < layoutAt, "bo'lim tartibi: hisobot, keyin havola");
-  assert.ok(src.indexOf("ArticleReviewPanel\n") < src.indexOf("<GameSharePanel"), "tayyorlik hisoboti panelidan KEYIN");
+  const reviewAt = src.indexOf("<LazyArticleReviewSection");
+  assert.ok(reviewAt > 0 && reviewAt < src.indexOf("<LazyGameSharePanel"), "tayyorlik hisoboti panelidan KEYIN");
 });

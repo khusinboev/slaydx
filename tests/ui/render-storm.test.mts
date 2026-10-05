@@ -190,7 +190,21 @@ test("FE-13 (c): ro'yxat pollingi o'zgarmagan kartalarni qayta chizmaydi", async
 
   useAppStore.setState({ sessionChecked: true, loggedIn: true, generations: page().generations, generationsLoaded: true, generationsCursor: null });
   render(h(AppRouterContext.Provider, { value: router }, h(SearchParamsContext.Provider, { value: new URLSearchParams() }, h(HomeFiles))));
-  await waitFor(() => assert.ok(document.querySelectorAll("[data-layer]").length > 0 || renders("SlideCanvas") > 0));
+  /*
+   * Ops WP-C: the slide thumbnail is a lazy chunk. Wait until all three deck
+   * cards have COMMITTED their thumbnail (DOM), not just rendered it: a poll
+   * landing between the lazy retry's render and its commit restarts that
+   * uncommitted work, which is not a re-render of a mounted card. The first
+   * import of the chunk transpiles the slide engine under tsx: allow 15 s.
+   */
+  await waitFor(
+    () => {
+      const ready = document.querySelectorAll('[data-slide-thumb="ready"]');
+      assert.equal(ready.length, 3, "3 deck thumbnails committed");
+      for (const el of ready) assert.ok(el.querySelector("[data-layer]"), "thumbnail has the SlideCanvas layers");
+    },
+    { timeout: 15_000 },
+  );
 
   // 1) Hech narsa o'zgarmagan poll.
   resetRenders();

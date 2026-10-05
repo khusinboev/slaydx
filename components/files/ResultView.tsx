@@ -20,7 +20,7 @@ import { useAppStore } from "@/lib/store";
 import { TOOL_BY_ID } from "@/lib/tools";
 import { useConfirmClick } from "../overlays/useConfirmClick";
 import { EditActions, type EditActionsState } from "./EditActions";
-import { GameSharePanel } from "./GameSharePanel";
+import { LazyArticleReviewSection, LazyGameSharePanel, PanelChunk } from "./lazy-panels";
 import { DownloadSheetContext, type SheetMode } from "./DownloadSheet";
 import { ResultActions } from "./ResultActions";
 import { ResultLayout, type PanelSection } from "./ResultLayout";
@@ -34,7 +34,6 @@ import { publicGameKindOf } from "@/lib/game/public";
  * `lazy` o'rami (W4-D N3).
  */
 import { ArtifactViewer, SlideViewer } from "../viewers/ArtifactViewer";
-import { ArticleReviewPanel, ESSAY_HIDDEN_GROUPS } from "../viewers/ArticleReviewPanel";
 import { asLiveView } from "../viewers/live-view";
 import { liveDocOf, type LiveDeck } from "@/lib/generation/slide-progress";
 import { viewerKind } from "@/lib/viewers/kind";
@@ -354,7 +353,7 @@ export function ResultView({ id }: { id: string }) {
   /*
    * O'YIN va PLAKAT (AUDIT-21 WP-D).
    *
-   * `hideGroups` — «Manbalar» va «Vizuallar» guruhlari bu oilalarda
+   * `hideEssayGroups` (`ESSAY_HIDDEN_GROUPS`) — «Manbalar» va «Vizuallar» guruhlari bu oilalarda
    * BO'SH: krossvord/karta/plakat manba keltirmaydi va sxema chizmaydi,
    * ya'ni ularning bandlari umuman hisoblanmaydi (insho bilan ayni
    * qaror — bo'sh guruh «manbalar tekshirilmadi» deb o'qilardi).
@@ -384,7 +383,7 @@ export function ResultView({ id }: { id: string }) {
    * bu yerdan chaqirilsa server 409 «eski formatda» qaytarardi.
    */
   const noPolish = isAudio;
-  const hideGroups = isEssay || isGame || isPoster || isAudio ? ESSAY_HIDDEN_GROUPS : undefined;
+  const hideEssayGroups = isEssay || isGame || isPoster || isAudio;
   /*
    * O'YIN HAVOLASI (AUDIT-22 WP-C) — faqat O'YNALADIGAN vositalarda.
    *
@@ -446,14 +445,16 @@ export function ResultView({ id }: { id: string }) {
                     {aiLocked}
                   </p>
                 ) : null}
-                <ArticleReviewPanel
-                  review={review}
-                  hrefBase={`/uz/${gen.type}`}
-                  {...(aiLocked ? {} : noFix ? {} : { onFix: (fix: NonNullable<ReviewCheck["fix"]>) => void onFix(fix) })}
-                  fixing={fixing}
-                  {...(aiLocked ? {} : noPolish ? {} : { onPolish: () => void onPolish(), polishing })}
-                  {...(hideGroups ? { hideGroups } : {})}
-                />
+                <PanelChunk>
+                  <LazyArticleReviewSection
+                    review={review}
+                    hrefBase={`/uz/${gen.type}`}
+                    {...(aiLocked ? {} : noFix ? {} : { onFix: (fix: NonNullable<ReviewCheck["fix"]>) => void onFix(fix) })}
+                    fixing={fixing}
+                    {...(aiLocked ? {} : noPolish ? {} : { onPolish: () => void onPolish(), polishing })}
+                    hideEssayGroups={hideEssayGroups}
+                  />
+                </PanelChunk>
               </div>
             ),
           },
@@ -470,7 +471,11 @@ export function ResultView({ id }: { id: string }) {
             id: "share",
             title: "O‘yin havolasi",
             ...(shareSum ? chipOf(shareSum) : { chip: "O‘yin havolasi" }),
-            content: <GameSharePanel id={gen.id} kind={shareKind} onSummary={setShareSum} />,
+            content: (
+              <PanelChunk>
+                <LazyGameSharePanel id={gen.id} kind={shareKind} onSummary={setShareSum} />
+              </PanelChunk>
+            ),
           },
         ]
       : []),

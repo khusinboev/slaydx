@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderToStaticMarkup } from "react-dom/server";
-import { createElement as h } from "react";
+import { renderToPipeableStream, renderToStaticMarkup } from "react-dom/server";
+import { Writable } from "node:stream";
+import { createElement as h, type ReactElement } from "react";
 import { FilePreview } from "../../components/home/FilePreview.tsx";
 import { buildSlideDeck } from "../../lib/generation/slides.ts";
 import { extractMeta } from "../../lib/generation/meta.ts";
@@ -18,7 +19,35 @@ import type { AcademicDoc } from "../../lib/generation/types.ts";
  * (`server-only` paket "Client Component" xatosini otadi) — shuning
  * uchun bu test `npm run test` emas, `npm run test:viewer`
  * (`tsconfig.viewer.json`, alohida `--test` yo'li) qamrovida.
+ *
+ * Ops sprint WP-C: the thumbnail (`SlideThumb`, slide engine) is a lazy chunk.
+ * The synchronous shell therefore shows a same-size placeholder, and the
+ * slide assertions run on the FULL render (`renderAll` waits for every
+ * Suspense boundary, i.e. the chunk). Changed assertions: tests 1 and 4 used
+ * `renderToStaticMarkup` and now use `renderAll` with the same expectations;
+ * the new first test locks that the slide engine is NOT in the first render.
+ * Mutation: a static `import SlideThumb from "./SlideThumb"` in
+ * `FilePreview.tsx` turned the first test red.
  */
+
+/** Full HTML after every lazy chunk has loaded (Suspense boundaries resolved). */
+function renderAll(el: ReactElement): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let html = "";
+    const sink = new Writable({
+      write(chunk, _enc, cb) {
+        html += chunk.toString();
+        cb();
+      },
+    });
+    sink.on("finish", () => resolve(html));
+    const { pipe } = renderToPipeableStream(el, {
+      onAllReady: () => pipe(sink),
+      onShellError: reject,
+      onError: reject,
+    });
+  });
+}
 
 const meta = extractMeta(TOOL_BY_ID.slide, { topic: "Suv aylanishi", slideTemplate: "lecture" } as never);
 const deck = buildSlideDeck({
@@ -62,8 +91,20 @@ function gen(overrides: Partial<ServerGeneration>): ServerGeneration {
   } as unknown as ServerGeneration;
 }
 
-test("preview.slide bo'lsa SlideCanvas HTML (data-layer=\"text\") chiqadi", () => {
+/*
+ * MUST stay the first render of a slide card in this file: once the lazy chunk
+ * has loaded (the tests below), `lazy` renders synchronously.
+ */
+test("WP-C: first render has a same-size placeholder, not the slide engine (lazy chunk)", () => {
   const html = renderToStaticMarkup(h(FilePreview, { gen: gen({ preview: { slide: SAMPLE_SLIDE } }) }));
+  assert.match(html, /data-slide-thumb="loading"/, "placeholder while the thumbnail chunk loads");
+  assert.match(html, /h-full w-full/, "placeholder fills the card box");
+  assert.doesNotMatch(html, /data-layer="text"/, "SlideCanvas must not be in the first render");
+});
+
+test("preview.slide bo'lsa SlideCanvas HTML (data-layer=\"text\") chiqadi", async () => {
+  const html = await renderAll(h(FilePreview, { gen: gen({ preview: { slide: SAMPLE_SLIDE } }) }));
+  assert.match(html, /data-slide-thumb="ready"/, "thumbnail chunk rendered");
   assert.match(html, /data-layer="text"/, "SlideCanvas matn qatlami chiqishi kerak");
   assert.match(html, /Suv aylanishi/, "birinchi slayd sarlavhasi ko'rinishi kerak");
 });
@@ -85,8 +126,8 @@ test("preview.slide YO'Q, faqat url bo'lsa — eski rasm yo'li", () => {
   assert.match(html, /img\.jpg/);
 });
 
-test("preview.slide bor bo'lsa url/lines'dan USTUN turadi", () => {
-  const html = renderToStaticMarkup(
+test("preview.slide bor bo'lsa url/lines'dan USTUN turadi", async () => {
+  const html = await renderAll(
     h(FilePreview, {
       gen: gen({
         preview: { slide: SAMPLE_SLIDE, url: "/should/not/render.jpg", lines: ["ko'rinmasin"] },
