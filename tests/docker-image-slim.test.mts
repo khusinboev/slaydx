@@ -99,6 +99,23 @@ test("Dockerfile: web image copies migrations and orders layers stable → volat
   }
 });
 
+test("Dockerfile: builder drops non-runtime source trees from standalone (Turbopack traces the project root)", () => {
+  const builder = byName.get("builder")!.text;
+  const lines = instr(builder);
+  const prune = lines.findIndex((l) => /^RUN rm -rf .*\.next\/standalone\//.test(l));
+  assert.ok(prune >= 0, "standalone prune step missing");
+  assert.ok(prune > lines.findIndex((l) => /^RUN npm run build/.test(l)), "prune must run after next build");
+  const removed = [...lines[prune].matchAll(/\.next\/standalone\/(\S+)/g)].map((m) => m[1]);
+  for (const d of ["components", "scripts", "brand"]) assert.ok(removed.includes(d), `standalone/${d} is not pruned`);
+  for (const keep of ["lib", "app", "data", "public", "node_modules", ".next", "server.js", "package.json", "parse-worker.mjs"]) {
+    assert.ok(!removed.some((r) => r === keep || r.startsWith(`${keep}/`) || r === "*"), `standalone/${keep} is read at run time`);
+  }
+  // Next 15.5 ignores outputFileTracingExcludes for Turbopack builds: a config
+  // value there would be decorative, so it must not come back silently.
+  const cfg = readFileSync(new URL("next.config.ts", ROOT), "utf8");
+  assert.ok(!/outputFileTracingExcludes/.test(cfg), "outputFileTracingExcludes has no effect with `next build --turbopack`");
+});
+
 test("Dockerfile: the only build arg is the base image pin; no build secrets, no BuildKit-only syntax", () => {
   // Images are pushed to a registry: every ARG value is readable there. OCI
   // source/revision labels come from the CI Bake file, not from build args.

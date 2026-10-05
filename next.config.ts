@@ -118,34 +118,6 @@ const nextConfig: NextConfig = {
   images: { unoptimized: true },
   // Konteynerda ishlash uchun minimal server to'plami.
   output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
-  /*
-   * File tracing (docs/ops/O1-deploy-pipeline.md F4). `process.cwd()`-based
-   * reads (`lib/server/db.ts` migrations, `lib/server/admin-system.ts`
-   * package.json) defeat nft, so every route's trace listed the WHOLE project
-   * tree and `standalone/` shipped sources, tests and load tests. None of
-   * these are read at run time: components/scripts are compiled into the
-   * server chunks, the migrations are copied by the Dockerfile on their own.
-   * `lib/`, `app/`, `data/`, `public/` and `package.json` stay traced (runtime
-   * reads). `tests/next-config-ops.test.mts` locks the list.
-   */
-  outputFileTracingExcludes: {
-    "*": [
-      "tests/**",
-      "loadtests/**",
-      "eval-out/**",
-      "audit/**",
-      "docs/**",
-      "scratch-tmp/**",
-      "namunalar/**",
-      ".claude/**",
-      ".github/**",
-      "deploy/**",
-      "brand/**",
-      "scripts/**",
-      "components/**",
-      "*.md",
-    ],
-  },
 
   /*
    * `/` → `/uz` on the server (docs/ops/O4-frontend-speed.md WP-G, item 11).

@@ -97,6 +97,18 @@ RUN npx esbuild lib/server/parse-worker.ts --bundle --platform=node --format=esm
   --outfile=.next/standalone/parse-worker.mjs \
   --banner:js="import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);"
 
+# Next file tracing copies the WHOLE project tree into `standalone/`:
+# `path.join(process.cwd(), …)` reads (`lib/server/db.ts` migrations,
+# `lib/server/admin-system.ts`) make Turbopack trace the project root, and
+# Next 15.5 does not apply `outputFileTracingExcludes` to Turbopack builds
+# (collect-build-traces.js skips routes without a webpack trace context —
+# measured: with the excludes set, components/scripts/brand still shipped).
+# These trees are never read at run time (components are compiled into the
+# server chunks; scripts run only in the worker image), so they are dropped
+# here. `lib/`, `app/`, `data/` stay: migrations live in `lib/` (and are also
+# copied explicitly below).
+RUN rm -rf .next/standalone/components .next/standalone/scripts .next/standalone/brand
+
 # ─── Ishlash ──────────────────────────────────────────────────────────
 FROM os-base AS runner
 WORKDIR /app
