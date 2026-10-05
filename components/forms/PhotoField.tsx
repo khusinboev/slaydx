@@ -106,11 +106,11 @@ export function PhotoField({
           }}
         />
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => fileRef.current?.click()} disabled={busy} className="text-primary font-medium disabled:opacity-40">
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={busy} className="text-primary pointer-coarse:min-h-11 pointer-coarse:px-1.5 font-medium disabled:opacity-40">
             {assetId ? "Almashtirish" : "Surat qo‘shish"}
           </button>
           {assetId && originalAssetId ? (
-            <button type="button" onClick={() => setRecrop(true)} disabled={busy} className="text-muted-foreground hover:text-foreground disabled:opacity-40">
+            <button type="button" onClick={() => setRecrop(true)} disabled={busy} className="text-muted-foreground hover:text-foreground pointer-coarse:min-h-11 pointer-coarse:px-1.5 disabled:opacity-40">
               Markazlash
             </button>
           ) : null}
@@ -119,7 +119,7 @@ export function PhotoField({
               type="button"
               onClick={() => onChange({ assetId: "", originalAssetId: "", crop: undefined, shape: undefined })}
               disabled={busy}
-              className="text-muted-foreground hover:text-destructive disabled:opacity-40"
+              className="text-muted-foreground hover:text-destructive pointer-coarse:min-h-11 pointer-coarse:px-1.5 disabled:opacity-40"
             >
               Olib tashlash
             </button>

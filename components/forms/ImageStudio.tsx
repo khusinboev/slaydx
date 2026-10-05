@@ -96,7 +96,7 @@ export function ImageStudio({ tool }: { tool: ToolConfig }) {
             <button
               key={ex}
               type="button"
-              className="text-muted-foreground hover:text-foreground max-w-full truncate rounded-full border px-2.5 py-0.5 text-[11.5px]"
+              className="text-muted-foreground hover:text-foreground pointer-coarse:min-h-11 pointer-coarse:px-3 max-w-full truncate rounded-full border px-2.5 py-0.5 text-[11.5px]"
               onClick={() => set("prompt", ex)}
             >
               {ex}

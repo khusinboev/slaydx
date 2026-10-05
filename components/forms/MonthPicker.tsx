@@ -50,7 +50,7 @@ export function MonthPicker({
         value={month}
         disabled={now}
         onChange={(e) => setMonth(e.target.value)}
-        className="border-input bg-card focus:ring-ring h-8 rounded-lg border px-1.5 text-[12px] outline-none focus:ring-2 disabled:opacity-40"
+        className="border-input bg-card focus:ring-ring pointer-coarse:h-11 h-8 rounded-lg border px-1.5 text-[12px] outline-none focus:ring-2 disabled:opacity-40"
       >
         <option value="">oy —</option>
         {MONTHS.map((m, i) => (
@@ -64,7 +64,7 @@ export function MonthPicker({
         value={year}
         disabled={now}
         onChange={(e) => setYear(e.target.value)}
-        className="border-input bg-card focus:ring-ring h-8 rounded-lg border px-1.5 text-[12px] outline-none focus:ring-2 disabled:opacity-40"
+        className="border-input bg-card focus:ring-ring pointer-coarse:h-11 h-8 rounded-lg border px-1.5 text-[12px] outline-none focus:ring-2 disabled:opacity-40"
       >
         <option value="">yil —</option>
         {YEARS.map((y) => (

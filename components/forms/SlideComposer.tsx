@@ -241,7 +241,7 @@ export function SlideComposer({
                 title={m.hint}
                 onClick={() => set("mode", m.id)}
                 className={cn(
-                  "rounded-md px-2.5 py-1 text-xs transition-colors",
+                  "pointer-coarse:min-h-11 pointer-coarse:px-3 rounded-md px-2.5 py-1 text-xs transition-colors",
                   mode === m.id ? "bg-card shadow-sm font-medium" : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -281,7 +281,7 @@ export function SlideComposer({
                   <button
                     key={ex}
                     type="button"
-                    className="text-muted-foreground hover:text-foreground hover:border-foreground/30 rounded-full border px-2.5 py-0.5 text-[11.5px]"
+                    className="text-muted-foreground hover:text-foreground hover:border-foreground/30 pointer-coarse:min-h-11 pointer-coarse:px-3 rounded-full border px-2.5 py-0.5 text-[11.5px]"
                     onClick={() => set("topic", ex)}
                   >
                     {ex}

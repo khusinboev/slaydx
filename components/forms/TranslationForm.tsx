@@ -287,7 +287,7 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
               setSourceLang(language);
               setLanguage(sourceLang);
             }}
-            className="border-input hover:bg-muted mx-auto mb-1.5 flex size-8 items-center justify-center rounded-lg border disabled:opacity-40"
+            className="border-input hover:bg-muted pointer-coarse:size-11 mx-auto mb-1.5 flex size-8 items-center justify-center rounded-lg border disabled:opacity-40"
           >
             <ArrowLeftRight className="size-4" />
           </button>

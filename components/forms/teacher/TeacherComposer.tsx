@@ -264,7 +264,7 @@ export function TeacherComposer({
           {tool.topicExamples?.length ? (
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {tool.topicExamples.map((ex) => (
-                <button key={ex} type="button" onClick={() => onTopicChange(ex)} className="bg-muted hover:bg-muted/70 rounded-md px-2 py-1 text-left text-[11px]">
+                <button key={ex} type="button" onClick={() => onTopicChange(ex)} className="bg-muted hover:bg-muted/70 pointer-coarse:min-h-11 pointer-coarse:px-3 rounded-md px-2 py-1 text-left text-[11px]">
                   {ex}
                 </button>
               ))}
