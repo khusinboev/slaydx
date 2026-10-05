@@ -22,7 +22,7 @@ import {
 } from "./jobs";
 import { refund, refundPartial } from "./credits";
 import { deleteGenerationFile } from "./storage";
-import { deleteAssets, extractAssets, putAssetBytes, slideViewCopies } from "./assets";
+import { deleteAssets, extractAssets, putAssetBytes, slideViewCopies, viewCopyBudget } from "./assets";
 import { buildPreview } from "./preview";
 import { logoDataUrl } from "./logo";
 import { photoDataUrl, purgeOldPhotos } from "./photo";
@@ -338,6 +338,8 @@ type RunCtl = {
   stage?: string;
   /** Yo'ldagi `putAsset` (TTS) yozuvlari — tozalashdan OLDIN kutiladi (W3-A nit 2). */
   assetWrites: Set<Promise<unknown>>;
+  /** Epoch ms of the hard stop (`runWithHardStop`) — post-build steps must finish before it. */
+  hardStopAt: number;
 };
 
 /**
@@ -405,7 +407,7 @@ const inflight = new Map<string, { job: ClaimedJob; ctl: RunCtl; done: Promise<v
  * o'tganda qaytadi — shu paytda slot bo'shaydi (`tick` `running--`).
  */
 export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<void> {
-  const ctl: RunCtl = { abandoned: false, assetWrites: new Set() };
+  const ctl: RunCtl = { abandoned: false, assetWrites: new Set(), hardStopAt: Number.POSITIVE_INFINITY };
   // Shu ish ichidagi HAR jurnal qatori (`credits.ts` refund va h.k.) `jobId`/`userId` ni o'zi oladi (OBS-02).
   const done = withFreshLogContext({ jobId: job.id, userId: job.userId }, () => runWithHardStop(job, opts, ctl));
   inflight.set(job.lease, { job, ctl, done });
@@ -463,6 +465,7 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
   const expired = new Promise<"expired">((resolve) => {
     timer = setTimeout(() => resolve("expired"), hardStopMs);
   });
+  ctl.hardStopAt = Date.now() + hardStopMs;
   const work = execute(job, tool, build, ctl, live, onStage);
   try {
     const outcome = await Promise.race([work.then(() => "done" as const), expired]);
@@ -601,9 +604,14 @@ async function execute(
      * Screen copies of the slide images (ops D5): written with the result in
      * one transaction below, never instead of the originals (PPTX rebuild and
      * downloads read those). Never throws; a slide without a copy is served
-     * the original.
+     * the original. The budget never reaches the hard stop (review M1): a deck
+     * that finished late is committed WITHOUT copies rather than failed.
      */
-    const viewCopies = await slideViewCopies(job.id, extracted.doc, extracted.assets);
+    const copyBudget = viewCopyBudget(ctl.hardStopAt - Date.now());
+    if (!copyBudget && extracted.doc?.slides?.some((s) => s.image)) {
+      log("warn", `[worker] job ${job.id}: qattiq muddat yaqin — ekran nusxalari o'tkazib yuborildi`, { jobId: job.id });
+    }
+    const viewCopies = copyBudget ? await slideViewCopies(job.id, extracted.doc, extracted.assets, copyBudget) : [];
 
     /*
      * Fayl + aktivlar + COMPLETED — bitta tranzaksiyada va FAQAT qulf hali
