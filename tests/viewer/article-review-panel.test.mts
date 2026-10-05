@@ -191,7 +191,8 @@ test("ResultView: article natijasida `doc.article.review` bo'lsa hisobot ResultL
   assert.match(src, /\.\.\.\(review && completed && !expired\s*\?\s*\[\s*\{\s*id: "review",/, "panel sharti — hisobot bor");
   assert.match(src, /id: "review",[\s\S]{0,2500}?<div data-article-review-panel>/, "hisobot paneli bo'limi");
   // WP7: `onFix` → `rewriteArticle` (POST …/rewrite), `fixing` — yuklanish holati.
-  assert.match(src, /<ArticleReviewPanel\s+review=\{review\}/, "panel hisobotni oladi");
+  // Ops WP-C: the panel is a lazy chunk (`lazy-panels.tsx` → `ArticleReviewSection` → `ArticleReviewPanel`).
+  assert.match(src, /<LazyArticleReviewSection\s+review=\{review\}/, "panel hisobotni oladi");
   assert.match(src, /fixing=\{fixing\}/, "«Tuzatish» yuklanish holati (WP7)");
   assert.match(src, /noPolish \? \{\} : \{ onPolish: \(\) => void onPolish\(\), polishing \}/, "«Hammasini tuzatish» (AUDIT-18) — audioda o'chiriladi");
   /*
@@ -211,8 +212,12 @@ test("ResultView: article natijasida `doc.article.review` bo'lsa hisobot ResultL
    * bosilganda 409 «eski formatda» xatosi chiqadigan tugma ko'rinardi.
    */
   assert.match(src, /const noPolish = isAudio;/, "«Hammasini tuzatish» yo'q oila: audio");
-  assert.match(src, /hideGroups \? \{ hideGroups \}/, "bo'sh guruhlar yashiriladi");
-  assert.match(src, /const hideGroups = isEssay \|\| isGame \|\| isPoster \|\| isAudio \? ESSAY_HIDDEN_GROUPS : undefined;/, "insho, o'yin, plakat va audioda «Manbalar»/«Vizuallar» yo'q");
+  assert.match(src, /hideEssayGroups=\{hideEssayGroups\}/, "bo'sh guruhlar yashiriladi");
+  assert.match(src, /const hideEssayGroups = isEssay \|\| isGame \|\| isPoster \|\| isAudio;/, "insho, o'yin, plakat va audioda «Manbalar»/«Vizuallar» yo'q");
+  const section = readFileSync(new URL("../../components/files/ArticleReviewSection.tsx", import.meta.url), "utf8");
+  assert.match(section, /hideEssayGroups \? \{ hideGroups: ESSAY_HIDDEN_GROUPS \} : \{\}/, "flag → ESSAY_HIDDEN_GROUPS (one list, in ArticleReviewPanel.tsx)");
+  const lazy = readFileSync(new URL("../../components/files/lazy-panels.tsx", import.meta.url), "utf8");
+  assert.match(lazy, /import\("\.\/ArticleReviewSection"\)\.then\(\(m\) => \(\{ default: m\.ArticleReviewSection \}\)\)/, "lazy chunk loads the section");
   assert.match(src, /const isGame = Boolean\(gen\.doc\?\.game\);/, "o'yin — hujjat MODELIDAN, vosita id sidan emas");
   assert.match(src, /const isPoster = Boolean\(gen\.doc\?\.infographic\);/, "plakat — hujjat modelidan");
   assert.match(src, /const isAudio = Boolean\(gen\.doc\?\.audio\);/, "audio — hujjat modelidan");
@@ -230,7 +235,7 @@ test("ResultView: article natijasida `doc.article.review` bo'lsa hisobot ResultL
   const viewerAt = src.indexOf("<ArtifactViewer");
   assert.ok(layoutAt > 0 && viewerAt > layoutAt, "ko'ruvchi ResultLayout mazmunida");
   assert.match(src.slice(layoutAt, viewerAt), /sections=\{sections\}/, "bo'limlar panelga uzatiladi");
-  assert.ok(!/ArticleReviewPanel|data-article-review-panel/.test(src.slice(layoutAt, viewerAt)), "hisobot ko'ruvchi ustida (mazmun ustunida) emas");
+  assert.ok(!/ArticleReview|data-article-review-panel/.test(src.slice(layoutAt, viewerAt)), "hisobot ko'ruvchi ustida (mazmun ustunida) emas");
   assert.ok(!/sections\.map|\.content\b/.test(src.slice(layoutAt, viewerAt)), "panel bo'limlari mazmun ustunida qayta chizilmaydi");
   assert.ok(src.indexOf("data-article-review-panel") < layoutAt, "hisobot `sections` ichida");
 });
