@@ -102,7 +102,7 @@ export const DELIVER_TEXT = {
   shared: "Ulashildi",
   shareForwarded: "Fayl bot chatiga yuborildi — u yerdan uzating",
   noTelegram: "Telegram akkaunti bog‘lanmagan",
-  mismatch: "Bu Telegram akkaunti boshqa SlaydX akkauntiga kirgan",
+  mismatch: "Bu Telegram akkaunti boshqa SlaydX akkauntiga kirgan. Akkauntni almashtirish uchun Mini ilovani yopib, qayta oching.",
   botUnreachable: "Bot sizga yoza olmadi. Botni ochib /start bosing, so‘ng qayta urinib ko‘ring.",
   openBot: "Botni ochish",
   shareReady: "Tayyor — «Ulashish»ni yana bir bor bosing",

@@ -20,7 +20,43 @@ export type TelegramProfile = {
   username: string | null;
   name: string;
   photoUrl: string | null;
+  /** Mini App `auth_date` (unix seconds, signed); the Login Widget does not set it. */
+  authDate?: number;
 };
+
+/** A session switch needs launch data at most this old (Telegram mints fresh initData on every launch). */
+export const MINI_APP_SWITCH_MAX_AGE_SEC = 600;
+
+/**
+ * Mini App sign-in over this browser's current session (verified initData):
+ *  - `create` — no session: a new one (the usual 24 h initData window);
+ *  - `reuse` — the session already belongs to this Telegram account: keep it;
+ *  - `replace` — it belongs to ANOTHER Telegram account and `auth_date` is at
+ *    most `MINI_APP_SWITCH_MAX_AGE_SEC` old: revoke this session row only,
+ *    then a new one;
+ *  - `refuse_stale` — another account but older launch data (a forwarded or
+ *    replayed link, security review B1/m2): 409, nothing changes;
+ *  - `refuse_phone` — the session has no Telegram account (phone login): it is
+ *    never replaced (review M1): 409, nothing changes.
+ * Ids compare as strings.
+ */
+export type MiniAppSessionAction = "create" | "reuse" | "replace" | "refuse_stale" | "refuse_phone";
+
+export function miniAppSessionAction(
+  current: { telegramId: string | null } | null,
+  telegramId: string,
+  authDateSec: number | undefined,
+  nowSec: number = Date.now() / 1000,
+): MiniAppSessionAction {
+  if (!current) return "create";
+  const sessionTg = current.telegramId == null ? "" : String(current.telegramId);
+  if (sessionTg === "") return "refuse_phone";
+  if (sessionTg === String(telegramId)) return "reuse";
+  const age = nowSec - Number(authDateSec);
+  // A little clock skew into the future is tolerated, a far-future date is not.
+  if (!Number.isFinite(age) || age > MINI_APP_SWITCH_MAX_AGE_SEC || age < -60) return "refuse_stale";
+  return "replace";
+}
 
 /*
  * Data-check-string: every received field except `hash`. Mini App initData
@@ -111,6 +147,7 @@ export function verifyMiniAppInitData(initData: string): TelegramProfile | null 
     username: user.username || null,
     name: [user.first_name, user.last_name].filter(Boolean).join(" ").trim() || "Foydalanuvchi",
     photoUrl: user.photo_url || null,
+    authDate,
   };
 }
 
