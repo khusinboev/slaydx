@@ -20,8 +20,8 @@ case "$1" in
   fetch) exit "\${STUB_FETCH_RC:-0}" ;;
   rev-parse) echo "\${STUB_TIP}" ;;
   merge-base) exit "\${STUB_ANCESTOR_RC:-0}" ;;
-  diff) printf '%s\\n' \${STUB_FILES} ;;
-  log) if [ "$2" = "-1" ] && [ "$3" = "--format=%B" ]; then printf '%s\\n' "\${STUB_MSG:-feat: change}"; else printf '%s\\n' "\${STUB_SUBJECT:-feat: change}"; fi ;;
+  diff) if [ -n "\${STUB_FILES_FILE:-}" ]; then tr '\\n' '\\0' < "$STUB_FILES_FILE"; else printf '%s\\0' \${STUB_FILES}; fi ;;
+  log) case "$3" in --format=%B) printf '%s\\n' "\${STUB_MSG:-feat: change}" ;; --format=%ct) echo "\${STUB_CT:-$(date +%s)}" ;; *) printf '%s\\n' "\${STUB_SUBJECT:-feat: change}" ;; esac ;;
   reset) exit 0 ;;
 esac
 `;
@@ -33,6 +33,8 @@ esac
 `;
 const STUB_DEPLOY = `#!/bin/bash
 echo "slaydx-deploy $*" >> "$STUB_LOG"
+if [ -e /proc/self/fd/8 ]; then echo "deploy-fd8: open" >> "$STUB_LOG"; else echo "deploy-fd8: closed" >> "$STUB_LOG"; fi
+[ -n "\${STUB_DEPLOY_OUT:-}" ] && echo "$STUB_DEPLOY_OUT"
 exit "\${STUB_DEPLOY_RC:-0}"
 `;
 const STUB_CURL = `#!/bin/bash
@@ -78,6 +80,7 @@ function sandbox(t: { after(fn: () => void): void }, extra: Record<string, strin
     SLAYDX_STATE_DIR: state,
     SLAYDX_DEPLOY_CMD: path.join(bin, "slaydx-deploy"),
     SLAYDX_AUTO_ENV: envFile,
+    SLAYDX_AUTO_ENV_OWNER: String(process.getuid?.() ?? 0),
     SLAYDX_AUTO_LOCK: path.join(dir, "auto.lock"),
     SLAYDX_LOCK_FILE: path.join(dir, "deploy.lock"),
     SLAYDX_AUTO_DISABLE: path.join(dir, "disabled"),
@@ -210,4 +213,76 @@ test("auto-deploy: at most MAX_PER_HOUR automatic deploys per hour", (t) => {
   const shas = ["1", "2", "3"].map((c) => c.repeat(40));
   for (const sha of shas) sb.run({ STUB_TIP: sha });
   assert.deepEqual(deployCalls(sb), [`slaydx-deploy ${shas[0]}`, `slaydx-deploy ${shas[1]}`]);
+});
+
+test("auto-deploy: a changed-file list over the 64 KiB pipe buffer is classified correctly (no SIGPIPE mis-read as docs-only)", (t) => {
+  const names = ["lib/server/x.ts"];
+  for (let i = 0; i < 6000; i++) names.push(`docs/archive/some-long-directory-name-for-padding/document-number-${i}.md`);
+  const file = path.join(tmpdir(), `slaydx-auto-files-${process.pid}.txt`);
+  writeFileSync(file, `${names.join("\n")}\n`);
+  t.after(() => rmSync(file, { force: true }));
+  assert.ok(readFileSync(file).length > 300_000);
+  const sb = sandbox(t, { STUB_FILES_FILE: file });
+  assert.equal(sb.run().code, 0);
+  assert.deepEqual(deployCalls(sb), [`slaydx-deploy ${TIP}`], "a runtime path first in a huge list must still deploy");
+  // The same size of docs-only names is skipped (checkout updated, no deploy).
+  writeFileSync(file, `${names.slice(1).join("\n")}\n`);
+  const sb2 = sandbox(t, { STUB_FILES_FILE: file });
+  assert.equal(sb2.run().code, 0);
+  assert.equal(deployCalls(sb2).length, 0);
+  assert.ok(sb2.log().includes(`git reset -q --hard ${TIP}`));
+});
+
+test("auto-deploy: the detached deploy does not inherit the auto lock (fd 8 closed)", (t) => {
+  const sb = sandbox(t);
+  assert.equal(sb.run().code, 0);
+  assert.ok(sb.log().includes("deploy-fd8: closed"), sb.log().join("\n"));
+});
+
+test("auto-deploy: 'another deploy is running' from slaydx-deploy is transient — not marked seen/failed, retried next run", (t) => {
+  const sb = sandbox(t, { STUB_DEPLOY_RC: "1", STUB_DEPLOY_OUT: "ERROR: another deploy is running (lock /run/lock/slaydx-deploy.lock)" });
+  assert.equal(sb.run().code, 0);
+  assert.ok(!existsSync(path.join(sb.state, "auto-seen")));
+  assert.ok(!existsSync(path.join(sb.state, "auto-failed")));
+  assert.ok(!texts(sb).some((x) => /muvaffaqiyatsiz/.test(x)), "no false failure notice");
+  assert.equal(sb.run({ STUB_DEPLOY_RC: "0", STUB_DEPLOY_OUT: "" }).code, 0);
+  assert.equal(deployCalls(sb).length, 2, "retried and deployed");
+});
+
+test("auto-deploy: a deploy that has held its lock for > 30 min is reported once", async (t) => {
+  const sb = sandbox(t);
+  writeFileSync(path.join(sb.state, "auto-started"), `${Math.floor(Date.now() / 1000) - 4000}\n`);
+  const holder = spawn("bash", ["-c", `exec 9>"${sb.env.SLAYDX_LOCK_FILE}"; flock 9; sleep 6`]);
+  t.after(() => holder.kill());
+  const start = Date.now();
+  while (Date.now() - start < 3000 && spawnSync("bash", ["-c", `flock -n "${sb.env.SLAYDX_LOCK_FILE}" true`]).status === 0) spawnSync("sleep", ["0.1"]);
+  assert.equal(sb.run().code, 0);
+  assert.equal(sb.run().code, 0);
+  const stale = texts(sb).filter((x) => /30 daqiqadan beri/.test(x));
+  assert.equal(stale.length, 1, "reported exactly once");
+  assert.equal(deployCalls(sb).length, 0);
+});
+
+test("auto-deploy: an env file not owned by root (or group/world writable) is refused", (t) => {
+  const wrongOwner = sandbox(t, { SLAYDX_AUTO_ENV_OWNER: "99999" });
+  assert.equal(wrongOwner.run().code, 0);
+  assert.equal(deployCalls(wrongOwner).length, 0);
+  const writable = sandbox(t);
+  chmodSync(writable.env.SLAYDX_AUTO_ENV!, 0o666);
+  assert.equal(writable.run().code, 0);
+  assert.equal(deployCalls(writable).length, 0);
+});
+
+test("auto-deploy: images still not promoted after 45 min → one alert, quiet log; deploy/ script changes → one install notice", (t) => {
+  const old = String(Math.floor(Date.now() / 1000) - 3000);
+  const sb = sandbox(t, { STUB_WEB_RC: "1", STUB_CT: old });
+  const first = sb.run();
+  const second = sb.run();
+  assert.equal(texts(sb).filter((x) => /45 daqiqadan beri/.test(x)).length, 1, "alerted once");
+  assert.equal((first.out.match(/not promoted yet/g) ?? []).length + (second.out.match(/not promoted yet/g) ?? []).length, 1, "log line written once");
+  assert.equal(deployCalls(sb).length, 0);
+  const sb2 = sandbox(t, { STUB_FILES: "deploy/auto-deploy.sh docs/a.md" });
+  assert.equal(sb2.run().code, 0);
+  assert.equal(deployCalls(sb2).length, 0);
+  assert.ok(texts(sb2).some((x) => /install-deploy\.sh/.test(x)), "owner told to re-run the installers");
 });
