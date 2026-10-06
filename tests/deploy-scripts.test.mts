@@ -706,8 +706,10 @@ test("deploy/install-ops.sh: installs backup + watchdog cron and logrotate into 
   mkdirSync(path.join(app, "scripts"), { recursive: true });
   mkdirSync(bin, { recursive: true });
   for (const s of ["watchdog.sh", "backup-ledger.sh", "restore-check.sh"]) writeFileSync(path.join(app, "scripts", s), "#!/bin/bash\n");
-  writeFileSync(path.join(bin, "slaydx-backup"), "#!/bin/bash\n");
-  chmodSync(path.join(bin, "slaydx-backup"), 0o755);
+  for (const b of ["slaydx-backup", "slaydx-auto-deploy"]) {
+    writeFileSync(path.join(bin, b), "#!/bin/bash\n");
+    chmodSync(path.join(bin, b), 0o755);
+  }
   const env: NodeJS.ProcessEnv = {
     NODE_ENV: "test",
     PATH: "/usr/bin:/bin",
@@ -726,6 +728,9 @@ test("deploy/install-ops.sh: installs backup + watchdog cron and logrotate into 
   assert.match(backup, new RegExp(`^0 5 \\* \\* 0 root umask 077; ${app}/scripts/restore-check\\.sh `, "m"));
   assert.match(watchdog, new RegExp(`^\\*/3 \\* \\* \\* \\* root umask 077; ${app}/scripts/watchdog\\.sh `, "m"));
   assert.match(watchdog, new RegExp(`^0 6 \\* \\* \\* root umask 077; ${app}/scripts/watchdog\\.sh --digest `, "m"));
+  const auto = readFileSync(path.join(dir, "cron.d/slaydx-auto-deploy"), "utf8");
+  assert.match(auto, new RegExp(`^\\* \\* \\* \\* \\* root umask 077; ${bin}/slaydx-auto-deploy >> /var/log/slaydx-auto-deploy\\.log 2>&1$`, "m"));
+  assert.match(readFileSync(path.join(dir, "logrotate.d/slaydx-ops"), "utf8"), /slaydx-auto-deploy\.log/);
   const jobs = watchdog.split("\n").filter((l) => l && !l.startsWith("#"));
   assert.equal(jobs.length, 2, "exactly the check and the digest job");
   assert.ok(jobs.every((l) => !/AUTO_RESTART/.test(l)), "auto-restart stays off (alert-only for the first week)");

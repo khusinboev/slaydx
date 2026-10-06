@@ -4,6 +4,7 @@
 #   /usr/local/bin/slaydx-deploy        ← deploy/deploy-pull.sh   (normal path)
 #   /usr/local/bin/slaydx-deploy-build  ← deploy/deploy-build.sh  (fallback, builds on the box)
 #   /usr/local/bin/slaydx-backup        ← deploy/slaydx-backup    (nightly cron + deploy; deploys run it local-only)
+#   /usr/local/bin/slaydx-auto-deploy   ← deploy/auto-deploy.sh   (cron every minute: deploys promoted origin/main commits)
 # Re-run after every change to deploy/*.sh. Idempotent. Touches nothing outside these paths,
 # the deploy state dir and the slaydx registry-auth dir.
 #
@@ -21,8 +22,9 @@ install -d -m 0755 "$BIN_DIR"
 install -m 0750 "$SRC_DIR/deploy-pull.sh" "$BIN_DIR/slaydx-deploy"
 install -m 0750 "$SRC_DIR/deploy-build.sh" "$BIN_DIR/slaydx-deploy-build"
 install -m 0750 "$SRC_DIR/slaydx-backup" "$BIN_DIR/slaydx-backup"
+install -m 0750 "$SRC_DIR/auto-deploy.sh" "$BIN_DIR/slaydx-auto-deploy"
 install -d -m 0700 "$STATE_DIR" "$DOCKER_CONFIG_DIR"
-echo "installed: $BIN_DIR/slaydx-deploy, $BIN_DIR/slaydx-deploy-build, $BIN_DIR/slaydx-backup"
+echo "installed: $BIN_DIR/slaydx-deploy, $BIN_DIR/slaydx-deploy-build, $BIN_DIR/slaydx-backup, $BIN_DIR/slaydx-auto-deploy"
 
 # The CLI looks for plugins (compose) under $DOCKER_CONFIG/cli-plugins too. If compose was
 # installed per-user (~/.docker/cli-plugins) it disappears once DOCKER_CONFIG is redirected —
