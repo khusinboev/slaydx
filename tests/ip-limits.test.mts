@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 
@@ -38,6 +38,16 @@ function freshIp(): string {
 }
 
 const skip = !hasDb ? "Postgres kerak (DATABASE_URL)" : false;
+
+/**
+ * The limits count per fixed minute window. A test that fires `count + 1` requests in a loop and starts in the last
+ * seconds of a minute can straddle the rollover — the counter resets mid-loop and the last request is not blocked
+ * (seen in CI at 01:10:00.18 UTC). Start every test early in the window instead; costs at most a few seconds.
+ */
+beforeEach(async () => {
+  const intoMinute = Date.now() % 60_000;
+  if (intoMinute > 56_000) await new Promise((r) => setTimeout(r, 60_000 - intoMinute + 100));
+});
 
 test("ticket: bitta IP dan 100 ta turli brauzer 5 daqiqada kira oladi (NAT)", { skip }, async () => {
   const ip = freshIp();
