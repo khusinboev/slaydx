@@ -243,7 +243,7 @@ run_deploy() {
   step validate
 
   # 4) Backup first (daily cron's script; it verifies the dump). A failed backup stops the deploy.
-  "$BACKUP_CMD" || die "backup failed ($BACKUP_CMD) — nothing changed"
+  SLAYDX_BACKUP_LOCAL_ONLY=1 "$BACKUP_CMD" || die "backup failed ($BACKUP_CMD) — nothing changed"
   log "backup done"
   step backup
 

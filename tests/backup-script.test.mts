@@ -493,3 +493,64 @@ test(
     assert.equal(dumps.length, 1, "lokal dump baribir yaratilishi kerak");
   },
 );
+
+test(
+  "backup.sh: BACKUP_LOCAL_ONLY=1 makes a verified local dump WITHOUT the off-box copy and WITHOUT refreshing .last-ok (pre-deploy dump)",
+  { skip: hasDocker ? false : "docker mavjud emas" },
+  async (t: TestContext) => {
+    const container = `slaydx-backup-test-localonly-${process.pid}`;
+    t.after(() => {
+      try {
+        execFileSync("docker", ["rm", "-f", container], { stdio: "ignore" });
+      } catch {
+        // already gone
+      }
+    });
+    execFileSync("docker", ["run", "-d", "--name", container, "-e", "POSTGRES_PASSWORD=test", "-e", "POSTGRES_USER=slaydx", "-e", "POSTGRES_DB=slaydx", "postgres:16-alpine"]);
+    let ready = false;
+    for (let i = 0; i < 30 && !ready; i++) {
+      try {
+        execFileSync("docker", ["exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "slaydx"], { stdio: "ignore" });
+        ready = true;
+      } catch {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+    assert.ok(ready, "Postgres 30 soniyada tayyor bo'lmadi");
+
+    const dir = mkdtempSync(path.join(tmpdir(), "slaydx-backup-localonly-test-"));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const envFile = path.join(dir, ".backup.env");
+    // A remote that would FAIL (and make a normal run fatal): local-only must not even try it.
+    writeFileSync(envFile, "BACKUP_REMOTE=nonexistent-remote-for-test-xyz:some/path\n", { mode: 0o600 });
+    const backupDir = mkdtempSync(path.join(tmpdir(), "slaydx-backup-localonly-dir-"));
+    t.after(() => rmSync(backupDir, { recursive: true, force: true }));
+
+    const env = {
+      ...process.env,
+      PG_CONTAINER: container,
+      PG_USER: "slaydx",
+      PG_DB: "slaydx",
+      BACKUP_DIR: backupDir,
+      BACKUP_MIN_SIZE_BYTES: "10",
+      BACKUP_ENV_FILE: envFile,
+      BACKUP_LOCAL_ONLY: "1",
+    };
+    execFileSync("bash", ["scripts/backup.sh"], { env, stdio: "pipe", timeout: 60_000 });
+
+    const files = readdirSync(backupDir);
+    assert.equal(files.filter((f) => f.endsWith(".dump")).length, 1, "the local dump must exist");
+    assert.ok(!files.includes(".last-ok"), "a local-only dump must NOT refresh .last-ok (no off-box copy yet)");
+    const log = readFileSync(path.join(backupDir, "backup.log"), "utf8").trim().split("\n").pop() ?? "";
+    assert.equal(JSON.parse(log).remote, "local-only");
+
+    // The same run without the flag still hits the (broken) remote and is FATAL — the flag is the only difference.
+    let threw = false;
+    try {
+      execFileSync("bash", ["scripts/backup.sh"], { env: { ...env, BACKUP_LOCAL_ONLY: "0" }, stdio: "pipe", timeout: 60_000 });
+    } catch {
+      threw = true;
+    }
+    assert.ok(threw, "without BACKUP_LOCAL_ONLY a failing remote stays fatal");
+  },
+);

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# /usr/local/bin/slaydx-backup — SlaydX backup wrapper (installed by deploy/install-deploy.sh; was server-only).
+#   nightly cron (01:30): full backup = local dump + verified off-box copy (+ GFS retention in backup.sh)
+#   slaydx-deploy / slaydx-deploy-build: set SLAYDX_BACKUP_LOCAL_ONLY=1 — a verified LOCAL dump only (the rollback
+#   point); the multi-minute off-box upload is NOT waited for. flock prevents overlapping runs.
+# Off-box retention is done by scripts/backup.sh (BACKUP_REMOTE_RETENTION=gfs: 7 daily + 4 weekly + 6 monthly);
+# the old "delete remote copies older than N days" line is gone — it would delete the monthly copies.
+set -euo pipefail
+exec 9>"${SLAYDX_BACKUP_LOCK:-/run/slaydx-backup.lock}"
+flock -n 9 || { echo "another backup is running"; exit 0; }
+set -a
+# shellcheck disable=SC1090,SC1091
+. "${SLAYDX_BACKUP_ENV:-/etc/slaydx/backup.env}"
+set +a
+if [ "${SLAYDX_BACKUP_LOCAL_ONLY:-0}" = 1 ]; then
+  export BACKUP_LOCAL_ONLY=1
+fi
+exec bash "${SLAYDX_BACKUP_SCRIPT:-/opt/slaydx/scripts/backup.sh}"

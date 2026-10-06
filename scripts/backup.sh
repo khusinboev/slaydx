@@ -195,7 +195,11 @@ find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'slaydx-*.dump' -o -name 'slaydx
 # bo'lib-da muvaffaqiyatsiz bo'lsa — bu FATAL: reviewer topilmasi (ilgari
 # faqat stderr ogohlantirishi bo'lib, umumiy natija baribir "ok" edi).
 remote_status="skipped"
-if [ -n "${BACKUP_REMOTE:-}" ]; then
+if [ "${BACKUP_LOCAL_ONLY:-0}" = 1 ]; then
+  # Pre-deploy dump (deploy/deploy-*.sh): a verified LOCAL dump is the rollback point; the multi-minute
+  # off-box upload is left to the nightly run. Not a full backup: `.last-ok` is NOT touched below.
+  remote_status="local-only"
+elif [ -n "${BACKUP_REMOTE:-}" ]; then
   remote_status="failed"
   case "$BACKUP_REMOTE" in
     *@*:*)
@@ -261,6 +265,9 @@ fi
 printf '{"ts":"%s","status":"ok","file":"%s","sizeBytes":%s,"durationSec":%s,"remote":"%s","retention":"%s","pruned":%s}\n' \
   "$(date -Iseconds)" "$final" "$size" "$duration" "$remote_status" "$retention_status" "$pruned" >> "$log"
 # scripts/watchdog.sh alerts when this marker is older than 26 h (verified dump + off-box copy).
-touch "$BACKUP_DIR/.last-ok"
+# A local-only (pre-deploy) dump has no off-box copy, so it must not refresh the marker.
+if [ "$remote_status" != "local-only" ]; then
+  touch "$BACKUP_DIR/.last-ok"
+fi
 
 exit 0

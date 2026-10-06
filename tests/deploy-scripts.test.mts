@@ -98,6 +98,7 @@ echo '{"status":"ok"}'
 
 const STUB_BACKUP = String.raw`#!/usr/bin/env bash
 printf '%s\t%s\t%s\t%s\n' slaydx-backup "${"$"}{SLAYDX_TAG:--}" - "$*" >> "$STUB_LOG"
+printf '%s\n' "${"$"}{SLAYDX_BACKUP_LOCAL_ONLY:-unset}" >> "$STUB_LOG.backup-mode"
 exit "${"$"}{STUB_BACKUP_RC:-0}"
 `;
 
@@ -650,4 +651,96 @@ test("docker-compose: web/worker run the tagged GHCR image, keep build: for the 
   for (const flag of ["effective_cache_size=640MB", "random_page_cost=1.1", "log_autovacuum_min_duration=5s"]) {
     assert.match(yaml, new RegExp(`\\n      - -c\\n      - ${flag.replace(/\./g, "\\.")}\\n`));
   }
+});
+
+test("deploy-pull and deploy-build: the pre-deploy backup runs LOCAL-ONLY (the deploy must not wait for the Drive upload)", (t) => {
+  for (const script of [PULL, BUILD]) {
+    const sb = sandbox(t);
+    const r = run(script, script === PULL ? [SHA.slice(0, 7)] : [], sb);
+    assert.equal(r.code, 0, `${path.basename(script)}: ${r.out}`);
+    const modes = readFileSync(`${sb.log}.backup-mode`, "utf8").split("\n").filter(Boolean);
+    assert.deepEqual(modes, ["1"], `${path.basename(script)} must call slaydx-backup with SLAYDX_BACKUP_LOCAL_ONLY=1`);
+  }
+});
+
+test("deploy/slaydx-backup: local-only is forwarded to backup.sh as BACKUP_LOCAL_ONLY; the nightly call is not local-only; overlapping runs are skipped", (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "slaydx-backup-wrapper-test-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const envFile = path.join(dir, "backup.env");
+  writeFileSync(envFile, "BACKUP_REMOTE=stub:remote\nBACKUP_TG_CHAT=1\n", { mode: 0o600 });
+  const out = path.join(dir, "seen.txt");
+  const fake = path.join(dir, "backup.sh");
+  writeFileSync(fake, `#!/bin/bash\nprintf '%s|%s\\n' "\${BACKUP_LOCAL_ONLY:-unset}" "\${BACKUP_REMOTE:-}" >> "${out}"\n`);
+  chmodSync(fake, 0o755);
+  const base = {
+    PATH: "/usr/bin:/bin",
+    SLAYDX_BACKUP_ENV: envFile,
+    SLAYDX_BACKUP_SCRIPT: fake,
+    SLAYDX_BACKUP_LOCK: path.join(dir, "lock"),
+  };
+  const wrapper = path.join(ROOT, "deploy/slaydx-backup");
+  assert.equal(spawnSync("bash", [wrapper], { env: base }).status, 0);
+  assert.equal(spawnSync("bash", [wrapper], { env: { ...base, SLAYDX_BACKUP_LOCAL_ONLY: "1" } }).status, 0);
+  assert.deepEqual(readFileSync(out, "utf8").split("\n").filter(Boolean), ["unset|stub:remote", "1|stub:remote"]);
+  // The old "delete remote copies older than N days" step must stay gone (it deletes the GFS monthly copies).
+  assert.ok(!/rclone delete/.test(readFileSync(wrapper, "utf8")), "wrapper must not prune the remote itself");
+  // A second run while the lock is held is skipped, not run twice.
+  const holder = spawn("bash", ["-c", `exec 9>"${path.join(dir, "lock")}"; flock 9; sleep 3`]);
+  t.after(() => holder.kill());
+  const start = Date.now();
+  while (Date.now() - start < 2000 && !spawnSync("bash", ["-c", `flock -n "${path.join(dir, "lock")}" true`]).status) {
+    spawnSync("sleep", ["0.1"]);
+  }
+  const r = spawnSync("bash", [wrapper], { env: base, encoding: "utf8" });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /another backup is running/);
+  assert.equal(readFileSync(out, "utf8").split("\n").filter(Boolean).length, 2, "the locked run must not execute backup.sh");
+});
+
+test("deploy/install-ops.sh: installs backup + watchdog cron and logrotate into the given dirs, idempotently, alert-only", (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "slaydx-install-ops-test-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const app = path.join(dir, "app");
+  const bin = path.join(dir, "bin");
+  mkdirSync(path.join(app, "scripts"), { recursive: true });
+  mkdirSync(bin, { recursive: true });
+  for (const s of ["watchdog.sh", "backup-ledger.sh", "restore-check.sh"]) writeFileSync(path.join(app, "scripts", s), "#!/bin/bash\n");
+  writeFileSync(path.join(bin, "slaydx-backup"), "#!/bin/bash\n");
+  chmodSync(path.join(bin, "slaydx-backup"), 0o755);
+  const env = {
+    PATH: "/usr/bin:/bin",
+    SLAYDX_APP_DIR: app,
+    SLAYDX_BIN_DIR: bin,
+    SLAYDX_CRON_DIR: path.join(dir, "cron.d"),
+    SLAYDX_LOGROTATE_DIR: path.join(dir, "logrotate.d"),
+  };
+  const script = path.join(ROOT, "deploy/install-ops.sh");
+  const first = spawnSync("bash", [script], { env, encoding: "utf8" });
+  assert.equal(first.status, 0, first.stderr);
+  const backup = readFileSync(path.join(dir, "cron.d/slaydx-backup"), "utf8");
+  const watchdog = readFileSync(path.join(dir, "cron.d/slaydx-watchdog"), "utf8");
+  assert.match(backup, new RegExp(`^30 1 \\* \\* \\* root umask 077; ${bin}/slaydx-backup >> /var/log/slaydx-backup\\.log 2>&1$`, "m"));
+  assert.match(backup, new RegExp(`^5 \\* \\* \\* \\* root umask 077; ${app}/scripts/backup-ledger\\.sh `, "m"));
+  assert.match(backup, new RegExp(`^0 5 \\* \\* 0 root umask 077; ${app}/scripts/restore-check\\.sh `, "m"));
+  assert.match(watchdog, new RegExp(`^\\*/3 \\* \\* \\* \\* root umask 077; ${app}/scripts/watchdog\\.sh `, "m"));
+  assert.match(watchdog, new RegExp(`^0 6 \\* \\* \\* root umask 077; ${app}/scripts/watchdog\\.sh --digest `, "m"));
+  const jobs = watchdog.split("\n").filter((l) => l && !l.startsWith("#"));
+  assert.equal(jobs.length, 2, "exactly the check and the digest job");
+  assert.ok(jobs.every((l) => !/AUTO_RESTART/.test(l)), "auto-restart stays off (alert-only for the first week)");
+  assert.match(readFileSync(path.join(dir, "logrotate.d/slaydx-ops"), "utf8"), /create 0600 root root/);
+  // Idempotent: a second run rewrites the same content.
+  assert.equal(spawnSync("bash", [script], { env, encoding: "utf8" }).status, 0);
+  assert.equal(readFileSync(path.join(dir, "cron.d/slaydx-backup"), "utf8"), backup);
+  // --dry-run writes nothing.
+  const dry = mkdtempSync(path.join(tmpdir(), "slaydx-install-ops-dry-"));
+  t.after(() => rmSync(dry, { recursive: true, force: true }));
+  const r = spawnSync("bash", [script, "--dry-run"], { env: { ...env, SLAYDX_CRON_DIR: path.join(dry, "c"), SLAYDX_LOGROTATE_DIR: path.join(dry, "l") }, encoding: "utf8" });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /watchdog\.sh --digest/);
+  assert.ok(!existsSync(path.join(dry, "c")), "dry-run must not create anything");
+  // A missing script (not deployed yet) is refused instead of installing cron lines that fail every run.
+  rmSync(path.join(app, "scripts/watchdog.sh"));
+  const miss = spawnSync("bash", [script], { env, encoding: "utf8" });
+  assert.equal(miss.status, 1);
+  assert.match(miss.stderr, /watchdog\.sh not found/);
 });

@@ -62,7 +62,7 @@ main() {
   prev_tag=${prev_tag:-local}
   log "build deploy ${sha:0:7} (previous ${prev_sha:0:7}, tag $prev_tag)"
 
-  "$BACKUP_CMD" || die "backup failed ($BACKUP_CMD) — nothing changed"
+  SLAYDX_BACKUP_LOCAL_ONLY=1 "$BACKUP_CMD" || die "backup failed ($BACKUP_CMD) — nothing changed"
 
   local web_id="" worker_id="" cid
   cid=$(dc ps -q web); cid=${cid%%$'\n'*}
