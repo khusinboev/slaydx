@@ -249,13 +249,15 @@ test("auto-deploy: 'another deploy is running' from slaydx-deploy is transient �
   assert.equal(deployCalls(sb).length, 2, "retried and deployed");
 });
 
-test("auto-deploy: a deploy that has held its lock for > 30 min is reported once", async (t) => {
+test("auto-deploy: a deploy running for > 30 min is reported once — even while the first auto process still holds the auto lock", async (t) => {
   const sb = sandbox(t);
   writeFileSync(path.join(sb.state, "auto-started"), `${Math.floor(Date.now() / 1000) - 4000}\n`);
-  const holder = spawn("bash", ["-c", `exec 9>"${sb.env.SLAYDX_LOCK_FILE}"; flock 9; sleep 6`]);
+  // The ordinary hang: the process that started the deploy holds the AUTO lock (reviewer MINOR-6).
+  const autoLock = sb.env.SLAYDX_AUTO_LOCK ?? path.join(sb.state, "auto-deploy.lock");
+  const holder = spawn("bash", ["-c", `exec 9>"${autoLock}"; flock 9; sleep 6`]);
   t.after(() => holder.kill());
   const start = Date.now();
-  while (Date.now() - start < 3000 && spawnSync("bash", ["-c", `flock -n "${sb.env.SLAYDX_LOCK_FILE}" true`]).status === 0) spawnSync("sleep", ["0.1"]);
+  while (Date.now() - start < 3000 && spawnSync("bash", ["-c", `flock -n "${autoLock}" true`]).status === 0) spawnSync("sleep", ["0.1"]);
   assert.equal(sb.run().code, 0);
   assert.equal(sb.run().code, 0);
   const stale = texts(sb).filter((x) => /30 daqiqadan beri/.test(x));
@@ -263,19 +265,23 @@ test("auto-deploy: a deploy that has held its lock for > 30 min is reported once
   assert.equal(deployCalls(sb).length, 0);
 });
 
-test("auto-deploy: an env file not owned by root (or group/world writable) is refused", (t) => {
+test("auto-deploy: an env file not owned by root or accessible to group/world is refused", (t) => {
   const wrongOwner = sandbox(t, { SLAYDX_AUTO_ENV_OWNER: "99999" });
   assert.equal(wrongOwner.run().code, 0);
   assert.equal(deployCalls(wrongOwner).length, 0);
-  const writable = sandbox(t);
-  chmodSync(writable.env.SLAYDX_AUTO_ENV!, 0o666);
-  assert.equal(writable.run().code, 0);
-  assert.equal(deployCalls(writable).length, 0);
+  for (const mode of [0o666, 0o644, 0o640]) {
+    const loose = sandbox(t);
+    chmodSync(loose.env.SLAYDX_AUTO_ENV!, mode);
+    assert.equal(loose.run().code, 0);
+    assert.equal(deployCalls(loose).length, 0, `mode ${mode.toString(8)} must be refused`);
+  }
 });
 
 test("auto-deploy: images still not promoted after 45 min → one alert, quiet log; deploy/ script changes → one install notice", (t) => {
   const old = String(Math.floor(Date.now() / 1000) - 3000);
-  const sb = sandbox(t, { STUB_WEB_RC: "1", STUB_CT: old });
+  const sb = sandbox(t, { STUB_WEB_RC: "1" });
+  // First seen unpromoted 50 minutes ago (the committer date is irrelevant — a late push must not alarm).
+  writeFileSync(path.join(sb.state, "auto-unpromoted-since"), `${TIP} ${old}\n`);
   const first = sb.run();
   const second = sb.run();
   assert.equal(texts(sb).filter((x) => /45 daqiqadan beri/.test(x)).length, 1, "alerted once");

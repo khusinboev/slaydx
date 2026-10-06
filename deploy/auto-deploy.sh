@@ -42,9 +42,9 @@ log_once() {
 once_file() { [ "$(cat "$STATE_DIR/$1" 2>/dev/null || true)" = "$2" ] && return 1; printf '%s\n' "$2" > "$STATE_DIR/$1"; return 0; }
 
 if [ -f "$ENV_FILE" ]; then
-  # Sourced as root: refuse a file anyone but root could have written.
-  if [ "$(stat -c %u "$ENV_FILE")" != "${SLAYDX_AUTO_ENV_OWNER:-0}" ] || [ $(( 0$(stat -c %a "$ENV_FILE") & 022 )) -ne 0 ]; then
-    echo "$(date -Is) auto-deploy: $ENV_FILE must be owned by root and not group/world writable — refusing" >&2
+  # Sourced as root and holds the bot token: refuse a file owned by someone else or accessible to group/world.
+  if [ "$(stat -c %u "$ENV_FILE")" != "${SLAYDX_AUTO_ENV_OWNER:-0}" ] || [ $(( 0$(stat -c %a "$ENV_FILE") & 077 )) -ne 0 ]; then
+    echo "$(date -Is) auto-deploy: $ENV_FILE must be owned by root with mode 600 (no group/world access) — refusing" >&2
     exit 0
   fi
   # shellcheck disable=SC1090
@@ -60,18 +60,20 @@ notify() {
 
 [ ! -e "$DISABLE_FILE" ] || exit 0
 mkdir -p "$STATE_DIR" "$(dirname "$LOCK_FILE")"
+# Leftover temp output of a killed run.
+find "$STATE_DIR" -maxdepth 1 -name 'auto-out.*' -mmin +120 -delete 2>/dev/null || true
+# A deploy that has been running for a suspiciously long time: say so once. This runs BEFORE the auto lock — the process
+# that started the hung deploy still holds it (it is following the deploy), so later runs would never get past it.
+started=$(cat "$STATE_DIR/auto-started" 2>/dev/null || echo 0)
+if [[ "$started" =~ ^[0-9]+$ ]] && [ "$started" -gt 0 ] && [ $(( $(date +%s) - started )) -gt 1800 ] && once_file auto-stale-notified "$started"; then
+  notify "⚠️ SlaydX: avto-deploy 30 daqiqadan beri tugamadi. Tekshiring: /root/slaydx-backups/deploy-*.log"
+fi
 exec 8>"$LOCK_FILE"
 flock -n 8 || exit 0
-# A manual/other deploy in progress: leave it alone — but say so once if it has been running suspiciously long.
+# A manual/other deploy in progress: leave it alone.
 mkdir -p "$(dirname "$DEPLOY_LOCK")"
 exec 7>"$DEPLOY_LOCK"
-if ! flock -n 7; then
-  started=$(cat "$STATE_DIR/auto-started" 2>/dev/null || echo 0)
-  if [ "$started" -gt 0 ] && [ $(( $(date +%s) - started )) -gt 1800 ] && once_file auto-stale-notified "$started"; then
-    notify "⚠️ SlaydX: deploy 30 daqiqadan beri tugamadi (qulf band). Tekshiring: /root/slaydx-backups/deploy-*.log"
-  fi
-  exit 0
-fi
+flock -n 7 || exit 0
 
 state_get() { [ -f "$STATE_DIR/current.env" ] && sed -n "/^$1=/{s/^$1=//p;q}" "$STATE_DIR/current.env" || true; }
 cd "$APP_DIR"
@@ -100,8 +102,13 @@ fi
 for img in slaydx-web slaydx-worker; do
   if ! docker manifest inspect "$REGISTRY/$img:$tip" >/dev/null 2>&1; then
     log_once "$short: $img image not promoted yet"
-    ct=$(git log -1 --format=%ct "$tip" 2>/dev/null || echo 0)
-    if [ "$ct" -gt 0 ] && [ $(( $(date +%s) - ct )) -gt 2700 ] && once_file auto-unpromoted-notified "$tip"; then
+    since_tip=$(awk '{print $1}' "$STATE_DIR/auto-unpromoted-since" 2>/dev/null || true)
+    since=$(awk '{print $2}' "$STATE_DIR/auto-unpromoted-since" 2>/dev/null || true)
+    if [ "$since_tip" != "$tip" ] || ! [[ "$since" =~ ^[0-9]+$ ]]; then
+      printf '%s %s\n' "$tip" "$(date +%s)" > "$STATE_DIR/auto-unpromoted-since"
+      since=$(date +%s)
+    fi
+    if [ $(( $(date +%s) - since )) -gt 2700 ] && once_file auto-unpromoted-notified "$tip"; then
       notify "⚠️ SlaydX: $short uchun image'lar 45 daqiqadan beri tayyor emas (CI qizil yoki GHCR tokeni eskirgan?). Avto-deploy kutmoqda."
     fi
     exit 0
