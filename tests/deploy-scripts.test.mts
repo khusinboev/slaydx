@@ -672,7 +672,8 @@ test("deploy/slaydx-backup: local-only is forwarded to backup.sh as BACKUP_LOCAL
   const fake = path.join(dir, "backup.sh");
   writeFileSync(fake, `#!/bin/bash\nprintf '%s|%s\\n' "\${BACKUP_LOCAL_ONLY:-unset}" "\${BACKUP_REMOTE:-}" >> "${out}"\n`);
   chmodSync(fake, 0o755);
-  const base = {
+  const base: NodeJS.ProcessEnv = {
+    NODE_ENV: "test",
     PATH: "/usr/bin:/bin",
     SLAYDX_BACKUP_ENV: envFile,
     SLAYDX_BACKUP_SCRIPT: fake,
@@ -707,7 +708,8 @@ test("deploy/install-ops.sh: installs backup + watchdog cron and logrotate into 
   for (const s of ["watchdog.sh", "backup-ledger.sh", "restore-check.sh"]) writeFileSync(path.join(app, "scripts", s), "#!/bin/bash\n");
   writeFileSync(path.join(bin, "slaydx-backup"), "#!/bin/bash\n");
   chmodSync(path.join(bin, "slaydx-backup"), 0o755);
-  const env = {
+  const env: NodeJS.ProcessEnv = {
+    NODE_ENV: "test",
     PATH: "/usr/bin:/bin",
     SLAYDX_APP_DIR: app,
     SLAYDX_BIN_DIR: bin,
