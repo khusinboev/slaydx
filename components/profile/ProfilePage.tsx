@@ -6,6 +6,7 @@ import * as api from "@/lib/api-client";
 import { creditTotal, useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { PageBack } from "../shell/PageBack";
+import { ReferralCard } from "./ReferralCard";
 
 const FIELDS = [
   ["author", "Muallif (F.I.Sh)"],
@@ -130,6 +131,8 @@ export function ProfilePage() {
           <Stat label="Balans" value={user.balance} />
         </div>
       </div>
+
+      <ReferralCard />
 
       <div className="bg-card rounded-2xl border p-6">
         <div className="mb-1 flex items-center justify-between">

@@ -273,11 +273,18 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     assert.deepEqual((await legacyAudit()).map((r) => r.id), auditIds, "audit takrorlandi");
   });
 
-  await t.test("rollback 034→028 toza o'chiradi, keyin hammasi qayta qo'llanadi", async () => {
-    // 036 (pg_stat_statements, docs/ops/O3-robustness-ops.md §4), 035 (telegram file cache,
-    // docs/mobile/PLAN.md §4.4) and 034 (quota merge, docs/SUBS-REMOVAL.md) sit on top of the
-    // admin migrations and are rolled back first, newest first.
-    for (const f of ["036_pg_stat_statements.sql", "035_telegram_files.sql", "034_quota_merge.sql", ...[...NEW].reverse()]) {
+  await t.test("rollback 037→028 toza o'chiradi, keyin hammasi qayta qo'llanadi", async () => {
+    // 037 (referrals, docs/todo-2026-10-07/PLAN.md T3), 036 (pg_stat_statements,
+    // docs/ops/O3-robustness-ops.md §4), 035 (telegram file cache, docs/mobile/PLAN.md §4.4)
+    // and 034 (quota merge, docs/SUBS-REMOVAL.md) sit on top of the admin migrations and are
+    // rolled back first, newest first.
+    for (const f of [
+      "037_referrals.sql",
+      "036_pg_stat_statements.sql",
+      "035_telegram_files.sql",
+      "034_quota_merge.sql",
+      ...[...NEW].reverse(),
+    ]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
     }

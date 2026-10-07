@@ -8,6 +8,7 @@ import { env } from "@/lib/server/env";
 import { IP_LIMITS } from "@/lib/server/ip-limits";
 import { peekRate } from "@/lib/server/rate-peek";
 import { BRAND_NAME } from "@/lib/brand";
+import { clearRefCookie } from "@/lib/server/referrals";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -221,6 +222,8 @@ export async function POST(req: Request) {
       ip: g.ip,
     });
     await setSessionCookie(sessionToken, expiresAt);
+    // Invite code captured from `/uz?ref=…` (T3): spent with this sign-in.
+    await clearRefCookie(req);
     return localRedirect("/uz");
   } catch (e) {
     console.error("[auth/enter]", e instanceof Error ? e.message : e);

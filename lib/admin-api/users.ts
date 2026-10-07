@@ -93,6 +93,15 @@ export type AdminUserDetailResponse = {
   flags: { isAdminAccount: boolean; adminRole: string | null; adminStatus: string | null; self: boolean };
   counts: { activeSessions: number; queuedJobs: number; activeGameLinks: number };
   walletConfirmThreshold: number;
+  /**
+   * Referral program (T3), read-only. `referredBy.id` is null when the inviter's row is gone.
+   * Optional on the client only: a server from before T3 (deploy swap) does not send it.
+   */
+  referral?: {
+    referredBy: { id: string | null; name: string; source: "bot" | "web"; at: string; rewardPoints: number } | null;
+    invitedCount: number;
+    earnedPoints: number;
+  };
 };
 
 export type TransactionKind = "charge" | "refund" | "topup" | "bonus" | "subscription" | "admin_credit" | "admin_debit" | "quota_merge";

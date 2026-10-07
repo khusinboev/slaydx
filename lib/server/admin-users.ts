@@ -28,6 +28,7 @@ import { LEDGER_COLUMNS, TRANSACTION_KINDS, resolveLedgerLinks, type LedgerDbRow
 import { escapeTelegramHtml } from "./broadcast-delivery";
 import { getSetting } from "./settings";
 import { TelegramTransientError, sendMessage } from "./telegram";
+import { adminReferralInfo, type AdminReferralInfo } from "./referrals";
 
 /**
  * Users module of the admin panel (docs/admin/02-plan.md §6.4, §7.1 S4/S5).
@@ -414,6 +415,8 @@ export type AdminUserDetailResponse = {
   counts: { activeSessions: number; queuedJobs: number; activeGameLinks: number };
   /** `admin.wallet_confirm_threshold`, for the wallet dialog's typed confirmation. */
   walletConfirmThreshold: number;
+  /** Referral program (T3), read-only: who invited this user, how many they invited. */
+  referral: AdminReferralInfo;
 };
 
 type DetailDbRow = UserDbRow & {
@@ -528,6 +531,7 @@ async function buildDetail(db: Queryable, actor: AdminActor, id: string, reveale
     },
     counts,
     walletConfirmThreshold: await getSetting("admin.wallet_confirm_threshold"),
+    referral: await adminReferralInfo(db, id),
   };
 }
 
