@@ -8,6 +8,7 @@ import { LoginModal } from "../overlays/LoginModal";
 import { SearchDialog } from "../overlays/SearchDialog";
 import { NotificationsPanel } from "../overlays/NotificationsPanel";
 import { PayDialog } from "../overlays/PayDialog";
+import { ScrollToTop } from "./ScrollToTop";
 import { useOverlayHistory } from "@/components/nav/useOverlayHistory";
 import { useUi } from "@/lib/ui";
 import { useAppStore } from "@/lib/store";
@@ -28,6 +29,10 @@ function isNarrow() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  // The page scroller: `<main>` is the one element every page scrolls in (the shell itself never scrolls).
+  const [scroller, setScroller] = useState<HTMLElement | null>(null);
+  // «Tepaga chiqish» is on screen: the end of the page gets bottom room (see `<main>` below).
+  const [topButton, setTopButton] = useState(false);
   const open = useUi((s) => s.open);
   const pathname = usePathname();
 
@@ -89,15 +94,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
          * 16 px above the sticky submit bar (73 px + safe area), or 16 px above
          * the visible bottom while the bar is in the flow (keyboard open).
          * Other pages carry no `[data-submit-bar]` and keep no padding.
+         *
+         * While the «Tepaga chiqish» button is on screen an in-flow spacer
+         * (`data-scroll-top-room`, 4.5 rem + the safe area: the button's 44 px
+         * plus its 16 px offset) ends the page, so the last lines and controls
+         * can be scrolled out from under it. It is a SPACER, not padding on
+         * `<main>`: a sticky `bottom: 0` bar (the tool forms' submit bar) sticks
+         * above the scroll container's padding, so padding would lift it off the
+         * bottom edge; a last child leaves it docked.
          */}
         <main
           id="main"
+          ref={setScroller}
           className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--page-bg)] has-[[data-submit-bar=inline]]:scroll-pb-4 has-[[data-submit-bar=sticky]]:scroll-pb-[calc(6rem+env(safe-area-inset-bottom))]"
         >
           {children}
+          {topButton ? (
+            <div
+              aria-hidden
+              data-scroll-top-room
+              className="no-print h-[calc(4.5rem+var(--tg-safe-bottom,env(safe-area-inset-bottom,0px)))] shrink-0"
+            />
+          ) : null}
         </main>
       </div>
 
+      {/* «Tepaga chiqish»: fixed, listens on <main>; hidden while an overlay (the drawer included) is open. */}
+      <ScrollToTop container={scroller} onShownChange={setTopButton} />
       <LoginModal />
       <SearchDialog />
       <NotificationsPanel />
