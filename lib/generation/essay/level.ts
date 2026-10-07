@@ -22,9 +22,12 @@
  * lead calibrates them with `scripts/level-measure.mts` and the live matrix
  * (R4 §5). Every number lives in the tables below; logic never hard-codes one.
  *
- * Legacy rule: a document without a level (`EssayModel.level` absent) and
- * every IELTS essay get `null` — no prompt block, no rule, no judge note,
- * byte-identical prompts (`tests/essay-legacy-snapshot.json`).
+ * Legacy rule: a document without a level (`EssayModel.level` absent) gets
+ * `null` — no prompt block, no rule, no judge note, byte-identical prompts
+ * (`tests/essay-legacy-snapshot.json`). IELTS Task 2 has the level control
+ * too (owner, 2026-10-07; it replaced decision O3 «IELTS has no level»):
+ * default C1 (today's «band 8 model answer»), the judge scores against the
+ * chosen target level, and the cohesion rule follows the level's connectors.
  */
 import type { EssayLang } from "./registry";
 import type { EssayContextId } from "./types";
@@ -36,6 +39,8 @@ export type CefrLevel = (typeof CEFR_LEVELS)[number];
 
 /** Owner decision O3 (2026-10-04): B2 when the user does not choose. */
 export const DEFAULT_ESSAY_LEVEL: CefrLevel = "B2";
+/** IELTS Task 2 (owner, 2026-10-07): C1 — the «band 7–8 model answer» the tool produced before the level existed. */
+export const DEFAULT_IELTS_LEVEL: CefrLevel = "C1";
 
 export function isCefrLevel(v: unknown): v is CefrLevel {
   return typeof v === "string" && (CEFR_LEVELS as readonly string[]).includes(v);
@@ -48,18 +53,17 @@ export function parseCefrLevel(v: unknown): CefrLevel | null {
   return isCefrLevel(s) ? s : null;
 }
 
-/** IELTS has its own band scale (owner decision O3): no CEFR control there. */
-export function levelAppliesTo(context: EssayContextId): boolean {
-  return context !== "ielts_task2";
+/** The level used when the user does not choose: C1 for IELTS, B2 elsewhere. */
+export function defaultEssayLevel(context: EssayContextId): CefrLevel {
+  return context === "ielts_task2" ? DEFAULT_IELTS_LEVEL : DEFAULT_ESSAY_LEVEL;
 }
 
 /**
- * The level the engine uses for a form submission: IELTS → null whatever a
- * stale draft carries; missing/invalid → `DEFAULT_ESSAY_LEVEL`.
+ * The level the engine uses for a form submission: the user's choice
+ * (case-insensitive), missing/invalid → `defaultEssayLevel(context)`.
  */
-export function essayLevelOf(context: EssayContextId, raw: unknown): CefrLevel | null {
-  if (!levelAppliesTo(context)) return null;
-  return parseCefrLevel(raw) ?? DEFAULT_ESSAY_LEVEL;
+export function essayLevelOf(context: EssayContextId, raw: unknown): CefrLevel {
+  return parseCefrLevel(raw) ?? defaultEssayLevel(context);
 }
 
 /* ────────────────────────── thresholds (ONE table) ────────────────────────── */
@@ -242,6 +246,34 @@ const LANG_NAME: Record<EssayLang, string> = { uz: "Uzbek", ru: "Russian", en: "
 
 const levelIndex = (l: CefrLevel) => CEFR_LEVELS.indexOf(l);
 
+/** The level at which an English connector first appears in `LEVEL_CONNECTORS`; -1 = not level-tagged (always allowed). */
+function connectorLevelIndex(word: string): number {
+  return CEFR_LEVELS.findIndex((l) => LEVEL_CONNECTORS[l].en.includes(word));
+}
+
+/**
+ * IELTS cohesion list (prompt rule 7 and review rule «linking») at a level.
+ * `base` is the standard IELTS list (`registry.ts IELTS_LINKERS`): the level
+ * block forbids connectors typical of a higher level, so the list must not
+ * ask for them — C1/C2 and no level keep `base`; B1/B2 drop the words
+ * introduced above the level; A1/A2 use the level's own connectors (the
+ * standard list is all B1+), cumulative from A1.
+ */
+export function ieltsLinkersFor(level: CefrLevel | null, base: readonly string[]): readonly string[] {
+  if (!level || level === "C1" || level === "C2") return base;
+  const top = levelIndex(level);
+  if (top <= 1) return [...new Set(CEFR_LEVELS.slice(0, top + 1).flatMap((l) => LEVEL_CONNECTORS[l].en))];
+  return base.filter((w) => connectorLevelIndex(w) <= top);
+}
+
+const escapeRe = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Words/phrases of `list` present in `text` as whole words (so «so» is not found in «also»). */
+export function linkersFound(text: string, list: readonly string[]): string[] {
+  const low = text.toLowerCase();
+  return list.filter((w) => new RegExp(`(?<![\\p{L}])${escapeRe(w)}(?![\\p{L}])`, "u").test(low));
+}
+
 /* ────────────────────────── prompt ────────────────────────── */
 
 function sentenceLine(level: CefrLevel, lang: EssayLang): string {
@@ -298,6 +330,15 @@ export function levelRepairInstruction(level: CefrLevel, lang: EssayLang, direct
         : "adjust sentence length and vocabulary to the level";
   return `Rewrite the whole essay at CEFR ${level} (${CEFR_SPECS[level].name}): average about ${b.target} words per sentence (acceptable ${b.lo}–${b.hi}), ${level === "C2" ? "rarely" : "no sentence"} longer than ${b.cap} words; ${how}. Keep the structure, every paragraph's thought, the thesis, every USER FACT verbatim, the same language and the same length.`;
 }
+
+/**
+ * IELTS addition to the judge calibration (owner, 2026-10-07: the report judges
+ * the essay against the CHOSEN level). The band descriptors for vocabulary and
+ * grammar range are applied relative to the target level, so a flawless A2
+ * model answer is not marked down — and never «fixed» upward.
+ */
+export const IELTS_LEVEL_JUDGE_NOTE =
+  "IELTS: score Lexical Resource and Grammatical Range & Accuracy relative to the TARGET LEVEL — an essay that is accurate and fully developed AT that level earns the top mark for them; Task Response and Coherence & Cohesion are scored as usual (cohesion with the connectors that level uses).";
 
 /** Judge calibration (R4 §2 #1): the judge must not pull a deliberate A2 text upward. */
 export function levelJudgeNote(level: CefrLevel): string {

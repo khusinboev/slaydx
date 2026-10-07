@@ -12,8 +12,8 @@ import { essayInputFromValues } from "../lib/generation/essay/input.ts";
 import { LEVEL_REPAIR_HEADER, essayCtx, essaySystemPrompt, outlinePrompt } from "../lib/generation/essay/prompts.ts";
 import { contextOf, planEssayPolish, rewriteEssayFix } from "../lib/generation/essay/polish.ts";
 import { essayJudgeSystemPrompt, essayModelOf, essayTextOf, judgeUserPrompt, ruleChecks } from "../lib/generation/essay/review.ts";
-import { essayWords } from "../lib/generation/essay/registry.ts";
-import { measureLevel } from "../lib/generation/essay/level.ts";
+import { IELTS_LINKERS, essayWords } from "../lib/generation/essay/registry.ts";
+import { IELTS_LEVEL_JUDGE_NOTE, LEVEL_BANDS, ieltsLinkersFor, linkersFound, measureLevel } from "../lib/generation/essay/level.ts";
 import type { EssayModel } from "../lib/generation/essay/types.ts";
 import { legacyOutputs } from "./helpers/essay-legacy-cases.mts";
 
@@ -32,7 +32,7 @@ import { legacyOutputs } from "./helpers/essay-legacy-cases.mts";
 
 /* ────────────────────────── legacy: byte-identical ────────────────────────── */
 
-test("legacy snapshot: docs without a level and IELTS — every prompt, judge prompt, rule and score unchanged", async () => {
+test("legacy snapshot: docs without a level (IELTS ones included) — every prompt, judge prompt, rule and score unchanged", async () => {
   const golden = JSON.parse(readFileSync(new URL("./essay-legacy-snapshot.json", import.meta.url), "utf8"));
   const now = JSON.parse(JSON.stringify(await legacyOutputs()));
   for (const key of Object.keys(golden)) assert.deepEqual(now[key], golden[key], `${key}: legacy output changed`);
@@ -123,16 +123,10 @@ test("engine: repair rejected when it is not closer to the level, or the guard g
   assert.ok(!textOf(b!.doc).includes("45 %"), "a rewrite with a new unsourced number is rejected");
 });
 
-test("engine: NO extra call when the text is on level, and none without a level (IELTS)", async () => {
+test("engine: NO extra call when the text is on level", async () => {
   const onLevel = stub({ write: () => essayJson(5, 230) });
   await build(SCHOOL_A1, onLevel);
   assert.equal(onLevel.repairs().length, 0);
-
-  const ielts = stub({ write: () => essayJson(30, 290) });
-  const built = await build({ topic: "Universities and practical skills", essayContext: "ielts_task2", essayKind: "opinion", language: "en", essayLevel: "A1" }, ielts);
-  assert.equal(ielts.repairs().length, 0, "IELTS has no level → no repair");
-  assert.ok(!("level" in (built!.doc.essay ?? {})), "IELTS model keeps the old shape");
-  assert.ok(!ielts.calls.some((c) => /WRITING LEVEL/.test(c.system)));
 });
 
 test("engine: the judge is told the target level (system calibration + TARGET LEVEL header)", async () => {
@@ -393,4 +387,126 @@ test("G-3: the repair leaves the report + polish budget; skipped when the window
   const built = await buildEssayDoc(extractMeta(TOOL_BY_ID.essay, values), values, { deadline: Date.now() + 110_000, complete: s.fn, judge: false, polish: false });
   assert.equal(s.repairs().length, 0, "no repair inside a tight budget");
   assert.ok(built!.doc.essay?.review, "the readiness report is still built");
+});
+
+/* ────────────────────────── IELTS Task 2 has the level too (owner, 2026-10-07) ────────────────────────── */
+
+const IELTS: FormValues = { topic: "Universities and practical skills", essayContext: "ielts_task2", essayKind: "opinion", language: "en" };
+
+function ieltsDoc(paragraphs: string[], level: EssayModel["level"] | undefined): AcademicDoc {
+  const essay: EssayModel = {
+    v: 1,
+    context: "ielts_task2",
+    kind: "opinion",
+    language: "en",
+    words: essayWords("ielts_task2"),
+    paragraphs: paragraphs.map((_, i) => ({ id: `p${i + 1}`, role: i === 0 ? "intro" : i === paragraphs.length - 1 ? "conclusion" : "body" })),
+    person: "first",
+    rubric: "ielts_band",
+    ...(level ? { level } : {}),
+  };
+  return {
+    meta: extractMeta(TOOL_BY_ID.essay, IELTS),
+    titlePage: false,
+    toc: false,
+    sections: [{ id: "essay", title: "Universities and practical skills", blocks: paragraphs.map((text) => ({ kind: "p" as const, text })) }],
+    essay,
+  };
+}
+
+test("IELTS: default level C1 (band 8 role kept); a chosen level reaches the system prompt, the role line and the stored model", async () => {
+  assert.equal(essayInputFromValues(IELTS).level, "C1", "owner: C1 default");
+  const c1 = essaySystemPrompt(ctxOf(IELTS));
+  assert.match(c1, /WRITING LEVEL — CEFR C1/);
+  assert.match(c1, /band 8 model answers/);
+
+  const a2 = essaySystemPrompt(ctxOf({ ...IELTS, essayLevel: "A2" }));
+  assert.match(a2, /WRITING LEVEL — CEFR A2/);
+  // MUTATION: role line not following the level → «band 8» would fight the A2 block.
+  assert.ok(!/band 8/.test(a2), "no band 8 claim at A2");
+  assert.match(a2, /written at CEFR A2/);
+
+  const s = stub({ write: () => essayJson(LEVEL_BANDS.en.A2.target, 290) });
+  const built = await build({ ...IELTS, essayLevel: "A2" }, s);
+  assert.equal(built?.doc.essay?.level, "A2", "stored for polish / «Tuzatish» / judge");
+  assert.ok(s.calls.some((c) => /WRITING LEVEL — CEFR A2/.test(c.system)));
+  assert.equal(s.repairs().length, 0, "on-level IELTS text → no repair call");
+  assert.equal(built?.doc.essay?.review?.checks.find((c) => c.id === "level")?.level, "green");
+});
+
+test("IELTS: an off-level text gets the ONE repair call, like the other contexts", async () => {
+  const s = stub({ write: () => essayJson(28, 290), repair: () => essayJson(LEVEL_BANDS.en.A2.target, 290) });
+  const built = await build({ ...IELTS, essayLevel: "A2" }, s);
+  assert.equal(s.repairs().length, 1);
+  assert.match(s.repairs()[0].user, /too complex for CEFR A2/);
+  assert.ok(measureLevel(textOf(built!.doc), "en").mean < 12, "the on-level rewrite was accepted");
+});
+
+test("IELTS cohesion list follows the level: A1/A2 the level's own connectors, B1/B2 nothing above, C1+ the standard list", () => {
+  const list = (l: Parameters<typeof ieltsLinkersFor>[0]) => [...ieltsLinkersFor(l, IELTS_LINKERS)];
+  assert.deepEqual(list("A1"), ["and", "but", "because", "then"]);
+  assert.ok(list("A2").includes("so") && list("A2").includes("finally") && list("A2").includes("because"));
+  assert.ok(!list("A2").includes("however"));
+  assert.ok(list("B1").includes("however") && list("B1").includes("for example") && !list("B1").includes("moreover"));
+  assert.ok(list("B2").includes("moreover") && list("B2").includes("therefore") && !list("B2").includes("furthermore") && !list("B2").includes("nevertheless"));
+  assert.deepEqual(list("C1"), [...IELTS_LINKERS]);
+  assert.deepEqual(list("C2"), [...IELTS_LINKERS]);
+  assert.deepEqual(list(null), [...IELTS_LINKERS]);
+
+  // The prompt rule shows the list of the chosen level (MUTATION: the fixed list would demand «moreover» at A1).
+  const a1 = essaySystemPrompt(ctxOf({ ...IELTS, essayLevel: "A1" }));
+  assert.match(a1, /COHESION: use at least three different cohesive devices from the natural range \(and, but, because, then\)/);
+  assert.match(essaySystemPrompt(ctxOf(IELTS)), /natural range \(however, moreover, furthermore/);
+});
+
+test("linkersFound: whole words only («also» is not «so»)", () => {
+  assert.deepEqual(linkersFound("They also like it, but not always.", ["so", "but", "also"]), ["but", "also"]);
+  assert.deepEqual(linkersFound("So it is. As a result, we win.", ["so", "as a result"]), ["so", "as a result"]);
+});
+
+const IELTS_A1_PARAS = [
+  "Some people say universities must teach practical skills. I agree and I will say why. Students need real skills for work.",
+  "First, practical lessons help students. They learn to use tools and they feel ready. Work is easier then.",
+  "Also, companies want people who can work. They like students who know the job because they learn fast.",
+  "Some people say theory is more important. But theory without practice is not enough for a job.",
+  "In short, universities should teach practical skills and they should do it now.",
+];
+
+test("IELTS review: «linking» counts the level's connectors, the «level» rule runs, legacy IELTS (no level) is unchanged", () => {
+  const rulesOf = (d: AcademicDoc) => {
+    const m = essayModelOf(d);
+    return ruleChecks({ doc: d, model: m, text: essayTextOf(d, m) });
+  };
+  const a1 = rulesOf(ieltsDoc(IELTS_A1_PARAS, "A1"));
+  const linking = a1.find((c) => c.id === "linking");
+  assert.equal(linking?.level, "green", linking?.detail);
+  assert.ok(a1.some((c) => c.id === "level"), "IELTS gets the «Til darajasi» rule");
+
+  // The same text judged at C1 would use the standard list: none of its words there → red.
+  assert.equal(rulesOf(ieltsDoc(IELTS_A1_PARAS, "C1")).find((c) => c.id === "linking")?.level, "red");
+
+  // A level-less (legacy) IELTS document: no level rule, standard list as before.
+  const legacy = rulesOf(ieltsDoc(IELTS_A1_PARAS, undefined));
+  assert.ok(!legacy.some((c) => c.id === "level"));
+  assert.equal(legacy.find((c) => c.id === "linking")?.level, "red");
+
+  // A fix at A2 asks for A2-level devices, not «however, moreover».
+  const bare = rulesOf(ieltsDoc(IELTS_A1_PARAS.map((p) => p.replace(/\b(and|but|because|then|first|also)\b/gi, "")), "A2"));
+  const fix = bare.find((c) => c.id === "linking")?.fix;
+  assert.match(fix?.instruction ?? "", /\(and, but, because, then, so\)/);
+});
+
+test("IELTS judge: the target level and the IELTS calibration line are sent; other contexts do not get the IELTS line", () => {
+  const ielts = essayJudgeSystemPrompt("ielts_task2", "Opinion essay", "A2");
+  assert.match(ielts, /DELIBERATELY written at CEFR A2/);
+  assert.ok(ielts.includes(IELTS_LEVEL_JUDGE_NOTE), "IELTS criteria are scored relative to the target level");
+  assert.ok(!essayJudgeSystemPrompt("school_dtm", "Reflective essay", "A2").includes(IELTS_LEVEL_JUDGE_NOTE));
+  assert.equal(essayJudgeSystemPrompt("ielts_task2", "Opinion essay", null), essayJudgeSystemPrompt("ielts_task2", "Opinion essay"), "legacy: no note");
+  const d = ieltsDoc(IELTS_A1_PARAS, "B1");
+  assert.match(judgeUserPrompt(d, essayModelOf(d)), /\nTARGET LEVEL: CEFR B1\n/);
+});
+
+test("IELTS: polish / «Tuzatish» rebuild the context with the stored level (no drift)", () => {
+  assert.equal(contextOf(ieltsDoc(IELTS_A1_PARAS, "A2")).input.level, "A2");
+  assert.equal(contextOf(ieltsDoc(IELTS_A1_PARAS, undefined)).input.level, null, "legacy IELTS doc → null");
 });

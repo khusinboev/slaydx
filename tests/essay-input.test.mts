@@ -98,19 +98,22 @@ test("encodeEssayValues — faqat berilgan maydonlar, kirish bilan aylanadi", ()
   assert.equal(back.person, "third");
 });
 
-test("essayLevel (mobile sprint): b1/« C2 » parsed, junk/number/missing → B2, IELTS → null, round trip", () => {
+test("essayLevel (mobile sprint): b1/« C2 » parsed, junk/number/missing → B2 (IELTS: C1), round trip", () => {
   assert.equal(essayInputFromValues(V({ essayLevel: "b1" })).level, "B1");
   assert.equal(essayInputFromValues(V({ essayLevel: " C2 " })).level, "C2");
   assert.equal(essayInputFromValues(V({ essayLevel: "X9" })).level, "B2");
   assert.equal(essayInputFromValues(V({ essayLevel: 5 })).level, "B2");
   assert.equal(essayInputFromValues(V()).level, "B2", "owner decision O3: default B2");
   assert.equal(essayInputFromValues(V({ essayContext: "academic", essayLevel: "a2" })).level, "A2");
-  // MUTATION: without the IELTS rule a stale «A1» from a school draft would reach the IELTS prompt.
-  assert.equal(essayInputFromValues(V({ essayContext: "ielts_task2", essayLevel: "A1" })).level, null);
+  // IELTS (2026-10-07): the chosen level counts; missing/invalid → C1 (the pre-level «band 8» register).
+  // MUTATION: with the old IELTS exclusion the chosen «A1» would be dropped (null).
+  assert.equal(essayInputFromValues(V({ essayContext: "ielts_task2", essayLevel: "A1" })).level, "A1");
+  assert.equal(essayInputFromValues(V({ essayContext: "ielts_task2" })).level, "C1");
+  assert.equal(essayInputFromValues(V({ essayContext: "ielts_task2", essayLevel: "junk" })).level, "C1");
 
   const values = encodeEssayValues({ context: "academic", level: "C1" });
   assert.equal(values.essayLevel, "C1");
   assert.equal(essayInputFromValues(values).level, "C1");
-  assert.equal(encodeEssayValues({ context: "ielts_task2", level: null }).essayLevel, "", "null encodes as empty");
+  assert.equal(encodeEssayValues({ context: "ielts_task2", level: null }).essayLevel, "", "null (legacy rebuild) encodes as empty");
   assert.ok(!("essayLevel" in encodeEssayValues({ topic: "x" })), "not given → not written");
 });

@@ -34,7 +34,7 @@ import {
 } from "./registry";
 import type { EssayInput } from "./input";
 import type { EssayWords } from "./types";
-import { levelGuidance, levelPromptBlock, levelRepairInstruction, levelReminder, thesisWordRange, type LevelMeasure, type LevelVerdict } from "./level";
+import { ieltsLinkersFor, levelGuidance, levelPromptBlock, levelRepairInstruction, levelReminder, thesisWordRange, type LevelMeasure, type LevelVerdict } from "./level";
 
 /* ────────────────────────── klişelar ────────────────────────── */
 
@@ -144,7 +144,8 @@ function contextRules(ctx: EssayCtx): string[] {
   }
   if (c.id === "ielts_task2") {
     out.push(
-      `7. COHESION: use at least three different cohesive devices from the natural range (${IELTS_LINKERS.slice(0, 8).join(", ")}) — placed inside sentences, not mechanically at the start of every one.`,
+      // The level block forbids connectors of a higher level: the list follows the chosen level (`level.ts ieltsLinkersFor`).
+      `7. COHESION: use at least three different cohesive devices from the natural range (${ieltsLinkersFor(ctx.input.level, IELTS_LINKERS).slice(0, 8).join(", ")}) — placed inside sentences, not mechanically at the start of every one.`,
       `8. No headings, no bullet points, no numbering: IELTS Task 2 is continuous prose.`,
     );
   }
@@ -193,8 +194,13 @@ function roleOf(ctx: EssayCtx): string {
       return "an Uzbek language and literature teacher who writes model school essays for graduating pupils";
     case "academic":
       return "a university writing tutor who writes model academic essays";
-    default:
-      return "an IELTS writing tutor who produces band 8 model answers for Writing Task 2";
+    default: {
+      // A band 8 answer is a C1+ text; at a lower chosen level the tutor writes the model answer AT that level.
+      const level = ctx.input.level;
+      return !level || level === "C1" || level === "C2"
+        ? "an IELTS writing tutor who produces band 8 model answers for Writing Task 2"
+        : `an IELTS writing tutor who produces model answers for Writing Task 2 written at CEFR ${level} — a clear, fully developed answer in the language a candidate at that level really uses`;
+    }
   }
 }
 

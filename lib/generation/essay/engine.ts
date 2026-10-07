@@ -198,7 +198,7 @@ export async function buildEssayDoc(meta: DocMeta, values: FormValues, opts: Ess
     ...(input.workTitle ? { workTitle: input.workTitle } : {}),
     paragraphs: paragraphsOf(outline.plans),
     person: input.person,
-    // Stored for polish/«Tuzatish»/judge; IELTS (null) keeps the old model shape.
+    // Stored for polish/«Tuzatish»/judge; no level (legacy rebuilds) keeps the old model shape.
     ...(input.level ? { level: input.level } : {}),
     ...(input.design ? { design: input.design } : {}),
     rubric: ctx.context.rubric,

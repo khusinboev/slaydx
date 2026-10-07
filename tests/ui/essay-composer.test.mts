@@ -381,7 +381,7 @@ test("«Materiallar» endi alohida karta emas — mazmuni Sozlamalar ichida (O'z
 
 const caption = () => document.querySelector("[data-level-caption]")?.textContent ?? "";
 
-test("Til darajasi: maktab va akademikda 6 ta kod (A1…C2), standart B2, ko'rinadigan izoh; IELTS da YO'Q", async () => {
+test("Til darajasi: maktab, akademik va IELTS da 6 ta kod (A1…C2); standart B2 (IELTS — C1), ko'rinadigan izoh", async () => {
   stubApi();
   await login();
   mount();
@@ -393,11 +393,17 @@ test("Til darajasi: maktab va akademikda 6 ta kod (A1…C2), standart B2, ko'rin
   assert.ok(field("essayLevel"), "akademik esseda ham bor");
   await pick("essayContext", /IELTS/i);
   /*
-   * MUTATSIYA: `levelAppliesTo` sharti olib tashlansa IELTS da ham daraja
-   * ko'rinardi (o'z band shkalasi bor, egasi qarori O3).
+   * MUTATSIYA: IELTS da daraja qatori yashirilsa (eski `levelAppliesTo`) yoki
+   * standart B2 qolsa (IELTS standarti C1 — bugungi «band 8» natijasi) bu
+   * assertion yiqiladi.
    */
-  assert.ok(!field("essayLevel"), "IELTS da daraja tanlovi yo'q");
-  assert.ok(!document.querySelector("[data-level-caption]"));
+  assert.ok(field("essayLevel"), "IELTS da ham daraja tanlovi bor (2026-10-07)");
+  assert.deepEqual(chipText("essayLevel"), ["A1", "A2", "B1", "B2", "C1", "C2"]);
+  assert.equal(checked("essayLevel"), "C1", "IELTS standarti C1");
+  assert.equal(caption(), `${CEFR_UI[4].name}: ${CEFR_UI[4].phrase}, gap ~${LEVEL_BANDS.en.C1.target} so‘z`, "IELTS faqat inglizcha — izoh en maqsadi bilan");
+  // Tegilmagan daraja kontekstning standartiga ergashadi.
+  await pick("essayContext", /akademik/i);
+  assert.equal(checked("essayLevel"), "B2", "tegilmagan daraja IELTS dan keyin B2 ga qaytadi");
 });
 
 test("Til darajasi: tanlov izohni almashtiradi; izohdagi raqam insho tiliga ergashadi (promptning o'z maqsadi)", async () => {
@@ -434,11 +440,10 @@ test("Til darajasi: kontekst almashganda (IELTS orqali ham) tanlov saqlanadi; su
   assert.equal(values.essayContext, "academic");
 });
 
-test("Til darajasi: IELTS submit — daraja yuborilmaydi (bo'sh), narx o'zgarmaydi", async () => {
+test("Til darajasi: IELTS submit — tanlangan daraja yuboriladi, tegilmagan bo'lsa C1; narx o'zgarmaydi", async () => {
   const calls = stubApi();
   await login();
   mount();
-  await pick("essayLevel", /^A1$/);
   await pick("essayContext", /IELTS/i);
   await act(async () => {
     fireEvent.change(topicInput(), { target: { value: "Universities and practical skills" } });
@@ -447,9 +452,30 @@ test("Til darajasi: IELTS submit — daraja yuborilmaydi (bo'sh), narx o'zgarmay
     fireEvent.click(screen.getByText(tool.submitLabel));
   });
   await waitFor(() => assert.ok(calls.some((c) => c.url === "/api/generations" && c.method === "POST")));
-  const values = (calls.find((c) => c.url === "/api/generations" && c.method === "POST")!.body as { values: Record<string, unknown> }).values;
-  assert.equal(values.essayLevel, "");
+  const post = () => (calls.filter((c) => c.url === "/api/generations" && c.method === "POST").at(-1)!.body as { values: Record<string, unknown> }).values;
+  // MUTATSIYA: IELTS da `level: null` yuborilsa (eski xatti-harakat) bo'sh qator chiqadi.
+  assert.equal(post().essayLevel, "C1", "tegilmagan IELTS darajasi — C1");
   assert.ok(/2\s000 tanga/.test(document.body.textContent ?? ""), "IELTS narxi avvalgidek 2 000");
+
+  await pick("essayLevel", /^A1$/);
+  assert.equal(checked("essayLevel"), "A1");
+  await act(async () => {
+    fireEvent.click(screen.getByText(tool.submitLabel));
+  });
+  await waitFor(() => assert.equal(post().essayLevel, "A1"));
+  assert.equal(post().essayContext, "ielts_task2");
+  assert.ok(/2\s000 tanga/.test(document.body.textContent ?? ""), "daraja narxga ta'sir qilmaydi");
+});
+
+test("Til darajasi: aniq tanlangan daraja kontekst almashganda saqlanadi (A2 → IELTS → akademik)", async () => {
+  stubApi();
+  await login();
+  mount();
+  await pick("essayLevel", /^A2$/);
+  await pick("essayContext", /IELTS/i);
+  assert.equal(checked("essayLevel"), "A2", "aniq tanlov IELTS ga o'tadi");
+  await pick("essayContext", /akademik/i);
+  assert.equal(checked("essayLevel"), "A2", "va qaytganda ham turadi");
 });
 
 test("Til darajasi: qoralama tiklaydi (c1 → C1), yaroqsiz qiymat → B2; narx darajadan qimirlamaydi", async () => {
