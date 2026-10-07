@@ -42,6 +42,8 @@ const summaryRoute = await import("../app/api/referral/route.ts");
 const captureRoute = await import("../app/api/referral/capture/route.ts");
 const authRoute = await import("../app/api/auth/telegram/route.ts");
 const ticketRoute = await import("../app/api/auth/telegram/ticket/route.ts");
+const enterRoute = await import("../app/api/auth/telegram/enter/route.ts");
+const { createBotLoginLink } = await import("../lib/server/telegram.ts");
 if (hasDb) await ensureMigrated();
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
@@ -144,7 +146,7 @@ test("POST /api/referral/capture: visitor → httpOnly sx_ref (Path=/api/auth, L
   assert.match(c, /Path=\/api\/auth/);
   assert.match(c, /HttpOnly/i);
   assert.match(c, /SameSite=lax/i);
-  assert.match(c, /Max-Age=2592000/);
+  assert.match(c, /Max-Age=604800(;|$)/, "review MINOR-4: 7 days, not 30");
 
   for (const code of ["../../x", "", 123, "k7m3p0qx"]) {
     const bad = await run(captureRoute.POST, request("/api/referral/capture", { method: "POST", body: { code } }));
@@ -195,6 +197,42 @@ test("POST /api/auth/telegram: sx_ref cookie on a NEW account → reward (source
   assert.equal(await pointsOf(inv.id), mid, "existing account: no reward");
   assert.equal((await referralOf(existingTg)).length, 0);
   assert.ok(r2.cookies.some((x) => x.startsWith("sx_ref=") && /Max-Age=0/.test(x)));
+});
+
+test("review MINOR-4: the bot-link login (POST /api/auth/telegram/enter) clears sx_ref on success only; a malformed sx_ref is cleared too", { skip }, async () => {
+  const enterPost = (token: string, cookie: string) => {
+    const req = new Request("http://localhost:3000/api/auth/telegram/enter", {
+      method: "POST",
+      headers: {
+        host: "localhost:3000",
+        origin: "http://localhost:3000",
+        "sec-fetch-site": "same-origin",
+        "content-type": "application/x-www-form-urlencoded",
+        "x-forwarded-for": ip(),
+        cookie,
+      },
+      body: new URLSearchParams({ t: token }).toString(),
+    });
+    return run(enterRoute.POST, req);
+  };
+  const tokenFor = async () => {
+    const link = await createBotLoginLink({ telegramId: tgId(), username: null, name: "Chipta", photoUrl: null });
+    return new URL(link).searchParams.get("t")!;
+  };
+  const cleared = (cookies: string[]) => cookies.some((x) => x.startsWith("sx_ref=") && /Max-Age=0/.test(x) && /Path=\/api\/auth/.test(x));
+
+  const ok = await enterPost(await tokenFor(), "sx_ref=k7m3p9qx");
+  assert.equal(ok.status, 303);
+  assert.ok(cleared(ok.cookies), `MUTATSIYA 7: spent after the login: ${ok.cookies.join(" | ")}`);
+
+  const junk = await enterPost(await tokenFor(), "sx_ref=%3Cscript%3E");
+  assert.ok(cleared(junk.cookies), "a malformed value is cleared as well");
+
+  const none = await enterPost(await tokenFor(), "");
+  assert.ok(!none.cookies.some((x) => x.startsWith("sx_ref=")), "no cookie → no header");
+
+  const failed = await enterPost("no-such-token-no-such-token-1234567890", "sx_ref=k7m3p9qx");
+  assert.ok(!failed.cookies.some((x) => x.startsWith("sx_ref=")), "a failed login keeps the code for the retry");
 });
 
 test("POST /api/auth/telegram without any code: no referral, no cookie header", { skip }, async () => {

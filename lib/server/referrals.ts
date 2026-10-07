@@ -1,6 +1,7 @@
 import "server-only";
 import { randomInt } from "node:crypto";
 import type { PoolClient } from "pg";
+import { cookies } from "next/headers";
 import { query, queryOne } from "./db";
 import { env } from "./env";
 import { topUpInTx } from "./credits";
@@ -42,7 +43,8 @@ export const REFERRAL_BURST_SCOPE = "referral_burst";
 /** Web-link capture cookie (`/uz?ref=…`) — read only by the Telegram sign-in routes. */
 export const REF_COOKIE = "sx_ref";
 export const REF_COOKIE_PATH = "/api/auth";
-export const REF_COOKIE_MAX_AGE_SEC = 30 * 24 * 3600;
+/** A week (review MINOR-4): long enough to sign in later, short enough not to credit a stranger on a shared device. */
+export const REF_COOKIE_MAX_AGE_SEC = 7 * 24 * 3600;
 
 export type ReferralSource = "bot" | "web";
 
@@ -263,9 +265,24 @@ export function refCookieFromRequest(req: Request): string | null {
   return null;
 }
 
-/** Cookie attributes shared by the capture route (set) and the sign-in route (clear). */
+/** Cookie attributes shared by the capture route (set) and the sign-in routes (clear). */
 export function refCookieOptions(maxAge: number) {
   return { httpOnly: true, secure: env.isProd, sameSite: "lax" as const, path: REF_COOKIE_PATH, maxAge };
+}
+
+/** The request carries an `sx_ref` cookie at all (well-formed or not). */
+export function hasRefCookie(req: Request): boolean {
+  return new RegExp(`(?:^|;)\\s*${REF_COOKIE}=`).test(req.headers.get("cookie") ?? "");
+}
+
+/**
+ * Spends the capture cookie once a Telegram sign-in has completed in this
+ * browser (review MINOR-4): the person is a user now, and a later stranger on
+ * the same device must not be credited to the old code. Route handlers only.
+ */
+export async function clearRefCookie(req: Request): Promise<void> {
+  if (!hasRefCookie(req)) return;
+  (await cookies()).set(REF_COOKIE, "", refCookieOptions(0));
 }
 
 export type ReferralSummary = {
