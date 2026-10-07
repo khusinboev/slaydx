@@ -68,8 +68,8 @@ export const ESSAY_PARAMS: EssayParam[] = [
    * CEFR level (mobile sprint, `essay/level.ts`): prompt block, review rule
    * «Til darajasi» (+ level-scaled thesis/topic minimums) and
    * `doc.essay.level`. NOT `price` — the price loop below proves it.
-   * Probed outside IELTS: IELTS has no level (owner decision O3), A/B
-   * would be identical there.
+   * IELTS has the control too (2026-10-07; default C1) — its own A/B probe
+   * lives in `tests/essay-level-wiring.test.mts`.
    */
   { id: "essayLevel", encode: "string", probeA: "A2", probeB: "C1", probeWith: { essayContext: "academic", essayKind: "argumentative" }, impacts: ["prompt", "review", "layout"] },
 ];

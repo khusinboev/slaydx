@@ -119,7 +119,7 @@ export type EssayModel = {
   /**
    * CEFR level the essay was written at (mobile sprint, `level.ts`). Stored
    * in the MODEL like `person`: polish/«Tuzatish» and the judge rebuild the
-   * context from the document. Absent → legacy document or IELTS: no level
+   * context from the document. Absent → legacy document: no level
    * block, no level rule — behaviour exactly as before.
    */
   level?: CefrLevel;

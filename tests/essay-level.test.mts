@@ -4,6 +4,8 @@ import {
   CEFR_LEVELS,
   CEFR_UI,
   DEFAULT_ESSAY_LEVEL,
+  DEFAULT_IELTS_LEVEL,
+  defaultEssayLevel,
   LEVEL_BANDS,
   LEVEL_CONNECTORS,
   LEGACY_CLAIM_MIN,
@@ -43,7 +45,7 @@ const LANGS: EssayLang[] = ["uz", "ru", "en"];
 
 /* ────────────────────────── values ────────────────────────── */
 
-test("values: six levels, case-insensitive parse, default B2, IELTS → null", () => {
+test("values: six levels, case-insensitive parse, default B2 (IELTS: C1)", () => {
   assert.deepEqual([...CEFR_LEVELS], ["A1", "A2", "B1", "B2", "C1", "C2"]);
   assert.equal(DEFAULT_ESSAY_LEVEL, "B2", "owner decision O3");
   assert.equal(parseCefrLevel("b1"), "B1");
@@ -54,7 +56,13 @@ test("values: six levels, case-insensitive parse, default B2, IELTS → null", (
   assert.equal(essayLevelOf("school_dtm", undefined), "B2");
   assert.equal(essayLevelOf("academic", "junk"), "B2");
   assert.equal(essayLevelOf("academic", "a2"), "A2");
-  assert.equal(essayLevelOf("ielts_task2", "A1"), null, "IELTS has no level whatever the draft carries");
+  // IELTS has the control too (owner, 2026-10-07): the chosen level counts, the default is C1.
+  assert.equal(essayLevelOf("ielts_task2", "A1"), "A1");
+  assert.equal(essayLevelOf("ielts_task2", undefined), "C1");
+  assert.equal(essayLevelOf("ielts_task2", "junk"), "C1");
+  assert.equal(DEFAULT_IELTS_LEVEL, "C1");
+  assert.equal(defaultEssayLevel("ielts_task2"), "C1");
+  assert.equal(defaultEssayLevel("school_dtm"), "B2");
 });
 
 /* ────────────────────────── thresholds ────────────────────────── */

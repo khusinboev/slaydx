@@ -1,9 +1,10 @@
 /**
  * Legacy essay outputs (mobile sprint, package G — essay level).
  *
- * Documents written BEFORE the CEFR level existed carry no `doc.essay.level`;
- * IELTS never carries one. For both, every prompt, judge prompt and review
- * rule must stay byte-identical to the pre-level code. `legacyOutputs()`
+ * Documents written BEFORE the CEFR level existed carry no `doc.essay.level`
+ * (IELTS ones included: IELTS got the level on 2026-10-07, old IELTS documents
+ * stay level-less). Every prompt, judge prompt and review rule for them must
+ * stay byte-identical to the pre-level code. `legacyOutputs()`
  * renders all of them; `tests/essay-legacy-snapshot.json` was generated from
  * the code BEFORE the level was introduced (commit "test(essay): legacy
  * prompt snapshot") and `tests/essay-level-wiring.test.mts` compares.
@@ -15,8 +16,7 @@ import type { AcademicDoc } from "../../lib/generation/types.ts";
 import type { FormValues } from "../../lib/types.ts";
 import { TOOL_BY_ID } from "../../lib/tools.ts";
 import { extractMeta } from "../../lib/generation/meta.ts";
-import { essayInputFromValues } from "../../lib/generation/essay/input.ts";
-import { essayCtx, essayPrompt, essaySystemPrompt, outlinePrompt, rewritePrompt, wordRangePrompt, type EssayCtx } from "../../lib/generation/essay/prompts.ts";
+import { essayPrompt, essaySystemPrompt, outlinePrompt, rewritePrompt, wordRangePrompt, type EssayCtx } from "../../lib/generation/essay/prompts.ts";
 import { fallbackOutline } from "../../lib/generation/essay/engine.ts";
 import { contextOf } from "../../lib/generation/essay/polish.ts";
 import { essayJudgeSystemPrompt, essayModelOf, essayTextOf, judgeUserPrompt, reviewEssay, ruleChecks } from "../../lib/generation/essay/review.ts";
@@ -81,11 +81,6 @@ export function legacyDocs(): Record<string, AcademicDoc> {
   };
 }
 
-/** IELTS from form values: the level never applies there (even a stale `essayLevel`). */
-export function ieltsValues(): FormValues {
-  return { topic: "Some people think universities should teach practical skills", essayContext: "ielts_task2", essayKind: "discussion", language: "en", essayLevel: "A1" };
-}
-
 function promptsOf(ctx: EssayCtx): Record<string, string> {
   const plans = fallbackOutline(ctx);
   return {
@@ -113,9 +108,5 @@ export async function legacyOutputs(): Promise<Record<string, unknown>> {
       score: review.score,
     };
   }
-  const values = ieltsValues();
-  const input = essayInputFromValues(values);
-  const meta = extractMeta(TOOL_BY_ID.essay, values);
-  out.ieltsValues = promptsOf(essayCtx({ ...meta, language: input.language, design: input.design }, input));
   return out;
 }

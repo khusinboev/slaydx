@@ -34,7 +34,7 @@ Research (read-only, local test DB, synthetic data): `R1-download.md`, `R2-teleg
 |---|---|---|
 | O1 | Formats per tool | **Wide set** (R1 §3): native + PDF where it applies; slides also PNG images (ZIP); images PNG/JPG; glossary and game results CSV; audio transcript TXT |
 | O2 | Where the file is uploaded for «Ulashish» | **Into the user's own bot chat** (share ⇒ also saved; no storage channel) |
-| O3 | Essay level default / IELTS | **B2 default; IELTS has no level control** (band-style C1) |
+| O3 | Essay level default / IELTS | **B2 default.** ~~IELTS has no level control~~ — superseded 2026-10-07: IELTS has the same A1–C2 control, default **C1**, judge scores against the chosen level (see «IELTS level» below) |
 | O4 | Slide text edit gesture on touch | **Double tap (reliable detector) + one-time hint**; the edited text auto-zooms on phones |
 | — | Already stated by the owner | «Saqlash» closes the Mini App; style controls sit at the top edge of the frame |
 
@@ -211,3 +211,13 @@ Mini App whose signed user differs from the session asks «Akkauntni almashtiras
 auth_date ≤ 10 min, never for phone-login sessions). Security review: first REJECT (Android in-app browser login-CSRF) → fixed →
 APPROVE. CI green; backup slaydx-20261005-171149.dump; rollback e6383b9 + images :pre-hotfix1 + webhook allowed_updates back to
 [message, callback_query]. Webhook allowed_updates now [message, inline_query, callback_query]. Prod smoke: health 200, errors 0, ledger 0.
+
+## 9. IELTS level (2026-10-07, owner)
+IELTS Writing Task 2 now offers the same CEFR A1–C2 control as the other essay contexts.
+- **Default C1** (today's «band 8 model answer» register). An explicit choice is stored in `EssayModel.level` like for the other contexts; documents saved before this change stay level-less and byte-identical (`tests/essay-legacy-snapshot.json`, `ielts` case).
+- **Report/judge:** the examiner judge scores Lexical Resource and Grammatical Range relative to the chosen level (`IELTS_LEVEL_JUDGE_NOTE`), «Tuzatish» and polish carry the level reminder, so a low level is never «fixed» upward.
+- **Cohesion:** the IELTS «≥ 3 different cohesive devices» rule follows the level (`ieltsLinkersFor`): A1/A2 use the level's own connectors, B1/B2 never ask for connectors above the level, C1/C2 keep the standard list; matching is whole-word.
+- **Role line:** «band 8 model answers» only at C1/C2; lower levels get «model answer written at CEFR X».
+- **Composer:** the level row shows for IELTS too; an untouched level follows the context default (B2 ↔ C1), an explicit pick survives context switches.
+- Price unchanged (2 000). Live matrix cases: `essay-lvl-ielts-{a1,b1,default,c2}` in `scripts/live-engine.mts`.
+

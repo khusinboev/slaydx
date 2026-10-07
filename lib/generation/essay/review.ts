@@ -27,7 +27,7 @@ import { ESSAY_CONTEXTS, IELTS_LINKERS, essayCitationPolicy, essayEpigraphPolicy
 import { ESSAY_FILLER, judgeHeader } from "./prompts";
 import { essayJudgeDetail, essayRubric, essayScore, type EssayJudge } from "./rubric";
 import { ESSAY_LIMITS, type EssayContextId, type EssayModel } from "./types";
-import { claimMinWords, levelDetail, levelJudgeNote, levelRepairInstruction, levelVerdict, measureLevel, thesisWordRange, type CefrLevel } from "./level";
+import { IELTS_LEVEL_JUDGE_NOTE, claimMinWords, ieltsLinkersFor, ieltsRelativeScoring, levelDetail, levelJudgeNote, levelRepairInstruction, levelVerdict, linkersFound, measureLevel, thesisWordRange, type CefrLevel } from "./level";
 
 export type CompleteFn = typeof completeRole;
 
@@ -344,12 +344,15 @@ export function ruleChecks(o: EssayRuleInput): ReviewCheck[] {
 
   /* ── linking: IELTS bog'lovchilari ── */
   if (model.context === "ielts_task2") {
-    const low = paras.join(" ").toLowerCase();
-    const found = IELTS_LINKERS.filter((w) => low.includes(w));
+    // The list follows the chosen level (A1/A2: the level's own connectors; B1/B2: nothing above the level; no level: legacy substring match).
+    const linkers = ieltsLinkersFor(level, IELTS_LINKERS);
+    const text = paras.join(" ");
+    const found = level ? linkersFound(text, linkers) : IELTS_LINKERS.filter((w) => text.toLowerCase().includes(w));
+    const sample = linkers.slice(0, 5).join(", ");
     out.push(
       found.length >= LINKERS_MIN
         ? check("linking", "green", "Bog‘lovchilar", `${found.length} xil: ${list(found)}`)
-        : check("linking", found.length ? "yellow" : "red", "Bog‘lovchilar", `${found.length} xil (kerak ≥ ${LINKERS_MIN})`, rewrite("essay", `Use at least ${LINKERS_MIN} different cohesive devices (however, moreover, as a result, for instance, in contrast) inside the sentences — not mechanically at the start of every sentence.`)),
+        : check("linking", found.length ? "yellow" : "red", "Bog‘lovchilar", `${found.length} xil (kerak ≥ ${LINKERS_MIN})`, rewrite("essay", `Use at least ${LINKERS_MIN} different cohesive devices (${level ? sample : "however, moreover, as a result, for instance, in contrast"}) inside the sentences — not mechanically at the start of every sentence.`)),
     );
   }
 
@@ -362,7 +365,7 @@ export function ruleChecks(o: EssayRuleInput): ReviewCheck[] {
     else out.push(check("title", "green", "Sarlavha", `«${t}»${kind.needsWork && model.workTitle ? ` · asar: «${model.workTitle}»` : ""}`));
   }
 
-  /* ── level: measured CEFR level of the text (skipped without a level: legacy, IELTS) ── */
+  /* ── level: measured CEFR level of the text (skipped without a level: legacy documents) ── */
   if (level) {
     const m = measureLevel(paras.join("\n"), model.language);
     const v = levelVerdict(m, level, model.language);
@@ -397,13 +400,13 @@ export function judgeUserPrompt(doc: AcademicDoc, model: EssayModel, maxChars = 
 }
 
 /** Baholovchi mezonlari → `ReviewCheck` (IELTS da detal «Band 7 · 2/3»). */
-export function essayJudgeChecks(context: EssayContextId, j: EssayJudge): ReviewCheck[] {
+export function essayJudgeChecks(context: EssayContextId, j: EssayJudge, level?: CefrLevel | null): ReviewCheck[] {
   const spec = ESSAY_CONTEXTS[context].judge;
   const rubric = essayRubric(context);
   const skip = new Set<string>(j.skipped ?? []);
   const out: ReviewCheck[] = rubric.criteria
     .filter((c) => !skip.has(c))
-    .map((c) => check(`judge:${c}`, j[c] >= 3 ? "green" : j[c] === 2 ? "yellow" : "red", spec.labels[c] ?? c, essayJudgeDetail(context, c, j[c])));
+    .map((c) => check(`judge:${c}`, j[c] >= 3 ? "green" : j[c] === 2 ? "yellow" : "red", spec.labels[c] ?? c, essayJudgeDetail(context, c, j[c], level)));
   j.fixes.forEach((f, i) => out.push(check(`judge:fix:${i + 1}`, "yellow", "Baholovchi tavsiyasi", `${f.target}: ${f.instruction}`, { op: "rewrite", target: f.target, instruction: f.instruction })));
   return out;
 }
@@ -418,7 +421,7 @@ export function essayJudgeSystemPrompt(context: EssayContextId, kindLabel?: stri
   const base = judgeSystemPromptFor({ ...spec, ...(kindLabel ? { typeLabel: kindLabel } : {}) }, ["essay"], ["intro", "conclusion"]);
   if (!level) return base;
   const lines = base.split("\n");
-  lines.splice(1, 0, levelJudgeNote(level));
+  lines.splice(1, 0, levelJudgeNote(level), ...(context === "ielts_task2" && ieltsRelativeScoring(level) ? [IELTS_LEVEL_JUDGE_NOTE] : []));
   return lines.join("\n");
 }
 
@@ -463,7 +466,7 @@ export async function reviewEssay(doc: AcademicDoc, opts: EssayReviewOpts = {}):
 
   return {
     score: essayScore(rules, j, model.context),
-    checks: [...rules, ...essayJudgeChecks(model.context, j)],
+    checks: [...rules, ...essayJudgeChecks(model.context, j, model.level)],
     judgeNotes,
     verifiedShare: 1,
     recentShare: 1,

@@ -34,7 +34,7 @@ import {
 } from "./registry";
 import type { EssayInput } from "./input";
 import type { EssayWords } from "./types";
-import { levelGuidance, levelPromptBlock, levelRepairInstruction, levelReminder, thesisWordRange, type LevelMeasure, type LevelVerdict } from "./level";
+import { ieltsLinkersFor, levelGuidance, levelPromptBlock, levelRepairInstruction, levelReminder, thesisWordRange, type LevelMeasure, type LevelVerdict } from "./level";
 
 /* ────────────────────────── klişelar ────────────────────────── */
 
@@ -144,7 +144,8 @@ function contextRules(ctx: EssayCtx): string[] {
   }
   if (c.id === "ielts_task2") {
     out.push(
-      `7. COHESION: use at least three different cohesive devices from the natural range (${IELTS_LINKERS.slice(0, 8).join(", ")}) — placed inside sentences, not mechanically at the start of every one.`,
+      // The level block forbids connectors of a higher level: the list follows the chosen level (`level.ts ieltsLinkersFor`).
+      `7. COHESION: use at least three different cohesive devices from the natural range (${ieltsLinkersFor(ctx.input.level, IELTS_LINKERS).slice(0, 8).join(", ")}) — placed inside sentences, not mechanically at the start of every one.`,
       `8. No headings, no bullet points, no numbering: IELTS Task 2 is continuous prose.`,
     );
   }
@@ -166,7 +167,7 @@ export function essaySystemPrompt(ctx: EssayCtx): string {
     `OUTPUT: return ONLY the JSON requested — no markdown fences, no commentary.`,
     `TYPE RULES (${kind.label.en}):`,
     // Level (R4 §2 #3): figurative/hedging wishes are replaced at low levels; `null` → unchanged.
-    ...levelGuidance(kind.guidance, input.level).map((g, i) => `${i + 1}. ${g}`),
+    ...levelGuidance(kind.guidance, input.level, { ielts: c.id === "ielts_task2" }).map((g, i) => `${i + 1}. ${g}`),
   ];
   if (input.workTitle) lines.push(`LITERARY WORK: «${input.workTitle}» — the essay is about this work; use only what the passage below and general knowledge of the work support.`);
   if (input.epigraph?.text) lines.push(`EPIGRAPH (verbatim):\n«${input.epigraph.text}»${input.epigraph.author ? `\n— ${input.epigraph.author}` : ""}`);
@@ -179,8 +180,8 @@ export function essaySystemPrompt(ctx: EssayCtx): string {
   }
   /*
    * Level block AFTER the author's free text (R4 §2 #4): the later, explicit
-   * constraint wins on sentence/vocabulary complexity. `null` (legacy doc,
-   * IELTS) → nothing is added and the prompt is byte-identical to before.
+   * constraint wins on sentence/vocabulary complexity. `null` (legacy doc)
+   * → nothing is added and the prompt is byte-identical to before.
    */
   if (input.level) lines.push(levelPromptBlock(input.level, input.language));
   lines.push(HONESTY_LIMIT);
@@ -193,8 +194,13 @@ function roleOf(ctx: EssayCtx): string {
       return "an Uzbek language and literature teacher who writes model school essays for graduating pupils";
     case "academic":
       return "a university writing tutor who writes model academic essays";
-    default:
-      return "an IELTS writing tutor who produces band 8 model answers for Writing Task 2";
+    default: {
+      // A band 8 answer is a C1+ text; at a lower chosen level the tutor writes the model answer AT that level.
+      const level = ctx.input.level;
+      return !level || level === "C1" || level === "C2"
+        ? "an IELTS writing tutor who produces band 8 model answers for Writing Task 2"
+        : `an IELTS writing tutor who produces model answers for Writing Task 2 written at CEFR ${level} — a clear, fully developed answer in the language a candidate at that level really uses`;
+    }
   }
 }
 

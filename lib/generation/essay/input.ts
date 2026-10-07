@@ -56,9 +56,9 @@ export type EssayInput = {
   /** Yuklangan fayl matni (`meta.sourceText`) — kontekst. */
   sourceText: string;
   /**
-   * CEFR level (mobile sprint, `level.ts`). `null` — no level: IELTS (own
-   * band scale, owner decision O3) and legacy documents rebuilt by
-   * `polish.ts contextOf`; prompts are then byte-identical to the pre-level code.
+   * CEFR level (mobile sprint, `level.ts`; IELTS too since 2026-10-07). `null` —
+   * no level: only legacy documents rebuilt by `polish.ts contextOf`; prompts
+   * are then byte-identical to the pre-level code.
    */
   level: CefrLevel | null;
 };
@@ -139,7 +139,7 @@ export function essayInputFromValues(values: FormValues): EssayInput {
     person: person === "first" || person === "third" ? person : spec.person,
     extra: text(values.extra, ESSAY_LIMITS.extraChars),
     sourceText: typeof values.sourceText === "string" ? values.sourceText : "",
-    // IELTS → null whatever a stale draft carries; missing/invalid → B2.
+    // Missing/invalid → the context default (C1 for IELTS, B2 elsewhere).
     level: essayLevelOf(context, values.essayLevel),
   };
 }

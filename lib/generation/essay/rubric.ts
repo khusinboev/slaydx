@@ -26,6 +26,7 @@
 import { JUDGE_NEUTRAL } from "../report/judge";
 import { LEVEL_SCORE } from "../report/score";
 import type { JudgeResult, ReviewCheck } from "../report/types";
+import { ieltsRelativeScoring, type CefrLevel } from "./level";
 import { ESSAY_CONTEXTS } from "./registry";
 import {
   ACADEMIC_CRITERIA,
@@ -176,11 +177,15 @@ export function essayScore(rules: ReviewCheck[], judge: EssayJudge, context: Ess
 /**
  * `ReviewCheck.detail` matni: IELTS da «Band 7 · 2/3» (band ko'rinadi,
  * xom ball esa `judgeFromReview` uchun o'qiladigan qoladi), boshqa
- * kontekstlarda «2/3».
+ * kontekstlarda «2/3». C1 dan past darajada IELTS leksika/grammatika
+ * satrlari «A2 darajasiga nisbatan · 3/3» (`polish.ts` ham `\d/3` ni o'qiydi).
  */
-export function essayJudgeDetail(context: EssayContextId, criterion: EssayJudgeCriterion, value: number): string {
+export function essayJudgeDetail(context: EssayContextId, criterion: EssayJudgeCriterion, value: number, level?: CefrLevel | null): string {
   const v = Math.max(0, Math.min(3, value));
   if (essayRubric(context).id !== "ielts_band") return `${v}/3`;
+  // Below C1 the judge scores vocabulary and grammar range against the CHOSEN level (owner, 2026-10-07):
+  // «Band 9» for a flawless A2 text would read as an absolute band, so the row says what it is.
+  if (level && ieltsRelativeScoring(level) && (criterion === "lr" || criterion === "gra")) return `${level} darajasiga nisbatan · ${v}/3`;
   return `Band ${ieltsBand(v)} · ${v}/3`;
 }
 
