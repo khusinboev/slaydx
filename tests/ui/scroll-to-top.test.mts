@@ -599,6 +599,46 @@ test("touch: focus moving from one field to another keeps it hidden; leaving the
   assert.ok(button(), "field → button");
 });
 
+test("touch: focus moving from a page field to a field OUTSIDE the scroller (the top bar search) brings the button back", async () => {
+  fresh();
+  coarse();
+  const sc = fakeScroller();
+  const inPage = document.createElement("input");
+  sc.appendChild(inPage);
+  const outside = document.createElement("input");
+  document.body.appendChild(outside);
+  mount(sc);
+  await scrollTo(2000);
+  await focusEl(inPage);
+  assert.ok(!button());
+  await focusEl(outside);
+  assert.ok(button(), "the keyboard is for another field: not the page's");
+});
+
+test("touch: focusout names the next field in relatedTarget — a field keeps it hidden, a button releases it", async () => {
+  fresh();
+  coarse();
+  const sc = fakeScroller();
+  const a = document.createElement("input");
+  const b = document.createElement("textarea");
+  const plain = document.createElement("button");
+  sc.append(a, b, plain);
+  mount(sc);
+  await scrollTo(2000);
+  assert.ok(button());
+  // Nothing is focused (activeElement is <body>): only relatedTarget can say where the focus goes.
+  await act(async () => {
+    fireEvent.focusOut(a, { relatedTarget: b });
+    await frames();
+  });
+  assert.ok(!button(), "→ a text field");
+  await act(async () => {
+    fireEvent.focusOut(b, { relatedTarget: plain });
+    await frames();
+  });
+  assert.ok(button(), "→ a button");
+});
+
 test("touch: a field that already has focus when the button would appear keeps it hidden", async () => {
   fresh();
   coarse();
