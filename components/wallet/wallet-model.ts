@@ -99,7 +99,7 @@ export function ledgerRow(e: LedgerEntry, now: number = Date.now()): LedgerRow {
     id: e.id,
     kind: e.kind,
     title,
-    meta: [detail, formatWhen(e.createdAt, now)].filter(Boolean).join(" · "),
+    meta: [formatWhen(e.createdAt, now), detail].filter(Boolean).join(" · "),
     amount: n > 0 ? `+${body}` : n < 0 ? `−${body}` : body,
     unit: e.kind === "bonus" ? "ball" : "tanga",
     tone: n > 0 ? "in" : n < 0 ? "out" : "zero",

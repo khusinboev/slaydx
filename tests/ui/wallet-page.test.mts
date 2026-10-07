@@ -179,7 +179,7 @@ test("Hamyon: «Harakatlar» — readable label per kind, signed amounts, ball v
   assert.match(income.className, /--success-text/, "income is green");
   assert.doesNotMatch(document.querySelector('[data-ledger-amount="out"]')!.className, /--success-text/);
   // The refund keeps its server note as the detail line.
-  assert.match(document.querySelector('[data-ledger-row="refund"]')!.textContent!, /farq qaytarildi · /);
+  assert.match(document.querySelector('[data-ledger-row="refund"]')!.textContent!, /\d\d:\d\d · Slayd yaratildi — farq qaytarildi\+/);
 });
 
 test("Hamyon: long ledger shows 8 rows, then all 30 behind a 44 px toggle; empty and error states", async () => {

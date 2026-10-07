@@ -64,7 +64,7 @@ export function WalletPage() {
           data-wallet-hero="loading"
           aria-busy="true"
           aria-label="Balans yuklanmoqda"
-          className="rounded-[24px] p-[18px]"
+          className="rounded-[24px] p-4 sm:p-5"
           style={HERO_STYLE}
         >
           <div className="h-4 w-16 rounded bg-black/10 motion-safe:animate-pulse" />
@@ -76,7 +76,7 @@ export function WalletPage() {
           </div>
         </section>
       ) : !loggedIn ? (
-        <section data-wallet-hero="signed-out" aria-labelledby="wallet-hero-title" className="rounded-[24px] p-[18px]" style={HERO_STYLE}>
+        <section data-wallet-hero="signed-out" aria-labelledby="wallet-hero-title" className="rounded-[24px] p-4 sm:p-5" style={HERO_STYLE}>
           <h2 id="wallet-hero-title" className="text-[19px] font-bold tracking-[-0.01em]">
             Hamyoningiz shu yerda
           </h2>
@@ -96,7 +96,7 @@ export function WalletPage() {
           </button>
         </section>
       ) : (
-        <section data-wallet-hero="ready" aria-labelledby="wallet-hero-title" className="rounded-[24px] p-[18px]" style={HERO_STYLE}>
+        <section data-wallet-hero="ready" aria-labelledby="wallet-hero-title" className="rounded-[24px] p-4 sm:p-5" style={HERO_STYLE}>
           <h2 id="wallet-hero-title" className="text-[14px] font-medium opacity-85">
             Balans
           </h2>
@@ -130,7 +130,7 @@ export function WalletPage() {
                 heroFocus,
               )}
             >
-              <Gift className="size-[18px] shrink-0" aria-hidden="true" />
+              <Gift className="hidden size-[18px] shrink-0 sm:block" aria-hidden="true" />
               <span className="truncate">Do&apos;st taklif qilish</span>
             </button>
           </div>
