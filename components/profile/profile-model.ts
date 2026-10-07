@@ -147,7 +147,8 @@ const SKIP = new Set(["va", "nomidagi", "and", "of", "the", "for", "im.", "им�
  * A short label for a long organisation name (row hint): kept as is when it
  * fits, otherwise the acronym of its words — «Toshkent davlat pedagogika
  * universiteti» → «TDPU». A name before «nomidagi» is dropped («Nizomiy
- * nomidagi TDPU» → «TDPU»). A single long word is cut with «…».
+ * nomidagi TDPU» → «TDPU»). A single long word or a numbered name
+ * («45-umumta'lim maktabi») is cut with «…».
  */
 export function shortName(value: string, max = 14): string {
   const s = value.trim().replace(/\s+/g, " ");
@@ -155,13 +156,15 @@ export function shortName(value: string, max = 14): string {
   let words = s.split(" ");
   const at = words.findIndex((w) => w.toLowerCase() === "nomidagi");
   if (at >= 0 && at < words.length - 1) words = words.slice(at + 1);
-  const letters = words
+  const significant = words
     .filter((w) => !SKIP.has(w.toLowerCase()))
     .map((w) => w.replace(/^[^\p{L}\p{N}]+/u, ""))
-    .filter(Boolean)
-    .map((w) => (/^\p{N}/u.test(w) ? w.replace(/\D.*$/u, "") : w[0]!.toUpperCase()));
-  const acronym = letters.join("");
-  if (letters.length >= 2 && acronym.length <= max) return acronym;
+    .filter(Boolean);
+  // «45-maktab …» has no useful acronym: numbered names are cut instead.
+  if (significant.length >= 2 && significant.every((w) => /^\p{L}/u.test(w))) {
+    const acronym = significant.map((w) => w[0]!.toUpperCase()).join("");
+    if (acronym.length <= max) return acronym;
+  }
   return `${s.slice(0, max - 1).trimEnd()}…`;
 }
 

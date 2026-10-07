@@ -137,14 +137,17 @@ test("purchase: kirmagan foydalanuvchi — tugma kirish oynasini ochadi, Pro yo'
   assert.equal(useUi.getState().overlay, "login");
 });
 
-test("profil: PRO belgisi, muddat va kvota yo'q; Ball va Balans bor; havola «Balansni to'ldirish»", () => {
+// Redesign W4: Ball/Balans and the top-up link moved to Hamyon (`/uz/wallet`, W3); the profile keeps one
+// «Hamyon» row with the total and the link (was: «Ball» + «Balans» stats and a link to /uz/purchase).
+test("profil: PRO belgisi, muddat va kvota yo'q; «Hamyon» qatori jami tangani ko'rsatadi va /uz/wallet ga olib boradi", () => {
   signIn(userWith(0));
   render(withRouter(h(ProfilePage)));
   assert.doesNotMatch(document.body.textContent ?? "", FORBIDDEN);
-  assert.ok(screen.getByText("Ball"));
-  assert.ok(screen.getByText("Balans"));
-  const link = screen.getByRole("link", { name: /Balansni to.ldirish/ });
-  assert.equal(link.getAttribute("href"), "/uz/purchase");
+  const wallet = document.querySelector<HTMLAnchorElement>("a[data-profile-row='hamyon']");
+  assert.ok(wallet);
+  assert.equal(wallet.getAttribute("href"), "/uz/wallet");
+  assert.match(wallet.textContent ?? "", /Hamyon/);
+  assert.match(wallet.textContent ?? "", /15[\s .,]?000 tanga/);
   assert.ok(!/NaN/.test(document.body.textContent ?? ""));
 });
 
