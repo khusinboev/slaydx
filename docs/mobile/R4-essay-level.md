@@ -66,7 +66,7 @@ academic C1, IELTS C1. Must be measured live before fixing the default (plan §6
 - Form/registry id: **`essayLevel`**, values `"A1"|"A2"|"B1"|"B2"|"C1"|"C2"` (string; case-insensitive on input,
   normalised to upper case). Parsing: invalid/missing -> default for the context (see §3.5) via `essayInputFromValues`;
   `EssayInput.level: CefrLevel | null`.
-- IELTS: **level not offered, `level = null`** (IELTS has its own band scale and "band 8 model answer" role; a CEFR
+- *(Superseded 2026-10-07, see `docs/mobile/PLAN.md` §9: IELTS offers the level, default C1.)* IELTS: **level not offered, `level = null`** (IELTS has its own band scale and "band 8 model answer" role; a CEFR
   override would fight `lr/gra` judge and `linking` rule). Owner question Q2.
 - Persisted in `EssayModel.level?: CefrLevel` (like `person`), so polish/«Tuzatish»/judge read it from the doc.
 - Registry entry (13th param):
