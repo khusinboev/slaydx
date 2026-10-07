@@ -715,20 +715,27 @@ test("onShownChange mirrors the button: true when it shows, false when it goes (
   assert.equal(last(), false, "unmount releases the room");
 });
 
-test("AppShell: <main> gets the bottom room only while the button is on screen", async () => {
+test("AppShell: the page ends in a bottom-room SPACER only while the button is on screen (never padding on <main>)", async () => {
   fresh();
-  render(inRouter(h(AppShell, null, h("div", null, "sahifa"))));
+  render(inRouter(h(AppShell, null, h("div", { "data-page": "" }, "sahifa"))));
   await settle();
   const main = document.getElementById("main")!;
   const sc = fakeScroller(main);
-  assert.equal(main.getAttribute("data-scroll-top-room"), null, "no button: no room");
+  const room = () => main.querySelector<HTMLElement>("[data-scroll-top-room]");
+  assert.ok(!room(), "no button: no room");
   await scrollTo(sc, 2000);
   assert.ok(button());
-  assert.equal(main.getAttribute("data-scroll-top-room"), "on");
-  // The padding that makes room: 4.5 rem + the Telegram / device bottom safe area.
-  assert.ok(main.className.includes("data-[scroll-top-room=on]:pb-[calc(4.5rem+var(--tg-safe-bottom,env(safe-area-inset-bottom,0px)))]"));
+  const spacer = room();
+  assert.ok(spacer, "button on screen: the room is there");
+  assert.equal(main.lastElementChild, spacer, "it ends the page (after the content)");
+  assert.equal(spacer.getAttribute("aria-hidden"), "true");
+  // 4.5 rem + the Telegram / device bottom safe area.
+  assert.ok(spacer.className.includes("h-[calc(4.5rem+var(--tg-safe-bottom,env(safe-area-inset-bottom,0px)))]"));
+  assert.ok(spacer.className.includes("shrink-0"));
+  // Padding on <main> would lift a sticky `bottom: 0` submit bar off the bottom edge (browser-verified).
+  assert.ok(!/(^|\s)(data-\[[^\]]*\]:)?pb-/.test(main.className), "no bottom padding on the scroller");
   await scrollTo(sc, 0);
-  assert.equal(main.getAttribute("data-scroll-top-room"), null, "back at the top: the room is released");
+  assert.ok(!room(), "back at the top: the room is released");
 });
 
 /* ------------------------------------------------------------------ bottom bars */
