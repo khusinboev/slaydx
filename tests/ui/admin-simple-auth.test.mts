@@ -200,11 +200,14 @@ test("AdminLink (Profil): «Admin panel» → /admin is shown for a user with an
   assert.ok(!screen.queryByRole("link", { name: /Admin panel/ }), "no button when signed out");
 });
 
-test("the Profil tab page mounts AdminLink (the admin entry stays reachable without the Sidebar)", async () => {
+test("the Profil tab page mounts ProfileHome, whose isAdmin-gated row keeps the admin entry reachable without the Sidebar", async () => {
   const { readFileSync } = await import("node:fs");
+  // Redesign W4: the admin entry is a row of the profile index (behaviour: tests/ui/profile.test.mts «admin row»).
   const src = readFileSync(new URL("../../app/uz/profile/page.tsx", import.meta.url), "utf8");
-  assert.match(src, /import \{ AdminLink \} from "@\/components\/shell\/AdminLink";/);
-  assert.match(src, /<AdminLink\b/);
+  assert.match(src, /import \{ ProfileHome \} from "@\/components\/profile\/ProfileHome";/);
+  assert.match(src, /<ProfileHome\b/);
+  const home = readFileSync(new URL("../../components/profile/ProfileHome.tsx", import.meta.url), "utf8");
+  assert.match(home, /user\.isAdmin \? <RowLink id="admin" href="\/admin"/);
 });
 
 /* ───────────────────────────── AccountPage ───────────────────────────── */

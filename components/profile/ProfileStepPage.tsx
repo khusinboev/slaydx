@@ -1,47 +1,27 @@
 "use client";
 
-import Link from "next/link";
-import { PageHeader } from "@/components/shell/PageHeader";
-import { ThemeChoice } from "@/components/shell/ThemeToggle";
-import type { ProfileStep } from "@/lib/nav/tabs";
-
-export const PROFILE_STEP_TITLES: Record<ProfileStep, string> = {
-  shaxsiy: "Shaxsiy ma’lumotlar",
-  oqish: "O‘qish",
-  ish: "Ish joyi",
-  korinish: "Ko‘rinish",
-  xavfsizlik: "Xavfsizlik",
-};
+import { useRouter } from "next/navigation";
+import { backTo } from "@/lib/nav/history";
+import type { ProfileStep as ProfileStepRoute } from "@/lib/nav/tabs";
+import { ProfileStep } from "./ProfileStep";
+import { profileHref, type ProfileTarget } from "./profile-model";
 
 /**
- * `/uz/profile/<step>` — interim page laid by the shell package (F0): the
- * route, its «←» (back to the profile index) and the step slide-in exist;
- * package W4 builds the real steps. «Ko'rinish» already works (Kun / Tun /
- * Avto); the other steps point to the profile page, where the fields are
- * still edited today.
+ * `/uz/profile/<step>`: the W4 step screen (it carries its own «←» header,
+ * hidden while Telegram's BackButton is shown) with real routes behind
+ * `onNavigate`, so the phone / Telegram / trackpad back walks the same path:
+ * the next step is pushed; «home» goes back to the profile index when that is
+ * the previous entry, otherwise replaces this entry with it (`backTo`).
  */
-export function ProfileStepPage({ step }: { step: ProfileStep }) {
+export function ProfileStepPage({ step }: { step: ProfileStepRoute }) {
+  const router = useRouter();
+  const go = (to: ProfileTarget) => {
+    if (to === "home") void backTo("/uz/profile");
+    else router.push(profileHref(to));
+  };
   return (
     <div className="slx-step-enter flex w-full flex-col" data-profile-step={step}>
-      <PageHeader title={PROFILE_STEP_TITLES[step]} back backFallback="/uz/profile" />
-      <div className="mx-auto w-full max-w-3xl px-4 pt-2 pb-6">
-        {step === "korinish" ? (
-          <section aria-labelledby="theme-label" className="bg-card rounded-[var(--radius-card)] border p-4">
-            <h2 id="theme-label" className="mb-3 text-[16px] font-semibold">
-              Mavzu
-            </h2>
-            <ThemeChoice />
-            <p className="text-muted-foreground mt-3 text-[13.5px]">«Avto» qurilmangiz sozlamasiga ergashadi.</p>
-          </section>
-        ) : (
-          <div className="bg-card rounded-[var(--radius-card)] border p-4 text-[15.5px]">
-            <p>Bu ma’lumotlar hozircha profil sahifasida tahrirlanadi.</p>
-            <Link href="/uz/profile" className="text-primary mt-2 inline-flex min-h-11 items-center font-medium">
-              Profilga o‘tish
-            </Link>
-          </div>
-        )}
-      </div>
+      <ProfileStep step={step} onNavigate={go} />
     </div>
   );
 }

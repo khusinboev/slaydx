@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Coins } from "lucide-react";
 import { creditTotal, useAppStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
+import { groupDigits } from "@/lib/format";
 
 /**
  * Balance pill → Hamyon (UX-03: the balance is one tap away; it used to live
@@ -14,7 +15,7 @@ export function BalanceChip({ className }: { className?: string }) {
   const loggedIn = useAppStore((s) => s.loggedIn);
   const user = useAppStore((s) => s.user);
   if (!loggedIn || !user) return null;
-  const total = creditTotal(user).toLocaleString("uz-UZ");
+  const total = groupDigits(creditTotal(user));
   return (
     <Link
       href="/uz/wallet"
