@@ -11,6 +11,7 @@ import { SlideCanvas } from "./SlideCanvas";
 import { SkeletonSlide } from "./SkeletonSlide";
 import { ImageWaitPlaque } from "./ImageWaitPlaque";
 import { focusZoomScale, type FocusBox } from "./slide-edit/geometry";
+import { useSlideNav } from "./slide-nav/useSlideNav";
 
 export type SlideStageOverlayCtx = { index: number; scale: number; slide: SlideModel };
 
@@ -45,7 +46,7 @@ export function SlideStage({
   zoom,
   fitOn,
   presenter,
-  onAdvance,
+  onStep,
   overlay,
   skeleton = false,
   role,
@@ -71,7 +72,13 @@ export function SlideStage({
   fitOn: boolean;
   /** `fitScale` effektini qayta o'lchash kerakligini bildiruvchi holat. */
   presenter: boolean;
-  onAdvance?: () => void;
+  /**
+   * Enlarged («To‘liq ekran») mode only: move by one slide (`-1` previous,
+   * `+1` next). A touch tap in the left third / swipe right goes back, the
+   * right and middle thirds / swipe left go forward; a mouse click advances
+   * (`slide-nav/`). Elsewhere the stage never navigates by itself.
+   */
+  onStep?: (dir: -1 | 1) => void;
   overlay?: (ctx: SlideStageOverlayCtx) => ReactNode;
   /** L5 jonli: bu slaydning matni hali yozilmagan → eskiz. */
   skeleton?: boolean;
@@ -94,6 +101,7 @@ export function SlideStage({
   focus?: FocusBox | null;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
+  const nav = useSlideNav({ enabled: present, step: onStep });
   const [fitScale, setFitScale] = useState(0.6);
   /*
    * Sensorli tanlov: teginish qurilmasida rasm tugmalari («O‘z rasmim»,
@@ -220,8 +228,25 @@ export function SlideStage({
               fitLayout ? "overflow-hidden" : "overflow-auto",
             ),
       )}
-      onClick={() => present && onAdvance?.()}
+      /*
+        Enlarged mode: the browser must leave HORIZONTAL drags to us (with the
+        default `touch-action` it claims them — `pointercancel`, and in Chromium
+        the drag even navigates the history, closing the presentation) while
+        vertical scroll and pinch stay native. Inline, not a class: the present
+        stage's class list is locked by the shell test.
+      */
+      style={
+        present
+          ? // Pinch-zoomed page: the touch goes back to the browser so the user can pan the zoomed slide.
+            { touchAction: nav.zoomed ? "auto" : "pan-y pinch-zoom" }
+          : undefined
+      }
+      onClick={nav.onClick}
+      onPointerMove={nav.onPointerMove}
+      onPointerUp={nav.onPointerUp}
+      onPointerCancel={nav.onPointerCancel}
       onPointerDown={(e) => {
+        nav.onPointerDown(e);
         // Slayd tashqarisiga (qora maydonga) tegilsa tanlov tushadi.
         if (!present && e.target === e.currentTarget) setTouchSel(false);
       }}

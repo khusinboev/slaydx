@@ -328,6 +328,8 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
                       { label: "Faol sessiyalar", value: <span className="tabular-nums">{fmtNumber(counts.activeSessions)}</span> },
                       { label: "Navbatdagi ishlar", value: <span className="tabular-nums">{fmtNumber(counts.queuedJobs)}</span> },
                       { label: "Faol o'yin havolalari", value: <span className="tabular-nums">{fmtNumber(counts.activeGameLinks)}</span> },
+                      // A response without the referral fields (an older server during a deploy swap) omits these rows.
+                      ...(data.referral ? referralRows(data.referral) : []),
                     ]}
                   />
                 </CardBody>
@@ -384,6 +386,41 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
       <EnrollLinkDialog link={enrollLink} onClose={() => setEnrollLink(null)} />
     </div>
   );
+}
+
+/** Referral program (T3), read-only: who invited this user and how many people they invited. */
+function referralRows(referral: NonNullable<AdminUserDetailResponse["referral"]>) {
+  const by = referral.referredBy;
+  return [
+    {
+      label: "Kim taklif qilgan",
+      value: by ? (
+        <span data-referred-by>
+          {by.id ? (
+            <Link href={`/admin/users/${by.id}`} className="text-foreground hover:text-primary underline underline-offset-2">
+              {by.name || `#${by.id}`}
+            </Link>
+          ) : (
+            "o'chirilgan foydalanuvchi"
+          )}
+          <span className="text-muted-foreground">
+            {" "}
+            ({by.source === "bot" ? "bot" : "sayt"}, <span className="tabular-nums">{fmtDateTime(by.at)}</span>
+            {by.rewardPoints > 0 ? `, +${fmtNumber(by.rewardPoints)} ball` : ", mukofotsiz"})
+          </span>
+        </span>
+      ) : null,
+    },
+    {
+      label: "Taklif qilganlar soni",
+      value: (
+        <span className="tabular-nums" data-invited-count>
+          {fmtNumber(referral.invitedCount)}
+          <span className="text-muted-foreground"> ({fmtNumber(referral.earnedPoints)} ball)</span>
+        </span>
+      ),
+    },
+  ];
 }
 
 function LinkCard({ title, text, href, label }: { title: string; text: string; href: string; label: string }) {
