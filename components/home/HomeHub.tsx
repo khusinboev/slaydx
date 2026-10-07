@@ -1,32 +1,56 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, ChevronRight, FolderOpen, Plus, Search, Wallet } from "lucide-react";
-import { BRAND_NAME } from "@/lib/brand";
+import { ArrowRight, Bell, Search } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { PageHeader, HeaderIconButton } from "@/components/shell/PageHeader";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { BalanceChip } from "@/components/shell/BalanceChip";
 import { useReturnToLogin } from "@/components/shell/useReturnToLogin";
+import { greetingTitle } from "./hub/hub-model";
+import { HubSection, HUB_STAGGER_MS, SECTION_LINK_CLASS } from "./hub/HubSection";
+import { HubSearch } from "./hub/HubSearch";
+import { QuickStart } from "./hub/QuickStart";
+import { RecentFiles } from "./hub/RecentFiles";
+import { SignedOutCard } from "./hub/SignedOutCard";
+import { ToolsByGroup } from "./hub/ToolsByGroup";
+import { useLoginGate } from "./hub/useLoginGate";
+import { useRecentFiles } from "./hub/useRecentFiles";
+
+/** Hub content width (PLAN W1: centred ~1040 px on a desktop); the header row matches it. */
+const WIDTH = "max-w-[1040px]";
 
 /**
- * Bosh (`/uz`) — interim hub laid by the shell package (F0). Package W1
- * replaces the body with the real hub (greeting, search box, «Tez boshlash»,
- * «Davom ettirish», tools by group). Keep: `PageHeader` with search / theme /
- * notifications, `useReturnToLogin()`, links into the tabs.
+ * Bosh (`/uz`) — the home hub, variant A «Iliq» (docs/redesign/PLAN.md W1):
+ *
+ *   - header: «Salom, <first name>» (never a phone number — «Salom!» when the
+ *     account has no real name), «Bugun nima yaratamiz?», search / quick theme
+ *     / notifications; the balance chip (→ Hamyon) beside the search field;
+ *   - «Vosita yoki fayl qidirish» → the search dialog (Cmd/Ctrl+K hint);
+ *   - «Tez boshlash»: Slayd, Referat, Insho, Rezyume;
+ *   - «Davom ettirish»: the 3 latest files + «Barchasi →» Ishlarim; signed out,
+ *     a login card instead;
+ *   - «Barcha vositalar» by group + «Hammasi» → `/uz/create`.
+ * Tool links keep the «+» sheet's login gate. ≥ 1024 px: quick start and
+ * recent files side by side. `?returnTo=` opens the login (`useReturnToLogin`).
  */
 export function HomeHub() {
   useReturnToLogin();
   const user = useAppStore((s) => s.user);
+  const sessionChecked = useAppStore((s) => s.sessionChecked);
+  const loggedIn = useAppStore((s) => s.loggedIn);
   const open = useUi((s) => s.open);
-  const first = (user?.name ?? "").trim().split(/\s+/)[0];
+  const gate = useLoginGate();
+  const recent = useRecentFiles();
+  const signedOut = sessionChecked && !loggedIn;
 
   return (
-    <div className="flex w-full flex-col">
+    <div className="flex w-full flex-col" data-home-hub>
       <PageHeader
-        title={first ? `Salom, ${first}` : BRAND_NAME}
+        title={greetingTitle(user)}
         subtitle="Bugun nima yaratamiz?"
+        contentClassName={WIDTH}
         actions={
           <>
             <HeaderIconButton label="Qidirish" onClick={() => open("search")}>
@@ -39,41 +63,60 @@ export function HomeHub() {
           </>
         }
       />
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 pt-1 pb-6">
-        <BalanceChip className="self-start" />
-        <button
-          type="button"
-          data-hub-create
-          onClick={() => open("create")}
-          className="text-hero-foreground focus-visible:ring-ring flex min-h-24 items-center gap-4 rounded-[var(--radius-card)] bg-[image:var(--hero)] px-5 text-left shadow-[var(--shadow-card)] outline-none focus-visible:ring-2"
+      <div className={`mx-auto flex w-full ${WIDTH} flex-col gap-5 px-4 pt-1 pb-6 text-[15.5px]`}>
+        <div
+          className="flex items-center gap-2 motion-safe:animate-[slx-enter-fade_240ms_ease-out_backwards]"
+          data-hub-top
         >
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white/30">
-            <Plus className="size-6" aria-hidden />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[18px] font-bold">Yangi ish yaratish</span>
-            <span className="block text-[14px] opacity-80">Slayd, referat, insho, test va boshqalar</span>
-          </span>
-        </button>
-        <HubLink href="/uz/files" icon={<FolderOpen className="size-5" aria-hidden />} title="Ishlarim" hint="Yaratilgan fayllar" />
-        <HubLink href="/uz/wallet" icon={<Wallet className="size-5" aria-hidden />} title="Hamyon" hint="Balans va to‘ldirish" />
+          <div className="min-w-0 flex-1">
+            <HubSearch onOpen={() => open("search")} />
+          </div>
+          <BalanceChip />
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
+          {signedOut ? (
+            <div
+              className="motion-safe:animate-[slx-enter-fade_240ms_ease-out_backwards] lg:order-2 lg:pt-[3.375rem]"
+              style={{ animationDelay: `${HUB_STAGGER_MS}ms` }}
+            >
+              <SignedOutCard onLogin={() => open("login")} />
+            </div>
+          ) : null}
+          <HubSection id="quick" title="Tez boshlash" index={1}>
+            <QuickStart onPick={gate} />
+          </HubSection>
+          {signedOut ? null : (
+            <HubSection
+              id="recent"
+              title="Davom ettirish"
+              index={2}
+              action={
+                <Link href="/uz/files" data-hub-all-files className={SECTION_LINK_CLASS}>
+                  Barchasi
+                  <ArrowRight className="size-4" aria-hidden />
+                </Link>
+              }
+            >
+              <RecentFiles state={recent} onCreate={() => open("create")} />
+            </HubSection>
+          )}
+        </div>
+
+        <HubSection
+          id="tools"
+          title="Barcha vositalar"
+          index={3}
+          action={
+            <Link href="/uz/create" data-hub-catalogue onClick={() => gate("/uz/create")} className={SECTION_LINK_CLASS}>
+              Hammasi
+              <ArrowRight className="size-4" aria-hidden />
+            </Link>
+          }
+        >
+          <ToolsByGroup onPick={gate} />
+        </HubSection>
       </div>
     </div>
-  );
-}
-
-function HubLink({ href, icon, title, hint }: { href: string; icon: React.ReactNode; title: string; hint: string }) {
-  return (
-    <Link
-      href={href}
-      className="bg-card hover:bg-accent focus-visible:ring-ring flex min-h-16 items-center gap-3 rounded-[var(--radius-card)] border px-4 shadow-[var(--shadow-card)] outline-none focus-visible:ring-2"
-    >
-      <span className="bg-accent-soft text-accent-soft-foreground flex size-10 shrink-0 items-center justify-center rounded-xl">{icon}</span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[16px] font-semibold">{title}</span>
-        <span className="text-muted-foreground block text-[13.5px]">{hint}</span>
-      </span>
-      <ChevronRight className="text-muted-foreground size-4 shrink-0" aria-hidden />
-    </Link>
   );
 }
