@@ -444,6 +444,138 @@ test("a leave guard is not an overlay: the button stays", async () => {
   });
 });
 
+/* ------------------------------------------------------------------ typing (M1) */
+
+const coarse = () => stubMedia((q) => q.includes("pointer: coarse"));
+
+/** A scroller with a long page scrolled deep and one control inside; returns both. */
+async function deepWith(make: () => HTMLElement, inside = true) {
+  const sc = fakeScroller();
+  const el = make();
+  (inside ? sc : document.body).appendChild(el);
+  mount(sc);
+  await scrollTo(2000);
+  assert.ok(button(), "precondition: the button is shown");
+  return { sc, el };
+}
+
+async function focusEl(el: HTMLElement) {
+  await act(async () => {
+    el.focus();
+    await frames();
+  });
+}
+async function blurEl(el: HTMLElement) {
+  await act(async () => {
+    el.blur();
+    await frames();
+  });
+}
+
+const input = (type?: string) => () => {
+  const i = document.createElement("input");
+  if (type) i.type = type;
+  return i;
+};
+
+for (const [name, make] of [
+  ["text input", input()],
+  ["search input", input("search")],
+  ["tel input", input("tel")],
+  ["number input", input("number")],
+  ["textarea", () => document.createElement("textarea")],
+  [
+    "contentEditable",
+    () => {
+      const d = document.createElement("div");
+      d.tabIndex = 0;
+      // jsdom does not implement `isContentEditable`.
+      Object.defineProperty(d, "isContentEditable", { value: true });
+      return d;
+    },
+  ],
+] as const) {
+  test(`touch: a focused ${name} inside the page hides the button (keyboard slot); blur brings it back`, async () => {
+    fresh();
+    coarse();
+    const { el } = await deepWith(make);
+    await focusEl(el);
+    assert.ok(!button(), "typing: no button on top of the field");
+    await blurEl(el);
+    assert.ok(button(), "blurred: back");
+  });
+}
+
+test("touch: controls that raise no keyboard keep the button (select, checkbox, button, read-only input)", async () => {
+  fresh();
+  coarse();
+  const sc = fakeScroller();
+  const sel = document.createElement("select");
+  const check = Object.assign(document.createElement("input"), { type: "checkbox" });
+  const btn = document.createElement("button");
+  const ro = Object.assign(document.createElement("input"), { readOnly: true });
+  sc.append(sel, check, btn, ro);
+  mount(sc);
+  await scrollTo(2000);
+  for (const el of [sel, check, btn, ro]) {
+    await focusEl(el);
+    assert.ok(button(), `${el.tagName.toLowerCase()} focused: the button stays`);
+  }
+});
+
+test("touch: focus moving from one field to another keeps it hidden; leaving the fields brings it back", async () => {
+  fresh();
+  coarse();
+  const sc = fakeScroller();
+  const a = document.createElement("input");
+  const b = document.createElement("textarea");
+  const plain = document.createElement("button");
+  sc.append(a, b, plain);
+  mount(sc);
+  await scrollTo(2000);
+  await focusEl(a);
+  assert.ok(!button());
+  await focusEl(b);
+  assert.ok(!button(), "field → field");
+  await focusEl(plain);
+  assert.ok(button(), "field → button");
+});
+
+test("touch: a field that already has focus when the button would appear keeps it hidden", async () => {
+  fresh();
+  coarse();
+  const sc = fakeScroller();
+  const i = document.createElement("input");
+  sc.appendChild(i);
+  document.body.appendChild(sc);
+  i.focus();
+  render(inRouter(h(ScrollToTop, { container: sc })));
+  current = sc;
+  await scrollTo(2000);
+  assert.ok(!button(), "focused at mount, then scrolled deep: still no button");
+  await blurEl(i);
+  assert.ok(button());
+});
+
+test("touch: a field OUTSIDE the page scroller does not hide it", async () => {
+  fresh();
+  coarse();
+  const { el } = await deepWith(input(), false);
+  await focusEl(el);
+  assert.ok(button());
+});
+
+test("a mouse pointer (no on-screen keyboard): a focused field keeps the button", async () => {
+  fresh(); // no matchMedia → not coarse
+  const { el } = await deepWith(input());
+  await focusEl(el);
+  assert.ok(button());
+  await blurEl(el);
+  stubMedia(() => false);
+  await focusEl(el);
+  assert.ok(button(), "matchMedia present but the pointer is fine: still shown");
+});
+
 /* ------------------------------------------------------------------ bottom bars */
 
 function stickyBar(top: number, bottom: number, mode: "sticky" | "inline" = "sticky") {

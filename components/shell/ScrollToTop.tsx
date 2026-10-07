@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { ArrowUp } from "lucide-react";
 import { getNavSnapshot, getServerNavSnapshot, subscribeNav } from "@/lib/nav/history";
 import { useVisualViewport } from "@/lib/hooks/useVisualViewport";
+import { isCoarsePointer } from "@/lib/hooks/useCoarsePointer";
+import { isTextEntry } from "@/components/forms/useKeyboardInset";
 import { SAFE_BOTTOM, SAFE_RIGHT, atLeast } from "./safe-area";
 import { directionOf, liftAbove, nextVisible, type Band, type ScrollDirection } from "./scroll-to-top";
 
@@ -24,6 +26,12 @@ import { directionOf, liftAbove, nextVisible, type Band, type ScrollDirection } 
  * Visibility rules live in `scroll-to-top.ts` (pure, tested). Besides them:
  *   - a route change hides the button at once and re-reads the position after
  *     the new page (and Next's / NavProvider's scroll restore) has settled;
+ *   - on touch it is not rendered while a text field inside the container has
+ *     focus: the on-screen keyboard is (about to be) open, and `useKeyboardInset`
+ *     keeps the focused field 16 px above the visible bottom, which is exactly
+ *     the button's slot. `isTextEntry` is the same predicate the form chrome
+ *     uses (text-like inputs, textarea, contentEditable; a native `<select>`
+ *     opens a picker, not a keyboard, so it does not count);
  *   - while any overlay is open it is not rendered (`getNavSnapshot().overlays`
  *     counts every `useDialog` / `useOverlayHistory` layer: login, search,
  *     download sheet, result panel sheet, menus, lightbox… and the shell's own
@@ -74,6 +82,7 @@ export function ScrollToTop({ container }: ScrollToTopProps) {
   const pathname = usePathname();
   const overlays = useSyncExternalStore(subscribeNav, () => getNavSnapshot().overlays, () => getServerNavSnapshot().overlays);
   const [visible, setVisible] = useState(false);
+  const typing = useTypingInside(container);
 
   useEffect(() => {
     if (!container) return;
@@ -124,8 +133,38 @@ export function ScrollToTop({ container }: ScrollToTopProps) {
     };
   }, [container, pathname]);
 
-  if (!container || !visible || overlays > 0) return null;
+  if (!container || !visible || typing || overlays > 0) return null;
   return <ScrollToTopButton container={container} />;
+}
+
+/**
+ * A text field inside `container` has focus on a touch device (see the header).
+ * `focusout` carries the next focus target in `relatedTarget` (no flicker when
+ * focus moves between two fields); without one (blur to nothing, window lost
+ * focus) the active element is re-read in a microtask.
+ */
+function useTypingInside(container: HTMLElement | null): boolean {
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    if (!container) return;
+    const inside = (el: Element | null): boolean => !!el && container.contains(el) && isTextEntry(el);
+    const recheck = () => setTyping(isCoarsePointer() && inside(document.activeElement));
+    const onIn = (e: FocusEvent) => setTyping(isCoarsePointer() && inside(e.target as Element | null));
+    const onOut = (e: FocusEvent) => {
+      const next = e.relatedTarget as Element | null;
+      if (next) setTyping(isCoarsePointer() && inside(next));
+      else queueMicrotask(recheck);
+    };
+    recheck();
+    container.addEventListener("focusin", onIn);
+    container.addEventListener("focusout", onOut);
+    return () => {
+      container.removeEventListener("focusin", onIn);
+      container.removeEventListener("focusout", onOut);
+      setTyping(false);
+    };
+  }, [container]);
+  return typing;
 }
 
 function ScrollToTopButton({ container }: { container: HTMLElement }) {
