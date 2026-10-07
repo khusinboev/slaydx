@@ -50,7 +50,7 @@ import { factNumbers } from "../lib/generation/article/guard.ts";
 import { PUBLICATION_PROFILES, isPublicationProfileId } from "../lib/generation/article/profiles.ts";
 import { isArticleTypeId } from "../lib/generation/article/types-registry.ts";
 import { ESSAY_FILLER } from "../lib/generation/essay/prompts.ts";
-import { DEFAULT_ESSAY_LEVEL, levelDetail, levelVerdict, measureLevel, type CefrLevel } from "../lib/generation/essay/level.ts";
+import { defaultEssayLevel, levelDetail, levelVerdict, measureLevel, type CefrLevel } from "../lib/generation/essay/level.ts";
 import { essayModelOf, essayTextOf } from "../lib/generation/essay/review.ts";
 import type { ArticleTypeId, PublicationProfileId } from "../lib/generation/article/types.ts";
 import type { FormValues } from "../lib/types.ts";
@@ -81,7 +81,7 @@ const ok = (label: string, cond: boolean, detail: string): Check => ({ label, ok
 
 /*
  * Essay CEFR level matrix (mobile sprint, `docs/mobile/R4-essay-level.md` §5).
- * `null` level = the field is not sent → must behave as the default (B2).
+ * `null` level = the field is not sent → must behave as the context default (B2; IELTS C1).
  */
 const LEVEL_DTM: FormValues = { topic: "Kitob o‘qish yoshlarga nima beradi?", essayContext: "school_dtm", essayKind: "reflective", pages: "2", language: "uz" };
 const LEVEL_ACAD = (language: string): FormValues => ({
@@ -91,6 +91,7 @@ const LEVEL_ACAD = (language: string): FormValues => ({
   wordTarget: "700",
   language,
 });
+const LEVEL_IELTS: FormValues = { topic: "Some people think that governments should invest in public transport rather than new roads. To what extent do you agree or disagree?", essayContext: "ielts_task2", essayKind: "opinion", language: "en" };
 const LEVEL_CASES: [string, CefrLevel | null, FormValues][] = [
   ["essay-lvl-dtm-a1", "A1", LEVEL_DTM],
   ["essay-lvl-dtm-b1", "B1", LEVEL_DTM],
@@ -102,6 +103,11 @@ const LEVEL_CASES: [string, CefrLevel | null, FormValues][] = [
   ["essay-lvl-acad-ru-b1", "B1", LEVEL_ACAD("ru")],
   ["essay-lvl-acad-ru-c1", "C1", LEVEL_ACAD("ru")],
   ["essay-lvl-acad-uz-a2", "A2", LEVEL_ACAD("uz")],
+  // IELTS Task 2 has the level too (2026-10-07): extremes + the default (C1) on a 250–330 word text.
+  ["essay-lvl-ielts-a1", "A1", LEVEL_IELTS],
+  ["essay-lvl-ielts-b1", "B1", LEVEL_IELTS],
+  ["essay-lvl-ielts-default", null, LEVEL_IELTS],
+  ["essay-lvl-ielts-c2", "C2", LEVEL_IELTS],
 ];
 
 const TRANSLATION_SAMPLE = [
@@ -1344,8 +1350,7 @@ const CASES: Case[] = [
        */
       ok("1 bet ham qabul (sahifa darvozasi yo'q)", pages === null || pages >= 1, `${pages ?? "—"} bet`),
       ok("band → ball o'girmasi (IELTS rubrikasi)", f.doc.essay?.rubric === "ielts_band", f.doc.essay?.rubric ?? "—"),
-      ok("IELTS da CEFR darajasi yo'q (egasi qarori O3)", !f.doc.essay?.level && !(f.doc.essay?.review?.checks ?? []).some((c) => c.id === "level"), f.doc.essay?.level ?? "yo'q"),
-    ]),
+    ]).concat(levelChecks(f, defaultEssayLevel("ielts_task2"))),
   },
   /*
    * CEFR level matrix (mobile sprint, R4 §5 step 1) — ~10 cheap essays.
@@ -1359,7 +1364,13 @@ const CASES: Case[] = [
       tool: "essay",
       budgetMs: 200_000,
       values: { ...values, ...(level ? { essayLevel: level } : {}) },
-      checks: (f, pages) => essayChecks(f, pages, { criteria: 5, context: String(values.essayContext) }).concat(levelChecks(f, level ?? DEFAULT_ESSAY_LEVEL)),
+      checks: (f, pages) => {
+        const ielts = values.essayContext === "ielts_task2";
+        const linking = (f.doc.essay?.review?.checks ?? []).find((c) => c.id === "linking");
+        return essayChecks(f, pages, { criteria: ielts ? 4 : 5, context: String(values.essayContext) })
+          .concat(levelChecks(f, level ?? defaultEssayLevel(values.essayContext as "school_dtm" | "academic" | "ielts_task2")))
+          .concat(ielts ? [ok("IELTS: «Bog‘lovchilar» bandi qizil emas (darajaga mos ro‘yxat)", linking?.level !== "red", linking ? `${linking.level}: ${linking.detail}` : "yo'q")] : []);
+      },
     }),
   ),
   /* ── Talaba ishlari 2 (AUDIT-19): `work/` dvigateli — kurs ishi / referat / mustaqil ish ── */
