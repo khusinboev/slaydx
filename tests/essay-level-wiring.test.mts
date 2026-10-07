@@ -522,7 +522,7 @@ test("IELTS report rows: lr/gra read «A2 darajasiga nisbatan · 3/3» below C1 
 
   const rows = essayJudgeChecks("ielts_task2", essayJudgeOf("ielts_task2", { tr: 2, cc: 2, lr: 3, gra: 3 }), "A2");
   const lr = rows.find((c) => c.id === "judge:lr")!;
-  assert.equal(/(\d)\/3/.exec(lr.detail)?.[1], "3", "polish.ts reads the raw score with /(\d)\/3/");
+  assert.equal(/(\d)\/3/.exec(lr.detail ?? "")?.[1], "3", "polish.ts reads the raw score with /(\d)\/3/");
   assert.equal(lr.level, "green");
 });
 
