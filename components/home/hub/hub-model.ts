@@ -37,14 +37,8 @@ export const QUICK_TOOL_IDS = ["slide", "referat", "essay", "resume"] as const s
 
 const OUTPUT_LABEL: Record<ToolConfig["output"], string> = { pptx: "PPTX", docx: "DOCX", png: "PNG", mp3: "MP3" };
 
-/**
- * «3 000» with a no-break space — the same text on the server and in every
- * browser (`toLocaleString("uz-UZ")` gives «3,000» where the browser lacks
- * Uzbek ICU data, so the server HTML would not hydrate).
- */
-export function groupDigits(n: number): string {
-  return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0");
-}
+export { groupDigits } from "@/lib/format";
+import { groupDigits } from "@/lib/format";
 
 /** Output format badge of a quick card («PPTX», «DOCX» …) — from `tool.output`. */
 export function outputLabel(tool: Pick<ToolConfig, "output">): string {

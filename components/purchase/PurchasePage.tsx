@@ -7,6 +7,7 @@ import { PageBack } from "../shell/PageBack";
 import { PaymentBanner } from "../wallet/PaymentBanner";
 import { TOPUP_FEATURES as FEATURES } from "../wallet/wallet-model";
 import { usePaymentReturn } from "../wallet/usePaymentReturn";
+import { groupDigits } from "@/lib/format";
 
 export function PurchasePage() {
   const loggedIn = useAppStore((s) => s.loggedIn);
@@ -36,7 +37,7 @@ export function PurchasePage() {
           <h2 className="text-lg font-semibold">Balansni to&apos;ldirish</h2>
           {loggedIn && user ? (
             <p data-testid="purchase-total" className="mt-2 text-3xl font-bold tabular-nums">
-              {creditTotal(user).toLocaleString("uz-UZ")} tanga
+              {groupDigits(creditTotal(user))} tanga
             </p>
           ) : (
             <p className="mt-2 text-3xl font-bold">10 000 so&apos;mdan</p>
@@ -79,7 +80,7 @@ export function PurchasePage() {
                   {new Date(o.createdAt).toLocaleString("uz-UZ")} · {o.provider}
                 </span>
                 <span className="flex items-center gap-3">
-                  <span>{o.amountSoum.toLocaleString("uz-UZ")} so&apos;m</span>
+                  <span>{groupDigits(o.amountSoum)} so&apos;m</span>
                   <span
                     className={
                       o.state === "paid"
