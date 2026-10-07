@@ -76,9 +76,15 @@ function prefersReducedMotion(): boolean {
 export type ScrollToTopProps = {
   /** The page's scroll container (`<main id="main">`); `null` until it mounts. */
   container: HTMLElement | null;
+  /**
+   * Called with `true` while the button is on screen, `false` otherwise. The shell
+   * uses it to give the end of the page 4.5 rem + the safe area of bottom room, so
+   * the last lines and controls can be scrolled out from under the button.
+   */
+  onShownChange?: (shown: boolean) => void;
 };
 
-export function ScrollToTop({ container }: ScrollToTopProps) {
+export function ScrollToTop({ container, onShownChange }: ScrollToTopProps) {
   const pathname = usePathname();
   const overlays = useSyncExternalStore(subscribeNav, () => getNavSnapshot().overlays, () => getServerNavSnapshot().overlays);
   const [visible, setVisible] = useState(false);
@@ -133,7 +139,14 @@ export function ScrollToTop({ container }: ScrollToTopProps) {
     };
   }, [container, pathname]);
 
-  if (!container || !visible || typing || overlays > 0) return null;
+  const shown = !!container && visible && !typing && overlays === 0;
+  // The shell reserves room under the page's last lines while the button is there (m1).
+  useEffect(() => {
+    onShownChange?.(shown);
+    return () => onShownChange?.(false);
+  }, [shown, onShownChange]);
+
+  if (!shown || !container) return null;
   return <ScrollToTopButton container={container} />;
 }
 

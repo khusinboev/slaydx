@@ -576,6 +576,63 @@ test("a mouse pointer (no on-screen keyboard): a focused field keeps the button"
   assert.ok(button(), "matchMedia present but the pointer is fine: still shown");
 });
 
+/* ------------------------------------------------------------------ bottom room (m1) */
+
+test("onShownChange mirrors the button: true when it shows, false when it goes (top, overlay, typing, unmount)", async () => {
+  fresh();
+  coarse();
+  const calls: boolean[] = [];
+  const sc = fakeScroller();
+  const field = document.createElement("input");
+  sc.appendChild(field);
+  current = sc;
+  document.body.appendChild(sc);
+  const onShownChange = (v: boolean) => calls.push(v);
+  const view = render(inRouter(h(ScrollToTop, { container: sc, onShownChange })));
+  await settle();
+  const last = () => calls[calls.length - 1];
+  assert.notEqual(last(), true, "page at the top: not shown");
+  await scrollTo(2000);
+  assert.equal(last(), true, "shown");
+  await scrollTo(0);
+  assert.equal(last(), false, "back at the top");
+  await scrollTo(2000);
+  assert.equal(last(), true);
+  await focusEl(field);
+  assert.equal(last(), false, "typing hides it");
+  await blurEl(field);
+  assert.equal(last(), true);
+  let token = "";
+  await act(async () => {
+    token = nav.pushLayer("overlay", () => {});
+  });
+  await settle();
+  assert.equal(last(), false, "overlay open");
+  await act(async () => {
+    nav.releaseLayer(token);
+  });
+  await settle();
+  assert.equal(last(), true);
+  view.unmount();
+  assert.equal(last(), false, "unmount releases the room");
+});
+
+test("AppShell: <main> gets the bottom room only while the button is on screen", async () => {
+  fresh();
+  render(inRouter(h(AppShell, null, h("div", null, "sahifa"))));
+  await settle();
+  const main = document.getElementById("main")!;
+  const sc = fakeScroller(main);
+  assert.equal(main.getAttribute("data-scroll-top-room"), null, "no button: no room");
+  await scrollTo(sc, 2000);
+  assert.ok(button());
+  assert.equal(main.getAttribute("data-scroll-top-room"), "on");
+  // The padding that makes room: 4.5 rem + the Telegram / device bottom safe area.
+  assert.ok(main.className.includes("data-[scroll-top-room=on]:pb-[calc(4.5rem+var(--tg-safe-bottom,env(safe-area-inset-bottom,0px)))]"));
+  await scrollTo(sc, 0);
+  assert.equal(main.getAttribute("data-scroll-top-room"), null, "back at the top: the room is released");
+});
+
 /* ------------------------------------------------------------------ bottom bars */
 
 function stickyBar(top: number, bottom: number, mode: "sticky" | "inline" = "sticky") {

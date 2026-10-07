@@ -31,6 +31,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   // The page scroller: `<main>` is the one element every page scrolls in (the shell itself never scrolls).
   const [scroller, setScroller] = useState<HTMLElement | null>(null);
+  // «Tepaga chiqish» is on screen: the end of the page gets bottom room (see `<main>` below).
+  const [topButton, setTopButton] = useState(false);
   const open = useUi((s) => s.open);
   const pathname = usePathname();
 
@@ -92,18 +94,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
          * 16 px above the sticky submit bar (73 px + safe area), or 16 px above
          * the visible bottom while the bar is in the flow (keyboard open).
          * Other pages carry no `[data-submit-bar]` and keep no padding.
+         *
+         * While the «Tepaga chiqish» button is on screen (`data-scroll-top-room="on"`)
+         * the end of the page gets 4.5 rem + the safe area of bottom room (the
+         * button's 44 px + its 16 px offset), so the last lines and controls can
+         * be scrolled out from under it.
          */}
         <main
           id="main"
           ref={setScroller}
-          className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--page-bg)] has-[[data-submit-bar=inline]]:scroll-pb-4 has-[[data-submit-bar=sticky]]:scroll-pb-[calc(6rem+env(safe-area-inset-bottom))]"
+          data-scroll-top-room={topButton ? "on" : undefined}
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--page-bg)] has-[[data-submit-bar=inline]]:scroll-pb-4 has-[[data-submit-bar=sticky]]:scroll-pb-[calc(6rem+env(safe-area-inset-bottom))] data-[scroll-top-room=on]:pb-[calc(4.5rem+var(--tg-safe-bottom,env(safe-area-inset-bottom,0px)))]"
         >
           {children}
         </main>
       </div>
 
       {/* «Tepaga chiqish»: fixed, listens on <main>; hidden while an overlay (the drawer included) is open. */}
-      <ScrollToTop container={scroller} />
+      <ScrollToTop container={scroller} onShownChange={setTopButton} />
       <LoginModal />
       <SearchDialog />
       <NotificationsPanel />
