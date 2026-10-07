@@ -7,7 +7,9 @@
  *  - the «Yuklab olish» sheet rows (label, hint, order, spinner for `convert`),
  *  - the server prepare route, which rejects any format this module does not
  *    return for that generation (`formatById`),
- *  - «Ulashish» / «Saqlash» (`defaultShareFormat`).
+ *  - «Yuklab olish», «Ulashish» and «Saqlash»: all three sheets list this registry's order
+ *    (todo sprint 2026-10-07); `defaultShareFormat` is the format used when a material has a
+ *    single format and no sheet is shown.
  *
  * Every id has a server producer (`lib/server/downloads/`) and a differential
  * test: there are no decorative options.
@@ -277,9 +279,10 @@ export function isDownloadFormatId(v: unknown): v is DownloadFormatId {
 }
 
 /**
- * Format used by «Ulashish» and «Saqlash» when the user does not pick one:
- * always the stored file (owner decision O2 + lead decision: editable, no
- * conversion, images sent as documents to keep quality).
+ * Format used by «Ulashish» and «Saqlash» for a material that has only one format (no sheet
+ * is shown): the stored file (owner decision O2: editable, no conversion, images sent as
+ * documents to keep quality). Materials with several formats open the sheet instead, in
+ * registry order.
  */
 export function defaultShareFormat(g: DownloadSubject): DownloadFormat {
   return nativeFormat(g);
