@@ -1,10 +1,9 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { Moon, Sun, SunMoon } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { useAppStore, type ResolvedTheme, type ThemeMode } from "@/lib/store";
 import { THEME_OPTIONS } from "@/lib/ui";
-import { cn } from "@/lib/cn";
 import { HeaderIconButton } from "./PageHeader";
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
@@ -43,7 +42,7 @@ export function useThemeMode(): { mode: ThemeMode; resolved: ResolvedTheme; setM
 /**
  * Quick sun/moon in a page header (Bosh, D4). One tap flips what is painted
  * (Avto becomes an explicit Kun/Tun); the full choice lives in Profil →
- * Ko'rinish (`ThemeChoice`). The icon shows the CURRENT look.
+ * Ko'rinish (`ProfileStep` «korinish»). The icon shows the CURRENT look.
  */
 export function ThemeToggle({ className }: { className?: string }) {
   const { mode, resolved, setMode } = useThemeMode();
@@ -60,37 +59,5 @@ export function ThemeToggle({ className }: { className?: string }) {
     >
       <Icon className="size-[1.2rem]" aria-hidden />
     </HeaderIconButton>
-  );
-}
-
-const ICONS: Record<ThemeMode, typeof Sun> = { light: Sun, dark: Moon, auto: SunMoon };
-
-/** Kun / Tun / Avto as one radio group (Profil → Ko'rinish). Each option is a 44 px+ target. */
-export function ThemeChoice({ className }: { className?: string }) {
-  const { mode, setMode } = useThemeMode();
-  return (
-    <div role="radiogroup" aria-label="Mavzu" data-theme-choice className={cn("grid grid-cols-3 gap-2", className)}>
-      {THEME_OPTIONS.map((o) => {
-        const Icon = ICONS[o.value];
-        const on = mode === o.value;
-        return (
-          <button
-            key={o.value}
-            type="button"
-            role="radio"
-            aria-checked={on}
-            data-theme-option={o.value}
-            onClick={() => setMode(o.value)}
-            className={cn(
-              "focus-visible:ring-ring flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-2xl border text-[15px] font-medium outline-none transition-colors focus-visible:ring-2",
-              on ? "border-primary bg-accent-soft text-foreground" : "bg-card text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Icon className="size-5" aria-hidden />
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
   );
 }

@@ -283,3 +283,13 @@ test("mostUsedToolIds: most frequent first, ties by recency, unknown skipped, to
   assert.deepEqual(mostUsedToolIds([], known), [...DEFAULT_TOP_TOOLS]);
   assert.deepEqual(mostUsedToolIds(gens(["slide", "slide"]), known), ["slide", "referat", "essay", "test"], "no duplicate default");
 });
+
+test("UI copy names the files tab «Ishlarim» (the old «Mening fayllarim» survives only in code comments)", () => {
+  const files = ["components/files/ResultView.tsx", "components/viewers/LiveStrip.tsx", "lib/api-client.ts"];
+  for (const f of files) {
+    const src = readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
+    const copy = src.split("\n").filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l));
+    assert.ok(!copy.some((l) => l.includes("Mening fayllarim")), `${f}: «Mening fayllarim» in UI copy`);
+    assert.ok(copy.some((l) => l.includes("«Ishlarim»")), `${f}: points to «Ishlarim»`);
+  }
+});

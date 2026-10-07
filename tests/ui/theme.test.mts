@@ -27,14 +27,18 @@ import { createElement as h } from "react";
 import { act, render, fireEvent, screen, cleanup } from "@testing-library/react";
 import { THEME_OPTIONS } from "../../lib/ui.ts";
 import { useAppStore, applyTheme, resolveOsTheme, migrateUiPrefs } from "../../lib/store.ts";
-import { ThemeChoice, ThemeToggle } from "../../components/shell/ThemeToggle.tsx";
+import { ThemeToggle } from "../../components/shell/ThemeToggle.tsx";
+import { ProfileStep } from "../../components/profile/ProfileStep.tsx";
+import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import type * as api from "../../lib/api-client.ts";
 
 /**
  * Redesign D4 (2026-10-07): Kun / Tun / **Avto** (Avto — OS ga jonli ergashadi).
  * WP5 dagi eski «Tizim» qiymati qaytmaydi: u (va yo'q qiymat) bir martalik OS
  * o'qishiga aylanadi; `auto` esa haqiqiy tanlov sifatida saqlanadi. TopBar
  * olib tashlandi — tugma endi `ThemeToggle` (Bosh sarlavhasi), to'liq tanlov
- * `ThemeChoice` (Profil → Ko'rinish).
+ * Profil → Ko'rinish qadami (`ProfileStep` «korinish»; avvalgi, hech qayerda
+ * ishlatilmagan `ThemeChoice` o'chirildi).
  *
  * Mutatsiyalar: THEME_OPTIONS dan `auto` ni olib tashlash; `migrateUiPrefs`
  * `auto` ni OS ga aylantirsa; `applyTheme("auto")` OS ni o'qimasa yoki
@@ -51,6 +55,18 @@ import { ThemeChoice, ThemeToggle } from "../../components/shell/ThemeToggle.tsx
 afterEach(() => {
   cleanup();
 });
+
+const THEME_USER = {
+  id: "u1", telegramId: null, username: null, name: "Ali", photoUrl: null, language: "uz", points: 0, quota: 0, balance: 0,
+  university: "", faculty: "", department: "", group: "", course: "", author: "", subject: "", teacher: "", city: "",
+  position: "", organization: "", phone: null, isAdmin: false,
+} as api.ServerUser;
+const noRouter = { back() {}, forward() {}, refresh() {}, prefetch() {}, push() {}, replace() {} } as unknown as AppRouterInstance;
+/** The Ko'rinish step needs a signed-in session (the steps show a sign-in card otherwise). */
+function signInForTheme() {
+  useAppStore.setState({ sessionChecked: true, loggedIn: true, user: THEME_USER });
+}
+const korinish = () => h(AppRouterContext.Provider, { value: noRouter }, h(ProfileStep, { step: "korinish", onNavigate: () => {} }));
 
 // ═══════════════════════════════════════════ THEME_OPTIONS
 
@@ -131,8 +147,10 @@ test("migrateUiPrefs: dir yaroqli bo'lsa saqlanadi, yaroqsiz bo'lsa maydon qaytm
 
 // ═══════════════════════════════════════════ C38 — bezak til menyusi yo'q
 
-test("C38 (UX-09/FE-21): mavzu boshqaruvlarida (ThemeToggle/ThemeChoice) interfeys tili menyusi YO'Q, store da `locale` holati yo'q", () => {
-  render(h("div", null, h(ThemeToggle), h(ThemeChoice)));
+test("C38 (UX-09/FE-21): mavzu boshqaruvlarida (ThemeToggle / Profil → Ko'rinish) interfeys tili menyusi YO'Q, store da `locale` holati yo'q", () => {
+  signInForTheme();
+  render(h("div", null, h(ThemeToggle), korinish()));
+  assert.ok(document.querySelector("[data-theme-choice]"), "the Ko'rinish step rendered");
   assert.ok(!screen.queryByLabelText("Tilni o'zgartirish"), "til tugmasi olib tashlangan");
   for (const name of ["English", "Русский", "Qaraqalpaqsha", "Қазақша", "Кыргызча"]) {
     assert.ok(!screen.queryByText(name), `${name} yo'q`);
@@ -143,7 +161,7 @@ test("C38 (UX-09/FE-21): mavzu boshqaruvlarida (ThemeToggle/ThemeChoice) interfe
   assert.equal(document.documentElement.getAttribute("lang") === "en", false);
 });
 
-// ═══════════════════════════════════════════ ThemeToggle / ThemeChoice — haqiqiy DOM hodisasi
+// ═══════════════════════════════════════════ ThemeToggle / Ko'rinish — haqiqiy DOM hodisasi
 
 test("ThemeToggle: bosilganda light↔dark almashadi, documentElement 'dark' klassi ergashadi", () => {
   useAppStore.setState({ theme: "light" });
@@ -177,19 +195,24 @@ test("ThemeToggle on Avto: shows what is painted and flips it to the explicit op
   mqMatches = false;
 });
 
-test("ThemeChoice: Kun / Tun / Avto radio guruhi, tanlangani aria-checked, har biri ≥ 44 px", () => {
+test("Profil → Ko'rinish (ProfileStep «korinish»): Kun / Tun / Avto radio guruhi, tanlangani checked, har biri ≥ 44 px", () => {
   act(() => useAppStore.getState().setTheme("light"));
-  render(h(ThemeChoice));
-  const group = screen.getByRole("radiogroup", { name: "Mavzu" });
-  const radios = [...group.querySelectorAll<HTMLButtonElement>("[role=radio]")];
-  assert.deepEqual(radios.map((r) => r.textContent), ["Kun", "Tun", "Avto"]);
-  assert.deepEqual(radios.map((r) => r.getAttribute("aria-checked")), ["true", "false", "false"]);
-  for (const r of radios) assert.ok(r.className.includes("min-h-20"), "≥ 44 px");
+  signInForTheme();
+  render(korinish());
+  const group = screen.getByRole("group", { name: "Mavzu" });
+  const radios = [...group.querySelectorAll<HTMLInputElement>("input[type=radio]")];
+  const labels = radios.map((r) => r.closest<HTMLElement>("label[data-theme-choice]")!);
+  assert.deepEqual(radios.map((r) => r.value), ["light", "dark", "auto"]);
+  assert.deepEqual(labels.map((l) => l.querySelector("span > span")?.textContent), ["Kun", "Tun", "Avto"]);
+  assert.deepEqual(radios.map((r) => r.checked), [true, false, false]);
+  assert.equal(new Set(radios.map((r) => r.name)).size, 1, "one radio group");
+  for (const l of labels) assert.ok(l.className.includes("min-h-[64px]"), "≥ 44 px target (the whole row)");
   mqMatches = true;
   fireEvent.click(radios[2]!);
   assert.equal(useAppStore.getState().theme, "auto");
   assert.equal(document.documentElement.classList.contains("dark"), true, "Avto: OS tun");
-  assert.equal(radios[2]!.getAttribute("aria-checked"), "true");
+  assert.equal(radios[2]!.checked, true);
+  assert.equal(radios[0]!.checked, false);
   mqMatches = false;
   act(() => useAppStore.getState().setTheme("light"));
 });
