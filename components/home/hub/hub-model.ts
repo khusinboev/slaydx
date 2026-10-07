@@ -38,13 +38,27 @@ export const QUICK_TOOL_IDS = ["slide", "referat", "essay", "resume"] as const s
 const OUTPUT_LABEL: Record<ToolConfig["output"], string> = { pptx: "PPTX", docx: "DOCX", png: "PNG", mp3: "MP3" };
 
 /**
- * One-line card detail from the tool registry only: the output format and the
- * «from» price exactly as the catalogue (`CreateGrid`) shows it — `price` is
+ * «3 000» with a no-break space — the same text on the server and in every
+ * browser (`toLocaleString("uz-UZ")` gives «3,000» where the browser lacks
+ * Uzbek ICU data, so the server HTML would not hydrate).
+ */
+export function groupDigits(n: number): string {
+  return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0");
+}
+
+/** Output format badge of a quick card («PPTX», «DOCX» …) — from `tool.output`. */
+export function outputLabel(tool: Pick<ToolConfig, "output">): string {
+  return OUTPUT_LABEL[tool.output];
+}
+
+/**
+ * One-line card detail from the tool registry only: the «from» price exactly
+ * as the catalogue (`CreateGrid`) shows it — `price` is
  * `clientAdjustedPrice(tool.id, tool.basePrice)`, passed in so admin
  * adjustments apply. Nothing is invented here.
  */
-export function quickDetail(tool: Pick<ToolConfig, "output">, price: number): string {
-  return `${OUTPUT_LABEL[tool.output]} · ${price.toLocaleString("uz-UZ")} tangadan`;
+export function quickDetail(price: number): string {
+  return `${groupDigits(price)} tangadan`;
 }
 
 export type FileTone = "ok" | "run" | "error" | "muted";

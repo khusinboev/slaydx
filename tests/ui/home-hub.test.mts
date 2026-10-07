@@ -206,7 +206,7 @@ test("signed out: login card instead of «Davom ettirish»; «Kirish» opens the
 
 /* ───────────── quick start ───────────── */
 
-test("«Tez boshlash»: Slayd, Referat, Insho, Rezyume → /uz/<slug>, detail = output · catalogue price", () => {
+test("«Tez boshlash»: Slayd, Referat, Insho, Rezyume → /uz/<slug>, format badge + catalogue price", () => {
   signIn();
   mount();
   const cards = [...document.querySelectorAll<HTMLAnchorElement>("[data-quick-tool]")];
@@ -218,10 +218,11 @@ test("«Tez boshlash»: Slayd, Referat, Insho, Rezyume → /uz/<slug>, detail = 
     const tool = TOOL_BY_ID[c.dataset.quickTool as keyof typeof TOOL_BY_ID];
     assert.equal(c.getAttribute("href"), `/uz/${tool.slug}`);
     assert.ok(c.textContent!.includes(tool.title), `${tool.id} title`);
-    const price = clientAdjustedPrice(tool.id, tool.basePrice).toLocaleString("uz-UZ");
-    assert.equal(c.querySelector("[data-quick-detail]")!.textContent, `${tool.output.toUpperCase()} · ${price} tangadan`);
+    const price = model.groupDigits(clientAdjustedPrice(tool.id, tool.basePrice));
+    assert.equal(c.querySelector("[data-quick-detail]")!.textContent, `${price} tangadan`);
+    assert.equal(c.querySelector("[data-quick-format]")!.textContent, tool.output.toUpperCase());
   }
-  assert.equal(q("[data-quick-tool=slide] [data-quick-detail]")!.textContent, `PPTX · ${(3000).toLocaleString("uz-UZ")} tangadan`);
+  assert.equal(q("[data-quick-tool=slide] [data-quick-detail]")!.textContent, "3\u00a0000 tangadan");
 });
 
 test("login gate on tool links: signed out → login over the tool with returnTo; signed in or session unknown → none", () => {
@@ -258,7 +259,9 @@ test("a tool without its provider key is drawn disabled with the reason (not a l
   const slide = q("[data-quick-tool=slide]")!;
   assert.equal(slide.tagName, "DIV");
   assert.equal(slide.getAttribute("aria-disabled"), "true");
-  assert.match(slide.textContent!, /AI xizmati vaqtincha o‘chiq/);
+  assert.equal(slide.querySelector("[data-quick-detail]")!.textContent, "Vaqtincha o‘chiq");
+  assert.match(slide.textContent!, /AI xizmati vaqtincha o‘chiq/, "full reason for screen readers");
+  assert.match(slide.getAttribute("title")!, /AI xizmati vaqtincha o‘chiq/);
 });
 
 /* ───────────── recent files ───────────── */
@@ -345,6 +348,13 @@ test("empty store but the server has files: the store is refreshed and the rows 
   mount();
   await waitFor(() => assert.equal(document.querySelectorAll("[data-hub-file]").length, 2));
   assert.equal(refreshed, 1);
+});
+
+test("groupDigits: one text on server and client (no locale data needed)", () => {
+  assert.equal(model.groupDigits(3000), "3\u00a0000");
+  assert.equal(model.groupDigits(12000), "12\u00a0000");
+  assert.equal(model.groupDigits(1234567), "1\u00a0234\u00a0567");
+  assert.equal(model.groupDigits(500), "500");
 });
 
 test("fileStatus / recentFiles", () => {
