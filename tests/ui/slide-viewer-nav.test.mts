@@ -373,6 +373,14 @@ test("the control pill respects the safe areas (notch / Telegram header / side i
 // ══════════════════════════════════ auto-hide (fine pointers)
 const bar = () => document.querySelector("[data-slide-present-bar]") as HTMLElement;
 const chrome = () => bar().getAttribute("data-slide-chrome");
+/** jsdom has no focus-visible heuristics: answer `:focus-visible` the way a browser would for keyboard / mouse focus. */
+function focusVisibleAs(el: Element, on: boolean) {
+  const real = Element.prototype.matches;
+  Object.defineProperty(el, "matches", {
+    configurable: true,
+    value: (q: string) => (q === ":focus-visible" ? on : real.call(el, q)),
+  });
+}
 const tick = (ms: number) =>
   act(async () => {
     mock.timers.tick(ms);
@@ -426,6 +434,7 @@ test("fine pointer: the pill never fades while the pointer rests on it or a cont
     assert.equal(chrome(), "hidden", "left the pill: it fades");
     // Keyboard: a Tab onto a button shows it and keeps it while focused.
     const prev = screen.getByLabelText("Oldingi slayd");
+    focusVisibleAs(prev, true);
     await act(async () => {
       prev.focus();
       fireEvent.focusIn(prev);
@@ -438,6 +447,24 @@ test("fine pointer: the pill never fades while the pointer rests on it or a cont
     });
     await tick(CHROME_HIDE_MS);
     assert.equal(chrome(), "hidden", "focus left: it fades");
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("fine pointer: a button the MOUSE just clicked (focused, not :focus-visible) does not pin the pill", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    mountPresent();
+    const next = screen.getByLabelText("Keyingi slayd");
+    focusVisibleAs(next, false); // focused by a mouse click
+    await act(async () => {
+      next.focus();
+      fireEvent.click(next);
+    });
+    await tick(CHROME_HIDE_MS * 2);
+    assert.ok(document.activeElement === next, "the button still has focus");
+    assert.equal(chrome(), "hidden", "…but a mouse-focused button lets the pill fade");
   } finally {
     mock.timers.reset();
   }

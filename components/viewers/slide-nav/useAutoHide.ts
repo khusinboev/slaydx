@@ -6,6 +6,21 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 export const CHROME_HIDE_MS = 2500;
 
 /**
+ * A control inside `el` has focus the KEYBOARD put there. A button the mouse
+ * just clicked keeps focus too, but that must not pin the pill (`:focus-visible`
+ * is false for it); engines without `:focus-visible` count any focus.
+ */
+function keyboardFocusIn(el: HTMLElement | null): boolean {
+  const a = document.activeElement;
+  if (!el || !a || !el.contains(a)) return false;
+  try {
+    return a.matches(":focus-visible");
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Auto-hide of the enlarged-mode control pill on FINE pointers (a mouse on a
  * desktop / projector): after `CHROME_HIDE_MS` without pointer movement it
  * fades, so the audience sees the slide, not a dark block over its corner
@@ -32,9 +47,8 @@ export function useAutoHide(
     const arm = () => {
       if (timer !== undefined) clearTimeout(timer);
       timer = setTimeout(() => {
-        const el = ref.current;
-        // Resting on the pill, or a button inside it focused: stay, look again later.
-        if (hovering.current || (el && document.activeElement && el.contains(document.activeElement))) {
+        // Resting on the pill, or KEYBOARD focus on a button inside it: stay, look again later.
+        if (hovering.current || keyboardFocusIn(ref.current)) {
           arm();
           return;
         }
