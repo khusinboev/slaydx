@@ -335,6 +335,26 @@ test("Space on a focused bar button activates THAT button — the page-forward k
   assert.equal(counter(), "3 / 3");
 });
 
+test("a mouse press on a bar button does not take focus (so Space keeps paging, not re-activating the clicked button); Tab still focuses", () => {
+  mountPresent();
+  tap(350);
+  assert.equal(counter(), "2 / 3");
+  const prev = screen.getByLabelText("Oldingi slayd");
+  const presenterBtn = screen.getByLabelText("Taqdimotchi rejimi");
+  for (const b of [prev, presenterBtn, screen.getByLabelText("Keyingi slayd"), screen.getByLabelText("Yopish")]) {
+    assert.equal(fireEvent.mouseDown(b), false, `${b.getAttribute("aria-label")}: mousedown default (focus) is cancelled`);
+  }
+  assert.equal(fireEvent.mouseDown(document.querySelector("[data-slide-present-bar]") as HTMLElement), false, "…also on the pill itself");
+  // The click still works, and the next Space (focus not on the button) pages forward from the body.
+  fireEvent.click(prev);
+  assert.equal(counter(), "1 / 3");
+  fireEvent.keyDown(document.body, { key: " " });
+  assert.equal(counter(), "2 / 3", "Space after a mouse click pages forward, it does not re-fire ‹");
+  // Keyboard focus is untouched: a button can still be focused (Tab).
+  prev.focus();
+  assert.ok(document.activeElement === prev, "Tab / programmatic focus still lands on a bar button");
+});
+
 test("the position is a polite live region («2 / 9 slayd» for screen readers)", () => {
   mountPresent();
   const c = document.querySelector("[data-slide-counter]") as HTMLElement;

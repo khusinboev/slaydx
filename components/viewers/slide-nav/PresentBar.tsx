@@ -58,6 +58,14 @@ export function PresentBar({
       style={{ top: `calc(${TOP_INSET} + 0.5rem)`, right: `calc(${SAFE_RIGHT} + 0.5rem)` }}
       onPointerEnter={idle.onPointerEnter}
       onPointerLeave={idle.onPointerLeave}
+      /*
+        A mouse press must not move focus onto the bar's buttons: the presenter
+        keeps paging with Space, and a clicked ‹ that kept focus would be
+        re-activated by that Space (it went back instead of forward). Tab still
+        focuses them (keyboard); touch taps are unaffected (their compat
+        mousedown is cancelled too, the click still fires).
+      */
+      onMouseDown={(e) => e.preventDefault()}
       className={cn(
         "no-print absolute z-20 flex items-center gap-1 rounded-lg bg-black/60 p-1 text-white/90 backdrop-blur-sm transition-opacity duration-300 motion-reduce:transition-none",
         idle.hidden && "pointer-events-none opacity-0",
