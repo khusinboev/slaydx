@@ -203,22 +203,40 @@ export async function getMe(): Promise<{ id: number; username: string } | null> 
   return call<{ id: number; username: string }>("getMe", {});
 }
 
-/** `getMe` answer cached for the process (the bot's username does not change at run time). */
-let cachedBotUsername: string | null = null;
+/** A failed / empty `getMe` is retried at most this often (review MINOR-5). */
+const BOT_USERNAME_RETRY_MS = 60_000;
+
+/**
+ * `getMe` result: a username is kept for the process (it does not change at
+ * run time); `null` (Telegram down, wrong token) only until `at + 60 s`, so a
+ * missing env does not turn every `GET /api/referral` and `/taklif` into a
+ * Bot API call. `pending` lets concurrent callers share one request.
+ */
+let botUsernameCache: { value: string | null; at: number } | null = null;
+let botUsernamePending: Promise<string | null> | null = null;
 
 /**
  * The bot's username for deep links (`t.me/<bot>?start=…`): the configured
- * `NEXT_PUBLIC_TELEGRAM_BOT`, else one `getMe` call per process. `null` when
- * neither is available (local run without a bot).
+ * `NEXT_PUBLIC_TELEGRAM_BOT`, else `getMe` (cached as above). `null` when
+ * neither is available (local run without a bot). `now` — test clock.
  */
-export async function botUsername(): Promise<string | null> {
+export async function botUsername(now: number = Date.now()): Promise<string | null> {
   const configured = env.telegramBotUsername.trim().replace(/^@/, "");
   if (configured) return configured;
-  if (cachedBotUsername) return cachedBotUsername;
   if (!botConfigured()) return null;
-  const me = await getMe().catch(() => null);
-  cachedBotUsername = me?.username ? me.username.replace(/^@/, "") : null;
-  return cachedBotUsername;
+  const c = botUsernameCache;
+  if (c && (c.value !== null || now - c.at < BOT_USERNAME_RETRY_MS)) return c.value;
+  botUsernamePending ??= getMe()
+    .catch(() => null)
+    .then((me) => {
+      const value = me?.username ? me.username.replace(/^@/, "") : null;
+      botUsernameCache = { value, at: now };
+      return value;
+    })
+    .finally(() => {
+      botUsernamePending = null;
+    });
+  return botUsernamePending;
 }
 
 /**

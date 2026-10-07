@@ -225,3 +225,31 @@ test("botUsername: the configured NEXT_PUBLIC_TELEGRAM_BOT, no getMe call", asyn
   assert.equal(await tg.botUsername(), "slaydx_test_bot");
   assert.equal(calls.length, 0);
 });
+
+test("review MINOR-5: botUsername without the env — a failed getMe is cached 60 s, a success for good, concurrent callers share one call", async () => {
+  const env = (await import("../lib/server/env.ts")).env as unknown as { telegramBotUsername: string };
+  const prev = env.telegramBotUsername;
+  env.telegramBotUsername = "";
+  let getMeCalls = 0;
+  let answer: unknown = { ok: false, error_code: 502, description: "Bad Gateway" };
+  globalThis.fetch = (async (url: string | URL) => {
+    assert.match(String(url), /\/getMe$/);
+    getMeCalls++;
+    return new Response(JSON.stringify(answer));
+  }) as typeof fetch;
+  try {
+    const t0 = 1_900_000_000_000;
+    const first = await Promise.all([tg.botUsername(t0), tg.botUsername(t0), tg.botUsername(t0)]);
+    assert.deepEqual(first, [null, null, null]);
+    assert.equal(getMeCalls, 1, "concurrent callers share one getMe");
+    assert.equal(await tg.botUsername(t0 + 59_000), null);
+    assert.equal(getMeCalls, 1, "MUTATSIYA 6: a failure is not retried on every request");
+    answer = { ok: true, result: { id: 1, username: "found_bot" } };
+    assert.equal(await tg.botUsername(t0 + 61_000), "found_bot", "retried after a minute");
+    assert.equal(getMeCalls, 2);
+    assert.equal(await tg.botUsername(t0 + 10 * 86_400_000), "found_bot");
+    assert.equal(getMeCalls, 2, "a success is kept");
+  } finally {
+    env.telegramBotUsername = prev;
+  }
+});
