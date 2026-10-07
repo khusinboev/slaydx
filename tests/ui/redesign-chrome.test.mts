@@ -31,7 +31,11 @@ import type * as api from "../../lib/api-client.ts";
  *   - ResultView: after a delete the page is REPLACED by `/uz/files` (Ishlarim);
  *   - sitemap lists `/uz/wallet`, not the `/uz/purchase` alias.
  *
- * Mutations (each turned the named test red, then restored): see the W5 report.
+ * Mutations (each turned the named test red, then restored): delete → `/uz`; openPay ignoring the
+ * amount; PAY_RETURN_PATH → `/uz/purchase`; sitemap back to `/uz/purchase`; tool chip without `--tc`;
+ * «eng qulay» on 10 000. Elsewhere: toast without `--tabbar-h` (result-actions), `--app-topbar-h: 3.5rem`
+ * (result-layout), search → `/uz/purchase`, sheet without grabber / `--sheet-pb` (shell-phone),
+ * Segmented `text-xs`, counter 11 px (touch-layer), submit bar pb env() only (tool-chrome-keyboard).
  */
 
 if (!("IntersectionObserver" in globalThis)) {

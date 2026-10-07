@@ -34,6 +34,8 @@ import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks
  *   - PayDialog presets `h-11` → `h-10`;
  *   - OverlayFrame dropping the `visualViewport` height (keyboard) or the safe padding;
  *   - LoginForm input `text-base` removed.
+ *   - W5: sheet without the grabber; `--sheet-pb` without the bottom safe area; search «Balansni
+ *     to'ldirish» → `/uz/purchase`.
  */
 
 const win = window as unknown as { matchMedia?: unknown; visualViewport?: unknown };
