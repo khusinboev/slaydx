@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Pause, Play, Presentation, RotateCcw, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pause, Play, Presentation, RotateCcw, X } from "lucide-react";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { slideNotes } from "@/lib/generation/slide-layout";
 import type { SlideSrc } from "@/lib/generation/slide-types";
@@ -513,9 +513,34 @@ export function SlideViewer({
       {phoneEditing ? <VisualViewportWatch onChange={capToViewport} /> : null}
       {present ? (
         <div className="no-print absolute top-0 right-0 z-20 flex items-center gap-1 p-3 text-white/80">
-          <span className="mr-2 text-sm tabular-nums">
+          {/*
+            Visible previous / next (44 px targets): the enlarged mode had NO
+            way back except the arrow keys. Touch also taps the left/right
+            third and swipes (`slide-nav/`).
+          */}
+          <button
+            type="button"
+            data-slide-prev
+            aria-label="Oldingi slayd"
+            disabled={i <= 0}
+            className="hover:bg-white/10 inline-flex size-11 items-center justify-center rounded disabled:opacity-30"
+            onClick={() => go(i - 1)}
+          >
+            <ChevronLeft className="size-5" />
+          </button>
+          <span data-slide-counter className="min-w-12 text-center text-sm tabular-nums">
             {i + 1} / {slides.length}
           </span>
+          <button
+            type="button"
+            data-slide-next
+            aria-label="Keyingi slayd"
+            disabled={i >= slides.length - 1}
+            className="hover:bg-white/10 mr-1 inline-flex size-11 items-center justify-center rounded disabled:opacity-30"
+            onClick={() => go(i + 1)}
+          >
+            <ChevronRight className="size-5" />
+          </button>
           <button
             type="button"
             title="Taqdimotchi rejimi (P)"
@@ -602,7 +627,7 @@ export function SlideViewer({
             fitOn={fitOn}
             presenter={presenter}
             onFitScale={setFitScale}
-            onAdvance={() => go(i + 1)}
+            onStep={(dir) => go(i + dir)}
             hideSrc={editOn && !present && editingKey ? editingKey : undefined}
             focus={phoneEditing ? editBox : null}
             /*
