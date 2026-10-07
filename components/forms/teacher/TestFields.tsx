@@ -161,7 +161,7 @@ export function TestSettings({ ui, set, setUi }: KindProps) {
                       questionKinds: s.questionKinds.includes(k) ? s.questionKinds.filter((x) => x !== k) : [...s.questionKinds, k],
                     }))
                   }
-                  className={`pointer-coarse:min-h-11 pointer-coarse:px-3 rounded-full border px-2.5 py-1 text-[12.5px] transition-colors ${on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted"}`}
+                  className={`pointer-coarse:min-h-11 pointer-coarse:px-3 rounded-full border px-2.5 py-1 text-[13.5px] transition-colors ${on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted"}`}
                 >
                   {QUESTION_KIND_LABEL[k]}
                 </button>

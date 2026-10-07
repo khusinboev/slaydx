@@ -90,10 +90,10 @@ export function PhotoField({
             onError={() => void onImgError(assetId)}
           />
         ) : (
-          <span className="text-muted-foreground text-[10px]">surat</span>
+          <span className="text-muted-foreground text-[12.5px]">surat</span>
         )}
       </div>
-      <div className="min-w-0 text-[12px]">
+      <div className="min-w-0 text-[14.5px]">
         <input
           ref={fileRef}
           type="file"
@@ -133,21 +133,21 @@ export function PhotoField({
           * qilinadi. O'zi kesmasa ham hujjat yiqilmaydi.
           */}
         {expired && !assetId ? (
-          <p className="mt-0.5 text-[11px] text-amber-600" data-photo-expired>
+          <p className="mt-0.5 text-[13px] text-amber-600" data-photo-expired>
             Avvalgi surat muddati o‘tib o‘chirilgan. Suratni qayta yuklang.
           </p>
         ) : assetId && !showImg ? (
-          <p className="mt-0.5 text-[11px] text-amber-600" data-photo-broken>
+          <p className="mt-0.5 text-[13px] text-amber-600" data-photo-broken>
             Surat ochilmadi — sahifani yangilang yoki suratni qayta yuklang.
           </p>
         ) : mismatch ? (
-          <p className="mt-0.5 text-[11px] text-amber-600">
+          <p className="mt-0.5 text-[13px] text-amber-600">
             Shablon {shape === "circle" ? "doira" : "kvadrat"} surat kutadi — «Markazlash» bilan qayta kesing.
           </p>
         ) : (
-          <p className="text-muted-foreground mt-0.5 text-[11px]">{busy ? "Yuklanmoqda…" : "PNG yoki JPEG, 5 MB gacha"}</p>
+          <p className="text-muted-foreground mt-0.5 text-[13px]">{busy ? "Yuklanmoqda…" : "PNG yoki JPEG, 5 MB gacha"}</p>
         )}
-        {error ? <p className="text-destructive mt-0.5 text-[11px]">{error}</p> : null}
+        {error ? <p className="text-destructive mt-0.5 text-[13px]">{error}</p> : null}
       </div>
 
       {pending || recrop ? (

@@ -312,7 +312,7 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
       onSubmit={submit}
       error={error}
     >
-      <Card title="Shaxsiy" aside={<span className="text-muted-foreground text-[11px]">{getClientPriceAdjust(tool.id) ? `${formatTanga(price)} · hammasi kiritilgan` : "3 000 tanga · hammasi kiritilgan"}</span>}>
+      <Card title="Shaxsiy" aside={<span className="text-muted-foreground text-[13.5px]">{getClientPriceAdjust(tool.id) ? `${formatTanga(price)} · hammasi kiritilgan` : "3 000 tanga · hammasi kiritilgan"}</span>}>
         <div className="grid gap-x-6 sm:grid-cols-2">
           <Row label="F.I.Sh">
             <span data-field="fullName" className="block">
@@ -361,7 +361,7 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
               />
             </span>
             {ui.photoAssetId && !template.photo ? (
-              <p className="mt-1 text-[11px] text-amber-600">
+              <p className="mt-1 text-[13px] text-amber-600">
                 «{template.title}» — SURATSIZ shablon: yuklangan surat chizilmaydi. Suratli shablonni tanlang yoki shu holicha qoldiring.
               </p>
             ) : null}
@@ -426,7 +426,7 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
                 />
                 <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
                   <MonthPicker label="Boshlanish" value={row.start} onChange={(v) => set2({ start: v })} />
-                  <span className="text-muted-foreground text-[12px]">—</span>
+                  <span className="text-muted-foreground text-[13.5px]">—</span>
                   <MonthPicker label="Tugash" value={row.end} onChange={(v) => set2({ end: v })} allowNow />
                 </div>
                 <div className="sm:col-span-2">
@@ -503,7 +503,7 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
                   {/* Oy SO'RALMAYDI — barcha o'qishlar sentabrda boshlanadi. */}
                   <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
                     <YearPicker label="Boshlanish yili" value={row.start} onChange={(v) => set2({ start: v })} />
-                    <span className="text-muted-foreground text-[12px]">—</span>
+                    <span className="text-muted-foreground text-[13.5px]">—</span>
                     <YearPicker label="Tugash yili" value={row.end} onChange={(v) => set2({ end: v })} allowNow />
                   </div>
                 </div>
@@ -557,7 +557,7 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
         </Toggle>
       </Card>
 
-      <Card title="Ko'nikmalar" aside={<span className="text-muted-foreground text-[11px]">{ui.skills.length} ta</span>}>
+      <Card title="Ko'nikmalar" aside={<span className="text-muted-foreground text-[13.5px]">{ui.skills.length} ta</span>}>
         <span data-field="skills" className="block">
           <Combobox
             multi
@@ -569,7 +569,7 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
             placeholder="Excel, 1C, IFRS…"
           />
         </span>
-        <p className="text-muted-foreground mt-1.5 text-[11px]">
+        <p className="text-muted-foreground mt-1.5 text-[13px]">
           Lavozimni tanlasangiz, shu kasbga xos ko‘nikmalar tavsiya qilinadi.
         </p>
       </Card>
@@ -656,7 +656,7 @@ function Toggle({
      */
     <div className="border-b py-2 last:border-b-0" data-toggle={field} data-field={field}>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[13px] font-medium">{label}</span>
+        <span className="text-[14.5px] font-medium">{label}</span>
         <Switch checked={on} onChange={onToggle} ariaLabel={label} />
       </div>
       {on ? <div className="mt-2">{children}</div> : null}

@@ -171,7 +171,7 @@ export function InfographicComposer({ tool }: { tool: ToolConfig }) {
           <Field id="infographicType">
             <SelectField ariaLabel="Plakat turi" options={infographicTypes().map((t) => ({ value: t.id, label: t.label.uz }))} value={ui.infographicType} onChange={onTypeChange} />
           </Field>
-          <p className="text-muted-foreground mt-1 text-[11px]">{type.hint}</p>
+          <p className="text-muted-foreground mt-1 text-[13px]">{type.hint}</p>
         </Row>
         <Row label="Blok soni">
           <Field id="blockCount">

@@ -55,7 +55,7 @@ export function LogoField({
 
   if (compact) {
     return (
-      <div className="flex min-w-0 flex-wrap items-center gap-2 text-[13px]">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 text-[14px]">
         {value ? (
           <>
             {preview ? (
@@ -64,18 +64,18 @@ export function LogoField({
             ) : (
               <span className="text-muted-foreground">Logotip yuklangan</span>
             )}
-            <button type="button" className="text-destructive text-xs" onClick={() => { setPreview(null); setError(null); onChange(""); }}>
+            <button type="button" className="text-destructive text-[13.5px]" onClick={() => { setPreview(null); setError(null); onChange(""); }}>
               O‘chirish
             </button>
           </>
         ) : (
-          <label className="border-input bg-card hover:bg-muted/40 inline-flex h-9 cursor-pointer items-center rounded-lg border border-dashed px-3 text-[13px]">
+          <label className="border-input bg-card hover:bg-muted/40 inline-flex h-9 cursor-pointer items-center rounded-lg border border-dashed px-3 text-[14.5px]">
             {busy ? "Yuklanmoqda..." : "Logotip yuklash (PNG/JPEG)"}
             <input type="file" className="hidden" accept="image/png,image/jpeg" disabled={busy}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }} />
           </label>
         )}
-        {error ? <span className="text-destructive text-xs">{error}</span> : null}
+        {error ? <span className="text-destructive text-[13.5px]">{error}</span> : null}
       </div>
     );
   }
@@ -83,7 +83,7 @@ export function LogoField({
   return (
     <fieldset className="mb-6">
       <Legend>Logotip</Legend>
-      <p className="text-muted-foreground mb-3 text-sm">
+      <p className="text-muted-foreground mb-3 text-[14.5px]">
         Taqdimotning pastki burchagida ko‘rinadi — ixtiyoriy.
       </p>
       {value ? (
@@ -92,7 +92,7 @@ export function LogoField({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={preview} alt="Logotip" className="h-12 w-12 rounded-lg border object-contain" />
           ) : (
-            <span className="text-muted-foreground text-sm">Logotip yuklangan</span>
+            <span className="text-muted-foreground text-[14.5px]">Logotip yuklangan</span>
           )}
           <button
             type="button"
@@ -101,13 +101,13 @@ export function LogoField({
               setError(null);
               onChange("");
             }}
-            className="text-destructive text-sm"
+            className="text-destructive text-[14.5px]"
           >
             O‘chirish
           </button>
         </div>
       ) : (
-        <label className="border-input bg-card hover:bg-muted/40 flex cursor-pointer items-center justify-center rounded-xl border border-dashed px-4 py-6 text-center text-sm">
+        <label className="border-input bg-card hover:bg-muted/40 flex cursor-pointer items-center justify-center rounded-xl border border-dashed px-4 py-6 text-center text-[14.5px]">
           {busy ? "Yuklanmoqda..." : "Logotip tanlash (PNG/JPEG, 2 MB gacha)"}
           <input
             type="file"
@@ -122,7 +122,7 @@ export function LogoField({
           />
         </label>
       )}
-      {error ? <p className="text-destructive mt-2 text-sm">{error}</p> : null}
+      {error ? <p className="text-destructive mt-2 text-[14.5px]">{error}</p> : null}
     </fieldset>
   );
 }

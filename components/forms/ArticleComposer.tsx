@@ -418,7 +418,7 @@ export function ArticleComposer({
             placeholder="Tajribada 120 talaba ishtirok etdi, o‘rtacha ball 4,1 dan 4,6 ga oshdi."
           />
         </span>
-        <p className="text-muted-foreground mt-1 text-[11px]">
+        <p className="text-muted-foreground mt-1 text-[13px]">
           {ui.userFacts.length.toLocaleString("uz-UZ")}/{ARTICLE_LIMITS.userFactsChars.toLocaleString("uz-UZ")}
         </p>
       </Row>
@@ -466,7 +466,7 @@ export function ArticleComposer({
           />
         </span>
         {userDataInvalid ? (
-          <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-500">
+          <p className="mt-1 text-[13px] text-amber-600 dark:text-amber-500">
             Jadval o‘qilmadi — birinchi qator sarlavhalar (kamida 2 ustun), keyingi har qator: nom,son,son…
             (son soni sarlavha soniga teng bo‘lishi kerak).
           </p>
@@ -514,7 +514,7 @@ export function ArticleComposer({
         </Card>
       )}
 
-      <Card title="Mualliflar" aside={<span className="text-muted-foreground text-[11px]">{ui.authors.length}/{ARTICLE_LIMITS.authors}</span>}>
+      <Card title="Mualliflar" aside={<span className="text-muted-foreground text-[13.5px]">{ui.authors.length}/{ARTICLE_LIMITS.authors}</span>}>
         <span data-field="authors" id="authors" className="block">
           <RowList
             name="authors"
@@ -549,12 +549,12 @@ export function ArticleComposer({
               onChange={(v) => onPagesChange(v as PagesId)}
             />
             {overLimit ? (
-              <p data-pages-limit={pubProfile.maxPages} className="mt-1 text-[11px] text-amber-700">
+              <p data-pages-limit={pubProfile.maxPages} className="mt-1 text-[13px] text-amber-700">
                 {pubProfile.label.uz} profili ko‘pi bilan <b>{pubProfile.maxPages} bet</b> qabul qiladi (taxmin {pagesEstimate}) — kichikroq paket tanlang; hisobotda «Bet chegarasi» bandi va qisqartirish tuzatishi bo‘ladi.
               </p>
             ) : null}
             {pagesOver ? (
-              <p data-pages-estimate={pagesEstimate} className="text-muted-foreground mt-1 text-[11px]">
+              <p data-pages-estimate={pagesEstimate} className="text-muted-foreground mt-1 text-[13px]">
                 {pubProfile.label.uz} profilida uch tilli annotatsiya, adabiyotlar ro‘yxati{pubProfile.secondEnglishList ? " (ikki ro‘yxat)" : ""} va sxema qo‘shimcha joy oladi — hujjat taxminan{" "}
                 <b>{pagesEstimate} bet</b> chiqadi; matn hajmi paketga mos.
               </p>
@@ -569,7 +569,7 @@ export function ArticleComposer({
         {isThesisTool(tool) ? null : (
           // Tezisda annotatsiya bo'limi yo'q (skeleton — bitta zich blok),
           // shu izoh maqolaga xos — tezisda ko'rsatilmaydi.
-          <p className="text-muted-foreground mt-1.5 text-[11px]">Annotatsiya: uz + ru + en (har doim uch tilda chiqadi)</p>
+          <p className="text-muted-foreground mt-1.5 text-[13px]">Annotatsiya: uz + ru + en (har doim uch tilda chiqadi)</p>
         )}
       </Card>
 
@@ -579,7 +579,7 @@ export function ArticleComposer({
         className="bg-card mb-3 rounded-2xl border p-4"
       >
         <summary className="pointer-coarse:min-h-11 flex cursor-pointer items-center justify-between gap-2">
-          <span className="text-muted-foreground text-[11.5px] font-semibold tracking-wide uppercase">Sozlamalar</span>
+          <span className="text-muted-foreground text-[13px] font-semibold tracking-wide uppercase">Sozlamalar</span>
           {!settingsOpen ? (
             <SummaryChips
               items={[
@@ -602,7 +602,7 @@ export function ArticleComposer({
               </span>
               <button
                 type="button"
-                className="bg-card pointer-coarse:min-h-11 pointer-coarse:px-3 shrink-0 rounded-md border px-2.5 py-1.5 text-xs disabled:opacity-50"
+                className="bg-card pointer-coarse:min-h-11 pointer-coarse:px-3 shrink-0 rounded-md border px-2.5 py-1.5 text-[13.5px] disabled:opacity-50"
                 disabled={udkBusy || ui.topic.trim().length < 3}
                 title={ui.topic.trim().length < 3 ? "Avval mavzuni kiriting" : "AI mavzudan UDK taklif qiladi"}
                 onClick={() => void onSuggestUdk()}
@@ -613,7 +613,7 @@ export function ArticleComposer({
               </button>
             </span>
             {udkNote ? (
-              <p className="text-muted-foreground mt-1 text-[11px]" data-udk-note>
+              <p className="text-muted-foreground mt-1 text-[13px]" data-udk-note>
                 {udkNote}
               </p>
             ) : null}
@@ -630,7 +630,7 @@ export function ArticleComposer({
                 placeholder="sun’iy intellekt, ta’lim…"
               />
             </span>
-            <p className="text-muted-foreground mt-1 text-[11px]">
+            <p className="text-muted-foreground mt-1 text-[13px]">
               {ui.keywords.length}/{ARTICLE_LIMITS.keywords}
             </p>
           </Row>
@@ -644,7 +644,7 @@ export function ArticleComposer({
                   onChange={(v) => set("figureCount", Number(v))}
                 />
               ) : (
-                <span className="text-muted-foreground text-sm">0</span>
+                <span className="text-muted-foreground text-[14.5px]">0</span>
               )}
             </span>
           </Row>
@@ -678,7 +678,7 @@ export function ArticleComposer({
           </div>
         </div>
       </details>
-      {fileBusy ? <p className="text-muted-foreground -mt-2 mb-4 text-[11px]">Fayl o‘qilmoqda…</p> : null}
+      {fileBusy ? <p className="text-muted-foreground -mt-2 mb-4 text-[13px]">Fayl o‘qilmoqda…</p> : null}
     </ToolChrome>
   );
 }

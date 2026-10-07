@@ -141,8 +141,8 @@ export function CurriculumPicker({
       <div data-field="topicIds">
         {value.subjectId && value.grade ? (
           <>
-            {loading ? <p className="text-muted-foreground text-[12px]">Mavzular yuklanmoqda…</p> : null}
-            {error ? <p className="text-destructive text-[12px]">{error}</p> : null}
+            {loading ? <p className="text-muted-foreground text-[13.5px]">Mavzular yuklanmoqda…</p> : null}
+            {error ? <p className="text-destructive text-[13.5px]">{error}</p> : null}
             {topics ? (
               <>
                 {selected.length ? (
@@ -155,7 +155,7 @@ export function CurriculumPicker({
                         data-topic={t.id}
                         onClick={() => toggleTopic(t.id)}
                         title={`${t.unit} · olib tashlash`}
-                        className="border-primary bg-primary text-primary-foreground rounded-full border px-2.5 py-1 text-[12px]"
+                        className="border-primary bg-primary text-primary-foreground rounded-full border px-2.5 py-1 text-[13.5px]"
                       >
                         {t.title} <span aria-hidden>×</span>
                       </button>
@@ -180,7 +180,7 @@ export function CurriculumPicker({
                     onChange={(e) => setQ(e.target.value)}
                     placeholder="Mavzu qidirish…"
                     aria-label="Mavzu qidirish"
-                    className="border-input bg-card focus:ring-ring h-8 min-w-0 flex-1 rounded-lg border px-2 text-[13px] outline-none focus:ring-2"
+                    className="border-input bg-card focus:ring-ring h-8 min-w-0 flex-1 rounded-lg border px-2 text-[16px] outline-none focus:ring-2"
                   />
                 </div>
                 <div className="flex flex-wrap gap-1.5" role="group" aria-label="Mavzular">
@@ -197,7 +197,7 @@ export function CurriculumPicker({
                         onClick={() => toggleTopic(t.id)}
                         title={t.unit}
                         className={cn(
-                          "rounded-full border px-2.5 py-1 text-[12px] transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                          "rounded-full border px-2.5 py-1 text-[13.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                           on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted",
                         )}
                       >
@@ -206,15 +206,15 @@ export function CurriculumPicker({
                     );
                   })}
                 </div>
-                {query && !shown.length ? <p className="text-muted-foreground text-[12px]">Mos mavzu topilmadi.</p> : null}
-                <p className="text-muted-foreground mt-1 text-[11px]">
+                {query && !shown.length ? <p className="text-muted-foreground text-[13.5px]">Mos mavzu topilmadi.</p> : null}
+                <p className="text-muted-foreground mt-1 text-[13px]">
                   {value.topicIds.length}/{TEACHER_LIMITS.curriculumTopicsMax} mavzu tanlandi · {flat.length} mavzu, {units.length} bo&apos;lim — manba: {topics.source.title}
                 </p>
               </>
             ) : null}
           </>
         ) : (
-          <p className="text-muted-foreground text-[12px]">Avval fan va sinfni tanlang.</p>
+          <p className="text-muted-foreground text-[13.5px]">Avval fan va sinfni tanlang.</p>
         )}
       </div>
     </div>

@@ -46,7 +46,7 @@ export function YearPicker({
         value={year}
         disabled={now}
         onChange={(e) => onChange(e.target.value)}
-        className="border-input bg-card focus:ring-ring pointer-coarse:h-11 h-8 rounded-lg border px-1.5 text-[12px] outline-none focus:ring-2 disabled:opacity-40"
+        className="border-input bg-card focus:ring-ring pointer-coarse:h-11 h-8 rounded-lg border px-1.5 text-[16px] outline-none focus:ring-2 disabled:opacity-40"
       >
         <option value="">yil —</option>
         {PICKER_YEARS.map((y) => (
@@ -56,7 +56,7 @@ export function YearPicker({
         ))}
       </select>
       {allowNow ? (
-        <span className="text-muted-foreground inline-flex items-center gap-1.5 text-[12px]">
+        <span className="text-muted-foreground inline-flex items-center gap-1.5 text-[14px]">
           <Switch checked={now} onChange={(on) => onChange(on ? "now" : "")} ariaLabel={nowLabel} />
           hozir
         </span>

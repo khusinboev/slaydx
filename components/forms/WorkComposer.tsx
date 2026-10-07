@@ -179,7 +179,7 @@ const pagesLabel = (id: string) => `${id.replace("-", "–")} bet`;
 
 /** ▸ Sozlamalar ichidagi kichik bo'lim sarlavhasi (karta emas — balandlik qimmat). */
 function SubHead({ children }: { children: ReactNode }) {
-  return <h3 className="text-muted-foreground mt-4 mb-1 text-[11px] font-semibold tracking-wide uppercase first:mt-1">{children}</h3>;
+  return <h3 className="text-muted-foreground mt-4 mb-1 text-[13px] font-semibold tracking-wide uppercase first:mt-1">{children}</h3>;
 }
 
 function emptyUi(profile: UserProfile, tool: ToolConfig, genre: WorkGenreId): Ui {
@@ -510,7 +510,7 @@ export function WorkComposer({
 
       <Card title="Titul">
         <AuthorRows ids={REQUIRED_TITLE_IDS} values={{ university: ui.university, author: ui.author }} set={setTitleField} required={REQUIRED_TITLE_IDS} />
-        <p className="text-muted-foreground mt-1 text-[11px]">Fakultet, kafedra, guruh, kurs, o‘qituvchi, shahar va vazirlik — ▸ Sozlamalar ichida.</p>
+        <p className="text-muted-foreground mt-1 text-[13px]">Fakultet, kafedra, guruh, kurs, o‘qituvchi, shahar va vazirlik — ▸ Sozlamalar ichida.</p>
       </Card>
 
       <SettingsDetails summary={summary}>
@@ -571,7 +571,7 @@ export function WorkComposer({
                 placeholder={"1-BOB. Nazariy asoslar\n1.1. Tushuncha\n1.2. Yondashuvlar\n2-BOB. Amaliy tahlil\n2.1. Natijalar"}
               />
             </Field>
-            <p className="text-muted-foreground mt-1 text-[11px]" data-outline-summary>
+            <p className="text-muted-foreground mt-1 text-[13px]" data-outline-summary>
               {outline.length} bob, {outlineParagraphs} paragraf
             </p>
           </Row>
@@ -683,7 +683,7 @@ export function WorkComposer({
           <ClearFormButton armed={clearConfirm.armed} onClick={clearConfirm.trigger} />
         </div>
       </SettingsDetails>
-      {fileBusy ? <p className="text-muted-foreground -mt-2 mb-4 text-[11px]">Fayl o‘qilmoqda…</p> : null}
+      {fileBusy ? <p className="text-muted-foreground -mt-2 mb-4 text-[13px]">Fayl o‘qilmoqda…</p> : null}
     </ToolChrome>
   );
 }

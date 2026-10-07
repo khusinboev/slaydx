@@ -187,7 +187,7 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
             onChange={(e) => setSourceText(e.target.value)}
             minRows={6}
             maxHeight="60vh"
-            className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 text-[15px] outline-none focus:ring-2"
+            className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 text-[16px] outline-none focus:ring-2"
             placeholder="Matnni shu yerga yozing yoki joylashtiring…"
           />
         ) : upload ? (
@@ -207,15 +207,15 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
               onChange={() => clearUpload()}
               badge={
                 <>
-                  <span className="bg-muted rounded-md px-1.5 py-0.5 text-[11px]">{KIND_LABEL[upload.kind] ?? upload.kind}</span>
-                  <span className="text-muted-foreground text-[12px] tabular-nums">{fmt(upload.chars)} belgi</span>
+                  <span className="bg-muted rounded-md px-1.5 py-0.5 text-[12.5px]">{KIND_LABEL[upload.kind] ?? upload.kind}</span>
+                  <span className="text-muted-foreground text-[13.5px] tabular-nums">{fmt(upload.chars)} belgi</span>
                 </>
               }
             />
             {upload.text ? (
-              <details className="mt-2 text-[12.5px]">
+              <details className="mt-2 text-[13px]">
                 <summary className="text-muted-foreground cursor-pointer">Olingan matn (ko‘rish)</summary>
-                <p className="text-muted-foreground mt-1 text-[11.5px]">
+                <p className="text-muted-foreground mt-1 text-[13px]">
                   Fayl rejimida tarjima FAYLNING O‘ZIGA yoziladi — matn tahrir qilinmaydi.{" "}
                   {!upload.truncatedPreview ? (
                     <button
@@ -260,11 +260,11 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
           >
             {busy ? <Loader2 className="text-muted-foreground mb-2 size-6 animate-spin" /> : <FileText className="text-muted-foreground mb-2 size-6" />}
             <span className="font-medium">{busy ? "Tahlil qilinmoqda…" : "Faylni tanlang yoki shu yerga tashlang"}</span>
-            <span className="text-muted-foreground mt-1 text-[12.5px]">DOCX, PPTX, XLSX, PDF, TXT, MD, CSV — 20 MB gacha. Tuzilma, shrift, jadval va rasmlar saqlanadi.</span>
+            <span className="text-muted-foreground mt-1 text-[13px]">DOCX, PPTX, XLSX, PDF, TXT, MD, CSV — 20 MB gacha. Tuzilma, shrift, jadval va rasmlar saqlanadi.</span>
             <input type="file" className="hidden" accept={ACCEPT} aria-label="Fayl tanlash" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }} />
           </label>
         )}
-        <p className="text-muted-foreground mt-2 text-[11.5px]" data-price-rule>
+        <p className="text-muted-foreground mt-2 text-[13px]" data-price-rule>
           {/* An adjusted price is rounded, so the per-step amount is no longer exact: only the base tier is quoted. */}
           {adjusted
             ? `${fmt(10_000)} belgigacha ${fmt(clientAdjustedPrice(tool.id, TRANSLATION_BASE_PRICE))} tanga · keyingi har ${fmt(5000)} belgi uchun narx oshadi`
@@ -273,7 +273,7 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
         </p>
       </Card>
 
-      <Card title="Tillar" aside={<span className="text-muted-foreground text-[11.5px]">Natija: {outFormat}</span>}>
+      <Card title="Tillar" aside={<span className="text-muted-foreground text-[13.5px]">Natija: {outFormat}</span>}>
         <div className="grid gap-x-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
           <Row label="Qaysi tildan">
             <SelectField ariaLabel="Manba tili" options={[{ value: "avto", label: "Avtomatik aniqlash" }, ...langOptions]} value={sourceLang} onChange={setSourceLang} />
@@ -295,7 +295,7 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
             <SelectField ariaLabel="Maqsad tili" options={langOptions} value={language} onChange={setLanguage} />
           </Row>
         </div>
-        {sameLang ? <p className="text-destructive mt-1 text-[12.5px]">Manba va maqsad tili bir xil</p> : null}
+        {sameLang ? <p className="text-destructive mt-1 text-[13.5px]">Manba va maqsad tili bir xil</p> : null}
       </Card>
 
       <SettingsDetails summary={[TRANSLATION_STYLES.find((s) => s.value === style)?.label ?? style, glossaryCount ? `Lug‘at · ${glossaryCount}` : ""]}>
@@ -311,9 +311,9 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
               minRows={3}
               maxRows={10}
               placeholder={"fotosintez = photosynthesis\nOliy Majlis = Oliy Majlis"}
-              className="border-input bg-card focus:ring-ring w-full rounded-lg border px-3 py-2 text-[13px] outline-none focus:ring-2"
+              className="border-input bg-card focus:ring-ring w-full rounded-lg border px-3 py-2 text-[16px] outline-none focus:ring-2"
             />
-            {glossaryCount ? <p className="text-muted-foreground mt-1 text-[11.5px]">{glossaryCount} ta atama</p> : null}
+            {glossaryCount ? <p className="text-muted-foreground mt-1 text-[13px]">{glossaryCount} ta atama</p> : null}
           </Row>
         </div>
       </SettingsDetails>

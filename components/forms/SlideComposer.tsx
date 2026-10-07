@@ -241,7 +241,7 @@ export function SlideComposer({
                 title={m.hint}
                 onClick={() => set("mode", m.id)}
                 className={cn(
-                  "pointer-coarse:min-h-11 pointer-coarse:px-3 rounded-md px-2.5 py-1 text-xs transition-colors",
+                  "pointer-coarse:min-h-11 pointer-coarse:px-3 rounded-md px-2.5 py-1 text-[13.5px] transition-colors",
                   mode === m.id ? "bg-card shadow-sm font-medium" : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -273,7 +273,7 @@ export function SlideComposer({
               value={String(values.topic ?? "")}
               placeholder={tool.topicPlaceholder}
               onChange={(e) => set("topic", e.target.value)}
-              className="border-input bg-card focus:ring-ring h-11 w-full rounded-xl border px-3.5 text-[15px] outline-none focus:ring-2"
+              className="border-input bg-card focus:ring-ring h-11 w-full rounded-xl border px-3.5 text-[16px] outline-none focus:ring-2"
             />
             {pro ? null : (
               <TopicChips examples={TOPIC_EXAMPLES} onPick={(ex) => set("topic", ex)} />
@@ -294,12 +294,12 @@ export function SlideComposer({
       ) : null}
 
       {authorIds.length ? (
-        <Card title="Muallif" aside={<span className="text-muted-foreground text-[11.5px]">profilga saqlanadi</span>}>
+        <Card title="Muallif" aside={<span className="text-muted-foreground text-[13.5px]">profilga saqlanadi</span>}>
           <div className="grid gap-x-6 sm:grid-cols-2">{authorIds.map((id) => renderSlideParam(id, values, set, ctx))}</div>
         </Card>
       ) : null}
 
-      <Card title="Shablon va rang" aside={<span className="text-muted-foreground text-[11.5px]">preview — haqiqiy slaydlar</span>}>
+      <Card title="Shablon va rang" aside={<span className="text-muted-foreground text-[13.5px]">preview — haqiqiy slaydlar</span>}>
         <TemplateGallery
           value={String(values.slideTemplate || "auto")}
           theme={String(values.slideTheme || "atlas")}
