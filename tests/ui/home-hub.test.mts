@@ -18,14 +18,17 @@ import type * as Api from "../../lib/api-client.ts";
  *   - `useReturnToLogin()` kept (test: `?returnTo=` opens the login).
  *
  * Mutations (each turned this file red — see the W1 report):
- *   M1 hub-model `nameWord`: drop the digit/@ filter → «Salom, +998…»;
- *   M2 HomeHub: drop `useReturnToLogin()` → no login from `?returnTo=`;
- *   M3 useLoginGate: gate on `!loggedIn` only → login before the session is known;
- *   M4 useRecentFiles: show the empty state without the `limit=1` check → error unseen;
- *   M5 RecentFiles: empty CTA `open("login")` instead of «+»;
- *   M6 hub-model `recentFiles`: no sort (store order) → wrong three;
- *   M7 hub-model `fileStatus`: progress not shown → «Yozilmoqda» without %;
- *   M8 ToolsByGroup: a hand-written group list (drops «Media»).
+ *   M1  hub-model `nameWord`: drop the digit/@ filter → «greetingName» red;
+ *   M1b … and the letter check too (the F0 behaviour) → «Salom, +998…», greeting test red;
+ *   M2  HomeHub: drop `useReturnToLogin()` → no login from `?returnTo=`;
+ *   M3  useLoginGate: gate on `!loggedIn` only → login before the session is known;
+ *   M4  useRecentFiles: trust the store's empty list (no `limit=1` check) → error unseen;
+ *   M5  HomeHub: empty CTA `open("login")` instead of «+»;
+ *   M6  hub-model `recentFiles`: no sort (store order) → wrong three;
+ *   M7  hub-model `fileStatus`: «Yozilmoqda» without the %;
+ *   M8  ToolsByGroup: a hand-written group list (drops «Media»);
+ *   M9  QuickStart: a hard-coded price instead of the catalogue's;
+ *   M10 HomeHub: the search field opens another overlay.
  */
 
 const { HomeHub } = await import("../../components/home/HomeHub.tsx");
