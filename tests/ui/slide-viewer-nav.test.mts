@@ -316,28 +316,27 @@ test("a pinch-zoomed page is panned, not navigated: gestures are off and touch-a
   win.visualViewport = vv;
   try {
     mountPresent();
-    tap(350);
-    assert.equal(counter(), "2 / 3", "not zoomed: taps navigate");
+    assert.equal(stage().style.touchAction, "pan-y pinch-zoom", "not zoomed: navigation gestures on");
     await act(async () => {
       vv.scale = 2.4;
       vv.dispatchEvent(new Event("resize"));
     });
     assert.equal(stage().style.touchAction, "auto", "zoomed: the browser pans the page");
     assert.equal(stage().style.overscrollBehaviorX, "none", "…and still never navigates history");
-    drag({ x: 300, y: 400 }, { x: 160, y: 400 });
-    drag({ x: 100, y: 400 }, { x: 240, y: 400 });
-    tap(350);
-    tap(40);
-    assert.equal(counter(), "2 / 3", "zoomed: swipes and taps do not change the slide");
+    fireEvent.click(stage(), { clientX: 10, clientY: 10 });
     fireEvent.click(stage(), { clientX: 10, clientY: 10 });
     assert.equal(counter(), "3 / 3", "a mouse click is not a touch gesture: still advances");
+    // On the last slide a swipe RIGHT / a tap LEFT would go back — zoomed, they must not.
+    drag({ x: 100, y: 400 }, { x: 240, y: 400 });
+    tap(40);
+    assert.equal(counter(), "3 / 3", "zoomed: swipes and taps do not change the slide");
     await act(async () => {
       vv.scale = 1;
       vv.dispatchEvent(new Event("resize"));
     });
     assert.equal(stage().style.touchAction, "pan-y pinch-zoom", "zoomed out: navigation gestures are back");
     drag({ x: 100, y: 400 }, { x: 240, y: 400 });
-    assert.equal(counter(), "2 / 3");
+    assert.equal(counter(), "2 / 3", "zoomed out: a swipe right goes back again");
   } finally {
     delete win.visualViewport;
   }
