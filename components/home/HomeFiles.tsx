@@ -1,13 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowDownUp, ArrowUp, ChevronDown, FileX, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { ArrowDownUp, Check, FolderOpen, Plus, RotateCw, Search } from "lucide-react";
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { TOOL_BY_ID } from "@/lib/tools";
 import {
+  DEFAULT_FILE_VIEW,
   FILE_FILTERS,
   FILE_SORTS,
   fileFilterMatch,
@@ -19,12 +19,25 @@ import {
   useUi,
 } from "@/lib/ui";
 import { useOverlayHistory } from "@/components/nav/useOverlayHistory";
+import { HeaderIconButton, PageHeader } from "@/components/shell/PageHeader";
 import { cn } from "@/lib/cn";
-import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
-import { FilePreview } from "./FilePreview";
 import { FileMenu } from "./FileMenu";
 import { PhoneFileCard } from "./PhoneFileCard";
-import { confirmAccepted, confirmClock } from "../overlays/useConfirmClick";
+import { groupFilesByDate } from "./file-meta";
+
+/** Body width of the tab (header row uses the same). */
+const CONTENT = "max-w-6xl";
+
+/** The «all» chip reads «Hammasi · N» on this tab (mockup A); the other labels come from `FILE_FILTERS`. */
+function chipLabel(id: FileFilterId, label: string): string {
+  return id === "all" ? "Hammasi" : label;
+}
+
+/** Entrance stagger: card `i` fades in after `i × 20 ms`, at most 140 ms (reduced motion: none). */
+const STAGGER_MS = 20;
+const STAGGER_MAX = 7;
+
+type ListError = { message: string; retry?: () => void };
 
 export function HomeFiles() {
   const sessionChecked = useAppStore((s) => s.sessionChecked);
@@ -39,22 +52,16 @@ export function HomeFiles() {
   const close = useUi((s) => s.close);
   const params = useSearchParams();
   /*
-   * Filtr/tartib URLda yashaydi (`?filter=docs&sort=name&desc=0`, standart
-   * qiymatlar URLga chiqmaydi): faylni ochib «orqaga» qaytganda ro'yxat
-   * o'sha ko'rinishda turadi. Holat mahalliy ham saqlanadi (bosish zahoti
-   * qayta chiziladi), URL esa `replace` bilan yangilanadi — tarixda yangi
-   * yozuv yo'q.
+   * Filter/sort live in the URL (`?filter=docs&sort=name&desc=0`; defaults are
+   * left out): open a file, come back — the list is in the same view. The
+   * state is kept locally too (instant redraw on tap) and the URL is updated
+   * with `replace` — no new history entry.
    */
   const [view, setView] = useState<FileView>(() => readFileView(params));
   const { filter, sort, desc } = view;
-  const [error, setError] = useState<string | null>(null);
-  /*
-   * Telefon/sensorli ekran (docs/mobile/PLAN.md O7): 2 ustunli kartalar,
-   * 2 qatorli sarlavha, o'chirish «⋯» menyusida, 44 px nishonlar. Kompyuter
-   * ko'rinishi (jsdom, SSR ham) o'zgarmaydi.
-   */
-  const phone = useCoarsePointer();
+  const [error, setError] = useState<ListError | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
+  const sortWrap = useRef<HTMLDivElement>(null);
 
   function changeView(patch: Partial<FileView>) {
     const next = { ...view, ...patch };
@@ -62,7 +69,7 @@ export function HomeFiles() {
     replaceSearch(writeFileView(new URLSearchParams(window.location.search), next));
   }
 
-  // URL tashqaridan o'zgarsa (masalan yon paneldagi «Bosh sahifa») ko'rinish ergashadi.
+  // The URL changed from outside (a link to `/uz/files`, back/forward): the view follows.
   useEffect(() => {
     const fromUrl = readFileView(params);
     setView((cur) =>
@@ -71,37 +78,55 @@ export function HomeFiles() {
   }, [params]);
 
   useEffect(() => {
-    // `ret` so'rov parametridan (masalan `?returnTo=javascript:...`)
-    // keladi — TEKSHIRILMAGAN. Sanatsiya `useUi.open` ichida
-    // (`lib/ui.ts`, `safeReturnTo`) yagona joyda bajariladi, shu bois
-    // bu yerda xom qiymat shunchaki uzatiladi (C02/FE-01/SECA-02).
+    // `returnTo` comes from the query (e.g. `?returnTo=javascript:...`) — UNCHECKED
+    // here on purpose: `useUi.open` sanitises it in one place (`lib/ui.ts`,
+    // `safeReturnTo`; C02/FE-01/SECA-02).
     const ret = params.get("returnTo");
     if (!ret || !sessionChecked) return;
     if (!loggedIn) open("login", { returnTo: ret });
-    // Qiymat do'konga o'tdi (yoki foydalanuvchi allaqachon kirgan): URLda qolsa,
-    // yangilash kirish oynasini qayta ochardi.
+    // The value went to the store (or the user is already signed in): left in
+    // the URL, a reload would open the login again.
     const rest = new URLSearchParams(params.toString());
     rest.delete("returnTo");
     replaceSearch(rest);
   }, [params, loggedIn, sessionChecked, open]);
 
-  // Saralash oynasi ham tarix yozuviga ega: telefonning «orqaga»si uni yopadi.
-  useOverlayHistory(overlay === "sort", () => {
+  // The sort menu has its own history entry: the phone's back closes it.
+  const sortOpen = overlay === "sort";
+  useOverlayHistory(sortOpen, () => {
     if (useUi.getState().overlay === "sort") close();
   });
+  // …and so do Escape and a tap anywhere outside it.
+  useEffect(() => {
+    if (!sortOpen) return;
+    const shut = () => {
+      if (useUi.getState().overlay === "sort") useUi.getState().close();
+    };
+    const onDown = (e: PointerEvent) => {
+      if (sortWrap.current && e.target instanceof Node && sortWrap.current.contains(e.target)) return;
+      shut();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") shut();
+    };
+    document.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [sortOpen]);
 
   /*
-   * Navbatdagi ish tugaguncha ro'yxatni yangilab turamiz — foydalanuvchi
-   * sahifani qo'lda yangilamasdan «Tayyor» ni ko'radi.
+   * Refresh the list while a job is queued/running — the user sees «Tayyor»
+   * without reloading.
    *
-   * FE-12: oraliq 3 s dan boshlab ×1,5 o'sadi (15 s gacha) — navbat soatlab
-   * cho'zilganda ham har yorliq serverni 3 s da bir bosmasin; yorliq
-   * YASHIRIN bo'lsa umuman so'ramaydi, ko'ringan zahoti darhol so'raydi
-   * (`waitTurn` — natija sahifasi pollingi bilan bir xil qoida).
+   * FE-12: the interval starts at 3 s and grows ×1.5 (up to 15 s), so a long
+   * queue does not hit the server every 3 s from every tab; a HIDDEN tab does
+   * not ask at all and asks at once when it is shown again (`waitTurn` — the
+   * same rule as the result page polling).
    */
-  const hasRunning = generations.some(
-    (g) => g.status === "QUEUED" || g.status === "IN_PROGRESS",
-  );
+  const hasRunning = generations.some((g) => g.status === "QUEUED" || g.status === "IN_PROGRESS");
   useEffect(() => {
     if (!hasRunning || !loggedIn) return;
     const ctrl = new AbortController();
@@ -113,20 +138,19 @@ export function HomeFiles() {
         delay = Math.min(LIST_POLL_MAX_MS, Math.round(delay * 1.5));
       }
     })().catch((e: unknown) => {
-      // Effekt tozalanganda (`ctrl.abort`) — kutilgan to'xtash.
+      // The effect was cleaned up (`ctrl.abort`) — an expected stop.
       if (e instanceof DOMException && e.name === "AbortError") return;
-      setError(e instanceof Error ? e.message : "Ro'yxat yangilanmadi");
+      setError({ message: e instanceof Error ? e.message : "Ro'yxat yangilanmadi", retry: () => void refreshGenerations() });
     });
     return () => ctrl.abort();
   }, [hasRunning, loggedIn, refreshGenerations]);
 
   /*
-   * «Yana ko'rsatish» (FE-08): server ro'yxatni sahifalab beradi (standart
-   * 50 ta, `nextCursor`). Store faqat BIRINCHI sahifani yuritadi (polling
-   * ham shuni yangilaydi); eski sahifalar shu yerda, alohida — ikkalasi
-   * id bo'yicha birlashtiriladi. Kursor: birinchi yuklashdan keyin —
-   * store dagi birinchi sahifaniki (`generationsCursor`), keyin — oxirgi
-   * yuklangan sahifaniki. Eski server `nextCursor` bermaydi → tugma chiqmaydi.
+   * «Yana ko'rsatish» (FE-08): the server pages the list (50 by default,
+   * `nextCursor`). The store keeps only the FIRST page (polling refreshes it);
+   * older pages live here, separately — both are merged by id. Cursor: after
+   * the first load — the store's first-page cursor (`generationsCursor`), then
+   * the last loaded page's. An old server sends no `nextCursor` → no button.
    */
   const [older, setOlder] = useState<api.ServerGeneration[]>([]);
   const [olderCursor, setOlderCursor] = useState<string | null | undefined>(undefined);
@@ -146,7 +170,7 @@ export function HomeFiles() {
       });
       setOlderCursor(page.nextCursor ?? null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ro'yxat yuklanmadi");
+      setError({ message: e instanceof Error ? e.message : "Ro'yxat yuklanmadi", retry: () => void loadMore() });
     } finally {
       setLoadingMore(false);
     }
@@ -166,34 +190,8 @@ export function HomeFiles() {
       setOlder((prev) => prev.filter((g) => g.id !== id));
       void useAppStore.getState().refreshSession();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "O'chirilmadi");
+      setError({ message: e instanceof Error ? e.message : "O'chirilmadi", retry: () => void onDelete(id) });
     }
-  }
-
-  /*
-   * Ikki bosqichli o'chirish — birinchi bosish tugmani «qurollantiradi»,
-   * 3 s ichidagi ikkinchi bosishgina o'chiradi. Ilgari ro'yxatdagi bir
-   * bosish hujjatni darhol yo'q qilardi (undo yo'q).
-   */
-  const [confirmId, setConfirmId] = useState<string | null>(null);
-  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const armedAt = useRef(0);
-  useEffect(() => () => {
-    if (confirmTimer.current) clearTimeout(confirmTimer.current);
-  }, []);
-  function askDelete(id: string, e?: { detail?: number }) {
-    if (confirmId === id) {
-      // FE-07: qo'sh bosishning ikkinchi yarmi tasdiq emas (`useConfirmClick` bilan bitta qoida).
-      if (!confirmAccepted(armedAt.current, e)) return;
-      if (confirmTimer.current) clearTimeout(confirmTimer.current);
-      setConfirmId(null);
-      void onDelete(id);
-      return;
-    }
-    if (confirmTimer.current) clearTimeout(confirmTimer.current);
-    armedAt.current = confirmClock();
-    setConfirmId(id);
-    confirmTimer.current = setTimeout(() => setConfirmId(null), 3000);
   }
 
   const list = useMemo(() => {
@@ -207,231 +205,220 @@ export function HomeFiles() {
     return rows;
   }, [all, filter, sort, desc]);
 
+  /*
+   * One «now» for all cards (today/yesterday sections and times, Tashkent),
+   * re-read whenever the list changes (poll, delete, next page) — so the
+   * sections roll over at midnight with the next refresh, and memoised cards
+   * are not redrawn by unrelated renders (sort menu, error banner).
+   */
+  const now = useMemo(() => {
+    void all;
+    return new Date();
+  }, [all]);
+  /*
+   * Date sections «Bugun / Kecha / Shu hafta / Avvalroq» by the date the list
+   * is sorted on; sorted by name there are no sections (they would cut the
+   * alphabet apart).
+   */
+  const groups = useMemo(() => {
+    if (sort === "name") return [{ id: "all" as const, label: null, rows: list }];
+    const dateOf = (g: api.ServerGeneration) => (sort === "created" ? g.createdAt : (g.finishedAt ?? g.createdAt));
+    return groupFilesByDate(list, dateOf, now);
+  }, [list, sort, now]);
+
   const menuGen = menuId ? all.find((g) => g.id === menuId) : undefined;
   const sortLabel = FILE_SORTS.find((s) => s.id === sort)?.label ?? FILE_SORTS[0].label;
+  // `desc` means «the sort's natural order»: newest first for «modified», first-made first for «created».
+  const newestFirst = sort === "created" ? !desc : desc;
+  const customView = sort !== DEFAULT_FILE_VIEW.sort || desc !== DEFAULT_FILE_VIEW.desc;
+  const loading = !sessionChecked || (loggedIn && !generationsLoaded);
+  const total = `${all.length}${moreCursor ? "+" : ""}`;
+  const subtitle = loading
+    ? "Yuklanmoqda…"
+    : !loggedIn
+      ? "Yaratgan fayllaringiz shu yerda"
+      : all.length
+        ? `${total} ta ish`
+        : "Hali ish yo‘q";
+
+  let cardIndex = 0;
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-5 py-5 lg:px-8 lg:py-8 2xl:max-w-[1440px]">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <FolderOpen className="size-5 shrink-0" strokeWidth={1.75} />
-          <h1 className="text-base font-semibold tracking-tight">Mening fayllarim</h1>
-        </div>
-        <Link
-          href="/uz/create"
-          onClick={() => {
-            if (!loggedIn) open("login", { returnTo: "/uz/create" });
-          }}
-          className={cn(
-            "bg-primary text-primary-foreground hover:bg-primary/90 inline-flex w-full items-center justify-center gap-2 rounded-full px-5 text-[15.5px] font-medium shadow-sm sm:w-auto",
-            phone ? "h-11" : "h-10",
-          )}
-        >
-          <Plus className="size-4" />
-          Yaratish
-        </Link>
-      </div>
-
-      <div className="mt-8 flex flex-row items-center justify-between gap-2 sm:gap-3">
-        <div className="hidden min-w-0 flex-1 items-center gap-2 sm:flex sm:flex-wrap">
-          {FILE_FILTERS.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              aria-pressed={filter === f.id}
-              onClick={() => changeView({ filter: f.id })}
-              className={cn(
-                "inline-flex flex-none items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap transition-colors",
-                phone ? "h-11" : "h-9",
-                filter === f.id
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex min-w-0 flex-1 sm:hidden">
-          <select
-            aria-label="Hujjat turi"
-            className={cn(
-              "border-input bg-background w-full rounded-full border px-4 font-medium",
-              phone ? "h-11 text-base" : "h-10 text-sm",
-            )}
-            value={filter}
-            onChange={(e) => changeView({ filter: e.target.value as FileFilterId })}
-          >
-            {FILE_FILTERS.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="relative flex flex-none items-center gap-2">
-          <button
-            type="button"
-            onClick={() => (overlay === "sort" ? close() : open("sort"))}
-            aria-label={`Saralash: ${sortLabel}`}
-            aria-haspopup="menu"
-            aria-expanded={overlay === "sort"}
-            className={cn(
-              "border-input bg-background hover:bg-accent inline-flex items-center gap-2 rounded-full border text-[15.5px] font-medium",
-              phone ? "h-11 min-w-11 justify-center px-3" : "h-10 px-5",
-            )}
-          >
-            <span className="hidden sm:inline">{sortLabel}</span>
-            <ArrowDownUp className="size-4 sm:hidden" />
-            <ChevronDown className="hidden size-4 opacity-70 sm:inline" />
-          </button>
-          {overlay === "sort" ? (
-            <div
-              role="menu"
-              className={cn(
-                "bg-popover absolute z-20 min-w-48 rounded-xl border p-1 shadow-lg",
-                phone ? "top-12 right-0" : "top-12 right-10",
-              )}
-            >
-              {FILE_SORTS.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={sort === s.id}
-                  className={cn(
-                    "hover:bg-muted w-full rounded-lg px-3 text-left",
-                    phone ? "min-h-11 text-base" : "py-2 text-sm",
-                    sort === s.id && "font-medium",
-                  )}
-                  onClick={() => {
-                    changeView({ sort: s.id });
-                    close();
-                  }}
+    <div className="flex w-full flex-col">
+      <PageHeader
+        title="Ishlarim"
+        subtitle={<span data-files-count>{subtitle}</span>}
+        contentClassName={CONTENT}
+        actions={
+          <>
+            <HeaderIconButton label="Qidirish" onClick={() => open("search")}>
+              <Search className="size-[1.2rem]" aria-hidden />
+            </HeaderIconButton>
+            <div ref={sortWrap} className="relative">
+              <HeaderIconButton
+                label={`Saralash: ${sortLabel}`}
+                aria-haspopup="menu"
+                aria-expanded={sortOpen}
+                data-sort-button
+                data-sort-custom={customView ? "" : undefined}
+                onClick={() => (sortOpen ? close() : open("sort"))}
+                className={cn("relative", sortOpen && "bg-accent")}
+              >
+                <ArrowDownUp className="size-[1.2rem]" aria-hidden />
+                {customView ? (
+                  <span aria-hidden className="bg-primary ring-background absolute top-2 right-2 size-2 rounded-full ring-2" />
+                ) : null}
+              </HeaderIconButton>
+              {sortOpen ? (
+                <div
+                  role="menu"
+                  aria-label="Saralash"
+                  data-sort-menu
+                  className="slx-scrim-enter bg-popover text-popover-foreground absolute top-12 right-0 z-30 w-64 rounded-2xl border p-1.5 shadow-[var(--shadow-bar)]"
                 >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => changeView({ desc: !desc })}
-            className={cn(
-              "border-input bg-background hover:bg-accent flex items-center justify-center rounded-full border",
-              phone ? "size-11" : "size-10",
-            )}
-            aria-label={desc ? "Tartib: yangisi birinchi. O'zgartirish" : "Tartib: eskisi birinchi. O'zgartirish"}
-          >
-            {phone ? desc ? <ArrowDown className="size-4" /> : <ArrowUp className="size-4" /> : <ArrowDownUp className="size-4" />}
-          </button>
-        </div>
-      </div>
-
-      {error ? (
-        <p role="alert" className="text-destructive mt-4 text-sm">
-          {error}
-        </p>
-      ) : null}
-
-      <div className="mt-6">
-        {!sessionChecked || (loggedIn && !generationsLoaded) ? (
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="border-border/60 bg-card overflow-hidden rounded-xl border">
-                <div className="bg-accent h-24 w-full animate-pulse sm:h-28" />
-                <div className="space-y-2 p-4">
-                  <div className="bg-accent h-4 w-4/5 animate-pulse rounded-md" />
-                  <div className="bg-accent h-4 w-3/5 animate-pulse rounded-md" />
-                  <div className="bg-accent h-3 w-1/2 animate-pulse rounded-md" />
+                  <p className="text-muted-foreground px-3 pt-1.5 pb-1 text-[12.5px] font-semibold tracking-[0.06em] uppercase">
+                    Saralash
+                  </p>
+                  {FILE_SORTS.map((s) => (
+                    <MenuRadio
+                      key={s.id}
+                      checked={sort === s.id}
+                      onPick={() => {
+                        changeView({ sort: s.id });
+                        close();
+                      }}
+                    >
+                      {s.label}
+                    </MenuRadio>
+                  ))}
+                  {sort !== "name" ? (
+                    <>
+                      <div className="bg-border mx-2 my-1.5 h-px" />
+                      <p className="text-muted-foreground px-3 pt-1 pb-1 text-[12.5px] font-semibold tracking-[0.06em] uppercase">
+                        Tartib
+                      </p>
+                      {[
+                        { newest: true, label: "Yangisi birinchi" },
+                        { newest: false, label: "Eskisi birinchi" },
+                      ].map((d) => (
+                        <MenuRadio
+                          key={d.label}
+                          checked={newestFirst === d.newest}
+                          onPick={() => {
+                            changeView({ desc: sort === "created" ? !d.newest : d.newest });
+                            close();
+                          }}
+                        >
+                          {d.label}
+                        </MenuRadio>
+                      ))}
+                    </>
+                  ) : null}
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : list.length === 0 ? (
-          <div className="bg-card rounded-2xl border px-6 py-16 text-center">
-            <p className="font-medium">
-              {loggedIn ? "Hozircha fayl yo‘q" : "Yaratgan fayllaringiz shu yerda saqlanadi"}
-            </p>
-            <p className="text-muted-foreground mt-1 text-sm">
-              {loggedIn
-                ? "Yaratish tugmasi orqali birinchi hujjatni boshlang"
-                : "Kirish qiling — keyin slayd, insho va boshqa hujjatlar shu yerda ochiladi"}
-            </p>
-            {loggedIn ? (
-              <Link href="/uz/create" className="text-primary mt-4 inline-block text-sm font-medium">
-                Nima yaratamiz?
-              </Link>
-            ) : (
+              ) : null}
+            </div>
+          </>
+        }
+      />
+
+      <div className={cn("mx-auto w-full px-4 pb-8", CONTENT)}>
+        <div
+          data-filter-chips
+          role="group"
+          aria-label="Hujjat turi"
+          className="-mx-4 flex gap-1.5 overflow-x-auto overscroll-x-contain px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {FILE_FILTERS.map((f) => {
+            const on = filter === f.id;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                aria-pressed={on}
+                data-filter-chip={f.id}
+                onClick={() => changeView({ filter: f.id })}
+                className="group/chip focus-visible:ring-ring flex h-11 flex-none items-center rounded-full outline-none focus-visible:ring-2"
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-[14.5px] font-medium whitespace-nowrap transition-colors",
+                    on
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-border bg-card text-foreground/80 group-hover/chip:bg-accent",
+                  )}
+                >
+                  {chipLabel(f.id, f.label)}
+                  {f.id === "all" && loggedIn && !loading ? (
+                    <span className={cn("tabular-nums", on ? "opacity-75" : "text-muted-foreground")}>· {total}</span>
+                  ) : null}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {error ? (
+          <div
+            role="alert"
+            data-files-error
+            className="border-destructive/30 bg-destructive/8 mt-3 flex items-center gap-3 rounded-2xl border py-2 pr-2 pl-4"
+          >
+            <p className="text-destructive min-w-0 flex-1 text-[14.5px]">{error.message}</p>
+            {error.retry ? (
               <button
                 type="button"
-                onClick={() => open("login")}
-                className="bg-primary text-primary-foreground mt-5 h-10 rounded-full px-5 text-sm font-medium"
+                data-files-retry
+                onClick={() => {
+                  const retry = error.retry;
+                  setError(null);
+                  retry?.();
+                }}
+                className="text-foreground hover:bg-accent focus-visible:ring-ring inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[14.5px] font-semibold outline-none focus-visible:ring-2"
               >
-                Kirish
+                <RotateCw className="size-4" aria-hidden />
+                Qayta urinish
               </button>
-            )}
+            ) : null}
           </div>
+        ) : null}
+
+        {loading ? (
+          <FilesSkeleton />
+        ) : list.length === 0 ? (
+          <EmptyState
+            loggedIn={loggedIn}
+            filtered={all.length > 0 && filter !== "all"}
+            onCreate={() => open("create")}
+            onLogin={() => open("login")}
+            onShowAll={() => changeView({ filter: "all" })}
+          />
         ) : (
-          <div className={cn("grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4", phone ? "gap-3" : "gap-2")}>
-            {list.map((g) => {
-              const tool = TOOL_BY_ID[g.type];
-              if (phone) return <PhoneFileCard key={g.id} gen={g} tool={tool} onMenu={setMenuId} />;
-              // Fayl/hujjat endi MUDDATSIZ saqlanadi — avtomatik "muddati
-              // tugagan" holati yo'q (`011_no_expiry.sql`).
-              return (
-                <div key={g.id} className="border-border/60 bg-card overflow-hidden rounded-xl border">
-                  {tool ? <div className="h-1" style={{ background: `rgb(${tool.tc})` }} /> : null}
-                  <Link href={`/uz/files/${g.id}`} className="bg-muted block h-36 overflow-hidden sm:h-40">
-                    {g.filesPurgedAt ? (
-                      /*
-                       * Retention (W2-D2): bonus-faqat hujjat fayllari
-                       * o'chirilgan — eskiz/rasm havolasi o'chgan aktivga
-                       * olib borardi (404). Neytral belgi chiziladi.
-                       */
-                      <div
-                        className="text-muted-foreground flex h-full flex-col items-center justify-center gap-1.5 text-xs"
-                        data-files-purged
-                      >
-                        <FileX className="size-7 opacity-60" />
-                        Fayl o‘chirilgan
-                      </div>
-                    ) : (
-                      <FilePreview gen={g} />
-                    )}
-                  </Link>
-                  <div className="flex items-start justify-between gap-2 p-4">
-                    <Link href={`/uz/files/${g.id}`} className="min-w-0">
-                      <div className="truncate text-sm font-medium">{g.topic}</div>
-                      <div className="text-muted-foreground mt-1 text-xs">
-                        {tool?.title} · {g.status === "COMPLETED" ? "Tayyor" : g.step}
-                      </div>
-                    </Link>
-                    <button
-                      type="button"
-                      className={cn(
-                        "inline-flex shrink-0 items-center gap-1 rounded p-1 text-xs",
-                        confirmId === g.id
-                          ? "text-destructive font-medium"
-                          : "text-muted-foreground hover:text-destructive",
-                      )}
-                      onClick={(e) => askDelete(g.id, e)}
-                      aria-label={
-                        confirmId === g.id
-                          ? `${g.topic} — o'chirishni tasdiqlang`
-                          : `${g.topic} — o'chirish`
-                      }
+          groups.map((group) => (
+            <section key={group.id} data-file-group={group.id} className="mt-4">
+              {group.label ? (
+                <h2 className="text-muted-foreground mb-2.5 px-0.5 text-[13px] font-semibold tracking-[0.06em] uppercase">
+                  {group.label}
+                </h2>
+              ) : null}
+              <ul role="list" data-file-list className="grid grid-cols-1 gap-2.5 md:grid-cols-3 md:gap-4 xl:grid-cols-4">
+                {group.rows.map((g) => {
+                  const i = cardIndex++;
+                  return (
+                    <li
+                      key={g.id}
+                      className="motion-safe:animate-[slx-enter-fade_180ms_ease-out_backwards]"
+                      style={i ? { animationDelay: `${Math.min(i, STAGGER_MAX) * STAGGER_MS}ms` } : undefined}
                     >
-                      <Trash2 className="size-4" />
-                      {confirmId === g.id ? <span>Rostdan?</span> : null}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                      <PhoneFileCard gen={g} tool={TOOL_BY_ID[g.type]} onMenu={setMenuId} now={now} />
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))
         )}
-        {moreCursor ? (
+
+        {moreCursor && !loading ? (
           <div className="mt-6 flex justify-center">
             <button
               type="button"
@@ -439,20 +426,19 @@ export function HomeFiles() {
               disabled={loadingMore}
               aria-busy={loadingMore}
               data-load-more
-              className={cn(
-                "border-input bg-background hover:bg-accent inline-flex items-center rounded-full border px-6 text-sm font-medium disabled:opacity-60",
-                phone ? "h-11" : "h-10",
-              )}
+              className="border-border bg-card hover:bg-accent focus-visible:ring-ring inline-flex h-11 items-center rounded-full border px-6 text-[15px] font-medium shadow-[var(--shadow-card)] outline-none focus-visible:ring-2 disabled:opacity-60"
             >
               {loadingMore ? "Yuklanmoqda…" : "Yana ko‘rsatish"}
             </button>
           </div>
         ) : null}
       </div>
-      {phone && menuGen ? (
+
+      {menuGen ? (
         <FileMenu
           key={menuGen.id}
           gen={menuGen}
+          kind={TOOL_BY_ID[menuGen.type]?.title}
           onClose={() => setMenuId(null)}
           onDelete={(id) => {
             setMenuId(null);
@@ -464,6 +450,100 @@ export function HomeFiles() {
   );
 }
 
-/** Ro'yxat pollingi: birinchi oraliq va yuqori chegara (FE-12). */
+function MenuRadio({ checked, onPick, children }: { checked: boolean; onPick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={checked}
+      onClick={onPick}
+      className={cn(
+        "hover:bg-accent focus-visible:bg-accent flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-[15px] outline-none",
+        checked && "font-semibold",
+      )}
+    >
+      <span className="min-w-0 flex-1">{children}</span>
+      {checked ? <Check className="text-accent-soft-foreground size-4 shrink-0" aria-hidden /> : null}
+    </button>
+  );
+}
+
+/** Loading: the shapes of the real rows / cards, shimmering (static under reduced motion). */
+function FilesSkeleton() {
+  return (
+    <div data-files-skeleton aria-hidden className="mt-4">
+      <div className="bg-muted slx-shimmer mb-3 h-3.5 w-20 rounded-md" />
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3 md:gap-4 xl:grid-cols-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div
+            key={i}
+            className="bg-card border-border/80 flex items-center gap-3 rounded-[18px] border p-2.5 md:flex-col md:items-stretch md:gap-0 md:overflow-hidden md:rounded-[var(--radius-card)] md:p-0"
+          >
+            <div className="bg-muted slx-shimmer aspect-video w-[104px] shrink-0 rounded-xl md:w-full md:rounded-none" />
+            <div className="min-w-0 flex-1 space-y-2 md:p-4">
+              <div className="bg-muted slx-shimmer h-4 w-4/5 rounded-md" />
+              <div className="bg-muted slx-shimmer h-3.5 w-1/2 rounded-md" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({
+  loggedIn,
+  filtered,
+  onCreate,
+  onLogin,
+  onShowAll,
+}: {
+  loggedIn: boolean;
+  filtered: boolean;
+  onCreate: () => void;
+  onLogin: () => void;
+  onShowAll: () => void;
+}) {
+  const btn =
+    "focus-visible:ring-ring mt-5 inline-flex h-12 items-center justify-center gap-2 rounded-2xl px-6 text-[15.5px] font-semibold outline-none focus-visible:ring-2";
+  return (
+    <div data-files-empty className="bg-card mt-4 flex flex-col items-center rounded-[var(--radius-card)] border px-6 py-12 text-center shadow-[var(--shadow-card)]">
+      <span className="bg-accent-soft text-accent-soft-foreground flex size-14 items-center justify-center rounded-2xl">
+        <FolderOpen className="size-7" aria-hidden />
+      </span>
+      <p className="mt-4 text-[17px] font-semibold">
+        {!loggedIn ? "Yaratgan fayllaringiz shu yerda saqlanadi" : filtered ? "Bu turda ish yo‘q" : "Hozircha ish yo‘q"}
+      </p>
+      <p className="text-muted-foreground mt-1.5 max-w-sm text-[14.5px] leading-relaxed">
+        {!loggedIn
+          ? "Kirish qiling — keyin slayd, insho va boshqa hujjatlar shu yerda ochiladi"
+          : filtered
+            ? "Boshqa turni tanlang yoki hamma ishlarni ko‘ring"
+            : "Slayd, referat, insho yoki boshqa ishni bir necha daqiqada yarating"}
+      </p>
+      {!loggedIn ? (
+        <button type="button" onClick={onLogin} className={cn(btn, "bg-primary text-primary-foreground hover:bg-primary/90")}>
+          Kirish
+        </button>
+      ) : filtered ? (
+        <button type="button" onClick={onShowAll} className={cn(btn, "border-border hover:bg-accent border")}>
+          Hammasini ko‘rsatish
+        </button>
+      ) : (
+        <button
+          type="button"
+          data-files-create
+          onClick={onCreate}
+          className={cn(btn, "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[var(--shadow-fab)]")}
+        >
+          <Plus className="size-5" aria-hidden />
+          Yangi ish yaratish
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** List polling: first interval and upper bound (FE-12). */
 const LIST_POLL_START_MS = 3000;
 const LIST_POLL_MAX_MS = 15_000;

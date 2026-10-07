@@ -75,9 +75,9 @@ function mount(generations: api.ServerGeneration[], refresh?: () => Promise<void
   );
 }
 
-/** Karta (o'chirish tugmasi orqali) — sarlavha kartada ikki marta (nom + eskiz qatorlari) chiqadi. */
+/** Karta (W2: `data-file-id`) — sarlavha kartada ikki marta (nom + eskiz qatorlari) chiqadi, shuning uchun matn bilan emas. */
 function card(id: string) {
-  return document.querySelector(`[aria-label="Hujjat ${id} — o'chirish"]`);
+  return document.querySelector(`[data-file-card][data-file-id="${id}"]`);
 }
 
 /** Soxta vaqtni `ms` ga suradi (500 ms qadamlar, har qadamda mikrovazifalar bo'shatiladi). */
@@ -139,7 +139,7 @@ test("FE-08: «Yana ko'rsatish» `nextCursor` bilan keyingi sahifani qo'shadi", 
   });
   await waitFor(() => assert.ok(card("old1")));
   assert.ok(urls.includes("/api/generations?cursor=c2"));
-  assert.equal(document.querySelectorAll(`[aria-label="Hujjat a1 — o'chirish"]`).length, 1, "takror karta yo'q");
+  assert.equal(document.querySelectorAll(`[data-file-card][data-file-id="a1"]`).length, 1, "takror karta yo'q");
   assert.ok(!screen.queryByRole("button", { name: "Yana ko‘rsatish" }), "oxirgi sahifadan keyin tugma yo'q");
 });
 
@@ -238,4 +238,160 @@ test("FE-08: har vosita turi `all` dan tashqari aniq BITTA filtrga tushadi", asy
     const hits = FILE_FILTERS.filter((f) => f.id !== "all" && fileFilterMatch(f.id, t.id)).map((f) => f.id);
     assert.equal(hits.length, 1, `${t.id}: ${hits.join(",")}`);
   }
+});
+
+/* ───────────────────── redesign W2: «Ishlarim» states ───────────────────── */
+
+function mountView(generations: api.ServerGeneration[], opts: { search?: string; loggedIn?: boolean; loaded?: boolean; checked?: boolean; cursor?: string | null } = {}) {
+  useAppStore.setState({
+    sessionChecked: opts.checked ?? true,
+    loggedIn: opts.loggedIn ?? true,
+    generations,
+    generationsLoaded: opts.loaded ?? true,
+    generationsCursor: opts.cursor ?? null,
+    refreshGenerations: async () => {},
+  });
+  render(
+    h(
+      AppRouterContext.Provider,
+      { value: router },
+      h(SearchParamsContext.Provider, { value: new URLSearchParams(opts.search ?? "") }, h(HomeFiles)),
+    ),
+  );
+}
+
+const sectionsShown = () =>
+  [...document.querySelectorAll("[data-file-group]")].map((s) => [
+    s.getAttribute("data-file-group"),
+    s.querySelector("h2")?.textContent ?? null,
+    [...s.querySelectorAll("[data-file-card]")].map((c) => c.getAttribute("data-file-id")).join(","),
+  ]);
+
+test("W2: date sections «Bugun / Kecha / Shu hafta / Avvalroq» (Tashkent), reversed with oldest first, none when sorted by name", async (t) => {
+  // Wednesday 2026-10-07 00:30 in Tashkent — still the 6th in UTC.
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-06T19:30:00Z") });
+  (globalThis as unknown as { fetch: unknown }).fetch = async () => json(200, { generations: [] });
+  const at = (iso: string) => ({ createdAt: iso, finishedAt: iso });
+  const rows = [
+    row("t1", at("2026-10-06T19:10:00Z")), // 00:10 today in Tashkent (yesterday in UTC)
+    row("y1", at("2026-10-06T10:00:00Z")),
+    row("w1", at("2026-10-05T03:00:00Z")), // Monday
+    row("e1", at("2026-10-04T10:00:00Z")), // last Sunday
+    row("e2", at("2026-08-01T10:00:00Z")),
+  ];
+  mountView(rows);
+  assert.deepEqual(sectionsShown(), [
+    ["today", "Bugun", "t1"],
+    ["yesterday", "Kecha", "y1"],
+    ["week", "Shu hafta", "w1"],
+    ["earlier", "Avvalroq", "e1,e2"],
+  ]);
+  // Today's / yesterday's cards say the time, older ones the date.
+  const meta = (id: string) => document.querySelector(`[data-file-id="${id}"] [data-file-meta]`)?.textContent ?? "";
+  assert.equal(meta("t1"), "Referat · 00:10");
+  assert.equal(meta("y1"), "Referat · 15:00");
+  assert.equal(meta("e2"), "Referat · 1 avg");
+  cleanup();
+  mountView(rows, { search: "desc=0" });
+  assert.deepEqual(sectionsShown().map((s) => s[0]), ["earlier", "week", "yesterday", "today"]);
+  cleanup();
+  mountView(rows, { search: "sort=name" });
+  assert.deepEqual(sectionsShown(), [["all", null, "e1,e2,t1,w1,y1"]], "alphabetical, no date headings");
+});
+
+test("W2: chips — filter from the URL is pressed on open, «Hammasi · N» counts loaded files («+» when more pages exist)", async () => {
+  (globalThis as unknown as { fetch: unknown }).fetch = async () => json(200, { generations: [] });
+  mountView([row("a1"), row("g1", { type: "crossword" })], { search: "filter=games", cursor: "c2" });
+  const chip = (id: string) => document.querySelector(`[data-filter-chip="${id}"]`) as HTMLElement;
+  assert.equal(chip("games").getAttribute("aria-pressed"), "true");
+  assert.equal(chip("all").getAttribute("aria-pressed"), "false");
+  assert.match(chip("all").textContent ?? "", /^Hammasi\s*· 2\+$/);
+  assert.equal(document.querySelector("[data-files-count]")?.textContent, "2+ ta ish");
+  assert.deepEqual([...document.querySelectorAll("[data-file-card]")].map((c) => c.getAttribute("data-file-id")), ["g1"]);
+  await act(async () => {
+    fireEvent.click(chip("all"));
+  });
+  assert.equal(document.querySelectorAll("[data-file-card]").length, 2);
+});
+
+test("W2: empty states — no files → «Yangi ish yaratish» opens the «+» sheet; empty filter → «Hammasini ko'rsatish»; signed out → «Kirish»", async () => {
+  const { useUi } = await import("../../lib/ui.ts");
+  useUi.setState({ overlay: null });
+  mountView([]);
+  assert.ok(document.querySelector("[data-files-empty]"));
+  const cta = screen.getByRole("button", { name: "Yangi ish yaratish" });
+  assert.match(cta.className, /\bh-12\b/, "48 px CTA");
+  await act(async () => {
+    fireEvent.click(cta);
+  });
+  assert.equal(useUi.getState().overlay, "create", "the CTA opens the «+» tool sheet");
+  useUi.setState({ overlay: null });
+  cleanup();
+
+  mountView([row("a1")], { search: "filter=image" });
+  assert.ok(!screen.queryByRole("button", { name: "Yangi ish yaratish" }), "a filter with no match is not «no files»");
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Hammasini ko‘rsatish" }));
+  });
+  assert.ok(document.querySelector('[data-file-id="a1"]'), "filter reset shows the files");
+  cleanup();
+
+  mountView([], { loggedIn: false });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Kirish" }));
+  });
+  assert.equal(useUi.getState().overlay, "login");
+  useUi.setState({ overlay: null });
+});
+
+test("W2: loading — shimmering skeleton rows, no cards, no empty state", () => {
+  mountView([], { checked: false });
+  const sk = document.querySelector("[data-files-skeleton]");
+  assert.ok(sk);
+  assert.ok(sk.querySelector(".slx-shimmer"), "shimmer (stops under reduced motion via globals.css)");
+  assert.ok(!document.querySelector("[data-files-empty]"));
+  assert.ok(!document.querySelector("[data-file-card]"));
+  assert.equal(document.querySelector("[data-files-count]")?.textContent, "Yuklanmoqda…");
+  cleanup();
+  mountView([], { loaded: false });
+  assert.ok(document.querySelector("[data-files-skeleton]"), "signed in, list not loaded yet");
+});
+
+test("W2: a failed «Yana ko'rsatish» shows an error with «Qayta urinish», which retries and clears it", async () => {
+  let fail = true;
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown) => {
+    if (String(input) === "/api/generations?cursor=c2") {
+      return fail ? json(500, { error: "Server xatosi" }) : json(200, { generations: [row("old1")], nextCursor: null });
+    }
+    return json(200, { generations: [] });
+  };
+  mountView([row("a1")], { cursor: "c2" });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Yana ko‘rsatish" }));
+  });
+  const alert = await waitFor(() => {
+    const el = document.querySelector("[data-files-error]");
+    assert.ok(el);
+    return el;
+  });
+  assert.equal(alert.getAttribute("role"), "alert");
+  assert.ok(!card("old1"));
+  fail = false;
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Qayta urinish" }));
+  });
+  await waitFor(() => assert.ok(card("old1"), "the retry loaded the page"));
+  assert.ok(!document.querySelector("[data-files-error]"), "error cleared");
+});
+
+test("W2: short entrance stagger — ≤ 140 ms delays, motion-safe only", () => {
+  (globalThis as unknown as { fetch: unknown }).fetch = async () => json(200, { generations: [] });
+  mountView(Array.from({ length: 12 }, (_, i) => row(`s${i}`)));
+  const items = [...document.querySelectorAll("[data-file-list] > li")] as HTMLElement[];
+  assert.equal(items.length, 12);
+  for (const li of items) assert.match(li.className, /^motion-safe:animate-\[slx-enter-fade_180ms/, "no animation under reduced motion");
+  const delays = items.map((li) => Number.parseInt(li.style.animationDelay || "0", 10));
+  assert.equal(delays[0], 0);
+  assert.equal(delays[1], 20);
+  assert.equal(Math.max(...delays), 140, "the tail does not wait longer");
 });
