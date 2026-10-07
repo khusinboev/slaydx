@@ -79,7 +79,7 @@ export function SourceFileField({
           <FileText className="text-muted-foreground mb-2 size-6" />
         )}
         <span className="font-medium">{reading ? "Matn olinmoqda..." : "Fayl tanlash"}</span>
-        <span className="text-muted-foreground mt-1 text-sm">
+        <span className="text-muted-foreground mt-1 text-[14.5px]">
           DOCX, PDF, PPTX, XLSX, TXT — {MAX_MB} MB gacha
         </span>
         <input
@@ -94,15 +94,15 @@ export function SourceFileField({
           }}
         />
         {fileName ? (
-          <span className="mt-3 text-sm">
+          <span className="mt-3 text-[14.5px]">
             {fileName}
             {sourceText ? ` · ${sourceText.length.toLocaleString("uz-UZ")} belgi` : ""}
           </span>
         ) : null}
       </label>
-      {error ? <p className="text-destructive mt-2 text-sm">{error}</p> : null}
+      {error ? <p className="text-destructive mt-2 text-[14.5px]">{error}</p> : null}
       {sourceText && sourceText.length > SOURCE_TEXT_LIMIT ? (
-        <p className="mt-2 text-xs text-amber-600 dark:text-amber-500">
+        <p className="mt-2 text-[13.5px] text-amber-600 dark:text-amber-500">
           Matn olindi, lekin uzun: faylning faqat birinchi{" "}
           {SOURCE_TEXT_LIMIT.toLocaleString("uz-UZ")} belgisi generatsiyada ishlatiladi (
           {(sourceText.length - SOURCE_TEXT_LIMIT).toLocaleString("uz-UZ")} belgi qoladi). Muhim qism
@@ -121,7 +121,7 @@ export function SourceFileField({
           ) : null}
         </p>
       ) : sourceText ? (
-        <p className="text-muted-foreground mt-2 text-xs">
+        <p className="text-muted-foreground mt-2 text-[13.5px]">
           Matn olindi — hujjat shu manba asosida yoziladi.
         </p>
       ) : null}

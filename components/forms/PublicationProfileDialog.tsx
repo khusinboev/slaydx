@@ -77,9 +77,9 @@ export function PublicationProfileTile({
       >
         <ProfileSheet id={value} />
         <span className="min-w-0">
-          <span className="block text-[13px] font-medium">{p.label.uz}</span>
-          <span className="text-muted-foreground mt-0.5 block text-[11px]">{p.hint}</span>
-          <span className="text-primary mt-1 block text-[11px]">O‘zgartirish</span>
+          <span className="block text-[14.5px] font-medium">{p.label.uz}</span>
+          <span className="text-muted-foreground mt-0.5 block text-[13px]">{p.hint}</span>
+          <span className="text-primary mt-1 block text-[13px]">O‘zgartirish</span>
         </span>
       </button>
       {open ? (
@@ -117,7 +117,7 @@ export function PublicationProfileDialog({
         onClick={(e) => e.stopPropagation()}
         className="bg-card my-8 w-full max-w-2xl rounded-2xl border p-4 shadow-xl"
       >
-        <h2 className="mb-3 text-[15px] font-semibold">Nashr profilini tanlang</h2>
+        <h2 className="mb-3 text-[17px] font-semibold">Nashr profilini tanlang</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {PUBLICATION_PROFILE_IDS.map((id) => {
             const p = PUBLICATION_PROFILES[id];
@@ -134,9 +134,9 @@ export function PublicationProfileDialog({
               >
                 <ProfileSheet id={id} />
                 <span className="min-w-0">
-                  <span className="block text-[13px] font-medium">{p.label.uz}</span>
-                  <span className="text-muted-foreground mt-0.5 block text-[11px]">{p.hint}</span>
-                  <span className="text-muted-foreground mt-1 block text-[10.5px]">
+                  <span className="block text-[14.5px] font-medium">{p.label.uz}</span>
+                  <span className="text-muted-foreground mt-0.5 block text-[13px]">{p.hint}</span>
+                  <span className="text-muted-foreground mt-1 block text-[12.5px]">
                     manba {p.refsMin}–{p.refsMax} ta
                   </span>
                 </span>

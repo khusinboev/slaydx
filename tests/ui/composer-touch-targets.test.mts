@@ -73,7 +73,9 @@ test("RowList: «+ qo'shish» and the ↑ ↓ × icon buttons are 44 px on touch
   render(h(RowList<{ a: string }>, { rows: [{ a: "1" }, { a: "2" }], onChange() {}, render: () => h("span"), add: () => ({ a: "" }), addLabel: "Ish joyi", max: 5, name: "t" }));
   const add = byText(document, "button", /\+ Ish joyi/);
   assertTouch(add, "+ qo'shish");
-  assert.match(cls(add!), /text-\[12px\]/, "desktop font size kept");
+  // Redesign W6 type sweep: desktop 12 px → 14 px, touch 14.5 px (was 13 px, i.e. smaller than the base would have become).
+  assert.match(cls(add!), /(?:^|\s)text-\[14px\](?:\s|$)/, "desktop font size 14 px");
+  assert.match(cls(add!), /pointer-coarse:text-\[14\.5px\]/, "touch font size 14.5 px");
   for (const label of ["Yuqoriga", "Pastga", "O'chirish"]) {
     const b = document.querySelector(`button[aria-label="${label}"]`);
     assertTouch(b, label);

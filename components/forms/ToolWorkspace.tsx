@@ -40,7 +40,7 @@ const MediaComposer = lazy(() => import("./MediaComposer").then((m) => ({ defaul
 const InfographicComposer = lazy(() => import("./InfographicComposer").then((m) => ({ default: m.InfographicComposer })));
 const GameComposer = lazy(() => import("./GameComposer").then((m) => ({ default: m.GameComposer })));
 
-const LOADING = <div className="text-muted-foreground p-8 text-sm">Yuklanmoqda...</div>;
+const LOADING = <div className="text-muted-foreground p-8 text-[14.5px]">Yuklanmoqda...</div>;
 
 function defaultsFor(tool: ToolConfig, profile: UserProfile): FormValues {
   const v: FormValues = {
@@ -118,8 +118,8 @@ export function ToolWorkspace({ tool }: { tool: ToolConfig }) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
         <p className="font-medium">{tool.pageTitle}</p>
-        <p className="text-muted-foreground mt-2 text-sm">{blocked}</p>
-        <p className="text-muted-foreground mt-1 text-sm">
+        <p className="text-muted-foreground mt-2 text-[14.5px]">{blocked}</p>
+        <p className="text-muted-foreground mt-1 text-[14.5px]">
           Hisobingizdan hech narsa yechilmadi.
         </p>
       </div>
@@ -267,7 +267,7 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
               <AutoTextarea
                 value={String(values.extra ?? "")}
                 onChange={(e) => set("extra", e.target.value)}
-                className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 text-[15px] outline-none focus:ring-2"
+                className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 text-[16px] outline-none focus:ring-2"
                 minRows={3}
                 maxRows={8}
                 placeholder="Mavzu, yo'nalish va boshqa qo'shimchalar"
@@ -280,7 +280,7 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
             <AutoTextarea
               value={String(values.extra ?? "")}
               onChange={(e) => set("extra", e.target.value)}
-              className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 text-[15px] outline-none focus:ring-2"
+              className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 text-[16px] outline-none focus:ring-2"
               minRows={3}
               maxRows={8}
             />
@@ -332,7 +332,7 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
       {hasOutline ? (
         <fieldset className="mb-6">
           <Legend>Ish rejasi</Legend>
-          <p className="text-muted-foreground mb-3 text-sm">
+          <p className="text-muted-foreground mb-3 text-[14.5px]">
             Rejani oldindan ko&apos;rib, tuzatib olishingiz mumkin — bu bepul. Tahrirlangan reja hujjat tuzilmasiga
             aynan tushadi.
           </p>
@@ -340,7 +340,7 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
             type="button"
             onClick={makeOutline}
             disabled={outlineBusy || loading}
-            className="border-input bg-card hover:bg-muted mb-3 rounded-xl border px-4 py-2 text-sm disabled:opacity-60"
+            className="border-input bg-card hover:bg-muted mb-3 rounded-xl border px-4 py-2 text-[14.5px] disabled:opacity-60"
           >
             {outlineBusy ? "Reja tuzilmoqda…" : "AI reja tuzsin"}
           </button>
@@ -349,10 +349,10 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
             onChange={(e) => setOutline(e.target.value)}
             minRows={4}
             maxRows={12}
-            className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 font-mono text-[13px] outline-none focus:ring-2"
+            className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 font-mono text-[16px] outline-none focus:ring-2"
             placeholder={"1. Birinchi bob\n  1.1 Ostmavzu\n  1.2 Ostmavzu\n2. Ikkinchi bob"}
           />
-          <p className="text-muted-foreground mt-2 text-xs">
+          <p className="text-muted-foreground mt-2 text-[13.5px]">
             Bu yerga yozganingiz hujjat tuzilmasiga aynan tushadi. Bo&apos;sh qoldirsangiz reja avtomatik
             tuziladi. Ostmavzuni ichkariga surib yoki «1.1» deb yozing.
           </p>

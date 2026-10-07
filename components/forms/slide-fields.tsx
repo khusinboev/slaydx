@@ -147,7 +147,7 @@ function textRow(id: string, label: string, hint: string, placeholder: string, v
         value={String(values[id] ?? "")}
         placeholder={placeholder}
         onChange={(e) => set(id, e.target.value)}
-        className="border-input bg-card focus:ring-ring h-9 w-full rounded-lg border px-2.5 text-[13px] outline-none focus:ring-2"
+        className="border-input bg-card focus:ring-ring h-9 w-full rounded-lg border px-2.5 text-[16px] outline-none focus:ring-2"
       />
     </Row>
   );
@@ -169,7 +169,7 @@ function SlideCountField({ values, set, tool }: { values: FormValues; set: Slide
   return (
     <div data-slide-count>
       <RangeField value={n} min={pro ? PRO_SLIDE_MIN : SLIDE_MIN} max={pro ? PRO_SLIDE_MAX : SLIDE_MAX} onChange={(v) => set("slideCount", v)} />
-      <p className="text-muted-foreground mt-1.5 text-[11.5px]" data-price-rule>
+      <p className="text-muted-foreground mt-1.5 text-[13px]" data-price-rule>
         {/*
          * With an admin adjustment the total is rounded, so a per-slide amount
          * is no longer exact: the rule quotes the adjusted prices at both ends
@@ -266,7 +266,7 @@ function PlanItemsField({ values, set, tool }: { values: FormValues; set: SlideF
       <div>
         <Segmented ariaLabel="Reja bandlari" options={options} value={String(effective)} onChange={(v) => set("planItems", Number(v))} />
         {values.planItems !== undefined && effective < raw ? (
-          <p className="text-muted-foreground mt-1 text-[11px]" data-plan-capacity-hint>
+          <p className="text-muted-foreground mt-1 text-[13px]" data-plan-capacity-hint>
             {`Tanlangan ${raw} band sig‘maydi — ${effective} band yoziladi.`}
           </p>
         ) : null}
@@ -452,7 +452,7 @@ export function renderSlideParam(
             minRows={2}
             maxRows={6}
             placeholder={"Suv bug‘lanadi\nBulut hosil bo‘ladi"}
-            className="border-input bg-card focus:ring-ring w-full rounded-lg border px-2.5 py-2 text-[13px] outline-none focus:ring-2"
+            className="border-input bg-card focus:ring-ring w-full rounded-lg border px-2.5 py-2 text-[16px] outline-none focus:ring-2"
           />
         </Row>
       );
@@ -466,7 +466,7 @@ export function renderSlideParam(
             minRows={2}
             maxRows={6}
             placeholder="Rejalar, uslub, auditoriya..."
-            className="border-input bg-card focus:ring-ring w-full rounded-lg border px-2.5 py-2 text-[13px] outline-none focus:ring-2"
+            className="border-input bg-card focus:ring-ring w-full rounded-lg border px-2.5 py-2 text-[16px] outline-none focus:ring-2"
           />
         </Row>
       );

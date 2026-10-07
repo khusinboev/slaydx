@@ -219,7 +219,7 @@ function DesignChips({ value, onChange }: { value: string; onChange: (v: string)
             aria-checked={on}
             data-design={d.value}
             onClick={() => onChange(d.value)}
-            className={`pointer-coarse:min-h-11 pointer-coarse:px-3 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] transition-colors ${on ? "border-primary ring-primary/40 ring-2" : "border-input hover:bg-muted"}`}
+            className={`pointer-coarse:min-h-11 pointer-coarse:px-3 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[13.5px] transition-colors ${on ? "border-primary ring-primary/40 ring-2" : "border-input hover:bg-muted"}`}
           >
             <span className="size-3 rounded-full" style={{ background: `linear-gradient(135deg, ${d.from}, ${d.to})` }} aria-hidden="true" />
             {d.label}
@@ -347,7 +347,7 @@ export function EssayComposer({ tool }: { tool: ToolConfig }) {
            * hisoblanadi (1 varaq) va zond uni o'lchaydi.
            */
           <Row label="Hajm" hint="IELTS Writing Task 2 rasmiy minimumi — 250 so‘z">
-            <span data-field="pages" data-fixed="ielts" className="text-sm">
+            <span data-field="pages" data-fixed="ielts" className="text-[14.5px]">
               250+ so‘z · {formatTanga(price)}
             </span>
           </Row>
@@ -395,7 +395,7 @@ export function EssayComposer({ tool }: { tool: ToolConfig }) {
               <Segmented ariaLabel="Til darajasi (CEFR)" options={LEVEL_OPTIONS} value={levelOf(ui)} onChange={(v) => set("level", v as CefrLevel)} />
             </span>
           </Field>
-          <p data-level-caption className="text-muted-foreground mt-1 text-[11px] leading-snug">
+          <p data-level-caption className="text-muted-foreground mt-1 text-[13px] leading-snug">
             {levelCaption(levelOf(ui), ui.language)}
           </p>
         </Row>

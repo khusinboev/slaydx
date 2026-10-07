@@ -323,7 +323,7 @@ export function SubjectGradeLanguage({
       </div>
       {auto ? (
         <Row label="Fan nomi" hint="O'quv dasturidan olindi — o'zgartirish uchun dasturdagi fanni bo'shating">
-          <span className="text-[13px] font-medium" data-subject-auto>
+          <span className="text-[14.5px] font-medium" data-subject-auto>
             {autoLabel || ui.subject}
           </span>
         </Row>
@@ -406,7 +406,7 @@ export function DateRow({ value, onChange }: { value: string; onChange: (v: stri
     setSeen(iso);
     onChange(iso);
   };
-  const cls = "border-input bg-card focus:ring-ring pointer-coarse:h-11 h-8 rounded-lg border px-1.5 text-[12.5px] outline-none focus:ring-2";
+  const cls = "border-input bg-card focus:ring-ring pointer-coarse:h-11 h-8 rounded-lg border px-1.5 text-[16px] outline-none focus:ring-2";
   return (
     <Row label="Sana" hint="Ixtiyoriy — shapkadagi sana">
       <Field id="date">

@@ -323,7 +323,7 @@ export function TeacherComposer({
           <ClearFormButton armed={clearConfirm.armed} onClick={clearConfirm.trigger} />
         </div>
       </SettingsDetails>
-      {fileBusy ? <p className="text-muted-foreground -mt-2 mb-4 text-[11px]">Fayl o‘qilmoqda…</p> : null}
+      {fileBusy ? <p className="text-muted-foreground -mt-2 mb-4 text-[13px]">Fayl o‘qilmoqda…</p> : null}
     </ToolChrome>
   );
 }
