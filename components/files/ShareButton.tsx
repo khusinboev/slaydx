@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type Ref } from "react";
 import { Loader2, Share2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { DownloadFormat, DownloadFormatId } from "@/lib/downloads/formats";
@@ -284,6 +284,7 @@ export function ShareButton({
   action,
   onPress,
   picker = false,
+  buttonRef,
   iconOnly = false,
   className,
 }: {
@@ -291,6 +292,8 @@ export function ShareButton({
   onPress: () => void;
   /** The press opens the format sheet (the material has several formats). */
   picker?: boolean;
+  /** The desktop format popover hangs from this button. */
+  buttonRef?: Ref<HTMLButtonElement>;
   iconOnly?: boolean;
   className?: string;
 }) {
@@ -304,6 +307,7 @@ export function ShareButton({
   return (
     <button
       type="button"
+      ref={buttonRef}
       data-share-button
       data-share-ready={ready ? "1" : undefined}
       aria-busy={action.busy || undefined}

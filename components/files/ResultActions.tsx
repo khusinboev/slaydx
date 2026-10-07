@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Download, Loader2, MoreHorizontal, Send, Share2, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -116,6 +116,22 @@ export function ResultActions({
   }, []);
   const closeSheet = useCallback(() => showSheet(null), [showSheet]);
   const dlRef = useRef<HTMLButtonElement>(null);
+  const shareRef = useRef<HTMLButtonElement>(null);
+  const saveRef = useRef<HTMLButtonElement>(null);
+  /**
+   * The desktop popover hangs from the button that opened it; when that one
+   * is hidden (compact header, opened from «⋯») it hangs from «Yuklab olish».
+   */
+  const sheetAnchor = useMemo<RefObject<HTMLElement | null>>(
+    () => ({
+      get current() {
+        const mode = sheetRef.current;
+        const own = mode === "save" ? saveRef.current : mode === "share" ? shareRef.current : null;
+        return own && own.getClientRects().length > 0 ? own : dlRef.current;
+      },
+    }),
+    [],
+  );
 
   const [toast, setToast] = useState<ActionToast | null>(null);
   useEffect(() => {
@@ -287,6 +303,7 @@ export function ResultActions({
             action={share}
             onPress={onSharePress}
             picker={!single}
+            buttonRef={shareRef}
             className="flex-1 group-data-[compact=1]/hdr:hidden md:flex-none"
           />
           <SaveToBotButton
@@ -294,6 +311,7 @@ export function ResultActions({
             visible={showSave}
             onPress={onSavePress}
             picker={!single}
+            buttonRef={saveRef}
             className="flex-1 group-data-[compact=1]/hdr:hidden md:flex-none"
           />
         </div>
@@ -359,7 +377,7 @@ export function ResultActions({
         mode={sheet ?? "download"}
         formats={sendMode ? sendFormats : formats}
         downloads={downloads}
-        anchorRef={dlRef}
+        anchorRef={sheetAnchor}
         sizes={downloads.sizes}
         onPick={pick}
         send={sheet === "share" ? share : sheet === "save" ? save : undefined}

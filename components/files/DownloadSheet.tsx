@@ -341,13 +341,15 @@ export function DownloadSheet({
     if (!open || phone) return;
     const place = () => {
       const r = anchorRef?.current?.getBoundingClientRect();
-      if (!r) return setPos({ top: 72, right: 16 });
+      // A hidden anchor (display: none) has an empty rect: the default corner, never off-screen.
+      if (!r || (r.width === 0 && r.height === 0)) return setPos({ top: 72, right: 16 });
       setPos({ top: Math.round(r.bottom + 6), right: Math.max(8, Math.round(window.innerWidth - r.right)) });
     };
     place();
     window.addEventListener("resize", place);
     return () => window.removeEventListener("resize", place);
-  }, [open, phone, anchorRef]);
+    // `mode`: the sheet may switch (share → download list) while open; it then hangs from that button.
+  }, [open, phone, anchorRef, mode]);
 
   // Focus the first row when the sheet opens (keyboard and screen reader land inside).
   useEffect(() => {

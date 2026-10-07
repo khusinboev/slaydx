@@ -297,7 +297,7 @@ test("one-format materials skip the sheet: «Saqlash» and «Ulashish» act at o
     assert.deepEqual(bodies("/telegram/save"), ["native"]);
     await waitFor(() => assert.ok(!saveBtn().hasAttribute("aria-busy")));
     await tap(shareBtn());
-    await waitFor(() => assert.ok(tgCalls.includes("share prep-native")), `${m.name}: picker opened`);
+    await waitFor(() => assert.ok(tgCalls.includes("share prep-native"), `${m.name}: picker opened`));
     assert.ok(!sheet(), `${m.name}: no share sheet`);
     assert.deepEqual(bodies("/telegram/share"), ["native"]);
     cleanup();
@@ -316,7 +316,7 @@ test("differential: every save row sends ITS format id (different rows → diffe
       mount({ g: m.g, hasResults: m.hasResults });
       await tap(saveBtn());
       await tap(row(id));
-      await waitFor(() => assert.match(toast()?.textContent ?? "", /✅ Fayl bot chatiga yuborildi/), `${m.name} → ${id}`);
+      await waitFor(() => assert.match(toast()?.textContent ?? "", /✅ Fayl bot chatiga yuborildi/, `${m.name} → ${id}`));
       assert.deepEqual(bodies("/telegram/save"), [id], `${m.name}: the ${id} row saves ${id}`);
       assert.ok(!sheet(), "success closes the sheet");
       if (id === m.send[0]) {
@@ -337,7 +337,7 @@ test("differential: every share row prepares ITS format and opens the picker wit
       mount({ g: m.g, hasResults: m.hasResults });
       await tap(shareBtn());
       await tap(row(id));
-      await waitFor(() => assert.match(toast()?.textContent ?? "", /Ulashildi/), `${m.name} → ${id}`);
+      await waitFor(() => assert.match(toast()?.textContent ?? "", /Ulashildi/, `${m.name} → ${id}`));
       assert.deepEqual(bodies("/telegram/share"), [id]);
       assert.deepEqual(tgCalls, [`share prep-${id}`], `${m.name}: the picker gets the ${id} message`);
       assert.ok(!sheet(), `${m.name} → ${id}: shared, the sheet closes`);
@@ -378,7 +378,7 @@ test("error mapping: each Telegram route failure → the Uzbek text on THAT row 
       mount();
       await tap(kind === "save" ? saveBtn() : shareBtn());
       await tap(row("pdf"));
-      await waitFor(() => assert.equal(state("pdf"), "error"), `${kind} ${e.name}`);
+      await waitFor(() => assert.equal(state("pdf"), "error", `${kind} ${e.name}`));
       assert.match(status("pdf"), e.text, `${kind} ${e.name}`);
       assert.equal(row("pdf").querySelector("[data-row-status]")!.getAttribute("role"), "alert");
       assert.match(row("pdf").textContent ?? "", /Qayta urinish/);
@@ -394,7 +394,7 @@ test("error mapping: each Telegram route failure → the Uzbek text on THAT row 
       } else assert.ok(!link);
       fail = false;
       await tap(row("pdf"));
-      await waitFor(() => assert.ok(!sheet()), `${kind} ${e.name}: the retry succeeds and closes the sheet`);
+      await waitFor(() => assert.ok(!sheet(), `${kind} ${e.name}: the retry succeeds and closes the sheet`));
       assert.deepEqual(bodies(`/telegram/${kind}`), ["pdf", "pdf"]);
       cleanup();
       tgCalls = [];
@@ -409,7 +409,7 @@ test("share: 501 share_unavailable / 409 telegram_id_unsupported → the chosen 
     mount();
     await tap(shareBtn());
     await tap(row("slides-png"));
-    await waitFor(() => assert.match(toast()?.textContent ?? "", /Fayl bot chatiga yuborildi — u yerdan uzating/), code);
+    await waitFor(() => assert.match(toast()?.textContent ?? "", /Fayl bot chatiga yuborildi — u yerdan uzating/, code));
     assert.deepEqual(bodies("/telegram/share"), ["slides-png"]);
     assert.deepEqual(bodies("/telegram/save"), ["slides-png"], `${code}: the same format forwarded`);
     assert.ok(!tgCalls.some((c) => c.startsWith("share ")));
@@ -427,7 +427,7 @@ test("bot_unreachable → requestWriteAccess → allowed → the same format is 
     mount();
     await tap(kind === "save" ? saveBtn() : shareBtn());
     await tap(row("pdf"));
-    await waitFor(() => assert.ok(toast()?.getAttribute("data-result-toast") === "ok"), kind);
+    await waitFor(() => assert.ok(toast()?.getAttribute("data-result-toast") === "ok", kind));
     assert.deepEqual(bodies(`/telegram/${kind}`), ["pdf", "pdf"]);
     assert.equal(tgCalls.filter((c) => c === "writeAccess").length, 1);
     cleanup();
@@ -582,6 +582,41 @@ test("nothing shareable in this browser → the toast says why and the download 
   assert.equal(toast()?.textContent?.trim(), DELIVER_TEXT.shareNoBrowser);
   await settle();
   assert.equal(posts("/telegram/share").length, 0);
+});
+
+test("desktop popover hangs from the button that opened it; a hidden one (compact header → «⋯») → from «Yuklab olish»; nothing measurable → the default corner, never off-screen", async () => {
+  fakeTelegram();
+  stub();
+  mount();
+  const place = (el: HTMLElement, r: { left: number; right: number; top: number; bottom: number } | null) => {
+    const box = r ?? { left: 0, right: 0, top: 0, bottom: 0 };
+    el.getBoundingClientRect = () => ({ ...box, x: box.left, y: box.top, width: box.right - box.left, height: box.bottom - box.top, toJSON() {} }) as DOMRect;
+    el.getClientRects = () => (r ? [el.getBoundingClientRect()] : []) as unknown as DOMRectList;
+  };
+  const dl = q("[data-download-button]")!;
+  place(saveBtn(), { left: 900, right: 1000, top: 10, bottom: 46 });
+  place(shareBtn(), { left: 780, right: 890, top: 10, bottom: 46 });
+  place(dl, { left: 600, right: 720, top: 10, bottom: 46 });
+  const at = () => [sheet()!.style.top, sheet()!.style.right];
+  const esc = () => act(async () => void fireEvent.keyDown(window, { key: "Escape" }));
+  await tap(saveBtn());
+  assert.equal(sheet()!.getAttribute("data-sheet-kind"), "popover");
+  assert.deepEqual(at(), ["52px", `${window.innerWidth - 1000}px`], "under «Saqlash»");
+  await esc();
+  await tap(shareBtn());
+  assert.deepEqual(at(), ["52px", `${window.innerWidth - 890}px`], "under «Ulashish»");
+  await esc();
+  // Compact header: «Saqlash» is display:none, the sheet comes from the «⋯» menu.
+  place(saveBtn(), null);
+  await click(q("[data-more-button]")!);
+  await click(q('[data-menu-item="save-other"]')!);
+  assert.deepEqual(at(), ["52px", `${window.innerWidth - 720}px`], "under «Yuklab olish»");
+  await esc();
+  place(shareBtn(), null);
+  place(dl, null);
+  await click(q("[data-more-button]")!);
+  await click(q('[data-menu-item="share-other"]')!);
+  assert.deepEqual(at(), ["72px", "16px"], "the default corner, not right: innerWidth");
 });
 
 test("an edit (new file version) clears the rows: a «sent» row of the old file is idle again", async () => {

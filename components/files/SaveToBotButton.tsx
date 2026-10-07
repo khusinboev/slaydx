@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type Ref } from "react";
 import { Loader2, Send } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { DownloadFormatId } from "@/lib/downloads/formats";
@@ -243,6 +243,7 @@ export function SaveToBotButton({
   visible,
   onPress,
   picker = false,
+  buttonRef,
   iconOnly = false,
   className,
 }: {
@@ -251,6 +252,8 @@ export function SaveToBotButton({
   onPress: () => void;
   /** The press opens the format sheet (the material has several formats). */
   picker?: boolean;
+  /** The desktop format popover hangs from this button. */
+  buttonRef?: Ref<HTMLButtonElement>;
   iconOnly?: boolean;
   className?: string;
 }) {
@@ -264,6 +267,7 @@ export function SaveToBotButton({
   return (
     <button
       type="button"
+      ref={buttonRef}
       data-save-to-bot
       aria-busy={action.busy || undefined}
       aria-haspopup={picker ? "dialog" : undefined}
