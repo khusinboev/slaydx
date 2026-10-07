@@ -340,6 +340,7 @@ test("differential: every share row prepares ITS format and opens the picker wit
       await waitFor(() => assert.match(toast()?.textContent ?? "", /Ulashildi/), `${m.name} → ${id}`);
       assert.deepEqual(bodies("/telegram/share"), [id]);
       assert.deepEqual(tgCalls, [`share prep-${id}`], `${m.name}: the picker gets the ${id} message`);
+      assert.ok(!sheet(), `${m.name} → ${id}: shared, the sheet closes`);
       cleanup();
     }
   }
