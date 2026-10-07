@@ -221,7 +221,8 @@ function focusTemporarily(el: HTMLElement, root: HTMLElement) {
  */
 function focusPageStart(root: HTMLElement) {
   for (const el of root.querySelectorAll<HTMLElement>(FOCUSABLE)) {
-    if (el.tabIndex < 0 || isTextEntry(el) || !reachable(el, root)) continue;
+    const text: boolean = isTextEntry(el); // a type guard would narrow `el` to `never` below
+    if (el.tabIndex < 0 || text || !reachable(el, root)) continue;
     el.focus({ preventScroll: true });
     return;
   }
