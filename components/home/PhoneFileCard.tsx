@@ -38,7 +38,7 @@ export const PhoneFileCard = memo(function PhoneFileCard({
   const running = gen.status === "QUEUED" || gen.status === "IN_PROGRESS";
   const when = formatFileWhen(gen.finishedAt ?? gen.createdAt, now);
   // A running job tells what it is doing («Matn · 7/12 slayd»); everything else tells when.
-  const detail = running && gen.step ? gen.step : when;
+  const detail = running && gen.step && gen.step !== pill.label ? gen.step : when;
   const meta = [tool?.title, detail].filter(Boolean).join(" · ");
   const ended = gen.status === "FAILED" || gen.status === "REVOKED";
   const href = `/uz/files/${gen.id}`;
@@ -74,7 +74,7 @@ export const PhoneFileCard = memo(function PhoneFileCard({
           <FilePreview gen={gen} />
         )}
       </Link>
-      <div className="min-w-0 flex-1 md:px-4 md:pt-3 md:pr-12 md:pb-3.5">
+      <div className="min-w-0 flex-1 md:flex md:flex-col md:px-4 md:pt-3 md:pr-12 md:pb-3.5">
         <Link
           href={href}
           aria-label={gen.topic}
@@ -88,12 +88,12 @@ export const PhoneFileCard = memo(function PhoneFileCard({
         >
           {gen.topic}
         </Link>
-        <div className="mt-1.5 flex min-w-0 items-center gap-2">
+        <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 md:mt-auto md:pt-1.5">
           <StatusPill label={pill.label} tone={pill.tone} running={running} />
           <span
             data-file-meta
             data-file-status={ended ? gen.status.toLowerCase() : undefined}
-            className="text-muted-foreground min-w-0 truncate text-[13px] leading-5"
+            className="text-muted-foreground max-w-full min-w-0 truncate text-[13px] leading-5"
           >
             {tool ? (
               <span

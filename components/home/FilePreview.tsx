@@ -22,7 +22,7 @@ function SlideThumbLoading() {
 
 function SlideThumbUnavailable() {
   return (
-    <div className="flex h-full items-center justify-center bg-[#eef1f4]" data-slide-thumb="unavailable">
+    <div className="bg-muted flex h-full items-center justify-center" data-slide-thumb="unavailable">
       <Presentation className="text-muted-foreground size-8" />
     </div>
   );
@@ -102,7 +102,7 @@ export const FilePreview = memo(function FilePreview({ gen }: { gen: ServerGener
    * eskiz bo'lmasa (LibreOffice yo'q, xato) matn qatorlari ko'rinadi.
    */
   if (gen.format === "docx" || gen.format === "pptx") {
-    return <DocThumb id={gen.id} fileVersion={gen.fileVersion} fallback={linesView} />;
+    return <DocThumb id={gen.id} fileVersion={gen.fileVersion} fallback={linesView ?? <KindPlaceholder type={gen.type} />} />;
   }
 
   /*
@@ -131,13 +131,22 @@ export const FilePreview = memo(function FilePreview({ gen }: { gen: ServerGener
   if (linesView) {
     return linesView;
   }
-  const Icon = gen.type === "slide" ? Presentation : gen.type === "image" ? ImageIcon : FileText;
+  return <KindPlaceholder type={gen.type} />;
+});
+
+/**
+ * Nothing to draw (no thumbnail, no text lines): a themed surface with the
+ * kind's icon — never a blank paper-white box (glaring in dark mode).
+ */
+function KindPlaceholder({ type }: { type: string }) {
+  const Icon =
+    type === "slide" || type === "pro-slide" ? Presentation : type === "image" || type === "infographic" ? ImageIcon : FileText;
   return (
-    <div className="bg-[#eef1f4] flex h-full items-center justify-center">
-      <Icon className="text-muted-foreground size-8" />
+    <div className="bg-muted flex h-full w-full items-center justify-center" data-preview-empty>
+      <Icon className="text-muted-foreground size-7 opacity-70" aria-hidden />
     </div>
   );
-});
+}
 
 /**
  * Hujjat eskizi: `<img>` yuklanguncha `fallback` (matn qatorlari) turadi,
@@ -147,7 +156,7 @@ export const FilePreview = memo(function FilePreview({ gen }: { gen: ServerGener
 function DocThumb({ id, fileVersion, fallback }: { id: string; fileVersion?: number; fallback: React.ReactNode }) {
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#f7f4ec]" data-doc-thumb={state}>
+    <div className="relative h-full w-full overflow-hidden" data-doc-thumb={state}>
       {state !== "ok" ? fallback : null}
       {state !== "error" ? (
         // eslint-disable-next-line @next/next/no-img-element

@@ -158,3 +158,31 @@ test("DOCX natija (referat/tarjima): eskiz <img> `/thumb` + yuklanguncha matn qa
   assert.match(html, /Kirish qismi matni bu yerda\./, "yuklanguncha matn qatorlari");
   assert.match(html, /loading="lazy"/);
 });
+
+/*
+ * Redesign W2 (lead note): a finished file with no preview lines and no
+ * thumbnail used to render a blank paper-white box (`#f7f4ec` / `#eef1f4`),
+ * glaring in dark mode on «Ishlarim» and the Bosh «Davom ettirish» list.
+ * Now: the themed muted surface + the kind's icon, while the thumbnail loads
+ * and when it fails. Mutation: the DocThumb fallback back to bare `linesView`
+ * (null) turned the first case red.
+ */
+test("bo'sh eskiz: qator/eskiz yo'q — mavzuli `bg-muted` + tur belgisi, oq quti emas (DOCX, slayd, rasm)", () => {
+  const cases = [
+    { type: "referat", format: "docx", preview: null, icon: /lucide-file-text/ },
+    { type: "coursework", format: "docx", preview: { lines: [] }, icon: /lucide-file-text/ },
+    { type: "slide", format: "pptx", preview: null, icon: /lucide-presentation/ },
+    { type: "image", format: "png", preview: null, icon: /lucide-image/ },
+  ] as const;
+  for (const c of cases) {
+    const html = renderToStaticMarkup(h(FilePreview, { gen: gen({ type: c.type as never, format: c.format as never, preview: c.preview as never }) }));
+    assert.match(html, /data-preview-empty/, `${c.type}: placeholder`);
+    assert.match(html, /class="bg-muted [^"]*"[^>]*data-preview-empty/, `${c.type}: themed surface`);
+    assert.match(html, c.icon, `${c.type}: kind icon`);
+    assert.doesNotMatch(html, /#f7f4ec|#eef1f4/, `${c.type}: no fixed paper colour`);
+  }
+  // With text lines the paper preview (it draws the document) is unchanged.
+  const withLines = renderToStaticMarkup(h(FilePreview, { gen: gen({ type: "referat" as never, format: "docx", preview: { lines: ["Kirish"] } }) }));
+  assert.doesNotMatch(withLines, /data-preview-empty/);
+  assert.match(withLines, /#f7f4ec/);
+});
