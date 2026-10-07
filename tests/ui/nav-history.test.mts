@@ -758,3 +758,122 @@ test("replacePage: replaces the page entry itself, popping an open overlay's ent
   await settle();
   assert.equal(here(), "/uz", "back → Bosh");
 });
+
+const STEPS = ["/uz/profile/shaxsiy", "/uz/profile/oqish", "/uz/profile/ish", "/uz/profile/korinish"];
+
+test("pageStack: page paths of the run up to the current page; overlay entries above it do not count", async () => {
+  fresh("/uz");
+  assert.deepEqual(nav.pageStack(), ["/uz"]);
+  router.push("/uz/profile");
+  router.push(STEPS[0]!);
+  router.replace(STEPS[1]!);
+  assert.deepEqual(nav.pageStack(), ["/uz", "/uz/profile", STEPS[1]]);
+  nav.pushLayer("overlay", () => {});
+  await settle();
+  assert.deepEqual(nav.pageStack(), ["/uz", "/uz/profile", STEPS[1]], "the overlay entry is not a page");
+});
+
+test("backToEntry: one history.go(-n) to an earlier entry (Next renders it); `replaceWith` hides the pop from Next and replaces that entry", async () => {
+  fresh("/uz");
+  router.push("/uz/profile");
+  router.push(STEPS[0]!);
+  router.push(STEPS[1]!);
+  const closed: string[] = [];
+  nav.pushLayer("overlay", () => closed.push("sheet"));
+  await settle();
+  calls.length = 0;
+  nextSaw.length = 0;
+  // Profile step → Hamyon tab: the entry right above Bosh becomes the wallet.
+  let ok = false;
+  await act(async () => {
+    ok = await nav.backToEntry(1, { replaceWith: "/uz/wallet" });
+  });
+  await settle();
+  assert.ok(ok);
+  assert.equal(here(), "/uz/wallet");
+  assert.equal(sx()?.i, 1, "entry 1 replaced; the steps are now forward entries");
+  assert.ok(!sx()?.o);
+  assert.deepEqual(calls, ["replace /uz/wallet"]);
+  assert.deepEqual(nextSaw, [], "Next never saw the intermediate /uz/profile");
+  assert.deepEqual(closed, ["sheet"], "the open overlay was closed");
+  assert.deepEqual(nav.pageStack(), ["/uz", "/uz/wallet"]);
+  await act(async () => {
+    window.history.back();
+  });
+  await settle();
+  assert.equal(here(), "/uz", "back from the tab → Bosh, not a step");
+  // Plain: Next renders the entry it lands on.
+  router.push("/uz/files");
+  router.push(STEPS[2]!);
+  calls.length = 0;
+  nextSaw.length = 0;
+  await act(async () => {
+    ok = await nav.backToEntry(0);
+  });
+  await settle();
+  assert.ok(ok);
+  assert.equal(here(), "/uz");
+  assert.equal(sx()?.i, 0);
+  assert.deepEqual(calls, [], "a traversal, no push / replace");
+  assert.deepEqual(nextSaw, ["/uz"], "Next restores Bosh");
+  // Not under the current page: nothing happens.
+  assert.equal(await nav.backToEntry(0), false);
+  assert.equal(await nav.backToEntry(-1), false);
+  // A failed leave-guard save cancels it.
+  router.push("/uz/files");
+  const off = nav.registerGuard({ isPending: () => true, save: async () => false });
+  assert.equal(await nav.backToEntry(0), false);
+  off();
+  assert.equal(here(), "/uz/files");
+});
+
+test("backToPath: «Saqlash va yakunlash» goes back to the nearest index entry in one step; deep-linked steps collapse into it", async () => {
+  // Bosh → Profil → 4 pushed steps → finish: the index, then back → Bosh (never into the steps).
+  fresh("/uz");
+  router.push("/uz/profile");
+  for (const s of STEPS) router.push(s);
+  calls.length = 0;
+  nextSaw.length = 0;
+  await act(async () => {
+    await nav.backToPath("/uz/profile");
+  });
+  await settle();
+  assert.equal(here(), "/uz/profile");
+  assert.equal(sx()?.i, 1);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(nextSaw, ["/uz/profile"], "one traversal");
+  await act(async () => {
+    window.history.back();
+  });
+  await settle();
+  assert.equal(here(), "/uz", "back from the index → Bosh");
+
+  // Deep-linked step + a pushed one: the first step entry becomes the index (i 0, its parent is Bosh).
+  fresh(STEPS[0]);
+  router.push(STEPS[1]!);
+  calls.length = 0;
+  nextSaw.length = 0;
+  await act(async () => {
+    await nav.backToPath("/uz/profile");
+  });
+  await settle();
+  assert.equal(here(), "/uz/profile");
+  assert.equal(sx()?.i, 0);
+  assert.deepEqual(calls, ["replace /uz/profile"]);
+  assert.deepEqual(nextSaw, []);
+  calls.length = 0;
+  await act(async () => {
+    await nav.backTo();
+  });
+  assert.deepEqual(calls, ["replace /uz"], "the index's back → its parent Bosh");
+
+  // Nothing to collapse: replace.
+  fresh(STEPS[3]);
+  calls.length = 0;
+  await act(async () => {
+    await nav.backToPath("/uz/profile");
+  });
+  await settle();
+  assert.deepEqual(calls, ["replace /uz/profile"]);
+  assert.equal(sx()?.i, 0);
+});

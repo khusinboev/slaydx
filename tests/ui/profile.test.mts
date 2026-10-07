@@ -434,3 +434,35 @@ test("route page: «Saqlash va keyingisi» on /uz/profile/shaxsiy pushes the nex
   assert.deepEqual(pushed, ["/uz/profile/oqish"]);
 });
 
+test("route page: «Saqlash va yakunlash» after the pushed steps returns to the profile index entry (one history.go), not to the previous step", async () => {
+  const { ProfileStepPage } = await import("../../components/profile/ProfileStepPage.tsx");
+  const nav = await import("../../lib/nav/history.ts");
+  // Real jsdom history under the nav engine: Bosh → Profil → shaxsiy → oqish → ish → korinish.
+  nav.__resetNavForTests();
+  window.history.pushState(null, "", "/uz");
+  window.sessionStorage.clear();
+  nav.installNav();
+  for (const p of ["/uz/profile", "/uz/profile/shaxsiy", "/uz/profile/oqish", "/uz/profile/ish", "/uz/profile/korinish"]) {
+    window.history.pushState({}, "", p);
+  }
+  try {
+    stub();
+    signIn();
+    pushed.length = 0;
+    render(wrap(h(ProfileStepPage, { step: "korinish" })));
+    fireEvent.click(screen.getByRole("button", { name: "Saqlash va yakunlash" }));
+    await tick(40);
+    // MUTATION: `backTo("/uz/profile")` (one entry back) lands on /uz/profile/ish.
+    assert.equal(window.location.pathname, "/uz/profile");
+    assert.equal((window.history.state as { sx?: { i: number } }).sx?.i, 1, "the index entry right above Bosh");
+    assert.deepEqual(pushed, []);
+    await act(async () => {
+      window.history.back();
+    });
+    await tick(20);
+    assert.equal(window.location.pathname, "/uz", "back from the index → Bosh, never into the steps");
+  } finally {
+    nav.__resetNavForTests();
+  }
+});
+

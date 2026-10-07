@@ -20,7 +20,9 @@ import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks
  *   - TabBar `onTab`: always `router.push` (history grows, back from Hamyon lands on Ishlarim);
  *   - TabBar `onTab`: no `preventDefault` for the scroll-top case (navigates to itself);
  *   - AppShell: `--tabbar-h` always `var(--tabbar-room)`; no bottom room spacer;
- *   - history.ts `recordPath` not called on push (previousPagePath null → Bosh replaces).
+ *   - history.ts `recordPath` not called on push (pageStack without Bosh → Bosh replaces);
+ *   - TabBar «back-replace» wired as a plain `replacePage` (Hamyon from a step: back lands on a step);
+ *   - history.ts `backToEntry` with `replaceWith` not swallowing the pop (Next sees /uz/profile).
  */
 
 const nav = await import("../../lib/nav/history.ts");
@@ -176,7 +178,7 @@ test("targets: every tab is a ≥ 44 px cell of the 64 px bar, the «+» is 56 p
     assert.ok(has(a, "min-h-11"), `${id}: ≥ 44 px`);
     assert.ok(has(a, "focus-visible:ring-2"), `${id}: keyboard focus ring`);
     const label = a.lastElementChild;
-    assert.ok(has(label, "text-[12px]"), `${id}: 12 px label`);
+    assert.ok(has(label, "text-[12.5px]"), `${id}: 12.5 px label`);
   }
   for (const c of ["size-14", "rounded-[20px]", "ring-4", "ring-[var(--page-bg)]", "-mt-3"]) assert.ok(has(plus(), c), `«+»: ${c}`);
   assert.ok(cls(plus()).some((c) => c.startsWith("focus-visible:outline")), "«+» keyboard focus ring");
@@ -347,6 +349,55 @@ test("history: on a deep link (no in-app entry under it) a tab → Bosh REPLACES
   assert.equal(here(), "/uz");
   assert.equal(sx()?.i, 0);
   assert.deepEqual(calls, ["replace /uz"]);
+});
+
+/** Bosh → Profil (tab) → shaxsiy → oqish (pushed step routes, as «Saqlash va keyingisi» does). */
+async function onStep() {
+  fresh("/uz");
+  shell();
+  await settle();
+  await clickTab("profil");
+  await act(async () => {
+    router.push("/uz/profile/shaxsiy");
+    router.push("/uz/profile/oqish");
+  });
+  await settle();
+  assert.equal(sx()?.i, 3);
+  calls.length = 0;
+}
+
+async function phoneBack() {
+  await act(async () => {
+    window.history.back();
+  });
+  await settle();
+}
+
+test("history: a tab tap on a profile step collapses the stack to [Bosh, tab] (the review's MAJOR 2)", async () => {
+  // Hamyon: back to the entry right above Bosh, unseen, and replace it.
+  await onStep();
+  await clickTab("hamyon");
+  assert.equal(here(), "/uz/wallet");
+  assert.equal(sx()?.i, 1);
+  assert.deepEqual(calls, ["replace /uz/wallet"]);
+  await phoneBack();
+  assert.equal(here(), "/uz", "back from Hamyon → Bosh, not a step");
+  cleanup();
+  // Profil: the index is already that entry — a plain traversal.
+  await onStep();
+  await clickTab("profil");
+  assert.equal(here(), "/uz/profile");
+  assert.equal(sx()?.i, 1);
+  assert.deepEqual(calls, []);
+  await phoneBack();
+  assert.equal(here(), "/uz", "back from Profil → Bosh");
+  cleanup();
+  // Bosh: back to the first entry; nothing under it, so back on Bosh leaves.
+  await onStep();
+  await clickTab("bosh");
+  assert.equal(here(), "/uz");
+  assert.equal(sx()?.i, 0);
+  assert.deepEqual(calls, []);
 });
 
 test("the active tab again: #main scrolls to the top, no navigation", async () => {

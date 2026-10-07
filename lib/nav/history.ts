@@ -25,6 +25,7 @@
  * cross-document cases (reload, hard navigation).
  */
 import { isListPath, listParentOf, listUrlToRemember, parentOf } from "./parents";
+import { returnPlan } from "./tabs";
 
 export type LayerKind = "overlay" | "guard";
 export type PopReason = "back" | "navigate";
@@ -757,6 +758,23 @@ export function previousPagePath(): string | null {
   return paths[base - 1] ?? null;
 }
 
+/**
+ * Page paths of this tab's in-app run, index 0 … the current page's base entry
+ * (the entries of its open overlays excluded); `null` where unknown. A same-URL
+ * overlay entry left behind under the page shows its page's path. Tab history
+ * decisions read it (`lib/nav/tabs.ts tabNavAction`, `returnPlan`).
+ */
+export function pageStack(): (string | null)[] {
+  if (!hasWindow()) return [];
+  installNav();
+  const eff = effectiveIndex();
+  const base = Math.max(0, eff - layersAbove(eff));
+  const out: (string | null)[] = [];
+  for (let i = 0; i < base; i += 1) out.push(paths[i] ?? null);
+  out.push(paths[base] ?? (pathOf(lastHref) || null));
+  return out;
+}
+
 function rememberListUrl(href: string) {
   try {
     const u = new URL(href);
@@ -843,6 +861,52 @@ export async function replacePage(href: string, opts?: NavOpts): Promise<boolean
   }
   replaceTo(href, r);
   return true;
+}
+
+/**
+ * Goes back to entry `index` of this tab's in-app run (an entry under the
+ * current page, see `pageStack`) with ONE `history.go(-n)`; open overlays are
+ * closed and their entries crossed in the same call. Leave guards save first.
+ *
+ * `replaceWith`: the traversal is hidden from Next (swallowed) and the entry
+ * it lands on is then REPLACED with that href, so the user sees one page
+ * change (no flash of the page in between) and everything above `index` is
+ * out of the back path (`tabNavAction` «back-replace»).
+ *
+ * Resolves `false` when nothing happened (a guard failed, `index` is not under
+ * the current page).
+ */
+export async function backToEntry(index: number, opts?: NavOpts & { replaceWith?: string }): Promise<boolean> {
+  installNav();
+  if (!(await runGuards())) return false;
+  if (!hasWindow()) return false;
+  const r = opts?.router ?? router;
+  const eff = effectiveIndex();
+  const base = eff - layersAbove(eff);
+  if (!Number.isInteger(index) || index < 0 || index >= base) return false;
+  const leaving = layers;
+  layers = [];
+  closeLater(leaving, ["overlay"]);
+  const href = opts?.replaceWith;
+  if (href) go(index - eff, { swallow: true, then: () => replaceTo(href, r) });
+  else go(index - eff, { page: true });
+  notify();
+  return true;
+}
+
+/**
+ * Returns to `path` leaving nothing pushed above it (profile «Saqlash va
+ * yakunlash» → the profile index, wherever the steps left the stack), by the
+ * pure plan `returnPlan`: back to the nearest earlier `path` entry; else back
+ * to the first of the pages nested under `path` and replace it; else replace
+ * the current page (`replacePage`). Leave guards save first.
+ */
+export async function backToPath(path: string, opts?: NavOpts): Promise<boolean> {
+  installNav();
+  const plan = returnPlan(pageStack(), path);
+  if (plan.kind === "back") return backToEntry(plan.index, opts);
+  if (plan.kind === "back-replace") return backToEntry(plan.index, { ...opts, replaceWith: path });
+  return replacePage(path, opts);
 }
 
 /**
