@@ -8,7 +8,8 @@ import { formatPoints } from "@/lib/referral";
 import { creditTotal, useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { ReferralCard } from "../profile/ReferralCard";
-import { DEFAULT_TOPUP, TOPUP_PRESETS, formatSoum, openPay } from "../overlays/pay-amount";
+import { DEFAULT_TOPUP, TOPUP_PRESETS, openPay } from "../overlays/pay-amount";
+import { groupDigits } from "@/lib/format";
 import { PaymentBanner } from "./PaymentBanner";
 import { usePaymentReturn } from "./usePaymentReturn";
 import { TOPUP_FEATURES, formatWhen, ledgerRow, orderStateLabel, providerLabel } from "./wallet-model";
@@ -176,7 +177,7 @@ function QuickTopUp() {
               key={v}
               type="button"
               data-wallet-pack={v}
-              aria-label={`${formatSoum(v)} so'm${best ? ", eng qulay" : ""} — to'ldirish`}
+              aria-label={`${groupDigits(v)} so'm${best ? ", eng qulay" : ""} — to'ldirish`}
               onClick={() => openPay({ amount: v })}
               className={cn(
                 "bg-card hover:bg-accent flex min-h-[4.5rem] flex-col items-center justify-center rounded-[16px] border px-2 py-2.5 text-center tabular-nums shadow-[var(--shadow-card)] transition-[background-color,transform] active:scale-[0.98] motion-reduce:transform-none",
@@ -184,7 +185,7 @@ function QuickTopUp() {
                 focusRing,
               )}
             >
-              <span className="text-[17px] leading-tight font-bold">{formatSoum(v)}</span>
+              <span className="text-[17px] leading-tight font-bold">{groupDigits(v)}</span>
               <span className={cn("mt-0.5 text-[13px] leading-tight", best ? "text-accent-soft-foreground font-semibold" : "text-muted-foreground")}>
                 {best ? "eng qulay" : "so'm"}
               </span>

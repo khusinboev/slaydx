@@ -10,6 +10,7 @@ import { SOURCE_TEXT_LIMIT } from "@/lib/generation/meta";
 import { SELECTABLE_FIGURE_KINDS, type SelectableFigureKind } from "@/lib/generation/article/types";
 import { MAX_SOURCE_CHARS, formatTanga } from "@/lib/tools";
 import type { FormValues } from "@/lib/types";
+import { groupDigits } from "@/lib/format";
 import { Row, SummaryChips } from "../compact";
 import { TextInput } from "../fields";
 
@@ -145,7 +146,7 @@ export function Counter({ len, limit }: { len: number; limit: number }) {
       className={cn("pointer-coarse:text-[13px] mt-1 block text-right text-[12.5px] tabular-nums", near ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground")}
       data-counter
     >
-      {len.toLocaleString("uz-UZ")} / {limit.toLocaleString("uz-UZ")}
+      {groupDigits(len)} / {groupDigits(limit)}
     </span>
   );
 }
@@ -355,7 +356,7 @@ export function SourceFileRow({
               {badge !== undefined
                 ? badge
                 : sourceText
-                  ? <span className="bg-muted pointer-coarse:text-[13px] rounded-[8px] px-2 py-0.5 text-[12.5px] tabular-nums">{sourceText.length.toLocaleString("uz-UZ")} belgi</span>
+                  ? <span className="bg-muted pointer-coarse:text-[13px] rounded-[8px] px-2 py-0.5 text-[12.5px] tabular-nums">{groupDigits(sourceText.length)} belgi</span>
                   : null}
             </>
           ) : (
@@ -385,8 +386,8 @@ export function SourceFileRow({
         {error ? <p className="text-destructive mt-1 text-[13.5px] leading-snug">{error}</p> : null}
         {tooLong ? (
           <p className="mt-1 text-[13px] leading-snug text-amber-700 dark:text-amber-400">
-            Matn uzun: faqat birinchi {SOURCE_TEXT_LIMIT.toLocaleString("uz-UZ")} belgisi ishlatiladi
-            {sourceText.length > MAX_SOURCE_CHARS ? `; serverga eng ko‘pi ${MAX_SOURCE_CHARS.toLocaleString("uz-UZ")} belgi yuboriladi` : ""}.
+            Matn uzun: faqat birinchi {groupDigits(SOURCE_TEXT_LIMIT)} belgisi ishlatiladi
+            {sourceText.length > MAX_SOURCE_CHARS ? `; serverga eng ko‘pi ${groupDigits(MAX_SOURCE_CHARS)} belgi yuboriladi` : ""}.
           </p>
         ) : null}
       </Field>

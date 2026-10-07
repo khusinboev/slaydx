@@ -14,6 +14,7 @@ import { parentOf } from "../../lib/nav/parents.ts";
 import { TOOL_BY_ID } from "../../lib/tools.ts";
 import { useAppStore } from "../../lib/store.ts";
 import { useUi } from "../../lib/ui.ts";
+import { groupDigits } from "../../lib/format.ts";
 import sitemapImport from "../../app/sitemap.ts";
 import type * as api from "../../lib/api-client.ts";
 
@@ -132,7 +133,7 @@ for (const amount of TOPUP_PRESETS) {
     });
     assert.equal(useUi.getState().overlay, "pay");
     assert.deepEqual(pressed(), [amount], "only that amount is selected");
-    assert.match(document.querySelector("[data-pay-total]")!.textContent ?? "", new RegExp(String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, " ")));
+    assert.match(document.querySelector("[data-pay-total]")!.textContent ?? "", new RegExp(`${groupDigits(amount)} so.m`));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Click" }));
       await new Promise((r) => setTimeout(r, 5));

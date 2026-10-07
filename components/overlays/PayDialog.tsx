@@ -8,7 +8,8 @@ import { useUi } from "@/lib/ui";
 import { cn } from "@/lib/cn";
 import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
 import { OverlayFrame, OverlayHeader, OverlayPanel, OverlayScrim } from "./OverlayFrame";
-import { DEFAULT_TOPUP, PAY_RETURN_PATH, TOPUP_PRESETS, formatSoum, usePayAmount } from "./pay-amount";
+import { DEFAULT_TOPUP, PAY_RETURN_PATH, TOPUP_PRESETS, usePayAmount } from "./pay-amount";
+import { groupDigits } from "@/lib/format";
 import { useDialog } from "./useDialog";
 
 export { TOPUP_PRESETS, DEFAULT_TOPUP, PAY_RETURN_PATH, openPay } from "./pay-amount";
@@ -107,14 +108,14 @@ export function PayDialog() {
                   type="button"
                   aria-pressed={on}
                   data-pay-amount={v}
-                  aria-label={`${formatSoum(v)} so'm${best ? ", eng qulay" : ""}`}
+                  aria-label={`${groupDigits(v)} so'm${best ? ", eng qulay" : ""}`}
                   onClick={() => setAmount(v)}
                   className={cn(
                     "focus-visible:ring-ring flex min-h-16 flex-col items-center justify-center rounded-[16px] border px-2 py-2 text-center tabular-nums outline-none transition-colors focus-visible:ring-2",
                     on ? "border-primary bg-accent-soft shadow-[inset_0_0_0_1px_var(--primary)]" : "bg-card hover:bg-accent",
                   )}
                 >
-                  <span className="text-[17px] leading-tight font-bold">{formatSoum(v)}</span>
+                  <span className="text-[17px] leading-tight font-bold">{groupDigits(v)}</span>
                   <span className={cn("text-[12.5px] leading-tight", best ? "text-accent-soft-foreground font-semibold" : "text-muted-foreground")}>
                     {best ? "eng qulay" : "so'm"}
                   </span>
@@ -151,7 +152,7 @@ export function PayDialog() {
         </div>
 
         <p className="text-muted-foreground mt-3 text-center text-[13px] tabular-nums" data-pay-total>
-          To&apos;lanadi: <span className="text-foreground font-semibold">{formatSoum(amount)} so&apos;m</span>
+          To&apos;lanadi: <span className="text-foreground font-semibold">{groupDigits(amount)} so&apos;m</span>
         </p>
 
         {error ? (

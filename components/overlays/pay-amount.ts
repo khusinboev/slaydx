@@ -20,11 +20,6 @@ export function isTopupPreset(v: unknown): v is TopupPreset {
   return typeof v === "number" && (TOPUP_PRESETS as readonly number[]).includes(v);
 }
 
-/** «25 000» — the same grouping on the server render and in every browser (no ICU). */
-export function formatSoum(v: number): string {
-  return String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-}
-
 /**
  * The amount selected in `PayDialog`. It lives outside the component so a
  * caller can preselect it before the dialog renders (no flash of the old
