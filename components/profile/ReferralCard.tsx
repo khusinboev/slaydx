@@ -162,8 +162,9 @@ export function ReferralCard() {
               data-referral-kind={id}
               onClick={() => setKind(id)}
               className={cn(
-                "h-11 rounded-lg text-sm font-medium transition-colors",
-                kind === id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                "h-11 rounded-lg border text-sm font-medium transition-colors",
+                // The border keeps the chosen segment visible in dark mode, where card ≈ muted (smoke screenshot).
+                kind === id ? "border-border bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground border-transparent",
               )}
             >
               {label}
