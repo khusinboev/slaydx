@@ -31,12 +31,13 @@ function chrome(props: { price?: number; error?: string | null }) {
 
 const topUp = () => document.querySelector<HTMLAnchorElement>("[data-topup]");
 
-test("UX-03: 402 xatosi yonida «Balansni to'ldirish» → /uz/purchase", () => {
+// Redesign W5: the link goes to the Hamyon tab itself (was `/uz/purchase`, now only a redirect alias).
+test("UX-03: 402 xatosi yonida «Balansni to'ldirish» → /uz/wallet", () => {
   useAppStore.setState({ loggedIn: true, user: user(10_000) }); // store balansi eskirgan (hali ko'p) — server matni baribir tanilsin
   chrome({ price: 4000, error: "Balans yetarli emas. Kerak: 4 000 tanga, mavjud: 1 200." });
   const a = topUp();
   assert.ok(a, "to'ldirish havolasi bor");
-  assert.equal(a.getAttribute("href"), "/uz/purchase");
+  assert.equal(a.getAttribute("href"), "/uz/wallet");
   assert.ok(a.closest("[role=alert]"), "havola xato matni yonida");
 });
 

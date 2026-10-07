@@ -15,6 +15,7 @@ import { TabBar } from "../../components/shell/TabBar.tsx";
 import { CreateSheet } from "../../components/shell/CreateSheet.tsx";
 import { creditTotal, useAppStore, writerProfile } from "../../lib/store.ts";
 import { useUi } from "../../lib/ui.ts";
+import { groupDigits } from "../../lib/format.ts";
 import type * as api from "../../lib/api-client.ts";
 
 /**
@@ -118,7 +119,7 @@ test("purchase: to'lov faqat purpose=topup buyurtma yaratadi (tanlangan summa bi
   assert.doesNotMatch(dialog.textContent ?? "", FORBIDDEN);
   assert.ok(dialog.querySelector("fieldset"), "summa tanlash har doim ko'rinadi");
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "50k" }));
+    fireEvent.click(screen.getByRole("button", { name: `${groupDigits(50_000)} so'm` })); // redesign W5: was «50k»
   });
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Click" }));

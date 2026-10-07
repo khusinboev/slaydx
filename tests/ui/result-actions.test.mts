@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createElement as h } from "react";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import { ResultActions, toastDuration } from "../../components/files/ResultActions.tsx";
+import { ResultActions, TOAST_BOTTOM, toastDuration } from "../../components/files/ResultActions.tsx";
 import { useAppStore } from "../../lib/store.ts";
 import { compareVersions } from "../../lib/telegram-webapp.ts";
 import { resetGesture } from "../../lib/downloads/deliver.ts";
@@ -397,6 +397,21 @@ test("«Saqlash» one-format tool: no sheet — saves from the button with its o
   await waitFor(() => assert.match(toast()?.textContent ?? "", /✅ Fayl bot chatiga yuborildi/));
   await act(async () => new Promise((r) => setTimeout(r, 1_150)));
   assert.ok(tgCalls.includes("close"));
+});
+
+// Redesign W5 (F0 hand-off): the toast clears the tab bar's room (`--tabbar-h`, 0 while hidden) and the
+// home indicator from the Telegram bridge (`--tg-safe-bottom`, env() fallback) — was `16px + env()` only.
+test("toast offset: 16 px above --tabbar-h and the Telegram / env() bottom safe area", async () => {
+  fakeTelegram();
+  stub((c) => (c.url.endsWith("/telegram/save") ? json(200, { ok: true, duplicate: false, format: "native", botUrl: "https://t.me/SlaydX_bot" }) : undefined));
+  mount({ g: oneFormat() });
+  await tap(q("[data-save-to-bot]")!);
+  await waitFor(() => assert.ok(toast()));
+  assert.equal(TOAST_BOTTOM, "calc(16px + var(--tabbar-h, 0px) + var(--tg-safe-bottom, env(safe-area-inset-bottom, 0px)))");
+  const bottom = (toast() as HTMLElement).style.bottom;
+  assert.match(bottom, /var\(--tabbar-h, 0px\)/, "clears the tab bar when it is shown");
+  assert.match(bottom, /var\(--tg-safe-bottom, env\(safe-area-inset-bottom, 0px\)\)/, "Telegram safe area first, env() fallback");
+  assert.match(bottom, /^calc\(16px \+/, "16 px gap kept");
 });
 
 test("«Saqlash»: 409 bot_unreachable → requestWriteAccess → allowed → one retry succeeds", async () => {

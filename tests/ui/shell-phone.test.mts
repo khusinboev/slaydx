@@ -34,6 +34,8 @@ import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks
  *   - PayDialog presets `h-11` → `h-10`;
  *   - OverlayFrame dropping the `visualViewport` height (keyboard) or the safe padding;
  *   - LoginForm input `text-base` removed.
+ *   - W5: sheet without the grabber; `--sheet-pb` without the bottom safe area; search «Balansni
+ *     to'ldirish» → `/uz/purchase`.
  */
 
 const win = window as unknown as { matchMedia?: unknown; visualViewport?: unknown };
@@ -247,8 +249,10 @@ test("CreateSheet phone: tiles ≥ 44 px, 44 px close, 48 px «Barchasi», the c
 });
 
 // ------------------------------------------------------------------ search
+// Redesign W5 (variant A): rows carry the tool's icon chip and are ≥ 56 px on touch (was ≥ 48); the close
+// button is the shared `OverlayClose` (44 px touch / 40 px mouse); desktop input 56 px / 16 px (was 48 / 15.5).
 
-test("SearchDialog phone: 16 px input, 44 px close, ≥ 48 px rows, inner scroll", () => {
+test("SearchDialog phone: 16 px input, 44 px close, ≥ 56 px rows with tool icon chips, inner scroll", () => {
   phoneMedia(true);
   signIn();
   useAppStore.setState({
@@ -264,61 +268,96 @@ test("SearchDialog phone: 16 px input, 44 px close, ≥ 48 px rows, inner scroll
   assert.ok(has(closeBtns[0], "size-11"), "close is 44x44");
   const rows = [...document.querySelectorAll("button")].filter((b) => has(b, "w-full") && !has(b, "absolute"));
   assert.ok(rows.length > TOOLS.length, "tools + balance + files");
-  for (const r of rows) assert.ok(has(r, "min-h-12"), `row «${(r.textContent ?? "").slice(0, 20)}» ≥ 48 px`);
+  for (const r of rows) assert.ok(has(r, "min-h-14"), `row «${(r.textContent ?? "").slice(0, 20)}» ≥ 56 px`);
+  // Every tool row shows its icon in the tool colour; the file row shows its tool's icon.
+  for (const t of TOOLS) {
+    const chip = document.querySelector(`[data-search-tool="${t.id}"] > span[aria-hidden]`) as HTMLElement | null;
+    assert.ok(chip?.querySelector("svg"), `${t.id}: icon chip`);
+    assert.equal(chip!.style.getPropertyValue("--tc"), t.tc, `${t.id}: chip in the tool colour`);
+  }
+  assert.ok(document.querySelector('[data-search-file="g1"] svg'), "file row icon");
   const list = input.closest(".overflow-hidden")?.querySelector(".overflow-y-auto");
   assert.ok(has(list ?? null, "overscroll-contain") && !has(list ?? null, "max-h-[60vh]"));
   assert.ok(has(input.closest(".overflow-hidden"), "max-h-full"), "card never taller than the frame");
 });
 
-test("SearchDialog desktop: unchanged (60vh list, 48 px input, 12vh offset)", () => {
+test("SearchDialog desktop: 60vh list, 56 px / 16 px input, 12vh offset, 40 px close, no inline frame style", () => {
   signIn();
   useUi.setState({ overlay: "search" });
   render(inRouter(h(SearchDialog)));
   const input = screen.getByPlaceholderText("Qidirish...");
-  assert.ok(has(input, "h-12") && has(input, "text-[15.5px]"));
+  assert.ok(has(input, "h-14") && has(input, "text-[16px]"));
   assert.ok(has(input.closest(".overflow-hidden")?.querySelector(".overflow-y-auto") ?? null, "max-h-[60vh]"));
   const frame = document.querySelector("[data-overlay-frame]");
   assert.ok(has(frame, "pt-[12vh]"));
   assert.ok(!frame?.getAttribute("style"));
   assert.ok(!document.querySelector(".size-11"));
+  const close = screen.getAllByLabelText("Yopish").find((b) => b.querySelector("svg"));
+  assert.ok(has(close ?? null, "size-10"), "40 px close with a mouse");
+});
+
+test("SearchDialog: «Balansni to'ldirish» opens Hamyon (/uz/wallet, not the /uz/purchase alias)", () => {
+  signIn();
+  const pushes: string[] = [];
+  const spy = { ...router, push: (href: string) => void pushes.push(href) } as unknown as AppRouterInstance;
+  useUi.setState({ overlay: "search" });
+  render(h(AppRouterContext.Provider, { value: spy }, h(SearchDialog)));
+  fireEvent.click(document.querySelector("[data-search-wallet]")!);
+  assert.deepEqual(pushes, ["/uz/wallet"]);
+  assert.equal(useUi.getState().overlay, null, "the dialog closed");
 });
 
 // ------------------------------------------------------------------ notifications
+// Redesign W5: there is no 3.5rem top bar any more — the phone panel is a bottom sheet (was: a card
+// anchored 3.5rem under the bar); the desktop panel is a centred dialog (was: an `absolute top-14` popover).
 
-test("NotificationsPanel phone: 44 px close, anchored under the bar, scrolls inside", () => {
+test("NotificationsPanel phone: a bottom sheet (grabber, 26 px top corners, slide-up) with a 44 px close, scrolls inside, clears the home indicator", () => {
   phoneMedia(true);
   useUi.setState({ overlay: "notifications" });
   render(h(NotificationsPanel));
   const aside = document.querySelector("aside");
   assert.ok(has(aside, "overflow-y-auto") && has(aside, "max-h-full"));
   assert.ok(!has(aside, "absolute"), "in-flow inside the safe-area frame");
+  for (const c of ["rounded-t-[26px]", "slx-sheet-enter", "pb-[var(--sheet-pb,1rem)]"]) assert.ok(has(aside, c), c);
+  assert.ok(aside?.querySelector("[data-sheet-grabber]"), "grabber");
   const frame = document.querySelector<HTMLElement>("[data-overlay-frame]");
-  assert.match(frame?.getAttribute("style") ?? "", /3\.5rem/, "starts below the 56 px bar");
-  assert.match(frame?.getAttribute("style") ?? "", /--tg-safe-top/);
+  assert.ok(frame?.hasAttribute("data-sheet") && has(frame, "items-end"), "docked at the bottom");
+  const style = frame?.getAttribute("style") ?? "";
+  assert.doesNotMatch(style, /3\.5rem/, "no TopBar offset any more");
+  assert.match(style, /--tg-safe-top/, "still below the notch / Telegram header");
+  assert.match(style, /--sheet-pb: calc\(var\(--tg-safe-bottom, env\(safe-area-inset-bottom, 0px\)\) \+ 1rem\)/, "home indicator");
   const close = aside?.querySelector('button[aria-label="Yopish"]');
   assert.ok(has(close ?? null, "size-11"));
+  assert.ok(has(document.querySelector("[data-overlay-scrim]"), "slx-scrim-enter"), "scrim fades in");
 });
 
-test("NotificationsPanel desktop: unchanged popover", () => {
+test("NotificationsPanel desktop: a centred dialog (no popover offset), 40 px close", () => {
   useUi.setState({ overlay: "notifications" });
   render(h(NotificationsPanel));
   const aside = document.querySelector("aside");
-  assert.ok(has(aside, "absolute") && has(aside, "top-14"));
-  assert.ok(has(aside?.querySelector('button[aria-label="Yopish"]') ?? null, "p-1.5"));
+  assert.ok(!has(aside, "absolute") && !has(aside, "top-14"), "no popover anchored to the old top bar");
+  assert.ok(has(aside, "max-w-sm") && has(aside, "rounded-[24px]"));
+  const frame = document.querySelector("[data-overlay-frame]");
+  assert.ok(has(frame, "items-center") && has(frame, "justify-center"), "centred");
+  assert.ok(!frame?.getAttribute("style"));
+  assert.ok(has(aside?.querySelector('button[aria-label="Yopish"]') ?? null, "size-10"));
+  assert.ok(!aside?.querySelector("[data-sheet-grabber]"), "no grabber on a desktop");
 });
 
 // ------------------------------------------------------------------ pay
+// Redesign W5: amount chips became ≥ 64 px cards (was: 44 px phone / 40 px desktop chips).
 
-test("PayDialog phone: 44 px amount chips and close, card scrolls inside the screen", () => {
+test("PayDialog phone: a bottom sheet with ≥ 64 px amount cards, 44 px close and ≥ 48 px methods; scrolls inside", () => {
   phoneMedia(true);
   signIn();
   useUi.setState({ overlay: "pay" });
   render(inRouter(h(PayDialog)));
   const chips = [...document.querySelectorAll("[aria-pressed]")];
   assert.equal(chips.length, 4);
-  for (const c of chips) assert.ok(has(c, "h-11"), "amount chip 44 px");
+  for (const c of chips) assert.ok(has(c, "min-h-16"), "amount card ≥ 64 px");
   const card = chips[0].closest(".overflow-y-auto");
   assert.ok(card && has(card, "max-h-full"), "internal scroll");
+  assert.ok(has(card, "rounded-t-[26px]") && card.querySelector("[data-sheet-grabber]"), "bottom sheet");
   assert.ok(has(card.querySelector('button[aria-label="Yopish"]'), "size-11"));
   for (const m of ["Click", "Payme"]) {
     const b = screen.getByText(new RegExp(`^${m}`));
@@ -326,12 +365,15 @@ test("PayDialog phone: 44 px amount chips and close, card scrolls inside the scr
   }
 });
 
-test("PayDialog desktop: unchanged (40 px chips)", () => {
+test("PayDialog desktop: a centred dialog, same ≥ 64 px amount cards, 40 px close", () => {
   signIn();
   useUi.setState({ overlay: "pay" });
   render(inRouter(h(PayDialog)));
-  for (const c of document.querySelectorAll("[aria-pressed]")) assert.ok(has(c, "h-10"));
+  for (const c of document.querySelectorAll("[aria-pressed]")) assert.ok(has(c, "min-h-16"));
   assert.ok(!document.querySelector(".size-11"));
+  assert.ok(!document.querySelector("[data-sheet-grabber]"));
+  const frame = document.querySelector("[data-overlay-frame]");
+  assert.ok(has(frame, "items-center") && !frame?.getAttribute("style"));
 });
 
 // ------------------------------------------------------------------ login
@@ -344,32 +386,35 @@ function loginFeatures(over: Record<string, unknown> = {}) {
   } as never);
 }
 
-test("LoginModal phone: 44 px close, card scrolls inside, buttons ≥ 44, dev-phone input is 16 px", async () => {
+// Redesign W5: primary buttons 48 px (was 44 px), the close is the shared 44 / 40 px `OverlayClose`.
+test("LoginModal phone: bottom sheet, 44 px close, card scrolls inside, buttons ≥ 44, dev-phone input is 16 px", async () => {
   phoneMedia(true);
   loginFeatures();
   useUi.setState({ overlay: "login" });
   render(inRouter(h(LoginModal)));
   const card = document.querySelector("[data-overlay-frame] .overflow-y-auto");
   assert.ok(card && has(card, "max-h-full"), "card scrolls inside 360x740");
+  assert.ok(has(card, "slx-sheet-enter") && card.querySelector("[data-sheet-grabber]"), "slides up as a sheet");
   assert.ok(has(card.querySelector('button[aria-label="Yopish"]'), "size-11"));
-  assert.ok(has(screen.getByText("Telegram orqali kirish"), "h-11"));
+  assert.ok(has(screen.getByText("Telegram orqali kirish"), "h-12"));
   const phoneLink = screen.getByText("Telefon raqami orqali kirish");
   assert.ok(has(phoneLink, "min-h-11"), "text link has a 44 px hit area");
   fireEvent.click(phoneLink);
   const input = document.querySelector<HTMLInputElement>("#login-phone");
   assert.ok(input && has(input, "text-base"), "phone input 16 px (no iOS focus zoom)");
   assert.ok(has(screen.getByText("Orqaga"), "h-11"));
-  assert.ok(has(screen.getByText("Kod olish"), "h-11"));
+  assert.ok(has(screen.getByText("Kod olish"), "h-12"));
 });
 
-test("LoginModal desktop: unchanged (32 px close, no inner scroll)", () => {
+test("LoginModal desktop: centred dialog, 40 px close, no inner scroll", () => {
   loginFeatures();
   useUi.setState({ overlay: "login" });
   render(inRouter(h(LoginModal)));
   const card = document.querySelector("[data-overlay-frame] > div:last-child");
   assert.ok(!has(card ?? null, "overflow-y-auto"));
-  assert.ok(has(card?.querySelector('button[aria-label="Yopish"]') ?? null, "size-8"));
-  assert.ok(has(screen.getByText("Telegram orqali kirish"), "h-11"));
+  assert.ok(has(card ?? null, "rounded-[24px]") && has(card ?? null, "max-w-md"));
+  assert.ok(has(card?.querySelector('button[aria-label="Yopish"]') ?? null, "size-10"));
+  assert.ok(has(screen.getByText("Telegram orqali kirish"), "h-12"));
   assert.ok(has(screen.getByText("Telefon raqami orqali kirish"), "underline") && !has(screen.getByText("Telefon raqami orqali kirish"), "min-h-11"));
 });
 

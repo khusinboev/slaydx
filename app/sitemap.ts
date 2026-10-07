@@ -8,7 +8,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: `${APP_URL}/uz`, lastModified: now, changeFrequency: "daily", priority: 1 },
     { url: `${APP_URL}/uz/create`, lastModified: now, changeFrequency: "weekly", priority: 0.9 },
-    { url: `${APP_URL}/uz/purchase`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
+    // `/uz/purchase` is a redirect to the wallet (redesign F0): list the real page, not the alias.
+    { url: `${APP_URL}/uz/wallet`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     ...TOOLS.map((t) => ({
       url: `${APP_URL}/uz/${t.slug}`,
       lastModified: now,

@@ -22,7 +22,8 @@ import type { ChipTone } from "./result-layout/summary";
  * - `--result-fill-h` — sarlavha ostidagi qolgan ekran:
  *   `calc(100svh - var(--app-topbar-h) - var(--result-header-h))`;
  *   `fill` ko'ruvchi (slayd) aynan shu balandlikni oladi;
- * - `--app-topbar-h` — AppShell TopBar (`h-14`).
+ * - `--app-topbar-h` — what the shell keeps above `<main>`: the notch /
+ *   Telegram strip `--shell-topbar-h` (redesign F0; 0 on a desktop).
  *
  * Ikkinchi darajali bloklar (`sections`: tayyorlik hisoboti, o'yin
  * havolasi) HECH QACHON mazmun ustida turmaydi: ≥ 1280 px da o'ngdagi
@@ -164,6 +165,29 @@ export function ResultLayout({
     syncHeaderH();
   }, [compactNow, syncHeaderH]);
 
+  /*
+   * `--app-topbar-h` in px (redesign W5). The CSS default below is the shell's
+   * `var(--shell-topbar-h, 0px)` — a `calc()` once resolved, which the page
+   * counter's reader (`useVisiblePage` `stickyTopPx`) cannot parse (it read 0
+   * under Telegram's header). The real value is where `<main>` starts: the
+   * notch / Telegram strip plus a session banner when one is shown. Re-measured
+   * when `<main>` changes size (insets arrive late from the Telegram bridge).
+   */
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const main = document.getElementById("main");
+    if (!root || !main || !root.isConnected || !main.contains(root)) return;
+    const sync = () => root.style.setProperty("--app-topbar-h", `${Math.max(0, Math.round(main.getBoundingClientRect().top))}px`);
+    sync();
+    window.addEventListener("resize", sync);
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(sync);
+    ro?.observe(main);
+    return () => {
+      window.removeEventListener("resize", sync);
+      ro?.disconnect();
+    };
+  }, []);
+
   const compactRef = useRef(false);
   useEffect(() => {
     compactRef.current = false;
@@ -267,7 +291,8 @@ export function ResultLayout({
       data-result-frame={frame}
       className="flex shrink-0 grow flex-col"
       style={{
-        ["--app-topbar-h" as string]: "3.5rem",
+        // Redesign F0: no global top bar any more — only the shell's notch / Telegram strip (0 on a desktop).
+        ["--app-topbar-h" as string]: "var(--shell-topbar-h, 0px)",
         ["--result-fill-h" as string]: "calc(100svh - var(--app-topbar-h) - var(--result-header-h, 0px))",
       }}
     >

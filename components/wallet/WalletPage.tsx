@@ -8,6 +8,8 @@ import { formatPoints } from "@/lib/referral";
 import { creditTotal, useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { ReferralCard } from "../profile/ReferralCard";
+import { DEFAULT_TOPUP, TOPUP_PRESETS, openPay } from "../overlays/pay-amount";
+import { groupDigits } from "@/lib/format";
 import { PaymentBanner } from "./PaymentBanner";
 import { usePaymentReturn } from "./usePaymentReturn";
 import { TOPUP_FEATURES, formatWhen, ledgerRow, orderStateLabel, providerLabel } from "./wallet-model";
@@ -137,6 +139,8 @@ export function WalletPage() {
         </section>
       )}
 
+      {sessionChecked && !(loggedIn && !user) ? <QuickTopUp /> : null}
+
       {ready ? (
         <>
           <Ledger paidOrder={pay.orderState === "paid" ? pay.orderId : null} />
@@ -148,16 +152,56 @@ export function WalletPage() {
         </>
       ) : null}
 
-      <h2 className={sectionLabel}>To&apos;lov haqida</h2>
-      <ul className={cn(card, "space-y-2.5 px-4 py-4 text-[15px]")} data-wallet-features>
+    </div>
+  );
+}
+
+/**
+ * «Tez to'ldirish» (redesign W5, variant A packages): one card per PayDialog
+ * amount (`TOPUP_PRESETS`, the same list), «eng qulay» on the dialog's
+ * default; a tap opens PayDialog with that amount preselected
+ * (`openPay({ amount })`). Below them the top-up facts (formerly the separate
+ * «To'lov haqida» card).
+ */
+function QuickTopUp() {
+  return (
+    <section aria-labelledby="wallet-packs-title" data-wallet-packs>
+      <h2 id="wallet-packs-title" className={sectionLabel}>
+        Tez to&apos;ldirish
+      </h2>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {TOPUP_PRESETS.map((v) => {
+          const best = v === DEFAULT_TOPUP;
+          return (
+            <button
+              key={v}
+              type="button"
+              data-wallet-pack={v}
+              aria-label={`${groupDigits(v)} so'm${best ? ", eng qulay" : ""} — to'ldirish`}
+              onClick={() => openPay({ amount: v })}
+              className={cn(
+                "bg-card hover:bg-accent flex min-h-[4.5rem] flex-col items-center justify-center rounded-[16px] border px-2 py-2.5 text-center tabular-nums shadow-[var(--shadow-card)] transition-[background-color,transform] active:scale-[0.98] motion-reduce:transform-none",
+                best && "border-primary shadow-[inset_0_0_0_1px_var(--primary)]",
+                focusRing,
+              )}
+            >
+              <span className="text-[17px] leading-tight font-bold">{groupDigits(v)}</span>
+              <span className={cn("mt-0.5 text-[13px] leading-tight", best ? "text-accent-soft-foreground font-semibold" : "text-muted-foreground")}>
+                {best ? "eng qulay" : "so'm"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <ul className="text-muted-foreground mt-3 grid gap-x-4 gap-y-1.5 px-1 text-[13.5px] leading-snug sm:grid-cols-2" data-wallet-features>
         {TOPUP_FEATURES.map((f) => (
-          <li key={f} className="flex gap-2.5">
-            <Check className="text-primary mt-0.5 size-[18px] shrink-0" aria-hidden="true" />
+          <li key={f} className="flex gap-2">
+            <Check className="text-primary mt-px size-4 shrink-0" aria-hidden="true" />
             {f}
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }
 
