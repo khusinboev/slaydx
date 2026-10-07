@@ -35,8 +35,9 @@ import { directionOf, dockInset, liftAbove, nextVisible, type Band, type ScrollD
  *   - while any overlay is open it is not rendered (`getNavSnapshot().overlays`
  *     counts every `useDialog` / `useOverlayHistory` layer: login, search,
  *     download sheet, result panel sheet, menus, lightbox… and the shell's own
- *     mobile drawer);
+ *     «+» sheet);
  *   - it sits above the safe areas (`--tg-safe-bottom` → `env()`), above the
+ *     bottom tab bar while it is shown (`--tabbar-h`, 0 when hidden), above the
  *     on-screen keyboard (`--kb-h`, kept alive by `useVisualViewport` while the
  *     button is mounted) and above bottom bars (`[data-submit-bar]` of the tool
  *     forms, or any element marked `data-scroll-top-avoid`) — measured, so a bar
@@ -45,8 +46,9 @@ import { directionOf, dockInset, liftAbove, nextVisible, type Band, type ScrollD
  *     while it shows. Next to the result page's open side panel (≥ 1280 px) it
  *     moves left of the panel instead of covering its corner.
  *
- * It is `position: fixed` with `z-30`: below the drawer (`z-40`) and every
- * dialog/sheet (`z-50`+), above the sticky result header (`z-20`).
+ * It is `position: fixed` with `z-30`: below the tab bar (`z-46`), the «+»
+ * sheet (`z-45`) and every dialog/sheet (`z-50`+), above the sticky result
+ * header (`z-20`).
  */
 
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
@@ -309,7 +311,8 @@ function ScrollToTopButton({ container }: { container: HTMLElement }) {
         // 20 px: clears a classic 15–17 px scrollbar of <main> on desktops.
         // Docked result panel: sit just left of it, not over its «Tuzatish» buttons.
         right: dockRight > 0 ? `${dockRight}px` : atLeast("1.25rem", SAFE_RIGHT),
-        bottom: `calc(${SAFE_BOTTOM} + 1rem + var(--kb-h, 0px))`,
+        // Above the tab bar while it is shown (`--tabbar-h`; 0 when hidden, e.g. keyboard open).
+        bottom: `calc(${SAFE_BOTTOM} + 1rem + var(--kb-h, 0px) + var(--tabbar-h, 0px))`,
       }}
     >
       <button

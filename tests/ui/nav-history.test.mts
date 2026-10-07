@@ -243,8 +243,8 @@ test("backTo with an overlay open on a fresh deep link: pops the overlay entry, 
     await nav.backTo();
   });
   await settle();
-  assert.deepEqual(calls, ["replace /uz"]);
-  assert.equal(here(), "/uz");
+  assert.deepEqual(calls, ["replace /uz/files"], "parent of the file page = the Ishlarim list (redesign F0)");
+  assert.equal(here(), "/uz/files");
   assert.equal(sx()?.i, 0, "the page's base entry was replaced, not the overlay entry");
   assert.ok(!isOpen("A"), "the overlay closed with the page");
 });
@@ -674,17 +674,21 @@ test("PayDialog sends the user to the checkout with location.replace", async () 
   }
 });
 
-test("/uz/files/[id] «←» restores the home view (?filter&sort&desc) the user last had", async () => {
-  fresh("/uz");
-  router.replace("/uz?filter=docs&sort=name&desc=0&returnTo=%2Fuz%2Fcreate");
+test("/uz/files/[id] «←» restores the Ishlarim view (/uz/files?filter&sort&desc) the user last had", async () => {
+  // Redesign F0: the list moved from /uz to /uz/files; the file page's parent is the list.
+  fresh("/uz/files");
+  router.replace("/uz/files?filter=docs&sort=name&desc=0&returnTo=%2Fuz%2Fcreate");
   router.push("/uz/files/9");
-  assert.equal(nav.parentHref("/uz/files/9"), "/uz?filter=docs&sort=name&desc=0", "view keys only, no returnTo");
+  assert.equal(nav.parentHref("/uz/files/9"), "/uz/files?filter=docs&sort=name&desc=0", "view keys only, no returnTo");
   assert.equal(nav.parentHref("/uz/create"), "/uz", "only the file page goes back to the filtered list");
 
-  // A later visit to home without filters resets the memory.
-  router.push("/uz");
-  assert.equal(nav.parentHref("/uz/files/9"), "/uz");
-  router.replace("/uz?filter=image");
+  // A later visit to the list without filters resets the memory.
+  router.push("/uz/files");
+  assert.equal(nav.parentHref("/uz/files/9"), "/uz/files");
+  router.replace("/uz/files?filter=image");
+  // Bosh (/uz) with search params is not the list: it does not overwrite the memory.
+  router.push("/uz?filter=docs");
+  assert.equal(nav.parentHref("/uz/files/9"), "/uz/files?filter=image");
 
   // Reload on the file page with no in-app history (memory lives in sessionStorage): backTo replaces with it.
   nav.__resetNavForTests();
@@ -695,5 +699,62 @@ test("/uz/files/[id] «←» restores the home view (?filter&sort&desc) the user
   await act(async () => {
     await nav.backTo();
   });
-  assert.deepEqual(calls, ["replace /uz?filter=image"]);
+  assert.deepEqual(calls, ["replace /uz/files?filter=image"]);
+});
+
+test("previousPagePath: the page under the current one (overlay entries skipped), null on a fresh run; survives a reload", async () => {
+  fresh("/uz");
+  assert.equal(nav.previousPagePath(), null, "first entry");
+  router.push("/uz/files");
+  assert.equal(nav.previousPagePath(), "/uz");
+  router.replace("/uz/wallet");
+  assert.equal(nav.previousPagePath(), "/uz", "replace keeps the entry under it");
+  const token = nav.pushLayer("overlay", () => {});
+  await settle();
+  assert.equal(nav.previousPagePath(), "/uz", "an overlay entry on top does not count");
+  nav.releaseLayer(token);
+  await settle();
+  router.push("/uz/profile");
+  assert.equal(nav.previousPagePath(), "/uz/wallet");
+  await act(async () => {
+    window.history.back();
+  });
+  await settle();
+  assert.equal(window.location.pathname, "/uz/wallet");
+  assert.equal(nav.previousPagePath(), "/uz", "after a traversal");
+  // Reload (same stamped entry): the paths come back from sessionStorage.
+  nav.__resetNavForTests();
+  nav.installNav();
+  nav.setNavRouter(router);
+  assert.equal(nav.previousPagePath(), "/uz");
+  // A push truncates the forward entries.
+  router.push("/uz/files");
+  assert.equal(nav.previousPagePath(), "/uz/wallet");
+  // Two pushes in a row: the entry under the page is the first push's page.
+  router.push("/uz/profile");
+  assert.equal(nav.previousPagePath(), "/uz/files");
+});
+
+test("replacePage: replaces the page entry itself, popping an open overlay's entry first", async () => {
+  fresh("/uz");
+  router.push("/uz/files");
+  const closed: string[] = [];
+  nav.pushLayer("overlay", () => closed.push("sheet"));
+  await settle();
+  assert.ok(sx()?.o);
+  calls.length = 0;
+  await act(async () => {
+    await nav.replacePage("/uz/wallet");
+  });
+  await settle();
+  assert.deepEqual(calls, ["replace /uz/wallet"]);
+  assert.equal(here(), "/uz/wallet");
+  assert.equal(sx()?.i, 1, "the page entry (index 1) was replaced, not the overlay entry above it");
+  assert.ok(!sx()?.o);
+  assert.deepEqual(closed, ["sheet"], "the overlay was closed");
+  await act(async () => {
+    window.history.back();
+  });
+  await settle();
+  assert.equal(here(), "/uz", "back → Bosh");
 });

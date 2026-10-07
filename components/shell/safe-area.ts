@@ -16,9 +16,6 @@ export const CONTENT_SAFE_TOP = "var(--tg-content-safe-top, 0px)";
 /** Everything above the page content: device notch plus Telegram's header. */
 export const TOP_INSET = `calc(${SAFE_TOP} + ${CONTENT_SAFE_TOP})`;
 
-/** Top bar height: 3.5rem of bar below the inset (desktop inset is 0 → 56 px). */
-export const TOPBAR_HEIGHT = `calc(3.5rem + ${TOP_INSET})`;
-
 /** `max(min, safe)` — keeps `min` of ordinary padding, grows by the safe inset when larger. */
 export function atLeast(min: string, safe: string): string {
   return `max(${min}, ${safe})`;

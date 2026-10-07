@@ -94,6 +94,8 @@ export type LeaveGuard = {
 
 const STORE_KEY = "sx:nav";
 const LIST_KEY = "sx:list:";
+/** Pathname of every in-app entry by index (tab history decisions, `previousPagePath`). */
+const PATHS_KEY = "sx:paths";
 const EXPECT_TTL_MS = 2000;
 
 // ---------------------------------------------------------------- state
@@ -110,6 +112,8 @@ let tokenSeq = 0;
 let router: NavRouter | null = null;
 let layers: Layer[] = [];
 let expected: Expected[] = [];
+/** Index → pathname of the page entries of this tab's in-app run (mirrored to sessionStorage). */
+let paths: Record<number, string> = {};
 /** Layers taken off the stack by a navigation whose UI is about to be closed (see `closeLater`). */
 const pendingClose = new Map<string, Layer>();
 const guards = new Set<LeaveGuard>();
@@ -158,6 +162,31 @@ function storageSet(key: string, value: string) {
 
 function mirror() {
   storageSet(STORE_KEY, String(cur));
+}
+
+function loadPaths(): Record<number, string> {
+  try {
+    const raw = storageGet(PATHS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    if (!isPlainObject(parsed)) return {};
+    const out: Record<number, string> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      const i = Number(k);
+      if (Number.isInteger(i) && i >= 0 && typeof v === "string") out[i] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** Records the page path of entry `index`; `truncate` drops the forward entries (a push). */
+function recordPath(index: number, href: string, truncate = false) {
+  if (truncate) for (const k of Object.keys(paths)) if (Number(k) > index) delete paths[Number(k)];
+  const p = pathOf(href);
+  if (!p) return;
+  paths[index] = p;
+  storageSet(PATHS_KEY, JSON.stringify(paths));
 }
 
 const isLive = (l: Layer) => !l.dead && !l.releasing;
@@ -296,6 +325,9 @@ function boot() {
   }
   lastState = h.state;
   mirror();
+  // Paths survive reloads and hard in-app navigations (same stamps); a fresh run starts empty.
+  paths = cur > 0 || sx ? loadPaths() : {};
+  recordPath(cur, lastHref, !sx);
   rememberListUrl(lastHref);
   snapshot = computeSnapshot();
 }
@@ -359,6 +391,7 @@ function onPush(data: unknown, unused: string, url?: string | URL | null) {
   lastHref = window.location.href;
   mirror();
   if (!own) {
+    recordPath(cur, lastHref, true);
     rememberListUrl(lastHref);
     emitNavigate("push", from);
   }
@@ -391,6 +424,7 @@ function onReplace(data: unknown, unused: string, url?: string | URL | null) {
   lastState = d;
   lastHref = window.location.href;
   mirror();
+  if (!own) recordPath(cur, lastHref);
   if (to !== from) {
     rememberListUrl(lastHref);
     emitNavigate("replace", from);
@@ -426,6 +460,7 @@ function onPopState(e: PopStateEvent) {
     lastHref = toHref;
     window.history.replaceState({ sx: curSx }, "");
     mirror();
+    recordPath(cur, toHref, true);
     notify();
     return;
   }
@@ -436,6 +471,8 @@ function onPopState(e: PopStateEvent) {
   lastHref = toHref;
   lastState = st;
   mirror();
+  // A layer entry carries the URL of the page under it, so this is the page path either way.
+  recordPath(toIndex, toHref);
 
   const exp = takeExpected(fromIndex, toIndex);
   if (exp) {
@@ -705,6 +742,21 @@ export function parentHref(pathname: string, search?: string): string | null {
   return parentOf(pathname, search);
 }
 
+/**
+ * Pathname of the in-app page entry right under the current page (its open
+ * overlays' entries skipped), or `null` when the page is the first in-app entry
+ * (fresh tab, deep link, external referrer). Tab history decisions use it
+ * (`lib/nav/tabs.ts tabNavAction`).
+ */
+export function previousPagePath(): string | null {
+  if (!hasWindow()) return null;
+  installNav();
+  const eff = effectiveIndex();
+  const base = eff - layersAbove(eff);
+  if (base <= 0) return null;
+  return paths[base - 1] ?? null;
+}
+
 function rememberListUrl(href: string) {
   try {
     const u = new URL(href);
@@ -765,6 +817,31 @@ function backToUnguarded(fallback?: string, r: NavRouter | null = router): boole
     return true;
   }
   replaceTo(target, r);
+  return true;
+}
+
+/**
+ * REPLACES the current page entry with `href` (tab switch between non-home
+ * tabs). Open overlays on the page are closed and their entries popped first,
+ * so the page's own entry is the one replaced, not an overlay entry above it.
+ * Leave guards save first; resolves `false` when one failed.
+ */
+export async function replacePage(href: string, opts?: NavOpts): Promise<boolean> {
+  installNav();
+  if (!(await runGuards())) return false;
+  if (!hasWindow()) return false;
+  const r = opts?.router ?? router;
+  const eff = effectiveIndex();
+  const k = layersAbove(eff);
+  if (k > 0) {
+    const leaving = layers;
+    layers = [];
+    closeLater(leaving, ["overlay"]);
+    go(-k, { then: () => replaceTo(href, r) });
+    notify();
+    return true;
+  }
+  replaceTo(href, r);
   return true;
 }
 
@@ -981,6 +1058,7 @@ export function __resetNavForTests(): void {
   router = null;
   layers = [];
   expected = [];
+  paths = {};
   pendingClose.clear();
   guards.clear();
   listeners.clear();

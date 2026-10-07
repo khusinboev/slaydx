@@ -11,7 +11,8 @@ import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks
  * (docs/nav/PLAN.md «Contract for N1–N4»).
  *
  * Mutations, each caught here:
- *   - AppShell: drop `useOverlayHistory(mobileOpen…)`          → "drawer closes on back" fails;
+ *   - CreateSheet (successor of the drawer, redesign F0): `useDialog(…, { history: false })`
+ *                                                              → "«+» sheet closes on back" fails;
  *   - HomeFiles: drop `useOverlayHistory(overlay === "sort"…)` → "sort popover closes on back" fails;
  *   - HomeFiles: `changeView` stops calling `replaceSearch`    → "filter lands in the URL" fails;
  *   - `writeFileView` writes defaults                          → "defaults stay out of the URL" fails;
@@ -27,6 +28,7 @@ const { PayDialog } = await import("../../components/overlays/PayDialog.tsx");
 const { ToolChrome } = await import("../../components/forms/ToolChrome.tsx");
 const { PurchasePage } = await import("../../components/purchase/PurchasePage.tsx");
 const { PageBack } = await import("../../components/shell/PageBack.tsx");
+const { NavProvider: NavProviderEl } = await import("../../components/nav/NavProvider.tsx");
 const { useUi, readFileView, writeFileView, DEFAULT_FILE_VIEW } = await import("../../lib/ui.ts");
 const { useAppStore } = await import("../../lib/store.ts");
 
@@ -109,47 +111,56 @@ test("fayl ko'rinishi: standart qiymatlar URLga chiqmaydi, buzuq qiymat standart
   assert.deepEqual(readFileView(null), DEFAULT_FILE_VIEW);
 });
 
-// ------------------------------------------------------------------ AppShell drawer
+// ------------------------------------------------------------------ AppShell «+» sheet (was: drawer)
 
-test("AppShell: mobil panel — telefon «orqaga»si uni yopadi, URL o'zgarmaydi", async () => {
+const sheetOpen = () => Boolean(document.querySelector("[data-create-sheet]"));
+const plus = () => document.querySelector<HTMLButtonElement>("[data-create-button]")!;
+
+test("AppShell: «+» oynasi — telefon «orqaga»si uni yopadi, URL o'zgarmaydi", async () => {
   fresh("/uz");
   render(inRouter(h(AppShell, null, h("div", null, "sahifa"))));
-  assert.ok(!document.querySelector(".fixed.inset-0.z-40"), "boshida yopiq");
-  fireEvent.click(screen.getByLabelText("Yon panelni ko‘rsatish/yashirish"));
+  assert.ok(!sheetOpen(), "boshida yopiq");
+  fireEvent.click(plus());
   await settle();
-  assert.ok(document.querySelector(".fixed.inset-0.z-40"), "ochildi");
-  assert.ok(sx()?.o, "panel tarix yozuviga ega");
+  assert.ok(sheetOpen(), "ochildi");
+  assert.ok(sx()?.o, "oyna tarix yozuviga ega");
   assert.equal(here(), "/uz");
   await act(async () => {
     window.history.back();
   });
   await settle();
-  assert.ok(!document.querySelector(".fixed.inset-0.z-40"), "orqaga panelni yopdi");
+  assert.ok(!sheetOpen(), "orqaga oynani yopdi");
   assert.equal(here(), "/uz");
   assert.equal(sx()?.i, 0);
   assert.ok(!sx()?.o);
 });
 
-test("AppShell: yo'l o'zgarsa ochiq panel yopiladi (yangi sahifa ustida qolmaydi)", async () => {
+test("AppShell: yo'l o'zgarsa ochiq «+» oynasi yopiladi (yangi sahifa ustida qolmaydi)", async () => {
   fresh("/uz");
-  const view = render(inRouter(h(AppShell, null, h("div", null, "sahifa"))));
-  fireEvent.click(screen.getByLabelText("Yon panelni ko‘rsatish/yashirish"));
+  // NavProvider (mounted in Providers in the app) closes an overlay left open from the previous page.
+  const page = () => h("div", null, h(NavProviderEl), h(AppShell, null, h("div", null, "sahifa")));
+  const view = render(inRouter(page(), "", "/uz"));
+  fireEvent.click(plus());
   await settle();
-  assert.ok(document.querySelector(".fixed.inset-0.z-40"));
-  view.rerender(inRouter(h(AppShell, null, h("div", null, "sahifa")), "", "/uz/create"));
+  assert.ok(sheetOpen());
+  window.dispatchEvent(new window.Event("pointerdown"));
+  await act(async () => {
+    router.push("/uz/create");
+  });
+  view.rerender(inRouter(page(), "", "/uz/create"));
   await settle();
-  assert.ok(!document.querySelector(".fixed.inset-0.z-40"), "yo'l o'zgardi — panel yopildi");
+  assert.ok(!sheetOpen(), "yo'l o'zgardi — oyna yopildi");
 });
 
-test("AppShell: fon bosilganda panel yopiladi va yozuvi bir marta olib tashlanadi", async () => {
+test("AppShell: fon bosilganda «+» oynasi yopiladi va yozuvi bir marta olib tashlanadi", async () => {
   fresh("/uz");
   render(inRouter(h(AppShell, null, h("div", null, "sahifa"))));
-  fireEvent.click(screen.getByLabelText("Yon panelni ko‘rsatish/yashirish"));
+  fireEvent.click(plus());
   await settle();
   const i = sx()?.i;
-  fireEvent.click(screen.getAllByLabelText("Yopish")[0]);
+  fireEvent.click(document.querySelector("[data-create-scrim]")!);
   await settle();
-  assert.ok(!document.querySelector(".fixed.inset-0.z-40"));
+  assert.ok(!sheetOpen());
   assert.equal(sx()?.i, (i ?? 1) - 1, "bitta yozuv qaytdi");
 });
 

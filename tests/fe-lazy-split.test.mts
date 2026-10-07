@@ -57,10 +57,13 @@ function assertReachable(entry: string, file: string) {
   assert.ok(staticGraph(path.join(ROOT, entry)).has(path.join(ROOT, file)), `${entry} no longer reaches ${file} — the check above proves nothing`);
 }
 
-test("WP-C: home (/uz) does not ship the slide layout engine; the thumbnail chunk does", () => {
-  assertUnreachable("app/uz/page.tsx", ["components/home/SlideThumb.tsx", "components/viewers/SlideCanvas.tsx", "lib/generation/slide-layout.ts"]);
+test("WP-C: the file list (/uz/files, Ishlarim) and Bosh (/uz) do not ship the slide layout engine; the thumbnail chunk does", () => {
+  // The list moved from /uz to /uz/files (redesign F0); Bosh may show file cards too, never the engine.
+  for (const entry of ["app/uz/files/page.tsx", "app/uz/page.tsx"]) {
+    assertUnreachable(entry, ["components/home/SlideThumb.tsx", "components/viewers/SlideCanvas.tsx", "lib/generation/slide-layout.ts"]);
+  }
   // Guard against a vacuous pass: the cards are still on the page, the engine is behind import().
-  assertReachable("app/uz/page.tsx", "components/home/FilePreview.tsx");
+  assertReachable("app/uz/files/page.tsx", "components/home/FilePreview.tsx");
   assertReachable("components/home/SlideThumb.tsx", "lib/generation/slide-layout.ts");
   assert.match(readFileSync(path.join(ROOT, "components/home/FilePreview.tsx"), "utf8"), /lazy\(\(\) => import\("\.\/SlideThumb"\)/);
 });
