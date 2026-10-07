@@ -165,7 +165,7 @@ export function SelectField({
       aria-label={ariaLabel}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="border-input bg-card focus:ring-ring pointer-coarse:h-11 h-10 w-full max-w-xs rounded-[12px] border px-3 text-[15px] outline-none focus:ring-2"
+      className="border-input bg-card focus:ring-ring pointer-coarse:h-11 h-10 w-full max-w-xs rounded-[12px] border px-3 text-[16px] outline-none focus:ring-2"
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
