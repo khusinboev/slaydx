@@ -8,6 +8,7 @@ import { LoginModal } from "../overlays/LoginModal";
 import { SearchDialog } from "../overlays/SearchDialog";
 import { NotificationsPanel } from "../overlays/NotificationsPanel";
 import { PayDialog } from "../overlays/PayDialog";
+import { ScrollToTop } from "./ScrollToTop";
 import { useOverlayHistory } from "@/components/nav/useOverlayHistory";
 import { useUi } from "@/lib/ui";
 import { useAppStore } from "@/lib/store";
@@ -28,6 +29,8 @@ function isNarrow() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  // The page scroller: `<main>` is the one element every page scrolls in (the shell itself never scrolls).
+  const [scroller, setScroller] = useState<HTMLElement | null>(null);
   const open = useUi((s) => s.open);
   const pathname = usePathname();
 
@@ -92,12 +95,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
          */}
         <main
           id="main"
+          ref={setScroller}
           className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--page-bg)] has-[[data-submit-bar=inline]]:scroll-pb-4 has-[[data-submit-bar=sticky]]:scroll-pb-[calc(6rem+env(safe-area-inset-bottom))]"
         >
           {children}
         </main>
       </div>
 
+      {/* «Tepaga chiqish»: fixed, listens on <main>; hidden while an overlay or the drawer is open. */}
+      <ScrollToTop container={scroller} suspended={mobileOpen} />
       <LoginModal />
       <SearchDialog />
       <NotificationsPanel />

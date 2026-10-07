@@ -1,0 +1,224 @@
+"use client";
+
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
+import { ArrowUp } from "lucide-react";
+import { getNavSnapshot, getServerNavSnapshot, subscribeNav } from "@/lib/nav/history";
+import { useVisualViewport } from "@/lib/hooks/useVisualViewport";
+import { SAFE_BOTTOM, SAFE_RIGHT, atLeast } from "./safe-area";
+import { directionOf, liftAbove, nextVisible, type Band, type ScrollDirection } from "./scroll-to-top";
+
+/**
+ * «Tepaga chiqish» — one floating button for every page in the app shell
+ * (todo T2, owner request: after scrolling a long list or document down, one
+ * tap goes back to the top).
+ *
+ * What scrolls. The shell is `h-svh overflow-hidden`; the page scrolls in
+ * `<main id="main">` (docs/viewer/PLAN.md: «One page scroll»), NOT in the
+ * window. `AppShell` hands that element over as `container`. The listener sits
+ * on the container itself (scroll events do not bubble), so the slide stage,
+ * the result panel body, the topic-chip row and any other inner scroller never
+ * reach it. Phone-width forms, the home file list, the catalogue, profile,
+ * purchase and result pages all scroll in that one element.
+ *
+ * Visibility rules live in `scroll-to-top.ts` (pure, tested). Besides them:
+ *   - a route change hides the button at once and re-reads the position after
+ *     the new page (and Next's / NavProvider's scroll restore) has settled;
+ *   - while any overlay is open it is not rendered (`getNavSnapshot().overlays`
+ *     counts every `useDialog` / `useOverlayHistory` layer: login, search,
+ *     download sheet, result panel sheet, menus, lightbox…), nor while the
+ *     mobile drawer is open (`suspended`);
+ *   - it sits above the safe areas (`--tg-safe-bottom` → `env()`), above the
+ *     on-screen keyboard (`--kb-h`, kept alive by `useVisualViewport` while the
+ *     button is mounted) and above bottom bars (`[data-submit-bar]` of the tool
+ *     forms, `[data-edit-done-bar]`, or any element marked
+ *     `data-scroll-top-avoid`) — measured, so a bar resting above the form's
+ *     bottom padding does not push it up.
+ *
+ * It is `position: fixed` with `z-30`: below the drawer (`z-40`) and every
+ * dialog/sheet (`z-50`+), above the sticky result header (`z-20`).
+ */
+
+const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+/** Bars the button must clear. Tool forms and the document edit bar mark themselves. */
+const AVOID_SELECTOR = "[data-submit-bar], [data-edit-done-bar], [data-scroll-top-avoid]";
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"])';
+
+const BAR_ATTRIBUTES = ["data-submit-bar", "data-edit-done-bar", "data-scroll-top-avoid"];
+
+export const SCROLL_TOP_LABEL = "Tepaga chiqish";
+
+/** A bar was added, removed or switched (the form's sticky → inline while typing). Other DOM churn is ignored. */
+function touchesBar(r: MutationRecord): boolean {
+  if (r.type === "attributes") return true; // already filtered to the bar attributes
+  const hit = (n: Node) => n instanceof Element && (n.matches(AVOID_SELECTOR) || n.querySelector(AVOID_SELECTOR) !== null);
+  for (const n of r.addedNodes) if (hit(n)) return true;
+  for (const n of r.removedNodes) if (hit(n)) return true;
+  return false;
+}
+
+function prefersReducedMotion(): boolean {
+  try {
+    return typeof window.matchMedia === "function" && window.matchMedia(REDUCED_MOTION).matches;
+  } catch {
+    return false;
+  }
+}
+
+export type ScrollToTopProps = {
+  /** The page's scroll container (`<main id="main">`); `null` until it mounts. */
+  container: HTMLElement | null;
+  /** An overlay the nav layer does not know about (the mobile drawer) is open. */
+  suspended?: boolean;
+};
+
+export function ScrollToTop({ container, suspended = false }: ScrollToTopProps) {
+  const pathname = usePathname();
+  const overlays = useSyncExternalStore(subscribeNav, () => getNavSnapshot().overlays, () => getServerNavSnapshot().overlays);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!container) return;
+    let last = container.scrollTop;
+    let dir: ScrollDirection = null;
+    let shown = false;
+    let raf: number | null = null;
+
+    const apply = (next: boolean) => {
+      if (next === shown) return;
+      shown = next;
+      setVisible(next);
+    };
+    const measure = () => {
+      const top = container.scrollTop;
+      dir = directionOf(last, top, dir);
+      last = top;
+      apply(nextVisible({ top, height: container.clientHeight, dir, visible: shown }));
+    };
+    const onScroll = () => measure();
+    // A resize (rotation, keyboard on Android) moves the thresholds.
+    const onResize = () => measure();
+
+    // New route: the old position says nothing about the new page. Start hidden,
+    // then read once the page committed and the scroll was restored or reset.
+    apply(false);
+    last = 0;
+    dir = null;
+    const settle = () => {
+      raf = requestAnimationFrame(() => {
+        raf = requestAnimationFrame(() => {
+          raf = null;
+          last = container.scrollTop;
+          measure();
+        });
+      });
+    };
+    settle();
+
+    container.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize);
+    return () => {
+      container.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+      if (raf !== null) cancelAnimationFrame(raf);
+      shown = false;
+      setVisible(false);
+    };
+  }, [container, pathname]);
+
+  if (!container || !visible || suspended || overlays > 0) return null;
+  return <ScrollToTopButton container={container} />;
+}
+
+function ScrollToTopButton({ container }: { container: HTMLElement }) {
+  // Keeps `--kb-h` on <html> while this button is mounted (and re-renders on keyboard changes).
+  const viewport = useVisualViewport();
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const [lift, setLift] = useState(0);
+  const [entered, setEntered] = useState(false);
+
+  const measureLift = useCallback(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    const anchorBottom = anchor.getBoundingClientRect().bottom;
+    const bars: Band[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>(AVOID_SELECTOR)) {
+      const r = el.getBoundingClientRect();
+      bars.push({ top: r.top, bottom: r.bottom });
+    }
+    setLift(liftAbove(anchorBottom, bars));
+  }, []);
+
+  // Fade in once (no movement: the anchor's position must stay exact for measuring).
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  // Bars come and go with the keyboard, with editing and with scrolling.
+  useLayoutEffect(() => {
+    measureLift();
+    let raf: number | null = null;
+    const schedule = () => {
+      if (raf !== null) return;
+      raf = requestAnimationFrame(() => {
+        raf = null;
+        measureLift();
+      });
+    };
+    container.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    let mo: MutationObserver | null = null;
+    if (typeof MutationObserver === "function") {
+      mo = new MutationObserver((records) => {
+        if (records.some(touchesBar)) schedule();
+      });
+      mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: BAR_ATTRIBUTES });
+    }
+    return () => {
+      container.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      mo?.disconnect();
+      if (raf !== null) cancelAnimationFrame(raf);
+    };
+  }, [container, measureLift, viewport.keyboardHeight, viewport.height]);
+
+  const goTop = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const smooth = !prefersReducedMotion();
+    if (typeof container.scrollTo === "function") {
+      container.scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" });
+    } else {
+      container.scrollTop = 0;
+    }
+    // Keyboard activation (`detail === 0`): the button disappears, so hand the
+    // focus to the start of the page; the next Tab continues from there.
+    if (e.detail === 0) {
+      container.querySelector<HTMLElement>(FOCUSABLE)?.focus({ preventScroll: true });
+    }
+  };
+
+  return (
+    <div
+      ref={anchorRef}
+      data-scroll-top-anchor
+      className={`no-print pointer-events-none fixed z-30 h-0 w-0 transition-opacity duration-150 motion-reduce:transition-none ${entered ? "opacity-100" : "opacity-0"}`}
+      style={{
+        // 20 px: clears a classic 15–17 px scrollbar of <main> on desktops.
+        right: atLeast("1.25rem", SAFE_RIGHT),
+        bottom: `calc(${SAFE_BOTTOM} + 1rem + var(--kb-h, 0px))`,
+      }}
+    >
+      <button
+        type="button"
+        data-scroll-top
+        aria-label={SCROLL_TOP_LABEL}
+        title={SCROLL_TOP_LABEL}
+        onClick={goTop}
+        className="bg-card text-foreground hover:bg-accent focus-visible:ring-ring pointer-events-auto absolute right-0 bottom-0 flex size-11 touch-manipulation items-center justify-center rounded-full border shadow-lg ring-1 ring-black/5 transition-transform duration-150 outline-none select-none focus-visible:ring-2 motion-reduce:transition-none dark:ring-white/10"
+        style={{ transform: lift ? `translateY(${-lift}px)` : undefined }}
+      >
+        <ArrowUp className="size-5" aria-hidden />
+      </button>
+    </div>
+  );
+}
