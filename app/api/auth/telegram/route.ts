@@ -1,3 +1,4 @@
+import type { NextResponse } from "next/server";
 import { ApiError, checkOrigin, handler, json, limit, readJson } from "@/lib/server/api";
 import { ensureMigrated } from "@/lib/server/db";
 import { miniAppSessionAction, upsertTelegramUser, verifyLoginWidget, verifyMiniAppInitData } from "@/lib/server/auth";
@@ -6,6 +7,7 @@ import { clientIp, rateLimit } from "@/lib/server/ratelimit";
 import { IP_LIMITS } from "@/lib/server/ip-limits";
 import { peekRate } from "@/lib/server/rate-peek";
 import { env } from "@/lib/server/env";
+import { REF_COOKIE, refCookieFromRequest, refCookieOptions, referralClaim } from "@/lib/server/referrals";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -109,13 +111,23 @@ export const POST = handler("auth/telegram", async (req) => {
     );
   }
 
-  const user = await upsertTelegramUser(profile);
-  if (viaMiniApp && sessionAction === "reuse") return json({ user });
+  /*
+   * Invite (T3): the signed Mini App `start_param` (`startapp=ref_<code>`) or the
+   * code this browser captured from `/uz?ref=…`. `upsertTelegramUser` applies it
+   * only when this sign-in CREATES the account; the cookie is spent either way.
+   */
+  const refCookie = refCookieFromRequest(req);
+  const user = await upsertTelegramUser(profile, referralClaim({ startParam: profile.startParam, cookie: refCookie }));
+  const spend = (res: NextResponse) => {
+    if (refCookie) res.cookies.set(REF_COOKIE, "", refCookieOptions(0));
+    return res;
+  };
+  if (viaMiniApp && sessionAction === "reuse") return spend(json({ user }));
   if (viaMiniApp && sessionAction === "replace") await revokeSessionById(current!.sessionId);
   const { token, expiresAt } = await createSession(user.id, {
     userAgent: req.headers.get("user-agent"),
     ip,
   });
   await setSessionCookie(token, expiresAt);
-  return json({ user });
+  return spend(json({ user }));
 });

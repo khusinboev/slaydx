@@ -4,6 +4,7 @@ import { botConfigured, createTicket } from "@/lib/server/telegram";
 import { clientIp } from "@/lib/server/ratelimit";
 import { env } from "@/lib/server/env";
 import { BROWSER_KEY_COOKIE, browserKey, IP_LIMITS } from "@/lib/server/ip-limits";
+import { refCookieFromRequest } from "@/lib/server/referrals";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,7 +39,9 @@ export const POST = handler("auth/ticket", async (req) => {
   await limit(`ticket:b:${browser.id}`, perBrowser.count, perBrowser.windowSec);
   await limit(`ticket:new:${clientIp(req)}`, perIp.count, perIp.windowSec);
 
-  const res = json(await createTicket(env.telegramBotUsername));
+  // Invite captured from `/uz?ref=…` (T3): the bot creates the account on
+  // `/start <nonce>`, so the ticket carries the code there.
+  const res = json(await createTicket(env.telegramBotUsername, refCookieFromRequest(req)));
   if (browser.fresh) {
     res.cookies.set(BROWSER_KEY_COOKIE, browser.id, {
       httpOnly: true,

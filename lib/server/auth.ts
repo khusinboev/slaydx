@@ -3,6 +3,7 @@ import { createHash, createHmac, randomInt } from "node:crypto";
 import { env } from "./env";
 import { query, queryOne, transaction } from "./db";
 import { topUpInTx } from "./credits";
+import { applyReferralInTx, type ReferralClaim } from "./referrals";
 import { rowToUser, safeEqual, userColumns, type SessionUser } from "./session";
 
 /**
@@ -22,6 +23,8 @@ export type TelegramProfile = {
   photoUrl: string | null;
   /** Mini App `auth_date` (unix seconds, signed); the Login Widget does not set it. */
   authDate?: number;
+  /** Mini App `start_param` (signed; `startapp=…` of the launch link), e.g. `ref_<code>`. */
+  startParam?: string;
 };
 
 /** A session switch needs launch data at most this old (Telegram mints fresh initData on every launch). */
@@ -142,12 +145,14 @@ export function verifyMiniAppInitData(initData: string): TelegramProfile | null 
     return null;
   }
   if (!user.id) return null;
+  const startParam = params.get("start_param");
   return {
     telegramId: String(user.id),
     username: user.username || null,
     name: [user.first_name, user.last_name].filter(Boolean).join(" ").trim() || "Foydalanuvchi",
     photoUrl: user.photo_url || null,
     authDate,
+    ...(startParam ? { startParam: startParam.slice(0, 64) } : {}),
   };
 }
 
@@ -166,9 +171,14 @@ const USER_COLUMNS = userColumns();
  * `xmax = 0` — qator shu so'rovda YARATILGANINI bildiradi; bonus faqat
  * shunda va `topUpInTx` orqali (`(kind, reference)` bo'yicha idempotent
  * jurnal) beriladi — ya'ni har holda bir martadan ortiq emas.
+ *
+ * `referral` — sign-in came through an invite link. It is applied ONLY in the
+ * same create branch (T3): an account that already exists — the bot was
+ * deleted and re-added, the link reopened, the site visited later — never
+ * reaches it, so an invite can never be rewarded twice.
  */
-export async function upsertTelegramUser(p: TelegramProfile): Promise<SessionUser> {
-  return upsertUser(p, "EXCLUDED.photo_url");
+export async function upsertTelegramUser(p: TelegramProfile, referral: ReferralClaim | null = null): Promise<SessionUser> {
+  return upsertUser(p, "EXCLUDED.photo_url", referral);
 }
 
 /**
@@ -178,14 +188,17 @@ export async function upsertTelegramUser(p: TelegramProfile): Promise<SessionUse
  * kabi bir martalik ro'yxatdan o'tish bonusini oladi (`signup:<id>` —
  * keyingi kirishda takrorlanmaydi). Bot surat manzilini bilmaydi, shuning
  * uchun mavjud `photo_url` (Login Widget / Mini App'dan) o'chirilmaydi.
+ * `referral` — `/start ref_<code>` (or a site ticket carrying a captured code):
+ * applied only when this message creates the account, as in `upsertTelegramUser`.
  */
-export async function registerBotUser(p: TelegramProfile): Promise<SessionUser> {
-  return upsertUser(p, "COALESCE(EXCLUDED.photo_url, users.photo_url)");
+export async function registerBotUser(p: TelegramProfile, referral: ReferralClaim | null = null): Promise<SessionUser> {
+  return upsertUser(p, "COALESCE(EXCLUDED.photo_url, users.photo_url)", referral);
 }
 
 async function upsertUser(
   p: TelegramProfile,
   photoOnConflict: "EXCLUDED.photo_url" | "COALESCE(EXCLUDED.photo_url, users.photo_url)",
+  referral: ReferralClaim | null,
 ): Promise<SessionUser> {
   return transaction(async (client) => {
     const res = await client.query<{ id: string; inserted: boolean }>(
@@ -200,6 +213,8 @@ async function upsertUser(
     const { id, inserted } = res.rows[0]!;
     if (inserted) {
       await topUpInTx(client, id, { points: SIGNUP_BONUS_POINTS }, `signup:${id}`, "bonus", "Ro'yxatdan o'tish bonusi");
+      // The ONLY call site of the referral reward: the account was created right here.
+      if (referral) await applyReferralInTx(client, { refereeId: String(id), code: referral.code, source: referral.source });
     }
     const user = await client.query(`SELECT ${USER_COLUMNS} FROM users WHERE id = $1`, [id]);
     return rowToUser(user.rows[0]);

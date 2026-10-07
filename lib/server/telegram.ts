@@ -6,6 +6,8 @@ import { query, transaction } from "./db";
 import { registerBotUser, upsertTelegramUser, type TelegramProfile } from "./auth";
 import { isAdminPhone } from "./admin-phones";
 import type { SessionUser } from "./session";
+import { normalizeRefCode, refCodeFromStartPayload, referralRuleText, formatPoints, telegramShareUrl } from "../referral";
+import { referralSummary, type ReferralClaim } from "./referrals";
 
 /**
  * Telegram bot: kirish chiptasi va kod yetkazish.
@@ -201,6 +203,24 @@ export async function getMe(): Promise<{ id: number; username: string } | null> 
   return call<{ id: number; username: string }>("getMe", {});
 }
 
+/** `getMe` answer cached for the process (the bot's username does not change at run time). */
+let cachedBotUsername: string | null = null;
+
+/**
+ * The bot's username for deep links (`t.me/<bot>?start=…`): the configured
+ * `NEXT_PUBLIC_TELEGRAM_BOT`, else one `getMe` call per process. `null` when
+ * neither is available (local run without a bot).
+ */
+export async function botUsername(): Promise<string | null> {
+  const configured = env.telegramBotUsername.trim().replace(/^@/, "");
+  if (configured) return configured;
+  if (cachedBotUsername) return cachedBotUsername;
+  if (!botConfigured()) return null;
+  const me = await getMe().catch(() => null);
+  cachedBotUsername = me?.username ? me.username.replace(/^@/, "") : null;
+  return cachedBotUsername;
+}
+
 /**
  * Bot menyusidagi buyruqlar (Telegram «/» tugmasi). Idempotent — har
  * ishga tushishda chaqirish xavfsiz. Prod webhook rejimida bo'lgani
@@ -211,6 +231,7 @@ export async function setBotCommands(): Promise<boolean> {
     commands: [
       { command: "start", description: "Saytga kirish havolasi" },
       { command: "login", description: "Yangi kirish havolasi" },
+      { command: "taklif", description: "Do'stlarni taklif qilish havolasi" },
       { command: "admin", description: "Admin sifatida tasdiqlash" },
     ],
   });
@@ -240,19 +261,35 @@ export function isLoginNonce(payload: string): boolean {
   return NONCE_RE.test(payload);
 }
 
-export async function createTicket(botUsername: string): Promise<Ticket> {
+/**
+ * Site-started login ticket. `refCode` — the invite code this browser captured
+ * (`/uz?ref=…` cookie): the account is CREATED by the bot's `/start <nonce>`
+ * (`registerBotUser`), which has no access to the browser, so the ticket
+ * carries the code there.
+ */
+export async function createTicket(botUsername: string, refCode: string | null = null): Promise<Ticket> {
   await purgeExpiredTickets();
   const nonce = randomBytes(NONCE_BYTES).toString("base64url");
   const expiresAt = new Date(Date.now() + TICKET_TTL_MS);
   await query(
-    "INSERT INTO login_tickets (nonce, expires_at) VALUES ($1, $2)",
-    [nonce, expiresAt],
+    "INSERT INTO login_tickets (nonce, expires_at, ref_code) VALUES ($1, $2, $3)",
+    [nonce, expiresAt, normalizeRefCode(refCode)],
   );
   return {
     nonce,
     url: `https://t.me/${botUsername.replace(/^@/, "")}?start=${nonce}`,
     expiresAt: expiresAt.toISOString(),
   };
+}
+
+/** The invite code a live site ticket carries (`/start <nonce>` before the account exists). */
+async function ticketReferral(nonce: string): Promise<ReferralClaim | null> {
+  const rows = await query<{ ref_code: string | null }>(
+    "SELECT ref_code FROM login_tickets WHERE nonce = $1 AND consumed_at IS NULL AND expires_at > now()",
+    [nonce],
+  );
+  const code = normalizeRefCode(rows[0]?.ref_code);
+  return code ? { code, source: "web" } : null;
 }
 
 /**
@@ -330,15 +367,16 @@ export async function redeemLoginToken(token: string): Promise<TicketCheck> {
   const raw = String(token ?? "").trim();
   if (raw.length < 20 || raw.length > 200) return { ok: false, reason: "invalid" };
 
-  const profile = await transaction<TelegramProfile | TicketCheck>(async (client) => {
+  const ticket = await transaction<{ profile: TelegramProfile; refCode: string | null } | TicketCheck>(async (client) => {
     const res = await client.query<{
       nonce: string;
       telegram_id: string | null;
       username: string | null;
       name: string | null;
       photo_url: string | null;
+      ref_code: string | null;
     }>(
-      `SELECT nonce, telegram_id, username, name, photo_url
+      `SELECT nonce, telegram_id, username, name, photo_url, ref_code
          FROM login_tickets
         WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > now()
         FOR UPDATE`,
@@ -348,15 +386,21 @@ export async function redeemLoginToken(token: string): Promise<TicketCheck> {
     if (!t || !t.telegram_id) return { ok: false as const, reason: "expired" as const };
     await client.query("UPDATE login_tickets SET consumed_at = now() WHERE nonce = $1", [t.nonce]);
     return {
-      telegramId: String(t.telegram_id),
-      username: t.username,
-      name: t.name || "Foydalanuvchi",
-      photoUrl: t.photo_url,
-    } satisfies TelegramProfile;
+      profile: {
+        telegramId: String(t.telegram_id),
+        username: t.username,
+        name: t.name || "Foydalanuvchi",
+        photoUrl: t.photo_url,
+      } satisfies TelegramProfile,
+      refCode: t.ref_code,
+    };
   });
 
-  if ("ok" in profile) return profile;
-  return { ok: true, user: await upsertTelegramUser(profile) };
+  if ("ok" in ticket) return ticket;
+  // Normally the bot's `/start <nonce>` already created the account (and applied
+  // the code there); this only matters if that did not happen.
+  const code = normalizeRefCode(ticket.refCode);
+  return { ok: true, user: await upsertTelegramUser(ticket.profile, code ? { code, source: "web" } : null) };
 }
 
 /**
@@ -687,6 +731,40 @@ async function answerInlineQuery(q: NonNullable<TelegramUpdate["inline_query"]>)
   await callBot("answerInlineQuery", { inline_query_id: q.id, results, cache_time: 0, is_personal: true });
 }
 
+/**
+ * The invite a `/start` payload claims: `ref_<code>` (bot link), or a login
+ * nonce whose site ticket carries a captured web code. Anything else: none.
+ */
+async function startReferral(payload: string): Promise<ReferralClaim | null> {
+  const code = refCodeFromStartPayload(payload);
+  if (code) return { code, source: "bot" };
+  return isLoginNonce(payload) ? ticketReferral(payload) : null;
+}
+
+const escHtml = (s: string) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
+
+/** `/taklif` — the user's own invite link, counters and a «send to a chat» button. */
+async function sendReferralLink(chatId: number, userId: string): Promise<void> {
+  const s = await referralSummary(userId, { botUsername: await botUsername(), appUrl: env.appUrl });
+  const link = s.botLink ?? s.webLink;
+  const text = [
+    "🎁 <b>Do'stlarni taklif qiling</b>",
+    "",
+    escHtml(referralRuleText(s.rewardPoints)),
+    "",
+    "Sizning havolangiz:",
+    escHtml(link),
+    "",
+    `Taklif qilinganlar: <b>${formatPoints(s.invitedCount)}</b> · Ishlangan ball: <b>${formatPoints(s.earnedPoints)}</b>`,
+  ].join("\n");
+  const share = telegramShareUrl(link);
+  // t.me links are public https (always valid button URLs); a local web link is not.
+  const extra = isPublicHttps(link)
+    ? { reply_markup: { inline_keyboard: [[{ text: "📤 Do'stlarga yuborish", url: share }]] } }
+    : {};
+  await sendMessage(chatId, text, extra);
+}
+
 async function processUpdate(update: TelegramUpdate): Promise<void> {
   if (update.inline_query) {
     await answerInlineQuery(update.inline_query);
@@ -716,13 +794,27 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
     photoUrl: null,
   };
 
+  const text = msg.text.trim();
+  // `/start <payload>` — `/startfoo` keeps the historical «payload foo» reading.
+  const startPayload = text.startsWith("/start") ? text.slice("/start".length).trim() : null;
+
   // Botga shaxsiy chatda yozgan har bir odam (avvalo `/start`) darhol
   // bazaga yoziladi — saytga kirmagan bo'lsa ham admin panelda ko'rinadi.
+  // Invite (T3): `/start ref_<code>`, or a site ticket that carries the code the
+  // browser captured. It counts only if THIS message creates the account.
+  let me: SessionUser | null = null;
   if (msg.chat.type === "private" && !msg.from.is_bot) {
-    await registerBotUser(profile);
+    me = await registerBotUser(profile, startPayload === null ? null : await startReferral(startPayload));
   }
 
-  const text = msg.text.trim();
+  if (text.startsWith("/taklif")) {
+    if (!me) {
+      await sendMessage(msg.chat.id, "Taklif havolasini olish uchun botga shaxsiy chatda /taklif yozing.");
+      return;
+    }
+    await sendReferralLink(msg.chat.id, me.id);
+    return;
+  }
 
   if (text.startsWith("/admin")) {
     await sendMessage(
@@ -750,13 +842,14 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
     return;
   }
 
-  const nonce = text.slice("/start".length).trim();
+  const nonce = startPayload ?? "";
   if (!isLoginNonce(nonce)) {
     // Oddiy /start — foydalanuvchi botga saytdan emas, to'g'ridan-to'g'ri
     // keldi. Uni saytga «bor va u yerdan qayta kel» deb yubormaymiz:
     // kirish havolasini shu yerning o'zida beramiz.
-    // A payload that is not nonce-shaped (a share/inline deep link, random
-    // text) is not a login attempt either: welcome, never «eskirgan».
+    // A payload that is not nonce-shaped (a share/inline deep link, an invite
+    // `ref_<code>` — already applied above —, random text) is not a login
+    // attempt either: welcome, never «eskirgan».
     await sendLoginLink(msg.chat.id, await createBotLoginLink(profile), WELCOME);
     return;
   }
