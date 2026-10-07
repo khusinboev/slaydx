@@ -5,7 +5,7 @@ import { useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { FolderOpen, House, Plus, UserRound, Wallet, type LucideIcon } from "lucide-react";
 import { useNav } from "@/components/nav/NavProvider";
-import { getNavSnapshot, getServerNavSnapshot, previousPagePath, replacePage, subscribeNav } from "@/lib/nav/history";
+import { backToEntry, getNavSnapshot, getServerNavSnapshot, pageStack, replacePage, subscribeNav } from "@/lib/nav/history";
 import { TABS, tabBarRoute, tabNavAction, tabOf, type TabId } from "@/lib/nav/tabs";
 import { useVisualViewport } from "@/lib/hooks/useVisualViewport";
 import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
@@ -60,10 +60,12 @@ function scrollMainTop() {
  * area. Active tab: icon on an `--accent-soft` chip + strong label +
  * `aria-current="page"`. Every target is the full 64 px cell.
  *
- * History (PLAN «Back», `tabNavAction`): Bosh → tab pushes; tab ↔ tab
- * replaces; → Bosh goes back when the entry under the page is Bosh, else
- * replaces; the active tab scrolls `#main` to the top. Tabs are real links
- * (prefetch, middle-click, open in a new tab).
+ * History (PLAN «Back», `tabNavAction`): the stack collapses to [Bosh, tab] —
+ * Bosh → tab pushes; any other tap goes back to the entry right above Bosh
+ * (steps and older tabs leave the back path) and makes it the tab; → Bosh goes
+ * back to the Bosh entry (replaces it in on a deep link); the active tab
+ * scrolls `#main` to the top. Tabs are real links (prefetch, middle-click,
+ * open in a new tab).
  */
 export function TabBar({ shown, createOpen }: { shown: boolean; createOpen: boolean }) {
   const pathname = usePathname() ?? "/uz";
@@ -76,14 +78,19 @@ export function TabBar({ shown, createOpen }: { shown: boolean; createOpen: bool
   const onTab = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
-    const action = tabNavAction({ from: pathname, to: href, previous: previousPagePath() });
+    const action = tabNavAction({ from: pathname, to: href, stack: pageStack() });
     switch (action.kind) {
       case "scroll-top":
         if (createOpen) closeUi();
         scrollMainTop();
         return;
       case "back":
-        void nav.backTo(action.href);
+        // One history.go(-n) down to Bosh / the tab root: the steps above it leave the back path.
+        void backToEntry(action.index, { router });
+        return;
+      case "back-replace":
+        // Down to the entry right above Bosh (unseen by Next), which then becomes the tab.
+        void backToEntry(action.index, { router, replaceWith: action.href });
         return;
       case "replace":
         void replacePage(action.href, { router });
@@ -124,7 +131,7 @@ export function TabBar({ shown, createOpen }: { shown: boolean; createOpen: bool
         </span>
         <span
           className={cn(
-            "max-w-full truncate px-0.5 text-[12px] leading-none",
+            "max-w-full truncate px-0.5 text-[12.5px] leading-none",
             on ? "text-foreground font-semibold" : "text-muted-foreground font-medium",
           )}
         >

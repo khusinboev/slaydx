@@ -38,7 +38,7 @@ const heroFocus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-
  * referral card. No page header — the shell's `PageHeader` «Hamyon» wraps it.
  *
  * «To'ldirish» opens the existing `PayDialog` (amount presets + Click/Payme live
- * there, unchanged), exactly like `PurchasePage`.
+ * there, unchanged), as the old purchase page did.
  */
 export function WalletPage() {
   const sessionChecked = useAppStore((s) => s.sessionChecked);
@@ -306,7 +306,7 @@ function Ledger({ paidOrder }: { paidOrder: string | null }) {
   );
 }
 
-/** Recent payment orders (as `PurchasePage` «Oxirgi to'lovlar» shows them). */
+/** Recent payment orders (the old purchase page's «Oxirgi to'lovlar»). */
 function Orders({ orders }: { orders: api.PaymentOrder[] | null }) {
   if (!orders?.length) return null;
   const now = Date.now();

@@ -5,7 +5,7 @@ import { createElement as h } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
-import { PurchasePage } from "../../components/purchase/PurchasePage.tsx";
+import { WalletPage } from "../../components/wallet/WalletPage.tsx";
 import { PayDialog } from "../../components/overlays/PayDialog.tsx";
 import { SearchDialog } from "../../components/overlays/SearchDialog.tsx";
 import { ProfilePage } from "../../components/profile/ProfilePage.tsx";
@@ -87,33 +87,36 @@ const withRouter = (node: ReturnType<typeof h>) =>
     h(PathnameContext.Provider, { value: "/uz" }, h(SearchParamsContext.Provider, { value: new URLSearchParams("") }, node)),
   );
 
-function mountPurchase() {
-  render(withRouter(h("div", null, h(PurchasePage), h(PayDialog))));
+// Redesign: `/uz/purchase` redirects to Hamyon (`/uz/wallet`); the old PurchasePage is gone, so the
+// top-up promises below are now checked on `WalletPage` (its «To'ldirish» opens the same PayDialog).
+function mountWallet() {
+  render(withRouter(h("div", null, h(WalletPage), h(PayDialog))));
 }
 
-test("purchase: Pro/Bepul taklifi yo'q, bitta «Balansni to'ldirish» kartasi", async () => {
+test("Hamyon: Pro/Bepul taklifi yo'q, balans va bitta «To'ldirish» tugmasi; to'lovlar tarixi saqlangan", async () => {
   signIn();
   stubOrders();
-  mountPurchase();
+  mountWallet();
   await act(async () => {
     await new Promise((r) => setImmediate(r));
   });
   const text = document.body.textContent ?? "";
   assert.doesNotMatch(text, FORBIDDEN);
-  assert.ok(screen.getByRole("heading", { level: 1, name: /Balansni to.ldirish/ }));
-  assert.equal(document.querySelectorAll("article").length, 1, "yagona karta");
-  assert.ok(screen.getByRole("button", { name: /Balansni to.ldirish/ }));
-  assert.match(document.querySelector("[data-testid=purchase-total]")?.textContent ?? "", /15[\s .,]?000 tanga/);
+  assert.ok(document.querySelector('[data-wallet-hero="ready"]'), "balans kartasi");
+  assert.equal(document.querySelectorAll("[data-wallet-topup]").length, 1, "yagona to'ldirish tugmasi");
+  assert.ok(screen.getByRole("button", { name: /To.ldirish/ }));
+  assert.match(document.querySelector("[data-wallet-total]")?.textContent ?? "", /15[\s .,  ]?000 tanga/);
   // Buyurtma tarixi saqlangan (eski «pro» buyurtma ham ko'rinadi).
-  assert.ok(screen.getByText(/Oxirgi to.lovlar/));
+  assert.ok(screen.getByRole("heading", { name: /To.lovlar/ }));
+  assert.equal(document.querySelectorAll("[data-wallet-orders] li").length, 2, "ikkala buyurtma, «pro» ham");
 });
 
-test("purchase: to'lov faqat purpose=topup buyurtma yaratadi (tanlangan summa bilan)", async () => {
+test("Hamyon: to'lov faqat purpose=topup buyurtma yaratadi (tanlangan summa bilan)", async () => {
   signIn();
   const captured = stubOrders();
-  mountPurchase();
+  mountWallet();
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: /Balansni to.ldirish/ }));
+    fireEvent.click(screen.getByRole("button", { name: /To.ldirish/ }));
   });
   const dialog = screen.getByRole("dialog");
   assert.doesNotMatch(dialog.textContent ?? "", FORBIDDEN);
@@ -129,15 +132,17 @@ test("purchase: to'lov faqat purpose=topup buyurtma yaratadi (tanlangan summa bi
   assert.deepEqual(captured[0].body, { provider: "click", amount: 50_000, purpose: "topup" });
 });
 
-test("purchase: kirmagan foydalanuvchi — tugma kirish oynasini ochadi, Pro yo'q", async () => {
+test("Hamyon: kirmagan foydalanuvchi — «Kirish» kirish oynasini ochadi (qaytish /uz/wallet), Pro yo'q", async () => {
   useAppStore.setState({ loggedIn: false, sessionChecked: true, user: null });
   stubOrders();
-  mountPurchase();
+  mountWallet();
   assert.doesNotMatch(document.body.textContent ?? "", FORBIDDEN);
+  assert.ok(!document.querySelector("[data-wallet-topup]"), "to'ldirish faqat kirgandan keyin");
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: /Balansni to.ldirish/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Kirish/ }));
   });
   assert.equal(useUi.getState().overlay, "login");
+  assert.equal(useUi.getState().returnTo, "/uz/wallet");
 });
 
 // Redesign W4: Ball/Balans and the top-up link moved to Hamyon (`/uz/wallet`, W3); the profile keeps one

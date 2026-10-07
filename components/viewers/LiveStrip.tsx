@@ -37,7 +37,7 @@ export function LiveStrip({ live }: { live: LiveView }) {
         <div className="h-full bg-emerald-400 transition-all" style={{ width: `${live.progress}%` }} />
       </div>
       <p className="mt-1.5 text-[11px] text-white/45">
-        Sahifani yopsangiz ham ish davom etadi — keyin «Mening fayllarim» dan ochasiz.
+        Sahifani yopsangiz ham ish davom etadi — keyin «Ishlarim» dan ochasiz.
       </p>
     </div>
   );

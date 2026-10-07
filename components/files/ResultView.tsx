@@ -764,7 +764,7 @@ export function RunningPanel({ gen }: { gen: api.GenerationDetail }) {
           <div className="bg-primary h-full transition-all" style={{ width: `${gen.progress}%` }} />
         </div>
         <p className="text-muted-foreground mt-4 text-xs">
-          Sahifani yopsangiz ham ish davom etadi — keyin «Mening fayllarim» dan ochasiz.
+          Sahifani yopsangiz ham ish davom etadi — keyin «Ishlarim» dan ochasiz.
         </p>
       </div>
     </div>

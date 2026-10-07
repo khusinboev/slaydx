@@ -18,7 +18,7 @@ import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks
  *   - `writeFileView` writes defaults                          → "defaults stay out of the URL" fails;
  *   - PayDialog: `window.location.href = checkoutUrl` again    → "pay dialog entry is popped" fails;
  *   - ToolChrome: back to a fixed `<Link href="/uz/create">`   → "ToolChrome ←" fails (deep link pushes);
- *   - PurchasePage: no strip of `?order=`                      → "?order= is stripped" fails.
+ *   - WalletPage (usePaymentReturn): no strip of `?order=`   → "?order= is stripped" fails.
  */
 
 const nav = await import("../../lib/nav/history.ts");
@@ -26,7 +26,7 @@ const { AppShell } = await import("../../components/shell/AppShell.tsx");
 const { HomeFiles } = await import("../../components/home/HomeFiles.tsx");
 const { PayDialog } = await import("../../components/overlays/PayDialog.tsx");
 const { ToolChrome } = await import("../../components/forms/ToolChrome.tsx");
-const { PurchasePage } = await import("../../components/purchase/PurchasePage.tsx");
+const { WalletPage } = await import("../../components/wallet/WalletPage.tsx");
 const { PageBack } = await import("../../components/shell/PageBack.tsx");
 const { NavProvider: NavProviderEl } = await import("../../components/nav/NavProvider.tsx");
 const { useUi, readFileView, writeFileView, DEFAULT_FILE_VIEW } = await import("../../lib/ui.ts");
@@ -329,28 +329,32 @@ test("PageBack (/uz/create, /uz/purchase, /uz/profile): yangi yorliqda /uz ga al
   }
 });
 
-// ------------------------------------------------------------------ PurchasePage ?order=
+// ------------------------------------------------------------------ Hamyon (WalletPage) ?order=
 
-test("PurchasePage: hal bo'lgan buyurtmada ?order= URLdan olib tashlanadi, banner qoladi", async () => {
-  fresh("/uz/purchase");
-  window.history.replaceState(window.history.state, "", "/uz/purchase?order=o1");
+test("Hamyon (/uz/purchase → /uz/wallet): hal bo'lgan buyurtmada ?order= URLdan olib tashlanadi, banner qoladi", async () => {
+  // The provider returns to /uz/purchase?order=, which the server redirects to /uz/wallet?order= (query kept).
+  fresh("/uz/wallet");
+  window.history.replaceState(window.history.state, "", "/uz/wallet?order=o1");
   Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
-  useAppStore.setState({ sessionChecked: true, loggedIn: true, refreshSession: async () => {} });
+  const user = { id: "u1", name: "Ali", points: 0, balance: 10_000, isAdmin: false };
+  useAppStore.setState({ sessionChecked: true, loggedIn: true, user: user as never, refreshSession: async () => {} });
   (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown) =>
     String(input) === "/api/payments/orders"
       ? json(200, {
           orders: [{ id: "o1", provider: "click", purpose: "topup", amountSoum: 10_000, state: "paid", createdAt: "2026-09-24T08:00:00.000Z" }],
           providers: { click: true, payme: false },
         })
-      : json(404, {});
+      : String(input) === "/api/users/me"
+        ? json(200, { user, transactions: [] })
+        : json(404, {});
   const len = window.history.length;
-  render(inRouter(h(PurchasePage), "order=o1"));
+  render(inRouter(h(WalletPage), "order=o1"));
   // Birinchi so'rov 3 s dan keyin (`PAY_POLL_START_MS`): haqiqiy taymer bilan kutamiz.
   await act(async () => {
     await new Promise((r) => setTimeout(r, 3300));
   });
   await settle();
-  assert.equal(here(), "/uz/purchase", "?order= ketdi");
+  assert.equal(here(), "/uz/wallet", "?order= ketdi");
   assert.equal(window.history.length, len, "yangi yozuv yo'q");
   assert.ok(screen.getByText(/To.lov qabul qilindi/), "banner yo'qolmadi");
 });
