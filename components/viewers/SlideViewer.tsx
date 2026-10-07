@@ -512,11 +512,12 @@ export function SlideViewer({
     >
       {phoneEditing ? <VisualViewportWatch onChange={capToViewport} /> : null}
       {present ? (
-        <div className="no-print absolute top-0 right-0 z-20 flex items-center gap-1 p-3 text-white/80">
+        <div className="no-print absolute top-0 right-0 z-20 m-2 flex items-center gap-1 rounded-lg bg-black/60 p-1 text-white/90 backdrop-blur-sm">
           {/*
             Visible previous / next (44 px targets): the enlarged mode had NO
             way back except the arrow keys. Touch also taps the left/right
-            third and swipes (`slide-nav/`).
+            third and swipes (`slide-nav/`). A dark pill keeps the controls
+            legible over a light slide that fills the screen (desktop).
           */}
           <button
             type="button"
