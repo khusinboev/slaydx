@@ -6,12 +6,18 @@ import { Check, ChevronDown, Download, Loader2, MoreHorizontal, Send, Share2, Tr
 import { cn } from "@/lib/cn";
 import type { GenerationDetail } from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
-import { defaultShareFormat, downloadFormats, downloadSubject, type DownloadFormatId } from "@/lib/downloads/formats";
+import {
+  defaultShareFormat,
+  downloadFormats,
+  downloadSubject,
+  type DownloadFormat,
+  type DownloadFormatId,
+} from "@/lib/downloads/formats";
 import { DELIVER_TEXT, IDLE, markGesture, rowBusy, rowPercent, elapsedSeconds, type RowState } from "@/lib/downloads/deliver";
 import { useDialog } from "../overlays/useDialog";
 import { DownloadSheet, useDownloads, type SheetMode } from "./DownloadSheet";
-import { openBotLink, SaveToBotButton, useSaveAction, type ActionToast } from "./SaveToBotButton";
-import { ShareButton, useShareAction } from "./ShareButton";
+import { miniAppMismatch, openBotLink, SaveToBotButton, useSaveAction, type ActionToast } from "./SaveToBotButton";
+import { currentShareCapability, shareFallbackToast, ShareButton, useShareAction } from "./ShareButton";
 
 /**
  * Result header actions (docs/mobile/PLAN.md §4.5, R5 P6): ONE «Yuklab olish»
@@ -30,6 +36,12 @@ import { ShareButton, useShareAction } from "./ShareButton";
  * Tools with one format skip the sheet: the button itself shows the row
  * state (spinner + seconds, %, «Tayyor — yuklab olish»); a Telegram refusal or
  * an error opens the sheet with that row's fallback / «Qayta urinish».
+ *
+ * «Saqlash» and «Ulashish» (docs/todo-2026-10-07 T4) offer the same per-
+ * material format choice: several formats → the same sheet in `save` /
+ * `share` mode (stored file first, «Asosiy»); a row tap runs the action in
+ * that format and the row shows its progress/error; success closes the sheet
+ * and toasts. One format → the action runs from the button, as before.
  */
 
 /**
@@ -41,6 +53,21 @@ import { ShareButton, useShareAction } from "./ShareButton";
 export function toastDuration(t: Pick<ActionToast, "tone" | "link">): number | null {
   if (t.link) return null;
   return t.tone === "error" ? 10_000 : 4_500;
+}
+
+/**
+ * Pure: the «Saqlash» / «Ulashish» sheet order — the stored file (`defaultId`,
+ * what one tap used to send) first, then the other registry formats in their
+ * registry order. Exactly the registry's formats, none added or dropped.
+ */
+export function sendOrder(formats: readonly DownloadFormat[], defaultId: DownloadFormatId): DownloadFormat[] {
+  const first = formats.find((f) => f.id === defaultId);
+  return first ? [first, ...formats.filter((f) => f !== first)] : [...formats];
+}
+
+/** Pure: the open `mode` sheet already shows this toast's message on the row (the toast would cover it). */
+export function rowShows(t: Pick<ActionToast, "row">, open: SheetMode | null, mode: SheetMode): boolean {
+  return t.row !== undefined && open === mode;
 }
 
 export function ResultActions({
@@ -74,11 +101,20 @@ export function ResultActions({
   const subject = useMemo(() => downloadSubject(gen, { hasResults }), [gen, hasResults]);
   const formats = useMemo(() => downloadFormats(subject, { pdf: Boolean(features?.pdf) }), [subject, features?.pdf]);
   const shareFormat = useMemo(() => defaultShareFormat(subject), [subject]);
+  /** «Saqlash» / «Ulashish» sheet rows: the registry's formats, the stored file (the old one-tap default) first. */
+  const sendFormats = useMemo(() => sendOrder(formats, shareFormat.id), [formats, shareFormat.id]);
   const single = formats.length === 1;
+  const version = gen.fileVersion ?? 0;
 
-  const downloads = useDownloads(gen.id, gen.fileVersion ?? 0, { canSendToBot: Boolean(sessionTelegramId) });
+  const downloads = useDownloads(gen.id, version, { canSendToBot: Boolean(sessionTelegramId) });
   const [sheet, setSheet] = useState<SheetMode | null>(null);
-  const closeSheet = useCallback(() => setSheet(null), []);
+  /** The open sheet right now (async action callbacks read it). */
+  const sheetRef = useRef<SheetMode | null>(null);
+  const showSheet = useCallback((mode: SheetMode | null) => {
+    sheetRef.current = mode;
+    setSheet(mode);
+  }, []);
+  const closeSheet = useCallback(() => showSheet(null), [showSheet]);
   const dlRef = useRef<HTMLButtonElement>(null);
 
   const [toast, setToast] = useState<ActionToast | null>(null);
@@ -90,36 +126,88 @@ export function ResultActions({
     return () => clearTimeout(t);
   }, [toast]);
   const onToast = useCallback((t: ActionToast) => setToast(t), []);
+  /** An action's toast, unless its open format sheet already shows the same message on the row. */
+  const saveToast = useCallback((t: ActionToast) => void (rowShows(t, sheetRef.current, "save") || setToast(t)), []);
+  const shareToast = useCallback((t: ActionToast) => void (rowShows(t, sheetRef.current, "share") || setToast(t)), []);
+  /** Success closes that action's sheet (the toast confirms; inside Telegram «Saqlash» then closes the Mini App). */
+  const closeIf = useCallback(
+    (mode: SheetMode) => () => {
+      if (sheetRef.current === mode) showSheet(null);
+    },
+    [showSheet],
+  );
+  const onSaveDone = useMemo(() => closeIf("save"), [closeIf]);
+  const onShareDone = useMemo(() => closeIf("share"), [closeIf]);
 
   const openSheet = useCallback(
     (mode: SheetMode = "download") => {
       if (expired) return;
-      setSheet(mode);
+      showSheet(mode);
     },
-    [expired],
+    [expired, showSheet],
   );
   useEffect(() => {
     registerOpen?.(openSheet);
     return () => registerOpen?.(null);
   }, [registerOpen, openSheet]);
 
-  /** Download a specific format: one-format tools deliver straight from the button, else the sheet. */
+  /**
+   * «Ulashish» cannot share this format here (no Web Share for the type, no
+   * Telegram account): download it instead — straight from the button for
+   * one-format tools, else in the download list, started for that format.
+   */
   const downloadFormat = useCallback(
     (id: DownloadFormatId) => {
-      if (single) void downloads.tap(id);
-      else setSheet("download");
+      if (!single) showSheet("download");
+      void downloads.tap(id);
     },
-    [single, downloads],
+    [single, downloads, showSheet],
   );
 
-  const save = useSaveAction({ genId: gen.id, sessionTelegramId, onToast });
-  const share = useShareAction({ genId: gen.id, title: gen.topic, sessionTelegramId, onToast, onDownload: downloadFormat });
+  const save = useSaveAction({ genId: gen.id, version, sessionTelegramId, onToast: saveToast, onDone: onSaveDone });
+  const share = useShareAction({
+    genId: gen.id,
+    version,
+    title: gen.topic,
+    sessionTelegramId,
+    onToast: shareToast,
+    onDownload: downloadFormat,
+    onDone: onShareDone,
+  });
+
+  /** «Saqlash»: one format → save it now; several → the format sheet (a different Telegram account is refused first). */
+  const onSavePress = () => {
+    if (single) return void save.run(formats[0].id);
+    if (miniAppMismatch(sessionTelegramId)) return onToast({ text: DELIVER_TEXT.mismatch, tone: "error" });
+    showSheet("save");
+  };
+
+  /**
+   * «Ulashish»: one format → share it now. Several → the format sheet, except
+   * when a format is already «Tayyor» (the toast asked for one more tap on
+   * «Ulashish»): that one is shared within this tap. Nothing shareable here at
+   * all → say why and open the download list (as before).
+   */
+  const onSharePress = () => {
+    if (single) return void share.run(formats[0]);
+    const ready = share.readyFor ? sendFormats.find((f) => f.id === share.readyFor) : undefined;
+    if (ready) return void share.run(ready);
+    const caps = sendFormats.map((f) => currentShareCapability(f, Boolean(sessionTelegramId)));
+    if (caps.every((c) => c === "download-only")) {
+      onToast(shareFallbackToast());
+      return showSheet("download");
+    }
+    if (caps.some((c) => c === "tg-prepared" || c === "tg-save-forward") && miniAppMismatch(sessionTelegramId)) {
+      return onToast({ text: DELIVER_TEXT.mismatch, tone: "error" });
+    }
+    showSheet("share");
+  };
 
   // One-format tools: a refusal or an error needs the sheet's fallback rows / «Qayta urinish».
   const singleState = single ? (downloads.rows[formats[0].id] ?? IDLE) : IDLE;
   useEffect(() => {
-    if (single && (singleState.s === "fallback" || singleState.s === "error")) setSheet("download");
-  }, [single, singleState.s]);
+    if (single && (singleState.s === "fallback" || singleState.s === "error")) showSheet("download");
+  }, [single, singleState.s, showSheet]);
 
   const [menu, setMenu] = useState(false);
   const closeMenu = useCallback(() => setMenu(false), []);
@@ -140,15 +228,17 @@ export function ResultActions({
 
   const onDownloadClick = () => {
     if (single) void downloads.tap(formats[0].id);
-    else setSheet("download");
+    else showSheet("download");
   };
 
+  /** A share/save sheet row: the action in exactly that format (synchronous up to `navigator.share` — Web Share needs the tap's activation). */
   const pick = (id: DownloadFormatId) => {
-    const f = formats.find((x) => x.id === id);
+    const f = sendFormats.find((x) => x.id === id);
     if (!f) return;
     if (sheet === "share") void share.run(f);
-    else if (sheet === "save") void save.run(id);
+    else if (sheet === "save") void save.run(f.id);
   };
+  const sendMode = sheet === "share" || sheet === "save";
 
   const btn =
     "inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg text-sm font-medium disabled:opacity-70 md:h-9 md:pointer-coarse:h-11";
@@ -193,8 +283,19 @@ export function ResultActions({
               <span className="text-primary-foreground/80 hidden text-xs md:inline">{formats[0].ext.toUpperCase()}</span>
             ) : null}
           </button>
-          <ShareButton action={share} format={shareFormat} className="flex-1 group-data-[compact=1]/hdr:hidden md:flex-none" />
-          <SaveToBotButton action={save} visible={showSave} className="flex-1 group-data-[compact=1]/hdr:hidden md:flex-none" />
+          <ShareButton
+            action={share}
+            onPress={onSharePress}
+            picker={!single}
+            className="flex-1 group-data-[compact=1]/hdr:hidden md:flex-none"
+          />
+          <SaveToBotButton
+            action={save}
+            visible={showSave}
+            onPress={onSavePress}
+            picker={!single}
+            className="flex-1 group-data-[compact=1]/hdr:hidden md:flex-none"
+          />
         </div>
       ) : null}
 
@@ -234,9 +335,10 @@ export function ResultActions({
         items={[
           ...(!expired && canOtherFormat
             ? [
-                { id: "share-other", label: "Boshqa formatda ulashish…", icon: <Share2 className="size-4" />, onSelect: () => setSheet("share") },
+                // The compact (scrolled) phone header hides «Ulashish»/«Saqlash»: these reach the same sheets.
+                { id: "share-other", label: "Boshqa formatda ulashish…", icon: <Share2 className="size-4" />, onSelect: onSharePress },
                 ...(showSave
-                  ? [{ id: "save-other", label: "Boshqa formatda saqlash…", icon: <Send className="size-4" />, onSelect: () => setSheet("save") }]
+                  ? [{ id: "save-other", label: "Boshqa formatda saqlash…", icon: <Send className="size-4" />, onSelect: onSavePress }]
                   : []),
               ]
             : []),
@@ -255,11 +357,13 @@ export function ResultActions({
         open={sheet !== null}
         onClose={closeSheet}
         mode={sheet ?? "download"}
-        formats={formats}
+        formats={sendMode ? sendFormats : formats}
         downloads={downloads}
         anchorRef={dlRef}
         sizes={downloads.sizes}
         onPick={pick}
+        send={sheet === "share" ? share : sheet === "save" ? save : undefined}
+        defaultId={sendMode ? shareFormat.id : undefined}
       />
 
       {toast ? <Toast toast={toast} onClose={() => setToast(null)} /> : null}

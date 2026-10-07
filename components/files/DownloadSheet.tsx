@@ -1,8 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronRight, Download, ExternalLink, FileText, Loader2, RefreshCw, Send, X } from "lucide-react";
+import { Check, ChevronRight, Download, ExternalLink, Loader2, RefreshCw, Send, Share2, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { DownloadFormat, DownloadFormatId } from "@/lib/downloads/formats";
 import {
@@ -11,6 +11,8 @@ import {
   deliverErrorText,
   downloadToDevice,
   DELIVER_TEXT,
+  elapsedSeconds,
+  formatBytes,
   gestureFresh,
   gestureRequired,
   IDLE,
@@ -30,6 +32,7 @@ import {
 } from "@/lib/downloads/deliver";
 import { useDialog } from "../overlays/useDialog";
 import { usePhone } from "./result-layout/prefs";
+import { openBotLink, SEND_IDLE, sendRowBusy, type SendRows, type SendRowState } from "./SaveToBotButton";
 
 /**
  * «Yuklab olish» sheet (docs/mobile/PLAN.md §4.5, R1 §5).
@@ -48,14 +51,24 @@ import { usePhone } from "./result-layout/prefs";
  * («Botga yuborish» / «Brauzerda ochish») | error («Qayta urinish»).
  * Other rows stay usable while one works.
  *
- * `mode: "share" | "save"` reuses the sheet as a format picker for
- * «Ulashish» / «Saqlash» (they use the stored file by default, one tap).
+ * `mode: "share" | "save"` (docs/todo-2026-10-07 T4) is the format choice of
+ * «Ulashish» / «Saqlash» for a material with several formats: the same
+ * registry rows, the stored file first and marked «Asosiy» (the old one-tap
+ * default is two taps away and has the focus), sizes from the same pre-warm
+ * (PDF starts converting on open). A tap runs the action in that format and
+ * the row shows the action's own state (`SendRowState`: «Botga
+ * yuborilmoqda…», «PDF tayyorlanmoqda… N s», «Tayyor — ulashish uchun
+ * bosing», the Uzbek error + «Qayta urinish», «Botni ochish»); the sheet
+ * stays open until the action succeeds (then `ResultActions` closes it).
  */
 
 export type SheetMode = "download" | "share" | "save";
 
 /** Formats prepared as soon as the sheet opens (lead decision: PDF on open; the stored file is a cheap token mint and gives its size). */
 const PREWARM: readonly DownloadFormatId[] = ["native", "pdf"];
+
+/** Badge of the stored-file row in the share/save sheet. */
+export const DEFAULT_ROW_BADGE = "Asosiy";
 
 type Warm = { since: number; promise: Promise<ReadyFile>; file?: ReadyFile };
 
@@ -251,11 +264,31 @@ function useTicker(active: boolean): number {
   return now;
 }
 
-const TITLE: Record<SheetMode, string> = {
+export const SHEET_TITLE: Record<SheetMode, string> = {
   download: "Yuklab olish",
-  share: "Qaysi formatda ulashish?",
-  save: "Qaysi formatda saqlash?",
+  share: "Qaysi formatda ulashamiz?",
+  save: "Qaysi formatda saqlaymiz?",
 };
+
+/** Pure: the status line of a share/save row (`idle` → hint + size, like the download rows). */
+export function sendRowStatusText(
+  state: SendRowState,
+  f: Pick<DownloadFormat, "id" | "hint">,
+  ctx: { now: number; size?: number | null },
+): string {
+  switch (state.s) {
+    case "idle":
+      return [f.hint, ctx.size ? formatBytes(ctx.size) : ""].filter(Boolean).join(" · ");
+    case "preparing":
+      return `${f.id === "pdf" ? DELIVER_TEXT.preparingPdf : DELIVER_TEXT.preparing} ${elapsedSeconds(state.since, ctx.now)} s`;
+    case "ready":
+      return DELIVER_TEXT.tapToShare;
+    case "delivering":
+    case "done":
+    case "error":
+      return state.text;
+  }
+}
 
 type PopoverPos = { top: number; right: number };
 
@@ -268,6 +301,8 @@ export function DownloadSheet({
   anchorRef,
   sizes,
   onPick,
+  send,
+  defaultId,
 }: {
   open: boolean;
   onClose: () => void;
@@ -278,19 +313,29 @@ export function DownloadSheet({
   anchorRef?: RefObject<HTMLElement | null>;
   /** Known sizes (bytes) per format (from prepared rows). */
   sizes?: Partial<Record<DownloadFormatId, number>>;
-  /** `share` / `save` modes: the chosen format (the sheet closes). */
+  /** `share` / `save` modes: a row was tapped — run the action in that format (the sheet stays open). */
   onPick?: (id: DownloadFormatId) => void;
+  /** `share` / `save` modes: the action's row states; `busy` = one format is in flight (the other rows wait). */
+  send?: { rows: SendRows; busy: boolean };
+  /** `share` / `save` modes: the stored-file row (first, «Asosiy»). */
+  defaultId?: DownloadFormatId;
 }) {
   const phone = usePhone();
   const ref = useDialog(open, onClose);
   const { rows, tap, prewarm, sendRowToBot, openRowInBrowser, canSendToBot } = downloads;
-  const ticking = open && Object.values(rows).some((r) => r?.s === "preparing" || (r?.s === "sending" && r.since !== undefined));
+  const sending = mode !== "download";
+  const ticking =
+    open &&
+    (sending
+      ? Object.values(send?.rows ?? {}).some((r) => r?.s === "preparing")
+      : Object.values(rows).some((r) => r?.s === "preparing" || (r?.s === "sending" && r.since !== undefined)));
   const now = useTicker(ticking);
   const [pos, setPos] = useState<PopoverPos | null>(null);
 
+  // Every mode: sizes on the rows, and a PDF that is (being) converted before the tap.
   useEffect(() => {
-    if (open && mode === "download") prewarm(formats);
-  }, [open, mode, formats, prewarm]);
+    if (open) prewarm(formats);
+  }, [open, formats, prewarm]);
 
   useLayoutEffect(() => {
     if (!open || phone) return;
@@ -325,7 +370,7 @@ export function DownloadSheet({
         ref={ref}
         role="dialog"
         aria-modal="true"
-        aria-label={TITLE[mode]}
+        aria-label={SHEET_TITLE[mode]}
         data-download-sheet={mode}
         data-sheet-kind={phone ? "sheet" : "popover"}
         onPointerDownCapture={() => markGesture()}
@@ -341,7 +386,9 @@ export function DownloadSheet({
       >
         {phone ? <div className="bg-muted-foreground/30 mx-auto mt-2 h-1 w-10 shrink-0 rounded-full" aria-hidden /> : null}
         <div className="flex shrink-0 items-center gap-2 px-4 pt-2 pb-1">
-          <p className="min-w-0 flex-1 truncate text-[15px] font-semibold">{TITLE[mode]}</p>
+          <p className="min-w-0 flex-1 truncate text-[15px] font-semibold" data-sheet-title>
+            {SHEET_TITLE[mode]}
+          </p>
           <button
             type="button"
             onClick={onClose}
@@ -353,26 +400,33 @@ export function DownloadSheet({
           </button>
         </div>
         <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2" data-download-rows>
-          {formats.map((f) => (
-            <Row
-              key={f.id}
-              f={f}
-              mode={mode}
-              state={rows[f.id] ?? IDLE}
-              now={now}
-              size={sizes?.[f.id] ?? null}
-              canSendToBot={canSendToBot}
-              onTap={() => {
-                if (mode === "download") void tap(f.id);
-                else {
-                  onPick?.(f.id);
-                  onClose();
-                }
-              }}
-              onSendToBot={() => void sendRowToBot(f.id)}
-              onOpenInBrowser={() => openRowInBrowser(f.id)}
-            />
-          ))}
+          {formats.map((f) =>
+            sending ? (
+              <SendRow
+                key={f.id}
+                f={f}
+                mode={mode}
+                state={send?.rows[f.id] ?? SEND_IDLE}
+                blocked={Boolean(send?.busy)}
+                isDefault={f.id === defaultId}
+                now={now}
+                size={sizes?.[f.id] ?? null}
+                onTap={() => onPick?.(f.id)}
+              />
+            ) : (
+              <Row
+                key={f.id}
+                f={f}
+                state={rows[f.id] ?? IDLE}
+                now={now}
+                size={sizes?.[f.id] ?? null}
+                canSendToBot={canSendToBot}
+                onTap={() => void tap(f.id)}
+                onSendToBot={() => void sendRowToBot(f.id)}
+                onOpenInBrowser={() => openRowInBrowser(f.id)}
+              />
+            ),
+          )}
         </ul>
       </div>
     </>
@@ -380,9 +434,163 @@ export function DownloadSheet({
   return createPortal(sheet, document.body);
 }
 
-function Row({
+type Tone = "error" | "done" | "ready" | "plain";
+
+const toneOf = (s: string): Tone => (s === "error" ? "error" : s === "done" ? "done" : s === "ready" ? "ready" : "plain");
+
+/** The tappable part of a row, shared by the download and the share/save rows. */
+function RowButton({
+  f,
+  s,
+  status,
+  busy,
+  blocked = false,
+  isDefault = false,
+  icon,
+  readyIcon,
+  idleTrail,
+  pct = null,
+  onTap,
+}: {
+  f: DownloadFormat;
+  /** Row state name (`data-row-state`). */
+  s: string;
+  status: string;
+  busy: boolean;
+  /** Another format of the same action is in flight: this row waits. */
+  blocked?: boolean;
+  isDefault?: boolean;
+  icon: ReactNode;
+  readyIcon: ReactNode;
+  idleTrail: ReactNode;
+  pct?: number | null;
+  onTap: () => void;
+}) {
+  const tone = toneOf(s);
+  const inert = busy || blocked;
+  return (
+    <button
+      type="button"
+      data-download-row={f.id}
+      data-row-state={s}
+      data-default-row={isDefault ? "1" : undefined}
+      data-row-blocked={blocked && !busy ? "1" : undefined}
+      aria-busy={busy || undefined}
+      // Not `disabled`: a disabled button drops focus to <body> and breaks the dialog's Tab trap; busy rows ignore taps.
+      aria-disabled={inert || undefined}
+      onClick={inert ? undefined : onTap}
+      className={cn(
+        "hover:bg-muted focus-visible:bg-muted flex min-h-14 w-full items-center gap-3 rounded-xl px-3 py-2 text-left outline-none aria-disabled:cursor-progress",
+        tone === "ready" ? "bg-primary/10 ring-primary/40 ring-1" : isDefault && tone === "plain" && "bg-primary/5 ring-primary/25 ring-1",
+        blocked && !busy && "opacity-60",
+      )}
+    >
+      <span className="bg-muted text-muted-foreground flex size-10 shrink-0 items-center justify-center rounded-lg" aria-hidden>
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="text-[15px] leading-snug font-medium">{f.label}</span>
+          {isDefault ? (
+            <span className="bg-primary/15 text-primary rounded-full px-2 py-px text-[11px] leading-4 font-semibold" data-default-badge>
+              {DEFAULT_ROW_BADGE}
+            </span>
+          ) : null}
+        </span>
+        {status ? (
+          <span
+            className={cn(
+              "mt-0.5 block text-[13px] leading-snug",
+              tone === "error" ? "text-destructive" : tone === "done" ? "text-emerald-700 dark:text-emerald-400" : tone === "ready" ? "text-primary font-medium" : "text-muted-foreground",
+            )}
+            data-row-status
+            role={s === "error" ? "alert" : undefined}
+          >
+            {status}
+          </span>
+        ) : null}
+        {pct !== null ? (
+          <span className="bg-muted mt-1.5 block h-1.5 overflow-hidden rounded-full" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+            <span className="bg-primary block h-full transition-[width]" style={{ width: `${pct}%` }} />
+          </span>
+        ) : null}
+      </span>
+      <span className="text-muted-foreground flex shrink-0 items-center gap-1 text-[13px]" aria-hidden>
+        {busy ? (
+          <Loader2 className="size-5 animate-spin" />
+        ) : s === "done" ? (
+          <Check className="size-5 text-emerald-600" />
+        ) : s === "error" ? (
+          <>
+            <RefreshCw className="size-4" />
+            <span>{DELIVER_TEXT.retry}</span>
+          </>
+        ) : s === "ready" ? (
+          readyIcon
+        ) : (
+          idleTrail
+        )}
+      </span>
+    </button>
+  );
+}
+
+/** A «Saqlash» / «Ulashish» row: tap = that action in this format. */
+function SendRow({
   f,
   mode,
+  state,
+  blocked,
+  isDefault,
+  now,
+  size,
+  onTap,
+}: {
+  f: DownloadFormat;
+  mode: Exclude<SheetMode, "download">;
+  state: SendRowState;
+  blocked: boolean;
+  isDefault: boolean;
+  now: number;
+  size: number | null;
+  onTap: () => void;
+}) {
+  const Icon = mode === "share" ? Share2 : Send;
+  const link = state.s === "error" ? state.link : undefined;
+  return (
+    <li className="py-0.5" data-download-item={f.id}>
+      <RowButton
+        f={f}
+        s={state.s}
+        status={sendRowStatusText(state, f, { now, size })}
+        busy={sendRowBusy(state)}
+        blocked={blocked}
+        isDefault={isDefault}
+        icon={<Icon className="size-5" />}
+        readyIcon={<Icon className="text-primary size-5" />}
+        idleTrail={<ChevronRight className="size-5" />}
+        onTap={onTap}
+      />
+      {link ? (
+        <div className="flex flex-wrap gap-2 px-3 pt-1 pb-2" data-row-actions>
+          <button
+            type="button"
+            data-row-link
+            onClick={() => openBotLink(link.href)}
+            className="bg-primary text-primary-foreground inline-flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-medium"
+          >
+            <ExternalLink className="size-4" />
+            {link.label}
+          </button>
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+/** A «Yuklab olish» row (download state machine, Telegram fallbacks). */
+function Row({
+  f,
   state,
   now,
   size,
@@ -392,7 +600,6 @@ function Row({
   onOpenInBrowser,
 }: {
   f: DownloadFormat;
-  mode: SheetMode;
   state: RowState;
   now: number;
   size: number | null;
@@ -401,65 +608,19 @@ function Row({
   onSendToBot: () => void;
   onOpenInBrowser: () => void;
 }) {
-  const busy = rowBusy(state);
-  const status = mode === "download" ? rowStatusText(state, f, { now, size }) : [f.hint].filter(Boolean).join(" · ");
-  const pct = rowPercent(state);
-  const tone = state.s === "error" ? "error" : state.s === "done" ? "done" : state.s === "ready" ? "ready" : "plain";
   return (
     <li className="py-0.5" data-download-item={f.id}>
-      <button
-        type="button"
-        data-download-row={f.id}
-        data-row-state={state.s}
-        aria-busy={busy || undefined}
-        // Not `disabled`: a disabled button drops focus to <body> and breaks the dialog's Tab trap; busy rows ignore taps.
-        aria-disabled={busy || undefined}
-        onClick={busy ? undefined : onTap}
-        className={cn(
-          "hover:bg-muted focus-visible:bg-muted flex min-h-14 w-full items-center gap-3 rounded-xl px-3 py-2 text-left outline-none aria-disabled:cursor-progress",
-          tone === "ready" && "bg-primary/10 ring-primary/40 ring-1",
-        )}
-      >
-        <span className="bg-muted text-muted-foreground flex size-10 shrink-0 items-center justify-center rounded-lg" aria-hidden>
-          {mode === "download" ? <Download className="size-5" /> : mode === "share" ? <Send className="size-5" /> : <FileText className="size-5" />}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[15px] leading-snug font-medium">{f.label}</span>
-          {status ? (
-            <span
-              className={cn(
-                "mt-0.5 block text-[13px] leading-snug",
-                tone === "error" ? "text-destructive" : tone === "done" ? "text-emerald-700 dark:text-emerald-400" : tone === "ready" ? "text-primary font-medium" : "text-muted-foreground",
-              )}
-              data-row-status
-              role={state.s === "error" ? "alert" : undefined}
-            >
-              {status}
-            </span>
-          ) : null}
-          {pct !== null ? (
-            <span className="bg-muted mt-1.5 block h-1.5 overflow-hidden rounded-full" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-              <span className="bg-primary block h-full transition-[width]" style={{ width: `${pct}%` }} />
-            </span>
-          ) : null}
-        </span>
-        <span className="text-muted-foreground flex shrink-0 items-center gap-1 text-[13px]" aria-hidden>
-          {busy ? (
-            <Loader2 className="size-5 animate-spin" />
-          ) : state.s === "done" ? (
-            <Check className="size-5 text-emerald-600" />
-          ) : state.s === "error" ? (
-            <>
-              <RefreshCw className="size-4" />
-              <span>{DELIVER_TEXT.retry}</span>
-            </>
-          ) : state.s === "ready" ? (
-            <Download className="text-primary size-5" />
-          ) : mode === "download" ? null : (
-            <ChevronRight className="size-5" />
-          )}
-        </span>
-      </button>
+      <RowButton
+        f={f}
+        s={state.s}
+        status={rowStatusText(state, f, { now, size })}
+        busy={rowBusy(state)}
+        icon={<Download className="size-5" />}
+        readyIcon={<Download className="text-primary size-5" />}
+        idleTrail={null}
+        pct={rowPercent(state)}
+        onTap={onTap}
+      />
       {state.s === "fallback" || state.s === "sending" ? (
         <div className="flex flex-wrap gap-2 px-3 pt-1 pb-2" data-download-fallback>
           {canSendToBot ? (

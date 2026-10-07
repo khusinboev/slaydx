@@ -32,6 +32,12 @@ import {
  * Hidden for accounts without a Telegram id. The recipient is always the
  * session's Telegram account (server); the client also refuses when the Mini
  * App user is a different Telegram account.
+ *
+ * Format choice (docs/todo-2026-10-07 T4): a material with several formats
+ * opens the format sheet first (`DownloadSheet` mode `save`, the stored file
+ * on top); a tap on a row saves THAT format (`POST …/telegram/save {format}`).
+ * One-format materials save straight from the button. Each format has its
+ * own row state ({@link SendRowState}).
  */
 
 /** A short message under the header (`ResultActions` renders it). */
@@ -40,7 +46,66 @@ export type ActionToast = {
   tone: "ok" | "error" | "info";
   /** «Botni ochish» — a t.me link (inside Telegram opened with `openTelegramLink`). */
   link?: { label: string; href: string };
+  /**
+   * The sheet row of this format shows the same message: while the format
+   * sheet of that action is open the toast is not shown (it would cover the
+   * row that already says it). Never set on a success toast.
+   */
+  row?: DownloadFormatId;
 };
+
+/**
+ * One format row of the «Saqlash» / «Ulashish» sheet:
+ * idle → delivering (request in flight / picker open) ⇄ preparing (the
+ * route converts: 202, elapsed seconds) → ready (share: the next tap on the
+ * row opens the picker) → done | error («Qayta urinish», maybe «Botni ochish»).
+ */
+export type SendRowState =
+  | { s: "idle" }
+  | { s: "delivering"; text: string }
+  | { s: "preparing"; since: number }
+  | { s: "ready" }
+  | { s: "done"; text: string }
+  | { s: "error"; text: string; link?: { label: string; href: string } };
+
+export type SendRows = Partial<Record<DownloadFormatId, SendRowState>>;
+
+export const SEND_IDLE: SendRowState = { s: "idle" };
+
+/** A row that must not start again on a second tap. */
+export function sendRowBusy(s: SendRowState): boolean {
+  return s.s === "delivering" || s.s === "preparing";
+}
+
+type PutRow = (id: DownloadFormatId, st: SendRowState) => void;
+
+/**
+ * Row states of one action for one {generation, file version}: an edit (new
+ * file version) or another result clears them, and a late answer of the old
+ * scope never lands in the new rows (`bind()` at the start of each action).
+ */
+export function useSendRows(genId: string, version: number) {
+  const [rows, setRows] = useState<SendRows>({});
+  const scope = useRef(0);
+  useEffect(() => {
+    scope.current += 1;
+    setRows({});
+  }, [genId, version]);
+  const bind = useCallback((): PutRow => {
+    const at = scope.current;
+    return (id, st) => {
+      if (scope.current === at) setRows((r) => (r[id] === st ? r : { ...r, [id]: st }));
+    };
+  }, []);
+  return { rows, bind };
+}
+
+/** Row error + toast from a failed Telegram route call. */
+export function failRow(put: PutRow, format: DownloadFormatId, e: unknown): ActionToast {
+  const t = telegramFailureToast(e);
+  put(format, { s: "error", text: t.text, ...(t.link ? { link: t.link } : {}) });
+  return { ...t, row: format };
+}
 
 /** Delay before `WebApp.close()` after a successful «Saqlash» (lead decision: ~1 s, the toast is read first). */
 export const SAVE_CLOSE_DELAY_MS = 1_000;
@@ -69,17 +134,25 @@ export type SaveAction = {
   busy: boolean;
   /** Epoch ms when the server started converting (202 preparing), for the elapsed counter. */
   since: number | null;
-  run: (format?: DownloadFormatId) => Promise<void>;
+  /** Per-format row states for the «Saqlash» sheet. */
+  rows: SendRows;
+  /** Saves `format` (always sent explicitly: the server uploads exactly that file). */
+  run: (format: DownloadFormatId) => Promise<void>;
 };
 
 export function useSaveAction(args: {
   genId: string;
+  /** File version: an edit clears the rows (a «sent» row would describe the old file). */
+  version?: number;
   sessionTelegramId: string | null | undefined;
   onToast: (t: ActionToast) => void;
+  /** The file reached the bot chat (the format sheet closes). */
+  onDone?: (format: DownloadFormatId) => void;
 }): SaveAction {
-  const { genId, sessionTelegramId, onToast } = args;
+  const { genId, sessionTelegramId, onToast, onDone } = args;
   const [busy, setBusy] = useState(false);
   const [since, setSince] = useState<number | null>(null);
+  const { rows, bind } = useSendRows(genId, args.version ?? 0);
   const inFlight = useRef(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -87,33 +160,41 @@ export function useSaveAction(args: {
   }, []);
 
   const run = useCallback(
-    async (format?: DownloadFormatId) => {
+    async (format: DownloadFormatId) => {
       if (inFlight.current) return;
+      const put = bind();
       if (miniAppMismatch(sessionTelegramId)) {
-        onToast({ text: DELIVER_TEXT.mismatch, tone: "error" });
+        put(format, { s: "error", text: DELIVER_TEXT.mismatch });
+        onToast({ text: DELIVER_TEXT.mismatch, tone: "error", row: format });
         return;
       }
       inFlight.current = true;
       setBusy(true);
+      put(format, { s: "delivering", text: DELIVER_TEXT.sending });
       const started = Date.now();
       const inTelegram = isInTelegramWebApp();
       const attempt = async (retried: boolean): Promise<void> => {
         try {
-          const r = await telegramAction("save", genId, format, () => setSince((s) => s ?? started));
+          const r = await telegramAction("save", genId, format, () => {
+            setSince((s) => s ?? started);
+            put(format, { s: "preparing", since: started });
+          });
           const cap = saveCapability({ inTelegram, hasTelegramId: true, pending: getNavSnapshot().guardPending });
           const href = botUrlOf(null, r.botUrl);
+          put(format, { s: "done", text: DELIVER_TEXT.sentToBot });
           onToast({
             text: DELIVER_TEXT.sentToBot,
             tone: "ok",
             ...(cap === "web-toast" && href ? { link: { label: DELIVER_TEXT.openBot, href } } : {}),
           });
+          onDone?.(format);
           if (cap === "tg-close") closeTimer.current = setTimeout(() => closeApp(), SAVE_CLOSE_DELAY_MS);
         } catch (e) {
           // The bot may not write to this user yet: ask once, then try again once.
           if (apiErrorCode(e) === "bot_unreachable" && inTelegram && !retried && (await requestWriteAccess())) {
             return attempt(true);
           }
-          onToast(telegramFailureToast(e));
+          onToast(failRow(put, format, e));
         }
       };
       try {
@@ -124,10 +205,10 @@ export function useSaveAction(args: {
         setSince(null);
       }
     },
-    [genId, sessionTelegramId, onToast],
+    [genId, sessionTelegramId, onToast, onDone, bind],
   );
 
-  return { busy, since, run };
+  return { busy, since, rows, run };
 }
 
 /**
@@ -153,15 +234,23 @@ export function ActionLabel({ verb, since, now }: { verb: string; since: number 
   );
 }
 
-/** «Saqlash» button. `visible` = the session account has a Telegram id (`saveCapability` ≠ hidden). */
+/**
+ * «Saqlash» button. `visible` = the session account has a Telegram id (`saveCapability` ≠ hidden).
+ * `onPress` saves the only format or opens the format sheet (`picker`).
+ */
 export function SaveToBotButton({
   action,
   visible,
+  onPress,
+  picker = false,
   iconOnly = false,
   className,
 }: {
   action: SaveAction;
   visible: boolean;
+  onPress: () => void;
+  /** The press opens the format sheet (the material has several formats). */
+  picker?: boolean;
   iconOnly?: boolean;
   className?: string;
 }) {
@@ -177,11 +266,12 @@ export function SaveToBotButton({
       type="button"
       data-save-to-bot
       aria-busy={action.busy || undefined}
+      aria-haspopup={picker ? "dialog" : undefined}
       disabled={action.busy}
       title="Telegram'ga saqlash — fayl bot chatiga yuboriladi"
       aria-label={iconOnly ? "Telegram'ga saqlash" : undefined}
       onPointerDown={() => markGesture()}
-      onClick={() => void action.run()}
+      onClick={onPress}
       className={cn(
         "bg-card hover:bg-muted inline-flex h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-lg border px-2 text-[13px] font-medium disabled:opacity-70 md:h-9 md:gap-1.5 md:px-3 md:text-sm md:pointer-coarse:h-11",
         className,
