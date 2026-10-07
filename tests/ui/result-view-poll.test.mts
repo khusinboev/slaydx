@@ -6,6 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { ResultView, resultSubtitle } from "../../components/files/ResultView.tsx";
 import { useAppStore } from "../../lib/store.ts";
+import { groupDigits } from "../../lib/format.ts";
 import { sampleArticleDoc } from "../../lib/generation/article/samples.ts";
 import type { AcademicDoc, DocMeta } from "../../lib/generation/types.ts";
 import type { ArticleReview } from "../../lib/generation/article/types.ts";
@@ -249,12 +250,12 @@ test("FAILED: no dead end — «Yangi yaratish» opens the same tool's form, «O
   assert.ok(!document.querySelector("[data-download-button]"), "no download on a failed result");
   // UX review m2: no empty «· ·» part, and the state says it failed.
   const sub = document.querySelector("[data-result-subtitle]")!.textContent ?? "";
-  assert.equal(sub, `Referat · Xato · ${(3000).toLocaleString("uz-UZ")} tanga`);
+  assert.equal(sub, `Referat · Xato · ${groupDigits(3000)} tanga`);
   assert.match(document.body.textContent ?? "", /Xizmat vaqtincha javob bermadi/);
 });
 
 test("resultSubtitle: empty parts dropped (no «· ·»), FAILED → «Xato», REVOKED → «Bekor qilindi»", () => {
-  const p = `${(3000).toLocaleString("uz-UZ")} tanga`;
+  const p = `${groupDigits(3000)} tanga`;
   assert.equal(resultSubtitle({ status: "QUEUED", step: "", price: 3000 }, "Slayd", false, false), `Slayd · ${p}`);
   assert.equal(resultSubtitle({ status: "QUEUED", step: "  ", price: 3000 }, undefined, false, false), p);
   assert.equal(resultSubtitle({ status: "FAILED", step: "", price: 3000 }, "Kurs ishi", false, false), `Kurs ishi · Xato · ${p}`);

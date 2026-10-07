@@ -4,14 +4,16 @@ import assert from "node:assert/strict";
 import { createElement as h } from "react";
 import { cleanup, render } from "@testing-library/react";
 import { ToolChrome } from "../../components/forms/ToolChrome.tsx";
-import { TopBar } from "../../components/shell/TopBar.tsx";
+import { BalanceChip } from "../../components/shell/BalanceChip.tsx";
 import { useAppStore } from "../../lib/store.ts";
 import type * as api from "../../lib/api-client.ts";
 
 /**
  * UX-03 — «Balans yetarli emas» o'lik matn emas: yonida to'ldirish havolasi;
  * balans narxdan kam bo'lsa yuborishdan oldin ham aytiladi; balans ilova
- * sarlavhasida har sahifada ko'rinadi.
+ * sarlavhasida ko'rinadi. Redesign F0: TopBar olib tashlandi — balans chipi
+ * (`BalanceChip`, Bosh sarlavhasi) Hamyonga olib boradi, Hamyon esa pastki
+ * panelda har sahifada (`tests/ui/tab-bar.test.mts`).
  */
 
 afterEach(() => cleanup());
@@ -29,12 +31,13 @@ function chrome(props: { price?: number; error?: string | null }) {
 
 const topUp = () => document.querySelector<HTMLAnchorElement>("[data-topup]");
 
-test("UX-03: 402 xatosi yonida «Balansni to'ldirish» → /uz/purchase", () => {
+// Redesign W5: the link goes to the Hamyon tab itself (was `/uz/purchase`, now only a redirect alias).
+test("UX-03: 402 xatosi yonida «Balansni to'ldirish» → /uz/wallet", () => {
   useAppStore.setState({ loggedIn: true, user: user(10_000) }); // store balansi eskirgan (hali ko'p) — server matni baribir tanilsin
   chrome({ price: 4000, error: "Balans yetarli emas. Kerak: 4 000 tanga, mavjud: 1 200." });
   const a = topUp();
   assert.ok(a, "to'ldirish havolasi bor");
-  assert.equal(a.getAttribute("href"), "/uz/purchase");
+  assert.equal(a.getAttribute("href"), "/uz/wallet");
   assert.ok(a.closest("[role=alert]"), "havola xato matni yonida");
 });
 
@@ -54,15 +57,16 @@ test("UX-03: balans yetarli va boshqa xato — havola yo'q (bezak emas)", () => 
   assert.ok(!document.querySelector("[data-balance-short]"));
 });
 
-test("UX-03: TopBar — kirgan foydalanuvchi balansi har sahifada, bosilsa to'ldirish sahifasi", () => {
+test("UX-03: BalanceChip — kirgan foydalanuvchi balansi sarlavhada, bosilsa Hamyon (to'ldirish)", () => {
   useAppStore.setState({ loggedIn: true, user: user(4800) });
-  render(h(TopBar, { onMenu: () => {} }));
+  render(h(BalanceChip));
   const chip = document.querySelector<HTMLAnchorElement>("[data-balance]");
   assert.ok(chip);
-  assert.equal(chip.getAttribute("href"), "/uz/purchase");
+  assert.equal(chip.getAttribute("href"), "/uz/wallet");
   assert.match(chip.textContent ?? "", /5[\s .,]?000/, "points + quota + balance");
+  assert.match(chip.getAttribute("aria-label") ?? "", /^Balans: 5\D?000 tanga\. Hamyon$/);
   cleanup();
   useAppStore.setState({ loggedIn: false, user: null });
-  render(h(TopBar, { onMenu: () => {} }));
+  render(h(BalanceChip));
   assert.ok(!document.querySelector("[data-balance]"), "kirmagan — balans yo'q");
 });

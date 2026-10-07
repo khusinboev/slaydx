@@ -5,14 +5,17 @@ import { createElement as h } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
-import { PurchasePage } from "../../components/purchase/PurchasePage.tsx";
+import { WalletPage } from "../../components/wallet/WalletPage.tsx";
 import { PayDialog } from "../../components/overlays/PayDialog.tsx";
 import { SearchDialog } from "../../components/overlays/SearchDialog.tsx";
 import { ProfilePage } from "../../components/profile/ProfilePage.tsx";
-import { Sidebar } from "../../components/shell/Sidebar.tsx";
-import { TopBar } from "../../components/shell/TopBar.tsx";
+// Redesign F0: the Sidebar / TopBar are gone; their successors carry the same promises.
+import { BalanceChip } from "../../components/shell/BalanceChip.tsx";
+import { TabBar } from "../../components/shell/TabBar.tsx";
+import { CreateSheet } from "../../components/shell/CreateSheet.tsx";
 import { creditTotal, useAppStore, writerProfile } from "../../lib/store.ts";
 import { useUi } from "../../lib/ui.ts";
+import { groupDigits } from "../../lib/format.ts";
 import type * as api from "../../lib/api-client.ts";
 
 /**
@@ -84,39 +87,42 @@ const withRouter = (node: ReturnType<typeof h>) =>
     h(PathnameContext.Provider, { value: "/uz" }, h(SearchParamsContext.Provider, { value: new URLSearchParams("") }, node)),
   );
 
-function mountPurchase() {
-  render(withRouter(h("div", null, h(PurchasePage), h(PayDialog))));
+// Redesign: `/uz/purchase` redirects to Hamyon (`/uz/wallet`); the old PurchasePage is gone, so the
+// top-up promises below are now checked on `WalletPage` (its «To'ldirish» opens the same PayDialog).
+function mountWallet() {
+  render(withRouter(h("div", null, h(WalletPage), h(PayDialog))));
 }
 
-test("purchase: Pro/Bepul taklifi yo'q, bitta «Balansni to'ldirish» kartasi", async () => {
+test("Hamyon: Pro/Bepul taklifi yo'q, balans va bitta «To'ldirish» tugmasi; to'lovlar tarixi saqlangan", async () => {
   signIn();
   stubOrders();
-  mountPurchase();
+  mountWallet();
   await act(async () => {
     await new Promise((r) => setImmediate(r));
   });
   const text = document.body.textContent ?? "";
   assert.doesNotMatch(text, FORBIDDEN);
-  assert.ok(screen.getByRole("heading", { level: 1, name: /Balansni to.ldirish/ }));
-  assert.equal(document.querySelectorAll("article").length, 1, "yagona karta");
-  assert.ok(screen.getByRole("button", { name: /Balansni to.ldirish/ }));
-  assert.match(document.querySelector("[data-testid=purchase-total]")?.textContent ?? "", /15[\s .,]?000 tanga/);
+  assert.ok(document.querySelector('[data-wallet-hero="ready"]'), "balans kartasi");
+  assert.equal(document.querySelectorAll("[data-wallet-topup]").length, 1, "yagona to'ldirish tugmasi");
+  assert.ok(screen.getByRole("button", { name: /To.ldirish/ }));
+  assert.match(document.querySelector("[data-wallet-total]")?.textContent ?? "", /15[\s .,  ]?000 tanga/);
   // Buyurtma tarixi saqlangan (eski «pro» buyurtma ham ko'rinadi).
-  assert.ok(screen.getByText(/Oxirgi to.lovlar/));
+  assert.ok(screen.getByRole("heading", { name: /To.lovlar/ }));
+  assert.equal(document.querySelectorAll("[data-wallet-orders] li").length, 2, "ikkala buyurtma, «pro» ham");
 });
 
-test("purchase: to'lov faqat purpose=topup buyurtma yaratadi (tanlangan summa bilan)", async () => {
+test("Hamyon: to'lov faqat purpose=topup buyurtma yaratadi (tanlangan summa bilan)", async () => {
   signIn();
   const captured = stubOrders();
-  mountPurchase();
+  mountWallet();
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: /Balansni to.ldirish/ }));
+    fireEvent.click(screen.getByRole("button", { name: /To.ldirish/ }));
   });
   const dialog = screen.getByRole("dialog");
   assert.doesNotMatch(dialog.textContent ?? "", FORBIDDEN);
   assert.ok(dialog.querySelector("fieldset"), "summa tanlash har doim ko'rinadi");
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "50k" }));
+    fireEvent.click(screen.getByRole("button", { name: `${groupDigits(50_000)} so'm` })); // redesign W5: was «50k»
   });
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Click" }));
@@ -126,35 +132,43 @@ test("purchase: to'lov faqat purpose=topup buyurtma yaratadi (tanlangan summa bi
   assert.deepEqual(captured[0].body, { provider: "click", amount: 50_000, purpose: "topup" });
 });
 
-test("purchase: kirmagan foydalanuvchi — tugma kirish oynasini ochadi, Pro yo'q", async () => {
+test("Hamyon: kirmagan foydalanuvchi — «Kirish» kirish oynasini ochadi (qaytish /uz/wallet), Pro yo'q", async () => {
   useAppStore.setState({ loggedIn: false, sessionChecked: true, user: null });
   stubOrders();
-  mountPurchase();
+  mountWallet();
   assert.doesNotMatch(document.body.textContent ?? "", FORBIDDEN);
+  assert.ok(!document.querySelector("[data-wallet-topup]"), "to'ldirish faqat kirgandan keyin");
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: /Balansni to.ldirish/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Kirish/ }));
   });
   assert.equal(useUi.getState().overlay, "login");
+  assert.equal(useUi.getState().returnTo, "/uz/wallet");
 });
 
-test("profil: PRO belgisi, muddat va kvota yo'q; Ball va Balans bor; havola «Balansni to'ldirish»", () => {
+// Redesign W4: Ball/Balans and the top-up link moved to Hamyon (`/uz/wallet`, W3); the profile keeps one
+// «Hamyon» row with the total and the link (was: «Ball» + «Balans» stats and a link to /uz/purchase).
+test("profil: PRO belgisi, muddat va kvota yo'q; «Hamyon» qatori jami tangani ko'rsatadi va /uz/wallet ga olib boradi", () => {
   signIn(userWith(0));
   render(withRouter(h(ProfilePage)));
   assert.doesNotMatch(document.body.textContent ?? "", FORBIDDEN);
-  assert.ok(screen.getByText("Ball"));
-  assert.ok(screen.getByText("Balans"));
-  const link = screen.getByRole("link", { name: /Balansni to.ldirish/ });
-  assert.equal(link.getAttribute("href"), "/uz/purchase");
+  const wallet = document.querySelector<HTMLAnchorElement>("a[data-profile-row='hamyon']");
+  assert.ok(wallet);
+  assert.equal(wallet.getAttribute("href"), "/uz/wallet");
+  assert.match(wallet.textContent ?? "", /Hamyon/);
+  assert.match(wallet.textContent ?? "", /15[\s .,]?000 tanga/);
   assert.ok(!/NaN/.test(document.body.textContent ?? ""));
 });
 
-test("sidebar: foydalanuvchi nomi yonida PRO belgisi yo'q", () => {
+test("balans chipi, pastki panel va «+» oynasi (sidebar o'rnida): PRO belgisi yo'q, balans tanga bilan", () => {
   signIn(userWith(0));
-  render(withRouter(h(Sidebar, {})));
-  const profile = document.querySelector<HTMLAnchorElement>("a[href='/uz/profile']");
-  assert.ok(profile);
-  assert.doesNotMatch(profile.textContent ?? "", /PRO/i);
-  assert.match(profile.textContent ?? "", /15[\s .,]?000 tanga/);
+  useUi.setState({ overlay: "create" });
+  render(withRouter(h("div", null, h(BalanceChip), h(TabBar, { shown: true, createOpen: true }), h(CreateSheet))));
+  assert.doesNotMatch(document.body.textContent ?? "", FORBIDDEN);
+  const chip = document.querySelector<HTMLAnchorElement>("[data-balance]");
+  assert.ok(chip);
+  assert.match(chip.textContent ?? "", /15[\s\u00a0.,]?000/);
+  assert.equal(chip.getAttribute("href"), "/uz/wallet");
+  assert.ok(document.querySelector('[data-tab="hamyon"]'), "Hamyon har sahifada");
 });
 
 test("qidiruv oynasi: «Tariflar» o'rniga «Balansni to'ldirish» → /uz/purchase", () => {
@@ -171,7 +185,8 @@ test("sessiyada plan/premium/quota bo'lmasa ham hech joyda NaN yo'q", () => {
   const profileCopy = writerProfile(useAppStore.getState().user);
   assert.ok(!("plan" in profileCopy) && !("premium" in profileCopy));
   assert.equal(profileCopy.quota, 0);
-  const nodes = [h(TopBar, { onMenu: () => {} }), h(Sidebar, {}), h(ProfilePage)];
+  useUi.setState({ overlay: "create" });
+  const nodes = [h(BalanceChip), h(TabBar, { shown: true, createOpen: true }), h(CreateSheet), h(ProfilePage)];
   for (const node of nodes) {
     cleanup();
     render(withRouter(node));

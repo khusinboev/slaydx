@@ -241,7 +241,7 @@ export function MediaComposer({ tool }: { tool: ToolConfig }) {
                   onChange={(v) => set("mode", v as AudioMode)}
                 />
               </Field>
-              <p className="text-muted-foreground mt-1 text-[11px]">{tool.modes?.find((m) => m.id === ui.mode)?.hint}</p>
+              <p className="text-muted-foreground mt-1 text-[13px]">{tool.modes?.find((m) => m.id === ui.mode)?.hint}</p>
             </Row>
             {ui.mode === "topic" ? (
               <TopicRow value={ui.topic} onChange={(v) => set("topic", v)} placeholder={tool.topicPlaceholder} limit={AUDIO_LIMITS.topicChars} />
@@ -294,7 +294,7 @@ export function MediaComposer({ tool }: { tool: ToolConfig }) {
               <Field id="occasion">
                 <SelectField ariaLabel="Sabab" options={audioTypesOf("greeting").map((t) => ({ value: t.id, label: t.label.uz }))} value={ui.occasion} onChange={(v) => set("occasion", v)} />
               </Field>
-              <p className="text-muted-foreground mt-1 text-[11px]">{occasionType.hint}</p>
+              <p className="text-muted-foreground mt-1 text-[13px]">{occasionType.hint}</p>
             </Row>
           </>
         )}
@@ -342,7 +342,7 @@ export function MediaComposer({ tool }: { tool: ToolConfig }) {
           <ClearFormButton armed={clearConfirm.armed} onClick={clearConfirm.trigger} />
         </div>
       </SettingsDetails>
-      {fileBusy ? <p className="text-muted-foreground -mt-2 mb-4 text-[11px]">Fayl o‘qilmoqda…</p> : null}
+      {fileBusy ? <p className="text-muted-foreground -mt-2 mb-4 text-[13px]">Fayl o‘qilmoqda…</p> : null}
     </ToolChrome>
   );
 }

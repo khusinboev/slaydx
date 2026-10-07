@@ -50,11 +50,11 @@ export function MapMain({ ui, setUi, onTypeChange }: KindProps & { onTypeChange:
           <Field id="weeklyHours" className="inline-block">
             <NumberInput ariaLabel="Haftalik soat" value={ui.weeklyHours} onChange={onWeekly} min={1} max={TEACHER_LIMITS.weeklyHoursMax} />
           </Field>
-          <span className="text-muted-foreground text-[12px]">hafta ·</span>
+          <span className="text-muted-foreground text-[13.5px]">hafta ·</span>
           <Field id="totalHours" className="inline-block">
             <NumberInput ariaLabel="Yillik soat" value={ui.totalHours} onChange={onTotal} min={1} max={TEACHER_LIMITS.totalHoursMax} />
           </Field>
-          <span className="text-muted-foreground text-[12px]">yil</span>
+          <span className="text-muted-foreground text-[13.5px]">yil</span>
         </span>
       </Row>
     </>

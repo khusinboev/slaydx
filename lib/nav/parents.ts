@@ -40,7 +40,10 @@ const ADMIN_SECTIONS = [
 ] as const;
 
 /** `/uz/<x>` segments that are their own pages, not tool slugs. */
-const UZ_RESERVED = ["create", "purchase", "profile", "login", "files", "admin"] as const;
+const UZ_RESERVED = ["create", "purchase", "wallet", "profile", "login", "files", "admin"] as const;
+
+/** `/uz/profile/<step>` (docs/redesign/PLAN.md; kept in sync with `lib/nav/tabs.ts PROFILE_STEPS` by a test). */
+const PROFILE_STEP_RE = "(?:shaxsiy|oqish|ish|korinish|xavfsizlik)";
 
 const SEG = "[^/]+";
 
@@ -53,10 +56,15 @@ export const ROUTE_RULES: readonly RouteRule[] = [
   { route: "/admin/login", match: /^\/admin\/login$/, parent: null },
   { route: "/admin/enroll", match: /^\/admin\/enroll$/, parent: null },
   { route: "/uz/create", match: /^\/uz\/create$/, parent: "/uz" },
+  // Tabs (bottom bar): `/uz` stays the only root, so back from any tab returns home.
+  { route: "/uz/files", match: /^\/uz\/files$/, parent: "/uz" },
+  { route: "/uz/wallet", match: /^\/uz\/wallet$/, parent: "/uz" },
+  // Legacy alias: the page is a server redirect to `/uz/wallet` (query kept).
   { route: "/uz/purchase", match: /^\/uz\/purchase$/, parent: "/uz" },
   { route: "/uz/profile", match: /^\/uz\/profile$/, parent: "/uz" },
+  { route: "/uz/profile/[step]", match: new RegExp(`^/uz/profile/${PROFILE_STEP_RE}$`), parent: "/uz/profile" },
   { route: "/uz/admin", match: /^\/uz\/admin$/, parent: "/uz" },
-  { route: "/uz/files/[id]", match: new RegExp(`^/uz/files/${SEG}$`), parent: "/uz" },
+  { route: "/uz/files/[id]", match: new RegExp(`^/uz/files/${SEG}$`), parent: "/uz/files" },
   {
     route: "/uz/login",
     match: /^\/uz\/login$/,
@@ -125,8 +133,8 @@ export function isAdminListPath(pathname: string): boolean {
   return ADMIN_LISTS.some((l) => p === `/admin/${l}`);
 }
 
-/** Home («Mening fayllarim»): its view (`?filter&sort&desc`) is remembered for `/uz/files/[id]` «←». */
-export const HOME_LIST = "/uz";
+/** Ishlarim («Mening fayllarim», `/uz/files`): its view (`?filter&sort&desc`) is remembered for `/uz/files/[id]` «←». */
+export const HOME_LIST = "/uz/files";
 /** Query keys of the home list view; anything else (`returnTo`, …) is not remembered. */
 export const HOME_VIEW_KEYS = ["filter", "sort", "desc"] as const;
 
@@ -135,7 +143,7 @@ export function isListPath(pathname: string): boolean {
   return isAdminListPath(pathname) || normalize(pathname) === HOME_LIST;
 }
 
-/** The list page a detail page goes back to (`/admin/users/1` → `/admin/users`, `/uz/files/x` → `/uz`), else `null`. */
+/** The list page a detail page goes back to (`/admin/users/1` → `/admin/users`, `/uz/files/x` → `/uz/files`), else `null`. */
 export function listParentOf(pathname: string): string | null {
   if (/^\/uz\/files\/[^/]+$/.test(normalize(pathname))) return HOME_LIST;
   return adminListOf(pathname);

@@ -163,8 +163,8 @@ export function CustomTemplateCard({
       )}
     >
       <div className="flex items-baseline justify-between gap-2 px-1 pb-1.5">
-        <span className="truncate text-[13px] font-semibold">O‘z shablonim</span>
-        <span className="bg-muted text-muted-foreground rounded-md px-1.5 py-0.5 text-[10px]">Pro · ustamasiz</span>
+        <span className="truncate text-[14.5px] font-semibold">O‘z shablonim</span>
+        <span className="bg-muted text-muted-foreground rounded-md px-1.5 py-0.5 text-[12.5px]">Pro · ustamasiz</span>
       </div>
 
       {current ? (
@@ -174,7 +174,7 @@ export function CustomTemplateCard({
       ) : (
         <label
           className={cn(
-            "border-input bg-background/60 hover:bg-muted/40 flex cursor-pointer flex-col items-center justify-center rounded-md border border-dashed px-3 text-center text-[12.5px]",
+            "border-input bg-background/60 hover:bg-muted/40 flex cursor-pointer flex-col items-center justify-center rounded-md border border-dashed px-3 text-center text-[14.5px]",
             busy && "cursor-progress opacity-70",
           )}
           style={{ aspectRatio: "16 / 9" }}
@@ -183,12 +183,12 @@ export function CustomTemplateCard({
           {busy ? (
             <>
               <span className="font-medium">Tahlil qilinmoqda…</span>
-              <span className="text-muted-foreground mt-1 text-[11px]">Maketlar o‘qilib, fonlar chizilmoqda (20–40 s)</span>
+              <span className="text-muted-foreground mt-1 text-[13px]">Maketlar o‘qilib, fonlar chizilmoqda (20–40 s)</span>
             </>
           ) : (
             <>
               <span className="font-medium">PPTX namunani tanlang</span>
-              <span className="text-muted-foreground mt-1 text-[11px]">Taqdimot aynan shu faylning dizaynida chiqadi · 20 MB gacha</span>
+              <span className="text-muted-foreground mt-1 text-[13px]">Taqdimot aynan shu faylning dizaynida chiqadi · 20 MB gacha</span>
             </>
           )}
           <input
@@ -207,7 +207,7 @@ export function CustomTemplateCard({
       )}
 
       {current ? (
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11.5px]" onClick={(e) => e.stopPropagation()}>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[14px]" onClick={(e) => e.stopPropagation()}>
           <span className="text-muted-foreground min-w-0 flex-1 truncate" title={current.name}>
             {current.name}
           </span>
@@ -240,7 +240,7 @@ export function CustomTemplateCard({
       ) : list.length ? (
         <div className="mt-1.5 flex flex-wrap gap-1 px-1" onClick={(e) => e.stopPropagation()}>
           {list.slice(0, 4).map((t) => (
-            <span key={t.assetId} className="bg-muted inline-flex max-w-full items-center gap-1 rounded-full pr-1 text-[11px]">
+            <span key={t.assetId} className="bg-muted inline-flex max-w-full items-center gap-1 rounded-full pr-1 text-[13.5px]">
               <button
                 type="button"
                 className="pointer-coarse:min-h-11 max-w-[9rem] truncate py-0.5 pl-2"
@@ -260,8 +260,8 @@ export function CustomTemplateCard({
         </div>
       ) : null}
 
-      <p className="text-muted-foreground px-1 pt-1.5 text-[11px]">{TEMPLATE_WAIT_NOTE}</p>
-      {error ? <p className="text-destructive px-1 pt-1 text-[11px]">{error}</p> : null}
+      <p className="text-muted-foreground px-1 pt-1.5 text-[13px]">{TEMPLATE_WAIT_NOTE}</p>
+      {error ? <p className="text-destructive px-1 pt-1 text-[13px]">{error}</p> : null}
     </div>
   );
 }

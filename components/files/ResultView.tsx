@@ -38,6 +38,13 @@ import { asLiveView } from "../viewers/live-view";
 import { liveDocOf, type LiveDeck } from "@/lib/generation/slide-progress";
 import { viewerKind } from "@/lib/viewers/kind";
 import type { Generation } from "@/lib/types";
+import { groupDigits } from "@/lib/format";
+
+/**
+ * Where a deleted document's page goes (redesign F0 hand-off): the «Ishlarim»
+ * tab — the result page's parent in `lib/nav/parents.ts` — not the Bosh hub.
+ */
+export const RESULT_LIST_PATH = "/uz/files";
 
 /**
  * Bitta hujjat sahifasi.
@@ -153,7 +160,7 @@ export function ResultView({ id }: { id: string }) {
       drop(id);
       void useAppStore.getState().refreshSession();
       // REPLACE: the deleted document's page must not stay in history (back would land on a 404).
-      router.replace("/uz");
+      router.replace(RESULT_LIST_PATH);
     } catch (e) {
       setError(e instanceof Error ? e.message : "O'chirilmadi");
       setBusy(false);
@@ -489,18 +496,21 @@ export function ResultView({ id }: { id: string }) {
     <>
       {/*
        * «←» = in-app back (docs/nav/PLAN.md): back to the page we came from
-       * (the filled form after generation), or the parent `/uz`
-       * (`parentOf`) in a fresh tab / deep link — replaced, so it never leaves
+       * (the filled form after generation), or the parent `/uz/files`
+       * (`parentOf`, «Ishlarim») in a fresh tab / deep link — replaced, so it never leaves
        * the site and never ping-pongs.
        */}
-      <BackLink className="text-muted-foreground hover:bg-muted order-1 -ml-1.5 flex size-11 shrink-0 items-center justify-center rounded-full md:size-9 md:pointer-coarse:size-11">
-        <ArrowLeft className="size-5" />
+      <BackLink
+        data-result-back
+        className="text-foreground hover:bg-accent focus-visible:ring-ring order-1 -ml-1.5 flex size-11 shrink-0 items-center justify-center rounded-[14px] outline-none transition-colors focus-visible:ring-2"
+      >
+        <ArrowLeft className="size-5" aria-hidden />
       </BackLink>
       <div className="order-2 min-w-0 flex-1">
-        <h1 className="line-clamp-2 text-[15px] leading-snug font-semibold break-words group-data-[compact=1]/hdr:line-clamp-1 md:line-clamp-1" data-result-title>
+        <h1 className="line-clamp-2 text-[16.5px] leading-snug font-semibold tracking-[-0.01em] break-words group-data-[compact=1]/hdr:line-clamp-1 md:line-clamp-1 md:text-[17px]" data-result-title>
           {gen.topic}
         </h1>
-        <p className="text-muted-foreground truncate text-xs group-data-[compact=1]/hdr:hidden" data-result-subtitle>
+        <p className="text-muted-foreground truncate text-[13px] leading-snug group-data-[compact=1]/hdr:hidden" data-result-subtitle>
           {resultSubtitle(gen, tool?.title, completed, expired)}
         </p>
       </div>
@@ -676,7 +686,7 @@ export function resultSubtitle(
       : gen.status === "REVOKED"
         ? "Bekor qilindi"
         : gen.step;
-  return [toolTitle, state, `${gen.price.toLocaleString("uz-UZ")} tanga`].filter((p) => p && p.trim()).join(" · ");
+  return [toolTitle, state, `${groupDigits(gen.price)} tanga`].filter((p) => p && p.trim()).join(" · ");
 }
 
 /** Hisobot xulosasi → chip (`ResultLayout` sarlavhasida). */
@@ -754,7 +764,7 @@ export function RunningPanel({ gen }: { gen: api.GenerationDetail }) {
           <div className="bg-primary h-full transition-all" style={{ width: `${gen.progress}%` }} />
         </div>
         <p className="text-muted-foreground mt-4 text-xs">
-          Sahifani yopsangiz ham ish davom etadi — keyin «Mening fayllarim» dan ochasiz.
+          Sahifani yopsangiz ham ish davom etadi — keyin «Ishlarim» dan ochasiz.
         </p>
       </div>
     </div>

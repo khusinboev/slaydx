@@ -33,10 +33,10 @@ export function Card({
   className?: string;
 }) {
   return (
-    <section className={cn("bg-card mb-3 rounded-2xl border p-4", className)}>
-      <header className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="text-muted-foreground pointer-coarse:text-xs text-[11.5px] font-semibold tracking-wide uppercase">{title}</h2>
-        {aside ? <div className="text-[13px]">{aside}</div> : null}
+    <section className={cn("bg-card mb-3 rounded-[20px] border p-4 shadow-[var(--shadow-card)]", className)}>
+      <header className="mb-2.5 flex items-center justify-between gap-2">
+        <h2 className="text-muted-foreground text-[13px] font-semibold tracking-[0.06em] uppercase">{title}</h2>
+        {aside ? <div className="text-[13.5px]">{aside}</div> : null}
       </header>
       {children}
     </section>
@@ -65,11 +65,11 @@ export function Row({
   const hintId = useId();
   const touchHint = coarse && Boolean(hint);
   return (
-    <div className={cn("grid grid-cols-1 items-center gap-1.5 py-1.5 sm:grid-cols-[7.5rem_1fr] sm:gap-3", wide && "sm:col-span-2")}>
-      <span className="flex items-center gap-1 text-[13px] font-medium">
+    <div className={cn("grid grid-cols-1 items-center gap-1.5 py-2 sm:grid-cols-[8.5rem_1fr] sm:gap-3", wide && "sm:col-span-2")}>
+      <span className="flex items-center gap-1 text-[14.5px] leading-snug font-medium">
         {label}
         {hint && !coarse ? (
-          <span title={hint} aria-label={hint} className="text-muted-foreground cursor-help text-[11px] leading-none">
+          <span title={hint} aria-label={hint} className="text-muted-foreground cursor-help text-[13px] leading-none">
             ⓘ
           </span>
         ) : null}
@@ -81,7 +81,7 @@ export function Row({
             aria-label={`${label}: izoh`}
             onClick={() => setOpen((v) => !v)}
             className={cn(
-              "text-muted-foreground -m-3 grid size-11 shrink-0 place-items-center text-[14px] leading-none",
+              "text-muted-foreground -m-3 grid size-11 shrink-0 place-items-center text-[15px] leading-none",
               open && "text-foreground",
             )}
           >
@@ -91,7 +91,7 @@ export function Row({
       </span>
       <div className="min-w-0">{children}</div>
       {touchHint && open ? (
-        <p id={hintId} data-hint className="bg-muted/60 text-muted-foreground rounded-lg px-3 py-2 text-xs leading-snug sm:col-span-2">
+        <p id={hintId} data-hint className="bg-muted/60 text-muted-foreground rounded-[12px] px-3 py-2 text-[13.5px] leading-snug sm:col-span-2">
           {hint}
         </p>
       ) : null}
@@ -118,7 +118,7 @@ export function Segmented({
   ariaLabel?: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={ariaLabel} className="bg-muted/60 inline-flex max-w-full flex-wrap gap-0.5 rounded-lg p-0.5">
+    <div role="radiogroup" aria-label={ariaLabel} className="bg-muted/70 inline-flex max-w-full flex-wrap gap-0.5 rounded-[12px] p-1">
       {options.map((o) => {
         const on = value === o.value;
         const disabled = o.disabled === true;
@@ -132,11 +132,11 @@ export function Segmented({
             disabled={disabled}
             onClick={() => !disabled && onChange(o.value)}
             className={cn(
-              "pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:px-3 pointer-coarse:text-[13px] rounded-md px-2.5 py-1 text-xs whitespace-nowrap transition-colors",
+              "pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:px-3.5 pointer-coarse:text-[14.5px] focus-visible:ring-ring rounded-[9px] px-3 py-1.5 text-[14px] whitespace-nowrap outline-none transition-colors focus-visible:ring-2",
               disabled
                 ? "text-muted-foreground/40 cursor-not-allowed"
                 : on
-                  ? "bg-card text-foreground shadow-sm font-medium"
+                  ? "bg-card text-foreground font-semibold shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
             )}
           >
@@ -165,7 +165,7 @@ export function SelectField({
       aria-label={ariaLabel}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="border-input bg-card focus:ring-ring pointer-coarse:h-11 h-8 w-full max-w-xs rounded-lg border px-2 text-[13px] outline-none focus:ring-2"
+      className="border-input bg-card focus:ring-ring pointer-coarse:h-11 h-10 w-full max-w-xs rounded-[12px] border px-3 text-[16px] outline-none focus:ring-2"
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
@@ -193,7 +193,7 @@ export function Switch({
       aria-checked={checked}
       aria-label={ariaLabel}
       onClick={() => onChange(!checked)}
-      className="pointer-coarse:h-11 pointer-coarse:w-14 pointer-coarse:justify-center inline-flex shrink-0 items-center"
+      className="pointer-coarse:h-11 pointer-coarse:w-14 pointer-coarse:justify-center focus-visible:ring-ring inline-flex shrink-0 items-center rounded-full outline-none focus-visible:ring-2"
     >
       <span
         className={cn(
@@ -215,9 +215,9 @@ export function Switch({
 /** Yig'iq «Sozlamalar» sarlavhasidagi joriy tanlovlar. */
 export function SummaryChips({ items }: { items: string[] }) {
   return (
-    <span className="text-muted-foreground pointer-coarse:text-xs flex min-w-0 flex-wrap gap-1 text-[11px] font-normal" data-summary-chips>
+    <span className="text-muted-foreground pointer-coarse:text-[13px] flex min-w-0 flex-wrap gap-1 text-[12.5px] font-normal" data-summary-chips>
       {items.map((t, i) => (
-        <span key={`${t}-${i}`} className="bg-muted rounded-md px-1.5 py-0.5 whitespace-nowrap">
+        <span key={`${t}-${i}`} className="bg-muted rounded-[8px] px-2 py-0.5 whitespace-nowrap">
           {t}
         </span>
       ))}

@@ -79,7 +79,7 @@ const router: AppRouterInstance = { back() {}, forward() {}, refresh() {}, push(
 const json = (status: number, data: unknown) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 
-test("HomeFiles: kartadagi o'chirishni qo'sh bosish DELETE yubormaydi; ongli tasdiq yuboradi", async () => {
+test("HomeFiles: «⋯» menyusidagi o'chirish tasdig'ini qo'sh bosish DELETE yubormaydi; ongli tasdiq yuboradi", async () => {
   const deletes: string[] = [];
   (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) => {
     if (init?.method === "DELETE") {
@@ -119,17 +119,25 @@ test("HomeFiles: kartadagi o'chirishni qo'sh bosish DELETE yubormaydi; ongli tas
       h(SearchParamsContext.Provider, { value: new URLSearchParams() }, h(HomeFiles)),
     ),
   );
-  const del = () =>
-    document.querySelector<HTMLButtonElement>(`[aria-label^="Hujjat d1 — o'chirish"]`)!;
+  /*
+   * Redesign W2: delete moved from an inline trash button into the card's «⋯»
+   * menu (`FileMenu`) on every screen size. Same rule: the click that ARMS
+   * («O'chirish» in the list) and a double-tap's second half on the confirm
+   * button never delete; a deliberate confirm after CONFIRM_MIN_MS does.
+   */
   await act(async () => {
-    fireEvent.click(del(), { detail: 1 });
+    fireEvent.click(document.querySelector<HTMLButtonElement>(`[aria-label="Hujjat d1 — amallar"]`)!);
   });
+  await act(async () => {
+    fireEvent.click(document.querySelector<HTMLButtonElement>("[data-file-menu-delete]")!, { detail: 1 });
+  });
+  const del = () => document.querySelector<HTMLButtonElement>("[data-file-menu-confirm-delete]")!;
   await act(async () => {
     fireEvent.click(del(), { detail: 2 });
   });
   await pause(20);
   assert.equal(deletes.length, 0, "qo'sh bosish hujjatni o'chirmasligi kerak");
-  assert.match(del().getAttribute("aria-label") ?? "", /tasdiqlang/);
+  assert.ok(document.querySelector("[data-file-menu-confirm]"), "tasdiq bosqichi ochiq turadi");
   await pause(CONFIRM_MIN_MS + 40);
   await act(async () => {
     fireEvent.click(del(), { detail: 1 });

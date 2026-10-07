@@ -15,7 +15,8 @@ import { AdminAutoEnter } from "../../components/admin/shell/AdminAutoEnter.tsx"
 import { AccountPage } from "../../components/admin/shell/AccountPage.tsx";
 import { AdminIdentityProvider, type AdminIdentity } from "../../components/admin/shell/admin-identity.tsx";
 import { AdminsPage } from "../../components/admin/admins/AdminsPage.tsx";
-import { Sidebar } from "../../components/shell/Sidebar.tsx";
+// Redesign: the Sidebar is gone; the admin entry is the isAdmin-gated row of the Profil index (W4).
+import { ProfileHome } from "../../components/profile/ProfileHome.tsx";
 
 /*
  * Simple admin entry — the 2FA switch OFF (docs/admin/HANDOFF.md "Admin 2FA
@@ -145,7 +146,7 @@ test("AdminAutoEnter: a 404 shows the error with «Qayta urinish»; retry POSTs 
   assert.equal(calls.length, 2);
 });
 
-/* ───────────────────────────── Sidebar button ───────────────────────────── */
+/* ───────────────────────────── Admin entry (was: Sidebar button) ───────────────────────────── */
 
 const USER: ServerUser = {
   id: "10",
@@ -182,21 +183,42 @@ function signIn(user: ServerUser) {
   });
 }
 
-test("Sidebar: «Admin panel» → /admin is shown for a user with an admin account (isAdmin), hidden for everyone else", () => {
+test("Profil index (ProfileHome): «Admin panel» row → /admin is shown for a user with an admin account (isAdmin), hidden for everyone else", async () => {
+  // ProfileHome refreshes the session copy once (GET /api/users/me): answer with the store's user.
+  const calls = stubFetch({ "GET /api/users/me": () => json(200, { user: useAppStore.getState().user, transactions: [] }) });
+  const mount = () => render(withRouter(h(ProfileHome), makeRouter().router, "/uz/profile"));
+  const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 0))));
+
   signIn({ ...USER, isAdmin: true });
-  const { unmount } = render(withRouter(h(Sidebar, {}), makeRouter().router, "/uz"));
+  const { unmount } = mount();
+  await settle();
   const link = screen.getByRole("link", { name: /Admin panel/ });
   assert.equal(link.getAttribute("href"), "/admin");
+  assert.ok(link.closest('[data-profile-row="admin"]') ?? link.matches('[data-profile-row="admin"]'), "the profile's admin row");
   unmount();
 
   signIn({ ...USER, isAdmin: false });
-  render(withRouter(h(Sidebar, {}), makeRouter().router, "/uz"));
-  assert.ok(!screen.queryByRole("link", { name: /Admin panel/ }), "no button for a plain user");
+  mount();
+  await settle();
+  assert.ok(screen.getByRole("link", { name: /Hamyon/ }), "the index rendered");
+  assert.ok(!screen.queryByRole("link", { name: /Admin panel/ }), "no row for a plain user");
   cleanup();
 
   useAppStore.setState({ loggedIn: false, sessionChecked: true, user: null });
-  render(withRouter(h(Sidebar, {}), makeRouter().router, "/uz"));
-  assert.ok(!screen.queryByRole("link", { name: /Admin panel/ }), "no button when signed out");
+  mount();
+  await settle();
+  assert.ok(!screen.queryByRole("link", { name: /Admin panel/ }), "no row when signed out");
+  assert.equal(calls.length, 2, "one session refresh per signed-in mount, none signed out");
+});
+
+test("the Profil tab page mounts ProfileHome, whose isAdmin-gated row keeps the admin entry reachable without the Sidebar", async () => {
+  const { readFileSync } = await import("node:fs");
+  // Redesign W4: the admin entry is a row of the profile index (behaviour: tests/ui/profile.test.mts «admin row»).
+  const src = readFileSync(new URL("../../app/uz/profile/page.tsx", import.meta.url), "utf8");
+  assert.match(src, /import \{ ProfileHome \} from "@\/components\/profile\/ProfileHome";/);
+  assert.match(src, /<ProfileHome\b/);
+  const home = readFileSync(new URL("../../components/profile/ProfileHome.tsx", import.meta.url), "utf8");
+  assert.match(home, /user\.isAdmin \? <RowLink id="admin" href="\/admin"/);
 });
 
 /* ───────────────────────────── AccountPage ───────────────────────────── */

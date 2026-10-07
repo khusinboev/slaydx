@@ -111,6 +111,8 @@ test("ildiz scroll tuzog'i emas: overflow-hidden/overflow-y-auto yo'q, sarlavha 
   assert.ok(head.contains(q("[data-test-nav]")), "sarlavha qatori sticky blok ichida");
   assert.match(root.style.getPropertyValue("--result-header-h"), /^\d+px$/, "sarlavha balandligi o'zgaruvchisi");
   assert.match(root.style.getPropertyValue("--result-fill-h"), /100svh - var\(--app-topbar-h\) - var\(--result-header-h/);
+  // Redesign F0/W5: no 3.5rem TopBar — only the shell's notch / Telegram strip sits above <main>.
+  assert.equal(root.style.getPropertyValue("--app-topbar-h"), "var(--shell-topbar-h, 0px)");
 });
 
 test("keng ekran: panel o'ngda, standart OCHIQ, bo'limlar panel ichida, mazmun ustunida emas", () => {

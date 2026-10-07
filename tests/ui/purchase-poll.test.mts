@@ -3,15 +3,21 @@ import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createElement as h } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
-import { PurchasePage } from "../../components/purchase/PurchasePage.tsx";
+import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
+import { WalletPage } from "../../components/wallet/WalletPage.tsx";
 import { useAppStore } from "../../lib/store.ts";
+import type * as api from "../../lib/api-client.ts";
 
 /**
  * UX-04 / FE-19 — Click/Payme dan qaytgandan keyingi «To'lov tasdiqlanmoqda…»
  * banneri abadiy qotmaydi: kechikkan webhook ham ushlanadi (~2 daqiqa,
  * o'sib boruvchi oraliq), undan keyin — tushuntirish va «Tekshirish»;
  * bekor qilingan buyurtma «tasdiqlanmoqda» deb ko'rsatilmaydi.
+ *
+ * Redesign: the provider returns to `/uz/purchase?order=`, which redirects to
+ * `/uz/wallet?order=` (tests/nav-tabs.test.mts), so the polling now runs on the
+ * Hamyon page (`WalletPage` → `usePaymentReturn`); the old `PurchasePage` is gone.
  */
 
 const realFetch = globalThis.fetch;
@@ -37,21 +43,36 @@ function stubOrders(stateAt: (ms: number) => "pending" | "paid" | "cancelled") {
         providers: { click: true, payme: false },
       });
     }
+    if (String(input) === "/api/users/me") return json(200, { user: USER, transactions: [] });
     return json(404, {});
   };
   return () => calls;
 }
+
+const USER = {
+  id: "u1", telegramId: null, username: null, name: "Ali", photoUrl: null, language: "uz", points: 0, quota: 0,
+  balance: 10_000, university: "", faculty: "", department: "", group: "", course: "", author: "", subject: "", teacher: "",
+  city: "", position: "", organization: "", phone: null, isAdmin: false,
+} as api.ServerUser;
+const router = { back() {}, forward() {}, refresh() {}, prefetch() {}, push() {}, replace() {} } as unknown as AppRouterInstance;
 
 function mount() {
   refreshes = 0;
   useAppStore.setState({
     sessionChecked: true,
     loggedIn: true,
+    user: USER,
     refreshSession: async () => {
       refreshes++;
     },
   });
-  render(h(SearchParamsContext.Provider, { value: new URLSearchParams("order=o1") }, h(PurchasePage)));
+  render(
+    h(
+      AppRouterContext.Provider,
+      { value: router },
+      h(PathnameContext.Provider, { value: "/uz/wallet" }, h(SearchParamsContext.Provider, { value: new URLSearchParams("order=o1") }, h(WalletPage))),
+    ),
+  );
 }
 
 async function advance(t: import("node:test").TestContext, ms: number) {

@@ -130,7 +130,7 @@ export function PhotoCropDialog({
         onClick={(e) => e.stopPropagation()}
         className="bg-card w-full max-w-sm rounded-2xl border p-4 shadow-xl"
       >
-        <h2 className="mb-3 text-[15px] font-semibold">Suratni moslash</h2>
+        <h2 className="mb-3 text-[17px] font-semibold">Suratni moslash</h2>
         <div
           className="relative mx-auto touch-none select-none"
           style={{ width: FRAME, height: FRAME }}
@@ -148,7 +148,7 @@ export function PhotoCropDialog({
             className={cn("bg-muted cursor-move", shape === "circle" ? "rounded-full" : "rounded-xl")}
           />
         </div>
-        <label className="mt-3 flex items-center gap-2 text-[12px]">
+        <label className="mt-3 flex items-center gap-2 text-[13.5px]">
           <span className="text-muted-foreground">Kattalik</span>
           <input
             type="range"
@@ -161,16 +161,16 @@ export function PhotoCropDialog({
             className="flex-1"
           />
         </label>
-        <p className="text-muted-foreground mt-2 text-[11px]">Suratni sudrab markazga qo‘ying.</p>
+        <p className="text-muted-foreground mt-2 text-[13px]">Suratni sudrab markazga qo‘ying.</p>
         <div className="mt-4 flex justify-end gap-2">
-          <button type="button" onClick={onCancel} className="hover:bg-muted rounded-lg px-3 py-1.5 text-[13px]">
+          <button type="button" onClick={onCancel} className="hover:bg-muted rounded-lg px-3 py-1.5 text-[14.5px]">
             Bekor qilish
           </button>
           <button
             type="button"
             onClick={done}
             disabled={!ready || busy}
-            className="bg-primary text-primary-foreground rounded-lg px-3 py-1.5 text-[13px] font-medium disabled:opacity-50"
+            className="bg-primary text-primary-foreground rounded-lg px-3 py-1.5 text-[14.5px] font-medium disabled:opacity-50"
           >
             {busy ? "Saqlanmoqda…" : "Tayyor"}
           </button>

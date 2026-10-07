@@ -11,13 +11,14 @@ import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks
  * (docs/nav/PLAN.md «Contract for N1–N4»).
  *
  * Mutations, each caught here:
- *   - AppShell: drop `useOverlayHistory(mobileOpen…)`          → "drawer closes on back" fails;
+ *   - CreateSheet (successor of the drawer, redesign F0): `useDialog(…, { history: false })`
+ *                                                              → "«+» sheet closes on back" fails;
  *   - HomeFiles: drop `useOverlayHistory(overlay === "sort"…)` → "sort popover closes on back" fails;
  *   - HomeFiles: `changeView` stops calling `replaceSearch`    → "filter lands in the URL" fails;
  *   - `writeFileView` writes defaults                          → "defaults stay out of the URL" fails;
  *   - PayDialog: `window.location.href = checkoutUrl` again    → "pay dialog entry is popped" fails;
  *   - ToolChrome: back to a fixed `<Link href="/uz/create">`   → "ToolChrome ←" fails (deep link pushes);
- *   - PurchasePage: no strip of `?order=`                      → "?order= is stripped" fails.
+ *   - WalletPage (usePaymentReturn): no strip of `?order=`   → "?order= is stripped" fails.
  */
 
 const nav = await import("../../lib/nav/history.ts");
@@ -25,8 +26,9 @@ const { AppShell } = await import("../../components/shell/AppShell.tsx");
 const { HomeFiles } = await import("../../components/home/HomeFiles.tsx");
 const { PayDialog } = await import("../../components/overlays/PayDialog.tsx");
 const { ToolChrome } = await import("../../components/forms/ToolChrome.tsx");
-const { PurchasePage } = await import("../../components/purchase/PurchasePage.tsx");
+const { WalletPage } = await import("../../components/wallet/WalletPage.tsx");
 const { PageBack } = await import("../../components/shell/PageBack.tsx");
+const { NavProvider: NavProviderEl } = await import("../../components/nav/NavProvider.tsx");
 const { useUi, readFileView, writeFileView, DEFAULT_FILE_VIEW } = await import("../../lib/ui.ts");
 const { useAppStore } = await import("../../lib/store.ts");
 
@@ -109,47 +111,56 @@ test("fayl ko'rinishi: standart qiymatlar URLga chiqmaydi, buzuq qiymat standart
   assert.deepEqual(readFileView(null), DEFAULT_FILE_VIEW);
 });
 
-// ------------------------------------------------------------------ AppShell drawer
+// ------------------------------------------------------------------ AppShell «+» sheet (was: drawer)
 
-test("AppShell: mobil panel — telefon «orqaga»si uni yopadi, URL o'zgarmaydi", async () => {
+const sheetOpen = () => Boolean(document.querySelector("[data-create-sheet]"));
+const plus = () => document.querySelector<HTMLButtonElement>("[data-create-button]")!;
+
+test("AppShell: «+» oynasi — telefon «orqaga»si uni yopadi, URL o'zgarmaydi", async () => {
   fresh("/uz");
   render(inRouter(h(AppShell, null, h("div", null, "sahifa"))));
-  assert.ok(!document.querySelector(".fixed.inset-0.z-40"), "boshida yopiq");
-  fireEvent.click(screen.getByLabelText("Yon panelni ko‘rsatish/yashirish"));
+  assert.ok(!sheetOpen(), "boshida yopiq");
+  fireEvent.click(plus());
   await settle();
-  assert.ok(document.querySelector(".fixed.inset-0.z-40"), "ochildi");
-  assert.ok(sx()?.o, "panel tarix yozuviga ega");
+  assert.ok(sheetOpen(), "ochildi");
+  assert.ok(sx()?.o, "oyna tarix yozuviga ega");
   assert.equal(here(), "/uz");
   await act(async () => {
     window.history.back();
   });
   await settle();
-  assert.ok(!document.querySelector(".fixed.inset-0.z-40"), "orqaga panelni yopdi");
+  assert.ok(!sheetOpen(), "orqaga oynani yopdi");
   assert.equal(here(), "/uz");
   assert.equal(sx()?.i, 0);
   assert.ok(!sx()?.o);
 });
 
-test("AppShell: yo'l o'zgarsa ochiq panel yopiladi (yangi sahifa ustida qolmaydi)", async () => {
+test("AppShell: yo'l o'zgarsa ochiq «+» oynasi yopiladi (yangi sahifa ustida qolmaydi)", async () => {
   fresh("/uz");
-  const view = render(inRouter(h(AppShell, null, h("div", null, "sahifa"))));
-  fireEvent.click(screen.getByLabelText("Yon panelni ko‘rsatish/yashirish"));
+  // NavProvider (mounted in Providers in the app) closes an overlay left open from the previous page.
+  const page = () => h("div", null, h(NavProviderEl), h(AppShell, null, h("div", null, "sahifa")));
+  const view = render(inRouter(page(), "", "/uz"));
+  fireEvent.click(plus());
   await settle();
-  assert.ok(document.querySelector(".fixed.inset-0.z-40"));
-  view.rerender(inRouter(h(AppShell, null, h("div", null, "sahifa")), "", "/uz/create"));
+  assert.ok(sheetOpen());
+  window.dispatchEvent(new window.Event("pointerdown"));
+  await act(async () => {
+    router.push("/uz/create");
+  });
+  view.rerender(inRouter(page(), "", "/uz/create"));
   await settle();
-  assert.ok(!document.querySelector(".fixed.inset-0.z-40"), "yo'l o'zgardi — panel yopildi");
+  assert.ok(!sheetOpen(), "yo'l o'zgardi — oyna yopildi");
 });
 
-test("AppShell: fon bosilganda panel yopiladi va yozuvi bir marta olib tashlanadi", async () => {
+test("AppShell: fon bosilganda «+» oynasi yopiladi va yozuvi bir marta olib tashlanadi", async () => {
   fresh("/uz");
   render(inRouter(h(AppShell, null, h("div", null, "sahifa"))));
-  fireEvent.click(screen.getByLabelText("Yon panelni ko‘rsatish/yashirish"));
+  fireEvent.click(plus());
   await settle();
   const i = sx()?.i;
-  fireEvent.click(screen.getAllByLabelText("Yopish")[0]);
+  fireEvent.click(document.querySelector("[data-create-scrim]")!);
   await settle();
-  assert.ok(!document.querySelector(".fixed.inset-0.z-40"));
+  assert.ok(!sheetOpen());
   assert.equal(sx()?.i, (i ?? 1) - 1, "bitta yozuv qaytdi");
 });
 
@@ -168,28 +179,39 @@ test("HomeFiles: filtr/tartib URLga yoziladi (replace — tarixda yangi yozuv yo
   const i = sx()?.i;
   fireEvent.click(screen.getByRole("button", { name: "Hujjatlar" }));
   assert.equal(here(), "/uz?filter=docs");
-  // P5 (mobile sprint): the direction toggle's accessible name now states the current order.
-  fireEvent.click(screen.getByLabelText("Tartib: yangisi birinchi. O'zgartirish"));
-  assert.equal(here(), "/uz?filter=docs&desc=0");
-  fireEvent.click(screen.getByRole("button", { name: "Barchasi" }));
-  fireEvent.click(screen.getByLabelText("Tartib: eskisi birinchi. O'zgartirish"));
+  fireEvent.click(screen.getByRole("button", { name: /^Hammasi/ }));
   assert.equal(here(), "/uz", "standart qiymatlar URLda qolmaydi");
-  assert.equal(window.history.length, len, "tarixga yozuv qo'shilmadi");
+  assert.equal(window.history.length, len, "chiplar tarixga yozuv qo'shmaydi");
   assert.equal(sx()?.i, i);
+  // Redesign W2: the direction lives in the header sort menu («Yangisi / Eskisi birinchi»).
+  fireEvent.click(screen.getByRole("button", { name: "Hujjatlar" }));
+  const pickInMenu = async (name: string) => {
+    fireEvent.click(document.querySelector("[data-sort-button]") as HTMLElement);
+    await settle();
+    fireEvent.click(screen.getByRole("menuitemradio", { name }));
+    await settle();
+  };
+  await pickInMenu("Eskisi birinchi");
+  assert.equal(here(), "/uz?filter=docs&desc=0");
+  fireEvent.click(screen.getByRole("button", { name: /^Hammasi/ }));
+  await pickInMenu("Yangisi birinchi");
+  assert.equal(here(), "/uz", "standart qiymatlar URLda qolmaydi");
+  assert.equal(sx()?.i, i, "menyu yozuvi yopilgach indeks joyida — filtr/tartib yozuv qo'shmadi");
+  assert.ok(!sx()?.o);
 });
 
 test("HomeFiles: URLdagi filtr bilan ochilganda tanlangan (orqaga qaytish — qayta o'rnatish)", async () => {
   fresh("/uz");
   mountHome("?filter=image&sort=name");
   assert.equal(screen.getByRole("button", { name: "Rasmlar" }).getAttribute("aria-pressed"), "true");
-  assert.equal(screen.getByRole("button", { name: "Barchasi" }).getAttribute("aria-pressed"), "false");
-  assert.ok(screen.getByText("Nomi"), "tartib yorlig'i URLdan");
+  assert.equal(screen.getByRole("button", { name: /^Hammasi/ }).getAttribute("aria-pressed"), "false");
+  assert.ok(screen.getByRole("button", { name: "Saralash: Nomi" }), "tartib yorlig'i URLdan");
 });
 
 test("HomeFiles: saralash oynasi telefon «orqaga»si bilan yopiladi; tanlov filtrni saqlaydi", async () => {
   fresh("/uz");
   mountHome();
-  const sortBtn = () => document.querySelector("button.border-input.inline-flex") as HTMLElement;
+  const sortBtn = () => document.querySelector("[data-sort-button]") as HTMLElement;
   fireEvent.click(sortBtn());
   await settle();
   assert.equal(useUi.getState().overlay, "sort");
@@ -204,7 +226,7 @@ test("HomeFiles: saralash oynasi telefon «orqaga»si bilan yopiladi; tanlov fil
   // Oynada tanlash: URL yangilanadi, oyna yopiladi, yozuv bir marta olib tashlanadi.
   fireEvent.click(sortBtn());
   await settle();
-  fireEvent.click(screen.getByText("Nomi"));
+  fireEvent.click(screen.getByRole("menuitemradio", { name: "Nomi" }));
   await settle();
   assert.equal(useUi.getState().overlay, null);
   assert.equal(here(), "/uz?sort=name", "tanlov oyna yozuvi yopilgach ham URLda");
@@ -307,28 +329,32 @@ test("PageBack (/uz/create, /uz/purchase, /uz/profile): yangi yorliqda /uz ga al
   }
 });
 
-// ------------------------------------------------------------------ PurchasePage ?order=
+// ------------------------------------------------------------------ Hamyon (WalletPage) ?order=
 
-test("PurchasePage: hal bo'lgan buyurtmada ?order= URLdan olib tashlanadi, banner qoladi", async () => {
-  fresh("/uz/purchase");
-  window.history.replaceState(window.history.state, "", "/uz/purchase?order=o1");
+test("Hamyon (/uz/purchase → /uz/wallet): hal bo'lgan buyurtmada ?order= URLdan olib tashlanadi, banner qoladi", async () => {
+  // The provider returns to /uz/purchase?order=, which the server redirects to /uz/wallet?order= (query kept).
+  fresh("/uz/wallet");
+  window.history.replaceState(window.history.state, "", "/uz/wallet?order=o1");
   Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
-  useAppStore.setState({ sessionChecked: true, loggedIn: true, refreshSession: async () => {} });
+  const user = { id: "u1", name: "Ali", points: 0, balance: 10_000, isAdmin: false };
+  useAppStore.setState({ sessionChecked: true, loggedIn: true, user: user as never, refreshSession: async () => {} });
   (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown) =>
     String(input) === "/api/payments/orders"
       ? json(200, {
           orders: [{ id: "o1", provider: "click", purpose: "topup", amountSoum: 10_000, state: "paid", createdAt: "2026-09-24T08:00:00.000Z" }],
           providers: { click: true, payme: false },
         })
-      : json(404, {});
+      : String(input) === "/api/users/me"
+        ? json(200, { user, transactions: [] })
+        : json(404, {});
   const len = window.history.length;
-  render(inRouter(h(PurchasePage), "order=o1"));
+  render(inRouter(h(WalletPage), "order=o1"));
   // Birinchi so'rov 3 s dan keyin (`PAY_POLL_START_MS`): haqiqiy taymer bilan kutamiz.
   await act(async () => {
     await new Promise((r) => setTimeout(r, 3300));
   });
   await settle();
-  assert.equal(here(), "/uz/purchase", "?order= ketdi");
+  assert.equal(here(), "/uz/wallet", "?order= ketdi");
   assert.equal(window.history.length, len, "yangi yozuv yo'q");
   assert.ok(screen.getByText(/To.lov qabul qilindi/), "banner yo'qolmadi");
 });

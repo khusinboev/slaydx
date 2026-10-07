@@ -27,7 +27,7 @@ export function TextInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="border-input bg-card focus:ring-ring h-11 w-full rounded-xl border px-3.5 text-[15px] outline-none focus:ring-2"
+      className="border-input bg-card focus:ring-ring h-11 w-full rounded-xl border px-3.5 text-[16px] outline-none focus:ring-2"
     />
   );
 }
@@ -48,7 +48,7 @@ export function TextArea({
       placeholder={placeholder}
       minRows={2}
       maxRows={8}
-      className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 text-[15px] outline-none focus:ring-2"
+      className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 text-[16px] outline-none focus:ring-2"
     />
   );
 }
@@ -72,7 +72,7 @@ export function ChipGroup({
             type="button"
             onClick={() => onChange(o.value)}
             className={cn(
-              "pointer-coarse:min-h-11 rounded-full border px-3.5 py-1.5 text-sm transition-colors",
+              "pointer-coarse:min-h-11 rounded-full border px-3.5 py-1.5 text-[14.5px] transition-colors",
               on
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-input bg-card hover:bg-muted",
@@ -119,7 +119,7 @@ export function MultiChipGroup({
             aria-pressed={on}
             onClick={() => toggle(o.value)}
             className={cn(
-              "pointer-coarse:min-h-11 rounded-full border px-3.5 py-1.5 text-sm transition-colors",
+              "pointer-coarse:min-h-11 rounded-full border px-3.5 py-1.5 text-[14.5px] transition-colors",
               on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted",
             )}
           >
@@ -183,7 +183,7 @@ export function LanguagePicker({
             type="button"
             onClick={() => onChange(l.value)}
             className={cn(
-              "pointer-coarse:min-h-11 rounded-full border px-3 py-1.5 text-sm transition-colors",
+              "pointer-coarse:min-h-11 rounded-full border px-3 py-1.5 text-[14.5px] transition-colors",
               on
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-input bg-card hover:bg-muted",
@@ -197,7 +197,7 @@ export function LanguagePicker({
         <button
           type="button"
           onClick={() => setMore((v) => !v)}
-          className="border-input bg-card hover:bg-muted pointer-coarse:min-h-11 rounded-full border px-3 py-1.5 text-sm"
+          className="border-input bg-card hover:bg-muted pointer-coarse:min-h-11 rounded-full border px-3 py-1.5 text-[14.5px]"
         >
           {more ? "Kamroq" : `Ko'proq (+${rest})`}
         </button>
@@ -219,7 +219,7 @@ export function RangeField({
 }) {
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between text-sm">
+      <div className="mb-2 flex items-center justify-between text-[14.5px]">
         <span className="text-muted-foreground">{min}</span>
         <span className="text-lg font-semibold">{value}</span>
         <span className="text-muted-foreground">{max}</span>
@@ -261,7 +261,7 @@ export function DesignPicker({
               className="h-14"
               style={{ background: `linear-gradient(135deg, ${d.from}, ${d.to})` }}
             />
-            <div className="bg-card px-2 py-1.5 text-xs font-medium">{d.label}</div>
+            <div className="bg-card px-2 py-1.5 text-[14.5px] font-medium">{d.label}</div>
           </button>
         );
       })}
@@ -293,7 +293,7 @@ export function ModeSwitch({
             )}
           >
             <div className="font-medium">{m.title}</div>
-            <div className="text-muted-foreground mt-1 text-sm">{m.hint}</div>
+            <div className="text-muted-foreground mt-1 text-[14.5px]">{m.hint}</div>
           </button>
         );
       })}

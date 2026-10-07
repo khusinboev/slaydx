@@ -7,7 +7,10 @@
  *
  * Mutations: drop the `/uz/[slug]` rule → the page enumeration fails; make
  * `/uz/files/[id]` a root → the table fails; ignore `overlays` or the version
- * gate in `telegramBackState` → the Telegram table fails.
+ * gate in `telegramBackState` → the Telegram table fails. Redesign (F0): drop
+ * `wallet` from `UZ_RESERVED` → `/uz/wallet` falls into `[slug]` and the table
+ * fails; make a tab a root → `isRootPath` fails; drop the `[step]` rule → the
+ * page enumeration fails.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -40,6 +43,7 @@ function sample(route: string): string {
   return route
     .replace("[slug]", "slide")
     .replace("[id]", "3f1c2a9e-0000-4000-8000-000000000001")
+    .replace("[step]", "shaxsiy")
     .replace("[token]", "Ab3dEf");
 }
 
@@ -65,7 +69,16 @@ test("parentOf: the R4 §6 table", () => {
     ["/uz/create", "/uz"],
     ["/uz/purchase", "/uz", "?order=42"],
     ["/uz/profile", "/uz"],
-    ["/uz/files/3f1c2a9e", "/uz"],
+    // Bottom tabs (redesign): `/uz` is the only root; steps go back to the profile index.
+    ["/uz/files", "/uz"],
+    ["/uz/wallet", "/uz"],
+    ["/uz/wallet", "/uz", "?order=42"],
+    ["/uz/profile/shaxsiy", "/uz/profile"],
+    ["/uz/profile/oqish", "/uz/profile"],
+    ["/uz/profile/ish", "/uz/profile"],
+    ["/uz/profile/korinish", "/uz/profile"],
+    ["/uz/profile/xavfsizlik", "/uz/profile"],
+    ["/uz/files/3f1c2a9e", "/uz/files"],
     ["/uz/slide", "/uz/create"],
     ["/uz/pro-slide", "/uz/create"],
     ["/uz/coursework", "/uz/create"],
@@ -90,13 +103,36 @@ test("parentOf: the R4 §6 table", () => {
 
 test("parentOf: unknown routes stay on the site", () => {
   assert.equal(parentOf("/uz/files/1/extra"), "/uz");
+  // An unknown profile step has no rule (the page 404s) and is not a tool slug either.
+  assert.equal(matchRoute("/uz/profile/nope"), null);
+  assert.equal(parentOf("/uz/profile/nope"), "/uz");
+  // The tab segments are pages, not `/uz/[slug]` tool slugs — and the slug rule itself
+  // refuses them too (rule order must not be the only thing keeping `/uz/wallet` off a tool form).
+  for (const p of ["/uz/files", "/uz/wallet", "/uz/profile", "/uz/purchase"]) assert.equal(matchRoute(p)?.route, p, p);
+  const slug = ROUTE_RULES.find((r) => r.route === "/uz/[slug]")!;
+  for (const seg of ["create", "purchase", "wallet", "profile", "login", "files", "admin"]) {
+    assert.equal(slug.match.test(`/uz/${seg}`), false, `/uz/${seg} is reserved`);
+  }
+  assert.equal(slug.match.test("/uz/slide"), true);
   assert.equal(parentOf("/admin/nope/1/2"), "/admin");
   assert.equal(parentOf("/elsewhere"), "/uz");
 });
 
 test("isRootPath and adminListOf", () => {
   for (const p of ["/uz", "/o/x", "/admin", "/admin/login", "/admin/enroll", "/"]) assert.equal(isRootPath(p), true, p);
-  for (const p of ["/uz/create", "/uz/files/1", "/uz/slide", "/admin/users", "/admin/users/1", "/o", "/uz/unknown/x"]) {
+  for (const p of [
+    "/uz/create",
+    "/uz/files/1",
+    "/uz/slide",
+    "/admin/users",
+    "/admin/users/1",
+    "/o",
+    "/uz/unknown/x",
+    "/uz/files",
+    "/uz/wallet",
+    "/uz/profile",
+    "/uz/profile/ish",
+  ]) {
     assert.equal(isRootPath(p), false, p);
   }
   assert.equal(adminListOf("/admin/users/1"), "/admin/users");
@@ -121,6 +157,9 @@ test("telegramBackState: BackButton iff an overlay is open or the route is not a
     [0, "/uz/create", true],
     [0, "/uz/files/1", true],
     [0, "/uz/slide", true],
+    [0, "/uz/files", true],
+    [0, "/uz/wallet", true],
+    [0, "/uz/profile/korinish", true],
     [0, "/admin/users/4", true],
     [1, "/uz/files/1", true],
   ];

@@ -165,16 +165,19 @@ test("globals.css: coarse-pointer layer — 16 px inputs/selects/textareas, hit-
 
 /* ───────────────────────── primitives ───────────────────────── */
 
-test("Segmented: option buttons are 44 px on touch (min-h-11 + min-w-11), desktop classes intact", () => {
+// Redesign W5 type bump: desktop option text 14 px (was text-xs = 12 px), padding px-3 py-1.5 (was px-2.5 py-1).
+test("Segmented: option buttons are 44 px on touch (min-h-11 + min-w-11), desktop 14 px text", () => {
   const { container } = render(
     h(Segmented, { options: [{ value: "a", label: "3" }, { value: "b", label: "4" }], value: "a", onChange() {}, ariaLabel: "Reja" }),
   );
   const b = container.querySelector("button")!;
   assert.match(b.className, /pointer-coarse:min-h-11/);
   assert.match(b.className, /pointer-coarse:min-w-11/);
-  assert.match(b.className, /\bpx-2\.5\b/);
-  assert.match(b.className, /\bpy-1\b/);
-  assert.match(b.className, /\btext-xs\b/);
+  assert.match(b.className, /(?:^|\s)px-3(?:\s|$)/);
+  assert.match(b.className, /(?:^|\s)py-1\.5(?:\s|$)/);
+  assert.match(b.className, /(?:^|\s)text-\[14px\](?:\s|$)/);
+  assert.match(b.className, /pointer-coarse:text-\[14\.5px\]/);
+  assert.doesNotMatch(b.className, /\btext-xs\b/);
 });
 
 test("Segmented/Switch/ColorDots keep their behaviour: click, aria-checked", () => {
@@ -239,11 +242,18 @@ test("Chip groups, range inputs, number input, clear button: 44 px on touch", ()
   assert.match(container.querySelector("input[type=number]")!.className, /pointer-coarse:h-11/);
 });
 
-test("Card title, summary chips and counter are >= 12 px on touch", () => {
+// Redesign W5: ≥ 12.5 px on EVERY pointer now (was: ≥ 12 px on touch only, 11–11.5 px with a mouse).
+test("Card title, summary chips and counter are >= 12.5 px on every pointer, 13 px on touch", () => {
   const { container } = render(
     h("div", null, h(Card, { title: "Mavzu", children: "x" }), h(SummaryChips, { items: ["a"] }), h(Counter, { len: 1, limit: 10 })),
   );
-  assert.match(container.querySelector("h2")!.className, /pointer-coarse:text-xs/);
-  assert.match(container.querySelector("[data-summary-chips]")!.className, /pointer-coarse:text-xs/);
-  assert.match(container.querySelector("[data-counter]")!.className, /pointer-coarse:text-xs/);
+  assert.match(container.querySelector("h2")!.className, /(?:^|\s)text-\[13px\](?:\s|$)/);
+  for (const sel of ["[data-summary-chips]", "[data-counter]"]) {
+    const c = container.querySelector(sel)!.className;
+    assert.match(c, /(?:^|\s)text-\[12\.5px\](?:\s|$)/, `${sel}: 12.5 px`);
+    assert.match(c, /pointer-coarse:text-\[13px\]/, `${sel}: 13 px on touch`);
+  }
+  for (const el of container.querySelectorAll("*")) {
+    assert.doesNotMatch(el.getAttribute("class") ?? "", /text-\[1[01](?:\.5)?px\]|text-\[12px\]/, "nothing below 12.5 px");
+  }
 });

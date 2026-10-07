@@ -19,6 +19,7 @@ import { ESSAY_CONTEXTS, essayWords } from "./generation/essay/registry";
 import { ESSAY_LIMITS } from "./generation/essay/types";
 import { glossaryTermCount } from "./generation/teacher/input";
 import { clientAdjustedPrice } from "./price-adjust";
+import { groupDigits } from "./format";
 
 const TOPIC_FILE_MODES = [
   {
@@ -1250,10 +1251,10 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
        * ortiq» deb ko'rsatilardi — soni aniq bo'lsa ham.
        */
       const clipped = n === MAX_SOURCE_CHARS;
-      const size = `${n.toLocaleString("uz-UZ")}${clipped ? " dan ortiq" : ""}`;
+      const size = `${groupDigits(n)}${clipped ? " dan ortiq" : ""}`;
       return (
         `Matn juda uzun: ${size} belgi. ` +
-        `Chegara ${TRANSLATION_MAX_CHARS.toLocaleString("uz-UZ")} — hujjatni bo'lib yuboring.`
+        `Chegara ${groupDigits(TRANSLATION_MAX_CHARS)} — hujjatni bo'lib yuboring.`
       );
     }
     /*
@@ -1265,8 +1266,8 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
     const total = translationChars(values);
     if (total > TRANSLATION_MAX_CHARS) {
       return (
-        `Fayl ${total.toLocaleString("uz-UZ")} belgi. ` +
-        `Chegara ${TRANSLATION_MAX_CHARS.toLocaleString("uz-UZ")} — hujjatni bo'lib yuboring.`
+        `Fayl ${groupDigits(total)} belgi. ` +
+        `Chegara ${groupDigits(TRANSLATION_MAX_CHARS)} — hujjatni bo'lib yuboring.`
       );
     }
     if (total > 0 && total < TRANSLATION_MIN_CHARS) return "Matn juda qisqa.";
@@ -1586,7 +1587,7 @@ export {
 export type { PriceAdjust, PriceAdjustMap } from "./price-adjust";
 
 export function formatTanga(n: number) {
-  return `${n.toLocaleString("uz-UZ")} tanga`;
+  return `${groupDigits(n)} tanga`;
 }
 
 export function topicOf(values: FormValues, tool: ToolConfig) {

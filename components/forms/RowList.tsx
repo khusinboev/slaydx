@@ -47,12 +47,12 @@ export function RowList<T>({
 
   return (
     <div data-rowlist={name}>
-      {rows.length === 0 && empty ? <p className="text-muted-foreground mb-2 text-[12px]">{empty}</p> : null}
+      {rows.length === 0 && empty ? <p className="text-muted-foreground mb-2 text-[13.5px]">{empty}</p> : null}
       <div className="flex flex-col gap-2">
         {rows.map((row, i) => (
           <div key={i} data-row className="bg-muted/40 rounded-xl border p-2.5">
             <div className="mb-1.5 flex items-center justify-between gap-2">
-              <span className="text-muted-foreground text-[11px] font-medium">{i + 1}</span>
+              <span className="text-muted-foreground text-[13.5px] font-medium">{i + 1}</span>
               <span className="flex items-center gap-0.5">
                 <IconBtn label="Yuqoriga" disabled={i === 0} onClick={() => move(i, -1)}>
                   ↑
@@ -73,7 +73,7 @@ export function RowList<T>({
         type="button"
         disabled={rows.length >= max}
         onClick={() => onChange([...rows, add()])}
-        className="text-primary pointer-coarse:min-h-11 pointer-coarse:px-1 pointer-coarse:text-[13px] mt-2 text-[12px] font-medium disabled:opacity-40"
+        className="text-primary pointer-coarse:min-h-11 pointer-coarse:px-1 pointer-coarse:text-[14.5px] mt-2 text-[14px] font-medium disabled:opacity-40"
       >
         + {addLabel}
       </button>
@@ -100,7 +100,7 @@ function IconBtn({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "text-muted-foreground hover:bg-muted hover:text-foreground pointer-coarse:size-11 pointer-coarse:text-base flex size-6 items-center justify-center rounded-md text-[13px]",
+        "text-muted-foreground hover:bg-muted hover:text-foreground pointer-coarse:size-11 pointer-coarse:text-base flex size-6 items-center justify-center rounded-md text-[14px]",
         disabled && "opacity-30",
       )}
     >

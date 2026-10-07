@@ -243,8 +243,8 @@ test("backTo with an overlay open on a fresh deep link: pops the overlay entry, 
     await nav.backTo();
   });
   await settle();
-  assert.deepEqual(calls, ["replace /uz"]);
-  assert.equal(here(), "/uz");
+  assert.deepEqual(calls, ["replace /uz/files"], "parent of the file page = the Ishlarim list (redesign F0)");
+  assert.equal(here(), "/uz/files");
   assert.equal(sx()?.i, 0, "the page's base entry was replaced, not the overlay entry");
   assert.ok(!isOpen("A"), "the overlay closed with the page");
 });
@@ -674,17 +674,21 @@ test("PayDialog sends the user to the checkout with location.replace", async () 
   }
 });
 
-test("/uz/files/[id] «←» restores the home view (?filter&sort&desc) the user last had", async () => {
-  fresh("/uz");
-  router.replace("/uz?filter=docs&sort=name&desc=0&returnTo=%2Fuz%2Fcreate");
+test("/uz/files/[id] «←» restores the Ishlarim view (/uz/files?filter&sort&desc) the user last had", async () => {
+  // Redesign F0: the list moved from /uz to /uz/files; the file page's parent is the list.
+  fresh("/uz/files");
+  router.replace("/uz/files?filter=docs&sort=name&desc=0&returnTo=%2Fuz%2Fcreate");
   router.push("/uz/files/9");
-  assert.equal(nav.parentHref("/uz/files/9"), "/uz?filter=docs&sort=name&desc=0", "view keys only, no returnTo");
+  assert.equal(nav.parentHref("/uz/files/9"), "/uz/files?filter=docs&sort=name&desc=0", "view keys only, no returnTo");
   assert.equal(nav.parentHref("/uz/create"), "/uz", "only the file page goes back to the filtered list");
 
-  // A later visit to home without filters resets the memory.
-  router.push("/uz");
-  assert.equal(nav.parentHref("/uz/files/9"), "/uz");
-  router.replace("/uz?filter=image");
+  // A later visit to the list without filters resets the memory.
+  router.push("/uz/files");
+  assert.equal(nav.parentHref("/uz/files/9"), "/uz/files");
+  router.replace("/uz/files?filter=image");
+  // Bosh (/uz) with search params is not the list: it does not overwrite the memory.
+  router.push("/uz?filter=docs");
+  assert.equal(nav.parentHref("/uz/files/9"), "/uz/files?filter=image");
 
   // Reload on the file page with no in-app history (memory lives in sessionStorage): backTo replaces with it.
   nav.__resetNavForTests();
@@ -695,5 +699,181 @@ test("/uz/files/[id] «←» restores the home view (?filter&sort&desc) the user
   await act(async () => {
     await nav.backTo();
   });
-  assert.deepEqual(calls, ["replace /uz?filter=image"]);
+  assert.deepEqual(calls, ["replace /uz/files?filter=image"]);
+});
+
+test("previousPagePath: the page under the current one (overlay entries skipped), null on a fresh run; survives a reload", async () => {
+  fresh("/uz");
+  assert.equal(nav.previousPagePath(), null, "first entry");
+  router.push("/uz/files");
+  assert.equal(nav.previousPagePath(), "/uz");
+  router.replace("/uz/wallet");
+  assert.equal(nav.previousPagePath(), "/uz", "replace keeps the entry under it");
+  const token = nav.pushLayer("overlay", () => {});
+  await settle();
+  assert.equal(nav.previousPagePath(), "/uz", "an overlay entry on top does not count");
+  nav.releaseLayer(token);
+  await settle();
+  router.push("/uz/profile");
+  assert.equal(nav.previousPagePath(), "/uz/wallet");
+  await act(async () => {
+    window.history.back();
+  });
+  await settle();
+  assert.equal(window.location.pathname, "/uz/wallet");
+  assert.equal(nav.previousPagePath(), "/uz", "after a traversal");
+  // Reload (same stamped entry): the paths come back from sessionStorage.
+  nav.__resetNavForTests();
+  nav.installNav();
+  nav.setNavRouter(router);
+  assert.equal(nav.previousPagePath(), "/uz");
+  // A push truncates the forward entries.
+  router.push("/uz/files");
+  assert.equal(nav.previousPagePath(), "/uz/wallet");
+  // Two pushes in a row: the entry under the page is the first push's page.
+  router.push("/uz/profile");
+  assert.equal(nav.previousPagePath(), "/uz/files");
+});
+
+test("replacePage: replaces the page entry itself, popping an open overlay's entry first", async () => {
+  fresh("/uz");
+  router.push("/uz/files");
+  const closed: string[] = [];
+  nav.pushLayer("overlay", () => closed.push("sheet"));
+  await settle();
+  assert.ok(sx()?.o);
+  calls.length = 0;
+  await act(async () => {
+    await nav.replacePage("/uz/wallet");
+  });
+  await settle();
+  assert.deepEqual(calls, ["replace /uz/wallet"]);
+  assert.equal(here(), "/uz/wallet");
+  assert.equal(sx()?.i, 1, "the page entry (index 1) was replaced, not the overlay entry above it");
+  assert.ok(!sx()?.o);
+  assert.deepEqual(closed, ["sheet"], "the overlay was closed");
+  await act(async () => {
+    window.history.back();
+  });
+  await settle();
+  assert.equal(here(), "/uz", "back → Bosh");
+});
+
+const STEPS = ["/uz/profile/shaxsiy", "/uz/profile/oqish", "/uz/profile/ish", "/uz/profile/korinish"];
+
+test("pageStack: page paths of the run up to the current page; overlay entries above it do not count", async () => {
+  fresh("/uz");
+  assert.deepEqual(nav.pageStack(), ["/uz"]);
+  router.push("/uz/profile");
+  router.push(STEPS[0]!);
+  router.replace(STEPS[1]!);
+  assert.deepEqual(nav.pageStack(), ["/uz", "/uz/profile", STEPS[1]]);
+  nav.pushLayer("overlay", () => {});
+  await settle();
+  assert.deepEqual(nav.pageStack(), ["/uz", "/uz/profile", STEPS[1]], "the overlay entry is not a page");
+});
+
+test("backToEntry: one history.go(-n) to an earlier entry (Next renders it); `replaceWith` hides the pop from Next and replaces that entry", async () => {
+  fresh("/uz");
+  router.push("/uz/profile");
+  router.push(STEPS[0]!);
+  router.push(STEPS[1]!);
+  const closed: string[] = [];
+  nav.pushLayer("overlay", () => closed.push("sheet"));
+  await settle();
+  calls.length = 0;
+  nextSaw.length = 0;
+  // Profile step → Hamyon tab: the entry right above Bosh becomes the wallet.
+  let ok = false;
+  await act(async () => {
+    ok = await nav.backToEntry(1, { replaceWith: "/uz/wallet" });
+  });
+  await settle();
+  assert.ok(ok);
+  assert.equal(here(), "/uz/wallet");
+  assert.equal(sx()?.i, 1, "entry 1 replaced; the steps are now forward entries");
+  assert.ok(!sx()?.o);
+  assert.deepEqual(calls, ["replace /uz/wallet"]);
+  assert.deepEqual(nextSaw, [], "Next never saw the intermediate /uz/profile");
+  assert.deepEqual(closed, ["sheet"], "the open overlay was closed");
+  assert.deepEqual(nav.pageStack(), ["/uz", "/uz/wallet"]);
+  await act(async () => {
+    window.history.back();
+  });
+  await settle();
+  assert.equal(here(), "/uz", "back from the tab → Bosh, not a step");
+  // Plain: Next renders the entry it lands on.
+  router.push("/uz/files");
+  router.push(STEPS[2]!);
+  calls.length = 0;
+  nextSaw.length = 0;
+  await act(async () => {
+    ok = await nav.backToEntry(0);
+  });
+  await settle();
+  assert.ok(ok);
+  assert.equal(here(), "/uz");
+  assert.equal(sx()?.i, 0);
+  assert.deepEqual(calls, [], "a traversal, no push / replace");
+  assert.deepEqual(nextSaw, ["/uz"], "Next restores Bosh");
+  // Not under the current page: nothing happens.
+  assert.equal(await nav.backToEntry(0), false);
+  assert.equal(await nav.backToEntry(-1), false);
+  // A failed leave-guard save cancels it.
+  router.push("/uz/files");
+  const off = nav.registerGuard({ isPending: () => true, save: async () => false });
+  assert.equal(await nav.backToEntry(0), false);
+  off();
+  assert.equal(here(), "/uz/files");
+});
+
+test("backToPath: «Saqlash va yakunlash» goes back to the nearest index entry in one step; deep-linked steps collapse into it", async () => {
+  // Bosh → Profil → 4 pushed steps → finish: the index, then back → Bosh (never into the steps).
+  fresh("/uz");
+  router.push("/uz/profile");
+  for (const s of STEPS) router.push(s);
+  calls.length = 0;
+  nextSaw.length = 0;
+  await act(async () => {
+    await nav.backToPath("/uz/profile");
+  });
+  await settle();
+  assert.equal(here(), "/uz/profile");
+  assert.equal(sx()?.i, 1);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(nextSaw, ["/uz/profile"], "one traversal");
+  await act(async () => {
+    window.history.back();
+  });
+  await settle();
+  assert.equal(here(), "/uz", "back from the index → Bosh");
+
+  // Deep-linked step + a pushed one: the first step entry becomes the index (i 0, its parent is Bosh).
+  fresh(STEPS[0]);
+  router.push(STEPS[1]!);
+  calls.length = 0;
+  nextSaw.length = 0;
+  await act(async () => {
+    await nav.backToPath("/uz/profile");
+  });
+  await settle();
+  assert.equal(here(), "/uz/profile");
+  assert.equal(sx()?.i, 0);
+  assert.deepEqual(calls, ["replace /uz/profile"]);
+  assert.deepEqual(nextSaw, []);
+  calls.length = 0;
+  await act(async () => {
+    await nav.backTo();
+  });
+  assert.deepEqual(calls, ["replace /uz"], "the index's back → its parent Bosh");
+
+  // Nothing to collapse: replace.
+  fresh(STEPS[3]);
+  calls.length = 0;
+  await act(async () => {
+    await nav.backToPath("/uz/profile");
+  });
+  await settle();
+  assert.deepEqual(calls, ["replace /uz/profile"]);
+  assert.equal(sx()?.i, 0);
 });

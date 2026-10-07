@@ -45,10 +45,10 @@ export function ArticleTypeTile({
         className="hover:bg-muted flex w-full items-start justify-between gap-3 rounded-xl border p-2.5 text-left"
       >
         <span className="min-w-0">
-          <span className="block text-[13px] font-medium">{t.label.uz}</span>
-          <span className="text-muted-foreground mt-0.5 block text-[11px]">{t.hint}</span>
+          <span className="block text-[14.5px] font-medium">{t.label.uz}</span>
+          <span className="text-muted-foreground mt-0.5 block text-[13px]">{t.hint}</span>
         </span>
-        <span className="text-primary mt-0.5 shrink-0 text-[11px]">O‘zgartirish</span>
+        <span className="text-primary mt-0.5 shrink-0 text-[13px]">O‘zgartirish</span>
       </button>
       {open ? (
         <ArticleTypeDialog
@@ -95,7 +95,7 @@ export function ArticleTypeDialog({
         onClick={(e) => e.stopPropagation()}
         className="bg-card my-8 w-full max-w-3xl rounded-2xl border p-4 shadow-xl"
       >
-        <h2 className="mb-3 text-[15px] font-semibold">{title ?? "Maqola turini tanlang"}</h2>
+        <h2 className="mb-3 text-[17px] font-semibold">{title ?? "Maqola turini tanlang"}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {(allowed ?? ARTICLE_TYPE_IDS).map((id) => {
             const t = ARTICLE_TYPES[id];
@@ -111,17 +111,17 @@ export function ArticleTypeDialog({
                 )}
               >
                 <span className="flex items-center gap-1.5">
-                  <span className="text-[13px] font-medium">{t.label.uz}</span>
+                  <span className="text-[14.5px] font-medium">{t.label.uz}</span>
                   {id === "imrad_oak" ? (
-                    <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-600 dark:text-amber-400">
+                    <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[12.5px] text-amber-600 dark:text-amber-400">
                       ⭐ tavsiya
                     </span>
                   ) : null}
                 </span>
-                <span className="text-muted-foreground text-[11px]">{t.hint}</span>
+                <span className="text-muted-foreground text-[13px]">{t.hint}</span>
                 <ul className="mt-1 flex flex-wrap gap-1">
                   {t.skeleton.map((s) => (
-                    <li key={s.id} className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[10px]">
+                    <li key={s.id} className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[12.5px]">
                       {labels.section[s.titleKey]}
                     </li>
                   ))}

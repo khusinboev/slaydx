@@ -8,7 +8,18 @@ import type { UserProfile } from "./types";
 // Not `./tools`: this store is in every route's client layer, the tool registry is not (ops WP-B).
 import { parsePriceAdjustments, setClientPriceAdjustments, type PriceAdjustMap } from "./price-adjust";
 
-export type ThemeMode = "light" | "dark";
+/**
+ * Kun / Tun / Avto (docs/redesign/PLAN.md D4). `auto` follows the OS
+ * (`prefers-color-scheme`) live; `light`/`dark` are explicit. The first visit
+ * still reads the OS once into an explicit value (`onRehydrateStorage`).
+ */
+export type ThemeMode = "light" | "dark" | "auto";
+/** What is actually painted. */
+export type ResolvedTheme = "light" | "dark";
+
+export function isThemeMode(v: unknown): v is ThemeMode {
+  return v === "light" || v === "dark" || v === "auto";
+}
 
 /**
  * Klient holati.
@@ -48,6 +59,8 @@ type AppState = {
 
   generations: ServerGeneration[];
   generationsLoaded: boolean;
+  /** The last list load failed (network/5xx): «Ishlarim» shows an error with retry instead of «no files». */
+  generationsError: boolean;
   /**
    * Birinchi sahifa javobidagi `nextCursor` (W2-B shartnomasi) — «Yana
    * ko'rsatish» shu yerdan davom etadi. `null` — boshqa sahifa yo'q.
@@ -106,6 +119,7 @@ api.setUnauthorizedHandler(() => {
     loggedIn: false,
     generations: [],
     generationsLoaded: false,
+    generationsError: false,
     generationsCursor: null,
   });
 });
@@ -164,14 +178,32 @@ function startPricingRefresh() {
  * OS afzalligini BIR MARTA o'qiydi (birinchi tashrifda standart qiymat
  * uchun). SSR xavfsiz — `window`/`matchMedia` yo'q bo'lsa "light".
  */
-export function resolveOsTheme(): ThemeMode {
+export function resolveOsTheme(): ResolvedTheme {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "light";
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+/** `auto` → the OS preference now; explicit modes as they are. */
+export function resolveTheme(theme: ThemeMode): ResolvedTheme {
+  return theme === "auto" ? resolveOsTheme() : theme;
+}
+
+/** While the mode is `auto`: repaint when the OS switches (one listener per page). */
+let osThemeListening = false;
+function followOsTheme() {
+  if (osThemeListening || typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  if (typeof mq?.addEventListener !== "function") return;
+  osThemeListening = true;
+  mq.addEventListener("change", () => {
+    if (useAppStore.getState().theme === "auto") applyTheme("auto");
+  });
+}
+
 export function applyTheme(theme: ThemeMode) {
   if (typeof document === "undefined") return;
-  document.documentElement.classList.toggle("dark", theme === "dark");
+  if (theme === "auto") followOsTheme();
+  document.documentElement.classList.toggle("dark", resolveTheme(theme) === "dark");
 }
 
 /**
@@ -183,7 +215,8 @@ export function applyTheme(theme: ThemeMode) {
  */
 export function migrateUiPrefs(persisted: unknown): { theme: ThemeMode; dir?: "ltr" | "rtl" } {
   const p = (persisted ?? {}) as { theme?: unknown; dir?: unknown };
-  const theme: ThemeMode = p.theme === "light" || p.theme === "dark" ? p.theme : resolveOsTheme();
+  // `auto` (Avto) is a real choice and stays; the legacy `"system"` / missing value is read from the OS once.
+  const theme: ThemeMode = isThemeMode(p.theme) ? p.theme : resolveOsTheme();
   // `undefined` KIRITILMAYDI (faqat haqiqiy qiymat bo'lsa maydon
   // qo'shiladi) — `persist`ning standart merge'i sayoz (`{...state,
   // ...persisted}`), aks holda `dir: undefined` joriy "ltr"ni bosib yozardi.
@@ -206,6 +239,7 @@ export const useAppStore = create<AppState>()(
       pricingVersion: 0,
       generations: [],
       generationsLoaded: false,
+      generationsError: false,
       generationsCursor: null,
       // SSR uchun joy egallovchi — haqiqiy qiymat `onRehydrateStorage`da
       // (birinchi tashrif → OS afzalligi) yoki `migrate`da (eski "system"
@@ -236,6 +270,7 @@ export const useAppStore = create<AppState>()(
               user: null,
               generations: [],
               generationsLoaded: false,
+              generationsError: false,
               generationsCursor: null,
             });
             return;
@@ -269,7 +304,7 @@ export const useAppStore = create<AppState>()(
 
       refreshGenerations: async () => {
         if (!get().loggedIn) {
-          set({ generations: [], generationsLoaded: true, generationsCursor: null });
+          set({ generations: [], generationsLoaded: true, generationsError: false, generationsCursor: null });
           return;
         }
         try {
@@ -277,11 +312,12 @@ export const useAppStore = create<AppState>()(
           set((s) => ({
             generations: keepUnchanged(s.generations, generations),
             generationsLoaded: true,
+            generationsError: false,
             generationsCursor: nextCursor ?? null,
           }));
         } catch {
           // Ro'yxat eski holicha qoladi; keyingi yangilash (polling/fokus) yana so'raydi.
-          set({ generationsLoaded: true });
+          set({ generationsLoaded: true, generationsError: true });
         }
       },
 
@@ -303,7 +339,7 @@ export const useAppStore = create<AppState>()(
         try {
           await api.logout(all);
         } finally {
-          set({ user: null, loggedIn: false, generations: [], generationsLoaded: false, generationsCursor: null });
+          set({ user: null, loggedIn: false, generations: [], generationsLoaded: false, generationsError: false, generationsCursor: null });
         }
       },
 
@@ -345,7 +381,7 @@ export const useAppStore = create<AppState>()(
         } catch {
           raw = null;
         }
-        if (raw === null || (state.theme !== "light" && state.theme !== "dark")) {
+        if (raw === null || !isThemeMode(state.theme)) {
           state.theme = resolveOsTheme();
         }
         applyTheme(state.theme);

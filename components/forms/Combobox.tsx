@@ -110,10 +110,10 @@ export function Combobox({ value, onChange, suggest, placeholder, multi, ariaLab
             title="Olib tashlash"
             aria-label={`${c} — olib tashlash`}
             onClick={() => removeChip(i)}
-            className="bg-primary/10 text-primary hover:bg-primary/20 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px]"
+            className="bg-primary/10 text-primary hover:bg-primary/20 inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[13.5px]"
           >
             {c}
-            <span aria-hidden className="text-[13px] leading-none">
+            <span aria-hidden className="text-[14px] leading-none">
               ×
             </span>
           </button>
@@ -138,7 +138,7 @@ export function Combobox({ value, onChange, suggest, placeholder, multi, ariaLab
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 120)}
           onKeyDown={onKeyDown}
-          className="min-w-[6rem] flex-1 bg-transparent px-1 text-[13px] outline-none"
+          className="min-w-[6rem] flex-1 bg-transparent px-1 text-[16px] outline-none"
         />
       </div>
       {open && options.length ? (
@@ -161,10 +161,10 @@ export function Combobox({ value, onChange, suggest, placeholder, multi, ariaLab
                 commit(o.label);
               }}
               onMouseEnter={() => setCursor(i)}
-              className={cn("cursor-pointer px-2.5 py-1.5 text-[13px]", i === cursor && "bg-muted")}
+              className={cn("cursor-pointer px-2.5 py-1.5 text-[14.5px]", i === cursor && "bg-muted")}
             >
               {o.label}
-              {o.hint ? <span className="text-muted-foreground ml-2 text-[11px]">{o.hint}</span> : null}
+              {o.hint ? <span className="text-muted-foreground ml-2 text-[13.5px]">{o.hint}</span> : null}
             </li>
           ))}
         </ul>

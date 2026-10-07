@@ -651,3 +651,196 @@ button {
     display: none !important;
   }
 }
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ * REDESIGN (docs/redesign/PLAN.md, variant A «Iliq») — tokens + motion.
+ * Owned by package F0. The brand stays (amber `--primary`, cream page,
+ * warm dark); these add the bottom-tab shell's surfaces and motion.
+ *
+ * Tokens (light + dark):
+ *   --accent-soft            active chip / soft amber fill (tab icon chip, selected rows)
+ *   --accent-soft-foreground icon / text on --accent-soft
+ *   --hero, --hero-foreground   amber → #ea7a0a gradient with dark text (balance hero)
+ *   --surface-bar, --surface-bar-border   floating tab bar (translucent, blurred)
+ *   --shadow-card, --shadow-bar, --shadow-fab
+ *   --radius-card (20 px), --radius-bar (24 px)
+ *   --tabbar-room            what the bar takes above the bottom safe area when shown
+ *   --tabbar-h               0 while the bar is hidden, `--tabbar-room` while shown. Read it
+ *                            for bottom-fixed things (ScrollToTop, toasts, sheets).
+ *   --shell-topbar-h         the shell's top strip = Telegram / notch inset only (no global
+ *                            top bar any more; 0 on a desktop)
+ * Tailwind utilities: `bg-accent-soft`, `text-hero-foreground`, `bg-surface-bar`.
+ *
+ * Motion (CSS only; everything off under prefers-reduced-motion):
+ *   .slx-page-enter[data-dir=left|right|none]   page content enter (the shell sets it)
+ *   .slx-step-enter     step page slides in from the right (profile steps)
+ *   .slx-sheet-enter    bottom sheet slides up (300 ms)
+ *   .slx-scrim-enter    backdrop fades in
+ *   .slx-tabbar[data-hidden]   the bar slides away (route / keyboard / modal)
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+:root {
+  --accent-soft: #fdecc8;
+  /* Icon / text on `--accent-soft` (amber-700: 4.6:1 there; the brand amber is only 1.9:1). */
+  --accent-soft-foreground: #b45309;
+  --hero: linear-gradient(135deg, #f59e0b 0%, #ea7a0a 100%);
+  --hero-foreground: #1c1406;
+  --surface-bar: rgba(255, 253, 249, 0.92);
+  --surface-bar-border: rgba(43, 32, 19, 0.09);
+  --shadow-card: 0 1px 2px rgba(43, 32, 19, 0.05), 0 6px 18px -8px rgba(43, 32, 19, 0.12);
+  --shadow-bar: 0 12px 32px -12px rgba(43, 32, 19, 0.3), 0 2px 8px rgba(43, 32, 19, 0.06);
+  --shadow-fab: 0 10px 22px -8px rgba(234, 122, 10, 0.6);
+  --radius-card: 20px;
+  --radius-bar: 24px;
+  /* 8 px gap + 64 px bar + 12 px for the raised «+» = 84 px. */
+  --tabbar-room: 5.25rem;
+  --tabbar-h: 0px;
+  --shell-topbar-h: calc(var(--tg-safe-top, env(safe-area-inset-top, 0px)) + var(--tg-content-safe-top, 0px));
+}
+
+.dark {
+  --accent-soft: rgba(245, 158, 11, 0.16);
+  --accent-soft-foreground: #fbbf24;
+  --hero: linear-gradient(135deg, #f59e0b 0%, #ea7a0a 100%);
+  --hero-foreground: #1c1406;
+  --surface-bar: rgba(30, 27, 23, 0.9);
+  --surface-bar-border: rgba(255, 255, 255, 0.08);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-bar: 0 12px 32px -12px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.03);
+  --shadow-fab: 0 10px 24px -8px rgba(245, 158, 11, 0.45);
+}
+
+@theme inline {
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-soft-foreground: var(--accent-soft-foreground);
+  --color-hero-foreground: var(--hero-foreground);
+  --color-surface-bar: var(--surface-bar);
+}
+
+/* The bar is shown: every bottom-fixed element (portals included) clears it. The shell root sets it too. */
+:root:has(.slx-tabbar:not([data-hidden])) {
+  --tabbar-h: var(--tabbar-room);
+}
+
+.slx-tabbar {
+  transition:
+    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 200ms ease-out,
+    visibility 0s linear 0s;
+}
+
+.slx-tabbar[data-hidden] {
+  transform: translate3d(0, calc(100% + 1.5rem), 0);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    transform 220ms ease-in,
+    opacity 180ms ease-in,
+    visibility 0s linear 220ms;
+}
+
+@keyframes slx-enter-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slx-enter-from-right {
+  from {
+    opacity: 0;
+    transform: translate3d(20px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slx-enter-from-left {
+  from {
+    opacity: 0;
+    transform: translate3d(-20px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slx-step-in {
+  from {
+    opacity: 0;
+    transform: translate3d(32px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slx-sheet-up {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* `backwards`: no transform is left on the element after the run, so fixed children stay viewport-anchored. */
+.slx-page-enter {
+  animation: slx-enter-fade 200ms ease-out backwards;
+}
+
+/* `left`: the content travels left, i.e. it enters from the right (towards a tab further right). */
+.slx-page-enter[data-dir="left"] {
+  animation: slx-enter-from-right 220ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+.slx-page-enter[data-dir="right"] {
+  animation: slx-enter-from-left 220ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+/* First paint: nothing animates. */
+.slx-page-enter[data-dir="initial"] {
+  animation: none;
+}
+
+.slx-step-enter {
+  animation: slx-step-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+.slx-sheet-enter {
+  animation: slx-sheet-up 300ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
+}
+
+.slx-scrim-enter {
+  animation: slx-enter-fade 200ms ease-out backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slx-page-enter,
+  .slx-page-enter[data-dir="left"],
+  .slx-page-enter[data-dir="right"],
+  .slx-step-enter,
+  .slx-sheet-enter,
+  .slx-scrim-enter {
+    animation: none;
+  }
+
+  .slx-tabbar,
+  .slx-tabbar[data-hidden] {
+    transition: none;
+  }
+}
+
+@media print {
+  .slx-tabbar {
+    display: none !important;
+  }
+}

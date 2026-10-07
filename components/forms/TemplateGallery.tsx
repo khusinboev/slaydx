@@ -110,7 +110,7 @@ export function TemplateGallery({
       <div className="mt-3">
         {customOn ? (
           <Row label="Rang" hint="O'z shablonda ranglar va shriftlar namunaning o'zidan olinadi.">
-            <span className="text-muted-foreground text-[12.5px]">Namunaning o‘z ranglari</span>
+            <span className="text-muted-foreground text-[13.5px]">Namunaning o‘z ranglari</span>
           </Row>
         ) : (
           <Row label="Rang" hint="Palitra — tanlangan shablonning barcha slaydlariga; preview ham shu rangda.">
@@ -179,7 +179,7 @@ function SelectionTile({
           customTpl ? (
             <CustomPreview tpl={customTpl} themeId={themeObj.id} mainOnly />
           ) : (
-            <span className="bg-muted text-muted-foreground flex items-center justify-center rounded-md text-[11px]" style={{ aspectRatio: "16 / 9" }}>
+            <span className="bg-muted text-muted-foreground flex items-center justify-center rounded-md text-[13px]" style={{ aspectRatio: "16 / 9" }}>
               Namuna yuklanmoqda…
             </span>
           )
@@ -191,11 +191,11 @@ function SelectionTile({
       </span>
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-1 py-1">
         <span className="flex items-center gap-2">
-          <span className="truncate text-[14px] font-semibold">{label}</span>
-          {current === "auto" && !customName ? <span className="bg-muted text-muted-foreground rounded-md px-1.5 py-0.5 text-[10px]">standart</span> : null}
+          <span className="truncate text-[14.5px] font-semibold">{label}</span>
+          {current === "auto" && !customName ? <span className="bg-muted text-muted-foreground rounded-md px-1.5 py-0.5 text-[12.5px]">standart</span> : null}
         </span>
-        <span className="text-muted-foreground line-clamp-2 text-[12px]">{blurb}</span>
-        <span className="text-primary mt-1 text-[12px] font-medium underline-offset-2 group-hover:underline">Shablonni o‘zgartirish ›</span>
+        <span className="text-muted-foreground line-clamp-2 text-[13.5px]">{blurb}</span>
+        <span className="text-primary mt-1 text-[13.5px] font-medium underline-offset-2 group-hover:underline">Shablonni o‘zgartirish ›</span>
       </span>
     </button>
   );
@@ -288,8 +288,8 @@ function TemplateDialog({
       <div ref={panelRef} className="bg-card relative z-10 flex max-h-[92vh] w-full max-w-4xl flex-col rounded-2xl border shadow-xl">
         <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
           <div>
-            <h2 className="text-[15px] font-semibold">Shablon tanlash</h2>
-            <p className="text-muted-foreground text-[12px]">Har karta — haqiqiy slaydlar. Bosilganda tanlanadi.</p>
+            <h2 className="text-[17px] font-semibold">Shablon tanlash</h2>
+            <p className="text-muted-foreground text-[13.5px]">Har karta — haqiqiy slaydlar. Bosilganda tanlanadi.</p>
           </div>
           <button type="button" onClick={close} className="hover:bg-muted rounded-lg p-1.5" aria-label="Yopish">
             <X className="size-4" />
@@ -340,13 +340,13 @@ function TemplateCard({ tpl, on, themeObj, onPick }: { tpl: SlideTemplate; on: b
       style={{ contentVisibility: "auto", containIntrinsicSize: "320px 250px" } as React.CSSProperties}
     >
       <div className="flex items-baseline justify-between gap-2 px-1 pb-1.5">
-        <span className="truncate text-[13px] font-semibold">{tpl.nameUz}</span>
-        {tpl.id === "auto" ? <span className="bg-muted text-muted-foreground rounded-md px-1.5 py-0.5 text-[10px]">mavzudan</span> : null}
+        <span className="truncate text-[14.5px] font-semibold">{tpl.nameUz}</span>
+        {tpl.id === "auto" ? <span className="bg-muted text-muted-foreground rounded-md px-1.5 py-0.5 text-[12.5px]">mavzudan</span> : null}
       </div>
       {tpl.id === "auto" ? (
         <>
           <AutoTile theme={themeObj} />
-          <p className="text-muted-foreground px-1 pt-1.5 text-[11px]">Mavzuga qarab 10 dizayndan eng mosi va rangi tanlanadi.</p>
+          <p className="text-muted-foreground px-1 pt-1.5 text-[13px]">Mavzuga qarab 10 dizayndan eng mosi va rangi tanlanadi.</p>
         </>
       ) : (
         <>
@@ -358,7 +358,7 @@ function TemplateCard({ tpl, on, themeObj, onPick }: { tpl: SlideTemplate; on: b
               </Thumb>
             ))}
           </div>
-          <p className="text-muted-foreground truncate px-1 pt-1.5 text-[11px]">{tpl.blurb}</p>
+          <p className="text-muted-foreground truncate px-1 pt-1.5 text-[13px]">{tpl.blurb}</p>
         </>
       )}
     </button>

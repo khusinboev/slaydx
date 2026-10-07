@@ -1,17 +1,13 @@
-import { Suspense } from "react";
-import type { Metadata } from "next";
-import { PurchasePage } from "@/components/purchase/PurchasePage";
+import { redirect } from "next/navigation";
+import { walletRedirectTarget } from "@/lib/nav/tabs";
 
-export const metadata: Metadata = {
-  title: "Balansni to'ldirish",
-  description: "Hisobni to'ldirish — Click yoki Payme orqali; har bir hujjat alohida to'lanadi",
-};
+type SearchParams = Record<string, string | string[] | undefined>;
 
-export default function Page() {
-  // `useSearchParams` (to'lovdan qaytish `?order=`) Suspense talab qiladi.
-  return (
-    <Suspense fallback={<div className="text-muted-foreground p-8 text-sm">Yuklanmoqda...</div>}>
-      <PurchasePage />
-    </Suspense>
-  );
+/**
+ * Legacy route: the wallet moved to `/uz/wallet` (docs/redesign/PLAN.md). A
+ * server redirect that keeps the query, so the payment provider's return URL
+ * (`/uz/purchase?order=<id>`) and old links keep working.
+ */
+export default async function Page({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  redirect(walletRedirectTarget(await searchParams));
 }

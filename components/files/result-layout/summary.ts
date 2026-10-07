@@ -1,4 +1,5 @@
 import type { ArticleReview } from "@/lib/generation/article/types";
+import { groupDigits } from "@/lib/format";
 
 export type ChipTone = "green" | "yellow" | "red" | "neutral";
 
@@ -50,5 +51,5 @@ export function shareSummary(s: { hasLink: boolean; results: number }): ShareSum
   const results = Number.isFinite(s.results) && s.results > 0 ? Math.floor(s.results) : 0;
   if (!s.hasLink) return { hasLink: false, results: 0, label: "O‘yin havolasi", tone: "neutral" };
   if (!results) return { hasLink: true, results: 0, label: "O‘yin havolasi · natija yo‘q", tone: "neutral" };
-  return { hasLink: true, results, label: `O‘yin havolasi · ${results.toLocaleString("uz-UZ")} natija`, tone: "green" };
+  return { hasLink: true, results, label: `O‘yin havolasi · ${groupDigits(results)} natija`, tone: "green" };
 }

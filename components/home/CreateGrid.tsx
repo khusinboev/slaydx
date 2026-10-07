@@ -11,6 +11,7 @@ import { useUi } from "@/lib/ui";
 import { cn } from "@/lib/cn";
 import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
 import { filterCatalogue, type CatalogueGroup } from "./catalogue-filter";
+import { groupDigits } from "@/lib/format";
 
 export function CreateGrid() {
   const hydrated = useAppStore((s) => s.hydrated);
@@ -130,7 +131,7 @@ export function CreateGrid() {
         .filter((g) => shown.some((t) => t.group === g.id))
         .map((g) => (
         <section key={g.id} data-catalogue-group={g.id} className="mb-8 scroll-mt-32">
-          <h2 className="text-muted-foreground mb-3 text-xs font-semibold tracking-wider uppercase">
+          <h2 className="text-muted-foreground mb-3 text-[13px] font-semibold tracking-wider uppercase">
             {g.label}
           </h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -153,10 +154,10 @@ export function CreateGrid() {
                     </div>
                     <p className="text-muted-foreground text-sm">{t.description}</p>
                     {blocked ? (
-                      <p className="mt-3 text-xs font-medium text-amber-600 dark:text-amber-500">{blocked}</p>
+                      <p className="mt-3 text-[13px] font-medium text-amber-600 dark:text-amber-500">{blocked}</p>
                     ) : (
-                      <p className="mt-3 text-xs font-medium">
-                        {clientAdjustedPrice(t.id, t.basePrice).toLocaleString("uz-UZ")} tanga dan
+                      <p className="mt-3 text-[13px] font-medium">
+                        {groupDigits(clientAdjustedPrice(t.id, t.basePrice))} tanga dan
                       </p>
                     )}
                   </div>

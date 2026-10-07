@@ -33,7 +33,7 @@ export function PhoneInput({
       value={formatPhone(value)}
       placeholder={placeholder}
       onChange={(e) => onChange(normalizePhone(e.target.value))}
-      className="border-input bg-card focus:ring-ring h-9 w-full max-w-xs rounded-lg border px-2.5 text-[13px] outline-none focus:ring-2"
+      className="border-input bg-card focus:ring-ring h-9 w-full max-w-xs rounded-lg border px-2.5 text-[16px] outline-none focus:ring-2"
     />
   );
 }

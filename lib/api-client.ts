@@ -403,7 +403,7 @@ export function nextPollDelay(g: GenerationDetail, delay: number): number {
  * Avtomatik qayta yuborilmaydi: har yuborish — yangi to'lov.
  *
  * Vaqt tugasa ish baribir navbatga tushgan bo'lishi mumkin — matn
- * qayta yuborishdan oldin «Mening fayllarim» ni tekshirishni aytadi.
+ * qayta yuborishdan oldin «Ishlarim» ni tekshirishni aytadi.
  *
  * `Idempotency-Key` (C34 / CONC-10): har yuborish NIYATIGA bitta UUID v4
  * ({@link submitKey}). Javobi yo'qolgan so'rovdan (vaqt tugashi, 5xx,
@@ -446,7 +446,7 @@ export async function createGeneration(
     }
     if (e instanceof ApiError && e.data.timeout === true) {
       throw new ApiError(
-        "Server javob bermadi. Qayta yuborishdan oldin «Mening fayllarim» ni tekshiring — ish navbatga qo'yilgan bo'lishi mumkin.",
+        "Server javob bermadi. Qayta yuborishdan oldin «Ishlarim» ni tekshiring — ish navbatga qo'yilgan bo'lishi mumkin.",
         0,
         e.data,
       );

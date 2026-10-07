@@ -80,9 +80,9 @@ export function ResumeTemplateTile({
       >
         <ResumeThumb template={template} palette={palette} withPhoto={withPhoto} />
         <span className="min-w-0">
-          <span className="block text-[13px] font-medium">{t.title}</span>
-          <span className="text-muted-foreground block text-[11px]">{t.hint}</span>
-          <span className="text-primary mt-1 block text-[11px]">O‘zgartirish</span>
+          <span className="block text-[14.5px] font-medium">{t.title}</span>
+          <span className="text-muted-foreground block text-[13px]">{t.hint}</span>
+          <span className="text-primary mt-1 block text-[13px]">O‘zgartirish</span>
         </span>
       </button>
       {open ? (
@@ -136,7 +136,7 @@ export function ResumeTemplateDialog({
         className="bg-card my-8 w-full max-w-3xl rounded-2xl border p-4 shadow-xl"
       >
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-[15px] font-semibold">Shablon tanlang</h2>
+          <h2 className="text-[17px] font-semibold">Shablon tanlang</h2>
           <span data-palettes>
             <ColorDots
               ariaLabel="Palitra"
@@ -154,7 +154,7 @@ export function ResumeTemplateDialog({
          */}
         {GROUPS.map((g) => (
           <section key={g.id} className="mb-4" data-template-group={g.id}>
-            <h3 className="mb-2 text-[12.5px] font-semibold">
+            <h3 className="mb-2 text-[14px] font-semibold">
               {g.title} <span className="text-muted-foreground font-normal">· {g.ids.length} ta · {g.hint}</span>
             </h3>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -170,8 +170,8 @@ export function ResumeTemplateDialog({
                   )}
                 >
                   <ResumeThumb template={id} palette={pal} withPhoto />
-                  <span className="text-[12px] font-medium">{RESUME_TEMPLATES[id].title}</span>
-                  <span className="text-muted-foreground text-[10.5px]">{RESUME_TEMPLATES[id].hint}</span>
+                  <span className="text-[14.5px] font-medium">{RESUME_TEMPLATES[id].title}</span>
+                  <span className="text-muted-foreground text-[13px]">{RESUME_TEMPLATES[id].hint}</span>
                 </button>
               ))}
             </div>

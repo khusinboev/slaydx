@@ -14,7 +14,7 @@ export function DraftNotice() {
   const detachedFile = useDraftNotice((s) => s.detachedFile);
   if (!failed && !detachedFile) return null;
   return (
-    <p role="status" data-draft-notice className="text-muted-foreground mb-4 text-[12.5px]">
+    <p role="status" data-draft-notice className="text-muted-foreground mb-4 text-[13px]">
       {detachedFile ? (
         <>
           Qoralama tiklandi. «{detachedFile}» fayli matni qoralamada saqlanmaydi — faylni qayta biriktiring.
