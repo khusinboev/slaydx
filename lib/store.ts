@@ -59,6 +59,8 @@ type AppState = {
 
   generations: ServerGeneration[];
   generationsLoaded: boolean;
+  /** The last list load failed (network/5xx): «Ishlarim» shows an error with retry instead of «no files». */
+  generationsError: boolean;
   /**
    * Birinchi sahifa javobidagi `nextCursor` (W2-B shartnomasi) — «Yana
    * ko'rsatish» shu yerdan davom etadi. `null` — boshqa sahifa yo'q.
@@ -117,6 +119,7 @@ api.setUnauthorizedHandler(() => {
     loggedIn: false,
     generations: [],
     generationsLoaded: false,
+    generationsError: false,
     generationsCursor: null,
   });
 });
@@ -236,6 +239,7 @@ export const useAppStore = create<AppState>()(
       pricingVersion: 0,
       generations: [],
       generationsLoaded: false,
+      generationsError: false,
       generationsCursor: null,
       // SSR uchun joy egallovchi — haqiqiy qiymat `onRehydrateStorage`da
       // (birinchi tashrif → OS afzalligi) yoki `migrate`da (eski "system"
@@ -266,6 +270,7 @@ export const useAppStore = create<AppState>()(
               user: null,
               generations: [],
               generationsLoaded: false,
+              generationsError: false,
               generationsCursor: null,
             });
             return;
@@ -299,7 +304,7 @@ export const useAppStore = create<AppState>()(
 
       refreshGenerations: async () => {
         if (!get().loggedIn) {
-          set({ generations: [], generationsLoaded: true, generationsCursor: null });
+          set({ generations: [], generationsLoaded: true, generationsError: false, generationsCursor: null });
           return;
         }
         try {
@@ -307,11 +312,12 @@ export const useAppStore = create<AppState>()(
           set((s) => ({
             generations: keepUnchanged(s.generations, generations),
             generationsLoaded: true,
+            generationsError: false,
             generationsCursor: nextCursor ?? null,
           }));
         } catch {
           // Ro'yxat eski holicha qoladi; keyingi yangilash (polling/fokus) yana so'raydi.
-          set({ generationsLoaded: true });
+          set({ generationsLoaded: true, generationsError: true });
         }
       },
 
@@ -333,7 +339,7 @@ export const useAppStore = create<AppState>()(
         try {
           await api.logout(all);
         } finally {
-          set({ user: null, loggedIn: false, generations: [], generationsLoaded: false, generationsCursor: null });
+          set({ user: null, loggedIn: false, generations: [], generationsLoaded: false, generationsError: false, generationsCursor: null });
         }
       },
 

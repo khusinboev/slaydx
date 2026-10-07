@@ -395,3 +395,36 @@ test("W2: short entrance stagger — ≤ 140 ms delays, motion-safe only", () =>
   assert.equal(delays[1], 20);
   assert.equal(Math.max(...delays), 140, "the tail does not wait longer");
 });
+
+test("lead: a failed FIRST list load shows an error with «Qayta urinish» (retry reloads), never «no files yet»", async () => {
+  let reloads = 0;
+  useAppStore.setState({
+    sessionChecked: true,
+    loggedIn: true,
+    generations: [],
+    generationsLoaded: true,
+    generationsError: true,
+    generationsCursor: null,
+    refreshGenerations: async () => {
+      reloads++;
+    },
+  });
+  render(h(AppRouterContext.Provider, { value: router }, h(SearchParamsContext.Provider, { value: new URLSearchParams("") }, h(HomeFiles))));
+  // MUTATION: without `generationsError` the empty state («Yangi ish yaratish») was shown instead.
+  assert.ok(document.querySelector("[data-files-error]"), "error banner");
+  assert.ok(!document.querySelector("[data-files-empty]"), "no «no files» state");
+  fireEvent.click(document.querySelector<HTMLButtonElement>("[data-files-retry]")!);
+  assert.equal(reloads, 1, "retry reloads the list");
+  cleanup();
+  useAppStore.setState({ generationsError: false });
+  mountView([]);
+  assert.ok(document.querySelector("[data-files-empty]"), "a successful empty load still shows the empty state");
+  assert.ok(!document.querySelector("[data-files-error]"));
+});
+
+test("lead: a queued card does not repeat «Navbatda» in its meta line", () => {
+  mountView([row("q1", { status: "QUEUED", step: "Navbatda", progress: 0 })]);
+  const card = document.querySelector('[data-file-card][data-file-id="q1"]')!;
+  assert.equal((card.textContent?.match(/Navbatda/g) ?? []).length, 1, card.textContent ?? "");
+});
+

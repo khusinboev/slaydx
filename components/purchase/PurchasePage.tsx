@@ -58,7 +58,7 @@ export function PurchasePage() {
             disabled={!sessionChecked}
             onClick={() => {
               if (!loggedIn) {
-                open("login", { returnTo: "/uz/purchase" });
+                open("login", { returnTo: "/uz/wallet" });
                 return;
               }
               open("pay");

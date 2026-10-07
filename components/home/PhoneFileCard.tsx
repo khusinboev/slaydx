@@ -38,7 +38,9 @@ export const PhoneFileCard = memo(function PhoneFileCard({
   const running = gen.status === "QUEUED" || gen.status === "IN_PROGRESS";
   const when = formatFileWhen(gen.finishedAt ?? gen.createdAt, now);
   // A running job tells what it is doing («Matn · 7/12 slayd»); everything else tells when.
-  const detail = running && gen.step && gen.step !== pill.label ? gen.step : when;
+  // The server step for a queued job is the same word as the pill («Navbatda…») — say when instead of repeating it.
+  const sameAsPill = (gen.step ?? "").trim().toLowerCase().replace(/[.…\s]+$/, "") === pill.label.toLowerCase();
+  const detail = running && gen.step && !sameAsPill ? gen.step : when;
   const meta = [tool?.title, detail].filter(Boolean).join(" · ");
   const ended = gen.status === "FAILED" || gen.status === "REVOKED";
   const href = `/uz/files/${gen.id}`;

@@ -44,6 +44,7 @@ export function HomeFiles() {
   const loggedIn = useAppStore((s) => s.loggedIn);
   const generations = useAppStore((s) => s.generations);
   const generationsLoaded = useAppStore((s) => s.generationsLoaded);
+  const generationsError = useAppStore((s) => s.generationsError);
   const firstCursor = useAppStore((s) => s.generationsCursor);
   const refreshGenerations = useAppStore((s) => s.refreshGenerations);
   const drop = useAppStore((s) => s.dropGeneration);
@@ -232,6 +233,12 @@ export function HomeFiles() {
   const newestFirst = sort === "created" ? !desc : desc;
   const customView = sort !== DEFAULT_FILE_VIEW.sort || desc !== DEFAULT_FILE_VIEW.desc;
   const loading = !sessionChecked || (loggedIn && !generationsLoaded);
+  // A failed first load is an error with retry, never «no files yet» (the store keeps the old list otherwise).
+  const shownError: ListError | null =
+    error ??
+    (loggedIn && generationsLoaded && generationsError && all.length === 0
+      ? { message: "Fayllar ro‘yxati yuklanmadi. Internet aloqasini tekshirib, qayta urining.", retry: () => void refreshGenerations() }
+      : null);
   const total = `${all.length}${moreCursor ? "+" : ""}`;
   const subtitle = loading
     ? "Yuklanmoqda…"
@@ -357,19 +364,19 @@ export function HomeFiles() {
           })}
         </div>
 
-        {error ? (
+        {shownError ? (
           <div
             role="alert"
             data-files-error
             className="border-destructive/30 bg-destructive/8 mt-3 flex items-center gap-3 rounded-2xl border py-2 pr-2 pl-4"
           >
-            <p className="text-destructive min-w-0 flex-1 text-[14.5px]">{error.message}</p>
-            {error.retry ? (
+            <p className="text-destructive min-w-0 flex-1 text-[14.5px]">{shownError.message}</p>
+            {shownError.retry ? (
               <button
                 type="button"
                 data-files-retry
                 onClick={() => {
-                  const retry = error.retry;
+                  const retry = shownError.retry;
                   setError(null);
                   retry?.();
                 }}
@@ -384,7 +391,7 @@ export function HomeFiles() {
 
         {loading ? (
           <FilesSkeleton />
-        ) : list.length === 0 ? (
+        ) : list.length === 0 && shownError ? null : list.length === 0 ? (
           <EmptyState
             loggedIn={loggedIn}
             filtered={all.length > 0 && filter !== "all"}
