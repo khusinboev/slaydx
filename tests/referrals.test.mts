@@ -36,6 +36,7 @@ const shared = await import("../lib/referral.ts");
 const { query, queryOne, pool, transaction, ensureMigrated } = await import("../lib/server/db.ts");
 const { upsertTelegramUser, registerBotUser, SIGNUP_BONUS_POINTS } = await import("../lib/server/auth.ts");
 const referrals = await import("../lib/server/referrals.ts");
+const { topUpInTx } = await import("../lib/server/credits.ts");
 const { setErrorSink } = await import("../lib/server/log.ts");
 if (hasDb) await ensureMigrated();
 
@@ -420,6 +421,27 @@ test("second apply in the same transaction (a retry) → duplicate: one row, one
   assert.equal((await referralOf(out.id)).length, 1);
   const ledger = await query("SELECT 1 FROM transactions WHERE user_id = $1 AND reference LIKE 'referral:%' AND created_at > now() - interval '1 minute' AND reference = $2", [inviter.id, `referral:${out.id}`]);
   assert.equal(ledger.length, 1, "MUTATSIYA 6: the reward reference is `referral:<referee id>`");
+  await assertLedger(inviter.id, "inviter");
+});
+
+test("review MINOR-2: the reward reference already in the ledger → the row is kept but claims 0 points (row ⇔ ledger)", { skip }, async () => {
+  const inviter = await newReferrer();
+  const before = await pointsOf(inviter.id);
+  const out = await inFreshUserTx(async (client, id) => {
+    // e.g. a restored ledger that already paid this referee id
+    await topUpInTx(client, inviter.id, { points: 2000 }, `referral:${id}`, "bonus", "oldindan");
+    const r = await applyReferralInTx(client, { refereeId: id, code: inviter.code, source: "bot" });
+    const row = (await client.query<{ reward_points: number; reward_ref: string | null }>(
+      "SELECT reward_points, reward_ref FROM referrals WHERE referee_user_id = $1",
+      [id],
+    )).rows;
+    return { r, row };
+  }, false);
+  assert.equal(out.r.applied === false && out.r.reason, "duplicate");
+  assert.deepEqual(out.row, [{ reward_points: 0, reward_ref: null }], "MUTATSIYA 12: the row must not claim money that did not move");
+  assert.equal((await pointsOf(inviter.id)) - before, 2000, "only the pre-existing ledger row");
+  const s = await referralSummary(inviter.id, { botUsername: null, appUrl: "https://slaydx.test" });
+  assert.equal(s.earnedPoints, 0, "counters follow the ledger");
   await assertLedger(inviter.id, "inviter");
 });
 

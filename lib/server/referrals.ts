@@ -199,7 +199,10 @@ async function applyCore(client: PoolClient, refereeId: string, code: string, so
 
   const credited = await topUpInTx(client, referrer.id, { points }, ref!, "bonus", rewardNote(referee.name));
   if (!credited) {
-    // The ledger already holds this reference: money moved once, keep the row consistent with it.
+    // The ledger already holds this reference (e.g. a restored ledger): no money moved
+    // now, so the row keeps who-invited-whom but claims nothing (review MINOR-2) —
+    // the counters (profile, /taklif, admin) sum `reward_points`.
+    await client.query("UPDATE referrals SET reward_points = 0, reward_ref = NULL WHERE referee_user_id = $1", [refereeId]);
     log("warn", "[referral] mukofot jurnalda allaqachon bor — qayta yozilmadi", { userId: referrer.id, reference: ref });
     return { applied: false, reason: "duplicate", referrerId: referrer.id };
   }
