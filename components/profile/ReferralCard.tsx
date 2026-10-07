@@ -48,12 +48,18 @@ export async function copyText(text: string, field: HTMLInputElement | null): Pr
   }
 }
 
+/** Variant A icon bubble: F0's `--accent-soft` when present, the same tint before F0 merges. */
+const SOFT = { background: "var(--accent-soft, rgba(245, 158, 11, 0.16))" } as const;
+const FOCUS = "focus-visible:ring-ring focus-visible:ring-offset-card focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none";
+const CARD = "bg-card min-w-0 rounded-[20px] border p-5";
+
 /**
- * Profile section «Do'stlarni taklif qiling» (T3): the user's invite link
+ * «Do'stlarni taklif qiling» (T3; Hamyon tab and profile): the user's invite link
  * (bot or site), copy and share, counters and the recent joiners (names only).
  * Phone first: every control is ≥ 44 px and nothing overflows at 360 px.
+ * `className` replaces the default bottom margin (`mb-6`, the profile stack).
  */
-export function ReferralCard() {
+export function ReferralCard({ className = "mb-6" }: { className?: string } = {}) {
   const [data, setData] = useState<ReferralSummaryView | null>(null);
   const [failed, setFailed] = useState(false);
   const [kind, setKind] = useState<LinkKind>("bot");
@@ -83,13 +89,13 @@ export function ReferralCard() {
 
   if (failed) {
     return (
-      <section className="bg-card mb-6 rounded-2xl border p-6" data-referral-card="error">
-        <h2 className="text-lg font-semibold">Do&apos;stlarni taklif qiling</h2>
-        <p className="text-muted-foreground mt-1 text-sm">Taklif ma&apos;lumotlari yuklanmadi.</p>
+      <section className={cn(CARD, className)} data-referral-card="error">
+        <h2 className="text-[17px] font-semibold">Do&apos;stlarni taklif qiling</h2>
+        <p className="text-muted-foreground mt-1 text-[15px]">Taklif ma&apos;lumotlari yuklanmadi.</p>
         <button
           type="button"
           onClick={load}
-          className="hover:bg-muted mt-3 inline-flex h-11 items-center rounded-xl border px-4 text-sm font-medium"
+          className={cn("hover:bg-muted mt-3 inline-flex h-11 items-center rounded-[14px] border px-4 text-[15px] font-medium", FOCUS)}
         >
           Qayta urinish
         </button>
@@ -99,12 +105,12 @@ export function ReferralCard() {
 
   if (!data) {
     return (
-      <section className="bg-card mb-6 rounded-2xl border p-6" aria-busy="true" aria-label="Yuklanmoqda" data-referral-card="loading">
-        <div className="bg-muted h-6 w-48 animate-pulse rounded" />
-        <div className="bg-muted mt-4 h-11 w-full animate-pulse rounded-xl" />
+      <section className={cn(CARD, className)} aria-busy="true" aria-label="Yuklanmoqda" data-referral-card="loading">
+        <div className="bg-muted h-6 w-48 rounded motion-safe:animate-pulse" />
+        <div className="bg-muted mt-4 h-11 w-full rounded-[14px] motion-safe:animate-pulse" />
         <div className="mt-3 grid grid-cols-2 gap-3">
-          <div className="bg-muted h-16 animate-pulse rounded-xl" />
-          <div className="bg-muted h-16 animate-pulse rounded-xl" />
+          <div className="bg-muted h-16 rounded-2xl motion-safe:animate-pulse" />
+          <div className="bg-muted h-16 rounded-2xl motion-safe:animate-pulse" />
         </div>
       </section>
     );
@@ -132,23 +138,27 @@ export function ReferralCard() {
   };
 
   return (
-    <section className="bg-card mb-6 min-w-0 rounded-2xl border p-6" data-referral-card="ready" aria-labelledby="referral-title">
+    <section className={cn(CARD, className)} data-referral-card="ready" aria-labelledby="referral-title">
       <div className="flex items-start gap-3">
-        <span className="bg-primary/15 text-primary flex size-10 shrink-0 items-center justify-center rounded-full" aria-hidden="true">
-          <Gift className="size-5" />
+        <span
+          className="flex size-11 shrink-0 items-center justify-center rounded-[14px] text-amber-700 dark:text-amber-400"
+          style={SOFT}
+          aria-hidden="true"
+        >
+          <Gift className="size-[22px]" />
         </span>
         <div className="min-w-0">
-          <h2 id="referral-title" className="text-lg font-semibold">
+          <h2 id="referral-title" className="text-[17px] leading-snug font-semibold">
             Do&apos;stlarni taklif qiling
           </h2>
-          <p className="text-muted-foreground mt-0.5 text-sm" data-referral-rule>
+          <p className="text-muted-foreground mt-0.5 text-[14px] leading-snug" data-referral-rule>
             {referralRuleText(data.rewardPoints)}
           </p>
         </div>
       </div>
 
       {data.botLink ? (
-        <div role="group" aria-label="Havola turi" className="bg-muted/60 mt-4 grid grid-cols-2 gap-1 rounded-xl p-1">
+        <div role="group" aria-label="Havola turi" className="bg-muted/70 mt-4 grid grid-cols-2 gap-1 rounded-[14px] p-1">
           {(
             [
               ["bot", "Telegram bot"],
@@ -162,7 +172,8 @@ export function ReferralCard() {
               data-referral-kind={id}
               onClick={() => setKind(id)}
               className={cn(
-                "h-11 rounded-lg border text-sm font-medium transition-colors",
+                "h-11 rounded-[11px] border text-[15px] font-medium transition-colors",
+                FOCUS,
                 // The border keeps the chosen segment visible in dark mode, where card ≈ muted (smoke screenshot).
                 kind === id ? "border-border bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground border-transparent",
               )}
@@ -181,7 +192,7 @@ export function ReferralCard() {
           value={link}
           data-referral-link
           onFocus={(e) => e.currentTarget.select()}
-          className="border-input bg-background h-11 w-full min-w-0 rounded-xl border px-3 font-mono text-[13px]"
+          className={cn("border-input bg-background h-11 w-full min-w-0 rounded-[14px] border px-3 font-mono text-[13.5px]", FOCUS)}
         />
       </label>
 
@@ -190,7 +201,10 @@ export function ReferralCard() {
           type="button"
           onClick={() => void copy()}
           data-referral-copy
-          className="hover:bg-muted inline-flex h-11 min-w-0 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-medium"
+          className={cn(
+            "hover:bg-muted inline-flex h-11 min-w-0 items-center justify-center gap-2 rounded-[14px] border px-3 text-[15px] font-medium",
+            FOCUS,
+          )}
         >
           <Copy className="size-4 shrink-0" aria-hidden="true" />
           <span className="truncate">Nusxalash</span>
@@ -199,7 +213,10 @@ export function ReferralCard() {
           type="button"
           onClick={share}
           data-referral-share
-          className="bg-primary text-primary-foreground inline-flex h-11 min-w-0 items-center justify-center gap-2 rounded-xl px-3 text-sm font-medium"
+          className={cn(
+            "bg-primary text-primary-foreground inline-flex h-11 min-w-0 items-center justify-center gap-2 rounded-[14px] px-3 text-[15px] font-semibold transition-transform active:scale-[0.98] motion-reduce:transform-none",
+            FOCUS,
+          )}
         >
           <Send className="size-4 shrink-0" aria-hidden="true" />
           <span className="truncate">Ulashish</span>
@@ -208,38 +225,38 @@ export function ReferralCard() {
       <p
         aria-live="polite"
         data-referral-notice={notice?.tone ?? ""}
-        className={cn("mt-2 min-h-5 text-xs", notice?.tone === "error" ? "text-destructive" : "text-emerald-700 dark:text-emerald-400")}
+        className={cn("mt-2 min-h-5 text-[13px]", notice?.tone === "error" ? "text-destructive" : "text-emerald-700 dark:text-emerald-400")}
       >
         {notice?.text ?? ""}
       </p>
 
       <div className="mt-2 grid grid-cols-2 gap-3 text-center">
-        <div className="bg-muted/50 rounded-xl px-3 py-3">
-          <div className="text-lg font-semibold tabular-nums" data-referral-invited>
+        <div className="bg-muted/60 rounded-2xl px-3 py-3">
+          <div className="text-[20px] font-bold tabular-nums" data-referral-invited>
             {formatPoints(data.invitedCount)}
           </div>
-          <div className="text-muted-foreground text-xs">Taklif qilinganlar</div>
+          <div className="text-muted-foreground text-[13px]">Taklif qilinganlar</div>
         </div>
-        <div className="bg-muted/50 rounded-xl px-3 py-3">
-          <div className="text-lg font-semibold tabular-nums" data-referral-earned>
+        <div className="bg-muted/60 rounded-2xl px-3 py-3">
+          <div className="text-[20px] font-bold tabular-nums" data-referral-earned>
             {formatPoints(data.earnedPoints)}
           </div>
-          <div className="text-muted-foreground text-xs">Ishlangan ball</div>
+          <div className="text-muted-foreground text-[13px]">Ishlangan ball</div>
         </div>
       </div>
 
-      <h3 className="mt-5 text-sm font-semibold">Oxirgi qo&apos;shilganlar</h3>
+      <h3 className="text-muted-foreground mt-5 text-[13px] font-semibold tracking-[0.06em] uppercase">Oxirgi qo&apos;shilganlar</h3>
       {data.recent.length ? (
-        <ul className="mt-2 divide-y text-sm" data-referral-recent>
+        <ul className="mt-1 divide-y text-[15px]" data-referral-recent>
           {data.recent.map((r, i) => (
-            <li key={`${r.joinedAt}-${i}`} className="flex min-w-0 items-center justify-between gap-3 py-2">
+            <li key={`${r.joinedAt}-${i}`} className="flex min-w-0 items-center justify-between gap-3 py-2.5">
               <span className="min-w-0 flex-1 truncate">{r.name}</span>
-              <span className="text-muted-foreground shrink-0 text-xs tabular-nums">{formatJoinDate(r.joinedAt)}</span>
+              <span className="text-muted-foreground shrink-0 text-[13px] tabular-nums">{formatJoinDate(r.joinedAt)}</span>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="text-muted-foreground mt-1 text-sm" data-referral-recent="empty">
+        <p className="text-muted-foreground mt-1.5 text-[15px]" data-referral-recent="empty">
           Hali hech kim qo&apos;shilmagan. Havolani do&apos;stlaringizga yuboring.
         </p>
       )}
