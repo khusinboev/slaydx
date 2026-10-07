@@ -17,7 +17,7 @@ server (cron, har daqiqa) ◄─ slaydx-auto-deploy ──┘  origin/main da ya
    └─► Telegram: 🚀 boshlandi · ✅ yangilandi (soniya) · ❌ muvaffaqiyatsiz
 ```
 
-- Serverda **build yo'q** (avval ~6–8 daqiqa edi, serverni og'irlashtirardi). Deploy ~1,5 daqiqa (zaxirasiz ~77 s).
+- Serverda **build yo'q** (avval ~6–8 daqiqa edi, serverni og'irlashtirardi). Deploy serverda ~3 daqiqa (o'lchandi: 195 s, shundan lokal zaxira ~120 s, pull 17 s, migratsiya 8 s, almashtirish 13 s, sog'liq 25 s).
 - GitHub'da serverga kirish kaliti YO'Q: server o'zi so'raydi (pull modeli). Serverga tashqaridan yangi yo'l ochilmagan.
 - Ishonch modeli: `main`ga push qila oladigan odam serverda ishlaydigan narsani (image, compose, cron skriptlari) allaqachon o'zgartira oladi;
   avto-deploy yangi huquq bermaydi, faqat CI'dan o'tgan commit'ni chiqaradi.
@@ -109,5 +109,6 @@ Yangi serverda avval GHCR login (4-bo'lim), keyin bir marta qo'lda `slaydx-deplo
 | GitHub Actions sekin/ishlamayapti | githubstatus.com; zaxira yo'l: `slaydx-deploy-build` |
 
 ## 8. Hozirgi ko'rsatkichlar
-CI ~3 daqiqa (avval ~13) · image build GitHub'da ~1–3 daqiqa (kesh bilan) · serverda deploy ~1,5 daqiqa (avval ~10–12) ·
-worker image 681 MB (avval 1,88 GB) · push'dan serverga ~5–6 daqiqa, qo'lsiz.
+CI ~3–4 daqiqa (avval ~13) · image build GitHub'da ~1–3 daqiqa (kesh bilan) · serverda deploy ~3,3 daqiqa o'lchandi (avval ~10–12 + Drive kutish) ·
+worker image 681 MB (avval 1,88 GB) · push'dan saytda yangilanguncha ~7–9 daqiqa, qo'lsiz (birinchi avtomatik deploy: f88b8d9, 195 s).
+Keyingi tezlashtirish imkoniyati: deploy oldidan zaxira ~120 s (pg_dump + tekshiruv); migratsiyasiz commit'larda uni o'tkazib yuborish yoki soatlik ledger dump'iga tayanish mumkin.
