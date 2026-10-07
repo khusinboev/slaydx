@@ -309,7 +309,8 @@ function ScrollToTopButton({ container }: { container: HTMLElement }) {
         // 20 px: clears a classic 15–17 px scrollbar of <main> on desktops.
         // Docked result panel: sit just left of it, not over its «Tuzatish» buttons.
         right: dockRight > 0 ? `${dockRight}px` : atLeast("1.25rem", SAFE_RIGHT),
-        bottom: `calc(${SAFE_BOTTOM} + 1rem + var(--kb-h, 0px))`,
+        // Above the tab bar while it is shown (`--tabbar-h`; 0 when hidden, e.g. keyboard open).
+        bottom: `calc(${SAFE_BOTTOM} + 1rem + var(--kb-h, 0px) + var(--tabbar-h, 0px))`,
       }}
     >
       <button

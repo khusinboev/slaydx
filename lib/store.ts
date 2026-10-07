@@ -8,7 +8,18 @@ import type { UserProfile } from "./types";
 // Not `./tools`: this store is in every route's client layer, the tool registry is not (ops WP-B).
 import { parsePriceAdjustments, setClientPriceAdjustments, type PriceAdjustMap } from "./price-adjust";
 
-export type ThemeMode = "light" | "dark";
+/**
+ * Kun / Tun / Avto (docs/redesign/PLAN.md D4). `auto` follows the OS
+ * (`prefers-color-scheme`) live; `light`/`dark` are explicit. The first visit
+ * still reads the OS once into an explicit value (`onRehydrateStorage`).
+ */
+export type ThemeMode = "light" | "dark" | "auto";
+/** What is actually painted. */
+export type ResolvedTheme = "light" | "dark";
+
+export function isThemeMode(v: unknown): v is ThemeMode {
+  return v === "light" || v === "dark" || v === "auto";
+}
 
 /**
  * Klient holati.
@@ -164,14 +175,32 @@ function startPricingRefresh() {
  * OS afzalligini BIR MARTA o'qiydi (birinchi tashrifda standart qiymat
  * uchun). SSR xavfsiz — `window`/`matchMedia` yo'q bo'lsa "light".
  */
-export function resolveOsTheme(): ThemeMode {
+export function resolveOsTheme(): ResolvedTheme {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "light";
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+/** `auto` → the OS preference now; explicit modes as they are. */
+export function resolveTheme(theme: ThemeMode): ResolvedTheme {
+  return theme === "auto" ? resolveOsTheme() : theme;
+}
+
+/** While the mode is `auto`: repaint when the OS switches (one listener per page). */
+let osThemeListening = false;
+function followOsTheme() {
+  if (osThemeListening || typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  if (typeof mq?.addEventListener !== "function") return;
+  osThemeListening = true;
+  mq.addEventListener("change", () => {
+    if (useAppStore.getState().theme === "auto") applyTheme("auto");
+  });
+}
+
 export function applyTheme(theme: ThemeMode) {
   if (typeof document === "undefined") return;
-  document.documentElement.classList.toggle("dark", theme === "dark");
+  if (theme === "auto") followOsTheme();
+  document.documentElement.classList.toggle("dark", resolveTheme(theme) === "dark");
 }
 
 /**
@@ -183,7 +212,8 @@ export function applyTheme(theme: ThemeMode) {
  */
 export function migrateUiPrefs(persisted: unknown): { theme: ThemeMode; dir?: "ltr" | "rtl" } {
   const p = (persisted ?? {}) as { theme?: unknown; dir?: unknown };
-  const theme: ThemeMode = p.theme === "light" || p.theme === "dark" ? p.theme : resolveOsTheme();
+  // `auto` (Avto) is a real choice and stays; the legacy `"system"` / missing value is read from the OS once.
+  const theme: ThemeMode = isThemeMode(p.theme) ? p.theme : resolveOsTheme();
   // `undefined` KIRITILMAYDI (faqat haqiqiy qiymat bo'lsa maydon
   // qo'shiladi) — `persist`ning standart merge'i sayoz (`{...state,
   // ...persisted}`), aks holda `dir: undefined` joriy "ltr"ni bosib yozardi.
@@ -345,7 +375,7 @@ export const useAppStore = create<AppState>()(
         } catch {
           raw = null;
         }
-        if (raw === null || (state.theme !== "light" && state.theme !== "dark")) {
+        if (raw === null || !isThemeMode(state.theme)) {
           state.theme = resolveOsTheme();
         }
         applyTheme(state.theme);

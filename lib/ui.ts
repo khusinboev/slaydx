@@ -11,6 +11,8 @@ export type Overlay =
   | "notifications"
   | "pay"
   | "sort"
+  /** The «+» tool sheet of the bottom tab bar (`components/shell/CreateSheet.tsx`). */
+  | "create"
   | null;
 
 type UiState = {
@@ -34,9 +36,11 @@ export const useUi = create<UiState>((set) => ({
   close: () => set({ overlay: null }),
 }));
 
+/** Kun / Tun / Avto (docs/redesign/PLAN.md D4): `auto` follows the OS (`lib/store.ts applyTheme`). */
 export const THEME_OPTIONS = [
   { value: "light", label: "Kun" },
   { value: "dark", label: "Tun" },
+  { value: "auto", label: "Avto" },
 ] as const;
 
 export const FILE_FILTERS = [

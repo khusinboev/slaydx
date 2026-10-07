@@ -1,49 +1,55 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Sidebar } from "./Sidebar";
-import { TopBar } from "./TopBar";
 import { LoginModal } from "../overlays/LoginModal";
 import { SearchDialog } from "../overlays/SearchDialog";
 import { NotificationsPanel } from "../overlays/NotificationsPanel";
 import { PayDialog } from "../overlays/PayDialog";
 import { ScrollToTop } from "./ScrollToTop";
-import { useOverlayHistory } from "@/components/nav/useOverlayHistory";
+import { TabBar, useTabBarState } from "./TabBar";
+import { CreateSheet } from "./CreateSheet";
+import { TOP_INSET } from "./safe-area";
+import { pageEnterDir } from "@/lib/nav/tabs";
 import { useUi } from "@/lib/ui";
 import { useAppStore } from "@/lib/store";
 
-const NARROW_QUERY = "(max-width: 767.98px)";
+// `useLayoutEffect` warns on the server; the page-enter restart only matters in the browser.
+const useBrowserLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-function subscribeNarrow(cb: () => void) {
-  if (typeof window.matchMedia !== "function") return () => {};
-  const mq = window.matchMedia(NARROW_QUERY);
-  mq.addEventListener("change", cb);
-  return () => mq.removeEventListener("change", cb);
-}
+/** Bottom room under the page while the bar is shown: the bar's room + the home indicator. */
+const BAR_ROOM = "h-[calc(var(--tabbar-h,0px)+var(--tg-safe-bottom,env(safe-area-inset-bottom,0px)))]";
+/** … plus 4.5 rem while «Tepaga chiqish» is on screen (its 44 px + 16 px offset + a gap). */
+const BAR_AND_TOP_BUTTON_ROOM =
+  "h-[calc(4.5rem+var(--tabbar-h,0px)+var(--tg-safe-bottom,env(safe-area-inset-bottom,0px)))]";
 
-/** Below Tailwind's `md` (where the drawer is visible); no `matchMedia` (jsdom) counts as narrow. */
-function isNarrow() {
-  return typeof window.matchMedia !== "function" || window.matchMedia(NARROW_QUERY).matches;
-}
-
+/**
+ * App shell of the consumer pages (docs/redesign/PLAN.md, F0): no sidebar, no
+ * top bar, no drawer — a bottom tab bar (`TabBar`) and the «+» sheet
+ * (`CreateSheet`).
+ *
+ *   - a top strip of exactly the notch / Telegram header inset (`TOP_INSET`,
+ *     0 on a desktop) keeps every page, its sticky header and the tool / result
+ *     headers below the device and Telegram chrome (`--shell-topbar-h`);
+ *   - `<main id="main">` is the one page scroller (NavProvider restores its
+ *     scroll per history entry; ScrollToTop listens on it);
+ *   - the page sits in a `.slx-page-enter` wrapper whose animation restarts on
+ *     every route change, direction from the tab order (`pageEnterDir`);
+ *   - `--tabbar-h` is the bar's room while it is shown, 0 otherwise (set here
+ *     for SSR and by a `:root:has(...)` rule for portals); the page ends in a
+ *     spacer of that height so nothing hides under the bar;
+ *   - Cmd/Ctrl+K opens search, Alt+T notifications.
+ */
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
   // The page scroller: `<main>` is the one element every page scrolls in (the shell itself never scrolls).
   const [scroller, setScroller] = useState<HTMLElement | null>(null);
   // «Tepaga chiqish» is on screen: the end of the page gets bottom room (see `<main>` below).
   const [topButton, setTopButton] = useState(false);
   const open = useUi((s) => s.open);
-  const pathname = usePathname();
-
-  // Phone back / Telegram BackButton closes the drawer first (docs/nav/PLAN.md).
-  // The drawer is `md:hidden`: on a wide screen the menu button shows nothing, so no history entry either.
-  const narrow = useSyncExternalStore(subscribeNarrow, isNarrow, () => true);
-  useOverlayHistory(mobileOpen, () => setMobileOpen(false), { enabled: narrow });
-  // A route change never leaves the drawer open over the new page.
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
+  const pathname = usePathname() ?? "/uz";
+  const bar = useTabBarState(pathname);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const lastPath = useRef<string | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -63,63 +69,66 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  // Page enter: restart the CSS animation on every route change (no remount of the page tree).
+  useBrowserLayoutEffect(() => {
+    const el = pageRef.current;
+    const from = lastPath.current;
+    lastPath.current = pathname;
+    if (!el || from === null || from === pathname) return;
+    el.dataset.dir = pageEnterDir(from, pathname);
+    el.classList.remove("slx-page-enter");
+    void el.offsetWidth; // reflow: the next add starts the animation from its first frame
+    el.classList.add("slx-page-enter");
+  }, [pathname]);
+
+  const room = topButton ? BAR_AND_TOP_BUTTON_ROOM : bar.shown ? BAR_ROOM : null;
+
   return (
     <div
-      className="bg-sidebar flex h-svh w-full overflow-hidden"
-      style={{ ["--sidebar-width" as string]: "16rem" }}
+      data-app-shell
+      data-tabbar={bar.shown ? "on" : "off"}
+      className="flex h-svh w-full flex-col overflow-hidden bg-[var(--page-bg)]"
+      style={{ ["--tabbar-h" as string]: bar.shown ? "var(--tabbar-room)" : "0px" }}
     >
-      <aside className="hidden h-full w-[var(--sidebar-width)] shrink-0 md:flex">
-        <Sidebar />
-      </aside>
-
-      {mobileOpen ? (
-        <div className="fixed inset-0 z-40 md:hidden">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/40"
-            aria-label="Yopish"
-            onClick={() => setMobileOpen(false)}
-          />
-          <div className="relative z-10 h-full w-[16rem] shadow-xl">
-            <Sidebar onNavigate={() => setMobileOpen(false)} />
-          </div>
-        </div>
-      ) : null}
-
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--page-bg)]">
-        <TopBar onMenu={() => setMobileOpen((v) => !v)} />
-        <SessionBanner />
-        {/*
-         * Scroll padding for tool forms (mobile P3): focus and caret reveals stop
-         * 16 px above the sticky submit bar (73 px + safe area), or 16 px above
-         * the visible bottom while the bar is in the flow (keyboard open).
-         * Other pages carry no `[data-submit-bar]` and keep no padding.
-         *
-         * While the «Tepaga chiqish» button is on screen an in-flow spacer
-         * (`data-scroll-top-room`, 4.5 rem + the safe area: the button's 44 px
-         * plus its 16 px offset) ends the page, so the last lines and controls
-         * can be scrolled out from under it. It is a SPACER, not padding on
-         * `<main>`: a sticky `bottom: 0` bar (the tool forms' submit bar) sticks
-         * above the scroll container's padding, so padding would lift it off the
-         * bottom edge; a last child leaves it docked.
-         */}
-        <main
-          id="main"
-          ref={setScroller}
-          className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--page-bg)] has-[[data-submit-bar=inline]]:scroll-pb-4 has-[[data-submit-bar=sticky]]:scroll-pb-[calc(6rem+env(safe-area-inset-bottom))]"
-        >
+      {/* Notch / Telegram header: 0 on a desktop and in a plain mobile browser tab. */}
+      <div aria-hidden data-top-inset className="shrink-0 bg-[var(--page-bg)]" style={{ height: TOP_INSET }} />
+      <SessionBanner />
+      {/*
+       * Scroll padding for tool forms (mobile P3): focus and caret reveals stop
+       * 16 px above the sticky submit bar (73 px + safe area), or 16 px above
+       * the visible bottom while the bar is in the flow (keyboard open).
+       * Other pages carry no `[data-submit-bar]` and keep no padding.
+       *
+       * The page ends in an in-flow SPACER (never padding on `<main>`: a sticky
+       * `bottom: 0` submit bar sticks above the scroll container's padding, so
+       * padding would lift it off the bottom edge; a last child leaves it docked):
+       *   - while the tab bar is shown: `--tabbar-h` + the bottom safe area, so the
+       *     end of every list can be scrolled out from under the bar;
+       *   - while «Tepaga chiqish» is on screen (`data-scroll-top-room`): 4.5 rem
+       *     more (the button's 44 px plus its 16 px offset).
+       */}
+      <main
+        id="main"
+        ref={setScroller}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--page-bg)] has-[[data-submit-bar=inline]]:scroll-pb-4 has-[[data-submit-bar=sticky]]:scroll-pb-[calc(6rem+env(safe-area-inset-bottom))]"
+      >
+        <div ref={pageRef} data-page data-dir="initial" className="slx-page-enter flex shrink-0 grow flex-col">
           {children}
-          {topButton ? (
-            <div
-              aria-hidden
-              data-scroll-top-room
-              className="no-print h-[calc(4.5rem+var(--tg-safe-bottom,env(safe-area-inset-bottom,0px)))] shrink-0"
-            />
-          ) : null}
-        </main>
-      </div>
+        </div>
+        {room ? (
+          <div
+            aria-hidden
+            data-bottom-room
+            data-tabbar-room={bar.shown ? "" : undefined}
+            data-scroll-top-room={topButton ? "" : undefined}
+            className={`no-print ${room} shrink-0`}
+          />
+        ) : null}
+      </main>
 
-      {/* «Tepaga chiqish»: fixed, listens on <main>; hidden while an overlay (the drawer included) is open. */}
+      <TabBar shown={bar.shown} createOpen={bar.createOpen} />
+      <CreateSheet />
+      {/* «Tepaga chiqish»: fixed, listens on <main>; hidden while an overlay is open; sits above the bar (`--tabbar-h`). */}
       <ScrollToTop container={scroller} onShownChange={setTopButton} />
       <LoginModal />
       <SearchDialog />
