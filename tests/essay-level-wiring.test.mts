@@ -11,7 +11,8 @@ import { LEVEL_REPAIR_MIN_MS, LEVEL_REPAIR_RESERVE_MS, buildEssayDoc, levelRepai
 import { essayInputFromValues } from "../lib/generation/essay/input.ts";
 import { LEVEL_REPAIR_HEADER, essayCtx, essaySystemPrompt, outlinePrompt } from "../lib/generation/essay/prompts.ts";
 import { contextOf, planEssayPolish, rewriteEssayFix } from "../lib/generation/essay/polish.ts";
-import { essayJudgeSystemPrompt, essayModelOf, essayTextOf, judgeUserPrompt, ruleChecks } from "../lib/generation/essay/review.ts";
+import { essayJudgeChecks, essayJudgeSystemPrompt, essayModelOf, essayTextOf, judgeUserPrompt, ruleChecks } from "../lib/generation/essay/review.ts";
+import { essayJudgeDetail, essayJudgeOf } from "../lib/generation/essay/rubric.ts";
 import { IELTS_LINKERS, essayWords } from "../lib/generation/essay/registry.ts";
 import { IELTS_LEVEL_JUDGE_NOTE, LEVEL_BANDS, ieltsLinkersFor, linkersFound, measureLevel } from "../lib/generation/essay/level.ts";
 import type { EssayModel } from "../lib/generation/essay/types.ts";
@@ -496,14 +497,67 @@ test("IELTS review: «linking» counts the level's connectors, the «level» rul
   assert.match(fix?.instruction ?? "", /\(and, but, because, then, so\)/);
 });
 
-test("IELTS judge: the target level and the IELTS calibration line are sent; other contexts do not get the IELTS line", () => {
-  const ielts = essayJudgeSystemPrompt("ielts_task2", "Opinion essay", "A2");
-  assert.match(ielts, /DELIBERATELY written at CEFR A2/);
-  assert.ok(ielts.includes(IELTS_LEVEL_JUDGE_NOTE), "IELTS criteria are scored relative to the target level");
+test("IELTS judge: the target level is always sent; the «relative to the level» line only BELOW C1 (default report stays absolute)", () => {
+  const ielts = (l: Parameters<typeof essayJudgeSystemPrompt>[2]) => essayJudgeSystemPrompt("ielts_task2", "Opinion essay", l);
+  assert.match(ielts("A2"), /DELIBERATELY written at CEFR A2/);
+  assert.ok(ielts("A2").includes(IELTS_LEVEL_JUDGE_NOTE), "IELTS criteria are scored relative to the target level");
+  assert.ok(ielts("B2").includes(IELTS_LEVEL_JUDGE_NOTE));
+  // MUTATION: sending the note at the default C1 turned a C1 text's lr/gra into Band 9 where it used to be Band 7.
+  assert.ok(!ielts("C1").includes(IELTS_LEVEL_JUDGE_NOTE) && !ielts("C2").includes(IELTS_LEVEL_JUDGE_NOTE), "C1/C2: absolute");
+  assert.match(ielts("C1"), /DELIBERATELY written at CEFR C1/);
   assert.ok(!essayJudgeSystemPrompt("school_dtm", "Reflective essay", "A2").includes(IELTS_LEVEL_JUDGE_NOTE));
-  assert.equal(essayJudgeSystemPrompt("ielts_task2", "Opinion essay", null), essayJudgeSystemPrompt("ielts_task2", "Opinion essay"), "legacy: no note");
+  assert.equal(ielts(null), essayJudgeSystemPrompt("ielts_task2", "Opinion essay"), "legacy: no note");
   const d = ieltsDoc(IELTS_A1_PARAS, "B1");
   assert.match(judgeUserPrompt(d, essayModelOf(d)), /\nTARGET LEVEL: CEFR B1\n/);
+});
+
+test("IELTS report rows: lr/gra read «A2 darajasiga nisbatan · 3/3» below C1 (not «Band 9»); tr/cc and C1+ keep the band; the raw score stays readable", () => {
+  assert.equal(essayJudgeDetail("ielts_task2", "lr", 3, "A2"), "A2 darajasiga nisbatan · 3/3");
+  assert.equal(essayJudgeDetail("ielts_task2", "gra", 2, "B1"), "B1 darajasiga nisbatan · 2/3");
+  assert.match(essayJudgeDetail("ielts_task2", "tr", 3, "A2"), /^Band 9/, "task response / cohesion keep the band");
+  assert.match(essayJudgeDetail("ielts_task2", "cc", 3, "A2"), /^Band 9/);
+  assert.match(essayJudgeDetail("ielts_task2", "gra", 3, "C1"), /^Band 9/, "C1: absolute, as before");
+  assert.match(essayJudgeDetail("ielts_task2", "gra", 3, null), /^Band 9/);
+  assert.equal(essayJudgeDetail("school_dtm", "content", 2, "A2"), "2/3", "other contexts unchanged");
+
+  const rows = essayJudgeChecks("ielts_task2", essayJudgeOf("ielts_task2", { tr: 2, cc: 2, lr: 3, gra: 3 }), "A2");
+  const lr = rows.find((c) => c.id === "judge:lr")!;
+  assert.equal(/(\d)\/3/.exec(lr.detail)?.[1], "3", "polish.ts reads the raw score with /(\d)\/3/");
+  assert.equal(lr.level, "green");
+});
+
+test("IELTS type rules follow the level: no «however, moreover»/«whereas» at A1–B1, hedging does not ban «I think», conclusion clause kept", () => {
+  const typeRules = (kind: string, level: string | null) => {
+    const sys = essaySystemPrompt(ctxOf({ ...IELTS, essayKind: kind, ...(level ? { essayLevel: level } : {}) }));
+    // The numbered lines after the «TYPE RULES» header (the level block below them is not numbered).
+    return sys.slice(sys.indexOf("TYPE RULES")).split("\n").filter((l) => /^\d+\. /.test(l) || l.startsWith("TYPE RULES")).join("\n");
+  };
+  const a1 = typeRules("opinion", "A1");
+  // MUTATION: without the IELTS-aware guidance the A1 prompt still tells the model to use «however, moreover».
+  assert.ok(!/however|moreover|cohesive devices/.test(a1.split("TYPE RULES")[1] ?? ""), "cohesion example line dropped at A1");
+  assert.ok(!/no «I think»|impersonal/.test(a1), "IELTS stays first person: the hedging replacement does not ban «I think»");
+  assert.match(a1, /State claims plainly in short sentences/);
+  assert.match(a1, /The conclusion restates the position in different words\./, "the conclusion rule is not lost with the hedging line");
+  assert.match(typeRules("opinion", "B1"), /Soften strong claims only with simple words/);
+
+  // The other kinds: contrast/concession lines name B2 connectors.
+  assert.ok(!/on the other hand/.test(typeRules("discussion", "B1")), "discussion at B1");
+  assert.ok(!/whereas/.test(typeRules("advantages_disadvantages", "A2")), "advantages at A2");
+  // B2 and above (and the default C1): the type lines are exactly the registry ones.
+  assert.match(typeRules("discussion", "B2"), /on the other hand/);
+  assert.match(typeRules("opinion", null), /however, moreover, as a result/);
+  assert.match(typeRules("opinion", null), /Hedge claims appropriately/);
+});
+
+test("IELTS «linking» for a level-less (legacy) document keeps the old substring match on the standard list", () => {
+  const rulesOf = (d: AcademicDoc) => {
+    const m = essayModelOf(d);
+    return ruleChecks({ doc: d, model: m, text: essayTextOf(d, m) });
+  };
+  // «howeverish / moreoverish / thereforeish» only match as substrings: whole-word matching (levelled docs) would find none.
+  const paras = ["Praise howeverish plans.", "Praise moreoverish plans.", "Praise thereforeish plans.", "Praise plans.", "Praise plans."];
+  assert.equal(rulesOf(ieltsDoc(paras, undefined)).find((c) => c.id === "linking")?.level, "green", "legacy substring behaviour");
+  assert.equal(rulesOf(ieltsDoc(paras, "C1")).find((c) => c.id === "linking")?.level, "red", "levelled: whole words only");
 });
 
 test("IELTS: polish / «Tuzatish» rebuild the context with the stored level (no drift)", () => {

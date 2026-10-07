@@ -426,7 +426,7 @@ test("Til darajasi: kontekst almashganda (IELTS orqali ham) tanlov saqlanadi; su
   await pick("essayLevel", /^C1$/);
   await pick("essayContext", /IELTS/i);
   await pick("essayContext", /akademik/i);
-  // MUTATSIYA: `onContext` dagi `level: s.level` olib tashlansa IELTS aylanmasi B2 ga qaytarardi.
+  // (`onContext` dagi `level: s.level` mutatsiyasini birinchi test ushlaydi: tegilmagan daraja IELTS ga C1 bo'lib o'tadi.)
   assert.equal(checked("essayLevel"), "C1", "IELTS aylanmasi tanlovni o'chirmaydi");
   await act(async () => {
     fireEvent.change(topicInput(), { target: { value: "Raqamli savodxonlik" } });
@@ -476,6 +476,20 @@ test("Til darajasi: aniq tanlangan daraja kontekst almashganda saqlanadi (A2 →
   assert.equal(checked("essayLevel"), "A2", "aniq tanlov IELTS ga o'tadi");
   await pick("essayContext", /akademik/i);
   assert.equal(checked("essayLevel"), "A2", "va qaytganda ham turadi");
+});
+
+test("Til darajasi: eski IELTS qoralamasi (bo'sh essayLevel) C1 ga tushadi; aniq A2 saqlanadi", async () => {
+  stubApi({ topic: "Eski IELTS", essayContext: "ielts_task2", essayKind: "opinion", language: "en", essayLevel: "" });
+  await login();
+  mount();
+  await waitFor(() => assert.equal(topicInput().value, "Eski IELTS"));
+  assert.equal(checked("essayLevel"), "C1", "daraja yo'q → IELTS standarti");
+  cleanup();
+
+  stubApi({ topic: "IELTS A2", essayContext: "ielts_task2", essayKind: "opinion", language: "en", essayLevel: "A2" });
+  mount();
+  await waitFor(() => assert.equal(topicInput().value, "IELTS A2"));
+  assert.equal(checked("essayLevel"), "A2");
 });
 
 test("Til darajasi: qoralama tiklaydi (c1 → C1), yaroqsiz qiymat → B2; narx darajadan qimirlamaydi", async () => {

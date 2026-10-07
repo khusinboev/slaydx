@@ -324,7 +324,7 @@ export async function runEssayPolish(doc: AcademicDoc, review: DocReview, deps: 
       return {
         ...fresh,
         score: essayScore(rules, j, model.context),
-        checks: [...rules, ...essayJudgeChecks(model.context, j)],
+        checks: [...rules, ...essayJudgeChecks(model.context, j, model.level)],
         judgeNotes: [...essayRubric(model.context).notes, ...j.notes, POLISH_JUDGE_NOTE],
       };
     },

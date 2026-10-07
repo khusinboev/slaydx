@@ -340,6 +340,11 @@ export function levelRepairInstruction(level: CefrLevel, lang: EssayLang, direct
 export const IELTS_LEVEL_JUDGE_NOTE =
   "IELTS: score Lexical Resource and Grammatical Range & Accuracy relative to the TARGET LEVEL — an essay that is accurate and fully developed AT that level earns the top mark for them; Task Response and Coherence & Cohesion are scored as usual (cohesion with the connectors that level uses).";
 
+/** The IELTS note (and the relative display) applies below C1; at C1/C2 the report stays the absolute IELTS one. */
+export function ieltsRelativeScoring(level: CefrLevel | null | undefined): boolean {
+  return !!level && levelIndex(level) < levelIndex("C1");
+}
+
 /** Judge calibration (R4 §2 #1): the judge must not pull a deliberate A2 text upward. */
 export function levelJudgeNote(level: CefrLevel): string {
   const s = CEFR_SPECS[level];
@@ -362,25 +367,51 @@ const HEDGING_LINE: Record<Exclude<Hedging, "free">, string> = {
   simple: "Register is impersonal (no «I think»); soften strong claims only with simple words («may», «often», «usually»).",
 };
 
+const COHESION_RE = /cohesi(?:ve|on)|concessive language/i;
+
+/** IELTS hedging replacement: unlike `HEDGING_LINE` it does not forbid «I think» (IELTS essays are first person). */
+const IELTS_HEDGING_LINE: Record<Exclude<Hedging, "free">, string> = {
+  none: "State claims plainly in short sentences — no hedging phrases.",
+  simple: "Soften strong claims only with simple words («may», «often», «usually»).",
+};
+
+const capitalize = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
 /**
  * Kind guidance (`registry.ts`) asks for figurative language «at least once
  * per paragraph» and for hedging — both push a text upward (R4 §2 #3). At
  * low levels those lines are REPLACED by a level-appropriate version; the
  * structural guidance lines stay untouched. `null` → lines unchanged.
+ *
+ * `ielts`: the IELTS type lines also (a) name connectors («however, moreover»,
+ * «on the other hand», «whereas») that the level block forbids below B2 → at
+ * A1–B1 those cohesion lines are dropped (the level's connector line and
+ * IELTS rule 7 govern cohesion), and (b) mix the hedging wish with the
+ * conclusion rule («…; the conclusion restates the position») → the replaced
+ * line keeps its non-hedging clauses, and does not forbid «I think».
  */
-export function levelGuidance(lines: readonly string[], level: CefrLevel | null): string[] {
+export function levelGuidance(lines: readonly string[], level: CefrLevel | null, opts: { ielts?: boolean } = {}): string[] {
   if (!level) return [...lines];
   const s = CEFR_SPECS[level];
-  return lines.map((g) => {
-    if (FIGURATIVE_RE.test(g) && s.figurative !== "free") return FIGURATIVE_LINE[s.figurative];
-    if (HEDGING_RE.test(g) && s.hedging !== "free") return HEDGING_LINE[s.hedging];
-    return g;
-  });
+  const low = levelIndex(level) <= 2;
+  const out: string[] = [];
+  for (const g of lines) {
+    if (opts.ielts && low && COHESION_RE.test(g)) continue;
+    if (FIGURATIVE_RE.test(g) && s.figurative !== "free") {
+      out.push(FIGURATIVE_LINE[s.figurative]);
+    } else if (HEDGING_RE.test(g) && s.hedging !== "free") {
+      if (opts.ielts) out.push(IELTS_HEDGING_LINE[s.hedging], ...g.split(/;\s*/).slice(1).map(capitalize));
+      else out.push(HEDGING_LINE[s.hedging]);
+    } else {
+      out.push(g);
+    }
+  }
+  return out;
 }
 
 /* ────────────────────────── level-scaled structure numbers ────────────────────────── */
 
-/** Pre-level values (legacy docs and IELTS keep them exactly). */
+/** Pre-level values (legacy documents keep them exactly). */
 export const LEGACY_THESIS_WORDS: [number, number] = [12, 35];
 export const LEGACY_CLAIM_MIN = { thesis: 8, topic: 5 } as const;
 
