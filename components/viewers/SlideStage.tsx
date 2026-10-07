@@ -235,7 +235,14 @@ export function SlideStage({
         presentation) while vertical scroll and pinch stay native. Inline, not a
         class: the present stage's class list is locked by the shell test.
       */
-      style={present ? { touchAction: "pan-y pinch-zoom", overscrollBehaviorX: "none" } : undefined}
+      style={
+        present
+          ? // Pinch-zoomed page: the touch goes back to the browser so the user can pan the zoomed slide.
+            nav.zoomed
+            ? { touchAction: "auto", overscrollBehaviorX: "none" }
+            : { touchAction: "pan-y pinch-zoom", overscrollBehaviorX: "none" }
+          : undefined
+      }
       onClick={nav.onClick}
       onPointerMove={nav.onPointerMove}
       onPointerUp={nav.onPointerUp}

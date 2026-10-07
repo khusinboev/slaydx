@@ -3,11 +3,13 @@ import assert from "node:assert/strict";
 import {
   CLICK_SWALLOW_MS,
   NAV_ZONE_FRACTION,
+  PAGE_ZOOM_EPSILON,
   SWIPE_DOMINANCE,
   SWIPE_MAX_MS,
   SWIPE_MIN_PX,
   classifyRelease,
   createNavGesture,
+  isPageZoomed,
   stepOf,
   zoneOf,
   type NavBox,
@@ -41,6 +43,19 @@ test("zoneOf: left third → prev, right third → next, middle → mid (thirds 
   assert.equal(zoneOf(350, shifted), "next");
   assert.equal(zoneOf(50, { left: 100, width: 300 }), "prev", "outside the rect to the left is still the left edge");
   assert.equal(zoneOf(10, { left: 0, width: 0 }), "mid", "an unmeasured stage never navigates by zone");
+});
+
+test("isPageZoomed: only a real pinch zoom (scale clearly above 1) counts; junk never does", () => {
+  assert.equal(isPageZoomed(1), false);
+  assert.equal(isPageZoomed(1.01), false, "rounding noise");
+  assert.equal(isPageZoomed(PAGE_ZOOM_EPSILON), false);
+  assert.equal(isPageZoomed(1.03), true);
+  assert.equal(isPageZoomed(3), true);
+  assert.equal(isPageZoomed(0.9), false, "zoomed OUT is not a reason to stop navigating");
+  assert.equal(isPageZoomed(undefined), false);
+  assert.equal(isPageZoomed(null), false);
+  assert.equal(isPageZoomed(Number.NaN), false);
+  assert.equal(isPageZoomed(Number.POSITIVE_INFINITY), false);
 });
 
 // ═══════════════════════════════════════ classification

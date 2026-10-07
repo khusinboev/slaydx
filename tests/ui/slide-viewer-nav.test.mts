@@ -143,6 +143,11 @@ test("tap in the LEFT third goes to the previous slide, the right third to the n
   assert.equal(counter(), "2 / 3");
   tap(40);
   assert.equal(counter(), "1 / 3");
+  // The edges of the middle third (130…260 of 390) are still "advance", not "back".
+  tap(140);
+  assert.equal(counter(), "2 / 3");
+  tap(250);
+  assert.equal(counter(), "3 / 3");
 });
 
 test("one finger tap = exactly one step (the compat click after it must not advance again)", () => {
@@ -220,16 +225,19 @@ test("vertical drags, short drags and a 39 px swipe do not navigate", () => {
 
 test("a pinch / two-finger gesture never navigates; the next single finger works again", () => {
   mountPresent();
+  tap(350);
+  assert.equal(counter(), "2 / 3");
   const el = stage();
+  // Spread: the second finger would read as a swipe RIGHT, the first as a swipe LEFT.
   fireEvent.pointerDown(el, ev(100, 400, { id: 1 }));
   fireEvent.pointerDown(el, ev(300, 400, { id: 2 }));
   fireEvent.pointerMove(el, ev(20, 400, { id: 1 }));
   fireEvent.pointerMove(el, ev(380, 400, { id: 2 }));
   fireEvent.pointerUp(el, ev(380, 400, { id: 2 }));
   fireEvent.pointerUp(el, ev(20, 400, { id: 1 }));
-  assert.equal(counter(), "1 / 3");
+  assert.equal(counter(), "2 / 3", "the pinch moved nothing");
   tap(350, 400, { id: 3 });
-  assert.equal(counter(), "2 / 3");
+  assert.equal(counter(), "3 / 3", "the next single finger works again");
 });
 
 test("pointercancel (the browser took the gesture) navigates nothing", () => {
@@ -301,6 +309,38 @@ test("the enlarged stage hands horizontal drags to the page (touch-action) and n
   const style = stage().style;
   assert.equal(style.touchAction, "pan-y pinch-zoom", "horizontal drags reach us; vertical scroll and pinch stay native");
   assert.equal(style.overscrollBehaviorX, "none", "no browser history swipe closing the presentation");
+});
+
+test("a pinch-zoomed page is panned, not navigated: gestures are off and touch-action goes back to the browser", async () => {
+  const vv = Object.assign(new EventTarget(), { scale: 1 });
+  win.visualViewport = vv;
+  try {
+    mountPresent();
+    tap(350);
+    assert.equal(counter(), "2 / 3", "not zoomed: taps navigate");
+    await act(async () => {
+      vv.scale = 2.4;
+      vv.dispatchEvent(new Event("resize"));
+    });
+    assert.equal(stage().style.touchAction, "auto", "zoomed: the browser pans the page");
+    assert.equal(stage().style.overscrollBehaviorX, "none", "…and still never navigates history");
+    drag({ x: 300, y: 400 }, { x: 160, y: 400 });
+    drag({ x: 100, y: 400 }, { x: 240, y: 400 });
+    tap(350);
+    tap(40);
+    assert.equal(counter(), "2 / 3", "zoomed: swipes and taps do not change the slide");
+    fireEvent.click(stage(), { clientX: 10, clientY: 10 });
+    assert.equal(counter(), "3 / 3", "a mouse click is not a touch gesture: still advances");
+    await act(async () => {
+      vv.scale = 1;
+      vv.dispatchEvent(new Event("resize"));
+    });
+    assert.equal(stage().style.touchAction, "pan-y pinch-zoom", "zoomed out: navigation gestures are back");
+    drag({ x: 100, y: 400 }, { x: 240, y: 400 });
+    assert.equal(counter(), "2 / 3");
+  } finally {
+    delete win.visualViewport;
+  }
 });
 
 test("outside the enlarged mode the stage has no navigation gestures and no touch-action override", () => {

@@ -35,6 +35,14 @@ export const CLICK_SWALLOW_MS = 800;
 /** A finger that never reported its release is forgotten after this long (ms). */
 const STALE_MS = 2000;
 
+/** `visualViewport.scale` above this means the user pinch-zoomed the page (rounding noise stays below). */
+export const PAGE_ZOOM_EPSILON = 1.02;
+
+/** The page is pinch-zoomed: drags pan it, so they must not navigate. */
+export function isPageZoomed(scale: number | null | undefined): boolean {
+  return typeof scale === "number" && Number.isFinite(scale) && scale > PAGE_ZOOM_EPSILON;
+}
+
 export type NavDir = "prev" | "next";
 export type NavZone = NavDir | "mid";
 export type NavIntent = { kind: "tap"; zone: NavZone } | { kind: "swipe"; dir: NavDir };
