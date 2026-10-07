@@ -185,7 +185,8 @@ async function applyCore(client: PoolClient, refereeId: string, code: string, so
     log("warn", "[referral] mukofot jurnalda allaqachon bor — qayta yozilmadi", { userId: referrer.id, reference: ref });
     return { applied: false, reason: "duplicate", referrerId: referrer.id };
   }
-  log("info", "[referral] do'st taklifi mukofoti yozildi", { userId: referrer.id, refereeId, source, points });
+  // Inside the sign-up transaction: it commits (or rolls back) together with the new account.
+  log("info", "[referral] do'st taklifi mukofoti tranzaksiyaga qo'shildi", { userId: referrer.id, refereeId, source, points });
   return { applied: true, referrerId: referrer.id, points };
 }
 
