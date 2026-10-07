@@ -12,6 +12,8 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *   1. `referee_user_id` without UNIQUE → «UNIQUE on both referee keys»;
  *   2. `referee_telegram_id` without UNIQUE → same test;
  *   3. referee FK `ON DELETE CASCADE` → «the Telegram-id record outlives a deleted user row»;
+ *   6. referrer FK `ON DELETE CASCADE` (review MINOR-3), or the old `IS DISTINCT FROM`
+ *      self-check (rejects a row whose two ids were both nulled) → «deleting the INVITER»;
  *   4. a backfill `UPDATE users SET ref_code = …` in the file → «additive only»;
  *   5. `IF NOT EXISTS` dropped from the table → «re-apply is a no-op».
  */
@@ -131,6 +133,27 @@ test("037 on a fresh database: applies, re-applies, constraints hold, rollback b
     await assert.rejects(
       query("INSERT INTO referrals (referee_user_id, referee_telegram_id, referrer_user_id, source) VALUES ($1, 910000002, $2, 'bot')", [again, a]),
       /referrals_referee_telegram_id_key/,
+    );
+  });
+
+  await t.test("review MINOR-3: deleting the INVITER keeps every invitee's record and Telegram-id block (SET NULL, both ids NULL allowed)", async () => {
+    const a = (await queryOne<{ id: string }>("SELECT id::text AS id FROM users WHERE telegram_id = 910000001"))!.id;
+    const c = (await queryOne<{ id: string }>("SELECT id::text AS id FROM users WHERE telegram_id = 910000003"))!.id;
+    await query("INSERT INTO referrals (referee_user_id, referee_telegram_id, referrer_user_id, source) VALUES ($1, 910000003, $2, 'web')", [c, a]);
+    // The 910000002 row already lost its invitee (previous step): deleting A nulls both ids.
+    await query("DELETE FROM users WHERE id = $1", [a]);
+    const rows = await query<{ tg: string; referee: string | null; referrer: string | null }>(
+      "SELECT referee_telegram_id::text AS tg, referee_user_id::text AS referee, referrer_user_id::text AS referrer FROM referrals ORDER BY referee_telegram_id",
+    );
+    assert.deepEqual(rows, [
+      { tg: "910000002", referee: null, referrer: null },
+      { tg: "910000003", referee: c, referrer: null },
+    ], "MUTATSIYA 6: CASCADE would erase both records");
+    const r2 = await user(910_000_004, "R2");
+    await assert.rejects(
+      query("INSERT INTO referrals (referee_user_id, referee_telegram_id, referrer_user_id, source) VALUES (NULL, 910000003, $1, 'bot')", [r2]),
+      /referrals_referee_telegram_id_key/,
+      "the invitee's Telegram id still blocks a second reward",
     );
   });
 

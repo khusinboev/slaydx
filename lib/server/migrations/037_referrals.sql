@@ -14,9 +14,9 @@
 --                           (blocked inviter).
 --
 -- «Never twice» is enforced by the schema as well as the code: `referee_user_id` and
--- `referee_telegram_id` are both UNIQUE, and the invited user's FK is ON DELETE SET NULL
--- so the Telegram-id record survives even if that user row were ever deleted and
--- re-created. The reward itself is idempotent through `transactions_ref_idx`
+-- `referee_telegram_id` are both UNIQUE, and both user FKs are ON DELETE SET NULL so
+-- the Telegram-id record survives even if the invitee's or the inviter's user row
+-- were ever deleted (and the invitee re-created). The reward itself is idempotent through `transactions_ref_idx`
 -- (UNIQUE kind + reference `referral:<referee user id>`).
 --
 -- Additive only: two nullable columns (metadata-only ALTERs), one small unique index on a
@@ -41,12 +41,16 @@ CREATE TABLE IF NOT EXISTS referrals (
   -- reward through `referee_telegram_id` even without the user row.
   referee_user_id     BIGINT UNIQUE REFERENCES users(id) ON DELETE SET NULL,
   referee_telegram_id BIGINT NOT NULL UNIQUE,
-  referrer_user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- The inviter. SET NULL too (not CASCADE): deleting an inviter must not erase the
+  -- invitees' records and with them their Telegram-id block (review MINOR-3).
+  -- Always set when the row is written; NULL only after that user row is deleted.
+  referrer_user_id    BIGINT REFERENCES users(id) ON DELETE SET NULL,
   source              TEXT NOT NULL CHECK (source IN ('bot', 'web')),
   reward_points       INT NOT NULL DEFAULT 0 CHECK (reward_points >= 0),
   reward_ref          TEXT,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT referrals_not_self CHECK (referee_user_id IS DISTINCT FROM referrer_user_id)
+  -- Both ids present → different people; either may become NULL through a deletion.
+  CONSTRAINT referrals_not_self CHECK (referee_user_id IS NULL OR referrer_user_id IS NULL OR referee_user_id <> referrer_user_id)
 );
 -- The inviter's list / counters (`GET /api/referral`, admin) and the 24 h burst count.
 CREATE INDEX IF NOT EXISTS referrals_referrer_created_idx ON referrals (referrer_user_id, created_at DESC);
