@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Copy, Gift, Send } from "lucide-react";
 import { request } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
-import { REFERRAL_SHARE_TEXT, formatPoints, referralRuleText, telegramShareUrl } from "@/lib/referral";
+import { REFERRAL_SHARE_TEXT, formatJoinDate, formatPoints, referralRuleText, telegramShareUrl } from "@/lib/referral";
 import { isInTelegramWebApp, openTelegramLink } from "@/lib/telegram-webapp";
 
 /** `GET /api/referral` (`lib/server/referrals.ts ReferralSummary`). */
@@ -233,9 +233,7 @@ export function ReferralCard() {
           {data.recent.map((r, i) => (
             <li key={`${r.joinedAt}-${i}`} className="flex min-w-0 items-center justify-between gap-3 py-2">
               <span className="min-w-0 flex-1 truncate">{r.name}</span>
-              <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-                {new Date(r.joinedAt).toLocaleDateString("uz-UZ")}
-              </span>
+              <span className="text-muted-foreground shrink-0 text-xs tabular-nums">{formatJoinDate(r.joinedAt)}</span>
             </li>
           ))}
         </ul>

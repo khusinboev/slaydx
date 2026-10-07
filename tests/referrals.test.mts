@@ -136,6 +136,31 @@ test("codes: normalised, alphabet without look-alikes, 8–10 chars; payload and
   assert.equal(share.searchParams.get("url"), "https://t.me/slaydx_bot?start=ref_k7m3p9qx");
 });
 
+test("formatPoints / formatJoinDate: by hand, NBSP groups, Tashkent date — never the runtime's ICU (Chromium wrote «6,000»)", () => {
+  const realNum = Number.prototype.toLocaleString;
+  const realDate = Date.prototype.toLocaleDateString;
+  // A browser whose ICU formats differently must not change what we render (smoke finding).
+  Number.prototype.toLocaleString = function () {
+    return "ICU";
+  };
+  Date.prototype.toLocaleDateString = function () {
+    return "ICU";
+  };
+  try {
+    assert.equal(shared.formatPoints(2000), "2 000", "MUTATSIYA 10: toLocaleString is back");
+    assert.equal(shared.formatPoints(1_234_567), "1 234 567");
+    assert.equal(shared.formatPoints(0), "0");
+    assert.equal(shared.formatPoints(999), "999");
+    assert.equal(shared.formatJoinDate("2026-10-06T20:30:00.000Z"), "07.10.2026", "UTC+5: already the next day in Tashkent");
+    assert.equal(shared.formatJoinDate("2026-01-02T03:00:00.000Z"), "02.01.2026");
+    assert.equal(shared.formatJoinDate("nonsense"), "");
+    assert.equal(shared.referralRuleText(), "Har bir yangi do'st uchun 2 000 ball. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi.");
+  } finally {
+    Number.prototype.toLocaleString = realNum;
+    Date.prototype.toLocaleDateString = realDate;
+  }
+});
+
 /* ───────────────────────────── codes ───────────────────────────── */
 
 test("ensureRefCode: random 8-char code, stable, never the Telegram id, concurrent first calls agree, unique per user", { skip }, async () => {

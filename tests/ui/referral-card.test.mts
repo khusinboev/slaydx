@@ -78,10 +78,10 @@ test("ReferralCard: loading → link, rule, counters and recent names; Sayt swit
   );
   assert.equal(linkField().value, DATA.botLink);
   assert.equal(document.querySelector("[data-referral-invited]")!.textContent, "3");
-  assert.match(document.querySelector("[data-referral-earned]")!.textContent!, /^6\s000$/);
+  assert.equal(document.querySelector("[data-referral-earned]")!.textContent, "6 000", "NBSP groups, as in every browser");
   const items = [...document.querySelectorAll("[data-referral-recent] li")].map((li) => li.textContent);
   assert.equal(items.length, 2);
-  assert.ok(items[0]!.startsWith("Dilnoza Karimova"));
+  assert.equal(items[0], "Dilnoza Karimova06.10.2026", "name + Tashkent dd.mm.yyyy");
   fireEvent.click(screen.getByRole("button", { name: "Sayt" }));
   assert.equal(linkField().value, DATA.webLink, "MUTATSIYA 3");
   assert.equal(screen.getByRole("button", { name: "Sayt" }).getAttribute("aria-pressed"), "true");

@@ -59,9 +59,25 @@ export function referralWebLink(appUrl: string, code: string): string {
   return `${appUrl.replace(/\/+$/, "")}/uz?${REF_QUERY_PARAM}=${encodeURIComponent(code)}`;
 }
 
-/** Points as the UI writes them («2 000»). */
+/**
+ * Points as the UI writes them: «2 000» (NBSP between groups, never wraps).
+ * By hand, not `toLocaleString("uz-UZ")`: ICU data differs between Node and
+ * browsers — Chromium writes «2,000» (found by the T3 smoke; `lib/admin-format.ts`
+ * avoids it for the same reason).
+ */
 export function formatPoints(n: number): string {
-  return Math.round(n).toLocaleString("uz-UZ");
+  const v = Math.round(Number.isFinite(n) ? n : 0);
+  const body = String(Math.abs(v)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return v < 0 ? `-${body}` : body;
+}
+
+/** A join date as `dd.mm.yyyy` in Tashkent (UTC+5, no DST) — by hand for the same reason. */
+export function formatJoinDate(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const d = new Date(t + 5 * 3_600_000);
+  const pad = (x: number) => String(x).padStart(2, "0");
+  return `${pad(d.getUTCDate())}.${pad(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`;
 }
 
 /** The program rule shown on the profile and in the bot. */
