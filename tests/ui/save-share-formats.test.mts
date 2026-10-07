@@ -4,19 +4,20 @@ import assert from "node:assert/strict";
 import { createElement as h } from "react";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import { ResultActions, rowShows, sendOrder } from "../../components/files/ResultActions.tsx";
+import { ResultActions, rowShows } from "../../components/files/ResultActions.tsx";
 import { DEFAULT_ROW_BADGE, SHEET_TITLE, sendRowStatusText } from "../../components/files/DownloadSheet.tsx";
 import { useAppStore } from "../../lib/store.ts";
 import { compareVersions } from "../../lib/telegram-webapp.ts";
 import { DELIVER_TEXT, resetGesture } from "../../lib/downloads/deliver.ts";
-import { downloadFormats, downloadSubject, type DownloadFormat } from "../../lib/downloads/formats.ts";
+import { downloadFormats, downloadSubject } from "../../lib/downloads/formats.ts";
 import type { GenerationDetail, ServerUser } from "../../lib/api-client.ts";
 
 /**
  * T4 (docs/todo-2026-10-07/PLAN.md): «Saqlash» and «Ulashish» offer the same
  * per-material format choice as «Yuklab olish». A material with several
  * formats opens `DownloadSheet` in `save` / `share` mode (the registry's
- * formats, the stored file first and marked «Asosiy»); a row runs the action
+ * formats in the registry order — the resume lists PDF first, owner decision —
+ * the first row marked «Asosiy»); a row runs the action
  * in exactly that format (`POST …/telegram/{save|share} {format}`) and shows
  * its own state; one-format materials act from the button. `fetch` is stubbed
  * per route; a fake `Telegram.WebApp` records `shareMessage` / `close` /
@@ -148,7 +149,8 @@ function gen(patch: Partial<GenerationDetail> = {}): GenerationDetail {
 /** Materials with several formats (registry, `features.pdf`), as the result page sees them. */
 const MATERIALS: { name: string; g: GenerationDetail; hasResults?: boolean; send: string[] }[] = [
   { name: "slide", g: gen(), send: ["native", "pdf", "slides-png"] },
-  { name: "resume (PDF first in downloads; the stored DOCX first here)", g: gen({ type: "resume", format: "docx", fileName: "cv.docx" }), send: ["native", "pdf"] },
+  // Review M4 (owner decision): registry order in every sheet — the resume lists PDF first here too (was DOCX first).
+  { name: "resume (PDF first, as in downloads)", g: gen({ type: "resume", format: "docx", fileName: "cv.docx" }), send: ["pdf", "native"] },
   { name: "image (PNG)", g: gen({ type: "image", format: "png", fileName: "r.png", doc: { meta: {}, images: [{}] } as unknown as GenerationDetail["doc"] }), send: ["native", "jpg"] },
   { name: "podcast", g: gen({ type: "podcast", format: "mp3", fileName: "p.mp3" }), send: ["native", "transcript-txt"] },
   { name: "glossary", g: gen({ type: "glossary", format: "docx", fileName: "g.docx" }), send: ["native", "pdf", "glossary-csv"] },
@@ -222,14 +224,12 @@ async function settle() {
 
 /* ───────────────────────────── pure helpers ───────────────────────────── */
 
-test("sendOrder: the stored file first, the rest in registry order, nothing added or dropped", () => {
+// Review M4 rewrite: `sendOrder` (stored file first) is gone — the sheets use the registry order; pinned through the UI below.
+test("registry order is the sheet order: the resume registry lists PDF first", () => {
   const resume = downloadFormats({ type: "resume", format: "docx" }, { pdf: true });
   assert.deepEqual(resume.map((f) => f.id), ["pdf", "native"], "downloads: PDF first for the resume");
-  assert.deepEqual(sendOrder(resume, "native").map((f) => f.id), ["native", "pdf"]);
   const slide = downloadFormats({ type: "slide", format: "pptx" }, { pdf: true });
-  assert.deepEqual(sendOrder(slide, "native"), slide, "already first: same rows, same objects");
-  const one = [{ id: "native" } as DownloadFormat];
-  assert.deepEqual(sendOrder(one, "pdf"), one, "a missing default changes nothing");
+  assert.deepEqual(slide.map((f) => f.id), ["native", "pdf", "slides-png"]);
 });
 
 test("rowShows: only a toast that names a row, and only while that action's sheet is open", () => {
@@ -252,13 +252,13 @@ test("sendRowStatusText: hint + size when idle, «PDF tayyorlanmoqda… N s», �
 
 /* ───────────────────────────── rows per material ───────────────────────────── */
 
-test("save and share sheets list exactly the registry's formats for each material, the stored file first «Asosiy»; titles in Uzbek", async () => {
+test("save and share sheets list exactly the registry's formats in registry order, the first row «Asosiy» and focused; titles in Uzbek", async () => {
   for (const m of MATERIALS) {
     fakeTelegram();
     stub();
     mount({ g: m.g, hasResults: m.hasResults });
     const registry = downloadFormats(downloadSubject(m.g, { hasResults: m.hasResults }), { pdf: true });
-    assert.deepEqual(sendOrder(registry, "native").map((f) => f.id), m.send, `${m.name}: the oracle agrees with the registry`);
+    assert.deepEqual(registry.map((f) => f.id), m.send, `${m.name}: the oracle agrees with the registry`);
     for (const kind of ["save", "share"] as const) {
       const b = kind === "save" ? saveBtn() : shareBtn();
       assert.equal(b.getAttribute("aria-haspopup"), "dialog", `${m.name} ${kind}: the button opens a picker`);
@@ -270,11 +270,11 @@ test("save and share sheets list exactly the registry's formats for each materia
       assert.deepEqual(rowIds(), m.send, `${m.name} ${kind}: rows`);
       for (const f of registry) assert.match(row(f.id).textContent ?? "", new RegExp(f.label.replace(/[()]/g, "\\$&")), `${m.name}: label of ${f.id}`);
       const defaults = [...s.querySelectorAll("[data-default-row]")].map((r) => r.getAttribute("data-download-row"));
-      assert.deepEqual(defaults, ["native"], `${m.name} ${kind}: one default row, the stored file`);
-      assert.equal(row("native").querySelector("[data-default-badge]")!.textContent, DEFAULT_ROW_BADGE);
+      assert.deepEqual(defaults, [m.send[0]], `${m.name} ${kind}: one «Asosiy» row, the first`);
+      assert.equal(row(m.send[0]).querySelector("[data-default-badge]")!.textContent, DEFAULT_ROW_BADGE);
       assert.equal(DEFAULT_ROW_BADGE, "Asosiy");
       // Identity check through assert.ok: a failing assert.equal on DOM nodes would serialize the whole jsdom tree.
-      await waitFor(() => assert.ok(document.activeElement === row("native"), `${m.name} ${kind}: focus on the stored-file row`));
+      await waitFor(() => assert.ok(document.activeElement === row(m.send[0]), `${m.name} ${kind}: focus on the first row`));
       assert.equal(posts(`/telegram/${kind}`).length, 0, `${m.name} ${kind}: opening sends nothing`);
       await act(async () => {
         fireEvent.keyDown(window, { key: "Escape" });
@@ -629,4 +629,138 @@ test("an edit (new file version) clears the rows: a «sent» row of the old file
   m.rerender(gen({ fileVersion: 2 }));
   await settle();
   assert.equal(state("pdf"), "idle");
+});
+
+/* ───────────────────────────── review fixes (T4 review M1–M3, N1–N3) ───────────────────────────── */
+
+test("M1 leaving the page while a PDF save is preparing: polling stops, and a late answer never closes the Mini App", async () => {
+  // a) left during the 202 poll pause: no second POST, no close().
+  fakeTelegram();
+  stub((c) => (c.url.endsWith("/telegram/save") ? json(202, { state: "preparing", retryAfterMs: 500, format: "pdf" }) : undefined));
+  mount();
+  await tap(saveBtn());
+  await tap(row("pdf"));
+  await waitFor(() => assert.equal(state("pdf"), "preparing"));
+  cleanup(); // the user goes back to the list
+  await act(async () => new Promise((r) => setTimeout(r, 1_300)));
+  assert.equal(posts("/telegram/save").length, 1, "no polling after the page is gone");
+  assert.ok(!tgCalls.includes("close"));
+  // b) left while the request is in flight; it answers 200 afterwards: still no close(), no toast.
+  fakeTelegram();
+  tgCalls = [];
+  let release!: (r: Response) => void;
+  stub((c) => (c.url.endsWith("/telegram/save") ? new Promise((r) => (release = r)) : undefined));
+  mount();
+  await tap(saveBtn());
+  await tap(row("pdf"));
+  cleanup();
+  await act(async () => release(json(200, { ok: true, duplicate: false, format: "pdf", botUrl: null })));
+  await act(async () => new Promise((r) => setTimeout(r, 1_200)));
+  assert.ok(!tgCalls.includes("close"), "never close() after the page is gone");
+  assert.ok(!toast());
+});
+
+test("M3 a new file version while the share is prepared (sheet closed, Android): the old message is never sent; the user is told; the button opens the choice again", async () => {
+  fakeTelegram({ platform: "android" });
+  let release!: (r: Response) => void;
+  stub((c) => (c.url.endsWith("/telegram/share") ? new Promise((r) => (release = r)) : undefined));
+  const m = mount();
+  await click(shareBtn());
+  await click(row("native")); // stale gesture → would end «Tayyor»
+  await act(async () => void fireEvent.keyDown(window, { key: "Escape" }));
+  m.rerender(gen({ fileVersion: 2 })); // an edit was saved and the file rebuilt
+  await settle();
+  assert.equal(toast()?.textContent?.trim(), DELIVER_TEXT.fileChanged, "the running share stopped — said, not silent");
+  assert.ok(!shareBtn().hasAttribute("disabled"), "the button is free at once");
+  await act(async () => release(json(200, { preparedId: "prep-OLD", expiresAt: exp(), format: "native", botUrl: null })));
+  await settle();
+  assert.ok(!shareBtn().hasAttribute("data-share-ready"), "the old prepared message is not «Tayyor»");
+  await tap(shareBtn());
+  assert.equal(sheet()?.getAttribute("data-download-sheet"), "share", "a fresh choice, not the old message");
+  assert.equal(state("native"), "idle");
+  assert.ok(!tgCalls.some((c) => c.includes("prep-OLD")), "prep-OLD never reaches shareMessage");
+});
+
+test("M3 a new file version while a save runs with the sheet open: rows reset AND usable (not blocked), the user is told, the old late error lands nowhere", async () => {
+  fakeTelegram();
+  let release!: (r: Response) => void;
+  let n = 0;
+  stub((c) => (c.url.endsWith("/telegram/save") && n++ === 0 ? new Promise((r) => (release = r)) : undefined));
+  const m = mount();
+  await tap(saveBtn());
+  await tap(row("pdf"));
+  assert.equal(row("native").getAttribute("aria-disabled"), "true", "blocked while the PDF is sent");
+  m.rerender(gen({ fileVersion: 2 }));
+  await settle();
+  assert.equal(state("pdf"), "idle");
+  assert.ok(!row("native").hasAttribute("aria-disabled"), "the other rows are free again");
+  assert.ok(!saveBtn().hasAttribute("disabled"));
+  assert.equal(toast()?.textContent?.trim(), DELIVER_TEXT.fileChanged);
+  await act(async () => release(json(413, { error: "Fayl Telegram uchun juda katta — «Yuklab olish» dan foydalaning.", code: "too_large" })));
+  await settle();
+  assert.equal(state("pdf"), "idle", "the old answer does not touch the new rows");
+  await tap(row("native"));
+  await waitFor(() => assert.match(toast()?.textContent ?? "", /✅ Fayl bot chatiga yuborildi/));
+  assert.deepEqual(bodies("/telegram/save"), ["pdf", "native"]);
+});
+
+test("M2 «Ulashish» turns the open sheet into the download list: focus stays inside the dialog, on that format's row", async () => {
+  // This browser shares everything but PDF: the PDF row (not the first one) turns the sheet into the download list.
+  nav.canShare = (d: { files: File[] }) => d.files[0].type !== "application/pdf";
+  nav.share = async () => {};
+  stub();
+  mount({ telegramId: null });
+  await tap(shareBtn());
+  await waitFor(() => assert.ok(document.activeElement === row("native"), "focus inside the share sheet"));
+  await tap(row("pdf"));
+  assert.equal(sheet()?.getAttribute("data-download-sheet"), "download");
+  await waitFor(() => assert.ok(document.activeElement === row("pdf"), "focus on the row being downloaded, not <body>"));
+  assert.ok(sheet()!.contains(document.activeElement));
+});
+
+test("N1 «⋯ → Boshqa formatda ulashish…» always offers the choice, even with a «Tayyor» format; the header button still shares it at once", async () => {
+  const shared: string[] = [];
+  nav.canShare = () => true;
+  nav.share = async (d: { files: File[] }) => void shared.push(d.files[0].name);
+  stub();
+  mount({ telegramId: null });
+  await tap(shareBtn());
+  await tap(row("pdf"));
+  await waitFor(() => assert.equal(state("pdf"), "ready"));
+  await act(async () => void fireEvent.keyDown(window, { key: "Escape" }));
+  await click(q("[data-more-button]")!);
+  await click(q('[data-menu-item="share-other"]')!);
+  assert.equal(sheet()?.getAttribute("data-download-sheet"), "share", "the choice opens");
+  assert.equal(state("pdf"), "ready", "the «Tayyor» row is marked there");
+  assert.equal(shared.length, 0, "nothing shared by the menu item");
+  await act(async () => void fireEvent.keyDown(window, { key: "Escape" }));
+  await tap(shareBtn());
+  await waitFor(() => assert.deepEqual(shared, ["fayl-pdf.bin"]));
+});
+
+test("N2 «Ulashish» / «Saqlash» report their sheet: aria-haspopup=dialog + aria-expanded", async () => {
+  fakeTelegram();
+  stub();
+  mount();
+  for (const [b, kind] of [[saveBtn, "save"], [shareBtn, "share"]] as const) {
+    assert.equal(b().getAttribute("aria-expanded"), "false");
+    await tap(b());
+    assert.equal(sheet()?.getAttribute("data-download-sheet"), kind);
+    assert.equal(b().getAttribute("aria-expanded"), "true");
+    await act(async () => void fireEvent.keyDown(window, { key: "Escape" }));
+    assert.equal(b().getAttribute("aria-expanded"), "false");
+  }
+});
+
+test("N3 browser Web Share reuses the sheet's pre-warm: the PDF is prepared once", async () => {
+  nav.canShare = () => true;
+  nav.share = async () => {};
+  stub();
+  mount({ telegramId: null });
+  await tap(shareBtn());
+  await waitFor(() => assert.equal(posts("/download").length, 2)); // pre-warm: native + pdf
+  await tap(row("pdf"));
+  await waitFor(() => assert.equal(state("pdf"), "ready"));
+  assert.deepEqual(bodies("/download").filter((f) => f === "pdf"), ["pdf"], "one prepare for the PDF");
+  assert.ok(calls.some((c) => c.url === "/api/dl/tok-pdf"), "the pre-warmed signed URL was fetched");
 });

@@ -53,9 +53,9 @@ import { openBotLink, SEND_IDLE, sendRowBusy, type SendRows, type SendRowState }
  *
  * `mode: "share" | "save"` (docs/todo-2026-10-07 T4) is the format choice of
  * «Ulashish» / «Saqlash» for a material with several formats: the same
- * registry rows, the stored file first and marked «Asosiy» (the old one-tap
- * default is two taps away and has the focus), sizes from the same pre-warm
- * (PDF starts converting on open). A tap runs the action in that format and
+ * registry rows in the registry order (the resume lists PDF first, owner
+ * decision), the first row marked «Asosiy» and focused (the common case is
+ * two taps), sizes from the same pre-warm (PDF starts converting on open). A tap runs the action in that format and
  * the row shows the action's own state (`SendRowState`: «Botga
  * yuborilmoqda…», «PDF tayyorlanmoqda… N s», «Tayyor — ulashish uchun
  * bosing», the Uzbek error + «Qayta urinish», «Botni ochish»); the sheet
@@ -67,7 +67,7 @@ export type SheetMode = "download" | "share" | "save";
 /** Formats prepared as soon as the sheet opens (lead decision: PDF on open; the stored file is a cheap token mint and gives its size). */
 const PREWARM: readonly DownloadFormatId[] = ["native", "pdf"];
 
-/** Badge of the stored-file row in the share/save sheet. */
+/** Badge of the first (recommended) row of the share/save sheet. */
 export const DEFAULT_ROW_BADGE = "Asosiy";
 
 type Warm = { since: number; promise: Promise<ReadyFile>; file?: ReadyFile };
@@ -237,7 +237,7 @@ export function useDownloads(genId: string, version: number, opts: { canSendToBo
     [dispatcher],
   );
 
-  return { rows, sizes, tap, prewarm, sendRowToBot, openRowInBrowser, canSendToBot: opts.canSendToBot };
+  return { rows, sizes, tap, prewarm, warm: prepare, sendRowToBot, openRowInBrowser, canSendToBot: opts.canSendToBot };
 }
 
 export type Downloads = ReturnType<typeof useDownloads>;
@@ -303,6 +303,7 @@ export function DownloadSheet({
   onPick,
   send,
   defaultId,
+  focusId,
 }: {
   open: boolean;
   onClose: () => void;
@@ -317,8 +318,10 @@ export function DownloadSheet({
   onPick?: (id: DownloadFormatId) => void;
   /** `share` / `save` modes: the action's row states; `busy` = one format is in flight (the other rows wait). */
   send?: { rows: SendRows; busy: boolean };
-  /** `share` / `save` modes: the stored-file row (first, «Asosiy»). */
+  /** `share` / `save` modes: the row marked «Asosiy» (the first one). */
   defaultId?: DownloadFormatId;
+  /** The row to focus when the sheet opens or switches mode (else the first row). */
+  focusId?: DownloadFormatId | null;
 }) {
   const phone = usePhone();
   const ref = useDialog(open, onClose);
@@ -351,12 +354,18 @@ export function DownloadSheet({
     // `mode`: the sheet may switch (share → download list) while open; it then hangs from that button.
   }, [open, phone, anchorRef, mode]);
 
-  // Focus the first row when the sheet opens (keyboard and screen reader land inside).
+  // Focus a row when the sheet opens — and when it switches mode while open («Ulashish» → the download list
+  // replaces every row, the focused one included): keyboard and screen reader stay inside (review M2).
   useEffect(() => {
     if (!open) return;
-    const t = setTimeout(() => ref.current?.querySelector<HTMLElement>("[data-download-row]")?.focus({ preventScroll: true }), 0);
+    const t = setTimeout(() => {
+      const panel = ref.current;
+      if (!panel) return;
+      const target = (focusId && panel.querySelector<HTMLElement>(`[data-download-row="${focusId}"]`)) || panel.querySelector<HTMLElement>("[data-download-row]");
+      target?.focus({ preventScroll: true });
+    }, 0);
     return () => clearTimeout(t);
-  }, [open, ref]);
+  }, [open, ref, mode, focusId]);
 
   if (!open || typeof document === "undefined") return null;
 

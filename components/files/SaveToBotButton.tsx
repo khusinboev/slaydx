@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type Ref } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Ref } from "react";
 import { Loader2, Send } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { DownloadFormatId } from "@/lib/downloads/formats";
@@ -77,34 +77,102 @@ export function sendRowBusy(s: SendRowState): boolean {
   return s.s === "delivering" || s.s === "preparing";
 }
 
-type PutRow = (id: DownloadFormatId, st: SendRowState) => void;
+/**
+ * One running «Saqlash» / «Ulashish» action. Every effect of the action goes
+ * through it, so a dead scope (page left, file version changed) changes nothing.
+ */
+export type SendScope = {
+  /** Aborts the route polling / requests when the scope dies. */
+  signal: AbortSignal;
+  alive: () => boolean;
+  put: (id: DownloadFormatId, st: SendRowState) => void;
+  /** 202 preparing: the row and the header label count seconds from `started`. */
+  preparing: (id: DownloadFormatId, started: number) => void;
+  toast: (t: ActionToast) => void;
+  /** The action settled (frees the button and the other rows). */
+  end: () => void;
+};
+
+type ScopeState = { ctrl: AbortController; running: boolean };
 
 /**
- * Row states of one action for one {generation, file version}: an edit (new
- * file version) or another result clears them, and a late answer of the old
- * scope never lands in the new rows (`bind()` at the start of each action).
+ * Rows + the running action of one {generation, file version} (review M1, M3):
+ *  - `begin()` starts an action (`null` while one runs: double-tap safe);
+ *  - leaving the page aborts it — polling and requests stop; no toast, no
+ *    `close()`, no picker after the page is gone;
+ *  - a new file version aborts it too, frees the rows and the button at once
+ *    and says so («Fayl yangilandi…») instead of dropping the result silently;
+ *    a message prepared for the old file is never sent.
  */
-export function useSendRows(genId: string, version: number) {
+export function useSendScope(genId: string, version: number, onToast: (t: ActionToast) => void) {
   const [rows, setRows] = useState<SendRows>({});
-  const scope = useRef(0);
+  const [busy, setBusy] = useState(false);
+  const [since, setSince] = useState<number | null>(null);
+  const toastRef = useRef(onToast);
+  useLayoutEffect(() => {
+    toastRef.current = onToast;
+  });
+  const mounted = useRef(true);
   useEffect(() => {
-    scope.current += 1;
-    setRows({});
-  }, [genId, version]);
-  const bind = useCallback((): PutRow => {
-    const at = scope.current;
-    return (id, st) => {
-      if (scope.current === at) setRows((r) => (r[id] === st ? r : { ...r, [id]: st }));
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
     };
   }, []);
-  return { rows, bind };
+  const cur = useRef<ScopeState | null>(null);
+  useEffect(() => {
+    const s: ScopeState = { ctrl: new AbortController(), running: false };
+    cur.current = s;
+    setRows({});
+    setBusy(false);
+    setSince(null);
+    return () => {
+      const wasRunning = s.running;
+      s.running = false;
+      s.ctrl.abort();
+      // All cleanups of an unmount run before this microtask, so `mounted` tells a new file version from leaving the page.
+      if (wasRunning) queueMicrotask(() => mounted.current && toastRef.current({ text: DELIVER_TEXT.fileChanged, tone: "info" }));
+    };
+  }, [genId, version]);
+
+  const begin = useCallback((): SendScope | null => {
+    const s = cur.current;
+    if (!s || s.running) return null;
+    s.running = true;
+    setBusy(true);
+    const alive = () => cur.current === s && !s.ctrl.signal.aborted;
+    const put = (id: DownloadFormatId, st: SendRowState) => {
+      if (alive()) setRows((r) => (r[id] === st ? r : { ...r, [id]: st }));
+    };
+    return {
+      signal: s.ctrl.signal,
+      alive,
+      put,
+      preparing: (id, started) => {
+        if (!alive()) return;
+        setSince((x) => x ?? started);
+        put(id, { s: "preparing", since: started });
+      },
+      toast: (t) => {
+        if (alive()) toastRef.current(t);
+      },
+      end: () => {
+        if (!alive()) return;
+        s.running = false;
+        setBusy(false);
+        setSince(null);
+      },
+    };
+  }, []);
+  return { rows, busy, since, begin };
 }
 
-/** Row error + toast from a failed Telegram route call. */
-export function failRow(put: PutRow, format: DownloadFormatId, e: unknown): ActionToast {
+/** Row error + toast from a failed Telegram route call (nothing when the scope is dead: aborted, not failed). */
+export function failRow(sc: SendScope, format: DownloadFormatId, e: unknown): void {
+  if (!sc.alive()) return;
   const t = telegramFailureToast(e);
-  put(format, { s: "error", text: t.text, ...(t.link ? { link: t.link } : {}) });
-  return { ...t, row: format };
+  sc.put(format, { s: "error", text: t.text, ...(t.link ? { link: t.link } : {}) });
+  sc.toast({ ...t, row: format });
 }
 
 /** Delay before `WebApp.close()` after a successful «Saqlash» (lead decision: ~1 s, the toast is read first). */
@@ -150,10 +218,7 @@ export function useSaveAction(args: {
   onDone?: (format: DownloadFormatId) => void;
 }): SaveAction {
   const { genId, sessionTelegramId, onToast, onDone } = args;
-  const [busy, setBusy] = useState(false);
-  const [since, setSince] = useState<number | null>(null);
-  const { rows, bind } = useSendRows(genId, args.version ?? 0);
-  const inFlight = useRef(false);
+  const { rows, busy, since, begin } = useSendScope(genId, args.version ?? 0, onToast);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -161,51 +226,46 @@ export function useSaveAction(args: {
 
   const run = useCallback(
     async (format: DownloadFormatId) => {
-      if (inFlight.current) return;
-      const put = bind();
-      if (miniAppMismatch(sessionTelegramId)) {
-        put(format, { s: "error", text: DELIVER_TEXT.mismatch });
-        onToast({ text: DELIVER_TEXT.mismatch, tone: "error", row: format });
-        return;
-      }
-      inFlight.current = true;
-      setBusy(true);
-      put(format, { s: "delivering", text: DELIVER_TEXT.sending });
-      const started = Date.now();
-      const inTelegram = isInTelegramWebApp();
-      const attempt = async (retried: boolean): Promise<void> => {
-        try {
-          const r = await telegramAction("save", genId, format, () => {
-            setSince((s) => s ?? started);
-            put(format, { s: "preparing", since: started });
-          });
-          const cap = saveCapability({ inTelegram, hasTelegramId: true, pending: getNavSnapshot().guardPending });
-          const href = botUrlOf(null, r.botUrl);
-          put(format, { s: "done", text: DELIVER_TEXT.sentToBot });
-          onToast({
-            text: DELIVER_TEXT.sentToBot,
-            tone: "ok",
-            ...(cap === "web-toast" && href ? { link: { label: DELIVER_TEXT.openBot, href } } : {}),
-          });
-          onDone?.(format);
-          if (cap === "tg-close") closeTimer.current = setTimeout(() => closeApp(), SAVE_CLOSE_DELAY_MS);
-        } catch (e) {
-          // The bot may not write to this user yet: ask once, then try again once.
-          if (apiErrorCode(e) === "bot_unreachable" && inTelegram && !retried && (await requestWriteAccess())) {
-            return attempt(true);
-          }
-          onToast(failRow(put, format, e));
-        }
-      };
+      const sc = begin();
+      if (!sc) return;
       try {
+        if (miniAppMismatch(sessionTelegramId)) {
+          sc.put(format, { s: "error", text: DELIVER_TEXT.mismatch });
+          sc.toast({ text: DELIVER_TEXT.mismatch, tone: "error", row: format });
+          return;
+        }
+        sc.put(format, { s: "delivering", text: DELIVER_TEXT.sending });
+        const started = Date.now();
+        const inTelegram = isInTelegramWebApp();
+        const attempt = async (retried: boolean): Promise<void> => {
+          try {
+            const r = await telegramAction("save", genId, format, () => sc.preparing(format, started), { signal: sc.signal });
+            // Left the page or a new file version meanwhile: no row, no toast — and never `close()`.
+            if (!sc.alive()) return;
+            const cap = saveCapability({ inTelegram, hasTelegramId: true, pending: getNavSnapshot().guardPending });
+            const href = botUrlOf(null, r.botUrl);
+            sc.put(format, { s: "done", text: DELIVER_TEXT.sentToBot });
+            sc.toast({
+              text: DELIVER_TEXT.sentToBot,
+              tone: "ok",
+              ...(cap === "web-toast" && href ? { link: { label: DELIVER_TEXT.openBot, href } } : {}),
+            });
+            onDone?.(format);
+            if (cap === "tg-close") closeTimer.current = setTimeout(() => closeApp(), SAVE_CLOSE_DELAY_MS);
+          } catch (e) {
+            // The bot may not write to this user yet: ask once, then try again once.
+            if (sc.alive() && apiErrorCode(e) === "bot_unreachable" && inTelegram && !retried && (await requestWriteAccess())) {
+              return attempt(true);
+            }
+            failRow(sc, format, e);
+          }
+        };
         await attempt(false);
       } finally {
-        inFlight.current = false;
-        setBusy(false);
-        setSince(null);
+        sc.end();
       }
     },
-    [genId, sessionTelegramId, onToast, onDone, bind],
+    [genId, sessionTelegramId, onDone, begin],
   );
 
   return { busy, since, rows, run };
@@ -243,6 +303,7 @@ export function SaveToBotButton({
   visible,
   onPress,
   picker = false,
+  expanded = false,
   buttonRef,
   iconOnly = false,
   className,
@@ -252,6 +313,8 @@ export function SaveToBotButton({
   onPress: () => void;
   /** The press opens the format sheet (the material has several formats). */
   picker?: boolean;
+  /** Its format sheet is open (`aria-expanded`). */
+  expanded?: boolean;
   /** The desktop format popover hangs from this button. */
   buttonRef?: Ref<HTMLButtonElement>;
   iconOnly?: boolean;
@@ -271,6 +334,7 @@ export function SaveToBotButton({
       data-save-to-bot
       aria-busy={action.busy || undefined}
       aria-haspopup={picker ? "dialog" : undefined}
+      aria-expanded={picker ? expanded : undefined}
       disabled={action.busy}
       title="Telegram'ga saqlash — fayl bot chatiga yuboriladi"
       aria-label={iconOnly ? "Telegram'ga saqlash" : undefined}

@@ -112,6 +112,8 @@ export const DELIVER_TEXT = {
   sharing: "Ulashishga tayyorlanmoqda…",
   /** Share sheet row while Telegram's chat picker is open. */
   pickChat: "Chatni tanlang…",
+  /** «Saqlash» / «Ulashish» was running when the file changed (an edit): the action stopped, its result is ignored. */
+  fileChanged: "Fayl yangilandi — qayta urinib ko‘ring",
   shareExpired: "Ulashish havolasi eskirdi — qayta urinib ko‘ring",
   shareNoBrowser: "Bu brauzer faylni ulasha olmaydi — yuklab olib, o‘zingiz yuboring",
   shareNoAccount: "Telegram akkaunti bog‘lanmagan — faylni yuklab olib, o‘zingiz yuboring",

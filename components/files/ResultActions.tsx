@@ -6,13 +6,7 @@ import { Check, ChevronDown, Download, Loader2, MoreHorizontal, Send, Share2, Tr
 import { cn } from "@/lib/cn";
 import type { GenerationDetail } from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
-import {
-  defaultShareFormat,
-  downloadFormats,
-  downloadSubject,
-  type DownloadFormat,
-  type DownloadFormatId,
-} from "@/lib/downloads/formats";
+import { downloadFormats, downloadSubject, type DownloadFormatId } from "@/lib/downloads/formats";
 import { DELIVER_TEXT, IDLE, markGesture, rowBusy, rowPercent, elapsedSeconds, type RowState } from "@/lib/downloads/deliver";
 import { useDialog } from "../overlays/useDialog";
 import { DownloadSheet, useDownloads, type SheetMode } from "./DownloadSheet";
@@ -39,7 +33,7 @@ import { currentShareCapability, shareFallbackToast, ShareButton, useShareAction
  *
  * «Saqlash» and «Ulashish» (docs/todo-2026-10-07 T4) offer the same per-
  * material format choice: several formats → the same sheet in `save` /
- * `share` mode (stored file first, «Asosiy»); a row tap runs the action in
+ * `share` mode (registry order, first row «Asosiy»); a row tap runs the action in
  * that format and the row shows its progress/error; success closes the sheet
  * and toasts. One format → the action runs from the button, as before.
  */
@@ -53,16 +47,6 @@ import { currentShareCapability, shareFallbackToast, ShareButton, useShareAction
 export function toastDuration(t: Pick<ActionToast, "tone" | "link">): number | null {
   if (t.link) return null;
   return t.tone === "error" ? 10_000 : 4_500;
-}
-
-/**
- * Pure: the «Saqlash» / «Ulashish» sheet order — the stored file (`defaultId`,
- * what one tap used to send) first, then the other registry formats in their
- * registry order. Exactly the registry's formats, none added or dropped.
- */
-export function sendOrder(formats: readonly DownloadFormat[], defaultId: DownloadFormatId): DownloadFormat[] {
-  const first = formats.find((f) => f.id === defaultId);
-  return first ? [first, ...formats.filter((f) => f !== first)] : [...formats];
 }
 
 /** Pure: the open `mode` sheet already shows this toast's message on the row (the toast would cover it). */
@@ -100,9 +84,6 @@ export function ResultActions({
   const sessionTelegramId = useAppStore((s) => s.user?.telegramId ?? null);
   const subject = useMemo(() => downloadSubject(gen, { hasResults }), [gen, hasResults]);
   const formats = useMemo(() => downloadFormats(subject, { pdf: Boolean(features?.pdf) }), [subject, features?.pdf]);
-  const shareFormat = useMemo(() => defaultShareFormat(subject), [subject]);
-  /** «Saqlash» / «Ulashish» sheet rows: the registry's formats, the stored file (the old one-tap default) first. */
-  const sendFormats = useMemo(() => sendOrder(formats, shareFormat.id), [formats, shareFormat.id]);
   const single = formats.length === 1;
   const version = gen.fileVersion ?? 0;
 
@@ -110,9 +91,12 @@ export function ResultActions({
   const [sheet, setSheet] = useState<SheetMode | null>(null);
   /** The open sheet right now (async action callbacks read it). */
   const sheetRef = useRef<SheetMode | null>(null);
-  const showSheet = useCallback((mode: SheetMode | null) => {
+  /** The row the sheet focuses (the download list opened for one format); else its first row. */
+  const [focusId, setFocusId] = useState<DownloadFormatId | null>(null);
+  const showSheet = useCallback((mode: SheetMode | null, focus: DownloadFormatId | null = null) => {
     sheetRef.current = mode;
     setSheet(mode);
+    setFocusId(focus);
   }, []);
   const closeSheet = useCallback(() => showSheet(null), [showSheet]);
   const dlRef = useRef<HTMLButtonElement>(null);
@@ -174,7 +158,8 @@ export function ResultActions({
    */
   const downloadFormat = useCallback(
     (id: DownloadFormatId) => {
-      if (!single) showSheet("download");
+      // The open share sheet becomes the download list: focus moves to this format's row (review M2).
+      if (!single) showSheet("download", id);
       void downloads.tap(id);
     },
     [single, downloads, showSheet],
@@ -189,6 +174,7 @@ export function ResultActions({
     onToast: shareToast,
     onDownload: downloadFormat,
     onDone: onShareDone,
+    warm: downloads.warm,
   });
 
   /** «Saqlash»: one format → save it now; several → the format sheet (a different Telegram account is refused first). */
@@ -200,15 +186,17 @@ export function ResultActions({
 
   /**
    * «Ulashish»: one format → share it now. Several → the format sheet, except
-   * when a format is already «Tayyor» (the toast asked for one more tap on
-   * «Ulashish»): that one is shared within this tap. Nothing shareable here at
-   * all → say why and open the download list (as before).
+   * when a format is already «Tayyor» and the header button was tapped (the
+   * toast asked for one more tap on «Ulashish»): that one is shared within
+   * this tap. «⋯ → Boshqa formatda ulashish…» always offers the choice (the
+   * «Tayyor» row is marked there; review N1). Nothing shareable here at all →
+   * say why and open the download list (as before).
    */
-  const onSharePress = () => {
+  const onSharePress = (choose = false) => {
     if (single) return void share.run(formats[0]);
-    const ready = share.readyFor ? sendFormats.find((f) => f.id === share.readyFor) : undefined;
+    const ready = !choose && share.readyFor ? formats.find((f) => f.id === share.readyFor) : undefined;
     if (ready) return void share.run(ready);
-    const caps = sendFormats.map((f) => currentShareCapability(f, Boolean(sessionTelegramId)));
+    const caps = formats.map((f) => currentShareCapability(f, Boolean(sessionTelegramId)));
     if (caps.every((c) => c === "download-only")) {
       onToast(shareFallbackToast());
       return showSheet("download");
@@ -249,7 +237,7 @@ export function ResultActions({
 
   /** A share/save sheet row: the action in exactly that format (synchronous up to `navigator.share` — Web Share needs the tap's activation). */
   const pick = (id: DownloadFormatId) => {
-    const f = sendFormats.find((x) => x.id === id);
+    const f = formats.find((x) => x.id === id);
     if (!f) return;
     if (sheet === "share") void share.run(f);
     else if (sheet === "save") void save.run(f.id);
@@ -301,8 +289,9 @@ export function ResultActions({
           </button>
           <ShareButton
             action={share}
-            onPress={onSharePress}
+            onPress={() => onSharePress()}
             picker={!single}
+            expanded={sheet === "share"}
             buttonRef={shareRef}
             className="flex-1 group-data-[compact=1]/hdr:hidden md:flex-none"
           />
@@ -311,6 +300,7 @@ export function ResultActions({
             visible={showSave}
             onPress={onSavePress}
             picker={!single}
+            expanded={sheet === "save"}
             buttonRef={saveRef}
             className="flex-1 group-data-[compact=1]/hdr:hidden md:flex-none"
           />
@@ -354,7 +344,7 @@ export function ResultActions({
           ...(!expired && canOtherFormat
             ? [
                 // The compact (scrolled) phone header hides «Ulashish»/«Saqlash»: these reach the same sheets.
-                { id: "share-other", label: "Boshqa formatda ulashish…", icon: <Share2 className="size-4" />, onSelect: onSharePress },
+                { id: "share-other", label: "Boshqa formatda ulashish…", icon: <Share2 className="size-4" />, onSelect: () => onSharePress(true) },
                 ...(showSave
                   ? [{ id: "save-other", label: "Boshqa formatda saqlash…", icon: <Send className="size-4" />, onSelect: onSavePress }]
                   : []),
@@ -375,13 +365,15 @@ export function ResultActions({
         open={sheet !== null}
         onClose={closeSheet}
         mode={sheet ?? "download"}
-        formats={sendMode ? sendFormats : formats}
+        formats={formats}
         downloads={downloads}
         anchorRef={sheetAnchor}
         sizes={downloads.sizes}
         onPick={pick}
         send={sheet === "share" ? share : sheet === "save" ? save : undefined}
-        defaultId={sendMode ? shareFormat.id : undefined}
+        // Owner decision (T4 review M4): registry order everywhere; «Asosiy» marks the first row (resume: PDF).
+        defaultId={sendMode ? formats[0].id : undefined}
+        focusId={focusId}
       />
 
       {toast ? <Toast toast={toast} onClose={() => setToast(null)} /> : null}
