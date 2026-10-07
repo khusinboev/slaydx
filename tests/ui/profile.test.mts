@@ -22,7 +22,6 @@ import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks
 import { ProfileHome } from "../../components/profile/ProfileHome.tsx";
 import { ProfileStep, AUTOSAVE_MS } from "../../components/profile/ProfileStep.tsx";
 import { ProfilePage } from "../../components/profile/ProfilePage.tsx";
-import { THEME_AUTO_KEY } from "../../components/profile/theme.ts";
 import type { ProfileStepId, ProfileTarget } from "../../components/profile/profile-model.ts";
 import { useAppStore } from "../../lib/store.ts";
 import { useUi } from "../../lib/ui.ts";
@@ -40,7 +39,7 @@ import type * as api from "../../lib/api-client.ts";
  *   3. PATCH sends the whole user (`{...user, ...draft}`) → «only edited keys»;
  *   4. «Saqlash va keyingisi» navigates without awaiting the save → «next waits for the save»;
  *   5. first logout tap signs out directly (no confirm) → «two-tap logout»;
- *   6. «Avto» stores the flag but does not follow the OS → «Avto follows the OS»;
+ *   6. «Avto» does not follow the OS (store) → «Avto follows the OS»;
  *   7. unmount does not flush the pending edit → «save on leave».
  */
 
@@ -50,7 +49,6 @@ afterEach(() => {
   globalThis.fetch = realFetch;
   useUi.setState({ overlay: null, returnTo: null });
   try {
-    window.localStorage.removeItem(THEME_AUTO_KEY);
   } catch {
     /* ignore */
   }
@@ -114,7 +112,8 @@ function stub(opts: { patchStatus?: () => number } = {}): Call[] {
 }
 const patches = (calls: Call[]) => calls.filter((c) => c.method === "PATCH");
 
-const router = { back() {}, forward() {}, refresh() {}, prefetch() {}, push() {}, replace() {} } as unknown as AppRouterInstance;
+const pushed: string[] = [];
+const router = { back() {}, forward() {}, refresh() {}, prefetch() {}, push(href: string) { pushed.push(href); }, replace() {} } as unknown as AppRouterInstance;
 const wrap = (node: ReturnType<typeof h>) =>
   h(
     AppRouterContext.Provider,
@@ -348,12 +347,13 @@ test("theme: Kun / Tun / Avto apply at once; Avto follows the OS; the index hint
 
   osDark = false;
   fireEvent.click(radio("Avto"));
-  assert.equal(window.localStorage.getItem(THEME_AUTO_KEY), "1");
-  assert.equal(useAppStore.getState().theme, "light", "Avto takes the OS theme now");
+  // The store owns «Avto» (lib/store.ts ThemeMode "auto"): the mode stays "auto", the painted theme follows the OS.
+  assert.equal(useAppStore.getState().theme, "auto");
+  assert.ok(!document.documentElement.classList.contains("dark"), "Avto takes the OS theme now (light)");
   assert.ok(radio("Avto").checked);
   osDark = true;
   act(() => mqListeners.forEach((l) => l()));
-  assert.equal(useAppStore.getState().theme, "dark", "…and follows its changes");
+  assert.ok(document.documentElement.classList.contains("dark"), "…and follows its changes");
   assert.ok(radio("Avto").checked);
 
   cleanup();
@@ -363,11 +363,11 @@ test("theme: Kun / Tun / Avto apply at once; Avto follows the OS; the index hint
   cleanup();
   mountStep("korinish");
   fireEvent.click(radio("Kun"));
-  assert.equal(window.localStorage.getItem(THEME_AUTO_KEY), null, "Kun turns Avto off");
-  assert.equal(useAppStore.getState().theme, "light");
+  assert.equal(useAppStore.getState().theme, "light", "Kun turns Avto off");
+  assert.ok(!document.documentElement.classList.contains("dark"));
   osDark = true;
   act(() => mqListeners.forEach((l) => l()));
-  assert.equal(useAppStore.getState().theme, "light", "no longer follows the OS");
+  assert.ok(!document.documentElement.classList.contains("dark"), "no longer follows the OS");
 });
 
 test("logout: two taps for this device and for everywhere, then back to the index", async () => {
@@ -418,3 +418,19 @@ test("ProfilePage (current /uz/profile route): index first, steps switch in plac
   fireEvent.click(screen.getByRole("button", { name: "Orqaga" }));
   assert.ok(document.querySelector("[data-profile-home]"));
 });
+
+// ───────────────────────────────────────────── route wiring (lead, after W4 merge)
+
+test("route page: «Saqlash va keyingisi» on /uz/profile/shaxsiy pushes the next step route", async () => {
+  const { ProfileStepPage } = await import("../../components/profile/ProfileStepPage.tsx");
+  stub();
+  signIn();
+  pushed.length = 0;
+  render(wrap(h(ProfileStepPage, { step: "shaxsiy" })));
+  assert.ok(document.querySelector('[data-profile-step="shaxsiy"].slx-step-enter'), "the step slides in");
+  fireEvent.click(screen.getByRole("button", { name: "Saqlash va keyingisi" }));
+  await tick(20);
+  // MUTATION: wiring `onNavigate` to a no-op (or to replace) leaves `pushed` empty.
+  assert.deepEqual(pushed, ["/uz/profile/oqish"]);
+});
+
