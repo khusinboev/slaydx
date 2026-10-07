@@ -1,112 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { Check } from "lucide-react";
-import * as api from "@/lib/api-client";
 import { creditTotal, useAppStore } from "@/lib/store";
-import { replaceSearch, useUi } from "@/lib/ui";
+import { useUi } from "@/lib/ui";
 import { PageBack } from "../shell/PageBack";
-
-const FEATURES = [
-  "Har bir hujjat narxi yaratishdan oldin ko'rsatiladi",
-  "Hujjat yaratilmasa, pul to'liq qaytariladi",
-  "Click yoki Payme orqali xavfsiz to'lov",
-  "Balans muddatsiz saqlanadi",
-];
+import { PaymentBanner } from "../wallet/PaymentBanner";
+import { TOPUP_FEATURES as FEATURES } from "../wallet/wallet-model";
+import { usePaymentReturn } from "../wallet/usePaymentReturn";
 
 export function PurchasePage() {
   const loggedIn = useAppStore((s) => s.loggedIn);
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const user = useAppStore((s) => s.user);
-  const refreshSession = useAppStore((s) => s.refreshSession);
   const open = useUi((s) => s.open);
-  const params = useSearchParams();
 
-  const [orders, setOrders] = useState<api.PaymentOrder[] | null>(null);
-  /*
-   * `?order=` — provayderdan qaytish belgisi. Buyurtma hal bo'lgach (to'langan /
-   * bekor) URLdan olib tashlanadi (`replace`): yangilash yoki tarixdan qaytish
-   * eski buyurtma bannerini qayta ochmaydi. Banner holati shu sahifada
-   * mahalliy saqlanadi, shuning uchun URL tozalansa ham yo'qolmaydi.
-   */
-  const urlOrder = params.get("order");
-  const [seenOrder, setSeenOrder] = useState<string | null>(urlOrder);
-  useEffect(() => {
-    if (urlOrder) setSeenOrder(urlOrder);
-  }, [urlOrder]);
-  const orderId = urlOrder ?? seenOrder;
-
-  useEffect(() => {
-    if (!loggedIn) {
-      setOrders([]);
-      return;
-    }
-    void api
-      .listOrders()
-      .then((r) => setOrders(r.orders))
-      .catch(() => setOrders([]));
-  }, [loggedIn]);
-
-  /*
-   * To'lovdan qaytganda holat darhol ko'rinmasligi mumkin (webhook
-   * kechikadi). UX-04/FE-19: ilgari 5 marta × 3 s (15 s) so'rab JIM
-   * to'xtardi — «tasdiqlanmoqda» banneri abadiy qolar, bekor qilingan
-   * buyurtmada ham shu yozuv chiqardi. Endi: oraliq o'sib boradi (3 s →
-   * 20 s), jami ~2 daqiqa; buyurtma to'langan/bekor bo'lsa darhol
-   * to'xtaydi. Undan keyin — tushuntirish va qo'lda «Tekshirish».
-   */
-  const [check, setCheck] = useState<"idle" | "polling" | "stalled">("idle");
-  const [pollKey, setPollKey] = useState(0);
-  useEffect(() => {
-    if (!orderId || !loggedIn) return;
-    const ctrl = new AbortController();
-    setCheck("polling");
-    void (async () => {
-      // «Tekshirish» bosilganda birinchi so'rov darhol ketadi.
-      let wait = pollKey > 0 ? 0 : PAY_POLL_START_MS;
-      let delay = PAY_POLL_START_MS;
-      let spent = 0;
-      while (spent + wait <= PAY_POLL_BUDGET_MS) {
-        await api.waitTurn(wait, ctrl.signal);
-        spent += wait;
-        wait = delay;
-        delay = Math.min(PAY_POLL_MAX_MS, Math.round(delay * 1.5));
-        let list: api.PaymentOrder[];
-        try {
-          ({ orders: list } = await api.listOrders());
-        } catch (e) {
-          if (ctrl.signal.aborted) return;
-          // Vaqtinchalik xato (tarmoq, 5xx) — keyingi navbatda yana so'raladi.
-          console.warn("[purchase] buyurtmalar olinmadi:", e instanceof Error ? e.message : e);
-          continue;
-        }
-        if (ctrl.signal.aborted) return;
-        setOrders(list);
-        const state = list.find((o) => o.id === orderId)?.state;
-        if (state === "paid" || state === "cancelled") {
-          // Balans (sarlavhadagi raqam) ham yangilansin.
-          if (state === "paid") void refreshSession();
-          const rest = new URLSearchParams(window.location.search);
-          if (rest.has("order")) {
-            rest.delete("order");
-            replaceSearch(rest);
-          }
-          setCheck("idle");
-          return;
-        }
-      }
-      setCheck("stalled");
-    })().catch((e: unknown) => {
-      // Effekt tozalandi (`ctrl.abort`) — kutilgan to'xtash.
-      if (e instanceof DOMException && e.name === "AbortError") return;
-      setCheck("stalled");
-    });
-    return () => ctrl.abort();
-  }, [orderId, loggedIn, refreshSession, pollKey]);
-
-  const orderState = orderId ? orders?.find((o) => o.id === orderId)?.state : undefined;
-  const justPaid = orderState === "paid";
+  const pay = usePaymentReturn();
+  const { orders } = pay;
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 pt-8 pb-16 sm:px-6 sm:pt-12 lg:px-8">
@@ -120,44 +29,7 @@ export function PurchasePage() {
         </p>
       </div>
 
-      {justPaid ? (
-        <div className="mx-auto mb-6 max-w-3xl rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">
-          To&apos;lov qabul qilindi — hisobingiz yangilandi.
-        </div>
-      ) : orderState === "cancelled" ? (
-        <div
-          data-pay-banner="cancelled"
-          className="border-destructive/30 bg-destructive/10 text-destructive mx-auto mb-6 max-w-3xl rounded-xl border px-4 py-3 text-sm"
-        >
-          To&apos;lov bekor qilindi — hisob o&apos;zgarmadi. Xohlasangiz, qaytadan to&apos;lashingiz mumkin.
-        </div>
-      ) : orderId && orders && check === "stalled" ? (
-        <div
-          data-pay-banner="stalled"
-          role="status"
-          className="mx-auto mb-6 max-w-3xl rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-300"
-        >
-          <p>
-            To&apos;lov tasdig&apos;i hali kelmadi. To&apos;lov tizimi xabarni kechiktirishi mumkin: pul yechilgan
-            bo&apos;lsa, u hisobingizga o&apos;zi tushadi — qayta to&apos;lamang. 10 daqiqadan keyin ham tushmasa, to&apos;lov
-            chekini saqlab, administratorga murojaat qiling.
-          </p>
-          <button
-            type="button"
-            onClick={() => setPollKey((k) => k + 1)}
-            className="mt-2 h-8 rounded-full border border-amber-500/40 px-4 text-xs font-medium hover:bg-amber-500/10"
-          >
-            Tekshirish
-          </button>
-        </div>
-      ) : orderId && orders ? (
-        <div
-          data-pay-banner="pending"
-          className="mx-auto mb-6 max-w-3xl rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400"
-        >
-          To&apos;lov tasdiqlanmoqda... Odatda bir necha soniya, ba&apos;zan 1–2 daqiqa oladi.
-        </div>
-      ) : null}
+      <PaymentBanner pay={pay} className="mx-auto mb-6 max-w-3xl" />
 
       <div className="mx-auto max-w-md">
         <article className="bg-card ring-primary rounded-2xl border p-6 ring-2">
@@ -228,8 +100,3 @@ export function PurchasePage() {
     </div>
   );
 }
-
-/** To'lovdan qaytgandan keyingi tekshiruv: birinchi oraliq, yuqori chegara va jami muddat (UX-04). */
-const PAY_POLL_START_MS = 3000;
-const PAY_POLL_MAX_MS = 20_000;
-const PAY_POLL_BUDGET_MS = 120_000;
