@@ -9,6 +9,7 @@ import { useAppStore } from "@/lib/store";
 import { downloadFormats, downloadSubject, type DownloadFormatId } from "@/lib/downloads/formats";
 import { DELIVER_TEXT, IDLE, markGesture, rowBusy, rowPercent, elapsedSeconds, type RowState } from "@/lib/downloads/deliver";
 import { useDialog } from "../overlays/useDialog";
+import { SAFE_BOTTOM } from "../shell/safe-area";
 import { DownloadSheet, useDownloads, type SheetMode } from "./DownloadSheet";
 import { miniAppMismatch, openBotLink, SaveToBotButton, useSaveAction, type ActionToast } from "./SaveToBotButton";
 import { currentShareCapability, shareFallbackToast, ShareButton, useShareAction } from "./ShareButton";
@@ -450,6 +451,14 @@ function OverflowMenu({ open, onClose, anchor, items }: { open: boolean; onClose
   );
 }
 
+/**
+ * Toast offset (redesign F0 hand-off): 16 px above the tab bar's room
+ * (`--tabbar-h`, 0 while the bar is hidden — it is on the result page) and the
+ * home indicator (`--tg-safe-bottom` from the Telegram bridge, else
+ * `env(safe-area-inset-bottom)`).
+ */
+export const TOAST_BOTTOM = `calc(16px + var(--tabbar-h, 0px) + ${SAFE_BOTTOM})`;
+
 function Toast({ toast, onClose }: { toast: ActionToast; onClose: () => void }) {
   if (typeof document === "undefined") return null;
   return createPortal(
@@ -464,7 +473,7 @@ function Toast({ toast, onClose }: { toast: ActionToast; onClose: () => void }) 
             ? "border-emerald-500/40 bg-background text-emerald-800 dark:text-emerald-300"
             : "bg-background",
       )}
-      style={{ bottom: "calc(16px + env(safe-area-inset-bottom, 0px))" }}
+      style={{ bottom: TOAST_BOTTOM }}
     >
       <p className="min-w-0 flex-1">{toast.text}</p>
       {toast.link ? (

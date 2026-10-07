@@ -118,7 +118,7 @@ test("purchase: to'lov faqat purpose=topup buyurtma yaratadi (tanlangan summa bi
   assert.doesNotMatch(dialog.textContent ?? "", FORBIDDEN);
   assert.ok(dialog.querySelector("fieldset"), "summa tanlash har doim ko'rinadi");
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "50k" }));
+    fireEvent.click(screen.getByRole("button", { name: "50 000 so'm" })); // redesign W5: was «50k»
   });
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Click" }));

@@ -331,7 +331,9 @@ test("isTextEntry: text inputs, textarea, contentEditable; not buttons, pickers,
 
 /* ------------------------------------------------------------ touch targets */
 
-test("ToolChrome touch hit areas: back 44 px circle (row height kept), «Qo'shimcha» and top-up 44 px rows", () => {
+// Redesign W5: the «←» is the PageHeader back (44 px on every pointer, was 32 px desktop / 44 px touch);
+// the bar's bottom padding also reads Telegram's `--tg-safe-bottom` (was env() only).
+test("ToolChrome touch hit areas: back 44 px (PageHeader), «Qo'shimcha» and top-up 44 px rows", () => {
   useAppStore.setState({
     loggedIn: true,
     user: { id: "u1", balance: 1000, points: 0, quota: 0 } as never,
@@ -347,8 +349,9 @@ test("ToolChrome touch hit areas: back 44 px circle (row height kept), «Qo'shim
       children: h("div"),
     }),
   );
-  const back = document.querySelector("nav a")!;
-  for (const c of ["pointer-coarse:size-11", "pointer-coarse:-my-1.5", "pointer-coarse:-ml-2.5", "h-8", "w-8", "-ml-1"]) {
+  const back = document.querySelector("[data-page-header-back]")!;
+  assert.ok(back, "PageHeader «←»");
+  for (const c of ["size-11", "-ml-2", "focus-visible:ring-2"]) {
     assert.ok(back.classList.contains(c), `back link: ${c}`);
   }
   const more = [...document.querySelectorAll("button")].find((b) => /Qo/.test(b.textContent ?? ""))!;
@@ -357,8 +360,8 @@ test("ToolChrome touch hit areas: back 44 px circle (row height kept), «Qo'shim
   for (const c of ["pointer-coarse:flex", "pointer-coarse:min-h-11", "pointer-coarse:w-fit"]) {
     assert.ok(topUp.classList.contains(c), `top-up link: ${c}`);
   }
-  // Safe-area padding on the bar, desktop 12 px kept.
-  assert.ok(bar().classList.contains("pb-[max(0.75rem,env(safe-area-inset-bottom))]"));
+  // Safe-area padding on the bar (Telegram first, then env()), desktop 12 px kept.
+  assert.ok(bar().classList.contains("pb-[max(0.75rem,var(--tg-safe-bottom,env(safe-area-inset-bottom,0px)))]"));
   assert.ok(bar().classList.contains("pt-3"));
   cleanup();
   useAppStore.setState({ loggedIn: false, user: null });

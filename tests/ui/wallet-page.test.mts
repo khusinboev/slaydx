@@ -152,7 +152,7 @@ test("Hamyon: «To'ldirish» opens the existing PayDialog (presets + Click/Payme
   assert.equal(useUi.getState().overlay, "pay");
   const dialog = screen.getByRole("dialog");
   assert.match(dialog.textContent ?? "", /To.lov usuli/);
-  assert.ok(screen.getByRole("button", { name: "50k" }));
+  assert.ok(screen.getByRole("button", { name: "50 000 so'm" })); // redesign W5: was «50k»
 });
 
 test("Hamyon: «Harakatlar» — readable label per kind, signed amounts, ball vs tanga, income marked", async () => {

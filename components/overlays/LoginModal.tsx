@@ -2,14 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X } from "lucide-react";
+import { Send } from "lucide-react";
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { safeReturnTo } from "@/lib/safe-return";
 import { cn } from "@/lib/cn";
 import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
-import { OverlayFrame } from "./OverlayFrame";
+import { OverlayClose, OverlayFrame, OverlayPanel, OverlayScrim } from "./OverlayFrame";
 import { useDialog } from "./useDialog";
 
 export function LoginModal() {
@@ -33,27 +33,17 @@ export function LoginModal() {
     <OverlayFrame
       label="Kirish"
       phone={phone}
-      className={cn("flex items-end justify-center sm:items-center", !phone && "p-4")}
+      sheet
+      className={phone ? "flex items-end justify-center" : "flex items-center justify-center p-4"}
     >
-      <button type="button" className="absolute inset-0 bg-black/40" aria-label="Yopish" onClick={close} />
-      <div
+      <OverlayScrim onClose={close} />
+      <OverlayPanel
         ref={panelRef}
-        className={cn(
-          "bg-card relative z-10 w-full max-w-md rounded-2xl border shadow-xl",
-          phone ? "max-h-full overflow-y-auto overscroll-contain p-5 pt-6 [&_h1]:pr-10" : "p-6",
-        )}
+        phone={phone}
+        sheet
+        className={phone ? "pt-2 [&_h1]:pr-12" : "max-w-md [&_h1]:pr-10"}
       >
-        <button
-          type="button"
-          onClick={close}
-          className={cn(
-            "hover:bg-muted absolute flex items-center justify-center rounded-full",
-            phone ? "top-1 right-1 size-11" : "top-3 right-3 size-8",
-          )}
-          aria-label="Yopish"
-        >
-          <X className="size-4" />
-        </button>
+        <OverlayClose onClose={close} phone={phone} className={cn("absolute", phone ? "top-4 right-3" : "top-4 right-4")} />
         <LoginForm
           onDone={() => {
             close();
@@ -65,7 +55,7 @@ export function LoginModal() {
             else router.refresh();
           }}
         />
-      </div>
+      </OverlayPanel>
     </OverlayFrame>
   );
 }
@@ -241,7 +231,7 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
           }}
           className={cn(
             "text-muted-foreground hover:text-foreground underline",
-            touch ? "-mx-2 inline-flex min-h-11 items-center px-2 text-sm" : "text-xs",
+            touch ? "-mx-2 inline-flex min-h-11 items-center px-2 text-[14.5px]" : "text-[13.5px]",
           )}
         >
           Telefon raqami orqali kirish
@@ -253,12 +243,12 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
   if (stage === "phone" || stage === "phoneCode") {
     return (
       <div>
-        <h1 className="mb-1 text-xl font-semibold tracking-tight">Telefon orqali kirish</h1>
-        <p className="text-muted-foreground mb-6 text-sm">
+        <h1 className="mb-1.5 text-[22px] leading-tight font-bold tracking-[-0.02em]">Telefon orqali kirish</h1>
+        <p className="text-muted-foreground mb-6 text-[15px] leading-snug">
           SMS ulanmagan — kod ekranda ko&apos;rsatiladi (sinov rejimi).
         </p>
 
-        <label htmlFor="login-phone" className="text-muted-foreground mb-1 block text-sm">
+        <label htmlFor="login-phone" className="text-muted-foreground mb-1.5 block text-[14.5px] font-medium">
           Telefon
         </label>
         <input
@@ -269,12 +259,12 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
           disabled={busy || stage === "phoneCode"}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="+998901234567"
-          className="border-input bg-background mb-3 h-11 w-full rounded-xl border px-3 text-base disabled:opacity-60"
+          className="border-input bg-background focus:ring-ring mb-3 h-12 w-full rounded-[14px] border px-3.5 text-base outline-none focus:ring-2 disabled:opacity-60"
         />
 
         {stage === "phoneCode" ? (
           <>
-            <label htmlFor="login-phone-code" className="text-muted-foreground mb-1 block text-sm">
+            <label htmlFor="login-phone-code" className="text-muted-foreground mb-1.5 block text-[14.5px] font-medium">
               Kod
             </label>
             <input
@@ -289,7 +279,7 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
                 if (v.length === 5) void submitPhoneCode(v);
               }}
               placeholder="•••••"
-              className="border-input bg-background mb-3 h-11 w-full rounded-xl border px-3 text-center text-lg tracking-[0.5em] disabled:opacity-60"
+              className="border-input bg-background focus:ring-ring mb-3 h-12 w-full rounded-[14px] border px-3.5 text-center text-lg tracking-[0.5em] outline-none focus:ring-2 disabled:opacity-60"
             />
           </>
         ) : (
@@ -297,7 +287,7 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
             type="button"
             disabled={busy}
             onClick={() => void startPhone()}
-            className="bg-primary text-primary-foreground mb-3 flex h-11 w-full items-center justify-center rounded-xl text-sm font-medium disabled:opacity-60"
+            className="bg-primary text-primary-foreground focus-visible:ring-ring mb-3 flex h-12 w-full items-center justify-center rounded-[16px] text-[15.5px] font-semibold outline-none focus-visible:ring-2 disabled:opacity-60"
           >
             {busy ? "So'ralmoqda..." : "Kod olish"}
           </button>
@@ -313,15 +303,15 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
           }}
           className={cn(
             "text-muted-foreground hover:text-foreground",
-            touch ? "h-11 min-w-11 px-2 text-sm" : "h-10 px-1 text-xs",
+            touch ? "h-11 min-w-11 px-2 text-[14.5px]" : "h-10 px-1 text-[13.5px]",
           )}
         >
           Orqaga
         </button>
 
-        {hint && !error ? <p className="text-muted-foreground mt-3 text-xs">{hint}</p> : null}
+        {hint && !error ? <p className="text-muted-foreground mt-3 text-[13.5px]">{hint}</p> : null}
         {error ? (
-          <p role="alert" className="text-destructive mt-3 text-xs">
+          <p role="alert" className="text-destructive mt-3 text-[13.5px] leading-snug">
             {error}
           </p>
         ) : null}
@@ -332,8 +322,8 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
   if (!features?.telegram) {
     return (
       <div>
-        <h1 className="mb-1 text-xl font-semibold tracking-tight">Kirish</h1>
-        <p className="text-muted-foreground text-sm">
+        <h1 className="mb-1.5 text-[22px] leading-tight font-bold tracking-[-0.02em]">Kirish</h1>
+        <p className="text-muted-foreground text-[15px] leading-snug">
           Telegram kirish hali sozlanmagan. Administrator <code>TELEGRAM_BOT_TOKEN</code> ni
           qo&apos;shishi kerak.
         </p>
@@ -344,8 +334,8 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
 
   return (
     <div>
-      <h1 className="mb-1 text-xl font-semibold tracking-tight">Xush kelibsiz</h1>
-      <p className="text-muted-foreground mb-6 text-sm">
+      <h1 className="mb-1.5 text-[22px] leading-tight font-bold tracking-[-0.02em]">Xush kelibsiz</h1>
+      <p className="text-muted-foreground mb-6 text-[15px] leading-snug">
         Telegram orqali tez va xavfsiz kirish — parol kerak emas
       </p>
 
@@ -354,19 +344,20 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
           type="button"
           disabled={busy}
           onClick={startTelegram}
-          className="bg-primary text-primary-foreground flex h-11 w-full items-center justify-center rounded-xl text-sm font-medium disabled:opacity-60"
+          className="bg-primary text-primary-foreground focus-visible:ring-ring flex h-12 w-full items-center justify-center gap-2 rounded-[16px] text-[15.5px] font-semibold outline-none transition-transform focus-visible:ring-2 active:scale-[0.98] disabled:opacity-60 motion-reduce:transform-none"
         >
+          {busy ? null : <Send className="size-[18px]" aria-hidden />}
           {busy ? "Ochilmoqda..." : "Telegram orqali kirish"}
         </button>
       ) : (
         <>
           {popupBlocked ? (
-            <p role="alert" data-popup-blocked className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+            <p role="alert" data-popup-blocked className="mb-3 rounded-[14px] border border-amber-500/40 bg-amber-500/10 px-3.5 py-2.5 text-[14.5px] leading-snug text-amber-800 dark:text-amber-300">
               Yangi oyna ochilmadi — brauzeringiz uni bloklagan bo‘lishi mumkin. Quyidagi «Telegram’da ochish» tugmasini bosing.
             </p>
           ) : null}
 
-          <ol className="text-muted-foreground mb-4 space-y-1 text-sm">
+          <ol className="text-muted-foreground mb-4 space-y-1.5 text-[15px]">
             <li>1. Ochilgan Telegram chatida «Start» ni bosing</li>
             <li>2. Bot yuborgan «Saytga kirish» tugmasini bosing</li>
           </ol>
@@ -376,14 +367,14 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
            * ochiladi. Kompyuterda boshlab telefonda bossa — bu sahifa 5 daqiqa
            * kutib, «muddati tugadi» derdi, sababini aytmasdan.
            */}
-          <p className="text-muted-foreground mb-4 rounded-xl bg-muted/60 px-3 py-2 text-xs" data-same-device-hint>
+          <p className="text-muted-foreground mb-4 rounded-[14px] bg-muted/60 px-3.5 py-2.5 text-[13.5px] leading-snug" data-same-device-hint>
             <span className="text-foreground font-medium">Shu qurilmada oching.</span> «Saytga kirish» ni boshqa telefon yoki
             kompyuterda bossangiz, kirish o‘sha yerda bo‘ladi — bu sahifa esa kutib qoladi.
           </p>
 
-          <div className="border-border/60 mb-4 flex items-center justify-center gap-3 rounded-xl border py-6">
+          <div className="border-border/60 mb-4 flex items-center justify-center gap-3 rounded-[16px] border py-6">
             <span className="border-muted-foreground/30 border-t-primary size-5 animate-spin rounded-full border-2" />
-            <span className="text-muted-foreground text-sm">Telegram&apos;da tasdiqlanishi kutilmoqda...</span>
+            <span className="text-muted-foreground text-[15px]">Telegram&apos;da tasdiqlanishi kutilmoqda...</span>
           </div>
 
           <div className="flex gap-2">
@@ -394,7 +385,7 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
                 rel="noopener noreferrer"
                 data-ticket-link
                 className={cn(
-                  "flex flex-1 items-center px-3 py-2 text-center justify-center rounded-xl text-sm",
+                  "flex flex-1 items-center justify-center rounded-[14px] px-3 py-2 text-center text-[14.5px] font-medium",
                   touch ? "min-h-11" : "min-h-10",
                   popupBlocked
                     ? "bg-primary text-primary-foreground font-medium"
@@ -415,7 +406,7 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
               }}
               className={cn(
                 "text-muted-foreground hover:text-foreground px-3",
-                touch ? "h-11 min-w-11 text-sm" : "h-10 text-xs",
+                touch ? "h-11 min-w-11 text-[14.5px]" : "h-10 text-[13.5px]",
               )}
             >
               Bekor qilish
@@ -426,9 +417,9 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
 
       {phoneBlock}
 
-      {hint && !error ? <p className="text-muted-foreground mt-3 text-xs">{hint}</p> : null}
+      {hint && !error ? <p className="text-muted-foreground mt-3 text-[13.5px]">{hint}</p> : null}
       {error ? (
-        <p role="alert" className="text-destructive mt-3 text-xs">
+        <p role="alert" className="text-destructive mt-3 text-[13.5px] leading-snug">
           {error}
         </p>
       ) : null}

@@ -1,10 +1,14 @@
 "use client";
 
-import { useRef } from "react";
+import { useId, useRef } from "react";
 import Link from "next/link";
-import { ArrowLeft, ChevronDown } from "lucide-react";
-import { BackLink } from "@/components/nav/BackLink";
-import { formatTanga } from "@/lib/tools";
+import { usePathname } from "next/navigation";
+import { ChevronDown } from "lucide-react";
+import { PageHeader } from "@/components/shell/PageHeader";
+import { TOOL_ICONS } from "@/components/shell/icons";
+import { PAY_RETURN_PATH } from "@/components/overlays/pay-amount";
+import { TOOLS, TOOL_BY_SLUG, formatTanga } from "@/lib/tools";
+import type { ToolConfig } from "@/lib/types";
 import { creditTotal, useAppStore } from "@/lib/store";
 import { DraftNotice } from "./DraftNotice";
 import { useKeyboardInset } from "./useKeyboardInset";
@@ -17,6 +21,28 @@ import { useKeyboardInset } from "./useKeyboardInset";
  */
 const INSUFFICIENT_RE = /balans yetarli emas/i;
 
+/** Submit bar bottom padding: 12 px, or the home indicator when larger (Telegram's `--tg-safe-bottom` first). */
+export const SUBMIT_BAR_PB = "pb-[max(0.75rem,var(--tg-safe-bottom,env(safe-area-inset-bottom,0px)))]";
+
+/**
+ * The tool of this form: the route's slug (`/uz/<slug>`), else the one whose
+ * `pageTitle` is `title` (tests and previews render without a route).
+ */
+function useChromeTool(title: string): ToolConfig | undefined {
+  const pathname = usePathname();
+  const slug = pathname?.match(/^\/uz\/([^/]+)$/)?.[1];
+  const bySlug = slug ? TOOL_BY_SLUG[slug as keyof typeof TOOL_BY_SLUG] : undefined;
+  return bySlug ?? TOOLS.find((t) => t.pageTitle === title);
+}
+
+/**
+ * Tool form chrome (redesign W5, variant A): the page header (`PageHeader`:
+ * «←» to the parent `/uz/create`, the tool's icon chip in its colour `tc`,
+ * the title and the tool's one-line description), the form, and the sticky
+ * submit bar — a floating rounded card with the price and the primary
+ * button above the home indicator. While typing on a phone the bar drops
+ * into the flow (`useKeyboardInset`, mobile P3) — unchanged.
+ */
 export function ToolChrome({
   title,
   children,
@@ -46,6 +72,9 @@ export function ToolChrome({
   const loggedIn = useAppStore((s) => s.loggedIn);
   const user = useAppStore((s) => s.user);
   const total = creditTotal(user);
+  const tool = useChromeTool(title);
+  const Icon = tool ? TOOL_ICONS[tool.icon] : undefined;
+  const priceId = useId();
   // UX-03: narx ma'lum va balans yetmaydi — yuborishdan OLDIN aytiladi.
   const short = loggedIn && user !== null && price !== undefined && price > total;
   const balanceError = Boolean(error && (INSUFFICIENT_RE.test(error) || short));
@@ -57,83 +86,107 @@ export function ToolChrome({
   // On touch the link drops to its own 44 px row instead of a 20 px inline run.
   const topUp = (
     <Link
-      href="/uz/purchase"
+      href={PAY_RETURN_PATH}
       data-topup
-      className="text-primary pointer-coarse:mt-1 pointer-coarse:flex pointer-coarse:min-h-11 pointer-coarse:w-fit pointer-coarse:items-center font-medium whitespace-nowrap underline underline-offset-2"
+      className="text-accent-soft-foreground pointer-coarse:mt-1 pointer-coarse:flex pointer-coarse:min-h-11 pointer-coarse:w-fit pointer-coarse:items-center font-semibold whitespace-nowrap underline underline-offset-2"
     >
       Balansni to‘ldirish →
     </Link>
   );
   return (
-    <div ref={rootRef} className="mx-auto w-full max-w-3xl px-4 py-8 pb-28">
-      <nav className="mb-6 flex items-center gap-2.5">
-        {/* Parent from `parentOf` (`/uz/create`); a fresh-tab deep link replaces, never leaves the site.
-            Touch: a 44 px circle; the negative margins keep the 32 px row and the icon's position. */}
-        <BackLink className="text-muted-foreground hover:text-foreground hover:bg-muted pointer-coarse:size-11 pointer-coarse:-my-1.5 pointer-coarse:-ml-2.5 pointer-coarse:-mr-1.5 -ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full">
-          <ArrowLeft className="h-5 w-5" />
-        </BackLink>
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-      </nav>
-
-      {children}
-
-      {/* FE-17: qoralama saqlanmadi / fayl qayta biriktirilsin — har formada. */}
-      <DraftNotice />
-
-      {extra ? (
-        <button
-          type="button"
-          onClick={onExtra}
-          className="text-muted-foreground hover:text-foreground pointer-coarse:min-h-11 mb-8 flex items-center gap-1 text-sm"
-        >
-          Qoʼshimcha (ixtiyoriy)
-          <ChevronDown className={`size-4 transition ${extraOpen ? "rotate-180" : ""}`} />
-        </button>
-      ) : null}
-      {extra && extraOpen ? <div className="mb-8">{extra}</div> : null}
-
-      {/*
-       * UX-03: «Balans yetarli emas» endi o'lik matn emas — yonida to'ldirish
-       * sahifasiga havola. Ilgari foydalanuvchi profil → to'ldirish yo'lini
-       * o'zi topishi kerak edi.
-       */}
-      {error ? (
-        <p role="alert" className="text-destructive mb-4 text-sm">
-          {error}
-          {balanceError ? <> {topUp}</> : null}
-        </p>
-      ) : short ? (
-        <p className="text-muted-foreground mb-4 text-sm" data-balance-short>
-          Balansingiz: {formatTanga(total)} — bu hujjat uchun {formatTanga(price ?? 0)} kerak. {topUp}
-        </p>
-      ) : null}
-
-      {/*
-       * `data-submit-bar` also drives `#main`'s scroll padding (AppShell), so
-       * focus and caret reveals never stop behind the bar. The safe-area
-       * padding keeps the button above the iOS home indicator.
-       */}
-      <div
-        data-submit-bar={typing ? "inline" : "sticky"}
-        className={`bg-[var(--page-bg)]/90 -mx-4 border-t px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur ${
-          typing ? "static" : "sticky bottom-0"
-        }`}
-      >
-        <button
-          type="button"
-          disabled={disabled || loading}
-          onClick={onSubmit}
-          className="bg-primary text-primary-foreground disabled:opacity-50 flex h-12 w-full items-center justify-center gap-3 rounded-2xl text-[15px] font-medium"
-        >
-          <span>{loading ? "Yaratilmoqda..." : submitLabel}</span>
-          {price === undefined ? null : (
-            <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-sm" data-price-total>
-              {formatTanga(price)}
+    <>
+      <PageHeader
+        back
+        title={
+          <span className="flex min-w-0 items-center gap-2.5">
+            {tool && Icon ? (
+              <span
+                aria-hidden
+                data-tool-chip={tool.id}
+                className="flex size-9 shrink-0 items-center justify-center rounded-[12px] bg-[rgb(var(--tc)/0.14)]"
+                style={{ ["--tc" as string]: tool.tc }}
+              >
+                <Icon className="size-5 text-[rgb(var(--tc))]" />
+              </span>
+            ) : null}
+            <span className="truncate text-[21px] sm:text-[24px]" data-tool-title>
+              {title}
             </span>
-          )}
-        </button>
+          </span>
+        }
+        subtitle={tool?.description}
+      />
+      <div ref={rootRef} data-tool-chrome className="mx-auto w-full max-w-3xl px-4 pt-2 pb-6">
+        {children}
+
+        {/* FE-17: qoralama saqlanmadi / fayl qayta biriktirilsin — har formada. */}
+        <DraftNotice />
+
+        {extra ? (
+          <button
+            type="button"
+            onClick={onExtra}
+            className="text-muted-foreground hover:text-foreground pointer-coarse:min-h-11 mb-8 flex items-center gap-1 text-[15px]"
+          >
+            Qoʼshimcha (ixtiyoriy)
+            <ChevronDown className={`size-4 transition ${extraOpen ? "rotate-180" : ""}`} />
+          </button>
+        ) : null}
+        {extra && extraOpen ? <div className="mb-8">{extra}</div> : null}
+
+        {/*
+         * UX-03: «Balans yetarli emas» endi o'lik matn emas — yonida to'ldirish
+         * sahifasiga (Hamyon) havola. Ilgari foydalanuvchi profil → to'ldirish
+         * yo'lini o'zi topishi kerak edi.
+         */}
+        {error ? (
+          <p role="alert" className="text-destructive mb-4 text-[14.5px] leading-snug">
+            {error}
+            {balanceError ? <> {topUp}</> : null}
+          </p>
+        ) : short ? (
+          <p className="text-muted-foreground mb-4 text-[14.5px] leading-snug" data-balance-short>
+            Balansingiz: {formatTanga(total)} — bu hujjat uchun {formatTanga(price ?? 0)} kerak. {topUp}
+          </p>
+        ) : null}
+
+        {/*
+         * `data-submit-bar` also drives `#main`'s scroll padding (AppShell), so
+         * focus and caret reveals never stop behind the bar. The bottom padding
+         * keeps the card above the home indicator; the page colour fades in
+         * behind the floating card so the form never shows through its edges.
+         */}
+        <div
+          data-submit-bar={typing ? "inline" : "sticky"}
+          className={`-mx-2 bg-gradient-to-t from-[var(--page-bg)] from-60% to-transparent px-0 pt-3 ${SUBMIT_BAR_PB} ${
+            typing ? "static" : "sticky bottom-0"
+          }`}
+        >
+          <div
+            data-submit-card
+            className="bg-card flex items-center gap-3 rounded-[22px] border p-2 shadow-[var(--shadow-bar)]"
+          >
+            {price === undefined ? null : (
+              <div className="min-w-0 shrink-0 pl-2.5">
+                <span className="text-muted-foreground block text-[12.5px] leading-tight">Narxi</span>
+                <span id={priceId} className="block text-[17px] leading-tight font-bold whitespace-nowrap tabular-nums" data-price-total>
+                  {formatTanga(price)}
+                </span>
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={disabled || loading}
+              onClick={onSubmit}
+              aria-describedby={price === undefined ? undefined : priceId}
+              className="bg-primary text-primary-foreground focus-visible:ring-ring flex h-12 min-w-0 flex-1 items-center justify-center rounded-[16px] px-4 text-[16px] font-semibold outline-none transition-[filter,transform] hover:brightness-95 focus-visible:ring-2 focus-visible:ring-offset-2 active:scale-[0.98] disabled:opacity-50 motion-reduce:transform-none"
+            >
+              <span className="truncate">{loading ? "Yaratilmoqda..." : submitLabel}</span>
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -157,7 +210,7 @@ export function TopicChips({ examples, onPick }: { examples: readonly string[]; 
           type="button"
           title={ex}
           onClick={() => onPick(ex)}
-          className="text-muted-foreground hover:text-foreground hover:border-foreground/30 pointer-coarse:min-h-11 pointer-coarse:max-w-[80%] pointer-coarse:shrink-0 pointer-coarse:truncate pointer-coarse:px-3.5 pointer-coarse:text-sm rounded-full border px-2.5 py-0.5 text-left text-[11.5px]"
+          className="bg-card text-muted-foreground hover:text-foreground hover:border-foreground/30 pointer-coarse:min-h-11 pointer-coarse:max-w-[80%] pointer-coarse:shrink-0 pointer-coarse:truncate pointer-coarse:px-3.5 pointer-coarse:text-[14px] rounded-full border px-3 py-1 text-left text-[13px]"
         >
           {ex}
         </button>
