@@ -466,3 +466,14 @@ test("route page: «Saqlash va yakunlash» after the pushed steps returns to the
   }
 });
 
+test("index under the tab header: `header={null}` renders no second «Profil» title; default keeps it", () => {
+  stub();
+  signIn();
+  render(wrap(h(ProfileHome, { header: null })));
+  // MUTATION: `header ?? <h1>` turns null back into the default title (the double «Profil» seen on /uz/profile).
+  assert.equal(document.querySelectorAll("h1").length, 0, "the route's PageHeader owns the title");
+  cleanup();
+  render(wrap(h(ProfileHome, {})));
+  assert.equal(document.querySelector("h1")?.textContent, "Profil");
+});
+

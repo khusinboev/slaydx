@@ -15,7 +15,7 @@ export type ProfileHomeProps = {
    * without it the rows are plain links to the same URLs.
    */
   onNavigate?: (to: ProfileTarget) => void;
-  /** Replaces the default «Profil» title (e.g. the shell's `PageHeader`). */
+  /** Replaces the default «Profil» title; `null` = no title (the route renders the shell's `PageHeader`). */
   header?: ReactNode;
 };
 
@@ -43,7 +43,8 @@ export function ProfileHome({ onNavigate, header }: ProfileHomeProps) {
       .catch(() => {});
   }, [loggedIn, setUser]);
 
-  const title = header ?? <h1 className="pt-1.5 pb-3 text-[24px] font-semibold tracking-[-0.02em]">Profil</h1>;
+  // `undefined` → the default title; `null` → none. (A `<></>` from a server page arrives as `null`.)
+  const title = header !== undefined ? header : <h1 className="pt-1.5 pb-3 text-[24px] font-semibold tracking-[-0.02em]">Profil</h1>;
 
   let body: ReactNode;
   if (!sessionChecked) body = <ProfileSkeleton />;

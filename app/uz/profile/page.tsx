@@ -7,7 +7,7 @@ export default function Page() {
   return (
     <div className="flex w-full flex-col">
       <PageHeader title="Profil" actions={<ThemeToggle />} contentClassName="max-w-xl" />
-      <ProfileHome header={<></>} />
+      <ProfileHome header={null} />
     </div>
   );
 }
