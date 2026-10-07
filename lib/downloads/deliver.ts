@@ -106,6 +106,14 @@ export const DELIVER_TEXT = {
   botUnreachable: "Bot sizga yoza olmadi. Botni ochib /start bosing, so‘ng qayta urinib ko‘ring.",
   openBot: "Botni ochish",
   shareReady: "Tayyor — «Ulashish»ni yana bir bor bosing",
+  /** Share sheet row: the file is ready, the next tap on THIS row opens the picker (Android gesture rule / Web Share). */
+  tapToShare: "Tayyor — ulashish uchun bosing",
+  /** Share sheet row while the server uploads the file and prepares the message. */
+  sharing: "Ulashishga tayyorlanmoqda…",
+  /** Share sheet row while Telegram's chat picker is open. */
+  pickChat: "Chatni tanlang…",
+  /** «Saqlash» / «Ulashish» was running when the file changed (an edit): the action stopped, its result is ignored. */
+  fileChanged: "Fayl yangilandi — qayta urinib ko‘ring",
   shareExpired: "Ulashish havolasi eskirdi — qayta urinib ko‘ring",
   shareNoBrowser: "Bu brauzer faylni ulasha olmaydi — yuklab olib, o‘zingiz yuboring",
   shareNoAccount: "Telegram akkaunti bog‘lanmagan — faylni yuklab olib, o‘zingiz yuboring",

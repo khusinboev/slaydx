@@ -226,30 +226,44 @@ function stubShare(opts: { delayMs?: number } = {}) {
 
 const btn = () => document.querySelector("[data-share-button]") as HTMLButtonElement;
 const toast = () => document.querySelector("[data-result-toast]");
+/** T4: a slide has several formats — «Ulashish» opens the format sheet; this is its stored-file row. */
+const nativeRow = () => document.querySelector('[data-download-sheet="share"] [data-download-row="native"]') as HTMLButtonElement;
 async function tap(el: Element) {
   await act(async () => {
     fireEvent.pointerDown(el);
     fireEvent.click(el);
   });
 }
+async function click(el: Element) {
+  await act(async () => {
+    fireEvent.click(el);
+  });
+}
 
-test("«Ulashish»: a dropped answer never leaves the button loading; the user is back → usable, no success claimed; the second tap prepares a NEW id and the picker opens", async () => {
+// T4 rewrite: the taps go through the share sheet's stored-file row (was the header button); the busy/usable
+// state is asserted on that row (aria-busy / data-row-state) and on the header button (disabled while in flight).
+test("«Ulashish»: a dropped answer never leaves the row/button loading; the user is back → usable, no success claimed; the second tap prepares a NEW id and the picker opens", async () => {
   const tg = fakeTelegram();
   const shares = stubShare();
   mountResult();
   await tap(btn());
+  await tap(nativeRow());
   await waitFor(() => assert.equal(tg.posted.length, 1));
   assert.equal(btn().disabled, true, "loading while the picker is open");
+  assert.equal(nativeRow().getAttribute("aria-busy"), "true");
+  assert.equal(nativeRow().querySelector("[data-row-status]")?.textContent, "Chatni tanlang…");
   // Telegram drops the answer; the user comes back to the Mini App.
   tg.emit("deactivated");
   tg.emit("activated");
   await act(async () => sleep(1_700));
   assert.equal(btn().disabled, false, "re-enabled after the grace");
   assert.ok(!btn().hasAttribute("aria-busy"));
+  assert.equal(nativeRow().getAttribute("data-row-state"), "idle", "the row is usable again");
+  assert.ok(!nativeRow().hasAttribute("aria-busy"));
   assert.ok(!/Ulashildi/.test(toast()?.textContent ?? ""), "no success claimed for an unknown outcome");
   assert.ok(!toast() || toast()!.getAttribute("role") !== "alert", "and no error either");
   // Second tap: new preparation, the picker opens again (re-sent past the stuck flag).
-  await tap(btn());
+  await tap(nativeRow());
   await waitFor(() => assert.equal(tg.posted.length, 2));
   assert.deepEqual(shares, [1, 2], "a new prepared message per tap");
   assert.deepEqual(tg.posted[1], { type: "web_app_send_prepared_message", data: { id: "prep-2" } });
@@ -258,33 +272,70 @@ test("«Ulashish»: a dropped answer never leaves the button loading; the user i
   assert.equal(btn().disabled, false);
 });
 
-test("«Ulashish» on Android after a slow preparation (tap > 8 s old): no silent drop — «Tayyor» and the next tap opens the picker with the same unused id", async () => {
+// T4 rewrite: the «Tayyor» re-tap is the sheet row (data-row-state="ready", «Tayyor — ulashish uchun bosing");
+// the header-button re-tap (sheet closed, toast «…yana bir bor bosing») is pinned in the next test.
+test("«Ulashish» on Android after a slow preparation (tap > 8 s old): no silent drop — the row says «Tayyor» and the next tap on it opens the picker with the same unused id", async () => {
   const tg = fakeTelegram({ platform: "android" });
   const shares = stubShare();
   mountResult();
-  // A click with no pointerdown: the last tap is stale, as after a long upload.
-  await act(async () => {
-    fireEvent.click(btn());
-  });
-  await waitFor(() => assert.equal(btn().getAttribute("data-share-ready"), "1"));
+  // Clicks with no pointerdown: the last tap is stale, as after a long upload.
+  await click(btn());
+  await click(nativeRow());
+  await waitFor(() => assert.equal(nativeRow().getAttribute("data-row-state"), "ready"));
+  assert.equal(nativeRow().querySelector("[data-row-status]")?.textContent, "Tayyor — ulashish uchun bosing");
   assert.equal(tg.posted.length, 0, "the request is not sent outside Android's 10 s window");
-  assert.match(toast()?.textContent ?? "", /Tayyor — «Ulashish»ni yana bir bor bosing/);
-  await tap(btn());
+  assert.equal(btn().getAttribute("data-share-ready"), "1");
+  assert.ok(!toast(), "the row says it (no toast over the sheet)");
+  await tap(nativeRow());
   await waitFor(() => assert.equal(tg.posted.length, 1));
   assert.deepEqual(tg.posted[0].data, { id: "prep-1" });
   assert.deepEqual(shares, [1], "no second preparation for the unused id");
   await act(async () => tg.clientSent());
   await waitFor(() => assert.match(toast()?.textContent ?? "", /Ulashildi/));
   assert.ok(!btn().hasAttribute("data-share-ready"));
+  assert.ok(!document.querySelector("[data-download-sheet]"), "shared: the sheet closed");
+});
+
+test("T4 Android: the sheet was closed while the message was prepared → toast «…yana bir bor bosing»; the next «Ulashish» tap opens the picker directly (same id, no sheet)", async () => {
+  const tg = fakeTelegram({ platform: "android" });
+  let release!: () => void;
+  let n = 0;
+  globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+    if (String(input).endsWith("/telegram/share") && init?.method === "POST") {
+      n++;
+      await new Promise<void>((r) => (release = r));
+      return json(200, { preparedId: `prep-${n}`, expiresAt: new Date(Date.now() + 3600e3).toISOString(), format: "native", botUrl: null });
+    }
+    return json(404, {});
+  }) as typeof fetch;
+  mountResult();
+  await click(btn());
+  await click(nativeRow()); // stale gesture
+  await waitFor(() => assert.equal(n, 1));
+  // The user closes the sheet (Escape = phone back) while the server prepares.
+  await act(async () => {
+    fireEvent.keyDown(window, { key: "Escape" });
+  });
+  assert.ok(!document.querySelector("[data-download-sheet]"));
+  await act(async () => release());
+  await waitFor(() => assert.equal(btn().getAttribute("data-share-ready"), "1"));
+  assert.match(toast()?.textContent ?? "", /Tayyor — «Ulashish»ni yana bir bor bosing/, "no sheet open: the toast asks for the tap");
+  assert.ok(!btn().hasAttribute("aria-haspopup"), "a ready message: the button shares, it does not open the picker sheet");
+  await tap(btn());
+  await waitFor(() => assert.equal(tg.posted.length, 1));
+  assert.ok(!document.querySelector("[data-download-sheet]"), "no sheet in between");
+  assert.deepEqual(tg.posted[0].data, { id: "prep-1" });
+  assert.equal(n, 1, "the unused id, no second preparation");
+  await act(async () => tg.clientSent());
+  await waitFor(() => assert.match(toast()?.textContent ?? "", /Ulashildi/));
 });
 
 test("iOS: no tap rule for the picker (opens right after a slow preparation)", async () => {
   const tg = fakeTelegram({ platform: "ios" });
   stubShare();
   mountResult();
-  await act(async () => {
-    fireEvent.click(btn());
-  });
+  await click(btn());
+  await click(nativeRow()); // T4: the stale click is on the sheet row (was the header button)
   await waitFor(() => assert.equal(tg.posted.length, 1));
   await act(async () => tg.clientSent());
   await waitFor(() => assert.match(toast()?.textContent ?? "", /Ulashildi/));
