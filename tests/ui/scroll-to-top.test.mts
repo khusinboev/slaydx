@@ -16,7 +16,7 @@ import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks
  *
  * Mutations (each turned this file red, see the sprint report):
  *   - listen on `window` instead of the container;
- *   - drop the `overlays > 0` check / the `suspended` check;
+ *   - drop the `overlays > 0` check (dialogs and the shell's drawer both own a nav layer);
  *   - drop `pathname` from the effect deps (no route reset);
  *   - ignore `prefers-reduced-motion` (always smooth);
  *   - click does not scroll to 0 (`top: 0` → `top: 1`);
@@ -133,14 +133,14 @@ async function scrollTo(a: Scroller | number, b?: number) {
 const button = () => document.querySelector<HTMLButtonElement>("[data-scroll-top]");
 const anchor = () => document.querySelector<HTMLElement>("[data-scroll-top-anchor]");
 
-function mount(sc: Scroller, props: { suspended?: boolean } = {}, pathname = "/uz") {
+function mount(sc: Scroller, pathname = "/uz") {
   current = sc;
   document.body.appendChild(sc);
-  const view = render(inRouter(h(ScrollToTop, { container: sc, ...props }), pathname));
+  const view = render(inRouter(h(ScrollToTop, { container: sc }), pathname));
   return {
     view,
-    rerender(next: { container?: HTMLElement | null; suspended?: boolean }, path = pathname) {
-      view.rerender(inRouter(h(ScrollToTop, { container: next.container === undefined ? sc : next.container, suspended: next.suspended }), path));
+    rerender(next: { container?: HTMLElement | null }, path = pathname) {
+      view.rerender(inRouter(h(ScrollToTop, { container: next.container === undefined ? sc : next.container }), path));
     },
   };
 }
@@ -384,7 +384,7 @@ test("unmount removes the listeners", async () => {
 test("route change: hidden at once, and re-read after the new page settled (reset vs restore)", async () => {
   fresh();
   const sc = fakeScroller();
-  const m = mount(sc, {}, "/uz");
+  const m = mount(sc, "/uz");
   await scrollTo(2000);
   assert.ok(button());
   // The new page opens at the top (what a push does).
@@ -406,20 +406,6 @@ test("route change: hidden at once, and re-read after the new page settled (rese
 });
 
 /* ------------------------------------------------------------------ overlays */
-
-test("`suspended` (the mobile drawer) hides it; closing brings it back", async () => {
-  fresh();
-  const sc = fakeScroller();
-  const m = mount(sc);
-  await scrollTo(2000);
-  assert.ok(button());
-  m.rerender({ suspended: true });
-  await settle();
-  assert.ok(!button());
-  m.rerender({ suspended: false });
-  await settle();
-  assert.ok(button());
-});
 
 test("an open dialog (nav overlay layer) hides it; closing the dialog brings it back", async () => {
   fresh();

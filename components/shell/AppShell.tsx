@@ -102,8 +102,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* «Tepaga chiqish»: fixed, listens on <main>; hidden while an overlay or the drawer is open. */}
-      <ScrollToTop container={scroller} suspended={mobileOpen} />
+      {/* «Tepaga chiqish»: fixed, listens on <main>; hidden while an overlay (the drawer included) is open. */}
+      <ScrollToTop container={scroller} />
       <LoginModal />
       <SearchDialog />
       <NotificationsPanel />

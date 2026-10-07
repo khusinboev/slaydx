@@ -26,8 +26,8 @@ import { directionOf, liftAbove, nextVisible, type Band, type ScrollDirection } 
  *     the new page (and Next's / NavProvider's scroll restore) has settled;
  *   - while any overlay is open it is not rendered (`getNavSnapshot().overlays`
  *     counts every `useDialog` / `useOverlayHistory` layer: login, search,
- *     download sheet, result panel sheet, menus, lightbox…), nor while the
- *     mobile drawer is open (`suspended`);
+ *     download sheet, result panel sheet, menus, lightbox… and the shell's own
+ *     mobile drawer);
  *   - it sits above the safe areas (`--tg-safe-bottom` → `env()`), above the
  *     on-screen keyboard (`--kb-h`, kept alive by `useVisualViewport` while the
  *     button is mounted) and above bottom bars (`[data-submit-bar]` of the tool
@@ -68,11 +68,9 @@ function prefersReducedMotion(): boolean {
 export type ScrollToTopProps = {
   /** The page's scroll container (`<main id="main">`); `null` until it mounts. */
   container: HTMLElement | null;
-  /** An overlay the nav layer does not know about (the mobile drawer) is open. */
-  suspended?: boolean;
 };
 
-export function ScrollToTop({ container, suspended = false }: ScrollToTopProps) {
+export function ScrollToTop({ container }: ScrollToTopProps) {
   const pathname = usePathname();
   const overlays = useSyncExternalStore(subscribeNav, () => getNavSnapshot().overlays, () => getServerNavSnapshot().overlays);
   const [visible, setVisible] = useState(false);
@@ -126,7 +124,7 @@ export function ScrollToTop({ container, suspended = false }: ScrollToTopProps) 
     };
   }, [container, pathname]);
 
-  if (!container || !visible || suspended || overlays > 0) return null;
+  if (!container || !visible || overlays > 0) return null;
   return <ScrollToTopButton container={container} />;
 }
 
@@ -214,7 +212,7 @@ function ScrollToTopButton({ container }: { container: HTMLElement }) {
         aria-label={SCROLL_TOP_LABEL}
         title={SCROLL_TOP_LABEL}
         onClick={goTop}
-        className="bg-card text-foreground hover:bg-accent focus-visible:ring-ring pointer-events-auto absolute right-0 bottom-0 flex size-11 touch-manipulation items-center justify-center rounded-full border shadow-lg ring-1 ring-black/5 transition-transform duration-150 outline-none select-none focus-visible:ring-2 motion-reduce:transition-none dark:ring-white/10"
+        className="bg-card text-foreground hover:bg-accent focus-visible:ring-ring pointer-events-auto absolute right-0 bottom-0 flex size-11 touch-manipulation items-center justify-center rounded-full border shadow-lg ring-1 ring-black/5 transition-transform duration-150 outline-none select-none focus-visible:ring-2 motion-reduce:transition-none dark:border-white/25 dark:bg-[#26231e] dark:ring-white/10 dark:hover:bg-[#312d26]"
         style={{ transform: lift ? `translateY(${-lift}px)` : undefined }}
       >
         <ArrowUp className="size-5" aria-hidden />
