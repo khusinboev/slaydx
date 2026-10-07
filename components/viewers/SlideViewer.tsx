@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Pause, Play, Presentation, RotateCcw, X } from "lucide-react";
+import { Pause, Play, RotateCcw } from "lucide-react";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { slideNotes } from "@/lib/generation/slide-layout";
 import type { SlideSrc } from "@/lib/generation/slide-types";
@@ -20,6 +20,7 @@ import { SlideCanvas } from "./SlideCanvas";
 import { SlideRail } from "./SlideRail";
 import { SlideStage, type SlideStageOverlayCtx } from "./SlideStage";
 import { useSlideKeys } from "./useSlideKeys";
+import { PresentBar } from "./slide-nav/PresentBar";
 import { useOverlayHistory } from "../nav/useOverlayHistory";
 import { useReveal, type LiveView } from "./useReveal";
 import { LiveStrip } from "./LiveStrip";
@@ -512,22 +513,16 @@ export function SlideViewer({
     >
       {phoneEditing ? <VisualViewportWatch onChange={capToViewport} /> : null}
       {present ? (
-        <div className="no-print absolute top-0 right-0 z-20 flex items-center gap-1 p-3 text-white/80">
-          <span className="mr-2 text-sm tabular-nums">
-            {i + 1} / {slides.length}
-          </span>
-          <button
-            type="button"
-            title="Taqdimotchi rejimi (P)"
-            className={cn("hover:bg-white/10 rounded p-1.5", presenter && "bg-white/15")}
-            onClick={() => setPresenter((v) => !v)}
-          >
-            <Presentation className="size-4" />
-          </button>
-          <button type="button" className="hover:bg-white/10 rounded p-1.5" onClick={() => setPresent(false)}>
-            <X className="size-4" />
-          </button>
-        </div>
+        <PresentBar
+          index={i}
+          total={slides.length}
+          presenter={presenter}
+          autoHide={!coarse}
+          onPrev={() => go(i - 1)}
+          onNext={() => go(i + 1)}
+          onPresenter={() => setPresenter((v) => !v)}
+          onClose={() => setPresent(false)}
+        />
       ) : (
         <SlideToolbar
           page={i + 1}
@@ -602,7 +597,7 @@ export function SlideViewer({
             fitOn={fitOn}
             presenter={presenter}
             onFitScale={setFitScale}
-            onAdvance={() => go(i + 1)}
+            onStep={(dir) => go(i + dir)}
             hideSrc={editOn && !present && editingKey ? editingKey : undefined}
             focus={phoneEditing ? editBox : null}
             /*
