@@ -195,7 +195,7 @@ test("ResultView «←» on a fresh deep link: REPLACE with its parent, the Ishl
   assert.equal(here(), "/uz/files");
 });
 
-test("ResultView delete replaces the page with /uz (the deleted page leaves history)", async () => {
+test("ResultView delete replaces the page with Ishlarim /uz/files (the deleted page leaves history)", async () => {
   const seen = stubResult();
   fresh("/uz");
   router.push(`/uz/files/${ID}`);
@@ -227,7 +227,7 @@ test("ResultView delete replaces the page with /uz (the deleted page leaves hist
   });
   await settle();
   assert.ok(seen.includes(`DELETE /api/generations/${ID}`));
-  assert.deepEqual(calls, ["replace /uz"]);
+  assert.deepEqual(calls, ["replace /uz/files"]); // redesign W5: the list, not Bosh
   assert.equal(sx()?.i, 1, "same history slot: back from /uz does not return to the deleted page");
 });
 

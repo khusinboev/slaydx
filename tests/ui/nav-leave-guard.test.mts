@@ -159,7 +159,7 @@ test("phone back press: guard entry pops, auto-save, then the navigation continu
   assert.equal(here(), "/uz");
   assert.equal(sx()?.i, 0);
 
-  // Fresh deep link: after the save the page is replaced by its parent.
+  // Fresh deep link: after the save the page is replaced by its parent (redesign: Ishlarim `/uz/files`).
   cleanup();
   fresh("/uz/files/2");
   mount();
@@ -168,8 +168,8 @@ test("phone back press: guard entry pops, auto-save, then the navigation continu
   await settle();
   await settle();
   assert.equal(saves, 1);
-  assert.deepEqual(calls, ["replace /uz"]);
-  assert.equal(here(), "/uz");
+  assert.deepEqual(calls, ["replace /uz/files"]);
+  assert.equal(here(), "/uz/files");
 });
 
 test("root with no in-app history (/o from a QR code): a let-through back press does the real back", async () => {
