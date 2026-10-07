@@ -179,28 +179,39 @@ test("HomeFiles: filtr/tartib URLga yoziladi (replace — tarixda yangi yozuv yo
   const i = sx()?.i;
   fireEvent.click(screen.getByRole("button", { name: "Hujjatlar" }));
   assert.equal(here(), "/uz?filter=docs");
-  // P5 (mobile sprint): the direction toggle's accessible name now states the current order.
-  fireEvent.click(screen.getByLabelText("Tartib: yangisi birinchi. O'zgartirish"));
-  assert.equal(here(), "/uz?filter=docs&desc=0");
-  fireEvent.click(screen.getByRole("button", { name: "Barchasi" }));
-  fireEvent.click(screen.getByLabelText("Tartib: eskisi birinchi. O'zgartirish"));
+  fireEvent.click(screen.getByRole("button", { name: /^Hammasi/ }));
   assert.equal(here(), "/uz", "standart qiymatlar URLda qolmaydi");
-  assert.equal(window.history.length, len, "tarixga yozuv qo'shilmadi");
+  assert.equal(window.history.length, len, "chiplar tarixga yozuv qo'shmaydi");
   assert.equal(sx()?.i, i);
+  // Redesign W2: the direction lives in the header sort menu («Yangisi / Eskisi birinchi»).
+  fireEvent.click(screen.getByRole("button", { name: "Hujjatlar" }));
+  const pickInMenu = async (name: string) => {
+    fireEvent.click(document.querySelector("[data-sort-button]") as HTMLElement);
+    await settle();
+    fireEvent.click(screen.getByRole("menuitemradio", { name }));
+    await settle();
+  };
+  await pickInMenu("Eskisi birinchi");
+  assert.equal(here(), "/uz?filter=docs&desc=0");
+  fireEvent.click(screen.getByRole("button", { name: /^Hammasi/ }));
+  await pickInMenu("Yangisi birinchi");
+  assert.equal(here(), "/uz", "standart qiymatlar URLda qolmaydi");
+  assert.equal(sx()?.i, i, "menyu yozuvi yopilgach indeks joyida — filtr/tartib yozuv qo'shmadi");
+  assert.ok(!sx()?.o);
 });
 
 test("HomeFiles: URLdagi filtr bilan ochilganda tanlangan (orqaga qaytish — qayta o'rnatish)", async () => {
   fresh("/uz");
   mountHome("?filter=image&sort=name");
   assert.equal(screen.getByRole("button", { name: "Rasmlar" }).getAttribute("aria-pressed"), "true");
-  assert.equal(screen.getByRole("button", { name: "Barchasi" }).getAttribute("aria-pressed"), "false");
-  assert.ok(screen.getByText("Nomi"), "tartib yorlig'i URLdan");
+  assert.equal(screen.getByRole("button", { name: /^Hammasi/ }).getAttribute("aria-pressed"), "false");
+  assert.ok(screen.getByRole("button", { name: "Saralash: Nomi" }), "tartib yorlig'i URLdan");
 });
 
 test("HomeFiles: saralash oynasi telefon «orqaga»si bilan yopiladi; tanlov filtrni saqlaydi", async () => {
   fresh("/uz");
   mountHome();
-  const sortBtn = () => document.querySelector("button.border-input.inline-flex") as HTMLElement;
+  const sortBtn = () => document.querySelector("[data-sort-button]") as HTMLElement;
   fireEvent.click(sortBtn());
   await settle();
   assert.equal(useUi.getState().overlay, "sort");
@@ -215,7 +226,7 @@ test("HomeFiles: saralash oynasi telefon «orqaga»si bilan yopiladi; tanlov fil
   // Oynada tanlash: URL yangilanadi, oyna yopiladi, yozuv bir marta olib tashlanadi.
   fireEvent.click(sortBtn());
   await settle();
-  fireEvent.click(screen.getByText("Nomi"));
+  fireEvent.click(screen.getByRole("menuitemradio", { name: "Nomi" }));
   await settle();
   assert.equal(useUi.getState().overlay, null);
   assert.equal(here(), "/uz?sort=name", "tanlov oyna yozuvi yopilgach ham URLda");

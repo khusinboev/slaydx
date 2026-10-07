@@ -17,7 +17,7 @@ const SlideThumb = lazy(() => import("./SlideThumb").catch(() => ({ default: Sli
 
 /** Same box as the thumbnail while its chunk loads — the card does not jump. */
 function SlideThumbLoading() {
-  return <div aria-hidden className="bg-muted h-full w-full animate-pulse" data-slide-thumb="loading" />;
+  return <div aria-hidden className="bg-muted slx-shimmer h-full w-full" data-slide-thumb="loading" />;
 }
 
 function SlideThumbUnavailable() {
