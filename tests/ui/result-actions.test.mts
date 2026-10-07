@@ -172,7 +172,11 @@ function mount(o: { g?: GenerationDetail; telegramId?: string | null } = {}) {
 const q = (sel: string) => document.querySelector(sel) as HTMLElement | null;
 const row = (id: string) => q(`[data-download-row="${id}"]`)!;
 const state = (id: string) => row(id).getAttribute("data-row-state");
+const status = (id: string) => row(id).querySelector("[data-row-status]")?.textContent ?? "";
 const toast = () => q("[data-result-toast]");
+/** A one-format material (translated text → TXT): «Saqlash» / «Ulashish» act straight from the button. */
+const oneFormat = () =>
+  gen({ type: "translation", format: "txt", fileName: "t.txt", doc: { meta: {}, translation: { sourceKind: "text" } } as unknown as GenerationDetail["doc"] });
 
 async function click(el: Element) {
   await act(async () => {
@@ -184,6 +188,15 @@ async function tap(el: Element) {
     fireEvent.pointerDown(el);
     fireEvent.click(el);
   });
+}
+/**
+ * T4 (docs/todo-2026-10-07): a material with several formats — «Saqlash» /
+ * «Ulashish» open the format sheet, a row runs the action in that format.
+ */
+async function via(kind: "save" | "share", id = "native") {
+  await tap(q(kind === "save" ? "[data-save-to-bot]" : "[data-share-button]")!);
+  assert.equal(q("[data-download-sheet]")?.getAttribute("data-download-sheet"), kind, `${kind} sheet open`);
+  await tap(row(id));
 }
 
 /* ───────────────────────────── sheet ───────────────────────────── */
@@ -342,21 +355,48 @@ test("«Saqlash» hidden without a Telegram id", async () => {
   assert.ok(q("[data-share-button]"), "«Ulashish» stays (download fallback)");
 });
 
-test("«Saqlash» in Telegram: POST save (stored file), toast «✅ Fayl bot chatiga yuborildi», then close() after ~1 s; double tap = one request", async () => {
+// T4 rewrite (was: one tap on «Saqlash» POSTed `{}` at once). Several formats → the save sheet first; the
+// stored-file row (first) sends `{format:"native"}`; double tap on the row = one request; same toast and close().
+test("«Saqlash» in Telegram (slide): the button opens the save sheet (nothing sent); the stored-file row saves it — toast «✅ Fayl bot chatiga yuborildi», sheet closes, close() after ~1 s; double tap = one request", async () => {
   fakeTelegram();
   let release!: (r: Response) => void;
   stub((c) => (c.url.endsWith("/telegram/save") ? new Promise((r) => (release = r)) : undefined));
   mount();
   const b = q("[data-save-to-bot]")!;
+  assert.equal(b.getAttribute("aria-haspopup"), "dialog");
   await tap(b);
-  await tap(b);
-  assert.equal(posts("/telegram/save").length, 1, "disabled while in flight");
-  assert.equal(posts("/telegram/save")[0].body, "{}", "default = stored file");
+  assert.equal(q("[data-download-sheet]")?.getAttribute("data-download-sheet"), "save");
+  assert.equal(posts("/telegram/save").length, 0, "opening the sheet sends nothing");
+  await tap(row("native"));
+  await tap(row("native"));
+  assert.equal(posts("/telegram/save").length, 1, "the row ignores a second tap while in flight");
+  assert.equal(posts("/telegram/save")[0].body, JSON.stringify({ format: "native" }), "the stored file, named explicitly");
+  assert.equal(state("native"), "delivering");
+  assert.equal(status("native"), "Botga yuborilmoqda…");
   await act(async () => release(json(200, { ok: true, duplicate: false, format: "native", botUrl: "https://t.me/SlaydX_bot" })));
   await waitFor(() => assert.match(toast()?.textContent ?? "", /✅ Fayl bot chatiga yuborildi/));
+  assert.ok(!q("[data-download-sheet]"), "success closes the sheet");
   assert.ok(!tgCalls.includes("close"), "not closed immediately");
   await act(async () => new Promise((r) => setTimeout(r, 1_150)));
   assert.ok(tgCalls.includes("close"), "Mini App closed after the toast");
+});
+
+test("«Saqlash» one-format tool: no sheet — saves from the button with its only format; double tap = one request; close() after ~1 s", async () => {
+  fakeTelegram();
+  let release!: (r: Response) => void;
+  stub((c) => (c.url.endsWith("/telegram/save") ? new Promise((r) => (release = r)) : undefined));
+  mount({ g: oneFormat() });
+  const b = q("[data-save-to-bot]")!;
+  assert.ok(!b.hasAttribute("aria-haspopup"), "no picker for one format");
+  await tap(b);
+  await tap(b);
+  assert.ok(!q("[data-download-sheet]"), "no sheet");
+  assert.equal(posts("/telegram/save").length, 1, "disabled while in flight");
+  assert.equal(posts("/telegram/save")[0].body, JSON.stringify({ format: "native" }));
+  await act(async () => release(json(200, { ok: true, duplicate: false, format: "native", botUrl: "https://t.me/SlaydX_bot" })));
+  await waitFor(() => assert.match(toast()?.textContent ?? "", /✅ Fayl bot chatiga yuborildi/));
+  await act(async () => new Promise((r) => setTimeout(r, 1_150)));
+  assert.ok(tgCalls.includes("close"));
 });
 
 test("«Saqlash»: 409 bot_unreachable → requestWriteAccess → allowed → one retry succeeds", async () => {
@@ -370,16 +410,36 @@ test("«Saqlash»: 409 bot_unreachable → requestWriteAccess → allowed → on
       : json(200, { ok: true, duplicate: false, format: "native", botUrl: "https://t.me/SlaydX_bot" });
   });
   mount();
-  await tap(q("[data-save-to-bot]")!);
+  await via("save"); // T4: through the save sheet (was one tap on «Saqlash»)
   await waitFor(() => assert.match(toast()?.textContent ?? "", /✅/));
   assert.deepEqual(tgCalls.filter((c) => c === "writeAccess"), ["writeAccess"]);
   assert.equal(posts("/telegram/save").length, 2);
+  assert.deepEqual(posts("/telegram/save").map((c) => c.body), [JSON.stringify({ format: "native" }), JSON.stringify({ format: "native" })], "the retry keeps the format");
 });
 
-test("«Saqlash»: bot unreachable and write access declined → Uzbek text + «Botni ochish» (openTelegramLink)", async () => {
+// T4 rewrite: in the sheet the row carries the error and «Botni ochish» (the toast would cover it); the
+// toast form (was this test) is kept for the one-format button below.
+test("«Saqlash» sheet: bot unreachable and write access declined → the row says the Uzbek text (alert) + «Botni ochish» (openTelegramLink); no toast over the sheet", async () => {
   fakeTelegram({ writeAccess: false });
   stub((c) => (c.url.endsWith("/telegram/save") ? json(409, { error: "x", code: "bot_unreachable", botUrl: "https://t.me/SlaydX_bot" }) : undefined));
   mount();
+  await via("save");
+  await waitFor(() => assert.equal(state("native"), "error"));
+  assert.match(status("native"), /^Bot sizga yoza olmadi\. Botni ochib \/start bosing/);
+  assert.equal(row("native").querySelector("[data-row-status]")!.getAttribute("role"), "alert");
+  assert.match(row("native").textContent ?? "", /Qayta urinish/);
+  assert.ok(!toast(), "the open sheet's row shows it");
+  const link = q('[data-download-item="native"] [data-row-link]')!;
+  assert.equal(link.textContent, "Botni ochish");
+  await click(link);
+  assert.ok(tgCalls.includes("openTg https://t.me/SlaydX_bot"));
+  assert.equal(posts("/telegram/save").length, 1, "no retry without permission");
+});
+
+test("«Saqlash» one-format: bot unreachable and write access declined → Uzbek text + «Botni ochish» (openTelegramLink)", async () => {
+  fakeTelegram({ writeAccess: false });
+  stub((c) => (c.url.endsWith("/telegram/save") ? json(409, { error: "x", code: "bot_unreachable", botUrl: "https://t.me/SlaydX_bot" }) : undefined));
+  mount({ g: oneFormat() });
   await tap(q("[data-save-to-bot]")!);
   await waitFor(() => assert.ok(toast()));
   assert.equal(toast()!.getAttribute("role"), "alert");
@@ -397,31 +457,58 @@ test("«Saqlash»: the Mini App user is another Telegram account → refused, no
   mount({ telegramId: "700" });
   await tap(q("[data-save-to-bot]")!);
   assert.match(toast()?.textContent ?? "", /Bu Telegram akkaunti boshqa SlaydX akkauntiga kirgan/);
+  assert.ok(!q("[data-download-sheet]"), "T4: refused before the format sheet opens");
+  assert.equal(posts("/telegram/save").length, 0);
+  // The one-format button refuses the same way.
+  cleanup();
+  fakeTelegram({ userId: 999 });
+  stub();
+  mount({ g: oneFormat(), telegramId: "700" });
+  await tap(q("[data-save-to-bot]")!);
+  assert.match(toast()?.textContent ?? "", /Bu Telegram akkaunti boshqa SlaydX akkauntiga kirgan/);
   assert.equal(posts("/telegram/save").length, 0);
 });
 
-test("«Saqlash» errors → Uzbek server text (503 telegram_unavailable, 413 too_large)", async () => {
+// T4 rewrite: the same server text, now on the sheet row (was the toast after one tap).
+test("«Saqlash» errors → Uzbek server text on the row (503 telegram_unavailable with the exact retry time)", async () => {
   fakeTelegram();
   stub((c) => (c.url.endsWith("/telegram/save") ? json(503, { error: "Telegram hozir javob bermayapti. Birozdan keyin qayta urinib ko'ring.", code: "telegram_unavailable", retryAfter: 30 }) : undefined));
   mount();
-  await tap(q("[data-save-to-bot]")!);
+  await via("save");
   // UX review m12: the exact time replaces «Birozdan keyin», no second «(qayta urinish: …)».
-  await waitFor(() => assert.match(toast()?.textContent ?? "", /^Telegram hozir javob bermayapti\. 30 soniyadan keyin qayta urinib ko'ring\.(?!.*qayta urinish)/));
+  await waitFor(() => assert.equal(state("native"), "error"));
+  assert.match(status("native"), /^Telegram hozir javob bermayapti\. 30 soniyadan keyin qayta urinib ko'ring\.(?!.*qayta urinish)/);
+  assert.ok(q("[data-download-sheet]"), "an error keeps the sheet open (retry is one tap)");
   assert.ok(!tgCalls.includes("close"));
 });
 
 /* ───────────────────────────── «Ulashish» ───────────────────────────── */
 
-test("«Ulashish» Telegram ≥ 8.0: POST share → shareMessage(preparedId) → «Ulashildi»", async () => {
+// T4 rewrite (was one tap on «Ulashish»): the share sheet's stored-file row → the same request and picker.
+test("«Ulashish» Telegram ≥ 8.0: share sheet → stored-file row → POST share {format:native} → shareMessage(preparedId) → «Ulashildi», sheet closes", async () => {
   fakeTelegram({ share: true });
   stub((c) => (c.url.endsWith("/telegram/share") ? json(200, { preparedId: "prep-1", expiresAt: exp(), format: "native", botUrl: null }) : undefined));
   mount();
+  await via("share");
+  await waitFor(() => assert.match(toast()?.textContent ?? "", /Ulashildi/));
+  assert.deepEqual(tgCalls, ["share prep-1"]);
+  assert.equal(posts("/telegram/share")[0].body, JSON.stringify({ format: "native" }));
+  assert.ok(!q("[data-download-sheet]"), "success closes the sheet");
+});
+
+test("«Ulashish» one-format tool: no sheet — POST share with the only format → shareMessage → «Ulashildi»", async () => {
+  fakeTelegram({ share: true });
+  stub((c) => (c.url.endsWith("/telegram/share") ? json(200, { preparedId: "prep-1", expiresAt: exp(), format: "native", botUrl: null }) : undefined));
+  mount({ g: oneFormat() });
+  assert.ok(!q("[data-share-button]")!.hasAttribute("aria-haspopup"));
   await tap(q("[data-share-button]")!);
   await waitFor(() => assert.match(toast()?.textContent ?? "", /Ulashildi/));
+  assert.ok(!q("[data-download-sheet]"));
   assert.deepEqual(tgCalls, ["share prep-1"]);
   assert.equal(posts("/telegram/share")[0].body, JSON.stringify({ format: "native" }));
 });
 
+// T4 rewrite: both branches through the share sheet (was one tap); the forwarded file keeps the row's format.
 test("«Ulashish»: 501 share_unavailable (inline mode off) → save + «u yerdan uzating»; old client → save directly", async () => {
   fakeTelegram();
   stub((c) => {
@@ -430,33 +517,55 @@ test("«Ulashish»: 501 share_unavailable (inline mode off) → save + «u yerda
     return undefined;
   });
   mount();
-  await tap(q("[data-share-button]")!);
+  await via("share");
   await waitFor(() => assert.match(toast()?.textContent ?? "", /Fayl bot chatiga yuborildi — u yerdan uzating/));
   assert.equal(posts("/telegram/save").length, 1);
+  assert.equal(posts("/telegram/save")[0].body, JSON.stringify({ format: "native" }));
   assert.ok(!tgCalls.some((c) => c.startsWith("share")));
   cleanup();
   fakeTelegram({ version: "7.10" });
-  stub((c) => (c.url.endsWith("/telegram/save") ? json(200, { ok: true, duplicate: false, format: "native", botUrl: null }) : undefined));
+  stub((c) => (c.url.endsWith("/telegram/save") ? json(200, { ok: true, duplicate: false, format: "pdf", botUrl: null }) : undefined));
   mount();
-  await tap(q("[data-share-button]")!);
+  await via("share", "pdf");
   await waitFor(() => assert.match(toast()?.textContent ?? "", /u yerdan uzating/));
   assert.equal(posts("/telegram/share").length, 0, "7.x never asks for a prepared message");
+  assert.deepEqual(posts("/telegram/save").map((c) => c.body), [JSON.stringify({ format: "pdf" })], "the chosen format is forwarded");
 });
 
-test("«Ulashish» in a browser with file Web Share: two taps — fetch first, then navigator.share with the File", async () => {
+// T4 rewrite: the two taps now happen on the sheet row (the row shows «Tayyor — ulashish uchun bosing», the
+// header button is marked ready too); the toast that asked for a second «Ulashish» tap is not shown over the sheet.
+test("«Ulashish» in a browser with file Web Share: two taps on the row — fetch first, then navigator.share with the File", async () => {
   const shared: File[][] = [];
   nav.canShare = () => true;
   nav.share = async (d: { files: File[] }) => void shared.push(d.files);
   stub();
   mount();
+  await via("share");
+  await waitFor(() => assert.equal(state("native"), "ready"));
+  assert.equal(status("native"), "Tayyor — ulashish uchun bosing");
+  assert.equal(q("[data-share-button]")!.getAttribute("data-share-ready"), "1");
+  assert.ok(!toast(), "the row says it; no toast over the sheet");
+  assert.equal(shared.length, 0, "no share() after an async fetch (activation lost)");
+  await tap(row("native"));
+  await waitFor(() => assert.equal(shared.length, 1));
+  assert.equal(shared[0][0].name, "deck.pptx");
+  assert.equal(shared[0][0].size, 2048);
+  assert.ok(!q("[data-download-sheet]"), "shared: the sheet closes");
+});
+
+test("«Ulashish» one-format in a browser with file Web Share: two taps on the button (toast asks for the second)", async () => {
+  const shared: File[][] = [];
+  nav.canShare = () => true;
+  nav.share = async (d: { files: File[] }) => void shared.push(d.files);
+  stub();
+  mount({ g: oneFormat() });
   const b = q("[data-share-button]")!;
   await tap(b);
   await waitFor(() => assert.equal(b.getAttribute("data-share-ready"), "1"));
   assert.match(toast()?.textContent ?? "", /Tayyor — «Ulashish»ni yana bir bor bosing/);
-  assert.equal(shared.length, 0, "no share() after an async fetch (activation lost)");
+  assert.equal(shared.length, 0);
   await tap(b);
   await waitFor(() => assert.equal(shared.length, 1));
-  assert.equal(shared[0][0].name, "deck.pptx");
   assert.equal(shared[0][0].size, 2048);
 });
 
@@ -500,13 +609,15 @@ test("contract additions: share 409 telegram_id_unsupported → saved to the bot
     return undefined;
   });
   mount();
-  await tap(q("[data-share-button]")!);
+  // T4: both actions through their sheets (was one tap each); the save error is on the row.
+  await via("share");
   await waitFor(() => assert.match(toast()?.textContent ?? "", /Fayl bot chatiga yuborildi — u yerdan uzating/), { timeout: 3000 });
   assert.equal(saves, 2, "202 then 200 (the same request repeated)");
   assert.ok(!tgCalls.some((c) => c.startsWith("share")), "no picker without a prepared message");
-  await tap(q("[data-save-to-bot]")!);
-  await waitFor(() => assert.match(toast()?.textContent ?? "", /^Fayl Telegram uchun juda katta — «Yuklab olish» dan foydalaning\./));
-  assert.equal(toast()!.getAttribute("role"), "alert");
+  await via("save");
+  await waitFor(() => assert.equal(state("native"), "error"));
+  assert.match(status("native"), /^Fayl Telegram uchun juda katta — «Yuklab olish» dan foydalaning\./);
+  assert.equal(row("native").querySelector("[data-row-status]")!.getAttribute("role"), "alert");
 });
 
 /* ───────────────────────────── UX review fixes ───────────────────────────── */
@@ -519,10 +630,11 @@ test("M1 toastDuration: a toast with an action stays until dismissed; errors 10 
   assert.equal(toastDuration({ tone: "info" }), 4_500);
 });
 
+// T4: the toast form lives on the one-format button now (a sheet row carries the link itself, see above).
 test("M1 «Botni ochish» toast is still there after 5 s; acting on the link dismisses it", async () => {
   fakeTelegram({ writeAccess: false });
   stub((c) => (c.url.endsWith("/telegram/save") ? json(409, { error: "x", code: "bot_unreachable", botUrl: "https://t.me/SlaydX_bot" }) : undefined));
-  mount();
+  mount({ g: oneFormat() });
   await tap(q("[data-save-to-bot]")!);
   await waitFor(() => assert.ok(toast()?.querySelector("[data-toast-link]")));
   await act(async () => new Promise((r) => setTimeout(r, 5_000)));
@@ -582,6 +694,7 @@ test("m4 a busy row keeps focus (aria-disabled, not disabled) and ignores taps",
   assert.equal(document.activeElement, r);
 });
 
+// T4: the button label is pinned on the one-format button (a slide now converts from the sheet row, next test).
 test("m3 while the route converts the button never shows a bare «N s»", async () => {
   fakeTelegram();
   let hold!: (r: Response) => void;
@@ -591,7 +704,7 @@ test("m3 while the route converts the button never shows a bare «N s»", async 
     n++;
     return n === 1 ? json(202, { state: "preparing", retryAfterMs: 500, format: "native" }) : new Promise((r) => (hold = r));
   });
-  mount();
+  mount({ g: oneFormat() });
   const b = q("[data-save-to-bot]")!;
   await tap(b);
   await waitFor(() => assert.ok(b.querySelector("[data-action-progress]")), { timeout: 3000 });
@@ -603,12 +716,33 @@ test("m3 while the route converts the button never shows a bare «N s»", async 
   await waitFor(() => assert.ok(!b.querySelector("[data-action-progress]")));
 });
 
+test("T4 202 preparing on a sheet row: «PDF tayyorlanmoqda… (odatda 5–15 soniya) N s», the same body polled, then sent", async () => {
+  fakeTelegram();
+  let hold!: (r: Response) => void;
+  let n = 0;
+  stub((c) => {
+    if (!c.url.endsWith("/telegram/save")) return undefined;
+    n++;
+    return n === 1 ? json(202, { state: "preparing", retryAfterMs: 500, format: "pdf" }) : new Promise((r) => (hold = r));
+  });
+  mount();
+  await via("save", "pdf");
+  await waitFor(() => assert.equal(state("pdf"), "preparing"));
+  assert.match(status("pdf"), /^PDF tayyorlanmoqda… \(odatda 5–15 soniya\) \d+ s$/);
+  await waitFor(() => assert.equal(n, 2), { timeout: 3000 });
+  assert.deepEqual(posts("/telegram/save").map((c) => c.body), [JSON.stringify({ format: "pdf" }), JSON.stringify({ format: "pdf" })]);
+  await act(async () => hold(json(200, { ok: true, duplicate: false, format: "pdf", botUrl: null })));
+  await waitFor(() => assert.match(toast()?.textContent ?? "", /✅ Fayl bot chatiga yuborildi/));
+});
+
+// T4 rewrite: through the share sheet; the second expiry's message is on the row (was a toast).
 test("m5 a second MESSAGE_EXPIRED in a row ends with a message, not silence", async () => {
   fakeTelegram({ shareError: "MESSAGE_EXPIRED" });
   stub((c) => (c.url.endsWith("/telegram/share") ? json(200, { preparedId: `p${calls.length}`, expiresAt: exp(), format: "native", botUrl: null }) : undefined));
   mount();
-  await tap(q("[data-share-button]")!);
-  await waitFor(() => assert.match(toast()?.textContent ?? "", /Ulashish havolasi eskirdi — qayta urinib ko‘ring/));
+  await via("share");
+  await waitFor(() => assert.equal(state("native"), "error"));
+  assert.equal(status("native"), "Ulashish havolasi eskirdi — qayta urinib ko‘ring");
   assert.equal(posts("/telegram/share").length, 2, "one re-prepare, then the message");
 });
 
