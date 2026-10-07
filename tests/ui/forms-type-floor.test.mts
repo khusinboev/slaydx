@@ -56,3 +56,18 @@ test("text inputs carry a 16 px desktop font (the touch layer already forces 16 
   }
   assert.deepEqual(offenders, [], "field chrome without text-[16px]");
 });
+
+test("the «Barchasi» catalogue (/uz/create CreateGrid), the «+» sheet and the tab bar: nothing below 12.5 px", () => {
+  const COMPONENTS = join(import.meta.dirname, "..", "..", "components");
+  const offenders: string[] = [];
+  for (const rel of ["home/CreateGrid.tsx", "shell/CreateSheet.tsx", "shell/TabBar.tsx"]) {
+    readFileSync(join(COMPONENTS, rel), "utf8").split("\n").forEach((line, i) => {
+      if (/(?:^|[^\w:[-])text-xs(?![\w-])/.test(line)) offenders.push(`${rel}:${i + 1} text-xs`);
+      for (const m of line.matchAll(/text-\[(\d+(?:\.\d+)?)(px|rem)\]/g)) {
+        const px = m[2] === "rem" ? Number(m[1]) * 16 : Number(m[1]);
+        if (px < 12.5) offenders.push(`${rel}:${i + 1} ${m[0]}`);
+      }
+    });
+  }
+  assert.deepEqual(offenders, [], "redesign type floor (PLAN «Typography»)");
+});
