@@ -241,7 +241,7 @@ test("CreateSheet phone: tiles ≥ 44 px, 44 px close, 48 px «Barchasi», the c
   assert.ok(has(close ?? null, "size-11"), "close is 44x44");
   assert.ok(has(sheet.querySelector("[data-create-all]"), "h-12"), "«Barchasi» 48 px");
   const panel = sheet.querySelector<HTMLElement>(".slx-sheet-enter");
-  assert.match(panel?.getAttribute("style") ?? "", /max-height: calc\(100svh - calc\(var\(--tg-safe-top/, "never under the notch");
+  assert.match(panel?.getAttribute("style") ?? "", /max-height: min\(88svh, calc\(100svh - calc\(var\(--tg-safe-top/, "never under the notch, the page peeks out above");
   assert.match(panel?.getAttribute("style") ?? "", /padding-bottom: calc\(var\(--tabbar-h, 0px\) \+ var\(--tg-safe-bottom/, "clears the bar and the home indicator");
   assert.ok(sheet.querySelector(".overflow-y-auto.overscroll-contain"), "inner scroll");
 });

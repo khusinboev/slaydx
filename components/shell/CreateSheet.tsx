@@ -73,7 +73,8 @@ export function CreateSheet() {
         ref={panelRef}
         className="slx-sheet-enter bg-card absolute inset-x-0 bottom-0 mx-auto flex w-full max-w-[560px] flex-col overflow-hidden rounded-t-[28px] border border-b-0 shadow-2xl"
         style={{
-          maxHeight: `calc(100svh - ${TOP_INSET} - 1.25rem)`,
+          // ≤ 88 % of the screen: the page peeks out above it, so the backdrop stays tappable.
+          maxHeight: `min(88svh, calc(100svh - ${TOP_INSET} - 1.25rem))`,
           paddingBottom: `calc(var(--tabbar-h, 0px) + ${SAFE_BOTTOM} + 0.5rem)`,
         }}
       >
