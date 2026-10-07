@@ -8,7 +8,7 @@ import { useVisualViewport } from "@/lib/hooks/useVisualViewport";
 import { isCoarsePointer } from "@/lib/hooks/useCoarsePointer";
 import { isTextEntry } from "@/components/forms/useKeyboardInset";
 import { SAFE_BOTTOM, SAFE_RIGHT, atLeast } from "./safe-area";
-import { directionOf, liftAbove, nextVisible, type Band, type ScrollDirection } from "./scroll-to-top";
+import { directionOf, dockInset, liftAbove, nextVisible, type Band, type ScrollDirection } from "./scroll-to-top";
 
 /**
  * «Tepaga chiqish» — one floating button for every page in the app shell
@@ -52,7 +52,10 @@ const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 const AVOID_SELECTOR = "[data-submit-bar], [data-edit-done-bar], [data-scroll-top-avoid]";
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"])';
 
-const BAR_ATTRIBUTES = ["data-submit-bar", "data-edit-done-bar", "data-scroll-top-avoid"];
+/** Attributes whose change moves what the button must clear: the bars, and the result dock opening / closing. */
+const BAR_ATTRIBUTES = ["data-submit-bar", "data-edit-done-bar", "data-scroll-top-avoid", "data-panel-open", "data-result-panel"];
+/** The result page's docked side panel (≥ 1280 px, open). */
+const DOCK_SELECTOR = '[data-result-panel="dock"][data-panel-open="1"]';
 
 export const SCROLL_TOP_LABEL = "Tepaga chiqish";
 
@@ -185,6 +188,8 @@ function ScrollToTopButton({ container }: { container: HTMLElement }) {
   const viewport = useVisualViewport();
   const anchorRef = useRef<HTMLDivElement>(null);
   const [lift, setLift] = useState(0);
+  // Extra right offset (px) while the result page's side panel is docked open; 0 = none.
+  const [dockRight, setDockRight] = useState(0);
   const [entered, setEntered] = useState(false);
 
   const measureLift = useCallback(() => {
@@ -197,6 +202,9 @@ function ScrollToTopButton({ container }: { container: HTMLElement }) {
       bars.push({ top: r.top, bottom: r.bottom });
     }
     setLift(liftAbove(anchorBottom, bars));
+    const dock = document.querySelector<HTMLElement>(DOCK_SELECTOR);
+    const d = dock ? dock.getBoundingClientRect() : null;
+    setDockRight(d ? dockInset(d.left, d.width, document.documentElement.clientWidth || window.innerWidth) : 0);
   }, []);
 
   // Fade in once (no movement: the anchor's position must stay exact for measuring).
@@ -254,7 +262,8 @@ function ScrollToTopButton({ container }: { container: HTMLElement }) {
       className={`no-print pointer-events-none fixed z-30 h-0 w-0 transition-opacity duration-150 motion-reduce:transition-none ${entered ? "opacity-100" : "opacity-0"}`}
       style={{
         // 20 px: clears a classic 15–17 px scrollbar of <main> on desktops.
-        right: atLeast("1.25rem", SAFE_RIGHT),
+        // Docked result panel: sit just left of it, not over its «Tuzatish» buttons.
+        right: dockRight > 0 ? `${dockRight}px` : atLeast("1.25rem", SAFE_RIGHT),
         bottom: `calc(${SAFE_BOTTOM} + 1rem + var(--kb-h, 0px))`,
       }}
     >

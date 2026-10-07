@@ -77,12 +77,14 @@ function fresh(path = "/uz") {
 }
 
 /** Rects the fake layout hands out (jsdom returns zeros). */
-const rects = new Map<Element, { top: number; bottom: number }>();
+const rects = new Map<Element, { top: number; bottom: number; left?: number; right?: number }>();
 const realRect = window.HTMLElement.prototype.getBoundingClientRect;
 window.HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
   const r = rects.get(this);
   if (!r) return realRect.call(this);
-  return { ...r, left: 0, right: 100, width: 100, height: r.bottom - r.top, x: 0, y: r.top, toJSON() {} } as DOMRect;
+  const left = r.left ?? 0;
+  const right = r.right ?? 100;
+  return { ...r, left, right, width: right - left, height: r.bottom - r.top, x: left, y: r.top, toJSON() {} } as DOMRect;
 };
 
 const realFetch = globalThis.fetch;
@@ -706,6 +708,67 @@ test("the keyboard variable change re-measures", async () => {
   });
   assert.equal(button()!.style.transform, `translateY(-${540 - (470 - 12)}px)`);
   Object.defineProperty(window, "innerHeight", { value: 768, configurable: true, writable: true });
+});
+
+/* ------------------------------------------------------------------ result dock (m2) */
+
+function dockAside(open: "1" | "0", mode: "dock" | "sheet" = "dock", left = 1060, right = 1440) {
+  const a = document.createElement("aside");
+  a.setAttribute("data-result-panel", mode);
+  a.setAttribute("data-panel-open", open);
+  document.body.appendChild(a);
+  rects.set(a, { top: 0, bottom: 900, left, right });
+  return a;
+}
+
+test("the open result dock (≥ 1280 px): the button sits left of it, not over its bottom-right corner", async () => {
+  fresh();
+  Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true, writable: true });
+  const sc = fakeScroller();
+  dockAside("1");
+  mount(sc);
+  await scrollTo(2000);
+  await settle();
+  // dock left 1060 → 380 px from the right edge, plus the 12 px gap
+  assert.equal(anchor()!.style.right, `${1440 - 1060 + 12}px`);
+  Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true, writable: true });
+});
+
+test("the dock closing / opening moves the button without a scroll", async () => {
+  fresh();
+  Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true, writable: true });
+  const sc = fakeScroller();
+  const dock = dockAside("0");
+  mount(sc);
+  await scrollTo(2000);
+  await settle();
+  assert.ok(!anchor()!.style.right.endsWith("px"), "closed dock: the safe-area offset");
+  assert.ok(anchor()!.style.right.includes("--tg-safe-right"));
+  await act(async () => {
+    dock.setAttribute("data-panel-open", "1");
+    await frames();
+    await frames();
+  });
+  assert.equal(anchor()!.style.right, `${1440 - 1060 + 12}px`, "dock opened");
+  await act(async () => {
+    dock.setAttribute("data-panel-open", "0");
+    await frames();
+    await frames();
+  });
+  assert.ok(anchor()!.style.right.includes("--tg-safe-right"), "dock closed again");
+  Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true, writable: true });
+});
+
+test("the narrow-screen sheet (data-result-panel=sheet) never shifts the button", async () => {
+  fresh();
+  Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true, writable: true });
+  const sc = fakeScroller();
+  dockAside("1", "sheet");
+  mount(sc);
+  await scrollTo(2000);
+  await settle();
+  assert.ok(anchor()!.style.right.includes("--tg-safe-right"));
+  Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true, writable: true });
 });
 
 /* ------------------------------------------------------------------ AppShell wiring */

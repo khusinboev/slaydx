@@ -95,3 +95,17 @@ export function liftAbove(anchorBottom: number, bars: readonly Band[]): number {
   }
   return Math.max(0, Math.round(lift));
 }
+
+/**
+ * Right offset (px) that keeps the button left of the result page's docked side
+ * panel (`[data-result-panel="dock"]`, ≥ 1280 px, sticky, 380 px wide): its
+ * bottom-right corner holds the last review rows («Tuzatish») and must stay
+ * clickable. `0` = no dock → the plain safe-area offset applies.
+ *
+ * `left`/`width` are the dock's rect, `viewportWidth` the layout viewport. A
+ * collapsed (`width` 0) or left-hand element is not a dock.
+ */
+export function dockInset(left: number, width: number, viewportWidth: number): number {
+  if (!(width > 0) || !(viewportWidth > 0) || !(left > viewportWidth / 2) || !(left < viewportWidth)) return 0;
+  return Math.round(viewportWidth - left) + BAR_GAP_PX;
+}

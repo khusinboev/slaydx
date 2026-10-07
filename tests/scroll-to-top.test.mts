@@ -6,6 +6,7 @@ import {
   DIRECTION_SLOP_PX,
   MIN_SHOW_PX,
   directionOf,
+  dockInset,
   hideThreshold,
   liftAbove,
   nextVisible,
@@ -129,4 +130,24 @@ test("liftAbove: a bar that only grazes the slot edge (within the gap) still cou
   assert.ok(liftAbove(724, [{ top: 600, bottom: 672 }]) > 0);
   // A bar ending 13 px above the slot is clear.
   assert.equal(liftAbove(724, [{ top: 600, bottom: 667 }]), 0);
+});
+
+/* ------------------------------------------------------------------ dock */
+
+test("dockInset: distance from the viewport's right edge to the open dock's left edge, plus the 12 px gap", () => {
+  // 1440 wide, the 380 px dock starts at 1060.
+  assert.equal(dockInset(1060, 380, 1440), 380 + BAR_GAP_PX);
+  // A 15 px page scrollbar to the dock's right: the left edge is what counts.
+  assert.equal(dockInset(1045, 380, 1440), 395 + BAR_GAP_PX);
+  assert.equal(dockInset(1060.4, 380, 1440), 380 + BAR_GAP_PX, "rounded to whole px");
+});
+
+test("dockInset: no dock (collapsed, left-hand, off-screen or unknown viewport) → 0", () => {
+  assert.equal(dockInset(1060, 0, 1440), 0, "collapsed (display:none / width 0)");
+  assert.equal(dockInset(0, 300, 1440), 0, "a left-hand panel is not a dock");
+  assert.equal(dockInset(720, 300, 1440), 0, "exactly the middle is not a right-hand dock");
+  assert.equal(dockInset(1440, 380, 1440), 0, "starts at the right edge: nothing to clear");
+  assert.equal(dockInset(1500, 380, 1440), 0, "off-screen");
+  assert.equal(dockInset(1060, 380, 0), 0, "viewport unknown");
+  assert.equal(dockInset(Number.NaN, 380, 1440), 0);
 });
