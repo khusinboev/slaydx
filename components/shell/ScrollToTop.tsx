@@ -39,21 +39,23 @@ import { directionOf, dockInset, liftAbove, nextVisible, type Band, type ScrollD
  *   - it sits above the safe areas (`--tg-safe-bottom` → `env()`), above the
  *     on-screen keyboard (`--kb-h`, kept alive by `useVisualViewport` while the
  *     button is mounted) and above bottom bars (`[data-submit-bar]` of the tool
- *     forms, `[data-edit-done-bar]`, or any element marked
- *     `data-scroll-top-avoid`) — measured, so a bar resting above the form's
- *     bottom padding does not push it up.
+ *     forms, or any element marked `data-scroll-top-avoid`) — measured, so a bar
+ *     resting above the form's bottom padding does not push it up. The document
+ *     edit bar needs no entry: it owns an overlay layer, so the button is gone
+ *     while it shows. Next to the result page's open side panel (≥ 1280 px) it
+ *     moves left of the panel instead of covering its corner.
  *
  * It is `position: fixed` with `z-30`: below the drawer (`z-40`) and every
  * dialog/sheet (`z-50`+), above the sticky result header (`z-20`).
  */
 
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
-/** Bars the button must clear. Tool forms and the document edit bar mark themselves. */
-const AVOID_SELECTOR = "[data-submit-bar], [data-edit-done-bar], [data-scroll-top-avoid]";
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"])';
+/** Bars the button must clear. The tool forms' submit bar marks itself; others can opt in. */
+const AVOID_SELECTOR = "[data-submit-bar], [data-scroll-top-avoid]";
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]';
 
 /** Attributes whose change moves what the button must clear: the bars, and the result dock opening / closing. */
-const BAR_ATTRIBUTES = ["data-submit-bar", "data-edit-done-bar", "data-scroll-top-avoid", "data-panel-open", "data-result-panel"];
+const BAR_ATTRIBUTES = ["data-submit-bar", "data-scroll-top-avoid", "data-panel-open", "data-result-panel"];
 /** The result page's docked side panel (≥ 1280 px, open). */
 const DOCK_SELECTOR = '[data-result-panel="dock"][data-panel-open="1"]';
 
@@ -183,6 +185,50 @@ function useTypingInside(container: HTMLElement | null): boolean {
   return typing;
 }
 
+/** Visible and exposed: no `hidden` / `inert` / `aria-hidden` / `display:none` / `visibility:hidden` on the element or above it (up to `root`). */
+function reachable(el: HTMLElement, root: HTMLElement): boolean {
+  for (let n: HTMLElement | null = el; n; n = n.parentElement) {
+    if (n.hidden || n.hasAttribute("inert") || n.getAttribute("aria-hidden") === "true") return false;
+    const st = getComputedStyle(n);
+    if (st.display === "none" || st.visibility === "hidden") return false;
+    if (n === root) break;
+  }
+  return true;
+}
+
+/** Focus a non-tabbable element for the moment (`tabindex=-1`, no ring on the whole page) and undo it on blur. */
+function focusTemporarily(el: HTMLElement, root: HTMLElement) {
+  const hadTabindex = el.hasAttribute("tabindex");
+  const outline = el.style.outline;
+  if (!hadTabindex) el.setAttribute("tabindex", "-1");
+  if (el === root) el.style.outline = "none";
+  el.addEventListener(
+    "blur",
+    () => {
+      if (!hadTabindex) el.removeAttribute("tabindex");
+      if (el === root) el.style.outline = outline;
+    },
+    { once: true },
+  );
+  el.focus({ preventScroll: true });
+}
+
+/**
+ * Where keyboard focus goes after the jump to the top: the first real control
+ * (skipping `tabindex=-1`, hidden and `aria-hidden` ones — focusing those is a
+ * no-op that would drop focus to `<body>` — and text fields, which would raise
+ * the keyboard on a phone), else the page's `<h1>`, else the page container.
+ */
+function focusPageStart(root: HTMLElement) {
+  for (const el of root.querySelectorAll<HTMLElement>(FOCUSABLE)) {
+    if (el.tabIndex < 0 || isTextEntry(el) || !reachable(el, root)) continue;
+    el.focus({ preventScroll: true });
+    return;
+  }
+  const h1 = root.querySelector<HTMLElement>("h1");
+  focusTemporarily(h1 && reachable(h1, root) ? h1 : root, root);
+}
+
 function ScrollToTopButton({ container }: { container: HTMLElement }) {
   // Keeps `--kb-h` on <html> while this button is mounted (and re-renders on keyboard changes).
   const viewport = useVisualViewport();
@@ -250,9 +296,7 @@ function ScrollToTopButton({ container }: { container: HTMLElement }) {
     }
     // Keyboard activation (`detail === 0`): the button disappears, so hand the
     // focus to the start of the page; the next Tab continues from there.
-    if (e.detail === 0) {
-      container.querySelector<HTMLElement>(FOCUSABLE)?.focus({ preventScroll: true });
-    }
+    if (e.detail === 0) focusPageStart(container);
   };
 
   return (

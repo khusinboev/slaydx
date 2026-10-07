@@ -327,6 +327,62 @@ test("a pointer tap (detail 1) does not move the focus", async () => {
   assert.notEqual(document.activeElement, first);
 });
 
+async function keyboardJump(sc: Scroller) {
+  mount(sc);
+  await scrollTo(3000);
+  await act(async () => {
+    fireEvent.click(button()!, { detail: 0 });
+    await frames();
+  });
+}
+
+test("focus hand-off skips tabindex=-1, aria-hidden, display:none and text-field candidates", async () => {
+  fresh();
+  const sc = fakeScroller();
+  const skipTabindex = Object.assign(document.createElement("a"), { href: "/uz/a" });
+  skipTabindex.setAttribute("tabindex", "-1");
+  const skipAria = Object.assign(document.createElement("a"), { href: "/uz/b" });
+  skipAria.setAttribute("aria-hidden", "true");
+  const hiddenBox = document.createElement("div");
+  hiddenBox.style.display = "none";
+  const skipHidden = Object.assign(document.createElement("a"), { href: "/uz/c" });
+  hiddenBox.appendChild(skipHidden);
+  const skipHiddenAttr = Object.assign(document.createElement("button"), { hidden: true });
+  const skipField = document.createElement("input");
+  const real = Object.assign(document.createElement("a"), { href: "/uz/real" });
+  sc.append(skipTabindex, skipAria, hiddenBox, skipHiddenAttr, skipField, real);
+  await keyboardJump(sc);
+  assert.equal(document.activeElement, real, "the first REAL control gets the focus");
+});
+
+test("focus hand-off without a usable control falls back to the <h1> (tabindex only while focused)", async () => {
+  fresh();
+  const sc = fakeScroller();
+  const dead = Object.assign(document.createElement("a"), { href: "/uz/x" });
+  dead.setAttribute("aria-hidden", "true");
+  const h1 = document.createElement("h1");
+  h1.textContent = "Sarlavha";
+  sc.append(dead, h1);
+  await keyboardJump(sc);
+  assert.equal(document.activeElement, h1);
+  assert.equal(h1.getAttribute("tabindex"), "-1");
+  h1.blur();
+  assert.equal(h1.getAttribute("tabindex"), null, "the temporary tabindex is gone");
+});
+
+test("focus hand-off with nothing at all focuses the page container (no ring), then restores it", async () => {
+  fresh();
+  const sc = fakeScroller();
+  sc.appendChild(document.createElement("p"));
+  await keyboardJump(sc);
+  assert.equal(document.activeElement, sc);
+  assert.equal(sc.getAttribute("tabindex"), "-1");
+  assert.equal(sc.style.outline, "none");
+  sc.blur();
+  assert.equal(sc.getAttribute("tabindex"), null);
+  assert.equal(sc.style.outline, "");
+});
+
 /* ---------------------------------------------------------- what it listens to */
 
 test("it listens on the container: window scroll and inner scrollers are ignored", async () => {
@@ -670,7 +726,7 @@ test("a bar resting at the end of the form (above the bottom padding) does not m
   assert.equal(button()!.style.transform, "");
 });
 
-test("a bar that appears later (typing → inline, edit bar) is cleared without a scroll", async () => {
+test("a bar that appears later (the form's sticky → inline while typing) is cleared without a scroll", async () => {
   fresh();
   const sc = fakeScroller();
   mount(sc);
