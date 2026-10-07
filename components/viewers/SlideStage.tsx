@@ -231,16 +231,14 @@ export function SlideStage({
       /*
         Enlarged mode: the browser must leave HORIZONTAL drags to us (with the
         default `touch-action` it claims them — `pointercancel`, and in Chromium
-        a horizontal overscroll even navigates the history, closing the
-        presentation) while vertical scroll and pinch stay native. Inline, not a
-        class: the present stage's class list is locked by the shell test.
+        the drag even navigates the history, closing the presentation) while
+        vertical scroll and pinch stay native. Inline, not a class: the present
+        stage's class list is locked by the shell test.
       */
       style={
         present
           ? // Pinch-zoomed page: the touch goes back to the browser so the user can pan the zoomed slide.
-            nav.zoomed
-            ? { touchAction: "auto", overscrollBehaviorX: "none" }
-            : { touchAction: "pan-y pinch-zoom", overscrollBehaviorX: "none" }
+            { touchAction: nav.zoomed ? "auto" : "pan-y pinch-zoom" }
           : undefined
       }
       onClick={nav.onClick}

@@ -1,9 +1,10 @@
 import "./setup.ts";
-import test, { afterEach } from "node:test";
+import test, { afterEach, mock } from "node:test";
 import assert from "node:assert/strict";
 import { createElement as h, act } from "react";
 import { render, fireEvent, screen, cleanup } from "@testing-library/react";
 import { SlideViewer } from "../../components/viewers/SlideViewer.tsx";
+import { CHROME_HIDE_MS } from "../../components/viewers/slide-nav/useAutoHide.ts";
 import type { AcademicDoc } from "../../lib/generation/types.ts";
 import type { SlideModel } from "../../lib/generation/slide-types.ts";
 
@@ -25,6 +26,15 @@ import type { SlideModel } from "../../lib/generation/slide-types.ts";
  * dominance check removed → "vertical drag" fails; second-finger rule removed →
  * "pinch" fails; `touch-action` style removed → style test fails; `go` made
  * wrapping → boundary tests fail.
+ *
+ * Review fixes (m1–m4, n5, n6): Space on a focused bar button no longer pages
+ * forward; the ends are `aria-disabled` (focus stays), not `disabled`; the
+ * position is a polite live region; close/presenter are 44 px and named; the
+ * pill respects the safe areas; on fine pointers it fades after 2.5 s idle
+ * (pointer move/press/focus wakes it, hover/focus inside keeps it), touch never
+ * hides it. Mutations: guard removed, `disabled` back, live region / sr-only
+ * word / close label / close size / safe-area removed, never-hide, hover and
+ * focus ignored, wake not re-showing, touch hides, focusin/pointerdown not waking.
  */
 
 const observers: { cb: () => void; el: Element }[] = [];
@@ -87,7 +97,8 @@ function gen(doc: AcademicDoc) {
 
 const W = 390;
 const stage = () => document.querySelector("[data-slide-stage]") as HTMLElement;
-const counter = () => document.querySelector("[data-slide-counter]")?.textContent ?? null;
+/** «2 / 9» — the hidden « slayd» suffix is for screen readers only. */
+const counter = () => document.querySelector("[data-slide-counter]")?.textContent?.replace(/\s*slayd$/, "") ?? null;
 
 /** jsdom lays nothing out: give the stage the rect the zones are measured against. */
 function sizeStage(width = W, height = 844) {
@@ -270,18 +281,26 @@ test("a click without any pointer events (assistive tech) still advances", () =>
   assert.equal(counter(), "2 / 3");
 });
 
-test("visible ‹ › buttons: step, and disable at the ends; arrow keys keep working", () => {
+test("visible ‹ › buttons: step, are aria-disabled at the ends (focus stays), arrow keys keep working", () => {
   mountPresent();
   const prev = screen.getByLabelText("Oldingi slayd") as HTMLButtonElement;
   const next = screen.getByLabelText("Keyingi slayd") as HTMLButtonElement;
-  assert.equal(prev.disabled, true, "first slide: no previous");
-  assert.equal(next.disabled, false);
+  assert.equal(prev.getAttribute("aria-disabled"), "true", "first slide: no previous");
+  assert.equal(next.hasAttribute("aria-disabled"), false);
+  assert.equal(prev.disabled, false, "never `disabled`: a focused disabled button drops focus to <body>");
+  fireEvent.click(prev);
+  assert.equal(counter(), "1 / 3", "the aria-disabled ‹ is a no-op on the first slide");
   fireEvent.click(next);
   assert.equal(counter(), "2 / 3");
-  assert.equal(prev.disabled, false);
+  assert.equal(prev.hasAttribute("aria-disabled"), false);
   fireEvent.click(next);
   assert.equal(counter(), "3 / 3");
-  assert.equal(next.disabled, true, "last slide: no next");
+  assert.equal(next.getAttribute("aria-disabled"), "true", "last slide: no next");
+  assert.equal(next.disabled, false);
+  next.focus();
+  fireEvent.click(next);
+  assert.equal(counter(), "3 / 3", "the aria-disabled › is a no-op on the last slide");
+  assert.ok(document.activeElement === next, "keyboard focus stays on the button at the end");
   fireEvent.click(prev);
   assert.equal(counter(), "2 / 3");
   fireEvent.keyDown(document.body, { key: "ArrowLeft" });
@@ -295,20 +314,169 @@ test("visible ‹ › buttons: step, and disable at the ends; arrow keys keep wo
   assert.equal(counter(), "3 / 3");
 });
 
-test("the buttons are 44 px targets and labelled in Uzbek", () => {
+test("Space on a focused bar button activates THAT button — the page-forward key must not also fire (and swallow it)", () => {
   mountPresent();
-  for (const label of ["Oldingi slayd", "Keyingi slayd"]) {
+  tap(350);
+  assert.equal(counter(), "2 / 3");
+  const prev = screen.getByLabelText("Oldingi slayd");
+  // The keys handler is on `window`: a Space keydown whose target is the ‹ button must be left alone.
+  const notPrevented = fireEvent.keyDown(prev, { key: " " });
+  assert.equal(counter(), "2 / 3", "Space on ‹ did not page forward");
+  assert.equal(notPrevented, true, "…and its default (the button activation) is not cancelled");
+  fireEvent.keyDown(screen.getByLabelText("Yopish"), { key: "Enter" });
+  assert.equal(counter(), "2 / 3");
+  // Anywhere else Space / PageDown still page forward, PageUp back.
+  fireEvent.keyDown(document.body, { key: " " });
+  assert.equal(counter(), "3 / 3");
+  fireEvent.keyDown(document.body, { key: "PageUp" });
+  assert.equal(counter(), "2 / 3");
+  // PageDown is not an activation key: it pages even from a focused button.
+  fireEvent.keyDown(prev, { key: "PageDown" });
+  assert.equal(counter(), "3 / 3");
+});
+
+test("the position is a polite live region («2 / 9 slayd» for screen readers)", () => {
+  mountPresent();
+  const c = document.querySelector("[data-slide-counter]") as HTMLElement;
+  assert.equal(c.getAttribute("aria-live"), "polite");
+  assert.equal(c.getAttribute("aria-atomic"), "true");
+  assert.equal(c.textContent, "1 / 3 slayd", "visible «1 / 3» plus the screen-reader word");
+  assert.ok(c.querySelector(".sr-only"), "the word «slayd» is visually hidden");
+  tap(350);
+  assert.equal(c.textContent, "2 / 3 slayd", "the same live node updates (that is what is announced)");
+});
+
+test("the bar's buttons are ≥ 44 px targets with Uzbek names; close and presenter work", () => {
+  mountPresent();
+  for (const label of ["Oldingi slayd", "Keyingi slayd", "Yopish", "Taqdimotchi rejimi"]) {
     const b = screen.getByLabelText(label);
     assert.ok(b.className.split(/\s+/).includes("size-11"), `${label}: size-11 = 44 px`);
+  }
+  const presenterBtn = screen.getByLabelText("Taqdimotchi rejimi");
+  assert.equal(presenterBtn.getAttribute("aria-pressed"), "false");
+  fireEvent.click(presenterBtn);
+  assert.equal(presenterBtn.getAttribute("aria-pressed"), "true");
+  assert.ok(document.body.textContent?.includes("Keyingi slayd"), "presenter panel opened");
+  fireEvent.click(screen.getByLabelText("Yopish"));
+  assert.notEqual(stage().getAttribute("data-slide-stage"), "present", "«Yopish» leaves the enlarged mode");
+});
+
+test("the control pill respects the safe areas (notch / Telegram header / side inset) with env() fallbacks", () => {
+  mountPresent();
+  const bar = document.querySelector("[data-slide-present-bar]") as HTMLElement;
+  const style = bar.getAttribute("style") ?? "";
+  assert.match(style, /--tg-safe-top, env\(safe-area-inset-top/, "top: Telegram safe top, else the env() inset");
+  assert.match(style, /--tg-content-safe-top/, "…plus Telegram's own header");
+  assert.match(style, /--tg-safe-right, env\(safe-area-inset-right/, "right: safe inset");
+});
+
+// ══════════════════════════════════ auto-hide (fine pointers)
+const bar = () => document.querySelector("[data-slide-present-bar]") as HTMLElement;
+const chrome = () => bar().getAttribute("data-slide-chrome");
+const tick = (ms: number) =>
+  act(async () => {
+    mock.timers.tick(ms);
+  });
+
+test("fine pointer: the pill fades after the idle, a pointer move/press wakes it, and it fades again", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    mountPresent();
+    assert.equal(chrome(), "visible");
+    await tick(CHROME_HIDE_MS - 1);
+    assert.equal(chrome(), "visible", "not before the idle has passed");
+    await tick(1);
+    assert.equal(chrome(), "hidden");
+    assert.ok(bar().className.includes("opacity-0") && bar().className.includes("pointer-events-none"), "faded and click-through");
+    await act(async () => {
+      fireEvent.pointerMove(document.body, { pointerType: "mouse", clientX: 5, clientY: 5 });
+    });
+    assert.equal(chrome(), "visible", "a pointer move shows it again");
+    await tick(CHROME_HIDE_MS);
+    assert.equal(chrome(), "hidden", "…and the idle is re-armed");
+    await act(async () => {
+      fireEvent.pointerDown(document.body, { pointerType: "mouse" });
+    });
+    assert.equal(chrome(), "visible", "a press shows it too");
+    // Movement keeps pushing the fade back.
+    await tick(CHROME_HIDE_MS - 100);
+    await act(async () => {
+      fireEvent.pointerMove(document.body, { pointerType: "mouse", clientX: 9, clientY: 9 });
+    });
+    await tick(CHROME_HIDE_MS - 100);
+    assert.equal(chrome(), "visible", "the timer restarted on the move");
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("fine pointer: the pill never fades while the pointer rests on it or a control inside has focus", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    mountPresent();
+    await act(async () => {
+      fireEvent.pointerEnter(bar(), { pointerType: "mouse" });
+    });
+    await tick(CHROME_HIDE_MS * 3);
+    assert.equal(chrome(), "visible", "resting on the pill");
+    await act(async () => {
+      fireEvent.pointerLeave(bar(), { pointerType: "mouse" });
+    });
+    await tick(CHROME_HIDE_MS);
+    assert.equal(chrome(), "hidden", "left the pill: it fades");
+    // Keyboard: a Tab onto a button shows it and keeps it while focused.
+    const prev = screen.getByLabelText("Oldingi slayd");
+    await act(async () => {
+      prev.focus();
+      fireEvent.focusIn(prev);
+    });
+    assert.equal(chrome(), "visible", "focus shows it");
+    await tick(CHROME_HIDE_MS * 3);
+    assert.equal(chrome(), "visible", "focus inside keeps it");
+    await act(async () => {
+      prev.blur();
+    });
+    await tick(CHROME_HIDE_MS);
+    assert.equal(chrome(), "hidden", "focus left: it fades");
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("touch device (coarse pointer): the pill stays visible, it is never hidden", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    phone();
+    mountPresent();
+    await tick(CHROME_HIDE_MS * 4);
+    assert.equal(chrome(), "visible");
+    assert.ok(!bar().className.includes("opacity-0"));
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("leaving the enlarged mode and coming back shows the pill again (a hidden pill does not stay hidden)", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    mountPresent();
+    await tick(CHROME_HIDE_MS);
+    assert.equal(chrome(), "hidden");
+    fireEvent.click(screen.getByLabelText("Yopish"));
+    assert.notEqual(stage().getAttribute("data-slide-stage"), "present");
+    fireEvent.click(screen.getByLabelText("To‘liq ekran"));
+    assert.equal(chrome(), "visible", "a new session starts with the pill shown");
+    await tick(CHROME_HIDE_MS);
+    assert.equal(chrome(), "hidden", "…and fades again after the idle");
+  } finally {
+    mock.timers.reset();
   }
 });
 
 // ══════════════════════════════════ scope
-test("the enlarged stage hands horizontal drags to the page (touch-action) and never navigates history", () => {
+test("the enlarged stage hands horizontal drags to us (touch-action) — the browser neither claims them nor swipes history", () => {
   mountPresent();
-  const style = stage().style;
-  assert.equal(style.touchAction, "pan-y pinch-zoom", "horizontal drags reach us; vertical scroll and pinch stay native");
-  assert.equal(style.overscrollBehaviorX, "none", "no browser history swipe closing the presentation");
+  assert.equal(stage().style.touchAction, "pan-y pinch-zoom", "horizontal drags reach us; vertical scroll and pinch stay native");
 });
 
 test("a pinch-zoomed page is panned, not navigated: gestures are off and touch-action goes back to the browser", async () => {
@@ -322,7 +490,6 @@ test("a pinch-zoomed page is panned, not navigated: gestures are off and touch-a
       vv.dispatchEvent(new Event("resize"));
     });
     assert.equal(stage().style.touchAction, "auto", "zoomed: the browser pans the page");
-    assert.equal(stage().style.overscrollBehaviorX, "none", "…and still never navigates history");
     fireEvent.click(stage(), { clientX: 10, clientY: 10 });
     fireEvent.click(stage(), { clientX: 10, clientY: 10 });
     assert.equal(counter(), "3 / 3", "a mouse click is not a touch gesture: still advances");

@@ -65,6 +65,12 @@ export function useSlideKeys({
       // Qolgan tugmalar FAQAT taqdimot rejimida — u yerda sahifa aylantirish
       // yoki yangilash uchun boshqa ehtiyoj yo'q.
       if (!present) return;
+      /*
+       * Space on a focused button (the ‹ › / presenter / close buttons of the
+       * enlarged bar) ACTIVATES that button — paging forward here would also
+       * swallow the activation, so ‹ would go the wrong way.
+       */
+      if ((e.key === " " || e.key === "Enter") && el?.closest?.("button, a[href], [role='button']")) return;
       if (e.key === "PageDown" || e.key === " ") {
         e.preventDefault();
         go(i + 1);

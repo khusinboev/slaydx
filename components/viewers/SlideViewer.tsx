@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Pause, Play, Presentation, RotateCcw, X } from "lucide-react";
+import { Pause, Play, RotateCcw } from "lucide-react";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { slideNotes } from "@/lib/generation/slide-layout";
 import type { SlideSrc } from "@/lib/generation/slide-types";
@@ -20,6 +20,7 @@ import { SlideCanvas } from "./SlideCanvas";
 import { SlideRail } from "./SlideRail";
 import { SlideStage, type SlideStageOverlayCtx } from "./SlideStage";
 import { useSlideKeys } from "./useSlideKeys";
+import { PresentBar } from "./slide-nav/PresentBar";
 import { useOverlayHistory } from "../nav/useOverlayHistory";
 import { useReveal, type LiveView } from "./useReveal";
 import { LiveStrip } from "./LiveStrip";
@@ -512,48 +513,16 @@ export function SlideViewer({
     >
       {phoneEditing ? <VisualViewportWatch onChange={capToViewport} /> : null}
       {present ? (
-        <div className="no-print absolute top-0 right-0 z-20 m-2 flex items-center gap-1 rounded-lg bg-black/60 p-1 text-white/90 backdrop-blur-sm">
-          {/*
-            Visible previous / next (44 px targets): the enlarged mode had NO
-            way back except the arrow keys. Touch also taps the left/right
-            third and swipes (`slide-nav/`). A dark pill keeps the controls
-            legible over a light slide that fills the screen (desktop).
-          */}
-          <button
-            type="button"
-            data-slide-prev
-            aria-label="Oldingi slayd"
-            disabled={i <= 0}
-            className="hover:bg-white/10 inline-flex size-11 items-center justify-center rounded disabled:opacity-30"
-            onClick={() => go(i - 1)}
-          >
-            <ChevronLeft className="size-5" />
-          </button>
-          <span data-slide-counter className="min-w-12 text-center text-sm tabular-nums">
-            {i + 1} / {slides.length}
-          </span>
-          <button
-            type="button"
-            data-slide-next
-            aria-label="Keyingi slayd"
-            disabled={i >= slides.length - 1}
-            className="hover:bg-white/10 mr-1 inline-flex size-11 items-center justify-center rounded disabled:opacity-30"
-            onClick={() => go(i + 1)}
-          >
-            <ChevronRight className="size-5" />
-          </button>
-          <button
-            type="button"
-            title="Taqdimotchi rejimi (P)"
-            className={cn("hover:bg-white/10 rounded p-1.5", presenter && "bg-white/15")}
-            onClick={() => setPresenter((v) => !v)}
-          >
-            <Presentation className="size-4" />
-          </button>
-          <button type="button" className="hover:bg-white/10 rounded p-1.5" onClick={() => setPresent(false)}>
-            <X className="size-4" />
-          </button>
-        </div>
+        <PresentBar
+          index={i}
+          total={slides.length}
+          presenter={presenter}
+          autoHide={!coarse}
+          onPrev={() => go(i - 1)}
+          onNext={() => go(i + 1)}
+          onPresenter={() => setPresenter((v) => !v)}
+          onClose={() => setPresent(false)}
+        />
       ) : (
         <SlideToolbar
           page={i + 1}
