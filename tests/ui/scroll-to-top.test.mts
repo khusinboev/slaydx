@@ -234,6 +234,8 @@ test("the button: 44 px round up-arrow, aria-label «Tepaga chiqish», keyboard-
   assert.ok(a.classList.contains("z-30"), "below the drawer (z-40) and the dialogs / sheets (z-50+)");
   // Theme tokens, not fixed colours: works in light and dark.
   assert.ok(b.classList.contains("bg-card") && b.classList.contains("text-foreground"));
+  // Dark: the card token is almost the page colour, so the fill and the border are lifted explicitly.
+  assert.ok(b.className.includes("dark:bg-[#") && b.className.includes("dark:border-white/"), "visible against the dark page");
 });
 
 test("position: above the safe areas (Telegram vars with env() fallbacks) and the keyboard", async () => {
