@@ -730,6 +730,9 @@ test("previousPagePath: the page under the current one (overlay entries skipped)
   // A push truncates the forward entries.
   router.push("/uz/files");
   assert.equal(nav.previousPagePath(), "/uz/wallet");
+  // Two pushes in a row: the entry under the page is the first push's page.
+  router.push("/uz/profile");
+  assert.equal(nav.previousPagePath(), "/uz/files");
 });
 
 test("replacePage: replaces the page entry itself, popping an open overlay's entry first", async () => {

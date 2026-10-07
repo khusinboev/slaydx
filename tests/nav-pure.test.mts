@@ -106,8 +106,14 @@ test("parentOf: unknown routes stay on the site", () => {
   // An unknown profile step has no rule (the page 404s) and is not a tool slug either.
   assert.equal(matchRoute("/uz/profile/nope"), null);
   assert.equal(parentOf("/uz/profile/nope"), "/uz");
-  // The tab segments are pages, not `/uz/[slug]` tool slugs.
+  // The tab segments are pages, not `/uz/[slug]` tool slugs — and the slug rule itself
+  // refuses them too (rule order must not be the only thing keeping `/uz/wallet` off a tool form).
   for (const p of ["/uz/files", "/uz/wallet", "/uz/profile", "/uz/purchase"]) assert.equal(matchRoute(p)?.route, p, p);
+  const slug = ROUTE_RULES.find((r) => r.route === "/uz/[slug]")!;
+  for (const seg of ["create", "purchase", "wallet", "profile", "login", "files", "admin"]) {
+    assert.equal(slug.match.test(`/uz/${seg}`), false, `/uz/${seg} is reserved`);
+  }
+  assert.equal(slug.match.test("/uz/slide"), true);
   assert.equal(parentOf("/admin/nope/1/2"), "/admin");
   assert.equal(parentOf("/elsewhere"), "/uz");
 });
