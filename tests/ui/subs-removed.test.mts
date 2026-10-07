@@ -9,8 +9,10 @@ import { PurchasePage } from "../../components/purchase/PurchasePage.tsx";
 import { PayDialog } from "../../components/overlays/PayDialog.tsx";
 import { SearchDialog } from "../../components/overlays/SearchDialog.tsx";
 import { ProfilePage } from "../../components/profile/ProfilePage.tsx";
-import { Sidebar } from "../../components/shell/Sidebar.tsx";
-import { TopBar } from "../../components/shell/TopBar.tsx";
+// Redesign F0: the Sidebar / TopBar are gone; their successors carry the same promises.
+import { BalanceChip } from "../../components/shell/BalanceChip.tsx";
+import { TabBar } from "../../components/shell/TabBar.tsx";
+import { CreateSheet } from "../../components/shell/CreateSheet.tsx";
 import { creditTotal, useAppStore, writerProfile } from "../../lib/store.ts";
 import { useUi } from "../../lib/ui.ts";
 import type * as api from "../../lib/api-client.ts";
@@ -148,13 +150,16 @@ test("profil: PRO belgisi, muddat va kvota yo'q; Ball va Balans bor; havola «Ba
   assert.ok(!/NaN/.test(document.body.textContent ?? ""));
 });
 
-test("sidebar: foydalanuvchi nomi yonida PRO belgisi yo'q", () => {
+test("balans chipi, pastki panel va «+» oynasi (sidebar o'rnida): PRO belgisi yo'q, balans tanga bilan", () => {
   signIn(userWith(0));
-  render(withRouter(h(Sidebar, {})));
-  const profile = document.querySelector<HTMLAnchorElement>("a[href='/uz/profile']");
-  assert.ok(profile);
-  assert.doesNotMatch(profile.textContent ?? "", /PRO/i);
-  assert.match(profile.textContent ?? "", /15[\s .,]?000 tanga/);
+  useUi.setState({ overlay: "create" });
+  render(withRouter(h("div", null, h(BalanceChip), h(TabBar, { shown: true, createOpen: true }), h(CreateSheet))));
+  assert.doesNotMatch(document.body.textContent ?? "", FORBIDDEN);
+  const chip = document.querySelector<HTMLAnchorElement>("[data-balance]");
+  assert.ok(chip);
+  assert.match(chip.textContent ?? "", /15[\s\u00a0.,]?000/);
+  assert.equal(chip.getAttribute("href"), "/uz/wallet");
+  assert.ok(document.querySelector('[data-tab="hamyon"]'), "Hamyon har sahifada");
 });
 
 test("qidiruv oynasi: «Tariflar» o'rniga «Balansni to'ldirish» → /uz/purchase", () => {
@@ -171,7 +176,8 @@ test("sessiyada plan/premium/quota bo'lmasa ham hech joyda NaN yo'q", () => {
   const profileCopy = writerProfile(useAppStore.getState().user);
   assert.ok(!("plan" in profileCopy) && !("premium" in profileCopy));
   assert.equal(profileCopy.quota, 0);
-  const nodes = [h(TopBar, { onMenu: () => {} }), h(Sidebar, {}), h(ProfilePage)];
+  useUi.setState({ overlay: "create" });
+  const nodes = [h(BalanceChip), h(TabBar, { shown: true, createOpen: true }), h(CreateSheet), h(ProfilePage)];
   for (const node of nodes) {
     cleanup();
     render(withRouter(node));

@@ -18,11 +18,17 @@ import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks
  * jsdom has no layout, so sizes are asserted through the Tailwind classes
  * that decide them; the real pixel numbers come from the Chromium smoke.
  *
- * Mutations (each turned this file red, see the sprint report):
- *   - TopBar `size-11` → `size-10` for the icon buttons;
- *   - TopBar balance chip `h-11` → `h-8`;
- *   - TopBar avatar wrapper 44 → 32 (`size-11` → `size-8`);
- *   - Sidebar `h-12` → `h-10` rows;
+ * Redesign F0 (docs/redesign/PLAN.md): the TopBar, the Sidebar and the drawer
+ * are gone. Their phone rules moved to the successors: page-header icon
+ * buttons (`HeaderIconButton`, `ThemeToggle`), the balance chip, the shell's
+ * top inset strip, the «+» sheet (`CreateSheet`) and the tab bar
+ * (`tests/ui/tab-bar.test.mts` holds the bar's own sizes and behaviour).
+ *
+ * Mutations (each turned this file red, see the sprint / F0 reports):
+ *   - HeaderIconButton `size-11` → `size-10`; BalanceChip `h-11` → `h-8`;
+ *   - PageHeader back link without the 44 px class; title `text-[24px]` → `text-xl`;
+ *   - AppShell top strip without `TOP_INSET`;
+ *   - CreateSheet tiles `min-h-[5.5rem]` → `min-h-8`, close `size-11` → `size-8`;
  *   - SearchDialog input `text-base` → `text-sm`, rows `min-h-12` → `min-h-9`;
  *   - Notifications / Pay / Login close button `size-11` → `size-8`;
  *   - PayDialog presets `h-11` → `h-10`;
@@ -48,8 +54,9 @@ function phoneMedia(on: boolean) {
 }
 
 const nav = await import("../../lib/nav/history.ts");
-const { TopBar } = await import("../../components/shell/TopBar.tsx");
-const { Sidebar } = await import("../../components/shell/Sidebar.tsx");
+const { PageHeader, HeaderIconButton } = await import("../../components/shell/PageHeader.tsx");
+const { ThemeToggle } = await import("../../components/shell/ThemeToggle.tsx");
+const { BalanceChip } = await import("../../components/shell/BalanceChip.tsx");
 const { AppShell } = await import("../../components/shell/AppShell.tsx");
 const { SearchDialog } = await import("../../components/overlays/SearchDialog.tsx");
 const { NotificationsPanel } = await import("../../components/overlays/NotificationsPanel.tsx");
@@ -128,100 +135,115 @@ function signIn() {
 const cls = (el: Element | null) => (el?.getAttribute("class") ?? "").split(/\s+/);
 const has = (el: Element | null, c: string) => cls(el).includes(c);
 
-// ------------------------------------------------------------------ top bar
+// ------------------------------------------------------------------ page header (was: top bar)
 
-const TOPBAR_LABELS = [
-  "Yon panelni ko‘rsatish/yashirish",
-  "Qidirish...",
-  /^Mavzu:/,
-  "Bildirishnomalar",
-] as const;
+/** A tab page header as Bosh draws it: search, theme, bell + the balance chip. */
+function headerWithActions() {
+  return inRouter(
+    h(
+      "div",
+      null,
+      h(PageHeader, {
+        title: "Salom, Ali",
+        subtitle: "Bugun nima yaratamiz?",
+        actions: h(
+          "span",
+          null,
+          h(HeaderIconButton, { label: "Qidirish" }, "q"),
+          h(ThemeToggle),
+          h(HeaderIconButton, { label: "Bildirishnomalar", title: "Bildirishnomalar (Alt+T)" }, "b"),
+        ),
+      }),
+      h(BalanceChip),
+    ),
+  );
+}
 
-test("TopBar phone: every control has a 44 px hit area, no scale, all icons kept (O5, lead decision)", () => {
+const HEADER_LABELS = ["Qidirish", /^Mavzu:/, "Bildirishnomalar"] as const;
+
+test("page header phone: every icon button has a 44 px hit area with no scale; the balance chip is 44 px and truncates", () => {
   phoneMedia(true);
   signIn();
-  render(h(TopBar, { onMenu: () => {} }));
-  const header = document.querySelector("[data-topbar]");
-  assert.ok(header);
-  assert.ok(header.hasAttribute("data-phone"));
-  for (const label of TOPBAR_LABELS) {
+  render(headerWithActions());
+  for (const label of HEADER_LABELS) {
     const b = screen.getByLabelText(label);
     assert.ok(has(b, "size-11"), `${String(label)} is 44x44`);
     assert.ok(!has(b, "scale-95"), `${String(label)} is not shrunk by a transform`);
+    assert.ok(has(b, "focus-visible:ring-2"), `${String(label)}: keyboard ring`);
   }
   const chip = document.querySelector("[data-balance]");
   assert.ok(has(chip, "h-11") && has(chip, "min-w-11"), "balance chip is 44 px tall");
-  assert.ok(has(chip, "shrink"), "chip may shrink so six controls fit at 360 px");
+  assert.ok(has(chip, "shrink"), "chip may shrink in a 360 px header");
   assert.ok(chip?.querySelector(".truncate"), "balance digits truncate instead of overflowing");
-  const avatar = document.querySelector("[data-avatar]");
-  assert.ok(has(avatar, "size-11"), "avatar link is 44x44");
-  assert.ok(avatar?.querySelector(".size-8"), "the visible avatar circle stays 32 px");
+  assert.equal(chip?.getAttribute("href"), "/uz/wallet");
 });
 
-test("TopBar phone: signed out — «Kirish» is 44 px tall", () => {
-  phoneMedia(true);
-  render(h(TopBar, { onMenu: () => {} }));
-  const btn = screen.getByText("Kirish");
-  assert.ok(has(btn, "h-11") && !has(btn, "h-9"));
+test("page header: the step «←» is a 44 px link to the parent; the title is 24 px with -0.02em tracking", () => {
+  fresh("/uz/profile/korinish");
+  render(
+    h(
+      AppRouterContext.Provider,
+      { value: router },
+      h(PathnameContext.Provider, { value: "/uz/profile/korinish" }, h(PageHeader, { title: "Ko‘rinish", back: true })),
+    ),
+  );
+  const back = document.querySelector<HTMLAnchorElement>("[data-page-header-back]")!;
+  assert.ok(back, "back link");
+  assert.equal(back.getAttribute("href"), "/uz/profile", "parent from lib/nav/parents.ts");
+  assert.equal(back.getAttribute("aria-label"), "Orqaga");
+  assert.ok(has(back, "size-11"), "44 px");
+  const h1 = document.querySelector("[data-page-header] h1");
+  assert.ok(has(h1, "text-[24px]") && has(h1, "tracking-[-0.02em]"));
+  assert.ok(has(document.querySelector("[data-page-header]"), "sticky"), "sticky header");
 });
 
-test("TopBar phone: the bar keeps the notch / Telegram safe inset above its 56 px", () => {
+test("shell phone: the page sits below the notch / Telegram header (the old TopBar inset now lives in a top strip)", () => {
   phoneMedia(true);
-  render(h(TopBar, { onMenu: () => {} }));
-  const header = document.querySelector<HTMLElement>("[data-topbar]");
-  const style = header?.getAttribute("style") ?? "";
+  fresh("/uz");
+  render(inRouter(h(AppShell, null, h("div", null, "sahifa"))));
+  const strip = document.querySelector<HTMLElement>("[data-top-inset]");
+  const style = strip?.getAttribute("style") ?? "";
   assert.match(style, /--tg-safe-top/, "uses the Telegram bridge var");
   assert.match(style, /env\(safe-area-inset-top/, "falls back to env()");
-  assert.match(style, /3\.5rem/, "bar itself is still 56 px");
+  assert.match(style, /--tg-content-safe-top/, "Telegram's own header in fullscreen");
+  assert.ok(!document.querySelector("[data-topbar]"), "no top bar any more");
+  assert.ok(!document.querySelector("[data-sidebar]"), "no sidebar any more");
 });
 
-test("TopBar desktop: unchanged markup (40 px scaled icons, 32 px menu / avatar, 36 px login)", () => {
+test("page header desktop: the same 44 px buttons (no phone/desktop split), no inline style", () => {
   signIn();
-  render(h(TopBar, { onMenu: () => {} }));
-  const header = document.querySelector("[data-topbar]");
-  assert.ok(!header?.hasAttribute("data-phone"));
-  assert.ok(!header?.getAttribute("style"), "no inline style on desktop");
-  assert.ok(has(header, "h-14"));
-  assert.ok(has(screen.getByLabelText("Qidirish..."), "size-10") && has(screen.getByLabelText("Qidirish..."), "scale-95"));
-  assert.ok(has(screen.getByLabelText("Yon panelni ko‘rsatish/yashirish"), "size-8"));
-  assert.ok(has(document.querySelector("[data-balance]"), "h-8"));
-  assert.ok(has(document.querySelector("[data-avatar]"), "size-8"));
+  render(headerWithActions());
+  const header = document.querySelector("[data-page-header]");
+  assert.ok(!header?.getAttribute("style"), "no inline style");
+  for (const label of HEADER_LABELS) assert.ok(has(screen.getByLabelText(label), "size-11"));
   cleanup();
   useAppStore.setState({ loggedIn: false, user: null });
-  render(h(TopBar, { onMenu: () => {} }));
-  assert.ok(has(screen.getByText("Kirish"), "h-9"));
+  render(headerWithActions());
+  assert.ok(!document.querySelector("[data-balance]"), "signed out: no balance chip");
 });
 
-// ------------------------------------------------------------------ drawer
+// ------------------------------------------------------------------ «+» sheet (was: drawer)
 
-test("Sidebar phone: tool rows, brand, «Yaratish» and footer rows are ≥ 48 px", () => {
+test("CreateSheet phone: tiles ≥ 44 px, 44 px close, 48 px «Barchasi», the card scrolls inside under the top inset", async () => {
   phoneMedia(true);
+  fresh("/uz");
   signIn();
-  useAppStore.setState({ user: { ...USER, isAdmin: true } });
-  const { container } = render(inRouter(h(Sidebar, {})));
-  const root = container.querySelector("[data-sidebar]");
-  assert.ok(root?.hasAttribute("data-phone"));
-  const toolLink = container.querySelector<HTMLAnchorElement>(`a[href="/uz/${TOOLS[0].slug}"]`);
-  assert.ok(has(toolLink, "h-12") && !has(toolLink, "h-10"), "tool row 48 px");
-  assert.ok(has(container.querySelector('a[href="/uz/create"]'), "h-12"));
-  // Chromium smoke: inside the scrolling flex column «Yaratish» was squeezed to 16 px — rows must not shrink.
-  assert.ok(has(container.querySelector('a[href="/uz/create"]'), "shrink-0") && has(toolLink, "shrink-0"));
-  assert.ok(has(container.querySelector('a[href="/admin"]'), "h-12"), "admin row uses the shared 48 px row (UX review m10)");
-  assert.ok(has(container.querySelector('a[href="/uz/profile"]'), "min-h-14"));
-  assert.match(root?.getAttribute("style") ?? "", /--tg-safe-bottom/, "footer clears the home indicator");
-  cleanup();
-  useAppStore.setState({ loggedIn: false, user: null });
-  const out = render(inRouter(h(Sidebar, {})));
-  assert.ok(has(out.getByText("Tizimga kiring").closest("button"), "min-h-12"));
-});
-
-test("Sidebar desktop: 40 px rows, no inline style", () => {
-  signIn();
-  const { container } = render(inRouter(h(Sidebar, {})));
-  const root = container.querySelector("[data-sidebar]");
-  assert.ok(!root?.hasAttribute("data-phone"));
-  assert.ok(!root?.getAttribute("style"));
-  assert.ok(has(container.querySelector(`a[href="/uz/${TOOLS[0].slug}"]`), "h-10"));
+  render(inRouter(h(AppShell, null, h("div", null, "sahifa"))));
+  await act(async () => {
+    useUi.getState().open("create");
+  });
+  await settle();
+  const sheet = document.querySelector("[data-create-sheet]");
+  assert.ok(sheet);
+  const tool = sheet.querySelector(`[data-create-tool="${TOOLS[0].id}"]`);
+  assert.ok(has(tool, "min-h-[5.5rem]"), "tool tile ≥ 44 px");
+  const close = [...sheet.querySelectorAll('button[aria-label="Yopish"]')].find((b) => !b.hasAttribute("data-create-scrim"));
+  assert.ok(has(close ?? null, "size-11"), "close is 44x44");
+  assert.ok(has(sheet.querySelector("[data-create-all]"), "h-12"), "«Barchasi» 48 px");
+  const panel = sheet.querySelector<HTMLElement>(".slx-sheet-enter");
+  assert.match(panel?.getAttribute("style") ?? "", /max-height: calc\(100svh - calc\(var\(--tg-safe-top/, "never under the notch");
+  assert.match(panel?.getAttribute("style") ?? "", /padding-bottom: calc\(var\(--tabbar-h, 0px\) \+ var\(--tg-safe-bottom/, "clears the bar and the home indicator");
+  assert.ok(sheet.querySelector(".overflow-y-auto.overscroll-contain"), "inner scroll");
 });
 
 // ------------------------------------------------------------------ search
@@ -419,18 +441,20 @@ for (const name of ["search", "notifications", "pay", "login"] as const) {
   });
 }
 
-test("phone back closes the drawer first (phone layout, 48 px rows inside)", async () => {
+test("phone back closes the «+» sheet first (phone layout, ≥ 44 px tiles inside)", async () => {
   fresh("/uz");
   phoneMedia(true);
   render(inRouter(h(AppShell, null, h("div", null, "sahifa"))));
-  fireEvent.click(screen.getByLabelText("Yon panelni ko‘rsatish/yashirish"));
+  fireEvent.click(document.querySelector("[data-create-button]")!);
   await settle();
-  const drawer = document.querySelector(".fixed.inset-0.z-40");
-  assert.ok(drawer);
-  assert.ok(has(drawer.querySelector(`a[href="/uz/${TOOLS[0].slug}"]`), "h-12"));
+  const sheet = document.querySelector("[data-create-sheet]");
+  assert.ok(sheet);
+  assert.ok(has(sheet.querySelector(`[data-create-tool="${TOOLS[0].id}"]`), "min-h-[5.5rem]"));
+  assert.ok(sx()?.o, "the sheet owns a history entry");
   await act(async () => {
     window.history.back();
   });
   await settle();
-  assert.ok(!document.querySelector(".fixed.inset-0.z-40"));
+  assert.ok(!document.querySelector("[data-create-sheet]"));
+  assert.equal(window.location.pathname, "/uz", "page unchanged");
 });

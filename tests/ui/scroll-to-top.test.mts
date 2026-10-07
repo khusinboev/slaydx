@@ -16,14 +16,16 @@ import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks
  *
  * Mutations (each turned this file red, see the sprint report):
  *   - listen on `window` instead of the container;
- *   - drop the `overlays > 0` check (dialogs and the shell's drawer both own a nav layer);
+ *   - drop the `overlays > 0` check (dialogs and the shell's «+» sheet both own a nav layer);
  *   - drop `pathname` from the effect deps (no route reset);
  *   - ignore `prefers-reduced-motion` (always smooth);
  *   - click does not scroll to 0 (`top: 0` → `top: 1`);
  *   - drop the lift (`liftAbove` result unused);
  *   - AppShell: drop `ref={setScroller}` (the shell never hands the scroller over);
  *   - drop the effect cleanup (listener stays on the old container);
- *   - `ScrollToTopButton` without `useVisualViewport` (no `--kb-h` above the keyboard).
+ *   - `ScrollToTopButton` without `useVisualViewport` (no `--kb-h` above the keyboard);
+ *   - redesign F0: drop `var(--tabbar-h)` from the button's bottom (it sits on the tab bar);
+ *     AppShell spacer without `--tabbar-h` (the end of the page hides under the bar).
  */
 
 const nav = await import("../../lib/nav/history.ts");
@@ -233,7 +235,7 @@ test("the button: 44 px round up-arrow, aria-label «Tepaga chiqish», keyboard-
   assert.ok(b.getAttribute("tabindex") === null || b.tabIndex >= 0, "focusable");
   const a = anchor()!;
   assert.ok(a.classList.contains("fixed"));
-  assert.ok(a.classList.contains("z-30"), "below the drawer (z-40) and the dialogs / sheets (z-50+)");
+  assert.ok(a.classList.contains("z-30"), "below the tab bar (z-46), the «+» sheet (z-45) and the dialogs (z-50+)");
   // Theme tokens, not fixed colours: works in light and dark.
   assert.ok(b.classList.contains("bg-card") && b.classList.contains("text-foreground"));
   // Dark: the card token is almost the page colour, so the fill and the border are lifted explicitly.
@@ -249,6 +251,7 @@ test("position: above the safe areas (Telegram vars with env() fallbacks) and th
   assert.ok(style.includes("--tg-safe-bottom"), "Telegram bottom safe area");
   assert.ok(style.includes("env(safe-area-inset-bottom"), "env() fallback");
   assert.ok(style.includes("--kb-h"), "lifted by the keyboard variable");
+  assert.ok(style.includes("var(--tabbar-h, 0px)"), "lifted above the bottom tab bar while it is shown");
   assert.ok(style.includes("--tg-safe-right") && style.includes("env(safe-area-inset-right"), "right safe area");
   assert.ok(document.documentElement.style.getPropertyValue("--kb-h") !== "", "`useVisualViewport` keeps --kb-h alive while the button is mounted");
   await scrollTo(0);
@@ -715,27 +718,46 @@ test("onShownChange mirrors the button: true when it shows, false when it goes (
   assert.equal(last(), false, "unmount releases the room");
 });
 
-test("AppShell: the page ends in a bottom-room SPACER only while the button is on screen (never padding on <main>)", async () => {
-  fresh();
-  render(inRouter(h(AppShell, null, h("div", { "data-page": "" }, "sahifa"))));
+test("AppShell (no tab bar: a tool form): the page ends in a bottom-room SPACER only while the button is on screen (never padding on <main>)", async () => {
+  fresh("/uz/slide");
+  render(inRouter(h(AppShell, null, h("div", { "data-page": "" }, "sahifa")), "/uz/slide"));
   await settle();
   const main = document.getElementById("main")!;
   const sc = fakeScroller(main);
   const room = () => main.querySelector<HTMLElement>("[data-scroll-top-room]");
   assert.ok(!room(), "no button: no room");
+  assert.ok(!main.querySelector("[data-bottom-room]"), "no bar and no button: no spacer at all");
   await scrollTo(sc, 2000);
   assert.ok(button());
   const spacer = room();
   assert.ok(spacer, "button on screen: the room is there");
   assert.equal(main.lastElementChild, spacer, "it ends the page (after the content)");
   assert.equal(spacer.getAttribute("aria-hidden"), "true");
-  // 4.5 rem + the Telegram / device bottom safe area.
-  assert.ok(spacer.className.includes("h-[calc(4.5rem+var(--tg-safe-bottom,env(safe-area-inset-bottom,0px)))]"));
+  // 4.5 rem + the bar's room (0 here: no bar on a tool form) + the Telegram / device bottom safe area.
+  assert.ok(spacer.className.includes("h-[calc(4.5rem+var(--tabbar-h,0px)+var(--tg-safe-bottom,env(safe-area-inset-bottom,0px)))]"));
   assert.ok(spacer.className.includes("shrink-0"));
   // Padding on <main> would lift a sticky `bottom: 0` submit bar off the bottom edge (browser-verified).
   assert.ok(!/(^|\s)(data-\[[^\]]*\]:)?pb-/.test(main.className), "no bottom padding on the scroller");
   await scrollTo(sc, 0);
   assert.ok(!room(), "back at the top: the room is released");
+});
+
+test("AppShell (tab bar shown): the spacer always clears the bar and grows by 4.5 rem while the button is on screen", async () => {
+  fresh("/uz/files");
+  render(inRouter(h(AppShell, null, h("div", { "data-page": "" }, "sahifa")), "/uz/files"));
+  await settle();
+  const main = document.getElementById("main")!;
+  const sc = fakeScroller(main);
+  const spacer = () => main.querySelector<HTMLElement>("[data-bottom-room]");
+  assert.ok(spacer()?.hasAttribute("data-tabbar-room"), "bar shown: room for it");
+  assert.ok(!spacer()?.hasAttribute("data-scroll-top-room"));
+  assert.ok(spacer()!.className.includes("h-[calc(var(--tabbar-h,0px)+var(--tg-safe-bottom,env(safe-area-inset-bottom,0px)))]"));
+  await scrollTo(sc, 2000);
+  assert.ok(button());
+  assert.ok(spacer()?.hasAttribute("data-scroll-top-room"), "button too: one spacer for both");
+  assert.ok(spacer()!.className.includes("h-[calc(4.5rem+var(--tabbar-h,0px)+"));
+  assert.equal(main.lastElementChild, spacer());
+  assert.equal(main.querySelectorAll("[data-bottom-room]").length, 1);
 });
 
 /* ------------------------------------------------------------------ bottom bars */
@@ -923,17 +945,17 @@ test("AppShell: an open search dialog hides it, closing it brings it back", asyn
   assert.ok(button(), "search dialog closed");
 });
 
-test("AppShell: the open mobile drawer hides it", async () => {
+test("AppShell: the open «+» sheet hides it (the drawer's successor owns a nav layer too)", async () => {
   fresh();
   render(inRouter(h(AppShell, null, h("div", null, "sahifa"))));
   await settle();
   const sc = fakeScroller(document.getElementById("main")!);
   await scrollTo(sc, 2000);
   assert.ok(button());
-  fireEvent.click(screen.getByLabelText("Yon panelni ko‘rsatish/yashirish"));
+  fireEvent.click(screen.getByLabelText("Yaratish"));
   await settle();
-  assert.ok(document.querySelector(".fixed.inset-0.z-40"), "drawer open");
-  assert.ok(!button(), "drawer open: no button");
+  assert.ok(document.querySelector("[data-create-sheet]"), "sheet open");
+  assert.ok(!button(), "sheet open: no button");
 });
 
 test("AppShell: a route change clears it", async () => {

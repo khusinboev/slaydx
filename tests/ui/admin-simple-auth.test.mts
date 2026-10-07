@@ -15,7 +15,8 @@ import { AdminAutoEnter } from "../../components/admin/shell/AdminAutoEnter.tsx"
 import { AccountPage } from "../../components/admin/shell/AccountPage.tsx";
 import { AdminIdentityProvider, type AdminIdentity } from "../../components/admin/shell/admin-identity.tsx";
 import { AdminsPage } from "../../components/admin/admins/AdminsPage.tsx";
-import { Sidebar } from "../../components/shell/Sidebar.tsx";
+// Redesign F0: the Sidebar is gone; the admin entry moved to Profil as `AdminLink`.
+import { AdminLink } from "../../components/shell/AdminLink.tsx";
 
 /*
  * Simple admin entry — the 2FA switch OFF (docs/admin/HANDOFF.md "Admin 2FA
@@ -145,7 +146,7 @@ test("AdminAutoEnter: a 404 shows the error with «Qayta urinish»; retry POSTs 
   assert.equal(calls.length, 2);
 });
 
-/* ───────────────────────────── Sidebar button ───────────────────────────── */
+/* ───────────────────────────── Admin entry (was: Sidebar button) ───────────────────────────── */
 
 const USER: ServerUser = {
   id: "10",
@@ -182,21 +183,28 @@ function signIn(user: ServerUser) {
   });
 }
 
-test("Sidebar: «Admin panel» → /admin is shown for a user with an admin account (isAdmin), hidden for everyone else", () => {
+test("AdminLink (Profil): «Admin panel» → /admin is shown for a user with an admin account (isAdmin), hidden for everyone else", () => {
   signIn({ ...USER, isAdmin: true });
-  const { unmount } = render(withRouter(h(Sidebar, {}), makeRouter().router, "/uz"));
+  const { unmount } = render(withRouter(h(AdminLink), makeRouter().router, "/uz"));
   const link = screen.getByRole("link", { name: /Admin panel/ });
   assert.equal(link.getAttribute("href"), "/admin");
   unmount();
 
   signIn({ ...USER, isAdmin: false });
-  render(withRouter(h(Sidebar, {}), makeRouter().router, "/uz"));
+  render(withRouter(h(AdminLink), makeRouter().router, "/uz"));
   assert.ok(!screen.queryByRole("link", { name: /Admin panel/ }), "no button for a plain user");
   cleanup();
 
   useAppStore.setState({ loggedIn: false, sessionChecked: true, user: null });
-  render(withRouter(h(Sidebar, {}), makeRouter().router, "/uz"));
+  render(withRouter(h(AdminLink), makeRouter().router, "/uz"));
   assert.ok(!screen.queryByRole("link", { name: /Admin panel/ }), "no button when signed out");
+});
+
+test("the Profil tab page mounts AdminLink (the admin entry stays reachable without the Sidebar)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../../app/uz/profile/page.tsx", import.meta.url), "utf8");
+  assert.match(src, /import \{ AdminLink \} from "@\/components\/shell\/AdminLink";/);
+  assert.match(src, /<AdminLink\b/);
 });
 
 /* ───────────────────────────── AccountPage ───────────────────────────── */

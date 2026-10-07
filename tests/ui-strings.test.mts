@@ -37,9 +37,30 @@ test("UX-10: komponentlardagi aria-label/title/placeholder/alt matnlari inglizch
   assert.deepEqual(hits, []);
 });
 
-test("UX-10: sarlavhadagi ikki tugma o'zbekcha nomlangan, qisqa tugma esa `title` da", () => {
-  const src = readFileSync(path.join(ROOT, "components/shell/TopBar.tsx"), "utf8");
-  assert.match(src, /aria-label="Yon panelni ko‘rsatish\/yashirish"/);
-  assert.match(src, /aria-label="Bildirishnomalar"/);
-  assert.match(src, /title="Bildirishnomalar \(Alt\+T\)"/);
+/*
+ * The TopBar (menu toggle + bell) is gone (redesign F0). Its successors: the
+ * bottom bar, the «+» sheet and the Bosh header. Their names come through
+ * props (`label=…`, `aria-label={cond ? … : …}`), which the literal scan above
+ * cannot see, so they are pinned here.
+ */
+test("UX-10: tab bar, «+» sheet and Bosh header controls are named in Uzbek; the bell keeps its `title` shortcut", () => {
+  const read = (f: string) => readFileSync(path.join(ROOT, f), "utf8");
+  const tabbar = read("components/shell/TabBar.tsx");
+  assert.match(tabbar, /aria-label="Asosiy bo‘limlar"/);
+  assert.match(tabbar, /aria-label=\{createOpen \? "Yopish" : "Yaratish"\}/);
+  const sheet = read("components/shell/CreateSheet.tsx");
+  assert.match(sheet, /aria-label="Yopish"/);
+  assert.match(sheet, /Nima yaratamiz\?/);
+  const hub = read("components/home/HomeHub.tsx");
+  assert.match(hub, /label="Bildirishnomalar"/);
+  assert.match(hub, /title="Bildirishnomalar \(Alt\+T\)"/);
+  assert.match(hub, /label="Qidirish"/);
+  // `label=` props of the shell's icon buttons must not be English either.
+  const hits: string[] = [];
+  for (const f of [...files(path.join(ROOT, "components")), ...files(path.join(ROOT, "app/uz"))]) {
+    for (const m of readFileSync(f, "utf8").matchAll(/\blabel="([^"]*)"/g)) {
+      if (ENGLISH.test(m[1]!)) hits.push(`${path.relative(ROOT, f)}: ${m[0]}`);
+    }
+  }
+  assert.deepEqual(hits, []);
 });

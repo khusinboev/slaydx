@@ -86,7 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div
       data-app-shell
-      data-tabbar={bar.shown ? "on" : "off"}
+      data-tabbar-state={bar.shown ? "on" : "off"}
       className="flex h-svh w-full flex-col overflow-hidden bg-[var(--page-bg)]"
       style={{ ["--tabbar-h" as string]: bar.shown ? "var(--tabbar-room)" : "0px" }}
     >

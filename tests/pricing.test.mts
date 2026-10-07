@@ -600,7 +600,7 @@ test("bo'lim yorliqlari bitta manbadan; bo'sh bo'lim ko'rinmaydi", () => {
   // HAR vosita chiziladigan bo'limga tegishli — aks holda u sotib olinmaydi.
   for (const t of TOOLS) assert.ok(ids.includes(t.group), `${t.id}: «${t.group}» bo'limi hech qayerda chizilmaydi`);
   // Ikki komponent ham SHU manbadan o'qiydi (qo'lda yozilgan nusxa qolmasin).
-  for (const f of ["../components/home/CreateGrid.tsx", "../components/shell/Sidebar.tsx"]) {
+  for (const f of ["../components/home/CreateGrid.tsx", "../components/shell/CreateSheet.tsx"]) {
     const src = readFileSync(new URL(f, import.meta.url), "utf8");
     assert.match(src, /visibleToolGroups\(\)/, `${f}: guruhlar ro'yxati qo'lda yozilgan`);
   }

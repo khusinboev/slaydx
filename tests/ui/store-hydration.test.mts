@@ -29,7 +29,8 @@ import { act, cleanup } from "@testing-library/react";
 afterEach(() => cleanup());
 
 const { useAppStore } = await import("../../lib/store.ts");
-const { TopBar } = await import("../../components/shell/TopBar.tsx");
+// The TopBar is gone (redesign F0); its theme button lives on as `ThemeToggle` (Bosh header).
+const { ThemeToggle } = await import("../../components/shell/ThemeToggle.tsx");
 const { renderToString } = await import("react-dom/server");
 const { hydrateRoot } = await import("react-dom/client");
 
@@ -41,8 +42,8 @@ test("FE-09: getInitialState = server holati (hydrated:false, kun); joriy holat 
   assert.equal(document.documentElement.classList.contains("dark"), true, "va qo'llanadi");
 });
 
-test("FE-09: TopBar serverda Kun bilan chiziladi va gidratsiya XATOSIZ o'tadi, keyin Tun ga o'tadi", async () => {
-  const html = renderToString(h(TopBar, { onMenu: () => {} }));
+test("FE-09: ThemeToggle serverda Kun bilan chiziladi va gidratsiya XATOSIZ o'tadi, keyin Tun ga o'tadi", async () => {
+  const html = renderToString(h(ThemeToggle));
   assert.match(html, /Mavzu: Kun/, "server HTML (localStorage yo'q) kun mavzusini chizadi");
   const box = document.createElement("div");
   box.innerHTML = html;
@@ -54,7 +55,7 @@ test("FE-09: TopBar serverda Kun bilan chiziladi va gidratsiya XATOSIZ o'tadi, k
   };
   try {
     await act(async () => {
-      hydrateRoot(box, h(TopBar, { onMenu: () => {} }), {
+      hydrateRoot(box, h(ThemeToggle), {
         onRecoverableError: (e) => errors.push(`recoverable: ${e instanceof Error ? e.message : String(e)}`),
       });
     });
