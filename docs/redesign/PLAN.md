@@ -49,3 +49,6 @@ https://claude.ai/artifact/HmDv1nFFhdeadHCxWLc8eg (variant **A**).
 |---|---|
 | R1 inventory | ✅ |
 | Mockups A/B/C | ✅ owner chose A + day/night |
+| F0 Foundation | ✅ merged b2d621e (29/30 mutations, smoke 127 checks; ThemeMode auto, `/uz/purchase`→`/uz/wallet`) |
+| W1 Bosh, W2 Ishlarim, W3 Hamyon, W4 Profil | running (4 agents) |
+| W5 Chrome & type | queued; also owns F0 hand-offs: ResultLayout `--app-topbar-h` → `var(--shell-topbar-h,0px)`, NotificationsPanel phone anchor, ResultView delete → `/uz/files`, `/uz/purchase` links → `/uz/wallet` (ToolChrome, SearchDialog, PayDialog, sitemap) |
