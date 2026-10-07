@@ -158,8 +158,9 @@ export function ToolChrome({
          */}
         <div
           data-submit-bar={typing ? "inline" : "sticky"}
+          // z-10: positioned form content (template previews) must not paint over the floating card.
           className={`-mx-2 bg-gradient-to-t from-[var(--page-bg)] from-60% to-transparent px-0 pt-3 ${SUBMIT_BAR_PB} ${
-            typing ? "static" : "sticky bottom-0"
+            typing ? "static" : "sticky bottom-0 z-10"
           }`}
         >
           <div

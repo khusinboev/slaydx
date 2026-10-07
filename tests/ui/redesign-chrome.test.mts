@@ -10,6 +10,8 @@ import { PayDialog } from "../../components/overlays/PayDialog.tsx";
 import { DEFAULT_TOPUP, TOPUP_PRESETS, openPay, usePayAmount } from "../../components/overlays/pay-amount.ts";
 import { ToolChrome } from "../../components/forms/ToolChrome.tsx";
 import { RESULT_LIST_PATH, ResultView } from "../../components/files/ResultView.tsx";
+import { ResultLayout } from "../../components/files/ResultLayout.tsx";
+import { stickyTopPx } from "../../components/viewers/useVisiblePage.ts";
 import { parentOf } from "../../lib/nav/parents.ts";
 import { TOOL_BY_ID } from "../../lib/tools.ts";
 import { useAppStore } from "../../lib/store.ts";
@@ -267,6 +269,27 @@ test("ResultView: after a confirmed delete the page is REPLACED by /uz/files (Is
   await waitFor(() => assert.ok(calls.some((c) => c.method === "DELETE")));
   await waitFor(() => assert.deepEqual(replaced, ["/uz/files"]));
   assert.equal(RESULT_LIST_PATH, parentOf(`/uz/files/${ID}`), "the same page «←» falls back to");
+});
+
+/* ───────────────────────── ResultLayout top offset ───────────────────────── */
+
+test("ResultLayout: --app-topbar-h is where <main> starts, in px (the page counter can read it; 0 without a top strip)", async () => {
+  const main = document.createElement("main");
+  main.id = "main";
+  document.body.appendChild(main);
+  let top = 70; // e.g. Telegram fullscreen: 24 px status bar + 46 px Telegram header
+  main.getBoundingClientRect = () => ({ top, bottom: 844, left: 0, right: 390, width: 390, height: 844 - top, x: 0, y: top, toJSON() {} }) as DOMRect;
+  render(h(ResultLayout, { header: h("nav", null, "x"), sections: [], frame: "flow", children: h("div", null, "Hujjat") }), { container: main });
+  const root = document.querySelector<HTMLElement>("[data-result-layout]")!;
+  assert.equal(root.style.getPropertyValue("--app-topbar-h"), "70px");
+  assert.ok(stickyTopPx(root) >= 70, "useVisiblePage reads it (was 0 for the calc() value)");
+  top = 0;
+  await act(async () => {
+    window.dispatchEvent(new window.Event("resize"));
+  });
+  assert.equal(root.style.getPropertyValue("--app-topbar-h"), "0px", "follows the insets");
+  cleanup();
+  main.remove();
 });
 
 /* ───────────────────────── sitemap ───────────────────────── */

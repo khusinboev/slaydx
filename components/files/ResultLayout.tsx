@@ -165,6 +165,29 @@ export function ResultLayout({
     syncHeaderH();
   }, [compactNow, syncHeaderH]);
 
+  /*
+   * `--app-topbar-h` in px (redesign W5). The CSS default below is the shell's
+   * `var(--shell-topbar-h, 0px)` — a `calc()` once resolved, which the page
+   * counter's reader (`useVisiblePage` `stickyTopPx`) cannot parse (it read 0
+   * under Telegram's header). The real value is where `<main>` starts: the
+   * notch / Telegram strip plus a session banner when one is shown. Re-measured
+   * when `<main>` changes size (insets arrive late from the Telegram bridge).
+   */
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const main = document.getElementById("main");
+    if (!root || !main || !root.isConnected || !main.contains(root)) return;
+    const sync = () => root.style.setProperty("--app-topbar-h", `${Math.max(0, Math.round(main.getBoundingClientRect().top))}px`);
+    sync();
+    window.addEventListener("resize", sync);
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(sync);
+    ro?.observe(main);
+    return () => {
+      window.removeEventListener("resize", sync);
+      ro?.disconnect();
+    };
+  }, []);
+
   const compactRef = useRef(false);
   useEffect(() => {
     compactRef.current = false;
