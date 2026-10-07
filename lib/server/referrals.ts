@@ -150,6 +150,24 @@ async function applyCore(client: PoolClient, refereeId: string, code: string, so
   if (!referrer) return { applied: false, reason: "unknown" };
   if (referrer.id === String(refereeId)) return { applied: false, reason: "self", referrerId: referrer.id };
 
+  /*
+   * Lock the inviter's row FIRST (review BLOCKER-1). The `referrals` INSERT
+   * below takes FOR KEY SHARE on it (FK) and `topUpInTx` then wants FOR
+   * UPDATE: two new invitees of one inviter at once each held the share lock
+   * and waited for the other's — 40P01, the savepoint swallowed it and the
+   * reward was lost for good. With FOR UPDATE up front they queue instead.
+   *
+   * Lock order is always [own new row → inviter row]. No cycle is possible:
+   * nobody else can lock the invitee's row (uncommitted, unseen), and an
+   * inviter is never itself being created in a transaction — its code is
+   * generated lazily on a committed row (`ensureRefCode`). Every other path
+   * (charges, sign-ins, admin) locks a single user row. The `is_blocked` flag
+   * and the 24 h burst count are re-read under this lock.
+   */
+  const locked = await client.query<{ is_blocked: boolean }>("SELECT is_blocked FROM users WHERE id = $1 FOR UPDATE", [referrer.id]);
+  if (!locked.rows[0]) return { applied: false, reason: "unknown" };
+  referrer.isBlocked = locked.rows[0].is_blocked;
+
   // Layer 1 (see the module comment): this transaction must have INSERTed the
   // referee. `now()` is the transaction timestamp, which is also what the
   // row's `created_at DEFAULT now()` got when this transaction created it.

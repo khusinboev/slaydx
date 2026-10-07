@@ -284,6 +284,61 @@ test("concurrency: one new person, two different inviters' links at once → exa
   assert.equal(n!.n, "1");
 });
 
+/** Rewards booked for `inviterId`: referral rows (with points) and ledger rows. */
+async function rewardCounts(inviterId: string) {
+  const r = await queryOne<{ rows: string; ledger: string }>(
+    `SELECT (SELECT count(*) FROM referrals WHERE referrer_user_id = $1 AND reward_points = 2000)::text AS rows,
+            (SELECT count(*) FROM transactions WHERE user_id = $1 AND kind = 'bonus' AND reference LIKE 'referral:%')::text AS ledger`,
+    [inviterId],
+  );
+  return { rows: Number(r!.rows), ledger: Number(r!.ledger) };
+}
+
+test("concurrency (review BLOCKER-1): 12 brand-new invitees of ONE inviter at once → 12 rewards, no deadlock swallowed, ledger invariant", { skip }, async () => {
+  const inviter = await newReferrer("Guruhga yuborgan");
+  const before = await pointsOf(inviter.id);
+  const N = 12;
+  const { result: settled, errors } = await capturingErrors(() =>
+    Promise.allSettled(
+      Array.from({ length: N }, (_, i) =>
+        i % 2
+          ? upsertTelegramUser(profile(tgId(), `Guruh ${i}`), { code: inviter.code, source: "web" })
+          : registerBotUser(profile(tgId(), `Guruh ${i}`), { code: inviter.code, source: "bot" }),
+      ),
+    ),
+  );
+  assert.deepEqual(settled.map((s) => s.status), Array(N).fill("fulfilled"), "every sign-up succeeds");
+  assert.deepEqual(errors.filter((m) => m.startsWith("[referral]")), [], "MUTATSIYA 11: no 40P01 swallowed by the savepoint");
+  assert.equal((await pointsOf(inviter.id)) - before, N * REFERRAL_REWARD_POINTS, "every reward granted exactly once");
+  assert.deepEqual(await rewardCounts(inviter.id), { rows: N, ledger: N });
+  await assertLedger(inviter.id, "inviter of 12");
+});
+
+test("concurrency: B (A's invitee) is a referrer too — A's and B's new invitees, A's and B's own sign-ins, all at once → no deadlock", { skip }, async () => {
+  const a = await newReferrer("A");
+  const bTg = tgId();
+  const b = await registerBotUser(profile(bTg, "B"), { code: a.code, source: "bot" });
+  const bCode = await ensureRefCode(b.id);
+  const aTg = (await queryOne<{ t: string }>("SELECT telegram_id::text AS t FROM users WHERE id = $1", [a.id]))!.t;
+  const [pa, pb] = [await pointsOf(a.id), await pointsOf(b.id)];
+  const K = 6;
+  const { result: settled, errors } = await capturingErrors(() =>
+    Promise.allSettled([
+      ...Array.from({ length: K }, () => registerBotUser(profile(tgId(), "A dan"), { code: a.code, source: "bot" })),
+      ...Array.from({ length: K }, () => upsertTelegramUser(profile(tgId(), "B dan"), { code: bCode, source: "web" })),
+      // The inviters' own rows are locked by their own sign-ins at the same time.
+      registerBotUser(profile(bTg, "B"), { code: a.code, source: "bot" }),
+      upsertTelegramUser(profile(aTg, "A"), { code: bCode, source: "web" }),
+    ]),
+  );
+  assert.ok(settled.every((s) => s.status === "fulfilled"), JSON.stringify(settled.filter((s) => s.status === "rejected")));
+  assert.deepEqual(errors.filter((m) => m.startsWith("[referral]")), []);
+  assert.equal((await pointsOf(a.id)) - pa, K * REFERRAL_REWARD_POINTS, "A: K new invitees (B's re-sign-in pays nothing)");
+  assert.equal((await pointsOf(b.id)) - pb, K * REFERRAL_REWARD_POINTS, "B: K new invitees (A's sign-in with B's code pays nothing)");
+  await assertLedger(a.id, "A");
+  await assertLedger(b.id, "B");
+});
+
 test("unknown or malformed code → the account is created, nobody is credited, no row", { skip }, async () => {
   for (const code of ["zzzzzzzz", "../../x", "ref_k7m3p9qx"]) {
     const tg = tgId();
