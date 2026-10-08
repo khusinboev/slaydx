@@ -177,6 +177,11 @@ export function ledgerTitle(lang: Lang, e: Pick<LedgerItem, "kind" | "note">): s
       const friend = /^Do'st taklifi:\s*(.+)$/.exec(note)?.[1];
       if (friend) return t(lang, "ledger.bonusFriend", { f: friend });
       if (/ro'yxatdan o'tish/i.test(note)) return t(lang, "ledger.signup");
+      // Channel bonus notes (`bonus-channels.ts JOIN_NOTE_PREFIX` / `STAY_NOTE_PREFIX`).
+      const join = /^Kanal obunasi:\s*(.+)$/.exec(note)?.[1];
+      if (join) return t(lang, "ledger.channelJoin", { c: join });
+      const stay = /^Kanalda qolish bonusi:\s*(.+)$/.exec(note)?.[1];
+      if (stay) return t(lang, "ledger.channelStay", { c: stay });
       return lang === "uz" && note ? note : t(lang, "ledger.bonus");
     }
     case "subscription":
@@ -215,10 +220,14 @@ export function walletScreen(lang: Lang, user: Pick<ProfileUser, "points" | "quo
   const wallet = appUrl("/uz/wallet");
   return {
     text,
-    reply_markup: rows([
-      wallet ? inlineButton("card", t(lang, "btn.topup"), { web_app: { url: wallet } }, "primary") : null,
-      inlineButton("gift", t(lang, "btn.inviteFriend"), { callback_data: cb.walletInvite() }),
-    ]),
+    // «🎁 Bonus olish» first, full width, green (docs/bonus/PLAN.md flows).
+    reply_markup: rows(
+      [inlineButton("gift", t(lang, "btn.bonus"), { callback_data: cb.bonus() }, "success")],
+      [
+        wallet ? inlineButton("card", t(lang, "btn.topup"), { web_app: { url: wallet } }, "primary") : null,
+        inlineButton("group", t(lang, "btn.inviteFriend"), { callback_data: cb.walletInvite() }),
+      ],
+    ),
   };
 }
 
