@@ -334,7 +334,7 @@ test("Ishlarim: own files only, 5 per page, ◀️/▶️ edit the same message"
   assert.equal(buttons(sends()[0]!.body)[0]!.web_app?.url, "https://slaydx.test/uz/create");
 });
 
-test("Hamyon → «Do‘st taklif qilish» → back; Yordam; a blocked tool answers «vaqtincha o‘chiq»", { skip }, async () => {
+test("Hamyon; an older card's «Do‘st taklif qilish» (w:r) → back; Yordam; a blocked tool answers «vaqtincha o‘chiq»", { skip }, async () => {
   const u = await newUser();
   installFetch();
   await tg.handleUpdate(textUpdate(u.tg, "💰 Hamyon"));

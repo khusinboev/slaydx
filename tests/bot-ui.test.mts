@@ -14,7 +14,12 @@ import assert from "node:assert/strict";
  *   4. a blocked tool keeps its web_app → «blocked tool → text button»;
  *   5. `parseCallback` accepts `p:e:balance` → «callback codes reject unknown fields»;
  *   6. a Russian i18n entry emptied → «i18n: every key in uz/ru/en»;
- *   7. `maskPhone` shows all digits → «maskPhone».
+ *   7. `maskPhone` shows all digits → «maskPhone»;
+ *   B1. a joined channel's button without `style: "success"` → «bonuses message (uz)»;
+ *   B2. the invite button green at 0 invites → «before the first invite / after the first top-up»;
+ *   B3. the Hamyon history not cut to WALLET_RECENT → «Hamyon card: only the LAST 3»;
+ *   B4. the blank line after the greeting removed → «/start welcome»;
+ *   B5. a bonus ledger line in tanga → «Hamyon, referral, Yordam, Til».
  */
 
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
@@ -101,7 +106,10 @@ function bonusTasks() {
       { id: "5", title: "Taklif havolali kanal", username: null, joinUrl: "https://t.me/+AbCdEf123456", joinBonus: 1000, stayBonus: 0, stayDays: 7, claim: null },
     ],
     referral: { link: "https://t.me/slaydx_test_bot?start=ref_abcdefgh", rewardPoints: 2000, invitedCount: 3, earnedPoints: 6000 },
+    signupPoints: 2000,
+    firstTopup: { paid: false, points: 0 },
     earnedTotal: 10000,
+    availableTotal: 8000,
   };
 }
 
@@ -135,9 +143,14 @@ function allScreens(lang: (typeof LANGS)[number]) {
     ]),
     referral: scr.referralScreen(lang, ref, "wallet"),
     bonus: bonus.bonusScreen(lang, bonusTasks(), BONUS_NOW),
-    bonusPaid: bonus.bonusScreen(lang, bonusTasks(), BONUS_NOW, { points: 1000, title: "SlaydX <yangi>", stayBonus: 2000, stayDays: 7 }),
+    bonusFresh: bonus.bonusScreen(
+      lang,
+      { ...bonusTasks(), referral: { ...bonusTasks().referral, invitedCount: 0, earnedPoints: 0 }, firstTopup: { paid: true, points: 5000 } },
+      BONUS_NOW,
+    ),
     bonusEmpty: bonus.bonusScreen(lang, { ...bonusTasks(), channels: [] }, BONUS_NOW),
     stayNotice: bonus.stayPaidNotice(lang, { points: 2000, title: "Kanal & <b>", stayDays: 7 }),
+    joinNotice: bonus.joinPaidNotice(lang, { points: 1000, title: "Kanal & <b>", stayBonus: 2000, stayDays: 7 }),
     help: scr.helpScreen(lang),
     language: scr.languageScreen(lang, "p"),
     keyboardNote: kbd.keyboardMessage(lang, 7_300_000_001, "note", { llm: true, images: true }),
@@ -291,6 +304,8 @@ test("callback codes: round trip, ≤ 64 bytes, unknown/forged codes rejected", 
     codes.cb.help(),
     codes.cb.noop(),
     codes.cb.bonus(),
+    codes.cb.bonusRefresh(),
+    codes.cb.bonusDone(),
     codes.cb.bonusCheck("1"),
     codes.cb.bonusCheck("999999999999999999"),
     ...codes.SECTIONS.map((s) => codes.cb.section(s)),
@@ -305,7 +320,9 @@ test("callback codes: round trip, ≤ 64 bytes, unknown/forged codes rejected", 
   assert.deepEqual(codes.parseCallback("l:s:ru:p"), { kind: "langSet", lang: "ru", origin: "p" });
   assert.deepEqual(codes.parseCallback("b:c:42"), { kind: "bonusCheck", channelId: "42" });
   assert.deepEqual(codes.parseCallback("b:h"), { kind: "bonus" });
-  for (const bad of ["b:c:0", "b:c:-1", "b:c:01", "b:c:1e3", "b:c:1234567890123456789", "b:c", "b:c:", "b:c:1:2", "b:h:1", "b:x", "b"]) {
+  assert.deepEqual(codes.parseCallback("b:r"), { kind: "bonusRefresh" });
+  assert.deepEqual(codes.parseCallback("b:d"), { kind: "bonusDone" });
+  for (const bad of ["b:c:0", "b:c:-1", "b:c:01", "b:c:1e3", "b:c:1234567890123456789", "b:c", "b:c:", "b:c:1:2", "b:h:1", "b:r:1", "b:d:1", "b:x", "b"]) {
     assert.equal(codes.parseCallback(bad).kind, "unknown", `forged bonus code: ${bad}`);
   }
   for (const bad of ["p:e:balance", "p:e:language", "p:e:points", "p:s:korinish", "f:20", "f:-1", "f:1:2", "l:s:de:p", "l:m:x", "x", "", "p:h:1"]) {
@@ -373,7 +390,7 @@ test("Profilim card: masked phone, study summary, money, completion, buttons (co
   assert.match(s.text, /📞 Telefon: <b>\+998 90 ••• •• 67<\/b>/);
   assert.match(s.text, /🎓 O‘qish: <b>TDPU · 3-kurs<\/b>/);
   assert.match(s.text, /💼 Ish joyi: —/);
-  assert.match(s.text, /💰 12\s500 tanga · ⭐ 2\s000 ball/);
+  assert.match(s.text, /💰 12\s500 tanga · ⭐ bonus 2\s000 so‘m/);
   assert.match(s.text, /Profil 50% to‘ldirilgan/);
   const b = inline(s);
   assert.deepEqual(b.find((x) => x.copy_text)?.copy_text, { text: "https://t.me/slaydx_test_bot?start=ref_abcdefgh" });
@@ -411,19 +428,19 @@ test("section, prompt, saved: values on buttons, danger cancel, success Profilim
 test("Hamyon, referral, Yordam, Til", async () => {
   const w = allScreens("uz").wallet;
   assert.match(w.text, /Balans: <b>12\s500 tanga<\/b>/);
-  assert.match(w.text, /⭐ Shundan bonus: 2\s000 ball/);
+  assert.match(w.text, /⭐ Shundan bonus: 2\s000 so‘m/);
   assert.match(w.text, /<b>\+20\s000 tanga<\/b> — To‘ldirish · Payme · 05\.10\.2026/);
   assert.match(w.text, /<b>−3\s000 tanga<\/b> — Slayd: Iqlim o'zgarishi · 07\.10\.2026/);
-  assert.match(w.text, /<b>\+2\s000 ball<\/b> — Taklif bonusi · Ali/);
+  assert.match(w.text, /<b>\+2\s000 so‘m<\/b> — Taklif bonusi · Ali/);
   assert.match(allScreens("en").wallet.text, /<b>−3\s000 coins<\/b> — Slides: Iqlim o'zgarishi/);
-  const wb = inline(w);
-  // Bonus tasks (docs/bonus/PLAN.md): «🎁 Bonus olish» is the first, full-width, green row.
+  assert.match(allScreens("ru").wallet.text, /<b>\+2\s000 сум<\/b> — Бонус за приглашение · Ali/);
+  assert.match(allScreens("en").wallet.text, /<b>\+2\s000 UZS<\/b> — Invite bonus · Ali/);
+  // B2-Q4: big green «🎁 Bonuslar» (full row), then «💳 To‘ldirish» (web app) — nothing else.
   const wRows = (w.reply_markup as { inline_keyboard: Btn[][] }).inline_keyboard;
-  assert.deepEqual(wRows[0], [{ text: "🎁 Bonus olish", callback_data: "b:h", style: "success" }]);
-  assert.equal(wb[1]!.web_app?.url, "https://slaydx.test/uz/wallet");
-  assert.equal(wb[1]!.style, "primary");
-  assert.equal(wb[2]!.callback_data, "w:r");
-  assert.equal(wb[2]!.text, "👥 Do‘st taklif qilish");
+  assert.deepEqual(wRows, [
+    [{ text: "🎁 Bonuslar", callback_data: "b:h", style: "success" }],
+    [{ text: "💳 To‘ldirish", web_app: { url: "https://slaydx.test/uz/wallet" }, style: "primary" }],
+  ]);
 
   const r = allScreens("uz").referral;
   assert.deepEqual(inline(r).find((b) => b.copy_text)?.copy_text, { text: "https://t.me/slaydx_test_bot?start=ref_abcdefgh" });
@@ -478,44 +495,145 @@ test("cleanFieldValue: one line — newlines/tabs collapse, bidi overrides and o
   assert.equal(fields.cleanFieldValue("👩‍💻 Dev"), "👩‍💻 Dev");
 });
 
-/* ── Bonus olish (docs/bonus/PLAN.md, K1) ── */
+/* ── «Sizning bonuslaringiz» (docs/bonus/PLAN.md, Bonus 2: B2-Q2..Q4) ── */
 
-test("Bonus olish: header, invite task, channel reward/state lines, escaped titles (uz)", () => {
+type Row = Btn[];
+const kbRows = (s: { reply_markup?: unknown }): Row[] => (s.reply_markup as { inline_keyboard: Row[] }).inline_keyboard;
+/** A button as «label | action | style» — the action is the callback, the url without its query, `app:<url>` or `copy`. */
+const brief = (b: Btn) =>
+  [b.text, b.callback_data ?? (b.web_app ? `app:${b.web_app.url}` : b.url?.replace(/\?.*$/, "") ?? (b.copy_text ? "copy" : "")), b.style ?? ""].join(" | ");
+
+test("bonuses message (uz): summary, short explanation, ONE button per task in order — styles and action types — MUTATSIYA B1, B2", () => {
   const s = allScreens("uz").bonus;
-  assert.match(s.text, /^🎁 <b>Bonus olish<\/b>\n/);
-  assert.match(s.text, /<blockquote>⭐ Bonuslardan topilgan: <b>10\s000 ball<\/b><\/blockquote>/);
-  assert.match(s.text, /👥 <b>Do‘st taklif qilish: \+2\s000 har biri<\/b>\nTaklif qilinganlar: <b>3<\/b> · topilgan: <b>6\s000 ball<\/b>/);
-  assert.match(s.text, /📢 <b>1\. SlaydX yangiliklari<\/b> · \+2\s000\n✨ Yangi/);
-  assert.match(s.text, /📢 <b>2\. Talabalar &lt;kanali&gt; &amp; co<\/b> · \+1\s000, 7 kundan keyin yana \+2\s000\n⏳ 7 kun: 4 kun qoldi/);
-  assert.match(s.text, /📢 <b>3\. Paid<\/b> · .*\n✅ Olindi/);
-  assert.match(s.text, /<i>Kanalga obuna bo‘ling, so‘ng «Tekshirish»ni bosing\.<\/i>$/);
-  assert.ok(!s.text.includes("🎉"), "no banner without a payment");
-
-  const rowsOf = (s.reply_markup as { inline_keyboard: Btn[][] }).inline_keyboard;
-  assert.deepEqual(
-    rowsOf.map((r) => r.map((b) => b.callback_data ?? b.url?.replace(/\?.*$/, "") ?? (b.copy_text ? "copy" : ""))),
-    [["https://t.me/share/url", "copy"], ["https://t.me/slaydx_news", "b:c:1"], ["b:c:999999999999999999"], ["https://t.me/+AbCdEf123456", "b:c:5"], ["w:h"]],
-    "claimed channels have no buttons; neither username nor invite link → no subscribe button; private channel → its invite link",
+  assert.equal(
+    s.text,
+    [
+      "🎁 <b>Sizning bonuslaringiz</b>",
+      "",
+      "<blockquote>⭐ Jami olgan bonusingiz: <b>10 000 so‘m</b> · yana olish mumkin: <b>8 000 so‘m</b></blockquote>",
+      "",
+      "Har bir tugma — bitta vazifa: bajaring, bonus hamyoningizga o‘zi tushadi (✅ — bajarilgan). Bonus xizmatlar uchun tanga kabi sarflanadi.",
+      "<i>Kanalga obuna bo‘lgach bonus tushmasa — «Yangilash»ni bosing.</i>",
+    ].join("\n"),
   );
-  assert.deepEqual(rowsOf[1]!.map((b) => [b.text, b.style]), [
-    ["📢 1. Obuna bo‘lish", undefined],
-    ["✅ 1. Tekshirish", "success"],
+  assert.deepEqual(kbRows(s).map((r) => r.map(brief)), [
+    ["✅ Ro‘yxatdan o‘tish · +2 000 so‘m | b:d | success"],
+    ["✅ 3 do‘st taklif qildingiz · +6 000 so‘m | https://t.me/share/url | success"],
+    ["📢 SlaydX yangiliklari · +2 000 so‘m | https://t.me/slaydx_news | "],
+    ["✅ Talabalar <k… · +1 000 so‘m · ⏳ 7 kun: 4 kun | b:d | success"],
+    ["✅ Paid · +1 000 so‘m · ✅ +2 000 | b:d | success"],
+    ["📢 Yopiq kanal · +1 000 so‘m | b:c:999999999999999999 | "],
+    ["📢 Taklif havolali kanal · +1 000 so‘m | https://t.me/+AbCdEf123456 | "],
+    ["💳 Birinchi to‘ldirish · +10% (50 000 so‘mdan) | app:https://slaydx.test/uz/wallet | "],
+    ["🔄 Yangilash | b:r | ", "⬅️ Hamyon | w:h | "],
   ]);
-  assert.equal(rowsOf[2]![0]!.text, "✅ 4. Tekshirish", "numbered like the list");
-  assert.deepEqual(rowsOf[0]![1]!.copy_text, { text: "https://t.me/slaydx_test_bot?start=ref_abcdefgh" });
-  assert.equal(rowsOf[0]![0]!.style, "primary");
-  assert.equal(rowsOf.at(-1)![0]!.text, "⬅️ Hamyonga qaytish");
+  // The share sheet carries the personal referral link and the share text.
+  const share = new URL(kbRows(s)[1]![0]!.url!);
+  assert.equal(share.searchParams.get("url"), "https://t.me/slaydx_test_bot?start=ref_abcdefgh");
+  assert.match(share.searchParams.get("text") ?? "", /SlaydX/);
+  // The top-up opens the plain wallet URL: inline web_app buttons carry initData, no personal `?bt=` link in the chat.
+  assert.ok(!kbRows(s)[7]![0]!.web_app!.url.includes("bt="));
 });
 
-test("Bonus olish: success banner, due state, empty list, ru/en, stay notice", () => {
-  const paid = allScreens("uz").bonusPaid.text;
-  assert.match(
-    paid,
-    /^<blockquote>🎉 <b>\+1\s000 ball!<\/b>\n«SlaydX &lt;yangi&gt;» obunasi uchun ball hamyoningizga qo‘shildi\.\n7 kun obuna bo‘lib qolsangiz — yana \+2\s000 ball\.<\/blockquote>\n\n🎁 <b>Bonus olish<\/b>/,
-  );
-  const zero = bonus.bonusScreen("uz", bonusTasks(), BONUS_NOW, { points: 0, title: "X", stayBonus: 2000, stayDays: 7 });
-  assert.match(zero.text, /^✅ <b>Obuna tasdiqlandi<\/b>\n\n/);
+test("bonuses message: before the first invite / after the first top-up; no public URLs; empty channel list", async () => {
+  const f = allScreens("uz").bonusFresh;
+  assert.equal(brief(kbRows(f)[1]![0]!), "👥 Do‘st taklif qilish · +2 000 so‘m har biri | https://t.me/share/url | primary");
+  assert.equal(brief(kbRows(f).at(-2)![0]!), "✅ Birinchi to‘ldirish · +5 000 so‘m | b:d | success");
 
+  // An account from before the sign-up bonus: still done, no amount.
+  const old = bonus.bonusScreen("uz", { ...bonusTasks(), signupPoints: 0 }, BONUS_NOW);
+  assert.equal(brief(kbRows(old)[0]![0]!), "✅ Ro‘yxatdan o‘tish | b:d | success");
+
+  // No channels: sign-up, invite, top-up, the last row.
+  assert.deepEqual(kbRows(allScreens("uz").bonusEmpty).map((r) => r.length), [1, 1, 1, 2]);
+
+  const { env } = (await import("../lib/server/env.ts")) as unknown as { env: { appUrl: string } };
+  const prev = env.appUrl;
+  env.appUrl = "http://localhost:3000";
+  try {
+    const local = bonus.bonusScreen("uz", { ...bonusTasks(), referral: { ...bonusTasks().referral, link: "http://localhost:3000/?ref=abcdefgh" } }, BONUS_NOW);
+    assert.ok(!inline(local).some((b) => b.web_app), "no public URL → no top-up web_app button");
+    assert.deepEqual(kbRows(local)[1]![0]!.copy_text, { text: "http://localhost:3000/?ref=abcdefgh" }, "a local referral link is copied, not shared");
+  } finally {
+    env.appUrl = prev;
+  }
+});
+
+test("bonuses message (ru/en): labels, units, styles; every label ≤ 44 chars after its icon (3 languages, premium on/off)", () => {
+  assert.deepEqual(kbRows(allScreens("ru").bonus).map((r) => r.map(brief)).slice(0, 4), [
+    ["✅ Регистрация · +2 000 сум | b:d | success"],
+    ["✅ Приглашено друзей: 3 · +6 000 сум | https://t.me/share/url | success"],
+    ["📢 SlaydX yangiliklari · +2 000 сум | https://t.me/slaydx_news | "],
+    ["✅ Talabalar <ka… · +1 000 сум · ⏳ 7 дн.: 4 дн. | b:d | success"],
+  ]);
+  assert.match(allScreens("ru").bonus.text, /Всего получено бонусов: <b>10 000 сум<\/b> · можно получить ещё: <b>8 000 сум<\/b>/);
+  assert.deepEqual(kbRows(allScreens("en").bonus).map((r) => r.map(brief)).slice(-2), [
+    ["💳 First top-up · +10% (from 50 000 UZS) | app:https://slaydx.test/uz/wallet | "],
+    ["🔄 Refresh | b:r | ", "⬅️ Wallet | w:h | "],
+  ]);
+  assert.equal(brief(kbRows(allScreens("en").bonusFresh)[1]![0]!), "👥 Invite a friend · +2 000 UZS each | https://t.me/share/url | primary");
+  const long = bonus.bonusScreen(
+    "uz",
+    { ...bonusTasks(), channels: bonusTasks().channels.map((c) => ({ ...c, title: `${c.title} — juda uzun kanal nomi, ataylab cho‘zilgan` })) },
+    BONUS_NOW,
+  );
+  for (const premium of [false, true]) {
+    withPremium(premium, () => {
+      for (const lang of LANGS) {
+        for (const s of [allScreens(lang).bonus, allScreens(lang).bonusFresh, long]) {
+          for (const b of inline(s)) {
+            const label = premium && b.icon_custom_emoji_id ? b.text : b.text.replace(/^\S+ /, "");
+            assert.ok(label.length <= bonus.BONUS_LABEL_MAX, `${lang}: «${b.text}» ${label.length}`);
+            if (b.callback_data) assert.ok(Buffer.byteLength(b.callback_data) <= 64);
+          }
+        }
+      }
+    });
+  }
+  assert.ok(inline(long).some((b) => b.text.includes("…")), "long titles are cut");
+});
+
+test("bonuses message with premium emoji: icon ids on the task buttons, no duplicate emoji in labels", () => {
+  withPremium(true, () => {
+    const s = bonus.bonusScreen("uz", bonusTasks(), BONUS_NOW);
+    assert.ok(s.text.includes(`<tg-emoji emoji-id="${EMOJI_IDS.gift.id}">🎁</tg-emoji> <b>Sizning bonuslaringiz</b>`));
+    // «✅» / «👥» have no premium id: they stay in the label; the top-up («card») gets an icon id and a bare label.
+    assert.deepEqual(kbRows(s)[0]![0]!, { text: "✅ Ro‘yxatdan o‘tish · +2 000 so‘m", callback_data: "b:d", style: "success" });
+    const fresh = bonus.bonusScreen("uz", { ...bonusTasks(), referral: { ...bonusTasks().referral, invitedCount: 0 } }, BONUS_NOW);
+    const invite = kbRows(fresh)[1]![0]!;
+    assert.equal(invite.icon_custom_emoji_id, undefined);
+    assert.equal(invite.text, "👥 Do‘st taklif qilish · +2 000 so‘m har biri");
+    const topup = kbRows(s)[7]![0]!;
+    assert.equal(topup.icon_custom_emoji_id, EMOJI_IDS.card.id);
+    assert.equal(topup.text, "Birinchi to‘ldirish · +10% (50 000 so‘mdan)");
+    const w = scr.walletScreen("uz", USER, []);
+    assert.deepEqual(inline(w)[0], { text: "Bonuslar", icon_custom_emoji_id: EMOJI_IDS.gift.id, callback_data: "b:h", style: "success" });
+  });
+});
+
+test("join / stay notices: so‘m units in 3 languages, escaped titles, «🎁 Bonuslar» button", () => {
+  assert.equal(
+    allScreens("uz").joinNotice.text,
+    "🎉 <b>+1 000 so‘m bonus!</b>\n«Kanal &amp; &lt;b&gt;» kanaliga obuna bo‘lganingiz uchun.\n7 kun obuna bo‘lib qolsangiz — yana +2 000 so‘m.",
+  );
+  assert.equal(
+    bonus.joinPaidNotice("uz", { points: 2000, title: "SlaydX", stayBonus: 0, stayDays: 7 }).text,
+    "🎉 <b>+2 000 so‘m bonus!</b>\n«SlaydX» kanaliga obuna bo‘lganingiz uchun.",
+  );
+  assert.match(allScreens("ru").joinNotice.text, /^🎉 <b>\+1 000 сум бонуса!<\/b>\nЗа подписку на канал «Kanal &amp; &lt;b&gt;»\.\nОстаньтесь подписанным 7 дн\. — и получите ещё \+2 000 сум\.$/);
+  assert.match(allScreens("en").joinNotice.text, /^🎉 <b>\+1 000 UZS bonus!<\/b>/);
+  assert.equal(
+    allScreens("uz").stayNotice.text,
+    "🎉 <b>+2 000 so‘m bonus!</b>\n«Kanal &amp; &lt;b&gt;» kanalida 7 kun qolganingiz uchun rahmat! Bonus hamyoningizga qo‘shildi.",
+  );
+  assert.match(allScreens("en").stayNotice.text, /^🎉 <b>\+2 000 UZS bonus!<\/b>\nThanks for staying in «Kanal &amp; &lt;b&gt;» for 7 days! The bonus is in your wallet\.$/);
+  for (const n of [allScreens("uz").joinNotice, allScreens("uz").stayNotice]) {
+    assert.deepEqual(inline(n).map(brief), ["🎁 Bonuslar | b:h | success"]);
+  }
+  assert.deepEqual(inline(allScreens("ru").joinNotice).map(brief), ["🎁 Бонусы | b:h | success"]);
+});
+
+test("channel state + ledger titles of channel bonuses (unchanged rules)", () => {
   const claim = (agoDays: number, extra: { stayPaid?: number | null; leftAt?: string | null } = {}) => ({
     joinedAt: new Date(BONUS_NOW - agoDays * 86_400_000).toISOString(),
     joinPaid: 1000,
@@ -524,35 +642,59 @@ test("Bonus olish: success banner, due state, empty list, ru/en, stay notice", (
   });
   assert.deepEqual(bonus.channelState({ stayBonus: 2000, stayDays: 7, claim: claim(7) }, BONUS_NOW), { kind: "due" }, "day 7 passed, sweep not run yet");
   assert.deepEqual(bonus.channelState({ stayBonus: 2000, stayDays: 7, claim: claim(0) }, BONUS_NOW), { kind: "wait", daysLeft: 7 });
-  assert.deepEqual(bonus.channelState({ stayBonus: 2000, stayDays: 7, claim: claim(1, { leftAt: new Date(BONUS_NOW).toISOString() }) }, BONUS_NOW), { kind: "done" }, "left: nothing pending");
+  assert.deepEqual(bonus.channelState({ stayBonus: 2000, stayDays: 7, claim: claim(1, { leftAt: new Date(BONUS_NOW).toISOString() }) }, BONUS_NOW), { kind: "done" });
   assert.deepEqual(bonus.channelState({ stayBonus: 0, stayDays: 7, claim: claim(0) }, BONUS_NOW), { kind: "done" });
   assert.deepEqual(bonus.channelState({ stayBonus: 2000, stayDays: 7, claim: null }, BONUS_NOW), { kind: "new" });
+  // A due claim shows 0 days; a channel left before day N shows no stay part (forfeited, B-Q3).
+  const t = bonusTasks();
+  const due = bonus.bonusScreen("uz", { ...t, channels: [{ ...t.channels[1]!, claim: claim(8) }] }, BONUS_NOW);
+  assert.match(kbRows(due)[2]![0]!.text, /· ⏳ 7 kun: 0 kun$/);
+  const left = bonus.bonusScreen("uz", { ...t, channels: [{ ...t.channels[1]!, claim: claim(2, { leftAt: new Date(BONUS_NOW).toISOString() }) }] }, BONUS_NOW);
+  assert.match(kbRows(left)[2]![0]!.text, /· \+1 000 so‘m$/);
 
-  const empty = allScreens("uz").bonusEmpty;
-  assert.match(empty.text, /<i>Hozircha kanal vazifalari yo‘q — tez orada qo‘shiladi\.<\/i>$/);
-  assert.deepEqual(inline(empty).map((b) => b.callback_data ?? "link"), ["link", "link", "w:h"]);
-
-  assert.match(allScreens("ru").bonus.text, /📢 <b>2\. Talabalar &lt;kanali&gt; &amp; co<\/b> · \+1\s000, через 7 дн\. ещё \+2\s000\n⏳ 7 дн\.: осталось 4 дн\./);
-  assert.match(allScreens("en").bonus.text, /✨ New/);
-  assert.equal(inline(allScreens("en").bonus).find((b) => b.callback_data === "b:c:1")?.text, "✅ 1. Check");
-
-  const n = allScreens("uz").stayNotice;
-  assert.equal(n.text, "🎉 <b>+2 000 ball!</b>\n«Kanal &amp; &lt;b&gt;» kanalida 7 kun qolganingiz uchun rahmat! Ball hamyoningizga qo‘shildi.");
-  assert.deepEqual(inline(n).map((b) => [b.text, b.callback_data, b.style]), [["🎁 Boshqa vazifalar", "b:h", "success"]]);
-
-  // Hamyon reads the channel ledger notes back in the user's language.
   assert.equal(scr.ledgerTitle("ru", { kind: "bonus", note: "Kanal obunasi: SlaydX" }), "Подписка на канал · SlaydX");
   assert.equal(scr.ledgerTitle("en", { kind: "bonus", note: "Kanalda qolish bonusi: SlaydX" }), "Channel stay bonus · SlaydX");
   assert.equal(scr.ledgerTitle("uz", { kind: "bonus", note: "Kanal obunasi: SlaydX" }), "Kanal obunasi · SlaydX");
 });
 
-test("Bonus olish with premium emoji: <tg-emoji> gift/party in text, icon ids on buttons, megaphone stays a fallback", () => {
-  withPremium(true, () => {
-    const s = bonus.bonusScreen("uz", bonusTasks(), BONUS_NOW, { points: 1000, title: "X", stayBonus: 0, stayDays: 7 });
-    assert.ok(s.text.includes(`<tg-emoji emoji-id="${EMOJI_IDS.party.id}">🎉</tg-emoji>`));
-    assert.ok(s.text.includes(`<tg-emoji emoji-id="${EMOJI_IDS.gift.id}">🎁</tg-emoji> <b>Bonus olish</b>`));
-    assert.ok(s.text.includes("📢 <b>1. SlaydX yangiliklari</b>"), "no premium id for the megaphone: plain fallback");
-    const w = scr.walletScreen("uz", USER, []);
-    assert.deepEqual(inline(w)[0], { text: "Bonus olish", icon_custom_emoji_id: EMOJI_IDS.gift.id, callback_data: "b:h", style: "success" });
-  });
+test("Hamyon card (B2-Q4): only the LAST 3 entries, inside <blockquote expandable> — MUTATSIYA B3", () => {
+  const entries = Array.from({ length: 5 }, (_, i) => ({ kind: "charge", amount: -(i + 1) * 1000, note: `slide: Mavzu ${i}`, createdAt: "2026-10-07T10:00:00Z" }));
+  const w = scr.walletScreen("uz", USER, entries);
+  assert.equal(scr.WALLET_RECENT, 3);
+  const quote = /<blockquote expandable>🧾 <b>So‘nggi amallar<\/b>\n([\s\S]*?)<\/blockquote>/.exec(w.text);
+  assert.ok(quote, "history is an expandable quote");
+  assert.deepEqual(quote[1]!.split("\n").map((l) => /Mavzu (\d)/.exec(l)?.[1]), ["0", "1", "2"]);
+  assert.ok(!w.text.includes("Mavzu 3"));
+  assert.match(scr.walletScreen("uz", USER, []).text, /<blockquote expandable>🧾 <b>So‘nggi amallar<\/b>\nHali amallar yo‘q\.<\/blockquote>/);
+  assert.match(w.text, /^💰 <b>Hamyon<\/b>\n\n<blockquote>💰 Balans: <b>12 500 tanga<\/b>\n⭐ Shundan bonus: 2 000 so‘m<\/blockquote>\n\n<blockquote expandable>/);
+});
+
+test("/start welcome: a blank line between greeting · pitch · balance quote · app/site (3 languages) — MUTATSIYA B4", () => {
+  for (const lang of LANGS) {
+    const sections = allScreens(lang).welcome.text.split("\n\n");
+    assert.equal(sections.length, 4, `${lang}: ${JSON.stringify(sections)}`);
+    assert.match(sections[0]!, /^👋 <b>/);
+    assert.match(sections[1]!, /^✨ /);
+    assert.match(sections[2]!, /^<blockquote>💰 [\s\S]*<\/blockquote>$/);
+    assert.match(sections[3]!, /^📱 [\s\S]*\n🌐 /);
+  }
+  assert.match(allScreens("uz").welcome.text, /🎁 Do‘st taklif qiling — har biriga <b>2 000 so‘m<\/b>/);
+  assert.match(allScreens("ru").welcome.text, /<b>2 000 сум<\/b> за каждого/);
+  // Without an account (a group): greeting · pitch · app/site.
+  const anon = scr.welcomeScreen("uz", { user: null, loginLink: "https://slaydx.test/api/auth/telegram/enter?t=" + "x".repeat(43), rewardPoints: 2000 });
+  assert.equal(anon.text.split("\n\n").length, 3);
+});
+
+test("units (B2-Q3): bonus amounts are so‘m / сум / UZS everywhere in the bot; no «ball» / «баллов» / «points» left", () => {
+  for (const lang of LANGS) {
+    for (const [name, s] of Object.entries(allScreens(lang))) {
+      const all = `${s.text}\n${JSON.stringify(s.reply_markup ?? {})}`;
+      assert.doesNotMatch(all, /\bball\b|балл|\bpoints?\b/i, `${lang}/${name}`);
+    }
+  }
+  assert.match(allScreens("uz").referral.text, /Har bir yangi do'st uchun 2 000 so'm bonus\./);
+  assert.match(allScreens("uz").referral.text, /Taklif qilinganlar: <b>3<\/b> · Topilgan bonus: <b>6 000 so'm<\/b>/);
+  assert.match(allScreens("en").referral.text, /Bonus earned: <b>6 000 UZS<\/b>/);
+  assert.match(allScreens("ru").profile.text, /бонус 2 000 сум/);
+  assert.equal(i18n.t("en", "unit.som", { n: "1 000" }), "1 000 UZS");
 });

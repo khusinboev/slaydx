@@ -517,8 +517,9 @@ export type TelegramUpdate = {
     data?: string;
   };
   /**
-   * A member's status changed in a chat where the bot is an admin (bonus channels: leaving
-   * before day N forfeits the stay bonus, `bonus-channels.ts recordChannelLeave`). Sent only
+   * A member's status changed in a chat where the bot is an admin (bonus channels: joining
+   * pays the join bonus, `recordChannelJoin` — the only reply is that user's «+N so‘m» notice;
+   * leaving before day N forfeits the stay bonus, `recordChannelLeave`). Sent only
    * when `allowed_updates` names it explicitly (webhook and `scripts/bot.mts`). No reply.
    */
   chat_member?: {
@@ -796,10 +797,12 @@ async function botUser(
 
 async function processUpdate(update: TelegramUpdate): Promise<void> {
   if (update.chat_member) {
-    // Loaded lazily, and only for a leave (joins and other changes need no database round trip).
+    // Loaded lazily. A leave forfeits the unpaid stay bonus; a join pays the join bonus at once
+    // (B2-Q2, `recordChannelJoin` never throws). Other changes need no database round trip.
     const cm = update.chat_member;
     const bonus = await import("./bonus-channels");
     if (bonus.isLeaveStatus(cm.new_chat_member)) await bonus.recordChannelLeave(cm);
+    else if (bonus.isJoinStatus(cm.new_chat_member)) await bonus.recordChannelJoin(cm);
     return;
   }
   if (update.inline_query) {

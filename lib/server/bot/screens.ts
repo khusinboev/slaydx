@@ -32,14 +32,17 @@ export type WelcomeInput = {
  */
 export function welcomeScreen(lang: Lang, w: WelcomeInput): Screen {
   const name = w.user?.name?.trim();
+  // Sections (greeting · pitch · balance/referral quote · app/site) are separated by a blank line.
   const lines = [
     `${tgEmoji("wave")} <b>${name ? t(lang, "welcome.hello", { name: esc(name) }) : t(lang, "welcome.helloAnon")}</b>`,
+    "",
     `${tgEmoji("sparkles")} ${t(lang, "welcome.pitch")}`,
   ];
   if (w.user) {
     lines.push(
+      "",
       `<blockquote>${tgEmoji("wallet")} ${t(lang, "welcome.balance", { n: t(lang, "unit.tanga", { n: formatPoints(creditTotal(w.user)) }) })}\n` +
-        `${tgEmoji("gift")} ${t(lang, "welcome.invite", { n: t(lang, "unit.ball", { n: formatPoints(w.rewardPoints) }) })}</blockquote>`,
+        `${tgEmoji("gift")} ${t(lang, "welcome.invite", { n: t(lang, "unit.som", { n: formatPoints(w.rewardPoints) }) })}</blockquote>`,
     );
   }
   lines.push("", `${tgEmoji("app")} ${t(lang, "welcome.app")}`, `${tgEmoji("web")} ${t(lang, "welcome.site")}`);
@@ -200,33 +203,39 @@ export function ledgerLine(lang: Lang, e: LedgerItem): string {
   const n = Math.round(Number.isFinite(e.amount) ? e.amount : 0);
   const body = formatPoints(Math.abs(n));
   const amount = n > 0 ? `+${body}` : n < 0 ? `−${body}` : body;
-  const unit = e.kind === "bonus" ? "unit.ball" : "unit.tanga";
+  // Bonus amounts in so‘m (B2-Q3); everything else is the tanga balance.
+  const unit = e.kind === "bonus" ? "unit.som" : "unit.tanga";
   return `<b>${t(lang, unit, { n: amount })}</b> — ${esc(clip(ledgerTitle(lang, e), 60))} · ${formatJoinDate(e.createdAt)}`;
 }
 
+/** Ledger entries on the Hamyon card (owner, B2-Q4): the last 3, folded into an expandable quote. */
+export const WALLET_RECENT = 3;
+
+/**
+ * Hamyon card (B2-Q4): balance (tanga) with its bonus share (so‘m), the last
+ * WALLET_RECENT ledger entries in a `<blockquote expandable>`, then a big green
+ * «🎁 Bonuslar» (full row) and «💳 To‘ldirish» (web app — payment stays in the app).
+ */
 export function walletScreen(lang: Lang, user: Pick<ProfileUser, "points" | "quota" | "balance">, recent: LedgerItem[]): Screen {
   const quote = [`${tgEmoji("wallet")} ${t(lang, "wallet.balance", { n: t(lang, "unit.tanga", { n: formatPoints(creditTotal(user)) }) })}`];
-  if (user.points > 0) quote.push(`${tgEmoji("star")} ${t(lang, "wallet.bonus", { n: t(lang, "unit.ball", { n: formatPoints(user.points) }) })}`);
+  if (user.points > 0) quote.push(`${tgEmoji("star")} ${t(lang, "wallet.bonus", { n: t(lang, "unit.som", { n: formatPoints(user.points) }) })}`);
+  const last = recent.slice(0, WALLET_RECENT);
+  const history = last.length ? last.map((e) => ledgerLine(lang, e)).join("\n") : t(lang, "wallet.none");
   const text = [
     `${tgEmoji("wallet")} <b>${t(lang, "wallet.title")}</b>`,
     "",
     `<blockquote>${quote.join("\n")}</blockquote>`,
     "",
-    `${tgEmoji("receipt")} <b>${t(lang, "wallet.recent")}</b>`,
-    recent.length ? recent.map((e) => ledgerLine(lang, e)).join("\n") : t(lang, "wallet.none"),
+    `<blockquote expandable>${tgEmoji("receipt")} <b>${t(lang, "wallet.recent")}</b>\n${history}</blockquote>`,
     "",
     `${tgEmoji("card")} <i>${t(lang, "wallet.payNote")}</i>`,
   ].join("\n");
   const wallet = appUrl("/uz/wallet");
   return {
     text,
-    // «🎁 Bonus olish» first, full width, green (docs/bonus/PLAN.md flows).
     reply_markup: rows(
       [inlineButton("gift", t(lang, "btn.bonus"), { callback_data: cb.bonus() }, "success")],
-      [
-        wallet ? inlineButton("card", t(lang, "btn.topup"), { web_app: { url: wallet } }, "primary") : null,
-        inlineButton("group", t(lang, "btn.inviteFriend"), { callback_data: cb.walletInvite() }),
-      ],
+      [wallet ? inlineButton("card", t(lang, "btn.topup"), { web_app: { url: wallet } }, "primary") : null],
     ),
   };
 }
