@@ -11,7 +11,7 @@ import { adminGet, adminSend, type AdminCallOptions, type AdminParams, type List
 export const BROADCAST_STATUSES = ["draft", "queued", "sending", "done", "cancelled"] as const;
 export type BroadcastStatus = (typeof BROADCAST_STATUSES)[number];
 
-export type Audience = { kind: "all" } | { kind: "paid" } | { kind: "active_days"; days: number };
+export type Audience = { kind: "all" } | { kind: "paid" } | { kind: "active_days"; days: number } | { kind: "new_days"; days: number };
 export type AudienceKind = Audience["kind"];
 
 /** Message cap in characters (code points), after trim. */
@@ -69,7 +69,7 @@ export function listBroadcasts(q: BroadcastListQuery, opts?: AdminCallOptions): 
 
 /** Live recipient count: users with a Telegram chat who are not blocked and match the audience. */
 export function getAudienceCount(a: Audience, opts?: AdminCallOptions): Promise<{ count: number }> {
-  return adminGet<{ count: number }>("/api/admin/broadcasts/audience", { kind: a.kind, days: a.kind === "active_days" ? a.days : undefined }, opts);
+  return adminGet<{ count: number }>("/api/admin/broadcasts/audience", { kind: a.kind, days: "days" in a ? a.days : undefined }, opts);
 }
 
 export function getBroadcast(id: string, opts?: AdminCallOptions): Promise<BroadcastDetail> {

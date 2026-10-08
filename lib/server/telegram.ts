@@ -492,6 +492,12 @@ export type TelegramUpdate = {
     forward_origin?: unknown;
     forward_date?: number;
     forward_from?: { id: number };
+    // Admin panel input (docs/bot-admin/PLAN.md): a broadcast message as the admin sent it.
+    caption?: string;
+    entities?: unknown[];
+    caption_entities?: unknown[];
+    photo?: Array<{ file_id: string; width?: number; height?: number; file_size?: number }>;
+    video?: { file_id: string };
   };
   /**
    * Inline mode (`@bot …` typed in any chat). Arrives only when inline mode
@@ -830,10 +836,17 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
     const forwarded = msg.forward_origin != null || msg.forward_date != null || msg.forward_from != null;
     const known = isPrivate ? await bot.userByTelegram(msg.from.id) : null;
     const lang = langOf(known?.language);
-    const keyboard = known ? mainKeyboard(lang, msg.from.id) : null;
+    const { isLinkedAdmin } = await import("./bot/admin-access");
+    const keyboard = known ? mainKeyboard(lang, msg.from.id, undefined, { admin: await isLinkedAdmin(msg.from.id) }) : null;
     const sent = await handleContact(msg.chat.id, msg.from.id, msg.contact, forwarded, msg.chat.type === "private", lang, keyboard);
     if (sent && known) await bot.markKeyboardSent(msg.chat.id, known.id);
     return;
+  }
+  // An admin panel step waiting for input (a broadcast text / photo / video, a button, a channel
+  // forward or @username, a step-up code). The admin account is re-checked inside.
+  if (isPrivate) {
+    const adminBot = await import("./bot/admin");
+    if (await adminBot.handleAdminInput(msg, update.update_id)) return;
   }
   if (!msg.text) return;
 
@@ -871,6 +884,9 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
       // A command always wins over a pending «Kafedra nomini yozing».
       await bot.cancelPending(ctx.chatId);
     } else {
+      // «🛠 Admin» (only linked admins have the button; anyone else's text falls through as usual).
+      const adminBot = await import("./bot/admin");
+      if (adminBot.isAdminButtonText(text) && (await adminBot.openPanel(ctx.chatId, ctx.telegramId))) return;
       const action = bot.matchKeyboard(text);
       if (action) {
         await bot.handleKeyboard(ctx, action);
@@ -895,6 +911,14 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
   }
 
   if (text.startsWith("/admin")) {
+    // A linked admin gets the panel (and the keyboard with its «🛠 Admin» row); anyone else keeps the contact flow.
+    if (ctx) {
+      const adminBot = await import("./bot/admin");
+      if (await adminBot.openPanel(ctx.chatId, ctx.telegramId)) {
+        await bot.sendMainKeyboard(ctx, "refreshed");
+        return;
+      }
+    }
     await sendMessage(msg.chat.id, t(lang, "admin.ask"), {
       reply_markup: {
         keyboard: [[{ text: `📱 ${t(lang, "admin.shareButton")}`, request_contact: true }]],

@@ -15,7 +15,7 @@ const KIND_OPTIONS: ReadonlyArray<FilterOption> = [
 
 /** `kind` + the text of the days field → a valid audience, or `null` while the days are not 1..365. */
 export function audienceFrom(kind: AudienceKind, daysText: string): Audience | null {
-  if (kind !== "active_days") return { kind };
+  if (kind === "all" || kind === "paid") return { kind };
   if (!/^\d{1,3}$/.test(daysText)) return null;
   const days = Number(daysText);
   return days >= 1 && days <= AUDIENCE_DAYS_MAX ? { kind, days } : null;
