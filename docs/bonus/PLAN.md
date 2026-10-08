@@ -68,3 +68,4 @@ Ledger refs: `channel:<channel_id>:<user_id>:join`, `channel:<channel_id>:<user_
   the sweep settles older such rows the same way without a Bot API call; «Kutilmoqda» counts only channels with a stay bonus.
 - Migration 043: index `bonus_channel_claims (channel_id)` (admin stats, the channel delete check, the FK cascade).
 - Sweep: batch **200** per run (every 10 min), time budget **15 s** (the rest continue next run), ≤ 20 Bot API calls/s.
+- Admin page renders an invite link as a link only if it matches `^https://t.me/+[A-Za-z0-9_-]{8,64}$` (else as text).

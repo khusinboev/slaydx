@@ -79,6 +79,16 @@ export function amountsDraft(a: Amounts): AmountsDraft {
   return { joinBonus: String(a.joinBonus), stayBonus: String(a.stayBonus), stayDays: String(a.stayDays) };
 }
 
+const SAFE_INVITE = /^https:\/\/t\.me\/\+[A-Za-z0-9_-]{8,64}$/;
+
+/**
+ * A stored invite link usable as an `href`: exactly `https://t.me/+<hash>` (what the server
+ * stores), else `null` — the row then shows the value as plain text, never as a link.
+ */
+export function inviteHref(link: string | null): string | null {
+  return link && SAFE_INVITE.test(link) ? link : null;
+}
+
 export function channelUrl(username: string | null): string | null {
   return username ? `https://t.me/${username}` : null;
 }
