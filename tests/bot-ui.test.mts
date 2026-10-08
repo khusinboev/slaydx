@@ -81,7 +81,7 @@ function bonusTasks() {
   const day = 86_400_000;
   return {
     channels: [
-      { id: "1", title: "SlaydX yangiliklari", username: "slaydx_news", joinUrl: "https://t.me/slaydx_news", joinBonus: 2000, stayBonus: 0, stayDays: 7, claim: null },
+      { id: "1", title: "SlaydX yangiliklari", username: "slaydx_news", joinUrl: "https://t.me/slaydx_news", joinBonus: 2000, stayBonus: 0, stayDays: 7, mandatory: false, claim: null },
       {
         id: "2",
         title: "Talabalar <kanali> & co",
@@ -90,6 +90,7 @@ function bonusTasks() {
         joinBonus: 1000,
         stayBonus: 2000,
         stayDays: 7,
+        mandatory: false,
         claim: { joinedAt: new Date(BONUS_NOW - 3 * day - 3_600_000).toISOString(), joinPaid: 1000, stayPaid: null, leftAt: null },
       },
       {
@@ -100,10 +101,11 @@ function bonusTasks() {
         joinBonus: 1000,
         stayBonus: 2000,
         stayDays: 7,
+        mandatory: false,
         claim: { joinedAt: new Date(BONUS_NOW - 9 * day).toISOString(), joinPaid: 1000, stayPaid: 2000, leftAt: null },
       },
-      { id: "999999999999999999", title: "Yopiq kanal", username: null, joinUrl: null, joinBonus: 1000, stayBonus: 2000, stayDays: 7, claim: null },
-      { id: "5", title: "Taklif havolali kanal", username: null, joinUrl: "https://t.me/+AbCdEf123456", joinBonus: 1000, stayBonus: 0, stayDays: 7, claim: null },
+      { id: "999999999999999999", title: "Yopiq kanal", username: null, joinUrl: null, joinBonus: 1000, stayBonus: 2000, stayDays: 7, mandatory: false, claim: null },
+      { id: "5", title: "Taklif havolali kanal", username: null, joinUrl: "https://t.me/+AbCdEf123456", joinBonus: 1000, stayBonus: 0, stayDays: 7, mandatory: false, claim: null },
     ],
     referral: { link: "https://t.me/slaydx_test_bot?start=ref_abcdefgh", rewardPoints: 2000, invitedCount: 3, earnedPoints: 6000 },
     signupPoints: 2000,

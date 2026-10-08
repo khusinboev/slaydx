@@ -958,7 +958,11 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
     // personal links are refreshed by every /start.
     const screen = welcomeScreen(lang, { user: me, loginLink: await createBotLoginLink(profile), rewardPoints: REFERRAL_REWARD_POINTS });
     await sendMessage(msg.chat.id, screen.text, markupOf(screen));
-    if (ctx) await bot.sendMainKeyboard(ctx, "note");
+    if (ctx) {
+      await bot.sendMainKeyboard(ctx, "note");
+      // C-Q2: mandatory channels not joined yet → a short card with their buttons.
+      await bot.sendMandatoryCard(ctx);
+    }
     return;
   }
 
