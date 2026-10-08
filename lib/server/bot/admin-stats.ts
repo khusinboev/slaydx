@@ -10,12 +10,12 @@ import { callBot } from "../telegram";
  *     (the dashboard's `activeUsers`);
  *   - revenue = `payment_orders` in state `paid` by `perform_time` (gross, so‘m);
  *   - bonuses = `transactions` of kind `bonus` by ledger reference (all time):
- *     `channel:<c>:<u>:join|stay`, `referral:<u>`, `signup:<u>`, `first-topup:<u>`;
+ *     `channel:<c>:<u>:join|stay`, `referral:<u>`, `signup:<u>`, `payment-bonus:<order>`, `first-topup:<u>` (history);
  *   - channel members = Telegram `getChatMemberCount` (best effort, `null` when it
  *     fails) and the users who got its join bonus and did not leave.
  */
 
-export type BonusKind = "join" | "stay" | "invite" | "signup" | "first" | "other";
+export type BonusKind = "join" | "stay" | "invite" | "signup" | "pay" | "first" | "other";
 
 export type BotStats = {
   at: Date;
@@ -73,6 +73,7 @@ SELECT CASE
          WHEN reference LIKE 'channel:%:stay' THEN 'stay'
          WHEN reference LIKE 'referral:%' THEN 'invite'
          WHEN reference LIKE 'signup:%' THEN 'signup'
+         WHEN reference LIKE 'payment-bonus:%' THEN 'pay'
          WHEN reference LIKE 'first-topup:%' THEN 'first'
          ELSE 'other'
        END AS kind,
@@ -91,7 +92,7 @@ SELECT c.id::text AS id, c.chat_id::text AS chat_id, c.title,
  ORDER BY c.sort, c.id
  LIMIT 10`;
 
-const BONUS_ORDER: BonusKind[] = ["join", "stay", "invite", "signup", "first", "other"];
+const BONUS_ORDER: BonusKind[] = ["join", "stay", "invite", "signup", "pay", "first", "other"];
 
 export async function botStats(opts: { channelMembers?: boolean } = {}): Promise<BotStats> {
   const data = await readOnlyMetricsTx(async (c) => {

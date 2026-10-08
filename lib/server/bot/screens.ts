@@ -185,6 +185,9 @@ export function ledgerTitle(lang: Lang, e: Pick<LedgerItem, "kind" | "note">): s
       if (join) return t(lang, "ledger.channelJoin", { c: join });
       const stay = /^Kanalda qolish bonusi:\s*(.+)$/.exec(note)?.[1];
       if (stay) return t(lang, "ledger.channelStay", { c: stay });
+      // Payment bonus «To‘lov bonusi (N%)» (`lib/payment-bonus.ts paymentBonusNote`).
+      const pay = /^To[‘']lov bonusi \((\d{1,2})%\)$/.exec(note)?.[1];
+      if (pay) return t(lang, "ledger.paymentBonus", { p: pay });
       if (/^Birinchi to[‘']ldirish bonusi/.test(note)) return t(lang, "ledger.firstTopup");
       return lang === "uz" && note ? note : t(lang, "ledger.bonus");
     }
@@ -216,8 +219,15 @@ export const WALLET_RECENT = 3;
  * Hamyon card (B2-Q4): balance (tanga) with its bonus share (so‘m), the last
  * WALLET_RECENT ledger entries in a `<blockquote expandable>`, then a big green
  * «🎁 Bonuslar» (full row) and «💳 To‘ldirish» (web app — payment stays in the app).
+ * `bonusPercent` > 0 (C-Q4 payment bonus, `payment-bonus.ts getPaymentBonusPercent`) adds the
+ * «Har bir to‘ldirishga +N% bonus» line above the payment note.
  */
-export function walletScreen(lang: Lang, user: Pick<ProfileUser, "points" | "quota" | "balance">, recent: LedgerItem[]): Screen {
+export function walletScreen(
+  lang: Lang,
+  user: Pick<ProfileUser, "points" | "quota" | "balance">,
+  recent: LedgerItem[],
+  bonusPercent = 0,
+): Screen {
   const quote = [`${tgEmoji("wallet")} ${t(lang, "wallet.balance", { n: t(lang, "unit.tanga", { n: formatPoints(creditTotal(user)) }) })}`];
   if (user.points > 0) quote.push(`${tgEmoji("star")} ${t(lang, "wallet.bonus", { n: t(lang, "unit.som", { n: formatPoints(user.points) }) })}`);
   const last = recent.slice(0, WALLET_RECENT);
@@ -229,6 +239,7 @@ export function walletScreen(lang: Lang, user: Pick<ProfileUser, "points" | "quo
     "",
     `<blockquote expandable>${tgEmoji("receipt")} <b>${t(lang, "wallet.recent")}</b>\n${history}</blockquote>`,
     "",
+    ...(bonusPercent > 0 ? [`${tgEmoji("gift")} ${t(lang, "wallet.payBonus", { p: Math.floor(bonusPercent) })}`] : []),
     `${tgEmoji("card")} <i>${t(lang, "wallet.payNote")}</i>`,
   ].join("\n");
   const wallet = appUrl("/uz/wallet");

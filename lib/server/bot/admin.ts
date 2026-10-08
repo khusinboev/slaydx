@@ -32,6 +32,8 @@ import {
   sendBroadcastContent,
   type BroadcastContent,
 } from "../broadcast-content";
+import { getPaymentBonusPercent, setPaymentBonusPercent } from "../payment-bonus";
+import { isPaymentBonusPercent } from "../../payment-bonus";
 import { cancelInput } from "./state";
 import { editScreen, sendScreen } from "./router";
 import { matchKeyboard } from "./keyboard";
@@ -55,6 +57,9 @@ import {
   draftScreen,
   inputProblemScreen,
   panelScreen,
+  payBonusAskScreen,
+  payBonusConfirmScreen,
+  payBonusScreen,
   progressScreen,
   statsScreen,
   stepUpScreen,
@@ -79,7 +84,8 @@ import { esc, tgEmoji, type Screen } from "./ui";
 
 /**
  * In-bot admin panel (docs/bot-admin/PLAN.md): «📊 Statistika», «📣 Xabar
- * yuborish», «📢 Kanal ulash». Every message and button re-reads the admin
+ * yuborish», «📢 Kanal ulash», «💳 To‘lov bonusi» (C-Q4: the web's
+ * `payment_bonus_percent` setting via `payment-bonus.ts`). Every message and button re-reads the admin
  * account (`admin-access.ts lookupAdmin`) and checks the role's permission
  * for THAT action; every change goes through the web's admin services
  * (`admin-broadcasts.ts`, `admin-bonus-channels.ts`) with an audit actor, so
@@ -119,12 +125,16 @@ const PERM: Record<Exclude<AdminCallback["kind"], "unknown">, Permission> = {
   chTypes: "bonus.edit",
   chCreate: "bonus.edit",
   chToggle: "bonus.edit",
+  payBonus: "settings.view",
+  pbOther: "settings.edit",
+  pbPick: "settings.edit",
+  pbSet: "settings.edit",
 };
 
 /** The confirmed changes: in 2FA mode they need a fresh bot step-up. */
-const CONFIRMS = new Set<AdminCallback["kind"]>(["bcSend", "bcStop", "chCreate", "chToggle"]);
+const CONFIRMS = new Set<AdminCallback["kind"]>(["bcSend", "bcStop", "chCreate", "chToggle", "pbSet"]);
 
-const STEP_PERM = { bc_msg: "broadcasts.send", bc_btn: "broadcasts.send", ch_ref: "bonus.edit", totp: "self" } as const;
+const STEP_PERM = { bc_msg: "broadcasts.send", bc_btn: "broadcasts.send", ch_ref: "bonus.edit", pb_val: "settings.edit", totp: "self" } as const;
 
 /** Admin actions per minute per account (reads and taps; the services keep their own limits). */
 export const ADMIN_BOT_RATE = { limit: 60, windowSec: 60 };
@@ -137,7 +147,21 @@ const REASON = {
   discard: "Telegram botda qoralama bekor qilindi",
   channel: "Telegram bot orqali ulandi",
   toggle: "Telegram bot orqali o'zgartirildi",
+  payBonus: "Telegram bot orqali to'lov bonusi o'zgartirildi",
 };
+
+/** The panel with the current payment bonus on its «💳 To‘lov bonusi: N%» button. */
+async function panel(a: BotAdmin): Promise<Screen> {
+  return panelScreen(a, await getPaymentBonusPercent());
+}
+
+/** A typed percent: a whole number 0–50 («10», «10%», « 7 »), else `null`. The service validates again. */
+export function percentFromText(raw: string | undefined): number | null {
+  const m = /^\s*(\d{1,2})\s*%?\s*$/.exec(raw ?? "");
+  if (!m) return null;
+  const n = Number(m[1]);
+  return isPaymentBonusPercent(n) ? n : null;
+}
 
 async function denied(a: BotAdmin, perm: Permission, updateId: number): Promise<void> {
   const r = await rateLimit(`admin-denied:${a.adminId}`, DENIED_LIMIT, 60, { failClosed: true });
@@ -170,7 +194,7 @@ export async function openPanel(chatId: number, telegramId: number): Promise<boo
   if (!admin) return false;
   await cancelInput(chatId);
   await clearState(chatId);
-  await sendScreen(chatId, panelScreen(admin));
+  await sendScreen(chatId, await panel(admin));
   return true;
 }
 
@@ -287,7 +311,7 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
   switch (c.kind) {
     case "panel":
       await clearState(chatId);
-      await edit(panelScreen(a));
+      await edit(await panel(a));
       return undefined;
     case "close":
       await clearState(chatId);
@@ -296,7 +320,7 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
     case "cancel":
       if (isBc(d)) await discardBroadcast(a, d, updateId);
       await clearState(chatId);
-      await edit(panelScreen(a));
+      await edit(await panel(a));
       return at(l, "toast.cancelled");
     case "stats":
       await edit(statsScreen(a, await botStats()));
@@ -416,6 +440,26 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
       await updateBonusChannel(actorOf(a, updateId), c.id, { active: !cur.active, reason: REASON.toggle });
       await edit(channelsScreen(a, (await listBonusChannels()).items));
       return at(l, cur.active ? "toast.chOff" : "toast.chOn");
+    }
+
+    /* ── payment bonus (C-Q4): the web's setting, through `payment-bonus.ts` ── */
+    case "payBonus":
+      await clearState(chatId);
+      await edit(payBonusScreen(a, await getPaymentBonusPercent()));
+      return undefined;
+    case "pbOther":
+      await cancelInput(chatId);
+      await edit(payBonusAskScreen(l));
+      await writeState(chatId, a.adminId, { step: "pb_val", draft: null, promptMessageId: messageId });
+      return undefined;
+    case "pbPick":
+      await edit(payBonusConfirmScreen(l, await getPaymentBonusPercent(), c.percent));
+      return undefined;
+    case "pbSet": {
+      const now = await setPaymentBonusPercent(actorOf(a, updateId), c.percent, REASON.payBonus, { via: "bot" });
+      await clearState(chatId);
+      await edit(payBonusScreen(a, now));
+      return at(l, "toast.pbSaved", { p: now });
     }
   }
 }
@@ -576,6 +620,14 @@ export async function handleAdminInput(m: AdminMessage, updateId: number): Promi
       const d: ChannelDraft = { t: "ch", chatId: resolved.chatId, title: resolved.title, username: resolved.username, botAdmin: resolved.botAdmin };
       await sendScreen(chatId, channelTypeScreen(l, d));
       await writeState(chatId, admin.adminId, { step: null, draft: d });
+      return true;
+    }
+    case "pb_val": {
+      const p = percentFromText(text);
+      if (p === null) return reprompt(payBonusAskScreen(l, at(l, "pb.bad"))).then(() => true);
+      await clearPrompt();
+      await sendScreen(chatId, payBonusConfirmScreen(l, await getPaymentBonusPercent(), p));
+      await writeState(chatId, admin.adminId, { step: null, draft: null });
       return true;
     }
     case "totp":

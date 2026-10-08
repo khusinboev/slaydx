@@ -1,5 +1,4 @@
 import { formatPoints, telegramShareUrl } from "../../referral";
-import { FIRST_TOPUP_MIN_SOUM, FIRST_TOPUP_PERCENT } from "../../topup-bonus";
 import type { BonusTasks, ChannelTask } from "../bonus-channels";
 import { cb } from "./codes";
 import { t, type Lang } from "./i18n";
@@ -80,21 +79,18 @@ function inviteButton(lang: Lang, r: BonusTasks["referral"]): InlineButton {
     : inlineButton("group", t(lang, "task.invite", { n: som(lang, r.rewardPoints) }), action, "primary");
 }
 
-function topupButton(lang: Lang, f: BonusTasks["firstTopup"]): InlineButton | null {
-  if (f.paid) return inlineButton("save", t(lang, "task.topupPaid", { n: som(lang, f.points) }), { callback_data: cb.bonusDone() }, "success");
-  // Already topped up before (or a first top-up under the minimum): the bonus can no longer be earned — no button.
-  if (!f.eligible) return null;
+/** C-Q4: «💳 Har to‘ldirishga +N% bonus» → the wallet web app; no button while the bonus is off (N = 0). */
+function topupButton(lang: Lang, b: BonusTasks["paymentBonus"]): InlineButton | null {
+  if (!(b.percent > 0)) return null;
   // An INLINE web_app button carries initData: the plain URL logs in silently (no personal `?bt=` link in chat history).
   const wallet = appUrl("/uz/wallet");
-  return wallet
-    ? inlineButton("card", t(lang, "task.topup", { p: FIRST_TOPUP_PERCENT, m: som(lang, FIRST_TOPUP_MIN_SOUM) }), { web_app: { url: wallet } })
-    : null;
+  return wallet ? inlineButton("card", t(lang, "task.topup", { p: b.percent }), { web_app: { url: wallet } }) : null;
 }
 
 /**
  * «Sizning bonuslaringiz»: the summary (earned · still available), a short
  * explanation, then one button per task — sign-up, invite friends, each active
- * channel, the first top-up — and [«🔄 Yangilash»][«⬅️ Hamyon»].
+ * channel, the payment bonus — and [«🔄 Yangilash»][«⬅️ Hamyon»].
  */
 export function bonusScreen(lang: Lang, tasks: BonusTasks, now: number): Screen {
   const channels = tasks.channels.slice(0, BONUS_MAX_CHANNELS);
@@ -114,7 +110,7 @@ export function bonusScreen(lang: Lang, tasks: BonusTasks, now: number): Screen 
       [inlineButton("save", signup, { callback_data: cb.bonusDone() }, "success")],
       [inviteButton(lang, tasks.referral)],
       ...channels.map((c) => [channelButton(lang, c, now)]),
-      [topupButton(lang, tasks.firstTopup)],
+      [topupButton(lang, tasks.paymentBonus)],
       [
         inlineButton("refresh", t(lang, "btn.refresh"), { callback_data: cb.bonusRefresh() }),
         inlineButton("back", t(lang, "btn.wallet"), { callback_data: cb.wallet() }),
