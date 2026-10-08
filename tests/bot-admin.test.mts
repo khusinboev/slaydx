@@ -473,3 +473,24 @@ test("2FA mode: an un-enrolled admin has no panel; an enrolled one must give a c
     delete process.env.ADMIN_2FA_REQUIRED;
   }
 });
+
+test("Xabar yuborish: a CONCURRENT double tap on «Yuborish» without a test creates and queues exactly ONE broadcast (review MAJOR)", { skip }, async () => {
+  const a = await newAdmin("owner");
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, "a:b", 950));
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "Ikki marta bosish sinovi"));
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, "a:ba", 951));
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, "a:bu:new", 951));
+  const nw = (await audienceCount({ kind: "new_days", days: 7 })).count;
+  installFetch();
+  // Two separate updates (different update ids) handled at the same time — no earlier test send.
+  // MUTATION: without the per-chat lock in ensureBroadcast both taps created their own broadcast row.
+  await Promise.all([tg.handleUpdate(cbUpdate(a.tg, `a:bs:${nw}`, 952)), tg.handleUpdate(cbUpdate(a.tg, `a:bs:${nw}`, 952))]);
+  const bs = await broadcastsBy(a.adminId);
+  assert.equal(bs.length, 1, "exactly one broadcast row");
+  assert.equal(bs[0]!.status, "queued");
+  assert.equal((await audit(a.adminId, "broadcasts.send")).length, 1, "queued once");
+});

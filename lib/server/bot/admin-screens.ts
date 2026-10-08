@@ -138,7 +138,7 @@ export function inputProblemScreen(lang: Lang, p: InputProblem, prompt: Screen):
         : p.kind === "caption"
           ? at(lang, "bc.captionLong", { n: g(p.n), max: g(CAPTION_MAX) })
           : at(lang, "bc.buttonBad", { max: BUTTON_TEXT_MAX });
-  return { text: `${tgEmoji("warn")} ${why}\n\n${prompt.text}`, reply_markup: prompt.reply_markup };
+  return { text: `${tgEmoji("warn")} ${esc(why)}\n\n${prompt.text}`, reply_markup: prompt.reply_markup };
 }
 
 export function draftScreen(lang: Lang, d: BroadcastDraft): Screen {

@@ -1,6 +1,6 @@
 import { ApiError } from "../api";
 import { env } from "../env";
-import { queryOne } from "../db";
+import { pool, queryOne } from "../db";
 import { rateLimit } from "../ratelimit";
 import { callBot } from "../telegram";
 import { needsStepUp, type Permission } from "../admin-rbac";
@@ -75,7 +75,7 @@ import {
   type ChannelDraft,
   type Draft,
 } from "./admin-state";
-import { tgEmoji, type Screen } from "./ui";
+import { esc, tgEmoji, type Screen } from "./ui";
 
 /**
  * In-bot admin panel (docs/bot-admin/PLAN.md): «📊 Statistika», «📣 Xabar
@@ -246,11 +246,26 @@ const isCh = (d: Draft | null): d is ChannelDraft & Draft => d?.t === "ch";
 /** The draft's broadcast row (created once, at the first test or at the send). */
 async function ensureBroadcast(a: BotAdmin, chatId: number, d: BroadcastDraft, updateId: number): Promise<string> {
   if (d.broadcastId) return d.broadcastId;
-  const content: BroadcastContent = { ...d.content, notify: { chatId: String(chatId), lang: a.lang } };
-  const { broadcast } = await createBroadcast(actorOf(a, updateId), { text: d.text, audience: AUDIENCES[d.audience ?? "all"] }, { content, via: "bot" });
-  d.broadcastId = broadcast.id;
-  await writeState(chatId, a.adminId, { step: null, draft: d });
-  return broadcast.id;
+  // Serialised per chat (security review MAJOR): a double tap on «Yuborish» arrives as two updates; without the
+  // lock both saw no broadcastId, both created a row and every recipient got the message twice. Under the lock
+  // the second tap re-reads the draft, finds the first one's row, and the send's draft-state guard answers 409.
+  const client = await pool().connect();
+  try {
+    await client.query("SELECT pg_advisory_lock(hashtext($1))", [`bot-admin-bc:${chatId}`]);
+    const fresh = (await readState(chatId, a.adminId)).draft;
+    if (isBc(fresh) && fresh.broadcastId) {
+      d.broadcastId = fresh.broadcastId;
+      return fresh.broadcastId;
+    }
+    const content: BroadcastContent = { ...d.content, notify: { chatId: String(chatId), lang: a.lang } };
+    const { broadcast } = await createBroadcast(actorOf(a, updateId), { text: d.text, audience: AUDIENCES[d.audience ?? "all"] }, { content, via: "bot" });
+    d.broadcastId = broadcast.id;
+    await writeState(chatId, a.adminId, { step: null, draft: d });
+    return broadcast.id;
+  } finally {
+    await client.query("SELECT pg_advisory_unlock(hashtext($1))", [`bot-admin-bc:${chatId}`]).catch(() => undefined);
+    client.release();
+  }
 }
 
 /** A draft row that no longer matches the draft (button / audience changed): cancelled, audited. */
@@ -341,6 +356,8 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
       try {
         await sendBroadcast(actorOf(a, updateId), id, { reason: REASON.send, confirmCount: c.count }, { via: "bot" });
       } catch (e) {
+        // The second tap of a double tap: the broadcast already left the draft state.
+        if (e instanceof ApiError && e.status === 409 && e.extra.code !== "count_changed" && e.extra.code !== "empty_audience") return at(l, "toast.expired");
         if (e instanceof ApiError && (e.extra.code === "count_changed" || e.extra.code === "empty_audience")) {
           const now = Number(e.extra.count) || 0;
           await edit(confirmScreen(l, d.audience, now));
@@ -496,6 +513,8 @@ export async function handleAdminInput(m: AdminMessage, updateId: number): Promi
   const st = await readState(chatId, admin.adminId);
   if (!st.step) return false;
   const l = admin.lang;
+  // Each input may call the Bot API (getChat/getChatMember): same per-admin budget as the buttons (review MINOR).
+  if (!(await rateLimit(`admin:${admin.adminId}:bot`, ADMIN_BOT_RATE.limit, ADMIN_BOT_RATE.windowSec, { failClosed: true })).ok) return true;
   if (!allowed(admin, STEP_PERM[st.step])) {
     await clearState(chatId);
     await denied(admin, STEP_PERM[st.step], updateId);
@@ -588,7 +607,7 @@ async function stepUpInput(
       return true;
     }
     await clearState(chatId);
-    await sendScreen(chatId, { text: `${tgEmoji("warn")} ${e.message}` });
+    await sendScreen(chatId, { text: `${tgEmoji("warn")} ${esc(e.message)}` });
     return true;
   }
   const resume = st.draft?.resume;
