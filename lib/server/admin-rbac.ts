@@ -53,6 +53,8 @@ export const PERMISSIONS = [
   "audit.export",
   "pricing.view",
   "pricing.edit",
+  "bonus.view",
+  "bonus.edit",
   "admins.view",
   "admins.manage",
   // §4.2: implicit for every admin — own sessions, own recovery codes, step-up.
@@ -98,6 +100,9 @@ const GRANTS: Readonly<Record<Permission, readonly Role[]>> = {
   "audit.export": O,
   "pricing.view": ["owner", "admin", "finance", "viewer"],
   "pricing.edit": OA,
+  // docs/bonus/PLAN.md K2: the bonus channel list follows the pricing rows (amounts are payouts).
+  "bonus.view": ["owner", "admin", "finance", "viewer"],
+  "bonus.edit": OA,
   "admins.view": OA,
   "admins.manage": OA,
   self: ALL,
@@ -115,6 +120,7 @@ export const STEP_UP: ReadonlySet<Permission> = new Set<Permission>([
   "settings.edit",
   "audit.export",
   "pricing.edit",
+  "bonus.edit",
   "admins.manage",
 ]);
 
