@@ -22,6 +22,9 @@ import {
 import { cancelInput, claimInput, finishInput, keyboardStale, markKeyboard, repromptInput, startInput } from "./state";
 import type { Screen } from "./ui";
 import { rateLimit } from "../ratelimit";
+import { bonusTasks, checkChannel } from "../bonus-channels";
+import { formatPoints } from "../../referral";
+import { bonusScreen, type Celebrate } from "./bonus";
 
 /**
  * Bot chat routing for the new screens (docs/bot/PLAN.md, B2). Loaded lazily
@@ -133,6 +136,39 @@ async function filesPage(ctx: Pick<ChatCtx, "user" | "lang" | "telegramId">, pag
 
 async function walletCard(ctx: Pick<ChatCtx, "user" | "lang">): Promise<Screen> {
   return walletScreen(ctx.lang, ctx.user, await recentTransactions(ctx.user.id, 5));
+}
+
+async function bonusCard(ctx: Pick<ChatCtx, "user" | "lang">, celebrate: Celebrate | null = null): Promise<Screen> {
+  const tasks = await bonusTasks(ctx.user.id, { botUsername: await botUsername(), appUrl: env.appUrl });
+  return bonusScreen(ctx.lang, tasks, Date.now(), celebrate);
+}
+
+/** «Tekshirish» budget per user: every tap is a getChatMember call (Telegram's limits are per bot). */
+const BONUS_CHECKS_PER_MIN = 10;
+
+/** «✅ Tekshirish»: check + pay (once), then the toast and the re-rendered screen. */
+async function bonusCheck(ctx: ChatCtx, channelId: string): Promise<{ toast: string; screen: Screen | null }> {
+  if (!(await rateLimit(`bonus-check:${ctx.user.id}`, BONUS_CHECKS_PER_MIN, 60)).ok) {
+    return { toast: t(ctx.lang, "toast.bonusRate"), screen: null };
+  }
+  const r = await checkChannel(ctx.user.id, ctx.telegramId, channelId);
+  switch (r.status) {
+    case "paid":
+      return {
+        toast: r.points > 0 ? t(ctx.lang, "toast.bonusPaid", { n: formatPoints(r.points) }) : t(ctx.lang, "bonus.confirmed"),
+        screen: await bonusCard(ctx, { points: r.points, title: r.title, stayBonus: r.stayBonus, stayDays: r.stayDays }),
+      };
+    case "already":
+      return { toast: t(ctx.lang, "toast.bonusAlready"), screen: await bonusCard(ctx) };
+    case "inactive":
+      return { toast: t(ctx.lang, "toast.bonusInactive"), screen: await bonusCard(ctx) };
+    case "not_member":
+      return { toast: t(ctx.lang, "toast.bonusNotMember"), screen: null };
+    case "blocked":
+      return { toast: t(ctx.lang, "account.blocked"), screen: null };
+    case "unknown":
+      return { toast: t(ctx.lang, "toast.bonusUnknown"), screen: null };
+  }
 }
 
 /* ───────────────────────── Keyboard + texts ───────────────────────── */
@@ -295,6 +331,17 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
         await cancelInput(ctx.chatId);
         await edit(await walletCard(ctx));
         return;
+      case "bonus":
+        await cancelInput(ctx.chatId);
+        await edit(await bonusCard(ctx));
+        return;
+      case "bonusCheck": {
+        await cancelInput(ctx.chatId);
+        const r = await bonusCheck(ctx, c.channelId);
+        toast = r.toast;
+        if (r.screen) await edit(r.screen);
+        return;
+      }
       case "walletInvite":
         await edit(referralScreen(ctx.lang, await referral(user.id), "wallet"));
         return;
