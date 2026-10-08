@@ -1,5 +1,4 @@
 import { env } from "../env";
-import { botAppUrl } from "../bot-link";
 import { formatJoinDate, formatPoints, telegramShareUrl } from "../../referral";
 import { TOOL_BY_ID } from "../../tools";
 import { BOT_LANGUAGES } from "../../profile/fields";
@@ -103,10 +102,11 @@ function fileToolTitle(lang: Lang, type: string): string {
 function fileButton(telegramId: number | string, n: number, f: FileItem, lang: Lang): InlineButton | null {
   const path = `/uz/files/${f.id}`;
   const label = `${n}. ${clip(f.topic || fileToolTitle(lang, f.type), 30)}`;
-  const personal = botAppUrl(telegramId, path);
-  if (personal) return inlineButton(null, label, { web_app: { url: personal } });
+  // An INLINE web_app button carries initData (normal Mini App login), so no personal `?bt=` link
+  // is put into chat history (security review MINOR-2).
+  void telegramId;
   const plain = appUrl(path);
-  return plain ? inlineButton(null, label, { url: plain }) : null;
+  return plain ? inlineButton(null, label, { web_app: { url: plain } }) : null;
 }
 
 export function filesScreen(

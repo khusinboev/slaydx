@@ -361,3 +361,53 @@ test("Hamyon → «Do‘st taklif qilish» → back; Yordam; a blocked tool answ
   assert.equal(sends().length, 1, "welcome «Taklif» → a NEW referral message");
   assert.match(String(sends()[0]!.body.text), /Do'stlarni taklif qiling/);
 });
+
+/* ── security review (2nd pass) fixes ── */
+
+test("blocked account: messages get only the notice (keyboard removed), callbacks only a toast; nothing is changed", { skip }, async () => {
+  const u = await newUser();
+  await query("UPDATE users SET is_blocked = TRUE WHERE id = $1", [u.id]);
+  installFetch();
+  await tg.handleUpdate(textUpdate(u.tg, "👤 Profilim"));
+  // MUTATION: without the blocked check the full Profilim card and a keyboard with signed links went out.
+  assert.equal(sends().length, 1);
+  assert.match(String(sends()[0]!.body.text), /bloklangan/);
+  assert.deepEqual(sends()[0]!.body.reply_markup, { remove_keyboard: true });
+
+  installFetch();
+  await tg.handleUpdate(cbUpdate(u.tg, "p:e:department", 900));
+  assert.equal(edits().length, 0);
+  assert.equal(await pending(u.tg), null, "no input state for a blocked user");
+  assert.match(String(answers()[0]!.body.text), /bloklangan/);
+});
+
+test("bot profile writes share the web budget (profile:<id>, 30 / 5 min): over it the value is NOT saved and the prompt says why", { skip }, async () => {
+  const u = await newUser();
+  installFetch();
+  await tg.handleUpdate(cbUpdate(u.tg, "p:e:city", 910));
+  const { windowStartOf } = await import("../lib/server/ratelimit.ts");
+  await query(
+    "INSERT INTO rate_limits (bucket, window_start, hits) VALUES ($1, $2, 30) ON CONFLICT (bucket, window_start) DO UPDATE SET hits = 30",
+    [`profile:${u.id}`, windowStartOf(Date.now(), 300)],
+  );
+  installFetch();
+  await tg.handleUpdate(textUpdate(u.tg, "Samarqand"));
+  // MUTATION: without the rateLimit check every pending-prompt message wrote a row + an audit row.
+  assert.notEqual(await col(u.id, "city"), "Samarqand");
+  assert.equal(await auditCount(u.id), 0);
+  assert.match(String(sends()[0]!.body.text), /Juda tez-tez/);
+});
+
+test("/start and /login in a group chat never build a personal login link", { skip }, async () => {
+  const u = await newUser();
+  for (const cmd of ["/start", "/login"]) {
+    installFetch();
+    const upd = textUpdate(u.tg, cmd);
+    upd.message.chat = { id: -100_123, type: "group" };
+    await tg.handleUpdate(upd);
+    // MUTATION: the group got the welcome/login card with a site login link.
+    assert.equal(sends().length, 1, cmd);
+    assert.match(String(sends()[0]!.body.text), /shaxsiy chatida/, cmd);
+    assert.ok(!JSON.stringify(sends()[0]!.body).includes("http"), cmd);
+  }
+});

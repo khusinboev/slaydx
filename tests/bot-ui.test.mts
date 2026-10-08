@@ -379,3 +379,22 @@ test("maskPhone / profileCompletion", () => {
   assert.equal(fields.profileCompletion({}), 0);
   assert.equal(fields.profileCompletion(Object.fromEntries(fields.PROFILE_FIELDS.map((f) => [f, "x"]))), 100);
 });
+
+/* ── security review (2nd pass) fixes ── */
+
+test("Ishlarim: file buttons are inline web_app WITHOUT a personal ?bt= link (inline buttons carry initData)", () => {
+  const files = [{ id: "g1", type: "slide", topic: "Orol", status: "COMPLETED", progress: 100, createdAt: "2026-10-08T08:00:00.000Z" }];
+  const s = scr.filesScreen("uz", 7_300_000_001, 0, files, false);
+  const btns = (s.reply_markup as { inline_keyboard: { web_app?: { url: string } }[][] }).inline_keyboard.flat();
+  const file = btns.find((b) => b.web_app?.url.includes("/uz/files/g1"));
+  assert.ok(file, "the file opens in the Mini App");
+  // MUTATION: botAppUrl(telegramId, path) put a 7-day sign-in token into chat history.
+  assert.ok(!file!.web_app!.url.includes("bt="), file!.web_app!.url);
+});
+
+test("cleanFieldValue: one line — newlines/tabs collapse, bidi overrides and other control/format chars go, ZWJ/ZWNJ stay", () => {
+  assert.equal(fields.cleanFieldValue("  Jahon\n\ttarixi\r\n kafedrasi  "), "Jahon tarixi kafedrasi");
+  // MUTATION: without the \p{Cc}\p{Cf} pass a U+202E «right-to-left override» reverses what admins see.
+  assert.equal(fields.cleanFieldValue("abc‮def\u0000"), "abc def");
+  assert.equal(fields.cleanFieldValue("👩‍💻 Dev"), "👩‍💻 Dev");
+});

@@ -75,7 +75,7 @@ export async function updateProfile(
       return `${col(f)} = $${params.length}`;
     });
     // Saving «Ism» marks it as the user's own, so Telegram logins stop overwriting it (migration 040).
-    if ((changed as string[]).includes("name")) sets.push("name_custom = TRUE");
+    if ((changed as string[]).includes("name") && patch.name) sets.push("name_custom = TRUE");
     await client.query(`UPDATE users SET ${sets.join(", ")}, updated_at = now() WHERE id = $1`, params);
 
     const before: Record<string, string> = {};

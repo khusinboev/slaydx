@@ -251,7 +251,13 @@ export type EditableField = (typeof EDITABLE_FIELDS)[number];
 
 /** NUL bytes stripped, outer spaces trimmed (the stored shape of every text field). */
 export function cleanFieldValue(value: string): string {
-  return value.replace(/\0/g, "").trim();
+  // Control and format characters (newlines, bidi overrides like U+202E) out — ZWNJ/ZWJ stay (emoji, scripts);
+  // runs of whitespace become one space: a profile field is one line.
+  return value
+    .replace(/\0/g, "")
+    .replace(/[\p{Cc}\p{Cf}]/gu, (c) => (c === "\u200c" || c === "\u200d" ? c : " "))
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function isProfileField(value: unknown): value is ProfileField {

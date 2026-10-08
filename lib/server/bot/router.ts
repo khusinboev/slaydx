@@ -21,6 +21,7 @@ import {
 } from "./screens";
 import { cancelInput, claimInput, finishInput, keyboardStale, markKeyboard, repromptInput, startInput } from "./state";
 import type { Screen } from "./ui";
+import { rateLimit } from "../ratelimit";
 
 /**
  * Bot chat routing for the new screens (docs/bot/PLAN.md, B2). Loaded lazily
@@ -85,6 +86,12 @@ async function answerCallback(id: string, text?: string): Promise<void> {
 }
 
 /* ───────────────────────── Data ───────────────────────── */
+
+/** True when the Telegram user's account is blocked by an admin (the bot then serves nothing but a notice). */
+export async function isBlockedTelegram(telegramId: number): Promise<boolean> {
+  const rows = await query<{ b: boolean }>("SELECT is_blocked AS b FROM users WHERE telegram_id = $1", [String(telegramId)]);
+  return rows[0]?.b === true;
+}
 
 /** The account of a Telegram user, or `null` (never creates one). */
 export async function userByTelegram(telegramId: number): Promise<SessionUser | null> {
@@ -179,7 +186,9 @@ export async function handlePendingInput(ctx: ChatCtx, text: string, updateId: n
   const pending = await claimInput(ctx.chatId, ctx.user.id, updateId);
   if (!pending) return false;
   const value = cleanFieldValue(text);
-  const error: InputError | null = !value ? { kind: "empty" } : value.length > FIELD_MAX ? { kind: "long", length: value.length } : null;
+  let error: InputError | null = !value ? { kind: "empty" } : value.length > FIELD_MAX ? { kind: "long", length: value.length } : null;
+  // Same budget as the web PATCH (`profile:<id>`, 30 per 5 min): every save writes an audit row.
+  if (!error && !(await rateLimit(`profile:${ctx.user.id}`, 30, 300)).ok) error = { kind: "rate" };
   if (error) {
     const id = await sendScreen(ctx.chatId, promptScreen(ctx.user, pending.field, ctx.lang, error));
     await repromptInput(ctx.chatId, updateId, id);
@@ -244,6 +253,10 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
     const user = await userByTelegram(q.from.id);
     if (!user) {
       toast = t("uz", "toast.start");
+      return;
+    }
+    if (await isBlockedTelegram(q.from.id)) {
+      toast = t(langOf(user.language), "account.blocked");
       return;
     }
     const ctx: ChatCtx = { chatId: msg.chat.id, telegramId: q.from.id, lang: langOf(user.language), user };

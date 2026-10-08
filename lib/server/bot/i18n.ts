@@ -251,6 +251,21 @@ const T = {
     en: "Type your answer in this chat (within 10 minutes).",
   },
   "err.empty": { uz: "Qiymat bo‘sh bo‘lmasin.", ru: "Значение не может быть пустым.", en: "The value cannot be empty." },
+  "err.rate": {
+    uz: "Juda tez-tez saqlanmoqda — bir necha daqiqadan keyin qayta yozing.",
+    ru: "Слишком часто — попробуйте снова через несколько минут.",
+    en: "Too many changes — please try again in a few minutes.",
+  },
+  "account.blocked": {
+    uz: "Hisobingiz vaqtincha bloklangan. Savol bo‘lsa, admin bilan bog‘laning.",
+    ru: "Ваш аккаунт временно заблокирован. Если есть вопросы, свяжитесь с администратором.",
+    en: "Your account is temporarily blocked. Please contact the admin if you have questions.",
+  },
+  "private.only": {
+    uz: "Bu buyruq faqat botning shaxsiy chatida ishlaydi.",
+    ru: "Эта команда работает только в личном чате с ботом.",
+    en: "This command works only in a private chat with the bot.",
+  },
   "err.long": {
     uz: "Juda uzun: {max} belgidan oshmasin (hozir {n}).",
     ru: "Слишком длинно: не больше {max} символов (сейчас {n}).",

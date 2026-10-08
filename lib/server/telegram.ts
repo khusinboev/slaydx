@@ -823,6 +823,16 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
   };
 
   const text = msg.text.trim();
+  if (isPrivate && (await bot.isBlockedTelegram(msg.from.id))) {
+    const known = await bot.userByTelegram(msg.from.id);
+    await sendMessage(msg.chat.id, t(langOf(known?.language), "account.blocked"), { reply_markup: { remove_keyboard: true } });
+    return;
+  }
+  // `/start` and `/login` build a personal site login link: never in a group chat.
+  if (msg.chat.type != null && msg.chat.type !== "private" && (text.startsWith("/start") || text.startsWith("/login"))) {
+    await sendMessage(msg.chat.id, t("uz", "private.only"));
+    return;
+  }
   // `/start <payload>` — `/startfoo` keeps the historical «payload foo» reading.
   const startPayload = text.startsWith("/start") ? text.slice("/start".length).trim() : null;
 

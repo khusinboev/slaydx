@@ -157,11 +157,11 @@ export function sectionScreen(user: ProfileUser, step: FieldStepId, lang: Lang):
   };
 }
 
-export type InputError = { kind: "empty" } | { kind: "long"; length: number };
+export type InputError = { kind: "empty" } | { kind: "long"; length: number } | { kind: "rate" };
 
 export function promptScreen(user: ProfileUser, field: ProfileField, lang: Lang, error?: InputError): Screen {
   const err = error
-    ? `${tgEmoji("warn")} ${error.kind === "empty" ? t(lang, "err.empty") : t(lang, "err.long", { max: FIELD_MAX, n: error.length })}\n\n`
+    ? `${tgEmoji("warn")} ${error.kind === "empty" ? t(lang, "err.empty") : error.kind === "rate" ? t(lang, "err.rate") : t(lang, "err.long", { max: FIELD_MAX, n: error.length })}\n\n`
     : "";
   const text = [
     `${err}${tgEmoji(FIELD_ICONS[field])} <b>${fieldText(lang, field, "prompt")}</b>`,

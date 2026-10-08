@@ -142,3 +142,12 @@ test("a name saved in Profilim survives the next Telegram login / /start; an une
   await upsertTelegramUser({ telegramId: tg, username: "x", name: "Telegram Nick", photoUrl: null });
   assert.equal((await row(id))?.name, "Husinboyev Adhambek");
 });
+
+test("an EMPTY «Ism» is not a user-chosen name: Telegram fills it again", { skip }, async () => {
+  const id = await newUser();
+  const tg = tgIds[tgIds.length - 1]!;
+  await updateProfile(id, { name: "" }, "web");
+  // MUTATION: name_custom=TRUE on an empty name froze it empty forever.
+  await upsertTelegramUser({ telegramId: tg, username: "x", name: "Telegram Ism", photoUrl: null });
+  assert.equal((await row(id))?.name, "Telegram Ism");
+});
