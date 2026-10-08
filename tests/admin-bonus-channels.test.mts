@@ -33,7 +33,13 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *   - `botAdminStatus` mapping `creator` → `not_admin` → "resolve: bot admin status";
  *   - `stay_paid > 0` filter dropped from the stay count → "stats" (stay paid count 3, not 2);
  *   - audit written through a separate `transaction()` instead of the `adminTx` client →
- *     "atomicity" (the row survived the failed audit).
+ *     "atomicity" (the row survived the failed audit);
+ *   - `resolveChannel` called before the field validation → "create: validation" (Bot API hit);
+ *   - bot id = token prefix + 1 → resolve / create / bot-status (getChatMember asked about
+ *     someone else);
+ *   - `group` accepted as a chat type → "resolve: non-channel types";
+ *   - `FOR UPDATE` dropped from `lockChannel` → "delete vs a concurrent claim" (200, the
+ *     committed claim was cascaded away).
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -590,6 +596,34 @@ test("delete: refused with 409 has_claims while claims exist (row and claims sta
   const again = await del(s.cookie, unused.id, {});
   assert.equal(again.status, 404);
   assert.equal(again.body.code, "not_found");
+});
+
+test("delete vs a concurrent claim: the row lock makes the delete wait and then refuse — a claim is never cascaded away", { skip }, async () => {
+  await resetChannels();
+  const s = await session("owner");
+  const item = await seedChannel(s);
+  const u = await mkUser();
+  // The bot side inserts a claim in its own, still open transaction (FK → FOR KEY SHARE on the channel row).
+  const other = await pool().connect();
+  try {
+    await other.query("BEGIN");
+    await other.query(`INSERT INTO bonus_channel_claims (user_id, channel_id, join_paid) VALUES ($1, $2, 1000)`, [u.id, item.id]);
+    let settled = false;
+    const pending = del(s.cookie, item.id, {}).finally(() => {
+      settled = true;
+    });
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(settled, false, "the delete must wait for the claim transaction");
+    await other.query("COMMIT");
+    const r = await pending;
+    assert.equal(r.status, 409, JSON.stringify(r.body));
+    assert.equal(r.body.code, "has_claims");
+  } finally {
+    await other.query("ROLLBACK").catch(() => undefined);
+    other.release();
+  }
+  assert.equal((await query(`SELECT 1 FROM bonus_channel_claims WHERE channel_id = $1`, [item.id])).length, 1, "the claim survived");
+  assert.equal((await channelRows()).length, 1);
 });
 
 test("atomicity: when the audit insert fails, the channel change rolls back", { skip }, async (t) => {
