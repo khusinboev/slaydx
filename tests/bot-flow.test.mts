@@ -275,7 +275,7 @@ test("language: Profilim → Til → Русский: card re-rendered in Russian
   assert.equal(await col(u.id, "language"), "ru");
   assert.match(String(edits()[0]!.body.text), /<b>Мой профиль<\/b>/);
   const kb = sends()[0]!.body.reply_markup as { keyboard: { text: string }[][] };
-  assert.deepEqual(kb.keyboard[2]!.map((b) => b.text), ["👤 Мой профиль", "❓ Помощь"]);
+  assert.deepEqual(kb.keyboard[4]!.map((b) => b.text), ["👤 Профиль", "❓ Помощь"]);
   assert.equal(answers()[0]!.body.text, "Язык бота: русский");
 
   installFetch();
@@ -411,3 +411,20 @@ test("/start and /login in a group chat never build a personal login link", { sk
     assert.ok(!JSON.stringify(sends()[0]!.body).includes("http"), cmd);
   }
 });
+
+test("an old-layout keyboard (sent before KEYBOARD_LAYOUT_SINCE) is replaced on the next chat-screen tap", { skip }, async () => {
+  const u = await newUser();
+  installFetch();
+  await tg.handleUpdate(textUpdate(u.tg, "👤 Profil"));
+  installFetch();
+  await tg.handleUpdate(textUpdate(u.tg, "📂 Ishlarim"));
+  assert.equal(sends().length, 1, "fresh keyboard → screen only");
+  await query("UPDATE bot_chat_state SET keyboard_at = '2026-10-08T09:00:00Z' WHERE chat_id = $1", [u.tg]);
+  installFetch();
+  await tg.handleUpdate(textUpdate(u.tg, "💰 Hamyon"));
+  // MUTATION: without the layout check the old 3-tool keyboard stayed for up to 3 days.
+  assert.equal(sends().length, 2, "wallet card + the new keyboard");
+  const kb = sends()[1]!.body.reply_markup as { keyboard: { text: string }[][] };
+  assert.equal(kb.keyboard.length, 5);
+});
+

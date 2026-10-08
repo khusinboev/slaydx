@@ -97,3 +97,9 @@ Release: when reviewed (fable security review for the link token) + CI green, me
   with the Telegram name, which would revert a «Ism» saved in the bot.
 - `profile.update` audit rows go to `admin_audit_log` (actor = the user, `actor_role = 'user'`, `admin_id` NULL,
   `meta.via` web|bot, changed fields only), in the same transaction as the UPDATE; an unchanged value writes nothing.
+
+## Keyboard v2 (owner, 2026-10-08)
+Two buttons per row: [📊 Slayd][💎 Pro slayd] / [📝 Mustaqil ish][📄 Referat] / [🖼 Rasm][💼 Rezyume] / [📂 Ishlarim][💰 Hamyon / Bonus] /
+[👤 Profil][❓ Yordam]. Six tools are web_app (personal link); old labels («Profilim», «Hamyon») still match; a keyboard sent before
+`KEYBOARD_LAYOUT_SINCE` is re-sent on the next chat-screen tap (and on /start).
+

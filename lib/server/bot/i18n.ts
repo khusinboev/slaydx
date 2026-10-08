@@ -24,8 +24,11 @@ const T = {
   "kb.image": { uz: "Rasm", ru: "Картинка", en: "Image" },
   "kb.pro": { uz: "Pro slayd", ru: "Pro слайды", en: "Pro slides" },
   "kb.files": { uz: "Ishlarim", ru: "Мои работы", en: "My files" },
-  "kb.wallet": { uz: "Hamyon", ru: "Кошелёк", en: "Wallet" },
-  "kb.profile": { uz: "Profilim", ru: "Мой профиль", en: "My profile" },
+  "kb.independent": { uz: "Mustaqil ish", ru: "Самостоятельная работа", en: "Independent work" },
+  "kb.referat": { uz: "Referat", ru: "Реферат", en: "Report" },
+  "kb.resume": { uz: "Rezyume", ru: "Резюме", en: "Resume" },
+  "kb.wallet": { uz: "Hamyon / Bonus", ru: "Кошелёк / Бонус", en: "Wallet / Bonus" },
+  "kb.profile": { uz: "Profil", ru: "Профиль", en: "Profile" },
   "kb.help": { uz: "Yordam", ru: "Помощь", en: "Help" },
   "kb.placeholder": {
     uz: "Vositani tanlang yoki xabar yozing…",
