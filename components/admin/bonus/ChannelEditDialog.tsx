@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 import { updateBonusChannel, type BonusChannel, type BonusChannelPatch } from "@/lib/admin-api/bonus";
 import { AmountFields, FIELD } from "./AmountFields";
 import { InviteLinkField } from "./InviteLinkField";
+import { MandatoryField } from "./MandatoryField";
 import { amountsDraft, bonusText, checkAmounts, checkIntText, checkInviteText, checkTitle, MAX_SORT, type AmountsDraft } from "./format";
 
 export type ChannelEditDialogProps = {
@@ -32,10 +33,11 @@ function Body({ item, onClose, onSaved }: ChannelEditDialogProps & { item: Bonus
   const [amounts, setAmounts] = useState<AmountsDraft>(() => amountsDraft(item));
   const [sort, setSort] = useState(String(item.sort));
   const [active, setActive] = useState(item.active);
+  const [mandatory, setMandatory] = useState(item.mandatory);
 
   const titleCheck = checkTitle(title);
   const inviteCheck = checkInviteText(invite);
-  const amountsCheck = checkAmounts(amounts);
+  const amountsCheck = checkAmounts(amounts, mandatory);
   const sortCheck = checkIntText(sort, -MAX_SORT, MAX_SORT, "Tartib");
 
   const patch: BonusChannelPatch = {};
@@ -48,6 +50,7 @@ function Body({ item, onClose, onSaved }: ChannelEditDialogProps & { item: Bonus
   }
   if (sortCheck.ok && sortCheck.value !== item.sort) patch.sort = sortCheck.value;
   if (active !== item.active) patch.active = active;
+  if (mandatory !== item.mandatory) patch.mandatory = mandatory;
   const valid = titleCheck.ok && inviteCheck.ok && amountsCheck.ok && sortCheck.ok;
   const changed = Object.keys(patch).length > 0;
 
@@ -90,6 +93,8 @@ function Body({ item, onClose, onSaved }: ChannelEditDialogProps & { item: Bonus
       </div>
 
       <InviteLinkField value={invite} onChange={setInvite} chatRef={item.username ? `@${item.username}` : item.chatId} needed={!item.username} />
+
+      <MandatoryField value={mandatory} onChange={setMandatory} />
 
       <AmountFields draft={amounts} onChange={setAmounts} error={amountsCheck.ok ? null : amountsCheck.error} />
       {item.stats.joined > 0 ? (
