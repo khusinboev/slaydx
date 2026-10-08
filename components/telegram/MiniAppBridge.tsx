@@ -215,7 +215,10 @@ function BotLinkLogin({ token }: { token: string | null }) {
         const ui = useUi.getState();
         const target = ui.overlay === "login" ? safeReturnTo(ui.returnTo) : null;
         if (ui.overlay === "login") ui.close();
-        if (target) nav.navigateFromOverlay(target);
+        // The page opened its login sheet while the link was being exchanged, with
+        // a returnTo of this very page: stay (keeps the link's query) and re-render.
+        const elsewhere = target !== null && new URL(target, window.location.href).pathname !== window.location.pathname;
+        if (target && elsewhere) nav.navigateFromOverlay(target);
         else router.refresh();
       } catch (e) {
         const err = e instanceof api.ApiError ? e : null;

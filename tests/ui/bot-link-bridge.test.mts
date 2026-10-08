@@ -152,6 +152,27 @@ test("«Kirish…» shows while the exchange runs; nothing is sent before the se
   assert.equal(useAppStore.getState().loggedIn, true);
 });
 
+test("the page's login sheet opened meanwhile: closed on success; returnTo of this page keeps the link's query, another page is followed", async () => {
+  setup({ url: `/uz/slide?x=1&bt=${BT}` });
+  useUi.setState({ overlay: "login", returnTo: "/uz/slide" });
+  const pushed: string[] = [];
+  const replaced: string[] = [];
+  const r2 = { ...router, push: (u: string) => void pushed.push(u), replace: (u: string) => void replaced.push(u) };
+  render(h(AppRouterContext.Provider, { value: r2 }, h(MiniAppBridge)));
+  await settle();
+  assert.equal(useUi.getState().overlay, null, "login sheet closed");
+  assert.equal(here(), "/uz/slide?x=1", "MUTATION: navigated to the bare returnTo and lost the query");
+  assert.deepEqual([...pushed, ...replaced], []);
+  assert.equal(refreshed, 1);
+  cleanup();
+  setup({ url: `/uz/slide?bt=${BT}` });
+  useUi.setState({ overlay: "login", returnTo: "/uz/wallet" });
+  render(h(AppRouterContext.Provider, { value: r2 }, h(MiniAppBridge)));
+  await settle();
+  assert.equal(useUi.getState().overlay, null);
+  assert.deepEqual([...pushed, ...replaced], ["/uz/wallet"], "another page's returnTo is followed");
+});
+
 test("expired link (401) → «Kirish havolasi eskirgan» with a way back to the bot; not signed in", async () => {
   setup({ url: `/uz/slide?bt=${BT}` });
   answers = [{ status: 401, body: { error: "Kirish havolasi eskirgan.", code: "bot_link_expired" } }];
