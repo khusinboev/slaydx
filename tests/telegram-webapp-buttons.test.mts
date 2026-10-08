@@ -106,9 +106,11 @@ test("/start (B2 welcome): Mini App primary, all tools, invite, one-time site li
   const main = calls[1]!.body.reply_markup as { keyboard: { text: string; web_app?: { url: string }; style?: string }[][]; is_persistent: boolean };
   assert.equal(main.is_persistent, true);
   assert.deepEqual(main.keyboard.map((r) => r.map((b) => b.text)), [
-    ["📊 Slayd", "🖼 Rasm", "💎 Pro slayd"],
-    ["📂 Ishlarim", "💰 Hamyon"],
-    ["👤 Profilim", "❓ Yordam"],
+    ["📊 Slayd", "💎 Pro slayd"],
+    ["📝 Mustaqil ish", "📄 Referat"],
+    ["🖼 Rasm", "💼 Rezyume"],
+    ["📂 Ishlarim", "💰 Hamyon / Bonus"],
+    ["👤 Profil", "❓ Yordam"],
   ]);
 });
 

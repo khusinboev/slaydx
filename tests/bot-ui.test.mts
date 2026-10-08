@@ -152,7 +152,7 @@ test("premium on: <tg-emoji> in texts, icon_custom_emoji_id on buttons and NO em
   });
 });
 
-test("main keyboard layout: 3/2/2 rows, styles, persistent, placeholder; tools → personal web_app links", () => {
+test("main keyboard layout (owner 2026-10-08): 5 rows × 2, styles, persistent, placeholder; six tools → personal web_app links", () => {
   const kb = kbd.mainKeyboard("uz", 7_300_000_001, { llm: true, images: true }) as {
     keyboard: Btn[][];
     is_persistent: boolean;
@@ -162,30 +162,49 @@ test("main keyboard layout: 3/2/2 rows, styles, persistent, placeholder; tools �
   assert.deepEqual(
     kb.keyboard.map((r) => r.map((b) => `${b.text}${b.style ? `(${b.style})` : ""}${b.web_app ? "[app]" : ""}`)),
     [
-      ["📊 Slayd(primary)[app]", "🖼 Rasm[app]", "💎 Pro slayd[app]"],
-      ["📂 Ishlarim", "💰 Hamyon"],
-      ["👤 Profilim(success)", "❓ Yordam"],
+      ["📊 Slayd(primary)[app]", "💎 Pro slayd[app]"],
+      ["📝 Mustaqil ish[app]", "📄 Referat[app]"],
+      ["🖼 Rasm[app]", "💼 Rezyume[app]"],
+      ["📂 Ishlarim", "💰 Hamyon / Bonus"],
+      ["👤 Profil(success)", "❓ Yordam"],
     ],
     "MUTATSIYA 3",
   );
   assert.equal(kb.is_persistent, true);
   assert.equal(kb.resize_keyboard, true);
   assert.equal(kb.input_field_placeholder, "Vositani tanlang yoki xabar yozing…");
-  const urls = kb.keyboard[0]!.map((b) => b.web_app!.url);
-  assert.ok(urls[0]!.startsWith("https://slaydx.test/uz/slide"), urls[0]);
-  assert.ok(urls[1]!.startsWith("https://slaydx.test/uz/rasm"), urls[1]);
-  assert.ok(urls[2]!.startsWith("https://slaydx.test/uz/pro-slide"), urls[2]);
+  const urls = kb.keyboard.slice(0, 3).flat().map((b) => b.web_app!.url.split("?")[0]);
+  assert.deepEqual(urls, [
+    "https://slaydx.test/uz/slide",
+    "https://slaydx.test/uz/pro-slide",
+    "https://slaydx.test/uz/mustaqil-ish",
+    "https://slaydx.test/uz/referat",
+    "https://slaydx.test/uz/rasm",
+    "https://slaydx.test/uz/resume",
+  ]);
+  assert.ok(kb.keyboard.slice(0, 3).flat().every((b) => b.web_app!.url.includes("bt=")), "reply-keyboard tools carry the personal link");
   const ru = kbd.mainKeyboard("ru", 1, { llm: true, images: true }) as { keyboard: Btn[][]; input_field_placeholder: string };
-  assert.deepEqual(ru.keyboard.flat().map((b) => b.text), ["📊 Слайды", "🖼 Картинка", "💎 Pro слайды", "📂 Мои работы", "💰 Кошелёк", "👤 Мой профиль", "❓ Помощь"]);
+  assert.deepEqual(ru.keyboard.flat().map((b) => b.text), [
+    "📊 Слайды",
+    "💎 Pro слайды",
+    "📝 Самостоятельная работа",
+    "📄 Реферат",
+    "🖼 Картинка",
+    "💼 Резюме",
+    "📂 Мои работы",
+    "💰 Кошелёк / Бонус",
+    "👤 Профиль",
+    "❓ Помощь",
+  ]);
   assert.equal(ru.input_field_placeholder, "Выберите инструмент или напишите сообщение…");
 });
 
 test("blocked tool → text button (bot answers «vaqtincha o‘chiq»); no public URL → text button", async () => {
   const kb = kbd.mainKeyboard("uz", 1, { llm: true, images: false }) as { keyboard: Btn[][] };
   assert.ok(kb.keyboard[0]![0]!.web_app, "slide still works");
-  assert.equal(kb.keyboard[0]![1]!.web_app, undefined, "MUTATSIYA 4: image blocked → text");
+  assert.equal(kb.keyboard[2]![0]!.web_app, undefined, "MUTATSIYA 4: image blocked → text");
   const noLlm = kbd.mainKeyboard("uz", 1, { llm: false, images: true }) as { keyboard: Btn[][] };
-  assert.deepEqual(noLlm.keyboard[0]!.map((b) => Boolean(b.web_app)), [false, true, false], "every tool needs the LLM except the image");
+  assert.deepEqual(noLlm.keyboard.slice(0, 3).flat().map((b) => Boolean(b.web_app)), [false, false, false, false, true, false], "every tool needs the LLM except the image");
   assert.equal(kbd.toolBlocked("image", { llm: true, images: false }), "Rasm xizmati vaqtincha o‘chiq: serverda rasm kaliti sozlanmagan.");
   const { env } = (await import("../lib/server/env.ts")) as unknown as { env: { appUrl: string } };
   const prev = env.appUrl;
@@ -207,6 +226,14 @@ test("matchKeyboard: any language, with or without the emoji (premium labels are
   assert.equal(kbd.matchKeyboard("❓ Help"), "help");
   assert.equal(kbd.matchKeyboard("💎 Pro slayd"), "pro");
   assert.equal(kbd.matchKeyboard("📊 Slayd"), "slide");
+  // The 2026-10-08 layout: new tools and renamed buttons; old labels on users' screens keep working.
+  assert.equal(kbd.matchKeyboard("📝 Mustaqil ish"), "independent");
+  assert.equal(kbd.matchKeyboard("📄 Referat"), "referat");
+  assert.equal(kbd.matchKeyboard("💼 Rezyume"), "resume");
+  assert.equal(kbd.matchKeyboard("💰 Hamyon / Bonus"), "wallet");
+  assert.equal(kbd.matchKeyboard("👤 Profil"), "profile");
+  // MUTATION: without `legacy` an old keyboard's «Hamyon» fell through to the «/login yozing» fallback.
+  assert.equal(kbd.matchKeyboard("💰 Hamyon"), "wallet");
   assert.equal(kbd.matchKeyboard("Boshlang'ich ta'lim kafedrasi"), null);
   assert.equal(kbd.matchKeyboard("/start"), null);
   assert.equal(kbd.matchKeyboard(""), null);

@@ -8,9 +8,12 @@ import { keyboardButton, tgEmoji, type IconKey, type KeyboardButton, type Screen
  * The persistent main reply keyboard (docs/bot/PLAN.md, owner decisions Q1/Q3 +
  * 2026-10-08 scope):
  *
- *   [📊 Slayd (primary)] [🖼 Rasm] [💎 Pro slayd]
- *   [📂 Ishlarim]        [💰 Hamyon]
- *   [👤 Profilim (success)] [❓ Yordam]
+ * Owner layout 2026-10-08 (two buttons per row):
+ *   [📊 Slayd (primary)]   [💎 Pro slayd]
+ *   [📝 Mustaqil ish]      [📄 Referat]
+ *   [🖼 Rasm]              [💼 Rezyume]
+ *   [📂 Ishlarim]          [💰 Hamyon / Bonus]
+ *   [👤 Profil (success)]  [❓ Yordam]
  *
  * Tools are `web_app` buttons with the user's personal signed link
  * (`botAppUrl` — a reply-keyboard WebApp gets EMPTY initData, so the link token
@@ -20,20 +23,34 @@ import { keyboardButton, tgEmoji, type IconKey, type KeyboardButton, type Screen
  */
 
 /** What a reply-keyboard text means. */
-export type KeyboardAction = "slide" | "image" | "pro" | "files" | "wallet" | "profile" | "help";
+export type KeyboardAction = "slide" | "pro" | "independent" | "referat" | "image" | "resume" | "files" | "wallet" | "profile" | "help";
 
-type Spec = { action: KeyboardAction; icon: IconKey; label: TextKey; tool?: "slide" | "image" | "pro-slide"; path?: string };
+/** Tool ids behind the web_app buttons. */
+type KeyboardTool = "slide" | "image" | "pro-slide" | "mustaqil-ish" | "referat" | "resume";
 
-/** Slugs verified in `lib/tools.ts` (slide → /uz/slide, image → /uz/rasm, pro-slide → /uz/pro-slide). */
+/** `legacy`: labels of earlier keyboards still on users' screens (a tap keeps working until the keyboard is refreshed). */
+type Spec = { action: KeyboardAction; icon: IconKey; label: TextKey; tool?: KeyboardTool; path?: string; legacy?: readonly string[] };
+
+const toolSpec = (action: KeyboardAction, icon: IconKey, label: TextKey, tool: KeyboardTool): Spec => ({ action, icon, label, tool, path: `/uz/${TOOL_BY_ID[tool].slug}` });
+
+/** Paths from `lib/tools.ts` slugs (slide, pro-slide, mustaqil-ish, referat, rasm, resume). */
 const SPECS: Record<KeyboardAction, Spec> = {
-  slide: { action: "slide", icon: "slide", label: "kb.slide", tool: "slide", path: `/uz/${TOOL_BY_ID.slide.slug}` },
-  image: { action: "image", icon: "image", label: "kb.image", tool: "image", path: `/uz/${TOOL_BY_ID.image.slug}` },
-  pro: { action: "pro", icon: "pro", label: "kb.pro", tool: "pro-slide", path: `/uz/${TOOL_BY_ID["pro-slide"].slug}` },
+  slide: toolSpec("slide", "slide", "kb.slide", "slide"),
+  pro: toolSpec("pro", "pro", "kb.pro", "pro-slide"),
+  independent: toolSpec("independent", "independent", "kb.independent", "mustaqil-ish"),
+  referat: toolSpec("referat", "referat", "kb.referat", "referat"),
+  image: toolSpec("image", "image", "kb.image", "image"),
+  resume: toolSpec("resume", "resume", "kb.resume", "resume"),
   files: { action: "files", icon: "files", label: "kb.files" },
-  wallet: { action: "wallet", icon: "wallet", label: "kb.wallet" },
-  profile: { action: "profile", icon: "profile", label: "kb.profile" },
+  wallet: { action: "wallet", icon: "wallet", label: "kb.wallet", legacy: ["Hamyon", "Кошелёк", "Wallet"] },
+  profile: { action: "profile", icon: "profile", label: "kb.profile", legacy: ["Profilim", "Мой профиль", "My profile"] },
   help: { action: "help", icon: "help", label: "kb.help" },
 };
+
+/** Whether an action opens a tool (web_app) rather than a chat screen. */
+export function isToolAction(action: KeyboardAction): boolean {
+  return Boolean(SPECS[action].tool);
+}
 
 /** Server features, as `/api/auth/session` reports them. */
 export function botFeatures(): ToolFeatures {
@@ -57,7 +74,9 @@ export function mainKeyboard(lang: Lang, telegramId: number | string, features: 
   const b = (a: KeyboardAction) => button(lang, telegramId, a, features);
   return {
     keyboard: [
-      [b("slide"), b("image"), b("pro")],
+      [b("slide"), b("pro")],
+      [b("independent"), b("referat")],
+      [b("image"), b("resume")],
       [b("files"), b("wallet")],
       [b("profile"), b("help")],
     ],
@@ -87,6 +106,7 @@ export function matchKeyboard(text: string): KeyboardAction | null {
     for (const lang of LANGS) {
       if (t(lang, s.label).toLowerCase() === bare) return s.action;
     }
+    if (s.legacy?.some((l) => l.toLowerCase() === bare)) return s.action;
   }
   return null;
 }

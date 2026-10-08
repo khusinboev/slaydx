@@ -16,6 +16,8 @@ import { isProfileField, type ProfileField } from "../../profile/fields";
 export const INPUT_TTL_MINUTES = 10;
 /** «Profilim» re-sends the keyboard (fresh personal links, 7-day tokens) when older than this. */
 export const KEYBOARD_REFRESH_DAYS = 3;
+/** Keyboards sent before this moment have an older layout and are re-sent on the next tap (owner layout 2026-10-08). */
+export const KEYBOARD_LAYOUT_SINCE = "2026-10-08T12:00:00Z";
 
 export type PendingInput = { field: ProfileField; promptMessageId: number | null };
 
@@ -98,8 +100,8 @@ export async function markKeyboard(chatId: number, userId: string): Promise<void
 /** Whether the keyboard (and its personal links) should be re-sent. */
 export async function keyboardStale(chatId: number): Promise<boolean> {
   const rows = await query<{ fresh: boolean }>(
-    `SELECT keyboard_at > now() - make_interval(days => $2) AS fresh FROM bot_chat_state WHERE chat_id = $1`,
-    [chatId, KEYBOARD_REFRESH_DAYS],
+    `SELECT keyboard_at > now() - make_interval(days => $2) AND keyboard_at > $3::timestamptz AS fresh FROM bot_chat_state WHERE chat_id = $1`,
+    [chatId, KEYBOARD_REFRESH_DAYS, KEYBOARD_LAYOUT_SINCE],
   );
   return !rows[0]?.fresh;
 }

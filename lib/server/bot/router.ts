@@ -148,8 +148,11 @@ export async function handleKeyboard(ctx: ChatCtx, action: KeyboardAction): Prom
   await cancelInput(ctx.chatId);
   switch (action) {
     case "slide":
+    case "pro":
+    case "independent":
+    case "referat":
     case "image":
-    case "pro": {
+    case "resume": {
       // A web_app button never sends text; a text one is a blocked tool or a deployment without a public URL.
       const blocked = toolBlocked(action);
       const tool = actionLabel(ctx.lang, action);
@@ -161,19 +164,20 @@ export async function handleKeyboard(ctx: ChatCtx, action: KeyboardAction): Prom
     }
     case "profile":
       await sendScreen(ctx.chatId, await profileScreen(ctx));
-      // Owner decision Q1: «Profilim» refreshes the personal links when they are getting old.
-      if (await keyboardStale(ctx.chatId)) await sendMainKeyboard(ctx, "refreshed");
-      return;
+      break;
     case "files":
       await sendScreen(ctx.chatId, await filesPage(ctx, 0));
-      return;
+      break;
     case "wallet":
       await sendScreen(ctx.chatId, await walletCard(ctx));
-      return;
+      break;
     case "help":
       await sendScreen(ctx.chatId, helpScreen(ctx.lang));
-      return;
+      break;
   }
+  // Owner decision Q1: a chat-screen tap refreshes the keyboard when its personal links are getting old
+  // or it has an older layout (KEYBOARD_LAYOUT_SINCE).
+  if (await keyboardStale(ctx.chatId)) await sendMainKeyboard(ctx, "refreshed");
 }
 
 export { matchKeyboard };
