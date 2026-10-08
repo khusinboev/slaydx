@@ -48,3 +48,20 @@ migration 038_bot_chat_state.sql (additive)
 
 ## Open decisions (owner)
 See the question round in the chat (Q1 login from keyboard buttons, Q2 premium emoji, Q3 tools, Q4 profile editing).
+
+## Owner decisions (2026-10-08)
+| # | Decision |
+|---|---|
+| Q1 | Reply-keyboard WebApp login: **personal signed link** in each keyboard URL, valid **7 days**, refreshed on /start and «Profilim»; expired → page says «botga qayting» |
+| Q2 | Owner HAS Telegram Premium → premium custom emoji in texts and on buttons (fallback emoji always; `BOT_PREMIUM_EMOJI` switch) |
+| Q3 | Keyboard tools: **Slayd · Rasm · Pro slayd** (+ «Profilim») |
+| Q4 | Profile editing **in the chat** (section → field → ForceReply prompt → saved), plus «Ilovada to'liq ochish» |
+Release: when reviewed (fable security review for the link token) + CI green, merge to main (auto-deploy), notify the owner.
+
+## Work packages
+| WP | Scope | Files (exclusive) | Model |
+|---|---|---|---|
+| B1 Link login | signed token (HMAC with SESSION_SECRET-derived key, telegram id + exp 7 d + version), `botAppUrl` body, token → session exchange route (same session rules as Mini App login: account switch confirm, Origin check, rate limit), MiniAppBridge reads `?bt=` when initData is empty and strips it from the URL, expired/invalid page state «botga qayting», revoke on logout-everywhere | `lib/server/bot-link.ts`, `app/api/auth/bot-link/**`, `components/telegram/MiniAppBridge.tsx`, `lib/telegram-miniapp.ts`, `lib/server/auth.ts` (only additions), tests | opus |
+| B2 Bot screens | `lib/server/bot/*` (ui/emoji table, keyboard, profile screens, callbacks, state), migration `038_bot_chat_state.sql`, `lib/server/profile.ts` updateProfile + audit (route refactor), `lib/profile/fields.ts` (moved pure model), telegram.ts routing (callback_query, keyboard texts, pending input), /start + menu button, `scripts/bot.mts` allowed_updates, `scripts/bot-commands.mts`, tests | opus |
+| B3 Emoji pack | pick premium emoji packs and map each icon key → custom_emoji_id + fallback (lead fetches IDs via getStickerSet) | research only | sonnet |
+| S review | security of B1 token + B2 input handling | read-only | fable |
