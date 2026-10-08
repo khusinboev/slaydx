@@ -61,6 +61,56 @@ export function miniAppSessionAction(
   return "replace";
 }
 
+/**
+ * Bot keyboard link sign-in (`POST /api/auth/bot-link`, docs/bot/PLAN.md Q1)
+ * over this browser's current session:
+ *  - `create` / `reuse` / `refuse_phone` — as in `miniAppSessionAction`;
+ *  - `confirm` — the session is ANOTHER Telegram account and the client has not
+ *    confirmed: answer 409 `switch_confirm`, nothing changes (never a silent
+ *    switch — a link can be forwarded or opened in Telegram's in-app browser,
+ *    which shares the webview cookies);
+ *  - `replace` — the same, after the user tapped «O'tish»: revoke this session
+ *    row only, then a new one.
+ * A link is valid for days, so the Mini App's 10-minute freshness rule cannot
+ * apply; the explicit confirmation is the guard.
+ */
+export type BotLinkSessionAction = "create" | "reuse" | "confirm" | "replace" | "refuse_phone";
+
+export function botLinkSessionAction(
+  current: { telegramId: string | null } | null,
+  telegramId: string,
+  confirmed: boolean,
+): BotLinkSessionAction {
+  // Without a launch date `miniAppSessionAction` answers `refuse_stale` for any other account.
+  const base = miniAppSessionAction(current, telegramId, undefined);
+  if (base === "create" || base === "reuse" || base === "refuse_phone") return base;
+  return confirmed ? "replace" : "confirm";
+}
+
+/**
+ * The account behind a verified bot link, or `null` when no user has this
+ * Telegram id. `revoked` — one of the user's sessions was revoked at or after
+ * the link's issue second (logout, «barcha qurilmalardan chiqish», admin
+ * revoke, an account switch away from it): the link is void. Revoked rows are
+ * purged 7 days after revocation (`purgeExpiredSessions`), and a link lives
+ * 7 days from issue, so a purge never revives a link. `blocked` — admin block.
+ */
+export async function botLinkAccount(
+  telegramId: string,
+  issuedAtSec: number,
+): Promise<{ user: SessionUser; blocked: boolean; revoked: boolean } | null> {
+  const row = await queryOne<Record<string, unknown> & { is_blocked: boolean; link_revoked: boolean }>(
+    `SELECT ${USER_COLUMNS},
+            EXISTS (SELECT 1 FROM sessions s
+                     WHERE s.user_id = users.id AND s.revoked_at >= to_timestamp($2)) AS link_revoked
+       FROM users
+      WHERE telegram_id = $1`,
+    [telegramId, issuedAtSec],
+  );
+  if (!row) return null;
+  return { user: rowToUser(row as never), blocked: row.is_blocked === true, revoked: row.link_revoked === true };
+}
+
 /*
  * Data-check-string: every received field except `hash`. Mini App initData
  * from Bot API 8.0+ clients also carries `signature` (Ed25519, meant for
