@@ -606,8 +606,8 @@ export async function botStepUp(
   rawCode: unknown,
   inTx: (client: PoolClient) => Promise<void>,
 ): Promise<void> {
-  requireAdminCrypto();
   const code = parseTotpCode(rawCode);
+  requireAdminCrypto();
   const w: Who = { ...who, ip: "unknown", userAgent: "telegram-bot" };
   await withVerifiedTotp(w, code, "bot_reauth", async (client, audit) => {
     await inTx(client);
