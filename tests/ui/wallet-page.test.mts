@@ -234,7 +234,7 @@ test("Hamyon: «Do'st taklif qilish» moves focus to the referral card", async (
 
 // ───────────────────────── first top-up bonus hint (docs/bonus/PLAN.md «Bonus 2»)
 
-const HINT = "Birinchi to‘ldirishga +10% bonus (50 000 so‘mdan, ko‘pi 20 000)";
+const HINT = "Birinchi to‘ldirishga +10% bonus (50 000 so‘mdan, ko‘pi 20 000 so‘m)";
 const hintText = () => document.querySelector("[data-wallet-first-bonus]")?.textContent?.replace(/\u00a0/g, " ") ?? null;
 const meWith = (firstTopupEligible: unknown) => () => json(200, { user: USER, transactions: LEDGER, firstTopupEligible });
 

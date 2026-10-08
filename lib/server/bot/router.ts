@@ -188,6 +188,8 @@ async function bonusRefresh(ctx: ChatCtx): Promise<{ toast: string; screen: Scre
   let missing = 0;
   for (const c of tasks.channels.slice(0, BONUS_MAX_CHANNELS)) {
     if (c.claim) continue;
+    // Each check also spends the single-check budget, so «Yangilash» cannot bypass it (review MINOR).
+    if (!(await rateLimit(`bonus-check:${ctx.user.id}`, BONUS_CHECKS_PER_MIN, 60)).ok) break;
     const r = await checkChannel(ctx.user.id, ctx.telegramId, c.id);
     if (r.status === "paid") paid += r.points;
     else if (r.status === "unknown") unknown += 1;

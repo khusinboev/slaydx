@@ -185,6 +185,7 @@ export function ledgerTitle(lang: Lang, e: Pick<LedgerItem, "kind" | "note">): s
       if (join) return t(lang, "ledger.channelJoin", { c: join });
       const stay = /^Kanalda qolish bonusi:\s*(.+)$/.exec(note)?.[1];
       if (stay) return t(lang, "ledger.channelStay", { c: stay });
+      if (/^Birinchi to[‘']ldirish bonusi/.test(note)) return t(lang, "ledger.firstTopup");
       return lang === "uz" && note ? note : t(lang, "ledger.bonus");
     }
     case "subscription":
