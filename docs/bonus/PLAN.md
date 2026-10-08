@@ -34,3 +34,13 @@ Ledger refs: `channel:<channel_id>:<user_id>:join`, `channel:<channel_id>:<user_
 | K1 Bot + core | `lib/server/bonus-channels.ts` (user-side: tasks, check+pay join, stay sweep, chatMember), worker housekeeping step, bot screens + callbacks + i18n (uz/ru/en), signup bonus 3000→2000 (+ texts/tests), tests | `lib/server/bonus-channels.ts`, `lib/server/bot/*`, `lib/server/telegram.ts`, `lib/server/worker.ts` (one step), `lib/server/auth.ts` (constant), tests | opus |
 | K2 Admin | admin API + page «Bonus kanallar» (CRUD, resolve channel, bot-admin check, stats, audit, permission) | `lib/server/admin-bonus-channels.ts`, `app/api/admin/bonus-channels/**`, `app/admin/(panel)/bonus/**`, `components/admin/bonus/**`, admin nav entry, tests | opus |
 | Review | security/money review of both | read-only | opus |
+
+## K1 implementation notes
+- `checkChannel` → `paid | already | not_member | inactive | unknown | blocked`; a claimed channel answers `already` with no Bot API
+  call; the payment re-checks `telegram_id`, `is_blocked` and `active` under the user row lock / channel share lock, then
+  `INSERT … ON CONFLICT DO NOTHING` + `topUpInTx` (`channel:<id>:<user>:join`, note `Kanal obunasi: <title>`).
+- `staySweep(limit)` — worker step `bonus-stay`, every 10 min, batch 50, ≤ 20 Bot API calls/s, 30 s budget; `unknown` retried
+  after 6 h (`stay_checked_at`); stay note `Kanalda qolish bonusi: <title>`; the notice message carries «🎁 Boshqa vazifalar» (`b:h`).
+- Bot callbacks: `b:h` (tasks screen), `b:c:<channelId>` (check; ≤ 10 per user per minute). Hamyon's first row is «🎁 Bonus olish».
+- Admin panel (K2): the bot reads only `active`, `sort`, `title`, `username` (no username → no «Obuna bo‘lish» button),
+  `join_bonus`, `stay_bonus`, `stay_days`, `chat_id`.
