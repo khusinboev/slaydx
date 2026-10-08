@@ -14,7 +14,7 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *   - resolve (preview): getChat → title/username/type, getChatMember(chat, bot id from the
  *     token) → admin / not_admin (+ the warning) / unknown; non-channel types 400 `chat_type`,
  *     unknown chats 400 `chat_not_found`, Telegram down 503; a known chat id is flagged;
- *   - create: validation (amounts 0..1 000 000 integers, at least one > 0, stay days 1..365)
+ *   - create: validation (amounts 0..20 000 integers per channel, at least one > 0, stay days 1..365)
  *     happens BEFORE Telegram; the row + ONE `bonus_channel.create` audit row commit together;
  *     a duplicate chat id is 409 with no second audit row; title override; default sort;
  *   - update: only changed fields go into before/after; no change 409 `state`; bounds 400;
@@ -295,11 +295,12 @@ test("parseChannelRef: invite links are 400 invite_link; junk, other hosts and b
   }
 });
 
-test("validators: amounts are JSON integers 0..1 000 000, stay days 1..365, titles trimmed 1..128", () => {
+test("validators: amounts are JSON integers 0..20 000 (per-channel cap), stay days 1..365, titles trimmed 1..128", () => {
+  assert.equal(lib.MAX_BONUS, 20_000);
   assert.equal(lib.parseAmount(0, "x"), 0);
-  assert.equal(lib.parseAmount(1_000_000, "x"), 1_000_000);
-  for (const bad of [-1, 1_000_001, 1.5, "1000", null, Number.NaN, Number.POSITIVE_INFINITY, true]) {
-    assert.throws(() => lib.parseAmount(bad, "x"), /0 dan 1 000 000/, String(bad));
+  assert.equal(lib.parseAmount(20_000, "x"), 20_000);
+  for (const bad of [-1, 20_001, 1_000_000, 1_000_001, 1.5, "1000", null, Number.NaN, Number.POSITIVE_INFINITY, true]) {
+    assert.throws(() => lib.parseAmount(bad, "x"), /0 dan 20 000 gacha butun son bo'lishi kerak \(bitta kanal uchun eng ko'pi 20 000 ball\)/, String(bad));
   }
   assert.equal(lib.parseStayDays(1), 1);
   assert.equal(lib.parseStayDays(365), 365);
@@ -491,6 +492,25 @@ test("create: validation is 400 before any Bot API call and writes nothing", { s
   assert.deepEqual(await channelRows(), []);
 });
 
+test("create: each bonus is capped at 20 000 per channel — 400 with an Uzbek error before Telegram; 20 000 itself is fine", { skip }, async () => {
+  await resetChannels();
+  const s = await session("owner");
+  const ch = freshChannel();
+  const input = `@${ch.username}`;
+  botCalls.length = 0;
+  const join = await create(s.cookie, { input, joinBonus: 20_001 });
+  assert.equal(join.status, 400);
+  assert.equal(join.body.error, "Obuna bonusi: 0 dan 20 000 gacha butun son bo'lishi kerak (bitta kanal uchun eng ko'pi 20 000 ball)");
+  const stay = await create(s.cookie, { input, joinBonus: 1000, stayBonus: 20_001 });
+  assert.equal(stay.status, 400);
+  assert.equal(stay.body.error, "Qolish bonusi: 0 dan 20 000 gacha butun son bo'lishi kerak (bitta kanal uchun eng ko'pi 20 000 ball)");
+  assert.deepEqual(botCalls, [], "validation must run before Telegram");
+  assert.deepEqual(await channelRows(), []);
+  const ok = await create(s.cookie, { input, joinBonus: 20_000, stayBonus: 20_000 });
+  assert.equal(ok.status, 201, JSON.stringify(ok.body));
+  assert.deepEqual([(ok.body.item as Item).joinBonus, (ok.body.item as Item).stayBonus], [20_000, 20_000]);
+});
+
 // ───────────────────────────── update
 
 async function seedChannel(s: Session, body: Record<string, unknown> = {}): Promise<Item> {
@@ -527,11 +547,18 @@ test("update: only changed fields go into before/after; no change 409 state; bou
   assert.equal(same.status, 409);
   assert.equal(same.body.code, "state");
 
-  for (const body of [{}, { joinBonus: -1 }, { stayDays: 400 }, { active: 1 }, { joinBonus: 0 }, { title: "" }, { sort: 1.5 }]) {
+  for (const body of [{}, { joinBonus: -1 }, { stayDays: 400 }, { active: 1 }, { joinBonus: 0 }, { title: "" }, { sort: 1.5 }, { joinBonus: 20_001 }, { stayBonus: 50_000 }]) {
     const b = await patch(s.cookie, item.id, body);
     assert.equal(b.status, 400, `${JSON.stringify(body)} → ${JSON.stringify(b.body)}`);
   }
   assert.equal((await audits(s.admin.adminId, "bonus_channel.update")).length, 2, "refusals are not audited");
+  // The per-channel cap (money review): 20 000 for each bonus, with a clear Uzbek error.
+  const over = await patch(s.cookie, item.id, { stayBonus: 20_001 });
+  assert.equal(over.status, 400);
+  assert.equal(over.body.error, "Qolish bonusi: 0 dan 20 000 gacha butun son bo'lishi kerak (bitta kanal uchun eng ko'pi 20 000 ball)");
+  const cap = await patch(s.cookie, item.id, { joinBonus: 20_000, stayBonus: 20_000 });
+  assert.equal(cap.status, 200, JSON.stringify(cap.body));
+  assert.deepEqual([(cap.body.item as Item).joinBonus, (cap.body.item as Item).stayBonus], [20_000, 20_000]);
 
   const missing = await patch(s.cookie, "900000000000", { joinBonus: 10 });
   assert.equal(missing.status, 404);

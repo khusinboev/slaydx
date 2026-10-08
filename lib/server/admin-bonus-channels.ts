@@ -30,12 +30,14 @@ import { parseBigintId, parseReason } from "./admin-accounts";
  *     `FOR KEY SHARE` lock on the channel row (FK), so it waits for this transaction and then
  *     fails on the FK, and the claims FK's `ON DELETE CASCADE` can never drop a paid claim.
  *
- * Validation: amounts are JSON integers 0..1 000 000 (at least one > 0), `stayDays` 1..365,
+ * Validation: amounts are JSON integers 0..20 000 per channel (`MAX_BONUS`, review cap; the DB CHECK allows
+ * 1 000 000) with at least one > 0, `stayDays` 1..365,
  * `sort` −1 000 000..1 000 000, `title` 1..128 characters. The reason is optional (audited
  * when given). Every refusal is a 4xx before any write, so nothing partial is ever audited.
  */
 
-export const MAX_BONUS = 1_000_000;
+/** Per-channel cap of `join_bonus` and of `stay_bonus` (money review): a typo cannot pay out a fortune. */
+export const MAX_BONUS = 20_000;
 export const MAX_STAY_DAYS = 365;
 export const MAX_SORT = 1_000_000;
 export const MAX_TITLE = 128;
@@ -153,7 +155,7 @@ function intIn(raw: unknown, min: number, max: number, message: string): number 
   return raw;
 }
 
-const amountMessage = (label: string) => `${label}: 0 dan 1 000 000 gacha butun son bo'lishi kerak`;
+const amountMessage = (label: string) => `${label}: 0 dan 20 000 gacha butun son bo'lishi kerak (bitta kanal uchun eng ko'pi 20 000 ball)`;
 
 export function parseAmount(raw: unknown, label: string): number {
   return intIn(raw, 0, MAX_BONUS, amountMessage(label));

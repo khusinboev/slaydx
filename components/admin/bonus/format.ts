@@ -6,7 +6,8 @@ import type { BonusChannel, BotAdminStatus } from "@/lib/admin-api/bonus";
  * `lib/server/admin-bonus-channels.ts`; the server validates again and is the authority.
  */
 
-export const MAX_BONUS = 1_000_000;
+/** Per-channel cap of each bonus (the server's `MAX_BONUS`). */
+export const MAX_BONUS = 20_000;
 export const MAX_STAY_DAYS = 365;
 export const MAX_SORT = 1_000_000;
 export const MAX_TITLE = 128;

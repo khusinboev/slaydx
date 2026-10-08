@@ -120,6 +120,12 @@ test("format: bonusText, checkIntText, checkAmounts, defaultPreset", () => {
   assert.equal(checkAmounts({ joinBonus: "0", stayBonus: "0", stayDays: "7" }).ok, false, "at least one bonus");
   assert.equal(checkAmounts({ joinBonus: "1000", stayBonus: "0", stayDays: "0" }).ok, false, "days 1..365");
   assert.deepEqual(checkAmounts({ joinBonus: "1000", stayBonus: "2000", stayDays: "7" }), { ok: true, value: { joinBonus: 1000, stayBonus: 2000, stayDays: 7 } });
+  // Per-channel cap 20 000 for each bonus (mirrors the server's MAX_BONUS).
+  assert.deepEqual(checkAmounts({ joinBonus: "20 000", stayBonus: "20000", stayDays: "7" }), { ok: true, value: { joinBonus: 20000, stayBonus: 20000, stayDays: 7 } });
+  const overJoin = checkAmounts({ joinBonus: "20001", stayBonus: "0", stayDays: "7" });
+  assert.ok(!overJoin.ok && /^Obuna bonusi: 0 dan 20.000 gacha$/.test(overJoin.error), JSON.stringify(overJoin));
+  const overStay = checkAmounts({ joinBonus: "1000", stayBonus: "1000000", stayDays: "7" });
+  assert.ok(!overStay.ok && /^Qo'shimcha bonus: 0 dan 20.000 gacha$/.test(overStay.error), JSON.stringify(overStay));
   assert.equal(defaultPreset(0), "news");
   assert.equal(defaultPreset(3), "extra");
   assert.deepEqual(checkInviteText(" t.me/joinchat/AbCdEfGh12 "), { ok: true, value: "https://t.me/+AbCdEfGh12" });
