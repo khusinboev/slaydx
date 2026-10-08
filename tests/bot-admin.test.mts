@@ -397,20 +397,29 @@ test("Kanal ulash: forward from the channel → type → confirm → created (au
   assert.match(String(sends()[0]!.body.text), /Bu kanal posti emas/);
   installFetch();
   await tg.handleUpdate(textUpdate(a.tg, "post", { forward_origin: { type: "channel", chat: { id: chatId, type: "channel", title: "x" }, message_id: 5 } }));
-  const typeScreen = sends()[0]!.body;
-  assert.match(String(typeScreen.text), /Admin &lt;yangiliklar&gt;<\/b>\n@adm_news_\d+ · ID <code>-100\d+<\/code>\n\n✅ Bot kanalda admin\./);
+  // C-Q2: after resolving, «🔒 Majburiy» / «➕ Ixtiyoriy» first, then the presets of that kind.
+  const kindScreen = sends()[0]!.body;
+  assert.match(String(kindScreen.text), /Admin &lt;yangiliklar&gt;<\/b>\n@adm_news_\d+ · ID <code>-100\d+<\/code>\n\n✅ Bot kanalda admin\./);
+  assert.deepEqual(buttons(kindScreen).slice(0, 2).map((b) => [b.text, b.callback_data]), [["🔒 Majburiy", "a:ck:m"], ["➕ Ixtiyoriy", "a:ck:o"]]);
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, "a:ck:o", 601));
+  const typeScreen = edits()[0]!.body;
+  assert.match(String(typeScreen.text), /Obuna: <b>➕ Ixtiyoriy<\/b>/);
   assert.deepEqual(buttons(typeScreen).slice(0, 2).map((b) => b.text), ["📄 Yangiliklar · 2 000 so‘m", "➕ Qo‘shimcha · 1 000 + 7 kunda 2 000"].map(nb));
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, "a:cy:z", 601));
+  assert.ok(toasts()[0], "a mandatory preset on an optional draft is refused");
   installFetch();
   await tg.handleUpdate(cbUpdate(a.tg, "a:cy:e", 601));
   assert.ok(String(edits()[0]!.body.text).includes(nb("Obuna bo‘lganda: <b>1 000 so‘m</b>\n7 kun qolsa: yana <b>2 000 so‘m</b>")));
   installFetch();
   await tg.handleUpdate(cbUpdate(a.tg, "a:cc:e", 601));
   assert.deepEqual(toasts(), ["✅ Kanal ulandi"]);
-  const row = await queryOne<{ id: string; join_bonus: number; stay_bonus: number; stay_days: number; active: boolean }>(
-    "SELECT id::text AS id, join_bonus, stay_bonus, stay_days, active FROM bonus_channels WHERE chat_id = $1",
+  const row = await queryOne<{ id: string; join_bonus: number; stay_bonus: number; stay_days: number; active: boolean; mandatory: boolean }>(
+    "SELECT id::text AS id, join_bonus, stay_bonus, stay_days, active, mandatory FROM bonus_channels WHERE chat_id = $1",
     [chatId],
   );
-  assert.deepEqual({ ...row, id: undefined }, { id: undefined, join_bonus: 1000, stay_bonus: 2000, stay_days: 7, active: true });
+  assert.deepEqual({ ...row, id: undefined }, { id: undefined, join_bonus: 1000, stay_bonus: 2000, stay_days: 7, active: true, mandatory: false });
   const created = await audit(a.adminId, "bonus_channel.create");
   assert.equal(created.length, 1);
   assert.equal(created[0]!.target_id, row!.id);
@@ -424,7 +433,7 @@ test("Kanal ulash: forward from the channel → type → confirm → created (au
   assert.match(String(sends()[0]!.body.text), /allaqachon ulangan/);
   assert.equal((await audit(a.adminId, "bonus_channel.create")).length, 1);
 
-  // A new channel by t.me link → news type.
+  // A new channel by t.me link → 🔒 Majburiy → «Bonussiz» (a mandatory channel may pay nothing).
   const chat2 = chatId - 1;
   const uname2 = `${uname}_b`;
   chats[`@${uname2}`] = { id: chat2, type: "channel", title: "Ikkinchi", username: uname2 };
@@ -432,10 +441,28 @@ test("Kanal ulash: forward from the channel → type → confirm → created (au
   installFetch();
   await tg.handleUpdate(cbUpdate(a.tg, "a:cn", 603));
   await tg.handleUpdate(textUpdate(a.tg, `https://t.me/${uname2}`));
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, "a:ck:m", 604));
+  const mScreen = edits()[0]!.body;
+  assert.match(String(mScreen.text), /Obuna: <b>🔒 Majburiy<\/b>/);
+  assert.deepEqual(buttons(mScreen).slice(0, 3).map((b) => b.callback_data), ["a:cy:m", "a:cy:z", "a:cg"]);
+  installFetch();
   await tg.handleUpdate(cbUpdate(a.tg, "a:cy:n", 604));
-  await tg.handleUpdate(cbUpdate(a.tg, "a:cc:n", 604));
-  const r2 = await queryOne<{ join_bonus: number; stay_bonus: number }>("SELECT join_bonus, stay_bonus FROM bonus_channels WHERE chat_id = $1", [chat2]);
-  assert.deepEqual({ ...r2 }, { join_bonus: 2000, stay_bonus: 0 });
+  assert.ok(toasts()[0], "an optional preset on a mandatory draft is refused");
+  await tg.handleUpdate(cbUpdate(a.tg, "a:cy:z", 604));
+  assert.ok(String(edits().at(-1)!.body.text).includes("Obuna bo‘lganda: <b>bonussiz</b>"));
+  await tg.handleUpdate(cbUpdate(a.tg, "a:cc:z", 604));
+  const r2 = await queryOne<{ id: string; join_bonus: number; stay_bonus: number; mandatory: boolean }>(
+    "SELECT id::text AS id, join_bonus, stay_bonus, mandatory FROM bonus_channels WHERE chat_id = $1",
+    [chat2],
+  );
+  assert.deepEqual({ ...r2, id: undefined }, { id: undefined, join_bonus: 0, stay_bonus: 0, mandatory: true });
+  const c2 = (await audit(a.adminId, "bonus_channel.create")).find((x) => x.target_id === r2!.id);
+  assert.equal((c2!.after as Record<string, unknown>).mandatory, true, "audited as mandatory");
+  // The list marks it with 🔒.
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, "a:c", 604));
+  assert.ok(buttons(edits()[0]!.body).some((b) => b.callback_data === `a:ct:${r2!.id}` && b.text.includes("🔒 Ikkinchi")));
 
   // Toggle: ⏸ (audited), the list re-rendered.
   installFetch();

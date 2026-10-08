@@ -414,6 +414,7 @@ test("create: 201, row + ONE bonus_channel.create audit row (after = stored valu
     stayBonus: 0,
     stayDays: 7,
     active: true,
+    mandatory: false,
     sort: 1,
   });
 
@@ -643,7 +644,7 @@ test("delete: refused with 409 has_claims while claims exist (row and claims sta
   assert.equal(a[0]!.after, null);
   assert.deepEqual(
     Object.keys(a[0]!.before as Record<string, unknown>).sort(),
-    ["active", "chatId", "inviteLink", "joinBonus", "sort", "stayBonus", "stayDays", "title", "username"],
+    ["active", "chatId", "inviteLink", "joinBonus", "mandatory", "sort", "stayBonus", "stayDays", "title", "username"],
   );
 
   const again = await del(s.cookie, unused.id, {});

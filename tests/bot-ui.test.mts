@@ -720,3 +720,39 @@ test("clip: cuts by code points — an emoji in a long channel title is never sp
   assert.equal(Array.from(out).length, 10);
   assert.ok(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(out), "no lone high surrogate");
 });
+
+/* ── Bonus 3 D2: mandatory channels (C-Q2) ── */
+
+test("mandatory channels: 🔒 in «Bonuslar» (no «+0» for a bonus-free one); /start card buttons + «Tekshirish» (b:m); all joined → thanks", () => {
+  const base = bonusTasks();
+  const joinedAt = new Date(BONUS_NOW).toISOString();
+  const tasks = {
+    ...base,
+    channels: [
+      { id: "7", title: "Rasmiy", username: "rasmiy", joinUrl: "https://t.me/rasmiy", joinBonus: 0, stayBonus: 0, stayDays: 7, mandatory: true, claim: null },
+      { id: "8", title: "Rasmiy 2", username: "rasmiy2", joinUrl: "https://t.me/rasmiy2", joinBonus: 2000, stayBonus: 0, stayDays: 7, mandatory: true, claim: { joinedAt, joinPaid: 2000, stayPaid: 0, leftAt: null } },
+      ...base.channels,
+    ],
+  };
+  const btns = inline(bonus.bonusScreen("uz", tasks, BONUS_NOW));
+  const open = btns.find((b) => b.url === "https://t.me/rasmiy")!;
+  assert.equal(open.text, "🔒 Rasmiy", "not joined: the 🔒 icon, no «+0 so‘m»");
+  assert.equal(open.style, "primary");
+  const joined = btns.find((b) => b.callback_data === codes.cb.bonusDone() && /Rasmiy 2/.test(b.text))!;
+  assert.match(joined.text, /^✅ 🔒 Rasmiy 2 · \+2\s000 so‘m$/u, "joined: green, still marked 🔒");
+
+  assert.deepEqual(codes.parseCallback("b:m"), { kind: "mandatoryCheck" });
+  assert.deepEqual(codes.parseCallback("b:m:1"), { kind: "unknown" });
+  for (const lang of LANGS) {
+    const card = bonus.mandatoryScreen(lang, [
+      { id: "7", title: "Rasmiy", joinUrl: "https://t.me/rasmiy" },
+      { id: "9", title: "Yopiq", joinUrl: null },
+    ]);
+    assert.ok(card.text.includes(i18n.t(lang, "mand.title")), lang);
+    assert.deepEqual(inline(card).map((x) => x.url ?? x.callback_data), ["https://t.me/rasmiy", "b:c:9", "b:m"], lang);
+    const done = bonus.mandatoryScreen(lang, []);
+    assert.ok(!done.reply_markup, "all joined → no buttons");
+    assert.ok(done.text.includes(i18n.t(lang, "mand.done")), lang);
+  }
+  assert.match(bonus.mandatoryScreen("uz", [{ id: "7", title: "R", joinUrl: null }]).text, /Botdan to‘liq foydalanish uchun kanalga obuna bo‘ling/);
+});
