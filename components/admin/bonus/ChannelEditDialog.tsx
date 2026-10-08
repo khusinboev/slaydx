@@ -5,7 +5,8 @@ import { ConfirmDialog, toast } from "@/components/admin/ui";
 import { cn } from "@/lib/cn";
 import { updateBonusChannel, type BonusChannel, type BonusChannelPatch } from "@/lib/admin-api/bonus";
 import { AmountFields, FIELD } from "./AmountFields";
-import { amountsDraft, bonusText, checkAmounts, checkIntText, checkTitle, MAX_SORT, type AmountsDraft } from "./format";
+import { InviteLinkField } from "./InviteLinkField";
+import { amountsDraft, bonusText, checkAmounts, checkIntText, checkInviteText, checkTitle, MAX_SORT, type AmountsDraft } from "./format";
 
 export type ChannelEditDialogProps = {
   /** The channel being edited; `null` keeps the dialog closed. */
@@ -27,16 +28,19 @@ export function ChannelEditDialog(props: ChannelEditDialogProps) {
 function Body({ item, onClose, onSaved }: ChannelEditDialogProps & { item: BonusChannel }) {
   const ids = useId();
   const [title, setTitle] = useState(item.title);
+  const [invite, setInvite] = useState(item.inviteLink ?? "");
   const [amounts, setAmounts] = useState<AmountsDraft>(() => amountsDraft(item));
   const [sort, setSort] = useState(String(item.sort));
   const [active, setActive] = useState(item.active);
 
   const titleCheck = checkTitle(title);
+  const inviteCheck = checkInviteText(invite);
   const amountsCheck = checkAmounts(amounts);
   const sortCheck = checkIntText(sort, -MAX_SORT, MAX_SORT, "Tartib");
 
   const patch: BonusChannelPatch = {};
   if (titleCheck.ok && titleCheck.value !== item.title) patch.title = titleCheck.value;
+  if (inviteCheck.ok && inviteCheck.value !== item.inviteLink) patch.inviteLink = inviteCheck.value;
   if (amountsCheck.ok) {
     if (amountsCheck.value.joinBonus !== item.joinBonus) patch.joinBonus = amountsCheck.value.joinBonus;
     if (amountsCheck.value.stayBonus !== item.stayBonus) patch.stayBonus = amountsCheck.value.stayBonus;
@@ -44,7 +48,7 @@ function Body({ item, onClose, onSaved }: ChannelEditDialogProps & { item: Bonus
   }
   if (sortCheck.ok && sortCheck.value !== item.sort) patch.sort = sortCheck.value;
   if (active !== item.active) patch.active = active;
-  const valid = titleCheck.ok && amountsCheck.ok && sortCheck.ok;
+  const valid = titleCheck.ok && inviteCheck.ok && amountsCheck.ok && sortCheck.ok;
   const changed = Object.keys(patch).length > 0;
 
   return (
@@ -84,6 +88,8 @@ function Body({ item, onClose, onSaved }: ChannelEditDialogProps & { item: Bonus
         />
         {!titleCheck.ok ? <span className="text-destructive text-xs">{titleCheck.error}</span> : null}
       </div>
+
+      <InviteLinkField value={invite} onChange={setInvite} chatRef={item.username ? `@${item.username}` : item.chatId} needed={!item.username} />
 
       <AmountFields draft={amounts} onChange={setAmounts} error={amountsCheck.ok ? null : amountsCheck.error} />
       {item.stats.joined > 0 ? (

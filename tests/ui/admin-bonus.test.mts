@@ -7,7 +7,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import type * as IdentityModule from "../../components/admin/shell/admin-identity.tsx";
 import type * as ToasterModule from "../../components/admin/ui/Toaster.tsx";
 import { BonusPage } from "../../components/admin/bonus/BonusPage.tsx";
-import { bonusText, checkAmounts, checkIntText, defaultPreset } from "../../components/admin/bonus/format.ts";
+import { bonusText, checkAmounts, checkIntText, checkInviteText, defaultPreset } from "../../components/admin/bonus/format.ts";
 
 /**
  * `/admin/bonus` «Bonus kanallar» (docs/bonus/PLAN.md K2): helpers; loading / empty (with the
@@ -21,7 +21,9 @@ import { bonusText, checkAmounts, checkIntText, defaultPreset } from "../../comp
  *   - edit dialog sending every field instead of the diff → "edit: only changed fields";
  *   - `disabled={hasClaims}` removed from the delete button → "delete: disabled while claims exist";
  *   - the bot-status effect not started after the list loads → "ready: rows" (no «Bot admin»);
- *   - the preview kept after the address changes → "add: first channel".
+ *   - the preview kept after the address changes → "add: first channel";
+ *   - the edit dialog never sending `inviteLink` → "invite link: private channel";
+ *   - «Havola yaratish» not filling the field → "invite link: private channel".
  */
 const req = createRequire(import.meta.url);
 const { AdminIdentityProvider } = req("../../components/admin/shell/admin-identity.tsx") as typeof IdentityModule;
@@ -67,6 +69,7 @@ const NEWS = {
   id: "1",
   chatId: "-1001000000001",
   username: "slaydx_news",
+  inviteLink: null as string | null,
   title: "SlaydX Yangiliklar",
   joinBonus: 2000,
   stayBonus: 0,
@@ -119,6 +122,9 @@ test("format: bonusText, checkIntText, checkAmounts, defaultPreset", () => {
   assert.deepEqual(checkAmounts({ joinBonus: "1000", stayBonus: "2000", stayDays: "7" }), { ok: true, value: { joinBonus: 1000, stayBonus: 2000, stayDays: 7 } });
   assert.equal(defaultPreset(0), "news");
   assert.equal(defaultPreset(3), "extra");
+  assert.deepEqual(checkInviteText(" t.me/joinchat/AbCdEfGh12 "), { ok: true, value: "https://t.me/+AbCdEfGh12" });
+  assert.deepEqual(checkInviteText(""), { ok: true, value: null });
+  for (const bad of ["https://t.me/slaydx_news", "https://evil.example/+AbCdEfGh12", "https://t.me/+short"]) assert.equal(checkInviteText(bad).ok, false, bad);
 });
 
 /* ───────────────────────────── states ───────────────────────────── */
@@ -315,4 +321,54 @@ test("delete: confirm dialog, DELETE, the row disappears; a 409 has_claims stays
   const d2 = within(await screen.findByRole("dialog"));
   fireEvent.click(d2.getByRole("button", { name: "O'chirish" }));
   await d2.findByText(/o'chirib bo'lmaydi/);
+});
+
+test("invite link: private channel row warns without a link; add fills it via «Havola yaratish»; edit clears it", async () => {
+  const LINK = "https://t.me/+AbCdEfGh12";
+  const PRIV = { ...PARTNER, id: "3", chatId: "-1001000000003", title: "Yopiq hamkor" };
+  const calls = stubFetch([
+    listRoute([NEWS, PARTNER, { ...PRIV, inviteLink: LINK }]),
+    botRoute({}),
+    (c) =>
+      c.url.startsWith("/api/admin/bonus-channels/resolve")
+        ? json(200, { chatId: "-1001000000009", title: "Maxfiy kanal", username: null, type: "channel", botAdmin: "admin", warning: null, existingId: null })
+        : null,
+    (c) => (c.url === "/api/admin/bonus-channels/invite-link" ? json(200, { inviteLink: "https://t.me/+NewLink12345" }) : null),
+    (c) => (c.method === "POST" && c.url === "/api/admin/bonus-channels" ? json(201, { item: { ...PRIV, id: "9", title: "Maxfiy kanal", inviteLink: "https://t.me/+NewLink12345" }, botAdmin: "admin", warning: null }) : null),
+    (c) => (c.method === "PATCH" ? json(200, { item: { ...PRIV, inviteLink: null } }) : null),
+  ]);
+  mount(h(BonusPage));
+  await screen.findByText("Yopiq hamkor");
+  assert.ok(within(rowOf("2")).getByText("Taklif havolasi yo'q"), "private channel without a link is flagged");
+  assert.ok(!within(rowOf("1")).queryByText("Taklif havolasi yo'q"), "public channels need no link");
+  const invite = rowOf("3").querySelector<HTMLAnchorElement>("[data-invite]");
+  assert.ok(invite);
+  assert.equal(invite.getAttribute("href"), LINK);
+
+  // Add a private channel: the field warns, «Havola yaratish» fills it, the POST carries it.
+  fireEvent.click(button("Kanal qo'shish"));
+  const dialog = within(await screen.findByRole("dialog"));
+  fireEvent.change(dialog.getByLabelText("Kanal manzili"), { target: { value: "-1001000000009" } });
+  fireEvent.click(dialog.getByRole("button", { name: "Tekshirish" }));
+  await dialog.findByText("Maxfiy kanal");
+  assert.ok(dialog.getByText(/havolasiz foydalanuvchi kanalga kira olmaydi/));
+  fireEvent.click(dialog.getByRole("button", { name: "Havola yaratish" }));
+  await waitFor(() => assert.equal((dialog.getByLabelText("Taklif havolasi") as HTMLInputElement).value, "https://t.me/+NewLink12345"));
+  assert.deepEqual(calls.find((c) => c.url === "/api/admin/bonus-channels/invite-link")!.body, { input: "-1001000000009" });
+  fireEvent.change(dialog.getByLabelText("Taklif havolasi"), { target: { value: "https://t.me/nope" } });
+  assert.equal(button("Qo'shish").disabled, true, "an invalid link blocks saving");
+  fireEvent.change(dialog.getByLabelText("Taklif havolasi"), { target: { value: "https://t.me/joinchat/NewLink12345" } });
+  fireEvent.click(button("Qo'shish"));
+  await waitFor(() => assert.ok(!screen.queryByRole("dialog")));
+  assert.equal(calls.find((c) => c.method === "POST" && c.url === "/api/admin/bonus-channels")!.body.inviteLink, "https://t.me/+NewLink12345", "normalized before sending");
+
+  // Edit: clearing the link sends exactly {inviteLink: null}.
+  fireEvent.click(button("Yopiq hamkor: tahrirlash"));
+  const edit = within(await screen.findByRole("dialog"));
+  assert.equal((edit.getByLabelText("Taklif havolasi") as HTMLInputElement).value, LINK);
+  fireEvent.change(edit.getByLabelText("Taklif havolasi"), { target: { value: "" } });
+  fireEvent.click(button("Saqlash"));
+  await waitFor(() => assert.ok(!screen.queryByRole("dialog")));
+  assert.deepEqual(calls.find((c) => c.method === "PATCH")!.body, { inviteLink: null });
+  await waitFor(() => assert.ok(within(rowOf("3")).getByText("Taklif havolasi yo'q")));
 });

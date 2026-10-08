@@ -27,6 +27,8 @@ export type BonusChannel = {
   id: string;
   chatId: string;
   username: string | null;
+  /** Normalized `https://t.me/+…`; the bot's subscribe link for channels without a username. */
+  inviteLink: string | null;
   title: string;
   joinBonus: number;
   stayBonus: number;
@@ -51,13 +53,14 @@ export type ResolvedChannel = {
 export type BonusChannelCreate = {
   input: string;
   title?: string;
+  inviteLink?: string;
   joinBonus: number;
   stayBonus: number;
   stayDays: number;
   reason?: string;
 };
 
-export type BonusChannelPatch = Partial<Pick<BonusChannel, "title" | "joinBonus" | "stayBonus" | "stayDays" | "active" | "sort">> & {
+export type BonusChannelPatch = Partial<Pick<BonusChannel, "title" | "inviteLink" | "joinBonus" | "stayBonus" | "stayDays" | "active" | "sort">> & {
   reason?: string;
 };
 
@@ -86,6 +89,11 @@ export function updateBonusChannel(id: string, patch: BonusChannelPatch, opts: A
 
 export function deleteBonusChannel(id: string, reason: string, opts: AdminCallOptions = {}): Promise<{ id: string; deleted: true }> {
   return adminSend<{ id: string; deleted: true }>("DELETE", pathOf(id), reason ? { reason } : {}, opts);
+}
+
+/** «Havola yaratish»: a new Telegram invite link for `input` (`@name` / `-100…`); stores nothing. */
+export function createInviteLink(input: string, opts: AdminCallOptions = {}): Promise<{ inviteLink: string }> {
+  return adminSend<{ inviteLink: string }>("POST", `${BASE}/invite-link`, { input }, opts);
 }
 
 /** Live re-check: is the bot still an admin of the channel? */

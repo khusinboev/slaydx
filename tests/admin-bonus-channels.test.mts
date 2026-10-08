@@ -39,7 +39,12 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *     someone else);
  *   - `group` accepted as a chat type → "resolve: non-channel types";
  *   - `FOR UPDATE` dropped from `lockChannel` → "delete vs a concurrent claim" (200, the
- *     committed claim was cascaded away).
+ *     committed claim was cascaded away);
+ *   - invite links stored without normalization (`parseInviteLink` returning the raw input) →
+ *     "parseInviteLink" and "invite link: stored normalized";
+ *   - the `search`/`hash` refusal dropped → "parseInviteLink" (`?x=1` accepted);
+ *   - invite link left out of the UPDATE → "invite link: stored normalized" (409 / stale value);
+ *   - the invite-create audit removed → "invite-link route".
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -99,6 +104,12 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
       ? tgJson({ ok: true, result: { status, user: { id: BOT_ID, is_bot: true } } })
       : tgJson({ ok: false, error_code: 400, description: "Bad Request: member list is inaccessible" }, 400);
   }
+  if (method === "createChatInviteLink") {
+    const status = chat ? BOT_STATUS.get(String(chat.id)) : undefined;
+    return status === "administrator" || status === "creator"
+      ? tgJson({ ok: true, result: { invite_link: `https://t.me/+Inv${String(chat!.id).slice(-8)}xyz`, creator: { id: BOT_ID }, is_primary: false } })
+      : tgJson({ ok: false, error_code: 400, description: "Bad Request: not enough rights to manage chat invite links" }, 400);
+  }
   return tgJson({ ok: false, error_code: 404, description: "Not Found" }, 404);
 }) as typeof fetch;
 
@@ -110,6 +121,7 @@ const listRoute = await import("../app/api/admin/bonus-channels/route.ts");
 const resolveRoute = await import("../app/api/admin/bonus-channels/resolve/route.ts");
 const idRoute = await import("../app/api/admin/bonus-channels/[id]/route.ts");
 const botRoute = await import("../app/api/admin/bonus-channels/[id]/bot-status/route.ts");
+const inviteRoute = await import("../app/api/admin/bonus-channels/invite-link/route.ts");
 
 after(async () => {
   globalThis.fetch = realFetch;
@@ -204,6 +216,11 @@ async function del(cookie: string | null, id: string, body: unknown = {}): Promi
   return readResult(await inRequest(req, () => idRoute.DELETE(req, { params: Promise.resolve({ id }) })));
 }
 
+async function inviteLink(cookie: string | null, body: unknown): Promise<Result> {
+  const req = new Request(`${BASE}/invite-link`, { method: "POST", headers: headersFor(cookie, true), body: JSON.stringify(body) });
+  return readResult(await inRequest(req, () => inviteRoute.POST(req, undefined)));
+}
+
 async function botStatus(cookie: string | null, id: string): Promise<Result> {
   const req = new Request(`${BASE}/${id}/bot-status`, { method: "GET", headers: headersFor(cookie, false) });
   return readResult(await inRequest(req, () => botRoute.GET(req, { params: Promise.resolve({ id }) })));
@@ -213,6 +230,7 @@ type Item = {
   id: string;
   chatId: string;
   username: string | null;
+  inviteLink: string | null;
   title: string;
   joinBonus: number;
   stayBonus: number;
@@ -243,7 +261,8 @@ let chatSeq = 1_000_000_000;
 /** A fresh public channel the fake Telegram knows (bot is admin unless told otherwise). */
 function freshChannel(opts: { username?: string; title?: string; type?: string; botStatus?: string | null } = {}): TgChat {
   chatSeq += 1;
-  const username = opts.username ?? `kanal_${chatSeq}`;
+  // `{username: undefined}` given explicitly = a private chat without a public username.
+  const username = "username" in opts ? opts.username : `kanal_${chatSeq}`;
   return addChat(
     { id: -1_000_000_000_000 - chatSeq, type: opts.type ?? "channel", title: opts.title ?? `Kanal ${chatSeq}`, username },
     opts.botStatus === undefined ? "administrator" : opts.botStatus,
@@ -386,6 +405,7 @@ test("create: 201, row + ONE bonus_channel.create audit row (after = stored valu
   assert.deepEqual(a[0]!.after, {
     chatId: String(news.id),
     username: news.username,
+    inviteLink: null,
     title: "SlaydX Yangiliklar",
     joinBonus: 2000,
     stayBonus: 0,
@@ -450,6 +470,9 @@ test("create: validation is 400 before any Bot API call and writes nothing", { s
     { input, joinBonus: 1000, sort: 2_000_000 },
     { input, joinBonus: 1000, title: "x".repeat(129) },
     { input, joinBonus: 1000, reason: "abc" },
+    { input, joinBonus: 1000, inviteLink: "https://t.me/slaydx_news" },
+    { input, joinBonus: 1000, inviteLink: "https://evil.example/+AbCdEfGh12" },
+    { input, joinBonus: 1000, inviteLink: 42 },
     { input: "https://t.me/+invite", joinBonus: 1000 },
   ];
   botCalls.length = 0;
@@ -590,7 +613,7 @@ test("delete: refused with 409 has_claims while claims exist (row and claims sta
   assert.equal(a[0]!.after, null);
   assert.deepEqual(
     Object.keys(a[0]!.before as Record<string, unknown>).sort(),
-    ["active", "chatId", "joinBonus", "sort", "stayBonus", "stayDays", "title", "username"],
+    ["active", "chatId", "inviteLink", "joinBonus", "sort", "stayBonus", "stayDays", "title", "username"],
   );
 
   const again = await del(s.cookie, unused.id, {});
@@ -651,6 +674,105 @@ test("atomicity: when the audit insert fails, the channel change rolls back", { 
   const rows = await channelRows();
   assert.equal(rows.length, 1, "neither the create nor the delete committed");
   assert.equal(rows[0]!.join_bonus, 1000, "the update rolled back");
+});
+
+// ───────────────────────────── invite link (migration 042)
+
+test("parseInviteLink: t.me/+ and joinchat links normalize to https://t.me/+<hash>; everything else is 400 invite_link", () => {
+  const n = "https://t.me/+AbCd_Ef-12";
+  for (const ok of [n, "http://t.me/+AbCd_Ef-12", "t.me/+AbCd_Ef-12", "https://t.me/joinchat/AbCd_Ef-12", "https://telegram.me/joinchat/AbCd_Ef-12/", "  https://www.t.me/+AbCd_Ef-12  "]) {
+    assert.equal(lib.parseInviteLink(ok), n, ok);
+  }
+  for (const empty of [null, undefined, "", "   "]) assert.equal(lib.parseInviteLink(empty), null);
+  for (const bad of [
+    42,
+    "https://t.me/slaydx_news",
+    "https://t.me/+short",
+    "https://t.me/+AbCd_Ef-12?x=1",
+    "https://t.me/+AbCd_Ef-12#x",
+    "https://t.me:8443/+AbCd_Ef-12",
+    "https://user@t.me/+AbCd_Ef-12",
+    "https://evil.example/+AbCd_Ef-12",
+    "https://t.me.evil.example/+AbCd_Ef-12",
+    "javascript:alert(1)//t.me/+AbCd_Ef-12",
+    "ftp://t.me/+AbCd_Ef-12",
+    "https://t.me/+AbCd Ef-12",
+    "https://t.me/+AbCd_Ef-12/extra",
+    `https://t.me/+${"a".repeat(65)}`,
+  ]) {
+    assert.throws(() => lib.parseInviteLink(bad), (e: { status: number; extra: { code: string } }) => e.status === 400 && e.extra.code === "invite_link", String(bad));
+  }
+});
+
+test("invite link: stored normalized on create, set / cleared on update with before/after audit, shown in the list", { skip }, async () => {
+  await resetChannels();
+  const s = await session("owner");
+  const priv = freshChannel({ username: undefined, title: "Yopiq kanal" });
+  const r = await create(s.cookie, { input: String(priv.id), joinBonus: 1000, inviteLink: "https://t.me/joinchat/AbCdEfGh12" });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const item = r.body.item as Item;
+  assert.equal(item.username, null);
+  assert.equal(item.inviteLink, "https://t.me/+AbCdEfGh12");
+  const created = (await audits(s.admin.adminId, "bonus_channel.create"))[0]!;
+  assert.equal((created.after as { inviteLink: string }).inviteLink, "https://t.me/+AbCdEfGh12");
+  assert.equal((await query<{ invite_link: string }>("SELECT invite_link FROM bonus_channels WHERE id = $1", [item.id]))[0]!.invite_link, "https://t.me/+AbCdEfGh12");
+
+  const up = await patch(s.cookie, item.id, { inviteLink: "t.me/+ZyXwVuTs98" });
+  assert.equal(up.status, 200, JSON.stringify(up.body));
+  assert.equal((up.body.item as Item).inviteLink, "https://t.me/+ZyXwVuTs98");
+  // The same link in another spelling is no change.
+  const same = await patch(s.cookie, item.id, { inviteLink: "https://t.me/joinchat/ZyXwVuTs98" });
+  assert.equal(same.status, 409);
+  const cleared = await patch(s.cookie, item.id, { inviteLink: null });
+  assert.equal(cleared.status, 200);
+  assert.equal((cleared.body.item as Item).inviteLink, null);
+  const a = await audits(s.admin.adminId, "bonus_channel.update");
+  assert.deepEqual(a.map((x) => [x.before, x.after]), [
+    [{ inviteLink: "https://t.me/+AbCdEfGh12" }, { inviteLink: "https://t.me/+ZyXwVuTs98" }],
+    [{ inviteLink: "https://t.me/+ZyXwVuTs98" }, { inviteLink: null }],
+  ]);
+  assert.equal((await patch(s.cookie, item.id, { inviteLink: "https://t.me/nope" })).body.code, "invite_link");
+
+  const l = await list(s.cookie);
+  assert.equal((l.body.items as Item[])[0]!.inviteLink, null);
+});
+
+test("invite-link route: Telegram creates a link when the bot may (audited, nothing stored); 400 invite_rights otherwise; 400 before Telegram on bad input; viewer 403", { skip }, async () => {
+  await resetChannels();
+  const s = await session("owner");
+  const ch = freshChannel({ username: undefined });
+  botCalls.length = 0;
+  const r = await inviteLink(s.cookie, { input: String(ch.id) });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.inviteLink, `https://t.me/+Inv${String(ch.id).slice(-8)}xyz`);
+  assert.deepEqual(botCalls.map((c) => [c.method, c.body.chat_id]), [["createChatInviteLink", String(ch.id)]]);
+  const a = await audits(s.admin.adminId, "bonus_channel.invite_create");
+  assert.equal(a.length, 1);
+  assert.equal(a[0]!.target_id, String(ch.id));
+  assert.deepEqual(a[0]!.meta, { inviteLink: r.body.inviteLink });
+  assert.deepEqual(await channelRows(), [], "nothing stored");
+
+  const member = freshChannel({ botStatus: "member" });
+  const no = await inviteLink(s.cookie, { input: `@${member.username}` });
+  assert.equal(no.status, 400);
+  assert.equal(no.body.code, "invite_rights");
+  telegramDown = { code: 502 };
+  try {
+    assert.equal((await inviteLink(s.cookie, { input: String(ch.id) })).status, 503);
+  } finally {
+    telegramDown = null;
+  }
+  assert.equal((await audits(s.admin.adminId, "bonus_channel.invite_create")).length, 1, "failures are not audited");
+
+  botCalls.length = 0;
+  assert.equal((await inviteLink(s.cookie, {})).status, 400);
+  assert.equal((await inviteLink(s.cookie, { input: "https://t.me/+x" })).status, 400);
+  assert.deepEqual(botCalls, []);
+
+  const viewer = await session("viewer");
+  const v = await inviteLink(viewer.cookie, { input: String(ch.id) });
+  assert.equal(v.status, 403);
+  assert.equal(v.body.code, "forbidden");
 });
 
 // ───────────────────────────── bot status

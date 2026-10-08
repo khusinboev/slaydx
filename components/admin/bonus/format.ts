@@ -48,7 +48,18 @@ export function checkTitle(text: string): Check<string> {
   return { ok: true, value: s };
 }
 
-export type AmountsDraft = { joinBonus: string; stayBonus: string; stayDays: string };
+const INVITE = /^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/(?:\+|joinchat\/)([A-Za-z0-9_-]{8,64})\/?$/i;
+
+/** Optional private-channel invite link → normalized `https://t.me/+<hash>`; empty → `null`. */
+export function checkInviteText(text: string): Check<string | null> {
+  const s = text.trim();
+  if (!s) return { ok: true, value: null };
+  const m = INVITE.exec(s);
+  if (!m) return { ok: false, error: "Havola https://t.me/+… yoki https://t.me/joinchat/… ko'rinishida bo'lsin" };
+  return { ok: true, value: `https://t.me/+${m[1]}` };
+}
+
+export type AmountsDraft ={ joinBonus: string; stayBonus: string; stayDays: string };
 export type Amounts = { joinBonus: number; stayBonus: number; stayDays: number };
 
 /** Validates the three amount fields together (at least one bonus must be above zero). */

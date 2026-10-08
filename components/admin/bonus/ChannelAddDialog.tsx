@@ -8,7 +8,8 @@ import { adminErrorMessage, isAbortError } from "@/lib/admin-api/core";
 import { createBonusChannel, resolveBonusChannel, type BonusChannel, type ResolvedChannel } from "@/lib/admin-api/bonus";
 import { AmountFields, FIELD } from "./AmountFields";
 import { BotBadge } from "./BotBadge";
-import { amountsDraft, bonusText, checkAmounts, checkTitle, defaultPreset, PRESETS, type AmountsDraft, type BotCheck, type PresetId } from "./format";
+import { InviteLinkField } from "./InviteLinkField";
+import { amountsDraft, bonusText, checkAmounts, checkInviteText, checkTitle, defaultPreset, PRESETS, type AmountsDraft, type BotCheck, type PresetId } from "./format";
 
 export type ChannelAddDialogProps = {
   open: boolean;
@@ -37,6 +38,7 @@ function Body({ existingCount, onClose, onCreated }: ChannelAddDialogProps) {
   const [preset, setPreset] = useState<PresetId>(() => defaultPreset(existingCount));
   const [amounts, setAmounts] = useState<AmountsDraft>(() => amountsDraft(PRESETS[defaultPreset(existingCount)]));
   const [title, setTitle] = useState("");
+  const [invite, setInvite] = useState("");
   const ctl = useRef<AbortController | null>(null);
 
   useEffect(() => () => ctl.current?.abort(), []);
@@ -45,7 +47,8 @@ function Body({ existingCount, onClose, onCreated }: ChannelAddDialogProps) {
   const current = preview && preview.q === q ? preview.data : null;
   const amountsCheck = checkAmounts(amounts);
   const titleCheck = checkTitle(title);
-  const ready = Boolean(current) && !current?.existingId && amountsCheck.ok && titleCheck.ok && !resolving;
+  const inviteCheck = checkInviteText(invite);
+  const ready = Boolean(current) && !current?.existingId && amountsCheck.ok && titleCheck.ok && inviteCheck.ok && !resolving;
 
   async function resolve() {
     if (!q || resolving) return;
@@ -89,10 +92,11 @@ function Body({ existingCount, onClose, onCreated }: ChannelAddDialogProps) {
       confirmLabel="Qo'shish"
       confirmDisabled={!ready}
       onConfirm={async ({ reason }) => {
-        if (!current || !amountsCheck.ok || !titleCheck.ok) return;
+        if (!current || !amountsCheck.ok || !titleCheck.ok || !inviteCheck.ok) return;
         const r = await createBonusChannel({
           input: q,
           ...(titleCheck.value !== current.title ? { title: titleCheck.value } : {}),
+          ...(inviteCheck.value ? { inviteLink: inviteCheck.value } : {}),
           ...amountsCheck.value,
           ...(reason ? { reason } : {}),
         });
@@ -168,6 +172,8 @@ function Body({ existingCount, onClose, onCreated }: ChannelAddDialogProps) {
               {titleCheck.ok ? "Botdagi vazifa nomi. Telegram'dagi nomdan farq qilishi mumkin." : titleCheck.error}
             </span>
           </div>
+
+          <InviteLinkField value={invite} onChange={setInvite} chatRef={current.username ? `@${current.username}` : current.chatId} needed={!current.username} />
 
           <div role="group" aria-label="Tayyor miqdorlar" className="flex flex-wrap gap-2">
             {(Object.keys(PRESETS) as PresetId[]).map((id) => (

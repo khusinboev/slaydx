@@ -59,6 +59,24 @@ export function ChannelRow({ item, bot, canEdit, toggling, onToggle, onEdit, onD
         ) : (
           <span className="text-muted-foreground text-[13px]">Yopiq kanal · ID {item.chatId}</span>
         )}
+        {item.inviteLink ? (
+          <a
+            href={item.inviteLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-invite
+            className="text-info inline-flex w-fit items-center gap-1 text-[13px] break-all underline-offset-2 hover:underline"
+          >
+            {item.inviteLink.replace(/^https:\/\//, "")}
+            <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
+          </a>
+        ) : item.username ? null : (
+          <span className="w-fit">
+            <Badge tone="warning" dot title="Foydalanuvchi kanalga kira olmaydi — taklif havolasini qo'shing">
+              Taklif havolasi yo&apos;q
+            </Badge>
+          </span>
+        )}
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <BotBadge check={bot} />
           <Button
