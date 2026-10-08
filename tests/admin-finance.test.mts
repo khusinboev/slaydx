@@ -214,8 +214,11 @@ before(async () => {
   seed.mismatch = mis.id;
 
   // Revenue: two orders in range, two just outside it, one legacy paid order without perform_time (and without a ledger row).
-  seed.a1 = await paidOrder(ali.id, "click", "topup", 100_000, tk(2026, 9, 11, 10));
+  // The earlier 5 000 order settles first: it is ali's first paid top-up (< 50 000 → no first
+  // top-up bonus, docs/bonus/PLAN.md «Bonus 2»), so the 100 000 one earns no bonus points and
+  // the charges below come from balance, as this fixture models.
   await paidOrder(ali.id, "click", "topup", 5_000, tk(2026, 9, 9, 23, 59, 59, 999));
+  seed.a1 = await paidOrder(ali.id, "click", "topup", 100_000, tk(2026, 9, 11, 10));
   seed.b1 = await legacyProOrder(vali.id, "payme", tk(2026, 9, 13, 23, 59, 59, 999));
   await paidOrder(vali.id, "payme", "topup", 40_000, tk(2026, 9, 14));
   seed.legacy = randomUUID();

@@ -166,7 +166,15 @@ test("settleOrder → credits.ts: jurnal invarianti va yozuv shakli o'zgarmagan"
     const statuses = outs.map((o) => o.status).sort();
     assert.deepEqual(statuses, ["already_paid", "already_paid", "already_paid", "already_paid", "already_paid", "paid"]);
     assert.equal(Number((await wallet(uid)).balance), 50_000);
-    assert.equal((await journal(uid)).length, 1);
+    // One top-up row + the first top-up bonus (50 000 is the user's first paid top-up → +5 000
+    // points, docs/bonus/PLAN.md «Bonus 2»), each exactly once despite six parallel settlements.
+    assert.deepEqual(
+      (await journal(uid)).map((r) => [r.kind, Number(r.balance_delta), Number(r.points_delta)]),
+      [
+        ["topup", 50_000, 0],
+        ["bonus", 0, 5_000],
+      ],
+    );
     await assertLedger(uid);
   });
 

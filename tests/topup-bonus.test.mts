@@ -15,13 +15,15 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *   - percent 10 → 11 (`FIRST_TOPUP_PERCENT`)             → «rules», «Payme 120 000»;
  *   - cap removed (`Math.min` dropped)                      → «rules», «Payme 300 000 → cap»;
  *   - minimum `<` → `<=` (50 000 earns nothing)             → «rules», «Click 50 000»;
- *   - first-only: prior-order query always empty           → «second top-up», «first < 50 000»;
+ *   - first-only: prior-order query always empty           → «first < 50 000», «concurrent 10 000 ∥ 100 000»
+ *     («second top-up» stays green: the unique bonus reference still pays once — the second guard);
  *   - refund clause dropped from the prior-order query      → «fully refunded first order»;
  *   - user lock in `firstTopupBonusDueInTx` removed         → «concurrent 10 000 ∥ 100 000»;
- *   - `credited &&` dropped from the pay condition          → none (order `paid` short-circuits retries
- *     before it; kept as defence in depth, documented);
+ *   - `o.state = 'paid'` → any state                         → «cancelled / pending …», «Click ∥ Payme»;
+ *   - `o.purpose = 'topup'` dropped (legacy Pro counts)      → «cancelled / pending …»;
+ *   - `credited &&` dropped from the pay condition          → «the top-up is not credited»;
  *   - savepoint catch removed (rethrow)                     → «duplicate reference race»;
- *   - bonus call moved outside the transaction (own `transaction`) → «concurrent first payments».
+ *   - `!row.paid` dropped from `firstTopupEligible`         → «a later refund …» (hint after the bonus).
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -155,6 +157,7 @@ test("first top-up bonus: Click + Payme settlement", { skip }, async (t) => {
     const pid = String(prep.merchant_prepare_id);
     return {
       id: order.id,
+      txn: base.click_trans_id,
       complete: (error = "0") => clickCall({ ...base, action: "1", merchant_prepare_id: pid, error }),
     };
   };
@@ -409,6 +412,21 @@ test("first top-up bonus: Click + Payme settlement", { skip }, async (t) => {
     assert.deepEqual(await wallet(uid), { points: 8_000, balance: 80_000 });
     assert.equal((await bonusRows(uid)).length, 1);
     await assertLedger(uid);
+  });
+
+  await t.test("the top-up is not credited (its reference is already in the ledger) → no bonus either", async () => {
+    const uid = await mkUser();
+    const o = await clickPrepare(uid, 100_000);
+    // A ledger row with this settlement's reference already exists (data anomaly): `topUpInTx`
+    // writes nothing, so the bonus must not be paid on its own.
+    await query(
+      `INSERT INTO transactions (user_id, kind, points_delta, quota_delta, balance_delta, reference, note) VALUES ($1, 'topup', 0, 0, 0, $2, 'pre-existing')`,
+      [uid, `click:${o.txn}`],
+    );
+    assert.equal((await o.complete()).error, 0);
+    assert.equal(await orderState(o.id), "paid");
+    assert.deepEqual(await wallet(uid), { points: 0, balance: 0 });
+    assert.equal((await bonusRows(uid)).length, 0);
   });
 
   await t.test("duplicate reference race: the bonus rolls back alone, the top-up and `paid` stay", async () => {
