@@ -107,7 +107,7 @@ function bonusTasks() {
     ],
     referral: { link: "https://t.me/slaydx_test_bot?start=ref_abcdefgh", rewardPoints: 2000, invitedCount: 3, earnedPoints: 6000 },
     signupPoints: 2000,
-    firstTopup: { paid: false, points: 0 },
+    firstTopup: { paid: false, points: 0, eligible: true },
     earnedTotal: 10000,
     availableTotal: 8000,
   };
@@ -145,7 +145,7 @@ function allScreens(lang: (typeof LANGS)[number]) {
     bonus: bonus.bonusScreen(lang, bonusTasks(), BONUS_NOW),
     bonusFresh: bonus.bonusScreen(
       lang,
-      { ...bonusTasks(), referral: { ...bonusTasks().referral, invitedCount: 0, earnedPoints: 0 }, firstTopup: { paid: true, points: 5000 } },
+      { ...bonusTasks(), referral: { ...bonusTasks().referral, invitedCount: 0, earnedPoints: 0 }, firstTopup: { paid: true, points: 5000, eligible: false } },
       BONUS_NOW,
     ),
     bonusEmpty: bonus.bonusScreen(lang, { ...bonusTasks(), channels: [] }, BONUS_NOW),
@@ -697,4 +697,24 @@ test("units (B2-Q3): bonus amounts are so‘m / сум / UZS everywhere in the b
   assert.match(allScreens("en").referral.text, /Bonus earned: <b>6 000 UZS<\/b>/);
   assert.match(allScreens("ru").profile.text, /бонус 2 000 сум/);
   assert.equal(i18n.t("en", "unit.som", { n: "1 000" }), "1 000 UZS");
+});
+
+/* ── bonus2 review fixes ── */
+
+test("first top-up task: shown only while the user can still earn it (review MAJOR); paid → green; not eligible → no button", () => {
+  const urls = (s: { reply_markup?: unknown }) => inline(s).map((b) => b.web_app?.url ?? "");
+  const eligible = bonus.bonusScreen("uz", { ...bonusTasks(), firstTopup: { paid: false, points: 0, eligible: true } }, BONUS_NOW);
+  assert.ok(urls(eligible).some((u) => u.endsWith("/uz/wallet")), "eligible → web_app to the wallet");
+  // MUTATION: without the eligibility check a paying customer was offered a bonus they can never get.
+  const notEligible = bonus.bonusScreen("uz", { ...bonusTasks(), firstTopup: { paid: false, points: 0, eligible: false } }, BONUS_NOW);
+  assert.ok(!urls(notEligible).some((u) => u.endsWith("/uz/wallet")), "already topped up → no first-top-up button");
+  assert.ok(!inline(notEligible).some((b) => /Birinchi to‘ldirish/.test(b.text)));
+});
+
+test("clip: cuts by code points — an emoji in a long channel title is never split into a lone surrogate", () => {
+  const title = "😀".repeat(30);
+  const out = ui.clip(title, 10);
+  // MUTATION: String#slice cut a surrogate pair → Telegram rejects the whole keyboard («must be UTF-8»).
+  assert.equal(Array.from(out).length, 10);
+  assert.ok(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(out), "no lone high surrogate");
 });

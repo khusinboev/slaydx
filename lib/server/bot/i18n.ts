@@ -321,6 +321,7 @@ const T = {
   "ledger.bonus": { uz: "Bonus", ru: "Бонус", en: "Bonus" },
   "ledger.bonusFriend": { uz: "Taklif bonusi · {f}", ru: "Бонус за приглашение · {f}", en: "Invite bonus · {f}" },
   "ledger.signup": { uz: "Ro‘yxatdan o‘tish bonusi", ru: "Бонус за регистрацию", en: "Sign-up bonus" },
+  "ledger.firstTopup": { uz: "Birinchi to‘ldirish bonusi", ru: "Бонус за первое пополнение", en: "First top-up bonus" },
   "ledger.subscription": { uz: "To‘lov balansga tushdi", ru: "Платёж зачислен на баланс", en: "Payment added to balance" },
   "ledger.admin": { uz: "Ma’muriy tuzatish", ru: "Административная корректировка", en: "Admin adjustment" },
   "ledger.merge": {

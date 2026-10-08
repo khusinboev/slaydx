@@ -7,7 +7,7 @@ import { referralSummary } from "./referrals";
 import { botConfigured, botUsername, callBot } from "./telegram";
 import { langOf } from "./bot/i18n";
 import { joinPaidNotice, stayPaidNotice } from "./bot/bonus";
-import { firstTopupStatus } from "./topup-bonus";
+import { firstTopupEligible, firstTopupStatus } from "./topup-bonus";
 
 /**
  * Bonus tasks — the user side (docs/bonus/PLAN.md, K1; owner decisions B-Q1..Q4).
@@ -91,7 +91,7 @@ export type BonusTasks = {
   /** The sign-up bonus actually booked (`signup:<user>` ledger row), 0 when there is none. */
   signupPoints: number;
   /** The first top-up bonus (`lib/server/topup-bonus.ts firstTopupStatus`). */
-  firstTopup: { paid: boolean; points: number };
+  firstTopup: { paid: boolean; points: number; eligible: boolean };
   /** Bonus earned so far: sign-up + channel tasks + invites + first top-up (the screen's summary). */
   earnedTotal: number;
   /**
@@ -164,7 +164,9 @@ export async function bonusTasks(
     [userId, `signup:${userId}`],
   );
   const signupPoints = Math.max(0, Number(signupRow?.p ?? 0));
-  const firstTopup = await firstTopupStatus(userId);
+  const status = await firstTopupStatus(userId);
+  // Offer the task only to users who can still earn it (no earlier paid top-up) — review MAJOR.
+  const firstTopup = { ...status, eligible: status.paid ? false : await firstTopupEligible(userId) };
   const s = await referralSummary(userId, links ?? { botUsername: await botUsername(), appUrl: env.appUrl });
   const referral = { link: s.botLink ?? s.webLink, rewardPoints: s.rewardPoints, invitedCount: s.invitedCount, earnedPoints: s.earnedPoints };
   const channels: ChannelTask[] = rows.map((r) => ({

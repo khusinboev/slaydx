@@ -17,7 +17,7 @@ export const TOPUP_FEATURES = [
  * `firstTopupEligible` (docs/bonus/PLAN.md «Bonus 2»; numbers from `lib/topup-bonus.ts`).
  */
 export function firstTopupHint(): string {
-  return `Birinchi to‘ldirishga +${FIRST_TOPUP_PERCENT}% bonus (${groupDigits(FIRST_TOPUP_MIN_SOUM)} so‘mdan, ko‘pi ${groupDigits(FIRST_TOPUP_MAX_POINTS)})`;
+  return `Birinchi to‘ldirishga +${FIRST_TOPUP_PERCENT}% bonus (${groupDigits(FIRST_TOPUP_MIN_SOUM)} so‘mdan, ko‘pi ${groupDigits(FIRST_TOPUP_MAX_POINTS)} so‘m)`;
 }
 
 const MONTHS = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"];

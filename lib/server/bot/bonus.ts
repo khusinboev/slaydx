@@ -82,6 +82,8 @@ function inviteButton(lang: Lang, r: BonusTasks["referral"]): InlineButton {
 
 function topupButton(lang: Lang, f: BonusTasks["firstTopup"]): InlineButton | null {
   if (f.paid) return inlineButton("save", t(lang, "task.topupPaid", { n: som(lang, f.points) }), { callback_data: cb.bonusDone() }, "success");
+  // Already topped up before (or a first top-up under the minimum): the bonus can no longer be earned — no button.
+  if (!f.eligible) return null;
   // An INLINE web_app button carries initData: the plain URL logs in silently (no personal `?bt=` link in chat history).
   const wallet = appUrl("/uz/wallet");
   return wallet
