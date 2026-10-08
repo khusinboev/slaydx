@@ -169,8 +169,10 @@ const LINK_EXPIRED_TEXT = "Botga qayting va /start bosing — bot yangi havola y
 /**
  * Bot keyboard link → session (`POST /api/auth/bot-link`), once per page load,
  * after the session check: a session of the link's owner (or a phone-login
- * session, never replaced) skips the request. Another Telegram account's
- * session is switched only after «O'tish» (409 `switch_confirm`). While the
+ * session, never replaced) skips the request. Without a session the server
+ * answers 409 `login_confirm` and the user is asked «… sifatida kirasizmi?»
+ * first; another Telegram account's session is switched only after «O'tish»
+ * (409 `switch_confirm`). While the
  * request runs a small «Kirish…» status shows; an expired / revoked link shows
  * «botga qayting» with a button to the bot chat.
  */
@@ -185,14 +187,18 @@ function BotLinkLogin({ token }: { token: string | null }) {
   const refreshGenerations = useAppStore((s) => s.refreshGenerations);
   const [view, setView] = useState<BotLinkView>({ s: "idle" });
   const [prompt, setPrompt] = useState<AccountSwitchPrompt | null>(null);
+  const [loginAsk, setLoginAsk] = useState<LoginPrompt | null>(null);
   const started = useRef(false);
 
   useEffect(() => removeBotLinkFromUrl(), []);
 
+  /** `first` — the initial request; `login` — after «Kirish»; `switch` — after «O'tish». */
   const exchange = useCallback(
-    async (confirm: boolean) => {
+    async (mode: "first" | "login" | "switch") => {
       if (!token) return;
-      if (!confirm) setView({ s: "busy" });
+      const confirm = mode !== "first";
+      if (mode === "first") setView({ s: "busy" });
+      else if (mode === "login") setLoginAsk((p) => (p ? { ...p, status: "busy" } : p));
       else setPrompt((p) => (p ? { ...p, status: "busy" } : p));
       try {
         const { user } = await api.request<{ user: api.ServerUser }>("/api/auth/bot-link", {
@@ -200,7 +206,8 @@ function BotLinkLogin({ token }: { token: string | null }) {
           body: JSON.stringify(confirm ? { token, confirm: true } : { token }),
         });
         setView({ s: "idle" });
-        if (confirm) {
+        setLoginAsk(null);
+        if (mode === "switch") {
           // Same as the Mini App switch: nothing of the previous account survives.
           setPrompt(null);
           useAppStore.setState({ user, loggedIn: true, generations: [], generationsLoaded: false, generationsCursor: null });
@@ -224,12 +231,21 @@ function BotLinkLogin({ token }: { token: string | null }) {
         const err = e instanceof api.ApiError ? e : null;
         const outcome = botLinkOutcome(err?.status ?? 0, err ? { ...err.data, error: err.message } : null);
         setView({ s: "idle" });
-        if (outcome.kind === "confirm" && !confirm) {
+        if (mode === "first" && outcome.kind === "login") {
+          // No session: a link alone never signs in — the user says «Kirish» (security review of B1).
+          setLoginAsk({ to: outcome.to ?? "Telegram akkauntingiz", status: "ask" });
+          return;
+        }
+        if (mode === "first" && outcome.kind === "confirm") {
           const from = accountLabel(useAppStore.getState().user) ?? "boshqa akkaunt";
           setPrompt({ from, to: outcome.to ?? "boshqa Telegram akkaunti", status: "ask" });
           return;
         }
-        if (confirm) {
+        if (mode === "login") {
+          setLoginAsk((p) => (p ? { ...p, status: "refused", message: err?.message ?? "Kirib bo'lmadi." } : p));
+          return;
+        }
+        if (mode === "switch") {
           setPrompt((p) => (p ? { ...p, status: "refused", message: err?.message ?? "Akkaunt almashtirilmadi." } : p));
           return;
         }
@@ -253,7 +269,7 @@ function BotLinkLogin({ token }: { token: string | null }) {
       if (sessionTelegramId == null) return;
       if (String(sessionTelegramId) === botLinkTelegramId(token)) return;
     }
-    void exchange(false);
+    void exchange("first");
   }, [token, sessionChecked, loggedIn, sessionTelegramId, exchange]);
 
   return (
@@ -273,8 +289,88 @@ function BotLinkLogin({ token }: { token: string | null }) {
         botUrl={botChatUrl(bot ?? process.env.NEXT_PUBLIC_TELEGRAM_BOT)}
         onClose={() => setView({ s: "idle" })}
       />
-      <AccountSwitchDialog prompt={prompt} onConfirm={() => void exchange(true)} onCancel={() => setPrompt(null)} />
+      <AccountSwitchDialog prompt={prompt} onConfirm={() => void exchange("switch")} onCancel={() => setPrompt(null)} />
+      <BotLinkLoginDialog prompt={loginAsk} onConfirm={() => void exchange("login")} onCancel={() => setLoginAsk(null)} />
     </>
+  );
+}
+
+type LoginPrompt = { to: string; status: "ask" | "busy" | "refused"; message?: string };
+
+/**
+ * «… sifatida kirasizmi?» — a bot link signs in only after this tap (the
+ * `AccountSwitchDialog` pattern): someone else's bot or chat link must never
+ * log a visitor into the sender's account silently. Back / Escape = «Yo'q».
+ */
+function BotLinkLoginDialog({
+  prompt,
+  onConfirm,
+  onCancel,
+}: {
+  prompt: LoginPrompt | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const titleId = useId();
+  const onConfirmRef = useRef(onConfirm);
+  const onCancelRef = useRef(onCancel);
+  useEffect(() => {
+    onConfirmRef.current = onConfirm;
+    onCancelRef.current = onCancel;
+  });
+  const close = useCallback(() => onCancelRef.current(), []);
+  const panelRef = useDialog(prompt !== null, close);
+  if (!prompt) return null;
+  const busy = prompt.status === "busy";
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center p-4 sm:items-center">
+      <button type="button" tabIndex={-1} aria-label="Yopish" className="absolute inset-0 bg-black/45" onClick={close} />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        data-bot-login-confirm
+        className="bg-card relative z-10 flex w-full max-w-sm flex-col rounded-2xl border shadow-xl"
+      >
+        <div className="px-5 pt-4 pb-1">
+          <h2 id={titleId} className="text-base font-semibold">
+            {prompt.status === "refused" ? "Kirib bo'lmadi" : "Kirish"}
+          </h2>
+          <p className="text-muted-foreground mt-1 text-[14px] leading-snug" data-bot-login-text>
+            {prompt.status === "refused" ? prompt.message : `${prompt.to} sifatida kirasizmi?`}
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-end gap-2 px-5 pt-2 pb-4">
+          {prompt.status === "refused" ? (
+            <button type="button" onClick={close} className="bg-card h-11 rounded-lg border px-4 text-[15px] font-medium" data-bot-login-ok>
+              Tushunarli
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={close}
+                disabled={busy}
+                className="bg-card h-11 rounded-lg border px-4 text-[15px] font-medium disabled:opacity-60"
+                data-bot-login-no
+              >
+                Yo&apos;q
+              </button>
+              <button
+                type="button"
+                onClick={() => onConfirmRef.current()}
+                disabled={busy}
+                className="bg-primary text-primary-foreground h-11 rounded-lg px-4 text-[15px] font-medium disabled:opacity-60"
+                data-bot-login-go
+              >
+                {busy ? "Kirilmoqda…" : "Kirish"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

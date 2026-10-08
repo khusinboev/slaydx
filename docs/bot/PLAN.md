@@ -58,6 +58,17 @@ See the question round in the chat (Q1 login from keyboard buttons, Q2 premium e
 | Q4 | Profile editing **in the chat** (section → field → ForceReply prompt → saved), plus «Ilovada to'liq ochish» |
 Release: when reviewed (fable security review for the link token) + CI green, merge to main (auto-deploy), notify the owner.
 
+### Q1 link login — security notes (after the B1 review)
+- **A leaked keyboard URL = sign-in for ≤ 7 days** (owner-accepted, Q1): whoever holds the link can sign in as
+  its owner until it expires, unless the owner uses «barcha qurilmalardan chiqish» (or an admin revokes / blocks).
+- **No silent login:** without a session the server answers 409 `login_confirm` and the page asks
+  «<name> sifatida kirasizmi?» — a link alone is not intent (anyone's bot can carry HIS link to our URL).
+  Only the link owner's own session is kept silently; another account → «O'tish» prompt; phone login never replaced.
+- **Revocation:** `users.bot_links_before` (migration 039) — set by logout-everywhere, admin session revoke and admin
+  block (also without live sessions). A one-device logout or an account switch keeps the keyboard working.
+- **Logs:** nginx skips the access log for requests with `?bt=` (`deploy/nginx/slaydx.conf.example`; the owner
+  applies it on the server); the page removes `bt` from the URL and from the login sheet's `returnTo`.
+
 ## Work packages
 | WP | Scope | Files (exclusive) | Model |
 |---|---|---|---|

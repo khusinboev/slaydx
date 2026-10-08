@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { safeReturnTo } from "./safe-return";
+import { hasBotLinkParam, withoutBotLink } from "./telegram-miniapp";
 // Not `./tools` (the full registry): this module is in every route's client layer (ops WP-B).
 import { toolKindOf } from "./tool-kinds";
 
@@ -31,10 +32,22 @@ export const useUi = create<UiState>((set) => ({
       // C02/FE-01/SECA-02: `returnTo` bu yerga so'rov parametridan
       // (masalan `?returnTo=javascript:...`) kelishi mumkin — faqat
       // saytning o'zidagi "/uz" yo'li saqlanadi, aks holda `null`.
-      returnTo: safeReturnTo(extra?.returnTo ?? null),
+      returnTo: returnToWithoutBotLink(safeReturnTo(extra?.returnTo ?? null)),
     }),
   close: () => set({ overlay: null }),
 }));
+
+/**
+ * `returnTo` without a bot keyboard link token (`?bt=`, docs/bot/PLAN.md Q1):
+ * a login finished from the sheet must never push the token back into the
+ * address bar / history. Untouched when there is no `bt`.
+ */
+export function returnToWithoutBotLink(returnTo: string | null): string | null {
+  if (!returnTo) return returnTo;
+  const q = returnTo.indexOf("?");
+  if (q < 0) return returnTo;
+  return hasBotLinkParam(returnTo.slice(q).split("#")[0]!) ? withoutBotLink(returnTo) : returnTo;
+}
 
 /** Kun / Tun / Avto (docs/redesign/PLAN.md D4): `auto` follows the OS (`lib/store.ts applyTheme`). */
 export const THEME_OPTIONS = [

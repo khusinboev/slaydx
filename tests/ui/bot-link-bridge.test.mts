@@ -55,12 +55,14 @@ const realFetch = globalThis.fetch;
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 type TestUser = Omit<typeof base, "telegramId" | "username"> & { telegramId: string | null; username: string | null };
+const LOGIN_CONFIRM = { status: 409, body: { error: "Kirishni tasdiqlang.", code: "login_confirm", to: "Ali (@ali)" } };
 function setup(opts: { url: string; session?: TestUser | null; sessionChecked?: boolean; webview?: boolean }) {
   posts = [];
   tgPosts = 0;
   refreshed = 0;
   gate = null;
-  answers = [{ status: 200, body: { user: base } }];
+  // The server's contract: no session → 409 login_confirm first, then 200 after «Kirish» (confirm:true).
+  answers = [LOGIN_CONFIRM, { status: 200, body: { user: base } }];
   window.history.replaceState(null, "", opts.url);
   if (opts.webview) win.TelegramWebviewProxy = { postEvent() {} };
   useAppStore.setState({
@@ -110,8 +112,15 @@ const here = () => `${window.location.pathname}${window.location.search}${window
 const notice = () => document.querySelector("[data-bot-link-notice]");
 const busy = () => document.querySelector("[data-bot-link-busy]");
 const switchDialog = () => document.querySelector("[data-account-switch]");
+const loginDialog = () => document.querySelector("[data-bot-login-confirm]");
+async function tap(sel: string) {
+  await act(async () => {
+    (document.querySelector(sel) as HTMLButtonElement | null)?.click();
+    await new Promise((r) => setTimeout(r, 30));
+  });
+}
 
-test("plain browser, no session: one exchange, signed in, bt removed (other params kept) without a new history entry", async () => {
+test("plain browser, no session: one exchange → «… sifatida kirasizmi?», bt removed (other params kept) without a new history entry; «Kirish» signs in", async () => {
   navMod.installNav();
   setup({ url: `/uz/slide?x=1&bt=${BT}&y=2` });
   const len = window.history.length;
@@ -120,8 +129,15 @@ test("plain browser, no session: one exchange, signed in, bt removed (other para
   assert.equal(posts.length, 1, "MUTATION: StrictMode double effect sent two exchanges / none");
   assert.deepEqual(posts[0], { token: BT });
   assert.equal(here(), "/uz/slide?x=1&y=2", "MUTATION: the token stays in the address bar");
-  assert.equal(window.history.length, len, "replaceState, not pushState");
-  assert.equal(navMod.getNavSnapshot().index, index, "the nav engine sees no new entry");
+  assert.equal(window.history.length, len + 1, "the strip adds no entry: the only new one is the prompt's own layer (useDialog)");
+  assert.equal(navMod.getNavSnapshot().index, index + 1, "nav engine: the prompt layer only");
+  assert.ok(loginDialog(), "MUTATION: no login confirmation (silent login CSRF)");
+  assert.match(document.querySelector("[data-bot-login-text]")?.textContent ?? "", /^Ali \(@ali\) sifatida kirasizmi\?$/);
+  assert.equal(useAppStore.getState().loggedIn, false, "nothing before the tap");
+  await tap("[data-bot-login-go]");
+  assert.equal(posts.length, 2);
+  assert.deepEqual(posts[1], { token: BT, confirm: true });
+  assert.ok(!loginDialog());
   assert.equal(useAppStore.getState().loggedIn, true);
   assert.equal(useAppStore.getState().user?.id, "u1");
   assert.equal(refreshed, 1, "server components re-rendered");
@@ -149,7 +165,32 @@ test("«Kirish…» shows while the exchange runs; nothing is sent before the se
     await new Promise((r) => setTimeout(r, 20));
   });
   assert.ok(!busy());
-  assert.equal(useAppStore.getState().loggedIn, true);
+  assert.ok(loginDialog(), "then the login confirmation");
+});
+
+test("«Yo'q» on the login confirmation: no second request, not signed in; a refused confirm shows the reason", async () => {
+  setup({ url: `/uz/slide?bt=${BT}` });
+  await mount();
+  await tap("[data-bot-login-no]");
+  assert.ok(!loginDialog());
+  assert.equal(posts.length, 1, "MUTATION: «Yo'q» still signed in");
+  assert.equal(useAppStore.getState().loggedIn, false);
+  cleanup();
+  setup({ url: `/uz/slide?bt=${BT}` });
+  answers = [LOGIN_CONFIRM, { status: 401, body: { error: "Kirish havolasi eskirgan. Botga qayting va /start bosing.", code: "bot_link_expired" } }];
+  await mount();
+  await tap("[data-bot-login-go]");
+  assert.match(document.querySelector("[data-bot-login-text]")?.textContent ?? "", /eskirgan/);
+  assert.equal(useAppStore.getState().loggedIn, false);
+});
+
+test("review MINOR 4: the login sheet's returnTo never carries bt", () => {
+  useUi.getState().open("login", { returnTo: `/uz/slide?x=1&bt=${BT}#top` });
+  assert.equal(useUi.getState().returnTo, "/uz/slide?x=1#top", "MUTATION: the token would be pushed back after an OTP login");
+  useUi.getState().open("login", { returnTo: "/uz/slide?q=a%20b" });
+  assert.equal(useUi.getState().returnTo, "/uz/slide?q=a%20b", "no bt: untouched");
+  useUi.getState().open("login", { returnTo: `/uz?bt=${BT}` });
+  assert.equal(useUi.getState().returnTo, "/uz");
 });
 
 test("the page's login sheet opened meanwhile: closed on success; returnTo of this page keeps the link's query, another page is followed", async () => {
@@ -160,6 +201,7 @@ test("the page's login sheet opened meanwhile: closed on success; returnTo of th
   const r2 = { ...router, push: (u: string) => void pushed.push(u), replace: (u: string) => void replaced.push(u) };
   render(h(AppRouterContext.Provider, { value: r2 }, h(MiniAppBridge)));
   await settle();
+  await tap("[data-bot-login-go]");
   assert.equal(useUi.getState().overlay, null, "login sheet closed");
   assert.equal(here(), "/uz/slide?x=1", "MUTATION: navigated to the bare returnTo and lost the query");
   assert.deepEqual([...pushed, ...replaced], []);
@@ -169,6 +211,7 @@ test("the page's login sheet opened meanwhile: closed on success; returnTo of th
   useUi.setState({ overlay: "login", returnTo: "/uz/wallet" });
   render(h(AppRouterContext.Provider, { value: r2 }, h(MiniAppBridge)));
   await settle();
+  await tap("[data-bot-login-go]");
   assert.equal(useUi.getState().overlay, null);
   assert.deepEqual([...pushed, ...replaced], ["/uz/wallet"], "another page's returnTo is followed");
 });

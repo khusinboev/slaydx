@@ -1,0 +1,15 @@
+-- Bot keyboard link revocation (docs/bot/PLAN.md Q1, security review of B1, MINOR 1).
+--
+--   users.bot_links_before  a bot keyboard link (`lib/server/bot-link.ts`, `?bt=`) issued
+--                           before this moment is void. Set to now() by «barcha
+--                           qurilmalardan chiqish» (`revokeAllSessions`), the admin session
+--                           revoke and the admin block — also when the user has no live
+--                           session rows. A single-device logout or an account switch does
+--                           NOT set it, so the keyboard keeps working there. NULL = never.
+--
+-- Additive only: one nullable column (metadata-only ALTER, no rewrite, no backfill).
+--
+-- ROLLBACK:
+--   ALTER TABLE users DROP COLUMN IF EXISTS bot_links_before;
+--   DELETE FROM schema_migrations WHERE name = '039_bot_links_before.sql';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bot_links_before TIMESTAMPTZ;

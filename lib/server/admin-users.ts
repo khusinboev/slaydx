@@ -731,13 +731,23 @@ async function lockUser(client: Queryable, id: string): Promise<{ is_blocked: bo
   return row;
 }
 
-/** Revokes every live session of the user; returns how many were live. */
+/**
+ * Revokes every live session of the user; returns how many were live. Bot
+ * keyboard links issued so far die too (`users.bot_links_before`,
+ * docs/bot/PLAN.md Q1) — also when no session row is live.
+ */
 async function revokeUserSessionsInTx(client: Queryable, id: string): Promise<number> {
+  await voidBotLinksInTx(client, id);
   const res = await client.query(
     `UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()`,
     [id],
   );
   return res.rowCount ?? 0;
+}
+
+/** Bot keyboard links issued before now are void (`lib/server/auth.ts botLinkAccount`). */
+async function voidBotLinksInTx(client: Queryable, id: string): Promise<void> {
+  await client.query(`UPDATE users SET bot_links_before = now() WHERE id = $1`, [id]);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -816,6 +826,8 @@ export async function setUserBlocked(actor: AdminActor, id: string, input: Block
     const refunded = { points: 0, quota: 0, balance: 0 };
     const jobIds: string[] = [];
     if (input.blocked) {
+      // A block always voids outstanding bot keyboard links: an unblock must not revive them.
+      await voidBotLinksInTx(client, id);
       if (input.revokeSessions) effects.sessionsRevoked = await revokeUserSessionsInTx(client, id);
       if (queued) {
         for (const { id: jobId } of queued.rows) {

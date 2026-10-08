@@ -63,18 +63,22 @@ export function miniAppSessionAction(
 
 /**
  * Bot keyboard link sign-in (`POST /api/auth/bot-link`, docs/bot/PLAN.md Q1)
- * over this browser's current session:
- *  - `create` / `reuse` / `refuse_phone` — as in `miniAppSessionAction`;
- *  - `confirm` — the session is ANOTHER Telegram account and the client has not
- *    confirmed: answer 409 `switch_confirm`, nothing changes (never a silent
- *    switch — a link can be forwarded or opened in Telegram's in-app browser,
- *    which shares the webview cookies);
- *  - `replace` — the same, after the user tapped «O'tish»: revoke this session
- *    row only, then a new one.
+ * over this browser's current session. Nothing happens without the user's
+ * tap, except keeping the session the link already belongs to:
+ *  - `reuse` — the session is the link owner's: keep it (silent);
+ *  - `confirm_login` — no session, not confirmed: 409 `login_confirm`, nothing
+ *    is created. A link alone is not intent: anyone can put our URL with HIS
+ *    token into his own bot's keyboard (a genuine webview, empty initData) or
+ *    a chat link — silent login CSRF (security review of B1, MAJOR);
+ *  - `create` — no session, the user tapped «Kirish»;
+ *  - `confirm_switch` — ANOTHER Telegram account's session, not confirmed:
+ *    409 `switch_confirm`, nothing changes;
+ *  - `replace` — the same after «O'tish»: revoke this session row only, then a new one;
+ *  - `refuse_phone` — a phone-login session is never replaced.
  * A link is valid for days, so the Mini App's 10-minute freshness rule cannot
  * apply; the explicit confirmation is the guard.
  */
-export type BotLinkSessionAction = "create" | "reuse" | "confirm" | "replace" | "refuse_phone";
+export type BotLinkSessionAction = "reuse" | "confirm_login" | "create" | "confirm_switch" | "replace" | "refuse_phone";
 
 export function botLinkSessionAction(
   current: { telegramId: string | null } | null,
@@ -83,17 +87,18 @@ export function botLinkSessionAction(
 ): BotLinkSessionAction {
   // Without a launch date `miniAppSessionAction` answers `refuse_stale` for any other account.
   const base = miniAppSessionAction(current, telegramId, undefined);
-  if (base === "create" || base === "reuse" || base === "refuse_phone") return base;
-  return confirmed ? "replace" : "confirm";
+  if (base === "reuse" || base === "refuse_phone") return base;
+  if (base === "create") return confirmed ? "create" : "confirm_login";
+  return confirmed ? "replace" : "confirm_switch";
 }
 
 /**
  * The account behind a verified bot link, or `null` when no user has this
- * Telegram id. `revoked` — one of the user's sessions was revoked at or after
- * the link's issue second (logout, «barcha qurilmalardan chiqish», admin
- * revoke, an account switch away from it): the link is void. Revoked rows are
- * purged 7 days after revocation (`purgeExpiredSessions`), and a link lives
- * 7 days from issue, so a purge never revives a link. `blocked` — admin block.
+ * Telegram id. `revoked` — the link was issued before `users.bot_links_before`
+ * (migration 039: set by «barcha qurilmalardan chiqish», the admin session
+ * revoke and the admin block — also when no session row is live). A
+ * single-device logout or an account switch does not void links.
+ * `blocked` — admin block.
  */
 export async function botLinkAccount(
   telegramId: string,
@@ -101,8 +106,7 @@ export async function botLinkAccount(
 ): Promise<{ user: SessionUser; blocked: boolean; revoked: boolean } | null> {
   const row = await queryOne<Record<string, unknown> & { is_blocked: boolean; link_revoked: boolean }>(
     `SELECT ${USER_COLUMNS},
-            EXISTS (SELECT 1 FROM sessions s
-                     WHERE s.user_id = users.id AND s.revoked_at >= to_timestamp($2)) AS link_revoked
+            (bot_links_before IS NOT NULL AND to_timestamp($2) < bot_links_before) AS link_revoked
        FROM users
       WHERE telegram_id = $1`,
     [telegramId, issuedAtSec],
