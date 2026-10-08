@@ -28,10 +28,20 @@ import { parseIntParam } from "./validate";
  *     (a real cash payment; free quota / admin credits do not count);
  *   - `active_days` (`days` 1..365): the user created a generation or has a
  *     session created or last seen within the last `days` days (the same
- *     definition of "active" as the dashboard's `activeUsers`).
+ *     definition of "active" as the dashboard's `activeUsers`);
+ *   - `new_days` (`days` 1..365): the account was created within the last
+ *     `days` days (the bot panel's «Yangilar (7 kun)», docs/bot-admin/PLAN.md A-Q3).
  *
  * Text is stored as plain text and HTML-escaped at send time (T8): the test
  * send below uses the very same `escapeTelegramHtml` as delivery.
+ *
+ * Rich content (bot panel, A-Q2): a broadcast created in the bot carries
+ * `content` (migration 044) — the admin's own message as Telegram gave it:
+ * text with its formatting entities, or a photo / video `file_id` with its
+ * caption, plus an optional single link button. Such a broadcast is sent
+ * with `sendBroadcastContent` (entities, never `parse_mode`), by the test
+ * send AND by delivery. Web broadcasts have `content = NULL` and keep the
+ * plain-text path unchanged.
  */
 
 /* -------------------------------------------------------------------------- */
@@ -46,9 +56,12 @@ export const PREVIEW_CHARS = 160;
 
 export const BROADCAST_STATUSES = ["draft", "queued", "sending", "done", "cancelled"] as const;
 export type BroadcastStatus = (typeof BROADCAST_STATUSES)[number];
-export const AUDIENCE_KINDS = ["all", "paid", "active_days"] as const;
+export const AUDIENCE_KINDS = ["all", "paid", "active_days", "new_days"] as const;
 export type AudienceKind = (typeof AUDIENCE_KINDS)[number];
-export type Audience = { kind: "all" } | { kind: "paid" } | { kind: "active_days"; days: number };
+export type Audience = { kind: "all" } | { kind: "paid" } | { kind: "active_days"; days: number } | { kind: "new_days"; days: number };
+
+/** Audience kinds that carry `days`. */
+const hasDays = (kind: AudienceKind): kind is "active_days" | "new_days" => kind === "active_days" || kind === "new_days";
 
 const notFound = (): ApiError => new ApiError("Topilmadi", 404, { code: "not_found" });
 const stateError = (): ApiError => new ApiError("Xabar holati o'zgargan — sahifani yangilang", 409, { code: "state" });
@@ -78,10 +91,10 @@ function parseDays(raw: unknown): number {
   return n;
 }
 
-/** Builds the normalised audience; `days` is required for `active_days` and refused otherwise. */
+/** Builds the normalised audience; `days` is required for `active_days` / `new_days` and refused otherwise. */
 function makeAudience(kind: AudienceKind, days: unknown, fromBody: boolean): Audience {
-  if (kind === "active_days") {
-    if (days === undefined || days === null) throw new ApiError("active_days uchun days kerak", 400);
+  if (hasDays(kind)) {
+    if (days === undefined || days === null) throw new ApiError(`${kind} uchun days kerak`, 400);
     if (fromBody && typeof days !== "number") throw new ApiError(`days 1 dan ${AUDIENCE_DAYS_MAX} gacha bo'lgan butun son bo'lishi kerak`, 400);
     return { kind, days: parseDays(days) };
   }
@@ -137,6 +150,9 @@ function audienceWhere(a: Audience, params: unknown[]): string {
         OR EXISTS (SELECT 1 FROM sessions s WHERE s.user_id = u.id
                     AND (s.created_at >= now() - $${n}::int * interval '1 day' OR s.last_seen_at >= now() - $${n}::int * interval '1 day')))`,
     );
+  } else if (a.kind === "new_days") {
+    params.push(a.days);
+    conds.push(`u.created_at >= now() - $${params.length}::int * interval '1 day'`);
   }
   return conds.join(" AND ");
 }
