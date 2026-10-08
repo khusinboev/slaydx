@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ChevronRight, LayoutGrid } from "lucide-react";
 import { TOOL_BY_ID, clientAdjustedPrice, toolBlockedReason } from "@/lib/tools";
 import { useAppStore, usePricingVersion } from "@/lib/store";
 import type { ToolConfig } from "@/lib/types";
@@ -23,16 +24,28 @@ export function QuickStart({ onPick }: { onPick: (href: string) => void }) {
   const features = useAppStore((s) => s.features);
   usePricingVersion(); // admin price adjustments re-render the «from» prices
   return (
-    <ul className="grid grid-cols-2 gap-2.5" data-hub-quick>
-      {QUICK_TOOL_IDS.map((id, i) => {
-        const tool = TOOL_BY_ID[id];
-        return (
-          <li key={id} className="min-w-0">
-            <QuickCard tool={tool} first={i === 0} blocked={toolBlockedReason(tool, features)} onPick={onPick} />
-          </li>
-        );
-      })}
-    </ul>
+    <div className="flex flex-col gap-2.5">
+      <ul className="grid grid-cols-2 gap-2.5" data-hub-quick>
+        {QUICK_TOOL_IDS.map((id, i) => {
+          const tool = TOOL_BY_ID[id];
+          return (
+            <li key={id} className="min-w-0">
+              <QuickCard tool={tool} first={i === 0} blocked={toolBlockedReason(tool, features)} onPick={onPick} />
+            </li>
+          );
+        })}
+      </ul>
+      {/* Owner request 2026-10-08: a big «Barcha vositalar» under the four cards → the full catalogue. */}
+      <Link
+        href="/uz/create"
+        data-hub-all-tools
+        className="focus-visible:ring-ring flex min-h-14 items-center gap-3 rounded-[var(--radius-card)] border bg-[var(--accent-soft)] px-4 text-[16px] font-semibold text-[var(--accent-soft-foreground)] shadow-[var(--shadow-card)] outline-none focus-visible:ring-2"
+      >
+        <LayoutGrid className="size-5 shrink-0" aria-hidden />
+        <span className="min-w-0 flex-1">Barcha vositalar</span>
+        <ChevronRight className="size-5 shrink-0 opacity-70" aria-hidden />
+      </Link>
+    </div>
   );
 }
 

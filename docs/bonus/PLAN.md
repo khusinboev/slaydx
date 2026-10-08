@@ -69,3 +69,44 @@ Ledger refs: `channel:<channel_id>:<user_id>:join`, `channel:<channel_id>:<user_
 - Migration 043: index `bonus_channel_claims (channel_id)` (admin stats, the channel delete check, the FK cascade).
 - Sweep: batch **200** per run (every 10 min), time budget **15 s** (the rest continue next run), ≤ 20 Bot API calls/s.
 - Admin page renders an invite link as a link only if it matches `^https://t.me/+[A-Za-z0-9_-]{8,64}$` (else as text).
+
+## Bonus 2 (client feedback, owner decisions 2026-10-08)
+| # | Decision |
+|---|---|
+| B2-Q1 | First top-up bonus: **10 %** of the first paid top-up **≥ 50 000 so'm**, at most **20 000**, once (`lib/topup-bonus.ts`) |
+| B2-Q2 | Channel bonus is paid **automatically on join** (chat_member), no «Tekshirish»; one «🔄 Yangilash» fallback |
+| B2-Q3 | Bot shows bonus amounts in **so'm** («+2 000 so'm bonus»; ru «сум», en «UZS») |
+| B2-Q4 | «Hamyon / Bonus» → wallet card (history: last 3 in an expandable quote) + a big green «🎁 Bonuslar» button → «Sizning bonuslaringiz» message |
+«Sizning bonuslaringiz»: one message, summary line (earned · still available), each task is a BUTTON under it: done → ✅ + green
+(style success), not done → the action itself (channel url, share link, web_app top-up). Tasks: signup (always done), invite friends
+(green after ≥ 1), each channel, first top-up. /start welcome: blank line between sections. Web home: big «Barcha vositalar» under
+«Tez boshlash».
+| WP | Scope | Model |
+|---|---|---|
+| P1 Bot bonus UI | bonuses message + task buttons, auto-pay on chat_member join (+ notify, message effect), Yangilash, wallet card (expandable last 3), so'm units, welcome spacing | opus |
+| P2 First top-up | pay the bonus in the payment-paid transaction (Click + Payme), idempotent, web wallet hint, tests | opus |
+| Web | «Barcha vositalar» button (lead) | — |
+
+### P2 first top-up bonus — how «first» is decided (to confirm with the owner)
+- **Where:** `lib/server/payments.ts settleOrder` (the ONLY place an order becomes `paid`; both the Click Complete and
+  the Payme PerformTransaction webhooks call it). Under the order lock it calls `firstTopupBonusDueInTx`
+  (`lib/server/topup-bonus.ts`: locks the user row `FOR UPDATE`, then looks for other paid top-ups), credits the top-up
+  (`topUpInTx`, kind `topup`), and only if that credit was really written pays the bonus in the SAME transaction:
+  `topUpInTx(client, userId, { points }, "first-topup:<userId>", "bonus", "Birinchi to‘ldirish bonusi (10%)")`.
+- **«A paid top-up»** = a `payment_orders` row of the user with `purpose = 'topup'`, `state = 'paid'`, not fully
+  refunded (`SUM(payment_refunds.amount_soum) < amount_soum`). Not counted: created / pending / cancelled orders,
+  legacy `pro` orders, admin manual credits (`admin_credit`, `scripts/topup.mts` bonus rows), generation refunds.
+- **First** = no OTHER paid top-up exists when this order settles. **Reading of B2-Q1 (please confirm):** the bonus is
+  for the very first paid top-up only — if that first top-up is **below 50 000** it earns nothing and **no later top-up
+  ever earns it** (the chance is used). Alternative reading (not implemented): «the first top-up that is ≥ 50 000».
+- **Once per user:** the unique ledger reference `first-topup:<userId>`; webhook replays never reach the credit
+  (`already_paid`), parallel replays wait on the order lock, two different orders settling at once wait on the user
+  lock (the one that commits first is the first top-up). A unique-index race on the bonus row rolls back only the
+  bonus (savepoint) — the top-up and `paid` are kept.
+- **Refunds:** a later refund / chargeback does **not** claw the bonus back (the clawback debits the order's own top-up
+  credit from `balance`). A fully refunded first order stops counting as a paid top-up, so a user whose refunded first
+  top-up was below 50 000 can still earn the bonus later; a user who already got it never gets it twice (reference).
+- **Blocked users:** top-ups are credited regardless (settlement does not check blocking), so the bonus follows.
+- **Web:** `GET /api/users/me` returns `firstTopupEligible` (no paid top-up yet AND no bonus row); the wallet shows
+  «Birinchi to‘ldirishga +10% bonus (50 000 so‘mdan, ko‘pi 20 000)» on «Tez to'ldirish» while it is true; the ledger
+  row reads «Birinchi to‘ldirish bonusi». Tests: `tests/topup-bonus.test.mts`, `tests/ui/wallet-page.test.mts`.

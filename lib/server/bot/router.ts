@@ -17,14 +17,17 @@ import {
   languageScreen,
   referralScreen,
   walletScreen,
+  WALLET_RECENT,
   type FileItem,
 } from "./screens";
 import { cancelInput, claimInput, finishInput, keyboardStale, markKeyboard, repromptInput, startInput } from "./state";
+import { clearState as clearAdminState, dropPendingStep } from "./admin-state";
+import { isLinkedAdmin } from "./admin-access";
+import { isAdminCallback } from "./admin-codes";
 import type { Screen } from "./ui";
 import { rateLimit } from "../ratelimit";
 import { bonusTasks, checkChannel } from "../bonus-channels";
-import { formatPoints } from "../../referral";
-import { bonusScreen, type Celebrate } from "./bonus";
+import { BONUS_MAX_CHANNELS, bonusScreen, som } from "./bonus";
 
 /**
  * Bot chat routing for the new screens (docs/bot/PLAN.md, B2). Loaded lazily
@@ -105,7 +108,11 @@ export async function userByTelegram(telegramId: number): Promise<SessionUser | 
 /** For `telegram.ts`: the keyboard went out with another message (contact replies). */
 export const markKeyboardSent = markKeyboard;
 /** For `telegram.ts`: a command drops a pending prompt. */
-export const cancelPending = cancelInput;
+export async function cancelPending(chatId: number): Promise<void> {
+  await cancelInput(chatId);
+  // An admin step and its draft go too (docs/bot-admin/PLAN.md).
+  await clearAdminState(chatId);
+}
 
 async function referral(userId: string) {
   const s = await referralSummary(userId, { botUsername: await botUsername(), appUrl: env.appUrl });
@@ -135,18 +142,20 @@ async function filesPage(ctx: Pick<ChatCtx, "user" | "lang" | "telegramId">, pag
 }
 
 async function walletCard(ctx: Pick<ChatCtx, "user" | "lang">): Promise<Screen> {
-  return walletScreen(ctx.lang, ctx.user, await recentTransactions(ctx.user.id, 5));
+  return walletScreen(ctx.lang, ctx.user, await recentTransactions(ctx.user.id, WALLET_RECENT));
 }
 
-async function bonusCard(ctx: Pick<ChatCtx, "user" | "lang">, celebrate: Celebrate | null = null): Promise<Screen> {
+async function bonusCard(ctx: Pick<ChatCtx, "user" | "lang">): Promise<Screen> {
   const tasks = await bonusTasks(ctx.user.id, { botUsername: await botUsername(), appUrl: env.appUrl });
-  return bonusScreen(ctx.lang, tasks, Date.now(), celebrate);
+  return bonusScreen(ctx.lang, tasks, Date.now());
 }
 
-/** «Tekshirish» budget per user: every tap is a getChatMember call (Telegram's limits are per bot). */
+/** One-channel checks per user per minute: every check is a getChatMember call (Telegram's limits are per bot). */
 const BONUS_CHECKS_PER_MIN = 10;
+/** «🔄 Yangilash» taps per user per minute: one tap checks every channel not joined yet. */
+const BONUS_REFRESH_PER_MIN = 3;
 
-/** «✅ Tekshirish»: check + pay (once), then the toast and the re-rendered screen. */
+/** One channel without a public link (or an old «Tekshirish» button): check + pay (once), then the toast and the re-rendered message. */
 async function bonusCheck(ctx: ChatCtx, channelId: string): Promise<{ toast: string; screen: Screen | null }> {
   if (!(await rateLimit(`bonus-check:${ctx.user.id}`, BONUS_CHECKS_PER_MIN, 60)).ok) {
     return { toast: t(ctx.lang, "toast.bonusRate"), screen: null };
@@ -155,8 +164,8 @@ async function bonusCheck(ctx: ChatCtx, channelId: string): Promise<{ toast: str
   switch (r.status) {
     case "paid":
       return {
-        toast: r.points > 0 ? t(ctx.lang, "toast.bonusPaid", { n: formatPoints(r.points) }) : t(ctx.lang, "bonus.confirmed"),
-        screen: await bonusCard(ctx, { points: r.points, title: r.title, stayBonus: r.stayBonus, stayDays: r.stayDays }),
+        toast: r.points > 0 ? t(ctx.lang, "toast.bonusPaid", { n: som(ctx.lang, r.points) }) : t(ctx.lang, "toast.bonusDone"),
+        screen: await bonusCard(ctx),
       };
     case "already":
       return { toast: t(ctx.lang, "toast.bonusAlready"), screen: await bonusCard(ctx) };
@@ -171,11 +180,45 @@ async function bonusCheck(ctx: ChatCtx, channelId: string): Promise<{ toast: str
   }
 }
 
+/**
+ * «🔄 Yangilash» (B2-Q2 fallback for a missed `chat_member` update): every active channel the
+ * user has not joined yet is checked with `checkChannel` (getChatMember → the same idempotent
+ * payment as the automatic one), then the message is re-rendered. Rate limited per user.
+ */
+async function bonusRefresh(ctx: ChatCtx): Promise<{ toast: string; screen: Screen | null }> {
+  if (!(await rateLimit(`bonus-refresh:${ctx.user.id}`, BONUS_REFRESH_PER_MIN, 60)).ok) {
+    return { toast: t(ctx.lang, "toast.bonusRate"), screen: null };
+  }
+  const tasks = await bonusTasks(ctx.user.id, { botUsername: await botUsername(), appUrl: env.appUrl });
+  let paid = 0;
+  let unknown = 0;
+  let missing = 0;
+  for (const c of tasks.channels.slice(0, BONUS_MAX_CHANNELS)) {
+    if (c.claim) continue;
+    // Each check also spends the single-check budget, so «Yangilash» cannot bypass it (review MINOR).
+    if (!(await rateLimit(`bonus-check:${ctx.user.id}`, BONUS_CHECKS_PER_MIN, 60)).ok) break;
+    const r = await checkChannel(ctx.user.id, ctx.telegramId, c.id);
+    if (r.status === "paid") paid += r.points;
+    else if (r.status === "unknown") unknown += 1;
+    else if (r.status === "not_member") missing += 1;
+    else if (r.status === "blocked") return { toast: t(ctx.lang, "account.blocked"), screen: null };
+  }
+  const toast =
+    paid > 0
+      ? t(ctx.lang, "toast.bonusPaid", { n: som(ctx.lang, paid) })
+      : unknown > 0
+        ? t(ctx.lang, "toast.bonusUnknown")
+        : missing > 0
+          ? t(ctx.lang, "toast.bonusNotMember")
+          : t(ctx.lang, "toast.bonusRefreshed");
+  return { toast, screen: await bonusCard(ctx) };
+}
+
 /* ───────────────────────── Keyboard + texts ───────────────────────── */
 
 /** Sends the main keyboard (its own message) and records it. */
 export async function sendMainKeyboard(ctx: ChatCtx, kind: "note" | "refreshed"): Promise<void> {
-  await sendScreen(ctx.chatId, keyboardMessage(ctx.lang, ctx.telegramId, kind));
+  await sendScreen(ctx.chatId, keyboardMessage(ctx.lang, ctx.telegramId, kind, undefined, { admin: await isLinkedAdmin(ctx.telegramId) }));
   await markKeyboard(ctx.chatId, ctx.user.id);
 }
 
@@ -194,7 +237,7 @@ export async function handleKeyboard(ctx: ChatCtx, action: KeyboardAction): Prom
       const tool = actionLabel(ctx.lang, action);
       await sendScreen(ctx.chatId, {
         text: t(ctx.lang, blocked ? "tool.blocked" : "tool.noApp", { tool }),
-        reply_markup: mainKeyboard(ctx.lang, ctx.telegramId),
+        reply_markup: mainKeyboard(ctx.lang, ctx.telegramId, undefined, { admin: await isLinkedAdmin(ctx.telegramId) }),
       });
       return;
     }
@@ -290,6 +333,12 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
       toast = t("uz", "toast.notYours");
       return;
     }
+    if (isAdminCallback(q.data)) {
+      // The admin panel (docs/bot-admin/PLAN.md) re-checks the admin account itself: a non-admin gets «Ruxsat yo‘q» only.
+      const admin = await import("./admin");
+      toast = await admin.handleAdminCallback(q.from.id, msg.chat.id, msg.message_id, q.data!, updateId);
+      return;
+    }
     const user = await userByTelegram(q.from.id);
     if (!user) {
       toast = t("uz", "toast.start");
@@ -313,6 +362,7 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
         await edit(sectionScreen(user, c.step, ctx.lang));
         return;
       case "edit":
+        await dropPendingStep(ctx.chatId);
         await startInput(ctx.chatId, user.id, c.field, msg.message_id);
         await edit(promptScreen(user, c.field, ctx.lang));
         return;
@@ -342,6 +392,16 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
         if (r.screen) await edit(r.screen);
         return;
       }
+      case "bonusRefresh": {
+        await cancelInput(ctx.chatId);
+        const r = await bonusRefresh(ctx);
+        toast = r.toast;
+        if (r.screen) await edit(r.screen);
+        return;
+      }
+      case "bonusDone":
+        toast = t(ctx.lang, "toast.bonusDone");
+        return;
       case "walletInvite":
         await edit(referralScreen(ctx.lang, await referral(user.id), "wallet"));
         return;

@@ -280,6 +280,8 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     // rolled back first, newest first.
     assert.ok(await exists("bonus_channel_claims_channel_idx"), "043 index created");
     for (const f of [
+      // 044: bot admin panel (docs/bot-admin/PLAN.md) — broadcasts.content + bot_admin_state.
+      "044_bot_admin.sql",
       "043_bonus_claims_channel_idx.sql",
       "042_bonus_channel_invite.sql",
       "041_bonus_channels.sql",

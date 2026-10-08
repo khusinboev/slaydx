@@ -5,6 +5,7 @@ import { query, queryOne, transaction } from "./db";
 import { safeEqual } from "./session";
 import { topUpInTx } from "./credits";
 import { log } from "./log";
+import { firstTopupBonusDueInTx, payFirstTopupBonusInTx } from "./topup-bonus";
 
 /**
  * To'lov buyurtmalari va ularni kreditga aylantirish.
@@ -356,8 +357,10 @@ export async function settleOrder(
   opts: { expiresBefore?: number } = {},
 ): Promise<SettleOutcome> {
   let credited = false;
+  let bonusPoints = 0;
   const out = await transaction(async (client): Promise<SettleOutcome> => {
     credited = false;
+    bonusPoints = 0;
     const row = await lockOrder(client, orderId);
     if (!row) return { status: "not_found", order: null };
     const order = toOrder(row);
@@ -403,6 +406,12 @@ export async function settleOrder(
         "Pro obuna (eski buyurtma) — balansga",
       );
     } else {
+      /*
+       * First top-up bonus (docs/bonus/PLAN.md «Bonus 2», `lib/server/topup-bonus.ts`): decided
+       * BEFORE the credit, under the user row lock, against the user's other paid top-up orders;
+       * paid AFTER it, only when this call really credited the top-up, in this same transaction.
+       */
+      const bonusDue = await firstTopupBonusDueInTx(client, order.userId, order.id, order.amountSoum);
       credited = await topUpInTx(
         client,
         order.userId,
@@ -411,6 +420,9 @@ export async function settleOrder(
         "topup",
         `${order.provider} orqali to'ldirish`,
       );
+      if (credited && bonusDue > 0 && (await payFirstTopupBonusInTx(client, order.userId, bonusDue))) {
+        bonusPoints = bonusDue;
+      }
     }
 
     await client.query(
@@ -428,7 +440,7 @@ export async function settleOrder(
     return { status: "paid", order: await reread(client, orderId) };
   });
   // COMMIT dan KEYIN — rollback bo'lgan urinish «to'landi» deb yozilmasin.
-  logOrder("settle", out, { credited });
+  logOrder("settle", out, { credited, firstTopupBonus: bonusPoints });
   return out;
 }
 

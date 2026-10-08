@@ -124,5 +124,7 @@ export function rows(...r: (InlineButton | null | undefined | false)[][]): Inlin
 /** Cuts a value for a button label / a list line (labels are short on phones). */
 export function clip(s: string, max: number): string {
   const v = s.replace(/\s+/g, " ").trim();
-  return v.length <= max ? v : `${v.slice(0, max - 1).trimEnd()}…`;
+  // By code points, never inside a surrogate pair (a split emoji makes Telegram reject the whole keyboard).
+  const chars = Array.from(v);
+  return chars.length <= max ? v : `${chars.slice(0, max - 1).join("").trimEnd()}…`;
 }

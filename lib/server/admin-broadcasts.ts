@@ -4,9 +4,10 @@ import { ApiError } from "./api";
 import { queryOne, transaction } from "./db";
 import { adminTx } from "./admin-audit";
 import { parseBigintId, parseReason } from "./admin-accounts";
-import type { AdminActor } from "./admin-handler";
+import type { AuditActor } from "./admin-audit";
 import { buildKeyset, countCapped, keysetSelect, pageResult, parseListParams, type CursorColumns, type ListSpec, type ParsedList } from "./admin-list";
 import { escapeTelegramHtml } from "./broadcast-delivery";
+import { contentOf, parseBroadcastContent, sendBroadcastContent, type BroadcastContent } from "./broadcast-content";
 import { toJsonb } from "./jsonb";
 import { botConfigured, sendMessage, TelegramTransientError } from "./telegram";
 import { parseIntParam } from "./validate";
@@ -28,10 +29,20 @@ import { parseIntParam } from "./validate";
  *     (a real cash payment; free quota / admin credits do not count);
  *   - `active_days` (`days` 1..365): the user created a generation or has a
  *     session created or last seen within the last `days` days (the same
- *     definition of "active" as the dashboard's `activeUsers`).
+ *     definition of "active" as the dashboard's `activeUsers`);
+ *   - `new_days` (`days` 1..365): the account was created within the last
+ *     `days` days (the bot panel's «Yangilar (7 kun)», docs/bot-admin/PLAN.md A-Q3).
  *
  * Text is stored as plain text and HTML-escaped at send time (T8): the test
  * send below uses the very same `escapeTelegramHtml` as delivery.
+ *
+ * Rich content (bot panel, A-Q2): a broadcast created in the bot carries
+ * `content` (migration 044) — the admin's own message as Telegram gave it:
+ * text with its formatting entities, or a photo / video `file_id` with its
+ * caption, plus an optional single link button. Such a broadcast is sent
+ * with `sendBroadcastContent` (entities, never `parse_mode`), by the test
+ * send AND by delivery. Web broadcasts have `content = NULL` and keep the
+ * plain-text path unchanged.
  */
 
 /* -------------------------------------------------------------------------- */
@@ -46,9 +57,18 @@ export const PREVIEW_CHARS = 160;
 
 export const BROADCAST_STATUSES = ["draft", "queued", "sending", "done", "cancelled"] as const;
 export type BroadcastStatus = (typeof BROADCAST_STATUSES)[number];
-export const AUDIENCE_KINDS = ["all", "paid", "active_days"] as const;
+export const AUDIENCE_KINDS = ["all", "paid", "active_days", "new_days"] as const;
 export type AudienceKind = (typeof AUDIENCE_KINDS)[number];
-export type Audience = { kind: "all" } | { kind: "paid" } | { kind: "active_days"; days: number };
+export type Audience = { kind: "all" } | { kind: "paid" } | { kind: "active_days"; days: number } | { kind: "new_days"; days: number };
+
+/** Audience kinds that carry `days`. */
+const hasDays = (kind: AudienceKind): kind is "active_days" | "new_days" => kind === "active_days" || kind === "new_days";
+
+/**
+ * Who acts. The web passes its `AdminActor` (`adminHandler`); the bot panel passes an
+ * actor built from the linked admin account (`bot/admin.ts`). Only these fields are used.
+ */
+export type BroadcastActor = AuditActor & { id: string; userId: string };
 
 const notFound = (): ApiError => new ApiError("Topilmadi", 404, { code: "not_found" });
 const stateError = (): ApiError => new ApiError("Xabar holati o'zgargan — sahifani yangilang", 409, { code: "state" });
@@ -78,10 +98,10 @@ function parseDays(raw: unknown): number {
   return n;
 }
 
-/** Builds the normalised audience; `days` is required for `active_days` and refused otherwise. */
+/** Builds the normalised audience; `days` is required for `active_days` / `new_days` and refused otherwise. */
 function makeAudience(kind: AudienceKind, days: unknown, fromBody: boolean): Audience {
-  if (kind === "active_days") {
-    if (days === undefined || days === null) throw new ApiError("active_days uchun days kerak", 400);
+  if (hasDays(kind)) {
+    if (days === undefined || days === null) throw new ApiError(`${kind} uchun days kerak`, 400);
     if (fromBody && typeof days !== "number") throw new ApiError(`days 1 dan ${AUDIENCE_DAYS_MAX} gacha bo'lgan butun son bo'lishi kerak`, 400);
     return { kind, days: parseDays(days) };
   }
@@ -137,6 +157,9 @@ function audienceWhere(a: Audience, params: unknown[]): string {
         OR EXISTS (SELECT 1 FROM sessions s WHERE s.user_id = u.id
                     AND (s.created_at >= now() - $${n}::int * interval '1 day' OR s.last_seen_at >= now() - $${n}::int * interval '1 day')))`,
     );
+  } else if (a.kind === "new_days") {
+    params.push(a.days);
+    conds.push(`u.created_at >= now() - $${params.length}::int * interval '1 day'`);
   }
   return conds.join(" AND ");
 }
@@ -356,13 +379,26 @@ export async function getBroadcast(id: string): Promise<{ broadcast: AdminBroadc
 /* Create (draft)                                                             */
 /* -------------------------------------------------------------------------- */
 
-export async function createBroadcast(actor: AdminActor, body: Record<string, unknown>): Promise<{ broadcast: AdminBroadcast }> {
-  const text = parseText(body.text);
+export async function createBroadcast(
+  actor: BroadcastActor,
+  body: Record<string, unknown>,
+  opts: { content?: BroadcastContent; via?: "bot" } = {},
+): Promise<{ broadcast: AdminBroadcast }> {
+  // `content` comes only from server code (the bot panel), never from a request body.
+  let text: string;
+  let content: BroadcastContent | null = null;
+  if (opts.content) {
+    const parsed = parseBroadcastContent(opts.content, body.text, BROADCAST_TEXT_MAX);
+    text = parsed.text;
+    content = parsed.content;
+  } else {
+    text = parseText(body.text);
+  }
   const audience = parseAudience(body.audience);
   return adminTx(actor, async (client, audit) => {
     const ins = await client.query<{ id: string }>(
-      `INSERT INTO broadcasts (status, text, audience, created_by) VALUES ('draft', $1, $2::jsonb, $3) RETURNING id::text AS id`,
-      [text, toJsonb(audience), actor.id],
+      `INSERT INTO broadcasts (status, text, audience, created_by, content) VALUES ('draft', $1, $2::jsonb, $3, $4::jsonb) RETURNING id::text AS id`,
+      [text, toJsonb(audience), actor.id, content ? toJsonb(content) : null],
     );
     const id = ins.rows[0]!.id;
     await audit({
@@ -370,7 +406,13 @@ export async function createBroadcast(actor: AdminActor, body: Record<string, un
       targetType: "broadcast",
       targetId: id,
       before: null,
-      after: { status: "draft", audience, text },
+      after: {
+        status: "draft",
+        audience,
+        text,
+        ...(content ? { content: { kind: content.kind, fileId: content.fileId ?? null, button: content.button ?? null } } : {}),
+      },
+      ...(opts.via ? { meta: { via: opts.via } } : {}),
     });
     return { broadcast: (await fetchBroadcast(client, id))! };
   });
@@ -391,8 +433,8 @@ export async function createBroadcast(actor: AdminActor, body: Record<string, un
  *     `{sent:false}` (200), a transient failure → 502 `{code:"telegram_unavailable"}`.
  * One audit row per attempt that reached Telegram, with the outcome in `meta`.
  */
-export async function sendTest(actor: AdminActor, id: string): Promise<{ sent: boolean }> {
-  const b = await queryOne<{ text: string }>("SELECT text FROM broadcasts WHERE id = $1", [id]);
+export async function sendTest(actor: BroadcastActor, id: string, opts: { via?: "bot" } = {}): Promise<{ sent: boolean }> {
+  const b = await queryOne<{ text: string; content: unknown }>("SELECT text, content FROM broadcasts WHERE id = $1", [id]);
   if (!b) throw notFound();
   const u = await queryOne<{ telegram_id: string | null }>("SELECT telegram_id::text AS telegram_id FROM users WHERE id = $1", [actor.userId]);
   if (!u?.telegram_id) throw new ApiError("Sizning hisobingizga Telegram ulanmagan — sinov xabarini yuborib bo'lmaydi", 409, { code: "no_telegram" });
@@ -401,13 +443,14 @@ export async function sendTest(actor: AdminActor, id: string): Promise<{ sent: b
   let sent = false;
   let transient = false;
   try {
-    sent = await sendMessage(u.telegram_id, escapeTelegramHtml(b.text));
+    const content = contentOf(b.content, b.text);
+    sent = content ? await sendBroadcastContent(u.telegram_id, b.text, content) : await sendMessage(u.telegram_id, escapeTelegramHtml(b.text));
   } catch (e) {
     if (!(e instanceof TelegramTransientError)) throw e;
     transient = true;
   }
   await adminTx(actor, async (_client, audit) => {
-    await audit({ action: "broadcasts.test", targetType: "broadcast", targetId: id, meta: { sent, ...(transient ? { transient: true } : {}) } });
+    await audit({ action: "broadcasts.test", targetType: "broadcast", targetId: id, meta: { sent, ...(transient ? { transient: true } : {}), ...(opts.via ? { via: opts.via } : {}) } });
   });
   if (transient) throw new ApiError("Telegram vaqtincha javob bermadi — keyinroq urinib ko'ring", 502, { code: "telegram_unavailable" });
   return { sent };
@@ -432,7 +475,7 @@ function parseConfirmCount(raw: unknown): number {
  * count) and rolls the snapshot back, so what the admin confirmed is exactly
  * what is queued. An empty audience is refused (409 `empty_audience`).
  */
-export async function sendBroadcast(actor: AdminActor, id: string, body: Record<string, unknown>): Promise<{ broadcast: AdminBroadcast }> {
+export async function sendBroadcast(actor: BroadcastActor, id: string, body: Record<string, unknown>, opts: { via?: "bot" } = {}): Promise<{ broadcast: AdminBroadcast }> {
   const reason = parseReason(body.reason)!;
   const confirmCount = parseConfirmCount(body.confirmCount);
   return adminTx(actor, async (client, audit) => {
@@ -461,7 +504,7 @@ export async function sendBroadcast(actor: AdminActor, id: string, body: Record<
       reason,
       before: { status: "draft", total: 0 },
       after: { status: "queued", total },
-      meta: { audience, confirmCount },
+      meta: { audience, confirmCount, ...(opts.via ? { via: opts.via } : {}) },
     });
     return { broadcast: (await fetchBroadcast(client, id))! };
   });
@@ -477,7 +520,7 @@ export async function sendBroadcast(actor: AdminActor, id: string, body: Record<
  * and only looks at `queued` / `sending`. A message already in flight when the
  * cancel lands may still arrive (at most one per delivering process).
  */
-export async function cancelBroadcast(actor: AdminActor, id: string, body: Record<string, unknown>): Promise<{ broadcast: AdminBroadcast }> {
+export async function cancelBroadcast(actor: BroadcastActor, id: string, body: Record<string, unknown>, opts: { via?: "bot" } = {}): Promise<{ broadcast: AdminBroadcast }> {
   const reason = parseReason(body.reason)!;
   return adminTx(actor, async (client, audit) => {
     const cur = await client.query<{ status: string; total: number; sent: number; failed: number }>(
@@ -498,7 +541,7 @@ export async function cancelBroadcast(actor: AdminActor, id: string, body: Recor
       reason,
       before: { status: row.status },
       after: { status: "cancelled" },
-      meta: { total, sent, failed, unsent: Math.max(0, total - sent - failed) },
+      meta: { total, sent, failed, unsent: Math.max(0, total - sent - failed), ...(opts.via ? { via: opts.via } : {}) },
     });
     return { broadcast: (await fetchBroadcast(client, id))! };
   });
