@@ -58,7 +58,7 @@ for (const [command, fromId] of [["/start", 700000301], ["/login", 700000302]] a
     assert.match(String(body.text), /\n\nhttp:\/\/localhost:3000\/api\/auth\/telegram\/enter\?t=[A-Za-z0-9_-]{40,}$/);
     if (command === "/start") {
       const kb = calls[1]!.reply_markup as { keyboard: Record<string, unknown>[][] };
-      assert.ok(kb.keyboard.flat().length === 7, "seven reply buttons");
+      assert.ok(kb.keyboard.flat().length === 10, "ten reply buttons (keyboard v2: 5 rows × 2)");
       assert.ok(!JSON.stringify(kb).includes("web_app"), "no web_app on localhost");
     }
   });
