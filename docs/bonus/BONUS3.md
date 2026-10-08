@@ -15,3 +15,8 @@
 | D1 Payment bonus % | settings key (app_settings or existing settings mechanism) `payment_bonus_percent`, settleOrder pays % of every paid top-up (unique ref per order), web admin control + bot admin control (audited), bot bonuses message/wallet hint/texts updated, remove the first-top-up-only path for new payments | opus |
 | D2 Mandatory channels | migration: bonus_channels.mandatory boolean; admin web + bot «Kanal ulash» choose mandatory/optional; membership cache; server gate in the generation enqueue path (+ tool page UI gate in web and bot tool screens); Telegram-less users → «Telegram'ni ulang»; tests | opus |
 | D3 Broadcast engine | C-Q5 | sonnet (after D1/D2) |
+
+## Owner addition (2026-10-09)
+- C-Q6: the bot admin menu is a REPLY keyboard at the bottom while the admin is in the panel:
+  [📈 Statistika][📢 Xabar yuborish] / [🔔 Kanal ulash][💳 To‘lov bonusi] / [⬅️ Asosiy menyu] — «Asosiy menyu» restores the main
+  keyboard. Access re-checked on every tap (texts are matched only for linked admins). Lead does it after D1/D2 merge.
