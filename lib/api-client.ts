@@ -287,7 +287,8 @@ export function updateProfile(patch: Partial<ServerUser>) {
 export type LedgerEntry = { id: string; kind: string; amount: number; note: string; createdAt: string };
 
 export function fetchMe() {
-  return request<{ user: ServerUser; transactions: LedgerEntry[] }>("/api/users/me");
+  /** `firstTopupEligible`: the next paid top-up can still earn the first top-up bonus (server-computed). */
+  return request<{ user: ServerUser; transactions: LedgerEntry[]; firstTopupEligible?: boolean }>("/api/users/me");
 }
 
 /* ──────────────────────────── Generations ─────────────────────────── */

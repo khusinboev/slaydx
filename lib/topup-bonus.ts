@@ -18,3 +18,10 @@ export function firstTopupBonus(amountSoum: number): number {
 export function firstTopupRef(userId: string): string {
   return `first-topup:${userId}`;
 }
+
+/**
+ * Ledger note of the first top-up bonus row (`transactions.note`). The web wallet
+ * (`components/wallet/wallet-model.ts`) titles the row «Birinchi to‘ldirish bonusi» by this prefix.
+ */
+export const FIRST_TOPUP_NOTE_PREFIX = "Birinchi to‘ldirish bonusi";
+export const FIRST_TOPUP_NOTE = `${FIRST_TOPUP_NOTE_PREFIX} (${FIRST_TOPUP_PERCENT}%)`;
