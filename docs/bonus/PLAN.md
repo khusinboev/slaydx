@@ -69,3 +69,20 @@ Ledger refs: `channel:<channel_id>:<user_id>:join`, `channel:<channel_id>:<user_
 - Migration 043: index `bonus_channel_claims (channel_id)` (admin stats, the channel delete check, the FK cascade).
 - Sweep: batch **200** per run (every 10 min), time budget **15 s** (the rest continue next run), ≤ 20 Bot API calls/s.
 - Admin page renders an invite link as a link only if it matches `^https://t.me/+[A-Za-z0-9_-]{8,64}$` (else as text).
+
+## Bonus 2 (client feedback, owner decisions 2026-10-08)
+| # | Decision |
+|---|---|
+| B2-Q1 | First top-up bonus: **10 %** of the first paid top-up **≥ 50 000 so'm**, at most **20 000**, once (`lib/topup-bonus.ts`) |
+| B2-Q2 | Channel bonus is paid **automatically on join** (chat_member), no «Tekshirish»; one «🔄 Yangilash» fallback |
+| B2-Q3 | Bot shows bonus amounts in **so'm** («+2 000 so'm bonus»; ru «сум», en «UZS») |
+| B2-Q4 | «Hamyon / Bonus» → wallet card (history: last 3 in an expandable quote) + a big green «🎁 Bonuslar» button → «Sizning bonuslaringiz» message |
+«Sizning bonuslaringiz»: one message, summary line (earned · still available), each task is a BUTTON under it: done → ✅ + green
+(style success), not done → the action itself (channel url, share link, web_app top-up). Tasks: signup (always done), invite friends
+(green after ≥ 1), each channel, first top-up. /start welcome: blank line between sections. Web home: big «Barcha vositalar» under
+«Tez boshlash».
+| WP | Scope | Model |
+|---|---|---|
+| P1 Bot bonus UI | bonuses message + task buttons, auto-pay on chat_member join (+ notify, message effect), Yangilash, wallet card (expandable last 3), so'm units, welcome spacing | opus |
+| P2 First top-up | pay the bonus in the payment-paid transaction (Click + Payme), idempotent, web wallet hint, tests | opus |
+| Web | «Barcha vositalar» button (lead) | — |
