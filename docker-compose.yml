@@ -157,6 +157,11 @@ services:
       NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-SlaydX}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       NEXT_PUBLIC_TELEGRAM_BOT: ${NEXT_PUBLIC_TELEGRAM_BOT:-}
+      # Bot UI (docs/bot/PLAN.md): premium custom emoji — the owner has Telegram Premium,
+      # so production defaults to on (code default off); 0 → plain fallback emoji.
+      BOT_PREMIUM_EMOJI: ${BOT_PREMIUM_EMOJI:-1}
+      # «Yordam» → «Admin bilan bog‘lanish» button (Telegram username, no @); empty → no button.
+      BOT_SUPPORT_USERNAME: ${BOT_SUPPORT_USERNAME:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
       # Rasm yaratish modeli (bo'sh → kod standarti gemini-3.1-flash-lite-image / 1K)

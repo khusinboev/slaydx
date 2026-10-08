@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 /**
  * Dev fallback: `APP_URL` is not public https (localhost), so Telegram would
  * reject both the `web_app` and the `url` button ("Wrong HTTP URL"). `/start`
- * and `/login` then send the link in the text and no keyboard at all.
+ * and `/login` then send the link in the text and no inline keyboard (B2: a
+ * private `/start` still gets the main reply keyboard, without web_app tools).
  * `env.appUrl` is read at module load, hence a separate file from
  * `tests/telegram-webapp-buttons.test.mts`. `fetch` is stubbed.
  */
@@ -49,9 +50,16 @@ for (const [command, fromId] of [["/start", 700000301], ["/login", 700000302]] a
       update_id: ++seq,
       message: { chat: { id: fromId, type: "private" }, text: command, from: { id: fromId, first_name: "Dev" } },
     });
-    assert.equal(calls.length, 1);
+    // B2: a private /start also sends the main reply keyboard (its own message); its
+    // chat buttons work locally, the tools get no web_app (no public URL → `botAppUrl` null).
+    assert.equal(calls.length, command === "/start" ? 2 : 1);
     const body = calls[0]!;
-    assert.ok(!("reply_markup" in body), "no keyboard on a non-public APP_URL");
+    assert.ok(!("reply_markup" in body), "no inline keyboard on a non-public APP_URL");
     assert.match(String(body.text), /\n\nhttp:\/\/localhost:3000\/api\/auth\/telegram\/enter\?t=[A-Za-z0-9_-]{40,}$/);
+    if (command === "/start") {
+      const kb = calls[1]!.reply_markup as { keyboard: Record<string, unknown>[][] };
+      assert.ok(kb.keyboard.flat().length === 7, "seven reply buttons");
+      assert.ok(!JSON.stringify(kb).includes("web_app"), "no web_app on localhost");
+    }
   });
 }
