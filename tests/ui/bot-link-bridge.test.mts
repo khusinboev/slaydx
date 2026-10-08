@@ -1,7 +1,7 @@
 import "./setup.ts";
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { createElement as h, StrictMode } from "react";
+import { createElement as h, StrictMode, useEffect } from "react";
 import { act, cleanup, render } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 
@@ -94,7 +94,7 @@ afterEach(() => {
   delete win.Telegram;
   for (const s of document.querySelectorAll(`script[src="${SRC}"]`)) s.remove();
   window.history.replaceState(null, "", "/");
-  useUi.setState({ overlay: null, returnTo: null });
+  useUi.setState({ overlay: null, returnTo: null, linkLogin: false });
   navMod.__resetNavForTests();
 });
 
@@ -334,4 +334,103 @@ test("a malformed or repeated bt is removed and never sent; no bt → nothing at
   assert.equal(posts.length, 0);
   assert.equal(window.history.length, len);
   assert.equal(here(), "/uz/slide?x=1");
+});
+
+/**
+ * A page with `ToolWorkspace`'s login gate (also `CreateGrid`'s): once the
+ * session is known to be signed out it opens the login sheet by itself.
+ */
+function GatedPage() {
+  const sessionChecked = useAppStore((s) => s.sessionChecked);
+  const loggedIn = useAppStore((s) => s.loggedIn);
+  const open = useUi((s) => s.open);
+  useEffect(() => {
+    if (sessionChecked && !loggedIn) open("login", { returnTo: "/uz/slide" });
+  }, [sessionChecked, loggedIn, open]);
+  return null;
+}
+async function mountWithPage(strict = false) {
+  const tree = h(AppRouterContext.Provider, { value: router }, h(GatedPage), h(MiniAppBridge));
+  render(strict ? h(StrictMode, null, tree) : tree);
+  await settle();
+}
+const sheet = () => useUi.getState().overlay === "login";
+
+test("tool page + bt: the page's own login sheet never opens under the exchange / the prompt; «Yo'q» → signed-out page, the user's «Kirish» works", async () => {
+  setup({ url: `/uz/slide?bt=${BT}`, sessionChecked: false });
+  let release!: () => void;
+  gate = new Promise((r) => (release = r));
+  await mountWithPage(true);
+  assert.equal(useUi.getState().linkLogin, true, "pending from the first frame");
+  await act(async () => {
+    useAppStore.setState({ sessionChecked: true });
+    await new Promise((r) => setTimeout(r, 20));
+  });
+  assert.ok(busy());
+  assert.equal(sheet(), false, "MUTATION: the login sheet flashed while the link was being exchanged");
+  await act(async () => {
+    release();
+    await new Promise((r) => setTimeout(r, 20));
+  });
+  assert.ok(loginDialog());
+  assert.equal(sheet(), false, "MUTATION: the login sheet sits under «… sifatida kirasizmi?»");
+  await tap("[data-bot-login-no]");
+  assert.ok(!loginDialog());
+  assert.equal(sheet(), false, "MUTATION: the login sheet stays (or opens) after «Yo'q»");
+  assert.equal(useUi.getState().linkLogin, false, "MUTATION: the flag never clears");
+  assert.equal(useAppStore.getState().loggedIn, false);
+  // The signed-out page's own «Kirish» still opens the sheet.
+  act(() => useUi.getState().open("login", { returnTo: "/uz/slide" }));
+  assert.equal(sheet(), true, "MUTATION: the user's own «Kirish» is swallowed after «Yo'q»");
+});
+
+test("tool page + bt: «Kirish» signs in and nothing else opens", async () => {
+  setup({ url: `/uz/slide?bt=${BT}` });
+  await mountWithPage();
+  assert.ok(loginDialog());
+  assert.equal(sheet(), false);
+  await tap("[data-bot-login-go]");
+  assert.equal(useAppStore.getState().loggedIn, true);
+  assert.ok(!loginDialog());
+  assert.equal(sheet(), false, "MUTATION: a login sheet opened after signing in");
+  assert.equal(useUi.getState().linkLogin, false);
+});
+
+test("tool page + expired bt: no login sheet under «eskirgan»; after «Yopish» the page is signed out without a sheet", async () => {
+  setup({ url: `/uz/slide?bt=${BT}` });
+  answers = [{ status: 401, body: { error: "Kirish havolasi eskirgan.", code: "bot_link_expired" } }];
+  await mountWithPage();
+  assert.ok(notice());
+  assert.equal(sheet(), false, "MUTATION: the login sheet sits under the notice");
+  await tap("[data-bot-link-close]");
+  assert.ok(!notice());
+  assert.equal(sheet(), false);
+  assert.equal(useUi.getState().linkLogin, false);
+});
+
+test("tool page, link owner already signed in / malformed bt / no bt: the flag stays clear", async () => {
+  setup({ url: `/uz/slide?bt=${BT}`, session: base });
+  await mountWithPage();
+  assert.equal(useUi.getState().linkLogin, false, "MUTATION: a skipped exchange leaves the flag set");
+  cleanup();
+  setup({ url: "/uz/slide?bt=a%20b" });
+  await mountWithPage();
+  assert.equal(useUi.getState().linkLogin, false);
+  assert.equal(sheet(), true, "without a usable link the page's gate works as before");
+  cleanup();
+  useUi.setState({ overlay: null });
+  setup({ url: "/uz/slide" });
+  await mountWithPage();
+  assert.equal(sheet(), true);
+});
+
+test("useUi.open: only the login sheet is held back while a link login is pending", () => {
+  useUi.setState({ overlay: null, linkLogin: true });
+  useUi.getState().open("login", { returnTo: "/uz/slide" });
+  assert.equal(useUi.getState().overlay, null, "MUTATION: open ignores linkLogin");
+  useUi.getState().open("search");
+  assert.equal(useUi.getState().overlay, "search", "other overlays are not affected");
+  useUi.getState().setLinkLogin(false);
+  useUi.getState().open("login");
+  assert.equal(useUi.getState().overlay, "login");
 });

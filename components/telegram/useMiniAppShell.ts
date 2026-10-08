@@ -14,7 +14,7 @@ import {
  * browser, so markup never differs between server and first client render.
  */
 
-/** The page runs as a genuine Telegram Mini App (`isGenuineMiniApp`, detected by the bridge). */
+/** The page runs inside the Telegram Mini App shell — signed or reply-keyboard launch (detected by the bridge; UI only, never auth). */
 export function useInTelegramMiniApp(): boolean {
   return useSyncExternalStore(subscribeMiniAppShell, getMiniAppShellState, getServerMiniAppShellState).active;
 }

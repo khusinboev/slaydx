@@ -8,7 +8,8 @@ import {
   downloadFile,
   getTelegramWebApp,
   isGenuineMiniApp,
-  isInTelegramWebApp,
+  isInMiniAppShell,
+  isMiniAppShell,
   isMiniAppUserMismatch,
   miniAppUserId,
   offEvent,
@@ -24,6 +25,7 @@ import {
   tgVersionAtLeast,
   type MiniAppEnv,
 } from "../lib/telegram-webapp.ts";
+import { setMiniAppShellState } from "../lib/telegram-miniapp.ts";
 
 /**
  * `lib/telegram-webapp.ts` (docs/mobile/PLAN.md §4.3). The fake below mirrors
@@ -231,11 +233,69 @@ test("isGenuineMiniApp: webview signal AND (launch hash OR loaded initData)", ()
   assert.equal(isGenuineMiniApp(evil), false);
 });
 
+test("isMiniAppShell (UI only): a reply-keyboard launch counts, isGenuineMiniApp (auth) stays strict", () => {
+  const base = (over: Partial<MiniAppEnv>): MiniAppEnv => {
+    const env = { location: { hash: "" }, document: { referrer: "" }, ...over } as MiniAppEnv;
+    if (!("parent" in over)) (env as { parent?: unknown }).parent = env;
+    return env;
+  };
+  const proxy = { postEvent() {} };
+  const KEYBOARD = "#tgWebAppVersion=8.0&tgWebAppPlatform=android&tgWebAppThemeParams=%7B%7D";
+  const keyboard = base({ TelegramWebviewProxy: proxy, location: { hash: KEYBOARD }, Telegram: { WebApp: { initData: "" } } });
+  assert.equal(isMiniAppShell(keyboard), true, "MUTATION: keyboard-opened pages take the browser path");
+  assert.equal(isGenuineMiniApp(keyboard), false, "MUTATION: the auth check accepts a launch without signed data");
+  assert.equal(isMiniAppShell(base({ TelegramWebviewProxy: proxy, location: { hash: LAUNCH } })), true, "a genuine launch is a shell too");
+  // Not a shell: a plain browser tab with the same fragment / a planted object, or Telegram's in-app browser (no launch params).
+  assert.equal(isMiniAppShell(base({ location: { hash: KEYBOARD } })), false, "MUTATION: the webview signal is not required");
+  assert.equal(isMiniAppShell(base({ location: { hash: KEYBOARD }, Telegram: { WebApp: { initData: "" } } })), false);
+  assert.equal(isMiniAppShell(base({ TelegramWebviewProxy: proxy })), false, "in-app browser");
+  assert.equal(isMiniAppShell(base({ TelegramWebviewProxy: proxy, location: { hash: "#tgWebAppVersion=x" } })), false);
+  // After a client-side navigation the fragment is gone: the bridge's shell state (set from the same check) carries it.
+  const navigated = base({ TelegramWebviewProxy: proxy, Telegram: { WebApp: { initData: "" } } });
+  assert.equal(isMiniAppShell(navigated), false);
+  setMiniAppShellState({ active: true, backButton: "pending" });
+  try {
+    assert.equal(isMiniAppShell(navigated), true, "MUTATION: the shell is lost after a client-side navigation");
+    assert.equal(isGenuineMiniApp(navigated), false, "the shell state never makes a launch genuine");
+    assert.equal(isMiniAppShell(base({})), false, "the shell state alone is not enough (no webview signal)");
+  } finally {
+    setMiniAppShellState(null);
+  }
+  const evil = base({ TelegramWebviewProxy: proxy });
+  Object.defineProperty(evil, "location", { get() { throw new Error("boom"); } });
+  assert.equal(isMiniAppShell(evil), false);
+});
+
+test("reply-keyboard launch (empty initData): downloads, sharing and «Saqlash» take the Telegram path", async () => {
+  const fake = makeFake("8.0", null);
+  fake.WebApp.initData = "";
+  install(fake, { hash: "#tgWebAppVersion=8.0&tgWebAppPlatform=ios" });
+  assert.equal(isInMiniAppShell(), true);
+  assert.equal(getTelegramWebApp(), fake.WebApp, "MUTATION: the accessor still requires signed launch data");
+  assert.equal(tgVersion(), "8.0");
+  assert.equal(miniAppUserId(), null, "no user without launch data (the mismatch guard stays quiet)");
+  assert.equal(downloadCapability({ inTelegram: isInMiniAppShell(), version: tgVersion() }), "tg-download");
+  assert.equal(
+    shareCapability({ inTelegram: isInMiniAppShell(), version: tgVersion(), hasTelegramId: true, canShareFiles: true }),
+    "tg-prepared",
+  );
+  assert.equal(saveCapability({ inTelegram: isInMiniAppShell(), hasTelegramId: true }), "tg-close");
+  const pending = downloadFile({ url: "https://x.test/a.pdf", file_name: "a.pdf" });
+  await flush();
+  assert.deepEqual(fake.calls, ["downloadFile"], "Telegram's downloadFile is called");
+  fake.client.fileDownloadRequested("downloading");
+  assert.equal(await pending, true);
+  // Same fragment in a plain browser tab: the browser path, Telegram's object ignored.
+  install(fake, { hash: "#tgWebAppVersion=8.0&tgWebAppPlatform=ios", proxy: false });
+  assert.equal(isInMiniAppShell(), false);
+  assert.equal(getTelegramWebApp(), null);
+});
+
 /* --------------------------------------------------------- accessor/env */
 
 test("outside a Mini App everything is a safe no-op (no window, plain browser)", async () => {
   delete g.window;
-  assert.equal(isInTelegramWebApp(), false);
+  assert.equal(isInMiniAppShell(), false);
   assert.equal(getTelegramWebApp(), null);
   assert.equal(tgVersionAtLeast("6.0"), false);
   assert.equal(tgVersion(), null);
@@ -252,7 +312,7 @@ test("outside a Mini App everything is a safe no-op (no window, plain browser)",
   // A plain browser where somebody planted `Telegram.WebApp`: still ignored.
   const fake = makeFake();
   install(fake, { proxy: false });
-  assert.equal(isInTelegramWebApp(), false);
+  assert.equal(isInMiniAppShell(), false);
   assert.equal(getTelegramWebApp(), null);
   assert.equal(closeApp(), false);
   assert.equal(fake.closed, 0);
@@ -261,7 +321,7 @@ test("outside a Mini App everything is a safe no-op (no window, plain browser)",
 test("inside a Mini App: accessor, version, user id, write access flag", () => {
   const fake = makeFake("8.0", { id: 42, allows_write_to_pm: true });
   install(fake);
-  assert.equal(isInTelegramWebApp(), true);
+  assert.equal(isInMiniAppShell(), true);
   assert.equal(getTelegramWebApp(), fake.WebApp);
   assert.equal(tgVersion(), "8.0");
   assert.equal(tgVersionAtLeast("8.0"), true);
@@ -284,7 +344,7 @@ test("inside a Mini App: accessor, version, user id, write access flag", () => {
 
   // Script not loaded yet: genuine launch, but no object.
   install(null);
-  assert.equal(isInTelegramWebApp(), true);
+  assert.equal(isInMiniAppShell(), true);
   assert.equal(getTelegramWebApp(), null);
 });
 

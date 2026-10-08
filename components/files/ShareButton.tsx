@@ -19,7 +19,7 @@ import {
   type ReadyFile,
 } from "@/lib/downloads/deliver";
 import {
-  isInTelegramWebApp,
+  isInMiniAppShell,
   requestWriteAccess,
   shareCapability,
   shareMessageResult,
@@ -72,7 +72,7 @@ export function canShareFile(f: Pick<DownloadFormat, "ext" | "mime">, nav: unkno
 
 /** The capability right now, for this format and session. */
 export function currentShareCapability(f: DownloadFormat, hasTelegramId: boolean): ShareCapability {
-  const inTelegram = isInTelegramWebApp();
+  const inTelegram = isInMiniAppShell();
   return shareCapability({
     inTelegram,
     version: inTelegram ? tgVersion() : null,
@@ -83,7 +83,7 @@ export function currentShareCapability(f: DownloadFormat, hasTelegramId: boolean
 
 /** Info toast when nothing can be shared from here (UX review m13: say why a download list opens). */
 export function shareFallbackToast(): ActionToast {
-  return { text: isInTelegramWebApp() ? DELIVER_TEXT.shareNoAccount : DELIVER_TEXT.shareNoBrowser, tone: "info" };
+  return { text: isInMiniAppShell() ? DELIVER_TEXT.shareNoAccount : DELIVER_TEXT.shareNoBrowser, tone: "info" };
 }
 
 export type ShareAction = {

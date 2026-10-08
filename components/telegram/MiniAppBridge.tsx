@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
@@ -117,6 +117,14 @@ export function MiniAppBridge() {
   // component stays inert and never calls `useRouter`.
   const [inTelegram, setInTelegram] = useState(false);
   const [botLink, setBotLink] = useState<{ token: string | null } | null>(null);
+  useLayoutEffect(() => {
+    // A usable link holds the pages' own login sheet back (`useUi.linkLogin`)
+    // from the first client commit: layout effects run before any page's
+    // passive effect, so no gate can open the sheet under the link's prompt.
+    // `BotLinkLogin` owns the flag from its mount on.
+    if (!hasBotLinkParam(window.location.search) || isGenuineMiniApp(window as unknown as MiniAppEnv)) return;
+    if (botLinkFromSearch(window.location.search)) useUi.getState().setLinkLogin(true);
+  }, []);
   useEffect(() => {
     const env = window as unknown as MiniAppEnv;
     const genuine = isGenuineMiniApp(env);
@@ -175,6 +183,11 @@ const LINK_EXPIRED_TEXT = "Botga qayting va /start bosing — bot yangi havola y
  * (409 `switch_confirm`). While the
  * request runs a small «Kirish…» status shows; an expired / revoked link shows
  * «botga qayting» with a button to the bot chat.
+ *
+ * Until the exchange is settled and every one of its dialogs is closed,
+ * `useUi.linkLogin` keeps pages from opening their own login sheet: after
+ * «Kirish» the user is signed in with nothing else open, after «Yo'q» the page
+ * is in its normal signed-out state (its own «Kirish» works again).
  */
 function BotLinkLogin({ token }: { token: string | null }) {
   const router = useRouter();
@@ -188,9 +201,17 @@ function BotLinkLogin({ token }: { token: string | null }) {
   const [view, setView] = useState<BotLinkView>({ s: "idle" });
   const [prompt, setPrompt] = useState<AccountSwitchPrompt | null>(null);
   const [loginAsk, setLoginAsk] = useState<LoginPrompt | null>(null);
+  /** The first exchange answered, or was not needed (the session is kept). */
+  const [settled, setSettled] = useState(false);
   const started = useRef(false);
 
   useEffect(() => removeBotLinkFromUrl(), []);
+
+  const pending = token !== null && (!settled || view.s !== "idle" || loginAsk !== null || prompt !== null);
+  useEffect(() => {
+    useUi.getState().setLinkLogin(pending);
+    return () => useUi.getState().setLinkLogin(false);
+  }, [pending]);
 
   /** `first` — the initial request; `login` — after «Kirish»; `switch` — after «O'tish». */
   const exchange = useCallback(
@@ -205,6 +226,7 @@ function BotLinkLogin({ token }: { token: string | null }) {
           method: "POST",
           body: JSON.stringify(confirm ? { token, confirm: true } : { token }),
         });
+        setSettled(true);
         setView({ s: "idle" });
         setLoginAsk(null);
         if (mode === "switch") {
@@ -230,6 +252,7 @@ function BotLinkLogin({ token }: { token: string | null }) {
       } catch (e) {
         const err = e instanceof api.ApiError ? e : null;
         const outcome = botLinkOutcome(err?.status ?? 0, err ? { ...err.data, error: err.message } : null);
+        setSettled(true);
         setView({ s: "idle" });
         if (mode === "first" && outcome.kind === "login") {
           // No session: a link alone never signs in — the user says «Kirish» (security review of B1).
@@ -266,8 +289,10 @@ function BotLinkLogin({ token }: { token: string | null }) {
     started.current = true;
     if (loggedIn) {
       // A phone-login session is never replaced; the link's own account is already here.
-      if (sessionTelegramId == null) return;
-      if (String(sessionTelegramId) === botLinkTelegramId(token)) return;
+      if (sessionTelegramId == null || String(sessionTelegramId) === botLinkTelegramId(token)) {
+        setSettled(true);
+        return;
+      }
     }
     void exchange("first");
   }, [token, sessionChecked, loggedIn, sessionTelegramId, exchange]);

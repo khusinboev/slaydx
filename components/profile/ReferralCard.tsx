@@ -5,7 +5,7 @@ import { Copy, Gift, Send } from "lucide-react";
 import { request } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { REFERRAL_SHARE_TEXT, formatJoinDate, formatPoints, referralRuleText, telegramShareUrl } from "@/lib/referral";
-import { isInTelegramWebApp, openTelegramLink } from "@/lib/telegram-webapp";
+import { isInMiniAppShell, openTelegramLink } from "@/lib/telegram-webapp";
 
 /** `GET /api/referral` (`lib/server/referrals.ts ReferralSummary`). */
 export type ReferralSummaryView = {
@@ -125,7 +125,7 @@ export function ReferralCard({ className = "mb-6" }: { className?: string } = {}
 
   const share = () => {
     // Inside the Mini App: Telegram's own «send to a chat» sheet.
-    if (isInTelegramWebApp() && openTelegramLink(telegramShareUrl(link))) return;
+    if (isInMiniAppShell() && openTelegramLink(telegramShareUrl(link))) return;
     // Elsewhere: the system share sheet (called synchronously, inside the tap), else copy.
     if (typeof navigator.share === "function") {
       navigator.share({ title: "SlaydX", text: REFERRAL_SHARE_TEXT, url: link }).catch((e: unknown) => {

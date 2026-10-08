@@ -5,8 +5,17 @@
  * Only this module touches `window.Telegram.WebApp` for these APIs;
  * `components/telegram/MiniAppBridge.tsx` keeps login, `ready/expand` and the
  * BackButton. The script itself is loaded by the bridge, and only inside a
- * genuine Telegram webview (`lib/telegram-miniapp.ts`), so outside Telegram
- * every function here is a safe no-op.
+ * Telegram webview opened as a Mini App (`lib/telegram-miniapp.ts`), so
+ * outside Telegram every function here is a safe no-op.
+ *
+ * Two detections, on purpose:
+ *  - `isGenuineMiniApp` — SIGNED launch data is present. The only one an
+ *    authentication decision may use (initData login vs. a `?bt=` link).
+ *  - `isMiniAppShell` / `isInMiniAppShell()` — the page runs inside Telegram's
+ *    Mini App shell, also when opened from a reply-keyboard button (empty
+ *    initData). UI capabilities only (downloads, sharing, «Saqlash», links,
+ *    viewport events): Telegram's methods work there, there is just nobody
+ *    to sign in. Never an authentication input.
  *
  * Rules:
  *  - SSR-safe: nothing reads `window` at import time.
@@ -17,7 +26,13 @@
  *  - The capability functions are pure: components pass in what they know and
  *    branch on a string union.
  */
-import { hasLaunchData, telegramWebviewSignal, type LaunchEnv } from "./telegram-miniapp";
+import {
+  getMiniAppShellState,
+  hasLaunchData,
+  isTelegramShellLaunch,
+  telegramWebviewSignal,
+  type LaunchEnv,
+} from "./telegram-miniapp";
 
 /** Bot API version that added `downloadFile` and `shareMessage`. */
 export const TG_DOWNLOAD_FILE_VERSION = "8.0";
@@ -77,7 +92,9 @@ function currentEnv(): MiniAppEnv | null {
 }
 
 /**
- * Pure: the page runs as a genuine Telegram Mini App.
+ * Pure: the page runs as a genuine Telegram Mini App — with SIGNED launch data.
+ * AUTH-RELEVANT: the bridge decides initData login vs. `?bt=` with it. For UI
+ * capabilities use `isMiniAppShell` (a reply-keyboard launch has no initData).
  *
  * Same rule as `isTelegramWebApp` (`lib/telegram-miniapp.ts`: a client-injected
  * webview signal AND launch data), with one addition: after a client-side
@@ -98,19 +115,42 @@ export function isGenuineMiniApp(env: MiniAppEnv): boolean {
   }
 }
 
-/** `true` inside a genuine Telegram Mini App (see `isGenuineMiniApp`); `false` on the server. */
-export function isInTelegramWebApp(): boolean {
+/**
+ * The page runs inside Telegram's Mini App shell — FOR UI CAPABILITIES ONLY,
+ * NEVER for authentication (that is `isGenuineMiniApp` / the `?bt=` link).
+ *
+ * A Telegram webview signal AND one of: a genuine launch (`isGenuineMiniApp`),
+ * Telegram's launch parameters in the fragment (`isTelegramShellLaunch`: a
+ * reply-keyboard button opens the app with `tgWebAppVersion` /
+ * `tgWebAppPlatform` and empty initData), or — after a client-side navigation
+ * dropped the fragment — the shell state `MiniAppBridge` set from that same
+ * check on the first frame.
+ */
+export function isMiniAppShell(env: MiniAppEnv): boolean {
+  try {
+    if (isGenuineMiniApp(env)) return true;
+    if (telegramWebviewSignal(env) === null) return false;
+    return isTelegramShellLaunch(env) || getMiniAppShellState().active;
+  } catch {
+    return false;
+  }
+}
+
+/** `isMiniAppShell` for the current window (UI capabilities only); `false` on the server. */
+export function isInMiniAppShell(): boolean {
   const env = currentEnv();
-  return env ? isGenuineMiniApp(env) : false;
+  return env ? isMiniAppShell(env) : false;
 }
 
 /**
- * `Telegram.WebApp` when running as a genuine Mini App and the script has
- * loaded, else `null` (server, ordinary browser, script not loaded yet).
+ * `Telegram.WebApp` inside the Mini App shell (`isMiniAppShell`: a genuine
+ * launch or a reply-keyboard launch) once the script has loaded, else `null`
+ * (server, ordinary browser, script not loaded yet). UI capabilities only:
+ * with a keyboard launch `initData` is empty and `initDataUnsafe` has no user.
  */
 export function getTelegramWebApp(): TelegramWebApp | null {
   const env = currentEnv();
-  if (!env || !isGenuineMiniApp(env)) return null;
+  if (!env || !isMiniAppShell(env)) return null;
   try {
     return env.Telegram?.WebApp ?? null;
   } catch {
@@ -509,13 +549,13 @@ export function openTelegramLink(url: string): boolean {
 }
 
 /* ---------------------------------------------------------------------------
- * Pure capability decisions. Components gather the inputs (`isInTelegramWebApp()`,
+ * Pure capability decisions. Components gather the inputs (`isInMiniAppShell()`,
  * `tgVersion()`, the session user's `telegramId`, a `navigator.canShare` probe)
  * and branch on the result.
  * ------------------------------------------------------------------------- */
 
 export type CapabilityInput = {
-  /** `isInTelegramWebApp()`. */
+  /** `isInMiniAppShell()` — also true for a reply-keyboard launch. */
   inTelegram: boolean;
   /** `tgVersion()`; `null`/empty when unknown (treated as old). */
   version: string | null;
