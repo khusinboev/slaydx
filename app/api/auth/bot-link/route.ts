@@ -24,9 +24,10 @@ const EXPIRED = "Kirish havolasi eskirgan. Botga qayting va /start bosing.";
  * Bot keyboard link → session (docs/bot/PLAN.md Q1). The same protections as
  * `POST /api/auth/telegram`: Origin check, an IP ceiling, a separate IP bucket
  * for forged/malformed tokens (checked before any work), a per-account limit
- * after verification, the session cookie exactly like the Mini App login and
- * its account-switch rules — another Telegram account's session is never
- * replaced without the user's confirmation (409 `switch_confirm`), a
+ * after verification, the session cookie exactly like the Mini App login.
+ * Only the link owner's own session is kept silently; a new session needs the
+ * user's «Kirish» (409 `login_confirm` until `confirm: true`), another Telegram
+ * account's session is replaced only after «O'tish» (409 `switch_confirm`), a
  * phone-login session never (409 `switch_phone_session`).
  *
  * The token is a bearer credential: it is never logged or echoed.
@@ -66,7 +67,7 @@ export const POST = handler("auth/bot-link", async (req) => {
   const account = await botLinkAccount(link.telegramId, link.issuedAt);
   if (!account) throw new ApiError("Kirish havolasi yaroqsiz", 401, { code: "bot_link_invalid" });
   if (account.blocked) throw new ApiError("Hisobingiz bloklangan. Yordam uchun qo'llab-quvvatlashga yozing.", 403, { code: "account_blocked" });
-  // Logout (one device or all), an admin revoke or a switch away after the link was issued voids it.
+  // «Barcha qurilmalardan chiqish», an admin revoke or block after the link was issued voids it.
   if (account.revoked) throw new ApiError(EXPIRED, 401, { code: "bot_link_expired" });
 
   const current = await currentSessionRef();
@@ -78,12 +79,10 @@ export const POST = handler("auth/bot-link", async (req) => {
       { code: "switch_phone_session" },
     );
   }
-  if (action === "confirm") {
-    throw new ApiError("Boshqa akkauntga o'tishni tasdiqlang.", 409, {
-      code: "switch_confirm",
-      to: accountLabel(account.user) ?? "boshqa Telegram akkaunti",
-    });
-  }
+  const to = accountLabel(account.user) ?? "Telegram akkaunti";
+  // A link alone is not intent (someone else's bot can carry HIS link): no session without «Kirish».
+  if (action === "confirm_login") throw new ApiError("Kirishni tasdiqlang.", 409, { code: "login_confirm", to });
+  if (action === "confirm_switch") throw new ApiError("Boshqa akkauntga o'tishni tasdiqlang.", 409, { code: "switch_confirm", to });
   if (action === "reuse") return json({ user: account.user });
   if (action === "replace") await revokeSessionById(current!.sessionId);
   const { token, expiresAt } = await createSession(account.user.id, {

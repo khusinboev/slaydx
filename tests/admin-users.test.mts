@@ -639,6 +639,30 @@ test("sessions: list (users.sessions) and revoke-all with one audit row; viewer 
   assert.equal((await revoke(support, "999999999", { reason: "Mavjud emas foydalanuvchi" })).status, 404);
 });
 
+test("bot keyboard links (docs/bot/PLAN.md Q1): admin revoke voids them even with NO live session; a block always voids them", { skip }, async () => {
+  const linksBefore = async (id: string) =>
+    (await queryOne<{ t: Date | null }>(`SELECT bot_links_before AS t FROM users WHERE id = $1`, [id]))!.t;
+  const support = await as("support");
+  const u = await mkUser({ name: "Havola Egasi" });
+  await query(`UPDATE sessions SET revoked_at = now() WHERE user_id = $1`, [u.id]);
+  assert.equal(await linksBefore(u.id), null, "a single-device logout does not void links");
+  const t0 = Date.now() - 1000;
+  const r = await call(revokeRoute.POST, {
+    cookie: support.cookie, method: "POST", path: `/api/admin/users/${u.id}/sessions/revoke`, id: u.id, body: { reason: "Havolalar sizib chiqdi" },
+  });
+  assert.equal(r.status, 200, r.text);
+  assert.deepEqual(r.body, { revoked: 0 });
+  const t = await linksBefore(u.id);
+  assert.ok(t && t.getTime() >= t0, "MUTATSIYA: admin revoke without live sessions left the bot links alive");
+
+  const v = await mkUser({ name: "Bloklanadigan" });
+  const mod = await as("moderator");
+  const b = await block(mod, v.id, { blocked: true, reason: "Spam havolalar tarqatdi", revokeSessions: false });
+  assert.equal(b.status, 200, b.text);
+  const tb = await linksBefore(v.id);
+  assert.ok(tb && tb.getTime() >= t0, "MUTATSIYA: a block without session revoke left the bot links alive (an unblock would revive them)");
+});
+
 // ───────────────────────────── block
 
 async function blockFixture() {

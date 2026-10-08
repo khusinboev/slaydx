@@ -169,11 +169,12 @@ test("botAppUrl: null for http / localhost app URLs (no web_app button)", async 
   }
 });
 
-test("botLinkSessionAction: create / reuse / confirm → replace only when confirmed / phone never replaced", () => {
-  assert.equal(botLinkSessionAction(null, "42", false), "create");
+test("botLinkSessionAction: a new session or a switch only when confirmed; the owner's own session silent; phone never replaced", () => {
+  assert.equal(botLinkSessionAction(null, "42", false), "confirm_login", "review MAJOR: never a silent login");
+  assert.equal(botLinkSessionAction(null, "42", true), "create");
   assert.equal(botLinkSessionAction({ telegramId: "42" }, "42", false), "reuse");
   assert.equal(botLinkSessionAction({ telegramId: 42 as unknown as string }, "42", false), "reuse");
-  assert.equal(botLinkSessionAction({ telegramId: "77" }, "42", false), "confirm", "never a silent switch");
+  assert.equal(botLinkSessionAction({ telegramId: "77" }, "42", false), "confirm_switch", "never a silent switch");
   assert.equal(botLinkSessionAction({ telegramId: "77" }, "42", true), "replace");
   assert.equal(botLinkSessionAction({ telegramId: null }, "42", true), "refuse_phone");
   assert.equal(botLinkSessionAction({ telegramId: "" }, "42", false), "refuse_phone");
@@ -190,6 +191,7 @@ test("client helpers: bt read once (repeated / malformed → null), removed with
   assert.equal(hasBotLinkParam("?bt="), true);
   assert.equal(hasBotLinkParam("?x=1"), false);
   assert.equal(withoutBotLink(`https://a.example/uz/slide?bt=${t}`), "/uz/slide");
+  assert.equal(withoutBotLink(`/uz/slide?x=1&bt=${t}#h`), "/uz/slide?x=1#h", "relative (returnTo)");
   assert.equal(withoutBotLink(`https://a.example/uz/slide?x=1&bt=${t}&y=2#tgWebAppVersion=8.0`), "/uz/slide?x=1&y=2#tgWebAppVersion=8.0");
   assert.equal(botLinkTelegramId(t), ID);
   assert.equal(botLinkTelegramId(signBotLink(Number.MAX_SAFE_INTEGER, NOW)), String(Number.MAX_SAFE_INTEGER));
@@ -205,6 +207,7 @@ test("botLinkOutcome: 200 signed in, 409 confirm / kept, 401 expired, 403 with t
   assert.deepEqual(botLinkOutcome(200, { }), { kind: "signed-in" });
   assert.deepEqual(botLinkOutcome(409, { code: "switch_confirm", to: "Ali (@ali)" }), { kind: "confirm", to: "Ali (@ali)" });
   assert.deepEqual(botLinkOutcome(409, { code: "switch_phone_session", error: "x" }), { kind: "kept" });
+  assert.deepEqual(botLinkOutcome(409, { code: "login_confirm", to: "Ali (@ali)" }), { kind: "login", to: "Ali (@ali)" });
   assert.deepEqual(botLinkOutcome(401, { code: "bot_link_expired", error: "x" }), { kind: "expired", message: null });
   assert.deepEqual(botLinkOutcome(403, { code: "account_blocked", error: "Bloklangan" }), { kind: "expired", message: "Bloklangan" });
   assert.deepEqual(botLinkOutcome(429, { error: "Juda ko'p" }), { kind: "error", message: "Juda ko'p" });

@@ -434,11 +434,12 @@ export function hasBotLinkParam(search: string): boolean {
 }
 
 /**
- * Same-origin path + query + fragment of `href` without the `bt` parameter
- * (every other parameter kept in order), for `history.replaceState`.
+ * Path + query + fragment of `href` (absolute, or relative to the site root)
+ * without the `bt` parameter, every other parameter kept in order — for
+ * `history.replaceState` and the login sheet's `returnTo` (`lib/ui.ts`).
  */
 export function withoutBotLink(href: string): string {
-  const url = new URL(href);
+  const url = new URL(href, "http://site.invalid");
   url.searchParams.delete(BOT_LINK_PARAM);
   const search = url.searchParams.toString();
   return `${url.pathname}${search ? `?${search}` : ""}${url.hash}`;
@@ -482,6 +483,7 @@ export function botChatUrl(botUsername: string | null | undefined): string | nul
 /** What the bridge shows after `POST /api/auth/bot-link`. */
 export type BotLinkOutcome =
   | { kind: "signed-in" }
+  | { kind: "login"; to: string | null }
   | { kind: "confirm"; to: string | null }
   | { kind: "kept" }
   | { kind: "expired"; message: string | null }
@@ -490,7 +492,8 @@ export type BotLinkOutcome =
 /**
  * Pure: the bridge's reaction to the exchange answer.
  *  - 2xx → signed in (or the same account kept);
- *  - 409 `switch_confirm` → ask before switching (`to` is the link owner's label);
+ *  - 409 `login_confirm` → ask «… sifatida kirasizmi?» (no session yet; `to` is the link owner's label);
+ *  - 409 `switch_confirm` → ask before switching;
  *  - any other 409 (a phone-login session is never replaced) → keep the session quietly;
  *  - 401 → the friendly «botga qayting» state; 403 → the same with the server's reason;
  *  - anything else (400, 429, 5xx, network) → a short error with the same way back.
@@ -499,7 +502,9 @@ export function botLinkOutcome(status: number, data: { code?: unknown; to?: unkn
   const message = typeof data?.error === "string" ? data.error : null;
   if (status >= 200 && status < 300) return { kind: "signed-in" };
   if (status === 409) {
-    return data?.code === "switch_confirm" ? { kind: "confirm", to: typeof data.to === "string" ? data.to : null } : { kind: "kept" };
+    const to = typeof data?.to === "string" ? data.to : null;
+    if (data?.code === "login_confirm") return { kind: "login", to };
+    return data?.code === "switch_confirm" ? { kind: "confirm", to } : { kind: "kept" };
   }
   if (status === 401) return { kind: "expired", message: null };
   if (status === 403) return { kind: "expired", message };

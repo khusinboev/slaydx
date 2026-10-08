@@ -97,9 +97,34 @@ async function exchange(
   return { status: result.status, json: (await result.json()) as Res["json"], newToken };
 }
 
-test("no session + valid link → 200, the link owner's session cookie", { skip }, async () => {
+async function sessionCount(uid: string): Promise<number> {
+  return Number((await query<{ n: string }>("SELECT count(*)::text AS n FROM sessions WHERE user_id = $1", [uid]))[0]!.n);
+}
+
+test("security review MAJOR: no session + link WITHOUT confirm → 409 login_confirm, nothing created (plain browser or a foreign bot's keyboard)", { skip }, async () => {
+  const u = await user({ name: "Bek Ali", username: "bekali" });
+  const token = signBotLink(u.telegramId);
+  // The server cannot tell our keyboard from an attacker's bot keyboard carrying HIS link (genuine
+  // webview, empty initData) or a chat link opened in any browser: a link alone is never intent.
+  for (const opts of [{}, { origin: null }, { site: "same-origin" }] as const) {
+    const r = await exchange({ token }, opts);
+    assert.equal(r.status, 409, "MUTATION: silent login from a link (login CSRF)");
+    assert.equal(r.json.code, "login_confirm");
+    assert.equal(r.json.to, "Bek Ali (@bekali)");
+    assert.ok(!r.newToken, "no cookie without confirm");
+    assert.ok(!r.json.user, "no user in the answer");
+  }
+  for (const confirm of ["true", 1, "yes", {}]) {
+    const loose = await exchange({ token, confirm });
+    assert.equal(loose.status, 409, `confirm must be the boolean true, not ${JSON.stringify(confirm)}`);
+    assert.ok(!loose.newToken);
+  }
+  assert.equal(await sessionCount(u.uid), 0, "no session row was created");
+});
+
+test("no session + link + confirm:true («Kirish») → 200, the link owner's session cookie", { skip }, async () => {
   const u = await user();
-  const r = await exchange({ token: signBotLink(u.telegramId) });
+  const r = await exchange({ token: signBotLink(u.telegramId), confirm: true });
   assert.equal(r.status, 200);
   assert.equal(r.json.user?.id, u.uid);
   assert.ok(r.newToken, "MUTATION: no session cookie");
@@ -125,7 +150,7 @@ test("expired link (7 days) → 401 bot_link_expired, no cookie; 1 s before → 
   assert.equal(r.json.code, "bot_link_expired");
   assert.match(String(r.json.error), /Botga qayting/);
   assert.ok(!r.newToken);
-  const ok = await exchange({ token: signBotLink(u.telegramId, Date.now() - (BOT_LINK_TTL_SEC - 5) * 1000) });
+  const ok = await exchange({ token: signBotLink(u.telegramId, Date.now() - (BOT_LINK_TTL_SEC - 5) * 1000), confirm: true });
   assert.equal(ok.status, 200);
 });
 
@@ -149,33 +174,53 @@ test("forged, malformed, wrong-version or unknown-account links → 401 bot_link
   }
 });
 
-test("revocation: logout-all after issue voids the link; a link issued after the logout works", { skip }, async () => {
-  const u = await user({ sessions: 2 });
-  const before = signBotLink(u.telegramId, Date.now() - 60_000);
-  const req = new Request("http://localhost:3000/api/auth/session?all=1", {
+async function logout(cookie: string, all: boolean) {
+  const req = new Request(`http://localhost:3000/api/auth/session${all ? "?all=1" : ""}`, {
     method: "DELETE",
-    headers: { host: "localhost:3000", origin: "http://localhost:3000", cookie: u.cookie! },
+    headers: { host: "localhost:3000", origin: "http://localhost:3000", cookie },
   });
   const out = await inRouteRequest(req, () => LOGOUT(req));
   assert.equal(out.result.status, 200);
+}
+
+test("revocation: logout-all after issue voids the link (users.bot_links_before); a link issued after it works", { skip }, async () => {
+  const u = await user({ sessions: 2 });
+  const before = signBotLink(u.telegramId, Date.now() - 60_000);
+  await logout(u.cookie!, true);
   assert.equal(await revoked(u.tokens[1]!), true, "logout-all revoked the other device");
-  const r = await exchange({ token: before });
+  const r = await exchange({ token: before, confirm: true });
   assert.equal(r.status, 401, "MUTATION: a link survived «barcha qurilmalardan chiqish»");
   assert.equal(r.json.code, "bot_link_expired");
   assert.ok(!r.newToken);
   const after = signBotLink(u.telegramId, Date.now() + 2000);
-  assert.equal((await exchange({ token: after })).status, 200, "a fresh link (/start) signs in again");
+  assert.equal((await exchange({ token: after, confirm: true })).status, 200, "a fresh link (/start) signs in again");
 });
 
-test("revocation: a single logout, or an admin revoke, after issue also voids the link; older revocations do not", { skip }, async () => {
-  const u = await user({ sessions: 1 });
-  await query("UPDATE sessions SET revoked_at = now() - interval '2 hours' WHERE user_id = $1", [u.uid]);
+test("revocation (review MINOR 1): a single-device logout or a switch away keeps keyboard links working", { skip }, async () => {
+  const u = await user({ sessions: 2 });
   const link = signBotLink(u.telegramId, Date.now() - 3600_000);
-  assert.equal((await exchange({ token: link })).status, 200, "revoked before the link was issued: no effect");
-  await query("UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [u.uid]);
-  const r = await exchange({ token: link });
+  await logout(u.cookie!, false);
+  assert.equal(await revoked(u.tokens[0]!), true);
+  assert.equal((await exchange({ token: link, confirm: true })).status, 200, "MUTATION: a one-device logout voided the keyboard");
+  // Account B switches in on u's other device (replace revokes u's session row there).
+  const b = await user();
+  const sw = await exchange({ token: signBotLink(b.telegramId), confirm: true }, { cookie: `${SESSION_COOKIE}=${u.tokens[1]}` });
+  assert.equal(sw.status, 200);
+  assert.equal(await revoked(u.tokens[1]!), true);
+  assert.equal((await exchange({ token: link, confirm: true })).status, 200, "a switch away keeps u's links");
+});
+
+test("revocation: bot_links_before after the issue second voids, before it does not (admin revoke / block set it, tests/admin-users)", { skip }, async () => {
+  const u = await user();
+  await query("UPDATE users SET bot_links_before = now() - interval '2 hours' WHERE id = $1", [u.uid]);
+  const link = signBotLink(u.telegramId, Date.now() - 3600_000);
+  assert.equal((await exchange({ token: link, confirm: true })).status, 200, "voided before the link was issued: no effect");
+  await query("UPDATE users SET bot_links_before = now() WHERE id = $1", [u.uid]);
+  const r = await exchange({ token: link, confirm: true });
   assert.equal(r.status, 401);
   assert.equal(r.json.code, "bot_link_expired");
+  // Even the prompt step refuses: no «Kirish» dialog for a dead link.
+  assert.equal((await exchange({ token: link })).status, 401);
 });
 
 test("blocked account → 403 account_blocked, no cookie", { skip }, async () => {
@@ -230,7 +275,7 @@ test("Origin: cross-site requests are refused before anything else", { skip }, a
   assert.ok(!foreign.newToken);
   const site = await exchange({ token }, { site: "cross-site" });
   assert.equal(site.status, 403);
-  assert.equal((await exchange({ token }, { origin: null })).status, 200, "no Origin (not a browser): allowed like every route");
+  assert.equal((await exchange({ token, confirm: true }, { origin: null })).status, 200, "no Origin (not a browser): allowed like every route");
 });
 
 test("rate limits: forged tokens fill the IP's bad bucket (then even a valid link waits); 10 per account per 5 min", { skip }, async () => {
@@ -241,7 +286,7 @@ test("rate limits: forged tokens fill the IP's bad bucket (then even a valid lin
   for (let i = 0; i < IP_LIMITS.tgBadPerIp.count; i++) {
     assert.equal((await exchange({ token: forged.toString("base64url") }, { ip: addr })).status, 401);
   }
-  const blocked = await exchange({ token: signBotLink(u.telegramId) }, { ip: addr });
+  const blocked = await exchange({ token: signBotLink(u.telegramId), confirm: true }, { ip: addr });
   assert.equal(blocked.status, 429, "MUTATION: the bad bucket is not checked");
   assert.ok(!blocked.newToken);
   // Expired links (valid MAC) are not counted as attacks.
@@ -249,8 +294,8 @@ test("rate limits: forged tokens fill the IP's bad bucket (then even a valid lin
   const old = signBotLink(u.telegramId, Date.now() - 8 * 86_400_000);
   for (let i = 0; i < IP_LIMITS.tgBadPerIp.count + 2; i++) assert.equal((await exchange({ token: old }, { ip: addr2 })).status, 401);
   const v = await user();
-  for (let i = 0; i < IP_LIMITS.tgPerAccount.count; i++) assert.equal((await exchange({ token: signBotLink(v.telegramId) })).status, 200);
-  const over = await exchange({ token: signBotLink(v.telegramId) });
+  for (let i = 0; i < IP_LIMITS.tgPerAccount.count; i++) assert.equal((await exchange({ token: signBotLink(v.telegramId), confirm: true })).status, 200);
+  const over = await exchange({ token: signBotLink(v.telegramId), confirm: true });
   assert.equal(over.status, 429, "MUTATION: no per-account limit");
 });
 
@@ -265,7 +310,7 @@ test("the token never reaches the logs or the response", { skip }, async () => {
   const tokens = [signBotLink(u.telegramId), signBotLink(u.telegramId, Date.now() - 9 * 86_400_000)];
   const bodies: string[] = [];
   try {
-    for (const t of tokens) bodies.push(JSON.stringify((await exchange({ token: t })).json));
+    for (const t of tokens) bodies.push(JSON.stringify((await exchange({ token: t, confirm: true })).json));
     const broken = Buffer.from(tokens[0]!, "base64url");
     broken[3]! ^= 1;
     bodies.push(JSON.stringify((await exchange({ token: broken.toString("base64url") })).json));
