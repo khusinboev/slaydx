@@ -14,7 +14,12 @@ import assert from "node:assert/strict";
  *   4. a blocked tool keeps its web_app → «blocked tool → text button»;
  *   5. `parseCallback` accepts `p:e:balance` → «callback codes reject unknown fields»;
  *   6. a Russian i18n entry emptied → «i18n: every key in uz/ru/en»;
- *   7. `maskPhone` shows all digits → «maskPhone».
+ *   7. `maskPhone` shows all digits → «maskPhone»;
+ *   B1. a joined channel's button without `style: "success"` → «bonuses message (uz)»;
+ *   B2. the invite button green at 0 invites → «before the first invite / after the first top-up»;
+ *   B3. the Hamyon history not cut to WALLET_RECENT → «Hamyon card: only the LAST 3»;
+ *   B4. the blank line after the greeting removed → «/start welcome»;
+ *   B5. a bonus ledger line in tanga → «Hamyon, referral, Yordam, Til».
  */
 
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";

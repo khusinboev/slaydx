@@ -25,6 +25,11 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *  11. `settleZeroStay` call removed from the sweep → «existing zero-stay claims are settled»;
  *      the `c.stay_bonus > 0` CASE dropped from the admin stats → same test («Kutilmoqda»);
  *  12. `STAY_BUDGET_MS` back to 30 000 → «15 s budget stops the run early».
+ *  J1. the join branch removed from `processUpdate` → «chat_member join → join bonus paid once» (+ 2 more);
+ *  J2. `payJoin` without `if (!inserted.rowCount) return already` → «join ‖ Yangilash ‖ replays: exactly ONE payment»;
+ *      a notice also on «already» → the same test (notices ≠ join payments);
+ *  J3. the blocked checks removed from `recordChannelJoin` and `payJoin` → «chat_member join ignored: blocked …»;
+ *  J4. `channelsAvailable` counts the stay bonus of a channel the user left → «bonusTasks totals».
  */
 
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
