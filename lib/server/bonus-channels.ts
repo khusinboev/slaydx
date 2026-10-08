@@ -6,13 +6,16 @@ import { log } from "./log";
 import { referralSummary } from "./referrals";
 import { botConfigured, botUsername, callBot } from "./telegram";
 import { langOf } from "./bot/i18n";
-import { stayPaidNotice } from "./bot/bonus";
+import { joinPaidNotice, stayPaidNotice } from "./bot/bonus";
+import { firstTopupStatus } from "./topup-bonus";
 
 /**
  * Bonus tasks — the user side (docs/bonus/PLAN.md, K1; owner decisions B-Q1..Q4).
  *
  * A channel row (`bonus_channels`, managed in the admin panel) pays
- * `join_bonus` once when the bot sees the user as a member, and `stay_bonus`
+ * `join_bonus` once when the bot sees the user as a member — automatically on
+ * the `chat_member` join update (B2-Q2, `recordChannelJoin`), or on «🔄 Yangilash»
+ * (`checkChannel` → `getChatMember`), both through `payJoin` — and `stay_bonus`
  * once more after `stay_days` days if the user is still a member (worker
  * sweep). One `bonus_channel_claims` row per (user, channel) — PRIMARY KEY —
  * so a channel pays a user at most once, leaving and re-joining included.
@@ -85,9 +88,29 @@ export type ChannelTask = {
 export type BonusTasks = {
   channels: ChannelTask[];
   referral: { link: string; rewardPoints: number; invitedCount: number; earnedPoints: number };
-  /** Points earned from channel tasks + invites (the screen's header). */
+  /** The sign-up bonus actually booked (`signup:<user>` ledger row), 0 when there is none. */
+  signupPoints: number;
+  /** The first top-up bonus (`lib/server/topup-bonus.ts firstTopupStatus`). */
+  firstTopup: { paid: boolean; points: number };
+  /** Bonus earned so far: sign-up + channel tasks + invites + first top-up (the screen's summary). */
   earnedTotal: number;
+  /**
+   * Fixed channel bonuses still open: join + stay of channels not joined yet, plus owed stay
+   * bonuses of joined channels the user did not leave. Invites (unbounded) and the first top-up
+   * (a share of an amount) are not counted.
+   */
+  availableTotal: number;
 };
+
+/** What the active channels still offer this user (see `BonusTasks.availableTotal`). */
+export function channelsAvailable(channels: Pick<ChannelTask, "joinBonus" | "stayBonus" | "claim">[]): number {
+  let sum = 0;
+  for (const c of channels) {
+    if (!c.claim) sum += Math.max(0, c.joinBonus) + Math.max(0, c.stayBonus);
+    else if (c.claim.stayPaid === null && !c.claim.leftAt) sum += Math.max(0, c.stayBonus);
+  }
+  return sum;
+}
 
 /** A Telegram public username (5–32; a few legacy ones are 4), or `null`. */
 export function channelUsername(raw: string | null | undefined): string | null {
@@ -136,28 +159,38 @@ export async function bonusTasks(
     "SELECT COALESCE(sum(join_paid + COALESCE(stay_paid, 0)), 0)::text AS n FROM bonus_channel_claims WHERE user_id = $1",
     [userId],
   );
+  const signupRow = await queryOne<{ p: string }>(
+    "SELECT points_delta::text AS p FROM transactions WHERE user_id = $1 AND kind = 'bonus' AND reference = $2",
+    [userId, `signup:${userId}`],
+  );
+  const signupPoints = Math.max(0, Number(signupRow?.p ?? 0));
+  const firstTopup = await firstTopupStatus(userId);
   const s = await referralSummary(userId, links ?? { botUsername: await botUsername(), appUrl: env.appUrl });
   const referral = { link: s.botLink ?? s.webLink, rewardPoints: s.rewardPoints, invitedCount: s.invitedCount, earnedPoints: s.earnedPoints };
+  const channels: ChannelTask[] = rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    username: channelUsername(r.username),
+    joinUrl: channelUsername(r.username) ? `https://t.me/${channelUsername(r.username)}` : channelInviteLink(r.invite_link),
+    joinBonus: Number(r.join_bonus),
+    stayBonus: Number(r.stay_bonus),
+    stayDays: Number(r.stay_days),
+    claim: r.joined_at
+      ? {
+          joinedAt: new Date(r.joined_at).toISOString(),
+          joinPaid: Number(r.join_paid ?? 0),
+          stayPaid: r.stay_paid === null ? null : Number(r.stay_paid),
+          leftAt: r.left_at ? new Date(r.left_at).toISOString() : null,
+        }
+      : null,
+  }));
   return {
-    channels: rows.map((r) => ({
-      id: r.id,
-      title: r.title,
-      username: channelUsername(r.username),
-      joinUrl: channelUsername(r.username) ? `https://t.me/${channelUsername(r.username)}` : channelInviteLink(r.invite_link),
-      joinBonus: Number(r.join_bonus),
-      stayBonus: Number(r.stay_bonus),
-      stayDays: Number(r.stay_days),
-      claim: r.joined_at
-        ? {
-            joinedAt: new Date(r.joined_at).toISOString(),
-            joinPaid: Number(r.join_paid ?? 0),
-            stayPaid: r.stay_paid === null ? null : Number(r.stay_paid),
-            leftAt: r.left_at ? new Date(r.left_at).toISOString() : null,
-          }
-        : null,
-    })),
+    channels,
     referral,
-    earnedTotal: Number(earnedRow?.n ?? 0) + referral.earnedPoints,
+    signupPoints,
+    firstTopup,
+    earnedTotal: Number(earnedRow?.n ?? 0) + referral.earnedPoints + signupPoints + (firstTopup.paid ? firstTopup.points : 0),
+    availableTotal: channelsAvailable(channels),
   };
 }
 
@@ -194,7 +227,7 @@ function channelKey(channelId: string | number): string | null {
 }
 
 /**
- * «✅ Tekshirish»: is the user a member of the channel → claim row + join
+ * «🔄 Yangilash» (one channel): is the user a member of the channel → claim row + join
  * bonus, once. Idempotent and race-safe: a second tap, a replayed callback or
  * two concurrent taps pay exactly once (claim PK + ledger reference, in ONE
  * transaction). `telegramId` must be the account's own Telegram id (checked
@@ -219,7 +252,17 @@ export async function checkChannel(userId: string, telegramId: number | string, 
   const member = await chatMemberStatus(channel.chat_id, telegramId);
   if (member === "not_member") return { status: "not_member" };
   if (member !== "member") return { status: "unknown" };
+  return payJoin(userId, telegramId, key);
+}
 
+/**
+ * The join payment — ONE path for «Yangilash» / `checkChannel` (after `getChatMember`) and for
+ * a `chat_member` join update (`recordChannelJoin`). Idempotent and race-safe: concurrent or
+ * replayed calls pay exactly once (the user row lock, the claim PK and the unique ledger
+ * reference, all in ONE transaction). `telegramId` must be the account's own Telegram id
+ * (checked under the user row lock); a blocked account or an inactive channel is never paid.
+ */
+async function payJoin(userId: string, telegramId: number | string, key: string): Promise<CheckResult> {
   return transaction(async (client): Promise<CheckResult> => {
     // The user row lock first (the same order as `topUpInTx`): concurrent taps queue here.
     const u = await client.query<{ is_blocked: boolean; telegram_id: string | null }>(
@@ -252,6 +295,76 @@ export async function checkChannel(userId: string, telegramId: number | string, 
     log("info", "[bonus] channel join", { userId, channelId: key, points });
     return { status: "paid", points, title: ch.title, stayBonus: Number(ch.stay_bonus), stayDays: Number(ch.stay_days) };
   });
+}
+
+/* ───────────────────────── Joining (chat_member updates) ───────────────────────── */
+
+export type JoinPaid = Extract<CheckResult, { status: "paid" }>;
+
+/** member / administrator / creator, or `restricted` with `is_member: true` — the user is in the chat. */
+export function isJoinStatus(m: ChatMemberUpdate["new_chat_member"]): boolean {
+  const status = String(m?.status ?? "");
+  if (MEMBER_STATUSES.has(status)) return true;
+  return status === "restricted" && m?.is_member === true;
+}
+
+export type JoinDeps = {
+  /** The «+N so‘m bonus» message (default: `sendMessage` to the user's private chat). */
+  notify?: (telegramId: string, lang: string, paid: JoinPaid) => Promise<void>;
+};
+
+async function notifyJoin(telegramId: string, lang: string, paid: JoinPaid): Promise<void> {
+  const screen = joinPaidNotice(langOf(lang), paid);
+  // No `message_effect_id`: the Bot API documents the parameter but publishes no effect ids to rely on.
+  const r = await callBot("sendMessage", {
+    chat_id: telegramId,
+    text: screen.text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    ...(screen.reply_markup ? { reply_markup: screen.reply_markup } : {}),
+  });
+  // Best effort: the money is already in the wallet; a user who blocked the bot just gets no message.
+  if (!r.ok) log("warn", "[bonus] join notice not sent", { code: r.code });
+}
+
+/**
+ * B2-Q2: a Telegram `chat_member` update in which a user JOINS an active bonus channel
+ * (matched by `chat_id`) pays the join bonus automatically — the same `payJoin` path as
+ * «Yangilash» (one claim row, unique ledger reference), so a replayed update, a second join
+ * or a concurrent «Yangilash» pays nothing more. The update itself is the membership proof
+ * (it reaches us only through the secret-checked webhook), so there is no `getChatMember`.
+ * Paid now (and > 0) → one message to the user. Bots, unknown / blocked users, unknown or
+ * inactive chats and unsafe ids → `null`, nothing happens. Never throws: a failure is logged
+ * («🔄 Yangilash» is the fallback), so the webhook always answers.
+ */
+export async function recordChannelJoin(u: ChatMemberUpdate, deps: JoinDeps = {}): Promise<CheckResult | null> {
+  try {
+    const m = u.new_chat_member;
+    if (!isJoinStatus(m)) return null;
+    const chatId = u.chat?.id;
+    const tgId = m?.user?.id;
+    // A JSON number above 2^53 is already rounded to a different id: never act on it.
+    if (!Number.isSafeInteger(chatId) || !Number.isSafeInteger(tgId) || m?.user?.is_bot) return null;
+    const channel = await queryOne<{ id: string }>("SELECT id::text AS id FROM bonus_channels WHERE chat_id = $1 AND active", [String(chatId)]);
+    if (!channel) return null;
+    const user = await queryOne<{ id: string; is_blocked: boolean; language: string | null }>(
+      "SELECT id::text AS id, is_blocked, language FROM users WHERE telegram_id = $1",
+      [String(tgId)],
+    );
+    if (!user || user.is_blocked) return null;
+    const r = await payJoin(user.id, String(tgId), channel.id);
+    if (r.status === "paid" && r.points > 0) {
+      try {
+        await (deps.notify ?? notifyJoin)(String(tgId), user.language ?? "uz", r);
+      } catch (e) {
+        log("warn", "[bonus] join notice failed", { err: e });
+      }
+    }
+    return r;
+  } catch (e) {
+    log("error", "[bonus] chat_member join failed", { err: e });
+    return null;
+  }
 }
 
 /* ───────────────────────── Leaving (chat_member updates) ───────────────────────── */
