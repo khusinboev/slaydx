@@ -9,7 +9,7 @@
  */
 import { env } from "../lib/server/env.ts";
 import { ensureMigrated, pool } from "../lib/server/db.ts";
-import { botConfigured, getMe, handleUpdate, purgeExpiredTickets, setBotCommands } from "../lib/server/telegram.ts";
+import { botConfigured, getMe, handleUpdate, purgeExpiredTickets, setBotCommands, setMenuButton } from "../lib/server/telegram.ts";
 import type { TelegramUpdate } from "../lib/server/telegram.ts";
 
 function sleep(ms: number) {
@@ -41,6 +41,7 @@ if (!me) {
 }
 console.log(`[bot] @${me.username} ishga tushdi (long-polling)`);
 await setBotCommands();
+await setMenuButton();
 
 // Webhook o'rnatilgan bo'lsa getUpdates ishlamaydi — avval o'chiramiz.
 await fetch(`https://api.telegram.org/bot${env.telegramBotToken}/deleteWebhook`, {
@@ -63,7 +64,8 @@ while (!stopped) {
     const res = await fetch(`https://api.telegram.org/bot${env.telegramBotToken}/getUpdates`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ offset, timeout: 25, allowed_updates: ["message"] }),
+      // Same as the prod webhook: messages, inline mode and inline button taps (bot screens, B2).
+      body: JSON.stringify({ offset, timeout: 25, allowed_updates: ["message", "inline_query", "callback_query"] }),
       // Long-poll 25 s, shuning uchun timeout undan kattaroq.
       signal: AbortSignal.timeout(40_000),
     });

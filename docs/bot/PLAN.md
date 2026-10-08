@@ -65,3 +65,24 @@ Release: when reviewed (fable security review for the link token) + CI green, me
 | B2 Bot screens | `lib/server/bot/*` (ui/emoji table, keyboard, profile screens, callbacks, state), migration `038_bot_chat_state.sql`, `lib/server/profile.ts` updateProfile + audit (route refactor), `lib/profile/fields.ts` (moved pure model), telegram.ts routing (callback_query, keyboard texts, pending input), /start + menu button, `scripts/bot.mts` allowed_updates, `scripts/bot-commands.mts`, tests | opus |
 | B3 Emoji pack | pick premium emoji packs and map each icon key → custom_emoji_id + fallback (lead fetches IDs via getStickerSet) | research only | sonnet |
 | S review | security of B1 token + B2 input handling | read-only | fable |
+
+## Owner decisions — added scope (2026-10-08, second round)
+| # | Decision |
+|---|---|
+| D1 | Keyboard is 3 rows: [📊 Slayd (primary)][🖼 Rasm][💎 Pro slayd] / [📂 Ishlarim][💰 Hamyon] / [👤 Profilim (success)][❓ Yordam]. Tools are `web_app` via `botAppUrl`; Ishlarim, Hamyon, Profilim, Yordam are TEXT buttons handled in chat |
+| D2 | «Ishlarim» in chat: latest files, 5 per page, one card (status Tayyor / Yozilmoqda N% / Navbatda / Xato, tool, topic, date), a button per file → `/uz/files/<id>` (`botAppUrl` web_app, url fallback), «◀️ / ▶️» edit the same message, empty state → «Yangi ish yaratish» (`/uz/create`). Reuses `jobs.ts listGenerations` (owner-scoped) |
+| D3 | «Hamyon» in chat: balance (tanga + ball), last 5 transactions with readable labels, «💳 To‘ldirish» (web_app `/uz/wallet` — payment stays in the web app), «🎁 Do‘st taklif qilish» (referral text + `copy_text` link) |
+| D4 | Bot language uz / ru / en: every bot text through `lib/server/bot/i18n.ts` (Uzbek Latin = source); stored in `users.language` (uz\|ru\|en enforced by `updateProfile`); the web app stays Uzbek. Entry points: «🌐 Til» in Profilim and Yordam, `/til` (setMyCommands per language_code). A change re-sends the keyboard. New users default from Telegram `language_code` (ru → ru, en → en, else uz) at first registration only |
+| D5 | «Yordam»: what the bot does, how to create, 5 Q&A in an expandable blockquote, «🌐 Til», «👨‍💻 Admin bilan bog‘lanish» (only when `BOT_SUPPORT_USERNAME` is set), «📱 Ilovani ochish» |
+| D6 | Premium emoji ids: `lib/server/bot/emoji-ids.ts` (Fluent Emoji 3D + TopicIcons/PremiumIcons, via getStickerSet); `BOT_PREMIUM_EMOJI` code default off (deterministic tests), production compose default 1 |
+
+## B2 implementation notes
+- Callback codes (`lib/server/bot/codes.ts`, all ≤ 16 bytes): `p:h`, `p:s:<step>`, `p:e:<field>`, `p:x`, `f:<page>` (0…19), `w:h`, `w:r`, `r:n`, `y:h`, `l:m:<o>`, `l:s:<lang>:<o>`, `n`.
+- The field prompt is the section message EDITED in place with an inline «✖️ Bekor qilish» (danger): a message holds one
+  reply_markup, so a ForceReply and an inline button cannot share it; the pending state makes the next text the value.
+- `/start` = welcome card (inline buttons) + a second message carrying the persistent keyboard. «Profilim» re-sends the
+  keyboard only when it is older than 3 days (`bot_chat_state.keyboard_at`).
+- Existing users are no longer re-upserted on every bot message (only on `/start`): the upsert overwrote `users.name`
+  with the Telegram name, which would revert a «Ism» saved in the bot.
+- `profile.update` audit rows go to `admin_audit_log` (actor = the user, `actor_role = 'user'`, `admin_id` NULL,
+  `meta.via` web|bot, changed fields only), in the same transaction as the UPDATE; an unchanged value writes nothing.
