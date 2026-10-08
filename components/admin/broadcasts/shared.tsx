@@ -41,6 +41,7 @@ export const isCancellable = (status: BroadcastStatus): boolean => status === "d
 export function audienceLabel(a: Audience): string {
   if (a.kind === "all") return "Barcha foydalanuvchilar";
   if (a.kind === "paid") return "To'lov qilganlar";
+  if (a.kind === "new_days") return `Oxirgi ${a.days} kunda qo'shilganlar`;
   return `Oxirgi ${a.days} kunda faol`;
 }
 

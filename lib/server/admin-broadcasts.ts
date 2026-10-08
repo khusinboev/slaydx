@@ -4,9 +4,10 @@ import { ApiError } from "./api";
 import { queryOne, transaction } from "./db";
 import { adminTx } from "./admin-audit";
 import { parseBigintId, parseReason } from "./admin-accounts";
-import type { AdminActor } from "./admin-handler";
+import type { AuditActor } from "./admin-audit";
 import { buildKeyset, countCapped, keysetSelect, pageResult, parseListParams, type CursorColumns, type ListSpec, type ParsedList } from "./admin-list";
 import { escapeTelegramHtml } from "./broadcast-delivery";
+import { contentOf, parseBroadcastContent, sendBroadcastContent, type BroadcastContent } from "./broadcast-content";
 import { toJsonb } from "./jsonb";
 import { botConfigured, sendMessage, TelegramTransientError } from "./telegram";
 import { parseIntParam } from "./validate";
@@ -62,6 +63,12 @@ export type Audience = { kind: "all" } | { kind: "paid" } | { kind: "active_days
 
 /** Audience kinds that carry `days`. */
 const hasDays = (kind: AudienceKind): kind is "active_days" | "new_days" => kind === "active_days" || kind === "new_days";
+
+/**
+ * Who acts. The web passes its `AdminActor` (`adminHandler`); the bot panel passes an
+ * actor built from the linked admin account (`bot/admin.ts`). Only these fields are used.
+ */
+export type BroadcastActor = AuditActor & { id: string; userId: string };
 
 const notFound = (): ApiError => new ApiError("Topilmadi", 404, { code: "not_found" });
 const stateError = (): ApiError => new ApiError("Xabar holati o'zgargan — sahifani yangilang", 409, { code: "state" });
@@ -372,13 +379,26 @@ export async function getBroadcast(id: string): Promise<{ broadcast: AdminBroadc
 /* Create (draft)                                                             */
 /* -------------------------------------------------------------------------- */
 
-export async function createBroadcast(actor: AdminActor, body: Record<string, unknown>): Promise<{ broadcast: AdminBroadcast }> {
-  const text = parseText(body.text);
+export async function createBroadcast(
+  actor: BroadcastActor,
+  body: Record<string, unknown>,
+  opts: { content?: BroadcastContent; via?: "bot" } = {},
+): Promise<{ broadcast: AdminBroadcast }> {
+  // `content` comes only from server code (the bot panel), never from a request body.
+  let text: string;
+  let content: BroadcastContent | null = null;
+  if (opts.content) {
+    const parsed = parseBroadcastContent(opts.content, body.text, BROADCAST_TEXT_MAX);
+    text = parsed.text;
+    content = parsed.content;
+  } else {
+    text = parseText(body.text);
+  }
   const audience = parseAudience(body.audience);
   return adminTx(actor, async (client, audit) => {
     const ins = await client.query<{ id: string }>(
-      `INSERT INTO broadcasts (status, text, audience, created_by) VALUES ('draft', $1, $2::jsonb, $3) RETURNING id::text AS id`,
-      [text, toJsonb(audience), actor.id],
+      `INSERT INTO broadcasts (status, text, audience, created_by, content) VALUES ('draft', $1, $2::jsonb, $3, $4::jsonb) RETURNING id::text AS id`,
+      [text, toJsonb(audience), actor.id, content ? toJsonb(content) : null],
     );
     const id = ins.rows[0]!.id;
     await audit({
@@ -386,7 +406,13 @@ export async function createBroadcast(actor: AdminActor, body: Record<string, un
       targetType: "broadcast",
       targetId: id,
       before: null,
-      after: { status: "draft", audience, text },
+      after: {
+        status: "draft",
+        audience,
+        text,
+        ...(content ? { content: { kind: content.kind, fileId: content.fileId ?? null, button: content.button ?? null } } : {}),
+      },
+      ...(opts.via ? { meta: { via: opts.via } } : {}),
     });
     return { broadcast: (await fetchBroadcast(client, id))! };
   });
@@ -407,8 +433,8 @@ export async function createBroadcast(actor: AdminActor, body: Record<string, un
  *     `{sent:false}` (200), a transient failure → 502 `{code:"telegram_unavailable"}`.
  * One audit row per attempt that reached Telegram, with the outcome in `meta`.
  */
-export async function sendTest(actor: AdminActor, id: string): Promise<{ sent: boolean }> {
-  const b = await queryOne<{ text: string }>("SELECT text FROM broadcasts WHERE id = $1", [id]);
+export async function sendTest(actor: BroadcastActor, id: string, opts: { via?: "bot" } = {}): Promise<{ sent: boolean }> {
+  const b = await queryOne<{ text: string; content: unknown }>("SELECT text, content FROM broadcasts WHERE id = $1", [id]);
   if (!b) throw notFound();
   const u = await queryOne<{ telegram_id: string | null }>("SELECT telegram_id::text AS telegram_id FROM users WHERE id = $1", [actor.userId]);
   if (!u?.telegram_id) throw new ApiError("Sizning hisobingizga Telegram ulanmagan — sinov xabarini yuborib bo'lmaydi", 409, { code: "no_telegram" });
@@ -417,13 +443,14 @@ export async function sendTest(actor: AdminActor, id: string): Promise<{ sent: b
   let sent = false;
   let transient = false;
   try {
-    sent = await sendMessage(u.telegram_id, escapeTelegramHtml(b.text));
+    const content = contentOf(b.content, b.text);
+    sent = content ? await sendBroadcastContent(u.telegram_id, b.text, content) : await sendMessage(u.telegram_id, escapeTelegramHtml(b.text));
   } catch (e) {
     if (!(e instanceof TelegramTransientError)) throw e;
     transient = true;
   }
   await adminTx(actor, async (_client, audit) => {
-    await audit({ action: "broadcasts.test", targetType: "broadcast", targetId: id, meta: { sent, ...(transient ? { transient: true } : {}) } });
+    await audit({ action: "broadcasts.test", targetType: "broadcast", targetId: id, meta: { sent, ...(transient ? { transient: true } : {}), ...(opts.via ? { via: opts.via } : {}) } });
   });
   if (transient) throw new ApiError("Telegram vaqtincha javob bermadi — keyinroq urinib ko'ring", 502, { code: "telegram_unavailable" });
   return { sent };
@@ -448,7 +475,7 @@ function parseConfirmCount(raw: unknown): number {
  * count) and rolls the snapshot back, so what the admin confirmed is exactly
  * what is queued. An empty audience is refused (409 `empty_audience`).
  */
-export async function sendBroadcast(actor: AdminActor, id: string, body: Record<string, unknown>): Promise<{ broadcast: AdminBroadcast }> {
+export async function sendBroadcast(actor: BroadcastActor, id: string, body: Record<string, unknown>, opts: { via?: "bot" } = {}): Promise<{ broadcast: AdminBroadcast }> {
   const reason = parseReason(body.reason)!;
   const confirmCount = parseConfirmCount(body.confirmCount);
   return adminTx(actor, async (client, audit) => {
@@ -477,7 +504,7 @@ export async function sendBroadcast(actor: AdminActor, id: string, body: Record<
       reason,
       before: { status: "draft", total: 0 },
       after: { status: "queued", total },
-      meta: { audience, confirmCount },
+      meta: { audience, confirmCount, ...(opts.via ? { via: opts.via } : {}) },
     });
     return { broadcast: (await fetchBroadcast(client, id))! };
   });
@@ -493,7 +520,7 @@ export async function sendBroadcast(actor: AdminActor, id: string, body: Record<
  * and only looks at `queued` / `sending`. A message already in flight when the
  * cancel lands may still arrive (at most one per delivering process).
  */
-export async function cancelBroadcast(actor: AdminActor, id: string, body: Record<string, unknown>): Promise<{ broadcast: AdminBroadcast }> {
+export async function cancelBroadcast(actor: BroadcastActor, id: string, body: Record<string, unknown>, opts: { via?: "bot" } = {}): Promise<{ broadcast: AdminBroadcast }> {
   const reason = parseReason(body.reason)!;
   return adminTx(actor, async (client, audit) => {
     const cur = await client.query<{ status: string; total: number; sent: number; failed: number }>(
@@ -514,7 +541,7 @@ export async function cancelBroadcast(actor: AdminActor, id: string, body: Recor
       reason,
       before: { status: row.status },
       after: { status: "cancelled" },
-      meta: { total, sent, failed, unsent: Math.max(0, total - sent - failed) },
+      meta: { total, sent, failed, unsent: Math.max(0, total - sent - failed), ...(opts.via ? { via: opts.via } : {}) },
     });
     return { broadcast: (await fetchBroadcast(client, id))! };
   });

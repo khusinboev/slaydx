@@ -593,6 +593,28 @@ export async function reauth(admin: AdminActor, rawCode: unknown): Promise<{ rea
   return { reauthUntil: until.toISOString() };
 }
 
+/**
+ * Bot panel step-up (docs/bot-admin/PLAN.md, 2FA mode only): the linked admin typed the
+ * current TOTP code in the bot chat. Same verification as `reauth` — per-account failure
+ * lock, replay guard (`totp_last_step`), `auth.login_failed` / `auth.locked` rows — and an
+ * `auth.reauth` row (`meta.via = "bot"`) in the transaction that runs `inTx` (the bot
+ * records its 10-minute step-up window there). The bot has no client IP: the IP budget
+ * does not apply ("unknown"), the account lock does. Throws `ApiError` 400/401/409/429/503.
+ */
+export async function botStepUp(
+  who: { adminId: string; userId: string; role: Role; telegramId: string | null; requestId: string | null },
+  rawCode: unknown,
+  inTx: (client: PoolClient) => Promise<void>,
+): Promise<void> {
+  requireAdminCrypto();
+  const code = parseTotpCode(rawCode);
+  const w: Who = { ...who, ip: "unknown", userAgent: "telegram-bot" };
+  await withVerifiedTotp(w, code, "bot_reauth", async (client, audit) => {
+    await inTx(client);
+    await audit({ action: "auth.reauth", targetType: "admin", targetId: who.adminId, meta: { via: "bot" } });
+  });
+}
+
 /** POST /api/admin/me/recovery-codes — new set (old ones invalidated); needs a fresh TOTP in the body. */
 export async function regenerateRecoveryCodes(admin: AdminActor, rawCode: unknown): Promise<{ recoveryCodes: string[] }> {
   requireAdminCrypto();
