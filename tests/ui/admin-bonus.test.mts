@@ -7,7 +7,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import type * as IdentityModule from "../../components/admin/shell/admin-identity.tsx";
 import type * as ToasterModule from "../../components/admin/ui/Toaster.tsx";
 import { BonusPage } from "../../components/admin/bonus/BonusPage.tsx";
-import { bonusText, checkAmounts, checkIntText, checkInviteText, defaultPreset } from "../../components/admin/bonus/format.ts";
+import { bonusText, checkAmounts, checkIntText, checkInviteText, defaultPreset, inviteHref } from "../../components/admin/bonus/format.ts";
 
 /**
  * `/admin/bonus` «Bonus kanallar» (docs/bonus/PLAN.md K2): helpers; loading / empty (with the
@@ -23,7 +23,8 @@ import { bonusText, checkAmounts, checkIntText, checkInviteText, defaultPreset }
  *   - the bot-status effect not started after the list loads → "ready: rows" (no «Bot admin»);
  *   - the preview kept after the address changes → "add: first channel";
  *   - the edit dialog never sending `inviteLink` → "invite link: private channel";
- *   - «Havola yaratish» not filling the field → "invite link: private channel".
+ *   - «Havola yaratish» not filling the field → "invite link: private channel";
+ *   - `ChannelRow` using `item.inviteLink` as the href unchecked → "invite link: an unexpected stored value".
  */
 const req = createRequire(import.meta.url);
 const { AdminIdentityProvider } = req("../../components/admin/shell/admin-identity.tsx") as typeof IdentityModule;
@@ -120,6 +121,12 @@ test("format: bonusText, checkIntText, checkAmounts, defaultPreset", () => {
   assert.equal(checkAmounts({ joinBonus: "0", stayBonus: "0", stayDays: "7" }).ok, false, "at least one bonus");
   assert.equal(checkAmounts({ joinBonus: "1000", stayBonus: "0", stayDays: "0" }).ok, false, "days 1..365");
   assert.deepEqual(checkAmounts({ joinBonus: "1000", stayBonus: "2000", stayDays: "7" }), { ok: true, value: { joinBonus: 1000, stayBonus: 2000, stayDays: 7 } });
+  // Per-channel cap 20 000 for each bonus (mirrors the server's MAX_BONUS).
+  assert.deepEqual(checkAmounts({ joinBonus: "20 000", stayBonus: "20000", stayDays: "7" }), { ok: true, value: { joinBonus: 20000, stayBonus: 20000, stayDays: 7 } });
+  const overJoin = checkAmounts({ joinBonus: "20001", stayBonus: "0", stayDays: "7" });
+  assert.ok(!overJoin.ok && /^Obuna bonusi: 0 dan 20.000 gacha$/.test(overJoin.error), JSON.stringify(overJoin));
+  const overStay = checkAmounts({ joinBonus: "1000", stayBonus: "1000000", stayDays: "7" });
+  assert.ok(!overStay.ok && /^Qo'shimcha bonus: 0 dan 20.000 gacha$/.test(overStay.error), JSON.stringify(overStay));
   assert.equal(defaultPreset(0), "news");
   assert.equal(defaultPreset(3), "extra");
   assert.deepEqual(checkInviteText(" t.me/joinchat/AbCdEfGh12 "), { ok: true, value: "https://t.me/+AbCdEfGh12" });
@@ -321,6 +328,34 @@ test("delete: confirm dialog, DELETE, the row disappears; a 409 has_claims stays
   const d2 = within(await screen.findByRole("dialog"));
   fireEvent.click(d2.getByRole("button", { name: "O'chirish" }));
   await d2.findByText(/o'chirib bo'lmaydi/);
+});
+
+test("invite link: an unexpected stored value is rendered as text, never as an href", async () => {
+  assert.equal(inviteHref("https://t.me/+AbCdEfGh12"), "https://t.me/+AbCdEfGh12");
+  for (const bad of [null, "", "javascript:alert(1)", "https://evil.example/+AbCdEfGh12", "http://t.me/+AbCdEfGh12", "https://t.me/+short", "https://t.me/+AbCdEfGh12?x=1", "https://t.me/slaydx_news", " https://t.me/+AbCdEfGh12"]) {
+    assert.equal(inviteHref(bad), null, String(bad));
+  }
+  const EVIL = "javascript:alert(document.cookie)//https://t.me/+AbCdEfGh12";
+  const OTHER = "https://evil.example/+AbCdEfGh12";
+  stubFetch([
+    listRoute([
+      { ...PARTNER, id: "4", title: "Buzuq havola", inviteLink: EVIL },
+      { ...PARTNER, id: "5", title: "Begona havola", inviteLink: OTHER },
+      { ...PARTNER, id: "6", title: "To'g'ri havola", inviteLink: "https://t.me/+AbCdEfGh12" },
+    ]),
+    botRoute({}),
+  ]);
+  mount(h(BonusPage));
+  await screen.findByText("Buzuq havola");
+  for (const [id, value] of [["4", EVIL], ["5", OTHER]] as const) {
+    const row = rowOf(id);
+    assert.ok(!row.querySelector("[data-invite]"), `${id}: no invite anchor`);
+    assert.ok(![...row.querySelectorAll("a")].some((a) => (a.getAttribute("href") ?? "").includes("+AbCdEfGh12")), `${id}: no href with the value`);
+    assert.equal(row.querySelector("[data-invite-text]")?.textContent, value, `${id}: shown as text`);
+  }
+  const good = rowOf("6").querySelector<HTMLAnchorElement>("[data-invite]");
+  assert.ok(good);
+  assert.equal(good.getAttribute("href"), "https://t.me/+AbCdEfGh12");
 });
 
 test("invite link: private channel row warns without a link; add fills it via «Havola yaratish»; edit clears it", async () => {

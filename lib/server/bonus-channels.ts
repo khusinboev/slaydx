@@ -17,7 +17,9 @@ import { stayPaidNotice } from "./bot/bonus";
  * sweep). One `bonus_channel_claims` row per (user, channel) — PRIMARY KEY —
  * so a channel pays a user at most once, leaving and re-joining included.
  * Leaving never claws back a paid bonus (B-Q3); leaving before day N only
- * forfeits the unpaid stay bonus.
+ * forfeits the unpaid stay bonus: a `chat_member` update marks `left_at` the
+ * moment the user leaves (`recordChannelLeave`), and the sweep's own
+ * `getChatMember` at day N is the second line.
  *
  * Money: only `credits.topUpInTx` (kind `bonus`) with the unique ledger
  * references `channel:<channel_id>:<user_id>:join` / `:stay`, in the same
@@ -231,12 +233,15 @@ export async function checkChannel(userId: string, telegramId: number | string, 
     const ch = (await client.query<ChannelRow>(`SELECT ${CHANNEL_COLUMNS} FROM bonus_channels WHERE id = $1 FOR SHARE`, [key])).rows[0];
     if (!ch || !ch.active) return { status: "inactive" };
     const points = Number(ch.join_bonus);
+    // No stay bonus on this channel: the claim is settled at once (`stay_paid = 0`), so it never
+    // enters the sweep's partial index (`stay_paid IS NULL AND left_at IS NULL`).
+    const stayPaid = Number(ch.stay_bonus) > 0 ? null : 0;
     const inserted = await client.query(
-      `INSERT INTO bonus_channel_claims (user_id, channel_id, join_paid)
-       VALUES ($1, $2, $3)
+      `INSERT INTO bonus_channel_claims (user_id, channel_id, join_paid, stay_paid)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT (user_id, channel_id) DO NOTHING
        RETURNING 1`,
-      [userId, key, points],
+      [userId, key, points, stayPaid],
     );
     if (!inserted.rowCount) return { status: "already" };
     if (points > 0) {
@@ -249,14 +254,63 @@ export async function checkChannel(userId: string, telegramId: number | string, 
   });
 }
 
+/* ───────────────────────── Leaving (chat_member updates) ───────────────────────── */
+
+/** The parts of a Bot API `ChatMemberUpdated` this module reads. */
+export type ChatMemberUpdate = {
+  chat: { id: number; type?: string };
+  new_chat_member?: { status?: string; is_member?: boolean; user?: { id: number; is_bot?: boolean } };
+};
+
+/** `left` / `kicked`, or `restricted` with `is_member: false` — the user is no longer in the chat. */
+export function isLeaveStatus(m: ChatMemberUpdate["new_chat_member"]): boolean {
+  const status = String(m?.status ?? "");
+  if (status === "left" || status === "kicked") return true;
+  return status === "restricted" && m?.is_member === false;
+}
+
+/**
+ * A Telegram `chat_member` update (the webhook's `allowed_updates` must include it; the bot
+ * must be an admin of the chat): when a user leaves a bonus channel (active or not, matched by
+ * `chat_id`), their claim gets `left_at = now()` while the stay bonus is unpaid — leaving
+ * before day N forfeits it (B-Q3), even if they re-join before the sweep looks. Re-joining
+ * never clears `left_at`. Unknown users / chats and joins change nothing; a replay keeps the
+ * first `left_at`. Returns the number of claims marked (0 or 1). No reply to anyone.
+ */
+export async function recordChannelLeave(u: ChatMemberUpdate): Promise<number> {
+  const m = u.new_chat_member;
+  if (!isLeaveStatus(m)) return 0;
+  const chatId = u.chat?.id;
+  const userId = m?.user?.id;
+  // A JSON number above 2^53 is already rounded to a different id: never act on it.
+  if (!Number.isSafeInteger(chatId) || !Number.isSafeInteger(userId) || m?.user?.is_bot) return 0;
+  const rows = await query<{ channel_id: string }>(
+    `UPDATE bonus_channel_claims c
+        SET left_at = now()
+       FROM bonus_channels ch, users u
+      WHERE ch.chat_id = $1 AND c.channel_id = ch.id
+        AND u.telegram_id = $2 AND c.user_id = u.id
+        AND c.stay_paid IS NULL AND c.left_at IS NULL
+      RETURNING c.channel_id::text AS channel_id`,
+    [String(chatId), String(userId)],
+  );
+  if (rows.length) log("info", "[bonus] channel left before the stay bonus", { channelId: rows[0]!.channel_id });
+  return rows.length;
+}
+
 /* ───────────────────────── Stay bonus sweep ───────────────────────── */
 
 /** An `unknown` membership answer is retried after this long (bot removed from the channel, Telegram down). */
 export const STAY_RETRY_HOURS = 6;
 /** Bot API calls per second of one sweep — well below Telegram's ~30/s. */
 export const STAY_PER_SECOND = 20;
-/** One sweep stops starting new checks after this long (housekeeping must not stall). */
-export const STAY_BUDGET_MS = 30_000;
+/** Due claims read per sweep run (the worker runs one every 10 min). */
+export const STAY_BATCH = 200;
+/**
+ * One sweep stops starting new checks after this long (housekeeping must not stall); the
+ * claims it did not reach stay due and are picked up by the next run.
+ */
+export const STAY_BUDGET_MS = 15_000;
 
 export type StaySweepDeps = {
   member?: (chatId: string, telegramId: string) => Promise<MemberStatus>;
@@ -270,6 +324,32 @@ export type StaySweepDeps = {
 };
 
 export type StaySweepResult = { rows: number; paid: number; left: number; unknown: number };
+
+/** Unsettled claims of zero-stay channels settled per sweep (no Bot API call). */
+export const STAY_ZERO_SETTLE_BATCH = 1_000;
+
+/**
+ * Claims of channels whose `stay_bonus` is 0 (created before claims were settled at join time,
+ * or the admin set the stay bonus to 0 later) get `stay_paid = 0`: nothing is owed, and they
+ * leave the sweep's partial index. No Telegram call, no money. Returns the number settled.
+ */
+async function settleZeroStay(limit: number): Promise<number> {
+  const rows = await query<{ user_id: string }>(
+    `UPDATE bonus_channel_claims c
+        SET stay_paid = 0, stay_checked_at = now()
+       FROM (SELECT z.user_id, z.channel_id
+               FROM bonus_channel_claims z
+               JOIN bonus_channels ch ON ch.id = z.channel_id
+              WHERE ch.stay_bonus = 0 AND z.stay_paid IS NULL AND z.left_at IS NULL
+              LIMIT $1
+                FOR UPDATE OF z SKIP LOCKED) d
+      WHERE c.user_id = d.user_id AND c.channel_id = d.channel_id AND c.stay_paid IS NULL
+      RETURNING c.user_id::text AS user_id`,
+    [limit],
+  );
+  if (rows.length) log("info", "[bonus] zero-stay claims settled", { rows: rows.length });
+  return rows.length;
+}
 
 type DueRow = {
   user_id: string;
@@ -295,17 +375,19 @@ async function notifyStay(telegramId: string, lang: string, points: number, titl
 }
 
 /**
- * Pays the stay bonus of due claims (worker housekeeping, every ~10 min):
+ * Settles zero-stay claims first (`settleZeroStay`, no Bot API call), then
+ * pays the stay bonus of due claims (worker housekeeping, every ~10 min):
  * joined_at + stay_days ≤ now, stay unpaid, not left, channel active with
  * stay_bonus > 0, account not blocked. Per claim one `getChatMember`:
  *   member      → stay bonus (ledger `…:stay`) + a message in the user's language;
  *   not member  → `left_at = now()`, nothing paid (B-Q3);
  *   unknown     → `stay_checked_at = now()`, retried after STAY_RETRY_HOURS.
- * Bounded (`limit`, time budget) and paced (≤ STAY_PER_SECOND Bot API calls/s).
+ * Bounded (`limit`, default STAY_BATCH = 200; time budget STAY_BUDGET_MS = 15 s — the rest
+ * continue next run) and paced (≤ STAY_PER_SECOND = 20 Bot API calls/s).
  * Each claim is settled in its own transaction under row locks, re-checking
  * every condition, so a concurrent sweep or admin edit cannot double-pay.
  */
-export async function staySweep(limit = 50, deps: StaySweepDeps = {}): Promise<StaySweepResult> {
+export async function staySweep(limit = STAY_BATCH, deps: StaySweepDeps = {}): Promise<StaySweepResult> {
   const out: StaySweepResult = { rows: 0, paid: 0, left: 0, unknown: 0 };
   if (!(deps.configured ?? botConfigured)()) return out;
   const member = deps.member ?? chatMemberStatus;
@@ -316,6 +398,7 @@ export async function staySweep(limit = 50, deps: StaySweepDeps = {}): Promise<S
   const budget = deps.budgetMs ?? STAY_BUDGET_MS;
   const started = now();
   const n = Math.max(1, Math.min(500, Math.trunc(limit)));
+  await settleZeroStay(STAY_ZERO_SETTLE_BATCH);
 
   const due = await query<DueRow>(
     `SELECT c.user_id::text AS user_id, c.channel_id::text AS channel_id, ch.chat_id::text AS chat_id,

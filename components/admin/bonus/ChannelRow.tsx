@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
 import { fmtNumber } from "@/lib/admin-format";
 import type { BonusChannel } from "@/lib/admin-api/bonus";
 import { BotBadge } from "./BotBadge";
-import { bonusText, channelUrl, type BotCheck } from "./format";
+import { bonusText, channelUrl, inviteHref, type BotCheck } from "./format";
 
 export type ChannelRowProps = {
   item: BonusChannel;
@@ -34,6 +34,8 @@ const countSum = (count: number, sum: number) => (count > 0 ? `${fmtNumber(count
 /** One channel: title and link, amounts, active switch, order, claim stats, bot status. */
 export function ChannelRow({ item, bot, canEdit, toggling, onToggle, onEdit, onDelete, onRecheck }: ChannelRowProps) {
   const url = channelUrl(item.username);
+  // Re-checked before it becomes an href: a row from the API is never trusted blindly.
+  const invite = inviteHref(item.inviteLink);
   const s = item.stats;
   const hasClaims = s.joined > 0;
   return (
@@ -59,17 +61,21 @@ export function ChannelRow({ item, bot, canEdit, toggling, onToggle, onEdit, onD
         ) : (
           <span className="text-muted-foreground text-[13px]">Yopiq kanal · ID {item.chatId}</span>
         )}
-        {item.inviteLink ? (
+        {invite ? (
           <a
-            href={item.inviteLink}
+            href={invite}
             target="_blank"
             rel="noopener noreferrer"
             data-invite
             className="text-info inline-flex w-fit items-center gap-1 text-[13px] break-all underline-offset-2 hover:underline"
           >
-            {item.inviteLink.replace(/^https:\/\//, "")}
+            {invite.replace(/^https:\/\//, "")}
             <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
           </a>
+        ) : item.inviteLink ? (
+          <span data-invite-text className="text-muted-foreground w-fit text-[13px] break-all">
+            {item.inviteLink}
+          </span>
         ) : item.username ? null : (
           <span className="w-fit">
             <Badge tone="warning" dot title="Foydalanuvchi kanalga kira olmaydi — taklif havolasini qo'shing">

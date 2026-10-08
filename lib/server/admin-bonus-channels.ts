@@ -30,12 +30,14 @@ import { parseBigintId, parseReason } from "./admin-accounts";
  *     `FOR KEY SHARE` lock on the channel row (FK), so it waits for this transaction and then
  *     fails on the FK, and the claims FK's `ON DELETE CASCADE` can never drop a paid claim.
  *
- * Validation: amounts are JSON integers 0..1 000 000 (at least one > 0), `stayDays` 1..365,
+ * Validation: amounts are JSON integers 0..20 000 per channel (`MAX_BONUS`, review cap; the DB CHECK allows
+ * 1 000 000) with at least one > 0, `stayDays` 1..365,
  * `sort` −1 000 000..1 000 000, `title` 1..128 characters. The reason is optional (audited
  * when given). Every refusal is a 4xx before any write, so nothing partial is ever audited.
  */
 
-export const MAX_BONUS = 1_000_000;
+/** Per-channel cap of `join_bonus` and of `stay_bonus` (money review): a typo cannot pay out a fortune. */
+export const MAX_BONUS = 20_000;
 export const MAX_STAY_DAYS = 365;
 export const MAX_SORT = 1_000_000;
 export const MAX_TITLE = 128;
@@ -52,7 +54,7 @@ export type BonusChannelStats = {
   stayPaidCount: number;
   stayPaidSum: number;
   left: number;
-  /** Joined, not left, stay bonus not settled yet (the worker sweep's queue). */
+  /** Joined, not left, stay bonus not settled yet (the worker sweep's queue); 0 when the channel's stay_bonus is 0. */
   stayPending: number;
 };
 
@@ -153,7 +155,7 @@ function intIn(raw: unknown, min: number, max: number, message: string): number 
   return raw;
 }
 
-const amountMessage = (label: string) => `${label}: 0 dan 1 000 000 gacha butun son bo'lishi kerak`;
+const amountMessage = (label: string) => `${label}: 0 dan 20 000 gacha butun son bo'lishi kerak (bitta kanal uchun eng ko'pi 20 000 ball)`;
 
 export function parseAmount(raw: unknown, label: string): number {
   return intIn(raw, 0, MAX_BONUS, amountMessage(label));
@@ -264,8 +266,11 @@ export function botWarning(status: BotAdminStatus): string | null {
   return status === "not_admin" ? BOT_NOT_ADMIN_WARNING : BOT_UNKNOWN_WARNING;
 }
 
-/** `getChat` + type check + bot admin status. Throws 503 / 400 with a code the UI can show. */
-export async function resolveChannel(ref: ChannelRef): Promise<ResolvedChannel> {
+/**
+ * `getChat` + type check: the chat must be a `channel` or a `supergroup` with a safe integer id.
+ * Throws 503 `telegram_unavailable` / 400 `chat_not_found` / 400 `chat_type`.
+ */
+async function channelChat(ref: ChannelRef): Promise<TgChat & { type: ResolvedChannel["type"] }> {
   requireBot();
   const r = await callBot<TgChat>("getChat", { chat_id: ref.kind === "username" ? `@${ref.username}` : ref.chatId });
   if (!r.ok) {
@@ -283,12 +288,19 @@ export async function resolveChannel(ref: ChannelRef): Promise<ResolvedChannel> 
     throw bad("Bu kanal emas. Faqat kanal yoki superguruh qo'shiladi.", "chat_type");
   }
   if (!Number.isSafeInteger(chat.id)) throw bad("Telegram noto'g'ri chat ID qaytardi", "chat_not_found");
+  return { ...chat, type: chat.type };
+}
+
+/** `getChat` + type check + bot admin status. Throws 503 / 400 with a code the UI can show. */
+export async function resolveChannel(ref: ChannelRef): Promise<ResolvedChannel> {
+  const chat = await channelChat(ref);
+  const type = chat.type;
   const chatId = String(chat.id);
   const username = typeof chat.username === "string" && chat.username ? chat.username : null;
   const title = (typeof chat.title === "string" && chat.title.trim() ? chat.title.trim() : username ?? chatId).slice(0, MAX_TITLE);
   const botAdmin = await botAdminStatus(chatId);
   const existing = await queryOne<{ id: string }>("SELECT id::text AS id FROM bonus_channels WHERE chat_id = $1", [chatId]);
-  return { chatId, title, username, type: chat.type, botAdmin, warning: botWarning(botAdmin), existingId: existing?.id ?? null };
+  return { chatId, title, username, type, botAdmin, warning: botWarning(botAdmin), existingId: existing?.id ?? null };
 }
 
 /* ───────────────────────────── reads ───────────────────────────── */
@@ -315,6 +327,7 @@ type Row = {
   stay_pending: number;
 };
 
+/** `stay_pending` is 0 for a channel without a stay bonus: it owes nothing, so no claim is «pending». */
 const SELECT = `
   SELECT c.id::text AS id, c.chat_id::text AS chat_id, c.username, c.invite_link, c.title, c.join_bonus, c.stay_bonus,
          c.stay_days, c.active, c.sort, c.created_at, c.updated_at,
@@ -324,7 +337,7 @@ const SELECT = `
          COALESCE(s.stay_paid_count, 0)::int AS stay_paid_count,
          COALESCE(s.stay_paid_sum, 0)::text AS stay_paid_sum,
          COALESCE(s.left_count, 0)::int AS left_count,
-         COALESCE(s.stay_pending, 0)::int AS stay_pending
+         (CASE WHEN c.stay_bonus > 0 THEN COALESCE(s.stay_pending, 0) ELSE 0 END)::int AS stay_pending
     FROM bonus_channels c
     LEFT JOIN (
       SELECT channel_id,
@@ -559,15 +572,15 @@ export async function deleteBonusChannel(admin: AuditActor, rawId: unknown, body
 }
 
 /**
- * POST `{input}` («Havola yaratish»): asks Telegram for a NEW invite link of the chat
+ * POST `{input}` («Havola yaratish»): `getChat` first — only a channel / supergroup (400 `chat_type`
+ * otherwise, nothing created) — then asks Telegram for a NEW invite link of that chat id
  * (`createChatInviteLink`; the bot must be an admin with the «invite users via link» right).
  * Nothing is stored — the dialog puts the link into its field and the admin saves it — but the
  * Telegram-side effect is audited (`bonus_channel.invite_create`, meta = the link).
  */
 export async function createInviteLink(admin: AuditActor, body: Record<string, unknown>): Promise<{ inviteLink: string }> {
   const ref = parseChannelRef(body.input);
-  requireBot();
-  const chatId = ref.kind === "username" ? `@${ref.username}` : ref.chatId;
+  const chatId = String((await channelChat(ref)).id);
   const r = await callBot<{ invite_link?: string }>("createChatInviteLink", { chat_id: chatId, name: "SlaydX bonus" });
   if (!r.ok) {
     if (isTransientBotFailure(r)) {

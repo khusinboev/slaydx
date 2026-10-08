@@ -274,11 +274,13 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
   });
 
   await t.test("rollback 040→028 toza o'chiradi, keyin hammasi qayta qo'llanadi", async () => {
-    // 042 (bonus channel invite link) and 041 (bonus channels, docs/bonus/PLAN.md), 040 (user-chosen name, docs/bot/PLAN.md), 039 (bot keyboard link revocation, docs/bot/PLAN.md Q1), 038 (bot chat state, B2), 037 (referrals, docs/todo-2026-10-07/PLAN.md T3), 036 (pg_stat_statements,
+    // 043 (bonus claims channel index, docs/bonus/PLAN.md review fixes), 042 (bonus channel invite link) and 041 (bonus channels, docs/bonus/PLAN.md), 040 (user-chosen name, docs/bot/PLAN.md), 039 (bot keyboard link revocation, docs/bot/PLAN.md Q1), 038 (bot chat state, B2), 037 (referrals, docs/todo-2026-10-07/PLAN.md T3), 036 (pg_stat_statements,
     // docs/ops/O3-robustness-ops.md §4), 035 (telegram file cache, docs/mobile/PLAN.md §4.4)
     // and 034 (quota merge, docs/SUBS-REMOVAL.md) sit on top of the admin migrations and are
     // rolled back first, newest first.
+    assert.ok(await exists("bonus_channel_claims_channel_idx"), "043 index created");
     for (const f of [
+      "043_bonus_claims_channel_idx.sql",
       "042_bonus_channel_invite.sql",
       "041_bonus_channels.sql",
       "040_name_custom.sql",
@@ -292,6 +294,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     ]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
+      if (f === "043_bonus_claims_channel_idx.sql") assert.ok(!(await exists("bonus_channel_claims_channel_idx")), "043 rollback drops the index");
     }
     await assertOriginal("full rollback");
     for (const tb of NEW_TABLES) assert.ok(!(await exists(tb)), `${tb} qoldi`);

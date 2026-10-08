@@ -6,7 +6,8 @@ import type { BonusChannel, BotAdminStatus } from "@/lib/admin-api/bonus";
  * `lib/server/admin-bonus-channels.ts`; the server validates again and is the authority.
  */
 
-export const MAX_BONUS = 1_000_000;
+/** Per-channel cap of each bonus (the server's `MAX_BONUS`). */
+export const MAX_BONUS = 20_000;
 export const MAX_STAY_DAYS = 365;
 export const MAX_SORT = 1_000_000;
 export const MAX_TITLE = 128;
@@ -76,6 +77,16 @@ export function checkAmounts(d: AmountsDraft): Check<Amounts> {
 
 export function amountsDraft(a: Amounts): AmountsDraft {
   return { joinBonus: String(a.joinBonus), stayBonus: String(a.stayBonus), stayDays: String(a.stayDays) };
+}
+
+const SAFE_INVITE = /^https:\/\/t\.me\/\+[A-Za-z0-9_-]{8,64}$/;
+
+/**
+ * A stored invite link usable as an `href`: exactly `https://t.me/+<hash>` (what the server
+ * stores), else `null` — the row then shows the value as plain text, never as a link.
+ */
+export function inviteHref(link: string | null): string | null {
+  return link && SAFE_INVITE.test(link) ? link : null;
 }
 
 export function channelUrl(username: string | null): string | null {
