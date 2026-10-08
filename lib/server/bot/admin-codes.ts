@@ -17,14 +17,25 @@
  *   a:bp:<id>         broadcast progress
  *   a:bc:<id>         ask to stop       a:bk:<id>  stop (confirmed)
  *   a:c               channel list      a:cn       connect: ask for the channel
- *   a:cy:<n|e>        type picked → confirm     a:cf  back to the type choice
- *   a:cc:<n|e>        connect (confirmed)       a:ct:<id>  toggle active
+ *   a:ck:<m|o>        mandatory / optional picked → bonus presets   a:cg  back to that choice
+ *   a:cy:<n|e|m|z>    preset picked → confirm   a:cf  back to the preset choice
+ *                     (optional: n news, e extra; mandatory: m with a bonus, z without — C-Q2)
+ *   a:cc:<n|e|m|z>    connect (confirmed)       a:ct:<id>  toggle active
  */
 
 export const AUDIENCE_CODES = ["all", "act", "new"] as const;
 export type AudienceCode = (typeof AUDIENCE_CODES)[number];
-export const CHANNEL_TYPES = ["n", "e"] as const;
+export const CHANNEL_TYPES = ["n", "e", "m", "z"] as const;
 export type ChannelType = (typeof CHANNEL_TYPES)[number];
+/** Presets offered for an optional / a mandatory channel (docs/bonus/BONUS3.md C-Q2). */
+export const OPTIONAL_TYPES = ["n", "e"] as const satisfies readonly ChannelType[];
+export const MANDATORY_TYPES = ["m", "z"] as const satisfies readonly ChannelType[];
+export const CHANNEL_KINDS = ["m", "o"] as const;
+export type ChannelKind = (typeof CHANNEL_KINDS)[number];
+/** Whether `type` is a preset of the mandatory (`true`) or the optional (`false`) kind. */
+export function typeFits(type: ChannelType, mandatory: boolean): boolean {
+  return ((mandatory ? MANDATORY_TYPES : OPTIONAL_TYPES) as readonly ChannelType[]).includes(type);
+}
 
 export const acb = {
   panel: () => "a:h",
@@ -44,6 +55,8 @@ export const acb = {
   bcStop: (id: string) => `a:bk:${id}`,
   channels: () => "a:c",
   chConnect: () => "a:cn",
+  chKind: (k: ChannelKind) => `a:ck:${k}`,
+  chKinds: () => "a:cg",
   chType: (t: ChannelType) => `a:cy:${t}`,
   chTypes: () => "a:cf",
   chCreate: (t: ChannelType) => `a:cc:${t}`,
@@ -68,6 +81,8 @@ export type AdminCallback =
   | { kind: "bcStop"; id: string }
   | { kind: "channels" }
   | { kind: "chConnect" }
+  | { kind: "chKind"; mandatory: boolean }
+  | { kind: "chKinds" }
   | { kind: "chType"; type: ChannelType }
   | { kind: "chTypes" }
   | { kind: "chCreate"; type: ChannelType }
@@ -113,6 +128,8 @@ export function parseAdminCallback(data: string | undefined | null): AdminCallba
         return { kind: "chConnect" };
       case "cf":
         return { kind: "chTypes" };
+      case "cg":
+        return { kind: "chKinds" };
     }
     return { kind: "unknown" };
   }
@@ -128,6 +145,8 @@ export function parseAdminCallback(data: string | undefined | null): AdminCallba
       return ID.test(c) ? { kind: "bcStopAsk", id: c } : { kind: "unknown" };
     case "bk":
       return ID.test(c) ? { kind: "bcStop", id: c } : { kind: "unknown" };
+    case "ck":
+      return (CHANNEL_KINDS as readonly string[]).includes(c) ? { kind: "chKind", mandatory: c === "m" } : { kind: "unknown" };
     case "cy":
       return (CHANNEL_TYPES as readonly string[]).includes(c) ? { kind: "chType", type: c as ChannelType } : { kind: "unknown" };
     case "cc":

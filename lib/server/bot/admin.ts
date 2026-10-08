@@ -38,7 +38,7 @@ import { matchKeyboard } from "./keyboard";
 import { at, ADMIN_TEXT_KEYS } from "./admin-i18n";
 import { LANGS, langOf, type Lang } from "./i18n";
 import { actorOf, allowed, lookupAdmin, type BotAdmin } from "./admin-access";
-import { parseAdminCallback, type AdminCallback, type AudienceCode, type ChannelType } from "./admin-codes";
+import { parseAdminCallback, typeFits, type AdminCallback, type AudienceCode, type ChannelType } from "./admin-codes";
 import {
   CHANNEL_PRESETS,
   audienceScreen,
@@ -47,6 +47,7 @@ import {
   buttonAskScreen,
   channelAskScreen,
   channelConfirmScreen,
+  channelKindScreen,
   channelProblemScreen,
   channelTypeScreen,
   channelsScreen,
@@ -115,6 +116,8 @@ const PERM: Record<Exclude<AdminCallback["kind"], "unknown">, Permission> = {
   bcStop: "broadcasts.send",
   channels: "bonus.view",
   chConnect: "bonus.edit",
+  chKind: "bonus.edit",
+  chKinds: "bonus.edit",
   chType: "bonus.edit",
   chTypes: "bonus.edit",
   chCreate: "bonus.edit",
@@ -396,18 +399,30 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
       await edit(channelAskScreen(l));
       await writeState(chatId, a.adminId, { step: "ch_ref", draft: null, promptMessageId: messageId });
       return undefined;
+    case "chKinds":
+      if (!isCh(d)) return at(l, "toast.expired");
+      await edit(channelKindScreen(l, d));
+      return undefined;
+    case "chKind":
+      if (!isCh(d)) return at(l, "toast.expired");
+      d.mandatory = c.mandatory;
+      delete d.type;
+      await edit(channelTypeScreen(l, d));
+      await writeState(chatId, a.adminId, { step: null, draft: d });
+      return undefined;
     case "chTypes":
       if (!isCh(d)) return at(l, "toast.expired");
       await edit(channelTypeScreen(l, d));
       return undefined;
     case "chType":
-      if (!isCh(d)) return at(l, "toast.expired");
+      // A preset of the other kind (an old button) never mixes «mandatory» with an optional preset.
+      if (!isCh(d) || !typeFits(c.type, d.mandatory ?? false)) return at(l, "toast.expired");
       d.type = c.type;
       await edit(channelConfirmScreen(l, d, c.type));
       await writeState(chatId, a.adminId, { step: null, draft: d });
       return undefined;
     case "chCreate": {
-      if (!isCh(d) || d.type !== c.type) return at(l, "toast.expired");
+      if (!isCh(d) || d.type !== c.type || !typeFits(c.type, d.mandatory ?? false)) return at(l, "toast.expired");
       return createChannel(a, d, c.type, chatId, messageId, updateId);
     }
     case "chToggle": {
@@ -438,6 +453,7 @@ async function createChannel(a: BotAdmin, d: ChannelDraft, type: ChannelType, ch
     joinBonus: p.joinBonus,
     stayBonus: p.stayBonus,
     stayDays: p.stayDays,
+    mandatory: d.mandatory ?? false,
     ...(inviteLink ? { inviteLink } : {}),
     reason: REASON.channel,
   });
@@ -574,7 +590,7 @@ export async function handleAdminInput(m: AdminMessage, updateId: number): Promi
         return true;
       }
       const d: ChannelDraft = { t: "ch", chatId: resolved.chatId, title: resolved.title, username: resolved.username, botAdmin: resolved.botAdmin };
-      await sendScreen(chatId, channelTypeScreen(l, d));
+      await sendScreen(chatId, channelKindScreen(l, d));
       await writeState(chatId, admin.adminId, { step: null, draft: d });
       return true;
     }
