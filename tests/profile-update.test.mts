@@ -130,3 +130,15 @@ test("audit row rolls back with the UPDATE (same transaction)", { skip }, async 
   assert.equal(await faculty(), "");
   assert.equal((await audits(id)).length, 0, "MUTATSIYA 5: the audit row rolled back with the change");
 });
+
+test("a name saved in Profilim survives the next Telegram login / /start; an unedited name keeps syncing from Telegram", { skip }, async () => {
+  const id = await newUser();
+  const tg = tgIds[tgIds.length - 1]!;
+  // Never edited: Telegram renames still come through (the old contract).
+  await upsertTelegramUser({ telegramId: tg, username: "x", name: "Yangi Telegram", photoUrl: null });
+  assert.equal((await row(id))?.name, "Yangi Telegram");
+  await updateProfile(id, { name: "Husinboyev Adhambek" }, "bot");
+  // MUTATION: without `name_custom` the upsert overwrote the saved name with the Telegram display name.
+  await upsertTelegramUser({ telegramId: tg, username: "x", name: "Telegram Nick", photoUrl: null });
+  assert.equal((await row(id))?.name, "Husinboyev Adhambek");
+});

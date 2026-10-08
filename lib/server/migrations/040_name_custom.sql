@@ -1,0 +1,13 @@
+-- User-chosen display name (docs/bot/PLAN.md, Profilim).
+--
+--   users.name_custom  TRUE once the user saved «Ism» themselves (web profile or the
+--                      bot's Profilim, `lib/server/profile.ts updateProfile`). Telegram
+--                      logins / /start keep syncing `name` from Telegram while it is
+--                      FALSE, and leave the user's own name alone once it is TRUE.
+--
+-- Additive only: one column with a constant default (metadata-only, no rewrite).
+--
+-- ROLLBACK:
+--   ALTER TABLE users DROP COLUMN IF EXISTS name_custom;
+--   DELETE FROM schema_migrations WHERE name = '040_name_custom.sql';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS name_custom BOOLEAN NOT NULL DEFAULT FALSE;

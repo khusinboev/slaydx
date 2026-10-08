@@ -259,7 +259,8 @@ async function upsertUser(
       `INSERT INTO users (telegram_id, username, name, photo_url, points, author)
        VALUES ($1, $2, $3, $4, 0, $3)
        ON CONFLICT (telegram_id) DO UPDATE
-          SET username = EXCLUDED.username, name = EXCLUDED.name,
+          -- A name the user saved themselves (Profilim / web profile, name_custom) is kept; otherwise synced from Telegram.
+          SET username = EXCLUDED.username, name = CASE WHEN users.name_custom THEN users.name ELSE EXCLUDED.name END,
               photo_url = ${photoOnConflict}, updated_at = now()
        RETURNING id, (xmax = 0) AS inserted`,
       [p.telegramId, p.username, p.name, p.photoUrl],
