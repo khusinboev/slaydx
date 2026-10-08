@@ -97,7 +97,7 @@ test("/start ref_<code> from a brand-new person → registered, inviter rewarded
   assert.equal(Number(me.points), SIGNUP_BONUS_POINTS);
   assert.equal((await pointsOf(inv.id)) - before, 2000, "MUTATSIYA 1");
   assert.deepEqual(await referralOf(me.id), [{ referrer_user_id: inv.id, source: "bot", reward_points: 2000 }]);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2, "B2: welcome card + main keyboard");
   assert.match(String(calls[0]!.body.text), /Assalomu alaykum/);
   const b = buttons(calls[0]!.body);
   assert.ok(b.some((x) => x.web_app?.url === "https://slaydx.test/uz"), "Mini App button");
@@ -112,8 +112,8 @@ test("/start ref_<code> from a brand-new person → registered, inviter rewarded
   assert.equal(await pointsOf(inv.id), p1, "never twice");
   assert.equal(await pointsOf(other.id), p2);
   assert.equal((await referralOf(me.id)).length, 1);
-  assert.equal(calls.length, 2, "still a welcome each time");
-  for (const c of calls) assert.match(String(c.body.text), /Assalomu alaykum/);
+  assert.equal(calls.length, 4, "still a welcome (+ keyboard) each time");
+  for (const c of [calls[0]!, calls[2]!]) assert.match(String(c.body.text), /Assalomu alaykum/);
 });
 
 test("someone who first came through the site (existing account) opens a bot ref link → nothing", { skip }, async () => {
@@ -216,8 +216,13 @@ test("setBotCommands lists /taklif with an Uzbek description", { skip }, async (
   installFetch();
   assert.equal(await tg.setBotCommands(), true);
   const cmds = calls[0]!.body.commands as { command: string; description: string }[];
-  assert.deepEqual(cmds.map((c) => c.command), ["start", "login", "taklif", "admin"], "MUTATSIYA 5");
+  // B2: + /til; the default (Uzbek) list first, then the ru/en scopes.
+  assert.deepEqual(cmds.map((c) => c.command), ["start", "login", "taklif", "admin", "til"], "MUTATSIYA 5");
   assert.equal(cmds.find((c) => c.command === "taklif")!.description, "Do'stlarni taklif qilish havolasi");
+  assert.equal(calls[0]!.body.language_code, undefined);
+  assert.deepEqual(calls.slice(1).map((c) => c.body.language_code), ["ru", "en"]);
+  const ru = calls[1]!.body.commands as { command: string; description: string }[];
+  assert.equal(ru.find((c) => c.command === "til")!.description, "Сменить язык бота");
 });
 
 test("botUsername: the configured NEXT_PUBLIC_TELEGRAM_BOT, no getMe call", async () => {

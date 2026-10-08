@@ -73,8 +73,10 @@ for (const payload of ["s_00000000-0000-4000-8000-000000000001", "share", "inlin
   test(`/start ${payload} (not a login nonce) → welcome with login buttons, not «eskirgan»`, { skip }, async () => {
     installFetch();
     await handleUpdate(startUpdate(`/start ${payload}`));
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].method, "sendMessage");
+    // B2: the welcome card, then the main reply keyboard in a message of its own.
+    assert.equal(calls.length, 2);
+    assert.deepEqual(calls.map((c) => c.method), ["sendMessage", "sendMessage"]);
+    assert.ok((calls[1].body.reply_markup as { keyboard?: unknown }).keyboard, "main keyboard");
     const text = String(calls[0].body.text);
     assert.match(text, /Assalomu alaykum/);
     assert.doesNotMatch(text, /eskirgan/);

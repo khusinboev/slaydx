@@ -189,6 +189,20 @@ export const env = {
 
   telegramBotToken: str("TELEGRAM_BOT_TOKEN"),
   telegramBotUsername: str("NEXT_PUBLIC_TELEGRAM_BOT", ""),
+  /**
+   * Premium custom emoji in bot texts (`<tg-emoji>`) and on buttons
+   * (`icon_custom_emoji_id`) — allowed because the bot owner has Telegram
+   * Premium (docs/bot/PLAN.md Q2). Off → the same texts with plain fallback
+   * emoji. Code default off (deterministic tests); production sets 1. A getter:
+   * tests flip it per case.
+   */
+  get botPremiumEmoji(): boolean {
+    return bool("BOT_PREMIUM_EMOJI", false);
+  },
+  /** Support contact for the bot's «Yordam» (a Telegram username, no @); empty → no button. */
+  get botSupportUsername(): string {
+    return str("BOT_SUPPORT_USERNAME").replace(/^@/, "");
+  },
 
   /** Kalitsiz OTP — faqat lokal/staging da. Prod da yoqilsa xato beradi. */
   devLoginEnabled: bool("DEV_LOGIN_ENABLED", !isProd),

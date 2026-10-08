@@ -2,9 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 /**
- * Bot `/start` va `/login`: bitta xabar, ikki qatorli inline klaviatura —
+ * Bot `/login`: bitta xabar, ikki qatorli inline klaviatura —
  * 1) «📱 Ilovada ochish» (`web_app`, Telegram ichidagi Mini App),
  * 2) «🌐 Saytda ochish» (bir martalik kirish havolasi, `url`).
+ * `/start` (B2): salomlashuv kartasi + asosiy klaviatura (ikki xabar).
  * `/start <nonce>` (saytdan boshlangan kirish) o'zgarmaydi: bitta tugma.
  *
  * `env.appUrl` modul yuklanganda o'qiladi — shu fayl public https manzil bilan
@@ -68,27 +69,47 @@ function assertTwoButtonKeyboard(body: Record<string, unknown>): string {
   return site.url;
 }
 
-async function send(fromId: number, text: string): Promise<Record<string, unknown>> {
+async function send(fromId: number, text: string, messages = 1): Promise<Record<string, unknown>> {
   createdIds.push(String(fromId));
   await mods!.tg.handleUpdate({
     update_id: nextUpdateId(),
     message: { chat: { id: fromId, type: "private" }, text, from: { id: fromId, first_name: "Test" } },
   });
-  assert.equal(calls.length, 1, "exactly one sendMessage");
-  assert.match(calls[0]!.url, /\/sendMessage$/);
+  assert.equal(calls.length, messages, `exactly ${messages} sendMessage`);
+  for (const c of calls) assert.match(c.url, /\/sendMessage$/);
   return calls[0]!.body;
 }
 
-test("/start: one message, Mini App button then one-time site link, text explains both", { skip }, async () => {
+test("/start (B2 welcome): Mini App primary, all tools, invite, one-time site link; then the main keyboard", { skip }, async () => {
   installFetchMock();
-  const body = await send(700000201, "/start");
-  const link = assertTwoButtonKeyboard(body);
+  const body = await send(700000211, "/start", 2);
+  const kb = (body.reply_markup as { inline_keyboard: Record<string, unknown>[][] }).inline_keyboard;
+  assert.deepEqual(kb[0], [{ text: "📱 Ilovani ochish", web_app: { url: "https://slaydx.test/uz" }, style: "primary" }]);
+  assert.deepEqual(kb[1], [
+    { text: "🧰 Barcha vositalar", web_app: { url: "https://slaydx.test/uz/create" } },
+    { text: "🎁 Taklif", callback_data: "r:n" },
+  ]);
+  const site = kb[2]![0] as { text: string; url: string };
+  assert.deepEqual(Object.keys(site).sort(), ["text", "url"]);
+  assert.equal(site.text, "🌐 Saytda ochish");
+  assert.match(site.url, LINK);
   const text = String(body.text);
-  assert.match(text, /Ilovada ochish/);
+  assert.match(text, /Assalomu alaykum, Test!/);
+  assert.match(text, /<blockquote>💰 Balans: <b>\d[\d\s]* tanga<\/b>\n🎁 Do‘st taklif qiling — har biriga <b>2\s000 ball<\/b><\/blockquote>/);
+  assert.match(text, /Ilovani ochish/);
   assert.match(text, /Saytda ochish/);
-  assert.ok(!text.includes(link), "with buttons the link is not repeated in the text");
-  const result = await mods!.tg.redeemLoginToken(new URL(link).searchParams.get("t")!);
+  assert.ok(!text.includes(site.url), "with buttons the link is not repeated in the text");
+  const result = await mods!.tg.redeemLoginToken(new URL(site.url).searchParams.get("t")!);
   assert.equal(result.ok, true, "the site button carries a working one-time link");
+
+  // The second message carries the persistent main keyboard.
+  const main = calls[1]!.body.reply_markup as { keyboard: { text: string; web_app?: { url: string }; style?: string }[][]; is_persistent: boolean };
+  assert.equal(main.is_persistent, true);
+  assert.deepEqual(main.keyboard.map((r) => r.map((b) => b.text)), [
+    ["📊 Slayd", "🖼 Rasm", "💎 Pro slayd"],
+    ["📂 Ishlarim", "💰 Hamyon"],
+    ["👤 Profilim", "❓ Yordam"],
+  ]);
 });
 
 test("/login: the same two-button keyboard with a fresh link", { skip }, async () => {

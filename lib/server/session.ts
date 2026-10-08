@@ -269,9 +269,14 @@ export async function revokeSessionById(sessionId: string): Promise<void> {
   await query("UPDATE sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL", [sessionId]);
 }
 
+/**
+ * «Barcha qurilmalardan chiqish»: every session of the user, plus every bot
+ * keyboard link issued so far (`users.bot_links_before`, docs/bot/PLAN.md Q1).
+ */
 export async function revokeAllSessions(userId: string): Promise<void> {
   await query(
-    "UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL",
+    `WITH links AS (UPDATE users SET bot_links_before = now() WHERE id = $1)
+     UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`,
     [userId],
   );
 }

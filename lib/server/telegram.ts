@@ -6,8 +6,12 @@ import { query, transaction } from "./db";
 import { registerBotUser, upsertTelegramUser, type TelegramProfile } from "./auth";
 import { isAdminPhone } from "./admin-phones";
 import type { SessionUser } from "./session";
-import { normalizeRefCode, refCodeFromStartPayload, referralRuleText, formatPoints, telegramShareUrl } from "../referral";
-import { referralSummary, type ReferralClaim } from "./referrals";
+import { normalizeRefCode, refCodeFromStartPayload, REFERRAL_REWARD_POINTS } from "../referral";
+import type { ReferralClaim } from "./referrals";
+import { inlineButton, tgEmoji, type Screen } from "./bot/ui";
+import { langFromTelegram, langOf, t, LANGS, type Lang } from "./bot/i18n";
+import { mainKeyboard } from "./bot/keyboard";
+import { loginScreen, welcomeScreen } from "./bot/screens";
 
 /**
  * Telegram bot: kirish chiptasi va kod yetkazish.
@@ -239,19 +243,39 @@ export async function botUsername(now: number = Date.now()): Promise<string | nu
   return botUsernamePending;
 }
 
+/** The bot's commands, in menu order. */
+export const BOT_COMMANDS = ["start", "login", "taklif", "admin", "til"] as const;
+
 /**
  * Bot menyusidagi buyruqlar (Telegram «/» tugmasi). Idempotent — har
  * ishga tushishda chaqirish xavfsiz. Prod webhook rejimida bo'lgani
  * uchun `scripts/bot.mts` dan tashqari `npm run bot:commands` ham bor.
+ *
+ * B2: the default list is Uzbek; Russian and English clients get their own
+ * descriptions (`language_code` scopes of `setMyCommands`).
  */
 export async function setBotCommands(): Promise<boolean> {
-  const out = await call("setMyCommands", {
-    commands: [
-      { command: "start", description: "Saytga kirish havolasi" },
-      { command: "login", description: "Yangi kirish havolasi" },
-      { command: "taklif", description: "Do'stlarni taklif qilish havolasi" },
-      { command: "admin", description: "Admin sifatida tasdiqlash" },
-    ],
+  let ok = true;
+  for (const lang of LANGS) {
+    const out = await call("setMyCommands", {
+      commands: BOT_COMMANDS.map((command) => ({ command, description: t(lang, `cmd.${command}`) })),
+      ...(lang === "uz" ? {} : { language_code: lang }),
+    });
+    ok &&= out !== null;
+  }
+  return ok;
+}
+
+/**
+ * The chat menu button («Ilova») → the Mini App home. The menu button carries
+ * initData, so the plain app URL logs the user in silently (no link token).
+ * `false` without a public https app URL (Telegram rejects it) or on failure.
+ */
+export async function setMenuButton(): Promise<boolean> {
+  const url = `${env.appUrl.replace(/\/$/, "")}/uz`;
+  if (!isPublicHttps(url)) return false;
+  const out = await call("setChatMenuButton", {
+    menu_button: { type: "web_app", text: t("uz", "menu.app"), web_app: { url } },
   });
   return out !== null;
 }
@@ -455,9 +479,10 @@ export type TelegramUpdate = {
     // `type` — faqat shaxsiy chatda ("private") kontakt qabul qilinadi;
     // guruh/kanalda botga ulashilgan kontakt hech qachon "o'zining
     // raqami" bo'la olmaydi (reviewer nit — chat.type === "private").
+    message_id?: number;
     chat: { id: number; type?: string };
     text?: string;
-    from?: { id: number; is_bot?: boolean; username?: string; first_name?: string; last_name?: string };
+    from?: { id: number; is_bot?: boolean; username?: string; first_name?: string; last_name?: string; language_code?: string };
     contact?: { phone_number: string; user_id?: number };
     // Forward qilingan xabar belgilari (Bot API): SECA-01 — forward qilingan
     // kontaktni ham "o'ziniki" deb qabul qilib bo'lmaydi, hattoki uning
@@ -479,6 +504,17 @@ export type TelegramUpdate = {
     query: string;
     offset: string;
     chat_type?: string;
+  };
+  /**
+   * An inline button tap (bot screens, `bot/router.ts handleCallback`). Always
+   * answered with `answerCallbackQuery`; only the private chat's own user may
+   * use its buttons. The webhook's `allowed_updates` must include it.
+   */
+  callback_query?: {
+    id: string;
+    from: { id: number; is_bot?: boolean };
+    message?: { message_id: number; chat: { id: number; type?: string } };
+    data?: string;
   };
 };
 
@@ -521,71 +557,20 @@ function isPublicHttps(url: string): boolean {
  * qabul qilmaydi («Wrong HTTP URL»), shuning uchun lokal ishlab
  * chiqishda tugmasiz yuboramiz.
  */
-function publicSiteButton(path = "/uz", label = "Saytni ochish"): Record<string, unknown> {
+function publicSiteButton(path: string, label: string): Record<string, unknown> {
   const url = `${env.appUrl}${path}`;
   if (!isPublicHttps(url)) return {};
-  return { reply_markup: { inline_keyboard: [[{ text: label, url }]] } };
+  return { reply_markup: { inline_keyboard: [[inlineButton("admin", label, { url })]] } };
 }
-
-const WELCOME = [
-  "Assalomu alaykum! 👋",
-  "",
-  "SlaydX — AI yordamida slayd, referat, kurs ishi, maqola va o'qituvchi hujjatlarini yaratadi.",
-  "",
-  "📱 <b>Ilovada ochish</b> — SlaydX shu yerning o'zida, Telegram ichida ochiladi va siz avtomatik kirasiz.",
-  "🌐 <b>Saytda ochish</b> — brauzerda ochiladi; sahifadagi «Kirish» ni tasdiqlang.",
-  "Sayt havolasi <b>bir martalik</b> va 5 daqiqa amal qiladi. Yangi havola kerak bo'lsa /login yozing.",
-].join("\n");
-
-/** `/login` matni — xuddi shu ikki yo'l, qisqaroq. */
-const LOGIN_TEXT = [
-  "Qayerda ochishni tanlang 👇",
-  "",
-  "📱 <b>Ilovada ochish</b> — Telegram ichida, avtomatik kirish bilan.",
-  "🌐 <b>Saytda ochish</b> — brauzerda; havola <b>bir martalik</b> va 5 daqiqa amal qiladi.",
-].join("\n");
 
 /** Mini App (Telegram ichidagi WebApp) ochiladigan sahifa. */
 const WEB_APP_PATH = "/uz";
 
-/**
- * `/start` va `/login` tugmalari — har biri o'z qatorida (telefonda yozuvlar
- * qisqarmasin): avval Mini App (`web_app`), keyin bir martalik sayt havolasi.
- *
- * Telegram `localhost` va ichki manzillarni ham `url`, ham `web_app` tugmasi
- * sifatida rad etadi («Wrong HTTP URL»; `web_app` faqat https qabul qiladi),
- * shuning uchun lokal ishlab chiqishda tugmasiz yuboramiz — `sendLoginLink`
- * havolani matnga qo'shadi.
- */
-function loginButton(link: string): Record<string, unknown> {
-  const app = `${env.appUrl}${WEB_APP_PATH}`;
-  const isPublic = [link, app].every((u) => /^https:\/\//.test(u) && !/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(u));
-  if (!isPublic) return {};
-  return {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "📱 Ilovada ochish", web_app: { url: app } }],
-        [{ text: "🌐 Saytda ochish", url: link }],
-      ],
-    },
-  };
+/** A rendered screen as `sendMessage` extras. */
+function markupOf(screen: Screen): Record<string, unknown> {
+  return screen.reply_markup ? { reply_markup: screen.reply_markup } : {};
 }
 
-/**
- * Havolani yuboradi. Tugma qo'yib bo'lmasa (lokal manzil) havolaning
- * o'zi matnga qo'shiladi — aks holda dev muhitida foydalanuvchi
- * «tugmani bosing» degan xabarni tugmasiz olardi.
- */
-async function sendLoginLink(chatId: number, link: string, intro: string): Promise<void> {
-  const btn = loginButton(link);
-  const text = "reply_markup" in btn ? intro : `${intro}\n\n${link}`;
-  await sendMessage(chatId, text, btn);
-}
-
-/**
- * `/start` va `/start <nonce>` ni qayta ishlaydi.
- * Boshqa xabarlarga qisqa yo'riqnoma qaytaradi.
- */
 /**
  * Foydalanuvchi botga o'z kontaktini ulashdi (`/admin` javobi).
  *
@@ -628,6 +613,11 @@ async function sendLoginLink(chatId: number, link: string, intro: string): Promi
  * Foydalanuvchi hali saytga bir marta ham kirmagan bo'lsa (bazada
  * akkaunti yo'q) — kontakt e'tiborsiz qoldiriladi: avval «Telegram
  * orqali kirish» orqali akkaunt ochilishi kerak.
+ *
+ * Bot UI (B2): `/admin` ning bir martalik kontakt klaviaturasi yopilgach
+ * asosiy klaviatura qaytadi — matnli javoblarga `keyboard` (ma'lum
+ * foydalanuvchi, shaxsiy chat) shu xabarning o'ziga qo'shiladi; inline
+ * tugmali «Admin panel» javobidan keyin esa alohida xabar bilan.
  */
 async function handleContact(
   chatId: number,
@@ -635,15 +625,18 @@ async function handleContact(
   contact: { phone_number: string; user_id?: number },
   forwarded: boolean,
   isPrivateChat: boolean,
-): Promise<void> {
+  lang: Lang,
+  keyboard: Record<string, unknown> | null,
+): Promise<boolean> {
+  const kb = keyboard ? { reply_markup: keyboard } : {};
   if (forwarded || contact.user_id !== fromId || !isPrivateChat) {
-    await sendMessage(chatId, "Faqat o'zingizning raqamingizni ulashing.");
-    return;
+    await sendMessage(chatId, t(lang, "contact.onlyOwn"), kb);
+    return Boolean(keyboard);
   }
   const digits = contact.phone_number.replace(/\D/g, "");
   if (digits.length < 7 || digits.length > 15) {
-    await sendMessage(chatId, "Faqat o'zingizning raqamingizni ulashing.");
-    return;
+    await sendMessage(chatId, t(lang, "contact.onlyOwn"), kb);
+    return Boolean(keyboard);
   }
   const phone = `+${digits}`;
   let updated: { id: string }[];
@@ -658,23 +651,27 @@ async function handleContact(
     // yutilib jim qolmasin — foydalanuvchi nima bo'lganini bilishi kerak.
     const msg = e instanceof Error ? e.message : "";
     if (/users_phone_key/.test(msg)) {
-      await sendMessage(chatId, "Bu raqam allaqachon boshqa akkauntga bog'langan.");
-      return;
+      await sendMessage(chatId, t(lang, "contact.taken"), kb);
+      return Boolean(keyboard);
     }
     throw e;
   }
   if (!updated.length) {
-    await sendMessage(
-      chatId,
-      "Avval saytga «Telegram orqali kirish» orqali bir marta kiring, keyin qaytadan /admin bosing.",
-    );
-    return;
+    await sendMessage(chatId, t(lang, "contact.noAccount"), kb);
+    return Boolean(keyboard);
   }
   if (isAdminPhone(phone)) {
-    await sendMessage(chatId, "✅ Admin sifatida tasdiqlandingiz.", publicSiteButton("/uz/admin", "🛠 Admin panel"));
+    await sendMessage(chatId, t(lang, "contact.admin"), publicSiteButton("/uz/admin", t(lang, "btn.adminPanel")));
+    if (keyboard) await sendMessage(chatId, keyboardNote(lang), kb);
   } else {
-    await sendMessage(chatId, "Bu raqam admin ro'yxatida yo'q.");
+    await sendMessage(chatId, t(lang, "contact.notAdmin"), kb);
   }
+  return Boolean(keyboard);
+}
+
+/** The short text that carries a re-sent main keyboard. */
+function keyboardNote(lang: Lang): string {
+  return `${tgEmoji("pointDown")} ${t(lang, "kb.note")}`;
 }
 
 /**
@@ -687,7 +684,8 @@ async function handleContact(
  * yuqoriga otiladi: webhook 500 qaytaradi, Telegram qayta yuboradi.
  * Qayta ishlash xavfsiz: `/login`/`/start` yangi chipta/token yaratadi
  * (eskisi yetkazilmagan va 5 daqiqada eskiradi), kontakt UPDATE —
- * idempotent.
+ * idempotent; bot ekranlari (`bot/router.ts`) tahrirlash va update id
+ * bo'yicha band qilingan kutilayotgan qiymat bilan qayta ishlashga chidamli.
  */
 export async function handleUpdate(update: TelegramUpdate): Promise<void> {
   if (!(await claimUpdate(update.update_id))) return;
@@ -759,33 +757,40 @@ async function startReferral(payload: string): Promise<ReferralClaim | null> {
   return isLoginNonce(payload) ? ticketReferral(payload) : null;
 }
 
-const escHtml = (s: string) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
-
-/** `/taklif` — the user's own invite link, counters and a «send to a chat» button. */
-async function sendReferralLink(chatId: number, userId: string): Promise<void> {
-  const s = await referralSummary(userId, { botUsername: await botUsername(), appUrl: env.appUrl });
-  const link = s.botLink ?? s.webLink;
-  const text = [
-    "🎁 <b>Do'stlarni taklif qiling</b>",
-    "",
-    escHtml(referralRuleText(s.rewardPoints)),
-    "",
-    "Sizning havolangiz:",
-    escHtml(link),
-    "",
-    `Taklif qilinganlar: <b>${formatPoints(s.invitedCount)}</b> · Ishlangan ball: <b>${formatPoints(s.earnedPoints)}</b>`,
-  ].join("\n");
-  const share = telegramShareUrl(link);
-  // t.me links are public https (always valid button URLs); a local web link is not.
-  const extra = isPublicHttps(link)
-    ? { reply_markup: { inline_keyboard: [[{ text: "📤 Do'stlarga yuborish", url: share }]] } }
-    : {};
-  await sendMessage(chatId, text, extra);
+/**
+ * The private-chat user for a message: an existing account is read as is;
+ * the account is (re)written by `registerBotUser` only when it does not exist
+ * yet or on `/start` (B2). Before, EVERY message re-ran the upsert, which
+ * overwrote `users.name` with the Telegram name — a «Ism» saved in the bot's
+ * Profilim would have been reverted by the very next message.
+ * A NEW account gets the bot language from Telegram's `language_code`
+ * (ru → ru, en → en, else uz) — only at creation, never later.
+ */
+async function botUser(
+  profile: TelegramProfile,
+  languageCode: string | undefined,
+  startPayload: string | null,
+  findUser: (telegramId: number) => Promise<SessionUser | null>,
+): Promise<SessionUser> {
+  const existing = await findUser(Number(profile.telegramId));
+  if (existing && startPayload === null) return existing;
+  const me = await registerBotUser(profile, startPayload === null ? null : await startReferral(startPayload));
+  if (existing) return me;
+  const lang = langFromTelegram(languageCode);
+  if (lang === "uz") return me;
+  await query("UPDATE users SET language = $2 WHERE id = $1 AND language = 'uz'", [me.id, lang]);
+  return { ...me, language: lang };
 }
 
 async function processUpdate(update: TelegramUpdate): Promise<void> {
   if (update.inline_query) {
     await answerInlineQuery(update.inline_query);
+    return;
+  }
+  if (update.callback_query) {
+    // Loaded lazily (like telegram-files): the screens pull in referrals/credits/jobs.
+    const bot = await import("./bot/router");
+    await bot.handleCallback(update.callback_query, update.update_id);
     return;
   }
   const msg = update.message;
@@ -796,11 +801,16 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
     console.warn(`[telegram] update ${update.update_id}: unsafe integer id ignored`);
     return;
   }
+  const isPrivate = msg.chat.type === "private" && !msg.from.is_bot;
+  const bot = await import("./bot/router");
 
   if (msg.contact) {
     const forwarded = msg.forward_origin != null || msg.forward_date != null || msg.forward_from != null;
-    const isPrivateChat = msg.chat.type === "private";
-    await handleContact(msg.chat.id, msg.from.id, msg.contact, forwarded, isPrivateChat);
+    const known = isPrivate ? await bot.userByTelegram(msg.from.id) : null;
+    const lang = langOf(known?.language);
+    const keyboard = known ? mainKeyboard(lang, msg.from.id) : null;
+    const sent = await handleContact(msg.chat.id, msg.from.id, msg.contact, forwarded, msg.chat.type === "private", lang, keyboard);
+    if (sent && known) await bot.markKeyboardSent(msg.chat.id, known.id);
     return;
   }
   if (!msg.text) return;
@@ -813,6 +823,16 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
   };
 
   const text = msg.text.trim();
+  if (isPrivate && (await bot.isBlockedTelegram(msg.from.id))) {
+    const known = await bot.userByTelegram(msg.from.id);
+    await sendMessage(msg.chat.id, t(langOf(known?.language), "account.blocked"), { reply_markup: { remove_keyboard: true } });
+    return;
+  }
+  // `/start` and `/login` build a personal site login link: never in a group chat.
+  if (msg.chat.type != null && msg.chat.type !== "private" && (text.startsWith("/start") || text.startsWith("/login"))) {
+    await sendMessage(msg.chat.id, t("uz", "private.only"));
+    return;
+  }
   // `/start <payload>` — `/startfoo` keeps the historical «payload foo» reading.
   const startPayload = text.startsWith("/start") ? text.slice("/start".length).trim() : null;
 
@@ -820,43 +840,58 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
   // bazaga yoziladi — saytga kirmagan bo'lsa ham admin panelda ko'rinadi.
   // Invite (T3): `/start ref_<code>`, or a site ticket that carries the code the
   // browser captured. It counts only if THIS message creates the account.
-  let me: SessionUser | null = null;
-  if (msg.chat.type === "private" && !msg.from.is_bot) {
-    me = await registerBotUser(profile, startPayload === null ? null : await startReferral(startPayload));
+  const me: SessionUser | null = isPrivate ? await botUser(profile, msg.from.language_code, startPayload, bot.userByTelegram) : null;
+  const lang = langOf(me?.language);
+  const ctx = me ? { chatId: msg.chat.id, telegramId: msg.from.id, lang, user: me } : null;
+
+  if (ctx) {
+    if (text.startsWith("/")) {
+      // A command always wins over a pending «Kafedra nomini yozing».
+      await bot.cancelPending(ctx.chatId);
+    } else {
+      const action = bot.matchKeyboard(text);
+      if (action) {
+        await bot.handleKeyboard(ctx, action);
+        return;
+      }
+      if (await bot.handlePendingInput(ctx, msg.text, update.update_id)) return;
+    }
   }
 
   if (text.startsWith("/taklif")) {
     if (!me) {
-      await sendMessage(msg.chat.id, "Taklif havolasini olish uchun botga shaxsiy chatda /taklif yozing.");
+      await sendMessage(msg.chat.id, t(lang, "ref.groupOnly"));
       return;
     }
-    await sendReferralLink(msg.chat.id, me.id);
+    await bot.sendReferral(msg.chat.id, me, lang);
+    return;
+  }
+
+  if (text.startsWith("/til") && ctx) {
+    await bot.sendLanguageMenu(ctx);
     return;
   }
 
   if (text.startsWith("/admin")) {
-    await sendMessage(
-      msg.chat.id,
-      "Admin sifatida tasdiqlash uchun raqamingizni ulashing.",
-      {
-        reply_markup: {
-          keyboard: [[{ text: "📱 Raqamni ulashish", request_contact: true }]],
-          resize_keyboard: true,
-          one_time_keyboard: true,
-        },
+    await sendMessage(msg.chat.id, t(lang, "admin.ask"), {
+      reply_markup: {
+        keyboard: [[{ text: `📱 ${t(lang, "admin.shareButton")}`, request_contact: true }]],
+        resize_keyboard: true,
+        one_time_keyboard: true,
       },
-    );
+    });
     return;
   }
 
   // `/login` — qayta havola (masalan, oldingisi eskirgan bo'lsa).
   if (text.startsWith("/login")) {
-    await sendLoginLink(msg.chat.id, await createBotLoginLink(profile), LOGIN_TEXT);
+    const screen = loginScreen(lang, await createBotLoginLink(profile));
+    await sendMessage(msg.chat.id, screen.text, markupOf(screen));
     return;
   }
 
   if (!text.startsWith("/start")) {
-    await sendMessage(msg.chat.id, "Saytga kirish uchun /login yozing yoki saytdagi «Telegram orqali kirish» tugmasini bosing.");
+    await sendMessage(msg.chat.id, t(lang, "fallback"));
     return;
   }
 
@@ -868,27 +903,22 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
     // A payload that is not nonce-shaped (a share/inline deep link, an invite
     // `ref_<code>` — already applied above —, random text) is not a login
     // attempt either: welcome, never «eskirgan».
-    await sendLoginLink(msg.chat.id, await createBotLoginLink(profile), WELCOME);
+    // B2: the welcome card (inline buttons) + the persistent main keyboard in a
+    // second message (one message holds one reply_markup); the keyboard's
+    // personal links are refreshed by every /start.
+    const screen = welcomeScreen(lang, { user: me, loginLink: await createBotLoginLink(profile), rewardPoints: REFERRAL_REWARD_POINTS });
+    await sendMessage(msg.chat.id, screen.text, markupOf(screen));
+    if (ctx) await bot.sendMainKeyboard(ctx, "note");
     return;
   }
 
   const link = await attachTicket(nonce, profile);
   if (!link) {
-    await sendMessage(
-      msg.chat.id,
-      "Bu havola eskirgan. Saytga qaytib «Telegram orqali kirish» tugmasini qayta bosing.",
-    );
+    await sendMessage(msg.chat.id, t(lang, "ticket.expired"));
     return;
   }
 
-  await sendMessage(
-    msg.chat.id,
-    [
-      "Kirish uchun quyidagi tugmani bosing 👇",
-      "",
-      "Havola <b>bir martalik</b> va 5 daqiqa amal qiladi.",
-      "Agar bu siz bo'lmasangiz — havolani hech kimga yubormang.",
-    ].join("\n"),
-    { reply_markup: { inline_keyboard: [[{ text: "🔑 Saytga kirish", url: link }]] } },
-  );
+  await sendMessage(msg.chat.id, t(lang, "ticket.text"), {
+    reply_markup: { inline_keyboard: [[inlineButton("key", t(lang, "ticket.button"), { url: link })]] },
+  });
 }

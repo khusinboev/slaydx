@@ -376,3 +376,137 @@ export function setMiniAppShellState(patch: Partial<MiniAppShellState> | null): 
 export function shouldHideInAppBack(s: MiniAppShellState): boolean {
   return s.active && s.backButton !== false;
 }
+
+/* ---------------------------------------------------------------------------
+ * Bot keyboard links (docs/bot/PLAN.md Q1). A reply-keyboard `web_app` button
+ * opens the app with EMPTY initData; the bot puts a signed personal token in
+ * the URL (`?bt=…`, `lib/server/bot-link.ts`) and `MiniAppBridge` exchanges it
+ * for a session at `POST /api/auth/bot-link`, then removes it from the URL.
+ * ------------------------------------------------------------------------- */
+
+/** The query parameter that carries the bot link token. */
+export const BOT_LINK_PARAM = "bt";
+const BOT_LINK_SHAPE = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * The bot link token in a `location.search`, or `null`: absent, repeated (we
+ * refuse to guess which copy is meant) or not token-shaped. The server
+ * verifies it; this only decides whether to ask.
+ */
+export function botLinkFromSearch(search: string): string | null {
+  try {
+    const all = new URLSearchParams(search).getAll(BOT_LINK_PARAM);
+    if (all.length !== 1) return null;
+    return BOT_LINK_SHAPE.test(all[0]!) ? all[0]! : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The Telegram user id inside a version-1 bot link token, UNVERIFIED (as a
+ * string), or `null`. Only a UX decision input — «this link is the account
+ * already signed in, skip the request»; the server verifies the MAC.
+ */
+export function botLinkTelegramId(token: string): string | null {
+  try {
+    if (!/^[A-Za-z0-9_-]{39}$/.test(token)) return null;
+    const bin = atob(token.replace(/-/g, "+").replace(/_/g, "/") + "=");
+    if (bin.length !== 29 || bin.charCodeAt(0) !== 1) return null;
+    const word = (at: number) =>
+      ((bin.charCodeAt(at) << 24) >>> 0) + (bin.charCodeAt(at + 1) << 16) + (bin.charCodeAt(at + 2) << 8) + bin.charCodeAt(at + 3);
+    const hi = word(1);
+    if (hi >= 0x20_0000) return null; // above 2^53 - 1
+    const id = hi * 0x1_0000_0000 + word(5);
+    return id > 0 ? String(id) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** `true` when the search has any `bt` parameter (a malformed one is removed too). */
+export function hasBotLinkParam(search: string): boolean {
+  try {
+    return new URLSearchParams(search).has(BOT_LINK_PARAM);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Path + query + fragment of `href` (absolute, or relative to the site root)
+ * without the `bt` parameter, every other parameter kept in order — for
+ * `history.replaceState` and the login sheet's `returnTo` (`lib/ui.ts`).
+ */
+export function withoutBotLink(href: string): string {
+  const url = new URL(href, "http://site.invalid");
+  url.searchParams.delete(BOT_LINK_PARAM);
+  const search = url.searchParams.toString();
+  return `${url.pathname}${search ? `?${search}` : ""}${url.hash}`;
+}
+
+/**
+ * Launch parameters Telegram appends to every Mini App URL (`tgWebAppVersion`)
+ * but WITHOUT launch data: a reply-keyboard `web_app` button (initData is
+ * empty there). Exactly one well-formed version, and `tgWebAppData` absent or
+ * empty.
+ */
+export function hasKeyboardLaunchParams(hash: string): boolean {
+  try {
+    const p = new URLSearchParams(hash.replace(/^#/, ""));
+    const versions = p.getAll("tgWebAppVersion");
+    if (versions.length !== 1 || !/^\d+(\.\d+){0,3}$/.test(versions[0]!)) return false;
+    return p.getAll("tgWebAppData").every((v) => v === "");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The page runs inside a Telegram webview opened as a Mini App — with launch
+ * data (`isTelegramWebApp`) or from a reply-keyboard button (no launch data).
+ * Used only for the shell (script, ready/expand, BackButton, colours): with
+ * empty initData there is nothing to sign in with, so the login-CSRF rule of
+ * `isTelegramWebApp` is not weakened.
+ */
+export function isTelegramShellLaunch(win: LaunchEnv): boolean {
+  if (telegramWebviewSignal(win) === null) return false;
+  return hasLaunchData(win.location.hash) || hasKeyboardLaunchParams(win.location.hash);
+}
+
+/** `https://t.me/<bot>` (the bot chat: «/start» sends fresh links), or `null` without a valid username. */
+export function botChatUrl(botUsername: string | null | undefined): string | null {
+  const bot = (botUsername ?? "").trim().replace(/^@/, "");
+  return /^[A-Za-z0-9_]{3,64}$/.test(bot) ? `https://t.me/${bot}` : null;
+}
+
+/** What the bridge shows after `POST /api/auth/bot-link`. */
+export type BotLinkOutcome =
+  | { kind: "signed-in" }
+  | { kind: "login"; to: string | null }
+  | { kind: "confirm"; to: string | null }
+  | { kind: "kept" }
+  | { kind: "expired"; message: string | null }
+  | { kind: "error"; message: string | null };
+
+/**
+ * Pure: the bridge's reaction to the exchange answer.
+ *  - 2xx → signed in (or the same account kept);
+ *  - 409 `login_confirm` → ask «… sifatida kirasizmi?» (no session yet; `to` is the link owner's label);
+ *  - 409 `switch_confirm` → ask before switching;
+ *  - any other 409 (a phone-login session is never replaced) → keep the session quietly;
+ *  - 401 → the friendly «botga qayting» state; 403 → the same with the server's reason;
+ *  - anything else (400, 429, 5xx, network) → a short error with the same way back.
+ */
+export function botLinkOutcome(status: number, data: { code?: unknown; to?: unknown; error?: unknown } | null): BotLinkOutcome {
+  const message = typeof data?.error === "string" ? data.error : null;
+  if (status >= 200 && status < 300) return { kind: "signed-in" };
+  if (status === 409) {
+    const to = typeof data?.to === "string" ? data.to : null;
+    if (data?.code === "login_confirm") return { kind: "login", to };
+    return data?.code === "switch_confirm" ? { kind: "confirm", to } : { kind: "kept" };
+  }
+  if (status === 401) return { kind: "expired", message: null };
+  if (status === 403) return { kind: "expired", message };
+  return { kind: "error", message };
+}

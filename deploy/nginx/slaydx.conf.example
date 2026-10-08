@@ -62,6 +62,15 @@ map $http_upgrade $slaydx_connection_upgrade {
     ''      '';
 }
 
+# Bot keyboard links (docs/bot/PLAN.md Q1) carry a personal sign-in token in `?bt=` (valid
+# 7 days). Requests that carry it are NOT written to the access log, so the token never lands
+# in log files or log shipping. The page removes `bt` from the address bar right away, so
+# every later request of that visitor is logged as usual. `slaydx_` prefix: shared http{}.
+map $arg_bt $slaydx_loggable {
+    ""      1;
+    default 0;
+}
+
 upstream slaydx_web {
     server 127.0.0.1:3000;
     keepalive 16;
@@ -71,6 +80,9 @@ server {
     listen 80;
     listen [::]:80;
     server_name slaydxx.uz www.slaydxx.uz;
+
+    # No `?bt=` bot link token in the access log (see `map $arg_bt` above).
+    access_log /var/log/nginx/access.log combined if=$slaydx_loggable;
 
     # certbot HTTP-01 tekshiruvi uchun.
     location /.well-known/acme-challenge/ { root /var/www/certbot; }
@@ -106,6 +118,10 @@ server {
 
     # Do not advertise the nginx version (security review O6).
     server_tokens off;
+
+    # No `?bt=` bot link token in the access log (see `map $arg_bt` above). Adjust the path to
+    # the box's log location when applying; the owner applies this on the server.
+    access_log /var/log/nginx/access.log combined if=$slaydx_loggable;
 
     # Yuklash chegaralari: `SOURCE_MAX_BYTES`/`TEMPLATE_MAX_BYTES` = 20 MB
     # (`lib/server/source-upload.ts`, `lib/server/template-upload.ts`).

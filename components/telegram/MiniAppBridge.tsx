@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
@@ -16,16 +16,24 @@ import {
   safeAreaCssVars,
   setMiniAppShellState,
   accountLabel,
+  botChatUrl,
+  botLinkFromSearch,
+  botLinkOutcome,
+  botLinkTelegramId,
+  hasBotLinkParam,
   initDataUserLabel,
+  isTelegramShellLaunch,
   miniAppLoginAction,
   signedInitDataUserId,
   telegramBackState,
   telegramChromeColors,
+  withoutBotLink,
   type SafeAreaInset,
 } from "@/lib/telegram-miniapp";
 import { isGenuineMiniApp, type MiniAppEnv } from "@/lib/telegram-webapp";
 import { getNavSnapshot, getServerNavSnapshot, subscribeNav } from "@/lib/nav/history";
 import { useNav } from "@/components/nav/NavProvider";
+import { useDialog } from "@/components/overlays/useDialog";
 import { AccountSwitchDialog, type AccountSwitchPrompt } from "./AccountSwitchDialog";
 
 type TelegramBackButton = {
@@ -52,6 +60,7 @@ type TelegramWebApp = {
   contentSafeAreaInset?: SafeAreaInset;
   onEvent?: (type: string, handler: () => void) => void;
   offEvent?: (type: string, handler: () => void) => void;
+  openTelegramLink?: (url: string) => void;
 };
 type TelegramWindow = Window & { Telegram?: { WebApp?: TelegramWebApp } };
 
@@ -94,23 +103,368 @@ function loadTelegramWebApp(win: TelegramWindow): Promise<TelegramWebApp | null>
  * Shell (docs/mobile/PLAN.md O6, O8): vertical swipes off, Telegram's header /
  * background / bottom bar in the app's page colour (follows light/dark),
  * safe-area CSS variables, and the shell state that hides the in-app «←»
- * (`useMiniAppShell.ts`).
+ * (`useMiniAppShell.ts`). A reply-keyboard launch (Telegram's launch
+ * parameters without launch data, `isTelegramShellLaunch`) gets the shell too.
+ *
+ * Bot keyboard links (docs/bot/PLAN.md Q1): a `?bt=` token in the URL is
+ * exchanged for a session by `BotLinkLogin` — in Telegram (empty initData) and
+ * in any browser — and removed from the URL. With signed launch data the
+ * initData login runs instead and the token is only removed.
  */
 export function MiniAppBridge() {
   // Detect first, without touching the router: outside a genuine Telegram webview
   // (every normal visitor, and any tree rendered without the app router) this
   // component stays inert and never calls `useRouter`.
   const [inTelegram, setInTelegram] = useState(false);
+  const [botLink, setBotLink] = useState<{ token: string | null } | null>(null);
+  useLayoutEffect(() => {
+    // A usable link holds the pages' own login sheet back (`useUi.linkLogin`)
+    // from the first client commit: layout effects run before any page's
+    // passive effect, so no gate can open the sheet under the link's prompt.
+    // `BotLinkLogin` owns the flag from its mount on.
+    if (!hasBotLinkParam(window.location.search) || isGenuineMiniApp(window as unknown as MiniAppEnv)) return;
+    if (botLinkFromSearch(window.location.search)) useUi.getState().setLinkLogin(true);
+  }, []);
   useEffect(() => {
-    const genuine = isGenuineMiniApp(window as unknown as MiniAppEnv);
-    setInTelegram(genuine);
-    if (!genuine) return;
+    const env = window as unknown as MiniAppEnv;
+    const genuine = isGenuineMiniApp(env);
+    if (hasBotLinkParam(window.location.search)) {
+      // Captured once (StrictMode re-runs this effect after `BotLinkLogin` removed it).
+      const token = genuine ? null : botLinkFromSearch(window.location.search);
+      setBotLink((prev) => prev ?? { token });
+    }
+    const shell = genuine || isTelegramShellLaunch(env);
+    setInTelegram(shell);
+    if (!shell) return;
     // O6: the in-app «←» hides from the first client frame; the session then
     // confirms Telegram's BackButton or gives the «←» back.
     setMiniAppShellState({ active: true, backButton: "pending" });
     return () => setMiniAppShellState(null);
   }, []);
-  return inTelegram ? <MiniAppSession /> : null;
+  return (
+    <>
+      {inTelegram ? <MiniAppSession /> : null}
+      {botLink ? <BotLinkLogin token={botLink.token} /> : null}
+    </>
+  );
+}
+
+/**
+ * Removes `bt` from the address bar without a new history entry. `null` state
+ * on purpose: Next's history patch (installed by the app router after the
+ * first commit, hence this runs from `BotLinkLogin`'s own mount) then adopts
+ * the clean URL as its canonical URL, so a later `router.refresh()` cannot
+ * write the token back; the nav engine carries its index stamp over.
+ */
+function removeBotLinkFromUrl() {
+  try {
+    const clean = withoutBotLink(window.location.href);
+    if (clean !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+      window.history.replaceState(null, "", clean);
+    }
+  } catch (e) {
+    console.warn("[bot-link] url:", e instanceof Error ? e.message : e);
+  }
+}
+
+type BotLinkView =
+  | { s: "idle" }
+  | { s: "busy" }
+  | { s: "notice"; title: string; text: string };
+
+const LINK_EXPIRED_TEXT = "Botga qayting va /start bosing — bot yangi havola yuboradi.";
+
+/**
+ * Bot keyboard link → session (`POST /api/auth/bot-link`), once per page load,
+ * after the session check: a session of the link's owner (or a phone-login
+ * session, never replaced) skips the request. Without a session the server
+ * answers 409 `login_confirm` and the user is asked «… sifatida kirasizmi?»
+ * first; another Telegram account's session is switched only after «O'tish»
+ * (409 `switch_confirm`). While the
+ * request runs a small «Kirish…» status shows; an expired / revoked link shows
+ * «botga qayting» with a button to the bot chat.
+ *
+ * Until the exchange is settled and every one of its dialogs is closed,
+ * `useUi.linkLogin` keeps pages from opening their own login sheet: after
+ * «Kirish» the user is signed in with nothing else open, after «Yo'q» the page
+ * is in its normal signed-out state (its own «Kirish» works again).
+ */
+function BotLinkLogin({ token }: { token: string | null }) {
+  const router = useRouter();
+  const nav = useNav();
+  const sessionChecked = useAppStore((s) => s.sessionChecked);
+  const loggedIn = useAppStore((s) => s.loggedIn);
+  const sessionTelegramId = useAppStore((s) => s.user?.telegramId ?? null);
+  const bot = useAppStore((s) => s.features?.telegramBot ?? null);
+  const setUser = useAppStore((s) => s.setUser);
+  const refreshGenerations = useAppStore((s) => s.refreshGenerations);
+  const [view, setView] = useState<BotLinkView>({ s: "idle" });
+  const [prompt, setPrompt] = useState<AccountSwitchPrompt | null>(null);
+  const [loginAsk, setLoginAsk] = useState<LoginPrompt | null>(null);
+  /** The first exchange answered, or was not needed (the session is kept). */
+  const [settled, setSettled] = useState(false);
+  const started = useRef(false);
+
+  useEffect(() => removeBotLinkFromUrl(), []);
+
+  const pending = token !== null && (!settled || view.s !== "idle" || loginAsk !== null || prompt !== null);
+  useEffect(() => {
+    useUi.getState().setLinkLogin(pending);
+    return () => useUi.getState().setLinkLogin(false);
+  }, [pending]);
+
+  /** `first` — the initial request; `login` — after «Kirish»; `switch` — after «O'tish». */
+  const exchange = useCallback(
+    async (mode: "first" | "login" | "switch") => {
+      if (!token) return;
+      const confirm = mode !== "first";
+      if (mode === "first") setView({ s: "busy" });
+      else if (mode === "login") setLoginAsk((p) => (p ? { ...p, status: "busy" } : p));
+      else setPrompt((p) => (p ? { ...p, status: "busy" } : p));
+      try {
+        const { user } = await api.request<{ user: api.ServerUser }>("/api/auth/bot-link", {
+          method: "POST",
+          body: JSON.stringify(confirm ? { token, confirm: true } : { token }),
+        });
+        setSettled(true);
+        setView({ s: "idle" });
+        setLoginAsk(null);
+        if (mode === "switch") {
+          // Same as the Mini App switch: nothing of the previous account survives.
+          setPrompt(null);
+          useAppStore.setState({ user, loggedIn: true, generations: [], generationsLoaded: false, generationsCursor: null });
+          void refreshGenerations();
+          useUi.getState().close();
+          router.refresh();
+          return;
+        }
+        // Same follow-up as the Mini App login (`LoginForm.finish` / `LoginModal.onDone`).
+        setUser(user);
+        void refreshGenerations();
+        const ui = useUi.getState();
+        const target = ui.overlay === "login" ? safeReturnTo(ui.returnTo) : null;
+        if (ui.overlay === "login") ui.close();
+        // The page opened its login sheet while the link was being exchanged, with
+        // a returnTo of this very page: stay (keeps the link's query) and re-render.
+        const elsewhere = target !== null && new URL(target, window.location.href).pathname !== window.location.pathname;
+        if (target && elsewhere) nav.navigateFromOverlay(target);
+        else router.refresh();
+      } catch (e) {
+        const err = e instanceof api.ApiError ? e : null;
+        const outcome = botLinkOutcome(err?.status ?? 0, err ? { ...err.data, error: err.message } : null);
+        setSettled(true);
+        setView({ s: "idle" });
+        if (mode === "first" && outcome.kind === "login") {
+          // No session: a link alone never signs in — the user says «Kirish» (security review of B1).
+          setLoginAsk({ to: outcome.to ?? "Telegram akkauntingiz", status: "ask" });
+          return;
+        }
+        if (mode === "first" && outcome.kind === "confirm") {
+          const from = accountLabel(useAppStore.getState().user) ?? "boshqa akkaunt";
+          setPrompt({ from, to: outcome.to ?? "boshqa Telegram akkaunti", status: "ask" });
+          return;
+        }
+        if (mode === "login") {
+          setLoginAsk((p) => (p ? { ...p, status: "refused", message: err?.message ?? "Kirib bo'lmadi." } : p));
+          return;
+        }
+        if (mode === "switch") {
+          setPrompt((p) => (p ? { ...p, status: "refused", message: err?.message ?? "Akkaunt almashtirilmadi." } : p));
+          return;
+        }
+        if (outcome.kind === "kept") return;
+        if (outcome.kind === "expired") {
+          setView({ s: "notice", title: "Kirish havolasi eskirgan", text: outcome.message ?? LINK_EXPIRED_TEXT });
+          return;
+        }
+        const text = outcome.kind === "error" ? outcome.message : null;
+        setView({ s: "notice", title: "Kirib bo'lmadi", text: text ?? "Birozdan keyin qayta urinib ko'ring." });
+      }
+    },
+    [token, refreshGenerations, setUser, router, nav],
+  );
+
+  useEffect(() => {
+    if (!token || !sessionChecked || started.current) return;
+    started.current = true;
+    if (loggedIn) {
+      // A phone-login session is never replaced; the link's own account is already here.
+      if (sessionTelegramId == null || String(sessionTelegramId) === botLinkTelegramId(token)) {
+        setSettled(true);
+        return;
+      }
+    }
+    void exchange("first");
+  }, [token, sessionChecked, loggedIn, sessionTelegramId, exchange]);
+
+  return (
+    <>
+      {view.s === "busy" ? (
+        <div
+          role="status"
+          aria-live="polite"
+          data-bot-link-busy
+          className="bg-card fixed top-[calc(var(--tg-safe-top,0px)+var(--tg-content-safe-top,0px)+12px)] left-1/2 z-[70] -translate-x-1/2 rounded-full border px-4 py-2 text-[14px] font-medium shadow-lg"
+        >
+          Kirish…
+        </div>
+      ) : null}
+      <BotLinkNotice
+        notice={view.s === "notice" ? view : null}
+        botUrl={botChatUrl(bot ?? process.env.NEXT_PUBLIC_TELEGRAM_BOT)}
+        onClose={() => setView({ s: "idle" })}
+      />
+      <AccountSwitchDialog prompt={prompt} onConfirm={() => void exchange("switch")} onCancel={() => setPrompt(null)} />
+      <BotLinkLoginDialog prompt={loginAsk} onConfirm={() => void exchange("login")} onCancel={() => setLoginAsk(null)} />
+    </>
+  );
+}
+
+type LoginPrompt = { to: string; status: "ask" | "busy" | "refused"; message?: string };
+
+/**
+ * «… sifatida kirasizmi?» — a bot link signs in only after this tap (the
+ * `AccountSwitchDialog` pattern): someone else's bot or chat link must never
+ * log a visitor into the sender's account silently. Back / Escape = «Yo'q».
+ */
+function BotLinkLoginDialog({
+  prompt,
+  onConfirm,
+  onCancel,
+}: {
+  prompt: LoginPrompt | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const titleId = useId();
+  const onConfirmRef = useRef(onConfirm);
+  const onCancelRef = useRef(onCancel);
+  useEffect(() => {
+    onConfirmRef.current = onConfirm;
+    onCancelRef.current = onCancel;
+  });
+  const close = useCallback(() => onCancelRef.current(), []);
+  const panelRef = useDialog(prompt !== null, close);
+  if (!prompt) return null;
+  const busy = prompt.status === "busy";
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center p-4 sm:items-center">
+      <button type="button" tabIndex={-1} aria-label="Yopish" className="absolute inset-0 bg-black/45" onClick={close} />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        data-bot-login-confirm
+        className="bg-card relative z-10 flex w-full max-w-sm flex-col rounded-2xl border shadow-xl"
+      >
+        <div className="px-5 pt-4 pb-1">
+          <h2 id={titleId} className="text-base font-semibold">
+            {prompt.status === "refused" ? "Kirib bo'lmadi" : "Kirish"}
+          </h2>
+          <p className="text-muted-foreground mt-1 text-[14px] leading-snug" data-bot-login-text>
+            {prompt.status === "refused" ? prompt.message : `${prompt.to} sifatida kirasizmi?`}
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-end gap-2 px-5 pt-2 pb-4">
+          {prompt.status === "refused" ? (
+            <button type="button" onClick={close} className="bg-card h-11 rounded-lg border px-4 text-[15px] font-medium" data-bot-login-ok>
+              Tushunarli
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={close}
+                disabled={busy}
+                className="bg-card h-11 rounded-lg border px-4 text-[15px] font-medium disabled:opacity-60"
+                data-bot-login-no
+              >
+                Yo&apos;q
+              </button>
+              <button
+                type="button"
+                onClick={() => onConfirmRef.current()}
+                disabled={busy}
+                className="bg-primary text-primary-foreground h-11 rounded-lg px-4 text-[15px] font-medium disabled:opacity-60"
+                data-bot-login-go
+              >
+                {busy ? "Kirilmoqda…" : "Kirish"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** «Kirish havolasi eskirgan» — the way back is the bot chat (/start sends fresh links). */
+function BotLinkNotice({
+  notice,
+  botUrl,
+  onClose,
+}: {
+  notice: { title: string; text: string } | null;
+  botUrl: string | null;
+  onClose: () => void;
+}) {
+  const titleId = useId();
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+  const close = useCallback(() => onCloseRef.current(), []);
+  const panelRef = useDialog(notice !== null, close);
+  if (!notice) return null;
+  const openBot = (e: { preventDefault(): void }) => {
+    // Inside Telegram the chat opens in place; elsewhere the link opens normally.
+    const wa = (window as TelegramWindow).Telegram?.WebApp;
+    if (!botUrl || typeof wa?.openTelegramLink !== "function") return;
+    try {
+      wa.openTelegramLink(botUrl);
+      e.preventDefault();
+    } catch {
+      /* the plain link still works */
+    }
+  };
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center p-4 sm:items-center">
+      <button type="button" tabIndex={-1} aria-label="Yopish" className="absolute inset-0 bg-black/45" onClick={close} />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        data-bot-link-notice
+        className="bg-card relative z-10 flex w-full max-w-sm flex-col rounded-2xl border shadow-xl"
+      >
+        <div className="px-5 pt-4 pb-1">
+          <h2 id={titleId} className="text-base font-semibold">
+            {notice.title}
+          </h2>
+          <p className="text-muted-foreground mt-1 text-[14px] leading-snug">{notice.text}</p>
+        </div>
+        <div className="flex flex-wrap justify-end gap-2 px-5 pt-2 pb-4">
+          <button type="button" onClick={close} className="bg-card h-11 rounded-lg border px-4 text-[15px] font-medium" data-bot-link-close>
+            Yopish
+          </button>
+          {botUrl ? (
+            <a
+              href={botUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={openBot}
+              className="bg-primary text-primary-foreground inline-flex h-11 items-center rounded-lg px-4 text-[15px] font-medium"
+              data-bot-link-bot
+            >
+              Botga qaytish
+            </a>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /** `Telegram.WebApp.isVersionAtLeast`, called on its object; `false` when missing. */
@@ -159,7 +513,7 @@ function MiniAppSession() {
 
   useEffect(() => {
     // Defence in depth: the script is injected only after the same detection.
-    if (!isGenuineMiniApp(window as unknown as MiniAppEnv)) return;
+    if (!isGenuineMiniApp(window as unknown as MiniAppEnv) && !isTelegramShellLaunch(window as unknown as MiniAppEnv)) return;
     let cancelled = false;
     void loadTelegramWebApp(window as TelegramWindow).then((wa) => {
       if (cancelled) return;

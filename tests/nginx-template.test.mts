@@ -197,3 +197,26 @@ test("nginx shabloni: /api/* uncached (proxy_cache off har ikkala /api/ blokida)
   const genBlock = conf.slice(genStart, conf.indexOf("\n    }", genStart));
   assert.match(genBlock, /proxy_cache\s+off;/, "location /api/generations/ blokida proxy_cache off; yo'q");
 });
+
+/**
+ * Bot keyboard links (docs/bot/PLAN.md Q1, security review of B1 MINOR 2): a request with a
+ * `?bt=` sign-in token is never written to the access log. Every server block has
+ * `access_log … if=$<map var>`, and the map turns any non-empty `$arg_bt` into 0.
+ *
+ * Mutations: drop the `if=` from one `access_log`, or swap the map's values — red.
+ */
+test("nginx shabloni: ?bt= (bot havola tokeni) access log'ga yozilmaydi", () => {
+  const conf = codeOf(readFileSync(new URL("../deploy/nginx/slaydx.conf.example", import.meta.url), "utf8"));
+  const map = conf.match(/map\s+\$arg_bt\s+\$(slaydx_\w+)\s*\{([^}]*)\}/);
+  assert.ok(map, "map $arg_bt bloki topilmadi");
+  const [, varName, body] = map!;
+  assert.match(body!, /^\s*""\s+1;/m, "bt yo'q so'rov log'ga yozilishi kerak");
+  assert.match(body!, /^\s*default\s+0;/m, "bt bor so'rov log'ga yozilmasligi kerak");
+  const servers = conf.split(/\bserver\s*\{/).slice(1);
+  assert.ok(servers.length >= 2);
+  for (const s of servers) {
+    const logs = [...s.matchAll(/access_log\s+([^;]+);/g)].map((m) => m[1]!);
+    assert.ok(logs.length >= 1, "server blokida access_log yo'q (http{} standarti tokenni yozadi)");
+    for (const l of logs) assert.match(l, new RegExp(`\\bif=\\$${varName}\\b`), `access_log ${l} — bt filtrsiz`);
+  }
+});
