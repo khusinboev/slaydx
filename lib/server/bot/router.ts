@@ -21,6 +21,9 @@ import {
   type FileItem,
 } from "./screens";
 import { cancelInput, claimInput, finishInput, keyboardStale, markKeyboard, repromptInput, startInput } from "./state";
+import { clearState as clearAdminState, dropPendingStep } from "./admin-state";
+import { isLinkedAdmin } from "./admin-access";
+import { isAdminCallback } from "./admin-codes";
 import type { Screen } from "./ui";
 import { rateLimit } from "../ratelimit";
 import { bonusTasks, checkChannel } from "../bonus-channels";
@@ -105,7 +108,11 @@ export async function userByTelegram(telegramId: number): Promise<SessionUser | 
 /** For `telegram.ts`: the keyboard went out with another message (contact replies). */
 export const markKeyboardSent = markKeyboard;
 /** For `telegram.ts`: a command drops a pending prompt. */
-export const cancelPending = cancelInput;
+export async function cancelPending(chatId: number): Promise<void> {
+  await cancelInput(chatId);
+  // An admin step and its draft go too (docs/bot-admin/PLAN.md).
+  await clearAdminState(chatId);
+}
 
 async function referral(userId: string) {
   const s = await referralSummary(userId, { botUsername: await botUsername(), appUrl: env.appUrl });
@@ -211,7 +218,7 @@ async function bonusRefresh(ctx: ChatCtx): Promise<{ toast: string; screen: Scre
 
 /** Sends the main keyboard (its own message) and records it. */
 export async function sendMainKeyboard(ctx: ChatCtx, kind: "note" | "refreshed"): Promise<void> {
-  await sendScreen(ctx.chatId, keyboardMessage(ctx.lang, ctx.telegramId, kind));
+  await sendScreen(ctx.chatId, keyboardMessage(ctx.lang, ctx.telegramId, kind, undefined, { admin: await isLinkedAdmin(ctx.telegramId) }));
   await markKeyboard(ctx.chatId, ctx.user.id);
 }
 
@@ -230,7 +237,7 @@ export async function handleKeyboard(ctx: ChatCtx, action: KeyboardAction): Prom
       const tool = actionLabel(ctx.lang, action);
       await sendScreen(ctx.chatId, {
         text: t(ctx.lang, blocked ? "tool.blocked" : "tool.noApp", { tool }),
-        reply_markup: mainKeyboard(ctx.lang, ctx.telegramId),
+        reply_markup: mainKeyboard(ctx.lang, ctx.telegramId, undefined, { admin: await isLinkedAdmin(ctx.telegramId) }),
       });
       return;
     }
@@ -326,6 +333,12 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
       toast = t("uz", "toast.notYours");
       return;
     }
+    if (isAdminCallback(q.data)) {
+      // The admin panel (docs/bot-admin/PLAN.md) re-checks the admin account itself: a non-admin gets «Ruxsat yo‘q» only.
+      const admin = await import("./admin");
+      toast = await admin.handleAdminCallback(q.from.id, msg.chat.id, msg.message_id, q.data!, updateId);
+      return;
+    }
     const user = await userByTelegram(q.from.id);
     if (!user) {
       toast = t("uz", "toast.start");
@@ -349,6 +362,7 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
         await edit(sectionScreen(user, c.step, ctx.lang));
         return;
       case "edit":
+        await dropPendingStep(ctx.chatId);
         await startInput(ctx.chatId, user.id, c.field, msg.message_id);
         await edit(promptScreen(user, c.field, ctx.lang));
         return;

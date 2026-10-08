@@ -3,6 +3,7 @@ import { botAppUrl } from "../bot-link";
 import { TOOL_BY_ID, toolBlockedReason, type ToolFeatures } from "../../tools";
 import { t, LANGS, type Lang, type TextKey } from "./i18n";
 import { keyboardButton, tgEmoji, type IconKey, type KeyboardButton, type Screen } from "./ui";
+import { at } from "./admin-i18n";
 
 /**
  * The persistent main reply keyboard (docs/bot/PLAN.md, owner decisions Q1/Q3 +
@@ -70,7 +71,12 @@ function button(lang: Lang, telegramId: number | string, action: KeyboardAction,
   return keyboardButton(s.icon, t(lang, s.label), { webApp, style });
 }
 
-export function mainKeyboard(lang: Lang, telegramId: number | string, features: ToolFeatures = botFeatures()): Record<string, unknown> {
+export function mainKeyboard(
+  lang: Lang,
+  telegramId: number | string,
+  features: ToolFeatures = botFeatures(),
+  opts: { admin?: boolean } = {},
+): Record<string, unknown> {
   const b = (a: KeyboardAction) => button(lang, telegramId, a, features);
   return {
     keyboard: [
@@ -79,6 +85,8 @@ export function mainKeyboard(lang: Lang, telegramId: number | string, features: 
       [b("image"), b("resume")],
       [b("files"), b("wallet")],
       [b("profile"), b("help")],
+      // Linked admins only (docs/bot-admin/PLAN.md); the panel re-checks the account on every tap.
+      ...(opts.admin ? [[keyboardButton("admin", at(lang, "kb.admin"), { style: "primary" })]] : []),
     ],
     is_persistent: true,
     resize_keyboard: true,
@@ -87,9 +95,15 @@ export function mainKeyboard(lang: Lang, telegramId: number | string, features: 
 }
 
 /** The message that carries the keyboard (a reply keyboard needs a message of its own). */
-export function keyboardMessage(lang: Lang, telegramId: number | string, kind: "note" | "refreshed", features?: ToolFeatures): Screen {
+export function keyboardMessage(
+  lang: Lang,
+  telegramId: number | string,
+  kind: "note" | "refreshed",
+  features?: ToolFeatures,
+  opts: { admin?: boolean } = {},
+): Screen {
   const text = kind === "note" ? `${tgEmoji("pointDown")} ${t(lang, "kb.note")}` : `${tgEmoji("refresh")} ${t(lang, "kb.refreshed")}`;
-  return { text, reply_markup: mainKeyboard(lang, telegramId, features) };
+  return { text, reply_markup: mainKeyboard(lang, telegramId, features, opts) };
 }
 
 const LEADING = /^[\s\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Emoji_Component}‍️]+/u;
