@@ -107,7 +107,7 @@ function bonusTasks() {
     ],
     referral: { link: "https://t.me/slaydx_test_bot?start=ref_abcdefgh", rewardPoints: 2000, invitedCount: 3, earnedPoints: 6000 },
     signupPoints: 2000,
-    firstTopup: { paid: false, points: 0, eligible: true },
+    paymentBonus: { percent: 10, earnedPoints: 0 },
     earnedTotal: 10000,
     availableTotal: 8000,
   };
@@ -145,7 +145,7 @@ function allScreens(lang: (typeof LANGS)[number]) {
     bonus: bonus.bonusScreen(lang, bonusTasks(), BONUS_NOW),
     bonusFresh: bonus.bonusScreen(
       lang,
-      { ...bonusTasks(), referral: { ...bonusTasks().referral, invitedCount: 0, earnedPoints: 0 }, firstTopup: { paid: true, points: 5000, eligible: false } },
+      { ...bonusTasks(), referral: { ...bonusTasks().referral, invitedCount: 0, earnedPoints: 0 }, paymentBonus: { percent: 0, earnedPoints: 5000 } },
       BONUS_NOW,
     ),
     bonusEmpty: bonus.bonusScreen(lang, { ...bonusTasks(), channels: [] }, BONUS_NOW),
@@ -524,7 +524,7 @@ test("bonuses message (uz): summary, short explanation, ONE button per task in o
     ["✅ Paid · +1 000 so‘m · ✅ +2 000 | b:d | success"],
     ["📢 Yopiq kanal · +1 000 so‘m | b:c:999999999999999999 | "],
     ["📢 Taklif havolali kanal · +1 000 so‘m | https://t.me/+AbCdEf123456 | "],
-    ["💳 Birinchi to‘ldirish · +10% (50 000 so‘mdan) | app:https://slaydx.test/uz/wallet | "],
+    ["💳 Har to‘ldirishga +10% bonus | app:https://slaydx.test/uz/wallet | "],
     ["🔄 Yangilash | b:r | ", "⬅️ Hamyon | w:h | "],
   ]);
   // The share sheet carries the personal referral link and the share text.
@@ -535,10 +535,11 @@ test("bonuses message (uz): summary, short explanation, ONE button per task in o
   assert.ok(!kbRows(s)[7]![0]!.web_app!.url.includes("bt="));
 });
 
-test("bonuses message: before the first invite / after the first top-up; no public URLs; empty channel list", async () => {
+test("bonuses message: before the first invite / payment bonus off; no public URLs; empty channel list", async () => {
   const f = allScreens("uz").bonusFresh;
   assert.equal(brief(kbRows(f)[1]![0]!), "👥 Do‘st taklif qilish · +2 000 so‘m har biri | https://t.me/share/url | primary");
-  assert.equal(brief(kbRows(f).at(-2)![0]!), "✅ Birinchi to‘ldirish · +5 000 so‘m | b:d | success");
+  // C-Q4: percent 0 → no payment bonus task (the last task row is the last channel).
+  assert.equal(brief(kbRows(f).at(-2)![0]!), "📢 Taklif havolali kanal · +1 000 so‘m | https://t.me/+AbCdEf123456 | ");
 
   // An account from before the sign-up bonus: still done, no amount.
   const old = bonus.bonusScreen("uz", { ...bonusTasks(), signupPoints: 0 }, BONUS_NOW);
@@ -568,7 +569,7 @@ test("bonuses message (ru/en): labels, units, styles; every label ≤ 44 chars a
   ]);
   assert.match(allScreens("ru").bonus.text, /Всего получено бонусов: <b>10 000 сум<\/b> · можно получить ещё: <b>8 000 сум<\/b>/);
   assert.deepEqual(kbRows(allScreens("en").bonus).map((r) => r.map(brief)).slice(-2), [
-    ["💳 First top-up · +10% (from 50 000 UZS) | app:https://slaydx.test/uz/wallet | "],
+    ["💳 +10% bonus on every top-up | app:https://slaydx.test/uz/wallet | "],
     ["🔄 Refresh | b:r | ", "⬅️ Wallet | w:h | "],
   ]);
   assert.equal(brief(kbRows(allScreens("en").bonusFresh)[1]![0]!), "👥 Invite a friend · +2 000 UZS each | https://t.me/share/url | primary");
@@ -605,7 +606,7 @@ test("bonuses message with premium emoji: icon ids on the task buttons, no dupli
     assert.equal(invite.text, "👥 Do‘st taklif qilish · +2 000 so‘m har biri");
     const topup = kbRows(s)[7]![0]!;
     assert.equal(topup.icon_custom_emoji_id, EMOJI_IDS.card.id);
-    assert.equal(topup.text, "Birinchi to‘ldirish · +10% (50 000 so‘mdan)");
+    assert.equal(topup.text, "Har to‘ldirishga +10% bonus");
     const w = scr.walletScreen("uz", USER, []);
     assert.deepEqual(inline(w)[0], { text: "Bonuslar", icon_custom_emoji_id: EMOJI_IDS.gift.id, callback_data: "b:h", style: "success" });
   });
@@ -701,14 +702,36 @@ test("units (B2-Q3): bonus amounts are so‘m / сум / UZS everywhere in the b
 
 /* ── bonus2 review fixes ── */
 
-test("first top-up task: shown only while the user can still earn it (review MAJOR); paid → green; not eligible → no button", () => {
+test("payment bonus task (C-Q4): «💳 Har to‘ldirishga +N% bonus» → wallet web app for any N > 0, in 3 languages; N = 0 → no button", () => {
   const urls = (s: { reply_markup?: unknown }) => inline(s).map((b) => b.web_app?.url ?? "");
-  const eligible = bonus.bonusScreen("uz", { ...bonusTasks(), firstTopup: { paid: false, points: 0, eligible: true } }, BONUS_NOW);
-  assert.ok(urls(eligible).some((u) => u.endsWith("/uz/wallet")), "eligible → web_app to the wallet");
-  // MUTATION: without the eligibility check a paying customer was offered a bonus they can never get.
-  const notEligible = bonus.bonusScreen("uz", { ...bonusTasks(), firstTopup: { paid: false, points: 0, eligible: false } }, BONUS_NOW);
-  assert.ok(!urls(notEligible).some((u) => u.endsWith("/uz/wallet")), "already topped up → no first-top-up button");
-  assert.ok(!inline(notEligible).some((b) => /Birinchi to‘ldirish/.test(b.text)));
+  const on = bonus.bonusScreen("uz", { ...bonusTasks(), paymentBonus: { percent: 15, earnedPoints: 40_000 } }, BONUS_NOW);
+  const btn = inline(on).find((b) => b.web_app);
+  assert.ok(btn, "a web_app button");
+  assert.equal(btn!.text.replace(/^💳 /, ""), "Har to‘ldirishga +15% bonus");
+  assert.equal(btn!.web_app!.url, "https://slaydx.test/uz/wallet", "plain app URL, no personal link");
+  // Still offered after earlier payments: every top-up earns it (the old first-top-up task disappeared after one).
+  assert.equal(inline(bonus.bonusScreen("ru", { ...bonusTasks(), paymentBonus: { percent: 7, earnedPoints: 1 } }, BONUS_NOW)).find((b) => b.web_app)!.text.replace(/^💳 /, ""), "+7% бонус к каждому пополнению");
+  assert.equal(inline(bonus.bonusScreen("en", { ...bonusTasks(), paymentBonus: { percent: 50, earnedPoints: 0 } }, BONUS_NOW)).find((b) => b.web_app)!.text.replace(/^💳 /, ""), "+50% bonus on every top-up");
+  // MUTATION: `percent > 0` check dropped → «+0% bonus» was offered while the bonus is off.
+  const off = bonus.bonusScreen("uz", { ...bonusTasks(), paymentBonus: { percent: 0, earnedPoints: 9_000 } }, BONUS_NOW);
+  assert.ok(!urls(off).some((u) => u.endsWith("/uz/wallet")), "off → no task button");
+  assert.ok(!inline(off).some((b) => /to‘ldirish/i.test(b.text)));
+});
+
+test("wallet card: «Har bir to‘ldirishga +N% bonus» line while N > 0; payment bonus ledger rows labelled in 3 languages", () => {
+  const on = scr.walletScreen("uz", USER, [], 10);
+  assert.match(on.text, /Har bir to‘ldirishga <b>\+10%<\/b> bonus\n.*To‘lov ilovada/);
+  assert.match(scr.walletScreen("ru", USER, [], 25).text, /<b>\+25%<\/b> бонус к каждому пополнению/);
+  assert.match(scr.walletScreen("en", USER, [], 5).text, /<b>\+5%<\/b> bonus on every top-up/);
+  // MUTATION: the `bonusPercent > 0` guard dropped → «+0%» shown while off.
+  assert.ok(!/to‘ldirishga/.test(scr.walletScreen("uz", USER, [], 0).text));
+  assert.ok(!/to‘ldirishga/.test(scr.walletScreen("uz", USER, []).text), "default: no line");
+  const row = { kind: "bonus", amount: 5000, note: "To‘lov bonusi (10%)", createdAt: "2026-10-09T10:00:00Z" };
+  assert.match(scr.ledgerLine("uz", row), /— To‘lov bonusi \(10%\) ·/);
+  assert.match(scr.ledgerLine("ru", row), /— Бонус за пополнение \(10%\) ·/);
+  assert.match(scr.ledgerLine("en", row), /— Payment bonus \(10%\) ·/);
+  // A legacy first top-up row still reads as before.
+  assert.match(scr.ledgerLine("en", { ...row, note: "Birinchi to‘ldirish bonusi (10%)" }), /— First top-up bonus ·/);
 });
 
 test("clip: cuts by code points — an emoji in a long channel title is never split into a lone surrogate", () => {
