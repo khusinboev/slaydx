@@ -592,9 +592,15 @@ test("bonuses message with premium emoji: icon ids on the task buttons, no dupli
   withPremium(true, () => {
     const s = bonus.bonusScreen("uz", bonusTasks(), BONUS_NOW);
     assert.ok(s.text.includes(`<tg-emoji emoji-id="${EMOJI_IDS.gift.id}">🎁</tg-emoji> <b>Sizning bonuslaringiz</b>`));
-    const first = kbRows(s)[0]![0]!;
-    assert.equal(first.style, "success");
-    if (EMOJI_IDS.save.id) assert.deepEqual([first.text, first.icon_custom_emoji_id], ["Ro‘yxatdan o‘tish · +2 000 so‘m", EMOJI_IDS.save.id]);
+    // «✅» / «👥» have no premium id: they stay in the label; the top-up («card») gets an icon id and a bare label.
+    assert.deepEqual(kbRows(s)[0]![0]!, { text: "✅ Ro‘yxatdan o‘tish · +2 000 so‘m", callback_data: "b:d", style: "success" });
+    const fresh = bonus.bonusScreen("uz", { ...bonusTasks(), referral: { ...bonusTasks().referral, invitedCount: 0 } }, BONUS_NOW);
+    const invite = kbRows(fresh)[1]![0]!;
+    assert.equal(invite.icon_custom_emoji_id, undefined);
+    assert.equal(invite.text, "👥 Do‘st taklif qilish · +2 000 so‘m har biri");
+    const topup = kbRows(s)[7]![0]!;
+    assert.equal(topup.icon_custom_emoji_id, EMOJI_IDS.card.id);
+    assert.equal(topup.text, "Birinchi to‘ldirish · +10% (50 000 so‘mdan)");
     const w = scr.walletScreen("uz", USER, []);
     assert.deepEqual(inline(w)[0], { text: "Bonuslar", icon_custom_emoji_id: EMOJI_IDS.gift.id, callback_data: "b:h", style: "success" });
   });
