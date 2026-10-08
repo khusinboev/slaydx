@@ -19,21 +19,39 @@ export type Overlay =
 type UiState = {
   overlay: Overlay;
   returnTo: string | null;
+  /**
+   * A bot keyboard link (`?bt=`, docs/bot/PLAN.md Q1) is being exchanged or its
+   * «… sifatida kirasizmi?» / account-switch / «eskirgan» dialog is open
+   * (published by `MiniAppBridge`). Meanwhile the login sheet is NOT opened:
+   * pages that open it on their own once the session is known to be signed out
+   * (`ToolWorkspace`, `CreateGrid`, `?returnTo=`) would put it under the
+   * bridge's dialog and leave it there after «Yo'q». Those effects do not run
+   * again when the flag clears, so after «Yo'q» the page stays in its normal
+   * signed-out state and the user's own «Kirish» works.
+   */
+  linkLogin: boolean;
+  setLinkLogin: (pending: boolean) => void;
   open: (o: Overlay, extra?: { returnTo?: string }) => void;
   close: () => void;
 };
 
-export const useUi = create<UiState>((set) => ({
+export const useUi = create<UiState>((set, get) => ({
   overlay: null,
   returnTo: null,
-  open: (overlay, extra) =>
+  linkLogin: false,
+  setLinkLogin: (pending) => {
+    if (get().linkLogin !== pending) set({ linkLogin: pending });
+  },
+  open: (overlay, extra) => {
+    if (overlay === "login" && get().linkLogin) return;
     set({
       overlay,
       // C02/FE-01/SECA-02: `returnTo` bu yerga so'rov parametridan
       // (masalan `?returnTo=javascript:...`) kelishi mumkin — faqat
       // saytning o'zidagi "/uz" yo'li saqlanadi, aks holda `null`.
       returnTo: returnToWithoutBotLink(safeReturnTo(extra?.returnTo ?? null)),
-    }),
+    });
+  },
   close: () => set({ overlay: null }),
 }));
 
