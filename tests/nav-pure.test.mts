@@ -90,6 +90,7 @@ test("parentOf: the R4 §6 table", () => {
     ["/admin/users", "/admin"],
     ["/admin/audit", "/admin"],
     ["/admin/account", "/admin"],
+    ["/admin/bonus", "/admin"],
     ["/admin/users/42", "/admin/users"],
     ["/admin/generations/3f1c", "/admin/generations"],
     ["/admin/payments/7", "/admin/payments"],
