@@ -13,8 +13,12 @@ import { rowToUser, safeEqual, userColumns, type SessionUser } from "./session";
  * kelgan `user_id` ga hech qachon ishonilmaydi.
  */
 
-/** Yangi foydalanuvchiga beriladigan tanish bonusi. */
-export const SIGNUP_BONUS_POINTS = 3000;
+/**
+ * Yangi foydalanuvchiga beriladigan tanish bonusi. Owner decision B-Q2
+ * (2026-10-08, docs/bonus/PLAN.md): 2 000 (was 3 000) — only new accounts;
+ * already-paid ledger rows stay as they are.
+ */
+export const SIGNUP_BONUS_POINTS = 2000;
 
 export type TelegramProfile = {
   telegramId: string;

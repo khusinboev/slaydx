@@ -55,6 +55,7 @@ import { purgeFailedLeftovers } from "./admin-job-actions";
 import { registerErrorSink } from "./error-sink";
 import { processIdFor, startHeartbeat, stopHeartbeat } from "./heartbeat";
 import { recordStep } from "./housekeeping-status";
+import { staySweep } from "./bonus-channels";
 
 /**
  * Navbatni bajaruvchi worker.
@@ -110,7 +111,17 @@ let lastPaymentEventsPurgeAt = -Infinity;
 export function resetRetentionScan(): void {
   lastRetentionAt = -Infinity;
   lastPaymentEventsPurgeAt = -Infinity;
+  lastStaySweepAt = -Infinity;
 }
+
+/**
+ * Bonus channel stay sweep (docs/bonus/PLAN.md): every 10 minutes, at most
+ * `STAY_SWEEP_BATCH` claims (one getChatMember each, paced inside `staySweep`).
+ * A stay bonus is due after days, so minute precision buys nothing.
+ */
+const STAY_SWEEP_EVERY_MS = 10 * 60_000;
+export const STAY_SWEEP_BATCH = 50;
+let lastStaySweepAt = -Infinity;
 /** Har iteratsiyada diskka yozmaslik uchun — 30 s shartnomadan ancha tez. */
 const ALIVE_EVERY_MS = 10_000;
 let lastAliveAt = 0;
@@ -983,6 +994,13 @@ export async function purgeHousekeeping(): Promise<void> {
   await step("broadcast-recipients", () => purgeBroadcastRecipients());
   // Orphan files/assets a fenced worker wrote after an admin force-fail (admin-job-actions.ts).
   await step("failed-leftovers", () => purgeFailedLeftovers());
+  // Leader-only (one sweep in the cluster); the mark goes before the run, like `retention`.
+  if (Date.now() - lastStaySweepAt >= STAY_SWEEP_EVERY_MS) {
+    await step("bonus-stay", async () => {
+      lastStaySweepAt = Date.now();
+      return staySweep(STAY_SWEEP_BATCH);
+    });
+  }
 }
 
 /** In-flight broadcast delivery of this process (one at a time). */

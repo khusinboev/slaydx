@@ -14,6 +14,8 @@ import { BOT_LANGUAGES, isProfileField, type BotLanguage, type FieldStepId, type
  *   w:h | w:r         Hamyon card | its referral view
  *   r:n               referral as a NEW message (from the /start card, which keeps its login button)
  *   y:h               Yordam card
+ *   b:h               «Bonus olish» tasks screen
+ *   b:c:<channelId>   «Tekshirish» of one bonus channel (a positive BIGINT, ≤ 18 digits → ≤ 22 bytes)
  *   l:m:<o>           language menu; o = where it came from (p profile, y help, n none)
  *   l:s:<lang>:<o>    set the language, then show screen `o`
  *   n                 no-op (a label-only button)
@@ -36,6 +38,8 @@ export const cb = {
   walletInvite: () => "w:r",
   invite: () => "r:n",
   help: () => "y:h",
+  bonus: () => "b:h",
+  bonusCheck: (channelId: string) => `b:c:${channelId}`,
   langMenu: (origin: Origin) => `l:m:${origin}`,
   langSet: (lang: BotLanguage, origin: Origin) => `l:s:${lang}:${origin}`,
   noop: () => "n",
@@ -51,6 +55,8 @@ export type Callback =
   | { kind: "walletInvite" }
   | { kind: "invite" }
   | { kind: "help" }
+  | { kind: "bonus" }
+  | { kind: "bonusCheck"; channelId: string }
   | { kind: "langMenu"; origin: Origin }
   | { kind: "langSet"; lang: BotLanguage; origin: Origin }
   | { kind: "noop" }
@@ -83,6 +89,11 @@ export function parseCallback(data: string | undefined | null): Callback {
       break;
     case "y":
       if (parts.length === 2 && b === "h") return { kind: "help" };
+      break;
+    case "b":
+      if (parts.length === 2 && b === "h") return { kind: "bonus" };
+      // Decimal, no sign, no leading zero; never trusted further — `checkChannel` reads the row itself.
+      if (parts.length === 3 && b === "c" && /^[1-9]\d{0,17}$/.test(c ?? "")) return { kind: "bonusCheck", channelId: c! };
       break;
     case "l":
       if (b === "m" && parts.length === 3 && isOrigin(c)) return { kind: "langMenu", origin: c };

@@ -77,6 +77,11 @@ export function describeEntry(e: Pick<LedgerEntry, "kind" | "note">): { title: s
     case "bonus": {
       const friend = /^Do'st taklifi:\s*(.+)$/.exec(note)?.[1];
       if (friend) return { title: `Taklif bonusi · ${friend}`, detail: "" };
+      // Channel bonus notes (lib/server/bonus-channels.ts JOIN_NOTE_PREFIX / STAY_NOTE_PREFIX).
+      const join = /^Kanal obunasi:\s*(.+)$/.exec(note)?.[1];
+      if (join) return { title: `Kanal obunasi bonusi · ${join}`, detail: "" };
+      const stay = /^Kanalda qolish bonusi:\s*(.+)$/.exec(note)?.[1];
+      if (stay) return { title: `Kanalda qolish bonusi · ${stay}`, detail: "" };
       return { title: note || "Bonus ball", detail: "" };
     }
     case "subscription":

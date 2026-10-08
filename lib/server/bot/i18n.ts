@@ -328,6 +328,86 @@ const T = {
     en: "Old account remainder moved to balance",
   },
   "ledger.other": { uz: "Hisob harakati", ru: "Операция по счёту", en: "Account activity" },
+  "ledger.channelJoin": { uz: "Kanal obunasi · {c}", ru: "Подписка на канал · {c}", en: "Channel subscription · {c}" },
+  "ledger.channelStay": { uz: "Kanalda qolish bonusi · {c}", ru: "Бонус за верность каналу · {c}", en: "Channel stay bonus · {c}" },
+
+  /* ── Bonus olish (docs/bonus/PLAN.md) ── */
+  "btn.bonus": { uz: "Bonus olish", ru: "Получить бонус", en: "Get bonuses" },
+  "bonus.title": { uz: "Bonus olish", ru: "Получить бонус", en: "Get bonuses" },
+  "bonus.lead": {
+    uz: "Vazifalarni bajaring va ball oling. Ball xizmatlar uchun tanga kabi sarflanadi.",
+    ru: "Выполняйте задания и получайте баллы. Баллы тратятся на услуги так же, как монеты.",
+    en: "Complete tasks to earn points. Points pay for services just like coins.",
+  },
+  "bonus.earned": { uz: "Bonuslardan topilgan: <b>{n}</b>", ru: "Заработано на бонусах: <b>{n}</b>", en: "Earned from bonuses: <b>{n}</b>" },
+  "bonus.invite": { uz: "Do‘st taklif qilish: +{n} har biri", ru: "Пригласить друга: +{n} за каждого", en: "Invite a friend: +{n} each" },
+  "bonus.inviteCounts": {
+    uz: "Taklif qilinganlar: <b>{a}</b> · topilgan: <b>{b}</b>",
+    ru: "Приглашено: <b>{a}</b> · заработано: <b>{b}</b>",
+    en: "Invited: <b>{a}</b> · earned: <b>{b}</b>",
+  },
+  "bonus.rewardJoin": { uz: "+{n}", ru: "+{n}", en: "+{n}" },
+  "bonus.rewardJoinStay": {
+    uz: "+{n}, {d} kundan keyin yana +{s}",
+    ru: "+{n}, через {d} дн. ещё +{s}",
+    en: "+{n}, then +{s} more after {d} days",
+  },
+  "bonus.stateNew": { uz: "Yangi", ru: "Новое", en: "New" },
+  "bonus.stateDone": { uz: "Olindi", ru: "Получено", en: "Claimed" },
+  "bonus.stateWait": { uz: "{d} kun: {n} kun qoldi", ru: "{d} дн.: осталось {n} дн.", en: "{d} days: {n} days left" },
+  "bonus.stateDue": {
+    uz: "{d} kun o‘tdi — tez orada tekshiriladi",
+    ru: "{d} дн. прошло — скоро проверим",
+    en: "{d} days passed — checking soon",
+  },
+  "bonus.none": {
+    uz: "Hozircha kanal vazifalari yo‘q — tez orada qo‘shiladi.",
+    ru: "Пока заданий с каналами нет — скоро появятся.",
+    en: "No channel tasks yet — more are coming soon.",
+  },
+  "bonus.hint": {
+    uz: "Kanalga obuna bo‘ling, so‘ng «Tekshirish»ni bosing.",
+    ru: "Подпишитесь на канал, затем нажмите «Проверить».",
+    en: "Join the channel, then tap «Check».",
+  },
+  "bonus.celebrateTitle": { uz: "+{n} ball!", ru: "+{n} баллов!", en: "+{n} points!" },
+  "bonus.celebrateJoin": {
+    uz: "«{c}» obunasi uchun ball hamyoningizga qo‘shildi.",
+    ru: "Баллы за подписку на «{c}» зачислены в кошелёк.",
+    en: "Points for joining «{c}» are in your wallet.",
+  },
+  "bonus.celebrateStay": {
+    uz: "{d} kun obuna bo‘lib qolsangiz — yana +{s} ball.",
+    ru: "Останьтесь подписанным {d} дн. — и получите ещё +{s} баллов.",
+    en: "Stay subscribed for {d} days to get +{s} more points.",
+  },
+  "bonus.confirmed": { uz: "Obuna tasdiqlandi", ru: "Подписка подтверждена", en: "Subscription confirmed" },
+  "bonus.stayText": {
+    uz: "«{c}» kanalida {d} kun qolganingiz uchun rahmat! Ball hamyoningizga qo‘shildi.",
+    ru: "Спасибо, что остаётесь в канале «{c}» {d} дн.! Баллы зачислены в кошелёк.",
+    en: "Thanks for staying in «{c}» for {d} days! The points are in your wallet.",
+  },
+  "btn.subscribe": { uz: "{i}. Obuna bo‘lish", ru: "{i}. Подписаться", en: "{i}. Join" },
+  "btn.check": { uz: "{i}. Tekshirish", ru: "{i}. Проверить", en: "{i}. Check" },
+  "btn.moreTasks": { uz: "Boshqa vazifalar", ru: "Другие задания", en: "More tasks" },
+  "toast.bonusPaid": { uz: "🎉 +{n} ball!", ru: "🎉 +{n} баллов!", en: "🎉 +{n} points!" },
+  "toast.bonusAlready": { uz: "Bu vazifa allaqachon bajarilgan", ru: "Это задание уже выполнено", en: "This task is already done" },
+  "toast.bonusNotMember": {
+    uz: "Avval kanalga obuna bo‘ling, so‘ng «Tekshirish»ni bosing",
+    ru: "Сначала подпишитесь на канал, затем нажмите «Проверить»",
+    en: "Join the channel first, then tap «Check»",
+  },
+  "toast.bonusUnknown": {
+    uz: "Hozir tekshirib bo‘lmadi — birozdan keyin qayta urinib ko‘ring",
+    ru: "Сейчас не удалось проверить — попробуйте чуть позже",
+    en: "Could not check right now — please try again a bit later",
+  },
+  "toast.bonusInactive": { uz: "Bu vazifa endi faol emas", ru: "Это задание больше не активно", en: "This task is no longer active" },
+  "toast.bonusRate": {
+    uz: "Juda tez — bir daqiqadan keyin qayta urinib ko‘ring",
+    ru: "Слишком часто — попробуйте через минуту",
+    en: "Too fast — please try again in a minute",
+  },
 
   /* ── Yordam ── */
   "help.title": { uz: "Yordam", ru: "Помощь", en: "Help" },
