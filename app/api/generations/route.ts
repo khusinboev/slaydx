@@ -9,6 +9,7 @@ import { env } from "@/lib/server/env";
 import { queryOne } from "@/lib/server/db";
 import { effectivePrice } from "@/lib/server/pricing";
 import { getSetting } from "@/lib/server/settings";
+import { assertCanCreate } from "@/lib/server/mandatory-channels";
 import type { ToolId } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -135,6 +136,14 @@ export const POST = handler("generations/create", async (req) => {
    * replays (same tool and values) or rejects with 422 (different ones).
    */
   const replay = idempotencyKey ? await idempotencyKeyTaken(user.id, idempotencyKey) : false;
+
+  /*
+   * Mandatory channels (docs/bonus/BONUS3.md C-Q2/C-Q3): 403 `channel_required` /
+   * `telegram_required` before anything is priced, charged or queued. A replay is a job the
+   * user already created (and paid for) — it is answered, never blocked. Users with an admin
+   * account are exempt (`mandatory-channels.ts`).
+   */
+  if (!replay) await assertCanCreate(user.id);
 
   // Admin pause (§6.10): checked before pricing and charging, so nothing is charged or queued.
   if (!replay) await assertGenerationOpen(tool.id);

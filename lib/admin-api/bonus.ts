@@ -34,6 +34,8 @@ export type BonusChannel = {
   stayBonus: number;
   stayDays: number;
   active: boolean;
+  /** Must be joined before creating new work (docs/bonus/BONUS3.md C-Q2). */
+  mandatory: boolean;
   sort: number;
   createdAt: string;
   updatedAt: string;
@@ -57,10 +59,11 @@ export type BonusChannelCreate = {
   joinBonus: number;
   stayBonus: number;
   stayDays: number;
+  mandatory?: boolean;
   reason?: string;
 };
 
-export type BonusChannelPatch = Partial<Pick<BonusChannel, "title" | "inviteLink" | "joinBonus" | "stayBonus" | "stayDays" | "active" | "sort">> & {
+export type BonusChannelPatch = Partial<Pick<BonusChannel, "title" | "inviteLink" | "joinBonus" | "stayBonus" | "stayDays" | "active" | "mandatory" | "sort">> & {
   reason?: string;
 };
 

@@ -46,6 +46,11 @@ export function ChannelRow({ item, bot, canEdit, toggling, onToggle, onEdit, onD
             #{item.sort}
           </span>
           <span className={cn("min-w-0 text-[14px] font-semibold break-words", !item.active && "text-muted-foreground")}>{item.title}</span>
+          {item.mandatory ? (
+            <span data-mandatory className="bg-primary/15 text-foreground shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold">
+              🔒 Majburiy
+            </span>
+          ) : null}
           {item.active ? null : <Badge>O&apos;chiq</Badge>}
         </div>
         {url ? (

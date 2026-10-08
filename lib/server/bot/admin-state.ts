@@ -38,6 +38,8 @@ export type ChannelDraft = {
   title: string;
   username: string | null;
   botAdmin: BotAdminStatus;
+  /** «🔒 Majburiy» / «➕ Ixtiyoriy» (C-Q2); absent until picked (a draft from before is optional). */
+  mandatory?: boolean;
   type?: ChannelType;
 };
 

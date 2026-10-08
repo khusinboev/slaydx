@@ -82,6 +82,8 @@ export type ChannelTask = {
   joinBonus: number;
   stayBonus: number;
   stayDays: number;
+  /** Must be joined before creating new work (C-Q2): listed first, with a 🔒 mark. */
+  mandatory: boolean;
   claim: ChannelClaim | null;
 };
 
@@ -132,6 +134,7 @@ type TaskRow = {
   join_bonus: number;
   stay_bonus: number;
   stay_days: number;
+  mandatory: boolean;
   joined_at: Date | null;
   join_paid: number | null;
   stay_paid: number | null;
@@ -139,7 +142,7 @@ type TaskRow = {
 };
 
 /**
- * Active channels (by `sort`, then id) with the user's claim state, plus the
+ * Active channels (mandatory first, then by `sort`, then id) with the user's claim state, plus the
  * referral summary. Owner-scoped: claims are read by `user_id = $1` only.
  */
 export async function bonusTasks(
@@ -147,12 +150,12 @@ export async function bonusTasks(
   links?: { botUsername: string | null; appUrl: string },
 ): Promise<BonusTasks> {
   const rows = await query<TaskRow>(
-    `SELECT ch.id::text AS id, ch.title, ch.username, ch.invite_link, ch.join_bonus, ch.stay_bonus, ch.stay_days,
+    `SELECT ch.id::text AS id, ch.title, ch.username, ch.invite_link, ch.join_bonus, ch.stay_bonus, ch.stay_days, ch.mandatory,
             c.joined_at, c.join_paid, c.stay_paid, c.left_at
        FROM bonus_channels ch
        LEFT JOIN bonus_channel_claims c ON c.channel_id = ch.id AND c.user_id = $1
       WHERE ch.active
-      ORDER BY ch.sort, ch.id`,
+      ORDER BY ch.mandatory DESC, ch.sort, ch.id`,
     [userId],
   );
   const earnedRow = await queryOne<{ n: string }>(
@@ -177,6 +180,7 @@ export async function bonusTasks(
     joinBonus: Number(r.join_bonus),
     stayBonus: Number(r.stay_bonus),
     stayDays: Number(r.stay_days),
+    mandatory: r.mandatory === true,
     claim: r.joined_at
       ? {
           joinedAt: new Date(r.joined_at).toISOString(),

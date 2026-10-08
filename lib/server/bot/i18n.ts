@@ -378,6 +378,27 @@ const T = {
   "toast.bonusDone": { uz: "✅ Bajarilgan", ru: "✅ Выполнено", en: "✅ Done" },
   "toast.bonusRefreshed": { uz: "Yangilandi", ru: "Обновлено", en: "Updated" },
   "toast.bonusAlready": { uz: "Bu vazifa allaqachon bajarilgan", ru: "Это задание уже выполнено", en: "This task is already done" },
+  "mand.title": {
+    uz: "Botdan to‘liq foydalanish uchun kanalga obuna bo‘ling",
+    ru: "Чтобы пользоваться ботом полностью, подпишитесь на канал",
+    en: "Join the channel to use the bot in full",
+  },
+  "mand.lead": {
+    uz: "Obuna bo‘lmaguncha yangi hujjat yaratib bo‘lmaydi. Obuna bo‘lgach «Tekshirish»ni bosing.",
+    ru: "Пока вы не подписаны, новые документы создавать нельзя. После подписки нажмите «Проверить».",
+    en: "You cannot create new documents until you join. After joining, tap “Check”.",
+  },
+  "mand.check": { uz: "Tekshirish", ru: "Проверить", en: "Check" },
+  "mand.done": {
+    uz: "Rahmat! Endi botdan to‘liq foydalanishingiz mumkin.",
+    ru: "Спасибо! Теперь вы можете пользоваться ботом полностью.",
+    en: "Thank you! You can now use the bot in full.",
+  },
+  "toast.mandMissing": {
+    uz: "Hali hamma kanalga obuna bo‘lmagansiz",
+    ru: "Вы ещё подписаны не на все каналы",
+    en: "You have not joined every channel yet",
+  },
   "toast.bonusNotMember": {
     uz: "Obuna topilmadi — avval kanalga obuna bo‘ling",
     ru: "Подписка не найдена — сначала подпишитесь на канал",

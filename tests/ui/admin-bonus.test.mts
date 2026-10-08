@@ -76,6 +76,7 @@ const NEWS = {
   stayBonus: 0,
   stayDays: 7,
   active: true,
+  mandatory: false,
   sort: 1,
   createdAt: "2026-10-08T08:00:00.000Z",
   updatedAt: "2026-10-08T08:00:00.000Z",
@@ -246,7 +247,7 @@ test("add: first channel — resolve preview, news defaults (2 000, qo'shimcha y
   await waitFor(() => assert.ok(!screen.queryByRole("dialog")));
   const post = calls.find((c) => c.method === "POST")!;
   assert.equal(post.url, "/api/admin/bonus-channels");
-  assert.deepEqual(post.body, { input: "https://t.me/slaydx_news", joinBonus: 2000, stayBonus: 0, stayDays: 7 });
+  assert.deepEqual(post.body, { input: "https://t.me/slaydx_news", joinBonus: 2000, stayBonus: 0, stayDays: 7, mandatory: false });
   await screen.findByText("SlaydX Yangiliklar");
   assert.ok(within(rowOf("1")).getByText("Bot admin emas"), "the create answer seeds the bot status");
   assert.ok(toasts().some((m) => m.includes("admin emas")), toasts().join(" | "));
@@ -289,6 +290,29 @@ test("edit: only changed fields are sent; the row updates from the answer", asyn
   assert.equal(p.url, "/api/admin/bonus-channels/2");
   assert.deepEqual(p.body, { joinBonus: 1500 });
   assert.equal(rowOf("2").querySelector("[data-bonus]")?.textContent, `1${NBSP}500 + 2${NBSP}000 / 7 kun`);
+});
+
+test("mandatory (C-Q2): edit switch sends {mandatory:true}, a bonus-free mandatory channel is valid, the row shows «🔒 Majburiy»", async () => {
+  const saved = { ...NEWS, mandatory: true, joinBonus: 0 };
+  const calls = stubFetch([listRoute([NEWS]), botRoute({}), (c) => (c.method === "PATCH" ? json(200, { item: saved }) : null)]);
+  mount(h(BonusPage));
+  await screen.findByText("SlaydX Yangiliklar");
+  assert.ok(!rowOf("1").querySelector("[data-mandatory]"));
+  fireEvent.click(button("SlaydX Yangiliklar: tahrirlash"));
+  const dialog = within(await screen.findByRole("dialog"));
+  fireEvent.change(dialog.getByLabelText("Obuna bonusi"), { target: { value: "0" } });
+  assert.ok(dialog.getByText("Kamida bitta bonus 0 dan katta bo'lsin"), "optional: a bonus is required");
+  assert.equal(button("Saqlash").disabled, true);
+  const sw = dialog.getByRole("switch", { name: "Majburiy obuna" });
+  assert.equal(sw.getAttribute("aria-checked"), "false");
+  fireEvent.click(sw);
+  assert.equal(sw.getAttribute("aria-checked"), "true");
+  assert.ok(!dialog.queryByText("Kamida bitta bonus 0 dan katta bo'lsin"), "mandatory: no bonus is fine");
+  fireEvent.click(button("Saqlash"));
+  await waitFor(() => assert.ok(!screen.queryByRole("dialog")));
+  assert.deepEqual(calls.find((c) => c.method === "PATCH")!.body, { joinBonus: 0, mandatory: true });
+  assert.match(rowOf("1").querySelector("[data-mandatory]")?.textContent ?? "", /Majburiy/);
+  assert.deepEqual(checkAmounts({ joinBonus: "0", stayBonus: "0", stayDays: "7" }, true), { ok: true, value: { joinBonus: 0, stayBonus: 0, stayDays: 7 } });
 });
 
 test("active switch: PATCH {active:false}; the row shows «O'chiq»", async () => {

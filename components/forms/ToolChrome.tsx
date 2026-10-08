@@ -10,6 +10,8 @@ import { PAY_RETURN_PATH } from "@/components/overlays/pay-amount";
 import { TOOLS, TOOL_BY_SLUG, formatTanga } from "@/lib/tools";
 import type { ToolConfig } from "@/lib/types";
 import { creditTotal, useAppStore } from "@/lib/store";
+import { useChannelGate } from "@/lib/channel-gate";
+import { ChannelGate } from "./ChannelGate";
 import { DraftNotice } from "./DraftNotice";
 import { useKeyboardInset } from "./useKeyboardInset";
 
@@ -73,6 +75,8 @@ export function ToolChrome({
   const user = useAppStore((s) => s.user);
   const total = creditTotal(user);
   const tool = useChromeTool(title);
+  // The gate card already explains a 403 `channel_required` / `telegram_required` (no second error line).
+  const gated = useChannelGate((s) => s.gate !== null);
   const Icon = tool ? TOOL_ICONS[tool.icon] : undefined;
   const priceId = useId();
   // UX-03: narx ma'lum va balans yetmaydi — yuborishdan OLDIN aytiladi.
@@ -117,6 +121,8 @@ export function ToolChrome({
         subtitle={tool?.description}
       />
       <div ref={rootRef} data-tool-chrome className="mx-auto w-full max-w-3xl px-4 pt-2 pb-6">
+        {/* C-Q2/C-Q3: mandatory channels / Telegram login, before the form is filled. */}
+        <ChannelGate />
         {children}
 
         {/* FE-17: qoralama saqlanmadi / fayl qayta biriktirilsin — har formada. */}
@@ -139,7 +145,7 @@ export function ToolChrome({
          * sahifasiga (Hamyon) havola. Ilgari foydalanuvchi profil → to'ldirish
          * yo'lini o'zi topishi kerak edi.
          */}
-        {error ? (
+        {error && !gated ? (
           <p role="alert" className="text-destructive mb-4 text-[14.5px] leading-snug">
             {error}
             {balanceError ? <> {topUp}</> : null}

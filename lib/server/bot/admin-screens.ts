@@ -17,10 +17,15 @@ import { clip, esc, inlineButton, rows, tgEmoji, type InlineButton, type Screen 
  * Buttons appear only for what the role may do; the handlers re-check anyway.
  */
 
-/** Channel bonus presets (docs/bonus/PLAN.md B-Q2): news 2 000 once; extra 1 000 + 2 000 after 7 days. */
+/**
+ * Channel bonus presets (docs/bonus/PLAN.md B-Q2): optional — news 2 000 once, extra 1 000 + 2 000
+ * after 7 days; mandatory (BONUS3.md C-Q2) — 2 000 once (the default) or no bonus at all.
+ */
 export const CHANNEL_PRESETS: Record<ChannelType, { joinBonus: number; stayBonus: number; stayDays: number }> = {
   n: { joinBonus: 2000, stayBonus: 0, stayDays: 7 },
   e: { joinBonus: 1000, stayBonus: 2000, stayDays: 7 },
+  m: { joinBonus: 2000, stayBonus: 0, stayDays: 7 },
+  z: { joinBonus: 0, stayBonus: 0, stayDays: 7 },
 };
 
 const som = (lang: Lang, v: number): string => (lang === "uz" ? `${groupDigits(v)} so‘m` : lang === "ru" ? `${groupDigits(v)} сум` : `${groupDigits(v)} UZS`);
@@ -238,10 +243,12 @@ export function broadcastDoneScreen(lang: Lang, id: string, s: { sent: number; f
 /* ───────────────────────── Kanal ulash ───────────────────────── */
 
 function amountText(lang: Lang, c: { joinBonus: number; stayBonus: number; stayDays: number }): string {
-  return c.stayBonus > 0
-    ? at(lang, "ch.amountE", { join: som(lang, c.joinBonus), stay: som(lang, c.stayBonus), days: c.stayDays })
-    : som(lang, c.joinBonus);
+  if (c.stayBonus > 0) return at(lang, "ch.amountE", { join: som(lang, c.joinBonus), stay: som(lang, c.stayBonus), days: c.stayDays });
+  return c.joinBonus > 0 ? som(lang, c.joinBonus) : at(lang, "ch.noBonus");
 }
+
+/** «🔒 » before a mandatory channel (C-Q2). */
+const lockMark = (c: { mandatory?: boolean }) => (c.mandatory ? "🔒 " : "");
 
 export function channelsScreen(a: BotAdmin, items: BonusChannelItem[]): Screen {
   const l = a.lang;
@@ -252,7 +259,7 @@ export function channelsScreen(a: BotAdmin, items: BonusChannelItem[]): Screen {
     lines.push(
       at(l, "ch.line", {
         icon: c.active ? "✅" : "⏸",
-        title: esc(clip(c.title, 40)),
+        title: `${lockMark(c)}${esc(clip(c.title, 40))}`,
         user: c.username ? ` (@${esc(c.username)})` : "",
         amount: amountText(l, c),
         n: g(c.stats.joinPaidCount),
@@ -261,7 +268,7 @@ export function channelsScreen(a: BotAdmin, items: BonusChannelItem[]): Screen {
   }
   if (items.length) lines.push("", edit ? at(l, "ch.toggleHint") : at(l, "ch.viewOnly"));
   const toggles: InlineButton[][] = edit
-    ? items.slice(0, 20).map((c) => [inlineButton(null, `${c.active ? "✅" : "⏸"} ${clip(c.title, 30)}`, { callback_data: acb.chToggle(c.id) })])
+    ? items.slice(0, 20).map((c) => [inlineButton(null, `${c.active ? "✅" : "⏸"} ${lockMark(c)}${clip(c.title, 30)}`, { callback_data: acb.chToggle(c.id) })])
     : [];
   return {
     text: lines.join("\n"),
@@ -284,22 +291,47 @@ function channelHead(lang: Lang, d: ChannelDraft): string[] {
   return [head("megaphone", esc(clip(d.title, 60))), `${where} · ID <code>${esc(d.chatId)}</code>`, "", bot];
 }
 
-export function channelTypeScreen(lang: Lang, d: ChannelDraft): Screen {
-  const n = CHANNEL_PRESETS.n;
-  const e = CHANNEL_PRESETS.e;
+/** After resolving the channel: «🔒 Majburiy» or «➕ Ixtiyoriy» (docs/bonus/BONUS3.md C-Q2), then the bonus presets. */
+export function channelKindScreen(lang: Lang, d: ChannelDraft): Screen {
   return {
-    text: [...channelHead(lang, d), "", at(lang, "ch.pickType")].join("\n"),
+    text: [...channelHead(lang, d), "", at(lang, "ch.pickKind")].join("\n"),
     reply_markup: rows(
-      [inlineButton("doc", at(lang, "ch.typeN", { join: som(lang, n.joinBonus) }), { callback_data: acb.chType("n") })],
-      [inlineButton("plus", at(lang, "ch.typeE", { join: g(e.joinBonus), stay: g(e.stayBonus), days: e.stayDays }), { callback_data: acb.chType("e") })],
+      [inlineButton(null, at(lang, "ch.kindM"), { callback_data: acb.chKind("m") }, "primary")],
+      [inlineButton(null, at(lang, "ch.kindO"), { callback_data: acb.chKind("o") })],
       [cancel(lang)],
     ),
   };
 }
 
+/** Bonus presets of the picked kind: mandatory — 2 000 (default) / no bonus; optional — today's news / extra. */
+export function channelTypeScreen(lang: Lang, d: ChannelDraft): Screen {
+  const kind = d.mandatory ? at(lang, "ch.kindM") : at(lang, "ch.kindO");
+  const n = CHANNEL_PRESETS.n;
+  const e = CHANNEL_PRESETS.e;
+  const presets: InlineButton[][] = d.mandatory
+    ? [
+        [inlineButton("gift", at(lang, "ch.typeM", { join: som(lang, CHANNEL_PRESETS.m.joinBonus) }), { callback_data: acb.chType("m") }, "primary")],
+        [inlineButton(null, at(lang, "ch.typeZ"), { callback_data: acb.chType("z") })],
+      ]
+    : [
+        [inlineButton("doc", at(lang, "ch.typeN", { join: som(lang, n.joinBonus) }), { callback_data: acb.chType("n") })],
+        [inlineButton("plus", at(lang, "ch.typeE", { join: g(e.joinBonus), stay: g(e.stayBonus), days: e.stayDays }), { callback_data: acb.chType("e") })],
+      ];
+  return {
+    text: [...channelHead(lang, d), "", at(lang, "ch.confirmKind", { kind }), "", at(lang, "ch.pickType")].join("\n"),
+    reply_markup: rows(...presets, [back(lang, acb.chKinds())], [cancel(lang)]),
+  };
+}
+
 export function channelConfirmScreen(lang: Lang, d: ChannelDraft, type: ChannelType): Screen {
   const p = CHANNEL_PRESETS[type];
-  const lines = [...channelHead(lang, d), "", at(lang, "ch.confirmType", { type: at(lang, `ch.type.${type}`) }), at(lang, "ch.confirmJoin", { join: som(lang, p.joinBonus) })];
+  const lines = [
+    ...channelHead(lang, d),
+    "",
+    at(lang, "ch.confirmKind", { kind: d.mandatory ? at(lang, "ch.kindM") : at(lang, "ch.kindO") }),
+    at(lang, "ch.confirmType", { type: at(lang, `ch.type.${type}`) }),
+    at(lang, "ch.confirmJoin", { join: p.joinBonus > 0 ? som(lang, p.joinBonus) : at(lang, "ch.noBonus") }),
+  ];
   if (p.stayBonus > 0) lines.push(at(lang, "ch.confirmStay", { days: p.stayDays, stay: som(lang, p.stayBonus) }));
   lines.push("", at(lang, "ch.confirmAsk"));
   return {

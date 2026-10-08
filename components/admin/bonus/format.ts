@@ -64,14 +64,15 @@ export type AmountsDraft ={ joinBonus: string; stayBonus: string; stayDays: stri
 export type Amounts = { joinBonus: number; stayBonus: number; stayDays: number };
 
 /** Validates the three amount fields together (at least one bonus must be above zero). */
-export function checkAmounts(d: AmountsDraft): Check<Amounts> {
+/** `mandatory`: a mandatory channel may pay no bonus at all (C-Q2, the server's rule too). */
+export function checkAmounts(d: AmountsDraft, mandatory = false): Check<Amounts> {
   const join = checkIntText(d.joinBonus, 0, MAX_BONUS, "Obuna bonusi");
   if (!join.ok) return join;
   const stay = checkIntText(d.stayBonus, 0, MAX_BONUS, "Qo'shimcha bonus");
   if (!stay.ok) return stay;
   const days = checkIntText(d.stayDays, 1, MAX_STAY_DAYS, "Kunlar");
   if (!days.ok) return days;
-  if (join.value === 0 && stay.value === 0) return { ok: false, error: "Kamida bitta bonus 0 dan katta bo'lsin" };
+  if (!mandatory && join.value === 0 && stay.value === 0) return { ok: false, error: "Kamida bitta bonus 0 dan katta bo'lsin" };
   return { ok: true, value: { joinBonus: join.value, stayBonus: stay.value, stayDays: days.value } };
 }
 
