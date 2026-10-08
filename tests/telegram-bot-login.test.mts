@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 
 /**
  * Botdan boshlangan bir martalik kirish havolasi (`createBotLoginLink`,
@@ -15,9 +14,9 @@ import { readFile } from "node:fs/promises";
  * shuning uchun `process.env.APP_URL`/`TELEGRAM_BOT_TOKEN` FAQAT shu faylning
  * birinchi importidan oldin o'rnatiladi va butun fayl davomida o'zgarmaydi.
  * `APP_URL=https://slaydx.test` (https) tanlandi — shunda `loginButton`
- * tugma qo'yadi. Lokal (`http://localhost`) holat shu sababli JONLI
- * sinalmaydi — pastda alohida testda `loginButton` manbasi skanerlanib
- * qulflanadi.
+ * tugma qo'yadi. Lokal (`http://localhost`) holat pastdagi testda `env.appUrl`ni
+ * vaqtincha almashtirib, bot ekranlari (`lib/server/bot/screens.ts`) orqali
+ * JONLI sinaladi.
  */
 
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
@@ -256,32 +255,30 @@ test("eskirgan chipta — redeemLoginToken rad etadi", async () => {
   assert.deepEqual(result, { ok: false, reason: "expired" });
 });
 
-test("loginButton — lokal manzil holati manba skani bilan qulflangan", async () => {
-  // `env.appUrl` bu faylda `https://slaydx.test` ga muzlatilgan (modul
-  // yuklanishida o'qiladi), shuning uchun `http://localhost` shoxini
-  // jonli chaqirib bo'lmaydi. Mantiqni manba matnidan tekshiramiz: lokal
-  // manzilda tugma YO'Q (reply_markup bo'sh) — `sendLoginLink` shunda
-  // havolani matnga qo'shadi.
-  const src = await readFile(
-    new URL("../lib/server/telegram.ts", import.meta.url),
-    "utf8",
-  );
-  const fnMatch = src.match(/function loginButton\([\s\S]*?\n\}/);
-  assert.ok(fnMatch, "loginButton funksiyasi topilishi kerak");
-  const fn = fnMatch![0];
-  assert.ok(
-    fn.includes("localhost") && fn.includes("127\\.0\\.0\\.1") && fn.includes("0\\.0\\.0\\.0"),
-    "lokal manzilni aniqlaydigan mantiq saqlanishi kerak",
-  );
-  assert.match(fn, /if \(!isPublic\) return \{\};/, "lokal bo'lsa tugma qaytarilmasligi kerak");
-
-  const sendMatch = src.match(/async function sendLoginLink\([\s\S]*?\n\}/);
-  assert.ok(sendMatch, "sendLoginLink funksiyasi topilishi kerak");
-  assert.ok(
-    sendMatch![0].includes('"reply_markup" in btn ? intro : `${intro}') &&
-      sendMatch![0].includes("${link}`"),
-    "tugma bo'lmasa havola matnga qo'shilishi kodda qulflangan bo'lishi kerak",
-  );
+test("login screens — lokal manzilda tugma YO'Q, havola matnga qo'shiladi (jonli, B2)", async () => {
+  // Bot UI (B2): `/start` va `/login` ekranlari sof `lib/server/bot/screens.ts`
+  // renderlari — `env.appUrl` ni chaqiruv paytida o'qiydi, shuning uchun
+  // lokal holat endi manba skani emas, JONLI sinaladi.
+  const { welcomeScreen, loginScreen } = await import("../lib/server/bot/screens.ts");
+  const { env } = (await import("../lib/server/env.ts")) as unknown as { env: { appUrl: string } };
+  const prev = env.appUrl;
+  try {
+    for (const base of ["http://localhost:3000", "https://127.0.0.1:3000", "https://0.0.0.0"]) {
+      env.appUrl = base;
+      const link = `${base}/api/auth/telegram/enter?t=${"x".repeat(43)}`;
+      for (const s of [loginScreen("uz", link), welcomeScreen("uz", { user: null, loginLink: link, rewardPoints: 2000 })]) {
+        assert.ok(!s.reply_markup, `${base}: lokal manzilda tugma bo'lmasligi kerak`);
+        assert.ok(s.text.endsWith(`\n\n${link}`), "tugma bo'lmasa havola matnga qo'shiladi");
+      }
+    }
+    env.appUrl = "https://slaydx.test";
+    const link = `https://slaydx.test/api/auth/telegram/enter?t=${"x".repeat(43)}`;
+    const s = loginScreen("uz", link);
+    assert.ok(s.reply_markup, "https da tugmalar bor");
+    assert.ok(!s.text.includes(link), "tugma bo'lsa havola matnda takrorlanmaydi");
+  } finally {
+    env.appUrl = prev;
+  }
 });
 
 /*
@@ -332,7 +329,10 @@ test("handleUpdate: /start — saytga kirmagan foydalanuvchi bazaga yoziladi, bo
   assert.equal(Number(again!.points), SIGNUP_BONUS_POINTS, "ikkinchi /start bonus bermaydi");
   assert.equal(await signupBonusCount(user.id), 1);
 
-  const result = await redeemLoginToken(extractToken(buttonUrl(calls[1]!.body)!));
+  // B2: every private /start = the welcome card + the main-keyboard message → the 2nd welcome is calls[2].
+  assert.equal(calls.length, 4);
+  assert.ok((calls[3]!.body.reply_markup as { keyboard?: unknown }).keyboard, "the 2nd message carries the main keyboard");
+  const result = await redeemLoginToken(extractToken(buttonUrl(calls[2]!.body)!));
   assert.equal(result.ok, true);
   if (result.ok) assert.equal(result.user.id, user.id, "saytga kirish o'sha akkauntni ochadi");
   assert.equal(await signupBonusCount(user.id), 1, "saytga kirish ham bonusni takrorlamaydi");
