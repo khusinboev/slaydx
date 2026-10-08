@@ -223,6 +223,12 @@ test("«Tez boshlash»: Slayd, Referat, Insho, Rezyume → /uz/<slug>, format ba
     assert.equal(c.querySelector("[data-quick-format]")!.textContent, tool.output.toUpperCase());
   }
   assert.equal(q("[data-quick-tool=slide] [data-quick-detail]")!.textContent, "3\u00a0000 tangadan");
+  // Owner request 2026-10-08: a big «Barcha vositalar» right under the four cards → the full catalogue.
+  const all = q<HTMLAnchorElement>("[data-hub-all-tools]");
+  assert.ok(all, "«Barcha vositalar» button");
+  assert.equal(all!.getAttribute("href"), "/uz/create");
+  assert.match(all!.textContent ?? "", /Barcha vositalar/);
+  assert.ok(all!.className.includes("min-h-14"), "big (≥ 56 px) touch target");
 });
 
 test("login gate on tool links: signed out → login over the tool with returnTo; signed in or session unknown → none", () => {
