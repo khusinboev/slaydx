@@ -23,7 +23,8 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *   9. `restricted` + `is_member: false` not treated as leaving → «kicked / restricted non-member»;
  *  10. join-time `stay_paid` always NULL → «a channel without a stay bonus settles the claim at join»;
  *  11. `settleZeroStay` call removed from the sweep → «existing zero-stay claims are settled»;
- *      the `c.stay_bonus > 0` CASE dropped from the admin stats → same test («Kutilmoqda»).
+ *      the `c.stay_bonus > 0` CASE dropped from the admin stats → same test («Kutilmoqda»);
+ *  12. `STAY_BUDGET_MS` back to 30 000 → «15 s budget stops the run early».
  */
 
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
@@ -572,6 +573,42 @@ test("chat_member: a paid stay bonus, unknown users / chats and unsafe ids chang
   assert.equal(await bc.recordChannelLeave({ chat: { id: chat }, new_chat_member: { status: "left", user: { id: 2 ** 53 + 2 } } }), 0);
   assert.equal((await claim(w.id, ch))?.left_at, null);
   assert.equal(await bc.recordChannelLeave({ chat: { id: chat }, new_chat_member: { status: "left", user: { id: w.tg } } }), 1);
+});
+
+test("staySweep: 15 s budget stops the run early and the next run continues; ≤ 20 Bot API calls/s; batch 200 — MUTATSIYA 12", { skip }, async () => {
+  await freshSweep();
+  assert.equal(bc.STAY_BATCH, 200);
+  assert.equal(bc.STAY_BUDGET_MS, 15_000);
+  assert.equal(bc.STAY_PER_SECOND, 20);
+  const ch = await newChannel();
+  const users = [];
+  for (let i = 0; i < 20; i++) {
+    const u = await newUser();
+    users.push(u);
+    await joinedAgo(u.id, ch, 8);
+  }
+  // Virtual clock: every membership check «takes» 1 s; the default budget (15 s) is used.
+  let t = 0;
+  const sleeps: number[] = [];
+  const deps = {
+    now: () => t,
+    sleep: async (ms: number) => {
+      sleeps.push(ms);
+    },
+    member: async () => {
+      t += 1_000;
+      return "member" as const;
+    },
+    notify: async () => {},
+  };
+  const first = await bc.staySweep(undefined, deps);
+  assert.deepEqual(first, { rows: 15, paid: 15, left: 0, unknown: 0 }, "stops starting checks once 15 s are spent");
+  assert.ok(sleeps.length > 0 && sleeps.every((ms) => ms >= 1000 / 20), JSON.stringify(sleeps));
+  const paid = await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM bonus_channel_claims WHERE channel_id = $1 AND stay_paid = 2000", [ch]);
+  assert.equal(paid?.n, "15");
+  t = 0;
+  const second = await bc.staySweep(undefined, deps);
+  assert.deepEqual(second, { rows: 5, paid: 5, left: 0, unknown: 0 }, "the rest are paid by the next run");
 });
 
 /* ───────────────────────── bonusTasks ───────────────────────── */

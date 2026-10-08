@@ -304,8 +304,13 @@ export async function recordChannelLeave(u: ChatMemberUpdate): Promise<number> {
 export const STAY_RETRY_HOURS = 6;
 /** Bot API calls per second of one sweep — well below Telegram's ~30/s. */
 export const STAY_PER_SECOND = 20;
-/** One sweep stops starting new checks after this long (housekeeping must not stall). */
-export const STAY_BUDGET_MS = 30_000;
+/** Due claims read per sweep run (the worker runs one every 10 min). */
+export const STAY_BATCH = 200;
+/**
+ * One sweep stops starting new checks after this long (housekeeping must not stall); the
+ * claims it did not reach stay due and are picked up by the next run.
+ */
+export const STAY_BUDGET_MS = 15_000;
 
 export type StaySweepDeps = {
   member?: (chatId: string, telegramId: string) => Promise<MemberStatus>;
@@ -377,11 +382,12 @@ async function notifyStay(telegramId: string, lang: string, points: number, titl
  *   member      → stay bonus (ledger `…:stay`) + a message in the user's language;
  *   not member  → `left_at = now()`, nothing paid (B-Q3);
  *   unknown     → `stay_checked_at = now()`, retried after STAY_RETRY_HOURS.
- * Bounded (`limit`, time budget) and paced (≤ STAY_PER_SECOND Bot API calls/s).
+ * Bounded (`limit`, default STAY_BATCH = 200; time budget STAY_BUDGET_MS = 15 s — the rest
+ * continue next run) and paced (≤ STAY_PER_SECOND = 20 Bot API calls/s).
  * Each claim is settled in its own transaction under row locks, re-checking
  * every condition, so a concurrent sweep or admin edit cannot double-pay.
  */
-export async function staySweep(limit = 50, deps: StaySweepDeps = {}): Promise<StaySweepResult> {
+export async function staySweep(limit = STAY_BATCH, deps: StaySweepDeps = {}): Promise<StaySweepResult> {
   const out: StaySweepResult = { rows: 0, paid: 0, left: 0, unknown: 0 };
   if (!(deps.configured ?? botConfigured)()) return out;
   const member = deps.member ?? chatMemberStatus;

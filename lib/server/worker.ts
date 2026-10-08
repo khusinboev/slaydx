@@ -55,7 +55,7 @@ import { purgeFailedLeftovers } from "./admin-job-actions";
 import { registerErrorSink } from "./error-sink";
 import { processIdFor, startHeartbeat, stopHeartbeat } from "./heartbeat";
 import { recordStep } from "./housekeeping-status";
-import { staySweep } from "./bonus-channels";
+import { STAY_BATCH, staySweep } from "./bonus-channels";
 
 /**
  * Navbatni bajaruvchi worker.
@@ -120,7 +120,7 @@ export function resetRetentionScan(): void {
  * A stay bonus is due after days, so minute precision buys nothing.
  */
 const STAY_SWEEP_EVERY_MS = 10 * 60_000;
-export const STAY_SWEEP_BATCH = 50;
+export const STAY_SWEEP_BATCH = STAY_BATCH;
 let lastStaySweepAt = -Infinity;
 /** Har iteratsiyada diskka yozmaslik uchun — 30 s shartnomadan ancha tez. */
 const ALIVE_EVERY_MS = 10_000;

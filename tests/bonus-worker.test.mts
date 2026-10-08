@@ -3,13 +3,14 @@ import assert from "node:assert/strict";
 
 /**
  * Worker wiring of the bonus channel stay sweep (docs/bonus/PLAN.md, K1):
- * `purgeHousekeeping` runs `staySweep(50)` as the recorded step «bonus-stay»,
+ * `purgeHousekeeping` runs `staySweep(200)` as the recorded step «bonus-stay»,
  * at most every 10 minutes (the mark is set before the run, like
  * «retention»), and a failing sweep does not stop the other steps.
  * Stubbed pool — no database.
  *
  * Mutations (each turned a test red, then restored):
- *   1. the `step("bonus-stay", …)` call removed → «recorded … with batch 50»;
+ *   1. the `step("bonus-stay", …)` call removed → «recorded … with batch 200»;
+ *   3. `STAY_BATCH` back to 50 → «recorded … with batch 200».
  *   2. the 10 min cadence check removed → «skipped on the next tick».
  */
 
@@ -44,7 +45,7 @@ function stubPool(t: TestContext, fail = false) {
   return seen;
 }
 
-test("housekeeping records «bonus-stay» with batch 50, then skips it for 10 minutes", async (t) => {
+test("housekeeping records «bonus-stay» with batch 200, then skips it for 10 minutes", async (t) => {
   quiet(t);
   const seen = stubPool(t);
   worker.resetRetentionScan();
@@ -55,7 +56,7 @@ test("housekeeping records «bonus-stay» with batch 50, then skips it for 10 mi
   const due = seen.filter((q) => DUE.test(q.text));
   assert.equal(due.length, 1, "MUTATSIYA 1: the sweep ran once");
   assert.deepEqual(due[0]!.params, [worker.STAY_SWEEP_BATCH, 6]);
-  assert.equal(worker.STAY_SWEEP_BATCH, 50);
+  assert.equal(worker.STAY_SWEEP_BATCH, 200);
   const status = seen.filter((q) => /INSERT INTO housekeeping_status/.test(q.text)).find((q) => q.params[0] === "bonus-stay");
   assert.ok(status, "status row recorded");
   assert.equal(status!.params[1], true, "ok");
