@@ -626,3 +626,39 @@ test("admin.wallet_confirm_threshold: PUT/DELETE o'qiladigan qiymatga ta'sir qil
   await del(admin.cookie, "admin.wallet_confirm_threshold", { reason: REASON });
   assert.equal(await settings.getSetting("admin.wallet_confirm_threshold"), 1_000_000);
 });
+
+// ───────────────────────────── C-Q4 payment bonus (the same setting the bot admin panel writes)
+
+test("payment_bonus_percent (web): owner/admin PUT 0–50 → 200 + audit; the service reads it; 51 / -1 / 2.5 / \"10\" → 400; finance 403 + denied audit", { skip }, async () => {
+  await resetAll();
+  const { getPaymentBonusPercent } = await import("../lib/server/payment-bonus.ts");
+  const listed = itemOf(await list((await session("viewer")).cookie), "payment_bonus_percent");
+  assert.deepEqual(
+    { group: listed.group, type: listed.type, min: listed.min, max: listed.max, value: listed.value, source: listed.source, envValue: listed.envValue },
+    { group: "Moliya", type: "int", min: 0, max: 50, value: 10, source: "default", envValue: 10 },
+  );
+  const s = await session("owner");
+  const bad: Array<[unknown, RegExp]> = [[51, /0 dan 50 gacha/], [-1, /0 dan 50 gacha/], [2.5, /butun son/], ["10", /butun son/], [null, /butun son/]];
+  for (const [value, msg] of bad) {
+    const r = await put(s.cookie, "payment_bonus_percent", { value, reason: REASON });
+    assert.equal(r.status, 400, JSON.stringify(value));
+    assert.match(String(r.body.error), msg);
+  }
+  assert.deepEqual(await rows(), []);
+  const ok = await put(s.cookie, "payment_bonus_percent", { value: 25, reason: REASON });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal((ok.body.item as Item).value, 25);
+  assert.equal(await getPaymentBonusPercent(), 25, "the wallet / bot read the new value (this process's cache dropped)");
+  const a = await audits(s.admin.adminId, "settings.update");
+  assert.equal(a.length, 1);
+  assert.deepEqual([a[0].target_id, a[0].before, a[0].after], ["payment_bonus_percent", { value: 10, source: "default" }, { value: 25, source: "db" }]);
+  const adm = await session("admin");
+  assert.equal((await put(adm.cookie, "payment_bonus_percent", { value: 0, reason: REASON })).status, 200);
+  assert.equal(await getPaymentBonusPercent(), 0);
+  const fin = await session("finance");
+  const denied = await put(fin.cookie, "payment_bonus_percent", { value: 50, reason: REASON });
+  assert.equal(denied.status, 403);
+  assert.equal((await audits(fin.admin.adminId, "auth.denied")).length, 1);
+  assert.equal(await getPaymentBonusPercent(), 0, "finance changed nothing");
+  await resetAll();
+});

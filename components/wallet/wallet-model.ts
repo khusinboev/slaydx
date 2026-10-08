@@ -1,7 +1,6 @@
 import type { LedgerEntry, PaymentOrder } from "@/lib/api-client";
 import { formatPoints } from "@/lib/referral";
 import { TOOL_BY_ID } from "@/lib/tools";
-import { groupDigits } from "@/lib/format";
 import { FIRST_TOPUP_NOTE_PREFIX } from "@/lib/topup-bonus";
 import { PAYMENT_BONUS_NOTE_PREFIX } from "@/lib/payment-bonus";
 
