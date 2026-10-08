@@ -12,7 +12,7 @@ import { DEFAULT_TOPUP, TOPUP_PRESETS, openPay } from "../overlays/pay-amount";
 import { groupDigits } from "@/lib/format";
 import { PaymentBanner } from "./PaymentBanner";
 import { usePaymentReturn } from "./usePaymentReturn";
-import { TOPUP_FEATURES, formatWhen, ledgerRow, orderStateLabel, providerLabel } from "./wallet-model";
+import { TOPUP_FEATURES, firstTopupHint, formatWhen, ledgerRow, orderStateLabel, providerLabel } from "./wallet-model";
 
 /** Where the login returns to (the lead routes `/uz/wallet`; `/uz/purchase` redirects here keeping `?order=`). */
 export const WALLET_PATH = "/uz/wallet";
@@ -46,6 +46,8 @@ export function WalletPage() {
   const user = useAppStore((s) => s.user);
   const open = useUi((s) => s.open);
   const pay = usePaymentReturn();
+  /** `GET /api/users/me` `firstTopupEligible` (loaded with the ledger, again after a payment lands). */
+  const [firstTopup, setFirstTopup] = useState(false);
 
   const toReferral = useCallback(() => {
     const el = document.getElementById("wallet-referral");
@@ -139,11 +141,11 @@ export function WalletPage() {
         </section>
       )}
 
-      {sessionChecked && !(loggedIn && !user) ? <QuickTopUp /> : null}
+      {sessionChecked && !(loggedIn && !user) ? <QuickTopUp firstTopupBonus={ready && firstTopup} /> : null}
 
       {ready ? (
         <>
-          <Ledger paidOrder={pay.orderState === "paid" ? pay.orderId : null} />
+          <Ledger paidOrder={pay.orderState === "paid" ? pay.orderId : null} onFirstTopup={setFirstTopup} />
           <Orders orders={pay.orders} />
           <h2 className={sectionLabel}>Do&apos;stlar</h2>
           <div id="wallet-referral" tabIndex={-1} className="scroll-mt-4 rounded-[20px] focus:outline-none">
@@ -161,14 +163,24 @@ export function WalletPage() {
  * amount (`TOPUP_PRESETS`, the same list), «eng qulay» on the dialog's
  * default; a tap opens PayDialog with that amount preselected
  * (`openPay({ amount })`). Below them the top-up facts (formerly the separate
- * «To'lov haqida» card).
+ * «To'lov haqida» card). While the user has no paid top-up yet, the first top-up
+ * bonus hint sits above the amounts.
  */
-function QuickTopUp() {
+function QuickTopUp({ firstTopupBonus }: { firstTopupBonus: boolean }) {
   return (
     <section aria-labelledby="wallet-packs-title" data-wallet-packs>
       <h2 id="wallet-packs-title" className={sectionLabel}>
         Tez to&apos;ldirish
       </h2>
+      {firstTopupBonus ? (
+        <p
+          className="bg-accent-soft text-accent-soft-foreground mb-2.5 flex items-start gap-2 rounded-[14px] px-3.5 py-2.5 text-[14.5px] leading-snug font-semibold"
+          data-wallet-first-bonus
+        >
+          <Gift className="mt-px size-[18px] shrink-0" aria-hidden="true" />
+          {firstTopupHint()}
+        </p>
+      ) : null}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {TOPUP_PRESETS.map((v) => {
           const best = v === DEFAULT_TOPUP;
@@ -206,7 +218,7 @@ function QuickTopUp() {
 }
 
 /** «Harakatlar»: the last 30 ledger entries from `GET /api/users/me` (also refreshes the store user). */
-function Ledger({ paidOrder }: { paidOrder: string | null }) {
+function Ledger({ paidOrder, onFirstTopup }: { paidOrder: string | null; onFirstTopup: (eligible: boolean) => void }) {
   const setUser = useAppStore((s) => s.setUser);
   const [entries, setEntries] = useState<api.LedgerEntry[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -219,9 +231,10 @@ function Ledger({ paidOrder }: { paidOrder: string | null }) {
       .then((r) => {
         setUser(r.user);
         setEntries(r.transactions);
+        onFirstTopup(r.firstTopupEligible === true);
       })
       .catch(() => setFailed(true));
-  }, [setUser]);
+  }, [setUser, onFirstTopup]);
 
   // Again after a payment lands: the top-up row appears without a reload.
   useEffect(() => {
