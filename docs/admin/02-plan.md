@@ -196,6 +196,8 @@ Roles are a fixed set defined in code. `admin_accounts.role` carries a CHECK con
 | `errors.resolve` | resolve errors |
 | `audit.view` | audit log |
 | `audit.export` | CSV of the audit log |
+| `bonus.view` | bonus channel list with claim stats, resolve preview, bot admin re-check (docs/bonus/PLAN.md K2) |
+| `bonus.edit` | add, edit, (de)activate and delete bonus channels; delete only without claims |
 | `admins.view` | admin account list |
 | `admins.manage` | create, disable, change role, reset 2FA, revoke sessions, within rank limits |
 | `self` | implicit for every admin: own sessions, own recovery codes |
@@ -238,6 +240,8 @@ Roles are a fixed set defined in code. `admin_accounts.role` carries a CHECK con
 | audit.export | ✓ | | | | | | S |
 | pricing.view | ✓ | ✓ | ✓ | | | ✓ | |
 | pricing.edit | ✓ | ✓ | | | | | S |
+| bonus.view | ✓ | ✓ | ✓ | | | ✓ | |
+| bonus.edit | ✓ | ✓ | | | | | S |
 | admins.view | ✓ | ✓ | | | | | |
 | admins.manage | ✓ | ✓ (rank-limited) | | | | | S |
 

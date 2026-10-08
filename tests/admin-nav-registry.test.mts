@@ -24,6 +24,7 @@ const EXPECTED: ReadonlyArray<[string, string]> = [
   ["/admin/finance", "finance.view"],
   ["/admin/ai", "ai.view"],
   ["/admin/pricing", "pricing.view"],
+  ["/admin/bonus", "bonus.view"],
   ["/admin/moderation", "moderation.view"],
   ["/admin/broadcasts", "broadcasts.view"],
   ["/admin/settings", "settings.view"],

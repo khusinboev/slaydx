@@ -368,6 +368,7 @@ const PATH_FAMILIES: ReadonlyArray<readonly [RegExp, readonly string[]]> = [
   [/^admins\//, ["admins"]],
   [/^metrics\//, ["dashboard"]],
   [/^pricing\//, ["pricing"]],
+  [/^bonus-channels\//, ["bonus"]],
   [/^(me\/|auth\/reauth\/)/, ["self"]],
 ];
 
@@ -448,6 +449,8 @@ const PLAN_TABLE = `
 | audit.export | ✓ | | | | | | S |
 | pricing.view | ✓ | ✓ | ✓ | | | ✓ | |
 | pricing.edit | ✓ | ✓ | | | | | S |
+| bonus.view | ✓ | ✓ | ✓ | | | ✓ | |
+| bonus.edit | ✓ | ✓ | | | | | S |
 | admins.view | ✓ | ✓ | | | | | |
 | admins.manage | ✓ | ✓ (rank-limited) | | | | | S |
 `;
@@ -502,7 +505,7 @@ const planStepUp = (perm: Permission): boolean => PLAN_STEP_UP.has(perm);
 
 test("matrix: admin-rbac equals the §4.3 literal AND the §4.3 table in the plan file (role × permission × step-up)", () => {
   const literal = parseTable(PLAN_TABLE);
-  assert.equal(literal.length, 34);
+  assert.equal(literal.length, 36);
   assert.deepEqual(parseTable(planFileTable()), literal, "the transcribed literal drifted from docs/admin/02-plan.md §4.3");
   assert.deepEqual([...rbac.PERMISSIONS].filter((p) => p !== "self").sort(), literal.map((r) => r.perm).sort());
   const diffs: string[] = [];
@@ -537,7 +540,7 @@ function paramsFor(e: Entry, role: Role | null): Record<string, string> {
     if (e.rel.startsWith("users/[id]")) value = s.targetUser.id;
     else if (e.rel.startsWith("admins/[id]")) value = s.targetAdmin.adminId;
     else if (e.rel.startsWith("me/sessions/[id]")) value = role ? s.admins[role].spare[currentMode.name].id : "900000000000";
-    else if (/^(audit|errors|broadcasts)\/\[id\]/.test(e.rel)) value = "900000000000";
+    else if (/^(audit|errors|broadcasts|bonus-channels)\/\[id\]/.test(e.rel)) value = "900000000000";
     else if (/^(generations|orders|moderation\/game-links|moderation\/game-results)\/\[id\]/.test(e.rel)) value = randomUUID();
     else if (e.rel.startsWith("settings/[key]")) value = "no_such_setting";
     else if (e.rel.startsWith("pricing/[toolId]")) value = PRICING_TOOL_ID;
