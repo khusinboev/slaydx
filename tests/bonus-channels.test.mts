@@ -18,7 +18,9 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *   4. sweep due condition `<= now()` → `<= now() + interval '7 days'` (stay before day N) → «not due before day N»;
  *   5. sweep `status === "member"` → `status !== "not_member"` (unknown pays the stay) → «unknown → retried later»;
  *   6. sweep without `NOT u.is_blocked` and the in-tx check → «skips blocked / inactive / zero stay»;
- *   7. `SIGNUP_BONUS_POINTS` back to 3000 → «signup bonus is 2 000».
+ *   7. `SIGNUP_BONUS_POINTS` back to 3000 → «signup bonus is 2 000»;
+ *   8. the `chat_member` branch removed from `processUpdate` → «join → claim → leave on day 1»;
+ *   9. `restricted` + `is_member: false` not treated as leaving → «kicked / restricted non-member».
  */
 
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
@@ -418,6 +420,106 @@ test("staySweep: bounded batch, paced Bot API calls, time budget; no bot → not
   });
   assert.deepEqual(r3, { rows: 0, paid: 0, left: 0, unknown: 0 });
   assert.equal(called, false);
+});
+
+/* ───────────────────────── chat_member: leaving before day N ───────────────────────── */
+
+let updateSeq = 900_000_000 + randomInt(0, 9_999_999);
+async function chatMemberUpdate(chatId: number, tg: number, status: string, isMember?: boolean): Promise<void> {
+  const { handleUpdate } = await import("../lib/server/telegram.ts");
+  await handleUpdate({
+    update_id: updateSeq++,
+    chat_member: {
+      chat: { id: chatId, type: "channel", title: "Kanal" },
+      from: { id: tg },
+      date: Math.floor(Date.now() / 1000),
+      old_chat_member: { status: "member", user: { id: tg } },
+      new_chat_member: { status, user: { id: tg }, ...(isMember === undefined ? {} : { is_member: isMember }) },
+    },
+  });
+}
+const chatIdOf = async (channelId: string) =>
+  Number((await queryOne<{ c: string }>("SELECT chat_id::text AS c FROM bonus_channels WHERE id = $1", [channelId]))!.c);
+
+test("chat_member: join → claim → leave on day 1 → re-join → day N pays no stay bonus (B-Q3) — MUTATSIYA 8", { skip }, async () => {
+  await freshSweep();
+  const u = await newUser();
+  const other = await newUser();
+  const ch = await newChannel({ join: 1000, stay: 2000, days: 7 });
+  const chat = await chatIdOf(ch);
+  member = { [u.tg]: "member", [other.tg]: "member" };
+  installFetch();
+  assert.equal((await bc.checkChannel(u.id, u.tg, ch)).status, "paid");
+  assert.equal((await bc.checkChannel(other.id, other.tg, ch)).status, "paid");
+  const before = await points(u.id);
+
+  installFetch();
+  await chatMemberUpdate(chat, u.tg, "left");
+  assert.equal(calls.length, 0, "no reply, no Bot API call");
+  const leftAt = (await claim(u.id, ch))?.left_at;
+  assert.ok(leftAt, "left_at set when the user leaves");
+  assert.equal((await claim(other.id, ch))?.left_at, null, "another member's claim untouched");
+
+  // Re-joining does not clear left_at; a replayed / repeated leave keeps the first timestamp.
+  await chatMemberUpdate(chat, u.tg, "member");
+  await chatMemberUpdate(chat, u.tg, "kicked");
+  assert.equal(await bc.recordChannelLeave({ chat: { id: chat }, new_chat_member: { status: "left", user: { id: u.tg } } }), 0);
+  assert.equal((await claim(u.id, ch))?.left_at?.getTime(), leftAt!.getTime());
+
+  // Day N: the user is a member again, but the stay bonus is forfeited; the other user is paid.
+  await query("UPDATE bonus_channel_claims SET joined_at = now() - interval '8 days' WHERE channel_id = $1", [ch]);
+  installFetch();
+  assert.deepEqual(await bc.staySweep(50, noSleep), { rows: 1, paid: 1, left: 0, unknown: 0 });
+  assert.equal(memberCalls(), 1, "only the other user is checked");
+  assert.equal(await points(u.id), before);
+  assert.equal((await claim(u.id, ch))?.stay_paid, null);
+  assert.equal((await claim(other.id, ch))?.stay_paid, 2000);
+});
+
+test("chat_member: kicked / restricted non-member leave, restricted member / member / admin do not; inactive channels count — MUTATSIYA 9", { skip }, async () => {
+  await freshSweep();
+  const ch = await newChannel();
+  const off = await newChannel({ active: false });
+  const chat = await chatIdOf(ch);
+  const offChat = await chatIdOf(off);
+  const cases: Array<[string, boolean | undefined, boolean]> = [
+    ["kicked", undefined, true],
+    ["restricted", false, true],
+    ["restricted", true, false],
+    ["restricted", undefined, false],
+    ["member", undefined, false],
+    ["administrator", undefined, false],
+  ];
+  for (const [status, isMember, leaves] of cases) {
+    const u = await newUser();
+    await joinedAgo(u.id, ch, 2);
+    await chatMemberUpdate(chat, u.tg, status, isMember);
+    assert.equal(Boolean((await claim(u.id, ch))?.left_at), leaves, `${status}:${isMember}`);
+  }
+  const v = await newUser();
+  await joinedAgo(v.id, off, 2);
+  await chatMemberUpdate(offChat, v.tg, "left");
+  assert.ok((await claim(v.id, off))?.left_at, "an inactive bonus channel still records the leave");
+});
+
+test("chat_member: a paid stay bonus, unknown users / chats and unsafe ids change nothing", { skip }, async () => {
+  await freshSweep();
+  const u = await newUser();
+  const ch = await newChannel();
+  const chat = await chatIdOf(ch);
+  await query("INSERT INTO bonus_channel_claims (user_id, channel_id, join_paid, stay_paid) VALUES ($1, $2, 1000, 2000)", [u.id, ch]);
+  await chatMemberUpdate(chat, u.tg, "left");
+  assert.equal((await claim(u.id, ch))?.left_at, null, "stay already paid: nothing to forfeit");
+
+  const w = await newUser();
+  await joinedAgo(w.id, ch, 1);
+  // Unknown Telegram user, unknown chat, a bot, an id above 2^53: no-ops, no errors.
+  await chatMemberUpdate(chat, 5_000_000_001, "left");
+  await chatMemberUpdate(-1_009_999_999_999, w.tg, "left");
+  assert.equal(await bc.recordChannelLeave({ chat: { id: chat }, new_chat_member: { status: "left", user: { id: w.tg, is_bot: true } } }), 0);
+  assert.equal(await bc.recordChannelLeave({ chat: { id: chat }, new_chat_member: { status: "left", user: { id: 2 ** 53 + 2 } } }), 0);
+  assert.equal((await claim(w.id, ch))?.left_at, null);
+  assert.equal(await bc.recordChannelLeave({ chat: { id: chat }, new_chat_member: { status: "left", user: { id: w.tg } } }), 1);
 });
 
 /* ───────────────────────── bonusTasks ───────────────────────── */

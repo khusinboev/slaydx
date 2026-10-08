@@ -64,8 +64,10 @@ while (!stopped) {
     const res = await fetch(`https://api.telegram.org/bot${env.telegramBotToken}/getUpdates`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // Same as the prod webhook: messages, inline mode and inline button taps (bot screens, B2).
-      body: JSON.stringify({ offset, timeout: 25, allowed_updates: ["message", "inline_query", "callback_query"] }),
+      // Same as the prod webhook: messages, inline mode, inline button taps (bot screens, B2) and
+      // chat member changes (bonus channels: leaving before day N, docs/bonus/PLAN.md). Telegram
+      // sends `chat_member` only when it is named here explicitly.
+      body: JSON.stringify({ offset, timeout: 25, allowed_updates: ["message", "inline_query", "callback_query", "chat_member"] }),
       // Long-poll 25 s, shuning uchun timeout undan kattaroq.
       signal: AbortSignal.timeout(40_000),
     });

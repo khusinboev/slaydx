@@ -44,3 +44,20 @@ Ledger refs: `channel:<channel_id>:<user_id>:join`, `channel:<channel_id>:<user_
 - Bot callbacks: `b:h` (tasks screen), `b:c:<channelId>` (check; ≤ 10 per user per minute). Hamyon's first row is «🎁 Bonus olish».
 - Admin panel (K2): the bot reads only `active`, `sort`, `title`, `username` (no username → no «Obuna bo‘lish» button),
   `join_bonus`, `stay_bonus`, `stay_days`, `chat_id`.
+
+## Review fixes (2026-10-08, `wip/bonus-fix`)
+- **Leaving before day N (B-Q3) is detected when it happens.** Telegram `chat_member` updates (the bot is an admin of every
+  bonus channel) route to `bonus-channels.ts recordChannelLeave`: a member of an active or inactive bonus channel (by
+  `chat_id`) whose new status is `left` / `kicked` / `restricted` with `is_member: false` gets `left_at = now()` on their
+  claim while `stay_paid IS NULL` (users looked up by `telegram_id`, unknown users ignored, replay keeps the first `left_at`).
+  Re-joining never clears `left_at`. No reply is sent. The sweep's `getChatMember` at day N stays as the second line.
+- **Production webhook must include `chat_member`** — Telegram sends it ONLY when `allowed_updates` names it. `setWebhook`
+  replaces the whole list, so send all four (current prod list is message, inline_query, callback_query):
+  ```bash
+  curl -F "url=https://<domen>/api/telegram/webhook" \
+       -F "secret_token=$TELEGRAM_WEBHOOK_SECRET" \
+       -F 'allowed_updates=["message","inline_query","callback_query","chat_member"]' \
+       "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook"
+  # verify: curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getWebhookInfo" → allowed_updates lists chat_member
+  ```
+  Deploy the code first (an older build ignores `chat_member` harmlessly). `scripts/bot.mts` (dev polling) asks for the same list.
