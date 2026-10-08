@@ -807,6 +807,10 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
     // (B2-Q2, `recordChannelJoin` never throws). Other changes need no database round trip.
     const cm = update.chat_member;
     const bonus = await import("./bonus-channels");
+    // Mandatory channels (C-Q2): any join / leave of this pair drops the cached membership answer.
+    if (Number.isSafeInteger(cm.chat?.id) && Number.isSafeInteger(cm.new_chat_member?.user?.id)) {
+      (await import("./mandatory-channels")).forgetMembership(cm.new_chat_member!.user!.id, cm.chat.id);
+    }
     if (bonus.isLeaveStatus(cm.new_chat_member)) await bonus.recordChannelLeave(cm);
     else if (bonus.isJoinStatus(cm.new_chat_member)) await bonus.recordChannelJoin(cm);
     return;
