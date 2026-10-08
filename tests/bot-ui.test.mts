@@ -76,11 +76,12 @@ function bonusTasks() {
   const day = 86_400_000;
   return {
     channels: [
-      { id: "1", title: "SlaydX yangiliklari", username: "slaydx_news", joinBonus: 2000, stayBonus: 0, stayDays: 7, claim: null },
+      { id: "1", title: "SlaydX yangiliklari", username: "slaydx_news", joinUrl: "https://t.me/slaydx_news", joinBonus: 2000, stayBonus: 0, stayDays: 7, claim: null },
       {
         id: "2",
         title: "Talabalar <kanali> & co",
         username: "talaba_kanal",
+        joinUrl: "https://t.me/talaba_kanal",
         joinBonus: 1000,
         stayBonus: 2000,
         stayDays: 7,
@@ -90,12 +91,14 @@ function bonusTasks() {
         id: "3",
         title: "Paid",
         username: "paid_channel",
+        joinUrl: "https://t.me/paid_channel",
         joinBonus: 1000,
         stayBonus: 2000,
         stayDays: 7,
         claim: { joinedAt: new Date(BONUS_NOW - 9 * day).toISOString(), joinPaid: 1000, stayPaid: 2000, leftAt: null },
       },
-      { id: "999999999999999999", title: "Yopiq kanal", username: null, joinBonus: 1000, stayBonus: 2000, stayDays: 7, claim: null },
+      { id: "999999999999999999", title: "Yopiq kanal", username: null, joinUrl: null, joinBonus: 1000, stayBonus: 2000, stayDays: 7, claim: null },
+      { id: "5", title: "Taklif havolali kanal", username: null, joinUrl: "https://t.me/+AbCdEf123456", joinBonus: 1000, stayBonus: 0, stayDays: 7, claim: null },
     ],
     referral: { link: "https://t.me/slaydx_test_bot?start=ref_abcdefgh", rewardPoints: 2000, invitedCount: 3, earnedPoints: 6000 },
     earnedTotal: 10000,
@@ -491,8 +494,8 @@ test("Bonus olish: header, invite task, channel reward/state lines, escaped titl
   const rowsOf = (s.reply_markup as { inline_keyboard: Btn[][] }).inline_keyboard;
   assert.deepEqual(
     rowsOf.map((r) => r.map((b) => b.callback_data ?? b.url?.replace(/\?.*$/, "") ?? (b.copy_text ? "copy" : ""))),
-    [["https://t.me/share/url", "copy"], ["https://t.me/slaydx_news", "b:c:1"], ["b:c:999999999999999999"], ["w:h"]],
-    "claimed channels have no buttons; no username → no subscribe button",
+    [["https://t.me/share/url", "copy"], ["https://t.me/slaydx_news", "b:c:1"], ["b:c:999999999999999999"], ["https://t.me/+AbCdEf123456", "b:c:5"], ["w:h"]],
+    "claimed channels have no buttons; neither username nor invite link → no subscribe button; private channel → its invite link",
   );
   assert.deepEqual(rowsOf[1]!.map((b) => [b.text, b.style]), [
     ["📢 1. Obuna bo‘lish", undefined],

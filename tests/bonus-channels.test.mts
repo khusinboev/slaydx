@@ -441,6 +441,29 @@ test("bonusTasks: active channels by sort with the user's own claim state; earne
   assert.equal(tasks.referral.rewardPoints, 2000);
 });
 
+test("joinUrl: t.me/<username>, else the stored invite link of a private channel; anything else → no button", { skip }, async () => {
+  await freshSweep();
+  const u = await newUser();
+  const pub = await newChannel({ sort: 1, title: "Pub", username: "slaydx_pub" });
+  const priv = await newChannel({ sort: 2, title: "Priv", username: null });
+  const evil = await newChannel({ sort: 3, title: "Evil", username: null });
+  const none = await newChannel({ sort: 4, title: "None", username: null });
+  await query("UPDATE bonus_channels SET invite_link = 'https://t.me/+AbCdEf123456' WHERE id = $1", [priv]);
+  await query("UPDATE bonus_channels SET invite_link = 'https://evil.example/+AbCdEf123456' WHERE id = $1", [evil]);
+  void pub;
+  void none;
+  const tasks = await bc.bonusTasks(u.id, { botUsername: "slaydx_test_bot", appUrl: "https://slaydx.test" });
+  // MUTATION: passing invite_link through unchecked would put an arbitrary URL on a bot button.
+  assert.deepEqual(tasks.channels.map((c) => [c.title, c.joinUrl]), [
+    ["Pub", "https://t.me/slaydx_pub"],
+    ["Priv", "https://t.me/+AbCdEf123456"],
+    ["Evil", null],
+    ["None", null],
+  ]);
+  assert.equal(bc.channelInviteLink("javascript:alert(1)"), null);
+  assert.equal(bc.channelInviteLink("https://t.me/+short"), null);
+});
+
 /* ───────────────────────── Signup bonus ───────────────────────── */
 
 test("signup bonus is 2 000 (owner B-Q2) — MUTATSIYA 7", { skip }, async () => {

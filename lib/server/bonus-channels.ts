@@ -70,8 +70,10 @@ export type ChannelClaim = { joinedAt: string; joinPaid: number; stayPaid: numbe
 export type ChannelTask = {
   id: string;
   title: string;
-  /** Public @username without «@» (a t.me link), or `null` (no subscribe button). */
+  /** Public @username without «@» (a t.me link), or `null`. */
   username: string | null;
+  /** Join URL for the «Obuna bo‘lish» button: t.me/<username>, else the admin-set invite link (private channels), else `null`. */
+  joinUrl: string | null;
   joinBonus: number;
   stayBonus: number;
   stayDays: number;
@@ -91,10 +93,17 @@ export function channelUsername(raw: string | null | undefined): string | null {
   return /^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(u) ? u : null;
 }
 
+/** An invite link as the admin panel stores it (`https://t.me/+<hash>`), or `null` — never any other URL. */
+export function channelInviteLink(raw: string | null | undefined): string | null {
+  const v = String(raw ?? "").trim();
+  return /^https:\/\/t\.me\/\+[A-Za-z0-9_-]{8,64}$/.test(v) ? v : null;
+}
+
 type TaskRow = {
   id: string;
   title: string;
   username: string | null;
+  invite_link: string | null;
   join_bonus: number;
   stay_bonus: number;
   stay_days: number;
@@ -113,7 +122,7 @@ export async function bonusTasks(
   links?: { botUsername: string | null; appUrl: string },
 ): Promise<BonusTasks> {
   const rows = await query<TaskRow>(
-    `SELECT ch.id::text AS id, ch.title, ch.username, ch.join_bonus, ch.stay_bonus, ch.stay_days,
+    `SELECT ch.id::text AS id, ch.title, ch.username, ch.invite_link, ch.join_bonus, ch.stay_bonus, ch.stay_days,
             c.joined_at, c.join_paid, c.stay_paid, c.left_at
        FROM bonus_channels ch
        LEFT JOIN bonus_channel_claims c ON c.channel_id = ch.id AND c.user_id = $1
@@ -132,6 +141,7 @@ export async function bonusTasks(
       id: r.id,
       title: r.title,
       username: channelUsername(r.username),
+      joinUrl: channelUsername(r.username) ? `https://t.me/${channelUsername(r.username)}` : channelInviteLink(r.invite_link),
       joinBonus: Number(r.join_bonus),
       stayBonus: Number(r.stay_bonus),
       stayDays: Number(r.stay_days),

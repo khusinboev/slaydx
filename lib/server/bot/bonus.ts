@@ -66,8 +66,8 @@ function celebrateLines(lang: Lang, c: Celebrate): string[] {
 
 /**
  * The tasks screen: earned total, «invite a friend», each active channel
- * (title, reward, state) with «Obuna bo‘lish» (t.me link; none without a
- * public username) and «Tekshirish» for the ones not claimed yet.
+ * (title, reward, state) with «Obuna bo‘lish» (t.me/<username>, or the
+ * admin-set invite link of a private channel; none without either) and «Tekshirish» for the ones not claimed yet.
  */
 export function bonusScreen(lang: Lang, tasks: BonusTasks, now: number, celebrate?: Celebrate | null): Screen {
   const channels = tasks.channels.slice(0, BONUS_MAX_CHANNELS);
@@ -101,7 +101,7 @@ export function bonusScreen(lang: Lang, tasks: BonusTasks, now: number, celebrat
     if (c.claim) return [];
     const n = i + 1;
     return [
-      c.username ? inlineButton("megaphone", t(lang, "btn.subscribe", { i: n }), { url: `https://t.me/${c.username}` }) : null,
+      c.joinUrl ? inlineButton("megaphone", t(lang, "btn.subscribe", { i: n }), { url: c.joinUrl }) : null,
       inlineButton("save", t(lang, "btn.check", { i: n }), { callback_data: cb.bonusCheck(c.id) }, "success"),
     ];
   });
