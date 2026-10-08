@@ -44,7 +44,9 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *     "parseInviteLink" and "invite link: stored normalized";
  *   - the `search`/`hash` refusal dropped → "parseInviteLink" (`?x=1` accepted);
  *   - invite link left out of the UPDATE → "invite link: stored normalized" (409 / stale value);
- *   - the invite-create audit removed → "invite-link route".
+ *   - the invite-create audit removed → "invite-link route";
+ *   - `createInviteLink` without the `getChat` type check → "invite-link route: getChat first";
+ *   - `MAX_BONUS` back to 1 000 000 → "validators", "create: each bonus is capped", "update".
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -772,7 +774,7 @@ test("invite-link route: Telegram creates a link when the bot may (audited, noth
   const r = await inviteLink(s.cookie, { input: String(ch.id) });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.inviteLink, `https://t.me/+Inv${String(ch.id).slice(-8)}xyz`);
-  assert.deepEqual(botCalls.map((c) => [c.method, c.body.chat_id]), [["createChatInviteLink", String(ch.id)]]);
+  assert.deepEqual(botCalls.map((c) => [c.method, c.body.chat_id]), [["getChat", String(ch.id)], ["createChatInviteLink", String(ch.id)]]);
   const a = await audits(s.admin.adminId, "bonus_channel.invite_create");
   assert.equal(a.length, 1);
   assert.equal(a[0]!.target_id, String(ch.id));
@@ -800,6 +802,34 @@ test("invite-link route: Telegram creates a link when the bot may (audited, noth
   const v = await inviteLink(viewer.cookie, { input: String(ch.id) });
   assert.equal(v.status, 403);
   assert.equal(v.body.code, "forbidden");
+});
+
+test("invite-link route: getChat first — a group / private chat is 400 chat_type and an unknown chat 400 chat_not_found, no link created, nothing audited", { skip }, async () => {
+  await resetChannels();
+  const s = await session("owner");
+  const group = freshChannel({ type: "group" });
+  const priv = freshChannel({ type: "private" });
+  for (const ch of [group, priv]) {
+    botCalls.length = 0;
+    for (const input of [String(ch.id), `@${ch.username}`]) {
+      const r = await inviteLink(s.cookie, { input });
+      assert.equal(r.status, 400, `${ch.type} ${input}`);
+      assert.equal(r.body.code, "chat_type");
+    }
+    assert.deepEqual(botCalls.map((c) => c.method), ["getChat", "getChat"], "never createChatInviteLink for a non-channel");
+  }
+  botCalls.length = 0;
+  const missing = await inviteLink(s.cookie, { input: "@missing_channel" });
+  assert.equal(missing.body.code, "chat_not_found");
+  assert.deepEqual(botCalls.map((c) => c.method), ["getChat"]);
+  // A username input creates the link for the resolved numeric chat id (audited under it).
+  const ch = freshChannel();
+  botCalls.length = 0;
+  const ok = await inviteLink(s.cookie, { input: `@${ch.username}` });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.deepEqual(botCalls.map((c) => [c.method, c.body.chat_id]), [["getChat", `@${ch.username}`], ["createChatInviteLink", String(ch.id)]]);
+  const a = await audits(s.admin.adminId, "bonus_channel.invite_create");
+  assert.deepEqual(a.map((x) => x.target_id), [String(ch.id)]);
 });
 
 // ───────────────────────────── bot status

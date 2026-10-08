@@ -266,8 +266,11 @@ export function botWarning(status: BotAdminStatus): string | null {
   return status === "not_admin" ? BOT_NOT_ADMIN_WARNING : BOT_UNKNOWN_WARNING;
 }
 
-/** `getChat` + type check + bot admin status. Throws 503 / 400 with a code the UI can show. */
-export async function resolveChannel(ref: ChannelRef): Promise<ResolvedChannel> {
+/**
+ * `getChat` + type check: the chat must be a `channel` or a `supergroup` with a safe integer id.
+ * Throws 503 `telegram_unavailable` / 400 `chat_not_found` / 400 `chat_type`.
+ */
+async function channelChat(ref: ChannelRef): Promise<TgChat & { type: ResolvedChannel["type"] }> {
   requireBot();
   const r = await callBot<TgChat>("getChat", { chat_id: ref.kind === "username" ? `@${ref.username}` : ref.chatId });
   if (!r.ok) {
@@ -285,12 +288,19 @@ export async function resolveChannel(ref: ChannelRef): Promise<ResolvedChannel> 
     throw bad("Bu kanal emas. Faqat kanal yoki superguruh qo'shiladi.", "chat_type");
   }
   if (!Number.isSafeInteger(chat.id)) throw bad("Telegram noto'g'ri chat ID qaytardi", "chat_not_found");
+  return { ...chat, type: chat.type };
+}
+
+/** `getChat` + type check + bot admin status. Throws 503 / 400 with a code the UI can show. */
+export async function resolveChannel(ref: ChannelRef): Promise<ResolvedChannel> {
+  const chat = await channelChat(ref);
+  const type = chat.type;
   const chatId = String(chat.id);
   const username = typeof chat.username === "string" && chat.username ? chat.username : null;
   const title = (typeof chat.title === "string" && chat.title.trim() ? chat.title.trim() : username ?? chatId).slice(0, MAX_TITLE);
   const botAdmin = await botAdminStatus(chatId);
   const existing = await queryOne<{ id: string }>("SELECT id::text AS id FROM bonus_channels WHERE chat_id = $1", [chatId]);
-  return { chatId, title, username, type: chat.type, botAdmin, warning: botWarning(botAdmin), existingId: existing?.id ?? null };
+  return { chatId, title, username, type, botAdmin, warning: botWarning(botAdmin), existingId: existing?.id ?? null };
 }
 
 /* ───────────────────────────── reads ───────────────────────────── */
@@ -561,15 +571,15 @@ export async function deleteBonusChannel(admin: AuditActor, rawId: unknown, body
 }
 
 /**
- * POST `{input}` («Havola yaratish»): asks Telegram for a NEW invite link of the chat
+ * POST `{input}` («Havola yaratish»): `getChat` first — only a channel / supergroup (400 `chat_type`
+ * otherwise, nothing created) — then asks Telegram for a NEW invite link of that chat id
  * (`createChatInviteLink`; the bot must be an admin with the «invite users via link» right).
  * Nothing is stored — the dialog puts the link into its field and the admin saves it — but the
  * Telegram-side effect is audited (`bonus_channel.invite_create`, meta = the link).
  */
 export async function createInviteLink(admin: AuditActor, body: Record<string, unknown>): Promise<{ inviteLink: string }> {
   const ref = parseChannelRef(body.input);
-  requireBot();
-  const chatId = ref.kind === "username" ? `@${ref.username}` : ref.chatId;
+  const chatId = String((await channelChat(ref)).id);
   const r = await callBot<{ invite_link?: string }>("createChatInviteLink", { chat_id: chatId, name: "SlaydX bonus" });
   if (!r.ok) {
     if (isTransientBotFailure(r)) {
