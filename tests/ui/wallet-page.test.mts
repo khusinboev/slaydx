@@ -276,6 +276,9 @@ test("wallet-model: Tashkent-time labels and kind fallbacks", () => {
 
   assert.deepEqual(describeEntry({ kind: "charge", note: "unknown-tool: x" }), { title: "unknown-tool: x", detail: "" });
   assert.deepEqual(describeEntry({ kind: "charge", note: "" }), { title: "Hujjat uchun to'lov", detail: "" });
+  // Channel bonus notes (bonus-channels.ts) read as titles, not raw notes.
+  assert.deepEqual(describeEntry({ kind: "bonus", note: "Kanal obunasi: SlaydX yangiliklari" }), { title: "Kanal obunasi bonusi · SlaydX yangiliklari", detail: "" });
+  assert.deepEqual(describeEntry({ kind: "bonus", note: "Kanalda qolish bonusi: Talabalar" }), { title: "Kanalda qolish bonusi · Talabalar", detail: "" });
   assert.deepEqual(describeEntry({ kind: "topup", note: "" }), { title: "Balans to'ldirildi", detail: "" });
   assert.deepEqual(describeEntry({ kind: "topup", note: "payme orqali to'ldirish" }), { title: "To'ldirish · Payme", detail: "" });
   assert.equal(describeEntry({ kind: "subscription", note: "Pro obuna (eski buyurtma) — balansga" }).title, "To'lov balansga tushdi");

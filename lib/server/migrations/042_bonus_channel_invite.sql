@@ -1,0 +1,13 @@
+-- Invite link of a bonus channel (docs/bonus/PLAN.md K2, lead addition 2026-10-08).
+--
+--   bonus_channels.invite_link  normalized `https://t.me/+<hash>` set in the admin panel (typed in,
+--                               or created through the Bot API `createChatInviteLink`). The bot's
+--                               «Obuna bo'lish» button uses it when the channel has no public
+--                               `username` (private channels); NULL = none.
+--
+-- Additive only: one nullable column (metadata-only, no rewrite).
+--
+-- ROLLBACK:
+--   ALTER TABLE bonus_channels DROP COLUMN IF EXISTS invite_link;
+--   DELETE FROM schema_migrations WHERE name = '042_bonus_channel_invite.sql';
+ALTER TABLE bonus_channels ADD COLUMN IF NOT EXISTS invite_link TEXT;

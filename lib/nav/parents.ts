@@ -32,6 +32,7 @@ const ADMIN_SECTIONS = [
   "errors",
   "finance",
   "pricing",
+  "bonus",
   "ai",
   "system",
   "settings",

@@ -20,6 +20,7 @@ export type AdminNavIcon =
   | "finance"
   | "ai"
   | "pricing"
+  | "bonus"
   | "moderation"
   | "broadcasts"
   | "settings"
@@ -55,6 +56,7 @@ export const ADMIN_NAV: ReadonlyArray<AdminNavItem> = [
   { href: "/admin/finance", label: "Moliya", icon: "finance", permission: "finance.view", group: "data" },
   { href: "/admin/ai", label: "AI xarajat", icon: "ai", permission: "ai.view", group: "data" },
   { href: "/admin/pricing", label: "Narxlar", icon: "pricing", permission: "pricing.view", group: "data" },
+  { href: "/admin/bonus", label: "Bonus kanallar", icon: "bonus", permission: "bonus.view", group: "data" },
   { href: "/admin/moderation", label: "Moderatsiya", icon: "moderation", permission: "moderation.view", group: "manage" },
   { href: "/admin/broadcasts", label: "E'lonlar", icon: "broadcasts", permission: "broadcasts.view", group: "manage" },
   { href: "/admin/settings", label: "Sozlamalar", icon: "settings", permission: "settings.view", group: "manage" },
