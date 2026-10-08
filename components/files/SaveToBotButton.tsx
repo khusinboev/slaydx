@@ -16,7 +16,7 @@ import {
 import { getNavSnapshot } from "@/lib/nav/history";
 import {
   closeApp,
-  isInTelegramWebApp,
+  isInMiniAppShell,
   isMiniAppUserMismatch,
   miniAppUserId,
   openTelegramLink,
@@ -180,7 +180,7 @@ export const SAVE_CLOSE_DELAY_MS = 1_000;
 
 /** Opens a bot link: in Telegram natively, else a new tab. */
 export function openBotLink(href: string): void {
-  if (isInTelegramWebApp() && openTelegramLink(href)) return;
+  if (isInMiniAppShell() && openTelegramLink(href)) return;
   window.open(href, "_blank", "noopener,noreferrer");
 }
 
@@ -195,7 +195,7 @@ export function telegramFailureToast(e: unknown): ActionToast {
 
 /** The Mini App user is another Telegram account than the session's (UX guard; the server sends to the session's id anyway). */
 export function miniAppMismatch(sessionTelegramId: string | null | undefined): boolean {
-  return isInTelegramWebApp() && isMiniAppUserMismatch(sessionTelegramId, miniAppUserId());
+  return isInMiniAppShell() && isMiniAppUserMismatch(sessionTelegramId, miniAppUserId());
 }
 
 export type SaveAction = {
@@ -236,7 +236,7 @@ export function useSaveAction(args: {
         }
         sc.put(format, { s: "delivering", text: DELIVER_TEXT.sending });
         const started = Date.now();
-        const inTelegram = isInTelegramWebApp();
+        const inTelegram = isInMiniAppShell();
         const attempt = async (retried: boolean): Promise<void> => {
           try {
             const r = await telegramAction("save", genId, format, () => sc.preparing(format, started), { signal: sc.signal });

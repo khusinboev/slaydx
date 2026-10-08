@@ -43,7 +43,7 @@ import type { DownloadFormatId } from "./formats";
 import {
   downloadCapability,
   getTelegramWebApp,
-  isInTelegramWebApp,
+  isInMiniAppShell,
   openExternalLink,
   requestDownload,
   tgVersion,
@@ -298,7 +298,7 @@ export async function prepareDownload(
 export type DeliveryEnv = { capability: DownloadCapability; platform: string | null };
 
 export function currentDeliveryEnv(): DeliveryEnv {
-  const inTelegram = isInTelegramWebApp();
+  const inTelegram = isInMiniAppShell();
   let platform: string | null = null;
   try {
     const p = getTelegramWebApp()?.platform;
