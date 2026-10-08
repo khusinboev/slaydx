@@ -608,7 +608,8 @@ test("stats: joined, join paid count/sum, stay paid count/sum, left, stay pendin
     stayPaidCount: 0,
     stayPaidSum: 0,
     left: 0,
-    stayPending: 1,
+    // stay_bonus 0: nothing is owed, so an unsettled claim is not pending (money review).
+    stayPending: 0,
   });
 });
 

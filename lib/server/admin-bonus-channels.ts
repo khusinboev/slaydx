@@ -54,7 +54,7 @@ export type BonusChannelStats = {
   stayPaidCount: number;
   stayPaidSum: number;
   left: number;
-  /** Joined, not left, stay bonus not settled yet (the worker sweep's queue). */
+  /** Joined, not left, stay bonus not settled yet (the worker sweep's queue); 0 when the channel's stay_bonus is 0. */
   stayPending: number;
 };
 
@@ -327,6 +327,7 @@ type Row = {
   stay_pending: number;
 };
 
+/** `stay_pending` is 0 for a channel without a stay bonus: it owes nothing, so no claim is «pending». */
 const SELECT = `
   SELECT c.id::text AS id, c.chat_id::text AS chat_id, c.username, c.invite_link, c.title, c.join_bonus, c.stay_bonus,
          c.stay_days, c.active, c.sort, c.created_at, c.updated_at,
@@ -336,7 +337,7 @@ const SELECT = `
          COALESCE(s.stay_paid_count, 0)::int AS stay_paid_count,
          COALESCE(s.stay_paid_sum, 0)::text AS stay_paid_sum,
          COALESCE(s.left_count, 0)::int AS left_count,
-         COALESCE(s.stay_pending, 0)::int AS stay_pending
+         (CASE WHEN c.stay_bonus > 0 THEN COALESCE(s.stay_pending, 0) ELSE 0 END)::int AS stay_pending
     FROM bonus_channels c
     LEFT JOIN (
       SELECT channel_id,

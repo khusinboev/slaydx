@@ -233,12 +233,15 @@ export async function checkChannel(userId: string, telegramId: number | string, 
     const ch = (await client.query<ChannelRow>(`SELECT ${CHANNEL_COLUMNS} FROM bonus_channels WHERE id = $1 FOR SHARE`, [key])).rows[0];
     if (!ch || !ch.active) return { status: "inactive" };
     const points = Number(ch.join_bonus);
+    // No stay bonus on this channel: the claim is settled at once (`stay_paid = 0`), so it never
+    // enters the sweep's partial index (`stay_paid IS NULL AND left_at IS NULL`).
+    const stayPaid = Number(ch.stay_bonus) > 0 ? null : 0;
     const inserted = await client.query(
-      `INSERT INTO bonus_channel_claims (user_id, channel_id, join_paid)
-       VALUES ($1, $2, $3)
+      `INSERT INTO bonus_channel_claims (user_id, channel_id, join_paid, stay_paid)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT (user_id, channel_id) DO NOTHING
        RETURNING 1`,
-      [userId, key, points],
+      [userId, key, points, stayPaid],
     );
     if (!inserted.rowCount) return { status: "already" };
     if (points > 0) {
@@ -317,6 +320,32 @@ export type StaySweepDeps = {
 
 export type StaySweepResult = { rows: number; paid: number; left: number; unknown: number };
 
+/** Unsettled claims of zero-stay channels settled per sweep (no Bot API call). */
+export const STAY_ZERO_SETTLE_BATCH = 1_000;
+
+/**
+ * Claims of channels whose `stay_bonus` is 0 (created before claims were settled at join time,
+ * or the admin set the stay bonus to 0 later) get `stay_paid = 0`: nothing is owed, and they
+ * leave the sweep's partial index. No Telegram call, no money. Returns the number settled.
+ */
+async function settleZeroStay(limit: number): Promise<number> {
+  const rows = await query<{ user_id: string }>(
+    `UPDATE bonus_channel_claims c
+        SET stay_paid = 0, stay_checked_at = now()
+       FROM (SELECT z.user_id, z.channel_id
+               FROM bonus_channel_claims z
+               JOIN bonus_channels ch ON ch.id = z.channel_id
+              WHERE ch.stay_bonus = 0 AND z.stay_paid IS NULL AND z.left_at IS NULL
+              LIMIT $1
+                FOR UPDATE OF z SKIP LOCKED) d
+      WHERE c.user_id = d.user_id AND c.channel_id = d.channel_id AND c.stay_paid IS NULL
+      RETURNING c.user_id::text AS user_id`,
+    [limit],
+  );
+  if (rows.length) log("info", "[bonus] zero-stay claims settled", { rows: rows.length });
+  return rows.length;
+}
+
 type DueRow = {
   user_id: string;
   channel_id: string;
@@ -341,7 +370,8 @@ async function notifyStay(telegramId: string, lang: string, points: number, titl
 }
 
 /**
- * Pays the stay bonus of due claims (worker housekeeping, every ~10 min):
+ * Settles zero-stay claims first (`settleZeroStay`, no Bot API call), then
+ * pays the stay bonus of due claims (worker housekeeping, every ~10 min):
  * joined_at + stay_days ≤ now, stay unpaid, not left, channel active with
  * stay_bonus > 0, account not blocked. Per claim one `getChatMember`:
  *   member      → stay bonus (ledger `…:stay`) + a message in the user's language;
@@ -362,6 +392,7 @@ export async function staySweep(limit = 50, deps: StaySweepDeps = {}): Promise<S
   const budget = deps.budgetMs ?? STAY_BUDGET_MS;
   const started = now();
   const n = Math.max(1, Math.min(500, Math.trunc(limit)));
+  await settleZeroStay(STAY_ZERO_SETTLE_BATCH);
 
   const due = await query<DueRow>(
     `SELECT c.user_id::text AS user_id, c.channel_id::text AS channel_id, ch.chat_id::text AS chat_id,

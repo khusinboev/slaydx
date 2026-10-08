@@ -20,7 +20,10 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *   6. sweep without `NOT u.is_blocked` and the in-tx check → «skips blocked / inactive / zero stay»;
  *   7. `SIGNUP_BONUS_POINTS` back to 3000 → «signup bonus is 2 000»;
  *   8. the `chat_member` branch removed from `processUpdate` → «join → claim → leave on day 1»;
- *   9. `restricted` + `is_member: false` not treated as leaving → «kicked / restricted non-member».
+ *   9. `restricted` + `is_member: false` not treated as leaving → «kicked / restricted non-member»;
+ *  10. join-time `stay_paid` always NULL → «a channel without a stay bonus settles the claim at join»;
+ *  11. `settleZeroStay` call removed from the sweep → «existing zero-stay claims are settled»;
+ *      the `c.stay_bonus > 0` CASE dropped from the admin stats → same test («Kutilmoqda»).
  */
 
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
@@ -237,6 +240,24 @@ test("checkChannel: join_bonus 0 records the claim (for the stay bonus) without 
   assert.equal((await claim(u.id, ch))?.join_paid, 0);
 });
 
+test("checkChannel: a channel without a stay bonus settles the claim at join (stay_paid 0) — out of the sweep index — MUTATSIYA 10", { skip }, async () => {
+  const u = await newUser();
+  const news = await newChannel({ join: 2000, stay: 0 });
+  const extra = await newChannel({ join: 1000, stay: 2000 });
+  member = { [u.tg]: "member" };
+  installFetch();
+  assert.equal((await bc.checkChannel(u.id, u.tg, news)).status, "paid");
+  assert.equal((await bc.checkChannel(u.id, u.tg, extra)).status, "paid");
+  assert.equal((await claim(u.id, news))?.stay_paid, 0, "nothing owed: settled at once");
+  assert.equal((await claim(u.id, extra))?.stay_paid, null, "the stay bonus is still owed");
+  const inIndex = await query<{ channel_id: string }>(
+    "SELECT channel_id::text AS channel_id FROM bonus_channel_claims WHERE user_id = $1 AND stay_paid IS NULL AND left_at IS NULL",
+    [u.id],
+  );
+  assert.deepEqual(inIndex.map((r) => r.channel_id), [extra]);
+  assert.deepEqual((await ledger(u.id)).map((r) => r.reference), [`channel:${news}:${u.id}:join`, `channel:${extra}:${u.id}:join`]);
+});
+
 test("ledger references are unique per (channel, user, join|stay)", { skip }, async () => {
   const dup = await queryOne<{ n: string }>(
     "SELECT count(*)::text AS n FROM (SELECT reference FROM transactions WHERE reference LIKE 'channel:%' GROUP BY kind, reference HAVING count(*) > 1) d",
@@ -370,6 +391,37 @@ test("staySweep: skips blocked users, inactive channels and stay_bonus 0 — MUT
   assert.equal(r.paid, 0);
   assert.equal(await points(blocked.id), b0);
   assert.equal((await claim(blocked.id, chOk))?.stay_paid, null);
+});
+
+test("staySweep: existing zero-stay claims are settled with stay_paid 0 — no Telegram call, no money; «Kutilmoqda» ignores them — MUTATSIYA 11", { skip }, async () => {
+  await freshSweep();
+  const u = await newUser();
+  const v = await newUser();
+  const zero = await newChannel({ join: 2000, stay: 0 });
+  const paidCh = await newChannel({ join: 1000, stay: 2000 });
+  // Rows from before join-time settlement: due, not yet due, already left.
+  await joinedAgo(u.id, zero, 9);
+  await joinedAgo(v.id, zero, 1);
+  const w = await newUser();
+  await joinedAgo(w.id, zero, 3);
+  await query("UPDATE bonus_channel_claims SET left_at = now() WHERE user_id = $1", [w.id]);
+  await joinedAgo(u.id, paidCh, 2);
+  const before = await points(u.id);
+  const admin = await import("../lib/server/admin-bonus-channels.ts");
+  const pending = async () => Object.fromEntries((await admin.listBonusChannels()).items.map((i) => [i.id, i.stats.stayPending]));
+  assert.deepEqual(await pending(), { [zero]: 0, [paidCh]: 1 }, "a channel without a stay bonus has nothing pending");
+
+  member = { [u.tg]: "member", [v.tg]: "member" };
+  installFetch();
+  assert.deepEqual(await bc.staySweep(50, noSleep), { rows: 0, paid: 0, left: 0, unknown: 0 });
+  assert.equal(calls.length, 0, "no Bot API call");
+  assert.equal((await claim(u.id, zero))?.stay_paid, 0);
+  assert.equal((await claim(v.id, zero))?.stay_paid, 0);
+  assert.equal((await claim(w.id, zero))?.stay_paid, null, "a left claim is already out of the index");
+  assert.equal((await claim(u.id, paidCh))?.stay_paid, null, "a stay bonus still owed is untouched");
+  assert.equal(await points(u.id), before);
+  assert.deepEqual(await ledger(u.id, "%:stay"), []);
+  assert.deepEqual(await pending(), { [zero]: 0, [paidCh]: 1 });
 });
 
 test("staySweep: bounded batch, paced Bot API calls, time budget; no bot → nothing", { skip }, async () => {
