@@ -182,7 +182,7 @@ test("error mapping: documented codes, keyword rules, stage fallback", () => {
   assert.match(m("card_request", -401, "Card expired").message, /muddati/);
   assert.match(m("card_verify", -402, "Wrong SMS code").message, /SMS kod noto'g'ri/);
   assert.match(m("card_request", -403, "Card not found").message, /Karta topilmadi/);
-  assert.match(m("invoice_create", -404, "Subscriber not found").message, /telefon raqami/);
+  assert.match(m("invoice_create", -404, "Subscriber not found").message, /Hisob-faktura yuborilmadi/);
   // Stage-scoped: "Card expired" at the invoice stage is not a card message.
   assert.match(m("invoice_create", -405, "Card expired").message, /Hisob yuborilmadi/);
   for (const stage of ["card_request", "card_verify", "card_payment", "invoice_create"] as const) {
