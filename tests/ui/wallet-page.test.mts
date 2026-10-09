@@ -6,8 +6,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 import { WalletPage } from "../../components/wallet/WalletPage.tsx";
-import { describeEntry, firstTopupHint, formatWhen, ledgerRow } from "../../components/wallet/wallet-model.ts";
-import { FIRST_TOPUP_NOTE } from "../../lib/topup-bonus.ts";
+import { describeEntry, formatWhen, ledgerRow } from "../../components/wallet/wallet-model.ts";
+import { paymentBonusNote } from "../../lib/payment-bonus.ts";
+
+/** A legacy Bonus 2 first top-up row (history; new payments write `paymentBonusNote`). */
+const FIRST_TOPUP_NOTE = "Birinchi to‘ldirish bonusi (10%)";
 import { PayDialog } from "../../components/overlays/PayDialog.tsx";
 import { useAppStore } from "../../lib/store.ts";
 import { useUi } from "../../lib/ui.ts";
@@ -25,8 +28,8 @@ import type * as api from "../../lib/api-client.ts";
  *   no income colour → Harakatlar; no 8-row cut → long ledger; no `focus()` →
  *   referral focus; ledger not reloaded on `paid` → ?order= paid; cancelled
  *   branch dropped → ?order= cancelled; no Tashkent offset → wallet-model;
- *   first top-up hint: gate `firstTopup` forced true → «hint hidden …»; `onFirstTopup` not called on
- *   reload → «… gone after the paid reload»; FIRST_TOPUP_NOTE_PREFIX branch dropped → wallet-model.
+ *   payment bonus hint: `bonusPercent > 0` gate dropped → «hint hidden …»; `onBonusPercent` not called
+ *   on reload → «… after the paid reload»; PAYMENT_BONUS_NOTE_PREFIX branch dropped → wallet-model.
  */
 
 const realFetch = globalThis.fetch;
@@ -232,49 +235,51 @@ test("Hamyon: «Do'st taklif qilish» moves focus to the referral card", async (
   assert.ok(document.activeElement!.querySelector("[data-referral-card]"));
 });
 
-// ───────────────────────── first top-up bonus hint (docs/bonus/PLAN.md «Bonus 2»)
+// ───────────────────────── payment bonus hint (C-Q4: every paid top-up earns N %)
 
-const HINT = "Birinchi to‘ldirishga +10% bonus (50 000 so‘mdan, ko‘pi 20 000 so‘m)";
-const hintText = () => document.querySelector("[data-wallet-first-bonus]")?.textContent?.replace(/\u00a0/g, " ") ?? null;
-const meWith = (firstTopupEligible: unknown) => () => json(200, { user: USER, transactions: LEDGER, firstTopupEligible });
+const hintText = () => document.querySelector("[data-wallet-payment-bonus]")?.textContent ?? null;
+const meWith = (paymentBonusPercent: unknown) => () => json(200, { user: USER, transactions: LEDGER, paymentBonusPercent });
 
-test("Hamyon: first top-up hint on the top-up area while /me says firstTopupEligible", async () => {
-  assert.equal(firstTopupHint().replace(/\u00a0/g, " "), HINT);
-  signIn();
-  stub({ me: meWith(true) });
-  mount();
-  await waitFor(() => assert.equal(hintText(), HINT));
-  const hint = document.querySelector("[data-wallet-first-bonus]")!;
-  assert.ok(hint.closest("[data-wallet-packs]"), "inside «Tez to'ldirish»");
+test("Hamyon: «Har bir to‘ldirishga +N% bonus» on the top-up area with the percent /me sends", async () => {
+  for (const [p, text] of [[10, "Har bir to‘ldirishga +10% bonus"], [25, "Har bir to‘ldirishga +25% bonus"], [50, "Har bir to‘ldirishga +50% bonus"]] as const) {
+    signIn();
+    stub({ me: meWith(p) });
+    mount();
+    await waitFor(() => assert.equal(hintText(), text));
+    assert.ok(document.querySelector("[data-wallet-payment-bonus]")!.closest("[data-wallet-packs]"), "inside «Tez to'ldirish»");
+    cleanup();
+  }
+  assert.ok(!document.querySelector("[data-wallet-first-bonus]"), "the first top-up hint is gone");
 });
 
-test("Hamyon: first top-up hint hidden when not eligible, field missing, or signed out", async () => {
-  for (const value of [false, undefined, "yes"]) {
+test("Hamyon: payment bonus hint hidden at 0 %, for a missing / invalid value, or signed out", async () => {
+  // MUTATION: the `bonusPercent > 0` gate dropped → «+0% bonus» rendered.
+  for (const value of [0, undefined, "10", 51, -5, 2.5, null]) {
     signIn();
     stub({ me: meWith(value) });
     mount();
     await waitFor(() => assert.ok(document.querySelector('[data-wallet-ledger="ready"]')));
-    assert.ok(!document.querySelector("[data-wallet-first-bonus]"), `no hint for ${String(value)}`);
+    assert.ok(!document.querySelector("[data-wallet-payment-bonus]"), `no hint for ${String(value)}`);
     cleanup();
   }
   useAppStore.setState({ sessionChecked: true, loggedIn: false, user: null });
-  stub({ me: meWith(true) });
+  stub({ me: meWith(10) });
   mount();
   assert.ok(document.querySelector("[data-wallet-packs]"));
-  assert.ok(!document.querySelector("[data-wallet-first-bonus]"), "signed out: no hint");
+  assert.ok(!document.querySelector("[data-wallet-payment-bonus]"), "signed out: no hint");
 });
 
-test("Hamyon ?order=: the first top-up hint is gone after the paid reload", async (t) => {
+test("Hamyon ?order=: the hint follows /me after the paid reload (still shown — every top-up earns; gone when switched off)", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
   signIn();
   let state: api.PaymentOrder["state"] = "pending";
-  let eligible = true;
-  stub({ orderState: () => state, me: () => meWith(eligible)() });
+  let percent = 10;
+  stub({ orderState: () => state, me: () => meWith(percent)() });
   mount("order=o1");
   await advance(t, 1000);
-  assert.equal(hintText(), HINT);
+  assert.equal(hintText(), "Har bir to‘ldirishga +10% bonus");
   state = "paid";
-  eligible = false;
+  percent = 0;
   await advance(t, 6000);
   assert.equal(banner(), "paid");
   assert.equal(hintText(), null);
@@ -327,7 +332,11 @@ test("wallet-model: Tashkent-time labels and kind fallbacks", () => {
 
   assert.deepEqual(describeEntry({ kind: "charge", note: "unknown-tool: x" }), { title: "unknown-tool: x", detail: "" });
   assert.deepEqual(describeEntry({ kind: "charge", note: "" }), { title: "Hujjat uchun to'lov", detail: "" });
-  // The first top-up bonus row (settleOrder, FIRST_TOPUP_NOTE) reads «Birinchi to‘ldirish bonusi», in ball.
+  // C-Q4 payment bonus rows (settleOrder, `paymentBonusNote`) read «To‘lov bonusi (N%)», in ball.
+  assert.deepEqual(describeEntry({ kind: "bonus", note: paymentBonusNote(15) }), { title: "To‘lov bonusi (15%)", detail: "" });
+  const pay = ledgerRow({ id: "p", kind: "bonus", amount: 5_000, note: paymentBonusNote(10), createdAt: "2026-10-07T05:24:00.000Z" }, now);
+  assert.deepEqual([pay.title, pay.amount, pay.unit, pay.tone], ["To‘lov bonusi (10%)", "+5 000", "ball", "in"]);
+  // A legacy first top-up bonus row (Bonus 2 history) still reads «Birinchi to‘ldirish bonusi», in ball.
   assert.deepEqual(describeEntry({ kind: "bonus", note: FIRST_TOPUP_NOTE }), { title: "Birinchi to‘ldirish bonusi", detail: "" });
   const first = ledgerRow({ id: "f", kind: "bonus", amount: 20_000, note: FIRST_TOPUP_NOTE, createdAt: "2026-10-07T05:24:00.000Z" }, now);
   assert.deepEqual([first.title, first.amount, first.unit, first.tone], ["Birinchi to‘ldirish bonusi", "+20\u00a0000", "ball", "in"]);

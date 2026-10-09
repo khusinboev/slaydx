@@ -21,7 +21,13 @@
  *   a:cy:<n|e|m|z>    preset picked → confirm   a:cf  back to the preset choice
  *                     (optional: n news, e extra; mandatory: m with a bonus, z without — C-Q2)
  *   a:cc:<n|e|m|z>    connect (confirmed)       a:ct:<id>  toggle active
+ *   a:p               payment bonus card        a:po       «Boshqa»: ask for a typed percent
+ *   a:pv:<0..50>      percent picked → confirm  a:pk:<0..50>  set it (confirmed)
  */
+
+/** A payment bonus percent in a code: 0–50, no leading zeros (the service validates again). */
+const PERCENT = /^(0|[1-9]\d?)$/;
+const isPercentCode = (c: string): boolean => PERCENT.test(c) && Number(c) <= 50;
 
 export const AUDIENCE_CODES = ["all", "act", "new"] as const;
 export type AudienceCode = (typeof AUDIENCE_CODES)[number];
@@ -61,6 +67,10 @@ export const acb = {
   chTypes: () => "a:cf",
   chCreate: (t: ChannelType) => `a:cc:${t}`,
   chToggle: (id: string) => `a:ct:${id}`,
+  payBonus: () => "a:p",
+  pbOther: () => "a:po",
+  pbPick: (p: number) => `a:pv:${p}`,
+  pbSet: (p: number) => `a:pk:${p}`,
 };
 
 export type AdminCallback =
@@ -87,6 +97,10 @@ export type AdminCallback =
   | { kind: "chTypes" }
   | { kind: "chCreate"; type: ChannelType }
   | { kind: "chToggle"; id: string }
+  | { kind: "payBonus" }
+  | { kind: "pbOther" }
+  | { kind: "pbPick"; percent: number }
+  | { kind: "pbSet"; percent: number }
   | { kind: "unknown" };
 
 const ID = /^[1-9]\d{0,17}$/;
@@ -130,6 +144,10 @@ export function parseAdminCallback(data: string | undefined | null): AdminCallba
         return { kind: "chTypes" };
       case "cg":
         return { kind: "chKinds" };
+      case "p":
+        return { kind: "payBonus" };
+      case "po":
+        return { kind: "pbOther" };
     }
     return { kind: "unknown" };
   }
@@ -153,6 +171,10 @@ export function parseAdminCallback(data: string | undefined | null): AdminCallba
       return (CHANNEL_TYPES as readonly string[]).includes(c) ? { kind: "chCreate", type: c as ChannelType } : { kind: "unknown" };
     case "ct":
       return ID.test(c) ? { kind: "chToggle", id: c } : { kind: "unknown" };
+    case "pv":
+      return isPercentCode(c) ? { kind: "pbPick", percent: Number(c) } : { kind: "unknown" };
+    case "pk":
+      return isPercentCode(c) ? { kind: "pbSet", percent: Number(c) } : { kind: "unknown" };
   }
   return { kind: "unknown" };
 }

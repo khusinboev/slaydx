@@ -1,8 +1,8 @@
 import type { LedgerEntry, PaymentOrder } from "@/lib/api-client";
 import { formatPoints } from "@/lib/referral";
 import { TOOL_BY_ID } from "@/lib/tools";
-import { groupDigits } from "@/lib/format";
-import { FIRST_TOPUP_MAX_POINTS, FIRST_TOPUP_MIN_SOUM, FIRST_TOPUP_NOTE_PREFIX, FIRST_TOPUP_PERCENT } from "@/lib/topup-bonus";
+import { FIRST_TOPUP_NOTE_PREFIX } from "@/lib/topup-bonus";
+import { PAYMENT_BONUS_NOTE_PREFIX } from "@/lib/payment-bonus";
 
 /** What a top-up buys (the copy `PurchasePage` has shown since AUDIT-12). */
 export const TOPUP_FEATURES = [
@@ -11,14 +11,6 @@ export const TOPUP_FEATURES = [
   "Click yoki Payme orqali xavfsiz to'lov",
   "Balans muddatsiz saqlanadi",
 ] as const;
-
-/**
- * The first top-up bonus hint on the top-up area while `GET /api/users/me` says
- * `firstTopupEligible` (docs/bonus/PLAN.md «Bonus 2»; numbers from `lib/topup-bonus.ts`).
- */
-export function firstTopupHint(): string {
-  return `Birinchi to‘ldirishga +${FIRST_TOPUP_PERCENT}% bonus (${groupDigits(FIRST_TOPUP_MIN_SOUM)} so‘mdan, ko‘pi ${groupDigits(FIRST_TOPUP_MAX_POINTS)} so‘m)`;
-}
 
 const MONTHS = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"];
 /** Tashkent is UTC+5 all year (no DST) — by hand, like `formatJoinDate`: ICU data differs between Node and browsers. */
@@ -87,7 +79,9 @@ export function describeEntry(e: Pick<LedgerEntry, "kind" | "note">): { title: s
     case "bonus": {
       const friend = /^Do'st taklifi:\s*(.+)$/.exec(note)?.[1];
       if (friend) return { title: `Taklif bonusi · ${friend}`, detail: "" };
-      // First top-up bonus (`lib/topup-bonus.ts FIRST_TOPUP_NOTE`, written by `settleOrder`).
+      // Payment bonus «To‘lov bonusi (N%)» (`lib/payment-bonus.ts paymentBonusNote`, written by `settleOrder`).
+      if (note.startsWith(PAYMENT_BONUS_NOTE_PREFIX)) return { title: note, detail: "" };
+      // First top-up bonus of Bonus 2 (history rows; `lib/topup-bonus.ts`).
       if (note.startsWith(FIRST_TOPUP_NOTE_PREFIX)) return { title: FIRST_TOPUP_NOTE_PREFIX, detail: "" };
       // Channel bonus notes (lib/server/bonus-channels.ts JOIN_NOTE_PREFIX / STAY_NOTE_PREFIX).
       const join = /^Kanal obunasi:\s*(.+)$/.exec(note)?.[1];

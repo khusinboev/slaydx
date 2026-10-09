@@ -110,11 +110,16 @@ after(async () => {
 });
 
 test("codes: every admin code parses back and fits 64 bytes; i18n filled in uz/ru/en", () => {
-  for (const d of [acb.panel(), acb.stats(), acb.bcPick("new"), acb.bcSend(123456789), acb.bcStop("999999999999999999"), acb.chCreate("e"), acb.chToggle("12")]) {
+  for (const d of [acb.panel(), acb.stats(), acb.bcPick("new"), acb.bcSend(123456789), acb.bcStop("999999999999999999"), acb.chCreate("e"), acb.chToggle("12"), acb.payBonus(), acb.pbOther(), acb.pbPick(0), acb.pbSet(50)]) {
     assert.notEqual(parseAdminCallback(d).kind, "unknown", d);
     assert.ok(Buffer.byteLength(d) <= 64);
   }
-  for (const bad of ["a:bs:-1", "a:bu:vip", "a:ct:0x1", "a:bk:1:2", "a"]) assert.equal(parseAdminCallback(bad).kind, "unknown", bad);
+  assert.deepEqual(parseAdminCallback("a:pk:15"), { kind: "pbSet", percent: 15 });
+  assert.deepEqual(parseAdminCallback("a:pv:0"), { kind: "pbPick", percent: 0 });
+  // MUTATION: the code bound 50 → 99 lets a forged `a:pk:51` reach the service (it would still refuse with 400).
+  for (const bad of ["a:bs:-1", "a:bu:vip", "a:ct:0x1", "a:bk:1:2", "a", "a:pk:51", "a:pk:-1", "a:pk:05", "a:pk:1.5", "a:pv:100", "a:pk:"]) {
+    assert.equal(parseAdminCallback(bad).kind, "unknown", bad);
+  }
   for (const k of ADMIN_TEXT_KEYS) for (const l of ["uz", "ru", "en"] as const) assert.ok(adminRawEntry(k)[l].trim(), `${k}.${l}`);
 });
 
@@ -144,8 +149,8 @@ test("access: an owner — /admin opens the panel + keyboard with the «🛠 Adm
   await tg.handleUpdate(textUpdate(a.tg, "/admin"));
   const panel = sends()[0]!.body;
   assert.match(String(panel.text), /^🛠 <b>Admin panel<\/b>\n\nAdmin Bot, rolingiz: <b>ega<\/b>\./);
-  assert.deepEqual(datas(panel), ["a:s", "a:b", "a:c", "a:z"]);
-  assert.deepEqual(buttons(panel).map((b) => b.text), ["📈 Statistika", "📢 Xabar yuborish", "🔔 Kanal ulash", "⬅️ Yopish"]);
+  assert.deepEqual(datas(panel), ["a:s", "a:b", "a:c", "a:p", "a:z"]);
+  assert.deepEqual(buttons(panel).map((b) => b.text), ["📈 Statistika", "📢 Xabar yuborish", "🔔 Kanal ulash", "💳 To‘lov bonusi: 10%", "⬅️ Yopish"]);
   const rows = (sends()[1]!.body.reply_markup as { keyboard: Btn[][] }).keyboard;
   assert.deepEqual(rows.at(-1), [{ text: "🛠 Admin", style: "primary" }]);
   installFetch();
@@ -176,7 +181,7 @@ test("access: viewer sees Statistika only (no bonus section); a broadcast tap is
   const v = await newAdmin("viewer");
   installFetch();
   await tg.handleUpdate(textUpdate(v.tg, "/admin"));
-  assert.deepEqual(datas(sends()[0]!.body), ["a:s", "a:c", "a:z"], "viewer has bonus.view, not broadcasts.send");
+  assert.deepEqual(datas(sends()[0]!.body), ["a:s", "a:c", "a:p", "a:z"], "viewer has bonus.view + settings.view, not broadcasts.send");
   const s = await newAdmin("support");
   installFetch();
   await tg.handleUpdate(cbUpdate(s.tg, "a:b"));

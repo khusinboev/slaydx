@@ -20,8 +20,8 @@ export const ADMIN_STATE_TTL_MINUTES = 10;
 /** The bot step-up window (2FA mode), as the web's `ADMIN_REAUTH_MIN`. */
 export const BOT_REAUTH_MINUTES = 10;
 
-export type Step = "bc_msg" | "bc_btn" | "ch_ref" | "totp";
-const STEPS: readonly Step[] = ["bc_msg", "bc_btn", "ch_ref", "totp"];
+export type Step = "bc_msg" | "bc_btn" | "ch_ref" | "pb_val" | "totp";
+const STEPS: readonly Step[] = ["bc_msg", "bc_btn", "ch_ref", "pb_val", "totp"];
 
 export type BroadcastDraft = {
   t: "bc";

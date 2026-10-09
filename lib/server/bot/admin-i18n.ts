@@ -26,6 +26,7 @@ const A = {
   "panel.stats": { uz: "Statistika", ru: "Статистика", en: "Statistics" },
   "panel.broadcast": { uz: "Xabar yuborish", ru: "Рассылка", en: "Broadcast" },
   "panel.channels": { uz: "Kanal ulash", ru: "Каналы", en: "Channels" },
+  "panel.payBonus": { uz: "To‘lov bonusi: {p}%", ru: "Бонус за пополнение: {p}%", en: "Payment bonus: {p}%" },
   "panel.close": { uz: "Yopish", ru: "Закрыть", en: "Close" },
   "panel.closed": {
     uz: "Admin panel yopildi. Qayta ochish: /admin yoki «🛠 Admin» tugmasi.",
@@ -95,6 +96,7 @@ const A = {
   "st.bonus.stay": { uz: "Kanalda qolish", ru: "Остался в канале", en: "Channel stay" },
   "st.bonus.invite": { uz: "Do‘st taklifi", ru: "Приглашение друга", en: "Invite" },
   "st.bonus.signup": { uz: "Ro‘yxatdan o‘tish", ru: "Регистрация", en: "Sign-up" },
+  "st.bonus.pay": { uz: "To‘lov bonusi", ru: "Бонус за пополнение", en: "Payment bonus" },
   "st.bonus.first": { uz: "Birinchi to‘ldirish", ru: "Первое пополнение", en: "First top-up" },
   "st.bonus.other": { uz: "Boshqa", ru: "Другое", en: "Other" },
   "st.bonusLine": { uz: "{label}: <b>{sum}</b> ({n} ta)", ru: "{label}: <b>{sum}</b> ({n})", en: "{label}: <b>{sum}</b> ({n})" },
@@ -277,6 +279,40 @@ const A = {
     ru: "Закрытый канал: добавьте ссылку-приглашение в веб-панели («Бонусные каналы»).",
     en: "Private channel: add its invite link in the web panel (“Bonus channels”).",
   },
+
+  /* ── To‘lov bonusi (C-Q4, payment-bonus.ts) ── */
+  "pb.title": { uz: "To‘lov bonusi", ru: "Бонус за пополнение", en: "Payment bonus" },
+  "pb.now": {
+    uz: "Hozir: <b>{p}%</b> — har bir to‘langan to‘ldirishga summaning {p}% i bonus ball bo‘lib tushadi.",
+    ru: "Сейчас: <b>{p}%</b> — к каждому оплаченному пополнению начисляется {p}% суммы бонусными баллами.",
+    en: "Now: <b>{p}%</b> — every paid top-up earns {p}% of its amount as bonus points.",
+  },
+  "pb.off": {
+    uz: "Hozir: <b>0%</b> — to‘lov bonusi o‘chirilgan.",
+    ru: "Сейчас: <b>0%</b> — бонус за пополнение выключен.",
+    en: "Now: <b>0%</b> — the payment bonus is off.",
+  },
+  "pb.rule": {
+    uz: "Yangi qiymat faqat keyingi to‘lovlarga qo‘llanadi. 0 — o‘chirish, ko‘pi bilan 50%.",
+    ru: "Новое значение действует только для следующих платежей. 0 — выключить, максимум 50%.",
+    en: "A new value applies to later payments only. 0 turns it off, 50% at most.",
+  },
+  "pb.pick": { uz: "Yangi foizni tanlang:", ru: "Выберите новый процент:", en: "Pick the new percent:" },
+  "pb.viewOnly": { uz: "Sizda faqat ko‘rish huquqi bor.", ru: "У вас только просмотр.", en: "You can only view this." },
+  "pb.other": { uz: "Boshqa (0–50)", ru: "Другое (0–50)", en: "Other (0–50)" },
+  "pb.ask": {
+    uz: "Yangi foizni yuboring — butun son, 0 dan 50 gacha (0 — bonusni o‘chirish).",
+    ru: "Пришлите новый процент — целое число от 0 до 50 (0 — выключить бонус).",
+    en: "Send the new percent — a whole number from 0 to 50 (0 turns the bonus off).",
+  },
+  "pb.bad": { uz: "Butun son yuboring: 0 dan 50 gacha.", ru: "Пришлите целое число от 0 до 50.", en: "Send a whole number from 0 to 50." },
+  "pb.confirmAsk": {
+    uz: "To‘lov bonusi <b>{from}%</b> dan <b>{to}%</b> ga o‘zgartirilsinmi? Yangi qiymat keyingi to‘lovlarga qo‘llanadi.",
+    ru: "Изменить бонус за пополнение с <b>{from}%</b> на <b>{to}%</b>? Новое значение действует для следующих платежей.",
+    en: "Change the payment bonus from <b>{from}%</b> to <b>{to}%</b>? The new value applies to later payments.",
+  },
+  "pb.confirm": { uz: "Ha, {to}% qilish", ru: "Да, сделать {to}%", en: "Yes, set {to}%" },
+  "toast.pbSaved": { uz: "✅ Saqlandi: {p}%", ru: "✅ Сохранено: {p}%", en: "✅ Saved: {p}%" },
 
   /* ── Step-up (2FA mode) ── */
   "su.title": { uz: "Tasdiqlash kodi", ru: "Код подтверждения", en: "Confirmation code" },

@@ -8,6 +8,7 @@ import { query } from "./db";
 import { env } from "./env";
 import { toJsonb } from "./jsonb";
 import { log } from "./log";
+import { PAYMENT_BONUS_DEFAULT, PAYMENT_BONUS_MAX, PAYMENT_BONUS_MIN } from "../payment-bonus";
 
 /**
  * Runtime settings (docs/admin/02-plan.md §6.10, §17.7).
@@ -37,6 +38,7 @@ export type SettingValues = {
   "generation.paused_tools": ToolId[];
   "admin.wallet_confirm_threshold": number;
   "finance.soum_per_usd": number;
+  payment_bonus_percent: number;
   "pricing.target_markup": number;
 };
 
@@ -215,6 +217,18 @@ const CATALOG: Catalog = {
     validate: intValidator(1, 1_000_000),
     envDefault: soumPerUsdDefault,
   },
+  payment_bonus_percent: {
+    key: "payment_bonus_percent",
+    group: FIN_GROUP,
+    label: "To'lov bonusi (%)",
+    description:
+      "Har bir to'langan to'ldirishga shu foiz bonus ball qo'shiladi (har qanday summa, shiftsiz). 0 — bonus o'chirilgan. Yangi qiymat faqat keyingi to'lovlarga qo'llanadi.",
+    type: "int",
+    min: PAYMENT_BONUS_MIN,
+    max: PAYMENT_BONUS_MAX,
+    validate: intValidator(PAYMENT_BONUS_MIN, PAYMENT_BONUS_MAX),
+    envDefault: () => PAYMENT_BONUS_DEFAULT,
+  },
   "pricing.target_markup": {
     key: "pricing.target_markup",
     group: PRICING_GROUP,
@@ -360,6 +374,17 @@ export async function getSetting<K extends SettingKey>(key: K): Promise<SettingV
     return (Array.isArray(v) ? [...v] : v) as SettingValues[K];
   }
   return settingDef(key).envDefault();
+}
+
+/**
+ * Effective value of `key` read inside the caller's transaction straight from
+ * `app_settings` (no cache, no lock). A money path that must apply the value in
+ * force at that moment — not a snapshot up to 15 s old — uses this
+ * (`payment-bonus.ts`). An invalid row falls back to env/default, as on reads.
+ */
+export async function getSettingInTx<K extends SettingKey>(client: Pick<PoolClient, "query">, key: K): Promise<SettingValues[K]> {
+  const res = await client.query<Row>("SELECT key, value, updated_by, updated_at FROM app_settings WHERE key = $1", [key]);
+  return effective(key, res.rows[0]).value;
 }
 
 // ---------------------------------------------------------------------------

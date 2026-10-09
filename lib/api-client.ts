@@ -288,8 +288,8 @@ export function updateProfile(patch: Partial<ServerUser>) {
 export type LedgerEntry = { id: string; kind: string; amount: number; note: string; createdAt: string };
 
 export function fetchMe() {
-  /** `firstTopupEligible`: the next paid top-up can still earn the first top-up bonus (server-computed). */
-  return request<{ user: ServerUser; transactions: LedgerEntry[]; firstTopupEligible?: boolean }>("/api/users/me");
+  /** `paymentBonusPercent`: every paid top-up earns this % as bonus points (0 = off; server setting). */
+  return request<{ user: ServerUser; transactions: LedgerEntry[]; paymentBonusPercent?: number }>("/api/users/me");
 }
 
 /* ──────────────────────────── Generations ─────────────────────────── */

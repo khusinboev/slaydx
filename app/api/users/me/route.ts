@@ -1,20 +1,21 @@
 import { handler, json, limit, readJson, requireUser } from "@/lib/server/api";
 import { getUserById } from "@/lib/server/session";
 import { recentTransactions } from "@/lib/server/credits";
-import { firstTopupEligible } from "@/lib/server/topup-bonus";
+import { getPaymentBonusPercent } from "@/lib/server/payment-bonus";
 import { profilePatchFromBody, updateProfile } from "@/lib/server/profile";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Profil + oxirgi tranzaksiyalar + `firstTopupEligible` (the next paid top-up can still earn the
- * first top-up bonus — the wallet shows the «+10%» hint by it; `lib/server/topup-bonus.ts`).
+ * Profil + oxirgi tranzaksiyalar + `paymentBonusPercent` (C-Q4: every paid top-up earns N % as
+ * bonus; 0 = off — the wallet shows «Har bir to‘ldirishga +N% bonus» while N > 0;
+ * `lib/server/payment-bonus.ts`).
  */
 export const GET = handler("users/me", async (req) => {
   const { user } = await requireUser(req);
-  const [transactions, eligible] = await Promise.all([recentTransactions(user.id, 30), firstTopupEligible(user.id)]);
-  return json({ user, transactions, firstTopupEligible: eligible });
+  const [transactions, percent] = await Promise.all([recentTransactions(user.id, 30), getPaymentBonusPercent()]);
+  return json({ user, transactions, paymentBonusPercent: percent });
 });
 
 /**

@@ -1,6 +1,6 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { randomInt } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { createIsolatedDb } from "./helpers/isolated-db.mts";
 
 /**
@@ -806,12 +806,12 @@ test("bonusTasks: active channels by sort with the user's own claim state; earne
   assert.equal(tasks.signupPoints, 2000);
   assert.equal(tasks.earnedTotal, 5000);
   assert.equal(tasks.availableTotal, 3000, "channel A not joined: 1 000 + 2 000");
-  assert.deepEqual(tasks.firstTopup, { paid: false, points: 0, eligible: true }, "no paid top-up yet → can still earn it");
+  assert.deepEqual(tasks.paymentBonus, { percent: 10, earnedPoints: 0 }, "C-Q4: default 10 %, nothing earned yet");
   assert.match(tasks.referral.link, /^https:\/\/t\.me\/slaydx_test_bot\?start=ref_/);
   assert.equal(tasks.referral.rewardPoints, 2000);
 });
 
-test("bonusTasks totals: first top-up bonus (P2 contract) is earned; owed stay bonuses are available, forfeited ones are not — MUTATSIYA J4", { skip }, async () => {
+test("bonusTasks totals: payment bonuses + the legacy first top-up row are earned; owed stay bonuses are available, forfeited ones are not — MUTATSIYA J4", { skip }, async () => {
   await freshSweep();
   const u = await newUser();
   const fresh = await newChannel({ sort: 1, join: 1000, stay: 2000 });
@@ -822,14 +822,20 @@ test("bonusTasks totals: first top-up bonus (P2 contract) is earned; owed stay b
   await query("INSERT INTO bonus_channel_claims (user_id, channel_id, join_paid) VALUES ($1, $2, 1000)", [u.id, waiting]);
   await query("INSERT INTO bonus_channel_claims (user_id, channel_id, join_paid, left_at) VALUES ($1, $2, 1000, now())", [u.id, left]);
   await query("INSERT INTO bonus_channel_claims (user_id, channel_id, join_paid, stay_paid) VALUES ($1, $2, 2000, 0)", [u.id, news]);
-  // The first top-up bonus as package P2 books it: one `first-topup:<user>` bonus row.
+  // The legacy first top-up bonus as Bonus 2 booked it (`first-topup:<user>`) + two C-Q4 payment bonuses.
   const { topUp } = await import("../lib/server/credits.ts");
   const { firstTopupRef } = await import("../lib/topup-bonus.ts");
+  const { paymentBonusRef } = await import("../lib/payment-bonus.ts");
   assert.equal(await topUp(u.id, { points: 7000 }, firstTopupRef(u.id), "bonus", "Birinchi to'ldirish bonusi"), true);
+  assert.equal(await topUp(u.id, { points: 1000 }, paymentBonusRef(randomUUID()), "bonus", "To‘lov bonusi (10%)"), true);
+  assert.equal(await topUp(u.id, { points: 500 }, paymentBonusRef(randomUUID()), "bonus", "To‘lov bonusi (5%)"), true);
+  // Another user's payment bonus never counts here.
+  const stranger = await newUser();
+  assert.equal(await topUp(stranger.id, { points: 9000 }, paymentBonusRef(randomUUID()), "bonus", "To‘lov bonusi (10%)"), true);
   const tasks = await bc.bonusTasks(u.id, { botUsername: "slaydx_test_bot", appUrl: "https://slaydx.test" });
-  assert.deepEqual(tasks.firstTopup, { paid: true, points: 7000, eligible: false });
-  // Earned: sign-up 2 000 + channels 1 000 + 1 000 + 2 000 + first top-up 7 000.
-  assert.equal(tasks.earnedTotal, 13000);
+  assert.deepEqual(tasks.paymentBonus, { percent: 10, earnedPoints: 8500 });
+  // Earned: sign-up 2 000 + channels 1 000 + 1 000 + 2 000 + first top-up 7 000 + payment bonuses 1 500.
+  assert.equal(tasks.earnedTotal, 14500);
   // Available: «fresh» 1 000 + 2 000, «waiting» its stay 2 000; «left» forfeited, «news» settled.
   assert.equal(tasks.availableTotal, 5000);
   assert.equal(bc.channelsAvailable(tasks.channels), 5000);

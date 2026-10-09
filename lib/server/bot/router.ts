@@ -3,6 +3,7 @@ import { query } from "../db";
 import { getUserById, type SessionUser } from "../session";
 import { referralSummary } from "../referrals";
 import { recentTransactions } from "../credits";
+import { getPaymentBonusPercent } from "../payment-bonus";
 import { updateProfile } from "../profile";
 import { callBot, botUsername, isTransientBotFailure, TelegramTransientError } from "../telegram";
 import { FIELD_MAX, cleanFieldValue, fieldStep } from "../../profile/fields";
@@ -144,7 +145,8 @@ async function filesPage(ctx: Pick<ChatCtx, "user" | "lang" | "telegramId">, pag
 }
 
 async function walletCard(ctx: Pick<ChatCtx, "user" | "lang">): Promise<Screen> {
-  return walletScreen(ctx.lang, ctx.user, await recentTransactions(ctx.user.id, WALLET_RECENT));
+  const [recent, percent] = await Promise.all([recentTransactions(ctx.user.id, WALLET_RECENT), getPaymentBonusPercent()]);
+  return walletScreen(ctx.lang, ctx.user, recent, percent);
 }
 
 async function bonusCard(ctx: Pick<ChatCtx, "user" | "lang">): Promise<Screen> {

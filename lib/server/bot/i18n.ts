@@ -308,6 +308,8 @@ const T = {
     ru: "Оплата — в приложении, через Click или Payme. Если документ не создан, деньги вернутся полностью.",
     en: "Payment is in the app, via Click or Payme. If a document is not made, you get a full refund.",
   },
+  /** C-Q4: the payment bonus line on the wallet card while the percent is > 0. */
+  "wallet.payBonus": { uz: "Har bir to‘ldirishga <b>+{p}%</b> bonus", ru: "<b>+{p}%</b> бонус к каждому пополнению", en: "<b>+{p}%</b> bonus on every top-up" },
   "btn.topup": { uz: "To‘ldirish", ru: "Пополнить", en: "Top up" },
   "btn.inviteFriend": { uz: "Do‘st taklif qilish", ru: "Пригласить друга", en: "Invite a friend" },
   "btn.backWallet": { uz: "Hamyonga qaytish", ru: "Назад в кошелёк", en: "Back to wallet" },
@@ -322,6 +324,7 @@ const T = {
   "ledger.bonusFriend": { uz: "Taklif bonusi · {f}", ru: "Бонус за приглашение · {f}", en: "Invite bonus · {f}" },
   "ledger.signup": { uz: "Ro‘yxatdan o‘tish bonusi", ru: "Бонус за регистрацию", en: "Sign-up bonus" },
   "ledger.firstTopup": { uz: "Birinchi to‘ldirish bonusi", ru: "Бонус за первое пополнение", en: "First top-up bonus" },
+  "ledger.paymentBonus": { uz: "To‘lov bonusi ({p}%)", ru: "Бонус за пополнение ({p}%)", en: "Payment bonus ({p}%)" },
   "ledger.subscription": { uz: "To‘lov balansga tushdi", ru: "Платёж зачислен на баланс", en: "Payment added to balance" },
   "ledger.admin": { uz: "Ma’muriy tuzatish", ru: "Административная корректировка", en: "Admin adjustment" },
   "ledger.merge": {
@@ -356,8 +359,8 @@ const T = {
   "task.invite": { uz: "Do‘st taklif qilish · +{n} har biri", ru: "Пригласить друга · +{n} за каждого", en: "Invite a friend · +{n} each" },
   "task.invited": { uz: "{a} do‘st taklif qildingiz · +{n}", ru: "Приглашено друзей: {a} · +{n}", en: "Friends invited: {a} · +{n}" },
   "task.stayWait": { uz: "⏳ {d} kun: {n} kun", ru: "⏳ {d} дн.: {n} дн.", en: "⏳ {d}d: {n}d" },
-  "task.topup": { uz: "Birinchi to‘ldirish · +{p}% ({m}dan)", ru: "Первое пополнение · +{p}% (от {m})", en: "First top-up · +{p}% (from {m})" },
-  "task.topupPaid": { uz: "Birinchi to‘ldirish · +{n}", ru: "Первое пополнение · +{n}", en: "First top-up · +{n}" },
+  /** C-Q4 payment bonus (`payment-bonus.ts`): every paid top-up earns +{p}%. */
+  "task.topup": { uz: "Har to‘ldirishga +{p}% bonus", ru: "+{p}% бонус к каждому пополнению", en: "+{p}% bonus on every top-up" },
   "bonus.paidTitle": { uz: "+{n} bonus!", ru: "+{n} бонуса!", en: "+{n} bonus!" },
   "bonus.joinText": {
     uz: "«{c}» kanaliga obuna bo‘lganingiz uchun.",

@@ -37,7 +37,8 @@ const cancel = (lang: Lang) => inlineButton("cancel", at(lang, "btn.cancel"), { 
 
 /* ───────────────────────── Panel ───────────────────────── */
 
-export function panelScreen(a: BotAdmin): Screen {
+/** `payBonusPercent`: the current payment bonus (C-Q4) for the «💳 To‘lov bonusi: N%» button (roles with settings.view). */
+export function panelScreen(a: BotAdmin, payBonusPercent?: number): Screen {
   const l = a.lang;
   return {
     text: `${head("admin", at(l, "panel.title"))}\n\n${at(l, "panel.lead", { name: esc(a.name), role: at(l, `role.${a.role}`) })}`,
@@ -45,6 +46,11 @@ export function panelScreen(a: BotAdmin): Screen {
       [can(a, "dashboard.view") && inlineButton("chart", at(l, "panel.stats"), { callback_data: acb.stats() }, "primary")],
       [can(a, "broadcasts.send") && inlineButton("megaphone", at(l, "panel.broadcast"), { callback_data: acb.bcStart() })],
       [can(a, "bonus.view") && inlineButton("bell", at(l, "panel.channels"), { callback_data: acb.channels() })],
+      [
+        can(a, "settings.view") &&
+          payBonusPercent !== undefined &&
+          inlineButton("card", at(l, "panel.payBonus", { p: payBonusPercent }), { callback_data: acb.payBonus() }),
+      ],
       [inlineButton("back", at(l, "panel.close"), { callback_data: acb.close() })],
     ),
   };
@@ -340,6 +346,49 @@ export function channelConfirmScreen(lang: Lang, d: ChannelDraft, type: ChannelT
       [inlineButton("save", at(lang, "ch.confirm"), { callback_data: acb.chCreate(type) }, "success")],
       [back(lang, acb.chTypes())],
       [cancel(lang)],
+    ),
+  };
+}
+
+/* ───────────────────────── To‘lov bonusi (C-Q4) ───────────────────────── */
+
+/** The quick choices; any other 0–50 value goes through «Boshqa». */
+export const PAY_BONUS_PRESETS = [0, 5, 10, 15, 20] as const;
+
+/** The payment bonus card: the current percent, the rule, and (settings.edit) the choices. */
+export function payBonusScreen(a: BotAdmin, percent: number): Screen {
+  const l = a.lang;
+  const edit = can(a, "settings.edit");
+  const lines = [head("card", at(l, "pb.title")), "", percent > 0 ? at(l, "pb.now", { p: percent }) : at(l, "pb.off"), at(l, "pb.rule")];
+  lines.push("", edit ? at(l, "pb.pick") : at(l, "pb.viewOnly"));
+  const choices: InlineButton[] = edit
+    ? PAY_BONUS_PRESETS.map((p) =>
+        inlineButton(p === percent ? "save" : null, `${p}%`, { callback_data: acb.pbPick(p) }, p === percent ? "success" : undefined),
+      )
+    : [];
+  return {
+    text: lines.join("\n"),
+    reply_markup: rows(
+      choices,
+      [edit && inlineButton("edit", at(l, "pb.other"), { callback_data: acb.pbOther() })],
+      [back(l)],
+    ),
+  };
+}
+
+export function payBonusAskScreen(lang: Lang, problem?: string): Screen {
+  return {
+    text: `${problem ? `${tgEmoji("warn")} ${problem}\n\n` : ""}${head("card", at(lang, "pb.title"))}\n\n${at(lang, "pb.ask")}`,
+    reply_markup: rows([back(lang, acb.payBonus())]),
+  };
+}
+
+export function payBonusConfirmScreen(lang: Lang, from: number, to: number): Screen {
+  return {
+    text: `${head("card", at(lang, "pb.title"))}\n\n${at(lang, "pb.confirmAsk", { from, to })}`,
+    reply_markup: rows(
+      [inlineButton("save", at(lang, "pb.confirm", { to }), { callback_data: acb.pbSet(to) }, "success")],
+      [back(lang, acb.payBonus())],
     ),
   };
 }
