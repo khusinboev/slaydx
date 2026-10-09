@@ -56,13 +56,11 @@ import {
   channelProblemScreen,
   channelTypeScreen,
   channelsScreen,
-  closedScreen,
   confirmScreen,
   draftScreen,
   inputProblemScreen,
   ADMIN_MENU,
   adminMenuScreen,
-  panelScreen,
   payBonusAskScreen,
   payBonusConfirmScreen,
   payBonusScreen,
@@ -160,9 +158,15 @@ const REASON = {
   payBonus: "Telegram bot orqali to'lov bonusi o'zgartirildi",
 };
 
-/** The panel with the current payment bonus on its «💳 To‘lov bonusi: N%» button. */
-async function panel(a: BotAdmin): Promise<Screen> {
-  return panelScreen(a, await getPaymentBonusPercent());
+/**
+ * Back to the admin home (owner 2026-10-09): there is no inline panel card any more — the inline
+ * message is removed and the admin menu (the reply keyboard, `adminMenuScreen`) is sent again.
+ * A message Telegram no longer lets the bot delete (older than 48 h) just loses its buttons.
+ */
+async function backToMenu(a: BotAdmin, chatId: number, messageId: number): Promise<void> {
+  const del = await callBot("deleteMessage", { chat_id: chatId, message_id: messageId }).catch(() => null);
+  if (!del?.ok) await editScreen(chatId, messageId, { text: at(a.lang, "panel.closed") });
+  await sendScreen(chatId, adminMenuScreen(a));
 }
 
 /** A typed percent: a whole number 0–50 («10», «10%», « 7 »), else `null`. The service validates again. */
@@ -354,17 +358,14 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
   const d = st.draft;
   switch (c.kind) {
     case "panel":
+    case "close": // «Yopish» on an old inline panel card
       await clearState(chatId);
-      await edit(await panel(a));
-      return undefined;
-    case "close":
-      await clearState(chatId);
-      await edit(closedScreen(l));
+      await backToMenu(a, chatId, messageId);
       return undefined;
     case "cancel":
       if (isBc(d)) await discardBroadcast(a, d, updateId);
       await clearState(chatId);
-      await edit(await panel(a));
+      await backToMenu(a, chatId, messageId);
       return at(l, "toast.cancelled");
     case "stats":
       await edit(statsScreen(a, await botStats()));
