@@ -426,6 +426,46 @@ test("Karta: SMS code -> waiting -> success; the balance refreshes; the card val
   assert.equal(useUi.getState().overlay, null, "«Yopish» closes the dialog");
 });
 
+test("Karta: «Kodni qayta yuborish» unlocks after 60 s, asks Click again for the SAME card, restarts the countdown; a server cap shows its message", async (t) => {
+  setup(DIRECT, { t });
+  await openDialog();
+  await toCardForm();
+  type(q("[data-pay-card-number]")!, "6262 1234 5678 9012");
+  type(q("[data-pay-card-expiry]")!, "1299");
+  fireEvent.click(q("[data-pay-submit]")!);
+  await settle();
+  await settle();
+  const cardPosts = () => reqs.filter((r) => r.url === "/api/payments/click/card");
+  assert.equal(cardPosts().length, 1);
+  const resend = () => q("[data-pay-resend]") as HTMLButtonElement;
+  // MUTATION: no countdown — the button is usable at once.
+  assert.ok(resend().disabled, "locked right after the first code");
+  assert.match(resend().textContent ?? "", /\(60 s\)/);
+  fireEvent.click(resend());
+  await settle();
+  assert.equal(cardPosts().length, 1, "nothing sent while locked");
+  await advance(t, 60_000);
+  assert.ok(!resend().disabled, "unlocked after 60 s");
+  assert.equal(resend().textContent, "Kodni qayta yuborish");
+  fireEvent.click(resend());
+  await settle();
+  await settle();
+  assert.equal(cardPosts().length, 2);
+  // MUTATION: resending without the card (or another card) — Click needs the same number + expiry.
+  assert.deepEqual(cardPosts()[1]!.body, cardPosts()[0]!.body, "the same card and order");
+  assert.match(q("[data-pay-notice]")?.textContent ?? "", /Yangi kod yuborildi/);
+  assert.ok(resend().disabled, "the countdown restarts");
+  assert.ok(q('[data-pay-step="card-sms"]'), "still on the SMS step");
+  // The per-order cap on the server: its message is shown, the step stays.
+  hook = (r) => (r.url === "/api/payments/click/card" ? json(429, { error: "Juda ko'p urinish. Birozdan keyin qayta urinib ko'ring" }) : undefined);
+  await advance(t, 60_000);
+  fireEvent.click(resend());
+  await settle();
+  await settle();
+  assert.match(alertText(), /Juda ko'p urinish/);
+  assert.ok(q('[data-pay-step="card-sms"]'));
+});
+
 test("Karta: the card route already saw the order paid -> success at once, no polling", async (t) => {
   setup(DIRECT, { t });
   hook = (r) => (r.url === "/api/payments/click/card/verify" ? json(200, { status: "paid" }) : undefined);
