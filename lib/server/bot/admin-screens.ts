@@ -1,10 +1,10 @@
 import { groupDigits } from "../../format";
 import { TOOL_BY_ID } from "../../tools";
-import type { BonusChannelItem } from "../admin-bonus-channels";
+import type { BonusChannelItem, BotAdminStatus } from "../admin-bonus-channels";
 import { BUTTON_TEXT_MAX, CAPTION_MAX } from "../broadcast-content";
 import type { AdminBroadcast, BroadcastStats } from "../admin-broadcasts";
 import type { Permission } from "../admin-rbac";
-import { acb, type AudienceCode, type ChannelType } from "./admin-codes";
+import { acb, type AudienceCode, type ChannelField, type ChannelType, type TypedField } from "./admin-codes";
 import { at } from "./admin-i18n";
 import type { BotAdmin } from "./admin-access";
 import type { BotStats } from "./admin-stats";
@@ -296,7 +296,6 @@ const lockMark = (c: { mandatory?: boolean }) => (c.mandatory ? "🔒 " : "");
 
 export function channelsScreen(a: BotAdmin, items: BonusChannelItem[]): AdminScreen {
   const l = a.lang;
-  const edit = can(a, "bonus.edit");
   const lines = [head("megaphone", at(l, "ch.title")), ""];
   if (!items.length) lines.push(at(l, "ch.empty"));
   for (const c of items.slice(0, 20)) {
@@ -310,29 +309,101 @@ export function channelsScreen(a: BotAdmin, items: BonusChannelItem[]): AdminScr
       }),
     );
   }
-  if (items.length) lines.push("", edit ? at(l, "ch.toggleHint") : at(l, "ch.viewOnly"));
-  // One button per channel; the «N.» prefix keeps every label unique (two channels may share a title) and the
-  // title is clipped by code points (`clip`), so a label is never cut inside an emoji.
-  const toggles: KeyDef[][] = edit
-    ? items.slice(0, 20).map((c, i) => [key(null, `${i + 1}. ${c.active ? "✅" : "⏸"} ${lockMark(c)}${clip(c.title, 30)}`, acb.chToggle(c.id))])
-    : [];
-  // «🗑» only for a PAUSED channel nobody got a bonus from (the web's rule): pause first, then delete.
-  const deletes: KeyDef[][] = edit
-    ? items
-        .slice(0, 20)
-        .map((c, i) => ({ c, i }))
-        .filter(({ c }) => !c.active && c.stats.joined === 0)
-        .map(({ c, i }) => [key(null, `🗑 ${i + 1}. ${clip(c.title, 30)}`, acb.chDeleteAsk(c.id), "danger")])
-    : [];
-  return keyScreen(lines.join("\n"), ...toggles, ...deletes, [edit && key("plus", at(l, "ch.connect"), acb.chConnect(), "primary"), back(l)]);
+  if (items.length) lines.push("", can(a, "bonus.edit") ? at(l, "ch.toggleHint") : at(l, "ch.viewOnly"));
+  // One button per channel opens its card (read-only without bonus.edit); the «N.» prefix keeps every label unique
+  // (two channels may share a title) and the title is clipped by code points (`clip`), so a label is never cut
+  // inside an emoji.
+  const rows: KeyDef[][] = items.slice(0, 20).map((c, i) => [key(null, `${i + 1}. ${c.active ? "✅" : "⏸"} ${lockMark(c)}${clip(c.title, 30)}`, acb.chView(c.id))]);
+  return keyScreen(lines.join("\n"), ...rows, [can(a, "bonus.edit") && key("plus", at(l, "ch.connect"), acb.chConnect(), "primary"), back(l)]);
 }
 
-/** «🗑 N. title» → confirm: the channel is removed for good (the service audits it). */
+/** A value of a card field as the card and the confirm screen show it. */
+type FieldValue = string | number | boolean | null;
+
+function fieldValueText(lang: Lang, field: ChannelField, v: FieldValue): string {
+  switch (field) {
+    case "title":
+      return esc(clip(String(v ?? ""), 60));
+    case "inviteLink":
+      return v ? esc(String(v)) : at(lang, "ch.none");
+    case "joinBonus":
+    case "stayBonus":
+      return Number(v) > 0 ? som(lang, Number(v)) : at(lang, "ch.none");
+    case "stayDays":
+      return at(lang, "ch.days", { n: Number(v) });
+    case "sort":
+      return g(Number(v));
+    case "mandatory":
+      return at(lang, v ? "ch.kindM" : "ch.kindO");
+    case "active":
+      return at(lang, v ? "ch.statusOn" : "ch.statusOff");
+  }
+}
+
+/** The current value of a field of a stored channel. */
+export const channelFieldValue = (c: BonusChannelItem, field: ChannelField): FieldValue => c[field];
+
+/**
+ * The channel card (owner 2026-10-09): everything the web's edit dialog edits, and the buttons that edit it (roles
+ * with bonus.edit; «🗑» only for a PAUSED channel nobody got a bonus from — the web's rule). Others see it read-only.
+ */
+export function channelCardScreen(a: BotAdmin, c: BonusChannelItem, botAdmin?: BotAdminStatus): AdminScreen {
+  const l = a.lang;
+  const edit = can(a, "bonus.edit");
+  const where = c.username ? `@${esc(c.username)}` : at(l, "ch.private");
+  const lines = [
+    head("megaphone", esc(clip(c.title, 60))),
+    `${where} · ID <code>${esc(c.chatId)}</code>`,
+    "",
+    at(l, "ch.cardKind", { v: fieldValueText(l, "mandatory", c.mandatory) }),
+    at(l, "ch.cardJoin", { v: fieldValueText(l, "joinBonus", c.joinBonus) }),
+    at(l, "ch.cardStay", { v: fieldValueText(l, "stayBonus", c.stayBonus), days: fieldValueText(l, "stayDays", c.stayDays) }),
+    at(l, "ch.cardLink", { v: fieldValueText(l, "inviteLink", c.inviteLink) }),
+    at(l, "ch.cardSort", { v: fieldValueText(l, "sort", c.sort) }),
+    at(l, "ch.cardStatus", { v: fieldValueText(l, "active", c.active) }),
+    at(l, "ch.cardClaims", { n: g(c.stats.joinPaidCount) }),
+  ];
+  if (botAdmin) lines.push("", botAdmin === "admin" ? at(l, "ch.botAdmin") : botAdmin === "not_admin" ? at(l, "ch.botNotAdmin") : at(l, "ch.botUnknown"));
+  lines.push("", edit ? at(l, "ch.cardHint") : at(l, "ch.viewOnly"));
+  const canDelete = !c.active && c.stats.joined === 0;
+  const rows: (KeyDef | false)[][] = edit
+    ? [
+        [key("edit", at(l, "ch.btn.title"), acb.chEdit("title", c.id)), key("link", at(l, "ch.btn.inviteLink"), acb.chEdit("inviteLink", c.id))],
+        [key("wallet", at(l, "ch.btn.joinBonus"), acb.chEdit("joinBonus", c.id)), key("gift", at(l, "ch.btn.stayBonus"), acb.chEdit("stayBonus", c.id))],
+        [key(null, `📅 ${at(l, "ch.btn.stayDays")}`, acb.chEdit("stayDays", c.id)), key(null, `↕️ ${at(l, "ch.btn.sort")}`, acb.chEdit("sort", c.id))],
+        [c.mandatory ? key("plus", at(l, "ch.btn.makeOptional"), acb.chEdit("mandatory", c.id)) : key("lock", at(l, "ch.btn.makeMandatory"), acb.chEdit("mandatory", c.id))],
+        [c.active ? key(null, `⏸ ${at(l, "ch.btn.pause")}`, acb.chEdit("active", c.id)) : key("save", at(l, "ch.btn.resume"), acb.chEdit("active", c.id), "success")],
+        [canDelete && key(null, `🗑 ${at(l, "ch.btn.delete")}`, acb.chDeleteAsk(c.id), "danger")],
+      ]
+    : [];
+  return keyScreen(lines.join("\n"), ...rows, [back(l, acb.channels())]);
+}
+
+/** Asks for the new value of one typed field (title / link / amounts / days / sort); `problem` = why the last answer was refused. */
+export function channelEditAskScreen(lang: Lang, c: BonusChannelItem, field: TypedField, problem?: string): AdminScreen {
+  const now = fieldValueText(lang, field, channelFieldValue(c, field));
+  return keyScreen(
+    `${problem ? `${tgEmoji("warn")} ${esc(problem)}\n\n` : ""}${head("megaphone", esc(clip(c.title, 60)))}\n\n<b>${at(lang, `ch.f.${field}`)}</b>\n${at(lang, "ch.nowValue", { v: now })}\n\n${at(lang, `ch.ask.${field}`)}`,
+    [field === "inviteLink" && c.inviteLink !== null && key(null, `🧹 ${at(lang, "ch.btn.dropLink")}`, acb.chLinkDrop(c.id))],
+    [back(lang, acb.chView(c.id)), cancel(lang)],
+  );
+}
+
+/** «<field>: old → new. Saqlansinmi?» with «✅ Saqlash» (the confirmed code; step-up in 2FA mode). */
+export function channelChangeConfirmScreen(lang: Lang, c: BonusChannelItem, field: ChannelField, from: FieldValue, to: FieldValue): AdminScreen {
+  return keyScreen(
+    `${head("megaphone", esc(clip(c.title, 60)))}\n\n${at(lang, "ch.editConfirm", { field: at(lang, `ch.f.${field}`), old: fieldValueText(lang, field, from), new: fieldValueText(lang, field, to) })}`,
+    [key("save", at(lang, "ch.btn.save"), acb.chSave(c.id), "success")],
+    [back(lang, acb.chView(c.id))],
+  );
+}
+
+/** «🗑 O‘chirish» on the card → confirm: the channel is removed for good (the service audits it). */
 export function channelDeleteAskScreen(lang: Lang, c: BonusChannelItem): AdminScreen {
   return keyScreen(
     `${head("warn", at(lang, "ch.deleteTitle"))}\n\n${at(lang, "ch.deleteAsk", { title: esc(clip(c.title, 60)) })}`,
     [key(null, `🗑 ${at(lang, "ch.deleteYes")}`, acb.chDelete(c.id), "danger")],
-    [back(lang, acb.channels())],
+    [back(lang, acb.chView(c.id))],
   );
 }
 

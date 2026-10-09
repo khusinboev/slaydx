@@ -2,7 +2,7 @@ import type { PoolClient } from "pg";
 import { query } from "../db";
 import type { BroadcastContent } from "../broadcast-content";
 import type { BotAdminStatus } from "../admin-bonus-channels";
-import type { AudienceCode, ChannelType } from "./admin-codes";
+import type { AudienceCode, ChannelField, ChannelType } from "./admin-codes";
 
 /**
  * Admin flow state per private chat (`bot_admin_state`, migration 044): the
@@ -20,8 +20,8 @@ export const ADMIN_STATE_TTL_MINUTES = 10;
 /** The bot step-up window (2FA mode), as the web's `ADMIN_REAUTH_MIN`. */
 export const BOT_REAUTH_MINUTES = 10;
 
-export type Step = "bc_msg" | "bc_btn" | "ch_ref" | "pb_val" | "totp";
-const STEPS: readonly Step[] = ["bc_msg", "bc_btn", "ch_ref", "pb_val", "totp"];
+export type Step = "bc_msg" | "bc_btn" | "ch_ref" | "ch_val" | "pb_val" | "totp";
+const STEPS: readonly Step[] = ["bc_msg", "bc_btn", "ch_ref", "ch_val", "pb_val", "totp"];
 
 export type BroadcastDraft = {
   t: "bc";
@@ -43,10 +43,22 @@ export type ChannelDraft = {
   type?: ChannelType;
 };
 
+/**
+ * One field of one stored channel being edited from its card: `field` alone while the value is awaited (`ch_val`),
+ * with `value` (what `updateBonusChannel` gets; `null` = clear the invite link) once the confirm screen is shown.
+ * The save code carries only the channel id: it must equal `id` here, else the tap is stale.
+ */
+export type ChannelEditDraft = {
+  t: "che";
+  id: string;
+  field: ChannelField;
+  value?: string | number | boolean | null;
+};
+
 /** Nothing prepared (only a step-up `resume` to remember). */
 export type NoDraft = { t: "none" };
 
-export type Draft = (BroadcastDraft | ChannelDraft | NoDraft) & {
+export type Draft = (BroadcastDraft | ChannelDraft | ChannelEditDraft | NoDraft) & {
   /** 2FA mode: the confirm button that asked for the code; re-run after a valid code. */
   resume?: string;
 };

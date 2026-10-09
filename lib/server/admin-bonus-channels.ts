@@ -230,7 +230,7 @@ export function parseInviteLink(raw: unknown): string | null {
 }
 
 /** An optional channel exists only for its bonus; a mandatory one may pay nothing (C-Q2). */
-function assertSomeBonus(joinBonus: number, stayBonus: number, mandatory: boolean): void {
+export function assertSomeBonus(joinBonus: number, stayBonus: number, mandatory: boolean): void {
   if (!mandatory && joinBonus === 0 && stayBonus === 0) throw bad("Kamida bitta bonus 0 dan katta bo'lishi kerak");
 }
 
