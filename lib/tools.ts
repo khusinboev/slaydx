@@ -1,7 +1,7 @@
 import type { FieldOption, FormValues, ToolConfig, ToolField, ToolGroup, ToolId, UserProfile } from "./types";
 import { gameTypesOf } from "./generation/games/registry";
 import { GAME_LIMITS } from "./generation/games/types";
-import { audioTypesOf } from "./generation/audio/registry";
+import { AUDIO_VOICE_OPTIONS, audioTypesOf } from "./generation/audio/registry";
 import { AUDIO_LIMITS } from "./generation/audio/types";
 import { infographicTypes } from "./generation/infographic/registry";
 import { INFOGRAPHIC_LIMITS, INFOGRAPHIC_SIZES, PALETTES } from "./generation/infographic/types";
@@ -274,11 +274,15 @@ const INTERACTIVE_GAME_FIELDS: Record<"sorting" | "listening", ToolField[]> = {
  * Audio maydonlari (`podcast.md`/`greeting.md` §3; reyestr —
  * `audio-params.ts`).
  *
- * Ovoz TANLANMAYDI: u til jadvalidan (`TTS_LANG_VOICES`) olinadi —
- * foydalanuvchiga 18 til × 2 ovozli ro'yxat berish tanlovni ham
- * og'irlashtirar, ham provayder almashganda yaroqsiz bo'lib qolardi
- * (`tts.md` §3).
+ * Voice (`voice`): the user picks ONE of two voices — female (default) or male
+ * (owner decision 2026-10-10; the earlier «the voice is not chosen» rule is
+ * reversed). What is chosen is a gender, NOT an 18-language × provider list: the
+ * concrete voice name per provider comes from the tables in `tts/types.ts`
+ * (`TTS_LANG_VOICES`, `TTS_GEMINI_VOICES`), so the form does not change when the
+ * provider does. Each option has a ▶︎ sample button (`MediaComposer`).
  */
+const VOICE_FIELD: ToolField = { kind: "chips", name: "voice", legend: "Ovoz", options: AUDIO_VOICE_OPTIONS.map((o) => ({ value: o.value, label: o.label })) };
+
 const AUDIO_FIELDS: Record<"podcast" | "greeting", ToolField[]> = {
   podcast: [
     {
@@ -302,6 +306,7 @@ const AUDIO_FIELDS: Record<"podcast" | "greeting", ToolField[]> = {
       hint: "Davomiylik narxga ta'sir qilmaydi — 1 daqiqa ham, 5 daqiqa ham 4 000 tanga.",
     },
     LANGUAGE_FIELD,
+    VOICE_FIELD,
   ],
   greeting: [
     { kind: "text", name: "recipient", legend: "Kimga?", placeholder: "Dilnoza opa", required: true },
@@ -314,6 +319,7 @@ const AUDIO_FIELDS: Record<"podcast" | "greeting", ToolField[]> = {
     },
     { kind: "chips", name: "durationMin", legend: "Davomiyligi", options: numberChips(AUDIO_LIMITS.greetingMinutes, "daqiqa") },
     LANGUAGE_FIELD,
+    VOICE_FIELD,
   ],
 };
 

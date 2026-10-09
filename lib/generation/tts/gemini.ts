@@ -31,7 +31,7 @@ export const geminiTtsModel = (): string => process.env.TTS_GEMINI_MODEL?.trim()
 
 export const GEMINI_TTS_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
-/** Gemini prebuilt ovozi — jadval `TTS_LANG_VOICES` da `gemini:kore` shaklida. */
+/** Voice used when no voice is passed. The per-gender voices live in `TTS_GEMINI_VOICES` (`types.ts`). */
 export const GEMINI_DEFAULT_VOICE = "Kore";
 
 /** `audio/L16;codec=pcm;rate=24000` → 24000; topilmasa Gemini standarti. */

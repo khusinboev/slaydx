@@ -27,6 +27,7 @@
  *   [tts:uz] aisha → kalit yo'q, o'tkazib yuborildi
  */
 import {
+  TTS_GEMINI_SPECS,
   TTS_LIMITS,
   TTS_PROVIDERS,
   TtsError,
@@ -35,7 +36,9 @@ import {
   type TtsProviderId,
   type TtsSynthOpts,
   type TtsUsage,
+  type TtsVoiceChoice,
   type TtsVoiceSpec,
+  ttsChoiceVoices,
   ttsCostUsd,
   ttsVoicesFor,
 } from "./types";
@@ -73,15 +76,32 @@ export function ttsVoiceChain(lang: string, env: NodeJS.ProcessEnv = process.env
       const voice = s.slice(at + 1).trim();
       if (!isProviderId(provider) || !voice) continue;
       // `gender`/`verified` — jadvalnikidan, topilmasa ehtiyotkor standart.
-      const known = ttsVoicesFor(lang).find((v) => v.provider === provider && v.voice === voice);
+      const known = [...ttsVoicesFor(lang), ...TTS_GEMINI_SPECS].find((v) => v.provider === provider && v.voice === voice);
       parsed.push(known ?? { provider, voice, gender: "female", verified: false });
     }
     if (parsed.length) return parsed;
   }
-  return [...ttsVoicesFor(lang)];
+  // Table path: the language rows, then Gemini (off unless TTS_GEMINI_MODEL is set).
+  return [...ttsVoicesFor(lang), ...TTS_GEMINI_SPECS];
 }
 
 export type TtsProviderGroup = { provider: TtsProviderId; voices: string[] };
+
+/**
+ * Applies the user's voice choice (female / male) to one provider group.
+ *
+ * The group's voices become [role A = chosen gender, role B = the other gender] from
+ * the voice tables (`ttsChoiceVoices`), so the choice decides the voice of a
+ * single-speaker job and who leads a two-speaker dialog. `TTS_VOICE_<LANG>` therefore
+ * only decides WHICH providers run and in which order; a provider without a table row
+ * for the language keeps the operator's list. No choice → the group is returned as is
+ * (listening game, tts-lab).
+ */
+export function groupForChoice(group: TtsProviderGroup, lang: string, choice?: TtsVoiceChoice): TtsProviderGroup {
+  if (!choice) return group;
+  const voices = ttsChoiceVoices(group.provider, lang, choice);
+  return voices ? { provider: group.provider, voices } : group;
+}
 
 /**
  * Ovoz ro'yxatini PROVAYDER bo'yicha guruhlaydi (tartib saqlanadi).
@@ -141,8 +161,11 @@ export type TtsChainDeps = {
  * EXT-10): berilsa har urinish timeout'i qolgan vaqt bilan cheklanadi,
  * vaqt yetmasa `DeadlineError` otiladi va keyingi provayderda skript
  * BOSHIDAN qayta boshlanmaydi. Berilmasa — eski xatti-harakat.
+ *
+ * `voice` — the user's female / male choice (`groupForChoice`): role A speaks in it,
+ * role B in the other gender's voice. Absent → the group's own voice list.
  */
-export type TtsRunOpts = { lang: string; speed?: number; timeoutMs?: number; deadline?: number };
+export type TtsRunOpts = { lang: string; speed?: number; timeoutMs?: number; deadline?: number; voice?: TtsVoiceChoice };
 
 const MAX_ATTEMPTS = 2;
 /** Muddatdan oldin qoldiriladigan zaxira (MP3 yig'ish, yozish). */
@@ -196,7 +219,7 @@ export function makeTtsChain(deps: TtsChainDeps = {}): TtsChain {
       for (const { group, provider } of chain) {
         const started = Date.now();
         try {
-          const run = await runGroup(provider, group, live, {
+          const run = await runGroup(provider, groupForChoice(group, lang, opts.voice), live, {
             lang,
             ...(opts.speed !== undefined ? { speed: opts.speed } : {}),
             ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
@@ -294,10 +317,13 @@ async function runGroup(provider: TtsProvider, group: TtsProviderGroup, parts: r
  * o'z mantiqini sinaydi.
  */
 export function chainOfProvider(provider: TtsProvider, voices?: string[], log?: (line: string) => void): TtsChain {
-  const voicesFor = (lang: string): string[] => {
+  // Explicit `voices` win over everything (the test seam ignores the table AND the
+  // user's choice); otherwise the table group, with the choice applied.
+  const voicesFor = (lang: string, choice?: TtsVoiceChoice): string[] => {
     if (voices?.length) return voices;
     const group = ttsGroups(lang).find((g) => g.provider === provider.id);
-    return group?.voices.length ? group.voices : ["default"];
+    if (!group?.voices.length) return ["default"];
+    return groupForChoice(group, lang, choice).voices;
   };
   return {
     configured: () => provider.configured(),
@@ -306,7 +332,7 @@ export function chainOfProvider(provider: TtsProvider, voices?: string[], log?: 
       const lang = String(opts.lang ?? "uz").toLowerCase();
       if (!provider.configured()) throw new TtsError(provider.id, "Ovoz provayderi sozlanmagan", { retryable: false });
       const started = Date.now();
-      const run = await runGroup(provider, { provider: provider.id, voices: voicesFor(lang) }, parts.filter((p) => String(p.text ?? "").trim()), {
+      const run = await runGroup(provider, { provider: provider.id, voices: voicesFor(lang, opts.voice) }, parts.filter((p) => String(p.text ?? "").trim()), {
         lang,
         ...(opts.speed !== undefined ? { speed: opts.speed } : {}),
         ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),

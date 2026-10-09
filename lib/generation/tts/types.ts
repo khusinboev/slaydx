@@ -226,6 +226,85 @@ export const TTS_LANG_VOICES: Record<string, readonly TtsVoiceSpec[]> = {
 /** Jadvalda tili bo'lmasa — o'zbekcha ovozlar (mahsulotning asosiy tili). */
 export const TTS_FALLBACK_LANG = "uz";
 
+/* ────────────────────────── voice choice (female / male) ────────────────────────── */
+
+/*
+ * The user picks ONE of two voices in the podcast / greeting form (owner decision
+ * 2026-10-10 — the earlier «the voice is not chosen» rule is reversed). The choice
+ * names a GENDER, not a provider; the concrete voice name per provider comes from the
+ * tables right here (single source):
+ *
+ *   gemini  TTS_GEMINI_VOICES   female `Kore`, male `Charon` (language-neutral)
+ *   azure   TTS_LANG_VOICES     the language's female/male pair (Uzbek:
+ *                               `uz-UZ-MadinaNeural` / `uz-UZ-SardorNeural`)
+ *   aisha   TTS_LANG_VOICES     a single voice — the choice is ignored
+ *
+ * When a language has no row of the chosen gender for a provider (Karakalpak,
+ * Kyrgyz, … have one voice) the provider's table default (first row) is used.
+ */
+export const TTS_VOICE_CHOICES = ["female", "male"] as const;
+export type TtsVoiceChoice = (typeof TTS_VOICE_CHOICES)[number];
+
+/** Old clients (no field) and unknown values fall back to this voice. */
+export const TTS_VOICE_DEFAULT: TtsVoiceChoice = "female";
+
+export const isTtsVoiceChoice = (v: unknown): v is TtsVoiceChoice => (TTS_VOICE_CHOICES as readonly string[]).includes(String(v));
+
+/** Form/API value → `female` | `male`; anything else → `TTS_VOICE_DEFAULT`. */
+export function normalizeVoiceChoice(v: unknown): TtsVoiceChoice {
+  const s = String(v ?? "").trim().toLowerCase();
+  return isTtsVoiceChoice(s) ? s : TTS_VOICE_DEFAULT;
+}
+
+/** The other gender — speaker B of a two-speaker podcast takes this voice. */
+export const otherVoiceChoice = (c: TtsVoiceChoice): TtsVoiceChoice => (c === "female" ? "male" : "female");
+
+/**
+ * Gemini prebuilt voices. Language-neutral (Gemini TTS detects the text language), so
+ * there are no per-language rows. Names are case-sensitive for the API. The form
+ * samples (`public/audio/voices/{female,male}.mp3`) are these two voices reading an
+ * Uzbek sentence; they were generated once and are never regenerated at runtime.
+ */
+export const TTS_GEMINI_VOICES: Readonly<Record<TtsVoiceChoice, string>> = { female: "Kore", male: "Charon" };
+
+/**
+ * Gemini rows appended to the TABLE path of `ttsVoiceChain`. The provider stays off
+ * unless `TTS_GEMINI_MODEL` is set (`configured()` = false → skipped), so while it is
+ * disabled these rows change nothing. Without them Gemini entered the chain only via
+ * `TTS_VOICE_<LANG>`, and compose forwards just UZ/RU/EN of those — in every other
+ * language a Gemini-only deployment had no usable provider at all.
+ */
+export const TTS_GEMINI_SPECS: readonly TtsVoiceSpec[] = TTS_VOICE_CHOICES.map((gender) => ({
+  provider: "gemini" as const,
+  voice: TTS_GEMINI_VOICES[gender],
+  gender,
+  verified: false,
+}));
+
+/**
+ * Voice name of `provider` for the chosen gender, or `null` when the provider has no
+ * table row for the language (the caller then leaves the operator's list untouched).
+ */
+export function ttsVoiceForChoice(provider: TtsProviderId, lang: string, choice: TtsVoiceChoice): string | null {
+  if (provider === "gemini") return TTS_GEMINI_VOICES[choice];
+  const rows = ttsVoicesFor(lang).filter((v) => v.provider === provider);
+  if (!rows.length) return null;
+  return (rows.find((v) => v.gender === choice) ?? rows[0]).voice;
+}
+
+/**
+ * [role A, role B] voices of one provider group.
+ *
+ * A = the chosen gender, B = the other gender (in a two-speaker podcast the choice
+ * decides who leads). Single-voice formats only ever use A. Where a provider does not
+ * distinguish genders (Aisha, one-voice languages) both roles get the same voice.
+ */
+export function ttsChoiceVoices(provider: TtsProviderId, lang: string, choice: TtsVoiceChoice): [string, string] | null {
+  const a = ttsVoiceForChoice(provider, lang, choice);
+  if (!a) return null;
+  return [a, ttsVoiceForChoice(provider, lang, otherVoiceChoice(choice)) ?? a];
+}
+
 /** Til ovozlari (tartibli). Noma'lum til → `TTS_FALLBACK_LANG` ovozlari. */
 export function ttsVoicesFor(lang: string): readonly TtsVoiceSpec[] {
   const key = String(lang ?? "").trim().toLowerCase();

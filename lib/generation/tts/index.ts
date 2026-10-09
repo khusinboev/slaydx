@@ -15,10 +15,14 @@
  */
 export {
   TTS_FALLBACK_LANG,
+  TTS_GEMINI_SPECS,
+  TTS_GEMINI_VOICES,
   TTS_LANG_VOICES,
   TTS_LIMITS,
   TTS_PRICES,
   TTS_PROVIDERS,
+  TTS_VOICE_CHOICES,
+  TTS_VOICE_DEFAULT,
   TtsError,
   TtsMeter,
   audioBytes,
@@ -26,13 +30,18 @@ export {
   formatVoiceId,
   isRetryableTtsError,
   isTtsProviderId,
+  isTtsVoiceChoice,
+  normalizeVoiceChoice,
+  otherVoiceChoice,
   parseVoiceId,
+  ttsChoiceVoices,
   ttsCostUsd,
   ttsVerified,
   ttsVoiceFor,
+  ttsVoiceForChoice,
   ttsVoicesFor,
 } from "./types";
-export type { TtsAudio, TtsCostJson, TtsPrice, TtsProvider, TtsProviderId, TtsSynthOpts, TtsUsage, TtsVoiceSpec } from "./types";
+export type { TtsAudio, TtsCostJson, TtsPrice, TtsProvider, TtsProviderId, TtsSynthOpts, TtsUsage, TtsVoiceChoice, TtsVoiceSpec } from "./types";
 
 export {
   MP3_BITRATE_KBPS,
@@ -59,5 +68,5 @@ export { AZURE_OUTPUT_FORMAT, azureEndpoint, azureKey, azureRegion, azureSsml, a
 export { AISHA_MAX_CHARS, AISHA_URL, aishaAudioRef, aishaBody, aishaKey, aishaTts, makeAishaTts } from "./aisha";
 export { GEMINI_TTS_BASE, geminiAudioPart, geminiKey, geminiTts, geminiTtsModel, makeGeminiTts, pcmRateOf } from "./gemini";
 
-export { asTtsChain, chainOfProvider, makeTtsChain, ttsChain, ttsGroups, ttsVoiceChain, ttsVoiceEnvName } from "./chain";
+export { asTtsChain, chainOfProvider, groupForChoice, makeTtsChain, ttsChain, ttsGroups, ttsVoiceChain, ttsVoiceEnvName } from "./chain";
 export type { TtsChain, TtsChainDeps, TtsPart, TtsProviderGroup, TtsRun } from "./chain";

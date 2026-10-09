@@ -317,7 +317,9 @@ export const buildAudioArtifact: AudioBuilder = async (tool, meta, values, opts)
    * skriptni qaytadan boshlamaydi, audit EXT-10). Xato ish xatosi bo'lib
    * ko'tariladi → FAILED + pul qaytarish (boshqa TTS xatolari kabi).
    */
-  const run = await chain.synthesizeAll(parts, { lang: input.language, timeoutMs: Math.min(TTS_LIMITS.callTimeoutMs, Math.max(1_000, remainingMs(deadline))), deadline });
+  // `voice` — the user's female / male choice: single-speaker formats read entirely in it,
+  // in a dialog speaker A takes it and speaker B the other gender's voice.
+  const run = await chain.synthesizeAll(parts, { lang: input.language, voice: input.voice, timeoutMs: Math.min(TTS_LIMITS.callTimeoutMs, Math.max(1_000, remainingMs(deadline))), deadline });
   for (const u of run.usages) ttsMeter.add(u);
 
   stage(92, "Audio yig‘ilmoqda");

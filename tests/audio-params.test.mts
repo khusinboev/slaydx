@@ -197,7 +197,9 @@ async function probe(kind: AudioKind, values: FormValues): Promise<Probe> {
   const built = await buildAudioArtifact(tool, meta, v, {
     deadline: Date.now() + 300_000,
     complete: makeStubComplete(ctx),
-    tts: chainOfProvider(tts, ["azure-A", "azure-B"]),
+    // No explicit voices: the voices come from the language table with the user's
+    // female / male choice applied — so a `voice` probe is visible in `tts.calls`.
+    tts: chainOfProvider(tts),
     judge: false,
     polish: false,
   });
@@ -271,4 +273,86 @@ test("tabriknoma: `occasion` ssenariy TUZILMASIGA tegmaydi (halol e'lon — faqa
   assert.notEqual(a.prompt, b.prompt);
   assert.notEqual(a.model, b.model);
   assert.notEqual(a.review, b.review);
+});
+
+/* ══════════════════════════ voice choice (female / male) reaches the TTS call ══════════════════════════ */
+
+/*
+ * `voice` is declared in the registry (impacts: tts), so the differential probe above
+ * already proves female vs male changes the TTS calls. These tests pin WHAT changes: the
+ * voice NAMES the provider receives, for a greeting, a monologue podcast and a dialog
+ * podcast (speaker A takes the chosen voice, speaker B the other gender's).
+ *
+ * Mutations (hand-checked, listed in the PR description):
+ *   1. engine.ts stops passing `voice` to synthesizeAll     -> every male test fails;
+ *   2. chain.ts keeps role B on the chosen voice (no swap)  -> the dialog test fails;
+ *   3. input.ts ignores values.voice (always female)        -> every male test fails.
+ */
+
+async function synthVoices(kind: AudioKind, values: FormValues) {
+  const tool = toolOf(kind);
+  const v: FormValues = { ...(kind === "podcast" ? BASE_PODCAST : BASE_GREETING), ...values };
+  const meta = extractMeta(tool, v);
+  const input = audioInputFromValues(kind, meta, v);
+  const ctx = audioCtx(audioTypeOf(kind, input.type), input);
+  const tts = fakeTts();
+  const built = await buildAudioArtifact(tool, meta, v, {
+    deadline: Date.now() + 300_000,
+    complete: makeStubComplete(ctx),
+    // The fake provider is "azure"; no explicit voices, so the language table + choice decide.
+    tts: chainOfProvider(tts),
+    judge: false,
+    polish: false,
+  });
+  assert.ok(built, `engine must build (${kind}, ${JSON.stringify(values)})`);
+  return { voices: tts.calls.map((c) => c.voice), model: built!.doc.audio! };
+}
+
+const MADINA = "uz-UZ-MadinaNeural";
+const SARDOR = "uz-UZ-SardorNeural";
+
+test("greeting: the whole audio is read in the chosen voice (female Madina / male Sardor)", async () => {
+  const f = await synthVoices("greeting", { voice: "female" });
+  const m = await synthVoices("greeting", { voice: "male" });
+  assert.ok(f.voices.length > 1);
+  assert.deepEqual([...new Set(f.voices)], [MADINA]);
+  assert.deepEqual([...new Set(m.voices)], [SARDOR]);
+  assert.equal(f.model.voice, `azure:${MADINA}`);
+  assert.equal(m.model.voice, `azure:${SARDOR}`);
+  assert.equal(m.model.voiceB, undefined, "a single-speaker greeting records one voice");
+});
+
+test("monologue podcast (tushuntirish): the whole audio is read in the chosen voice", async () => {
+  const f = await synthVoices("podcast", { podcastType: "tushuntirish", voice: "female" });
+  const m = await synthVoices("podcast", { podcastType: "tushuntirish", voice: "male" });
+  assert.deepEqual([...new Set(f.voices)], [MADINA]);
+  assert.deepEqual([...new Set(m.voices)], [SARDOR]);
+  assert.equal(m.model.voiceB, undefined);
+});
+
+test("dialog podcast (intervyu): speaker A = chosen voice, speaker B = the other gender (the choice decides who leads)", async () => {
+  const f = await synthVoices("podcast", { podcastType: "intervyu", voice: "female" });
+  const m = await synthVoices("podcast", { podcastType: "intervyu", voice: "male" });
+  assert.ok(f.voices.length >= 4);
+  // Scripts alternate A, B, A, B … so the voices alternate, and the choice sets the first.
+  f.voices.forEach((v, i) => assert.equal(v, i % 2 === 0 ? MADINA : SARDOR, `female run, call ${i}`));
+  m.voices.forEach((v, i) => assert.equal(v, i % 2 === 0 ? SARDOR : MADINA, `male run, call ${i}`));
+  // Both voices speak in both runs (the "both speakers must talk" rule is intact) and the model records the swap.
+  assert.deepEqual([...new Set(m.voices)].sort(), [MADINA, SARDOR]);
+  assert.equal(f.model.voice, `azure:${MADINA}`);
+  assert.equal(f.model.voiceB, `azure:${SARDOR}`);
+  assert.equal(m.model.voice, `azure:${SARDOR}`);
+  assert.equal(m.model.voiceB, `azure:${MADINA}`);
+});
+
+test("old clients and bad values read as female; other languages use their own female/male pair", async () => {
+  for (const values of [{}, { voice: "" }, { voice: "robot" }, { voice: 7 }, { voice: null }] as FormValues[]) {
+    const r = await synthVoices("greeting", values);
+    assert.deepEqual([...new Set(r.voices)], [MADINA], `voice=${JSON.stringify(values.voice)} must read as female`);
+  }
+  const ru = await synthVoices("greeting", { language: "ru", voice: "male" });
+  assert.deepEqual([...new Set(ru.voices)], ["ru-RU-DmitryNeural"]);
+  // A language with one table voice (Karakalpak) has no male row -> the table default for both choices.
+  const kaa = await synthVoices("greeting", { language: "kaa", voice: "male" });
+  assert.deepEqual([...new Set(kaa.voices)], [MADINA]);
 });

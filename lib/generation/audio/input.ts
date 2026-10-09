@@ -21,6 +21,7 @@
 import type { FormValues } from "../../types";
 import type { DocMeta } from "../types";
 import { AUDIO_LIMITS, audioWordBudget, normalizeAudioMinutes, type AudioKind, type AudioLine } from "./types";
+import { normalizeVoiceChoice, type TtsVoiceChoice } from "../tts/types";
 import { audioTypeOf, type AudioTypeSpec, type GreetingTypeSpec } from "./registry";
 
 /* ══════════════════════════ rejim ══════════════════════════ */
@@ -48,6 +49,12 @@ export type AudioInput = {
   wordBudget: number;
   /** Ovoz soni: reyestr TURIDAN (formada tanlanmaydi). */
   speakers: number;
+  /**
+   * The user's voice choice (female / male). Reaches the TTS call: the whole audio of
+   * a single-speaker format is read in it, in a two-speaker podcast it is speaker A's
+   * voice and speaker B takes the other gender's (`tts/chain.ts groupForChoice`).
+   */
+  voice: TtsVoiceChoice;
 
   /* ── podkast ── */
   mode: AudioMode;
@@ -83,6 +90,8 @@ export function audioInputFromValues(kind: AudioKind, meta: DocMeta, values: For
     minutes,
     wordBudget: audioWordBudget(minutes),
     speakers: type.speakers,
+    // Missing (old client) or unknown value → female; the job stores the normalized value.
+    voice: normalizeVoiceChoice(values.voice),
     mode,
     topic: str(values.topic ?? meta.topic, AUDIO_LIMITS.topicChars),
     /*
@@ -100,7 +109,7 @@ export function audioInputFromValues(kind: AudioKind, meta: DocMeta, values: For
 
 /** Qoralama/forma uchun teskari yo'nalish (`infographic/input.ts` naqshi). */
 export function encodeAudioValues(input: AudioInput): FormValues {
-  const common = { durationMin: input.minutes, language: input.language, extra: input.extra };
+  const common = { durationMin: input.minutes, language: input.language, extra: input.extra, voice: input.voice };
   return input.kind === "podcast"
     ? { ...common, mode: input.mode, topic: input.topic, sourceText: input.sourceText, podcastType: input.type }
     : { ...common, recipient: input.recipient, relation: input.relation, occasion: input.type };

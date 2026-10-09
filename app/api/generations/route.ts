@@ -1,5 +1,7 @@
 import { ApiError, handler, json, limit, readJson, requireUser } from "@/lib/server/api";
 import { budgetFor } from "@/lib/generation/budget";
+import { isAudioToolId } from "@/lib/generation/audio/types";
+import { normalizeVoiceChoice } from "@/lib/generation/tts/types";
 import { clampListLimit, decodeCursor, enqueueGeneration, IDEMPOTENCY_WINDOW_HOURS, listGenerations } from "@/lib/server/jobs";
 import { sanitizeValues } from "@/lib/server/validate";
 import { sourceCharsForRequest } from "@/lib/server/source-upload";
@@ -68,6 +70,15 @@ export const POST = handler("generations/create", async (req) => {
 
   const values = sanitizeValues(body.values);
   if (!values) throw new ApiError("Forma qiymatlari noto'g'ri", 400);
+
+  /*
+   * Podcast / greeting voice choice: `female` | `male`. A missing field (an old cached
+   * client) or an unknown value becomes `female` — the audio params normalize, never
+   * reject (like `mode`, `podcastType`, `durationMin`). The NORMALIZED value is what the
+   * job stores in `values_json`, so the worker and a later look at the job agree on
+   * which voice was asked for.
+   */
+  if (isAudioToolId(tool.id)) values.voice = normalizeVoiceChoice(values.voice);
 
   /*
    * Tarjima hajmi — SERVERDA aniqlanadi (Tarjimon 2, WP1).

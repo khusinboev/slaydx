@@ -67,6 +67,12 @@ export const AUDIO_PARAMS: AudioParam[] = [
   { id: "topic", kinds: ["podcast"], encode: "string", probeA: "Sun'iy intellekt va ta'lim", probeB: "Orol dengizi muammosi", impacts: ["prompt", "model"] },
   { id: "language", kinds: ALL, encode: "string", probeA: "uz", probeB: "ru", impacts: ["language", "prompt", "model", "tts"] },
   { id: "durationMin", kinds: ALL, encode: "number", probeA: 1, probeB: 4, impacts: ["prompt", "structure", "review", "budget", "tts"] },
+  /*
+   * `voice` — female / male (owner decision 2026-10-10). It reaches ONLY the TTS call:
+   * the voice name per provider comes from the gender tables in `tts/types.ts`; the
+   * script text, the structure and the price do not depend on it.
+   */
+  { id: "voice", kinds: ALL, encode: "string", probeA: "female", probeB: "male", impacts: ["tts"] },
   { id: "extra", kinds: ALL, encode: "string", probeA: "", probeB: "7-sinf o'quvchilariga mo'ljallang.", impacts: ["prompt"] },
 
   /* ── podkast (podcast.md §3) ── */
