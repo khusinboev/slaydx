@@ -11,6 +11,9 @@ import {
   cancelBroadcast,
   createBroadcast,
   getBroadcast,
+  pauseBroadcast,
+  resumeBroadcast,
+  setProgressMessage,
   sendBroadcast,
   sendTest,
   BROADCAST_TEXT_MAX,
@@ -120,6 +123,8 @@ const PERM: Record<Exclude<AdminCallback["kind"], "unknown">, Permission> = {
   bcTest: "broadcasts.send",
   bcSend: "broadcasts.send",
   bcProgress: "broadcasts.view",
+  bcPause: "broadcasts.send",
+  bcResume: "broadcasts.send",
   bcStopAsk: "broadcasts.send",
   bcStop: "broadcasts.send",
   channels: "bonus.view",
@@ -430,13 +435,27 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
       }
       await clearState(chatId);
       const b = await getBroadcast(id);
-      await edit(progressScreen(l, b.broadcast, b.stats, true));
+      // The engine keeps editing THIS message with the live numbers.
+      await setProgressMessage(id, await edit(progressScreen(l, b.broadcast, b.stats, true)));
       return at(l, "toast.queued");
     }
     case "bcProgress": {
       const b = await getBroadcast(c.id);
-      await edit(progressScreen(l, b.broadcast, b.stats, allowed(a, "broadcasts.send")));
+      await setProgressMessage(c.id, await edit(progressScreen(l, b.broadcast, b.stats, allowed(a, "broadcasts.send"))));
       return at(l, "toast.refreshed");
+    }
+    case "bcPause":
+    case "bcResume": {
+      const act = c.kind === "bcPause" ? pauseBroadcast : resumeBroadcast;
+      try {
+        await act(actorOf(a, updateId), c.id, {}, { via: "bot" });
+      } catch (e) {
+        // Already paused / resumed / finished meanwhile: show what is true now.
+        if (!(e instanceof ApiError && e.status === 409)) throw e;
+      }
+      const b = await getBroadcast(c.id);
+      await setProgressMessage(c.id, await edit(progressScreen(l, b.broadcast, b.stats, true)));
+      return at(l, c.kind === "bcPause" ? "toast.paused" : "toast.resumed");
     }
     case "bcStopAsk": {
       const b = await getBroadcast(c.id);
@@ -732,9 +751,36 @@ export async function notifyBroadcastDone(id: string, notify: { chatId: string; 
   const chatId = Number(notify.chatId);
   const { admin } = await lookupAdmin(chatId);
   if (!admin) return;
-  const r = await queryOne<{ sent: number; failed: number; total: number }>("SELECT sent, failed, total FROM broadcasts WHERE id = $1", [id]);
+  const r = await queryOne<{ sent: number; failed: number; total: number; status: string }>("SELECT sent, failed, total, status FROM broadcasts WHERE id = $1", [id]);
   if (!r) return;
+  if (r.status === "failed") {
+    // The engine aborted it (every send was refused for good): the card names the reason.
+    const b = await getBroadcast(id);
+    await sendScreen(chatId, progressScreen(langOf(admin.lang), b.broadcast, b.stats, false));
+    return;
+  }
   await sendScreen(chatId, broadcastDoneScreen(langOf(admin.lang), id, { sent: Number(r.sent), failed: Number(r.failed), total: Number(r.total) }));
+}
+
+/**
+ * Called by the delivery engine about every 10 s while a bot broadcast sends: edits the admin's progress
+ * message in place (never sends a new one — a deleted message just stops updating). Best effort.
+ */
+export async function editBroadcastProgress(id: string, notify: { chatId: string; lang: string; messageId?: number }): Promise<void> {
+  if (!notify.messageId) return;
+  const chatId = Number(notify.chatId);
+  const { admin } = await lookupAdmin(chatId);
+  if (!admin) return;
+  const b = await getBroadcast(id);
+  const screen = progressScreen(langOf(admin.lang), b.broadcast, b.stats, allowed(admin, "broadcasts.send"));
+  await callBot("editMessageText", {
+    chat_id: chatId,
+    message_id: notify.messageId,
+    text: screen.text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: screen.reply_markup ?? { inline_keyboard: [] },
+  });
 }
 
 /** Every admin text key (tests check all three languages are filled). */

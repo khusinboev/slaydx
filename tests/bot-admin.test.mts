@@ -548,3 +548,78 @@ test("Xabar yuborish: a CONCURRENT double tap on «Yuborish» without a test cre
   assert.equal(bs[0]!.status, "queued");
   assert.equal((await audit(a.adminId, "broadcasts.send")).length, 1, "queued once");
 });
+
+test("Progress card: pause / resume buttons, the engine edits the SAME message, support cannot pause (docs/bonus/BONUS3.md C-Q5)", { skip }, async () => {
+  const a = await newAdmin("owner");
+  const viewer = await newAdmin("support");
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, "a:b", 960));
+  await tg.handleUpdate(textUpdate(a.tg, "Pauza va davom ettirish"));
+  await tg.handleUpdate(cbUpdate(a.tg, "a:ba", 961));
+  await tg.handleUpdate(cbUpdate(a.tg, "a:bu:new", 961));
+  const nw = (await audienceCount({ kind: "new_days", days: 7 })).count;
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, `a:bs:${nw}`, 962));
+  const [b] = await broadcastsBy(a.adminId);
+  assert.ok(b);
+  assert.equal(b!.status, "queued");
+  assert.equal((b!.content!.notify as { messageId?: number }).messageId, 962, "the progress message is remembered for the engine");
+  assert.deepEqual(datas(edits()[0]!.body), ["a:bp:" + b!.id, "a:bw:" + b!.id, "a:bc:" + b!.id, "a:h"]);
+
+  // Pause → «pauzada», the button flips to «Davom ettirish».
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, `a:bw:${b!.id}`, 962));
+  assert.deepEqual(toasts(), ["⏸ Pauzada"]);
+  assert.match(String(edits()[0]!.body.text), /Holat: <b>pauzada<\/b>/);
+  assert.deepEqual(datas(edits()[0]!.body), ["a:bp:" + b!.id, "a:br:" + b!.id, "a:bc:" + b!.id, "a:h"]);
+  assert.equal((await broadcastsBy(a.adminId))[0]!.status, "paused");
+  const pa = await audit(a.adminId, "broadcasts.pause");
+  assert.equal(pa.length, 1);
+  assert.deepEqual(pa[0]!.meta, { via: "bot" });
+
+  // Support (broadcasts.view only) cannot pause or resume.
+  installFetch();
+  await tg.handleUpdate(cbUpdate(viewer.tg, `a:br:${b!.id}`, 970));
+  assert.deepEqual(toasts(), ["Ruxsat yo‘q"]);
+  assert.equal((await broadcastsBy(a.adminId))[0]!.status, "paused");
+
+  // The engine's in-place edit: editMessageText on message 962 with the current card.
+  installFetch();
+  const { editBroadcastProgress } = await import("../lib/server/bot/admin.ts");
+  await editBroadcastProgress(b!.id, { chatId: String(a.tg), lang: "uz", messageId: 962 });
+  assert.equal(edits().length, 1);
+  assert.equal(edits()[0]!.body.message_id, 962);
+  assert.equal(edits()[0]!.body.chat_id, a.tg);
+  assert.match(String(edits()[0]!.body.text), /Holat: <b>pauzada<\/b>/);
+  assert.equal(sends().length, 0, "never a new message");
+
+  // Resume → never started → back to «navbatda».
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, `a:br:${b!.id}`, 962));
+  assert.deepEqual(toasts(), ["▶️ Davom etmoqda"]);
+  assert.match(String(edits()[0]!.body.text), /Holat: <b>navbatda<\/b>/);
+  assert.equal((await broadcastsBy(a.adminId))[0]!.status, "queued");
+  // A stale second tap on «Davom ettirish» of an already resumed card is harmless.
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, `a:br:${b!.id}`, 962));
+  assert.match(String(edits()[0]!.body.text), /Holat: <b>navbatda<\/b>/, "409 swallowed, the card shows the truth");
+});
+
+test("Progress card text: speed and ETA while sending; the abort reason when failed", async () => {
+  const base = {
+    id: "9", status: "sending", text: "x", audience: { kind: "all" }, total: 1000, sent: 100, failed: 0, createdBy: null, createdByName: null,
+    createdAt: "", queuedAt: null, finishedAt: null, startedAt: null, heartbeatAt: null, failReason: null,
+  } as unknown as import("../lib/server/admin-broadcasts.ts").AdminBroadcast;
+  const stats = { total: 1000, sent: 100, failed: 0, pending: 900, inFlight: 8, retrying: 0, speed: 24.8, etaSeconds: 90, failedReasons: [] };
+  const { progressScreen } = await import("../lib/server/bot/admin-screens.ts");
+  const live = progressScreen("uz", base, stats, true);
+  assert.match(live.text, /Tezlik: 24\.8 ta\/s · taxminan 1 min 30 s qoldi/);
+  const failed = progressScreen("uz", { ...base, status: "failed", failReason: "Birinchi 200 ta yuborish muvaffaqiyatsiz <x>" }, { ...stats, speed: 0, etaSeconds: null }, true);
+  assert.match(failed.text, /xato bilan to‘xtatildi/);
+  assert.match(failed.text, /Birinchi 200 ta yuborish muvaffaqiyatsiz &lt;x&gt;/, "escaped");
+  assert.ok(!/Tezlik/.test(failed.text));
+  const paused = progressScreen("uz", { ...base, status: "paused" }, { ...stats, speed: 0, etaSeconds: null }, true);
+  assert.ok(JSON.stringify(paused.reply_markup).includes("a:br:9"));
+  const noPerm = progressScreen("uz", base, stats, false);
+  assert.ok(!JSON.stringify(noPerm.reply_markup).includes("a:bw:9"), "no pause button without broadcasts.send");
+});

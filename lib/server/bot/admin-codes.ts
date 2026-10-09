@@ -57,6 +57,8 @@ export const acb = {
   bcTest: () => "a:bt",
   bcSend: (n: number) => `a:bs:${n}`,
   bcProgress: (id: string) => `a:bp:${id}`,
+  bcPause: (id: string) => `a:bw:${id}`,
+  bcResume: (id: string) => `a:br:${id}`,
   bcStopAsk: (id: string) => `a:bc:${id}`,
   bcStop: (id: string) => `a:bk:${id}`,
   channels: () => "a:c",
@@ -87,6 +89,8 @@ export type AdminCallback =
   | { kind: "bcTest" }
   | { kind: "bcSend"; count: number }
   | { kind: "bcProgress"; id: string }
+  | { kind: "bcPause"; id: string }
+  | { kind: "bcResume"; id: string }
   | { kind: "bcStopAsk"; id: string }
   | { kind: "bcStop"; id: string }
   | { kind: "channels" }
@@ -159,6 +163,10 @@ export function parseAdminCallback(data: string | undefined | null): AdminCallba
       return COUNT.test(c) ? { kind: "bcSend", count: Number(c) } : { kind: "unknown" };
     case "bp":
       return ID.test(c) ? { kind: "bcProgress", id: c } : { kind: "unknown" };
+    case "bw":
+      return ID.test(c) ? { kind: "bcPause", id: c } : { kind: "unknown" };
+    case "br":
+      return ID.test(c) ? { kind: "bcResume", id: c } : { kind: "unknown" };
     case "bc":
       return ID.test(c) ? { kind: "bcStopAsk", id: c } : { kind: "unknown" };
     case "bk":

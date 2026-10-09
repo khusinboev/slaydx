@@ -20,3 +20,17 @@
 - C-Q6: the bot admin menu is a REPLY keyboard at the bottom while the admin is in the panel:
   [📈 Statistika][📢 Xabar yuborish] / [🔔 Kanal ulash][💳 To‘lov bonusi] / [⬅️ Asosiy menyu] — «Asosiy menyu» restores the main
   keyboard. Access re-checked on every tap (texts are matched only for linked admins). Lead does it after D1/D2 merge.
+
+## D3 broadcast engine — as built
+- **Loop**: `startBroadcastLoop` (`lib/server/broadcast-delivery.ts`), started by the worker loop, NOT by the 60 s housekeeping tick. Single leader by Postgres advisory lock `727_000_003` (a dedicated connection; housekeeping keeps `…002`). It writes its own `broadcasts` row in `housekeeping_status` (rows = recipients handled since the last write).
+- **Claim / lease**: short batches (10) of `pending` recipients (`next_attempt_at` passed) → `sending` with `lease_until = now() + 90 s`, `FOR UPDATE SKIP LOCKED`, committed BEFORE the HTTP call. Results are single statements keyed on the lease (a result for a lost lease is dropped). A `sending` row whose lease passed returns to `pending` at the start of the next pass.
+  **Crash duplicates**: if the process dies after Telegram accepted a message but before the result was written, that recipient is sent again after the lease expires — at most the messages in flight (≤ 8, one per sender). A sender never starts a send with < 25 s of its lease left.
+- **Rate**: 8 concurrent senders behind ONE limiter (`lib/server/send-limiter.ts`): even pacing 40 ms + sliding-second cap 25 + FIFO. Measured in `tests/broadcast-engine.test.mts`: 100 real-time messages = 25.0 msg/s.
+- **429**: the whole limiter pauses for `retry_after + 1` s (cap 1 h); the recipient is re-queued without using an attempt. **Network / 5xx**: `attempts + 1`, `next_attempt_at = now + LEAST(600, 10·2^attempts)` s (10, 20, 40, 80, 160), the 6th failure is final (`failed`, kind `other`).
+- **Permanent errors** → `broadcast_recipients.error_kind` ∈ blocked | deactivated | chat_not_found | bad_request | other; `failedReasons` in the detail groups by kind. blocked / deactivated also set `users.bot_blocked_at`.
+- **Early abort**: nothing delivered and 200 permanent failures → broadcast `failed` with `fail_reason`; the admin gets the card in the bot.
+- **bot_blocked_at**: set by delivery or by a private-chat `my_chat_member` with status `kicked`; cleared by `/start` or `my_chat_member` `member`; every audience (count AND snapshot) excludes users with it set.
+  **Prod**: the webhook's `allowed_updates` must include `my_chat_member` (README «Prod da webhook»), otherwise only delivery failures set the flag and only `/start` clears it.
+- **Pause / resume**: `pauseBroadcast` / `resumeBroadcast` (`admin-broadcasts.ts`, permission `broadcasts.send`, audited `broadcasts.pause` / `broadcasts.resume`, reason optional), web buttons on the detail page, bot buttons on the progress card. Status is re-read before every message; unsent claimed rows go straight back to `pending`.
+- **Progress**: `broadcasts.heartbeat_at` on every recorded result; detail stats carry `inFlight`, `retrying`, `speed` (last 30 s), `etaSeconds`. While a bot broadcast sends, the engine edits the admin's progress message (`content.notify.messageId`, remembered by `setProgressMessage`) at most once per 10 s per broadcast, and the final summary is sent as before (the card, with the reason, when aborted).
+- **Migration 046** (rollback in the file; `tests/admin-migrations.test.mts` rolls it back and forward).

@@ -58,8 +58,11 @@ export type BroadcastContent = {
   fileId?: string;
   entities?: BroadcastEntity[];
   button?: BroadcastButton;
-  /** Where to post the «finished» summary (the admin's bot chat) and in which bot language. */
-  notify?: { chatId: string; lang: string };
+  /**
+   * Where to post the «finished» summary (the admin's bot chat) and in which bot language.
+   * `messageId`: the bot's progress message, edited about every 10 s while the broadcast sends.
+   */
+  notify?: { chatId: string; lang: string; messageId?: number };
 };
 
 const bad = (message: string): ApiError => new ApiError(message, 400, { code: "content" });
@@ -171,7 +174,11 @@ export function parseBroadcastContent(raw: unknown, rawText: unknown, textMax: n
     if (typeof n?.chatId !== "string" || !CHAT_ID.test(n.chatId) || typeof n.lang !== "string" || !/^(uz|ru|en)$/.test(n.lang)) {
       throw bad("Xabar tarkibi noto'g'ri");
     }
-    content.notify = { chatId: n.chatId, lang: n.lang };
+    const messageId = n.messageId;
+    if (messageId !== undefined && messageId !== null && (typeof messageId !== "number" || !Number.isSafeInteger(messageId) || messageId < 1)) {
+      throw bad("Xabar tarkibi noto'g'ri");
+    }
+    content.notify = { chatId: n.chatId, lang: n.lang, ...(typeof messageId === "number" ? { messageId } : {}) };
   }
   return { content, text };
 }

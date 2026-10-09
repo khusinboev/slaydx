@@ -107,3 +107,13 @@ export function sendBroadcast(id: string, input: { reason: string; confirmCount:
 export function cancelBroadcast(id: string, reason: string): Promise<{ broadcast: AdminBroadcast }> {
   return adminSend<{ broadcast: AdminBroadcast }>("POST", `/api/admin/broadcasts/${encodeURIComponent(id)}/cancel`, { reason });
 }
+
+/** Pauses a queued / sending broadcast (delivery stops before the next message). */
+export function pauseBroadcast(id: string): Promise<{ broadcast: AdminBroadcast }> {
+  return adminSend<{ broadcast: AdminBroadcast }>("POST", `/api/admin/broadcasts/${encodeURIComponent(id)}/pause`, {});
+}
+
+/** Resumes a paused broadcast; the pending recipients continue. */
+export function resumeBroadcast(id: string): Promise<{ broadcast: AdminBroadcast }> {
+  return adminSend<{ broadcast: AdminBroadcast }>("POST", `/api/admin/broadcasts/${encodeURIComponent(id)}/resume`, {});
+}

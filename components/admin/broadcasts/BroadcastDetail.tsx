@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Ban, Rocket } from "lucide-react";
+import { Ban, Pause, Play, Rocket } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
   AdminAuthRequiredError,
@@ -11,8 +11,15 @@ import {
   adminRequestId,
   isAbortError,
 } from "@/lib/admin-api/core";
-import { BROADCAST_POLL_MS, cancelBroadcast, getBroadcast, type BroadcastDetail as Detail } from "@/lib/admin-api/broadcasts";
-import { fmtDateTime, fmtNumber } from "@/lib/admin-format";
+import {
+  BROADCAST_POLL_MS,
+  cancelBroadcast,
+  getBroadcast,
+  pauseBroadcast,
+  resumeBroadcast,
+  type BroadcastDetail as Detail,
+} from "@/lib/admin-api/broadcasts";
+import { fmtDateTime, fmtDuration, fmtNumber, fmtRelative } from "@/lib/admin-format";
 import {
   Button,
   Card,
@@ -89,7 +96,25 @@ export function BroadcastDetail({ id }: { id: string }) {
   const [reload, setReload] = useState(0);
   const [sendOpen, setSendOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [flowBusy, setFlowBusy] = useState(false);
   const ctlRef = useRef<AbortController | null>(null);
+
+  /** Pause / resume: one click, no dialog (nothing is lost; the state is re-read afterwards). */
+  const flow = useCallback(
+    async (kind: "pause" | "resume") => {
+      setFlowBusy(true);
+      try {
+        await (kind === "pause" ? pauseBroadcast(id) : resumeBroadcast(id));
+        toast(kind === "pause" ? "Yuborish to'xtatildi" : "Yuborish davom etmoqda");
+      } catch (e) {
+        toast(adminErrorMessage(e), { tone: "error" });
+      } finally {
+        setFlowBusy(false);
+        setReload((n) => n + 1);
+      }
+    },
+    [id],
+  );
 
   const refresh = useCallback(() => {
     ctlRef.current?.abort();
@@ -181,6 +206,20 @@ export function BroadcastDetail({ id }: { id: string }) {
       </Button>,
     );
   }
+  if (canSend && (b.status === "queued" || b.status === "sending")) {
+    actions.push(
+      <Button key="pause" variant="secondary" disabled={flowBusy} icon={<Pause className="size-4" aria-hidden="true" />} onClick={() => void flow("pause")}>
+        To&apos;xtatib turish
+      </Button>,
+    );
+  }
+  if (canSend && b.status === "paused") {
+    actions.push(
+      <Button key="resume" variant="primary" disabled={flowBusy} icon={<Play className="size-4" aria-hidden="true" />} onClick={() => void flow("resume")}>
+        Davom ettirish
+      </Button>,
+    );
+  }
   if (canSend && isCancellable(b.status)) {
     actions.push(
       <Button key="cancel" variant="dangerOutline" icon={<Ban className="size-4" aria-hidden="true" />} onClick={() => setCancelOpen(true)}>
@@ -251,14 +290,28 @@ export function BroadcastDetail({ id }: { id: string }) {
             <Counter label="Jami" value={stats.total} />
             <Counter label="Yuborildi" value={stats.sent} tone="ok" />
             <Counter label="Xato" value={stats.failed} tone="bad" />
-            <Counter label={b.status === "cancelled" ? "Yuborilmagan" : "Kutmoqda"} value={stats.pending} />
+            <Counter label={b.status === "cancelled" || b.status === "failed" ? "Yuborilmagan" : "Kutmoqda"} value={stats.pending} />
           </div>
+          {polling || b.status === "paused" ? (
+            <p className="text-muted-foreground text-[12.5px]" data-testid="broadcast-speed">
+              {stats.speed > 0 ? `Tezlik: ${fmtNumber(stats.speed, { digits: 1 })} ta/s` : "Tezlik: —"}
+              {stats.etaSeconds !== null ? ` · taxminan ${fmtDuration(stats.etaSeconds)} qoldi` : ""}
+              {stats.inFlight > 0 ? ` · yo'lda: ${fmtNumber(stats.inFlight)}` : ""}
+              {stats.retrying > 0 ? ` · qayta urinishda: ${fmtNumber(stats.retrying)}` : ""}
+              {b.heartbeatAt ? ` · oxirgi faollik: ${fmtRelative(b.heartbeatAt)}` : ""}
+            </p>
+          ) : null}
+          {b.status === "failed" && b.failReason ? (
+            <p role="alert" className="bg-destructive/10 text-destructive rounded-lg px-3 py-2 text-[13px]">
+              {b.failReason}
+            </p>
+          ) : null}
           {stats.failedReasons.length ? (
             <div className="flex flex-col gap-1.5">
               <h3 className="text-[12.5px] font-semibold">Xato sabablari</h3>
               <ul className="flex flex-col gap-1 text-[13px]">
                 {stats.failedReasons.map((r) => (
-                  <li key={r.error} className="flex items-start justify-between gap-3">
+                  <li key={r.kind ?? r.error} className="flex items-start justify-between gap-3">
                     <span className="min-w-0 break-words">{r.error}</span>
                     <span className="text-muted-foreground shrink-0 tabular-nums">{fmtNumber(r.count)} ta</span>
                   </li>

@@ -553,6 +553,75 @@ export async function sendBroadcast(actor: BroadcastActor, id: string, body: Rec
   });
 }
 
+/**
+ * Remembers the bot message that shows this broadcast's progress, so the delivery engine can keep
+ * editing it (`broadcast-delivery.ts`). Presentation state only — no audit, nothing else changes.
+ * A broadcast without a bot `notify` (every web broadcast) is left alone.
+ */
+export async function setProgressMessage(id: string, messageId: number | null): Promise<void> {
+  if (messageId === null || !Number.isSafeInteger(messageId) || messageId < 1) return;
+  await queryOne(
+    `UPDATE broadcasts SET content = jsonb_set(content, '{notify,messageId}', to_jsonb($2::bigint))
+      WHERE id = $1 AND content #> '{notify}' IS NOT NULL
+      RETURNING id`,
+    [id, messageId],
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Pause / resume                                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * queued / sending → paused. The delivery engine re-reads the status before every
+ * message, so at most the messages already in flight (one per sender, ≤ 8) still arrive;
+ * claimed-but-unsent recipients go straight back to `pending`. Same permission as `send`.
+ * The reason is optional (a quick bot button has none).
+ */
+export async function pauseBroadcast(actor: BroadcastActor, id: string, body: Record<string, unknown>, opts: { via?: "bot" } = {}): Promise<{ broadcast: AdminBroadcast }> {
+  const reason = parseReason(body.reason, { optional: true });
+  return adminTx(actor, async (client, audit) => {
+    const cur = await client.query<{ status: string }>("SELECT status FROM broadcasts WHERE id = $1 FOR UPDATE", [id]);
+    const row = cur.rows[0];
+    if (!row) throw notFound();
+    if (row.status !== "queued" && row.status !== "sending") throw stateError();
+    await client.query("UPDATE broadcasts SET status = 'paused' WHERE id = $1", [id]);
+    await audit({
+      action: "broadcasts.pause",
+      targetType: "broadcast",
+      targetId: id,
+      ...(reason ? { reason } : {}),
+      before: { status: row.status },
+      after: { status: "paused" },
+      ...(opts.via ? { meta: { via: opts.via } } : {}),
+    });
+    return { broadcast: (await fetchBroadcast(client, id))! };
+  });
+}
+
+/** paused → sending (or queued if delivery never started). Pending recipients continue where they stopped. */
+export async function resumeBroadcast(actor: BroadcastActor, id: string, body: Record<string, unknown>, opts: { via?: "bot" } = {}): Promise<{ broadcast: AdminBroadcast }> {
+  const reason = parseReason(body.reason, { optional: true });
+  return adminTx(actor, async (client, audit) => {
+    const cur = await client.query<{ status: string; started_at: Date | null }>("SELECT status, started_at FROM broadcasts WHERE id = $1 FOR UPDATE", [id]);
+    const row = cur.rows[0];
+    if (!row) throw notFound();
+    if (row.status !== "paused") throw stateError();
+    const next = row.started_at ? "sending" : "queued";
+    await client.query("UPDATE broadcasts SET status = $2 WHERE id = $1", [id, next]);
+    await audit({
+      action: "broadcasts.resume",
+      targetType: "broadcast",
+      targetId: id,
+      ...(reason ? { reason } : {}),
+      before: { status: "paused" },
+      after: { status: next },
+      ...(opts.via ? { meta: { via: opts.via } } : {}),
+    });
+    return { broadcast: (await fetchBroadcast(client, id))! };
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Cancel                                                                     */
 /* -------------------------------------------------------------------------- */

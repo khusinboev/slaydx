@@ -60,6 +60,13 @@ export type DeliveryDeps = {
   sendRich?: (chatId: string, text: string, content: BroadcastContent) => Promise<SendOutcome>;
   /** A rich broadcast with `notify` ended (done or aborted). Default: the bot panel's summary message. */
   notifyDone?: (id: string, notify: NonNullable<BroadcastContent["notify"]>) => Promise<void>;
+  /**
+   * Keeps the bot's progress message of a rich broadcast current (`content.notify.messageId`):
+   * called about every `progressEveryMs` while it sends. Default: the bot panel's in-place edit.
+   */
+  editProgress?: (id: string, notify: { chatId: string; lang: string; messageId?: number }) => Promise<void>;
+  /** At most one progress edit per broadcast per this many ms (default 10 s). */
+  progressEveryMs?: number;
   /** Default: `botConfigured()`. */
   configured?: () => boolean;
   sleep?: (ms: number) => Promise<void>;
@@ -99,6 +106,8 @@ export const BROADCAST_LEASE_MS = 90_000;
 /** A send is never started with less lease than this left (HTTP timeout is 15 s). */
 export const LEASE_MIN_LEFT_MS = 25_000;
 export const EARLY_ABORT_AFTER = 200;
+/** The bot's progress message is edited at most this often per broadcast. */
+export const PROGRESS_EVERY_MS = 10_000;
 /** Broadcasts looked at per pass (oldest first). */
 const MAX_BROADCASTS = 20;
 
@@ -329,6 +338,24 @@ async function sender(ctx: Ctx): Promise<void> {
   }
 }
 
+/** When each broadcast's progress message was last edited (real clock: the interval above is real too). */
+const lastProgressEdit = new Map<string, number>();
+
+/** One progress edit, if the broadcast has a bot progress message and the last edit is old enough. Never throws. */
+async function progressTick(id: string, shared: SharedPass): Promise<void> {
+  try {
+    if (Date.now() - (lastProgressEdit.get(id) ?? 0) < shared.progressEveryMs) return;
+    // Re-read: the admin may have tapped «Yangilash» on another message since the pass started.
+    const rows = await query<{ notify: { chatId?: unknown; lang?: unknown; messageId?: unknown } | null }>("SELECT content -> 'notify' AS notify FROM broadcasts WHERE id = $1", [id]);
+    const n = rows[0]?.notify;
+    if (!n || typeof n.chatId !== "string" || typeof n.lang !== "string" || typeof n.messageId !== "number") return;
+    lastProgressEdit.set(id, Date.now());
+    await shared.editProgress(id, { chatId: n.chatId, lang: n.lang, messageId: n.messageId });
+  } catch (err) {
+    log("warn", "[broadcast] progress xabari yangilanmadi", { broadcastId: id, err });
+  }
+}
+
 async function runBroadcast(b: { id: string; text: string; content: unknown }, shared: SharedPass): Promise<void> {
   await query(
     "UPDATE broadcasts SET status = 'sending', started_at = COALESCE(started_at, now()) WHERE id = $1 AND status IN ('queued', 'sending')",
@@ -348,7 +375,15 @@ async function runBroadcast(b: { id: string; text: string; content: unknown }, s
     drained: false,
     aborted: false,
   };
-  await Promise.all(Array.from({ length: ctx.deps.senders }, () => sender(ctx)));
+  // The admin's bot message follows the numbers while this broadcast sends (~every 10 s, never faster).
+  const timer = setInterval(() => void progressTick(b.id, shared), Math.max(5, shared.progressEveryMs));
+  timer.unref?.();
+  try {
+    await Promise.all(Array.from({ length: ctx.deps.senders }, () => sender(ctx)));
+  } finally {
+    clearInterval(timer);
+    lastProgressEdit.delete(b.id);
+  }
   // Liveness while idle (everything in backoff / paused): at most one write per 10 s.
   await query("UPDATE broadcasts SET heartbeat_at = now() WHERE id = $1 AND (heartbeat_at IS NULL OR heartbeat_at < now() - interval '10 seconds')", [b.id]);
   if (ctx.stopped) {
@@ -369,6 +404,8 @@ type SharedPass = {
   send: (chatId: string, html: string) => Promise<SendOutcome>;
   sendRich: (chatId: string, text: string, content: BroadcastContent) => Promise<SendOutcome>;
   notify: (id: string, notify: NonNullable<BroadcastContent["notify"]>) => Promise<void>;
+  editProgress: (id: string, notify: NonNullable<BroadcastContent["notify"]>) => Promise<void>;
+  progressEveryMs: number;
   out: DeliveryResult;
   budget: { left: number };
 };
@@ -437,6 +474,13 @@ export async function deliverBroadcasts(deps: DeliveryDeps = {}): Promise<Delive
         });
       await fn(id, notify).catch((err) => log("warn", "[broadcast] admin xabarnomasi yuborilmadi", { broadcastId: id, err }));
     },
+    editProgress:
+      deps.editProgress ??
+      (async (i, n) => {
+        const { editBroadcastProgress } = await import("./bot/admin");
+        await editBroadcastProgress(i, n);
+      }),
+    progressEveryMs: Math.max(1, Math.floor(deps.progressEveryMs ?? PROGRESS_EVERY_MS)),
     out,
     budget: { left: deps.maxPerTick === undefined ? Number.MAX_SAFE_INTEGER : Math.max(0, Math.floor(deps.maxPerTick)) },
   };

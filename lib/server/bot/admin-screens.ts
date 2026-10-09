@@ -247,18 +247,32 @@ export function confirmScreen(lang: Lang, a: AudienceCode, count: number): Scree
   };
 }
 
+/** «1 daq 05 s» / «42 s» for the ETA line. */
+function etaText(seconds: number): string {
+  const t = Math.max(0, Math.round(seconds));
+  return t < 60 ? `${t} s` : `${Math.floor(t / 60)} min ${String(t % 60).padStart(2, "0")} s`;
+}
+
 export function progressScreen(lang: Lang, b: AdminBroadcast, s: BroadcastStats, canStop: boolean): Screen {
-  const live = b.status === "queued" || b.status === "sending" || b.status === "draft";
+  const running = b.status === "queued" || b.status === "sending";
+  const live = running || b.status === "draft" || b.status === "paused";
+  const lines = [
+    head("megaphone", at(lang, "bc.status", { id: b.id })),
+    "",
+    at(lang, "bc.statusLine", { status: at(lang, `bc.st.${b.status}`) }),
+    at(lang, "bc.progress", { sent: g(s.sent), total: g(s.total), failed: g(s.failed), pending: g(s.pending) }),
+  ];
+  if (running && s.speed > 0) {
+    lines.push(at(lang, "bc.speed", { speed: s.speed.toFixed(1), eta: s.etaSeconds === null ? "—" : etaText(s.etaSeconds) }));
+  }
+  if (b.status === "failed" && b.failReason) lines.push("", esc(b.failReason));
   return {
-    text: [
-      head("megaphone", at(lang, "bc.status", { id: b.id })),
-      "",
-      at(lang, "bc.statusLine", { status: at(lang, `bc.st.${b.status}`) }),
-      at(lang, "bc.progress", { sent: g(s.sent), total: g(s.total), failed: g(s.failed), pending: g(s.pending) }),
-    ].join("\n"),
+    text: lines.join("\n"),
     reply_markup: rows(
       [live && inlineButton("refresh", at(lang, "btn.refresh"), { callback_data: acb.bcProgress(b.id) }, "primary")],
-      [live && canStop && inlineButton("stop", at(lang, "bc.stop"), { callback_data: acb.bcStopAsk(b.id) }, "danger")],
+      [running && canStop && inlineButton("clock", at(lang, "bc.pause"), { callback_data: acb.bcPause(b.id) })],
+      [b.status === "paused" && canStop && inlineButton("next", at(lang, "bc.resume"), { callback_data: acb.bcResume(b.id) }, "success")],
+      [live && b.status !== "draft" && canStop && inlineButton("stop", at(lang, "bc.stop"), { callback_data: acb.bcStopAsk(b.id) }, "danger")],
       [inlineButton("admin", at(lang, "btn.panel"), { callback_data: acb.panel() })],
     ),
   };

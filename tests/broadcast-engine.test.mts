@@ -184,7 +184,7 @@ test("broadcast engine (Postgres)", { skip }, async (t) => {
       "SELECT user_id::text, status, attempts, error, error_kind FROM broadcast_recipients WHERE broadcast_id = $1 ORDER BY user_id",
       [id],
     );
-  const pass = (extra: Record<string, unknown> = {}) => bd.deliverBroadcasts({ now: clock.now, sleep: clock.sleep, ...extra });
+  const pass = (extra: NonNullable<Parameters<typeof bd.deliverBroadcasts>[0]> = {}) => bd.deliverBroadcasts({ now: clock.now, sleep: clock.sleep, ...extra });
 
   await t.test("429: ONE global pause for retry_after + 1 s; the recipient is re-queued, not failed", async (tt) => {
     quiet(tt);
@@ -477,6 +477,130 @@ test("broadcast engine (Postgres)", { skip }, async (t) => {
     assert.ok(await blockedAt(u.id), "plain text keeps the flag (only /start or my_chat_member clear it)");
     await handleUpdate(msg("/start"));
     assert.equal(await blockedAt(u.id), null, "/start clears it");
+  });
+
+  /* ───────────── pause / resume, progress, heartbeat ───────────── */
+
+  await t.test("pause mid-run: delivery stops before the next message, nothing is left leased; resume finishes without repeats", async (tt) => {
+    quiet(tt);
+    await reset();
+    const id = await mk(30);
+    const chats: string[] = [];
+    let n = 0;
+    const send = async (chatId: string) => {
+      chats.push(chatId);
+      if (++n === 3) await query("UPDATE broadcasts SET status = 'paused' WHERE id = $1", [id]);
+      return { ok: true as const };
+    };
+    const r1 = await pass({ send, senders: 2, batchSize: 10 });
+    assert.ok(r1.sent >= 3 && r1.sent <= 5, `sent ${r1.sent} (3 + the messages already past the status check)`);
+    assert.equal(chats.length, r1.sent);
+    const mid = await rows(id);
+    assert.equal(mid.filter((x) => x.status === "sending").length, 0, "claimed-but-unsent rows went back to pending");
+    assert.equal(mid.filter((x) => x.status === "pending").length, 30 - r1.sent);
+    assert.equal((await bc(id)).status, "paused");
+    assert.equal((await pass({ send })).sent, 0, "paused broadcasts are skipped");
+    assert.equal(chats.length, r1.sent);
+    await query("UPDATE broadcasts SET status = 'sending' WHERE id = $1", [id]);
+    await pass({ send });
+    assert.equal(chats.length, 30);
+    assert.equal(new Set(chats).size, 30, "a recipient was sent twice across pause / resume");
+    assert.equal((await bc(id)).status, "done");
+    assert.equal((await bc(id)).sent, 30);
+  });
+
+  /** A rich (bot-composed) broadcast carrying the admin's progress message. */
+  const mkRich = async (n: number, notify: Record<string, unknown>) => {
+    const id = await mk(n, "queued", "Rasm izohi");
+    await query("UPDATE broadcasts SET content = $2::jsonb WHERE id = $1", [id, JSON.stringify({ kind: "text", notify })]);
+    return id;
+  };
+
+  await t.test("progress message: edited about every progressEveryMs (never faster), then the summary is sent once", async (tt) => {
+    quiet(tt);
+    await reset();
+    const id = await mkRich(40, { chatId: "555", lang: "uz", messageId: 77 });
+    const editAt: number[] = [];
+    const edited: Array<{ id: string; messageId?: number }> = [];
+    const done: string[] = [];
+    const r = await pass({
+      sendRich: async () => {
+        await new Promise((res) => setTimeout(res, 25));
+        return { ok: true as const };
+      },
+      progressEveryMs: 30,
+      editProgress: async (bid, notify) => {
+        editAt.push(Date.now());
+        edited.push({ id: bid, messageId: notify.messageId });
+      },
+      notifyDone: async (bid) => void done.push(bid),
+    });
+    assert.equal(r.sent, 40);
+    assert.ok(editAt.length >= 2, `the progress message was edited ${editAt.length}× while 40 slow messages went out`);
+    assert.ok(edited.every((e) => e.id === id && e.messageId === 77));
+    for (let i = 1; i < editAt.length; i++) assert.ok(editAt[i]! - editAt[i - 1]! >= 25, `edits ${i - 1}/${i} only ${editAt[i]! - editAt[i - 1]!} ms apart`);
+    assert.deepEqual(done, [id], "the final summary goes out exactly once");
+    const edits0 = editAt.length;
+    await pass({ progressEveryMs: 30, editProgress: async () => void editAt.push(Date.now()) });
+    assert.equal(editAt.length, edits0, "a finished broadcast is not edited any more");
+  });
+
+  await t.test("a plain web broadcast has no progress message and no summary", async (tt) => {
+    quiet(tt);
+    await reset();
+    await mk(10);
+    let edits = 0;
+    let summaries = 0;
+    await pass({
+      send: async () => {
+        await new Promise((res) => setTimeout(res, 10));
+        return { ok: true as const };
+      },
+      progressEveryMs: 10,
+      editProgress: async () => void edits++,
+      notifyDone: async () => void summaries++,
+    });
+    assert.equal(edits, 0);
+    assert.equal(summaries, 0);
+  });
+
+  await t.test("an aborted broadcast also gets its summary (the card names the reason)", async (tt) => {
+    quiet(tt);
+    await reset();
+    const id = await mkRich(260, { chatId: "555", lang: "uz", messageId: 77 });
+    const done: string[] = [];
+    const r = await pass({
+      sendRich: async () => ({ ok: false as const, code: 400, description: "Bad Request: wrong file identifier/HTTP URL specified" }),
+      notifyDone: async (bid) => void done.push(bid),
+      editProgress: async () => {},
+    });
+    assert.equal(r.aborted, 1);
+    assert.deepEqual(done, [id]);
+    assert.equal((await bc(id)).status, "failed");
+  });
+
+  await t.test("heartbeat, speed and ETA in the detail stats", async (tt) => {
+    quiet(tt);
+    await reset();
+    const id = await mk(20);
+    assert.equal((await bc(id)).heartbeat_at, null);
+    await pass({ maxPerTick: 10 });
+    const b = await bc(id);
+    assert.ok(b.heartbeat_at && Date.now() - b.heartbeat_at.getTime() < 10_000, "heartbeat is fresh");
+    assert.ok(b.started_at, "started_at is set");
+    const { broadcast, stats } = await admin.getBroadcast(id);
+    assert.equal(broadcast.status, "sending");
+    assert.ok(broadcast.heartbeatAt);
+    assert.equal(stats.sent, 10);
+    assert.equal(stats.pending, 10);
+    assert.ok(stats.speed > 0, `speed ${stats.speed}`);
+    assert.ok(stats.etaSeconds !== null && stats.etaSeconds >= 1, `eta ${stats.etaSeconds}`);
+    assert.equal(stats.etaSeconds, Math.ceil(10 / stats.speed));
+    // Nothing recent, or not running: no speed, no ETA.
+    await query("UPDATE broadcast_recipients SET done_at = now() - interval '5 minutes' WHERE broadcast_id = $1", [id]);
+    const quiet0 = (await admin.getBroadcast(id)).stats;
+    assert.equal(quiet0.speed, 0);
+    assert.equal(quiet0.etaSeconds, null);
   });
 
   await t.test("two loop instances never send to the same recipient twice", async (tt) => {

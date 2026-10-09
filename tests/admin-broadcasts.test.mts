@@ -55,6 +55,8 @@ const routes = {
   test: await import("../app/api/admin/broadcasts/[id]/test/route.ts"),
   send: await import("../app/api/admin/broadcasts/[id]/send/route.ts"),
   cancel: await import("../app/api/admin/broadcasts/[id]/cancel/route.ts"),
+  pause: await import("../app/api/admin/broadcasts/[id]/pause/route.ts"),
+  resume: await import("../app/api/admin/broadcasts/[id]/resume/route.ts"),
 };
 
 // ───────────────────────────── Telegram stub (the only network there is)
@@ -159,7 +161,7 @@ async function get(which: "list" | "audience" | "detail", cookie: string | null,
 }
 
 async function post(
-  which: "create" | "test" | "send" | "cancel",
+  which: "create" | "test" | "send" | "cancel" | "pause" | "resume",
   cookie: string | null,
   id: string | null,
   body: unknown,
@@ -841,6 +843,69 @@ test("cancel stops the real delivery: pending recipients are never sent", { skip
   assert.equal(d.pending, exp.length - 2);
 });
 
+test("pause / resume: audited, delivery honours `paused`, nothing is lost or repeated; wrong states are 409", { skip }, async (t) => {
+  quiet(t);
+  await quiesce();
+  const s = await session("owner");
+  const exp = expected("all");
+  assert.ok(exp.length > 3);
+  const id = await mkDraft(s, "Pauza testi", { kind: "all" });
+  // A draft cannot be paused (no audit row).
+  const early = await post("pause", s.cookie, id, {});
+  assert.equal(early.status, 409);
+  assert.equal(early.body.code, "state");
+  assert.equal((await post("resume", s.cookie, id, {})).status, 409, "only a paused broadcast resumes");
+  assert.equal((await post("send", s.cookie, id, { reason: REASON, confirmCount: exp.length })).status, 200);
+
+  // Paused before delivery ever started: back to `queued` on resume, nothing was sent meanwhile.
+  const p0 = await post("pause", s.cookie, id, {});
+  assert.equal(p0.status, 200, JSON.stringify(p0.body));
+  assert.equal((p0.body.broadcast as { status: string }).status, "paused");
+  tgCalls = [];
+  assert.equal((await bd.deliverBroadcasts(fakeTime())).sent, 0, "a paused broadcast is not delivered");
+  assert.equal(tgCalls.length, 0);
+  const r0 = await post("resume", s.cookie, id, {});
+  assert.equal((r0.body.broadcast as { status: string }).status, "queued");
+
+  const first = await bd.deliverBroadcasts({ ...fakeTime(), maxPerTick: 2 });
+  assert.equal(first.sent, 2);
+  assert.equal((await rowOf(id))!.status, "sending");
+  const p1 = await post("pause", s.cookie, id, { reason: "Texnik tanaffus" });
+  assert.equal(p1.status, 200);
+  assert.equal((await post("pause", s.cookie, id, {})).status, 409, "already paused");
+  tgCalls = [];
+  assert.equal((await bd.deliverBroadcasts(fakeTime())).sent, 0);
+  assert.equal(tgCalls.length, 0);
+  const detail = (await get("detail", s.cookie, { id })).body;
+  assert.equal((detail.broadcast as { status: string }).status, "paused");
+  assert.equal((detail.stats as { pending: number }).pending, exp.length - 2);
+  const r1 = await post("resume", s.cookie, id, {});
+  assert.equal(r1.status, 200);
+  assert.equal((r1.body.broadcast as { status: string }).status, "sending", "started before → sending");
+  const rest = await bd.deliverBroadcasts(fakeTime());
+  assert.equal(rest.sent, exp.length - 2);
+  assert.equal(new Set(tgCalls.map((c) => c.chatId)).size, exp.length - 2, "no recipient twice");
+  assert.equal((await rowOf(id))!.status, "done");
+  assert.equal((await post("resume", s.cookie, id, {})).status, 409, "a finished broadcast does not resume");
+  assert.equal((await post("pause", s.cookie, id, {})).status, 409);
+
+  const pa = await audits(s.adminId, "broadcasts.pause");
+  assert.deepEqual(pa.map((a) => a.before), [{ status: "queued" }, { status: "sending" }]);
+  assert.deepEqual(pa.map((a) => a.after), [{ status: "paused" }, { status: "paused" }]);
+  assert.equal(pa[1].reason, "Texnik tanaffus");
+  const ra = await audits(s.adminId, "broadcasts.resume");
+  assert.deepEqual(ra.map((a) => a.after), [{ status: "queued" }, { status: "sending" }]);
+
+  // A paused broadcast can still be cancelled; its pending recipients are never sent.
+  const id2 = await mkDraft(s, "Pauza, keyin bekor", { kind: "all" });
+  assert.equal((await post("send", s.cookie, id2, { reason: REASON, confirmCount: exp.length })).status, 200);
+  assert.equal((await post("pause", s.cookie, id2, {})).status, 200);
+  assert.equal((await post("cancel", s.cookie, id2, { reason: REASON })).status, 200);
+  assert.equal((await rowOf(id2))!.status, "cancelled");
+  tgCalls = [];
+  assert.equal((await bd.deliverBroadcasts(fakeTime())).sent, 0);
+});
+
 test("cancel: done / cancelled are 409 state (no audit); bad bodies 400; unknown id 404", { skip }, async () => {
   const s = await session("admin");
   const id = await mkDraft(s, "Matn");
@@ -875,6 +940,8 @@ test("support sees list, detail and audience but cannot create, test, send or ca
     ["test", await post("test", support.cookie, id, {})],
     ["send", await post("send", support.cookie, id, { reason: REASON, confirmCount: 1 })],
     ["cancel", await post("cancel", support.cookie, id, { reason: REASON })],
+    ["pause", await post("pause", support.cookie, id, {})],
+    ["resume", await post("resume", support.cookie, id, {})],
   ];
   for (const [what, r] of attempts) {
     assert.equal(r.status, 403, what);
@@ -882,7 +949,7 @@ test("support sees list, detail and audience but cannot create, test, send or ca
   }
   assert.equal(tgCalls.length, 0);
   const denied = (await query<{ outcome: string }>(`SELECT outcome FROM admin_audit_log WHERE admin_id = $1 AND action = 'auth.denied'`, [support.adminId])).map((x) => x.outcome);
-  assert.deepEqual(denied, ["denied", "denied", "denied", "denied"]);
+  assert.deepEqual(denied, ["denied", "denied", "denied", "denied", "denied", "denied"]);
   assert.equal((await rowOf(id))!.status, "draft");
 
   for (const role of ["finance", "viewer", "moderator"] as const) {
