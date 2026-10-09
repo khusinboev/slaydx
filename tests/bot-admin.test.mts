@@ -178,6 +178,8 @@ test("admin reply menu: a NON-admin typing «Statistika» / «Asosiy menyu» get
     installFetch();
     await tg.handleUpdate(textUpdate(u.tg, text));
     assert.ok(!sends().some((m) => m.body.text === "⏳" || /Foydalanuvchilar|Admin panel/.test(String(m.body.text))), text);
+    // MUTATION: the menu handler swallowing a non-admin's text — the usual bot reply must still come.
+    assert.ok(sends().length >= 1, `${text}: the ordinary reply still arrives`);
   }
 });
 
