@@ -301,3 +301,239 @@ test("vosita sahifasi podkast/tabriknoma uchun `MediaComposer` chizadi (`custom:
   assert.equal(TOOL_BY_ID.podcast.custom, "media");
   assert.equal(TOOL_BY_ID.greeting.custom, "media");
 });
+
+/* ══════════════════════════════ voice choice (female / male) ══════════════════════════════ */
+
+/*
+ * The `voice` field (both forms): two cards «👩 Ayol ovozi» / «👨 Erkak ovozi», female
+ * selected by default, each with a ▶︎ sample button. jsdom has no media pipeline, so
+ * `HTMLMediaElement.prototype.play/pause` are stubbed and record WHICH file was asked
+ * to play. Mutations (hand-checked, see the PR description):
+ *   1. a card plays the other card's file        -> "▶︎ plays the right file";
+ *   2. starting one sample does not stop the other -> "one sample at a time";
+ *   3. the form never posts `voice`               -> "value posted".
+ */
+
+let restoreMedia: (() => void) | null = null;
+afterEach(() => {
+  restoreMedia?.();
+  restoreMedia = null;
+});
+
+function stubMedia(opts: { rejectPlay?: boolean } = {}) {
+  const proto = window.HTMLMediaElement.prototype as unknown as { play: () => Promise<void>; pause: () => void };
+  const orig = { play: proto.play, pause: proto.pause };
+  const log = { played: [] as string[], paused: [] as string[] };
+  proto.play = function (this: HTMLMediaElement) {
+    log.played.push(this.getAttribute("src") ?? "");
+    this.dispatchEvent(new window.Event("play"));
+    return opts.rejectPlay ? Promise.reject(new Error("NotAllowedError")) : Promise.resolve();
+  };
+  proto.pause = function (this: HTMLMediaElement) {
+    log.paused.push(this.getAttribute("src") ?? "");
+    this.dispatchEvent(new window.Event("pause"));
+  };
+  restoreMedia = () => {
+    proto.play = orig.play;
+    proto.pause = orig.pause;
+  };
+  return log;
+}
+
+const radios = () => [...(field("voice")?.querySelectorAll('[role="radio"]') ?? [])] as HTMLButtonElement[];
+const sampleBtn = (v: "female" | "male") => document.querySelector(`[data-voice-sample="${v}"]`) as HTMLButtonElement;
+const sampleAudio = (v: "female" | "male") => document.querySelector(`[data-voice-audio="${v}"]`) as HTMLAudioElement;
+const click = async (el: Element) => {
+  await act(async () => {
+    fireEvent.click(el);
+  });
+};
+
+for (const [name, tool] of [["podcast", podcastTool], ["greeting", greetingTool]] as const) {
+  test(`voice (${name}): two options, female selected by default, a labeled ▶︎ button each, nothing plays on its own`, async () => {
+    const media = stubMedia();
+    stubApi(tool.id);
+    await login();
+    mount(tool);
+
+    assert.equal(document.querySelectorAll('[data-field="voice"]').length, 1, "exactly one voice field");
+    assert.ok(field("voice")?.querySelector('[role="radiogroup"][aria-label="Ovoz"]'));
+    assert.deepEqual(radios().map((r) => r.textContent?.trim()), ["👩 Ayol ovozi", "👨 Erkak ovozi"]);
+    assert.deepEqual(radios().map((r) => r.getAttribute("aria-checked")), ["true", "false"], "female is the default");
+
+    // Accessible label of the sample buttons.
+    const play = screen.getAllByRole("button", { name: "Namunani tinglash" });
+    assert.equal(play.length, 2);
+
+    // No autoplay: the files are not even requested until a tap, and nothing was played.
+    for (const v of ["female", "male"] as const) {
+      assert.equal(sampleAudio(v).getAttribute("preload"), "none");
+      assert.ok(!sampleAudio(v).hasAttribute("autoplay"));
+    }
+    assert.deepEqual(media.played, []);
+  });
+
+  test(`voice (${name}): ▶︎ plays the RIGHT file, one sample at a time, pressing again stops`, async () => {
+    const media = stubMedia();
+    stubApi(tool.id);
+    await login();
+    mount(tool);
+
+    // Each card carries its own file (a swapped pair would play the male voice for «Ayol»).
+    assert.equal(sampleAudio("female").getAttribute("src"), "/audio/voices/female.mp3");
+    assert.equal(sampleAudio("male").getAttribute("src"), "/audio/voices/male.mp3");
+    assert.ok(document.querySelector('[data-voice-option="female"]')?.contains(sampleBtn("female")));
+    assert.ok(document.querySelector('[data-voice-option="male"]')?.contains(sampleBtn("male")));
+
+    await click(sampleBtn("female"));
+    assert.deepEqual(media.played, ["/audio/voices/female.mp3"]);
+    assert.equal(sampleBtn("female").getAttribute("aria-pressed"), "true");
+    assert.equal(sampleBtn("male").getAttribute("aria-pressed"), "false");
+
+    // Starting the other one silences the first.
+    await click(sampleBtn("male"));
+    assert.deepEqual(media.played, ["/audio/voices/female.mp3", "/audio/voices/male.mp3"]);
+    assert.ok(media.paused.includes("/audio/voices/female.mp3"), "the female sample must be paused when the male one starts");
+    assert.equal(sampleBtn("female").getAttribute("aria-pressed"), "false");
+    assert.equal(sampleBtn("male").getAttribute("aria-pressed"), "true");
+
+    // Pressing the playing one again stops it (and does not restart it).
+    const playedBefore = media.played.length;
+    await click(sampleBtn("male"));
+    assert.equal(media.played.length, playedBefore, "second press must stop, not play again");
+    assert.equal(media.paused.at(-1), "/audio/voices/male.mp3");
+    assert.equal(sampleBtn("male").getAttribute("aria-pressed"), "false");
+
+    // The sample ending on its own releases the button.
+    await click(sampleBtn("female"));
+    assert.equal(sampleBtn("female").getAttribute("aria-pressed"), "true");
+    await act(async () => {
+      sampleAudio("female").dispatchEvent(new window.Event("ended"));
+    });
+    assert.equal(sampleBtn("female").getAttribute("aria-pressed"), "false");
+  });
+
+  test(`voice (${name}): choosing a card does not play, playing a sample does not choose`, async () => {
+    const media = stubMedia();
+    stubApi(tool.id);
+    await login();
+    mount(tool);
+
+    await click(radios()[1]!);
+    assert.deepEqual(radios().map((r) => r.getAttribute("aria-checked")), ["false", "true"]);
+    assert.deepEqual(media.played, [], "selecting must not play");
+
+    await click(sampleBtn("female"));
+    assert.deepEqual(radios().map((r) => r.getAttribute("aria-checked")), ["false", "true"], "▶︎ must not change the selection");
+  });
+
+  test(`voice (${name}): a refused/missing sample leaves a short note and a usable form`, async () => {
+    stubMedia({ rejectPlay: true });
+    stubApi(tool.id);
+    await login();
+    mount(tool);
+    await click(sampleBtn("male"));
+    await waitFor(() => assert.ok(screen.getByRole("status")));
+    assert.match(screen.getByRole("status").textContent ?? "", /Namunani yuklab bo‘lmadi/);
+    assert.equal(sampleBtn("male").getAttribute("aria-pressed"), "false");
+    await click(radios()[1]!);
+    assert.equal(radios()[1]!.getAttribute("aria-checked"), "true", "the voice can still be chosen");
+  });
+
+  test(`voice (${name}): leaving the form silences a playing sample`, async () => {
+    const media = stubMedia();
+    stubApi(tool.id);
+    await login();
+    mount(tool);
+    await click(sampleBtn("female"));
+    const before = media.paused.length;
+    cleanup();
+    assert.ok(media.paused.length > before, "unmount must pause the sample");
+  });
+
+  test(`voice (${name}): the chosen voice is POSTED (default female, male after choosing it)`, async () => {
+    stubMedia();
+    for (const choose of [null, "male"] as const) {
+      cleanup();
+      const calls = stubApi(tool.id);
+      await login();
+      mount(tool);
+      if (tool.id === "podcast") {
+        await act(async () => {
+          fireEvent.change(screen.getByPlaceholderText(podcastTool.topicPlaceholder!), { target: { value: "Sun'iy intellekt darsda" } });
+        });
+      } else {
+        await act(async () => {
+          fireEvent.change(screen.getByPlaceholderText("Dilnoza opa"), { target: { value: "Malika opa" } });
+        });
+      }
+      if (choose) await click(radios()[1]!);
+      await act(async () => {
+        fireEvent.click(screen.getByText(tool.submitLabel));
+      });
+      await waitFor(() => assert.ok(calls.some((c) => c.url === "/api/generations" && c.method === "POST")));
+      const body = (calls.find((c) => c.url === "/api/generations" && c.method === "POST")!.body as { values: Record<string, unknown> }).values;
+      assert.equal(body.voice, choose ?? "female", `${name}: posted voice`);
+    }
+  });
+
+  test(`voice (${name}): the draft restores a chosen voice; an old draft without the field reads as female`, async () => {
+    stubMedia();
+    const seed = tool.id === "podcast" ? { topic: "Mavzu" } : { recipient: "Malika opa" };
+    stubApi(tool.id, { ...seed, voice: "male" });
+    await login();
+    mount(tool);
+    await waitFor(() => assert.equal(radios()[1]!.getAttribute("aria-checked"), "true"));
+
+    cleanup();
+    stubApi(tool.id, seed);
+    mount(tool);
+    // Give the (empty-voice) draft time to apply, then check the default held.
+    await waitFor(() => assert.ok(document.querySelector("[data-field]")));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    assert.equal(radios()[0]!.getAttribute("aria-checked"), "true");
+  });
+
+  test(`voice (${name}): 44 px touch targets on a coarse pointer`, async () => {
+    stubMedia();
+    stubApi(tool.id);
+    await login();
+    mount(tool);
+    const TOUCH = /(?:^|\s)pointer-coarse:(?:min-h-11|h-11|size-11)(?:\s|$)/;
+    for (const r of radios()) assert.match(r.getAttribute("class") ?? "", TOUCH, "radio card");
+    for (const v of ["female", "male"] as const) assert.match(sampleBtn(v).getAttribute("class") ?? "", TOUCH, "sample button");
+  });
+}
+
+test("voice hint follows the format: a dialog podcast says the choice decides who leads", async () => {
+  stubMedia();
+  stubApi("podcast");
+  await login();
+  mount(podcastTool);
+  assert.match(document.querySelector("[data-voice-hint]")?.textContent ?? "", /Butun podkast shu ovozda/, "default type is a monologue");
+  await pick("podcastType", /Intervyu/i);
+  assert.match(document.querySelector("[data-voice-hint]")?.textContent ?? "", /Ikki ovozli turda tanlangan ovoz suhbatni boshlaydi/);
+
+  cleanup();
+  stubApi("greeting");
+  mount(greetingTool);
+  assert.match(document.querySelector("[data-voice-hint]")?.textContent ?? "", /Butun tabrik shu ovozda/);
+});
+
+test("voice samples: both files exist, are real MP3 audio, and differ", async () => {
+  const { readFileSync, statSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { AUDIO_VOICE_OPTIONS } = await import("../../lib/generation/audio/registry.ts");
+  const bytes = AUDIO_VOICE_OPTIONS.map((o) => {
+    const file = join(import.meta.dirname, "..", "..", "public", o.sample);
+    assert.ok(statSync(file).size > 10_000, `${o.sample}: too small for a ~7 s sample`);
+    assert.ok(statSync(file).size < 200_000, `${o.sample}: unexpectedly large for a short 48 kbps sample`);
+    const buf = readFileSync(file);
+    // MP3: an ID3v2 tag or an MPEG frame sync at the start.
+    assert.ok(buf.subarray(0, 3).toString("latin1") === "ID3" || (buf[0] === 0xff && (buf[1]! & 0xe0) === 0xe0), `${o.sample}: not an MP3`);
+    return buf;
+  });
+  assert.ok(!bytes[0]!.equals(bytes[1]!), "the female and male samples must be different recordings");
+});
