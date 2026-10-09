@@ -15,6 +15,15 @@ import { useDialog } from "./useDialog";
 export { TOPUP_PRESETS, DEFAULT_TOPUP, PAY_RETURN_PATH, openPay } from "./pay-amount";
 
 const sectionLabel = "text-muted-foreground mb-2.5 text-[13px] font-semibold tracking-[0.06em] uppercase";
+const methodBtn =
+  "focus-visible:ring-ring h-12 rounded-[16px] text-[15.5px] font-semibold outline-none transition-[background-color,transform] focus-visible:ring-2 active:scale-[0.98] disabled:opacity-40 motion-reduce:transform-none";
+
+/** «Karta orqali» (Click `card_type`): karta tizimi — to'lov sahifasi shu forma bilan ochiladi. */
+type CardType = "uzcard" | "humo";
+const CARD_TYPES: { id: CardType; label: string }[] = [
+  { id: "uzcard", label: "Uzcard" },
+  { id: "humo", label: "Humo" },
+];
 
 /**
  * To'lov usulini tanlash.
@@ -38,6 +47,7 @@ export function PayDialog() {
   const setAmount = usePayAmount((s) => s.setAmount);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cardOpen, setCardOpen] = useState(false);
   const panelRef = useDialog(open, close);
   const nav = useNav();
   /** Telefon (docs/mobile/PLAN.md O5): 44 px tugmalar, ekranga sig'adi va ichida aylanadi. */
@@ -48,27 +58,29 @@ export function PayDialog() {
     if (!open) return;
     setError(null);
     setBusy(null);
+    setCardOpen(false);
   }, [open]);
 
   if (!open) return null;
 
-  const methods = [
-    { id: "click" as const, label: "Click", enabled: features?.payments.click ?? false },
-    { id: "payme" as const, label: "Payme", enabled: features?.payments.payme ?? false },
-  ];
-  const anyEnabled = methods.some((m) => m.enabled);
+  // Sozlanmagan provayderning tugmalari CHIZILMAYDI (kalitsiz «o'chiq» tugma o'rniga).
+  // «Karta orqali» — o'sha Click buyurtmasi: Click sahifasi karta formasini darhol ochadi.
+  const clickOn = features?.payments.click ?? false;
+  const paymeOn = features?.payments.payme ?? false;
+  const anyEnabled = clickOn || paymeOn;
 
-  async function pay(provider: "click" | "payme") {
+  async function pay(provider: "click" | "payme", card?: CardType) {
     if (!loggedIn) {
       openUi("login", { returnTo: PAY_RETURN_PATH });
       return;
     }
     setError(null);
-    setBusy(provider);
+    setBusy(card ?? provider);
     try {
       const { checkoutUrl } = await api.createOrder({
         provider,
         amount,
+        ...(card ? { card } : {}),
       });
       // Provayder sahifasi — qaytganda `/uz/purchase?order=...` ochiladi va u
       // `/uz/wallet?order=...` ga yo'naltiradi (so'rov saqlanadi).
@@ -133,23 +145,57 @@ export function PayDialog() {
         ) : null}
 
         <p className={sectionLabel}>To&apos;lov usuli</p>
-        <div className="grid grid-cols-2 gap-2">
-          {methods.map((m) => (
+        <div className="grid grid-cols-2 gap-2" data-pay-methods>
+          {clickOn ? (
+            <>
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void pay("click")}
+                className={cn(methodBtn, "bg-primary text-primary-foreground hover:brightness-95")}
+              >
+                {busy === "click" ? "Ochilmoqda..." : "Click"}
+              </button>
+              <button
+                type="button"
+                disabled={busy !== null}
+                aria-expanded={cardOpen}
+                aria-controls="pay-card-types"
+                onClick={() => setCardOpen((v) => !v)}
+                className={cn(methodBtn, "bg-primary text-primary-foreground hover:brightness-95")}
+              >
+                Karta orqali
+              </button>
+            </>
+          ) : null}
+          {paymeOn ? (
             <button
-              key={m.id}
               type="button"
-              disabled={!m.enabled || busy !== null}
-              onClick={() => void pay(m.id)}
-              className={cn(
-                "focus-visible:ring-ring h-12 rounded-[16px] text-[15.5px] font-semibold outline-none transition-[background-color,transform] focus-visible:ring-2 active:scale-[0.98] disabled:opacity-40 motion-reduce:transform-none",
-                m.enabled ? "bg-primary text-primary-foreground hover:brightness-95" : "bg-muted text-foreground",
-              )}
+              disabled={busy !== null}
+              onClick={() => void pay("payme")}
+              className={cn(methodBtn, "bg-primary text-primary-foreground col-span-2 hover:brightness-95")}
             >
-              {busy === m.id ? "Ochilmoqda..." : m.label}
-              {!m.enabled ? " · o'chiq" : ""}
+              {busy === "payme" ? "Ochilmoqda..." : "Payme"}
             </button>
-          ))}
+          ) : null}
         </div>
+
+        {clickOn && cardOpen ? (
+          <div id="pay-card-types" role="group" aria-label="Karta turi" className="mt-2 grid grid-cols-2 gap-2" data-pay-card-types>
+            {CARD_TYPES.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                disabled={busy !== null}
+                data-pay-card={c.id}
+                onClick={() => void pay("click", c.id)}
+                className={cn(methodBtn, "bg-card hover:bg-accent border")}
+              >
+                {busy === c.id ? "Ochilmoqda..." : c.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         <p className="text-muted-foreground mt-3 text-center text-[13px] tabular-nums" data-pay-total>
           To&apos;lanadi: <span className="text-foreground font-semibold">{groupDigits(amount)} so&apos;m</span>
