@@ -111,7 +111,7 @@ export async function startCardPayment(input: {
 }): Promise<{ phoneMasked: string }> {
   assertClickDirectAvailable();
   const card = normalizeCardNumber(input.cardNumber);
-  if (!card) throw new ApiError("Karta raqami noto'g'ri. Faqat Uzcard va Humo qabul qilinadi", 400, { field: "cardNumber" });
+  if (!card) throw new ApiError("Karta raqami noto'g'ri: 16–19 ta raqam bo'lishi kerak", 400, { field: "cardNumber" });
   const exp = parseExpiry(input.expireDate);
   if (!exp.ok) throw new ApiError(exp.error, 400, { field: "expireDate" });
 

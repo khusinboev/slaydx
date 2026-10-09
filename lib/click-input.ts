@@ -16,27 +16,31 @@ export function isClickMethod(v: unknown): v is ClickMethod {
 
 export const digitsOf = (s: string): string => String(s ?? "").replace(/\D/g, "");
 
-/** Uzcard (8600, 5614) and Humo (9860) prefixes; Click's card_token API accepts only these. */
-export const CARD_PREFIXES = ["8600", "5614", "9860"] as const;
+/**
+ * Card numbers are 16–19 digits. NO prefix allow-list (owner 2026-10-09: Uzbek banks issue
+ * many card ranges — 6262…, Visa, UnionPay …): Click's `card_token/request` is the check —
+ * an unsupported or unknown card comes back as a mapped Click error, a valid one gets the SMS.
+ */
+export const CARD_MIN_DIGITS = 16;
+export const CARD_MAX_DIGITS = 19;
 
-/** `8600 1234 5678 9012` while typing: at most 16 digits, groups of 4. */
+/** `8600 1234 5678 9012` while typing: at most 19 digits, groups of 4. */
 export function formatCardNumber(input: string): string {
-  return digitsOf(input).slice(0, 16).replace(/(\d{4})(?=\d)/g, "$1 ");
+  return digitsOf(input).slice(0, CARD_MAX_DIGITS).replace(/(\d{4})(?=\d)/g, "$1 ");
 }
 
-/** Digits of a valid Uzcard/Humo number, else `null`. */
+/** Digits of a plausible card number (16–19 digits), else `null`. */
 export function normalizeCardNumber(input: string): string | null {
   const d = digitsOf(input);
-  return d.length === 16 && (CARD_PREFIXES as readonly string[]).includes(d.slice(0, 4)) ? d : null;
+  return d.length >= CARD_MIN_DIGITS && d.length <= CARD_MAX_DIGITS ? d : null;
 }
 
 /** The Uzbek reason a card number is not acceptable, or `null`. `""` input is an error too. */
 export function cardNumberError(input: string): string | null {
   const d = digitsOf(input);
   if (d.length === 0) return "Karta raqamini kiriting";
-  if (d.length < 16) return "Karta raqami 16 ta raqamdan iborat";
-  if (d.length > 16) return "Karta raqami 16 ta raqamdan oshmasin";
-  if (!normalizeCardNumber(d)) return "Faqat Uzcard (8600, 5614) va Humo (9860) kartalari qabul qilinadi";
+  if (d.length < CARD_MIN_DIGITS) return "Karta raqami kamida 16 ta raqamdan iborat";
+  if (d.length > CARD_MAX_DIGITS) return "Karta raqami 19 ta raqamdan oshmasin";
   return null;
 }
 

@@ -215,7 +215,7 @@ export function PayDialog() {
             <p className={sectionLabel}>To&apos;lov usuli</p>
             {directOn ? (
               <div className="flex flex-col gap-2" data-pay-methods>
-                <MethodRow method="card" icon={CreditCard} title="Karta" hint="Uzcard yoki Humo — SMS kod bilan" busy={busy} disabled={busy !== null || !!amountErr} onClick={() => void startDirect("card")} />
+                <MethodRow method="card" icon={CreditCard} title="Karta" hint="Bank kartasi — SMS kod bilan" busy={busy} disabled={busy !== null || !!amountErr} onClick={() => void startDirect("card")} />
                 <MethodRow method="phone" icon={Phone} title="Telefon raqam" hint="Click ilovasiga hisob yuboriladi" busy={busy} disabled={busy !== null || !!amountErr} onClick={() => void startDirect("phone")} />
                 <MethodRow method="app" icon={Smartphone} title="Click ilovasi" hint="Ilovani ochib, to'lovni tasdiqlaysiz" busy={busy} disabled={busy !== null || !!amountErr} onClick={() => void startDirect("app")} />
                 {paymeOn ? (

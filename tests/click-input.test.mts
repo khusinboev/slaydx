@@ -19,18 +19,21 @@ import { MAX_TOPUP_SOUM, MIN_TOPUP_SOUM, topupAmountError, topupRangeMessage } f
  * (validation). Synthetic numbers only.
  */
 
-test("card number: 16 digits with an Uzcard (8600, 5614) or Humo (9860) prefix", () => {
+test("card number: any 16–19 digits — no prefix allow-list, Click decides (owner 2026-10-09)", () => {
   assert.equal(normalizeCardNumber("8600 1234 5678 9012"), "8600123456789012");
-  assert.equal(normalizeCardNumber("5614123456789012"), "5614123456789012");
   assert.equal(normalizeCardNumber("9860-1234-5678-9012"), "9860123456789012");
-  for (const bad of ["", "8600 1234 5678 901", "8600 1234 5678 90123", "4111 1111 1111 1111", "1234123412341234", "8600abcd"]) {
+  // MUTATION: a prefix allow-list rejects these real Uzbek ranges.
+  assert.equal(normalizeCardNumber("6262 1234 5678 9012"), "6262123456789012");
+  assert.equal(normalizeCardNumber("4111 1111 1111 1111"), "4111111111111111");
+  assert.equal(normalizeCardNumber("6212 3456 7890 1234 567"), "6212345678901234567", "19 digits (UnionPay)");
+  for (const bad of ["", "8600 1234 5678 901", "8600 1234 5678 9012 3456", "8600abcd"]) {
     assert.equal(normalizeCardNumber(bad), null, bad);
   }
-  assert.equal(cardNumberError("8600 1234 5678 9012"), null);
+  assert.equal(cardNumberError("6262 1234 5678 9012"), null);
   assert.match(cardNumberError("")!, /kiriting/);
   assert.match(cardNumberError("8600 1234")!, /16 ta raqam/);
-  assert.match(cardNumberError("4111 1111 1111 1111")!, /Uzcard.*Humo/);
-  assert.equal(formatCardNumber("86001234567890129999"), "8600 1234 5678 9012", "capped at 16 digits");
+  assert.match(cardNumberError("8600 1234 5678 9012 3456")!, /19 ta/);
+  assert.equal(formatCardNumber("86001234567890129999123"), "8600 1234 5678 9012 999", "capped at 19 digits");
   assert.equal(formatCardNumber("86001"), "8600 1");
 });
 

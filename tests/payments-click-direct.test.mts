@@ -262,8 +262,8 @@ test("Click direct: card + invoice routes, caps, token handling, Shop API settle
       assert.equal(r.json.field, field);
     };
     await bad({ cardNumber: "8600 1234", expireDate: EXPIRE }, "cardNumber");
-    await bad({ cardNumber: "4111 1111 1111 1111", expireDate: EXPIRE }, "cardNumber");
-    await bad({ cardNumber: "86001234123412345", expireDate: EXPIRE }, "cardNumber");
+    await bad({ cardNumber: "4111 1111 1111 111", expireDate: EXPIRE }, "cardNumber");
+    await bad({ cardNumber: "86001234123412345678", expireDate: EXPIRE }, "cardNumber");
     await bad({ cardNumber: CARD, expireDate: "01/20" }, "expireDate");
     await bad({ cardNumber: CARD, expireDate: "13/99" }, "expireDate");
     await bad({ cardNumber: CARD, expireDate: "" }, "expireDate");

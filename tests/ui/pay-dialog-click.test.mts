@@ -256,7 +256,7 @@ test("Merchant API on: Karta, Telefon raqam, Click ilovasi (≥ 56 px rows) + th
   const fallback = q("[data-pay-fallback]")!;
   assert.equal(fallback.textContent, "Click sahifasi orqali to'lash");
   assert.ok(!document.body.textContent?.includes("Karta orqali"), "the Uzcard / Humo split is gone");
-  assert.ok(!document.body.textContent?.includes("Uzcard") || /Uzcard yoki Humo/.test(document.body.textContent ?? ""));
+  assert.ok(!document.body.textContent?.includes("Uzcard"), "no card-system restriction in the copy");
 });
 
 test("Merchant API off: only the plain «Click» button (and Payme); unconfigured providers are not drawn", async () => {
@@ -346,17 +346,21 @@ test("Karta: inline validation (number, expiry) blocks the request; valid input 
   assert.match(alertText(), /Karta raqamini kiriting/);
   assert.match(alertText(), /Amal qilish muddatini kiriting/);
   // Typing formats: groups of 4 and MM/YY.
+  type(number, "62621234567890129999123");
+  await settle();
+  assert.equal(number.value, "6262 1234 5678 9012 999", "groups of 4, capped at 19 digits");
   type(number, "86001234567890129999");
+  type(number, "8600123456789012");
   type(expiry, "1299");
   await settle();
   assert.equal(number.value, "8600 1234 5678 9012");
   assert.equal(expiry.value, "12/99");
-  // Wrong card system, expired date.
-  type(number, "4111111111111111");
+  // Too short, expired date.
+  type(number, "4111 1111");
   type(expiry, "0120");
   fireEvent.click(q("[data-pay-submit]")!);
   await settle();
-  assert.match(alertText(), /Uzcard.*Humo/);
+  assert.match(alertText(), /16 ta raqam/);
   assert.match(alertText(), /tugagan/);
   assert.ok(!reqs.some((r) => r.url === "/api/payments/click/card"), "nothing sent while invalid");
 
