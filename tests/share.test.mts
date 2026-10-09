@@ -238,7 +238,7 @@ test("canShareFile: needs share AND canShare(files) === true; Chromium's refusal
   assert.equal(canShareFile(f, undefined), false);
   assert.equal(canShareFile(f, { ...ok, canShare: () => { throw new Error("x"); } }), false);
   const seen: ShareData[] = [];
-  canShareFile({ ext: "pptx", mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation" }, { share: async () => {}, canShare: (d) => (seen.push(d), true) });
+  canShareFile({ ext: "pptx", mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation" }, { share: async () => {}, canShare: (d: ShareData) => (seen.push(d), true) });
   assert.equal(seen[0].files?.[0].name, "fayl.pptx");
   assert.equal(seen[0].files?.[0].type, "application/vnd.openxmlformats-officedocument.presentationml.presentation");
 });

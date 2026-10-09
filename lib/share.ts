@@ -127,11 +127,6 @@ export function isShareAbort(e: unknown): boolean {
   return typeof e === "object" && e !== null && (e as { name?: unknown }).name === "AbortError";
 }
 
-/** `navigator.share` exists in this environment. */
-export function hasNativeShare(env: Pick<ShareEnv, "nav"> = browserShareEnv()): boolean {
-  return typeof env.nav?.share === "function";
-}
-
 type NativeResult = "shared" | "cancelled" | "unsupported" | "error";
 
 /**

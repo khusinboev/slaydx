@@ -79,3 +79,32 @@ and the existing tests, plus the desktop Chromium smoke of this branch:
    the nothing-shareable case opens the download list instead of auto-downloading a single file).
 4. Tests: unit (`tests/share.test.mts`), UI per entry point, two mutations, Playwright smoke at
    1366 px and 390 px, light and dark.
+
+## 6. Result (what changed per environment)
+
+| Entry point | Phone browser (Web Share) | Desktop without Web Share | TG phone | TG desktop |
+|---|---|---|---|---|
+| Referral card «Ulashish» | unchanged: `navigator.share({title,text,url})`; cancel = silent | **fallback menu**: «Havolani nusxalash» (toast-style «Nusxalandi»), «Telegramda ulashish» (new tab) | unchanged: `openTelegramLink(t.me/share/url…)` | same as TG phone |
+| Game panel | **new «Ulashish»**: same flow as above (link + title + text) | menu | Telegram's sheet | same |
+| Game panel «Nusxalash» | works without `navigator.clipboard` (used to throw) and says so when every route fails | same | same | same |
+| File «Ulashish» (result header, «⋯», sheet rows) | unchanged (two taps, `navigator.share({files})`) | download list + reason toast; a ONE-format file is no longer saved unasked; a failed second tap says «Ulashib bo‘lmadi…» and downloads | unchanged (`shareMessage`) | unchanged |
+
+Decisions: icons (lucide `Link2`, `Send`) instead of emoji, matching the rest of the UI; a file has no
+public link, so its fallback is the existing download list (`DownloadSheet`, 56 px rows, focus trap,
+Esc) rather than a second menu. The link menu is a bottom sheet below `sm`, a centred card above.
+
+Verification (branch `fix/share-everywhere`):
+
+- `tests/share.test.mts` 20/20; `tests/ui/share-everywhere.test.mts` 31/31; `save-share-formats` 31/31
+  (4 new), `referral-card` 10/10 (one assertion rewritten: «without Web Share → copy» became «→ the
+  menu, and «Havolani nusxalash» copies»), `result-actions` 33/33, `game-share-panel` 11/11,
+  `panel-container` 15/15 (the game panel uses `@md:` container variants, not viewport ones).
+- Mutations, each red then restored: fallback removed (17 UI tests), AbortError as error (5 tests),
+  menu without `useDialog` (2), single-format auto-download restored (1), `?bt=` allowed (3), Telegram
+  sheet skipped (2), unit-level fallback removed (4).
+- Chromium smoke (real Chrome 153 on Linux = no `navigator.share`; 1366×768 and 390×844 @3x touch, light and
+  dark; API answered by route fixtures, dev server without a database): 156/156 checks, covering the
+  menu in view, ≥ 44 px controls, no horizontal overflow, the clipboard holding the exact link,
+  execCommand route when the Clipboard API is denied, Telegram tab URL, focus trap / Esc / focus return,
+  Web Share unchanged, AbortError silent, Telegram Desktop stub, and the file flows including a real
+  browser download from «Yuklab olish».
