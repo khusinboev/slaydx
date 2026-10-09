@@ -52,7 +52,7 @@ import { keyboardMessage, matchKeyboard } from "./keyboard";
 import { at, ADMIN_TEXT_KEYS } from "./admin-i18n";
 import { LANGS, langOf, type Lang } from "./i18n";
 import { actorOf, allowed, lookupAdmin, type BotAdmin } from "./admin-access";
-import { isTypedField, parseAdminCallback, typeFits, type AdminCallback, type AudienceCode, type ChannelField, type ChannelType, type TypedField } from "./admin-codes";
+import { isTypedField, parseAdminCallback, typeFits, type AdminCallback, type AudienceCode, type ChannelType, type TypedField } from "./admin-codes";
 import {
   CHANNEL_PRESETS,
   audienceScreen,

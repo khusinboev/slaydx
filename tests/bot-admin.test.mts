@@ -1419,14 +1419,25 @@ test("Progress card text: speed and ETA while sending; the abort reason when fai
 });
 
 test("screen buttons: the stored label → code map equals the keyboard on the wire, in plain and premium-emoji mode", async () => {
-  const { draftScreen, audienceScreen, channelKindScreen } = await import("../lib/server/bot/admin-screens.ts");
+  const { draftScreen, audienceScreen, channelKindScreen, channelCardScreen, channelEditAskScreen, channelChangeConfirmScreen } = await import("../lib/server/bot/admin-screens.ts");
+  const owner = { adminId: "1", userId: "1", role: "owner", telegramId: 1, name: "A", lang: "uz", permissions: ["bonus.view", "bonus.edit"] } as const;
+  const item = { id: "7", chatId: "-1001", username: null, inviteLink: "https://t.me/+AbCdEfGh12345", title: "Kanal", joinBonus: 1000, stayBonus: 0, stayDays: 7, active: false, mandatory: false, sort: 1, createdAt: "", updatedAt: "", stats: { joined: 0, joinPaidCount: 0, joinPaidSum: 0, stayPaidCount: 0, stayPaidSum: 0, left: 0, stayPending: 0 } } as const;
   const draft = { t: "bc", text: "Salom", content: { kind: "text" as const, button: { text: "Ochish", url: "https://slaydx.uz" } } } as const;
   const chan = { t: "ch", chatId: "-1001", title: "Kanal", username: null, botAdmin: "admin" } as const;
   for (const premium of [false, true]) {
     if (premium) process.env.BOT_PREMIUM_EMOJI = "1";
     else delete process.env.BOT_PREMIUM_EMOJI;
     try {
-      for (const s of [draftScreen("uz", draft), audienceScreen("uz", { all: 5, act: 3, new: 1 }), channelKindScreen("uz", chan)]) {
+      const screens = [
+        draftScreen("uz", draft),
+        audienceScreen("uz", { all: 5, act: 3, new: 1 }),
+        channelKindScreen("uz", chan),
+        channelCardScreen({ ...owner, permissions: [...owner.permissions] }, item, "admin"),
+        channelCardScreen({ ...owner, permissions: ["bonus.view"] }, item),
+        channelEditAskScreen("uz", item, "inviteLink"),
+        channelChangeConfirmScreen("uz", item, "active", false, true),
+      ];
+      for (const s of screens) {
         const wire = (s.reply_markup as { keyboard: Key[][] }).keyboard.flat().map((b) => b.text);
         assert.deepEqual(s.keys.map((k) => k.text), wire, `premium=${premium}`);
         assert.equal(new Set(wire).size, wire.length);
