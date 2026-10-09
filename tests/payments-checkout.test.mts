@@ -33,6 +33,13 @@ delete process.env.PAYME_TEST_KEY;
 // Before the first `test()`: node:test starts it at once and `lib/server/*` captures env on import.
 const iso = hasDb ? await createIsolatedDb("checkout") : { isolated: false, drop: async () => {} };
 
+type Reply = {
+  order: { id: string; provider: string; amountSoum: number };
+  checkoutUrl: string;
+  error?: string;
+  message?: string;
+};
+
 test("payments/orders: Click and «Karta orqali» checkout URLs", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t) => {
   const { query, migrate, pool } = await import("../lib/server/db.ts");
   const { createSession, SESSION_COOKIE } = await import("../lib/server/session.ts");
@@ -59,7 +66,7 @@ test("payments/orders: Click and «Karta orqali» checkout URLs", { skip: hasDb 
       body: JSON.stringify(body),
     });
     const res = await inRequest(req, () => orders.POST(req));
-    return { res, json: (await res.json()) as Record<string, any>, userId };
+    return { res, json: (await res.json()) as Reply, userId };
   };
   const orderCount = async (uid: string) =>
     Number((await query<{ n: string }>(`SELECT count(*) n FROM payment_orders WHERE user_id = $1`, [uid]))[0].n);
