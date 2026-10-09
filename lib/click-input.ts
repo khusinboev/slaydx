@@ -6,6 +6,14 @@
  * Nothing here logs or stores a value; callers must not either.
  */
 
+/** How a Click order is paid (`payment_orders.click_method`): the Click page (fallback), our card form, an invoice by phone, the Click app deeplink. */
+export const CLICK_METHODS = ["page", "card", "phone", "app"] as const;
+export type ClickMethod = (typeof CLICK_METHODS)[number];
+
+export function isClickMethod(v: unknown): v is ClickMethod {
+  return typeof v === "string" && (CLICK_METHODS as readonly string[]).includes(v);
+}
+
 export const digitsOf = (s: string): string => String(s ?? "").replace(/\D/g, "");
 
 /** Uzcard (8600, 5614) and Humo (9860) prefixes; Click's card_token API accepts only these. */
