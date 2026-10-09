@@ -36,7 +36,7 @@ import { getPaymentBonusPercent, setPaymentBonusPercent } from "../payment-bonus
 import { isPaymentBonusPercent } from "../../payment-bonus";
 import { cancelInput } from "./state";
 import { editScreen, sendScreen } from "./router";
-import { matchKeyboard } from "./keyboard";
+import { keyboardMessage, matchKeyboard } from "./keyboard";
 import { at, ADMIN_TEXT_KEYS } from "./admin-i18n";
 import { LANGS, langOf, type Lang } from "./i18n";
 import { actorOf, allowed, lookupAdmin, type BotAdmin } from "./admin-access";
@@ -57,6 +57,8 @@ import {
   confirmScreen,
   draftScreen,
   inputProblemScreen,
+  ADMIN_MENU,
+  adminMenuScreen,
   panelScreen,
   payBonusAskScreen,
   payBonusConfirmScreen,
@@ -197,7 +199,41 @@ export async function openPanel(chatId: number, telegramId: number): Promise<boo
   if (!admin) return false;
   await cancelInput(chatId);
   await clearState(chatId);
-  await sendScreen(chatId, await panel(admin));
+  // Owner C-Q6: the admin menu is a reply keyboard at the bottom (not inline buttons under the message).
+  await sendScreen(chatId, adminMenuScreen(admin));
+  return true;
+}
+
+/** Which admin menu button a text is (any language, with or without the emoji): its callback code, `"main"`, or `null`. */
+export function adminMenuAction(text: string): string | null {
+  const bare = text.replace(LEADING, "").trim().toLowerCase();
+  if (!bare) return null;
+  for (const l of LANGS) {
+    if (at(l, "kb.mainMenu").toLowerCase() === bare) return "main";
+    for (const m of ADMIN_MENU) if (at(l, m.key).toLowerCase() === bare) return m.data;
+  }
+  return null;
+}
+
+/**
+ * A tap on the admin reply keyboard. Only linked admins are served (anyone else's text falls through, `false`).
+ * The action runs through `handleAdminCallback` (same permission, rate-limit, step-up and audit checks as the
+ * inline buttons) on a fresh message it then edits; «Asosiy menyu» brings the main keyboard back.
+ */
+export async function handleAdminMenuText(chatId: number, telegramId: number, text: string, updateId: number): Promise<boolean> {
+  const action = adminMenuAction(text);
+  if (!action || chatId !== telegramId) return false;
+  const { admin } = await lookupAdmin(telegramId);
+  if (!admin) return false;
+  if (action === "main") {
+    await clearState(chatId);
+    await sendScreen(chatId, keyboardMessage(admin.lang, telegramId, "note", undefined, { admin: true }));
+    return true;
+  }
+  const messageId = await sendScreen(chatId, { text: "⏳" });
+  if (messageId === null) return true;
+  const toast = await handleAdminCallback(telegramId, chatId, messageId, action, updateId);
+  if (toast) await editScreen(chatId, messageId, { text: esc(toast) });
   return true;
 }
 
@@ -561,7 +597,7 @@ export async function handleAdminInput(m: AdminMessage, updateId: number): Promi
   if (!m.from || m.from.is_bot || m.chat.type !== "private" || m.from.id !== chatId) return false;
   if (!(await hasPendingStep(chatId))) return false;
   const text = m.text;
-  if (text !== undefined && (text.trim().startsWith("/") || matchKeyboard(text) || isAdminButtonText(text))) {
+  if (text !== undefined && (text.trim().startsWith("/") || matchKeyboard(text) || isAdminButtonText(text) || adminMenuAction(text))) {
     await clearState(chatId);
     return false;
   }

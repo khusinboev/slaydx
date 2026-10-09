@@ -10,7 +10,7 @@ import type { BotAdmin } from "./admin-access";
 import type { BotStats } from "./admin-stats";
 import type { BroadcastDraft, ChannelDraft } from "./admin-state";
 import { toolTitle, type Lang } from "./i18n";
-import { clip, esc, inlineButton, rows, tgEmoji, type InlineButton, type Screen } from "./ui";
+import { clip, esc, inlineButton, keyboardButton, rows, tgEmoji, type InlineButton, type KeyboardButton, type Screen } from "./ui";
 
 /**
  * In-bot admin panel screens (docs/bot-admin/PLAN.md) — pure renderers.
@@ -38,6 +38,41 @@ const cancel = (lang: Lang) => inlineButton("cancel", at(lang, "btn.cancel"), { 
 /* ───────────────────────── Panel ───────────────────────── */
 
 /** `payBonusPercent`: the current payment bonus (C-Q4) for the «💳 To‘lov bonusi: N%» button (roles with settings.view). */
+/** Admin menu items of the reply keyboard (owner C-Q6): label key, icon, the panel action (callback code) it opens. */
+export const ADMIN_MENU = [
+  { key: "panel.stats", icon: "chart", data: acb.stats(), perm: "dashboard.view" },
+  { key: "panel.broadcast", icon: "megaphone", data: acb.bcStart(), perm: "broadcasts.send" },
+  { key: "panel.channels", icon: "bell", data: acb.channels(), perm: "bonus.view" },
+  { key: "kb.payBonus", icon: "card", data: acb.payBonus(), perm: "settings.view" },
+] as const satisfies readonly { key: string; icon: string; data: string; perm: Permission }[];
+
+/**
+ * The admin menu as a REPLY keyboard at the bottom (owner C-Q6): two per row, only what the role may open,
+ * then «⬅️ Asosiy menyu». The texts are matched back by `adminMenuAction`; every tap re-checks the account.
+ */
+export function adminMenuKeyboard(a: BotAdmin): Record<string, unknown> {
+  const l = a.lang;
+  const items: KeyboardButton[] = ADMIN_MENU.filter((m) => can(a, m.perm)).map((m, i) =>
+    keyboardButton(m.icon, at(l, m.key), i === 0 ? { style: "primary" } : {}),
+  );
+  const pairs: KeyboardButton[][] = [];
+  for (let i = 0; i < items.length; i += 2) pairs.push(items.slice(i, i + 2));
+  return {
+    keyboard: [...pairs, [keyboardButton("back", at(l, "kb.mainMenu"))]],
+    is_persistent: true,
+    resize_keyboard: true,
+  };
+}
+
+/** The panel's opening message: title, who you are, the hint — with the admin reply keyboard. */
+export function adminMenuScreen(a: BotAdmin): Screen {
+  const l = a.lang;
+  return {
+    text: `${head("admin", at(l, "panel.title"))}\n\n${at(l, "panel.lead", { name: esc(a.name), role: at(l, `role.${a.role}`) })}\n\n${at(l, "panel.menuHint")}`,
+    reply_markup: adminMenuKeyboard(a),
+  };
+}
+
 export function panelScreen(a: BotAdmin, payBonusPercent?: number): Screen {
   const l = a.lang;
   return {

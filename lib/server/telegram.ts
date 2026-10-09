@@ -891,6 +891,8 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
       // «🛠 Admin» (only linked admins have the button; anyone else's text falls through as usual).
       const adminBot = await import("./bot/admin");
       if (adminBot.isAdminButtonText(text) && (await adminBot.openPanel(ctx.chatId, ctx.telegramId))) return;
+      // The admin reply-keyboard menu (owner C-Q6): linked admins only; others' identical texts fall through.
+      if (adminBot.adminMenuAction(text) && (await adminBot.handleAdminMenuText(ctx.chatId, ctx.telegramId, text, update.update_id))) return;
       const action = bot.matchKeyboard(text);
       if (action) {
         await bot.handleKeyboard(ctx, action);

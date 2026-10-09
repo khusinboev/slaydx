@@ -15,6 +15,13 @@ type Entry = { uz: string; ru: string; en: string };
 const A = {
   /* ── Keyboard / entry ── */
   "kb.admin": { uz: "Admin", ru: "Админ", en: "Admin" },
+  "kb.payBonus": { uz: "To‘lov bonusi", ru: "Бонус за пополнение", en: "Payment bonus" },
+  "kb.mainMenu": { uz: "Asosiy menyu", ru: "Главное меню", en: "Main menu" },
+  "panel.menuHint": {
+    uz: "Pastdagi admin tugmalaridan birini tanlang. «Asosiy menyu» — oddiy klaviaturaga qaytish.",
+    ru: "Выберите кнопку админ-меню внизу. «Главное меню» — вернуть обычную клавиатуру.",
+    en: "Pick an admin button below. «Main menu» brings the usual keyboard back.",
+  },
 
   /* ── Panel ── */
   "panel.title": { uz: "Admin panel", ru: "Админ-панель", en: "Admin panel" },

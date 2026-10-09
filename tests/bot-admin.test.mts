@@ -143,23 +143,42 @@ test("access: a non-admin tap gets «Ruxsat yo‘q» and nothing else; /admin ke
   assert.ok(!rows.flat().some((b) => /Admin/.test(b.text)), "no «🛠 Admin» row");
 });
 
-test("access: an owner — /admin opens the panel + keyboard with the «🛠 Admin» row; button opens it too; close", { skip }, async () => {
+test("access: an owner — /admin opens the admin menu as a REPLY keyboard (owner C-Q6); a tap runs the action; «Asosiy menyu» restores the main keyboard", { skip }, async () => {
   const a = await newAdmin("owner");
   installFetch();
   await tg.handleUpdate(textUpdate(a.tg, "/admin"));
   const panel = sends()[0]!.body;
   assert.match(String(panel.text), /^🛠 <b>Admin panel<\/b>\n\nAdmin Bot, rolingiz: <b>ega<\/b>\./);
-  assert.deepEqual(datas(panel), ["a:s", "a:b", "a:c", "a:p", "a:z"]);
-  assert.deepEqual(buttons(panel).map((b) => b.text), ["📈 Statistika", "📢 Xabar yuborish", "🔔 Kanal ulash", "💳 To‘lov bonusi: 10%", "⬅️ Yopish"]);
-  const rows = (sends()[1]!.body.reply_markup as { keyboard: Btn[][] }).keyboard;
-  assert.deepEqual(rows.at(-1), [{ text: "🛠 Admin", style: "primary" }]);
+  const kb = (panel.reply_markup as { keyboard: Btn[][]; is_persistent: boolean }).keyboard;
+  // MUTATION: the old inline panel (buttons under the message) instead of the bottom keyboard.
+  assert.deepEqual(kb.map((r) => r.map((b) => `${b.text}${b.style ? `(${b.style})` : ""}`)), [
+    ["📈 Statistika(primary)", "📢 Xabar yuborish"],
+    ["🔔 Kanal ulash", "💳 To‘lov bonusi"],
+    ["⬅️ Asosiy menyu"],
+  ]);
   installFetch();
   await tg.handleUpdate(textUpdate(a.tg, "🛠 Admin"));
   assert.match(String(sends()[0]!.body.text), /Admin panel/);
+
   installFetch();
-  await tg.handleUpdate(cbUpdate(a.tg, "a:z", 77));
-  assert.equal(edits()[0]!.body.message_id, 77);
-  assert.match(String(edits()[0]!.body.text), /Admin panel yopildi/);
+  await tg.handleUpdate(textUpdate(a.tg, "📈 Statistika"));
+  assert.equal(sends()[0]!.body.text, "⏳");
+  assert.match(String(edits()[0]!.body.text), /Foydalanuvchilar/, "the stats card replaces the placeholder");
+
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "⬅️ Asosiy menyu"));
+  const main = (sends()[0]!.body.reply_markup as { keyboard: Btn[][] }).keyboard;
+  assert.deepEqual(main.at(-1), [{ text: "🛠 Admin", style: "primary" }], "main keyboard with the admin row");
+  assert.ok(main.flat().some((b) => /Slayd/.test(b.text)));
+});
+
+test("admin reply menu: a NON-admin typing «Statistika» / «Asosiy menyu» gets no admin screen (text falls through)", { skip }, async () => {
+  const u = await newUser();
+  for (const text of ["📈 Statistika", "⬅️ Asosiy menyu"]) {
+    installFetch();
+    await tg.handleUpdate(textUpdate(u.tg, text));
+    assert.ok(!sends().some((m) => m.body.text === "⏳" || /Foydalanuvchilar|Admin panel/.test(String(m.body.text))), text);
+  }
 });
 
 test("access: revoked (disabled) and blocked admins get nothing — MUTATSIYA 1, 2", { skip }, async () => {
@@ -181,7 +200,8 @@ test("access: viewer sees Statistika only (no bonus section); a broadcast tap is
   const v = await newAdmin("viewer");
   installFetch();
   await tg.handleUpdate(textUpdate(v.tg, "/admin"));
-  assert.deepEqual(datas(sends()[0]!.body), ["a:s", "a:c", "a:p", "a:z"], "viewer has bonus.view + settings.view, not broadcasts.send");
+  const vkb = (sends()[0]!.body.reply_markup as { keyboard: Btn[][] }).keyboard;
+  assert.deepEqual(vkb.flat().map((b) => b.text), ["📈 Statistika", "🔔 Kanal ulash", "💳 To‘lov bonusi", "⬅️ Asosiy menyu"], "viewer has bonus.view + settings.view, not broadcasts.send");
   const s = await newAdmin("support");
   installFetch();
   await tg.handleUpdate(cbUpdate(s.tg, "a:b"));
