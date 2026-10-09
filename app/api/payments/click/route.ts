@@ -118,6 +118,11 @@ async function handle(p: ClickParams): Promise<Reply> {
     // Complete — pulni hisobga qo'shamiz. Avval Prepare bilan mosligi: Prepare
     // qilinmagan buyurtma, `merchant_prepare_id` yo'q/noto'g'ri yoki boshqa
     // `click_trans_id` — hammasi -6 (Click api-testing), pul qo'shilmaydi.
+    // Click o'z xatosi bilan (error<0) Prepare qilinmagan buyurtmaga Complete
+    // yuborsa — spetsifikatsiya bo'yicha -9; bekor qiladigan narsa yo'q, holat o'zgarmaydi.
+    if (Number(p.error ?? 0) < 0 && !order.providerTxn) {
+      return reply(p, CLICK_ERROR.CANCELLED, "Click tomonda bekor qilindi");
+    }
     const match = checkClickComplete(order, p);
     if (!match.ok) return reply(p, CLICK_ERROR.NO_TXN, match.note);
     if (Number(p.error ?? 0) < 0) {

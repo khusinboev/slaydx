@@ -403,10 +403,11 @@ test("Click Shop API: api-testing scenarios", { skip: SKIP }, async (t) => {
     assert.equal(await bonusCount(u2), 1);
   });
 
-  await t.test("Complete with Click error<0 for an order that was never Prepared is -6, not a cancel", async () => {
+  await t.test("Complete with Click error<0 for an order that was never Prepared is -9 (spec), state untouched", async () => {
     const { uid, order } = await mkOrder();
     const base = { click_trans_id: "910110", merchant_trans_id: order.id, amount: "10000" };
-    assert.equal((await call({ ...base, action: "1", merchant_prepare_id: "5", error: "-5017" })).error, -6);
+    // MUTATION: without the never-prepared guard this is -6 (review L1).
+    assert.equal((await call({ ...base, action: "1", merchant_prepare_id: "5", error: "-5017" })).error, -9);
     assert.equal((await orderRow(order.id)).state, "created");
     await untouched(uid);
   });
