@@ -288,7 +288,14 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     const keysCol = () =>
       queryOne("SELECT 1 FROM information_schema.columns WHERE table_name = 'bot_admin_state' AND column_name = 'keys'");
     assert.ok(await keysCol(), "047 column created");
+    const clickCols = () =>
+      query<{ column_name: string }>(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'payment_orders' AND column_name LIKE 'click\\_%' ORDER BY 1",
+      );
+    assert.deepEqual((await clickCols()).map((r) => r.column_name), ["click_card_token", "click_invoice_id", "click_method", "click_payment_id"], "048 columns created");
     for (const f of [
+      // 048: Click direct methods (owner 2026-10-09) -- payment_orders.click_method / click_invoice_id / click_card_token / click_payment_id.
+      "048_click_direct.sql",
       // 047: admin panel as reply-keyboard buttons (owner 2026-10-09) — bot_admin_state.keys.
       "047_bot_admin_keys.sql",
       // 046: broadcast engine (docs/bonus/BONUS3.md C-Q5) — users.bot_blocked_at, recipient lease / attempts / kind, paused + failed statuses.
@@ -311,6 +318,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     ]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
+      if (f === "048_click_direct.sql") assert.deepEqual(await clickCols(), [], "048 rollback drops the four columns");
       if (f === "047_bot_admin_keys.sql") assert.ok(!(await keysCol()), "047 rollback drops the column");
       if (f === "046_broadcast_engine.sql") assert.ok(!(await blockedCol()), "046 rollback drops the column");
       if (f === "045_bonus_channel_mandatory.sql") assert.ok(!(await mandatoryCol()), "045 rollback drops the column");

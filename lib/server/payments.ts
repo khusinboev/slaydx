@@ -6,7 +6,7 @@ import { safeEqual } from "./session";
 import { topUpInTx } from "./credits";
 import { log } from "./log";
 import { payPaymentBonusInTx } from "./payment-bonus";
-import { groupDigits } from "../format";
+import { MAX_TOPUP_SOUM, MIN_TOPUP_SOUM, topupRangeMessage } from "../topup-limits";
 
 /**
  * To'lov buyurtmalari va ularni kreditga aylantirish.
@@ -115,8 +115,8 @@ export function paymeAuthorized(header: string | null | undefined, keys: readonl
 /** Balans to'ldirishda 1 so'm = 1 tanga. */
 export const SOUM_PER_COIN = 1;
 
-export const MIN_TOPUP_SOUM = 1_000;
-export const MAX_TOPUP_SOUM = 10_000_000;
+// Limits live in `lib/topup-limits.ts` (shared with the wallet dialog).
+export { MIN_TOPUP_SOUM, MAX_TOPUP_SOUM };
 
 export type Provider = "click" | "payme";
 /**
@@ -195,9 +195,7 @@ export async function createOrder(input: {
   if (input.purpose !== "topup") throw new Error(PRO_REMOVED_MESSAGE);
   const amount = Math.round(input.amountSoum);
   if (!Number.isFinite(amount) || amount < MIN_TOPUP_SOUM || amount > MAX_TOPUP_SOUM) {
-    throw new Error(
-      `Summa ${groupDigits(MIN_TOPUP_SOUM)} — ${groupDigits(MAX_TOPUP_SOUM)} so'm oralig'ida bo'lishi kerak`,
-    );
+    throw new Error(topupRangeMessage());
   }
   const row = await queryOne<OrderRow>(
     `INSERT INTO payment_orders (id, user_id, provider, purpose, amount_soum)

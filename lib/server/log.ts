@@ -77,7 +77,7 @@ const REDACTED = "[REDACTED]";
  * `SECRET_KEY` bilan bir oila; bu yerda `key` ichida kelganlari ham —
  * `apiKey`, `x-api-key`, `secretKey`).
  */
-const SECRET_FIELD = /^(authorization|cookie|set-cookie|password|passwd|secret|token|sign_string|sign|signature|key|session|sessionid|session_id)$|(api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|bot[_-]?token)$/i;
+const SECRET_FIELD = /^(authorization|cookie|set-cookie|password|passwd|secret|token|sign_string|sign|signature|key|session|sessionid|session_id)$|(api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|bot[_-]?token)$|^(card[_-]?number|card[_-]?token|cardnumber|cardtoken|pan|cvv|cvc|expire[_-]?date|expiredate|expiry|sms[_-]?code|smscode|otp)$/i;
 
 /** Matn ichidagi sir shakllari — tartib muhim (avval aniqroq). */
 const TEXT_RULES: Array<[RegExp, string | ((m: string, ...g: string[]) => string)]> = [
@@ -91,18 +91,20 @@ const TEXT_RULES: Array<[RegExp, string | ((m: string, ...g: string[]) => string
   [/\b((?:set-)?cookie)\s*:\s*[^\r\n]+/gi, (_m, name: string) => `${name}: ${REDACTED}`],
   // JSON satr ichida: `"token":"…"`, `"password": "…"`.
   [
-    /("(?:(?:api[_-]?)?key|access_token|token|secret|password|passwd|session|sessionid|sign_string|signature|authorization)"\s*:\s*)"[^"]*"/gi,
+    /("(?:(?:api[_-]?)?key|access_token|token|secret|password|passwd|session|sessionid|sign_string|signature|authorization|card_number|card_token|expire_date|sms_code)"\s*:\s*)"[^"]*"/gi,
     `$1"${REDACTED}"`,
   ],
   // URL/forma parametrlari va `nom: qiymat`: `?key=…`, `&api_key=…`, `token=…`, `password: …`, `session=…`.
   [
-    /([?&;\s]|^)((?:api[_-]?)?key|access_token|token|secret|sign_string|password|passwd|signature|session|sessionid)(=|:\s*)([^&\s"'#;,]+)/gi,
+    /([?&;\s]|^)((?:api[_-]?)?key|access_token|token|secret|sign_string|password|passwd|signature|session|sessionid|card_number|card_token|expire_date|sms_code)(=|:\s*)([^&\s"'#;,]+)/gi,
     (_m, pre: string, name: string, sep: string) => `${pre}${name}${sep}${REDACTED}`,
   ],
   // Google API kaliti (`AIza` + 35), Anthropic/OpenRouter/OpenAI (`sk-…`), xAI (`xai-…`).
   [/AIza[0-9A-Za-z_-]{20,}/g, REDACTED],
   [/\bsk-[A-Za-z0-9_-]{8,}/g, REDACTED],
   [/\bxai-[A-Za-z0-9_-]{8,}/g, REDACTED],
+  // Bank card number (16 digits, optionally grouped) -- Click card form (Uzcard / Humo / any 4x4 group). Never logged.
+  [/(?<![\d-])\d{4}([ -]?)\d{4}\1\d{4}\1\d{4}(?![\d-])/g, "[CARD]"],
   // O'zbekiston raqami (+998 XX XXX XX XX, bo'shliq/tire bilan yoki yopishiq) — oxirgi 2 raqam qoladi.
   [/(?<![\w-])\+?998[\s-]?\(?\d{2}\)?[\s-]?\d{3}[\s-]?\d{2}[\s-]?(\d{2})(?![\w-])/g, (_m, last: string) => `***${last}`],
   // Boshqa xalqaro raqam — faqat `+` bilan (aks holda vaqt belgisi/summa buzilardi).
