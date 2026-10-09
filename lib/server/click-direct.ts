@@ -9,7 +9,7 @@ import {
   requestCardToken,
   verifyCardToken,
 } from "./click-merchant";
-import { paymentsConfigured } from "./env";
+import { clickDirectConfigured } from "./env";
 import { log } from "./log";
 import { query, queryOne } from "./db";
 import { normalizeCardNumber, normalizePhone, normalizeSmsCode, parseExpiry } from "../click-input";
@@ -54,7 +54,7 @@ const NOT_FOUND = "Buyurtma topilmadi";
 
 /** Fails (503) unless the Shop API keys AND the Merchant API credentials are configured. */
 export function assertClickDirectAvailable(): void {
-  if (!paymentsConfigured().click || !clickMerchantConfigured()) {
+  if (!clickDirectConfigured() || !clickMerchantConfigured()) {
     throw new ApiError("Click orqali to'g'ridan-to'g'ri to'lov hozircha mavjud emas. Boshqa usulni tanlang", 503, {
       code: "click_direct_unavailable",
     });

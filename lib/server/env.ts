@@ -365,6 +365,15 @@ export function ttsConfigured(): boolean {
   return Boolean((env.tts.azureKey && env.tts.azureRegion) || env.tts.aishaKey || (env.gemini.key && env.tts.geminiModel));
 }
 
+/**
+ * Click DIRECT methods (our card form, invoice by phone): the Shop API keys AND the Merchant API
+ * credentials (`CLICK_MERCHANT_USER_ID`). Without the latter the wallet shows only the plain
+ * «Click» (page) button.
+ */
+export function clickDirectConfigured(): boolean {
+  return paymentsConfigured().click && Boolean(env.click.merchantUserId);
+}
+
 export function paymentsConfigured(): { click: boolean; payme: boolean } {
   return {
     click: Boolean(env.click.serviceId && env.click.secretKey && env.click.merchantId),

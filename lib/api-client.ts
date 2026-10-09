@@ -6,6 +6,7 @@ import type { SlideModel, SlideThemeId } from "./generation/slide-types";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "./generation/slide-templates";
 import type { BodyRules } from "./generation/slide-audience";
 import type { DownloadFormatId } from "./downloads/formats";
+import type { ClickMethod } from "./click-input";
 import { reportGate, type GateChannel } from "./channel-gate";
 
 /**
@@ -231,7 +232,7 @@ export type Features = {
   devLogin: boolean;
   /** Server DOCX/PPTX ni PDF ga o'gira oladimi (LibreOffice o'rnatilganmi). */
   pdf: boolean;
-  payments: { click: boolean; payme: boolean };
+  payments: { click: boolean; payme: boolean; /** Click Merchant API is set up: card / phone / app methods. */ clickDirect?: boolean };
   /** Admin price adjustments (non-default tools only); untrusted, validated by `parsePriceAdjustments`. */
   pricing?: unknown;
 };
@@ -820,10 +821,46 @@ export type PaymentOrder = {
 };
 
 /** Faqat balansni to'ldirish: obuna (pro) buyurtmalari server tomonda to'xtatilgan. */
-export function createOrder(input: { provider: "click" | "payme"; amount?: number; card?: "uzcard" | "humo" }) {
+export function createOrder(input: {
+  provider: "click" | "payme";
+  amount?: number;
+  card?: "uzcard" | "humo";
+  /** Click only: how the user pays (`page` = my.click.uz fallback, `card` / `phone` = our forms, `app` = deeplink). */
+  method?: ClickMethod;
+}) {
   return request<{ order: PaymentOrder; checkoutUrl: string }>("/api/payments/orders", {
     method: "POST",
     body: JSON.stringify({ ...input, purpose: "topup" }),
+  });
+}
+
+/**
+ * Click direct, "Karta" step 1: Click texts a code to the card owner's phone. The card number and
+ * expiry are sent once over HTTPS, never stored on the client or in any URL.
+ */
+export function clickCardStart(input: { orderId: string; cardNumber: string; expireDate: string }) {
+  return request<{ phoneMasked: string }>("/api/payments/click/card", {
+    method: "POST",
+    body: JSON.stringify(input),
+    timeoutMs: 45_000,
+  });
+}
+
+/** Click direct, "Karta" step 2: SMS code -> payment. `paid` only once the Shop API settled it. */
+export function clickCardConfirm(input: { orderId: string; smsCode: string }) {
+  return request<{ status: "paid" | "pending" | "cancelled" }>("/api/payments/click/card/verify", {
+    method: "POST",
+    body: JSON.stringify(input),
+    timeoutMs: 60_000,
+  });
+}
+
+/** Click direct, "Telefon raqam": an invoice for the order goes to the Click app of `phone`. */
+export function clickInvoice(input: { orderId: string; phone: string }) {
+  return request<{ status: "sent" }>("/api/payments/click/invoice", {
+    method: "POST",
+    body: JSON.stringify(input),
+    timeoutMs: 45_000,
   });
 }
 
