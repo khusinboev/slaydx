@@ -162,3 +162,57 @@ export async function releaseStep(chatId: number, updateId: number, promptMessag
 export async function markBotReauth(client: Pick<PoolClient, "query">, chatId: number, adminId: string): Promise<void> {
   await client.query(`UPDATE bot_admin_state SET reauth_at = now(), updated_at = now() WHERE chat_id = $1 AND admin_id = $2`, [chatId, adminId]);
 }
+
+/* ───────────────── Reply-keyboard buttons of the last screen ───────────────── */
+
+/**
+ * One button of an admin screen's reply keyboard: the label the admin sees (and Telegram sends back as a plain
+ * text message when it is tapped) and the callback code (`admin-codes.ts`) it stands for.
+ */
+export type ScreenKey = { text: string; code: string };
+
+/**
+ * Remembers the buttons of the screen just sent to the chat (a reply keyboard cannot carry callback data and
+ * cannot be edited, so every screen sends a NEW message and replaces this map). A row of another admin account
+ * (an account re-linked to the chat) is overwritten like `writeState` does. Grants nothing by itself: a tap is
+ * mapped back to its code and then runs through the ordinary permission / rate-limit / step-up path.
+ */
+export async function writeKeys(chatId: number, adminId: string, keys: ScreenKey[]): Promise<void> {
+  await query(
+    `INSERT INTO bot_admin_state (chat_id, admin_id, keys, updated_at) VALUES ($1, $2, $3::jsonb, now())
+     ON CONFLICT (chat_id) DO UPDATE
+        SET keys = EXCLUDED.keys, updated_at = now(),
+            step = CASE WHEN bot_admin_state.admin_id = EXCLUDED.admin_id THEN bot_admin_state.step END,
+            draft = CASE WHEN bot_admin_state.admin_id = EXCLUDED.admin_id THEN bot_admin_state.draft END,
+            prompt_message_id = CASE WHEN bot_admin_state.admin_id = EXCLUDED.admin_id THEN bot_admin_state.prompt_message_id END,
+            expires_at = CASE WHEN bot_admin_state.admin_id = EXCLUDED.admin_id THEN bot_admin_state.expires_at END,
+            claimed_update = CASE WHEN bot_admin_state.admin_id = EXCLUDED.admin_id THEN bot_admin_state.claimed_update END,
+            reauth_at = CASE WHEN bot_admin_state.admin_id = EXCLUDED.admin_id THEN bot_admin_state.reauth_at END,
+            admin_id = EXCLUDED.admin_id`,
+    [chatId, adminId, JSON.stringify(keys)],
+  );
+}
+
+/**
+ * A screen's labels expire: an ordinary text typed days later that happens to equal an old label («10%»,
+ * «Yangilash») must not run an admin action. The static admin menu is matched separately and never expires.
+ */
+export const SCREEN_KEYS_TTL_HOURS = 12;
+
+/**
+ * The callback code behind a text the chat sent, when it is EXACTLY one of the last screen's button labels
+ * (and the account that screen was sent for). One primary-key read: a chat without an admin row (every ordinary
+ * user) costs nothing more. The caller still looks the admin up and compares `adminId`.
+ */
+export async function matchScreenKey(chatId: number, text: string): Promise<{ adminId: string; code: string } | null> {
+  const rows = await query<{ admin_id: string; keys: ScreenKey[] | null }>(
+    `SELECT admin_id::text AS admin_id, keys FROM bot_admin_state
+      WHERE chat_id = $1 AND keys IS NOT NULL AND updated_at > now() - make_interval(hours => ${SCREEN_KEYS_TTL_HOURS})`,
+    [chatId],
+  );
+  const r = rows[0];
+  if (!r || !Array.isArray(r.keys)) return null;
+  const want = text.trim();
+  const hit = r.keys.find((k) => k && typeof k.text === "string" && typeof k.code === "string" && k.text.trim() === want);
+  return hit ? { adminId: r.admin_id, code: hit.code } : null;
+}

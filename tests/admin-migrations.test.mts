@@ -285,7 +285,12 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     const blockedCol = () =>
       queryOne("SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'bot_blocked_at'");
     assert.ok(await blockedCol(), "046 column created");
+    const keysCol = () =>
+      queryOne("SELECT 1 FROM information_schema.columns WHERE table_name = 'bot_admin_state' AND column_name = 'keys'");
+    assert.ok(await keysCol(), "047 column created");
     for (const f of [
+      // 047: admin panel as reply-keyboard buttons (owner 2026-10-09) — bot_admin_state.keys.
+      "047_bot_admin_keys.sql",
       // 046: broadcast engine (docs/bonus/BONUS3.md C-Q5) — users.bot_blocked_at, recipient lease / attempts / kind, paused + failed statuses.
       "046_broadcast_engine.sql",
       // 045: mandatory channels (docs/bonus/BONUS3.md C-Q2) — bonus_channels.mandatory.
@@ -306,6 +311,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     ]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
+      if (f === "047_bot_admin_keys.sql") assert.ok(!(await keysCol()), "047 rollback drops the column");
       if (f === "046_broadcast_engine.sql") assert.ok(!(await blockedCol()), "046 rollback drops the column");
       if (f === "045_bonus_channel_mandatory.sql") assert.ok(!(await mandatoryCol()), "045 rollback drops the column");
       if (f === "043_bonus_claims_channel_idx.sql") assert.ok(!(await exists("bonus_channel_claims_channel_idx")), "043 rollback drops the index");

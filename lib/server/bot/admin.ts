@@ -60,6 +60,7 @@ import {
   draftScreen,
   inputProblemScreen,
   ADMIN_MENU,
+  adminMenuKeyboard,
   adminMenuScreen,
   payBonusAskScreen,
   payBonusConfirmScreen,
@@ -68,6 +69,7 @@ import {
   statsScreen,
   stepUpScreen,
   stopAskScreen,
+  type AdminScreen,
   type InputProblem,
 } from "./admin-screens";
 import { botStats } from "./admin-stats";
@@ -76,15 +78,17 @@ import {
   clearState,
   hasPendingStep,
   markBotReauth,
+  matchScreenKey,
   readState,
   releaseStep,
+  writeKeys,
   writeState,
   type AdminState,
   type BroadcastDraft,
   type ChannelDraft,
   type Draft,
 } from "./admin-state";
-import { esc, tgEmoji, type Screen } from "./ui";
+import { esc, tgEmoji } from "./ui";
 
 /**
  * In-bot admin panel (docs/bot-admin/PLAN.md): «📊 Statistika», «📣 Xabar
@@ -158,15 +162,34 @@ const REASON = {
   payBonus: "Telegram bot orqali to'lov bonusi o'zgartirildi",
 };
 
+/** `toast` becomes the first line of the screen: a reply-keyboard tap has no toast popup (owner 2026-10-09). */
+function withToast(screen: AdminScreen, toast?: string): AdminScreen {
+  return toast ? { ...screen, text: `${esc(toast)}\n\n${screen.text}` } : screen;
+}
+
 /**
- * Back to the admin home (owner 2026-10-09): there is no inline panel card any more — the inline
- * message is removed and the admin menu (the reply keyboard, `adminMenuScreen`) is sent again.
- * A message Telegram no longer lets the bot delete (older than 48 h) just loses its buttons.
+ * Sends an admin screen as a NEW message (a reply keyboard cannot be edited) and remembers the label -> code map
+ * of its keyboard for the chat BEFORE the keyboard appears, so the first tap already finds it. `tapped` is the
+ * message of an old inline `a:*` button that led here: its buttons are removed so they cannot be tapped twice.
  */
-async function backToMenu(a: BotAdmin, chatId: number, messageId: number): Promise<void> {
-  const del = await callBot("deleteMessage", { chat_id: chatId, message_id: messageId }).catch(() => null);
-  if (!del?.ok) await editScreen(chatId, messageId, { text: at(a.lang, "panel.closed") });
-  await sendScreen(chatId, adminMenuScreen(a));
+async function showScreen(a: BotAdmin, chatId: number, tapped: number | null, screen: AdminScreen, toast?: string): Promise<number | null> {
+  await writeKeys(chatId, a.adminId, screen.keys);
+  const id = await sendScreen(chatId, withToast(screen, toast));
+  if (tapped !== null) await callBot("editMessageReplyMarkup", { chat_id: chatId, message_id: tapped, reply_markup: { inline_keyboard: [] } }).catch(() => undefined);
+  return id;
+}
+
+/**
+ * Back to the admin home (owner 2026-10-09): there is no inline panel card any more — an old inline message is
+ * removed and the admin menu (the reply keyboard, `adminMenuScreen`) is sent again. A message Telegram no longer
+ * lets the bot delete (older than 48 h) just loses its buttons.
+ */
+async function backToMenu(a: BotAdmin, chatId: number, tapped: number | null, toast?: string): Promise<void> {
+  if (tapped !== null) {
+    const del = await callBot("deleteMessage", { chat_id: chatId, message_id: tapped }).catch(() => null);
+    if (!del?.ok) await editScreen(chatId, tapped, { text: at(a.lang, "panel.closed") });
+  }
+  await showScreen(a, chatId, null, adminMenuScreen(a), toast);
 }
 
 /** A typed percent: a whole number 0–50 («10», «10%», « 7 »), else `null`. The service validates again. */
@@ -209,7 +232,7 @@ export async function openPanel(chatId: number, telegramId: number): Promise<boo
   await cancelInput(chatId);
   await clearState(chatId);
   // Owner C-Q6: the admin menu is a reply keyboard at the bottom (not inline buttons under the message).
-  await sendScreen(chatId, adminMenuScreen(admin));
+  await showScreen(admin, chatId, null, adminMenuScreen(admin));
   return true;
 }
 
@@ -225,24 +248,41 @@ export function adminMenuAction(text: string): string | null {
 }
 
 /**
- * A tap on the admin reply keyboard. Only linked admins are served (anyone else's text falls through, `false`).
- * The action runs through `handleAdminCallback` (same permission, rate-limit, step-up and audit checks as the
- * inline buttons) on a fresh message it then edits; «Asosiy menyu» brings the main keyboard back.
+ * A tap on a screen button of the admin reply keyboard: the text is EXACTLY one of the labels of the screen last
+ * sent to this chat (`bot_admin_state.keys`, written by `showScreen`). It runs the code of that button through
+ * `handleAdminCallback` — the same permission, rate-limit, step-up and audit checks as the inline buttons. Only
+ * linked admins are served and only for the account the screen was sent to (anyone else's text, even an identical
+ * one, falls through to the ordinary bot: `false`).
  */
-export async function handleAdminMenuText(chatId: number, telegramId: number, text: string, updateId: number): Promise<boolean> {
+async function tapScreenKey(chatId: number, telegramId: number, text: string, updateId: number): Promise<boolean> {
+  if (chatId !== telegramId) return false;
+  const hit = await matchScreenKey(chatId, text);
+  if (!hit) return false;
+  const { admin } = await lookupAdmin(telegramId);
+  if (!admin || admin.adminId !== hit.adminId) return false;
+  const toast = await handleAdminCallback(telegramId, chatId, null, hit.code, updateId);
+  if (toast) await sendScreen(chatId, { text: esc(toast) });
+  return true;
+}
+
+/**
+ * A text from a private chat that may be an admin reply-keyboard tap: a button of the last screen (exact label), or
+ * one of the static admin menu buttons (any language, with or without the emoji). `false` = not ours.
+ */
+export async function handleAdminReplyText(chatId: number, telegramId: number, text: string, updateId: number): Promise<boolean> {
+  if (await tapScreenKey(chatId, telegramId, text, updateId)) return true;
   const action = adminMenuAction(text);
   if (!action || chatId !== telegramId) return false;
   const { admin } = await lookupAdmin(telegramId);
   if (!admin) return false;
   if (action === "main") {
     await clearState(chatId);
+    await writeKeys(chatId, admin.adminId, []);
     await sendScreen(chatId, keyboardMessage(admin.lang, telegramId, "note", undefined, { admin: true }));
     return true;
   }
-  const messageId = await sendScreen(chatId, { text: "⏳" });
-  if (messageId === null) return true;
-  const toast = await handleAdminCallback(telegramId, chatId, messageId, action, updateId);
-  if (toast) await editScreen(chatId, messageId, { text: esc(toast) });
+  const toast = await handleAdminCallback(telegramId, chatId, null, action, updateId);
+  if (toast) await sendScreen(chatId, { text: esc(toast) });
   return true;
 }
 
@@ -271,7 +311,7 @@ export type AdminMessage = {
 export async function handleAdminCallback(
   telegramId: number,
   chatId: number,
-  messageId: number,
+  messageId: number | null,
   data: string,
   updateId: number,
 ): Promise<string | undefined> {
@@ -290,8 +330,8 @@ export async function handleAdminCallback(
   const st = await readState(chatId, admin.adminId);
   if (env.admin2faRequired && CONFIRMS.has(c.kind) && needsStepUp(perm) && !st.reauthFresh) {
     const draft: Draft = { ...(st.draft ?? { t: "none" }), resume: data };
-    await editScreen(chatId, messageId, stepUpScreen(lang));
-    await writeState(chatId, admin.adminId, { step: "totp", draft, promptMessageId: messageId });
+    const prompt = await showScreen(admin, chatId, messageId, stepUpScreen(lang));
+    await writeState(chatId, admin.adminId, { step: "totp", draft, promptMessageId: prompt });
     return undefined;
   }
   try {
@@ -352,9 +392,28 @@ async function discardBroadcast(a: BotAdmin, d: BroadcastDraft, updateId: number
   }
 }
 
-async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, st: AdminState, chatId: number, messageId: number, updateId: number): Promise<string | undefined> {
+/**
+ * Keeps the progress card the delivery loop edits (`content.notify.messageId`) pointing at the NEWEST card and
+ * removes the superseded one: a reply keyboard cannot be edited, so every control tap sends a fresh card.
+ */
+async function moveProgressCard(id: string, chatId: number, messageId: number | null): Promise<void> {
+  if (messageId === null) return;
+  const prev = await queryOne<{ m: string | null }>("SELECT content #>> '{notify,messageId}' AS m FROM broadcasts WHERE id = $1", [id]);
+  await setProgressMessage(id, messageId);
+  const old = Number(prev?.m);
+  if (Number.isSafeInteger(old) && old > 0 && old !== messageId) {
+    await callBot("deleteMessage", { chat_id: chatId, message_id: old }).catch(() => undefined);
+  }
+}
+
+/**
+ * Runs one admin action. `messageId` is the inline message of an old `a:*` button that was tapped, or `null` when
+ * the action comes from a reply-keyboard tap. Screens are always SENT as new messages (a reply keyboard cannot be
+ * edited); a result toast that goes with a screen becomes the first line of that screen, any other toast is returned.
+ */
+async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, st: AdminState, chatId: number, messageId: number | null, updateId: number): Promise<string | undefined> {
   const l = a.lang;
-  const edit = (s: Screen) => editScreen(chatId, messageId, s);
+  const show = (s: AdminScreen, toast?: string) => showScreen(a, chatId, messageId, s, toast);
   const d = st.draft;
   switch (c.kind) {
     case "panel":
@@ -365,40 +424,42 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
     case "cancel":
       if (isBc(d)) await discardBroadcast(a, d, updateId);
       await clearState(chatId);
-      await backToMenu(a, chatId, messageId);
-      return at(l, "toast.cancelled");
+      await backToMenu(a, chatId, messageId, at(l, "toast.cancelled"));
+      return undefined;
     case "stats":
-      await edit(statsScreen(a, await botStats()));
+      await show(statsScreen(a, await botStats()));
       return undefined;
 
     /* ── broadcast ── */
-    case "bcStart":
+    case "bcStart": {
       if (isBc(d)) await discardBroadcast(a, d, updateId);
       await cancelInput(chatId);
-      await edit(broadcastAskScreen(l));
-      await writeState(chatId, a.adminId, { step: "bc_msg", draft: null, promptMessageId: messageId });
+      const id = await show(broadcastAskScreen(l));
+      await writeState(chatId, a.adminId, { step: "bc_msg", draft: null, promptMessageId: id });
       return undefined;
-    case "bcButton":
+    }
+    case "bcButton": {
       if (!isBc(d)) return at(l, "toast.expired");
       await cancelInput(chatId);
-      await edit(buttonAskScreen(l));
-      await writeState(chatId, a.adminId, { step: "bc_btn", draft: d, promptMessageId: messageId });
+      const id = await show(buttonAskScreen(l));
+      await writeState(chatId, a.adminId, { step: "bc_btn", draft: d, promptMessageId: id });
       return undefined;
+    }
     case "bcButtonDrop":
       if (!isBc(d)) return at(l, "toast.expired");
       await discardBroadcast(a, d, updateId);
       delete d.content.button;
-      await edit(draftScreen(l, d));
+      await show(draftScreen(l, d));
       await writeState(chatId, a.adminId, { step: null, draft: d });
       return undefined;
     case "bcDraft":
       if (!isBc(d)) return at(l, "toast.expired");
-      await edit(draftScreen(l, d));
+      await show(draftScreen(l, d));
       await writeState(chatId, a.adminId, { step: null, draft: d });
       return undefined;
     case "bcAudience":
       if (!isBc(d)) return at(l, "toast.expired");
-      await edit(audienceScreen(l, await counts()));
+      await show(audienceScreen(l, await counts()));
       await writeState(chatId, a.adminId, { step: null, draft: d });
       return undefined;
     case "bcPick": {
@@ -406,10 +467,10 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
       if (d.audience !== c.audience) await discardBroadcast(a, d, updateId);
       d.audience = c.audience;
       const n = (await audienceCount(AUDIENCES[c.audience])).count;
-      // The preview: the message exactly as recipients get it (copied back to the admin), then the confirm card under it.
-      await callBot("editMessageReplyMarkup", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } }).catch(() => undefined);
+      // The preview: the message exactly as recipients get it (copied back to the admin, with its own inline URL
+      // button — the one inline button left), then the confirm screen under it.
       await sendBroadcastContent(String(chatId), d.text, d.content);
-      await sendScreen(chatId, confirmScreen(l, c.audience, n));
+      await show(confirmScreen(l, c.audience, n));
       await writeState(chatId, a.adminId, { step: null, draft: d });
       return undefined;
     }
@@ -429,21 +490,21 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
         if (e instanceof ApiError && e.status === 409 && e.extra.code !== "count_changed" && e.extra.code !== "empty_audience") return at(l, "toast.expired");
         if (e instanceof ApiError && (e.extra.code === "count_changed" || e.extra.code === "empty_audience")) {
           const now = Number(e.extra.count) || 0;
-          await edit(confirmScreen(l, d.audience, now));
-          return at(l, "toast.countChanged", { n: now });
+          await show(confirmScreen(l, d.audience, now), at(l, "toast.countChanged", { n: now }));
+          return undefined;
         }
         throw e;
       }
       await clearState(chatId);
       const b = await getBroadcast(id);
-      // The engine keeps editing THIS message with the live numbers.
-      await setProgressMessage(id, await edit(progressScreen(l, b.broadcast, b.stats, true)));
-      return at(l, "toast.queued");
+      // The engine keeps editing THIS message (text only) with the live numbers; the controls are its reply keyboard.
+      await moveProgressCard(id, chatId, await show(progressScreen(l, b.broadcast, b.stats, true), at(l, "toast.queued")));
+      return undefined;
     }
     case "bcProgress": {
       const b = await getBroadcast(c.id);
-      await setProgressMessage(c.id, await edit(progressScreen(l, b.broadcast, b.stats, allowed(a, "broadcasts.send"))));
-      return at(l, "toast.refreshed");
+      await moveProgressCard(c.id, chatId, await show(progressScreen(l, b.broadcast, b.stats, allowed(a, "broadcasts.send")), at(l, "toast.refreshed")));
+      return undefined;
     }
     case "bcPause":
     case "bcResume": {
@@ -455,87 +516,96 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
         if (!(e instanceof ApiError && e.status === 409)) throw e;
       }
       const b = await getBroadcast(c.id);
-      await setProgressMessage(c.id, await edit(progressScreen(l, b.broadcast, b.stats, true)));
-      return at(l, c.kind === "bcPause" ? "toast.paused" : "toast.resumed");
+      await moveProgressCard(c.id, chatId, await show(progressScreen(l, b.broadcast, b.stats, true), at(l, c.kind === "bcPause" ? "toast.paused" : "toast.resumed")));
+      return undefined;
     }
     case "bcStopAsk": {
       const b = await getBroadcast(c.id);
-      await edit(stopAskScreen(l, c.id, b.stats.pending));
+      await show(stopAskScreen(l, c.id, b.stats.pending));
       return undefined;
     }
     case "bcStop": {
       await cancelBroadcast(actorOf(a, updateId), c.id, { reason: REASON.stop }, { via: "bot" });
       const b = await getBroadcast(c.id);
-      await edit(progressScreen(l, b.broadcast, b.stats, true));
-      return at(l, "toast.stopped");
+      await moveProgressCard(c.id, chatId, await show(progressScreen(l, b.broadcast, b.stats, true), at(l, "toast.stopped")));
+      return undefined;
     }
 
     /* ── channels ── */
     case "channels":
-      await edit(channelsScreen(a, (await listBonusChannels()).items));
+      await show(channelsScreen(a, (await listBonusChannels()).items));
       return undefined;
-    case "chConnect":
+    case "chConnect": {
       await cancelInput(chatId);
-      await edit(channelAskScreen(l));
-      await writeState(chatId, a.adminId, { step: "ch_ref", draft: null, promptMessageId: messageId });
+      const id = await show(channelAskScreen(l));
+      await writeState(chatId, a.adminId, { step: "ch_ref", draft: null, promptMessageId: id });
       return undefined;
+    }
     case "chKinds":
       if (!isCh(d)) return at(l, "toast.expired");
-      await edit(channelKindScreen(l, d));
+      await show(channelKindScreen(l, d));
       return undefined;
     case "chKind":
       if (!isCh(d)) return at(l, "toast.expired");
       d.mandatory = c.mandatory;
       delete d.type;
-      await edit(channelTypeScreen(l, d));
+      await show(channelTypeScreen(l, d));
       await writeState(chatId, a.adminId, { step: null, draft: d });
       return undefined;
     case "chTypes":
       if (!isCh(d)) return at(l, "toast.expired");
-      await edit(channelTypeScreen(l, d));
+      await show(channelTypeScreen(l, d));
       return undefined;
     case "chType":
       // A preset of the other kind (an old button) never mixes «mandatory» with an optional preset.
       if (!isCh(d) || !typeFits(c.type, d.mandatory ?? false)) return at(l, "toast.expired");
       d.type = c.type;
-      await edit(channelConfirmScreen(l, d, c.type));
+      await show(channelConfirmScreen(l, d, c.type));
       await writeState(chatId, a.adminId, { step: null, draft: d });
       return undefined;
     case "chCreate": {
       if (!isCh(d) || d.type !== c.type || !typeFits(c.type, d.mandatory ?? false)) return at(l, "toast.expired");
-      return createChannel(a, d, c.type, chatId, messageId, updateId);
+      return createChannel(a, d, c.type, show, updateId, chatId);
     }
     case "chToggle": {
       const cur = (await listBonusChannels()).items.find((x) => x.id === c.id);
       if (!cur) return at(l, "toast.old");
       await updateBonusChannel(actorOf(a, updateId), c.id, { active: !cur.active, reason: REASON.toggle });
-      await edit(channelsScreen(a, (await listBonusChannels()).items));
-      return at(l, cur.active ? "toast.chOff" : "toast.chOn");
+      await show(channelsScreen(a, (await listBonusChannels()).items), at(l, cur.active ? "toast.chOff" : "toast.chOn"));
+      return undefined;
     }
 
     /* ── payment bonus (C-Q4): the web's setting, through `payment-bonus.ts` ── */
     case "payBonus":
       await clearState(chatId);
-      await edit(payBonusScreen(a, await getPaymentBonusPercent()));
+      await show(payBonusScreen(a, await getPaymentBonusPercent()));
       return undefined;
-    case "pbOther":
+    case "pbOther": {
       await cancelInput(chatId);
-      await edit(payBonusAskScreen(l));
-      await writeState(chatId, a.adminId, { step: "pb_val", draft: null, promptMessageId: messageId });
+      const id = await show(payBonusAskScreen(l));
+      await writeState(chatId, a.adminId, { step: "pb_val", draft: null, promptMessageId: id });
       return undefined;
+    }
     case "pbPick":
-      await edit(payBonusConfirmScreen(l, await getPaymentBonusPercent(), c.percent));
+      await show(payBonusConfirmScreen(l, await getPaymentBonusPercent(), c.percent));
       return undefined;
     case "pbSet": {
       const now = await setPaymentBonusPercent(actorOf(a, updateId), c.percent, REASON.payBonus, { via: "bot" });
       await clearState(chatId);
-      await edit(payBonusScreen(a, now));
-      return at(l, "toast.pbSaved", { p: now });
+      await show(payBonusScreen(a, now), at(l, "toast.pbSaved", { p: now }));
+      return undefined;
     }
   }
 }
 
-async function createChannel(a: BotAdmin, d: ChannelDraft, type: ChannelType, chatId: number, messageId: number, updateId: number): Promise<string> {
+async function createChannel(
+  a: BotAdmin,
+  d: ChannelDraft,
+  type: ChannelType,
+  show: (s: AdminScreen, toast?: string) => Promise<number | null>,
+  updateId: number,
+  chatId: number,
+): Promise<undefined> {
   const p = CHANNEL_PRESETS[type];
   const actor = actorOf(a, updateId);
   // A private channel needs an invite link for the «Obuna bo‘lish» button: ask Telegram for one (audited) when possible.
@@ -558,8 +628,8 @@ async function createChannel(a: BotAdmin, d: ChannelDraft, type: ChannelType, ch
     reason: REASON.channel,
   });
   await clearState(chatId);
-  await editScreen(chatId, messageId, channelsScreen(a, (await listBonusChannels()).items));
-  return !d.username && !inviteLink ? `${at(a.lang, "toast.chCreated")}. ${at(a.lang, "ch.noInvite")}`.slice(0, 190) : at(a.lang, "toast.chCreated");
+  const toast = !d.username && !inviteLink ? `${at(a.lang, "toast.chCreated")}. ${at(a.lang, "ch.noInvite")}`.slice(0, 190) : at(a.lang, "toast.chCreated");
+  await show(channelsScreen(a, (await listBonusChannels()).items), toast);
 }
 
 /* ───────────────────────── Typed answers ───────────────────────── */
@@ -617,6 +687,9 @@ export async function handleAdminInput(m: AdminMessage, updateId: number): Promi
   if (!m.from || m.from.is_bot || m.chat.type !== "private" || m.from.id !== chatId) return false;
   if (!(await hasPendingStep(chatId))) return false;
   const text = m.text;
+  // The step's own keyboard («Bekor qilish» / «Orqaga») is checked BEFORE the text is taken as content: typing the
+  // label of a button is pressing it (its code runs through the ordinary callback path).
+  if (text !== undefined && (await tapScreenKey(chatId, m.from.id, text, updateId))) return true;
   if (text !== undefined && (text.trim().startsWith("/") || matchKeyboard(text) || isAdminButtonText(text) || adminMenuAction(text))) {
     await clearState(chatId);
     return false;
@@ -638,21 +711,17 @@ export async function handleAdminInput(m: AdminMessage, updateId: number): Promi
     return true;
   }
   if (!(await claimStep(chatId, admin.adminId, updateId))) return true;
-  const reprompt = async (screen: Screen) => {
-    const id = await sendScreen(chatId, screen);
+  const reprompt = async (screen: AdminScreen) => {
+    const id = await showScreen(admin, chatId, null, screen);
     await releaseStep(chatId, updateId, id);
   };
-  const clearPrompt = () =>
-    st.promptMessageId
-      ? callBot("editMessageReplyMarkup", { chat_id: chatId, message_id: st.promptMessageId, reply_markup: { inline_keyboard: [] } }).catch(() => undefined)
-      : Promise.resolve();
+  const show = (screen: AdminScreen) => showScreen(admin, chatId, null, screen);
 
   switch (st.step) {
     case "bc_msg": {
       const r = draftFromMessage(m);
       if ("problem" in r) return reprompt(inputProblemScreen(l, r.problem, broadcastAskScreen(l))).then(() => true);
-      await clearPrompt();
-      await sendScreen(chatId, draftScreen(l, r.ok));
+      await show(draftScreen(l, r.ok));
       await writeState(chatId, admin.adminId, { step: null, draft: r.ok });
       return true;
     }
@@ -667,8 +736,7 @@ export async function handleAdminInput(m: AdminMessage, updateId: number): Promi
       if (!b) return reprompt(inputProblemScreen(l, { kind: "button" }, buttonAskScreen(l))).then(() => true);
       await discardBroadcast(admin, d, updateId);
       d.content.button = b;
-      await clearPrompt();
-      await sendScreen(chatId, draftScreen(l, d));
+      await show(draftScreen(l, d));
       await writeState(chatId, admin.adminId, { step: null, draft: d });
       return true;
     }
@@ -682,23 +750,21 @@ export async function handleAdminInput(m: AdminMessage, updateId: number): Promi
         if (!(e instanceof ApiError)) throw e;
         return reprompt(channelProblemScreen(l, at(l, "ch.bad", { why: e.message }))).then(() => true);
       }
-      await clearPrompt();
       if (resolved.existingId) {
         await sendScreen(chatId, { text: `${tgEmoji("warn")} ${at(l, "ch.exists")}` });
-        await sendScreen(chatId, channelsScreen(admin, (await listBonusChannels()).items));
+        await show(channelsScreen(admin, (await listBonusChannels()).items));
         await clearState(chatId);
         return true;
       }
       const d: ChannelDraft = { t: "ch", chatId: resolved.chatId, title: resolved.title, username: resolved.username, botAdmin: resolved.botAdmin };
-      await sendScreen(chatId, channelKindScreen(l, d));
+      await show(channelKindScreen(l, d));
       await writeState(chatId, admin.adminId, { step: null, draft: d });
       return true;
     }
     case "pb_val": {
       const p = percentFromText(text);
       if (p === null) return reprompt(payBonusAskScreen(l, at(l, "pb.bad"))).then(() => true);
-      await clearPrompt();
-      await sendScreen(chatId, payBonusConfirmScreen(l, await getPaymentBonusPercent(), p));
+      await show(payBonusConfirmScreen(l, await getPaymentBonusPercent(), p));
       await writeState(chatId, admin.adminId, { step: null, draft: null });
       return true;
     }
@@ -713,7 +779,7 @@ async function stepUpInput(
   chatId: number,
   m: AdminMessage,
   updateId: number,
-  reprompt: (s: Screen) => Promise<void>,
+  reprompt: (s: AdminScreen) => Promise<void>,
 ): Promise<boolean> {
   const l = a.lang;
   // The code is a secret: removed from the chat whatever the outcome (best effort).
@@ -738,9 +804,10 @@ async function stepUpInput(
   const draft: Draft | null = st.draft && st.draft.t !== "none" ? { ...st.draft } : null;
   if (draft) delete draft.resume;
   await writeState(chatId, a.adminId, { step: null, draft, promptMessageId: st.promptMessageId });
-  if (resume && st.promptMessageId) {
-    const toast = await handleAdminCallback(a.telegramId, chatId, st.promptMessageId, resume, updateId);
-    if (toast) await sendScreen(chatId, { text: toast });
+  if (resume) {
+    // The code was typed in the chat: no inline message is involved, the confirmed action answers with a new screen.
+    const toast = await handleAdminCallback(a.telegramId, chatId, null, resume, updateId);
+    if (toast) await sendScreen(chatId, { text: esc(toast) });
   }
   return true;
 }
@@ -754,13 +821,16 @@ export async function notifyBroadcastDone(id: string, notify: { chatId: string; 
   if (!admin) return;
   const r = await queryOne<{ sent: number; failed: number; total: number; status: string }>("SELECT sent, failed, total, status FROM broadcasts WHERE id = $1", [id]);
   if (!r) return;
+  // The summary comes with the admin menu reply keyboard (the progress controls are over).
+  const withMenu = (text: string): AdminScreen => ({ text, reply_markup: adminMenuKeyboard(admin), keys: [] });
   if (r.status === "failed") {
     // The engine aborted it (every send was refused for good): the card names the reason.
     const b = await getBroadcast(id);
-    await sendScreen(chatId, progressScreen(langOf(admin.lang), b.broadcast, b.stats, false));
+    await showScreen(admin, chatId, null, withMenu(progressScreen(langOf(admin.lang), b.broadcast, b.stats, false).text));
     return;
   }
-  await sendScreen(chatId, broadcastDoneScreen(langOf(admin.lang), id, { sent: Number(r.sent), failed: Number(r.failed), total: Number(r.total) }));
+  const done = broadcastDoneScreen(langOf(admin.lang), id, { sent: Number(r.sent), failed: Number(r.failed), total: Number(r.total) });
+  await showScreen(admin, chatId, null, withMenu(done.text));
 }
 
 /**
@@ -780,7 +850,8 @@ export async function editBroadcastProgress(id: string, notify: { chatId: string
     text: screen.text,
     parse_mode: "HTML",
     disable_web_page_preview: true,
-    reply_markup: screen.reply_markup ?? { inline_keyboard: [] },
+    // Text only: the controls live in the reply keyboard of the card's sending (`progressScreen`).
+    reply_markup: { inline_keyboard: [] },
   });
 }
 

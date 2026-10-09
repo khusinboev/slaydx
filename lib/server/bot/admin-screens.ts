@@ -8,14 +8,43 @@ import { acb, type AudienceCode, type ChannelType } from "./admin-codes";
 import { at } from "./admin-i18n";
 import type { BotAdmin } from "./admin-access";
 import type { BotStats } from "./admin-stats";
-import type { BroadcastDraft, ChannelDraft } from "./admin-state";
+import type { BroadcastDraft, ChannelDraft, ScreenKey } from "./admin-state";
 import { toolTitle, type Lang } from "./i18n";
-import { clip, esc, inlineButton, keyboardButton, rows, tgEmoji, type InlineButton, type KeyboardButton, type Screen } from "./ui";
+import { clip, esc, keyboardButton, tgEmoji, type ButtonStyle, type IconKey, type KeyboardButton, type Screen } from "./ui";
 
 /**
  * In-bot admin panel screens (docs/bot-admin/PLAN.md) — pure renderers.
  * Buttons appear only for what the role may do; the handlers re-check anyway.
+ *
+ * Every screen is a REPLY keyboard (owner 2026-10-09): a screen declares its buttons as rows of
+ * `{label, callback code}`; `keyScreen` renders the keyboard and the flat `keys` list (label -> code) that
+ * the bot stores for the chat (`admin-state.ts writeKeys`). A tap arrives as a plain text message, is mapped
+ * back to the code and runs the SAME handler the inline button ran. The only inline buttons left are the
+ * broadcast's own URL button (the recipients' copy), which Telegram allows nowhere else.
  */
+
+/** A screen of the admin panel: the message, its reply keyboard and the label -> code map of that keyboard. */
+export type AdminScreen = Screen & { keys: ScreenKey[] };
+
+type KeyDef = { icon: IconKey | null; text: string; code: string; style?: ButtonStyle };
+const key = (icon: IconKey | null, text: string, code: string, style?: ButtonStyle): KeyDef => ({ icon, text, code, ...(style ? { style } : {}) });
+
+/** The screen's reply keyboard (rows of `KeyDef`; empty rows / falsy buttons dropped) + its label -> code map. */
+function keyScreen(text: string, ...defs: (KeyDef | null | undefined | false)[][]): AdminScreen {
+  const keyboard: KeyboardButton[][] = [];
+  const keys: ScreenKey[] = [];
+  for (const row of defs) {
+    const line: KeyboardButton[] = [];
+    for (const k of row) {
+      if (!k) continue;
+      const b = keyboardButton(k.icon, k.text, k.style ? { style: k.style } : {});
+      line.push(b);
+      keys.push({ text: b.text, code: k.code });
+    }
+    if (line.length) keyboard.push(line);
+  }
+  return { text, reply_markup: { keyboard, is_persistent: true, resize_keyboard: true }, keys };
+}
 
 /**
  * Channel bonus presets (docs/bonus/PLAN.md B-Q2): optional — news 2 000 once, extra 1 000 + 2 000
@@ -32,8 +61,8 @@ const som = (lang: Lang, v: number): string => (lang === "uz" ? `${groupDigits(v
 const g = groupDigits;
 const can = (a: BotAdmin, p: Permission) => a.permissions.includes(p);
 const head = (icon: Parameters<typeof tgEmoji>[0], title: string) => `${tgEmoji(icon)} <b>${title}</b>`;
-const back = (lang: Lang, data = acb.panel()) => inlineButton("back", at(lang, "btn.back"), { callback_data: data });
-const cancel = (lang: Lang) => inlineButton("cancel", at(lang, "btn.cancel"), { callback_data: acb.cancel() }, "danger");
+const back = (lang: Lang, code = acb.panel()) => key("back", at(lang, "btn.back"), code);
+const cancel = (lang: Lang) => key("cancel", at(lang, "btn.cancel"), acb.cancel(), "danger");
 
 /* ───────────────────────── Panel ───────────────────────── */
 
@@ -65,11 +94,13 @@ export function adminMenuKeyboard(a: BotAdmin): Record<string, unknown> {
 }
 
 /** The panel's opening message: title, who you are, the hint — with the admin reply keyboard. */
-export function adminMenuScreen(a: BotAdmin): Screen {
+export function adminMenuScreen(a: BotAdmin): AdminScreen {
   const l = a.lang;
   return {
     text: `${head("admin", at(l, "panel.title"))}\n\n${at(l, "panel.lead", { name: esc(a.name), role: at(l, `role.${a.role}`) })}\n\n${at(l, "panel.menuHint")}`,
     reply_markup: adminMenuKeyboard(a),
+    // The menu's own texts are static (`admin.ts adminMenuAction`); no per-screen buttons.
+    keys: [],
   };
 }
 
@@ -93,7 +124,7 @@ function tashkentTime(d: Date): string {
     .replace(",", "");
 }
 
-export function statsScreen(a: BotAdmin, s: BotStats): Screen {
+export function statsScreen(a: BotAdmin, s: BotStats): AdminScreen {
   const l = a.lang;
   const lines = [
     head("chart", at(l, "st.title")),
@@ -134,16 +165,13 @@ export function statsScreen(a: BotAdmin, s: BotStats): Screen {
     }
   }
   lines.push("", `<i>${at(l, "st.at", { time: tashkentTime(s.at) })}</i>`);
-  return {
-    text: lines.join("\n"),
-    reply_markup: rows([inlineButton("refresh", at(l, "btn.refresh"), { callback_data: acb.stats() }, "primary")], [back(l)]),
-  };
+  return keyScreen(lines.join("\n"), [key("refresh", at(l, "btn.refresh"), acb.stats(), "primary"), back(l)]);
 }
 
 /* ───────────────────────── Xabar yuborish ───────────────────────── */
 
-export function broadcastAskScreen(lang: Lang): Screen {
-  return { text: `${head("megaphone", at(lang, "bc.title"))}\n\n${at(lang, "bc.ask")}`, reply_markup: rows([cancel(lang)]) };
+export function broadcastAskScreen(lang: Lang): AdminScreen {
+  return keyScreen(`${head("megaphone", at(lang, "bc.title"))}\n\n${at(lang, "bc.ask")}`, [cancel(lang)]);
 }
 
 export type InputProblem =
@@ -153,7 +181,7 @@ export type InputProblem =
   | { kind: "button" };
 
 /** The prompt again with what was wrong on top (a new message under the admin's answer). */
-export function inputProblemScreen(lang: Lang, p: InputProblem, prompt: Screen): Screen {
+export function inputProblemScreen(lang: Lang, p: InputProblem, prompt: AdminScreen): AdminScreen {
   const why =
     p.kind === "type"
       ? at(lang, "bc.badType")
@@ -162,13 +190,13 @@ export function inputProblemScreen(lang: Lang, p: InputProblem, prompt: Screen):
         : p.kind === "caption"
           ? at(lang, "bc.captionLong", { n: g(p.n), max: g(CAPTION_MAX) })
           : at(lang, "bc.buttonBad", { max: BUTTON_TEXT_MAX });
-  return { text: `${tgEmoji("warn")} ${esc(why)}\n\n${prompt.text}`, reply_markup: prompt.reply_markup };
+  return { ...prompt, text: `${tgEmoji("warn")} ${esc(why)}\n\n${prompt.text}` };
 }
 
-export function draftScreen(lang: Lang, d: BroadcastDraft): Screen {
+export function draftScreen(lang: Lang, d: BroadcastDraft): AdminScreen {
   const b = d.content.button;
-  return {
-    text: [
+  return keyScreen(
+    [
       head("megaphone", at(lang, "bc.received")),
       "",
       at(lang, "bc.kindLine", { kind: at(lang, `bc.kind.${d.content.kind}`), n: g(Array.from(d.text).length) }),
@@ -176,23 +204,14 @@ export function draftScreen(lang: Lang, d: BroadcastDraft): Screen {
       "",
       at(lang, "bc.draftHint"),
     ].join("\n"),
-    reply_markup: rows(
-      [
-        b
-          ? inlineButton("cancel", at(lang, "bc.removeButton"), { callback_data: acb.bcButtonDrop() })
-          : inlineButton("link", at(lang, "bc.addButton"), { callback_data: acb.bcButton() }),
-      ],
-      [inlineButton("group", at(lang, "bc.toAudience"), { callback_data: acb.bcAudience() }, "primary")],
-      [cancel(lang)],
-    ),
-  };
+    [b ? key("cancel", at(lang, "bc.removeButton"), acb.bcButtonDrop()) : key("link", at(lang, "bc.addButton"), acb.bcButton())],
+    [key("group", at(lang, "bc.toAudience"), acb.bcAudience(), "primary")],
+    [cancel(lang)],
+  );
 }
 
-export function buttonAskScreen(lang: Lang): Screen {
-  return {
-    text: `${head("link", at(lang, "bc.addButton"))}\n\n${at(lang, "bc.buttonAsk", { max: BUTTON_TEXT_MAX })}`,
-    reply_markup: rows([back(lang, acb.cancel())]),
-  };
+export function buttonAskScreen(lang: Lang): AdminScreen {
+  return keyScreen(`${head("link", at(lang, "bc.addButton"))}\n\n${at(lang, "bc.buttonAsk", { max: BUTTON_TEXT_MAX })}`, [back(lang, acb.bcDraft()), cancel(lang)]);
 }
 
 const AUD_KEY = { all: "aud.all", act: "aud.act", new: "aud.new" } as const;
@@ -202,27 +221,21 @@ export function audienceLabel(lang: Lang, a: AudienceCode): string {
   return at(lang, AUD_KEY[a]);
 }
 
-export function audienceScreen(lang: Lang, counts: Record<AudienceCode, number>): Screen {
-  const btn = (a: AudienceCode) => inlineButton(AUD_ICON[a], `${audienceLabel(lang, a)} · ${g(counts[a])}`, { callback_data: acb.bcPick(a) });
-  return {
-    text: `${head("group", at(lang, "bc.audienceTitle"))}\n\n${at(lang, "bc.audienceLead")}`,
-    reply_markup: rows([btn("all")], [btn("act")], [btn("new")], [back(lang, acb.bcDraft())], [cancel(lang)]),
-  };
+export function audienceScreen(lang: Lang, counts: Record<AudienceCode, number>): AdminScreen {
+  const btn = (a: AudienceCode) => key(AUD_ICON[a], `${audienceLabel(lang, a)} · ${g(counts[a])}`, acb.bcPick(a));
+  return keyScreen(`${head("group", at(lang, "bc.audienceTitle"))}\n\n${at(lang, "bc.audienceLead")}`, [btn("all")], [btn("act")], [btn("new")], [back(lang, acb.bcDraft()), cancel(lang)]);
 }
 
 /** Under the preview copy: audience + count, «🧪 O‘zimga sinov», «✅ Yuborish (N kishiga)». */
-export function confirmScreen(lang: Lang, a: AudienceCode, count: number): Screen {
+export function confirmScreen(lang: Lang, a: AudienceCode, count: number): AdminScreen {
   const lines = [head("search", at(lang, "bc.previewTitle")), "", at(lang, "bc.previewLine", { aud: audienceLabel(lang, a), n: g(count) })];
   lines.push(count > 0 ? at(lang, "bc.previewHint") : `${tgEmoji("warn")} ${at(lang, "bc.empty")}`);
-  return {
-    text: lines.join("\n"),
-    reply_markup: rows(
-      [inlineButton("sparkles", at(lang, "bc.test"), { callback_data: acb.bcTest() })],
-      [count > 0 && inlineButton("save", at(lang, "bc.send", { n: g(count) }), { callback_data: acb.bcSend(count) }, "success")],
-      [back(lang, acb.bcAudience())],
-      [cancel(lang)],
-    ),
-  };
+  return keyScreen(
+    lines.join("\n"),
+    [key("sparkles", at(lang, "bc.test"), acb.bcTest())],
+    [count > 0 && key("save", at(lang, "bc.send", { n: g(count) }), acb.bcSend(count), "success")],
+    [back(lang, acb.bcAudience()), cancel(lang)],
+  );
 }
 
 /** «1 daq 05 s» / «42 s» for the ETA line. */
@@ -231,7 +244,7 @@ function etaText(seconds: number): string {
   return t < 60 ? `${t} s` : `${Math.floor(t / 60)} min ${String(t % 60).padStart(2, "0")} s`;
 }
 
-export function progressScreen(lang: Lang, b: AdminBroadcast, s: BroadcastStats, canStop: boolean): Screen {
+export function progressScreen(lang: Lang, b: AdminBroadcast, s: BroadcastStats, canStop: boolean): AdminScreen {
   const running = b.status === "queued" || b.status === "sending";
   const live = running || b.status === "draft" || b.status === "paused";
   const lines = [
@@ -244,32 +257,30 @@ export function progressScreen(lang: Lang, b: AdminBroadcast, s: BroadcastStats,
     lines.push(at(lang, "bc.speed", { speed: s.speed.toFixed(1), eta: s.etaSeconds === null ? "—" : etaText(s.etaSeconds) }));
   }
   if (b.status === "failed" && b.failReason) lines.push("", esc(b.failReason));
-  return {
-    text: lines.join("\n"),
-    reply_markup: rows(
-      [live && inlineButton("refresh", at(lang, "btn.refresh"), { callback_data: acb.bcProgress(b.id) }, "primary")],
-      [running && canStop && inlineButton("clock", at(lang, "bc.pause"), { callback_data: acb.bcPause(b.id) })],
-      [b.status === "paused" && canStop && inlineButton("next", at(lang, "bc.resume"), { callback_data: acb.bcResume(b.id) }, "success")],
-      [live && b.status !== "draft" && canStop && inlineButton("stop", at(lang, "bc.stop"), { callback_data: acb.bcStopAsk(b.id) }, "danger")],
-      [inlineButton("admin", at(lang, "btn.panel"), { callback_data: acb.panel() })],
-    ),
-  };
+  // The bot message itself is only edited as TEXT by the delivery loop; these are the controls (reply keyboard).
+  return keyScreen(
+    lines.join("\n"),
+    [
+      live && key("refresh", at(lang, "btn.refresh"), acb.bcProgress(b.id), "primary"),
+      running && canStop && key("clock", at(lang, "bc.pause"), acb.bcPause(b.id)),
+      b.status === "paused" && canStop && key("next", at(lang, "bc.resume"), acb.bcResume(b.id), "success"),
+    ],
+    [live && b.status !== "draft" && canStop && key("stop", at(lang, "bc.stop"), acb.bcStopAsk(b.id), "danger"), key("admin", at(lang, "btn.panel"), acb.panel())],
+  );
 }
 
-export function stopAskScreen(lang: Lang, id: string, unsent: number): Screen {
-  return {
-    text: `${tgEmoji("stop")} ${at(lang, "bc.stopAsk", { id, n: g(unsent) })}`,
-    reply_markup: rows(
-      [inlineButton("stop", at(lang, "bc.stopYes"), { callback_data: acb.bcStop(id) }, "danger")],
-      [back(lang, acb.bcProgress(id))],
-    ),
-  };
+export function stopAskScreen(lang: Lang, id: string, unsent: number): AdminScreen {
+  return keyScreen(
+    `${tgEmoji("stop")} ${at(lang, "bc.stopAsk", { id, n: g(unsent) })}`,
+    [key("stop", at(lang, "bc.stopYes"), acb.bcStop(id), "danger")],
+    [back(lang, acb.bcProgress(id))],
+  );
 }
 
+/** The finished-broadcast summary: text only - the delivery loop sends it with the admin menu reply keyboard. */
 export function broadcastDoneScreen(lang: Lang, id: string, s: { sent: number; failed: number; total: number }): Screen {
   return {
     text: `${tgEmoji("party")} <b>${at(lang, "bc.doneTitle", { id })}</b>\n${at(lang, "bc.doneLine", { sent: g(s.sent), failed: g(s.failed), total: g(s.total) })}`,
-    reply_markup: rows([inlineButton("admin", at(lang, "btn.panel"), { callback_data: acb.panel() })]),
   };
 }
 
@@ -283,7 +294,7 @@ function amountText(lang: Lang, c: { joinBonus: number; stayBonus: number; stayD
 /** «🔒 » before a mandatory channel (C-Q2). */
 const lockMark = (c: { mandatory?: boolean }) => (c.mandatory ? "🔒 " : "");
 
-export function channelsScreen(a: BotAdmin, items: BonusChannelItem[]): Screen {
+export function channelsScreen(a: BotAdmin, items: BonusChannelItem[]): AdminScreen {
   const l = a.lang;
   const edit = can(a, "bonus.edit");
   const lines = [head("megaphone", at(l, "ch.title")), ""];
@@ -300,22 +311,21 @@ export function channelsScreen(a: BotAdmin, items: BonusChannelItem[]): Screen {
     );
   }
   if (items.length) lines.push("", edit ? at(l, "ch.toggleHint") : at(l, "ch.viewOnly"));
-  const toggles: InlineButton[][] = edit
-    ? items.slice(0, 20).map((c) => [inlineButton(null, `${c.active ? "✅" : "⏸"} ${lockMark(c)}${clip(c.title, 30)}`, { callback_data: acb.chToggle(c.id) })])
+  // One button per channel; the «N.» prefix keeps every label unique (two channels may share a title) and the
+  // title is clipped by code points (`clip`), so a label is never cut inside an emoji.
+  const toggles: KeyDef[][] = edit
+    ? items.slice(0, 20).map((c, i) => [key(null, `${i + 1}. ${c.active ? "✅" : "⏸"} ${lockMark(c)}${clip(c.title, 30)}`, acb.chToggle(c.id))])
     : [];
-  return {
-    text: lines.join("\n"),
-    reply_markup: rows(...toggles, [edit && inlineButton("plus", at(l, "ch.connect"), { callback_data: acb.chConnect() }, "primary")], [back(l)]),
-  };
+  return keyScreen(lines.join("\n"), ...toggles, [edit && key("plus", at(l, "ch.connect"), acb.chConnect(), "primary"), back(l)]);
 }
 
-export function channelAskScreen(lang: Lang): Screen {
-  return { text: `${head("megaphone", at(lang, "ch.connect"))}\n\n${at(lang, "ch.ask")}`, reply_markup: rows([cancel(lang)]) };
+export function channelAskScreen(lang: Lang): AdminScreen {
+  return keyScreen(`${head("megaphone", at(lang, "ch.connect"))}\n\n${at(lang, "ch.ask")}`, [cancel(lang)]);
 }
 
-export function channelProblemScreen(lang: Lang, why: string): Screen {
+export function channelProblemScreen(lang: Lang, why: string): AdminScreen {
   const prompt = channelAskScreen(lang);
-  return { text: `${tgEmoji("warn")} ${why}\n\n${prompt.text}`, reply_markup: prompt.reply_markup };
+  return { ...prompt, text: `${tgEmoji("warn")} ${why}\n\n${prompt.text}` };
 }
 
 function channelHead(lang: Lang, d: ChannelDraft): string[] {
@@ -325,38 +335,32 @@ function channelHead(lang: Lang, d: ChannelDraft): string[] {
 }
 
 /** After resolving the channel: «🔒 Majburiy» or «➕ Ixtiyoriy» (docs/bonus/BONUS3.md C-Q2), then the bonus presets. */
-export function channelKindScreen(lang: Lang, d: ChannelDraft): Screen {
-  return {
-    text: [...channelHead(lang, d), "", at(lang, "ch.pickKind")].join("\n"),
-    reply_markup: rows(
-      [inlineButton(null, at(lang, "ch.kindM"), { callback_data: acb.chKind("m") }, "primary")],
-      [inlineButton(null, at(lang, "ch.kindO"), { callback_data: acb.chKind("o") })],
-      [cancel(lang)],
-    ),
-  };
+export function channelKindScreen(lang: Lang, d: ChannelDraft): AdminScreen {
+  return keyScreen(
+    [...channelHead(lang, d), "", at(lang, "ch.pickKind")].join("\n"),
+    [key(null, at(lang, "ch.kindM"), acb.chKind("m"), "primary"), key(null, at(lang, "ch.kindO"), acb.chKind("o"))],
+    [cancel(lang)],
+  );
 }
 
 /** Bonus presets of the picked kind: mandatory — 2 000 (default) / no bonus; optional — today's news / extra. */
-export function channelTypeScreen(lang: Lang, d: ChannelDraft): Screen {
+export function channelTypeScreen(lang: Lang, d: ChannelDraft): AdminScreen {
   const kind = d.mandatory ? at(lang, "ch.kindM") : at(lang, "ch.kindO");
   const n = CHANNEL_PRESETS.n;
   const e = CHANNEL_PRESETS.e;
-  const presets: InlineButton[][] = d.mandatory
+  const presets: KeyDef[][] = d.mandatory
     ? [
-        [inlineButton("gift", at(lang, "ch.typeM", { join: som(lang, CHANNEL_PRESETS.m.joinBonus) }), { callback_data: acb.chType("m") }, "primary")],
-        [inlineButton(null, at(lang, "ch.typeZ"), { callback_data: acb.chType("z") })],
+        [key("gift", at(lang, "ch.typeM", { join: som(lang, CHANNEL_PRESETS.m.joinBonus) }), acb.chType("m"), "primary")],
+        [key(null, at(lang, "ch.typeZ"), acb.chType("z"))],
       ]
     : [
-        [inlineButton("doc", at(lang, "ch.typeN", { join: som(lang, n.joinBonus) }), { callback_data: acb.chType("n") })],
-        [inlineButton("plus", at(lang, "ch.typeE", { join: g(e.joinBonus), stay: g(e.stayBonus), days: e.stayDays }), { callback_data: acb.chType("e") })],
+        [key("doc", at(lang, "ch.typeN", { join: som(lang, n.joinBonus) }), acb.chType("n"))],
+        [key("plus", at(lang, "ch.typeE", { join: g(e.joinBonus), stay: g(e.stayBonus), days: e.stayDays }), acb.chType("e"))],
       ];
-  return {
-    text: [...channelHead(lang, d), "", at(lang, "ch.confirmKind", { kind }), "", at(lang, "ch.pickType")].join("\n"),
-    reply_markup: rows(...presets, [back(lang, acb.chKinds())], [cancel(lang)]),
-  };
+  return keyScreen([...channelHead(lang, d), "", at(lang, "ch.confirmKind", { kind }), "", at(lang, "ch.pickType")].join("\n"), ...presets, [back(lang, acb.chKinds()), cancel(lang)]);
 }
 
-export function channelConfirmScreen(lang: Lang, d: ChannelDraft, type: ChannelType): Screen {
+export function channelConfirmScreen(lang: Lang, d: ChannelDraft, type: ChannelType): AdminScreen {
   const p = CHANNEL_PRESETS[type];
   const lines = [
     ...channelHead(lang, d),
@@ -367,14 +371,7 @@ export function channelConfirmScreen(lang: Lang, d: ChannelDraft, type: ChannelT
   ];
   if (p.stayBonus > 0) lines.push(at(lang, "ch.confirmStay", { days: p.stayDays, stay: som(lang, p.stayBonus) }));
   lines.push("", at(lang, "ch.confirmAsk"));
-  return {
-    text: lines.join("\n"),
-    reply_markup: rows(
-      [inlineButton("save", at(lang, "ch.confirm"), { callback_data: acb.chCreate(type) }, "success")],
-      [back(lang, acb.chTypes())],
-      [cancel(lang)],
-    ),
-  };
+  return keyScreen(lines.join("\n"), [key("save", at(lang, "ch.confirm"), acb.chCreate(type), "success")], [back(lang, acb.chTypes()), cancel(lang)]);
 }
 
 /* ───────────────────────── To‘lov bonusi (C-Q4) ───────────────────────── */
@@ -383,48 +380,29 @@ export function channelConfirmScreen(lang: Lang, d: ChannelDraft, type: ChannelT
 export const PAY_BONUS_PRESETS = [0, 5, 10, 15, 20] as const;
 
 /** The payment bonus card: the current percent, the rule, and (settings.edit) the choices. */
-export function payBonusScreen(a: BotAdmin, percent: number): Screen {
+export function payBonusScreen(a: BotAdmin, percent: number): AdminScreen {
   const l = a.lang;
   const edit = can(a, "settings.edit");
   const lines = [head("card", at(l, "pb.title")), "", percent > 0 ? at(l, "pb.now", { p: percent }) : at(l, "pb.off"), at(l, "pb.rule")];
   lines.push("", edit ? at(l, "pb.pick") : at(l, "pb.viewOnly"));
-  const choices: InlineButton[] = edit
-    ? PAY_BONUS_PRESETS.map((p) =>
-        inlineButton(p === percent ? "save" : null, `${p}%`, { callback_data: acb.pbPick(p) }, p === percent ? "success" : undefined),
-      )
-    : [];
-  return {
-    text: lines.join("\n"),
-    reply_markup: rows(
-      choices,
-      [edit && inlineButton("edit", at(l, "pb.other"), { callback_data: acb.pbOther() })],
-      [back(l)],
-    ),
-  };
+  const choices: KeyDef[] = edit ? PAY_BONUS_PRESETS.map((p) => key(p === percent ? "save" : null, `${p}%`, acb.pbPick(p), p === percent ? "success" : undefined)) : [];
+  return keyScreen(lines.join("\n"), choices, [edit && key("edit", at(l, "pb.other"), acb.pbOther()), back(l)]);
 }
 
-export function payBonusAskScreen(lang: Lang, problem?: string): Screen {
-  return {
-    text: `${problem ? `${tgEmoji("warn")} ${problem}\n\n` : ""}${head("card", at(lang, "pb.title"))}\n\n${at(lang, "pb.ask")}`,
-    reply_markup: rows([back(lang, acb.payBonus())]),
-  };
+export function payBonusAskScreen(lang: Lang, problem?: string): AdminScreen {
+  return keyScreen(`${problem ? `${tgEmoji("warn")} ${problem}\n\n` : ""}${head("card", at(lang, "pb.title"))}\n\n${at(lang, "pb.ask")}`, [back(lang, acb.payBonus()), cancel(lang)]);
 }
 
-export function payBonusConfirmScreen(lang: Lang, from: number, to: number): Screen {
-  return {
-    text: `${head("card", at(lang, "pb.title"))}\n\n${at(lang, "pb.confirmAsk", { from, to })}`,
-    reply_markup: rows(
-      [inlineButton("save", at(lang, "pb.confirm", { to }), { callback_data: acb.pbSet(to) }, "success")],
-      [back(lang, acb.payBonus())],
-    ),
-  };
+export function payBonusConfirmScreen(lang: Lang, from: number, to: number): AdminScreen {
+  return keyScreen(
+    `${head("card", at(lang, "pb.title"))}\n\n${at(lang, "pb.confirmAsk", { from, to })}`,
+    [key("save", at(lang, "pb.confirm", { to }), acb.pbSet(to), "success")],
+    [back(lang, acb.payBonus())],
+  );
 }
 
 /* ───────────────────────── Step-up ───────────────────────── */
 
-export function stepUpScreen(lang: Lang, problem?: string): Screen {
-  return {
-    text: `${problem ? `${tgEmoji("warn")} ${esc(problem)}\n\n` : ""}${head("lock", at(lang, "su.title"))}\n\n${at(lang, "su.ask")}`,
-    reply_markup: rows([cancel(lang)]),
-  };
+export function stepUpScreen(lang: Lang, problem?: string): AdminScreen {
+  return keyScreen(`${problem ? `${tgEmoji("warn")} ${esc(problem)}\n\n` : ""}${head("lock", at(lang, "su.title"))}\n\n${at(lang, "su.ask")}`, [cancel(lang)]);
 }
