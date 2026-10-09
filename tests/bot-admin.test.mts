@@ -167,12 +167,15 @@ after(async () => {
 });
 
 test("codes: every admin code parses back and fits 64 bytes; i18n filled in uz/ru/en", () => {
-  for (const d of [acb.panel(), acb.stats(), acb.bcPick("new"), acb.bcSend(123456789), acb.bcStop("999999999999999999"), acb.chCreate("e"), acb.chToggle("12"), acb.chDeleteAsk("12"), acb.chDelete("999999999999999999"), acb.payBonus(), acb.pbOther(), acb.pbPick(0), acb.pbSet(50)]) {
+  for (const d of [acb.panel(), acb.stats(), acb.bcPick("new"), acb.bcSend(123456789), acb.bcStop("999999999999999999"), acb.chCreate("e"), acb.chToggle("12"), acb.chDeleteAsk("12"), acb.chDelete("999999999999999999"), acb.chView("12"), acb.chEdit("title", "12"), acb.chEdit("active", "999999999999999999"), acb.chLinkDrop("12"), acb.chSave("999999999999999999"), acb.payBonus(), acb.pbOther(), acb.pbPick(0), acb.pbSet(50)]) {
     assert.notEqual(parseAdminCallback(d).kind, "unknown", d);
     assert.ok(Buffer.byteLength(d) <= 64);
   }
   assert.deepEqual(parseAdminCallback("a:pk:15"), { kind: "pbSet", percent: 15 });
   assert.deepEqual(parseAdminCallback("a:pv:0"), { kind: "pbPick", percent: 0 });
+  assert.deepEqual(parseAdminCallback("a:ce:o:77"), { kind: "chEdit", field: "sort", id: "77" });
+  assert.deepEqual(parseAdminCallback("a:cv:5"), { kind: "chView", id: "5" });
+  for (const bad of ["a:ce:x:12", "a:ce:t:0", "a:ce:t", "a:ce:t:12:3", "a:ce:constructor:12", "a:cv:0", "a:cs:", "a:cu:1x", "a:cd:1:2:3"]) assert.equal(parseAdminCallback(bad).kind, "unknown", bad);
   // MUTATION: the code bound 50 → 99 lets a forged `a:pk:51` reach the service (it would still refuse with 400).
   for (const bad of ["a:bs:-1", "a:bu:vip", "a:ct:0x1", "a:bk:1:2", "a", "a:pk:51", "a:pk:-1", "a:pk:05", "a:pk:1.5", "a:pv:100", "a:pk:"]) {
     assert.equal(parseAdminCallback(bad).kind, "unknown", bad);
@@ -372,7 +375,7 @@ test("access: viewer sees Statistika only (no bonus section); a broadcast tap �
   assert.deepEqual(toasts(), ["Ruxsat yo‘q"]);
 });
 
-test("access: a button of an OLDER screen is re-checked when typed — an owner downgraded to viewer cannot toggle a channel or connect one — MUTATSIYA 3", { skip }, async () => {
+test("access: a button of an OLDER screen is re-checked when typed — an owner downgraded to viewer cannot edit a channel or connect one — MUTATSIYA 3", { skip }, async () => {
   const a = await newAdmin("owner");
   const ch = await queryOne<{ id: string }>(
     `INSERT INTO bonus_channels (chat_id, title, join_bonus, stay_bonus, stay_days, sort, active) VALUES ($1, 'Downgrade', 1000, 0, 7, 60, true) RETURNING id::text AS id`,
@@ -380,17 +383,25 @@ test("access: a button of an OLDER screen is re-checked when typed — an owner 
   );
   installFetch();
   await tg.handleUpdate(textUpdate(a.tg, "🔔 Kanal ulash"));
-  const toggle = await labelFor(a.tg, acb.chToggle(ch!.id));
   const connect = await labelFor(a.tg, acb.chConnect());
   await query("UPDATE admin_accounts SET role = 'viewer' WHERE id = $1", [a.adminId]);
-  for (const label of [toggle, connect]) {
-    installFetch();
-    await tg.handleUpdate(textUpdate(a.tg, label));
-    assert.deepEqual(texts(), ["Ruxsat yo‘q"], label);
-    assert.equal(sends().length, 1, label);
-  }
-  assert.equal((await queryOne<{ active: boolean }>("SELECT active FROM bonus_channels WHERE id = $1", [ch!.id]))!.active, true, "nothing changed");
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, connect));
+  assert.deepEqual(texts(), ["Ruxsat yo‘q"], connect);
   assert.equal(await stepOf(a.tg), null, "the connect flow did not start");
+  // The same on the channel card: its «⏸ To‘xtatish» button (a flip of `active`) typed after the downgrade.
+  await query("UPDATE admin_accounts SET role = 'owner' WHERE id = $1", [a.adminId]);
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "🔔 Kanal ulash"));
+  installFetch();
+  await press(a, acb.chView(ch!.id));
+  const toggle = await labelFor(a.tg, acb.chEdit("active", ch!.id));
+  await query("UPDATE admin_accounts SET role = 'viewer' WHERE id = $1", [a.adminId]);
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, toggle));
+  assert.deepEqual(texts(), ["Ruxsat yo‘q"], toggle);
+  assert.equal(sends().length, 1, toggle);
+  assert.equal((await queryOne<{ active: boolean }>("SELECT active FROM bonus_channels WHERE id = $1", [ch!.id]))!.active, true, "nothing changed");
   const denied = await audit(a.adminId, "auth.denied");
   assert.equal(denied.length, 2);
   assert.deepEqual(denied.map((r) => (r.meta as { permission: string }).permission), ["bonus.edit", "bonus.edit"]);
@@ -744,22 +755,30 @@ test("Kanal ulash: forward from the channel → type → confirm → created (au
   assert.equal((c2!.after as Record<string, unknown>).mandatory, true, "audited as mandatory");
   // The list marks it with 🔒; labels are numbered so they stay unique.
   const listKeys = await keysOf(a.tg);
-  const lockKey = listKeys.find((k) => k.code === `a:ct:${r2!.id}`);
+  const lockKey = listKeys.find((k) => k.code === acb.chView(r2!.id));
   assert.match(lockKey!.text, /^\d+\. ✅ 🔒 Ikkinchi$/);
   assert.ok(listKeys.some((k) => k.code === acb.chConnect()) && listKeys.some((k) => k.code === acb.panel()));
 
-  // Toggle: ⏸ (audited), the list re-rendered with the result as its first line.
+  // A list row opens the channel CARD (it no longer toggles); «⏸ To‘xtatish» asks, «Saqlash» saves (audited).
   installFetch();
-  await press(a, acb.chToggle(row!.id));
-  assert.match(String(sends()[0]!.body.text), /^⏸ To‘xtatildi\n\n/);
+  await press(a, acb.chView(row!.id));
+  assert.equal(await queryOne("SELECT 1 FROM bonus_channels WHERE id = $1 AND active = false", [row!.id]), null, "opening the card changes nothing");
+  installFetch();
+  await press(a, acb.chEdit("active", row!.id));
+  assert.match(String(sends()[0]!.body.text), /<b>Holat<\/b>: ✅ Faol → <b>⏸ To‘xtatilgan<\/b>\n\nSaqlansinmi\?/);
+  installFetch();
+  await press(a, acb.chSave(row!.id));
+  assert.match(String(sends()[0]!.body.text), /^✅ Saqlandi\n\n/);
   assert.equal((await queryOne<{ active: boolean }>("SELECT active FROM bonus_channels WHERE id = $1", [row!.id]))!.active, false);
   const upd = await audit(a.adminId, "bonus_channel.update");
   assert.deepEqual([upd[0]!.after], [{ active: false }]);
-  assert.match((await keysOf(a.tg)).find((k) => k.code === `a:ct:${row!.id}`)!.text, /^\d+\. ⏸ /);
+  installFetch();
+  await press(a, acb.channels());
+  assert.match((await keysOf(a.tg)).find((k) => k.code === acb.chView(row!.id))!.text, /^\d+\. ⏸ /);
   await query("UPDATE bonus_channels SET active = false WHERE chat_id = ANY($1::bigint[])", [[chatId, chat2]]);
 });
 
-test("Kanal ulash: two channels with the SAME title get different labels and each toggles its own row; a long title is clipped by code points", { skip }, async () => {
+test("Kanal ulash: two channels with the SAME title get different labels and each opens its own card; a long title is clipped by code points", { skip }, async () => {
   const a = await newAdmin("owner");
   const title = `Bir xil nom ${"🎓".repeat(40)}`;
   const ids: string[] = [];
@@ -773,18 +792,23 @@ test("Kanal ulash: two channels with the SAME title get different labels and eac
   installFetch();
   await tg.handleUpdate(textUpdate(a.tg, "🔔 Kanal ulash"));
   const keys = await keysOf(a.tg);
-  const l0 = keys.find((k) => k.code === acb.chToggle(ids[0]!))!.text;
-  const l1 = keys.find((k) => k.code === acb.chToggle(ids[1]!))!.text;
+  const l0 = keys.find((k) => k.code === acb.chView(ids[0]!))!.text;
+  const l1 = keys.find((k) => k.code === acb.chView(ids[1]!))!.text;
   assert.notEqual(l0, l1);
   for (const l of [l0, l1]) assert.ok(!l.includes("�") && Array.from(l).length <= 45, l);
   installFetch();
   await tg.handleUpdate(textUpdate(a.tg, l1));
+  assert.deepEqual(
+    (await offered(a.tg)).filter((c) => c.startsWith("a:ce:")),
+    [acb.chEdit("title", ids[1]!), acb.chEdit("inviteLink", ids[1]!), acb.chEdit("joinBonus", ids[1]!), acb.chEdit("stayBonus", ids[1]!), acb.chEdit("stayDays", ids[1]!), acb.chEdit("sort", ids[1]!), acb.chEdit("mandatory", ids[1]!), acb.chEdit("active", ids[1]!)],
+    "the tapped row's card, not the other one's",
+  );
   const rows = await query<{ id: string; active: boolean }>("SELECT id::text AS id, active FROM bonus_channels WHERE id = ANY($1::bigint[]) ORDER BY id", [ids]);
-  assert.deepEqual(rows.map((r) => r.active), [true, false], "only the tapped row changed");
+  assert.deepEqual(rows.map((r) => r.active), [true, true], "opening a card changes nothing");
   await query("UPDATE bonus_channels SET active = false WHERE id = ANY($1::bigint[])", [ids]);
 });
 
-test("Kanal o‘chirish: «🗑» only for a PAUSED channel without bonus claims; confirm → deleted + audited; active / claimed / viewer refused (owner 2026-10-09)", { skip }, async () => {
+test("Kanal o‘chirish: «🗑 O‘chirish» on the CARD only for a PAUSED channel without bonus claims; confirm → deleted + audited; active / claimed / viewer refused (owner 2026-10-09)", { skip }, async () => {
   const a = await newAdmin("owner");
   const mk = async (title: string, active: boolean) =>
     (await queryOne<{ id: string }>(
@@ -799,17 +823,23 @@ test("Kanal o‘chirish: «🗑» only for a PAUSED channel without bonus claims
 
   installFetch();
   await tg.handleUpdate(textUpdate(a.tg, "🔔 Kanal ulash"));
-  const codes = await offered(a.tg);
+  assert.ok(!(await offered(a.tg)).some((c) => c.startsWith("a:cx:")), "the list has no separate «🗑» rows any more");
   // MUTATION: offering «🗑» for an active or a claimed channel.
-  assert.ok(codes.includes(acb.chDeleteAsk(free)), "paused + no claims → «🗑»");
-  assert.ok(!codes.includes(acb.chDeleteAsk(live)), "active → no «🗑» (pause first)");
-  assert.ok(!codes.includes(acb.chDeleteAsk(claimed)), "claims → no «🗑»");
-  assert.match(await labelFor(a.tg, acb.chDeleteAsk(free)), /^🗑 \d+\. Bo‘sh kanal$/);
+  for (const [id, want, why] of [[free, true, "paused + no claims → «🗑»"], [live, false, "active → no «🗑» (pause first)"], [claimed, false, "claims → no «🗑»"]] as const) {
+    installFetch();
+    await press(a, acb.chView(id));
+    assert.equal((await offered(a.tg)).includes(acb.chDeleteAsk(id)), want, why);
+    installFetch();
+    await press(a, acb.channels());
+  }
+  installFetch();
+  await press(a, acb.chView(free));
+  assert.equal(await labelFor(a.tg, acb.chDeleteAsk(free)), "🗑 O‘chirish");
 
   installFetch();
   await press(a, acb.chDeleteAsk(free));
   assert.match(texts().at(-1)!, /Bo‘sh kanal<\/b> butunlay o‘chirilsinmi/);
-  assert.deepEqual(await offered(a.tg), [acb.chDelete(free), acb.channels()]);
+  assert.deepEqual(await offered(a.tg), [acb.chDelete(free), acb.chView(free)], "«Orqaga» returns to the card");
   installFetch();
   await press(a, acb.chDelete(free));
   assert.match(texts().at(-1)!, /^🗑 Kanal o‘chirildi/);
@@ -854,7 +884,12 @@ test("2FA mode: an un-enrolled admin has no panel; an enrolled one must give a c
     installFetch();
     await tg.handleUpdate(textUpdate(enrolled.tg, "🔔 Kanal ulash"));
     installFetch();
-    await press(enrolled, acb.chToggle(ch!.id));
+    await press(enrolled, acb.chView(ch!.id));
+    installFetch();
+    await press(enrolled, acb.chEdit("active", ch!.id));
+    assert.match(texts()[0]!, /Saqlansinmi/, "asking for the change needs no code");
+    installFetch();
+    await press(enrolled, acb.chSave(ch!.id));
     assert.match(String(sends()[0]!.body.text), /6 xonali kodni/);
     assert.deepEqual(labels(sends()[0]!.body), ["✖️ Bekor qilish"]);
     assert.equal(await stepOf(enrolled.tg), "totp");

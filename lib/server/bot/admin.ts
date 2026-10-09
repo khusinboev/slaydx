@@ -20,13 +20,21 @@ import {
   type Audience,
 } from "../admin-broadcasts";
 import {
+  assertSomeBonus,
+  botAdminStatus,
   createBonusChannel,
   createInviteLink,
   deleteBonusChannel,
   listBonusChannels,
+  parseAmount,
   parseChannelRef,
+  parseInviteLink,
+  parseSort,
+  parseStayDays,
+  parseTitle,
   resolveChannel,
   updateBonusChannel,
+  type BonusChannelItem,
 } from "../admin-bonus-channels";
 import {
   CAPTION_MAX,
@@ -44,7 +52,7 @@ import { keyboardMessage, matchKeyboard } from "./keyboard";
 import { at, ADMIN_TEXT_KEYS } from "./admin-i18n";
 import { LANGS, langOf, type Lang } from "./i18n";
 import { actorOf, allowed, lookupAdmin, type BotAdmin } from "./admin-access";
-import { parseAdminCallback, typeFits, type AdminCallback, type AudienceCode, type ChannelType } from "./admin-codes";
+import { isTypedField, parseAdminCallback, typeFits, type AdminCallback, type AudienceCode, type ChannelField, type ChannelType, type TypedField } from "./admin-codes";
 import {
   CHANNEL_PRESETS,
   audienceScreen,
@@ -52,7 +60,11 @@ import {
   broadcastDoneScreen,
   buttonAskScreen,
   channelAskScreen,
+  channelCardScreen,
+  channelChangeConfirmScreen,
   channelConfirmScreen,
+  channelEditAskScreen,
+  channelFieldValue,
   channelKindScreen,
   channelProblemScreen,
   channelTypeScreen,
@@ -88,6 +100,7 @@ import {
   type AdminState,
   type BroadcastDraft,
   type ChannelDraft,
+  type ChannelEditDraft,
   type Draft,
 } from "./admin-state";
 import { esc, tgEmoji } from "./ui";
@@ -141,6 +154,10 @@ const PERM: Record<Exclude<AdminCallback["kind"], "unknown">, Permission> = {
   chToggle: "bonus.edit",
   chDeleteAsk: "bonus.edit",
   chDelete: "bonus.edit",
+  chView: "bonus.view",
+  chEdit: "bonus.edit",
+  chLinkDrop: "bonus.edit",
+  chSave: "bonus.edit",
   payBonus: "settings.view",
   pbOther: "settings.edit",
   pbPick: "settings.edit",
@@ -148,9 +165,9 @@ const PERM: Record<Exclude<AdminCallback["kind"], "unknown">, Permission> = {
 };
 
 /** The confirmed changes: in 2FA mode they need a fresh bot step-up. */
-const CONFIRMS = new Set<AdminCallback["kind"]>(["bcSend", "bcStop", "chCreate", "chToggle", "chDelete", "pbSet"]);
+const CONFIRMS = new Set<AdminCallback["kind"]>(["bcSend", "bcStop", "chCreate", "chToggle", "chDelete", "chSave", "pbSet"]);
 
-const STEP_PERM = { bc_msg: "broadcasts.send", bc_btn: "broadcasts.send", ch_ref: "bonus.edit", pb_val: "settings.edit", totp: "self" } as const;
+const STEP_PERM = { bc_msg: "broadcasts.send", bc_btn: "broadcasts.send", ch_ref: "bonus.edit", ch_val: "bonus.edit", pb_val: "settings.edit", totp: "self" } as const;
 
 /** Admin actions per minute per account (reads and taps; the services keep their own limits). */
 export const ADMIN_BOT_RATE = { limit: 60, windowSec: 60 };
@@ -164,6 +181,7 @@ const REASON = {
   channel: "Telegram bot orqali ulandi",
   toggle: "Telegram bot orqali o'zgartirildi",
   delete: "Telegram bot orqali o'chirildi",
+  edit: "Telegram bot orqali tahrirlandi",
   payBonus: "Telegram bot orqali to'lov bonusi o'zgartirildi",
 };
 
@@ -359,6 +377,7 @@ async function counts(): Promise<Record<AudienceCode, number>> {
 
 const isBc = (d: Draft | null): d is BroadcastDraft & Draft => d?.t === "bc";
 const isCh = (d: Draft | null): d is ChannelDraft & Draft => d?.t === "ch";
+const isChEdit = (d: Draft | null): d is ChannelEditDraft & Draft => d?.t === "che";
 
 /** The draft's broadcast row (created once, at the first test or at the send). */
 async function ensureBroadcast(a: BotAdmin, chatId: number, d: BroadcastDraft, updateId: number): Promise<string> {
@@ -579,6 +598,59 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
       await show(channelsScreen(a, (await listBonusChannels()).items), at(l, cur.active ? "toast.chOff" : "toast.chOn"));
       return undefined;
     }
+    /* ── channel card (owner 2026-10-09): the list opens it; every field of the web's edit dialog is edited here ── */
+    case "chView": {
+      const cur = await channelById(c.id);
+      if (!cur) return at(l, "toast.old");
+      await clearState(chatId);
+      await show(await cardScreen(a, cur));
+      return undefined;
+    }
+    case "chEdit": {
+      const cur = await channelById(c.id);
+      if (!cur) return at(l, "toast.old");
+      if (!isTypedField(c.field)) {
+        // A flip (mandatory / active): confirm what it becomes. «Optional» needs a bonus (the service's rule, checked early).
+        const to = c.field === "mandatory" ? !cur.mandatory : !cur.active;
+        const why = c.field === "mandatory" ? bonusRefusal(cur.joinBonus, cur.stayBonus, to) : null;
+        if (why) {
+          await clearState(chatId);
+          await show(await cardScreen(a, cur), why);
+          return undefined;
+        }
+        await show(channelChangeConfirmScreen(l, cur, c.field, channelFieldValue(cur, c.field), to));
+        await writeState(chatId, a.adminId, { step: null, draft: { t: "che", id: cur.id, field: c.field, value: to } });
+        return undefined;
+      }
+      await cancelInput(chatId);
+      const id = await show(channelEditAskScreen(l, cur, c.field));
+      await writeState(chatId, a.adminId, { step: "ch_val", draft: { t: "che", id: cur.id, field: c.field }, promptMessageId: id });
+      return undefined;
+    }
+    case "chLinkDrop": {
+      const cur = await channelById(c.id);
+      if (!cur) return at(l, "toast.old");
+      if (cur.inviteLink === null) return at(l, "ch.same");
+      await show(channelChangeConfirmScreen(l, cur, "inviteLink", cur.inviteLink, null));
+      await writeState(chatId, a.adminId, { step: null, draft: { t: "che", id: cur.id, field: "inviteLink", value: null } });
+      return undefined;
+    }
+    case "chSave": {
+      // The pending field+value live in the admin's draft, keyed by the channel: another channel's draft is stale.
+      if (!isChEdit(d) || d.id !== c.id || d.value === undefined) return at(l, "toast.old");
+      try {
+        const { item } = await updateBonusChannel(actorOf(a, updateId), c.id, { [d.field]: d.value, reason: REASON.edit });
+        await clearState(chatId);
+        await show(await cardScreen(a, item), at(l, "toast.chSaved"));
+      } catch (e) {
+        // 409 «O'zgarish yo'q», 400 validation / «at least one bonus», 404: shown on the card, nothing is saved.
+        if (!(e instanceof ApiError) || e.status >= 500) throw e;
+        await clearState(chatId);
+        const cur = await channelById(c.id);
+        await show(cur ? await cardScreen(a, cur) : channelsScreen(a, (await listBonusChannels()).items), e.message);
+      }
+      return undefined;
+    }
     /* Delete (owner 2026-10-09): the web's rule — pause the channel first; a channel somebody got a bonus from
        is never deleted (the service refuses with 409 `has_claims`, the history stays). */
     case "chDeleteAsk":
@@ -595,7 +667,7 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
         await deleteBonusChannel(actorOf(a, updateId), c.id, { reason: REASON.delete });
       } catch (e) {
         if (!(e instanceof ApiError) || e.status >= 500) throw e;
-        await show(channelsScreen(a, (await listBonusChannels()).items), esc(e.message));
+        await show(channelsScreen(a, (await listBonusChannels()).items), e.message);
         return undefined;
       }
       await show(channelsScreen(a, (await listBonusChannels()).items), at(l, "toast.chDeleted"));
@@ -622,6 +694,27 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
       await show(payBonusScreen(a, now), at(l, "toast.pbSaved", { p: now }));
       return undefined;
     }
+  }
+}
+
+/** A stored channel by id (the list is small), `null` when it is gone. */
+async function channelById(id: string): Promise<BonusChannelItem | null> {
+  return (await listBonusChannels()).items.find((x) => x.id === id) ?? null;
+}
+
+/** The channel card with the bot's admin status (one `getChatMember`; it never throws, a failure reads «unknown»). */
+async function cardScreen(a: BotAdmin, c: BonusChannelItem): Promise<AdminScreen> {
+  return channelCardScreen(a, c, await botAdminStatus(c.chatId));
+}
+
+/** The service's «at least one bonus > 0 for an optional channel» rule as a dry check: its message, or `null`. */
+function bonusRefusal(joinBonus: number, stayBonus: number, mandatory: boolean): string | null {
+  try {
+    assertSomeBonus(joinBonus, stayBonus, mandatory);
+    return null;
+  } catch (e) {
+    if (e instanceof ApiError) return e.message;
+    throw e;
   }
 }
 
@@ -694,6 +787,41 @@ export function buttonFromText(raw: string | undefined): { text: string; url: st
   const text = parseButtonText(s.slice(0, cut));
   const url = parseButtonUrl(s.slice(cut + 1));
   return text && url ? { text, url } : null;
+}
+
+/** A whole number typed by the admin («2 000», «2000», «−5»); `null` for anything else. */
+function wholeNumber(raw: string): number | null {
+  const s = raw.replace(/[\s_]/g, "").replace("−", "-");
+  return /^-?\d{1,9}$/.test(s) ? Number(s) : null;
+}
+
+/**
+ * The typed answer for one field of the card → the value `updateBonusChannel` will get, or why it is refused. The
+ * service's own parsers validate (the same limits and messages as the web); an unchanged value and the «at least one
+ * bonus» rule are checked here too so a doomed change never reaches the confirm screen.
+ */
+export function channelValueFromText(field: TypedField, raw: string | undefined, cur: BonusChannelItem, lang: Lang): { ok: string | number } | { problem: string } {
+  if (typeof raw !== "string" || !raw.trim()) return { problem: at(lang, "ch.badText") };
+  try {
+    let value: string | number | null;
+    if (field === "title") value = parseTitle(raw);
+    else if (field === "inviteLink") value = parseInviteLink(raw);
+    else {
+      const n = wholeNumber(raw);
+      if (n === null) return { problem: at(lang, "ch.badInt") };
+      value =
+        field === "joinBonus" ? parseAmount(n, "Obuna bonusi") : field === "stayBonus" ? parseAmount(n, "Qolish bonusi") : field === "stayDays" ? parseStayDays(n) : parseSort(n);
+    }
+    if (value === null || value === cur[field]) return { problem: at(lang, "ch.same") };
+    if (field === "joinBonus" || field === "stayBonus") {
+      const why = bonusRefusal(field === "joinBonus" ? Number(value) : cur.joinBonus, field === "stayBonus" ? Number(value) : cur.stayBonus, cur.mandatory);
+      if (why) return { problem: why };
+    }
+    return { ok: value };
+  } catch (e) {
+    if (e instanceof ApiError) return { problem: e.message };
+    throw e;
+  }
 }
 
 /** The channel a forwarded post comes from (`forward_origin.type = "channel"`), as a chat id. */
@@ -786,6 +914,21 @@ export async function handleAdminInput(m: AdminMessage, updateId: number): Promi
       const d: ChannelDraft = { t: "ch", chatId: resolved.chatId, title: resolved.title, username: resolved.username, botAdmin: resolved.botAdmin };
       await show(channelKindScreen(l, d));
       await writeState(chatId, admin.adminId, { step: null, draft: d });
+      return true;
+    }
+    case "ch_val": {
+      const d = st.draft;
+      const cur = isChEdit(d) && isTypedField(d.field) ? await channelById(d.id) : null;
+      if (!isChEdit(d) || !isTypedField(d.field) || !cur) {
+        await clearState(chatId);
+        await sendScreen(chatId, { text: at(l, "toast.expired") });
+        return true;
+      }
+      const field = d.field;
+      const r = channelValueFromText(field, text, cur, l);
+      if ("problem" in r) return reprompt(channelEditAskScreen(l, cur, field, r.problem)).then(() => true);
+      await show(channelChangeConfirmScreen(l, cur, field, channelFieldValue(cur, field), r.ok));
+      await writeState(chatId, admin.adminId, { step: null, draft: { t: "che", id: cur.id, field, value: r.ok } });
       return true;
     }
     case "pb_val": {

@@ -20,7 +20,11 @@
  *   a:ck:<m|o>        mandatory / optional picked → bonus presets   a:cg  back to that choice
  *   a:cy:<n|e|m|z>    preset picked → confirm   a:cf  back to the preset choice
  *                     (optional: n news, e extra; mandatory: m with a bonus, z without — C-Q2)
- *   a:cc:<n|e|m|z>    connect (confirmed)       a:ct:<id>  toggle active
+ *   a:cc:<n|e|m|z>    connect (confirmed)       a:ct:<id>  toggle active (old inline buttons; the list opens the card now)
+ *   a:cv:<id>         channel card (read-only for roles without bonus.edit)
+ *   a:ce:<f>:<id>     edit a field of the card: f = t title, l link, j join bonus, s stay bonus, d stay days, o sort
+ *                     (ask for the value), m mandatory / a active (confirm the flip)
+ *   a:cu:<id>         remove the invite link (confirm)     a:cs:<id>  save the pending field (confirmed)
  *   a:p               payment bonus card        a:po       «Boshqa»: ask for a typed percent
  *   a:pv:<0..50>      percent picked → confirm  a:pk:<0..50>  set it (confirmed)
  */
@@ -42,6 +46,24 @@ export type ChannelKind = (typeof CHANNEL_KINDS)[number];
 export function typeFits(type: ChannelType, mandatory: boolean): boolean {
   return ((mandatory ? MANDATORY_TYPES : OPTIONAL_TYPES) as readonly ChannelType[]).includes(type);
 }
+
+/** The editable fields of the channel card = the keys of `updateBonusChannel`; the letter is the code's field part. */
+export const CHANNEL_FIELD_CODES = {
+  title: "t",
+  inviteLink: "l",
+  joinBonus: "j",
+  stayBonus: "s",
+  stayDays: "d",
+  sort: "o",
+  mandatory: "m",
+  active: "a",
+} as const;
+export type ChannelField = keyof typeof CHANNEL_FIELD_CODES;
+/** The fields an admin types a value for (the others are flips: mandatory / active). */
+export const TYPED_FIELDS = ["title", "inviteLink", "joinBonus", "stayBonus", "stayDays", "sort"] as const satisfies readonly ChannelField[];
+export type TypedField = (typeof TYPED_FIELDS)[number];
+export const isTypedField = (f: ChannelField): f is TypedField => (TYPED_FIELDS as readonly string[]).includes(f);
+const FIELD_BY_CODE = new Map<string, ChannelField>((Object.entries(CHANNEL_FIELD_CODES) as [ChannelField, string][]).map(([f, c]) => [c, f]));
 
 export const acb = {
   panel: () => "a:h",
@@ -71,6 +93,10 @@ export const acb = {
   chToggle: (id: string) => `a:ct:${id}`,
   chDeleteAsk: (id: string) => `a:cx:${id}`,
   chDelete: (id: string) => `a:cd:${id}`,
+  chView: (id: string) => `a:cv:${id}`,
+  chEdit: (f: ChannelField, id: string) => `a:ce:${CHANNEL_FIELD_CODES[f]}:${id}`,
+  chLinkDrop: (id: string) => `a:cu:${id}`,
+  chSave: (id: string) => `a:cs:${id}`,
   payBonus: () => "a:p",
   pbOther: () => "a:po",
   pbPick: (p: number) => `a:pv:${p}`,
@@ -105,6 +131,10 @@ export type AdminCallback =
   | { kind: "chToggle"; id: string }
   | { kind: "chDeleteAsk"; id: string }
   | { kind: "chDelete"; id: string }
+  | { kind: "chView"; id: string }
+  | { kind: "chEdit"; field: ChannelField; id: string }
+  | { kind: "chLinkDrop"; id: string }
+  | { kind: "chSave"; id: string }
   | { kind: "payBonus" }
   | { kind: "pbOther" }
   | { kind: "pbPick"; percent: number }
@@ -159,6 +189,10 @@ export function parseAdminCallback(data: string | undefined | null): AdminCallba
     }
     return { kind: "unknown" };
   }
+  if (parts.length === 4) {
+    const field = FIELD_BY_CODE.get(c ?? "");
+    return b === "ce" && field && ID.test(parts[3]!) ? { kind: "chEdit", field, id: parts[3]! } : { kind: "unknown" };
+  }
   if (parts.length !== 3 || c === undefined) return { kind: "unknown" };
   switch (b) {
     case "bu":
@@ -187,6 +221,12 @@ export function parseAdminCallback(data: string | undefined | null): AdminCallba
       return ID.test(c) ? { kind: "chDeleteAsk", id: c } : { kind: "unknown" };
     case "cd":
       return ID.test(c) ? { kind: "chDelete", id: c } : { kind: "unknown" };
+    case "cv":
+      return ID.test(c) ? { kind: "chView", id: c } : { kind: "unknown" };
+    case "cu":
+      return ID.test(c) ? { kind: "chLinkDrop", id: c } : { kind: "unknown" };
+    case "cs":
+      return ID.test(c) ? { kind: "chSave", id: c } : { kind: "unknown" };
     case "pv":
       return isPercentCode(c) ? { kind: "pbPick", percent: Number(c) } : { kind: "unknown" };
     case "pk":
