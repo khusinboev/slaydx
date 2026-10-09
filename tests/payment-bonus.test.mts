@@ -257,9 +257,9 @@ test("payment bonus: Click + Payme settlement, service, /me", { skip }, async (t
         { kind: "bonus", points_delta: 100_000, balance_delta: 0, quota_delta: 0, reference: `payment-bonus:${c.id}`, note: "To‘lov bonusi (10%)" },
       ],
     );
-    // Click Complete replays (provider retries) and a direct re-settle: nothing more, no error.
-    assert.equal((await c.complete()).error, 0);
-    assert.equal((await c.complete()).error, 0);
+    // Click Complete replays (provider retries) answer -4 «Already paid», and a direct re-settle: nothing more.
+    assert.equal((await c.complete()).error, -4);
+    assert.equal((await c.complete()).error, -4);
     assert.equal((await settleOrder(a.id, Date.now())).status, "already_paid");
     assert.equal((await bonusRows(uid)).length, 3);
     await assertLedger(uid);
@@ -323,7 +323,7 @@ test("payment bonus: Click + Payme settlement, service, /me", { skip }, async (t
     );
     assert.equal(rows[0].reference, paymentBonusRef(early.id));
     // A replay of the early order after the change pays nothing new.
-    assert.equal((await early.complete()).error, 0);
+    assert.equal((await early.complete()).error, -4);
     assert.equal((await bonusRows(uid)).length, 3);
     await assertLedger(uid);
     await resetPercent();
@@ -409,8 +409,7 @@ test("payment bonus: Click + Payme settlement, service, /me", { skip }, async (t
     await waitFor(async () => (await lock.waiters()) >= 2, 1_000);
     await lock.release();
     const [x, y] = await Promise.all([r1, r2]);
-    assert.equal(x.error, 0, x.error_note);
-    assert.equal(y.error, 0, y.error_note);
+    assert.deepEqual([x.error, y.error].sort(), [-4, 0], `one pays, the replay is -4: ${x.error_note} / ${y.error_note}`);
     assert.deepEqual(await wallet(uid), { points: 8_000, balance: 80_000 });
     assert.equal((await bonusRows(uid)).length, 1);
     await assertLedger(uid);

@@ -820,7 +820,7 @@ export type PaymentOrder = {
 };
 
 /** Faqat balansni to'ldirish: obuna (pro) buyurtmalari server tomonda to'xtatilgan. */
-export function createOrder(input: { provider: "click" | "payme"; amount?: number }) {
+export function createOrder(input: { provider: "click" | "payme"; amount?: number; card?: "uzcard" | "humo" }) {
   return request<{ order: PaymentOrder; checkoutUrl: string }>("/api/payments/orders", {
     method: "POST",
     body: JSON.stringify({ ...input, purpose: "topup" }),

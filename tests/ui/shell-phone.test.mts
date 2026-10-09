@@ -359,7 +359,14 @@ test("PayDialog phone: a bottom sheet with ≥ 64 px amount cards, 44 px close a
   assert.ok(card && has(card, "max-h-full"), "internal scroll");
   assert.ok(has(card, "rounded-t-[26px]") && card.querySelector("[data-sheet-grabber]"), "bottom sheet");
   assert.ok(has(card.querySelector('button[aria-label="Yopish"]'), "size-11"));
-  for (const m of ["Click", "Payme"]) {
+  // Providers that are not configured are not drawn (no «o'chiq» placeholders): enable both here.
+  assert.equal(screen.queryByText(/^Click/), null, "unconfigured: not drawn");
+  cleanup();
+  useAppStore.setState({
+    features: { llm: true, images: true, telegram: false, telegramBot: null, devLogin: false, pdf: true, payments: { click: true, payme: true } } as never,
+  });
+  render(inRouter(h(PayDialog)));
+  for (const m of ["Click", "Karta orqali", "Payme"]) {
     const b = screen.getByText(new RegExp(`^${m}`));
     assert.ok(has(b, "h-12"), `${m} button ≥ 48 px`);
   }

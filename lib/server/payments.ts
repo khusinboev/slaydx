@@ -274,6 +274,36 @@ export async function attachTransaction(
   });
 }
 
+/**
+ * Click Complete (`action=1`) ning Prepare bilan mosligi — Click `api-testing`
+ * dasturi talabi: Prepare qilinmagan buyurtmaga Complete kelsa, u pulni
+ * hisobga QO'SHMAYDI va `-6` («Transaction not found») qaytadi.
+ *
+ * Tekshiruvlar (birortasi buzilsa `-6`, `note` — `error_note`):
+ *   1. buyurtma Prepare qilingan (`providerTxn` va `prepareId` bor);
+ *   2. `merchant_prepare_id` MAJBURIY va `order.prepareId` ga teng
+ *      (bo'sh yoki yo'q bo'lsa ham rad — ilgari bunday Complete o'tib ketardi);
+ *   3. `click_trans_id` Prepare dagi bilan bir xil.
+ *
+ * Sof funksiya: route ham, test ham shuni chaqiradi.
+ */
+export function checkClickComplete(
+  order: Pick<PaymentOrder, "providerTxn" | "prepareId">,
+  p: { click_trans_id?: string; merchant_prepare_id?: string },
+): { ok: true } | { ok: false; note: string } {
+  if (!order.providerTxn || order.prepareId === null) {
+    return { ok: false, note: "Prepare qilinmagan" };
+  }
+  const sent = String(p.merchant_prepare_id ?? "").trim();
+  if (!/^\d+$/.test(sent) || Number(sent) !== order.prepareId) {
+    return { ok: false, note: "prepare_id mos emas" };
+  }
+  if (order.providerTxn !== String(p.click_trans_id ?? "")) {
+    return { ok: false, note: "click_trans_id mos emas" };
+  }
+  return { ok: true };
+}
+
 /** Click `merchant_prepare_id` bo'yicha buyurtma. */
 export async function findOrderByPrepareId(prepareId: number): Promise<PaymentOrder | null> {
   if (!Number.isSafeInteger(prepareId)) return null;

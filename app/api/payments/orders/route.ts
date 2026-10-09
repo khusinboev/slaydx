@@ -1,5 +1,6 @@
 import { ApiError, handler, json, limit, readJson, requireUser } from "@/lib/server/api";
-import { env, paymentsConfigured } from "@/lib/server/env";
+import { type CardType, checkoutUrl, isCardType } from "@/lib/server/checkout-url";
+import { paymentsConfigured } from "@/lib/server/env";
 import { log } from "@/lib/server/log";
 import { PRO_REMOVED_MESSAGE, createOrder, listOrders, type Provider } from "@/lib/server/payments";
 import { userMessage } from "@/lib/server/user-error";
@@ -23,7 +24,7 @@ export const POST = handler("payments/create", async (req) => {
   const { user } = await requireUser(req);
   await limit(`pay:${user.id}`, 10, 300);
 
-  const body = await readJson<{ provider?: string; purpose?: string; amount?: number }>(req, 4_000);
+  const body = await readJson<{ provider?: string; purpose?: string; amount?: number; card?: unknown }>(req, 4_000);
   const provider = body.provider === "payme" ? "payme" : body.provider === "click" ? "click" : null;
   /*
    * Obuna olib tashlangan (2026-10): eski ochiq tab yoki keshlangan klient
@@ -33,6 +34,17 @@ export const POST = handler("payments/create", async (req) => {
   const purpose = "topup" as const;
 
   if (!provider) throw new ApiError("To'lov usuli tanlanmagan", 400);
+
+  /*
+   * «Karta orqali» (Click): `card` = `uzcard` | `humo` — o'sha Click buyurtmasi,
+   * faqat to'lov sahifasi karta formasini darhol ochadi. Boshqa qiymat yoki
+   * Click'dan boshqa provayder bilan — aniq rad (jim e'tiborsiz qoldirilmaydi).
+   */
+  let card: CardType | undefined;
+  if (body.card !== undefined && body.card !== null) {
+    if (provider !== "click" || !isCardType(body.card)) throw new ApiError("Karta turi noto'g'ri", 400);
+    card = body.card;
+  }
 
   const available = paymentsConfigured();
   if (!available[provider]) {
@@ -63,27 +75,5 @@ export const POST = handler("payments/create", async (req) => {
     throw new ApiError(safe, 400);
   }
 
-  return json({ order, checkoutUrl: checkoutUrl(order.provider, order.id, order.amountSoum) }, { status: 201 });
+  return json({ order, checkoutUrl: checkoutUrl(order.provider, order.id, order.amountSoum, { card }) }, { status: 201 });
 });
-
-/** Provayderning to'lov sahifasi. Summalar: Click — so'm, Payme — tiyin. */
-function checkoutUrl(provider: Provider, orderId: string, amountSoum: number): string {
-  const returnUrl = `${env.appUrl}/uz/purchase?order=${orderId}`;
-  if (provider === "click") {
-    const u = new URL("https://my.click.uz/services/pay");
-    u.searchParams.set("service_id", env.click.serviceId);
-    u.searchParams.set("merchant_id", env.click.merchantId);
-    u.searchParams.set("amount", String(amountSoum));
-    u.searchParams.set("transaction_param", orderId);
-    u.searchParams.set("return_url", returnUrl);
-    return u.toString();
-  }
-  // Payme checkout parametrlarni base64 qilingan qator sifatida kutadi.
-  const payload = [
-    `m=${env.payme.merchantId}`,
-    `ac.order_id=${orderId}`,
-    `a=${amountSoum * 100}`,
-    `c=${returnUrl}`,
-  ].join(";");
-  return `https://checkout.paycom.uz/${Buffer.from(payload).toString("base64")}`;
-}

@@ -475,7 +475,7 @@ test("to'lov buyurtmalari: Payme JSON-RPC + Click holat mashinasi", { skip: hasD
     assert.equal((await wallet(uid)).balance, 10_000);
 
     const again = await clickCall({ ...base, action: "1", merchant_prepare_id: pid });
-    assert.equal(again.error, 0, "takroriy Complete — muvaffaqiyat, pul qo'shilmaydi");
+    assert.equal(again.error, -4, "takroriy Complete — -4 Already paid, pul qo'shilmaydi");
     assert.equal((await wallet(uid)).balance, 10_000);
 
     assert.equal((await clickCall({ ...base, action: "0" })).error, -4);
@@ -523,7 +523,7 @@ test("to'lov buyurtmalari: Payme JSON-RPC + Click holat mashinasi", { skip: hasD
     await assertLedger(u2);
   });
 
-  await t.test("Click: Complete ∥ Complete (retry) — ikkalasi 0, pul bir marta", async () => {
+  await t.test("Click: Complete ∥ Complete (retry) — biri 0, ikkinchisi -4, pul bir marta", async () => {
     const { uid, order } = await mkOrder("click");
     const base = { click_trans_id: "900020", merchant_trans_id: order.id, amount: "10000" };
     const pid = String((await clickCall({ ...base, action: "0" })).merchant_prepare_id);
@@ -534,8 +534,7 @@ test("to'lov buyurtmalari: Payme JSON-RPC + Click holat mashinasi", { skip: hasD
     await waitFor(async () => (await lock.waiters()) >= 2, 1_000);
     await lock.release();
     const [ra, rb] = await Promise.all([a, b]);
-    assert.equal(ra.error, 0, ra.error_note);
-    assert.equal(rb.error, 0, rb.error_note);
+    assert.deepEqual([ra.error, rb.error].sort(), [-4, 0], `bittasi to'laydi, takrori -4: ${ra.error_note} / ${rb.error_note}`);
     assert.equal((await wallet(uid)).balance, 10_000);
     await assertLedger(uid);
   });
