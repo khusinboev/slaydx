@@ -1,6 +1,6 @@
 import "server-only";
 import { ApiError } from "./api";
-import { callBot, isTransientBotFailure, TelegramTransientError } from "./telegram";
+import { callBot, isTransientBotFailure, TelegramTransientError, type BotResult } from "./telegram";
 
 /**
  * Rich broadcast content (docs/bot-admin/PLAN.md A-Q2, migration 044
@@ -211,4 +211,13 @@ export async function sendBroadcastContent(chatId: string, text: string, c: Broa
   if (r.ok) return true;
   if (isTransientBotFailure(r)) throw new TelegramTransientError(`${method}: ${r.code ? `${r.code} ` : ""}${r.description}`.trim());
   return false;
+}
+
+/**
+ * Delivery-engine variant of `sendBroadcastContent`: the raw Bot API outcome (error code, description,
+ * `retryAfter`) with NO internal 429 wait — the engine classifies the failure and paces globally.
+ */
+export async function sendBroadcastContentOutcome(chatId: string, text: string, c: BroadcastContent): Promise<BotResult<unknown>> {
+  const { method, body } = contentPayload(chatId, text, c);
+  return callBot(method, body, { noRetry: true });
 }

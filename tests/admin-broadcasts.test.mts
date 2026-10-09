@@ -333,7 +333,23 @@ test("create: 201 draft with the exact shape, one audit row, extra body fields i
   assert.equal(r.status, 201, JSON.stringify(r.body));
   assert.deepEqual(Object.keys(r.body), ["broadcast"]);
   const b = r.body.broadcast as Record<string, unknown>;
-  assert.deepEqual(Object.keys(b).sort(), ["audience", "createdAt", "createdBy", "createdByName", "failed", "finishedAt", "id", "queuedAt", "sent", "status", "text", "total"]);
+  assert.deepEqual(Object.keys(b).sort(), [
+    "audience",
+    "createdAt",
+    "createdBy",
+    "createdByName",
+    "failReason",
+    "failed",
+    "finishedAt",
+    "heartbeatAt",
+    "id",
+    "queuedAt",
+    "sent",
+    "startedAt",
+    "status",
+    "text",
+    "total",
+  ]);
   assert.equal(b.status, "draft");
   assert.equal(b.text, "Yangi vosita qo'shildi: <b>Tinglash</b> & o'yin", "stored trimmed, NOT escaped (escaping happens at send time)");
   assert.deepEqual(b.audience, { kind: "active_days", days: 30 });
@@ -436,7 +452,11 @@ test("detail: broadcast + stats, failure reasons, 404 for unknown and malformed 
     sent: 2,
     failed: 2,
     pending: 1,
-    failedReasons: [{ error: "Telegram xabarni qabul qilmadi", count: 2 }],
+    inFlight: 0,
+    retrying: 0,
+    speed: 0,
+    etaSeconds: null,
+    failedReasons: [{ error: "Telegram xabarni qabul qilmadi", kind: null, count: 2 }],
   });
   const missing = await get("detail", s.cookie, { id: "999999999" });
   assert.equal(missing.status, 404);

@@ -197,6 +197,8 @@ const A = {
   "bc.st.draft": { uz: "qoralama", ru: "черновик", en: "draft" },
   "bc.st.queued": { uz: "navbatda", ru: "в очереди", en: "queued" },
   "bc.st.sending": { uz: "yuborilmoqda", ru: "отправляется", en: "sending" },
+  "bc.st.paused": { uz: "pauzada", ru: "на паузе", en: "paused" },
+  "bc.st.failed": { uz: "xato bilan to‘xtatildi", ru: "остановлена из-за ошибки", en: "aborted (errors)" },
   "bc.st.done": { uz: "tugadi", ru: "завершена", en: "done" },
   "bc.st.cancelled": { uz: "to‘xtatildi", ru: "остановлена", en: "stopped" },
   "bc.stop": { uz: "To‘xtatish", ru: "Остановить", en: "Stop" },

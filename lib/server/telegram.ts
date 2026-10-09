@@ -80,7 +80,7 @@ export const UPLOAD_TIMEOUT_MS = 60_000;
  * `0` means no usable answer: network error, timeout, a non-JSON body
  * (a proxy's HTML 502) or the bot is not configured.
  */
-export type BotResult<T> = { ok: true; result: T } | { ok: false; code: number; description: string };
+export type BotResult<T> = { ok: true; result: T } | { ok: false; code: number; description: string; retryAfter?: number };
 
 export type CallBotOptions = {
   /** `payload` is a `FormData` (file upload); fetch sets the multipart boundary itself. */
@@ -89,6 +89,11 @@ export type CallBotOptions = {
   timeoutMs?: number;
   /** Injected for tests (default: the global `fetch`). */
   fetch?: typeof fetch;
+  /**
+   * Never wait + retry a 429 here: return it (with `retryAfter`) and let the caller pace.
+   * The broadcast engine owns rate limiting globally (`send-limiter.ts`), so a sender must not sleep on its own.
+   */
+  noRetry?: boolean;
 };
 
 /** A failure worth retrying later: no answer, rate limit or Telegram 5xx. */
@@ -144,11 +149,16 @@ export async function callBot<T = unknown>(
     if (!data.ok) {
       console.warn(`[telegram] ${method}:`, data.description ?? "xato");
       const after = Number(data.parameters?.retry_after);
-      if (attempt === 0 && data.error_code === 429 && Number.isFinite(after) && after >= 0 && after <= TELEGRAM_RETRY_AFTER_CAP_S) {
+      if (!opts.noRetry && attempt === 0 && data.error_code === 429 && Number.isFinite(after) && after >= 0 && after <= TELEGRAM_RETRY_AFTER_CAP_S) {
         await new Promise((r) => setTimeout(r, after * 1000));
         continue;
       }
-      return { ok: false, code: Number(data.error_code ?? 0), description: data.description ?? "" };
+      return {
+        ok: false,
+        code: Number(data.error_code ?? 0),
+        description: data.description ?? "",
+        ...(Number.isFinite(after) && after >= 0 ? { retryAfter: after } : {}),
+      };
     }
     return { ok: true, result: data.result as T };
   }

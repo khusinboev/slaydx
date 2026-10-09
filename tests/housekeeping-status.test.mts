@@ -74,7 +74,6 @@ test("worker housekeeping records every named step and runs the new purges", asy
   const worker = await import("../lib/server/worker.ts");
   worker.resetRetentionScan();
   await worker.housekeeping();
-  await worker.broadcastDeliveryIdle();
   await hs.flushStepStatus();
 
   const statusRows = seen.filter((q) => /INSERT INTO housekeeping_status/.test(q.text));
@@ -92,7 +91,6 @@ test("worker housekeeping records every named step and runs the new purges", asy
     "sources",
     "photos",
     "source-cache",
-    "broadcasts",
     "error-log",
     "heartbeats",
     "admin-sessions",
@@ -121,7 +119,6 @@ test("worker housekeeping records every named step and runs the new purges", asy
   // The 6 h steps are skipped (and not recorded) on the next tick.
   seen.length = 0;
   await worker.housekeeping();
-  await worker.broadcastDeliveryIdle();
   await hs.flushStepStatus();
   const again = seen.filter((q) => /INSERT INTO housekeeping_status/.test(q.text)).map((q) => q.params[0]);
   assert.ok(!again.includes("retention") && !again.includes("payment-events"));

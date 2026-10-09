@@ -8,7 +8,7 @@ import { adminGet, adminSend, type AdminCallOptions, type AdminParams, type List
  * `lib/server/**`, tests/admin-boundary.test.mts).
  */
 
-export const BROADCAST_STATUSES = ["draft", "queued", "sending", "done", "cancelled"] as const;
+export const BROADCAST_STATUSES = ["draft", "queued", "sending", "paused", "done", "cancelled", "failed"] as const;
 export type BroadcastStatus = (typeof BROADCAST_STATUSES)[number];
 
 export type Audience = { kind: "all" } | { kind: "paid" } | { kind: "active_days"; days: number } | { kind: "new_days"; days: number };
@@ -33,6 +33,11 @@ export type AdminBroadcast = {
   createdAt: string;
   queuedAt: string | null;
   finishedAt: string | null;
+  startedAt: string | null;
+  /** Last result the delivery loop recorded (liveness). */
+  heartbeatAt: string | null;
+  /** Why the engine ended the broadcast as `failed` (early abort). */
+  failReason: string | null;
 };
 
 export type BroadcastListItem = Omit<AdminBroadcast, "text"> & {
@@ -47,7 +52,15 @@ export type BroadcastStats = {
   failed: number;
   /** Not yet handled; after a cancel they stay pending and are never sent. */
   pending: number;
-  failedReasons: Array<{ error: string; count: number }>;
+  /** Of `pending`: claimed by a sender right now. */
+  inFlight: number;
+  /** Of `pending`: waiting out a retry after a transient error. */
+  retrying: number;
+  /** Delivered + failed per second over the last 30 s. */
+  speed: number;
+  /** Seconds left at the current speed; null when unknown. */
+  etaSeconds: number | null;
+  failedReasons: Array<{ error: string; kind: string | null; count: number }>;
 };
 
 export type BroadcastDetail = { broadcast: AdminBroadcast; stats: BroadcastStats };

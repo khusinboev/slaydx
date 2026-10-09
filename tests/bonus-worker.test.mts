@@ -50,7 +50,6 @@ test("housekeeping records «bonus-stay» with batch 200, then skips it for 10 m
   const seen = stubPool(t);
   worker.resetRetentionScan();
   await worker.housekeeping();
-  await worker.broadcastDeliveryIdle();
   await hs.flushStepStatus();
 
   const due = seen.filter((q) => DUE.test(q.text));
@@ -68,7 +67,6 @@ test("housekeeping records «bonus-stay» with batch 200, then skips it for 10 m
 
   seen.length = 0;
   await worker.housekeeping();
-  await worker.broadcastDeliveryIdle();
   await hs.flushStepStatus();
   assert.equal(seen.filter((q) => DUE.test(q.text)).length, 0, "MUTATSIYA 2: cadence");
   assert.ok(!seen.some((q) => /INSERT INTO housekeeping_status/.test(q.text) && q.params[0] === "bonus-stay"));
@@ -79,7 +77,6 @@ test("a failing sweep is recorded as a failure and does not throw out of houseke
   const seen = stubPool(t, true);
   worker.resetRetentionScan();
   await worker.housekeeping();
-  await worker.broadcastDeliveryIdle();
   await hs.flushStepStatus();
   const status = seen.filter((q) => /INSERT INTO housekeeping_status/.test(q.text)).find((q) => q.params[0] === "bonus-stay");
   assert.ok(status);

@@ -7,6 +7,7 @@ import { parseBigintId, parseReason } from "./admin-accounts";
 import type { AuditActor } from "./admin-audit";
 import { buildKeyset, countCapped, keysetSelect, pageResult, parseListParams, type CursorColumns, type ListSpec, type ParsedList } from "./admin-list";
 import { escapeTelegramHtml } from "./broadcast-delivery";
+import { kindLabel } from "./broadcast-errors";
 import { contentOf, parseBroadcastContent, sendBroadcastContent, type BroadcastContent } from "./broadcast-content";
 import { toJsonb } from "./jsonb";
 import { botConfigured, sendMessage, TelegramTransientError } from "./telegram";
@@ -55,7 +56,7 @@ export const AUDIENCE_DAYS_MAX = 365;
 /** Characters of the text shown in the list. */
 export const PREVIEW_CHARS = 160;
 
-export const BROADCAST_STATUSES = ["draft", "queued", "sending", "done", "cancelled"] as const;
+export const BROADCAST_STATUSES = ["draft", "queued", "sending", "paused", "done", "cancelled", "failed"] as const;
 export type BroadcastStatus = (typeof BROADCAST_STATUSES)[number];
 export const AUDIENCE_KINDS = ["all", "paid", "active_days", "new_days"] as const;
 export type AudienceKind = (typeof AUDIENCE_KINDS)[number];
@@ -200,6 +201,12 @@ export type AdminBroadcast = {
   createdAt: string;
   queuedAt: string | null;
   finishedAt: string | null;
+  /** First delivery attempt (engine, migration 046). */
+  startedAt: string | null;
+  /** Last result the delivery loop recorded — liveness of a `sending` broadcast. */
+  heartbeatAt: string | null;
+  /** Why the engine ended the broadcast as `failed` (early abort). */
+  failReason: string | null;
 };
 
 export type BroadcastListItem = Omit<AdminBroadcast, "text"> & {
@@ -221,6 +228,9 @@ type Row = {
   created_at: Date;
   queued_at: Date | null;
   finished_at: Date | null;
+  started_at: Date | null;
+  heartbeat_at: Date | null;
+  fail_reason: string | null;
 };
 
 const iso = (d: Date | null | undefined): string | null => (d ? new Date(d).toISOString() : null);
@@ -235,7 +245,7 @@ function audienceOf(raw: unknown): Audience {
 }
 
 const COLUMNS = `b.id::text AS id, b.status, b.audience, b.total, b.sent, b.failed, b.created_by::text AS created_by,
-       cu.name AS created_by_name, b.created_at, b.queued_at, b.finished_at`;
+       cu.name AS created_by_name, b.created_at, b.queued_at, b.finished_at, b.started_at, b.heartbeat_at, b.fail_reason`;
 const FROM = `FROM broadcasts b
   LEFT JOIN admin_accounts ca ON ca.id = b.created_by
   LEFT JOIN users cu ON cu.id = ca.user_id`;
@@ -253,6 +263,9 @@ function base(r: Row): Omit<AdminBroadcast, "text"> {
     createdAt: new Date(r.created_at).toISOString(),
     queuedAt: iso(r.queued_at),
     finishedAt: iso(r.finished_at),
+    startedAt: iso(r.started_at),
+    heartbeatAt: iso(r.heartbeat_at),
+    failReason: r.fail_reason ?? null,
   };
 }
 
@@ -337,39 +350,67 @@ export type BroadcastStats = {
   total: number;
   sent: number;
   failed: number;
-  /** Recipients not yet handled. After a cancel they stay pending and are never sent. */
+  /** Recipients not yet handled (waiting, retrying or in flight). After a cancel they stay pending and are never sent. */
   pending: number;
-  /** Why recipients failed, most frequent first (at most 5). */
-  failedReasons: Array<{ error: string; count: number }>;
+  /** Of `pending`: claimed by a sender right now. */
+  inFlight: number;
+  /** Of `pending`: waiting out a retry after a transient error. */
+  retrying: number;
+  /** Delivered + failed per second over the last 30 s (0 when idle / paused). */
+  speed: number;
+  /** Seconds left at the current speed; null when there is no speed or nothing pending. */
+  etaSeconds: number | null;
+  /** Why recipients failed (error kinds), most frequent first (at most 5). */
+  failedReasons: Array<{ error: string; kind: string | null; count: number }>;
 };
+
+/** Window of the speed estimate, seconds. */
+const SPEED_WINDOW_S = 30;
 
 export async function getBroadcast(id: string): Promise<{ broadcast: AdminBroadcast; stats: BroadcastStats }> {
   return readOnly(async (client) => {
     const broadcast = await fetchBroadcast(client, id);
     if (!broadcast) throw notFound();
-    const c = await client.query<{ total: string; sent: string; failed: string; pending: string }>(
+    const c = await client.query<{ total: string; sent: string; failed: string; pending: string; in_flight: string; retrying: string; recent: string }>(
       `SELECT count(*)::text AS total,
               count(*) FILTER (WHERE status = 'sent')::text AS sent,
               count(*) FILTER (WHERE status = 'failed')::text AS failed,
-              count(*) FILTER (WHERE status = 'pending')::text AS pending
+              count(*) FILTER (WHERE status IN ('pending', 'sending'))::text AS pending,
+              count(*) FILTER (WHERE status = 'sending')::text AS in_flight,
+              count(*) FILTER (WHERE status = 'pending' AND attempts > 0)::text AS retrying,
+              count(*) FILTER (WHERE done_at > now() - interval '${SPEED_WINDOW_S} seconds')::text AS recent
          FROM broadcast_recipients WHERE broadcast_id = $1`,
       [id],
     );
-    const reasons = await client.query<{ error: string | null; n: string }>(
-      `SELECT error, count(*)::text AS n FROM broadcast_recipients
+    const reasons = await client.query<{ kind: string | null; error: string | null; n: string }>(
+      `SELECT error_kind AS kind, CASE WHEN error_kind IS NULL THEN error END AS error, count(*)::text AS n
+         FROM broadcast_recipients
         WHERE broadcast_id = $1 AND status = 'failed'
-        GROUP BY error ORDER BY count(*) DESC, error NULLS LAST LIMIT 5`,
+        GROUP BY 1, 2 ORDER BY count(*) DESC, 1 NULLS LAST, 2 NULLS LAST LIMIT 5`,
       [id],
     );
     const r = c.rows[0]!;
+    const pending = Number(r.pending);
+    const live = broadcast.status === "queued" || broadcast.status === "sending";
+    const startedMs = broadcast.startedAt ? Date.parse(broadcast.startedAt) : Date.now();
+    const window = Math.max(1, Math.min(SPEED_WINDOW_S, (Date.now() - startedMs) / 1000));
+    const speed = live ? Math.round((Number(r.recent) / window) * 10) / 10 : 0;
     return {
       broadcast,
       stats: {
         total: Number(r.total),
         sent: Number(r.sent),
         failed: Number(r.failed),
-        pending: Number(r.pending),
-        failedReasons: reasons.rows.map((x) => ({ error: x.error ?? "Noma'lum xato", count: Number(x.n) })),
+        pending,
+        inFlight: Number(r.in_flight),
+        retrying: Number(r.retrying),
+        speed,
+        etaSeconds: speed > 0 && pending > 0 ? Math.ceil(pending / speed) : null,
+        failedReasons: reasons.rows.map((x) => ({
+          error: x.kind ? kindLabel(x.kind) : (x.error ?? "Noma'lum xato"),
+          kind: x.kind,
+          count: Number(x.n),
+        })),
       },
     };
   });
@@ -515,7 +556,7 @@ export async function sendBroadcast(actor: BroadcastActor, id: string, body: Rec
 /* -------------------------------------------------------------------------- */
 
 /**
- * Draft / queued / sending → cancelled. Pending recipients stay `pending` and
+ * Draft / queued / sending / paused → cancelled. Pending recipients stay `pending` and
  * are never sent: delivery re-reads the broadcast status before every message
  * and only looks at `queued` / `sending`. A message already in flight when the
  * cancel lands may still arrive (at most one per delivering process).
@@ -529,7 +570,7 @@ export async function cancelBroadcast(actor: BroadcastActor, id: string, body: R
     );
     const row = cur.rows[0];
     if (!row) throw notFound();
-    if (row.status !== "draft" && row.status !== "queued" && row.status !== "sending") throw stateError();
+    if (row.status !== "draft" && row.status !== "queued" && row.status !== "sending" && row.status !== "paused") throw stateError();
     await client.query("UPDATE broadcasts SET status = 'cancelled', finished_at = now() WHERE id = $1", [id]);
     const total = Number(row.total);
     const sent = Number(row.sent);

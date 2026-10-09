@@ -273,7 +273,7 @@ export function BroadcastDetail({ id }: { id: string }) {
         open={sendOpen}
         broadcast={b}
         onClose={() => setSendOpen(false)}
-        onSent={(next) => setState({ kind: "ok", data: { broadcast: next, stats: { total: next.total, sent: 0, failed: 0, pending: next.total, failedReasons: [] } } })}
+        onSent={(next) => setState({ kind: "ok", data: { broadcast: next, stats: { total: next.total, sent: 0, failed: 0, pending: next.total, inFlight: 0, retrying: 0, speed: 0, etaSeconds: null, failedReasons: [] } } })}
       />
       <ConfirmDialog
         open={cancelOpen}
