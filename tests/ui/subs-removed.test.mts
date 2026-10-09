@@ -129,7 +129,7 @@ test("Hamyon: to'lov faqat purpose=topup buyurtma yaratadi (tanlangan summa bila
     await new Promise((r) => setImmediate(r));
   });
   assert.equal(captured.length, 1);
-  assert.deepEqual(captured[0].body, { provider: "click", amount: 50_000, purpose: "topup" });
+  assert.deepEqual(captured[0].body, { provider: "click", amount: 50_000, purpose: "topup", method: "page" });
 });
 
 test("Hamyon: kirmagan foydalanuvchi — «Kirish» kirish oynasini ochadi (qaytish /uz/wallet), Pro yo'q", async () => {
