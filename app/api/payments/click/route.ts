@@ -128,12 +128,14 @@ async function handle(p: ClickParams): Promise<Reply> {
       if (out.status === "paid") return reply(p, CLICK_ERROR.ALREADY_PAID, "Allaqachon to'langan");
       return reply(p, CLICK_ERROR.CANCELLED, "Click tomonda bekor qilindi");
     }
-    // Takroriy Complete — `settleOrder` idempotent (qulf ostida), pul ikki
-    // marta qo'shilmaydi va parallel takror ham xato emas, muvaffaqiyat oladi.
+    // `settleOrder` idempotent (qulf ostida): pul ikki marta qo'shilmaydi.
+    // Takroriy Complete (ham ketma-ket, ham parallel) -4 «Already paid» oladi —
+    // Click Shop API: muvaffaqiyatli Complete'dan keyin faqat -4 yoki -9 bo'ladi.
     const done = await settleOrder(order.id, order.performTime || Date.now());
     if (done.status === "cancelled" || done.status === "expired") {
       return reply(p, CLICK_ERROR.CANCELLED, "Bekor qilingan");
     }
+    if (done.status === "already_paid") return reply(p, CLICK_ERROR.ALREADY_PAID, "Allaqachon to'langan");
     if (done.status === "not_found") return reply(p, CLICK_ERROR.NO_USER, "Buyurtma topilmadi");
     return reply(p, CLICK_ERROR.OK, "Success", {
       merchant_confirm_id: order.prepareId,
@@ -153,6 +155,33 @@ export async function POST(req: Request) {
   const reqId = requestIdOf(req);
   const res = await withLogContext({ reqId }, () => handleClick(req));
   res.headers.set("x-request-id", reqId);
+  applyCors(req, res);
+  return res;
+}
+
+/**
+ * Click o'yin maydonchasi (docs.click.uz/testing/playground) Prepare/Complete
+ * so'rovlarini BRAUZERDAN yuboradi — javobni o'qishi uchun CORS kerak. Faqat
+ * shu bitta origin; imzo baribir majburiy, boshqa origin hech narsa olmaydi.
+ */
+const CLICK_DOCS_ORIGIN = "https://docs.click.uz";
+
+function applyCors(req: Request, res: Response): void {
+  res.headers.append("Vary", "Origin");
+  if (req.headers.get("origin") === CLICK_DOCS_ORIGIN) {
+    res.headers.set("Access-Control-Allow-Origin", CLICK_DOCS_ORIGIN);
+  }
+}
+
+/** Preflight: faqat `docs.click.uz` uchun ruxsat sarlavhalari; boshqalarga bo'sh 204. */
+export async function OPTIONS(req: Request) {
+  const res = new NextResponse(null, { status: 204 });
+  applyCors(req, res);
+  if (req.headers.get("origin") === CLICK_DOCS_ORIGIN) {
+    res.headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.headers.set("Access-Control-Allow-Headers", "Content-Type");
+    res.headers.set("Access-Control-Max-Age", "600");
+  }
   return res;
 }
 
