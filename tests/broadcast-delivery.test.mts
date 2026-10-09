@@ -204,6 +204,9 @@ test("broadcast delivery (Postgres)", { skip }, async (t) => {
     let n = 0;
     const r = await bd.deliverBroadcasts({
       ...fakeTime,
+      // One sender: with eight, a message already in flight when the cancel lands may finish
+      // (by design — the check is per message), which made the exact counts below flaky in CI.
+      senders: 1,
       send: async () => {
         n++;
         if (n === 3) await query("UPDATE broadcasts SET status = 'cancelled' WHERE id = $1", [id]);
