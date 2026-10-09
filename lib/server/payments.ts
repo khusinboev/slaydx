@@ -6,6 +6,7 @@ import { safeEqual } from "./session";
 import { topUpInTx } from "./credits";
 import { log } from "./log";
 import { payPaymentBonusInTx } from "./payment-bonus";
+import { groupDigits } from "../format";
 
 /**
  * To'lov buyurtmalari va ularni kreditga aylantirish.
@@ -114,7 +115,7 @@ export function paymeAuthorized(header: string | null | undefined, keys: readonl
 /** Balans to'ldirishda 1 so'm = 1 tanga. */
 export const SOUM_PER_COIN = 1;
 
-export const MIN_TOPUP_SOUM = 5_000;
+export const MIN_TOPUP_SOUM = 1_000;
 export const MAX_TOPUP_SOUM = 10_000_000;
 
 export type Provider = "click" | "payme";
@@ -193,9 +194,9 @@ export async function createOrder(input: {
 }): Promise<PaymentOrder> {
   if (input.purpose !== "topup") throw new Error(PRO_REMOVED_MESSAGE);
   const amount = Math.round(input.amountSoum);
-  if (amount < MIN_TOPUP_SOUM || amount > MAX_TOPUP_SOUM) {
+  if (!Number.isFinite(amount) || amount < MIN_TOPUP_SOUM || amount > MAX_TOPUP_SOUM) {
     throw new Error(
-      `Summa ${MIN_TOPUP_SOUM.toLocaleString("uz-UZ")} — ${MAX_TOPUP_SOUM.toLocaleString("uz-UZ")} so'm oralig'ida bo'lishi kerak`,
+      `Summa ${groupDigits(MIN_TOPUP_SOUM)} — ${groupDigits(MAX_TOPUP_SOUM)} so'm oralig'ida bo'lishi kerak`,
     );
   }
   const row = await queryOne<OrderRow>(

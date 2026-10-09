@@ -122,9 +122,25 @@ test("payments/orders: Click and «Karta orqali» checkout URLs", { skip: hasDb 
   });
 
   await t.test("amount bounds still apply to the card variant", async () => {
-    const { res, userId } = await post({ provider: "click", amount: 1_000, card: "humo" });
+    const { res, userId } = await post({ provider: "click", amount: 999, card: "humo" });
     assert.equal(res.status, 400);
     assert.equal(await orderCount(userId), 0);
+  });
+
+  await t.test("amount limits are 1 000 – 10 000 000 so'm (owner 2026-10-09): both edges accepted, just outside rejected", async () => {
+    for (const amount of [1_000, 1_001, 10_000_000]) {
+      const { res, json, userId } = await post({ provider: "click", amount });
+      assert.equal(res.status, 201, `${amount}: ${JSON.stringify(json)}`);
+      assert.equal(json.order.amountSoum, amount);
+      assert.equal(new URL(json.checkoutUrl).searchParams.get("amount"), `${amount}.00`);
+      assert.equal(await orderCount(userId), 1);
+    }
+    for (const amount of [999, 500, 0, -1_000, 10_000_001, "abc"]) {
+      const { res, json, userId } = await post({ provider: "click", amount });
+      assert.equal(res.status, 400, `${amount} must be rejected`);
+      assert.match(String(json.error ?? json.message ?? ""), /Summa 1\s000 — 10\s000\s000 so'm/);
+      assert.equal(await orderCount(userId), 0, `${amount}: no order is created`);
+    }
   });
 
   await t.test("Click not configured: neither variant is offered (503)", async () => {
