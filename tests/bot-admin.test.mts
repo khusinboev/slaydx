@@ -306,6 +306,15 @@ test("admin reply texts: a revoked admin's stale screen labels and another accou
   installFetch();
   await tg.handleUpdate(textUpdate(a.tg, "🔄 Yangilash"));
   assert.match(texts()[0]!, /Foydalanuvchilar/, "the same label works for the right account");
+  // Expired: a screen's labels live 12 h; the static menu keeps working.
+  // MUTATION: matching labels without the age limit.
+  await query("UPDATE bot_admin_state SET updated_at = now() - interval '13 hours' WHERE chat_id = $1", [a.tg]);
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "🔄 Yangilash"));
+  assert.ok(!texts().some((t) => /Foydalanuvchilar/.test(t)), "an expired label falls through");
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "📈 Statistika"));
+  assert.match(texts()[0]!, /Foydalanuvchilar/, "the static menu does not expire");
   // Revoked: the stale map stays in the row, but the account is no admin any more.
   await query("UPDATE admin_accounts SET status = 'disabled' WHERE id = $1", [a.adminId]);
   installFetch();

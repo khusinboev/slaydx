@@ -194,13 +194,20 @@ export async function writeKeys(chatId: number, adminId: string, keys: ScreenKey
 }
 
 /**
+ * A screen's labels expire: an ordinary text typed days later that happens to equal an old label («10%»,
+ * «Yangilash») must not run an admin action. The static admin menu is matched separately and never expires.
+ */
+export const SCREEN_KEYS_TTL_HOURS = 12;
+
+/**
  * The callback code behind a text the chat sent, when it is EXACTLY one of the last screen's button labels
  * (and the account that screen was sent for). One primary-key read: a chat without an admin row (every ordinary
  * user) costs nothing more. The caller still looks the admin up and compares `adminId`.
  */
 export async function matchScreenKey(chatId: number, text: string): Promise<{ adminId: string; code: string } | null> {
   const rows = await query<{ admin_id: string; keys: ScreenKey[] | null }>(
-    "SELECT admin_id::text AS admin_id, keys FROM bot_admin_state WHERE chat_id = $1 AND keys IS NOT NULL",
+    `SELECT admin_id::text AS admin_id, keys FROM bot_admin_state
+      WHERE chat_id = $1 AND keys IS NOT NULL AND updated_at > now() - make_interval(hours => ${SCREEN_KEYS_TTL_HOURS})`,
     [chatId],
   );
   const r = rows[0];
