@@ -23,9 +23,11 @@ import { parseIntParam } from "./validate";
  *
  * Audience semantics (one SQL fragment, `audienceWhere`, used for the live
  * count AND for the recipient snapshot, so the two cannot drift):
- *   - base, for every kind: `telegram_id IS NOT NULL AND NOT is_blocked`
+ *   - base, for every kind: `telegram_id IS NOT NULL AND NOT is_blocked AND bot_blocked_at IS NULL`
  *     (a user without a Telegram chat cannot be reached; a blocked user is
- *     deliberately not messaged) — the same rows delivery can actually send to;
+ *     deliberately not messaged; a user who blocked the BOT — `bot_blocked_at`, set by
+ *     delivery / `my_chat_member`, cleared by /start — would only fail again) — the
+ *     same rows delivery can actually send to;
  *   - `paid`: the user has at least one `payment_orders` row in state `paid`
  *     (a real cash payment; free quota / admin credits do not count);
  *   - `active_days` (`days` 1..365): the user created a generation or has a
@@ -147,7 +149,7 @@ export function parseText(raw: unknown): string {
  * `$n`; `params` receives them). Used by the count and by the snapshot.
  */
 function audienceWhere(a: Audience, params: unknown[]): string {
-  const conds = ["u.telegram_id IS NOT NULL", "NOT u.is_blocked"];
+  const conds = ["u.telegram_id IS NOT NULL", "NOT u.is_blocked", "u.bot_blocked_at IS NULL"];
   if (a.kind === "paid") {
     conds.push("EXISTS (SELECT 1 FROM payment_orders o WHERE o.user_id = u.id AND o.state = 'paid')");
   } else if (a.kind === "active_days") {

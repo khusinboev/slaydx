@@ -372,6 +372,113 @@ test("broadcast engine (Postgres)", { skip }, async (t) => {
     assert.equal((await rows(id))[0]!.status, "sending");
   });
 
+  /* ───────────── bot_blocked_at hygiene (docs/bonus/BONUS3.md C-Q5) ───────────── */
+
+  const { handleUpdate } = await import("../lib/server/telegram.ts");
+  let tgSeq = 8_100_000;
+  let updateSeq = 910_000_000;
+  const mkUser = async (name = "Reach Test") =>
+    (
+      await query<{ id: string; tg: string }>(
+        "INSERT INTO users (telegram_id, name) VALUES ($1, $2) RETURNING id::text AS id, telegram_id::text AS tg",
+        [++tgSeq, name],
+      )
+    )[0]!;
+  const blockedAt = async (id: string) => (await query<{ b: Date | null }>("SELECT bot_blocked_at AS b FROM users WHERE id = $1", [id]))[0]!.b;
+  /** A broadcast whose recipients are the given real users. */
+  const mkFor = async (users: Array<{ id: string; tg: string }>) => {
+    const id = String(
+      (
+        await query<{ id: string }>(
+          `INSERT INTO broadcasts (status, text, audience, total, queued_at) VALUES ('queued', 'Salom', '{"kind":"all"}'::jsonb, $1, now()) RETURNING id`,
+          [users.length],
+        )
+      )[0].id,
+    );
+    for (const u of users) await query("INSERT INTO broadcast_recipients (broadcast_id, user_id, telegram_id) VALUES ($1, $2, $3)", [id, u.id, u.tg]);
+    return id;
+  };
+
+  await t.test("blocked / deactivated set users.bot_blocked_at; other refusals and successes do not", async (tt) => {
+    quiet(tt);
+    await reset();
+    const [blocked, deactivated, gone, fine] = [await mkUser(), await mkUser(), await mkUser(), await mkUser()];
+    const id = await mkFor([blocked, deactivated, gone, fine]);
+    handler = (chatId) =>
+      chatId === blocked.tg
+        ? { code: 403, description: "Forbidden: bot was blocked by the user" }
+        : chatId === deactivated.tg
+          ? { code: 403, description: "Forbidden: user is deactivated" }
+          : chatId === gone.tg
+            ? { code: 400, description: "Bad Request: chat not found" }
+            : null;
+    const r = await pass();
+    assert.equal(r.failed, 3);
+    assert.equal(r.sent, 1);
+    assert.ok(await blockedAt(blocked.id), "blocked");
+    assert.ok(await blockedAt(deactivated.id), "deactivated");
+    assert.equal(await blockedAt(gone.id), null, "chat_not_found is not «blocked»");
+    assert.equal(await blockedAt(fine.id), null);
+    assert.equal((await bc(id)).status, "done");
+    // The first timestamp is kept.
+    const first = await blockedAt(blocked.id);
+    const { markBotBlocked } = await import("../lib/server/bot-reachability.ts");
+    await markBotBlocked({ userId: blocked.id });
+    assert.deepEqual(await blockedAt(blocked.id), first);
+  });
+
+  await t.test("audiences exclude users with bot_blocked_at (live count, several kinds)", async (tt) => {
+    quiet(tt);
+    await reset();
+    const base = await admin.audienceCount({ kind: "all" });
+    const u = await mkUser();
+    const v = await mkUser();
+    assert.equal((await admin.audienceCount({ kind: "all" })).count, base.count + 2);
+    const newBefore = (await admin.audienceCount({ kind: "new_days", days: 1 })).count;
+    assert.ok(newBefore >= 2);
+    await query("UPDATE users SET bot_blocked_at = now() WHERE id = $1", [u.id]);
+    assert.equal((await admin.audienceCount({ kind: "all" })).count, base.count + 1, "a user who blocked the bot is not counted");
+    await query("UPDATE users SET bot_blocked_at = now() WHERE id = $1", [v.id]);
+    assert.equal((await admin.audienceCount({ kind: "new_days", days: 1 })).count, newBefore - 2);
+    await query("UPDATE users SET bot_blocked_at = NULL WHERE id = ANY($1::bigint[])", [[u.id, v.id]]);
+    assert.equal((await admin.audienceCount({ kind: "all" })).count, base.count + 2, "cleared → counted again");
+  });
+
+  await t.test("my_chat_member: kicked sets, member clears; groups / channels are ignored", async (tt) => {
+    quiet(tt);
+    await reset();
+    const u = await mkUser();
+    const upd = (chatId: number, type: string, status: string) => ({
+      update_id: ++updateSeq,
+      my_chat_member: { chat: { id: chatId, type }, from: { id: chatId }, date: 1, old_chat_member: { status: "member" }, new_chat_member: { status } },
+    });
+    await handleUpdate(upd(Number(u.tg), "private", "kicked"));
+    assert.ok(await blockedAt(u.id), "the user blocked the bot");
+    await handleUpdate(upd(Number(u.tg), "private", "member"));
+    assert.equal(await blockedAt(u.id), null, "the user unblocked the bot");
+    await handleUpdate(upd(Number(u.tg), "private", "kicked"));
+    await handleUpdate(upd(Number(u.tg), "channel", "member"));
+    await handleUpdate(upd(Number(u.tg), "supergroup", "member"));
+    assert.ok(await blockedAt(u.id), "a channel / group update does not clear it");
+    await handleUpdate(upd(-1001234567890, "supergroup", "kicked"));
+    assert.equal(hits.length, 0, "no reply to a membership update");
+  });
+
+  await t.test("/start clears bot_blocked_at; any other text does not", async (tt) => {
+    quiet(tt);
+    await reset();
+    const u = await mkUser();
+    await query("UPDATE users SET bot_blocked_at = now() WHERE id = $1", [u.id]);
+    const msg = (text: string) => ({
+      update_id: ++updateSeq,
+      message: { message_id: 1, chat: { id: Number(u.tg), type: "private" }, from: { id: Number(u.tg), first_name: "Reach" }, text },
+    });
+    await handleUpdate(msg("salom"));
+    assert.ok(await blockedAt(u.id), "plain text keeps the flag (only /start or my_chat_member clear it)");
+    await handleUpdate(msg("/start"));
+    assert.equal(await blockedAt(u.id), null, "/start clears it");
+  });
+
   await t.test("two loop instances never send to the same recipient twice", async (tt) => {
     quiet(tt);
     await reset();

@@ -545,6 +545,18 @@ export type TelegramUpdate = {
     old_chat_member?: { status?: string; is_member?: boolean; user?: { id: number; is_bot?: boolean } };
     new_chat_member?: { status?: string; is_member?: boolean; user?: { id: number; is_bot?: boolean } };
   };
+  /**
+   * The BOT's own membership changed in a chat. In a private chat `kicked` = the user blocked the bot,
+   * `member` = they unblocked it (`bot-reachability.ts`, `users.bot_blocked_at`). Sent only when
+   * `allowed_updates` names `my_chat_member` (webhook and `scripts/bot.mts`). No reply.
+   */
+  my_chat_member?: {
+    chat: { id: number; type?: string };
+    from?: { id: number; is_bot?: boolean };
+    date?: number;
+    old_chat_member?: { status?: string };
+    new_chat_member?: { status?: string };
+  };
 };
 
 /**
@@ -812,6 +824,11 @@ async function botUser(
 }
 
 async function processUpdate(update: TelegramUpdate): Promise<void> {
+  if (update.my_chat_member) {
+    // Loaded lazily; a user blocking / unblocking the bot only flips `users.bot_blocked_at`.
+    await (await import("./bot-reachability")).handleMyChatMember(update.my_chat_member);
+    return;
+  }
   if (update.chat_member) {
     // Loaded lazily. A leave forfeits the unpaid stay bonus; a join pays the join bonus at once
     // (B2-Q2, `recordChannelJoin` never throws). Other changes need no database round trip.
@@ -892,6 +909,8 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
   const me: SessionUser | null = isPrivate ? await botUser(profile, msg.from.language_code, startPayload, bot.userByTelegram) : null;
   const lang = langOf(me?.language);
   const ctx = me ? { chatId: msg.chat.id, telegramId: msg.from.id, lang, user: me } : null;
+  // `/start` = the user is talking to the bot again: broadcasts may reach them (migration 046).
+  if (me && startPayload !== null) await (await import("./bot-reachability")).clearBotBlocked({ userId: me.id });
 
   if (ctx) {
     if (text.startsWith("/")) {

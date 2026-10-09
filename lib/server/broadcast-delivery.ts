@@ -8,6 +8,7 @@ import { botConfigured, callBot } from "./telegram";
 import { contentOf, sendBroadcastContentOutcome, type BroadcastContent } from "./broadcast-content";
 import { backoffSeconds, classify, isUnreachable, kindLabel, MAX_ATTEMPTS, type FailureKind, type SendOutcome } from "./broadcast-errors";
 import { createLimiter, type Limiter } from "./send-limiter";
+import { markBotBlocked } from "./bot-reachability";
 
 /**
  * Telegram broadcast delivery engine (docs/admin/02-plan.md §6.9, docs/bonus/BONUS3.md C-Q5).
@@ -31,7 +32,9 @@ import { createLimiter, type Limiter } from "./send-limiter";
  *       5xx        → back to `pending` with `attempts + 1` and `next_attempt_at`
  *                    = now + LEAST(600, 10·2^attempts) s; after 6 attempts → `failed`;
  *       permanent  → `failed` with an `error_kind` (blocked, deactivated,
- *                    chat_not_found, bad_request, other — `broadcast-errors.ts`).
+ *                    chat_not_found, bad_request, other — `broadcast-errors.ts`);
+ *                    blocked / deactivated also set `users.bot_blocked_at`, so later
+ *                    audiences skip that user (`bot-reachability.ts`).
  *   • EARLY ABORT — if 200 recipients failed permanently and NOTHING was delivered,
  *     the broadcast is marked `failed` with a reason (a bad file_id / entities
  *     would otherwise burn the whole audience).
@@ -312,7 +315,7 @@ async function sender(ctx: Ctx): Promise<void> {
         if (await recordFailed(ctx.id, rec, v.kind, v.reason)) {
           ctx.out.rows++;
           ctx.out.failed++;
-          if (isUnreachable(v.kind)) await markUnreachable(rec.userId);
+          if (isUnreachable(v.kind)) await markBotBlocked({ userId: rec.userId });
         }
         if (await abortIfHopeless(ctx.id, ctx.deps.earlyAbortAfter)) {
           ctx.stopped = true;
@@ -325,9 +328,6 @@ async function sender(ctx: Ctx): Promise<void> {
     }
   }
 }
-
-/** Placeholder until the `bot_blocked_at` hygiene step: nothing is written yet. */
-async function markUnreachable(_userId: string): Promise<void> {}
 
 async function runBroadcast(b: { id: string; text: string; content: unknown }, shared: SharedPass): Promise<void> {
   await query(
