@@ -53,7 +53,7 @@ let msgSeq = 1000;
 const chats: Record<string, { id: number; type: string; title: string; username?: string }> = {};
 /** The labels of the reply keyboard each chat last received (what its phone shows). */
 const shown = new Map<number, string[]>();
-type Key = { text: string; style?: string; icon_custom_emoji_id?: string };
+type Key = { text: string; style?: string; icon_custom_emoji_id?: string; url?: string };
 const kb = (body: Record<string, unknown>): Key[][] => (body.reply_markup as { keyboard?: Key[][] } | undefined)?.keyboard ?? [];
 const labels = (body: Record<string, unknown>): string[] => kb(body).flat().map((b) => b.text);
 
@@ -678,7 +678,7 @@ test("Kanal ulash: forward from the channel → type → confirm → created (au
   assert.ok(String(sends()[0]!.body.text).includes(nb("Obuna bo‘lganda: <b>1 000 so‘m</b>\n7 kun qolsa: yana <b>2 000 so‘m</b>")));
   installFetch();
   await press(a, acb.chCreate("e"));
-  assert.match(String(sends()[0]!.body.text), /^✅ Kanal ulandi\n\n.*Bonus kanallar/s, "the toast is the first line of the list");
+  assert.match(String(sends()[0]!.body.text), /^✅ Kanal ulandi\n\n[\s\S]*Bonus kanallar/, "the toast is the first line of the list");
   const row = await queryOne<{ id: string; join_bonus: number; stay_bonus: number; stay_days: number; active: boolean; mandatory: boolean }>(
     "SELECT id::text AS id, join_bonus, stay_bonus, stay_days, active, mandatory FROM bonus_channels WHERE chat_id = $1",
     [chatId],

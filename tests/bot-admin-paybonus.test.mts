@@ -140,7 +140,7 @@ test("To‘lov bonusi: card → 15% → confirm → saved (audited, via bot); «
   installFetch();
   await press(a, "a:pk:15");
   assert.equal(edits().length, 0);
-  assert.match(String(sends()[0]!.body.text), /^✅ Saqlandi: 15%\n\n.*Hozir: <b>15%<\/b>/s, "the result is the first line of the card");
+  assert.match(String(sends()[0]!.body.text), /^✅ Saqlandi: 15%\n\n[\s\S]*Hozir: <b>15%<\/b>/, "the result is the first line of the card");
   assert.equal(await pbValue(), 15);
   const rows = await audit(a.adminId, "settings.update");
   assert.equal(rows.length, 1);
