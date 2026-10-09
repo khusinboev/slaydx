@@ -117,6 +117,8 @@ export const DELIVER_TEXT = {
   shareExpired: "Ulashish havolasi eskirdi — qayta urinib ko‘ring",
   shareNoBrowser: "Bu brauzer faylni ulasha olmaydi — yuklab olib, o‘zingiz yuboring",
   shareNoAccount: "Telegram akkaunti bog‘lanmagan — faylni yuklab olib, o‘zingiz yuboring",
+  /** The browser's share sheet failed (not cancelled) for a downloaded file: the file is handed over as a download. */
+  shareFailed: "Ulashib bo‘lmadi — faylni yuklab olib, o‘zingiz yuboring",
   tooLarge: "Fayl Telegram uchun juda katta — «Yuklab olish» dan foydalaning.",
   idUnsupported: "Bu Telegram akkaunti bilan ulashib bo‘lmadi — «Saqlash» yoki «Yuklab olish» dan foydalaning.",
 } as const;

@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Copy, Check, Link2, RefreshCw } from "lucide-react";
+import { Copy, Check, Link2, RefreshCw, Share2 } from "lucide-react";
 import { request } from "@/lib/api-client";
 import { GAME_KIND_LABEL } from "@/lib/game/engine";
 import type { PublicGameKind } from "@/lib/game/public";
 import { cn } from "@/lib/cn";
+import { copyToClipboard } from "@/lib/share";
+import { useLinkShare } from "../share/ShareMenu";
 import { shareSummary, type ShareSummary } from "./result-layout/summary";
 import { DirectDownloadButton } from "./DownloadSheet";
 
@@ -191,16 +193,35 @@ export function GameSharePanel({
     }
   }, [loadResults]);
 
-  const copy = useCallback(() => {
+  const urlField = useRef<HTMLInputElement>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    },
+    [],
+  );
+  const copy = useCallback(async () => {
     if (!session) return;
-    void navigator.clipboard?.writeText(session.url).then(
-      () => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      },
-      () => setError("Nusxalab bo‘lmadi — havolani qo‘lda belgilang"),
-    );
+    // Clipboard API → the selected field + `execCommand` → hidden textarea (lib/share.ts).
+    const ok = await copyToClipboard(session.url, { field: urlField.current });
+    if (!ok) return setError("Nusxalab bo‘lmadi — havolani qo‘lda belgilang");
+    setError("");
+    setCopied(true);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopied(false), 2000);
   }, [session]);
+
+  // «Ulashish»: Telegram's sheet inside the Mini App, else the native sheet, else the fallback menu.
+  const { share: shareLinkTo, menu: shareMenu } = useLinkShare();
+  const share = useCallback(() => {
+    if (!session) return;
+    shareLinkTo({
+      url: session.url,
+      title: `SlaydX — ${GAME_KIND_LABEL[kind]}`,
+      text: `${GAME_KIND_LABEL[kind]}: havola orqali kiring va ro‘yxatdan o‘tmasdan o‘ynang.`,
+    });
+  }, [session, shareLinkTo, kind]);
 
   /*
    * V3: panel `ResultLayout` yon panelida (xl: ≈356 px) yoki pastki varaqda
@@ -272,21 +293,31 @@ export function GameSharePanel({
             {/* Havola maydoni to'liq kenglikda; nusxalash sig'masa pastga o'raladi (maydon ≥ 12rem). */}
             <div className="flex flex-wrap items-center gap-2" data-share-url-row>
               <input
+                ref={urlField}
                 readOnly
                 data-share-url
                 aria-label="O‘yin havolasi"
-                className="border-input bg-muted/40 h-9 min-w-0 flex-1 basis-48 rounded-lg border px-2.5 text-xs"
+                className="border-input bg-muted/40 h-11 min-w-0 flex-1 basis-48 rounded-lg border px-2.5 text-xs @md:h-9 @md:pointer-coarse:h-11"
                 value={session.url}
                 onFocus={(e) => e.currentTarget.select()}
               />
               <button
                 type="button"
                 data-share-copy
-                className="bg-card inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm"
-                onClick={copy}
+                className="bg-card hover:bg-muted inline-flex h-11 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm @md:h-9 @md:pointer-coarse:h-11"
+                onClick={() => void copy()}
               >
                 {copied ? <Check className="size-4" aria-hidden /> : <Copy className="size-4" aria-hidden />}
                 {copied ? "Nusxalandi" : "Nusxalash"}
+              </button>
+              <button
+                type="button"
+                data-share-send
+                className="bg-primary text-primary-foreground inline-flex h-11 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-medium @md:h-9 @md:pointer-coarse:h-11"
+                onClick={share}
+              >
+                <Share2 className="size-4" aria-hidden />
+                Ulashish
               </button>
             </div>
 
@@ -413,6 +444,7 @@ export function GameSharePanel({
           )}
         </div>
       ) : null}
+      {shareMenu}
     </section>
   );
 }

@@ -6,7 +6,6 @@ import { cn } from "@/lib/cn";
 import type { DownloadFormat, DownloadFormatId } from "@/lib/downloads/formats";
 import {
   apiErrorCode,
-  deliverErrorText,
   DELIVER_TEXT,
   fetchFileBlob,
   markGesture,
@@ -26,6 +25,7 @@ import {
   tgVersion,
   type ShareCapability,
 } from "@/lib/telegram-webapp";
+import { canShareFile, shareFiles } from "@/lib/share";
 import {
   ActionLabel,
   failRow,
@@ -50,7 +50,11 @@ import {
  *  - `web-share-files` (browser that can share this file type): two taps —
  *    the first downloads the bytes, the second calls `navigator.share`
  *    synchronously (transient activation);
- *  - `download-only`: falls back to downloading.
+ *  - `download-only`: nothing can be shared from here (Firefox, Linux Chrome, DOCX/PPTX in Chromium, a
+ *    Telegram session without an account): a toast says why and the download list opens.
+ *    A file has no public link, so the fallback is «Yuklab olish», not «Havolani nusxalash»;
+ *  - a failed (not cancelled) `navigator.share` on the second tap → error toast + that format downloads.
+ *    Cancelling the sheet (`AbortError`) is silent (`lib/share.ts`).
  *
  * Format choice (docs/todo-2026-10-07 T4): a material with several formats
  * opens the format sheet first (`DownloadSheet` mode `share`, the stored file
@@ -59,18 +63,7 @@ import {
  * second tap) lives on that row. One-format materials share from the button.
  */
 
-/** Pure probe: this browser's Web Share accepts a file of this type (Chromium refuses DOCX/PPTX). */
-export function canShareFile(f: Pick<DownloadFormat, "ext" | "mime">, nav: unknown = typeof navigator !== "undefined" ? navigator : undefined): boolean {
-  try {
-    const n = nav as { canShare?: (d: { files: File[] }) => boolean; share?: unknown } | undefined;
-    if (!n || typeof n.canShare !== "function" || typeof n.share !== "function" || typeof File === "undefined") return false;
-    return n.canShare({ files: [new File([""], `fayl.${f.ext}`, { type: f.mime })] }) === true;
-  } catch {
-    return false;
-  }
-}
-
-/** The capability right now, for this format and session. */
+/** The capability right now, for this format and session (the Web Share probe lives in `lib/share.ts`). */
 export function currentShareCapability(f: DownloadFormat, hasTelegramId: boolean): ShareCapability {
   const inTelegram = isInMiniAppShell();
   return shareCapability({
@@ -243,15 +236,19 @@ export function useShareAction(args: {
         setWeb(null);
         sc.put(f.id, SEND_IDLE);
         try {
-          await navigator.share({ files: [file], title });
+          // `shareFiles` reaches `navigator.share` synchronously (the tap's activation is still valid).
+          const outcome = await shareFiles([file], { title });
           if (!sc.alive()) return;
-          sc.put(f.id, { s: "done", text: DELIVER_TEXT.shared });
-          onDone?.(f.id);
-        } catch (e) {
-          if ((e instanceof DOMException && e.name === "AbortError") || !sc.alive()) return;
-          sc.put(f.id, { s: "error", text: deliverErrorText(e) });
-          sc.toast({ text: deliverErrorText(e), tone: "error" });
-          onDownload(f.id);
+          if (outcome.status === "shared") {
+            sc.put(f.id, { s: "done", text: DELIVER_TEXT.shared });
+            onDone?.(f.id);
+          } else if (outcome.status === "fallback") {
+            // Not silent: the share sheet failed or cannot take this file — say so and hand the file over as a download.
+            sc.put(f.id, { s: "error", text: DELIVER_TEXT.shareFailed });
+            sc.toast({ text: DELIVER_TEXT.shareFailed, tone: "error" });
+            onDownload(f.id);
+          }
+          // `cancelled`: the user closed the sheet — nothing to report.
         } finally {
           sc.end();
         }
