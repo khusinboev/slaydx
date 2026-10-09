@@ -316,7 +316,24 @@ export function channelsScreen(a: BotAdmin, items: BonusChannelItem[]): AdminScr
   const toggles: KeyDef[][] = edit
     ? items.slice(0, 20).map((c, i) => [key(null, `${i + 1}. ${c.active ? "✅" : "⏸"} ${lockMark(c)}${clip(c.title, 30)}`, acb.chToggle(c.id))])
     : [];
-  return keyScreen(lines.join("\n"), ...toggles, [edit && key("plus", at(l, "ch.connect"), acb.chConnect(), "primary"), back(l)]);
+  // «🗑» only for a PAUSED channel nobody got a bonus from (the web's rule): pause first, then delete.
+  const deletes: KeyDef[][] = edit
+    ? items
+        .slice(0, 20)
+        .map((c, i) => ({ c, i }))
+        .filter(({ c }) => !c.active && c.stats.joined === 0)
+        .map(({ c, i }) => [key(null, `🗑 ${i + 1}. ${clip(c.title, 30)}`, acb.chDeleteAsk(c.id), "danger")])
+    : [];
+  return keyScreen(lines.join("\n"), ...toggles, ...deletes, [edit && key("plus", at(l, "ch.connect"), acb.chConnect(), "primary"), back(l)]);
+}
+
+/** «🗑 N. title» → confirm: the channel is removed for good (the service audits it). */
+export function channelDeleteAskScreen(lang: Lang, c: BonusChannelItem): AdminScreen {
+  return keyScreen(
+    `${head("warn", at(lang, "ch.deleteTitle"))}\n\n${at(lang, "ch.deleteAsk", { title: esc(clip(c.title, 60)) })}`,
+    [key(null, `🗑 ${at(lang, "ch.deleteYes")}`, acb.chDelete(c.id), "danger")],
+    [back(lang, acb.channels())],
+  );
 }
 
 export function channelAskScreen(lang: Lang): AdminScreen {

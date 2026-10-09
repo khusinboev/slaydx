@@ -76,6 +76,17 @@ const A = {
   "toast.chCreated": { uz: "✅ Kanal ulandi", ru: "✅ Канал подключён", en: "✅ Channel connected" },
   "toast.chOn": { uz: "✅ Yoqildi", ru: "✅ Включён", en: "✅ Enabled" },
   "toast.chOff": { uz: "⏸ To‘xtatildi", ru: "⏸ Приостановлен", en: "⏸ Paused" },
+  "toast.chDeleted": { uz: "🗑 Kanal o‘chirildi", ru: "🗑 Канал удалён", en: "🗑 Channel deleted" },
+  "toast.chDeleteActive": {
+    uz: "Avval kanalni to‘xtating (⏸), keyin o‘chiring",
+    ru: "Сначала приостановите канал (⏸), затем удалите",
+    en: "Pause the channel first (⏸), then delete it",
+  },
+  "toast.chDeleteClaims": {
+    uz: "Bu kanal orqali {n} kishi bonus olgan — o‘chirib bo‘lmaydi, to‘xtatilgan holda qoladi",
+    ru: "Через этот канал бонус получили {n} — удалить нельзя, канал остаётся приостановленным",
+    en: "{n} people got a bonus through this channel — it cannot be deleted; it stays paused",
+  },
   "toast.stepUpOk": { uz: "🔐 Tasdiqlandi", ru: "🔐 Подтверждено", en: "🔐 Confirmed" },
   "toast.error": { uz: "Xatolik: {msg}", ru: "Ошибка: {msg}", en: "Error: {msg}" },
 
@@ -232,10 +243,17 @@ const A = {
     en: "{icon} <b>{title}</b>{user} · {amount} · {n} got the bonus",
   },
   "ch.toggleHint": {
-    uz: "Kanal tugmasi — yoqish ✅ / to‘xtatish ⏸.",
-    ru: "Кнопка канала — включить ✅ / приостановить ⏸.",
-    en: "A channel button toggles it: on ✅ / paused ⏸.",
+    uz: "Kanal tugmasi — yoqish ✅ / to‘xtatish ⏸. To‘xtatilgan kanalni «🗑» bilan o‘chirish mumkin.",
+    ru: "Кнопка канала — включить ✅ / приостановить ⏸. Приостановленный канал можно удалить кнопкой «🗑».",
+    en: "A channel button toggles it: on ✅ / paused ⏸. A paused channel can be deleted with «🗑».",
   },
+  "ch.deleteTitle": { uz: "Kanalni o‘chirish", ru: "Удаление канала", en: "Delete the channel" },
+  "ch.deleteAsk": {
+    uz: "<b>{title}</b> butunlay o‘chirilsinmi? Bu amalni qaytarib bo‘lmaydi.",
+    ru: "Удалить <b>{title}</b> навсегда? Это действие нельзя отменить.",
+    en: "Delete <b>{title}</b> for good? This cannot be undone.",
+  },
+  "ch.deleteYes": { uz: "Ha, o‘chirish", ru: "Да, удалить", en: "Yes, delete" },
   "ch.viewOnly": { uz: "Kanallarni faqat ko‘rishingiz mumkin.", ru: "Каналы доступны только для просмотра.", en: "You can only view the channels." },
   "ch.connect": { uz: "Kanal ulash", ru: "Подключить канал", en: "Connect a channel" },
   "ch.ask": {

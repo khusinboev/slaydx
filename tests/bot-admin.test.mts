@@ -167,7 +167,7 @@ after(async () => {
 });
 
 test("codes: every admin code parses back and fits 64 bytes; i18n filled in uz/ru/en", () => {
-  for (const d of [acb.panel(), acb.stats(), acb.bcPick("new"), acb.bcSend(123456789), acb.bcStop("999999999999999999"), acb.chCreate("e"), acb.chToggle("12"), acb.payBonus(), acb.pbOther(), acb.pbPick(0), acb.pbSet(50)]) {
+  for (const d of [acb.panel(), acb.stats(), acb.bcPick("new"), acb.bcSend(123456789), acb.bcStop("999999999999999999"), acb.chCreate("e"), acb.chToggle("12"), acb.chDeleteAsk("12"), acb.chDelete("999999999999999999"), acb.payBonus(), acb.pbOther(), acb.pbPick(0), acb.pbSet(50)]) {
     assert.notEqual(parseAdminCallback(d).kind, "unknown", d);
     assert.ok(Buffer.byteLength(d) <= 64);
   }
@@ -782,6 +782,57 @@ test("Kanal ulash: two channels with the SAME title get different labels and eac
   const rows = await query<{ id: string; active: boolean }>("SELECT id::text AS id, active FROM bonus_channels WHERE id = ANY($1::bigint[]) ORDER BY id", [ids]);
   assert.deepEqual(rows.map((r) => r.active), [true, false], "only the tapped row changed");
   await query("UPDATE bonus_channels SET active = false WHERE id = ANY($1::bigint[])", [ids]);
+});
+
+test("Kanal o‘chirish: «🗑» only for a PAUSED channel without bonus claims; confirm → deleted + audited; active / claimed / viewer refused (owner 2026-10-09)", { skip }, async () => {
+  const a = await newAdmin("owner");
+  const mk = async (title: string, active: boolean) =>
+    (await queryOne<{ id: string }>(
+      `INSERT INTO bonus_channels (chat_id, title, join_bonus, stay_bonus, stay_days, sort, active) VALUES ($1, $2, 1000, 0, 7, -200, $3) RETURNING id::text AS id`,
+      [-1_008_000_000_000 - randomInt(0, 999_999_999), title, active],
+    ))!.id;
+  const live = await mk("Faol kanal", true);
+  const claimed = await mk("Bonusli kanal", false);
+  const free = await mk("Bo‘sh kanal", false);
+  const u = await newUser("Claimer");
+  await query("INSERT INTO bonus_channel_claims (user_id, channel_id, join_paid) VALUES ($1, $2, 1000)", [u.id, claimed]);
+
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "🔔 Kanal ulash"));
+  const codes = await offered(a.tg);
+  // MUTATION: offering «🗑» for an active or a claimed channel.
+  assert.ok(codes.includes(acb.chDeleteAsk(free)), "paused + no claims → «🗑»");
+  assert.ok(!codes.includes(acb.chDeleteAsk(live)), "active → no «🗑» (pause first)");
+  assert.ok(!codes.includes(acb.chDeleteAsk(claimed)), "claims → no «🗑»");
+  assert.match(await labelFor(a.tg, acb.chDeleteAsk(free)), /^🗑 \d+\. Bo‘sh kanal$/);
+
+  installFetch();
+  await press(a, acb.chDeleteAsk(free));
+  assert.match(texts().at(-1)!, /Bo‘sh kanal<\/b> butunlay o‘chirilsinmi/);
+  assert.deepEqual(await offered(a.tg), [acb.chDelete(free), acb.channels()]);
+  installFetch();
+  await press(a, acb.chDelete(free));
+  assert.match(texts().at(-1)!, /^🗑 Kanal o‘chirildi/);
+  assert.equal(await queryOne("SELECT 1 FROM bonus_channels WHERE id = $1", [free]), null, "deleted");
+  const rows = await audit(a.adminId, "bonus_channel.delete");
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]!.target_id, free);
+
+  // Forged / stale taps: the same rules on the server side.
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, acb.chDelete(live)));
+  assert.match([...toasts(), ...texts()].join(" "), /Avval kanalni to‘xtating/);
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, acb.chDelete(claimed)));
+  assert.match([...toasts(), ...texts()].join(" "), /1 kishi bonus olgan — o‘chirib bo‘lmaydi/);
+  assert.ok(await queryOne("SELECT 1 FROM bonus_channels WHERE id = $1", [live]));
+  assert.ok(await queryOne("SELECT 1 FROM bonus_channels WHERE id = $1", [claimed]));
+
+  const v = await newAdmin("viewer");
+  installFetch();
+  await tg.handleUpdate(cbUpdate(v.tg, acb.chDelete(claimed)));
+  assert.deepEqual(toasts(), ["Ruxsat yo‘q"]);
+  await query("DELETE FROM bonus_channels WHERE id = ANY($1::bigint[])", [[live, claimed]]);
 });
 
 test("2FA mode: an un-enrolled admin has no panel; an enrolled one must give a code before a confirmed change — also when the confirm is a REPLY tap — MUTATSIYA 7", { skip }, async () => {
