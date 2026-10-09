@@ -69,6 +69,8 @@ export const acb = {
   chTypes: () => "a:cf",
   chCreate: (t: ChannelType) => `a:cc:${t}`,
   chToggle: (id: string) => `a:ct:${id}`,
+  chDeleteAsk: (id: string) => `a:cx:${id}`,
+  chDelete: (id: string) => `a:cd:${id}`,
   payBonus: () => "a:p",
   pbOther: () => "a:po",
   pbPick: (p: number) => `a:pv:${p}`,
@@ -101,6 +103,8 @@ export type AdminCallback =
   | { kind: "chTypes" }
   | { kind: "chCreate"; type: ChannelType }
   | { kind: "chToggle"; id: string }
+  | { kind: "chDeleteAsk"; id: string }
+  | { kind: "chDelete"; id: string }
   | { kind: "payBonus" }
   | { kind: "pbOther" }
   | { kind: "pbPick"; percent: number }
@@ -179,6 +183,10 @@ export function parseAdminCallback(data: string | undefined | null): AdminCallba
       return (CHANNEL_TYPES as readonly string[]).includes(c) ? { kind: "chCreate", type: c as ChannelType } : { kind: "unknown" };
     case "ct":
       return ID.test(c) ? { kind: "chToggle", id: c } : { kind: "unknown" };
+    case "cx":
+      return ID.test(c) ? { kind: "chDeleteAsk", id: c } : { kind: "unknown" };
+    case "cd":
+      return ID.test(c) ? { kind: "chDelete", id: c } : { kind: "unknown" };
     case "pv":
       return isPercentCode(c) ? { kind: "pbPick", percent: Number(c) } : { kind: "unknown" };
     case "pk":

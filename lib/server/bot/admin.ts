@@ -22,6 +22,7 @@ import {
 import {
   createBonusChannel,
   createInviteLink,
+  deleteBonusChannel,
   listBonusChannels,
   parseChannelRef,
   resolveChannel,
@@ -56,6 +57,7 @@ import {
   channelProblemScreen,
   channelTypeScreen,
   channelsScreen,
+  channelDeleteAskScreen,
   confirmScreen,
   draftScreen,
   inputProblemScreen,
@@ -137,6 +139,8 @@ const PERM: Record<Exclude<AdminCallback["kind"], "unknown">, Permission> = {
   chTypes: "bonus.edit",
   chCreate: "bonus.edit",
   chToggle: "bonus.edit",
+  chDeleteAsk: "bonus.edit",
+  chDelete: "bonus.edit",
   payBonus: "settings.view",
   pbOther: "settings.edit",
   pbPick: "settings.edit",
@@ -144,7 +148,7 @@ const PERM: Record<Exclude<AdminCallback["kind"], "unknown">, Permission> = {
 };
 
 /** The confirmed changes: in 2FA mode they need a fresh bot step-up. */
-const CONFIRMS = new Set<AdminCallback["kind"]>(["bcSend", "bcStop", "chCreate", "chToggle", "pbSet"]);
+const CONFIRMS = new Set<AdminCallback["kind"]>(["bcSend", "bcStop", "chCreate", "chToggle", "chDelete", "pbSet"]);
 
 const STEP_PERM = { bc_msg: "broadcasts.send", bc_btn: "broadcasts.send", ch_ref: "bonus.edit", pb_val: "settings.edit", totp: "self" } as const;
 
@@ -159,6 +163,7 @@ const REASON = {
   discard: "Telegram botda qoralama bekor qilindi",
   channel: "Telegram bot orqali ulandi",
   toggle: "Telegram bot orqali o'zgartirildi",
+  delete: "Telegram bot orqali o'chirildi",
   payBonus: "Telegram bot orqali to'lov bonusi o'zgartirildi",
 };
 
@@ -572,6 +577,28 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
       if (!cur) return at(l, "toast.old");
       await updateBonusChannel(actorOf(a, updateId), c.id, { active: !cur.active, reason: REASON.toggle });
       await show(channelsScreen(a, (await listBonusChannels()).items), at(l, cur.active ? "toast.chOff" : "toast.chOn"));
+      return undefined;
+    }
+    /* Delete (owner 2026-10-09): the web's rule — pause the channel first; a channel somebody got a bonus from
+       is never deleted (the service refuses with 409 `has_claims`, the history stays). */
+    case "chDeleteAsk":
+    case "chDelete": {
+      const cur = (await listBonusChannels()).items.find((x) => x.id === c.id);
+      if (!cur) return at(l, "toast.old");
+      if (cur.active) return at(l, "toast.chDeleteActive");
+      if (cur.stats.joined > 0) return at(l, "toast.chDeleteClaims", { n: cur.stats.joined });
+      if (c.kind === "chDeleteAsk") {
+        await show(channelDeleteAskScreen(l, cur));
+        return undefined;
+      }
+      try {
+        await deleteBonusChannel(actorOf(a, updateId), c.id, { reason: REASON.delete });
+      } catch (e) {
+        if (!(e instanceof ApiError) || e.status >= 500) throw e;
+        await show(channelsScreen(a, (await listBonusChannels()).items), esc(e.message));
+        return undefined;
+      }
+      await show(channelsScreen(a, (await listBonusChannels()).items), at(l, "toast.chDeleted"));
       return undefined;
     }
 
