@@ -182,6 +182,9 @@ test("error mapping: documented codes, keyword rules, stage fallback", () => {
   assert.match(m("card_request", -401, "Card expired").message, /muddati/);
   assert.match(m("card_verify", -402, "Wrong SMS code").message, /SMS kod noto'g'ri/);
   assert.match(m("card_request", -403, "Card not found").message, /Karta topilmadi/);
+  // No prefix allow-list on our side: Click's own refusal of a card range must read clearly.
+  assert.match(m("card_request", -500, "Card type is not supported").message, /Click orqali qabul qilinmaydi/);
+  assert.match(m("card_request", -500, "Тип карты не поддерживается").message, /Click orqali qabul qilinmaydi/);
   assert.match(m("invoice_create", -404, "Subscriber not found").message, /Hisob-faktura yuborilmadi/);
   // Stage-scoped: "Card expired" at the invoice stage is not a card message.
   assert.match(m("invoice_create", -405, "Card expired").message, /Hisob yuborilmadi/);
