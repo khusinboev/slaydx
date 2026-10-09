@@ -367,6 +367,7 @@ berardi. Eval bitta tarifda sinagani uchun uchalasi ham sezilmay qoldi.
 | `POST /api/article/udk` | UDK taklifi: `{topic, language}` → `{udk, label, note}` (LLM `fast`; «taklif — tekshiring»; 30 ta / soat) |
 | `POST /api/payments/orders` | To'lov buyurtmasi + provayder URL |
 | `POST /api/payments/click` | Click Prepare/Complete webhook |
+| `POST /api/payments/click/card` · `/card/verify` · `/invoice` | Click TO'G'RIDAN-TO'G'RI usullar (Merchant API, `CLICK_MERCHANT_USER_ID` kerak): «Karta» — bir martalik karta tokeni + SMS (`{orderId, cardNumber, expireDate}` → `{phoneMasked}`, `{orderId, smsCode}` → `{status}`), «Telefon raqam» — Click ilovasiga hisob (`{orderId, phone}`). Pul FAQAT Shop API `Complete` bilan qo'shiladi; karta raqami/muddati/SMS kod hech qayerda saqlanmaydi va jurnalga yozilmaydi (`lib/server/click-merchant.ts`, `click-direct.ts`) |
 | `POST /api/payments/payme` | Payme Merchant API (JSON-RPC) |
 | `PATCH /api/generations/{id}/doc` | Slaydlarni tahrirlash (operatsiyalar ro'yxati) |
 | `POST /api/generations/{id}/rebuild` | PPTX faylni qayta yasash |
@@ -462,6 +463,12 @@ Payme:  https://<domen>/api/payments/payme
 
 Click imzosi MD5 formulasi bo'yicha, Payme esa `Basic Paycom:<KEY>` bilan tekshiriladi;
 ikkalasi ham doimiy vaqtli taqqoslash ishlatadi.
+
+Hamyon (`PayDialog`): erkin summa 1 000 – 10 000 000 so'm (`lib/topup-limits.ts` — forma va server uchun
+yagona manba) va Click uchun uch usul — «Karta», «Telefon raqam», «Click ilovasi» (deeplink; Telegram'da
+`openLink` bilan tashqarida ochiladi); «Click sahifasi orqali» — zaxira havola. Merchant API sozlanmagan bo'lsa
+(`features.payments.clickDirect`) faqat oddiy «Click» tugmasi chiqadi. Migratsiya `048_click_direct.sql`
+(`payment_orders.click_method / click_invoice_id / click_card_token / click_payment_id`).
 
 ---
 

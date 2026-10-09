@@ -366,10 +366,19 @@ test("PayDialog phone: a bottom sheet with ≥ 64 px amount cards, 44 px close a
     features: { llm: true, images: true, telegram: false, telegramBot: null, devLogin: false, pdf: true, payments: { click: true, payme: true } } as never,
   });
   render(inRouter(h(PayDialog)));
-  for (const m of ["Click", "Karta orqali", "Payme"]) {
+  for (const m of ["Click", "Payme"]) {
     const b = screen.getByText(new RegExp(`^${m}`));
     assert.ok(has(b, "h-12"), `${m} button ≥ 48 px`);
   }
+  // Merchant API on (owner 2026-10-09): Karta / Telefon raqam / Click ilovasi are ≥ 56 px rows, the input is 48 px.
+  cleanup();
+  useAppStore.setState({
+    features: { llm: true, images: true, telegram: false, telegramBot: null, devLogin: false, pdf: true, payments: { click: true, payme: true, clickDirect: true } } as never,
+  });
+  render(inRouter(h(PayDialog)));
+  for (const m of ["card", "phone", "app", "payme"]) assert.ok(has(document.querySelector(`[data-pay-method="${m}"]`), "min-h-14"), `${m} row ≥ 56 px`);
+  assert.ok(has(document.querySelector("[data-pay-input]"), "h-12"), "free amount input ≥ 48 px");
+  assert.ok(has(document.querySelector("[data-pay-input]"), "text-base"), "16 px text: iOS does not zoom");
 });
 
 test("PayDialog desktop: a centred dialog, same ≥ 64 px amount cards, 40 px close", () => {

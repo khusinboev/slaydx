@@ -6,6 +6,7 @@ import { safeEqual } from "./session";
 import { topUpInTx } from "./credits";
 import { log } from "./log";
 import { payPaymentBonusInTx } from "./payment-bonus";
+import { MAX_TOPUP_SOUM, MIN_TOPUP_SOUM, topupRangeMessage } from "../topup-limits";
 
 /**
  * To'lov buyurtmalari va ularni kreditga aylantirish.
@@ -114,8 +115,8 @@ export function paymeAuthorized(header: string | null | undefined, keys: readonl
 /** Balans to'ldirishda 1 so'm = 1 tanga. */
 export const SOUM_PER_COIN = 1;
 
-export const MIN_TOPUP_SOUM = 5_000;
-export const MAX_TOPUP_SOUM = 10_000_000;
+// Limits live in `lib/topup-limits.ts` (shared with the wallet dialog).
+export { MIN_TOPUP_SOUM, MAX_TOPUP_SOUM };
 
 export type Provider = "click" | "payme";
 /**
@@ -190,19 +191,19 @@ export async function createOrder(input: {
   /** Faqat balansni to'ldirish. JSON dan kelgan qiymat uchun runtime da ham tekshiriladi. */
   purpose: "topup";
   amountSoum: number;
+  /** Click only: how the user chose to pay (048). `null`/absent for Payme and pre-048 callers. */
+  clickMethod?: "page" | "card" | "phone" | "app" | null;
 }): Promise<PaymentOrder> {
   if (input.purpose !== "topup") throw new Error(PRO_REMOVED_MESSAGE);
   const amount = Math.round(input.amountSoum);
-  if (amount < MIN_TOPUP_SOUM || amount > MAX_TOPUP_SOUM) {
-    throw new Error(
-      `Summa ${MIN_TOPUP_SOUM.toLocaleString("uz-UZ")} — ${MAX_TOPUP_SOUM.toLocaleString("uz-UZ")} so'm oralig'ida bo'lishi kerak`,
-    );
+  if (!Number.isFinite(amount) || amount < MIN_TOPUP_SOUM || amount > MAX_TOPUP_SOUM) {
+    throw new Error(topupRangeMessage());
   }
   const row = await queryOne<OrderRow>(
-    `INSERT INTO payment_orders (id, user_id, provider, purpose, amount_soum)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO payment_orders (id, user_id, provider, purpose, amount_soum, click_method)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING ${COLS}`,
-    [randomUUID(), input.userId, input.provider, input.purpose, amount],
+    [randomUUID(), input.userId, input.provider, input.purpose, amount, input.provider === "click" ? (input.clickMethod ?? null) : null],
   );
   const order = toOrder(row!);
   log("info", "[payments] buyurtma yaratildi", {
@@ -211,6 +212,7 @@ export async function createOrder(input: {
     provider: order.provider,
     purpose: order.purpose,
     amountSoum: order.amountSoum,
+    ...(input.clickMethod ? { clickMethod: input.clickMethod } : {}),
   });
   return order;
 }
@@ -407,7 +409,7 @@ export async function settleOrder(
     ) {
       await client.query(
         `UPDATE payment_orders
-            SET state = 'cancelled', cancel_time = $2, cancel_reason = $3, updated_at = now()
+            SET state = 'cancelled', cancel_time = $2, cancel_reason = $3, click_card_token = NULL, updated_at = now()
           WHERE id = $1`,
         [orderId, performTime, CANCEL_REASON_TIMEOUT],
       );
@@ -462,6 +464,7 @@ export async function settleOrder(
     await client.query(
       `UPDATE payment_orders
           SET state = 'paid',
+              click_card_token = NULL, -- a one-time Click card token never outlives the payment
               perform_time = $2,
               -- Yaratilish vaqti noma'lum bo'lsa (Click Prepare siz
               -- to'g'ridan-to'g'ri Complete yuborgan holat), to'lov
@@ -517,7 +520,7 @@ export async function cancelOrder(orderId: string, cancelTime: number, reason: n
 
     await client.query(
       `UPDATE payment_orders
-          SET state = 'cancelled', cancel_time = $2, cancel_reason = $3, updated_at = now()
+          SET state = 'cancelled', cancel_time = $2, cancel_reason = $3, click_card_token = NULL, updated_at = now()
         WHERE id = $1 AND state IN ('created', 'pending')`,
       [orderId, cancelTime, reason],
     );
@@ -525,4 +528,19 @@ export async function cancelOrder(orderId: string, cancelTime: number, reason: n
   });
   logOrder("cancel", out, { reason });
   return out;
+}
+
+/**
+ * Housekeeping (worker): a one-time Click card token whose payment was never submitted (the user
+ * closed the dialog after the SMS) is dropped after `maxAgeMin` minutes. Returns the cleared count.
+ */
+export async function purgeStaleCardTokens(maxAgeMin = 30): Promise<number> {
+  const rows = await query<{ id: string }>(
+    `UPDATE payment_orders
+        SET click_card_token = NULL
+      WHERE click_card_token IS NOT NULL AND updated_at < now() - make_interval(mins => $1)
+      RETURNING id`,
+    [maxAgeMin],
+  );
+  return rows.length;
 }

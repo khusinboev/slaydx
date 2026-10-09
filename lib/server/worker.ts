@@ -41,6 +41,7 @@ import { purgeBonusFiles } from "./retention";
 import { purgeSourceCache } from "../generation/research/cache";
 import { refundUnrefundedFailed } from "./refund-reconcile";
 import { purgePaymentEvents } from "./payment-events";
+import { purgeStaleCardTokens } from "./payments";
 import { query, queryOne } from "./db";
 import type { ToolConfig, ToolId } from "../types";
 import { refundRatio } from "../generation/delivered";
@@ -946,6 +947,8 @@ export async function purgeHousekeeping(): Promise<void> {
       return n;
     });
   }
+  // Click direct card payments: a one-time card token nobody confirmed is dropped after 30 min (048).
+  await step("click-tokens", () => purgeStaleCardTokens());
   await step("sessions", () => purgeExpiredSessions());
   /*
    * O'YIN havolalari (AUDIT-22 R, `game_sessions.expires_at`, standart

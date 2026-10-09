@@ -1,4 +1,5 @@
 import { ApiError, handler, json, limit, readJson, requireUser } from "@/lib/server/api";
+import { type ClickMethod, isClickMethod } from "@/lib/click-input";
 import { type CardType, checkoutUrl, isCardType } from "@/lib/server/checkout-url";
 import { paymentsConfigured } from "@/lib/server/env";
 import { log } from "@/lib/server/log";
@@ -24,7 +25,7 @@ export const POST = handler("payments/create", async (req) => {
   const { user } = await requireUser(req);
   await limit(`pay:${user.id}`, 10, 300);
 
-  const body = await readJson<{ provider?: string; purpose?: string; amount?: number; card?: unknown }>(req, 4_000);
+  const body = await readJson<{ provider?: string; purpose?: string; amount?: number; card?: unknown; method?: unknown }>(req, 4_000);
   const provider = body.provider === "payme" ? "payme" : body.provider === "click" ? "click" : null;
   /*
    * Obuna olib tashlangan (2026-10): eski ochiq tab yoki keshlangan klient
@@ -46,6 +47,18 @@ export const POST = handler("payments/create", async (req) => {
     card = body.card;
   }
 
+  /*
+   * `method` (Click only): how the user pays -- `page` (my.click.uz, the fallback), `card` / `phone`
+   * (our own forms, `POST /api/payments/click/card|invoice`) or `app` (deeplink; `checkoutUrl` below IS
+   * the deeplink). Recorded on the order for support / analytics; money still moves only through the
+   * Shop API Prepare/Complete.
+   */
+  let clickMethod: ClickMethod | undefined;
+  if (body.method !== undefined && body.method !== null) {
+    if (provider !== "click" || !isClickMethod(body.method)) throw new ApiError("To'lov usuli noto'g'ri", 400);
+    clickMethod = body.method;
+  }
+
   const available = paymentsConfigured();
   if (!available[provider]) {
     throw new ApiError(
@@ -61,6 +74,7 @@ export const POST = handler("payments/create", async (req) => {
       provider: provider as Provider,
       purpose,
       amountSoum: Number(body.amount ?? 0),
+      clickMethod,
     });
   } catch (e) {
     /*
