@@ -7,6 +7,7 @@ import { recordPaymentEvent } from "@/lib/server/payment-events";
 import {
   attachTransaction,
   cancelOrder,
+  checkClickComplete,
   clickSignatureValid,
   findOrder,
   settleOrder,
@@ -114,17 +115,11 @@ async function handle(p: ClickParams): Promise<Reply> {
   }
 
   if (p.action === "1") {
-    // Complete — pulni hisobga qo'shamiz.
-    const sentPrepare = Number(p.merchant_prepare_id ?? 0);
-    if (p.merchant_prepare_id !== undefined && p.merchant_prepare_id !== "") {
-      if (!Number.isFinite(sentPrepare) || sentPrepare !== order.prepareId) {
-        return reply(p, CLICK_ERROR.NO_TXN, "prepare_id mos emas");
-      }
-    }
-    // Click tranzaksiyasi shu buyurtmaga tegishli ekanini tekshiramiz.
-    if (order.providerTxn && order.providerTxn !== String(p.click_trans_id)) {
-      return reply(p, CLICK_ERROR.NO_TXN, "click_trans_id mos emas");
-    }
+    // Complete — pulni hisobga qo'shamiz. Avval Prepare bilan mosligi: Prepare
+    // qilinmagan buyurtma, `merchant_prepare_id` yo'q/noto'g'ri yoki boshqa
+    // `click_trans_id` — hammasi -6 (Click api-testing), pul qo'shilmaydi.
+    const match = checkClickComplete(order, p);
+    if (!match.ok) return reply(p, CLICK_ERROR.NO_TXN, match.note);
     if (Number(p.error ?? 0) < 0) {
       // Click tomonda xato — bekor qilamiz, lekin TO'LANGAN buyurtmani emas:
       // ilgari bu yo'l `paid` ni ham `cancelled` ga o'zgartirardi, kredit esa
