@@ -147,6 +147,8 @@ test("access: an owner — /admin opens the admin menu as a REPLY keyboard (owne
   const a = await newAdmin("owner");
   installFetch();
   await tg.handleUpdate(textUpdate(a.tg, "/admin"));
+  // MUTATION: the main keyboard sent after the panel would replace the admin menu (review F1).
+  assert.equal(sends().length, 1, "only the admin menu — no main keyboard on top of it");
   const panel = sends()[0]!.body;
   assert.match(String(panel.text), /^🛠 <b>Admin panel<\/b>\n\nAdmin Bot, rolingiz: <b>ega<\/b>\./);
   const kb = (panel.reply_markup as { keyboard: Btn[][]; is_persistent: boolean }).keyboard;
@@ -158,6 +160,7 @@ test("access: an owner — /admin opens the admin menu as a REPLY keyboard (owne
   ]);
   installFetch();
   await tg.handleUpdate(textUpdate(a.tg, "🛠 Admin"));
+  assert.equal(sends().length, 1, "«🛠 Admin» too: just the admin menu");
   assert.match(String(sends()[0]!.body.text), /Admin panel/);
 
   installFetch();

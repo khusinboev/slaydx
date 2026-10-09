@@ -35,9 +35,12 @@ import { markBotBlocked } from "./bot-reachability";
  *                    chat_not_found, bad_request, other — `broadcast-errors.ts`);
  *                    blocked / deactivated also set `users.bot_blocked_at`, so later
  *                    audiences skip that user (`bot-reachability.ts`).
- *   • EARLY ABORT — if 200 recipients failed permanently and NOTHING was delivered,
- *     the broadcast is marked `failed` with a reason (a bad file_id / entities
- *     would otherwise burn the whole audience).
+ *   • EARLY ABORT — if 200 recipients failed with a CONTENT error (bad_request /
+ *     other) and NOTHING was delivered, the broadcast is marked `failed` with a
+ *     reason (a bad file_id / entities would otherwise burn the whole audience).
+ *     Unreachable users (blocked, deactivated, chat not found — e.g. web-only
+ *     Telegram logins that never started the bot) never count: they say nothing
+ *     about the content.
  *   • CRASH SAFETY — a `sending` row whose lease expired returns to `pending` at the
  *     start of the next pass. A process that dies between Telegram accepting a
  *     message and the result being written therefore repeats AT MOST the messages
@@ -221,12 +224,17 @@ async function requeue(id: string, r: Claimed, opts: { attemptUsed: boolean; del
   );
 }
 
-/** Nothing delivered and `after` permanent refusals: the content itself is bad. Returns whether it aborted. */
+/** Failure kinds that indict the CONTENT (a bad file_id, broken entities) rather than the recipient. */
+const isContentFailure = (kind: FailureKind): boolean => kind === "bad_request" || kind === "other";
+
+/** Nothing delivered and `after` content refusals: the content itself is bad. Returns whether it aborted. */
 async function abortIfHopeless(id: string, after: number): Promise<boolean> {
   const hit = await query<{ id: string }>(
     `UPDATE broadcasts SET status = 'failed', finished_at = now(),
             fail_reason = 'Birinchi ' || $2::text || ' ta yuborishning hammasi doimiy xato bilan tugadi — xabar tarkibini (fayl, format) tekshiring. Yuborish to''xtatildi.'
-      WHERE id = $1 AND status IN ('queued', 'sending') AND sent = 0 AND failed >= $2
+      WHERE id = $1 AND status IN ('queued', 'sending') AND sent = 0
+        AND (SELECT count(*) FROM broadcast_recipients
+              WHERE broadcast_id = $1 AND status = 'failed' AND error_kind IN ('bad_request', 'other')) >= $2
       RETURNING id`,
     [id, after],
   );
@@ -326,7 +334,7 @@ async function sender(ctx: Ctx): Promise<void> {
           ctx.out.failed++;
           if (isUnreachable(v.kind)) await markBotBlocked({ userId: rec.userId });
         }
-        if (await abortIfHopeless(ctx.id, ctx.deps.earlyAbortAfter)) {
+        if (isContentFailure(v.kind) && (await abortIfHopeless(ctx.id, ctx.deps.earlyAbortAfter))) {
           ctx.stopped = true;
           ctx.aborted = true;
           ctx.out.aborted++;

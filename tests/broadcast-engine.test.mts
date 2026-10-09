@@ -315,6 +315,22 @@ test("broadcast engine (Postgres)", { skip }, async (t) => {
     assert.equal(hits.length, 0);
   });
 
+  await t.test("unreachable recipients never trigger the early abort (review F4: web-only Telegram logins)", async (tt) => {
+    quiet(tt);
+    await reset();
+    const id = await mk(260);
+    // MUTATION: counting blocked / chat-not-found failures toward the abort marks this broadcast failed.
+    handler = (chatId) =>
+      Number(chatId) % 2
+        ? { code: 403, description: "Forbidden: bot can't initiate conversation with a user" }
+        : { code: 400, description: "Bad Request: chat not found" };
+    const r = await pass();
+    assert.equal(r.aborted, 0);
+    const b = await bc(id);
+    assert.equal(b.status, "done");
+    assert.equal(b.failed, 260);
+  });
+
   await t.test("one delivery in the first 200 prevents the early abort", async (tt) => {
     quiet(tt);
     await reset();

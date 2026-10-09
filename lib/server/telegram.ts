@@ -946,13 +946,12 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
   }
 
   if (text.startsWith("/admin")) {
-    // A linked admin gets the panel (and the keyboard with its «🛠 Admin» row); anyone else keeps the contact flow.
+    // A linked admin gets the panel with its own reply keyboard (C-Q6; «⬅️ Asosiy menyu» brings the
+    // main one back) — sending the main keyboard after it would replace that menu. Anyone else keeps
+    // the contact flow.
     if (ctx) {
       const adminBot = await import("./bot/admin");
-      if (await adminBot.openPanel(ctx.chatId, ctx.telegramId)) {
-        await bot.sendMainKeyboard(ctx, "refreshed");
-        return;
-      }
+      if (await adminBot.openPanel(ctx.chatId, ctx.telegramId)) return;
     }
     await sendMessage(msg.chat.id, t(lang, "admin.ask"), {
       reply_markup: {
