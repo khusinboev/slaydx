@@ -1,6 +1,6 @@
 import { formatPoints, telegramShareUrl } from "../../referral";
-import { FIRST_TOPUP_MIN_SOUM, FIRST_TOPUP_PERCENT } from "../../topup-bonus";
 import type { BonusTasks, ChannelTask } from "../bonus-channels";
+import type { MandatoryChannel } from "../mandatory-channels";
 import { cb } from "./codes";
 import { t, type Lang } from "./i18n";
 import { appUrl, clip, esc, inlineButton, isPublicHttps, rows, tgEmoji, type InlineButton, type Screen } from "./ui";
@@ -56,20 +56,26 @@ function staySuffix(lang: Lang, c: ChannelTask, now: number): string {
   return ` · ${t(lang, "task.stayWait", { d: c.stayDays, n: left })}`;
 }
 
-/** `<title> · +1 000 so‘m[ · stay]` with the title cut so the label stays ≤ BONUS_LABEL_MAX. */
+/**
+ * `<title> · +1 000 so‘m[ · stay]` with the title cut so the label stays ≤ BONUS_LABEL_MAX. A mandatory
+ * channel (C-Q2) without a bonus shows no amount; a joined mandatory one keeps its «🔒» mark.
+ */
 function channelLabel(lang: Lang, c: ChannelTask, now: number): string {
   const amount = c.claim ? c.claim.joinPaid : c.joinBonus;
-  const rest = ` · +${som(lang, amount)}${staySuffix(lang, c, now)}`;
-  return `${clip(c.title, Math.max(TITLE_MIN, BONUS_LABEL_MAX - rest.length))}${rest}`;
+  const rest = `${amount > 0 || !c.mandatory ? ` · +${som(lang, amount)}` : ""}${staySuffix(lang, c, now)}`;
+  const mark = c.mandatory && c.claim ? "🔒 " : "";
+  return `${mark}${clip(c.title, Math.max(TITLE_MIN, BONUS_LABEL_MAX - rest.length))}${rest}`;
 }
 
 function channelButton(lang: Lang, c: ChannelTask, now: number): InlineButton {
   const label = channelLabel(lang, c, now);
   if (c.claim) return inlineButton("save", label, { callback_data: cb.bonusDone() }, "success");
   // No public link (a private channel without a stored invite link): the tap checks this one channel.
+  // A mandatory channel not joined yet carries the 🔒 icon (C-Q2).
+  const icon = c.mandatory ? "lock" : "megaphone";
   return c.joinUrl
-    ? inlineButton("megaphone", label, { url: c.joinUrl })
-    : inlineButton("megaphone", label, { callback_data: cb.bonusCheck(c.id) });
+    ? inlineButton(icon, label, { url: c.joinUrl }, c.mandatory ? "primary" : undefined)
+    : inlineButton(icon, label, { callback_data: cb.bonusCheck(c.id) }, c.mandatory ? "primary" : undefined);
 }
 
 /** Invite friends: the Telegram share sheet (green once at least one friend joined). */
@@ -80,21 +86,18 @@ function inviteButton(lang: Lang, r: BonusTasks["referral"]): InlineButton {
     : inlineButton("group", t(lang, "task.invite", { n: som(lang, r.rewardPoints) }), action, "primary");
 }
 
-function topupButton(lang: Lang, f: BonusTasks["firstTopup"]): InlineButton | null {
-  if (f.paid) return inlineButton("save", t(lang, "task.topupPaid", { n: som(lang, f.points) }), { callback_data: cb.bonusDone() }, "success");
-  // Already topped up before (or a first top-up under the minimum): the bonus can no longer be earned — no button.
-  if (!f.eligible) return null;
+/** C-Q4: «💳 Har to‘ldirishga +N% bonus» → the wallet web app; no button while the bonus is off (N = 0). */
+function topupButton(lang: Lang, b: BonusTasks["paymentBonus"]): InlineButton | null {
+  if (!(b.percent > 0)) return null;
   // An INLINE web_app button carries initData: the plain URL logs in silently (no personal `?bt=` link in chat history).
   const wallet = appUrl("/uz/wallet");
-  return wallet
-    ? inlineButton("card", t(lang, "task.topup", { p: FIRST_TOPUP_PERCENT, m: som(lang, FIRST_TOPUP_MIN_SOUM) }), { web_app: { url: wallet } })
-    : null;
+  return wallet ? inlineButton("card", t(lang, "task.topup", { p: b.percent }), { web_app: { url: wallet } }) : null;
 }
 
 /**
  * «Sizning bonuslaringiz»: the summary (earned · still available), a short
  * explanation, then one button per task — sign-up, invite friends, each active
- * channel, the first top-up — and [«🔄 Yangilash»][«⬅️ Hamyon»].
+ * channel, the payment bonus — and [«🔄 Yangilash»][«⬅️ Hamyon»].
  */
 export function bonusScreen(lang: Lang, tasks: BonusTasks, now: number): Screen {
   const channels = tasks.channels.slice(0, BONUS_MAX_CHANNELS);
@@ -114,7 +117,7 @@ export function bonusScreen(lang: Lang, tasks: BonusTasks, now: number): Screen 
       [inlineButton("save", signup, { callback_data: cb.bonusDone() }, "success")],
       [inviteButton(lang, tasks.referral)],
       ...channels.map((c) => [channelButton(lang, c, now)]),
-      [topupButton(lang, tasks.firstTopup)],
+      [topupButton(lang, tasks.paymentBonus)],
       [
         inlineButton("refresh", t(lang, "btn.refresh"), { callback_data: cb.bonusRefresh() }),
         inlineButton("back", t(lang, "btn.wallet"), { callback_data: cb.wallet() }),
@@ -146,5 +149,27 @@ export function stayPaidNotice(lang: Lang, p: { points: number; title: string; s
       t(lang, "bonus.stayText", { c: esc(clip(p.title, 60)), d: p.stayDays }),
     ].join("\n"),
     reply_markup: rows([bonusesButton(lang)]),
+  };
+}
+
+/**
+ * Mandatory channels card (docs/bonus/BONUS3.md C-Q2): after /start for a user who has not joined
+ * every active mandatory channel — one button per channel (its join link; a channel without a
+ * public link checks itself, like the bonuses screen) and «✅ Tekshirish» (`b:m`). `channels`
+ * empty → the «all joined» card without buttons. Data: `mandatory-channels.ts missingMandatory`.
+ */
+export function mandatoryScreen(lang: Lang, channels: MandatoryChannel[]): Screen {
+  if (!channels.length) return { text: `${tgEmoji("party")} ${t(lang, "mand.done")}` };
+  const list = channels.slice(0, BONUS_MAX_CHANNELS);
+  return {
+    text: [`${tgEmoji("lock")} <b>${t(lang, "mand.title")}</b>`, "", t(lang, "mand.lead")].join("\n"),
+    reply_markup: rows(
+      ...list.map((c) => [
+        c.joinUrl
+          ? inlineButton("lock", clip(c.title, BONUS_LABEL_MAX), { url: c.joinUrl }, "primary")
+          : inlineButton("lock", clip(c.title, BONUS_LABEL_MAX), { callback_data: cb.bonusCheck(c.id) }, "primary"),
+      ]),
+      [inlineButton("save", t(lang, "mand.check"), { callback_data: cb.mandatoryCheck() }, "success")],
+    ),
   };
 }

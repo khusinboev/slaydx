@@ -110,11 +110,16 @@ after(async () => {
 });
 
 test("codes: every admin code parses back and fits 64 bytes; i18n filled in uz/ru/en", () => {
-  for (const d of [acb.panel(), acb.stats(), acb.bcPick("new"), acb.bcSend(123456789), acb.bcStop("999999999999999999"), acb.chCreate("e"), acb.chToggle("12")]) {
+  for (const d of [acb.panel(), acb.stats(), acb.bcPick("new"), acb.bcSend(123456789), acb.bcStop("999999999999999999"), acb.chCreate("e"), acb.chToggle("12"), acb.payBonus(), acb.pbOther(), acb.pbPick(0), acb.pbSet(50)]) {
     assert.notEqual(parseAdminCallback(d).kind, "unknown", d);
     assert.ok(Buffer.byteLength(d) <= 64);
   }
-  for (const bad of ["a:bs:-1", "a:bu:vip", "a:ct:0x1", "a:bk:1:2", "a"]) assert.equal(parseAdminCallback(bad).kind, "unknown", bad);
+  assert.deepEqual(parseAdminCallback("a:pk:15"), { kind: "pbSet", percent: 15 });
+  assert.deepEqual(parseAdminCallback("a:pv:0"), { kind: "pbPick", percent: 0 });
+  // MUTATION: the code bound 50 → 99 lets a forged `a:pk:51` reach the service (it would still refuse with 400).
+  for (const bad of ["a:bs:-1", "a:bu:vip", "a:ct:0x1", "a:bk:1:2", "a", "a:pk:51", "a:pk:-1", "a:pk:05", "a:pk:1.5", "a:pv:100", "a:pk:"]) {
+    assert.equal(parseAdminCallback(bad).kind, "unknown", bad);
+  }
   for (const k of ADMIN_TEXT_KEYS) for (const l of ["uz", "ru", "en"] as const) assert.ok(adminRawEntry(k)[l].trim(), `${k}.${l}`);
 });
 
@@ -138,23 +143,47 @@ test("access: a non-admin tap gets «Ruxsat yo‘q» and nothing else; /admin ke
   assert.ok(!rows.flat().some((b) => /Admin/.test(b.text)), "no «🛠 Admin» row");
 });
 
-test("access: an owner — /admin opens the panel + keyboard with the «🛠 Admin» row; button opens it too; close", { skip }, async () => {
+test("access: an owner — /admin opens the admin menu as a REPLY keyboard (owner C-Q6); a tap runs the action; «Asosiy menyu» restores the main keyboard", { skip }, async () => {
   const a = await newAdmin("owner");
   installFetch();
   await tg.handleUpdate(textUpdate(a.tg, "/admin"));
+  // MUTATION: the main keyboard sent after the panel would replace the admin menu (review F1).
+  assert.equal(sends().length, 1, "only the admin menu — no main keyboard on top of it");
   const panel = sends()[0]!.body;
   assert.match(String(panel.text), /^🛠 <b>Admin panel<\/b>\n\nAdmin Bot, rolingiz: <b>ega<\/b>\./);
-  assert.deepEqual(datas(panel), ["a:s", "a:b", "a:c", "a:z"]);
-  assert.deepEqual(buttons(panel).map((b) => b.text), ["📈 Statistika", "📢 Xabar yuborish", "🔔 Kanal ulash", "⬅️ Yopish"]);
-  const rows = (sends()[1]!.body.reply_markup as { keyboard: Btn[][] }).keyboard;
-  assert.deepEqual(rows.at(-1), [{ text: "🛠 Admin", style: "primary" }]);
+  const kb = (panel.reply_markup as { keyboard: Btn[][]; is_persistent: boolean }).keyboard;
+  // MUTATION: the old inline panel (buttons under the message) instead of the bottom keyboard.
+  assert.deepEqual(kb.map((r) => r.map((b) => `${b.text}${b.style ? `(${b.style})` : ""}`)), [
+    ["📈 Statistika(primary)", "📢 Xabar yuborish"],
+    ["🔔 Kanal ulash", "💳 To‘lov bonusi"],
+    ["⬅️ Asosiy menyu"],
+  ]);
   installFetch();
   await tg.handleUpdate(textUpdate(a.tg, "🛠 Admin"));
+  assert.equal(sends().length, 1, "«🛠 Admin» too: just the admin menu");
   assert.match(String(sends()[0]!.body.text), /Admin panel/);
+
   installFetch();
-  await tg.handleUpdate(cbUpdate(a.tg, "a:z", 77));
-  assert.equal(edits()[0]!.body.message_id, 77);
-  assert.match(String(edits()[0]!.body.text), /Admin panel yopildi/);
+  await tg.handleUpdate(textUpdate(a.tg, "📈 Statistika"));
+  assert.equal(sends()[0]!.body.text, "⏳");
+  assert.match(String(edits()[0]!.body.text), /Foydalanuvchilar/, "the stats card replaces the placeholder");
+
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "⬅️ Asosiy menyu"));
+  const main = (sends()[0]!.body.reply_markup as { keyboard: Btn[][] }).keyboard;
+  assert.deepEqual(main.at(-1), [{ text: "🛠 Admin", style: "primary" }], "main keyboard with the admin row");
+  assert.ok(main.flat().some((b) => /Slayd/.test(b.text)));
+});
+
+test("admin reply menu: a NON-admin typing «Statistika» / «Asosiy menyu» gets no admin screen (text falls through)", { skip }, async () => {
+  const u = await newUser();
+  for (const text of ["📈 Statistika", "⬅️ Asosiy menyu"]) {
+    installFetch();
+    await tg.handleUpdate(textUpdate(u.tg, text));
+    assert.ok(!sends().some((m) => m.body.text === "⏳" || /Foydalanuvchilar|Admin panel/.test(String(m.body.text))), text);
+    // MUTATION: the menu handler swallowing a non-admin's text — the usual bot reply must still come.
+    assert.ok(sends().length >= 1, `${text}: the ordinary reply still arrives`);
+  }
 });
 
 test("access: revoked (disabled) and blocked admins get nothing — MUTATSIYA 1, 2", { skip }, async () => {
@@ -176,7 +205,8 @@ test("access: viewer sees Statistika only (no bonus section); a broadcast tap is
   const v = await newAdmin("viewer");
   installFetch();
   await tg.handleUpdate(textUpdate(v.tg, "/admin"));
-  assert.deepEqual(datas(sends()[0]!.body), ["a:s", "a:c", "a:z"], "viewer has bonus.view, not broadcasts.send");
+  const vkb = (sends()[0]!.body.reply_markup as { keyboard: Btn[][] }).keyboard;
+  assert.deepEqual(vkb.flat().map((b) => b.text), ["📈 Statistika", "🔔 Kanal ulash", "💳 To‘lov bonusi", "⬅️ Asosiy menyu"], "viewer has bonus.view + settings.view, not broadcasts.send");
   const s = await newAdmin("support");
   installFetch();
   await tg.handleUpdate(cbUpdate(s.tg, "a:b"));
@@ -397,20 +427,29 @@ test("Kanal ulash: forward from the channel → type → confirm → created (au
   assert.match(String(sends()[0]!.body.text), /Bu kanal posti emas/);
   installFetch();
   await tg.handleUpdate(textUpdate(a.tg, "post", { forward_origin: { type: "channel", chat: { id: chatId, type: "channel", title: "x" }, message_id: 5 } }));
-  const typeScreen = sends()[0]!.body;
-  assert.match(String(typeScreen.text), /Admin &lt;yangiliklar&gt;<\/b>\n@adm_news_\d+ · ID <code>-100\d+<\/code>\n\n✅ Bot kanalda admin\./);
+  // C-Q2: after resolving, «🔒 Majburiy» / «➕ Ixtiyoriy» first, then the presets of that kind.
+  const kindScreen = sends()[0]!.body;
+  assert.match(String(kindScreen.text), /Admin &lt;yangiliklar&gt;<\/b>\n@adm_news_\d+ · ID <code>-100\d+<\/code>\n\n✅ Bot kanalda admin\./);
+  assert.deepEqual(buttons(kindScreen).slice(0, 2).map((b) => [b.text, b.callback_data]), [["🔒 Majburiy", "a:ck:m"], ["➕ Ixtiyoriy", "a:ck:o"]]);
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, "a:ck:o", 601));
+  const typeScreen = edits()[0]!.body;
+  assert.match(String(typeScreen.text), /Obuna: <b>➕ Ixtiyoriy<\/b>/);
   assert.deepEqual(buttons(typeScreen).slice(0, 2).map((b) => b.text), ["📄 Yangiliklar · 2 000 so‘m", "➕ Qo‘shimcha · 1 000 + 7 kunda 2 000"].map(nb));
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, "a:cy:z", 601));
+  assert.ok(toasts()[0], "a mandatory preset on an optional draft is refused");
   installFetch();
   await tg.handleUpdate(cbUpdate(a.tg, "a:cy:e", 601));
   assert.ok(String(edits()[0]!.body.text).includes(nb("Obuna bo‘lganda: <b>1 000 so‘m</b>\n7 kun qolsa: yana <b>2 000 so‘m</b>")));
   installFetch();
   await tg.handleUpdate(cbUpdate(a.tg, "a:cc:e", 601));
   assert.deepEqual(toasts(), ["✅ Kanal ulandi"]);
-  const row = await queryOne<{ id: string; join_bonus: number; stay_bonus: number; stay_days: number; active: boolean }>(
-    "SELECT id::text AS id, join_bonus, stay_bonus, stay_days, active FROM bonus_channels WHERE chat_id = $1",
+  const row = await queryOne<{ id: string; join_bonus: number; stay_bonus: number; stay_days: number; active: boolean; mandatory: boolean }>(
+    "SELECT id::text AS id, join_bonus, stay_bonus, stay_days, active, mandatory FROM bonus_channels WHERE chat_id = $1",
     [chatId],
   );
-  assert.deepEqual({ ...row, id: undefined }, { id: undefined, join_bonus: 1000, stay_bonus: 2000, stay_days: 7, active: true });
+  assert.deepEqual({ ...row, id: undefined }, { id: undefined, join_bonus: 1000, stay_bonus: 2000, stay_days: 7, active: true, mandatory: false });
   const created = await audit(a.adminId, "bonus_channel.create");
   assert.equal(created.length, 1);
   assert.equal(created[0]!.target_id, row!.id);
@@ -424,7 +463,7 @@ test("Kanal ulash: forward from the channel → type → confirm → created (au
   assert.match(String(sends()[0]!.body.text), /allaqachon ulangan/);
   assert.equal((await audit(a.adminId, "bonus_channel.create")).length, 1);
 
-  // A new channel by t.me link → news type.
+  // A new channel by t.me link → 🔒 Majburiy → «Bonussiz» (a mandatory channel may pay nothing).
   const chat2 = chatId - 1;
   const uname2 = `${uname}_b`;
   chats[`@${uname2}`] = { id: chat2, type: "channel", title: "Ikkinchi", username: uname2 };
@@ -432,10 +471,28 @@ test("Kanal ulash: forward from the channel → type → confirm → created (au
   installFetch();
   await tg.handleUpdate(cbUpdate(a.tg, "a:cn", 603));
   await tg.handleUpdate(textUpdate(a.tg, `https://t.me/${uname2}`));
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, "a:ck:m", 604));
+  const mScreen = edits()[0]!.body;
+  assert.match(String(mScreen.text), /Obuna: <b>🔒 Majburiy<\/b>/);
+  assert.deepEqual(buttons(mScreen).slice(0, 3).map((b) => b.callback_data), ["a:cy:m", "a:cy:z", "a:cg"]);
+  installFetch();
   await tg.handleUpdate(cbUpdate(a.tg, "a:cy:n", 604));
-  await tg.handleUpdate(cbUpdate(a.tg, "a:cc:n", 604));
-  const r2 = await queryOne<{ join_bonus: number; stay_bonus: number }>("SELECT join_bonus, stay_bonus FROM bonus_channels WHERE chat_id = $1", [chat2]);
-  assert.deepEqual({ ...r2 }, { join_bonus: 2000, stay_bonus: 0 });
+  assert.ok(toasts()[0], "an optional preset on a mandatory draft is refused");
+  await tg.handleUpdate(cbUpdate(a.tg, "a:cy:z", 604));
+  assert.ok(String(edits().at(-1)!.body.text).includes("Obuna bo‘lganda: <b>bonussiz</b>"));
+  await tg.handleUpdate(cbUpdate(a.tg, "a:cc:z", 604));
+  const r2 = await queryOne<{ id: string; join_bonus: number; stay_bonus: number; mandatory: boolean }>(
+    "SELECT id::text AS id, join_bonus, stay_bonus, mandatory FROM bonus_channels WHERE chat_id = $1",
+    [chat2],
+  );
+  assert.deepEqual({ ...r2, id: undefined }, { id: undefined, join_bonus: 0, stay_bonus: 0, mandatory: true });
+  const c2 = (await audit(a.adminId, "bonus_channel.create")).find((x) => x.target_id === r2!.id);
+  assert.equal((c2!.after as Record<string, unknown>).mandatory, true, "audited as mandatory");
+  // The list marks it with 🔒.
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, "a:c", 604));
+  assert.ok(buttons(edits()[0]!.body).some((b) => b.callback_data === `a:ct:${r2!.id}` && b.text.includes("🔒 Ikkinchi")));
 
   // Toggle: ⏸ (audited), the list re-rendered.
   installFetch();
@@ -493,4 +550,79 @@ test("Xabar yuborish: a CONCURRENT double tap on «Yuborish» without a test cre
   assert.equal(bs.length, 1, "exactly one broadcast row");
   assert.equal(bs[0]!.status, "queued");
   assert.equal((await audit(a.adminId, "broadcasts.send")).length, 1, "queued once");
+});
+
+test("Progress card: pause / resume buttons, the engine edits the SAME message, support cannot pause (docs/bonus/BONUS3.md C-Q5)", { skip }, async () => {
+  const a = await newAdmin("owner");
+  const viewer = await newAdmin("support");
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, "a:b", 960));
+  await tg.handleUpdate(textUpdate(a.tg, "Pauza va davom ettirish"));
+  await tg.handleUpdate(cbUpdate(a.tg, "a:ba", 961));
+  await tg.handleUpdate(cbUpdate(a.tg, "a:bu:new", 961));
+  const nw = (await audienceCount({ kind: "new_days", days: 7 })).count;
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, `a:bs:${nw}`, 962));
+  const [b] = await broadcastsBy(a.adminId);
+  assert.ok(b);
+  assert.equal(b!.status, "queued");
+  assert.equal((b!.content!.notify as { messageId?: number }).messageId, 962, "the progress message is remembered for the engine");
+  assert.deepEqual(datas(edits()[0]!.body), ["a:bp:" + b!.id, "a:bw:" + b!.id, "a:bc:" + b!.id, "a:h"]);
+
+  // Pause → «pauzada», the button flips to «Davom ettirish».
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, `a:bw:${b!.id}`, 962));
+  assert.deepEqual(toasts(), ["⏸ Pauzada"]);
+  assert.match(String(edits()[0]!.body.text), /Holat: <b>pauzada<\/b>/);
+  assert.deepEqual(datas(edits()[0]!.body), ["a:bp:" + b!.id, "a:br:" + b!.id, "a:bc:" + b!.id, "a:h"]);
+  assert.equal((await broadcastsBy(a.adminId))[0]!.status, "paused");
+  const pa = await audit(a.adminId, "broadcasts.pause");
+  assert.equal(pa.length, 1);
+  assert.deepEqual(pa[0]!.meta, { via: "bot" });
+
+  // Support (broadcasts.view only) cannot pause or resume.
+  installFetch();
+  await tg.handleUpdate(cbUpdate(viewer.tg, `a:br:${b!.id}`, 970));
+  assert.deepEqual(toasts(), ["Ruxsat yo‘q"]);
+  assert.equal((await broadcastsBy(a.adminId))[0]!.status, "paused");
+
+  // The engine's in-place edit: editMessageText on message 962 with the current card.
+  installFetch();
+  const { editBroadcastProgress } = await import("../lib/server/bot/admin.ts");
+  await editBroadcastProgress(b!.id, { chatId: String(a.tg), lang: "uz", messageId: 962 });
+  assert.equal(edits().length, 1);
+  assert.equal(edits()[0]!.body.message_id, 962);
+  assert.equal(edits()[0]!.body.chat_id, a.tg);
+  assert.match(String(edits()[0]!.body.text), /Holat: <b>pauzada<\/b>/);
+  assert.equal(sends().length, 0, "never a new message");
+
+  // Resume → never started → back to «navbatda».
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, `a:br:${b!.id}`, 962));
+  assert.deepEqual(toasts(), ["▶️ Davom etmoqda"]);
+  assert.match(String(edits()[0]!.body.text), /Holat: <b>navbatda<\/b>/);
+  assert.equal((await broadcastsBy(a.adminId))[0]!.status, "queued");
+  // A stale second tap on «Davom ettirish» of an already resumed card is harmless.
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, `a:br:${b!.id}`, 962));
+  assert.match(String(edits()[0]!.body.text), /Holat: <b>navbatda<\/b>/, "409 swallowed, the card shows the truth");
+});
+
+test("Progress card text: speed and ETA while sending; the abort reason when failed", async () => {
+  const base = {
+    id: "9", status: "sending", text: "x", audience: { kind: "all" }, total: 1000, sent: 100, failed: 0, createdBy: null, createdByName: null,
+    createdAt: "", queuedAt: null, finishedAt: null, startedAt: null, heartbeatAt: null, failReason: null,
+  } as unknown as import("../lib/server/admin-broadcasts.ts").AdminBroadcast;
+  const stats = { total: 1000, sent: 100, failed: 0, pending: 900, inFlight: 8, retrying: 0, speed: 24.8, etaSeconds: 90, failedReasons: [] };
+  const { progressScreen } = await import("../lib/server/bot/admin-screens.ts");
+  const live = progressScreen("uz", base, stats, true);
+  assert.match(live.text, /Tezlik: 24\.8 ta\/s · taxminan 1 min 30 s qoldi/);
+  const failed = progressScreen("uz", { ...base, status: "failed", failReason: "Birinchi 200 ta yuborish muvaffaqiyatsiz <x>" }, { ...stats, speed: 0, etaSeconds: null }, true);
+  assert.match(failed.text, /xato bilan to‘xtatildi/);
+  assert.match(failed.text, /Birinchi 200 ta yuborish muvaffaqiyatsiz &lt;x&gt;/, "escaped");
+  assert.ok(!/Tezlik/.test(failed.text));
+  const paused = progressScreen("uz", { ...base, status: "paused" }, { ...stats, speed: 0, etaSeconds: null }, true);
+  assert.ok(JSON.stringify(paused.reply_markup).includes("a:br:9"));
+  const noPerm = progressScreen("uz", base, stats, false);
+  assert.ok(!JSON.stringify(noPerm.reply_markup).includes("a:bw:9"), "no pause button without broadcasts.send");
 });

@@ -1,0 +1,13 @@
+-- Mandatory channels (docs/bonus/BONUS3.md C-Q2, package D2).
+--
+--   bonus_channels.mandatory  TRUE = the user must be a member of this channel (while it is `active`)
+--                             before creating new work (POST /api/generations, `mandatory-channels.ts`
+--                             `assertCanCreate`). FALSE (every existing row) = today's optional bonus channel.
+--                             A mandatory channel may pay a join / stay bonus too, or none.
+--
+-- Additive only: one NOT NULL column with a constant default (metadata-only on PostgreSQL ≥ 11, no rewrite).
+--
+-- ROLLBACK:
+--   ALTER TABLE bonus_channels DROP COLUMN IF EXISTS mandatory;
+--   DELETE FROM schema_migrations WHERE name = '045_bonus_channel_mandatory.sql';
+ALTER TABLE bonus_channels ADD COLUMN IF NOT EXISTS mandatory BOOLEAN NOT NULL DEFAULT FALSE;

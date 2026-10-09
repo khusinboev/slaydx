@@ -17,6 +17,7 @@ import { BOT_LANGUAGES, isProfileField, type BotLanguage, type FieldStepId, type
  *   b:h               «Sizning bonuslaringiz» (the bonuses message)
  *   b:r               «🔄 Yangilash»: re-check every channel not joined yet, then re-render
  *   b:d               a green (done) task: only a «Bajarilgan» toast
+ *   b:m               mandatory channels card «✅ Tekshirish» (C-Q2): re-check, then re-render
  *   b:c:<channelId>   check one bonus channel (a channel without a public link; old «Tekshirish»
  *                     buttons) — a positive BIGINT, ≤ 18 digits → ≤ 22 bytes
  *   l:m:<o>           language menu; o = where it came from (p profile, y help, n none)
@@ -44,6 +45,7 @@ export const cb = {
   bonus: () => "b:h",
   bonusRefresh: () => "b:r",
   bonusDone: () => "b:d",
+  mandatoryCheck: () => "b:m",
   bonusCheck: (channelId: string) => `b:c:${channelId}`,
   langMenu: (origin: Origin) => `l:m:${origin}`,
   langSet: (lang: BotLanguage, origin: Origin) => `l:s:${lang}:${origin}`,
@@ -63,6 +65,7 @@ export type Callback =
   | { kind: "bonus" }
   | { kind: "bonusRefresh" }
   | { kind: "bonusDone" }
+  | { kind: "mandatoryCheck" }
   | { kind: "bonusCheck"; channelId: string }
   | { kind: "langMenu"; origin: Origin }
   | { kind: "langSet"; lang: BotLanguage; origin: Origin }
@@ -101,6 +104,7 @@ export function parseCallback(data: string | undefined | null): Callback {
       if (parts.length === 2 && b === "h") return { kind: "bonus" };
       if (parts.length === 2 && b === "r") return { kind: "bonusRefresh" };
       if (parts.length === 2 && b === "d") return { kind: "bonusDone" };
+      if (parts.length === 2 && b === "m") return { kind: "mandatoryCheck" };
       // Decimal, no sign, no leading zero; never trusted further — `checkChannel` reads the row itself.
       if (parts.length === 3 && b === "c" && /^[1-9]\d{0,17}$/.test(c ?? "")) return { kind: "bonusCheck", channelId: c! };
       break;

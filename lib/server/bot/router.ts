@@ -3,6 +3,7 @@ import { query } from "../db";
 import { getUserById, type SessionUser } from "../session";
 import { referralSummary } from "../referrals";
 import { recentTransactions } from "../credits";
+import { getPaymentBonusPercent } from "../payment-bonus";
 import { updateProfile } from "../profile";
 import { callBot, botUsername, isTransientBotFailure, TelegramTransientError } from "../telegram";
 import { FIELD_MAX, cleanFieldValue, fieldStep } from "../../profile/fields";
@@ -27,7 +28,9 @@ import { isAdminCallback } from "./admin-codes";
 import type { Screen } from "./ui";
 import { rateLimit } from "../ratelimit";
 import { bonusTasks, checkChannel } from "../bonus-channels";
-import { BONUS_MAX_CHANNELS, bonusScreen, som } from "./bonus";
+import { BONUS_MAX_CHANNELS, bonusScreen, mandatoryScreen, som } from "./bonus";
+import { missingMandatory, type MandatoryChannel } from "../mandatory-channels";
+import { log } from "../log";
 
 /**
  * Bot chat routing for the new screens (docs/bot/PLAN.md, B2). Loaded lazily
@@ -142,7 +145,8 @@ async function filesPage(ctx: Pick<ChatCtx, "user" | "lang" | "telegramId">, pag
 }
 
 async function walletCard(ctx: Pick<ChatCtx, "user" | "lang">): Promise<Screen> {
-  return walletScreen(ctx.lang, ctx.user, await recentTransactions(ctx.user.id, WALLET_RECENT));
+  const [recent, percent] = await Promise.all([recentTransactions(ctx.user.id, WALLET_RECENT), getPaymentBonusPercent()]);
+  return walletScreen(ctx.lang, ctx.user, recent, percent);
 }
 
 async function bonusCard(ctx: Pick<ChatCtx, "user" | "lang">): Promise<Screen> {
@@ -302,6 +306,35 @@ export async function sendReferral(chatId: number, user: SessionUser, lang: Lang
   await sendScreen(chatId, referralScreen(lang, await referral(user.id), null));
 }
 
+/**
+ * /start for a user who has not joined every active mandatory channel (C-Q2): the short
+ * «Botdan to‘liq foydalanish uchun kanalga obuna bo‘ling» card. The check is the web gate's
+ * own service (`missingMandatory`); an admin account or a user with nothing missing gets no
+ * card. Never fails /start: a database error is logged and the card skipped.
+ */
+export async function sendMandatoryCard(ctx: ChatCtx): Promise<void> {
+  let missing: MandatoryChannel[];
+  try {
+    const c = await missingMandatory(String(ctx.user.id));
+    if (c.exempt || !c.channels.length) return;
+    missing = c.channels;
+  } catch (e) {
+    log("error", "[mandatory] /start check failed", { err: e });
+    return;
+  }
+  await sendScreen(ctx.chatId, mandatoryScreen(ctx.lang, missing));
+}
+
+/** «✅ Tekshirish» on the mandatory card: asks Telegram again (cached «not a member» answers dropped). */
+async function mandatoryCheck(ctx: ChatCtx): Promise<{ toast: string; screen: Screen | null }> {
+  if (!(await rateLimit(`bonus-check:${ctx.user.id}`, BONUS_CHECKS_PER_MIN, 60)).ok) {
+    return { toast: t(ctx.lang, "toast.bonusRate"), screen: null };
+  }
+  const c = await missingMandatory(String(ctx.user.id), { fresh: true });
+  const left = c.exempt ? [] : c.channels;
+  return { toast: left.length ? t(ctx.lang, "toast.mandMissing") : t(ctx.lang, "mand.done"), screen: mandatoryScreen(ctx.lang, left) };
+}
+
 /* ───────────────────────── Callbacks ───────────────────────── */
 
 export type CallbackQuery = {
@@ -402,6 +435,12 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
       case "bonusDone":
         toast = t(ctx.lang, "toast.bonusDone");
         return;
+      case "mandatoryCheck": {
+        const r = await mandatoryCheck(ctx);
+        toast = r.toast;
+        if (r.screen) await edit(r.screen);
+        return;
+      }
       case "walletInvite":
         await edit(referralScreen(ctx.lang, await referral(user.id), "wallet"));
         return;

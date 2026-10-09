@@ -137,7 +137,7 @@ test("Hamyon card → «🎁 Bonuslar» (b:h) edits the same message into «Sizn
   assert.deepEqual(b[0], { text: "✅ Ro‘yxatdan o‘tish · +2 000 so‘m", callback_data: "b:d", style: "success" });
   assert.ok(b[1]!.url?.startsWith("https://t.me/share/url?url=https%3A%2F%2Ft.me%2Fslaydx_test_bot%3Fstart%3Dref_"), b[1]!.url);
   assert.deepEqual(b[2], { text: "📢 Bonus <test> · +1 000 so‘m", url: "https://t.me/slaydx_news" });
-  assert.ok(b.some((x) => x.web_app?.url === "https://slaydx.test/uz/wallet" && /Birinchi to‘ldirish/.test(x.text)));
+  assert.ok(b.some((x) => x.web_app?.url === "https://slaydx.test/uz/wallet" && /Har to‘ldirishga \+10% bonus/.test(x.text)));
   assert.deepEqual(b.slice(-2).map((x) => x.callback_data), ["b:r", "w:h"]);
   assert.equal(memberCalls().length, 0, "opening the message checks nothing");
   void ch;

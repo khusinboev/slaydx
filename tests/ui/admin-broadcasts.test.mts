@@ -145,8 +145,11 @@ const BASE = {
   createdAt: "2026-10-01T05:00:00.000Z",
   queuedAt: null,
   finishedAt: null,
+  startedAt: null,
+  heartbeatAt: null,
+  failReason: null,
 };
-const ZERO = { total: 0, sent: 0, failed: 0, pending: 0, failedReasons: [] };
+const ZERO = { total: 0, sent: 0, failed: 0, pending: 0, inFlight: 0, retrying: 0, speed: 0, etaSeconds: null, failedReasons: [] };
 const item = (over: Record<string, unknown> = {}) => ({ ...BASE, preview: String(over.text ?? BASE.text), textLength: String(over.text ?? BASE.text).length, ...over });
 const list = (items: unknown[], extra: Record<string, unknown> = {}) => ({ items, nextCursor: null, total: items.length, totalCapped: false, ...extra });
 const detailOf = (over: Record<string, unknown> = {}, stats: Record<string, unknown> = {}) => ({ broadcast: { ...BASE, ...over }, stats: { ...ZERO, ...stats } });
@@ -619,6 +622,46 @@ test("cancel: reason required, POST {reason}, toast, the page shows the cancelle
   await screen.findByText("Bekor qilingan", { selector: "span" });
   assert.ok(screen.getByText("Yuborilmagan"), "pending recipients are labelled as never sent");
   assert.ok(!screen.queryByRole("button", { name: "Bekor qilish" }));
+});
+
+test("pause / resume (C-Q5): one click each, no dialog; speed and ETA shown while sending", async () => {
+  let state = "sending";
+  const calls = stubRoutes(
+    detailRoutes({ status: "sending", total: 100, sent: 40, queuedAt: "2026-10-02T06:00:00.000Z", heartbeatAt: new Date().toISOString() }, { total: 100, sent: 40, pending: 60, speed: 12.5, etaSeconds: 90, inFlight: 8 }, (c) => {
+      if (c.method === "POST") {
+        state = c.path.endsWith("/pause") ? "paused" : "sending";
+        return json(200, { broadcast: { ...BASE, status: state } });
+      }
+      if (state === "paused") return json(200, detailOf({ status: "paused", total: 100, sent: 40 }, { total: 100, sent: 40, pending: 60 }));
+      return undefined;
+    }),
+  );
+  mount(h(BroadcastDetail, { id: "12" }));
+  const speed = await screen.findByTestId("broadcast-speed");
+  assert.match(speed.textContent ?? "", /Tezlik: 12,5 ta\/s/);
+  assert.match(speed.textContent ?? "", /taxminan 1 daq 30 s qoldi/);
+  assert.ok(!screen.queryByRole("button", { name: /Davom ettirish/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /To'xtatib turish/ }));
+  await waitFor(() => assert.ok(calls.some((c) => c.method === "POST")));
+  assert.equal(calls.find((c) => c.method === "POST")!.path, "/api/admin/broadcasts/12/pause");
+  assert.ok(!screen.queryByRole("dialog"), "pausing needs no dialog");
+  const resume = await screen.findByRole("button", { name: /Davom ettirish/ });
+  await screen.findByText("To'xtatilgan", { selector: "span" });
+  assert.ok(!screen.queryByRole("button", { name: /To'xtatib turish/ }));
+  assert.ok(screen.getByRole("button", { name: "Bekor qilish" }), "a paused broadcast can still be cancelled");
+  fireEvent.click(resume);
+  await waitFor(() => assert.equal(calls.filter((c) => c.method === "POST").length, 2));
+  assert.equal(calls.filter((c) => c.method === "POST")[1]!.path, "/api/admin/broadcasts/12/resume");
+  await screen.findByRole("button", { name: /To'xtatib turish/ });
+});
+
+test("failed broadcast: the early-abort reason is shown, no pause / resume", async () => {
+  stubRoutes(detailRoutes({ status: "failed", total: 300, failed: 205, failReason: "Birinchi 200 ta yuborishning hammasi doimiy xato bilan tugadi." }, { total: 300, failed: 205, pending: 95 }));
+  mount(h(BroadcastDetail, { id: "12" }));
+  const alert = await screen.findByRole("alert");
+  assert.match(alert.textContent ?? "", /Birinchi 200 ta yuborishning hammasi doimiy xato/);
+  assert.ok(screen.getByText("Yuborilmagan"), "the unsent rest is labelled");
+  assert.ok(!screen.queryByRole("button", { name: /To'xtatib turish|Davom ettirish|Bekor qilish/ }));
 });
 
 test("cancel: a 409 keeps the dialog open with the server message", async () => {

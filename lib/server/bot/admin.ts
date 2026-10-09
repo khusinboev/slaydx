@@ -11,6 +11,9 @@ import {
   cancelBroadcast,
   createBroadcast,
   getBroadcast,
+  pauseBroadcast,
+  resumeBroadcast,
+  setProgressMessage,
   sendBroadcast,
   sendTest,
   BROADCAST_TEXT_MAX,
@@ -32,13 +35,15 @@ import {
   sendBroadcastContent,
   type BroadcastContent,
 } from "../broadcast-content";
+import { getPaymentBonusPercent, setPaymentBonusPercent } from "../payment-bonus";
+import { isPaymentBonusPercent } from "../../payment-bonus";
 import { cancelInput } from "./state";
 import { editScreen, sendScreen } from "./router";
-import { matchKeyboard } from "./keyboard";
+import { keyboardMessage, matchKeyboard } from "./keyboard";
 import { at, ADMIN_TEXT_KEYS } from "./admin-i18n";
 import { LANGS, langOf, type Lang } from "./i18n";
 import { actorOf, allowed, lookupAdmin, type BotAdmin } from "./admin-access";
-import { parseAdminCallback, type AdminCallback, type AudienceCode, type ChannelType } from "./admin-codes";
+import { parseAdminCallback, typeFits, type AdminCallback, type AudienceCode, type ChannelType } from "./admin-codes";
 import {
   CHANNEL_PRESETS,
   audienceScreen,
@@ -47,6 +52,7 @@ import {
   buttonAskScreen,
   channelAskScreen,
   channelConfirmScreen,
+  channelKindScreen,
   channelProblemScreen,
   channelTypeScreen,
   channelsScreen,
@@ -54,7 +60,12 @@ import {
   confirmScreen,
   draftScreen,
   inputProblemScreen,
+  ADMIN_MENU,
+  adminMenuScreen,
   panelScreen,
+  payBonusAskScreen,
+  payBonusConfirmScreen,
+  payBonusScreen,
   progressScreen,
   statsScreen,
   stepUpScreen,
@@ -79,7 +90,8 @@ import { esc, tgEmoji, type Screen } from "./ui";
 
 /**
  * In-bot admin panel (docs/bot-admin/PLAN.md): «📊 Statistika», «📣 Xabar
- * yuborish», «📢 Kanal ulash». Every message and button re-reads the admin
+ * yuborish», «📢 Kanal ulash», «💳 To‘lov bonusi» (C-Q4: the web's
+ * `payment_bonus_percent` setting via `payment-bonus.ts`). Every message and button re-reads the admin
  * account (`admin-access.ts lookupAdmin`) and checks the role's permission
  * for THAT action; every change goes through the web's admin services
  * (`admin-broadcasts.ts`, `admin-bonus-channels.ts`) with an audit actor, so
@@ -111,20 +123,28 @@ const PERM: Record<Exclude<AdminCallback["kind"], "unknown">, Permission> = {
   bcTest: "broadcasts.send",
   bcSend: "broadcasts.send",
   bcProgress: "broadcasts.view",
+  bcPause: "broadcasts.send",
+  bcResume: "broadcasts.send",
   bcStopAsk: "broadcasts.send",
   bcStop: "broadcasts.send",
   channels: "bonus.view",
   chConnect: "bonus.edit",
+  chKind: "bonus.edit",
+  chKinds: "bonus.edit",
   chType: "bonus.edit",
   chTypes: "bonus.edit",
   chCreate: "bonus.edit",
   chToggle: "bonus.edit",
+  payBonus: "settings.view",
+  pbOther: "settings.edit",
+  pbPick: "settings.edit",
+  pbSet: "settings.edit",
 };
 
 /** The confirmed changes: in 2FA mode they need a fresh bot step-up. */
-const CONFIRMS = new Set<AdminCallback["kind"]>(["bcSend", "bcStop", "chCreate", "chToggle"]);
+const CONFIRMS = new Set<AdminCallback["kind"]>(["bcSend", "bcStop", "chCreate", "chToggle", "pbSet"]);
 
-const STEP_PERM = { bc_msg: "broadcasts.send", bc_btn: "broadcasts.send", ch_ref: "bonus.edit", totp: "self" } as const;
+const STEP_PERM = { bc_msg: "broadcasts.send", bc_btn: "broadcasts.send", ch_ref: "bonus.edit", pb_val: "settings.edit", totp: "self" } as const;
 
 /** Admin actions per minute per account (reads and taps; the services keep their own limits). */
 export const ADMIN_BOT_RATE = { limit: 60, windowSec: 60 };
@@ -137,7 +157,21 @@ const REASON = {
   discard: "Telegram botda qoralama bekor qilindi",
   channel: "Telegram bot orqali ulandi",
   toggle: "Telegram bot orqali o'zgartirildi",
+  payBonus: "Telegram bot orqali to'lov bonusi o'zgartirildi",
 };
+
+/** The panel with the current payment bonus on its «💳 To‘lov bonusi: N%» button. */
+async function panel(a: BotAdmin): Promise<Screen> {
+  return panelScreen(a, await getPaymentBonusPercent());
+}
+
+/** A typed percent: a whole number 0–50 («10», «10%», « 7 »), else `null`. The service validates again. */
+export function percentFromText(raw: string | undefined): number | null {
+  const m = /^\s*(\d{1,2})\s*%?\s*$/.exec(raw ?? "");
+  if (!m) return null;
+  const n = Number(m[1]);
+  return isPaymentBonusPercent(n) ? n : null;
+}
 
 async function denied(a: BotAdmin, perm: Permission, updateId: number): Promise<void> {
   const r = await rateLimit(`admin-denied:${a.adminId}`, DENIED_LIMIT, 60, { failClosed: true });
@@ -170,7 +204,41 @@ export async function openPanel(chatId: number, telegramId: number): Promise<boo
   if (!admin) return false;
   await cancelInput(chatId);
   await clearState(chatId);
-  await sendScreen(chatId, panelScreen(admin));
+  // Owner C-Q6: the admin menu is a reply keyboard at the bottom (not inline buttons under the message).
+  await sendScreen(chatId, adminMenuScreen(admin));
+  return true;
+}
+
+/** Which admin menu button a text is (any language, with or without the emoji): its callback code, `"main"`, or `null`. */
+export function adminMenuAction(text: string): string | null {
+  const bare = text.replace(LEADING, "").trim().toLowerCase();
+  if (!bare) return null;
+  for (const l of LANGS) {
+    if (at(l, "kb.mainMenu").toLowerCase() === bare) return "main";
+    for (const m of ADMIN_MENU) if (at(l, m.key).toLowerCase() === bare) return m.data;
+  }
+  return null;
+}
+
+/**
+ * A tap on the admin reply keyboard. Only linked admins are served (anyone else's text falls through, `false`).
+ * The action runs through `handleAdminCallback` (same permission, rate-limit, step-up and audit checks as the
+ * inline buttons) on a fresh message it then edits; «Asosiy menyu» brings the main keyboard back.
+ */
+export async function handleAdminMenuText(chatId: number, telegramId: number, text: string, updateId: number): Promise<boolean> {
+  const action = adminMenuAction(text);
+  if (!action || chatId !== telegramId) return false;
+  const { admin } = await lookupAdmin(telegramId);
+  if (!admin) return false;
+  if (action === "main") {
+    await clearState(chatId);
+    await sendScreen(chatId, keyboardMessage(admin.lang, telegramId, "note", undefined, { admin: true }));
+    return true;
+  }
+  const messageId = await sendScreen(chatId, { text: "⏳" });
+  if (messageId === null) return true;
+  const toast = await handleAdminCallback(telegramId, chatId, messageId, action, updateId);
+  if (toast) await editScreen(chatId, messageId, { text: esc(toast) });
   return true;
 }
 
@@ -287,7 +355,7 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
   switch (c.kind) {
     case "panel":
       await clearState(chatId);
-      await edit(panelScreen(a));
+      await edit(await panel(a));
       return undefined;
     case "close":
       await clearState(chatId);
@@ -296,7 +364,7 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
     case "cancel":
       if (isBc(d)) await discardBroadcast(a, d, updateId);
       await clearState(chatId);
-      await edit(panelScreen(a));
+      await edit(await panel(a));
       return at(l, "toast.cancelled");
     case "stats":
       await edit(statsScreen(a, await botStats()));
@@ -367,13 +435,27 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
       }
       await clearState(chatId);
       const b = await getBroadcast(id);
-      await edit(progressScreen(l, b.broadcast, b.stats, true));
+      // The engine keeps editing THIS message with the live numbers.
+      await setProgressMessage(id, await edit(progressScreen(l, b.broadcast, b.stats, true)));
       return at(l, "toast.queued");
     }
     case "bcProgress": {
       const b = await getBroadcast(c.id);
-      await edit(progressScreen(l, b.broadcast, b.stats, allowed(a, "broadcasts.send")));
+      await setProgressMessage(c.id, await edit(progressScreen(l, b.broadcast, b.stats, allowed(a, "broadcasts.send"))));
       return at(l, "toast.refreshed");
+    }
+    case "bcPause":
+    case "bcResume": {
+      const act = c.kind === "bcPause" ? pauseBroadcast : resumeBroadcast;
+      try {
+        await act(actorOf(a, updateId), c.id, {}, { via: "bot" });
+      } catch (e) {
+        // Already paused / resumed / finished meanwhile: show what is true now.
+        if (!(e instanceof ApiError && e.status === 409)) throw e;
+      }
+      const b = await getBroadcast(c.id);
+      await setProgressMessage(c.id, await edit(progressScreen(l, b.broadcast, b.stats, true)));
+      return at(l, c.kind === "bcPause" ? "toast.paused" : "toast.resumed");
     }
     case "bcStopAsk": {
       const b = await getBroadcast(c.id);
@@ -396,18 +478,30 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
       await edit(channelAskScreen(l));
       await writeState(chatId, a.adminId, { step: "ch_ref", draft: null, promptMessageId: messageId });
       return undefined;
+    case "chKinds":
+      if (!isCh(d)) return at(l, "toast.expired");
+      await edit(channelKindScreen(l, d));
+      return undefined;
+    case "chKind":
+      if (!isCh(d)) return at(l, "toast.expired");
+      d.mandatory = c.mandatory;
+      delete d.type;
+      await edit(channelTypeScreen(l, d));
+      await writeState(chatId, a.adminId, { step: null, draft: d });
+      return undefined;
     case "chTypes":
       if (!isCh(d)) return at(l, "toast.expired");
       await edit(channelTypeScreen(l, d));
       return undefined;
     case "chType":
-      if (!isCh(d)) return at(l, "toast.expired");
+      // A preset of the other kind (an old button) never mixes «mandatory» with an optional preset.
+      if (!isCh(d) || !typeFits(c.type, d.mandatory ?? false)) return at(l, "toast.expired");
       d.type = c.type;
       await edit(channelConfirmScreen(l, d, c.type));
       await writeState(chatId, a.adminId, { step: null, draft: d });
       return undefined;
     case "chCreate": {
-      if (!isCh(d) || d.type !== c.type) return at(l, "toast.expired");
+      if (!isCh(d) || d.type !== c.type || !typeFits(c.type, d.mandatory ?? false)) return at(l, "toast.expired");
       return createChannel(a, d, c.type, chatId, messageId, updateId);
     }
     case "chToggle": {
@@ -416,6 +510,26 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
       await updateBonusChannel(actorOf(a, updateId), c.id, { active: !cur.active, reason: REASON.toggle });
       await edit(channelsScreen(a, (await listBonusChannels()).items));
       return at(l, cur.active ? "toast.chOff" : "toast.chOn");
+    }
+
+    /* ── payment bonus (C-Q4): the web's setting, through `payment-bonus.ts` ── */
+    case "payBonus":
+      await clearState(chatId);
+      await edit(payBonusScreen(a, await getPaymentBonusPercent()));
+      return undefined;
+    case "pbOther":
+      await cancelInput(chatId);
+      await edit(payBonusAskScreen(l));
+      await writeState(chatId, a.adminId, { step: "pb_val", draft: null, promptMessageId: messageId });
+      return undefined;
+    case "pbPick":
+      await edit(payBonusConfirmScreen(l, await getPaymentBonusPercent(), c.percent));
+      return undefined;
+    case "pbSet": {
+      const now = await setPaymentBonusPercent(actorOf(a, updateId), c.percent, REASON.payBonus, { via: "bot" });
+      await clearState(chatId);
+      await edit(payBonusScreen(a, now));
+      return at(l, "toast.pbSaved", { p: now });
     }
   }
 }
@@ -438,6 +552,7 @@ async function createChannel(a: BotAdmin, d: ChannelDraft, type: ChannelType, ch
     joinBonus: p.joinBonus,
     stayBonus: p.stayBonus,
     stayDays: p.stayDays,
+    mandatory: d.mandatory ?? false,
     ...(inviteLink ? { inviteLink } : {}),
     reason: REASON.channel,
   });
@@ -501,7 +616,7 @@ export async function handleAdminInput(m: AdminMessage, updateId: number): Promi
   if (!m.from || m.from.is_bot || m.chat.type !== "private" || m.from.id !== chatId) return false;
   if (!(await hasPendingStep(chatId))) return false;
   const text = m.text;
-  if (text !== undefined && (text.trim().startsWith("/") || matchKeyboard(text) || isAdminButtonText(text))) {
+  if (text !== undefined && (text.trim().startsWith("/") || matchKeyboard(text) || isAdminButtonText(text) || adminMenuAction(text))) {
     await clearState(chatId);
     return false;
   }
@@ -574,8 +689,16 @@ export async function handleAdminInput(m: AdminMessage, updateId: number): Promi
         return true;
       }
       const d: ChannelDraft = { t: "ch", chatId: resolved.chatId, title: resolved.title, username: resolved.username, botAdmin: resolved.botAdmin };
-      await sendScreen(chatId, channelTypeScreen(l, d));
+      await sendScreen(chatId, channelKindScreen(l, d));
       await writeState(chatId, admin.adminId, { step: null, draft: d });
+      return true;
+    }
+    case "pb_val": {
+      const p = percentFromText(text);
+      if (p === null) return reprompt(payBonusAskScreen(l, at(l, "pb.bad"))).then(() => true);
+      await clearPrompt();
+      await sendScreen(chatId, payBonusConfirmScreen(l, await getPaymentBonusPercent(), p));
+      await writeState(chatId, admin.adminId, { step: null, draft: null });
       return true;
     }
     case "totp":
@@ -628,9 +751,36 @@ export async function notifyBroadcastDone(id: string, notify: { chatId: string; 
   const chatId = Number(notify.chatId);
   const { admin } = await lookupAdmin(chatId);
   if (!admin) return;
-  const r = await queryOne<{ sent: number; failed: number; total: number }>("SELECT sent, failed, total FROM broadcasts WHERE id = $1", [id]);
+  const r = await queryOne<{ sent: number; failed: number; total: number; status: string }>("SELECT sent, failed, total, status FROM broadcasts WHERE id = $1", [id]);
   if (!r) return;
+  if (r.status === "failed") {
+    // The engine aborted it (every send was refused for good): the card names the reason.
+    const b = await getBroadcast(id);
+    await sendScreen(chatId, progressScreen(langOf(admin.lang), b.broadcast, b.stats, false));
+    return;
+  }
   await sendScreen(chatId, broadcastDoneScreen(langOf(admin.lang), id, { sent: Number(r.sent), failed: Number(r.failed), total: Number(r.total) }));
+}
+
+/**
+ * Called by the delivery engine about every 10 s while a bot broadcast sends: edits the admin's progress
+ * message in place (never sends a new one — a deleted message just stops updating). Best effort.
+ */
+export async function editBroadcastProgress(id: string, notify: { chatId: string; lang: string; messageId?: number }): Promise<void> {
+  if (!notify.messageId) return;
+  const chatId = Number(notify.chatId);
+  const { admin } = await lookupAdmin(chatId);
+  if (!admin) return;
+  const b = await getBroadcast(id);
+  const screen = progressScreen(langOf(admin.lang), b.broadcast, b.stats, allowed(admin, "broadcasts.send"));
+  await callBot("editMessageText", {
+    chat_id: chatId,
+    message_id: notify.messageId,
+    text: screen.text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: screen.reply_markup ?? { inline_keyboard: [] },
+  });
 }
 
 /** Every admin text key (tests check all three languages are filled). */

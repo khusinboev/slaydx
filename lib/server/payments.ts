@@ -5,7 +5,7 @@ import { query, queryOne, transaction } from "./db";
 import { safeEqual } from "./session";
 import { topUpInTx } from "./credits";
 import { log } from "./log";
-import { firstTopupBonusDueInTx, payFirstTopupBonusInTx } from "./topup-bonus";
+import { payPaymentBonusInTx } from "./payment-bonus";
 
 /**
  * To'lov buyurtmalari va ularni kreditga aylantirish.
@@ -358,9 +358,11 @@ export async function settleOrder(
 ): Promise<SettleOutcome> {
   let credited = false;
   let bonusPoints = 0;
+  let bonusPercent = 0;
   const out = await transaction(async (client): Promise<SettleOutcome> => {
     credited = false;
     bonusPoints = 0;
+    bonusPercent = 0;
     const row = await lockOrder(client, orderId);
     if (!row) return { status: "not_found", order: null };
     const order = toOrder(row);
@@ -406,12 +408,6 @@ export async function settleOrder(
         "Pro obuna (eski buyurtma) — balansga",
       );
     } else {
-      /*
-       * First top-up bonus (docs/bonus/PLAN.md «Bonus 2», `lib/server/topup-bonus.ts`): decided
-       * BEFORE the credit, under the user row lock, against the user's other paid top-up orders;
-       * paid AFTER it, only when this call really credited the top-up, in this same transaction.
-       */
-      const bonusDue = await firstTopupBonusDueInTx(client, order.userId, order.id, order.amountSoum);
       credited = await topUpInTx(
         client,
         order.userId,
@@ -420,8 +416,16 @@ export async function settleOrder(
         "topup",
         `${order.provider} orqali to'ldirish`,
       );
-      if (credited && bonusDue > 0 && (await payFirstTopupBonusInTx(client, order.userId, bonusDue))) {
-        bonusPoints = bonusDue;
+      /*
+       * Payment bonus (C-Q4, `lib/server/payment-bonus.ts`): N % of EVERY paid top-up, N read
+       * from `app_settings` HERE (the percent in force at settlement), paid AFTER the top-up and
+       * only when this call really credited it, in this same transaction (savepoint-protected),
+       * reference `payment-bonus:<orderId>` — once per order.
+       */
+      if (credited) {
+        const b = await payPaymentBonusInTx(client, { userId: order.userId, orderId: order.id, amountSoum: order.amountSoum });
+        bonusPoints = b.points;
+        bonusPercent = b.percent;
       }
     }
 
@@ -440,7 +444,7 @@ export async function settleOrder(
     return { status: "paid", order: await reread(client, orderId) };
   });
   // COMMIT dan KEYIN — rollback bo'lgan urinish «to'landi» deb yozilmasin.
-  logOrder("settle", out, { credited, firstTopupBonus: bonusPoints });
+  logOrder("settle", out, { credited, paymentBonus: bonusPoints, paymentBonusPercent: bonusPercent });
   return out;
 }
 

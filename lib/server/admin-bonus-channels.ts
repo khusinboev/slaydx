@@ -22,6 +22,9 @@ import { parseBigintId, parseReason } from "./admin-accounts";
  *     writes `bonus_channel.create` in the same transaction; a known chat id is 409 `duplicate`;
  *   - update: title override, amounts, stay days, active, sort; only changed fields go into
  *     the `bonus_channel.update` audit row (before/after); no change is 409 `state`;
+ *   - mandatory (migration 045, docs/bonus/BONUS3.md C-Q2): an active mandatory channel must be
+ *     joined before the user creates new work (`mandatory-channels.ts`); it may pay a bonus too,
+ *     or none (the «at least one bonus > 0» rule applies to optional channels only);
  *   - invite link (migration 042): optional `https://t.me/+…` / `…/joinchat/…`, stored normalized
  *     as `https://t.me/+<hash>`; the bot uses it for private channels (no `username`).
  *     `createInviteLink` asks Telegram for a new one (audited, not stored);
@@ -31,7 +34,7 @@ import { parseBigintId, parseReason } from "./admin-accounts";
  *     fails on the FK, and the claims FK's `ON DELETE CASCADE` can never drop a paid claim.
  *
  * Validation: amounts are JSON integers 0..20 000 per channel (`MAX_BONUS`, review cap; the DB CHECK allows
- * 1 000 000) with at least one > 0, `stayDays` 1..365,
+ * 1 000 000) with at least one > 0 for an optional channel, `stayDays` 1..365,
  * `sort` −1 000 000..1 000 000, `title` 1..128 characters. The reason is optional (audited
  * when given). Every refusal is a 4xx before any write, so nothing partial is ever audited.
  */
@@ -69,6 +72,8 @@ export type BonusChannelItem = {
   stayBonus: number;
   stayDays: number;
   active: boolean;
+  /** Must be joined before creating new work (C-Q2). */
+  mandatory: boolean;
   sort: number;
   createdAt: string;
   updatedAt: string;
@@ -174,6 +179,11 @@ export function parseActive(raw: unknown): boolean {
   return raw;
 }
 
+export function parseMandatory(raw: unknown): boolean {
+  if (typeof raw !== "boolean") throw bad("Majburiylik true yoki false bo'lishi kerak");
+  return raw;
+}
+
 /** Trimmed, inner whitespace collapsed, no control characters, 1..128 characters. */
 export function parseTitle(raw: unknown): string {
   if (typeof raw !== "string") throw bad("Sarlavha matn bo'lishi kerak");
@@ -219,8 +229,9 @@ export function parseInviteLink(raw: unknown): string | null {
   return `https://t.me/+${m[1]}`;
 }
 
-function assertSomeBonus(joinBonus: number, stayBonus: number): void {
-  if (joinBonus === 0 && stayBonus === 0) throw bad("Kamida bitta bonus 0 dan katta bo'lishi kerak");
+/** An optional channel exists only for its bonus; a mandatory one may pay nothing (C-Q2). */
+function assertSomeBonus(joinBonus: number, stayBonus: number, mandatory: boolean): void {
+  if (!mandatory && joinBonus === 0 && stayBonus === 0) throw bad("Kamida bitta bonus 0 dan katta bo'lishi kerak");
 }
 
 /** `[id]` route segment: a positive bigint, anything else is the coded 404. */
@@ -315,6 +326,7 @@ type Row = {
   stay_bonus: number;
   stay_days: number;
   active: boolean;
+  mandatory: boolean;
   sort: number;
   created_at: Date;
   updated_at: Date;
@@ -330,7 +342,7 @@ type Row = {
 /** `stay_pending` is 0 for a channel without a stay bonus: it owes nothing, so no claim is «pending». */
 const SELECT = `
   SELECT c.id::text AS id, c.chat_id::text AS chat_id, c.username, c.invite_link, c.title, c.join_bonus, c.stay_bonus,
-         c.stay_days, c.active, c.sort, c.created_at, c.updated_at,
+         c.stay_days, c.active, c.mandatory, c.sort, c.created_at, c.updated_at,
          COALESCE(s.joined, 0)::int AS joined,
          COALESCE(s.join_paid_count, 0)::int AS join_paid_count,
          COALESCE(s.join_paid_sum, 0)::text AS join_paid_sum,
@@ -363,6 +375,7 @@ function toItem(r: Row): BonusChannelItem {
     stayBonus: r.stay_bonus,
     stayDays: r.stay_days,
     active: r.active,
+    mandatory: r.mandatory,
     sort: r.sort,
     createdAt: r.created_at.toISOString(),
     updatedAt: r.updated_at.toISOString(),
@@ -408,6 +421,7 @@ type Snapshot = {
   stayBonus: number;
   stayDays: number;
   active: boolean;
+  mandatory: boolean;
   sort: number;
 };
 
@@ -423,9 +437,10 @@ async function lockChannel(client: PoolClient, id: string): Promise<LockedRow> {
     stay_bonus: number;
     stay_days: number;
     active: boolean;
+    mandatory: boolean;
     sort: number;
   }>(
-    `SELECT chat_id::text AS chat_id, username, invite_link, title, join_bonus, stay_bonus, stay_days, active, sort
+    `SELECT chat_id::text AS chat_id, username, invite_link, title, join_bonus, stay_bonus, stay_days, active, mandatory, sort
        FROM bonus_channels WHERE id = $1 FOR UPDATE`,
     [id],
   );
@@ -440,6 +455,7 @@ async function lockChannel(client: PoolClient, id: string): Promise<LockedRow> {
     stayBonus: row.stay_bonus,
     stayDays: row.stay_days,
     active: row.active,
+    mandatory: row.mandatory,
     sort: row.sort,
   };
 }
@@ -447,7 +463,7 @@ async function lockChannel(client: PoolClient, id: string): Promise<LockedRow> {
 export type CreateResult = { item: BonusChannelItem; botAdmin: BotAdminStatus; warning: string | null };
 
 /**
- * POST `{input, title?, inviteLink?, joinBonus, stayBonus?, stayDays?, active?, sort?, reason?}`. Every field
+ * POST `{input, title?, inviteLink?, joinBonus, stayBonus?, stayDays?, active?, mandatory?, sort?, reason?}`. Every field
  * is validated before Telegram is called; the chat is then resolved on the server, inserted
  * (`sort` defaults to the end of the list) and audited in one transaction.
  */
@@ -459,20 +475,21 @@ export async function createBonusChannel(admin: AuditActor, body: Record<string,
   const stayBonus = body.stayBonus === undefined ? 0 : parseAmount(body.stayBonus, "Qolish bonusi");
   const stayDays = body.stayDays === undefined ? 7 : parseStayDays(body.stayDays);
   const active = body.active === undefined ? true : parseActive(body.active);
+  const mandatory = body.mandatory === undefined ? false : parseMandatory(body.mandatory);
   const sort = body.sort === undefined ? null : parseSort(body.sort);
   const reason = parseReason(body.reason, { optional: true });
-  assertSomeBonus(joinBonus, stayBonus);
+  assertSomeBonus(joinBonus, stayBonus, mandatory);
 
   const resolved = await resolveChannel(ref);
   const title = override ?? resolved.title;
 
   const id = await adminTx(admin, async (client, audit) => {
     const ins = await client.query<{ id: string; sort: number }>(
-      `INSERT INTO bonus_channels (chat_id, username, title, join_bonus, stay_bonus, stay_days, active, sort, invite_link)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::int, (SELECT COALESCE(max(sort), 0) + 1 FROM bonus_channels)), $9)
+      `INSERT INTO bonus_channels (chat_id, username, title, join_bonus, stay_bonus, stay_days, active, sort, invite_link, mandatory)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::int, (SELECT COALESCE(max(sort), 0) + 1 FROM bonus_channels)), $9, $10)
        ON CONFLICT (chat_id) DO NOTHING
        RETURNING id::text AS id, sort`,
-      [resolved.chatId, resolved.username, title, joinBonus, stayBonus, stayDays, active, sort, inviteLink],
+      [resolved.chatId, resolved.username, title, joinBonus, stayBonus, stayDays, active, sort, inviteLink, mandatory],
     );
     const row = ins.rows[0];
     if (!row) throw new ApiError("Bu kanal allaqachon qo'shilgan", 409, { code: "duplicate" });
@@ -490,6 +507,7 @@ export async function createBonusChannel(admin: AuditActor, body: Record<string,
         stayBonus,
         stayDays,
         active,
+        mandatory,
         sort: row.sort,
       },
       meta: { telegramTitle: resolved.title, type: resolved.type, botAdmin: resolved.botAdmin },
@@ -499,10 +517,10 @@ export async function createBonusChannel(admin: AuditActor, body: Record<string,
   return { item: await itemOf(id), botAdmin: resolved.botAdmin, warning: resolved.warning };
 }
 
-const EDITABLE = ["title", "inviteLink", "joinBonus", "stayBonus", "stayDays", "active", "sort"] as const;
+const EDITABLE = ["title", "inviteLink", "joinBonus", "stayBonus", "stayDays", "active", "mandatory", "sort"] as const;
 
 /**
- * PATCH `{title?, inviteLink? (null / "" clears it), joinBonus?, stayBonus?, stayDays?, active?, sort?, reason?}`: only the given
+ * PATCH `{title?, inviteLink? (null / "" clears it), joinBonus?, stayBonus?, stayDays?, active?, mandatory?, sort?, reason?}`: only the given
  * fields change; before/after of the audit row hold only the fields that really changed.
  */
 export async function updateBonusChannel(admin: AuditActor, rawId: unknown, body: Record<string, unknown>): Promise<{ item: BonusChannelItem }> {
@@ -514,6 +532,7 @@ export async function updateBonusChannel(admin: AuditActor, rawId: unknown, body
   if (body.stayBonus !== undefined) patch.stayBonus = parseAmount(body.stayBonus, "Qolish bonusi");
   if (body.stayDays !== undefined) patch.stayDays = parseStayDays(body.stayDays);
   if (body.active !== undefined) patch.active = parseActive(body.active);
+  if (body.mandatory !== undefined) patch.mandatory = parseMandatory(body.mandatory);
   if (body.sort !== undefined) patch.sort = parseSort(body.sort);
   const reason = parseReason(body.reason, { optional: true });
   if (Object.keys(patch).length === 0) throw bad("O'zgartiriladigan maydon yo'q");
@@ -527,6 +546,7 @@ export async function updateBonusChannel(admin: AuditActor, rawId: unknown, body
       stayBonus: patch.stayBonus ?? prev.stayBonus,
       stayDays: patch.stayDays ?? prev.stayDays,
       active: patch.active ?? prev.active,
+      mandatory: patch.mandatory ?? prev.mandatory,
       sort: patch.sort ?? prev.sort,
     };
     const before: Record<string, unknown> = {};
@@ -538,12 +558,13 @@ export async function updateBonusChannel(admin: AuditActor, rawId: unknown, body
       }
     }
     if (Object.keys(after).length === 0) throw new ApiError("O'zgarish yo'q — qiymatlar allaqachon shunday", 409, { code: "state" });
-    assertSomeBonus(next.joinBonus, next.stayBonus);
+    assertSomeBonus(next.joinBonus, next.stayBonus, next.mandatory);
     await client.query(
       `UPDATE bonus_channels
-          SET title = $2, join_bonus = $3, stay_bonus = $4, stay_days = $5, active = $6, sort = $7, invite_link = $8, updated_at = now()
+          SET title = $2, join_bonus = $3, stay_bonus = $4, stay_days = $5, active = $6, sort = $7, invite_link = $8,
+              mandatory = $9, updated_at = now()
         WHERE id = $1`,
-      [id, next.title, next.joinBonus, next.stayBonus, next.stayDays, next.active, next.sort, next.inviteLink],
+      [id, next.title, next.joinBonus, next.stayBonus, next.stayDays, next.active, next.sort, next.inviteLink, next.mandatory],
     );
     await audit({ action: "bonus_channel.update", targetType: "bonus_channel", targetId: id, reason, before, after });
   });

@@ -80,14 +80,18 @@ test("settleOrder → credits.ts: jurnal invarianti va yozuv shakli o'zgarmagan"
     assert.equal(Number(w.quota), 0);
     assert.equal(w.plan, "free");
     const j = await journal(uid);
-    assert.equal(j.length, 1);
+    // C-Q4: the top-up row, then the payment bonus row (default 10 % → points) in the same settlement.
+    assert.equal(j.length, 2);
     assert.deepEqual(
-      { ...j[0], points_delta: Number(j[0].points_delta), quota_delta: Number(j[0].quota_delta), balance_delta: Number(j[0].balance_delta) },
-      { kind: "topup", points_delta: 0, quota_delta: 0, balance_delta: 12_345, reference: "click:click-txn-1", note: "click orqali to'ldirish" },
+      j.map((r) => ({ ...r, points_delta: Number(r.points_delta), quota_delta: Number(r.quota_delta), balance_delta: Number(r.balance_delta) })),
+      [
+        { kind: "topup", points_delta: 0, quota_delta: 0, balance_delta: 12_345, reference: "click:click-txn-1", note: "click orqali to'ldirish" },
+        { kind: "bonus", points_delta: 1_234, quota_delta: 0, balance_delta: 0, reference: `payment-bonus:${order.id}`, note: "To‘lov bonusi (10%)" },
+      ],
     );
     // Takror — pul qo'shilmaydi, xato yo'q.
     assert.equal((await settleOrder(order.id, 3_000)).status, "already_paid");
-    assert.equal((await journal(uid)).length, 1);
+    assert.equal((await journal(uid)).length, 2);
     await assertLedger(uid);
   });
 

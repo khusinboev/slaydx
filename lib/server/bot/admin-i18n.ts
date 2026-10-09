@@ -15,6 +15,13 @@ type Entry = { uz: string; ru: string; en: string };
 const A = {
   /* ── Keyboard / entry ── */
   "kb.admin": { uz: "Admin", ru: "Админ", en: "Admin" },
+  "kb.payBonus": { uz: "To‘lov bonusi", ru: "Бонус за пополнение", en: "Payment bonus" },
+  "kb.mainMenu": { uz: "Asosiy menyu", ru: "Главное меню", en: "Main menu" },
+  "panel.menuHint": {
+    uz: "Pastdagi admin tugmalaridan birini tanlang. «Asosiy menyu» — oddiy klaviaturaga qaytish.",
+    ru: "Выберите кнопку админ-меню внизу. «Главное меню» — вернуть обычную клавиатуру.",
+    en: "Pick an admin button below. «Main menu» brings the usual keyboard back.",
+  },
 
   /* ── Panel ── */
   "panel.title": { uz: "Admin panel", ru: "Админ-панель", en: "Admin panel" },
@@ -26,6 +33,7 @@ const A = {
   "panel.stats": { uz: "Statistika", ru: "Статистика", en: "Statistics" },
   "panel.broadcast": { uz: "Xabar yuborish", ru: "Рассылка", en: "Broadcast" },
   "panel.channels": { uz: "Kanal ulash", ru: "Каналы", en: "Channels" },
+  "panel.payBonus": { uz: "To‘lov bonusi: {p}%", ru: "Бонус за пополнение: {p}%", en: "Payment bonus: {p}%" },
   "panel.close": { uz: "Yopish", ru: "Закрыть", en: "Close" },
   "panel.closed": {
     uz: "Admin panel yopildi. Qayta ochish: /admin yoki «🛠 Admin» tugmasi.",
@@ -64,6 +72,8 @@ const A = {
     ru: "Аудитория изменилась: сейчас {n} — подтвердите снова",
     en: "The audience changed: now {n} — confirm again",
   },
+  "toast.paused": { uz: "⏸ Pauzada", ru: "⏸ На паузе", en: "⏸ Paused" },
+  "toast.resumed": { uz: "▶️ Davom etmoqda", ru: "▶️ Продолжается", en: "▶️ Resumed" },
   "toast.stopped": { uz: "⛔ To‘xtatildi", ru: "⛔ Остановлено", en: "⛔ Stopped" },
   "toast.chCreated": { uz: "✅ Kanal ulandi", ru: "✅ Канал подключён", en: "✅ Channel connected" },
   "toast.chOn": { uz: "✅ Yoqildi", ru: "✅ Включён", en: "✅ Enabled" },
@@ -95,6 +105,7 @@ const A = {
   "st.bonus.stay": { uz: "Kanalda qolish", ru: "Остался в канале", en: "Channel stay" },
   "st.bonus.invite": { uz: "Do‘st taklifi", ru: "Приглашение друга", en: "Invite" },
   "st.bonus.signup": { uz: "Ro‘yxatdan o‘tish", ru: "Регистрация", en: "Sign-up" },
+  "st.bonus.pay": { uz: "To‘lov bonusi", ru: "Бонус за пополнение", en: "Payment bonus" },
   "st.bonus.first": { uz: "Birinchi to‘ldirish", ru: "Первое пополнение", en: "First top-up" },
   "st.bonus.other": { uz: "Boshqa", ru: "Другое", en: "Other" },
   "st.bonusLine": { uz: "{label}: <b>{sum}</b> ({n} ta)", ru: "{label}: <b>{sum}</b> ({n})", en: "{label}: <b>{sum}</b> ({n})" },
@@ -185,9 +196,18 @@ const A = {
     ru: "Доставлено: <b>{sent}</b> / {total} · не доставлено: {failed} · в очереди: {pending}",
     en: "Delivered: <b>{sent}</b> / {total} · failed: {failed} · pending: {pending}",
   },
+  "bc.speed": {
+    uz: "Tezlik: {speed} ta/s · taxminan {eta} qoldi",
+    ru: "Скорость: {speed}/с · осталось ≈ {eta}",
+    en: "Speed: {speed}/s · about {eta} left",
+  },
+  "bc.pause": { uz: "Pauza", ru: "Пауза", en: "Pause" },
+  "bc.resume": { uz: "Davom ettirish", ru: "Продолжить", en: "Resume" },
   "bc.st.draft": { uz: "qoralama", ru: "черновик", en: "draft" },
   "bc.st.queued": { uz: "navbatda", ru: "в очереди", en: "queued" },
   "bc.st.sending": { uz: "yuborilmoqda", ru: "отправляется", en: "sending" },
+  "bc.st.paused": { uz: "pauzada", ru: "на паузе", en: "paused" },
+  "bc.st.failed": { uz: "xato bilan to‘xtatildi", ru: "остановлена из-за ошибки", en: "aborted (errors)" },
   "bc.st.done": { uz: "tugadi", ru: "завершена", en: "done" },
   "bc.st.cancelled": { uz: "to‘xtatildi", ru: "остановлена", en: "stopped" },
   "bc.stop": { uz: "To‘xtatish", ru: "Остановить", en: "Stop" },
@@ -244,6 +264,19 @@ const A = {
     ru: "⚠️ Не удалось проверить, админ ли бот (Telegram не ответил).",
     en: "⚠️ Could not check whether the bot is an admin (Telegram did not answer).",
   },
+  "ch.pickKind": {
+    uz: "Kanal turi:\n🔒 <b>Majburiy</b> — obuna bo‘lmagan foydalanuvchi yangi ish yarata olmaydi (bot va sayt).\n➕ <b>Ixtiyoriy</b> — faqat bonus uchun.",
+    ru: "Тип канала:\n🔒 <b>Обязательный</b> — без подписки нельзя создавать новые работы (бот и сайт).\n➕ <b>Необязательный</b> — только за бонус.",
+    en: "Channel kind:\n🔒 <b>Mandatory</b> — users who have not joined cannot create new work (bot and site).\n➕ <b>Optional</b> — for the bonus only.",
+  },
+  "ch.kindM": { uz: "🔒 Majburiy", ru: "🔒 Обязательный", en: "🔒 Mandatory" },
+  "ch.kindO": { uz: "➕ Ixtiyoriy", ru: "➕ Необязательный", en: "➕ Optional" },
+  "ch.confirmKind": { uz: "Obuna: <b>{kind}</b>", ru: "Подписка: <b>{kind}</b>", en: "Subscription: <b>{kind}</b>" },
+  "ch.type.m": { uz: "Majburiy · bonus bilan", ru: "Обязательный · с бонусом", en: "Mandatory · with a bonus" },
+  "ch.type.z": { uz: "Majburiy · bonussiz", ru: "Обязательный · без бонуса", en: "Mandatory · no bonus" },
+  "ch.typeM": { uz: "Bonus · {join}", ru: "Бонус · {join}", en: "Bonus · {join}" },
+  "ch.typeZ": { uz: "Bonussiz", ru: "Без бонуса", en: "No bonus" },
+  "ch.noBonus": { uz: "bonussiz", ru: "без бонуса", en: "no bonus" },
   "ch.pickType": { uz: "Bonus turini tanlang:", ru: "Выберите тип бонуса:", en: "Pick the bonus type:" },
   "ch.type.n": { uz: "Yangiliklar", ru: "Новости", en: "News" },
   "ch.type.e": { uz: "Qo‘shimcha", ru: "Дополнительный", en: "Extra" },
@@ -264,6 +297,40 @@ const A = {
     ru: "Закрытый канал: добавьте ссылку-приглашение в веб-панели («Бонусные каналы»).",
     en: "Private channel: add its invite link in the web panel (“Bonus channels”).",
   },
+
+  /* ── To‘lov bonusi (C-Q4, payment-bonus.ts) ── */
+  "pb.title": { uz: "To‘lov bonusi", ru: "Бонус за пополнение", en: "Payment bonus" },
+  "pb.now": {
+    uz: "Hozir: <b>{p}%</b> — har bir to‘langan to‘ldirishga summaning {p}% i bonus ball bo‘lib tushadi.",
+    ru: "Сейчас: <b>{p}%</b> — к каждому оплаченному пополнению начисляется {p}% суммы бонусными баллами.",
+    en: "Now: <b>{p}%</b> — every paid top-up earns {p}% of its amount as bonus points.",
+  },
+  "pb.off": {
+    uz: "Hozir: <b>0%</b> — to‘lov bonusi o‘chirilgan.",
+    ru: "Сейчас: <b>0%</b> — бонус за пополнение выключен.",
+    en: "Now: <b>0%</b> — the payment bonus is off.",
+  },
+  "pb.rule": {
+    uz: "Yangi qiymat faqat keyingi to‘lovlarga qo‘llanadi. 0 — o‘chirish, ko‘pi bilan 50%.",
+    ru: "Новое значение действует только для следующих платежей. 0 — выключить, максимум 50%.",
+    en: "A new value applies to later payments only. 0 turns it off, 50% at most.",
+  },
+  "pb.pick": { uz: "Yangi foizni tanlang:", ru: "Выберите новый процент:", en: "Pick the new percent:" },
+  "pb.viewOnly": { uz: "Sizda faqat ko‘rish huquqi bor.", ru: "У вас только просмотр.", en: "You can only view this." },
+  "pb.other": { uz: "Boshqa (0–50)", ru: "Другое (0–50)", en: "Other (0–50)" },
+  "pb.ask": {
+    uz: "Yangi foizni yuboring — butun son, 0 dan 50 gacha (0 — bonusni o‘chirish).",
+    ru: "Пришлите новый процент — целое число от 0 до 50 (0 — выключить бонус).",
+    en: "Send the new percent — a whole number from 0 to 50 (0 turns the bonus off).",
+  },
+  "pb.bad": { uz: "Butun son yuboring: 0 dan 50 gacha.", ru: "Пришлите целое число от 0 до 50.", en: "Send a whole number from 0 to 50." },
+  "pb.confirmAsk": {
+    uz: "To‘lov bonusi <b>{from}%</b> dan <b>{to}%</b> ga o‘zgartirilsinmi? Yangi qiymat keyingi to‘lovlarga qo‘llanadi.",
+    ru: "Изменить бонус за пополнение с <b>{from}%</b> на <b>{to}%</b>? Новое значение действует для следующих платежей.",
+    en: "Change the payment bonus from <b>{from}%</b> to <b>{to}%</b>? The new value applies to later payments.",
+  },
+  "pb.confirm": { uz: "Ha, {to}% qilish", ru: "Да, сделать {to}%", en: "Yes, set {to}%" },
+  "toast.pbSaved": { uz: "✅ Saqlandi: {p}%", ru: "✅ Сохранено: {p}%", en: "✅ Saved: {p}%" },
 
   /* ── Step-up (2FA mode) ── */
   "su.title": { uz: "Tasdiqlash kodi", ru: "Код подтверждения", en: "Confirmation code" },

@@ -61,6 +61,9 @@ after(async () => {
 });
 
 if (hasDb) await ensureMigrated();
+// The ledger fixtures pay orders through `settleOrder` and pin exact rows: the C-Q4 payment bonus is
+// switched off in this isolated database (it is tested in payment-bonus.test.mts).
+if (hasDb) await query(`INSERT INTO app_settings (key, value) VALUES ('payment_bonus_percent', '0'::jsonb) ON CONFLICT (key) DO UPDATE SET value = '0'::jsonb`);
 
 // ───────────────────────────── fixtures (admin-wallet.test.mts pattern)
 

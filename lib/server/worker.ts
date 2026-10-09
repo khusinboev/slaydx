@@ -50,7 +50,7 @@ import { trackJobCost, type TrackedJobCost } from "../generation/job-cost";
 import { log, withFreshLogContext, type LogFields } from "./log";
 import { providerOf, userMessage } from "./user-error";
 import { recordAiUsage, type AiUsageOutcome } from "./ai-usage";
-import { deliverBroadcasts } from "./broadcast-delivery";
+import { startBroadcastLoop } from "./broadcast-delivery";
 import { purgeFailedLeftovers } from "./admin-job-actions";
 import { registerErrorSink } from "./error-sink";
 import { processIdFor, startHeartbeat, stopHeartbeat } from "./heartbeat";
@@ -983,11 +983,11 @@ export async function purgeHousekeeping(): Promise<void> {
   await step("source-cache", () => purgeSourceCache(60));
   /*
    * Admin panel steps (docs/admin/02-plan.md §5.5, §6.9), after every existing
-   * step so their order is unchanged. Broadcast delivery is detached: a full
-   * tick (600 messages at 25/s) takes ~24 s and must not stall job claiming in
-   * the worker loop; a still-running delivery skips the next start.
+   * step so their order is unchanged. Broadcast delivery is NOT a housekeeping
+   * step any more: it has its own loop (`startBroadcastLoop`, started by the
+   * worker loop; docs/bonus/BONUS3.md C-Q5) and writes its own `broadcasts`
+   * status row.
    */
-  startBroadcastDelivery();
   await step("error-log", () => purgeErrorLog());
   await step("heartbeats", () => purgeHeartbeats());
   await step("admin-sessions", () => purgeAdminSessions());
@@ -1001,28 +1001,6 @@ export async function purgeHousekeeping(): Promise<void> {
       return staySweep(STAY_SWEEP_BATCH);
     });
   }
-}
-
-/** In-flight broadcast delivery of this process (one at a time). */
-let broadcastRun: Promise<void> | null = null;
-
-function startBroadcastDelivery(): void {
-  if (broadcastRun) return;
-  const run = recordStep("broadcasts", HK_PROCESS, () => deliverBroadcasts()).then(
-    () => undefined,
-    (e: unknown) => {
-      log("error", "[worker] housekeeping/broadcasts", { step: "broadcasts", err: e });
-    },
-  );
-  broadcastRun = run;
-  void run.finally(() => {
-    if (broadcastRun === run) broadcastRun = null;
-  });
-}
-
-/** Test seam: resolves when the detached broadcast delivery (if any) has finished. */
-export async function broadcastDeliveryIdle(): Promise<void> {
-  await broadcastRun;
 }
 
 /** `error_log`: 90 days after `last_seen_at`, resolved or not (§5.5). */
@@ -1188,6 +1166,8 @@ async function loop(): Promise<void> {
   });
   // Admin system page: liveness, running jobs and this process's breaker/limiter state (§6.11).
   startHeartbeat({ role: "worker", concurrency: env.worker.concurrency, getRunning: () => running });
+  // Telegram broadcast delivery: its own loop (leader by advisory lock), independent of the job tick and housekeeping.
+  const broadcastLoop = startBroadcastLoop();
   let sinceHousekeeping = 0;
 
   while (!stopped) {
@@ -1214,6 +1194,7 @@ async function loop(): Promise<void> {
     }
     await sleep(wait);
   }
+  await broadcastLoop.stop();
   // Stopped: the row goes stale and the system page shows the worker as gone.
   stopHeartbeat("worker");
 }

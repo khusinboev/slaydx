@@ -190,7 +190,8 @@ test("top-up refund with full clawback: refund row, admin_debit refund:<id>, wal
   const s = await session("finance");
   const u = await mkUser();
   const order = await paidOrder(u.id, "topup", 20_000);
-  assert.deepEqual(await wallets(u.id), { points: 0, quota: 0, balance: 20_000 });
+  // C-Q4: the settlement also paid the 10 % payment bonus as points.
+  assert.deepEqual(await wallets(u.id), { points: 2_000, quota: 0, balance: 20_000 });
 
   const key = randomUUID();
   const r = await record(s.cookie, order, BODY, { key });
@@ -208,7 +209,7 @@ test("top-up refund with full clawback: refund row, admin_debit refund:<id>, wal
   assert.equal(r.body.recordedSoum, 20_000);
   assert.equal(r.body.remainingSoum, 0);
 
-  assert.deepEqual(await wallets(u.id), { points: 0, quota: 0, balance: 0 });
+  assert.deepEqual(await wallets(u.id), { points: 2_000, quota: 0, balance: 0 }, "the clawback takes the order's balance credit; the payment bonus stays");
   const rows = await refundRows(order);
   assert.equal(rows.length, 1);
   const d = await debits(u.id);

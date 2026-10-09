@@ -10,17 +10,22 @@ import type { BotAdmin } from "./admin-access";
 import type { BotStats } from "./admin-stats";
 import type { BroadcastDraft, ChannelDraft } from "./admin-state";
 import { toolTitle, type Lang } from "./i18n";
-import { clip, esc, inlineButton, rows, tgEmoji, type InlineButton, type Screen } from "./ui";
+import { clip, esc, inlineButton, keyboardButton, rows, tgEmoji, type InlineButton, type KeyboardButton, type Screen } from "./ui";
 
 /**
  * In-bot admin panel screens (docs/bot-admin/PLAN.md) — pure renderers.
  * Buttons appear only for what the role may do; the handlers re-check anyway.
  */
 
-/** Channel bonus presets (docs/bonus/PLAN.md B-Q2): news 2 000 once; extra 1 000 + 2 000 after 7 days. */
+/**
+ * Channel bonus presets (docs/bonus/PLAN.md B-Q2): optional — news 2 000 once, extra 1 000 + 2 000
+ * after 7 days; mandatory (BONUS3.md C-Q2) — 2 000 once (the default) or no bonus at all.
+ */
 export const CHANNEL_PRESETS: Record<ChannelType, { joinBonus: number; stayBonus: number; stayDays: number }> = {
   n: { joinBonus: 2000, stayBonus: 0, stayDays: 7 },
   e: { joinBonus: 1000, stayBonus: 2000, stayDays: 7 },
+  m: { joinBonus: 2000, stayBonus: 0, stayDays: 7 },
+  z: { joinBonus: 0, stayBonus: 0, stayDays: 7 },
 };
 
 const som = (lang: Lang, v: number): string => (lang === "uz" ? `${groupDigits(v)} so‘m` : lang === "ru" ? `${groupDigits(v)} сум` : `${groupDigits(v)} UZS`);
@@ -32,7 +37,43 @@ const cancel = (lang: Lang) => inlineButton("cancel", at(lang, "btn.cancel"), { 
 
 /* ───────────────────────── Panel ───────────────────────── */
 
-export function panelScreen(a: BotAdmin): Screen {
+/** `payBonusPercent`: the current payment bonus (C-Q4) for the «💳 To‘lov bonusi: N%» button (roles with settings.view). */
+/** Admin menu items of the reply keyboard (owner C-Q6): label key, icon, the panel action (callback code) it opens. */
+export const ADMIN_MENU = [
+  { key: "panel.stats", icon: "chart", data: acb.stats(), perm: "dashboard.view" },
+  { key: "panel.broadcast", icon: "megaphone", data: acb.bcStart(), perm: "broadcasts.send" },
+  { key: "panel.channels", icon: "bell", data: acb.channels(), perm: "bonus.view" },
+  { key: "kb.payBonus", icon: "card", data: acb.payBonus(), perm: "settings.view" },
+] as const satisfies readonly { key: string; icon: string; data: string; perm: Permission }[];
+
+/**
+ * The admin menu as a REPLY keyboard at the bottom (owner C-Q6): two per row, only what the role may open,
+ * then «⬅️ Asosiy menyu». The texts are matched back by `adminMenuAction`; every tap re-checks the account.
+ */
+export function adminMenuKeyboard(a: BotAdmin): Record<string, unknown> {
+  const l = a.lang;
+  const items: KeyboardButton[] = ADMIN_MENU.filter((m) => can(a, m.perm)).map((m, i) =>
+    keyboardButton(m.icon, at(l, m.key), i === 0 ? { style: "primary" } : {}),
+  );
+  const pairs: KeyboardButton[][] = [];
+  for (let i = 0; i < items.length; i += 2) pairs.push(items.slice(i, i + 2));
+  return {
+    keyboard: [...pairs, [keyboardButton("back", at(l, "kb.mainMenu"))]],
+    is_persistent: true,
+    resize_keyboard: true,
+  };
+}
+
+/** The panel's opening message: title, who you are, the hint — with the admin reply keyboard. */
+export function adminMenuScreen(a: BotAdmin): Screen {
+  const l = a.lang;
+  return {
+    text: `${head("admin", at(l, "panel.title"))}\n\n${at(l, "panel.lead", { name: esc(a.name), role: at(l, `role.${a.role}`) })}\n\n${at(l, "panel.menuHint")}`,
+    reply_markup: adminMenuKeyboard(a),
+  };
+}
+
+export function panelScreen(a: BotAdmin, payBonusPercent?: number): Screen {
   const l = a.lang;
   return {
     text: `${head("admin", at(l, "panel.title"))}\n\n${at(l, "panel.lead", { name: esc(a.name), role: at(l, `role.${a.role}`) })}`,
@@ -40,6 +81,11 @@ export function panelScreen(a: BotAdmin): Screen {
       [can(a, "dashboard.view") && inlineButton("chart", at(l, "panel.stats"), { callback_data: acb.stats() }, "primary")],
       [can(a, "broadcasts.send") && inlineButton("megaphone", at(l, "panel.broadcast"), { callback_data: acb.bcStart() })],
       [can(a, "bonus.view") && inlineButton("bell", at(l, "panel.channels"), { callback_data: acb.channels() })],
+      [
+        can(a, "settings.view") &&
+          payBonusPercent !== undefined &&
+          inlineButton("card", at(l, "panel.payBonus", { p: payBonusPercent }), { callback_data: acb.payBonus() }),
+      ],
       [inlineButton("back", at(l, "panel.close"), { callback_data: acb.close() })],
     ),
   };
@@ -201,18 +247,32 @@ export function confirmScreen(lang: Lang, a: AudienceCode, count: number): Scree
   };
 }
 
+/** «1 daq 05 s» / «42 s» for the ETA line. */
+function etaText(seconds: number): string {
+  const t = Math.max(0, Math.round(seconds));
+  return t < 60 ? `${t} s` : `${Math.floor(t / 60)} min ${String(t % 60).padStart(2, "0")} s`;
+}
+
 export function progressScreen(lang: Lang, b: AdminBroadcast, s: BroadcastStats, canStop: boolean): Screen {
-  const live = b.status === "queued" || b.status === "sending" || b.status === "draft";
+  const running = b.status === "queued" || b.status === "sending";
+  const live = running || b.status === "draft" || b.status === "paused";
+  const lines = [
+    head("megaphone", at(lang, "bc.status", { id: b.id })),
+    "",
+    at(lang, "bc.statusLine", { status: at(lang, `bc.st.${b.status}`) }),
+    at(lang, "bc.progress", { sent: g(s.sent), total: g(s.total), failed: g(s.failed), pending: g(s.pending) }),
+  ];
+  if (running && s.speed > 0) {
+    lines.push(at(lang, "bc.speed", { speed: s.speed.toFixed(1), eta: s.etaSeconds === null ? "—" : etaText(s.etaSeconds) }));
+  }
+  if (b.status === "failed" && b.failReason) lines.push("", esc(b.failReason));
   return {
-    text: [
-      head("megaphone", at(lang, "bc.status", { id: b.id })),
-      "",
-      at(lang, "bc.statusLine", { status: at(lang, `bc.st.${b.status}`) }),
-      at(lang, "bc.progress", { sent: g(s.sent), total: g(s.total), failed: g(s.failed), pending: g(s.pending) }),
-    ].join("\n"),
+    text: lines.join("\n"),
     reply_markup: rows(
       [live && inlineButton("refresh", at(lang, "btn.refresh"), { callback_data: acb.bcProgress(b.id) }, "primary")],
-      [live && canStop && inlineButton("stop", at(lang, "bc.stop"), { callback_data: acb.bcStopAsk(b.id) }, "danger")],
+      [running && canStop && inlineButton("clock", at(lang, "bc.pause"), { callback_data: acb.bcPause(b.id) })],
+      [b.status === "paused" && canStop && inlineButton("next", at(lang, "bc.resume"), { callback_data: acb.bcResume(b.id) }, "success")],
+      [live && b.status !== "draft" && canStop && inlineButton("stop", at(lang, "bc.stop"), { callback_data: acb.bcStopAsk(b.id) }, "danger")],
       [inlineButton("admin", at(lang, "btn.panel"), { callback_data: acb.panel() })],
     ),
   };
@@ -238,10 +298,12 @@ export function broadcastDoneScreen(lang: Lang, id: string, s: { sent: number; f
 /* ───────────────────────── Kanal ulash ───────────────────────── */
 
 function amountText(lang: Lang, c: { joinBonus: number; stayBonus: number; stayDays: number }): string {
-  return c.stayBonus > 0
-    ? at(lang, "ch.amountE", { join: som(lang, c.joinBonus), stay: som(lang, c.stayBonus), days: c.stayDays })
-    : som(lang, c.joinBonus);
+  if (c.stayBonus > 0) return at(lang, "ch.amountE", { join: som(lang, c.joinBonus), stay: som(lang, c.stayBonus), days: c.stayDays });
+  return c.joinBonus > 0 ? som(lang, c.joinBonus) : at(lang, "ch.noBonus");
 }
+
+/** «🔒 » before a mandatory channel (C-Q2). */
+const lockMark = (c: { mandatory?: boolean }) => (c.mandatory ? "🔒 " : "");
 
 export function channelsScreen(a: BotAdmin, items: BonusChannelItem[]): Screen {
   const l = a.lang;
@@ -252,7 +314,7 @@ export function channelsScreen(a: BotAdmin, items: BonusChannelItem[]): Screen {
     lines.push(
       at(l, "ch.line", {
         icon: c.active ? "✅" : "⏸",
-        title: esc(clip(c.title, 40)),
+        title: `${lockMark(c)}${esc(clip(c.title, 40))}`,
         user: c.username ? ` (@${esc(c.username)})` : "",
         amount: amountText(l, c),
         n: g(c.stats.joinPaidCount),
@@ -261,7 +323,7 @@ export function channelsScreen(a: BotAdmin, items: BonusChannelItem[]): Screen {
   }
   if (items.length) lines.push("", edit ? at(l, "ch.toggleHint") : at(l, "ch.viewOnly"));
   const toggles: InlineButton[][] = edit
-    ? items.slice(0, 20).map((c) => [inlineButton(null, `${c.active ? "✅" : "⏸"} ${clip(c.title, 30)}`, { callback_data: acb.chToggle(c.id) })])
+    ? items.slice(0, 20).map((c) => [inlineButton(null, `${c.active ? "✅" : "⏸"} ${lockMark(c)}${clip(c.title, 30)}`, { callback_data: acb.chToggle(c.id) })])
     : [];
   return {
     text: lines.join("\n"),
@@ -284,22 +346,47 @@ function channelHead(lang: Lang, d: ChannelDraft): string[] {
   return [head("megaphone", esc(clip(d.title, 60))), `${where} · ID <code>${esc(d.chatId)}</code>`, "", bot];
 }
 
-export function channelTypeScreen(lang: Lang, d: ChannelDraft): Screen {
-  const n = CHANNEL_PRESETS.n;
-  const e = CHANNEL_PRESETS.e;
+/** After resolving the channel: «🔒 Majburiy» or «➕ Ixtiyoriy» (docs/bonus/BONUS3.md C-Q2), then the bonus presets. */
+export function channelKindScreen(lang: Lang, d: ChannelDraft): Screen {
   return {
-    text: [...channelHead(lang, d), "", at(lang, "ch.pickType")].join("\n"),
+    text: [...channelHead(lang, d), "", at(lang, "ch.pickKind")].join("\n"),
     reply_markup: rows(
-      [inlineButton("doc", at(lang, "ch.typeN", { join: som(lang, n.joinBonus) }), { callback_data: acb.chType("n") })],
-      [inlineButton("plus", at(lang, "ch.typeE", { join: g(e.joinBonus), stay: g(e.stayBonus), days: e.stayDays }), { callback_data: acb.chType("e") })],
+      [inlineButton(null, at(lang, "ch.kindM"), { callback_data: acb.chKind("m") }, "primary")],
+      [inlineButton(null, at(lang, "ch.kindO"), { callback_data: acb.chKind("o") })],
       [cancel(lang)],
     ),
   };
 }
 
+/** Bonus presets of the picked kind: mandatory — 2 000 (default) / no bonus; optional — today's news / extra. */
+export function channelTypeScreen(lang: Lang, d: ChannelDraft): Screen {
+  const kind = d.mandatory ? at(lang, "ch.kindM") : at(lang, "ch.kindO");
+  const n = CHANNEL_PRESETS.n;
+  const e = CHANNEL_PRESETS.e;
+  const presets: InlineButton[][] = d.mandatory
+    ? [
+        [inlineButton("gift", at(lang, "ch.typeM", { join: som(lang, CHANNEL_PRESETS.m.joinBonus) }), { callback_data: acb.chType("m") }, "primary")],
+        [inlineButton(null, at(lang, "ch.typeZ"), { callback_data: acb.chType("z") })],
+      ]
+    : [
+        [inlineButton("doc", at(lang, "ch.typeN", { join: som(lang, n.joinBonus) }), { callback_data: acb.chType("n") })],
+        [inlineButton("plus", at(lang, "ch.typeE", { join: g(e.joinBonus), stay: g(e.stayBonus), days: e.stayDays }), { callback_data: acb.chType("e") })],
+      ];
+  return {
+    text: [...channelHead(lang, d), "", at(lang, "ch.confirmKind", { kind }), "", at(lang, "ch.pickType")].join("\n"),
+    reply_markup: rows(...presets, [back(lang, acb.chKinds())], [cancel(lang)]),
+  };
+}
+
 export function channelConfirmScreen(lang: Lang, d: ChannelDraft, type: ChannelType): Screen {
   const p = CHANNEL_PRESETS[type];
-  const lines = [...channelHead(lang, d), "", at(lang, "ch.confirmType", { type: at(lang, `ch.type.${type}`) }), at(lang, "ch.confirmJoin", { join: som(lang, p.joinBonus) })];
+  const lines = [
+    ...channelHead(lang, d),
+    "",
+    at(lang, "ch.confirmKind", { kind: d.mandatory ? at(lang, "ch.kindM") : at(lang, "ch.kindO") }),
+    at(lang, "ch.confirmType", { type: at(lang, `ch.type.${type}`) }),
+    at(lang, "ch.confirmJoin", { join: p.joinBonus > 0 ? som(lang, p.joinBonus) : at(lang, "ch.noBonus") }),
+  ];
   if (p.stayBonus > 0) lines.push(at(lang, "ch.confirmStay", { days: p.stayDays, stay: som(lang, p.stayBonus) }));
   lines.push("", at(lang, "ch.confirmAsk"));
   return {
@@ -308,6 +395,49 @@ export function channelConfirmScreen(lang: Lang, d: ChannelDraft, type: ChannelT
       [inlineButton("save", at(lang, "ch.confirm"), { callback_data: acb.chCreate(type) }, "success")],
       [back(lang, acb.chTypes())],
       [cancel(lang)],
+    ),
+  };
+}
+
+/* ───────────────────────── To‘lov bonusi (C-Q4) ───────────────────────── */
+
+/** The quick choices; any other 0–50 value goes through «Boshqa». */
+export const PAY_BONUS_PRESETS = [0, 5, 10, 15, 20] as const;
+
+/** The payment bonus card: the current percent, the rule, and (settings.edit) the choices. */
+export function payBonusScreen(a: BotAdmin, percent: number): Screen {
+  const l = a.lang;
+  const edit = can(a, "settings.edit");
+  const lines = [head("card", at(l, "pb.title")), "", percent > 0 ? at(l, "pb.now", { p: percent }) : at(l, "pb.off"), at(l, "pb.rule")];
+  lines.push("", edit ? at(l, "pb.pick") : at(l, "pb.viewOnly"));
+  const choices: InlineButton[] = edit
+    ? PAY_BONUS_PRESETS.map((p) =>
+        inlineButton(p === percent ? "save" : null, `${p}%`, { callback_data: acb.pbPick(p) }, p === percent ? "success" : undefined),
+      )
+    : [];
+  return {
+    text: lines.join("\n"),
+    reply_markup: rows(
+      choices,
+      [edit && inlineButton("edit", at(l, "pb.other"), { callback_data: acb.pbOther() })],
+      [back(l)],
+    ),
+  };
+}
+
+export function payBonusAskScreen(lang: Lang, problem?: string): Screen {
+  return {
+    text: `${problem ? `${tgEmoji("warn")} ${problem}\n\n` : ""}${head("card", at(lang, "pb.title"))}\n\n${at(lang, "pb.ask")}`,
+    reply_markup: rows([back(lang, acb.payBonus())]),
+  };
+}
+
+export function payBonusConfirmScreen(lang: Lang, from: number, to: number): Screen {
+  return {
+    text: `${head("card", at(lang, "pb.title"))}\n\n${at(lang, "pb.confirmAsk", { from, to })}`,
+    reply_markup: rows(
+      [inlineButton("save", at(lang, "pb.confirm", { to }), { callback_data: acb.pbSet(to) }, "success")],
+      [back(lang, acb.payBonus())],
     ),
   };
 }

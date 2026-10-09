@@ -115,8 +115,14 @@ Mini App ichida havola kerak emas — `initData` imzosi yetarli.
 ```bash
 curl -F "url=https://<domen>/api/telegram/webhook" \
      -F "secret_token=$TELEGRAM_WEBHOOK_SECRET" \
+     -F 'allowed_updates=["message","inline_query","callback_query","chat_member","my_chat_member"]' \
      "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook"
 ```
+
+`allowed_updates` ro'yxatida `my_chat_member` bo'lishi shart: foydalanuvchi botni
+bloklaganda/qayta ochganda Telegram shu update'ni yuboradi (`users.bot_blocked_at`,
+`lib/server/bot-reachability.ts`). Usiz bloklangan holat faqat yuborish xatosida
+belgilanadi va `/start`da tozalanadi.
 
 `TELEGRAM_WEBHOOK_SECRET` — faqat webhook uchun (`CRON_SECRET` emas: u
 `/api/health` bearer'i). Bo'sh bo'lsa vaqtincha `CRON_SECRET` ishlatiladi va

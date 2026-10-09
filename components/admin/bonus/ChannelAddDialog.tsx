@@ -9,6 +9,7 @@ import { createBonusChannel, resolveBonusChannel, type BonusChannel, type Resolv
 import { AmountFields, FIELD } from "./AmountFields";
 import { BotBadge } from "./BotBadge";
 import { InviteLinkField } from "./InviteLinkField";
+import { MandatoryField } from "./MandatoryField";
 import { amountsDraft, bonusText, checkAmounts, checkInviteText, checkTitle, defaultPreset, PRESETS, type AmountsDraft, type BotCheck, type PresetId } from "./format";
 
 export type ChannelAddDialogProps = {
@@ -39,13 +40,14 @@ function Body({ existingCount, onClose, onCreated }: ChannelAddDialogProps) {
   const [amounts, setAmounts] = useState<AmountsDraft>(() => amountsDraft(PRESETS[defaultPreset(existingCount)]));
   const [title, setTitle] = useState("");
   const [invite, setInvite] = useState("");
+  const [mandatory, setMandatory] = useState(false);
   const ctl = useRef<AbortController | null>(null);
 
   useEffect(() => () => ctl.current?.abort(), []);
 
   const q = input.trim();
   const current = preview && preview.q === q ? preview.data : null;
-  const amountsCheck = checkAmounts(amounts);
+  const amountsCheck = checkAmounts(amounts, mandatory);
   const titleCheck = checkTitle(title);
   const inviteCheck = checkInviteText(invite);
   const ready = Boolean(current) && !current?.existingId && amountsCheck.ok && titleCheck.ok && inviteCheck.ok && !resolving;
@@ -98,6 +100,7 @@ function Body({ existingCount, onClose, onCreated }: ChannelAddDialogProps) {
           ...(titleCheck.value !== current.title ? { title: titleCheck.value } : {}),
           ...(inviteCheck.value ? { inviteLink: inviteCheck.value } : {}),
           ...amountsCheck.value,
+          mandatory,
           ...(reason ? { reason } : {}),
         });
         toast(`«${r.item.title}» qo'shildi`);
@@ -174,6 +177,8 @@ function Body({ existingCount, onClose, onCreated }: ChannelAddDialogProps) {
           </div>
 
           <InviteLinkField value={invite} onChange={setInvite} chatRef={current.username ? `@${current.username}` : current.chatId} needed={!current.username} />
+
+          <MandatoryField value={mandatory} onChange={setMandatory} />
 
           <div role="group" aria-label="Tayyor miqdorlar" className="flex flex-wrap gap-2">
             {(Object.keys(PRESETS) as PresetId[]).map((id) => (

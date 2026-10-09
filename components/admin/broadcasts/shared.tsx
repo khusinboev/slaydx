@@ -8,16 +8,20 @@ export const STATUS_LABEL: Record<BroadcastStatus, string> = {
   draft: "Qoralama",
   queued: "Navbatda",
   sending: "Yuborilmoqda",
+  paused: "To'xtatilgan",
   done: "Yuborildi",
   cancelled: "Bekor qilingan",
+  failed: "Xato bilan to'xtatilgan",
 };
 
 const STATUS_TONE: Record<BroadcastStatus, Tone> = {
   draft: "neutral",
   queued: "info",
   sending: "info",
+  paused: "warning",
   done: "success",
   cancelled: "warning",
+  failed: "danger",
 };
 
 export const STATUS_OPTIONS: ReadonlyArray<FilterOption> = BROADCAST_STATUSES.map((s) => ({ value: s, label: STATUS_LABEL[s] }));
@@ -36,7 +40,7 @@ export function StatusPill({ status }: { status: BroadcastStatus }) {
 export const isInFlight = (status: BroadcastStatus): boolean => status === "queued" || status === "sending";
 
 /** Only these states can still be cancelled (the API answers 409 otherwise). */
-export const isCancellable = (status: BroadcastStatus): boolean => status === "draft" || status === "queued" || status === "sending";
+export const isCancellable = (status: BroadcastStatus): boolean => status === "draft" || status === "queued" || status === "sending" || status === "paused";
 
 export function audienceLabel(a: Audience): string {
   if (a.kind === "all") return "Barcha foydalanuvchilar";

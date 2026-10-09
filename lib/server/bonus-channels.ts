@@ -7,7 +7,7 @@ import { referralSummary } from "./referrals";
 import { botConfigured, botUsername, callBot } from "./telegram";
 import { langOf } from "./bot/i18n";
 import { joinPaidNotice, stayPaidNotice } from "./bot/bonus";
-import { firstTopupEligible, firstTopupStatus } from "./topup-bonus";
+import { getPaymentBonusPercent, paymentBonusEarned } from "./payment-bonus";
 
 /**
  * Bonus tasks — the user side (docs/bonus/PLAN.md, K1; owner decisions B-Q1..Q4).
@@ -82,6 +82,8 @@ export type ChannelTask = {
   joinBonus: number;
   stayBonus: number;
   stayDays: number;
+  /** Must be joined before creating new work (C-Q2): listed first, with a 🔒 mark. */
+  mandatory: boolean;
   claim: ChannelClaim | null;
 };
 
@@ -90,13 +92,16 @@ export type BonusTasks = {
   referral: { link: string; rewardPoints: number; invitedCount: number; earnedPoints: number };
   /** The sign-up bonus actually booked (`signup:<user>` ledger row), 0 when there is none. */
   signupPoints: number;
-  /** The first top-up bonus (`lib/server/topup-bonus.ts firstTopupStatus`). */
-  firstTopup: { paid: boolean; points: number; eligible: boolean };
-  /** Bonus earned so far: sign-up + channel tasks + invites + first top-up (the screen's summary). */
+  /**
+   * The payment bonus (C-Q4, `lib/server/payment-bonus.ts`): the current percent (0 = off) and the
+   * points the user earned from payments so far (payment bonuses + the legacy first top-up bonus).
+   */
+  paymentBonus: { percent: number; earnedPoints: number };
+  /** Bonus earned so far: sign-up + channel tasks + invites + payment bonuses (the screen's summary). */
   earnedTotal: number;
   /**
    * Fixed channel bonuses still open: join + stay of channels not joined yet, plus owed stay
-   * bonuses of joined channels the user did not leave. Invites (unbounded) and the first top-up
+   * bonuses of joined channels the user did not leave. Invites (unbounded) and the payment bonus
    * (a share of an amount) are not counted.
    */
   availableTotal: number;
@@ -132,6 +137,7 @@ type TaskRow = {
   join_bonus: number;
   stay_bonus: number;
   stay_days: number;
+  mandatory: boolean;
   joined_at: Date | null;
   join_paid: number | null;
   stay_paid: number | null;
@@ -139,7 +145,7 @@ type TaskRow = {
 };
 
 /**
- * Active channels (by `sort`, then id) with the user's claim state, plus the
+ * Active channels (mandatory first, then by `sort`, then id) with the user's claim state, plus the
  * referral summary. Owner-scoped: claims are read by `user_id = $1` only.
  */
 export async function bonusTasks(
@@ -147,12 +153,12 @@ export async function bonusTasks(
   links?: { botUsername: string | null; appUrl: string },
 ): Promise<BonusTasks> {
   const rows = await query<TaskRow>(
-    `SELECT ch.id::text AS id, ch.title, ch.username, ch.invite_link, ch.join_bonus, ch.stay_bonus, ch.stay_days,
+    `SELECT ch.id::text AS id, ch.title, ch.username, ch.invite_link, ch.join_bonus, ch.stay_bonus, ch.stay_days, ch.mandatory,
             c.joined_at, c.join_paid, c.stay_paid, c.left_at
        FROM bonus_channels ch
        LEFT JOIN bonus_channel_claims c ON c.channel_id = ch.id AND c.user_id = $1
       WHERE ch.active
-      ORDER BY ch.sort, ch.id`,
+      ORDER BY ch.mandatory DESC, ch.sort, ch.id`,
     [userId],
   );
   const earnedRow = await queryOne<{ n: string }>(
@@ -164,9 +170,7 @@ export async function bonusTasks(
     [userId, `signup:${userId}`],
   );
   const signupPoints = Math.max(0, Number(signupRow?.p ?? 0));
-  const status = await firstTopupStatus(userId);
-  // Offer the task only to users who can still earn it (no earlier paid top-up) — review MAJOR.
-  const firstTopup = { ...status, eligible: status.paid ? false : await firstTopupEligible(userId) };
+  const paymentBonus = { percent: await getPaymentBonusPercent(), earnedPoints: await paymentBonusEarned(userId) };
   const s = await referralSummary(userId, links ?? { botUsername: await botUsername(), appUrl: env.appUrl });
   const referral = { link: s.botLink ?? s.webLink, rewardPoints: s.rewardPoints, invitedCount: s.invitedCount, earnedPoints: s.earnedPoints };
   const channels: ChannelTask[] = rows.map((r) => ({
@@ -177,6 +181,7 @@ export async function bonusTasks(
     joinBonus: Number(r.join_bonus),
     stayBonus: Number(r.stay_bonus),
     stayDays: Number(r.stay_days),
+    mandatory: r.mandatory === true,
     claim: r.joined_at
       ? {
           joinedAt: new Date(r.joined_at).toISOString(),
@@ -190,8 +195,8 @@ export async function bonusTasks(
     channels,
     referral,
     signupPoints,
-    firstTopup,
-    earnedTotal: Number(earnedRow?.n ?? 0) + referral.earnedPoints + signupPoints + (firstTopup.paid ? firstTopup.points : 0),
+    paymentBonus,
+    earnedTotal: Number(earnedRow?.n ?? 0) + referral.earnedPoints + signupPoints + paymentBonus.earnedPoints,
     availableTotal: channelsAvailable(channels),
   };
 }

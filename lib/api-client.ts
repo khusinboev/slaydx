@@ -6,6 +6,7 @@ import type { SlideModel, SlideThemeId } from "./generation/slide-types";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "./generation/slide-templates";
 import type { BodyRules } from "./generation/slide-audience";
 import type { DownloadFormatId } from "./downloads/formats";
+import { reportGate, type GateChannel } from "./channel-gate";
 
 /**
  * Server API bilan yagona aloqa nuqtasi.
@@ -287,8 +288,8 @@ export function updateProfile(patch: Partial<ServerUser>) {
 export type LedgerEntry = { id: string; kind: string; amount: number; note: string; createdAt: string };
 
 export function fetchMe() {
-  /** `firstTopupEligible`: the next paid top-up can still earn the first top-up bonus (server-computed). */
-  return request<{ user: ServerUser; transactions: LedgerEntry[]; firstTopupEligible?: boolean }>("/api/users/me");
+  /** `paymentBonusPercent`: every paid top-up earns this % as bonus points (0 = off; server setting). */
+  return request<{ user: ServerUser; transactions: LedgerEntry[]; paymentBonusPercent?: number }>("/api/users/me");
 }
 
 /* ──────────────────────────── Generations ─────────────────────────── */
@@ -439,6 +440,8 @@ export async function createGeneration(
     return res;
   } catch (e) {
     settleSubmitKey(key, submitOutcome(e));
+    // 403 `channel_required` / `telegram_required` (C-Q2): nothing charged; the tool page shows the gate card.
+    if (e instanceof ApiError) reportGate(e.status, e.data);
     // 409 `price_changed`: nothing was charged or queued (a 4xx is "rejected", so the next submit gets a new key).
     const changed = priceChangedOf(e);
     if (changed) throw changed;
@@ -454,6 +457,17 @@ export async function createGeneration(
     }
     throw e;
   }
+}
+
+/**
+ * `GET /api/channels/required` (docs/bonus/BONUS3.md C-Q2): whether new work may be created and
+ * which mandatory channels are missing. `fresh`: «✅ Tekshirish» — cached «not a member» answers
+ * are asked again.
+ */
+export function requiredChannels(fresh = false) {
+  return request<{ ok: boolean; needsTelegram: boolean; channels: GateChannel[] }>(
+    `/api/channels/required${fresh ? "?fresh=1" : ""}`,
+  );
 }
 
 /**

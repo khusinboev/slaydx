@@ -1,6 +1,6 @@
 import "server-only";
 import { ApiError } from "./api";
-import { adminTx } from "./admin-audit";
+import { adminTx, type AuditActor } from "./admin-audit";
 import { parseReason } from "./admin-accounts";
 import type { AdminActor } from "./admin-handler";
 import {
@@ -93,9 +93,16 @@ function snapshot(s: Snapshot): Snapshot {
 /**
  * PUT: validates `value` with the catalog (400 with the validator's message),
  * upserts the row and writes `settings.update` (before/after = `{value, source}`)
- * in the same transaction.
+ * in the same transaction. `admin` is the web route's actor or, for the bot
+ * admin panel (`payment-bonus.ts setPaymentBonusPercent`), the bot's audit
+ * actor; `opts.via` marks the audit row (`meta.via = "bot"`).
  */
-export async function updateAdminSetting(admin: AdminActor, rawKey: unknown, body: Record<string, unknown>): Promise<AdminSettingItem> {
+export async function updateAdminSetting(
+  admin: AuditActor & Pick<AdminActor, "id">,
+  rawKey: unknown,
+  body: Record<string, unknown>,
+  opts: { via?: "bot" } = {},
+): Promise<AdminSettingItem> {
   const key = requireSettingKey(rawKey);
   const reason = parseReason(body.reason)!;
   await adminTx(admin, async (client, audit) => {
@@ -107,6 +114,7 @@ export async function updateAdminSetting(admin: AdminActor, rawKey: unknown, bod
       reason,
       before: snapshot(r.before),
       after: snapshot(r.after),
+      ...(opts.via ? { meta: { via: opts.via } } : {}),
     });
   });
   // After COMMIT: the next read in this process reloads (others within 15 s).

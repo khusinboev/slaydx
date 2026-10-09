@@ -80,7 +80,7 @@ export const UPLOAD_TIMEOUT_MS = 60_000;
  * `0` means no usable answer: network error, timeout, a non-JSON body
  * (a proxy's HTML 502) or the bot is not configured.
  */
-export type BotResult<T> = { ok: true; result: T } | { ok: false; code: number; description: string };
+export type BotResult<T> = { ok: true; result: T } | { ok: false; code: number; description: string; retryAfter?: number };
 
 export type CallBotOptions = {
   /** `payload` is a `FormData` (file upload); fetch sets the multipart boundary itself. */
@@ -89,6 +89,11 @@ export type CallBotOptions = {
   timeoutMs?: number;
   /** Injected for tests (default: the global `fetch`). */
   fetch?: typeof fetch;
+  /**
+   * Never wait + retry a 429 here: return it (with `retryAfter`) and let the caller pace.
+   * The broadcast engine owns rate limiting globally (`send-limiter.ts`), so a sender must not sleep on its own.
+   */
+  noRetry?: boolean;
 };
 
 /** A failure worth retrying later: no answer, rate limit or Telegram 5xx. */
@@ -144,11 +149,16 @@ export async function callBot<T = unknown>(
     if (!data.ok) {
       console.warn(`[telegram] ${method}:`, data.description ?? "xato");
       const after = Number(data.parameters?.retry_after);
-      if (attempt === 0 && data.error_code === 429 && Number.isFinite(after) && after >= 0 && after <= TELEGRAM_RETRY_AFTER_CAP_S) {
+      if (!opts.noRetry && attempt === 0 && data.error_code === 429 && Number.isFinite(after) && after >= 0 && after <= TELEGRAM_RETRY_AFTER_CAP_S) {
         await new Promise((r) => setTimeout(r, after * 1000));
         continue;
       }
-      return { ok: false, code: Number(data.error_code ?? 0), description: data.description ?? "" };
+      return {
+        ok: false,
+        code: Number(data.error_code ?? 0),
+        description: data.description ?? "",
+        ...(Number.isFinite(after) && after >= 0 ? { retryAfter: after } : {}),
+      };
     }
     return { ok: true, result: data.result as T };
   }
@@ -535,6 +545,18 @@ export type TelegramUpdate = {
     old_chat_member?: { status?: string; is_member?: boolean; user?: { id: number; is_bot?: boolean } };
     new_chat_member?: { status?: string; is_member?: boolean; user?: { id: number; is_bot?: boolean } };
   };
+  /**
+   * The BOT's own membership changed in a chat. In a private chat `kicked` = the user blocked the bot,
+   * `member` = they unblocked it (`bot-reachability.ts`, `users.bot_blocked_at`). Sent only when
+   * `allowed_updates` names `my_chat_member` (webhook and `scripts/bot.mts`). No reply.
+   */
+  my_chat_member?: {
+    chat: { id: number; type?: string };
+    from?: { id: number; is_bot?: boolean };
+    date?: number;
+    old_chat_member?: { status?: string };
+    new_chat_member?: { status?: string };
+  };
 };
 
 /**
@@ -802,11 +824,20 @@ async function botUser(
 }
 
 async function processUpdate(update: TelegramUpdate): Promise<void> {
+  if (update.my_chat_member) {
+    // Loaded lazily; a user blocking / unblocking the bot only flips `users.bot_blocked_at`.
+    await (await import("./bot-reachability")).handleMyChatMember(update.my_chat_member);
+    return;
+  }
   if (update.chat_member) {
     // Loaded lazily. A leave forfeits the unpaid stay bonus; a join pays the join bonus at once
     // (B2-Q2, `recordChannelJoin` never throws). Other changes need no database round trip.
     const cm = update.chat_member;
     const bonus = await import("./bonus-channels");
+    // Mandatory channels (C-Q2): any join / leave of this pair drops the cached membership answer.
+    if (Number.isSafeInteger(cm.chat?.id) && Number.isSafeInteger(cm.new_chat_member?.user?.id)) {
+      (await import("./mandatory-channels")).forgetMembership(cm.new_chat_member!.user!.id, cm.chat.id);
+    }
     if (bonus.isLeaveStatus(cm.new_chat_member)) await bonus.recordChannelLeave(cm);
     else if (bonus.isJoinStatus(cm.new_chat_member)) await bonus.recordChannelJoin(cm);
     return;
@@ -878,6 +909,8 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
   const me: SessionUser | null = isPrivate ? await botUser(profile, msg.from.language_code, startPayload, bot.userByTelegram) : null;
   const lang = langOf(me?.language);
   const ctx = me ? { chatId: msg.chat.id, telegramId: msg.from.id, lang, user: me } : null;
+  // `/start` = the user is talking to the bot again: broadcasts may reach them (migration 046).
+  if (me && startPayload !== null) await (await import("./bot-reachability")).clearBotBlocked({ userId: me.id });
 
   if (ctx) {
     if (text.startsWith("/")) {
@@ -887,6 +920,8 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
       // «🛠 Admin» (only linked admins have the button; anyone else's text falls through as usual).
       const adminBot = await import("./bot/admin");
       if (adminBot.isAdminButtonText(text) && (await adminBot.openPanel(ctx.chatId, ctx.telegramId))) return;
+      // The admin reply-keyboard menu (owner C-Q6): linked admins only; others' identical texts fall through.
+      if (adminBot.adminMenuAction(text) && (await adminBot.handleAdminMenuText(ctx.chatId, ctx.telegramId, text, update.update_id))) return;
       const action = bot.matchKeyboard(text);
       if (action) {
         await bot.handleKeyboard(ctx, action);
@@ -911,13 +946,12 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
   }
 
   if (text.startsWith("/admin")) {
-    // A linked admin gets the panel (and the keyboard with its «🛠 Admin» row); anyone else keeps the contact flow.
+    // A linked admin gets the panel with its own reply keyboard (C-Q6; «⬅️ Asosiy menyu» brings the
+    // main one back) — sending the main keyboard after it would replace that menu. Anyone else keeps
+    // the contact flow.
     if (ctx) {
       const adminBot = await import("./bot/admin");
-      if (await adminBot.openPanel(ctx.chatId, ctx.telegramId)) {
-        await bot.sendMainKeyboard(ctx, "refreshed");
-        return;
-      }
+      if (await adminBot.openPanel(ctx.chatId, ctx.telegramId)) return;
     }
     await sendMessage(msg.chat.id, t(lang, "admin.ask"), {
       reply_markup: {
@@ -954,7 +988,11 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
     // personal links are refreshed by every /start.
     const screen = welcomeScreen(lang, { user: me, loginLink: await createBotLoginLink(profile), rewardPoints: REFERRAL_REWARD_POINTS });
     await sendMessage(msg.chat.id, screen.text, markupOf(screen));
-    if (ctx) await bot.sendMainKeyboard(ctx, "note");
+    if (ctx) {
+      await bot.sendMainKeyboard(ctx, "note");
+      // C-Q2: mandatory channels not joined yet → a short card with their buttons.
+      await bot.sendMandatoryCard(ctx);
+    }
     return;
   }
 

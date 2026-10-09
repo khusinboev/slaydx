@@ -1,27 +1,18 @@
 /**
- * First top-up bonus (owner decision 2026-10-08, docs/bonus/PLAN.md «Bonus 2»):
- * the user's FIRST paid top-up of at least 50 000 so'm earns 10 % of it as bonus
- * points, at most 20 000, once per user. Pure rules — the server applies them in
- * the payment transaction (`lib/server/topup-bonus.ts`), the bot and the web show them.
+ * First top-up bonus of Bonus 2 (docs/bonus/PLAN.md, 2026-10-08) — HISTORY ONLY.
+ *
+ * Replaced by the payment bonus (C-Q4, `lib/payment-bonus.ts`): new payments no longer earn it.
+ * The rows it already wrote stay in the ledger and still read correctly: reference
+ * `first-topup:<userId>`, note «Birinchi to‘ldirish bonusi (10%)».
  */
-export const FIRST_TOPUP_MIN_SOUM = 50_000;
-export const FIRST_TOPUP_PERCENT = 10;
-export const FIRST_TOPUP_MAX_POINTS = 20_000;
 
-/** Bonus points for a first top-up of `amountSoum` (0 below the minimum). */
-export function firstTopupBonus(amountSoum: number): number {
-  if (!Number.isFinite(amountSoum) || amountSoum < FIRST_TOPUP_MIN_SOUM) return 0;
-  return Math.min(FIRST_TOPUP_MAX_POINTS, Math.floor((amountSoum * FIRST_TOPUP_PERCENT) / 100));
-}
-
-/** Ledger reference of the first top-up bonus (unique per user → paid at most once). */
+/** Ledger reference of a first top-up bonus row (one per user). */
 export function firstTopupRef(userId: string): string {
   return `first-topup:${userId}`;
 }
 
 /**
- * Ledger note of the first top-up bonus row (`transactions.note`). The web wallet
- * (`components/wallet/wallet-model.ts`) titles the row «Birinchi to‘ldirish bonusi» by this prefix.
+ * Prefix of the first top-up bonus note (`transactions.note`). The web wallet
+ * (`components/wallet/wallet-model.ts`) and the bot title such a row «Birinchi to‘ldirish bonusi».
  */
 export const FIRST_TOPUP_NOTE_PREFIX = "Birinchi to‘ldirish bonusi";
-export const FIRST_TOPUP_NOTE = `${FIRST_TOPUP_NOTE_PREFIX} (${FIRST_TOPUP_PERCENT}%)`;
