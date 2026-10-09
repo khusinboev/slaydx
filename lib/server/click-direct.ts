@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { ApiError, limit } from "./api";
 import {
   ClickMerchantError,
@@ -9,7 +9,7 @@ import {
   requestCardToken,
   verifyCardToken,
 } from "./click-merchant";
-import { clickDirectConfigured } from "./env";
+import { clickDirectConfigured, env } from "./env";
 import { log } from "./log";
 import { query, queryOne } from "./db";
 import { normalizeCardNumber, normalizePhone, normalizeSmsCode, parseExpiry } from "../click-input";
@@ -95,7 +95,9 @@ async function stateOf(userId: string, orderId: string): Promise<ClickOrderStatu
   return row?.state === "paid" ? "paid" : row?.state === "cancelled" ? "cancelled" : "pending";
 }
 
-const hash = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 24);
+// Keyed (review L2): a plain sha256 of a phone is reversible by brute force (~10^9 numbers),
+// and rate-limit keys may be visible to anyone who can read the limiter store.
+const hash = (s: string) => createHmac("sha256", env.sessionSecret).update(`click-phone:${s}`).digest("hex").slice(0, 24);
 
 /**
  * Step 1 of "Karta": asks Click for a ONE-TIME card token; Click texts a code to the card
@@ -175,11 +177,17 @@ export async function confirmCardPayment(input: {
 
   try {
     const paid = await payWithCardToken({ cardToken, amountSoum: Number(order.amount_soum), orderId: order.id }, ctx);
-    await query(`UPDATE payment_orders SET click_payment_id = $3, updated_at = now() WHERE id = $1 AND user_id = $2`, [
-      order.id,
-      input.userId,
-      paid.paymentId,
-    ]);
+    // Bookkeeping only (review L1): the charge already went through, so a failure here must not
+    // tell the user "failed" — the Shop API Complete credits the order; the client keeps polling.
+    try {
+      await query(`UPDATE payment_orders SET click_payment_id = $3, updated_at = now() WHERE id = $1 AND user_id = $2`, [
+        order.id,
+        input.userId,
+        paid.paymentId,
+      ]);
+    } catch (err) {
+      log("warn", "[click-direct] click_payment_id not saved", { orderId: order.id, err });
+    }
   } catch (e) {
     if (e instanceof ClickMerchantError && e.outcomeUnknown) {
       // The charge may have gone through (timeout / 5xx): do NOT say "failed" -- the Shop API

@@ -444,6 +444,23 @@ test("Click direct: card + invoice routes, caps, token handling, Shop API settle
     assert.deepEqual(await wallet(uid), { points: 1_000, balance: 10_000 });
   });
 
+  await t.test("charged but the payment id cannot be saved (BIGINT overflow): NOT an error, the order still settles (review L1)", async (tc) => {
+    arm(tc);
+    const uid = await mkUser();
+    const order = await mkOrder(uid, 25_000);
+    // MUTATION: the bookkeeping UPDATE in the same try as the payment call turns this into a 500.
+    behave["/card_token/payment"] = async (b) => {
+      await clickSettles(String(b.transaction_parameter), Number(b.amount));
+      return { body: { error_code: 0, error_note: "Success", payment_id: "9999999999999999999", payment_status: 2 } };
+    };
+    assert.equal((await card(uid, { orderId: order.id, cardNumber: CARD_SPACED, expireDate: EXPIRE })).res.status, 200);
+    const b = await verify(uid, { orderId: order.id, smsCode: SMS });
+    assert.equal(b.res.status, 200, JSON.stringify(b.json));
+    assert.deepEqual(b.json, { status: "paid" });
+    assert.equal((await row(order.id)).click_payment_id, null);
+    assert.deepEqual(await wallet(uid), { points: 2_500, balance: 25_000 });
+  });
+
   await t.test("two concurrent confirms submit ONE payment (token claim) and credit once", async (tc) => {
     arm(tc);
     const uid = await mkUser();
@@ -511,7 +528,7 @@ test("Click direct: card + invoice routes, caps, token handling, Shop API settle
     behave["/invoice/create"] = () => ({ body: { error_code: -404, error_note: "Subscriber not found" } });
     const r = await invoice(uid, { orderId: order.id, phone: ph });
     assert.equal(r.res.status, 422);
-    assert.match(String(r.json.error), /telefon raqami/);
+    assert.match(String(r.json.error), /Hisob-faktura yuborilmadi/, "generic: does not confirm whether the phone has Click (review L2)");
     assert.equal((await row(order.id)).click_invoice_id, null);
     behave["/invoice/create"] = () => ({ status: 500, body: {} });
     assert.equal((await invoice(uid, { orderId: order.id, phone: ph })).res.status, 503);

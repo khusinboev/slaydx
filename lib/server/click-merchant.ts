@@ -123,7 +123,7 @@ const NOTE_RULES: Array<{ test: RegExp; stages?: ClickStage[]; message: string }
   { test: /expire|expired|срок/i, stages: ["card_request", "card_payment"], message: "Kartaning amal qilish muddati noto'g'ri yoki tugagan" },
   { test: /sms|otp|confirm|код|code/i, stages: ["card_verify"], message: "SMS kod noto'g'ri yoki eskirgan. Kodni tekshirib qayta kiriting" },
   { test: /(card|карт\S*).*(not found|not exist|block|invalid|не найден|не существует|заблок)|(not found|invalid|blocked).*(card|карт)/i, stages: ["card_request", "card_payment"], message: "Karta topilmadi yoki bloklangan. Boshqa karta yoki usulni tanlang" },
-  { test: /phone|абонент|телефон|номер|subscriber|not found|не найден/i, stages: ["invoice_create"], message: "Bu telefon raqami Click'da topilmadi. Raqamni tekshiring" },
+  { test: /phone|абонент|телефон|номер|subscriber|not found|не найден/i, stages: ["invoice_create"], message: "Hisob-faktura yuborilmadi. Raqam Click'da ro'yxatdan o'tganini tekshiring yoki boshqa usulni tanlang" },
 ];
 
 /** Maps a Click `error_code` / `error_note` to a user message (exported for the tests). */
