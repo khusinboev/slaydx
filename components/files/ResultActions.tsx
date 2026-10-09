@@ -194,7 +194,15 @@ export function ResultActions({
    * say why and open the download list (as before).
    */
   const onSharePress = (choose = false) => {
-    if (single) return void share.run(formats[0]);
+    if (single) {
+      // Nothing can be shared from here: open the download list with the reason (the user picks «Yuklab olish»)
+      // instead of saving a file nobody asked for (docs/share/AUDIT.md #1).
+      if (currentShareCapability(formats[0], Boolean(sessionTelegramId)) === "download-only") {
+        onToast(shareFallbackToast());
+        return showSheet("download", formats[0].id);
+      }
+      return void share.run(formats[0]);
+    }
     const ready = !choose && share.readyFor ? formats.find((f) => f.id === share.readyFor) : undefined;
     if (ready) return void share.run(ready);
     const caps = formats.map((f) => currentShareCapability(f, Boolean(sessionTelegramId)));

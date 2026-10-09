@@ -150,7 +150,7 @@ test("ReferralCard: Mini App share → openTelegramLink(t.me/share/url?url=<link
   assert.match(u.searchParams.get("text")!, /SlaydX/);
 });
 
-test("ReferralCard: browser share → navigator.share({url}); without Web Share → copy", async () => {
+test("ReferralCard: browser share → navigator.share({url}), no menu", async () => {
   await ready();
   const shared: ShareData[] = [];
   Object.defineProperty(navigator, "share", { value: async (d: ShareData) => void shared.push(d), configurable: true });
@@ -158,13 +158,24 @@ test("ReferralCard: browser share → navigator.share({url}); without Web Share 
     fireEvent.click(screen.getByRole("button", { name: "Ulashish" }));
     assert.equal(shared.length, 1);
     assert.equal(shared[0]!.url, DATA.botLink);
+    await act(async () => {});
+    assert.ok(!document.querySelector("[data-share-menu]"), "the native sheet is the whole flow");
   } finally {
     Object.defineProperty(navigator, "share", { value: undefined, configurable: true });
   }
+});
+
+// T-share (docs/share/AUDIT.md #4): this used to copy silently (a 13 px notice). A desktop without Web Share now
+// gets the fallback menu; the full matrix lives in tests/ui/share-everywhere.test.mts.
+test("ReferralCard: without Web Share → the fallback menu, and «Havolani nusxalash» copies the link", async () => {
+  await ready();
   const written: string[] = [];
   Object.defineProperty(navigator, "clipboard", { value: { writeText: async (t: string) => void written.push(t) }, configurable: true });
   try {
     fireEvent.click(screen.getByRole("button", { name: "Ulashish" }));
+    await waitFor(() => assert.ok(document.querySelector("[data-share-menu]")));
+    assert.deepEqual(written, [], "opening the menu copies nothing");
+    fireEvent.click(screen.getByRole("button", { name: "Havolani nusxalash" }));
     await waitFor(() => assert.deepEqual(written, [DATA.botLink]));
   } finally {
     Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });

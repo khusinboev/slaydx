@@ -2,35 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
+import { copyToClipboard } from "@/lib/share";
 import { Button } from "./Button";
 
 /** Writes to the clipboard; falls back to a hidden textarea where the async API is unavailable (HTTP, old WebViews). */
-export async function copyText(text: string): Promise<boolean> {
-  try {
-    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    // Permission denied or insecure context: use the fallback below.
-  }
-  if (typeof document === "undefined") return false;
-  const area = document.createElement("textarea");
-  area.value = text;
-  area.setAttribute("readonly", "");
-  area.style.position = "fixed";
-  area.style.opacity = "0";
-  document.body.appendChild(area);
-  area.select();
-  let ok = false;
-  try {
-    ok = document.execCommand("copy");
-  } catch {
-    ok = false;
-  }
-  area.remove();
-  return ok;
-}
+export const copyText = (text: string): Promise<boolean> => copyToClipboard(text);
 
 export function CopyButton({
   value,

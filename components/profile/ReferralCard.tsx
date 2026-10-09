@@ -4,8 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Copy, Gift, Send } from "lucide-react";
 import { request } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
-import { REFERRAL_SHARE_TEXT, formatJoinDate, formatPoints, referralRuleText, telegramShareUrl } from "@/lib/referral";
-import { isInMiniAppShell, openTelegramLink } from "@/lib/telegram-webapp";
+import { REFERRAL_SHARE_TEXT, formatJoinDate, formatPoints, referralRuleText } from "@/lib/referral";
+import { copyToClipboard } from "@/lib/share";
+import { useLinkShare } from "../share/ShareMenu";
 
 /** `GET /api/referral` (`lib/server/referrals.ts ReferralSummary`). */
 export type ReferralSummaryView = {
@@ -20,33 +21,6 @@ export type ReferralSummaryView = {
 
 type LinkKind = "bot" | "web";
 type Notice = { text: string; tone: "ok" | "error" };
-
-/**
- * Copies `text`: the async Clipboard API first; where it is missing or refused
- * (older Telegram webviews, insecure origins) the read-only field is selected
- * and `execCommand("copy")` tries; if both fail the field stays selected so
- * the user can copy by hand.
- */
-export async function copyText(text: string, field: HTMLInputElement | null): Promise<boolean> {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    // Fall through to the selection fallback.
-  }
-  try {
-    if (field) {
-      field.focus();
-      field.select();
-      field.setSelectionRange(0, text.length);
-    }
-    return typeof document.execCommand === "function" && document.execCommand("copy");
-  } catch {
-    return false;
-  }
-}
 
 /** Variant A icon bubble: F0's `--accent-soft` when present, the same tint before F0 merges. */
 const SOFT = { background: "var(--accent-soft, rgba(245, 158, 11, 0.16))" } as const;
@@ -66,8 +40,10 @@ export function ReferralCard({ className = "mb-6" }: { className?: string } = {}
   const [notice, setNotice] = useState<Notice | null>(null);
   const field = useRef<HTMLInputElement | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // «Ulashish»: Telegram's sheet in the Mini App, else the native sheet, else the fallback menu (lib/share.ts).
+  const { share: shareLinkTo, menu: shareMenu } = useLinkShare();
 
-  const load = useCallback(() => {
+  const load =useCallback(() => {
     setFailed(false);
     request<ReferralSummaryView>("/api/referral")
       .then(setData)
@@ -119,23 +95,11 @@ export function ReferralCard({ className = "mb-6" }: { className?: string } = {}
   const link = kind === "bot" && data.botLink ? data.botLink : data.webLink;
 
   const copy = async () => {
-    const ok = await copyText(link, field.current);
+    const ok = await copyToClipboard(link, { field: field.current });
     say(ok ? { text: "Havola nusxalandi", tone: "ok" } : { text: "Nusxalab bo'lmadi — havolani belgilab, qo'lda nusxalang", tone: "error" });
   };
 
-  const share = () => {
-    // Inside the Mini App: Telegram's own «send to a chat» sheet.
-    if (isInMiniAppShell() && openTelegramLink(telegramShareUrl(link))) return;
-    // Elsewhere: the system share sheet (called synchronously, inside the tap), else copy.
-    if (typeof navigator.share === "function") {
-      navigator.share({ title: "SlaydX", text: REFERRAL_SHARE_TEXT, url: link }).catch((e: unknown) => {
-        if (e instanceof DOMException && e.name === "AbortError") return;
-        void copy();
-      });
-      return;
-    }
-    void copy();
-  };
+  const share = () => shareLinkTo({ url: link, text: REFERRAL_SHARE_TEXT, title: "SlaydX" });
 
   return (
     <section className={cn(CARD, className)} data-referral-card="ready" aria-labelledby="referral-title">
@@ -260,6 +224,7 @@ export function ReferralCard({ className = "mb-6" }: { className?: string } = {}
           Hali hech kim qo&apos;shilmagan. Havolani do&apos;stlaringizga yuboring.
         </p>
       )}
+      {shareMenu}
     </section>
   );
 }

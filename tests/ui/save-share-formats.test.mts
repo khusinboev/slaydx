@@ -764,3 +764,75 @@ test("N3 browser Web Share reuses the sheet's pre-warm: the PDF is prepared once
   assert.deepEqual(bodies("/download").filter((f) => f === "pdf"), ["pdf"], "one prepare for the PDF");
   assert.ok(calls.some((c) => c.url === "/api/dl/tok-pdf"), "the pre-warmed signed URL was fetched");
 });
+
+/* ───────────────────────────── share everywhere (docs/share/AUDIT.md #1–#3) ───────────────────────────── */
+
+test("S1 one-format material where nothing can be shared (desktop without Web Share): «Ulashish» opens the download list with the reason — it does NOT save a file nobody asked for", async () => {
+  for (const m of SINGLE) {
+    stub();
+    mount({ g: m.g, pdf: m.pdf, telegramId: null });
+    await tap(shareBtn());
+    assert.equal(sheet()?.getAttribute("data-download-sheet"), "download", `${m.name}: the download list is the fallback menu`);
+    assert.equal(toast()?.textContent?.trim(), DELIVER_TEXT.shareNoBrowser, `${m.name}: the reason`);
+    await settle();
+    assert.deepEqual(saved, [], `${m.name}: nothing downloaded until the user taps the row`);
+    assert.equal(posts("/telegram/share").length, 0);
+    await tap(row("native"));
+    await waitFor(() => assert.equal(saved.length, 1), { timeout: 2000 });
+    cleanup();
+    saved = [];
+  }
+});
+
+test("S2 second tap: cancelling the browser's share sheet (AbortError) is silent — no toast, no download, the row is usable again", async () => {
+  const attempts: string[] = [];
+  nav.canShare = () => true;
+  nav.share = async () => {
+    attempts.push("share");
+    throw new DOMException("Share canceled", "AbortError");
+  };
+  stub();
+  mount({ telegramId: null });
+  await tap(shareBtn());
+  await tap(row("pdf"));
+  await waitFor(() => assert.equal(state("pdf"), "ready"));
+  await tap(row("pdf"));
+  await waitFor(() => assert.deepEqual(attempts, ["share"]));
+  await settle();
+  assert.ok(!toast(), "an AbortError is not an error");
+  assert.deepEqual(saved, [], "and no download is started");
+  assert.equal(sheet()?.getAttribute("data-download-sheet"), "share", "the share sheet stays for another try");
+  assert.equal(state("pdf"), "idle");
+});
+
+test("S3 second tap: a real share failure is never silent — error toast + that format is handed over as a download", async () => {
+  nav.canShare = () => true;
+  nav.share = async () => {
+    throw new DOMException("not allowed", "NotAllowedError");
+  };
+  stub();
+  mount({ telegramId: null });
+  await tap(shareBtn());
+  await tap(row("pdf"));
+  await waitFor(() => assert.equal(state("pdf"), "ready"));
+  await tap(row("pdf"));
+  await waitFor(() => assert.equal(toast()?.textContent?.trim(), DELIVER_TEXT.shareFailed));
+  assert.equal(toast()!.getAttribute("data-result-toast"), "error");
+  await waitFor(() => assert.deepEqual(saved, ["fayl-pdf.bin"]), { timeout: 2000 });
+  assert.equal(sheet()?.getAttribute("data-download-sheet"), "download", "the sheet is the download list now");
+});
+
+test("S4 Telegram Desktop with a linked account keeps the bot-chat share flow (shareMessage), untouched by the fallback", async () => {
+  fakeTelegram({ platform: "tdesktop" });
+  nav.canShare = () => true;
+  nav.share = async () => {
+    throw new Error("must not be used inside Telegram");
+  };
+  stub();
+  mount();
+  await tap(shareBtn());
+  await tap(row("pdf"));
+  await waitFor(() => assert.deepEqual(tgCalls, ["share prep-pdf"]));
+  assert.deepEqual(bodies("/telegram/share"), ["pdf"]);
+  assert.ok(!document.querySelector("[data-share-menu]"));
+});
