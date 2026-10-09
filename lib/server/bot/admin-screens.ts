@@ -73,28 +73,6 @@ export function adminMenuScreen(a: BotAdmin): Screen {
   };
 }
 
-export function panelScreen(a: BotAdmin, payBonusPercent?: number): Screen {
-  const l = a.lang;
-  return {
-    text: `${head("admin", at(l, "panel.title"))}\n\n${at(l, "panel.lead", { name: esc(a.name), role: at(l, `role.${a.role}`) })}`,
-    reply_markup: rows(
-      [can(a, "dashboard.view") && inlineButton("chart", at(l, "panel.stats"), { callback_data: acb.stats() }, "primary")],
-      [can(a, "broadcasts.send") && inlineButton("megaphone", at(l, "panel.broadcast"), { callback_data: acb.bcStart() })],
-      [can(a, "bonus.view") && inlineButton("bell", at(l, "panel.channels"), { callback_data: acb.channels() })],
-      [
-        can(a, "settings.view") &&
-          payBonusPercent !== undefined &&
-          inlineButton("card", at(l, "panel.payBonus", { p: payBonusPercent }), { callback_data: acb.payBonus() }),
-      ],
-      [inlineButton("back", at(l, "panel.close"), { callback_data: acb.close() })],
-    ),
-  };
-}
-
-export function closedScreen(lang: Lang): Screen {
-  return { text: at(lang, "panel.closed") };
-}
-
 /* ───────────────────────── Statistika ───────────────────────── */
 
 function toolName(lang: Lang, id: string): string {

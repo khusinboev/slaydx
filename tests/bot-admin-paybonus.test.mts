@@ -120,10 +120,11 @@ test("To‘lov bonusi: card → 15% → confirm → saved (audited, via bot); «
   assert.equal(rows[0]!.user_agent, "telegram-bot");
   assert.deepEqual(rows[0]!.after, { value: 15, source: "db" });
 
-  // The panel button follows the setting.
+  // «Orqaga» from the card: the reply-keyboard admin menu comes back (the card itself shows N%).
   installFetch();
   await tg.handleUpdate(cbUpdate(a.tg, "a:h", 801));
-  assert.ok(buttons(edits()[0]!.body).some((b) => b.callback_data === "a:p" && b.text === "💳 To‘lov bonusi: 15%"));
+  const menu = sends().at(-1)!.body.reply_markup as { keyboard: Array<Array<{ text: string }>> };
+  assert.ok(menu.keyboard.flat().some((b) => b.text === "💳 To‘lov bonusi"));
 
   // «Boshqa»: a typed value — garbage / 51 re-ask, «33 %» → confirm → saved.
   installFetch();

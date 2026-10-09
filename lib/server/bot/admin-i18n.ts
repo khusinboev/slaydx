@@ -33,8 +33,6 @@ const A = {
   "panel.stats": { uz: "Statistika", ru: "Статистика", en: "Statistics" },
   "panel.broadcast": { uz: "Xabar yuborish", ru: "Рассылка", en: "Broadcast" },
   "panel.channels": { uz: "Kanal ulash", ru: "Каналы", en: "Channels" },
-  "panel.payBonus": { uz: "To‘lov bonusi: {p}%", ru: "Бонус за пополнение: {p}%", en: "Payment bonus: {p}%" },
-  "panel.close": { uz: "Yopish", ru: "Закрыть", en: "Close" },
   "panel.closed": {
     uz: "Admin panel yopildi. Qayta ochish: /admin yoki «🛠 Admin» tugmasi.",
     ru: "Админ-панель закрыта. Открыть снова: /admin или кнопка «🛠 Админ».",

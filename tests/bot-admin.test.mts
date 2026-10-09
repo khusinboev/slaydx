@@ -175,6 +175,21 @@ test("access: an owner — /admin opens the admin menu as a REPLY keyboard (owne
   assert.ok(main.flat().some((b) => /Slayd/.test(b.text)));
 });
 
+test("back / cancel return to the REPLY-keyboard admin menu — no inline panel card any more (owner 2026-10-09)", { skip }, async () => {
+  const a = await newAdmin("owner");
+  for (const data of ["a:h", "a:x", "a:z"]) {
+    installFetch();
+    await tg.handleUpdate(cbUpdate(a.tg, data, 555));
+    // MUTATION: editing the message into an inline panel instead of removing it.
+    assert.deepEqual(sends("deleteMessage").map((c) => c.body.message_id), [555], data);
+    assert.equal(edits().length, 0, `${data}: no inline card`);
+    const menu = sends().at(-1)!.body;
+    assert.match(String(menu.text), /Admin panel/, data);
+    const kb = (menu.reply_markup as { keyboard: Btn[][] }).keyboard;
+    assert.deepEqual(kb.at(-1)!.map((b) => b.text), ["⬅️ Asosiy menyu"], data);
+  }
+});
+
 test("admin reply menu: a NON-admin typing «Statistika» / «Asosiy menyu» gets no admin screen (text falls through)", { skip }, async () => {
   const u = await newUser();
   for (const text of ["📈 Statistika", "⬅️ Asosiy menyu"]) {
