@@ -256,7 +256,7 @@ export function PayDialog() {
                   type="button"
                   data-pay-fallback
                   disabled={busy !== null || !!amountErr}
-                  className={cn(textBtn, "text-[13px] disabled:opacity-40")}
+                  className={cn(textBtn, "text-[13px] underline disabled:opacity-40")}
                   onClick={() => void payViaPage("click", "page")}
                 >
                   {busy === "page" ? "Ochilmoqda..." : "Click sahifasi orqali to'lash"}
