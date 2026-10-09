@@ -1,6 +1,6 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { randomInt } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 
 /**
  * In-bot admin panel end to end (docs/bot-admin/PLAN.md): every update goes
@@ -21,7 +21,11 @@ import { randomInt } from "node:crypto";
  *   6. `tapScreenKey` serving a text without the `admin.adminId === hit.adminId` / admin checks → «non-admin / revoked /
  *      other account: the label falls through»;
  *   7. `handleAdminCallback` step-up skipped for reply taps (`messageId === null`) → «2FA mode»;
- *   8. `handleAdminInput` taking the step's «Bekor qilish» / «Orqaga» label as content → «free-text steps».
+ *   8. `handleAdminInput` taking the step's «Bekor qilish» / «Orqaga» label as content → «free-text steps»;
+ *   9. `PERM.chSave` lowered to `bonus.view` → «Kanal kartasi: a viewer … forged edit codes»;
+ *  10. `chSave` removed from `CONFIRMS` → «Kanal kartasi, 2FA mode»;
+ *  11. `chSave` without the `d.id !== c.id` check → «Kanal kartasi: a pending value is bound to its channel»;
+ *  12. `STEP_PERM.ch_val` lowered to `bonus.view` → «… an edit step does not outlive the permission».
  */
 
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
@@ -863,6 +867,397 @@ test("Kanal o‘chirish: «🗑 O‘chirish» on the CARD only for a PAUSED chan
   await tg.handleUpdate(cbUpdate(v.tg, acb.chDelete(claimed)));
   assert.deepEqual(toasts(), ["Ruxsat yo‘q"]);
   await query("DELETE FROM bonus_channels WHERE id = ANY($1::bigint[])", [[live, claimed]]);
+});
+
+/* ───────────── Channel card: settings editable from the bot (owner 2026-10-09) ───────────── */
+
+async function mkChannel(o: { title?: string; join?: number; stay?: number; days?: number; active?: boolean; mandatory?: boolean; sort?: number; link?: string | null; username?: string | null } = {}): Promise<string> {
+  return (await queryOne<{ id: string }>(
+    `INSERT INTO bonus_channels (chat_id, username, title, join_bonus, stay_bonus, stay_days, sort, active, mandatory, invite_link)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id::text AS id`,
+    [-1_009_000_000_000 - randomInt(0, 999_999_999), o.username ?? null, o.title ?? "Karta kanali", o.join ?? 1000, o.stay ?? 0, o.days ?? 7, o.sort ?? -300, o.active ?? true, o.mandatory ?? false, o.link ?? null],
+  ))!.id;
+}
+const channelRow = (id: string) =>
+  queryOne<{ title: string; invite_link: string | null; join_bonus: number; stay_bonus: number; stay_days: number; sort: number; active: boolean; mandatory: boolean }>(
+    "SELECT title, invite_link, join_bonus, stay_bonus, stay_days, sort, active, mandatory FROM bonus_channels WHERE id = $1",
+    [id],
+  );
+const channelUpdates = (adminId: string) =>
+  query<{ target_id: string; before: Record<string, unknown> | null; after: Record<string, unknown> | null; reason: string | null; user_agent: string | null }>(
+    "SELECT target_id, before, after, reason, user_agent FROM admin_audit_log WHERE admin_id = $1 AND action = 'bonus_channel.update' ORDER BY id",
+    [adminId],
+  );
+const draftOf = async (chat: number) => (await queryOne<{ draft: Record<string, unknown> | null }>("SELECT draft FROM bot_admin_state WHERE chat_id = $1", [chat]))?.draft ?? null;
+/** The kind of text the bot sent last. */
+const lastText = () => String(sends().at(-1)!.body.text);
+
+test("Kanal kartasi: a list row opens the card; every field is edited end to end (typed value → confirm → save) with the DB row and the audit row", { skip }, async () => {
+  const a = await newAdmin("owner");
+  const uname = `karta_${randomInt(0, 99_999)}`;
+  const id = await mkChannel({ username: uname });
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "🔔 Kanal ulash"));
+  installFetch();
+  await press(a, acb.chView(id));
+  const card = sends()[0]!.body;
+  const t = String(card.text);
+  assert.match(t, /Karta kanali<\/b>\n@karta_\d+ · ID <code>-100\d+<\/code>/);
+  assert.match(t, /Turi: <b>➕ Ixtiyoriy<\/b>/);
+  assert.ok(t.includes(nb("Obuna bonusi: <b>1 000 so‘m</b>")), t);
+  assert.match(t, /Qolish bonusi: <b>yo‘q<\/b> · 7 kun/);
+  assert.match(t, /Havola: yo‘q/);
+  assert.match(t, /Tartib: <b>−300<\/b>/);
+  assert.match(t, /Holat: <b>✅ Faol<\/b>/);
+  assert.match(t, /0 ta bonus olgan/);
+  assert.match(t, /✅ Bot kanalda admin\./);
+  assert.ok(calls.some((c) => c.method === "getChatMember"), "the bot's admin status is read for the card");
+  assert.deepEqual(labels(card), ["✏️ Nomi", "🔗 Havola", "💰 Obuna bonusi", "🎁 Qolish bonusi", "📅 Qolish kunlari", "↕️ Tartib", "🔒 Majburiy qilish", "⏸ To‘xtatish", "⬅️ Orqaga"]);
+  assert.ok(!(await offered(a.tg)).includes(acb.chDeleteAsk(id)), "an active channel has no «🗑»");
+  assert.equal((await channelRow(id))!.title, "Karta kanali", "opening the card changes nothing");
+
+  /** Asks for `field`, then types each of `bad` (each re-asked, still waiting), then the good value → the confirm screen text. */
+  const edit = async (field: Parameters<typeof acb.chEdit>[0], bad: Array<[string, RegExp]>, good: string): Promise<string> => {
+    installFetch();
+    await press(a, acb.chEdit(field, id));
+    assert.equal(await stepOf(a.tg), "ch_val", field);
+    assert.deepEqual(labels(sends()[0]!.body).slice(-2), ["⬅️ Orqaga", "✖️ Bekor qilish"], field);
+    for (const [text, why] of bad) {
+      installFetch();
+      await tg.handleUpdate(textUpdate(a.tg, text));
+      assert.match(lastText(), why, `${field}: ${text}`);
+      assert.equal(await stepOf(a.tg), "ch_val", `${field}: still waiting after «${text}»`);
+    }
+    installFetch();
+    await tg.handleUpdate(textUpdate(a.tg, good));
+    assert.equal(await stepOf(a.tg), null, `${field}: the confirm screen waits for a button, not for text`);
+    assert.deepEqual(await offered(a.tg), [acb.chSave(id), acb.chView(id)], field);
+    return lastText();
+  };
+  const save = async (): Promise<string> => {
+    installFetch();
+    await press(a, acb.chSave(id));
+    assert.match(lastText(), /^✅ Saqlandi\n\n/);
+    assert.equal(await draftOf(a.tg), null, "the pending value is gone");
+    return lastText();
+  };
+
+  // ── title ──
+  let c = await edit("title", [["x".repeat(129), /1 dan 128 belgigacha/], ["Karta kanali", /o‘zgarmadi/]], "  Yangi <nom>  ");
+  assert.match(c, /<b>Nomi<\/b>: Karta kanali → <b>Yangi &lt;nom&gt;<\/b>\n\nSaqlansinmi\?/);
+  assert.equal((await channelRow(id))!.title, "Karta kanali", "nothing is saved before the confirm");
+  assert.match(await save(), /Yangi &lt;nom&gt;<\/b>/);
+  assert.equal((await channelRow(id))!.title, "Yangi <nom>");
+  let ups = await channelUpdates(a.adminId);
+  assert.equal(ups.length, 1);
+  assert.deepEqual([ups[0]!.before, ups[0]!.after], [{ title: "Karta kanali" }, { title: "Yangi <nom>" }]);
+  assert.equal(ups[0]!.target_id, id);
+  assert.equal(ups[0]!.user_agent, "telegram-bot");
+  assert.equal(ups[0]!.reason, "Telegram bot orqali tahrirlandi");
+
+  // ── invite link: refused, set (normalized), removed ──
+  installFetch();
+  await press(a, acb.chEdit("inviteLink", id));
+  assert.ok(!(await offered(a.tg)).includes(acb.chLinkDrop(id)), "no link yet → nothing to remove");
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "https://example.com/+AbCdEfGh12345"));
+  assert.match(lastText(), /Taklif havolasi/);
+  installFetch();
+  await press(a, acb.chView(id));
+  c = await edit("inviteLink", [["salom", /Taklif havolasi/]], "t.me/joinchat/AbCdEfGh12345");
+  assert.match(c, /<b>Havola<\/b>: yo‘q → <b>https:\/\/t\.me\/\+AbCdEfGh12345<\/b>/);
+  await save();
+  assert.equal((await channelRow(id))!.invite_link, "https://t.me/+AbCdEfGh12345");
+  ups = await channelUpdates(a.adminId);
+  assert.deepEqual([ups[1]!.before, ups[1]!.after], [{ inviteLink: null }, { inviteLink: "https://t.me/+AbCdEfGh12345" }]);
+  // «🧹 Havolani olib tashlash» (only while there is a link) → confirm → cleared.
+  installFetch();
+  await press(a, acb.chEdit("inviteLink", id));
+  assert.equal(await labelFor(a.tg, acb.chLinkDrop(id)), "🧹 Havolani olib tashlash");
+  installFetch();
+  await press(a, acb.chLinkDrop(id));
+  assert.match(lastText(), /<b>Havola<\/b>: https:\/\/t\.me\/\+AbCdEfGh12345 → <b>yo‘q<\/b>/);
+  assert.equal((await channelRow(id))!.invite_link, "https://t.me/+AbCdEfGh12345", "not cleared before the confirm");
+  await save();
+  assert.equal((await channelRow(id))!.invite_link, null);
+  ups = await channelUpdates(a.adminId);
+  assert.deepEqual([ups[2]!.before, ups[2]!.after], [{ inviteLink: "https://t.me/+AbCdEfGh12345" }, { inviteLink: null }]);
+
+  // ── join bonus (an optional channel cannot lose its only bonus) ──
+  c = await edit(
+    "joinBonus",
+    [["abc", /Butun son yuboring/], ["20001", /0 dan 20 000 gacha/], ["-5", /0 dan 20 000 gacha/], ["1000", /o‘zgarmadi/], ["0", /Kamida bitta bonus/]],
+    "2 500",
+  );
+  assert.ok(c.includes(nb("<b>Obuna bonusi</b>: 1 000 so‘m → <b>2 500 so‘m</b>")), c);
+  await save();
+  assert.equal((await channelRow(id))!.join_bonus, 2500);
+  ups = await channelUpdates(a.adminId);
+  assert.deepEqual([ups[3]!.before, ups[3]!.after], [{ joinBonus: 1000 }, { joinBonus: 2500 }]);
+
+  // ── stay bonus ──
+  c = await edit("stayBonus", [["1,5", /Butun son yuboring/], ["99999", /0 dan 20 000 gacha/], ["0", /o‘zgarmadi/]], "1500");
+  assert.ok(c.includes(nb("<b>Qolish bonusi</b>: yo‘q → <b>1 500 so‘m</b>")), c);
+  assert.ok((await save()).includes(nb("Qolish bonusi: <b>1 500 so‘m</b> · 7 kun")));
+  assert.equal((await channelRow(id))!.stay_bonus, 1500);
+  ups = await channelUpdates(a.adminId);
+  assert.deepEqual([ups[4]!.before, ups[4]!.after], [{ stayBonus: 0 }, { stayBonus: 1500 }]);
+
+  // ── stay days ──
+  c = await edit("stayDays", [["0", /1 dan 365 gacha/], ["366", /1 dan 365 gacha/], ["7", /o‘zgarmadi/]], "14");
+  assert.match(c, /<b>Qolish kunlari<\/b>: 7 kun → <b>14 kun<\/b>/);
+  assert.match(await save(), /· 14 kun/);
+  assert.equal((await channelRow(id))!.stay_days, 14);
+  ups = await channelUpdates(a.adminId);
+  assert.deepEqual([ups[5]!.before, ups[5]!.after], [{ stayDays: 7 }, { stayDays: 14 }]);
+
+  // ── sort (a negative number typed with the true minus sign too) ──
+  c = await edit("sort", [["1000001", /−1 000 000 dan 1 000 000 gacha/], ["x", /Butun son yuboring/]], "−250");
+  assert.match(c, /<b>Tartib<\/b>: −300 → <b>−250<\/b>/);
+  await save();
+  assert.equal((await channelRow(id))!.sort, -250);
+  ups = await channelUpdates(a.adminId);
+  assert.deepEqual([ups[6]!.before, ups[6]!.after], [{ sort: -300 }, { sort: -250 }]);
+
+  // ── mandatory (a flip: confirm, no typing) ──
+  installFetch();
+  await press(a, acb.chEdit("mandatory", id));
+  assert.match(lastText(), /<b>Turi<\/b>: ➕ Ixtiyoriy → <b>🔒 Majburiy<\/b>\n\nSaqlansinmi\?/);
+  assert.equal((await channelRow(id))!.mandatory, false, "not flipped before the confirm");
+  assert.match(await save(), /Turi: <b>🔒 Majburiy<\/b>/);
+  assert.equal((await channelRow(id))!.mandatory, true);
+  assert.equal(await labelFor(a.tg, acb.chEdit("mandatory", id)), "➕ Ixtiyoriy qilish");
+  ups = await channelUpdates(a.adminId);
+  assert.deepEqual([ups[7]!.before, ups[7]!.after], [{ mandatory: false }, { mandatory: true }]);
+
+  // ── active (a flip) → the card now offers «✅ Yoqish» and, paused without claims, «🗑 O‘chirish» ──
+  installFetch();
+  await press(a, acb.chEdit("active", id));
+  assert.match(lastText(), /<b>Holat<\/b>: ✅ Faol → <b>⏸ To‘xtatilgan<\/b>/);
+  assert.match(await save(), /Holat: <b>⏸ To‘xtatilgan<\/b>/);
+  assert.equal((await channelRow(id))!.active, false);
+  assert.equal(await labelFor(a.tg, acb.chEdit("active", id)), "✅ Yoqish");
+  assert.ok((await offered(a.tg)).includes(acb.chDeleteAsk(id)), "paused + no claims → «🗑»");
+  ups = await channelUpdates(a.adminId);
+  assert.deepEqual([ups[8]!.before, ups[8]!.after], [{ active: true }, { active: false }]);
+  assert.equal(ups.length, 9, "exactly one audit row per saved field");
+
+  // «Orqaga» → the list again.
+  installFetch();
+  await press(a, acb.channels());
+  assert.match(lastText(), /Bonus kanallar/);
+  await query("DELETE FROM bonus_channels WHERE id = $1", [id]);
+});
+
+test("Kanal kartasi: old inline «a:ct» toggle buttons in the chat history still work", { skip }, async () => {
+  const a = await newAdmin("owner");
+  const id = await mkChannel({ sort: -310 });
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, acb.chToggle(id)));
+  assert.equal((await channelRow(id))!.active, false);
+  assert.match(lastText(), /^⏸ To‘xtatildi\n\n[\s\S]*Bonus kanallar/);
+  await query("DELETE FROM bonus_channels WHERE id = $1", [id]);
+});
+
+test("Kanal kartasi: «kamida bitta bonus» is refused early and by the service at save; an unchanged value, a vanished channel and an expired step never crash", { skip }, async () => {
+  const a = await newAdmin("owner");
+  const open = async (id: string) => {
+    installFetch();
+    await tg.handleUpdate(textUpdate(a.tg, "🔔 Kanal ulash"));
+    installFetch();
+    await press(a, acb.chView(id));
+  };
+  // A mandatory channel without any bonus cannot become optional: refused on the card, no confirm screen.
+  const z = await mkChannel({ title: "Bonussiz majburiy", join: 0, stay: 0, mandatory: true, sort: -320 });
+  await open(z);
+  installFetch();
+  await press(a, acb.chEdit("mandatory", z));
+  assert.match(lastText(), /^Kamida bitta bonus 0 dan katta bo'lishi kerak\n\n[\s\S]*Bonussiz majburiy/);
+  assert.ok((await offered(a.tg)).includes(acb.chEdit("mandatory", z)), "still the card");
+  assert.equal((await channelRow(z))!.mandatory, true);
+  assert.equal(await draftOf(a.tg), null);
+
+  // The service refuses at save when the row changed after the confirm screen (race): shown on the card, nothing saved.
+  const m = await mkChannel({ title: "Poyga kanali", join: 1000, mandatory: true, sort: -321 });
+  await open(m);
+  installFetch();
+  await press(a, acb.chEdit("mandatory", m));
+  assert.match(lastText(), /Saqlansinmi/);
+  await query("UPDATE bonus_channels SET join_bonus = 0 WHERE id = $1", [m]);
+  installFetch();
+  await press(a, acb.chSave(m));
+  assert.match(lastText(), /^Kamida bitta bonus 0 dan katta bo'lishi kerak\n\n[\s\S]*Poyga kanali/);
+  assert.equal((await channelRow(m))!.mandatory, true, "not saved");
+  assert.equal(await draftOf(a.tg), null);
+  assert.equal((await channelUpdates(a.adminId)).length, 0, "a refused change writes no update audit row");
+
+  // 409 «O'zgarish yo'q»: somebody already set the same value (the web) between the confirm screen and the save.
+  const s = await mkChannel({ title: "Bir xil qiymat", sort: -322 });
+  await open(s);
+  installFetch();
+  await press(a, acb.chEdit("sort", s));
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "-324"));
+  await query("UPDATE bonus_channels SET sort = -324 WHERE id = $1", [s]);
+  installFetch();
+  await press(a, acb.chSave(s));
+  assert.match(lastText(), /^O'zgarish yo'q — qiymatlar allaqachon shunday\n\n[\s\S]*Bir xil qiymat/);
+
+  // A channel deleted meanwhile: the save answers 404 on the list; a tap on its card is just «eskirgan».
+  const g1 = await mkChannel({ title: "Yo‘qolgan", sort: -323 });
+  await open(g1);
+  installFetch();
+  await press(a, acb.chEdit("title", g1));
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "Yangi nom"));
+  await query("DELETE FROM bonus_channels WHERE id = $1", [g1]);
+  installFetch();
+  await press(a, acb.chSave(g1));
+  assert.match(lastText(), /^Kanal topilmadi\n\n[\s\S]*Bonus kanallar/);
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, acb.chView(g1)));
+  assert.deepEqual(toasts(), ["Bu tugma eskirgan"]);
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, acb.chEdit("title", g1)));
+  assert.deepEqual(toasts(), ["Bu tugma eskirgan"]);
+
+  // A typed answer after the step expired (state wiped) is not taken as a value.
+  await open(s);
+  installFetch();
+  await press(a, acb.chEdit("title", s));
+  await query("UPDATE bot_admin_state SET draft = NULL WHERE chat_id = $1", [a.tg]);
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "Eskirgan javob"));
+  assert.match(lastText(), /eskirgan/);
+  assert.equal((await channelRow(s))!.title, "Bir xil qiymat");
+  assert.equal(await stepOf(a.tg), null);
+  await query("DELETE FROM bonus_channels WHERE id = ANY($1::bigint[])", [[z, m, s]]);
+});
+
+test("Kanal kartasi: a pending value is bound to its channel — a save code of ANOTHER channel, without a value or after cancel is stale — MUTATSIYA (stale draft)", { skip }, async () => {
+  const a = await newAdmin("owner");
+  const A = await mkChannel({ title: "Kanal A", sort: -330 });
+  const B = await mkChannel({ title: "Kanal B", sort: -331 });
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "🔔 Kanal ulash"));
+  installFetch();
+  await press(a, acb.chView(A));
+  installFetch();
+  await press(a, acb.chEdit("title", A));
+  // Asking is not a value yet: a forged save is stale.
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, acb.chSave(A)));
+  assert.deepEqual(toasts(), ["Bu tugma eskirgan"]);
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "A yangi"));
+  assert.deepEqual((await draftOf(a.tg))!, { t: "che", id: A, field: "title", value: "A yangi" });
+  // The pending value belongs to A: B's save code (an old button, a forged tap) changes nothing.
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, acb.chSave(B)));
+  assert.deepEqual(toasts(), ["Bu tugma eskirgan"]);
+  assert.equal((await channelRow(B))!.title, "Kanal B");
+  assert.equal((await channelRow(A))!.title, "Kanal A");
+  // After «Bekor qilish» (the draft is dropped) A's own save code is stale too.
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, "a:x"));
+  installFetch();
+  await tg.handleUpdate(cbUpdate(a.tg, acb.chSave(A)));
+  assert.deepEqual(toasts(), ["Bu tugma eskirgan"]);
+  assert.equal((await channelRow(A))!.title, "Kanal A");
+  assert.equal((await channelUpdates(a.adminId)).length, 0);
+  await query("DELETE FROM bonus_channels WHERE id = ANY($1::bigint[])", [[A, B]]);
+});
+
+test("Kanal kartasi: a viewer sees the card read-only; forged edit codes are refused and audited; an edit step does not outlive the permission — MUTATSIYA (permission)", { skip }, async () => {
+  const v = await newAdmin("viewer");
+  const id = await mkChannel({ title: "Faqat ko‘rish", active: false, sort: -340 });
+  installFetch();
+  await tg.handleUpdate(textUpdate(v.tg, "🔔 Kanal ulash"));
+  const list = await offered(v.tg);
+  assert.ok(list.includes(acb.chView(id)), "a viewer can open a card");
+  assert.ok(!list.includes(acb.chConnect()), "but not connect a channel");
+  installFetch();
+  await press(v, acb.chView(id));
+  assert.match(lastText(), /Faqat ko‘rish<\/b>[\s\S]*Kanallarni faqat ko‘rishingiz mumkin\./);
+  assert.deepEqual(await offered(v.tg), [acb.channels()], "read-only: only «Orqaga»");
+  assert.deepEqual(labels(sends()[0]!.body), ["⬅️ Orqaga"]);
+  // Forged / old codes: every edit is refused with «Ruxsat yo‘q» and one auth.denied row each.
+  const forged = [acb.chEdit("title", id), acb.chEdit("active", id), acb.chEdit("mandatory", id), acb.chLinkDrop(id), acb.chSave(id), acb.chDeleteAsk(id), acb.chDelete(id), acb.chToggle(id)];
+  for (const code of forged) {
+    installFetch();
+    await tg.handleUpdate(cbUpdate(v.tg, code));
+    assert.deepEqual(toasts(), ["Ruxsat yo‘q"], code);
+  }
+  const denied = await audit(v.adminId, "auth.denied");
+  assert.equal(denied.length, forged.length);
+  assert.ok(denied.every((r) => (r.meta as { permission: string }).permission === "bonus.edit"));
+  assert.deepEqual(await channelRow(id), { title: "Faqat ko‘rish", invite_link: null, join_bonus: 1000, stay_bonus: 0, stay_days: 7, sort: -340, active: false, mandatory: false });
+  assert.equal(await stepOf(v.tg), null);
+
+  // An owner starts an edit, is downgraded, then types the value: refused, the step is dropped, nothing saved.
+  const o = await newAdmin("owner");
+  installFetch();
+  await tg.handleUpdate(textUpdate(o.tg, "🔔 Kanal ulash"));
+  installFetch();
+  await press(o, acb.chView(id));
+  installFetch();
+  await press(o, acb.chEdit("title", id));
+  assert.equal(await stepOf(o.tg), "ch_val");
+  await query("UPDATE admin_accounts SET role = 'viewer' WHERE id = $1", [o.adminId]);
+  installFetch();
+  await tg.handleUpdate(textUpdate(o.tg, "Yangi nom"));
+  assert.deepEqual(texts(), ["🔒 Ruxsat yo‘q"]);
+  assert.equal(await stepOf(o.tg), null);
+  assert.equal((await channelRow(id))!.title, "Faqat ko‘rish");
+  const od = await audit(o.adminId, "auth.denied");
+  assert.deepEqual(od.map((r) => r.meta), [{ permission: "bonus.edit", scope: "bot/admin" }]);
+  await query("DELETE FROM bonus_channels WHERE id = $1", [id]);
+});
+
+test("Kanal kartasi, 2FA mode: the save needs a fresh code; the pending value survives the code prompt and is saved after a valid code — MUTATSIYA (step-up)", { skip }, async () => {
+  const { seal } = await import("../lib/server/admin-crypto.ts");
+  const { generateTotpSecret, totpCode, totpStep } = await import("../lib/server/admin-totp.ts");
+  const a = await newAdmin("owner");
+  const secret = generateTotpSecret();
+  process.env.ADMIN_TOTP_KEY = randomBytes(32).toString("base64");
+  await query("UPDATE admin_accounts SET totp_secret_enc = $2, totp_enabled_at = now() WHERE id = $1", [a.adminId, seal(secret, `admin:${a.adminId}`)]);
+  const id = await mkChannel({ title: "Ikki bosqichli", sort: -350 });
+  process.env.ADMIN_2FA_REQUIRED = "1";
+  try {
+    installFetch();
+    await tg.handleUpdate(textUpdate(a.tg, "🔔 Kanal ulash"));
+    installFetch();
+    await press(a, acb.chView(id));
+    installFetch();
+    await press(a, acb.chEdit("title", id));
+    installFetch();
+    await tg.handleUpdate(textUpdate(a.tg, "Yangi ikki bosqichli"));
+    assert.match(lastText(), /Saqlansinmi/, "asking and typing need no code");
+    installFetch();
+    await press(a, acb.chSave(id));
+    assert.match(lastText(), /6 xonali kodni/);
+    assert.equal(await stepOf(a.tg), "totp");
+    assert.equal((await channelRow(id))!.title, "Ikki bosqichli", "nothing saved without a code");
+    assert.deepEqual(await draftOf(a.tg), { t: "che", id, field: "title", value: "Yangi ikki bosqichli", resume: acb.chSave(id) }, "the pending value waits for the code");
+    // A valid code: the step-up is recorded and the saved change comes right after.
+    installFetch();
+    await tg.handleUpdate(textUpdate(a.tg, totpCode(secret, totpStep(Date.now()))));
+    assert.match(lastText(), /^✅ Saqlandi\n\n[\s\S]*Yangi ikki bosqichli/);
+    assert.equal((await channelRow(id))!.title, "Yangi ikki bosqichli");
+    assert.equal((await audit(a.adminId, "auth.reauth")).length, 1);
+    assert.equal((await channelUpdates(a.adminId)).length, 1);
+    // Within the window the next confirmed change needs no new code.
+    installFetch();
+    await press(a, acb.chEdit("active", id));
+    installFetch();
+    await press(a, acb.chSave(id));
+    assert.match(lastText(), /^✅ Saqlandi\n\n/);
+    assert.equal((await channelRow(id))!.active, false);
+  } finally {
+    delete process.env.ADMIN_2FA_REQUIRED;
+    delete process.env.ADMIN_TOTP_KEY;
+  }
+  await query("DELETE FROM bonus_channels WHERE id = $1", [id]);
 });
 
 test("2FA mode: an un-enrolled admin has no panel; an enrolled one must give a code before a confirmed change — also when the confirm is a REPLY tap — MUTATSIYA 7", { skip }, async () => {
