@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { Lock } from "lucide-react";
 import * as api from "@/lib/api-client";
 import { cardNumberError, formatCardNumber, formatExpiry, parseExpiry, smsCodeError } from "@/lib/click-input";
@@ -8,6 +8,9 @@ import { groupDigits } from "@/lib/format";
 import { fieldError, fieldLabel, inputCls, primaryBtn, textBtn } from "./ui";
 
 export type PayStatus = "paid" | "pending" | "cancelled";
+
+/** Seconds before «Kodni qayta yuborish» unlocks (the server also caps code requests per order). */
+export const SMS_RESEND_SECONDS = 60;
 
 /**
  * «Karta»: our own card form (Click one-time card token + SMS confirmation).
@@ -39,6 +42,15 @@ export function CardStep({
   const [touched, setTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [resendIn, setResendIn] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // Countdown for «Kodni qayta yuborish» (1 s ticks while it runs).
+  useEffect(() => {
+    if (stage !== "sms" || resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [stage, resendIn]);
 
   const numberErr = cardNumberError(number);
   const exp = parseExpiry(expiry);
@@ -56,7 +68,32 @@ export function CardStep({
       setPhoneMasked(r.phoneMasked);
       setSms("");
       setTouched(false);
+      setNotice(null);
+      setResendIn(SMS_RESEND_SECONDS);
       setStage("sms");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "SMS kod yuborilmadi");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * A NEW one-time token for the same card (Click has no separate "resend"): Click texts a fresh
+   * code and the previous token is replaced on the order. The card is still in this component.
+   */
+  async function resend() {
+    if (busy || resendIn > 0 || !exp.ok) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const r = await api.clickCardStart({ orderId, cardNumber: number, expireDate: exp.mmyy });
+      setPhoneMasked(r.phoneMasked);
+      setSms("");
+      setTouched(false);
+      setNotice("Yangi kod yuborildi");
+      setResendIn(SMS_RESEND_SECONDS);
     } catch (err) {
       setError(err instanceof Error ? err.message : "SMS kod yuborilmadi");
     } finally {
@@ -130,8 +167,22 @@ export function CardStep({
             {error}
           </p>
         ) : null}
+        {notice && !error ? (
+          <p role="status" data-pay-notice className="text-muted-foreground mt-2 text-[13.5px]">
+            {notice}
+          </p>
+        ) : null}
         <button type="submit" disabled={busy} className={`${primaryBtn} mt-4`} data-pay-submit>
           {busy ? "To'lanmoqda..." : `To'lash — ${groupDigits(amount)} so'm`}
+        </button>
+        <button
+          type="button"
+          data-pay-resend
+          disabled={busy || resendIn > 0}
+          className={`${textBtn} mt-2 w-full justify-center disabled:no-underline disabled:opacity-60`}
+          onClick={() => void resend()}
+        >
+          {resendIn > 0 ? `Kodni qayta yuborish (${resendIn} s)` : "Kodni qayta yuborish"}
         </button>
         <div className="mt-2 flex justify-between">
           <button
@@ -141,6 +192,7 @@ export function CardStep({
             onClick={() => {
               setStage("form");
               setError(null);
+              setNotice(null);
               setSms("");
             }}
           >
