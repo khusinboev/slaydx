@@ -16,10 +16,14 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *   repeated Complete credits (and pays the bonus) exactly once
  *
  * Mutation notes (each was broken on purpose, the named subtests went red, then reverted):
- *   - `checkClickComplete`: drop the `!order.providerTxn || prepareId === null` guard
- *       → «-6: Complete without Prepare»;
- *   - `checkClickComplete`: treat a missing / empty `merchant_prepare_id` as "ok"
- *       → «-6: merchant_prepare_id is mandatory».
+ *   - route back to the OLD guard (`order.providerTxn && …`, empty prepare id skipped)
+ *       → «-6: Complete without Prepare», «-6: merchant_prepare_id is mandatory»;
+ *   - `checkClickComplete`: a missing / empty `merchant_prepare_id` accepted
+ *       → «pure rules», «-6: merchant_prepare_id is mandatory»;
+ *   - `already_paid` no longer answered with -4 → «repeated Complete»;
+ *   - `Access-Control-Allow-Origin: *` instead of the docs origin → «CORS».
+ * (The "never Prepared" branch of `checkClickComplete` is also covered by the id and
+ *  click_trans_id comparisons — defense in depth, so it has no mutation of its own.)
  */
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
