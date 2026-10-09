@@ -1,0 +1,13 @@
+-- In-bot admin panel as REPLY-keyboard buttons (owner 2026-10-09). Additive only.
+--
+--   bot_admin_state.keys  the button texts of the admin screen last sent to this chat, as
+--                         [{"text": "<label>", "code": "a:…"}]. A reply-keyboard tap arrives as a plain
+--                         text message; the bot maps it back to the same callback code the inline button
+--                         used and runs it through the same permission / rate-limit / step-up / audit
+--                         path. NULL = no screen keyboard (only the static admin menu applies). Never
+--                         grants anything: the admin account and role are re-read on every tap.
+--
+-- ROLLBACK:
+--   ALTER TABLE bot_admin_state DROP COLUMN IF EXISTS keys;
+--   DELETE FROM schema_migrations WHERE name = '047_bot_admin_keys.sql';
+ALTER TABLE bot_admin_state ADD COLUMN IF NOT EXISTS keys JSONB;
