@@ -38,3 +38,12 @@ Request: an admin panel inside the Telegram bot with the main actions — «Xaba
   `createInviteLink` when the bot is admin). Custom amounts stay in the web panel.
 - **i18n**: `bot/admin-i18n.ts` (uz/ru/en); errors from the shared admin services are Uzbek in every language (web texts).
 - State: `bot_admin_state` (044), 10 min, claim per update id; commands / keyboard buttons / a profile prompt drop it.
+- **Reply-keyboard screens (owner 2026-10-09).** Every admin screen is a REPLY keyboard: `admin-screens.ts keyScreen` renders
+  rows of `{label, callback code}`; `showScreen` (admin.ts) stores the label → code map in `bot_admin_state.keys` (047) and
+  SENDS the screen as a new message (a reply keyboard cannot be edited). A tap arrives as plain text: `tapScreenKey` matches the
+  EXACT label for the same admin account, then runs the code through `handleAdminCallback` (permission, rate limit, step-up,
+  audit unchanged). Free-text steps (broadcast text, button, channel, percent, TOTP) show only «Orqaga» / «Bekor qilish», and
+  those labels are checked before a text is taken as content. A result toast becomes the first line of the next screen; the
+  progress card is still auto-edited by the delivery loop (text only) and re-sent by the control taps; the done summary comes
+  with the admin menu keyboard. Old inline `a:*` buttons in history keep working (they answer with a new reply-keyboard screen).
+  Inline stays only for the broadcast's own URL button (Telegram allows URL buttons nowhere else).
