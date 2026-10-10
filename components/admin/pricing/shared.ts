@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, adminErrorMessage, adminRequestId, isAbortError } from "@/lib/admin-api/core";
 import type { LadderRow, PriceAdjust, PricingItem, TrendPoint } from "@/lib/admin-api/pricing";
-import { fmtNumber, fmtPercent, fmtSoum, fmtUsd } from "@/lib/admin-format";
+import { fmtNumber, fmtPercent, fmtSoum, fmtUsd, todayTashkent } from "@/lib/admin-format";
 import type { Tone } from "@/components/admin/ui";
 
 /* ───────────────────────────── loading state ───────────────────────────── */
@@ -77,13 +77,27 @@ export function shortDay(iso: string): string {
   return m ? `${m[3]}.${m[2]}` : iso;
 }
 
+/** Margin bands (§17.6): below LOW is red, up to GOOD amber, above GOOD green. */
+export const MARGIN_LOW_PCT = 30;
+export const MARGIN_GOOD_PCT = 60;
+
 /** Margin colouring (§17.6): < 30 % red, 30–60 % amber, otherwise green; unknown → neutral. */
 export function marginTone(marginPct: number | null): Tone {
   if (marginPct === null) return "neutral";
-  if (marginPct < 30) return "danger";
-  if (marginPct <= 60) return "warning";
+  if (marginPct < MARGIN_LOW_PCT) return "danger";
+  if (marginPct <= MARGIN_GOOD_PCT) return "warning";
   return "success";
 }
+
+/** Uzbek names of the cost part kinds (`admin-cost.ts` part `kind`). */
+const COST_KIND_LABEL: Record<string, string> = {
+  llm: "Matn (LLM)",
+  image: "Rasm",
+  tts: "Ovoz (TTS)",
+  grounding: "Google qidiruvi",
+  unknown: "Turi yozilmagan",
+};
+export const costKindLabel = (kind: string): string => COST_KIND_LABEL[kind] ?? kind;
 
 /** "3 000 – 8 000" over a ladder column; one value when every step is the same. */
 export function ladderRange(ladder: ReadonlyArray<LadderRow>, key: "base" | "effective"): string {
@@ -116,25 +130,79 @@ export function trendChangePct(trend: ReadonlyArray<TrendPoint>): number | null 
   return ((avg(second) - a) / a) * 100;
 }
 
-/* ───────────────────────────── recommendation chip ───────────────────────────── */
+/* ───────────────────────────── recommendation ───────────────────────────── */
 
-export type Recommendation =
+/** Within ±5 points of the current percent counts as "Mos" (matches the 5 % recommendation step). */
+export const REC_OK_POINTS = 5;
+
+/** Why a recommendation is shown but cannot be applied in one click. */
+export type RecBlock = "low-confidence" | "changed-in-period" | "edited";
+
+export const REC_BLOCK_TEXT: Record<RecBlock, string> = {
+  "low-confidence": "kam ishonch",
+  "changed-in-period": "narx davr ichida o'zgargan",
+  edited: "yangilang",
+};
+
+/** The longer reason, for the sheet and the attention strip. */
+export const REC_BLOCK_HINT: Record<RecBlock, string> = {
+  "low-confidence": "Tanlama 20 tadan kam tayyor ish: tavsiya taxminiy. Kerak bo'lsa qo'lda o'zgartiring.",
+  "changed-in-period": "Narx shu davr ichida o'zgargan: ustama ikki xil narxdagi ishlardan hisoblangan. Davrni o'zgarishdan keyingi kunlardan boshlang.",
+  edited: "Narx hozirgina o'zgartirildi: tavsiyani yangi ma'lumot bilan ko'rish uchun sahifani yangilang.",
+};
+
+export type RecState =
   | { kind: "none" }
-  | { kind: "ok"; percent: number }
-  | { kind: "up" | "down"; percent: number; diff: number };
+  | { kind: "ok"; target: number }
+  | {
+      kind: "change";
+      /** The recommended adjustment percent (25–1000). */
+      target: number;
+      direction: "up" | "down";
+      /** Price change against the current one, % (target ÷ current − 1). */
+      changePct: number;
+      /** `null` = may be applied in one click. */
+      block: RecBlock | null;
+    };
 
-/** Within ±5 % of the current percent counts as "Mos" (matches the 5 % recommendation step). */
-export function recommendationOf(item: Pick<PricingItem, "adjust" | "recommendedPercent">): Recommendation {
-  if (item.recommendedPercent === null) return { kind: "none" };
-  const diff = item.recommendedPercent - item.adjust.percent;
-  if (Math.abs(diff) <= 5) return { kind: "ok", percent: item.recommendedPercent };
-  return { kind: diff > 0 ? "up" : "down", percent: item.recommendedPercent, diff };
+/** What the overview's recommendation was computed against, to tell a stale one apart. */
+export type RecContext = {
+  /** Each tool's adjustment when the overview was loaded (before any local save), by tool id. */
+  basis: ReadonlyMap<string, PriceAdjust>;
+  /** First day of the selected range, `YYYY-MM-DD` (Tashkent). */
+  rangeFrom: string;
+};
+
+/**
+ * The recommendation of a row and whether it may be applied in one click. It may not when
+ * the sample is small, when the price changed inside the range (the markup then mixes two
+ * prices, and `current × target ÷ markup` would compound the change), or when the row was
+ * saved after the overview loaded (the recommendation is from before that save).
+ */
+export function recommendationState(
+  item: Pick<PricingItem, "toolId" | "adjust" | "recommendedPercent" | "confidence" | "lastChangeAt">,
+  ctx: RecContext,
+): RecState {
+  const target = item.recommendedPercent;
+  if (target === null) return { kind: "none" };
+  const current = item.adjust.percent;
+  if (Math.abs(target - current) <= REC_OK_POINTS) return { kind: "ok", target };
+  const basis = ctx.basis.get(item.toolId);
+  const block: RecBlock | null =
+    basis !== undefined && (item.adjust.percent !== basis.percent || item.adjust.roundTo !== basis.roundTo)
+      ? "edited"
+      : item.lastChangeAt !== null && todayTashkent(Date.parse(item.lastChangeAt)) >= ctx.rangeFrom
+        ? "changed-in-period"
+        : item.confidence === "low"
+          ? "low-confidence"
+          : null;
+  return { kind: "change", target, direction: target > current ? "up" : "down", changePct: (target / current - 1) * 100, block };
 }
 
-export function recommendationText(rec: Recommendation): string {
-  if (rec.kind === "none") return "—";
-  if (rec.kind === "ok") return "Mos";
-  return rec.kind === "up" ? `+${fmtNumber(rec.diff)}% tavsiya` : `−${fmtNumber(-rec.diff)}% tavsiya`;
+/** `+121%` / `−10%`: the recommended price change against the current price. */
+export function changeText(changePct: number): string {
+  const n = Math.round(changePct);
+  return `${n > 0 ? "+" : "−"}${fmtNumber(Math.abs(n))}%`;
 }
 
 /* ───────────────────────────── client-side sort and filter ───────────────────────────── */
@@ -144,6 +212,16 @@ export type PricingSort = { field: PricingSortField; dir: "asc" | "desc"; value:
 
 /** Margin ascending first (the problems on top), as in the prototype. */
 export const DEFAULT_SORT = "margin_asc";
+
+/** The phone's «Saralash» select (the table headers are not shown there); same values as the headers. */
+export const SORT_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "margin_asc", label: "Marja: pastdan" },
+  { value: "margin_desc", label: "Marja: yuqoridan" },
+  { value: "cost_desc", label: "Tannarx: qimmatdan" },
+  { value: "cost_asc", label: "Tannarx: arzondan" },
+  { value: "volume_desc", label: "Ishlar: ko'pdan" },
+  { value: "volume_asc", label: "Ishlar: kamdan" },
+];
 const SORT_FIELDS: ReadonlyArray<PricingSortField> = ["margin", "cost", "volume"];
 
 export function parseSort(raw: string | null): PricingSort {

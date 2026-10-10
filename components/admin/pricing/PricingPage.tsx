@@ -1,20 +1,18 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useId, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { getPricing, type PricingItem, type PricingItemResult, type PricingOverview } from "@/lib/admin-api/pricing";
+import { getPricing, type PriceAdjust, type PricingItem, type PricingItemResult, type PricingOverview } from "@/lib/admin-api/pricing";
 import { fmtNumber, isIsoDate } from "@/lib/admin-format";
 import {
   Button,
   Card,
-  CardBody,
   CardHeader,
   DateRangePicker,
   EmptyState,
   ErrorState,
   FilterBar,
   Forbidden,
-  KpiTile,
   SelectFilter,
   Skeleton,
   presetRange,
@@ -22,27 +20,20 @@ import {
   type DateRange,
 } from "@/components/admin/ui";
 import { useCan } from "@/components/admin/shell";
+import { ApplyRecommendationDialog } from "./ApplyRecommendationDialog";
+import { AttentionStrip } from "./AttentionStrip";
+import { HealthKpis, HealthKpisSkeleton } from "./HealthKpis";
+import { MethodNotes } from "./MethodNotes";
 import { PricingDrawer } from "./PricingDrawer";
 import { PricingTable } from "./PricingTable";
-import {
-  COVERAGE_WARN_PCT,
-  DEFAULT_SORT,
-  SETTING_LABEL,
-  filterByGroup,
-  lowCoverage,
-  marginTone,
-  markupText,
-  parseSort,
-  pctText,
-  sortItems,
-  useLoad,
-  usdText,
-} from "./shared";
+import { attentionList } from "./attention";
+import { DEFAULT_SORT, SORT_OPTIONS, filterByGroup, parseSort, recommendationState, sortItems, useLoad, type RecContext } from "./shared";
 
 /**
- * S20 `/admin/pricing` ("Narxlar", plan §17.6): KPI tiles, the coverage
- * caveat, filters (period, tool group) and sort in the URL, the per-tool table
- * and the row drawer (`tool` in the URL, so a drawer link can be shared).
+ * S20 `/admin/pricing` («Narxlar»), a decision panel (docs/admin/pricing-redesign.md):
+ * what needs attention first, then six health figures, then every tool (table on desktop,
+ * cards on phones) with its sheet. Period, group, admin switch, sort and the open tool live
+ * in the URL, so any view can be shared.
  */
 export function PricingPage() {
   const router = useRouter();
@@ -81,20 +72,23 @@ export function PricingPage() {
   // A successful PUT/DELETE updates the row in place (no round trip); the aggregates are unchanged.
   const [patched, setPatched] = useState<Map<string, PricingItemResult>>(() => new Map());
   const applyResult = (r: PricingItemResult) => setPatched((m) => new Map(m).set(r.toolId, r));
+  // A reload brings fresh adjustments: local patches would only hide them.
+  const reload = () => {
+    setPatched(new Map());
+    retry();
+  };
 
   const activeFilters = Number(from !== defaultRange.from || to !== defaultRange.to) + Number(group !== "") + Number(includeAdmins);
   const clear = () => update({ from: null, to: null, group: null, sort: null, admins: null });
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-w-0 flex-col gap-4">
       <header className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-[22px] font-semibold tracking-tight">Narxlar va tannarx</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight">Narxlar</h1>
           {canEdit ? null : <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-semibold">Faqat ko&apos;rish</span>}
         </div>
-        <p className="text-muted-foreground text-[13px]">
-          Asosiy narx kod formulalaridan keladi; admin har bir vosita uchun foizli tuzatish belgilaydi. O&apos;zgarishlar faqat yangi buyurtmalarga ta&apos;sir qiladi.
-        </p>
+        <p className="text-muted-foreground text-[13px]">Har vositaning narxi, tannarxi va marjasi. O&apos;zgarish faqat yangi buyurtmalarga ta&apos;sir qiladi.</p>
       </header>
 
       {state.status === "forbidden" ? null : (
@@ -111,7 +105,7 @@ export function PricingPage() {
           />
           <div className="flex min-w-0 flex-col gap-1">
             <span className="text-muted-foreground text-[11px] font-semibold">Admin ishlari</span>
-            <label className="border-input bg-card flex h-9 cursor-pointer items-center gap-2 rounded-lg border px-2.5 text-[13px]">
+            <label className="border-input bg-card flex h-9 cursor-pointer items-center gap-2 rounded-lg border px-2.5 text-[13px] max-sm:h-11">
               <input
                 type="checkbox"
                 checked={includeAdmins}
@@ -144,35 +138,17 @@ export function PricingPage() {
           sort={sort.value}
           openTool={openTool}
           filtered={activeFilters > 0}
+          canEdit={canEdit}
           onClear={clear}
           onSort={(s) => update({ sort: s === DEFAULT_SORT ? null : s })}
           onOpen={(toolId) => update({ tool: toolId })}
           onClose={() => update({ tool: null })}
           onChanged={applyResult}
-          onStale={retry}
+          onStale={reload}
         />
       )}
     </div>
   );
-}
-
-/** Static class per margin tone (Tailwind needs literal class names). */
-const MARGIN_TEXT: Record<ReturnType<typeof marginTone>, string> = {
-  danger: "text-destructive",
-  warning: "text-badge-warning-text",
-  success: "text-badge-success-text",
-  neutral: "text-foreground",
-  info: "text-foreground",
-  primary: "text-foreground",
-};
-
-/**
- * A KPI money value that wraps between the number and its unit instead of
- * being cut off by the tile at 360 px (the number itself never breaks: NBSP groups).
- */
-function WrapMoney({ amount, unit }: { amount: number | null; unit: string }) {
-  if (amount === null) return <>—</>;
-  return <span className="block whitespace-normal">{`${fmtNumber(Math.round(amount))} ${unit}`}</span>;
 }
 
 /** Next to the switch: how many admin jobs the figures leave out (or contain). */
@@ -190,13 +166,9 @@ function AdminJobsNote({ includeAdmins, adminJobs }: { includeAdmins: boolean; a
 function PricingSkeleton() {
   return (
     <div aria-busy="true" aria-label="Yuklanmoqda" className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-          <KpiTile key={i} label="" value="" loading />
-        ))}
-      </div>
-      <Skeleton className="h-14 w-full" />
-      <Skeleton className="h-80 w-full" />
+      <Skeleton className="h-36 w-full rounded-xl" />
+      <HealthKpisSkeleton />
+      <Skeleton className="h-80 w-full rounded-xl" />
     </div>
   );
 }
@@ -215,6 +187,7 @@ function Ready({
   sort,
   openTool,
   filtered,
+  canEdit,
   onClear,
   onSort,
   onOpen,
@@ -229,6 +202,7 @@ function Ready({
   sort: string;
   openTool: string | null;
   filtered: boolean;
+  canEdit: boolean;
   onClear: () => void;
   onSort: (sort: string) => void;
   onOpen: (toolId: string) => void;
@@ -236,128 +210,126 @@ function Ready({
   onChanged: (r: PricingItemResult) => void;
   onStale: () => void;
 }) {
+  const sortId = useId();
+  const [applying, setApplying] = useState<string | null>(null);
   const items = data.items.map((i) => withPatch(i, patched));
+  // The recommendations were computed against the adjustments of the overview load.
+  const recContext: RecContext = useMemo(
+    () => ({ basis: new Map<string, PriceAdjust>(data.items.map((i) => [i.toolId, i.adjust])), rangeFrom: data.range.from }),
+    [data],
+  );
   const rows = sortItems(filterByGroup(items, group), parseSort(sort));
-  const low = items.filter((i) => i.marginPct !== null && i.marginPct < 30);
-  const lowCov = lowCoverage(items);
-  const open = openTool ? items.find((i) => i.toolId === openTool) ?? null : null;
-  const { totals } = data;
+  const attention = attentionList(filterByGroup(items, group), { ...recContext, targetMarkup: data.targetMarkup });
+  const open = openTool ? (items.find((i) => i.toolId === openTool) ?? null) : null;
+  const applyItem = applying ? (items.find((i) => i.toolId === applying) ?? null) : null;
+  const applyRec = applyItem ? recommendationState(applyItem, recContext) : null;
+  const startApply = (item: PricingItem) => setApplying(item.toolId);
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiTile
-          label="Marja"
-          value={<span className={MARGIN_TEXT[marginTone(totals.marginPct)]}>{pctText(totals.marginPct)}</span>}
-          hint={
-            `tugallangan ishlarning ro'yxat narxi (ball bilan to'langani ham) − tannarx − komissiya ${pctText(data.paymentFeePercent)} (faqat naqd qismdan)` +
-            (totals.uncoveredTools.length > 0 ? `. Tannarxi o'lchanmagan vositalar jamiga kirmagan: ${totals.uncoveredTools.join(", ")}` : "")
-          }
-        />
-        <KpiTile label="Naqd marja" value={pctText(totals.cashMarginPct)} hint="faqat naqd pul tushumi bo'yicha (ball hisobga olinmaydi)" />
-        <KpiTile
-          label="Bonus xarajati"
-          value={<WrapMoney amount={totals.bonusCostSoum} unit="so'm" />}
-          hint={`ball bilan to'langan ishlarning tannarxi (marketing xarajati) · tushumning ${pctText(totals.pointsSharePct)} qismi ball bilan to'langan`}
-        />
-        <KpiTile label="Marja < 30% vositalar" value={fmtNumber(low.length)} hint={low.length ? low.map((i) => i.title).join(", ") : "Hammasi me'yorda"} />
-        <KpiTile
-          label={`AI xarajat · pullik vositalar · ${fmtNumber(data.range.days)} kun`}
-          value={<WrapMoney amount={totals.costSoumTools} unit="so'm" />}
-          hint={`${usdText(totals.costUsdTools)} (xato ishlar bilan) · jami AI ${usdText(totals.costUsdAll)}, shundan boshqa ${usdText(totals.costUsdOther)} — bepul AI va noma'lum, marjaga kirmaydi`}
-        />
-        <KpiTile label="Kurs (so'm / USD)" value={fmtNumber(data.fx)} hint={`Sozlama: ${SETTING_LABEL.fx}`} />
-        <KpiTile label="Maqsadli ustama" value={markupText(data.targetMarkup)} hint={`Sozlama: ${SETTING_LABEL.targetMarkup}`} />
-        <KpiTile label="To'lov komissiyasi" value={pctText(data.paymentFeePercent)} hint={`Sozlama: ${SETTING_LABEL.paymentFee}`} />
-      </div>
+      <AttentionStrip
+        entries={attention}
+        targetMarkup={data.targetMarkup}
+        canEdit={canEdit}
+        hasJobs={data.totals.completed > 0}
+        onOpen={(i) => onOpen(i.toolId)}
+        onApply={startApply}
+      />
 
-      {lowCov.length > 0 ? (
-        <section aria-label="Qamrov ogohlantirishi" className="border-warning/50 bg-warning/10 rounded-xl border px-4 py-3 text-[13px]">
-          <p>
-            <strong className="font-semibold">Tannarx qamrovi {fmtNumber(COVERAGE_WARN_PCT)}% dan past:</strong>{" "}
-            {lowCov.map((i) => `${i.title} (${pctText(i.coveragePct, 0)})`).join(", ")}. Bu vositalarda tannarx kam baholangan bo&apos;lishi, marja esa haqiqatdagidan optimistik
-            ko&apos;rinishi mumkin.
-          </p>
-          {data.caveats.length > 0 ? (
-            <details className="mt-2">
-              <summary className="cursor-pointer text-xs font-semibold">Hisobga olinmaydigan va taxminiy qismlar ({fmtNumber(data.caveats.length)})</summary>
-              <ul className="text-muted-foreground mt-2 ml-4 list-disc space-y-1.5 text-xs">
-                {data.caveats.map((c) => (
-                  <li key={c}>{c}</li>
-                ))}
-              </ul>
-            </details>
-          ) : null}
-        </section>
-      ) : null}
+      <HealthKpis data={data} />
 
       <Card>
         <CardHeader
-          title="Vositalar bo'yicha narx va tannarx"
+          title={`Vositalar (${fmtNumber(rows.length)})`}
           aside={
-            <span className="text-muted-foreground flex flex-wrap items-center gap-3 text-xs" aria-label="Marja ranglari">
-              <span className="inline-flex items-center gap-1">
-                <i aria-hidden="true" className="bg-destructive inline-block size-2.5 rounded-full" /> &lt; 30%
+            <>
+              <span className="text-muted-foreground hidden flex-wrap items-center gap-3 text-xs sm:flex" aria-label="Marja ranglari">
+                <span className="inline-flex items-center gap-1">
+                  <i aria-hidden="true" className="bg-destructive inline-block size-2.5 rounded-full" /> &lt; 30%
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <i aria-hidden="true" className="bg-warning inline-block size-2.5 rounded-full" /> 30–60%
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <i aria-hidden="true" className="bg-success inline-block size-2.5 rounded-full" /> &gt; 60%
+                </span>
               </span>
-              <span className="inline-flex items-center gap-1">
-                <i aria-hidden="true" className="bg-warning inline-block size-2.5 rounded-full" /> 30–60%
+              <span className="sm:hidden">
+                <label htmlFor={sortId} className="sr-only">
+                  Saralash
+                </label>
+                <select
+                  id={sortId}
+                  value={sort}
+                  onChange={(e) => onSort(e.target.value)}
+                  className="border-input bg-card focus:ring-ring h-11 rounded-lg border px-2.5 text-[13px] outline-none focus:ring-2"
+                >
+                  {SORT_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
               </span>
-              <span className="inline-flex items-center gap-1">
-                <i aria-hidden="true" className="bg-success inline-block size-2.5 rounded-full" /> &gt; 60%
-              </span>
-            </span>
+            </>
           }
         />
-        <CardBody>
-          <PricingTable
-            items={rows}
-            days={data.range.days}
-            sort={sort}
-            onSortChange={onSort}
-            onRowClick={(r) => onOpen(r.toolId)}
-            empty={
-              <EmptyState
-                title="Bu guruhda vosita yo'q"
-                description="Tanlangan guruhga mos vosita topilmadi."
-                action={
-                  filtered ? (
-                    <Button size="sm" onClick={onClear}>
-                      Filtrlarni tozalash
-                    </Button>
-                  ) : undefined
-                }
-              />
-            }
-          />
-        </CardBody>
+        <PricingTable
+          items={rows}
+          days={data.range.days}
+          sort={sort}
+          targetMarkup={data.targetMarkup}
+          recContext={recContext}
+          canEdit={canEdit}
+          onSortChange={onSort}
+          onOpen={(r) => onOpen(r.toolId)}
+          onApply={startApply}
+          empty={
+            <EmptyState
+              title="Bu guruhda vosita yo'q"
+              description="Tanlangan guruhga mos vosita topilmadi."
+              action={
+                filtered ? (
+                  <Button size="sm" onClick={onClear}>
+                    Filtrlarni tozalash
+                  </Button>
+                ) : undefined
+              }
+            />
+          }
+        />
       </Card>
 
-      <div className="text-muted-foreground flex flex-col gap-1.5 text-xs">
-        <p>
-          Narxlar va tushum tangada, tannarx so&apos;mda; marja va ustama uchun tanga so&apos;mga o&apos;tkaziladi (1 tanga = {fmtNumber(data.soumPerCoin)} so&apos;m).
-        </p>
-        <p>
-          <b className="text-foreground font-semibold">Marja</b> = (tugallangan ishlarning ro&apos;yxat narxi − qaytarilgani − to&apos;lov komissiyasi − to&apos;liq tannarx) ÷ ro&apos;yxat narxi;
-          narx ball bilan to&apos;langan bo&apos;lsa ham to&apos;liq hisoblanadi, komissiya esa faqat naqd to&apos;langan qismdan olinadi (ball to&apos;lov tizimidan o&apos;tmaydi). <b className="text-foreground font-semibold">Naqd marja</b> = (naqd tushum − to&apos;liq tannarx) ÷ naqd tushum:
-          ball naqd hisoblanmaydi, davrda yaratilgan barcha ishlar bo&apos;yicha. <b className="text-foreground font-semibold">Bonus xarajati</b> = davrdagi AI xarajatining ball bilan
-          to&apos;langan ulushi.
-        </p>
-        <p>
-          To&apos;liq tannarx = tugallangan ishning o&apos;rtacha AI xarajati + xato va tashlab ketilgan ishlar xarajatining tugallangan ishga ulushi. Ustama = o&apos;rtacha ro&apos;yxat narxi
-          (qaytarilgandan keyin) ÷ to&apos;liq tannarx. «Tavsiya» ustamani maqsadli {markupText(data.targetMarkup)} ga yetkazadigan foiz; tanlama 20 ishdan kam bo&apos;lsa «kam ishonch» deb
-          belgilanadi. Adminlarning ishlari standart bo&apos;yicha hisobga olinmaydi («Adminlar bilan» yoqilsa qo&apos;shiladi); «AI xarajat» sahifasida esa hammasi ko&apos;rinadi. Qatorni
-          bosing — grafik, simulyator va tarix ochiladi.
-        </p>
-      </div>
+      <MethodNotes caveats={data.caveats} targetMarkup={data.targetMarkup} paymentFeePercent={data.paymentFeePercent} soumPerCoin={data.soumPerCoin} />
 
       {open ? (
         <PricingDrawer
           key={open.toolId}
           item={open}
           includeAdmins={includeAdmins}
-          paymentFeePercent={data.paymentFeePercent}
+          targetMarkup={data.targetMarkup}
+          recContext={recContext}
+          latest={patched.get(open.toolId)}
           onClose={onClose}
+          onApply={startApply}
           onChanged={onChanged}
+          onStale={onStale}
+        />
+      ) : null}
+
+      {canEdit && applyItem && applyRec?.kind === "change" && applyRec.block === null ? (
+        <ApplyRecommendationDialog
+          key={applyItem.toolId}
+          item={applyItem}
+          target={applyRec.target}
+          targetMarkup={data.targetMarkup}
+          includeAdmins={includeAdmins}
+          onClose={() => setApplying(null)}
+          onApplied={(r) => {
+            // Closed here: once the row is patched the dialog unmounts before ConfirmDialog's own close.
+            setApplying(null);
+            onChanged(r);
+          }}
           onStale={onStale}
         />
       ) : null}

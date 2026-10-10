@@ -1,7 +1,8 @@
 "use client";
 
 import { useId, useState } from "react";
-import { ConfirmDialog, toast } from "@/components/admin/ui";
+import { Badge, ConfirmDialog, toast } from "@/components/admin/ui";
+import { ApiError } from "@/lib/admin-api/core";
 import { cn } from "@/lib/cn";
 import {
   PRICE_PERCENT_MAX,
@@ -17,7 +18,6 @@ import { LadderCompare } from "./LadderCompare";
 import { parsePercentText } from "./Simulator";
 import { BIG_CHANGE_PP, marginTone, pctText, percentLabel, PROPAGATION_NOTE, roundToText } from "./shared";
 import { shownSimulation, useSimulation } from "./useSimulation";
-import { Badge } from "@/components/admin/ui";
 
 export type PriceEditDialogProps = {
   open: boolean;
@@ -30,6 +30,8 @@ export type PriceEditDialogProps = {
   onClose: () => void;
   /** Called with the server's updated item after a successful save. */
   onSaved: (item: PricingItemResult) => void;
+  /** The tool changed meanwhile (409 `stale`/`state`): reload the overview. */
+  onStale?: () => void;
 };
 
 const FIELD = "border-input bg-card focus:ring-ring h-9 w-full rounded-lg border px-2.5 text-[13px] tabular-nums outline-none focus:ring-2 disabled:opacity-60";
@@ -45,7 +47,7 @@ export function PriceEditDialog(props: PriceEditDialogProps) {
   return <Body key={props.toolId} {...props} />;
 }
 
-function Body({ toolId, title, adjust, ladder, includeAdmins = false, onClose, onSaved }: PriceEditDialogProps) {
+function Body({ toolId, title, adjust, ladder, includeAdmins = false, onClose, onSaved, onStale }: PriceEditDialogProps) {
   const ids = useId();
   const [text, setText] = useState(String(adjust.percent));
   const [roundTo, setRoundTo] = useState<PriceRoundTo>(adjust.roundTo);
@@ -60,6 +62,7 @@ function Body({ toolId, title, adjust, ladder, includeAdmins = false, onClose, o
   return (
     <ConfirmDialog
       open
+      sheet
       onClose={onClose}
       title={`Narxni o'zgartirish — ${title}`}
       description={`Hozir ${percentLabel(adjust.percent)} · yaxlitlash ${roundToText(adjust.roundTo)}. ${PROPAGATION_NOTE}`}
@@ -71,7 +74,14 @@ function Body({ toolId, title, adjust, ladder, includeAdmins = false, onClose, o
       confirmDisabled={next === null || unchanged}
       onConfirm={async ({ reason }) => {
         if (next === null) return;
-        const { item } = await updatePricing(toolId, next, reason);
+        let item: PricingItemResult;
+        try {
+          // `expected`: the adjustment this dialog was opened with; a change made meanwhile is refused (409 stale).
+          ({ item } = await updatePricing(toolId, next, reason, { expected: adjust }));
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 409 && e.data.code === "stale") onStale?.();
+          throw e;
+        }
         toast(`${title}: ${percentLabel(adjust.percent)} → ${percentLabel(next.percent)}. ${PROPAGATION_NOTE}`);
         onSaved(item);
       }}

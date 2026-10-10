@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 import { PRICE_PERCENT_MAX, PRICE_PERCENT_MIN, type LadderRow, type PriceAdjust, type PricingItem } from "@/lib/admin-api/pricing";
 import { fmtNumber } from "@/lib/admin-format";
-import { Badge } from "@/components/admin/ui";
+import { Badge, InfoTip } from "@/components/admin/ui";
 import { LadderCompare } from "./LadderCompare";
 import { marginTone, pctText, roundToText, soumText, tangaText } from "./shared";
 import { shownSimulation, useSimulation } from "./useSimulation";
@@ -90,33 +90,37 @@ export function Simulator({
           <div className="bg-muted/50 rounded-lg px-3 py-2">
             <dt className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">Tushum · {fmtNumber(sim.window.days)} kun</dt>
             <dd className="text-base font-semibold tabular-nums">{tangaText(sim.projected.revenue30d)}</dd>
-            <dd className="text-muted-foreground text-xs tabular-nums">= {soumText(sim.projected.revenue30dSoum)}</dd>
             <dd className="text-muted-foreground text-xs tabular-nums">hozir {tangaText(sim.current.revenue30d)}</dd>
-            <dd className="text-muted-foreground text-xs">tugallangan ishlarning ro&apos;yxat narxi</dd>
           </div>
           <div className="bg-muted/50 rounded-lg px-3 py-2">
             <dt className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">AI xarajat · {fmtNumber(sim.window.days)} kun</dt>
             <dd className="text-base font-semibold tabular-nums">{soumText(sim.projected.cost30d)}</dd>
-            <dd className="text-muted-foreground text-xs">so&apos;mda, o&apos;zgarmaydi</dd>
+            <dd className="text-muted-foreground text-xs">o&apos;zgarmaydi</dd>
           </div>
           <div className="bg-muted/50 rounded-lg px-3 py-2">
             <dt className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">Marja</dt>
             <dd className="text-base font-semibold tabular-nums">
-              <Badge tone={marginTone(sim.projected.marginPct)}>{pctText(sim.projected.marginPct)}</Badge>
+              <Badge tone={marginTone(sim.projected.marginPct)} dot>
+                {pctText(sim.projected.marginPct)}
+              </Badge>
             </dd>
             <dd className="text-muted-foreground text-xs tabular-nums">hozir {pctText(sim.current.marginPct)}</dd>
-            <dd className="text-muted-foreground text-xs">jadvaldagi «Marja» bilan bir xil: komissiya {pctText(sim.paymentFeePercent)} ayrilgan</dd>
           </div>
         </dl>
       ) : null}
 
-      <p className="text-muted-foreground text-xs">
-        Hajm o&apos;zgarmaydi deb hisoblanadi (talab elastikligi hisobga olinmaydi): oxirgi {sim ? fmtNumber(sim.window.days) : "30"} kundagi{" "}
-        {sim ? `${fmtNumber(sim.current.jobs)} ta` : ""} tugallangan ish yangi narxda qayta hisoblanadi (qaytarilgan qismi o&apos;sha ulushda qoladi), xarajat o&apos;sha davrning haqiqiy AI sarfi
-        (so&apos;m). Marja so&apos;mda hisoblanadi: tanga tushum × {sim ? fmtNumber(sim.soumPerCoin) : "1"} so&apos;m/tanga, to&apos;lov komissiyasi ayriladi.
-        {sim?.includeAdmins ? " Adminlarning ishlari ham hisobga olingan." : " Adminlarning ishlari hisobga olinmagan."} Yaxlitlash: {roundToText(item.adjust.roundTo)}. Qoida: 100% → asosiy narx; aks holda max({fmtNumber(item.adjust.roundTo)}, round(asosiy × % ÷ 100 ÷{" "}
-        {fmtNumber(item.adjust.roundTo)}) × {fmtNumber(item.adjust.roundTo)}).
-        {sim?.partial ? " Davrda ishlar juda ko'p: faqat birinchi 20 000 tasi hisoblandi." : ""}
+      <p className="text-muted-foreground flex items-start gap-1.5 text-xs">
+        <span>
+          Oxirgi {sim ? fmtNumber(sim.window.days) : "30"} kundagi {sim ? `${fmtNumber(sim.current.jobs)} ta ` : ""}tayyor ish yangi narxda qayta hisoblanadi; hajm va AI
+          xarajati o&apos;zgarmaydi deb olinadi. Saqlanmaydi.
+          {sim?.partial ? " Faqat birinchi 20 000 ta ish hisoblandi." : ""}
+        </span>
+        <InfoTip label="Simulyator qanday hisoblaydi" align="end">
+          Talab elastikligi hisobga olinmaydi. Tushum tangada, marja so&apos;mda: tanga × {sim ? fmtNumber(sim.soumPerCoin) : "1"} so&apos;m, to&apos;lov komissiyasi{" "}
+          {sim ? pctText(sim.paymentFeePercent) : ""} naqd qismdan ayriladi — jadvaldagi «Marja» bilan bir xil.{" "}
+          {sim?.includeAdmins ? "Adminlarning ishlari ham kiritilgan." : "Adminlarning ishlari kiritilmagan."} Yangi narx: asosiy × % ÷ 100,{" "}
+          {roundToText(item.adjust.roundTo)} ga yaxlitlanadi (100% — asosiy narxning o&apos;zi).
+        </InfoTip>
       </p>
     </section>
   );
