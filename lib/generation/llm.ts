@@ -66,6 +66,12 @@ export type LlmOpts = {
    * Berilmasa — eski xatti-harakat (faqat `timeoutMs` byudjeti).
    */
   deadline?: number;
+  /**
+   * Optional improvement call (thin-slide repair, research): a TIMEOUT is not
+   * retried even when the job deadline would allow it. Essential text steps
+   * leave it unset and get one retry after a timeout.
+   */
+  noTimeoutRetry?: boolean;
 };
 
 /** Grounding topgan bitta sahifa. `uri` — Google redirect, `title` — domen. */
@@ -163,6 +169,7 @@ async function withRetry<T>(
   call: (timeoutMs: number) => Promise<Attempt<T>>,
   deadline?: number,
   role = "complete",
+  noTimeoutRetry = false,
 ): Promise<{ value: T; finishReason?: string } | null> {
   let started = Date.now();
   const breaker = breakerFor(provider);
@@ -237,7 +244,7 @@ async function withRetry<T>(
       // Urinishni ish muddati kesgan bo'lsa — bu «vaqt tugadi», «model javob bermadi» emas.
       if (jobLeft() < CHAIN_MIN_ATTEMPT_MS) throw new DeadlineError(provider, jobLeft());
       // One retry after a timeout, only inside a job deadline with real time left (fresh per-call budget).
-      if (deadline !== undefined && !timeoutRetried && attempt < MAX_ATTEMPTS - 1 && jobLeft() >= TIMEOUT_RETRY_MIN_LEFT_MS) {
+      if (deadline !== undefined && !noTimeoutRetry && !timeoutRetried && attempt < MAX_ATTEMPTS - 1 && jobLeft() >= TIMEOUT_RETRY_MIN_LEFT_MS) {
         timeoutRetried = true;
         started = Date.now();
         await sleep(equalJitterMs(0, 500));
@@ -286,7 +293,7 @@ async function runLlm(
   const call = provider === "gemini" ? completeGemini : completeXai;
   const budget = opts.timeoutMs ?? 40_000;
   const once = async (o: { system: string; maxTokens: number }): Promise<GroundedResult | null> => {
-    const done = await withRetry(provider, budget, (timeoutMs) => call(o.system, user, o.maxTokens, { ...opts, timeoutMs }), opts.deadline, role);
+    const done = await withRetry(provider, budget, (timeoutMs) => call(o.system, user, o.maxTokens, { ...opts, timeoutMs }), opts.deadline, role, opts.noTimeoutRetry);
     return done ? { ...done.value, ...(done.finishReason ? { finishReason: done.finishReason } : {}) } : null;
   };
   // JSON answers that are cut or unparseable get ONE stricter retry (every paid attempt is already recorded in the job meter).
@@ -733,6 +740,7 @@ export async function llmStream(
       (timeoutMs) => streamGemini(o.system, user, o.maxTokens, { ...rest, timeoutMs }, onText),
       rest.deadline,
       "stream",
+      rest.noTimeoutRetry,
     );
     return done ? { text: done.value, ...(done.finishReason ? { finishReason: done.finishReason } : {}) } : null;
   };

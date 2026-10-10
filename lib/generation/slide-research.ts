@@ -94,6 +94,8 @@ export async function runSlideResearch(meta: DocMeta, deadline?: number): Promis
 
   const res = await llmGrounded(researchSystem(meta), researchUser(meta), 2048, {
     timeoutMs: budget,
+    // Research is optional (the deck is written without it): no second try after a timeout.
+    noTimeoutRetry: true,
     /*
      * O'ylash byudjeti KICHIK, lekin nol emas. Nol bo'lsa model qidiruv
      * qilish/qilmaslikni «o'ylab» ulgurmay to'g'ridan-to'g'ri javob

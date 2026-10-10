@@ -44,6 +44,8 @@ export type ChainOpts = {
   thinking?: number;
   /** Ish muddati (epoch ms). Berilmasa — eski xatti-harakat. */
   deadline?: number;
+  /** Optional improvement call: a timeout is not retried on the same provider. */
+  noTimeoutRetry?: boolean;
 };
 
 export type ChainUsage = {
@@ -215,7 +217,7 @@ async function runSpec(
     if (timedOut) {
       if (timeoutMs >= BREAKER_TIMEOUT_FLOOR_MS) breaker.failure();
       // No fallback spec: one retry on the same provider if the job still has time.
-      if (ctx.lastSpec && opts.deadline !== undefined && !timeoutRetried && attempt < MAX_ATTEMPTS - 1 && leftMs(opts) >= TIMEOUT_RETRY_MIN_LEFT_MS) {
+      if (ctx.lastSpec && opts.deadline !== undefined && !opts.noTimeoutRetry && !timeoutRetried && attempt < MAX_ATTEMPTS - 1 && leftMs(opts) >= TIMEOUT_RETRY_MIN_LEFT_MS) {
         timeoutRetried = true;
         await sleep(equalJitterMs(0, 500, ctx.random));
         continue;

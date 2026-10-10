@@ -312,6 +312,24 @@ test("4xx (429 dan tashqari): qayta urinish YO'Q", async () => {
   });
 });
 
+test("llm.ts: timeout + ish muddati → BITTA qayta urinish; `noTimeoutRetry` bilan yo'q", async () => {
+  const abort = () => {
+    throw new DOMException("This operation was aborted", "AbortError");
+  };
+  await withGemini([abort, ok("javob")], async (reqs) => {
+    assert.equal(await llmComplete("S", "U", 500, { deadline: Date.now() + 120_000 }), "javob");
+    assert.equal(reqs.length, 2);
+  });
+  await withGemini([abort, ok("javob")], async (reqs) => {
+    assert.equal(await llmComplete("S", "U", 500, { deadline: Date.now() + 120_000, noTimeoutRetry: true }), null);
+    assert.equal(reqs.length, 1);
+  });
+  await withGemini([abort, ok("javob")], async (reqs) => {
+    assert.equal(await llmComplete("S", "U", 500, {}), null, "muddatsiz — eski qoida");
+    assert.equal(reqs.length, 1);
+  });
+});
+
 test("oqim yo'li ham: bo'sh → ok va yaroqsiz JSON → qayta urinish", async () => {
   const sse = (text: string, finish = "STOP") =>
     new Response(`data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text }] }, finishReason: finish }], usageMetadata: USAGE })}\n\n`, {
@@ -467,6 +485,14 @@ test("zanjir: timeout — oxirgi specda va muddat bilan BITTA qayta urinish; mud
     assert.equal(res2?.text, "javob");
     assert.equal(c.calls.length, 1, "zaxira spec bor — sekin provayder qayta urinilmaydi");
     assert.equal(d.calls.length, 1);
+
+    const f = fake("gemini", [TO, OKA]);
+    assert.equal(
+      await completeWithChain("writer", SPEC, "s", "u", { ...OPTS, deadline: Date.now() + 120_000, noTimeoutRetry: true }, DEPS({ gemini: f.adapter })),
+      null,
+      "ixtiyoriy chaqiruv (tuzatish/tadqiqot) timeout'dan keyin qayta urinilmaydi",
+    );
+    assert.equal(f.calls.length, 1);
 
     const e = fake("gemini", [TO]);
     assert.equal(await completeWithChain("writer", SPEC, "s", "u", { ...OPTS, deadline: Date.now() + 120_000 }, DEPS({ gemini: e.adapter })), null);

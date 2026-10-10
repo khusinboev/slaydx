@@ -60,6 +60,8 @@ export type RoleOpts = Pick<LlmOpts, "json" | "timeoutMs" | "thinking"> & {
    * chaqiruvchi uni ushlashi kerak. Berilmasa — eski xatti-harakat.
    */
   deadline?: number;
+  /** Optional improvement call: a timeout is not retried even when the job deadline would allow it. */
+  noTimeoutRetry?: boolean;
 };
 
 const ADAPTERS: Partial<Record<ProviderId, ProviderAdapter>> = {
