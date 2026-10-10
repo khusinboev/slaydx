@@ -81,7 +81,8 @@ test("computed caveats: rollout coverage, historical split, unpriced, estimated,
   await t.test("empty database: nothing applies → no caveats, no rollout", async () => {
     await reset();
     assert.equal(await cost.spendRollout(pool()), null);
-    assert.deepEqual(await cost.costCaveats(pool(), rWide), []);
+    // Only the always-true notes (the retry gap, today's FX rate) remain.
+    assert.deepEqual(await cost.costCaveats(pool(), rWide), [...cost.COST_CAVEATS]);
     const cov = await cost.spendCoverage(pool(), rWide);
     assert.deepEqual(cov, { jobsWithCost: 0, jobsCompleted: 0, pct: 0, rolloutAt: null, historicalCompleted: 0, historicalWithCost: 0 });
   });
@@ -93,7 +94,7 @@ test("computed caveats: rollout coverage, historical split, unpriced, estimated,
     const cov = await cost.spendCoverage(pool(), rWide);
     assert.deepEqual(cov, { jobsWithCost: 1, jobsCompleted: 2, pct: 50, rolloutAt: null, historicalCompleted: 0, historicalWithCost: 0 });
     const text = await cost.costCaveats(pool(), rWide);
-    assert.equal(text.length, 1);
+    assert.equal(text.length, 1 + cost.COST_CAVEATS.length);
     assert.match(text[0], /^1 ta yangi ishda \(2 ta tugallangandan, 50,0%\) tannarx umuman yozilmagan: Slayd \(1\/2\)\./);
   });
 
@@ -143,7 +144,8 @@ test("computed caveats: rollout coverage, historical split, unpriced, estimated,
 
     const caveats = await cost.costCaveats(pool(), rWide);
     // new-jobs gap, historical gap, and the rollout's own free call ($0.04 of $0.16).
-    assert.equal(caveats.length, 3, caveats.join("\n"));
+    assert.equal(caveats.length, 3 + cost.COST_CAVEATS.length, caveats.join("\n"));
+    assert.deepEqual(caveats.slice(3), [...cost.COST_CAVEATS], "the always-true notes close the list");
     assert.ok(caveats[2].startsWith("Bepul AI so'rovlari") && caveats[2].includes("25,0%"), caveats[2]);
     assert.equal(
       caveats[0],
@@ -238,15 +240,15 @@ test("computed caveats: rollout coverage, historical split, unpriced, estimated,
       caveats.find((x) => x.startsWith("Bepul AI so'rovlari")),
       "Bepul AI so'rovlari (reja, UDK, tuzatish, sayqal): 1 ta chaqiruv, $1.50 — jami AI xarajatining 33,0%. Bu xarajat hech bir vositaning tannarxiga kirmaydi.",
     );
-    assert.equal(caveats.length, 2, caveats.join("\n"));
+    assert.equal(caveats.length, 2 + cost.COST_CAVEATS.length, caveats.join("\n"));
   });
 
-  await t.test("a fully priced, fully covered period has no caveats", async () => {
+  await t.test("a fully priced, fully covered period has only the always-true notes", async () => {
     await reset();
     const c = sonnetJob();
     const id = await gen({ tool: "slide", finishedAt: tk(R, "12:00:00"), costJson: c });
     await usage({ at: tk(R, "12:00:01"), genId: id, tool: "slide", cost: c });
-    assert.deepEqual(await cost.costCaveats(pool(), rWide), []);
+    assert.deepEqual(await cost.costCaveats(pool(), rWide), [...cost.COST_CAVEATS]);
   });
 
   await t.test("a long list of unpriced names is capped, the rest summarised", async () => {

@@ -108,9 +108,8 @@ export type ToolSpendCoverage = SpendCoverage & { toolId: string };
 /**
  * The permanent limits of the data, true for every period. The former ten-sentence
  * list (stale fal.ai / «Gemini TTS is free» rows included) is replaced by
- * `costCaveats`, which computes only what applies, with real numbers. This short
- * remainder stays exported for `admin-pricing.ts`, which has not switched to
- * `costCaveats` yet; drop it once it has.
+ * `costCaveats`, which computes what applies, with real numbers, and ENDS with
+ * these always-true notes (so the AI screen and the pricing screen both show them).
  */
 export const COST_CAVEATS: readonly string[] = Object.freeze([
   // ai_usage_job_once_idx (generation_id, outcome) + lib/server/jobs.ts requeue paths
@@ -559,15 +558,17 @@ const partName = (r: FlaggedRow): string => `${r.provider}:${r.model}`;
 
 /**
  * The known gaps of the spend data for `range`, as Uzbek sentences with the real
- * numbers. Replaces the former static list: an item appears ONLY when it applies, so
- * an empty result means "nothing is known to be missing". Items, in order:
+ * numbers. Replaces the former static list: an item appears ONLY when it applies, and
+ * the always-true `COST_CAVEATS` (the retry gap, today's FX rate on old spend) close the
+ * list, so the computed part is exactly what comes before them. Items, in order:
  *   1. NEW jobs (finished after the rollout) without cost data, per tool;
  *   2. HISTORICAL jobs (finished before the first `ai_usage` row) without cost data;
  *   3. LLM models with tokens but no price (recorded at usd 0);
  *   4. other unpriced services (fal models, TTS models missing from the price book);
  *   5. estimated prices (default image price, TTS tokens estimated from audio length);
  *   6. Google Search grounding, billed per query with the free quota NOT deducted;
- *   7. free-LLM calls (outline, UDK, rewrite, polish): their share of the spend.
+ *   7. free-LLM calls (outline, UDK, rewrite, polish): their share of the spend;
+ *   8. `COST_CAVEATS`, always.
  * Read-only; takes any `Queryable` so the caller's READ ONLY transaction is reused.
  */
 export async function costCaveats(db: Queryable, range: SpendRange): Promise<string[]> {
@@ -656,6 +657,8 @@ export async function costCaveats(db: Queryable, range: SpendRange): Promise<str
       `Bepul AI so'rovlari (reja, UDK, tuzatish, sayqal): ${n(money.rows[0]?.free_calls)} ta chaqiruv, ${usdText(freeUsd)} — jami AI xarajatining ${pctText((freeUsd / allUsd) * 100)}. Bu xarajat hech bir vositaning tannarxiga kirmaydi.`,
     );
   }
+  // Always true, whatever the period: shown last, after the computed items.
+  out.push(...COST_CAVEATS);
   return out;
 }
 
