@@ -3,12 +3,14 @@
 #   /etc/cron.d/slaydx-backup    nightly full backup (01:30), hourly ledger dump, weekly restore drill
 #   /etc/cron.d/slaydx-watchdog  every 3 minutes + a daily digest (alert-only: WATCHDOG_AUTO_RESTART stays 0)
 #   /etc/cron.d/slaydx-auto-deploy  every minute: deploy a promoted origin/main commit (deploy/auto-deploy.sh)
+#   /etc/cron.d/slaydx-metrics   every 5 minutes: host load sample into server_metrics (docs/ops/METRICS.md);
+#                                runs the root-owned copy /usr/local/bin/slaydx-metrics (deploy/ops/slaydx-metrics.sh)
 #   /etc/logrotate.d/slaydx-ops  weekly, 8 rotations, new files 0600 (logs can carry error text)
 # The scripts run from the checkout (/opt/slaydx/scripts, updated by every deploy); the env file
 # /etc/slaydx/backup.env (root 600) already holds TELEGRAM_BOT_TOKEN + BACKUP_TG_CHAT.
 #   deploy/install-ops.sh            install
 #   deploy/install-ops.sh --dry-run  print the files instead of writing them
-# Touches only the three files above. Re-run after changing the schedule.
+# Touches only the files above (+ /usr/local/bin/slaydx-metrics). Re-run after changing the schedule.
 set -euo pipefail
 umask 022
 
@@ -21,6 +23,8 @@ BIN_DIR=${SLAYDX_BIN_DIR:-/usr/local/bin}
 BACKUP_LOG=/var/log/slaydx-backup.log
 AUTO_LOG=/var/log/slaydx-auto-deploy.log
 WATCHDOG_LOG=/var/log/slaydx-watchdog.log
+METRICS_LOG=/var/log/slaydx-metrics.log
+SRC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 for s in watchdog.sh backup-ledger.sh restore-check.sh; do
   [ -f "$APP_DIR/scripts/$s" ] || { echo "ERROR: $APP_DIR/scripts/$s not found — deploy the new version first" >&2; exit 1; }
@@ -45,7 +49,11 @@ auto_cron="# SlaydX auto-deploy (managed by deploy/install-ops.sh): deploys a pr
 # Pause: touch /etc/slaydx/auto-deploy.disabled   Resume: rm it   Skip one commit: put [skip deploy] in its message.
 * * * * * root umask 077; $BIN_DIR/slaydx-auto-deploy >> $AUTO_LOG 2>&1
 "
-logrotate_conf="$BACKUP_LOG $WATCHDOG_LOG $AUTO_LOG {
+metrics_cron="# SlaydX load history (managed by deploy/install-ops.sh): one host sample into server_metrics every 5 minutes.
+# flock inside the script; it always exits 0. Remove this file to stop recording (docs/ops/METRICS.md).
+*/5 * * * * root umask 077; $BIN_DIR/slaydx-metrics >> $METRICS_LOG 2>&1
+"
+logrotate_conf="$BACKUP_LOG $WATCHDOG_LOG $AUTO_LOG $METRICS_LOG {
     weekly
     rotate 8
     missingok
@@ -71,10 +79,15 @@ write() { # path content
 write "$CRON_DIR/slaydx-backup" "$backup_cron"
 write "$CRON_DIR/slaydx-watchdog" "$watchdog_cron"
 write "$CRON_DIR/slaydx-auto-deploy" "$auto_cron"
+write "$CRON_DIR/slaydx-metrics" "$metrics_cron"
 write "$LOGROTATE_DIR/slaydx-ops" "$logrotate_conf"
 
 if [ "$DRY_RUN" = 0 ]; then
+  # Root-owned COPY (not a symlink): a deploy rewrites the checkout while cron may be running the script.
+  install -d -m 0755 "$BIN_DIR"
+  install -m 0750 "$SRC_DIR/ops/slaydx-metrics.sh" "$BIN_DIR/slaydx-metrics"
+  echo "installed: $BIN_DIR/slaydx-metrics"
   # Existing logs created by the old cron lines may be world-readable; they can carry error text.
-  for f in "$BACKUP_LOG" "$WATCHDOG_LOG" "$AUTO_LOG"; do [ -f "$f" ] && chmod 0600 "$f"; done
+  for f in "$BACKUP_LOG" "$WATCHDOG_LOG" "$AUTO_LOG" "$METRICS_LOG"; do [ -f "$f" ] && chmod 0600 "$f"; done
   true
 fi

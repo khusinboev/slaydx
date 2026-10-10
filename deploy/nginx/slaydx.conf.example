@@ -71,6 +71,13 @@ map $arg_bt $slaydx_loggable {
     default 0;
 }
 
+# Load history (docs/ops/METRICS.md): a SECOND, tiny access log of this site only -- epoch time,
+# status and request time -- that the host cron deploy/ops/slaydx-metrics.sh turns into requests
+# per 5 minutes, 2xx/4xx/5xx counts and p50/p95 latency. The shared combined log has no host
+# field, so it cannot be split per site. Same `?bt=` rule as the main log. Rotate it with
+# logrotate like access.log (see docs/ops/METRICS.md). `slaydx_` prefix: shared http{}.
+log_format slaydx_metrics '$msec $status $request_time';
+
 upstream slaydx_web {
     server 127.0.0.1:3000;
     keepalive 16;
@@ -122,6 +129,7 @@ server {
     # No `?bt=` bot link token in the access log (see `map $arg_bt` above). Adjust the path to
     # the box's log location when applying; the owner applies this on the server.
     access_log /var/log/nginx/access.log combined if=$slaydx_loggable;
+    access_log /var/log/nginx/slaydx.access.log slaydx_metrics if=$slaydx_loggable;
 
     # Yuklash chegaralari: `SOURCE_MAX_BYTES`/`TEMPLATE_MAX_BYTES` = 20 MB
     # (`lib/server/source-upload.ts`, `lib/server/template-upload.ts`).
