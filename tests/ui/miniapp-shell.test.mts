@@ -382,7 +382,7 @@ test("BackLink: comes back when BackButton.show throws", async () => {
   assert.ok(backLink());
 });
 
-test("BackLink: the bridge unmounting (e.g. leaving for /admin) restores it", async () => {
+test("BackLink: the bridge unmounting restores it", async () => {
   fresh("/uz/create");
   function Shell() {
     const [bridge, setBridge] = useState(true);

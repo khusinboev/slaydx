@@ -1,7 +1,7 @@
 import "./setup.ts";
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { Fragment, StrictMode, createElement as h, useState } from "react";
+import { Fragment, StrictMode, createElement as h, useState, type ComponentType } from "react";
 import { act, cleanup, render } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { PathnameContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
@@ -143,13 +143,16 @@ function Editor() {
   return null;
 }
 
+/** `Providers` passes `admin` from the pathname (`/admin/**`); the tests drive both together. */
+const isAdmin = (p: string) => p === "/admin" || p.startsWith("/admin/");
+
 function App(props: { path: string }) {
   const [path, setPath] = useState(props.path);
   ctl.path = setPath as (v: never) => void;
   return h(
     AppRouterContext.Provider,
     { value: router },
-    h(PathnameContext.Provider, { value: path }, h(Fragment, null, h(Dialog), h(Editor), h(MiniAppBridge))),
+    h(PathnameContext.Provider, { value: path }, h(Fragment, null, h(Dialog), h(Editor), h(MiniAppBridge as ComponentType<{ admin?: boolean }>, { admin: isAdmin(path) }))),
   );
 }
 
@@ -266,4 +269,101 @@ test("ordinary browser (no webview signal): inert, the stub is never called", as
   await mount("/uz/create");
   assert.deepEqual(tg.log, []);
   assert.ok(!document.querySelector(`script[src="${SRC}"]`));
+});
+
+// ---------------------------------------------------------------- admin panel (docs/nav/ADMIN-BACK.md)
+
+test("admin: BackButton shown on /admin; click on a fresh deep link → replace /uz/profile", async () => {
+  fresh("/admin");
+  await mount("/admin");
+  assert.equal(tg.visible, true);
+  assert.equal(tg.handlers.length, 1);
+  await act(async () => {
+    tg.handlers[0]!();
+  });
+  await settle();
+  assert.deepEqual(calls, ["replace /uz/profile"]);
+  assert.equal(here(), "/uz/profile");
+});
+
+test("admin: a section goes back to /admin, a detail page to its list", async () => {
+  fresh("/admin/pricing");
+  await mount("/admin/pricing");
+  assert.equal(tg.visible, true);
+  await act(async () => {
+    tg.handlers[0]!();
+  });
+  await settle();
+  assert.deepEqual(calls, ["replace /admin"]);
+
+  cleanup();
+  fresh("/admin/users/42");
+  await mount("/admin/users/42");
+  assert.equal(tg.visible, true);
+  await act(async () => {
+    tg.handlers[0]!();
+  });
+  await settle();
+  assert.deepEqual(calls, ["replace /admin/users"]);
+});
+
+test("admin: login and enroll pages stay roots (BackButton hidden)", async () => {
+  fresh("/admin/login");
+  await mount("/admin/login");
+  assert.equal(tg.visible, false);
+  act(() => ctl.path!("/admin/enroll" as never));
+  await settle();
+  assert.equal(tg.visible, false);
+});
+
+test("admin: profile → /admin keeps ONE live handler and a shown button (no dead button after the hand-over)", async () => {
+  fresh("/uz/profile");
+  await mount("/uz/profile");
+  assert.equal(tg.visible, true);
+  tg.log.length = 0;
+  calls.length = 0;
+  act(() => {
+    router.push("/admin" + HASH);
+    ctl.path!("/admin" as never);
+  });
+  await settle();
+  assert.equal(tg.visible, true);
+  assert.equal(tg.handlers.length, 1, "the bridge was not remounted");
+  assert.ok(!tg.log.includes("offClick"), tg.log.join(","));
+  assert.ok(!tg.log.includes("hide"), tg.log.join(","));
+  // The button works from the panel: in-app history is back, else the parent.
+  await act(async () => {
+    tg.handlers[0]!();
+  });
+  await settle();
+  assert.equal(here(), "/uz/profile");
+  assert.deepEqual(calls, ["push /admin" + HASH], "back, not a replace or a second push");
+});
+
+test("admin: the bridge does not log in or switch the consumer account on admin paths", async () => {
+  const urls: string[] = [];
+  const track = () => {
+    (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown) => {
+      urls.push(String(input));
+      return new Response(JSON.stringify({ user: { id: "1" }, generations: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+  };
+  // Control: on a consumer page with signed launch data and nobody signed in, the bridge logs in.
+  fresh("/uz/create");
+  useAppStore.setState({ sessionChecked: true, loggedIn: false });
+  track();
+  await mount("/uz/create");
+  assert.ok(urls.some((u) => u.includes("/api/auth/telegram")), urls.join(","));
+
+  cleanup();
+  fresh("/admin");
+  useAppStore.setState({ sessionChecked: true, loggedIn: false });
+  urls.length = 0;
+  track();
+  await mount("/admin");
+  assert.ok(!urls.some((u) => u.includes("/api/auth/telegram")), urls.join(","));
+  assert.equal(tg.visible, true, "the BackButton still works there");
 });

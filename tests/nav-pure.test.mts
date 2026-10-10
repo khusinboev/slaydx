@@ -63,7 +63,7 @@ test("parentOf: the R4 §6 table", () => {
     ["/", null],
     ["/uz", null],
     ["/o/Ab3dEf", null],
-    ["/admin", null],
+    ["/admin", "/uz/profile"],
     ["/admin/login", null],
     ["/admin/enroll", null],
     ["/uz/create", "/uz"],
@@ -120,11 +120,12 @@ test("parentOf: unknown routes stay on the site", () => {
 });
 
 test("isRootPath and adminListOf", () => {
-  for (const p of ["/uz", "/o/x", "/admin", "/admin/login", "/admin/enroll", "/"]) assert.equal(isRootPath(p), true, p);
+  for (const p of ["/uz", "/o/x", "/admin/login", "/admin/enroll", "/"]) assert.equal(isRootPath(p), true, p);
   for (const p of [
     "/uz/create",
     "/uz/files/1",
     "/uz/slide",
+    "/admin",
     "/admin/users",
     "/admin/users/1",
     "/o",
@@ -152,7 +153,10 @@ test("telegramBackState: BackButton iff an overlay is open or the route is not a
   const rows: Array<[overlays: number, pathname: string, back: boolean]> = [
     [0, "/uz", false],
     [0, "/o/Ab3dEf", false],
-    [0, "/admin", false],
+    [0, "/admin", true],
+    [0, "/admin/pricing", true],
+    [0, "/admin/login", false],
+    [0, "/admin/enroll", false],
     [1, "/uz", true],
     [2, "/o/Ab3dEf", true],
     [0, "/uz/create", true],

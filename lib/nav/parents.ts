@@ -53,7 +53,8 @@ export const ROUTE_RULES: readonly RouteRule[] = [
   { route: "/", match: /^\/$/, parent: null },
   { route: "/uz", match: /^\/uz$/, parent: null },
   { route: "/o/[token]", match: new RegExp(`^/o/${SEG}$`), parent: null },
-  { route: "/admin", match: /^\/admin$/, parent: null },
+  // The panel's home goes back to the profile, where «Admin panel» lives (docs/nav/ADMIN-BACK.md).
+  { route: "/admin", match: /^\/admin$/, parent: "/uz/profile" },
   { route: "/admin/login", match: /^\/admin\/login$/, parent: null },
   { route: "/admin/enroll", match: /^\/admin\/enroll$/, parent: null },
   { route: "/uz/create", match: /^\/uz\/create$/, parent: "/uz" },
@@ -101,7 +102,7 @@ export function matchRoute(pathname: string): RouteRule | null {
   return ROUTE_RULES.find((r) => r.match.test(p)) ?? null;
 }
 
-/** `true` for routes with no in-app parent (`/uz`, `/o/*`, `/admin`, admin login/enroll). */
+/** `true` for routes with no in-app parent (`/uz`, `/o/*`, admin login/enroll). */
 export function isRootPath(pathname: string): boolean {
   const rule = matchRoute(pathname);
   return rule != null && rule.parent === null;
