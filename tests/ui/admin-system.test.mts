@@ -107,12 +107,21 @@ function systemBody(over: Partial<SystemStatus> = {}): SystemStatus {
   };
 }
 
+/** «Yuklama tarixi» has its own endpoint (tests/ui/admin-load-history.test.mts); these tests only need it to answer. */
+const EMPTY_METRICS = {
+  range: "24h", from: new Date(NOW - 86_400_000).toISOString(), to: new Date(NOW).toISOString(), bucketSec: 300,
+  hasData: false, truncated: false, host: [], app: [], containers: [],
+  peaks: { activeUsers: null, memUsedPct: null, oldestQueuedSec: null, waitP95Sec: null, load1: null },
+};
+const stubSystem = (handler: (call: Call, n: number) => Response | Promise<Response>): Call[] =>
+  stubFetch((call, n) => (call.url.pathname === "/api/admin/system/metrics" ? json(200, EMPTY_METRICS) : handler(call, n)));
+
 const renderSystem = (permissions?: string[]) => renderAt("/admin/system", "", () => h(SystemPage), permissions);
 
 test("system: loading skeleton, then tiles, processes, housekeeping and config", async () => {
   let release: () => void = () => {};
   const gate = new Promise<void>((r) => (release = r));
-  const calls = stubFetch(async () => {
+  const calls = stubSystem(async () => {
     await gate;
     return json(200, systemBody());
   });
@@ -120,9 +129,9 @@ test("system: loading skeleton, then tiles, processes, housekeeping and config",
   assert.ok(container.querySelector('[aria-busy="true"]'), "loading skeleton");
   release();
   await screen.findByText("Ulangan");
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].url.pathname, "/api/admin/system");
-  assert.ok(calls[0].signal, "the request carries an AbortSignal");
+  const sys = calls.filter((c) => c.url.pathname === "/api/admin/system");
+  assert.equal(sys.length, 1);
+  assert.ok(sys[0].signal, "the request carries an AbortSignal");
 
   const body = container.textContent ?? "";
   assert.match(body, /4 ms/);
@@ -155,7 +164,7 @@ test("system: loading skeleton, then tiles, processes, housekeeping and config",
 });
 
 test("system: clean config, DB down, pending migrations and an idle system render their own states", async () => {
-  stubFetch(() =>
+  stubSystem(() =>
     json(
       200,
       systemBody({
@@ -182,7 +191,7 @@ test("system: clean config, DB down, pending migrations and an idle system rende
 
 test("system: error shows the message and requestId; retry reloads", async () => {
   let n = 0;
-  stubFetch(() => {
+  stubSystem(() => {
     n += 1;
     return n === 1 ? json(500, { error: "Ichki xatolik", requestId: "req-sys-7" }) : json(200, systemBody());
   });
@@ -196,17 +205,17 @@ test("system: error shows the message and requestId; retry reloads", async () =>
 });
 
 test("system: 403 renders the forbidden state without data; the refresh button reloads", async () => {
-  stubFetch(() => json(403, { error: "Bu amal uchun ruxsatingiz yo'q", code: "forbidden" }));
+  stubSystem(() => json(403, { error: "Bu amal uchun ruxsatingiz yo'q", code: "forbidden" }));
   renderSystem();
   await screen.findByText("Ruxsat yo'q");
   assert.ok(!screen.queryByText("Ulangan"));
   cleanup();
 
-  const calls = stubFetch(() => json(200, systemBody()));
+  const calls = stubSystem(() => json(200, systemBody()));
   renderSystem();
   await screen.findByText("Ulangan");
   fireEvent.click(screen.getByRole("button", { name: "Yangilash" }));
-  await waitFor(() => assert.equal(calls.length, 2));
+  await waitFor(() => assert.equal(calls.filter((c) => c.url.pathname === "/api/admin/system").length, 2));
 });
 
 // ───────────────────────────── errors

@@ -34,6 +34,7 @@ export { TabPanel, Tabs, type TabItem } from "./Tabs";
 export { Toaster, toast, useToastStore, type ToastOptions, type ToastTone } from "./Toaster";
 export { useLoad, type LoadState } from "./useLoad";
 export { LineChart, type LinePoint } from "./charts/LineChart";
+export { MultiLineChart, type MultiLinePoint, type MultiLineSeries } from "./charts/MultiLineChart";
 export { Sparkline } from "./charts/Sparkline";
 export { StackedBarChart, type BarDatum, type BarSeries } from "./charts/StackedBarChart";
 export { niceTicks } from "./charts/ticks";

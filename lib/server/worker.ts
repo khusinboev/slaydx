@@ -41,6 +41,8 @@ import { purgeBonusFiles } from "./retention";
 import { purgeSourceCache } from "../generation/research/cache";
 import { refundUnrefundedFailed } from "./refund-reconcile";
 import { purgePaymentEvents } from "./payment-events";
+import { METRICS_RETENTION_DAYS, purgeServerMetrics, recordAppSample } from "./server-metrics";
+import { runAlerts } from "./server-alerts";
 import { purgeStaleCardTokens } from "./payments";
 import { query, queryOne } from "./db";
 import type { ToolConfig, ToolId } from "../types";
@@ -104,6 +106,8 @@ let lastRetentionAt = -Infinity;
  */
 const PAYMENT_EVENTS_RETENTION_DAYS = 365;
 let lastPaymentEventsPurgeAt = -Infinity;
+/** `server_metrics` retention purge (90 days): same 6 hour cadence, mark before the DELETE. */
+let lastServerMetricsPurgeAt = -Infinity;
 
 /**
  * Sinov uchun: keyingi `housekeeping()` 6 soatlik qadamlarni (saqlash
@@ -112,6 +116,7 @@ let lastPaymentEventsPurgeAt = -Infinity;
 export function resetRetentionScan(): void {
   lastRetentionAt = -Infinity;
   lastPaymentEventsPurgeAt = -Infinity;
+  lastServerMetricsPurgeAt = -Infinity;
   lastStaySweepAt = -Infinity;
 }
 
@@ -917,6 +922,21 @@ export async function recoverJobs(): Promise<void> {
  * qilmaydi (tiklash `recoverJobs` da, qulfsiz).
  */
 export async function purgeHousekeeping(): Promise<void> {
+  /*
+   * Load history (docs/ops/METRICS.md): one app sample per minute + the load alerts. FIRST and
+   * bounded (10 s statement timeout, read-only), so a slow later step never makes a gap in the
+   * time series. Leader only (this function runs behind the advisory lock); `recordAppSample`
+   * also skips when a sample is younger than 45 s. Sampling and alerts are separate steps: an
+   * alert problem never stops the sampling and vice versa.
+   */
+  await step("server-metrics", async () => (await recordAppSample()) ? 1 : 0);
+  await step("server-alerts", async () => (await runAlerts()).sent.length);
+  if (Date.now() - lastServerMetricsPurgeAt >= RETENTION_EVERY_MS) {
+    await step("server-metrics-purge", async () => {
+      lastServerMetricsPurgeAt = Date.now();
+      return purgeServerMetrics(METRICS_RETENTION_DAYS);
+    });
+  }
   /*
    * Saqlash muddati (C23): faqat bonus bilan to'langan tayyor ishlarning
    * fayllari `RETENTION_BONUS_DAYS` dan keyin tozalanadi. Pullik ishlar —

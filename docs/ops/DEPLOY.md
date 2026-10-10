@@ -72,8 +72,9 @@ slaydx-deploy-build                         # ZAXIRA yo'l: eski usul, serverda b
 | `/etc/cron.d/slaydx-backup` | 01:30 to'liq zaxira · har soat ledger (`:05`) · yakshanba 05:00 tiklash sinovi | `deploy/install-ops.sh` yozadi |
 | `/etc/cron.d/slaydx-watchdog` | har 3 daqiqa tekshiruv · 06:00 kunlik hisobot | faqat ogohlantiradi (`WATCHDOG_AUTO_RESTART=1` bo'lsa qayta ishga tushiradi) |
 | `/etc/cron.d/slaydx-auto-deploy` | har daqiqa avto-deploy | |
+| `/etc/cron.d/slaydx-metrics` | har 5 daqiqada server yuklamasi namunasi (`server_metrics`, kind `host`) | `deploy/install-ops.sh` yozadi; batafsil `docs/ops/METRICS.md` |
 | `/etc/logrotate.d/slaydx-ops` | haftalik, 8 ta, `create 0600` | |
-| `/usr/local/bin/` | `slaydx-deploy`, `slaydx-deploy-build`, `slaydx-backup`, `slaydx-auto-deploy` | root nusxalari (symlink emas) |
+| `/usr/local/bin/` | `slaydx-deploy`, `slaydx-deploy-build`, `slaydx-backup`, `slaydx-auto-deploy`, `slaydx-metrics` | root nusxalari (symlink emas) |
 
 Skriptlar uchun muhit o'zgaruvchilari (odatda tegilmaydi): `SLAYDX_APP_DIR` (/opt/slaydx), `SLAYDX_STATE_DIR`, `SLAYDX_LOCK_FILE`
 (/run/lock/slaydx-deploy.lock — watchdog ham shuni tekshiradi), `SLAYDX_AUTO_MAX_PER_HOUR` (6), `SLAYDX_REGISTRY` (ghcr.io/khusinboev),
