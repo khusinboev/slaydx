@@ -249,7 +249,10 @@ function Ready({
         <KpiTile
           label="Marja"
           value={<span className={MARGIN_TEXT[marginTone(totals.marginPct)]}>{pctText(totals.marginPct)}</span>}
-          hint={`tugallangan ishlarning ro'yxat narxi (ball bilan to'langani ham) − tannarx − komissiya ${pctText(data.paymentFeePercent)}`}
+          hint={
+            `tugallangan ishlarning ro'yxat narxi (ball bilan to'langani ham) − tannarx − komissiya ${pctText(data.paymentFeePercent)}` +
+            (totals.uncoveredTools.length > 0 ? `. Tannarxi o'lchanmagan vositalar jamiga kirmagan: ${totals.uncoveredTools.join(", ")}` : "")
+          }
         />
         <KpiTile label="Naqd marja" value={pctText(totals.cashMarginPct)} hint="faqat naqd pul tushumi bo'yicha (ball hisobga olinmaydi)" />
         <KpiTile

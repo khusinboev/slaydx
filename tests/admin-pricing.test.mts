@@ -536,7 +536,12 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     assert.equal(totals.revenue, 28000);
     assert.equal(totals.revenueSoum, 28000 * SOUM_PER_COIN);
     assert.equal(totals.feeSoum, 0);
-    near(totals.marginPct, ((28000 - tools * FX) / 28000) * 100, "marginPct from tools cost");
+    // The headline cost is the UNIT cost × completed jobs per tool (essay 800 × 3, slide 2 640 × 3, translation 6 000,
+    // image 408 = 16 728), not the raw spend: essay J3 has no cost data and must not count as free.
+    assert.equal(totals.marginRevenueSoum, 28000);
+    assert.equal(totals.marginCostSoum, 16728);
+    assert.deepEqual(totals.uncoveredTools, []);
+    near(totals.marginPct, ((28000 - 16728) / 28000) * 100, "marginPct from unit costs");
     // CASH (earlier formula): the 26 000 of wallet cash, same tools' cost.
     near(totals.cashMarginPct, ((26000 - tools * FX) / 26000) * 100, "cashMarginPct from tools cost");
     // J3 is the only points job: 2 000 of the 28 000 the completed jobs paid.
@@ -576,7 +581,7 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     assert.equal(o.totals.revenue, 28000);
     assert.equal(o.totals.revenueSoum, 56000);
     const tools = 0.14 + 0.66 + 0.5 + 0.034;
-    near(o.totals.marginPct, ((56000 - tools * FX) / 56000) * 100, "totals primary margin on so'm revenue");
+    near(o.totals.marginPct, ((56000 - 16728) / 56000) * 100, "totals primary margin on so'm revenue");
     near(o.totals.cashMarginPct, ((52000 - tools * FX) / 52000) * 100, "totals cash margin on so'm revenue");
 
     const sim = await ap.simulatePricing("essay", { percent: 120, roundTo: 500 }, { soumPerCoin: 2 });
@@ -584,11 +589,12 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     // The completed essay jobs only (J1–J3 = 8 000 tanga; the failed J4 and the queued J5 are not revenue).
     assert.equal(sim.current.revenue30d, 8000);
     assert.equal(sim.current.revenue30dSoum, 16000);
-    assert.equal(sim.current.cost30d, 1680);
-    // (16 000 − 1 680) ÷ 16 000 = 89.5 %; projected 9 500 tanga = 19 000 so'm: (19 000 − 1 680) ÷ 19 000 = 91.16 %.
-    assert.equal(sim.current.marginPct, 89.5);
+    // Unit cost (0.06 + 0.02 ÷ 3) × 3 jobs = 0.2 USD = 2 400 so'm (the raw spend 1 680 would count J3 as free):
+    // (16 000 − 2 400) ÷ 16 000 = 85 %; projected 9 500 tanga = 19 000 so'm: (19 000 − 2 400) ÷ 19 000 = 87.37 %.
+    assert.equal(sim.current.cost30d, 2400);
+    assert.equal(sim.current.marginPct, 85);
     assert.equal(sim.projected.revenue30dSoum, 19000);
-    assert.equal(sim.projected.marginPct, 91.16);
+    assert.equal(sim.projected.marginPct, 87.37);
     await assert.rejects(() => ap.pricingOverview(parseDateRange(D, D2), { soumPerCoin: 0 }));
   });
 
@@ -658,15 +664,16 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     const current = r.body.current as Record<string, number | null>;
     const projected = r.body.projected as Record<string, number | null>;
     // Current: the three COMPLETED essay jobs (J1–J3; the failed and the queued ones are no revenue) as listed = 8 000;
-    // cost = (0.12 + 0.02) × 12 000 = 1 680, so the margin is (8 000 − 1 680) ÷ 8 000 = 79 % — the table's primary basis.
+    // cost = unit cost (0.06 + 0.02 ÷ 3 USD) × 3 jobs × 12 000 = 2 400 (J3 has no cost data, so the raw 1 680 would undercount),
+    // so the margin is (8 000 − 2 400) ÷ 8 000 = 70 % — the table's primary margin of the essay row.
     assert.equal(current.jobs, 3);
     assert.equal(current.revenue30d, 8000);
-    assert.equal(current.cost30d, 1680);
-    assert.equal(current.marginPct, 79);
+    assert.equal(current.cost30d, 2400);
+    assert.equal(current.marginPct, 70);
     // Projected: bases 2 500, 3 500, 2 000 × 1.2 rounded to 500 = 3 000 + 4 000 + 2 500 = 9 500.
     assert.equal(projected.revenue30d, 9500);
-    assert.equal(projected.cost30d, 1680);
-    assert.equal(projected.marginPct, 82.32);
+    assert.equal(projected.cost30d, 2400);
+    assert.equal(projected.marginPct, 74.74);
     assert.equal(r.body.partial, false);
     assert.equal((r.body.window as { days: number }).days, 30);
     // 100 % → the base ladder and the current revenue, byte for byte.

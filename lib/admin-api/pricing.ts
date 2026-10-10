@@ -97,8 +97,14 @@ export type PricingTotals = {
   /** Net listed revenue of the completed jobs, tanga, and in so'm. */
   revenue: number;
   revenueSoum: number;
-  /** Payment fee on that revenue, so'm. */
+  /** The headline margin's basis: revenue of the tools whose cost is known, and their cost (unit cost × completed jobs). */
+  marginRevenueSoum: number;
+  marginCostSoum: number;
+  /** Payment fee on marginRevenueSoum, so'm. */
   feeSoum: number;
+  /** Revenue (so'm) and titles of tools with completed jobs but NO cost data: left out of the margin. */
+  uncoveredRevenueSoum: number;
+  uncoveredTools: string[];
   /** PRIMARY margin, %. */
   marginPct: number | null;
   /** CASH margin, % (earlier formula). */
@@ -152,7 +158,7 @@ export type PricingDetail = {
  * revenue30d in tanga (listed price of the completed jobs minus refunds); revenue30dSoum, feeSoum and cost30d in
  * so'm; the margin is the table's primary one: (revenue − fee − cost) ÷ revenue.
  */
-export type Projection = { revenue30d: number; revenue30dSoum: number; feeSoum: number; cost30d: number; marginPct: number | null };
+export type Projection = { revenue30d: number; revenue30dSoum: number; feeSoum: number; cost30d: number | null; marginPct: number | null };
 
 export type Simulation = {
   toolId: string;

@@ -463,9 +463,18 @@ export type PricingTotals = {
   revenue: number;
   /** revenue × SOUM_PER_COIN. */
   revenueSoum: number;
-  /** revenueSoum × payment fee %, so'm. */
+  /**
+   * The headline margin's basis: the revenue of the tools whose cost is KNOWN, and their cost = Σ unit cost (full cost
+   * per completed job) × completed jobs — not the raw spend, which would ignore the jobs without cost data.
+   */
+  marginRevenueSoum: number;
+  marginCostSoum: number;
+  /** Payment fee on marginRevenueSoum, so'm. */
   feeSoum: number;
-  /** PRIMARY: (revenueSoum − feeSoum − costSoumTools) ÷ revenueSoum × 100; `null` without revenue. */
+  /** Completed jobs' revenue (so'm) of tools with NO cost data at all, and their titles: left out of the margin, flagged in the UI. */
+  uncoveredRevenueSoum: number;
+  uncoveredTools: string[];
+  /** PRIMARY: (marginRevenueSoum − feeSoum − marginCostSoum) ÷ marginRevenueSoum × 100; `null` without revenue. */
   marginPct: number | null;
   /** CASH (earlier formula): (cashRevenueSoum − costSoumTools) ÷ cashRevenueSoum × 100; `null` without cash revenue. */
   cashMarginPct: number | null;
@@ -729,8 +738,13 @@ export function recommendedPercent(current: number, markup: number | null, targe
  * margin, the total and the simulator get their arithmetic from.
  */
 export function marginPercent(revenueSoum: number | null, costSoum: number | null, feePercent = 0): number | null {
-  if (revenueSoum === null || costSoum === null || !(revenueSoum > 0)) return null;
-  return ((revenueSoum * (1 - feePercent / 100) - costSoum) / revenueSoum) * 100;
+  return revenueSoum === null ? null : marginAfterFee(revenueSoum, costSoum, (revenueSoum * feePercent) / 100);
+}
+
+/** `(revenue − fee − cost) ÷ revenue × 100` with the fee already in so'm (a sum over tools with different fee bases). */
+export function marginAfterFee(revenueSoum: number, costSoum: number | null, feeSoum: number): number | null {
+  if (costSoum === null || !(revenueSoum > 0)) return null;
+  return ((revenueSoum - feeSoum - costSoum) / revenueSoum) * 100;
 }
 
 /** `admins` query value: absent = admin accounts left out; `1` = included; anything else is a 400. */
@@ -772,7 +786,11 @@ export async function pricingOverview(range: DateRange, opts?: MoneyOptions & { 
     costUsdAll: 0,
     revenue: 0,
     revenueSoum: 0,
+    marginRevenueSoum: 0,
+    marginCostSoum: 0,
     feeSoum: 0,
+    uncoveredRevenueSoum: 0,
+    uncoveredTools: [],
     marginPct: null,
     cashMarginPct: null,
     bonusCostSoum: 0,
@@ -781,6 +799,13 @@ export async function pricingOverview(range: DateRange, opts?: MoneyOptions & { 
   let netPoints = 0;
   let netPaid = 0;
   let bonusCostUsd = 0;
+  // The headline margin's basis: ONLY tools whose cost is known. Their cost is the unit cost × completed jobs
+  // (as in the rows), never the raw spend, so jobs without cost data cannot make the total look cheaper.
+  let marginRevenueSoum = 0;
+  let marginCostSoum = 0;
+  let marginFeeSoum = 0;
+  let uncoveredRevenueSoum = 0;
+  const uncoveredTools: string[] = [];
 
   const items: PricingItem[] = TOOLS.map((tool) => {
     const id = tool.id;
@@ -816,6 +841,15 @@ export async function pricingOverview(range: DateRange, opts?: MoneyOptions & { 
     netPoints += rev.netPoints;
     netPaid += rev.netPoints + rev.netCash;
     if (pointsShare !== null) bonusCostUsd += toolSpendUsd * pointsShare;
+    if (avgRevenueSoum !== null && fullCostSoum !== null) {
+      marginRevenueSoum += avgRevenueSoum * oc.completed;
+      marginCostSoum += fullCostSoum * oc.completed;
+      marginFeeSoum += (avgRevenueSoum * oc.completed * feePercent) / 100;
+    } else if (avgRevenueSoum !== null) {
+      // Completed jobs, but no cost data at all: flagged, not counted as free.
+      uncoveredRevenueSoum += avgRevenueSoum * oc.completed;
+      uncoveredTools.push(tool.title);
+    }
 
     const r2 = (v: number | null): number | null => (v === null ? null : round(v, 2));
     return {
@@ -865,8 +899,12 @@ export async function pricingOverview(range: DateRange, opts?: MoneyOptions & { 
   totals.costUsdOther = round(Math.max(0, agg.spendAllUsd - totals.costUsdTools), 6);
   totals.cashRevenueSoum = round(totals.cashRevenue * k, 2);
   totals.revenueSoum = round(totals.revenue * k, 2);
-  totals.feeSoum = round((totals.revenueSoum * feePercent) / 100, 2);
-  const totalMargin = marginPercent(totals.revenueSoum, totals.costSoumTools, feePercent);
+  totals.marginRevenueSoum = round(marginRevenueSoum, 2);
+  totals.marginCostSoum = round(marginCostSoum, 2);
+  totals.feeSoum = round(marginFeeSoum, 2);
+  totals.uncoveredRevenueSoum = round(uncoveredRevenueSoum, 2);
+  totals.uncoveredTools = uncoveredTools;
+  const totalMargin = marginAfterFee(marginRevenueSoum, marginCostSoum, marginFeeSoum);
   totals.marginPct = totalMargin === null ? null : round(totalMargin, 2);
   const totalCashMargin = marginPercent(totals.cashRevenueSoum, totals.costSoumTools);
   totals.cashMarginPct = totalCashMargin === null ? null : round(totalCashMargin, 2);
@@ -991,8 +1029,8 @@ export type Projection = {
   revenue30dSoum: number;
   /** Payment fee on that revenue (`pricing.payment_fee_percent`), so'm. */
   feeSoum: number;
-  /** Σ AI spend of every outcome in the window, so'm. */
-  cost30d: number;
+  /** AI cost of the window, so'm: the table's full cost per job × the completed jobs; `null` when no job has cost data. */
+  cost30d: number | null;
   /** (revenue30dSoum − feeSoum − cost30d) ÷ revenue30dSoum × 100; `null` without revenue. The table's primary margin. */
   marginPct: number | null;
 };
@@ -1055,7 +1093,13 @@ const PRICE_INPUTS_SQL = `jsonb_strip_nulls(jsonb_build_object(
 
 type ProjectionRow = { price: string; net: string; inputs: FormValues };
 /** `net` = price minus refunds (what the job really kept); `ratio` = net ÷ price, 0 for an unpriced job. */
-type ProjectionInputs = { jobs: { net: number; ratio: number; base: number }[]; costUsd: number; partial: boolean; range: DateRange };
+type ProjectionInputs = {
+  jobs: { net: number; ratio: number; base: number }[];
+  /** The tool's spend rows of the window, as the table's unit cost is built from them. */
+  spend: { completedUsd: number; completedRecords: number; failedUsd: number };
+  partial: boolean;
+  range: DateRange;
+};
 
 async function projectionInputs(toolId: ToolId, includeAdmins: boolean): Promise<ProjectionInputs> {
   // Always the last 30 Tashkent days (the simulator's window is fixed by §17.4).
@@ -1080,11 +1124,15 @@ async function projectionInputs(toolId: ToolId, includeAdmins: boolean): Promise
         return { net, ratio: price > 0 ? net / price : 0, base: basePriceFor(tool, r.inputs ?? {}) };
       });
       const spend = spendRowsSql({ fromTs: range.fromTs, toTsExclusive: range.toTsExclusive });
-      const cost = await c.query<{ usd: string }>(
-        `SELECT COALESCE(sum(s.usd), 0) AS usd FROM (${spend.sql}) s WHERE s.tool_id = $3 AND ${spendFilter(includeAdmins)}`,
+      const cost = await c.query<{ c_usd: string; c_records: string; f_usd: string }>(
+        `SELECT COALESCE(sum(s.usd) FILTER (WHERE s.outcome = 'completed'), 0) AS c_usd,
+                count(*) FILTER (WHERE s.outcome = 'completed') AS c_records,
+                COALESCE(sum(s.usd) FILTER (WHERE s.outcome IN ('failed', 'abandoned')), 0) AS f_usd
+           FROM (${spend.sql}) s WHERE s.tool_id = $3 AND ${spendFilter(includeAdmins)}`,
         [...spend.params, toolId],
       );
-      return { jobs, costUsd: num(cost.rows[0]?.usd), partial, range };
+      const row = cost.rows[0];
+      return { jobs, spend: { completedUsd: num(row?.c_usd), completedRecords: num(row?.c_records), failedUsd: num(row?.f_usd) }, partial, range };
     }),
   );
 }
@@ -1095,7 +1143,9 @@ async function projectionInputs(toolId: ToolId, includeAdmins: boolean): Promise
  *   current.revenue30d   = Σ_completed jobs max(price − refunds, 0)            (what was actually listed and kept)
  *   projected.revenue30d = Σ_completed jobs applyPriceAdjust(basePriceFor(tool, job inputs), proposed) × net ÷ price
  *                          (a job refunded in part stays refunded in the same share; an unpriced job stays unpriced)
- *   cost30d              = Σ spend rows of the tool, every outcome × fx          (so'm; a price change does not change cost)
+ *   cost30d              = (completed spend ÷ completed spend records + failed/abandoned spend ÷ completed jobs) × completed jobs × fx
+ *                          — the table's full cost per job × the jobs of the window, NOT the raw spend (jobs without cost data
+ *                          would otherwise count as free); `null` when no job has cost data. A price change does not change cost.
  *   revenue30dSoum       = revenue30d × SOUM_PER_COIN                            (tanga → so'm)
  *   feeSoum              = revenue30dSoum × pricing.payment_fee_percent ÷ 100
  *   marginPct            = (revenue30dSoum − feeSoum − cost30d) ÷ revenue30dSoum × 100
@@ -1107,7 +1157,10 @@ export async function simulatePricing(toolId: ToolId, proposed: PriceAdjust, opt
   const includeAdmins = opts?.includeAdmins === true;
   const [inputs, fx, feePercent] = await Promise.all([projectionInputs(toolId, includeAdmins), soumPerUsd(), getSetting("pricing.payment_fee_percent")]);
   const adj: PriceAdjust | null = proposed.percent === 100 ? null : proposed;
-  const cost30d = round(inputs.costUsd * fx, 2);
+  const sp = inputs.spend;
+  const jobsCount = inputs.jobs.length;
+  const unitCostUsd = sp.completedRecords > 0 && jobsCount > 0 ? sp.completedUsd / sp.completedRecords + sp.failedUsd / jobsCount : null;
+  const cost30d = unitCostUsd === null ? null : round(unitCostUsd * jobsCount * fx, 2);
   let currentRevenue = 0;
   let projectedRevenue = 0;
   for (const j of inputs.jobs) {

@@ -224,7 +224,11 @@ function overview(over: Partial<PricingOverview> = {}): PricingOverview {
       costUsdAll: 322.75,
       revenue: 9_100_000,
       revenueSoum: 9_100_000,
-      feeSoum: 227_500,
+      marginRevenueSoum: 8_900_000,
+      marginCostSoum: 3_700_000,
+      feeSoum: 222_500,
+      uncoveredRevenueSoum: 200_000,
+      uncoveredTools: ["Maqola"],
       marginPct: 36.85,
       cashMarginPct: 21.5,
       bonusCostSoum: 1_670_000,
@@ -371,6 +375,7 @@ test("loading skeleton, then KPI tiles, coverage banner with caveats and the tab
   const marginTile = screen.getByText("Marja", { selector: "span" }).parentElement!;
   assert.match(marginTile.textContent ?? "", /ball bilan to'langani ham/);
   assert.match(marginTile.textContent ?? "", /komissiya 2,5%/);
+  assert.match(marginTile.textContent ?? "", /Tannarxi o'lchanmagan vositalar jamiga kirmagan: Maqola/);
   const cashTile = screen.getByText("Naqd marja", { selector: "span.uppercase" }).parentElement!;
   assert.ok(within(cashTile).getByText("21,5%"));
   assert.match(cashTile.textContent ?? "", /ball hisobga olinmaydi/);

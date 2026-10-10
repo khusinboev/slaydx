@@ -191,30 +191,37 @@ const itemOf = (r: Result, toolId: string): Item => {
 
 async function seedJob(o: {
   user: TestUser;
-  pages: string;
+  /** Essay pages, unless `toolId` + `values` are given. */
+  pages?: string;
+  toolId?: "essay" | "slide" | "image";
+  values?: FormValues;
   at: string;
   status?: "COMPLETED" | "FAILED";
-  usage: { outcome: "completed" | "failed"; usd: number };
+  /** Omitted = a job with NO cost data. */
+  usage?: { outcome: "completed" | "failed"; usd: number };
   refund?: "full" | number;
 }): Promise<{ id: string; price: number }> {
-  const tool = TOOL_BY_ID.essay;
-  const values: FormValues = { essayContext: "school_dtm", pages: o.pages };
+  const toolId = o.toolId ?? "essay";
+  const tool = TOOL_BY_ID[toolId];
+  const values: FormValues = o.values ?? { essayContext: "school_dtm", pages: o.pages ?? "2" };
   const price = basePriceFor(tool, values);
-  const res = await enqueueGeneration({ userId: o.user.id, toolId: "essay", topic: "fixture", price, format: tool.output, values, budgetMs: 1000 });
+  const res = await enqueueGeneration({ userId: o.user.id, toolId, topic: "fixture", price, format: tool.output, values, budgetMs: 1000 });
   assert.ok(res.ok, `seed: ${JSON.stringify(res)}`);
   const finished = new Date(new Date(o.at).getTime() + 300_000).toISOString();
   await query(`UPDATE generations SET created_at = $2, status = $3, finished_at = $4 WHERE id = $1`, [res.id, o.at, o.status ?? "COMPLETED", finished]);
   await query(`UPDATE transactions SET created_at = $2 WHERE reference = $1`, [res.id, o.at]);
-  await recordAiUsage({
-    source: "job",
-    outcome: o.usage.outcome,
-    generationId: res.id,
-    userId: o.user.id,
-    toolId: "essay",
-    cost: { provider: "test", model: "fixture", inputTokens: 10, outputTokens: 5, calls: 1, usd: o.usage.usd },
-  });
-  await flushAiUsage();
-  await query(`UPDATE ai_usage SET at = $2 WHERE generation_id = $1`, [res.id, finished]);
+  if (o.usage) {
+    await recordAiUsage({
+      source: "job",
+      outcome: o.usage.outcome,
+      generationId: res.id,
+      userId: o.user.id,
+      toolId,
+      cost: { provider: "test", model: "fixture", inputTokens: 10, outputTokens: 5, calls: 1, usd: o.usage.usd },
+    });
+    await flushAiUsage();
+    await query(`UPDATE ai_usage SET at = $2 WHERE generation_id = $1`, [res.id, finished]);
+  }
   if (o.refund === "full") {
     assert.ok(await transaction((client) => refundInTx(client, o.user.id, res.id, "fixture refund")), "to'liq qaytarish yozilishi kerak edi");
   } else if (typeof o.refund === "number") {
@@ -440,4 +447,54 @@ test("two margins, bonus cost, fee and admin exclusion against a hand-computed m
     const support = await openSession(await mkAdmin("support", "Support"));
     assert.equal((await list(support.cookie, RANGE_ADMINS)).status, 403);
   });
+});
+
+test("headline margin: unit cost × completed jobs (not the raw spend); tools with no cost data are flagged, not free", { skip }, async () => {
+  const user = await mkUser("Coverage", { balance: 10_000_000 });
+  const day = tkDay(-20);
+  const range = `?from=${day}&to=${tkDay(-18)}`;
+  await setFee(null);
+  const slide = { slideCount: 10 };
+  // 10 completed slide jobs at 3 000: seven measured at 0.10 USD, THREE with no cost data; one failed job (0.05 USD overhead).
+  for (let i = 0; i < 10; i++) {
+    const at = tk(day, `${String(8 + i).padStart(2, "0")}:00:00`);
+    await seedJob({ user, toolId: "slide", values: slide, at, ...(i < 7 ? { usage: { outcome: "completed" as const, usd: 0.1 } } : {}) });
+  }
+  await seedJob({ user, toolId: "slide", values: slide, at: tk(day, "20:00:00"), status: "FAILED", usage: { outcome: "failed", usd: 0.05 }, refund: "full" });
+  // Two completed image jobs with NO cost data at all: revenue 2 × 2 000 that cannot be margin.
+  for (let i = 0; i < 2; i++) await seedJob({ user, toolId: "image", values: { prompt: "a cat" }, at: tk(day, `0${i + 1}:00:00`) });
+  ap.clearPricingCache();
+  const owner = await openSession(await mkAdmin("owner", "Coverage Owner"));
+
+  const r = await list(owner.cookie, range);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const s = itemOf(r, "slide");
+  // unit cost: 0.10 + 0.05 ÷ 10 = 0.105 USD = 1 260 so'm; margin (3 000 − 1 260) ÷ 3 000 = 58 %.
+  assert.equal(s.completed, 10);
+  assert.equal(s.fullCostSoum, 1260);
+  assert.equal(s.marginPct, 58);
+  const totals = r.body.totals as Record<string, unknown> & { uncoveredTools: string[] };
+  // The headline cost is 1 260 × 10 = 12 600 (NOT the raw spend 0.75 USD = 9 000, which would read 70 %).
+  assert.equal(totals.marginCostSoum, 12600);
+  assert.equal(totals.marginRevenueSoum, 30000);
+  assert.equal(totals.marginPct, 58);
+  near(totals.costSoumTools as number, 9000, "the measured spend is still reported as it is");
+  // The image jobs have no cost data: out of the margin, named, with their revenue.
+  assert.deepEqual(totals.uncoveredTools, ["Rasm"]);
+  assert.equal(totals.uncoveredRevenueSoum, 4000);
+  assert.equal(totals.revenueSoum, 34000, "the revenue total still shows every completed job");
+  assert.equal(itemOf(r, "image").marginPct, null);
+
+  // The simulator's cost is the same unit cost × the window's jobs, so its «current» margin is the row's.
+  const sim = await simulate(owner.cookie, "slide", { percent: 100, roundTo: 500 });
+  assert.equal(sim.status, 200, JSON.stringify(sim.body));
+  const cur = sim.body.current as Record<string, number | null>;
+  assert.equal(cur.jobs, 10);
+  assert.equal(cur.revenue30d, 30000);
+  assert.equal(cur.cost30d, 12600, "unit cost × jobs, not the raw spend 9 000");
+  assert.equal(cur.marginPct, 58, "the same number as the table row");
+  // No cost data at all (image): no cost, no margin — never a free tool.
+  const none = (await simulate(owner.cookie, "image", { percent: 100, roundTo: 500 })).body.current as Record<string, number | null>;
+  assert.equal(none.cost30d, null);
+  assert.equal(none.marginPct, null);
 });
