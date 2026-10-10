@@ -212,6 +212,7 @@ function Ready({
 }) {
   const sortId = useId();
   const [applying, setApplying] = useState<string | null>(null);
+  const [showIdle, setShowIdle] = useState(false);
   const items = data.items.map((i) => withPatch(i, patched));
   // The recommendations were computed against the adjustments of the overview load.
   const recContext: RecContext = useMemo(
@@ -219,6 +220,10 @@ function Ready({
     [data],
   );
   const rows = sortItems(filterByGroup(items, group), parseSort(sort));
+  // Tools with no job in the period have nothing to decide: one toggle instead of a long tail of dashes.
+  const idle = rows.filter((r) => r.jobs === 0 && r.completed === 0).length;
+  const active = rows.filter((r) => r.jobs > 0 || r.completed > 0);
+  const listed = showIdle || active.length === 0 ? rows : active;
   const attention = attentionList(filterByGroup(items, group), { ...recContext, targetMarkup: data.targetMarkup });
   const open = openTool ? (items.find((i) => i.toolId === openTool) ?? null) : null;
   const applyItem = applying ? (items.find((i) => i.toolId === applying) ?? null) : null;
@@ -275,7 +280,7 @@ function Ready({
           }
         />
         <PricingTable
-          items={rows}
+          items={listed}
           days={data.range.days}
           sort={sort}
           targetMarkup={data.targetMarkup}
@@ -298,6 +303,13 @@ function Ready({
             />
           }
         />
+        {idle > 0 && active.length > 0 ? (
+          <div className="border-t px-4 py-2">
+            <Button size="sm" variant="ghost" onClick={() => setShowIdle((v) => !v)} aria-expanded={showIdle} className="max-sm:min-h-11">
+              {showIdle ? "Ishsiz vositalarni yashirish" : `Bu davrda ishi bo'lmagan vositalar (${fmtNumber(idle)})`}
+            </Button>
+          </div>
+        ) : null}
       </Card>
 
       <MethodNotes caveats={data.caveats} targetMarkup={data.targetMarkup} paymentFeePercent={data.paymentFeePercent} soumPerCoin={data.soumPerCoin} />

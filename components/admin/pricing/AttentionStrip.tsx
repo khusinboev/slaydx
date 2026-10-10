@@ -5,7 +5,7 @@ import type { PricingItem } from "@/lib/admin-api/pricing";
 import { fmtNumber } from "@/lib/admin-format";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/admin/ui";
-import { ATTENTION_LIMIT, type AttentionEntry, type AttentionKind, type Severity } from "./attention";
+import { ATTENTION_LIMIT, ATTENTION_PHONE_LIMIT, type AttentionEntry, type AttentionKind, type Severity } from "./attention";
 import { RecommendationAction } from "./bits";
 import { COVERAGE_WARN_PCT, REC_BLOCK_HINT, markupText, pctText } from "./shared";
 
@@ -51,6 +51,7 @@ export function AttentionStrip({
 }) {
   const shown = entries.slice(0, ATTENTION_LIMIT);
   const more = entries.length - shown.length;
+  const morePhone = entries.length - Math.min(entries.length, ATTENTION_PHONE_LIMIT);
   return (
     <section aria-labelledby="pricing-attention" className="bg-card rounded-xl border">
       <header className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
@@ -66,11 +67,11 @@ export function AttentionStrip({
         </p>
       ) : (
         <ol className="divide-y">
-          {shown.map((e) => {
+          {shown.map((e, index) => {
             const { title, detail } = reasonOf(e, targetMarkup);
             const blocked = e.rec.kind === "change" && e.rec.block !== null ? REC_BLOCK_HINT[e.rec.block] : null;
             return (
-              <li key={e.item.toolId} data-attention={e.item.toolId} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
+              <li key={e.item.toolId} data-attention={e.item.toolId} className={cn("flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4", index >= ATTENTION_PHONE_LIMIT && "max-sm:hidden")}>
                 <div className="flex min-w-0 flex-1 items-start gap-2.5">
                   <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", SEVERITY_DOT[e.severity])} aria-hidden="true" />
                   <div className="min-w-0 text-[13px]">
@@ -96,7 +97,8 @@ export function AttentionStrip({
           })}
         </ol>
       )}
-      {more > 0 ? <p className="text-muted-foreground border-t px-4 py-2 text-xs">Yana {fmtNumber(more)} ta vosita — jadvalda belgilangan.</p> : null}
+      {more > 0 ? <p className="text-muted-foreground border-t px-4 py-2 text-xs max-sm:hidden">Yana {fmtNumber(more)} ta vosita — jadvalda belgilangan.</p> : null}
+      {morePhone > 0 ? <p className="text-muted-foreground border-t px-4 py-2 text-xs sm:hidden">Yana {fmtNumber(morePhone)} ta vosita — ro&apos;yxatda belgilangan.</p> : null}
     </section>
   );
 }

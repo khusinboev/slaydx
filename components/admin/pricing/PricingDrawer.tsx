@@ -117,7 +117,7 @@ export function PricingDrawer({
           </span>
         </div>
         <div className="flex flex-col gap-1.5">
-          <RecommendationAction rec={rec} title={item.title} canEdit={canEdit} onApply={() => onApply(item)} size="md" />
+          <RecommendationAction rec={rec} title={item.title} canEdit={canEdit} onApply={() => onApply(item)} size="md" primary />
           <p className="text-muted-foreground text-xs">
             {rec.kind === "change"
               ? `Tuzatish ${percentLabel(item.adjust.percent)} → ${percentLabel(rec.target)}. ${rec.block ? REC_BLOCK_HINT[rec.block] : ""}`

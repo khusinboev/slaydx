@@ -35,6 +35,7 @@ export function MarkupBar({ markup, target, className }: { markup: number | null
   const scale = Math.max(target * BAR_SCALE_OF_TARGET, markup ?? 0);
   const fill = markup === null || !(scale > 0) ? 0 : Math.min(1, markup / scale);
   const tick = scale > 0 ? Math.min(1, target / scale) : 0;
+  if (markup === null) return <span className={cn("text-muted-foreground text-xs", className)}>ustama —</span>;
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
       <span
@@ -65,6 +66,7 @@ export function RecommendationAction({
   onApply,
   size = "sm",
   showLabel = true,
+  primary = false,
 }: {
   rec: RecState;
   /** Tool title, for the button's accessible name. */
@@ -74,6 +76,8 @@ export function RecommendationAction({
   /** Button size from `sm` up; below `sm` it is always at least 44 px tall. */
   size?: "sm" | "md";
   showLabel?: boolean;
+  /** The main action of its surface (the tool sheet's decision block). */
+  primary?: boolean;
 }) {
   if (rec.kind === "none") return <span className="text-muted-foreground text-xs">—</span>;
   if (rec.kind === "ok") return <Badge tone="success">Mos</Badge>;
@@ -91,7 +95,7 @@ export function RecommendationAction({
       ) : canEdit ? (
         <Button
           size={size === "md" ? "md" : "sm"}
-          variant="secondary"
+          variant={primary ? "primary" : "secondary"}
           onClick={onApply}
           aria-label={`Tavsiyani qo'llash: ${title}, narx ${changeText(rec.changePct)}`}
           className="max-sm:min-h-11 max-sm:px-4"

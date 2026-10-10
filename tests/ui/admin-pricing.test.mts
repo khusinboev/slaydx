@@ -902,3 +902,25 @@ test("reset: DELETE {reason}; 409 state reloads the overview", async () => {
   await waitFor(() => assert.equal(calls2.filter((c) => c.url.pathname === "/api/admin/pricing").length, 2, "overview reloaded"));
   await waitFor(() => assert.equal(screen.getAllByRole("dialog").length, 1, "only the drawer remains"));
 });
+
+test("tools without a job in the period sit behind one toggle; on phones the strip keeps to three entries", async () => {
+  const keys = item({ toolId: "keys", title: "Keys", group: "oqituvchi" });
+  stubAll({ overview: overview({ items: [...ALL, keys] }) });
+  renderPage(Q);
+  await ready();
+  const table = screen.getByRole("table", { name: "Vositalar bo'yicha narx va tannarx" });
+  const bodyRows = () => table.querySelectorAll(":scope > tbody > tr").length;
+  assert.equal(bodyRows(), 6, "the idle tool is hidden");
+  assert.ok(screen.getByRole("heading", { name: "Vositalar (7)" }), "the count includes it");
+  const toggle = button("Bu davrda ishi bo'lmagan vositalar (1)");
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  fireEvent.click(toggle);
+  assert.equal(bodyRows(), 7);
+  fireEvent.click(button("Ishsiz vositalarni yashirish"));
+  assert.equal(bodyRows(), 6);
+  // Phone: entries 4–5 are hidden below `sm` and the phone footer counts them.
+  const entries = Array.from(strip().querySelectorAll("[data-attention]"));
+  assert.deepEqual(entries.map((e) => e.className.includes("max-sm:hidden")), [false, false, false, true, true]);
+  assert.match(text(strip()), /Yana 3 ta vosita — ro'yxatda belgilangan/);
+  assert.match(text(strip()), /Yana 1 ta vosita — jadvalda belgilangan/);
+});

@@ -8,7 +8,7 @@ import { cn } from "@/lib/cn";
  * A «?» button that opens a short explanation of the number next to it (what it is
  * computed on). Click or Enter toggles it; Escape, a click outside or Tab away closes it.
  * Escape is taken in the capture phase, so an open tip inside a drawer or modal closes
- * the tip, not the dialog. The hit area is 36 px although the icon is small.
+ * the tip, not the dialog. The hit area is 36 px (44 px on phones) although the icon is small.
  */
 export function InfoTip({ label, children, align = "center" }: { label: string; children: ReactNode; align?: "start" | "center" | "end" }) {
   const [open, setOpen] = useState(false);
@@ -50,7 +50,7 @@ export function InfoTip({ label, children, align = "center" }: { label: string; 
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="text-muted-foreground hover:text-foreground focus-visible:ring-ring relative inline-flex size-4 items-center justify-center rounded-full outline-none after:absolute after:-inset-2.5 focus-visible:ring-2"
+        className="text-muted-foreground hover:text-foreground focus-visible:ring-ring relative inline-flex size-4 items-center justify-center rounded-full outline-none after:absolute after:-inset-2.5 focus-visible:ring-2 max-sm:after:-inset-3.5"
       >
         <CircleHelp className="size-3.5" aria-hidden="true" />
       </button>

@@ -146,9 +146,11 @@ export function PricingTable({ items, days, sort, targetMarkup, recContext, canE
       cell: (r) => (
         <span className="flex flex-col items-end gap-0.5">
           <span>{soumText(r.fullCostSoum)}</span>
-          <span className="text-muted-foreground text-xs">
-            {soumText(r.costPerUnitSoum)} / {r.unitLabel}
-          </span>
+          {r.costPerUnitSoum !== null ? (
+            <span className="text-muted-foreground text-xs">
+              {soumText(r.costPerUnitSoum)} / {r.unitLabel}
+            </span>
+          ) : null}
         </span>
       ),
     },

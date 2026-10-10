@@ -21,6 +21,8 @@ export type AttentionEntry = {
 
 /** How many entries the strip shows; the rest are counted. */
 export const ATTENTION_LIMIT = 5;
+/** On phones the strip keeps to the first three, so the KPIs stay within reach. */
+export const ATTENTION_PHONE_LIMIT = 3;
 
 /** An info-level recommendation (margin already healthy) is listed only from this price change up. */
 export const INFO_MIN_CHANGE_PCT = 15;
