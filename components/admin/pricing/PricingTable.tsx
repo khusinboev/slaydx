@@ -109,12 +109,12 @@ export function PricingTable({
       className: "tabular-nums whitespace-nowrap",
       cell: (r) => <Stacked main={`${soumText(r.fullCostSoum)} / ish`} sub={`${soumText(r.costPerUnitSoum)} / ${r.unitLabel}`} />,
     },
-    { id: "markup", header: "Ustama ×", hint: "tushum ÷ tannarx", align: "right", className: "tabular-nums", cell: (r) => markupText(r.markup) },
+    { id: "markup", header: "Ustama ×", hint: "tushum (komissiyadan keyin) ÷ tannarx", align: "right", className: "tabular-nums", cell: (r) => markupText(r.markup) },
     {
       id: "margin",
       header: "Marja % · tavsiya",
       // The primary margin: the listed price of the completed jobs (points included), less cost and the payment fee.
-      hint: "narx (ball ham) − tannarx − komissiya",
+      hint: "narx (ball ham) − tannarx − komissiya (naqd qismdan)",
       sortKey: "margin_asc",
       sortKeyReverse: "margin_desc",
       // The recommendation sits under the margin it is derived from (§17.6 chip).

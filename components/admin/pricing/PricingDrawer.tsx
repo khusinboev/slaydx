@@ -111,7 +111,7 @@ export function PricingDrawer({
               <span className="flex flex-wrap items-center gap-2 tabular-nums">
                 {markupText(item.markup)}
                 <Badge tone={marginTone(item.marginPct)}>{pctText(item.marginPct, 0)}</Badge>
-                <span className="text-muted-foreground text-xs">ro&apos;yxat narxi − tannarx − komissiya {pctText(paymentFeePercent)}</span>
+                <span className="text-muted-foreground text-xs">ro&apos;yxat narxi − tannarx − komissiya {pctText(paymentFeePercent)} (naqd qismdan); ustama komissiyadan keyingi tushum bo&apos;yicha</span>
               </span>
             ),
           },

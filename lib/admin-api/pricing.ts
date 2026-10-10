@@ -65,7 +65,7 @@ export type PricingItem = {
   marginPct: number | null;
   /** CASH margin, %: only the wallet cash (points excluded), the earlier formula. */
   cashMarginPct: number | null;
-  /** avgRevenueSoum ÷ fullCostSoum (the fee is not deducted). */
+  /** avgRevenueSoum after the payment fee (cash share only) ÷ fullCostSoum. */
   markup: number | null;
   /** Share of the completed jobs' revenue paid with points, %. */
   pointsSharePct: number | null;

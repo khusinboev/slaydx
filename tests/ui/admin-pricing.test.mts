@@ -389,8 +389,8 @@ test("loading skeleton, then KPI tiles, coverage banner with caveats and the tab
   // One short hint per money column says what it is computed on.
   const headers = screen.getAllByRole("columnheader").map((h) => h.textContent ?? "");
   for (const [name, hint] of [
-    ["Ustama ×", "tushum ÷ tannarx"],
-    ["Marja % · tavsiya", "narx (ball ham) − tannarx − komissiya"],
+    ["Ustama ×", "tushum (komissiyadan keyin) ÷ tannarx"],
+    ["Marja % · tavsiya", "narx (ball ham) − tannarx − komissiya (naqd qismdan)"],
     ["Naqd marja · bonus", "naqd tushum bo'yicha · bonus = ball bilan to'langan ishlar tannarxi"],
   ] as const) {
     assert.ok(headers.some((t) => t.includes(name) && t.includes(hint)), `${name}: ${hint}`);
@@ -600,7 +600,7 @@ test("drawer: detail fetched with days=90, headline figures, ladder, trend chart
   assert.ok(d.getByText("3 600 tanga / ish"));
   // Both margins, their bases and the bonus cost are explained next to the numbers.
   assert.ok(d.getByText("3 500 tanga / tugallangan ish"), "primary basis: listed price of a completed job");
-  assert.ok(d.getByText("ro'yxat narxi − tannarx − komissiya 2,5%"));
+  assert.ok(d.getByText("ro'yxat narxi − tannarx − komissiya 2,5% (naqd qismdan); ustama komissiyadan keyingi tushum bo'yicha"));
   assert.ok(d.getByText("Naqd marja"));
   assert.ok(d.getByText("faqat naqd pul tushumi bo'yicha"));
   assert.ok(d.getByText("Bonus xarajati"));

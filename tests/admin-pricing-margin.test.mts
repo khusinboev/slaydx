@@ -77,6 +77,10 @@ if (hasDb) {
 test("marginPercent: (revenue × (1 − fee) − cost) ÷ revenue, null without revenue or cost", () => {
   assert.equal(ap.marginPercent(2500, 680), 72.8);
   assert.equal(ap.marginPercent(2500, 680, 2.5), 70.3);
+  // The fee is on the money only: 2.5 % on a 40 % points share is 1.5 % of the revenue.
+  assert.equal(ap.feeShare(2.5, 0.4), 1.5);
+  assert.equal(ap.feeShare(2.5, null), 2.5);
+  assert.equal(ap.feeShare(2.5, 1), 0);
   assert.equal(ap.marginPercent(1000, 1000), 0);
   assert.equal(ap.marginPercent(1000, 1500), -50);
   assert.equal(ap.marginPercent(0, 100), null);
@@ -291,11 +295,12 @@ test("two margins, bonus cost, fee and admin exclusion against a hand-computed m
     assert.equal(e.avgCostSoum, 600);
     assert.equal(e.overheadSoum, 80);
     assert.equal(e.fullCostSoum, 680);
-    // margin (2 500 × (1 − 0.025) − 680) ÷ 2 500 = 70.3 %.
-    assert.equal(e.marginPct, 70.3);
-    // markup 2 500 ÷ 680 (the fee is not in the markup); 100 × 3 ÷ 3.6765 = 81.6 → 80.
-    assert.equal(e.markup, 3.676);
-    assert.equal(e.recommendedPercent, 80);
+    // The 2.5 % fee is on the CASH share only: points paid 4 000 of 7 500 (53.33 %), so the fee is 2.5 % × 46.67 % = 1.1667 % of the revenue.
+    // margin (2 500 × (1 − 0.011667) − 680) ÷ 2 500 = 71.63 %.
+    assert.equal(e.marginPct, 71.63);
+    // markup on the revenue left after the fee: 2 470.83 ÷ 680 = 3.634; 100 × 3 ÷ 3.6336 = 82.6 → 85 (the target holds net of the fee).
+    assert.equal(e.markup, 3.634);
+    assert.equal(e.recommendedPercent, 85);
     assert.equal(e.confidence, "low");
     assert.equal(e.sampleSize, 3);
   });
@@ -329,11 +334,11 @@ test("two margins, bonus cost, fee and admin exclusion against a hand-computed m
     const totals = (await list(owner.cookie, RANGE)).body.totals as Record<string, number | null>;
     assert.equal(totals.revenue, 7500);
     assert.equal(totals.revenueSoum, 7500);
-    assert.equal(totals.feeSoum, 187.5);
+    assert.equal(totals.feeSoum, 87.5, "7 500 × 2.5 % × the cash share 46.67 %");
     near(totals.costUsdTools, 0.17, "costUsdTools", 1e-6);
     near(totals.costSoumTools, 2040, "costSoumTools");
-    // (7 500 − 187.5 − 2 040) ÷ 7 500 = 70.3 %; cash (3 500 − 2 040) ÷ 3 500 = 41.71 %.
-    assert.equal(totals.marginPct, 70.3);
+    // (7 500 − 87.5 − 2 040) ÷ 7 500 = 71.63 %; cash (3 500 − 2 040) ÷ 3 500 = 41.71 %.
+    assert.equal(totals.marginPct, 71.63);
     assert.equal(totals.cashRevenue, 3500);
     assert.equal(totals.cashMarginPct, 41.71);
     assert.equal(totals.bonusCostSoum, 1088);
@@ -353,9 +358,9 @@ test("two margins, bonus cost, fee and admin exclusion against a hand-computed m
     assert.equal(e.completed, 4);
     assert.equal(e.avgRevenue, 2375);
     assert.equal(e.fullCostSoum, 2010);
-    // (2 375 × 0.975 − 2 010) ÷ 2 375 = 12.87 %.
-    assert.equal(e.marginPct, 12.87);
-    assert.equal(e.markup, 1.182);
+    // Points paid 4 000 of the 9 500 (42.1 %): fee 2.5 % × 57.9 % = 1.4474 %; (2 375 × (1 − 0.014474) − 2 010) ÷ 2 375 = 13.92 %.
+    assert.equal(e.marginPct, 13.92);
+    assert.equal(e.markup, 1.164);
     // Cash: + X 2 000 + Y (2 000 − 2 000) over 6 jobs created: 5 500 ÷ 6 = 916.67 → (916.67 − 2 010) ÷ 916.67 = −119.27 %.
     assert.equal(e.jobs, 6);
     assert.equal(e.avgCashRevenue, 916.67);
@@ -389,14 +394,16 @@ test("two margins, bonus cost, fee and admin exclusion against a hand-computed m
     await setFee(10);
     const o10 = await list(owner.cookie, RANGE);
     const e10 = itemOf(o10, "essay");
-    // (2 500 × 0.9 − 680) ÷ 2 500 = 62.8 %.
-    assert.equal(e10.marginPct, 62.8);
-    assert.equal(e10.markup, e0.markup);
+    // 10 % on the cash share 46.67 % = 4.667 % of the revenue: (2 500 × 0.95333 − 680) ÷ 2 500 = 68.13 %.
+    assert.equal(e10.marginPct, 68.13);
+    // The markup is on the revenue after the fee, so it falls with the fee (2 383.33 ÷ 680) and the recommendation rises: 100 × 3 ÷ 3.505 = 85.6 → 85.
+    assert.equal(e0.markup, 3.676);
+    assert.equal(e10.markup, 3.505);
+    assert.ok((e10.recommendedPercent as number) >= (e0.recommendedPercent as number));
     assert.equal(e10.cashMarginPct, e0.cashMarginPct);
-    assert.equal(e10.recommendedPercent, e0.recommendedPercent);
-    assert.equal((o10.body.totals as Record<string, number>).feeSoum, 750);
+    assert.equal((o10.body.totals as Record<string, number>).feeSoum, 350);
     await setFee(2.5);
-    assert.equal(itemOf(await list(owner.cookie, RANGE), "essay").marginPct, 70.3);
+    assert.equal(itemOf(await list(owner.cookie, RANGE), "essay").marginPct, 71.63);
   });
 
   await t.test("simulator uses the same revenue (completed, net of refunds, fee) and the same toggle", async () => {
@@ -409,16 +416,16 @@ test("two margins, bonus cost, fee and admin exclusion against a hand-computed m
     // Current = the table's revenue: 7 500 over 3 completed jobs; cost 0.17 USD × 12 000 = 2 040.
     assert.equal(current.jobs, 3);
     assert.equal(current.revenue30d, 7500);
-    assert.equal(current.feeSoum, 187.5);
+    assert.equal(current.feeSoum, 87.5, "fee on the cash share (46.67 %) of the window");
     assert.equal(current.cost30d, 2040);
-    // (7 500 − 187.5 − 2 040) ÷ 7 500 = 70.3 % — the SAME number as the table's total.
-    assert.equal(current.marginPct, 70.3);
+    // (7 500 − 87.5 − 2 040) ÷ 7 500 = 71.63 % — the SAME number as the table's total.
+    assert.equal(current.marginPct, 71.63);
     // 120 %: A 2 500 → 3 000, B 3 500 → 4 000, C 3 000 → 3 500 × (1 500 ÷ 3 000 kept) = 1 750 → 8 750.
     assert.equal(projected.revenue30d, 8750);
-    assert.equal(projected.feeSoum, 218.75);
+    assert.equal(projected.feeSoum, 102.08);
     assert.equal(projected.cost30d, 2040);
-    // (8 750 − 218.75 − 2 040) ÷ 8 750 = 74.19 %.
-    assert.equal(projected.marginPct, 74.19);
+    // (8 750 − 102.08 − 2 040) ÷ 8 750 = 75.52 %.
+    assert.equal(projected.marginPct, 75.52);
 
     const withAdmins = await simulate(owner.cookie, "essay", { percent: 120, roundTo: 500, includeAdmins: true });
     assert.equal(withAdmins.status, 200, JSON.stringify(withAdmins.body));

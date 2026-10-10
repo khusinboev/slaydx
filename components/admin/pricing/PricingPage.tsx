@@ -250,7 +250,7 @@ function Ready({
           label="Marja"
           value={<span className={MARGIN_TEXT[marginTone(totals.marginPct)]}>{pctText(totals.marginPct)}</span>}
           hint={
-            `tugallangan ishlarning ro'yxat narxi (ball bilan to'langani ham) − tannarx − komissiya ${pctText(data.paymentFeePercent)}` +
+            `tugallangan ishlarning ro'yxat narxi (ball bilan to'langani ham) − tannarx − komissiya ${pctText(data.paymentFeePercent)} (faqat naqd qismdan)` +
             (totals.uncoveredTools.length > 0 ? `. Tannarxi o'lchanmagan vositalar jamiga kirmagan: ${totals.uncoveredTools.join(", ")}` : "")
           }
         />
@@ -338,7 +338,7 @@ function Ready({
         </p>
         <p>
           <b className="text-foreground font-semibold">Marja</b> = (tugallangan ishlarning ro&apos;yxat narxi − qaytarilgani − to&apos;lov komissiyasi − to&apos;liq tannarx) ÷ ro&apos;yxat narxi;
-          narx ball bilan to&apos;langan bo&apos;lsa ham to&apos;liq hisoblanadi. <b className="text-foreground font-semibold">Naqd marja</b> = (naqd tushum − to&apos;liq tannarx) ÷ naqd tushum:
+          narx ball bilan to&apos;langan bo&apos;lsa ham to&apos;liq hisoblanadi, komissiya esa faqat naqd to&apos;langan qismdan olinadi (ball to&apos;lov tizimidan o&apos;tmaydi). <b className="text-foreground font-semibold">Naqd marja</b> = (naqd tushum − to&apos;liq tannarx) ÷ naqd tushum:
           ball naqd hisoblanmaydi, davrda yaratilgan barcha ishlar bo&apos;yicha. <b className="text-foreground font-semibold">Bonus xarajati</b> = davrdagi AI xarajatining ball bilan
           to&apos;langan ulushi.
         </p>

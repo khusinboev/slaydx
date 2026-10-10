@@ -264,7 +264,7 @@ const CATALOG: Catalog = {
     group: PRICING_GROUP,
     label: "To'lov komissiyasi (%)",
     description:
-      "To'lov tizimi (Click va h.k.) har bir tushumdan oladigan foiz, qadam 0,1. «Narxlar» sahifasidagi marja hisobida tushumdan shuncha foiz ayriladi. 0 — hisobga olinmaydi.",
+      "To'lov tizimi (Click va h.k.) har bir tushumdan oladigan foiz, qadam 0,1. «Narxlar» sahifasidagi marja hisobida tushumning FAQAT naqd pul bilan to'langan qismidan shuncha foiz ayriladi (ball to'lov tizimidan o'tmaydi). 0 — hisobga olinmaydi.",
     type: "number",
     min: 0,
     max: 10,
