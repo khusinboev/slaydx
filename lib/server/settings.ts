@@ -40,6 +40,7 @@ export type SettingValues = {
   "finance.soum_per_usd": number;
   payment_bonus_percent: number;
   "pricing.target_markup": number;
+  "pricing.payment_fee_percent": number;
 };
 
 export type SettingKey = keyof SettingValues;
@@ -97,6 +98,24 @@ function numberValidator(min: number, max: number) {
       return { ok: false, error: `Qiymat ${min} dan ${max} gacha bo'lishi kerak` };
     }
     return { ok: true, value: raw };
+  };
+}
+
+/**
+ * A number on a fixed grid (`step`) inside `[min, max]`: the stored value is
+ * snapped to the grid and cleaned of float noise (0.1 × 3 → 0.3, not
+ * 0.30000000000000004), so what the admin typed is what is stored.
+ */
+function stepNumberValidator(min: number, max: number, step: number) {
+  const inRange = numberValidator(min, max);
+  return (raw: unknown): Validation<number> => {
+    const checked = inRange(raw);
+    if (!checked.ok) return checked;
+    const n = checked.value / step;
+    if (Math.abs(n - Math.round(n)) > 1e-9) {
+      return { ok: false, error: `Qiymat ${String(step).replace(".", ",")} qadam bilan bo'lishi kerak` };
+    }
+    return { ok: true, value: Number((Math.round(n) * step).toFixed(6)) };
   };
 }
 
@@ -239,6 +258,18 @@ const CATALOG: Catalog = {
     max: 20,
     validate: numberValidator(1, 20),
     envDefault: () => 3,
+  },
+  "pricing.payment_fee_percent": {
+    key: "pricing.payment_fee_percent",
+    group: PRICING_GROUP,
+    label: "To'lov komissiyasi (%)",
+    description:
+      "To'lov tizimi (Click va h.k.) har bir tushumdan oladigan foiz, qadam 0,1. «Narxlar» sahifasidagi marja hisobida tushumdan shuncha foiz ayriladi. 0 — hisobga olinmaydi.",
+    type: "number",
+    min: 0,
+    max: 10,
+    validate: stepNumberValidator(0, 10, 0.1),
+    envDefault: () => 0,
   },
 };
 

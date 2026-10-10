@@ -56,11 +56,27 @@ import type { FormValues, ToolGroup, ToolId } from "../types";
  *     figures here equal the AI screen's.
  *
  * Two money units, never mixed silently:
- *   - tanga: prices, the ladder and the cash revenue (wallet ledger deltas);
+ *   - tanga: prices, the ladder and the revenue;
  *   - so'm: every cost (USD × `finance.soum_per_usd`).
  * Margin, markup and the simulator's margin convert tanga to so'm first with
  * `SOUM_PER_COIN` (lib/server/payments.ts: what one tanga costs at top-up), so
  * a change of that rate moves the economics instead of being ignored.
+ *
+ * Two margins, on purpose (owner decision 2026-10-10):
+ *   - PRIMARY `marginPct` (and `markup`, `recommendedPercent`) is on the LISTED
+ *     revenue of the COMPLETED jobs — `generations.price` minus what was
+ *     refunded, whatever the job was paid with (cash, quota or bonus points).
+ *     Cost is the full cost (completed spend + failure overhead) and the
+ *     payment fee (`pricing.payment_fee_percent` of the revenue) is deducted;
+ *   - `cashMarginPct` keeps the earlier formula: only the wallet cash
+ *     (balance + quota deltas) over ALL jobs created in the range, no fee.
+ * `bonusCostSoum` is the share of the AI spend that went to jobs paid with
+ * points (the marketing cost of the sign-up/top-up bonus).
+ *
+ * Admin accounts (`admin_accounts.user_id`, any status) test the product with
+ * their own jobs: those jobs, their spend rows and their ledger rows are left
+ * out of every aggregate here unless the caller asks for `includeAdmins`. The
+ * AI cost screen (`admin-ai.ts`) is NOT filtered.
  */
 
 const TZ = "Asia/Tashkent";
@@ -380,8 +396,15 @@ export type PricingItem = {
   avgPrice: number | null;
   /** Σ(−charge − refund) of balance_delta + quota_delta over those jobs ÷ jobs, tanga; points excluded. */
   avgCashRevenue: number | null;
-  /** avgCashRevenue × SOUM_PER_COIN: the so'm the margin is computed on. */
+  /** avgCashRevenue × SOUM_PER_COIN: the so'm the CASH margin is computed on. */
   avgCashRevenueSoum: number | null;
+  /**
+   * Net listed revenue per COMPLETED job, tanga: `generations.price` minus the refunds of the job,
+   * whatever it was paid with (cash, quota, points); `null` without completed jobs.
+   */
+  avgRevenue: number | null;
+  /** avgRevenue × SOUM_PER_COIN: the so'm the primary margin, markup and recommendation are computed on. */
+  avgRevenueSoum: number | null;
   /** Average units per job (see the units note); `null` when no job has a readable value. */
   avgUnits: number | null;
   /** Completed spend ÷ completed jobs WITH cost data (USD / so'm); `null` without such jobs. */
@@ -394,10 +417,22 @@ export type PricingItem = {
   fullCostSoum: number | null;
   /** fullCostSoum ÷ avgUnits; `null` when either is unknown. */
   costPerUnitSoum: number | null;
-  /** (avgCashRevenueSoum − fullCostSoum) ÷ avgCashRevenueSoum × 100; `null` without cash revenue or cost. */
+  /**
+   * PRIMARY margin: (avgRevenueSoum × (1 − fee) − fullCostSoum) ÷ avgRevenueSoum × 100, fee =
+   * `pricing.payment_fee_percent`; `null` without revenue or cost.
+   */
   marginPct: number | null;
-  /** avgPrice × SOUM_PER_COIN ÷ fullCostSoum; `null` without a price or a positive cost. */
+  /** CASH margin (the earlier formula): (avgCashRevenueSoum − fullCostSoum) ÷ avgCashRevenueSoum × 100; `null` without cash revenue or cost. */
+  cashMarginPct: number | null;
+  /** avgRevenueSoum ÷ fullCostSoum (fee not deducted); `null` without revenue or a positive cost. */
   markup: number | null;
+  /** Share of the completed jobs' revenue paid with points, %; `null` when no completed job was charged. */
+  pointsSharePct: number | null;
+  /**
+   * Bonus cost, so'm: the AI spend (completed + failure overhead) of the period × pointsSharePct, i.e. what the
+   * jobs paid with points cost; `null` without a points share.
+   */
+  bonusCostSoum: number | null;
   /** Completed jobs with cost data ÷ completed × 100 (`spendCoverageByTool`); `null` without completed jobs. */
   coveragePct: number | null;
   jobsWithCost: number;
@@ -424,8 +459,20 @@ export type PricingTotals = {
   costUsdOther: number;
   /** costUsdTools + costUsdOther = `spendTotals` of the range — the dashboard and AI-page figure. */
   costUsdAll: number;
-  /** (cashRevenueSoum − costSoumTools) ÷ cashRevenueSoum × 100; `null` without cash revenue. */
+  /** Σ net listed revenue of the completed jobs of the registry tools, tanga (see `PricingItem.avgRevenue`). */
+  revenue: number;
+  /** revenue × SOUM_PER_COIN. */
+  revenueSoum: number;
+  /** revenueSoum × payment fee %, so'm. */
+  feeSoum: number;
+  /** PRIMARY: (revenueSoum − feeSoum − costSoumTools) ÷ revenueSoum × 100; `null` without revenue. */
   marginPct: number | null;
+  /** CASH (earlier formula): (cashRevenueSoum − costSoumTools) ÷ cashRevenueSoum × 100; `null` without cash revenue. */
+  cashMarginPct: number | null;
+  /** Σ per-tool bonus cost, so'm. */
+  bonusCostSoum: number;
+  /** Points share of the completed jobs' revenue, %; `null` when nothing was charged. */
+  pointsSharePct: number | null;
 };
 
 export type PricingOverview = {
@@ -438,12 +485,19 @@ export type PricingOverview = {
   soumPerCoin: number;
   /** `pricing.target_markup`. */
   targetMarkup: number;
+  /** `pricing.payment_fee_percent`: deducted from the revenue in the primary margin. */
+  paymentFeePercent: number;
+  /** `true` when admin accounts' jobs are part of every figure (query `admins=1`). */
+  includeAdmins: boolean;
+  /** Completed jobs of admin accounts finished in the range, counted whatever `includeAdmins` is. */
+  adminJobs: number;
   groups: ReadonlyArray<{ id: ToolGroup; label: string }>;
   caveats: string[];
 };
 
 type OrdersRow = { tool_id: string; jobs: string; avg_price: string | null; refunded: string; avg_units: string | null };
 type CashRow = { tool_id: string; cash: string };
+type RevenueRow = { tool_id: string; completed: string; net_listed: string; net_points: string; net_cash: string };
 type OutcomeRow = { tool_id: string; completed: string; failed: string };
 type SpendRow = { tool_id: string; outcome: string; usd: string; records: string };
 type TrendRow = { tool_id: string; day: string; c_usd: string | null; f_usd: string | null; c_records: string | null; completed: string | null };
@@ -451,19 +505,49 @@ type TrendRow = { tool_id: string; day: string; c_usd: string | null; f_usd: str
 type Aggregates = {
   orders: Map<string, { jobs: number; avgPrice: number | null; refunded: number; avgUnits: number | null }>;
   cash: Map<string, number>;
+  /** Completed jobs finished in range: net listed revenue and how it was paid (tanga). */
+  revenue: Map<string, { completed: number; netListed: number; netPoints: number; netCash: number }>;
   outcomes: Map<string, { completed: number; failed: number }>;
   spend: Map<string, { completedUsd: number; completedRecords: number; failedUsd: number }>;
   coverage: Map<string, { jobsWithCost: number; jobsCompleted: number; pct: number }>;
   trend: Map<string, Map<string, TrendRow>>;
-  /** All-in spend of the range (`spendTotals`), tools or not. */
+  /** All-in spend of the range (tools or not), without the admin accounts' rows unless they are included. */
   spendAllUsd: number;
+  /** Completed jobs of admin accounts finished in range (always counted, filter or not). */
+  adminJobs: number;
 };
 
+const IS_ADMIN_JOB = "EXISTS (SELECT 1 FROM admin_accounts aa WHERE aa.user_id = g.user_id)";
+
+/** SQL condition on a job `g`: not an admin account's job (the default view), or any job. */
+function jobFilter(includeAdmins: boolean): string {
+  return includeAdmins ? "TRUE" : `NOT ${IS_ADMIN_JOB}`;
+}
+
+/**
+ * SQL condition on a spend row (AI usage record) of table/alias `alias`:
+ * free-LLM rows carry no user and always stay; the rest drops with the admin
+ * accounts' jobs.
+ */
+function spendFilter(includeAdmins: boolean, alias = "s"): string {
+  return includeAdmins ? "TRUE" : `(${alias}.user_id IS NULL OR NOT EXISTS (SELECT 1 FROM admin_accounts aa WHERE aa.user_id = ${alias}.user_id))`;
+}
+
+/**
+ * Refund sums per job `g` (reference = generation id): points back and cash
+ * back (balance + quota). A partial refund counts as it was written.
+ */
+const REFUNDED_LATERAL = `LEFT JOIN LATERAL (
+       SELECT COALESCE(sum(t.points_delta), 0) AS points, COALESCE(sum(t.balance_delta + t.quota_delta), 0) AS cash
+         FROM transactions t WHERE t.kind = 'refund' AND t.reference = g.id::text) rf ON true`;
+
 /** The cached part of the overview: pure aggregates for a range (no adjustments, no settings). */
-async function aggregates(db: Queryable, range: DateRange): Promise<Aggregates> {
+async function aggregates(db: Queryable, range: DateRange, includeAdmins: boolean): Promise<Aggregates> {
   const spendRange: SpendRange = { fromTs: range.fromTs, toTsExclusive: range.toTsExclusive };
   const spend = spendRowsSql(spendRange);
   const bounds = [range.fromTs, range.toTsExclusive];
+  const jobs = jobFilter(includeAdmins);
+  const spendOk = spendFilter(includeAdmins);
 
   // jobs: generations created in range (any status). avgPrice: avg(price).
   // refunded: jobs among them with a 'refund' ledger row (full or partial).
@@ -473,21 +557,41 @@ async function aggregates(db: Queryable, range: DateRange): Promise<Aggregates> 
             count(*) FILTER (WHERE EXISTS (SELECT 1 FROM transactions r WHERE r.kind = 'refund' AND r.reference = g.id::text)) AS refunded,
             avg(${unitsSql()}) AS avg_units
        FROM generations g
-      WHERE g.created_at >= $1 AND g.created_at < $2
+      WHERE g.created_at >= $1 AND g.created_at < $2 AND ${jobs}
       GROUP BY g.tool_id`,
     bounds,
   );
 
-  // cash: Σ(−charge − refund) of balance_delta + quota_delta over the ledger
-  // rows that reference those jobs (reference = generation id). Charges are
-  // negative deltas and refunds positive, so the sum is the net cash kept.
-  // points_delta is left out: points are the sign-up bonus, not money
+  // cash (the CASH margin): Σ(−charge − refund) of balance_delta + quota_delta
+  // over the ledger rows that reference those jobs (reference = generation
+  // id). Charges are negative deltas and refunds positive, so the sum is the
+  // net cash kept. points_delta is left out: points are the bonus, not money
   // (lib/server/spend.ts assertPaidDocument).
   const cash = await db.query<CashRow>(
     `SELECT g.tool_id, sum(-(t.balance_delta + t.quota_delta)) AS cash
        FROM generations g
        JOIN transactions t ON t.kind IN ('charge', 'refund') AND t.reference = g.id::text
-      WHERE g.created_at >= $1 AND g.created_at < $2
+      WHERE g.created_at >= $1 AND g.created_at < $2 AND ${jobs}
+      GROUP BY g.tool_id`,
+    bounds,
+  );
+
+  // revenue (the PRIMARY margin): the COMPLETED jobs finished in range, the
+  // basis of the cost figures. net_listed = Σ max(price − refunded, 0): the
+  // listed price whatever the job was paid with. net_points / net_cash split
+  // what the wallet really paid (charge minus refund per job, never below 0)
+  // into bonus points and money, for the points share.
+  const revenue = await db.query<RevenueRow>(
+    `SELECT g.tool_id, count(*) AS completed,
+            COALESCE(sum(GREATEST(g.price - rf.points - rf.cash, 0)), 0) AS net_listed,
+            COALESCE(sum(GREATEST(ch.points - rf.points, 0)), 0) AS net_points,
+            COALESCE(sum(GREATEST(ch.cash - rf.cash, 0)), 0) AS net_cash
+       FROM generations g
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(sum(-t.points_delta), 0) AS points, COALESCE(sum(-(t.balance_delta + t.quota_delta)), 0) AS cash
+           FROM transactions t WHERE t.kind = 'charge' AND t.reference = g.id::text) ch ON true
+       ${REFUNDED_LATERAL}
+      WHERE g.status = 'COMPLETED' AND g.finished_at >= $1 AND g.finished_at < $2 AND ${jobs}
       GROUP BY g.tool_id`,
     bounds,
   );
@@ -498,7 +602,7 @@ async function aggregates(db: Queryable, range: DateRange): Promise<Aggregates> 
             count(*) FILTER (WHERE g.status = 'COMPLETED') AS completed,
             count(*) FILTER (WHERE g.status = 'FAILED') AS failed
        FROM generations g
-      WHERE g.finished_at >= $1 AND g.finished_at < $2
+      WHERE g.finished_at >= $1 AND g.finished_at < $2 AND ${jobs}
       GROUP BY g.tool_id`,
     bounds,
   );
@@ -510,6 +614,7 @@ async function aggregates(db: Queryable, range: DateRange): Promise<Aggregates> 
     `SELECT COALESCE(NULLIF(s.tool_id, ''), 'unknown') AS tool_id, s.outcome,
             COALESCE(sum(s.usd), 0) AS usd, count(*) AS records
        FROM (${spend.sql}) s
+      WHERE ${spendOk}
       GROUP BY 1, 2`,
     spend.params,
   );
@@ -523,11 +628,11 @@ async function aggregates(db: Queryable, range: DateRange): Promise<Aggregates> 
               sum(usd) FILTER (WHERE outcome = 'completed') AS c_usd,
               count(*) FILTER (WHERE outcome = 'completed') AS c_records,
               sum(usd) FILTER (WHERE outcome IN ('failed', 'abandoned')) AS f_usd
-         FROM spend GROUP BY 1, 2),
+         FROM spend WHERE ${spendFilter(includeAdmins, "spend")} GROUP BY 1, 2),
      j AS (
        SELECT g.tool_id, (g.finished_at AT TIME ZONE '${TZ}')::date AS d, count(*) AS completed
          FROM generations g
-        WHERE g.status = 'COMPLETED' AND g.finished_at >= $1 AND g.finished_at < $2
+        WHERE g.status = 'COMPLETED' AND g.finished_at >= $1 AND g.finished_at < $2 AND ${jobs}
         GROUP BY 1, 2)
      SELECT COALESCE(s.tool_id, j.tool_id) AS tool_id, to_char(COALESCE(s.d, j.d), 'YYYY-MM-DD') AS day,
             s.c_usd, s.f_usd, s.c_records, j.completed
@@ -535,14 +640,34 @@ async function aggregates(db: Queryable, range: DateRange): Promise<Aggregates> 
     spend.params,
   );
 
+  // Coverage stays over every completed job: admin-cost.ts owns that definition.
   const coverageRows = await spendCoverageByTool(db, spendRange);
-  const spendAll = await spendTotals(db, spendRange);
+  // All-in spend: the canonical rows, minus the admin accounts' when they are left out.
+  const spendAll = await db.query<{ usd: string | null }>(`SELECT COALESCE(sum(s.usd), 0) AS usd FROM (${spend.sql}) s WHERE ${spendOk}`, spend.params);
+  const adminJobs = await db.query<{ n: string }>(
+    `SELECT count(*) AS n FROM generations g
+      WHERE g.status = 'COMPLETED' AND g.finished_at >= $1 AND g.finished_at < $2 AND ${IS_ADMIN_JOB}`,
+    bounds,
+  );
 
-  const out: Aggregates = { orders: new Map(), cash: new Map(), outcomes: new Map(), spend: new Map(), coverage: new Map(), trend: new Map(), spendAllUsd: spendAll.usd };
+  const out: Aggregates = {
+    orders: new Map(),
+    cash: new Map(),
+    revenue: new Map(),
+    outcomes: new Map(),
+    spend: new Map(),
+    coverage: new Map(),
+    trend: new Map(),
+    spendAllUsd: round(num(spendAll.rows[0]?.usd), 6),
+    adminJobs: num(adminJobs.rows[0]?.n),
+  };
   for (const r of orders.rows) {
     out.orders.set(r.tool_id, { jobs: num(r.jobs), avgPrice: numOrNull(r.avg_price), refunded: num(r.refunded), avgUnits: numOrNull(r.avg_units) });
   }
   for (const r of cash.rows) out.cash.set(r.tool_id, num(r.cash));
+  for (const r of revenue.rows) {
+    out.revenue.set(r.tool_id, { completed: num(r.completed), netListed: num(r.net_listed), netPoints: num(r.net_points), netCash: num(r.net_cash) });
+  }
   for (const r of outcomes.rows) out.outcomes.set(r.tool_id, { completed: num(r.completed), failed: num(r.failed) });
   for (const r of spendRows.rows) {
     const acc = out.spend.get(r.tool_id) ?? { completedUsd: 0, completedRecords: 0, failedUsd: 0 };
@@ -563,8 +688,8 @@ async function aggregates(db: Queryable, range: DateRange): Promise<Aggregates> 
   return out;
 }
 
-function cachedAggregates(range: DateRange): Promise<Aggregates> {
-  return cached(`agg|${range.fromDay}|${range.toDay}`, () => readOnlyTx((c) => aggregates(c, range)));
+function cachedAggregates(range: DateRange, includeAdmins: boolean): Promise<Aggregates> {
+  return cached(`agg|${range.fromDay}|${range.toDay}|${includeAdmins ? "a" : "n"}`, () => readOnlyTx((c) => aggregates(c, range, includeAdmins)));
 }
 
 /** Daily average full cost per job (so'm), zero-filled over `days`. */
@@ -592,51 +717,100 @@ export function recommendedPercent(current: number, markup: number | null, targe
   return Math.min(PRICE_PERCENT_MAX, Math.max(PRICE_PERCENT_MIN, stepped));
 }
 
+/**
+ * Margin in percent: `(revenue × (1 − fee) − cost) ÷ revenue × 100`, the
+ * payment fee being a share of the revenue. `null` without a positive revenue
+ * or a known cost (never NaN/Infinity on the wire). The one place the primary
+ * margin, the total and the simulator get their arithmetic from.
+ */
+export function marginPercent(revenueSoum: number | null, costSoum: number | null, feePercent = 0): number | null {
+  if (revenueSoum === null || costSoum === null || !(revenueSoum > 0)) return null;
+  return ((revenueSoum * (1 - feePercent / 100) - costSoum) / revenueSoum) * 100;
+}
+
+/** `admins` query value: absent = admin accounts left out; `1` = included; anything else is a 400. */
+export function parseIncludeAdminsParam(raw: string | null): boolean {
+  if (raw === null || raw === "" || raw === "0") return false;
+  if (raw === "1") return true;
+  throw new ApiError("Noto'g'ri parametr: admins", 400);
+}
+
 /** Query parameters of `GET /api/admin/pricing`; anything malformed is a 400. */
-export function parsePricingParams(url: URL): { range: DateRange } {
+export function parsePricingParams(url: URL): { range: DateRange; includeAdmins: boolean } {
   const single = (name: string): string | null => {
     const all = url.searchParams.getAll(name);
     if (all.length > 1) throw new ApiError(`Noto'g'ri parametr: ${name}`, 400);
     return all[0] ? all[0] : null;
   };
-  return { range: parseDateRange(single("from"), single("to")) };
+  return { range: parseDateRange(single("from"), single("to")), includeAdmins: parseIncludeAdminsParam(single("admins")) };
 }
 
-export async function pricingOverview(range: DateRange, opts?: MoneyOptions): Promise<PricingOverview> {
+export async function pricingOverview(range: DateRange, opts?: MoneyOptions & { includeAdmins?: boolean }): Promise<PricingOverview> {
   const k = soumPerCoinOf(opts);
-  const [agg, adjustments, fx, targetMarkup] = await Promise.all([
-    cachedAggregates(range),
+  const includeAdmins = opts?.includeAdmins === true;
+  const [agg, adjustments, fx, targetMarkup, feePercent] = await Promise.all([
+    cachedAggregates(range, includeAdmins),
     adjustmentsOf(pool()),
     soumPerUsd(),
     getSetting("pricing.target_markup"),
+    getSetting("pricing.payment_fee_percent"),
   ]);
   const days = daysOf(range).slice(-LIST_TREND_DAYS);
-  const totals: PricingTotals = { jobs: 0, completed: 0, cashRevenue: 0, cashRevenueSoum: 0, costUsdTools: 0, costSoumTools: 0, costUsdOther: 0, costUsdAll: 0, marginPct: null };
+  const totals: PricingTotals = {
+    jobs: 0,
+    completed: 0,
+    cashRevenue: 0,
+    cashRevenueSoum: 0,
+    costUsdTools: 0,
+    costSoumTools: 0,
+    costUsdOther: 0,
+    costUsdAll: 0,
+    revenue: 0,
+    revenueSoum: 0,
+    feeSoum: 0,
+    marginPct: null,
+    cashMarginPct: null,
+    bonusCostSoum: 0,
+    pointsSharePct: null,
+  };
+  let netPoints = 0;
+  let netPaid = 0;
+  let bonusCostUsd = 0;
 
   const items: PricingItem[] = TOOLS.map((tool) => {
     const id = tool.id;
     const adjust = adjustments.get(id) ?? { ...DEFAULT_ADJUST };
     const o = agg.orders.get(id) ?? { jobs: 0, avgPrice: null, refunded: 0, avgUnits: null };
     const cash = agg.cash.get(id) ?? 0;
+    const rev = agg.revenue.get(id) ?? { completed: 0, netListed: 0, netPoints: 0, netCash: 0 };
     const oc = agg.outcomes.get(id) ?? { completed: 0, failed: 0 };
     const sp = agg.spend.get(id) ?? { completedUsd: 0, completedRecords: 0, failedUsd: 0 };
     const cov = agg.coverage.get(id);
 
     const avgCashRevenue = ratio(cash, o.jobs);
     const avgCashRevenueSoum = avgCashRevenue === null ? null : avgCashRevenue * k;
+    const avgRevenue = ratio(rev.netListed, rev.completed);
+    const avgRevenueSoum = avgRevenue === null ? null : avgRevenue * k;
     const avgCostUsd = ratio(sp.completedUsd, sp.completedRecords);
     const overheadUsd = ratio(sp.failedUsd, oc.completed);
     const fullCostUsd = avgCostUsd === null || overheadUsd === null ? null : avgCostUsd + overheadUsd;
     const fullCostSoum = fullCostUsd === null ? null : fullCostUsd * fx;
     const costPerUnitSoum = fullCostSoum === null || o.avgUnits === null || !(o.avgUnits > 0) ? null : fullCostSoum / o.avgUnits;
-    const marginPct =
-      avgCashRevenueSoum === null || !(avgCashRevenueSoum > 0) || fullCostSoum === null ? null : ((avgCashRevenueSoum - fullCostSoum) / avgCashRevenueSoum) * 100;
-    const markup = o.avgPrice === null || fullCostSoum === null || !(fullCostSoum > 0) ? null : (o.avgPrice * k) / fullCostSoum;
+    const margin = marginPercent(avgRevenueSoum, fullCostSoum, feePercent);
+    const cashMargin = marginPercent(avgCashRevenueSoum, fullCostSoum);
+    const markup = avgRevenueSoum === null || fullCostSoum === null || !(fullCostSoum > 0) ? null : avgRevenueSoum / fullCostSoum;
+    // Points share of what the wallet paid for the completed jobs; the AI spend of the period × that share is the bonus cost.
+    const pointsShare = ratio(rev.netPoints, rev.netPoints + rev.netCash);
+    const toolSpendUsd = sp.completedUsd + sp.failedUsd;
 
     totals.jobs += o.jobs;
     totals.completed += oc.completed;
     totals.cashRevenue += cash;
-    totals.costUsdTools += sp.completedUsd + sp.failedUsd;
+    totals.revenue += rev.netListed;
+    totals.costUsdTools += toolSpendUsd;
+    netPoints += rev.netPoints;
+    netPaid += rev.netPoints + rev.netCash;
+    if (pointsShare !== null) bonusCostUsd += toolSpendUsd * pointsShare;
 
     const r2 = (v: number | null): number | null => (v === null ? null : round(v, 2));
     return {
@@ -655,6 +829,8 @@ export async function pricingOverview(range: DateRange, opts?: MoneyOptions): Pr
       avgPrice: r2(o.avgPrice),
       avgCashRevenue: r2(avgCashRevenue),
       avgCashRevenueSoum: r2(avgCashRevenueSoum),
+      avgRevenue: r2(avgRevenue),
+      avgRevenueSoum: r2(avgRevenueSoum),
       avgUnits: r2(o.avgUnits),
       avgCostUsd: avgCostUsd === null ? null : round(avgCostUsd, 6),
       avgCostSoum: r2(avgCostUsd === null ? null : avgCostUsd * fx),
@@ -662,8 +838,11 @@ export async function pricingOverview(range: DateRange, opts?: MoneyOptions): Pr
       overheadSoum: r2(overheadUsd === null ? null : overheadUsd * fx),
       fullCostSoum: r2(fullCostSoum),
       costPerUnitSoum: r2(costPerUnitSoum),
-      marginPct: r2(marginPct),
+      marginPct: r2(margin),
+      cashMarginPct: r2(cashMargin),
       markup: markup === null ? null : round(markup, 3),
+      pointsSharePct: r2(pointsShare === null ? null : pointsShare * 100),
+      bonusCostSoum: r2(pointsShare === null ? null : toolSpendUsd * pointsShare * fx),
       coveragePct: cov && cov.jobsCompleted > 0 ? round(cov.pct, 2) : null,
       jobsWithCost: cov?.jobsWithCost ?? 0,
       recommendedPercent: recommendedPercent(adjust.percent, markup, targetMarkup),
@@ -680,7 +859,14 @@ export async function pricingOverview(range: DateRange, opts?: MoneyOptions): Pr
   totals.costUsdAll = agg.spendAllUsd;
   totals.costUsdOther = round(Math.max(0, agg.spendAllUsd - totals.costUsdTools), 6);
   totals.cashRevenueSoum = round(totals.cashRevenue * k, 2);
-  totals.marginPct = totals.cashRevenueSoum > 0 ? round(((totals.cashRevenueSoum - totals.costSoumTools) / totals.cashRevenueSoum) * 100, 2) : null;
+  totals.revenueSoum = round(totals.revenue * k, 2);
+  totals.feeSoum = round((totals.revenueSoum * feePercent) / 100, 2);
+  const totalMargin = marginPercent(totals.revenueSoum, totals.costSoumTools, feePercent);
+  totals.marginPct = totalMargin === null ? null : round(totalMargin, 2);
+  const totalCashMargin = marginPercent(totals.cashRevenueSoum, totals.costSoumTools);
+  totals.cashMarginPct = totalCashMargin === null ? null : round(totalCashMargin, 2);
+  totals.bonusCostSoum = round(bonusCostUsd * fx, 2);
+  totals.pointsSharePct = netPaid > 0 ? round((netPoints / netPaid) * 100, 2) : null;
 
   return {
     range: { from: range.fromDay, to: range.toDay, days: range.days },
@@ -689,6 +875,9 @@ export async function pricingOverview(range: DateRange, opts?: MoneyOptions): Pr
     fx,
     soumPerCoin: k,
     targetMarkup,
+    paymentFeePercent: feePercent,
+    includeAdmins,
+    adminJobs: agg.adminJobs,
     groups: TOOL_GROUPS,
     caveats: [...COST_CAVEATS],
   };
@@ -773,9 +962,9 @@ export async function priceHistory(toolId: ToolId): Promise<PriceHistoryRow[]> {
   }));
 }
 
-export async function pricingDetail(toolId: ToolId, days: number): Promise<PricingDetail> {
+export async function pricingDetail(toolId: ToolId, days: number, includeAdmins = false): Promise<PricingDetail> {
   const range = parseDateRange(null, null, { defaultDays: days, maxDays: TREND_MAX_DAYS });
-  const [agg, adjust, history, fx] = await Promise.all([cachedAggregates(range), adjustmentOf(pool(), toolId), priceHistory(toolId), soumPerUsd()]);
+  const [agg, adjust, history, fx] = await Promise.all([cachedAggregates(range, includeAdmins), adjustmentOf(pool(), toolId), priceHistory(toolId), soumPerUsd()]);
   const tool = TOOL_BY_ID[toolId];
   return {
     tool: { toolId, title: tool.title, group: tool.group, unit: UNIT_OF[toolId], unitLabel: UNIT_LABELS[UNIT_OF[toolId]], adjust },
@@ -791,13 +980,15 @@ export async function pricingDetail(toolId: ToolId, days: number): Promise<Prici
 // Simulator (§17.4, §17.5 POST /pricing/:toolId/simulate)
 
 export type Projection = {
-  /** Σ listed price of the tool's jobs in the window, tanga. */
+  /** Σ net listed revenue (price minus refunds) of the tool's completed jobs in the window, tanga. */
   revenue30d: number;
   /** revenue30d × SOUM_PER_COIN, so'm. */
   revenue30dSoum: number;
+  /** Payment fee on that revenue (`pricing.payment_fee_percent`), so'm. */
+  feeSoum: number;
   /** Σ AI spend of every outcome in the window, so'm. */
   cost30d: number;
-  /** (revenue30dSoum − cost30d) ÷ revenue30dSoum × 100; `null` without revenue. */
+  /** (revenue30dSoum − feeSoum − cost30d) ÷ revenue30dSoum × 100; `null` without revenue. The table's primary margin. */
   marginPct: number | null;
 };
 
@@ -806,7 +997,7 @@ export type Simulation = {
   proposed: PriceAdjust;
   ladder: LadderRow[];
   window: { from: string; to: string; days: number };
-  /** The last 30 days as they were listed (actual `generations.price`). */
+  /** The last 30 days as they were listed (actual `generations.price` of the completed jobs, minus refunds). */
   current: Projection & { jobs: number };
   /** The same jobs re-priced with `proposed`; cost unchanged. */
   projected: Projection;
@@ -815,7 +1006,19 @@ export type Simulation = {
   fx: number;
   /** So'm per tanga (`SOUM_PER_COIN`). */
   soumPerCoin: number;
+  /** `pricing.payment_fee_percent`, deducted from both projections. */
+  paymentFeePercent: number;
+  /** Whether admin accounts' jobs are in the window (the table's toggle). */
+  includeAdmins: boolean;
 };
+
+/** `includeAdmins` of a simulate body: absent = false; present it must be a boolean (400 otherwise). */
+export function parseIncludeAdminsBody(body: Record<string, unknown>): boolean {
+  const v = body.includeAdmins;
+  if (v === undefined) return false;
+  if (typeof v !== "boolean") throw new ApiError("includeAdmins true yoki false bo'lishi kerak", 400);
+  return v;
+}
 
 /** Validated `{percent, roundTo}` of a request body (400 with an Uzbek message). */
 export function parseAdjustBody(body: Record<string, unknown>): PriceAdjust {
@@ -845,60 +1048,76 @@ const PRICE_INPUTS_SQL = `jsonb_strip_nulls(jsonb_build_object(
     'sourceChars', COALESCE(g.values_json->'sourceChars', to_jsonb(length(g.values_json->>'sourceText'))),
     'sourceAssetId', CASE WHEN g.tool_id = 'translation' THEN to_jsonb('projection'::text) END))`;
 
-type ProjectionRow = { price: string; inputs: FormValues };
-type ProjectionInputs = { jobs: { price: number; base: number }[]; costUsd: number; partial: boolean; range: DateRange };
+type ProjectionRow = { price: string; net: string; inputs: FormValues };
+/** `net` = price minus refunds (what the job really kept); `ratio` = net ÷ price, 0 for an unpriced job. */
+type ProjectionInputs = { jobs: { net: number; ratio: number; base: number }[]; costUsd: number; partial: boolean; range: DateRange };
 
-async function projectionInputs(toolId: ToolId): Promise<ProjectionInputs> {
+async function projectionInputs(toolId: ToolId, includeAdmins: boolean): Promise<ProjectionInputs> {
   // Always the last 30 Tashkent days (the simulator's window is fixed by §17.4).
   const range = parseDateRange(null, null, { defaultDays: 30 });
-  return cached(`proj|${toolId}|${range.fromDay}|${range.toDay}`, () =>
+  return cached(`proj|${toolId}|${range.fromDay}|${range.toDay}|${includeAdmins ? "a" : "n"}`, () =>
     readOnlyTx(async (c) => {
       const tool = TOOL_BY_ID[toolId];
+      // The same jobs the table's revenue is on: COMPLETED, finished in the window, admin accounts left out by default.
       const rows = await c.query<ProjectionRow>(
-        `SELECT g.price::text AS price, ${PRICE_INPUTS_SQL} AS inputs
+        `SELECT g.price::text AS price, GREATEST(g.price - rf.points - rf.cash, 0)::text AS net, ${PRICE_INPUTS_SQL} AS inputs
            FROM generations g
-          WHERE g.tool_id = $3 AND g.created_at >= $1 AND g.created_at < $2
-          ORDER BY g.created_at, g.id
+           ${REFUNDED_LATERAL}
+          WHERE g.tool_id = $3 AND g.status = 'COMPLETED' AND g.finished_at >= $1 AND g.finished_at < $2 AND ${jobFilter(includeAdmins)}
+          ORDER BY g.finished_at, g.id
           LIMIT ${PROJECTION_MAX_JOBS + 1}`,
         [range.fromTs, range.toTsExclusive, toolId],
       );
       const partial = rows.rows.length > PROJECTION_MAX_JOBS;
-      const jobs = rows.rows.slice(0, PROJECTION_MAX_JOBS).map((r) => ({ price: num(r.price), base: basePriceFor(tool, r.inputs ?? {}) }));
+      const jobs = rows.rows.slice(0, PROJECTION_MAX_JOBS).map((r) => {
+        const price = num(r.price);
+        const net = num(r.net);
+        return { net, ratio: price > 0 ? net / price : 0, base: basePriceFor(tool, r.inputs ?? {}) };
+      });
       const spend = spendRowsSql({ fromTs: range.fromTs, toTsExclusive: range.toTsExclusive });
-      const cost = await c.query<{ usd: string }>(`SELECT COALESCE(sum(s.usd), 0) AS usd FROM (${spend.sql}) s WHERE s.tool_id = $3`, [...spend.params, toolId]);
+      const cost = await c.query<{ usd: string }>(
+        `SELECT COALESCE(sum(s.usd), 0) AS usd FROM (${spend.sql}) s WHERE s.tool_id = $3 AND ${spendFilter(includeAdmins)}`,
+        [...spend.params, toolId],
+      );
       return { jobs, costUsd: num(cost.rows[0]?.usd), partial, range };
     }),
   );
 }
 
 /**
- * Projection formula (the same 30-day window for volume and cost):
- *   projected.revenue30d = Σ_jobs applyPriceAdjust(basePriceFor(tool, job inputs), proposed)
- *   current.revenue30d   = Σ_jobs generations.price            (what was actually listed)
- *   cost30d              = Σ spend rows of the tool, every outcome × fx   (so'm; a price change does not change cost)
- *   revenue30dSoum       = revenue30d × SOUM_PER_COIN                     (tanga → so'm)
- *   marginPct            = (revenue30dSoum − cost30d) ÷ revenue30dSoum × 100
- * Volume is held constant (no demand elasticity). Revenue here is the listed
- * price of every job (points included), not the cash revenue of §17.4.
+ * Projection formula (the same 30-day window for volume and cost), on the
+ * SAME revenue as the table's primary margin:
+ *   current.revenue30d   = Σ_completed jobs max(price − refunds, 0)            (what was actually listed and kept)
+ *   projected.revenue30d = Σ_completed jobs applyPriceAdjust(basePriceFor(tool, job inputs), proposed) × net ÷ price
+ *                          (a job refunded in part stays refunded in the same share; an unpriced job stays unpriced)
+ *   cost30d              = Σ spend rows of the tool, every outcome × fx          (so'm; a price change does not change cost)
+ *   revenue30dSoum       = revenue30d × SOUM_PER_COIN                            (tanga → so'm)
+ *   feeSoum              = revenue30dSoum × pricing.payment_fee_percent ÷ 100
+ *   marginPct            = (revenue30dSoum − feeSoum − cost30d) ÷ revenue30dSoum × 100
+ * Volume is held constant (no demand elasticity). Revenue is the listed price
+ * whatever the job was paid with (points included), as in the table.
  */
-export async function simulatePricing(toolId: ToolId, proposed: PriceAdjust, opts?: MoneyOptions): Promise<Simulation> {
+export async function simulatePricing(toolId: ToolId, proposed: PriceAdjust, opts?: MoneyOptions & { includeAdmins?: boolean }): Promise<Simulation> {
   const k = soumPerCoinOf(opts);
-  const [inputs, fx] = await Promise.all([projectionInputs(toolId), soumPerUsd()]);
+  const includeAdmins = opts?.includeAdmins === true;
+  const [inputs, fx, feePercent] = await Promise.all([projectionInputs(toolId, includeAdmins), soumPerUsd(), getSetting("pricing.payment_fee_percent")]);
   const adj: PriceAdjust | null = proposed.percent === 100 ? null : proposed;
   const cost30d = round(inputs.costUsd * fx, 2);
   let currentRevenue = 0;
   let projectedRevenue = 0;
   for (const j of inputs.jobs) {
-    currentRevenue += j.price;
-    projectedRevenue += applyPriceAdjust(j.base, adj);
+    currentRevenue += j.net;
+    projectedRevenue += applyPriceAdjust(j.base, adj) * j.ratio;
   }
   const projection = (revenue: number): Projection => {
     const revenueSoum = round(revenue * k, 2);
+    const margin = marginPercent(revenueSoum, cost30d, feePercent);
     return {
       revenue30d: revenue,
       revenue30dSoum: revenueSoum,
+      feeSoum: round((revenueSoum * feePercent) / 100, 2),
       cost30d,
-      marginPct: revenueSoum > 0 ? round(((revenueSoum - cost30d) / revenueSoum) * 100, 2) : null,
+      marginPct: margin === null ? null : round(margin, 2),
     };
   };
   return {
@@ -907,10 +1126,12 @@ export async function simulatePricing(toolId: ToolId, proposed: PriceAdjust, opt
     ladder: effectiveLadder(ladderFor(toolId), adj),
     window: { from: inputs.range.fromDay, to: inputs.range.toDay, days: inputs.range.days },
     current: { ...projection(currentRevenue), jobs: inputs.jobs.length },
-    projected: projection(projectedRevenue),
+    projected: projection(Math.round(projectedRevenue)),
     partial: inputs.partial,
     fx,
     soumPerCoin: k,
+    paymentFeePercent: feePercent,
+    includeAdmins,
   };
 }
 
