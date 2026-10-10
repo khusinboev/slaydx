@@ -34,6 +34,8 @@ export type LogContext = {
   userId?: string;
   genId?: string;
   provider?: string;
+  /** Tool of the running job (worker sets it), so LLM/engine lines carry it. */
+  toolId?: string;
 };
 
 export type LogFields = LogContext & { err?: unknown; [key: string]: unknown };
@@ -129,12 +131,15 @@ function clip(s: string): string {
 }
 
 /** Xato obyektini `{message, stack, name?, code?}` ga aylantiradi (redaksiya bilan). */
-export function serializeError(e: unknown): { message: string; stack?: string; name?: string; code?: string } {
+export function serializeError(e: unknown, depth = 0): { message: string; stack?: string; name?: string; code?: string; cause?: unknown } {
   if (e instanceof Error) {
-    const out: { message: string; stack?: string; name?: string; code?: string } = {
+    const out: { message: string; stack?: string; name?: string; code?: string; cause?: unknown } = {
       message: clip(redact(e.message)),
     };
-    if (e.stack) out.stack = clip(redact(e.stack));
+    // `Error.cause` (one level): engines attach the last LLM failure here so the root cause is in the same line.
+    const cause = (e as { cause?: unknown }).cause;
+    if (cause !== undefined && cause !== null && depth < 1) out.cause = serializeError(cause, depth + 1);
+    if (e.stack && depth === 0) out.stack = clip(redact(e.stack));
     if (e.name && e.name !== "Error") out.name = e.name;
     const code = (e as { code?: unknown }).code;
     if (typeof code === "string" || typeof code === "number") out.code = String(code);

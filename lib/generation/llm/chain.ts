@@ -30,7 +30,9 @@
  * CHEKLAGICH (`limiter.ts`): provayder bo'yicha bir vaqtdagi so'rovlar
  * soni; navbatda kutilgan vaqt urinish timeout'idan ayriladi.
  */
-import { LLM_BREAKER, breakerFor, type CircuitBreaker } from "./breaker";
+import { recordLlmUsage } from "../job-cost";
+import { LLM_BREAKER, allowOrWait, breakerFor, type CircuitBreaker } from "./breaker";
+import { classifyFailure, reportFailure, type FailureKind } from "./failure";
 import { limiterFor, type Semaphore } from "./limiter";
 import { backoffMs, equalJitterMs } from "./retry";
 import type { Attempt, ProviderAdapter, ProviderId, RoleSpec } from "./types";
@@ -44,9 +46,16 @@ export type ChainOpts = {
   deadline?: number;
 };
 
-export type ChainUsage = { provider: ProviderId; model: string; inputTokens: number; outputTokens: number };
+export type ChainUsage = {
+  provider: ProviderId;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  /** Earlier paid attempts of the same call (JSON-quality retry, `llm-roles.ts`). */
+  prior?: ChainUsage[];
+};
 
-export type ChainResult = { text: string; usage: ChainUsage };
+export type ChainResult = { text: string; usage: ChainUsage; finishReason?: string };
 
 export type ChainDeps = {
   adapters: Partial<Record<ProviderId, ProviderAdapter>>;
@@ -101,6 +110,11 @@ function isTimeoutSignal(error: string): boolean {
   return /abort|\btimed?\s?out\b/i.test(error);
 }
 
+/** Timeout retry on the same provider (only when there is no fallback spec) needs at least this much job time. */
+export const TIMEOUT_RETRY_MIN_LEFT_MS = 20_000;
+/** A job with a deadline waits at most this long for an open breaker's cooldown. */
+export const BREAKER_WAIT_MAX_MS = 35_000;
+
 /** Ochiq saqlagich uchun eng uzun muddat — soxta ulkan `Retry-After` provayderni abadiy o'chirmasin. */
 const BREAKER_TRIP_MAX_MS = 10 * 60_000;
 
@@ -111,7 +125,14 @@ type Ctx = {
   breaker: CircuitBreaker;
   limiter: Semaphore;
   random: () => number;
+  /** No fallback spec follows: a timeout may be retried on the same provider. */
+  lastSpec: boolean;
 };
+
+/** Skipped-call failure (breaker open, queue timeout, ...): one structured line like a failed attempt. */
+function reportSkip(ctx: Ctx, spec: RoleSpec, attempt: number, message: string, kind: FailureKind = "other"): void {
+  reportFailure({ role: ctx.role, provider: spec.provider, model: spec.model, attempt, durationMs: 0, kind, retryable: false, message });
+}
 
 /** Muddatgacha ishlatsa bo'ladigan vaqt; muddatsiz — cheksiz. */
 function leftMs(opts: ChainOpts): number {
@@ -126,11 +147,13 @@ async function runSpec(
   ctx: Ctx,
 ): Promise<ChainResult | null | "timeout" | "deadline"> {
   const { role, opts, log, breaker, limiter } = ctx;
+  let timeoutRetried = false;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const left = leftMs(opts);
     if (left < CHAIN_MIN_ATTEMPT_MS) return "deadline";
     if (attempt > 0 && !breaker.allow()) {
       log(`[llm:${role}] ${spec.provider}:${spec.model} → saqlagich ochildi, keyingi specga`);
+      reportSkip(ctx, spec, attempt + 1, "circuit breaker opened during retries");
       return null;
     }
     const budget = Math.min(opts.timeoutMs, left);
@@ -138,6 +161,7 @@ async function runSpec(
     const release = await limiter.acquire(budget);
     if (!release) {
       log(`[llm:${role}] ${spec.provider}:${spec.model} → navbatda vaqt tugadi (${budget} ms)`);
+      reportSkip(ctx, spec, attempt + 1, `limiter queue wait exceeded ${budget} ms (max ${limiter.max} in flight)`, "timeout");
       return "timeout";
     }
     // Navbatda kutilgan vaqt ayriladi; bo'sh slotda timeout aynan sozlangandek.
@@ -166,11 +190,36 @@ async function runSpec(
           inputTokens: res.usage.inputTokens,
           outputTokens: res.usage.outputTokens,
         },
+        ...(res.finishReason ? { finishReason: res.finishReason } : {}),
       };
     }
     log(`[llm:${role}] ${spec.provider}:${spec.model} → xato (${res.status ?? "-"}) ${ms} ms: ${res.error}`);
-    if (isTimeoutSignal(res.error)) {
+    const timedOut = res.kind === "timeout" || (res.kind === undefined && isTimeoutSignal(res.error));
+    // One structured line per failed attempt: kind/status/tokens, never prompt text.
+    reportFailure({
+      role,
+      provider: spec.provider,
+      model: spec.model,
+      attempt: attempt + 1,
+      durationMs: ms,
+      kind: res.kind ?? classifyFailure({ status: res.status, message: res.error, timedOut }),
+      status: res.status,
+      retryable: res.retryable,
+      message: res.error,
+      finishReason: res.finishReason,
+      inputTokens: res.usage?.inputTokens,
+      outputTokens: res.usage?.outputTokens,
+    });
+    // A failed but paid attempt (thinking tokens, no text) is still spend.
+    if (res.usage) recordLlmUsage({ provider: spec.provider, model: spec.model, ...res.usage });
+    if (timedOut) {
       if (timeoutMs >= BREAKER_TIMEOUT_FLOOR_MS) breaker.failure();
+      // No fallback spec: one retry on the same provider if the job still has time.
+      if (ctx.lastSpec && opts.deadline !== undefined && !timeoutRetried && attempt < MAX_ATTEMPTS - 1 && leftMs(opts) >= TIMEOUT_RETRY_MIN_LEFT_MS) {
+        timeoutRetried = true;
+        await sleep(equalJitterMs(0, 500, ctx.random));
+        continue;
+      }
       return "timeout";
     }
     /*
@@ -180,7 +229,9 @@ async function runSpec(
      * ishning muammoli promptlari tufayli Gemini'ni butun jarayon uchun
      * o'chirib qo'yardi (review R1). `llm.ts withRetry` bilan bir xil qoida.
      */
-    if (res.status === undefined ? res.retryable : res.status >= 500) breaker.failure();
+    if (res.kind === "empty" || res.kind === "safety") {
+      // Provider answered (empty candidate / policy block): healthy transport, not a breaker failure.
+    } else if (res.status === undefined ? res.retryable : res.status >= 500) breaker.failure();
     else if (res.status !== undefined && res.status !== 429) breaker.success();
     // Kvota: sarf chegarasi (429, retryable:false) yoki uzun `Retry-After` —
     // provayder shu muddat javob bermaydi; har chaqiruvda qayta urmaslik uchun darhol ochamiz.
@@ -196,7 +247,10 @@ async function runSpec(
     // Tarmoq xatosi (status yo'q: ETIMEDOUT/ECONNRESET) — uzilish odatda bir
     // necha soniya: asos 2 s va TENG jitter (≥ yarmi kutiladi, AUDIT-19 smoke);
     // HTTP xatosida 500 ms asos, to'liq jitter.
-    const wait = res.retryAfterMs ?? (res.status === undefined ? equalJitterMs(attempt, 2_000, ctx.random) : backoffMs(attempt, 500, ctx.random));
+    // Empty answers carry no status but are not connection trouble: short wait.
+    const wait =
+      res.retryAfterMs ??
+      (res.kind === "empty" ? equalJitterMs(attempt, 500, ctx.random) : res.status === undefined ? equalJitterMs(attempt, 2_000, ctx.random) : backoffMs(attempt, 500, ctx.random));
     if (leftMs(opts) - wait < CHAIN_MIN_ATTEMPT_MS) return "deadline";
     await sleep(wait);
   }
@@ -216,7 +270,7 @@ export async function completeWithChain(
   const getLimiter = deps.limiterFor ?? ((p: ProviderId) => limiterFor(p));
   const random = deps.random ?? Math.random;
   let outOfTime = false;
-  for (const spec of specs) {
+  for (const [specIndex, spec] of specs.entries()) {
     if (!process.env[KEY_ENV[spec.provider]]?.trim()) {
       log(`[llm:${role}] ${spec.provider}:${spec.model} → kalit yo'q, o'tkazib yuborildi`);
       continue;
@@ -231,11 +285,15 @@ export async function completeWithChain(
       break;
     }
     const breaker = getBreaker(spec.provider);
-    if (!breaker.allow()) {
+    const lastSpec = specIndex === specs.length - 1;
+    // Only the last spec waits for a short cooldown (a fallback spec would answer sooner), and only inside a job deadline.
+    const waitMax = lastSpec && opts.deadline !== undefined ? Math.min(BREAKER_WAIT_MAX_MS, leftMs(opts) - CHAIN_MIN_ATTEMPT_MS - 5_000) : 0;
+    if (!(waitMax > 0 ? await allowOrWait(breaker, waitMax, random) : breaker.allow())) {
       log(`[llm:${role}] ${spec.provider}:${spec.model} → saqlagich ochiq, o'tkazib yuborildi`);
+      reportFailure({ role, provider: spec.provider, model: spec.model, attempt: 0, durationMs: 0, kind: "other", retryable: false, message: "circuit breaker open - call skipped" });
       continue;
     }
-    const result = await runSpec(spec, adapter, system, user, { role, opts, log, breaker, limiter: getLimiter(spec.provider), random });
+    const result = await runSpec(spec, adapter, system, user, { role, opts, log, breaker, limiter: getLimiter(spec.provider), random, lastSpec });
     if (result === "deadline") {
       outOfTime = true;
       break;

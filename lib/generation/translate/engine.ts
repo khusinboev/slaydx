@@ -29,6 +29,7 @@ import {
 import { glossarySystem, glossaryUser, strictSuffix, translationBatchUser, translationSystem, type BatchItem } from "./prompts";
 import { isTranslationStyle, type GlossaryEntry, type TranslationReport, type TranslationStyle, type TranslationWarning } from "./report";
 import { parseUserGlossary, USER_GLOSSARY_MAX } from "./glossary";
+import { errorWithCause } from "../llm/failure";
 export { parseUserGlossary } from "./glossary";
 
 /**
@@ -438,7 +439,7 @@ export async function translateSegments(segs: Segment[], opts: TranslateOpts, de
   if (failedCount > allowed) {
     // Yetishmovchilik muddat tufayli — foydalanuvchiga «vaqt tugadi» (worker `DeadlineError` ni taniydi).
     if ([...failed.values()].some((f) => f.detail === TIME_OUT)) throw new DeadlineError("translate", remaining());
-    throw new Error(`Tarjima to‘liq chiqmadi: ${total} banddan ${failedCount} tasi tarjima qilinmadi. Kredit qaytariladi — qayta urinib ko‘ring.`);
+    throw errorWithCause(`Tarjima to‘liq chiqmadi: ${total} banddan ${failedCount} tasi tarjima qilinmadi. Kredit qaytariladi — qayta urinib ko‘ring.`);
   }
   const byId = new Map(work.map((s) => [s.id, s]));
   for (const [id] of failed) {

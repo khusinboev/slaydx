@@ -22,8 +22,17 @@ export function makeGeminiAdapter(deps: GeminiDeps = {}): ProviderAdapter {
         thinking: opts.thinking,
         fetchImpl: deps.fetchImpl,
       });
-      if (res.ok) return { ok: true, text: res.text, usage: res.usage };
-      return { ok: false, error: res.error, retryable: res.retryable, status: res.status, retryAfterMs: res.retryAfterMs };
+      if (res.ok) return { ok: true, text: res.text, usage: res.usage, finishReason: res.finishReason };
+      return {
+        ok: false,
+        error: res.error,
+        retryable: res.retryable,
+        status: res.status,
+        retryAfterMs: res.retryAfterMs,
+        kind: res.kind,
+        finishReason: res.finishReason,
+        usage: res.usage,
+      };
     },
   };
 }

@@ -3,8 +3,9 @@
  * Kalit bo‘lmasa chaqiruv ketmaydi.
  */
 import { recordGrounding, recordLlmUsage } from "./job-cost";
-import { breakerFor } from "./llm/breaker";
-import { CHAIN_MIN_ATTEMPT_MS, CHAIN_SAFETY_MS, DeadlineError } from "./llm/chain";
+import { allowOrWait, breakerFor } from "./llm/breaker";
+import { BREAKER_WAIT_MAX_MS, CHAIN_MIN_ATTEMPT_MS, CHAIN_SAFETY_MS, DeadlineError, TIMEOUT_RETRY_MIN_LEFT_MS } from "./llm/chain";
+import { classifyFailure, isMaxTokensFinish, isSafetyFinish, reportFailure, withJsonRetry, type FailureKind } from "./llm/failure";
 import { limiterFor } from "./llm/limiter";
 import { backoffMs, equalJitterMs, geminiRetryDelayMs, parseRetryAfter } from "./llm/retry";
 
@@ -82,6 +83,8 @@ export type GroundedResult = {
   queries: string[];
   sources: GroundedSource[];
   entryPoint?: string;
+  /** Provider's raw stop reason (Gemini `finishReason`): `MAX_TOKENS` means the answer was cut. */
+  finishReason?: string;
 };
 
 /**
@@ -100,8 +103,14 @@ type Attempt<T> = {
   retryAfterMs?: number;
   /** Bizning timeout'imiz (abort) — sekin provayder belgisi. */
   timedOut?: boolean;
-  /** Muvaffaqiyatli javobning token sarfi (EXT-11 telemetriyasi). */
+  /** Token spend of the attempt (EXT-11 telemetry); on a FAILED attempt it is a paid, empty answer. */
   usage?: RawUsage;
+  /** Failure classification the provider call already knows (empty/safety/...); HTTP/network/timeout are derived. */
+  kind?: FailureKind;
+  /** Short provider error text for the structured failure line (never prompt text). */
+  message?: string;
+  /** Provider stop reason (also on success: `MAX_TOKENS` marks a truncated answer). */
+  finishReason?: string;
 };
 
 /** Qayta urinish uchun kamida shuncha vaqt qolishi kerak (ms). */
@@ -153,13 +162,18 @@ async function withRetry<T>(
   budget: number,
   call: (timeoutMs: number) => Promise<Attempt<T>>,
   deadline?: number,
-): Promise<T | null> {
-  const started = Date.now();
+  role = "complete",
+): Promise<{ value: T; finishReason?: string } | null> {
+  let started = Date.now();
   const breaker = breakerFor(provider);
   const limiter = limiterFor(provider);
+  const model = llmModel();
   const MAX_ATTEMPTS = 3;
+  let timeoutRetried = false;
   // Ish muddatigacha ishlatsa bo'ladigan vaqt (`llm/chain.ts leftMs` bilan bir xil); muddatsiz — cheksiz.
   const jobLeft = () => (deadline === undefined ? Number.POSITIVE_INFINITY : deadline - CHAIN_SAFETY_MS - Date.now());
+  const skipped = (attempt: number, kind: FailureKind, message: string) =>
+    reportFailure({ role, provider, model, attempt: attempt + 1, durationMs: 0, kind, retryable: false, message });
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const left = budget - (Date.now() - started);
     // Qayta urinish uchun kamida 6 soniya qolishi kerak.
@@ -170,37 +184,67 @@ async function withRetry<T>(
     /*
      * Saqlagich (audit EXT-04): ketma-ket sekin/5xx javoblardan keyin
      * provayder sovish davrida CHAQIRILMAYDI — har chaqiruv nosozlikni
-     * qaytadan «kashf qilib» to'liq timeout'ni kutmasin.
+     * qaytadan «kashf qilib» to'liq timeout'ni kutmasin. Ish muddati bor
+     * bo'lsa va sovish qisqa bo'lsa — kutamiz (2026-10-10: bir to'da 503
+     * saqlagichni ochdi va barcha ishlar ~2 s da yiqildi).
      */
-    if (!breaker.allow()) {
+    const waitMax = deadline !== undefined ? Math.min(BREAKER_WAIT_MAX_MS, dl - CHAIN_MIN_ATTEMPT_MS - 5_000) : 0;
+    if (!(waitMax > 0 ? await allowOrWait(breaker, waitMax) : breaker.allow())) {
       console.warn(`[llm] ${provider} saqlagichi ochiq — chaqiruv o'tkazib yuborildi`);
+      skipped(attempt, "other", "circuit breaker open - call skipped");
       return null;
     }
-    const slot = Math.min(attempt === 0 ? budget : Math.min(left, budget), dl);
+    const slot = Math.min(attempt === 0 ? budget : Math.min(left, budget), jobLeft());
     // Cheklagich (audit EXT-09): ortiqcha parallel so'rov qisqa navbatda kutadi.
     const queued = limiter.active >= limiter.max ? Date.now() : 0;
     const release = await limiter.acquire(slot);
     if (!release) {
       console.warn(`[llm] ${provider} navbatida vaqt tugadi (${slot} ms)`);
+      skipped(attempt, "timeout", `limiter queue wait exceeded ${slot} ms (max ${limiter.max} in flight)`);
       return null;
     }
     // Navbatda kutilgan vaqt ayriladi; bo'sh slotda timeout aynan avvalgidek.
     const timeoutMs = queued ? Math.max(1, slot - (Date.now() - queued)) : slot;
+    const attemptStarted = Date.now();
     let res: Attempt<T>;
     try {
       res = await call(timeoutMs);
     } finally {
       release();
     }
+    if (res.usage) recordLlmUsage({ provider, model, ...res.usage });
     if (res.value) {
       breaker.success();
-      if (res.usage) recordLlmUsage({ provider, model: llmModel(), ...res.usage });
-      return res.value;
+      return { value: res.value, ...(res.finishReason ? { finishReason: res.finishReason } : {}) };
     }
+    // ONE structured line per failed attempt (kind/status/tokens; never prompt text).
+    reportFailure({
+      role,
+      provider,
+      model,
+      attempt: attempt + 1,
+      durationMs: Date.now() - attemptStarted,
+      kind: res.kind ?? classifyFailure({ status: res.status, message: res.message, timedOut: res.timedOut }),
+      status: res.status,
+      retryable: Boolean(res.retryable),
+      message: res.message ?? (res.status !== undefined ? `HTTP ${res.status}` : "no details"),
+      finishReason: res.finishReason,
+      inputTokens: res.usage?.inputTokens,
+      outputTokens: res.usage?.outputTokens,
+    });
     if (res.timedOut) {
       if (timeoutMs >= BREAKER_TIMEOUT_FLOOR_MS) breaker.failure();
       // Urinishni ish muddati kesgan bo'lsa — bu «vaqt tugadi», «model javob bermadi» emas.
       if (jobLeft() < CHAIN_MIN_ATTEMPT_MS) throw new DeadlineError(provider, jobLeft());
+      // One retry after a timeout, only inside a job deadline with real time left (fresh per-call budget).
+      if (deadline !== undefined && !timeoutRetried && attempt < MAX_ATTEMPTS - 1 && jobLeft() >= TIMEOUT_RETRY_MIN_LEFT_MS) {
+        timeoutRetried = true;
+        started = Date.now();
+        await sleep(equalJitterMs(0, 500));
+        continue;
+      }
+    } else if (res.kind === "empty" || res.kind === "safety") {
+      // Provider answered (empty candidate / policy block): healthy transport, not a breaker failure (review R1).
     } else if (res.status === undefined ? res.retryable : res.status >= 500) {
       breaker.failure();
     } else if (res.status !== undefined && res.status !== 429) {
@@ -209,8 +253,10 @@ async function withRetry<T>(
     if (!res.retryable) break;
     // Oxirgi urinishdan keyin uxlash — bekor vaqt (audit EXT-13).
     if (attempt === MAX_ATTEMPTS - 1) break;
-    // Tarmoq uzilishida teng jitter (kamida yarim asos), HTTP xatosida to'liq jitter.
-    const wait = res.retryAfterMs ?? (res.status === undefined ? equalJitterMs(attempt, 500) : backoffMs(attempt, 500));
+    // Tarmoq uzilishida teng jitter (kamida yarim asos), HTTP xatosida to'liq jitter; bo'sh javobda qisqa teng jitter.
+    const wait =
+      res.retryAfterMs ??
+      (res.kind === "empty" ? equalJitterMs(attempt, 500) : res.status === undefined ? equalJitterMs(attempt, 500) : backoffMs(attempt, 500));
     // Kutish + keyingi urinish byudjetga sig'masa — hozir voz kechamiz.
     if (Date.now() - started + wait + RETRY_MIN_LEFT_MS > budget) break;
     // Kutishdan keyin ish muddatiga urinish sig'maydi — uxlamasdan «vaqt tugadi».
@@ -232,13 +278,19 @@ async function runLlm(
   user: string,
   maxTokens: number,
   opts: LlmOpts,
+  role = "complete",
 ): Promise<GroundedResult | null> {
   assertGroundingMode(opts);
   const provider = llmProvider();
   if (!provider) return null;
   const call = provider === "gemini" ? completeGemini : completeXai;
   const budget = opts.timeoutMs ?? 40_000;
-  return withRetry(provider, budget, (timeoutMs) => call(system, user, maxTokens, { ...opts, timeoutMs }), opts.deadline);
+  const once = async (o: { system: string; maxTokens: number }): Promise<GroundedResult | null> => {
+    const done = await withRetry(provider, budget, (timeoutMs) => call(o.system, user, o.maxTokens, { ...opts, timeoutMs }), opts.deadline, role);
+    return done ? { ...done.value, ...(done.finishReason ? { finishReason: done.finishReason } : {}) } : null;
+  };
+  // JSON answers that are cut or unparseable get ONE stricter retry (every paid attempt is already recorded in the job meter).
+  return withJsonRetry(once, { system, maxTokens, json: opts.json, deadline: opts.deadline }, { role, provider: () => provider, model: () => llmModel() }, (winner) => winner);
 }
 
 export async function llmComplete(
@@ -274,7 +326,7 @@ export async function llmGrounded(
     console.warn("[llm] grounding faqat Gemini da bor — tadqiqot o'tkazib yuborildi");
     return null;
   }
-  const res = await runLlm(system, user, maxTokens, grounded);
+  const res = await runLlm(system, user, maxTokens, grounded, "grounded");
   // Qidiruv haqiqatan bo'lgan javob — alohida pullik birlik (EXT-11).
   if (res && (res.queries.length || res.sources.length)) recordGrounding(res.queries.length);
   return res;
@@ -295,6 +347,18 @@ function geminiUsage(u: GeminiUsageMetadata): RawUsage {
   };
 }
 
+/**
+ * Why a Gemini answer has no text. A policy block (prompt feedback / safety
+ * finish) is final; anything else (empty candidate list, `STOP` with no parts,
+ * thinking ate the whole limit) is transient and worth another try.
+ */
+function geminiEmpty(blockReason: string | undefined, finishReason: string | undefined): { kind: FailureKind; retryable: boolean; message: string } {
+  if (blockReason || isSafetyFinish(finishReason)) {
+    return { kind: "safety", retryable: false, message: `blocked: ${blockReason ?? finishReason}` };
+  }
+  return { kind: "empty", retryable: true, message: `empty answer (finishReason=${finishReason ?? "none"})` };
+}
+
 function thinkingBudget(requested?: number): number {
   const override = Number(process.env.GEMINI_THINKING_BUDGET);
   if (Number.isFinite(override) && override >= 0) return Math.round(override);
@@ -302,6 +366,8 @@ function thinkingBudget(requested?: number): number {
 }
 
 type GeminiCandidate = {
+  /** `STOP`, `MAX_TOKENS`, `SAFETY`, ... */
+  finishReason?: string;
   /** `thought: true` — modelning ichki o'ylashi, javob matni EMAS. */
   content?: { parts?: { text?: string; thought?: boolean }[] };
   groundingMetadata?: {
@@ -350,7 +416,7 @@ async function completeGemini(
   opts: LlmOpts,
 ): Promise<Attempt<GroundedResult>> {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) return { value: null, retryable: false };
+  if (!key) return { value: null, retryable: false, kind: "other", message: "GEMINI_API_KEY missing" };
   const model = llmModel();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 40_000);
@@ -369,22 +435,32 @@ async function completeGemini(
       error?: { message?: string };
       candidates?: GeminiCandidate[];
       usageMetadata?: GeminiUsageMetadata;
+      promptFeedback?: { blockReason?: string };
     };
     if (!res.ok) {
-      console.warn("[gemini]", res.status, data.error?.message ?? "request failed");
       return {
         value: null,
         retryable: res.status === 429 || res.status >= 500,
         status: res.status,
+        message: data.error?.message ?? "request failed",
         retryAfterMs: retryAfterMs(res.headers) ?? geminiRetryDelayMs(data),
       };
     }
     const cand = data.candidates?.[0];
     const text = cand?.content?.parts
-      ?.map((p) => p.text ?? "")
+      ?.filter((p) => p.thought !== true)
+      .map((p) => p.text ?? "")
       .join("")
       .trim();
-    if (!text) return { value: null, retryable: false };
+    if (!text) {
+      const why = geminiEmpty(data.promptFeedback?.blockReason, cand?.finishReason);
+      return {
+        value: null,
+        ...why,
+        finishReason: cand?.finishReason ?? data.promptFeedback?.blockReason,
+        ...(data.usageMetadata ? { usage: geminiUsage(data.usageMetadata) } : {}),
+      };
+    }
     const meta = cand?.groundingMetadata;
     if (opts.grounding && !meta) {
       // Model qidirmaslikka qaror qildi: matn bor, manba yo'q. Bu xato
@@ -402,15 +478,15 @@ async function completeGemini(
         entryPoint: meta?.searchEntryPoint?.renderedContent,
       },
       retryable: false,
+      ...(cand?.finishReason ? { finishReason: cand.finishReason } : {}),
       ...(data.usageMetadata ? { usage: geminiUsage(data.usageMetadata) } : {}),
     };
   } catch (e) {
     // `fetch failed` sababi (`ENOTFOUND`/`EAI_AGAIN`/`ECONNRESET`) `cause` da — logda ko'rinsin.
     const message = describeNetError(e);
-    console.warn("[gemini]", message);
     // `aborted` — FAQAT bizning timer'imiz; `ETIMEDOUT`/`UND_ERR_CONNECT_TIMEOUT` — tarmoq xatosi, qayta uriladi (review R2).
     const timedOut = /abort/i.test(message);
-    return { value: null, retryable: !timedOut, timedOut };
+    return { value: null, retryable: !timedOut, timedOut, message };
   } finally {
     clearTimeout(timer);
   }
@@ -446,10 +522,10 @@ function candidateText(cand: GeminiCandidate | undefined): string {
 
 /** Bitta SSE qatorining ma'nosi. */
 type SseLine =
-  | { kind: "text"; text: string; usage?: RawUsage }
-  | { kind: "blocked" }
+  | { kind: "text"; text: string; usage?: RawUsage; finish?: string }
+  | { kind: "blocked"; reason?: string }
   | { kind: "error"; message: string; retryable: boolean }
-  | { kind: "skip"; usage?: RawUsage };
+  | { kind: "skip"; usage?: RawUsage; finish?: string };
 
 const SSE_SKIP: SseLine = { kind: "skip" };
 
@@ -482,11 +558,13 @@ function parseSseLine(raw: string): SseLine {
     };
   }
   // Xavfsizlik filtri: matn kelmaydi va qayta urinish ham yordam bermaydi.
-  if (chunk.promptFeedback?.blockReason) return { kind: "blocked" };
+  if (chunk.promptFeedback?.blockReason) return { kind: "blocked", reason: chunk.promptFeedback.blockReason };
   const text = candidateText(chunk.candidates?.[0]);
   const usage = chunk.usageMetadata ? geminiUsage(chunk.usageMetadata) : undefined;
-  if (text === "") return usage ? { kind: "skip", usage } : SSE_SKIP;
-  return usage ? { kind: "text", text, usage } : { kind: "text", text };
+  const finish = chunk.candidates?.[0]?.finishReason;
+  const extra = { ...(usage ? { usage } : {}), ...(finish ? { finish } : {}) };
+  if (text === "") return usage || finish ? { kind: "skip", ...extra } : SSE_SKIP;
+  return { kind: "text", text, ...extra };
 }
 
 /**
@@ -507,7 +585,7 @@ async function streamGemini(
   onText: (partial: string) => void,
 ): Promise<Attempt<string>> {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) return { value: null, retryable: false };
+  if (!key) return { value: null, retryable: false, kind: "other", message: "GEMINI_API_KEY missing" };
   const model = llmModel();
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
   try {
@@ -524,12 +602,12 @@ async function streamGemini(
     });
     if (!res.ok) {
       const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-      console.warn("[gemini:stream]", res.status, err?.error?.message ?? "request failed");
       if (res.status === 429 || res.status >= 500) {
         return {
           value: null,
           retryable: true,
           status: res.status,
+          message: err?.error?.message ?? "request failed",
           retryAfterMs: retryAfterMs(res.headers) ?? geminiRetryDelayMs(err),
         };
       }
@@ -549,9 +627,17 @@ async function streamGemini(
       // butun javobni bir marta o'qiymiz, bitta `onText`.
       const data = (await res.json()) as GeminiStreamChunk;
       const whole = candidateText(data.candidates?.[0]).trim();
-      if (!whole) return { value: null, retryable: false };
+      const wholeFinish = data.candidates?.[0]?.finishReason;
+      if (!whole) {
+        return { value: null, ...geminiEmpty(data.promptFeedback?.blockReason, wholeFinish), ...(wholeFinish ? { finishReason: wholeFinish } : {}), ...(data.usageMetadata ? { usage: geminiUsage(data.usageMetadata) } : {}) };
+      }
       onText(whole);
-      return { value: whole, retryable: false, ...(data.usageMetadata ? { usage: geminiUsage(data.usageMetadata) } : {}) };
+      return {
+        value: whole,
+        retryable: false,
+        ...(wholeFinish ? { finishReason: wholeFinish } : {}),
+        ...(data.usageMetadata ? { usage: geminiUsage(data.usageMetadata) } : {}),
+      };
     }
 
     const reader = res.body.getReader();
@@ -565,6 +651,7 @@ async function streamGemini(
     let text = "";
     // `usageMetadata` — oxirgi ko'ringani (yig'indi, delta emas).
     let usage: RawUsage | undefined;
+    let finish: string | undefined;
     for (;;) {
       const { done, value } = await reader.read();
       buf += done ? decoder.decode() : decoder.decode(value, { stream: true });
@@ -576,6 +663,7 @@ async function streamGemini(
         const ev = parseSseLine(buf.slice(0, nl));
         buf = buf.slice(nl + 1);
         if ((ev.kind === "text" || ev.kind === "skip") && ev.usage) usage = ev.usage;
+        if ((ev.kind === "text" || ev.kind === "skip") && ev.finish) finish = ev.finish;
         if (ev.kind === "text") {
           text += ev.text;
           onText(text);
@@ -588,23 +676,20 @@ async function streamGemini(
       if (stop) {
         await reader.cancel().catch(() => {});
         if (stop.kind === "blocked") {
-          console.warn("[gemini:stream] javob bloklandi");
-          return { value: null, retryable: false };
+          return { value: null, retryable: false, kind: "safety", message: `blocked: ${stop.reason ?? "prompt feedback"}`, ...(usage ? { usage } : {}) };
         }
-        console.warn("[gemini:stream]", stop.message);
-        return { value: null, retryable: stop.retryable };
+        return { value: null, retryable: stop.retryable, message: stop.message, ...(usage ? { usage } : {}) };
       }
       if (done) break;
     }
     const full = text.trim();
-    if (!full) return { value: null, retryable: false };
-    return { value: full, retryable: false, ...(usage ? { usage } : {}) };
+    if (!full) return { value: null, ...geminiEmpty(undefined, finish), ...(finish ? { finishReason: finish } : {}), ...(usage ? { usage } : {}) };
+    return { value: full, retryable: false, ...(finish ? { finishReason: finish } : {}), ...(usage ? { usage } : {}) };
   } catch (e) {
     const message = describeNetError(e);
-    console.warn("[gemini:stream]", message);
     // `aborted` — FAQAT bizning timer'imiz; `ETIMEDOUT`/`UND_ERR_CONNECT_TIMEOUT` — tarmoq xatosi, qayta uriladi (review R2).
     const timedOut = /abort/i.test(message);
-    return { value: null, retryable: !timedOut, timedOut };
+    return { value: null, retryable: !timedOut, timedOut, message };
   }
 }
 
@@ -635,18 +720,24 @@ export async function llmStream(
   const provider = llmProvider();
   if (!provider) return null;
   if (provider !== "gemini" || process.env.LLM_STREAM === "false") {
-    const res = await runLlm(system, user, maxTokens, rest);
+    const res = await runLlm(system, user, maxTokens, rest, "stream");
     if (!res) return null;
     onText(res.text);
     return res.text;
   }
   const budget = rest.timeoutMs ?? 40_000;
-  return withRetry(
-    "gemini",
-    budget,
-    (timeoutMs) => streamGemini(system, user, maxTokens, { ...rest, timeoutMs }, onText),
-    rest.deadline,
-  );
+  const once = async (o: { system: string; maxTokens: number }): Promise<{ text: string; finishReason?: string } | null> => {
+    const done = await withRetry(
+      "gemini",
+      budget,
+      (timeoutMs) => streamGemini(o.system, user, o.maxTokens, { ...rest, timeoutMs }, onText),
+      rest.deadline,
+      "stream",
+    );
+    return done ? { text: done.value, ...(done.finishReason ? { finishReason: done.finishReason } : {}) } : null;
+  };
+  const res = await withJsonRetry(once, { system, maxTokens, json: rest.json, deadline: rest.deadline }, { role: "stream", provider: () => "gemini", model: () => llmModel() }, (winner) => winner);
+  return res?.text ?? null;
 }
 
 async function completeXai(
@@ -656,7 +747,7 @@ async function completeXai(
   opts: LlmOpts,
 ): Promise<Attempt<GroundedResult>> {
   const key = process.env.XAI_API_KEY;
-  if (!key) return { value: null, retryable: false };
+  if (!key) return { value: null, retryable: false, kind: "other", message: "XAI_API_KEY missing" };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 25_000);
   try {
@@ -681,32 +772,37 @@ async function completeXai(
       }),
     });
     if (!res.ok) {
-      console.warn("[xai]", res.status);
       return {
         value: null,
         retryable: res.status === 429 || res.status >= 500,
         status: res.status,
+        message: `HTTP ${res.status}`,
         retryAfterMs: retryAfterMs(res.headers),
       };
     }
     const data = (await res.json()) as {
-      choices?: { message?: { content?: string } }[];
+      choices?: { message?: { content?: string }; finish_reason?: string }[];
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
     const text = data.choices?.[0]?.message?.content?.trim();
-    if (!text) return { value: null, retryable: false };
+    const finish = data.choices?.[0]?.finish_reason;
+    const usage = data.usage ? { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0 } : undefined;
+    if (!text) {
+      const blocked = isSafetyFinish(finish);
+      return { value: null, retryable: !blocked, kind: blocked ? "safety" : "empty", message: `empty answer (finish_reason=${finish ?? "none"})`, ...(finish ? { finishReason: finish } : {}), ...(usage ? { usage } : {}) };
+    }
     // xAI da qidiruv vositasi yo'q — manba ham, so'rov ham bo'sh.
     return {
       value: { text, queries: [], sources: [] },
       retryable: false,
+      ...(finish ? { finishReason: isMaxTokensFinish(finish) ? "MAX_TOKENS" : finish } : {}),
       ...(data.usage ? { usage: { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0 } } : {}),
     };
   } catch (e) {
     const message = describeNetError(e);
-    console.warn("[xai]", message);
     // Faqat BIZNING timer abort'imiz; `ETIMEDOUT`/`UND_ERR_CONNECT_TIMEOUT` — tarmoq xatosi, qayta uriladi (review R2).
     const timedOut = /abort/i.test(message);
-    return { value: null, retryable: !timedOut, timedOut };
+    return { value: null, retryable: !timedOut, timedOut, message };
   } finally {
     clearTimeout(timer);
   }
@@ -730,8 +826,8 @@ async function completeXai(
 export type RawUsage = { inputTokens: number; outputTokens: number };
 
 export type RawAttempt =
-  | { ok: true; text: string; usage: RawUsage }
-  | { ok: false; error: string; retryable: boolean; status?: number; retryAfterMs?: number };
+  | { ok: true; text: string; usage: RawUsage; finishReason?: string }
+  | { ok: false; error: string; retryable: boolean; status?: number; retryAfterMs?: number; kind?: FailureKind; finishReason?: string; usage?: RawUsage };
 
 /** `Retry-After` sarlavhasi — soniya (son) yoki HTTP-sana bo'lishi mumkin. */
 function retryAfterMs(headers: Headers | null | undefined): number | undefined {
@@ -764,6 +860,7 @@ async function rawGemini(
       error?: { message?: string };
       candidates?: GeminiCandidate[];
       usageMetadata?: GeminiUsageMetadata;
+      promptFeedback?: { blockReason?: string };
     };
     if (!res.ok) {
       return {
@@ -780,11 +877,23 @@ async function rawGemini(
       .map((p) => p.text ?? "")
       .join("")
       .trim();
-    if (!text) return { ok: false, error: "bo'sh javob", retryable: false };
+    const finish = data.candidates?.[0]?.finishReason;
+    if (!text) {
+      const why = geminiEmpty(data.promptFeedback?.blockReason, finish);
+      return {
+        ok: false,
+        error: `bo'sh javob (${why.message})`,
+        retryable: why.retryable,
+        kind: why.kind,
+        ...(finish ? { finishReason: finish } : {}),
+        ...(data.usageMetadata ? { usage: geminiUsage(data.usageMetadata) } : {}),
+      };
+    }
     return {
       ok: true,
       text,
       usage: geminiUsage(data.usageMetadata ?? {}),
+      ...(finish ? { finishReason: finish } : {}),
     };
   } catch (e) {
     const message = describeNetError(e);
@@ -838,10 +947,15 @@ async function rawXai(
       };
     }
     const text = data.choices?.[0]?.message?.content?.trim();
-    if (!text) return { ok: false, error: "bo'sh javob", retryable: false };
+    const finish = (data.choices?.[0] as { finish_reason?: string } | undefined)?.finish_reason;
+    if (!text) {
+      const blocked = isSafetyFinish(finish);
+      return { ok: false, error: "bo'sh javob", retryable: !blocked, kind: blocked ? "safety" : "empty", ...(finish ? { finishReason: finish } : {}) };
+    }
     return {
       ok: true,
       text,
+      ...(finish ? { finishReason: isMaxTokensFinish(finish) ? "MAX_TOKENS" : finish } : {}),
       usage: {
         inputTokens: data.usage?.prompt_tokens ?? 0,
         outputTokens: data.usage?.completion_tokens ?? 0,

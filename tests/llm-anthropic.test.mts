@@ -207,14 +207,29 @@ test("stop_reason:'refusal' — ok:false, retryable:false", async () => {
   }
 });
 
-test("bo'sh matn javob — ok:false, retryable:false", async () => {
+test("bo'sh matn javob (max_tokens emas) — ok:false, kind:empty, retryable:true (o'tkinchi, qayta uriladi)", async () => {
   const client = {
     messages: { create: async () => textMessage("", { content: [] }) },
   } as unknown as Pick<Anthropic, "messages">;
   const adapter = makeAnthropicAdapter({ client });
   const res = await adapter.complete("claude-sonnet-5", "S", "U", OPTS);
   assert.equal(res.ok, false);
-  if (!res.ok) assert.equal(res.retryable, false);
+  if (!res.ok) {
+    assert.equal(res.retryable, true);
+    assert.equal(res.kind, "empty");
+  }
+});
+
+test("bo'sh matn + max_tokens (fikrlash byudjetni yedi) — retryable:false, kind:truncated", async () => {
+  const client = {
+    messages: { create: async () => textMessage("", { content: [], stop_reason: "max_tokens" }) },
+  } as unknown as Pick<Anthropic, "messages">;
+  const res = await makeAnthropicAdapter({ client }).complete("claude-sonnet-5", "S", "U", OPTS);
+  assert.equal(res.ok, false);
+  if (!res.ok) {
+    assert.equal(res.retryable, false);
+    assert.equal(res.kind, "truncated");
+  }
 });
 
 test("kalitsiz — `new Anthropic()` chaqirilmaydi (deps.client stub ishlatiladi)", async () => {

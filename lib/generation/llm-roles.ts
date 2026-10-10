@@ -22,7 +22,8 @@
  * eski `llmComplete` bermas edi — token sonini bilmasdi).
  */
 import { llmModel, llmProvider, type LlmOpts } from "./llm";
-import { completeWithChain } from "./llm/chain";
+import { completeWithChain, type ChainResult, type ChainUsage } from "./llm/chain";
+import { withJsonRetry } from "./llm/failure";
 export { DeadlineError } from "./llm/chain";
 import { anthropicAdapter } from "./llm/anthropic";
 import { geminiAdapter } from "./llm/gemini";
@@ -35,7 +36,18 @@ import { recordLlmUsage } from "./job-cost";
 
 export type LlmRole = "writer" | "researcher" | "judge" | "fast";
 
-export type LlmUsage = { provider: string; model: string; inputTokens: number; outputTokens: number };
+export type LlmUsage = {
+  provider: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  /**
+   * Earlier PAID attempts of the same call (a JSON-quality retry): `CostMeter.add`
+   * counts them too, so retried spend is never lost. Engines pass `usage` through
+   * untouched, so nothing else has to know.
+   */
+  prior?: LlmUsage[];
+};
 
 export type RoleResult = { text: string; usage?: LlmUsage };
 
@@ -92,17 +104,29 @@ export async function complete(
   const specs = envSpecs.length > 0 ? envSpecs : defaultSpec();
   if (specs.length === 0) return null;
 
-  const res = await completeWithChain(
-    role,
-    specs,
-    system,
-    user,
-    { ...rest, maxTokens, timeoutMs },
-    { adapters: ADAPTERS, log: (line) => console.log(line) },
+  const deps = { adapters: ADAPTERS, log: (line: string) => console.log(line) };
+  // Every attempt that returns text is paid: record it in the job meter right away.
+  const once = async (o: { system: string; maxTokens: number }): Promise<ChainResult | null> => {
+    const r = await completeWithChain(role, specs, o.system, user, { ...rest, maxTokens: o.maxTokens, timeoutMs }, deps);
+    // Ish sarfi (EXT-11): `buildArtifact` konteksti bo'lsa `cost_json` ga — dvigatel o'z hisoblagichini yuritmasa ham.
+    if (r) recordLlmUsage(r.usage);
+    return r;
+  };
+  // JSON answers that are cut or unparseable get ONE stricter retry; the better answer wins and carries the other's usage.
+  const res = await withJsonRetry(
+    once,
+    { system, maxTokens, json: rest.json, deadline: rest.deadline },
+    { role, provider: (r) => r.usage.provider, model: (r) => r.usage.model, tokens: (r) => r.usage },
+    (winner, other) => {
+      const { provider, model, inputTokens, outputTokens } = other.usage;
+      const usage: ChainUsage = {
+        ...winner.usage,
+        prior: [...(winner.usage.prior ?? []), ...(other.usage.prior ?? []), { provider, model, inputTokens, outputTokens }],
+      };
+      return { ...winner, usage };
+    },
   );
   if (!res) return null;
-  // Ish sarfi (EXT-11): `buildArtifact` konteksti bo'lsa `cost_json` ga — dvigatel o'z hisoblagichini yuritmasa ham.
-  recordLlmUsage(res.usage);
   return { text: res.text, usage: res.usage };
 }
 
@@ -122,7 +146,10 @@ export class CostMeter {
   private items: LlmUsage[] = [];
 
   add(u?: LlmUsage) {
-    if (u) this.items.push(u);
+    if (!u) return;
+    // Earlier paid attempts of the same call first (JSON-quality retry), then the answer's own usage.
+    for (const p of u.prior ?? []) this.add(p);
+    this.items.push({ provider: u.provider, model: u.model, inputTokens: u.inputTokens, outputTokens: u.outputTokens });
   }
 
   toJson() {

@@ -111,17 +111,29 @@ export function makeAnthropicAdapter(deps: AnthropicDeps = {}): ProviderAdapter 
           thinking: { type: "adaptive" },
         });
         if (res.stop_reason === "refusal") {
-          return { ok: false, error: "refusal", retryable: false };
+          return { ok: false, error: "refusal", retryable: false, kind: "safety", finishReason: "refusal" };
         }
         const text = res.content
           .filter((b): b is Anthropic.TextBlock => b.type === "text")
           .map((b) => b.text)
           .join("")
           .trim();
-        if (!text) return { ok: false, error: res.stop_reason === "max_tokens" ? "bo'sh javob (max_tokens — fikrlash byudjetni yedi)" : "bo'sh javob", retryable: false };
+        if (!text) {
+          // Thinking ate the whole limit: another try gives the same, so no retry; any other empty answer is transient.
+          const cut = res.stop_reason === "max_tokens";
+          return {
+            ok: false,
+            error: cut ? "bo'sh javob (max_tokens — fikrlash byudjetni yedi)" : "bo'sh javob",
+            retryable: !cut,
+            kind: cut ? "truncated" : "empty",
+            ...(res.stop_reason ? { finishReason: cut ? "MAX_TOKENS" : res.stop_reason } : {}),
+            usage: { inputTokens: res.usage.input_tokens ?? 0, outputTokens: res.usage.output_tokens ?? 0 },
+          };
+        }
         return {
           ok: true,
           text,
+          ...(res.stop_reason ? { finishReason: res.stop_reason === "max_tokens" ? "MAX_TOKENS" : res.stop_reason } : {}),
           usage: {
             inputTokens: res.usage.input_tokens ?? 0,
             outputTokens: res.usage.output_tokens ?? 0,

@@ -7,6 +7,8 @@
  * hammasi `Attempt` shakliga normallashtirilgan bo'lib keladi.
  */
 
+import type { FailureKind } from "./failure";
+
 /** `LLM_<ROL>` env qiymatidagi bitta yozuv: `"anthropic:claude-sonnet-5"`. */
 export type ProviderId = "gemini" | "anthropic" | "openrouter" | "xai" | "openai";
 
@@ -34,8 +36,20 @@ export type Usage = { inputTokens: number; outputTokens: number };
  * chain o'zi eksponensial hisoblaydi).
  */
 export type Attempt =
-  | { ok: true; text: string; usage: Usage }
-  | { ok: false; error: string; retryable: boolean; status?: number; retryAfterMs?: number };
+  // `finishReason` — provider's raw stop reason (Gemini `finishReason`, Anthropic `stop_reason`, OpenAI `finish_reason`).
+  | { ok: true; text: string; usage: Usage; finishReason?: string }
+  | {
+      ok: false;
+      error: string;
+      retryable: boolean;
+      status?: number;
+      retryAfterMs?: number;
+      /** Adapter's own classification (empty/safety/...); the chain classifies from status/text when absent. */
+      kind?: FailureKind;
+      finishReason?: string;
+      /** Tokens of a failed but PAID attempt (e.g. Gemini spent them on thinking and returned no text). */
+      usage?: Usage;
+    };
 
 export type ProviderAdapter = {
   id: ProviderId;
