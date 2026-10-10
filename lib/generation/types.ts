@@ -649,7 +649,7 @@ export type CostJson = {
 export type CostPart = {
   kind: "llm" | "image" | "grounding" | "tts";
   provider: string;
-  /** LLM/rasm modeli; TTS da ovoz; grounding da `google_search`. */
+  /** LLM/rasm modeli; TTS da model (Gemini) yoki `provider:ovoz`; grounding da `google_search`. */
   model: string;
   calls: number;
   inputTokens: number;
@@ -657,6 +657,17 @@ export type CostPart = {
   /** Rasm soni / grounding so'rovi / TTS belgisi (LLM da 0). */
   units: number;
   usd: number;
+  /**
+   * `false`: the price book has no price for this part, so `usd` is 0 (fal models
+   * without a documented price, TTS models missing from `TTS_PRICING`). The admin
+   * reports it as «unpriced» instead of treating the 0 as real.
+   */
+  priced?: false;
+  /** `usd` rests on a documented default (an image model missing from the table) or on estimated TTS tokens. */
+  estimated?: true;
+  /** Gemini TTS only: billed text-input and audio-output tokens. Kept apart from `inputTokens`/`outputTokens`, which stay LLM-only. */
+  textTokens?: number;
+  audioTokens?: number;
 };
 
 export type BuildCtx = {

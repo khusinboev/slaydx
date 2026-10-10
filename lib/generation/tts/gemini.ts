@@ -42,7 +42,36 @@ export function pcmRateOf(mimeType: string | undefined): number {
 }
 
 type GeminiPart = { inlineData?: { data?: string; mimeType?: string } };
-type GeminiResponse = { candidates?: { content?: { parts?: GeminiPart[] } }[]; error?: { message?: string } };
+type GeminiTokenDetail = { modality?: string; tokenCount?: number };
+type GeminiUsageMetadata = {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  candidatesTokensDetails?: GeminiTokenDetail[];
+};
+type GeminiResponse = {
+  candidates?: { content?: { parts?: GeminiPart[] } }[];
+  usageMetadata?: GeminiUsageMetadata;
+  error?: { message?: string };
+};
+
+const count = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
+
+/**
+ * Billing facts of one response: `promptTokenCount` = text-input tokens,
+ * audio-output tokens = the AUDIO entries of `candidatesTokensDetails` when the API
+ * itemises them, else `candidatesTokenCount` (a TTS response only produces audio).
+ * A field the API did not report is left out, so the price book can tell
+ * «reported» from «estimate it from the audio length».
+ */
+export function geminiTtsUsage(json: unknown): { inputTokens?: number; outputTokens?: number } {
+  const u = (json as GeminiResponse)?.usageMetadata;
+  if (!u || typeof u !== "object") return {};
+  const details = Array.isArray(u.candidatesTokensDetails) ? u.candidatesTokensDetails : [];
+  const audio = details.filter((d) => String(d?.modality ?? "").toUpperCase() === "AUDIO").reduce((a, d) => a + count(d.tokenCount), 0);
+  const input = count(u.promptTokenCount);
+  const output = audio || count(u.candidatesTokenCount);
+  return { ...(input ? { inputTokens: input } : {}), ...(output ? { outputTokens: output } : {}) };
+}
 
 /** Javobdagi birinchi audio bo'lak. */
 export function geminiAudioPart(json: unknown): { data: string; mimeType?: string } | null {
@@ -121,7 +150,7 @@ export function makeGeminiTts(deps: GeminiTtsDeps = {}): TtsProvider {
       const wav = pcmToWav(pcm, { sampleRate: pcmRateOf(part.mimeType), channels: 1, bits: 16 });
       const seconds = wavSeconds(wav);
       if (seconds <= 0) throw new TtsError("gemini", "PCM bo'sh", { retryable: false });
-      return { wav, seconds, chars: body.length };
+      return { wav, seconds, chars: body.length, model: m, ...geminiTtsUsage(json) };
     },
   };
 }
