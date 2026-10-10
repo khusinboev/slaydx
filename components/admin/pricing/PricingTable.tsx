@@ -101,7 +101,8 @@ export function PricingTable({
     },
     {
       id: "cost",
-      header: "O'rtacha tannarx",
+      header: "Tannarx",
+      hint: "to'liq: xato ishlar bilan",
       align: "right",
       sortKey: "cost_desc",
       sortKeyReverse: "cost_asc",
@@ -126,21 +127,20 @@ export function PricingTable({
     },
     {
       // The earlier formula, kept beside the primary one. Plain text, not a traffic-light badge: the cash margin is
-      // low by construction wherever points pay for the jobs, which is not a pricing problem.
+      // low by construction wherever points pay for the jobs, which is not a pricing problem. The bonus cost (what
+      // the jobs paid with points cost) is its second line: one column, so the table still fits the card at 1280.
       id: "cash-margin",
-      header: "Naqd marja",
-      hint: "faqat naqd tushum bo'yicha",
+      header: "Naqd marja · bonus",
+      hint: "naqd tushum bo'yicha · bonus = ball bilan to'langan ishlar tannarxi",
       align: "right",
       className: "tabular-nums whitespace-nowrap",
-      cell: (r) => pctText(r.cashMarginPct, 0),
-    },
-    {
-      id: "bonus",
-      header: "Bonus xarajati",
-      hint: "ball bilan to'langan ishlar tannarxi",
-      align: "right",
-      className: "tabular-nums whitespace-nowrap",
-      cell: (r) => <Stacked main={soumText(r.bonusCostSoum)} sub={`ball ulushi ${pctText(r.pointsSharePct, 0)}`} />,
+      cell: (r) => (
+        <span className="flex flex-col items-end gap-0.5">
+          <span>{pctText(r.cashMarginPct, 0)}</span>
+          <span className="text-muted-foreground text-xs">bonus {soumText(r.bonusCostSoum)}</span>
+          <span className="text-muted-foreground text-xs">ball ulushi {pctText(r.pointsSharePct, 0)}</span>
+        </span>
+      ),
     },
     {
       id: "jobs",
@@ -153,14 +153,15 @@ export function PricingTable({
     },
     {
       id: "trend",
-      header: `Trend (${fmtNumber(trendDays)} kun)`,
+      header: "Trend",
+      hint: `tannarx, ${fmtNumber(trendDays)} kun`,
       hideOnCard: true,
       className: "whitespace-nowrap",
       cell: (r) => {
         const change = trendChangePct(r.trend);
         return (
           <span className="inline-flex items-center gap-2">
-            <Sparkline values={trendValues(r.trend)} title={`${r.title}: ${fmtNumber(trendDays)} kunlik tannarx trendi`} color={change !== null && change > 5 ? 2 : 4} width={64} height={24} formatValue={(n) => fmtNumber(Math.round(n))} />
+            <Sparkline values={trendValues(r.trend)} title={`${r.title}: ${fmtNumber(trendDays)} kunlik tannarx trendi`} color={change !== null && change > 5 ? 2 : 4} width={56} height={24} formatValue={(n) => fmtNumber(Math.round(n))} />
             <span className={`text-xs tabular-nums ${change === null ? "text-muted-foreground" : change > 5 ? "text-destructive" : change < -5 ? "text-badge-success-text" : "text-muted-foreground"}`}>
               {change === null ? "—" : fmtPercent(change, { digits: 0, sign: true })}
             </span>

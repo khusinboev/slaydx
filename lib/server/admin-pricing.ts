@@ -4,7 +4,7 @@ import { ApiError } from "./api";
 import { adminTx } from "./admin-audit";
 import { parseReason } from "./admin-accounts";
 import type { AdminActor } from "./admin-handler";
-import { COST_CAVEATS, soumPerUsd, spendCoverageByTool, spendRowsSql, type Queryable, type SpendRange } from "./admin-cost";
+import { costCaveats, soumPerUsd, spendCoverageByTool, spendRowsSql, type Queryable, type SpendRange } from "./admin-cost";
 import { parseDateRange, type DateRange } from "./admin-list";
 import { pool, query, transaction } from "./db";
 import { SOUM_PER_COIN } from "./payments";
@@ -515,6 +515,8 @@ type Aggregates = {
   spendAllUsd: number;
   /** Completed jobs of admin accounts finished in range (always counted, filter or not). */
   adminJobs: number;
+  /** The computed gaps of the spend data (`costCaveats`): only what applies, with numbers; may be empty. */
+  caveats: string[];
 };
 
 const IS_ADMIN_JOB = "EXISTS (SELECT 1 FROM admin_accounts aa WHERE aa.user_id = g.user_id)";
@@ -660,6 +662,8 @@ async function aggregates(db: Queryable, range: DateRange, includeAdmins: boolea
     trend: new Map(),
     spendAllUsd: round(num(spendAll.rows[0]?.usd), 6),
     adminJobs: num(adminJobs.rows[0]?.n),
+    // Like the coverage, the caveats describe the data as a whole (admin-cost.ts owns them), not the admin-filtered view.
+    caveats: await costCaveats(db, spendRange),
   };
   for (const r of orders.rows) {
     out.orders.set(r.tool_id, { jobs: num(r.jobs), avgPrice: numOrNull(r.avg_price), refunded: num(r.refunded), avgUnits: numOrNull(r.avg_units) });
@@ -879,7 +883,7 @@ export async function pricingOverview(range: DateRange, opts?: MoneyOptions & { 
     includeAdmins,
     adminJobs: agg.adminJobs,
     groups: TOOL_GROUPS,
-    caveats: [...COST_CAVEATS],
+    caveats: agg.caveats,
   };
 }
 

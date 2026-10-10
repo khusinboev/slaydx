@@ -390,7 +390,9 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     assert.deepEqual(r.body.range, { from: D, to: D2, days: 3 });
     assert.equal(r.body.fx, FX);
     assert.equal(r.body.targetMarkup, 3);
-    assert.ok(Array.isArray(r.body.caveats) && (r.body.caveats as string[]).length > 0);
+    // The caveats are COMPUTED (admin-cost.ts costCaveats) and may be empty: the page shows exactly what the AI screen computes for the range.
+    assert.ok(Array.isArray(r.body.caveats) && (r.body.caveats as unknown[]).every((c) => typeof c === "string" && c.length > 0));
+    assert.deepEqual(r.body.caveats, await cost.costCaveats(pool(), parseDateRange(D, D2)));
     assert.deepEqual((r.body.groups as { id: string }[]).map((g) => g.id), ["umumiy", "talaba", "oqituvchi", "oyinlar", "media"]);
     assert.equal((r.body.items as Item[]).length, TOOLS.length, "har bir vosita bitta qator");
 

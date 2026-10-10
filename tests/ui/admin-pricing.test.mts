@@ -386,8 +386,7 @@ test("loading skeleton, then KPI tiles, coverage banner with caveats and the tab
   for (const [name, hint] of [
     ["Ustama ×", "tushum ÷ tannarx"],
     ["Marja % · tavsiya", "narx (ball ham) − tannarx − komissiya"],
-    ["Naqd marja", "faqat naqd tushum bo'yicha"],
-    ["Bonus xarajati", "ball bilan to'langan ishlar tannarxi"],
+    ["Naqd marja · bonus", "naqd tushum bo'yicha · bonus = ball bilan to'langan ishlar tannarxi"],
   ] as const) {
     assert.ok(headers.some((t) => t.includes(name) && t.includes(hint)), `${name}: ${hint}`);
   }
@@ -447,14 +446,14 @@ test("loading skeleton, then KPI tiles, coverage banner with caveats and the tab
   assert.ok(within(slide).getByText("1 460"));
   // The earlier cash formula sits in its own column, the bonus cost (so'm + points share) in another.
   assert.ok(within(slide).getByText("14%"), "cash margin");
-  assert.ok(within(slide).getByText("1 250 000 so'm"), "bonus cost");
+  assert.ok(within(slide).getByText("bonus 1 250 000 so'm"), "bonus cost");
   assert.ok(within(slide).getByText("ball ulushi 48%"), "points share");
   assert.ok(within(slide).getByRole("img", { name: "Slayd: 3 kunlik tannarx trendi" }));
   const essay = rowOf("Insho");
   assert.ok(within(essay).getByText("100%"));
   assert.ok(within(essay).getByText("70%"), "primary margin");
   assert.ok(within(essay).getByText("56%"), "cash margin");
-  assert.ok(within(essay).getByText("420 so'm"), "bonus cost");
+  assert.ok(within(essay).getByText("bonus 420 so'm"), "bonus cost");
   assert.ok(within(essay).getByText("ball ulushi 25%"));
   assert.ok(within(essay).getByText("−10% tavsiya"));
   assert.ok(within(essay).getByText("333 so'm / bet"));
