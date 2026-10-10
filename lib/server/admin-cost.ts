@@ -470,19 +470,21 @@ function toCoverage(r: CoverageSqlRow | undefined, rolloutAt: string | null): Sp
 }
 
 /**
- * When AI spend measurement started: the first `ai_usage` row (ISO instant), or
- * `null` while the table is empty. A job's row is flushed just AFTER the job
- * finishes, so the job behind the very first row would look "earlier" than the
- * rollout; its own finish time is therefore taken into account (the rollout is the
- * earlier of the two). Jobs that finished before it are "historical" (migration 033
- * did not exist) and are reported apart from the coverage.
+ * Jobs finishing within this window BEFORE the first `ai_usage` row still count as
+ * measurable: a job's row is flushed just after it finishes, so the job behind the very
+ * first row finished slightly earlier than the row's own timestamp.
+ */
+const ROLLOUT_GRACE = "interval '1 hour'";
+
+/**
+ * When AI spend measurement started: the first `ai_usage` row (ISO instant) minus a
+ * one-hour grace, or `null` while the table is empty. Jobs that finished before it are
+ * "historical" (migration 033 did not exist) and are reported apart from the coverage.
+ * Reads one indexed minimum (`ai_usage_at_idx`) — no join with `generations`, so a
+ * late row of an OLD job (a backfill, a requeue) cannot move the date back.
  */
 export async function spendRollout(db: Queryable): Promise<string | null> {
-  const res = await db.query<{ at: Date | string | null }>(
-    `SELECT LEAST(min(u.at), min(g.finished_at)) AS at
-       FROM ai_usage u
-       LEFT JOIN generations g ON g.id = u.generation_id`,
-  );
+  const res = await db.query<{ at: Date | string | null }>(`SELECT min(at) - ${ROLLOUT_GRACE} AS at FROM ai_usage`);
   const at = res.rows[0]?.at;
   return at ? new Date(at).toISOString() : null;
 }

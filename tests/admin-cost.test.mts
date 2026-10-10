@@ -370,7 +370,7 @@ test("canonical spend: dedupe, legacy, outcomes, Tashkent days, groupings, cover
   await t.test("coverage: completed with cost data ÷ completed, by Tashkent day", async () => {
     // D: A, B, C, G, I have cost data; F does not.
     // The first ai_usage row (the rollout) is the free call at 23:59:59 on D-1, before every job here: nothing is historical.
-    const rolloutAt = tk("2026-03-09", "23:59:59");
+    const rolloutAt = tk("2026-03-09", "22:59:59"); // the first row (23:59:59) minus the one-hour grace
     assert.equal(await cost.spendRollout(pool()), rolloutAt);
     const noHistory = { rolloutAt, historicalCompleted: 0, historicalWithCost: 0 };
     assert.deepEqual(await cost.spendCoverage(pool(), rD), { jobsWithCost: 5, jobsCompleted: 6, pct: (5 / 6) * 100, ...noHistory });
@@ -390,7 +390,7 @@ test("canonical spend: dedupe, legacy, outcomes, Tashkent days, groupings, cover
   await t.test("empty range → zeros, not nulls", async () => {
     const empty = parseDateRange("2020-01-01", "2020-01-02");
     assert.deepEqual(await cost.spendTotals(pool(), empty), { records: 0, calls: 0, inputTokens: 0, outputTokens: 0, usd: 0 });
-    assert.deepEqual(await cost.spendCoverage(pool(), empty), { jobsWithCost: 0, jobsCompleted: 0, pct: 0, rolloutAt: tk("2026-03-09", "23:59:59"), historicalCompleted: 0, historicalWithCost: 0 });
+    assert.deepEqual(await cost.spendCoverage(pool(), empty), { jobsWithCost: 0, jobsCompleted: 0, pct: 0, rolloutAt: tk("2026-03-09", "22:59:59"), historicalCompleted: 0, historicalWithCost: 0 });
     assert.deepEqual(await cost.spendCoverageByTool(pool(), empty), []);
     const days = await cost.spendBy(pool(), empty, "day");
     assert.deepEqual(days, [

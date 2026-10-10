@@ -104,9 +104,27 @@ test("computed caveats: rollout coverage, historical split, unpriced, estimated,
     const id = await gen({ tool: "slide", finishedAt: tk(R, "12:00:00"), costJson: c });
     await usage({ at: tk(R, "12:00:01"), genId: id, tool: "slide", cost: c });
     await gen({ tool: "slide", finishedAt: tk(R, "11:00:00"), costJson: null }); // an hour earlier: really historical
-    assert.equal(await cost.spendRollout(pool()), tk(R, "12:00:00"));
+    // The rollout is the first row (12:00:01) minus the one-hour grace; the job at 11:00:00 is before it, so really historical.
+    assert.equal(await cost.spendRollout(pool()), tk(R, "11:00:01"));
     const cov = await cost.spendCoverage(pool(), rWide);
     assert.deepEqual([cov.jobsCompleted, cov.jobsWithCost, cov.historicalCompleted, cov.historicalWithCost], [1, 1, 1, 0]);
+  });
+
+  await t.test("an OLD job that later gets an ai_usage row does not move the rollout back", async () => {
+    await reset();
+    // The first real row: a job of the rollout day.
+    const c = sonnetJob();
+    const fresh = await gen({ tool: "slide", finishedAt: tk(R, "12:00:00"), costJson: c });
+    await usage({ at: tk(R, "12:00:01"), genId: fresh, tool: "slide", cost: c });
+    const before = await cost.spendRollout(pool());
+    assert.equal(before, tk(R, "11:00:01"));
+    // Weeks later a backfill / requeue writes a row for a job that finished long before the rollout.
+    const old = await gen({ tool: "slide", finishedAt: tk("2026-03-02", "10:00:00"), costJson: null });
+    await usage({ at: tk(R, "15:00:00"), genId: old, tool: "slide", cost: c });
+    // MUTATION (LEAST(min(u.at), min(g.finished_at)) over a join): the date would jump back to 2026-03-02.
+    assert.equal(await cost.spendRollout(pool()), before, "the date is the first row's time, not the old job's finish time");
+    const cov = await cost.spendCoverage(pool(), rWide);
+    assert.deepEqual([cov.jobsCompleted, cov.historicalCompleted], [1, 1], "the old job stays historical");
   });
 
   await t.test("coverage starts at the ai_usage rollout; earlier jobs are historical and reported apart", async () => {
@@ -124,7 +142,7 @@ test("computed caveats: rollout coverage, historical split, unpriced, estimated,
     }
     await gen({ tool: "article", finishedAt: tk(R, "13:00:00"), costJson: null });
 
-    const rolloutAt = tk(R, "09:00:00");
+    const rolloutAt = tk(R, "08:00:00"); // first row 09:00 minus the one-hour grace
     assert.equal(await cost.spendRollout(pool()), rolloutAt);
     const cov = await cost.spendCoverage(pool(), rWide);
     // MUTATION (rollout filter dropped): jobsCompleted 7, pct 4/7.
