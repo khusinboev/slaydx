@@ -307,7 +307,8 @@ test("overview: every KPI of R and of the previous period P, hand-computed", { s
     bonusSpendPoints: 500,
     refunds: { count: 5, tanga: 7_700, points: 1_000 },
     aiCostUsd: 0.9, // 0.5 + 0.25 + 0.1 + 0.05
-    aiCoverage: { jobsWithCost: 2, jobsCompleted: 3, pct: (2 / 3) * 100 }, // G1, G2 of G1, G2, G10
+    // G1, G2 of G1, G2, G10; the rollout is G1's own finish (its ai_usage row follows 1 s later), nothing is earlier.
+    aiCoverage: { jobsWithCost: 2, jobsCompleted: 3, pct: (2 / 3) * 100, rolloutAt: tk(D10, "10:01:40"), historicalCompleted: 0, historicalWithCost: 0 },
     marginSoum: 65_000 - 11_250, // 0.9 × 12 500 = 11 250
     pendingOrders: 1,
   });
@@ -324,7 +325,8 @@ test("overview: every KPI of R and of the previous period P, hand-computed", { s
     bonusSpendPoints: 0,
     refunds: { count: 0, tanga: 0, points: 0 },
     aiCostUsd: 0.3,
-    aiCoverage: { jobsWithCost: 1, jobsCompleted: 1, pct: 100 },
+    // G6 finished before the first ai_usage row: historical, so it neither counts as covered nor as a gap.
+    aiCoverage: { jobsWithCost: 0, jobsCompleted: 0, pct: 0, rolloutAt: tk(D10, "10:01:40"), historicalCompleted: 1, historicalWithCost: 1 },
     marginSoum: 10_000 - 3_750,
     pendingOrders: 1,
   });
@@ -343,7 +345,7 @@ test("overview: an empty range is all zeros with null rates", { skip }, async ()
   assert.equal(cur.successRate, null);
   assert.equal(cur.newUsers, 0);
   assert.equal(cur.aiCostUsd, 0);
-  assert.deepEqual(cur.aiCoverage, { jobsWithCost: 0, jobsCompleted: 0, pct: 0 });
+  assert.deepEqual(cur.aiCoverage, { jobsWithCost: 0, jobsCompleted: 0, pct: 0, rolloutAt: tk(D10, "10:01:40"), historicalCompleted: 0, historicalWithCost: 0 });
   assert.equal(cur.marginSoum, 0);
 });
 

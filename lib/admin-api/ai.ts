@@ -37,7 +37,19 @@ export type AiCostTotals = {
   unpricedCalls: number;
 };
 
-export type AiCoverage = { jobsWithCost: number; jobsCompleted: number; pct: number };
+export type AiCoverage = {
+  /** Completed jobs finished in range, from the `ai_usage` rollout on, that have cost data. */
+  jobsWithCost: number;
+  /** Completed jobs finished in range, from the rollout on. */
+  jobsCompleted: number;
+  pct: number;
+  /** First `ai_usage` row (ISO instant); `null` while the table is empty. */
+  rolloutAt: string | null;
+  /** Completed jobs finished in range BEFORE the rollout — reported apart, never part of `pct`. */
+  historicalCompleted: number;
+  /** Of those, the ones that still have a legacy `cost_json`. */
+  historicalWithCost: number;
+};
 
 export type AiCostResponse = {
   range: { from: string; to: string; days: number };
