@@ -426,7 +426,7 @@ const inflight = new Map<string, { job: ClaimedJob; ctl: RunCtl; done: Promise<v
 export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<void> {
   const ctl: RunCtl = { abandoned: false, assetWrites: new Set(), hardStopAt: Number.POSITIVE_INFINITY };
   // Shu ish ichidagi HAR jurnal qatori (`credits.ts` refund va h.k.) `jobId`/`userId` ni o'zi oladi (OBS-02).
-  const done = withFreshLogContext({ jobId: job.id, userId: job.userId }, () => runWithHardStop(job, opts, ctl));
+  const done = withFreshLogContext({ jobId: job.id, userId: job.userId, toolId: job.toolId }, () => runWithHardStop(job, opts, ctl));
   inflight.set(job.lease, { job, ctl, done });
   try {
     await done;

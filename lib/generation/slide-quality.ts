@@ -1203,6 +1203,8 @@ export async function repairThinSlides(
       json: true,
       timeoutMs: Math.min(REPAIR_TIMEOUT_MS, left),
       deadline: jobDeadline,
+      // An improvement, not an obligation: a timeout is not worth a second call.
+      noTimeoutRetry: true,
     });
     const data = parseLlmJson(raw) as { slides?: unknown } | null;
     if (!Array.isArray(data?.slides)) return out;

@@ -1,6 +1,7 @@
 import { slideLabels } from "./i18n";
 import { parseLlmJson } from "./json";
 import { llmComplete, llmEnabled, llmStream } from "./llm";
+import { errorWithCause } from "./llm/failure";
 import { remainingMs } from "./quality";
 import { assertJobTime } from "./deadline";
 import { bodyRules, type BodyRules } from "./slide-audience";
@@ -1171,7 +1172,7 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
   // yaratadi va foydalanuvchi buni to'lagan ishi deb oladi. Xato bo'lsa
   // worker kreditni qaytaradi.
   if (!written && llmEnabled()) {
-    throw new Error("Taqdimot matni yozilmadi. Kredit qaytariladi — qayta urinib ko‘ring.");
+    throw errorWithCause("Taqdimot matni yozilmadi. Kredit qaytariladi — qayta urinib ko‘ring.");
   }
   const slides = written ?? fallbackSlides(meta, tpl, beats);
   /*

@@ -120,6 +120,20 @@ export class CircuitBreaker {
   }
 
   /** Read-only view for the admin heartbeat; changes nothing. */
+  /**
+   * Milliseconds until `allow()` may say yes again (0 when closed or a probe is
+   * due). Lets a job with spare time WAIT for a short cooldown instead of
+   * failing instantly (prod 2026-10-10: one burst of 503s opened the breaker and
+   * every in-flight job failed in ~2 s).
+   */
+  msUntilRetry(): number {
+    if (this.openUntil === 0) return 0;
+    const now = this.now();
+    if (now < this.openUntil) return this.openUntil - now;
+    if (this.probeAt !== 0 && now - this.probeAt < this.cooldownMs) return this.cooldownMs - (now - this.probeAt);
+    return 0;
+  }
+
   snapshot(): BreakerSnapshot {
     return {
       name: this.name,
@@ -169,4 +183,18 @@ export function snapshotBreakers(): BreakerSnapshot[] {
 /** Testlar uchun: hamma saqlagichni unutadi. */
 export function resetBreakers(): void {
   REGISTRY.clear();
+}
+
+/**
+ * `breaker.allow()`, but when it says no and the cooldown fits into
+ * `maxWaitMs`, sleeps (jittered) and asks once more. Returns whether the call
+ * may go ahead. A longer cooldown (quota trip) is NOT waited for.
+ */
+export async function allowOrWait(b: CircuitBreaker, maxWaitMs: number, random: () => number = Math.random): Promise<boolean> {
+  if (b.allow()) return true;
+  const wait = b.msUntilRetry();
+  if (wait <= 0 || wait > maxWaitMs) return false;
+  // +5 ms: timers may fire a hair early, and `allow()` must see the cooldown as over.
+  await new Promise((r) => setTimeout(r, wait + 5 + Math.floor(random() * 400)));
+  return b.allow();
 }

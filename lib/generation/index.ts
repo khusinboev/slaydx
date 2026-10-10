@@ -1,6 +1,7 @@
 import { buildAcademicDoc } from "./content";
 import { deliveredCount } from "./delivered";
 import { withJobCost } from "./job-cost";
+import { errorWithCause } from "./llm/failure";
 import { llmEnabled as llmKeyPresent } from "./llm";
 import { extractMeta, minPages } from "./meta";
 import { bodyWordCount, remainingMs, targetWords, wordCount } from "./quality";
@@ -653,7 +654,8 @@ async function buildArtifactInner(
    * o'zi qaytaradi. Shablon faqat kalitsiz (dev/demo) muhitda qoladi.
    */
   if (!llmDoc && llmKeyPresent()) {
-    throw new Error("Matn yozilmadi — AI javob bermadi. Kredit qaytariladi, qayta urinib ko‘ring.");
+    // The user text stays; the last LLM failure rides along as `cause` for the worker log.
+    throw errorWithCause("Matn yozilmadi — AI javob bermadi. Kredit qaytariladi, qayta urinib ko‘ring.");
   }
 
   let academic = llmDoc ?? buildAcademicDoc(meta, values);

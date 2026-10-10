@@ -118,16 +118,17 @@ const jsonReply = (text: string) => ({
 test("oqim: URL, tana va o'suvchi onText", async () => {
   // Bir nechta `data:` qatori bitta bo'lakda, bittasi esa JSON satrining
   // O'RTASIDAN uzilgan — yig'ish buferda bo'lishi shart.
-  const a = sse(part("Salom "));
-  const b = sse(part("dunyo"));
+  // `json: true` answers are checked for completeness now (JSON-quality retry), so the stub is a complete JSON text.
+  const a = sse(part('{"t":"Salom '));
+  const b = sse(part('dunyo"}'));
   const cut = Math.floor(b.length / 2);
   await withFetch(
     () => streamReply([a.slice(0, 4), a.slice(4) + b.slice(0, cut), b.slice(cut), "data: [DONE]\n\n"]),
     async (calls) => {
       const seen: string[] = [];
       const out = await llmStream("S", "U", 1200, { json: true, onText: (t) => seen.push(t) });
-      assert.equal(out, "Salom dunyo");
-      assert.deepEqual(seen, ["Salom ", "Salom dunyo"], "har bo'lakda TO'PLANGAN matn");
+      assert.equal(out, '{"t":"Salom dunyo"}');
+      assert.deepEqual(seen, ['{"t":"Salom ', '{"t":"Salom dunyo"}'], "har bo'lakda TO'PLANGAN matn");
       assert.equal(calls.length, 1);
       assert.ok(calls[0].url.includes(":streamGenerateContent"), calls[0].url);
       assert.ok(calls[0].url.includes("alt=sse"), calls[0].url);
@@ -237,16 +238,16 @@ test("oqim ichidagi 500 xatosi — qayta urinish `partial` BOSHIDAN", async () =
 
 test("400 — SHU urinishda `generateContent` ga tushadi, tana bir xil", async () => {
   await withFetch(
-    (_req, i) => (i === 0 ? errReply(400, "stream endpoint rad etdi") : jsonReply("Zaxira matn")),
+    (_req, i) => (i === 0 ? errReply(400, "stream endpoint rad etdi") : jsonReply('{"t":"Zaxira matn"}')),
     async (calls) => {
       const seen: string[] = [];
       const out = await llmStream("S", "U", 1200, { json: true, onText: (t) => seen.push(t) });
-      assert.equal(out, "Zaxira matn");
+      assert.equal(out, '{"t":"Zaxira matn"}');
       assert.equal(calls.length, 2, "4xx da qayta urinilmaydi — darhol zaxira");
       assert.ok(calls[1].url.includes(":generateContent"), calls[1].url);
       assert.ok(!calls[1].url.includes("alt=sse"));
       assert.equal(calls[0].body, calls[1].body, "oqimli va oqimsiz TANA aynan bir xil");
-      assert.deepEqual(seen, ["Zaxira matn"]);
+      assert.deepEqual(seen, ['{"t":"Zaxira matn"}']);
     },
   );
 });

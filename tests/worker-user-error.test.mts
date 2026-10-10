@@ -181,6 +181,27 @@ test("worker: xom xato foydalanuvchiga chiqmaydi, tafsilot jurnalda (jobId, atte
     assert.ok(rows.some((r) => r.jobId === id && /qaytarildi/.test(String(r.msg))), "refund jurnali yo'q");
   });
 
+  await t.test("LLM yiqilishi: foydalanuvchi matni o'zgarmaydi, pul qaytadi, ishchi qatori sababni (kind/status) va toolId ni chop etadi", async (tt) => {
+    const { reportFailure, errorWithCause } = await import("../lib/generation/llm/failure.ts");
+    const USER_MSG = "Taqdimot matni yozilmadi. Kredit qaytariladi — qayta urinib ko‘ring.";
+    const { id, gen, tx, rows } = await runWith(tt, async () => {
+      // Dvigatel ichida: provayder 503 berdi, hamma urinish yiqildi → umumiy xato `cause` bilan.
+      reportFailure({ role: "complete", provider: "gemini", model: "gemini-3.7-flash", attempt: 3, durationMs: 1200, kind: "http", status: 503, retryable: true, message: "overloaded" });
+      throw errorWithCause(USER_MSG);
+    });
+    assert.equal(gen.status, "FAILED");
+    assert.equal(gen.error, USER_MSG, "foydalanuvchi matni o'zgarmaydi");
+    assert.ok(tx.find((x) => x.kind === "refund"), "pul qaytmadi");
+    const fail = rows.find((r) => r.level === "error" && r.jobId === id && r.err);
+    assert.ok(fail, `jurnalda ish xatosi qatori yo'q: ${JSON.stringify(rows)}`);
+    // MUTATSIYA: `cause` olib tashlansa yoki `serializeError` uni yozmasa — shu qator qizaradi.
+    assert.match(String(((fail.err as Row).cause as Row | undefined)?.message), /kind=http status=503/);
+    assert.equal(fail.toolId, "translation");
+    const attempt = rows.find((r) => r.msg === "[llm] attempt failed" && r.jobId === id);
+    assert.ok(attempt, "urinish qatori ish konteksti (jobId) bilan chiqishi kerak");
+    assert.equal(attempt.toolId, "translation");
+  });
+
   await t.test("provayder tanasidagi kalit — foydalanuvchiga ham, jurnalga ham chiqmaydi", async (tt) => {
     const { id, gen, tx, rows } = await runWith(tt, async () => {
       throw new TtsError("gemini", `403 Forbidden: ${PROVIDER_BODY}`, { status: 403 });

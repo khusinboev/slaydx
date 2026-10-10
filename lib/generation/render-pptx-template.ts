@@ -1,5 +1,7 @@
 import JSZip from "jszip";
+import { IMAGE_COMPACT, IMAGE_NORMAL, PPTX_SIZE_LIMIT, shrinkImage, type ImageProfile } from "./pptx-image";
 import { fetchImageBytes, type ImageBytes } from "./slide-images";
+import { log } from "../server/log";
 import { buildSlideDeck } from "./slides";
 import { slideNotes } from "./slide-layout";
 import { TEMPLATE_MAX_XML, type Placeholder, type TemplateLayout, type TemplateProfile, type TemplateRole } from "./pptx-template";
@@ -119,10 +121,18 @@ function findPh(lay: TemplateLayout, ...types: Placeholder["type"][]): Placehold
 
 async function loadImage(
   url: string,
-  resolveImage?: (url: string) => Promise<ImageBytes | null>,
+  resolveImage: ((url: string) => Promise<ImageBytes | null>) | undefined,
+  profile: ImageProfile,
+  raw: Map<string, ImageBytes | null>,
 ): Promise<{ bytes: Buffer; ext: "png" | "jpeg" } | null> {
-  const img = (resolveImage ? await resolveImage(url) : null) ?? (await fetchImageBytes(url));
-  if (!img) return null;
+  let orig = raw.get(url);
+  if (orig === undefined) {
+    orig = (resolveImage ? await resolveImage(url) : null) ?? (await fetchImageBytes(url));
+    raw.set(url, orig);
+  }
+  if (!orig) return null;
+  // Same downscale/recompress as the plain renderer (`pptx-image.ts`); the template's own media is untouched.
+  const img = await shrinkImage(orig, profile);
   const comma = img.data.indexOf(",");
   return { bytes: Buffer.from(comma === -1 ? img.data : img.data.slice(comma + 1), "base64"), ext: img.type === "png" ? "png" : "jpeg" };
 }
@@ -352,7 +362,33 @@ export async function renderPptxWithTemplate(
   fileName: string,
   templateBytes: Uint8Array | ArrayBuffer,
   profile: TemplateProfile,
-  opts?: { resolveImage?: (url: string) => Promise<ImageBytes | null> },
+  opts?: {
+    resolveImage?: (url: string) => Promise<ImageBytes | null>;
+    /** Test seam: size that triggers the compact re-pack (default: the 25 MB storage limit). */
+    sizeLimit?: number;
+    onPack?: (profile: ImageProfile["name"], bytes: number) => void;
+  },
+): Promise<BuiltFile> {
+  const raw = new Map<string, ImageBytes | null>();
+  const limit = opts?.sizeLimit ?? PPTX_SIZE_LIMIT;
+  let built = await renderTemplatePass(doc, fileName, templateBytes, profile, opts?.resolveImage, IMAGE_NORMAL, raw);
+  opts?.onPack?.("normal", built.bytes.byteLength);
+  if (built.bytes.byteLength > limit) {
+    log("warn", "[pptx] template deck over the size limit, packing again with stronger image compression", { bytes: built.bytes.byteLength, limit });
+    built = await renderTemplatePass(doc, fileName, templateBytes, profile, opts?.resolveImage, IMAGE_COMPACT, raw);
+    opts?.onPack?.("compact", built.bytes.byteLength);
+  }
+  return built;
+}
+
+async function renderTemplatePass(
+  doc: AcademicDoc,
+  fileName: string,
+  templateBytes: Uint8Array | ArrayBuffer,
+  profile: TemplateProfile,
+  resolveImage: ((url: string) => Promise<ImageBytes | null>) | undefined,
+  imageProfile: ImageProfile,
+  rawImages: Map<string, ImageBytes | null>,
 ): Promise<BuiltFile> {
   const zip = await loadZipCapped(templateBytes);
   const deck = buildSlideDeck(doc);
@@ -393,7 +429,7 @@ export async function renderPptxWithTemplate(
     // Rasm — faqat `pic` placeholder bo'lsa.
     const [picPh] = findPh(lay, "pic");
     if (picPh && s.image?.url) {
-      const img = await loadImage(s.image.url, opts?.resolveImage);
+      const img = await loadImage(s.image.url, resolveImage, imageProfile, rawImages);
       if (img) {
         const media = `ppt/media/slaydx-${mediaN++}.${img.ext}`;
         entry.media.push({ path: media, bytes: img.bytes });

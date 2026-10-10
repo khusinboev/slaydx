@@ -51,7 +51,7 @@ export function makeOpenrouterAdapter(deps: OpenrouterDeps = {}): ProviderAdapte
           }),
         });
         const data = (await res.json()) as {
-          choices?: { message?: { content?: string } }[];
+          choices?: { message?: { content?: string }; finish_reason?: string }[];
           usage?: { prompt_tokens?: number; completion_tokens?: number };
           error?: { message?: string };
         };
@@ -65,10 +65,15 @@ export function makeOpenrouterAdapter(deps: OpenrouterDeps = {}): ProviderAdapte
           };
         }
         const text = data.choices?.[0]?.message?.content?.trim();
-        if (!text) return { ok: false, error: "bo'sh javob", retryable: false };
+        const finish = data.choices?.[0]?.finish_reason;
+        if (!text) {
+          const blocked = finish === "content_filter";
+          return { ok: false, error: "bo'sh javob", retryable: !blocked, kind: blocked ? "safety" : "empty", ...(finish ? { finishReason: finish } : {}) };
+        }
         return {
           ok: true,
           text,
+          ...(finish ? { finishReason: finish === "length" ? "MAX_TOKENS" : finish } : {}),
           usage: {
             inputTokens: data.usage?.prompt_tokens ?? 0,
             outputTokens: data.usage?.completion_tokens ?? 0,
