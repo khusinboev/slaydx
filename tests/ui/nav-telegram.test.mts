@@ -1,7 +1,7 @@
 import "./setup.ts";
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { Fragment, StrictMode, createElement as h, useState } from "react";
+import { Fragment, StrictMode, createElement as h, useState, type ComponentType } from "react";
 import { act, cleanup, render } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { PathnameContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
@@ -152,7 +152,7 @@ function App(props: { path: string }) {
   return h(
     AppRouterContext.Provider,
     { value: router },
-    h(PathnameContext.Provider, { value: path }, h(Fragment, null, h(Dialog), h(Editor), h(MiniAppBridge, { admin: isAdmin(path) }))),
+    h(PathnameContext.Provider, { value: path }, h(Fragment, null, h(Dialog), h(Editor), h(MiniAppBridge as ComponentType<{ admin?: boolean }>, { admin: isAdmin(path) }))),
   );
 }
 
