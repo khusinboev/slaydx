@@ -234,7 +234,14 @@ const GAME_MS: Record<GameKind, { base: number; per: number }> = {
  * Daqiqa boshiga 48 s: 5 daqiqalik podkast 90 + 240 = 330 s. AUDIT-22
  * §1 rejasidagi «podkast 5 daq ≈ 240 s» aynan shu `per` qismi.
  */
-export const AUDIO_BASE_MS = 90_000;
+/*
+ * 2026-10-10 fix: the base must cover the engine's fixed reserves —
+ * TTS 60 s + review 40 s + polish 50 s (`audio/engine.ts`) = 150 s — plus
+ * time to write the script. With the old 90 s base a 1-minute greeting
+ * (138 s) left the writer < 0 s and EVERY greeting failed in ~10 ms;
+ * a 2-minute podcast (186 s) survived with ~36 s. 190 s = reserves + 40 s.
+ */
+export const AUDIO_BASE_MS = 190_000;
 export const AUDIO_PER_MINUTE_MS = 48_000;
 
 /** @param minutes Davomiylik (podkast 1–5, tabriknoma 1–4). */
