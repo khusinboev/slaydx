@@ -1,6 +1,6 @@
 import "server-only";
 import type { PoolClient } from "pg";
-import { soumPerUsd } from "../generation/llm-pricing";
+import { registerSoumPerUsdSource, soumPerUsd } from "../generation/llm-pricing";
 import { TOOL_BY_ID } from "../tools";
 import type { ToolId } from "../types";
 import { ApiError } from "./api";
@@ -406,6 +406,9 @@ export async function getSetting<K extends SettingKey>(key: K): Promise<SettingV
   }
   return settingDef(key).envDefault();
 }
+
+// Cost RECORDING (TTS priced in so'm) converts with the same rate the admin cost pages show: this setting.
+registerSoumPerUsdSource(() => getSetting("finance.soum_per_usd"));
 
 /**
  * Effective value of `key` read inside the caller's transaction straight from

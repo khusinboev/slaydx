@@ -110,6 +110,33 @@ export function soumPerUsd(): number {
   return Number.isFinite(v) && v > 0 ? v : 12_700;
 }
 
+let soumPerUsdSource: (() => Promise<number>) | null = null;
+
+/**
+ * The server registers the runtime setting `finance.soum_per_usd` here (`lib/server/settings.ts`), the ONE
+ * rate every admin cost page converts USD to so'm with. Anything priced in so'm (Aisha TTS) must turn into
+ * USD with the same rate, or the admin's so'm figure would not be what the provider quoted.
+ */
+export function registerSoumPerUsdSource(source: (() => Promise<number>) | null): void {
+  soumPerUsdSource = source;
+}
+
+/**
+ * So'm per USD for COST RECORDING: the registered runtime setting (the admin pages' rate), else the
+ * `SOUM_PER_USD` env (what the setting defaults to). Never throws: a failing read falls back to env.
+ */
+export async function currentSoumPerUsd(): Promise<number> {
+  if (soumPerUsdSource) {
+    try {
+      const v = await soumPerUsdSource();
+      if (Number.isFinite(v) && v > 0) return v;
+    } catch {
+      // fall through to the env rate
+    }
+  }
+  return soumPerUsd();
+}
+
 /** `costUsd` so'mda. */
 export function costSoum(usage: UsageLike, at: Date = new Date()): number {
   return costUsd(usage, at) * soumPerUsd();
@@ -204,7 +231,7 @@ export const TTS_PRICING: readonly TtsPriceRow[] = [
   { billing: "chars", provider: "azure", usdPerMChars: 16, note: "Azure Neural TTS — $16/1M chars" },
   { billing: "chars", provider: "google", usdPerMChars: 16, note: "Google Cloud TTS Neural2 — $16/1M chars" },
   { billing: "chars", provider: "elevenlabs", usdPerMChars: 165, note: "ElevenLabs Creator — ≈$165/1M chars" },
-  { billing: "chars", provider: "aisha", soumPerChar: 1, note: "Aisha AI — 1 so'm/char (converted with SOUM_PER_USD)" },
+  { billing: "chars", provider: "aisha", soumPerChar: 1, note: "Aisha AI — 1 so'm/char (converted with the admin rate finance.soum_per_usd, env SOUM_PER_USD by default)" },
 ];
 
 /** Gemini TTS audio output: 370 tokens per 15 s in the 2026-10-10 probe ≈ 25 tokens/s (Google documents 25). */
@@ -222,6 +249,8 @@ export type TtsUsageLike = {
   seconds?: number;
   inputTokens?: number;
   outputTokens?: number;
+  /** So'm per USD for providers priced in so'm (Aisha); the caller passes `currentSoumPerUsd()`, else the env rate. */
+  soumPerUsd?: number;
 };
 
 export type TtsCost = {
@@ -264,7 +293,7 @@ export function ttsCost(u: TtsUsageLike, at: Date = new Date()): TtsCost {
   }
   const chars = Math.max(0, u.chars || 0);
   if (row.billing === "chars") {
-    const perM = "usdPerMChars" in row ? row.usdPerMChars : (row.soumPerChar * 1_000_000) / soumPerUsd();
+    const perM = "usdPerMChars" in row ? row.usdPerMChars : (row.soumPerChar * 1_000_000) / (positive(u.soumPerUsd) || soumPerUsd());
     return { usd: Number(((perM * chars) / 1_000_000).toFixed(6)), priced: true, estimated: false, textTokens: 0, audioTokens: 0 };
   }
   let audioTokens = positive(u.outputTokens);

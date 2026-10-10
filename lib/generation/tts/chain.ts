@@ -43,6 +43,7 @@ import {
   ttsVoicesFor,
 } from "./types";
 import { recordTts } from "../job-cost";
+import { currentSoumPerUsd } from "../llm-pricing";
 import { makeAzureTts } from "./azure";
 import { makeAishaTts } from "./aisha";
 import { makeGeminiTts } from "./gemini";
@@ -304,6 +305,8 @@ async function runGroup(provider: TtsProvider, group: TtsProviderGroup, parts: r
       ...(audio.model !== undefined ? { model: audio.model } : {}),
       ...(audio.inputTokens !== undefined ? { inputTokens: audio.inputTokens } : {}),
       ...(audio.outputTokens !== undefined ? { outputTokens: audio.outputTokens } : {}),
+      // Priced with the rate the admin cost pages use (finance.soum_per_usd), carried so `TtsMeter` prices it the same.
+      soumPerUsd: await currentSoumPerUsd(),
     };
     usages.push(usage);
     // Ish sarfi (EXT-11) MANBADA: keyingi provayderda boshidan boshlansa ham bu bo'lak to'langan.

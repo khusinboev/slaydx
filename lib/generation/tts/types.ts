@@ -458,6 +458,8 @@ export type TtsUsage = {
   /** Billing facts reported by the provider (Gemini `usageMetadata`): text-input tokens / audio-output tokens. */
   inputTokens?: number;
   outputTokens?: number;
+  /** So'm per USD the chain priced this synthesis with (the admin rate); lets `TtsMeter` price it identically. */
+  soumPerUsd?: number;
 };
 
 export type TtsCostJson = {
@@ -480,7 +482,7 @@ export type TtsCostJson = {
  * itself is `TTS_PRICING` in `llm-pricing.ts` (the price book).
  */
 export function ttsUsageCost(u: TtsUsage, at: Date = new Date()): TtsCost {
-  return ttsCost({ provider: u.provider, chars: u.chars, seconds: u.seconds, ...(u.model !== undefined ? { model: u.model } : {}), ...(u.inputTokens !== undefined ? { inputTokens: u.inputTokens } : {}), ...(u.outputTokens !== undefined ? { outputTokens: u.outputTokens } : {}) }, at);
+  return ttsCost({ provider: u.provider, chars: u.chars, seconds: u.seconds, ...(u.model !== undefined ? { model: u.model } : {}), ...(u.inputTokens !== undefined ? { inputTokens: u.inputTokens } : {}), ...(u.outputTokens !== undefined ? { outputTokens: u.outputTokens } : {}), ...(u.soumPerUsd !== undefined ? { soumPerUsd: u.soumPerUsd } : {}) }, at);
 }
 
 /**

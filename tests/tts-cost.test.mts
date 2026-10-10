@@ -99,6 +99,27 @@ test("ttsCost: per-character providers — Azure $16/1M, Aisha 1 so'm per char v
   assert.equal(ttsCost({ provider: "azure", chars: -5_000 }).usd, 0);
 });
 
+test("ttsCost: an explicit so'm/USD rate beats the env rate; TtsMeter and the chain price with the usage's rate", () => {
+  const prev = process.env.SOUM_PER_USD;
+  try {
+    process.env.SOUM_PER_USD = "12500";
+    // Aisha quotes 1 so'm per char: 25 000 chars = 25 000 so'm. Env rate 12 500 → $2; the admin rate 20 000 → $1.25.
+    assert.equal(ttsCost({ provider: "aisha", chars: 25_000 }).usd, 2, "env rate when none is given");
+    assert.equal(ttsCost({ provider: "aisha", chars: 25_000, soumPerUsd: 20_000 }).usd, 1.25, "the passed rate wins");
+    assert.equal(ttsCost({ provider: "aisha", chars: 25_000, soumPerUsd: 0 }).usd, 2, "a junk rate falls back to env");
+    assert.equal(ttsCost({ provider: "aisha", chars: 25_000, soumPerUsd: Number.NaN }).usd, 2);
+    assert.equal(ttsUsageCost({ provider: "aisha", voice: "v", chars: 25_000, seconds: 60, soumPerUsd: 20_000 }).usd, 1.25);
+    const m = new TtsMeter();
+    m.add({ provider: "aisha", voice: "v", chars: 25_000, seconds: 60, soumPerUsd: 20_000 });
+    assert.equal(m.toJson().usd, 1.25, "the meter prices exactly like the chain's recordTts");
+    // Per-USD providers never read the so'm rate.
+    assert.equal(ttsCost({ provider: "azure", chars: 1_000_000, soumPerUsd: 20_000 }).usd, 16);
+  } finally {
+    if (prev === undefined) delete process.env.SOUM_PER_USD;
+    else process.env.SOUM_PER_USD = prev;
+  }
+});
+
 test("ttsCost: unknown model / provider is flagged «unpriced» (usd 0, priced false), never priced like flash", (t) => {
   quiet(t);
   for (const u of [
@@ -340,6 +361,40 @@ test("end to end (audio engine → JobCost → ai_usage → admin)", { skip }, a
     const bp = bare.parts!.find((p) => p.kind === "tts")!;
     assert.ok(bp.usd > 0 && bp.estimated === true && bp.priced === undefined);
     assert.equal(bp.audioTokens, bp.calls * 15 * 25);
+  });
+
+  await t.test("an Aisha podcast is priced with the admin rate finance.soum_per_usd, not the env rate", async () => {
+    const settings = await import("../lib/server/settings.ts");
+    const prev = process.env.SOUM_PER_USD;
+    process.env.SOUM_PER_USD = "12500";
+    const fakeAisha = (): TtsProvider => ({
+      id: "aisha" as const,
+      configured: () => true,
+      async synthesize(text: string): Promise<TtsAudio> {
+        return { mp3: mp3Of(20), seconds: 15, chars: text.length };
+      },
+    });
+    try {
+      await query(`DELETE FROM app_settings WHERE key = 'finance.soum_per_usd'`, []);
+      settings.invalidateSettingsCache();
+      const atEnv = (await podcastCost(fakeAisha())).parts!.find((p) => p.kind === "tts")!;
+      const chars = atEnv.units;
+      assert.ok(chars > 100);
+      assert.ok(Math.abs(atEnv.usd - chars / 12_500) < 1e-4, `no setting row: the env default 12 500 → ${atEnv.usd}`);
+
+      // The admin sets another rate: the SAME synthesis is now recorded with it.
+      await query(`INSERT INTO app_settings (key, value) VALUES ('finance.soum_per_usd', '20000'::jsonb) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, []);
+      settings.invalidateSettingsCache();
+      const atSetting = (await podcastCost(fakeAisha())).parts!.find((p) => p.kind === "tts")!;
+      // MUTATION (env rate read in ttsCost again): usd stays chars ÷ 12 500 and this goes red.
+      assert.ok(Math.abs(atSetting.usd - chars / 20_000) < 1e-4, `setting 20 000 → ${atSetting.usd} (chars ${chars})`);
+      assert.ok(atSetting.usd < atEnv.usd);
+    } finally {
+      await query(`DELETE FROM app_settings WHERE key = 'finance.soum_per_usd'`, []);
+      settings.invalidateSettingsCache();
+      if (prev === undefined) delete process.env.SOUM_PER_USD;
+      else process.env.SOUM_PER_USD = prev;
+    }
   });
 
   await t.test("an UNKNOWN Gemini TTS model is recorded flagged (priced:false, usd 0) and listed in the admin caveats", async () => {
