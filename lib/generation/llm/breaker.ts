@@ -194,6 +194,7 @@ export async function allowOrWait(b: CircuitBreaker, maxWaitMs: number, random: 
   if (b.allow()) return true;
   const wait = b.msUntilRetry();
   if (wait <= 0 || wait > maxWaitMs) return false;
-  await new Promise((r) => setTimeout(r, wait + Math.floor(random() * 400)));
+  // +5 ms: timers may fire a hair early, and `allow()` must see the cooldown as over.
+  await new Promise((r) => setTimeout(r, wait + 5 + Math.floor(random() * 400)));
   return b.allow();
 }

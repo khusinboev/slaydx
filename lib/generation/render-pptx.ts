@@ -1,9 +1,11 @@
+import { IMAGE_COMPACT, IMAGE_NORMAL, PPTX_SIZE_LIMIT, shrinkImage, type ImageProfile } from "./pptx-image";
 import { fetchImageBytes, type ImageBytes, imageDims } from "./slide-images";
 import { planSlide, PPTX_FONT, slideNotes, SLIDE_IN, type SlideLayer, type SlidePlan } from "./slide-layout";
 import { buildSlideDeck } from "./slides";
 import { getSlideTheme } from "./slide-themes";
 import type { AcademicDoc, BuiltFile } from "./types";
 import { BRAND_SHORT } from "../brand";
+import { log } from "../server/log";
 
 const W = SLIDE_IN.w;
 const H = SLIDE_IN.h;
@@ -45,22 +47,35 @@ function imageDimsOf(img: ImageBytes): { w: number; h: number } | undefined {
   return dims;
 }
 
+/**
+ * Per-render image state. `raw` holds the originals (shared by the normal and the
+ * compact pass, so a re-pack never fetches again); `shrunk` holds what is embedded
+ * in THIS pass.
+ */
+type ImageState = { raw: ImageCache; shrunk: ImageCache; profile: ImageProfile };
+
 async function loadImage(
-  cache: ImageCache,
+  state: ImageState,
   url: string,
   resolveImage?: (url: string) => Promise<ImageBytes | null>,
 ): Promise<ImageBytes | null> {
-  const hit = cache.get(url);
+  const hit = state.shrunk.get(url);
   if (hit !== undefined) return hit;
-  const img = (resolveImage ? await resolveImage(url) : null) ?? (await fetchImageBytes(url));
-  cache.set(url, img);
+  let orig = state.raw.get(url);
+  if (orig === undefined) {
+    orig = (resolveImage ? await resolveImage(url) : null) ?? (await fetchImageBytes(url));
+    state.raw.set(url, orig);
+  }
+  // Downscale + recompress at insertion (never upscales; falls back to the original).
+  const img = orig ? await shrinkImage(orig, state.profile) : null;
+  state.shrunk.set(url, img);
   return img;
 }
 
 async function paintPlan(
   slide: PptxSlide,
   plan: SlidePlan,
-  cache: ImageCache,
+  cache: ImageState,
   resolveImage?: (url: string) => Promise<ImageBytes | null>,
 ) {
   slide.addShape("rect", { x: 0, y: 0, w: W, h: H, fill: { color: hx(plan.bg) } });
@@ -72,7 +87,7 @@ async function paintPlan(
 async function paintLayer(
   slide: PptxSlide,
   layer: SlideLayer,
-  cache: ImageCache,
+  cache: ImageState,
   resolveImage?: (url: string) => Promise<ImageBytes | null>,
 ) {
   if (layer.t === "rect") {
@@ -174,12 +189,42 @@ async function paintLayer(
   });
 }
 
-export async function renderPptx(
+export type RenderPptxOpts = {
+  resolveImage?: (url: string) => Promise<ImageBytes | null>;
+  /** Test seam: the size limit that triggers the compact re-pack (default: the 25 MB storage limit). */
+  sizeLimit?: number;
+  /** Test seam: called after each pack with the profile used and the resulting size. */
+  onPack?: (profile: ImageProfile["name"], bytes: number) => void;
+};
+
+/**
+ * Renders the deck; images are downscaled/recompressed at insertion. When the
+ * file is still over the storage limit it is packed ONCE more with stronger
+ * compression instead of failing; only if that is still too big does the
+ * caller's existing size check fail it.
+ */
+export async function renderPptx(doc: AcademicDoc, fileName: string, opts?: RenderPptxOpts): Promise<BuiltFile> {
+  const raw: ImageCache = new Map();
+  const limit = opts?.sizeLimit ?? PPTX_SIZE_LIMIT;
+  let built = await renderPass(doc, fileName, opts?.resolveImage, { raw, shrunk: new Map(), profile: IMAGE_NORMAL });
+  opts?.onPack?.("normal", built.bytes.byteLength);
+  if (built.bytes.byteLength > limit) {
+    log("warn", "[pptx] file over the size limit, packing again with stronger image compression", {
+      bytes: built.bytes.byteLength,
+      limit,
+    });
+    built = await renderPass(doc, fileName, opts?.resolveImage, { raw, shrunk: new Map(), profile: IMAGE_COMPACT });
+    opts?.onPack?.("compact", built.bytes.byteLength);
+  }
+  return built;
+}
+
+async function renderPass(
   doc: AcademicDoc,
   fileName: string,
-  opts?: { resolveImage?: (url: string) => Promise<ImageBytes | null> },
+  resolveImage: ((url: string) => Promise<ImageBytes | null>) | undefined,
+  imageCache: ImageState,
 ): Promise<BuiltFile> {
-  const imageCache: ImageCache = new Map();
   const PptxGenJS = (await import("pptxgenjs")).default;
   const pptx = new PptxGenJS();
   pptx.defineLayout({ name: "WIDE", width: W, height: H });
@@ -198,14 +243,15 @@ export async function renderPptx(
       logo: deck.logo,
       custom: deck.custom,
     });
-    await paintPlan(slide, plan, imageCache, opts?.resolveImage);
+    await paintPlan(slide, plan, imageCache, resolveImage);
     // Notiq eslatmasi. Ilgari `notesSlide` yaratilardi-yu, ichi bo'sh qolardi:
     // foydalanuvchi saytda eslatmani ko'rib, yuklab olgach yo'qotardi.
     const notes = slideNotes(deck.slides[i], deck.speakerNotes);
     if (notes) slide.addNotes?.(notes);
   }
 
-  const buf = (await pptx.write({ outputType: "nodebuffer" })) as Buffer;
+  // DEFLATE: XML parts shrink; JPEG/PNG media stay as they are.
+  const buf = (await pptx.write({ outputType: "nodebuffer", compression: true })) as Buffer;
   return {
     html: "",
     bytes: new Uint8Array(buf),

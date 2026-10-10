@@ -170,6 +170,31 @@ test("jurnal: BITTA tuzilmali qator, kontekst (jobId/toolId), prompt yo'q, xabar
   });
 });
 
+test("jurnal: prompt/foydalanuvchi matni/model javobi HECH QACHON yozilmaydi (http, bo'sh, yaroqsiz JSON, kesilgan, oqim)", async () => {
+  const MODEL_OUT = "MODEL-OUTPUT-QQ-4417";
+  const sse = (text: string) =>
+    new Response(`data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text }] }, finishReason: "STOP" }] })}\n\n`, { headers: { "content-type": "text/event-stream" } });
+  const scenarios: [string, (Response | (() => Response))[], Parameters<typeof llmComplete>[3]][] = [
+    ["http", [http(503, "boom"), http(500, "boom"), http(502, "boom")], {}],
+    ["empty", [empty()], {}],
+    ["bad_json", [ok(`kechirasiz ${MODEL_OUT}`)], { json: true }],
+    ["truncated", [ok(`{"a":"${MODEL_OUT}`, "MAX_TOKENS")], { json: true }],
+  ];
+  for (const [name, replies, opts] of scenarios) {
+    await withGemini(replies, async (_reqs, logs) => {
+      await llmComplete(`SYS-${SECRET_PROMPT}`, `USER-${SECRET_PROMPT}`, 500, opts);
+      const all = logs.join("\n");
+      assert.ok(failureLines(logs).length >= 1, `${name}: kamida bitta urinish qatori`);
+      assert.ok(!all.includes(SECRET_PROMPT), `${name}: prompt jurnalga tushdi`);
+      assert.ok(!all.includes(MODEL_OUT), `${name}: model javobi jurnalga tushdi`);
+    });
+  }
+  await withGemini([sse("")], async (_reqs, logs) => {
+    await llmStream(`SYS-${SECRET_PROMPT}`, `USER-${SECRET_PROMPT}`, 500, { json: true, onText: () => {} });
+    assert.ok(!logs.join("\n").includes(SECRET_PROMPT), "oqim: prompt jurnalga tushdi");
+  });
+});
+
 test("jurnal: bo'sh javob — kind=empty, finishReason va token soni bilan", async () => {
   await withGemini([empty(), ok('{"a":1}')], async (_reqs, logs) => {
     await llmComplete("S", "U", 500, { json: true });

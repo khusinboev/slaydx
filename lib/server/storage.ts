@@ -1,6 +1,7 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import { query, queryOne } from "./db";
+import { PPTX_SIZE_LIMIT } from "../generation/pptx-image";
 
 /**
  * Yaratilgan fayl bayti.
@@ -14,7 +15,7 @@ import { query, queryOne } from "./db";
  */
 
 /** Bazaga yoziladigan eng katta fayl. Kattaroq PPTX odatda rasm sifati muammosi. */
-export const MAX_FILE_BYTES = 25 * 1024 * 1024;
+export const MAX_FILE_BYTES = PPTX_SIZE_LIMIT;
 
 export type StoredFileMeta = {
   fileName: string;
