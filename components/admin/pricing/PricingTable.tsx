@@ -113,7 +113,7 @@ export function PricingTable({
       id: "margin",
       header: "Marja % · tavsiya",
       // The primary margin: the listed price of the completed jobs (points included), less cost and the payment fee.
-      hint: "ro'yxat narxi (ball ham) − tannarx − komissiya",
+      hint: "narx (ball ham) − tannarx − komissiya",
       sortKey: "margin_asc",
       sortKeyReverse: "margin_desc",
       // The recommendation sits under the margin it is derived from (§17.6 chip).
@@ -129,7 +129,7 @@ export function PricingTable({
       // low by construction wherever points pay for the jobs, which is not a pricing problem.
       id: "cash-margin",
       header: "Naqd marja",
-      hint: "faqat naqd pul tushumi bo'yicha",
+      hint: "faqat naqd tushum bo'yicha",
       align: "right",
       className: "tabular-nums whitespace-nowrap",
       cell: (r) => pctText(r.cashMarginPct, 0),

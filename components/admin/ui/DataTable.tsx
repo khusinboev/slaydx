@@ -236,7 +236,7 @@ export function DataTable<T>({
                     {col.hint ? (
                       <span
                         className={cn(
-                          "text-muted-foreground mt-0.5 block max-w-[9.5rem] text-[10.5px] leading-snug font-normal whitespace-normal",
+                          "text-muted-foreground mt-0.5 block max-w-[8rem] text-[10.5px] leading-snug font-normal whitespace-normal",
                           align === "right" && "ml-auto",
                           align === "center" && "mx-auto",
                         )}

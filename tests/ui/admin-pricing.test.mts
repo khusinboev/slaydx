@@ -385,8 +385,8 @@ test("loading skeleton, then KPI tiles, coverage banner with caveats and the tab
   const headers = screen.getAllByRole("columnheader").map((h) => h.textContent ?? "");
   for (const [name, hint] of [
     ["Ustama ×", "tushum ÷ tannarx"],
-    ["Marja % · tavsiya", "ro'yxat narxi (ball ham) − tannarx − komissiya"],
-    ["Naqd marja", "faqat naqd pul tushumi bo'yicha"],
+    ["Marja % · tavsiya", "narx (ball ham) − tannarx − komissiya"],
+    ["Naqd marja", "faqat naqd tushum bo'yicha"],
     ["Bonus xarajati", "ball bilan to'langan ishlar tannarxi"],
   ] as const) {
     assert.ok(headers.some((t) => t.includes(name) && t.includes(hint)), `${name}: ${hint}`);

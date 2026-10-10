@@ -98,7 +98,7 @@ export function PricingDrawer({
               </span>
             ),
           },
-          { label: "O'rtacha narx", value: `${tangaText(item.avgPrice)} / ish` },
+          { label: "O'rtacha narx (barcha buyurtmalar)", value: `${tangaText(item.avgPrice)} / ish` },
           { label: "Tushum (ro'yxat narxi)", value: `${tangaText(item.avgRevenue)} / tugallangan ish` },
           { label: "Naqd tushum", value: `${tangaText(item.avgCashRevenue)} / ish` },
           {
