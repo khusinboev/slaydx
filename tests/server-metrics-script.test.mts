@@ -47,7 +47,7 @@ test("install-ops.sh --dry-run: the metrics cron runs every 5 minutes as root fr
       chmodSync(path.join(bin, f), 0o755);
     }
     const r = spawnSync("bash", [path.join(ROOT, "deploy/install-ops.sh"), "--dry-run"], {
-      env: { PATH: process.env.PATH ?? "", SLAYDX_APP_DIR: app, SLAYDX_BIN_DIR: bin },
+      env: { NODE_ENV: "test", PATH: process.env.PATH ?? "", SLAYDX_APP_DIR: app, SLAYDX_BIN_DIR: bin },
       encoding: "utf8",
     });
     assert.equal(r.status, 0, r.stderr);
