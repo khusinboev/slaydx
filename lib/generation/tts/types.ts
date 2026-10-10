@@ -54,7 +54,16 @@ export type TtsSynthOpts = {
    * Berilmasa adapter o'z standartini oladi (`TTS_LIMITS.callTimeoutMs`).
    */
   timeoutMs?: number;
+  /**
+   * Two-speaker request (Gemini multi-speaker): consecutive turns of a dialog, each with
+   * the voice that speaks it. Only providers with `multiSpeaker: true` get it (the chain
+   * decides, `pack.ts`); `text` is then the same turns joined, for length accounting.
+   */
+  turns?: TtsTurn[];
 };
+
+/** One dialog turn inside a multi-speaker request. */
+export type TtsTurn = { voice: string; text: string };
 
 /**
  * Provayder xatosi (WP-A) — `TtsProvider.synthesize` ISTISNO tashlaydi
@@ -67,14 +76,27 @@ export class TtsError extends Error {
   readonly retryable: boolean;
   readonly status?: number;
   readonly retryAfterMs?: number;
+  /** 429 RESOURCE_EXHAUSTED from a per-minute quota: the chain waits `retryAfterMs` and retries (bounded by the job deadline). */
+  readonly rateLimited?: boolean;
+  /** The quota that was exceeded (`GenerateRequestsPerMinutePerProjectPerModel`), for the log. */
+  readonly quotaId?: string;
+  /** The exceeded quota resets per DAY: retrying is pointless, the chain fails fast with a user message. */
+  readonly dailyQuota?: boolean;
 
-  constructor(provider: TtsProviderId, message: string, o: { retryable?: boolean; status?: number; retryAfterMs?: number } = {}) {
+  constructor(
+    provider: TtsProviderId,
+    message: string,
+    o: { retryable?: boolean; status?: number; retryAfterMs?: number; rateLimited?: boolean; quotaId?: string; dailyQuota?: boolean } = {},
+  ) {
     super(message);
     this.name = "TtsError";
     this.provider = provider;
     this.retryable = o.retryable ?? false;
     if (o.status !== undefined) this.status = o.status;
     if (o.retryAfterMs !== undefined) this.retryAfterMs = o.retryAfterMs;
+    if (o.rateLimited) this.rateLimited = true;
+    if (o.quotaId !== undefined) this.quotaId = o.quotaId;
+    if (o.dailyQuota) this.dailyQuota = true;
   }
 }
 
@@ -130,6 +152,23 @@ export type TtsProvider = {
   /** Muhitda kalit bormi — zanjir kalitsiz provayderni O'TKAZIB yuboradi. */
   configured(): boolean;
   synthesize(text: string, opts: TtsSynthOpts): Promise<TtsAudio>;
+  /** Two voices in ONE request (`opts.turns`) — lets a dialog be packed into few calls. Only Gemini. */
+  multiSpeaker?: boolean;
+  /**
+   * Cross-process request pacing: awaited before EVERY request attempt (retries included).
+   * Resolves when a slot is free; throws `DeadlineError` when none opens before the job deadline.
+   */
+  pace?(ctx: TtsPaceCtx): Promise<void>;
+};
+
+/** What the chain hands `TtsProvider.pace` (clock injected so tests can fake it). */
+export type TtsPaceCtx = {
+  /** ms left until the job deadline minus its safety margin (Infinity without a deadline). */
+  left(): number;
+  /** Never wait if fewer than this many ms would remain afterwards. */
+  reserveMs: number;
+  sleep(ms: number): Promise<void>;
+  now(): number;
 };
 
 /* ────────────────────────── ovoz jadvali ────────────────────────── */
@@ -364,6 +403,13 @@ export const TTS_LIMITS = {
    * bilan AYNI son: replika o'z-o'zidan bitta bo'lakka sig'sin.
    */
   chunkChars: 900,
+  /**
+   * Gemini TTS chunk: ~2 400 chars ≈ 2.5 min of audio (~3.7k audio tokens), far below
+   * the model's limits. Gemini has a per-minute REQUEST quota (≈10/min/project/model), so
+   * fewer, larger calls are the first defence (900-char chunks made a 1-min greeting 11 calls).
+   * Aisha/Azure keep `chunkChars`.
+   */
+  geminiChunkChars: 2_400,
   /** Bitta ishdagi umumiy belgi (5 daq × ~150 so'z/daq ≈ 4 500 belgi, zaxira bilan). */
   maxChars: 12_000,
   /**
@@ -376,6 +422,9 @@ export const TTS_LIMITS = {
    */
   callTimeoutMs: 30_000,
 } as const;
+
+/** Largest text one request of `provider` takes. */
+export const ttsChunkLimit = (provider: TtsProviderId): number => (provider === "gemini" ? TTS_LIMITS.geminiChunkChars : TTS_LIMITS.chunkChars);
 
 /**
  * Matnni ≤`max` belgili bo'laklarga ajratadi.

@@ -84,6 +84,17 @@ test("docker-compose: TTS ovoz zanjiri o'zgaruvchilari (uz/ru/en) ikkala servisd
 });
 
 /**
+ * Gemini TTS pacing (`tts/pace.ts`): web and worker must read the SAME limit, and the default
+ * (8) lives in compose so no `.env` change is needed on deploy.
+ */
+test("docker-compose: TTS_GEMINI_RPM ikkala servisda, standart 8", () => {
+  const yaml = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  for (const service of ["web", "worker"]) {
+    assert.match(envBlock(yaml, service), /^\s+TTS_GEMINI_RPM: \$\{TTS_GEMINI_RPM:-8\}$/m, `${service}: TTS_GEMINI_RPM compose'da yo'q`);
+  }
+});
+
+/**
  * INFRA-09: `lib/brand.ts` `NEXT_PUBLIC_BRAND_NAME`/`NEXT_PUBLIC_BRAND_LOGO`ni
  * `process.env`dan to'g'ridan-to'g'ri o'qiydi (Next.js build-vaqtidagi inline
  * qilish worker'ga tegishli emas — u oddiy `tsx` processi). PPTX/DOCX

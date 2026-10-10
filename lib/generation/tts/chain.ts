@@ -31,7 +31,9 @@ import {
   TTS_LIMITS,
   TTS_PROVIDERS,
   TtsError,
+  ttsChunkLimit,
   type TtsAudio,
+  type TtsPaceCtx,
   type TtsProvider,
   type TtsProviderId,
   type TtsSynthOpts,
@@ -46,9 +48,12 @@ import { recordTts } from "../job-cost";
 import { currentSoumPerUsd } from "../llm-pricing";
 import { makeAzureTts } from "./azure";
 import { makeAishaTts } from "./aisha";
-import { makeGeminiTts } from "./gemini";
+import { GEMINI_DAILY_QUOTA_MESSAGE, makeGeminiTts } from "./gemini";
+import { geminiPacer } from "./pace";
+import { packParts } from "./pack";
 import { DeadlineError } from "../llm/chain";
 import { backoffMs } from "../llm/retry";
+import { UserFacingError } from "../../server/user-error";
 
 /* ══════════════════════════ ovoz zanjiri ══════════════════════════ */
 
@@ -155,7 +160,12 @@ export type TtsChainDeps = {
   env?: NodeJS.ProcessEnv;
   /** `[tts:<lang>] …` — standart `console.log`. */
   log?: (line: string) => void;
+  /** Clock seam (tests fake time); default = real `Date.now` / `setTimeout`. */
+  clock?: TtsClock;
 };
+
+/** Time source of the chain: waits (429 backoff, pacing) and deadline checks go through it. */
+export type TtsClock = { now(): number; sleep(ms: number): Promise<void> };
 
 /**
  * `synthesizeAll` sozlamalari. `deadline` (epoch ms, ish muddati — audit
@@ -175,14 +185,25 @@ const TTS_SAFETY_MS = 1_000;
 export const TTS_MIN_ATTEMPT_MS = 3_000;
 /** `Retry-After` shundan uzun bo'lsa shu provayder qayta urinilmaydi. */
 export const TTS_RETRY_AFTER_CAP_MS = 5_000;
-const sleep = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+/** 429 RESOURCE_EXHAUSTED (per-minute quota): waits per chunk before giving up. */
+export const TTS_RATE_RETRIES = 3;
+/** Added to the server's `retryDelay` — it is the earliest moment, not a promise. */
+export const TTS_RATE_RETRY_PAD_MS = 1_000;
 
-const leftMs = (deadline?: number): number => (deadline === undefined ? Number.POSITIVE_INFINITY : deadline - TTS_SAFETY_MS - Date.now());
+const REAL_CLOCK: TtsClock = { now: () => Date.now(), sleep: (ms) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve()) };
+
+const leftMs = (deadline: number | undefined, clock: TtsClock): number => (deadline === undefined ? Number.POSITIVE_INFINITY : deadline - TTS_SAFETY_MS - clock.now());
+
+/** The user sees the daily-quota text, not the generic voice error. */
+function finalError(e: unknown): unknown {
+  return e instanceof TtsError && e.dailyQuota ? new UserFacingError(GEMINI_DAILY_QUOTA_MESSAGE) : e;
+}
 
 export function makeTtsChain(deps: TtsChainDeps = {}): TtsChain {
-  const providers = deps.providers ?? [makeAzureTts(), makeAishaTts(), makeGeminiTts()];
+  const providers = deps.providers ?? [makeAzureTts(), makeAishaTts(), makeGeminiTts({ pace: geminiPacer })];
   const env = deps.env ?? process.env;
   const log = deps.log ?? ((line: string) => console.log(line));
+  const clock = deps.clock ?? REAL_CLOCK;
   const byId = (id: TtsProviderId) => providers.find((p) => p.id === id);
 
   const usable = (lang: string): { group: TtsProviderGroup; provider: TtsProvider }[] => {
@@ -218,28 +239,32 @@ export function makeTtsChain(deps: TtsChainDeps = {}): TtsChain {
 
       let last: unknown = null;
       for (const { group, provider } of chain) {
-        const started = Date.now();
+        const started = clock.now();
         try {
           const run = await runGroup(provider, groupForChoice(group, lang, opts.voice), live, {
             lang,
+            clock,
+            log,
             ...(opts.speed !== undefined ? { speed: opts.speed } : {}),
             ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
             ...(opts.deadline !== undefined ? { deadline: opts.deadline } : {}),
           });
-          log(`[tts:${lang}] ${provider.id} → ok ${Date.now() - started} ms (${run.audios.length} bo'lak, ${run.chars} belgi)`);
+          log(`[tts:${lang}] ${provider.id} → ok ${clock.now() - started} ms (${run.audios.length} bo'lak, ${run.chars} belgi)`);
           return run;
         } catch (e) {
           last = e;
           const err = e instanceof TtsError ? e : null;
-          log(`[tts:${lang}] ${provider.id} → xato (${err?.status ?? "-"}) ${Date.now() - started} ms: ${e instanceof Error ? e.message : String(e)}`);
+          log(`[tts:${lang}] ${provider.id} → xato (${err?.status ?? "-"}) ${clock.now() - started} ms: ${e instanceof Error ? e.message : String(e)}`);
           // Vaqt tugadi — keyingi provayderda skriptni BOSHIDAN boshlash ma'nosiz.
           if (e instanceof DeadlineError) throw e;
         }
       }
-      throw last instanceof Error ? last : new TtsError(chain[0].group.provider, "sintez yiqildi", { retryable: false });
+      throw last instanceof Error ? finalError(last) : new TtsError(chain[0].group.provider, "sintez yiqildi", { retryable: false });
     },
   };
 }
+
+type GroupOpts = TtsRunOpts & { clock?: TtsClock; log?: (line: string) => void };
 
 /**
  * Bitta provayder BUTUN ishni bajaradi.
@@ -250,48 +275,92 @@ export function makeTtsChain(deps: TtsChainDeps = {}): TtsChain {
  * `retryable:false` (kalit, 400, chegara) — darhol tashqariga, ya'ni
  * keyingi provayderga.
  */
-async function runGroup(provider: TtsProvider, group: TtsProviderGroup, parts: readonly TtsPart[], opts: TtsRunOpts): Promise<TtsRun> {
+async function runGroup(provider: TtsProvider, group: TtsProviderGroup, parts: readonly TtsPart[], opts: GroupOpts): Promise<TtsRun> {
   const voiceA = group.voices[0];
   const voiceB = group.voices[1] ?? group.voices[0];
+  const clock = opts.clock ?? REAL_CLOCK;
+  const log = opts.log ?? (() => undefined);
   const audios: TtsAudio[] = [];
   const usages: TtsUsage[] = [];
   let seconds = 0;
   let chars = 0;
 
+  const limit = ttsChunkLimit(provider.id);
   for (const part of parts) {
     const text = String(part.text ?? "").trim();
-    if (!text) continue;
-    if (text.length > TTS_LIMITS.chunkChars) {
-      // Bo'laklash chaqiruvchida (`chunkText`) — bu yerga uzun matn kelsa
-      // shartnoma buzilgan, va uni jimgina kesish matnni YO'QOTARDI.
-      throw new TtsError(provider.id, `bo'lak ${text.length} belgi, chegara ${TTS_LIMITS.chunkChars}`, { retryable: false });
+    if (text.length > limit) {
+      // Chunking belongs to the caller (`chunkText`); a longer part breaks the contract, and
+      // silently cutting it would LOSE text.
+      throw new TtsError(provider.id, `bo'lak ${text.length} belgi, chegara ${limit}`, { retryable: false });
     }
+  }
+
+  /*
+   * Provider-aware packing (`pack.ts`): Azure/Aisha get one request per part as before; Gemini
+   * (per-minute REQUEST quota) gets consecutive parts merged up to 2 400 chars, a two-voice
+   * dialog as two-speaker requests.
+   */
+  const calls = packParts(parts, { provider: provider.id, multiSpeaker: provider.multiSpeaker === true, twoVoices: voiceA !== voiceB });
+  const paceCtx = (): TtsPaceCtx => ({ left: () => leftMs(opts.deadline, clock), reserveMs: TTS_MIN_ATTEMPT_MS, sleep: (ms) => clock.sleep(ms), now: () => clock.now() });
+
+  for (const part of calls) {
+    const text = part.text;
+    if (!text) continue;
     const voice = part.voice === 1 ? voiceB : voiceA;
     const synth: TtsSynthOpts = {
       lang: opts.lang,
       voice,
+      ...(part.turns ? { turns: part.turns.map((t) => ({ voice: t.voice === 1 ? voiceB : voiceA, text: t.text })) } : {}),
       ...(opts.speed !== undefined ? { speed: opts.speed } : {}),
       ...(part.pauseMs !== undefined ? { pauseMs: part.pauseMs } : {}),
       ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
     };
 
     let audio: TtsAudio | null = null;
-    for (let attempt = 0; attempt < MAX_ATTEMPTS && !audio; attempt++) {
-      // Muddat (audit EXT-10): soat HAR urinishdan oldin qaraladi.
-      const left = leftMs(opts.deadline);
+    let attempt = 0;
+    let rateRetries = 0;
+    while (!audio) {
+      // Deadline (audit EXT-10): the clock is checked before EVERY attempt.
+      const left = leftMs(opts.deadline, clock);
       if (left < TTS_MIN_ATTEMPT_MS) throw new DeadlineError(`tts:${opts.lang}`, left);
-      const call: TtsSynthOpts = opts.deadline === undefined ? synth : { ...synth, timeoutMs: Math.min(opts.timeoutMs ?? TTS_LIMITS.callTimeoutMs, left) };
+      // Cross-process pacing (Gemini): a slot per request attempt; throws DeadlineError if none opens in time.
+      if (provider.pace) await provider.pace(paceCtx());
+      const afterPace = leftMs(opts.deadline, clock);
+      if (afterPace < TTS_MIN_ATTEMPT_MS) throw new DeadlineError(`tts:${opts.lang}`, afterPace);
+      const call: TtsSynthOpts = opts.deadline === undefined ? synth : { ...synth, timeoutMs: Math.min(opts.timeoutMs ?? TTS_LIMITS.callTimeoutMs, afterPace) };
       try {
         audio = await provider.synthesize(text, call);
       } catch (e) {
         const err = e instanceof TtsError ? e : null;
+
+        // 429 RESOURCE_EXHAUSTED (Gemini): per-minute quota -> wait the server's retryDelay and retry,
+        // bounded by TTS_RATE_RETRIES and the deadline; a per-DAY quota fails fast.
+        if (err?.rateLimited) {
+          if (err.dailyQuota) {
+            log(`[tts:${opts.lang}] ${provider.id} → kunlik kvota tugadi (quotaId=${err.quotaId ?? "?"}), qayta urinilmaydi`);
+            throw e;
+          }
+          if (rateRetries >= TTS_RATE_RETRIES) {
+            log(`[tts:${opts.lang}] ${provider.id} → 429 (quotaId=${err.quotaId ?? "?"}), ${TTS_RATE_RETRIES} marta kutildi, taslim`);
+            throw e;
+          }
+          const want = (err.retryAfterMs ?? 0) + TTS_RATE_RETRY_PAD_MS;
+          const wait = Math.min(want, leftMs(opts.deadline, clock) - TTS_MIN_ATTEMPT_MS);
+          if (wait <= 0) throw new DeadlineError(`tts:${opts.lang}`, leftMs(opts.deadline, clock));
+          rateRetries++;
+          log(`[tts:${opts.lang}] ${provider.id} → 429 (quotaId=${err.quotaId ?? "?"}), ${wait} ms kutiladi (${rateRetries}/${TTS_RATE_RETRIES})`);
+          await clock.sleep(wait);
+          continue;
+        }
+
         const retryable = err ? err.retryable : true;
-        if (!retryable || attempt === MAX_ATTEMPTS - 1) throw e;
-        // Uzun `Retry-After` (kvota) — kutmaymiz, keyingi provayderga.
+        if (!retryable || attempt >= MAX_ATTEMPTS - 1) throw e;
+        // A long `Retry-After` (quota) is not waited for; the next provider takes over.
         if (err?.retryAfterMs !== undefined && err.retryAfterMs > TTS_RETRY_AFTER_CAP_MS) throw e;
         const wait = err?.retryAfterMs ?? backoffMs(attempt, 500);
-        if (leftMs(opts.deadline) - wait < TTS_MIN_ATTEMPT_MS) throw new DeadlineError(`tts:${opts.lang}`, leftMs(opts.deadline));
-        await sleep(wait);
+        if (leftMs(opts.deadline, clock) - wait < TTS_MIN_ATTEMPT_MS) throw new DeadlineError(`tts:${opts.lang}`, leftMs(opts.deadline, clock));
+        attempt++;
+        await clock.sleep(wait);
       }
     }
     if (!audio) throw new TtsError(provider.id, "sintez natijasi bo'sh", { retryable: false });
@@ -335,7 +404,7 @@ async function runGroup(provider: TtsProvider, group: TtsProviderGroup, parts: r
  * jadvalga umuman qaralmaydi — shunda test provayder tanlovini emas,
  * o'z mantiqini sinaydi.
  */
-export function chainOfProvider(provider: TtsProvider, voices?: string[], log?: (line: string) => void): TtsChain {
+export function chainOfProvider(provider: TtsProvider, voices?: string[], log?: (line: string) => void, clock: TtsClock = REAL_CLOCK): TtsChain {
   // Explicit `voices` win over everything (the test seam ignores the table AND the
   // user's choice); otherwise the table group, with the choice applied.
   const voicesFor = (lang: string, choice?: TtsVoiceChoice): string[] => {
@@ -350,14 +419,21 @@ export function chainOfProvider(provider: TtsProvider, voices?: string[], log?: 
     async synthesizeAll(parts, opts) {
       const lang = String(opts.lang ?? "uz").toLowerCase();
       if (!provider.configured()) throw new TtsError(provider.id, "Ovoz provayderi sozlanmagan", { retryable: false });
-      const started = Date.now();
-      const run = await runGroup(provider, { provider: provider.id, voices: voicesFor(lang, opts.voice) }, parts.filter((p) => String(p.text ?? "").trim()), {
-        lang,
-        ...(opts.speed !== undefined ? { speed: opts.speed } : {}),
-        ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
-        ...(opts.deadline !== undefined ? { deadline: opts.deadline } : {}),
-      });
-      log?.(`[tts:${lang}] ${provider.id} → ok ${Date.now() - started} ms (${run.audios.length} bo'lak, ${run.chars} belgi)`);
+      const started = clock.now();
+      let run: TtsRun;
+      try {
+        run = await runGroup(provider, { provider: provider.id, voices: voicesFor(lang, opts.voice) }, parts.filter((p) => String(p.text ?? "").trim()), {
+          lang,
+          clock,
+          ...(log ? { log } : {}),
+          ...(opts.speed !== undefined ? { speed: opts.speed } : {}),
+          ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+          ...(opts.deadline !== undefined ? { deadline: opts.deadline } : {}),
+        });
+      } catch (e) {
+        throw finalError(e);
+      }
+      log?.(`[tts:${lang}] ${provider.id} → ok ${clock.now() - started} ms (${run.audios.length} bo'lak, ${run.chars} belgi)`);
       return run;
     },
   };
