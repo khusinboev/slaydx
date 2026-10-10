@@ -528,8 +528,9 @@ function jobFilter(includeAdmins: boolean): string {
 
 /**
  * SQL condition on a spend row (AI usage record) of table/alias `alias`:
- * free-LLM rows carry no user and always stay; the rest drops with the admin
- * accounts' jobs.
+ * every row follows its user: an admin account's rows (its jobs AND its free-LLM
+ * calls, which carry the caller's user id, lib/server/spend.ts flushFreeUsage)
+ * drop with it; a row with no user at all stays.
  */
 function spendFilter(includeAdmins: boolean, alias = "s"): string {
   return includeAdmins ? "TRUE" : `(${alias}.user_id IS NULL OR NOT EXISTS (SELECT 1 FROM admin_accounts aa WHERE aa.user_id = ${alias}.user_id))`;
