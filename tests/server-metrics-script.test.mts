@@ -20,11 +20,43 @@ const SCRIPT = path.join(ROOT, "deploy/ops/slaydx-metrics.sh");
 const FAKE_PG_PASSWORD = "FAKE-pg-password-for-the-secret-check";
 const NOW = 1_760_100_000; // epoch seconds used as METRICS_NOW
 
+type HostJson = {
+  v: number; cpus: number; load1: number; load5: number; load15: number;
+  mem_total_mb: number; mem_used_mb: number; mem_avail_mb: number; swap_total_mb: number; swap_used_mb: number; disk_pct: number;
+  containers: Array<{ name: string; id: string; status: string; restarts: number; oom: boolean; cpu_pct: number; mem_mb: number; mem_limit_mb: number }>;
+  nginx: { window_s: number; requests: number; s2xx: number; s3xx: number; s4xx: number; s5xx: number; p50_ms: number | null; p95_ms: number | null } | null;
+};
+
 test("slaydx-metrics.sh: bash -n sintaksis xato bermaydi, bajariladigan", () => {
   execFileSync("bash", ["-n", SCRIPT], { stdio: "pipe" });
   const help = spawnSync("bash", [SCRIPT, "--help"], { encoding: "utf8" });
   assert.equal(help.status, 0);
   assert.match(help.stdout, /--print/);
+});
+
+test("install-ops.sh --dry-run: the metrics cron runs every 5 minutes as root from the root-owned copy, with its log rotated", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "slaydx-install-test-"));
+  try {
+    const app = path.join(dir, "app");
+    const bin = path.join(dir, "bin");
+    mkdirSync(path.join(app, "scripts"), { recursive: true });
+    mkdirSync(bin);
+    for (const f of ["watchdog.sh", "backup-ledger.sh", "restore-check.sh"]) writeFileSync(path.join(app, "scripts", f), "");
+    for (const f of ["slaydx-backup", "slaydx-auto-deploy"]) {
+      writeFileSync(path.join(bin, f), "");
+      chmodSync(path.join(bin, f), 0o755);
+    }
+    const r = spawnSync("bash", [path.join(ROOT, "deploy/install-ops.sh"), "--dry-run"], {
+      env: { PATH: process.env.PATH ?? "", SLAYDX_APP_DIR: app, SLAYDX_BIN_DIR: bin },
+      encoding: "utf8",
+    });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /=== \S*\/slaydx-metrics\n/);
+    assert.ok(r.stdout.includes(`*/5 * * * * root umask 077; ${bin}/slaydx-metrics >> /var/log/slaydx-metrics.log 2>&1`), r.stdout);
+    assert.match(r.stdout, /\/var\/log\/slaydx-metrics\.log \{/, "logrotate covers the metrics log");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 const STUB_DOCKER = `#!/usr/bin/env bash
@@ -33,8 +65,11 @@ printf '%s\\n' "$*" >>"$S/docker.log"
 [ -f "$S/docker-fail" ] && { echo "Cannot connect to the Docker daemon" >&2; exit 1; }
 case "$1" in
   ps) cat "$S/ps.txt" ;;
-  stats) cat "$S/stats.txt" ;;
-  inspect) cat "$S/inspect.txt" ;;
+  # stats / inspect answer only for the container names that were ASKED for (like the real docker)
+  stats)
+    for a in "$@"; do case "$a" in -*|*"{{"*|stats) continue ;; esac; grep -E "^$a\\|" "$S/stats.txt"; done ;;
+  inspect)
+    for a in "$@"; do case "$a" in -*|*"{{"*|inspect) continue ;; esac; grep -E "^/$a\\|" "$S/inspect.txt"; done ;;
   exec)
     shift
     while [ "\${1:-}" = -i ]; do shift; done
@@ -81,11 +116,12 @@ test("slaydx-metrics.sh (fixture /proc + stub docker + haqiqiy Postgres)", { ski
   writeFileSync(path.join(stub, "ps.txt"), "other-app-1\nslaydx-web-1\nslaydx-postgres-1\nslaydx-worker-1\nunrelated\n");
   writeFileSync(
     path.join(stub, "stats.txt"),
-    "slaydx-web-1|12.50%|356.2MiB / 1.5GiB\nslaydx-postgres-1|250.00%|900MiB / 1GiB\nslaydx-worker-1|0.00%|2.5GiB / 3GiB\n",
+    "other-app-1|99.00%|1GiB / 2GiB\nslaydx-web-1|12.50%|356.2MiB / 1.5GiB\nslaydx-postgres-1|250.00%|900MiB / 1GiB\nslaydx-worker-1|0.00%|2.5GiB / 3GiB\n",
   );
   writeFileSync(
     path.join(stub, "inspect.txt"),
     [
+      `/other-app-1|${"d".repeat(64)}|running|0|false|2026-10-10T08:00:00Z`,
       `/slaydx-web-1|${"a".repeat(64)}|running|0|false|2026-10-10T10:00:00.123456789Z`,
       `/slaydx-postgres-1|${"b".repeat(64)}|running|2|false|2026-10-09T10:00:00Z`,
       `/slaydx-worker-1|${"c".repeat(64)}|exited|5|true|2026-10-10T09:00:00Z`,
@@ -117,23 +153,23 @@ test("slaydx-metrics.sh (fixture /proc + stub docker + haqiqiy Postgres)", { ski
   await t.test("--print: host, containers (slaydx-* only) and nginx are parsed from the fixtures", () => {
     const r = run(["--print"]);
     assert.equal(r.status, 0, r.stderr);
-    const j = JSON.parse(r.stdout) as Record<string, any>;
+    const j = JSON.parse(r.stdout) as HostJson;
     assert.equal(j.v, 1);
     assert.deepEqual([j.cpus, j.load1, j.load5, j.load15], [4, 3.5, 2.25, 1.1]);
     assert.deepEqual([j.mem_total_mb, j.mem_avail_mb, j.mem_used_mb], [7812, 976, 6836]);
     assert.deepEqual([j.swap_total_mb, j.swap_used_mb], [4096, 1024]);
     assert.equal(j.disk_pct, 63);
     assert.deepEqual(j.containers.map((c: { name: string }) => c.name).sort(), ["slaydx-postgres-1", "slaydx-web-1", "slaydx-worker-1"]);
-    const web = j.containers.find((c: { name: string }) => c.name === "slaydx-web-1");
+    const web = j.containers.find((c) => c.name === "slaydx-web-1")!;
     assert.deepEqual(
       [web.cpu_pct, web.mem_mb, web.mem_limit_mb, web.restarts, web.oom, web.status, web.id],
       [12.5, 356.2, 1536, 0, false, "running", "a".repeat(12)],
     );
-    const worker = j.containers.find((c: { name: string }) => c.name === "slaydx-worker-1");
+    const worker = j.containers.find((c) => c.name === "slaydx-worker-1")!;
     assert.deepEqual([worker.mem_mb, worker.restarts, worker.oom, worker.status], [2560, 5, true, "exited"]);
     // 12 lines in the log, 10 of them inside the last 300 s: 8 x 200, 1 x 404, 1 x 500.
     assert.deepEqual(
-      [j.nginx.requests, j.nginx.s2xx, j.nginx.s4xx, j.nginx.s5xx, j.nginx.p50_ms, j.nginx.p95_ms, j.nginx.window_s],
+      [j.nginx!.requests, j.nginx!.s2xx, j.nginx!.s4xx, j.nginx!.s5xx, j.nginx!.p50_ms, j.nginx!.p95_ms, j.nginx!.window_s],
       [10, 8, 1, 1, 500, 1000, 300],
     );
   });
@@ -163,7 +199,7 @@ test("slaydx-metrics.sh (fixture /proc + stub docker + haqiqiy Postgres)", { ski
     const r = run([]);
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stdout.trim(), "");
-    const rows = await query<{ kind: string; data: Record<string, any> }>("SELECT kind, data FROM server_metrics");
+    const rows = await query<{ kind: string; data: HostJson }>("SELECT kind, data FROM server_metrics");
     assert.equal(rows.length, 1);
     assert.equal(rows[0].kind, "host");
     assert.equal(rows[0].data.load1, 3.5);
