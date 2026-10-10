@@ -12,6 +12,7 @@ import { t, langOf, type Lang } from "./i18n";
 import { actionLabel, keyboardMessage, mainKeyboard, matchKeyboard, toolBlocked, type KeyboardAction } from "./keyboard";
 import { profileCard, promptScreen, savedScreen, sectionScreen, type InputError } from "./profile";
 import {
+  blockedText,
   filesScreen,
   helpScreen,
   languageSavedScreen,
@@ -178,7 +179,7 @@ async function bonusCheck(ctx: ChatCtx, channelId: string): Promise<{ toast: str
     case "not_member":
       return { toast: t(ctx.lang, "toast.bonusNotMember"), screen: null };
     case "blocked":
-      return { toast: t(ctx.lang, "account.blocked"), screen: null };
+      return { toast: blockedText(ctx.lang), screen: null };
     case "unknown":
       return { toast: t(ctx.lang, "toast.bonusUnknown"), screen: null };
   }
@@ -205,7 +206,7 @@ async function bonusRefresh(ctx: ChatCtx): Promise<{ toast: string; screen: Scre
     if (r.status === "paid") paid += r.points;
     else if (r.status === "unknown") unknown += 1;
     else if (r.status === "not_member") missing += 1;
-    else if (r.status === "blocked") return { toast: t(ctx.lang, "account.blocked"), screen: null };
+    else if (r.status === "blocked") return { toast: blockedText(ctx.lang), screen: null };
   }
   const toast =
     paid > 0
@@ -378,7 +379,7 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
       return;
     }
     if (await isBlockedTelegram(q.from.id)) {
-      toast = t(langOf(user.language), "account.blocked");
+      toast = blockedText(langOf(user.language));
       return;
     }
     const ctx: ChatCtx = { chatId: msg.chat.id, telegramId: q.from.id, lang: langOf(user.language), user };

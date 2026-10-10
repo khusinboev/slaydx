@@ -84,7 +84,7 @@ Release: when reviewed (fable security review for the link token) + CI green, me
 | D2 | «Ishlarim» in chat: latest files, 5 per page, one card (status Tayyor / Yozilmoqda N% / Navbatda / Xato, tool, topic, date), a button per file → `/uz/files/<id>` (`botAppUrl` web_app, url fallback), «◀️ / ▶️» edit the same message, empty state → «Yangi ish yaratish» (`/uz/create`). Reuses `jobs.ts listGenerations` (owner-scoped) |
 | D3 | «Hamyon» in chat: balance (tanga + ball), last 5 transactions with readable labels, «💳 To‘ldirish» (web_app `/uz/wallet` — payment stays in the web app), «🎁 Do‘st taklif qilish» (referral text + `copy_text` link) |
 | D4 | Bot language uz / ru / en: every bot text through `lib/server/bot/i18n.ts` (Uzbek Latin = source); stored in `users.language` (uz\|ru\|en enforced by `updateProfile`); the web app stays Uzbek. Entry points: «🌐 Til» in Profilim and Yordam, `/til` (setMyCommands per language_code). A change re-sends the keyboard. New users default from Telegram `language_code` (ru → ru, en → en, else uz) at first registration only |
-| D5 | «Yordam»: what the bot does, how to create, 5 Q&A in an expandable blockquote, «🌐 Til», «👨‍💻 Admin bilan bog‘lanish» (only when `BOT_SUPPORT_USERNAME` is set), «📱 Ilovani ochish» |
+| D5 | «Yordam»: what the bot does, how to create, 5 Q&A in an expandable blockquote, «🌐 Til», «👨‍💻 Admin bilan bog‘lanish» (opens the support group, `SUPPORT_URL`, default https://t.me/SlaydX_support), «📱 Ilovani ochish» |
 | D6 | Premium emoji ids: `lib/server/bot/emoji-ids.ts` (Fluent Emoji 3D + TopicIcons/PremiumIcons, via getStickerSet); `BOT_PREMIUM_EMOJI` code default off (deterministic tests), production compose default 1 |
 
 ## B2 implementation notes

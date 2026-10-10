@@ -75,7 +75,7 @@ test("userMessage: dvigatelning ATAYIN yozgan o'zbekcha xabari o'zgarmaydi", () 
   const keep = [
     "Fayl bo'sh chiqdi — qayta urinib ko'ring",
     "Tarjima qilinadigan matn topilmadi. Kredit qaytariladi.",
-    "Ovoz provayderi sozlanmagan. Administrator bilan bog‘laning — to‘lov qaytarildi.",
+    "Ovoz provayderi sozlanmagan. Yordam xizmatiga murojaat qiling: t.me/SlaydX_support — to‘lov qaytarildi.",
     "Bosqich daqiqalari dars davomiyligiga mos kelmadi (40 daqiqa, kerak: 80 ± 5). Kredit qaytariladi — qayta urinib ko‘ring.",
     "PDF juda uzun: 400 sahifa (chegara 300). Hujjatni bo'lib yuboring.",
     "Ish vaqti tugadi",

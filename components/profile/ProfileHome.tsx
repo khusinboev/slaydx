@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import { Briefcase, Gift, GraduationCap, Lock, Moon, ShieldCheck, Sun, SunMoon, UserRound, Wallet } from "lucide-react";
+import { Briefcase, Gift, GraduationCap, LifeBuoy, Lock, Moon, ShieldCheck, Sun, SunMoon, UserRound, Wallet } from "lucide-react";
 import * as api from "@/lib/api-client";
 import { creditTotal, useAppStore } from "@/lib/store";
-import { Avatar, Group, ProfileSkeleton, RowLink, SectionLabel, SignedOutCard } from "./parts";
+import { Avatar, Group, ProfileSkeleton, RowExternal, RowLink, SectionLabel, SignedOutCard } from "./parts";
 import { identityLine, profileHref, rowHint, type ProfileStepId, type ProfileTarget } from "./profile-model";
 import { themeChoiceLabel, useThemeChoice } from "./theme";
 import { groupDigits } from "@/lib/format";
+import { SUPPORT_URL } from "@/lib/support";
+import { onSupportClick } from "@/lib/support-link";
 
 export type ProfileHomeProps = {
   /**
@@ -24,7 +26,7 @@ const WALLET = "/uz/wallet";
 /**
  * Profil tab index (redesign W4): avatar, name, @username / phone, then
  * «Sozlamalar» (the 4 steps, each with a value hint) and «Hisob» (Hamyon,
- * invite friends → Hamyon, Admin panel for admins, Xavfsizlik va chiqish).
+ * invite friends → Hamyon, Admin panel for admins, Yordam → the support group, Xavfsizlik va chiqish).
  * The ledger, top-up and referral card live in Hamyon now.
  */
 export function ProfileHome({ onNavigate, header }: ProfileHomeProps) {
@@ -92,6 +94,7 @@ export function ProfileHome({ onNavigate, header }: ProfileHomeProps) {
           <RowLink id="hamyon" href={WALLET} icon={Wallet} label="Hamyon" hint={`${groupDigits(creditTotal(user))} tanga`} />
           <RowLink id="taklif" href={WALLET} icon={Gift} label="Do'stlarni taklif qilish" hint="Bonus ball" />
           {user.isAdmin ? <RowLink id="admin" href="/admin" icon={ShieldCheck} label="Admin panel" /> : null}
+          <RowExternal id="yordam" href={SUPPORT_URL} icon={LifeBuoy} label="Yordam" hint="Admin bilan bog'lanish" onClick={onSupportClick} />
           <RowLink {...step("xavfsizlik")} icon={Lock} label="Xavfsizlik va chiqish" />
         </Group>
       </>

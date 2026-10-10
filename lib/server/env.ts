@@ -1,6 +1,7 @@
 import "server-only";
 import { BRAND_NAME } from "../brand";
 import { acceptedPaymeKeys } from "./payme-keys";
+import { resolveSupportUrl } from "../support";
 
 /**
  * Serverdagi barcha sozlamalar shu yerdan o'qiladi.
@@ -199,9 +200,9 @@ export const env = {
   get botPremiumEmoji(): boolean {
     return bool("BOT_PREMIUM_EMOJI", false);
   },
-  /** Support contact for the bot's «Yordam» (a Telegram username, no @); empty → no button. */
-  get botSupportUsername(): string {
-    return str("BOT_SUPPORT_USERNAME").replace(/^@/, "");
+  /** Support group link (admin / help service): a valid `SUPPORT_URL` override (https://t.me/…) or the default group. */
+  get supportUrl(): string {
+    return resolveSupportUrl(process.env.SUPPORT_URL);
   },
 
   /** Kalitsiz OTP — faqat lokal/staging da. Prod da yoqilsa xato beradi. */

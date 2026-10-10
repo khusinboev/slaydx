@@ -15,6 +15,8 @@ import assert from "node:assert/strict";
  *   5. `parseCallback` accepts `p:e:balance` → «callback codes reject unknown fields»;
  *   6. a Russian i18n entry emptied → «i18n: every key in uz/ru/en»;
  *   7. `maskPhone` shows all digits → «maskPhone»;
+ *   S1. the help button reverts to the username-derived URL → main screens test (MUTATSIYA S1);
+ *   S2. `account.blocked` loses `{url}` → «blocked account text names the support group».
  *   B1. a joined channel's button without `style: "success"` → «bonuses message (uz)»;
  *   B2. the invite button green at 0 invites → «before the first invite / after the first top-up»;
  *   B3. the Hamyon history not cut to WALLET_RECENT → «Hamyon card: only the LAST 3»;
@@ -26,7 +28,7 @@ process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long"
 process.env.APP_URL = "https://slaydx.test";
 process.env.DATABASE_URL ||= "postgres://unused/unused";
 delete process.env.BOT_PREMIUM_EMOJI;
-delete process.env.BOT_SUPPORT_USERNAME;
+delete process.env.SUPPORT_URL;
 
 const ui = await import("../lib/server/bot/ui.ts");
 const { EMOJI_IDS } = await import("../lib/server/bot/emoji-ids.ts");
@@ -451,12 +453,16 @@ test("Hamyon, referral, Yordam, Til", async () => {
 
   const h = allScreens("uz").help;
   assert.match(h.text, /<blockquote expandable>/);
-  assert.ok(!inline(h).some((b) => b.url?.startsWith("https://t.me/")), "no support contact configured → no button");
-  process.env.BOT_SUPPORT_USERNAME = "@slaydx_support";
+  // The support GROUP (not a personal username): default, and a validated env override.
+  assert.equal(inline(h).find((x) => x.text.includes("Admin bilan"))?.url, "https://t.me/SlaydX_support", "MUTATSIYA S1");
+  assert.equal(inline(scr.helpScreen("en")).find((x) => x.url)?.url, "https://t.me/SlaydX_support");
+  process.env.SUPPORT_URL = "https://t.me/slaydx_other";
   try {
-    assert.equal(inline(scr.helpScreen("uz")).find((b) => b.url)?.url, "https://t.me/slaydx_support");
+    assert.equal(inline(scr.helpScreen("uz")).find((x) => x.url)?.url, "https://t.me/slaydx_other");
+    process.env.SUPPORT_URL = "http://evil.example/x";
+    assert.equal(inline(scr.helpScreen("uz")).find((x) => x.url)?.url, "https://t.me/SlaydX_support", "invalid override -> default");
   } finally {
-    delete process.env.BOT_SUPPORT_USERNAME;
+    delete process.env.SUPPORT_URL;
   }
 
   const l = scr.languageScreen("ru", "y");
@@ -467,6 +473,17 @@ test("Hamyon, referral, Yordam, Til", async () => {
     ["⬅️ Назад", "y:h", undefined],
   ]);
   assert.equal(inline(scr.languageScreen("uz", "n")).length, 3, "from /til: no back button");
+});
+
+test("blocked account text names the support group in uz / ru / en - MUTATSIYA S2", () => {
+  for (const lang of ["uz", "ru", "en"] as const) {
+    const text = scr.blockedText(lang);
+    assert.ok(text.includes("https://t.me/SlaydX_support"), `${lang}: ${text}`);
+    assert.ok(!text.includes("{url}"), `${lang}: placeholder left`);
+    assert.ok(text.length < 200, `${lang}: toast limit`);
+  }
+  assert.match(scr.blockedText("uz"), /admin bilan bog‘laning/);
+  assert.ok(!/BOT_SUPPORT|Axmadjanov/i.test(JSON.stringify([scr.blockedText("uz"), inline(scr.helpScreen("uz"))])));
 });
 
 test("maskPhone / profileCompletion", () => {
