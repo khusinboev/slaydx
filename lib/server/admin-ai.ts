@@ -7,7 +7,7 @@ import { aishaKey } from "../generation/tts/aisha";
 import { azureKey, azureRegion } from "../generation/tts/azure";
 import { geminiKey } from "../generation/tts/gemini";
 import { ApiError } from "./api";
-import { COST_CAVEATS, soumPerUsd, spendBy, spendByProviderModel, spendCoverage, spendTotals, type SpendCoverage, type SpendGroupBy, type SpendRange } from "./admin-cost";
+import { costCaveats, soumPerUsd, spendBy, spendByProviderModel, spendCoverage, spendTotals, type SpendCoverage, type SpendGroupBy, type SpendRange } from "./admin-cost";
 import { parseDateRange, type DateRange } from "./admin-list";
 import { isStale } from "./admin-heartbeat";
 import { env } from "./env";
@@ -193,7 +193,7 @@ export async function aiCost(range: DateRange, groupBy: AiGroupBy): Promise<AiCo
         })),
         totals: { ...totals, unpricedCalls: rows.reduce((a, r) => a + r.unpricedCalls, 0) },
         coverage,
-        caveats: [...COST_CAVEATS],
+        caveats: await costCaveats(client, spendRange),
       };
     }),
   );

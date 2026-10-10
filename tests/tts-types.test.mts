@@ -4,7 +4,6 @@ import {
   TTS_FALLBACK_LANG,
   TTS_LANG_VOICES,
   TTS_LIMITS,
-  TTS_PRICES,
   TTS_PROVIDERS,
   TtsMeter,
   audioBytes,
@@ -12,11 +11,11 @@ import {
   formatVoiceId,
   isTtsProviderId,
   parseVoiceId,
-  ttsCostUsd,
   ttsVerified,
   ttsVoiceFor,
   ttsVoicesFor,
 } from "../lib/generation/tts/types.ts";
+import { TTS_PRICING } from "../lib/generation/llm-pricing.ts";
 import { AUDIO_LIMITS } from "../lib/generation/audio/types.ts";
 import { ALL_LANGUAGES } from "../lib/languages.ts";
 
@@ -57,7 +56,7 @@ test("18 tilning HAMMASIDA ovoz bor; ovoz shakli to'liq", () => {
     }
   }
   // Har provayder narx jadvalida bo'lsin (aks holda tannarx 0 chiqardi).
-  for (const p of TTS_PROVIDERS) assert.ok(TTS_PRICES[p], `${p}: narx yo'q`);
+  for (const p of TTS_PROVIDERS) assert.ok(TTS_PRICING.some((r) => r.provider === p), `${p}: narx yo'q`);
 });
 
 test("o'zbek tili — Azure Neural + Aisha; tasdiqlanmagan tillar belgilangan", () => {
@@ -144,7 +143,7 @@ test("hisoblagich: tannarx BELGIGA proporsional, `cost_json` shakli", () => {
   assert.equal(one.calls, 1);
   assert.equal(one.chars, 1_000_000);
   assert.equal(one.seconds, 60);
-  assert.equal(one.usd, TTS_PRICES.azure.usdPerMillionChars, "1 M belgi = jadvaldagi narx");
+  assert.equal(one.usd, 16, "1 M belgi = Azure jadvalidagi narx ($16)");
   assert.equal(one.provider, "azure");
   assert.equal(one.voice, "azure:uz-UZ-MadinaNeural");
 
@@ -158,11 +157,11 @@ test("hisoblagich: tannarx BELGIGA proporsional, `cost_json` shakli", () => {
   assert.ok(two.usd > one.usd / 2, "aralash provayderda tannarx hisoblanmadi");
   assert.equal(two.provider, "azure+aisha", "provayderlar ro'yxati yig'ilmadi");
 
-  assert.equal(ttsCostUsd("azure", 1_000_000), 16);
-  assert.equal(ttsCostUsd("gemini", 1_000_000), 0, "bepul zveno tannarxga qo'shilmasin");
-  assert.equal(ttsCostUsd("azure", 0), 0);
   // Manfiy qiymat tannarxni KAMAYTIRMASIN.
-  assert.equal(ttsCostUsd("azure", -1_000_000), 0);
+  const neg = new TtsMeter();
+  neg.add({ provider: "azure", voice: "v", chars: -1_000_000, seconds: -5 });
+  assert.equal(neg.toJson().usd, 0);
+  assert.equal(neg.toJson().chars, 0);
 });
 
 test("sintez natijasi: mp3/wav dan bittasi, formati yo'qolmaydi", () => {

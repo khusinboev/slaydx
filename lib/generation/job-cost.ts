@@ -27,64 +27,19 @@
  * bir jarayonda birga yursa ham sarflar aralashmaydi.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
-import { costUsd, type UsageLike } from "./llm-pricing";
+import { FAL_USD_PER_MEGAPIXEL, GROUNDING_USD, IMAGE_PRICES, costUsd, falImageUnitUsd, imagePriceOf, imageUnitUsd, type UsageLike } from "./llm-pricing";
 import type { CostJson, CostPart } from "./types";
 
-/**
- * Grounding (Google qidiruvi) — bitta QIDIRUV narxi, USD (Gemini 3 qidiruv bo'yicha to'laydi).
- * Oyiga 5 000 tasi bepul, keyin $14/1 000 (`slide-research.ts`); bepul
- * kvota butun hisob bo'yicha, ish bo'yicha emas — telemetriya ehtiyotkor
- * (yuqori) chegarani yozadi.
+/*
+ * Every price lives in `llm-pricing.ts` (the price book); these re-exports keep the
+ * historical import path working.
  */
-export const GROUNDING_USD = 0.014;
-
-/**
- * Gemini rasm modeli → bitta rasm narxi (USD, 1K). Model nomi PREFIKS
- * bo'yicha (eng uzuni); jadvalda yo'q model — standart lite narxi va
- * jurnal ogohlantirishi (`.env.example`: lite $0.034, flash $0.067).
- */
-export const IMAGE_PRICES: Record<string, number> = {
-  "gemini-3.1-flash-lite-image": 0.034,
-  "gemini-3.1-flash-image": 0.067,
-};
-const IMAGE_DEFAULT_USD = 0.034;
-
-export function imageUnitUsd(model: string): number {
-  const hit = Object.keys(IMAGE_PRICES)
-    .filter((k) => model.startsWith(k))
-    .sort((a, b) => b.length - a.length)[0];
-  if (hit) return IMAGE_PRICES[hit];
-  console.warn(`[job-cost] noma'lum rasm modeli: ${model} — ${IMAGE_DEFAULT_USD} USD deb hisoblanadi`);
-  return IMAGE_DEFAULT_USD;
-}
-
-/**
- * fal.ai price per started megapixel, by exact model id. Only models with a
- * documented price are listed: docs/research/provider-pricing.md §3 records
- * `fal-ai/flux/schnell` at $0.003 per megapixel (checked 2026-09-20) and no
- * price for the other FLUX variants. Unlisted models are recorded with their
- * image count, usd 0 and `priced: false`, so reports can show the gap.
- */
-export const FAL_USD_PER_MEGAPIXEL: Record<string, number> = {
-  "fal-ai/flux/schnell": 0.003,
-};
-
-/**
- * USD for one fal image of `width`×`height`, or `null` when the model has no
- * documented price. The megapixel count is rounded UP (an upper bound, like
- * `GROUNDING_USD`): fal bills whole megapixels.
- */
-export function falImageUnitUsd(model: string, width: number, height: number): number | null {
-  const perMp = FAL_USD_PER_MEGAPIXEL[model];
-  if (perMp === undefined) return null;
-  const mp = Math.max(1, Math.ceil((Math.max(0, width) * Math.max(0, height)) / 1_000_000));
-  return mp * perMp;
-}
+export { FAL_USD_PER_MEGAPIXEL, GROUNDING_USD, IMAGE_PRICES, falImageUnitUsd, imageUnitUsd };
 
 type Key = `${CostPart["kind"]}|${string}|${string}`;
 
-/** A part with an optional "no documented price" marker (usd is then 0). */
-type MeterPart = CostPart & { priced?: false };
+/** A part; `priced: false` / `estimated` are the optional markers of `CostPart`. */
+type MeterPart = CostPart;
 
 /** Bitta ishning barcha sarfi — tur × provayder × model bo'yicha yig'indi. */
 export class JobCost {
@@ -108,12 +63,17 @@ export class JobCost {
     p.usd += costUsd(u, new Date());
   }
 
-  /** Muvaffaqiyatli (pullik) rasm. `units` — rasm soni. */
-  addImage(provider: string, model: string, count = 1, unitUsd = imageUnitUsd(model)): void {
+  /**
+   * Muvaffaqiyatli (pullik) rasm. `units` — rasm soni. Without an explicit
+   * `unitUsd` the price comes from the price book; a model missing there gets the
+   * lite default and the part is marked `estimated` (never a silent guess).
+   */
+  addImage(provider: string, model: string, count = 1, unitUsd?: number): void {
     const p = this.part("image", provider, model);
     p.calls += count;
     p.units += count;
-    p.usd += count * unitUsd;
+    if (unitUsd === undefined && imagePriceOf(model) === null) p.estimated = true;
+    p.usd += count * (unitUsd ?? imageUnitUsd(model));
   }
 
   /** An image from a model without a documented price: counted, usd 0, `priced: false`. */
@@ -134,6 +94,9 @@ export class JobCost {
       p.units += o.units;
       p.usd += o.usd;
       if (o.priced === false) p.priced = false;
+      if (o.estimated) p.estimated = true;
+      if (o.textTokens !== undefined) p.textTokens = (p.textTokens ?? 0) + o.textTokens;
+      if (o.audioTokens !== undefined) p.audioTokens = (p.audioTokens ?? 0) + o.audioTokens;
     }
   }
 
@@ -150,12 +113,22 @@ export class JobCost {
     p.usd += n * GROUNDING_USD;
   }
 
-  /** TTS parchasi. `units` — belgilar (token EMAS — `TtsMeter` izohi). */
-  addTts(provider: string, voice: string, chars: number, usd: number): void {
-    const p = this.part("tts", provider, voice);
+  /**
+   * TTS parchasi. `units` — belgilar (display only); the money is `usd`, computed by
+   * `ttsCost` from the price book. `model` is the provider's model id (Gemini) or
+   * `provider:voice` for per-character providers. `extra.priced === false` marks a
+   * synthesis the book could not price (usd 0); `estimated` and the token counts
+   * (`textTokens` = prompt, `audioTokens` = audio output) come from Gemini usage.
+   */
+  addTts(provider: string, model: string, chars: number, usd: number, extra: { priced?: boolean; estimated?: boolean; textTokens?: number; audioTokens?: number } = {}): void {
+    const p = this.part("tts", provider, model);
     p.calls += 1;
     p.units += Math.max(0, Math.round(chars));
     p.usd += Math.max(0, usd);
+    if (extra.priced === false) p.priced = false;
+    if (extra.estimated) p.estimated = true;
+    if (extra.textTokens) p.textTokens = (p.textTokens ?? 0) + Math.round(extra.textTokens);
+    if (extra.audioTokens) p.audioTokens = (p.audioTokens ?? 0) + Math.round(extra.audioTokens);
   }
 
   get calls(): number {
@@ -269,6 +242,6 @@ export function recordGrounding(queries = 1): void {
   store.getStore()?.addGrounding(queries);
 }
 
-export function recordTts(provider: string, voice: string, chars: number, usd: number): void {
-  store.getStore()?.addTts(provider, voice, chars, usd);
+export function recordTts(provider: string, model: string, chars: number, usd: number, extra?: Parameters<JobCost["addTts"]>[4]): void {
+  store.getStore()?.addTts(provider, model, chars, usd, extra);
 }

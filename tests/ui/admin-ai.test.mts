@@ -66,7 +66,7 @@ function costBody(over: Partial<AiCostResponse> = {}): AiCostResponse {
       { key: "mystery-model", calls: 4, inputTokens: 100, outputTokens: 50, units: 0, usd: 0, records: 1, unpricedCalls: 4, title: null },
     ],
     totals: { records: 8, calls: 19, inputTokens: 2_501_100, outputTokens: 120_550, usd: 12.4042, unpricedCalls: 4 },
-    coverage: { jobsWithCost: 9, jobsCompleted: 10, pct: 90 },
+    coverage: { jobsWithCost: 9, jobsCompleted: 10, pct: 90, rolloutAt: null, historicalCompleted: 0, historicalWithCost: 0 },
     caveats: CAVEATS,
     soumPerUsd: 12_700,
     ...over,
@@ -151,6 +151,27 @@ test("cost: loading skeleton, then KPI, coverage banner with caveats, chart and 
   assert.ok(container.querySelector('svg[role="img"]'));
 });
 
+test("cost: coverage banner names the rollout day and the historical jobs; the line is absent without any", async () => {
+  // 2026-10-03 21:00 UTC = 2026-10-04 02:00 Tashkent: the day shown is the Tashkent one.
+  const rollout = { rolloutAt: "2026-10-03T21:00:00.000Z", historicalCompleted: 77, historicalWithCost: 50 };
+  stubFetch((url) => {
+    const by = url.searchParams.get("groupBy");
+    const coverage = { jobsWithCost: 9, jobsCompleted: 10, pct: 90, ...rollout };
+    return json(200, by === "day" ? costBody({ groupBy: "day", rows: DAY_ROWS, coverage }) : costBody({ groupBy: by as AiCostResponse["groupBy"], coverage }));
+  });
+  const first = renderPage(Q);
+  await screen.findAllByText("claude-sonnet-5");
+  const note = screen.getByLabelText("Qamrov va cheklovlar");
+  assert.match(note.textContent ?? "", /2026-10-04 dan boshlab hisoblanadi/);
+  assert.match(note.textContent ?? "", /77 ta ish tarixiy/);
+  first.unmount();
+
+  stubFetch(costHandler);
+  renderPage(Q);
+  await screen.findAllByText("claude-sonnet-5");
+  assert.ok(!/tarixiy/.test(screen.getByLabelText("Qamrov va cheklovlar").textContent ?? ""), "no historical jobs → no historical line");
+});
+
 test("cost: filters live in the URL — group-by, sort, period and clear reset", async () => {
   stubFetch(costHandler);
   const { calls, container } = renderPage(Q);
@@ -226,7 +247,7 @@ test("cost: changing a filter aborts the pending request", async () => {
 });
 
 test("cost: empty — no spend in the range; 'Filtrlarni tozalash' only when filters are set", async () => {
-  const empty = costBody({ rows: [], totals: { records: 0, calls: 0, inputTokens: 0, outputTokens: 0, usd: 0, unpricedCalls: 0 }, coverage: { jobsWithCost: 0, jobsCompleted: 0, pct: 0 } });
+  const empty = costBody({ rows: [], totals: { records: 0, calls: 0, inputTokens: 0, outputTokens: 0, usd: 0, unpricedCalls: 0 }, coverage: { jobsWithCost: 0, jobsCompleted: 0, pct: 0, rolloutAt: null, historicalCompleted: 0, historicalWithCost: 0 } });
   stubFetch(() => json(200, empty));
   const withFilters = renderPage(`${Q}&groupBy=tool`);
   await screen.findByText("Bu oraliqda AI xarajati yo'q");

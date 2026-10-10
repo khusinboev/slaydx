@@ -6,7 +6,7 @@
  * provayder qo'shilgan/olib tashlanganda chaqiruvchilarning importi
  * o'zgarmaydi.
  *
- *   types.ts   shartnoma, til → ovoz jadvali, `chunkText`, `TtsMeter`, narx
+ *   types.ts   shartnoma, til → ovoz jadvali, `chunkText`, `TtsMeter` (narx jadvali — `llm-pricing.ts`)
  *   mp3.ts     kadr tahlili, `concatMp3`, WAV→MP3 (`lamejs`, lazy)
  *   azure.ts   REST adapteri (MP3) — zanjirning birinchi bo'g'ini
  *   aisha.ts   REST adapteri (WAV) — mahalliy o'zbek provayderi
@@ -19,7 +19,6 @@ export {
   TTS_GEMINI_VOICES,
   TTS_LANG_VOICES,
   TTS_LIMITS,
-  TTS_PRICES,
   TTS_PROVIDERS,
   TTS_VOICE_CHOICES,
   TTS_VOICE_DEFAULT,
@@ -35,13 +34,13 @@ export {
   otherVoiceChoice,
   parseVoiceId,
   ttsChoiceVoices,
-  ttsCostUsd,
+  ttsUsageCost,
   ttsVerified,
   ttsVoiceFor,
   ttsVoiceForChoice,
   ttsVoicesFor,
 } from "./types";
-export type { TtsAudio, TtsCostJson, TtsPrice, TtsProvider, TtsProviderId, TtsSynthOpts, TtsUsage, TtsVoiceChoice, TtsVoiceSpec } from "./types";
+export type { TtsAudio, TtsCostJson, TtsProvider, TtsProviderId, TtsSynthOpts, TtsUsage, TtsVoiceChoice, TtsVoiceSpec } from "./types";
 
 export {
   MP3_BITRATE_KBPS,
@@ -66,7 +65,7 @@ export type { AudioPiece, Mp3EncoderFactory, Mp3EncoderLike, Mp3Frame, Mp3Profil
 
 export { AZURE_OUTPUT_FORMAT, azureEndpoint, azureKey, azureRegion, azureSsml, azureTts, localeOfVoice, makeAzureTts, prosodyRate, xmlEscape } from "./azure";
 export { AISHA_MAX_CHARS, AISHA_URL, aishaAudioRef, aishaBody, aishaKey, aishaTts, makeAishaTts } from "./aisha";
-export { GEMINI_TTS_BASE, geminiAudioPart, geminiKey, geminiTts, geminiTtsModel, makeGeminiTts, pcmRateOf } from "./gemini";
+export { GEMINI_TTS_BASE, geminiAudioPart, geminiKey, geminiTts, geminiTtsModel, geminiTtsUsage, makeGeminiTts, pcmRateOf } from "./gemini";
 
 export { asTtsChain, chainOfProvider, groupForChoice, makeTtsChain, ttsChain, ttsGroups, ttsVoiceChain, ttsVoiceEnvName } from "./chain";
 export type { TtsChain, TtsChainDeps, TtsPart, TtsProviderGroup, TtsRun } from "./chain";

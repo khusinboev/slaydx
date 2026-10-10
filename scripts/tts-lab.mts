@@ -31,7 +31,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { makeAzureTts } from "../lib/generation/tts/azure.ts";
 import { makeAishaTts } from "../lib/generation/tts/aisha.ts";
 import { makeGeminiTts } from "../lib/generation/tts/gemini.ts";
-import { chunkText, ttsCostUsd, TTS_LIMITS, type TtsProvider } from "../lib/generation/tts/types.ts";
+import { chunkText, ttsUsageCost, TTS_LIMITS, type TtsProvider } from "../lib/generation/tts/types.ts";
 import { ttsGroups } from "../lib/generation/tts/chain.ts";
 import { mergeToMp3, mp3Seconds } from "../lib/generation/tts/mp3.ts";
 
@@ -104,10 +104,13 @@ async function measure(provider: TtsProvider, voice: string): Promise<Row> {
   try {
     const audios = [];
     let chars = 0;
+    let usd = 0;
     for (const part of parts) {
       const a = await provider.synthesize(part, { lang, voice, pauseMs: 300 });
       audios.push(a);
       chars += a.chars || part.length;
+      // Same price-book call the production chain makes (Gemini: from the reported tokens).
+      usd += ttsUsageCost({ provider: provider.id, voice, chars: a.chars || part.length, seconds: a.seconds, ...(a.model ? { model: a.model } : {}), ...(a.inputTokens !== undefined ? { inputTokens: a.inputTokens } : {}), ...(a.outputTokens !== undefined ? { outputTokens: a.outputTokens } : {}) }).usd;
     }
     const ms = Date.now() - started;
     const mp3 = await mergeToMp3(audios);
@@ -115,7 +118,7 @@ async function measure(provider: TtsProvider, voice: string): Promise<Row> {
 
     const name = `${provider.id}-${voice.replace(/[^\w.-]+/g, "_")}.mp3`;
     await writeFile(`${OUT}/${name}`, mp3);
-    return { ...base, seconds: mp3Seconds(mp3), chars, usd: ttsCostUsd(provider.id, chars), ms, parts: parts.length, note: name };
+    return { ...base, seconds: mp3Seconds(mp3), chars, usd: Number(usd.toFixed(6)), ms, parts: parts.length, note: name };
   } catch (e) {
     return { ...base, status: "xato", ms: Date.now() - started, parts: parts.length, note: e instanceof Error ? e.message.slice(0, 120) : String(e) };
   }

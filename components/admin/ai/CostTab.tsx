@@ -273,7 +273,10 @@ function CostReady({
   );
 }
 
-/** Coverage of the telemetry plus the known gaps of the data (the server always sends them). */
+/** Tashkent calendar day (`YYYY-MM-DD`) of an ISO instant. */
+const rolloutDay = (iso: string): string => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Tashkent" });
+
+/** Coverage of the telemetry plus the known gaps of the data (the server computes them: only what applies). */
 function CoverageBanner({ data }: { data: AiCostResponse }) {
   const { coverage, totals, caveats } = data;
   const healthy = coverage.jobsCompleted > 0 && coverage.pct >= COVERAGE_OK_PCT;
@@ -290,6 +293,12 @@ function CoverageBanner({ data }: { data: AiCostResponse }) {
             : "Bu oraliqda tugallangan ish yo'q."}
         </span>
       </p>
+      {coverage.historicalCompleted > 0 && coverage.rolloutAt ? (
+        <p className="text-muted-foreground mt-1">
+          Qamrov xarajat hisobi ishga tushgan {rolloutDay(coverage.rolloutAt)} dan boshlab hisoblanadi; undan oldin tugagan {numText(coverage.historicalCompleted)} ta ish tarixiy hisoblanadi
+          va qamrovga kirmaydi.
+        </p>
+      ) : null}
       {totals.unpricedCalls > 0 ? (
         <p className="mt-1">
           {numText(totals.unpricedCalls)} ta chaqiruvning narxi noma&apos;lum, ular 0 dollar deb hisoblangan: haqiqiy xarajat ko&apos;rsatilganidan yuqori bo&apos;lishi mumkin.
