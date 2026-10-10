@@ -81,7 +81,7 @@ test("load_high needs the load above 2 x CPUs for 10 minutes; recovery is immedi
 });
 
 test("containerEvents: restart, OOM, stop; a replaced container (deploy) is not an event", () => {
-  const web = (o: Partial<(typeof HEALTHY_HOST.containers)[0]>) => ({ ...HEALTHY_HOST, containers: [{ ...HEALTHY_HOST.containers![0], ...o }] });
+  const web = (o: Partial<NonNullable<typeof HEALTHY_HOST.containers>[number]>) => ({ ...HEALTHY_HOST, containers: [{ ...HEALTHY_HOST.containers![0], ...o }] });
   assert.deepEqual(A.containerEvents(HEALTHY_HOST, HEALTHY_HOST), []);
   assert.match(A.containerEvents(HEALTHY_HOST, web({ restarts: 1 }))[0], /slaydx-web-1: qayta ishga tushdi \(restartlar 0 -> 1\)/);
   assert.match(A.containerEvents(HEALTHY_HOST, web({ restarts: 1, oom: true }))[0], /OOMKilled/);
@@ -200,7 +200,7 @@ test("runAlerts (haqiqiy Postgres): recipients, once, cooldown, recovery, restar
   });
 
   await t.test("each remaining rule fires exactly once on its own sample", async () => {
-    const cases: Array<{ rule: string; text: RegExp; setup: () => Promise<void> }> = [
+    const cases: Array<{ rule: string; text: RegExp; setup: () => Promise<unknown> }> = [
       { rule: "swap_high", text: /Swap to'lib bormoqda: 75%/, setup: () => putHost(NOW, { swap_used_mb: 3000 }) },
       { rule: "disk_high", text: /Server diski to'lyapti: 91%/, setup: () => putHost(NOW, { disk_pct: 91 }) },
       {

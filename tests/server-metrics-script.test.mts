@@ -98,6 +98,7 @@ test("slaydx-metrics.sh (fixture /proc + stub docker + haqiqiy Postgres)", { ski
   writeFileSync(nginxLog, lines.join("\n") + "\n");
 
   const env = (extra: Record<string, string> = {}): NodeJS.ProcessEnv => ({
+    NODE_ENV: "test",
     PATH: `${bin}:${process.env.PATH}`,
     HOME: dir,
     LANG: "C.UTF-8",

@@ -50,6 +50,64 @@ export type SystemStatus = {
   nodeEnv: "production" | "development" | "test" | "unknown";
 };
 
+/** Load history («Yuklama tarixi»): GET /api/admin/system/metrics (docs/ops/METRICS.md). */
+export type MetricRange = "24h" | "7d" | "30d";
+
+export type HostPoint = {
+  t: string;
+  cpus: number | null;
+  load1: number | null;
+  load5: number | null;
+  memUsedPct: number | null;
+  swapUsedPct: number | null;
+  diskPct: number | null;
+  reqPerMin: number | null;
+  s4xxPerMin: number | null;
+  s5xxPerMin: number | null;
+  p95Ms: number | null;
+};
+
+export type AppPoint = {
+  t: string;
+  activeUsers: number | null;
+  queued: number | null;
+  running: number | null;
+  oldestQueuedSec: number | null;
+  waitP95Sec: number | null;
+  durP95Sec: number | null;
+  completed5m: number | null;
+  failed5m: number | null;
+  dbConns: number | null;
+  dbMaxConns: number | null;
+  poolWaiting: number | null;
+  loopLagMs: number | null;
+  rssMb: number | null;
+};
+
+export type ContainerPoint = { t: string; name: string; memMb: number | null; cpuPct: number | null };
+
+export type MetricPeak = { at: string; value: number; queued?: number | null; waitP95Sec?: number | null };
+
+export type ServerMetrics = {
+  range: MetricRange;
+  from: string;
+  to: string;
+  bucketSec: number;
+  hasData: boolean;
+  /** A server-side row cap was hit: the oldest buckets are missing. */
+  truncated: boolean;
+  host: HostPoint[];
+  app: AppPoint[];
+  containers: ContainerPoint[];
+  peaks: {
+    activeUsers: MetricPeak | null;
+    memUsedPct: MetricPeak | null;
+    oldestQueuedSec: MetricPeak | null;
+    waitP95Sec: MetricPeak | null;
+    load1: MetricPeak | null;
+  };
+};
+
 export type ErrorLevel = "error" | "warn";
 
 export type ErrorItem = {
@@ -90,6 +148,11 @@ export const BULK_RESOLVE_LIMIT = 100;
 /** GET /api/admin/system. 403 `forbidden` without `system.view`. */
 export function getSystem(opts?: AdminCallOptions): Promise<SystemStatus> {
   return adminGet<SystemStatus>("/api/admin/system", undefined, opts);
+}
+
+/** GET /api/admin/system/metrics?range=. 400 bad range, 403 `forbidden` without `system.view`. */
+export function getServerMetrics(range: MetricRange, opts?: AdminCallOptions): Promise<ServerMetrics> {
+  return adminGet<ServerMetrics>("/api/admin/system/metrics", { range }, opts);
 }
 
 /** GET /api/admin/errors. Errors: 400 bad filter, 403 `forbidden`. */

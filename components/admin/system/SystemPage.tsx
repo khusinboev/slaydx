@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 import { getSystem, type SystemProcess, type SystemStatus, type SystemStep } from "@/lib/admin-api/system";
 import { fmtDateTime, fmtDuration, fmtNumber, fmtRelative } from "@/lib/admin-format";
 import { Badge, Button, Card, CardBody, CardHeader, DataTable, EmptyState, ErrorState, Forbidden, KpiTile, Skeleton, useLoad, type Column } from "@/components/admin/ui";
+import { LoadHistory } from "./LoadHistory";
 import { useNow } from "./shared";
 
 const loadSystem = (signal: AbortSignal): Promise<SystemStatus> => getSystem({ signal });
@@ -118,6 +119,8 @@ function SystemReady({ data }: { data: SystemStatus }) {
 
         <ConfigCard problems={data.config.problems} warnings={data.config.warnings} />
       </div>
+
+      <LoadHistory />
 
       <Card>
         <CardHeader title="Fon vazifalari" description="Worker har siklda bajaradigan qadamlar: oxirgi natija va xatolar." />
