@@ -268,7 +268,13 @@ async function notify(text: string, send: Send): Promise<boolean> {
 type Row<T> = { id: string; at: Date; data: T };
 const toSample = <T>(r: Row<T> | undefined | null): StoredSample<T> | null => (r ? { id: Number(r.id), at: new Date(r.at), data: r.data } : null);
 
-export type RunAlertsOptions = { now?: Date; send?: Send; thresholds?: Thresholds };
+export type RunAlertsOptions = {
+  now?: Date;
+  send?: Send;
+  thresholds?: Thresholds;
+  /** Test seam: awaited after the state rows are read and before any decision (lets a test interleave two passes). */
+  afterRead?: () => Promise<void>;
+};
 export type RunAlertsResult = { sent: Array<{ rule: string; kind: string }> };
 
 /**
@@ -299,6 +305,7 @@ export async function runAlerts(opts: RunAlertsOptions = {}): Promise<RunAlertsR
   );
   const host = hostRows.map((r) => toSample(r)!);
   const states = await loadStates();
+  await opts.afterRead?.();
 
   const findings = evaluateLevelRules({ now, host, app: toSample(appRow), jobs: jobs ?? { failed: 0, finished: 0 } }, th);
   for (const f of findings) {
