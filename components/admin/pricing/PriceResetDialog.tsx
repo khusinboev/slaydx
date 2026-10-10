@@ -27,6 +27,7 @@ export function PriceResetDialog({ open, toolId, title, adjust, ladder, onClose,
     <ConfirmDialog
       key={toolId}
       open
+      sheet
       onClose={onClose}
       title={`100% ga qaytarish — ${title}`}
       description={`Tuzatish ${percentLabel(adjust.percent)} dan 100% ga (kod formulasi) qaytariladi, yaxlitlash 500 ga. ${PROPAGATION_NOTE}`}

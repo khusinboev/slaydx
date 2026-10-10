@@ -78,7 +78,15 @@ export type PricingItem = {
   confidence: "low" | "ok";
   /** The last ≤ 30 days of the range (the sparkline); the 90-day trend comes from the detail endpoint. */
   trend: TrendPoint[];
+  /** The tool's AI spend of the range by part kind (`llm`, `image`, `tts`, `grounding`, `unknown`), so'm descending. */
+  costParts: CostPart[];
+  /** Calls recorded without a known price (counted as $0): the cost is understated. */
+  unpricedCalls: number;
+  /** Latest price change (ISO), whatever the range; `null` when never changed. */
+  lastChangeAt: string | null;
 };
+
+export type CostPart = { kind: string; soum: number; sharePct: number };
 
 export type PricingTotals = {
   jobs: number;
@@ -132,6 +140,8 @@ export type PricingOverview = {
   adminJobs: number;
   groups: ReadonlyArray<{ id: ToolGroupId; label: string }>;
   caveats: string[];
+  /** The equal-length period before `range`, same settings and admin filter: the KPI deltas. */
+  previous: { range: { from: string; to: string; days: number }; totals: PricingTotals };
 };
 
 export type PriceHistoryRow = {
@@ -195,9 +205,19 @@ export function simulatePricing(toolId: string, adjust: PriceAdjust, opts: Admin
   return adminSend<Simulation>("POST", `${pathOf(toolId)}/simulate`, body, { signal: opts.signal, timeoutMs: opts.timeoutMs });
 }
 
-/** Sets the adjustment (needs a fresh step-up; the core asks for it). */
-export function updatePricing(toolId: string, adjust: PriceAdjust, reason: string, opts: AdminCallOptions = {}): Promise<{ item: PricingItemResult }> {
-  return adminSend<{ item: PricingItemResult }>("PUT", pathOf(toolId), { ...adjust, reason }, opts);
+/**
+ * Sets the adjustment (needs a fresh step-up; the core asks for it). `expected` is the adjustment the admin was
+ * looking at: the server writes only if the tool is still at it, else 409 `stale`.
+ */
+export function updatePricing(
+  toolId: string,
+  adjust: PriceAdjust,
+  reason: string,
+  opts: AdminCallOptions & { expected?: PriceAdjust } = {},
+): Promise<{ item: PricingItemResult }> {
+  const { expected, ...call } = opts;
+  const body = expected ? { ...adjust, reason, expected: { percent: expected.percent, roundTo: expected.roundTo } } : { ...adjust, reason };
+  return adminSend<{ item: PricingItemResult }>("PUT", pathOf(toolId), body, call);
 }
 
 /** Back to 100 % (the code formula). */

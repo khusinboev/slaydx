@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { InfoTip } from "./InfoTip";
 import { Skeleton } from "./Skeleton";
 
 export type KpiDelta = {
@@ -31,6 +32,7 @@ export function KpiTile({
   value,
   delta,
   hint,
+  info,
   loading = false,
 }: {
   label: string;
@@ -38,11 +40,20 @@ export function KpiTile({
   delta?: KpiDelta | null;
   /** Small caption under the number (e.g. coverage). */
   hint?: ReactNode;
+  /** What the number is computed on, behind a «?» next to the label (`InfoTip`). */
+  info?: ReactNode;
   loading?: boolean;
 }) {
   return (
     <div className="bg-card flex min-w-0 flex-col gap-1 rounded-xl border px-3.5 py-3" aria-busy={loading || undefined}>
-      <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">{label}</span>
+      {info ? (
+        <span className="flex items-center gap-1.5">
+          <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">{label}</span>
+          <InfoTip label={label}>{info}</InfoTip>
+        </span>
+      ) : (
+        <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">{label}</span>
+      )}
       {loading ? (
         <>
           <Skeleton className="mt-0.5 h-6 w-24" />

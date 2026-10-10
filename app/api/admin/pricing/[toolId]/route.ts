@@ -15,7 +15,7 @@ export const GET = adminHandler("admin/pricing/detail", { permission: "pricing.v
   return json(await pricingDetail(toolId, days, parseIncludeAdminsParam(query.get("admins"))));
 });
 
-/** Sets the adjustment `{percent, roundTo, reason}`; row + history + audit in one transaction. */
+/** Sets the adjustment `{percent, roundTo, reason, expected?}`; row + history + audit in one transaction; a stale `expected` is 409 `stale`. */
 export const PUT = adminHandler("admin/pricing/update", { permission: "pricing.edit", mutation: true }, async (req, { params }: Ctx, admin) => {
   const toolId = (await params).toolId;
   const body = await readJson(req, 8 * 1024);

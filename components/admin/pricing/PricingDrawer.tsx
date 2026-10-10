@@ -1,50 +1,73 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { getPricingDetail, type PricingDetail, type PricingItem, type PricingItemResult } from "@/lib/admin-api/pricing";
 import { fmtDate, fmtNumber } from "@/lib/admin-format";
-import { Badge, Button, Card, CardBody, CardHeader, Drawer, ErrorState, Forbidden, KeyValueList, LineChart, Skeleton } from "@/components/admin/ui";
+import { Button, Drawer, ErrorState, Forbidden, InfoTip, KeyValueList, LineChart, Skeleton } from "@/components/admin/ui";
 import { permissionLabel, useCan } from "@/components/admin/shell";
+import { CostParts } from "./CostParts";
 import { LadderCompare } from "./LadderCompare";
 import { PriceEditDialog } from "./PriceEditDialog";
 import { PriceResetDialog } from "./PriceResetDialog";
 import { Simulator } from "./Simulator";
+import { MarginChip, MarkupBar, RecommendationAction } from "./bits";
 import {
+  REC_BLOCK_HINT,
   isDefaultAdjust,
-  marginTone,
-  markupText,
+  ladderRange,
   pctText,
   percentLabel,
-  recommendationOf,
-  recommendationText,
+  recommendationState,
   roundToText,
   shortDay,
   soumText,
   tangaText,
   useLoad,
+  type RecContext,
 } from "./shared";
 
 const TREND_DAYS = 90;
 
+function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2.5">
+      <header className="flex items-center gap-2">
+        <h3 className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">{title}</h3>
+        {aside}
+      </header>
+      {children}
+    </section>
+  );
+}
+
 /**
- * Row drawer (§17.6): the headline figures of the overview row, the 90-day
- * cost trend, the ladder base → effective, the simulator, the change history
- * and — with `pricing.edit` — "O'zgartirish" and "100% ga qaytarish".
+ * The tool sheet (§2.5 of the redesign spec): the decision first — margin, markup against
+ * the target and the recommendation with «Qo'llash» — then the economics, what the cost is
+ * made of, the ladder, the 90-day cost trend, the simulator and the change history. With
+ * `pricing.edit`, «O'zgartirish» and «100% ga qaytarish» in the footer. A bottom sheet on
+ * phones, a side panel from `sm` up.
  */
 export function PricingDrawer({
   item,
   includeAdmins,
-  paymentFeePercent,
+  targetMarkup,
+  recContext,
+  latest,
   onClose,
+  onApply,
   onChanged,
   onStale,
 }: {
   item: PricingItem;
   /** The page's «Adminlar bilan» switch: the trend and the simulator follow it. */
   includeAdmins: boolean;
-  /** `pricing.payment_fee_percent` the page's margin was computed with. */
-  paymentFeePercent: number;
+  targetMarkup: number;
+  recContext: RecContext;
+  /** The last PUT/DELETE answer for this tool (from here or the apply dialog): its history wins over the loaded one. */
+  latest: PricingItemResult | undefined;
   onClose: () => void;
+  /** Opens the page's apply-recommendation dialog for this tool. */
+  onApply: (item: PricingItem) => void;
   /** A successful PUT/DELETE: the overview swaps in the new adjustment and ladder. */
   onChanged: (result: PricingItemResult) => void;
   /** The server state differs from what is shown (409): reload the overview. */
@@ -57,28 +80,25 @@ export function PricingDrawer({
   const [state, retry] = useLoad<PricingDetail>(load);
   const detail = state.status === "ready" ? state.data : null;
   // History comes from the drawer load, then from the last mutation's answer.
-  const [history, setHistory] = useState<PricingItemResult["history"] | null>(null);
-  const shownHistory = history ?? detail?.history ?? null;
-  const rec = recommendationOf(item);
-
-  const applied = (result: PricingItemResult) => {
-    setHistory(result.history);
-    onChanged(result);
-  };
+  const shownHistory = latest?.history ?? detail?.history ?? null;
+  const rec = recommendationState(item, recContext);
+  // One primary action per sheet: the recommendation when it can be applied, else the manual edit.
+  const recApplicable = canEdit && rec.kind === "change" && rec.block === null;
 
   return (
     <Drawer
+      sheet
       open
       onClose={onClose}
       title={item.title}
-      description={`Narx · birlik: ${item.unitLabel}`}
+      description={`${ladderRange(item.ladder, "effective")} tanga · birlik: ${item.unitLabel} · ${fmtNumber(item.jobs)} ish`}
       footer={
         canEdit ? (
           <>
-            <Button variant="danger" onClick={() => setDialog("reset")} disabled={isDefaultAdjust(item.adjust)}>
+            <Button variant="dangerOutline" onClick={() => setDialog("reset")} disabled={isDefaultAdjust(item.adjust)} className="max-sm:min-h-11">
               100% ga qaytarish
             </Button>
-            <Button variant="primary" onClick={() => setDialog("edit")}>
+            <Button variant={recApplicable ? "secondary" : "primary"} onClick={() => setDialog("edit")} className="max-sm:min-h-11">
               O&apos;zgartirish
             </Button>
           </>
@@ -87,139 +107,109 @@ export function PricingDrawer({
         )
       }
     >
-      <KeyValueList
-        items={[
-          {
-            label: "Joriy tuzatish",
-            value: (
-              <span className="flex flex-wrap items-center gap-2">
-                <Badge tone={isDefaultAdjust(item.adjust) ? "neutral" : "primary"}>{percentLabel(item.adjust.percent)}</Badge>
-                <span className="text-muted-foreground text-xs">yaxlitlash {roundToText(item.adjust.roundTo)}</span>
-              </span>
-            ),
-          },
-          { label: "O'rtacha narx (barcha buyurtmalar)", value: `${tangaText(item.avgPrice)} / ish` },
-          { label: "Tushum (ro'yxat narxi)", value: `${tangaText(item.avgRevenue)} / tugallangan ish` },
-          { label: "Naqd tushum", value: `${tangaText(item.avgCashRevenue)} / ish` },
-          {
-            label: "To'liq tannarx",
-            value: `${soumText(item.fullCostSoum)} / ish · ${soumText(item.costPerUnitSoum)} / ${item.unitLabel}`,
-          },
-          {
-            label: "Ustama · marja",
-            value: (
-              <span className="flex flex-wrap items-center gap-2 tabular-nums">
-                {markupText(item.markup)}
-                <Badge tone={marginTone(item.marginPct)}>{pctText(item.marginPct, 0)}</Badge>
-                <span className="text-muted-foreground text-xs">ro&apos;yxat narxi − tannarx − komissiya {pctText(paymentFeePercent)} (naqd qismdan); ustama komissiyadan keyingi tushum bo&apos;yicha</span>
-              </span>
-            ),
-          },
-          {
-            label: "Naqd marja",
-            value: (
-              <span className="flex flex-wrap items-center gap-2 tabular-nums">
-                {pctText(item.cashMarginPct, 0)}
-                <span className="text-muted-foreground text-xs">faqat naqd pul tushumi bo&apos;yicha</span>
-              </span>
-            ),
-          },
-          {
-            label: "Bonus xarajati",
-            value: (
-              <span className="flex flex-wrap items-center gap-2 tabular-nums">
-                {soumText(item.bonusCostSoum)}
-                <span className="text-muted-foreground text-xs">ball ulushi {pctText(item.pointsSharePct, 0)} — ball bilan to&apos;langan ishlarning tannarxi</span>
-              </span>
-            ),
-          },
-          {
-            label: "Tavsiya",
-            value: (
-              <span className="flex flex-wrap items-center gap-2">
-                <Badge tone={rec.kind === "ok" ? "success" : rec.kind === "up" ? (item.marginPct !== null && item.marginPct < 30 ? "danger" : "warning") : rec.kind === "down" ? "info" : "neutral"}>
-                  {recommendationText(rec)}
-                </Badge>
-                {item.confidence === "low" ? <Badge tone="neutral">kam ishonch</Badge> : null}
-                <span className="text-muted-foreground text-xs">tanlama: {fmtNumber(item.sampleSize)} ta tayyor ish</span>
-              </span>
-            ),
-          },
-          {
-            label: "Ishlar",
-            value: `${fmtNumber(item.jobs)} · xato ${pctText(item.failRate)} · qamrov ${pctText(item.coveragePct)}`,
-          },
-        ]}
-      />
+      <section aria-label="Holat" className="bg-muted/40 flex flex-col gap-3 rounded-xl border px-4 py-3.5">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span className="flex items-center gap-2 text-[13px]">
+            <span className="text-muted-foreground">Marja</span>
+            <MarginChip marginPct={item.marginPct} digits={1} />
+          </span>
+          <span className="flex items-center gap-2 text-[13px]">
+            <span className="text-muted-foreground">Ustama</span>
+            <MarkupBar markup={item.markup} target={targetMarkup} />
+          </span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <RecommendationAction rec={rec} title={item.title} canEdit={canEdit} onApply={() => onApply(item)} size="md" primary />
+          <p className="text-muted-foreground text-xs">
+            {rec.kind === "change"
+              ? `Tuzatish ${percentLabel(item.adjust.percent)} → ${percentLabel(rec.target)}. ${rec.block ? REC_BLOCK_HINT[rec.block] : ""}`
+              : rec.kind === "ok"
+                ? "Ustama maqsadga yaqin — o'zgartirish shart emas."
+                : "Tavsiya uchun ma'lumot yetarli emas (narx yoki tannarx yo'q)."}{" "}
+            Tanlama: {fmtNumber(item.sampleSize)} ta tayyor ish.
+          </p>
+        </div>
+      </section>
 
-      <Card>
-        <CardHeader as="h3" title="Narx pog'onalari" description="Asosiy narx — kod formulasi; amaldagi — tuzatish bilan." />
-        <CardBody>
-          <LadderCompare current={item.ladder} caption="Narx pog'onalari: asosiy va amaldagi" />
-        </CardBody>
-      </Card>
+      <Section title="Iqtisod">
+        <KeyValueList
+          items={[
+            { label: "Tuzatish", value: `${percentLabel(item.adjust.percent)} · yaxlitlash ${roundToText(item.adjust.roundTo)}` },
+            { label: "O'rtacha narx", value: `${tangaText(item.avgPrice)} / ish` },
+            { label: "Tushum", value: `${tangaText(item.avgRevenue)} / tayyor ish` },
+            { label: "Naqd tushum", value: `${tangaText(item.avgCashRevenue)} / ish` },
+            { label: "Tannarx", value: `${soumText(item.fullCostSoum)} / ish · ${soumText(item.costPerUnitSoum)} / ${item.unitLabel}` },
+            { label: "shundan xato ishlar", value: `${soumText(item.overheadSoum)} / ish` },
+            { label: "Naqd marja", value: pctText(item.cashMarginPct, 0) },
+            { label: "Bonus xarajati", value: `${soumText(item.bonusCostSoum)} · ball ulushi ${pctText(item.pointsSharePct, 0)}` },
+            { label: "Ishlar", value: `${fmtNumber(item.jobs)} · xato ${pctText(item.failRate)} · qamrov ${pctText(item.coveragePct)}` },
+          ]}
+        />
+      </Section>
 
-      <Card>
-        <CardHeader as="h3" title={`Tannarx trendi · ${TREND_DAYS} kun`} description="so'm / ish, Toshkent kunlari bo'yicha" />
-        <CardBody>
-          {state.status === "loading" ? (
-            <Skeleton className="h-48 w-full" />
-          ) : state.status === "forbidden" ? (
-            <Forbidden />
-          ) : state.status === "error" ? (
-            <ErrorState message={state.message} requestId={state.requestId} onRetry={retry} />
-          ) : (
-            <LineChart
-              title={`${item.title}: ${TREND_DAYS} kunlik tannarx trendi (so'm / ish)`}
-              color={4}
-              valueLabel="Tannarx"
-              formatValue={(n) => fmtNumber(Math.round(n))}
-              points={state.data.trend.map((p) => ({ label: shortDay(p.day), value: p.avgCostSoum ?? 0 }))}
-            />
-          )}
-        </CardBody>
-      </Card>
+      <Section
+        title="Tannarx tarkibi"
+        aside={<InfoTip label="Tannarx tarkibi">Davrdagi AI xarajati qismlar bo&apos;yicha (xato ishlar bilan): qaysi xizmat qimmat — narxni emas, modelni o&apos;zgartirish kerakmi, shu ko&apos;rinadi.</InfoTip>}
+      >
+        <CostParts parts={item.costParts} unpricedCalls={item.unpricedCalls} />
+      </Section>
 
-      <Card>
-        <CardHeader as="h3" title="Simulyator" aside={<span className="text-muted-foreground text-xs">saqlanmaydi</span>} />
-        <CardBody>
-          <Simulator item={item} ladder={item.ladder} includeAdmins={includeAdmins} />
-        </CardBody>
-      </Card>
+      <Section title="Narx pog'onalari">
+        <LadderCompare current={item.ladder} caption="Narx pog'onalari: asosiy va amaldagi" />
+      </Section>
 
-      <Card>
-        <CardHeader as="h3" title="O'zgarishlar tarixi" />
-        <CardBody>
-          {shownHistory === null ? (
-            state.status === "loading" ? (
-              <Skeleton className="h-10 w-full" />
-            ) : null
-          ) : shownHistory.length === 0 ? (
-            <p className="text-muted-foreground text-[13px]">Hali o&apos;zgartirilmagan — 100% (kod formulasi).</p>
-          ) : (
-            <ol className="flex flex-col gap-2 text-[13px]">
-              {shownHistory.map((h) => (
-                <li key={h.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-b pb-2 last:border-b-0">
-                  <span className="min-w-0">
-                    <b className="tabular-nums">
-                      {percentLabel(h.oldPercent)} → {percentLabel(h.newPercent)}
-                    </b>
-                    {h.oldRoundTo !== h.newRoundTo ? (
-                      <span className="text-muted-foreground tabular-nums">
-                        {" "}
-                        · yaxlitlash {fmtNumber(h.oldRoundTo)} → {roundToText(h.newRoundTo)}
-                      </span>
-                    ) : null}
-                    <span className="text-muted-foreground"> · {h.admin ?? "o'chirilgan admin"}</span>
-                    <span className="text-muted-foreground block text-xs">{h.reason}</span>
-                  </span>
-                  <span className="text-muted-foreground text-xs tabular-nums">{fmtDate(h.at)}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </CardBody>
-      </Card>
+      <Section title={`Tannarx trendi · ${TREND_DAYS} kun`}>
+        {state.status === "loading" ? (
+          <Skeleton className="h-48 w-full" />
+        ) : state.status === "forbidden" ? (
+          <Forbidden />
+        ) : state.status === "error" ? (
+          <ErrorState message={state.message} requestId={state.requestId} onRetry={retry} />
+        ) : (
+          <LineChart
+            title={`${item.title}: ${TREND_DAYS} kunlik tannarx trendi (so'm / ish)`}
+            color={4}
+            valueLabel="Tannarx"
+            formatValue={(n) => fmtNumber(Math.round(n))}
+            points={state.data.trend.map((p) => ({ label: shortDay(p.day), value: p.avgCostSoum ?? 0 }))}
+          />
+        )}
+      </Section>
+
+      <Section title="Simulyator" aside={<span className="text-muted-foreground text-xs">— agar narx o&apos;zgarsa</span>}>
+        <Simulator item={item} ladder={item.ladder} includeAdmins={includeAdmins} />
+      </Section>
+
+      <Section title="O'zgarishlar tarixi">
+        {shownHistory === null ? (
+          state.status === "loading" ? (
+            <Skeleton className="h-10 w-full" />
+          ) : null
+        ) : shownHistory.length === 0 ? (
+          <p className="text-muted-foreground text-[13px]">Hali o&apos;zgartirilmagan — 100% (kod formulasi).</p>
+        ) : (
+          <ol className="flex flex-col gap-2 text-[13px]">
+            {shownHistory.map((h) => (
+              <li key={h.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-b pb-2 last:border-b-0">
+                <span className="min-w-0">
+                  <b className="tabular-nums">
+                    {percentLabel(h.oldPercent)} → {percentLabel(h.newPercent)}
+                  </b>
+                  {h.oldRoundTo !== h.newRoundTo ? (
+                    <span className="text-muted-foreground tabular-nums">
+                      {" "}
+                      · yaxlitlash {fmtNumber(h.oldRoundTo)} → {roundToText(h.newRoundTo)}
+                    </span>
+                  ) : null}
+                  <span className="text-muted-foreground"> · {h.admin ?? "o'chirilgan admin"}</span>
+                  <span className="text-muted-foreground block text-xs">{h.reason}</span>
+                </span>
+                <span className="text-muted-foreground text-xs tabular-nums">{fmtDate(h.at)}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </Section>
 
       <PriceEditDialog
         open={dialog === "edit"}
@@ -229,7 +219,8 @@ export function PricingDrawer({
         ladder={item.ladder}
         includeAdmins={includeAdmins}
         onClose={() => setDialog(null)}
-        onSaved={applied}
+        onSaved={onChanged}
+        onStale={onStale}
       />
       <PriceResetDialog
         open={dialog === "reset"}
@@ -238,7 +229,7 @@ export function PricingDrawer({
         adjust={item.adjust}
         ladder={item.ladder}
         onClose={() => setDialog(null)}
-        onReset={applied}
+        onReset={onChanged}
         onStale={onStale}
       />
     </Drawer>

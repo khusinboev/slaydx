@@ -22,6 +22,7 @@ export { EmptyState } from "./EmptyState";
 export { ErrorState } from "./ErrorState";
 export { FilterBar, MultiSelectFilter, SearchInput, Segmented, SelectFilter, type FilterOption } from "./FilterBar";
 export { Forbidden } from "./Forbidden";
+export { InfoTip } from "./InfoTip";
 export { JsonView, prettyJson } from "./JsonView";
 export { KeyValueList, type KeyValueItem } from "./KeyValueList";
 export { KpiTile, type KpiDelta } from "./KpiTile";
