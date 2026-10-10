@@ -206,7 +206,7 @@ export function PricingTable({ items, days, sort, targetMarkup, recContext, canE
       onSortChange={onSortChange}
       onRowClick={onOpen}
       empty={empty}
-      maxHeightClass="max-h-[75vh]"
+      maxHeightClass="max-h-none"
       renderCard={(r) => <ToolCard item={r} targetMarkup={targetMarkup} recContext={recContext} canEdit={canEdit} onApply={() => onApply(r)} />}
     />
   );

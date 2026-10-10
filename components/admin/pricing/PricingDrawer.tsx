@@ -82,6 +82,8 @@ export function PricingDrawer({
   // History comes from the drawer load, then from the last mutation's answer.
   const shownHistory = latest?.history ?? detail?.history ?? null;
   const rec = recommendationState(item, recContext);
+  // One primary action per sheet: the recommendation when it can be applied, else the manual edit.
+  const recApplicable = canEdit && rec.kind === "change" && rec.block === null;
 
   return (
     <Drawer
@@ -96,7 +98,7 @@ export function PricingDrawer({
             <Button variant="dangerOutline" onClick={() => setDialog("reset")} disabled={isDefaultAdjust(item.adjust)} className="max-sm:min-h-11">
               100% ga qaytarish
             </Button>
-            <Button variant="primary" onClick={() => setDialog("edit")} className="max-sm:min-h-11">
+            <Button variant={recApplicable ? "secondary" : "primary"} onClick={() => setDialog("edit")} className="max-sm:min-h-11">
               O&apos;zgartirish
             </Button>
           </>

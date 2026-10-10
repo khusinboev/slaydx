@@ -18,7 +18,7 @@ const MARGIN_TEXT: Record<ReturnType<typeof marginTone>, string> = {
 };
 
 export const KPI_LABELS = ["Marja", "Naqd marja", "Tushum", "AI xarajat", "Bonus xarajati", "Maqsadli ustama"] as const;
-export const KPI_GRID = "grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6";
+export const KPI_GRID = "grid grid-cols-2 gap-2.5 md:grid-cols-3";
 
 /**
  * Six health figures with the change against the previous equal period. Each «?» says

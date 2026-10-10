@@ -38,7 +38,7 @@ Order = priority. Every section answers one question.
 2. **«Diqqat talab qiladi»** (attention strip) — at most 5 actionable items, ranked (§3); each has one primary path:
    «Qo'llash» (recommendation, `pricing.edit` only) or «Ko'rish» (opens the tool). Empty → a single calm line
    «Hammasi me'yorda». «Yana N ta» when more exist.
-3. **Health KPIs** — 6 tiles, each with a «?» hint and a delta vs the previous equal period: Marja (p.p.),
+3. **Health KPIs** — 6 tiles (3 × 2; 2 columns on phones), each with a «?» hint and a delta vs the previous equal period: Marja (p.p.),
    Naqd marja (p.p.), Tushum, AI xarajat (up = bad), Bonus xarajati (up = bad), Maqsadli ustama (setting; caption =
    fee + FX — the two other settings live here instead of in their own tiles).
 4. **Vositalar** — desktop table (7 columns: Vosita+status, Narx, Tannarx, Marja+ustama bar, Tavsiya+Qo'llash,
@@ -61,7 +61,8 @@ Order = priority. Every section answers one question.
 │ ● Insho     Tannarx qamrovi 67% — marja optimistik       [Ko'rish]          │
 │ ○ Rezyume   Ustama 5,0× — narxni tushirish mumkin  Tavsiya −40% [Qo'llash] │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ [Marja 36,9% ▲1,2pp] [Naqd marja 21,5%] [Tushum 9,1 mln] [AI xarajat] [Bonus] [Maqsad 3,0×] │
+│ [Marja 36,9% ▲1,2 p.p.]      [Naqd marja 21,5%]        [Tushum 9 100 000 so'm]        │
+│ [AI xarajat ▲20%]            [Bonus xarajati]          [Maqsadli ustama 3,0×]         │
 ├ Vositalar (22) ──────────────────────────────────────── legend ●<30 ●30–60 ●>60 ┤
 │ Vosita        Narx, tanga     Tannarx/ish  Marja · ustama   Tavsiya        Ishlar  Trend │
 │ Slayd ▲120%   3 500 – 9 500   2 640 so'm   ●22%  ▕██░░|░▏   +121% [Qo'llash] 1 460  ╱╲ +18% │
@@ -104,7 +105,8 @@ it becomes an edge-to-edge bottom sheet there (rounded top, safe-area padding), 
 ## 3. Attention strip — rules (`components/admin/pricing/attention.ts`, pure)
 
 One entry per tool (its most severe reason), ranked by **severity**, then **impact** (so'm over the period), then
-title. Max 5 shown; the rest counted.
+title. Max 5 shown (3 on phones, so the KPIs stay within reach); the rest counted. Tools with no job in the
+period are not judged and sit behind one «Bu davrda ishi bo'lmagan vositalar (N)» toggle under the list.
 
 | Severity | Kind | Condition | Impact (so'm) | Action |
 |---|---|---|---|---|
@@ -113,7 +115,8 @@ title. Max 5 shown; the rest counted.
 | 2 warning | `no-cost` | completed > 0 and `fullCostSoum === null` | revenue of those jobs (uncounted) | Ko'rish |
 | 2 warning | `unpriced` | `unpricedCalls > 0` | revenue of the tool | Ko'rish |
 | 2 warning | `low-coverage` | `coveragePct < 90` | revenue × missing share | Ko'rish |
-| 3 info | `overpriced` | recommendation «down» (markup above target) | `(netRevenue − target × fullCost) × completed` | Qo'llash |
+| 3 info | `below-target` | margin ≥ 30 % but recommendation «up» by ≥ 15 % | `(target − markup) × fullCost × completed` | Qo'llash |
+| 3 info | `overpriced` | recommendation «down» by ≥ 15 % (markup above target) | `(markup − target) × fullCost × completed` | Qo'llash |
 | 3 info | `low-margin` without a recommendation / with low confidence | as above | as above | Ko'rish |
 
 A recommendation is **applicable** only when all hold: kind «up»/«down» (|Δ| > 5 points), confidence ok
@@ -164,4 +167,24 @@ Browser: Chromium at 1440 / 1280 / 390 in light and dark, two review passes; fin
 
 ## 8. Screenshots
 
-See `docs/admin/pricing-redesign/` (added after the visual review).
+Synthetic data on the test Postgres (:55440), real API, Chromium (GPU) at 1440 / 1280 / 390 in both themes;
+three review passes. Findings fixed between passes: 22-row tail of tools without jobs (→ toggle), 6 KPI tiles
+cramped at 1280 (→ 3 × 2 grid), inner 75vh table scroll hid half the list (→ page scroll), 5 strip entries
+pushed the KPIs off the first phone screen (→ 3), «— / ish» dashes on empty rows, two primary buttons in the
+sheet (→ one), «?» hit area below 44 px on phones. No horizontal overflow at any size. Remaining sub-44 px
+targets on phones are kit controls shared by every admin page (date presets 24 px, group select 36 px).
+
+Live smoke on the same stack: «Qo'llash» in the strip → reason + typed «230» → `PUT /api/admin/pricing/slide`
+`{percent: 230, roundTo: 500, reason, expected: {percent: 100, roundTo: 500}}` → 200, `tool_pricing` row and
+one `pricing.update` audit row (before 100 → after 230); a second PUT still expecting 100 % → 409 `stale`.
+
+| | |
+|---|---|
+| Desktop 1440, light — strip, KPIs, table | ![](pricing-redesign/desktop-1440-light.png) |
+| Desktop 1440, dark | ![](pricing-redesign/desktop-1440-dark.png) |
+| Desktop 1280, light — the table | ![](pricing-redesign/desktop-1280-light-table.png) |
+| Desktop 1280, dark — tool sheet | ![](pricing-redesign/desktop-1280-dark-sheet.png) |
+| Desktop 1440 — apply dialog | ![](pricing-redesign/desktop-1440-light-apply.png) |
+| Phone 390, light — top | ![](pricing-redesign/phone-390-light-top.png) |
+| Phone 390, dark — tool cards | ![](pricing-redesign/phone-390-dark-cards.png) |
+| Phone 390 — apply bottom sheet | ![](pricing-redesign/phone-390-light-apply-sheet.png) |
