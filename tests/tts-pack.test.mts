@@ -155,13 +155,14 @@ test("a part longer than the provider limit still fails (contract), Gemini limit
 });
 
 test("Gemini wire: a two-speaker request sends multiSpeakerVoiceConfig + 'Speaker1:/Speaker2:' text; chars exclude the labels", async () => {
-  let body: { contents: { parts: { text: string }[] }[]; generationConfig: { speechConfig: Record<string, unknown> } } | null = null;
+  type Body = { contents: { parts: { text: string }[] }[]; generationConfig: { speechConfig: Record<string, unknown> } };
+  const box: { body?: Body } = {};
   const pcm = Buffer.from(new Uint8Array(48_000)).toString("base64");
   const real = makeGeminiTts({
     key: () => "k",
     model: () => "gemini-2.5-flash-preview-tts",
     fetchImpl: (async (_u: unknown, init: RequestInit) => {
-      body = JSON.parse(String(init.body));
+      box.body = JSON.parse(String(init.body)) as Body;
       return Response.json({ candidates: [{ content: { parts: [{ inlineData: { mimeType: "audio/L16;codec=pcm;rate=24000", data: pcm } }] } }] });
     }) as unknown as typeof fetch,
   });
@@ -170,8 +171,8 @@ test("Gemini wire: a two-speaker request sends multiSpeakerVoiceConfig + 'Speake
     voice: "Kore",
     turns: [{ voice: "Kore", text: "Salom" }, { voice: "Charon", text: "Assalomu alaykum" }, { voice: "Kore", text: "Yaxshimisiz" }],
   });
-  assert.ok(body);
-  const sent = body as NonNullable<typeof body>;
+  assert.ok(box.body);
+  const sent = box.body;
   assert.equal(sent.contents[0].parts[0].text, "Speaker1: Salom\nSpeaker2: Assalomu alaykum\nSpeaker1: Yaxshimisiz");
   assert.deepEqual(sent.generationConfig.speechConfig, {
     multiSpeakerVoiceConfig: {
