@@ -54,6 +54,7 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "finance.soum_per_usd",
     "payment_bonus_percent",
     "pricing.target_markup",
+    "pricing.payment_fee_percent",
   ]);
   for (const k of s.SETTING_KEYS) {
     const d = s.settingDef(k);
@@ -82,6 +83,7 @@ test("standart qiymatlar = env (mahsulot xulqi o'zgarmaydi)", () => {
   assert.equal(d("finance.soum_per_usd"), soumPerUsd());
   assert.equal(d("finance.soum_per_usd"), 12_500);
   assert.equal(d("pricing.target_markup"), 3);
+  assert.equal(d("pricing.payment_fee_percent"), 0, "komissiya standart bo'yicha hisobga olinmaydi");
 });
 
 test("validatsiya: bool", () => {
@@ -107,6 +109,20 @@ test("validatsiya: pricing.target_markup 1.0–20.0", () => {
   good("pricing.target_markup", 3.5);
   good("pricing.target_markup", 20);
   for (const v of [0.99, 20.01, 0, -3, NaN, Infinity, "3", null]) bad("pricing.target_markup", v);
+});
+
+test("validatsiya: pricing.payment_fee_percent 0–10, qadam 0,1 (kasr shovqini tozalanadi)", () => {
+  for (const v of [0, 0.1, 1.5, 2.5, 9.9, 10]) good("pricing.payment_fee_percent", v);
+  // 0.1 × 3 is 0.30000000000000004 in floats: the stored value is the clean 0.3.
+  good("pricing.payment_fee_percent", 0.1 * 3, 0.3);
+  good("pricing.payment_fee_percent", 7 / 10, 0.7);
+  for (const v of [-0.1, 10.1, 11, 100, 0.05, 1.25, NaN, Infinity, -Infinity, "1", "", null, undefined, true, {}]) bad("pricing.payment_fee_percent", v);
+  const def = s.settingDef("pricing.payment_fee_percent");
+  assert.equal(def.type, "number");
+  assert.equal(def.group, "Narxlar");
+  assert.equal(def.min, 0);
+  assert.equal(def.max, 10);
+  assert.match(def.label, /komissiya/i);
 });
 
 test("validatsiya: generation.paused_tools — faqat registrdagi vositalar, tartiblangan, takrorsiz", () => {
@@ -225,6 +241,8 @@ test("sozlamalar bazada (haqiqiy Postgres)", { skip }, async (t) => {
       ["free_llm.daily.polish", 2.5, 400],
       ["pricing.target_markup", 25, 400],
       ["pricing.target_markup", 0.5, 400],
+      ["pricing.payment_fee_percent", 11, 400],
+      ["pricing.payment_fee_percent", Number.NaN, 400],
       ["generation.paused", "true", 400],
       ["no.such.key", true, 404],
     ];

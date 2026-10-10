@@ -360,6 +360,63 @@ test("PUT int / number / tool_ids: har tur saqlanadi; ikkinchi yozuv before = ol
   await resetAll();
 });
 
+test("PUT pricing.payment_fee_percent: 0–10 qadam 0,1 saqlanadi, BITTA settings.update audit; 11 / NaN / qadamsiz → 400 va hech narsa yozilmaydi; RBAC", { skip }, async () => {
+  await resetAll();
+  const key = "pricing.payment_fee_percent";
+  const owner = await session("owner");
+
+  const g = itemOf(await list(owner.cookie), key);
+  assert.equal(g.type, "number");
+  assert.equal(g.group, "Narxlar");
+  assert.equal(g.label, "To'lov komissiyasi (%)");
+  assert.equal(g.value, 0);
+  assert.equal(g.source, "default");
+  assert.equal(g.min, 0);
+  assert.equal(g.max, 10);
+
+  const ok = await put(owner.cookie, key, { value: 1.5, reason: REASON });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal((ok.body.item as Item).value, 1.5);
+  assert.equal((ok.body.item as Item).source, "db");
+  assert.deepEqual(await rows(), [{ key, value: 1.5, updated_by: owner.admin.adminId }]);
+  const a = await audits(owner.admin.adminId, "settings.update");
+  assert.equal(a.length, 1, "BITTA audit qatori");
+  assert.equal(a[0].target_id, key);
+  assert.equal(a[0].reason, REASON);
+  assert.deepEqual(a[0].before, { value: 0, source: "default" });
+  assert.deepEqual(a[0].after, { value: 1.5, source: "db" });
+  // The margin reads the stored value once the 15 s snapshot is dropped.
+  settings.invalidateSettingsCache();
+  assert.equal(await settings.getSetting(key), 1.5);
+
+  const cases: Array<[unknown, RegExp]> = [
+    [11, /0 dan 10 gacha/],
+    [10.1, /0 dan 10 gacha/],
+    [-0.1, /0 dan 10 gacha/],
+    [0.25, /0,1 qadam/],
+    [null, /son bo'lishi/], // JSON.stringify(NaN) is null
+    ["2", /son bo'lishi/],
+  ];
+  for (const [value, msg] of cases) {
+    const r = await put(owner.cookie, key, { value, reason: REASON });
+    assert.equal(r.status, 400, `${JSON.stringify(value)} → ${JSON.stringify(r.body)}`);
+    assert.match(String(r.body.error), msg, JSON.stringify(value));
+  }
+  assert.deepEqual(await rows(), [{ key, value: 1.5, updated_by: owner.admin.adminId }], "rad etilganlar hech narsani o'zgartirmadi");
+  assert.equal((await audits(owner.admin.adminId, "settings.update")).length, 1);
+
+  // Same permission path as every setting: finance reads, support/viewer cannot write.
+  const viewer = await session("viewer");
+  const denied = await put(viewer.cookie, key, { value: 2, reason: REASON });
+  assert.equal(denied.status, 403);
+  assert.deepEqual(await rows(), [{ key, value: 1.5, updated_by: owner.admin.adminId }]);
+  const back = await del(owner.cookie, key, { reason: REASON });
+  assert.equal(back.status, 200, JSON.stringify(back.body));
+  assert.equal((back.body.item as Item).value, 0);
+  assert.deepEqual(await rows(), []);
+  await resetAll();
+});
+
 test("PUT: noto'g'ri qiymat → 400 (validator xabari), qator ham audit ham yo'q", { skip }, async () => {
   await resetAll();
   const s = await session("owner");
