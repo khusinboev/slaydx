@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
+import { cn } from "@/lib/cn";
 import { useDialog } from "@/components/overlays/useDialog";
 
 /** Right-side panel for row details (moderation preview, audit diff). Same dialog behaviour as `Modal`. */
@@ -13,7 +14,10 @@ export function Drawer({
   children,
   footer,
   history = true,
+  sheet = false,
 }: {
+  /** Below `sm`: a bottom sheet (92 % of the screen, rounded top) instead of a full-screen side panel. */
+  sheet?: boolean;
   /**
    * `false` only when the open state already lives in the URL (`?id=` pushed by
    * `useUrlDrawer`): the URL entry is then the drawer's history entry.
@@ -38,14 +42,19 @@ export function Drawer({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end">
+    <div className={cn("fixed inset-0 z-40 flex justify-end", sheet && "items-end sm:items-stretch")}>
       <button type="button" tabIndex={-1} aria-label="Yopish" className="absolute inset-0 bg-black/40" onClick={close} />
       <aside
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="bg-card relative z-10 flex h-full w-full max-w-lg flex-col border-l shadow-xl"
+        className={cn(
+          "bg-card relative z-10 flex w-full max-w-lg flex-col shadow-xl",
+          sheet
+            ? "h-[92dvh] rounded-t-2xl border-t pb-[env(safe-area-inset-bottom)] sm:h-full sm:rounded-none sm:border-t-0 sm:border-l sm:pb-0"
+            : "h-full border-l",
+        )}
       >
         <header className="flex items-start gap-3 border-b px-5 py-4">
           <div className="min-w-0 flex-1">

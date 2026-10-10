@@ -23,7 +23,10 @@ export function Modal({
   footer,
   size = "md",
   dismissible = true,
+  sheet = false,
 }: {
+  /** Below `sm`: an edge-to-edge bottom sheet (rounded top, safe-area padding) instead of a floating card. */
+  sheet?: boolean;
   open: boolean;
   onClose: () => void;
   title: string;
@@ -49,7 +52,7 @@ export function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
+    <div className={cn("fixed inset-0 z-50 flex items-end justify-center sm:items-center", sheet ? "sm:p-4" : "p-4")}>
       <button
         type="button"
         tabIndex={-1}
@@ -63,7 +66,10 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         className={cn(
-          "bg-card relative z-10 flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-2xl border shadow-xl",
+          "bg-card relative z-10 flex w-full flex-col border shadow-xl",
+          sheet
+            ? "max-h-[92dvh] rounded-t-2xl border-x-0 border-b-0 pb-[env(safe-area-inset-bottom)] sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl sm:border-x sm:border-b sm:pb-0"
+            : "max-h-[calc(100dvh-2rem)] rounded-2xl",
           WIDTH[size],
         )}
       >

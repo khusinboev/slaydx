@@ -3,6 +3,7 @@
 import { useEffect, useRef, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { InfoTip } from "./InfoTip";
 import { Skeleton } from "./Skeleton";
 
 export type Align = "left" | "right" | "center";
@@ -25,6 +26,8 @@ export type Column<T> = {
   hideOnCard?: boolean;
   /** One short line under the header (and the card label) saying what the column is computed on. */
   hint?: string;
+  /** A longer explanation behind a «?» next to the header (`InfoTip`). */
+  info?: ReactNode;
 };
 
 export type DataTableProps<T> = {
@@ -45,6 +48,11 @@ export type DataTableProps<T> = {
   selectable?: boolean;
   selected?: ReadonlySet<string>;
   onSelectedChange?: (next: Set<string>) => void;
+  /**
+   * Custom content of each card below `sm` (the generic card lists every column as label/value).
+   * The card keeps the row's click/keyboard behaviour; controls inside it are not row clicks.
+   */
+  renderCard?: (row: T) => ReactNode;
   /** Tailwind max-height for the scroll area so the sticky header actually sticks. */
   maxHeightClass?: string;
   /**
@@ -124,6 +132,7 @@ export function DataTable<T>({
   onSelectedChange,
   maxHeightClass = "max-h-[75vh]",
   regionLabel,
+  renderCard,
 }: DataTableProps<T>) {
   const selectedSet = selected ?? new Set<string>();
   const keys = rows.map(rowKey);
@@ -233,6 +242,13 @@ export function DataTable<T>({
                     ) : (
                       col.header
                     )}
+                    {col.info ? (
+                      <span className="ml-1 inline-flex align-middle">
+                        <InfoTip label={col.header} align={align === "right" ? "end" : "start"}>
+                          {col.info}
+                        </InfoTip>
+                      </span>
+                    ) : null}
                     {col.hint ? (
                       <span
                         className={cn(
@@ -321,25 +337,31 @@ export function DataTable<T>({
                   )}
                   {...rowProps(row)}
                 >
-                  <div className="flex items-start gap-2.5">
-                    {selectable ? (
-                      <div className="pt-0.5">
-                        <SelectBox checked={isSelected} label="Qatorni tanlash" onChange={(on) => toggleOne(key, on)} />
+                  {renderCard ? (
+                    renderCard(row)
+                  ) : (
+                    <>
+                      <div className="flex items-start gap-2.5">
+                        {selectable ? (
+                          <div className="pt-0.5">
+                            <SelectBox checked={isSelected} label="Qatorni tanlash" onChange={(on) => toggleOne(key, on)} />
+                          </div>
+                        ) : null}
+                        <div className="min-w-0 flex-1 font-medium">{titleCol ? titleCol.cell(row) : null}</div>
                       </div>
-                    ) : null}
-                    <div className="min-w-0 flex-1 font-medium">{titleCol ? titleCol.cell(row) : null}</div>
-                  </div>
-                  <dl className="grid grid-cols-[minmax(0,40%)_1fr] gap-x-3 gap-y-1">
-                    {restCols.map((col) => (
-                      <div key={col.id} className="contents">
-                        <dt className="text-muted-foreground text-xs">
-                          {col.header}
-                          {col.hint ? <span className="block text-[10.5px] opacity-80">{col.hint}</span> : null}
-                        </dt>
-                        <dd className="min-w-0 text-right break-words">{col.cell(row)}</dd>
-                      </div>
-                    ))}
-                  </dl>
+                      <dl className="grid grid-cols-[minmax(0,40%)_1fr] gap-x-3 gap-y-1">
+                        {restCols.map((col) => (
+                          <div key={col.id} className="contents">
+                            <dt className="text-muted-foreground text-xs">
+                              {col.header}
+                              {col.hint ? <span className="block text-[10.5px] opacity-80">{col.hint}</span> : null}
+                            </dt>
+                            <dd className="min-w-0 text-right break-words">{col.cell(row)}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </>
+                  )}
                 </li>
               );
             })}

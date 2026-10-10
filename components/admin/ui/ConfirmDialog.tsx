@@ -44,6 +44,8 @@ export type ConfirmDialogProps = {
   confirmDisabled?: boolean;
   /** Throw to keep the dialog open and show the message inline. */
   onConfirm: (ctx: ConfirmContext) => Promise<void> | void;
+  /** Bottom sheet on phones (`Modal` `sheet`). */
+  sheet?: boolean;
 };
 
 const REASON_MAX = 500;
@@ -77,6 +79,7 @@ function ConfirmBody({
   cancelLabel = "Bekor qilish",
   confirmDisabled = false,
   onConfirm,
+  sheet = false,
 }: ConfirmDialogProps) {
   const formId = useId();
   const [idempotencyKey] = useState(newIdempotencyKey);
@@ -144,6 +147,7 @@ function ConfirmBody({
       title={title}
       description={description}
       dismissible={!busy}
+      sheet={sheet}
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>
