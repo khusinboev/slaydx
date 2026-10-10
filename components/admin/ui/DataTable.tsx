@@ -23,6 +23,8 @@ export type Column<T> = {
   className?: string;
   /** Hide this column in the card list shown below `sm`. */
   hideOnCard?: boolean;
+  /** One short line under the header (and the card label) saying what the column is computed on. */
+  hint?: string;
 };
 
 export type DataTableProps<T> = {
@@ -231,6 +233,17 @@ export function DataTable<T>({
                     ) : (
                       col.header
                     )}
+                    {col.hint ? (
+                      <span
+                        className={cn(
+                          "text-muted-foreground mt-0.5 block max-w-[9.5rem] text-[10.5px] leading-snug font-normal whitespace-normal",
+                          align === "right" && "ml-auto",
+                          align === "center" && "mx-auto",
+                        )}
+                      >
+                        {col.hint}
+                      </span>
+                    ) : null}
                   </th>
                 );
               })}
@@ -319,7 +332,10 @@ export function DataTable<T>({
                   <dl className="grid grid-cols-[minmax(0,40%)_1fr] gap-x-3 gap-y-1">
                     {restCols.map((col) => (
                       <div key={col.id} className="contents">
-                        <dt className="text-muted-foreground text-xs">{col.header}</dt>
+                        <dt className="text-muted-foreground text-xs">
+                          {col.header}
+                          {col.hint ? <span className="block text-[10.5px] opacity-80">{col.hint}</span> : null}
+                        </dt>
                         <dd className="min-w-0 text-right break-words">{col.cell(row)}</dd>
                       </div>
                     ))}

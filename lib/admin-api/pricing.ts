@@ -48,8 +48,12 @@ export type PricingItem = {
   avgPrice: number | null;
   /** Tanga. */
   avgCashRevenue: number | null;
-  /** avgCashRevenue converted with `soumPerCoin` (what the margin is on). */
+  /** avgCashRevenue converted with `soumPerCoin` (what the CASH margin is on). */
   avgCashRevenueSoum: number | null;
+  /** Tanga: listed price minus refunds per COMPLETED job, however it was paid (cash, points); the primary margin's basis. */
+  avgRevenue: number | null;
+  /** avgRevenue converted with `soumPerCoin`. */
+  avgRevenueSoum: number | null;
   avgUnits: number | null;
   avgCostUsd: number | null;
   avgCostSoum: number | null;
@@ -57,8 +61,16 @@ export type PricingItem = {
   overheadSoum: number | null;
   fullCostSoum: number | null;
   costPerUnitSoum: number | null;
+  /** PRIMARY margin, %: listed revenue − full cost − payment fee, however the jobs were paid. */
   marginPct: number | null;
+  /** CASH margin, %: only the wallet cash (points excluded), the earlier formula. */
+  cashMarginPct: number | null;
+  /** avgRevenueSoum ÷ fullCostSoum (the fee is not deducted). */
   markup: number | null;
+  /** Share of the completed jobs' revenue paid with points, %. */
+  pointsSharePct: number | null;
+  /** So'm: AI spend of the period × pointsSharePct, i.e. what the jobs paid with points cost. */
+  bonusCostSoum: number | null;
   coveragePct: number | null;
   jobsWithCost: number;
   recommendedPercent: number | null;
@@ -75,14 +87,25 @@ export type PricingTotals = {
   cashRevenue: number;
   /** cashRevenue × soumPerCoin. */
   cashRevenueSoum: number;
-  /** Registry tools' spend (what `marginPct` is on). */
+  /** Registry tools' spend (what the margins are on). */
   costUsdTools: number;
   costSoumTools: number;
   /** Free-LLM endpoints and unknown-tool spend of the same range. */
   costUsdOther: number;
-  /** costUsdTools + costUsdOther — the dashboard / AI page figure. */
+  /** costUsdTools + costUsdOther — the dashboard / AI page figure (with admins included). */
   costUsdAll: number;
+  /** Net listed revenue of the completed jobs, tanga, and in so'm. */
+  revenue: number;
+  revenueSoum: number;
+  /** Payment fee on that revenue, so'm. */
+  feeSoum: number;
+  /** PRIMARY margin, %. */
   marginPct: number | null;
+  /** CASH margin, % (earlier formula). */
+  cashMarginPct: number | null;
+  /** Σ per-tool bonus cost, so'm; points share of the revenue, %. */
+  bonusCostSoum: number;
+  pointsSharePct: number | null;
 };
 
 export type PricingOverview = {
@@ -95,6 +118,12 @@ export type PricingOverview = {
   soumPerCoin: number;
   /** `pricing.target_markup`. */
   targetMarkup: number;
+  /** `pricing.payment_fee_percent`: deducted from the revenue in the primary margin. */
+  paymentFeePercent: number;
+  /** Whether admin accounts' jobs are in every figure (`admins=1`). */
+  includeAdmins: boolean;
+  /** Completed admin-account jobs of the range (left out unless `includeAdmins`). */
+  adminJobs: number;
   groups: ReadonlyArray<{ id: ToolGroupId; label: string }>;
   caveats: string[];
 };
@@ -119,8 +148,11 @@ export type PricingDetail = {
   fx: number;
 };
 
-/** revenue30d in tanga, revenue30dSoum and cost30d in so'm; the margin compares the two so'm figures. */
-export type Projection = { revenue30d: number; revenue30dSoum: number; cost30d: number; marginPct: number | null };
+/**
+ * revenue30d in tanga (listed price of the completed jobs minus refunds); revenue30dSoum, feeSoum and cost30d in
+ * so'm; the margin is the table's primary one: (revenue − fee − cost) ÷ revenue.
+ */
+export type Projection = { revenue30d: number; revenue30dSoum: number; feeSoum: number; cost30d: number; marginPct: number | null };
 
 export type Simulation = {
   toolId: string;
@@ -132,24 +164,29 @@ export type Simulation = {
   partial: boolean;
   fx: number;
   soumPerCoin: number;
+  /** `pricing.payment_fee_percent`, deducted from both projections. */
+  paymentFeePercent: number;
+  includeAdmins: boolean;
 };
 
 export type PricingItemResult = { toolId: string; title: string; adjust: PriceAdjust; ladder: LadderRow[]; history: PriceHistoryRow[] };
 
-export function getPricing(params: { from: string; to: string }, opts: AdminCallOptions = {}): Promise<PricingOverview> {
-  return adminGet<PricingOverview>("/api/admin/pricing", params, opts);
+/** `includeAdmins` adds admin accounts' jobs (`admins=1`); without it they are left out. */
+export function getPricing(params: { from: string; to: string; includeAdmins?: boolean }, opts: AdminCallOptions = {}): Promise<PricingOverview> {
+  return adminGet<PricingOverview>("/api/admin/pricing", { from: params.from, to: params.to, admins: params.includeAdmins ? true : null }, opts);
 }
 
 function pathOf(toolId: string): string {
   return `/api/admin/pricing/${encodeURIComponent(toolId)}`;
 }
 
-export function getPricingDetail(toolId: string, days: number, opts: AdminCallOptions = {}): Promise<PricingDetail> {
-  return adminGet<PricingDetail>(pathOf(toolId), { days }, opts);
+export function getPricingDetail(toolId: string, days: number, opts: AdminCallOptions & { includeAdmins?: boolean } = {}): Promise<PricingDetail> {
+  return adminGet<PricingDetail>(pathOf(toolId), { days, admins: opts.includeAdmins ? true : null }, { signal: opts.signal, timeoutMs: opts.timeoutMs });
 }
 
-export function simulatePricing(toolId: string, adjust: PriceAdjust, opts: AdminCallOptions = {}): Promise<Simulation> {
-  return adminSend<Simulation>("POST", `${pathOf(toolId)}/simulate`, adjust, opts);
+export function simulatePricing(toolId: string, adjust: PriceAdjust, opts: AdminCallOptions & { includeAdmins?: boolean } = {}): Promise<Simulation> {
+  const body = opts.includeAdmins ? { ...adjust, includeAdmins: true } : adjust;
+  return adminSend<Simulation>("POST", `${pathOf(toolId)}/simulate`, body, { signal: opts.signal, timeoutMs: opts.timeoutMs });
 }
 
 /** Sets the adjustment (needs a fresh step-up; the core asks for it). */

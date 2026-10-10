@@ -4,7 +4,7 @@ import { ApiError } from "./api";
 import { adminTx } from "./admin-audit";
 import { parseReason } from "./admin-accounts";
 import type { AdminActor } from "./admin-handler";
-import { COST_CAVEATS, soumPerUsd, spendCoverageByTool, spendRowsSql, spendTotals, type Queryable, type SpendRange } from "./admin-cost";
+import { COST_CAVEATS, soumPerUsd, spendCoverageByTool, spendRowsSql, type Queryable, type SpendRange } from "./admin-cost";
 import { parseDateRange, type DateRange } from "./admin-list";
 import { pool, query, transaction } from "./db";
 import { SOUM_PER_COIN } from "./payments";

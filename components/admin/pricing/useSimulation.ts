@@ -18,7 +18,7 @@ const DEBOUNCE_MS = 250;
  * older one). The last good result stays on screen while the next one loads,
  * so a slider does not flicker. The client never prices anything itself.
  */
-export function useSimulation(toolId: string, adjust: PriceAdjust | null): SimulationState {
+export function useSimulation(toolId: string, adjust: PriceAdjust | null, includeAdmins = false): SimulationState {
   const [state, setState] = useState<SimulationState>({ status: "idle" });
   const percent = adjust?.percent ?? null;
   const roundTo = adjust?.roundTo ?? null;
@@ -31,7 +31,7 @@ export function useSimulation(toolId: string, adjust: PriceAdjust | null): Simul
     const ctl = new AbortController();
     setState((cur) => ({ status: "loading", last: cur.status === "ready" ? cur.data : cur.status === "idle" ? null : cur.last }));
     const timer = setTimeout(() => {
-      simulatePricing(toolId, { percent, roundTo }, { signal: ctl.signal })
+      simulatePricing(toolId, { percent, roundTo }, { signal: ctl.signal, includeAdmins })
         .then((data) => {
           if (!ctl.signal.aborted) setState({ status: "ready", data });
         })
@@ -44,7 +44,7 @@ export function useSimulation(toolId: string, adjust: PriceAdjust | null): Simul
       clearTimeout(timer);
       ctl.abort();
     };
-  }, [toolId, percent, roundTo]);
+  }, [toolId, percent, roundTo, includeAdmins]);
 
   return state;
 }

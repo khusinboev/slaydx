@@ -301,6 +301,33 @@ test("number: decimal comma accepted, range 1–20 enforced", async () => {
   assert.ok(within(rowOf("pricing.target_markup")).getByText("2,5", { selector: "b" }));
 });
 
+test("payment fee: sits in the «Narxlar» card, bounds 0–10, decimal comma, body is {value: 2.5, reason}", async () => {
+  const FEE = { ...base({ key: "pricing.payment_fee_percent", label: "To'lov komissiyasi (%)", group: "Narxlar", min: 0, max: 10 }), type: "number", value: 0, envValue: 0 };
+  const saved = { ...FEE, value: 2.5, source: "db", updatedBy: "Admin", updatedAt: "2026-10-10T07:00:00.000Z" };
+  const calls = stubFetch([() => json(200, { items: [...ITEMS, FEE] }), () => json(200, { item: saved })]);
+  mount(h(SettingsPage, { tools: TOOLS }));
+  await ready();
+  const row = rowOf("pricing.payment_fee_percent");
+  assert.ok(within(row).getByText("To'lov komissiyasi (%)"));
+  assert.equal(row.closest("ul")?.contains(rowOf("pricing.target_markup")), true, "same card as the target markup");
+  fireEvent.click(within(row).getByRole("button", { name: "O'zgartirish" }));
+  const dialog = await screen.findByRole("dialog");
+  const input = within(dialog).getByLabelText("Yangi qiymat") as HTMLInputElement;
+  assert.ok(within(dialog).getByText("0 dan 10 gacha"), "bounds hint");
+  fireEvent.change(within(dialog).getByLabelText("Sabab"), { target: { value: "Click komissiyasi 2,5%" } });
+  for (const bad of ["11", "-1", "abc", ""]) {
+    fireEvent.change(input, { target: { value: bad } });
+    assert.equal(button("Saqlash").disabled, true, `«${bad}» bilan saqlab bo'lmaydi`);
+  }
+  fireEvent.change(input, { target: { value: "2,5" } });
+  assert.equal(button("Saqlash").disabled, false);
+  fireEvent.click(button("Saqlash"));
+  await waitFor(() => assert.ok(!screen.queryByRole("dialog")));
+  assert.deepEqual(calls[1].body, { value: 2.5, reason: "Click komissiyasi 2,5%" });
+  assert.ok(calls[1].url.endsWith("/api/admin/settings/pricing.payment_fee_percent"), calls[1].url);
+  assert.ok(within(rowOf("pricing.payment_fee_percent")).getByText("2,5", { selector: "b" }));
+});
+
 test("tool_ids: options come from the server page; tick, «Hammasini tanlash», «Tozalash»; body is the id list", async () => {
   const saved = { ...PAUSED_TOOLS, value: ["essay", "referat"], source: "db", updatedBy: "Admin", updatedAt: "2026-10-02T07:00:00.000Z" };
   const calls = stubFetch([() => json(200, { items: ITEMS }), () => json(200, { item: saved })]);

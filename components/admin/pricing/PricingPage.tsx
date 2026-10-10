@@ -57,6 +57,8 @@ export function PricingPage() {
   const urlRange: DateRange = { from: rawFrom, to: rawTo };
   const range: DateRange = isIsoDate(rawFrom) && isIsoDate(rawTo) && validateRange(urlRange) === null ? urlRange : defaultRange;
   const group = params.get("group") ?? "";
+  // Admin accounts' test jobs are left out by default; `admins=1` adds them (the same switch the API has).
+  const includeAdmins = params.get("admins") === "1";
   const sort = parseSort(params.get("sort"));
   const openTool = params.get("tool");
 
@@ -74,14 +76,14 @@ export function PricingPage() {
   );
 
   const { from, to } = range;
-  const load = useCallback((signal: AbortSignal) => getPricing({ from, to }, { signal }), [from, to]);
+  const load = useCallback((signal: AbortSignal) => getPricing({ from, to, includeAdmins }, { signal }), [from, to, includeAdmins]);
   const [state, retry] = useLoad<PricingOverview>(load);
   // A successful PUT/DELETE updates the row in place (no round trip); the aggregates are unchanged.
   const [patched, setPatched] = useState<Map<string, PricingItemResult>>(() => new Map());
   const applyResult = (r: PricingItemResult) => setPatched((m) => new Map(m).set(r.toolId, r));
 
-  const activeFilters = Number(from !== defaultRange.from || to !== defaultRange.to) + Number(group !== "");
-  const clear = () => update({ from: null, to: null, group: null, sort: null });
+  const activeFilters = Number(from !== defaultRange.from || to !== defaultRange.to) + Number(group !== "") + Number(includeAdmins);
+  const clear = () => update({ from: null, to: null, group: null, sort: null, admins: null });
 
   return (
     <div className="flex flex-col gap-4">
@@ -107,6 +109,19 @@ export function PricingPage() {
             onChange={(v) => update({ group: v })}
             options={state.status === "ready" ? state.data.groups.map((g) => ({ value: g.id, label: g.label })) : []}
           />
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="text-muted-foreground text-[11px] font-semibold">Admin ishlari</span>
+            <label className="border-input bg-card flex h-9 cursor-pointer items-center gap-2 rounded-lg border px-2.5 text-[13px]">
+              <input
+                type="checkbox"
+                checked={includeAdmins}
+                onChange={(e) => update({ admins: e.target.checked ? "1" : null })}
+                className="accent-primary size-4"
+              />
+              Adminlar bilan
+            </label>
+          </div>
+          {state.status === "ready" ? <AdminJobsNote includeAdmins={state.data.includeAdmins} adminJobs={state.data.adminJobs} /> : null}
         </FilterBar>
       )}
 
@@ -125,6 +140,7 @@ export function PricingPage() {
           data={state.data}
           patched={patched}
           group={group}
+          includeAdmins={includeAdmins}
           sort={sort.value}
           openTool={openTool}
           filtered={activeFilters > 0}
@@ -159,11 +175,23 @@ function WrapMoney({ amount, unit }: { amount: number | null; unit: string }) {
   return <span className="block whitespace-normal">{`${fmtNumber(Math.round(amount))} ${unit}`}</span>;
 }
 
+/** Next to the switch: how many admin jobs the figures leave out (or contain). */
+function AdminJobsNote({ includeAdmins, adminJobs }: { includeAdmins: boolean; adminJobs: number }) {
+  if (adminJobs === 0) return null;
+  return (
+    <p className="text-muted-foreground max-w-xs self-end pb-2 text-xs" role="status">
+      {includeAdmins
+        ? `Adminlarning ${fmtNumber(adminJobs)} ta tugallangan ishi ham hisobga olingan.`
+        : `Adminlarning ${fmtNumber(adminJobs)} ta tugallangan ishi hisobga olinmagan.`}
+    </p>
+  );
+}
+
 function PricingSkeleton() {
   return (
     <div aria-busy="true" aria-label="Yuklanmoqda" className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        {[0, 1, 2, 3, 4].map((i) => (
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
           <KpiTile key={i} label="" value="" loading />
         ))}
       </div>
@@ -183,6 +211,7 @@ function Ready({
   data,
   patched,
   group,
+  includeAdmins,
   sort,
   openTool,
   filtered,
@@ -196,6 +225,7 @@ function Ready({
   data: PricingOverview;
   patched: Map<string, PricingItemResult>;
   group: string;
+  includeAdmins: boolean;
   sort: string;
   openTool: string | null;
   filtered: boolean;
@@ -215,8 +245,18 @@ function Ready({
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <KpiTile label="O'rtacha marja" value={<span className={MARGIN_TEXT[marginTone(totals.marginPct)]}>{pctText(totals.marginPct)}</span>} hint="naqd tushum bo'yicha tortilgan" />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KpiTile
+          label="Marja"
+          value={<span className={MARGIN_TEXT[marginTone(totals.marginPct)]}>{pctText(totals.marginPct)}</span>}
+          hint={`tugallangan ishlarning ro'yxat narxi (ball bilan to'langani ham) − tannarx − komissiya ${pctText(data.paymentFeePercent)}`}
+        />
+        <KpiTile label="Naqd marja" value={pctText(totals.cashMarginPct)} hint="faqat naqd pul tushumi bo'yicha (ball hisobga olinmaydi)" />
+        <KpiTile
+          label="Bonus xarajati"
+          value={<WrapMoney amount={totals.bonusCostSoum} unit="so'm" />}
+          hint={`ball bilan to'langan ishlarning tannarxi (marketing xarajati) · tushumning ${pctText(totals.pointsSharePct)} qismi ball bilan to'langan`}
+        />
         <KpiTile label="Marja < 30% vositalar" value={fmtNumber(low.length)} hint={low.length ? low.map((i) => i.title).join(", ") : "Hammasi me'yorda"} />
         <KpiTile
           label={`AI xarajat · pullik vositalar · ${fmtNumber(data.range.days)} kun`}
@@ -225,6 +265,7 @@ function Ready({
         />
         <KpiTile label="Kurs (so'm / USD)" value={fmtNumber(data.fx)} hint={`Sozlama: ${SETTING_LABEL.fx}`} />
         <KpiTile label="Maqsadli ustama" value={markupText(data.targetMarkup)} hint={`Sozlama: ${SETTING_LABEL.targetMarkup}`} />
+        <KpiTile label="To'lov komissiyasi" value={pctText(data.paymentFeePercent)} hint={`Sozlama: ${SETTING_LABEL.paymentFee}`} />
       </div>
 
       {lowCov.length > 0 ? (
@@ -288,14 +329,35 @@ function Ready({
         </CardBody>
       </Card>
 
-      <p className="text-muted-foreground text-xs">
-        Narxlar va tushum tangada, tannarx so&apos;mda; marja va ustama uchun tanga so&apos;mga o&apos;tkaziladi (1 tanga = {fmtNumber(data.soumPerCoin)} so&apos;m).
-        Marja = (naqd tushum − to&apos;liq tannarx) ÷ naqd tushum (ballar naqd hisoblanmaydi). To&apos;liq tannarx = tugallangan ishning o&apos;rtacha AI xarajati + xato va tashlab
-        ketilgan ishlar xarajatining tugallangan ishga ulushi. Ustama = o&apos;rtacha ro&apos;yxat narxi ÷ to&apos;liq tannarx. «Tavsiya» ustamani maqsadli{" "}
-        {markupText(data.targetMarkup)} ga yetkazadigan foiz; tanlama 20 ishdan kam bo&apos;lsa «kam ishonch» deb belgilanadi. Qatorni bosing — grafik, simulyator va tarix ochiladi.
-      </p>
+      <div className="text-muted-foreground flex flex-col gap-1.5 text-xs">
+        <p>
+          Narxlar va tushum tangada, tannarx so&apos;mda; marja va ustama uchun tanga so&apos;mga o&apos;tkaziladi (1 tanga = {fmtNumber(data.soumPerCoin)} so&apos;m).
+        </p>
+        <p>
+          <b className="text-foreground font-semibold">Marja</b> = (tugallangan ishlarning ro&apos;yxat narxi − qaytarilgani − to&apos;lov komissiyasi − to&apos;liq tannarx) ÷ ro&apos;yxat narxi;
+          narx ball bilan to&apos;langan bo&apos;lsa ham to&apos;liq hisoblanadi. <b className="text-foreground font-semibold">Naqd marja</b> = (naqd tushum − to&apos;liq tannarx) ÷ naqd tushum:
+          ball naqd hisoblanmaydi, davrda yaratilgan barcha ishlar bo&apos;yicha. <b className="text-foreground font-semibold">Bonus xarajati</b> = davrdagi AI xarajatining ball bilan
+          to&apos;langan ulushi.
+        </p>
+        <p>
+          To&apos;liq tannarx = tugallangan ishning o&apos;rtacha AI xarajati + xato va tashlab ketilgan ishlar xarajatining tugallangan ishga ulushi. Ustama = o&apos;rtacha ro&apos;yxat narxi
+          (qaytarilgandan keyin) ÷ to&apos;liq tannarx. «Tavsiya» ustamani maqsadli {markupText(data.targetMarkup)} ga yetkazadigan foiz; tanlama 20 ishdan kam bo&apos;lsa «kam ishonch» deb
+          belgilanadi. Adminlarning ishlari standart bo&apos;yicha hisobga olinmaydi («Adminlar bilan» yoqilsa qo&apos;shiladi); «AI xarajat» sahifasida esa hammasi ko&apos;rinadi. Qatorni
+          bosing — grafik, simulyator va tarix ochiladi.
+        </p>
+      </div>
 
-      {open ? <PricingDrawer key={open.toolId} item={open} onClose={onClose} onChanged={onChanged} onStale={onStale} /> : null}
+      {open ? (
+        <PricingDrawer
+          key={open.toolId}
+          item={open}
+          includeAdmins={includeAdmins}
+          paymentFeePercent={data.paymentFeePercent}
+          onClose={onClose}
+          onChanged={onChanged}
+          onStale={onStale}
+        />
+      ) : null}
     </>
   );
 }

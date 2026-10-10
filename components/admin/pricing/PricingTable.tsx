@@ -108,10 +108,12 @@ export function PricingTable({
       className: "tabular-nums whitespace-nowrap",
       cell: (r) => <Stacked main={`${soumText(r.fullCostSoum)} / ish`} sub={`${soumText(r.costPerUnitSoum)} / ${r.unitLabel}`} />,
     },
-    { id: "markup", header: "Ustama ×", align: "right", className: "tabular-nums", cell: (r) => markupText(r.markup) },
+    { id: "markup", header: "Ustama ×", hint: "tushum ÷ tannarx", align: "right", className: "tabular-nums", cell: (r) => markupText(r.markup) },
     {
       id: "margin",
       header: "Marja % · tavsiya",
+      // The primary margin: the listed price of the completed jobs (points included), less cost and the payment fee.
+      hint: "ro'yxat narxi (ball ham) − tannarx − komissiya",
       sortKey: "margin_asc",
       sortKeyReverse: "margin_desc",
       // The recommendation sits under the margin it is derived from (§17.6 chip).
@@ -121,6 +123,24 @@ export function PricingTable({
           <RecommendationChip item={r} />
         </span>
       ),
+    },
+    {
+      // The earlier formula, kept beside the primary one. Plain text, not a traffic-light badge: the cash margin is
+      // low by construction wherever points pay for the jobs, which is not a pricing problem.
+      id: "cash-margin",
+      header: "Naqd marja",
+      hint: "faqat naqd pul tushumi bo'yicha",
+      align: "right",
+      className: "tabular-nums whitespace-nowrap",
+      cell: (r) => pctText(r.cashMarginPct, 0),
+    },
+    {
+      id: "bonus",
+      header: "Bonus xarajati",
+      hint: "ball bilan to'langan ishlar tannarxi",
+      align: "right",
+      className: "tabular-nums whitespace-nowrap",
+      cell: (r) => <Stacked main={soumText(r.bonusCostSoum)} sub={`ball ulushi ${pctText(r.pointsSharePct, 0)}`} />,
     },
     {
       id: "jobs",
