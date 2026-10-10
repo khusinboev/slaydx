@@ -16,6 +16,7 @@
  */
 import type { JudgeSpec } from "../report/types";
 import { AUDIO_LIMITS, AUDIO_TOOL_IDS, isAudioToolId, type AudioKind } from "./types";
+import type { TtsVoiceChoice } from "../tts/types";
 
 /* ══════════════════════════ umumiy shakl ══════════════════════════ */
 
@@ -418,3 +419,18 @@ export function audioDefaultTypeId(kind: AudioKind): string {
 export function normalizeAudioType(kind: AudioKind, v: unknown): string {
   return audioTypeOf(kind, v).id;
 }
+
+/* ══════════════════════════ ovoz tanlovi ══════════════════════════ */
+
+/**
+ * The two voices of the form (`voice` field, both audio tools): value + label + the
+ * sample the ▶︎ button plays. The sample files are Gemini `Kore` (female) and `Charon`
+ * (male) reading an Uzbek sentence (~7 s, 48 kbps mono). They were generated once and
+ * are NOT regenerated at runtime, so they must be re-recorded by hand if the voice
+ * names in `TTS_GEMINI_VOICES` ever change. `tests/ui/media-composer.test.mts` locks
+ * that every option points at an existing file.
+ */
+export const AUDIO_VOICE_OPTIONS: readonly { value: TtsVoiceChoice; label: string; sample: string }[] = [
+  { value: "female", label: "👩 Ayol ovozi", sample: "/audio/voices/female.mp3" },
+  { value: "male", label: "👨 Erkak ovozi", sample: "/audio/voices/male.mp3" },
+];

@@ -66,7 +66,12 @@ test("TTS_VOICE_<TIL> jadvalni ALMASHTIRADI, kengaytirmaydi", () => {
   const table = ttsVoiceChain("uz", envOf({}));
   assert.equal(table[0].provider, "azure");
   assert.equal(table[0].voice, "uz-UZ-MadinaNeural");
-  assert.equal(table.length, 3);
+  // 3 table rows (Madina, Sardor, gulnoza) + the 2 Gemini rows (Kore, Charon).
+  assert.equal(table.length, 5);
+  assert.deepEqual(
+    table.filter((v) => v.provider === "gemini").map((v) => v.voice),
+    ["Kore", "Charon"],
+  );
 
   const custom = ttsVoiceChain("uz", envOf({ TTS_VOICE_UZ: "aisha:gulnoza" }));
   // MUTATSIYA 3: kengaytirilsa Azure baribir birinchi qolardi va
@@ -87,7 +92,7 @@ test("TTS_VOICE_<TIL> dagi yaroqsiz yozuv tashlanadi; hammasi yaroqsiz bo'lsa ja
   );
   const broken = ttsVoiceChain("uz", envOf({ TTS_VOICE_UZ: "shovqin,unknown:x" }));
   assert.equal(broken[0].provider, "azure");
-  assert.equal(broken.length, 3);
+  assert.equal(broken.length, 5);
 });
 
 test("ttsGroups provayder bo'yicha guruhlaydi (tartib saqlanadi, A/B ovozlar bitta guruhda)", () => {
@@ -95,6 +100,8 @@ test("ttsGroups provayder bo'yicha guruhlaydi (tartib saqlanadi, A/B ovozlar bit
   assert.deepEqual(groups, [
     { provider: "azure", voices: ["uz-UZ-MadinaNeural", "uz-UZ-SardorNeural"] },
     { provider: "aisha", voices: ["gulnoza"] },
+    // Gemini is last and only runs when TTS_GEMINI_MODEL turns it on (configured()).
+    { provider: "gemini", voices: ["Kore", "Charon"] },
   ]);
 });
 

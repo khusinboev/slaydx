@@ -684,8 +684,14 @@ test("Media vositalarining shartnomasi: guruh, MP3 chiqishi, rejimlar", () => {
   // Davomiylik chiplari hisobotlardan: podkast 5 ta, tabriknoma 4 ta.
   assert.equal(podcast.fields.find((f) => f.name === "durationMin")?.options?.length, 5);
   assert.equal(greeting.fields.find((f) => f.name === "durationMin")?.options?.length, 4);
-  // Ovoz TANLANMAYDI — u til jadvalidan olinadi (`tts.md` §3).
-  for (const t of [podcast, greeting]) assert.ok(!t.fields.some((f) => /voice/i.test(f.name)), `${t.id}: ovoz maydoni formada`);
+  // Owner decision 2026-10-10 reverses the old «voice is not chosen» rule: exactly one `voice`
+  // field, a two-option chip list (female first = default), and it must not touch the price.
+  for (const t of [podcast, greeting]) {
+    const voice = t.fields.filter((f) => f.name === "voice");
+    assert.equal(voice.length, 1, `${t.id}: exactly one voice field`);
+    assert.deepEqual(voice[0].options?.map((o) => o.value), ["female", "male"], `${t.id}: voice options`);
+    assert.equal(priceFor(t, { topic: "x", recipient: "x", voice: "male" }), priceFor(t, { topic: "x", recipient: "x", voice: "female" }), `${t.id}: voice must not change the price`);
+  }
 });
 
 test("majburiy maydonlar: podkast rejimga qarab, tabriknomada «Kimga?»", () => {

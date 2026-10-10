@@ -11,9 +11,11 @@ import { TARGET_LANGUAGES } from "@/lib/languages";
 import { AUDIO_LIMITS, audioWordBudget, type AudioKind } from "@/lib/generation/audio/types";
 import { audioDefaultTypeId, audioKindOf, audioTypeOf, audioTypesOf, type GreetingTypeSpec } from "@/lib/generation/audio/registry";
 import { audioInputFromValues, encodeAudioValues, type AudioInput, type AudioMode } from "@/lib/generation/audio/input";
+import { TTS_VOICE_DEFAULT, type TtsVoiceChoice } from "@/lib/generation/tts/types";
 import { SettingsDetails, Field, TopicRow, LimitedTextarea, SourceFileRow, RangeRow, ClearFormButton, type SourceFileValue } from "./shared";
 import { Card, Row, Segmented, SelectField } from "./compact";
 import { TextInput } from "./fields";
+import { VoicePicker } from "./VoicePicker";
 import { ToolChrome } from "./ToolChrome";
 import { useFormDraft } from "./useFormDraft";
 import { runGeneration } from "./runGeneration";
@@ -57,6 +59,7 @@ type Ui = {
   occasion: string;
   durationMin: number;
   language: string;
+  voice: TtsVoiceChoice;
   extra: string;
 };
 
@@ -85,6 +88,7 @@ function emptyUi(kind: AudioKind): Ui {
     occasion: audioDefaultTypeId("greeting"),
     durationMin: kind === "podcast" ? AUDIO_LIMITS.podcastMinutesDefault : AUDIO_LIMITS.greetingMinutesDefault,
     language: "uz",
+    voice: TTS_VOICE_DEFAULT,
     extra: "",
   };
 }
@@ -105,6 +109,7 @@ function uiFromValues(values: FormValues, base: Ui, kind: AudioKind): Ui {
     relationCustom: Boolean(input.relation) && !relationKnown,
     durationMin: input.minutes,
     language: input.language,
+    voice: input.voice,
     extra: input.extra,
     fileName: typeof values.fileName === "string" ? values.fileName : base.fileName,
   };
@@ -121,6 +126,7 @@ function toValues(ui: Ui, kind: AudioKind): FormValues {
     minutes: ui.durationMin,
     wordBudget: audioWordBudget(ui.durationMin),
     speakers: spec.speakers,
+    voice: ui.voice,
     mode: kind === "podcast" ? ui.mode : "topic",
     topic: ui.topic,
     sourceText: ui.sourceText,
@@ -329,6 +335,18 @@ export function MediaComposer({ tool }: { tool: ToolConfig }) {
           <Field id="language">
             <Segmented ariaLabel="Til" options={LANGUAGE_OPTIONS} value={ui.language} onChange={(v) => set("language", v)} />
           </Field>
+        </Row>
+        <Row label="Ovoz" wide>
+          <Field id="voice">
+            <VoicePicker value={ui.voice} onChange={(v) => set("voice", v)} />
+          </Field>
+          <p className="text-muted-foreground mt-1 text-[13px]" data-voice-hint>
+            {kind === "podcast" && podcastType.speakers >= 2
+              ? "Ikki ovozli turda tanlangan ovoz suhbatni boshlaydi, ikkinchi ishtirokchi — boshqa jins ovozida."
+              : kind === "podcast"
+                ? "Butun podkast shu ovozda o‘qiladi."
+                : "Butun tabrik shu ovozda o‘qiladi."}
+          </p>
         </Row>
       </Card>
 
