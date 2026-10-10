@@ -236,6 +236,8 @@ export const env = {
     aishaKey: str("AISHA_API_KEY"),
     /** Gemini TTS PREVIEW modeli — bo'sh bo'lsa provayder o'chiq (ataylab). */
     geminiModel: str("TTS_GEMINI_MODEL"),
+    /** Gemini TTS requests per minute, shared by all processes (`tts/pace.ts`); the model's quota is ≈10. */
+    geminiRpm: int("TTS_GEMINI_RPM", 8),
   },
 
   storageDir: str("STORAGE_DIR", ".data/files"),

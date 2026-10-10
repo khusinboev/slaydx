@@ -48,7 +48,7 @@ import type { DocMeta } from "../lib/generation/types.ts";
 
 const envOf = (o: Record<string, string>) => o as unknown as NodeJS.ProcessEnv;
 
-type Rec = { text: string; voice?: string };
+type Rec = { text: string; voice?: string; turns?: { voice: string; text: string }[] };
 
 function fake(id: TtsProviderId): TtsProvider & { calls: Rec[] } {
   const calls: Rec[] = [];
@@ -56,8 +56,9 @@ function fake(id: TtsProviderId): TtsProvider & { calls: Rec[] } {
     id,
     calls,
     configured: () => true,
+    ...(id === "gemini" ? { multiSpeaker: true } : {}),
     async synthesize(text: string, opts: TtsSynthOpts): Promise<TtsAudio> {
-      calls.push({ text, ...(opts.voice !== undefined ? { voice: opts.voice } : {}) });
+      calls.push({ text, ...(opts.voice !== undefined ? { voice: opts.voice } : {}), ...(opts.turns ? { turns: opts.turns } : {}) });
       return { mp3: new Uint8Array([1, 2, 3]), seconds: 1, chars: text.length };
     },
   };
@@ -215,11 +216,16 @@ test("chain (table path): Gemini is the last group and a Gemini-only deployment 
   assert.deepEqual(ttsGroups("ja", envOf({})).map((g) => g.provider), ["azure", "gemini"]);
   assert.deepEqual(chain.providersFor("ja"), ["gemini"]);
 
+  // Gemini packs consecutive parts (pack.ts): a 2-turn dialog is ONE two-speaker request (A = Charon, B = Kore),
+  // a monologue of 2 short parts ONE single-voice request. (Azure/Aisha keep one call per part — see the chainOfProvider test.)
   await chain.synthesizeAll(dialog(2), { lang: "ja", voice: "male" });
-  assert.deepEqual(gemini.calls.map((c) => c.voice), ["Charon", "Kore"]);
+  assert.equal(gemini.calls.length, 1);
+  assert.equal(gemini.calls[0].voice, "Charon");
+  assert.deepEqual(gemini.calls[0].turns?.map((t) => t.voice), ["Charon", "Kore"]);
   const g2 = fake("gemini");
   await makeTtsChain({ providers: [{ ...fake("azure"), configured: () => false }, g2], env: envOf({}), log: () => {} }).synthesizeAll(monologue(2), { lang: "uz", voice: "female" });
-  assert.deepEqual(g2.calls.map((c) => c.voice), ["Kore", "Kore"]);
+  assert.deepEqual(g2.calls.map((c) => c.voice), ["Kore"]);
+  assert.equal(g2.calls[0].turns, undefined);
 });
 
 test("chain (Gemini wire): the voiceName sent to the API is Kore for female, Charon for male", async () => {
@@ -230,8 +236,10 @@ test("chain (Gemini wire): the voiceName sent to the API is Kore for female, Cha
     key: () => "k",
     model: () => "gemini-2.5-flash-preview-tts",
     fetchImpl: (async (_u: unknown, init: RequestInit) => {
-      const body = JSON.parse(String(init.body)) as { generationConfig: { speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: string } } } } };
-      sent.push(body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName);
+      type Cfg = { voiceConfig?: { prebuiltVoiceConfig: { voiceName: string } }; multiSpeakerVoiceConfig?: { speakerVoiceConfigs: { voiceConfig: { prebuiltVoiceConfig: { voiceName: string } } }[] } };
+      const cfg = (JSON.parse(String(init.body)) as { generationConfig: { speechConfig: Cfg } }).generationConfig.speechConfig;
+      if (cfg.voiceConfig) sent.push(cfg.voiceConfig.prebuiltVoiceConfig.voiceName);
+      else sent.push(...(cfg.multiSpeakerVoiceConfig?.speakerVoiceConfigs ?? []).map((v) => v.voiceConfig.prebuiltVoiceConfig.voiceName));
       return geminiOk();
     }) as unknown as typeof fetch,
   });
@@ -240,7 +248,8 @@ test("chain (Gemini wire): the voiceName sent to the API is Kore for female, Cha
   await only().synthesizeAll(monologue(2), { lang: "uz", voice: "female" });
   await only().synthesizeAll(monologue(2), { lang: "uz", voice: "male" });
   await only().synthesizeAll(dialog(2), { lang: "uz", voice: "male" });
-  assert.deepEqual(sent, ["Kore", "Kore", "Charon", "Charon", "Charon", "Kore"]);
+  // Packed requests: one single-voice call per monologue (Kore / Charon); the dialog is one two-speaker call [A, B].
+  assert.deepEqual(sent, ["Kore", "Charon", "Charon", "Kore"]);
 });
 
 test("chainOfProvider: explicit voices win (test seam); otherwise the table + choice apply", async () => {
