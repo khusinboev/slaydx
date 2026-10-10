@@ -9,7 +9,8 @@ import { AUDIO_KINDS, type AudioKind } from "../lib/generation/audio/types.ts";
 import { audioInputFromValues } from "../lib/generation/audio/input.ts";
 import { audioTypeOf } from "../lib/generation/audio/registry.ts";
 import { audioCtx, audioPrompt, audioSystemPrompt, type AudioContext } from "../lib/generation/audio/prompts.ts";
-import { buildAudioArtifact } from "../lib/generation/audio/engine.ts";
+import { AUDIO_POLISH_RESERVE_MS, AUDIO_REVIEW_RESERVE_MS, AUDIO_TTS_RESERVE_MS, buildAudioArtifact } from "../lib/generation/audio/engine.ts";
+import { audioMinuteOptions } from "../lib/generation/audio/types.ts";
 import { chainOfProvider, ttsGroups } from "../lib/generation/tts/chain.ts";
 import type { CompleteFn } from "../lib/generation/research/pipeline.ts";
 import type { TtsAudio, TtsProvider, TtsSynthOpts } from "../lib/generation/tts/types.ts";
@@ -355,4 +356,17 @@ test("old clients and bad values read as female; other languages use their own f
   // A language with one table voice (Karakalpak) has no male row -> the table default for both choices.
   const kaa = await synthVoices("greeting", { language: "kaa", voice: "male" });
   assert.deepEqual([...new Set(kaa.voices)], [MADINA]);
+});
+
+test("job budget leaves the script writer time at EVERY duration (greeting 1 min failed in 10 ms — 2026-10-10)", () => {
+  const reserves = AUDIO_TTS_RESERVE_MS + AUDIO_REVIEW_RESERVE_MS + AUDIO_POLISH_RESERVE_MS;
+  for (const kind of AUDIO_KINDS) {
+    const tool = TOOLS.find((t) => t.id === kind)!;
+    for (const m of audioMinuteOptions(kind)) {
+      const budget = budgetFor(tool, { durationMin: m }, 660_000);
+      // MUTATION: the old 90 s base gives a 1-minute greeting 138 s < 150 s of reserves.
+      assert.ok(budget - reserves >= 30_000, `${kind} ${m} min: ${budget} ms leaves ${budget - reserves} ms for the script`);
+      assert.ok(budget <= 660_000, `${kind} ${m} min under the prod cap`);
+    }
+  }
 });
