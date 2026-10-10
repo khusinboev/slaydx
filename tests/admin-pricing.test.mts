@@ -43,7 +43,10 @@ import type { FormValues } from "../lib/types.ts";
  *   - history insert moved outside `adminTx` → the rollback test finds a stray history row;
  *   - audit `before` built from the new values → before/after assertions;
  *   - `* k` dropped from the cash revenue / avgPrice → the injected-rate money-units test;
- *   - list trend not sliced to the last 30 days → the payload-shape test.
+ *   - list trend not sliced to the last 30 days → the payload-shape test;
+ *   - `previous` computed from the current period's aggregates → the previous-period test;
+ *   - the admin filter dropped from `spendKindsByTool` → the cost-composition test (admins' image spend);
+ *   - the `expected` check in `updateToolPricing` disabled → the 409 `stale` test.
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -603,7 +606,7 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     const to = tkDay(0);
     const r = await list(owner.cookie, `?from=${from}&to=${to}`);
     assert.equal(r.status, 200, JSON.stringify(r.body));
-    assert.deepEqual(Object.keys(r.body).sort(), ["adminJobs", "caveats", "fx", "groups", "includeAdmins", "items", "paymentFeePercent", "range", "soumPerCoin", "targetMarkup", "totals"]);
+    assert.deepEqual(Object.keys(r.body).sort(), ["adminJobs", "caveats", "fx", "groups", "includeAdmins", "items", "paymentFeePercent", "previous", "range", "soumPerCoin", "targetMarkup", "totals"]);
     assert.equal((r.body.range as { days: number }).days, 60);
     for (const it of r.body.items as Item[]) {
       assert.equal(it.trend.length, 30, `${it.toolId}: 30 trend points`);
@@ -617,6 +620,67 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     assert.equal(itemOf(await list(owner.cookie, RANGE), "slide").trend.length, 3);
     // The drawer's 90-day trend is unaffected.
     assert.equal(((await detail(owner.cookie, "slide")).body.trend as unknown[]).length, 90);
+  });
+
+  await t.test("previous period: the equal-length range before, computed by the same code (= a direct list of that range)", async () => {
+    const r = await list(owner.cookie, RANGE);
+    const prev = r.body.previous as { range: { from: string; to: string; days: number }; totals: Record<string, unknown> };
+    assert.deepEqual(prev.range, { from: tkDay(-8), to: D_BEFORE, days: 3 });
+    const direct = await list(owner.cookie, `?from=${tkDay(-8)}&to=${D_BEFORE}`);
+    assert.deepEqual(prev.totals, direct.body.totals, "previous totals = the list of that range");
+    // Only S3 was CREATED there (orders basis); nothing finished there, so no margin.
+    assert.equal(prev.totals.jobs, 1);
+    assert.equal(prev.totals.cashRevenue, 3000);
+    assert.equal(prev.totals.completed, 0);
+    assert.equal(prev.totals.marginPct, null);
+    assert.notDeepEqual(prev.totals, r.body.totals);
+  });
+
+  await t.test("cost composition by part kind, unpriced calls and the last price change per tool; admin spend follows the switch", async () => {
+    // Base fixture: essay spend = J1 ai_usage 0.05 (no parts → "unknown") + J2 legacy cost_json 0.07 ("llm") + J4 failed 0.02 ("unknown").
+    const r = await list(owner.cookie, RANGE);
+    const e = itemOf(r, "essay");
+    assert.deepEqual(e.costParts, [
+      { kind: "unknown", soum: 840, sharePct: 50 },
+      { kind: "llm", soum: 840, sharePct: 50 },
+    ].sort((a, b) => a.kind.localeCompare(b.kind)));
+    assert.equal(e.unpricedCalls, 0);
+    assert.equal(e.lastChangeAt, null, "never changed");
+    assert.deepEqual(itemOf(r, "resume").costParts, [], "no spend → no parts");
+    // Every tool's parts add up to the tools' spend of the totals.
+    const partsSoum = (r.body.items as Item[]).flatMap((i) => i.costParts as { soum: number }[]).reduce((a, p) => a + p.soum, 0);
+    near(partsSoum, (r.body.totals as { costSoumTools: number }).costSoumTools, "Σ parts = costSoumTools", 0.05);
+
+    // A separate day: one essay job with explicit parts (llm, image, an LLM call without a price) and an admin's image spend.
+    // Older than the simulator's 30-day window and outside every other range of this suite.
+    const far = tkDay(-45);
+    const farRange = `?from=${far}&to=${far}`;
+    const user = await mkUser("Parts", { balance: 100_000 });
+    const job = await seedJob({ user, toolId: "essay", values: { essayContext: "school_dtm", pages: "2" }, createdAt: tk(far, "10:00:00"), finishedAt: tk(far, "10:05:00") });
+    const parts = [
+      { kind: "llm", provider: "gemini", model: "fixture-llm", calls: 2, inputTokens: 100, outputTokens: 50, units: 0, usd: 0.03 },
+      { kind: "image", provider: "gemini", model: "fixture-image", calls: 1, inputTokens: 0, outputTokens: 0, units: 1, usd: 0.034 },
+      { kind: "llm", provider: "x", model: "unpriced-model", calls: 3, inputTokens: 500, outputTokens: 100, units: 0, usd: 0 },
+    ];
+    await recordAiUsage({ source: "job", outcome: "completed", generationId: job.id, userId: user.id, toolId: "essay", cost: { provider: "gemini", model: "fixture-llm", inputTokens: 600, outputTokens: 150, calls: 6, usd: 0.064, parts } as CostJson });
+    await recordAiUsage({ source: "job", outcome: "completed", generationId: randomUUID(), userId: owner.admin.id, toolId: "essay", cost: { provider: "gemini", model: "fixture-image", inputTokens: 0, outputTokens: 0, calls: 1, usd: 1, parts: [{ kind: "image", provider: "gemini", model: "fixture-image", calls: 1, inputTokens: 0, outputTokens: 0, units: 1, usd: 1 }] } as CostJson });
+    await flushAiUsage();
+    await query(`UPDATE ai_usage SET at = $1 WHERE user_id IN ($2, $3) AND tool_id = 'essay'`, [tk(far, "10:05:00"), user.id, owner.admin.id]);
+    ap.clearPricingCache();
+
+    const f = itemOf(await list(owner.cookie, farRange), "essay");
+    // image 0.034 × 12 000 = 408 (53,13 %), llm 0.03 × 12 000 = 360 (46,88 %); the admin's 1 USD is left out by default.
+    assert.deepEqual(f.costParts, [
+      { kind: "image", soum: 408, sharePct: 53.13 },
+      { kind: "llm", soum: 360, sharePct: 46.88 },
+    ]);
+    assert.equal(f.unpricedCalls, 3, "the LLM part with tokens but no price");
+    const withAdmins = itemOf(await list(owner.cookie, `${farRange}&admins=1`), "essay");
+    assert.deepEqual(
+      (withAdmins.costParts as { kind: string; soum: number }[]).map((p) => [p.kind, p.soum]),
+      [["image", 12408], ["llm", 360]],
+      "admins=1 adds the admin's image spend",
+    );
   });
 
   await t.test("range params: default 30 days, bad dates 400, > 366 days 400, repeated param 400", async () => {
@@ -723,6 +787,10 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     assert.deepEqual(o.ladder.map((s) => s.effective), [2500, 3000, 3500, 4000, 5000]);
     // 120 × 3 ÷ 3.3333 = 108 → 110.
     assert.equal(o.recommendedPercent, 110);
+    // The change is dated by its history row (read fresh, like the adjustment).
+    const changed = await queryOne<{ at: Date }>(`SELECT max(at) AS at FROM tool_price_history WHERE tool_id = 'essay'`);
+    assert.equal(o.lastChangeAt, changed!.at.toISOString());
+    assert.equal(itemOf(await list(owner.cookie, RANGE), "slide").lastChangeAt, null);
     const d = await detail(owner.cookie, "essay");
     assert.equal((d.body.history as unknown[]).length, 1);
   });
@@ -770,6 +838,31 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     assert.equal(nf.body.code, "not_found");
     assert.deepEqual(await pricingRows(), []);
     assert.equal((await audits(owner.admin.adminId)).length, before);
+  });
+
+  await t.test("PUT expected: a stale expected adjustment is 409 stale and writes nothing; the current one writes; bad expected 400", async () => {
+    const other = await session("owner", true, "Expected Owner");
+    const historyBefore = (await historyRows("resume")).length;
+    // The admin looked at 120 %, but the tool is at 100 % (someone reset it meanwhile).
+    const stale = await put(other.cookie, "resume", { percent: 130, roundTo: 500, reason: REASON, expected: { percent: 120, roundTo: 500 } });
+    assert.equal(stale.status, 409, JSON.stringify(stale.body));
+    assert.equal(stale.body.code, "stale");
+    assert.deepEqual(await pricingRows(), [], "nothing written");
+    assert.equal((await historyRows("resume")).length, historyBefore);
+    assert.equal((await audits(other.admin.adminId, "pricing.update")).length, 0);
+    // A different roundTo is stale too.
+    assert.equal((await put(other.cookie, "resume", { percent: 130, roundTo: 500, reason: REASON, expected: { percent: 100, roundTo: 1000 } })).body.code, "stale");
+    for (const expected of ["100", null, [100, 500], { percent: 10, roundTo: 500 }, { percent: 100, roundTo: 300 }]) {
+      assert.equal((await put(other.cookie, "resume", { percent: 130, roundTo: 500, reason: REASON, expected })).status, 400, JSON.stringify(expected));
+    }
+    // The current adjustment as expected: written, audited once.
+    const ok = await put(other.cookie, "resume", { percent: 130, roundTo: 500, reason: REASON, expected: { percent: 100, roundTo: 500 } });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.deepEqual((ok.body.item as { adjust: unknown }).adjust, { percent: 130, roundTo: 500 });
+    assert.equal((await audits(other.admin.adminId, "pricing.update")).length, 1);
+    // Back to 100 % (removes the row) so the later tests start from the base price.
+    assert.equal((await put(other.cookie, "resume", { percent: 100, roundTo: 500, reason: REASON, expected: { percent: 130, roundTo: 500 } })).status, 200);
+    assert.deepEqual(await pricingRows(), []);
   });
 
   await t.test("DELETE: resets with history + pricing.reset audit; already at 100 % → 409 and nothing written", async () => {

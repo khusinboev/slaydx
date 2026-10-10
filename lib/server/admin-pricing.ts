@@ -4,8 +4,9 @@ import { ApiError } from "./api";
 import { adminTx } from "./admin-audit";
 import { parseReason } from "./admin-accounts";
 import type { AdminActor } from "./admin-handler";
-import { costCaveats, soumPerUsd, spendCoverageByTool, spendRowsSql, type Queryable, type SpendRange } from "./admin-cost";
+import { costCaveats, soumPerUsd, spendCoverageByTool, spendKindsByTool, spendRowsSql, type Queryable, type SpendRange } from "./admin-cost";
 import { parseDateRange, type DateRange } from "./admin-list";
+import { previousRangeOf } from "./admin-metrics";
 import { pool, query, transaction } from "./db";
 import { SOUM_PER_COIN } from "./payments";
 import { invalidatePricingCache } from "./pricing";
@@ -443,7 +444,22 @@ export type PricingItem = {
   confidence: "low" | "ok";
   /** Daily average full cost per job over the LAST `LIST_TREND_DAYS` days of the range (zero-filled). */
   trend: TrendPoint[];
+  /**
+   * What the tool's AI spend of the range (every outcome, the full-cost basis) is made of, by part kind
+   * (`llm`, `image`, `tts`, `grounding`, `unknown`), so'm and share of the tool's spend; by so'm descending.
+   * Same admin filter as the margins. Empty without spend.
+   */
+  costParts: CostPart[];
+  /** Calls of the tool's spend in range recorded without a known price (counted as $0, so the cost is understated). */
+  unpricedCalls: number;
+  /**
+   * When the tool's price adjustment last changed (latest `tool_price_history` row, ISO), whatever the range;
+   * `null` when it never changed. A change inside the range means the markup mixes two prices.
+   */
+  lastChangeAt: string | null;
 };
+
+export type CostPart = { kind: string; soum: number; sharePct: number };
 
 export type PricingTotals = {
   jobs: number;
@@ -502,6 +518,11 @@ export type PricingOverview = {
   adminJobs: number;
   groups: ReadonlyArray<{ id: ToolGroup; label: string }>;
   caveats: string[];
+  /**
+   * The equal-length range ending the day before `range` (`previousRangeOf`, as the dashboard) and its totals,
+   * computed by the same code with the same settings and admin filter: the KPI deltas.
+   */
+  previous: { range: { from: string; to: string; days: number }; totals: PricingTotals };
 };
 
 type OrdersRow = { tool_id: string; jobs: string; avg_price: string | null; refunded: string; avg_units: string | null };
@@ -526,6 +547,9 @@ type Aggregates = {
   adminJobs: number;
   /** The computed gaps of the spend data (`costCaveats`): only what applies, with numbers; may be empty. */
   caveats: string[];
+  /** Spend per tool and part kind (USD, by usd descending) and the unpriced calls per tool. */
+  kinds: Map<string, { kind: string; usd: number }[]>;
+  unpriced: Map<string, number>;
 };
 
 const IS_ADMIN_JOB = "EXISTS (SELECT 1 FROM admin_accounts aa WHERE aa.user_id = g.user_id)";
@@ -674,7 +698,16 @@ async function aggregates(db: Queryable, range: DateRange, includeAdmins: boolea
     adminJobs: num(adminJobs.rows[0]?.n),
     // Like the coverage, the caveats describe the data as a whole (admin-cost.ts owns them), not the admin-filtered view.
     caveats: await costCaveats(db, spendRange),
+    kinds: new Map(),
+    unpriced: new Map(),
   };
+  // Cost composition and unpriced calls follow the admin switch, like the margins they explain.
+  for (const r of await spendKindsByTool(db, spendRange, spendFilter(includeAdmins, "s"))) {
+    const list = out.kinds.get(r.toolId) ?? [];
+    if (r.usd > 0) list.push({ kind: r.kind, usd: r.usd });
+    out.kinds.set(r.toolId, list);
+    out.unpriced.set(r.toolId, (out.unpriced.get(r.toolId) ?? 0) + r.unpricedCalls);
+  }
   for (const r of orders.rows) {
     out.orders.set(r.tool_id, { jobs: num(r.jobs), avgPrice: numOrNull(r.avg_price), refunded: num(r.refunded), avgUnits: numOrNull(r.avg_units) });
   }
@@ -772,17 +805,60 @@ export function parsePricingParams(url: URL): { range: DateRange; includeAdmins:
   return { range: parseDateRange(single("from"), single("to")), includeAdmins: parseIncludeAdminsParam(single("admins")) };
 }
 
+/** Latest `tool_price_history` row per tool (always read fresh, like the adjustments). */
+async function lastChangesOf(db: Queryable): Promise<Map<string, string>> {
+  const res = await db.query<{ tool_id: string; at: Date | string }>("SELECT tool_id, max(at) AS at FROM tool_price_history GROUP BY tool_id");
+  return new Map(res.rows.map((r) => [r.tool_id, new Date(r.at).toISOString()]));
+}
+
+/** Everything `economics` needs besides the aggregates: read once per request, shared by both periods. */
+type EconomicsInputs = {
+  adjustments: Map<ToolId, PriceAdjust>;
+  lastChanges: Map<string, string>;
+  fx: number;
+  targetMarkup: number;
+  feePercent: number;
+  soumPerCoin: number;
+  /** The days of the list trend (the last `LIST_TREND_DAYS` of the range). */
+  trendDays: string[];
+};
+
 export async function pricingOverview(range: DateRange, opts?: MoneyOptions & { includeAdmins?: boolean }): Promise<PricingOverview> {
   const k = soumPerCoinOf(opts);
   const includeAdmins = opts?.includeAdmins === true;
-  const [agg, adjustments, fx, targetMarkup, feePercent] = await Promise.all([
+  const prevRange = previousRangeOf(range);
+  const [agg, prevAgg, adjustments, lastChanges, fx, targetMarkup, feePercent] = await Promise.all([
     cachedAggregates(range, includeAdmins),
+    cachedAggregates(prevRange, includeAdmins),
     adjustmentsOf(pool()),
+    lastChangesOf(pool()),
     soumPerUsd(),
     getSetting("pricing.target_markup"),
     getSetting("pricing.payment_fee_percent"),
   ]);
-  const days = daysOf(range).slice(-LIST_TREND_DAYS);
+  const inputs: EconomicsInputs = { adjustments, lastChanges, fx, targetMarkup, feePercent, soumPerCoin: k, trendDays: daysOf(range).slice(-LIST_TREND_DAYS) };
+  const { items, totals } = economics(agg, inputs);
+  const previous = economics(prevAgg, { ...inputs, trendDays: [] }).totals;
+
+  return {
+    range: { from: range.fromDay, to: range.toDay, days: range.days },
+    items,
+    totals,
+    fx,
+    soumPerCoin: k,
+    targetMarkup,
+    paymentFeePercent: feePercent,
+    includeAdmins,
+    adminJobs: agg.adminJobs,
+    groups: TOOL_GROUPS,
+    caveats: agg.caveats,
+    previous: { range: { from: prevRange.fromDay, to: prevRange.toDay, days: prevRange.days }, totals: previous },
+  };
+}
+
+/** Per-tool rows and the totals of one period's aggregates (the formulas of the module comment, unchanged). */
+function economics(agg: Aggregates, inputs: EconomicsInputs): { items: PricingItem[]; totals: PricingTotals } {
+  const { adjustments, lastChanges, fx, targetMarkup, feePercent, soumPerCoin: k, trendDays: days } = inputs;
   const totals: PricingTotals = {
     jobs: 0,
     completed: 0,
@@ -899,6 +975,9 @@ export async function pricingOverview(range: DateRange, opts?: MoneyOptions & { 
       sampleSize: oc.completed,
       confidence: oc.completed < LOW_CONFIDENCE_BELOW ? "low" : "ok",
       trend: trendOf(agg.trend.get(id), days, fx),
+      costParts: costPartsOf(agg.kinds.get(id), fx),
+      unpricedCalls: agg.unpriced.get(id) ?? 0,
+      lastChangeAt: lastChanges.get(id) ?? null,
     };
   });
 
@@ -921,20 +1000,14 @@ export async function pricingOverview(range: DateRange, opts?: MoneyOptions & { 
   totals.cashMarginPct = totalCashMargin === null ? null : round(totalCashMargin, 2);
   totals.bonusCostSoum = round(bonusCostUsd * fx, 2);
   totals.pointsSharePct = netPaid > 0 ? round((netPoints / netPaid) * 100, 2) : null;
+  return { items, totals };
+}
 
-  return {
-    range: { from: range.fromDay, to: range.toDay, days: range.days },
-    items,
-    totals,
-    fx,
-    soumPerCoin: k,
-    targetMarkup,
-    paymentFeePercent: feePercent,
-    includeAdmins,
-    adminJobs: agg.adminJobs,
-    groups: TOOL_GROUPS,
-    caveats: agg.caveats,
-  };
+/** A tool's spend by part kind in so'm with its share of the tool's spend (the parts arrive by usd descending). */
+function costPartsOf(kinds: ReadonlyArray<{ kind: string; usd: number }> | undefined, fx: number): CostPart[] {
+  const total = (kinds ?? []).reduce((a, p) => a + p.usd, 0);
+  if (!kinds || !(total > 0)) return [];
+  return kinds.map((p) => ({ kind: p.kind, soum: round(p.usd * fx, 2), sharePct: round((p.usd / total) * 100, 2) }));
 }
 
 // ---------------------------------------------------------------------------
@@ -1088,6 +1161,17 @@ export function parseAdjustBody(body: Record<string, unknown>): PriceAdjust {
 }
 
 /**
+ * Optional `expected: {percent, roundTo}` of a PUT body: the adjustment the admin was looking at. When given, the
+ * write happens only if the tool is still at it (else 409 `stale`); absent = the earlier behaviour.
+ */
+export function parseExpectedAdjust(body: Record<string, unknown>): PriceAdjust | null {
+  const raw = body.expected;
+  if (raw === undefined) return null;
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) throw new ApiError("expected {percent, roundTo} bo'lishi kerak", 400);
+  return parseAdjustBody(raw as Record<string, unknown>);
+}
+
+/**
  * The inputs `basePriceFor` reads, per tool, and nothing else (no topic, no
  * text): the projection re-prices each job exactly as the server would.
  * `sourceChars` falls back to the text length for jobs older than the
@@ -1233,19 +1317,25 @@ async function lockTool(client: PoolClient, toolId: ToolId): Promise<PriceAdjust
 }
 
 /**
- * PUT: `{percent, roundTo, reason}`. In ONE transaction: upsert `tool_pricing`
+ * PUT: `{percent, roundTo, reason, expected?}`. In ONE transaction: upsert `tool_pricing`
  * (100 % removes the row — "no row" is the one representation of the base
  * price), insert `tool_price_history` (old → new) and write the audit row
  * `pricing.update` with before/after. An unchanged adjustment is 409 `state`
- * and writes nothing. After COMMIT the pricing cache of this process is
+ * and an `expected` adjustment that is no longer the current one is 409
+ * `stale`; both write nothing. After COMMIT the pricing cache of this process is
  * dropped; other processes pick the change up within 15 s.
  */
 export async function updateToolPricing(admin: AdminActor, rawToolId: unknown, body: Record<string, unknown>): Promise<PricingItemResult> {
   const toolId = requireToolId(rawToolId);
   const next = parseAdjustBody(body);
+  const expected = parseExpectedAdjust(body);
   const reason = parseReason(body.reason)!;
   await adminTx(admin, async (client, audit) => {
     const prev = await lockTool(client, toolId);
+    // Checked under the lock, so a concurrent change can never slip between the check and the write.
+    if (expected && !sameAdjust(prev, expected)) {
+      throw new ApiError("Narx boshqa admin tomonidan o'zgartirilgan. Sahifani yangilab, qayta ko'rib chiqing.", 409, { code: "stale" });
+    }
     if (sameAdjust(prev, next)) throw new ApiError("Narx sozlamasi allaqachon shunday", 409, { code: "state" });
     if (next.percent === 100) {
       await client.query("DELETE FROM tool_pricing WHERE tool_id = $1", [toolId]);

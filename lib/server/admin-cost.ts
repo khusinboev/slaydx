@@ -433,6 +433,32 @@ export async function spendByProviderModel(db: Queryable, range: SpendRange): Pr
   }));
 }
 
+export type ToolKindSpendRow = { toolId: string; kind: string; usd: number; unpricedCalls: number };
+
+/**
+ * Spend per tool and part kind (`llm`, `image`, `tts`, `grounding`, `unknown`) — what a
+ * tool's cost is made of — from the same exploded parts as the `kind` grouping, so each
+ * tool's kinds add up to `spendBy(…, "tool")`'s row for it (up to the 6-decimal rounding of
+ * each stored part). `rowFilter` is an extra SQL condition on the spend row `s` built by
+ * the caller from constants (never user text), e.g. the pricing screen's admin filter.
+ * By tool, then usd descending, then kind.
+ */
+export async function spendKindsByTool(db: Queryable, range: SpendRange, rowFilter = "TRUE"): Promise<ToolKindSpendRow[]> {
+  const spend = spendRowsSql(range);
+  const res = await db.query<{ tool_id: string; kind: string; usd: string | number | null; unpriced_calls: string | number | null }>(
+    `WITH spend AS (${spend.sql})
+      SELECT ${ROW_KEYS.tool} AS tool_id, ${PART_KEYS.kind} AS kind,
+             sum(GREATEST(${jsonNum("p->'usd'")}, 0)) AS usd,
+             COALESCE(sum(${jsonCount("p->'calls'")}) FILTER (WHERE ${UNPRICED_PART}), 0) AS unpriced_calls
+        ${PARTS_FROM}
+       WHERE ${rowFilter}
+       GROUP BY 1, 2
+       ORDER BY 1, 3 DESC, 2`,
+    spend.params,
+  );
+  return res.rows.map((r) => ({ toolId: String(r.tool_id), kind: String(r.kind), usd: usd6(r.usd), unpricedCalls: n(r.unpriced_calls) }));
+}
+
 const HAS_COST = `(jsonb_typeof(g.cost_json) = 'object'
     OR EXISTS (SELECT 1 FROM ai_usage x WHERE x.generation_id = g.id AND x.outcome = 'completed'))`;
 
