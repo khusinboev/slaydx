@@ -293,7 +293,11 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
         "SELECT column_name FROM information_schema.columns WHERE table_name = 'payment_orders' AND column_name LIKE 'click\\_%' ORDER BY 1",
       );
     assert.deepEqual((await clickCols()).map((r) => r.column_name), ["click_card_token", "click_invoice_id", "click_method", "click_payment_id"], "048 columns created");
+    const metricsTable = () => queryOne("SELECT 1 FROM information_schema.tables WHERE table_name = 'server_metrics'");
+    assert.ok(await metricsTable(), "049 table created");
     for (const f of [
+      // 049: server load history (owner 2026-10-10) -- server_metrics + server_alert_state.
+      "049_server_metrics.sql",
       // 048: Click direct methods (owner 2026-10-09) -- payment_orders.click_method / click_invoice_id / click_card_token / click_payment_id.
       "048_click_direct.sql",
       // 047: admin panel as reply-keyboard buttons (owner 2026-10-09) — bot_admin_state.keys.
@@ -318,6 +322,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     ]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
+      if (f === "049_server_metrics.sql") assert.ok(!(await metricsTable()) && !(await exists("server_alert_state")), "049 rollback drops both tables");
       if (f === "048_click_direct.sql") assert.deepEqual(await clickCols(), [], "048 rollback drops the four columns");
       if (f === "047_bot_admin_keys.sql") assert.ok(!(await keysCol()), "047 rollback drops the column");
       if (f === "046_broadcast_engine.sql") assert.ok(!(await blockedCol()), "046 rollback drops the column");
