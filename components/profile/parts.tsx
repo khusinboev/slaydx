@@ -103,6 +103,28 @@ export function RowLink({ id, icon, label, hint, href, tone, onClick }: RowProps
   );
 }
 
+/**
+ * An external link row (opens in a new tab; `onClick` may take it over, e.g. the Mini App's
+ * `openTelegramLink`). `rel="noopener noreferrer"` always.
+ */
+export function RowExternal({ id, icon, label, hint, href, tone, onClick }: RowProps) {
+  return (
+    <li>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        data-profile-row={id}
+        aria-label={hint ? `${label}: ${hint}` : label}
+        className={ROW_CLASS}
+        onClick={onClick}
+      >
+        <RowInner icon={icon} label={label} hint={hint} tone={tone} />
+      </a>
+    </li>
+  );
+}
+
 /** Avatar: the Telegram photo when it loads, else the initial on amber. */
 export function Avatar({ name, photoUrl }: { name: string; photoUrl: string | null }) {
   const [broken, setBroken] = useState<string | null>(null);

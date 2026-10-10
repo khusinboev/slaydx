@@ -226,7 +226,7 @@ export const buildAudioArtifact: AudioBuilder = async (tool, meta, values, opts)
    */
   const chain = opts.tts ? asTtsChain(opts.tts) : defaultChain;
   if (!chain.configured() || !chain.providersFor(input.language).length) {
-    throw new Error("Ovoz provayderi sozlanmagan. Administrator bilan bog‘laning — to‘lov qaytarildi.");
+    throw new Error("Ovoz provayderi sozlanmagan. Yordam xizmatiga murojaat qiling: t.me/SlaydX_support — to‘lov qaytarildi.");
   }
 
   /* ── 2. ssenariy ── */

@@ -1,5 +1,6 @@
 import { ApiError, checkOrigin, handler, json, limit, readJson } from "@/lib/server/api";
 import { ensureMigrated } from "@/lib/server/db";
+import { supportHandle } from "@/lib/support";
 import { accountLabel } from "@/lib/telegram-miniapp";
 import { botLinkAccount, botLinkSessionAction } from "@/lib/server/auth";
 import { BOT_LINK_MAX_LENGTH, verifyBotLink } from "@/lib/server/bot-link";
@@ -66,7 +67,7 @@ export const POST = handler("auth/bot-link", async (req) => {
 
   const account = await botLinkAccount(link.telegramId, link.issuedAt);
   if (!account) throw new ApiError("Kirish havolasi yaroqsiz", 401, { code: "bot_link_invalid" });
-  if (account.blocked) throw new ApiError("Hisobingiz bloklangan. Yordam uchun qo'llab-quvvatlashga yozing.", 403, { code: "account_blocked" });
+  if (account.blocked) throw new ApiError(`Hisobingiz bloklangan. Yordam xizmatiga murojaat qiling: ${supportHandle()}`, 403, { code: "account_blocked" });
   // «Barcha qurilmalardan chiqish», an admin revoke or block after the link was issued voids it.
   if (account.revoked) throw new ApiError(EXPIRED, 401, { code: "bot_link_expired" });
 

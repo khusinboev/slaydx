@@ -28,7 +28,7 @@ export function resultsCsv(rows: GameResult[]): string {
  * ochsa ham, oxiri KESILGAN emas, ANIQ XABARLI ekanini ko'radi.
  */
 export function csvErrorMarkerLine(): string {
-  return csvRecord(["#XATOLIK: eksport oqim o'rtasida uzildi — qayta urinib ko'ring yoki o'qituvchi qo'llab-quvvatlashga murojaat qiling", "", "", "", "", ""]);
+  return csvRecord(["#XATOLIK: eksport oqim o'rtasida uzildi — qayta urinib ko'ring yoki Yordam xizmatiga murojaat qiling: t.me/SlaydX_support", "", "", "", "", ""]);
 }
 
 /**

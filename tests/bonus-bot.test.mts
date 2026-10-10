@@ -235,7 +235,7 @@ test("someone else's button / a blocked account / no account: no getChatMember, 
   await tg.handleUpdate(cbUpdate(other.tg, "b:r"));
   await tg.handleUpdate(cbUpdate(other.tg, `b:c:${ch.id}`));
   await tg.handleUpdate(joinUpdate(ch.chat, other.tg));
-  assert.match(String(toasts()[0]), /bloklangan/);
+  assert.match(String(toasts()[0]), /bloklangan.*t\.me\/SlaydX_support/);
   assert.equal(memberCalls().length, 0);
   assert.equal(sends().length, 0, "a blocked account gets no join notice");
   assert.equal(await points(other.id), before);

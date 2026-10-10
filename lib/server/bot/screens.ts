@@ -282,6 +282,11 @@ export function referralScreen(lang: Lang, r: ReferralInput, back: "wallet" | nu
 
 /* ───────────────────────── Yordam ───────────────────────── */
 
+/** «Account blocked» text (message and toast) with the support group link — the one way to reach an admin. */
+export function blockedText(lang: Lang): string {
+  return t(lang, "account.blocked", { url: env.supportUrl });
+}
+
 export function helpScreen(lang: Lang): Screen {
   const faq = ([1, 2, 3, 4, 5] as const)
     .map((i) => `<b>${t(lang, `help.q${i}`)}</b>\n${t(lang, `help.a${i}`)}`)
@@ -295,15 +300,13 @@ export function helpScreen(lang: Lang): Screen {
     "",
     `<blockquote expandable>${tgEmoji("info")} <b>${t(lang, "help.faq")}</b>\n\n${faq}</blockquote>`,
   ].join("\n");
-  const support = env.botSupportUsername;
-  const supportUrl = /^[A-Za-z0-9_]{4,32}$/.test(support) ? `https://t.me/${support}` : null;
   const app = appUrl("/uz");
   return {
     text,
     reply_markup: rows(
       [
         inlineButton("lang", t(lang, "btn.lang"), { callback_data: cb.langMenu("y") }),
-        supportUrl ? inlineButton("support", t(lang, "btn.support"), { url: supportUrl }) : null,
+        inlineButton("support", t(lang, "btn.support"), { url: env.supportUrl }),
       ],
       [app ? inlineButton("app", t(lang, "btn.openApp"), { web_app: { url: app } }, "primary") : null],
     ),

@@ -317,3 +317,19 @@ test("docker-compose: W2 navbat/saqlash/pool o'zgaruvchilari env.ts'da o'qiladi"
     assert.match(envSrc, new RegExp(`\\("${k}"`), `${k} lib/server/env.ts'da hech qayerda o'qilmaydi — o'lik konfiguratsiya`);
   }
 });
+
+/**
+ * Support group link (owner request 2026-10-10): the bot's «Yordam» button and the blocked-account
+ * text read `env.supportUrl` (`SUPPORT_URL`, empty → https://t.me/SlaydX_support). The old
+ * `BOT_SUPPORT_USERNAME` (a personal bot) is gone everywhere.
+ *
+ * Mutation: delete the `SUPPORT_URL` line from the `web` block, or bring `BOT_SUPPORT_USERNAME`
+ * back into compose / `.env.example` — this test turns red.
+ */
+test("docker-compose: SUPPORT_URL web'da, BOT_SUPPORT_USERNAME hech qayerda yo'q", () => {
+  const yaml = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  assert.match(envBlock(yaml, "web"), /^\s+SUPPORT_URL: \$\{SUPPORT_URL:-\}$/m, "web: SUPPORT_URL compose'da uzatilmaydi");
+  const example = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
+  assert.match(example, /^SUPPORT_URL=$/m, "SUPPORT_URL .env.example da yo'q");
+  assert.ok(!/BOT_SUPPORT_USERNAME/.test(yaml + example), "BOT_SUPPORT_USERNAME qoldig'i");
+});

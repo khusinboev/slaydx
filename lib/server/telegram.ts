@@ -11,7 +11,7 @@ import type { ReferralClaim } from "./referrals";
 import { inlineButton, tgEmoji, type Screen } from "./bot/ui";
 import { langFromTelegram, langOf, t, LANGS, type Lang } from "./bot/i18n";
 import { mainKeyboard } from "./bot/keyboard";
-import { loginScreen, welcomeScreen } from "./bot/screens";
+import { blockedText, loginScreen, welcomeScreen } from "./bot/screens";
 
 /**
  * Telegram bot: kirish chiptasi va kod yetkazish.
@@ -891,7 +891,7 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
   const text = msg.text.trim();
   if (isPrivate && (await bot.isBlockedTelegram(msg.from.id))) {
     const known = await bot.userByTelegram(msg.from.id);
-    await sendMessage(msg.chat.id, t(langOf(known?.language), "account.blocked"), { reply_markup: { remove_keyboard: true } });
+    await sendMessage(msg.chat.id, blockedText(langOf(known?.language)), { reply_markup: { remove_keyboard: true } });
     return;
   }
   // `/start` and `/login` build a personal site login link: never in a group chat.

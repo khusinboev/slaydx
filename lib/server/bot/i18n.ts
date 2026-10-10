@@ -260,9 +260,9 @@ const T = {
     en: "Too many changes — please try again in a few minutes.",
   },
   "account.blocked": {
-    uz: "Hisobingiz vaqtincha bloklangan. Savol bo‘lsa, admin bilan bog‘laning.",
-    ru: "Ваш аккаунт временно заблокирован. Если есть вопросы, свяжитесь с администратором.",
-    en: "Your account is temporarily blocked. Please contact the admin if you have questions.",
+    uz: "Hisobingiz vaqtincha bloklangan. Savol bo‘lsa, admin bilan bog‘laning: {url}",
+    ru: "Ваш аккаунт временно заблокирован. Если есть вопросы, свяжитесь с администратором: {url}",
+    en: "Your account is temporarily blocked. Please contact the admin if you have questions: {url}",
   },
   "private.only": {
     uz: "Bu buyruq faqat botning shaxsiy chatida ishlaydi.",

@@ -25,6 +25,7 @@ import { ProfilePage } from "../../components/profile/ProfilePage.tsx";
 import type { ProfileStepId, ProfileTarget } from "../../components/profile/profile-model.ts";
 import { useAppStore } from "../../lib/store.ts";
 import { useUi } from "../../lib/ui.ts";
+import { SUPPORT_URL } from "../../lib/support.ts";
 import type * as api from "../../lib/api-client.ts";
 
 /**
@@ -40,7 +41,9 @@ import type * as api from "../../lib/api-client.ts";
  *   4. «Saqlash va keyingisi» navigates without awaiting the save → «next waits for the save»;
  *   5. first logout tap signs out directly (no confirm) → «two-tap logout»;
  *   6. «Avto» does not follow the OS (store) → «Avto follows the OS»;
- *   7. unmount does not flush the pending edit → «save on leave».
+ *   7. unmount does not flush the pending edit → «save on leave»;
+ *   8. Yordam row without `rel="noopener noreferrer"` → «Yordam row … safely»;
+ *   9. Mini App branch removed (plain anchor only) → «Yordam row inside the Mini App».
  */
 
 const realFetch = globalThis.fetch;
@@ -143,7 +146,7 @@ test("index: name, identity, avatar initial, every row with its hint and target"
   assert.equal(document.querySelector("[data-profile-avatar]")?.textContent, "A");
 
   const ids = [...document.querySelectorAll("[data-profile-row]")].map((a) => a.getAttribute("data-profile-row"));
-  assert.deepEqual(ids, ["shaxsiy", "oqish", "ish", "korinish", "hamyon", "taklif", "xavfsizlik"]);
+  assert.deepEqual(ids, ["shaxsiy", "oqish", "ish", "korinish", "hamyon", "taklif", "yordam", "xavfsizlik"]);
   assert.equal(hint("shaxsiy"), "2/3");
   assert.equal(hint("oqish"), "TDPU");
   assert.equal(hint("ish"), "Kiritilmagan");
@@ -155,6 +158,41 @@ test("index: name, identity, avatar initial, every row with its hint and target"
   assert.equal(row("taklif")!.getAttribute("href"), "/uz/wallet");
   // The ledger and the top-up link moved to Hamyon.
   assert.ok(!/Hisob harakati|Balansni to.ldirish/.test(document.body.textContent ?? ""));
+});
+
+test("index: Yordam row opens the support group in a new tab, safely", async () => {
+  stub();
+  signIn();
+  mountHome();
+  await tick();
+  const a = row("yordam")!;
+  assert.ok(a);
+  assert.equal(a.getAttribute("href"), SUPPORT_URL);
+  assert.equal(SUPPORT_URL, "https://t.me/SlaydX_support");
+  assert.equal(a.getAttribute("target"), "_blank");
+  assert.equal(a.getAttribute("rel"), "noopener noreferrer");
+  assert.match(a.textContent ?? "", /Yordam/);
+  // Outside Telegram a plain click is left to the anchor (new tab).
+  assert.equal(fireEvent.click(a), true, "default navigation must not be prevented in a browser");
+});
+
+test("index: Yordam row inside the Mini App uses openTelegramLink instead of navigating", async () => {
+  const opened: string[] = [];
+  const w = globalThis.window as unknown as Record<string, unknown>;
+  w.TelegramWebviewProxy = { postEvent() {} };
+  w.Telegram = { WebApp: { initData: "user=1", version: "8.0", platform: "ios", openTelegramLink: (u: string) => opened.push(u) } };
+  try {
+    stub();
+    signIn();
+    mountHome();
+    await tick();
+    const notPrevented = fireEvent.click(row("yordam")!);
+    assert.deepEqual(opened, [SUPPORT_URL]);
+    assert.equal(notPrevented, false, "the webview must not navigate to t.me");
+  } finally {
+    delete w.TelegramWebviewProxy;
+    delete w.Telegram;
+  }
 });
 
 test("index: admin row only for admins, linking to /admin", async () => {

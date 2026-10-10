@@ -371,14 +371,14 @@ test("blocked account: messages get only the notice (keyboard removed), callback
   await tg.handleUpdate(textUpdate(u.tg, "👤 Profilim"));
   // MUTATION: without the blocked check the full Profilim card and a keyboard with signed links went out.
   assert.equal(sends().length, 1);
-  assert.match(String(sends()[0]!.body.text), /bloklangan/);
+  assert.match(String(sends()[0]!.body.text), /bloklangan.*t\.me\/SlaydX_support/);
   assert.deepEqual(sends()[0]!.body.reply_markup, { remove_keyboard: true });
 
   installFetch();
   await tg.handleUpdate(cbUpdate(u.tg, "p:e:department", 900));
   assert.equal(edits().length, 0);
   assert.equal(await pending(u.tg), null, "no input state for a blocked user");
-  assert.match(String(answers()[0]!.body.text), /bloklangan/);
+  assert.match(String(answers()[0]!.body.text), /bloklangan.*t\.me\/SlaydX_support/);
 });
 
 test("bot profile writes share the web budget (profile:<id>, 30 / 5 min): over it the value is NOT saved and the prompt says why", { skip }, async () => {

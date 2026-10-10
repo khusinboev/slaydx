@@ -2,6 +2,8 @@
 
 import { CheckCircle2, Clock, XCircle } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { SUPPORT_URL } from "@/lib/support";
+import { onSupportClick } from "@/lib/support-link";
 import type { PaymentReturn } from "./usePaymentReturn";
 
 /**
@@ -47,7 +49,16 @@ export function PaymentBanner({ pay, className }: { pay: PaymentReturn; classNam
           <p>
             To&apos;lov tasdig&apos;i hali kelmadi. To&apos;lov tizimi xabarni kechiktirishi mumkin: pul yechilgan bo&apos;lsa, u
             hisobingizga o&apos;zi tushadi — qayta to&apos;lamang. 10 daqiqadan keyin ham tushmasa, to&apos;lov chekini saqlab,
-            administratorga murojaat qiling.
+            <a
+              href={SUPPORT_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={onSupportClick}
+              className="font-medium underline underline-offset-2"
+            >
+              Yordam xizmatiga
+            </a>{" "}
+            murojaat qiling.
           </p>
           <button
             type="button"
