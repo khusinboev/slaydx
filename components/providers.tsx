@@ -55,8 +55,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
       {/* History engine, back navigation, overlay/scroll handling: consumer AND admin pages. */}
       <NavProvider />
       {children}
-      {/* Telegram Mini App: inert outside a genuine Telegram webview. */}
-      {onAdmin ? null : <MiniAppBridge />}
+      {/* Telegram Mini App: inert outside a genuine Telegram webview; on admin paths shell + BackButton only. */}
+      <MiniAppBridge admin={onAdmin} />
     </>
   );
 }

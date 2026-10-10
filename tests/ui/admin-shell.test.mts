@@ -9,6 +9,8 @@ import { PathnameContext } from "next/dist/shared/lib/hooks-client-context.share
 import type { Permission, Role } from "../../lib/server/admin-rbac.ts";
 import type * as CoreModule from "../../lib/admin-api/core.ts";
 import type * as StoreModule from "../../lib/store.ts";
+import type * as HistoryModule from "../../lib/nav/history.ts";
+import type * as MiniAppModule from "../../lib/telegram-miniapp.ts";
 import type * as IdentityModule from "../../components/admin/shell/admin-identity.tsx";
 import { AdminShell } from "../../components/admin/shell/AdminShell.tsx";
 import { AdminLoginRedirect } from "../../components/admin/shell/AdminLoginRedirect.tsx";
@@ -246,6 +248,54 @@ test("AdminShell: unmount handler ni olib tashlaydi", async () => {
   await assert.rejects(core.adminGet("/api/admin/ai/usage"));
   assert.deepEqual(calls.replace, [], "eski router ishlatilmaydi");
   assert.deepEqual(assigned, ["/admin/login?next=%2Fadmin%2Fai"], "standart handler ishlaydi");
+});
+
+/* ───────────────────── phone back control (docs/nav/ADMIN-BACK.md) ───────────────────── */
+
+const tgShell = req("../../lib/telegram-miniapp.ts") as typeof MiniAppModule;
+const backIn = (c: ParentNode) => c.querySelector<HTMLAnchorElement>('header [aria-label="Orqaga"]');
+
+test("AdminShell: phone header «Orqaga» goes to the parent (/admin → profil, bo'lim → /admin, detal → ro'yxat)", () => {
+  const cases: Array<[string, string]> = [
+    ["/admin", "/uz/profile"],
+    ["/admin/pricing", "/admin"],
+    ["/admin/users/42", "/admin/users"],
+  ];
+  for (const [path, parent] of cases) {
+    const { container, unmount } = renderShell("owner", path);
+    const a = backIn(container);
+    assert.ok(a, path);
+    assert.equal(a.getAttribute("href"), parent, path);
+    unmount();
+  }
+});
+
+test("AdminShell: «Orqaga» with no in-app history REPLACES the page with its parent", async () => {
+  // The engine reads the real address bar; a deep link / fresh tab at /admin (engine index 0).
+  const engine = req("../../lib/nav/history.ts") as typeof HistoryModule;
+  engine.__resetNavForTests();
+  window.sessionStorage.clear();
+  window.history.replaceState(null, "", "/admin");
+  const { container, calls } = renderShell("owner", "/admin");
+  const a = backIn(container);
+  assert.ok(a);
+  fireEvent.click(a);
+  await waitFor(() => assert.deepEqual(calls.replace, ["/uz/profile"]));
+  assert.deepEqual(calls.push, []);
+});
+
+test("AdminShell: «Orqaga» hides while Telegram's BackButton works, returns without it", () => {
+  tgShell.setMiniAppShellState({ active: true, backButton: true });
+  try {
+    const { container, unmount } = renderShell("owner", "/admin");
+    assert.ok(!backIn(container));
+    unmount();
+    tgShell.setMiniAppShellState({ active: true, backButton: false });
+    const again = renderShell("owner", "/admin");
+    assert.ok(backIn(again.container));
+  } finally {
+    tgShell.setMiniAppShellState(null);
+  }
 });
 
 /* ───────────────────────────── session redirect ───────────────────────────── */

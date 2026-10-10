@@ -86,8 +86,7 @@ function loadTelegramWebApp(win: TelegramWindow): Promise<TelegramWebApp | null>
 }
 
 /**
- * Telegram Mini App support, mounted once from `Providers` (consumer pages
- * only). In an ordinary browser it does nothing at all: no script, no
+ * Telegram Mini App support, mounted once from `Providers`. In an ordinary browser it does nothing at all: no script, no
  * request. Inside a genuine Telegram webview (`isTelegramWebApp`, see the
  * security note in `lib/telegram-miniapp.ts`) it loads Telegram's script,
  * calls `ready()`/`expand()` and, when nobody is signed in, logs in once with
@@ -110,25 +109,35 @@ function loadTelegramWebApp(win: TelegramWindow): Promise<TelegramWebApp | null>
  * exchanged for a session by `BotLinkLogin` — in Telegram (empty initData) and
  * in any browser — and removed from the URL. With signed launch data the
  * initData login runs instead and the token is only removed.
+ *
+ * `admin` (the route is under `/admin`, docs/nav/ADMIN-BACK.md): the same
+ * instance stays mounted across consumer <-> admin navigation, so Telegram's
+ * BackButton is handed over instead of being left visible with no handler, and
+ * a Mini App launched straight into the panel gets it too. The panel has its
+ * own session, so here the bridge only runs the shell (script, BackButton,
+ * colours): no consumer login / account switch and no `?bt=` exchange.
  */
-export function MiniAppBridge() {
+export function MiniAppBridge({ admin = false }: { admin?: boolean } = {}) {
   // Detect first, without touching the router: outside a genuine Telegram webview
   // (every normal visitor, and any tree rendered without the app router) this
   // component stays inert and never calls `useRouter`.
   const [inTelegram, setInTelegram] = useState(false);
   const [botLink, setBotLink] = useState<{ token: string | null } | null>(null);
+  // Bot links are exchanged on the page the bridge mounted on; the panel is never a target.
+  const adminAtMount = useRef(admin).current;
   useLayoutEffect(() => {
+    if (adminAtMount) return;
     // A usable link holds the pages' own login sheet back (`useUi.linkLogin`)
     // from the first client commit: layout effects run before any page's
     // passive effect, so no gate can open the sheet under the link's prompt.
     // `BotLinkLogin` owns the flag from its mount on.
     if (!hasBotLinkParam(window.location.search) || isGenuineMiniApp(window as unknown as MiniAppEnv)) return;
     if (botLinkFromSearch(window.location.search)) useUi.getState().setLinkLogin(true);
-  }, []);
+  }, [adminAtMount]);
   useEffect(() => {
     const env = window as unknown as MiniAppEnv;
     const genuine = isGenuineMiniApp(env);
-    if (hasBotLinkParam(window.location.search)) {
+    if (!adminAtMount && hasBotLinkParam(window.location.search)) {
       // Captured once (StrictMode re-runs this effect after `BotLinkLogin` removed it).
       const token = genuine ? null : botLinkFromSearch(window.location.search);
       setBotLink((prev) => prev ?? { token });
@@ -140,10 +149,10 @@ export function MiniAppBridge() {
     // confirms Telegram's BackButton or gives the «←» back.
     setMiniAppShellState({ active: true, backButton: "pending" });
     return () => setMiniAppShellState(null);
-  }, []);
+  }, [adminAtMount]);
   return (
     <>
-      {inTelegram ? <MiniAppSession /> : null}
+      {inTelegram ? <MiniAppSession admin={admin} /> : null}
       {botLink ? <BotLinkLogin token={botLink.token} /> : null}
     </>
   );
@@ -496,7 +505,7 @@ function startWebApp(wa: TelegramWebApp) {
   }
 }
 
-function MiniAppSession() {
+function MiniAppSession({ admin }: { admin: boolean }) {
   const router = useRouter();
   const nav = useNav();
   const sessionChecked = useAppStore((s) => s.sessionChecked);
@@ -532,6 +541,8 @@ function MiniAppSession() {
   }, []);
 
   useEffect(() => {
+    // The panel runs on its own session: no consumer login or account switch there.
+    if (admin) return;
     const initData = (window as TelegramWindow).Telegram?.WebApp?.initData ?? "";
     const action = miniAppLoginAction({
       webAppReady,
@@ -567,7 +578,7 @@ function MiniAppSession() {
     const from = accountLabel(useAppStore.getState().user) ?? "boshqa akkaunt";
     const to = initDataUserLabel(initData) ?? "boshqa Telegram akkaunti";
     setPrompt({ from, to, status: "ask" });
-  }, [webAppReady, sessionChecked, loggedIn, sessionTelegramId, setUser, refreshGenerations, router, nav]);
+  }, [admin, webAppReady, sessionChecked, loggedIn, sessionTelegramId, setUser, refreshGenerations, router, nav]);
 
   const confirmSwitch = useCallback(() => {
     const initData = (window as TelegramWindow).Telegram?.WebApp?.initData ?? "";

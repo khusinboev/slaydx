@@ -42,12 +42,12 @@ works; the missing piece in browsers is an in-app «←» (deep link, fresh tab,
 
 ## Root cause
 
-1. `components/providers.tsx:~60` renders `{onAdmin ? null : <MiniAppBridge />}`. Navigating profile →
+1. `components/providers.tsx:59` renders `{onAdmin ? null : <MiniAppBridge />}`. Navigating profile →
    `/admin` unmounts the bridge: `useTelegramBack`'s cleanup calls `BackButton.offClick(handler)`, but
    nothing calls `hide()`, so Telegram keeps the button **visible with no click handler** — a dead
    button, and Android's hardware back (which fires `backButtonClicked` while the button is visible) does
    nothing. On a direct launch at `/admin` the bridge is never mounted at all.
-2. `lib/nav/parents.ts:~48` maps `/admin` to `parent: null` (a root). Even with the bridge mounted,
+2. `lib/nav/parents.ts:56` maps `/admin` to `parent: null` (a root). Even with the bridge mounted,
    `telegramBackState` (`lib/telegram-miniapp.ts:210`, `!isRootPath`) would hide the button on `/admin`,
    and `backTo()` would have no fallback target.
 3. `components/admin/shell/AdminShell.tsx` has no back control on phones (menu button + brand + theme
@@ -68,4 +68,22 @@ works; the missing piece in browsers is an in-app «←» (deep link, fresh tab,
 
 ## After the fix
 
-See the PR description for the re-run table (same scenarios, all passing).
+The same Playwright script (26 checks, 390 px, browser + Telegram stub) passes in full:
+
+| Scenario | Before | After |
+|---|---|---|
+| Browser: profile → admin → back | ok (history) | `/uz/profile`, second back `/uz` |
+| Browser: admin → Narxlar → back → back | ok | `/admin` → `/uz/profile` |
+| Browser: phone back with the nav drawer open | ok | unchanged |
+| Browser: fresh tab `/admin/pricing`, in-app back | no control | header «←»: `/admin`, then `/uz/profile`, replace (history length unchanged) |
+| «Saytga qaytish» | ok | unchanged (`/uz`) |
+| Telegram: profile → `/admin` | button visible, 0 handlers (dead) | visible, 1 handler; click → `/uz/profile` |
+| Telegram: `/admin/<section>` | dead | shown; click → `/admin` |
+| Telegram: launch straight at `/admin` | never shown | shown; click → `/uz/profile` (replace) |
+| Telegram: `/uz` | hidden | hidden (app closes) |
+| Telegram: header «←» on `/admin` | n/a | hidden (one back control) |
+
+The script lives outside the repo (the repo keeps no browser smokes besides `scripts/smoke/gpu-launch.cjs`);
+the unit tests that lock the behaviour are `tests/nav-pure.test.mts` (parents table),
+`tests/ui/nav-telegram.test.mts` (BackButton on admin, hand-over, no consumer login),
+`tests/ui/admin-shell.test.mts` (header «←») and `tests/ui/admin-providers.test.mts` (Providers wiring).

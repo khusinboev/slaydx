@@ -15,6 +15,7 @@ import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createElement as h } from "react";
 import { cleanup, render, waitFor } from "@testing-library/react";
+import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { PathnameContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 
 const { useAppStore } = await import("../../lib/store.ts");
@@ -99,6 +100,43 @@ test("Providers: /admin sahifasi iste'molchi seansi va generatsiyalarini so'rama
     useAppStore.getState().setTheme("light");
     await waitFor(() => assert.ok(!document.documentElement.classList.contains("dark")));
     cleanup();
+  }
+});
+
+test("Providers: Telegram Mini App ichida admin yo'lida BackButton ishlaydi (ko'prik admin rejimida), kirish so'rovi yo'q", async () => {
+  resetStore();
+  const calls = stubFetch();
+  const log: string[] = [];
+  const handlers: Array<() => void> = [];
+  const w = window as unknown as Record<string, unknown>;
+  w.TelegramWebviewProxy = { postEvent() {} };
+  w.Telegram = {
+    WebApp: {
+      initData: "",
+      ready() {},
+      expand() {},
+      isExpanded: true,
+      isVersionAtLeast: () => true,
+      BackButton: {
+        show: () => void log.push("show"),
+        hide: () => void log.push("hide"),
+        onClick: (cb: () => void) => void handlers.push(cb),
+        offClick: () => void log.push("offClick"),
+      },
+    },
+  };
+  window.history.replaceState(null, "", "/admin#tgWebAppVersion=8.0&tgWebAppPlatform=android");
+  const router = { push() {}, replace() {}, refresh() {}, back() {}, forward() {}, prefetch() {} } as unknown as AppRouterInstance;
+  try {
+    render(h(AppRouterContext.Provider, { value: router }, at("/admin")));
+    await waitFor(() => assert.ok(log.includes("show"), log.join(",")));
+    assert.equal(handlers.length, 1);
+    assert.deepEqual(calls, [], "panelning o'z seansi: iste'molchi so'rovlari yo'q");
+  } finally {
+    cleanup();
+    delete w.TelegramWebviewProxy;
+    delete w.Telegram;
+    window.history.replaceState(null, "", "/");
   }
 });
 

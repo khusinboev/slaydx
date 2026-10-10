@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft, Menu, X } from "lucide-react";
+import { BackLink } from "@/components/nav/BackLink";
 import { useDialog } from "@/components/overlays/useDialog";
 import { setOnAdminAuthRequired } from "@/lib/admin-api/core";
 import { BRAND_NAME } from "@/lib/brand";
@@ -96,6 +97,13 @@ export function AdminShell({ adminId, role, permissions, name, username, twoFact
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="bg-background/95 sticky top-0 z-30 flex h-14 items-center gap-2 border-b px-3 backdrop-blur md:hidden">
+            {/* Back: the previous in-app page, else the parent (/admin -> profile). Hidden by Telegram's own BackButton. */}
+            <BackLink
+              data-admin-back
+              className="hover:bg-muted focus-visible:ring-ring -ml-1 inline-flex size-11 shrink-0 items-center justify-center rounded-lg outline-none focus-visible:ring-2"
+            >
+              <ArrowLeft className="size-5" aria-hidden="true" />
+            </BackLink>
             <button
               type="button"
               onClick={() => setDrawerOpen(true)}
