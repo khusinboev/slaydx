@@ -254,8 +254,15 @@ test("cost: every groupBy equals admin-cost exactly; totals, coverage, caveats, 
     assert.equal(b.rows.reduce((a, x) => a + x.calls, 0), totalsWant.calls, `${by} calls sum`);
 
     assert.deepEqual(b.coverage, coverageWant, `${by} coverage`);
-    assert.deepEqual(b.caveats, [...cost.COST_CAVEATS], `${by} caveats`);
-    assert.ok(b.caveats.length >= 9 && b.caveats.every((c) => typeof c === "string" && c.length > 20));
+    // The notes are computed from this very data (only what applies), identical for every grouping.
+    assert.deepEqual(b.caveats, await cost.costCaveats(pool(), range), `${by} caveats`);
+    const has = (start: string) => assert.ok(b.caveats.some((c) => c.startsWith(start)), `${by}: «${start}» missing in ${JSON.stringify(b.caveats)}`);
+    has("1 ta yangi ishda (4 ta tugallangandan, 25,0%) tannarx umuman yozilmagan: Slayd (1/2)");
+    has("Narxi noma'lum LLM modellari: openrouter:mystery-model (1 chaqiruv)");
+    has("Narxlanmagan xizmatlar: rasm fal:fal-ai/flux/dev (1 chaqiruv)");
+    has("Google qidiruvi: 2 ta so'rov");
+    has("Bepul AI so'rovlari");
+    assert.ok(b.caveats.every((c) => typeof c === "string" && c.length > 20 && !/fal\.ai|bepul sinov/.test(c)), "no stale rows");
     assert.equal(typeof b.soumPerUsd, "number");
     // Only the tool grouping carries a title (the key itself is never rewritten).
     if (by === "tool") assert.ok(b.rows.every((x) => typeof x.title === "string" && x.title.length > 0), "tool: titles");
@@ -296,8 +303,9 @@ test("cost: completed, failed, abandoned, free and legacy rows are each counted 
   assert.equal(byTool.slide.title, "Slayd");
   assert.equal(byTool.referat.title, "Referat");
   assert.equal(byTool["free:polish"].title, "Bepul AI: sayqal");
-  // Coverage: 4 completed jobs on D (A, B, referat, one without cost), 3 have cost data.
-  assert.deepEqual(r.body.coverage, { jobsWithCost: 3, jobsCompleted: 4, pct: 75 });
+  // Coverage: 4 completed jobs on D (A, B, referat, one without cost), 3 have cost data. The rollout is job A's finish
+  // (10:00:00, its ai_usage row lands one second later): nothing here is historical.
+  assert.deepEqual(r.body.coverage, { jobsWithCost: 3, jobsCompleted: 4, pct: 75, rolloutAt: tk(D, "09:00:01"), historicalCompleted: 0, historicalWithCost: 0 });
 
   const kind = await call<CostBody>("cost", `?from=${D}&to=${D}&groupBy=kind`, s.cookie);
   const k = Object.fromEntries(kind.body.rows.map((x) => [x.key, x]));
@@ -313,7 +321,7 @@ test("cost: day grouping is zero-filled over the whole range; empty range gives 
   assert.equal(r.status, 200, r.text);
   assert.deepEqual(r.body.rows.map((x) => [x.key, x.usd, x.calls]), [["2020-01-01", 0, 0], ["2020-01-02", 0, 0], ["2020-01-03", 0, 0]]);
   assert.deepEqual(r.body.totals, { records: 0, calls: 0, inputTokens: 0, outputTokens: 0, usd: 0, unpricedCalls: 0 });
-  assert.deepEqual(r.body.coverage, { jobsWithCost: 0, jobsCompleted: 0, pct: 0 });
+  assert.deepEqual(r.body.coverage, { jobsWithCost: 0, jobsCompleted: 0, pct: 0, rolloutAt: tk(D, "09:00:01"), historicalCompleted: 0, historicalWithCost: 0 });
   const t = await call<CostBody>("cost", `?from=2020-01-01&to=2020-01-03&groupBy=model`, s.cookie);
   assert.deepEqual(t.body.rows, []);
 });

@@ -107,6 +107,8 @@ function item(over: Partial<PricingItem> & Pick<PricingItem, "toolId" | "title" 
     avgPrice: null,
     avgCashRevenue: null,
     avgCashRevenueSoum: null,
+    avgRevenue: null,
+    avgRevenueSoum: null,
     avgUnits: null,
     avgCostUsd: null,
     avgCostSoum: null,
@@ -115,7 +117,10 @@ function item(over: Partial<PricingItem> & Pick<PricingItem, "toolId" | "title" 
     fullCostSoum: null,
     costPerUnitSoum: null,
     marginPct: null,
+    cashMarginPct: null,
     markup: null,
+    pointsSharePct: null,
+    bonusCostSoum: null,
     coveragePct: null,
     jobsWithCost: 0,
     recommendedPercent: null,
@@ -146,6 +151,8 @@ const ESSAY = item({
   refundRate: 2.1,
   avgPrice: 2700,
   avgCashRevenue: 1800,
+  avgRevenue: 2666.67,
+  avgRevenueSoum: 2666.67,
   avgUnits: 2.4,
   avgCostUsd: 0.06,
   avgCostSoum: 720,
@@ -153,8 +160,11 @@ const ESSAY = item({
   overheadSoum: 80,
   fullCostSoum: 800,
   costPerUnitSoum: 333.33,
-  marginPct: 55.56,
-  markup: 3.375,
+  marginPct: 70,
+  cashMarginPct: 55.56,
+  markup: 3.333,
+  pointsSharePct: 25,
+  bonusCostSoum: 420,
   coveragePct: 66.67,
   jobsWithCost: 340,
   recommendedPercent: 90,
@@ -180,10 +190,15 @@ const SLIDE = item({
   failRate: 3.11,
   avgPrice: 3600,
   avgCashRevenue: 3400,
+  avgRevenue: 3500,
+  avgRevenueSoum: 3500,
   fullCostSoum: 2640,
   costPerUnitSoum: 132,
   marginPct: 22.35,
-  markup: 1.364,
+  cashMarginPct: 14.4,
+  markup: 1.326,
+  pointsSharePct: 48.2,
+  bonusCostSoum: 1_250_000,
   coveragePct: 97,
   jobsWithCost: 1358,
   recommendedPercent: 265,
@@ -198,10 +213,33 @@ function overview(over: Partial<PricingOverview> = {}): PricingOverview {
   return {
     range: { from: "2026-03-10", to: "2026-03-12", days: 3 },
     items: [ESSAY, SLIDE, RESUME],
-    totals: { jobs: 1987, completed: 1913, cashRevenue: 5_900_000, cashRevenueSoum: 5_900_000, costUsdTools: 310.5, costSoumTools: 3_726_000, costUsdOther: 12.25, costUsdAll: 322.75, marginPct: 36.85 },
+    totals: {
+      jobs: 1987,
+      completed: 1913,
+      cashRevenue: 5_900_000,
+      cashRevenueSoum: 5_900_000,
+      costUsdTools: 310.5,
+      costSoumTools: 3_726_000,
+      costUsdOther: 12.25,
+      costUsdAll: 322.75,
+      revenue: 9_100_000,
+      revenueSoum: 9_100_000,
+      marginRevenueSoum: 8_900_000,
+      marginCostSoum: 3_700_000,
+      feeSoum: 222_500,
+      uncoveredRevenueSoum: 200_000,
+      uncoveredTools: ["Maqola"],
+      marginPct: 36.85,
+      cashMarginPct: 21.5,
+      bonusCostSoum: 1_670_000,
+      pointsSharePct: 41.3,
+    },
     fx: 12_000,
     soumPerCoin: 1,
     targetMarkup: 3,
+    paymentFeePercent: 2.5,
+    includeAdmins: false,
+    adminJobs: 41,
     groups: [
       { id: "umumiy", label: "Umumiy vositalar" },
       { id: "talaba", label: "Talaba ishlari" },
@@ -238,16 +276,19 @@ function simulation(toolId: string, body: Record<string, unknown>): Simulation {
     ladder: it.ladder.map((s) => ({ ...s, effective: adj(s.base) })),
     window: { from: "2026-02-11", to: "2026-03-12", days: 30 },
     // 2 so'm per tanga in this fixture, so the tanga and so'm revenue lines differ visibly.
-    current: { revenue30d: 1_300_000, revenue30dSoum: 2_600_000, cost30d: 400_000, marginPct: 84.62, jobs: 500 },
+    current: { revenue30d: 1_300_000, revenue30dSoum: 2_600_000, feeSoum: 65_000, cost30d: 400_000, marginPct: 82.12, jobs: 500 },
     projected: {
       revenue30d: Math.round((1_300_000 * percent) / 100),
       revenue30dSoum: Math.round((2_600_000 * percent) / 100),
+      feeSoum: Math.round((2_600_000 * percent * 0.025) / 100),
       cost30d: 400_000,
       marginPct: 100 - (400_000 / ((2_600_000 * percent) / 100)) * 100,
     },
     partial: false,
     fx: 12_000,
     soumPerCoin: 2,
+    paymentFeePercent: 2.5,
+    includeAdmins: body.includeAdmins === true,
   };
 }
 
@@ -329,8 +370,31 @@ test("loading skeleton, then KPI tiles, coverage banner with caveats and the tab
   assert.equal(calls[0].url.searchParams.get("from"), "2026-03-10");
   assert.equal(calls[0].url.searchParams.get("to"), "2026-03-12");
 
-  // KPI tiles.
+  // KPI tiles: the primary «Marja» (listed price, fee deducted), the separate «Naqd marja», the bonus cost, the fee.
   assert.ok(screen.getByText("36,9%"));
+  const marginTile = screen.getByText("Marja", { selector: "span" }).parentElement!;
+  assert.match(marginTile.textContent ?? "", /ball bilan to'langani ham/);
+  assert.match(marginTile.textContent ?? "", /komissiya 2,5%/);
+  assert.match(marginTile.textContent ?? "", /Tannarxi o'lchanmagan vositalar jamiga kirmagan: Maqola/);
+  const cashTile = screen.getByText("Naqd marja", { selector: "span.uppercase" }).parentElement!;
+  assert.ok(within(cashTile).getByText("21,5%"));
+  assert.match(cashTile.textContent ?? "", /ball hisobga olinmaydi/);
+  const bonusTile = screen.getByText("Bonus xarajati", { selector: "span.uppercase" }).parentElement!;
+  assert.equal((bonusTile.children[1] as HTMLElement).textContent, nb("1 670 000 so'm"));
+  assert.match(bonusTile.textContent ?? "", /tushumning 41,3% qismi ball bilan to'langan/);
+  const feeTile = screen.getByText("To'lov komissiyasi", { selector: "span.uppercase" }).parentElement!;
+  assert.ok(within(feeTile).getByText("2,5%"));
+  assert.ok(within(feeTile).getByText("Sozlama: To'lov komissiyasi (%)"));
+  assert.ok(!document.body.textContent?.includes("pricing.payment_fee_percent"), "never the raw key");
+  // One short hint per money column says what it is computed on.
+  const headers = screen.getAllByRole("columnheader").map((h) => h.textContent ?? "");
+  for (const [name, hint] of [
+    ["Ustama ×", "tushum (komissiyadan keyin) ÷ tannarx"],
+    ["Marja % · tavsiya", "narx (ball ham) − tannarx − komissiya (naqd qismdan)"],
+    ["Naqd marja · bonus", "naqd tushum bo'yicha · bonus = ball bilan to'langan ishlar tannarxi"],
+  ] as const) {
+    assert.ok(headers.some((t) => t.includes(name) && t.includes(hint)), `${name}: ${hint}`);
+  }
   // AI cost tile: the paid tools' so'm figure, plus the other spend (free AI, unknown) and the
   // all-in total that equals the dashboard / AI page number (P4 money review, finding 3; UX #4).
   const costTile = screen.getByText("AI xarajat · pullik vositalar · 3 kun").parentElement!;
@@ -383,12 +447,19 @@ test("loading skeleton, then KPI tiles, coverage banner with caveats and the tab
   assert.ok(within(slide).getByText("+145% tavsiya"));
   assert.ok(within(slide).getByText("2 640 so'm / ish"));
   assert.ok(within(slide).getByText("132 so'm / slayd"));
-  assert.ok(within(slide).getByText("1,4×"));
+  assert.ok(within(slide).getByText("1,3×"));
   assert.ok(within(slide).getByText("1 460"));
+  // The earlier cash formula sits in its own column, the bonus cost (so'm + points share) in another.
+  assert.ok(within(slide).getByText("14%"), "cash margin");
+  assert.ok(within(slide).getByText("bonus 1 250 000 so'm"), "bonus cost");
+  assert.ok(within(slide).getByText("ball ulushi 48%"), "points share");
   assert.ok(within(slide).getByRole("img", { name: "Slayd: 3 kunlik tannarx trendi" }));
   const essay = rowOf("Insho");
   assert.ok(within(essay).getByText("100%"));
-  assert.ok(within(essay).getByText("56%"));
+  assert.ok(within(essay).getByText("70%"), "primary margin");
+  assert.ok(within(essay).getByText("56%"), "cash margin");
+  assert.ok(within(essay).getByText("bonus 420 so'm"), "bonus cost");
+  assert.ok(within(essay).getByText("ball ulushi 25%"));
   assert.ok(within(essay).getByText("−10% tavsiya"));
   assert.ok(within(essay).getByText("333 so'm / bet"));
   const resume = rowOf("Rezyume");
@@ -464,6 +535,54 @@ test("a changed period aborts the pending request and refetches", async () => {
   assert.equal(seen[1].url.searchParams.get("from"), "2026-03-01");
 });
 
+/* ───────────────────────────── admin jobs switch ───────────────────────────── */
+
+test("«Adminlar bilan»: off by default (no admins param, the note says how many admin jobs are left out); the checkbox writes ?admins=1; clear resets it", async () => {
+  const calls = stubAll();
+  const { calls: nav } = renderPage(Q);
+  await ready();
+  assert.equal(calls[0].url.searchParams.get("admins"), null, "default view does not ask for admin jobs");
+  const box = screen.getByRole("checkbox", { name: "Adminlar bilan" }) as HTMLInputElement;
+  assert.equal(box.checked, false);
+  assert.ok(screen.getByText("Adminlarning 41 ta tugallangan ishi hisobga olinmagan."));
+  fireEvent.click(box);
+  assert.equal(nav.replace.at(-1), `/admin/pricing?${Q}&admins=1`);
+  cleanup();
+
+  const calls2 = stubAll({ overview: overview({ includeAdmins: true }) });
+  const second = renderPage(`${Q}&admins=1`);
+  await ready();
+  assert.equal(calls2[0].url.searchParams.get("admins"), "1", "the switch is part of the request");
+  assert.equal((screen.getByRole("checkbox", { name: "Adminlar bilan" }) as HTMLInputElement).checked, true);
+  assert.ok(screen.getByText("Adminlarning 41 ta tugallangan ishi ham hisobga olingan."));
+  // Switching it off removes the param (the default), and the filter bar's clear button resets it with the rest.
+  fireEvent.click(screen.getByRole("checkbox", { name: "Adminlar bilan" }));
+  assert.equal(second.calls.replace.at(-1), `/admin/pricing?${Q}`);
+  fireEvent.click(screen.getByRole("button", { name: "Filtrlarni tozalash" }));
+  assert.equal(second.calls.replace.at(-1), "/admin/pricing");
+});
+
+test("the switch reaches the drawer: detail GET carries admins=1, the simulator and the edit preview send includeAdmins", async () => {
+  const calls = stubAll({ overview: overview({ includeAdmins: true }) });
+  renderPage(`${Q}&admins=1&tool=slide`);
+  const dialog = await screen.findByRole("dialog");
+  const d = within(dialog);
+  await d.findByText("Rasm generatsiyasi qimmatlashdi");
+  const detailCall = calls.find((c) => c.url.pathname === "/api/admin/pricing/slide" && (c.init.method ?? "GET") === "GET");
+  assert.equal(detailCall?.url.searchParams.get("admins"), "1");
+  await waitFor(() => assert.ok(calls.some((c) => c.url.pathname.endsWith("/simulate"))));
+  assert.deepEqual(calls.find((c) => c.url.pathname.endsWith("/simulate"))?.body, { percent: 120, roundTo: 500, includeAdmins: true });
+  await d.findByText("1 560 000 tanga");
+  assert.ok(d.getByText(/Adminlarning ishlari ham hisobga olingan/));
+  fireEvent.click(d.getByRole("button", { name: "O'zgartirish" }));
+  const edit = (await screen.findAllByRole("dialog")).at(-1)!;
+  fireEvent.change(within(edit).getByLabelText(/Tuzatish, %/), { target: { value: "130" } });
+  await waitFor(() => {
+    const sims = calls.filter((c) => c.url.pathname === "/api/admin/pricing/slide/simulate");
+    assert.deepEqual(sims.at(-1)?.body, { percent: 130, roundTo: 500, includeAdmins: true });
+  });
+});
+
 /* ───────────────────────────── drawer ───────────────────────────── */
 
 test("drawer: detail fetched with days=90, headline figures, ladder, trend chart, history; simulator is live and debounced", async () => {
@@ -479,6 +598,14 @@ test("drawer: detail fetched with days=90, headline figures, ladder, trend chart
   assert.ok(d.getByText("100% → 120%"));
   assert.ok(d.getByRole("img", { name: "Slayd: 90 kunlik tannarx trendi (so'm / ish)" }));
   assert.ok(d.getByText("3 600 tanga / ish"));
+  // Both margins, their bases and the bonus cost are explained next to the numbers.
+  assert.ok(d.getByText("3 500 tanga / tugallangan ish"), "primary basis: listed price of a completed job");
+  assert.ok(d.getByText("ro'yxat narxi − tannarx − komissiya 2,5% (naqd qismdan); ustama komissiyadan keyingi tushum bo'yicha"));
+  assert.ok(d.getByText("Naqd marja"));
+  assert.ok(d.getByText("faqat naqd pul tushumi bo'yicha"));
+  assert.ok(d.getByText("Bonus xarajati"));
+  assert.ok(d.getByText("1 250 000 so'm"));
+  assert.ok(d.getByText("ball ulushi 48% — ball bilan to'langan ishlarning tannarxi"));
   assert.ok(d.getByText("2 640 so'm / ish · 132 so'm / slayd"));
   assert.ok(d.getByText("tanlama: 1 400 ta tayyor ish"));
   // Simulator: the first call is for the current percent; typing 150 sends 150 after the debounce.
@@ -489,6 +616,9 @@ test("drawer: detail fetched with days=90, headline figures, ladder, trend chart
   // Revenue is tanga; the margin compares its so'm value (× soumPerCoin = 2 here) with the so'm cost.
   assert.ok(d.getByText("= 3 120 000 so'm"));
   assert.ok(d.getByText(/so'mda, o'zgarmaydi/));
+  // The simulator's margin is the table's: same revenue basis, fee deducted.
+  assert.ok(d.getByText("jadvaldagi «Marja» bilan bir xil: komissiya 2,5% ayrilgan"));
+  assert.ok(d.getByText(/tugallangan ishlarning ro'yxat narxi/));
   assert.ok(d.getByText("yaxlitlash 500 tanga"));
   fireEvent.change(d.getByLabelText("Tuzatish foizi"), { target: { value: "150" } });
   await waitFor(() => {

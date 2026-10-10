@@ -25,6 +25,8 @@ export type PriceEditDialogProps = {
   title: string;
   adjust: PriceAdjust;
   ladder: ReadonlyArray<LadderRow>;
+  /** The page's «Adminlar bilan» switch: the preview's 30-day window follows it, like the table's margin. */
+  includeAdmins?: boolean;
   onClose: () => void;
   /** Called with the server's updated item after a successful save. */
   onSaved: (item: PricingItemResult) => void;
@@ -43,7 +45,7 @@ export function PriceEditDialog(props: PriceEditDialogProps) {
   return <Body key={props.toolId} {...props} />;
 }
 
-function Body({ toolId, title, adjust, ladder, onClose, onSaved }: PriceEditDialogProps) {
+function Body({ toolId, title, adjust, ladder, includeAdmins = false, onClose, onSaved }: PriceEditDialogProps) {
   const ids = useId();
   const [text, setText] = useState(String(adjust.percent));
   const [roundTo, setRoundTo] = useState<PriceRoundTo>(adjust.roundTo);
@@ -51,7 +53,7 @@ function Body({ toolId, title, adjust, ladder, onClose, onSaved }: PriceEditDial
   const next: PriceAdjust | null = percent === null ? null : { percent, roundTo };
   const unchanged = next !== null && next.percent === adjust.percent && next.roundTo === adjust.roundTo;
   const big = next !== null && Math.abs(next.percent - adjust.percent) > BIG_CHANGE_PP;
-  const sim = shownSimulation(useSimulation(toolId, next));
+  const sim = shownSimulation(useSimulation(toolId, next, includeAdmins));
 
   const invalid = text !== "" && percent === null;
 

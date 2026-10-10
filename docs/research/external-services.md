@@ -148,11 +148,11 @@ so'rovlari hisobga kirmaydi (§8 ro'yxatiga qarang).
 
 Zanjir: Azure → Aisha → (ixtiyoriy) Gemini preview (`.env.example:190-209`).
 
-| Provider | Endpoint/rejim | Narx (`lib/generation/tts/types.ts:374-380`) |
+| Provider | Endpoint/rejim | Narx (`lib/generation/llm-pricing.ts` `TTS_PRICING` — yagona narx jadvali) |
 |---|---|---|
 | `azure` | `https://<region>.tts.speech.microsoft.com/cognitiveservices/v1`, REST, MP3 (`lib/generation/tts/azure.ts:14-50`) | $16/1M belgi |
-| `aisha` | voicelab.uz (mahalliy, WAV, 1000 belgi/so'rov chegara) | $80/1M belgi (1 so'm/belgi, 12 500 so'm/$) |
-| `gemini` | `TTS_GEMINI_MODEL` preview, ataylab `GEMINI_API_KEY`dan mustaqil yoqiladi | $0 (bepul sinov kvotasi) |
+| `aisha` | voicelab.uz (mahalliy, WAV, 1000 belgi/so'rov chegara) | 1 so'm/belgi (so'mda; dollarga `SOUM_PER_USD` bilan o'giriladi, standart 12 700 → ≈$79/1M belgi) |
+| `gemini` | `TTS_GEMINI_MODEL` preview, ataylab `GEMINI_API_KEY`dan mustaqil yoqiladi | TOKEN bo'yicha (2026-10-10): `gemini-2.5-flash-preview-tts` $0.50/M matn-kirish + $10/M audio-chiqish; `…pro-preview-tts` $1/$20. Javobdagi `usageMetadata` o'qiladi (15 s o'zbekcha nutq = 370 audio + 70 matn token ≈ $0.0037). Jadvalda yo'q model «narxlanmagan» deb belgilanadi |
 | (jadvalda bor, ishlatilmaydi) `google`, `elevenlabs` | — | $16/1M, $165/1M — kod bor lekin zanjirda YO'Q (`TTS_LANG_VOICES`da faqat azure/aisha/gemini) |
 
 `TtsMeter` (`lib/generation/tts/types.ts:389-436`) `audio/engine.ts` orqali

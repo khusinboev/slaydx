@@ -18,6 +18,7 @@
  *
  * Manba: `docs/research/tts.md` §3.
  */
+import { ttsCost, type TtsCost } from "../llm-pricing";
 
 /* ────────────────────────── provayder ────────────────────────── */
 
@@ -96,8 +97,18 @@ export type TtsAudio = {
   wav?: Uint8Array;
   /** Tayyor audio uzunligi — provayder qaytargan yoki o'lchangan. */
   seconds: number;
-  /** Hisoblangan belgilar (tannarx shu bilan o'lchanadi). */
+  /** Hisoblangan belgilar (Azure/Aisha tannarxi shu bilan o'lchanadi). */
   chars: number;
+  /*
+   * Billing facts, set only by token-billed providers (Gemini TTS, from the
+   * response's `usageMetadata`); per-character providers leave them out.
+   */
+  /** Provider model id that served the call — the key of `TTS_PRICING`. */
+  model?: string;
+  /** Text-input tokens (`promptTokenCount`). */
+  inputTokens?: number;
+  /** Audio-output tokens (`candidatesTokenCount`, AUDIO modality). */
+  outputTokens?: number;
 };
 
 /** Sintez natijasidagi baytlar va formati — `mp3`/`wav` dan bittasi. */
@@ -437,32 +448,18 @@ function splitLong(sentence: string, limit: number): string[] {
 
 /* ────────────────────────── tannarx ────────────────────────── */
 
-export type TtsPrice = {
-  /** 1 million belgi uchun USD (`tts.md` §2 narx jadvali). */
-  usdPerMillionChars: number;
-  note: string;
-};
-
-/**
- * Provayder narxlari — `cost_json` shu jadvaldan hisoblanadi.
- *
- * Aisha so'mda hisoblaydi (1 so'm/belgi): 1 M belgi = 1 000 000 so'm ≈
- * $80 (12 500 so'm/$ ishchi kursi). Kurs o'zgarganda SHU yer
- * yangilanadi — narx hisobi bitta joydan boshqarilsin.
- */
-export const TTS_PRICES: Record<TtsProviderId, TtsPrice> = {
-  azure: { usdPerMillionChars: 16, note: "Azure Neural TTS — $16/1M belgi" },
-  aisha: { usdPerMillionChars: 80, note: "Aisha AI — 1 so'm/belgi ≈ $80/1M (12 500 so'm/$)" },
-  gemini: { usdPerMillionChars: 0, note: "Gemini TTS — bepul sinov kvotasi (sifat noma'lum)" },
-  google: { usdPerMillionChars: 16, note: "Google Cloud TTS Neural2 — $16/1M belgi" },
-  elevenlabs: { usdPerMillionChars: 165, note: "ElevenLabs Creator — ≈$165/1M belgi" },
-};
-
 export type TtsUsage = {
   provider: TtsProviderId;
   voice: string;
   chars: number;
   seconds: number;
+  /** Provider model id (Gemini TTS); decides the price of token-billed providers. */
+  model?: string;
+  /** Billing facts reported by the provider (Gemini `usageMetadata`): text-input tokens / audio-output tokens. */
+  inputTokens?: number;
+  outputTokens?: number;
+  /** So'm per USD the chain priced this synthesis with (the admin rate); lets `TtsMeter` price it identically. */
+  soumPerUsd?: number;
 };
 
 export type TtsCostJson = {
@@ -472,32 +469,55 @@ export type TtsCostJson = {
   seconds: number;
   calls: number;
   usd: number;
+  /** Gemini billed tokens (reported or estimated): text-input / audio-output. 0 for per-character providers. */
+  textTokens: number;
+  audioTokens: number;
+  /** Syntheses the price book could not price (usd 0, must not be read as a real $0). */
+  unpricedCalls: number;
 };
+
+/**
+ * Money of one synthesis — the ONE place `TtsMeter` and the chain's `recordTts` both
+ * price from, so `cost_json.parts` and the meter can never disagree. The price table
+ * itself is `TTS_PRICING` in `llm-pricing.ts` (the price book).
+ */
+export function ttsUsageCost(u: TtsUsage, at: Date = new Date()): TtsCost {
+  return ttsCost({ provider: u.provider, chars: u.chars, seconds: u.seconds, ...(u.model !== undefined ? { model: u.model } : {}), ...(u.inputTokens !== undefined ? { inputTokens: u.inputTokens } : {}), ...(u.outputTokens !== undefined ? { outputTokens: u.outputTokens } : {}), ...(u.soumPerUsd !== undefined ? { soumPerUsd: u.soumPerUsd } : {}) }, at);
+}
 
 /**
  * Sintez sarfini yig'adi — `llm-roles.ts CostMeter` naqshi.
  *
  * Nega alohida hisoblagich: LLM sarfi TOKEN bilan, TTS sarfi BELGI
- * bilan o'lchanadi va ikkalasi bitta `cost_json` ga qo'shiladi
- * (`scripts/cost-report.mts` podkast/tabriknoma marjasini shu yig'indi
- * bo'yicha tekshiradi). Bitta hisoblagichga tiqilsa, «token» ustuni
- * belgilar bilan aralashib, marja hisobi yolg'on chiqardi.
+ * (Azure/Aisha) yoki TOKEN (Gemini audio) bilan o'lchanadi va ikkalasi
+ * bitta `cost_json` ga qo'shiladi (`scripts/cost-report.mts`
+ * podkast/tabriknoma marjasini shu yig'indi bo'yicha tekshiradi).
+ * `usd` — `ttsUsageCost` dan (narx jadvali `llm-pricing.ts`); belgilar
+ * (`chars`) faqat ko'rsatish uchun, TTS tokenlari esa LLM tokenlariga
+ * QO'SHILMAYDI.
  */
 export class TtsMeter {
   private calls = 0;
   private chars = 0;
   private seconds = 0;
   private usd = 0;
+  private textTokens = 0;
+  private audioTokens = 0;
+  private unpricedCalls = 0;
   private providers = new Set<string>();
   private voices = new Set<string>();
 
   add(u: TtsUsage): void {
     const chars = Math.max(0, Math.round(u.chars));
     const seconds = Math.max(0, u.seconds);
+    const cost = ttsUsageCost({ ...u, chars, seconds });
     this.calls += 1;
     this.chars += chars;
     this.seconds += seconds;
-    this.usd += (TTS_PRICES[u.provider]?.usdPerMillionChars ?? 0) * (chars / 1_000_000);
+    this.usd += cost.usd;
+    this.textTokens += cost.textTokens;
+    this.audioTokens += cost.audioTokens;
+    if (!cost.priced) this.unpricedCalls += 1;
     this.providers.add(u.provider);
     this.voices.add(`${u.provider}:${u.voice}`);
   }
@@ -511,12 +531,9 @@ export class TtsMeter {
       calls: this.calls,
       // Tiyin-darajadagi aniqlik yetarli; `cost-report` yig'indini oladi.
       usd: Number(this.usd.toFixed(6)),
+      textTokens: this.textTokens,
+      audioTokens: this.audioTokens,
+      unpricedCalls: this.unpricedCalls,
     };
   }
-}
-
-/** Bitta chaqiruv tannarxi (USD) — zond va byudjet hisobi uchun. */
-export function ttsCostUsd(provider: TtsProviderId, chars: number): number {
-  const price = TTS_PRICES[provider]?.usdPerMillionChars ?? 0;
-  return Number((price * (Math.max(0, chars) / 1_000_000)).toFixed(6));
 }

@@ -39,10 +39,11 @@ import {
   type TtsVoiceChoice,
   type TtsVoiceSpec,
   ttsChoiceVoices,
-  ttsCostUsd,
+  ttsUsageCost,
   ttsVoicesFor,
 } from "./types";
 import { recordTts } from "../job-cost";
+import { currentSoumPerUsd } from "../llm-pricing";
 import { makeAzureTts } from "./azure";
 import { makeAishaTts } from "./aisha";
 import { makeGeminiTts } from "./gemini";
@@ -296,9 +297,27 @@ async function runGroup(provider: TtsProvider, group: TtsProviderGroup, parts: r
     if (!audio) throw new TtsError(provider.id, "sintez natijasi bo'sh", { retryable: false });
 
     audios.push(audio);
-    usages.push({ provider: provider.id, voice, chars: audio.chars || text.length, seconds: audio.seconds });
+    const usage: TtsUsage = {
+      provider: provider.id,
+      voice,
+      chars: audio.chars || text.length,
+      seconds: audio.seconds,
+      ...(audio.model !== undefined ? { model: audio.model } : {}),
+      ...(audio.inputTokens !== undefined ? { inputTokens: audio.inputTokens } : {}),
+      ...(audio.outputTokens !== undefined ? { outputTokens: audio.outputTokens } : {}),
+      // Priced with the rate the admin cost pages use (finance.soum_per_usd), carried so `TtsMeter` prices it the same.
+      soumPerUsd: await currentSoumPerUsd(),
+    };
+    usages.push(usage);
     // Ish sarfi (EXT-11) MANBADA: keyingi provayderda boshidan boshlansa ham bu bo'lak to'langan.
-    recordTts(provider.id, `${provider.id}:${voice}`, audio.chars || text.length, ttsCostUsd(provider.id, audio.chars || text.length));
+    // Priced once from the price book (`ttsUsageCost`); an unpriced synthesis is recorded flagged, not as a real $0.
+    const cost = ttsUsageCost(usage);
+    recordTts(provider.id, usage.model ?? `${provider.id}:${voice}`, usage.chars, cost.usd, {
+      priced: cost.priced,
+      estimated: cost.estimated,
+      textTokens: cost.textTokens,
+      audioTokens: cost.audioTokens,
+    });
     seconds += audio.seconds;
     chars += audio.chars || text.length;
   }

@@ -68,6 +68,7 @@ export const listTrendDays = (rangeDays: number): number => Math.min(rangeDays, 
 export const SETTING_LABEL = {
   fx: "Dollar kursi (so'm)",
   targetMarkup: "Maqsadli ustama (×)",
+  paymentFee: "To'lov komissiyasi (%)",
 } as const;
 
 /** `YYYY-MM-DD` → `DD.MM` for chart axes. */

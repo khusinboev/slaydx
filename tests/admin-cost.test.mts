@@ -369,8 +369,12 @@ test("canonical spend: dedupe, legacy, outcomes, Tashkent days, groupings, cover
 
   await t.test("coverage: completed with cost data ÷ completed, by Tashkent day", async () => {
     // D: A, B, C, G, I have cost data; F does not.
-    assert.deepEqual(await cost.spendCoverage(pool(), rD), { jobsWithCost: 5, jobsCompleted: 6, pct: (5 / 6) * 100 });
-    assert.deepEqual(await cost.spendCoverage(pool(), rDD1), { jobsWithCost: 6, jobsCompleted: 7, pct: (6 / 7) * 100 });
+    // The first ai_usage row (the rollout) is the free call at 23:59:59 on D-1, before every job here: nothing is historical.
+    const rolloutAt = tk("2026-03-09", "22:59:59"); // the first row (23:59:59) minus the one-hour grace
+    assert.equal(await cost.spendRollout(pool()), rolloutAt);
+    const noHistory = { rolloutAt, historicalCompleted: 0, historicalWithCost: 0 };
+    assert.deepEqual(await cost.spendCoverage(pool(), rD), { jobsWithCost: 5, jobsCompleted: 6, pct: (5 / 6) * 100, ...noHistory });
+    assert.deepEqual(await cost.spendCoverage(pool(), rDD1), { jobsWithCost: 6, jobsCompleted: 7, pct: (6 / 7) * 100, ...noHistory });
     const byTool = await cost.spendCoverageByTool(pool(), rD);
     assert.deepEqual(
       byTool.map((r) => [r.toolId, r.jobsWithCost, r.jobsCompleted]),
@@ -386,7 +390,7 @@ test("canonical spend: dedupe, legacy, outcomes, Tashkent days, groupings, cover
   await t.test("empty range → zeros, not nulls", async () => {
     const empty = parseDateRange("2020-01-01", "2020-01-02");
     assert.deepEqual(await cost.spendTotals(pool(), empty), { records: 0, calls: 0, inputTokens: 0, outputTokens: 0, usd: 0 });
-    assert.deepEqual(await cost.spendCoverage(pool(), empty), { jobsWithCost: 0, jobsCompleted: 0, pct: 0 });
+    assert.deepEqual(await cost.spendCoverage(pool(), empty), { jobsWithCost: 0, jobsCompleted: 0, pct: 0, rolloutAt: tk("2026-03-09", "22:59:59"), historicalCompleted: 0, historicalWithCost: 0 });
     assert.deepEqual(await cost.spendCoverageByTool(pool(), empty), []);
     const days = await cost.spendBy(pool(), empty, "day");
     assert.deepEqual(days, [
@@ -435,7 +439,7 @@ test("canonical spend: dedupe, legacy, outcomes, Tashkent days, groupings, cover
   });
 });
 
-test("input validation and caveats", async () => {
+test("input validation", async () => {
   const r = parseDateRange(D, D);
   assert.throws(() => cost.spendRowsSql({ fromTs: "x", toTsExclusive: r.toTsExclusive }), /invalid range/);
   assert.throws(() => cost.spendRowsSql({ fromTs: r.toTsExclusive, toTsExclusive: r.fromTs }), /invalid range/);
@@ -451,7 +455,9 @@ test("input validation and caveats", async () => {
   assert.equal((await cost.spendForJobs(never, [])).size, 0);
   await assert.rejects(cost.spendForJobs(never, ["1; DROP TABLE ai_usage"]), /invalid job ids/);
   await assert.rejects(cost.spendForJobs(never, Array.from({ length: 1_001 }, () => randomUUID())), /invalid job ids/);
-  assert.ok(cost.COST_CAVEATS.length >= 8);
+  // The ten-sentence static list is gone: only the two permanent limits remain (the computed notes: admin-cost-caveats.test.mts).
+  assert.equal(cost.COST_CAVEATS.length, 2);
   assert.ok(Object.isFrozen(cost.COST_CAVEATS));
-  for (const c of cost.COST_CAVEATS) assert.ok(c.length > 20 && !/TODO|FIXME/.test(c));
+  for (const c of cost.COST_CAVEATS) assert.ok(c.length > 20 && !/fal\.ai|bepul sinov|TODO|FIXME/.test(c), "no stale rows");
+  await assert.rejects(cost.costCaveats({ query: async () => ({ rows: [] }) } as never, { fromTs: "x", toTsExclusive: r.toTsExclusive }), /invalid range/);
 });

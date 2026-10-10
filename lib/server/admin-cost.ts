@@ -1,6 +1,7 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import type { DateRange } from "./admin-list";
+import { TOOL_BY_ID } from "../tools";
 import { getSetting } from "./settings";
 
 /**
@@ -18,6 +19,11 @@ import { getSetting } from "./settings";
  *     finished before `ai_usage` existed, or whose completed flush was lost).
  *     The guard looks at `ai_usage` regardless of its `at`, so a job is never
  *     counted twice even when the two timestamps straddle a range edge.
+ *
+ * Coverage is measured from the `ai_usage` rollout (its first row) on: a job that
+ * finished before that could not have been measured, so it is reported as
+ * "historical" next to the coverage instead of lowering it (`spendCoverage`).
+ * The notes shown beside the figures are computed (`costCaveats`), never a fixed list.
  *
  * Every helper takes a caller-provided client so callers can run it inside
  * their `READ ONLY` + `statement_timeout` transaction (§9). Nothing here
@@ -78,37 +84,34 @@ export type SpendGroupRow = SpendTotals & {
 };
 
 export type SpendCoverage = {
-  /** COMPLETED jobs finished in range that have cost data (`cost_json` or a completed `ai_usage` row). */
+  /**
+   * COMPLETED jobs finished in range, from the `ai_usage` rollout on, that have cost
+   * data (`cost_json` or a completed `ai_usage` row). Jobs finished before the
+   * rollout are counted separately (`historical*`): they could not have been
+   * measured, so they must not drag the coverage down.
+   */
   jobsWithCost: number;
-  /** COMPLETED jobs finished in range. */
+  /** COMPLETED jobs finished in range, from the `ai_usage` rollout on. */
   jobsCompleted: number;
   /** `jobsWithCost / jobsCompleted × 100`; 0 when there are no completed jobs (check `jobsCompleted`). */
   pct: number;
+  /** First `ai_usage` row (ISO instant) = the day spend measurement started; `null` while the table is empty (then nothing is historical). */
+  rolloutAt: string | null;
+  /** COMPLETED jobs finished in range BEFORE `rolloutAt`. */
+  historicalCompleted: number;
+  /** Of those, the ones that still carry a legacy `cost_json`. */
+  historicalWithCost: number;
 };
 
 export type ToolSpendCoverage = SpendCoverage & { toolId: string };
 
 /**
- * Known gaps of the spend data, shown next to every AI-cost figure (analysis
- * §4.8; each claim checked against the code cited in the comment).
+ * The permanent limits of the data, true for every period. The former ten-sentence
+ * list (stale fal.ai / «Gemini TTS is free» rows included) is replaced by
+ * `costCaveats`, which computes what applies, with real numbers, and ENDS with
+ * these always-true notes (so the AI screen and the pricing screen both show them).
  */
 export const COST_CAVEATS: readonly string[] = Object.freeze([
-  // migration 033_ai_usage.sql, lib/server/worker.ts flushJobUsage, lib/server/spend.ts flushFreeUsage
-  "AI xarajatlari jadvali (ai_usage) ishga tushgunga qadar xato bilan tugagan yoki tashlab ketilgan ishlar va bepul AI so'rovlari (reja, UDK, tuzatish, sayqal) xarajati yozilmagan — u davr uchun bu xarajat noma'lum.",
-  // generations.cost_json was the only copy; lib/server/jobs.ts deletes the row
-  "O'sha davrda foydalanuvchi o'chirgan generatsiyalar xarajati ham yo'qolgan: u faqat generatsiya qatorida saqlangan edi.",
-  // lib/generation/index.ts buildArtifact: cost only when a paid call was made
-  "Tugallangan ishlarning bir qismida xarajat ma'lumoti yo'q (eski yozuvlar yoki birorta pullik AI chaqiruvisiz bajarilgan ishlar) — «Qamrov» ko'rsatkichiga qarang.",
-  // lib/generation/llm-pricing.ts costUsd, OPENROUTER_SURCHARGE
-  "Narxlar jadvalida yo'q LLM modeli 0 dollar deb hisoblanadi (bunday qismlar «narxlanmagan» deb sanaladi); OpenRouter uchun manba model narxiga 5,5% ustama qo'shiladi.",
-  // lib/generation/job-cost.ts FAL_USD_PER_MEGAPIXEL, addUnpricedImage
-  "fal.ai rasmlaridan faqat fal-ai/flux/schnell narxlangan (har megapiksel $0.003); boshqa fal modellari soni bilan yoziladi, narxi 0.",
-  // lib/generation/tts/types.ts TTS_PRICES.gemini; job-cost.ts IMAGE_DEFAULT_USD
-  "Gemini TTS narxi 0 deb yoziladi (bepul sinov kvotasi); jadvalda yo'q Gemini rasm modeli lite narxi ($0.034) bilan hisoblanadi.",
-  // lib/generation/job-cost.ts GROUNDING_USD
-  "Google qidiruvi (grounding) har so'rov uchun $0.014 dan hisoblanadi: oyiga 5 000 ta bepul so'rov ayirilmaydi, shuning uchun bu qism oshirib ko'rsatiladi.",
-  // lib/generation/llm-roles.ts CostMeter.toJson has no parts; spendRowsSql attributes it
-  "Eski xarajat yozuvlarida xizmatlar bo'yicha tafsilot yo'q: ular faqat LLM sarfini o'z ichiga oladi va provayder/model kesimida ishning asosiy LLM juftligiga to'liq yoziladi.",
   // ai_usage_job_once_idx (generation_id, outcome) + lib/server/jobs.ts requeue paths
   "Ish qayta urinilsa, har bir natija turi (xato, tashlab ketilgan) uchun faqat birinchi urinish xarajati yoziladi.",
   // finance.soum_per_usd is one current value (lib/server/settings.ts)
@@ -433,38 +436,232 @@ export async function spendByProviderModel(db: Queryable, range: SpendRange): Pr
 const HAS_COST = `(jsonb_typeof(g.cost_json) = 'object'
     OR EXISTS (SELECT 1 FROM ai_usage x WHERE x.generation_id = g.id AND x.outcome = 'completed'))`;
 
-type CoverageSqlRow = { tool_id?: string; with_cost: string | number | null; completed: string | number | null };
+/**
+ * A job finished at or after the rollout `$3` (NULL = no `ai_usage` row yet, so no
+ * rollout and nothing is historical) is measurable ("current"); an earlier one is
+ * "historical" — the table did not exist, its absence is not a gap anyone can fix.
+ */
+const CURRENT = `g.finished_at >= COALESCE($3::timestamptz, '-infinity'::timestamptz)`;
 
-function toCoverage(r: CoverageSqlRow | undefined): SpendCoverage {
+type CoverageSqlRow = {
+  tool_id?: string;
+  with_cost: string | number | null;
+  completed: string | number | null;
+  hist_with_cost: string | number | null;
+  hist_completed: string | number | null;
+};
+
+const COVERAGE_COLUMNS = `count(*) FILTER (WHERE ${CURRENT} AND ${HAS_COST}) AS with_cost,
+            count(*) FILTER (WHERE ${CURRENT}) AS completed,
+            count(*) FILTER (WHERE NOT (${CURRENT}) AND ${HAS_COST}) AS hist_with_cost,
+            count(*) FILTER (WHERE NOT (${CURRENT})) AS hist_completed`;
+
+function toCoverage(r: CoverageSqlRow | undefined, rolloutAt: string | null): SpendCoverage {
   const jobsWithCost = n(r?.with_cost);
   const jobsCompleted = n(r?.completed);
-  return { jobsWithCost, jobsCompleted, pct: jobsCompleted > 0 ? (jobsWithCost / jobsCompleted) * 100 : 0 };
+  return {
+    jobsWithCost,
+    jobsCompleted,
+    pct: jobsCompleted > 0 ? (jobsWithCost / jobsCompleted) * 100 : 0,
+    rolloutAt,
+    historicalCompleted: n(r?.hist_completed),
+    historicalWithCost: n(r?.hist_with_cost),
+  };
 }
 
-/** Telemetry coverage: completed jobs finished in range with cost data ÷ completed jobs finished in range. */
-export async function spendCoverage(db: Queryable, range: SpendRange): Promise<SpendCoverage> {
-  checkRange(range);
+/**
+ * Jobs finishing within this window BEFORE the first `ai_usage` row still count as
+ * measurable: a job's row is flushed just after it finishes, so the job behind the very
+ * first row finished slightly earlier than the row's own timestamp.
+ */
+const ROLLOUT_GRACE = "interval '1 hour'";
+
+/**
+ * When AI spend measurement started: the first `ai_usage` row (ISO instant) minus a
+ * one-hour grace, or `null` while the table is empty. Jobs that finished before it are
+ * "historical" (migration 033 did not exist) and are reported apart from the coverage.
+ * Reads one indexed minimum (`ai_usage_at_idx`) — no join with `generations`, so a
+ * late row of an OLD job (a backfill, a requeue) cannot move the date back.
+ */
+export async function spendRollout(db: Queryable): Promise<string | null> {
+  const res = await db.query<{ at: Date | string | null }>(`SELECT min(at) - ${ROLLOUT_GRACE} AS at FROM ai_usage`);
+  const at = res.rows[0]?.at;
+  return at ? new Date(at).toISOString() : null;
+}
+
+async function coverageAt(db: Queryable, range: SpendRange, rolloutAt: string | null): Promise<SpendCoverage> {
   const res = await db.query<CoverageSqlRow>(
-    `SELECT count(*) FILTER (WHERE ${HAS_COST}) AS with_cost, count(*) AS completed
+    `SELECT ${COVERAGE_COLUMNS}
        FROM generations g
       WHERE g.status = 'COMPLETED' AND g.finished_at >= $1::timestamptz AND g.finished_at < $2::timestamptz`,
-    [range.fromTs, range.toTsExclusive],
+    [range.fromTs, range.toTsExclusive, rolloutAt],
   );
-  return toCoverage(res.rows[0]);
+  return toCoverage(res.rows[0], rolloutAt);
+}
+
+async function coverageByToolAt(db: Queryable, range: SpendRange, rolloutAt: string | null): Promise<ToolSpendCoverage[]> {
+  const res = await db.query<CoverageSqlRow>(
+    `SELECT g.tool_id, ${COVERAGE_COLUMNS}
+       FROM generations g
+      WHERE g.status = 'COMPLETED' AND g.finished_at >= $1::timestamptz AND g.finished_at < $2::timestamptz
+      GROUP BY g.tool_id
+      ORDER BY g.tool_id`,
+    [range.fromTs, range.toTsExclusive, rolloutAt],
+  );
+  return res.rows.map((r) => ({ toolId: String(r.tool_id), ...toCoverage(r, rolloutAt) }));
+}
+
+/**
+ * Telemetry coverage: completed jobs finished in range, from the `ai_usage` rollout
+ * on, with cost data ÷ those jobs. Earlier jobs are reported as `historical*` and
+ * never lower the percentage.
+ */
+export async function spendCoverage(db: Queryable, range: SpendRange): Promise<SpendCoverage> {
+  checkRange(range);
+  return coverageAt(db, range, await spendRollout(db));
 }
 
 /** `spendCoverage` per tool (tools with at least one completed job in range), by tool id. */
 export async function spendCoverageByTool(db: Queryable, range: SpendRange): Promise<ToolSpendCoverage[]> {
   checkRange(range);
-  const res = await db.query<CoverageSqlRow>(
-    `SELECT g.tool_id, count(*) FILTER (WHERE ${HAS_COST}) AS with_cost, count(*) AS completed
-       FROM generations g
-      WHERE g.status = 'COMPLETED' AND g.finished_at >= $1::timestamptz AND g.finished_at < $2::timestamptz
-      GROUP BY g.tool_id
-      ORDER BY g.tool_id`,
-    [range.fromTs, range.toTsExclusive],
+  return coverageByToolAt(db, range, await spendRollout(db));
+}
+
+// ---------------------------------------------------------------------------
+// Computed caveats
+
+/** `p->>'estimated'` — the part's usd rests on a documented default or estimated tokens. */
+const ESTIMATED_PART = `((p->>'estimated') = 'true')`;
+
+const KIND_LABEL: Record<string, string> = {
+  llm: "LLM",
+  image: "rasm",
+  grounding: "Google qidiruvi",
+  tts: "ovoz (TTS)",
+  unknown: "noma'lum",
+};
+
+type FlaggedRow = { kind: string; provider: string; model: string; unpriced_calls: string | number | null; estimated_calls: string | number | null };
+
+/** Names listed in one sentence; the rest is summarised so a long list never floods the panel. */
+const LIST_MAX = 5;
+
+function list(items: string[]): string {
+  if (items.length <= LIST_MAX) return items.join(", ");
+  return `${items.slice(0, LIST_MAX).join(", ")} va yana ${items.length - LIST_MAX} ta`;
+}
+
+const decimal = (v: number, digits: number): string => v.toFixed(digits).replace(".", ",");
+const usdText = (v: number): string => `$${v >= 1 ? v.toFixed(2) : v.toFixed(4)}`;
+const pctText = (v: number): string => `${decimal(v, 1)}%`;
+const toolTitle = (id: string): string => (Object.prototype.hasOwnProperty.call(TOOL_BY_ID, id) ? TOOL_BY_ID[id as keyof typeof TOOL_BY_ID].title : id || "noma'lum vosita");
+const dayText = (iso: string): string => new Date(iso).toLocaleDateString("en-CA", { timeZone: TZ });
+const partName = (r: FlaggedRow): string => `${r.provider}:${r.model}`;
+
+/**
+ * The known gaps of the spend data for `range`, as Uzbek sentences with the real
+ * numbers. Replaces the former static list: an item appears ONLY when it applies, and
+ * the always-true `COST_CAVEATS` (the retry gap, today's FX rate on old spend) close the
+ * list, so the computed part is exactly what comes before them. Items, in order:
+ *   1. NEW jobs (finished after the rollout) without cost data, per tool;
+ *   2. HISTORICAL jobs (finished before the first `ai_usage` row) without cost data;
+ *   3. LLM models with tokens but no price (recorded at usd 0);
+ *   4. other unpriced services (fal models, TTS models missing from the price book);
+ *   5. estimated prices (default image price, TTS tokens estimated from audio length);
+ *   6. Google Search grounding, billed per query with the free quota NOT deducted;
+ *   7. free-LLM calls (outline, UDK, rewrite, polish): their share of the spend;
+ *   8. `COST_CAVEATS`, always.
+ * Read-only; takes any `Queryable` so the caller's READ ONLY transaction is reused.
+ */
+export async function costCaveats(db: Queryable, range: SpendRange): Promise<string[]> {
+  checkRange(range);
+  const out: string[] = [];
+  const rolloutAt = await spendRollout(db);
+
+  // 1 + 2: coverage gaps.
+  const total = await coverageAt(db, range, rolloutAt);
+  const missingNew = total.jobsCompleted - total.jobsWithCost;
+  if (missingNew > 0) {
+    const gaps = (await coverageByToolAt(db, range, rolloutAt))
+      .filter((t) => t.jobsCompleted > t.jobsWithCost)
+      .sort((a, b) => b.jobsCompleted - b.jobsWithCost - (a.jobsCompleted - a.jobsWithCost) || a.toolId.localeCompare(b.toolId));
+    out.push(
+      `${missingNew} ta yangi ishda (${total.jobsCompleted} ta tugallangandan, ${pctText((missingNew / total.jobsCompleted) * 100)}) tannarx umuman yozilmagan: ${list(gaps.map((t) => `${toolTitle(t.toolId)} (${t.jobsWithCost}/${t.jobsCompleted})`))}. Bu vositalarning tannarxi kam baholangan.`,
+    );
+  }
+  const missingOld = total.historicalCompleted - total.historicalWithCost;
+  if (missingOld > 0 && rolloutAt) {
+    out.push(
+      `Tarixiy: AI xarajatlari hisobi ishga tushgunga (${dayText(rolloutAt)}) qadar tugagan ${total.historicalCompleted} ta ishning ${missingOld} tasida tannarx ma'lumoti yo'q. Ular qamrov ko'rsatkichiga kirmaydi va endi tuzatib bo'lmaydi.`,
+    );
+  }
+
+  // 3 + 4 + 5: parts the price book could not price, or priced by estimate.
+  const spend = spendRowsSql(range);
+  const flagged = await db.query<FlaggedRow>(
+    `WITH spend AS (${spend.sql})
+      SELECT ${PART_KEYS.kind} AS kind, ${PART_KEYS.provider} AS provider, ${PART_KEYS.model} AS model,
+             COALESCE(sum(${jsonCount("p->'calls'")}) FILTER (WHERE ${UNPRICED_PART}), 0) AS unpriced_calls,
+             COALESCE(sum(${jsonCount("p->'calls'")}) FILTER (WHERE ${ESTIMATED_PART}), 0) AS estimated_calls
+        ${PARTS_FROM}
+       GROUP BY 1, 2, 3
+      HAVING bool_or(${UNPRICED_PART}) OR bool_or(${ESTIMATED_PART})
+       ORDER BY 4 DESC, 5 DESC, 1, 2, 3`,
+    spend.params,
   );
-  return res.rows.map((r) => ({ toolId: String(r.tool_id), ...toCoverage(r) }));
+  const unpriced = flagged.rows.filter((r) => n(r.unpriced_calls) > 0);
+  const models = unpriced.filter((r) => r.kind === "llm");
+  if (models.length) {
+    out.push(
+      `Narxi noma'lum LLM modellari: ${list(models.map((r) => `${partName(r)} (${n(r.unpriced_calls)} chaqiruv)`))}. Ular 0 dollar deb hisoblangan, haqiqiy xarajat yuqoriroq; model narxlar jadvaliga (llm-pricing.ts) qo'shilishi kerak.`,
+    );
+  }
+  const services = unpriced.filter((r) => r.kind !== "llm");
+  if (services.length) {
+    out.push(
+      `Narxlanmagan xizmatlar: ${list(services.map((r) => `${KIND_LABEL[r.kind] ?? r.kind} ${partName(r)} (${n(r.unpriced_calls)} chaqiruv)`))}. Ular 0 dollar deb yozilgan, haqiqiy xarajat yuqoriroq.`,
+    );
+  }
+  const estimated = flagged.rows.filter((r) => n(r.estimated_calls) > 0);
+  if (estimated.length) {
+    out.push(
+      `Narxi taxminiy xizmatlar: ${list(estimated.map((r) => `${KIND_LABEL[r.kind] ?? r.kind} ${partName(r)} (${n(r.estimated_calls)} chaqiruv)`))}. Narx standart qiymat yoki audio uzunligidan baholangan tokenlar bilan hisoblangan.`,
+    );
+  }
+
+  // 6: grounding is billed per query, the monthly free quota is not deducted.
+  const grounding = await db.query<{ queries: string | number | null; usd: string | number | null }>(
+    `WITH spend AS (${spend.sql})
+      SELECT COALESCE(sum(${jsonCount("p->'units'")}), 0) AS queries, COALESCE(sum(GREATEST(${jsonNum("p->'usd'")}, 0)), 0) AS usd
+        ${PARTS_FROM}
+       WHERE p->>'kind' = 'grounding'`,
+    spend.params,
+  );
+  const queries = n(grounding.rows[0]?.queries);
+  if (queries > 0) {
+    out.push(
+      `Google qidiruvi: ${queries} ta so'rov har biri $0.014 dan ${usdText(usd6(grounding.rows[0]?.usd))} deb hisoblangan. Oyiga 5 000 ta bepul so'rov ayirilmagan, shuning uchun bu qism oshirib ko'rsatilgan.`,
+    );
+  }
+
+  // 7: free-LLM spend belongs to no tool.
+  const money = await db.query<{ all_usd: string | number | null; free_usd: string | number | null; free_calls: string | number | null }>(
+    `SELECT COALESCE(sum(s.usd), 0) AS all_usd,
+            COALESCE(sum(s.usd) FILTER (WHERE s.source = 'free'), 0) AS free_usd,
+            COALESCE(sum(s.calls) FILTER (WHERE s.source = 'free'), 0) AS free_calls
+       FROM (${spend.sql}) s`,
+    spend.params,
+  );
+  const allUsd = n(money.rows[0]?.all_usd);
+  const freeUsd = n(money.rows[0]?.free_usd);
+  if (freeUsd > 0 && allUsd > 0) {
+    out.push(
+      `Bepul AI so'rovlari (reja, UDK, tuzatish, sayqal): ${n(money.rows[0]?.free_calls)} ta chaqiruv, ${usdText(freeUsd)} — jami AI xarajatining ${pctText((freeUsd / allUsd) * 100)}. Bu xarajat hech bir vositaning tannarxiga kirmaydi.`,
+    );
+  }
+  // Always true, whatever the period: shown last, after the computed items.
+  out.push(...COST_CAVEATS);
+  return out;
 }
 
 /**

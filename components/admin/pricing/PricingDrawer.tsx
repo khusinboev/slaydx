@@ -33,11 +33,17 @@ const TREND_DAYS = 90;
  */
 export function PricingDrawer({
   item,
+  includeAdmins,
+  paymentFeePercent,
   onClose,
   onChanged,
   onStale,
 }: {
   item: PricingItem;
+  /** The page's «Adminlar bilan» switch: the trend and the simulator follow it. */
+  includeAdmins: boolean;
+  /** `pricing.payment_fee_percent` the page's margin was computed with. */
+  paymentFeePercent: number;
   onClose: () => void;
   /** A successful PUT/DELETE: the overview swaps in the new adjustment and ladder. */
   onChanged: (result: PricingItemResult) => void;
@@ -47,7 +53,7 @@ export function PricingDrawer({
   const canEdit = useCan("pricing.edit");
   const [dialog, setDialog] = useState<"edit" | "reset" | null>(null);
   const toolId = item.toolId;
-  const load = useCallback((signal: AbortSignal) => getPricingDetail(toolId, TREND_DAYS, { signal }), [toolId]);
+  const load = useCallback((signal: AbortSignal) => getPricingDetail(toolId, TREND_DAYS, { signal, includeAdmins }), [toolId, includeAdmins]);
   const [state, retry] = useLoad<PricingDetail>(load);
   const detail = state.status === "ready" ? state.data : null;
   // History comes from the drawer load, then from the last mutation's answer.
@@ -92,7 +98,8 @@ export function PricingDrawer({
               </span>
             ),
           },
-          { label: "O'rtacha narx", value: `${tangaText(item.avgPrice)} / ish` },
+          { label: "O'rtacha narx (barcha buyurtmalar)", value: `${tangaText(item.avgPrice)} / ish` },
+          { label: "Tushum (ro'yxat narxi)", value: `${tangaText(item.avgRevenue)} / tugallangan ish` },
           { label: "Naqd tushum", value: `${tangaText(item.avgCashRevenue)} / ish` },
           {
             label: "To'liq tannarx",
@@ -104,6 +111,25 @@ export function PricingDrawer({
               <span className="flex flex-wrap items-center gap-2 tabular-nums">
                 {markupText(item.markup)}
                 <Badge tone={marginTone(item.marginPct)}>{pctText(item.marginPct, 0)}</Badge>
+                <span className="text-muted-foreground text-xs">ro&apos;yxat narxi − tannarx − komissiya {pctText(paymentFeePercent)} (naqd qismdan); ustama komissiyadan keyingi tushum bo&apos;yicha</span>
+              </span>
+            ),
+          },
+          {
+            label: "Naqd marja",
+            value: (
+              <span className="flex flex-wrap items-center gap-2 tabular-nums">
+                {pctText(item.cashMarginPct, 0)}
+                <span className="text-muted-foreground text-xs">faqat naqd pul tushumi bo&apos;yicha</span>
+              </span>
+            ),
+          },
+          {
+            label: "Bonus xarajati",
+            value: (
+              <span className="flex flex-wrap items-center gap-2 tabular-nums">
+                {soumText(item.bonusCostSoum)}
+                <span className="text-muted-foreground text-xs">ball ulushi {pctText(item.pointsSharePct, 0)} — ball bilan to&apos;langan ishlarning tannarxi</span>
               </span>
             ),
           },
@@ -157,7 +183,7 @@ export function PricingDrawer({
       <Card>
         <CardHeader as="h3" title="Simulyator" aside={<span className="text-muted-foreground text-xs">saqlanmaydi</span>} />
         <CardBody>
-          <Simulator item={item} ladder={item.ladder} />
+          <Simulator item={item} ladder={item.ladder} includeAdmins={includeAdmins} />
         </CardBody>
       </Card>
 
@@ -201,6 +227,7 @@ export function PricingDrawer({
         title={item.title}
         adjust={item.adjust}
         ladder={item.ladder}
+        includeAdmins={includeAdmins}
         onClose={() => setDialog(null)}
         onSaved={applied}
       />
