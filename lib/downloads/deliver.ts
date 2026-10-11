@@ -40,6 +40,7 @@ import {
   type TelegramShareResult,
 } from "../api-client";
 import type { DownloadFormatId } from "./formats";
+import { bearerHeaders } from "../session-transport";
 import {
   downloadCapability,
   getTelegramWebApp,
@@ -397,6 +398,15 @@ export function saveBlob(blob: Blob, name: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+/**
+ * Signed `/api/dl/` URLs need no session; an own asset URL (image viewer)
+ * does — in bearer mode it rides as a header (docs/auth/COOKIELESS.md).
+ */
+function bearerInit(url: string): { headers?: Record<string, string> } {
+  const headers = bearerHeaders(url);
+  return Object.keys(headers).length ? { headers } : {};
+}
+
 async function deliverBrowser(file: ReadyFile, opts: DeliverOptions): Promise<DeliverResult> {
   const doFetch = opts.fetchImpl ?? fetch;
   const navigate = opts.navigate ?? ((url: string) => window.location.assign(url));
@@ -404,7 +414,7 @@ async function deliverBrowser(file: ReadyFile, opts: DeliverOptions): Promise<De
   let res: Response;
   try {
     // No timeout on purpose: a 10 MB deck on a slow mobile line takes minutes; progress shows it moving.
-    res = await doFetch(file.url, { credentials: "same-origin", signal: opts.signal });
+    res = await doFetch(file.url, { credentials: "same-origin", signal: opts.signal, ...bearerInit(file.url) });
   } catch (e) {
     if (isAbort(e) || opts.signal?.aborted) throw e;
     if (!online()) throw new DeliverError("offline", DELIVER_TEXT.offline);
@@ -432,7 +442,7 @@ export async function fetchFileBlob(
 ): Promise<Blob> {
   let res: Response;
   try {
-    res = await (opts.fetchImpl ?? fetch)(file.url, { credentials: "same-origin", signal: opts.signal });
+    res = await (opts.fetchImpl ?? fetch)(file.url, { credentials: "same-origin", signal: opts.signal, ...bearerInit(file.url) });
   } catch (e) {
     if (isAbort(e) || opts.signal?.aborted) throw e;
     throw new DeliverError("offline", DELIVER_TEXT.offline);

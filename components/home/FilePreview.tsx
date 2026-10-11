@@ -4,6 +4,7 @@ import { lazy, memo, Suspense, useState } from "react";
 import { FileText, Image as ImageIcon, Mic, Presentation } from "lucide-react";
 import type { ServerGeneration } from "@/lib/api-client";
 import { thumbUrl } from "@/lib/api-client";
+import { ApiImg } from "@/lib/use-api-src";
 
 /*
  * First-slide thumbnail in its own chunk (ops sprint WP-C): it carries the
@@ -79,8 +80,7 @@ export const FilePreview = memo(function FilePreview({ gen }: { gen: ServerGener
     return (
       // Rasm bizning `/api/.../assets` endpointimizdan keladi — `next/image`
       // optimizatsiyasi shaxsiy, cookie talab qiladigan manba uchun ishlamaydi.
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={url} alt="" loading="lazy" className="h-full w-full object-cover" />
+      <ApiImg src={url} alt="" loading="lazy" className="h-full w-full object-cover" />
     );
   }
 
@@ -159,8 +159,7 @@ function DocThumb({ id, fileVersion, fallback }: { id: string; fileVersion?: num
     <div className="relative h-full w-full overflow-hidden" data-doc-thumb={state}>
       {state !== "ok" ? fallback : null}
       {state !== "error" ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <ApiImg
           src={thumbUrl(id, fileVersion)}
           alt=""
           loading="lazy"

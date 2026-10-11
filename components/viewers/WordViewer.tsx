@@ -36,6 +36,7 @@ import { readingSections } from "./reading/sections";
 import { useFitZoom } from "./useFitZoom";
 import { useFontEpoch } from "./fonts-ready";
 import { useVisiblePage } from "./useVisiblePage";
+import { ApiImg } from "@/lib/use-api-src";
 
 /**
  * Bo'lingan paragraf bo'lagi uchun iqtibos bo'laklari (Maqola 2).
@@ -1258,8 +1259,8 @@ function FlowBlock({
       return (
         <div className="word-figure" data-figure={item.figureId}>
           {item.url ? (
-            // eslint-disable-next-line @next/next/no-img-element -- aktiv/`data:` URL, optimizator o'chirilgan (next.config).
-            <img
+            // Own asset / `data:` URL; `ApiImg` keeps bearer-mode webviews working (docs/auth/COOKIELESS.md).
+            <ApiImg
               src={item.url}
               alt={item.caption}
               className="word-figure-img"

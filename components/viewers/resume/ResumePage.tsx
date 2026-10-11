@@ -4,6 +4,7 @@ import type { ResumeItem, ResumeLayout, ResumePath, ResumeZoneId } from "@/lib/g
 import type { ResumeSectionId } from "@/lib/generation/resume/model";
 import type { ResumeRowSection } from "@/lib/generation/resume/edit";
 import { CHIP_SEP, RESUME_PAD_MM, mmPx, resumeMainPadMm } from "@/lib/viewers/metrics";
+import { ApiImg } from "@/lib/use-api-src";
 
 /**
  * Rezyume VARAG'I — sof taqdimot komponenti («ko'rdim = oldim»).
@@ -377,8 +378,7 @@ function Item({ it, ctx }: { it: ResumeItem; ctx: Ctx }) {
       const px = mmPx(it.sizeMm);
       return (
         <div style={{ marginBottom: "4mm" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <ApiImg
             src={it.url}
             alt=""
             width={Math.round(px)}

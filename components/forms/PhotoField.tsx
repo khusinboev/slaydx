@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import { photoUrl, uploadResumePhoto } from "@/lib/api-client";
+import { bearerHeaders } from "@/lib/session-transport";
+import { ApiImg, useApiSrc } from "@/lib/use-api-src";
 import { PHOTO_ACCEPT } from "@/lib/photo-accept";
 import { PhotoCropDialog } from "./PhotoCropDialog";
 import type { Crop } from "@/lib/photo-crop";
@@ -46,11 +48,18 @@ export function PhotoField({
   const [expired, setExpired] = useState(false);
   const showImg = Boolean(assetId) && broken !== assetId;
   const mismatch = Boolean(assetId && savedShape && savedShape !== shape);
+  // Re-crop reads the stored original; in bearer mode through a `blob:` URL (docs/auth/COOKIELESS.md).
+  const recropSrc = useApiSrc(recrop ? photoUrl(originalAssetId || assetId) : undefined);
 
   async function onImgError(id: string) {
     setBroken(id);
     try {
-      const res = await fetch(photoUrl(id), { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(10_000) });
+      const res = await fetch(photoUrl(id), {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: bearerHeaders(photoUrl(id)),
+        signal: AbortSignal.timeout(10_000),
+      });
       if (res.status === 404 || res.status === 410) {
         setExpired(true);
         onChange({ assetId: "", originalAssetId: "", crop: undefined, shape: undefined });
@@ -82,8 +91,7 @@ export function PhotoField({
         className={`bg-muted flex size-16 shrink-0 items-center justify-center overflow-hidden border ${shape === "circle" ? "rounded-full" : "rounded-xl"}`}
       >
         {showImg ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <ApiImg
             src={photoUrl(assetId)}
             alt="Rezyume surati"
             className="size-full object-cover"
@@ -153,7 +161,7 @@ export function PhotoField({
       {pending || recrop ? (
         <PhotoCropDialog
           file={pending}
-          src={recrop ? photoUrl(originalAssetId || assetId) : undefined}
+          src={recropSrc}
           shape={shape}
           crop={recrop ? crop : undefined}
           onCancel={() => {
