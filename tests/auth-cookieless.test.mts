@@ -182,7 +182,8 @@ test("Telegram initData and OTP: the token only with the opt-in", { skip }, asyn
   assert.equal(retry.status, 200);
   assert.equal((await getMe({ bearer: String(retry.body.sessionToken) })).status, 200);
 
-  const phone = "+998900000002";
+  // A fresh identifier per run: the per-identifier request limit (3 / 10 min) must not make reruns flaky.
+  const phone = `cl-otp-${randomBytes(4).toString("hex")}`;
   const issue = await call(otp.POST, "/api/auth/otp?action=request", { method: "POST", body: { identifier: phone } });
   assert.equal(issue.status, 200);
   const verify = await call(otp.POST, "/api/auth/otp?action=verify", {

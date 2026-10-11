@@ -67,14 +67,24 @@ for every cause because it does not depend on the cookie jar at all.
 ### Reproduction
 
 Playwright WebKit is not installed on this machine (only Chromium builds in
-`~/.cache/ms-playwright`). The reproduction uses Chromium with a route that
-strips every `Set-Cookie` header from our responses — the observable behaviour
-of a cookie-refusing webview — against `next dev` on the test database
-(`scripts/smoke` style, script kept outside the repo). Before the fix:
-`/uz?bt=…` → «Kirish» → `bot-link 200` → `GET /api/generations 401`, the page
-signs out. Unit-level reproductions: `tests/auth-cookieless.test.mts` (server)
-and `tests/ui/cookieless-login.test.mts` (client, jsdom, `fetch` stub that
-never returns cookies).
+`~/.cache/ms-playwright`), so the end-to-end reproduction is Chromium:
+`scripts/smoke/cookieless-login.cjs` puts a tiny reverse proxy in front of
+`next dev` (test database) that removes every `Set-Cookie` header — the
+observable behaviour of a cookie-refusing webview — then opens `/uz?bt=…`,
+taps «Kirish» and visits `/uz`, `/uz/files`, `/uz/wallet`, `/uz/profile`,
+`/uz/create`. (CDP `Fetch` interception was tried first and does not see
+`Set-Cookie`.)
+
+- Before (main `22c01ae`): `bot-link 409 → 200`, cookie jar empty, every page
+  signed out (wallet shows «Kirish»), exit 1.
+- After: `bot-link 200` (cookie) → probe signed out → `bot-link 200` (opt-in)
+  → every following `/api` call carries the bearer, no 401 on any page, wallet
+  shows the balance, cookie jar still empty, exit 0; one
+  `[auth] bearer-mode session issued` line.
+
+Unit-level: `tests/auth-cookieless.test.mts` (server; 8 of 10 fail on main's
+server code) and `tests/ui/cookieless-login.test.mts` (client, jsdom, a
+simulated server with real session state that never keeps cookies).
 
 ## 2. Design
 
