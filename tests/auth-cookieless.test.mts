@@ -234,6 +234,25 @@ test("a valid cookie wins over the bearer; an invalid cookie does not shadow a v
   assert.equal((stale.body.user as { id: string }).id, b.uid, "dead cookie + live bearer → bearer");
 });
 
+test("«O'tish» in bearer mode: the bearer session is the current one — switch asked first, then replaced (old row revoked)", { skip }, async () => {
+  const a = await bearerLogin();
+  const b = await user();
+  const link = signBotLink(b.telegramId);
+  const ask = await call(botLink.POST, "/api/auth/bot-link", { method: "POST", body: { token: link }, bearer: a.token, optIn: true });
+  assert.equal(ask.status, 409);
+  assert.equal(ask.body.code, "switch_confirm", "the bearer session is seen as this webview's session");
+  const go = await call(botLink.POST, "/api/auth/bot-link", { method: "POST", body: { token: link, confirm: true }, bearer: a.token, optIn: true });
+  assert.equal(go.status, 200);
+  assert.equal((go.body.user as { id: string }).id, b.uid);
+  assert.equal((await getMe({ bearer: a.token })).status, 401, "account A's bearer row is revoked");
+  const now = await getMe({ bearer: String(go.body.sessionToken) });
+  assert.equal((now.body.user as { id: string }).id, b.uid);
+  // The link owner's own bearer session is reused: no new token.
+  const again = await call(botLink.POST, "/api/auth/bot-link", { method: "POST", body: { token: link, confirm: true }, bearer: String(go.body.sessionToken), optIn: true });
+  assert.equal(again.status, 200);
+  assert.equal(again.body.sessionToken, undefined);
+});
+
 test("admin stays cookie-only: currentSessionRef() without req ignores the bearer; the admin session route 404s", { skip }, async () => {
   const b = await bearerLogin();
   const req = new Request("http://localhost:3000/api/x", { headers: { authorization: `Bearer ${b.token}` } });
