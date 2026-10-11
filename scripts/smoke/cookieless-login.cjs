@@ -11,6 +11,7 @@
 //   BT=<signed bot link> USER_NAME=<expected display name> OUT=<screenshot dir> \
 //   node scripts/smoke/cookieless-login.cjs
 // Exit code 0 = no cookie in the jar, signed in, and no consumer page got a 401.
+/* eslint-disable @typescript-eslint/no-require-imports -- plain Node CommonJS smoke script, run outside the app bundle. */
 
 const http = require("node:http");
 const { chromium } = require(process.env.PW_CORE || "playwright-core");

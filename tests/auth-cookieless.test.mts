@@ -239,7 +239,7 @@ test("admin stays cookie-only: currentSessionRef() without req ignores the beare
   const { result } = await inRouteRequest(req, async () => ({ bare: await currentSessionRef(), withReq: await currentSessionRef(req) }));
   assert.equal(result.bare, null, "MUTATION: cookie-only reader accepts Authorization");
   assert.equal(result.withReq?.user.id, b.uid);
-  const admin = await call(adminSession.GET, "/api/admin/session", { bearer: b.token });
+  const admin = await call((req) => adminSession.GET(req, {}), "/api/admin/session", { bearer: b.token });
   assert.equal(admin.status, 404);
 });
 
