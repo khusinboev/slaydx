@@ -8,6 +8,14 @@ import type { BodyRules } from "./generation/slide-audience";
 import type { DownloadFormatId } from "./downloads/formats";
 import type { ClickMethod } from "./click-input";
 import { reportGate, type GateChannel } from "./channel-gate";
+import {
+  TRANSPORT_HEADER,
+  bearerHeaders,
+  clearBearerToken,
+  cookiesKnownUnusable,
+  markCookiesUnusable,
+  setBearerToken,
+} from "./session-transport";
 
 /**
  * Server API bilan yagona aloqa nuqtasi.
@@ -146,6 +154,8 @@ export async function request<T>(path: string, init: RequestOptions = {}): Promi
           ...(rest.body && !(rest.body instanceof FormData)
             ? { "Content-Type": "application/json" }
             : {}),
+          // Bearer mode only (a webview that refused the cookie): `{}` otherwise.
+          ...bearerHeaders(path),
           ...rest.headers,
         },
       });
@@ -177,7 +187,11 @@ export async function request<T>(path: string, init: RequestOptions = {}): Promi
       // Sessiya tugagan bo'lsa butun ilova bilib tursin — aks holda
       // foydalanuvchi har sahifada tushunarsiz xatoga urilardi.
       // Admin 401s mean "admin session needed", not "logged out" — the admin client handles them.
-      if (res.status === 401 && !path.startsWith("/api/auth/") && !path.startsWith("/api/admin/")) onUnauthorized?.();
+      if (res.status === 401 && !path.startsWith("/api/auth/") && !path.startsWith("/api/admin/")) {
+        // A refused bearer token (revoked, expired) is dead: drop it with the UI session.
+        clearBearerToken();
+        onUnauthorized?.();
+      }
       const message =
         typeof data.error === "string" && data.error
           ? data.error
@@ -248,18 +262,82 @@ export function requestOtp(identifier: string) {
   });
 }
 
+/** OTP codes are single use: a verify is never repeated, the user asks for a new code (the next one opts in). */
+export const COOKIES_REFUSED_OTP_TEXT =
+  "Bu oyna kirish ma'lumotini saqlamadi. Yangi kod so'rang va qaytadan kiriting.";
+const COOKIES_REFUSED_TEXT = "Bu oyna kirish ma'lumotini saqlamadi. Qaytadan urinib ko'ring.";
+
+type LoginAnswer = { user: ServerUser; sessionToken?: unknown };
+
+/** The session probe: does this tab now act as `userId`? `null` when the probe itself failed (network). */
+async function sessionActsAs(userId: string): Promise<boolean | null> {
+  try {
+    const { user } = await fetchSession();
+    // Only a definite answer proves anything: `null` (no session) or another user.
+    if (user === undefined) return null;
+    return user !== null && String(user.id) === String(userId);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Every consumer login (docs/auth/COOKIELESS.md §2.1). The exchange runs with
+ * the cookie transport; right after a success `GET /api/auth/session` must
+ * answer the same user. If it does not, this webview refused the cookie: the
+ * exchange is repeated once with `X-Session-Transport: bearer` (bot links and
+ * Telegram payloads stay valid for their lifetime) and the returned token is
+ * used as `Authorization: Bearer` from then on — only if the probe with it
+ * confirms the user. A tab that already proved cookies unusable opts in on the
+ * first attempt. `retryable: false` (OTP) never repeats the exchange.
+ * The token never leaves this function in the returned value.
+ */
+async function loginExchange(path: string, body: unknown, opts: { retryable: boolean }): Promise<{ user: ServerUser }> {
+  const send = async (bearer: boolean): Promise<{ user: ServerUser }> => {
+    const answer = await request<LoginAnswer>(path, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: bearer ? { [TRANSPORT_HEADER]: "bearer" } : undefined,
+    });
+    const { sessionToken, ...rest } = answer;
+    if (bearer && typeof sessionToken === "string" && sessionToken) setBearerToken(sessionToken);
+    return rest;
+  };
+
+  const optIn = cookiesKnownUnusable();
+  const first = await send(optIn);
+  const ok = await sessionActsAs(first.user.id);
+  // A failed probe (network) proves nothing: the store's own session check decides later.
+  if (ok !== false) return first;
+  if (optIn) {
+    clearBearerToken();
+    throw new ApiError(COOKIES_REFUSED_TEXT, 401, { code: "session_unusable" });
+  }
+  markCookiesUnusable();
+  if (!opts.retryable) throw new ApiError(COOKIES_REFUSED_OTP_TEXT, 401, { code: "session_unusable" });
+  const second = await send(true);
+  if ((await sessionActsAs(second.user.id)) === false) {
+    clearBearerToken();
+    throw new ApiError(COOKIES_REFUSED_TEXT, 401, { code: "session_unusable" });
+  }
+  return second;
+}
+
 export function verifyOtp(identifier: string, code: string) {
-  return request<{ user: ServerUser }>("/api/auth/otp?action=verify", {
-    method: "POST",
-    body: JSON.stringify({ identifier, code }),
-  });
+  return loginExchange("/api/auth/otp?action=verify", { identifier, code }, { retryable: false });
 }
 
 export function loginWithTelegram(payload: { initData?: string; widget?: Record<string, string> }) {
-  return request<{ user: ServerUser }>("/api/auth/telegram", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return loginExchange("/api/auth/telegram", payload, { retryable: true });
+}
+
+/**
+ * Bot keyboard link → session (`MiniAppBridge` `BotLinkLogin`). Without
+ * `confirm` the server never opens a session (409 `login_confirm`), so the
+ * bearer retry only ever repeats a confirmed exchange.
+ */
+export function botLinkLogin(token: string, confirm: boolean) {
+  return loginExchange("/api/auth/bot-link", confirm ? { token, confirm: true } : { token }, { retryable: true });
 }
 
 export type Ticket = { nonce: string; url: string; expiresAt: string };
@@ -275,8 +353,13 @@ export function createLoginTicket() {
   return request<Ticket>("/api/auth/telegram/ticket", { method: "POST", body: "{}" });
 }
 
-export function logout(all = false) {
-  return request<{ ok: boolean }>(`/api/auth/session${all ? "?all=1" : ""}`, { method: "DELETE" });
+export async function logout(all = false) {
+  try {
+    // In bearer mode the header rides along, so the server revokes that row too.
+    return await request<{ ok: boolean }>(`/api/auth/session${all ? "?all=1" : ""}`, { method: "DELETE" });
+  } finally {
+    clearBearerToken();
+  }
 }
 
 export function updateProfile(patch: Partial<ServerUser>) {

@@ -2,6 +2,7 @@
 
 import { Mic } from "lucide-react";
 import type { AcademicDoc } from "@/lib/generation/types";
+import { useApiSrc } from "@/lib/use-api-src";
 
 /**
  * AUDIO KO'RUVCHISI (AUDIT-22 R0) — podkast va tabriknoma.
@@ -27,7 +28,8 @@ import type { AcademicDoc } from "@/lib/generation/types";
  */
 export function AudioViewer({ doc, gen }: { doc: AcademicDoc; gen: { id: string; fileName?: string } }) {
   const audio = doc.audio;
-  const src = `/api/generations/${gen.id}/file?inline=1`;
+  // Bearer-mode webviews get the bytes through a `blob:` URL (docs/auth/COOKIELESS.md); unchanged otherwise.
+  const src = useApiSrc(`/api/generations/${gen.id}/file?inline=1`);
   const script = audio?.script ?? [];
   // Ikki ovozli suhbatda replikalar rol bo'yicha ajratiladi (A — chap, B — o'ng rang).
   const speakers = [...new Set(script.map((l) => l.speaker))];

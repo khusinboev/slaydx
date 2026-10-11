@@ -6,6 +6,7 @@ import type { AcademicDoc, GenImage } from "@/lib/generation/types";
 import { imageExt } from "@/lib/viewers/kind";
 import { imageRatioById, imageStyleById } from "@/lib/generation/image-studio-options";
 import { cn } from "@/lib/cn";
+import { ApiImg } from "@/lib/use-api-src";
 import { useDialog } from "../overlays/useDialog";
 import { useOpenDownloads, type SheetMode } from "../files/DownloadSheet";
 import { currentDeliveryEnv, deliver, markGesture, type ReadyFile } from "@/lib/downloads/deliver";
@@ -181,8 +182,7 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
               )}
             </div>
             <div className={cn("min-h-0 max-w-full", actual ? "max-h-[calc(100svh-5rem)] overflow-auto" : "")} data-lightbox-stage>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <ApiImg
                 src={images[open].url}
                 alt={images[open].alt || ""}
                 className={actual ? "max-w-none" : "max-h-[calc(100svh-5rem)] max-w-full object-contain"}
@@ -230,8 +230,7 @@ function ImageTile({
       data-image-state={status}
     >
       <button type="button" className="block w-full cursor-zoom-in" onClick={onOpen} aria-label="Kattalashtirish" disabled={status === "error"}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <ApiImg
           key={attempt}
           ref={ref}
           src={im.url}

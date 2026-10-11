@@ -6,6 +6,7 @@ import type { SlideModel, SlideTheme } from "@/lib/generation/slide-types";
 import { fontCss } from "@/lib/generation/slide-fonts";
 import { cn } from "@/lib/cn";
 import { viewSrc } from "@/lib/asset-view";
+import { ApiImg } from "@/lib/use-api-src";
 import {
   boxStyle,
   cssColor,
@@ -185,8 +186,7 @@ export function LayerView({ layer, budget, hidden = false }: { layer: SlideLayer
           off-screen images are not fetched and decoding stays off the main
           thread.
         */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <ApiImg
           src={viewSrc(layer.url)}
           alt=""
           loading="lazy"

@@ -231,10 +231,8 @@ function BotLinkLogin({ token }: { token: string | null }) {
       else if (mode === "login") setLoginAsk((p) => (p ? { ...p, status: "busy" } : p));
       else setPrompt((p) => (p ? { ...p, status: "busy" } : p));
       try {
-        const { user } = await api.request<{ user: api.ServerUser }>("/api/auth/bot-link", {
-          method: "POST",
-          body: JSON.stringify(confirm ? { token, confirm: true } : { token }),
-        });
+        // `botLinkLogin` also checks the session took and falls back to the bearer transport (docs/auth/COOKIELESS.md).
+        const { user } = await api.botLinkLogin(token, confirm);
         setSettled(true);
         setView({ s: "idle" });
         setLoginAsk(null);

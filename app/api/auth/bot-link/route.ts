@@ -1,10 +1,10 @@
-import { ApiError, checkOrigin, handler, json, limit, readJson } from "@/lib/server/api";
+import { ApiError, checkOrigin, handler, json, limit, readJson, sessionJson } from "@/lib/server/api";
 import { ensureMigrated } from "@/lib/server/db";
 import { supportHandle } from "@/lib/support";
 import { accountLabel } from "@/lib/telegram-miniapp";
 import { botLinkAccount, botLinkSessionAction } from "@/lib/server/auth";
 import { BOT_LINK_MAX_LENGTH, verifyBotLink } from "@/lib/server/bot-link";
-import { createSession, currentSessionRef, revokeSessionById, setSessionCookie } from "@/lib/server/session";
+import { currentSessionRef, revokeSessionById, startSession } from "@/lib/server/session";
 import { clientIp, rateLimit } from "@/lib/server/ratelimit";
 import { IP_LIMITS } from "@/lib/server/ip-limits";
 import { peekRate } from "@/lib/server/rate-peek";
@@ -71,7 +71,7 @@ export const POST = handler("auth/bot-link", async (req) => {
   // «Barcha qurilmalardan chiqish», an admin revoke or block after the link was issued voids it.
   if (account.revoked) throw new ApiError(EXPIRED, 401, { code: "bot_link_expired" });
 
-  const current = await currentSessionRef();
+  const current = await currentSessionRef(req);
   const action = botLinkSessionAction(current?.user ?? null, link.telegramId, confirmed);
   if (action === "refuse_phone") {
     throw new ApiError(
@@ -86,10 +86,6 @@ export const POST = handler("auth/bot-link", async (req) => {
   if (action === "confirm_switch") throw new ApiError("Boshqa akkauntga o'tishni tasdiqlang.", 409, { code: "switch_confirm", to });
   if (action === "reuse") return json({ user: account.user });
   if (action === "replace") await revokeSessionById(current!.sessionId);
-  const { token, expiresAt } = await createSession(account.user.id, {
-    userAgent: req.headers.get("user-agent"),
-    ip,
-  });
-  await setSessionCookie(token, expiresAt);
-  return json({ user: account.user });
+  // `sessionToken` only for an `X-Session-Transport: bearer` retry (docs/auth/COOKIELESS.md).
+  return sessionJson({ user: account.user }, await startSession(req, account.user.id, ip, "auth/bot-link"));
 });

@@ -1,4 +1,4 @@
-import { ApiError, checkOrigin, handler, json, limit, readJson } from "@/lib/server/api";
+import { ApiError, checkOrigin, handler, json, limit, readJson, sessionJson } from "@/lib/server/api";
 import { ensureMigrated } from "@/lib/server/db";
 import {
   consumeLoginCode,
@@ -6,7 +6,7 @@ import {
   normalizeIdentifier,
   upsertLocalUser,
 } from "@/lib/server/auth";
-import { createSession, setSessionCookie } from "@/lib/server/session";
+import { startSession } from "@/lib/server/session";
 import { clientIp, rateLimit } from "@/lib/server/ratelimit";
 import { IP_LIMITS } from "@/lib/server/ip-limits";
 import { peekRate } from "@/lib/server/rate-peek";
@@ -97,10 +97,6 @@ export const POST = handler("auth/otp", async (req) => {
   }
 
   const user = await upsertLocalUser(identifier);
-  const { token, expiresAt } = await createSession(user.id, {
-    userAgent: req.headers.get("user-agent"),
-    ip,
-  });
-  await setSessionCookie(token, expiresAt);
-  return json({ user });
+  // `sessionToken` only with `X-Session-Transport: bearer` (docs/auth/COOKIELESS.md).
+  return sessionJson({ user }, await startSession(req, user.id, ip, "auth/otp"));
 });
