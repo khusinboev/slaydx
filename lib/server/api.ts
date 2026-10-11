@@ -172,7 +172,8 @@ export async function requireUser(req: Request): Promise<AuthedContext> {
   if (req.method !== "GET" && req.method !== "HEAD" && !checkOrigin(req)) {
     throw new ApiError("So'rov manbasi noto'g'ri", 403);
   }
-  const user = await currentUser();
+  // `req`: the cookie, or the opt-in bearer transport (docs/auth/COOKIELESS.md).
+  const user = await currentUser(req);
   if (!user) throw new ApiError("Kirish talab qilinadi", 401);
   // Shu so'rovning keyingi jurnal qatorlari kimniki ekanini biladi (OBS-02).
   addLogContext({ userId: String(user.id) });
@@ -182,8 +183,18 @@ export async function requireUser(req: Request): Promise<AuthedContext> {
 /** Sessiya ixtiyoriy bo'lgan endpointlar uchun. */
 export async function optionalUser(req: Request): Promise<{ user: SessionUser | null; ip: string }> {
   await ensureMigrated();
-  const user = await currentUser().catch(() => null);
+  const user = await currentUser(req).catch(() => null);
   return { user, ip: clientIp(req) };
+}
+
+/**
+ * A login answer. `issued.sessionToken` exists only when the request opted in
+ * to the bearer transport (`startSession`); then the body carries it and the
+ * response is `no-store`. Otherwise the body is exactly `body`.
+ */
+export function sessionJson(body: Record<string, unknown>, issued: { sessionToken?: string } = {}) {
+  if (!issued.sessionToken) return json(body);
+  return NextResponse.json({ ...body, sessionToken: issued.sessionToken }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function limit(

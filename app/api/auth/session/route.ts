@@ -46,7 +46,8 @@ export const DELETE = handler("auth/logout", async (req) => {
     const { user } = await requireUser(req);
     await revokeAllSessions(user.id);
   } else {
-    await revokeCurrentSession();
+    // The cookie's row and, in bearer mode, the `Authorization` token's row (docs/auth/COOKIELESS.md).
+    await revokeCurrentSession(req);
   }
   await clearSessionCookie();
   return json({ ok: true });

@@ -1,7 +1,7 @@
-import { ApiError, checkOrigin, handler, json, limit, readJson } from "@/lib/server/api";
+import { ApiError, checkOrigin, handler, json, limit, readJson, sessionJson } from "@/lib/server/api";
 import { ensureMigrated } from "@/lib/server/db";
 import { miniAppSessionAction, upsertTelegramUser, verifyLoginWidget, verifyMiniAppInitData } from "@/lib/server/auth";
-import { createSession, currentSessionRef, revokeSessionById, setSessionCookie } from "@/lib/server/session";
+import { currentSessionRef, revokeSessionById, startSession } from "@/lib/server/session";
 import { clientIp, rateLimit } from "@/lib/server/ratelimit";
 import { IP_LIMITS } from "@/lib/server/ip-limits";
 import { peekRate } from "@/lib/server/rate-peek";
@@ -97,7 +97,7 @@ export const POST = handler("auth/telegram", async (req) => {
    * (browsers) keeps its old behaviour.
    */
   const viaMiniApp = typeof body.initData === "string" && body.initData !== "";
-  const current = viaMiniApp ? await currentSessionRef() : null;
+  const current = viaMiniApp ? await currentSessionRef(req) : null;
   const sessionAction = miniAppSessionAction(current?.user ?? null, profile.telegramId, profile.authDate);
   if (viaMiniApp && sessionAction === "refuse_stale") {
     throw new ApiError("Telegram ma'lumotlari eskirgan. Mini ilovani yopib, qayta oching.", 409, { code: "switch_stale" });
@@ -122,10 +122,6 @@ export const POST = handler("auth/telegram", async (req) => {
   await clearRefCookie(req);
   if (viaMiniApp && sessionAction === "reuse") return json({ user });
   if (viaMiniApp && sessionAction === "replace") await revokeSessionById(current!.sessionId);
-  const { token, expiresAt } = await createSession(user.id, {
-    userAgent: req.headers.get("user-agent"),
-    ip,
-  });
-  await setSessionCookie(token, expiresAt);
-  return json({ user });
+  // `sessionToken` only for an `X-Session-Transport: bearer` retry (docs/auth/COOKIELESS.md).
+  return sessionJson({ user }, await startSession(req, user.id, ip, "auth/telegram"));
 });

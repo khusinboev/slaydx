@@ -79,7 +79,7 @@ const REDACTED = "[REDACTED]";
  * `SECRET_KEY` bilan bir oila; bu yerda `key` ichida kelganlari ham —
  * `apiKey`, `x-api-key`, `secretKey`).
  */
-const SECRET_FIELD = /^(authorization|cookie|set-cookie|password|passwd|secret|token|sign_string|sign|signature|key|session|sessionid|session_id)$|(api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|bot[_-]?token)$|^(card[_-]?number|card[_-]?token|cardnumber|cardtoken|pan|cvv|cvc|expire[_-]?date|expiredate|expiry|sms[_-]?code|smscode|otp)$/i;
+const SECRET_FIELD = /^(authorization|cookie|set-cookie|password|passwd|secret|token|sign_string|sign|signature|key|session|sessionid|session_id)$|(api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|bot[_-]?token|session[_-]?token)$|^(card[_-]?number|card[_-]?token|cardnumber|cardtoken|pan|cvv|cvc|expire[_-]?date|expiredate|expiry|sms[_-]?code|smscode|otp)$/i;
 
 /** Matn ichidagi sir shakllari — tartib muhim (avval aniqroq). */
 const TEXT_RULES: Array<[RegExp, string | ((m: string, ...g: string[]) => string)]> = [
@@ -93,12 +93,12 @@ const TEXT_RULES: Array<[RegExp, string | ((m: string, ...g: string[]) => string
   [/\b((?:set-)?cookie)\s*:\s*[^\r\n]+/gi, (_m, name: string) => `${name}: ${REDACTED}`],
   // JSON satr ichida: `"token":"…"`, `"password": "…"`.
   [
-    /("(?:(?:api[_-]?)?key|access_token|token|secret|password|passwd|session|sessionid|sign_string|signature|authorization|card_number|card_token|expire_date|sms_code)"\s*:\s*)"[^"]*"/gi,
+    /("(?:(?:api[_-]?)?key|access_token|token|session_?token|secret|password|passwd|session|sessionid|sign_string|signature|authorization|card_number|card_token|expire_date|sms_code)"\s*:\s*)"[^"]*"/gi,
     `$1"${REDACTED}"`,
   ],
   // URL/forma parametrlari va `nom: qiymat`: `?key=…`, `&api_key=…`, `token=…`, `password: …`, `session=…`.
   [
-    /([?&;\s]|^)((?:api[_-]?)?key|access_token|token|secret|sign_string|password|passwd|signature|session|sessionid|card_number|card_token|expire_date|sms_code)(=|:\s*)([^&\s"'#;,]+)/gi,
+    /([?&;\s]|^)((?:api[_-]?)?key|access_token|token|session_?token|secret|sign_string|password|passwd|signature|session|sessionid|card_number|card_token|expire_date|sms_code)(=|:\s*)([^&\s"'#;,]+)/gi,
     (_m, pre: string, name: string, sep: string) => `${pre}${name}${sep}${REDACTED}`,
   ],
   // Google API kaliti (`AIza` + 35), Anthropic/OpenRouter/OpenAI (`sk-…`), xAI (`xai-…`).
