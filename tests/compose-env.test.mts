@@ -95,6 +95,17 @@ test("docker-compose: TTS_GEMINI_RPM ikkala servisda, standart 8", () => {
 });
 
 /**
+ * 2026-10-12: the broadcast loop, bonus-channel checks and admin alerts run in the WORKER; without
+ * the bot token there `botConfigured()` is false and broadcasts stay `queued` forever.
+ */
+test("docker-compose: worker'ga ham Telegram bot tokeni va bot sozlamalari uzatiladi", () => {
+  const yaml = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  for (const k of ["TELEGRAM_BOT_TOKEN", "NEXT_PUBLIC_TELEGRAM_BOT", "BOT_PREMIUM_EMOJI", "SUPPORT_URL"]) {
+    assert.match(envBlock(yaml, "worker"), new RegExp(`^\\s+${k}: \\$\\{${k}:-`, "m"), `worker: ${k} compose'da uzatilmaydi`);
+  }
+});
+
+/**
  * INFRA-09: `lib/brand.ts` `NEXT_PUBLIC_BRAND_NAME`/`NEXT_PUBLIC_BRAND_LOGO`ni
  * `process.env`dan to'g'ridan-to'g'ri o'qiydi (Next.js build-vaqtidagi inline
  * qilish worker'ga tegishli emas — u oddiy `tsx` processi). PPTX/DOCX
