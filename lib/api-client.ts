@@ -432,6 +432,12 @@ export type GenerationDetail = ServerGeneration & {
    */
   queuePosition?: number;
   etaSec?: number;
+  /**
+   * Faqat `IN_PROGRESS`, ixtiyoriy: ish necha soniyadan beri bajarilmoqda (server soati) va shu vositaning
+   * oxirgi 30 kundagi median davomiyligi (`typical-duration.ts`, kam ma'lumotda yo'q) — «taxminan N daqiqa qoldi».
+   */
+  runningSec?: number;
+  typicalSec?: number;
 };
 
 export type GenerationPage = { generations: ServerGeneration[]; nextCursor?: string | null };

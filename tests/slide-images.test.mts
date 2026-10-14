@@ -399,6 +399,30 @@ test("buildImageArtifact: Gemini'ga boradi, fal.run ga so'rov yo'q", async () =>
   }
 });
 
+/**
+ * Running-panel stages of the «Rasm» tool (`lib/progress-stages.ts` "image"): before this the tool reported
+ * nothing and the page only showed the time-based fallback curve with generic text.
+ * MUTATION: drop the per-image `stage(...)` -> the 2-image run loses its «1/2», «2/2» steps.
+ */
+test("buildImageArtifact: haqiqiy bosqichlar yuboradi (0 → 10 → rasm sanog'i → 85), progress o'sadi", async () => {
+  const restore = geminiEnv();
+  const padded = Buffer.concat([Buffer.from(JPEG_1PX, "base64"), Buffer.alloc(1200, 0)]).toString("base64");
+  globalThis.fetch = (async (url: string) => (String(url).includes("/interactions") ? jsonRes(200, geminiOkBody(padded)) : jsonRes(500, {}))) as unknown as typeof fetch;
+  try {
+    const stages: { progress: number; step: string }[] = [];
+    await buildImageArtifact(TOOL_BY_ID.image, { prompt: "Registon maydoni, tong", imageStyle: "photo", imageRatio: "1:1", imageCount: 2 }, undefined, (ev) => stages.push(ev));
+    assert.deepEqual(
+      stages.map((s) => s.step),
+      ["So‘rov tayyorlanmoqda", "Rasm chizilmoqda · 0/2", "Rasm chizilmoqda · 1/2", "Rasm chizilmoqda · 2/2", "Fayl saqlanmoqda"],
+    );
+    const marks = stages.map((s) => s.progress);
+    assert.deepEqual([...marks].sort((a, b) => a - b), marks, "ascending");
+    assert.ok(marks[0] === 0 && marks.at(-1) === 85 && marks.every((m) => m < 96));
+  } finally {
+    restore();
+  }
+});
+
 // ───────────────────────────────────────────── 5. Pro deka: shift yo'q
 
 /**

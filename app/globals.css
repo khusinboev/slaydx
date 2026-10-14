@@ -598,6 +598,83 @@ button {
 }
 
 /*
+  Generation progress panel (`components/files/GenerationProgress.tsx` / `GenerationArt.tsx`):
+  per-tool loop art, the moving sheen on the bar and the current-stage dot. Decorative — off under
+  `prefers-reduced-motion`; the percentage, the stage list and the step text carry the information.
+*/
+@keyframes slx-art-write {
+  0% {
+    transform: scaleX(0.12);
+    opacity: 0.5;
+  }
+  55%,
+  100% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+@keyframes slx-art-eq {
+  0%,
+  100% {
+    transform: scaleY(0.25);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+@keyframes slx-art-cell {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes slx-art-sheen {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(200%);
+  }
+}
+@keyframes slx-bar-sheen {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+.slx-art-write {
+  animation: slx-art-write 1.8s ease-in-out infinite;
+}
+.slx-art-eq {
+  animation: slx-art-eq 0.9s ease-in-out infinite;
+}
+.slx-art-cell {
+  animation: slx-art-cell 1.6s ease-in-out infinite;
+}
+.slx-art-sheen {
+  animation: slx-art-sheen 1.7s linear infinite;
+}
+.slx-bar-sheen {
+  animation: slx-bar-sheen 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slx-art-write,
+  .slx-art-eq,
+  .slx-art-cell,
+  .slx-art-sheen,
+  .slx-bar-sheen {
+    animation: none;
+  }
+}
+
+/*
   Mobil eskiz tasmasi (AUDIT-10) — gorizontal aylantirish.
 
   Tasma balandligi ~90 px; brauzerning standart 15 px li gorizontal

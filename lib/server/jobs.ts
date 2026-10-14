@@ -148,6 +148,7 @@ export function rowToSummary(
     topic: r.topic,
     status: r.status,
     createdAt: new Date(r.created_at).toISOString(),
+    startedAt: r.started_at ? new Date(r.started_at).toISOString() : undefined,
     finishedAt: r.finished_at ? new Date(r.finished_at).toISOString() : undefined,
     price: Number(r.price),
     fileName: r.file_name,
