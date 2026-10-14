@@ -49,6 +49,16 @@ function isSpendLimit(message: string): boolean {
 }
 
 /** `Headers`ga o'xshasa (`.get` bor) — instanceof EMAS, duck-typing (yuqoridagi izohdagi sabab bilan bir xil ehtiyot). */
+/**
+ * A key that is not scoped to one workspace needs the `anthropic-workspace-id` header (prod 2026-10-12:
+ * every call answered 400 «must include the anthropic-workspace-id header»). Optional env; no braces here
+ * on purpose — `tests/llm-anthropic.test.mts` pins the client constructor's text.
+ */
+function workspaceHeaders(): Record<string, string> | undefined {
+  const id = process.env.ANTHROPIC_WORKSPACE_ID;
+  return id ? { "anthropic-workspace-id": id } : undefined;
+}
+
 function retryAfterMs(headers: unknown): number | undefined {
   const get = (headers as { get?: (name: string) => string | null })?.get;
   const raw = typeof get === "function" ? get.call(headers, "retry-after") : null;
@@ -94,7 +104,7 @@ export function makeAnthropicAdapter(deps: AnthropicDeps = {}): ProviderAdapter 
          * boshqaradi — muddat, jitter va `Retry-After` chegarasi bilan
          * (audit EXT-03).
          */
-        deps.client ?? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: opts.timeoutMs, maxRetries: 0 });
+        deps.client ?? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, defaultHeaders: workspaceHeaders(), timeout: opts.timeoutMs, maxRetries: 0 });
       try {
         const res = await client.messages.create({
           model,
