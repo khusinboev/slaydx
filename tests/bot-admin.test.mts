@@ -219,7 +219,8 @@ test("access: an owner — /admin opens the admin menu as a REPLY keyboard (owne
   // MUTATION: the old inline panel (buttons under the message) instead of the bottom keyboard.
   assert.deepEqual(kb(panel).map((r) => r.map((b) => `${b.text}${b.style ? `(${b.style})` : ""}`)), [
     ["📈 Statistika(primary)", "📢 Xabar yuborish"],
-    ["🔔 Kanal ulash", "💳 To‘lov bonusi"],
+    ["⏳ Xabarlar holati", "🔔 Kanal ulash"],
+    ["💳 To‘lov bonusi"],
     ["⬅️ Asosiy menyu"],
   ]);
   installFetch();
@@ -511,7 +512,7 @@ test("Xabar yuborish: text + bold + button → audience counts → preview → t
   assert.match(String(card.text), /Holat: <b>navbatda<\/b>/);
   const bs = await broadcastsBy(a.adminId);
   assert.equal(bs.length, 1, "exactly one broadcast");
-  assert.deepEqual(await offered(a.tg), [`a:bp:${bs[0]!.id}`, `a:bw:${bs[0]!.id}`, `a:bc:${bs[0]!.id}`, "a:h"]);
+  assert.deepEqual(await offered(a.tg), [`a:bp:${bs[0]!.id}`, `a:bw:${bs[0]!.id}`, `a:bc:${bs[0]!.id}`, "a:bl", "a:h"]);
   assert.equal((bs[0]!.content!.notify as { messageId?: number }).messageId, msgSeq, "the engine edits THIS card");
   // The label is gone from the screen: typing it again starts nothing; an old inline button answers «eskirgan».
   installFetch();
@@ -544,7 +545,7 @@ test("Xabar yuborish: text + bold + button → audience counts → preview → t
   const notice = sends().find((c) => c.body.chat_id === a.tg && /yuborildi<\/b>/.test(String(c.body.text)));
   assert.ok(notice, "summary to the admin");
   assert.match(String(notice!.body.text), new RegExp(`Xabar #${bs[0]!.id} yuborildi</b>\\nYetkazildi: <b>${groupDigits(nw)}</b> · yetkazilmadi: 0`));
-  assert.deepEqual(labels(notice!.body), ["📈 Statistika", "📢 Xabar yuborish", "🔔 Kanal ulash", "💳 To‘lov bonusi", "⬅️ Asosiy menyu"]);
+  assert.deepEqual(labels(notice!.body), ["📈 Statistika", "📢 Xabar yuborish", "⏳ Xabarlar holati", "🔔 Kanal ulash", "💳 To‘lov bonusi", "⬅️ Asosiy menyu"]);
   assert.ok(!JSON.stringify(notice!.body).includes("inline_keyboard"), "no inline buttons on the summary");
   assert.deepEqual(await offered(a.tg), [], "the progress controls are over");
 });
@@ -1331,15 +1332,15 @@ test("Progress card: reply controls (pause / resume / refresh / stop), the engin
   assert.equal(b!.status, "queued");
   const card1 = msgSeq;
   assert.equal((b!.content!.notify as { messageId?: number }).messageId, card1, "the progress message is remembered for the engine");
-  assert.deepEqual(await offered(a.tg), ["a:bp:" + b!.id, "a:bw:" + b!.id, "a:bc:" + b!.id, "a:h"]);
-  assert.deepEqual(labels(sends()[0]!.body), ["🔄 Yangilash", "⏳ Pauza", "⛔ To‘xtatish", "🛠 Admin panel"]);
+  assert.deepEqual(await offered(a.tg), ["a:bp:" + b!.id, "a:bw:" + b!.id, "a:bc:" + b!.id, "a:bl", "a:h"]);
+  assert.deepEqual(labels(sends()[0]!.body), ["🔄 Yangilash", "⏳ Pauza", "⛔ To‘xtatish", "⏳ Xabarlar holati", "🛠 Admin panel"]);
 
   // Pause → «pauzada», the keyboard flips to «Davom ettirish»; the superseded card is removed and the engine follows the new one.
   installFetch();
   await press(a, acb.bcPause(b!.id));
   assert.match(String(sends()[0]!.body.text), /^⏸ Pauzada\n\n/);
   assert.match(String(sends()[0]!.body.text), /Holat: <b>pauzada<\/b>/);
-  assert.deepEqual(await offered(a.tg), ["a:bp:" + b!.id, "a:br:" + b!.id, "a:bc:" + b!.id, "a:h"]);
+  assert.deepEqual(await offered(a.tg), ["a:bp:" + b!.id, "a:br:" + b!.id, "a:bc:" + b!.id, "a:bl", "a:h"]);
   const card2 = msgSeq;
   assert.deepEqual(sends("deleteMessage").map((c) => c.body.message_id), [card1], "the old card is removed");
   assert.equal(((await broadcastsBy(a.adminId))[0]!.content!.notify as { messageId?: number }).messageId, card2);
@@ -1397,6 +1398,73 @@ test("Progress card: reply controls (pause / resume / refresh / stop), the engin
   assert.equal((await audit(a.adminId, "broadcasts.cancel")).length, 1);
 });
 
+test("Xabarlar holati: the menu button lists broadcasts in progress (status, %), opens the card with pause / resume / stop; support may look, a viewer may not", { skip }, async () => {
+  const a = await newAdmin("owner");
+  const sup = await newAdmin("support");
+  const viewer = await newAdmin("viewer");
+
+  // Empty state (screen level: the suite's other tests leave broadcasts behind, so the chat-level list is never empty here).
+  const { broadcastListScreen } = await import("../lib/server/bot/admin-screens.ts");
+  const empty = broadcastListScreen("uz", [], []);
+  assert.match(empty.text, /Hozir jarayonda xabar yo‘q/);
+  assert.deepEqual(empty.keys.map((k) => k.code), ["a:bl", "a:h"]);
+
+  // One queued broadcast, then paused.
+  await toConfirm(a, "Holat ro'yxati sinovi");
+  const nw = (await audienceCount({ kind: "new_days", days: 7 })).count;
+  installFetch();
+  await press(a, acb.bcSend(nw));
+  const [b] = await broadcastsBy(a.adminId);
+  assert.ok(b);
+  installFetch();
+  await press(a, acb.bcPause(b!.id));
+
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "⏳ Xabarlar holati"));
+  const text = String(sends()[0]!.body.text);
+  const [activePart = ""] = text.split("Oxirgi tugaganlar:");
+  assert.match(activePart, /Jarayonda:/);
+  assert.match(activePart, new RegExp(`#${b!.id} · <b>pauzada</b> · 0 / ${nw} \\(0%\\)`));
+  const codes = await offered(a.tg);
+  assert.ok(codes.includes(`a:bp:${b!.id}`), "a button for the broadcast");
+  assert.deepEqual(codes.slice(-2), ["a:bl", "a:h"], "refresh / panel last");
+  assert.ok(labels(sends()[0]!.body).some((t) => new RegExp(`^.*#${b!.id} · pauzada 0%`).test(t)));
+
+  // The button opens the card, whose controls are pause / resume / stop (+ the way back to the list).
+  installFetch();
+  await press(a, acb.bcProgress(b!.id));
+  assert.deepEqual(await offered(a.tg), [`a:bp:${b!.id}`, `a:br:${b!.id}`, `a:bc:${b!.id}`, "a:bl", "a:h"]);
+
+  // Stopped broadcasts leave «Jarayonda» and show under the latest finished ones.
+  installFetch();
+  await press(a, acb.bcStopAsk(b!.id));
+  installFetch();
+  await press(a, acb.bcStop(b!.id));
+  installFetch();
+  await press(a, acb.bcList());
+  const after = String(sends()[0]!.body.text);
+  const [activeAfter = "", finished = ""] = after.split("Oxirgi tugaganlar:");
+  assert.ok(!activeAfter.includes(`#${b!.id} `), "a stopped broadcast leaves «Jarayonda»");
+  assert.match(finished, new RegExp(`#${b!.id} · <b>to‘xtatildi</b>`));
+
+  // Support (broadcasts.view) sees the list and the card, but the card has no pause / stop.
+  installFetch();
+  await tg.handleUpdate(textUpdate(sup.tg, "⏳ Xabarlar holati"));
+  assert.match(String(sends()[0]!.body.text), /Xabarlar holati/);
+  installFetch();
+  await press(sup, acb.bcProgress(b!.id));
+  assert.ok(!(await offered(sup.tg)).some((c) => c.startsWith("a:bw:") || c.startsWith("a:bc:")), "no pause / stop for support");
+
+  // A viewer (no broadcasts.view) is refused — inline code and typed label alike.
+  // MUTATION: PERM.bcList = "dashboard.view" -> the viewer gets the list.
+  installFetch();
+  await tg.handleUpdate(cbUpdate(viewer.tg, "a:bl"));
+  assert.deepEqual(toasts(), ["Ruxsat yo‘q"]);
+  installFetch();
+  await tg.handleUpdate(textUpdate(viewer.tg, "⏳ Xabarlar holati"));
+  assert.ok(!sends().some((c) => /Xabarlar holati/.test(String(c.body.text)) && /Jarayonda|jarayonda xabar/.test(String(c.body.text))));
+});
+
 test("Progress card text: speed and ETA while sending; the abort reason when failed; the controls are reply buttons", async () => {
   const base = {
     id: "9", status: "sending", text: "x", audience: { kind: "all" }, total: 1000, sent: 100, failed: 0, createdBy: null, createdByName: null,
@@ -1406,7 +1474,7 @@ test("Progress card text: speed and ETA while sending; the abort reason when fai
   const { progressScreen } = await import("../lib/server/bot/admin-screens.ts");
   const live = progressScreen("uz", base, stats, true);
   assert.match(live.text, /Tezlik: 24\.8 ta\/s · taxminan 1 min 30 s qoldi/);
-  assert.deepEqual(live.keys.map((k) => k.code), ["a:bp:9", "a:bw:9", "a:bc:9", "a:h"]);
+  assert.deepEqual(live.keys.map((k) => k.code), ["a:bp:9", "a:bw:9", "a:bc:9", "a:bl", "a:h"]);
   assert.ok(!JSON.stringify(live.reply_markup).includes("inline_keyboard"));
   const failed = progressScreen("uz", { ...base, status: "failed", failReason: "Birinchi 200 ta yuborish muvaffaqiyatsiz <x>" }, { ...stats, speed: 0, etaSeconds: null }, true);
   assert.match(failed.text, /xato bilan to‘xtatildi/);

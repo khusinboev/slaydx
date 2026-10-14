@@ -14,6 +14,7 @@
  *   a:bu:<all|act|new>  audience picked → preview
  *   a:bt              test send to me
  *   a:bs:<n>          send to n recipients (n = the count the admin saw; checked by `sendBroadcast`)
+ *   a:bl              list of broadcasts in progress (+ the latest finished)
  *   a:bp:<id>         broadcast progress
  *   a:bc:<id>         ask to stop       a:bk:<id>  stop (confirmed)
  *   a:c               channel list      a:cn       connect: ask for the channel
@@ -78,6 +79,7 @@ export const acb = {
   bcPick: (a: AudienceCode) => `a:bu:${a}`,
   bcTest: () => "a:bt",
   bcSend: (n: number) => `a:bs:${n}`,
+  bcList: () => "a:bl",
   bcProgress: (id: string) => `a:bp:${id}`,
   bcPause: (id: string) => `a:bw:${id}`,
   bcResume: (id: string) => `a:br:${id}`,
@@ -116,6 +118,7 @@ export type AdminCallback =
   | { kind: "bcPick"; audience: AudienceCode }
   | { kind: "bcTest" }
   | { kind: "bcSend"; count: number }
+  | { kind: "bcList" }
   | { kind: "bcProgress"; id: string }
   | { kind: "bcPause"; id: string }
   | { kind: "bcResume"; id: string }
@@ -174,6 +177,8 @@ export function parseAdminCallback(data: string | undefined | null): AdminCallba
         return { kind: "bcDraft" };
       case "bt":
         return { kind: "bcTest" };
+      case "bl":
+        return { kind: "bcList" };
       case "c":
         return { kind: "channels" };
       case "cn":

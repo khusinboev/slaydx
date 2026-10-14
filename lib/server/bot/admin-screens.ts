@@ -71,6 +71,7 @@ const cancel = (lang: Lang) => key("cancel", at(lang, "btn.cancel"), acb.cancel(
 export const ADMIN_MENU = [
   { key: "panel.stats", icon: "chart", data: acb.stats(), perm: "dashboard.view" },
   { key: "panel.broadcast", icon: "megaphone", data: acb.bcStart(), perm: "broadcasts.send" },
+  { key: "panel.bcList", icon: "clock", data: acb.bcList(), perm: "broadcasts.view" },
   { key: "panel.channels", icon: "bell", data: acb.channels(), perm: "bonus.view" },
   { key: "kb.payBonus", icon: "card", data: acb.payBonus(), perm: "settings.view" },
 ] as const satisfies readonly { key: string; icon: string; data: string; perm: Permission }[];
@@ -244,6 +245,33 @@ function etaText(seconds: number): string {
   return t < 60 ? `${t} s` : `${Math.floor(t / 60)} min ${String(t % 60).padStart(2, "0")} s`;
 }
 
+/** Share of recipients handled (delivered + failed), 0–100. */
+const doneShare = (b: { sent: number; failed: number; total: number }): number => (b.total > 0 ? Math.min(100, Math.floor(((b.sent + b.failed) * 100) / b.total)) : 0);
+
+type ListedBroadcast = Pick<AdminBroadcast, "id" | "status" | "sent" | "failed" | "total">;
+
+/**
+ * «Xabarlar holati»: the broadcasts in progress (queued / sending / paused) and the latest finished ones, one button each
+ * that opens the progress card (status, pause / resume, stop). Reached from the menu, so a card that scrolled away
+ * can always be found again.
+ */
+export function broadcastListScreen(lang: Lang, active: ListedBroadcast[], recent: ListedBroadcast[]): AdminScreen {
+  const line = (b: ListedBroadcast) =>
+    at(lang, "bc.listLine", { id: b.id, status: at(lang, `bc.st.${b.status}`), done: g(b.sent + b.failed), total: g(b.total), pct: doneShare(b) });
+  const lines = [head("clock", at(lang, "bc.listTitle")), ""];
+  if (active.length) lines.push(at(lang, "bc.listActive"), ...active.map(line));
+  else lines.push(at(lang, "bc.listNone"));
+  if (recent.length) lines.push("", at(lang, "bc.listRecent"), ...recent.map(line));
+  if (active.length || recent.length) lines.push("", at(lang, "bc.listHint"));
+  const open = (b: ListedBroadcast) =>
+    key(b.status === "paused" ? "next" : b.status === "queued" || b.status === "sending" ? "megaphone" : "chart", `#${b.id} · ${at(lang, `bc.st.${b.status}`)} ${doneShare(b)}%`, acb.bcProgress(b.id));
+  return keyScreen(
+    lines.join("\n"),
+    ...[...active, ...recent].map((b) => [open(b)]),
+    [key("refresh", at(lang, "btn.refresh"), acb.bcList(), "primary"), key("admin", at(lang, "btn.panel"), acb.panel())],
+  );
+}
+
 export function progressScreen(lang: Lang, b: AdminBroadcast, s: BroadcastStats, canStop: boolean): AdminScreen {
   const running = b.status === "queued" || b.status === "sending";
   const live = running || b.status === "draft" || b.status === "paused";
@@ -265,7 +293,8 @@ export function progressScreen(lang: Lang, b: AdminBroadcast, s: BroadcastStats,
       running && canStop && key("clock", at(lang, "bc.pause"), acb.bcPause(b.id)),
       b.status === "paused" && canStop && key("next", at(lang, "bc.resume"), acb.bcResume(b.id), "success"),
     ],
-    [live && b.status !== "draft" && canStop && key("stop", at(lang, "bc.stop"), acb.bcStopAsk(b.id), "danger"), key("admin", at(lang, "btn.panel"), acb.panel())],
+    [live && b.status !== "draft" && canStop && key("stop", at(lang, "bc.stop"), acb.bcStopAsk(b.id), "danger")],
+    [key("clock", at(lang, "bc.toList"), acb.bcList()), key("admin", at(lang, "btn.panel"), acb.panel())],
   );
 }
 
