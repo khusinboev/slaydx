@@ -54,7 +54,7 @@ export type EtaState =
 export function etaState(input: { elapsedSec: number; typicalSec?: number | null; progress: number }): EtaState {
   const typical = input.typicalSec;
   if (!typical || typical <= 0 || !Number.isFinite(input.elapsedSec)) return { kind: "none" };
-  if (input.elapsedSec > typical * 1.3 && input.progress < 90) return { kind: "slow" };
+  if (input.elapsedSec > typical * 1.3) return { kind: "slow" };
   const byProgress = typical * (1 - Math.min(99, Math.max(0, input.progress)) / 100);
   const byClock = typical - input.elapsedSec;
   const sec = Math.max(byProgress, byClock * 0.5);

@@ -14,7 +14,7 @@ export const MIN_SAMPLES = 5;
 type Row = { tool_id: string; median_sec: string | number | null };
 
 let cache: { at: number; byTool: Map<string, number> } | null = null;
-let inflight: Promise<Map<string, number>> | null = null;
+let inflight: Promise<void> | null = null;
 
 async function load(): Promise<Map<string, number>> {
   const rows = await query<Row>(
@@ -35,16 +35,34 @@ async function load(): Promise<Map<string, number>> {
   return byTool;
 }
 
-/** Median seconds for `toolId`, or `null` (too few samples / lookup failed — never throws). */
+/** A failed refresh is retried after this, not on every poll. */
+const RETRY_MS = 60_000;
+
+function refresh(now: number): Promise<void> {
+  inflight ??= load()
+    .then((byTool) => {
+      cache = { at: now, byTool };
+    })
+    .catch(() => {
+      // Keep serving the previous medians (or none) and back off — a slow/failing DB must not turn the 1.2 s poll into a query storm.
+      cache = { at: now - TTL_MS + RETRY_MS, byTool: cache?.byTool ?? new Map() };
+    })
+    .finally(() => {
+      inflight = null;
+    });
+  return inflight;
+}
+
+/**
+ * Median seconds for `toolId`, or `null` (too few samples / lookup failed — never throws).
+ * Stale-while-revalidate: after the first load an expired cache is served immediately and refreshed in the background,
+ * so no poll waits for the grouped query.
+ */
 export async function typicalDurationSec(toolId: string, now: number = Date.now()): Promise<number | null> {
   try {
-    if (!cache || now - cache.at > TTL_MS) {
-      inflight ??= load().finally(() => {
-        inflight = null;
-      });
-      cache = { at: now, byTool: await inflight };
-    }
-    return cache.byTool.get(toolId) ?? null;
+    if (!cache) await refresh(now);
+    else if (now - cache.at > TTL_MS) void refresh(now);
+    return cache?.byTool.get(toolId) ?? null;
   } catch {
     return null;
   }

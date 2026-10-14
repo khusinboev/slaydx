@@ -44,9 +44,13 @@ export function GenerationProgress({ gen }: { gen: api.GenerationDetail }) {
 
   // "Adjust state while rendering": when the server value / clock sample changes, restart the creep / re-anchor.
   const [mark, setMark] = useState({ progress: gen.progress, at: now });
-  if (mark.progress !== gen.progress) setMark({ progress: gen.progress, at: now });
+  if (!Object.is(mark.progress, gen.progress)) setMark({ progress: gen.progress, at: now });
   const [anchor, setAnchor] = useState({ sec: gen.runningSec, at: now });
-  if (anchor.sec !== gen.runningSec) setAnchor({ sec: gen.runningSec, at: now });
+  if (anchor.sec !== gen.runningSec) {
+    // The displayed clock only moves forward: a poll can land up to 1 s "behind" the last tick.
+    const current = typeof anchor.sec === "number" ? anchor.sec + (now - anchor.at) / 1000 : 0;
+    setAnchor({ sec: typeof gen.runningSec === "number" ? Math.max(gen.runningSec, current) : gen.runningSec, at: now });
+  }
   const [peak, setPeak] = useState(0);
 
   const shown = queued
@@ -84,7 +88,7 @@ export function GenerationProgress({ gen }: { gen: api.GenerationDetail }) {
           aria-valuenow={queued ? undefined : shown}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-valuetext={queued ? "Navbatda" : `${shown}% · ${gen.step}`}
+          aria-valuetext={queued ? "Navbatda" : gen.step ? `${shown}% · ${gen.step}` : `${shown}%`}
         >
           <div
             className="bg-primary relative h-full overflow-hidden rounded-full transition-[width] duration-700 ease-out"

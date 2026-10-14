@@ -66,7 +66,10 @@ test("typicalDurationSec: median per tool, min samples, status/window filters, 1
   // Cache: new rows are invisible inside the TTL, visible after it.
   for (let i = 0; i < 5; i++) await add("podcast", "COMPLETED", 200);
   assert.equal(await typicalDurationSec("podcast", t0 + 60_000), null, "served from cache within 10 min");
-  assert.equal(await typicalDurationSec("podcast", t0 + 11 * 60_000), 200, "reloaded after the TTL");
+  // After the TTL the stale value is served at once (no poll waits for the query) and refreshed in the background.
+  assert.equal(await typicalDurationSec("podcast", t0 + 11 * 60_000), null, "stale-while-revalidate: old value now");
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal(await typicalDurationSec("podcast", t0 + 11 * 60_000 + 1), 200, "refreshed in the background");
 
   await query("DELETE FROM users WHERE id = $1", [uid]);
 });

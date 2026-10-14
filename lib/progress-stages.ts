@@ -14,10 +14,10 @@ import type { ToolId } from "./types";
 export type StageDef = { readonly from: number; readonly label: string };
 
 /** Visual flavour of the running panel (`components/files/GenerationProgress.tsx`). */
-export type ProgressKind = "doc" | "essay" | "teacher" | "game" | "infographic" | "audio" | "image" | "translation" | "resume" | "slides";
+export type ProgressKind = "doc" | "article" | "essay" | "teacher" | "game" | "listening" | "infographic" | "audio" | "image" | "translation" | "resume" | "slides";
 
 const STAGES: Record<ProgressKind, readonly StageDef[]> = {
-  // coursework / referat / mustaqil-ish / thesis / article — `work/engine.ts`, `article/engine.ts`
+  // coursework / referat / mustaqil-ish — `work/engine.ts`
   doc: [
     { from: 0, label: "Manbalar qidirilmoqda" },
     { from: 10, label: "Reja tuzilmoqda" },
@@ -25,7 +25,18 @@ const STAGES: Record<ProgressKind, readonly StageDef[]> = {
     { from: 60, label: "Jadval va sxemalar" },
     { from: 76, label: "Adabiyotlar tekshirilmoqda" },
     { from: 80, label: "Tayyorlik hisoboti" },
-    { from: 90, label: "Avto-sayqal" },
+    { from: 88, label: "Avto-sayqal" },
+  ],
+  // thesis / article — `article/engine.ts`
+  article: [
+    { from: 0, label: "Manbalar qidirilmoqda" },
+    { from: 12, label: "Reja tuzilmoqda" },
+    { from: 18, label: "Bo‘limlar yozilmoqda" },
+    { from: 62, label: "Jadval va sxemalar" },
+    { from: 74, label: "Annotatsiya yozilmoqda" },
+    { from: 82, label: "Adabiyotlar tekshirilmoqda" },
+    { from: 88, label: "Tayyorlik hisoboti" },
+    { from: 92, label: "Avto-sayqal" },
   ],
   // `essay/engine.ts`
   essay: [
@@ -35,19 +46,28 @@ const STAGES: Record<ProgressKind, readonly StageDef[]> = {
     { from: 70, label: "Tayyorlik hisoboti" },
     { from: 90, label: "Avto-sayqal" },
   ],
-  // lesson-plan / texnologik-xarita / glossary / keys / test — `teacher/engine.ts`, `teacher/test/engine.ts`
+  // lesson-plan / texnologik-xarita / glossary / keys / test — `teacher/engine.ts` (10/65/75/88), `teacher/test/engine.ts` (8/60/70/85)
   teacher: [
     { from: 0, label: "Ma’lumotlar tayyorlanmoqda" },
     { from: 8, label: "Mazmun yozilmoqda" },
-    { from: 65, label: "Hujjat yig‘ilmoqda" },
-    { from: 75, label: "Tayyorlik hisoboti" },
-    { from: 88, label: "Avto-sayqal" },
+    { from: 60, label: "Hujjat yig‘ilmoqda" },
+    { from: 70, label: "Tayyorlik hisoboti" },
+    { from: 85, label: "Avto-sayqal" },
   ],
-  // crossword / flashcards / sorting / listening — `games/**`
+  // crossword / flashcards / sorting — `games/**`
   game: [
     { from: 0, label: "Ma’lumotlar tayyorlanmoqda" },
     { from: 10, label: "Mazmun yozilmoqda" },
     { from: 55, label: "Varaq tayyorlanmoqda" },
+    { from: 75, label: "Tayyorlik hisoboti" },
+    { from: 90, label: "Avto-sayqal" },
+  ],
+  // `games/listening/engine.ts` (TTS audio 50, sheet 70)
+  listening: [
+    { from: 0, label: "Ma’lumotlar tayyorlanmoqda" },
+    { from: 10, label: "So‘zlar tanlanmoqda" },
+    { from: 50, label: "Audio tayyorlanmoqda" },
+    { from: 70, label: "Varaq tayyorlanmoqda" },
     { from: 75, label: "Tayyorlik hisoboti" },
     { from: 90, label: "Avto-sayqal" },
   ],
@@ -101,8 +121,8 @@ const KIND_BY_TOOL: Record<ToolId, ProgressKind> = {
   coursework: "doc",
   referat: "doc",
   "mustaqil-ish": "doc",
-  thesis: "doc",
-  article: "doc",
+  thesis: "article",
+  article: "article",
   essay: "essay",
   resume: "resume",
   translation: "translation",
@@ -116,7 +136,7 @@ const KIND_BY_TOOL: Record<ToolId, ProgressKind> = {
   crossword: "game",
   flashcards: "game",
   sorting: "game",
-  listening: "game",
+  listening: "listening",
   podcast: "audio",
   greeting: "audio",
 };

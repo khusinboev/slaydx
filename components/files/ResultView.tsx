@@ -738,7 +738,7 @@ export function RunningPanel({ gen }: { gen: api.GenerationDetail }) {
     );
   }
 
-  return <GenerationProgress gen={gen} />;
+  return <GenerationProgress key={gen.id} gen={gen} />;
 }
 
 /** Ko'ruvchilar hali eski `Generation` shaklini kutadi. */

@@ -138,7 +138,7 @@ export async function buildImageArtifact(
     const res = await imageProvider.fetchImage({ prompt: full, size, styleId: "photo" }, deadline);
     const im = res.ok ? res.image : null;
     drawn++;
-    if (count > 1) stage(10 + Math.round((75 * drawn) / count), `Rasm chizilmoqda · ${drawn}/${count}`);
+    if (count > 1) stage(10 + Math.round((70 * drawn) / count), `Rasm chizilmoqda · ${drawn}/${count}`);
     if (!im) return null;
     const bytes = await fetchImageBytes(im.url);
     const url = bytes ? `data:${bytes.data}` : im.url;

@@ -59,13 +59,13 @@ test("smooth: first render and zero elapsed show the server value exactly", () =
 test("smooth: creeps up inside a long stage but never past the stage ceiling", () => {
   const shown = smoothProgress({ server: 10, stages: LESSON, sinceChangeMs: 5 * 60_000 });
   assert.ok(shown > 40, `creep ${shown}`);
-  assert.ok(shown <= 64, `ceiling: ${shown}`);
+  assert.ok(shown <= 59, `ceiling: ${shown}`);
   const early = smoothProgress({ server: 10, stages: LESSON, sinceChangeMs: 10_000 });
   assert.ok(early > 10 && early < shown, `monotone in time: ${early} < ${shown}`);
 });
 
 test("smooth: never below the server value, never reaches 99, never backwards", () => {
-  assert.equal(smoothProgress({ server: 64, stages: LESSON, sinceChangeMs: 60_000 }), 64, "already at the ceiling");
+  assert.equal(smoothProgress({ server: 59, stages: LESSON, sinceChangeMs: 60_000 }), 59, "already at the ceiling");
   assert.ok(smoothProgress({ server: 97, stages: LESSON, sinceChangeMs: 10 * 60_000 }) <= 98);
   assert.ok(smoothProgress({ server: 99, stages: LESSON, sinceChangeMs: 10 * 60_000 }) <= 99);
   // The server catches up lower than what was shown: the shown value holds.
@@ -91,8 +91,9 @@ test("eta: needs a typical duration; slow past 1.3x; remaining shrinks with prog
   assert.equal(a.kind, "left");
   assert.equal(b.kind, "left");
   if (a.kind === "left" && b.kind === "left") assert.ok(b.sec < a.sec, `${b.sec} < ${a.sec}`);
-  // Past the median but nearly done: still an estimate, not "slow".
-  assert.equal(etaState({ elapsedSec: 150, typicalSec: 100, progress: 95 }).kind, "left");
+  // Far past the median is "slow" at ANY progress — never a stuck "a few seconds left" at 95 %.
+  assert.equal(etaState({ elapsedSec: 150, typicalSec: 100, progress: 95 }).kind, "slow");
+  assert.equal(etaState({ elapsedSec: 90, typicalSec: 100, progress: 95 }).kind, "left");
 });
 
 test("etaLabel is coarse Uzbek text", () => {

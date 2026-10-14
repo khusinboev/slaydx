@@ -71,7 +71,7 @@ test("creeps inside the current stage while the server value stands still, never
     act(() => mock.timers.tick(10_000));
     const p = percent();
     assert.ok(p >= last, `never backwards: ${last} -> ${p}`);
-    assert.ok(p <= 64, `stays inside the stage (teacher "Mazmun" ends at 64): ${p}`);
+    assert.ok(p <= 59, `stays inside the stage (teacher "Mazmun" ends at 59): ${p}`);
     last = p;
   }
   assert.ok(last > 40, `creeps: ${last}`);
@@ -86,10 +86,10 @@ test("a new server value restarts from it and moves the checklist; shown value n
   assert.ok(crept > 10);
   view.rerender(h(GenerationProgress, { gen: detail({ progress: 20 }) }));
   assert.ok(percent() >= crept, "does not drop below what was already shown");
-  view.rerender(h(GenerationProgress, { gen: detail({ progress: 70, step: "Hujjat yig‘ilmoqda" }) }));
-  assert.equal(percent(), 70);
+  view.rerender(h(GenerationProgress, { gen: detail({ progress: 62, step: "Hujjat yig‘ilmoqda" }) }));
+  assert.equal(percent(), 62);
   assert.deepEqual(states(), ["done", "done", "current", "todo", "todo"]);
-  assert.equal(q("[role=progressbar]")?.getAttribute("aria-valuenow"), "70");
+  assert.equal(q("[role=progressbar]")?.getAttribute("aria-valuenow"), "62");
 });
 
 test("elapsed clock and ETA: left, then slow past 1.3x the median", () => {

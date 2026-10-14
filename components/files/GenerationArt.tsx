@@ -21,6 +21,7 @@ export function GenerationArt({ kind, className }: { kind: ProgressKind; classNa
 function Art({ kind }: { kind: ProgressKind }) {
   switch (kind) {
     case "audio":
+    case "listening":
       return (
         <div className="flex h-8 items-center gap-1">
           {[0, 1, 2, 3, 4].map((i) => (
