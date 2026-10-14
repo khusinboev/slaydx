@@ -213,7 +213,7 @@ test("extractNewSlides: NDJSON, bare array and duplicated answer all yield the s
 
 /* ───────────────────────── 4. the retry ───────────────────────── */
 
-type Seen = { url: string; body: Record<string, any> };
+type Seen = { url: string; body: { system_instruction?: { parts?: { text?: string }[] }; generationConfig: { responseMimeType?: string; responseSchema?: unknown } } };
 
 const enc = new TextEncoder();
 const sseBody = (text: string, finishReason = "STOP") => {
@@ -433,13 +433,16 @@ test("SseAssembler: a chunk that never becomes JSON is dropped and COUNTED; the 
 });
 
 /* ───────────────────────── 6. schema mirrors the prompt ───────────────────────── */
+/** The slice of a Gemini schema node these tests read (loose on purpose: every access is asserted). */
+type Sch = { type: string; properties: Record<string, Sch>; items: Sch; propertyOrdering?: string[]; enum?: string[]; required?: string[] };
+
 
 function promptSample(): unknown {
   return JSON.parse(deckJsonSchema().replace(/^JSON sxema: /, ""));
 }
 
 /** Property names of the prompt sample vs the Gemini schema, recursively. */
-function shape(sample: unknown, schema: any, path: string): void {
+function shape(sample: unknown, schema: Sch, path: string): void {
   if (Array.isArray(sample)) {
     assert.equal(schema.type, "ARRAY", path);
     if (sample.length && typeof sample[0] === "object" && sample[0] !== null) shape(sample[0], schema.items, `${path}[]`);
@@ -458,9 +461,9 @@ function shape(sample: unknown, schema: any, path: string): void {
 }
 
 test("deckResponseSchema mirrors deckJsonSchema field by field, layout enum included", () => {
-  const schema = deckResponseSchema() as any;
+  const schema = deckResponseSchema() as unknown as Sch;
   shape(promptSample(), schema, "$");
-  const promptLayouts = (promptSample() as any).slides[0].layout.split("|");
+  const promptLayouts = ((promptSample() as { slides: { layout: string }[] }).slides[0].layout).split("|");
   assert.deepEqual(schema.properties.slides.items.properties.layout.enum, promptLayouts);
   assert.deepEqual(schema.properties.slides.items.required, ["layout", "title"]);
 });

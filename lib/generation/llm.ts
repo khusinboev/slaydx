@@ -553,7 +553,7 @@ type SseLine =
   /** A `data:` payload that is not (yet) valid JSON - possibly the first line of a multi-line event. */
   | { kind: "bad" };
 
-const SSE_SKIP: SseLine = { kind: "skip" };
+const SSE_SKIP: SseEvent = { kind: "skip" };
 const SSE_BAD: SseLine = { kind: "bad" };
 /** What the stream loop sees: everything but the internal `bad` marker. */
 type SseEvent = Exclude<SseLine, { kind: "bad" }>;
