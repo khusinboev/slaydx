@@ -285,7 +285,7 @@ test("mostUsedToolIds: most frequent first, ties by recency, unknown skipped, to
 });
 
 test("UI copy names the files tab «Ishlarim» (the old «Mening fayllarim» survives only in code comments)", () => {
-  const files = ["components/files/ResultView.tsx", "components/viewers/LiveStrip.tsx", "lib/api-client.ts"];
+  const files = ["components/files/GenerationProgress.tsx", "components/viewers/LiveStrip.tsx", "lib/api-client.ts"];
   for (const f of files) {
     const src = readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
     const copy = src.split("\n").filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l));
