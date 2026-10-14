@@ -154,7 +154,24 @@ umask 077
 mkdir -p "$BACKUP_DIR"
 
 ts=$(date +%Y%m%d-%H%M%S)
-final="$BACKUP_DIR/slaydx-$ts.dump"
+# Pre-deploy rollback point (BACKUP_CORE_ONLY=1; implied by BACKUP_LOCAL_ONLY=1, which `slaydx-deploy` sets via the wrapper): the database WITHOUT the contents of the
+# big generated-file tables. ~95 % of the full dump is `generation_assets` + `generation_files` (the users' finished files, which
+# migrations never rewrite), so the core dump is ~100 MB / ~15 s instead of ~1.9 GB / 4-6 min, and every deploy no longer eats
+# 1.9 GB of disk. Schema of those tables IS in the dump; their rows are not. The nightly run stays a FULL dump + off-box copy.
+# The file name deliberately does not match `slaydx-*.dump`, so the weekly restore drill and the watchdog keep using FULL dumps.
+# Default: a local-only (pre-deploy) run is a CORE dump unless BACKUP_FULL=1 forces the full one (e.g. by hand, before a risky migration).
+# Decided here, not in the installed `slaydx-backup` wrapper, so it ships with the repo checkout (no manual reinstall on the server).
+if [ "${BACKUP_LOCAL_ONLY:-0}" = 1 ] && [ "${BACKUP_FULL:-0}" != 1 ]; then BACKUP_CORE_ONLY="${BACKUP_CORE_ONLY:-1}"; fi
+BACKUP_CORE_ONLY="${BACKUP_CORE_ONLY:-0}"
+BACKUP_CORE_KEEP="${BACKUP_CORE_KEEP:-3}"
+[[ "$BACKUP_CORE_KEEP" =~ ^[1-9][0-9]*$ ]] || fail "BACKUP_CORE_KEEP musbat butun son bo'lishi kerak"
+dump_args=(-Fc)
+if [ "$BACKUP_CORE_ONLY" = 1 ]; then
+  final="$BACKUP_DIR/core-predeploy-$ts.dump"
+  dump_args+=(--exclude-table-data=generation_assets --exclude-table-data=generation_files)
+else
+  final="$BACKUP_DIR/slaydx-$ts.dump"
+fi
 tmp="$final.tmp"
 log="$BACKUP_DIR/backup.log"
 check_name="_slaydx_backup_check_$$.dump"
@@ -162,7 +179,7 @@ errfile=$(mktemp "${TMPDIR:-/tmp}/slaydx-backup-err.XXXXXX")
 
 echo "backup: $PG_CONTAINER ($PG_DB) -> $final"
 
-docker exec "$PG_CONTAINER" pg_dump -U "$PG_USER" -Fc "$PG_DB" > "$tmp" 2>"$errfile" \
+docker exec "$PG_CONTAINER" pg_dump -U "$PG_USER" "${dump_args[@]}" "$PG_DB" > "$tmp" 2>"$errfile" \
   || fail "pg_dump muvaffaqiyatsiz: $(tr '\n' ' ' < "$errfile" 2>/dev/null)"
 
 size=$(stat -c%s "$tmp" 2>/dev/null || stat -f%z "$tmp" 2>/dev/null || echo 0)
@@ -186,9 +203,15 @@ echo "backup: OK — $final ($size bayt, $duration s)"
 # yo'qotmasin deb — bu qadam FATAL emas, faqat ogohlantiradi).
 # Pre-deploy dumps (`slaydx-<ts>.sql` from the deploy guide, `slaydx-predeploy-<ts>.dump`) follow
 # the same local retention — they used to pile up forever (docs/ops/O3-robustness-ops.md §2).
-find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'slaydx-*.dump' -o -name 'slaydx-*.sql' -o -name 'slaydx-*.sql.gz' \) \
+find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'slaydx-*.dump' -o -name 'slaydx-*.sql' -o -name 'slaydx-*.sql.gz' -o -name 'core-predeploy-*.dump' \) \
   -mtime "+$BACKUP_KEEP_DAYS" -delete 2>/dev/null \
   || echo "backup: OGOHLANTIRISH — eskirgan nusxalarni tozalash muvaffaqiyatsiz" >&2
+
+# Pre-deploy core dumps only serve the rollback of the deploy that just ran: keep the newest BACKUP_CORE_KEEP.
+if [ "$BACKUP_CORE_ONLY" = 1 ]; then
+  # shellcheck disable=SC2012
+  ls -1t "$BACKUP_DIR"/core-predeploy-*.dump 2>/dev/null | tail -n "+$((BACKUP_CORE_KEEP + 1))" | while IFS= read -r old; do rm -f -- "$old"; done || true
+fi
 
 # Box tashqarisiga nusxa — sozlanmagan bo'lsa ochiq ogohlantiramiz (jim
 # qolib, "zaxira bor" deb ishonib qolishdan ko'ra yaxshi). LEKIN sozlangan

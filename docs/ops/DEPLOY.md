@@ -58,7 +58,7 @@ slaydx-deploy-build                         # ZAXIRA yo'l: eski usul, serverda b
 - **Avtomatik rollback:** sog'liq tekshiruvi o'tmasa oldingi image'larga qaytadi (`:rollback` teglari), `rc=1` qaytaradi.
 - **Qo'lda rollback:** `slaydx-deploy <oldingi sha>` (history.log'dan), yoki DB muammosi bo'lsa — deploy oldidan olingan zaxira
   `/root/slaydx-backups/slaydx-<vaqt>.dump` + `ROLLBACK.txt`. Migratsiyalar additive, shuning uchun image'ni qaytarish odatda yetarli.
-- Deploydan oldingi zaxira **faqat lokal** (Google Drive'ni kutmaydi); kechasi 01:30 dagi to'liq zaxira Drive'ga ham yuklaydi.
+- Deploydan oldingi zaxira **faqat lokal** va **«core»** (2026-10-14): `core-predeploy-<vaqt>.dump` — baza `generation_assets` / `generation_files` jadvallarining QATORLARISIZ (sxemasi bor). Bu ikki jadval dumpning ~95 % ini (≈1,7 GB) egallaydi va migratsiyalar ularni o'zgartirmaydi, shuning uchun core dump ~100 MB / ~15 s (avval ~1,9 GB / 4–6 daq, har deploy diskni 1,9 GB ga to'ldirardi). Oxirgi 3 tasi saqlanadi (`BACKUP_CORE_KEEP`). To'liq dump kerak bo'lsa: `BACKUP_FULL=1 SLAYDX_BACKUP_LOCAL_ONLY=1 slaydx-backup`. Kechasi 01:30 dagi **to'liq** zaxira (Drive'ga ham yuklanadi) o'zgarmagan; haftalik tiklash sinovi va watchdog faqat to'liq `slaydx-*.dump` ni ko'radi.
 
 ## 4. Sozlamalar va fayllar (serverda)
 
