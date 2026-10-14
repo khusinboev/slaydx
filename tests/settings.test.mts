@@ -55,6 +55,10 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "payment_bonus_percent",
     "pricing.target_markup",
     "pricing.payment_fee_percent",
+    "queue.max_wait_sec",
+    "queue.user_max_inflight",
+    "queue.total_slots",
+    "queue.mean_service_sec",
   ]);
   for (const k of s.SETTING_KEYS) {
     const d = s.settingDef(k);
@@ -84,6 +88,10 @@ test("standart qiymatlar = env (mahsulot xulqi o'zgarmaydi)", () => {
   assert.equal(d("finance.soum_per_usd"), 12_500);
   assert.equal(d("pricing.target_markup"), 3);
   assert.equal(d("pricing.payment_fee_percent"), 0, "komissiya standart bo'yicha hisobga olinmaydi");
+  assert.equal(d("queue.max_wait_sec"), env.queue.maxWaitSec);
+  assert.equal(d("queue.user_max_inflight"), env.queue.userMaxInflight);
+  assert.equal(d("queue.total_slots"), env.queue.totalSlots);
+  assert.equal(d("queue.mean_service_sec"), env.queue.meanServiceSec, "0 (env unset) = measured automatically");
 });
 
 test("validatsiya: bool", () => {

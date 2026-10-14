@@ -324,8 +324,9 @@ const CATALOG: Catalog = {
     type: "int",
     min: 0,
     max: 1800,
+    envVar: "QUEUE_MEAN_SERVICE_SEC",
     validate: intValidator(0, 1800),
-    envDefault: () => 0,
+    envDefault: () => env.queue.meanServiceSec,
   },
 };
 

@@ -300,7 +300,8 @@ export const env = {
    */
   queue: {
     totalSlots: int("QUEUE_TOTAL_SLOTS", 8),
-    meanServiceSec: int("QUEUE_MEAN_SERVICE_SEC", 200),
+    // 0 (unset) = measured from the last finished jobs (`queue-limits.ts`); a value > 0 is a manual override.
+    meanServiceSec: int("QUEUE_MEAN_SERVICE_SEC", 0),
     maxWaitSec: int("QUEUE_MAX_WAIT_SEC", 900),
     userMaxInflight: int("USER_MAX_INFLIGHT", 2),
     ttlSec: int("QUEUE_TTL_SEC", 2700),

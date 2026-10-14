@@ -4,12 +4,12 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
 
 /**
  * Effective admission limits (`lib/server/queue-limits.ts`) on a throwaway Postgres:
- *   - auto mean duration = mean of the last finished jobs, each clipped at the p95 (one outlier must not move it);
+ *   - auto mean duration = mean of the last finished jobs, each clipped at 600 s (a runaway job must not move it, a slow TAIL must still count);
  *   - fewer than 20 samples -> the old 200 s fallback; a manual `queue.mean_service_sec` wins over the auto value;
  *   - the admin's `queue.*` settings (written to `app_settings`) reach `admissionDecision` (wait / user cap / slots);
  *   - cached 60 s.
  *
- * MUTATIONS checked: drop the p95 clip (outlier test fails); drop the 20-sample minimum (fallback test fails);
+ * MUTATIONS checked: drop the 600 s clip (outlier test fails); clip at p95 (heavy-tail test fails); drop the 20-sample minimum (fallback test fails);
  * ignore the setting (override test fails); TTL bypass (cache test fails).
  */
 
@@ -27,7 +27,7 @@ after(async () => {
   await iso.drop();
 });
 
-test("queueLimits: auto mean (p95-clipped), fallback, manual override, settings reach the admission decision, 60 s cache", { skip }, async () => {
+test("queueLimits: auto mean (clipped at 600 s), fallback, manual override, settings reach the admission decision, 60 s cache", { skip }, async () => {
   const { query, migrate } = await import("../lib/server/db.ts");
   const { queueLimits, autoMeanServiceSec, resetQueueLimitsCache } = await import("../lib/server/queue-limits.ts");
   const { admissionDecision } = await import("../lib/server/admission.ts");
@@ -48,7 +48,7 @@ test("queueLimits: auto mean (p95-clipped), fallback, manual override, settings 
   resetQueueLimitsCache();
   assert.equal(await autoMeanServiceSec(1_000), 200, "fewer than 20 samples -> 200 s");
 
-  // 40 jobs: 39 x 40 s + one 3 000 s outlier. Unclipped mean would be ~114; clipped at p95 it stays ~40.
+  // 40 jobs: 39 x 40 s + one 3 000 s outlier. Unclipped mean would be ~114; clipped at 600 s it is ~54.
   for (let i = 0; i < 29; i++) await add(40);
   await add(3000);
   resetQueueLimitsCache();
@@ -91,4 +91,24 @@ test("queueLimits: auto mean (p95-clipped), fallback, manual override, settings 
 
   await query("DELETE FROM app_settings WHERE key LIKE 'queue.%'");
   await query("DELETE FROM users WHERE id = $1", [uid]);
+});
+
+test("auto mean keeps a slow tail: 8 pro-slide-like jobs at 240 s among 192 at 10 s -> ~19 s, not the fast-job duration (a p95 clip would hide the tail)", { skip }, async () => {
+  const { query, migrate } = await import("../lib/server/db.ts");
+  const { autoMeanServiceSec, resetQueueLimitsCache } = await import("../lib/server/queue-limits.ts");
+  await migrate();
+  const [u] = await query<{ id: string }>(`INSERT INTO users (username, name, points, quota, balance) VALUES ('qlim2', 'Q', 0, 0, 0) RETURNING id`);
+  const uid = String(u.id);
+  await query(
+    `INSERT INTO generations (id, user_id, tool_id, topic, status, price, format, values_json, started_at, finished_at)
+     SELECT gen_random_uuid(), $1, 'slide', 't', 'COMPLETED', 0, 'pptx', '{}'::jsonb,
+            now() - interval '1 hour', now() - interval '1 hour' + make_interval(secs => CASE WHEN g % 25 = 0 THEN 240 ELSE 10 END)
+       FROM generate_series(1, 200) g`,
+    [uid],
+  );
+  resetQueueLimitsCache();
+  const mean = await autoMeanServiceSec(10_000_000);
+  assert.ok(mean >= 17 && mean <= 21, `mean ${mean}`);
+  await query("DELETE FROM users WHERE id = $1", [uid]);
+  resetQueueLimitsCache();
 });

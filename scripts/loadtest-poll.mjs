@@ -11,9 +11,10 @@
  *
  * Safety: each stage ends early (and the whole run stops) when the stage p95 > P95_LIMIT_MS (default 2000), the error
  * rate > 2 %, or — with SSH set — the host load1 > LOAD_LIMIT (default 7) / MemAvailable < MEM_LIMIT_MB (default 700).
- * The cookie is read from the environment and never printed.
+ * The cookie is read from the environment and never printed. Without SSH the host guard is off (only latency / errors stop it).
+ * A finished/failed job id exercises the lean DB row of a poll; it does not cover the QUEUED ETA path or the live-deck payload.
  */
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { writeFileSync } from "node:fs";
 
 const BASE = (process.env.BASE || "").replace(/\/$/, "");
@@ -42,7 +43,7 @@ async function hit(path) {
     const res = await fetch(BASE + path, { headers, signal: AbortSignal.timeout(15_000) });
     status = res.status;
     await res.arrayBuffer();
-    ok = res.status < 500 && res.status !== 429;
+    ok = res.ok; // 401/403/404 are failures: an expired cookie or a wrong JOB_ID must not look like a fast, healthy run
   } catch {
     status = 0;
   }
@@ -54,12 +55,16 @@ async function hit(path) {
   }
 }
 
+// Async on purpose: a blocking ssh call would stall the very event loop that measures request latency.
 function host() {
-  if (!SSH) return null;
-  const r = spawnSync("ssh", ["-n", "-o", "ConnectTimeout=8", SSH, "cat /proc/loadavg; grep MemAvailable /proc/meminfo"], { encoding: "utf8", timeout: 15_000 });
-  if (r.status !== 0) return null;
-  const [load, mem] = r.stdout.trim().split("\n");
-  return { load1: Number(load.split(" ")[0]), memMb: Math.round(Number(mem.replace(/\D/g, "")) / 1024) };
+  if (!SSH) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    execFile("ssh", ["-n", "-o", "ConnectTimeout=8", SSH, "cat /proc/loadavg; grep MemAvailable /proc/meminfo"], { timeout: 15_000 }, (err, out) => {
+      if (err) return resolve(null);
+      const [load, mem] = String(out).trim().split("\n");
+      resolve({ load1: Number(load.split(" ")[0]), memMb: Math.round(Number(String(mem).replace(/\D/g, "")) / 1024) });
+    });
+  });
 }
 
 const pct = (a, p) => (a.length ? [...a].sort((x, y) => x - y)[Math.min(a.length - 1, Math.floor((a.length * p) / 100))] : 0);
@@ -85,7 +90,7 @@ for (const users of STAGES) {
   let hostMax = { load1: 0, memMin: Infinity };
   while (Date.now() - t0 < STAGE_SEC * 1000) {
     await new Promise((r) => setTimeout(r, 10_000));
-    const h = host();
+    const h = await host();
     if (h) {
       hostMax = { load1: Math.max(hostMax.load1, h.load1), memMin: Math.min(hostMax.memMin, h.memMb) };
       if (h.load1 > LOAD_LIMIT || h.memMb < MEM_LIMIT) aborted = `host load1=${h.load1} mem=${h.memMb}MB at ${users} users`;
@@ -93,6 +98,7 @@ for (const users of STAGES) {
     // Skip the first 15 s (connection warm-up) for the live p95 check.
     const live = stage.lat.slice(Math.floor(stage.lat.length * 0.3));
     if (live.length > 20 && pct(live, 95) > P95_LIMIT * 2) aborted = `p95 ${Math.round(pct(live, 95))} ms at ${users} users`;
+    if (live.length > 20 && (stage.err * 100) / Math.max(1, stage.lat.length) > 10) aborted = `error rate > 10 % at ${users} users`;
     if (aborted) break;
   }
   stop.v = true;
