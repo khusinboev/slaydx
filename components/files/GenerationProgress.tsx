@@ -45,11 +45,13 @@ export function GenerationProgress({ gen }: { gen: api.GenerationDetail }) {
   // "Adjust state while rendering": when the server value / clock sample changes, restart the creep / re-anchor.
   const [mark, setMark] = useState({ progress: gen.progress, at: now });
   if (!Object.is(mark.progress, gen.progress)) setMark({ progress: gen.progress, at: now });
-  const [anchor, setAnchor] = useState({ sec: gen.runningSec, at: now });
-  if (anchor.sec !== gen.runningSec) {
+  // `seen` = the last server `runningSec` we reacted to. The guard MUST compare against it, not against the (clamped) shown
+  // value, or a poll landing "behind" the local clock would re-trigger this branch on every render (infinite loop).
+  const [anchor, setAnchor] = useState({ seen: gen.runningSec, sec: gen.runningSec, at: now });
+  if (anchor.seen !== gen.runningSec) {
     // The displayed clock only moves forward: a poll can land up to 1 s "behind" the last tick.
     const current = typeof anchor.sec === "number" ? anchor.sec + (now - anchor.at) / 1000 : 0;
-    setAnchor({ sec: typeof gen.runningSec === "number" ? Math.max(gen.runningSec, current) : gen.runningSec, at: now });
+    setAnchor({ seen: gen.runningSec, sec: typeof gen.runningSec === "number" ? Math.max(gen.runningSec, current) : gen.runningSec, at: now });
   }
   const [peak, setPeak] = useState(0);
 
