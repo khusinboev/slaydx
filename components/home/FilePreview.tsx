@@ -46,13 +46,19 @@ export const FilePreview = memo(function FilePreview({ gen }: { gen: ServerGener
   const running = gen.status === "QUEUED" || gen.status === "IN_PROGRESS";
 
   if (running) {
+    const queued = gen.status === "QUEUED";
+    const p = Math.max(0, Math.min(99, Math.round(Number(gen.progress) || 0)));
     return (
-      <div className="bg-muted flex h-full items-center justify-center">
+      <div className="bg-muted flex h-full flex-col items-center justify-center gap-1.5">
+        {queued ? null : (
+          <span className="text-primary text-base font-semibold tabular-nums" data-file-percent>
+            {p}%
+          </span>
+        )}
         <div className="bg-primary/30 h-1.5 w-2/3 overflow-hidden rounded-full">
-          <div
-            className="bg-primary h-full transition-all"
-            style={{ width: `${Math.max(8, gen.progress)}%` }}
-          />
+          <div className="bg-primary relative h-full overflow-hidden rounded-full transition-all duration-700" style={{ width: `${Math.max(8, p)}%` }}>
+            <span className="slx-bar-sheen absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+          </div>
         </div>
       </div>
     );

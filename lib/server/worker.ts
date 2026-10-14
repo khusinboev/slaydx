@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { buildArtifact } from "../generation";
 import { TOOL_BY_ID } from "../tools";
-import { GENERATION_STEPS } from "../generation-steps";
+import { stagesFor } from "../progress-stages";
 import { env } from "./env";
 import { Client } from "pg";
 import { ensureMigrated, poolConfig } from "./db";
@@ -171,14 +171,9 @@ const g = globalThis as Globals;
 let running = 0;
 let stopped = false;
 
+/** Fallback ticker step text — the tool's own stage labels (`lib/progress-stages.ts`), not one generic list. */
 function stepsFor(toolId: string): string[] {
-  if (toolId === "image") {
-    return ["So‘rov qabul qilindi", "Kompozitsiya tanlanmoqda", "Rasm chizilmoqda", "Fayl saqlanmoqda"];
-  }
-  if (toolId === "translation") {
-    return ["So‘rov qabul qilindi", "Matn o‘qilmoqda", "Tarjima qilinmoqda", "Hujjat formatlanmoqda"];
-  }
-  return GENERATION_STEPS;
+  return stagesFor(toolId).map((st) => st.label);
 }
 
 /**

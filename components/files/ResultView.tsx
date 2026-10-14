@@ -23,6 +23,7 @@ import { EditActions, type EditActionsState } from "./EditActions";
 import { LazyArticleReviewSection, LazyGameSharePanel, PanelChunk } from "./lazy-panels";
 import { DownloadSheetContext, type SheetMode } from "./DownloadSheet";
 import { ResultActions } from "./ResultActions";
+import { GenerationProgress } from "./GenerationProgress";
 import { ResultLayout, type PanelSection } from "./ResultLayout";
 import { frameClass, viewerFrame } from "./result-layout/frame";
 import { reviewSummary, type ChipSummary, type ShareSummary } from "./result-layout/summary";
@@ -707,7 +708,6 @@ function chipOf(s: ChipSummary): Pick<PanelSection, "chip" | "tone"> {
  * kartochkasi, ya'ni yiqilish xavfsiz tomonga.
  */
 export function RunningPanel({ gen }: { gen: api.GenerationDetail }) {
-  const tool = TOOL_BY_ID[gen.type];
   const live =
     viewerKind(gen.type) === "slides" ? asLiveView(gen.live as LiveDeck | null | undefined) : null;
   /*
@@ -738,37 +738,7 @@ export function RunningPanel({ gen }: { gen: api.GenerationDetail }) {
     );
   }
 
-  return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-8">
-      <div className="bg-card rounded-2xl border p-6">
-        <p className="mb-2 font-medium">{tool?.creatingLabel ?? "Yaratilmoqda..."}</p>
-        <p className="text-muted-foreground mb-4 text-sm">{gen.step}</p>
-        {/*
-          UX-07: navbatdagi o'rin va taxminiy kutish — server bersagina
-          (W2-B, ixtiyoriy maydonlar). Aks holda yangi ish va 15 daqiqa
-          navbatda turgan ish bir xil ko'rinardi.
-        */}
-        {gen.status === "QUEUED" && typeof gen.queuePosition === "number" && gen.queuePosition > 0 ? (
-          <p className="mb-4 text-sm" data-queue-position>
-            Navbatdagi o‘rningiz: <b>{gen.queuePosition}</b>
-            {typeof gen.etaSec === "number" && gen.etaSec > 0 ? ` · boshlanishiga taxminan ${etaText(gen.etaSec)}` : null}
-          </p>
-        ) : null}
-        <div
-          className="bg-muted h-2 overflow-hidden rounded-full"
-          role="progressbar"
-          aria-valuenow={gen.progress}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        >
-          <div className="bg-primary h-full transition-all" style={{ width: `${gen.progress}%` }} />
-        </div>
-        <p className="text-muted-foreground mt-4 text-xs">
-          Sahifani yopsangiz ham ish davom etadi — keyin «Ishlarim» dan ochasiz.
-        </p>
-      </div>
-    </div>
-  );
+  return <GenerationProgress key={gen.id} gen={gen} />;
 }
 
 /** Ko'ruvchilar hali eski `Generation` shaklini kutadi. */
@@ -807,13 +777,6 @@ function withFrozenYear(doc: api.GenerationDetail["doc"], createdAt: string): Ge
 /** «Tuzatish» dan oldin saqlash yiqildi — sababini ko'ruvchi o'zi ko'rsatadi (navbat qolgan yoki qayta yuklangan). */
 const UNSAVED_FIRST = "«Tuzatish» boshlanmadi — tahrirlar saqlanmadi (sababi hujjat ustida ko‘rsatilgan).";
 
-/** Taxminiy kutish: «1 daqiqadan kam» / «N daqiqa» / «N soat». */
-export function etaText(sec: number): string {
-  if (sec < 60) return "1 daqiqadan kam";
-  const min = Math.round(sec / 60);
-  if (min < 90) return `${min} daqiqa`;
-  return `${Math.round(min / 60)} soat`;
-}
 
 function RecheckButton({ onClick }: { onClick: () => void }) {
   return (

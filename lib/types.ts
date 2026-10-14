@@ -147,6 +147,8 @@ export type Generation = {
   topic: string;
   status: JobStatus;
   createdAt: string;
+  /** First time a worker took the job (not the queue wait) — the running panel's elapsed clock. */
+  startedAt?: string;
   finishedAt?: string;
   price: number;
   values: FormValues;

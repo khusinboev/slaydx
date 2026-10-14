@@ -107,7 +107,15 @@ function dataToBytes(dataUrl: string): Uint8Array | null {
  */
 const imageProvider = limitedProvider(geminiProvider);
 
-export async function buildImageArtifact(tool: ToolConfig, values: FormValues, deadline?: number): Promise<BuiltFile> {
+export async function buildImageArtifact(
+  tool: ToolConfig,
+  values: FormValues,
+  deadline?: number,
+  onStage?: (ev: { progress: number; step: string }) => void,
+): Promise<BuiltFile> {
+  // Real stages for the running panel (`lib/progress-stages.ts` "image"); otherwise only the time-based fallback curve.
+  const stage = (progress: number, step: string) => onStage?.({ progress, step });
+  stage(0, "So‘rov tayyorlanmoqda");
   const meta = extractMeta(tool, { ...values, topic: String(values.prompt || values.topic || "Rasm") });
   const prompt = String(values.prompt || "").trim();
   if (prompt.length < 3) throw new Error("Rasm uchun tavsif yozing");
@@ -117,7 +125,9 @@ export async function buildImageArtifact(tool: ToolConfig, values: FormValues, d
   const size = { width: ratio.w, height: ratio.h };
   const scene = await expandPrompt(prompt, styleId, ratio.id, deadline);
   const full = composePrompt(scene, styleId, ratio.w, ratio.h);
+  stage(10, count > 1 ? `Rasm chizilmoqda · 0/${count}` : "Rasm chizilmoqda");
 
+  let drawn = 0;
   const raw = await mapPool(Array.from({ length: count }, (_, i) => i), 2, async (i) => {
     /*
      * `rasm` — mustaqil pullik mahsulot, fal endi ishlatilmaydi. Gemini
@@ -127,6 +137,8 @@ export async function buildImageArtifact(tool: ToolConfig, values: FormValues, d
     // Muddat (EXT-03): har so'rov byudjeti ish muddati bilan cheklanadi (ilgari 120 s shift, muddatsiz).
     const res = await imageProvider.fetchImage({ prompt: full, size, styleId: "photo" }, deadline);
     const im = res.ok ? res.image : null;
+    drawn++;
+    if (count > 1) stage(10 + Math.round((70 * drawn) / count), `Rasm chizilmoqda · ${drawn}/${count}`);
     if (!im) return null;
     const bytes = await fetchImageBytes(im.url);
     const url = bytes ? `data:${bytes.data}` : im.url;
@@ -142,6 +154,7 @@ export async function buildImageArtifact(tool: ToolConfig, values: FormValues, d
   });
   const images = raw.filter((x): x is GenImage => Boolean(x));
   if (!images.length) throw new Error("Rasm yaratilmadi. Qayta urinib ko‘ring.");
+  stage(85, "Fayl saqlanmoqda");
 
   const doc: AcademicDoc = {
     meta,

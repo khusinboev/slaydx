@@ -2,6 +2,7 @@ import { ApiError, handler, json, requireUser } from "@/lib/server/api";
 import { cancelGeneration, deleteGeneration, generationStatus, getGeneration } from "@/lib/server/jobs";
 import { hasGenerationFile } from "@/lib/server/storage";
 import { log } from "@/lib/server/log";
+import { typicalDurationSec } from "@/lib/server/typical-duration";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,10 +53,18 @@ export const GET = handler("generations/get", async (req, ctx: Ctx) => {
   if (!gen) throw new ApiError("Topilmadi", 404);
 
   const hasFile = gen.status === "COMPLETED" ? await hasGenerationFile(id, user.id) : false;
+  // Running panel: elapsed clock + the tool's median duration (cached 10 min, `typical-duration.ts`).
+  const timing =
+    gen.status === "IN_PROGRESS" && gen.startedAt
+      ? {
+          runningSec: Math.max(0, Math.round((Date.now() - Date.parse(gen.startedAt)) / 1000)),
+          ...(await typicalDurationSec(gen.type).then((t) => (t ? { typicalSec: t } : {}))),
+        }
+      : {};
   // `live` faqat `getGeneration` uni qaytarganda qo'shiladi — kalit
   // umuman yo'q bo'lsa klient eskisini saqlaydi (`mergeLive`).
   const { live, ...rest } = gen;
-  const body = "live" in gen ? { ...rest, live, hasFile } : { ...rest, hasFile };
+  const body = "live" in gen ? { ...rest, live, hasFile, ...timing } : { ...rest, hasFile, ...timing };
   return json({ generation: body });
 });
 

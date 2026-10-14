@@ -553,7 +553,7 @@ async function buildArtifactInner(
   }
 
   if (tool.id === "image") {
-    return buildImageArtifact(tool, values, deadline);
+    return buildImageArtifact(tool, values, deadline, opts.onStage);
   }
 
   /*
@@ -612,6 +612,8 @@ async function buildArtifactInner(
    * hujjat mazmunli chiqadi (maqola/referatdan farqi shu).
    */
   if (tool.id === "resume") {
+    opts.onStage?.({ progress: 0, step: "Ma’lumotlar tayyorlanmoqda" });
+    opts.onStage?.({ progress: 15, step: "Matn yozilmoqda" });
     let resumeDoc = await buildResumeDoc(meta, values, { deadline, photo: opts.photo });
     if (!resumeDoc) {
       resumeDoc = buildAcademicDoc(meta, values);
@@ -627,6 +629,7 @@ async function buildArtifactInner(
         };
       }
     }
+    opts.onStage?.({ progress: 80, step: "Hujjat yig‘ilmoqda" });
     const fileName = `${meta.fileNameHint}.docx`;
     return { html: renderHtml(resumeDoc), bytes: await renderDocx(resumeDoc), fileName, mime: DOCX, doc: resumeDoc };
   }
