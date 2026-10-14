@@ -18,7 +18,7 @@ owner's private notes); only names, mechanics and decisions. Updated by whoever 
   (6–10 min). Verify: server `current.env` + `history.log`, `/api/health`, container logs. Details: `docs/ops/DEPLOY.md`.
 - Workers are separate processes: every env var a worker needs must be listed in the `worker` block of `docker-compose.yml`
   (`tests/compose-env.test.mts` pins it). Bot token / support link / premium emoji are in it since PR #48.
-- Backups: daily DB dump + off-site copy; monitoring: `server_metrics` recorder, alert rules (memory < 10 %, swap > 85 %, disk > 85 %, load,
+- Backups: nightly FULL dump + off-site copy; every deploy takes a small «core» dump (DB without the generated-file rows, ~100 MB, newest 3 kept) as its rollback point; monitoring: `server_metrics` recorder, alert rules (memory < 10 %, swap > 85 %, disk > 85 %, load,
   queue, failed-generation ratio, container events) → bot message to the owner; admin page «Yuklama tarixi» (`docs/ops/METRICS.md`).
 
 ## 3. Settings the owner controls (admin panel → Sozlamalar, table `app_settings`, audited)

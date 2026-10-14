@@ -158,6 +158,76 @@ test(
 );
 
 /**
+ * Pre-deploy CORE dump (BACKUP_LOCAL_ONLY=1 implies BACKUP_CORE_ONLY=1 unless BACKUP_FULL=1): the rows of `generation_assets` / `generation_files` are left out (schema kept), the file is
+ * `core-predeploy-*.dump` (NOT `slaydx-*.dump`: the restore drill and the watchdog keep seeing only FULL dumps), only the newest
+ * BACKUP_CORE_KEEP survive, and a full run is unchanged.
+ * MUTATIONS checked: drop `--exclude-table-data` (size test fails); name it slaydx-*.dump (name test fails); drop the keep-newest
+ * prune (count test fails); the local-only => core default removed (name test fails).
+ */
+test(
+  "backup.sh BACKUP_CORE_ONLY: core-predeploy dump without the big tables' rows (schema kept), newest N kept, full dump unchanged",
+  { skip: hasDocker ? false : "docker mavjud emas" },
+  async (t: TestContext) => {
+    const container = `slaydx-backup-core-${process.pid}`;
+    t.after(() => {
+      try {
+        execFileSync("docker", ["rm", "-f", container], { stdio: "ignore" });
+      } catch {
+        // already gone
+      }
+    });
+    execFileSync("docker", ["run", "-d", "--name", container, "-e", "POSTGRES_PASSWORD=test", "-e", "POSTGRES_USER=slaydx", "-e", "POSTGRES_DB=slaydx", "postgres:16-alpine"]);
+    let ready = false;
+    for (let i = 0; i < 30 && !ready; i++) {
+      try {
+        execFileSync("docker", ["exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "slaydx"], { stdio: "ignore" });
+        ready = true;
+      } catch {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+    assert.ok(ready, "Postgres 30 soniyada tayyor bo'lmadi");
+    // ~6 MB of incompressible rows in each blob table, a small core table.
+    execFileSync("docker", [
+      "exec", container, "psql", "-U", "slaydx", "-d", "slaydx", "-c",
+      "CREATE TABLE users_core (id serial primary key, v text); INSERT INTO users_core(v) SELECT 'u' || g FROM generate_series(1, 500) g;" +
+        "CREATE TABLE generation_files (id serial primary key, b text); INSERT INTO generation_files(b) SELECT md5(random()::text) || md5(random()::text) || repeat(md5(random()::text), 100) FROM generate_series(1, 2000);" +
+        "CREATE TABLE generation_assets (id serial primary key, b text); INSERT INTO generation_assets(b) SELECT md5(random()::text) || md5(random()::text) || repeat(md5(random()::text), 100) FROM generate_series(1, 2000);",
+    ]);
+    const backupDir = mkdtempSync(path.join(tmpdir(), "slaydx-backup-core-"));
+    t.after(() => rmSync(backupDir, { recursive: true, force: true }));
+    const env = { ...process.env, PG_CONTAINER: container, PG_USER: "slaydx", PG_DB: "slaydx", BACKUP_DIR: backupDir, BACKUP_MIN_SIZE_BYTES: "1000", BACKUP_LOCAL_ONLY: "1" };
+
+    // Full dump first (the reference size): BACKUP_FULL=1 overrides the local-only => core default.
+    execFileSync("bash", ["scripts/backup.sh"], { env: { ...env, BACKUP_FULL: "1" }, stdio: "pipe", timeout: 60_000 });
+    const full = readdirSync(backupDir).filter((f) => /^slaydx-.*\.dump$/.test(f));
+    assert.equal(full.length, 1);
+    const fullSize = readFileSync(path.join(backupDir, full[0]!)).length;
+
+    // Four pre-deploy runs (BACKUP_LOCAL_ONLY alone implies core) with KEEP=3: the oldest goes.
+    for (let i = 0; i < 4; i++) {
+      await new Promise((r) => setTimeout(r, 1100));
+      execFileSync("bash", ["scripts/backup.sh"], { env: { ...env, BACKUP_CORE_KEEP: "3" }, stdio: "pipe", timeout: 60_000 });
+    }
+    const files = readdirSync(backupDir);
+    const core = files.filter((f) => f.startsWith("core-predeploy-") && f.endsWith(".dump"));
+    assert.equal(core.length, 3, `newest 3 core dumps kept, got ${core.join(", ")}`);
+    assert.deepEqual(files.filter((f) => /^slaydx-.*\.dump$/.test(f)), full, "the full dump is untouched and is the only slaydx-*.dump");
+    assert.ok(!existsSync(path.join(backupDir, ".last-ok")), "a local-only/core dump never refreshes the full-backup marker");
+
+    const coreSize = readFileSync(path.join(backupDir, core[0]!)).length;
+    assert.ok(coreSize * 5 < fullSize, `core ${coreSize} B must be far smaller than full ${fullSize} B`);
+    // Schema of the blob tables is in the core dump, their rows are not; the core table's rows are.
+    const list = execFileSync("docker", ["exec", "-i", container, "sh", "-c", "cat > /tmp/c.dump && pg_restore --list /tmp/c.dump"], { input: readFileSync(path.join(backupDir, core[0]!)), encoding: "utf8" });
+    assert.match(list, /TABLE public generation_files/);
+    assert.match(list, /TABLE public generation_assets/);
+    assert.match(list, /TABLE DATA public users_core/);
+    assert.ok(!/TABLE DATA public generation_files/.test(list), "generation_files rows excluded");
+    assert.ok(!/TABLE DATA public generation_assets/.test(list), "generation_assets rows excluded");
+  },
+);
+
+/**
  * Reviewer topilmasi (W2-D1 review): ilgari faqat `pg_dump` va hajm
  * tekshiruvi `fail()`ni chaqirardi — `mkdir`, `mv`, `docker cp` kabi
  * boshqa YO'Ldagi kutilmagan xatolar `backup.log`ga yozuvsiz, alertsiz
