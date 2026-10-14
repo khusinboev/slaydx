@@ -47,3 +47,13 @@ Request: an admin panel inside the Telegram bot with the main actions — «Xaba
   progress card is still auto-edited by the delivery loop (text only) and re-sent by the control taps; the done summary comes
   with the admin menu keyboard. Old inline `a:*` buttons in history keep working (they answer with a new reply-keyboard screen).
   Inline stays only for the broadcast's own URL button (Telegram allows URL buttons nowhere else).
+
+## Xabarlar holati (2026-10-14)
+
+Owner: see the broadcasts in progress and their state from the bot panel, with pause / stop.
+- New menu button «⏳ Xabarlar holati» (`a:bl`, permission `broadcasts.view`) → `broadcastListScreen`: queued / sending / paused
+  broadcasts (≤ 8, newest first) and the 3 latest finished, each line `#id · status · done / total (pct%)`, one button each.
+- The button opens the existing progress card (`a:bp:<id>`): refresh, **pause / resume**, **stop** (`broadcasts.send` only —
+  support can look but not control), and a «Xabarlar holati» button back to the list. Pause / resume / stop already existed on the
+  card; the list makes a card that scrolled away reachable again.
+- Tests: `tests/bot-admin.test.mts` («Xabarlar holati» + updated menu / card key expectations); mutations: permission, active filter, menu permission.

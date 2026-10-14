@@ -11,6 +11,8 @@ import {
   cancelBroadcast,
   createBroadcast,
   getBroadcast,
+  listBroadcasts,
+  parseBroadcastsQuery,
   pauseBroadcast,
   resumeBroadcast,
   setProgressMessage,
@@ -70,6 +72,7 @@ import {
   channelTypeScreen,
   channelsScreen,
   channelDeleteAskScreen,
+  broadcastListScreen,
   confirmScreen,
   draftScreen,
   inputProblemScreen,
@@ -139,6 +142,7 @@ const PERM: Record<Exclude<AdminCallback["kind"], "unknown">, Permission> = {
   bcPick: "broadcasts.send",
   bcTest: "broadcasts.send",
   bcSend: "broadcasts.send",
+  bcList: "broadcasts.view",
   bcProgress: "broadcasts.view",
   bcPause: "broadcasts.send",
   bcResume: "broadcasts.send",
@@ -523,6 +527,12 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
       const b = await getBroadcast(id);
       // The engine keeps editing THIS message (text only) with the live numbers; the controls are its reply keyboard.
       await moveProgressCard(id, chatId, await show(progressScreen(l, b.broadcast, b.stats, true), at(l, "toast.queued")));
+      return undefined;
+    }
+    case "bcList": {
+      const list = (statuses: string, limit: number) => listBroadcasts(parseBroadcastsQuery(new URL(`http://x/?status=${statuses}&limit=${limit}`)));
+      const [active, recent] = await Promise.all([list("queued,sending,paused", 8), list("done,failed,cancelled", 3)]);
+      await show(broadcastListScreen(l, active.items, recent.items), messageId === null ? undefined : at(l, "toast.refreshed"));
       return undefined;
     }
     case "bcProgress": {
