@@ -404,23 +404,24 @@ export const TTS_LIMITS = {
    */
   chunkChars: 900,
   /**
-   * Gemini TTS chunk: ~2 400 chars ≈ 2.5 min of audio (~3.7k audio tokens), far below
-   * the model's limits. Gemini has a per-minute REQUEST quota (≈10/min/project/model), so
-   * fewer, larger calls are the first defence (900-char chunks made a 1-min greeting 11 calls).
-   * Aisha/Azure keep `chunkChars`.
+   * Gemini TTS chunk: ~1 400 chars ≈ 1.5 min of audio (~2.2k audio tokens, ~30–45 s to generate).
+   * Gemini has a per-minute REQUEST quota (≈10/min/project/model), so chunks are larger than the
+   * 900 chars of Aisha/Azure (a 1-min greeting was 11 calls) — but NOT larger than one call can
+   * finish inside `callTimeoutMs`: 2 400 chars (≈2.5 min of audio) timed out at 30 s and failed
+   * 3 of 4 four-minute greetings on 2026-10-12/13. Aisha/Azure keep `chunkChars`.
    */
-  geminiChunkChars: 2_400,
+  geminiChunkChars: 1_400,
   /** Bitta ishdagi umumiy belgi (5 daq × ~150 so'z/daq ≈ 4 500 belgi, zaxira bilan). */
   maxChars: 12_000,
   /**
    * WP-A: bitta sintez so'rovining standart vaqt chegarasi (ms).
    *
-   * 900 belgi ≈ 1 daqiqalik audio; Azure real vaqt sintezida bu ~2–4 s
-   * oladi, lekin sovuq ulanish va tarmoq kechikishi bilan 30 s xavfsiz
-   * shift. `TtsSynthOpts.timeoutMs` uni har chaqiruvda pasaytira oladi
-   * (worker muddati tugayotganda).
+   * Azure real vaqt sintezida 900 belgi ~2–4 s oladi, Gemini TTS esa 1 400 belgini
+   * (~1,5 daq audio) 30–45 s da yaratadi — shuning uchun shift 90 s (2026-10-13: 30 s da
+   * 4 daqiqalik tabriknomalar uzilib qolgan). `TtsSynthOpts.timeoutMs` uni har chaqiruvda
+   * pasaytira oladi (worker muddati tugayotganda).
    */
-  callTimeoutMs: 30_000,
+  callTimeoutMs: 90_000,
 } as const;
 
 /** Largest text one request of `provider` takes. */

@@ -52,8 +52,8 @@ const podcast = (turns = 9, len = 200): AudioLine[] => Array.from({ length: turn
 const chainOf = (p: TtsProvider) => makeTtsChain({ providers: [p], env: ENV, log: () => {} });
 
 test("limits: Gemini 2 400 chars, every other provider keeps 900", () => {
-  assert.equal(TTS_LIMITS.geminiChunkChars, 2_400);
-  assert.equal(ttsChunkLimit("gemini"), 2_400);
+  assert.equal(TTS_LIMITS.geminiChunkChars, 1_400);
+  assert.equal(ttsChunkLimit("gemini"), 1_400);
   for (const id of ["azure", "aisha", "google", "elevenlabs"] as const) assert.equal(ttsChunkLimit(id), 900, id);
   assert.equal(TTS_LIMITS.chunkChars, 900);
 });
@@ -65,11 +65,11 @@ test("packParts: Azure/Aisha are NOT packed (one request per part, pauses kept)"
   assert.equal(packParts(parts, { provider: "aisha" }).length, 2);
 });
 
-test("packParts: Gemini merges same-voice parts up to 2 400 and never splits a part", () => {
+test("packParts: Gemini merges same-voice parts up to 1 400 and never splits a part", () => {
   const parts = Array.from({ length: 8 }, (_, i) => ({ text: sentence(i, 800), voice: 0 }));
   const out = packParts(parts, { provider: "gemini", multiSpeaker: true, twoVoices: false });
-  // 800-char parts: two fit (1 601 chars), a third would make 2 402 > 2 400.
-  assert.deepEqual(out.map((c) => c.text.length), [1_601, 1_601, 1_601, 1_601]);
+  // 800-char parts: one fits (800); a second would make 1 601 > 1 400, so parts are never merged here.
+  assert.deepEqual(out.map((c) => c.text.length), Array(8).fill(800));
   assert.equal(out.map((c) => c.text).join(" "), parts.map((p) => p.text).join(" "), "text lost or reordered");
   for (const c of out) assert.ok(c.text.length <= TTS_LIMITS.geminiChunkChars);
 });
@@ -118,14 +118,14 @@ test("calls per job: 1-min greeting 11 -> 1 on Gemini (Azure unchanged: 11)", as
   assert.equal(az.seen.length, 11, "Azure keeps one call per part");
 });
 
-test("calls per job: 2-min dialog podcast 9 -> 1 on Gemini (Azure unchanged: 9), voices still alternate", async () => {
+test("calls per job: 2-min dialog podcast 9 -> at most 2 on Gemini (Azure unchanged: 9), voices still alternate", async () => {
   const parts = speechParts(podcast());
   assert.equal(parts.length, 9);
 
   const gem = fake("gemini", true);
   await chainOf(gem).synthesizeAll(parts, { lang: "uz", voice: "female" });
-  assert.equal(gem.seen.length, 1);
-  const turns = gem.seen[0].turns ?? [];
+  assert.ok(gem.seen.length >= 1 && gem.seen.length <= 2, `${gem.seen.length} Gemini calls`);
+  const turns = gem.seen.flatMap((c) => c.turns ?? []);
   assert.equal(turns.length, 9, "every turn keeps its own speaker slot");
   assert.deepEqual(new Set(turns.map((t) => t.voice)).size, 2);
   assert.ok(turns.every((t, i) => i === 0 || t.voice !== turns[i - 1].voice), "voices must alternate A,B,A,B…");
@@ -135,7 +135,7 @@ test("calls per job: 2-min dialog podcast 9 -> 1 on Gemini (Azure unchanged: 9),
   assert.equal(az.seen.length, 9);
 });
 
-test("calls per job: a long 5-min podcast (~4 500 chars) needs <= ceil(chars/2400)+1 Gemini calls", async () => {
+test("calls per job: a long 5-min podcast (~4 500 chars) needs <= ceil(chars/1400)+1 Gemini calls", async () => {
   const script = podcast(18, 250);
   const total = script.reduce((n, l) => n + l.text.length, 0);
   const gem = fake("gemini", true);
@@ -144,11 +144,11 @@ test("calls per job: a long 5-min podcast (~4 500 chars) needs <= ceil(chars/240
   assert.ok(gem.seen.length >= 2);
 });
 
-test("a part longer than the provider limit still fails (contract), Gemini limit is 2 400 not 900", async () => {
+test("a part longer than the provider limit still fails (contract), Gemini limit is 1 400 not 900", async () => {
   const gem = fake("gemini", true);
-  await assert.rejects(() => chainOf(gem).synthesizeAll([{ text: "x".repeat(2_401) }], { lang: "uz" }), (e) => e instanceof TtsError && /2400/.test(e.message));
-  // 1 500 chars is fine on Gemini …
-  await chainOf(gem).synthesizeAll([{ text: "y".repeat(1_500) }], { lang: "uz" });
+  await assert.rejects(() => chainOf(gem).synthesizeAll([{ text: "x".repeat(1_401) }], { lang: "uz" }), (e) => e instanceof TtsError && /1400/.test(e.message));
+  // 1 300 chars is fine on Gemini (and over Azure's 900) …
+  await chainOf(gem).synthesizeAll([{ text: "y".repeat(1_300) }], { lang: "uz" });
   assert.equal(gem.seen.length, 1);
   // … but not on Azure (900).
   await assert.rejects(() => chainOf(fake("azure")).synthesizeAll([{ text: "y".repeat(1_500) }], { lang: "uz" }), TtsError);
@@ -183,4 +183,10 @@ test("Gemini wire: a two-speaker request sends multiSpeakerVoiceConfig + 'Speake
     },
   });
   assert.equal(audio.chars, "Salom".length + "Assalomu alaykum".length + "Yaxshimisiz".length);
+});
+
+test("Gemini chunk must finish inside the call timeout (2 400-char chunks timed out at 30 s: 4-min greetings failed)", () => {
+  // MUTATION: geminiChunkChars 2 400 + callTimeoutMs 30 000 (the 2026-10-12 values) → red.
+  assert.ok(TTS_LIMITS.callTimeoutMs >= 60_000, "Gemini needs 30–45 s for ~1.5 min of audio");
+  assert.ok(TTS_LIMITS.geminiChunkChars <= 1_500, "~1.5 min of audio per call");
 });
