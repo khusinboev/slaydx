@@ -104,6 +104,22 @@ test("elapsed clock and ETA: left, then slow past 1.3x the median", () => {
   assert.ok(!q("[data-eta=left]"));
 });
 
+test("a poll whose runningSec is BEHIND the local clock re-anchors once (no render loop) and the clock never goes back", () => {
+  // Regression: the "never backwards" clamp stored a value != gen.runningSec and the guard compared against it -> "Too many re-renders" in prod.
+  mock.timers.enable({ apis: ["Date", "setInterval"], now: Date.parse("2026-10-14T08:01:00Z") });
+  const view = render(h(GenerationProgress, { gen: detail({ runningSec: 20, typicalSec: 120 }) }));
+  act(() => mock.timers.tick(5_000));
+  assert.match(q("[data-progress-time]")?.textContent ?? "", /Ketdi: 0:25/);
+  // Server says 24 s although the local clock already shows 25 s.
+  view.rerender(h(GenerationProgress, { gen: detail({ runningSec: 24, typicalSec: 120 }) }));
+  assert.match(q("[data-progress-time]")?.textContent ?? "", /Ketdi: 0:25/, "did not step back to 0:24");
+  act(() => mock.timers.tick(2_000));
+  assert.match(q("[data-progress-time]")?.textContent ?? "", /Ketdi: 0:27/);
+  // And a later, larger server value is honoured.
+  view.rerender(h(GenerationProgress, { gen: detail({ runningSec: 40, typicalSec: 120 }) }));
+  assert.match(q("[data-progress-time]")?.textContent ?? "", /Ketdi: 0:40/);
+});
+
 test("no typical duration or no runningSec (old server) -> no estimate, panel still works", () => {
   render(h(GenerationProgress, { gen: detail({ runningSec: 40 }) }));
   assert.ok(!q("[data-eta]"), "no median -> no ETA");
