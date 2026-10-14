@@ -8,6 +8,7 @@ import { sourceCharsForRequest } from "@/lib/server/source-upload";
 import { missingRequired, preflightError, TOOL_BY_SLUG, topicOf } from "@/lib/tools";
 import { startInlineWorker } from "@/lib/server/worker";
 import { env } from "@/lib/server/env";
+import { queueLimits } from "@/lib/server/queue-limits";
 import { queryOne } from "@/lib/server/db";
 import { effectivePrice } from "@/lib/server/pricing";
 import { getSetting } from "@/lib/server/settings";
@@ -192,10 +193,10 @@ export const POST = handler("generations/create", async (req) => {
     /*
      * Qabul qarori (C22, `audit/designs/capacity.md`) — tranzaksiya ichida,
      * PUL YECHISHDAN OLDIN: foydalanuvchida QUEUED+IN_PROGRESS ≥
-     * `USER_MAX_INFLIGHT` yoki navbatdagi kutish > `QUEUE_MAX_WAIT_SEC`
+     * `queue.user_max_inflight` yoki navbatdagi kutish > `queue.max_wait_sec` (Sozlamalar)
      * bo'lsa 429 — pul ham, qator ham yo'q.
      */
-    admission: env.queue,
+    admission: await queueLimits(),
   });
 
   if (!result.ok && result.reason === "idempotency_conflict") {

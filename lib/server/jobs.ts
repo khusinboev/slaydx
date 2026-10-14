@@ -9,6 +9,7 @@ import type { PendingAsset } from "./assets";
 import { toJsonb } from "./jsonb";
 import { cleanText, safeSlice } from "../generation/safe-text";
 import { env } from "./env";
+import { queueLimits } from "./queue-limits";
 import { log } from "./log";
 import { userMessage } from "./user-error";
 import {
@@ -558,7 +559,7 @@ export async function getGeneration(
   const base: GenerationDetailRow = { ...rowToSummary(row), html: row.html, doc: row.doc_json };
   if (row.status === "QUEUED" && row.queue_position != null) {
     base.queuePosition = Number(row.queue_position);
-    base.etaSec = queueEtaSec(base.queuePosition, env.queue);
+    base.etaSec = queueEtaSec(base.queuePosition, await queueLimits());
   }
   const changed = row.status === "IN_PROGRESS" && (since == null || (row.live_seq ?? 0) > since);
   return changed ? { ...base, live: row.live_json_out ?? null } : base;

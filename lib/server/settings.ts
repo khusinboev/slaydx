@@ -41,6 +41,10 @@ export type SettingValues = {
   payment_bonus_percent: number;
   "pricing.target_markup": number;
   "pricing.payment_fee_percent": number;
+  "queue.max_wait_sec": number;
+  "queue.user_max_inflight": number;
+  "queue.total_slots": number;
+  "queue.mean_service_sec": number;
 };
 
 export type SettingKey = keyof SettingValues;
@@ -147,6 +151,7 @@ const FREE_GROUP = "Bepul AI";
 const GEN_GROUP = "Generatsiya";
 const FIN_GROUP = "Moliya";
 const PRICING_GROUP = "Narxlar";
+const QUEUE_GROUP = "Navbat va yuklama";
 
 type DailyKey = "free_llm.daily.outline" | "free_llm.daily.udk" | "free_llm.daily.rewrite" | "free_llm.daily.polish";
 
@@ -270,6 +275,58 @@ const CATALOG: Catalog = {
     max: 10,
     validate: stepNumberValidator(0, 10, 0.1),
     envDefault: () => 0,
+  },
+  "queue.max_wait_sec": {
+    key: "queue.max_wait_sec",
+    group: QUEUE_GROUP,
+    label: "Eng uzun kutish (soniya)",
+    description:
+      "Navbatdagi taxminiy kutish shundan oshsa, yangi ish PUL YECHILMASDAN «navbat to'la» deb rad etiladi. Kattaroq qiymat — ko'proq ish qabul qilinadi, lekin foydalanuvchi uzoqroq kutadi.",
+    type: "int",
+    min: 60,
+    max: 7200,
+    envVar: "QUEUE_MAX_WAIT_SEC",
+    validate: intValidator(60, 7200),
+    envDefault: () => env.queue.maxWaitSec,
+  },
+  "queue.user_max_inflight": {
+    key: "queue.user_max_inflight",
+    group: QUEUE_GROUP,
+    label: "Bir foydalanuvchining bir vaqtdagi ishlari",
+    description:
+      "Navbatda yoki tayyorlanayotgan ishlar shu sondan ko'p bo'lsa, shu foydalanuvchining yangi ishi rad etiladi (pul yechilmaydi). Bitta foydalanuvchi hamma slotni band qilib qo'ymasligi uchun.",
+    type: "int",
+    min: 1,
+    max: 20,
+    envVar: "USER_MAX_INFLIGHT",
+    validate: intValidator(1, 20),
+    envDefault: () => env.queue.userMaxInflight,
+  },
+  "queue.total_slots": {
+    key: "queue.total_slots",
+    group: QUEUE_GROUP,
+    label: "Ish bajaruvchi slotlar soni",
+    description:
+      "Barcha worker'lar bir vaqtda necha ishni bajaradi (worker soni × WORKER_CONCURRENCY). Faqat kutish vaqtini hisoblash uchun: haqiqiy slotlar soniga teng bo'lsin — kattasi navbatni yengil, kichigi qattiq ko'rsatadi.",
+    type: "int",
+    min: 1,
+    max: 64,
+    envVar: "QUEUE_TOTAL_SLOTS",
+    validate: intValidator(1, 64),
+    envDefault: () => env.queue.totalSlots,
+  },
+  "queue.mean_service_sec": {
+    key: "queue.mean_service_sec",
+    group: QUEUE_GROUP,
+    label: "Bitta ishning o'rtacha davomiyligi (soniya)",
+    description:
+      "0 — avtomatik: oxirgi tugagan ishlarning o'rtachasidan hisoblanadi (ma'lumot kam bo'lsa 200 s). Qo'lda berilsa avtomatik hisob o'chadi. Kutish = navbatdagi ishlar × shu qiymat ÷ slotlar.",
+    type: "int",
+    min: 0,
+    max: 1800,
+    envVar: "QUEUE_MEAN_SERVICE_SEC",
+    validate: intValidator(0, 1800),
+    envDefault: () => env.queue.meanServiceSec,
   },
 };
 

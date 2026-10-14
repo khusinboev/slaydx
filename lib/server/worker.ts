@@ -5,6 +5,7 @@ import { buildArtifact } from "../generation";
 import { TOOL_BY_ID } from "../tools";
 import { stagesFor } from "../progress-stages";
 import { env } from "./env";
+import { getSetting } from "./settings";
 import { Client } from "pg";
 import { ensureMigrated, poolConfig } from "./db";
 import {
@@ -816,7 +817,8 @@ export async function claimNext(): Promise<ClaimedJob | null> {
     });
     return null;
   }
-  return claimJob(newLease(WORKER_ID));
+  // The per-user running cap is the admin's `queue.user_max_inflight` (Sozlamalar), env as the default.
+  return claimJob(newLease(WORKER_ID), { userMaxRunning: await getSetting("queue.user_max_inflight").catch(() => env.queue.userMaxInflight) });
 }
 
 async function tick(): Promise<boolean> {
