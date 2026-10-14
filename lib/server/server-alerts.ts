@@ -10,7 +10,7 @@ import { botConfigured, sendMessage } from "./telegram";
  *
  * Rules (thresholds below):
  *   mem_low        host memory available < 10 %
- *   swap_high      swap used > 50 %
+ *   swap_high      swap used > 85 %
  *   disk_high      root disk > 85 %
  *   load_high      load1 > 2 x CPUs for 10 minutes
  *   queue_stuck    oldest runnable QUEUED job older than 5 minutes
@@ -28,7 +28,9 @@ export const ALERT_THRESHOLDS = {
   /** mem_low: fire when MemAvailable / MemTotal is below this percentage. */
   memAvailMinPct: 10,
   /** swap_high: fire when swap used / swap total is above this percentage. */
-  swapMaxPct: 50,
+  // 85, not 50: on the shared prod box swap holds COLD pages of other projects (2026-10-14: 55–71 % used with
+  // swap-in 2–6 pages/s, i.e. no thrashing). Real memory pressure is caught by `mem_low` (available < 10 %).
+  swapMaxPct: 85,
   /** disk_high: root disk usage above this percentage. */
   diskMaxPct: 85,
   /** load_high: load1 above this many times the CPU count ... */

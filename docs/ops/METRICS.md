@@ -80,7 +80,7 @@ constants `ALERT_THRESHOLDS` in that file.
 | rule | fires when | constant |
 |---|---|---|
 | `mem_low` | host memory available < 10 % of total | `memAvailMinPct` 10 |
-| `swap_high` | swap used > 50 % | `swapMaxPct` 50 |
+| `swap_high` | swap used > 85 % (cold pages of other projects sit in swap on the shared box; real pressure = `mem_low`) | `swapMaxPct` 85 |
 | `disk_high` | root disk > 85 % | `diskMaxPct` 85 |
 | `load_high` | `load1` > 2 × CPUs for 10 min (an unbroken run of host samples spanning 10 min) | `loadPerCpuMax` 2, `loadSustainMin` 10 |
 | `queue_stuck` | oldest runnable QUEUED job older than 5 min | `queueMaxAgeSec` 300 |

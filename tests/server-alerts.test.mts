@@ -45,8 +45,8 @@ test("evaluateLevelRules: every rule fires on its own threshold and clears again
   assert.deepEqual(firing(input({})), { mem_low: false, swap_high: false, disk_high: false, load_high: false, queue_stuck: false, fail_ratio: false });
   assert.equal(firing(input({ mem_avail_mb: 799 })).mem_low, true, "< 10 % available");
   assert.equal(firing(input({ mem_avail_mb: 800 })).mem_low, false, "exactly 10 % is fine");
-  assert.equal(firing(input({ swap_used_mb: 2001 })).swap_high, true, "> 50 % swap");
-  assert.equal(firing(input({ swap_used_mb: 2000 })).swap_high, false);
+  assert.equal(firing(input({ swap_used_mb: 3401 })).swap_high, true, "> 85 % swap");
+  assert.equal(firing(input({ swap_used_mb: 3400 })).swap_high, false, "exactly 85 % is not above; 55–71 % (prod, cold pages) never fires");
   assert.equal(firing(input({ swap_total_mb: 0, swap_used_mb: 0 })).swap_high, false, "no swap configured");
   assert.equal(firing(input({ disk_pct: 86 })).disk_high, true, "> 85 % disk");
   assert.equal(firing(input({ disk_pct: 85 })).disk_high, false);
@@ -201,7 +201,7 @@ test("runAlerts (haqiqiy Postgres): recipients, once, cooldown, recovery, restar
 
   await t.test("each remaining rule fires exactly once on its own sample", async () => {
     const cases: Array<{ rule: string; text: RegExp; setup: () => Promise<unknown> }> = [
-      { rule: "swap_high", text: /Swap to'lib bormoqda: 75%/, setup: () => putHost(NOW, { swap_used_mb: 3000 }) },
+      { rule: "swap_high", text: /Swap to'lib bormoqda: 90%/, setup: () => putHost(NOW, { swap_used_mb: 3600 }) },
       { rule: "disk_high", text: /Server diski to'lyapti: 91%/, setup: () => putHost(NOW, { disk_pct: 91 }) },
       {
         rule: "load_high",
