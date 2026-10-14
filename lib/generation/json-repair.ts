@@ -18,6 +18,7 @@
  *   smart_quote_delimiters       - `{“title”: “x”}` (typographic quotes used as delimiters)
  *   duplicate_object             - the same top-level value written twice
  *   multi_object                 - NDJSON / several top-level objects (returned as an array)
+ *   extra_fragment               - a complete value followed by a cut-off second one (the fragment is dropped)
  *   stray_chars                  - NBSP, zero-width space, control characters between tokens
  *
  * The caller (`json.ts`) adds `fence`, `prose`, `bom` and `truncated`.
@@ -39,6 +40,7 @@ export type RepairKind =
   | "smart_quote_delimiters"
   | "duplicate_object"
   | "multi_object"
+  | "extra_fragment"
   | "stray_chars"
   | "truncated";
 
@@ -359,6 +361,7 @@ export function rewriteLenient(src: string, start: number): Rewrite | null {
   const repairs = new Set<RepairKind>();
   const rw = new Rewriter(src, start, repairs);
   const texts: string[] = [];
+  let sawMore = false;
   try {
     texts.push(rw.value(0, "top"));
     while (!rw.incomplete && texts.length < MAX_TOP_VALUES) {
@@ -367,9 +370,9 @@ export function rewriteLenient(src: string, start: number): Rewrite | null {
       while (j < src.length && (isWs(src[j]) || src[j] === ",")) j += 1;
       if (j >= src.length || (src[j] !== "{" && src[j] !== "[")) break;
       rw.i = j;
-      const before = rw.incomplete;
+      sawMore = true;
       const text = rw.value(0, "top");
-      if (rw.incomplete && !before) {
+      if (rw.incomplete) {
         // The extra value was cut off - keep the complete ones, drop the fragment.
         rw.incomplete = false;
         break;
@@ -381,8 +384,9 @@ export function rewriteLenient(src: string, start: number): Rewrite | null {
     throw e;
   }
   let text = texts[0];
-  if (texts.length > 1) {
-    if (texts.every((t) => t === texts[0])) repairs.add("duplicate_object");
+  if (sawMore) {
+    if (texts.length === 1) repairs.add("extra_fragment");
+    else if (texts.every((t) => t === texts[0])) repairs.add("duplicate_object");
     else {
       repairs.add("multi_object");
       text = "[" + texts.join(",") + "]";
