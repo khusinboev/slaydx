@@ -9,7 +9,7 @@ import { researchLines } from "./research";
 import { structureLines } from "./structure";
 
 export type { SlidePromptCtx } from "./ctx";
-export { deckJsonSchema } from "./schema";
+export { deckJsonSchema, deckResponseSchema } from "./schema";
 
 /**
  * Slayd tizim prompti — nomlangan BO'LIMLARDAN yig'iladi.

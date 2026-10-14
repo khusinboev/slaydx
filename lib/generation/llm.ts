@@ -7,6 +7,7 @@ import { allowOrWait, breakerFor } from "./llm/breaker";
 import { BREAKER_WAIT_MAX_MS, CHAIN_MIN_ATTEMPT_MS, CHAIN_SAFETY_MS, DeadlineError, TIMEOUT_RETRY_MIN_LEFT_MS } from "./llm/chain";
 import { classifyFailure, isMaxTokensFinish, isSafetyFinish, reportFailure, withJsonRetry, type FailureKind } from "./llm/failure";
 import { limiterFor } from "./llm/limiter";
+import { log } from "../server/log";
 import { backoffMs, equalJitterMs, geminiRetryDelayMs, parseRetryAfter } from "./llm/retry";
 
 type Provider = "gemini" | "xai" | null;
@@ -72,6 +73,16 @@ export type LlmOpts = {
    * leave it unset and get one retry after a timeout.
    */
   noTimeoutRetry?: boolean;
+  /**
+   * Gemini `responseSchema` (OpenAPI subset), sent together with the JSON mime type. Needs `json`.
+   * Constrained decoding: the answer cannot be malformed JSON.
+   */
+  responseSchema?: Record<string, unknown>;
+  /**
+   * Like `responseSchema`, but ONLY for the JSON-quality retry (the second attempt after an
+   * unparseable first answer). The first attempt keeps the free form it always had.
+   */
+  retrySchema?: Record<string, unknown>;
 };
 
 /** Grounding topgan bitta sahifa. `uri` — Google redirect, `title` — domen. */
@@ -292,8 +303,8 @@ async function runLlm(
   if (!provider) return null;
   const call = provider === "gemini" ? completeGemini : completeXai;
   const budget = opts.timeoutMs ?? 40_000;
-  const once = async (o: { system: string; maxTokens: number }): Promise<GroundedResult | null> => {
-    const done = await withRetry(provider, budget, (timeoutMs) => call(o.system, user, o.maxTokens, { ...opts, timeoutMs }), opts.deadline, role, opts.noTimeoutRetry);
+  const once = async (o: { system: string; maxTokens: number; retry?: boolean }): Promise<GroundedResult | null> => {
+    const done = await withRetry(provider, budget, (timeoutMs) => call(o.system, user, o.maxTokens, { ...retryOpts(opts, o.retry), timeoutMs }), opts.deadline, role, opts.noTimeoutRetry);
     return done ? { ...done.value, ...(done.finishReason ? { finishReason: done.finishReason } : {}) } : null;
   };
   // JSON answers that are cut or unparseable get ONE stricter retry (every paid attempt is already recorded in the job meter).
@@ -412,8 +423,14 @@ function geminiBody(system: string, user: string, maxTokens: number, opts: LlmOp
       maxOutputTokens: Math.max(maxTokens, 4096),
       thinkingConfig: { thinkingBudget: thinkingBudget(opts.thinking) },
       ...(opts.json ? { responseMimeType: "application/json" } : {}),
+      ...(opts.json && opts.responseSchema ? { responseSchema: opts.responseSchema } : {}),
     },
   });
+}
+
+/** Options of the stricter second attempt: the retry schema (when given) becomes the response schema. */
+function retryOpts<T extends LlmOpts>(opts: T, retry: boolean | undefined): T {
+  return retry && opts.retrySchema ? { ...opts, responseSchema: opts.retrySchema } : opts;
 }
 
 async function completeGemini(
@@ -532,9 +549,65 @@ type SseLine =
   | { kind: "text"; text: string; usage?: RawUsage; finish?: string }
   | { kind: "blocked"; reason?: string }
   | { kind: "error"; message: string; retryable: boolean }
-  | { kind: "skip"; usage?: RawUsage; finish?: string };
+  | { kind: "skip"; usage?: RawUsage; finish?: string }
+  /** A `data:` payload that is not (yet) valid JSON - possibly the first line of a multi-line event. */
+  | { kind: "bad" };
 
-const SSE_SKIP: SseLine = { kind: "skip" };
+const SSE_SKIP: SseEvent = { kind: "skip" };
+const SSE_BAD: SseLine = { kind: "bad" };
+/** What the stream loop sees: everything but the internal `bad` marker. */
+type SseEvent = Exclude<SseLine, { kind: "bad" }>;
+
+/**
+ * SSE `data:` lines -> events, tolerant of an event whose JSON is spread over several `data:` lines
+ * (the SSE spec joins them with `\n`). A `data:` line that does not parse is held back and joined with
+ * the following lines until the JSON is complete; a payload that never completes is DROPPED and counted
+ * (`dropped`) - before, such a chunk vanished silently and the answer lost a piece of its text.
+ */
+export class SseAssembler {
+  dropped = 0;
+  private pending = "";
+
+  feed(rawLine: string): SseEvent {
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+    if (!line.startsWith("data:")) {
+      if (line.trim() === "" && this.pending) this.drop();
+      return SSE_SKIP;
+    }
+    const payload = line.slice(5).trim();
+    if (payload === "" || payload === "[DONE]") return SSE_SKIP;
+    const joined = this.pending ? `${this.pending}\n${payload}` : payload;
+    const ev = parseSseLine(`data:${joined}`);
+    if (ev.kind !== "bad") {
+      this.pending = "";
+      return ev;
+    }
+    if (this.pending) {
+      // The held payload did not complete with this line: maybe this line is a fresh, valid event.
+      const alone = parseSseLine(`data:${payload}`);
+      if (alone.kind !== "bad") {
+        this.drop();
+        return alone;
+      }
+    }
+    if (joined.length > 1_000_000) {
+      this.drop();
+      return SSE_SKIP;
+    }
+    this.pending = joined;
+    return SSE_SKIP;
+  }
+
+  /** End of stream: an unfinished held payload is a dropped chunk. */
+  end(): void {
+    if (this.pending) this.drop();
+  }
+
+  private drop(): void {
+    this.dropped += 1;
+    this.pending = "";
+  }
+}
 
 /**
  * Bitta SSE qatorini o'qish.
@@ -554,7 +627,7 @@ function parseSseLine(raw: string): SseLine {
   try {
     chunk = JSON.parse(payload) as GeminiStreamChunk;
   } catch {
-    return SSE_SKIP;
+    return SSE_BAD;
   }
   if (chunk.error) {
     const code = chunk.error.code ?? 0;
@@ -649,6 +722,7 @@ async function streamGemini(
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
+    const sse = new SseAssembler();
     /*
      * Bo'lak chegarasi qator chegarasi EMAS: bitta `data:` qatori ikki
      * bo'lakka bo'linishi mumkin, hatto JSON satrining o'rtasidan.
@@ -664,10 +738,10 @@ async function streamGemini(
       buf += done ? decoder.decode() : decoder.decode(value, { stream: true });
       // Oxirida newline'siz qolgan quyruq ham to'liq qator.
       if (done && buf !== "" && !buf.endsWith("\n")) buf += "\n";
-      let stop: SseLine | null = null;
+      let stop: SseEvent | null = null;
       let nl = buf.indexOf("\n");
       while (nl >= 0) {
-        const ev = parseSseLine(buf.slice(0, nl));
+        const ev = sse.feed(buf.slice(0, nl));
         buf = buf.slice(nl + 1);
         if ((ev.kind === "text" || ev.kind === "skip") && ev.usage) usage = ev.usage;
         if ((ev.kind === "text" || ev.kind === "skip") && ev.finish) finish = ev.finish;
@@ -688,6 +762,11 @@ async function streamGemini(
         return { value: null, retryable: stop.retryable, message: stop.message, ...(usage ? { usage } : {}) };
       }
       if (done) break;
+    }
+    sse.end();
+    // A dropped SSE chunk (or a stream cut before `finishReason`) leaves a hole in the text: log it, metadata only.
+    if (sse.dropped > 0 || !finish) {
+      log("warn", "[llm] stream anomaly", { model, droppedChunks: sse.dropped, finishReason: finish ?? "none", chars: text.length });
     }
     const full = text.trim();
     if (!full) return { value: null, ...geminiEmpty(undefined, finish), ...(finish ? { finishReason: finish } : {}), ...(usage ? { usage } : {}) };
@@ -733,7 +812,26 @@ export async function llmStream(
     return res.text;
   }
   const budget = rest.timeoutMs ?? 40_000;
-  const once = async (o: { system: string; maxTokens: number }): Promise<{ text: string; finishReason?: string } | null> => {
+  const once = async (o: { system: string; maxTokens: number; retry?: boolean }): Promise<{ text: string; finishReason?: string } | null> => {
+    /*
+     * The JSON-quality retry is NOT streamed: one plain `generateContent` call (JSON mime type, plus the
+     * retry schema when the caller has one). The whole answer arrives atomically, so a bad SSE chunk or a
+     * mid-stream hiccup cannot corrupt it. The live text callback gets the finished text once (`onText`
+     * is cumulative, the caller's indices are monotonic).
+     */
+    if (o.retry) {
+      const plain = await withRetry(
+        "gemini",
+        budget,
+        (timeoutMs) => completeGemini(o.system, user, o.maxTokens, { ...retryOpts(rest, true), timeoutMs }),
+        rest.deadline,
+        "stream",
+        rest.noTimeoutRetry,
+      );
+      if (!plain) return null;
+      onText(plain.value.text);
+      return { text: plain.value.text, ...(plain.finishReason ? { finishReason: plain.finishReason } : {}) };
+    }
     const done = await withRetry(
       "gemini",
       budget,

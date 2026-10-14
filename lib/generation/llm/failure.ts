@@ -17,7 +17,8 @@
  * as `cause` and the `[worker] job … failed` line shows the root cause.
  */
 import { log } from "../../server/log";
-import { parseLlmJson } from "../json";
+import { parseLlmJsonDetailed } from "../json";
+import type { RepairKind } from "../json-repair";
 import { currentJobCost, type JobCost } from "../job-cost";
 
 export type FailureKind = "http" | "timeout" | "network" | "empty" | "bad_json" | "truncated" | "safety" | "other";
@@ -210,10 +211,30 @@ function strictParses(text: string): boolean {
  * can be parsed at all.
  */
 export function checkJson(text: string, finishReason?: string): JsonQuality {
-  if (strictParses(text)) return "ok";
-  const salvaged = parseLlmJson(text);
-  if (salvaged === null || salvaged === undefined) return isMaxTokensFinish(finishReason) ? "truncated" : "bad_json";
-  return isMaxTokensFinish(finishReason) ? "truncated" : "ok";
+  return inspectJson(text, finishReason).quality;
+}
+
+/** `checkJson` plus the names of the syntax repairs the lenient parser needed (empty for a clean answer). */
+export function inspectJson(text: string, finishReason?: string): { quality: JsonQuality; repairs: RepairKind[] } {
+  if (strictParses(text)) return { quality: "ok", repairs: [] };
+  const salvaged = parseLlmJsonDetailed(text);
+  if (salvaged === null || salvaged.value === null || salvaged.value === undefined) {
+    return { quality: isMaxTokensFinish(finishReason) ? "truncated" : "bad_json", repairs: [] };
+  }
+  return { quality: isMaxTokensFinish(finishReason) ? "truncated" : "ok", repairs: salvaged.repairs };
+}
+
+/**
+ * ONE warn line when an answer parsed only after syntax repairs, so production can count which
+ * strategy rescued it (`grep "json repaired"`). Metadata only - never the answer text.
+ */
+export function reportRepair(ctx: { role: string; provider: string; model: string }, repairs: RepairKind[], finishReason?: string): void {
+  if (repairs.length === 0) return;
+  try {
+    log("warn", "[llm] json repaired", { role: ctx.role, provider: ctx.provider, model: ctx.model, repairs: repairs.join(","), finishReason });
+  } catch {
+    // Observability must never change what the call does.
+  }
 }
 
 export const STRICT_JSON_REMINDER =
@@ -230,7 +251,11 @@ export function biggerMaxTokens(current: number): number {
 /** Minimum job time left for a JSON-quality retry to start (ms). */
 export const JSON_RETRY_MIN_LEFT_MS = 12_000;
 
-export type JsonRetryRun<R extends { text: string; finishReason?: string }> = (o: { system: string; maxTokens: number }) => Promise<R | null>;
+/**
+ * `retry: true` marks the second (stricter) attempt: the provider call should make it as parseable as
+ * it can (Gemini: non-streaming JSON mode with a response schema, see `llm.ts llmStream`).
+ */
+export type JsonRetryRun<R extends { text: string; finishReason?: string }> = (o: { system: string; maxTokens: number; retry?: boolean }) => Promise<R | null>;
 
 /**
  * JSON-quality retry shared by the direct (`llm.ts`) and the role (`llm-roles.ts`)
@@ -251,8 +276,11 @@ export async function withJsonRetry<R extends { text: string; finishReason?: str
 ): Promise<R | null> {
   const first = await run({ system: base.system, maxTokens: base.maxTokens });
   if (!first || !base.json) return first;
-  const q = checkJson(first.text, first.finishReason);
-  if (q === "ok") return first;
+  const { quality: q, repairs: repairs1 } = inspectJson(first.text, first.finishReason);
+  if (q === "ok") {
+    reportRepair({ role: ctx.role, provider: ctx.provider(first), model: ctx.model(first) }, repairs1, first.finishReason);
+    return first;
+  }
   const tk = ctx.tokens?.(first);
   reportFailure({
     role: ctx.role,
@@ -273,12 +301,14 @@ export async function withJsonRetry<R extends { text: string; finishReason?: str
     second = await run({
       system: base.system + STRICT_JSON_REMINDER,
       maxTokens: q === "truncated" ? biggerMaxTokens(base.maxTokens) : base.maxTokens,
+      retry: true,
     });
   } catch {
     return first;
   }
   if (!second) return first;
-  const q2 = checkJson(second.text, second.finishReason);
+  const { quality: q2, repairs: repairs2 } = inspectJson(second.text, second.finishReason);
+  if (q2 === "ok") reportRepair({ role: ctx.role, provider: ctx.provider(second), model: ctx.model(second) }, repairs2, second.finishReason);
   const rank = (x: JsonQuality) => (x === "ok" ? 2 : x === "truncated" ? 1 : 0);
   if (q2 !== "ok") {
     const tk2 = ctx.tokens?.(second);

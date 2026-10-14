@@ -8,6 +8,8 @@
  * Shuning uchun avval tozalaymiz, keyin kerak bo'lsa qavslarni o'zimiz yopamiz.
  */
 
+import { rewriteLenient, type RepairKind } from "./json-repair";
+
 function stripFences(raw: string): string {
   return raw
     .replace(/^﻿/, "")
@@ -187,11 +189,36 @@ function repairTruncated(body: string): unknown {
   return undefined;
 }
 
+/** Parse result plus the names of the syntax repairs it needed (`[]` - the answer was clean). */
+export type ParsedJson = { value: unknown; repairs: RepairKind[] };
+
+/** Fence / BOM / prose around the value - cheap facts about the raw answer, for the repair counters. */
+function wrapperRepairs(raw: string, start: number, endIndex: number, length: number): RepairKind[] {
+  const out: RepairKind[] = [];
+  if (raw.charCodeAt(0) === 0xfeff) out.push("bom");
+  if (raw.includes("```")) out.push("fence");
+  if (start > 0 || endIndex < length - 1) out.push("prose");
+  return out;
+}
+
+/** Indices of the `{` / `[` characters to try as the value start (the first one wins when it parses). */
+function startCandidates(text: string, first: number): number[] {
+  const out = [first];
+  for (let i = first + 1; i < text.length && out.length < 4; i++) {
+    if (text[i] === "{" || text[i] === "[") out.push(i);
+  }
+  return out;
+}
+
 /**
- * LLM javobidan birinchi JSON obyekt/massivni oladi.
- * Javob kesilgan bo'lsa ham qutqarishga harakat qiladi. Bo'lmasa `null`.
+ * `parseLlmJson` with the list of repairs that were applied. Order of attempts:
+ *   1. the plain value up to the last closing bracket (clean answers, fences, prose);
+ *   2. the whole remainder;
+ *   3. the lenient SYNTAX rewriter (`json-repair.ts`) from the first bracket, then from the
+ *      next few brackets (prose that itself contains `[1]` or `{}` before the real value);
+ *   4. the old truncation repair on the raw text.
  */
-export function parseLlmJson(raw: string | null | undefined): unknown {
+export function parseLlmJsonDetailed(raw: string | null | undefined): ParsedJson | null {
   if (!raw) return null;
   const cleaned = stripFences(raw);
   if (!cleaned) return null;
@@ -208,16 +235,35 @@ export function parseLlmJson(raw: string | null | undefined): unknown {
   const lastClose = body.lastIndexOf(endChar);
   if (lastClose > 0) {
     const direct = tryParse(body.slice(0, lastClose + 1));
-    if (direct !== undefined) return direct;
+    if (direct !== undefined) return { value: direct, repairs: wrapperRepairs(raw, start, start + lastClose, cleaned.length) };
   }
 
   // 2) Butun qoldiq to'g'ri JSON bo'lishi mumkin.
   const whole = tryParse(body);
-  if (whole !== undefined) return whole;
+  if (whole !== undefined) return { value: whole, repairs: wrapperRepairs(raw, start, cleaned.length - 1, cleaned.length) };
 
-  // 3) Kesilgan javobni tiklaymiz.
+  // 3) Sintaksis tiklash: ortiqcha/yetishmagan vergul, xom yangi qator, noto'g'ri escape, ichki tirnoq, takror obyekt...
+  for (const at of startCandidates(cleaned, start)) {
+    const r = rewriteLenient(cleaned, at);
+    if (!r) continue;
+    const parsed = r.incomplete ? repairTruncated(r.text) : tryParse(r.text);
+    if (parsed === undefined || isEmptyContainer(parsed)) continue;
+    const repairs = [...wrapperRepairs(raw, at, cleaned.length - 1, cleaned.length), ...r.repairs];
+    if (r.incomplete) repairs.push("truncated");
+    return { value: parsed, repairs };
+  }
+
+  // 4) Kesilgan javobni tiklaymiz (eski yo'l).
   const repaired = repairTruncated(body);
-  return repaired === undefined ? null : repaired;
+  return repaired === undefined ? null : { value: repaired, repairs: [...wrapperRepairs(raw, start, cleaned.length - 1, cleaned.length), "truncated"] };
+}
+
+/**
+ * LLM javobidan birinchi JSON obyekt/massivni oladi.
+ * Javob kesilgan bo'lsa ham qutqarishga harakat qiladi. Bo'lmasa `null`.
+ */
+export function parseLlmJson(raw: string | null | undefined): unknown {
+  return parseLlmJsonDetailed(raw)?.value ?? null;
 }
 
 /** `parseLlmJson`, lekin natija obyekt bo'lsagina qaytaradi. */

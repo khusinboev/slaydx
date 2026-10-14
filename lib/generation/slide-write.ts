@@ -13,7 +13,7 @@ import { purposeDefaults } from "./slide-purpose";
 import { finalizeQuiz } from "./slide-quiz";
 import { attachSlideImages } from "./slide-images";
 import { SLIDE_MAX } from "./slide-params";
-import { deckJsonSchema, slideSystem, type SlidePromptCtx } from "./slide-prompt";
+import { deckJsonSchema, deckResponseSchema, slideSystem, type SlidePromptCtx } from "./slide-prompt";
 import type { SlideProgressSink } from "./slide-progress";
 import { isGoogleRedirect, runSlideResearch } from "./slide-research";
 import { expandBeats, resolveSlideTemplate, type SlideBeat, type SlideTemplate, type SlideVisual } from "./slide-templates";
@@ -501,10 +501,27 @@ export function coerceLayout(s: SlideModel, want: SlideLayout, maxBullets = 4, r
   return { ...s, layout: want, bullets: pool.length ? pool.slice(0, maxBullets) : s.bullets };
 }
 
+/**
+ * The slide list inside a parsed answer, whatever shape the model gave it:
+ * `{"slides":[…]}` (asked), a bare array of slides, several `{"slides":[…]}` objects
+ * (a duplicated answer - the FIRST one is used) or a lone slide object. Only the
+ * wrapper is recognised here; no slide is ever created or edited.
+ */
+export function slideListOf(data: unknown): unknown[] | null {
+  const isObj = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
+  if (Array.isArray(data)) {
+    const wrapped = data.find((e) => isObj(e) && Array.isArray(e.slides));
+    return isObj(wrapped) ? (wrapped.slides as unknown[]) : data;
+  }
+  if (!isObj(data)) return null;
+  if (Array.isArray(data.slides)) return data.slides;
+  return typeof data.layout === "string" && typeof data.title === "string" ? [data] : null;
+}
+
 function parseDeckJson(raw: string, footer: string, want: number, rules: BulletRules, visual?: SlideVisual): SlideModel[] {
-  const data = parseLlmJson(raw) as { slides?: unknown } | null;
-  if (!Array.isArray(data?.slides)) return [];
-  return data.slides
+  const list = slideListOf(parseLlmJson(raw));
+  if (!list) return [];
+  return list
     .map((s, i) => normalizeSlide(s, i, footer, rules, visual))
     .filter((s): s is SlideModel => Boolean(s))
     .slice(0, Math.max(6, Math.min(24, want + 2)));
@@ -535,9 +552,8 @@ export function extractNewSlides(
   /** Deka vizuali — sig'im (`clipLimit`) shunga qarab; berilmasa auditoriya chegarasi. */
   visual?: SlideVisual,
 ): { index: number; slide: SlideModel }[] {
-  const data = parseLlmJson(partial) as { slides?: unknown } | null;
-  if (!Array.isArray(data?.slides)) return [];
-  const list = data.slides;
+  const list = slideListOf(parseLlmJson(partial));
+  if (!list) return [];
   const ready = opts.final ? list.length : list.length - 1;
   const out: { index: number; slide: SlideModel }[] = [];
   for (let i = Math.max(0, emitted); i < ready; i += 1) {
@@ -815,7 +831,7 @@ export async function writeSlidesWithLlm(
       return [];
     }
     const system = slideSystem(meta, tpl, ctx);
-    const llmOpts = { json: true as const, timeoutMs: Math.min(90_000, left), deadline: jobDeadline };
+    const llmOpts = { json: true as const, timeoutMs: Math.min(90_000, left), deadline: jobDeadline, retrySchema: deckResponseSchema() };
     /*
      * Oqim OPT-IN: faqat `onProgress` bo'lganda va kill-switch
      * o'chirilmaganda. `LLM_STREAM=false` da (yoki oqimni qo'llamaydigan
