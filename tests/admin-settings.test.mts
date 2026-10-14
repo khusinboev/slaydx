@@ -213,7 +213,7 @@ test("katalog: hech bir kalit sirga bog'lanmagan va faqat bool/son/vositalar ro'
   // Pinned: adding an env-backed setting must be a conscious decision (review it for secrecy).
   assert.deepEqual(
     [...envVars.values()].sort(),
-    ["FREE_LLM_DAILY_GLOBAL", "FREE_LLM_DAILY_OUTLINE", "FREE_LLM_DAILY_POLISH", "FREE_LLM_DAILY_REWRITE", "FREE_LLM_DAILY_UDK", "FREE_LLM_DISABLED", "SOUM_PER_USD"],
+    ["FREE_LLM_DAILY_GLOBAL", "FREE_LLM_DAILY_OUTLINE", "FREE_LLM_DAILY_POLISH", "FREE_LLM_DAILY_REWRITE", "FREE_LLM_DAILY_UDK", "FREE_LLM_DISABLED", "QUEUE_MAX_WAIT_SEC", "QUEUE_TOTAL_SLOTS", "SOUM_PER_USD", "USER_MAX_INFLIGHT"],
   );
   assert.ok(settings.SETTING_KEYS.includes("pricing.target_markup"));
 });

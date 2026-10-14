@@ -30,6 +30,7 @@ owner's private notes); only names, mechanics and decisions. Updated by whoever 
 | `finance.soum_per_usd` | USD rate for cost/margin reports | default |
 | `generation.paused`, `generation.paused_tools` | stop accepting new jobs (no charge) | off |
 | `free_llm.disabled`, `free_llm.daily.global` | free-AI switch and daily cap | default |
+| `queue.max_wait_sec` / `queue.user_max_inflight` / `queue.total_slots` / `queue.mean_service_sec` | admission: longest honest wait, per-user in-flight cap, real slot count, mean job duration (0 = measured automatically from the last 200 jobs) | env defaults (900 s / 2 / 8 / auto) |
 | `admin.wallet_confirm_threshold` | wallet correction needs re-typed amount above this | default |
 Prices: one place, `priceFor` (server); admin «Narxlar» page adjusts 25–1000 % per tool with rounding (100/500/1000) and shows cost, margin
 (listed-revenue and cash), bonus cost; admin test jobs are excluded unless «Adminlar bilan». Credits only through `lib/server/credits.ts`
