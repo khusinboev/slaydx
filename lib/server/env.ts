@@ -252,7 +252,8 @@ export const env = {
      * Click callbacks whose `merchant_trans_id` starts with `vk-` belong to Bandlik.uz (vakant3), which shares this Click
      * service; they are forwarded here untouched (`lib/server/click-forward.ts`). Optional, default = production abitur24.uz.
      */
-    vakantForwardUrl: str("VAKANT_CLICK_FORWARD_URL", "https://abitur24.uz/api/payments/click"),
+    // `||` not a fallback arg: docker-compose passes an EMPTY string when the variable is unset in `.env`.
+    vakantForwardUrl: str("VAKANT_CLICK_FORWARD_URL") || "https://abitur24.uz/api/payments/click",
   },
   payme: {
     merchantId: str("PAYME_MERCHANT_ID"),

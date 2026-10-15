@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requestIdOf } from "@/lib/server/api";
 import { ensureMigrated } from "@/lib/server/db";
 import { env } from "@/lib/server/env";
-import { actionOf, clickTransIdOf, forwardToVakant, isVakantOrder, MAX_BODY_BYTES, merchantTransIdOf } from "@/lib/server/click-forward";
+import { forwardToVakant, isVakantOrder, MAX_BODY_BYTES, readTextCapped } from "@/lib/server/click-forward";
 import { log, withLogContext } from "@/lib/server/log";
 import { recordPaymentEvent } from "@/lib/server/payment-events";
 import {
@@ -196,17 +196,20 @@ export async function OPTIONS(req: Request) {
 }
 
 async function handleClick(req: Request): Promise<NextResponse> {
-  // Read the body ONCE as text: a Bandlik.uz (`vk-`) callback is forwarded byte for byte, everything else is parsed from the same text.
+  // Read the body ONCE as text (size enforced while reading): a Bandlik.uz (`vk-`) callback is forwarded as it came,
+  // everything else is parsed from the same text.
   const contentType = req.headers.get("content-type") ?? "";
-  const declared = Number(req.headers.get("content-length") ?? 0);
-  const raw = declared > MAX_BODY_BYTES ? "" : await req.text().catch(() => "");
-  if (raw.length > MAX_BODY_BYTES) return NextResponse.json(reply({}, CLICK_ERROR.BAD_REQUEST, "So'rov to'liq emas").body);
+  const raw = await readTextCapped(req.body, MAX_BODY_BYTES);
+  if (raw === null) return NextResponse.json(reply({}, CLICK_ERROR.BAD_REQUEST, "So'rov to'liq emas").body);
 
-  const merchantTransId = merchantTransIdOf(raw, contentType);
-  if (merchantTransId !== null && isVakantOrder(merchantTransId)) {
-    const fwd = await forwardToVakant(raw, contentType, { action: actionOf(raw, contentType), merchantTransId });
+  // ONE parse decides everything: the "is it vk-?" check uses the very params SlaydX's own handler would use, so the two
+  // can never read different order ids out of one body (duplicate keys, multipart, JSON).
+  const parsed = await readParams(req, raw);
+  if (parsed && isVakantOrder(parsed.merchant_trans_id)) {
+    const merchantTransId = String(parsed.merchant_trans_id);
+    const fwd = await forwardToVakant(raw, contentType, { action: parsed.action === undefined ? null : String(parsed.action), merchantTransId });
     if (fwd.ok) return new NextResponse(fwd.text, { status: 200, headers: { "content-type": "application/json" } });
-    return NextResponse.json(reply({ click_trans_id: clickTransIdOf(raw, contentType) ?? "0", merchant_trans_id: merchantTransId }, CLICK_ERROR.UPDATE_FAILED, "forward_failed").body);
+    return NextResponse.json(reply({ click_trans_id: String(parsed.click_trans_id ?? "0"), merchant_trans_id: merchantTransId }, CLICK_ERROR.UPDATE_FAILED, "forward_failed").body);
   }
 
   if (!env.click.serviceId || !env.click.secretKey) {
@@ -214,7 +217,7 @@ async function handleClick(req: Request): Promise<NextResponse> {
   }
   await ensureMigrated();
 
-  const p = await readParams(req, raw);
+  const p = parsed;
   if (!p || !p.click_trans_id || !p.merchant_trans_id || !p.sign_string) {
     return NextResponse.json(reply(p ?? {}, CLICK_ERROR.BAD_REQUEST, "So'rov to'liq emas").body);
   }
