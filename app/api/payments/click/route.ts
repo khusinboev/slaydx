@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requestIdOf } from "@/lib/server/api";
 import { ensureMigrated } from "@/lib/server/db";
 import { env } from "@/lib/server/env";
+import { forwardToVakant, isVakantOrder, MAX_BODY_BYTES, readTextCapped } from "@/lib/server/click-forward";
 import { log, withLogContext } from "@/lib/server/log";
 import { recordPaymentEvent } from "@/lib/server/payment-events";
 import {
@@ -68,13 +69,17 @@ function reply(params: Partial<ClickParams>, error: number, note: string, extra:
   };
 }
 
-async function readParams(req: Request): Promise<ClickParams | null> {
+/**
+ * Parses the ALREADY-READ raw body (the body is read once, as text, so a `vk-` callback can be forwarded byte for byte).
+ * The text is replayed into a `Request` so the parsing — JSON or `formData()` — is exactly what it was before.
+ */
+async function readParams(req: Request, raw: string): Promise<ClickParams | null> {
   const type = req.headers.get("content-type") ?? "";
   try {
     if (type.includes("application/json")) {
-      return (await req.json()) as ClickParams;
+      return JSON.parse(raw) as ClickParams;
     }
-    const form = await req.formData();
+    const form = await new Request(req.url, { method: "POST", headers: req.headers, body: raw }).formData();
     const out: Record<string, string> = {};
     form.forEach((v, k) => {
       out[k] = String(v);
@@ -191,12 +196,28 @@ export async function OPTIONS(req: Request) {
 }
 
 async function handleClick(req: Request): Promise<NextResponse> {
+  // Read the body ONCE as text (size enforced while reading): a Bandlik.uz (`vk-`) callback is forwarded as it came,
+  // everything else is parsed from the same text.
+  const contentType = req.headers.get("content-type") ?? "";
+  const raw = await readTextCapped(req.body, MAX_BODY_BYTES);
+  if (raw === null) return NextResponse.json(reply({}, CLICK_ERROR.BAD_REQUEST, "So'rov to'liq emas").body);
+
+  // ONE parse decides everything: the "is it vk-?" check uses the very params SlaydX's own handler would use, so the two
+  // can never read different order ids out of one body (duplicate keys, multipart, JSON).
+  const parsed = await readParams(req, raw);
+  if (parsed && isVakantOrder(parsed.merchant_trans_id)) {
+    const merchantTransId = String(parsed.merchant_trans_id);
+    const fwd = await forwardToVakant(raw, contentType, { action: parsed.action === undefined ? null : String(parsed.action), merchantTransId });
+    if (fwd.ok) return new NextResponse(fwd.text, { status: 200, headers: { "content-type": "application/json" } });
+    return NextResponse.json(reply({ click_trans_id: String(parsed.click_trans_id ?? "0"), merchant_trans_id: merchantTransId }, CLICK_ERROR.UPDATE_FAILED, "forward_failed").body);
+  }
+
   if (!env.click.serviceId || !env.click.secretKey) {
     return NextResponse.json(reply({}, CLICK_ERROR.BAD_REQUEST, "Click sozlanmagan").body);
   }
   await ensureMigrated();
 
-  const p = await readParams(req);
+  const p = parsed;
   if (!p || !p.click_trans_id || !p.merchant_trans_id || !p.sign_string) {
     return NextResponse.json(reply(p ?? {}, CLICK_ERROR.BAD_REQUEST, "So'rov to'liq emas").body);
   }

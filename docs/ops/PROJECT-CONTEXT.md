@@ -43,6 +43,7 @@ Prices: one place, `priceFor` (server); admin «Narxlar» page adjusts 25–1000
 - **Fiscalization is done by Click**, not by us: receipt data is set in the Click cabinet (debit receipt, PINFL, VAT 0 %, item «SlaydX»).
   **MXIK / SPIC code in the cabinet: `10305008004000000`** (package 1546606) — the owner confirms Click assigned exactly this code to SlaydX.
   Our server sends NO MXIK/VAT/item fields (only amount, order id, phone) — nothing to change in code.
+- **Shared Click service with Bandlik.uz (vakant3):** callbacks whose `merchant_trans_id` starts with `vk-` are forwarded unchanged to `VAKANT_CLICK_FORWARD_URL` (default abitur24.uz) and its JSON reply is returned to Click; failure → Click `-7 forward_failed`. SlaydX never looks up, settles or logs-to-DB such orders (`lib/server/click-forward.ts`, `docs/payments/CLICK-FORWARD.md`). SlaydX order ids are UUIDs so they can never start with `vk-`.
 - Live results: app payment works end to end (bonus credited). Card 6262… got no SMS (asked Click); phone-invoice method not yet live-tested.
 - Refund policy: the bot only accepts payments; money paid is not refunded to the user (owner decision).
 
