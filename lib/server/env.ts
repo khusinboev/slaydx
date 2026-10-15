@@ -248,6 +248,11 @@ export const env = {
     merchantId: str("CLICK_MERCHANT_ID"),
     secretKey: str("CLICK_SECRET_KEY"),
     merchantUserId: str("CLICK_MERCHANT_USER_ID"),
+    /**
+     * Click callbacks whose `merchant_trans_id` starts with `vk-` belong to Bandlik.uz (vakant3), which shares this Click
+     * service; they are forwarded here untouched (`lib/server/click-forward.ts`). Optional, default = production abitur24.uz.
+     */
+    vakantForwardUrl: str("VAKANT_CLICK_FORWARD_URL", "https://abitur24.uz/api/payments/click"),
   },
   payme: {
     merchantId: str("PAYME_MERCHANT_ID"),

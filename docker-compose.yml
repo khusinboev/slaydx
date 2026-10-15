@@ -208,6 +208,7 @@ services:
       PAYME_KEY: ${PAYME_KEY:-}
       NEXT_PUBLIC_BRAND_LOGO: ${NEXT_PUBLIC_BRAND_LOGO:-/logo.png}
       CLICK_MERCHANT_USER_ID: ${CLICK_MERCHANT_USER_ID:-}
+      VAKANT_CLICK_FORWARD_URL: ${VAKANT_CLICK_FORWARD_URL:-}
       PAYME_TEST_KEY: ${PAYME_TEST_KEY:-}
       CRON_SECRET: ${CRON_SECRET:-}
       # EXT-14: webhook'ning ALOHIDA kaliti (bo'sh → vaqtincha CRON_SECRET + ogohlantirish).
