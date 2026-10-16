@@ -2,11 +2,11 @@ import "./setup.ts";
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createElement as h } from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 import { WalletPage } from "../../components/wallet/WalletPage.tsx";
-import { describeEntry, formatWhen, ledgerRow } from "../../components/wallet/wallet-model.ts";
+import { describeEntry, formatWhen, ledgerRow, providerLabel } from "../../components/wallet/wallet-model.ts";
 import { paymentBonusNote } from "../../lib/payment-bonus.ts";
 
 /** A legacy Bonus 2 first top-up row (history; new payments write `paymentBonusNote`). */
@@ -319,6 +319,139 @@ test("Hamyon ?order=: cancelled → «bekor qilindi»", async (t) => {
   await advance(t, 4000);
   assert.equal(banner(), "cancelled");
   assert.equal(refreshes, 0);
+});
+
+/* ───────────────────────────── Paynet card (docs/payments/PAYNET.md «UI») ───────────────────────────── */
+
+/**
+ * Mutations (each turned the named test red, then restored):
+ *   `paynetOn` gate dropped in WalletPage → "hidden unless the server has Paynet configured";
+ *   `user!.id` replaced by a constant → "the card shows the SlaydX ID";
+ *   the copy handler copies something else than the ID → "copy button";
+ *   the `copyToClipboard` fallback bypassed (writeText only) → "copy falls back";
+ *   `paynet` added to the PayDialog methods → "PayDialog does not offer Paynet".
+ */
+const paynetCard = () => document.querySelector("[data-wallet-paynet]");
+const paynetNotice = () => document.querySelector("[data-wallet-paynet-notice]")!;
+const docExec = document as unknown as { execCommand?: (c: string) => boolean };
+const navAny = navigator as unknown as Record<string, unknown>;
+const realExec = docExec.execCommand;
+function signInWithPaynet(paynet: boolean | undefined) {
+  signIn();
+  useAppStore.setState({ features: { payments: { click: true, payme: true, ...(paynet === undefined ? {} : { paynet }) } } as never });
+}
+afterEach(() => {
+  delete navAny.clipboard;
+  docExec.execCommand = realExec;
+});
+
+test("Hamyon Paynet: hidden unless the server has Paynet configured, and when signed out", async () => {
+  for (const paynet of [undefined, false]) {
+    signInWithPaynet(paynet);
+    stub();
+    mount();
+    await waitFor(() => assert.ok(document.querySelector('[data-wallet-ledger="ready"]')));
+    assert.ok(!paynetCard(), `no card for paynet=${String(paynet)}`);
+    assert.ok(!/Paynet/.test(document.body.textContent ?? ""), "no Paynet text anywhere");
+    cleanup();
+  }
+  signInWithPaynet(true);
+  useAppStore.setState({ sessionChecked: true, loggedIn: false, user: null });
+  stub();
+  mount();
+  assert.equal(hero(), "signed-out");
+  assert.ok(!paynetCard(), "signed out: no user ID to show, no card");
+});
+
+test("Hamyon Paynet: the card shows the SlaydX ID large, three steps and the bonus note from /me", async () => {
+  signInWithPaynet(true);
+  stub({ me: meWith(10) });
+  mount();
+  await waitFor(() => assert.ok(paynetCard()));
+  const card = paynetCard() as HTMLElement;
+  assert.equal(within(card).getByRole("heading", { name: "Paynet orqali to'lash" }).tagName, "H2");
+  const id = card.querySelector("[data-wallet-paynet-id]") as HTMLElement;
+  assert.equal(id.textContent, "u1", "the user's id, nothing else");
+  assert.ok(id.className.includes("text-[28px]"), "large");
+  const steps = [...card.querySelectorAll("[data-wallet-paynet-steps] li")].map((li) => li.textContent);
+  assert.deepEqual(steps, [
+    "1Paynet ilovasi yoki terminalini oching",
+    "2«SlaydX» xizmatini tanlang",
+    "3SlaydX ID ni kiriting va to'lang — summa balansga darhol tushadi",
+  ]);
+  await waitFor(() => assert.ok(card.querySelector("[data-wallet-paynet-bonus]")));
+  assert.match(card.querySelector("[data-wallet-paynet-bonus]")!.textContent ?? "", /\+10% bonus/);
+  const copy = within(card).getByRole("button", { name: "SlaydX ID ni nusxalash" });
+  assert.ok(copy.className.includes("h-11"), "44 px touch target");
+});
+
+test("Hamyon Paynet: no bonus note while the payment bonus is off", async () => {
+  signInWithPaynet(true);
+  stub({ me: meWith(0) });
+  mount();
+  await waitFor(() => assert.ok(document.querySelector('[data-wallet-ledger="ready"]')));
+  assert.ok(paynetCard());
+  assert.ok(!document.querySelector("[data-wallet-paynet-bonus]"));
+});
+
+test("Hamyon Paynet: copy button writes the ID to the clipboard and says so", async () => {
+  signInWithPaynet(true);
+  stub();
+  const written: string[] = [];
+  Object.defineProperty(navigator, "clipboard", { value: { writeText: async (t: string) => void written.push(t) }, configurable: true });
+  mount();
+  await waitFor(() => assert.ok(paynetCard()));
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "SlaydX ID ni nusxalash" }));
+  });
+  assert.deepEqual(written, ["u1"]);
+  assert.equal(paynetNotice().textContent, "SlaydX ID nusxalandi");
+  assert.equal(paynetNotice().getAttribute("data-wallet-paynet-notice"), "ok");
+});
+
+test("Hamyon Paynet: copy falls back to execCommand without the Clipboard API, and reports a failure", async () => {
+  signInWithPaynet(true);
+  stub();
+  const exec: string[] = [];
+  docExec.execCommand = (c: string) => (exec.push(c), true);
+  mount();
+  await waitFor(() => assert.ok(paynetCard()));
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "SlaydX ID ni nusxalash" }));
+  });
+  assert.deepEqual(exec, ["copy"], "no navigator.clipboard → selection route");
+  assert.equal(paynetNotice().textContent, "SlaydX ID nusxalandi");
+
+  docExec.execCommand = () => false;
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "SlaydX ID ni nusxalash" }));
+  });
+  assert.equal(paynetNotice().getAttribute("data-wallet-paynet-notice"), "error");
+  assert.match(paynetNotice().textContent ?? "", /Nusxalab bo'lmadi/);
+  assert.equal(document.querySelector("[data-wallet-paynet-id]")!.textContent, "u1", "the ID stays visible to copy by hand");
+});
+
+test("Hamyon Paynet: PayDialog does not offer Paynet (it is paid at an agent, not in a checkout)", async () => {
+  signInWithPaynet(true);
+  stub();
+  mount();
+  await waitFor(() => assert.ok(paynetCard()));
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "To'ldirish" }));
+  });
+  const dialog = screen.getByRole("dialog");
+  const methods = [...dialog.querySelectorAll("[data-pay-methods] [data-pay-method]")].map((b) => b.getAttribute("data-pay-method"));
+  assert.ok(methods.length > 0, "the dialog still lists Click / Payme");
+  assert.ok(methods.every((m) => m === "click" || m === "payme"), methods.join(","));
+  assert.ok(!dialog.querySelector('[data-pay-method="paynet"]'));
+  assert.ok(!/Paynet/.test(dialog.textContent ?? ""), "no Paynet text in the dialog");
+});
+
+test("Hamyon Paynet: a Paynet top-up reads «To'ldirish · Paynet» in the ledger and «Paynet» in recent payments", () => {
+  // MUTATION: `paynet` dropped from wallet-model PROVIDERS → «Balans to'ldirildi» / the raw code.
+  assert.deepEqual(describeEntry({ kind: "topup", note: "paynet orqali to'ldirish" }), { title: "To'ldirish · Paynet", detail: "" });
+  assert.equal(providerLabel("paynet"), "Paynet");
+  assert.equal(providerLabel("click"), "Click");
 });
 
 test("wallet-model: Tashkent-time labels and kind fallbacks", () => {
