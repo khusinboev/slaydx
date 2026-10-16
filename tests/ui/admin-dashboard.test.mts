@@ -100,7 +100,7 @@ const kpis = (o: Partial<Record<string, unknown>> = {}) => ({
   activeUsers: 40,
   generations: { total: 120, completed: 100, failed: 10, revoked: 2 },
   successRate: 90.91,
-  revenueSoum: { total: 1_500_000, click: 1_000_000, payme: 500_000, topup: 1_200_000, pro: 300_000 },
+  revenueSoum: { total: 1_500_000, click: 900_000, payme: 400_000, paynet: 200_000, topup: 1_200_000, pro: 300_000 },
   paidOrders: 9,
   cashSpendTanga: 900_000,
   bonusSpendPoints: 3_000,
@@ -129,7 +129,7 @@ function seriesBody(url: URL) {
   const metric = url.searchParams.get("metric");
   const days = [url.searchParams.get("from") ?? "", url.searchParams.get("to") ?? ""];
   const values: Record<string, Record<string, number>> = {
-    revenue: { total: 750_000, click: 0, payme: 0, topup: 0, pro: 0, orders: 1 },
+    revenue: { total: 750_000, click: 0, payme: 0, paynet: 0, topup: 0, pro: 0, orders: 1 },
     generations: { total: 60, completed: 50, failed: 5, revoked: 1 },
     signups: { users: 6 },
     ai_cost: { usd: 6.25, records: 50 },
@@ -237,6 +237,8 @@ test("ready: tiles, deltas, coverage hint, charts, tools table and live strip; d
   const metrics = calls.filter((u) => u.pathname === "/api/admin/metrics/series").map((u) => u.searchParams.get("metric")).sort();
   assert.deepEqual(metrics, ["ai_cost", "generations", "revenue", "signups"]);
 
+  // Every provider has its own revenue bucket in the hint (Paynet included).
+  assert.ok(within(tile("Tushum")).getByText(/Click 900\D000 · Payme 400\D000 · Paynet 200\D000/), "revenue hint lists Click, Payme and Paynet");
   assert.ok(within(tile("Yangi foydalanuvchilar")).getByText("+20%"));
   assert.ok(within(tile("Muvaffaqiyat")).getByText("-1,1 p.p."));
   const refunds = tile("Qaytarishlar");
