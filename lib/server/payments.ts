@@ -118,7 +118,7 @@ export const SOUM_PER_COIN = 1;
 // Limits live in `lib/topup-limits.ts` (shared with the wallet dialog).
 export { MIN_TOPUP_SOUM, MAX_TOPUP_SOUM };
 
-export type Provider = "click" | "payme";
+export type Provider = "click" | "payme" | "paynet";
 /**
  * `pro` — olib tashlangan obuna (2026-10): yangi buyurtma faqat `topup`.
  * Tur tarixiy qatorlarni (`payment_orders.purpose = 'pro'`) o'qish uchun qoladi.
@@ -388,97 +388,121 @@ export async function settleOrder(
   performTime: number,
   opts: { expiresBefore?: number } = {},
 ): Promise<SettleOutcome> {
+  const res = await transaction((client) => settleOrderInTx(client, orderId, performTime, opts));
+  // COMMIT dan KEYIN — rollback bo'lgan urinish «to'landi» deb yozilmasin.
+  logOrder("settle", res.outcome, {
+    credited: res.credited,
+    paymentBonus: res.bonusPoints,
+    paymentBonusPercent: res.bonusPercent,
+  });
+  return res.outcome;
+}
+
+/** What `settleOrderInTx` did: the outcome, whether THIS call credited the order, and the payment bonus it paid. */
+export type SettleInTxResult = {
+  outcome: SettleOutcome;
+  /** The top-up was written by this call (false for a repeat and for a cancelled / expired / missing order). */
+  credited: boolean;
+  bonusPoints: number;
+  bonusPercent: number;
+};
+
+/**
+ * The body of `settleOrder`, run inside the CALLER's transaction (`client` has BEGIN-ed). Same rules: the order row is
+ * locked, the top-up and the payment bonus go through `credits.ts` with reference `<provider>:<providerTxn | id>`, and the
+ * order becomes `paid`. It never logs: the caller logs AFTER its COMMIT (a rolled-back attempt must not read as «paid»).
+ * Paynet (`createPaidPaynetOrder`) inserts its order and calls this in ONE transaction.
+ */
+export async function settleOrderInTx(
+  client: PoolClient,
+  orderId: string,
+  performTime: number,
+  opts: { expiresBefore?: number } = {},
+): Promise<SettleInTxResult> {
   let credited = false;
   let bonusPoints = 0;
   let bonusPercent = 0;
-  const out = await transaction(async (client): Promise<SettleOutcome> => {
-    credited = false;
-    bonusPoints = 0;
-    bonusPercent = 0;
-    const row = await lockOrder(client, orderId);
-    if (!row) return { status: "not_found", order: null };
-    const order = toOrder(row);
-    if (order.state === "cancelled") return { status: "cancelled", order };
-    if (order.state === "paid") return { status: "already_paid", order };
+  const done = (outcome: SettleOutcome): SettleInTxResult => ({ outcome, credited, bonusPoints, bonusPercent });
+  const row = await lockOrder(client, orderId);
+  if (!row) return done({ status: "not_found", order: null });
+  const order = toOrder(row);
+  if (order.state === "cancelled") return done({ status: "cancelled", order });
+  if (order.state === "paid") return done({ status: "already_paid", order });
 
-    if (
-      opts.expiresBefore !== undefined &&
-      order.state === "pending" &&
-      order.createTime > 0 &&
-      order.createTime < opts.expiresBefore
-    ) {
-      await client.query(
-        `UPDATE payment_orders
-            SET state = 'cancelled', cancel_time = $2, cancel_reason = $3, click_card_token = NULL, updated_at = now()
-          WHERE id = $1`,
-        [orderId, performTime, CANCEL_REASON_TIMEOUT],
-      );
-      return { status: "expired", order: await reread(client, orderId) };
-    }
-
-    /*
-     * Kredit `credits.ts` ning tranzaksiya ichidagi yo'llari bilan — buyurtma
-     * qulfi va `paid` holati bilan BITTA atomar qadam (W3 wrap-up: ilgari bu
-     * yerda `creditInTx` nusxasi bor edi). Idempotentlik `reference` bo'yicha,
-     * foydalanuvchi qulfi tekshiruvdan oldin (`topUpInTx` izohi).
-     */
-    const reference = `${order.provider}:${order.providerTxn ?? order.id}`;
-    const coins = Math.floor(order.amountSoum / SOUM_PER_COIN);
-    if (order.purpose === "pro") {
-      /*
-       * Obuna olib tashlangan (2026-10). Deploydan oldin ochilib, keyin
-       * to'langan ESKI Pro buyurtma — to'langan summa BALANSGA tushadi;
-       * `plan`/`quota` ga tegilmaydi. `kind = 'subscription'` saqlanadi:
-       * admin SQL (purpose → kind, `CREDITED_SQL`) shu moslikka tayanadi.
-       */
-      credited = await topUpInTx(
-        client,
-        order.userId,
-        { balance: coins },
-        reference,
-        "subscription",
-        "Pro obuna (eski buyurtma) — balansga",
-      );
-    } else {
-      credited = await topUpInTx(
-        client,
-        order.userId,
-        { balance: coins },
-        reference,
-        "topup",
-        `${order.provider} orqali to'ldirish`,
-      );
-      /*
-       * Payment bonus (C-Q4, `lib/server/payment-bonus.ts`): N % of EVERY paid top-up, N read
-       * from `app_settings` HERE (the percent in force at settlement), paid AFTER the top-up and
-       * only when this call really credited it, in this same transaction (savepoint-protected),
-       * reference `payment-bonus:<orderId>` — once per order.
-       */
-      if (credited) {
-        const b = await payPaymentBonusInTx(client, { userId: order.userId, orderId: order.id, amountSoum: order.amountSoum });
-        bonusPoints = b.points;
-        bonusPercent = b.percent;
-      }
-    }
-
+  if (
+    opts.expiresBefore !== undefined &&
+    order.state === "pending" &&
+    order.createTime > 0 &&
+    order.createTime < opts.expiresBefore
+  ) {
     await client.query(
       `UPDATE payment_orders
-          SET state = 'paid',
-              click_card_token = NULL, -- a one-time Click card token never outlives the payment
-              perform_time = $2,
-              -- Yaratilish vaqti noma'lum bo'lsa (Click Prepare siz
-              -- to'g'ridan-to'g'ri Complete yuborgan holat), to'lov
-              -- vaqtini qo'yamiz — nol qolishidan yaxshiroq.
-              create_time = CASE WHEN create_time = 0 THEN $2 ELSE create_time END,
-              updated_at = now()
+          SET state = 'cancelled', cancel_time = $2, cancel_reason = $3, click_card_token = NULL, updated_at = now()
         WHERE id = $1`,
-      [orderId, performTime],
+      [orderId, performTime, CANCEL_REASON_TIMEOUT],
     );
-    return { status: "paid", order: await reread(client, orderId) };
-  });
-  // COMMIT dan KEYIN — rollback bo'lgan urinish «to'landi» deb yozilmasin.
-  logOrder("settle", out, { credited, paymentBonus: bonusPoints, paymentBonusPercent: bonusPercent });
-  return out;
+    return done({ status: "expired", order: await reread(client, orderId) });
+  }
+
+  /*
+   * Kredit `credits.ts` ning tranzaksiya ichidagi yo'llari bilan — buyurtma
+   * qulfi va `paid` holati bilan BITTA atomar qadam (W3 wrap-up: ilgari bu
+   * yerda `creditInTx` nusxasi bor edi). Idempotentlik `reference` bo'yicha,
+   * foydalanuvchi qulfi tekshiruvdan oldin (`topUpInTx` izohi).
+   */
+  const reference = `${order.provider}:${order.providerTxn ?? order.id}`;
+  const coins = Math.floor(order.amountSoum / SOUM_PER_COIN);
+  if (order.purpose === "pro") {
+    /*
+     * Obuna olib tashlangan (2026-10). Deploydan oldin ochilib, keyin
+     * to'langan ESKI Pro buyurtma — to'langan summa BALANSGA tushadi;
+     * `plan`/`quota` ga tegilmaydi. `kind = 'subscription'` saqlanadi:
+     * admin SQL (purpose → kind, `CREDITED_SQL`) shu moslikka tayanadi.
+     */
+    credited = await topUpInTx(
+      client,
+      order.userId,
+      { balance: coins },
+      reference,
+      "subscription",
+      "Pro obuna (eski buyurtma) — balansga",
+    );
+  } else {
+    credited = await topUpInTx(
+      client,
+      order.userId,
+      { balance: coins },
+      reference,
+      "topup",
+      `${order.provider} orqali to'ldirish`,
+    );
+    /*
+     * Payment bonus (C-Q4, `lib/server/payment-bonus.ts`): N % of EVERY paid top-up, N read
+     * from `app_settings` HERE (the percent in force at settlement), paid AFTER the top-up and
+     * only when this call really credited it, in this same transaction (savepoint-protected),
+     * reference `payment-bonus:<orderId>` — once per order.
+     */
+    if (credited) {
+      const b = await payPaymentBonusInTx(client, { userId: order.userId, orderId: order.id, amountSoum: order.amountSoum });
+      bonusPoints = b.points;
+      bonusPercent = b.percent;
+    }
+  }
+
+  await client.query(
+    `UPDATE payment_orders
+        SET state = 'paid',
+            click_card_token = NULL, -- a one-time Click card token never outlives the payment
+            perform_time = $2,
+            -- Yaratilish vaqti noma'lum bo'lsa (Click Prepare siz
+            -- to'g'ridan-to'g'ri Complete yuborgan holat), to'lov
+            -- vaqtini qo'yamiz — nol qolishidan yaxshiroq.
+            create_time = CASE WHEN create_time = 0 THEN $2 ELSE create_time END,
+            updated_at = now()
+      WHERE id = $1`,
+    [orderId, performTime],
+  );
+  return done({ status: "paid", order: await reread(client, orderId) });
 }
 
 /**
@@ -543,4 +567,117 @@ export async function purgeStaleCardTokens(maxAgeMin = 30): Promise<number> {
     [maxAgeMin],
   );
   return rows.length;
+}
+
+/* ───────────────────────────── Paynet (docs/payments/PAYNET.md) ───────────────────────────── */
+
+/**
+ * A Paynet order: the normal order row plus OUR numeric `providerTrnId` (`payment_orders.paynet_trn_id`, from
+ * `paynet_trn_seq`). Paynet's own `transactionId` is `order.providerTxn`.
+ */
+export type PaynetOrder = { order: PaymentOrder; providerTrnId: number };
+
+export type PaynetPerformOutcome =
+  /** Inserted, credited (top-up + payment bonus) and `paid` — all in one committed transaction. */
+  | { status: "paid"; order: PaymentOrder; providerTrnId: number; balance: number; bonusPoints: number }
+  /** This `transactionId` already has an order (repeat or a concurrent twin): nothing was written. */
+  | { status: "duplicate" };
+
+/** The unique index `(provider, provider_txn)` (001_init.sql): the idempotency guard of PerformTransaction. */
+const ORDER_TXN_UNIQUE = "payment_orders_txn_idx";
+
+/** Paynet's `transactionId` as stored in `provider_txn`: a positive integer without leading zeros. */
+const PAYNET_TXN_RE = /^[1-9]\d{0,15}$/;
+
+function isUniqueViolation(e: unknown, constraint: string): boolean {
+  const err = e as { code?: unknown; constraint?: unknown } | null;
+  return Boolean(err) && err!.code === "23505" && err!.constraint === constraint;
+}
+
+/**
+ * Paynet `PerformTransaction`: inserts the order (provider `paynet`, purpose `topup`, `provider_txn = transactionId`,
+ * `create_time = now`, `paynet_trn_id = nextval`) and settles it through `settleOrderInTx` in ONE transaction, so an order
+ * never exists without its credit. Credit = `amountSoum` to the balance (ledger reference `paynet:<transactionId>`) plus the
+ * payment bonus in points.
+ *
+ * Idempotency: a second call with the same `transactionId` hits `payment_orders_txn_idx`; a CONCURRENT twin waits on that
+ * index until the first commits and then fails the same way. Either way the whole transaction rolls back and the caller gets
+ * `duplicate` (Paynet error 201). Any other failure rolls everything back and is thrown.
+ */
+export async function createPaidPaynetOrder(input: {
+  userId: string;
+  amountSoum: number;
+  transactionId: string;
+  now?: number;
+}): Promise<PaynetPerformOutcome> {
+  const amount = input.amountSoum;
+  if (!Number.isSafeInteger(amount) || amount < MIN_TOPUP_SOUM || amount > MAX_TOPUP_SOUM) {
+    throw new Error(topupRangeMessage());
+  }
+  if (!PAYNET_TXN_RE.test(input.transactionId)) throw new Error("paynet transactionId is not a positive integer");
+  const now = input.now ?? Date.now();
+
+  let res: { order: PaymentOrder; providerTrnId: number; balance: number; settled: SettleInTxResult };
+  try {
+    res = await transaction(async (client) => {
+      const ins = await client.query<{ id: string; paynet_trn_id: string }>(
+        `INSERT INTO payment_orders (id, user_id, provider, purpose, amount_soum, state, provider_txn, create_time, paynet_trn_id)
+         VALUES ($1, $2, 'paynet', 'topup', $3, 'pending', $4, $5, nextval('paynet_trn_seq'))
+         RETURNING id, paynet_trn_id`,
+        [randomUUID(), input.userId, amount, input.transactionId, now],
+      );
+      const { id, paynet_trn_id } = ins.rows[0]!;
+      const settled = await settleOrderInTx(client, id, now);
+      // A fresh order must be credited by this very call; anything else (a stray ledger row with the same reference) aborts.
+      if (settled.outcome.status !== "paid" || !settled.credited) {
+        throw new Error(`paynet order ${id} was not credited (${settled.outcome.status})`);
+      }
+      const bal = await client.query<{ balance: string }>(`SELECT balance FROM users WHERE id = $1`, [input.userId]);
+      return { order: settled.outcome.order, providerTrnId: Number(paynet_trn_id), balance: Number(bal.rows[0]!.balance), settled };
+    });
+  } catch (e) {
+    if (isUniqueViolation(e, ORDER_TXN_UNIQUE)) {
+      log("info", "[payments] paynet: duplicate transactionId", { provider: "paynet", providerTxn: input.transactionId, userId: input.userId });
+      return { status: "duplicate" };
+    }
+    throw e;
+  }
+  // After COMMIT, like `settleOrder`.
+  logOrder("settle", res.settled.outcome, {
+    credited: true,
+    paymentBonus: res.settled.bonusPoints,
+    paymentBonusPercent: res.settled.bonusPercent,
+    paynetTrnId: res.providerTrnId,
+  });
+  return { status: "paid", order: res.order, providerTrnId: res.providerTrnId, balance: res.balance, bonusPoints: res.settled.bonusPoints };
+}
+
+/** The Paynet order of a `transactionId` (normalised digits), or null. */
+export async function findPaynetOrder(transactionId: string): Promise<PaynetOrder | null> {
+  if (!PAYNET_TXN_RE.test(transactionId)) return null;
+  const row = await queryOne<OrderRow & { paynet_trn_id: string | null }>(
+    `SELECT ${COLS}, paynet_trn_id FROM payment_orders WHERE provider = 'paynet' AND provider_txn = $1`,
+    [transactionId],
+  );
+  return row ? { order: toOrder(row), providerTrnId: Number(row.paynet_trn_id ?? 0) } : null;
+}
+
+export type PaynetStatementRow = { amountSoum: number; transactionId: string; providerTrnId: number; performTime: number };
+
+/** PAID Paynet orders with `fromMs <= perform_time < toMsExclusive`, oldest first, at most `limit` rows. */
+export async function paynetStatement(fromMs: number, toMsExclusive: number, limit: number): Promise<PaynetStatementRow[]> {
+  const rows = await query<{ amount_soum: string; provider_txn: string; paynet_trn_id: string; perform_time: string }>(
+    `SELECT amount_soum, provider_txn, paynet_trn_id, perform_time
+       FROM payment_orders
+      WHERE provider = 'paynet' AND state = 'paid' AND perform_time >= $1 AND perform_time < $2
+      ORDER BY perform_time, paynet_trn_id
+      LIMIT $3`,
+    [fromMs, toMsExclusive, limit],
+  );
+  return rows.map((r) => ({
+    amountSoum: Number(r.amount_soum),
+    transactionId: r.provider_txn,
+    providerTrnId: Number(r.paynet_trn_id),
+    performTime: Number(r.perform_time),
+  }));
 }

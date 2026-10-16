@@ -17,7 +17,7 @@ export const ORDER_STATE_TONE: Record<OrderState, Tone> = {
   cancelled: "danger",
 };
 
-export const PROVIDER_LABEL: Record<OrderProvider, string> = { click: "Click", payme: "Payme" };
+export const PROVIDER_LABEL: Record<OrderProvider, string> = { click: "Click", payme: "Payme", paynet: "Paynet" };
 
 export const PURPOSE_LABEL: Record<OrderPurpose, string> = { topup: "Balansni to'ldirish", pro: "Pro obuna (eski)" };
 
@@ -53,10 +53,14 @@ export const CANCEL_REASON_LABEL: Readonly<Record<number, string>> = {
   10: "Noma'lum xato",
 };
 
-/** Payme sends a reason code; Click's cancel carries its own `error` code (payments/click/route.ts). */
+/**
+ * Payme sends a reason code; Click's cancel carries its own `error` code (payments/click/route.ts).
+ * Paynet orders are never cancelled (the endpoint refuses CancelTransaction), so a code on one is shown raw.
+ */
 export function cancelReasonText(code: number | null, provider: OrderProvider): string | null {
   if (code === null) return null;
   if (provider === "click") return `Click xato kodi: ${code}`;
+  if (provider === "paynet") return `Paynet kodi: ${code}`;
   return CANCEL_REASON_LABEL[code] ? `${CANCEL_REASON_LABEL[code]} (${code})` : String(code);
 }
 

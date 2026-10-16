@@ -28,8 +28,6 @@ export const MAX_REPLY_BYTES = 16 * 1024;
 /** Forwards in flight at once; beyond it the callback gets -7 instead of piling connections up. */
 export const MAX_IN_FLIGHT = 20;
 
-let inFlight = 0;
-
 export const isVakantOrder = (merchantTransId: unknown): boolean => typeof merchantTransId === "string" && merchantTransId.startsWith(VAKANT_PREFIX);
 
 /** Reads a body stream as UTF-8 text, giving up (`null`) as soon as it exceeds `maxBytes` — enforced while reading, not by a header. */
@@ -61,30 +59,58 @@ export type ForwardResult =
 
 /** POSTs the raw callback to vakant3. Never throws. `raw` and `contentType` are passed through untouched. */
 export async function forwardToVakant(raw: string, contentType: string, meta: { action: string | null; merchantTransId: string }): Promise<ForwardResult> {
-  const url = env.click.vakantForwardUrl;
+  // No sign_string / secret / body in the log line; the id is attacker-controlled, so it is clipped.
+  return forwardRaw({
+    channel: "click",
+    url: env.click.vakantForwardUrl,
+    raw,
+    headers: { "content-type": contentType },
+    logFields: { action: meta.action, merchantTransId: meta.merchantTransId.slice(0, 64) },
+  });
+}
+
+/**
+ * Forwards per channel in flight; each channel has its own MAX_IN_FLIGHT budget, so a burst on one provider's
+ * endpoint cannot starve the other's.
+ */
+const inFlightBy = new Map<string, number>();
+
+/**
+ * The hardened forward shared by every provider endpoint Bandlik.uz shares with SlaydX (Click, Paynet). Never throws.
+ * `raw` and `headers` are sent untouched, plus `X-Forwarded-By: slaydx`; 8 s timeout, redirects not followed, at most
+ * MAX_IN_FLIGHT per channel, reply read up to MAX_REPLY_BYTES and accepted only as HTTP 200 + a JSON object (returned as
+ * the exact text). One log line `[<channel>] forwarded to vakant` with `logFields`, the upstream status and ms: callers pass
+ * only safe, clipped fields (never a signature, password or Authorization).
+ */
+export async function forwardRaw(r: {
+  channel: string;
+  url: string;
+  raw: string;
+  headers: Record<string, string>;
+  logFields: Record<string, unknown>;
+}): Promise<ForwardResult> {
   const started = Date.now();
   const done = (result: ForwardResult, upstreamStatus: number | null): ForwardResult => {
-    // No sign_string / secret / body in the log line; the id is attacker-controlled, so it is clipped.
-    log(result.ok ? "info" : "warn", "[click] forwarded to vakant", {
-      action: meta.action,
-      merchantTransId: meta.merchantTransId.slice(0, 64),
+    log(result.ok ? "info" : "warn", `[${r.channel}] forwarded to vakant`, {
+      ...r.logFields,
       upstreamStatus,
       ms: Date.now() - started,
       ...(result.ok ? {} : { reason: result.reason }),
     });
     return result;
   };
-  if (!url) return done({ ok: false, reason: "no_url" }, null);
+  if (!r.url) return done({ ok: false, reason: "no_url" }, null);
+  const inFlight = inFlightBy.get(r.channel) ?? 0;
   if (inFlight >= MAX_IN_FLIGHT) return done({ ok: false, reason: "busy" }, null);
 
-  inFlight++;
+  inFlightBy.set(r.channel, inFlight + 1);
   try {
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await fetch(r.url, {
         method: "POST",
-        headers: { "content-type": contentType, "x-forwarded-by": "slaydx" },
-        body: raw,
+        headers: { ...r.headers, "x-forwarded-by": "slaydx" },
+        body: r.raw,
         redirect: "manual",
         signal: AbortSignal.timeout(FORWARD_TIMEOUT_MS),
       });
@@ -106,6 +132,6 @@ export async function forwardToVakant(raw: string, contentType: string, meta: { 
     }
     return done({ ok: true, text }, res.status);
   } finally {
-    inFlight--;
+    inFlightBy.set(r.channel, (inFlightBy.get(r.channel) ?? 1) - 1);
   }
 }

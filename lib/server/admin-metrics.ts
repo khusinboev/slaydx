@@ -17,7 +17,7 @@ import { TOOL_BY_ID } from "../tools";
  * keyed by (endpoint, params). `live` is never cached.
  *
  * Money units:
- *   - so'm: what users paid through Click/Payme (`payment_orders.amount_soum`);
+ *   - so'm: what users paid through Click/Payme/Paynet (`payment_orders.amount_soum`);
  *   - tanga: the wallet unit (1 tanga = `SOUM_PER_COIN` = 1 so'm at top-up);
  *   - points: the sign-up bonus wallet, NOT cash (lib/server/spend.ts
  *     `assertPaidDocument`: only `balance`/`quota` count as paid money).
@@ -43,7 +43,7 @@ export type Kpis = {
   generations: { total: number; completed: number; failed: number; revoked: number };
   /** completed ÷ (completed + failed) × 100, 2 decimals; `null` when nothing finished. */
   successRate: number | null;
-  revenueSoum: { total: number; click: number; payme: number; topup: number; pro: number };
+  revenueSoum: { total: number; click: number; payme: number; paynet: number; topup: number; pro: number };
   paidOrders: number;
   cashSpendTanga: number;
   bonusSpendPoints: number;
@@ -234,7 +234,7 @@ const KPI_SQL = `SELECT
   -- revenueSoum / paidOrders: orders in state 'paid' whose perform_time (epoch
   -- ms, set by payments.ts settleOrder) falls in range. Gross: external refunds
   -- and chargebacks (payment_refunds) are not subtracted.
-  p.orders AS paid_orders, p.total AS rev_total, p.click AS rev_click, p.payme AS rev_payme,
+  p.orders AS paid_orders, p.total AS rev_total, p.click AS rev_click, p.payme AS rev_payme, p.paynet AS rev_paynet,
   p.topup AS rev_topup, p.pro AS rev_pro,
 
   -- cashSpendTanga: cash wallets (balance + quota) charged for jobs in range,
@@ -257,6 +257,7 @@ FROM
           COALESCE(sum(amount_soum), 0) AS total,
           COALESCE(sum(amount_soum) FILTER (WHERE provider = 'click'), 0) AS click,
           COALESCE(sum(amount_soum) FILTER (WHERE provider = 'payme'), 0) AS payme,
+          COALESCE(sum(amount_soum) FILTER (WHERE provider = 'paynet'), 0) AS paynet,
           COALESCE(sum(amount_soum) FILTER (WHERE purpose = 'topup'), 0) AS topup,
           COALESCE(sum(amount_soum) FILTER (WHERE purpose = 'pro'), 0) AS pro
      FROM payment_orders WHERE state = 'paid' AND perform_time >= $3 AND perform_time < $4) p,
@@ -289,6 +290,7 @@ async function kpisFor(c: PoolClient, r: DateRange): Promise<RawKpis> {
       total: revenueTotal,
       click: num(k.rev_click),
       payme: num(k.rev_payme),
+      paynet: num(k.rev_paynet),
       topup: num(k.rev_topup),
       pro: num(k.rev_pro),
     },
@@ -343,20 +345,21 @@ const tkDay = (col: string): string => `(${col} AT TIME ZONE '${TZ}')::date`;
 const SERIES_SQL: Record<Exclude<SeriesMetric, "ai_cost">, { keys: readonly string[]; bounds: "ts" | "ms"; sql: string }> = {
   // revenue: paid orders by the Tashkent day of perform_time (ms), so'm.
   revenue: {
-    keys: ["total", "click", "payme", "topup", "pro", "orders"],
+    keys: ["total", "click", "payme", "paynet", "topup", "pro", "orders"],
     bounds: "ms",
     sql: `WITH agg AS (
         SELECT ${tkDay("to_timestamp(perform_time / 1000.0)")} AS d,
                sum(amount_soum) AS total,
                sum(amount_soum) FILTER (WHERE provider = 'click') AS click,
                sum(amount_soum) FILTER (WHERE provider = 'payme') AS payme,
+               sum(amount_soum) FILTER (WHERE provider = 'paynet') AS paynet,
                sum(amount_soum) FILTER (WHERE purpose = 'topup') AS topup,
                sum(amount_soum) FILTER (WHERE purpose = 'pro') AS pro,
                count(*) AS orders
           FROM payment_orders
          WHERE state = 'paid' AND perform_time >= $3 AND perform_time < $4
          GROUP BY 1)
-      SELECT to_char(days.d, 'YYYY-MM-DD') AS day, agg.total, agg.click, agg.payme, agg.topup, agg.pro, agg.orders
+      SELECT to_char(days.d, 'YYYY-MM-DD') AS day, agg.total, agg.click, agg.payme, agg.paynet, agg.topup, agg.pro, agg.orders
         FROM (${DAYS}) days LEFT JOIN agg ON agg.d = days.d ORDER BY days.d`,
   },
   // generations: jobs by the Tashkent day they were created, by current status.

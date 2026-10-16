@@ -37,7 +37,7 @@ import type { OrderState, Provider, Purpose } from "./payments";
 type Queryable = Pick<PoolClient, "query">;
 
 export const ORDER_STATES = ["created", "pending", "paid", "cancelled"] as const satisfies readonly OrderState[];
-export const ORDER_PROVIDERS = ["click", "payme"] as const satisfies readonly Provider[];
+export const ORDER_PROVIDERS = ["click", "payme", "paynet"] as const satisfies readonly Provider[];
 export const ORDER_PURPOSES = ["topup", "pro"] as const satisfies readonly Purpose[];
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -67,7 +67,7 @@ type OrderListParsed = ParsedList<typeof ORDER_LIST_SPEC>;
 export type OrderQuery =
   /** An order uuid: `payment_orders.id`. */
   | { kind: "id"; value: string }
-  /** Digits only: Click `merchant_prepare_id` or a numeric provider transaction (Click `click_trans_id`). */
+  /** Digits only: Click `merchant_prepare_id` or a numeric provider transaction (Click `click_trans_id`, Paynet `transactionId`). */
   | { kind: "number"; value: string }
   /** Anything else: an exact provider transaction id (Payme ids are 24 hex characters). */
   | { kind: "txn"; value: string };
@@ -210,11 +210,11 @@ function orderFromWhere(f: OrderFilter): { sql: string; params: unknown[] } {
     else if (f.q.kind === "number") {
       const asNum = p(f.q.value);
       const asText = p(f.q.value);
-      // Row-value IN uses the unique (provider, provider_txn) index for both providers.
-      conds.push(`(o.prepare_id = ${asNum}::bigint OR (o.provider, o.provider_txn) IN (('click', ${asText}::text), ('payme', ${asText}::text)))`);
+      // Row-value IN uses the unique (provider, provider_txn) index for every provider.
+      conds.push(`(o.prepare_id = ${asNum}::bigint OR (o.provider, o.provider_txn) IN (('click', ${asText}::text), ('payme', ${asText}::text), ('paynet', ${asText}::text)))`);
     } else {
       const txn = p(f.q.value);
-      conds.push(`(o.provider, o.provider_txn) IN (('click', ${txn}::text), ('payme', ${txn}::text))`);
+      conds.push(`(o.provider, o.provider_txn) IN (('click', ${txn}::text), ('payme', ${txn}::text), ('paynet', ${txn}::text))`);
     }
   }
   const where = conds.length ? conds.join(" AND ") : "TRUE";
@@ -383,7 +383,7 @@ export const LEDGER_COLUMNS = `t.id::text AS id, t.user_id::text AS user_id, u.n
   t.points_delta::text AS points_delta, t.quota_delta::text AS quota_delta, t.balance_delta::text AS balance_delta,
   t.reference, t.note, t.created_at`;
 
-const SETTLE_REF_RE = /^(click|payme):([\s\S]+)$/;
+const SETTLE_REF_RE = /^(click|payme|paynet):([\s\S]+)$/;
 const CLAWBACK_REF_RE = /^refund:(\d{1,18})$/;
 
 /**

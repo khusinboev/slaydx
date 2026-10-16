@@ -11,7 +11,7 @@ import { query } from "./db";
  */
 
 export type PaymentEvent = {
-  provider: "click" | "payme";
+  provider: "click" | "payme" | "paynet";
   method: string;
   orderId?: string | null;
   providerTxn?: string | null;

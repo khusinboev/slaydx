@@ -16,6 +16,20 @@ function str(name: string, fallback = ""): string {
   return (process.env[name] ?? fallback).trim();
 }
 
+function strList(name: string): string[] {
+  return str(name)
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+/** Comma separated integers; anything that is not a plain non-negative integer is dropped. */
+function intList(name: string): number[] {
+  return strList(name)
+    .filter((x) => /^\d{1,15}$/.test(x))
+    .map(Number);
+}
+
 function int(name: string, fallback: number): number {
   const raw = str(name);
   if (!raw) return fallback;
@@ -255,6 +269,24 @@ export const env = {
     // `||` not a fallback arg: docker-compose passes an EMPTY string when the variable is unset in `.env`.
     vakantForwardUrl: str("VAKANT_CLICK_FORWARD_URL") || "https://abitur24.uz/api/payments/click",
   },
+  /**
+   * Paynet (UZPAYNET) provider — we are the «Поставщик» of a JSON-RPC web service (`docs/payments/PAYNET.md`).
+   * Not configured (no username, password or service ids) → every call is a 401 and the wallet shows no Paynet card.
+   */
+  paynet: {
+    username: str("PAYNET_USERNAME"),
+    password: str("PAYNET_PASSWORD"),
+    /** OUR Paynet serviceIds (integers). */
+    serviceIds: intList("PAYNET_SERVICE_IDS"),
+    /** Name of the payer parameter in `fields` (the SlaydX ID). */
+    clientParam: str("PAYNET_CLIENT_PARAM") || "client_id",
+    /** Paynet's IPs / CIDRs; empty = no IP restriction (testing). */
+    allowedIps: strList("PAYNET_ALLOWED_IPS"),
+    /** Bandlik.uz (vakant3) shares the endpoint: calls with its OWN serviceIds are forwarded untouched. */
+    vakantServiceIds: intList("PAYNET_VAKANT_SERVICE_IDS"),
+    // `||`: docker-compose passes an EMPTY string when the variable is unset in `.env`.
+    vakantForwardUrl: str("VAKANT_PAYNET_FORWARD_URL") || "https://abitur24.uz/api/payments/paynet",
+  },
   payme: {
     merchantId: str("PAYME_MERCHANT_ID"),
     key: str("PAYME_KEY"),
@@ -384,6 +416,11 @@ export function clickDirectConfigured(): boolean {
   return paymentsConfigured().click && Boolean(env.click.merchantUserId);
 }
 
+/** Paynet is live only when the login, the password and at least one of our serviceIds are set. */
+export function paynetConfigured(): boolean {
+  return Boolean(env.paynet.username && env.paynet.password && env.paynet.serviceIds.length);
+}
+
 export function paymentsConfigured(): { click: boolean; payme: boolean } {
   return {
     click: Boolean(env.click.serviceId && env.click.secretKey && env.click.merchantId),
@@ -453,6 +490,18 @@ export function runtimeWarnings(): string[] {
     warnings.push(
       "ADMIN_TOTP_KEY yo'q yoki noto'g'ri (base64, aniq 32 bayt) — admin panelga kirish o'chiq; yaratish: openssl rand -base64 32",
     );
+  }
+  // Paynet: a live endpoint without the IP allow-list has no rate limit on the Basic login; with the list but without TRUST_PROXY
+  // every call is a 403 (`clientIp` is "direct"); overlapping serviceIds would silently send our own calls to Bandlik.
+  if (paynetConfigured()) {
+    if (!env.paynet.allowedIps.length) {
+      warnings.push("PAYNET_ALLOWED_IPS bo'sh — Paynet xizmati IP cheklovisiz ishlayapti (faqat sinov uchun); Paynet IP diapazonlarini qo'ying");
+    } else if (!env.trustProxy) {
+      warnings.push("PAYNET_ALLOWED_IPS berilgan, lekin TRUST_PROXY=true emas — barcha Paynet so'rovlari 403 oladi");
+    }
+  }
+  if (env.paynet.vakantServiceIds.some((id) => env.paynet.serviceIds.includes(id))) {
+    warnings.push("PAYNET_VAKANT_SERVICE_IDS va PAYNET_SERVICE_IDS kesishadi — kesishgan serviceId SlaydX'niki hisoblanadi (Bandlik'ka yo'naltirilmaydi)");
   }
   // Admin panel: TRUST_PROXY bo'lmasa `clientIp` hamma uchun "direct" — admin
   // kirishdagi IP bo'yicha limit o'chiq qoladi (hisob bo'yicha qulf ishlaydi).

@@ -106,6 +106,7 @@ export type RevenueDay = {
   orders: number;
   click: number;
   payme: number;
+  paynet: number;
   topup: number;
   pro: number;
 };
@@ -145,7 +146,7 @@ export type FinanceSummary = {
   generatedAt: string;
 };
 
-type DayRow = { day: string; soum: string; orders: string; click: string; payme: string; topup: string; pro: string; click_n: string; payme_n: string; topup_n: string; pro_n: string };
+type DayRow = { day: string; soum: string; orders: string; click: string; payme: string; paynet: string; topup: string; pro: string; click_n: string; payme_n: string; paynet_n: string; topup_n: string; pro_n: string };
 
 async function revenue(client: Queryable, range: DateRange): Promise<FinanceSummary["revenue"]> {
   const fromMs = String(Date.parse(range.fromTs));
@@ -164,10 +165,12 @@ async function revenue(client: Queryable, range: DateRange): Promise<FinanceSumm
             count(p.amount_soum)::text AS orders,
             COALESCE(sum(p.amount_soum) FILTER (WHERE p.provider = 'click'), 0)::text AS click,
             COALESCE(sum(p.amount_soum) FILTER (WHERE p.provider = 'payme'), 0)::text AS payme,
+            COALESCE(sum(p.amount_soum) FILTER (WHERE p.provider = 'paynet'), 0)::text AS paynet,
             COALESCE(sum(p.amount_soum) FILTER (WHERE p.purpose = 'topup'), 0)::text AS topup,
             COALESCE(sum(p.amount_soum) FILTER (WHERE p.purpose = 'pro'), 0)::text AS pro,
             count(*) FILTER (WHERE p.provider = 'click')::text AS click_n,
             count(*) FILTER (WHERE p.provider = 'payme')::text AS payme_n,
+            count(*) FILTER (WHERE p.provider = 'paynet')::text AS paynet_n,
             count(*) FILTER (WHERE p.purpose = 'topup')::text AS topup_n,
             count(*) FILTER (WHERE p.purpose = 'pro')::text AS pro_n
        FROM days d LEFT JOIN paid p ON p.day = d.day
@@ -176,7 +179,7 @@ async function revenue(client: Queryable, range: DateRange): Promise<FinanceSumm
     [range.fromDay, range.toDay, fromMs, toMs],
   );
   const total: RevenueBucket = { soum: 0, orders: 0 };
-  const byProvider: Record<Provider, RevenueBucket> = { click: { soum: 0, orders: 0 }, payme: { soum: 0, orders: 0 } };
+  const byProvider: Record<Provider, RevenueBucket> = { click: { soum: 0, orders: 0 }, payme: { soum: 0, orders: 0 }, paynet: { soum: 0, orders: 0 } };
   const byPurpose: Record<Purpose, RevenueBucket> = { topup: { soum: 0, orders: 0 }, pro: { soum: 0, orders: 0 } };
   const byDay = res.rows.map((r): RevenueDay => {
     total.soum += num(r.soum);
@@ -185,11 +188,13 @@ async function revenue(client: Queryable, range: DateRange): Promise<FinanceSumm
     byProvider.click.orders += num(r.click_n);
     byProvider.payme.soum += num(r.payme);
     byProvider.payme.orders += num(r.payme_n);
+    byProvider.paynet.soum += num(r.paynet);
+    byProvider.paynet.orders += num(r.paynet_n);
     byPurpose.topup.soum += num(r.topup);
     byPurpose.topup.orders += num(r.topup_n);
     byPurpose.pro.soum += num(r.pro);
     byPurpose.pro.orders += num(r.pro_n);
-    return { day: r.day, soum: num(r.soum), orders: num(r.orders), click: num(r.click), payme: num(r.payme), topup: num(r.topup), pro: num(r.pro) };
+    return { day: r.day, soum: num(r.soum), orders: num(r.orders), click: num(r.click), payme: num(r.payme), paynet: num(r.paynet), topup: num(r.topup), pro: num(r.pro) };
   });
   return { total, byDay, byProvider, byPurpose };
 }

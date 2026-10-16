@@ -246,7 +246,14 @@ export type Features = {
   devLogin: boolean;
   /** Server DOCX/PPTX ni PDF ga o'gira oladimi (LibreOffice o'rnatilganmi). */
   pdf: boolean;
-  payments: { click: boolean; payme: boolean; /** Click Merchant API is set up: card / phone / app methods. */ clickDirect?: boolean };
+  payments: {
+    click: boolean;
+    payme: boolean;
+    /** Click Merchant API is set up: card / phone / app methods. */
+    clickDirect?: boolean;
+    /** Paynet agents can top up by SlaydX ID (wallet card only; never a checkout method in PayDialog). */
+    paynet?: boolean;
+  };
   /** Admin price adjustments (non-default tools only); untrusted, validated by `parsePriceAdjustments`. */
   pricing?: unknown;
 };
@@ -901,7 +908,7 @@ export async function pollGeneration(
 
 export type PaymentOrder = {
   id: string;
-  provider: "click" | "payme";
+  provider: "click" | "payme" | "paynet";
   /** "pro" faqat eski (tarixiy) buyurtmalarda uchraydi. */
   purpose: "topup" | "pro";
   amountSoum: number;
@@ -911,7 +918,7 @@ export type PaymentOrder = {
 
 /** Faqat balansni to'ldirish: obuna (pro) buyurtmalari server tomonda to'xtatilgan. */
 export function createOrder(input: {
-  provider: "click" | "payme";
+  provider: "click" | "payme" | "paynet";
   amount?: number;
   card?: "uzcard" | "humo";
   /** Click only: how the user pays (`page` = my.click.uz fallback, `card` / `phone` = our forms, `app` = deeplink). */
