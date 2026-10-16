@@ -57,6 +57,28 @@ Decided BEFORE our own auth (Bandlik authenticates with its own credentials): fo
 SlaydX writes nothing to its payment tables for forwarded calls. Same hardening and tests as `docs/payments/CLICK-FORWARD.md` (share the helper in `lib/server/click-forward.ts`).
 Contract for the vakant3 side: it receives exactly what Paynet sent (including the Basic header), answers HTTP 200 + a JSON-RPC response.
 
+## Implementation (core backend, `feat/paynet-core`)
+- `lib/server/migrations/050_paynet.sql` — as «Data model»; GetStatement index `payment_orders_paynet_paid_idx (perform_time, paynet_trn_id) WHERE provider='paynet' AND state='paid'`; ROLLBACK block in the header.
+- `lib/server/payments.ts` — `settleOrderInTx(client, orderId, performTime, opts)` is the old `settleOrder` body (returns `{outcome, credited, bonusPoints, bonusPercent}`, never logs);
+  `settleOrder` is the transaction wrapper with the same post-COMMIT log (Click / Payme unchanged). `createPaidPaynetOrder` inserts the order (`state 'pending'`, `create_time = now`,
+  `paynet_trn_id = nextval`) and calls `settleOrderInTx` in ONE transaction; a unique violation on `payment_orders_txn_idx` rolls everything back and returns `duplicate`.
+  `findPaynetOrder`, `paynetStatement` (half-open `[from, to)` in ms).
+- `lib/server/paynet.ts` — everything protocol-side; `app/api/payments/paynet/route.ts` is a thin `POST` (+ every other HTTP method → `-32300`).
+- `lib/server/click-forward.ts` — `forwardRaw` is the shared hardened forward (Click keeps `forwardToVakant`, same log line); each channel has its own 20-in-flight budget.
+
+Behaviour details fixed by the implementation (not spelled out above):
+- Check order per request: forward decision → IP → auth → envelope errors (`-32700` / `-32600`, so an unauthenticated caller only ever sees 401 / 403) → method.
+- Per method: required params present (`-32602`) → `serviceId` (305) → `transactionId` (`-32602`) → `timestamp`/dates (414) or amount (413 / 415) → payer (411 / 401 / 302 / 501) → work.
+  `fields` missing or not an object → `-32602`; present but without the client param → 411.
+- `transactionId`: number or digit string, canonicalised (`"000123"` and `123` are the same id → 201). `serviceId`: integer or digit string. Amount: integer or digit string.
+- Client id: number or 1–18 digits, looked up as `bigint` (leading zeros allowed: `"007"` = user 7; `0` / `0000000000` → 302).
+- `CheckTransaction`: `transactionState` 1 paid, 2 cancelled (cannot happen today), 3 not found; `timestamp` = the perform time (now when not found).
+- `GetStatement`: both ends inclusive to the second (`perform_time < dateTo + 1 s`), ordered by `perform_time, providerTrnId`; `transactionId` returned as a number.
+- Errors carry Russian messages (Paynet's); internal failures are `-32603 «Системная ошибка»` with the detail only in our log.
+- `payment_events`: every call that passed auth (envelope errors and `-32601` included): method, order id, transactionId, params (`redactPayload`), response code (0 = success).
+- Log: one `[paynet] call` line (method, serviceId, code, http, ms, detail, forwarded) + `[paynet] forwarded to vakant` for forwards; the empty-allow-list warning once per process.
+- Tests: `tests/paynet.test.mts` (route against Postgres) and `tests/paynet-forward.test.mts`; their headers list the mutations each suite was checked against.
+
 ## UI
 Wallet: a «Paynet orqali to'lash» card (only when Paynet is configured) showing the user's SlaydX ID with a copy button and 3 short steps (Paynet agent → service «SlaydX» → enter the ID).
 Admin: provider `Paynet` everywhere providers appear (labels, filters, revenue by provider, order search / settle-ref matching, exports, bot admin stats if provider-specific).

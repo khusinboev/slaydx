@@ -8,17 +8,22 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  * insert + settle, idempotency, the ledger, the payment bonus and the audit rows are exercised together. `fetch` is stubbed to
  * FAIL: nothing on our own orders may call out. Forwarding to Bandlik.uz is covered in `tests/paynet-forward.test.mts`.
  *
- * MUTATIONS checked (each broke the named subtests, then was reverted) — see the report in docs/payments/PAYNET.md:
- *   M1 settleOrderInTx called twice in createPaidPaynetOrder (credit twice)            → «Perform: credited», «duplicate», «concurrent»
- *   M2 duplicate check removed (unique violation not mapped to 201)                     → «duplicate», «concurrent»
- *   M3 auth skipped (authorized forced true)                                            → «auth»
- *   M4 IP allow-list bypassed                                                           → «IP allow-list»
- *   M5 CancelTransaction honoured (cancels the order)                                   → «Cancel never cancels»
- *   M6 amount not divided by 100 (credited in tiyin)                                    → «Perform: credited», «amount rules»
- *   M7 insert and settle in two transactions (order committed before the credit)        → «atomicity»
- *   M8 statement end exclusive at the second (no +1000 ms) / GMT instead of GMT+5        → «GetStatement»
- *   M9 bonus credited to balance instead of points                                      → «Perform: credited»
- *   M10 amount multiple-of-100 check dropped                                            → «amount rules»
+ * MUTATIONS checked (each broke the named subtests, then was reverted):
+ *   M1  a second top-up written in createPaidPaynetOrder (credit twice)         → «Perform: credited», «duplicate», «concurrent», «atomicity»
+ *   M2a unique violation not mapped to «duplicate»                               → «duplicate», «concurrent», «payment_events»
+ *   M2b idempotency key broken (provider_txn made unique per call)               → «Perform», «duplicate», «concurrent», Check, Cancel, Statement
+ *   M3  auth skipped                                                             → «auth», «not configured», «JSON-RPC errors», «payment_events», «log»
+ *   M3b login ignored (password only)                                            → «paynetBasicAuthorized», «auth»
+ *   M4  IP allow-list bypassed                                                   → «IP allow-list»
+ *   M5  CancelTransaction honoured (order cancelled)                             → «Cancel never cancels», «payment_events»
+ *   M6  wrong tiyin factor (/10 instead of /100)                                 → «Perform: credited», «concurrent», «atomicity», «amount rules»
+ *   M7  insert and settle in two transactions                                    → «atomicity»
+ *   M8a statement end exclusive at the second (no +1000 ms)                      → «GetStatement»
+ *   M8b GMT instead of GMT+5                                                     → «formatTashkent», «GetStatement»
+ *   M9  payment bonus credited to balance instead of points                      → «Perform: credited», «concurrent», «atomicity», «amount rules»
+ *   M10 whole-so'm (multiple of 100) check dropped                               → «amount rules»
+ *   M11 name not masked                                                          → «maskName», «GetInformation»
+ *   M12 string id not echoed                                                     → «id echo», «CheckTransaction», «GetStatement»
  */
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");

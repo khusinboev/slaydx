@@ -17,6 +17,7 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *   F5 upstream failure answered as success                             → «upstream failures»
  *   F6 forwarded call also recorded in payment_events (forward leak)    → «nothing written»
  *   F7 vk- matched case-insensitively / anywhere in the value           → «not Bandlik»
+ *   F8 one in-flight budget shared by Click and Paynet                  → «at most MAX_IN_FLIGHT»
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -198,20 +199,24 @@ test("at most MAX_IN_FLIGHT Paynet forwards at once (next → -32603); the Click
       : new Response('{"error":0}', { status: 200 }),
   );
   const pending = Array.from({ length: fwd.MAX_IN_FLIGHT }, () => post(route, BY_SERVICE));
-  await new Promise((r) => setTimeout(r, 50));
-  assert.equal(gates.length, fwd.MAX_IN_FLIGHT);
-  const over = await post(route, BY_SERVICE);
-  assert.deepEqual(await over.json(), { jsonrpc: "2.0", id: 17, error: { code: -32603, message: "forward_failed" } });
-  assert.equal(gates.length, fwd.MAX_IN_FLIGHT, "the extra request never reached upstream");
-  const clickRes = await click.POST(
-    new Request("http://x/api/payments/click", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: "click_trans_id=1&service_id=777&merchant_trans_id=vk-1&amount=1&action=0&sign_time=t&sign_string=x",
-    }),
-  );
-  assert.equal(await clickRes.text(), '{"error":0}', "Click forwards are not starved by Paynet's burst");
-  for (const g of gates) g();
+  try {
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(gates.length, fwd.MAX_IN_FLIGHT);
+    const over = await post(route, BY_SERVICE);
+    assert.deepEqual(await over.json(), { jsonrpc: "2.0", id: 17, error: { code: -32603, message: "forward_failed" } });
+    assert.equal(gates.length, fwd.MAX_IN_FLIGHT, "the extra request never reached upstream");
+    const clickRes = await click.POST(
+      new Request("http://x/api/payments/click", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: "click_trans_id=1&service_id=777&merchant_trans_id=vk-1&amount=1&action=0&sign_time=t&sign_string=x",
+      }),
+    );
+    assert.equal(await clickRes.text(), '{"error":0}', "Click forwards are not starved by Paynet's burst");
+  } finally {
+    // Released even when an assertion fails, so the slots do not leak into the next tests.
+    for (const g of gates) g();
+  }
   for (const r of await Promise.all(pending)) assert.equal(await r.text(), UPSTREAM);
   stubFetch(() => new Response(UPSTREAM, { status: 200 }));
   assert.equal(await (await post(route, BY_SERVICE)).text(), UPSTREAM, "slots are released");

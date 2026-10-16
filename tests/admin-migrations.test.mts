@@ -295,7 +295,19 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     assert.deepEqual((await clickCols()).map((r) => r.column_name), ["click_card_token", "click_invoice_id", "click_method", "click_payment_id"], "048 columns created");
     const metricsTable = () => queryOne("SELECT 1 FROM information_schema.tables WHERE table_name = 'server_metrics'");
     assert.ok(await metricsTable(), "049 table created");
+    const paynetCol = () =>
+      queryOne("SELECT 1 FROM information_schema.columns WHERE table_name = 'payment_orders' AND column_name = 'paynet_trn_id'");
+    const providerChecks = async () =>
+      (
+        await query<{ def: string }>(
+          "SELECT pg_get_constraintdef(oid) def FROM pg_constraint WHERE conname IN ('payment_orders_provider_check', 'payment_events_provider_check') ORDER BY conname",
+        )
+      ).map((r) => r.def);
+    assert.ok(await paynetCol(), "050 column created");
+    for (const def of await providerChecks()) assert.match(def, /'paynet'/, "050 widened the provider CHECKs");
     for (const f of [
+      // 050: Paynet provider (docs/payments/PAYNET.md) -- provider CHECKs widened, paynet_trn_seq, payment_orders.paynet_trn_id.
+      "050_paynet.sql",
       // 049: server load history (owner 2026-10-10) -- server_metrics + server_alert_state.
       "049_server_metrics.sql",
       // 048: Click direct methods (owner 2026-10-09) -- payment_orders.click_method / click_invoice_id / click_card_token / click_payment_id.
@@ -322,6 +334,12 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     ]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
+      if (f === "050_paynet.sql") {
+        assert.ok(!(await paynetCol()) && !(await exists("paynet_trn_seq")), "050 rollback drops the column and the sequence");
+        const defs = await providerChecks();
+        assert.equal(defs.length, 2, "050 rollback restores both provider CHECKs");
+        for (const def of defs) assert.ok(!def.includes("paynet"), `050 rollback narrows the CHECK again: ${def}`);
+      }
       if (f === "049_server_metrics.sql") assert.ok(!(await metricsTable()) && !(await exists("server_alert_state")), "049 rollback drops both tables");
       if (f === "048_click_direct.sql") assert.deepEqual(await clickCols(), [], "048 rollback drops the four columns");
       if (f === "047_bot_admin_keys.sql") assert.ok(!(await keysCol()), "047 rollback drops the column");
