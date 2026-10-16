@@ -118,7 +118,7 @@ export const SOUM_PER_COIN = 1;
 // Limits live in `lib/topup-limits.ts` (shared with the wallet dialog).
 export { MIN_TOPUP_SOUM, MAX_TOPUP_SOUM };
 
-export type Provider = "click" | "payme";
+export type Provider = "click" | "payme" | "paynet";
 /**
  * `pro` — olib tashlangan obuna (2026-10): yangi buyurtma faqat `topup`.
  * Tur tarixiy qatorlarni (`payment_orders.purpose = 'pro'`) o'qish uchun qoladi.

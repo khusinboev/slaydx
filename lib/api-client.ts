@@ -901,7 +901,7 @@ export async function pollGeneration(
 
 export type PaymentOrder = {
   id: string;
-  provider: "click" | "payme";
+  provider: "click" | "payme" | "paynet";
   /** "pro" faqat eski (tarixiy) buyurtmalarda uchraydi. */
   purpose: "topup" | "pro";
   amountSoum: number;
@@ -911,7 +911,7 @@ export type PaymentOrder = {
 
 /** Faqat balansni to'ldirish: obuna (pro) buyurtmalari server tomonda to'xtatilgan. */
 export function createOrder(input: {
-  provider: "click" | "payme";
+  provider: "click" | "payme" | "paynet";
   amount?: number;
   card?: "uzcard" | "humo";
   /** Click only: how the user pays (`page` = my.click.uz fallback, `card` / `phone` = our forms, `app` = deeplink). */

@@ -17,7 +17,7 @@ export const ORDER_STATE_TONE: Record<OrderState, Tone> = {
   cancelled: "danger",
 };
 
-export const PROVIDER_LABEL: Record<OrderProvider, string> = { click: "Click", payme: "Payme" };
+export const PROVIDER_LABEL: Record<OrderProvider, string> = { click: "Click", payme: "Payme", paynet: "Paynet" };
 
 export const PURPOSE_LABEL: Record<OrderPurpose, string> = { topup: "Balansni to'ldirish", pro: "Pro obuna (eski)" };
 

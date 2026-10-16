@@ -17,11 +17,11 @@ import {
  */
 
 export type OrderState = "created" | "pending" | "paid" | "cancelled";
-export type OrderProvider = "click" | "payme";
+export type OrderProvider = "click" | "payme" | "paynet";
 export type OrderPurpose = "topup" | "pro";
 
 export const ORDER_STATES: readonly OrderState[] = ["created", "pending", "paid", "cancelled"];
-export const ORDER_PROVIDERS: readonly OrderProvider[] = ["click", "payme"];
+export const ORDER_PROVIDERS: readonly OrderProvider[] = ["click", "payme", "paynet"];
 export const ORDER_PURPOSES: readonly OrderPurpose[] = ["topup", "pro"];
 export const ORDER_SORTS = ["created_desc", "amount_desc"] as const;
 export type OrderSort = (typeof ORDER_SORTS)[number];

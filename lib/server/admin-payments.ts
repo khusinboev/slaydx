@@ -383,7 +383,7 @@ export const LEDGER_COLUMNS = `t.id::text AS id, t.user_id::text AS user_id, u.n
   t.points_delta::text AS points_delta, t.quota_delta::text AS quota_delta, t.balance_delta::text AS balance_delta,
   t.reference, t.note, t.created_at`;
 
-const SETTLE_REF_RE = /^(click|payme):([\s\S]+)$/;
+const SETTLE_REF_RE = /^(click|payme|paynet):([\s\S]+)$/;
 const CLAWBACK_REF_RE = /^refund:(\d{1,18})$/;
 
 /**
