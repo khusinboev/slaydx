@@ -16,7 +16,8 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *   F4 body re-serialised before forwarding                             → «serviceId» (byte for byte)
  *   F5 upstream failure answered as success                             → «upstream failures»
  *   F6 forwarded call also recorded in payment_events (forward leak)    → «nothing written»
- *   F7 vk- matched case-insensitively / anywhere in the value           → «not Bandlik»
+ *   F7 a vk- payer under our serviceId forwarded (payer-prefix routing)  → «NOT forwarded»
+ *   F9 forward before the IP allow-list                                  → «IP allow-list runs FIRST»
  *   F8 one in-flight budget shared by Click and Paynet                  → «at most MAX_IN_FLIGHT»
  */
 
@@ -89,19 +90,27 @@ test("serviceId in PAYNET_VAKANT_SERVICE_IDS: forwarded byte for byte with Conte
   assert.equal(await res.text(), UPSTREAM);
 });
 
-test("vk- / vk_ payer in params.fields (our own serviceId): forwarded", async () => {
+test("a vk- / vk_ payer under OUR serviceId is NOT forwarded (routing is by serviceId only): SlaydX answers itself", async () => {
   const { route } = await setup();
   for (const body of [BY_PAYER, BY_PAYER_US]) {
     const calls = stubFetch(() => new Response(UPSTREAM, { status: 200 }));
     const res = await post(route, body, { authorization: BANDLIK_AUTH });
-    assert.equal(calls.length, 1, body);
-    assert.equal(calls[0]!.body, body);
-    assert.equal(await res.text(), UPSTREAM);
+    assert.equal(calls.length, 0, body);
+    assert.equal(res.status, 401, "meets SlaydX's own auth, not Bandlik's");
   }
-  // A request without Authorization is forwarded without one (nothing invented).
-  const calls = stubFetch(() => new Response(UPSTREAM, { status: 200 }));
-  await post(route, BY_PAYER);
-  assert.equal(calls[0]!.headers.authorization, undefined);
+});
+
+test("on a config overlap our own serviceIds win: never forwarded", async () => {
+  const { route, env } = await setup();
+  const saved = { ...env.paynet };
+  try {
+    Object.assign(env.paynet, { vakantServiceIds: [909, 101] });
+    const calls = stubFetch(() => new Response(UPSTREAM, { status: 200 }));
+    await post(route, BY_PAYER, { authorization: BANDLIK_AUTH });
+    assert.equal(calls.length, 0);
+  } finally {
+    Object.assign(env.paynet, saved);
+  }
 });
 
 test("not Bandlik: VK-, xvk-, numeric ids, other serviceIds are NOT forwarded (they meet SlaydX's own auth)", async () => {
@@ -121,18 +130,25 @@ test("not Bandlik: VK-, xvk-, numeric ids, other serviceIds are NOT forwarded (t
   }
 });
 
-test("forward happens BEFORE SlaydX's IP and auth checks (and works while SlaydX's own Paynet is not configured)", async () => {
+test("the IP allow-list runs FIRST: a caller outside Paynet's ranges is never forwarded (no open relay); an allowed one is forwarded before SlaydX's own auth, even when SlaydX's own Paynet is not configured", async () => {
   const { route, env } = await setup();
   const saved = { ...env.paynet };
+  const trust = env.trustProxy;
   try {
+    Object.assign(env, { trustProxy: true });
     Object.assign(env.paynet, { allowedIps: ["213.230.106.112/28"], username: "", password: "", serviceIds: [] });
-    const calls = stubFetch(() => new Response(UPSTREAM, { status: 200 }));
-    const res = await post(route, BY_SERVICE, { "x-forwarded-for": "10.0.0.1" });
-    assert.equal(calls.length, 1);
+    const denied = stubFetch(() => new Response(UPSTREAM, { status: 200 }));
+    const res403 = await post(route, BY_SERVICE, { "x-forwarded-for": "10.0.0.1" });
+    assert.equal(denied.length, 0, "forged / foreign caller is not relayed");
+    assert.equal(res403.status, 403);
+    const allowed = stubFetch(() => new Response(UPSTREAM, { status: 200 }));
+    const res = await post(route, BY_SERVICE, { "x-forwarded-for": "213.230.106.115" });
+    assert.equal(allowed.length, 1);
     assert.equal(res.status, 200);
     assert.equal(await res.text(), UPSTREAM);
   } finally {
     Object.assign(env.paynet, saved);
+    Object.assign(env, { trustProxy: trust });
   }
 });
 
@@ -150,7 +166,7 @@ test("upstream failures (timeout, network, 500, 302, 404, invalid JSON, array, e
     ["too large", () => new Response(`{"pad":"${"x".repeat(fwd.MAX_REPLY_BYTES)}"}`, { status: 200 })],
   ];
   for (const [name, h] of cases) {
-    for (const [body, id] of [[BY_SERVICE, 17], [BY_PAYER, "g-1"]] as const) {
+    for (const [body, id] of [[BY_SERVICE, 17], [BY_SERVICE.replace(/"id"\s*:\s*17/, '"id":"g-1"'), "g-1"]] as const) {
       const calls = stubFetch(h);
       const res = await post(route, body, { authorization: BANDLIK_AUTH });
       assert.equal(calls.length, 1, name);
@@ -293,4 +309,25 @@ test("nothing written: forwarded calls (ok or failed) leave payment_orders, paym
   });
   assert.equal(own.status, 200);
   assert.equal((await count()).events, before.events + 1);
+});
+
+test("runtimeWarnings: Paynet live without an IP list, allow-list without TRUST_PROXY, overlapping serviceIds", async () => {
+  const { env } = await setup();
+  const mod = (await import("../lib/server/env.ts")) as { runtimeWarnings(): string[] };
+  const saved = { ...env.paynet };
+  const trust = env.trustProxy;
+  try {
+    Object.assign(env.paynet, { username: "u", password: "p", serviceIds: [101], vakantServiceIds: [909], allowedIps: [] });
+    assert.ok(mod.runtimeWarnings().some((w) => /PAYNET_ALLOWED_IPS bo'sh/.test(w)));
+    Object.assign(env.paynet, { allowedIps: ["213.230.106.112/28"] });
+    Object.assign(env, { trustProxy: false });
+    assert.ok(mod.runtimeWarnings().some((w) => /TRUST_PROXY=true emas — barcha Paynet/.test(w)));
+    Object.assign(env, { trustProxy: true });
+    assert.ok(!mod.runtimeWarnings().some((w) => /Paynet/.test(w)));
+    Object.assign(env.paynet, { vakantServiceIds: [101] });
+    assert.ok(mod.runtimeWarnings().some((w) => /kesishadi/.test(w)));
+  } finally {
+    Object.assign(env.paynet, saved);
+    Object.assign(env, { trustProxy: trust });
+  }
 });

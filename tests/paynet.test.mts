@@ -177,8 +177,12 @@ test("toTransactionId / toServiceId / parseEnvelope / isVakantPaynet", async () 
   const v = [909];
   assert.equal(p.isVakantPaynet({ params: { serviceId: 909 } }, v), true);
   assert.equal(p.isVakantPaynet({ params: { serviceId: "909" } }, v), true);
-  assert.equal(p.isVakantPaynet({ params: { serviceId: 101, fields: { client_id: "vk-12" } } }, v), true);
-  assert.equal(p.isVakantPaynet({ params: { serviceId: 101, fields: { other: "vk_12" } } }, v), true);
+  // Routing is by serviceId ONLY: a vk- payer under another serviceId is NOT Bandlik's (its follow-up Check/Cancel/Statement carry no payer).
+  assert.equal(p.isVakantPaynet({ params: { serviceId: 101, fields: { client_id: "vk-12" } } }, v), false);
+  assert.equal(p.isVakantPaynet({ params: { serviceId: 101, fields: { other: "vk_12" } } }, v), false);
+  // Our own serviceIds win on a config overlap (SlaydX's own payments are never forwarded).
+  assert.equal(p.isVakantPaynet({ params: { serviceId: 909 } }, [909], [909]), false);
+  assert.equal(p.isVakantPaynet({ params: { serviceId: 909 } }, [909], [101]), true);
   for (const no of [
     { params: { serviceId: 101, fields: { client_id: "12" } } },
     { params: { serviceId: 101, fields: { client_id: "VK-12" } } },
@@ -547,6 +551,17 @@ test("Paynet route (real Postgres)", { skip: SKIP_DB }, async (t) => {
     assert.deepEqual(await wallet(uid), { balance: 20_000, points: 2_000 });
     assert.equal((await ordersOf(txn)).length, 1);
     assert.equal((await ledger(uid)).length, 2, "one top-up + one bonus");
+  });
+
+  await t.test("CONCURRENT mixed forms of ONE transactionId (123 / \"123\" / \"000123\") → still exactly one credit", async () => {
+    const uid = await mkUser();
+    const txn = nextTxn();
+    const forms: Array<number | string> = [txn, String(txn), `000${txn}`, txn, `00${txn}`, String(txn)];
+    const replies = await Promise.all(forms.map((f) => perform(uid, 2_000_000, f as number, {})));
+    assert.equal(replies.filter((r) => r.body.result).length, 1, JSON.stringify(replies.map((r) => r.body)));
+    assert.equal(replies.filter((r) => r.body.error?.code === 201).length, forms.length - 1);
+    assert.deepEqual(await wallet(uid), { balance: 20_000, points: 2_000 });
+    assert.equal((await ordersOf(txn)).length, 1);
   });
 
   await t.test("atomicity: a failure after the order insert leaves NO order and NO credit; -32603 without details; a retry succeeds", async () => {

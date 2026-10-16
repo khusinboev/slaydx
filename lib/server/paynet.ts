@@ -139,16 +139,15 @@ export function toTransactionId(v: unknown): string | null {
 }
 
 /**
- * Bandlik.uz (vakant3) owns this request: its serviceId is in PAYNET_VAKANT_SERVICE_IDS, or a payer value in `params.fields`
- * starts with `vk-` / `vk_`. Decided on the SAME parsed object the handler would use.
+ * Bandlik.uz (vakant3) owns this request: its serviceId is in PAYNET_VAKANT_SERVICE_IDS and NOT in ours (ours win on a config overlap).
+ * Routing is by serviceId ONLY: Check / Cancel / GetStatement carry no payer field, so a payer-prefix rule would split one payment's
+ * follow-up calls between two systems. Bandlik therefore needs its own Paynet serviceId. Decided on the SAME parsed object the handler
+ * would use.
  */
-export function isVakantPaynet(body: unknown, vakantServiceIds: readonly number[]): boolean {
+export function isVakantPaynet(body: unknown, vakantServiceIds: readonly number[], ownServiceIds: readonly number[] = []): boolean {
   if (!isPlainObject(body) || !isPlainObject(body.params)) return false;
   const sid = toServiceId(body.params.serviceId);
-  if (sid !== null && vakantServiceIds.includes(sid)) return true;
-  const fields = body.params.fields;
-  if (!isPlainObject(fields)) return false;
-  return Object.values(fields).some((v) => typeof v === "string" && (v.startsWith("vk-") || v.startsWith("vk_")));
+  return sid !== null && vakantServiceIds.includes(sid) && !ownServiceIds.includes(sid);
 }
 
 const sha256 = (s: string) => createHash("sha256").update(s, "utf8").digest();
@@ -349,6 +348,7 @@ async function getStatement(p: Body): Promise<MethodOut> {
   if (from > to) throw new RpcError(PAYNET_ERR.BAD_DATE, { detail: "dateFrom > dateTo" });
   // Both ends inclusive at second resolution: everything up to dateTo + 999 ms.
   const rows = await paynetStatement(from, to + 1_000, STATEMENT_MAX_ROWS);
+  if (rows.length >= STATEMENT_MAX_ROWS) log("warn", "[paynet] GetStatement hit the row cap", { rows: rows.length });
   return {
     result: {
       statements: rows.map((r) => ({
@@ -416,8 +416,21 @@ export async function handlePaynetPost(req: Request): Promise<Response> {
   }
   const id = parsed.ok ? parsed.rpc.id : parsed.id;
 
-  // 1. Bandlik.uz — before our own IP / auth (it has its own credentials); nothing is written to SlaydX tables.
-  if (raw !== null && isVakantPaynet(body, env.paynet.vakantServiceIds)) {
+  // 1. IP allow-list — for EVERY call, including the ones forwarded to Bandlik (SlaydX is not an open relay).
+  const allowed = env.paynet.allowedIps;
+  if (allowed.length) {
+    if (!ipAllowed(clientIp(req), allowed)) {
+      code = PAYNET_ERR.ACCESS_DENIED;
+      return finish(json(rpcError(null, PAYNET_ERR.ACCESS_DENIED), 403));
+    }
+  } else if (!ipListOffWarned) {
+    ipListOffWarned = true;
+    log("warn", "[paynet] PAYNET_ALLOWED_IPS is empty: the IP allow-list is OFF");
+  }
+
+  // 2. Bandlik.uz — after the IP allow-list (Paynet's ranges are the same for every project; only the Basic credentials differ) and before
+  //    our own auth (Bandlik has its own credentials); nothing is written to SlaydX tables.
+  if (raw !== null && isVakantPaynet(body, env.paynet.vakantServiceIds, env.paynet.serviceIds)) {
     const headers: Record<string, string> = {};
     const ct = req.headers.get("content-type");
     if (ct) headers["content-type"] = ct;
@@ -433,18 +446,6 @@ export async function handlePaynetPost(req: Request): Promise<Response> {
     if (forwarded.ok) return finish(new Response(forwarded.text, { status: 200, headers: JSON_HEADERS }));
     code = PAYNET_ERR.INTERNAL;
     return finish(json(rpcError(id, PAYNET_ERR.INTERNAL, "forward_failed")));
-  }
-
-  // 2. IP allow-list.
-  const allowed = env.paynet.allowedIps;
-  if (allowed.length) {
-    if (!ipAllowed(clientIp(req), allowed)) {
-      code = PAYNET_ERR.ACCESS_DENIED;
-      return finish(json(rpcError(null, PAYNET_ERR.ACCESS_DENIED), 403));
-    }
-  } else if (!ipListOffWarned) {
-    ipListOffWarned = true;
-    log("warn", "[paynet] PAYNET_ALLOWED_IPS is empty: the IP allow-list is OFF");
   }
 
   // 3. HTTP Basic (not configured → every call is a 401).

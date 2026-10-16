@@ -282,7 +282,7 @@ export const env = {
     clientParam: str("PAYNET_CLIENT_PARAM") || "client_id",
     /** Paynet's IPs / CIDRs; empty = no IP restriction (testing). */
     allowedIps: strList("PAYNET_ALLOWED_IPS"),
-    /** Bandlik.uz (vakant3) shares the endpoint: its serviceIds (and `vk-` / `vk_` payers) are forwarded untouched. */
+    /** Bandlik.uz (vakant3) shares the endpoint: calls with its OWN serviceIds are forwarded untouched. */
     vakantServiceIds: intList("PAYNET_VAKANT_SERVICE_IDS"),
     // `||`: docker-compose passes an EMPTY string when the variable is unset in `.env`.
     vakantForwardUrl: str("VAKANT_PAYNET_FORWARD_URL") || "https://abitur24.uz/api/payments/paynet",
@@ -490,6 +490,18 @@ export function runtimeWarnings(): string[] {
     warnings.push(
       "ADMIN_TOTP_KEY yo'q yoki noto'g'ri (base64, aniq 32 bayt) — admin panelga kirish o'chiq; yaratish: openssl rand -base64 32",
     );
+  }
+  // Paynet: a live endpoint without the IP allow-list has no rate limit on the Basic login; with the list but without TRUST_PROXY
+  // every call is a 403 (`clientIp` is "direct"); overlapping serviceIds would silently send our own calls to Bandlik.
+  if (paynetConfigured()) {
+    if (!env.paynet.allowedIps.length) {
+      warnings.push("PAYNET_ALLOWED_IPS bo'sh — Paynet xizmati IP cheklovisiz ishlayapti (faqat sinov uchun); Paynet IP diapazonlarini qo'ying");
+    } else if (!env.trustProxy) {
+      warnings.push("PAYNET_ALLOWED_IPS berilgan, lekin TRUST_PROXY=true emas — barcha Paynet so'rovlari 403 oladi");
+    }
+  }
+  if (env.paynet.vakantServiceIds.some((id) => env.paynet.serviceIds.includes(id))) {
+    warnings.push("PAYNET_VAKANT_SERVICE_IDS va PAYNET_SERVICE_IDS kesishadi — kesishgan serviceId SlaydX'niki hisoblanadi (Bandlik'ka yo'naltirilmaydi)");
   }
   // Admin panel: TRUST_PROXY bo'lmasa `clientIp` hamma uchun "direct" — admin
   // kirishdagi IP bo'yicha limit o'chiq qoladi (hisob bo'yicha qulf ishlaydi).
