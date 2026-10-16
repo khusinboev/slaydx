@@ -266,7 +266,7 @@ function OrdersView({ store, fixedFilters, embedded = false, pageSize }: OrdersT
                   }
                 />
               ) : (
-                <EmptyState title="Buyurtmalar yo'q" description="Click yoki Payme orqali hali birorta buyurtma yaratilmagan." />
+                <EmptyState title="Buyurtmalar yo'q" description="Click, Payme yoki Paynet orqali hali birorta buyurtma yaratilmagan." />
               )
             }
           />

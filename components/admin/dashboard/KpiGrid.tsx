@@ -80,7 +80,7 @@ export function KpiGrid({ data }: { data: Overview }) {
           label="Tushum"
           value={<Money text={fmtSoum(c.revenueSoum.total)} />}
           delta={percentDelta(c.revenueSoum.total, p.revenueSoum.total, "up-good")}
-          hint={`${fmtNumber(c.paidOrders)} ta to'lov · Click ${fmtNumber(c.revenueSoum.click)} · Payme ${fmtNumber(c.revenueSoum.payme)}`}
+          hint={`${fmtNumber(c.paidOrders)} ta to'lov · Click ${fmtNumber(c.revenueSoum.click)} · Payme ${fmtNumber(c.revenueSoum.payme)} · Paynet ${fmtNumber(c.revenueSoum.paynet)}`}
         />
         <KpiTile
           label="Naqd sarf"

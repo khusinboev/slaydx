@@ -146,7 +146,7 @@ export type LedgerListParams = {
 
 export type Wallets = { points: number; quota: number; balance: number };
 export type RevenueBucket = { soum: number; orders: number };
-export type RevenueDay = { day: string; soum: number; orders: number; click: number; payme: number; topup: number; pro: number };
+export type RevenueDay = { day: string; soum: number; orders: number; click: number; payme: number; paynet: number; topup: number; pro: number };
 
 export type FinanceSummary = {
   range: { from: string; to: string; days: number };

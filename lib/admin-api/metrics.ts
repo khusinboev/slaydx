@@ -26,7 +26,7 @@ export type Kpis = {
   generations: { total: number; completed: number; failed: number; revoked: number };
   /** Percent, `null` when nothing finished. */
   successRate: number | null;
-  revenueSoum: { total: number; click: number; payme: number; topup: number; pro: number };
+  revenueSoum: { total: number; click: number; payme: number; paynet: number; topup: number; pro: number };
   paidOrders: number;
   cashSpendTanga: number;
   bonusSpendPoints: number;
@@ -48,7 +48,7 @@ export type SeriesMetric = "revenue" | "generations" | "signups" | "ai_cost" | "
 
 /** Value keys per metric. */
 export type SeriesValues = {
-  revenue: { total: number; click: number; payme: number; topup: number; pro: number; orders: number };
+  revenue: { total: number; click: number; payme: number; paynet: number; topup: number; pro: number; orders: number };
   generations: { total: number; completed: number; failed: number; revoked: number };
   signups: { users: number };
   ai_cost: { usd: number; records: number };
