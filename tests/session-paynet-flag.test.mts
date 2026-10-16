@@ -40,7 +40,7 @@ after(async () => {
 
 async function features(): Promise<{ payments: Record<string, unknown> }> {
   const req = new Request("http://localhost/api/auth/session");
-  const res = await inRequest(req, () => GET(req, undefined));
+  const res = await inRequest(req, () => GET(req));
   assert.equal(res.status, 200);
   return ((await res.json()) as { features: { payments: Record<string, unknown> } }).features;
 }
