@@ -16,6 +16,20 @@ function str(name: string, fallback = ""): string {
   return (process.env[name] ?? fallback).trim();
 }
 
+function strList(name: string): string[] {
+  return str(name)
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+/** Comma separated integers; anything that is not a plain non-negative integer is dropped. */
+function intList(name: string): number[] {
+  return strList(name)
+    .filter((x) => /^\d{1,15}$/.test(x))
+    .map(Number);
+}
+
 function int(name: string, fallback: number): number {
   const raw = str(name);
   if (!raw) return fallback;
@@ -255,6 +269,24 @@ export const env = {
     // `||` not a fallback arg: docker-compose passes an EMPTY string when the variable is unset in `.env`.
     vakantForwardUrl: str("VAKANT_CLICK_FORWARD_URL") || "https://abitur24.uz/api/payments/click",
   },
+  /**
+   * Paynet (UZPAYNET) provider — we are the «Поставщик» of a JSON-RPC web service (`docs/payments/PAYNET.md`).
+   * Not configured (no username, password or service ids) → every call is a 401 and the wallet shows no Paynet card.
+   */
+  paynet: {
+    username: str("PAYNET_USERNAME"),
+    password: str("PAYNET_PASSWORD"),
+    /** OUR Paynet serviceIds (integers). */
+    serviceIds: intList("PAYNET_SERVICE_IDS"),
+    /** Name of the payer parameter in `fields` (the SlaydX ID). */
+    clientParam: str("PAYNET_CLIENT_PARAM") || "client_id",
+    /** Paynet's IPs / CIDRs; empty = no IP restriction (testing). */
+    allowedIps: strList("PAYNET_ALLOWED_IPS"),
+    /** Bandlik.uz (vakant3) shares the endpoint: its serviceIds (and `vk-` / `vk_` payers) are forwarded untouched. */
+    vakantServiceIds: intList("PAYNET_VAKANT_SERVICE_IDS"),
+    // `||`: docker-compose passes an EMPTY string when the variable is unset in `.env`.
+    vakantForwardUrl: str("VAKANT_PAYNET_FORWARD_URL") || "https://abitur24.uz/api/payments/paynet",
+  },
   payme: {
     merchantId: str("PAYME_MERCHANT_ID"),
     key: str("PAYME_KEY"),
@@ -382,6 +414,11 @@ export function ttsConfigured(): boolean {
  */
 export function clickDirectConfigured(): boolean {
   return paymentsConfigured().click && Boolean(env.click.merchantUserId);
+}
+
+/** Paynet is live only when the login, the password and at least one of our serviceIds are set. */
+export function paynetConfigured(): boolean {
+  return Boolean(env.paynet.username && env.paynet.password && env.paynet.serviceIds.length);
 }
 
 export function paymentsConfigured(): { click: boolean; payme: boolean } {
