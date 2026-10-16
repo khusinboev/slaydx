@@ -17,7 +17,7 @@ except 401 / 403. `id` of the request is echoed (null when unknown). Body ≤ 64
 ### Security
 1. **HTTP Basic** (`PAYNET_USERNAME` / `PAYNET_PASSWORD`, compared in constant time via sha256 digests). Missing / wrong / not configured → **HTTP 401**
    + `WWW-Authenticate: Basic realm="paynet"` + `{jsonrpc,id:null,error:{code:412,"Неверный логин или пароль"}}`.
-2. **IP allow-list** `PAYNET_ALLOWED_IPS` (comma separated IPs / CIDRs; Paynet's: `213.230.106.112/28`, `213.230.65.80/28`), client IP from `clientIp(req)`
+2. **IP allow-list** `PAYNET_ALLOWED_IPS` (comma separated IPs / CIDRs — the two ranges Paynet publishes in its technical document, section «Сетевое соединение»; the values live in the server `.env`, not in the repo), client IP from `clientIp(req)`
    (trusted proxy header). Empty = off (testing; a warning is logged once). Not allowed → **HTTP 403** + error 601. nginx can enforce the same ranges (server change, owner consent).
 3. Nothing about the password is ever logged or stored in `payment_events`.
 4. Response time budget 500 ms: one short transaction per call, no outbound calls on our own orders.

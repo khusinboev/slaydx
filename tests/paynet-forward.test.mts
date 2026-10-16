@@ -136,13 +136,13 @@ test("the IP allow-list runs FIRST: a caller outside Paynet's ranges is never fo
   const trust = env.trustProxy;
   try {
     Object.assign(env, { trustProxy: true });
-    Object.assign(env.paynet, { allowedIps: ["213.230.106.112/28"], username: "", password: "", serviceIds: [] });
+    Object.assign(env.paynet, { allowedIps: ["203.0.113.16/28"], username: "", password: "", serviceIds: [] });
     const denied = stubFetch(() => new Response(UPSTREAM, { status: 200 }));
     const res403 = await post(route, BY_SERVICE, { "x-forwarded-for": "10.0.0.1" });
     assert.equal(denied.length, 0, "forged / foreign caller is not relayed");
     assert.equal(res403.status, 403);
     const allowed = stubFetch(() => new Response(UPSTREAM, { status: 200 }));
-    const res = await post(route, BY_SERVICE, { "x-forwarded-for": "213.230.106.115" });
+    const res = await post(route, BY_SERVICE, { "x-forwarded-for": "203.0.113.19" });
     assert.equal(allowed.length, 1);
     assert.equal(res.status, 200);
     assert.equal(await res.text(), UPSTREAM);
@@ -319,7 +319,7 @@ test("runtimeWarnings: Paynet live without an IP list, allow-list without TRUST_
   try {
     Object.assign(env.paynet, { username: "u", password: "p", serviceIds: [101], vakantServiceIds: [909], allowedIps: [] });
     assert.ok(mod.runtimeWarnings().some((w) => /PAYNET_ALLOWED_IPS bo'sh/.test(w)));
-    Object.assign(env.paynet, { allowedIps: ["213.230.106.112/28"] });
+    Object.assign(env.paynet, { allowedIps: ["203.0.113.16/28"] });
     Object.assign(env, { trustProxy: false });
     assert.ok(mod.runtimeWarnings().some((w) => /TRUST_PROXY=true emas — barcha Paynet/.test(w)));
     Object.assign(env, { trustProxy: true });

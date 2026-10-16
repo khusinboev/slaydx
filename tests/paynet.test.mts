@@ -107,17 +107,17 @@ test("maskName: first token + initial of the second; one token as is; empty → 
 
 test("ipAllowed: IPv4 exact, CIDR ranges, IPv4-mapped IPv6, malformed entries never match", async () => {
   const { ipAllowed } = await import("../lib/server/paynet.ts");
-  const paynet = ["213.230.106.112/28", "213.230.65.80/28"];
-  for (const ok of ["213.230.106.112", "213.230.106.127", "213.230.65.80", "213.230.65.95", "::ffff:213.230.106.120"]) {
+  const paynet = ["203.0.113.16/28", "198.51.100.80/28"];
+  for (const ok of ["203.0.113.16", "203.0.113.31", "198.51.100.80", "198.51.100.95", "::ffff:203.0.113.24"]) {
     assert.equal(ipAllowed(ok, paynet), true, ok);
   }
-  for (const no of ["213.230.106.111", "213.230.106.128", "213.230.65.96", "10.0.0.1", "direct", "unknown", "", "213.230.106", "::1"]) {
+  for (const no of ["203.0.113.15", "203.0.113.32", "198.51.100.96", "10.0.0.1", "direct", "unknown", "", "203.0.113", "::1"]) {
     assert.equal(ipAllowed(no, paynet), false, no);
   }
   assert.equal(ipAllowed("1.2.3.4", ["1.2.3.4"]), true);
   assert.equal(ipAllowed("1.2.3.5", ["1.2.3.4"]), false);
   assert.equal(ipAllowed("1.2.3.4", ["1.2.3.4/32"]), true);
-  assert.equal(ipAllowed("9.9.9.9", ["0.0.0.0/0"]), true);
+  assert.equal(ipAllowed("198.51.100.9", ["0.0.0.0/0"]), true);
   for (const bad of ["1.2.3.4/33", "1.2.3/24", "300.1.1.1/8", "1.2.3.4/x", "/24"]) assert.equal(ipAllowed("1.2.3.4", [bad]), false, bad);
   assert.equal(ipAllowed("2001:db8::1", ["2001:DB8::1"]), true, "a non-IPv4 entry matches exactly (case-insensitive)");
 });
@@ -345,12 +345,12 @@ test("Paynet route (real Postgres)", { skip: SKIP_DB }, async (t) => {
     const uid = await mkUser();
     const saved = { allowedIps: env.paynet.allowedIps, trustProxy: env.trustProxy };
     try {
-      Object.assign(env.paynet, { allowedIps: ["213.230.106.112/28", "213.230.65.80/28"] });
+      Object.assign(env.paynet, { allowedIps: ["203.0.113.16/28", "198.51.100.80/28"] });
       Object.assign(env, { trustProxy: true });
-      const ok = await rpc("GetInformation", { serviceId: 101, fields: { client_id: uid } }, { ip: "213.230.106.120" });
+      const ok = await rpc("GetInformation", { serviceId: 101, fields: { client_id: uid } }, { ip: "203.0.113.24" });
       assert.equal(ok.status, 200);
       assert.equal(ok.body.result?.status, "0");
-      for (const ip of ["10.0.0.1", "213.230.106.128", "213.230.65.79"]) {
+      for (const ip of ["10.0.0.1", "203.0.113.32", "198.51.100.79"]) {
         for (const auth of [BASIC, null]) {
           const r = await rpc("GetInformation", { serviceId: 101, fields: { client_id: uid } }, { ip, auth, id: 5 });
           assert.equal(r.status, 403, ip);
@@ -358,13 +358,13 @@ test("Paynet route (real Postgres)", { skip: SKIP_DB }, async (t) => {
         }
       }
       // The LAST X-Forwarded-For hop (set by our nginx) is the client: a spoofed first hop does not help.
-      assert.equal((await rpc("GetInformation", { serviceId: 101, fields: { client_id: uid } }, { ip: "213.230.106.120, 10.0.0.1" })).status, 403);
+      assert.equal((await rpc("GetInformation", { serviceId: 101, fields: { client_id: uid } }, { ip: "203.0.113.24, 10.0.0.1" })).status, 403);
       const before = await wallet(uid);
       const refused = await rpc("PerformTransaction", { serviceId: 101, amount: 1_000_000, transactionId: nextTxn(), fields: { client_id: uid } }, { ip: "10.0.0.1" });
       assert.equal(refused.status, 403);
       assert.deepEqual(await wallet(uid), before, "a refused IP credits nothing");
       Object.assign(env, { trustProxy: false });
-      assert.equal((await rpc("GetInformation", { serviceId: 101, fields: { client_id: uid } }, { ip: "213.230.106.120" })).status, 403, "no trusted proxy → client IP unknown → refused");
+      assert.equal((await rpc("GetInformation", { serviceId: 101, fields: { client_id: uid } }, { ip: "203.0.113.24" })).status, 403, "no trusted proxy → client IP unknown → refused");
     } finally {
       Object.assign(env.paynet, { allowedIps: saved.allowedIps });
       Object.assign(env, { trustProxy: saved.trustProxy });
