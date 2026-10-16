@@ -48,7 +48,7 @@ export type LedgerRow = {
   tone: "in" | "out" | "zero";
 };
 
-const PROVIDERS: Record<string, string> = { click: "Click", payme: "Payme" };
+const PROVIDERS: Record<string, string> = { click: "Click", payme: "Payme", paynet: "Paynet" };
 
 /** `<toolId>: <topic>` — the note `jobs.ts` writes on a charge. */
 function chargeTitle(note: string): string | null {

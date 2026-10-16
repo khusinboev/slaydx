@@ -11,6 +11,7 @@ import { ReferralCard } from "../profile/ReferralCard";
 import { DEFAULT_TOPUP, TOPUP_PRESETS, openPay } from "../overlays/pay-amount";
 import { groupDigits } from "@/lib/format";
 import { PaymentBanner } from "./PaymentBanner";
+import { PaynetCard } from "./PaynetCard";
 import { usePaymentReturn } from "./usePaymentReturn";
 import { isPaymentBonusPercent, paymentBonusHint } from "@/lib/payment-bonus";
 import { TOPUP_FEATURES, formatWhen, ledgerRow, orderStateLabel, providerLabel } from "./wallet-model";
@@ -46,6 +47,8 @@ export function WalletPage() {
   const loggedIn = useAppStore((s) => s.loggedIn);
   const user = useAppStore((s) => s.user);
   const open = useUi((s) => s.open);
+  /** Paynet is paid at an agent (not in PayDialog): its card shows only while the server has it configured. */
+  const paynetOn = useAppStore((s) => s.features?.payments.paynet === true);
   const pay = usePaymentReturn();
   /** `GET /api/users/me` `paymentBonusPercent` (loaded with the ledger, again after a payment lands); 0 = no hint. */
   const [bonusPercent, setBonusPercent] = useState(0);
@@ -143,6 +146,8 @@ export function WalletPage() {
       )}
 
       {sessionChecked && !(loggedIn && !user) ? <QuickTopUp bonusPercent={ready ? bonusPercent : 0} /> : null}
+
+      {ready && paynetOn ? <PaynetCard userId={user!.id} bonusPercent={bonusPercent} /> : null}
 
       {ready ? (
         <>

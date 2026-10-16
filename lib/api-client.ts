@@ -246,7 +246,14 @@ export type Features = {
   devLogin: boolean;
   /** Server DOCX/PPTX ni PDF ga o'gira oladimi (LibreOffice o'rnatilganmi). */
   pdf: boolean;
-  payments: { click: boolean; payme: boolean; /** Click Merchant API is set up: card / phone / app methods. */ clickDirect?: boolean };
+  payments: {
+    click: boolean;
+    payme: boolean;
+    /** Click Merchant API is set up: card / phone / app methods. */
+    clickDirect?: boolean;
+    /** Paynet agents can top up by SlaydX ID (wallet card only; never a checkout method in PayDialog). */
+    paynet?: boolean;
+  };
   /** Admin price adjustments (non-default tools only); untrusted, validated by `parsePriceAdjustments`. */
   pricing?: unknown;
 };

@@ -15,7 +15,7 @@ import { FinancePage } from "../../components/admin/finance/FinancePage.tsx";
 import { LedgerTable } from "../../components/admin/finance/LedgerTable.tsx";
 import { TIMEOUT_TEXT } from "../../components/admin/finance/ReconciliationView.tsx";
 import { compactSoum } from "../../components/admin/finance/FinanceSummaryView.tsx";
-import { cancelReasonText } from "../../components/admin/payments/labels.ts";
+import { PROVIDER_LABEL, cancelReasonText } from "../../components/admin/payments/labels.ts";
 
 /*
  * Payments and finance screens (docs/admin/02-plan.md §7.0, §7.1 S8–S10):
@@ -147,6 +147,8 @@ test("labels: Payme cancel reasons are named, Click carries its own error code; 
   assert.equal(cancelReasonText(99, "payme"), "99");
   assert.equal(cancelReasonText(-5017, "click"), "Click xato kodi: -5017");
   assert.equal(cancelReasonText(null, "payme"), null);
+  assert.equal(cancelReasonText(77, "paynet"), "Paynet kodi: 77", "Paynet is never cancelled: a code is shown raw, never as a Payme reason");
+  assert.equal(PROVIDER_LABEL.paynet, "Paynet");
   assert.equal(compactSoum(1_250_000), "1,3 mln");
   assert.equal(compactSoum(350_000), "350 ming");
   assert.equal(compactSoum(0), "0");
@@ -204,6 +206,25 @@ test("OrdersTable: filter change writes the URL, resets paging and aborts the st
   await waitFor(() => assert.equal(calls.length, 3));
   assert.equal(log.at(-1), "replace /admin/payments?provider=payme&q=771234567");
   assert.equal(calls[2]!.params.get("q"), "771234567");
+});
+
+test("OrdersTable: Paynet is a provider option, the URL filter reaches the API and its row is labelled «Paynet»", async () => {
+  const PAYNET = { ...ORDER, id: "5d1e9c70-2b4a-4f6e-8a3d-7c9b1e2f3a40", provider: "paynet", providerTxn: "9876543210", prepareId: null };
+  const calls = stubFetch({ "GET /api/admin/orders": [() => json(200, page([PAYNET])), () => json(200, page([PAYNET]))] });
+  const { container, log } = mount(h(OrdersTable), "/admin/payments?provider=paynet");
+  await waitFor(() => assert.equal(calls.length, 1));
+  assert.equal(calls[0]!.params.get("provider"), "paynet", "the paynet URL filter is sent, not dropped as junk");
+  await waitFor(() => assert.equal(dataRows(container).length, 1));
+  const row = container.querySelector(`tr[data-row-key="${PAYNET.id}"]`) as HTMLElement;
+  assert.ok(within(row).getByText("Paynet"), "provider cell");
+  assert.ok(within(row).getByText("9876543210"), "Paynet transactionId in the txn column");
+
+  const select = screen.getByLabelText("Provayder") as HTMLSelectElement;
+  assert.deepEqual([...select.options].map((o) => o.value).filter(Boolean), ["click", "payme", "paynet"]);
+  assert.ok([...select.options].some((o) => o.value === "paynet" && o.textContent === "Paynet"), "filter option");
+  fireEvent.change(select, { target: { value: "click" } });
+  await waitFor(() => assert.equal(calls.length, 2));
+  assert.deepEqual(log, ["replace /admin/payments?provider=click"]);
 });
 
 test("OrdersTable: keyset paging forward and back", async () => {
@@ -414,10 +435,10 @@ const SUMMARY = {
   revenue: {
     total: { soum: 135_000, orders: 3 },
     byDay: [
-      { day: "2026-09-10", soum: 0, orders: 0, click: 0, payme: 0, topup: 0, pro: 0 },
-      { day: "2026-09-11", soum: 135_000, orders: 3, click: 100_000, payme: 35_000, topup: 120_000, pro: 15_000 },
+      { day: "2026-09-10", soum: 0, orders: 0, click: 0, payme: 0, paynet: 0, topup: 0, pro: 0 },
+      { day: "2026-09-11", soum: 135_000, orders: 3, click: 100_000, payme: 15_000, paynet: 20_000, topup: 120_000, pro: 15_000 },
     ],
-    byProvider: { click: { soum: 100_000, orders: 1 }, payme: { soum: 35_000, orders: 2 } },
+    byProvider: { click: { soum: 100_000, orders: 1 }, payme: { soum: 15_000, orders: 1 }, paynet: { soum: 20_000, orders: 1 } },
     byPurpose: { topup: { soum: 120_000, orders: 2 }, pro: { soum: 15_000, orders: 1 } },
   },
   cashSpend: { charges: 8, points: 0, quota: 0, balance: 26_500 },
@@ -439,6 +460,12 @@ test("FinancePage summary: range from the URL, KPI tiles, tab switch writes the 
   assert.equal(calls[0]!.params.get("to"), "2026-09-11");
   assert.ok(screen.getByText("112 507 tanga"), "liabilities: balance");
   assert.ok(screen.getByText("74,1% · 1 ta"), "Click share of revenue");
+  assert.ok(screen.getByText("14,8% · 1 ta"), "Paynet share of revenue (tile)");
+  assert.ok(screen.getByText("11,1% · 1 ta"), "Payme share of revenue (tile)");
+  assert.ok(screen.getAllByText(/^20\D000\Dso'm$/).length >= 1, "Paynet revenue tile value");
+  const breakdown = screen.getByRole("region", { name: "Tushum taqsimoti" });
+  const paynetRow = within(breakdown).getByRole("rowheader", { name: "Paynet" }).closest("tr")!;
+  assert.ok(within(paynetRow).getByText(/^20\D000$/), "Paynet row in the provider breakdown");
   fireEvent.click(screen.getByRole("tab", { name: "Hisob kitobi" }));
   await waitFor(() => assert.equal(log.at(-1), "replace /admin/finance?from=2026-09-10&to=2026-09-11&tab=ledger"));
   assert.ok(await screen.findByText("Hisob yozuvlari yo'q"));

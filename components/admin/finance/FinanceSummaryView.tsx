@@ -91,6 +91,12 @@ export function FinanceSummaryView({
             />
             <KpiTile
               loading={loading}
+              label="Paynet"
+              value={s ? fmtSoum(s.revenue.byProvider.paynet.soum) : ""}
+              hint={s ? `${share(s.revenue.byProvider.paynet.soum, s.revenue.total.soum)} · ${fmtNumber(s.revenue.byProvider.paynet.orders)} ta` : null}
+            />
+            <KpiTile
+              loading={loading}
               label="Ishlarga sarflandi"
               value={s ? fmtTanga(s.cashSpend.balance) : ""}
               hint={s ? `${legacyQuota(s.cashSpend.quota)}bonus ${fmtNumber(s.cashSpend.points)} · ${fmtNumber(s.cashSpend.charges)} ta ish` : null}
@@ -171,6 +177,7 @@ function Breakdown({ s }: { s: FinanceSummary }) {
   const rows: Array<[string, RevenueBucket]> = [
     [PROVIDER_LABEL.click, s.revenue.byProvider.click],
     [PROVIDER_LABEL.payme, s.revenue.byProvider.payme],
+    [PROVIDER_LABEL.paynet, s.revenue.byProvider.paynet],
     [PURPOSE_LABEL.topup, s.revenue.byPurpose.topup],
     // Legacy Pro orders: the row shows only when the range has any.
     ...(s.revenue.byPurpose.pro.orders > 0 ? [[PURPOSE_LABEL.pro, s.revenue.byPurpose.pro] as [string, RevenueBucket]] : []),
@@ -189,7 +196,7 @@ function Breakdown({ s }: { s: FinanceSummary }) {
         </thead>
         <tbody>
           {rows.map(([label, b], i) => (
-            <tr key={label} className={i === 1 ? "border-b-2" : "border-b last:border-b-0"}>
+            <tr key={label} className={i === 2 ? "border-b-2" : "border-b last:border-b-0"}>
               <th scope="row" className="px-4 py-2 text-left font-medium">{label}</th>
               <td className="px-3 py-2 text-right tabular-nums">{fmtNumber(b.soum)}</td>
               <td className="px-3 py-2 text-right tabular-nums">{fmtNumber(b.orders)}</td>

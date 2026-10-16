@@ -299,7 +299,7 @@ test("overview: every KPI of R and of the previous period P, hand-computed", { s
     activeUsers: 5, // jobs: U0, U1, U2; sessions: U5 (last seen), U6 (login)
     generations: { total: 6, completed: 3, failed: 1, revoked: 1 }, // G1 G2 G10 | G3 | G4 | G5 queued
     successRate: 75, // 3 / (3 + 1)
-    revenueSoum: { total: 65_000, click: 50_000, payme: 15_000, topup: 50_000, pro: 15_000 }, // O1 + O2
+    revenueSoum: { total: 65_000, click: 50_000, payme: 15_000, paynet: 0, topup: 50_000, pro: 15_000 }, // O1 + O2
     paidOrders: 2,
     // charges cash 3000 + 2000 + 5000 + 1000 + 4000 = 15000; refunds cash 5000 + 700 + 1000 + 1000 = 7700
     cashSpendTanga: 7_300,
@@ -319,7 +319,7 @@ test("overview: every KPI of R and of the previous period P, hand-computed", { s
     activeUsers: 2, // jobs: U4 (G6), U0 (G7)
     generations: { total: 2, completed: 1, failed: 1, revoked: 0 },
     successRate: 50,
-    revenueSoum: { total: 10_000, click: 10_000, payme: 0, topup: 10_000, pro: 0 }, // O4
+    revenueSoum: { total: 10_000, click: 10_000, payme: 0, paynet: 0, topup: 10_000, pro: 0 }, // O4
     paidOrders: 1,
     cashSpendTanga: 1_500, // 800 + 700; G7's refund happened in R
     bonusSpendPoints: 0,
@@ -361,8 +361,8 @@ test("series: zero-filled Tashkent days for every metric, hand-computed", { skip
   assert.equal(rev.status, 200, JSON.stringify(rev.body));
   assert.equal(rev.body.metric, "revenue");
   assert.deepEqual(days(rev.body), [
-    { day: D10, values: { total: 50_000, click: 50_000, payme: 0, topup: 50_000, pro: 0, orders: 1 } },
-    { day: D11, values: { total: 15_000, click: 0, payme: 15_000, topup: 0, pro: 15_000, orders: 1 } },
+    { day: D10, values: { total: 50_000, click: 50_000, payme: 0, paynet: 0, topup: 50_000, pro: 0, orders: 1 } },
+    { day: D11, values: { total: 15_000, click: 0, payme: 15_000, paynet: 0, topup: 0, pro: 15_000, orders: 1 } },
   ]);
 
   const gens = await get("series", `metric=generations&from=${D08}&to=${D12}`, cookie);

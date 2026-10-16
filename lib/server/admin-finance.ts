@@ -106,6 +106,7 @@ export type RevenueDay = {
   orders: number;
   click: number;
   payme: number;
+  paynet: number;
   topup: number;
   pro: number;
 };
@@ -193,7 +194,7 @@ async function revenue(client: Queryable, range: DateRange): Promise<FinanceSumm
     byPurpose.topup.orders += num(r.topup_n);
     byPurpose.pro.soum += num(r.pro);
     byPurpose.pro.orders += num(r.pro_n);
-    return { day: r.day, soum: num(r.soum), orders: num(r.orders), click: num(r.click), payme: num(r.payme), topup: num(r.topup), pro: num(r.pro) };
+    return { day: r.day, soum: num(r.soum), orders: num(r.orders), click: num(r.click), payme: num(r.payme), paynet: num(r.paynet), topup: num(r.topup), pro: num(r.pro) };
   });
   return { total, byDay, byProvider, byPurpose };
 }
