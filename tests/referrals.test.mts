@@ -19,11 +19,11 @@ import { randomInt } from "node:crypto";
  *   1+2 together (double reward on the conflict path)                     → «existing account … nothing» (money);
  *   3. self check removed                                                  → «self-referral»;
  *   4. blocked check removed (points always 2000)                          → «blocked inviter»;
- *   5. REFERRAL_REWARD_POINTS 2000 → 200 / reward to the referee            → «new account via /start ref_»;
+ *   5. first tier 2000 → 200 / reward to the referee                       → «new account via /start ref_»;
  *   6. ledger reference random instead of `referral:<referee id>`          → «second apply in the same transaction»;
  *   7. `ON CONFLICT DO NOTHING` dropped from the referrals insert           → «second apply …» (reason error, not duplicate);
- *   8. burst `n <= THRESHOLD` → `n < THRESHOLD`                             → «burst signal»;
- *   9. burst `NOT EXISTS` (resolved row) dropped                            → «burst signal» (second row the same day).
+ *   8. (2026-10-19) tiers: friend number off by one / count taken outside the inviter lock / tiers swapped → «tiered rewards», «concurrency tiers»;
+ *   9. (2026-10-19) the 24 h burst signal is GONE (owner: no restriction at all) → «tiered rewards … no signal».
  */
 
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
@@ -41,7 +41,7 @@ const { setErrorSink } = await import("../lib/server/log.ts");
 if (hasDb) await ensureMigrated();
 
 const { REFERRAL_REWARD_POINTS } = shared;
-const { applyReferralInTx, ensureRefCode, resolveReferrer, referralSummary, REFERRAL_BURST_THRESHOLD } = referrals;
+const { applyReferralInTx, ensureRefCode, resolveReferrer, referralSummary } = referrals;
 
 const tgIds: string[] = [];
 after(async () => {
@@ -117,7 +117,7 @@ async function capturingErrors<T>(fn: () => Promise<T>): Promise<{ result: T; er
 /* ───────────────────────────── pure rules ───────────────────────────── */
 
 test("codes: normalised, alphabet without look-alikes, 8–10 chars; payload and link shapes", () => {
-  assert.equal(shared.REFERRAL_REWARD_POINTS, 2000, "D1: 2000 points per invited account");
+  assert.equal(shared.REFERRAL_REWARD_POINTS, 2000, "D1: the first tier is 2000 points per invited account");
   assert.equal(shared.normalizeRefCode(" K7M3P9QX "), "k7m3p9qx");
   for (const bad of ["k7m3p9q", "k7m3p9qx12345", "k7m3p0qx", "k7m3p1qx", "k7m3pIqx", "k7m3poqx", "../../x", "", null, 12345678, "k7m3 p9qx"]) {
     assert.equal(shared.normalizeRefCode(bad), null, String(bad));
@@ -131,10 +131,23 @@ test("codes: normalised, alphabet without look-alikes, 8–10 chars; payload and
   assert.equal(shared.referralBotLink("", "k7m3p9qx"), null);
   assert.equal(shared.referralBotLink("bad bot", "k7m3p9qx"), null);
   assert.equal(shared.referralWebLink("https://slaydx.test/", "k7m3p9qx"), "https://slaydx.test/uz?ref=k7m3p9qx");
-  assert.match(shared.referralRuleText(), /^Har bir yangi do'st uchun 2\s000 ball\. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi\.$/);
+  assert.match(shared.referralRuleText(), /^Yangi do'st uchun ball: 1–25-do'st — 2\s000, 26–50-do'st — 1\s000, 51-dan boshlab — 500\. Keyingi do'stingiz uchun: 2\s000 ball\. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi\.$/);
   const share = new URL(shared.telegramShareUrl("https://t.me/slaydx_bot?start=ref_k7m3p9qx"));
   assert.equal(share.origin + share.pathname, "https://t.me/share/url");
   assert.equal(share.searchParams.get("url"), "https://t.me/slaydx_bot?start=ref_k7m3p9qx");
+});
+
+test("tiers (owner 2026-10-19): friends 1–25 → 2000, 26–50 → 1000, 51+ → 500; boundaries and junk input", () => {
+  // MUTATION: `<=` → `<` in referralRewardFor, or swapped points → red.
+  assert.equal(shared.referralRewardFor(1), 2000);
+  assert.equal(shared.referralRewardFor(25), 2000);
+  assert.equal(shared.referralRewardFor(26), 1000);
+  assert.equal(shared.referralRewardFor(50), 1000);
+  assert.equal(shared.referralRewardFor(51), 500);
+  assert.equal(shared.referralRewardFor(100_000), 500);
+  for (const junk of [0, -3, Number.NaN, Number.POSITIVE_INFINITY]) assert.equal(shared.referralRewardFor(junk), 2000, String(junk));
+  assert.equal(shared.referralRewardFor(25.9), 2000, "floors");
+  assert.deepEqual(shared.REFERRAL_TIERS.map((t) => [t.upTo, t.points]), [[25, 2000], [50, 1000], [Infinity, 500]]);
 });
 
 test("formatPoints / formatJoinDate: by hand, NBSP groups, Tashkent date — never the runtime's ICU (Chromium wrote «6,000»)", () => {
@@ -155,7 +168,7 @@ test("formatPoints / formatJoinDate: by hand, NBSP groups, Tashkent date — nev
     assert.equal(shared.formatJoinDate("2026-10-06T20:30:00.000Z"), "07.10.2026", "UTC+5: already the next day in Tashkent");
     assert.equal(shared.formatJoinDate("2026-01-02T03:00:00.000Z"), "02.01.2026");
     assert.equal(shared.formatJoinDate("nonsense"), "");
-    assert.equal(shared.referralRuleText(), "Har bir yangi do'st uchun 2 000 ball. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi.");
+    assert.equal(shared.referralRuleText(1000), "Yangi do'st uchun ball: 1–25-do'st — 2\u00a0000, 26–50-do'st — 1\u00a0000, 51-dan boshlab — 500. Keyingi do'stingiz uchun: 1\u00a0000 ball. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi.");
   } finally {
     Number.prototype.toLocaleString = realNum;
     Date.prototype.toLocaleDateString = realDate;
@@ -458,35 +471,47 @@ test("a failing referral never costs the sign-up: rolled back to its savepoint, 
   await assertLedger(result.id, "invitee");
 });
 
-/* ───────────────────────────── burst signal (D3) ───────────────────────────── */
+/* ───────────────────────────── tiered rewards (2026-10-19) ───────────────────────────── */
 
-test("burst signal: > 25 invites in 24 h → exactly one error_log row per inviter per day (level error, scope referral_burst); no cap", { skip }, async () => {
-  const inviter = await newReferrer();
-  const rowsOf = () =>
-    query<{ id: string; level: string; scope: string; user_id: string; message: string; resolved_at: Date | null }>(
-      "SELECT id::text AS id, level, scope, user_id::text AS user_id, message, resolved_at FROM error_log WHERE scope = 'referral_burst' AND user_id = $1",
-      [inviter.id],
-    );
-  for (let i = 0; i < REFERRAL_BURST_THRESHOLD; i++) await registerBotUser(profile(tgId()), { code: inviter.code, source: "bot" });
-  assert.equal((await rowsOf()).length, 0, `MUTATSIYA 8: ${REFERRAL_BURST_THRESHOLD} is not a burst`);
-  await registerBotUser(profile(tgId()), { code: inviter.code, source: "bot" });
-  const rows = await rowsOf();
-  assert.equal(rows.length, 1, "the 26th raises the signal");
-  assert.equal(rows[0]!.level, "error", "the watchdog alerts on level error");
-  assert.match(rows[0]!.message, /24 soatda 26 ta/);
-  await registerBotUser(profile(tgId()), { code: inviter.code, source: "bot" });
-  assert.equal((await rowsOf()).length, 1, "the 27th: still one row");
-  // Resolved by an admin the same day: no second row today.
-  await query("UPDATE error_log SET resolved_at = now() WHERE id = $1", [rows[0]!.id]);
-  await registerBotUser(profile(tgId()), { code: inviter.code, source: "bot" });
-  assert.equal((await rowsOf()).length, 1, "MUTATSIYA 9: one row per inviter per day, resolved or not");
-  // D3: no cap — every one of the 28 was rewarded.
-  const n = await queryOne<{ n: string; pts: string }>(
-    "SELECT count(*)::text AS n, sum(reward_points)::text AS pts FROM referrals WHERE referrer_user_id = $1",
+test("tiered rewards, no signal, no cap: 55 friends of one inviter → 25×2000 + 25×1000 + 5×500 (a ledger row each); the old 24 h burst signal is gone", { skip }, async () => {
+  const inviter = await newReferrer("Pog'onali");
+  let prev = await pointsOf(inviter.id);
+  const gained: number[] = [];
+  for (let i = 1; i <= 55; i++) {
+    await registerBotUser(profile(tgId()), { code: inviter.code, source: "bot" });
+    const now = await pointsOf(inviter.id);
+    gained.push(now - prev);
+    prev = now;
+  }
+  assert.deepEqual(gained, [...Array(25).fill(2000), ...Array(25).fill(1000), ...Array(5).fill(500)], "MUTATSIYA 8: tier boundaries at friend 26 and 51");
+  const n = await queryOne<{ n: string; pts: string; t: string }>(
+    "SELECT count(*)::text AS n, sum(reward_points)::text AS pts, (SELECT count(*) FROM transactions WHERE user_id = $1 AND kind = 'bonus' AND reference LIKE 'referral:%')::text AS t FROM referrals WHERE referrer_user_id = $1",
     [inviter.id],
   );
-  assert.deepEqual(n, { n: "28", pts: String(28 * REFERRAL_REWARD_POINTS) });
-  await assertLedger(inviter.id, "burst inviter");
+  assert.deepEqual(n, { n: "55", pts: String(25 * 2000 + 25 * 1000 + 5 * 500), t: "55" });
+  // MUTATSIYA 9: no «referral_burst» error_log row at any count (the old signal fired from the 26th).
+  assert.equal((await query("SELECT id FROM error_log WHERE scope = 'referral_burst' AND user_id = $1", [inviter.id])).length, 0, "no burst signal");
+  // The summary shows what the NEXT (56th) friend earns.
+  const s = await referralSummary(inviter.id, { botUsername: "slaydx_test_bot", appUrl: "https://slaydx.test" });
+  assert.equal(s.invitedCount, 55);
+  assert.equal(s.rewardPoints, 500);
+  assert.equal(s.earnedPoints, 25 * 2000 + 25 * 1000 + 5 * 500);
+  await assertLedger(inviter.id, "tiered inviter");
+});
+
+test("concurrency tiers: 8 new invitees at once when the inviter already has 22 friends → distinct numbers 23..30 (3×2000 + 5×1000), ledger invariant", { skip }, async () => {
+  const inviter = await newReferrer("Chegarada");
+  for (let i = 0; i < 22; i++) await registerBotUser(profile(tgId()), { code: inviter.code, source: "bot" });
+  const before = await pointsOf(inviter.id);
+  const settled = await Promise.allSettled(Array.from({ length: 8 }, () => registerBotUser(profile(tgId()), { code: inviter.code, source: "bot" })));
+  assert.deepEqual(settled.map((x) => x.status), Array(8).fill("fulfilled"));
+  assert.equal((await pointsOf(inviter.id)) - before, 3 * 2000 + 5 * 1000, "numbers 23–25 pay 2000, 26–30 pay 1000, whatever the commit order");
+  const dist = await query<{ reward_points: number; n: string }>(
+    "SELECT reward_points, count(*)::text AS n FROM referrals WHERE referrer_user_id = $1 GROUP BY 1 ORDER BY 1",
+    [inviter.id],
+  );
+  assert.deepEqual(dist.map((r) => [r.reward_points, Number(r.n)]), [[1000, 5], [2000, 25]]);
+  await assertLedger(inviter.id, "boundary inviter");
 });
 
 /* ───────────────────────────── single base ───────────────────────────── */

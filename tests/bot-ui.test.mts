@@ -556,7 +556,7 @@ test("bonuses message (uz): summary, short explanation, ONE button per task in o
 
 test("bonuses message: before the first invite / payment bonus off; no public URLs; empty channel list", async () => {
   const f = allScreens("uz").bonusFresh;
-  assert.equal(brief(kbRows(f)[1]![0]!), "👥 Do‘st taklif qilish · +2 000 so‘m har biri | https://t.me/share/url | primary");
+  assert.equal(brief(kbRows(f)[1]![0]!), "👥 Do‘st taklif qilish · +2 000 so‘m | https://t.me/share/url | primary");
   // C-Q4: percent 0 → no payment bonus task (the last task row is the last channel).
   assert.equal(brief(kbRows(f).at(-2)![0]!), "📢 Taklif havolali kanal · +1 000 so‘m | https://t.me/+AbCdEf123456 | ");
 
@@ -591,7 +591,7 @@ test("bonuses message (ru/en): labels, units, styles; every label ≤ 44 chars a
     ["💳 +10% bonus on every top-up | app:https://slaydx.test/uz/wallet | "],
     ["🔄 Refresh | b:r | ", "⬅️ Wallet | w:h | "],
   ]);
-  assert.equal(brief(kbRows(allScreens("en").bonusFresh)[1]![0]!), "👥 Invite a friend · +2 000 UZS each | https://t.me/share/url | primary");
+  assert.equal(brief(kbRows(allScreens("en").bonusFresh)[1]![0]!), "👥 Invite a friend · +2 000 UZS | https://t.me/share/url | primary");
   const long = bonus.bonusScreen(
     "uz",
     { ...bonusTasks(), channels: bonusTasks().channels.map((c) => ({ ...c, title: `${c.title} — juda uzun kanal nomi, ataylab cho‘zilgan` })) },
@@ -622,7 +622,7 @@ test("bonuses message with premium emoji: icon ids on the task buttons, no dupli
     const fresh = bonus.bonusScreen("uz", { ...bonusTasks(), referral: { ...bonusTasks().referral, invitedCount: 0 } }, BONUS_NOW);
     const invite = kbRows(fresh)[1]![0]!;
     assert.equal(invite.icon_custom_emoji_id, undefined);
-    assert.equal(invite.text, "👥 Do‘st taklif qilish · +2 000 so‘m har biri");
+    assert.equal(invite.text, "👥 Do‘st taklif qilish · +2 000 so‘m");
     const topup = kbRows(s)[7]![0]!;
     assert.equal(topup.icon_custom_emoji_id, EMOJI_IDS.card.id);
     assert.equal(topup.text, "Har to‘ldirishga +10% bonus");
@@ -698,8 +698,8 @@ test("/start welcome: a blank line between greeting · pitch · balance quote ·
     assert.match(sections[2]!, /^<blockquote>💰 [\s\S]*<\/blockquote>$/);
     assert.match(sections[3]!, /^📱 [\s\S]*\n🌐 /);
   }
-  assert.match(allScreens("uz").welcome.text, /🎁 Do‘st taklif qiling — har biriga <b>2 000 so‘m<\/b>/);
-  assert.match(allScreens("ru").welcome.text, /<b>2 000 сум<\/b> за каждого/);
+  assert.match(allScreens("uz").welcome.text, /🎁 Do‘st taklif qiling — har biriga <b>2 000 so‘m<\/b> gacha/);
+  assert.match(allScreens("ru").welcome.text, /до <b>2 000 сум<\/b> за каждого/);
   // Without an account (a group): greeting · pitch · app/site.
   const anon = scr.welcomeScreen("uz", { user: null, loginLink: "https://slaydx.test/api/auth/telegram/enter?t=" + "x".repeat(43), rewardPoints: 2000 });
   assert.equal(anon.text.split("\n\n").length, 3);
@@ -712,7 +712,7 @@ test("units (B2-Q3): bonus amounts are so‘m / сум / UZS everywhere in the b
       assert.doesNotMatch(all, /\bball\b|балл|\bpoints?\b/i, `${lang}/${name}`);
     }
   }
-  assert.match(allScreens("uz").referral.text, /Har bir yangi do'st uchun 2 000 so'm bonus\./);
+  assert.match(allScreens("uz").referral.text, /Do'st uchun bonus: 1–25-do'st — 2\s000 so'm, 26–50-do'st — 1\s000 so'm, 51-dan boshlab — 500 so'm\. Keyingi do'stingiz uchun: 2\s000 so'm\./);
   assert.match(allScreens("uz").referral.text, /Taklif qilinganlar: <b>3<\/b> · Topilgan bonus: <b>6 000 so'm<\/b>/);
   assert.match(allScreens("en").referral.text, /Bonus earned: <b>6 000 UZS<\/b>/);
   assert.match(allScreens("ru").profile.text, /бонус 2 000 сум/);

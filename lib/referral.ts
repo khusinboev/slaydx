@@ -2,7 +2,7 @@
  * Referral program — shared, pure rules (server AND client; no `server-only`).
  *
  * Owner decisions (docs/todo-2026-10-07/PLAN.md D1–D3): the inviter earns
- * `REFERRAL_REWARD_POINTS` bonus points the moment the invited person's
+ * bonus points (tiers: `REFERRAL_TIERS`) the moment the invited person's
  * account is CREATED through the link (a brand-new account only, once per
  * Telegram account); the invited person gets nothing extra; no cap.
  *
@@ -14,8 +14,25 @@
  *   - web link        `<app>/uz?ref=<code>`                  (short cookie until the first login)
  */
 
-/** Points credited to the inviter per brand-new invited account (D1). */
-export const REFERRAL_REWARD_POINTS = 2000;
+/**
+ * Reward per brand-new invited account, by the inviter's friend NUMBER (owner 2026-10-19): friends 1–25 earn 2 000,
+ * friends 26–50 earn 1 000, from the 51st on 500. The number is the count of that inviter's referral rows + 1, read under the
+ * inviter's row lock (`referrals.ts applyCore`), so concurrent sign-ups get distinct numbers. There is no cap.
+ */
+export const REFERRAL_TIERS = [
+  { upTo: 25, points: 2000 },
+  { upTo: 50, points: 1000 },
+  { upTo: Number.POSITIVE_INFINITY, points: 500 },
+] as const;
+
+/** Points for the inviter's `rank`-th friend (1-based); a non-positive / non-finite rank counts as the first. */
+export function referralRewardFor(rank: number): number {
+  const n = Number.isFinite(rank) && rank >= 1 ? Math.floor(rank) : 1;
+  return REFERRAL_TIERS.find((t) => n <= t.upTo)!.points;
+}
+
+/** The first tier — generic copy for people who have not invited anyone yet (welcome message). */
+export const REFERRAL_REWARD_POINTS: number = REFERRAL_TIERS[0].points;
 
 /** Unambiguous lower-case alphabet: no 0, 1, i, l, o. 31 symbols. */
 export const REF_CODE_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
@@ -80,9 +97,15 @@ export function formatJoinDate(iso: string): string {
   return `${pad(d.getUTCDate())}.${pad(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`;
 }
 
-/** The program rule shown on the profile and in the bot. */
+/** The tier table as one phrase: «1–25-do'st — 2 000, 26–50-do'st — 1 000, 51-dan boshlab — 500». */
+export function referralTiersText(): string {
+  const [a, b, c] = REFERRAL_TIERS;
+  return `1–${a.upTo}-do'st — ${formatPoints(a.points)}, ${a.upTo + 1}–${b.upTo}-do'st — ${formatPoints(b.points)}, ${b.upTo + 1}-dan boshlab — ${formatPoints(c.points)}`;
+}
+
+/** The program rule shown on the profile and in the bot (`points` = what the NEXT friend earns). */
 export function referralRuleText(points = REFERRAL_REWARD_POINTS): string {
-  return `Har bir yangi do'st uchun ${formatPoints(points)} ball. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi.`;
+  return `Yangi do'st uchun ball: ${referralTiersText()}. Keyingi do'stingiz uchun: ${formatPoints(points)} ball. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi.`;
 }
 
 /** Text that accompanies a shared link (Telegram share sheet / Web Share). */

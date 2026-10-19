@@ -62,9 +62,9 @@ const T = {
   },
   "welcome.balance": { uz: "Balans: <b>{n}</b>", ru: "Баланс: <b>{n}</b>", en: "Balance: <b>{n}</b>" },
   "welcome.invite": {
-    uz: "Do‘st taklif qiling — har biriga <b>{n}</b>",
-    ru: "Приглашайте друзей — <b>{n}</b> за каждого",
-    en: "Invite friends — <b>{n}</b> for each",
+    uz: "Do‘st taklif qiling — har biriga <b>{n}</b> gacha",
+    ru: "Приглашайте друзей — до <b>{n}</b> за каждого",
+    en: "Invite friends — up to <b>{n}</b> for each",
   },
   "welcome.app": {
     uz: "<b>Ilovani ochish</b> — SlaydX shu yerning o‘zida, Telegram ichida ochiladi va siz avtomatik kirasiz.",
@@ -165,9 +165,9 @@ const T = {
   /* ── Referral ── */
   "ref.title": { uz: "Do'stlarni taklif qiling", ru: "Приглашайте друзей", en: "Invite your friends" },
   "ref.rule": {
-    uz: "Har bir yangi do'st uchun {n} so'm bonus. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi.",
-    ru: "{n} сум бонуса за каждого нового друга. Начисляется, когда друг впервые войдёт в приложение.",
-    en: "A {n} UZS bonus for every new friend. Counted when your friend opens the app for the first time.",
+    uz: "Do'st uchun bonus: 1–{u1}-do'st — {a} so'm, {u1p}–{u2}-do'st — {b} so'm, {u2p}-dan boshlab — {c} so'm. Keyingi do'stingiz uchun: {n} so'm. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi.",
+    ru: "Бонус за друга: 1–{u1}-й — {a} сум, {u1p}–{u2}-й — {b} сум, с {u2p}-го — {c} сум. За следующего друга: {n} сум. Начисляется, когда друг впервые войдёт в приложение.",
+    en: "Bonus per friend: friends 1–{u1} — {a} UZS, {u1p}–{u2} — {b} UZS, from {u2p} on — {c} UZS. Your next friend earns {n} UZS. Counted when your friend opens the app for the first time.",
   },
   "ref.link": { uz: "Sizning havolangiz:", ru: "Ваша ссылка:", en: "Your link:" },
   "ref.counts": {
@@ -356,7 +356,7 @@ const T = {
     en: "Joined a channel but no bonus yet? Tap «Refresh».",
   },
   "task.signup": { uz: "Ro‘yxatdan o‘tish", ru: "Регистрация", en: "Sign-up" },
-  "task.invite": { uz: "Do‘st taklif qilish · +{n} har biri", ru: "Пригласить друга · +{n} за каждого", en: "Invite a friend · +{n} each" },
+  "task.invite": { uz: "Do‘st taklif qilish · +{n}", ru: "Пригласить друга · +{n}", en: "Invite a friend · +{n}" },
   "task.invited": { uz: "{a} do‘st taklif qildingiz · +{n}", ru: "Приглашено друзей: {a} · +{n}", en: "Friends invited: {a} · +{n}" },
   "task.stayWait": { uz: "⏳ {d} kun: {n} kun", ru: "⏳ {d} дн.: {n} дн.", en: "⏳ {d}d: {n}d" },
   /** C-Q4 payment bonus (`payment-bonus.ts`): every paid top-up earns +{p}%. */
