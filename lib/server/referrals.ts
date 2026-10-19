@@ -159,7 +159,7 @@ async function applyCore(client: PoolClient, refereeId: string, code: string, so
    * inviter is never itself being created in a transaction — its code is
    * generated lazily on a committed row (`ensureRefCode`). Every other path
    * (charges, sign-ins, admin) locks a single user row. The `is_blocked` flag
-   * and the 24 h burst count are re-read under this lock.
+   * and the friend number (count of this inviter's referral rows) are re-read under this lock.
    */
   const locked = await client.query<{ is_blocked: boolean }>("SELECT is_blocked FROM users WHERE id = $1 FOR UPDATE", [referrer.id]);
   if (!locked.rows[0]) return { applied: false, reason: "unknown" };

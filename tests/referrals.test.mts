@@ -19,7 +19,7 @@ import { randomInt } from "node:crypto";
  *   1+2 together (double reward on the conflict path)                     → «existing account … nothing» (money);
  *   3. self check removed                                                  → «self-referral»;
  *   4. blocked check removed (points always 2000)                          → «blocked inviter»;
- *   5. REFERRAL_REWARD_POINTS 2000 → 200 / reward to the referee            → «new account via /start ref_»;
+ *   5. first tier 2000 → 200 / reward to the referee                       → «new account via /start ref_»;
  *   6. ledger reference random instead of `referral:<referee id>`          → «second apply in the same transaction»;
  *   7. `ON CONFLICT DO NOTHING` dropped from the referrals insert           → «second apply …» (reason error, not duplicate);
  *   8. (2026-10-19) tiers: friend number off by one / count taken outside the inviter lock / tiers swapped → «tiered rewards», «concurrency tiers»;

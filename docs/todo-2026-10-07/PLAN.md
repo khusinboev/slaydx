@@ -31,3 +31,6 @@
 | T3 referral | `lib/server/migrations/037_referrals.sql`, new `lib/server/referrals.ts`, `lib/server/auth.ts` (registration hook), `lib/server/telegram.ts` (`/start ref_…`), `app/api/referral/*`, `app/api/auth/telegram/*` (referral cookie hand-off only), profile UI (`components/profile/*`, profile page), admin user-detail read-only fields (find the minimal admin files; admin rules in docs/admin/AGENT-BRIEF.md), tests | opus |
 | T4 save/share formats | `components/files/{ResultActions,DownloadSheet,ShareButton,SaveToBotButton}.tsx`, `lib/downloads/deliver.ts` (only if needed), tests | opus |
 | Reviews | T3: security+money (fable); T1/T2/T4: correctness/UX (opus) | |
+
+
+> **Superseded 2026-10-19 (owner):** the reward is tiered by the inviter's friend number (1–25 → 2 000, 26–50 → 1 000, 51+ → 500 ball) and the 24 h burst admin signal was removed. See `lib/referral.ts REFERRAL_TIERS`. Blocked-inviter rows (paid 0) still count toward the friend number.
