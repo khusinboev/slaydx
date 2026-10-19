@@ -11,13 +11,14 @@ import {
   REF_CODE_LENGTH,
   REFERRAL_REWARD_POINTS,
   normalizeRefCode,
+  referralRewardFor,
   refCodeFromStartPayload,
   referralBotLink,
   referralWebLink,
 } from "../referral";
 
 /**
- * Referral program — the money side (docs/todo-2026-10-07/PLAN.md T3, D1–D3).
+ * Referral program — the money side (docs/todo-2026-10-07/PLAN.md T3, D1–D3; tiers 2026-10-19).
  *
  * The one rule everything here protects: the inviter is rewarded ONLY in the
  * transaction that CREATES the invited account (`auth.ts upsertUser`, the
@@ -33,12 +34,6 @@ import {
  */
 
 export { REFERRAL_REWARD_POINTS };
-
-/** More referrals than this by one inviter within 24 h raise the admin signal (D3). */
-export const REFERRAL_BURST_THRESHOLD = 25;
-
-/** `error_log.scope` of the burst signal (admin errors page, watchdog «new error type»). */
-export const REFERRAL_BURST_SCOPE = "referral_burst";
 
 /** Web-link capture cookie (`/uz?ref=…`) — read only by the Telegram sign-in routes. */
 export const REF_COOKIE = "sx_ref";
@@ -185,7 +180,11 @@ async function applyCore(client: PoolClient, refereeId: string, code: string, so
     return { applied: false, reason: "not_new", referrerId: referrer.id };
   }
 
-  const points = referrer.isBlocked ? 0 : REFERRAL_REWARD_POINTS;
+  // Friend number = existing rows + 1, counted under the inviter's row lock (above), so concurrent sign-ups never share a number.
+  const existing = Number(
+    (await client.query<{ n: string }>("SELECT count(*)::text AS n FROM referrals WHERE referrer_user_id = $1", [referrer.id])).rows[0]!.n,
+  );
+  const points = referrer.isBlocked ? 0 : referralRewardFor(existing + 1);
   const ref = points > 0 ? referralRewardRef(refereeId) : null;
   const inserted = await client.query(
     `INSERT INTO referrals (referee_user_id, referee_telegram_id, referrer_user_id, source, reward_points, reward_ref)
@@ -196,7 +195,6 @@ async function applyCore(client: PoolClient, refereeId: string, code: string, so
   );
   if (!inserted.rowCount) return { applied: false, reason: "duplicate", referrerId: referrer.id };
 
-  await flagBurstInTx(client, referrer.id);
   if (referrer.isBlocked) return { applied: false, reason: "blocked", referrerId: referrer.id };
 
   const credited = await topUpInTx(client, referrer.id, { points }, ref!, "bonus", rewardNote(referee.name));
@@ -211,38 +209,6 @@ async function applyCore(client: PoolClient, refereeId: string, code: string, so
   // Inside the sign-up transaction: it commits (or rolls back) together with the new account.
   log("info", "[referral] do'st taklifi mukofoti tranzaksiyaga qo'shildi", { userId: referrer.id, refereeId, source, points });
   return { applied: true, referrerId: referrer.id, points };
-}
-
-/**
- * D3 burst signal: more than `REFERRAL_BURST_THRESHOLD` referrals by one
- * inviter in 24 h → ONE `error_log` row per inviter per (Tashkent) day, level
- * `error` so the watchdog's «new error type» alert fires once. Nothing is
- * blocked: the owner decided on no cap, only a signal.
- */
-async function flagBurstInTx(client: PoolClient, referrerId: string): Promise<void> {
-  const n = Number(
-    (
-      await client.query<{ n: string }>(
-        "SELECT count(*)::text AS n FROM referrals WHERE referrer_user_id = $1 AND created_at > now() - interval '24 hours'",
-        [referrerId],
-      )
-    ).rows[0]!.n,
-  );
-  if (n <= REFERRAL_BURST_THRESHOLD) return;
-  // The fingerprint names the inviter and the day: a resolved row still blocks a second one that day.
-  await client.query(
-    `INSERT INTO error_log (fingerprint, level, scope, message, user_id)
-     SELECT f.fp, 'error', $3, $4, $1
-       FROM (SELECT $2::text || ':' || to_char(now() AT TIME ZONE 'Asia/Tashkent', 'YYYY-MM-DD') AS fp) f
-      WHERE NOT EXISTS (SELECT 1 FROM error_log e WHERE e.fingerprint = f.fp)
-     ON CONFLICT (fingerprint) WHERE resolved_at IS NULL DO NOTHING`,
-    [
-      referrerId,
-      `${REFERRAL_BURST_SCOPE}:${referrerId}`,
-      REFERRAL_BURST_SCOPE,
-      `Taklif portlashi: #${referrerId} 24 soatda ${n} ta yangi do'st olib keldi (chegara ${REFERRAL_BURST_THRESHOLD}). Soxta akkauntlarni tekshiring.`,
-    ],
-  );
 }
 
 /** A code from a Telegram `/start` / `startapp` payload or from the web cookie, as a claim. */
@@ -321,7 +287,8 @@ export async function referralSummary(
     code,
     botLink: referralBotLink(links.botUsername, code),
     webLink: referralWebLink(links.appUrl, code),
-    rewardPoints: REFERRAL_REWARD_POINTS,
+    // What the NEXT friend earns (tiered); the generic first-tier value is `REFERRAL_REWARD_POINTS`.
+    rewardPoints: referralRewardFor(Number(totals.n) + 1),
     invitedCount: Number(totals.n),
     earnedPoints: Number(totals.pts),
     recent: recent.map((r) => ({

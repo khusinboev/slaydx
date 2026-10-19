@@ -74,7 +74,7 @@ test("ReferralCard: loading → link, rule, counters and recent names; Sayt swit
   assert.ok(screen.getByRole("heading", { name: "Do'stlarni taklif qiling" }));
   assert.match(
     document.querySelector("[data-referral-rule]")!.textContent!,
-    /^Har bir yangi do'st uchun 2\s000 ball\. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi\.$/,
+    /^Yangi do'st uchun ball: 1–25-do'st — 2\s000, 26–50-do'st — 1\s000, 51-dan boshlab — 500\. Keyingi do'stingiz uchun: 2\s000 ball\. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi\.$/,
   );
   assert.equal(linkField().value, DATA.botLink);
   assert.equal(document.querySelector("[data-referral-invited]")!.textContent, "3");

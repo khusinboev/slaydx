@@ -1,5 +1,5 @@
 import { env } from "../env";
-import { formatJoinDate, formatPoints, telegramShareUrl } from "../../referral";
+import { REFERRAL_TIERS, formatJoinDate, formatPoints, telegramShareUrl } from "../../referral";
 import { TOOL_BY_ID } from "../../tools";
 import { BOT_LANGUAGES } from "../../profile/fields";
 import { FILES_PAGE_SIZE, cb, type Origin } from "./codes";
@@ -261,7 +261,18 @@ export function referralScreen(lang: Lang, r: ReferralInput, back: "wallet" | nu
   const text = [
     `${tgEmoji("gift")} <b>${t(lang, "ref.title")}</b>`,
     "",
-    esc(t(lang, "ref.rule", { n: formatPoints(r.rewardPoints) })),
+    esc(
+      t(lang, "ref.rule", {
+        n: formatPoints(r.rewardPoints),
+        a: formatPoints(REFERRAL_TIERS[0].points),
+        b: formatPoints(REFERRAL_TIERS[1].points),
+        c: formatPoints(REFERRAL_TIERS[2].points),
+        u1: REFERRAL_TIERS[0].upTo,
+        u1p: REFERRAL_TIERS[0].upTo + 1,
+        u2: REFERRAL_TIERS[1].upTo,
+        u2p: REFERRAL_TIERS[1].upTo + 1,
+      }),
+    ),
     "",
     t(lang, "ref.link"),
     esc(r.link),
