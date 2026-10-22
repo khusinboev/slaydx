@@ -63,7 +63,7 @@ function SampleRow({ s }: { s: ReconciliationSample }) {
             yetkazildi {fmtNumber(s.delivered.got)} / {fmtNumber(s.delivered.want)}
           </span>
         ) : null}
-        <span className="ml-auto tabular-nums">{fmtNumber(charged)} tanga yechilgan</span>
+        <span className="ml-auto tabular-nums">{fmtNumber(charged)} so&apos;m yechilgan</span>
         <span className="text-muted-foreground tabular-nums">{fmtDateTime(s.finishedAt)}</span>
       </li>
     );

@@ -79,7 +79,7 @@ test("shared: confirmText uses typeable spaces, parseWholeNumber tolerates separ
   assert.equal(parseWholeNumber("-3"), null);
   assert.equal(parseWholeNumber(""), null);
   assert.equal(refundText(null), "pul qaytarilmadi");
-  assert.equal(refundText({ points: 200, quota: 0, balance: 800 }), `qaytarildi: 200 bonus ball, 800 balans`);
+  assert.equal(refundText({ points: 200, quota: 0, balance: 800 }), `qaytarildi: 200 bonus so'm, 800 balans`);
 });
 
 /* ───────────────────────────── WalletAdjustDialog ───────────────────────────── */

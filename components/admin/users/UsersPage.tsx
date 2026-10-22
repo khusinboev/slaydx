@@ -98,7 +98,7 @@ export function UsersPage() {
       className: "whitespace-nowrap",
       cell: (u) => (u.phoneMasked ? <span className="font-mono text-[12.5px]">{u.phoneMasked}</span> : "—"),
     },
-    { id: "points", header: "Ball", align: "right", className: "tabular-nums", cell: (u) => fmtNumber(u.points) },
+    { id: "points", header: "Bonus so'm", align: "right", className: "tabular-nums", cell: (u) => fmtNumber(u.points) },
     ...(anyQuota
       ? [{ id: "quota", header: "Kvota (eski)", align: "right", className: "tabular-nums", cell: (u) => fmtNumber(u.quota) } satisfies Column<AdminUserRow>]
       : []),

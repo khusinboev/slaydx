@@ -246,7 +246,7 @@ const CATALOG: Catalog = {
     group: FIN_GROUP,
     label: "To'lov bonusi (%)",
     description:
-      "Har bir to'langan to'ldirishga shu foiz bonus ball qo'shiladi (har qanday summa, shiftsiz). 0 — bonus o'chirilgan. Yangi qiymat faqat keyingi to'lovlarga qo'llanadi.",
+      "Har bir to'langan to'ldirishga shu foiz bonus so'm qo'shiladi (har qanday summa, shiftsiz). 0 — bonus o'chirilgan. Yangi qiymat faqat keyingi to'lovlarga qo'llanadi.",
     type: "int",
     min: PAYMENT_BONUS_MIN,
     max: PAYMENT_BONUS_MAX,
@@ -269,7 +269,7 @@ const CATALOG: Catalog = {
     group: PRICING_GROUP,
     label: "To'lov komissiyasi (%)",
     description:
-      "To'lov tizimi (Click va h.k.) har bir tushumdan oladigan foiz, qadam 0,1. «Narxlar» sahifasidagi marja hisobida tushumning FAQAT naqd pul bilan to'langan qismidan shuncha foiz ayriladi (ball to'lov tizimidan o'tmaydi). 0 — hisobga olinmaydi.",
+      "To'lov tizimi (Click va h.k.) har bir tushumdan oladigan foiz, qadam 0,1. «Narxlar» sahifasidagi marja hisobida tushumning FAQAT naqd pul bilan to'langan qismidan shuncha foiz ayriladi (bonus so'm to'lov tizimidan o'tmaydi). 0 — hisobga olinmaydi.",
     type: "number",
     min: 0,
     max: 10,

@@ -172,7 +172,7 @@ function intIn(raw: unknown, min: number, max: number, message: string): number 
   return raw;
 }
 
-const amountMessage = (label: string) => `${label}: 0 dan 20 000 gacha butun son bo'lishi kerak (bitta kanal uchun eng ko'pi 20 000 ball)`;
+const amountMessage = (label: string) => `${label}: 0 dan 20 000 gacha butun son bo'lishi kerak (bitta kanal uchun eng ko'pi 20 000 bonus so'm)`;
 
 export function parseAmount(raw: unknown, label: string): number {
   return intIn(raw, 0, MAX_BONUS, amountMessage(label));

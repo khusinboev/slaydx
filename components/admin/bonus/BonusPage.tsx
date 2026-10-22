@@ -78,7 +78,7 @@ export function BonusPage() {
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="text-[22px] font-semibold tracking-tight">Bonus kanallar</h1>
           <p className="text-muted-foreground text-[13px]">
-            Foydalanuvchi kanalga obuna bo&apos;lib ball oladi: obuna uchun darhol, kanalda qolsa — belgilangan kundan keyin yana.
+            Foydalanuvchi kanalga obuna bo&apos;lib bonus so&apos;m oladi: obuna uchun darhol, kanalda qolsa — belgilangan kundan keyin yana.
             {canEdit ? "" : " Sizda faqat ko'rish huquqi bor."}
           </p>
         </div>
@@ -105,7 +105,7 @@ export function BonusPage() {
             description={
               <>
                 Avval botni kanalga admin qilib qo&apos;shing, so&apos;ng kanalning @username yoki t.me havolasini kiriting. Birinchi kanal
-                odatda yangiliklar kanali bo&apos;ladi: 2 000 ball, qo&apos;shimcha yo&apos;q.
+                odatda yangiliklar kanali bo&apos;ladi: 2 000 bonus so&apos;m, qo&apos;shimcha yo&apos;q.
               </>
             }
             action={addButton}
@@ -119,7 +119,7 @@ export function BonusPage() {
             description="Botda tartib raqami bo'yicha ko'rsatiladi (kichigi yuqorida)."
             aside={
               <span className="text-muted-foreground tabular-nums">
-                Faol: {active} / {items.length} · To&apos;langan: {fmtNumber(paid)} ball
+                Faol: {active} / {items.length} · To&apos;langan: {fmtNumber(paid)} bonus so&apos;m
               </span>
             }
           />

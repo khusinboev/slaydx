@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { ToolRow } from "@/lib/admin-api/metrics";
-import { fmtDuration, fmtNumber, fmtPercent, fmtTanga, fmtUsd } from "@/lib/admin-format";
+import { fmtDuration, fmtNumber, fmtPercent, fmtSoum, fmtUsd } from "@/lib/admin-format";
 import { cn } from "@/lib/cn";
 import { DataTable, type Column } from "@/components/admin/ui";
 
@@ -39,7 +39,7 @@ export function ToolsTable({ items, loading, empty }: { items: ReadonlyArray<Too
         </span>
       ),
     },
-    { id: "cash", header: "Naqd sarf", align: "right", className: "tabular-nums whitespace-nowrap", cell: (r) => fmtTanga(r.cashSpend) },
+    { id: "cash", header: "Naqd sarf", align: "right", className: "tabular-nums whitespace-nowrap", cell: (r) => fmtSoum(r.cashSpend) },
     { id: "ai", header: "AI xarajat", align: "right", className: "tabular-nums", cell: (r) => fmtUsd(r.aiCostUsd) },
     {
       id: "aiPerJob",

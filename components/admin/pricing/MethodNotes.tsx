@@ -34,13 +34,13 @@ export function MethodNotes({
   soumPerCoin: number;
 }) {
   const terms: Array<[string, ReactNode]> = [
-    ["Narx", `Amaldagi narx = asosiy (kod formulasi) × tuzatish %, yaxlitlangan. Tangada; 1 tanga = ${fmtNumber(soumPerCoin)} so'm.`],
+    ["Narx", `Amaldagi narx = asosiy (kod formulasi) × tuzatish %, yaxlitlangan, so'mda (marja hisobida × ${fmtNumber(soumPerCoin)}).`],
     ["Tannarx", "Tayyor ishning o'rtacha AI xarajati + xato va tashlab ketilgan ishlar xarajatining ulushi."],
-    ["Marja", `(Narx − tannarx − to'lov komissiyasi ${pctText(paymentFeePercent)}) ÷ narx. Ball bilan to'langan ishlar ham kiradi; komissiya faqat naqd qismdan.`],
-    ["Naqd marja", "Faqat naqd pul tushumi bo'yicha: ball tushum hisoblanmaydi."],
+    ["Marja", `(Narx − tannarx − to'lov komissiyasi ${pctText(paymentFeePercent)}) ÷ narx. Bonus so'm bilan to'langan ishlar ham kiradi; komissiya faqat naqd qismdan.`],
+    ["Naqd marja", "Faqat naqd pul tushumi bo'yicha: bonus so'm tushum hisoblanmaydi."],
     ["Ustama", `Narx (komissiyadan keyin) ÷ tannarx. Maqsad: ${markupText(targetMarkup)}.`],
     ["Tavsiya", "Ustamani maqsadga yetkazadigan narx o'zgarishi (5% qadam). 20 tadan kam tayyor ish — «kam ishonch»; narx davr ichida o'zgargan bo'lsa, bir bosishda qo'llanmaydi."],
-    ["Bonus xarajati", "Ball bilan to'langan ishlarning AI xarajati."],
+    ["Bonus xarajati", "Bonus so'm bilan to'langan ishlarning AI xarajati."],
     ["Adminlar", "Adminlarning sinov ishlari standart bo'yicha hisobga olinmaydi; «Adminlar bilan» qo'shadi."],
   ];
   return (

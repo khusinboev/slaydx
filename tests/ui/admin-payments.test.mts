@@ -458,7 +458,7 @@ test("FinancePage summary: range from the URL, KPI tiles, tab switch writes the 
   assert.ok((await screen.findAllByText("135 000 so'm")).length >= 1);
   assert.equal(calls[0]!.params.get("from"), "2026-09-10");
   assert.equal(calls[0]!.params.get("to"), "2026-09-11");
-  assert.ok(screen.getByText("112 507 tanga"), "liabilities: balance");
+  assert.ok(screen.getByText("112 507 so'm"), "liabilities: balance");
   assert.ok(screen.getByText("74,1% · 1 ta"), "Click share of revenue");
   assert.ok(screen.getByText("14,8% · 1 ta"), "Paynet share of revenue (tile)");
   assert.ok(screen.getByText("11,1% · 1 ta"), "Payme share of revenue (tile)");
@@ -556,9 +556,10 @@ test("LedgerTable: reference rendered as a link only when it resolved; embedded 
 test("FinancePage summary: legacy Pro revenue and quota liability show with «(eski)» only while non-zero", async () => {
   stubFetch({ "GET /api/admin/finance/summary": () => json(200, SUMMARY) });
   mount(h(FinancePage), "/admin/finance?from=2026-09-10&to=2026-09-11");
-  await screen.findByText("112 507 tanga");
+  await screen.findByText("112 507 so'm");
   assert.ok(screen.getByText("Majburiyat: kvota (eski)"), "15 000 legacy quota is still owed");
-  assert.ok(screen.getByText("15 000 tanga"));
+  // The quota liability and the Pro revenue are both 15 000 and, with one unit for everything, read the same.
+  assert.equal(screen.getAllByText("15 000 so'm").length, 2);
   const breakdown = screen.getByRole("region", { name: "Tushum taqsimoti" });
   assert.ok(within(breakdown).getByText("Pro obuna (eski)"), "a legacy Pro order in range");
   assert.ok(!screen.queryByText(/Pro kvota/));
@@ -573,7 +574,7 @@ test("FinancePage summary: legacy Pro revenue and quota liability show with «(e
   };
   stubFetch({ "GET /api/admin/finance/summary": () => json(200, none) });
   mount(h(FinancePage), "/admin/finance?from=2026-09-10&to=2026-09-11");
-  await screen.findByText("112 507 tanga");
+  await screen.findByText("112 507 so'm");
   assert.ok(!screen.queryByText(/kvota/i), "MUTATSIYA: no quota tile or hint once everything is 0");
   const b2 = screen.getByRole("region", { name: "Tushum taqsimoti" });
   assert.ok(within(b2).getByText("Balansni to'ldirish"));

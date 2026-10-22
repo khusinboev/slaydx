@@ -101,9 +101,9 @@ test("UserDetail: «Kim taklif qilgan» links the inviter (source, date, reward)
   const link = screen.getByRole("link", { name: "Vali Taklifchi" });
   assert.equal(link.getAttribute("href"), "/admin/users/7");
   const by = document.querySelector("[data-referred-by]")!.textContent!;
-  assert.match(by, /\(bot, .+, \+2\s000 ball\)/);
+  assert.match(by, /\(bot, .+, \+2\s000 bonus so'm\)/);
   assert.ok(screen.getByText("Taklif qilganlar soni"));
-  assert.match(document.querySelector("[data-invited-count]")!.textContent!, /^3 \(6\s000 ball\)$/);
+  assert.match(document.querySelector("[data-invited-count]")!.textContent!, /^3 \(6\s000 bonus so'm\)$/);
 });
 
 test("UserDetail: no inviter → empty row; blocked inviter (0 points) → «mukofotsiz»; deleted inviter → no link", async () => {
@@ -112,7 +112,7 @@ test("UserDetail: no inviter → empty row; blocked inviter (0 points) → «muk
   await screen.findByRole("heading", { name: /Ali Valiyev/ });
   assert.ok(screen.getByText("Kim taklif qilgan"));
   assert.ok(!document.querySelector("[data-referred-by]"));
-  assert.match(document.querySelector("[data-invited-count]")!.textContent!, /^0 \(0 ball\)$/);
+  assert.match(document.querySelector("[data-invited-count]")!.textContent!, /^0 \(0 bonus so'm\)$/);
   cleanup();
 
   serve({

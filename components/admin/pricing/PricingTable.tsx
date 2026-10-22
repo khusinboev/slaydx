@@ -91,7 +91,7 @@ function ToolCard({ item, targetMarkup, recContext, canEdit, onApply }: { item: 
         <span className="min-w-0">
           <b className="block text-[14px]">{item.title}</b>
           <span className="text-muted-foreground text-xs tabular-nums">
-            {ladderRange(item.ladder, "effective")} tanga
+            {ladderRange(item.ladder, "effective")} so&apos;m
             {isDefaultAdjust(item.adjust) ? "" : ` · ${percentLabel(item.adjust.percent)}`}
           </span>
         </span>
@@ -129,7 +129,7 @@ export function PricingTable({ items, days, sort, targetMarkup, recContext, canE
     },
     {
       id: "price",
-      header: "Narx, tanga",
+      header: "Narx, so'm",
       info: "Amaldagi narx pog'onalari (eng arzon – eng qimmat). Foiz — asosiy (kod formulasi) narxga tuzatish.",
       align: "right",
       className: "tabular-nums whitespace-nowrap",
@@ -157,7 +157,7 @@ export function PricingTable({ items, days, sort, targetMarkup, recContext, canE
     {
       id: "margin",
       header: "Marja · ustama",
-      info: "Marja: narx − tannarx − to'lov komissiyasi, narxdan foizda (ball bilan to'langan ishlar ham). Chiziq: ustama (narx ÷ tannarx) va maqsad belgisi.",
+      info: "Marja: narx − tannarx − to'lov komissiyasi, narxdan foizda (bonus so'm bilan to'langan ishlar ham). Chiziq: ustama (narx ÷ tannarx) va maqsad belgisi.",
       sortKey: "margin_asc",
       sortKeyReverse: "margin_desc",
       cell: (r) => (

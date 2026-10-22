@@ -12,7 +12,7 @@ import {
   Skeleton,
   type DateRange,
 } from "@/components/admin/ui";
-import { fmtDateTime, fmtIsoDate, fmtNumber, fmtPercent, fmtSoum, fmtTanga } from "@/lib/admin-format";
+import { fmtDateTime, fmtIsoDate, fmtNumber, fmtPercent, fmtSoum } from "@/lib/admin-format";
 import { getFinanceSummary, type FinanceSummary, type RevenueBucket } from "@/lib/admin-api/payments";
 import { PROVIDER_LABEL, PURPOSE_LABEL } from "@/components/admin/payments/labels";
 import { useResource } from "@/components/admin/payments/list-state";
@@ -98,25 +98,25 @@ export function FinanceSummaryView({
             <KpiTile
               loading={loading}
               label="Ishlarga sarflandi"
-              value={s ? fmtTanga(s.cashSpend.balance) : ""}
+              value={s ? fmtSoum(s.cashSpend.balance) : ""}
               hint={s ? `${legacyQuota(s.cashSpend.quota)}bonus ${fmtNumber(s.cashSpend.points)} · ${fmtNumber(s.cashSpend.charges)} ta ish` : null}
             />
             <KpiTile
               loading={loading}
               label="Ishlarga qaytarildi"
-              value={s ? fmtTanga(s.refunds.balance) : ""}
+              value={s ? fmtSoum(s.refunds.balance) : ""}
               hint={s ? `${legacyQuota(s.refunds.quota)}bonus ${fmtNumber(s.refunds.points)} · ${fmtNumber(s.refunds.count)} ta` : null}
             />
             <KpiTile
               loading={loading}
               label="Majburiyat: balans"
-              value={s ? fmtTanga(s.liabilities.balance) : ""}
+              value={s ? fmtSoum(s.liabilities.balance) : ""}
               hint={s ? `hozir · ${fmtNumber(s.liabilities.users)} ta foydalanuvchida` : null}
             />
             {s && s.liabilities.quota !== 0 ? (
-              <KpiTile loading={loading} label="Majburiyat: kvota (eski)" value={fmtTanga(s.liabilities.quota)} hint="hozir" />
+              <KpiTile loading={loading} label="Majburiyat: kvota (eski)" value={fmtSoum(s.liabilities.quota)} hint="hozir" />
             ) : null}
-            <KpiTile loading={loading} label="Majburiyat: bonus ball" value={s ? fmtNumber(s.liabilities.points) : ""} hint="hozir" />
+            <KpiTile loading={loading} label="Majburiyat: bonus so'm" value={s ? fmtNumber(s.liabilities.points) : ""} hint="hozir" />
             <KpiTile
               loading={loading}
               label="Tashqi qaytarishlar"

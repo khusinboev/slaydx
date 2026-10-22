@@ -13,7 +13,6 @@ import {
   fmtPercent,
   fmtRelative,
   fmtSoum,
-  fmtTanga,
   fmtUsd,
   isIsoDate,
   todayTashkent,
@@ -44,9 +43,9 @@ test("fmtNumber: -0 va +0 chiqmaydi, sign faqat musbatga", () => {
   assert.equal(fmtNumber(-12, { sign: true }), "-12");
 });
 
-test("fmtSoum / fmtTanga / fmtUsd / fmtPercent", () => {
+test("fmtSoum / fmtUsd / fmtPercent", () => {
   assert.equal(fmtSoum(1500000), `1${NB}500${NB}000${NB}so'm`);
-  assert.equal(fmtTanga(6000), `6${NB}000${NB}tanga`);
+  assert.equal(fmtSoum(6000), `6${NB}000${NB}so'm`);
   assert.equal(fmtSoum(null), "—");
   assert.equal(fmtUsd(0), "$0,00");
   assert.equal(fmtUsd(12.3), "$12,30");

@@ -106,7 +106,7 @@ export function ChannelRow({ item, bot, canEdit, toggling, onToggle, onEdit, onD
       </div>
 
       <div className="flex flex-col gap-1 text-[13px]">
-        <span className="text-muted-foreground text-xs">Bonus (ball)</span>
+        <span className="text-muted-foreground text-xs">Bonus (so&apos;m)</span>
         <span className="font-semibold tabular-nums" data-bonus>
           {bonusText(item)}
         </span>

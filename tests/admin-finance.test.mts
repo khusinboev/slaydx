@@ -565,7 +565,7 @@ test("ledger export: step-up, finance.export only; CSV header, links, formula es
   assert.match(String(r.headers.get("content-disposition")), /^attachment; filename="hisob-kitobi-\d{4}-\d{2}-\d{2}\.csv"$/);
   assert.equal(r.text.charCodeAt(0), 0xfeff);
   const lines = r.text.slice(1).split("\r\n").filter(Boolean);
-  assert.equal(lines[0], `"ID","Vaqt","Foydalanuvchi ID","Foydalanuvchi","Turi","Bonus ball","Kvota (eski)","Balans","Havola","Izoh","Bog'liq obyekt","Bog'liq obyekt ID"`);
+  assert.equal(lines[0], `"ID","Vaqt","Foydalanuvchi ID","Foydalanuvchi","Turi","Bonus so'm","Kvota (eski)","Balans","Havola","Izoh","Bog'liq obyekt","Bog'liq obyekt ID"`);
   assert.equal(lines.length, 3);
   const bonus = lines.find((l) => l.includes(`"bonus"`))!;
   assert.ok(bonus.includes(`"'=1+1"`), `formula escaped: ${bonus}`);

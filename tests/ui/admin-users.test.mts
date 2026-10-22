@@ -342,9 +342,9 @@ test("UserDetail: loading skeleton, then header, wallets, profile (masked) and s
   assert.ok(screen.getByText("+998 ** *** ** 67"));
   assert.ok(screen.getByText("TATU"), "profile fields shown (§6.0)");
   assert.ok(screen.getByText("Telefon yashirilgan"));
-  // Wallet tiles carry their unit (UX #6): wallets are tanga, real money is so'm.
-  assert.ok(screen.getByText(/^12\s000\stanga$/), "balance wallet tile");
-  assert.ok(screen.getByText(/^300\stanga$/), "points wallet tile");
+  // Wallet tiles carry their unit (UX #6): every wallet is counted in so'm.
+  assert.ok(screen.getByText(/^12\s000\sso'm$/), "balance wallet tile");
+  assert.ok(screen.getByText(/^300\sso'm$/), "points wallet tile");
   // Quota is 0 after the merge: no legacy quota tile, no plan badge or "Tarif" row.
   assert.ok(!screen.queryByText(/Kvota/), "MUTATSIYA: a zero legacy quota tile is hidden");
   assert.ok(!screen.queryByText("Tarif"));
@@ -602,7 +602,7 @@ test("UserDetail: a non-zero legacy quota shows as a «Kvota (eski)» tile", asy
   mount(h(UserDetail, { id: "42", tools: [] }), "/admin/users/42");
   await screen.findByRole("heading", { name: /Ali Valiyev/ });
   assert.ok(screen.getByText(/Kvota \(eski\)/));
-  assert.ok(screen.getByText(/^2\s500\stanga$/));
+  assert.ok(screen.getByText(/^2\s500\sso'm$/));
 });
 
 test("UserDetail Hisob: a quota_merge row renders with its label and both legs; the kind filter offers it", async () => {
