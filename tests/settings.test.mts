@@ -53,6 +53,7 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "admin.wallet_confirm_threshold",
     "finance.soum_per_usd",
     "payment_bonus_percent",
+    "bonus.rating_points",
     "pricing.target_markup",
     "pricing.payment_fee_percent",
     "queue.max_wait_sec",

@@ -2,6 +2,7 @@ import type { LedgerEntry, PaymentOrder } from "@/lib/api-client";
 import { formatPoints } from "@/lib/referral";
 import { TOOL_BY_ID } from "@/lib/tools";
 import { FIRST_TOPUP_NOTE_PREFIX } from "@/lib/topup-bonus";
+import { RATING_NOTE } from "@/lib/rating";
 import { PAYMENT_BONUS_NOTE_PREFIX } from "@/lib/payment-bonus";
 
 /** What a top-up buys (the copy `PurchasePage` has shown since AUDIT-12). */
@@ -83,6 +84,7 @@ export function describeEntry(e: Pick<LedgerEntry, "kind" | "note">): { title: s
       if (note.startsWith(PAYMENT_BONUS_NOTE_PREFIX)) return { title: note, detail: "" };
       // First top-up bonus of Bonus 2 (history rows; `lib/topup-bonus.ts`).
       if (note.startsWith(FIRST_TOPUP_NOTE_PREFIX)) return { title: FIRST_TOPUP_NOTE_PREFIX, detail: "" };
+      if (note === RATING_NOTE) return { title: "Ilovani baholash bonusi", detail: "" };
       // Channel bonus notes (lib/server/bonus-channels.ts JOIN_NOTE_PREFIX / STAY_NOTE_PREFIX).
       const join = /^Kanal obunasi:\s*(.+)$/.exec(note)?.[1];
       if (join) return { title: `Kanal obunasi bonusi · ${join}`, detail: "" };

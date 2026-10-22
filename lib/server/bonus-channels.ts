@@ -2,6 +2,7 @@ import "server-only";
 import { query, queryOne, transaction } from "./db";
 import { env } from "./env";
 import { topUpInTx } from "./credits";
+import { getRatingStatus } from "./ratings";
 import { log } from "./log";
 import { referralSummary } from "./referrals";
 import { botConfigured, botUsername, callBot } from "./telegram";
@@ -97,6 +98,8 @@ export type BonusTasks = {
    * points the user earned from payments so far (payment bonuses + the legacy first top-up bonus).
    */
   paymentBonus: { percent: number; earnedPoints: number };
+  /** «Ilovani baholash» (lib/server/ratings.ts): `done` once rated; `points` = the bonus paid (done) or on offer. */
+  rating: { done: boolean; points: number };
   /** Bonus earned so far: sign-up + channel tasks + invites + payment bonuses (the screen's summary). */
   earnedTotal: number;
   /**
@@ -171,6 +174,8 @@ export async function bonusTasks(
   );
   const signupPoints = Math.max(0, Number(signupRow?.p ?? 0));
   const paymentBonus = { percent: await getPaymentBonusPercent(), earnedPoints: await paymentBonusEarned(userId) };
+  const rs = await getRatingStatus(userId);
+  const rating = { done: rs.rated, points: rs.rewardPoints };
   const s = await referralSummary(userId, links ?? { botUsername: await botUsername(), appUrl: env.appUrl });
   const referral = { link: s.botLink ?? s.webLink, rewardPoints: s.rewardPoints, invitedCount: s.invitedCount, earnedPoints: s.earnedPoints };
   const channels: ChannelTask[] = rows.map((r) => ({
@@ -196,7 +201,8 @@ export async function bonusTasks(
     referral,
     signupPoints,
     paymentBonus,
-    earnedTotal: Number(earnedRow?.n ?? 0) + referral.earnedPoints + signupPoints + paymentBonus.earnedPoints,
+    rating,
+    earnedTotal: Number(earnedRow?.n ?? 0) + referral.earnedPoints + signupPoints + paymentBonus.earnedPoints + (rating.done ? rating.points : 0),
     availableTotal: channelsAvailable(channels),
   };
 }

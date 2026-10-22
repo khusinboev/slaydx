@@ -369,6 +369,7 @@ const PATH_FAMILIES: ReadonlyArray<readonly [RegExp, readonly string[]]> = [
   [/^metrics\//, ["dashboard"]],
   [/^pricing\//, ["pricing"]],
   [/^bonus-channels\//, ["bonus"]],
+  [/^ratings\//, ["bonus"]],
   [/^(me\/|auth\/reauth\/)/, ["self"]],
 ];
 

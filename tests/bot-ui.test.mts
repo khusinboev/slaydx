@@ -112,6 +112,7 @@ function bonusTasks() {
     referral: { link: "https://t.me/slaydx_test_bot?start=ref_abcdefgh", rewardPoints: 2000, invitedCount: 3, earnedPoints: 6000 },
     signupPoints: 2000,
     paymentBonus: { percent: 10, earnedPoints: 0 },
+    rating: { done: false, points: 500 },
     earnedTotal: 10000,
     availableTotal: 8000,
   };
@@ -544,6 +545,7 @@ test("bonuses message (uz): summary, short explanation, ONE button per task in o
     ["📢 Yopiq kanal · +1 000 so‘m | b:c:999999999999999999 | "],
     ["📢 Taklif havolali kanal · +1 000 so‘m | https://t.me/+AbCdEf123456 | "],
     ["💳 Har to‘ldirishga +10% bonus | app:https://slaydx.test/uz/wallet | "],
+    ["⭐ Ilovani baholash · +500 so‘m | app:https://slaydx.test/uz/profile#rating | "],
     ["🔄 Yangilash | b:r | ", "⬅️ Hamyon | w:h | "],
   ]);
   // The share sheet carries the personal referral link and the share text.
@@ -557,15 +559,15 @@ test("bonuses message (uz): summary, short explanation, ONE button per task in o
 test("bonuses message: before the first invite / payment bonus off; no public URLs; empty channel list", async () => {
   const f = allScreens("uz").bonusFresh;
   assert.equal(brief(kbRows(f)[1]![0]!), "👥 Do‘st taklif qilish · +2 000 so‘m | https://t.me/share/url | primary");
-  // C-Q4: percent 0 → no payment bonus task (the last task row is the last channel).
-  assert.equal(brief(kbRows(f).at(-2)![0]!), "📢 Taklif havolali kanal · +1 000 so‘m | https://t.me/+AbCdEf123456 | ");
+  // C-Q4: percent 0 → no payment bonus task (the last channel row sits just before the rating task).
+  assert.equal(brief(kbRows(f).at(-3)![0]!), "📢 Taklif havolali kanal · +1 000 so‘m | https://t.me/+AbCdEf123456 | ");
 
   // An account from before the sign-up bonus: still done, no amount.
   const old = bonus.bonusScreen("uz", { ...bonusTasks(), signupPoints: 0 }, BONUS_NOW);
   assert.equal(brief(kbRows(old)[0]![0]!), "✅ Ro‘yxatdan o‘tish | b:d | success");
 
-  // No channels: sign-up, invite, top-up, the last row.
-  assert.deepEqual(kbRows(allScreens("uz").bonusEmpty).map((r) => r.length), [1, 1, 1, 2]);
+  // No channels: sign-up, invite, top-up, rating, the last row.
+  assert.deepEqual(kbRows(allScreens("uz").bonusEmpty).map((r) => r.length), [1, 1, 1, 1, 2]);
 
   const { env } = (await import("../lib/server/env.ts")) as unknown as { env: { appUrl: string } };
   const prev = env.appUrl;
@@ -587,8 +589,9 @@ test("bonuses message (ru/en): labels, units, styles; every label ≤ 44 chars a
     ["✅ Talabalar <ka… · +1 000 сум · ⏳ 7 дн.: 4 дн. | b:d | success"],
   ]);
   assert.match(allScreens("ru").bonus.text, /Всего получено: <b>10 000 бонусных сум<\/b> · можно получить ещё: <b>8 000 бонусных сум<\/b>/);
-  assert.deepEqual(kbRows(allScreens("en").bonus).map((r) => r.map(brief)).slice(-2), [
+  assert.deepEqual(kbRows(allScreens("en").bonus).map((r) => r.map(brief)).slice(-3), [
     ["💳 +10% bonus on every top-up | app:https://slaydx.test/uz/wallet | "],
+    ["⭐ Rate the app · +500 UZS | app:https://slaydx.test/uz/profile#rating | "],
     ["🔄 Refresh | b:r | ", "⬅️ Wallet | w:h | "],
   ]);
   assert.equal(brief(kbRows(allScreens("en").bonusFresh)[1]![0]!), "👥 Invite a friend · +2 000 UZS | https://t.me/share/url | primary");
@@ -799,4 +802,25 @@ test("mandatory channels: 🔒 in «Bonuslar» (no «+0» for a bonus-free one);
     assert.ok(done.text.includes(i18n.t(lang, "mand.done")), lang);
   }
   assert.match(bonus.mandatoryScreen("uz", [{ id: "7", title: "R", joinUrl: null }]).text, /Botdan to‘liq foydalanish uchun kanalga obuna bo‘ling/);
+});
+
+test("rating task on the bonuses screen: opens the profile card, green once rated, hidden while the bonus is 0", () => {
+  const labels = (s: ReturnType<typeof bonus.bonusScreen>) => kbRows(s).flat().map((b) => b.text);
+  const open = kbRows(bonus.bonusScreen("uz", bonusTasks(), BONUS_NOW)).flat().find((b) => b.text.includes("Ilovani baholash"));
+  assert.ok(open, "task present");
+  assert.equal(open!.text, "⭐ Ilovani baholash · +500 so‘m");
+  assert.deepEqual((open as { web_app?: { url: string } }).web_app, { url: "https://slaydx.test/uz/profile#rating" });
+  const done = kbRows(bonus.bonusScreen("uz", { ...bonusTasks(), rating: { done: true, points: 500 } }, BONUS_NOW)).flat().find((b) => b.text.includes("Ilovani baholadingiz"));
+  assert.ok(done, "done state");
+  assert.equal(done!.text, "✅ Ilovani baholadingiz · +500 so‘m");
+  assert.equal(done!.style, "success");
+  assert.equal(done!.callback_data, "b:d");
+  assert.ok(!labels(bonus.bonusScreen("uz", { ...bonusTasks(), rating: { done: false, points: 0 } }, BONUS_NOW)).some((l) => l.includes("baholash")));
+  assert.ok(labels(bonus.bonusScreen("ru", bonusTasks(), BONUS_NOW)).some((l) => l.includes("Оценить приложение")));
+});
+
+test("ledger title of the rating bonus in 3 languages", () => {
+  assert.equal(scr.ledgerTitle("uz", { kind: "bonus", note: "Baholash bonusi" }), "Ilovani baholash bonusi");
+  assert.equal(scr.ledgerTitle("ru", { kind: "bonus", note: "Baholash bonusi" }), "Бонус за оценку приложения");
+  assert.equal(scr.ledgerTitle("en", { kind: "bonus", note: "Baholash bonusi" }), "App rating bonus");
 });

@@ -312,6 +312,8 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     assert.ok(await paynetCol(), "050 column created");
     for (const def of await providerChecks()) assert.match(def, /'paynet'/, "050 widened the provider CHECKs");
     for (const f of [
+      // 053: app rating bonus (docs/program-17 item 9) -- app_ratings.
+      "053_app_ratings.sql",
       // 052: payment reminder (owner 2026-10-22) -- payment_orders.reminded_at + partial index.
       "052_payment_reminder.sql",
       // 051: bonus channel soft delete (owner 2026-10-22) -- bonus_channels.deleted_at.
@@ -344,6 +346,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     ]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
+      if (f === "053_app_ratings.sql") assert.ok(!(await exists("app_ratings")), "053 rollback drops the table");
       if (f === "052_payment_reminder.sql") assert.ok(!(await remindedCol()), "052 reminder rollback drops the column");
       if (f === "051_bonus_channel_soft_delete.sql") assert.ok(!(await deletedCol()), "051 rollback drops the column");
       if (f === "050_paynet.sql") {

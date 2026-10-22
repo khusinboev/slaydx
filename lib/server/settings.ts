@@ -9,6 +9,7 @@ import { env } from "./env";
 import { toJsonb } from "./jsonb";
 import { log } from "./log";
 import { PAYMENT_BONUS_DEFAULT, PAYMENT_BONUS_MAX, PAYMENT_BONUS_MIN } from "../payment-bonus";
+import { RATING_BONUS_DEFAULT, RATING_BONUS_MAX } from "../rating";
 
 /**
  * Runtime settings (docs/admin/02-plan.md §6.10, §17.7).
@@ -39,6 +40,7 @@ export type SettingValues = {
   "admin.wallet_confirm_threshold": number;
   "finance.soum_per_usd": number;
   payment_bonus_percent: number;
+  "bonus.rating_points": number;
   "pricing.target_markup": number;
   "pricing.payment_fee_percent": number;
   "queue.max_wait_sec": number;
@@ -252,6 +254,18 @@ const CATALOG: Catalog = {
     max: PAYMENT_BONUS_MAX,
     validate: intValidator(PAYMENT_BONUS_MIN, PAYMENT_BONUS_MAX),
     envDefault: () => PAYMENT_BONUS_DEFAULT,
+  },
+  "bonus.rating_points": {
+    key: "bonus.rating_points",
+    group: FIN_GROUP,
+    label: "Baholash bonusi (bonus so'm)",
+    description:
+      "Ilovani baholab, fikr yozgan foydalanuvchiga BIR MARTA beriladigan bonus so'm. 0 — bonus o'chirilgan (baholash baribir qabul qilinadi). Yangi qiymat faqat keyingi baholarga qo'llanadi.",
+    type: "int",
+    min: 0,
+    max: RATING_BONUS_MAX,
+    validate: intValidator(0, RATING_BONUS_MAX),
+    envDefault: () => RATING_BONUS_DEFAULT,
   },
   "pricing.target_markup": {
     key: "pricing.target_markup",

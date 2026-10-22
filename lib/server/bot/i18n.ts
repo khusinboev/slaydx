@@ -362,6 +362,10 @@ const T = {
   "task.stayWait": { uz: "⏳ {d} kun: {n} kun", ru: "⏳ {d} дн.: {n} дн.", en: "⏳ {d}d: {n}d" },
   /** C-Q4 payment bonus (`payment-bonus.ts`): every paid top-up earns +{p}%. */
   "task.topup": { uz: "Har to‘ldirishga +{p}% bonus", ru: "+{p}% бонус к каждому пополнению", en: "+{p}% bonus on every top-up" },
+  // Rating bonus (lib/server/ratings.ts): ledger title and the bonus-task button.
+  "rating.ledger": { uz: "Ilovani baholash bonusi", ru: "Бонус за оценку приложения", en: "App rating bonus" },
+  "rating.task": { uz: "Ilovani baholash · +{n}", ru: "Оценить приложение · +{n}", en: "Rate the app · +{n}" },
+  "rating.done": { uz: "Ilovani baholadingiz · +{n}", ru: "Вы оценили приложение · +{n}", en: "You rated the app · +{n}" },
   "bonus.paidTitle": { uz: "+{n}!", ru: "+{n}!", en: "+{n}!" },
   "bonus.joinText": {
     uz: "«{c}» kanaliga obuna bo‘lganingiz uchun.",
