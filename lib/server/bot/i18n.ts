@@ -461,6 +461,15 @@ const T = {
   "help.a5": { uz: "Yo‘q, balans muddatsiz saqlanadi.", ru: "Нет, баланс хранится бессрочно.", en: "No, the balance never expires." },
   "btn.support": { uz: "Admin bilan bog‘lanish", ru: "Связаться с админом", en: "Contact the admin" },
 
+  /* ── Payment reminder (worker DM, 5 min after an unpaid Click order) ── */
+  "payReminder.text": {
+    uz: "To‘lovingiz yakunlanmadi. Yordam kerakmi?",
+    ru: "Ваш платёж не завершён. Нужна помощь?",
+    en: "Your payment was not completed. Need help?",
+  },
+  "payReminder.help": { uz: "Yordam", ru: "Помощь", en: "Help" },
+  "payReminder.retry": { uz: "Qayta to‘lash", ru: "Оплатить снова", en: "Pay again" },
+
   /* ── Til ── */
   "lang.title": { uz: "Bot tilini tanlang", ru: "Выберите язык бота", en: "Choose the bot language" },
   "lang.saved": { uz: "Bot tili: O‘zbekcha", ru: "Язык бота: русский", en: "Bot language: English" },
