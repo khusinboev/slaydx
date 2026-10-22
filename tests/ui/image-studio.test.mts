@@ -7,8 +7,9 @@ import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { ImageStudio } from "../../components/forms/ImageStudio.tsx";
 import { CONFIRM_MIN_MS } from "../../components/overlays/useConfirmClick.ts";
-import { TOOL_BY_ID, priceFor, formatTanga } from "../../lib/tools.ts";
+import { TOOL_BY_ID, priceFor } from "../../lib/tools.ts";
 import { IMAGE_FORM_FIELDS, IMAGE_PROMPT_LIMIT } from "../../lib/generation/image-params.ts";
+import { formatSom } from "../../lib/format.ts";
 
 /**
  * Rasm formasi (WP-E, Formalar 3) — jsdom, interaktiv xatti-harakat.
@@ -56,20 +57,20 @@ test("sticky narx (data-price-total) standart holatda priceFor bilan bir xil (1 
   mount();
   const el = document.querySelector("[data-price-total]");
   assert.ok(el, "sticky narx yo'q — ToolChrome ishlatilmagan bo'lishi mumkin");
-  assert.equal(el!.textContent, formatTanga(priceFor(tool, { imageCount: 1 })));
-  assert.equal(el!.textContent, formatTanga(2000));
+  assert.equal(el!.textContent, formatSom(priceFor(tool, { imageCount: 1 })));
+  assert.equal(el!.textContent, formatSom(2000));
 });
 
 test("«Nechta rasm» o'zgarsa narx DARHOL o'zgaradi (1→2 000, 2→3 500, 4→6 000) — ikkala narx ko'rsatkichi ham", () => {
   mount();
   const group = screen.getByRole("radiogroup", { name: "Nechta rasm" });
   fireEvent.click(within(group).getByRole("radio", { name: "2" }));
-  assert.equal(document.querySelector("[data-price-total]")!.textContent, formatTanga(3500));
-  assert.equal(document.querySelector("[data-price]")!.textContent, formatTanga(3500));
+  assert.equal(document.querySelector("[data-price-total]")!.textContent, formatSom(3500));
+  assert.equal(document.querySelector("[data-price]")!.textContent, formatSom(3500));
   fireEvent.click(within(group).getByRole("radio", { name: "4" }));
-  assert.equal(document.querySelector("[data-price-total]")!.textContent, formatTanga(6000));
+  assert.equal(document.querySelector("[data-price-total]")!.textContent, formatSom(6000));
   // MUTATSIYA: `priceFor` o'rniga qattiq yozilgan narx qaytarilsa — bu qator qizil bo'ladi.
-  assert.notEqual(document.querySelector("[data-price-total]")!.textContent, formatTanga(2000));
+  assert.notEqual(document.querySelector("[data-price-total]")!.textContent, formatSom(2000));
 });
 
 test("Tavsif — LimitedTextarea IMAGE_PROMPT_LIMIT dan uzun matnni kesadi, hisoblagich ko'rinadi", () => {

@@ -21,7 +21,6 @@ import {
   roundToText,
   shortDay,
   soumText,
-  tangaText,
   useLoad,
   type RecContext,
 } from "./shared";
@@ -91,7 +90,7 @@ export function PricingDrawer({
       open
       onClose={onClose}
       title={item.title}
-      description={`${ladderRange(item.ladder, "effective")} tanga · birlik: ${item.unitLabel} · ${fmtNumber(item.jobs)} ish`}
+      description={`${ladderRange(item.ladder, "effective")} so'm · birlik: ${item.unitLabel} · ${fmtNumber(item.jobs)} ish`}
       footer={
         canEdit ? (
           <>
@@ -135,13 +134,13 @@ export function PricingDrawer({
         <KeyValueList
           items={[
             { label: "Tuzatish", value: `${percentLabel(item.adjust.percent)} · yaxlitlash ${roundToText(item.adjust.roundTo)}` },
-            { label: "O'rtacha narx", value: `${tangaText(item.avgPrice)} / ish` },
-            { label: "Tushum", value: `${tangaText(item.avgRevenue)} / tayyor ish` },
-            { label: "Naqd tushum", value: `${tangaText(item.avgCashRevenue)} / ish` },
+            { label: "O'rtacha narx", value: `${soumText(item.avgPrice)} / ish` },
+            { label: "Tushum", value: `${soumText(item.avgRevenue)} / tayyor ish` },
+            { label: "Naqd tushum", value: `${soumText(item.avgCashRevenue)} / ish` },
             { label: "Tannarx", value: `${soumText(item.fullCostSoum)} / ish · ${soumText(item.costPerUnitSoum)} / ${item.unitLabel}` },
             { label: "shundan xato ishlar", value: `${soumText(item.overheadSoum)} / ish` },
             { label: "Naqd marja", value: pctText(item.cashMarginPct, 0) },
-            { label: "Bonus xarajati", value: `${soumText(item.bonusCostSoum)} · ball ulushi ${pctText(item.pointsSharePct, 0)}` },
+            { label: "Bonus xarajati", value: `${soumText(item.bonusCostSoum)} · bonus ulushi ${pctText(item.pointsSharePct, 0)}` },
             { label: "Ishlar", value: `${fmtNumber(item.jobs)} · xato ${pctText(item.failRate)} · qamrov ${pctText(item.coveragePct)}` },
           ]}
         />

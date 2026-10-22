@@ -6,9 +6,10 @@ import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { ResumeComposer } from "../../components/forms/ResumeComposer.tsx";
 import { RESUME_PARAMS } from "../../lib/generation/resume-params.ts";
-import { TOOL_BY_ID, formatTanga } from "../../lib/tools.ts";
+import { TOOL_BY_ID } from "../../lib/tools.ts";
 import { SOURCE_LANGUAGES } from "../../lib/languages.ts";
 import type { UserProfile } from "../../lib/types.ts";
+import { formatSom } from "../../lib/format.ts";
 
 /**
  * Rezyume formasi QAMROVI (Rezyume 2) — «bezak maydon yo'q» qoidasining
@@ -60,14 +61,16 @@ test("formada reyestrda YO'Q `data-field` bo'lmaydi (teskari yo'nalish)", () => 
 });
 
 /** `toLocaleString("ru-RU")` uzilmas bo'shliq qo'yadi — solishtirishdan oldin oddiy bo'shliqqa. */
+/** renderToStaticMarkup escapes the apostrophe of «so'm». */
+const esc = (s: string) => s.replace(/'/g, "&#x27;");
 const plain = (s: string) => s.replace(/[\u00a0\u202f]/g, " ");
 
-test("narx qat'iy 3 000 tanga — hammasi ichida", () => {
+test("narx qat'iy 3 000 so'm — hammasi ichida", () => {
   const chip = plain(/data-price-total[^>]*>([^<]*)</.exec(html)?.[1] ?? "");
   assert.match(chip, /3 000/, `submit chipi: «${chip}»`);
   assert.ok(html.includes("hammasi kiritilgan"), "narx izohi ko'rinadi");
   assert.equal(tool.basePrice, 3000);
-  assert.ok(plain(html).includes(plain(formatTanga(3000))), "chipda to'liq yozuv");
+  assert.ok(plain(html).includes(plain(esc(formatSom(3000)))), "chipda to'liq yozuv");
 });
 
 test("profil qiymatlari oldindan to'ldiriladi (ism, shahar)", () => {

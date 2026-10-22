@@ -585,7 +585,7 @@ test("catalogue: the chip bar is sticky, prices and routes of the cards are unch
     TOOLS.map((t) => `/uz/${t.slug}`).sort(),
     "every tool reachable at its own route",
   );
-  assert.ok(document.body.textContent?.includes("tanga dan"));
+  assert.ok(document.body.textContent?.includes("so'm dan"));
 });
 
 /*

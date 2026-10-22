@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { FormValues, ToolConfig } from "@/lib/types";
 import { useAppStore } from "@/lib/store";
 import { useConfirmClick } from "@/components/overlays/useConfirmClick";
-import { formatTanga, priceFor } from "@/lib/tools";
+import { priceFor } from "@/lib/tools";
 import { ESSAY_DESIGNS } from "@/lib/languages";
 /*
  * Import ATAYIN modullardan, `essay/index.ts` barrelidan EMAS: barrel
@@ -27,6 +27,7 @@ import { runGeneration } from "./runGeneration";
 // FORMALAR 3 (AUDIT-24, WP-C): umumiy bo'laklar — yig'iq Sozlamalar,
 // mavzu qatori (hisoblagich bilan), cheklangan matn, «Tozalash», zond belgisi.
 import { SettingsDetails, TopicRow, LimitedTextarea, ClearFormButton, Field } from "./shared";
+import { formatSom } from "@/lib/format";
 
 /**
  * Insho formasi (Talaba ishlari 2 / AUDIT-19, WP-E1) — `ArticleComposer`
@@ -332,7 +333,7 @@ export function EssayComposer({ tool }: { tool: ToolConfig }) {
                 ariaLabel="Insho hajmi"
                 options={Array.from({ length: ESSAY_LIMITS.pagesMax - ESSAY_LIMITS.pagesMin + 1 }, (_, i) => {
                   const n = ESSAY_LIMITS.pagesMin + i;
-                  return { value: String(n), label: `${pageLabel(n)} · ${formatTanga(priceFor(tool, { pages: String(n) } as FormValues))}` };
+                  return { value: String(n), label: `${pageLabel(n)} · ${formatSom(priceFor(tool, { pages: String(n) } as FormValues))}` };
                 })}
                 value={String(ui.pages)}
                 onChange={(v) => set("pages", Number(v))}
@@ -348,7 +349,7 @@ export function EssayComposer({ tool }: { tool: ToolConfig }) {
            */
           <Row label="Hajm" hint="IELTS Writing Task 2 rasmiy minimumi — 250 so‘z">
             <span data-field="pages" data-fixed="ielts" className="text-[14.5px]">
-              250+ so‘z · {formatTanga(price)}
+              250+ so‘z · {formatSom(price)}
             </span>
           </Row>
         ) : (
@@ -358,7 +359,7 @@ export function EssayComposer({ tool }: { tool: ToolConfig }) {
                 ariaLabel="So‘z hajmi"
                 options={WORD_OPTIONS.map((w) => ({
                   value: String(w),
-                  label: `${w} so‘z · ${formatTanga(priceFor(tool, { pages: String(pagesForWords(w)) } as FormValues))}`,
+                  label: `${w} so‘z · ${formatSom(priceFor(tool, { pages: String(pagesForWords(w)) } as FormValues))}`,
                 }))}
                 value={String(ui.wordTarget)}
                 onChange={(v) => set("wordTarget", Number(v))}

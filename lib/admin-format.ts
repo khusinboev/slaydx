@@ -53,11 +53,6 @@ export function fmtSoum(n: NumberInput): string {
   return isNum(n) ? `${fmtNumber(n)}${NBSP}so'm` : DASH;
 }
 
-/** Tanga: the app's internal accounting unit (whole number). */
-export function fmtTanga(n: NumberInput): string {
-  return isNum(n) ? `${fmtNumber(n)}${NBSP}tanga` : DASH;
-}
-
 /** US dollars. Tiny amounts (AI cost) get 4 fraction digits. */
 export function fmtUsd(n: NumberInput, digits?: number): string {
   if (!isNum(n)) return DASH;

@@ -203,7 +203,7 @@ test("narx sozlamasi va to'xtatish (haqiqiy Postgres)", { skip }, async (t) => {
     assert.equal(res.status, 409, JSON.stringify(res.body));
     assert.equal(res.body.code, "price_changed");
     assert.equal(res.body.price, want);
-    assert.equal(res.body.error, `Narx o'zgardi. Yangi narx: ${want.toLocaleString("uz-UZ")} tanga.`);
+    assert.equal(res.body.error, `Narx o'zgardi. Yangi narx: ${want.toLocaleString("uz-UZ")} so'm.`);
     await nothingHappened(u.uid);
     await clearPrices();
   });

@@ -6,7 +6,8 @@ import { render, fireEvent, screen, cleanup, within, act, waitFor } from "@testi
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { TranslationForm } from "../../components/forms/TranslationForm.tsx";
-import { TOOL_BY_ID, translationPrice, formatTanga, TRANSLATION_LANGUAGES } from "../../lib/tools.ts";
+import { TOOL_BY_ID, translationPrice, TRANSLATION_LANGUAGES } from "../../lib/tools.ts";
+import { formatSom } from "../../lib/format.ts";
 
 /**
  * Tarjimon formasi (Tarjimon 2, WP4): rejim, narx chip'i, ⇄, bir xil til,
@@ -56,7 +57,7 @@ test("standart: matn rejimi, 18 til ikkala tomonda + Avto, narx 3 000, ⇄ avto'
   assert.equal(src.options.length, TRANSLATION_LANGUAGES.length + 1, "Avto + 18");
   assert.equal(dst.options.length, TRANSLATION_LANGUAGES.length, "18 maqsad");
   assert.ok(Array.from(dst.options).some((o) => o.value === "tr") && Array.from(dst.options).some((o) => o.value === "de"));
-  assert.equal(price().trim(), formatTanga(3000));
+  assert.equal(price().trim(), formatSom(3000));
   assert.equal((screen.getByRole("button", { name: "Tillarni almashtirish" }) as HTMLButtonElement).disabled, true);
   assert.equal((submitBtn() as HTMLButtonElement).disabled, true);
 });
@@ -65,10 +66,10 @@ test("narx matn hajmidan: 9 999 → 3 000, 10 001 → 4 000; chegara oshsa amber
   stubApi();
   mount();
   fireEvent.change(textarea(), { target: { value: "a".repeat(9_999) } });
-  assert.ok(price().replace(/\s/g, "").includes(formatTanga(translationPrice(9_999)).replace(/\s/g, "")));
+  assert.ok(price().replace(/\s/g, "").includes(formatSom(translationPrice(9_999)).replace(/\s/g, "")));
   assert.ok(chars().includes("9 999"));
   fireEvent.change(textarea(), { target: { value: "a".repeat(10_001) } });
-  assert.ok(price().replace(/\s/g, "").includes(formatTanga(4000).replace(/\s/g, "")), `narx: ${price()}`);
+  assert.ok(price().replace(/\s/g, "").includes(formatSom(4000).replace(/\s/g, "")), `narx: ${price()}`);
   assert.equal((submitBtn() as HTMLButtonElement).disabled, false);
   fireEvent.change(textarea(), { target: { value: "a".repeat(200_001) } });
   assert.equal((submitBtn() as HTMLButtonElement).disabled, true);
@@ -106,7 +107,7 @@ test("fayl rejimi: yuklash → nom · DOCX · belgi, narx serverdagi chars dan; 
   await waitFor(() => assert.ok(document.querySelector("[data-upload]")));
   const box = document.querySelector("[data-upload]") as HTMLElement;
   assert.ok(box.textContent?.includes("hisobot.docx") && box.textContent?.includes("DOCX") && box.textContent?.includes("12 345"));
-  assert.ok(price().replace(/\s/g, "").includes(formatTanga(translationPrice(12_345)).replace(/\s/g, "")), `narx: ${price()}`);
+  assert.ok(price().replace(/\s/g, "").includes(formatSom(translationPrice(12_345)).replace(/\s/g, "")), `narx: ${price()}`);
   assert.ok(screen.getByText(/Natija: DOCX/));
   await act(async () => {
     fireEvent.click(submitBtn());

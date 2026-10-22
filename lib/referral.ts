@@ -105,7 +105,7 @@ export function referralTiersText(): string {
 
 /** The program rule shown on the profile and in the bot (`points` = what the NEXT friend earns). */
 export function referralRuleText(points = REFERRAL_REWARD_POINTS): string {
-  return `Yangi do'st uchun ball: ${referralTiersText()}. Keyingi do'stingiz uchun: ${formatPoints(points)} ball. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi.`;
+  return `Yangi do'st uchun bonus so'm: ${referralTiersText()}. Keyingi do'stingiz uchun: ${formatPoints(points)} bonus so'm. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi.`;
 }
 
 /** Text that accompanies a shared link (Telegram share sheet / Web Share). */

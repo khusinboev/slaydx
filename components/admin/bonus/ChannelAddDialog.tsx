@@ -205,7 +205,7 @@ function Body({ existingCount, onClose, onCreated }: ChannelAddDialogProps) {
           <AmountFields draft={amounts} onChange={setAmounts} error={amountsCheck.ok ? null : amountsCheck.error} />
           {amountsCheck.ok ? (
             <p className="text-muted-foreground text-xs">
-              Foydalanuvchi oladi: <span className="text-foreground font-semibold tabular-nums">{bonusText(amountsCheck.value)}</span> ball
+              Foydalanuvchi oladi: <span className="text-foreground font-semibold tabular-nums">{bonusText(amountsCheck.value)}</span> bonus so&apos;m
             </p>
           ) : null}
         </>

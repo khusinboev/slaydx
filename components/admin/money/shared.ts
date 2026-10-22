@@ -4,7 +4,7 @@ import type { ChargeSplit, WalletId } from "@/lib/admin-api/money";
 
 /** Uzbek names of the three wallets. */
 export const WALLET_LABEL: Record<WalletId, string> = {
-  points: "Bonus ball",
+  points: "Bonus so'm",
   quota: "Kvota (eski)",
   balance: "Balans",
 };

@@ -250,12 +250,12 @@ test("FAILED: no dead end — «Yangi yaratish» opens the same tool's form, «O
   assert.ok(!document.querySelector("[data-download-button]"), "no download on a failed result");
   // UX review m2: no empty «· ·» part, and the state says it failed.
   const sub = document.querySelector("[data-result-subtitle]")!.textContent ?? "";
-  assert.equal(sub, `Referat · Xato · ${groupDigits(3000)} tanga`);
+  assert.equal(sub, `Referat · Xato · ${groupDigits(3000)} so'm`);
   assert.match(document.body.textContent ?? "", /Xizmat vaqtincha javob bermadi/);
 });
 
 test("resultSubtitle: empty parts dropped (no «· ·»), FAILED → «Xato», REVOKED → «Bekor qilindi»", () => {
-  const p = `${groupDigits(3000)} tanga`;
+  const p = `${groupDigits(3000)} so'm`;
   assert.equal(resultSubtitle({ status: "QUEUED", step: "", price: 3000 }, "Slayd", false, false), `Slayd · ${p}`);
   assert.equal(resultSubtitle({ status: "QUEUED", step: "  ", price: 3000 }, undefined, false, false), p);
   assert.equal(resultSubtitle({ status: "FAILED", step: "", price: 3000 }, "Kurs ishi", false, false), `Kurs ishi · Xato · ${p}`);
@@ -296,7 +296,7 @@ function articleDoc(): AcademicDoc {
 }
 
 test("«Hammasini tuzatish» 402 unpaid — server sababi ko'rsatiladi va AI tugmalari o'chadi", async () => {
-  const UNPAID = "AI tahrir faqat pul bilan to'langan hujjatlarda ishlaydi. Bu hujjat bonus ballar hisobidan yaratilgan.";
+  const UNPAID = "AI tahrir faqat pul bilan to'langan hujjatlarda ishlaydi. Bu hujjat bonus so'm hisobidan yaratilgan.";
   stub((url, method) => {
     if (url.endsWith("/polish")) return json(402, { error: UNPAID, code: "unpaid" });
     if (method === "GET")

@@ -39,7 +39,7 @@ import { asLiveView } from "../viewers/live-view";
 import { liveDocOf, type LiveDeck } from "@/lib/generation/slide-progress";
 import { viewerKind } from "@/lib/viewers/kind";
 import type { Generation } from "@/lib/types";
-import { groupDigits } from "@/lib/format";
+import { formatSom } from "@/lib/format";
 
 /**
  * Where a deleted document's page goes (redesign F0 hand-off): the «Ishlarim»
@@ -575,7 +575,7 @@ export function ResultView({ id }: { id: string }) {
             </p>
             <p className="text-muted-foreground mt-1 text-sm">{gen.error ?? gen.step}</p>
             <p className="text-muted-foreground mt-3 text-xs">
-              Yechilgan tanga hisobingizga qaytarildi.
+              Yechilgan so&apos;m hisobingizga qaytarildi.
             </p>
             {/*
               R5 P6/F8: no dead end. The form's values are not kept after a
@@ -687,7 +687,7 @@ export function resultSubtitle(
       : gen.status === "REVOKED"
         ? "Bekor qilindi"
         : gen.step;
-  return [toolTitle, state, `${groupDigits(gen.price)} tanga`].filter((p) => p && p.trim()).join(" · ");
+  return [toolTitle, state, formatSom(gen.price)].filter((p) => p && p.trim()).join(" · ");
 }
 
 /** Hisobot xulosasi → chip (`ResultLayout` sarlavhasida). */

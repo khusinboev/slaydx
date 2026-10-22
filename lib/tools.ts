@@ -303,7 +303,7 @@ const AUDIO_FIELDS: Record<"podcast" | "greeting", ToolField[]> = {
       name: "durationMin",
       legend: "Davomiyligi",
       options: numberChips(AUDIO_LIMITS.podcastMinutes, "daqiqa"),
-      hint: "Davomiylik narxga ta'sir qilmaydi — 1 daqiqa ham, 5 daqiqa ham 4 000 tanga.",
+      hint: "Davomiylik narxga ta'sir qilmaydi — 1 daqiqa ham, 5 daqiqa ham 4 000 so'm.",
     },
     LANGUAGE_FIELD,
     VOICE_FIELD,
@@ -1591,10 +1591,6 @@ export {
   setClientPriceAdjustments,
 } from "./price-adjust";
 export type { PriceAdjust, PriceAdjustMap } from "./price-adjust";
-
-export function formatTanga(n: number) {
-  return `${groupDigits(n)} tanga`;
-}
 
 export function topicOf(values: FormValues, tool: ToolConfig) {
   if (tool.id === "image") {

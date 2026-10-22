@@ -41,8 +41,8 @@ export function welcomeScreen(lang: Lang, w: WelcomeInput): Screen {
   if (w.user) {
     lines.push(
       "",
-      `<blockquote>${tgEmoji("wallet")} ${t(lang, "welcome.balance", { n: t(lang, "unit.tanga", { n: formatPoints(creditTotal(w.user)) }) })}\n` +
-        `${tgEmoji("gift")} ${t(lang, "welcome.invite", { n: t(lang, "unit.som", { n: formatPoints(w.rewardPoints) }) })}</blockquote>`,
+      `<blockquote>${tgEmoji("wallet")} ${t(lang, "welcome.balance", { n: t(lang, "unit.som", { n: formatPoints(creditTotal(w.user)) }) })}\n` +
+        `${tgEmoji("gift")} ${t(lang, "welcome.invite", { n: t(lang, "unit.bonusSom", { n: formatPoints(w.rewardPoints) }) })}</blockquote>`,
     );
   }
   lines.push("", `${tgEmoji("app")} ${t(lang, "welcome.app")}`, `${tgEmoji("web")} ${t(lang, "welcome.site")}`);
@@ -207,8 +207,8 @@ export function ledgerLine(lang: Lang, e: LedgerItem): string {
   const n = Math.round(Number.isFinite(e.amount) ? e.amount : 0);
   const body = formatPoints(Math.abs(n));
   const amount = n > 0 ? `+${body}` : n < 0 ? `−${body}` : body;
-  // Bonus amounts in so‘m (B2-Q3); everything else is the tanga balance.
-  const unit = e.kind === "bonus" ? "unit.som" : "unit.tanga";
+  // Bonus amounts in bonus so‘m (program 17 D1); everything else is paid so‘m.
+  const unit = e.kind === "bonus" ? "unit.bonusSom" : "unit.som";
   return `<b>${t(lang, unit, { n: amount })}</b> — ${esc(clip(ledgerTitle(lang, e), 60))} · ${formatJoinDate(e.createdAt)}`;
 }
 
@@ -216,7 +216,7 @@ export function ledgerLine(lang: Lang, e: LedgerItem): string {
 export const WALLET_RECENT = 3;
 
 /**
- * Hamyon card (B2-Q4): balance (tanga) with its bonus share (so‘m), the last
+ * Hamyon card (B2-Q4): balance (so‘m) with its bonus share (bonus so‘m), the last
  * WALLET_RECENT ledger entries in a `<blockquote expandable>`, then a big green
  * «🎁 Bonuslar» (full row) and «💳 To‘ldirish» (web app — payment stays in the app).
  * `bonusPercent` > 0 (C-Q4 payment bonus, `payment-bonus.ts getPaymentBonusPercent`) adds the
@@ -228,8 +228,8 @@ export function walletScreen(
   recent: LedgerItem[],
   bonusPercent = 0,
 ): Screen {
-  const quote = [`${tgEmoji("wallet")} ${t(lang, "wallet.balance", { n: t(lang, "unit.tanga", { n: formatPoints(creditTotal(user)) }) })}`];
-  if (user.points > 0) quote.push(`${tgEmoji("star")} ${t(lang, "wallet.bonus", { n: t(lang, "unit.som", { n: formatPoints(user.points) }) })}`);
+  const quote = [`${tgEmoji("wallet")} ${t(lang, "wallet.balance", { n: t(lang, "unit.som", { n: formatPoints(creditTotal(user)) }) })}`];
+  if (user.points > 0) quote.push(`${tgEmoji("star")} ${t(lang, "wallet.bonus", { n: t(lang, "unit.bonusSom", { n: formatPoints(user.points) }) })}`);
   const last = recent.slice(0, WALLET_RECENT);
   const history = last.length ? last.map((e) => ledgerLine(lang, e)).join("\n") : t(lang, "wallet.none");
   const text = [

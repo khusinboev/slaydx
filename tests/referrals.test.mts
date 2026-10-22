@@ -131,7 +131,7 @@ test("codes: normalised, alphabet without look-alikes, 8–10 chars; payload and
   assert.equal(shared.referralBotLink("", "k7m3p9qx"), null);
   assert.equal(shared.referralBotLink("bad bot", "k7m3p9qx"), null);
   assert.equal(shared.referralWebLink("https://slaydx.test/", "k7m3p9qx"), "https://slaydx.test/uz?ref=k7m3p9qx");
-  assert.match(shared.referralRuleText(), /^Yangi do'st uchun ball: 1–25-do'st — 2\s000, 26–50-do'st — 1\s000, 51-dan boshlab — 500\. Keyingi do'stingiz uchun: 2\s000 ball\. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi\.$/);
+  assert.match(shared.referralRuleText(), /^Yangi do'st uchun bonus so'm: 1–25-do'st — 2\s000, 26–50-do'st — 1\s000, 51-dan boshlab — 500\. Keyingi do'stingiz uchun: 2\s000 bonus so'm\. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi\.$/);
   const share = new URL(shared.telegramShareUrl("https://t.me/slaydx_bot?start=ref_k7m3p9qx"));
   assert.equal(share.origin + share.pathname, "https://t.me/share/url");
   assert.equal(share.searchParams.get("url"), "https://t.me/slaydx_bot?start=ref_k7m3p9qx");
@@ -168,7 +168,7 @@ test("formatPoints / formatJoinDate: by hand, NBSP groups, Tashkent date — nev
     assert.equal(shared.formatJoinDate("2026-10-06T20:30:00.000Z"), "07.10.2026", "UTC+5: already the next day in Tashkent");
     assert.equal(shared.formatJoinDate("2026-01-02T03:00:00.000Z"), "02.01.2026");
     assert.equal(shared.formatJoinDate("nonsense"), "");
-    assert.equal(shared.referralRuleText(1000), "Yangi do'st uchun ball: 1–25-do'st — 2\u00a0000, 26–50-do'st — 1\u00a0000, 51-dan boshlab — 500. Keyingi do'stingiz uchun: 1\u00a0000 ball. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi.");
+    assert.equal(shared.referralRuleText(1000), "Yangi do'st uchun bonus so'm: 1–25-do'st — 2\u00a0000, 26–50-do'st — 1\u00a0000, 51-dan boshlab — 500. Keyingi do'stingiz uchun: 1\u00a0000 bonus so'm. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi.");
   } finally {
     Number.prototype.toLocaleString = realNum;
     Date.prototype.toLocaleDateString = realDate;

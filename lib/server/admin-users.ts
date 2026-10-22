@@ -305,7 +305,7 @@ export const USER_CSV_HEADER = [
   "Username",
   "Telegram ID",
   "Telefon (yashirilgan)",
-  "Ball",
+  "Bonus so'm",
   "Kvota (eski)",
   "Balans",
   "Bloklangan",

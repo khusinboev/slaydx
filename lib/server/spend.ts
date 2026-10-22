@@ -159,7 +159,7 @@ const GLOBAL_TEXT =
   "Bepul AI yordamchining bugungi umumiy chegarasi tugadi — ertaga (Toshkent vaqti bilan 00:00 dan keyin) qayta urinib ko'ring. Pullik generatsiya odatdagidek ishlaydi.";
 const DB_TEXT = "Xizmat hozir band — birozdan keyin qayta urinib ko'ring.";
 const UNPAID_TEXT =
-  "AI tahrir faqat pul bilan (balans) to'langan hujjatlarda ishlaydi. Bu hujjat bonus ballar hisobidan yaratilgan — bonus AI tahrirni qoplamaydi.";
+  "AI tahrir faqat pul bilan (balans) to'langan hujjatlarda ishlaydi. Bu hujjat bonus so'm hisobidan yaratilgan — bonus AI tahrirni qoplamaydi.";
 const BUSY_TEXT = "Bu hujjat ustida AI tahrir allaqachon ketmoqda — tugashini kuting.";
 
 /**

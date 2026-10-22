@@ -357,10 +357,10 @@ export function GenerationsTable({ tools, fixedFilters, embedded = false, pageSi
       className: "tabular-nums whitespace-nowrap",
       cell: (g) => fmtDateTime(g.createdAt),
     },
-    { id: "price", header: "Narx, tanga", align: "right", className: "tabular-nums whitespace-nowrap", cell: (g) => fmtNumber(g.price) },
+    { id: "price", header: "Narx, so'm", align: "right", className: "tabular-nums whitespace-nowrap", cell: (g) => fmtNumber(g.price) },
     {
       id: "charged",
-      header: "Yechilgan, tanga",
+      header: "Yechilgan, so'm",
       className: "text-xs tabular-nums",
       hideOnCard: true,
       cell: (g) => <ChargeLines charged={g.charged} />,

@@ -10,7 +10,8 @@ import { runGeneration } from "../../components/forms/runGeneration.ts";
 import { CONFIRM_MIN_MS } from "../../components/overlays/useConfirmClick.ts";
 import type { ServerUser } from "../../lib/api-client.ts";
 import { useAppStore } from "../../lib/store.ts";
-import { TOOL_BY_ID, formatTanga, setClientPriceAdjustments, type PriceAdjustMap } from "../../lib/tools.ts";
+import { TOOL_BY_ID, setClientPriceAdjustments, type PriceAdjustMap } from "../../lib/tools.ts";
+import { formatSom } from "../../lib/format.ts";
 
 /**
  * Admin price change between render and submit (docs/admin/02-plan.md §17.2).
@@ -82,7 +83,7 @@ test("ImageStudio: 409 price_changed → new price shown, NO retry until the use
   const api = stubApi({ serverPricing: { image: { percent: 150, roundTo: 500 } }, serverPrice: 3000 });
   pushes.length = 0;
   render(h(AppRouterContext.Provider, { value: router }, h(ImageStudio, { tool })));
-  assert.equal(document.querySelector("[data-price-total]")!.textContent, formatTanga(2000));
+  assert.equal(document.querySelector("[data-price-total]")!.textContent, formatSom(2000));
   fireEvent.change(screen.getByLabelText("Rasm tavsifi"), { target: { value: "Registon maydoni erta tongda" } });
 
   await act(async () => {
@@ -90,13 +91,13 @@ test("ImageStudio: 409 price_changed → new price shown, NO retry until the use
   });
   await waitFor(() => assert.match(screen.getByRole("alert").textContent ?? "", /Narx o‘zgardi/));
   const alert = screen.getByRole("alert").textContent ?? "";
-  assert.ok(alert.includes(`Yangi narx: ${formatTanga(3000)}`), alert);
+  assert.ok(alert.includes(`Yangi narx: ${formatSom(3000)}`), alert);
   assert.match(alert, /tugmani yana bir marta bosing/);
   assert.equal(api.posts.length, 1);
   assert.equal(api.posts[0].expectedPrice, 2000, "the displayed price is sent");
   // The session was refreshed before the error rendered: the button already shows the new price.
   assert.ok(api.sessions() >= 1);
-  assert.equal(document.querySelector("[data-price-total]")!.textContent, formatTanga(3000));
+  assert.equal(document.querySelector("[data-price-total]")!.textContent, formatSom(3000));
   assert.equal(pushes.length, 0, "nothing was created");
 
   // An immediate second press (the tail of a double click) is not a confirmation: no request.
@@ -104,7 +105,7 @@ test("ImageStudio: 409 price_changed → new price shown, NO retry until the use
     fireEvent.click(screen.getByText(tool.submitLabel));
   });
   assert.equal(api.posts.length, 1, "a double click must not buy at the new price");
-  assert.ok((screen.getByRole("alert").textContent ?? "").includes(formatTanga(3000)));
+  assert.ok((screen.getByRole("alert").textContent ?? "").includes(formatSom(3000)));
 
   // A deliberate press confirms: one request with the shown price and a NEW idempotency key.
   await sleep(CONFIRM_MIN_MS + 40);
@@ -128,7 +129,7 @@ test("ImageStudio: 409 price_changed → new price shown, NO retry until the use
  */
 const isPriceChanged = (price: number) => (e: unknown) =>
   e instanceof Error && (e as { status?: number }).status === 409 && (e as { price?: number }).price === price
-  && e.message.includes(`Yangi narx: ${formatTanga(price)}`);
+  && e.message.includes(`Yangi narx: ${formatSom(price)}`);
 
 test("runGeneration: a changed form after a 409 is a new intent; the price armed for the old form is not reused", async () => {
   const crossword = TOOL_BY_ID.crossword;

@@ -7,7 +7,7 @@ import { creditTotal, useAppStore } from "@/lib/store";
 import { Avatar, Group, ProfileSkeleton, RowExternal, RowLink, SectionLabel, SignedOutCard } from "./parts";
 import { identityLine, profileHref, rowHint, type ProfileStepId, type ProfileTarget } from "./profile-model";
 import { themeChoiceLabel, useThemeChoice } from "./theme";
-import { groupDigits } from "@/lib/format";
+import { formatSom } from "@/lib/format";
 import { SUPPORT_URL } from "@/lib/support";
 import { onSupportClick } from "@/lib/support-link";
 
@@ -91,8 +91,8 @@ export function ProfileHome({ onNavigate, header }: ProfileHomeProps) {
 
         <SectionLabel>Hisob</SectionLabel>
         <Group label="Hisob">
-          <RowLink id="hamyon" href={WALLET} icon={Wallet} label="Hamyon" hint={`${groupDigits(creditTotal(user))} tanga`} />
-          <RowLink id="taklif" href={WALLET} icon={Gift} label="Do'stlarni taklif qilish" hint="Bonus ball" />
+          <RowLink id="hamyon" href={WALLET} icon={Wallet} label="Hamyon" hint={formatSom(creditTotal(user))} />
+          <RowLink id="taklif" href={WALLET} icon={Gift} label="Do'stlarni taklif qilish" hint="Bonus so'm" />
           {user.isAdmin ? <RowLink id="admin" href="/admin" icon={ShieldCheck} label="Admin panel" /> : null}
           <RowExternal id="yordam" href={SUPPORT_URL} icon={LifeBuoy} label="Yordam" hint="Admin bilan bog'lanish" onClick={onSupportClick} />
           <RowLink {...step("xavfsizlik")} icon={Lock} label="Xavfsizlik va chiqish" />

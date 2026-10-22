@@ -48,14 +48,13 @@ export function useLoad<T>(load: (signal: AbortSignal) => Promise<T>): [LoadStat
 /* ───────────────────────────── money and labels ───────────────────────────── */
 
 export const soumText = (n: number | null): string => (n === null ? "—" : fmtSoum(Math.round(n)));
-export const tangaText = (n: number | null): string => (n === null ? "—" : `${fmtNumber(Math.round(n))} tanga`);
 /** AI cost in dollars: 2 decimals like the dashboard and the AI page (4 only below one cent). */
 export const usdText = (n: number | null): string => (n === null ? "—" : fmtUsd(n));
 export const pctText = (n: number | null, digits = 1): string => (n === null ? "—" : fmtPercent(n, { digits }));
 export const markupText = (n: number | null): string => (n === null ? "—" : `${fmtNumber(n, { digits: 1, fixed: true })}×`);
 export const percentLabel = (p: number): string => `${fmtNumber(p)}%`;
-/** Prices and their rounding step are tanga (the wallet unit), never so'm. */
-export const roundToText = (n: number): string => `${fmtNumber(n)} tanga`;
+/** Prices and their rounding step: so'm (the wallet unit, 1 point = 1 so'm). */
+export const roundToText = (n: number): string => `${fmtNumber(n)} so'm`;
 
 /** The list's sparkline covers at most the last 30 days of the range (server `LIST_TREND_DAYS`). */
 export const LIST_TREND_DAYS = 30;

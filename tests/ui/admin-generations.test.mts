@@ -178,7 +178,7 @@ test("list: skeleton while loading, then rows with tool label, status, money and
   // numbers; long text is capped, truncated and carries its full value in `title`.
   const headers = [...container.querySelectorAll("thead th")].map((th) => th.textContent?.trim());
   assert.deepEqual(headers.slice(0, 5), ["Mavzu · ID", "Foydalanuvchi", "Vosita", "Holat", "Yaratilgan"]);
-  assert.ok(headers.includes("Narx, tanga") && headers.includes("Yechilgan, tanga"), "money headers carry the unit");
+  assert.ok(headers.includes("Narx, so'm") && headers.includes("Yechilgan, so'm"), "money headers carry the unit");
   const topic = cells.getByText("Iqtisodiyot asoslari");
   assert.equal(topic.getAttribute("title"), "Iqtisodiyot asoslari");
   assert.ok(topic.className.includes("truncate"));

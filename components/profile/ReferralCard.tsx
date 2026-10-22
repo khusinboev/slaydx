@@ -205,7 +205,7 @@ export function ReferralCard({ className = "mb-6" }: { className?: string } = {}
           <div className="text-[20px] font-bold tabular-nums" data-referral-earned>
             {formatPoints(data.earnedPoints)}
           </div>
-          <div className="text-muted-foreground text-[13px]">Ishlangan ball</div>
+          <div className="text-muted-foreground text-[13px]">Ishlangan bonus so&apos;m</div>
         </div>
       </div>
 

@@ -198,8 +198,8 @@ test("/taklif → the user's own bot link, counters and a t.me/share button; in 
   const text = String(calls[0]!.body.text);
   const link = `https://t.me/slaydx_test_bot?start=ref_${inv.code}`;
   assert.ok(text.includes(link), text);
-  assert.match(text, /Do'st uchun bonus: 1–25-do'st — 2\s000 so'm, 26–50-do'st — 1\s000 so'm, 51-dan boshlab — 500 so'm\. Keyingi do'stingiz uchun: 2\s000 so'm\./);
-  assert.match(text, /Taklif qilinganlar: <b>1<\/b> · Topilgan bonus: <b>2\s000 so'm<\/b>/);
+  assert.match(text, /Har bir do'st uchun: 1–25-do'st — 2\s000 bonus so'm, 26–50-do'st — 1\s000 bonus so'm, 51-dan boshlab — 500 bonus so'm\. Keyingi do'stingiz uchun: 2\s000 bonus so'm\./);
+  assert.match(text, /Taklif qilinganlar: <b>1<\/b> · Topilgan: <b>2\s000 bonus so'm<\/b>/);
   const share = buttons(calls[0]!.body).find((x) => x.url?.startsWith("https://t.me/share/url?"));
   assert.ok(share, "share button");
   assert.equal(new URL(share.url!).searchParams.get("url"), link);

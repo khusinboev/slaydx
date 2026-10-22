@@ -480,7 +480,7 @@ test("loading skeleton, then the strip, the KPIs with deltas and «?» hints, th
   // «?» opens a short basis; Escape closes it.
   fireEvent.click(button("Izoh: Marja"));
   const note = screen.getByRole("note");
-  assert.match(text(note), /ball bilan to'langani ham.*komissiyasi 2,5%.*Tannarxi o'lchanmagan: Maqola/);
+  assert.match(text(note), /bonus so'm bilan to'langani ham.*komissiyasi 2,5%.*Tannarxi o'lchanmagan: Maqola/);
   fireEvent.keyDown(document, { key: "Escape" });
   assert.ok(!screen.queryByRole("note"));
   assert.ok(!document.body.textContent?.includes("pricing.payment_fee_percent"), "never a raw setting key");
@@ -521,7 +521,7 @@ test("phone: custom tool cards (not the generic label/value list) and a «Sarala
   assert.ok(cards.className.includes("sm:hidden"));
   const slide = cardOf(container, "slide");
   assert.ok(!slide.querySelector("dl"), "custom card, not the generic list");
-  assert.match(text(slide), /Slayd.*3 500 – 9 500 tanga · 120%/);
+  assert.match(text(slide), /Slayd.*3 500 – 9 500 so'm · 120%/);
   assert.match(text(slide), /22% \(past\)/);
   assert.match(text(slide), /Tannarx 2 640 so'm \/ ish · 1 460 ish/);
   const apply = within(slide).getByRole("button", { name: /Tavsiyani qo'llash: Slayd/ });
@@ -654,7 +654,7 @@ test("sheet: decision block first, economics, cost composition, ladder, 90-day t
   const detailCall = calls.find((c) => c.url.pathname === "/api/admin/pricing/slide" && method(c) === "GET");
   assert.equal(detailCall?.url.searchParams.get("days"), "90");
   assert.equal(detailCall?.url.searchParams.get("admins"), "1");
-  assert.match(text(dialog), /3 500 – 9 500 tanga · birlik: slayd · 1 460 ish/);
+  assert.match(text(dialog), /3 500 – 9 500 so'm · birlik: slayd · 1 460 ish/);
   // Decision block: the first section, with the margin, the markup bar and the recommendation.
   const decision = d.getByRole("region", { name: "Holat" });
   assert.equal(dialog.querySelector("section"), decision, "the decision comes first");
@@ -663,10 +663,10 @@ test("sheet: decision block first, economics, cost composition, ladder, 90-day t
   assert.match(text(decision), /Tavsiya \+121%.*Tuzatish 120% → 265%.*Tanlama: 1 400 ta tayyor ish/);
   assert.ok(within(decision).getByRole("button", { name: /Tavsiyani qo'llash: Slayd/ }));
   // Economics in one list.
-  assert.ok(d.getByText("3 600 tanga / ish"));
-  assert.ok(d.getByText("3 500 tanga / tayyor ish"));
+  assert.ok(d.getByText("3 600 so'm / ish"));
+  assert.ok(d.getByText("3 500 so'm / tayyor ish"));
   assert.ok(d.getByText("2 640 so'm / ish · 132 so'm / slayd"));
-  assert.ok(d.getByText("1 250 000 so'm · ball ulushi 48%"));
+  assert.ok(d.getByText("1 250 000 so'm · bonus ulushi 48%"));
   // Cost composition from the overview item.
   assert.match(text(dialog), /Rasm\s*1 800 so'm\s*68%/);
   assert.match(text(dialog), /Matn \(LLM\)\s*840 so'm\s*32%/);
@@ -675,10 +675,10 @@ test("sheet: decision block first, economics, cost composition, ladder, 90-day t
   assert.ok(d.getByText("100% → 120%"));
   // Simulator: live (debounced) with the switch.
   await waitFor(() => assert.deepEqual(calls.filter((c) => c.url.pathname.endsWith("/simulate")).at(-1)?.body, { percent: 120, roundTo: 500, includeAdmins: true }));
-  await d.findByText("1 560 000 tanga");
+  await d.findByText("1 560 000 so'm");
   fireEvent.change(d.getByLabelText("Tuzatish foizi"), { target: { value: "150" } });
   await waitFor(() => assert.deepEqual(calls.filter((c) => c.url.pathname.endsWith("/simulate")).at(-1)?.body, { percent: 150, roundTo: 500, includeAdmins: true }));
-  await d.findByText("1 950 000 tanga");
+  await d.findByText("1 950 000 so'm");
   const sim = d.getByRole("region", { name: "Simulyator" });
   assert.ok(within(sim).getByText("+1 000"), "difference to the current 3 500");
   // A «?» inside the sheet: Escape closes the tip, not the sheet.
@@ -718,7 +718,7 @@ test("apply from the strip: before/after ladder and margin, reason and typed con
   const dq = within(dialog);
   assert.match(text(dialog), /Tavsiyani qo'llash — Slayd/);
   assert.match(text(dialog), /Narx \+121%: ustama 1,3× dan maqsadli 3,0× ga/);
-  assert.match(text(dialog), /120% · 500 tanga.*265% · 500 tanga/);
+  assert.match(text(dialog), /120% · 500 so'm.*265% · 500 so'm/);
   // Preview from the simulate endpoint with the recommended percent.
   await waitFor(() => assert.deepEqual(calls.filter((c) => c.url.pathname === "/api/admin/pricing/slide/simulate").at(-1)?.body, { percent: 265, roundTo: 500 }));
   assert.ok(await dq.findByText("21 000"), "30 slayd: 8 000 × 2,65 = 21 200 → 21 000");
@@ -757,7 +757,7 @@ test("apply from the sheet: 409 stale → error toast and the overview reloads; 
   const sheet = await screen.findByRole("dialog");
   fireEvent.click(within(sheet).getByRole("button", { name: /Tavsiyani qo'llash: Insho/ }));
   const dialog = await lastDialog();
-  assert.match(text(dialog), /100% · 500 tanga.*90% · 500 tanga/);
+  assert.match(text(dialog), /100% · 500 so'm.*90% · 500 so'm/);
   assert.ok(!within(dialog).queryByLabelText(/deb yozing/), "−10 points: no typed confirmation");
   assert.equal((within(dialog).getByRole("button", { name: "Qo'llash" }) as HTMLButtonElement).disabled, true, "reason required");
   fireEvent.change(within(dialog).getByLabelText("Sabab"), { target: { value: "Ustama maqsaddan yuqori" } });
@@ -878,7 +878,7 @@ test("reset: DELETE {reason}; 409 state reloads the overview", async () => {
   const drawer = await screen.findByRole("dialog");
   fireEvent.click(within(drawer).getByRole("button", { name: "100% ga qaytarish" }));
   const dq = within(await lastDialog());
-  assert.ok(dq.getByText("120% · 500 tanga"), "before");
+  assert.ok(dq.getByText("120% · 500 so'm"), "before");
   assert.ok(dq.getByText("100% · 500", { selector: "span.font-semibold" }), "after");
   const confirm = dq.getByRole("button", { name: "Qaytarish" }) as HTMLButtonElement;
   assert.equal(confirm.disabled, true);

@@ -327,7 +327,7 @@ test("validators: amounts are JSON integers 0..20 000 (per-channel cap), stay da
   assert.equal(lib.parseAmount(0, "x"), 0);
   assert.equal(lib.parseAmount(20_000, "x"), 20_000);
   for (const bad of [-1, 20_001, 1_000_000, 1_000_001, 1.5, "1000", null, Number.NaN, Number.POSITIVE_INFINITY, true]) {
-    assert.throws(() => lib.parseAmount(bad, "x"), /0 dan 20 000 gacha butun son bo'lishi kerak \(bitta kanal uchun eng ko'pi 20 000 ball\)/, String(bad));
+    assert.throws(() => lib.parseAmount(bad, "x"), /0 dan 20 000 gacha butun son bo'lishi kerak \(bitta kanal uchun eng ko'pi 20 000 bonus so'm\)/, String(bad));
   }
   assert.equal(lib.parseStayDays(1), 1);
   assert.equal(lib.parseStayDays(365), 365);
@@ -535,10 +535,10 @@ test("create: each bonus is capped at 20 000 per channel — 400 with an Uzbek e
   botCalls.length = 0;
   const join = await create(s.cookie, { input, joinBonus: 20_001 });
   assert.equal(join.status, 400);
-  assert.equal(join.body.error, "Obuna bonusi: 0 dan 20 000 gacha butun son bo'lishi kerak (bitta kanal uchun eng ko'pi 20 000 ball)");
+  assert.equal(join.body.error, "Obuna bonusi: 0 dan 20 000 gacha butun son bo'lishi kerak (bitta kanal uchun eng ko'pi 20 000 bonus so'm)");
   const stay = await create(s.cookie, { input, joinBonus: 1000, stayBonus: 20_001 });
   assert.equal(stay.status, 400);
-  assert.equal(stay.body.error, "Qolish bonusi: 0 dan 20 000 gacha butun son bo'lishi kerak (bitta kanal uchun eng ko'pi 20 000 ball)");
+  assert.equal(stay.body.error, "Qolish bonusi: 0 dan 20 000 gacha butun son bo'lishi kerak (bitta kanal uchun eng ko'pi 20 000 bonus so'm)");
   assert.deepEqual(botCalls, [], "validation must run before Telegram");
   assert.deepEqual(await channelRows(), []);
   const ok = await create(s.cookie, { input, joinBonus: 20_000, stayBonus: 20_000 });
@@ -590,7 +590,7 @@ test("update: only changed fields go into before/after; no change 409 state; bou
   // The per-channel cap (money review): 20 000 for each bonus, with a clear Uzbek error.
   const over = await patch(s.cookie, item.id, { stayBonus: 20_001 });
   assert.equal(over.status, 400);
-  assert.equal(over.body.error, "Qolish bonusi: 0 dan 20 000 gacha butun son bo'lishi kerak (bitta kanal uchun eng ko'pi 20 000 ball)");
+  assert.equal(over.body.error, "Qolish bonusi: 0 dan 20 000 gacha butun son bo'lishi kerak (bitta kanal uchun eng ko'pi 20 000 bonus so'm)");
   const cap = await patch(s.cookie, item.id, { joinBonus: 20_000, stayBonus: 20_000 });
   assert.equal(cap.status, 200, JSON.stringify(cap.body));
   assert.deepEqual([(cap.body.item as Item).joinBonus, (cap.body.item as Item).stayBonus], [20_000, 20_000]);

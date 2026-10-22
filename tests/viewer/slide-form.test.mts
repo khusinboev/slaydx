@@ -15,8 +15,12 @@ import {
 import { SLIDE_PARAMS, PRO_SLIDE_DEFAULT, PRO_SLIDE_MIN, PRO_SLIDE_MAX, SLIDE_DEFAULT, SLIDE_MIN, SLIDE_MAX } from "../../lib/generation/slide-params.ts";
 import { AUDIENCE_RULES } from "../../lib/generation/slide-audience.ts";
 import { SLIDE_BLOCKS } from "../../lib/generation/slide-blocks.ts";
-import { TOOL_BY_ID, priceFor, formatTanga } from "../../lib/tools.ts";
+import { TOOL_BY_ID, priceFor } from "../../lib/tools.ts";
 import type { UserProfile } from "../../lib/types.ts";
+import { formatSom } from "../../lib/format.ts";
+
+/** renderToStaticMarkup escapes the apostrophe of «so'm». */
+const esc = (s: string) => s.replace(/'/g, "&#x27;");
 
 /**
  * WP-G — `ProSlideForm`/`SlideForm` SSR paritetlari.
@@ -131,7 +135,7 @@ test("ProSlideForm: slaydlar soni slayderi (4-30) bor", () => {
 
 test("ProSlideForm: narx standart slaydlar soniga mos (priceFor bilan bir xil)", () => {
   const html = renderWithRouter(h(ProSlideForm, { tool: proTool, profile }));
-  const expected = formatTanga(priceFor(proTool, { slideCount: PRO_SLIDE_DEFAULT }));
+  const expected = esc(formatSom(priceFor(proTool, { slideCount: PRO_SLIDE_DEFAULT })));
   assert.ok(html.includes(expected), `kutilgan narx «${expected}» ko'rinmayapti`);
 });
 
@@ -143,8 +147,8 @@ test("SlideForm: slaydlar soni slayderi (4–30) BOR, paketlar YO'Q, narx qoidas
   assert.ok(html.includes(`min="${SLIDE_MIN}"`) && html.includes(`max="${SLIDE_MAX}"`), "slayder chegarasi 4–30");
   assert.ok(html.includes(`value="${SLIDE_DEFAULT}"`), "standart 10 slayd");
   assert.ok(!html.includes("Sifat / hajm") && !html.includes("Premium"), "paketlar olib tashlangan");
-  assert.ok(html.includes(`20 tagacha ${formatTanga(3000)}`) && html.includes("+500"), "narx qoidasi ko'rinadi");
-  const expected = formatTanga(priceFor(slideTool, { slideCount: SLIDE_DEFAULT }));
+  assert.ok(html.includes(`20 tagacha ${esc(formatSom(3000))}`) && html.includes("+500"), "narx qoidasi ko'rinadi");
+  const expected = esc(formatSom(priceFor(slideTool, { slideCount: SLIDE_DEFAULT })));
   assert.ok(html.includes(expected), `standart narx «${expected}» ko'rinmayapti`);
   assert.ok(!html.includes("Rasm uslubi"), "oddiy slaydda rasm uslubi yo'q — bepul stock faqat foto");
 });

@@ -10,7 +10,7 @@ import type * as IdentityModule from "../../components/admin/shell/admin-identit
 import { Dashboard } from "../../components/admin/dashboard/Dashboard.tsx";
 import { LIVE_REFRESH_MS, LiveStrip } from "../../components/admin/dashboard/LiveStrip.tsx";
 import { chartUsd, compactNumber, dayLabel, isDefaultRange, percentDelta, pointsDelta, rangeFromParams, unitBreakable } from "../../components/admin/dashboard/format.ts";
-import { fmtSoum, fmtTanga, fmtUsd, todayTashkent, addDaysIso } from "../../lib/admin-format.ts";
+import { fmtSoum, fmtUsd, todayTashkent, addDaysIso } from "../../lib/admin-format.ts";
 
 /**
  * Dashboard S3 (docs/admin/02-plan.md §7.1, §7.0 states): KPI tiles with
@@ -201,7 +201,7 @@ test("chartUsd: cents from $1, exact trimmed sub-dollar ticks below", () => {
 
 test("unitBreakable: only the space before the unit may break; digit groups keep the NBSP", () => {
   assert.equal(unitBreakable(fmtSoum(2_090_000)), "2\u00a0090\u00a0000 so'm");
-  assert.equal(unitBreakable(fmtTanga(-1_125_266)), "-1\u00a0125\u00a0266 tanga");
+  assert.equal(unitBreakable(fmtSoum(-1_125_266)), "-1\u00a0125\u00a0266 so'm");
   assert.equal(unitBreakable(fmtSoum(500)), "500 so'm");
   assert.equal(unitBreakable("—"), "—");
 });

@@ -9,12 +9,12 @@ import { creditTotal, useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { ReferralCard } from "../profile/ReferralCard";
 import { DEFAULT_TOPUP, TOPUP_PRESETS, openPay } from "../overlays/pay-amount";
-import { groupDigits } from "@/lib/format";
+import { formatBonusSom, groupDigits } from "@/lib/format";
 import { PaymentBanner } from "./PaymentBanner";
 import { PaynetCard } from "./PaynetCard";
 import { usePaymentReturn } from "./usePaymentReturn";
 import { isPaymentBonusPercent, paymentBonusHint } from "@/lib/payment-bonus";
-import { TOPUP_FEATURES, formatWhen, ledgerRow, orderStateLabel, providerLabel } from "./wallet-model";
+import { TOPUP_FEATURES, UNIT_LABEL, formatWhen, ledgerRow, orderStateLabel, providerLabel } from "./wallet-model";
 
 /** Where the login returns to (the lead routes `/uz/wallet`; `/uz/purchase` redirects here keeping `?order=`). */
 export const WALLET_PATH = "/uz/wallet";
@@ -109,12 +109,12 @@ export function WalletPage() {
             Balans
           </h2>
           <p className="mt-1 text-[40px] leading-[1.1] font-bold tracking-[-0.03em] tabular-nums" data-wallet-total>
-            {formatPoints(creditTotal(user))} <span className="text-[18px] font-semibold tracking-normal">tanga</span>
+            {formatPoints(creditTotal(user))} <span className="text-[18px] font-semibold tracking-normal">so&apos;m</span>
           </p>
           <p className="mt-1 text-[14px] opacity-85 tabular-nums" data-wallet-split>
             {user!.points > 0
-              ? `Shundan ${formatPoints(user!.points)} ball — bonus`
-              : "Bonus ball yo'q — do'st taklif qiling"}
+              ? `Shundan ${formatBonusSom(user!.points)}`
+              : "Bonus so'm yo'q — do'st taklif qiling"}
           </p>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button
@@ -301,7 +301,7 @@ function Ledger({ paidOrder, onBonusPercent }: { paidOrder: string | null; onBon
                 >
                   {r.amount}
                   <span className={cn("ml-1 text-[13px] font-medium", r.tone === "in" ? "" : "text-muted-foreground")} data-ledger-unit>
-                    {r.unit}
+                    {UNIT_LABEL[r.unit]}
                   </span>
                 </p>
               </li>

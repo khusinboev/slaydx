@@ -4,13 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useConfirmClick } from "@/components/overlays/useConfirmClick";
 import type { FormValues, ToolConfig } from "@/lib/types";
-import { formatTanga, IMAGE_PROMPT_MIN, priceFor } from "@/lib/tools";
+import { IMAGE_PROMPT_MIN, priceFor } from "@/lib/tools";
 import { IMAGE_RATIOS, IMAGE_STYLES } from "@/lib/generation/image-studio-options";
 import { IMAGE_PROMPT_LIMIT } from "@/lib/generation/image-params";
 import { Card, Row, Segmented, SelectField } from "./compact";
 import { ClearFormButton, Field, LimitedTextarea, SettingsDetails } from "./shared";
 import { ToolChrome, TopicChips } from "./ToolChrome";
 import { runGeneration } from "./runGeneration";
+import { formatSom } from "@/lib/format";
 
 /*
  * Rasm formasi (WP-E, Formalar 3) — ilgari `ToolChrome`SIZ, o'zining
@@ -106,7 +107,7 @@ export function ImageStudio({ tool }: { tool: ToolConfig }) {
         title="Nisbat va soni"
         aside={
           <span className="font-semibold tabular-nums" data-price>
-            {formatTanga(price)}
+            {formatSom(price)}
           </span>
         }
       >

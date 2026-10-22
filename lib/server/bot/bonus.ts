@@ -13,8 +13,8 @@ import { appUrl, clip, esc, inlineButton, isPublicHttps, rows, tgEmoji, type Inl
  *
  * Every task is ONE button under a short summary: done → «✅ …» green
  * (`style: success`), not done → the action itself (the channel link, the
- * Telegram share sheet, the wallet web app). Bonus amounts are in so‘m
- * (B2-Q3): `som(lang, n)`.
+ * Telegram share sheet, the wallet web app). Bonus amounts are in bonus so‘m
+ * (program 17 D1): `som(lang, n)`.
  */
 
 /** Channels listed on one message (the admin list is short; this only bounds the keyboard). */
@@ -26,8 +26,17 @@ const TITLE_MIN = 12;
 
 const DAY_MS = 86_400_000;
 
-/** A bonus amount: «2 000 so‘m» / «2 000 сум» / «2 000 UZS». */
+/** A bonus amount: «2 000 bonus so‘m» / «2 000 бонусных сум» / «2 000 bonus UZS». */
 export function som(lang: Lang, n: number): string {
+  return t(lang, "unit.bonusSom", { n: formatPoints(n) });
+}
+
+/**
+ * A bonus amount on a BUTTON: «2 000 so‘m» / «2 000 сум» / «2 000 UZS». Telegram buttons are cut at
+ * BONUS_LABEL_MAX characters and the whole screen is «Sizning bonuslaringiz», so the bare unit keeps
+ * the channel title readable (the ru «бонусных сум» alone would eat the title).
+ */
+export function buttonSom(lang: Lang, n: number): string {
   return t(lang, "unit.som", { n: formatPoints(n) });
 }
 
@@ -62,7 +71,7 @@ function staySuffix(lang: Lang, c: ChannelTask, now: number): string {
  */
 function channelLabel(lang: Lang, c: ChannelTask, now: number): string {
   const amount = c.claim ? c.claim.joinPaid : c.joinBonus;
-  const rest = `${amount > 0 || !c.mandatory ? ` · +${som(lang, amount)}` : ""}${staySuffix(lang, c, now)}`;
+  const rest = `${amount > 0 || !c.mandatory ? ` · +${buttonSom(lang, amount)}` : ""}${staySuffix(lang, c, now)}`;
   const mark = c.mandatory && c.claim ? "🔒 " : "";
   return `${mark}${clip(c.title, Math.max(TITLE_MIN, BONUS_LABEL_MAX - rest.length))}${rest}`;
 }
@@ -82,8 +91,8 @@ function channelButton(lang: Lang, c: ChannelTask, now: number): InlineButton {
 function inviteButton(lang: Lang, r: BonusTasks["referral"]): InlineButton {
   const action = isPublicHttps(r.link) ? { url: telegramShareUrl(r.link) } : { copy_text: { text: r.link.slice(0, 256) } };
   return r.invitedCount > 0
-    ? inlineButton("save", t(lang, "task.invited", { a: formatPoints(r.invitedCount), n: som(lang, r.earnedPoints) }), action, "success")
-    : inlineButton("group", t(lang, "task.invite", { n: som(lang, r.rewardPoints) }), action, "primary");
+    ? inlineButton("save", t(lang, "task.invited", { a: formatPoints(r.invitedCount), n: buttonSom(lang, r.earnedPoints) }), action, "success")
+    : inlineButton("group", t(lang, "task.invite", { n: buttonSom(lang, r.rewardPoints) }), action, "primary");
 }
 
 /** C-Q4: «💳 Har to‘ldirishga +N% bonus» → the wallet web app; no button while the bonus is off (N = 0). */
@@ -110,7 +119,7 @@ export function bonusScreen(lang: Lang, tasks: BonusTasks, now: number): Screen 
     `<i>${t(lang, "bonus.refreshHint")}</i>`,
   ].join("\n");
   // Always done; the amount is the booked ledger row (an account from before the sign-up bonus has none).
-  const signup = `${t(lang, "task.signup")}${tasks.signupPoints > 0 ? ` · +${som(lang, tasks.signupPoints)}` : ""}`;
+  const signup = `${t(lang, "task.signup")}${tasks.signupPoints > 0 ? ` · +${buttonSom(lang, tasks.signupPoints)}` : ""}`;
   return {
     text,
     reply_markup: rows(

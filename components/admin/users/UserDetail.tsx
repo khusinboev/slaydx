@@ -30,7 +30,7 @@ import { STATUS_META, assignableRoles } from "@/components/admin/admins/shared";
 import { WalletAdjustDialog } from "@/components/admin/money";
 import { GenerationsTable } from "@/components/admin/generations";
 import { OrdersTable, useResource, useUrlFilters } from "@/components/admin/payments";
-import { fmtBytes, fmtDateTime, fmtNumber, fmtSoum, fmtTanga } from "@/lib/admin-format";
+import { fmtBytes, fmtDateTime, fmtNumber, fmtSoum } from "@/lib/admin-format";
 import { adminErrorMessage } from "@/lib/admin-api/core";
 import { PROFILE_FIELDS, getUser, type AdminUserDetailResponse } from "@/lib/admin-api/users";
 import { PROFILE_LABEL } from "./labels";
@@ -206,7 +206,7 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
 
   // Legacy Pro quota is read-only history: its tile shows only while it is non-zero (0 for everyone after the merge).
   const wallets: ReadonlyArray<readonly [label: string, hint: string, value: number]> = [
-    ["Ball", "bonus", user.points],
+    ["Bonus so'm", "bonus", user.points],
     ...(user.quota !== 0 ? [["Kvota (eski)", "Pro", user.quota] as const] : []),
     ["Balans", "haqiqiy pul", user.balance],
   ];
@@ -249,8 +249,8 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
               <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
                 {label} · {hint}
               </span>
-              {/* Every wallet is counted in tanga (prices are charged across them in tanga); real money is so'm. */}
-              <div className="mt-1 text-[22px] font-semibold tabular-nums">{fmtTanga(value)}</div>
+              {/* Every wallet is counted in so'm (1 point = 1 so'm; prices are charged across them). */}
+              <div className="mt-1 text-[22px] font-semibold tabular-nums">{fmtSoum(value)}</div>
             </CardBody>
           </Card>
         ))}
@@ -322,7 +322,7 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
                           </span>
                         ),
                       },
-                      { label: "Sarflangan", value: <span className="tabular-nums">{fmtTanga(stats.spentTanga)}</span> },
+                      { label: "Sarflangan", value: <span className="tabular-nums">{fmtSoum(stats.spentTanga)}</span> },
                       { label: "To'lagan", value: <span className="tabular-nums">{fmtSoum(stats.paidSoum)}</span> },
                       { label: "Xotira", value: <span className="tabular-nums">{fmtBytes(stats.storageBytes)}</span> },
                       { label: "Faol sessiyalar", value: <span className="tabular-nums">{fmtNumber(counts.activeSessions)}</span> },
@@ -406,7 +406,7 @@ function referralRows(referral: NonNullable<AdminUserDetailResponse["referral"]>
           <span className="text-muted-foreground">
             {" "}
             ({by.source === "bot" ? "bot" : "sayt"}, <span className="tabular-nums">{fmtDateTime(by.at)}</span>
-            {by.rewardPoints > 0 ? `, +${fmtNumber(by.rewardPoints)} ball` : ", mukofotsiz"})
+            {by.rewardPoints > 0 ? `, +${fmtNumber(by.rewardPoints)} bonus so'm` : ", mukofotsiz"})
           </span>
         </span>
       ) : null,
@@ -416,7 +416,7 @@ function referralRows(referral: NonNullable<AdminUserDetailResponse["referral"]>
       value: (
         <span className="tabular-nums" data-invited-count>
           {fmtNumber(referral.invitedCount)}
-          <span className="text-muted-foreground"> ({fmtNumber(referral.earnedPoints)} ball)</span>
+          <span className="text-muted-foreground"> ({fmtNumber(referral.earnedPoints)} bonus so&apos;m)</span>
         </span>
       ),
     },

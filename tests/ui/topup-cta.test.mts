@@ -34,7 +34,7 @@ const topUp = () => document.querySelector<HTMLAnchorElement>("[data-topup]");
 // Redesign W5: the link goes to the Hamyon tab itself (was `/uz/purchase`, now only a redirect alias).
 test("UX-03: 402 xatosi yonida «Balansni to'ldirish» → /uz/wallet", () => {
   useAppStore.setState({ loggedIn: true, user: user(10_000) }); // store balansi eskirgan (hali ko'p) — server matni baribir tanilsin
-  chrome({ price: 4000, error: "Balans yetarli emas. Kerak: 4 000 tanga, mavjud: 1 200." });
+  chrome({ price: 4000, error: "Balans yetarli emas. Kerak: 4 000 so'm, mavjud: 1 200." });
   const a = topUp();
   assert.ok(a, "to'ldirish havolasi bor");
   assert.equal(a.getAttribute("href"), "/uz/wallet");
@@ -46,7 +46,7 @@ test("UX-03: balans narxdan kam — yuborishdan OLDIN aytiladi (balans + havola)
   chrome({ price: 3000 });
   const note = document.querySelector("[data-balance-short]");
   assert.ok(note);
-  assert.match(note.textContent ?? "", /1[\s .,]?200 tanga/);
+  assert.match(note.textContent ?? "", /1[\s .,]?200 so'm/);
   assert.ok(topUp());
 });
 
@@ -64,7 +64,7 @@ test("UX-03: BalanceChip — kirgan foydalanuvchi balansi sarlavhada, bosilsa Ha
   assert.ok(chip);
   assert.equal(chip.getAttribute("href"), "/uz/wallet");
   assert.match(chip.textContent ?? "", /5[\s .,]?000/, "points + quota + balance");
-  assert.match(chip.getAttribute("aria-label") ?? "", /^Balans: 5\D?000 tanga\. Hamyon$/);
+  assert.match(chip.getAttribute("aria-label") ?? "", /^Balans: 5\D?000 so'm\. Hamyon$/);
   cleanup();
   useAppStore.setState({ loggedIn: false, user: null });
   render(h(BalanceChip));

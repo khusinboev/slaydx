@@ -1,7 +1,7 @@
 "use client";
 
 import { ConfirmDialog, toast } from "@/components/admin/ui";
-import { fmtTanga } from "@/lib/admin-format";
+import { fmtSoum } from "@/lib/admin-format";
 import { cancelJob, failJob, refundJob, type ChargeSplit, type JobActionResult } from "@/lib/admin-api/money";
 import { moneyError, refundText } from "./shared";
 
@@ -69,7 +69,7 @@ export function JobActionDialog({ open, onClose, action, generation, onDone }: J
           {generation.topic ? <span>{generation.topic} · </span> : null}
           <span className="font-mono text-xs">{generation.id}</span>
           {generation.userName ? <span className="text-muted-foreground"> · {generation.userName}</span> : null}
-          <span className="text-muted-foreground"> · {fmtTanga(generation.price)}</span>
+          <span className="text-muted-foreground"> · {fmtSoum(generation.price)}</span>
         </span>
       }
       before={c.from}

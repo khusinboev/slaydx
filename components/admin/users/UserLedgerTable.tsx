@@ -39,7 +39,7 @@ export function UserLedgerTable({ userId }: { userId: string }) {
       header: "Turi",
       cell: (t) => <StatusPill tone={KIND_TONE[t.kind]}>{KIND_LABEL[t.kind]}</StatusPill>,
     },
-    { id: "points", header: "Ball", align: "right", cell: (t) => <DeltaCell value={t.points} /> },
+    { id: "points", header: "Bonus so'm", align: "right", cell: (t) => <DeltaCell value={t.points} /> },
     ...(anyQuota ? [{ id: "quota", header: WALLET_LABEL.quota, align: "right", cell: (t) => <DeltaCell value={t.quota} /> } satisfies Column<AdminUserTransaction>] : []),
     { id: "balance", header: "Balans", align: "right", cell: (t) => <DeltaCell value={t.balance} /> },
     { id: "ref", header: "Havola", className: "max-w-[14rem]", cell: (t) => <ReferenceCell reference={t.reference} link={linkOf(t)} /> },

@@ -7,9 +7,13 @@ import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.
 import { WorkComposer } from "../../components/forms/WorkComposer.tsx";
 import { ArticleComposer } from "../../components/forms/ArticleComposer.tsx";
 import { WORK_PARAMS } from "../../lib/generation/work-params.ts";
-import { TOOL_BY_ID, priceFor, formatTanga } from "../../lib/tools.ts";
+import { TOOL_BY_ID, priceFor } from "../../lib/tools.ts";
 import { COURSEWORK_PAGES } from "../../lib/generation/work/registry.ts";
 import type { UserProfile } from "../../lib/types.ts";
+import { formatSom } from "../../lib/format.ts";
+
+/** renderToStaticMarkup escapes the apostrophe of «so'm». */
+const esc = (s: string) => s.replace(/'/g, "&#x27;");
 
 /**
  * Talaba ishlari 2 (AUDIT-19 WP-E2) — forma QAMROVI va vosita DISPATCH
@@ -124,7 +128,7 @@ test("SSR da ▸ Sozlamalar YOPIQ keladi va titulning qolgan maydonlari faqat un
 test("hajm slayderi yonidagi narx `priceFor` dan (uch vosita) — formada hisob yo'q", () => {
   for (const id of ["coursework", "referat", "mustaqil-ish"] as const) {
     const html = renderWork(id);
-    const want = formatTanga(priceFor(TOOL_BY_ID[id], { pages: id === "coursework" ? "20-25" : "10-15" }));
+    const want = esc(formatSom(priceFor(TOOL_BY_ID[id], { pages: id === "coursework" ? "20-25" : "10-15" })));
     const shown = /data-price="true"[^>]*>([^<]*)</.exec(html)?.[1]?.trim();
     assert.equal(shown, want, `${id}: slayder narxi priceFor natijasi`);
     assert.ok(html.split(want).length - 1 >= 2, `${id}: sticky narx ham AYNAN shu matn`);

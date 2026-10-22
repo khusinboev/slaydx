@@ -38,7 +38,7 @@ export function HealthKpis({ data }: { data: PricingOverview }) {
         hint={t.uncoveredTools.length > 0 ? `${fmtNumber(t.uncoveredTools.length)} ta vosita tannarxsiz, kirmagan` : "tannarxi bor vositalar"}
         info={
           <>
-            Tayyor ishlar narxi (ball bilan to&apos;langani ham) − tannarx − to&apos;lov komissiyasi {pctText(data.paymentFeePercent)} (faqat naqd qismdan), narxdan foizda.
+            Tayyor ishlar narxi (bonus so&apos;m bilan to&apos;langani ham) − tannarx − to&apos;lov komissiyasi {pctText(data.paymentFeePercent)} (faqat naqd qismdan), narxdan foizda.
             {t.uncoveredTools.length > 0 ? ` Tannarxi o'lchanmagan: ${t.uncoveredTools.join(", ")}.` : ""}
           </>
         }
@@ -48,14 +48,14 @@ export function HealthKpis({ data }: { data: PricingOverview }) {
         value={pctText(t.cashMarginPct)}
         delta={pointsDelta(t.cashMarginPct, p.cashMarginPct, "up-good")}
         hint="faqat naqd tushum"
-        info="Faqat naqd pul tushumi bo'yicha (ball bilan to'langan ishlar tushum emas), davrda yaratilgan barcha ishlar."
+        info="Faqat naqd pul tushumi bo'yicha (bonus so'm bilan to'langan ishlar tushum emas), davrda yaratilgan barcha ishlar."
       />
       <KpiTile
         label="Tushum"
         value={<Money amount={t.revenueSoum} unit="so'm" />}
         delta={percentDelta(t.revenueSoum, p.revenueSoum, "up-good")}
         hint={`${fmtNumber(t.completed)} ta tayyor ish`}
-        info="Davrda tugagan ishlarning ro'yxat narxi (qaytarilgani ayrilgan), qanday to'langanidan qat'i nazar. 1 tanga = 1 so'm."
+        info="Davrda tugagan ishlarning ro'yxat narxi (qaytarilgani ayrilgan), qanday to'langanidan qat'i nazar. Hisob birligi — so'm."
       />
       <KpiTile
         label="AI xarajat"
@@ -68,8 +68,8 @@ export function HealthKpis({ data }: { data: PricingOverview }) {
         label="Bonus xarajati"
         value={<Money amount={t.bonusCostSoum} unit="so'm" />}
         delta={percentDelta(t.bonusCostSoum, p.bonusCostSoum, "up-bad")}
-        hint={`ball ulushi ${pctText(t.pointsSharePct, 0)}`}
-        info="Ball bilan to'langan ishlarning AI xarajati — bonuslarning narxi. Ball ulushi: tayyor ishlar tushumining ball bilan to'langan qismi."
+        hint={`bonus ulushi ${pctText(t.pointsSharePct, 0)}`}
+        info="Bonus so'm bilan to'langan ishlarning AI xarajati — bonuslarning narxi. Bonus ulushi: tayyor ishlar tushumining bonus so'm bilan to'langan qismi."
       />
       <KpiTile
         label="Maqsadli ustama"

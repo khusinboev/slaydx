@@ -712,7 +712,7 @@ export const LEDGER_CSV_HEADER = [
   "Foydalanuvchi ID",
   "Foydalanuvchi",
   "Turi",
-  "Bonus ball",
+  "Bonus so'm",
   "Kvota (eski)",
   "Balans",
   "Havola",

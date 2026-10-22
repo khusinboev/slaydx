@@ -16,7 +16,8 @@ import {
   SourceFileRow,
   TopicRow,
 } from "../../components/forms/shared/index.tsx";
-import { formatTanga } from "../../lib/tools.ts";
+import { formatSom } from "../../lib/format.ts";
+
 
 /**
  * FORMALAR 3 (AUDIT-24 R0) — umumiy forma bo'laklari.
@@ -197,7 +198,7 @@ test("RangeRow: qiymat formatlanadi, narx AYNAN berilganicha chiqadi, slayder on
   let got = 0;
   render(h(RangeRow, { label: "Hajm", id: "pages", value: 20, min: 10, max: 45, onChange: (v) => (got = v), format: (v) => `${v} bet`, price: 16000, rule: "10 betgacha 12 000" }));
   assert.equal(document.querySelector("[data-range-value]")?.textContent, "20 bet");
-  assert.equal(document.querySelector("[data-price]")?.textContent, formatTanga(16000), "narx priceFor natijasi bilan bir xil formatda");
+  assert.equal(document.querySelector("[data-price]")?.textContent, formatSom(16000), "narx priceFor natijasi bilan bir xil formatda");
   assert.equal(document.querySelector("[data-price-rule]")?.textContent, "10 betgacha 12 000");
   fireEvent.change(screen.getByLabelText("Hajm"), { target: { value: "30" } });
   assert.equal(got, 30);

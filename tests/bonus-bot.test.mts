@@ -119,7 +119,7 @@ test("Hamyon card → «🎁 Bonuslar» (b:h) edits the same message into «Sizn
   installFetch();
   await tg.handleUpdate(textUpdate(u.tg, "💰 Hamyon / Bonus"));
   const card = sends()[0]!.body;
-  assert.match(String(card.text), /<blockquote expandable>🧾 <b>So‘nggi amallar<\/b>\n<b>\+2\s000 so‘m<\/b> — Ro‘yxatdan o‘tish bonusi/);
+  assert.match(String(card.text), /<blockquote expandable>🧾 <b>So‘nggi amallar<\/b>\n<b>\+2\s000 bonus so‘m<\/b> — Ro‘yxatdan o‘tish bonusi/);
   assert.deepEqual(rowsOf(card), [
     [{ text: "🎁 Bonuslar", callback_data: "b:h", style: "success" }],
     [{ text: "💳 To‘ldirish", web_app: { url: "https://slaydx.test/uz/wallet" }, style: "primary" }],
@@ -132,7 +132,7 @@ test("Hamyon card → «🎁 Bonuslar» (b:h) edits the same message into «Sizn
   assert.equal(edits()[0]!.body.message_id, 4242);
   const text = String(edits()[0]!.body.text);
   assert.match(text, /^🎁 <b>Sizning bonuslaringiz<\/b>/);
-  assert.match(text, /Jami olgan bonusingiz: <b>2\s000 so‘m<\/b> · yana olish mumkin: <b>\d[\d\s]* so‘m<\/b>/);
+  assert.match(text, /Jami olgan: <b>2\s000 bonus so‘m<\/b> · yana olish mumkin: <b>\d[\d\s]* bonus so‘m<\/b>/);
   const b = buttons(edits()[0]!.body);
   assert.deepEqual(b[0], { text: "✅ Ro‘yxatdan o‘tish · +2 000 so‘m", callback_data: "b:d", style: "success" });
   assert.ok(b[1]!.url?.startsWith("https://t.me/share/url?url=https%3A%2F%2Ft.me%2Fslaydx_test_bot%3Fstart%3Dref_"), b[1]!.url);
@@ -151,7 +151,7 @@ test("«🔄 Yangilash»: a member is paid once — toast + green button; replay
   member = { [u.tg]: "member" };
   installFetch();
   await tg.handleUpdate(cbUpdate(u.tg, "b:r", 777));
-  assert.deepEqual(toasts(), ["🎉 +1 000 so‘m bonus!"]);
+  assert.deepEqual(toasts(), ["🎉 +1 000 bonus so‘m!"]);
   assert.equal(memberCalls().length, 1);
   assert.equal(edits().length, 1);
   assert.equal(edits()[0]!.body.message_id, 777);
@@ -209,7 +209,7 @@ test("a private channel without a public link: its button checks that one channe
   member = { [u.tg]: "member" };
   installFetch();
   await tg.handleUpdate(cbUpdate(u.tg, btn!.callback_data!));
-  assert.deepEqual(toasts(), ["🎉 +1 000 so‘m bonus!"]);
+  assert.deepEqual(toasts(), ["🎉 +1 000 bonus so‘m!"]);
   installFetch();
   await tg.handleUpdate(cbUpdate(u.tg, btn!.callback_data!));
   assert.deepEqual(toasts(), ["Bu vazifa allaqachon bajarilgan"]);
@@ -274,7 +274,7 @@ test("a chat_member join pays automatically: ONE notice in the user's chat, «Bo
   assert.equal(await points(u.id), before + 1000);
   assert.equal(sends().length, 1, "replayed update: no second notice");
   assert.equal(sends()[0]!.body.chat_id, String(u.tg));
-  assert.equal(sends()[0]!.body.text, "🎉 <b>+1 000 so‘m bonus!</b>\n«SlaydX» kanaliga obuna bo‘lganingiz uchun.\n7 kun obuna bo‘lib qolsangiz — yana +2 000 so‘m.");
+  assert.equal(sends()[0]!.body.text, "🎉 <b>+1 000 bonus so‘m!</b>\n«SlaydX» kanaliga obuna bo‘lganingiz uchun.\n7 kun obuna bo‘lib qolsangiz — yana +2 000 bonus so‘m.");
   assert.deepEqual(buttons(sends()[0]!.body), [{ text: "🎁 Bonuslar", callback_data: "b:h", style: "success" }]);
   assert.equal(memberCalls().length, 0);
 
@@ -300,12 +300,12 @@ test("chat_member join ‖ «Yangilash» at the same time: paid exactly once; a 
     assert.equal(await points(u.id), before + 1000, `round ${round}`);
     assert.equal(await channelLedger(u.id), 1);
     const notices = sends().filter((c) => String(c.body.text).includes("kanaliga obuna bo‘lganingiz uchun")).length;
-    const refreshPaid = toasts().includes("🎉 +1 000 so‘m bonus!");
+    const refreshPaid = toasts().includes("🎉 +1 000 bonus so‘m!");
     assert.equal(notices + (refreshPaid ? 1 : 0), 1, `exactly one of the two paths paid (round ${round})`);
   }
 });
 
-test("russian user: toast, buttons and notice in Russian, amounts in сум", { skip }, async () => {
+test("russian user: toast, buttons and notice in Russian, amounts in бонусных сум (buttons: сум)", { skip }, async () => {
   await freshChannels();
   const u = await newUser();
   await query("UPDATE users SET language = 'ru' WHERE id = $1", [u.id]);
@@ -313,7 +313,7 @@ test("russian user: toast, buttons and notice in Russian, amounts in сум", { 
   member = { [u.tg]: "creator" };
   installFetch();
   await tg.handleUpdate(cbUpdate(u.tg, "b:r"));
-  assert.deepEqual(toasts(), ["🎉 +2 000 сум бонуса!"]);
+  assert.deepEqual(toasts(), ["🎉 +2 000 бонусных сум!"]);
   assert.match(String(edits()[0]!.body.text), /^🎁 <b>Ваши бонусы<\/b>/);
   assert.ok(buttons(edits()[0]!.body).some((b) => b.text === "✅ Канал · +2 000 сум" && b.style === "success"));
   void ch;

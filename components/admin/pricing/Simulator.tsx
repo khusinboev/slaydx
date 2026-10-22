@@ -5,7 +5,7 @@ import { PRICE_PERCENT_MAX, PRICE_PERCENT_MIN, type LadderRow, type PriceAdjust,
 import { fmtNumber } from "@/lib/admin-format";
 import { Badge, InfoTip } from "@/components/admin/ui";
 import { LadderCompare } from "./LadderCompare";
-import { marginTone, pctText, roundToText, soumText, tangaText } from "./shared";
+import { marginTone, pctText, roundToText, soumText } from "./shared";
 import { shownSimulation, useSimulation } from "./useSimulation";
 
 /** The slider covers the everyday range; the input reaches the API maximum. */
@@ -89,8 +89,8 @@ export function Simulator({
         <dl className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <div className="bg-muted/50 rounded-lg px-3 py-2">
             <dt className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">Tushum · {fmtNumber(sim.window.days)} kun</dt>
-            <dd className="text-base font-semibold tabular-nums">{tangaText(sim.projected.revenue30d)}</dd>
-            <dd className="text-muted-foreground text-xs tabular-nums">hozir {tangaText(sim.current.revenue30d)}</dd>
+            <dd className="text-base font-semibold tabular-nums">{soumText(sim.projected.revenue30d)}</dd>
+            <dd className="text-muted-foreground text-xs tabular-nums">hozir {soumText(sim.current.revenue30d)}</dd>
           </div>
           <div className="bg-muted/50 rounded-lg px-3 py-2">
             <dt className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">AI xarajat · {fmtNumber(sim.window.days)} kun</dt>
@@ -116,7 +116,7 @@ export function Simulator({
           {sim?.partial ? " Faqat birinchi 20 000 ta ish hisoblandi." : ""}
         </span>
         <InfoTip label="Simulyator qanday hisoblaydi" align="end">
-          Talab elastikligi hisobga olinmaydi. Tushum tangada, marja so&apos;mda: tanga × {sim ? fmtNumber(sim.soumPerCoin) : "1"} so&apos;m, to&apos;lov komissiyasi{" "}
+          Talab elastikligi hisobga olinmaydi. Tushum va marja so&apos;mda (marjada × {sim ? fmtNumber(sim.soumPerCoin) : "1"}), to&apos;lov komissiyasi{" "}
           {sim ? pctText(sim.paymentFeePercent) : ""} naqd qismdan ayriladi — jadvaldagi «Marja» bilan bir xil.{" "}
           {sim?.includeAdmins ? "Adminlarning ishlari ham kiritilgan." : "Adminlarning ishlari kiritilmagan."} Yangi narx: asosiy × % ÷ 100,{" "}
           {roundToText(item.adjust.roundTo)} ga yaxlitlanadi (100% — asosiy narxning o&apos;zi).

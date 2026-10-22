@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { Overview } from "@/lib/admin-api/metrics";
-import { fmtNumber, fmtPercent, fmtSoum, fmtTanga, fmtUsd } from "@/lib/admin-format";
+import { fmtNumber, fmtPercent, fmtSoum, fmtUsd } from "@/lib/admin-format";
 import { KpiTile } from "@/components/admin/ui";
 import { useCan } from "@/components/admin/shell/admin-identity";
 import { percentDelta, pointsDelta, unitBreakable } from "./format";
@@ -84,15 +84,15 @@ export function KpiGrid({ data }: { data: Overview }) {
         />
         <KpiTile
           label="Naqd sarf"
-          value={<Money text={fmtTanga(c.cashSpendTanga)} />}
+          value={<Money text={fmtSoum(c.cashSpendTanga)} />}
           delta={percentDelta(c.cashSpendTanga, p.cashSpendTanga, "up-good")}
-          hint={`Bonus ball: ${fmtNumber(c.bonusSpendPoints)}`}
+          hint={`Bonus so'm: ${fmtNumber(c.bonusSpendPoints)}`}
         />
         <KpiTile
           label="Qaytarishlar"
-          value={<Money text={fmtTanga(c.refunds.tanga)} />}
+          value={<Money text={fmtSoum(c.refunds.tanga)} />}
           delta={percentDelta(c.refunds.tanga, p.refunds.tanga, "up-bad")}
-          hint={`${fmtNumber(c.refunds.count)} ta · ${fmtNumber(c.refunds.points)} ball`}
+          hint={`${fmtNumber(c.refunds.count)} ta · ${fmtNumber(c.refunds.points)} bonus so'm`}
         />
         <KpiTile
           label="AI xarajat"

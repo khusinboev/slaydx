@@ -278,7 +278,7 @@ export type TopUpDelta = { points?: number; balance?: number };
  */
 function assertNoQuota(delta: TopUpDelta): void {
   const quota = (delta as { quota?: unknown }).quota;
-  if (quota !== undefined && quota !== 0) throw new Error("Kvota hamyoni yopilgan: kredit faqat ball yoki balansga");
+  if (quota !== undefined && quota !== 0) throw new Error("Kvota hamyoni yopilgan: kredit faqat bonus so'm yoki balansga");
 }
 
 /** Balansni to'ldirish (to'lov webhook idan). `reference` — provider tranzaksiya id. */
@@ -404,7 +404,7 @@ export async function adminAdjustWalletInTx(client: PoolClient, input: AdminAdju
   const row = res.rows[0];
   if (!row) throw new Error("Foydalanuvchi topilmadi");
   // Kvota yopiq hamyon (obuna olib tashlangan): faqat yechish mumkin, kredit — yo'q.
-  if (wallet === "quota" && amount > 0) throw new Error("Kvota hamyoni yopilgan: kredit faqat ball yoki balansga");
+  if (wallet === "quota" && amount > 0) throw new Error("Kvota hamyoni yopilgan: kredit faqat bonus so'm yoki balansga");
   const before = Number(row[wallet]);
   const after = before + amount;
   if (after < 0) return { ok: false as const, reason: "insufficient" as const, available: before };

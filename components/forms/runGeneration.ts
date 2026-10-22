@@ -2,9 +2,10 @@
 
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
-import { formatTanga, priceFor } from "@/lib/tools";
+import { priceFor } from "@/lib/tools";
 import type { FormValues, ToolConfig } from "@/lib/types";
 import { confirmAccepted, confirmClock } from "../overlays/useConfirmClick";
+import { formatSom } from "@/lib/format";
 
 /**
  * Generatsiyani boshlaydi.
@@ -104,7 +105,7 @@ function takePendingConfirm(intent: string): number | undefined {
 
 function priceChangedError(price: number, data: Record<string, unknown> = {}): api.PriceChangedError {
   return new api.PriceChangedError(
-    `Narx o‘zgardi. Yangi narx: ${formatTanga(price)}. Shu narxda davom etish uchun tugmani yana bir marta bosing.`,
+    `Narx o‘zgardi. Yangi narx: ${formatSom(price)}. Shu narxda davom etish uchun tugmani yana bir marta bosing.`,
     price,
     { ...data, code: "price_changed", price },
   );
