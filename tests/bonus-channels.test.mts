@@ -812,7 +812,7 @@ test("bonusTasks: active channels by sort with the user's own claim state; earne
   assert.equal(tasks.availableTotal, 3000, "channel A not joined: 1 000 + 2 000");
   assert.deepEqual(tasks.paymentBonus, { percent: 10, earnedPoints: 0 }, "C-Q4: default 10 %, nothing earned yet");
   assert.match(tasks.referral.link, /^https:\/\/t\.me\/slaydx_test_bot\?start=ref_/);
-  assert.equal(tasks.referral.rewardPoints, 2000);
+  assert.equal(tasks.referral.rewardPoints, 1000);
 });
 
 test("bonusTasks totals: payment bonuses + the legacy first top-up row are earned; owed stay bonuses are available, forfeited ones are not — MUTATSIYA J4", { skip }, async () => {

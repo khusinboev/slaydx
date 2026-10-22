@@ -15,14 +15,14 @@
  */
 
 /**
- * Reward per brand-new invited account, by the inviter's friend NUMBER (owner 2026-10-19): friends 1–25 earn 2 000,
- * friends 26–50 earn 1 000, from the 51st on 500. The number is the count of that inviter's referral rows + 1, read under the
+ * Reward per brand-new invited account, by the inviter's friend NUMBER (owner 2026-10-19, halved 2026-10-22 program 17 D3): friends 1–25 earn 1 000,
+ * friends 26–50 earn 500, from the 51st on 250. The number is the count of that inviter's referral rows + 1, read under the
  * inviter's row lock (`referrals.ts applyCore`), so concurrent sign-ups get distinct numbers. There is no cap.
  */
 export const REFERRAL_TIERS = [
-  { upTo: 25, points: 2000 },
-  { upTo: 50, points: 1000 },
-  { upTo: Number.POSITIVE_INFINITY, points: 500 },
+  { upTo: 25, points: 1000 },
+  { upTo: 50, points: 500 },
+  { upTo: Number.POSITIVE_INFINITY, points: 250 },
 ] as const;
 
 /** Points for the inviter's `rank`-th friend (1-based); a non-positive / non-finite rank counts as the first. */

@@ -95,8 +95,8 @@ test("/start ref_<code> from a brand-new person → registered, inviter rewarded
   const me = await userByTg(from);
   assert.ok(me, "the message created the account");
   assert.equal(Number(me.points), SIGNUP_BONUS_POINTS);
-  assert.equal((await pointsOf(inv.id)) - before, 2000, "MUTATSIYA 1");
-  assert.deepEqual(await referralOf(me.id), [{ referrer_user_id: inv.id, source: "bot", reward_points: 2000 }]);
+  assert.equal((await pointsOf(inv.id)) - before, 1000, "MUTATSIYA 1");
+  assert.deepEqual(await referralOf(me.id), [{ referrer_user_id: inv.id, source: "bot", reward_points: 1000 }]);
   assert.equal(calls.length, 2, "B2: welcome card + main keyboard");
   assert.match(String(calls[0]!.body.text), /Assalomu alaykum/);
   const b = buttons(calls[0]!.body);
@@ -149,8 +149,8 @@ test("site ticket with a captured code: /start <nonce> creates the account with 
   await tg.handleUpdate(update(from, `/start ${ticket.nonce}`));
   const me = await userByTg(from);
   assert.ok(me);
-  assert.equal((await pointsOf(inv.id)) - before, 2000, "MUTATSIYA 2");
-  assert.deepEqual(await referralOf(me.id), [{ referrer_user_id: inv.id, source: "web", reward_points: 2000 }]);
+  assert.equal((await pointsOf(inv.id)) - before, 1000, "MUTATSIYA 2");
+  assert.deepEqual(await referralOf(me.id), [{ referrer_user_id: inv.id, source: "web", reward_points: 1000 }]);
   // The login flow: the «🔑 Saytga kirish» one-time link, as before.
   assert.equal(calls.length, 1);
   assert.match(String(calls[0]!.body.text), /Kirish uchun quyidagi tugmani bosing/);
@@ -159,7 +159,7 @@ test("site ticket with a captured code: /start <nonce> creates the account with 
   const r = await tg.redeemLoginToken(new URL(link).searchParams.get("t")!);
   assert.equal(r.ok, true);
   assert.equal(r.ok && r.user.id, me.id);
-  assert.equal(await pointsOf(inv.id) - before, 2000, "redeeming the ticket does not reward again");
+  assert.equal(await pointsOf(inv.id) - before, 1000, "redeeming the ticket does not reward again");
 });
 
 test("ticket without a code → no referral; a code-less /start <nonce> for an existing person is unchanged", { skip }, async () => {
@@ -183,8 +183,8 @@ test("redeemLoginToken applies the ticket's code when the account does not exist
   const r = await tg.redeemLoginToken(new URL(link).searchParams.get("t")!);
   assert.equal(r.ok, true);
   const me = await userByTg(from);
-  assert.deepEqual(await referralOf(me!.id), [{ referrer_user_id: inv.id, source: "web", reward_points: 2000 }]);
-  assert.equal((await pointsOf(inv.id)) - before, 2000);
+  assert.deepEqual(await referralOf(me!.id), [{ referrer_user_id: inv.id, source: "web", reward_points: 1000 }]);
+  assert.equal((await pointsOf(inv.id)) - before, 1000);
 });
 
 test("/taklif → the user's own bot link, counters and a t.me/share button; in a group → instruction only, nobody registered", { skip }, async () => {
@@ -198,8 +198,8 @@ test("/taklif → the user's own bot link, counters and a t.me/share button; in 
   const text = String(calls[0]!.body.text);
   const link = `https://t.me/slaydx_test_bot?start=ref_${inv.code}`;
   assert.ok(text.includes(link), text);
-  assert.match(text, /Har bir do'st uchun: 1–25-do'st — 2\s000 bonus so'm, 26–50-do'st — 1\s000 bonus so'm, 51-dan boshlab — 500 bonus so'm\. Keyingi do'stingiz uchun: 2\s000 bonus so'm\./);
-  assert.match(text, /Taklif qilinganlar: <b>1<\/b> · Topilgan: <b>2\s000 bonus so'm<\/b>/);
+  assert.match(text, /Har bir do'st uchun: 1–25-do'st — 1\s000 bonus so'm, 26–50-do'st — 500 bonus so'm, 51-dan boshlab — 250 bonus so'm\. Keyingi do'stingiz uchun: 1\s000 bonus so'm\./);
+  assert.match(text, /Taklif qilinganlar: <b>1<\/b> · Topilgan: <b>1\s000 bonus so'm<\/b>/);
   const share = buttons(calls[0]!.body).find((x) => x.url?.startsWith("https://t.me/share/url?"));
   assert.ok(share, "share button");
   assert.equal(new URL(share.url!).searchParams.get("url"), link);
