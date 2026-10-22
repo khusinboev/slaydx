@@ -84,7 +84,9 @@ async function convert(bin: string, bytes: Uint8Array, fileName: string, timeout
   const dir = await mkdtemp(join(tmpdir(), "slaydx-pdf-"));
   try {
     // Fayl nomi buyruq qatoriga tushadi — faqat xavfsiz belgilar qoldiramiz.
-    const ext = /\.pptx$/i.test(fileName) ? "pptx" : "docx";
+    // Extension steers LibreOffice's import filter: keep the real one for the free converter's formats.
+    const given = /\.(docx|pptx|doc|ppt|odt|odp|rtf)$/i.exec(fileName)?.[1]?.toLowerCase();
+    const ext = given ?? "docx";
     const src = join(dir, `manba.${ext}`);
     await writeFile(src, bytes);
 
