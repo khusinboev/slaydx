@@ -18,8 +18,8 @@ import { randomInt } from "node:crypto";
  *   2. referrals.ts: the `fresh` (created in this transaction) guard removed → «not_new guard»;
  *   1+2 together (double reward on the conflict path)                     → «existing account … nothing» (money);
  *   3. self check removed                                                  → «self-referral»;
- *   4. blocked check removed (points always 2000)                          → «blocked inviter»;
- *   5. first tier 2000 → 200 / reward to the referee                       → «new account via /start ref_»;
+ *   4. blocked check removed (points always 1000)                          → «blocked inviter»;
+ *   5. first tier 1000 → 200 / reward to the referee                       → «new account via /start ref_»;
  *   6. ledger reference random instead of `referral:<referee id>`          → «second apply in the same transaction»;
  *   7. `ON CONFLICT DO NOTHING` dropped from the referrals insert           → «second apply …» (reason error, not duplicate);
  *   8. (2026-10-19) tiers: friend number off by one / count taken outside the inviter lock / tiers swapped → «tiered rewards», «concurrency tiers»;
@@ -117,7 +117,7 @@ async function capturingErrors<T>(fn: () => Promise<T>): Promise<{ result: T; er
 /* ───────────────────────────── pure rules ───────────────────────────── */
 
 test("codes: normalised, alphabet without look-alikes, 8–10 chars; payload and link shapes", () => {
-  assert.equal(shared.REFERRAL_REWARD_POINTS, 2000, "D1: the first tier is 2000 points per invited account");
+  assert.equal(shared.REFERRAL_REWARD_POINTS, 1000, "D1: the first tier is 1000 points per invited account");
   assert.equal(shared.normalizeRefCode(" K7M3P9QX "), "k7m3p9qx");
   for (const bad of ["k7m3p9q", "k7m3p9qx12345", "k7m3p0qx", "k7m3p1qx", "k7m3pIqx", "k7m3poqx", "../../x", "", null, 12345678, "k7m3 p9qx"]) {
     assert.equal(shared.normalizeRefCode(bad), null, String(bad));
@@ -131,23 +131,23 @@ test("codes: normalised, alphabet without look-alikes, 8–10 chars; payload and
   assert.equal(shared.referralBotLink("", "k7m3p9qx"), null);
   assert.equal(shared.referralBotLink("bad bot", "k7m3p9qx"), null);
   assert.equal(shared.referralWebLink("https://slaydx.test/", "k7m3p9qx"), "https://slaydx.test/uz?ref=k7m3p9qx");
-  assert.match(shared.referralRuleText(), /^Yangi do'st uchun bonus so'm: 1–25-do'st — 2\s000, 26–50-do'st — 1\s000, 51-dan boshlab — 500\. Keyingi do'stingiz uchun: 2\s000 bonus so'm\. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi\.$/);
+  assert.match(shared.referralRuleText(), /^Yangi do'st uchun bonus so'm: 1–25-do'st — 1\s000, 26–50-do'st — 500, 51-dan boshlab — 250\. Keyingi do'stingiz uchun: 1\s000 bonus so'm\. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi\.$/);
   const share = new URL(shared.telegramShareUrl("https://t.me/slaydx_bot?start=ref_k7m3p9qx"));
   assert.equal(share.origin + share.pathname, "https://t.me/share/url");
   assert.equal(share.searchParams.get("url"), "https://t.me/slaydx_bot?start=ref_k7m3p9qx");
 });
 
-test("tiers (owner 2026-10-19): friends 1–25 → 2000, 26–50 → 1000, 51+ → 500; boundaries and junk input", () => {
+test("tiers (owner 2026-10-19): friends 1–25 → 1000, 26–50 → 500, 51+ → 250; boundaries and junk input", () => {
   // MUTATION: `<=` → `<` in referralRewardFor, or swapped points → red.
-  assert.equal(shared.referralRewardFor(1), 2000);
-  assert.equal(shared.referralRewardFor(25), 2000);
-  assert.equal(shared.referralRewardFor(26), 1000);
-  assert.equal(shared.referralRewardFor(50), 1000);
-  assert.equal(shared.referralRewardFor(51), 500);
-  assert.equal(shared.referralRewardFor(100_000), 500);
-  for (const junk of [0, -3, Number.NaN, Number.POSITIVE_INFINITY]) assert.equal(shared.referralRewardFor(junk), 2000, String(junk));
-  assert.equal(shared.referralRewardFor(25.9), 2000, "floors");
-  assert.deepEqual(shared.REFERRAL_TIERS.map((t) => [t.upTo, t.points]), [[25, 2000], [50, 1000], [Infinity, 500]]);
+  assert.equal(shared.referralRewardFor(1), 1000);
+  assert.equal(shared.referralRewardFor(25), 1000);
+  assert.equal(shared.referralRewardFor(26), 500);
+  assert.equal(shared.referralRewardFor(50), 500);
+  assert.equal(shared.referralRewardFor(51), 250);
+  assert.equal(shared.referralRewardFor(100_000), 250);
+  for (const junk of [0, -3, Number.NaN, Number.POSITIVE_INFINITY]) assert.equal(shared.referralRewardFor(junk), 1000, String(junk));
+  assert.equal(shared.referralRewardFor(25.9), 1000, "floors");
+  assert.deepEqual(shared.REFERRAL_TIERS.map((t) => [t.upTo, t.points]), [[25, 1000], [50, 500], [Infinity, 250]]);
 });
 
 test("formatPoints / formatJoinDate: by hand, NBSP groups, Tashkent date — never the runtime's ICU (Chromium wrote «6,000»)", () => {
@@ -168,7 +168,7 @@ test("formatPoints / formatJoinDate: by hand, NBSP groups, Tashkent date — nev
     assert.equal(shared.formatJoinDate("2026-10-06T20:30:00.000Z"), "07.10.2026", "UTC+5: already the next day in Tashkent");
     assert.equal(shared.formatJoinDate("2026-01-02T03:00:00.000Z"), "02.01.2026");
     assert.equal(shared.formatJoinDate("nonsense"), "");
-    assert.equal(shared.referralRuleText(1000), "Yangi do'st uchun bonus so'm: 1–25-do'st — 2\u00a0000, 26–50-do'st — 1\u00a0000, 51-dan boshlab — 500. Keyingi do'stingiz uchun: 1\u00a0000 bonus so'm. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi.");
+    assert.equal(shared.referralRuleText(500), "Yangi do'st uchun bonus so'm: 1–25-do'st — 1\u00a0000, 26–50-do'st — 500, 51-dan boshlab — 250. Keyingi do'stingiz uchun: 500 bonus so'm. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi.");
   } finally {
     Number.prototype.toLocaleString = realNum;
     Date.prototype.toLocaleDateString = realDate;
@@ -194,20 +194,20 @@ test("ensureRefCode: random 8-char code, stable, never the Telegram id, concurre
 
 /* ───────────────────────────── reward ───────────────────────────── */
 
-test("new account via /start ref_ (registerBotUser): inviter +2000 once (ledger bonus `referral:<id>`), invitee only the signup bonus", { skip }, async () => {
+test("new account via /start ref_ (registerBotUser): inviter +1000 once (ledger bonus `referral:<id>`), invitee only the signup bonus", { skip }, async () => {
   const inviter = await newReferrer("Ali Taklifchi");
   const before = await pointsOf(inviter.id);
   const tg = tgId();
   const invitee = await registerBotUser(profile(tg, "Vali Yangi"), { code: inviter.code, source: "bot" });
 
-  assert.equal((await pointsOf(inviter.id)) - before, REFERRAL_REWARD_POINTS, "MUTATSIYA 5: exactly 2000 to the inviter");
+  assert.equal((await pointsOf(inviter.id)) - before, REFERRAL_REWARD_POINTS, "MUTATSIYA 5: exactly 1000 to the inviter");
   assert.equal(invitee.points, SIGNUP_BONUS_POINTS, "D2: the invitee gets no extra bonus");
   const rows = await referralOf(invitee.id);
   assert.equal(rows.length, 1);
   assert.deepEqual(rows[0], {
     referrer_user_id: inviter.id,
     source: "bot",
-    reward_points: 2000,
+    reward_points: 1000,
     reward_ref: `referral:${invitee.id}`,
     referee_telegram_id: tg,
   });
@@ -215,7 +215,7 @@ test("new account via /start ref_ (registerBotUser): inviter +2000 once (ledger 
   assert.equal(ledger.length, 1, "exactly one ledger row for this invite");
   assert.deepEqual(
     { ...ledger[0], note: undefined },
-    { user_id: inviter.id, kind: "bonus", points_delta: "2000", quota_delta: "0", balance_delta: "0", note: undefined },
+    { user_id: inviter.id, kind: "bonus", points_delta: "1000", quota_delta: "0", balance_delta: "0", note: undefined },
   );
   assert.equal(ledger[0]!.note, "Do'st taklifi: Vali Yangi");
   await assertLedger(inviter.id, "inviter");
@@ -301,7 +301,7 @@ test("concurrency: one new person, two different inviters' links at once → exa
 /** Rewards booked for `inviterId`: referral rows (with points) and ledger rows. */
 async function rewardCounts(inviterId: string) {
   const r = await queryOne<{ rows: string; ledger: string }>(
-    `SELECT (SELECT count(*) FROM referrals WHERE referrer_user_id = $1 AND reward_points = 2000)::text AS rows,
+    `SELECT (SELECT count(*) FROM referrals WHERE referrer_user_id = $1 AND reward_points = 1000)::text AS rows,
             (SELECT count(*) FROM transactions WHERE user_id = $1 AND kind = 'bonus' AND reference LIKE 'referral:%')::text AS ledger`,
     [inviterId],
   );
@@ -473,7 +473,7 @@ test("a failing referral never costs the sign-up: rolled back to its savepoint, 
 
 /* ───────────────────────────── tiered rewards (2026-10-19) ───────────────────────────── */
 
-test("tiered rewards, no signal, no cap: 55 friends of one inviter → 25×2000 + 25×1000 + 5×500 (a ledger row each); the old 24 h burst signal is gone", { skip }, async () => {
+test("tiered rewards, no signal, no cap: 55 friends of one inviter → 25×1000 + 25×500 + 5×250 (a ledger row each); the old 24 h burst signal is gone", { skip }, async () => {
   const inviter = await newReferrer("Pog'onali");
   let prev = await pointsOf(inviter.id);
   const gained: number[] = [];
@@ -483,34 +483,34 @@ test("tiered rewards, no signal, no cap: 55 friends of one inviter → 25×2000 
     gained.push(now - prev);
     prev = now;
   }
-  assert.deepEqual(gained, [...Array(25).fill(2000), ...Array(25).fill(1000), ...Array(5).fill(500)], "MUTATSIYA 8: tier boundaries at friend 26 and 51");
+  assert.deepEqual(gained, [...Array(25).fill(1000), ...Array(25).fill(500), ...Array(5).fill(250)], "MUTATSIYA 8: tier boundaries at friend 26 and 51");
   const n = await queryOne<{ n: string; pts: string; t: string }>(
     "SELECT count(*)::text AS n, sum(reward_points)::text AS pts, (SELECT count(*) FROM transactions WHERE user_id = $1 AND kind = 'bonus' AND reference LIKE 'referral:%')::text AS t FROM referrals WHERE referrer_user_id = $1",
     [inviter.id],
   );
-  assert.deepEqual(n, { n: "55", pts: String(25 * 2000 + 25 * 1000 + 5 * 500), t: "55" });
+  assert.deepEqual(n, { n: "55", pts: String(25 * 1000 + 25 * 500 + 5 * 250), t: "55" });
   // MUTATSIYA 9: no «referral_burst» error_log row at any count (the old signal fired from the 26th).
   assert.equal((await query("SELECT id FROM error_log WHERE scope = 'referral_burst' AND user_id = $1", [inviter.id])).length, 0, "no burst signal");
   // The summary shows what the NEXT (56th) friend earns.
   const s = await referralSummary(inviter.id, { botUsername: "slaydx_test_bot", appUrl: "https://slaydx.test" });
   assert.equal(s.invitedCount, 55);
-  assert.equal(s.rewardPoints, 500);
-  assert.equal(s.earnedPoints, 25 * 2000 + 25 * 1000 + 5 * 500);
+  assert.equal(s.rewardPoints, 250);
+  assert.equal(s.earnedPoints, 25 * 1000 + 25 * 500 + 5 * 250);
   await assertLedger(inviter.id, "tiered inviter");
 });
 
-test("concurrency tiers: 8 new invitees at once when the inviter already has 22 friends → distinct numbers 23..30 (3×2000 + 5×1000), ledger invariant", { skip }, async () => {
+test("concurrency tiers: 8 new invitees at once when the inviter already has 22 friends → distinct numbers 23..30 (3×1000 + 5×500), ledger invariant", { skip }, async () => {
   const inviter = await newReferrer("Chegarada");
   for (let i = 0; i < 22; i++) await registerBotUser(profile(tgId()), { code: inviter.code, source: "bot" });
   const before = await pointsOf(inviter.id);
   const settled = await Promise.allSettled(Array.from({ length: 8 }, () => registerBotUser(profile(tgId()), { code: inviter.code, source: "bot" })));
   assert.deepEqual(settled.map((x) => x.status), Array(8).fill("fulfilled"));
-  assert.equal((await pointsOf(inviter.id)) - before, 3 * 2000 + 5 * 1000, "numbers 23–25 pay 2000, 26–30 pay 1000, whatever the commit order");
+  assert.equal((await pointsOf(inviter.id)) - before, 3 * 1000 + 5 * 500, "numbers 23–25 pay 1000, 26–30 pay 500, whatever the commit order");
   const dist = await query<{ reward_points: number; n: string }>(
     "SELECT reward_points, count(*)::text AS n FROM referrals WHERE referrer_user_id = $1 GROUP BY 1 ORDER BY 1",
     [inviter.id],
   );
-  assert.deepEqual(dist.map((r) => [r.reward_points, Number(r.n)]), [[1000, 5], [2000, 25]]);
+  assert.deepEqual(dist.map((r) => [r.reward_points, Number(r.n)]), [[500, 5], [1000, 25]]);
   await assertLedger(inviter.id, "boundary inviter");
 });
 
@@ -537,9 +537,9 @@ test("referralSummary: counts, earned points, recent names only (newest first, �
   assert.equal(s.code, inviter.code);
   assert.equal(s.botLink, `https://t.me/slaydx_test_bot?start=ref_${inviter.code}`);
   assert.equal(s.webLink, `https://slaydx.test/uz?ref=${inviter.code}`);
-  assert.equal(s.rewardPoints, 2000);
+  assert.equal(s.rewardPoints, 1000);
   assert.equal(s.invitedCount, 22);
-  assert.equal(s.earnedPoints, 22 * 2000);
+  assert.equal(s.earnedPoints, 22 * 1000);
   assert.equal(s.recent.length, 20);
   assert.equal(s.recent[0]!.name, "Do'st 21", "newest first");
   assert.deepEqual(Object.keys(s.recent[0]!).sort(), ["joinedAt", "name"]);

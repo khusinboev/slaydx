@@ -712,7 +712,7 @@ test("units (program 17 D1): paid amounts are so‘m / сум / UZS, bonus amoun
       assert.doesNotMatch(all, /\bball\b|балл|\bpoints?\b|tanga|монет|\bcoins?\b/i, `${lang}/${name}`);
     }
   }
-  assert.match(allScreens("uz").referral.text, /Har bir do'st uchun: 1–25-do'st — 2\s000 bonus so'm, 26–50-do'st — 1\s000 bonus so'm, 51-dan boshlab — 500 bonus so'm\. Keyingi do'stingiz uchun: 2\s000 bonus so'm\./);
+  assert.match(allScreens("uz").referral.text, /Har bir do'st uchun: 1–25-do'st — 1\s000 bonus so'm, 26–50-do'st — 500 bonus so'm, 51-dan boshlab — 250 bonus so'm\. Keyingi do'stingiz uchun: 2\s000 bonus so'm\./);
   assert.match(allScreens("uz").referral.text, /Taklif qilinganlar: <b>3<\/b> · Topilgan: <b>6 000 bonus so'm<\/b>/);
   assert.match(allScreens("en").referral.text, /Earned: <b>6 000 bonus UZS<\/b>/);
   assert.match(allScreens("ru").profile.text, /2 000 бонусных сум/);
