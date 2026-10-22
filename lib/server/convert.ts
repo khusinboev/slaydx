@@ -4,7 +4,8 @@ import { CONVERT_MAX_PAGES, imageFormatOfName, maxBytesFor, sourceOfName, target
 import { buildJpegPdf, type JpegPage } from "../convert/jpeg-pdf";
 import { extractMeta } from "../generation/meta";
 import { renderDocx } from "../generation/render-docx";
-import { PdfPageLimitError, pdfBlocksToDoc, pdfToBlocks } from "../generation/translate/index";
+import { pdfBlocksToDoc, pdfToBlocks } from "../generation/translate/index";
+import { PdfPageLimitError } from "../generation/translate/pdf";
 import { TOOL_BY_ID } from "../tools";
 import { ApiError } from "./api";
 import { query } from "./db";
