@@ -56,6 +56,9 @@ export const IP_LIMITS = {
   /** Ochiq oferta PDF — IP shipi (bir marta yasaladi, keyin keshdan; sikl LibreOffice'ni urmasin). */
   ofertaPdfPerIp: { count: 60, windowSec: 300 },
 
+  /** Bepul fayl konvertatsiyasi — IP shipi (NAT ga sig'adi; qat'iy chegara — foydalanuvchi kunlik limiti). */
+  convertPerIp: { count: 200, windowSec: 3600 },
+
   /** O'yin natijasi — bitta o'yin, bitta IP (ikki sinf bir IP da ham sig'adi). */
   submitPerGamePerIp: { count: 120, windowSec: 60 },
   /** O'yin natijasi — IP shipi (barcha o'yinlar). */

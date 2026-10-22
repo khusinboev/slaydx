@@ -24,7 +24,11 @@ export type ParseTask =
   | { kind: "extract"; name: string; bytes: Uint8Array }
   | { kind: "source"; source: SourceKind; bytes: Uint8Array }
   | { kind: "template"; bytes: Uint8Array }
-  | { kind: "layout-sheet"; bytes: Uint8Array; profile: TemplateProfile };
+  | { kind: "layout-sheet"; bytes: Uint8Array; profile: TemplateProfile }
+  | { kind: "pdf-docx"; bytes: Uint8Array; title: string };
+
+/** Free converter PDF -> Word: `docx` is `null` when the PDF has no text layer (scanned). */
+export type PdfDocxResult = { docx: Uint8Array | null };
 
 export type ExtractResult = { text: string; error?: string; truncated?: boolean };
 
@@ -40,7 +44,9 @@ export type ParseResultOf<T extends ParseTask> = T extends { kind: "extract" }
     ? SourceCount
     : T extends { kind: "layout-sheet" }
       ? LayoutSheet
-      : TemplateProfile;
+      : T extends { kind: "pdf-docx" }
+        ? PdfDocxResult
+        : TemplateProfile;
 
 function arrayBufferOf(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
@@ -68,6 +74,17 @@ export async function runParseTask<T extends ParseTask>(task: T): Promise<ParseR
       // Kech import: bu og'ir modul (deka qurilishi) faqat shu vazifada yuklanadi.
       const { renderLayoutSheet } = await import("../generation/render-pptx-template");
       return (await renderLayoutSheet(task.bytes, task.profile)) as ParseResultOf<T>;
+    }
+    case "pdf-docx": {
+      // Late imports: the DOCX renderer is only loaded for this task.
+      const { pdfToBlocks, pdfBlocksToDoc } = await import("../generation/translate/index");
+      const { renderDocx } = await import("../generation/render-docx");
+      const { extractMeta } = await import("../generation/meta");
+      const { TOOL_BY_ID } = await import("../tools");
+      const { blocks } = await pdfToBlocks(task.bytes);
+      if (!blocks.length) return { docx: null } as ParseResultOf<T>;
+      const meta = { ...extractMeta(TOOL_BY_ID.essay, { topic: task.title } as never), toolId: "translation" as const };
+      return { docx: await renderDocx(pdfBlocksToDoc(blocks, new Map(), meta)) } as ParseResultOf<T>;
     }
     default:
       return (await parsePptxTemplate(task.bytes)) as ParseResultOf<T>;

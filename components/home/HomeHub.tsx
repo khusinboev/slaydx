@@ -116,6 +116,19 @@ export function HomeHub() {
         >
           <ToolsByGroup onPick={gate} />
         </HubSection>
+
+        {/* Static link card, not a ToolId: the free converter has no price, form or generation. */}
+        <Link
+          href="/uz/convert"
+          data-hub-convert
+          className="bg-card hover:bg-accent focus-visible:ring-ring flex min-h-14 items-center justify-between gap-3 rounded-[20px] border p-4 outline-none focus-visible:ring-2"
+        >
+          <span className="flex flex-col">
+            <span className="text-[15.5px] font-semibold">Fayl konvertatsiya (tekin)</span>
+            <span className="text-muted-foreground text-[13.5px]">Word, PowerPoint, PDF va rasmlar</span>
+          </span>
+          <ArrowRight className="size-5 shrink-0" aria-hidden />
+        </Link>
       </div>
     </div>
   );
