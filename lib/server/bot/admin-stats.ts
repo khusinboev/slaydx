@@ -87,7 +87,7 @@ SELECT c.id::text AS id, c.chat_id::text AS chat_id, c.title,
        count(cl.user_id) FILTER (WHERE cl.left_at IS NULL) AS joined
   FROM bonus_channels c
   LEFT JOIN bonus_channel_claims cl ON cl.channel_id = c.id
- WHERE c.active
+ WHERE c.active AND c.deleted_at IS NULL
  GROUP BY c.id
  ORDER BY c.sort, c.id
  LIMIT 10`;

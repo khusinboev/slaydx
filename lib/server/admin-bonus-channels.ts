@@ -19,19 +19,25 @@ import { parseBigintId, parseReason } from "./admin-accounts";
  *     `getChatMember(chat, botId)`. The status is never stored: a missing admin right is
  *     returned as a warning the UI shows, and the table re-checks it on demand;
  *   - create: re-resolves on the server (the client's preview is never trusted), inserts and
- *     writes `bonus_channel.create` in the same transaction; a known chat id is 409 `duplicate`;
- *   - update: title override, amounts, stay days, active, sort; only changed fields go into
- *     the `bonus_channel.update` audit row (before/after); no change is 409 `state`;
+ *     writes `bonus_channel.create` in the same transaction; a live channel with the same chat id
+ *     is 409 `duplicate`; a SOFT-DELETED one is restored instead (same row, same claims, so nobody
+ *     who already claimed is paid again; `bonus_channel.restore` audit row, `restored: true`);
+ *   - update: title override, username, amounts, stay days, active, sort; only changed fields go
+ *     into the `bonus_channel.update` audit row (before/after); no change is 409 `state`. A new
+ *     `username` (the channel owner renamed the channel) is resolved through `getChat` and must
+ *     be the SAME chat id (409 `chat_mismatch` otherwise) — the chat id is the identity;
+ *   - refresh («Telegramdan yangilash»): `getChat(chat_id)` → the stored username follows
+ *     Telegram's current one (`bonus_channel.refresh` audit row only when it changed);
  *   - mandatory (migration 045, docs/bonus/BONUS3.md C-Q2): an active mandatory channel must be
  *     joined before the user creates new work (`mandatory-channels.ts`); it may pay a bonus too,
  *     or none (the «at least one bonus > 0» rule applies to optional channels only);
  *   - invite link (migration 042): optional `https://t.me/+…` / `…/joinchat/…`, stored normalized
  *     as `https://t.me/+<hash>`; the bot uses it for private channels (no `username`).
  *     `createInviteLink` asks Telegram for a new one (audited, not stored);
- *   - delete: only without claims (409 `has_claims` otherwise — deactivate instead). The row
- *     is locked `FOR UPDATE` before the claims count: a concurrent claim insert needs a
- *     `FOR KEY SHARE` lock on the channel row (FK), so it waits for this transaction and then
- *     fails on the FK, and the claims FK's `ON DELETE CASCADE` can never drop a paid claim.
+ *   - delete (migration 051): a SOFT delete, always allowed — `deleted_at = now()`, `active = false`
+ *     under the row lock; claims and the ledger stay untouched (they are the «never pay twice»
+ *     guard). A deleted row is invisible to every admin read and write (404, as if gone) and to
+ *     the user side (bonus tasks, payouts, stay sweep, mandatory gate).
  *
  * Validation: amounts are JSON integers 0..20 000 per channel (`MAX_BONUS`, review cap; the DB CHECK allows
  * 1 000 000) with at least one > 0 for an optional channel, `stayDays` 1..365,
@@ -88,8 +94,14 @@ export type ResolvedChannel = {
   botAdmin: BotAdminStatus;
   /** Uzbek warning for the UI; `null` when the bot is an admin. */
   warning: string | null;
-  /** Id of the channel row that already has this chat id (`null` when new). */
+  /** Id of the LIVE channel row that already has this chat id (`null` when new or soft-deleted). */
   existingId: string | null;
+  /** Its title (the duplicate hint names it). */
+  existingTitle: string | null;
+  /** Id of a SOFT-DELETED row with this chat id: saving restores it instead of inserting. */
+  deletedId: string | null;
+  /** Claims of that deleted row: these users will not get the bonus again after the restore. */
+  deletedClaims: number;
 };
 
 export type ChannelRef = { kind: "username"; username: string } | { kind: "id"; chatId: string };
@@ -310,8 +322,26 @@ export async function resolveChannel(ref: ChannelRef): Promise<ResolvedChannel> 
   const username = typeof chat.username === "string" && chat.username ? chat.username : null;
   const title = (typeof chat.title === "string" && chat.title.trim() ? chat.title.trim() : username ?? chatId).slice(0, MAX_TITLE);
   const botAdmin = await botAdminStatus(chatId);
-  const existing = await queryOne<{ id: string }>("SELECT id::text AS id FROM bonus_channels WHERE chat_id = $1", [chatId]);
-  return { chatId, title, username, type, botAdmin, warning: botWarning(botAdmin), existingId: existing?.id ?? null };
+  const known = await queryOne<{ id: string; title: string; deleted: boolean; claims: number }>(
+    `SELECT c.id::text AS id, c.title, c.deleted_at IS NOT NULL AS deleted,
+            (SELECT count(*) FROM bonus_channel_claims cl WHERE cl.channel_id = c.id)::int AS claims
+       FROM bonus_channels c WHERE c.chat_id = $1`,
+    [chatId],
+  );
+  const live = known && !known.deleted ? known : null;
+  const gone = known && known.deleted ? known : null;
+  return {
+    chatId,
+    title,
+    username,
+    type,
+    botAdmin,
+    warning: botWarning(botAdmin),
+    existingId: live?.id ?? null,
+    existingTitle: live?.title ?? null,
+    deletedId: gone?.id ?? null,
+    deletedClaims: gone?.claims ?? 0,
+  };
 }
 
 /* ───────────────────────────── reads ───────────────────────────── */
@@ -362,7 +392,8 @@ const SELECT = `
              count(*) FILTER (WHERE stay_paid IS NULL AND left_at IS NULL) AS stay_pending
         FROM bonus_channel_claims
        GROUP BY channel_id
-    ) s ON s.channel_id = c.id`;
+    ) s ON s.channel_id = c.id
+   WHERE c.deleted_at IS NULL`;
 
 function toItem(r: Row): BonusChannelItem {
   return {
@@ -397,7 +428,7 @@ export async function listBonusChannels(): Promise<{ items: BonusChannelItem[] }
 }
 
 async function itemOf(id: string): Promise<BonusChannelItem> {
-  const row = await queryOne<Row>(`${SELECT} WHERE c.id = $1`, [id]);
+  const row = await queryOne<Row>(`${SELECT} AND c.id = $1`, [id]);
   if (!row) throw notFound();
   return toItem(row);
 }
@@ -405,7 +436,7 @@ async function itemOf(id: string): Promise<BonusChannelItem> {
 /** Bot admin status of a stored channel (the table's «Qayta tekshirish»). */
 export async function channelBotStatus(rawId: unknown): Promise<{ id: string; botAdmin: BotAdminStatus; warning: string | null }> {
   const id = parseChannelId(rawId);
-  const row = await queryOne<{ chat_id: string }>("SELECT chat_id::text AS chat_id FROM bonus_channels WHERE id = $1", [id]);
+  const row = await queryOne<{ chat_id: string }>("SELECT chat_id::text AS chat_id FROM bonus_channels WHERE id = $1 AND deleted_at IS NULL", [id]);
   if (!row) throw notFound();
   requireBot();
   const botAdmin = await botAdminStatus(row.chat_id);
@@ -416,6 +447,7 @@ export async function channelBotStatus(rawId: unknown): Promise<{ id: string; bo
 
 type Snapshot = {
   title: string;
+  username: string | null;
   inviteLink: string | null;
   joinBonus: number;
   stayBonus: number;
@@ -425,8 +457,9 @@ type Snapshot = {
   sort: number;
 };
 
-type LockedRow = Snapshot & { chatId: string; username: string | null };
+type LockedRow = Snapshot & { chatId: string };
 
+/** The live (not soft-deleted) row, locked `FOR UPDATE`; a missing or deleted row is the coded 404. */
 async function lockChannel(client: PoolClient, id: string): Promise<LockedRow> {
   const r = await client.query<{
     chat_id: string;
@@ -441,7 +474,7 @@ async function lockChannel(client: PoolClient, id: string): Promise<LockedRow> {
     sort: number;
   }>(
     `SELECT chat_id::text AS chat_id, username, invite_link, title, join_bonus, stay_bonus, stay_days, active, mandatory, sort
-       FROM bonus_channels WHERE id = $1 FOR UPDATE`,
+       FROM bonus_channels WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
     [id],
   );
   const row = r.rows[0];
@@ -460,12 +493,20 @@ async function lockChannel(client: PoolClient, id: string): Promise<LockedRow> {
   };
 }
 
-export type CreateResult = { item: BonusChannelItem; botAdmin: BotAdminStatus; warning: string | null };
+export type CreateResult = { item: BonusChannelItem; botAdmin: BotAdminStatus; warning: string | null; restored: boolean };
+
+/** Uzbek warning: a channel without a username AND without an invite link cannot be joined from the bot. */
+export const PRIVATE_NO_LINK_WARNING =
+  "Kanalning ommaviy username'i yo'q va taklif havolasi kiritilmagan — foydalanuvchilar botdan obuna bo'la olmaydi. Taklif havolasini qo'shing.";
+
+const duplicate = (title: string): ApiError => new ApiError(`«${title}» kanali allaqachon qo'shilgan`, 409, { code: "duplicate" });
 
 /**
  * POST `{input, title?, inviteLink?, joinBonus, stayBonus?, stayDays?, active?, mandatory?, sort?, reason?}`. Every field
  * is validated before Telegram is called; the chat is then resolved on the server, inserted
- * (`sort` defaults to the end of the list) and audited in one transaction.
+ * (`sort` defaults to the end of the list) and audited in one transaction. A soft-deleted row with
+ * the same chat id is RESTORED with the request's values (same id, its claims kept — nobody who
+ * already claimed is paid again), audited as `bonus_channel.restore`, `restored: true`.
  */
 export async function createBonusChannel(admin: AuditActor, body: Record<string, unknown>): Promise<CreateResult> {
   const ref = parseChannelRef(body.input);
@@ -482,51 +523,143 @@ export async function createBonusChannel(admin: AuditActor, body: Record<string,
 
   const resolved = await resolveChannel(ref);
   const title = override ?? resolved.title;
+  const values = { username: resolved.username, inviteLink, title, joinBonus, stayBonus, stayDays, active, mandatory };
+  const meta = { telegramTitle: resolved.title, type: resolved.type, botAdmin: resolved.botAdmin };
+  // The end of the list counts live channels only.
+  const nextSort = "(SELECT COALESCE(max(sort), 0) + 1 FROM bonus_channels WHERE deleted_at IS NULL)";
 
-  const id = await adminTx(admin, async (client, audit) => {
+  const { id, restored } = await adminTx(admin, async (client, audit) => {
     const ins = await client.query<{ id: string; sort: number }>(
       `INSERT INTO bonus_channels (chat_id, username, title, join_bonus, stay_bonus, stay_days, active, sort, invite_link, mandatory)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::int, (SELECT COALESCE(max(sort), 0) + 1 FROM bonus_channels)), $9, $10)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::int, ${nextSort}), $9, $10)
        ON CONFLICT (chat_id) DO NOTHING
        RETURNING id::text AS id, sort`,
       [resolved.chatId, resolved.username, title, joinBonus, stayBonus, stayDays, active, sort, inviteLink, mandatory],
     );
     const row = ins.rows[0];
-    if (!row) throw new ApiError("Bu kanal allaqachon qo'shilgan", 409, { code: "duplicate" });
+    if (row) {
+      await audit({
+        action: "bonus_channel.create",
+        targetType: "bonus_channel",
+        targetId: row.id,
+        reason,
+        after: { chatId: resolved.chatId, ...values, sort: row.sort },
+        meta,
+      });
+      return { id: row.id, restored: false };
+    }
+    // The chat id is taken: a live channel is a duplicate, a soft-deleted one comes back (locked first).
+    const old = await client.query<{
+      id: string;
+      deleted_at: Date | null;
+      username: string | null;
+      invite_link: string | null;
+      title: string;
+      join_bonus: number;
+      stay_bonus: number;
+      stay_days: number;
+      active: boolean;
+      mandatory: boolean;
+      sort: number;
+    }>(
+      `SELECT id::text AS id, deleted_at, username, invite_link, title, join_bonus, stay_bonus, stay_days, active, mandatory, sort
+         FROM bonus_channels WHERE chat_id = $1 FOR UPDATE`,
+      [resolved.chatId],
+    );
+    const p = old.rows[0];
+    // Gone between the INSERT and this read (a concurrent hard delete cannot happen any more): retry-able 409.
+    if (!p) throw duplicate(title);
+    if (p.deleted_at === null) throw duplicate(p.title);
+    const upd = await client.query<{ sort: number }>(
+      `UPDATE bonus_channels
+          SET deleted_at = NULL, username = $2, title = $3, join_bonus = $4, stay_bonus = $5, stay_days = $6, active = $7,
+              sort = COALESCE($8::int, ${nextSort}), invite_link = $9, mandatory = $10, updated_at = now()
+        WHERE id = $1
+        RETURNING sort`,
+      [p.id, resolved.username, title, joinBonus, stayBonus, stayDays, active, sort, inviteLink, mandatory],
+    );
+    const claims = await client.query<{ n: number }>("SELECT count(*)::int AS n FROM bonus_channel_claims WHERE channel_id = $1", [p.id]);
     await audit({
-      action: "bonus_channel.create",
+      action: "bonus_channel.restore",
       targetType: "bonus_channel",
-      targetId: row.id,
+      targetId: p.id,
       reason,
-      after: {
-        chatId: resolved.chatId,
-        username: resolved.username,
-        inviteLink,
-        title,
-        joinBonus,
-        stayBonus,
-        stayDays,
-        active,
-        mandatory,
-        sort: row.sort,
+      before: {
+        username: p.username,
+        inviteLink: p.invite_link,
+        title: p.title,
+        joinBonus: p.join_bonus,
+        stayBonus: p.stay_bonus,
+        stayDays: p.stay_days,
+        active: p.active,
+        mandatory: p.mandatory,
+        sort: p.sort,
+        deletedAt: p.deleted_at.toISOString(),
       },
-      meta: { telegramTitle: resolved.title, type: resolved.type, botAdmin: resolved.botAdmin },
+      after: { chatId: resolved.chatId, ...values, sort: upd.rows[0]!.sort },
+      meta: { ...meta, claims: claims.rows[0]?.n ?? 0 },
     });
-    return row.id;
+    return { id: p.id, restored: true };
   });
-  return { item: await itemOf(id), botAdmin: resolved.botAdmin, warning: resolved.warning };
+  return { item: await itemOf(id), botAdmin: resolved.botAdmin, warning: resolved.warning, restored };
 }
 
-const EDITABLE = ["title", "inviteLink", "joinBonus", "stayBonus", "stayDays", "active", "mandatory", "sort"] as const;
+const EDITABLE = ["title", "username", "inviteLink", "joinBonus", "stayBonus", "stayDays", "active", "mandatory", "sort"] as const;
+
+const USERNAME_HELP = "Username @nom yoki t.me/nom ko'rinishida bo'lishi kerak (5–32 belgi: lotin harflari, raqam, _)";
 
 /**
- * PATCH `{title?, inviteLink? (null / "" clears it), joinBonus?, stayBonus?, stayDays?, active?, mandatory?, sort?, reason?}`: only the given
- * fields change; before/after of the audit row hold only the fields that really changed.
+ * The `username` of a PATCH: `@name`, `name` or a `t.me/name` link → the bare name; `null` / `""` → `null`
+ * (a private channel). A numeric id, an invite link or junk is 400 `username`.
+ */
+export function parseUsernameInput(raw: unknown): string | null {
+  if (raw === null || (typeof raw === "string" && !raw.trim())) return null;
+  let ref: ChannelRef;
+  try {
+    ref = parseChannelRef(raw);
+  } catch {
+    throw bad(USERNAME_HELP, "username");
+  }
+  if (ref.kind !== "username") throw bad(USERNAME_HELP, "username");
+  return ref.username;
+}
+
+/**
+ * A typed username → Telegram's spelling of it, checked to be the SAME chat as the stored row (the chat id is
+ * the channel's identity: a username only names it). The name as stored (any case) needs no Bot API call.
+ * Throws 404 (unknown / deleted row), 400 `chat_not_found` / `chat_type`, 503, 409 `chat_mismatch`.
+ */
+async function verifiedUsername(id: string, username: string): Promise<string> {
+  const row = await queryOne<{ chat_id: string; username: string | null }>(
+    "SELECT chat_id::text AS chat_id, username FROM bonus_channels WHERE id = $1 AND deleted_at IS NULL",
+    [id],
+  );
+  if (!row) throw notFound();
+  if (row.username && row.username.toLowerCase() === username.toLowerCase()) return row.username;
+  const chat = await channelChat({ kind: "username", username });
+  if (String(chat.id) !== row.chat_id) {
+    const name = typeof chat.title === "string" && chat.title.trim() ? chat.title.trim().slice(0, MAX_TITLE) : `@${username}`;
+    throw new ApiError(`Bu boshqa kanal: «${name}» (@${username}). Bu yerga faqat shu kanalning yangi username'ini kiriting.`, 409, {
+      code: "chat_mismatch",
+    });
+  }
+  return typeof chat.username === "string" && chat.username ? chat.username : username;
+}
+
+/**
+ * PATCH `{title?, username?, inviteLink? (null / "" clears it), joinBonus?, stayBonus?, stayDays?, active?, mandatory?, sort?, reason?}`:
+ * only the given fields change; before/after of the audit row hold only the fields that really changed.
+ *
+ * `username`: a new name is verified through Telegram BEFORE the transaction (same chat id, else 409
+ * `chat_mismatch`, nothing written). `null` / `""` makes the channel private: allowed only when the row (after
+ * this patch) has an invite link — the bot's only way to send users there — else 400 `invite_needed`. That rule
+ * needs no Bot API call; «Telegramdan yangilash» is the way to take Telegram's own answer.
  */
 export async function updateBonusChannel(admin: AuditActor, rawId: unknown, body: Record<string, unknown>): Promise<{ item: BonusChannelItem }> {
   const id = parseChannelId(rawId);
   const patch: Partial<Snapshot> = {};
   if (body.title !== undefined) patch.title = parseTitle(body.title);
+  const username = body.username !== undefined ? parseUsernameInput(body.username) : undefined;
   if (body.inviteLink !== undefined) patch.inviteLink = parseInviteLink(body.inviteLink);
   if (body.joinBonus !== undefined) patch.joinBonus = parseAmount(body.joinBonus, "Obuna bonusi");
   if (body.stayBonus !== undefined) patch.stayBonus = parseAmount(body.stayBonus, "Qolish bonusi");
@@ -535,12 +668,15 @@ export async function updateBonusChannel(admin: AuditActor, rawId: unknown, body
   if (body.mandatory !== undefined) patch.mandatory = parseMandatory(body.mandatory);
   if (body.sort !== undefined) patch.sort = parseSort(body.sort);
   const reason = parseReason(body.reason, { optional: true });
-  if (Object.keys(patch).length === 0) throw bad("O'zgartiriladigan maydon yo'q");
+  if (Object.keys(patch).length === 0 && username === undefined) throw bad("O'zgartiriladigan maydon yo'q");
+  // Telegram is asked outside the transaction: no row lock is held over a network call.
+  if (username !== undefined) patch.username = username === null ? null : await verifiedUsername(id, username);
 
   await adminTx(admin, async (client, audit) => {
     const prev = await lockChannel(client, id);
     const next: Snapshot = {
       title: patch.title ?? prev.title,
+      username: patch.username !== undefined ? patch.username : prev.username,
       inviteLink: patch.inviteLink !== undefined ? patch.inviteLink : prev.inviteLink,
       joinBonus: patch.joinBonus ?? prev.joinBonus,
       stayBonus: patch.stayBonus ?? prev.stayBonus,
@@ -549,6 +685,9 @@ export async function updateBonusChannel(admin: AuditActor, rawId: unknown, body
       mandatory: patch.mandatory ?? prev.mandatory,
       sort: patch.sort ?? prev.sort,
     };
+    if (patch.username === null && prev.username !== null && next.inviteLink === null) {
+      throw bad("Yopiq kanal (username'siz) uchun avval taklif havolasini kiriting — aks holda foydalanuvchilar obuna bo'la olmaydi", "invite_needed");
+    }
     const before: Record<string, unknown> = {};
     const after: Record<string, unknown> = {};
     for (const k of EDITABLE) {
@@ -562,31 +701,69 @@ export async function updateBonusChannel(admin: AuditActor, rawId: unknown, body
     await client.query(
       `UPDATE bonus_channels
           SET title = $2, join_bonus = $3, stay_bonus = $4, stay_days = $5, active = $6, sort = $7, invite_link = $8,
-              mandatory = $9, updated_at = now()
+              mandatory = $9, username = $10, updated_at = now()
         WHERE id = $1`,
-      [id, next.title, next.joinBonus, next.stayBonus, next.stayDays, next.active, next.sort, next.inviteLink, next.mandatory],
+      [id, next.title, next.joinBonus, next.stayBonus, next.stayDays, next.active, next.sort, next.inviteLink, next.mandatory, next.username],
     );
     await audit({ action: "bonus_channel.update", targetType: "bonus_channel", targetId: id, reason, before, after });
   });
   return { item: await itemOf(id) };
 }
 
-/** DELETE `{reason?}`: allowed only while the channel has no claims (else 409 `has_claims`). */
+export type RefreshResult = {
+  item: BonusChannelItem;
+  /** Whether the stored username changed (an audit row was written). */
+  changed: boolean;
+  /** Telegram's current title — shown, never stored (the admin's title stays). */
+  telegramTitle: string;
+  /** Set when the channel is private now and has no invite link (`PRIVATE_NO_LINK_WARNING`). */
+  warning: string | null;
+};
+
+/**
+ * POST «Telegramdan yangilash»: `getChat(chat_id)` → the stored `username` becomes Telegram's current one (`null`
+ * for a channel without a public username). The admin-editable title is left alone; Telegram's title is returned
+ * for the UI. No change → the item as it is, no audit row; a change → `bonus_channel.refresh` (before/after).
+ */
+export async function refreshBonusChannel(admin: AuditActor, rawId: unknown): Promise<RefreshResult> {
+  const id = parseChannelId(rawId);
+  const row = await queryOne<{ chat_id: string }>("SELECT chat_id::text AS chat_id FROM bonus_channels WHERE id = $1 AND deleted_at IS NULL", [id]);
+  if (!row) throw notFound();
+  const chat = await channelChat({ kind: "id", chatId: row.chat_id });
+  if (String(chat.id) !== row.chat_id) throw new ApiError("Telegram boshqa chatni qaytardi", 409, { code: "chat_mismatch" });
+  const username = typeof chat.username === "string" && chat.username ? chat.username : null;
+  const telegramTitle = (typeof chat.title === "string" && chat.title.trim() ? chat.title.trim() : (username ?? row.chat_id)).slice(0, MAX_TITLE);
+
+  const changed = await adminTx(admin, async (client, audit) => {
+    const prev = await lockChannel(client, id);
+    if (prev.username === username) return false;
+    await client.query("UPDATE bonus_channels SET username = $2, updated_at = now() WHERE id = $1", [id, username]);
+    await audit({
+      action: "bonus_channel.refresh",
+      targetType: "bonus_channel",
+      targetId: id,
+      before: { username: prev.username },
+      after: { username },
+      meta: { telegramTitle },
+    });
+    return true;
+  });
+  const item = await itemOf(id);
+  return { item, changed, telegramTitle, warning: item.username === null && item.inviteLink === null ? PRIVATE_NO_LINK_WARNING : null };
+}
+
+/**
+ * DELETE `{reason?}`: a soft delete (migration 051), always allowed. Under the row lock: `deleted_at = now()`,
+ * `active = false`. Claims and the ledger stay — they are the «never pay twice» guard, and re-adding the same chat
+ * restores this row. A concurrent claim (its FK takes `FOR KEY SHARE` on the row) either commits first and is kept,
+ * or runs after and finds the channel inactive (`payJoin` re-reads it). A deleted / unknown channel is the coded 404.
+ */
 export async function deleteBonusChannel(admin: AuditActor, rawId: unknown, body: Record<string, unknown>): Promise<{ id: string; deleted: true }> {
   const id = parseChannelId(rawId);
   const reason = parseReason(body.reason, { optional: true });
   await adminTx(admin, async (client, audit) => {
     const prev = await lockChannel(client, id);
-    const claims = await client.query<{ n: number }>("SELECT count(*)::int AS n FROM bonus_channel_claims WHERE channel_id = $1", [id]);
-    const n = claims.rows[0]?.n ?? 0;
-    if (n > 0) {
-      throw new ApiError(
-        `Bu kanal bo'yicha ${n} ta foydalanuvchi bonus olgan — o'chirib bo'lmaydi. Uning o'rniga faolsizlantiring.`,
-        409,
-        { code: "has_claims", claims: n },
-      );
-    }
-    await client.query("DELETE FROM bonus_channels WHERE id = $1", [id]);
+    await client.query("UPDATE bonus_channels SET deleted_at = now(), active = false, updated_at = now() WHERE id = $1", [id]);
     await audit({ action: "bonus_channel.delete", targetType: "bonus_channel", targetId: id, reason, before: prev });
   });
   return { id, deleted: true };

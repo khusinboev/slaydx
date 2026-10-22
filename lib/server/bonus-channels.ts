@@ -157,7 +157,7 @@ export async function bonusTasks(
             c.joined_at, c.join_paid, c.stay_paid, c.left_at
        FROM bonus_channels ch
        LEFT JOIN bonus_channel_claims c ON c.channel_id = ch.id AND c.user_id = $1
-      WHERE ch.active
+      WHERE ch.active AND ch.deleted_at IS NULL
       ORDER BY ch.mandatory DESC, ch.sort, ch.id`,
     [userId],
   );
@@ -243,7 +243,8 @@ function channelKey(channelId: string | number): string | null {
 export async function checkChannel(userId: string, telegramId: number | string, channelId: string | number): Promise<CheckResult> {
   const key = channelKey(channelId);
   if (!key) return { status: "inactive" };
-  const channel = await queryOne<ChannelRow>(`SELECT ${CHANNEL_COLUMNS} FROM bonus_channels WHERE id = $1`, [key]);
+  // A soft-deleted channel (migration 051) reads as missing: «inactive», whatever its `active` says.
+  const channel = await queryOne<ChannelRow>(`SELECT ${CHANNEL_COLUMNS} FROM bonus_channels WHERE id = $1 AND deleted_at IS NULL`, [key]);
   if (!channel || !channel.active) return { status: "inactive" };
   const pre = await queryOne<{ is_blocked: boolean; claimed: boolean }>(
     `SELECT u.is_blocked,
@@ -280,7 +281,7 @@ async function payJoin(userId: string, telegramId: number | string, key: string)
     if (!user || user.telegram_id !== String(telegramId)) return { status: "unknown" };
     if (user.is_blocked) return { status: "blocked" };
     // Re-read the channel under a share lock: an admin deactivating / editing it waits or wins cleanly.
-    const ch = (await client.query<ChannelRow>(`SELECT ${CHANNEL_COLUMNS} FROM bonus_channels WHERE id = $1 FOR SHARE`, [key])).rows[0];
+    const ch = (await client.query<ChannelRow>(`SELECT ${CHANNEL_COLUMNS} FROM bonus_channels WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, [key])).rows[0];
     if (!ch || !ch.active) return { status: "inactive" };
     const points = Number(ch.join_bonus);
     // No stay bonus on this channel: the claim is settled at once (`stay_paid = 0`), so it never
@@ -352,7 +353,7 @@ export async function recordChannelJoin(u: ChatMemberUpdate, deps: JoinDeps = {}
     const tgId = m?.user?.id;
     // A JSON number above 2^53 is already rounded to a different id: never act on it.
     if (!Number.isSafeInteger(chatId) || !Number.isSafeInteger(tgId) || m?.user?.is_bot) return null;
-    const channel = await queryOne<{ id: string }>("SELECT id::text AS id FROM bonus_channels WHERE chat_id = $1 AND active", [String(chatId)]);
+    const channel = await queryOne<{ id: string }>("SELECT id::text AS id FROM bonus_channels WHERE chat_id = $1 AND active AND deleted_at IS NULL", [String(chatId)]);
     if (!channel) return null;
     const user = await queryOne<{ id: string; is_blocked: boolean; language: string | null }>(
       "SELECT id::text AS id, is_blocked, language FROM users WHERE telegram_id = $1",
@@ -391,11 +392,13 @@ export function isLeaveStatus(m: ChatMemberUpdate["new_chat_member"]): boolean {
 
 /**
  * A Telegram `chat_member` update (the webhook's `allowed_updates` must include it; the bot
- * must be an admin of the chat): when a user leaves a bonus channel (active or not, matched by
- * `chat_id`), their claim gets `left_at = now()` while the stay bonus is unpaid — leaving
+ * must be an admin of the chat): when a user leaves a bonus channel (active or not, soft-deleted or
+ * not, matched by `chat_id`), their claim gets `left_at = now()` while the stay bonus is unpaid — leaving
  * before day N forfeits it (B-Q3), even if they re-join before the sweep looks. Re-joining
  * never clears `left_at`. Unknown users / chats and joins change nothing; a replay keeps the
  * first `left_at`. Returns the number of claims marked (0 or 1). No reply to anyone.
+ * Soft-deleted channels (migration 051) are deliberately included: no money moves, and a restored channel
+ * then still knows who left before their stay bonus was due.
  */
 export async function recordChannelLeave(u: ChatMemberUpdate): Promise<number> {
   const m = u.new_chat_member;
@@ -527,7 +530,7 @@ export async function staySweep(limit = STAY_BATCH, deps: StaySweepDeps = {}): P
        JOIN bonus_channels ch ON ch.id = c.channel_id
        JOIN users u ON u.id = c.user_id
       WHERE c.stay_paid IS NULL AND c.left_at IS NULL
-        AND ch.active AND ch.stay_bonus > 0
+        AND ch.active AND ch.deleted_at IS NULL AND ch.stay_bonus > 0
         AND c.joined_at + make_interval(days => ch.stay_days) <= now()
         AND NOT u.is_blocked AND u.telegram_id IS NOT NULL
         AND (c.stay_checked_at IS NULL OR c.stay_checked_at <= now() - make_interval(hours => $2))
@@ -548,7 +551,7 @@ export async function staySweep(limit = STAY_BATCH, deps: StaySweepDeps = {}): P
       // Re-check everything under locks: the user row (topUpInTx order), then the claim.
       const u = await client.query<{ is_blocked: boolean }>("SELECT is_blocked FROM users WHERE id = $1 FOR UPDATE", [d.user_id]);
       const claim = await client.query<{ ok: boolean; stay_bonus: number; title: string; stay_days: number }>(
-        `SELECT (ch.active AND ch.stay_bonus > 0 AND c.joined_at + make_interval(days => ch.stay_days) <= now()) AS ok,
+        `SELECT (ch.active AND ch.deleted_at IS NULL AND ch.stay_bonus > 0 AND c.joined_at + make_interval(days => ch.stay_days) <= now()) AS ok,
                 ch.stay_bonus, ch.title, ch.stay_days
            FROM bonus_channel_claims c
            JOIN bonus_channels ch ON ch.id = c.channel_id

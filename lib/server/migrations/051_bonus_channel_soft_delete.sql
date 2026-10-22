@@ -1,0 +1,20 @@
+-- Bonus channels: soft delete (owner decision 2026-10-22).
+--
+--   bonus_channels.deleted_at  NULL = a live channel. Set by the admin «O'chirish»
+--                              (`admin-bonus-channels.ts deleteBonusChannel`, together with
+--                              active = false): the channel disappears from the admin list, the bot,
+--                              the bonus tasks and the mandatory gate, but the row stays so that
+--                              its `bonus_channel_claims` (the «never pay the same user twice»
+--                              guard) and the ledger references `channel:<id>:<user>:…` keep
+--                              pointing at it. Re-adding the same chat_id restores this row
+--                              (deleted_at = NULL) instead of inserting a new one, so users who
+--                              already claimed are not paid again. UNIQUE(chat_id) stays.
+--
+-- No index: the table holds a handful of rows and every reader already scans it whole.
+--
+-- Additive only: one nullable column, no default (metadata-only, no rewrite).
+--
+-- ROLLBACK (soft-deleted rows become ordinary inactive channels again — they are active = false):
+--   ALTER TABLE bonus_channels DROP COLUMN IF EXISTS deleted_at;
+--   DELETE FROM schema_migrations WHERE name = '051_bonus_channel_soft_delete.sql';
+ALTER TABLE bonus_channels ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
