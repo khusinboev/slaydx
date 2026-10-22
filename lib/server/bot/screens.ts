@@ -1,4 +1,5 @@
 import { env } from "../env";
+import { RATING_NOTE } from "../../rating";
 import { REFERRAL_TIERS, formatJoinDate, formatPoints, telegramShareUrl } from "../../referral";
 import { TOOL_BY_ID } from "../../tools";
 import { BOT_LANGUAGES } from "../../profile/fields";
@@ -188,6 +189,7 @@ export function ledgerTitle(lang: Lang, e: Pick<LedgerItem, "kind" | "note">): s
       // Payment bonus «To‘lov bonusi (N%)» (`lib/payment-bonus.ts paymentBonusNote`).
       const pay = /^To[‘']lov bonusi \((\d{1,2})%\)$/.exec(note)?.[1];
       if (pay) return t(lang, "ledger.paymentBonus", { p: pay });
+      if (note === RATING_NOTE) return t(lang, "rating.ledger");
       if (/^Birinchi to[‘']ldirish bonusi/.test(note)) return t(lang, "ledger.firstTopup");
       return lang === "uz" && note ? note : t(lang, "ledger.bonus");
     }

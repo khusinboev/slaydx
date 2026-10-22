@@ -103,6 +103,14 @@ function topupButton(lang: Lang, b: BonusTasks["paymentBonus"]): InlineButton | 
   return wallet ? inlineButton("card", t(lang, "task.topup", { p: b.percent }), { web_app: { url: wallet } }) : null;
 }
 
+/** «⭐ Ilovani baholash · +500»: opens the profile rating card in the Mini App; green once rated. Hidden while the bonus is 0. */
+function ratingButton(lang: Lang, r: BonusTasks["rating"]): InlineButton | null {
+  if (r.done) return inlineButton("save", t(lang, "rating.done", { n: buttonSom(lang, r.points) }), { callback_data: cb.bonusDone() }, "success");
+  if (!(r.points > 0)) return null;
+  const profile = appUrl("/uz/profile#rating");
+  return profile ? inlineButton("star", t(lang, "rating.task", { n: buttonSom(lang, r.points) }), { web_app: { url: profile } }) : null;
+}
+
 /**
  * «Sizning bonuslaringiz»: the summary (earned · still available), a short
  * explanation, then one button per task — sign-up, invite friends, each active
@@ -127,6 +135,7 @@ export function bonusScreen(lang: Lang, tasks: BonusTasks, now: number): Screen 
       [inviteButton(lang, tasks.referral)],
       ...channels.map((c) => [channelButton(lang, c, now)]),
       [topupButton(lang, tasks.paymentBonus)],
+      [ratingButton(lang, tasks.rating)],
       [
         inlineButton("refresh", t(lang, "btn.refresh"), { callback_data: cb.bonusRefresh() }),
         inlineButton("back", t(lang, "btn.wallet"), { callback_data: cb.wallet() }),
