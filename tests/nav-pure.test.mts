@@ -87,6 +87,7 @@ test("parentOf: the R4 §6 table", () => {
     ["/uz/login", "/uz", "?returnTo=https%3A%2F%2Fevil.example"],
     ["/uz/login", "/uz", "?returnTo=javascript%3Aalert(1)"],
     ["/uz/admin", "/uz"],
+    ["/uz/convert", "/uz"],
     ["/admin/users", "/admin"],
     ["/admin/audit", "/admin"],
     ["/admin/account", "/admin"],
