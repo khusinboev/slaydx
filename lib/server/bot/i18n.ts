@@ -441,9 +441,9 @@ const T = {
   },
   "help.q2": { uz: "Ish yaratilmasa pul nima bo‘ladi?", ru: "Что с деньгами, если работа не создалась?", en: "What if a file is not made?" },
   "help.a2": {
-    uz: "Hujjat yaratilmasa, so‘m to‘liq qaytariladi.",
-    ru: "Если документ не создан, сумы возвращаются полностью.",
-    en: "If a document is not made, the UZS are fully refunded.",
+    uz: "Hujjat yaratilmasa, summa hisobingizga to‘liq qaytariladi.",
+    ru: "Если документ не создан, сумма полностью возвращается на ваш баланс.",
+    en: "If a document is not made, the amount goes back to your balance in full.",
   },
   "help.q3": { uz: "Bonus nima?", ru: "Что такое бонус?", en: "What is a bonus?" },
   "help.a3": {
