@@ -158,6 +158,10 @@ export function BonusPage() {
           upsert(item);
           setEditing(null);
         }}
+        onRefreshed={(item) => {
+          upsert(item);
+          setEditing(item);
+        }}
       />
       <ChannelDeleteDialog
         item={deleting}

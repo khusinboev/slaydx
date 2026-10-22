@@ -60,6 +60,21 @@ export function checkInviteText(text: string): Check<string | null> {
   return { ok: true, value: `https://t.me/+${m[1]}` };
 }
 
+const USERNAME = /^@?([A-Za-z][A-Za-z0-9_]{3,31})$/;
+const USERNAME_LINK = /^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/(?:s\/)?([A-Za-z][A-Za-z0-9_]{3,31})\/?$/i;
+
+/**
+ * The edit dialog's username: `@name`, `name` or `t.me/name` → the bare name; empty → `null` (a private channel).
+ * A syntax check only — the server asks Telegram that the name belongs to the same chat.
+ */
+export function checkUsernameText(text: string): Check<string | null> {
+  const s = text.trim();
+  if (!s) return { ok: true, value: null };
+  const m = USERNAME.exec(s) ?? USERNAME_LINK.exec(s);
+  if (!m) return { ok: false, error: "Username @nom yoki t.me/nom ko'rinishida bo'lsin (5–32 belgi: lotin harflari, raqam, _)" };
+  return { ok: true, value: m[1]! };
+}
+
 export type AmountsDraft ={ joinBonus: string; stayBonus: string; stayDays: string };
 export type Amounts = { joinBonus: number; stayBonus: number; stayDays: number };
 

@@ -1,34 +1,44 @@
 "use client";
 
 import { useId, useState } from "react";
-import { ConfirmDialog, toast } from "@/components/admin/ui";
+import { RefreshCw } from "lucide-react";
+import { Button, ConfirmDialog, toast } from "@/components/admin/ui";
 import { cn } from "@/lib/cn";
-import { updateBonusChannel, type BonusChannel, type BonusChannelPatch } from "@/lib/admin-api/bonus";
+import { adminErrorMessage, AdminReauthCancelledError, isAbortError } from "@/lib/admin-api/core";
+import { refreshBonusChannel, updateBonusChannel, type BonusChannel, type BonusChannelPatch } from "@/lib/admin-api/bonus";
 import { AmountFields, FIELD } from "./AmountFields";
 import { InviteLinkField } from "./InviteLinkField";
 import { MandatoryField } from "./MandatoryField";
-import { amountsDraft, bonusText, checkAmounts, checkIntText, checkInviteText, checkTitle, MAX_SORT, type AmountsDraft } from "./format";
+import { amountsDraft, bonusText, checkAmounts, checkIntText, checkInviteText, checkTitle, checkUsernameText, MAX_SORT, type AmountsDraft } from "./format";
 
 export type ChannelEditDialogProps = {
   /** The channel being edited; `null` keeps the dialog closed. */
   item: BonusChannel | null;
   onClose: () => void;
   onSaved: (item: BonusChannel) => void;
+  /** «Telegramdan yangilash» stored a new username: the list and this dialog take the fresh row (the dialog stays open). */
+  onRefreshed: (item: BonusChannel) => void;
 };
 
 /**
- * Edits title, amounts, stay days, order and active. Only the changed fields are sent (and
- * audited); the reason is optional. The step-up code is asked by the admin API core when the
- * server needs it.
+ * Edits title, username, amounts, stay days, order and active. Only the changed fields are sent
+ * (and audited); the reason is optional. The step-up code is asked by the admin API core when the
+ * server needs it. A new username (the channel owner renamed the channel) is checked by the server
+ * to be the SAME Telegram chat; «Telegramdan yangilash» takes Telegram's current username at once.
  */
 export function ChannelEditDialog(props: ChannelEditDialogProps) {
   if (!props.item) return null;
   return <Body key={props.item.id} {...props} item={props.item} />;
 }
 
-function Body({ item, onClose, onSaved }: ChannelEditDialogProps & { item: BonusChannel }) {
+const usernameText = (u: string | null) => (u ? `@${u}` : "");
+
+function Body({ item, onClose, onSaved, onRefreshed }: ChannelEditDialogProps & { item: BonusChannel }) {
   const ids = useId();
   const [title, setTitle] = useState(item.title);
+  const [username, setUsername] = useState(usernameText(item.username));
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshNote, setRefreshNote] = useState<{ text: string; warning: string | null } | null>(null);
   const [invite, setInvite] = useState(item.inviteLink ?? "");
   const [amounts, setAmounts] = useState<AmountsDraft>(() => amountsDraft(item));
   const [sort, setSort] = useState(String(item.sort));
@@ -36,12 +46,15 @@ function Body({ item, onClose, onSaved }: ChannelEditDialogProps & { item: Bonus
   const [mandatory, setMandatory] = useState(item.mandatory);
 
   const titleCheck = checkTitle(title);
+  const usernameCheck = checkUsernameText(username);
   const inviteCheck = checkInviteText(invite);
   const amountsCheck = checkAmounts(amounts, mandatory);
   const sortCheck = checkIntText(sort, -MAX_SORT, MAX_SORT, "Tartib");
 
   const patch: BonusChannelPatch = {};
   if (titleCheck.ok && titleCheck.value !== item.title) patch.title = titleCheck.value;
+  // Case only is no change (Telegram usernames are case-insensitive; the server says the same).
+  if (usernameCheck.ok && (usernameCheck.value?.toLowerCase() ?? null) !== (item.username?.toLowerCase() ?? null)) patch.username = usernameCheck.value;
   if (inviteCheck.ok && inviteCheck.value !== item.inviteLink) patch.inviteLink = inviteCheck.value;
   if (amountsCheck.ok) {
     if (amountsCheck.value.joinBonus !== item.joinBonus) patch.joinBonus = amountsCheck.value.joinBonus;
@@ -51,7 +64,28 @@ function Body({ item, onClose, onSaved }: ChannelEditDialogProps & { item: Bonus
   if (sortCheck.ok && sortCheck.value !== item.sort) patch.sort = sortCheck.value;
   if (active !== item.active) patch.active = active;
   if (mandatory !== item.mandatory) patch.mandatory = mandatory;
-  const valid = titleCheck.ok && inviteCheck.ok && amountsCheck.ok && sortCheck.ok;
+  // A private channel (no username) is reachable only through its invite link: clearing the username needs one.
+  const privateNoLink = usernameCheck.ok && usernameCheck.value === null && item.username !== null && inviteCheck.ok && inviteCheck.value === null;
+  const valid = titleCheck.ok && usernameCheck.ok && !privateNoLink && inviteCheck.ok && amountsCheck.ok && sortCheck.ok;
+
+  async function refresh() {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const r = await refreshBonusChannel(item.id);
+      setUsername(usernameText(r.item.username));
+      const where = r.item.username ? `@${r.item.username}` : "yopiq kanal";
+      const head = r.changed ? `Username yangilandi: ${where}.` : `O'zgarish yo'q — Telegramdagi bilan bir xil (${where}).`;
+      setRefreshNote({ text: `${head} Telegramdagi nomi: «${r.telegramTitle}».`, warning: r.warning });
+      toast(r.changed ? `Username yangilandi: ${where}` : "O'zgarish yo'q — Telegramdagi bilan bir xil");
+      if (r.warning) toast(r.warning, { tone: "error" });
+      if (r.changed) onRefreshed(r.item);
+    } catch (e) {
+      if (!isAbortError(e) && !(e instanceof AdminReauthCancelledError)) toast(adminErrorMessage(e), { tone: "error" });
+    } finally {
+      setRefreshing(false);
+    }
+  }
   const changed = Object.keys(patch).length > 0;
 
   return (
@@ -90,6 +124,41 @@ function Body({ item, onClose, onSaved }: ChannelEditDialogProps & { item: Bonus
           className={FIELD}
         />
         {!titleCheck.ok ? <span className="text-destructive text-xs">{titleCheck.error}</span> : null}
+      </div>
+
+      <div className="flex flex-col gap-1.5 text-[12.5px]">
+        <label htmlFor={`${ids}-username`} className="font-semibold">
+          Username
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <input
+            id={`${ids}-username`}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="yopiq kanal"
+            autoComplete="off"
+            spellCheck={false}
+            aria-invalid={!usernameCheck.ok || privateNoLink}
+            aria-describedby={`${ids}-username-hint`}
+            className={cn(FIELD, "min-w-0 flex-1")}
+          />
+          <Button onClick={() => void refresh()} loading={refreshing} icon={<RefreshCw className="size-4" aria-hidden="true" />} className="h-10">
+            Telegramdan yangilash
+          </Button>
+        </div>
+        <span id={`${ids}-username-hint`} className={cn("text-xs", usernameCheck.ok && !privateNoLink ? "text-muted-foreground" : "text-destructive")}>
+          {!usernameCheck.ok
+            ? usernameCheck.error
+            : privateNoLink
+              ? "Yopiq kanal uchun avval taklif havolasini kiriting — aks holda foydalanuvchilar obuna bo'la olmaydi"
+              : "Kanal egasi username'ni o'zgartirsa, yangisini kiriting yoki «Telegramdan yangilash»ni bosing. Bonus olganlar ro'yxati saqlanadi."}
+        </span>
+        {refreshNote ? (
+          <p role="status" data-refresh-note className="text-xs">
+            {refreshNote.text}
+            {refreshNote.warning ? <span className="text-badge-warning-text block font-medium">{refreshNote.warning}</span> : null}
+          </p>
+        ) : null}
       </div>
 
       <InviteLinkField value={invite} onChange={setInvite} chatRef={item.username ? `@${item.username}` : item.chatId} needed={!item.username} />

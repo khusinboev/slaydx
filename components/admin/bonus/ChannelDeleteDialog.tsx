@@ -8,13 +8,16 @@ export type ChannelDeleteDialogProps = {
   item: BonusChannel | null;
   onClose: () => void;
   onDeleted: (id: string) => void;
-  /** The server refused (`has_claims`): the list is stale, reload it. */
+  /** The server answered 404 (deleted meanwhile, e.g. from the bot): the list is stale, reload it. */
   onStale: () => void;
 };
 
+export const DELETE_NOTE =
+  "Kanal ro'yxatdan, botdan va majburiy obuna tekshiruvidan yo'qoladi. Tarix va berilgan bonuslar saqlanadi. Shu kanalni qayta qo'shsangiz, u tiklanadi — avval bonus olganlarga qayta to'lanmaydi.";
+
 /**
- * Permanent delete of a channel nobody has claimed yet. The server refuses with 409
- * `has_claims` otherwise (the message tells the admin to deactivate instead).
+ * Delete = a soft delete on the server (migration 051): allowed for every channel, claims and paid bonuses are
+ * kept, and adding the same channel again restores it without paying anyone twice.
  */
 export function ChannelDeleteDialog({ item, onClose, onDeleted, onStale }: ChannelDeleteDialogProps) {
   return (
@@ -22,7 +25,7 @@ export function ChannelDeleteDialog({ item, onClose, onDeleted, onStale }: Chann
       open={item !== null}
       onClose={onClose}
       title="Kanalni o'chirish"
-      description="Kanal ro'yxatdan butunlay o'chadi va botda ko'rinmaydi. Bu amalni qaytarib bo'lmaydi."
+      description={DELETE_NOTE}
       target={item ? <span>{item.title}</span> : null}
       reason={{ required: false, label: "Sabab (ixtiyoriy)" }}
       danger
@@ -32,7 +35,7 @@ export function ChannelDeleteDialog({ item, onClose, onDeleted, onStale }: Chann
         try {
           await deleteBonusChannel(item.id, reason);
         } catch (e) {
-          if (e instanceof ApiError && e.status === 409) onStale();
+          if (e instanceof ApiError && (e.status === 404 || e.status === 409)) onStale();
           throw e;
         }
         toast(`«${item.title}» o'chirildi`);
