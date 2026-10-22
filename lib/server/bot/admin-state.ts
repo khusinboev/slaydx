@@ -41,6 +41,8 @@ export type ChannelDraft = {
   /** «🔒 Majburiy» / «➕ Ixtiyoriy» (C-Q2); absent until picked (a draft from before is optional). */
   mandatory?: boolean;
   type?: ChannelType;
+  /** The chat is a soft-deleted channel: connecting restores it; this many users already claimed (no second bonus). */
+  restoreClaims?: number;
 };
 
 /**
