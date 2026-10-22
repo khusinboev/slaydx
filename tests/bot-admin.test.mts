@@ -961,7 +961,7 @@ test("Kanal kartasi: «✏️ Username» (renamed channel, same chat → saved; 
   await press(a, acb.chConnect());
   installFetch();
   await tg.handleUpdate(textUpdate(a.tg, "post", { forward_origin: { type: "channel", chat: { id: chatId, type: "channel", title: "x" }, message_id: 5 } }));
-  assert.match(lastText(), /♻️ Bu kanal avval o‘chirilgan — qayta tiklanadi\. Oldingi 1 ta a’zo qayta bonus olmaydi\./);
+  assert.match(lastText(), /♻️ Bu kanal avval o‘chirilgan — qayta tiklanadi\. Oldingi 1 ta a’zo qo‘shilish bonusini qayta olmaydi\./);
   installFetch();
   await press(a, acb.chKind("o"));
   installFetch();

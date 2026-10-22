@@ -411,9 +411,9 @@ const A = {
   "ch.confirmAsk": { uz: "Ulansinmi?", ru: "Подключить?", en: "Connect it?" },
   "ch.confirm": { uz: "Ulash", ru: "Подключить", en: "Connect" },
   "ch.restoreNote": {
-    uz: "♻️ Bu kanal avval o‘chirilgan — qayta tiklanadi. Oldingi {n} ta a’zo qayta bonus olmaydi.",
-    ru: "♻️ Этот канал был удалён — он будет восстановлен. Прежние участники ({n}) повторно бонус не получат.",
-    en: "♻️ This channel was deleted before — it will be restored. Its {n} earlier members will not get the bonus again.",
+    uz: "♻️ Bu kanal avval o‘chirilgan — qayta tiklanadi. Oldingi {n} ta a’zo qo‘shilish bonusini qayta olmaydi.",
+    ru: "♻️ Этот канал был удалён — он будет восстановлен. Прежние участники ({n}) не получат бонус за подписку повторно.",
+    en: "♻️ This channel was deleted before — it will be restored. Its {n} earlier members will not get the join bonus again.",
   },
   "ch.refreshNoLink": {
     uz: "⚠️ Kanalda endi ommaviy username yo‘q va taklif havolasi kiritilmagan — foydalanuvchilar obuna bo‘la olmaydi. «🔗 Havola» orqali qo‘shing.",

@@ -161,7 +161,7 @@ function Body({ item, onClose, onSaved, onRefreshed }: ChannelEditDialogProps & 
         ) : null}
       </div>
 
-      <InviteLinkField value={invite} onChange={setInvite} chatRef={item.username ? `@${item.username}` : item.chatId} needed={!item.username} />
+      <InviteLinkField value={invite} onChange={setInvite} chatRef={item.username ? `@${item.username}` : item.chatId} needed={!item.username || (usernameCheck.ok && usernameCheck.value === null)} />
 
       <MandatoryField value={mandatory} onChange={setMandatory} />
 

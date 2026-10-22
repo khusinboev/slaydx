@@ -155,7 +155,7 @@ function Body({ existingCount, onClose, onCreated }: ChannelAddDialogProps) {
             </p>
           ) : current.deletedId ? (
             <p data-restore className="text-badge-warning-text text-xs font-medium">
-              ♻️ Bu kanal avval o&apos;chirilgan — qayta tiklanadi, oldingi {fmtNumber(current.deletedClaims ?? 0)} ta a&apos;zo qayta bonus olmaydi.
+              ♻️ Bu kanal avval o&apos;chirilgan — qayta tiklanadi, oldingi {fmtNumber(current.deletedClaims ?? 0)} ta a&apos;zo qo&apos;shilish bonusini qayta olmaydi.
             </p>
           ) : null}
         </div>

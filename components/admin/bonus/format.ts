@@ -71,7 +71,7 @@ export function checkUsernameText(text: string): Check<string | null> {
   const s = text.trim();
   if (!s) return { ok: true, value: null };
   const m = USERNAME.exec(s) ?? USERNAME_LINK.exec(s);
-  if (!m) return { ok: false, error: "Username @nom yoki t.me/nom ko'rinishida bo'lsin (5–32 belgi: lotin harflari, raqam, _)" };
+  if (!m) return { ok: false, error: "Username @nom yoki t.me/nom ko'rinishida bo'lsin (4–32 belgi: lotin harflari, raqam, _)" };
   return { ok: true, value: m[1]! };
 }
 

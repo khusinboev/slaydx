@@ -10,6 +10,9 @@
 --                              (deleted_at = NULL) instead of inserting a new one, so users who
 --                              already claimed are not paid again. UNIQUE(chat_id) stays.
 --
+-- Never hard-DELETE a bonus channel: `bonus_channel_claims.channel_id` is still ON DELETE CASCADE
+-- (041), so a hard delete drops the claims and re-adding the chat would pay every former member again.
+--
 -- No index: the table holds a handful of rows and every reader already scans it whole.
 --
 -- Additive only: one nullable column, no default (metadata-only, no rewrite).

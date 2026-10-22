@@ -899,12 +899,14 @@ test("atomicity: when the audit insert fails, the channel change rolls back", { 
   await resetChannels();
   const s = await session("owner");
   const item = await seedChannel(s);
+  const gone = await seedChannel(s);
+  assert.equal((await del(s.cookie, gone.id, {})).status, 200);
   await query(`
     CREATE OR REPLACE FUNCTION k2_fail_audit() RETURNS trigger AS $$
     BEGIN RAISE EXCEPTION 'k2 test: audit write failed'; END $$ LANGUAGE plpgsql`);
   await query(
     `CREATE TRIGGER k2_fail_audit_trg BEFORE INSERT ON admin_audit_log FOR EACH ROW
-     WHEN (NEW.action IN ('bonus_channel.update', 'bonus_channel.create', 'bonus_channel.delete', 'bonus_channel.refresh')) EXECUTE FUNCTION k2_fail_audit()`,
+     WHEN (NEW.action IN ('bonus_channel.update', 'bonus_channel.create', 'bonus_channel.delete', 'bonus_channel.refresh', 'bonus_channel.restore')) EXECUTE FUNCTION k2_fail_audit()`,
   );
   t.mock.method(console, "error", () => {});
   t.mock.method(console, "warn", () => {});
@@ -913,6 +915,8 @@ test("atomicity: when the audit insert fails, the channel change rolls back", { 
     const ch = freshChannel();
     assert.equal((await create(s.cookie, { input: `@${ch.username}`, joinBonus: 1000 })).status, 500);
     assert.equal((await del(s.cookie, item.id, {})).status, 500);
+    // Re-adding the deleted chat: the restore rolls back with its audit row.
+    assert.equal((await create(s.cookie, { input: `@${gone.username}`, joinBonus: 1000 })).status, 500);
     // A username change found by «Telegramdan yangilash» rolls back with its audit row too.
     addChat({ ...CHATS.get(item.chatId)!, username: "atomic_renamed" });
     assert.equal((await refresh(s.cookie, item.id)).status, 500);
@@ -921,10 +925,14 @@ test("atomicity: when the audit insert fails, the channel change rolls back", { 
     await query("DROP FUNCTION k2_fail_audit()");
   }
   const rows = await channelRows();
-  assert.equal(rows.length, 1, "the create did not commit");
-  assert.equal(rows[0]!.deleted, false, "the soft delete rolled back");
-  assert.equal(rows[0]!.active, true, "the soft delete rolled back");
-  assert.equal(rows[0]!.join_bonus, 1000, "the update rolled back");
+  assert.equal(rows.length, 2, "the create did not commit");
+  const live = rows.find((r) => r.id === item.id)!;
+  assert.equal(live.deleted, false, "the soft delete rolled back");
+  assert.equal(live.active, true, "the soft delete rolled back");
+  assert.equal(live.join_bonus, 1000, "the update rolled back");
+  const dead = rows.find((r) => r.id === gone.id)!;
+  assert.equal(dead.deleted, true, "the restore rolled back");
+  assert.equal(dead.active, false, "the restore rolled back");
   assert.equal((await query<{ username: string }>("SELECT username FROM bonus_channels WHERE id = $1", [item.id]))[0]!.username, item.username, "the refresh rolled back");
 });
 

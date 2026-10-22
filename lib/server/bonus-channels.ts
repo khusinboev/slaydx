@@ -463,7 +463,7 @@ async function settleZeroStay(limit: number): Promise<number> {
        FROM (SELECT z.user_id, z.channel_id
                FROM bonus_channel_claims z
                JOIN bonus_channels ch ON ch.id = z.channel_id
-              WHERE ch.stay_bonus = 0 AND z.stay_paid IS NULL AND z.left_at IS NULL
+              WHERE ch.stay_bonus = 0 AND ch.deleted_at IS NULL AND z.stay_paid IS NULL AND z.left_at IS NULL
               LIMIT $1
                 FOR UPDATE OF z SKIP LOCKED) d
       WHERE c.user_id = d.user_id AND c.channel_id = d.channel_id AND c.stay_paid IS NULL

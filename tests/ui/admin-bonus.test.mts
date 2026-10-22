@@ -455,7 +455,7 @@ test("add: a deleted channel — the preview says it will be restored and how ma
   const dialog = within(await screen.findByRole("dialog"));
   fireEvent.change(dialog.getByLabelText("Kanal manzili"), { target: { value: "@qaytgan_kanal" } });
   fireEvent.click(dialog.getByRole("button", { name: "Tekshirish" }));
-  await dialog.findByText(/Bu kanal avval o'chirilgan — qayta tiklanadi, oldingi 3 ta a'zo qayta bonus olmaydi/);
+  await dialog.findByText(/Bu kanal avval o'chirilgan — qayta tiklanadi, oldingi 3 ta a'zo qo'shilish bonusini qayta olmaydi/);
   const save = button("Qayta tiklash");
   assert.equal(save.disabled, false, "a deleted channel is not a duplicate");
   fireEvent.click(save);
