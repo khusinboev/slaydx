@@ -2,15 +2,12 @@ import "server-only";
 import JSZip from "jszip";
 import { CONVERT_MAX_PAGES, imageFormatOfName, maxBytesFor, sourceOfName, targetsFor, type ConvertSource, type ConvertTarget } from "../convert/matrix";
 import { buildJpegPdf, type JpegPage } from "../convert/jpeg-pdf";
-import { extractMeta } from "../generation/meta";
-import { renderDocx } from "../generation/render-docx";
-import { pdfBlocksToDoc, pdfToBlocks } from "../generation/translate/index";
 import { PdfPageLimitError } from "../generation/translate/pdf";
-import { TOOL_BY_ID } from "../tools";
 import { ApiError } from "./api";
 import { query } from "./db";
 import { isDownloadError } from "./downloads/errors";
 import { pdftoppmPages } from "./downloads/producers";
+import { ParsePoolError, parseInWorker } from "./parse-pool";
 import { pdfAvailable, toPdf } from "./pdf";
 import { rateLimit, windowStartOf } from "./ratelimit";
 import { getSetting } from "./settings";
@@ -32,7 +29,6 @@ const DAY_SEC = 86_400;
 const BUSY_RETRY_SEC = 60;
 /** PDF -> image: page images are held in memory before zipping. */
 const PAGES_CAP = { pages: CONVERT_MAX_PAGES, bytes: 60 * 1024 * 1024 };
-const PDF_DOCX_TIMEOUT_MS = 40_000;
 /** Decompression-bomb guard for sharp (pixels). */
 const MAX_PIXELS = 60_000_000;
 const RASTER_DPI = 150;
@@ -205,34 +201,31 @@ async function pdfToPages(bytes: Uint8Array, target: "png" | "jpg", base: string
   return { bytes: await zip.generateAsync({ type: "nodebuffer", compression: "STORE" }), mime: MIME.zip, fileName: `${base}-sahifalar.zip` };
 }
 
-async function pdfToDocx(bytes: Uint8Array, base: string): Promise<ConvertResult> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+async function pdfToDocx(bytes: Uint8Array, base: string, parse: typeof parseInWorker): Promise<ConvertResult> {
   try {
-    const parsed = await Promise.race([
-      pdfToBlocks(bytes),
-      new Promise<never>((_, rej) => {
-        timer = setTimeout(() => rej(new Error("pdf.js timeout")), PDF_DOCX_TIMEOUT_MS);
-      }),
-    ]);
-    if (!parsed.blocks.length) {
-      throw new ApiError("PDF dan matn chiqmadi — skaner (rasmli) PDF bo'lishi mumkin", 422, { code: "no_text" });
-    }
-    const meta = { ...extractMeta(TOOL_BY_ID.essay, { topic: base } as never), toolId: "translation" as const };
-    const doc = pdfBlocksToDoc(parsed.blocks, new Map(), meta);
-    return { bytes: Buffer.from(await renderDocx(doc)), mime: MIME.docx, fileName: `${base}.docx` };
+    // pdf.js runs in the parse pool's worker thread: wall-clock timeout, heap cap, terminate (CONC-09).
+    const out = await parse({ kind: "pdf-docx", bytes, title: base });
+    if (!out.docx) throw new ApiError("PDF dan matn chiqmadi — skaner (rasmli) PDF bo'lishi mumkin", 422, { code: "no_text" });
+    return { bytes: Buffer.from(out.docx), mime: MIME.docx, fileName: `${base}.docx` };
   } catch (e) {
-    if (e instanceof PdfPageLimitError) throw new ApiError("PDF juda uzun — Word ga o'girish uchun sahifalar soni oshib ketdi", 413, { code: "too_many_pages" });
     if (e instanceof ApiError) throw e;
+    if (e instanceof PdfPageLimitError) throw new ApiError("PDF juda uzun — Word ga o'girish uchun sahifalar soni oshib ketdi", 413, { code: "too_many_pages" });
+    if (e instanceof ParsePoolError) {
+      throw e.code === "busy"
+        ? new ApiError(CONVERT_BUSY_MESSAGE, 503, { code: "busy", retryAfter: BUSY_RETRY_SEC })
+        : new ApiError(e.message, 422, { code: e.code === "timeout" ? "timeout" : "failed" });
+    }
     console.warn("[convert] pdf->docx", e instanceof Error ? e.message : e);
     throw FAILED();
-  } finally {
-    clearTimeout(timer);
   }
 }
 
 /* ───────────────────────────── entry ───────────────────────────── */
 
-export async function convertFile(userId: string, file: ConvertInput, target: ConvertTarget): Promise<ConvertResult> {
+/** `parse` is a test seam for the parse pool. */
+export type ConvertDeps = { parse?: typeof parseInWorker };
+
+export async function convertFile(userId: string, file: ConvertInput, target: ConvertTarget, deps: ConvertDeps = {}): Promise<ConvertResult> {
   const policy = await convertPolicy();
   if (!policy.enabled) throw new ApiError(DISABLED_TEXT, 503, { code: "disabled" });
 
@@ -276,7 +269,7 @@ export async function convertFile(userId: string, file: ConvertInput, target: Co
         const t = target as "png" | "jpg" | "webp";
         return { bytes: await imageToImage(file.bytes, t), mime: MIME[t], fileName: `${base}.${t}` };
       }
-      return target === "docx" ? pdfToDocx(file.bytes, base) : pdfToPages(file.bytes, target as "png" | "jpg", base);
+      return target === "docx" ? pdfToDocx(file.bytes, base, deps.parse ?? parseInWorker) : pdfToPages(file.bytes, target as "png" | "jpg", base);
     });
   } catch (e) {
     if (e instanceof SofficeBusyError) throw apiBusy();

@@ -366,6 +366,38 @@ test("PDF -> Word (DOCX) reuses the translator's PDF reader; a scanned PDF says 
   assert.equal((await status(uid)).used, 1, "the scanned PDF was refunded");
 });
 
+test("PDF -> Word runs in the parse pool; a pool timeout / failure / busy refunds the quota with a clean status", { skip }, async () => {
+  const { ParsePoolError } = await import("../lib/server/parse-pool.ts");
+  const uid = await user();
+  const pdf = textPdf("Salom");
+  const cases: [Error, number, string][] = [
+    [new ParsePoolError("Faylni o'qish juda uzoq davom etdi", 422, "timeout"), 422, "timeout"],
+    [new ParsePoolError("Faylni o'qib bo'lmadi", 422, "failed"), 422, "failed"],
+    [new ParsePoolError("Server band", 503, "busy"), 503, "busy"],
+    [new Error("boom"), 422, "failed"],
+  ];
+  for (const [err, statusCode, code] of cases) {
+    let seen: { kind: string } | null = null;
+    await assert.rejects(
+      convert.convertFile(uid, { name: "m.pdf", bytes: pdf }, "docx", {
+        parse: (async (task: { kind: string }) => {
+          seen = task;
+          throw err;
+        }) as never,
+      }),
+      (e: { status: number; extra: Json }) => e.status === statusCode && e.extra.code === code,
+      code,
+    );
+    assert.equal(seen!.kind, "pdf-docx", "work goes to the pool, not the web process");
+    assert.equal((await status(uid)).used, 0, `${code}: refunded`);
+  }
+  const ok = await convert.convertFile(uid, { name: "m.pdf", bytes: pdf }, "docx", {
+    parse: (async () => ({ docx: new Uint8Array([80, 75]) })) as never,
+  });
+  assert.equal(ok.fileName, "m.docx");
+  assert.equal((await status(uid)).used, 1, "success is charged");
+});
+
 /* ───────────────────────── real binaries (skipped in CI) ───────────────────────── */
 
 test("real LibreOffice: docx -> pdf", { skip: skipRealSoffice }, async () => {
