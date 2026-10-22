@@ -36,11 +36,16 @@ export async function payAmbassadorInTx(
 ): Promise<AmbassadorPaid | null> {
   if (o.purpose !== "topup") return null;
   let savepoint = false;
+  // What a manual replay needs if the step fails (the order is `paid` by then, so a re-delivered callback never retries it).
+  const ctx: { orderId: string; payerId: string; amountSoum: number; percent?: number; points?: number; referrerId?: string | null } =
+    { orderId: o.id, payerId: o.userId, amountSoum: o.amountSoum };
   try {
     await client.query("SAVEPOINT ambassador");
     savepoint = true;
     const percent = await getSettingInTx(client, AMBASSADOR_KEY);
     const points = ambassadorPoints(o.amountSoum, percent);
+    ctx.percent = percent;
+    ctx.points = points;
     if (points < 1) {
       await client.query("RELEASE SAVEPOINT ambassador");
       return null;
@@ -50,6 +55,7 @@ export async function payAmbassadorInTx(
       [o.userId],
     );
     const referrerId = ref.rows[0]?.referrer ?? null;
+    ctx.referrerId = referrerId;
     if (!referrerId || referrerId === o.userId) {
       await client.query("RELEASE SAVEPOINT ambassador");
       return null;
@@ -72,7 +78,12 @@ export async function payAmbassadorInTx(
         throw e2;
       }
     }
-    log("error", "[ambassador] bonus skipped, settlement kept", { orderId: o.id, error: e instanceof Error ? e.message : String(e) });
+    const code = (e as { code?: unknown } | null)?.code;
+    log("error", "[ambassador] bonus skipped, settlement kept", {
+      ...ctx,
+      sqlstate: typeof code === "string" ? code : undefined,
+      error: e instanceof Error ? e.message : String(e),
+    });
     return null;
   }
 }

@@ -397,7 +397,8 @@ export async function settleOrder(
     paymentBonusPercent: res.bonusPercent,
     ambassador: res.ambassador?.points,
   });
-  await notifyAmbassador(res.ambassador);
+  // Not awaited: the provider's webhook must get its answer now, not after a slow Telegram call (never throws).
+  void notifyAmbassador(res.ambassador);
   return res.outcome;
 }
 
@@ -661,7 +662,8 @@ export async function createPaidPaynetOrder(input: {
     paynetTrnId: res.providerTrnId,
     ambassador: res.settled.ambassador?.points,
   });
-  await notifyAmbassador(res.settled.ambassador);
+  // Not awaited: Paynet's PerformTransaction must get its answer now (never throws).
+  void notifyAmbassador(res.settled.ambassador);
   return { status: "paid", order: res.order, providerTrnId: res.providerTrnId, balance: res.balance, bonusPoints: res.settled.bonusPoints };
 }
 
