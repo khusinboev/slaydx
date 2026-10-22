@@ -197,7 +197,7 @@ test("katalog: hech bir kalit sirga bog'lanmagan va faqat bool/son/vositalar ro'
   const envVars = new Map<string, string>();
   for (const k of settings.SETTING_KEYS) {
     const def = settings.settingDef(k);
-    assert.ok(["bool", "int", "number", "tool_ids"].includes(def.type), `${k}: ${def.type}`);
+    assert.ok(["bool", "int", "number", "tool_ids", "text"].includes(def.type), `${k}: ${def.type}`);
     if (def.envVar) {
       assert.ok(!SECRET_WORDS.test(def.envVar), `${k}: ${def.envVar} sirga o'xshaydi`);
       envVars.set(k, def.envVar);
@@ -206,6 +206,7 @@ test("katalog: hech bir kalit sirga bog'lanmagan va faqat bool/son/vositalar ro'
     const v = def.envDefault() as unknown;
     const plain =
       typeof v === "boolean" ||
+      (def.type === "text" && v === "") ||
       (typeof v === "number" && Number.isFinite(v)) ||
       (Array.isArray(v) && v.every((x) => typeof x === "string" && Object.hasOwn(TOOL_BY_ID, x)));
     assert.ok(plain, `${k}: envValue oddiy qiymat emas`);

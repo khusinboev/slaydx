@@ -5,7 +5,7 @@ import { referralSummary } from "../referrals";
 import { recentTransactions } from "../credits";
 import { getPaymentBonusPercent } from "../payment-bonus";
 import { updateProfile } from "../profile";
-import { callBot, botUsername, isTransientBotFailure, TelegramTransientError } from "../telegram";
+import { callBot, botUsername, isTransientBotFailure, sendWelcome, TelegramTransientError } from "../telegram";
 import { FIELD_MAX, cleanFieldValue, fieldStep } from "../../profile/fields";
 import { FILES_MAX_PAGE, FILES_PAGE_SIZE, parseCallback, type Origin } from "./codes";
 import { t, langOf, type Lang } from "./i18n";
@@ -440,6 +440,22 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
         const r = await mandatoryCheck(ctx);
         toast = r.toast;
         if (r.screen) await edit(r.screen);
+        return;
+      }
+      case "offerAccept": {
+        // Public offer (D6): record the acceptance (same service as the web), drop the button, then the normal welcome.
+        const { handleOfferAccept } = await import("./oferta");
+        const outcome = await handleOfferAccept({ chatId: ctx.chatId, lang: ctx.lang, user, messageId: msg.message_id }, c.version);
+        if (outcome === "outdated") {
+          toast = t(ctx.lang, "oferta.outdated");
+          return;
+        }
+        toast = t(ctx.lang, "oferta.accepted");
+        // A double tap (already accepted) must not send a second welcome.
+        if (outcome === "accepted") {
+          const profile = { telegramId: String(ctx.telegramId), username: user.username, name: user.name, photoUrl: null };
+          await sendWelcome(ctx.chatId, ctx.lang, user, profile, ctx);
+        }
         return;
       }
       case "walletInvite":

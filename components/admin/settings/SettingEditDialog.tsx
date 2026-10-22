@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 import { ConfirmDialog, toast } from "@/components/admin/ui";
+import { AutoTextarea } from "@/components/common/AutoTextarea";
 import { cn } from "@/lib/cn";
 import { updateSetting, type SettingItem, type SettingValue } from "@/lib/admin-api/settings";
 import { fmtNumber } from "@/lib/admin-format";
@@ -31,7 +32,7 @@ export function SettingEditDialog(props: SettingEditDialogProps) {
 function initialDraft(item: SettingItem): { bool: boolean; text: string; tools: string[] } {
   return {
     bool: item.type === "bool" ? item.value : false,
-    text: item.type === "int" || item.type === "number" ? numberText(item.value) : "",
+    text: item.type === "int" || item.type === "number" ? numberText(item.value) : item.type === "text" ? item.value : "",
     tools: item.type === "tool_ids" ? [...item.value] : [],
   };
 }
@@ -46,6 +47,8 @@ function Body({ item, tools, onClose, onSaved }: SettingEditDialogProps & { item
     next = draft.bool;
   } else if (item.type === "tool_ids") {
     next = draft.tools;
+  } else if (item.type === "text") {
+    next = draft.text;
   } else {
     const checked = checkNumberText(item, draft.text);
     if (checked.ok) next = checked.value;
@@ -100,6 +103,25 @@ function Body({ item, tools, onClose, onSaved }: SettingEditDialogProps & { item
             />
           </button>
           <span className="font-medium">{draft.bool ? "Yoqilgan" : "O'chiq"}</span>
+        </div>
+      ) : null}
+
+      {item.type === "text" ? (
+        <div className="flex flex-col gap-1.5 text-[12.5px]">
+          <label htmlFor={`${ids}-value`} className="font-semibold">
+            Yangi qiymat
+          </label>
+          <AutoTextarea
+            id={`${ids}-value`}
+            value={draft.text}
+            onChange={(e) => setDraft((d) => ({ ...d, text: e.target.value }))}
+            minRows={4}
+            maxRows={10}
+            maxLength={2000}
+            autoComplete="off"
+            className="border-input bg-card focus:ring-ring w-full rounded-lg border px-2.5 py-2 text-[13px] outline-none focus:ring-2"
+          />
+          <span className="text-muted-foreground text-xs">Har qator alohida: nom, STIR, manzil, bank hisobi, telefon.</span>
         </div>
       ) : null}
 

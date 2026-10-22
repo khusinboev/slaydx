@@ -43,6 +43,9 @@ export type SettingValues = {
   payment_bonus_percent: number;
   "ambassador.percent": number;
   "bonus.rating_points": number;
+  "oferta.gate_enabled": boolean;
+  "oferta.version": number;
+  "oferta.requisites": string;
   "pricing.target_markup": number;
   "pricing.payment_fee_percent": number;
   "queue.max_wait_sec": number;
@@ -53,7 +56,7 @@ export type SettingValues = {
 
 export type SettingKey = keyof SettingValues;
 
-export type SettingType = "bool" | "int" | "number" | "tool_ids";
+export type SettingType = "bool" | "int" | "number" | "tool_ids" | "text";
 
 /** Where an effective value comes from. */
 export type SettingSource = "db" | "env" | "default";
@@ -127,6 +130,25 @@ function stepNumberValidator(min: number, max: number, step: number) {
   };
 }
 
+/** Longest accepted multi-line text setting (the oferta requisites are a handful of lines). */
+const TEXT_MAX = 2000;
+
+/** Multi-line text: CRLF folded to LF, each line trimmed, blank runs collapsed; empty is allowed. */
+function textValidator(raw: unknown): Validation<string> {
+  if (typeof raw !== "string") return { ok: false, error: "Qiymat matn bo'lishi kerak" };
+  if (raw.length > TEXT_MAX * 2) return { ok: false, error: `Matn ${TEXT_MAX} belgidan oshmasligi kerak` };
+  const value = raw
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((l) => l.trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (value.length > TEXT_MAX) return { ok: false, error: `Matn ${TEXT_MAX} belgidan oshmasligi kerak` };
+  if (/[\u27e6\u27e7]/.test(value)) return { ok: false, error: "Matnda ⟦ ⟧ belgilari qolmasligi kerak" };
+  return { ok: true, value };
+}
+
 /** Registry order, so a stored list is stable regardless of input order. */
 const TOOL_ORDER: readonly ToolId[] = Object.keys(TOOL_BY_ID) as ToolId[];
 
@@ -156,6 +178,7 @@ const GEN_GROUP = "Generatsiya";
 const FIN_GROUP = "Moliya";
 const PRICING_GROUP = "Narxlar";
 const QUEUE_GROUP = "Navbat va yuklama";
+const OFERTA_GROUP = "Oferta";
 
 type DailyKey = "free_llm.daily.outline" | "free_llm.daily.udk" | "free_llm.daily.rewrite" | "free_llm.daily.polish";
 
@@ -280,6 +303,37 @@ const CATALOG: Catalog = {
     max: RATING_BONUS_MAX,
     validate: intValidator(0, RATING_BONUS_MAX),
     envDefault: () => RATING_BONUS_DEFAULT,
+  },
+  "oferta.gate_enabled": {
+    key: "oferta.gate_enabled",
+    group: OFERTA_GROUP,
+    label: "Oferta qabul qilishni talab qilish",
+    description:
+      "Yoqilsa, ofertani qabul qilmagan (yoki eski tahrirni qabul qilgan) foydalanuvchi yangi ish yarata olmaydi va to'lov qila olmaydi; botda yangi foydalanuvchiga /start da oferta ko'rsatiladi. Rekvizitlar kiritilmaguncha yoqib bo'lmaydi. Adminlar bu tekshiruvdan ozod.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => false,
+  },
+  "oferta.version": {
+    key: "oferta.version",
+    group: OFERTA_GROUP,
+    label: "Oferta tahriri (versiya)",
+    description: "Oshirilsa, hamma foydalanuvchi ofertani qayta qabul qilishi kerak bo'ladi (agar yuqoridagi tekshiruv yoqilgan bo'lsa). Matn o'zgarganda oshiring.",
+    type: "int",
+    min: 1,
+    max: 1000,
+    validate: intValidator(1, 1000),
+    envDefault: () => 1,
+  },
+  "oferta.requisites": {
+    key: "oferta.requisites",
+    group: OFERTA_GROUP,
+    label: "Ijrochi rekvizitlari",
+    description:
+      "Ofertaning 1.1 va 9-bandlariga chiqadi. Birinchi qator — Ijrochi nomi (YaTT/MChJ), keyingi qatorlar: STIR, manzil, bank hisob raqami, telefon. Oferta sahifasi va PDF shundan olinadi.",
+    type: "text",
+    validate: textValidator,
+    envDefault: () => "",
   },
   "pricing.target_markup": {
     key: "pricing.target_markup",
@@ -582,6 +636,27 @@ async function snapshotInTx<K extends SettingKey>(client: PoolClient, key: K): P
 }
 
 /**
+ * Cross-key rule of the oferta gate: it cannot be switched on while the Ijrochi requisites are empty
+ * (the owner has not supplied them; the public text would have a hole), and the requisites cannot be
+ * emptied while the gate is on. Evaluated against the values in force inside the caller's transaction.
+ */
+async function assertOfertaConsistent(client: PoolClient, key: SettingKey, value: unknown): Promise<void> {
+  if (key !== "oferta.gate_enabled" && key !== "oferta.requisites") return;
+  // Serialises the two oferta keys (their rows may not exist yet, so no row lock): "enable" and "clear the
+  // requisites" can never both pass their check against the same old state. Released at COMMIT/ROLLBACK.
+  await client.query("SELECT pg_advisory_xact_lock(hashtext('slaydx:oferta-settings'))");
+  if (key === "oferta.gate_enabled" && value === true) {
+    const requisites = await getSettingInTx(client, "oferta.requisites");
+    if (!requisites.trim()) throw new ApiError("Avval Ijrochi rekvizitlarini kiriting — ularsiz ofertani yoqib bo'lmaydi", 400);
+  }
+  if (key === "oferta.requisites" && typeof value === "string" && !value.trim()) {
+    if (await getSettingInTx(client, "oferta.gate_enabled")) {
+      throw new ApiError("Oferta yoqilgan — rekvizitlarni bo'sh qoldirib bo'lmaydi", 400);
+    }
+  }
+}
+
+/**
  * Validates and stores an override inside the caller's transaction and
  * returns before/after snapshots for the audit row. Throws `ApiError` 404 for
  * an unknown key and 400 for an invalid value. The caller must call
@@ -596,6 +671,7 @@ export async function setSettingInTx(
   const k = requireKey(key);
   const checked = validateSetting(k, rawValue);
   if (!checked.ok) throw new ApiError(checked.error, 400);
+  await assertOfertaConsistent(client, k, checked.value);
   const before = await snapshotInTx(client, k);
   await client.query(
     `INSERT INTO app_settings (key, value, updated_by, updated_at)
@@ -617,6 +693,7 @@ export async function resetSettingInTx(
   key: string,
 ): Promise<{ key: SettingKey; before: SettingSnapshot; after: SettingSnapshot }> {
   const k = requireKey(key);
+  if (k === "oferta.requisites") await assertOfertaConsistent(client, k, "");
   const before = await snapshotInTx(client, k);
   await client.query("DELETE FROM app_settings WHERE key = $1", [k]);
   return { key: k, before, after: effective(k, undefined) };

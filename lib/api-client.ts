@@ -8,6 +8,7 @@ import type { BodyRules } from "./generation/slide-audience";
 import type { DownloadFormatId } from "./downloads/formats";
 import type { ClickMethod } from "./click-input";
 import { reportGate, type GateChannel } from "./channel-gate";
+import { askOffer, isOfferRequired } from "./offer-gate";
 import {
   TRANSPORT_HEADER,
   bearerHeaders,
@@ -140,6 +141,22 @@ export function setUnauthorizedHandler(fn: () => void) {
  * `AbortError` (xato emas, UI uni ko'rsatmaydi).
  */
 export async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
+  try {
+    return await requestOnce<T>(path, init);
+  } catch (e) {
+    /*
+     * Public offer (D6): 403 `offer_required` -- show the acceptance dialog ONCE for every caller and, when the
+     * user accepts, repeat the request exactly once. The first attempt was refused before anything was
+     * created or charged, so the retry cannot double-act. Dismissed / no dialog host: the original error.
+     */
+    if (e instanceof ApiError && isOfferRequired(e.status, e.data) && (await askOffer(typeof e.data.version === "number" ? e.data.version : 0))) {
+      return requestOnce<T>(path, init);
+    }
+    throw e;
+  }
+}
+
+async function requestOnce<T>(path: string, init: RequestOptions = {}): Promise<T> {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, signal: outer, ...rest } = init;
   const link = linkedSignal(timeoutMs, outer);
   try {

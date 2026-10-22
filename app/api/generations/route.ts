@@ -13,6 +13,7 @@ import { queryOne } from "@/lib/server/db";
 import { effectivePrice } from "@/lib/server/pricing";
 import { getSetting } from "@/lib/server/settings";
 import { assertCanCreate } from "@/lib/server/mandatory-channels";
+import { assertOfferAccepted } from "@/lib/server/oferta";
 import type { ToolId } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -156,6 +157,9 @@ export const POST = handler("generations/create", async (req) => {
    * account are exempt (`mandatory-channels.ts`).
    */
   if (!replay) await assertCanCreate(user.id);
+
+  // Public offer (D6): 403 `offer_required` until the user accepts the current version (gate off = no-op; admins exempt).
+  if (!replay) await assertOfferAccepted(user.id);
 
   // Admin pause (§6.10): checked before pricing and charging, so nothing is charged or queued.
   if (!replay) await assertGenerationOpen(tool.id);

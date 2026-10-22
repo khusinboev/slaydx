@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { applyTheme, useAppStore } from "@/lib/store";
 import { MiniAppBridge } from "@/components/telegram/MiniAppBridge";
 import { NavProvider } from "@/components/nav/NavProvider";
+import { OfferDialog } from "@/components/overlays/OfferDialog";
 
 /**
  * The admin panel (`/admin/**`) has its own session (`/api/admin/session`) and never reads the
@@ -55,6 +56,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
       {/* History engine, back navigation, overlay/scroll handling: consumer AND admin pages. */}
       <NavProvider />
       {children}
+      {/* Public offer (D6): shown when an API answers 403 offer_required; idle (renders nothing) otherwise. */}
+      {!onAdmin ? <OfferDialog /> : null}
       {/* Telegram Mini App: inert outside a genuine Telegram webview; on admin paths shell + BackButton only. */}
       <MiniAppBridge admin={onAdmin} />
     </>

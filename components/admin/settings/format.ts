@@ -16,6 +16,7 @@ export type ToolOption = { value: string; label: string };
 /** Display text of a value. Tool ids not in the registry are shown by their id. */
 export function formatValue(item: Pick<SettingItem, "type">, value: SettingValue, tools: ReadonlyArray<ToolOption>): string {
   if (item.type === "bool") return value ? "Yoqilgan" : "O'chiq";
+  if (item.type === "text") return typeof value === "string" && value.trim() ? value : "Kiritilmagan";
   if (item.type === "tool_ids") {
     const ids = Array.isArray(value) ? value : [];
     if (ids.length === 0) return "Hech biri";
@@ -51,6 +52,16 @@ export function checkNumberText(item: Pick<SettingItem, "type" | "min" | "max">,
 /** Initial text of a numeric input: no grouping, so it is easy to edit. */
 export function numberText(value: number): string {
   return String(value);
+}
+
+/** The oferta flag is on but the requisites are empty: the server treats the gate as off (it cannot be enabled that way, but it can be left over). */
+export const OFERTA_INACTIVE_NOTE = "amalda o'chiq (rekvizitlar bo'sh)";
+
+/** A remark for `item` given all items, or `undefined`. */
+export function noteFor(item: SettingItem, all: ReadonlyArray<SettingItem>): string | undefined {
+  if (item.key !== "oferta.gate_enabled" || item.value !== true) return undefined;
+  const req = all.find((i) => i.key === "oferta.requisites");
+  return req && req.type === "text" && !req.value.trim() ? OFERTA_INACTIVE_NOTE : undefined;
 }
 
 /** Groups in order of first appearance (the catalog order decides the card order). */

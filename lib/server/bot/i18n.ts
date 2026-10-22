@@ -407,6 +407,28 @@ const T = {
     ru: "Пока вы не подписаны, новые документы создавать нельзя. После подписки нажмите «Проверить».",
     en: "You cannot create new documents until you join. After joining, tap “Check”.",
   },
+  "oferta.caption": {
+    uz: "<b>Ommaviy oferta</b>\n\nSlaydX xizmatlaridan foydalanish shartlari ilova qilingan PDF'da. O‘qib chiqib, davom etish uchun «Qabul qilaman» tugmasini bosing.",
+    ru: "<b>Публичная оферта</b>\n\nУсловия использования SlaydX — в приложенном PDF. Прочитайте и нажмите «Принимаю», чтобы продолжить.",
+    en: "<b>Public offer</b>\n\nThe SlaydX terms of use are in the attached PDF. Read them and tap “I accept” to continue.",
+  },
+  "oferta.captionLink": {
+    uz: "<b>Ommaviy oferta</b>\n\nSlaydX xizmatlaridan foydalanish shartlari saytda. PDF hozir tayyor emas — «Ofertani o‘qish» tugmasi orqali o‘qib chiqing, so‘ng «Qabul qilaman»ni bosing.",
+    ru: "<b>Публичная оферта</b>\n\nУсловия использования SlaydX — на сайте. PDF сейчас недоступен: прочитайте оферту по кнопке «Читать оферту», затем нажмите «Принимаю».",
+    en: "<b>Public offer</b>\n\nThe SlaydX terms of use are on the website. The PDF is not ready right now: read the offer with the “Read the offer” button, then tap “I accept”.",
+  },
+  "oferta.outdated": {
+    uz: "Oferta yangilandi — iltimos, qaytadan o‘qing",
+    ru: "Оферта обновлена — пожалуйста, прочитайте заново",
+    en: "The offer was updated — please read it again",
+  },
+  "oferta.accept": { uz: "Qabul qilaman", ru: "Принимаю", en: "I accept" },
+  "oferta.read": { uz: "Ofertani o‘qish", ru: "Читать оферту", en: "Read the offer" },
+  "oferta.accepted": {
+    uz: "Rahmat! Oferta qabul qilindi.",
+    ru: "Спасибо! Оферта принята.",
+    en: "Thank you! The offer is accepted.",
+  },
   "mand.check": { uz: "Tekshirish", ru: "Проверить", en: "Check" },
   "mand.done": {
     uz: "Rahmat! Endi botdan to‘liq foydalanishingiz mumkin.",
