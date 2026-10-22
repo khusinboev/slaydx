@@ -302,7 +302,7 @@ test("staySweep: pays after N days if still a member (+ notice in the user's lan
   assert.equal((await claim(u.id, ch))?.stay_paid, 2000);
   const notice = calls.find((c) => c.method === "sendMessage");
   assert.equal(notice?.body.chat_id, String(u.tg));
-  assert.match(String(notice?.body.text), /\+2\s000 сум бонуса!/);
+  assert.match(String(notice?.body.text), /\+2\s000 бонусных сум!/);
   assert.match(String(notice?.body.text), /Бонус зачислен в кошелёк\./);
   assert.match(String(notice?.body.text), /«SlaydX новости» 7 дн\./);
   assert.equal(((notice?.body.reply_markup as { inline_keyboard: { callback_data?: string }[][] }).inline_keyboard[0]![0]!.callback_data), "b:h");
@@ -652,7 +652,7 @@ test("chat_member join → join bonus paid once + ONE notice; replayed update / 
   assert.equal(sentNotices().length, 1);
   const notice = sentNotices()[0]!.body;
   assert.equal(notice.chat_id, String(u.tg));
-  assert.equal(notice.text, "🎉 <b>+1 000 so‘m bonus!</b>\n«SlaydX &lt;yangi&gt;» kanaliga obuna bo‘lganingiz uchun.\n7 kun obuna bo‘lib qolsangiz — yana +2 000 so‘m.");
+  assert.equal(notice.text, "🎉 <b>+1 000 bonus so‘m!</b>\n«SlaydX &lt;yangi&gt;» kanaliga obuna bo‘lganingiz uchun.\n7 kun obuna bo‘lib qolsangiz — yana +2 000 bonus so‘m.");
   assert.equal(notice.parse_mode, "HTML");
   assert.equal(notice.message_effect_id, undefined, "no undocumented effect id");
   assert.equal((notice.reply_markup as { inline_keyboard: { callback_data?: string }[][] }).inline_keyboard[0]![0]!.callback_data, "b:h");
@@ -676,7 +676,7 @@ test("chat_member join: restricted with is_member true joins; a channel without 
   await chatMemberUpdate(await chatIdOf(news), u.tg, "restricted", true);
   assert.equal((await claim(u.id, news))?.stay_paid, 0, "nothing owed: settled at join");
   assert.equal(sentNotices().length, 1);
-  assert.equal(sentNotices()[0]!.body.text, "🎉 <b>+2 000 UZS bonus!</b>\nFor joining the channel «News».");
+  assert.equal(sentNotices()[0]!.body.text, "🎉 <b>+2 000 bonus UZS!</b>\nFor joining the channel «News».");
   installFetch();
   await chatMemberUpdate(await chatIdOf(quiet), u.tg, "creator");
   assert.equal((await claim(u.id, quiet))?.join_paid, 0, "claimed for the stay bonus");
