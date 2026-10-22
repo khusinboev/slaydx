@@ -185,7 +185,11 @@ function signIn(user: ServerUser) {
 
 test("Profil index (ProfileHome): «Admin panel» row → /admin is shown for a user with an admin account (isAdmin), hidden for everyone else", async () => {
   // ProfileHome refreshes the session copy once (GET /api/users/me): answer with the store's user.
-  const calls = stubFetch({ "GET /api/users/me": () => json(200, { user: useAppStore.getState().user, transactions: [] }) });
+  const calls = stubFetch({
+    "GET /api/users/me": () => json(200, { user: useAppStore.getState().user, transactions: [] }),
+    // The profile's rating card (docs/program-17 item 9) loads its own status.
+    "GET /api/ratings": () => json(200, { rated: true, stars: 5, hasFinished: true, rewardPoints: 500 }),
+  });
   const mount = () => render(withRouter(h(ProfileHome), makeRouter().router, "/uz/profile"));
   const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 0))));
 
@@ -208,7 +212,8 @@ test("Profil index (ProfileHome): «Admin panel» row → /admin is shown for a 
   mount();
   await settle();
   assert.ok(!screen.queryByRole("link", { name: /Admin panel/ }), "no row when signed out");
-  assert.equal(calls.length, 2, "one session refresh per signed-in mount, none signed out");
+  const refreshes = (calls as { url?: string; path?: string }[]).filter((c) => JSON.stringify(c).includes("/api/users/me")).length;
+  assert.equal(refreshes, 2, "one session refresh per signed-in mount, none signed out");
 });
 
 test("the Profil tab page mounts ProfileHome, whose isAdmin-gated row keeps the admin entry reachable without the Sidebar", async () => {
