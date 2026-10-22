@@ -24,9 +24,9 @@ export const GET = handler("payments/orders", async (req) => {
  */
 export const POST = handler("payments/create", async (req) => {
   const { user } = await requireUser(req);
+  await limit(`pay:${user.id}`, 10, 300);
   // Public offer (D6): 403 `offer_required` before an order exists. Gate off = no-op; admins exempt.
   await assertOfferAccepted(user.id);
-  await limit(`pay:${user.id}`, 10, 300);
 
   const body = await readJson<{ provider?: string; purpose?: string; amount?: number; card?: unknown; method?: unknown }>(req, 4_000);
   const provider = body.provider === "payme" ? "payme" : body.provider === "click" ? "click" : null;

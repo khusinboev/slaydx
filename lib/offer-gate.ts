@@ -8,8 +8,8 @@
 
 export const OFFER_REQUIRED_CODE = "offer_required";
 
-/** Shows the dialog; resolves `true` once the user accepted (the server recorded it), `false` when dismissed. */
-export type OfferAsker = () => Promise<boolean>;
+/** Shows the dialog for offer `version` (the one the 403 named); resolves `true` once the user accepted (the server recorded it), `false` when dismissed. */
+export type OfferAsker = (version: number) => Promise<boolean>;
 
 let asker: OfferAsker | null = null;
 let pending: Promise<boolean> | null = null;
@@ -26,9 +26,9 @@ export function setOfferAsker(fn: OfferAsker | null): () => void {
  * Asks the user to accept the offer. Parallel requests that were all refused share ONE dialog. With no host
  * mounted (a test, a page without providers) resolves `false`, so the caller shows the server's message.
  */
-export function askOffer(): Promise<boolean> {
+export function askOffer(version: number): Promise<boolean> {
   if (!asker) return Promise.resolve(false);
-  pending ??= asker().finally(() => {
+  pending ??= asker(version).finally(() => {
     pending = null;
   });
   return pending;

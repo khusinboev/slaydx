@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useDialog } from "@/components/overlays/useDialog";
-import { request } from "@/lib/api-client";
+import { ApiError, request } from "@/lib/api-client";
 import { setOfferAsker } from "@/lib/offer-gate";
+import { openExternalLink } from "@/lib/telegram-webapp";
 import { OFERTA_SUMMARY } from "@/lib/oferta/text";
 
 /**
@@ -18,6 +19,7 @@ export function OfferDialog() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
   const settle = useRef<((accepted: boolean) => void) | null>(null);
 
   const finish = useCallback((accepted: boolean) => {
@@ -32,9 +34,10 @@ export function OfferDialog() {
   useEffect(
     () =>
       setOfferAsker(
-        () =>
+        (shown) =>
           new Promise<boolean>((resolve) => {
             settle.current = resolve;
+            setVersion(shown);
             setOpen(true);
           }),
       ),
@@ -49,10 +52,14 @@ export function OfferDialog() {
     setBusy(true);
     setError(null);
     try {
-      await request<{ ok: true }>("/api/oferta/accept", { method: "POST" });
+      await request<{ ok: true }>("/api/oferta/accept", { method: "POST", body: JSON.stringify({ version }) });
       finish(true);
     } catch (e) {
       setBusy(false);
+      // The offer was updated while the dialog was open: take the new version, ask the user to read again.
+      if (e instanceof ApiError && e.status === 409 && e.data.code === "offer_outdated" && typeof e.data.version === "number") {
+        setVersion(e.data.version);
+      }
       setError(e instanceof Error && e.message ? e.message : "Saqlab bo'lmadi, qayta urinib ko'ring");
     }
   };
@@ -83,6 +90,10 @@ export function OfferDialog() {
             href="/oferta"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => {
+              // Inside the Telegram Mini App a plain target=_blank may navigate the app away: use the SDK's openLink.
+              if (openExternalLink(new URL("/oferta", window.location.origin).href)) e.preventDefault();
+            }}
             data-offer-read
             className="text-primary mt-3 inline-flex min-h-11 items-center text-[15px] font-semibold underline underline-offset-2"
           >

@@ -260,7 +260,7 @@ test("gate ON: 403 offer_required on generation / order / card / invoice, nothin
   assert.deepEqual(await offerCols(u), { offer_version: null, accepted: false });
 
   // accept -> allowed
-  const acc = await call(acceptRoute, "POST", "/api/oferta/accept", u);
+  const acc = await call(acceptRoute, "POST", "/api/oferta/accept", u, { version: 1 });
   assert.equal(acc.status, 200);
   assert.deepEqual(acc.json, { ok: true, version: 1 });
   const first = await queryOne<{ at: Date }>("SELECT offer_accepted_at AS at FROM users WHERE id = $1", [u]);
@@ -268,7 +268,7 @@ test("gate ON: 403 offer_required on generation / order / card / invoice, nothin
   assert.equal((await postGen(u)).status, 202);
   assert.equal((await postOrder(u)).status, 201);
   // idempotent: a second accept keeps the original timestamp
-  await call(acceptRoute, "POST", "/api/oferta/accept", u);
+  await call(acceptRoute, "POST", "/api/oferta/accept", u, { version: 1 });
   assert.equal((await queryOne<{ at: Date }>("SELECT offer_accepted_at AS at FROM users WHERE id = $1", [u]))!.at.getTime(), first!.at.getTime());
 
   // version bump -> required again, until accepted again
@@ -278,7 +278,7 @@ test("gate ON: 403 offer_required on generation / order / card / invoice, nothin
   assert.equal(again.json.code, "offer_required");
   assert.equal(again.json.version, 2);
   assert.equal((await postOrder(u)).status, 403);
-  await call(acceptRoute, "POST", "/api/oferta/accept", u);
+  await call(acceptRoute, "POST", "/api/oferta/accept", u, { version: 2 });
   assert.deepEqual(await offerCols(u), { offer_version: 2, accepted: true });
   assert.equal((await postGen(u)).status, 202);
   // accepting is anonymous-proof
@@ -298,6 +298,13 @@ test("gate ON: webhooks, reads and the session are never gated; admin accounts a
   const hook = await shopRoute.POST(new Request("http://x/api/payments/click", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ ...full, sign_string }).toString() }));
   const hookBody = (await hook.json()) as { error: number; error_note: string };
   assert.equal(hookBody.error, 0, `webhook must not be gated: ${JSON.stringify(hookBody)}`);
+  // ... and Complete (it credits the money) for the same not-accepted user.
+  const done: Record<string, string> = { ...full, action: "1", merchant_prepare_id: String((hookBody as unknown as { merchant_prepare_id: number }).merchant_prepare_id) };
+  const doneSign = md5(done.click_trans_id! + done.service_id + "click-secret-key" + done.merchant_trans_id + done.merchant_prepare_id + done.amount + done.action + done.sign_time);
+  const complete = await shopRoute.POST(new Request("http://x/api/payments/click", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ ...done, sign_string: doneSign }).toString() }));
+  const completeBody = (await complete.json()) as { error: number; error_note: string };
+  assert.equal(completeBody.error, 0, `Complete must not be gated: ${JSON.stringify(completeBody)}`);
+  assert.equal((await queryOne<{ state: string }>("SELECT state FROM payment_orders WHERE id = $1", [order.id]))!.state, "paid", "the money was credited to a user who never accepted");
 
   // Reads and the session.
   const list = await call(ordersRoute, "GET", "/api/payments/orders", u);
@@ -418,7 +425,7 @@ test("bot: new user at /start gets the PDF + «Qabul qilaman»; the button accep
   assert.match(String(docs[0]!.body.document), /^\[file SlaydX-oferta-v1\.pdf\]$/);
   assert.match(String(docs[0]!.body.caption), /Ommaviy oferta/);
   const btns = buttonsOf(docs[0]!.body);
-  assert.deepEqual(btns.map((b) => b.callback_data ?? b.url), ["https://slaydx.test/oferta", "o:a"]);
+  assert.deepEqual(btns.map((b) => b.callback_data ?? b.url), ["https://slaydx.test/oferta", "o:a:1"]);
   assert.match(btns[1]!.text, /Qabul qilaman$/);
   assert.equal(sent("sendMessage").length, 0, "no welcome before the acceptance");
   const me = await userByTg(tg);
@@ -427,7 +434,7 @@ test("bot: new user at /start gets the PDF + «Qabul qilaman»; the button accep
 
   // The button.
   calls = [];
-  await router.handleCallback({ id: "q1", from: { id: tg }, message: { message_id: 3, chat: { id: tg, type: "private" } }, data: "o:a" }, ++updSeq);
+  await router.handleCallback({ id: "q1", from: { id: tg }, message: { message_id: 3, chat: { id: tg, type: "private" } }, data: "o:a:1" }, ++updSeq);
   assert.equal((await userByTg(tg))!.offer_version, 1);
   assert.equal(sent("editMessageReplyMarkup").length, 1, "the button is removed");
   assert.match(String(sent("answerCallbackQuery")[0]!.body.text), /Oferta qabul qilindi/);
@@ -504,10 +511,10 @@ test("bot: PDF unavailable -> a text message with the web link and the accept bu
     const msgs = sent("sendMessage");
     assert.equal(msgs.length, 1);
     assert.match(String(msgs[0]!.body.text), /PDF hozir tayyor emas/);
-    assert.deepEqual(buttonsOf(msgs[0]!.body).map((b) => b.callback_data ?? b.url), ["https://slaydx.test/oferta", "o:a"]);
+    assert.deepEqual(buttonsOf(msgs[0]!.body).map((b) => b.callback_data ?? b.url), ["https://slaydx.test/oferta", "o:a:7"]);
     // The accept button works the same.
     const router = await import("../lib/server/bot/router.ts");
-    await router.handleCallback({ id: "q2", from: { id: tg }, message: { message_id: 4, chat: { id: tg, type: "private" } }, data: "o:a" }, ++updSeq);
+    await router.handleCallback({ id: "q2", from: { id: tg }, message: { message_id: 4, chat: { id: tg, type: "private" } }, data: "o:a:7" }, ++updSeq);
     assert.equal((await userByTg(tg))!.offer_version, 7);
   } finally {
     if (prevBin === undefined) delete process.env.SOFFICE_BIN;
@@ -518,9 +525,165 @@ test("bot: PDF unavailable -> a text message with the web link and the accept bu
 test("bot i18n: oferta.* keys exist in uz / ru / en and only with that prefix", async () => {
   const i18n = await import("../lib/server/bot/i18n.ts");
   const keys = i18n.TEXT_KEYS.filter((k) => k.startsWith("oferta."));
-  assert.deepEqual([...keys].sort(), ["oferta.accept", "oferta.accepted", "oferta.caption", "oferta.captionLink", "oferta.read"]);
+  assert.deepEqual([...keys].sort(), ["oferta.accept", "oferta.accepted", "oferta.caption", "oferta.captionLink", "oferta.outdated", "oferta.read"]);
   for (const k of keys) {
     const e = i18n.rawEntry(k);
     for (const l of ["uz", "ru", "en"] as const) assert.ok(String(e[l]).trim().length > 3, `${k}.${l}`);
   }
+});
+
+/* ───────────────────────── review fixes ───────────────────────── */
+
+test("gate OFF: assertOfferAccepted / offerStatus run NO user-row query", { skip }, async () => {
+  await gate(false);
+  settings.invalidateSettingsCache();
+  const { assertOfferAccepted, offerStatus } = await import("../lib/server/oferta.ts");
+  const u = await webUser();
+  await offerStatus(u); // warm the settings cache (its own query is a settings read)
+  const p = pool() as unknown as { query: (...a: unknown[]) => unknown };
+  const real = p.query;
+  const seen: string[] = [];
+  p.query = function (this: unknown, ...a: unknown[]) {
+    seen.push(String(typeof a[0] === "string" ? a[0] : (a[0] as { text?: string })?.text));
+    return real.apply(this, a);
+  };
+  try {
+    await assertOfferAccepted(u);
+    assert.deepEqual((await offerStatus(u)).required, false);
+  } finally {
+    p.query = real;
+  }
+  assert.deepEqual(seen.filter((q) => /\busers\b/i.test(q)), [], `no users query with the gate off: ${seen.join(" | ")}`);
+  // Sanity: the spy does see the users query when the gate is on.
+  await gate(true);
+  seen.length = 0;
+  p.query = function (this: unknown, ...a: unknown[]) {
+    seen.push(String(typeof a[0] === "string" ? a[0] : (a[0] as { text?: string })?.text));
+    return real.apply(this, a);
+  };
+  try {
+    await assertOfferAccepted(await webUser()).catch(() => undefined);
+  } finally {
+    p.query = real;
+  }
+  assert.ok(seen.some((q) => /\busers\b/i.test(q)), "the spy works");
+});
+
+test("accept carries the SHOWN version: a bump between show and accept records nothing (web)", { skip }, async () => {
+  await gate(true, REQ, 1);
+  const u = await webUser();
+  const refused = await postGen(u);
+  assert.equal(refused.json.version, 1, "the 403 names the shown version");
+  await setSetting("oferta.version", 2); // an admin bumps it while the dialog is open
+  const stale = await call(acceptRoute, "POST", "/api/oferta/accept", u, { version: 1 });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.json.code, "offer_outdated");
+  assert.equal(stale.json.version, 2, "the new version is returned for the dialog");
+  assert.match(String(stale.json.error), /Oferta yangilandi/);
+  assert.deepEqual(await offerCols(u), { offer_version: null, accepted: false }, "nothing recorded");
+  assert.equal((await call(acceptRoute, "POST", "/api/oferta/accept", u, {})).status, 400, "a version is mandatory");
+  assert.equal((await call(acceptRoute, "POST", "/api/oferta/accept", u, { version: "2" })).status, 400);
+  assert.equal((await call(acceptRoute, "POST", "/api/oferta/accept", u, { version: 2 })).status, 200);
+  assert.deepEqual(await offerCols(u), { offer_version: 2, accepted: true });
+});
+
+test("bot: the shown version rides in the button; a bump re-sends the CURRENT offer and records nothing; a double tap sends one welcome", { skip }, async () => {
+  await gate(true, REQ, 1);
+  const tgm = await import("../lib/server/telegram.ts");
+  const router = await import("../lib/server/bot/router.ts");
+  const tg = newTg();
+  calls = [];
+  await tgm.handleUpdate(upd(tg, "/start") as never);
+  assert.equal(buttonsOf(sent("sendDocument")[0]!.body).at(-1)!.callback_data, "o:a:1");
+  await setSetting("oferta.version", 2);
+  calls = [];
+  await router.handleCallback({ id: "q3", from: { id: tg }, message: { message_id: 3, chat: { id: tg, type: "private" } }, data: "o:a:1" }, ++updSeq);
+  assert.equal((await userByTg(tg))!.offer_version, null, "nothing recorded for the stale button");
+  assert.match(String(sent("answerCallbackQuery")[0]!.body.text), /Oferta yangilandi/);
+  assert.equal(sent("sendDocument").length, 1, "the current offer is sent again");
+  assert.equal(buttonsOf(sent("sendDocument")[0]!.body).at(-1)!.callback_data, "o:a:2");
+  assert.ok(!welcomeSent(), "no welcome");
+  // Accept the new one twice (double tap): one welcome.
+  calls = [];
+  const tap = () => router.handleCallback({ id: "q4", from: { id: tg }, message: { message_id: 4, chat: { id: tg, type: "private" } }, data: "o:a:2" }, ++updSeq);
+  await tap();
+  const welcomes = sent("sendMessage").length;
+  assert.ok(welcomes >= 2, "welcome card + keyboard after the first tap");
+  await tap();
+  assert.equal(sent("sendMessage").length, welcomes, "the second tap sends nothing more");
+  assert.equal((await userByTg(tg))!.offer_version, 2);
+  // Malformed codes are unknown (answered «eskirgan»), never an acceptance.
+  const { parseCallback } = await import("../lib/server/bot/codes.ts");
+  for (const bad of ["o:a", "o:a:0", "o:a:x", "o:a:1:2", "o:a:99999"]) assert.equal(parseCallback(bad).kind, "unknown", bad);
+  assert.deepEqual(parseCallback("o:a:12"), { kind: "offerAccept", version: 12 });
+});
+
+let after_restore: () => void = () => {};
+test("PDF route: per-IP limit; a failed conversion is remembered for 60 s (LibreOffice is not hit again)", { skip }, async () => {
+  const pdfRoute = await import("../app/api/oferta/pdf/route.ts");
+  const { resetOfertaPdfFailures } = await import("../lib/server/oferta-pdf.ts");
+  const { IP_LIMITS } = await import("../lib/server/ip-limits.ts");
+  const get = (ip: string) => {
+    const req = new Request("http://localhost/api/oferta/pdf", { headers: { "x-forwarded-for": ip } });
+    return inRequest(req, () => pdfRoute.GET(req));
+  };
+  const prevTrust = env.trustProxy;
+  Object.assign(env, { trustProxy: true }); // honour x-forwarded-for so each fake IP has its own bucket
+  after_restore = () => Object.assign(env, { trustProxy: prevTrust });
+  // Failure memory: a text that was never converted + no LibreOffice -> 503; then LibreOffice is back, still 503 until the TTL.
+  await gate(true, "Xato YaTT\nSTIR 111", 3);
+  resetOfertaPdfFailures();
+  const prevBin = process.env.SOFFICE_BIN;
+  process.env.SOFFICE_BIN = "/nonexistent/soffice";
+  try {
+    assert.equal((await get("203.0.113.10")).status, 503);
+  } finally {
+    if (prevBin === undefined) delete process.env.SOFFICE_BIN;
+    else process.env.SOFFICE_BIN = prevBin;
+  }
+  assert.equal((await get("203.0.113.10")).status, 503, "remembered failure: no new conversion although soffice is back");
+  resetOfertaPdfFailures();
+  assert.equal((await get("203.0.113.10")).status, 200, "after the TTL / reset it converts");
+
+  // Per-IP limit.
+  const ip = "198.51.100.77";
+  for (let i = 0; i < IP_LIMITS.ofertaPdfPerIp.count; i++) assert.equal((await get(ip)).status, 200);
+  assert.equal((await get(ip)).status, 429);
+  assert.equal((await get("198.51.100.78")).status, 200, "another IP is unaffected");
+  after_restore();
+});
+
+test("settings: enable-gate and clear-requisites are serialised (no interleaving leaves the gate on with empty requisites)", { skip }, async () => {
+  await query("DELETE FROM app_settings WHERE key LIKE 'oferta.%'");
+  settings.invalidateSettingsCache();
+  const put = (key: string, value: unknown, holdMs = 0) =>
+    transaction(async (c) => {
+      const r = await settings.setSettingInTx(c, key, value, null);
+      if (holdMs) await new Promise((res) => setTimeout(res, holdMs));
+      return r;
+    });
+  await put("oferta.requisites", REQ);
+  // A enables the gate and holds its transaction open; B clears the requisites meanwhile.
+  const a = put("oferta.gate_enabled", true, 300);
+  await new Promise((r) => setTimeout(r, 80));
+  const b = put("oferta.requisites", "").then(() => "ok", (e: { status?: number }) => `rejected ${e.status}`);
+  assert.equal(await a.then(() => "ok"), "ok");
+  assert.equal(await b, "rejected 400", "B saw the committed gate and refused");
+  const rows = await query<{ key: string; value: unknown }>("SELECT key, value FROM app_settings WHERE key LIKE 'oferta.%' ORDER BY key");
+  assert.deepEqual(rows.map((r) => r.key), ["oferta.gate_enabled", "oferta.requisites"]);
+  assert.equal(rows.find((r) => r.key === "oferta.requisites")!.value, REQ);
+  await query("DELETE FROM app_settings WHERE key LIKE 'oferta.%'");
+  settings.invalidateSettingsCache();
+});
+
+test("text: `**` typed into the requisites renders literally (not as bold); `$&` in a name is not a replacement pattern", () => {
+  const view = text.renderOferta("Bold **Nom** $& MChJ\nSTIR **1**", 1);
+  const s9 = view.sections.at(-1)!.clauses.map((c) => text.runsOf(c.text));
+  assert.deepEqual(s9[0], [{ text: "Bold **Nom** $& MChJ", bold: false }]);
+  assert.deepEqual(s9[1], [{ text: "STIR **1**", bold: false }]);
+  const c11 = text.runsOf(view.sections[0]!.clauses[0]!.text);
+  assert.ok(c11.some((r) => !r.bold && r.text.includes("Bold **Nom** $& MChJ")), "1.1 shows the name literally");
+  assert.ok(text.ofertaPlainText(view).includes("STIR **1**"));
+  // The approved bold markup still works.
+  assert.deepEqual(text.runsOf("a **b** c"), [{ text: "a ", bold: false }, { text: "b", bold: true }, { text: " c", bold: false }]);
 });

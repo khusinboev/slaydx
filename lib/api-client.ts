@@ -149,7 +149,7 @@ export async function request<T>(path: string, init: RequestOptions = {}): Promi
      * user accepts, repeat the request exactly once. The first attempt was refused before anything was
      * created or charged, so the retry cannot double-act. Dismissed / no dialog host: the original error.
      */
-    if (e instanceof ApiError && isOfferRequired(e.status, e.data) && (await askOffer())) {
+    if (e instanceof ApiError && isOfferRequired(e.status, e.data) && (await askOffer(typeof e.data.version === "number" ? e.data.version : 0))) {
       return requestOnce<T>(path, init);
     }
     throw e;

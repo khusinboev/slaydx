@@ -417,6 +417,11 @@ const T = {
     ru: "<b>Публичная оферта</b>\n\nУсловия использования SlaydX — на сайте. PDF сейчас недоступен: прочитайте оферту по кнопке «Читать оферту», затем нажмите «Принимаю».",
     en: "<b>Public offer</b>\n\nThe SlaydX terms of use are on the website. The PDF is not ready right now: read the offer with the “Read the offer” button, then tap “I accept”.",
   },
+  "oferta.outdated": {
+    uz: "Oferta yangilandi — iltimos, qaytadan o‘qing",
+    ru: "Оферта обновлена — пожалуйста, прочитайте заново",
+    en: "The offer was updated — please read it again",
+  },
   "oferta.accept": { uz: "Qabul qilaman", ru: "Принимаю", en: "I accept" },
   "oferta.read": { uz: "Ofertani o‘qish", ru: "Читать оферту", en: "Read the offer" },
   "oferta.accepted": {

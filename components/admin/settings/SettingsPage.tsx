@@ -5,7 +5,7 @@ import { Info } from "lucide-react";
 import { useCan } from "@/components/admin/shell";
 import { Card, CardHeader, EmptyState, ErrorState, Forbidden, Skeleton } from "@/components/admin/ui";
 import type { SettingItem } from "@/lib/admin-api/settings";
-import { groupItems, PROPAGATION_NOTE, type ToolOption } from "./format";
+import { groupItems, noteFor, PROPAGATION_NOTE, type ToolOption } from "./format";
 import { SettingEditDialog } from "./SettingEditDialog";
 import { SettingResetDialog } from "./SettingResetDialog";
 import { SettingRow } from "./SettingRow";
@@ -77,7 +77,7 @@ export function SettingsPage({ tools }: { tools: ReadonlyArray<ToolOption> }) {
               <CardHeader title={g.group} />
               <ul>
                 {g.items.map((item) => (
-                  <SettingRow key={item.key} item={item} tools={tools} canEdit={canEdit} onEdit={setEditing} onReset={setResetting} />
+                  <SettingRow key={item.key} item={item} tools={tools} canEdit={canEdit} onEdit={setEditing} onReset={setResetting} note={noteFor(item, state.items)} />
                 ))}
               </ul>
             </Card>

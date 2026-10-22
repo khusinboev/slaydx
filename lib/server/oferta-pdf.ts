@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { AlignmentType, Document, Footer, Packer, PageNumber, Paragraph, TextRun } from "docx";
 import { renderOferta, runsOf, ofertaPlainText, type OfertaView } from "../oferta/text";
 import { ofertaConfig } from "./oferta";
@@ -58,18 +59,35 @@ export async function ofertaDocx(view: OfertaView): Promise<Buffer> {
 
 export type OfertaPdf = { bytes: Buffer; version: number; /** Stable id of this exact text + requisites. */ digest: string };
 
+/** A failed conversion is remembered this long, so an anonymous loop cannot keep starting LibreOffice. */
+export const PDF_FAILURE_TTL_MS = 60_000;
+const failures = (globalThis as typeof globalThis & { __slaydxOfertaPdfFail?: Map<string, number> });
+function failMap(): Map<string, number> {
+  return (failures.__slaydxOfertaPdfFail ??= new Map());
+}
+/** Test seam. */
+export function resetOfertaPdfFailures(): void {
+  failMap().clear();
+}
+
 /** The current offer as PDF bytes, or `null` when it cannot be produced. */
 export async function currentOfertaPdf(): Promise<OfertaPdf | null> {
   const cfg = await ofertaConfig();
   const view = renderOferta(cfg.requisites, cfg.version);
   const plain = Buffer.from(ofertaPlainText(view), "utf8");
+  const digest = createHash("sha256").update(plain).digest("hex").slice(0, 16);
+  const until = failMap().get(digest);
+  if (until !== undefined && until > Date.now()) return null;
   const bytes = await getOrDerive({
     generationId: CACHE_ID,
     bytes: plain,
     format: "pdf",
     produce: async () => toPdf(await ofertaDocx(view), "oferta.docx"),
   });
-  if (!bytes) return null;
-  const { createHash } = await import("node:crypto");
-  return { bytes, version: cfg.version, digest: createHash("sha256").update(plain).digest("hex").slice(0, 16) };
+  if (!bytes) {
+    // `SofficeBusyError` is thrown (not returned), so only a real failed conversion is remembered.
+    failMap().set(digest, Date.now() + PDF_FAILURE_TTL_MS);
+    return null;
+  }
+  return { bytes, version: cfg.version, digest };
 }

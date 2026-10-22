@@ -1,4 +1,5 @@
 import { log } from "../log";
+import { ApiError } from "../api";
 import { acceptOffer, offerStatus, ofertaConfig } from "../oferta";
 import { currentOfertaPdf, type OfertaPdf } from "../oferta-pdf";
 import { callBot, isTransientBotFailure, TelegramTransientError } from "../telegram";
@@ -23,23 +24,23 @@ function fileIds(): Map<string, string> {
   return (g.__slaydxOfertaFileIds ??= new Map());
 }
 
-function acceptRow(lang: Lang) {
-  return [inlineButton("save", t(lang, "oferta.accept"), { callback_data: cb.offerAccept() }, "success")];
+function acceptRow(lang: Lang, version: number) {
+  return [inlineButton("save", t(lang, "oferta.accept"), { callback_data: cb.offerAccept(version) }, "success")];
 }
 
 /** Keyboard under the offer message. `withLink`: also the «Ofertani o'qish» URL button (when the site URL is public). */
-export function offerMarkup(lang: Lang, withLink: boolean) {
+export function offerMarkup(lang: Lang, version: number, withLink: boolean) {
   const link = withLink ? appUrl("/oferta") : null;
-  return rows(link ? [inlineButton(null, t(lang, "oferta.read"), { url: link })] : [], acceptRow(lang));
+  return rows(link ? [inlineButton(null, t(lang, "oferta.read"), { url: link })] : [], acceptRow(lang, version));
 }
 
-export function offerLinkScreen(lang: Lang): Screen {
-  return { text: t(lang, "oferta.captionLink"), reply_markup: offerMarkup(lang, true) };
+export function offerLinkScreen(lang: Lang, version: number): Screen {
+  return { text: t(lang, "oferta.captionLink"), reply_markup: offerMarkup(lang, version, true) };
 }
 
 async function sendPdf(chatId: number, lang: Lang, pdf: OfertaPdf): Promise<boolean> {
   const caption = t(lang, "oferta.caption");
-  const reply_markup = offerMarkup(lang, true);
+  const reply_markup = offerMarkup(lang, pdf.version, true);
   const known = fileIds().get(pdf.digest);
   if (known) {
     const r = await callBot("sendDocument", { chat_id: chatId, document: known, caption, parse_mode: "HTML", reply_markup });
@@ -82,7 +83,7 @@ export async function sendOfferIfRequired(ctx: OfferChat): Promise<boolean> {
       log("warn", "[oferta] PDF unavailable, sending the web link", { err: e });
     }
     if (pdf && (await sendPdf(ctx.chatId, ctx.lang, pdf))) return true;
-    const screen = offerLinkScreen(ctx.lang);
+    const screen = offerLinkScreen(ctx.lang, cfg.version);
     const r = await callBot("sendMessage", {
       chat_id: ctx.chatId,
       text: screen.text,
@@ -99,8 +100,25 @@ export async function sendOfferIfRequired(ctx: OfferChat): Promise<boolean> {
   }
 }
 
-/** Callback `o:a`: records the acceptance of the current version and removes the button. */
-export async function handleOfferAccept(chatId: number, messageId: number, userId: string): Promise<void> {
-  await acceptOffer(userId);
-  await callBot("editMessageReplyMarkup", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } }).catch(() => undefined);
+export type OfferAcceptResult = "accepted" | "already" | "outdated";
+
+/**
+ * Callback `o:a:<v>`: records the acceptance of the version that was shown. "accepted" -- a real change (the
+ * caller sends the welcome), "already" -- a double tap (nothing to do), "outdated" -- the version moved on:
+ * nothing recorded and the CURRENT offer is sent again.
+ */
+export async function handleOfferAccept(chat: OfferChat & { messageId: number }, shown: number): Promise<OfferAcceptResult> {
+  let changed: boolean;
+  try {
+    ({ changed } = await acceptOffer(chat.user.id, shown));
+  } catch (e) {
+    if (e instanceof ApiError && e.extra.code === "offer_outdated") {
+      await callBot("editMessageReplyMarkup", { chat_id: chat.chatId, message_id: chat.messageId, reply_markup: { inline_keyboard: [] } }).catch(() => undefined);
+      await sendOfferIfRequired(chat);
+      return "outdated";
+    }
+    throw e;
+  }
+  await callBot("editMessageReplyMarkup", { chat_id: chat.chatId, message_id: chat.messageId, reply_markup: { inline_keyboard: [] } }).catch(() => undefined);
+  return changed ? "accepted" : "already";
 }

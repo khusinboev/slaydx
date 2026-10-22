@@ -641,6 +641,10 @@ async function snapshotInTx<K extends SettingKey>(client: PoolClient, key: K): P
  * emptied while the gate is on. Evaluated against the values in force inside the caller's transaction.
  */
 async function assertOfertaConsistent(client: PoolClient, key: SettingKey, value: unknown): Promise<void> {
+  if (key !== "oferta.gate_enabled" && key !== "oferta.requisites") return;
+  // Serialises the two oferta keys (their rows may not exist yet, so no row lock): "enable" and "clear the
+  // requisites" can never both pass their check against the same old state. Released at COMMIT/ROLLBACK.
+  await client.query("SELECT pg_advisory_xact_lock(hashtext('slaydx:oferta-settings'))");
   if (key === "oferta.gate_enabled" && value === true) {
     const requisites = await getSettingInTx(client, "oferta.requisites");
     if (!requisites.trim()) throw new ApiError("Avval Ijrochi rekvizitlarini kiriting — ularsiz ofertani yoqib bo'lmaydi", 400);

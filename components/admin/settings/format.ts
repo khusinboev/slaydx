@@ -54,6 +54,16 @@ export function numberText(value: number): string {
   return String(value);
 }
 
+/** The oferta flag is on but the requisites are empty: the server treats the gate as off (it cannot be enabled that way, but it can be left over). */
+export const OFERTA_INACTIVE_NOTE = "amalda o'chiq (rekvizitlar bo'sh)";
+
+/** A remark for `item` given all items, or `undefined`. */
+export function noteFor(item: SettingItem, all: ReadonlyArray<SettingItem>): string | undefined {
+  if (item.key !== "oferta.gate_enabled" || item.value !== true) return undefined;
+  const req = all.find((i) => i.key === "oferta.requisites");
+  return req && req.type === "text" && !req.value.trim() ? OFERTA_INACTIVE_NOTE : undefined;
+}
+
 /** Groups in order of first appearance (the catalog order decides the card order). */
 export function groupItems(items: ReadonlyArray<SettingItem>): Array<{ group: string; items: SettingItem[] }> {
   const out: Array<{ group: string; items: SettingItem[] }> = [];

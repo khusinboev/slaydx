@@ -445,10 +445,17 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
       case "offerAccept": {
         // Public offer (D6): record the acceptance (same service as the web), drop the button, then the normal welcome.
         const { handleOfferAccept } = await import("./oferta");
-        await handleOfferAccept(ctx.chatId, msg.message_id, user.id);
+        const outcome = await handleOfferAccept({ chatId: ctx.chatId, lang: ctx.lang, user, messageId: msg.message_id }, c.version);
+        if (outcome === "outdated") {
+          toast = t(ctx.lang, "oferta.outdated");
+          return;
+        }
         toast = t(ctx.lang, "oferta.accepted");
-        const profile = { telegramId: String(ctx.telegramId), username: user.username, name: user.name, photoUrl: null };
-        await sendWelcome(ctx.chatId, ctx.lang, user, profile, ctx);
+        // A double tap (already accepted) must not send a second welcome.
+        if (outcome === "accepted") {
+          const profile = { telegramId: String(ctx.telegramId), username: user.username, name: user.name, photoUrl: null };
+          await sendWelcome(ctx.chatId, ctx.lang, user, profile, ctx);
+        }
         return;
       }
       case "walletInvite":

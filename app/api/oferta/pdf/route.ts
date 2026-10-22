@@ -1,4 +1,6 @@
-import { handler } from "@/lib/server/api";
+import { handler, limit } from "@/lib/server/api";
+import { IP_LIMITS } from "@/lib/server/ip-limits";
+import { clientIp } from "@/lib/server/ratelimit";
 import { contentDisposition } from "@/lib/server/pdf-serve";
 import { bytesBody, NO_STORE, noStoreOnError } from "@/lib/server/http-bytes";
 import { currentOfertaPdf } from "@/lib/server/oferta-pdf";
@@ -14,7 +16,8 @@ export const maxDuration = 60;
  * conversion -> 503 `pdf_unavailable` (the bot then sends the web link instead).
  */
 export const GET = noStoreOnError(
-  handler("oferta/pdf", async () => {
+  handler("oferta/pdf", async (req) => {
+    await limit(`oferta-pdf:${clientIp(req)}`, IP_LIMITS.ofertaPdfPerIp.count, IP_LIMITS.ofertaPdfPerIp.windowSec);
     let pdf;
     try {
       pdf = await currentOfertaPdf();

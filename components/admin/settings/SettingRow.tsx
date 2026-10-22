@@ -14,6 +14,8 @@ export type SettingRowProps = {
   canEdit: boolean;
   onEdit: (item: SettingItem) => void;
   onReset: (item: SettingItem) => void;
+  /** A short remark under the value (e.g. «amalda o'chiq»). */
+  note?: string;
 };
 
 /** The current value as a badge (flags, tools) or a bold number. */
@@ -47,7 +49,7 @@ function ValueView({ item, tools }: { item: SettingItem; tools: ReadonlyArray<To
 }
 
 /** One setting: label, description and key, value, source badge, env value, last writer, actions. */
-export function SettingRow({ item, tools, canEdit, onEdit, onReset }: SettingRowProps) {
+export function SettingRow({ item, tools, canEdit, onEdit, onReset, note }: SettingRowProps) {
   return (
     <li data-setting={item.key} className="flex flex-wrap items-start gap-x-5 gap-y-3 border-t px-4 py-3.5 first:border-t-0">
       <div className="min-w-[min(100%,15rem)] flex-1">
@@ -68,6 +70,11 @@ export function SettingRow({ item, tools, canEdit, onEdit, onReset }: SettingRow
           <ValueView item={item} tools={tools} />
           <Badge tone={SOURCE_TONE[item.source]}>{SOURCE_LABEL[item.source]}</Badge>
         </div>
+        {note ? (
+          <p data-setting-note className="text-warning text-xs font-medium">
+            {note}
+          </p>
+        ) : null}
         {canEdit ? (
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => onEdit(item)}>

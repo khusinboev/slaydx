@@ -16,6 +16,7 @@ import { getSetting } from "./settings";
  */
 
 export const OFFER_REQUIRED_MESSAGE = "Davom etish uchun ommaviy ofertani qabul qiling";
+export const OFFER_OUTDATED_MESSAGE = "Oferta yangilandi — iltimos, qaytadan o'qing";
 
 export type OfertaConfig = {
   /** The gate is effectively on: the flag AND non-empty requisites (a public text without them has a hole). */
@@ -83,17 +84,23 @@ export async function assertOfferAccepted(userId: string): Promise<void> {
 }
 
 /**
- * Records the acceptance of the CURRENT version. Idempotent: a user who already accepted this (or a later)
- * version keeps the original timestamp. Works with the gate off too (a user may accept ahead of time).
+ * Records the acceptance of the version the user was SHOWN (`shown`). When the current version moved on in the
+ * meantime (an admin bumped `oferta.version` between the offer and the tap) nothing is recorded: 409
+ * `offer_outdated` with the current `version`, and the caller shows the new offer. Idempotent: a user who
+ * already accepted this (or a later) version keeps the original timestamp; `changed` is false then (the bot
+ * sends its welcome only on a real change). Works with the gate off too (a user may accept ahead of time).
  */
-export async function acceptOffer(userId: string): Promise<{ version: number }> {
+export async function acceptOffer(userId: string, shown: number): Promise<{ version: number; changed: boolean }> {
   const version = await getSetting("oferta.version");
+  if (!Number.isSafeInteger(shown) || shown !== version) {
+    throw new ApiError(OFFER_OUTDATED_MESSAGE, 409, { code: "offer_outdated", version });
+  }
   const rows = await query<{ id: string }>(
     `UPDATE users SET offer_version = $2, offer_accepted_at = now()
       WHERE id = $1 AND (offer_version IS NULL OR offer_version < $2)
       RETURNING id`,
-    [userId, version],
+    [userId, shown],
   );
-  if (rows.length) log("info", "[oferta] accepted", { userId, version });
-  return { version };
+  if (rows.length) log("info", "[oferta] accepted", { userId, version: shown });
+  return { version: shown, changed: rows.length > 0 };
 }

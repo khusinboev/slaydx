@@ -130,26 +130,43 @@ export function renderOferta(requisites: string, version: number): OfertaView {
     heading: s.heading,
     clauses: s.clauses.flatMap((c): OfertaClause[] => {
       if (c.text === REQUISITES_MARK) {
-        return (lines.length ? lines : [OFERTA_NO_REQUISITES]).map((text) => ({ no: "", text }));
+        return (lines.length ? lines : [OFERTA_NO_REQUISITES]).map((text) => ({ no: "", text: escapeMarkup(text) }));
       }
-      return [{ no: c.no, text: c.text.replaceAll(IJROCHI_MARK, ijrochi) }];
+      // A replacer function: an admin-entered name containing `$&` must not be read as a replacement pattern.
+      return [{ no: c.no, text: c.text.replaceAll(IJROCHI_MARK, () => escapeMarkup(ijrochi)) }];
     }),
   }));
   return { title: OFERTA_TITLE, version, editionDate: OFERTA_EDITION_DATE, sections, ijrochi, requisites: lines };
 }
 
-/** Splits `**bold**` markup into runs. */
+/** Admin-entered text (requisites) must render literally: its `**` becomes the escape `\*\*`. */
+export function escapeMarkup(text: string): string {
+  return text.replaceAll("**", "\\*\\*");
+}
+
+/** Splits `**bold**` markup into runs; the escape `\*\*` is a literal `**`. */
 export function runsOf(text: string): Array<{ text: string; bold: boolean }> {
   const out: Array<{ text: string; bold: boolean }> = [];
-  text.split("**").forEach((part, i) => {
-    if (part) out.push({ text: part, bold: i % 2 === 1 });
-  });
+  let bold = false;
+  let buf = "";
+  const flush = () => {
+    if (buf) out.push({ text: buf, bold });
+    buf = "";
+  };
+  for (const tok of text.split(/(\\\*\\\*|\*\*)/)) {
+    if (tok === "**") {
+      flush();
+      bold = !bold;
+    } else if (tok === "\\*\\*") buf += "**";
+    else buf += tok;
+  }
+  flush();
   return out;
 }
 
 /** The offer as plain text (no markup) -- used by tests and the bot caption fallback. */
 export function ofertaPlainText(view: OfertaView): string {
-  const body = view.sections.map((s) => [s.heading, ...s.clauses.map((c) => `${c.no ? c.no + " " : ""}${c.text.replaceAll("**", "")}`)].join("\n"));
+  const body = view.sections.map((s) => [s.heading, ...s.clauses.map((c) => `${c.no ? c.no + " " : ""}${runsOf(c.text).map((r) => r.text).join("")}`)].join("\n"));
   return [view.title, ...body, `Tahrir: v${view.version} · ${view.editionDate}`].join("\n\n");
 }
 

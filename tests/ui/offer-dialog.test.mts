@@ -25,21 +25,21 @@ const router = { back() {}, forward() {}, refresh() {}, prefetch() {}, push() {}
 const json = (status: number, data: unknown) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 
-type Req = { method: string; url: string };
+type Req = { method: string; url: string; body: unknown };
 let reqs: Req[] = [];
 /** Per-path queue of answers; the last one repeats. */
 let answers: Record<string, Response[]> = {};
 function install() {
   (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) => {
     const url = String(input);
-    reqs.push({ method: init?.method ?? "GET", url });
+    reqs.push({ method: init?.method ?? "GET", url, body: init?.body ? JSON.parse(String(init.body)) : null });
     const q = answers[url];
     if (!q || q.length === 0) return json(404, {});
     const r = q.length > 1 ? q.shift()! : q[0]!.clone();
     return r;
   };
 }
-const REFUSED = () => json(403, { error: "Davom etish uchun ommaviy ofertani qabul qiling", code: "offer_required", version: 1 });
+const REFUSED = (version = 1) => json(403, { error: "Davom etish uchun ommaviy ofertani qabul qiling", code: "offer_required", version });
 
 beforeEach(() => {
   reqs = [];
@@ -97,6 +97,7 @@ test("accept -> POST /api/oferta/accept -> the refused request is repeated once 
     reqs.map((r) => `${r.method} ${r.url}`),
     ["POST /api/payments/orders", "POST /api/oferta/accept", "POST /api/payments/orders"],
   );
+  assert.deepEqual(reqs[1]!.body, { version: 1 }, "the version named by the 403 is the one posted");
   assert.ok(!q("[data-offer-dialog]"));
 });
 
@@ -140,4 +141,61 @@ test("a 403 with another code (channel_required) never opens the dialog; with no
   cleanup(); // unmount the host
   answers["/api/generations"] = [REFUSED()];
   await assert.rejects(request("/api/generations", { method: "POST", body: "{}" }), (e: unknown) => e instanceof ApiError && e.data.code === "offer_required");
+});
+
+test("the offer was updated while the dialog was open: 409 -> new version taken, message shown, the next tap accepts the new one", async () => {
+  mount();
+  answers["/api/generations"] = [REFUSED(1), json(202, { id: "g1" })];
+  answers["/api/oferta/accept"] = [json(409, { error: "Oferta yangilandi — iltimos, qaytadan o'qing", code: "offer_outdated", version: 2 }), json(200, { ok: true, version: 2 })];
+  const p = request("/api/generations", { method: "POST", body: "{}" });
+  await settle();
+  fireEvent.click(q("[data-offer-accept]")!);
+  await settle();
+  assert.ok(q("[data-offer-dialog]"), "stays open");
+  assert.match(q("[data-offer-error]")?.textContent ?? "", /Oferta yangilandi/);
+  fireEvent.click(q("[data-offer-accept]")!);
+  await settle();
+  assert.deepEqual(await p, { id: "g1" });
+  const accepts = reqs.filter((r) => r.url === "/api/oferta/accept").map((r) => r.body);
+  assert.deepEqual(accepts, [{ version: 1 }, { version: 2 }]);
+});
+
+test("inside the Telegram Mini App «Ofertani o'qish» uses openLink; elsewhere the plain link stays", async () => {
+  const w = window as unknown as Record<string, unknown>;
+  const opened: string[] = [];
+  w.TelegramWebviewProxy = { postEvent() {} };
+  w.Telegram = { WebApp: { initData: "user=1", version: "8.0", platform: "ios", initDataUnsafe: { user: { id: 7 } }, openLink: (u: string) => opened.push(u) } };
+  try {
+    mount();
+    answers["/api/generations"] = [REFUSED()];
+    void request("/api/generations", { method: "POST", body: "{}" }).catch(() => undefined);
+    await settle();
+    const ev = fireEvent.click(q("[data-offer-read]")!);
+    assert.equal(opened.length, 1);
+    assert.ok(opened[0]!.endsWith("/oferta"));
+    assert.equal(ev, false, "default navigation prevented (the SDK opens it)");
+    fireEvent.click(q("[data-offer-cancel]")!);
+    await settle();
+    cleanup();
+    delete w.TelegramWebviewProxy;
+    delete w.Telegram;
+    mount();
+    void request("/api/generations", { method: "POST", body: "{}" }).catch(() => undefined);
+    await settle();
+    assert.equal(fireEvent.click(q("[data-offer-read]")!), true, "no Mini App: the link works normally");
+    assert.equal(opened.length, 1);
+  } finally {
+    delete w.TelegramWebviewProxy;
+    delete w.Telegram;
+  }
+});
+
+test("admin settings row: flag on + empty requisites -> «amalda o'chiq (rekvizitlar bo'sh)»", async () => {
+  const { noteFor } = await import("../../components/admin/settings/format.ts");
+  const mk = (key: string, type: string, value: unknown) => ({ key, type, value, envValue: value, label: key, description: "", group: "Oferta", min: null, max: null, source: "db", updatedBy: null, updatedAt: null }) as never;
+  const gate = (v: boolean) => mk("oferta.gate_enabled", "bool", v);
+  const req = (v: string) => mk("oferta.requisites", "text", v);
+  assert.equal(noteFor(gate(true), [gate(true), req("  ")]), "amalda o'chiq (rekvizitlar bo'sh)");
+  assert.equal(noteFor(gate(true), [gate(true), req("Nom")]), undefined);
+  assert.equal(noteFor(gate(false), [gate(false), req("")]), undefined);
 });
