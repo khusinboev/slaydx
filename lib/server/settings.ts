@@ -52,6 +52,8 @@ export type SettingValues = {
   "queue.user_max_inflight": number;
   "queue.total_slots": number;
   "queue.mean_service_sec": number;
+  "convert.daily_limit": number;
+  "convert.disabled": boolean;
 };
 
 export type SettingKey = keyof SettingValues;
@@ -179,6 +181,7 @@ const FIN_GROUP = "Moliya";
 const PRICING_GROUP = "Narxlar";
 const QUEUE_GROUP = "Navbat va yuklama";
 const OFERTA_GROUP = "Oferta";
+const CONVERT_GROUP = "Fayl konvertatsiya";
 
 type DailyKey = "free_llm.daily.outline" | "free_llm.daily.udk" | "free_llm.daily.rewrite" | "free_llm.daily.polish";
 
@@ -409,6 +412,26 @@ const CATALOG: Catalog = {
     envVar: "QUEUE_MEAN_SERVICE_SEC",
     validate: intValidator(0, 1800),
     envDefault: () => env.queue.meanServiceSec,
+  },
+  "convert.daily_limit": {
+    key: "convert.daily_limit",
+    group: CONVERT_GROUP,
+    label: "Kunlik limit (bitta foydalanuvchi)",
+    description: "Bitta foydalanuvchi kuniga (Toshkent kuni) nechta fayl o'gira oladi. 0 — bepul konvertatsiya o'chirilgan.",
+    type: "int",
+    min: 0,
+    max: 1000,
+    validate: intValidator(0, 1000),
+    envDefault: () => 20,
+  },
+  "convert.disabled": {
+    key: "convert.disabled",
+    group: CONVERT_GROUP,
+    label: "Konvertatsiya o'chirilgan",
+    description: "Yoqilsa fayl konvertatsiyasi darhol to'xtaydi (LibreOffice ham, rasm o'girish ham) — favqulodda tugma.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => false,
   },
 };
 

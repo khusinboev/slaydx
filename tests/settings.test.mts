@@ -64,6 +64,8 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "queue.user_max_inflight",
     "queue.total_slots",
     "queue.mean_service_sec",
+    "convert.daily_limit",
+    "convert.disabled",
   ]);
   for (const k of s.SETTING_KEYS) {
     const d = s.settingDef(k);
@@ -97,6 +99,8 @@ test("standart qiymatlar = env (mahsulot xulqi o'zgarmaydi)", () => {
   assert.equal(d("queue.user_max_inflight"), env.queue.userMaxInflight);
   assert.equal(d("queue.total_slots"), env.queue.totalSlots);
   assert.equal(d("queue.mean_service_sec"), env.queue.meanServiceSec, "0 (env unset) = measured automatically");
+  assert.equal(d("convert.daily_limit"), 20);
+  assert.equal(d("convert.disabled"), false);
 });
 
 test("validatsiya: bool", () => {
