@@ -1,4 +1,4 @@
-# SlaydX — project context for a new chat (2026-10-14)
+# SlaydX — project context for a new chat (2026-10-22)
 
 Read this first in a fresh session. No secrets, keys or server addresses are stored here (they live in the server `.env` and in the
 owner's private notes); only names, mechanics and decisions. Updated by whoever changes one of these facts.
@@ -62,7 +62,12 @@ Prices: one place, `priceFor` (server); admin «Narxlar» page adjusts 25–1000
 - Support group link `https://t.me/SlaydX_support` is used everywhere (`lib/support.ts`).
 - Running-job page: stage checklist, percent, ETA (`docs/ux/GENERATION-PROGRESS.md`).
 
-## 7. Known open items (2026-10-14)
+## 7. Known open items (2026-10-22)
+- **Current program:** `docs/program-17/PLAN.md` (17 owner requests, phases 0 → A → B → C → D, decisions D1–D9).
+- Shipped since 2026-10-14: Paynet provider (migration 050), Click forward for Bandlik.uz, tiered referral rewards (PR #62),
+  bonus-channel soft delete (PR #63). Referral tiers are being halved (D3) and units renamed to so'm (D1) in Program 17 phase A.
+- Capacity notes for new heavy tools: LibreOffice is web-only (writer+impress, no Calc), gate 2 concurrent / 20 waiters → 503;
+  8 worker slots, admission mean is global (one slow tool skews every ETA); broadcast limiter 25 msg/s shared with all bot traffic.
 - Slide failure rate (was 3.7 %/9 %): re-check worker logs after the JSON-repair and Anthropic fixes.
 - Google AI Studio final 4–10 Oct figure vs our metered $7.07 (`scripts/cost-reconcile.mts`).
 - Click: card 6262 SMS, phone-invoice live test. Telegram Desktop login retest (PR #47). `/admin/system` charts on a phone.
