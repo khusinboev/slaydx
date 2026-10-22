@@ -95,7 +95,7 @@ test("/start (B2 welcome): Mini App primary, all tools, invite, one-time site li
   assert.match(site.url, LINK);
   const text = String(body.text);
   assert.match(text, /Assalomu alaykum, Test!<\/b>\n\n✨ /, "a blank line between greeting and pitch");
-  assert.match(text, /<blockquote>💰 Balans: <b>\d[\d\s]* so‘m<\/b>\n🎁 Do‘st taklif qiling — har biriga <b>2\s000 bonus so‘m<\/b> gacha<\/blockquote>/);
+  assert.match(text, /<blockquote>💰 Balans: <b>\d[\d\s]* so‘m<\/b>\n🎁 Do‘st taklif qiling — har biriga <b>1\s000 bonus so‘m<\/b> gacha<\/blockquote>/);
   assert.match(text, /Ilovani ochish/);
   assert.match(text, /Saytda ochish/);
   assert.ok(!text.includes(site.url), "with buttons the link is not repeated in the text");

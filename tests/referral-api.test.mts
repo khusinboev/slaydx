@@ -125,8 +125,8 @@ test("GET /api/referral: exact shape, links, counters, recent names only (no ids
   assert.equal(r.body.botLink, `https://t.me/slaydx_test_bot?start=ref_${inv.code}`);
   assert.equal(r.body.webLink, `http://localhost:3000/uz?ref=${inv.code}`);
   assert.equal(r.body.invitedCount, 1);
-  assert.equal(r.body.earnedPoints, 2000);
-  assert.equal(r.body.rewardPoints, 2000);
+  assert.equal(r.body.earnedPoints, 1000);
+  assert.equal(r.body.rewardPoints, 1000);
   assert.deepEqual(r.body.recent.map((x: { name: string }) => x.name), ["Dilnoza Do'st"]);
   assert.deepEqual(Object.keys(r.body.recent[0]).sort(), ["joinedAt", "name"]);
   for (const leak of [friendTg, "dost_secret_handle"]) assert.ok(!r.text.includes(leak), `MUTATSIYA 2: ${leak} must not leave the server`);
@@ -164,18 +164,18 @@ test("POST /api/referral/capture: visitor → httpOnly sx_ref (Path=/api/auth, L
 
 /* ───────────────────────────── sign-in hand-off ───────────────────────────── */
 
-test("POST /api/auth/telegram: Mini App start_param=ref_<code> creating the account → inviter +2000 (source bot)", { skip }, async () => {
+test("POST /api/auth/telegram: Mini App start_param=ref_<code> creating the account → inviter +1000 (source bot)", { skip }, async () => {
   const inv = await inviter();
   const before = await pointsOf(inv.id);
   const id = tgId();
   const r = await run(authRoute.POST, request("/api/auth/telegram", { method: "POST", body: { initData: initData(id, `ref_${inv.code}`) } }));
   assert.equal(r.status, 200, r.text);
-  assert.equal((await pointsOf(inv.id)) - before, 2000, "MUTATSIYA 4");
-  assert.deepEqual(await referralOf(id), [{ referrer_user_id: inv.id, source: "bot", reward_points: 2000 }]);
+  assert.equal((await pointsOf(inv.id)) - before, 1000, "MUTATSIYA 4");
+  assert.deepEqual(await referralOf(id), [{ referrer_user_id: inv.id, source: "bot", reward_points: 1000 }]);
   // The same Mini App link again (a second launch): nothing more.
   const again = await run(authRoute.POST, request("/api/auth/telegram", { method: "POST", body: { initData: initData(id, `ref_${inv.code}`) } }));
   assert.equal(again.status, 200);
-  assert.equal((await pointsOf(inv.id)) - before, 2000);
+  assert.equal((await pointsOf(inv.id)) - before, 1000);
 });
 
 test("POST /api/auth/telegram: sx_ref cookie on a NEW account → reward (source web) and the cookie is cleared; an EXISTING account → nothing, cleared too", { skip }, async () => {
@@ -184,8 +184,8 @@ test("POST /api/auth/telegram: sx_ref cookie on a NEW account → reward (source
   const id = tgId();
   const r = await run(authRoute.POST, request("/api/auth/telegram", { method: "POST", body: { initData: initData(id) }, cookie: `sx_ref=${inv.code}` }));
   assert.equal(r.status, 200, r.text);
-  assert.equal((await pointsOf(inv.id)) - before, 2000, "MUTATSIYA 5");
-  assert.deepEqual(await referralOf(id), [{ referrer_user_id: inv.id, source: "web", reward_points: 2000 }]);
+  assert.equal((await pointsOf(inv.id)) - before, 1000, "MUTATSIYA 5");
+  assert.deepEqual(await referralOf(id), [{ referrer_user_id: inv.id, source: "web", reward_points: 1000 }]);
   const cleared = r.cookies.find((x) => x.startsWith("sx_ref="));
   assert.ok(cleared && /Max-Age=0/.test(cleared) && /Path=\/api\/auth/.test(cleared), `cookie cleared: ${cleared}`);
 
