@@ -1,6 +1,6 @@
-# SlaydX xizmatlaridan foydalanish bo'yicha OMMAVIY OFERTA (loyiha, v1)
+# SlaydX xizmatlaridan foydalanish bo'yicha OMMAVIY OFERTA (v1)
 
-> Loyiha — egasi (va imkon bo'lsa yurist) tasdiqlashi kerak. `⟦…⟧` bilan belgilangan joylar egasining rasmiy rekvizitlari bilan to'ldiriladi.
+> Matn egasi tomonidan 2026-10-22 da tasdiqlangan. `⟦…⟧` bilan belgilangan joylar egasining rasmiy rekvizitlari bilan keyin to'ldiriladi.
 
 ## 1. Umumiy qoidalar
 1.1. Ushbu hujjat ⟦Ijrochi: YaTT/MChJ nomi, STIR⟧ (bundan keyin — «Ijrochi») tomonidan SlaydX xizmatlari (sayt slaydxx.uz, Telegram bot va
