@@ -21,7 +21,9 @@ import { inRequest } from "./helpers/next-request.mts";
  *   M6. `fresh` ignored → «fresh drops cached non-member answers»;
  *   M7. the admin EXISTS removed → «admin account exempt»;
  *   M8. `WHERE active AND mandatory` → `WHERE mandatory` → «inactive / optional channels ignored»;
- *   M9. the `forgetMembership` call removed from the webhook → «chat_member join drops the cache entry».
+ *   M9. the `forgetMembership` call removed from the webhook → «chat_member join drops the cache entry»;
+ *  M10. `AND deleted_at IS NULL` dropped from `activeMandatoryChannels` → «inactive / optional channels ignored»
+ *       (a soft-deleted channel blocks).
  */
 
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
@@ -115,8 +117,12 @@ test("no mandatory channel → nothing to check; inactive / optional channels ig
   assert.deepEqual(await mc.missingMandatory(u.id), { exempt: false, needsTelegram: false, channels: [] });
   await channel({ mandatory: false });
   await channel({ active: false });
+  // Soft-deleted (migration 051) with `active` left true on purpose: the deleted_at filter must hold on its own.
+  const gone = await channel({ title: "O'chirilgan majburiy" });
+  await query("UPDATE bonus_channels SET deleted_at = now() WHERE id = $1", [gone.id]);
   const r = await mc.missingMandatory(u.id);
-  assert.deepEqual(r.channels, [], "an optional and an inactive mandatory channel never block");
+  assert.deepEqual(r.channels, [], "an optional, an inactive and a soft-deleted mandatory channel never block");
+  assert.deepEqual(await mc.activeMandatoryChannels(), []);
   assert.equal(memberCalls(), 0, "no Bot API call without an active mandatory channel");
   assert.ok(mc.canCreate(r));
   await assert.doesNotReject(mc.assertCanCreate(u.id));
