@@ -8,9 +8,9 @@ import { EXTRACT_ACCEPT, EXTRACT_MAX_BYTES } from "@/lib/extract-limits";
 import { extractText } from "@/lib/api-client";
 import { SOURCE_TEXT_LIMIT } from "@/lib/generation/meta";
 import { SELECTABLE_FIGURE_KINDS, type SelectableFigureKind } from "@/lib/generation/article/types";
-import { MAX_SOURCE_CHARS, formatTanga } from "@/lib/tools";
+import { MAX_SOURCE_CHARS } from "@/lib/tools";
 import type { FormValues } from "@/lib/types";
-import { groupDigits } from "@/lib/format";
+import { groupDigits, formatSom } from "@/lib/format";
 import { Row, SummaryChips } from "../compact";
 import { TextInput } from "../fields";
 
@@ -448,7 +448,7 @@ export function RangeRow({
           />
           {price === undefined ? null : (
             <span className="bg-accent-soft text-accent-soft-foreground rounded-full px-2.5 py-1 text-[13.5px] font-semibold tabular-nums whitespace-nowrap" data-price>
-              {formatTanga(price)}
+              {formatSom(price)}
             </span>
           )}
         </div>

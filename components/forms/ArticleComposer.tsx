@@ -7,7 +7,7 @@ import { suggestUdk, updateProfile, type ServerUser } from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { useConfirmClick } from "@/components/overlays/useConfirmClick";
 import { profilePatchFrom } from "@/lib/profile-sync";
-import { priceFor, formatTanga, clientAdjustedPrice, ARTICLE_PRICES, THESIS_PRICES, THESIS_TYPE_IDS, thesisTypeId } from "@/lib/tools";
+import { priceFor, clientAdjustedPrice, ARTICLE_PRICES, THESIS_PRICES, THESIS_TYPE_IDS, thesisTypeId } from "@/lib/tools";
 import {
   ARTICLE_LIMITS,
   CITE_STYLES,
@@ -43,6 +43,7 @@ import { PublicationProfileTile } from "./PublicationProfileDialog";
 import { ToolChrome, TopicChips } from "./ToolChrome";
 import { useFormDraft } from "./useFormDraft";
 import { runGeneration } from "./runGeneration";
+import { formatSom } from "@/lib/format";
 
 // Eski importchilar (`WorkComposer` gacha bo'lgan kod) uchun shartnoma saqlanadi.
 
@@ -544,7 +545,7 @@ export function ArticleComposer({
           <span data-field="pages" className="block">
             <Segmented
               ariaLabel="Hajm"
-              options={type.pages.map((id) => ({ value: id, label: `${PAGE_LABEL[id]} · ${formatTanga(priceLabelFor(tool, id))}` }))}
+              options={type.pages.map((id) => ({ value: id, label: `${PAGE_LABEL[id]} · ${formatSom(priceLabelFor(tool, id))}` }))}
               value={ui.pages}
               onChange={(v) => onPagesChange(v as PagesId)}
             />

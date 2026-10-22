@@ -6,8 +6,9 @@ import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { ArticleComposer } from "../../components/forms/ArticleComposer.tsx";
 import { ARTICLE_PARAMS } from "../../lib/generation/article-params.ts";
-import { TOOL_BY_ID, formatTanga } from "../../lib/tools.ts";
+import { TOOL_BY_ID } from "../../lib/tools.ts";
 import type { UserProfile } from "../../lib/types.ts";
+import { formatSom } from "../../lib/format.ts";
 
 /**
  * Maqola formasi QAMROVI (Maqola 2, WP6) — «bezak maydon yo'q» qoidasining
@@ -60,7 +61,7 @@ test("standart holat: tur imrad_oak, profil oak, narx 6 000 (3-5 bet), til uz", 
   assert.ok(html.includes("OAK jurnali (IMRAD"), "standart tur — OAK jurnali");
   assert.ok(html.includes(">OAK jurnali<") || html.includes("OAK jurnali</span>"), "standart profil — OAK jurnali");
   assert.match(html, /data-price-total[^>]*>[^<]*6[\s  ]?000/, `narx 6 000 kutilgan edi: ${html.match(/data-price-total[^>]*>[^<]*/)?.[0]}`);
-  assert.ok(html.includes(formatTanga(6000).replace(/ /g, "")) || /6[\s  ]000/.test(html));
+  assert.ok(html.includes(formatSom(6000).replace(/ /g, "")) || /6[\s  ]000/.test(html));
 });
 
 test("mualliflar birinchi qatori profildan prefill (ism, tashkilot)", () => {

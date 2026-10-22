@@ -20,11 +20,11 @@ import type * as api from "../../lib/api-client.ts";
 /**
  * Redesign W3 «Hamyon» (docs/redesign/PLAN.md): balance hero, signed-out and
  * loading states, «To'ldirish» → the existing PayDialog, `?order=` banners,
- * the «Harakatlar» ledger (labels, signs, ball vs tanga) and the referral card.
+ * the «Harakatlar» ledger (labels, signs, bonus so'm vs so'm) and the referral card.
  *
  * Mutations (each turned the named test red, then restored):
  *   returnTo "/uz/purchase" → signed out; hero shows `balance` not the total → hero;
- *   «To'ldirish» opens login → PayDialog; unit always «tanga» / no tool lookup /
+ *   «To'ldirish» opens login → PayDialog; unit always «so'm» / no tool lookup /
  *   no income colour → Harakatlar; no 8-row cut → long ledger; no `focus()` →
  *   referral focus; ledger not reloaded on `paid` → ?order= paid; cancelled
  *   branch dropped → ?order= cancelled; no Tashkent offset → wallet-model;
@@ -143,8 +143,8 @@ test("Hamyon: hero shows the spendable total (points + balance) and the bonus sh
   stub();
   mount();
   assert.equal(hero(), "ready");
-  assert.equal(document.querySelector("[data-wallet-total]")!.textContent, "15 000 tanga");
-  assert.equal(document.querySelector("[data-wallet-split]")!.textContent, "Shundan 3 000 ball — bonus");
+  assert.equal(document.querySelector("[data-wallet-total]")!.textContent, "15 000 so'm");
+  assert.equal(document.querySelector("[data-wallet-split]")!.textContent, "Shundan 3 000 bonus so'm");
   await waitFor(() => assert.ok(document.querySelector('[data-referral-card="ready"]')));
 });
 
@@ -162,7 +162,7 @@ test("Hamyon: «To'ldirish» opens the existing PayDialog (presets + Click/Payme
   assert.ok(screen.getByRole("button", { name: `${groupDigits(50_000)} so'm` })); // redesign W5: was «50k»
 });
 
-test("Hamyon: «Harakatlar» — readable label per kind, signed amounts, ball vs tanga, income marked", async () => {
+test("Hamyon: «Harakatlar» — readable label per kind, signed amounts, bonus so'm vs so'm, income marked", async () => {
   signIn();
   stub();
   mount();
@@ -175,12 +175,12 @@ test("Hamyon: «Harakatlar» — readable label per kind, signed amounts, ball v
     unit: li.querySelector("[data-ledger-unit]")!.textContent,
   }));
   assert.deepEqual(rows, [
-    { kind: "charge", title: "Slayd: Orol dengizi fojiasi", amount: "−3 000", tone: "out", unit: "tanga" },
-    { kind: "topup", title: "To'ldirish · Click", amount: "+20 000", tone: "in", unit: "tanga" },
-    { kind: "bonus", title: "Taklif bonusi · Aziz", amount: "+2 000", tone: "in", unit: "ball" },
-    { kind: "refund", title: "Pul qaytarildi", amount: "+1 500", tone: "in", unit: "tanga" },
-    { kind: "admin_debit", title: "Ma'muriy tuzatish", amount: "−500", tone: "out", unit: "tanga" },
-    { kind: "bonus", title: "Ro'yxatdan o'tish bonusi", amount: "+5 000", tone: "in", unit: "ball" },
+    { kind: "charge", title: "Slayd: Orol dengizi fojiasi", amount: "−3 000", tone: "out", unit: "so'm" },
+    { kind: "topup", title: "To'ldirish · Click", amount: "+20 000", tone: "in", unit: "so'm" },
+    { kind: "bonus", title: "Taklif bonusi · Aziz", amount: "+2 000", tone: "in", unit: "bonus so'm" },
+    { kind: "refund", title: "Pul qaytarildi", amount: "+1 500", tone: "in", unit: "so'm" },
+    { kind: "admin_debit", title: "Ma'muriy tuzatish", amount: "−500", tone: "out", unit: "so'm" },
+    { kind: "bonus", title: "Ro'yxatdan o'tish bonusi", amount: "+5 000", tone: "in", unit: "bonus so'm" },
   ]);
   const income = document.querySelector('[data-ledger-amount="in"]')!;
   assert.match(income.className, /--success-text/, "income is green");
@@ -465,14 +465,14 @@ test("wallet-model: Tashkent-time labels and kind fallbacks", () => {
 
   assert.deepEqual(describeEntry({ kind: "charge", note: "unknown-tool: x" }), { title: "unknown-tool: x", detail: "" });
   assert.deepEqual(describeEntry({ kind: "charge", note: "" }), { title: "Hujjat uchun to'lov", detail: "" });
-  // C-Q4 payment bonus rows (settleOrder, `paymentBonusNote`) read «To‘lov bonusi (N%)», in ball.
+  // C-Q4 payment bonus rows (settleOrder, `paymentBonusNote`) read «To‘lov bonusi (N%)», in bonus so'm.
   assert.deepEqual(describeEntry({ kind: "bonus", note: paymentBonusNote(15) }), { title: "To‘lov bonusi (15%)", detail: "" });
   const pay = ledgerRow({ id: "p", kind: "bonus", amount: 5_000, note: paymentBonusNote(10), createdAt: "2026-10-07T05:24:00.000Z" }, now);
-  assert.deepEqual([pay.title, pay.amount, pay.unit, pay.tone], ["To‘lov bonusi (10%)", "+5 000", "ball", "in"]);
-  // A legacy first top-up bonus row (Bonus 2 history) still reads «Birinchi to‘ldirish bonusi», in ball.
+  assert.deepEqual([pay.title, pay.amount, pay.unit, pay.tone], ["To‘lov bonusi (10%)", "+5 000", "bonus", "in"]);
+  // A legacy first top-up bonus row (Bonus 2 history) still reads «Birinchi to‘ldirish bonusi», in bonus so'm.
   assert.deepEqual(describeEntry({ kind: "bonus", note: FIRST_TOPUP_NOTE }), { title: "Birinchi to‘ldirish bonusi", detail: "" });
   const first = ledgerRow({ id: "f", kind: "bonus", amount: 20_000, note: FIRST_TOPUP_NOTE, createdAt: "2026-10-07T05:24:00.000Z" }, now);
-  assert.deepEqual([first.title, first.amount, first.unit, first.tone], ["Birinchi to‘ldirish bonusi", "+20\u00a0000", "ball", "in"]);
+  assert.deepEqual([first.title, first.amount, first.unit, first.tone], ["Birinchi to‘ldirish bonusi", "+20\u00a0000", "bonus", "in"]);
   // Channel bonus notes (bonus-channels.ts) read as titles, not raw notes.
   assert.deepEqual(describeEntry({ kind: "bonus", note: "Kanal obunasi: SlaydX yangiliklari" }), { title: "Kanal obunasi bonusi · SlaydX yangiliklari", detail: "" });
   assert.deepEqual(describeEntry({ kind: "bonus", note: "Kanalda qolish bonusi: Talabalar" }), { title: "Kanalda qolish bonusi · Talabalar", detail: "" });

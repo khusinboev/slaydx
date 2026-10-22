@@ -7,7 +7,7 @@ import { updateProfile, type ServerUser } from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { useConfirmClick } from "@/components/overlays/useConfirmClick";
 import { profilePatchFrom } from "@/lib/profile-sync";
-import { priceFor, formatTanga, defaultPages } from "@/lib/tools";
+import { priceFor, defaultPages } from "@/lib/tools";
 import type { SelectableFigureKind } from "@/lib/generation/article/types";
 import type { ArticleUserRef } from "@/lib/generation/article/input";
 import {
@@ -48,6 +48,7 @@ import {
 import { ToolChrome, TopicChips } from "./ToolChrome";
 import { useFormDraft } from "./useFormDraft";
 import { runGeneration } from "./runGeneration";
+import { formatSom } from "@/lib/format";
 
 /**
  * Talaba ishlari — kurs ishi / referat / mustaqil ish UMUMIY formasi.
@@ -407,8 +408,8 @@ export function WorkComposer({
   /** Qoida matni ham `priceFor` dan — formada qattiq yozilgan narx yo'q. */
   const priceRule =
     pageSteps.length > 1
-      ? `${pagesLabel(firstStep)} — ${formatTanga(priceOf(firstStep))} … ${pagesLabel(lastStep)} — ${formatTanga(priceOf(lastStep))}`
-      : `${pagesLabel(firstStep)} — ${formatTanga(priceOf(firstStep))}`;
+      ? `${pagesLabel(firstStep)} — ${formatSom(priceOf(firstStep))} … ${pagesLabel(lastStep)} — ${formatSom(priceOf(lastStep))}`
+      : `${pagesLabel(firstStep)} — ${formatSom(priceOf(firstStep))}`;
 
   const clearConfirm = useConfirmClick(() => {
     void clear();

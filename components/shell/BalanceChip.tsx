@@ -21,7 +21,7 @@ export function BalanceChip({ className }: { className?: string }) {
       href="/uz/wallet"
       data-balance
       title="Hamyon — balansni to'ldirish"
-      aria-label={`Balans: ${total} tanga. Hamyon`}
+      aria-label={`Balans: ${total} so'm. Hamyon`}
       className={cn(
         "bg-accent-soft text-foreground hover:bg-accent focus-visible:ring-ring inline-flex h-11 min-w-11 shrink items-center justify-center gap-1.5 rounded-[14px] px-3 text-[15px] font-semibold tabular-nums outline-none focus-visible:ring-2",
         className,

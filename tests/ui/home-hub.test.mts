@@ -219,10 +219,10 @@ test("«Tez boshlash»: Slayd, Referat, Insho, Rezyume → /uz/<slug>, format ba
     assert.equal(c.getAttribute("href"), `/uz/${tool.slug}`);
     assert.ok(c.textContent!.includes(tool.title), `${tool.id} title`);
     const price = model.groupDigits(clientAdjustedPrice(tool.id, tool.basePrice));
-    assert.equal(c.querySelector("[data-quick-detail]")!.textContent, `${price} tangadan`);
+    assert.equal(c.querySelector("[data-quick-detail]")!.textContent, `${price} so'mdan`);
     assert.equal(c.querySelector("[data-quick-format]")!.textContent, tool.output.toUpperCase());
   }
-  assert.equal(q("[data-quick-tool=slide] [data-quick-detail]")!.textContent, "3\u00a0000 tangadan");
+  assert.equal(q("[data-quick-tool=slide] [data-quick-detail]")!.textContent, "3\u00a0000 so'mdan");
   // Owner request 2026-10-08: a big «Barcha vositalar» right under the four cards → the full catalogue.
   const all = q<HTMLAnchorElement>("[data-hub-all-tools]");
   assert.ok(all, "«Barcha vositalar» button");

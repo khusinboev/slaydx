@@ -6,7 +6,7 @@ import type { FormValues, ToolConfig, UserProfile } from "@/lib/types";
 import { updateProfile, type ServerUser } from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { useConfirmClick } from "@/components/overlays/useConfirmClick";
-import { formatTanga, getClientPriceAdjust, priceFor } from "@/lib/tools";
+import { getClientPriceAdjust, priceFor } from "@/lib/tools";
 import { profilePatchFrom } from "@/lib/profile-sync";
 import {
   encodeResumeValues,
@@ -38,6 +38,7 @@ import { RowList } from "./RowList";
 import { ToolChrome } from "./ToolChrome";
 import { useResumeDraft } from "./useResumeDraft";
 import { runGeneration } from "./runGeneration";
+import { formatSom } from "@/lib/format";
 
 /** Kasblar bazasi moduli — `import()` bilan kechiktirib yuklanadi (FE-11). */
 type ProfessionsModule = typeof import("@/lib/professions");
@@ -312,7 +313,7 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
       onSubmit={submit}
       error={error}
     >
-      <Card title="Shaxsiy" aside={<span className="text-muted-foreground text-[13.5px]">{getClientPriceAdjust(tool.id) ? `${formatTanga(price)} · hammasi kiritilgan` : "3 000 tanga · hammasi kiritilgan"}</span>}>
+      <Card title="Shaxsiy" aside={<span className="text-muted-foreground text-[13.5px]">{getClientPriceAdjust(tool.id) ? `${formatSom(price)} · hammasi kiritilgan` : `${formatSom(3000)} · hammasi kiritilgan`}</span>}>
         <div className="grid gap-x-6 sm:grid-cols-2">
           <Row label="F.I.Sh">
             <span data-field="fullName" className="block">

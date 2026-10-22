@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FormValues, ToolConfig, UserProfile } from "@/lib/types";
-import { formatTanga, priceFor, profileDefaults } from "@/lib/tools";
+import { priceFor, profileDefaults } from "@/lib/tools";
 import { updateProfile } from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { useConfirmClick } from "@/components/overlays/useConfirmClick";
@@ -18,6 +18,7 @@ import { runGeneration } from "./runGeneration";
 import { TemplateGallery } from "./TemplateGallery";
 import { useFormDraft } from "./useFormDraft";
 import { renderSlideParam, resetBlocksForPurpose, settingsSummary } from "./slide-fields";
+import { formatSom } from "@/lib/format";
 
 /**
  * IKKALA slayd formasining kompozitori (Formalar 2, WP-E Formalar 3 da
@@ -288,7 +289,7 @@ export function SlideComposer({
       </Card>
 
       {countIds.length ? (
-        <Card title="Slaydlar soni" aside={<span className="font-semibold tabular-nums" data-price>{formatTanga(price)}</span>}>
+        <Card title="Slaydlar soni" aside={<span className="font-semibold tabular-nums" data-price>{formatSom(price)}</span>}>
           {countIds.map((id) => renderSlideParam(id, values, set, ctx))}
         </Card>
       ) : null}

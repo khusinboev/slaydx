@@ -43,8 +43,8 @@ export type LedgerRow = {
   meta: string;
   /** «+20 000», «−3 000», «0» (NBSP groups, a real minus sign). */
   amount: string;
-  /** Bonus points are «ball»; everything else moves tanga. */
-  unit: "tanga" | "ball";
+  /** Bonus entries move «bonus so'm»; everything else moves paid «so'm» (`UNIT_LABEL`). */
+  unit: "som" | "bonus";
   tone: "in" | "out" | "zero";
 };
 
@@ -88,7 +88,7 @@ export function describeEntry(e: Pick<LedgerEntry, "kind" | "note">): { title: s
       if (join) return { title: `Kanal obunasi bonusi · ${join}`, detail: "" };
       const stay = /^Kanalda qolish bonusi:\s*(.+)$/.exec(note)?.[1];
       if (stay) return { title: `Kanalda qolish bonusi · ${stay}`, detail: "" };
-      return { title: note || "Bonus ball", detail: "" };
+      return { title: note || "Bonus", detail: "" };
     }
     case "subscription":
       return { title: "To'lov balansga tushdi", detail: "Eski buyurtma" };
@@ -112,10 +112,13 @@ export function ledgerRow(e: LedgerEntry, now: number = Date.now()): LedgerRow {
     title,
     meta: [formatWhen(e.createdAt, now), detail].filter(Boolean).join(" · "),
     amount: n > 0 ? `+${body}` : n < 0 ? `−${body}` : body,
-    unit: e.kind === "bonus" ? "ball" : "tanga",
+    unit: e.kind === "bonus" ? "bonus" : "som",
     tone: n > 0 ? "in" : n < 0 ? "out" : "zero",
   };
 }
+
+/** The unit word printed next to a ledger amount. */
+export const UNIT_LABEL: Record<LedgerRow["unit"], string> = { som: "so'm", bonus: "bonus so'm" };
 
 export function orderStateLabel(state: PaymentOrder["state"]): string {
   return state === "paid" ? "To'landi" : state === "cancelled" ? "Bekor" : "Kutilmoqda";

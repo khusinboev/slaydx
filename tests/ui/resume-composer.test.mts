@@ -8,8 +8,9 @@ import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.
 import { ResumeComposer } from "../../components/forms/ResumeComposer.tsx";
 import { CONFIRM_MIN_MS } from "../../components/overlays/useConfirmClick.ts";
 import { ToolWorkspace } from "../../components/forms/ToolWorkspace.tsx";
-import { TOOL_BY_ID, priceFor, formatTanga } from "../../lib/tools.ts";
+import { TOOL_BY_ID, priceFor } from "../../lib/tools.ts";
 import type { UserProfile } from "../../lib/types.ts";
+import { formatSom } from "../../lib/format.ts";
 
 /**
  * Rezyume formasi — interaktiv xatti-harakat (Rezyume 2).
@@ -433,13 +434,13 @@ test("sticky narx `priceFor(tool, values)` dan keladi — tool.basePrice bilan b
   mount();
   const el = document.querySelector("[data-price-total]") as HTMLElement;
   assert.ok(el, "sticky narx yo'q");
-  assert.equal(el.textContent, formatTanga(3000));
+  assert.equal(el.textContent, formatSom(3000));
   // Rezyume narxi TEKIS — hech bir parametr uni o'zgartirmasligi kerak (resume-params.test.mts kafolati bilan bir xil).
-  assert.equal(el.textContent, formatTanga(priceFor(tool, { fullName: "Karimova Dilnoza", resumeTemplate: "letter" })));
+  assert.equal(el.textContent, formatSom(priceFor(tool, { fullName: "Karimova Dilnoza", resumeTemplate: "letter" })));
   fireEvent.change(screen.getByLabelText("Maqsadli lavozim"), { target: { value: "Backend dasturchi" } });
   // MUTATSIYA: `price={tool.basePrice}` qaytarilsa ham bu qator qizarmaydi (natija bir xil) —
   // shuning uchun bitta manba ekanini ALOHIDA `priceFor` import qilib solishtiramiz (yuqorida).
-  assert.equal((document.querySelector("[data-price-total]") as HTMLElement).textContent, formatTanga(3000));
+  assert.equal((document.querySelector("[data-price-total]") as HTMLElement).textContent, formatSom(3000));
 });
 
 test("Shablon oynasi: palitra tanlagich umumiy ColorDots — role=radio/aria-checked, bosilsa tanlov o'zgaradi", async () => {

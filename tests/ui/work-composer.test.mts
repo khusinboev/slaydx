@@ -9,10 +9,11 @@ import { WorkComposer } from "../../components/forms/WorkComposer.tsx";
 import { CONFIRM_MIN_MS } from "../../components/overlays/useConfirmClick.ts";
 import { ToolWorkspace } from "../../components/forms/ToolWorkspace.tsx";
 import { WORK_PARAMS } from "../../lib/generation/work-params.ts";
-import { TOOL_BY_ID, priceFor, formatTanga } from "../../lib/tools.ts";
+import { TOOL_BY_ID, priceFor } from "../../lib/tools.ts";
 import { WORK_LIMITS } from "../../lib/generation/work/types.ts";
 import { COURSEWORK_PAGES, REFERAT_PAGES, INDEPENDENT_PAGES } from "../../lib/generation/work/registry.ts";
 import type { UserProfile } from "../../lib/types.ts";
+import { formatSom } from "../../lib/format.ts";
 
 /**
  * Talaba ishlari 2 (AUDIT-19 WP-E2) — `WorkComposer` interaktiv xatti-harakat.
@@ -197,14 +198,14 @@ test("slayder yonidagi narx AYNAN `priceFor` dan (3 vosita, har pog'ona) — qat
     const tool = TOOL_BY_ID[id];
     for (let i = 0; i < steps[id].length; i++) {
       await slide(i);
-      const want = formatTanga(priceFor(tool, { pages: steps[id][i] }));
+      const want = formatSom(priceFor(tool, { pages: steps[id][i] }));
       assert.equal(document.querySelector("[data-price]")?.textContent, want, `${id} ${steps[id][i]}: slayder narxi`);
       assert.equal(document.querySelector("[data-price-total]")?.textContent, want, `${id} ${steps[id][i]}: sticky narx bilan bir xil`);
     }
     // Narx qoidasi ham `priceFor` dan: eng arzon va eng qimmat paket.
     const rule = document.querySelector("[data-price-rule]")?.textContent ?? "";
-    assert.ok(rule.includes(formatTanga(priceFor(tool, { pages: steps[id][0] }))), `${id}: qoida matnida eng arzon paket`);
-    assert.ok(rule.includes(formatTanga(priceFor(tool, { pages: steps[id][steps[id].length - 1] }))), `${id}: qoida matnida eng qimmat paket`);
+    assert.ok(rule.includes(formatSom(priceFor(tool, { pages: steps[id][0] }))), `${id}: qoida matnida eng arzon paket`);
+    assert.ok(rule.includes(formatSom(priceFor(tool, { pages: steps[id][steps[id].length - 1] }))), `${id}: qoida matnida eng qimmat paket`);
   }
 });
 

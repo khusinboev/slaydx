@@ -267,8 +267,8 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
         <p className="text-muted-foreground mt-2 text-[13px]" data-price-rule>
           {/* An adjusted price is rounded, so the per-step amount is no longer exact: only the base tier is quoted. */}
           {adjusted
-            ? `${fmt(10_000)} belgigacha ${fmt(clientAdjustedPrice(tool.id, TRANSLATION_BASE_PRICE))} tanga · keyingi har ${fmt(5000)} belgi uchun narx oshadi`
-            : <>{fmt(10_000)} belgigacha {fmt(3000)} tanga · keyingi har {fmt(5000)} belgi +{fmt(1000)}</>}
+            ? `${fmt(10_000)} belgigacha ${fmt(clientAdjustedPrice(tool.id, TRANSLATION_BASE_PRICE))} so'm · keyingi har ${fmt(5000)} belgi uchun narx oshadi`
+            : <>{fmt(10_000)} belgigacha {fmt(3000)} so&apos;m · keyingi har {fmt(5000)} belgi +{fmt(1000)}</>}
           {over ? ` · chegara ${fmt(TRANSLATION_MAX_CHARS)} — hujjatni bo‘lib yuboring` : ""}
         </p>
       </Card>

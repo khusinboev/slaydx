@@ -151,7 +151,7 @@ test("index: name, identity, avatar initial, every row with its hint and target"
   assert.equal(hint("oqish"), "TDPU");
   assert.equal(hint("ish"), "Kiritilmagan");
   assert.equal(hint("korinish"), "Kun");
-  assert.match(hint("hamyon"), /^12[\s .,]?500 tanga$/);
+  assert.match(hint("hamyon"), /^12[\s .,]?500 so'm$/);
   assert.equal(row("shaxsiy")!.getAttribute("href"), "/uz/profile/shaxsiy");
   assert.equal(row("xavfsizlik")!.getAttribute("href"), "/uz/profile/xavfsizlik");
   assert.equal(row("hamyon")!.getAttribute("href"), "/uz/wallet");

@@ -7,13 +7,14 @@ import { ChevronDown } from "lucide-react";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { TOOL_ICONS } from "@/components/shell/icons";
 import { PAY_RETURN_PATH } from "@/components/overlays/pay-amount";
-import { TOOLS, TOOL_BY_SLUG, formatTanga } from "@/lib/tools";
+import { TOOLS, TOOL_BY_SLUG } from "@/lib/tools";
 import type { ToolConfig } from "@/lib/types";
 import { creditTotal, useAppStore } from "@/lib/store";
 import { useChannelGate } from "@/lib/channel-gate";
 import { ChannelGate } from "./ChannelGate";
 import { DraftNotice } from "./DraftNotice";
 import { useKeyboardInset } from "./useKeyboardInset";
+import { formatSom } from "@/lib/format";
 
 /**
  * Serverning 402 matni (`app/api/generations/route.ts`: «Balans yetarli
@@ -152,7 +153,7 @@ export function ToolChrome({
           </p>
         ) : short ? (
           <p className="text-muted-foreground mb-4 text-[14.5px] leading-snug" data-balance-short>
-            Balansingiz: {formatTanga(total)} — bu hujjat uchun {formatTanga(price ?? 0)} kerak. {topUp}
+            Balansingiz: {formatSom(total)} — bu hujjat uchun {formatSom(price ?? 0)} kerak. {topUp}
           </p>
         ) : null}
 
@@ -177,7 +178,7 @@ export function ToolChrome({
               <div className="min-w-0 shrink-0 pl-2.5">
                 <span className="text-muted-foreground block text-[12.5px] leading-tight">Narxi</span>
                 <span id={priceId} className="block text-[17px] leading-tight font-bold whitespace-nowrap tabular-nums" data-price-total>
-                  {formatTanga(price)}
+                  {formatSom(price)}
                 </span>
               </div>
             )}

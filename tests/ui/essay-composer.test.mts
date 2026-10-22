@@ -172,7 +172,7 @@ test("akademik esse: hajm SO'Z bilan, narx varaqdan hisoblanadi (500 → 2 varaq
   const labels = chipText("wordTarget");
   /*
    * MUTATSIYA: `pagesForWords` o'rniga qattiq bitta varaq qo'yilsa,
-   * uchala chip ham 2 000 tanga ko'rsatardi — foydalanuvchi 1 000 so'zni
+   * uchala chip ham 2 000 so'm ko'rsatardi — foydalanuvchi 1 000 so'zni
    * 500 so'z narxiga so'rab olardi.
    */
   assert.ok(labels.some((t) => /500 so‘z · 2\s500/.test(t)), labels.join(" | "));
@@ -191,9 +191,9 @@ test("maktab inshosi: varaq chipi narx bilan va tanlov narxni o'zgartiradi (1 �
   assert.ok(chipText("pages").some((t) => /5 varaq · 4\s000/.test(t)));
   // Standart — 2 varaq (`defaultPages("essay")`), pastdagi «Yaratish» narxi ham shu.
   assert.match(checked("pages"), /^2 varaq/);
-  assert.ok(/2\s500 tanga/.test(document.body.textContent ?? ""), "standart narx 2 500");
+  assert.ok(/2\s500 so'm/.test(document.body.textContent ?? ""), "standart narx 2 500");
   await pick("pages", /^5 varaq/);
-  await waitFor(() => assert.ok(/4\s000 tanga/.test(document.body.textContent ?? ""), "5 varaq narxi 4 000"));
+  await waitFor(() => assert.ok(/4\s000 so'm/.test(document.body.textContent ?? ""), "5 varaq narxi 4 000"));
 });
 
 /* ══════════════════════════════ materiallar ══════════════════════════════ */
@@ -455,7 +455,7 @@ test("Til darajasi: IELTS submit — tanlangan daraja yuboriladi, tegilmagan bo'
   const post = () => (calls.filter((c) => c.url === "/api/generations" && c.method === "POST").at(-1)!.body as { values: Record<string, unknown> }).values;
   // MUTATSIYA: IELTS da `level: null` yuborilsa (eski xatti-harakat) bo'sh qator chiqadi.
   assert.equal(post().essayLevel, "C1", "tegilmagan IELTS darajasi — C1");
-  assert.ok(/2\s000 tanga/.test(document.body.textContent ?? ""), "IELTS narxi avvalgidek 2 000");
+  assert.ok(/2\s000 so'm/.test(document.body.textContent ?? ""), "IELTS narxi avvalgidek 2 000");
 
   await pick("essayLevel", /^A1$/);
   assert.equal(checked("essayLevel"), "A1");
@@ -464,7 +464,7 @@ test("Til darajasi: IELTS submit — tanlangan daraja yuboriladi, tegilmagan bo'
   });
   await waitFor(() => assert.equal(post().essayLevel, "A1"));
   assert.equal(post().essayContext, "ielts_task2");
-  assert.ok(/2\s000 tanga/.test(document.body.textContent ?? ""), "daraja narxga ta'sir qilmaydi");
+  assert.ok(/2\s000 so'm/.test(document.body.textContent ?? ""), "daraja narxga ta'sir qilmaydi");
 });
 
 test("Til darajasi: aniq tanlangan daraja kontekst almashganda saqlanadi (A2 → IELTS → akademik)", async () => {
@@ -499,7 +499,7 @@ test("Til darajasi: qoralama tiklaydi (c1 → C1), yaroqsiz qiymat → B2; narx 
   await waitFor(() => assert.equal(topicInput().value, "Tiklangan"));
   assert.equal(checked("essayLevel"), "C1", "qoralamadagi daraja (kichik harf ham) tiklanadi");
   assert.match(caption(), new RegExp(`~${LEVEL_BANDS.ru.C1.target} so‘z$`), "rus tili maqsadi");
-  const priceText = () => document.body.textContent?.match(/(\d[\d\s]*) tanga/)?.[1];
+  const priceText = () => document.body.textContent?.match(/(\d[\d\s]*) so'm/)?.[1];
   const before = priceText();
   assert.ok(before, "narx ko'rinadi");
   await pick("essayLevel", /^A1$/);

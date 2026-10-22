@@ -52,7 +52,7 @@ export function outputLabel(tool: Pick<ToolConfig, "output">): string {
  * adjustments apply. Nothing is invented here.
  */
 export function quickDetail(price: number): string {
-  return `${groupDigits(price)} tangadan`;
+  return `${groupDigits(price)} so'mdan`;
 }
 
 export type FileTone = "ok" | "run" | "error" | "muted";

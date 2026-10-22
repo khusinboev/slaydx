@@ -1,10 +1,11 @@
 "use client";
 
-import { priceFor, formatTanga } from "@/lib/tools";
+import { priceFor } from "@/lib/tools";
 import { teacherTypeOf, teacherTypesOf } from "@/lib/generation/teacher/registry";
 import { Row, Segmented, SelectField, Switch } from "../compact";
 import { Field } from "../shared";
 import { nearestNum, type KindProps, type Ui } from "./common";
+import { formatSom } from "@/lib/format";
 
 /**
  * GLOSSARIY qatorlari (AUDIT-24 WP-B).
@@ -44,7 +45,7 @@ export function GlossaryMain({ ui, set, tool, onTypeChange }: KindProps & { onTy
         <Field id="termCount">
           <Segmented
             ariaLabel="Atama soni"
-            options={t.limits.terms.map((n) => ({ value: String(n), label: `${n} ta · ${formatTanga(priceFor(tool, { termCount: n }))}` }))}
+            options={t.limits.terms.map((n) => ({ value: String(n), label: `${n} ta · ${formatSom(priceFor(tool, { termCount: n }))}` }))}
             value={String(ui.termCount)}
             onChange={(v) => set("termCount", Number(v))}
           />

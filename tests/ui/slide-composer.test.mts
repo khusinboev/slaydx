@@ -8,8 +8,9 @@ import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.
 import { SlideForm } from "../../components/forms/SlideForm.tsx";
 import { ProSlideForm } from "../../components/forms/ProSlideForm.tsx";
 import { capacityFor, slidePagesOf } from "../../components/forms/slide-fields.tsx";
-import { TOOL_BY_ID, formatTanga, priceFor } from "../../lib/tools.ts";
+import { TOOL_BY_ID, priceFor } from "../../lib/tools.ts";
 import type { FormValues, UserProfile } from "../../lib/types.ts";
+import { formatSom } from "../../lib/format.ts";
 
 /**
  * Ixcham slayd formasi (Formalar 2) — jsdom.
@@ -60,15 +61,15 @@ test("tanlov o'zgarsa yig'iq sarlavha ergashadi: auditoriya select, test segment
 
 test("slayder narxni DARHOL o'zgartiradi — priceFor bilan bir xil (oddiy: 25 → 5 500, pro: 25 → 50 000)", () => {
   mount("slide");
-  assert.equal(price(), formatTanga(priceFor(TOOL_BY_ID.slide, { slideCount: 10 })));
+  assert.equal(price(), formatSom(priceFor(TOOL_BY_ID.slide, { slideCount: 10 })));
   fireEvent.change(slider(), { target: { value: "25" } });
-  assert.equal(price(), formatTanga(5500));
+  assert.equal(price(), formatSom(5500));
   fireEvent.change(slider(), { target: { value: "30" } });
-  assert.equal(price(), formatTanga(8000));
+  assert.equal(price(), formatSom(8000));
   cleanup();
   mount("pro-slide");
   fireEvent.change(slider(), { target: { value: "25" } });
-  assert.equal(price(), formatTanga(50000));
+  assert.equal(price(), formatSom(50000));
 });
 
 test("muallif kartasi profildan to'ladi (tashkilot bo'lmasa universitet); pro'da lavozim ham", () => {

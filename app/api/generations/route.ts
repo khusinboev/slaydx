@@ -170,7 +170,7 @@ export const POST = handler("generations/create", async (req) => {
    * new key. Absent `expectedPrice` (an old cached client) = old behavior.
    */
   if (!replay && expectedPrice !== undefined && expectedPrice !== price) {
-    throw new ApiError(`Narx o'zgardi. Yangi narx: ${price.toLocaleString("uz-UZ")} tanga.`, 409, {
+    throw new ApiError(`Narx o'zgardi. Yangi narx: ${price.toLocaleString("uz-UZ")} so'm.`, 409, {
       code: "price_changed",
       price,
     });
@@ -211,7 +211,7 @@ export const POST = handler("generations/create", async (req) => {
   }
   if (!result.ok) {
     throw new ApiError(
-      `Balans yetarli emas. Kerak: ${result.required.toLocaleString("uz-UZ")} tanga, mavjud: ${result.available.toLocaleString("uz-UZ")}.`,
+      `Balans yetarli emas. Kerak: ${result.required.toLocaleString("uz-UZ")} so'm, mavjud: ${result.available.toLocaleString("uz-UZ")}.`,
       402,
       { required: result.required, available: result.available },
     );

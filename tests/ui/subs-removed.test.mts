@@ -105,7 +105,7 @@ test("Hamyon: Pro/Bepul taklifi yo'q, balans va bitta «To'ldirish» tugmasi; to
   assert.ok(document.querySelector('[data-wallet-hero="ready"]'), "balans kartasi");
   assert.equal(document.querySelectorAll("[data-wallet-topup]").length, 1, "yagona to'ldirish tugmasi");
   assert.ok(screen.getByRole("button", { name: /To.ldirish/ }));
-  assert.match(document.querySelector("[data-wallet-total]")?.textContent ?? "", /15[\s .,  ]?000 tanga/);
+  assert.match(document.querySelector("[data-wallet-total]")?.textContent ?? "", /15[\s .,  ]?000 so'm/);
   // Buyurtma tarixi saqlangan (eski «pro» buyurtma ham ko'rinadi).
   assert.ok(screen.getByRole("heading", { name: /To.lovlar/ }));
   assert.equal(document.querySelectorAll("[data-wallet-orders] li").length, 2, "ikkala buyurtma, «pro» ham");
@@ -147,7 +147,7 @@ test("Hamyon: kirmagan foydalanuvchi — «Kirish» kirish oynasini ochadi (qayt
 
 // Redesign W4: Ball/Balans and the top-up link moved to Hamyon (`/uz/wallet`, W3); the profile keeps one
 // «Hamyon» row with the total and the link (was: «Ball» + «Balans» stats and a link to /uz/purchase).
-test("profil: PRO belgisi, muddat va kvota yo'q; «Hamyon» qatori jami tangani ko'rsatadi va /uz/wallet ga olib boradi", () => {
+test("profil: PRO belgisi, muddat va kvota yo'q; «Hamyon» qatori jami so'mni ko'rsatadi va /uz/wallet ga olib boradi", () => {
   signIn(userWith(0));
   render(withRouter(h(ProfilePage)));
   assert.doesNotMatch(document.body.textContent ?? "", FORBIDDEN);
@@ -155,11 +155,11 @@ test("profil: PRO belgisi, muddat va kvota yo'q; «Hamyon» qatori jami tangani 
   assert.ok(wallet);
   assert.equal(wallet.getAttribute("href"), "/uz/wallet");
   assert.match(wallet.textContent ?? "", /Hamyon/);
-  assert.match(wallet.textContent ?? "", /15[\s .,]?000 tanga/);
+  assert.match(wallet.textContent ?? "", /15[\s .,]?000 so'm/);
   assert.ok(!/NaN/.test(document.body.textContent ?? ""));
 });
 
-test("balans chipi, pastki panel va «+» oynasi (sidebar o'rnida): PRO belgisi yo'q, balans tanga bilan", () => {
+test("balans chipi, pastki panel va «+» oynasi (sidebar o'rnida): PRO belgisi yo'q, balans so'm bilan", () => {
   signIn(userWith(0));
   useUi.setState({ overlay: "create" });
   render(withRouter(h("div", null, h(BalanceChip), h(TabBar, { shown: true, createOpen: true }), h(CreateSheet))));
