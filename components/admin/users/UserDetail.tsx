@@ -420,6 +420,14 @@ function referralRows(referral: NonNullable<AdminUserDetailResponse["referral"]>
         </span>
       ),
     },
+    {
+      label: "Do'st to'lovlaridan bonus",
+      value: (
+        <span className="tabular-nums" data-ambassador-earned>
+          {fmtNumber(referral.ambassadorPoints ?? 0)} <span className="text-muted-foreground">bonus so&apos;m</span>
+        </span>
+      ),
+    },
   ];
 }
 

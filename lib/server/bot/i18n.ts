@@ -364,6 +364,17 @@ const T = {
   "task.topup": { uz: "Har to‘ldirishga +{p}% bonus", ru: "+{p}% бонус к каждому пополнению", en: "+{p}% bonus on every top-up" },
   // Rating bonus (lib/server/ratings.ts): ledger title and the bonus-task button.
   "rating.ledger": { uz: "Ilovani baholash bonusi", ru: "Бонус за оценку приложения", en: "App rating bonus" },
+  "ambassador.ledger": { uz: "Do'st to'lovi bonusi ({p}%)", ru: "Бонус за пополнение друга ({p}%)", en: "Friend's payment bonus ({p}%)" },
+  "ambassador.rule": {
+    uz: "Do'stlaringiz har to'lovidan {p} % bonus so'm",
+    ru: "{p} % бонусных сум с каждого платежа ваших друзей",
+    en: "{p} % bonus UZS from every payment your friends make",
+  },
+  "ambassador.dm": {
+    uz: "🎉 Siz taklif qilgan do'stingiz to'lov qildi — sizga +{n} bonus so'm!",
+    ru: "🎉 Приглашённый вами друг совершил оплату — вам +{n} бонусных сум!",
+    en: "🎉 A friend you invited made a payment — you get +{n} bonus UZS!",
+  },
   "rating.task": { uz: "Ilovani baholash · +{n}", ru: "Оценить приложение · +{n}", en: "Rate the app · +{n}" },
   "rating.done": { uz: "Ilovani baholadingiz · +{n}", ru: "Вы оценили приложение · +{n}", en: "You rated the app · +{n}" },
   "bonus.paidTitle": { uz: "+{n}!", ru: "+{n}!", en: "+{n}!" },

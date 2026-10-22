@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Copy, Gift, Send } from "lucide-react";
 import { request } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
+import { ambassadorRuleText } from "@/lib/ambassador";
 import { REFERRAL_SHARE_TEXT, formatJoinDate, formatPoints, referralRuleText } from "@/lib/referral";
 import { copyToClipboard } from "@/lib/share";
 import { useLinkShare } from "../share/ShareMenu";
@@ -16,6 +17,8 @@ export type ReferralSummaryView = {
   rewardPoints: number;
   invitedCount: number;
   earnedPoints: number;
+  /** Ambassador percent; absent (older server) or 0 hides the rule line. */
+  ambassadorPercent?: number;
   recent: { name: string; joinedAt: string }[];
 };
 
@@ -118,6 +121,11 @@ export function ReferralCard({ className = "mb-6" }: { className?: string } = {}
           <p className="text-muted-foreground mt-0.5 text-[14px] leading-snug" data-referral-rule>
             {referralRuleText(data.rewardPoints)}
           </p>
+          {data.ambassadorPercent && data.ambassadorPercent > 0 ? (
+            <p className="text-muted-foreground mt-1 text-[14px] leading-snug" data-referral-ambassador>
+              {ambassadorRuleText(data.ambassadorPercent)}
+            </p>
+          ) : null}
         </div>
       </div>
 

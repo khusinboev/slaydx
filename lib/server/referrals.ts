@@ -6,6 +6,8 @@ import { query, queryOne } from "./db";
 import { env } from "./env";
 import { topUpInTx } from "./credits";
 import { log } from "./log";
+import { getSetting } from "./settings";
+import { AMBASSADOR_KEY } from "../ambassador";
 import {
   REF_CODE_ALPHABET,
   REF_CODE_LENGTH,
@@ -258,6 +260,8 @@ export type ReferralSummary = {
   rewardPoints: number;
   invitedCount: number;
   earnedPoints: number;
+  /** `ambassador.percent` (0 = the program is off): shown as one rule line. */
+  ambassadorPercent: number;
   /** Display names only — never ids, usernames or phones of other people. */
   recent: { name: string; joinedAt: string }[];
 };
@@ -291,6 +295,7 @@ export async function referralSummary(
     rewardPoints: referralRewardFor(Number(totals.n) + 1),
     invitedCount: Number(totals.n),
     earnedPoints: Number(totals.pts),
+    ambassadorPercent: await getSetting(AMBASSADOR_KEY),
     recent: recent.map((r) => ({
       name: (r.name ?? "").replace(/\s+/g, " ").trim().slice(0, 60) || "Foydalanuvchi",
       joinedAt: new Date(r.created_at).toISOString(),
@@ -303,6 +308,8 @@ export type AdminReferralInfo = {
   referredBy: { id: string | null; name: string; source: ReferralSource; at: string; rewardPoints: number } | null;
   invitedCount: number;
   earnedPoints: number;
+  /** Total ambassador bonus (D4) this user earned from their invitees' payments, in bonus so'm. */
+  ambassadorPoints: number;
 };
 
 export async function adminReferralInfo(db: Pick<PoolClient, "query">, userId: string): Promise<AdminReferralInfo> {
@@ -320,7 +327,14 @@ export async function adminReferralInfo(db: Pick<PoolClient, "query">, userId: s
       [userId],
     )
   ).rows[0]!;
+  const amb = (
+    await db.query<{ pts: string }>(
+      "SELECT COALESCE(SUM(points_delta), 0)::text AS pts FROM transactions WHERE user_id = $1 AND kind = 'bonus' AND reference LIKE 'ambassador:%'",
+      [userId],
+    )
+  ).rows[0]!;
   return {
+    ambassadorPoints: Number(amb.pts),
     referredBy: by
       ? { id: by.id, name: by.name ?? "", source: by.source, at: new Date(by.created_at).toISOString(), rewardPoints: Number(by.reward_points) }
       : null,

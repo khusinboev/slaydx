@@ -189,6 +189,9 @@ export function ledgerTitle(lang: Lang, e: Pick<LedgerItem, "kind" | "note">): s
       // Payment bonus «To‘lov bonusi (N%)» (`lib/payment-bonus.ts paymentBonusNote`).
       const pay = /^To[‘']lov bonusi \((\d{1,2})%\)$/.exec(note)?.[1];
       if (pay) return t(lang, "ledger.paymentBonus", { p: pay });
+      // Ambassador bonus «Do'st to'lovi bonusi (N%)» (`lib/ambassador.ts ambassadorNote`).
+      const amb = /^Do'st to'lovi bonusi \((\d{1,2})%\)$/.exec(note)?.[1];
+      if (amb) return t(lang, "ambassador.ledger", { p: amb });
       if (note === RATING_NOTE) return t(lang, "rating.ledger");
       if (/^Birinchi to[‘']ldirish bonusi/.test(note)) return t(lang, "ledger.firstTopup");
       return lang === "uz" && note ? note : t(lang, "ledger.bonus");
@@ -256,7 +259,14 @@ export function walletScreen(
 
 /* ───────────────────────── Referral ───────────────────────── */
 
-export type ReferralInput = { link: string; rewardPoints: number; invitedCount: number; earnedPoints: number };
+export type ReferralInput = {
+  link: string;
+  rewardPoints: number;
+  invitedCount: number;
+  earnedPoints: number;
+  /** Ambassador percent (`ambassador.percent`); 0 / absent hides the rule line. */
+  ambassadorPercent?: number;
+};
 
 /** `/taklif`, the welcome «Taklif» and Hamyon → «Do‘st taklif qilish» (with a way back). */
 export function referralScreen(lang: Lang, r: ReferralInput, back: "wallet" | null): Screen {
@@ -275,6 +285,7 @@ export function referralScreen(lang: Lang, r: ReferralInput, back: "wallet" | nu
         u2p: REFERRAL_TIERS[1].upTo + 1,
       }),
     ),
+    ...(r.ambassadorPercent && r.ambassadorPercent > 0 ? ["", esc(t(lang, "ambassador.rule", { p: r.ambassadorPercent }))] : []),
     "",
     t(lang, "ref.link"),
     esc(r.link),
