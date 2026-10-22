@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { Briefcase, Gift, GraduationCap, LifeBuoy, Lock, Moon, ShieldCheck, Sun, SunMoon, UserRound, Wallet } from "lucide-react";
 import * as api from "@/lib/api-client";
 import { creditTotal, useAppStore } from "@/lib/store";
+import { RatingCard } from "./RatingCard";
 import { Avatar, Group, ProfileSkeleton, RowExternal, RowLink, SectionLabel, SignedOutCard } from "./parts";
 import { identityLine, profileHref, rowHint, type ProfileStepId, type ProfileTarget } from "./profile-model";
 import { themeChoiceLabel, useThemeChoice } from "./theme";
@@ -97,6 +98,18 @@ export function ProfileHome({ onNavigate, header }: ProfileHomeProps) {
           <RowExternal id="yordam" href={SUPPORT_URL} icon={LifeBuoy} label="Yordam" hint="Admin bilan bog'lanish" onClick={onSupportClick} />
           <RowLink {...step("xavfsizlik")} icon={Lock} label="Xavfsizlik va chiqish" />
         </Group>
+
+        <div className="mt-6">
+          <RatingCard
+            className="mb-0"
+            onRated={() =>
+              void api
+                .fetchMe()
+                .then((r) => setUser(r.user))
+                .catch(() => {})
+            }
+          />
+        </div>
       </>
     );
   }
