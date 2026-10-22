@@ -402,7 +402,7 @@ const newTg = () => 7_900_000_000 + randomInt(0, 99_999_999);
 const userByTg = (tg: number) => queryOne<{ id: string; offer_version: number | null }>("SELECT id::text AS id, offer_version FROM users WHERE telegram_id = $1", [String(tg)]);
 const buttonsOf = (body: Record<string, unknown>) => {
   const mk = typeof body.reply_markup === "string" ? JSON.parse(body.reply_markup) : body.reply_markup;
-  return ((mk as { inline_keyboard?: { text: string; url?: string; callback_data?: string }[][] } | undefined)?.inline_keyboard ?? []).flat();
+  return ((mk as { inline_keyboard?: { text: string; url?: string; callback_data?: string; web_app?: unknown }[][] } | undefined)?.inline_keyboard ?? []).flat();
 };
 const welcomeSent = () => sent("sendMessage").some((c) => /Kirish|taklif|SlaydX/i.test(String(c.body.text)) && buttonsOf(c.body).some((b) => b.web_app || b.url));
 
