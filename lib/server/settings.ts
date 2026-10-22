@@ -9,6 +9,7 @@ import { env } from "./env";
 import { toJsonb } from "./jsonb";
 import { log } from "./log";
 import { PAYMENT_BONUS_DEFAULT, PAYMENT_BONUS_MAX, PAYMENT_BONUS_MIN } from "../payment-bonus";
+import { AMBASSADOR_DEFAULT, AMBASSADOR_MAX, AMBASSADOR_MIN } from "../ambassador";
 import { RATING_BONUS_DEFAULT, RATING_BONUS_MAX } from "../rating";
 
 /**
@@ -40,6 +41,7 @@ export type SettingValues = {
   "admin.wallet_confirm_threshold": number;
   "finance.soum_per_usd": number;
   payment_bonus_percent: number;
+  "ambassador.percent": number;
   "bonus.rating_points": number;
   "pricing.target_markup": number;
   "pricing.payment_fee_percent": number;
@@ -254,6 +256,18 @@ const CATALOG: Catalog = {
     max: PAYMENT_BONUS_MAX,
     validate: intValidator(PAYMENT_BONUS_MIN, PAYMENT_BONUS_MAX),
     envDefault: () => PAYMENT_BONUS_DEFAULT,
+  },
+  "ambassador.percent": {
+    key: "ambassador.percent",
+    group: FIN_GROUP,
+    label: "Do'st to'lovidan bonus (%)",
+    description:
+      "Taklif qilingan foydalanuvchi to'lov qilganda, uni taklif qilgan kishiga to'langan summaning shu foizi bonus so'm sifatida beriladi (to'lovchining o'z bonusi hisobga olinmaydi, qaytarilmaydi). 0 — o'chirilgan. Yangi qiymat faqat keyingi to'lovlarga qo'llanadi.",
+    type: "int",
+    min: AMBASSADOR_MIN,
+    max: AMBASSADOR_MAX,
+    validate: intValidator(AMBASSADOR_MIN, AMBASSADOR_MAX),
+    envDefault: () => AMBASSADOR_DEFAULT,
   },
   "bonus.rating_points": {
     key: "bonus.rating_points",

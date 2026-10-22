@@ -227,3 +227,14 @@ test("ReferralCapture: a failing capture is silent (no throw, nothing rendered)"
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(container.innerHTML, "");
 });
+
+test("ReferralCard: ambassador rule line shown with the percent, hidden for 0 and for an older server", async () => {
+  await ready({ ...DATA, ambassadorPercent: 10 });
+  assert.equal(document.querySelector("[data-referral-ambassador]")?.textContent, "Do'stlaringiz har to'lovidan 10 % bonus so'm");
+  cleanup();
+  await ready({ ...DATA, ambassadorPercent: 0 });
+  assert.ok(!document.querySelector("[data-referral-ambassador]"));
+  cleanup();
+  await ready(DATA);
+  assert.ok(!document.querySelector("[data-referral-ambassador]"));
+});

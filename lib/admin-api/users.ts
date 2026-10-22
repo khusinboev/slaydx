@@ -100,6 +100,8 @@ export type AdminUserDetailResponse = {
   referral?: {
     referredBy: { id: string | null; name: string; source: "bot" | "web"; at: string; rewardPoints: number } | null;
     invitedCount: number;
+    /** Total ambassador bonus earned from invitees' payments (older servers omit it). */
+    ambassadorPoints?: number;
     earnedPoints: number;
   };
 };

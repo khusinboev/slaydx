@@ -135,3 +135,11 @@ test("UserDetail: a response without the referral block (older server) renders w
   assert.ok(!screen.queryByText("Kim taklif qilgan"));
   assert.ok(!screen.queryByText("Taklif qilganlar soni"));
 });
+
+test("UserDetail: the ambassador bonus total is shown", async () => {
+  serve({ ...DETAIL, referral: { referredBy: null, invitedCount: 1, earnedPoints: 2000, ambassadorPoints: 12500 } });
+  mount(h(UserDetail, { id: "42", tools: [] }));
+  await screen.findByRole("heading", { name: /Ali Valiyev/ });
+  assert.ok(screen.getByText("Do'st to'lovlaridan bonus"));
+  assert.match(document.querySelector("[data-ambassador-earned]")!.textContent!, /^12\s500\s+bonus so'm$/);
+});

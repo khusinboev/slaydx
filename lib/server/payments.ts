@@ -6,6 +6,7 @@ import { safeEqual } from "./session";
 import { topUpInTx } from "./credits";
 import { log } from "./log";
 import { payPaymentBonusInTx } from "./payment-bonus";
+import { notifyAmbassador, payAmbassadorInTx, type AmbassadorPaid } from "./ambassador";
 import { MAX_TOPUP_SOUM, MIN_TOPUP_SOUM, topupRangeMessage } from "../topup-limits";
 
 /**
@@ -394,7 +395,9 @@ export async function settleOrder(
     credited: res.credited,
     paymentBonus: res.bonusPoints,
     paymentBonusPercent: res.bonusPercent,
+    ambassador: res.ambassador?.points,
   });
+  await notifyAmbassador(res.ambassador);
   return res.outcome;
 }
 
@@ -405,6 +408,8 @@ export type SettleInTxResult = {
   credited: boolean;
   bonusPoints: number;
   bonusPercent: number;
+  /** The referrer's ambassador bonus paid by this call (D4), for the post-commit DM; null when none. */
+  ambassador: AmbassadorPaid | null;
 };
 
 /**
@@ -422,7 +427,8 @@ export async function settleOrderInTx(
   let credited = false;
   let bonusPoints = 0;
   let bonusPercent = 0;
-  const done = (outcome: SettleOutcome): SettleInTxResult => ({ outcome, credited, bonusPoints, bonusPercent });
+  let ambassador: AmbassadorPaid | null = null;
+  const done = (outcome: SettleOutcome): SettleInTxResult => ({ outcome, credited, bonusPoints, bonusPercent, ambassador });
   const row = await lockOrder(client, orderId);
   if (!row) return done({ status: "not_found", order: null });
   const order = toOrder(row);
@@ -486,6 +492,11 @@ export async function settleOrderInTx(
       const b = await payPaymentBonusInTx(client, { userId: order.userId, orderId: order.id, amountSoum: order.amountSoum });
       bonusPoints = b.points;
       bonusPercent = b.percent;
+      /*
+       * Ambassador bonus (D4, `lib/server/ambassador.ts`): the inviter of a referred payer earns N % of the
+       * money actually paid (`amountSoum`, not the payer's bonus). Own savepoint; its failure never undoes this settlement.
+       */
+      ambassador = await payAmbassadorInTx(client, order);
     }
   }
 
@@ -648,7 +659,9 @@ export async function createPaidPaynetOrder(input: {
     paymentBonus: res.settled.bonusPoints,
     paymentBonusPercent: res.settled.bonusPercent,
     paynetTrnId: res.providerTrnId,
+    ambassador: res.settled.ambassador?.points,
   });
+  await notifyAmbassador(res.settled.ambassador);
   return { status: "paid", order: res.order, providerTrnId: res.providerTrnId, balance: res.balance, bonusPoints: res.settled.bonusPoints };
 }
 
