@@ -18,8 +18,13 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *     happens BEFORE Telegram; the row + ONE `bonus_channel.create` audit row commit together;
  *     a duplicate chat id is 409 with no second audit row; title override; default sort;
  *   - update: only changed fields go into before/after; no change 409 `state`; bounds 400;
- *   - delete: refused with 409 `has_claims` while claims exist (row and claims stay), else the
- *     row goes with a `bonus_channel.delete` audit row; an audit failure rolls the change back;
+ *   - delete (migration 051): a SOFT delete, allowed with claims — the row stays (deleted_at,
+ *     inactive), claims and ledger untouched, invisible to every admin read / write (404) and to
+ *     the user side; an audit failure rolls the change back;
+ *   - restore: re-adding a deleted chat id brings back the SAME row with its claims (a user who
+ *     claimed before gets «already», no second payment); a live duplicate stays 409 `duplicate`;
+ *   - username (the channel owner renamed it): PATCH verifies the new name is the same chat id
+ *     (409 `chat_mismatch` otherwise, nothing written); «Telegramdan yangilash» follows Telegram;
  *   - stats per channel from `bonus_channel_claims`;
  *   - permissions: viewer/finance read only (403 + one denied audit row on writes), support and
  *     moderator get 403 on reads, stale step-up 401 reauth, missing Origin 403, non-admin 404.
@@ -27,8 +32,14 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  * Mutation checks (each made the named test fail, then restored):
  *   - `assertSomeBonus` call removed from `createBonusChannel` → "create: validation" (201 for
  *     0 + 0 instead of 400);
- *   - the claims count check removed from `deleteBonusChannel` → "delete: refused while claims
- *     exist" (200 and the claims were cascaded away);
+ *   - soft delete replaced by a hard `DELETE` → "delete: a SOFT delete" (row and claims gone);
+ *   - `AND c.deleted_at IS NULL` dropped from the list `SELECT` → "delete: a SOFT delete" (still listed);
+ *   - `AND deleted_at IS NULL` dropped from `lockChannel` → "delete: a SOFT delete" (PATCH / second
+ *     delete 200 on a deleted row);
+ *   - the restore branch replaced by the plain 409 → "restore" (409 instead of 201);
+ *   - restore inserting a NEW row (claims left on the old one) → "restore" (id differs, paid twice);
+ *   - the chat id comparison removed from `verifiedUsername` → "username" (another chat accepted);
+ *   - `if (prev.username === username) return false` removed → "refresh" (audit row for no change);
  *   - `before[k] = prev[k]` replaced by `before[k] = next[k]` → "update: only changed fields";
  *   - `botAdminStatus` mapping `creator` → `not_admin` → "resolve: bot admin status";
  *   - `stay_paid > 0` filter dropped from the stay count → "stats" (stay paid count 3, not 2);
@@ -75,6 +86,8 @@ const BOT_STATUS = new Map<string, string>();
 /** When set, every Bot API call answers this HTTP-level failure. */
 let telegramDown: null | { code: number } = null;
 const botCalls: Array<{ method: string; body: Record<string, unknown> }> = [];
+/** Telegram user ids the fake Telegram reports as members of every chat (the user-side `checkChannel`). */
+const MEMBERS = new Set<number>();
 
 function addChat(chat: TgChat, botStatus: string | null = "administrator"): TgChat {
   CHATS.set(String(chat.id), chat);
@@ -98,6 +111,9 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   const chat = CHATS.get(key);
   if (method === "getChat") {
     return chat ? tgJson({ ok: true, result: chat }) : tgJson({ ok: false, error_code: 400, description: "Bad Request: chat not found" }, 400);
+  }
+  if (method === "getChatMember" && MEMBERS.has(Number(body.user_id))) {
+    return tgJson({ ok: true, result: { status: "member", user: { id: body.user_id } } });
   }
   if (method === "getChatMember") {
     assert.equal(body.user_id, BOT_ID, "getChatMember must ask about the bot itself");
@@ -124,6 +140,9 @@ const resolveRoute = await import("../app/api/admin/bonus-channels/resolve/route
 const idRoute = await import("../app/api/admin/bonus-channels/[id]/route.ts");
 const botRoute = await import("../app/api/admin/bonus-channels/[id]/bot-status/route.ts");
 const inviteRoute = await import("../app/api/admin/bonus-channels/invite-link/route.ts");
+const refreshRoute = await import("../app/api/admin/bonus-channels/[id]/refresh/route.ts");
+const bc = await import("../lib/server/bonus-channels.ts");
+const mc = await import("../lib/server/mandatory-channels.ts");
 
 after(async () => {
   globalThis.fetch = realFetch;
@@ -223,6 +242,11 @@ async function inviteLink(cookie: string | null, body: unknown): Promise<Result>
   return readResult(await inRequest(req, () => inviteRoute.POST(req, undefined)));
 }
 
+async function refresh(cookie: string | null, id: string): Promise<Result> {
+  const req = new Request(`${BASE}/${id}/refresh`, { method: "POST", headers: headersFor(cookie, true), body: "{}" });
+  return readResult(await inRequest(req, () => refreshRoute.POST(req, { params: Promise.resolve({ id }) })));
+}
+
 async function botStatus(cookie: string | null, id: string): Promise<Result> {
   const req = new Request(`${BASE}/${id}/bot-status`, { method: "GET", headers: headersFor(cookie, false) });
   return readResult(await inRequest(req, () => botRoute.GET(req, { params: Promise.resolve({ id }) })));
@@ -250,8 +274,9 @@ const audits = (adminId: string, action?: string) =>
   );
 
 const channelRows = () =>
-  query<{ id: string; chat_id: string; title: string; join_bonus: number; stay_bonus: number; stay_days: number; active: boolean; sort: number }>(
-    `SELECT id::text AS id, chat_id::text AS chat_id, title, join_bonus, stay_bonus, stay_days, active, sort FROM bonus_channels ORDER BY id`,
+  query<{ id: string; chat_id: string; title: string; join_bonus: number; stay_bonus: number; stay_days: number; active: boolean; sort: number; deleted: boolean }>(
+    `SELECT id::text AS id, chat_id::text AS chat_id, title, join_bonus, stay_bonus, stay_days, active, sort, deleted_at IS NOT NULL AS deleted
+       FROM bonus_channels ORDER BY id`,
   );
 
 const resetChannels = async () => {
@@ -329,6 +354,9 @@ test("resolve: preview of a public channel; bot admin status admin / creator / n
     botAdmin: "admin",
     warning: null,
     existingId: null,
+    existingTitle: null,
+    deletedId: null,
+    deletedClaims: 0,
   });
   assert.deepEqual(botCalls.map((c) => c.method), ["getChat", "getChatMember"]);
   assert.equal(botCalls[0]!.body.chat_id, `@${ch.username}`);
@@ -446,12 +474,16 @@ test("create: 201, row + ONE bonus_channel.create audit row (after = stored valu
     const d = await create(s.cookie, { input, joinBonus: 500 });
     assert.equal(d.status, 409, input);
     assert.equal(d.body.code, "duplicate");
+    assert.equal(d.body.error, "«SlaydX Yangiliklar» kanali allaqachon qo'shilgan", "the message names the existing channel");
   }
   assert.equal((await channelRows()).length, 2);
   assert.equal((await audits(s.admin.adminId, "bonus_channel.create")).length, 2);
 
   // The preview now flags the known chat.
-  assert.equal((await resolve(s.cookie, `@${news.username}`)).body.existingId, item.id);
+  const known = await resolve(s.cookie, `@${news.username}`);
+  assert.equal(known.body.existingId, item.id);
+  assert.equal(known.body.existingTitle, "SlaydX Yangiliklar");
+  assert.equal(known.body.deletedId, null);
 });
 
 test("create: validation is 400 before any Bot API call and writes nothing", { skip }, async () => {
@@ -614,45 +646,78 @@ test("stats: joined, join paid count/sum, stay paid count/sum, left, stay pendin
   });
 });
 
-test("delete: refused with 409 has_claims while claims exist (row and claims stay, no audit); deactivation works; without claims the row goes with an audit row", { skip }, async () => {
+test("delete: a SOFT delete — allowed with claims; row kept (deleted_at, inactive), claims + ledger intact; gone from the list, PATCH / toggle / bot-status / second delete 404; user side and stats blind to it", { skip }, async () => {
   await resetChannels();
+  mc.resetMandatoryCache();
   const s = await session("owner");
-  const used = await seedChannel(s);
-  const u = await mkUser();
-  await claim(u.id, used.id, { joinPaid: 1000 });
+  const used = await seedChannel(s, { mandatory: true, stayBonus: 2000 });
+  const keep = await seedChannel(s);
+  // A real payout through the user side: claim row + ledger row + points.
+  const u = await mkUser("Claimer");
+  const tgId = Number((await queryOne<{ t: string }>("SELECT telegram_id::text AS t FROM users WHERE id = $1", [u.id]))!.t);
+  MEMBERS.add(tgId);
+  try {
+    assert.equal((await bc.checkChannel(u.id, tgId, used.id)).status, "paid");
+  } finally {
+    MEMBERS.delete(tgId);
+  }
+  const ledgerOf = () => query<{ reference: string; points_delta: string }>("SELECT reference, points_delta::text AS points_delta FROM transactions WHERE user_id = $1 ORDER BY id", [u.id]);
+  const ledgerBefore = await ledgerOf();
+  assert.deepEqual(ledgerBefore.map((x) => x.reference), [`channel:${used.id}:${u.id}:join`]);
+  // A due stay claim of another user (the sweep would pay it if the channel were live).
+  const v = await mkUser();
+  await query("INSERT INTO bonus_channel_claims (user_id, channel_id, joined_at, join_paid) VALUES ($1, $2, now() - interval '30 days', 1000)", [v.id, used.id]);
 
   const r = await del(s.cookie, used.id, { reason: "Hamkorlik tugadi" });
-  assert.equal(r.status, 409);
-  assert.equal(r.body.code, "has_claims");
-  assert.equal(r.body.claims, 1);
-  assert.equal((await channelRows()).length, 1);
-  assert.equal((await query(`SELECT 1 FROM bonus_channel_claims WHERE channel_id = $1`, [used.id])).length, 1, "the claim survived");
-  assert.deepEqual(await audits(s.admin.adminId, "bonus_channel.delete"), []);
-
-  const off = await patch(s.cookie, used.id, { active: false });
-  assert.equal(off.status, 200);
-  assert.equal((off.body.item as Item).active, false);
-
-  const unused = await seedChannel(s);
-  const d = await del(s.cookie, unused.id, {});
-  assert.equal(d.status, 200, JSON.stringify(d.body));
-  assert.deepEqual(d.body, { id: unused.id, deleted: true });
-  assert.deepEqual((await channelRows()).map((x) => x.id), [used.id]);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body, { id: used.id, deleted: true });
+  const rows = await channelRows();
+  const stateOf = (id: string) => rows.filter((x) => x.id === id).map((x) => [x.deleted, x.active]);
+  assert.deepEqual([stateOf(used.id), stateOf(keep.id)], [[[true, false]], [[false, true]]], "the row stays, soft-deleted and inactive");
+  assert.equal((await query("SELECT 1 FROM bonus_channel_claims WHERE channel_id = $1", [used.id])).length, 2, "claims untouched");
+  assert.deepEqual(await ledgerOf(), ledgerBefore, "ledger untouched");
   const a = await audits(s.admin.adminId, "bonus_channel.delete");
   assert.equal(a.length, 1);
-  assert.equal(a[0]!.target_id, unused.id);
+  assert.equal(a[0]!.target_id, used.id);
+  assert.equal(a[0]!.reason, "Hamkorlik tugadi");
   assert.equal(a[0]!.after, null);
   assert.deepEqual(
     Object.keys(a[0]!.before as Record<string, unknown>).sort(),
     ["active", "chatId", "inviteLink", "joinBonus", "mandatory", "sort", "stayBonus", "stayDays", "title", "username"],
   );
+  assert.equal((a[0]!.before as { active: boolean }).active, true);
 
-  const again = await del(s.cookie, unused.id, {});
-  assert.equal(again.status, 404);
-  assert.equal(again.body.code, "not_found");
+  // Admin side: invisible, and every write on it is the coded 404.
+  assert.deepEqual(((await list(s.cookie)).body.items as Item[]).map((i) => i.id), [keep.id]);
+  assert.deepEqual((await lib.listBonusChannels()).items.map((i) => i.id), [keep.id]);
+  for (const res of [
+    await del(s.cookie, used.id, {}),
+    await patch(s.cookie, used.id, { active: true }),
+    await patch(s.cookie, used.id, { joinBonus: 1500 }),
+    await botStatus(s.cookie, used.id),
+    await refresh(s.cookie, used.id),
+  ]) {
+    assert.equal(res.status, 404, JSON.stringify(res.body));
+    assert.equal(res.body.code, "not_found");
+  }
+  assert.equal((await channelRows()).find((x) => x.id === used.id)!.active, false, "never re-activated");
+  assert.equal((await audits(s.admin.adminId, "bonus_channel.update")).length, 0);
+  assert.equal((await audits(s.admin.adminId, "bonus_channel.delete")).length, 1);
+
+  // User side: no task, no payout, no mandatory gate, no stay sweep, no bot stats.
+  const w = await mkUser();
+  const tasks = await bc.bonusTasks(w.id, { botUsername: "slaydx_test_bot", appUrl: "http://localhost:3000" });
+  assert.deepEqual(tasks.channels.map((c) => c.id), [keep.id]);
+  assert.equal((await bc.checkChannel(w.id, 1, used.id)).status, "inactive");
+  assert.deepEqual(await mc.activeMandatoryChannels(), []);
+  const swept = await bc.staySweep(50, { member: async () => "member", notify: async () => {}, sleep: async () => {}, configured: () => true });
+  assert.equal(swept.paid, 0, "the stay sweep skips a deleted channel");
+  assert.equal((await query("SELECT 1 FROM transactions WHERE user_id = $1", [v.id])).length, 0);
+  const { botStats } = await import("../lib/server/bot/admin-stats.ts");
+  assert.deepEqual((await botStats({ channelMembers: false })).channels.map((c) => c.id), [keep.id]);
 });
 
-test("delete vs a concurrent claim: the row lock makes the delete wait and then refuse — a claim is never cascaded away", { skip }, async () => {
+test("delete vs a concurrent claim: the row lock makes the delete wait; the committed claim survives the soft delete", { skip }, async () => {
   await resetChannels();
   const s = await session("owner");
   const item = await seedChannel(s);
@@ -670,26 +735,178 @@ test("delete vs a concurrent claim: the row lock makes the delete wait and then 
     assert.equal(settled, false, "the delete must wait for the claim transaction");
     await other.query("COMMIT");
     const r = await pending;
-    assert.equal(r.status, 409, JSON.stringify(r.body));
-    assert.equal(r.body.code, "has_claims");
+    assert.equal(r.status, 200, JSON.stringify(r.body));
   } finally {
     await other.query("ROLLBACK").catch(() => undefined);
     other.release();
   }
   assert.equal((await query(`SELECT 1 FROM bonus_channel_claims WHERE channel_id = $1`, [item.id])).length, 1, "the claim survived");
-  assert.equal((await channelRows()).length, 1);
+  assert.deepEqual((await channelRows()).map((x) => x.deleted), [true]);
+});
+
+test("restore: re-adding a deleted chat brings back the SAME row with the request's values and its claims — a user who claimed is not paid again; a live duplicate stays 409", { skip }, async () => {
+  await resetChannels();
+  const s = await session("owner");
+  const ch = freshChannel({ title: "Qaytgan kanal" });
+  const first = (await create(s.cookie, { input: `@${ch.username}`, joinBonus: 1000 })).body.item as Item;
+  const u = await mkUser("Oldin olgan");
+  const tgId = Number((await queryOne<{ t: string }>("SELECT telegram_id::text AS t FROM users WHERE id = $1", [u.id]))!.t);
+  MEMBERS.add(tgId);
+  const pointsOf = async () => Number((await queryOne<{ p: string }>("SELECT points::text AS p FROM users WHERE id = $1", [u.id]))!.p);
+  const ledgerOf = () => query<{ reference: string }>("SELECT reference FROM transactions WHERE user_id = $1 AND kind = 'bonus' ORDER BY id", [u.id]);
+  try {
+    assert.equal((await bc.checkChannel(u.id, tgId, first.id)).status, "paid");
+    const points = await pointsOf();
+    assert.equal((await del(s.cookie, first.id, {})).status, 200);
+
+    // The preview tells the admin it will be restored and how many will not be paid again.
+    const pre = await resolve(s.cookie, `@${ch.username}`);
+    assert.equal(pre.status, 200);
+    assert.equal(pre.body.existingId, null, "a deleted row is not a duplicate");
+    assert.equal(pre.body.deletedId, first.id);
+    assert.equal(pre.body.deletedClaims, 1);
+
+    const r = await create(s.cookie, { input: String(ch.id), title: "Qayta tiklangan", joinBonus: 3000, stayBonus: 0, mandatory: true, reason: "Hamkorlik qaytdi" });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    assert.equal(r.body.restored, true);
+    const item = r.body.item as Item;
+    assert.equal(item.id, first.id, "the same row, not a new one");
+    assert.deepEqual([item.title, item.joinBonus, item.stayBonus, item.active, (item as Item & { mandatory: boolean }).mandatory], ["Qayta tiklangan", 3000, 0, true, true]);
+    assert.equal(item.stats.joined, 1, "the old claim still counts");
+    assert.deepEqual((await channelRows()).map((x) => [x.id, x.deleted]), [[first.id, false]], "no second row");
+    const restore = await audits(s.admin.adminId, "bonus_channel.restore");
+    assert.equal(restore.length, 1);
+    assert.equal(restore[0]!.target_id, first.id);
+    assert.equal(restore[0]!.reason, "Hamkorlik qaytdi");
+    assert.equal((restore[0]!.before as { joinBonus: number; active: boolean }).joinBonus, 1000);
+    assert.equal((restore[0]!.before as { active: boolean }).active, false);
+    assert.match(String((restore[0]!.before as { deletedAt: string }).deletedAt), /^\d{4}-\d\d-\d\dT/);
+    assert.equal((restore[0]!.after as { joinBonus: number }).joinBonus, 3000);
+    assert.equal((restore[0]!.meta as { claims: number }).claims, 1);
+    assert.equal((await audits(s.admin.adminId, "bonus_channel.create")).length, 1, "no second create row");
+
+    // The user who claimed before: «already», no Bot API call, no second payment.
+    botCalls.length = 0;
+    assert.equal((await bc.checkChannel(u.id, tgId, item.id)).status, "already");
+    assert.equal(await pointsOf(), points, "not paid again");
+    assert.deepEqual((await ledgerOf()).map((x) => x.reference), [`channel:${first.id}:${u.id}:join`]);
+    assert.ok(!botCalls.some((c) => c.method === "getChatMember"));
+  } finally {
+    MEMBERS.delete(tgId);
+  }
+
+  // Now live again: a duplicate, named.
+  const dup = await create(s.cookie, { input: `@${ch.username}`, joinBonus: 500 });
+  assert.equal(dup.status, 409);
+  assert.equal(dup.body.code, "duplicate");
+  assert.equal(dup.body.error, "«Qayta tiklangan» kanali allaqachon qo'shilgan");
+  assert.equal((await audits(s.admin.adminId, "bonus_channel.restore")).length, 1);
+});
+
+test("username: the channel owner renamed it — PATCH with the new @name / t.me link keeps the row and its claims; another chat is 409 chat_mismatch (nothing written); clearing needs an invite link", { skip }, async () => {
+  await resetChannels();
+  const s = await session("owner");
+  const ch = freshChannel({ username: "eski_nom_kanal" });
+  const item = (await create(s.cookie, { input: `@${ch.username}`, joinBonus: 1000 })).body.item as Item;
+  const u = await mkUser();
+  await claim(u.id, item.id, { joinPaid: 1000 });
+  // The owner renames the channel: Telegram knows only the new name now.
+  CHATS.delete("@eski_nom_kanal");
+  addChat({ ...ch, username: "Yangi_Nom_Kanal" });
+
+  botCalls.length = 0;
+  const r = await patch(s.cookie, item.id, { username: "https://t.me/yangi_nom_kanal" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal((r.body.item as Item).username, "Yangi_Nom_Kanal", "Telegram's spelling is stored");
+  assert.equal((r.body.item as Item).id, item.id);
+  assert.equal((r.body.item as Item).stats.joined, 1, "claims continue on the same row");
+  assert.deepEqual(botCalls.map((c) => [c.method, c.body.chat_id]), [["getChat", "@yangi_nom_kanal"]]);
+  let ups = await audits(s.admin.adminId, "bonus_channel.update");
+  assert.deepEqual(ups.map((x) => [x.before, x.after]), [[{ username: "eski_nom_kanal" }, { username: "Yangi_Nom_Kanal" }]]);
+
+  // Another channel's name: refused before any write.
+  const stranger = freshChannel({ title: "Begona kanal" });
+  const bad = await patch(s.cookie, item.id, { username: `@${stranger.username}`, joinBonus: 5000 });
+  assert.equal(bad.status, 409);
+  assert.equal(bad.body.code, "chat_mismatch");
+  assert.match(String(bad.body.error), /^Bu boshqa kanal: «Begona kanal»/);
+  const row = (await channelRows())[0]!;
+  assert.equal(row.join_bonus, 1000, "nothing written");
+  assert.equal((await audits(s.admin.adminId, "bonus_channel.update")).length, 1, "nothing audited");
+  // Same name in another case: no change, no Bot API call.
+  botCalls.length = 0;
+  assert.equal((await patch(s.cookie, item.id, { username: "@yangi_nom_kanal" })).body.code, "state");
+  assert.deepEqual(botCalls, []);
+  // Junk / ids / invite links are 400 before Telegram; an unknown name is 400 chat_not_found.
+  for (const v of ["-1001234567890", "https://t.me/+AbCdEfGh12", "a b", 5]) assert.equal((await patch(s.cookie, item.id, { username: v })).body.code, "username", String(v));
+  assert.equal((await patch(s.cookie, item.id, { username: "@no_such_channel_here" })).body.code, "chat_not_found");
+
+  // Private: only with an invite link.
+  const noLink = await patch(s.cookie, item.id, { username: null });
+  assert.equal(noLink.status, 400);
+  assert.equal(noLink.body.code, "invite_needed");
+  const priv = await patch(s.cookie, item.id, { username: "", inviteLink: "https://t.me/+AbCdEfGh12" });
+  assert.equal(priv.status, 200, JSON.stringify(priv.body));
+  assert.deepEqual([(priv.body.item as Item).username, (priv.body.item as Item).inviteLink], [null, "https://t.me/+AbCdEfGh12"]);
+  ups = await audits(s.admin.adminId, "bonus_channel.update");
+  assert.equal(ups.length, 2);
+  assert.deepEqual([ups[1]!.before, ups[1]!.after], [{ username: "Yangi_Nom_Kanal", inviteLink: null }, { username: null, inviteLink: "https://t.me/+AbCdEfGh12" }]);
+});
+
+test("refresh («Telegramdan yangilash»): a changed username is stored + audited (title kept, Telegram's title returned); no change → no audit row; private without a link → warning", { skip }, async () => {
+  await resetChannels();
+  const s = await session("owner");
+  const ch = freshChannel({ username: "refresh_eski", title: "Telegramdagi nom" });
+  const item = (await create(s.cookie, { input: `@${ch.username}`, title: "Admin nomi", joinBonus: 1000 })).body.item as Item;
+
+  botCalls.length = 0;
+  const same = await refresh(s.cookie, item.id);
+  assert.equal(same.status, 200, JSON.stringify(same.body));
+  assert.deepEqual([same.body.changed, same.body.telegramTitle, same.body.warning], [false, "Telegramdagi nom", null]);
+  assert.deepEqual(botCalls.map((c) => [c.method, c.body.chat_id]), [["getChat", item.chatId]], "asked by chat id");
+  assert.equal((await audits(s.admin.adminId, "bonus_channel.refresh")).length, 0, "no change → no audit row");
+
+  addChat({ ...ch, username: "refresh_yangi", title: "Yangi Telegram nomi" });
+  const r = await refresh(s.cookie, item.id);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.changed, true);
+  assert.equal(r.body.telegramTitle, "Yangi Telegram nomi");
+  assert.equal((r.body.item as Item).username, "refresh_yangi");
+  assert.equal((r.body.item as Item).title, "Admin nomi", "the admin's title is not overwritten");
+  let a = await audits(s.admin.adminId, "bonus_channel.refresh");
+  assert.equal(a.length, 1);
+  assert.deepEqual([a[0]!.before, a[0]!.after, a[0]!.target_id], [{ username: "refresh_eski" }, { username: "refresh_yangi" }, item.id]);
+
+  // The channel went private: username null, and no invite link → the warning.
+  addChat({ ...ch, username: undefined });
+  const p = await refresh(s.cookie, item.id);
+  assert.equal(p.body.changed, true);
+  assert.equal((p.body.item as Item).username, null);
+  assert.match(String(p.body.warning), /taklif havolasi kiritilmagan/);
+  a = await audits(s.admin.adminId, "bonus_channel.refresh");
+  assert.deepEqual([a[1]!.before, a[1]!.after], [{ username: "refresh_yangi" }, { username: null }]);
+
+  telegramDown = { code: 502 };
+  try {
+    assert.equal((await refresh(s.cookie, item.id)).body.code, "telegram_unavailable");
+  } finally {
+    telegramDown = null;
+  }
+  assert.equal((await refresh(s.cookie, "900000000000")).status, 404);
 });
 
 test("atomicity: when the audit insert fails, the channel change rolls back", { skip }, async (t) => {
   await resetChannels();
   const s = await session("owner");
   const item = await seedChannel(s);
+  const gone = await seedChannel(s);
+  assert.equal((await del(s.cookie, gone.id, {})).status, 200);
   await query(`
     CREATE OR REPLACE FUNCTION k2_fail_audit() RETURNS trigger AS $$
     BEGIN RAISE EXCEPTION 'k2 test: audit write failed'; END $$ LANGUAGE plpgsql`);
   await query(
     `CREATE TRIGGER k2_fail_audit_trg BEFORE INSERT ON admin_audit_log FOR EACH ROW
-     WHEN (NEW.action IN ('bonus_channel.update', 'bonus_channel.create', 'bonus_channel.delete')) EXECUTE FUNCTION k2_fail_audit()`,
+     WHEN (NEW.action IN ('bonus_channel.update', 'bonus_channel.create', 'bonus_channel.delete', 'bonus_channel.refresh', 'bonus_channel.restore')) EXECUTE FUNCTION k2_fail_audit()`,
   );
   t.mock.method(console, "error", () => {});
   t.mock.method(console, "warn", () => {});
@@ -698,13 +915,25 @@ test("atomicity: when the audit insert fails, the channel change rolls back", { 
     const ch = freshChannel();
     assert.equal((await create(s.cookie, { input: `@${ch.username}`, joinBonus: 1000 })).status, 500);
     assert.equal((await del(s.cookie, item.id, {})).status, 500);
+    // Re-adding the deleted chat: the restore rolls back with its audit row.
+    assert.equal((await create(s.cookie, { input: `@${gone.username}`, joinBonus: 1000 })).status, 500);
+    // A username change found by «Telegramdan yangilash» rolls back with its audit row too.
+    addChat({ ...CHATS.get(item.chatId)!, username: "atomic_renamed" });
+    assert.equal((await refresh(s.cookie, item.id)).status, 500);
   } finally {
     await query("DROP TRIGGER k2_fail_audit_trg ON admin_audit_log");
     await query("DROP FUNCTION k2_fail_audit()");
   }
   const rows = await channelRows();
-  assert.equal(rows.length, 1, "neither the create nor the delete committed");
-  assert.equal(rows[0]!.join_bonus, 1000, "the update rolled back");
+  assert.equal(rows.length, 2, "the create did not commit");
+  const live = rows.find((r) => r.id === item.id)!;
+  assert.equal(live.deleted, false, "the soft delete rolled back");
+  assert.equal(live.active, true, "the soft delete rolled back");
+  assert.equal(live.join_bonus, 1000, "the update rolled back");
+  const dead = rows.find((r) => r.id === gone.id)!;
+  assert.equal(dead.deleted, true, "the restore rolled back");
+  assert.equal(dead.active, false, "the restore rolled back");
+  assert.equal((await query<{ username: string }>("SELECT username FROM bonus_channels WHERE id = $1", [item.id]))[0]!.username, item.username, "the refresh rolled back");
 });
 
 // ───────────────────────────── invite link (migration 042)
@@ -875,6 +1104,7 @@ test("permissions: viewer/finance read only (403 + one denied audit row per writ
       await create(s.cookie, { input: `@${ch.username}`, joinBonus: 1000 }),
       await patch(s.cookie, item.id, { joinBonus: 5 }),
       await del(s.cookie, item.id, {}),
+      await refresh(s.cookie, item.id),
     ];
     for (const w of writes) {
       assert.equal(w.status, 403, `${role}: ${JSON.stringify(w.body)}`);
@@ -883,7 +1113,7 @@ test("permissions: viewer/finance read only (403 + one denied audit row per writ
     const denied = await audits(s.admin.adminId, "auth.denied");
     assert.deepEqual(
       denied.map((d) => (d.meta as { permission: string; scope: string }).scope).sort(),
-      ["admin/bonus-channels/create", "admin/bonus-channels/delete", "admin/bonus-channels/update"],
+      ["admin/bonus-channels/create", "admin/bonus-channels/delete", "admin/bonus-channels/refresh", "admin/bonus-channels/update"],
     );
     for (const d of denied) assert.equal((d.meta as { permission: string }).permission, "bonus.edit");
   }

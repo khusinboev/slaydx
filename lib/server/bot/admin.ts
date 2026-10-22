@@ -34,6 +34,8 @@ import {
   parseSort,
   parseStayDays,
   parseTitle,
+  parseUsernameInput,
+  refreshBonusChannel,
   resolveChannel,
   updateBonusChannel,
   type BonusChannelItem,
@@ -162,6 +164,7 @@ const PERM: Record<Exclude<AdminCallback["kind"], "unknown">, Permission> = {
   chEdit: "bonus.edit",
   chLinkDrop: "bonus.edit",
   chSave: "bonus.edit",
+  chRefresh: "bonus.edit",
   payBonus: "settings.view",
   pbOther: "settings.edit",
   pbPick: "settings.edit",
@@ -169,7 +172,7 @@ const PERM: Record<Exclude<AdminCallback["kind"], "unknown">, Permission> = {
 };
 
 /** The confirmed changes: in 2FA mode they need a fresh bot step-up. */
-const CONFIRMS = new Set<AdminCallback["kind"]>(["bcSend", "bcStop", "chCreate", "chToggle", "chDelete", "chSave", "pbSet"]);
+const CONFIRMS = new Set<AdminCallback["kind"]>(["bcSend", "bcStop", "chCreate", "chToggle", "chDelete", "chSave", "chRefresh", "pbSet"]);
 
 const STEP_PERM = { bc_msg: "broadcasts.send", bc_btn: "broadcasts.send", ch_ref: "bonus.edit", ch_val: "bonus.edit", pb_val: "settings.edit", totp: "self" } as const;
 
@@ -661,14 +664,12 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
       }
       return undefined;
     }
-    /* Delete (owner 2026-10-09): the web's rule — pause the channel first; a channel somebody got a bonus from
-       is never deleted (the service refuses with 409 `has_claims`, the history stays). */
+    /* Delete = the web's soft delete (migration 051): any channel, active or with claims; the claims stay, so
+       re-connecting the same channel restores it without paying anyone twice. */
     case "chDeleteAsk":
     case "chDelete": {
-      const cur = (await listBonusChannels()).items.find((x) => x.id === c.id);
+      const cur = await channelById(c.id);
       if (!cur) return at(l, "toast.old");
-      if (cur.active) return at(l, "toast.chDeleteActive");
-      if (cur.stats.joined > 0) return at(l, "toast.chDeleteClaims", { n: cur.stats.joined });
       if (c.kind === "chDeleteAsk") {
         await show(channelDeleteAskScreen(l, cur));
         return undefined;
@@ -681,6 +682,27 @@ async function run(a: BotAdmin, c: Exclude<AdminCallback, { kind: "unknown" }>, 
         return undefined;
       }
       await show(channelsScreen(a, (await listBonusChannels()).items), at(l, "toast.chDeleted"));
+      return undefined;
+    }
+
+    /* «🔄 Telegramdan yangilash»: the stored username follows Telegram (the web's `refreshBonusChannel`). */
+    case "chRefresh": {
+      const cur = await channelById(c.id);
+      if (!cur) return at(l, "toast.old");
+      await clearState(chatId);
+      let r;
+      try {
+        r = await refreshBonusChannel(actorOf(a, updateId), c.id);
+      } catch (e) {
+        // 400 chat_not_found (bot removed), 404, 503 Telegram down: shown on the card, nothing changed.
+        if (!(e instanceof ApiError)) throw e;
+        const now = await channelById(c.id);
+        await show(now ? await cardScreen(a, now) : channelsScreen(a, (await listBonusChannels()).items), e.message);
+        return undefined;
+      }
+      const where = r.item.username ? `@${r.item.username}` : at(l, "ch.private");
+      const toast = r.changed ? at(l, "toast.chRefreshed", { v: where }) : at(l, "toast.chRefreshSame");
+      await show(await cardScreen(a, r.item), r.warning ? `${toast}\n${at(l, "ch.refreshNoLink")}` : toast);
       return undefined;
     }
 
@@ -748,7 +770,7 @@ async function createChannel(
         throw e;
       });
   }
-  await createBonusChannel(actor, {
+  const created = await createBonusChannel(actor, {
     input: d.chatId,
     joinBonus: p.joinBonus,
     stayBonus: p.stayBonus,
@@ -758,7 +780,8 @@ async function createChannel(
     reason: REASON.channel,
   });
   await clearState(chatId);
-  const toast = !d.username && !inviteLink ? `${at(a.lang, "toast.chCreated")}. ${at(a.lang, "ch.noInvite")}`.slice(0, 190) : at(a.lang, "toast.chCreated");
+  const done = at(a.lang, created.restored ? "toast.chRestored" : "toast.chCreated");
+  const toast = !d.username && !inviteLink ? `${done}. ${at(a.lang, "ch.noInvite")}`.slice(0, 190) : done;
   await show(channelsScreen(a, (await listBonusChannels()).items), toast);
 }
 
@@ -816,13 +839,17 @@ export function channelValueFromText(field: TypedField, raw: string | undefined,
     let value: string | number | null;
     if (field === "title") value = parseTitle(raw);
     else if (field === "inviteLink") value = parseInviteLink(raw);
+    // A syntax check only: the save (`updateBonusChannel`) asks Telegram that the name is THIS channel.
+    else if (field === "username") value = parseUsernameInput(raw);
     else {
       const n = wholeNumber(raw);
       if (n === null) return { problem: at(lang, "ch.badInt") };
       value =
         field === "joinBonus" ? parseAmount(n, "Obuna bonusi") : field === "stayBonus" ? parseAmount(n, "Qolish bonusi") : field === "stayDays" ? parseStayDays(n) : parseSort(n);
     }
-    if (value === null || value === cur[field]) return { problem: at(lang, "ch.same") };
+    if (value === null || value === cur[field] || (field === "username" && String(value).toLowerCase() === cur.username?.toLowerCase())) {
+      return { problem: at(lang, "ch.same") };
+    }
     if (field === "joinBonus" || field === "stayBonus") {
       const why = bonusRefusal(field === "joinBonus" ? Number(value) : cur.joinBonus, field === "stayBonus" ? Number(value) : cur.stayBonus, cur.mandatory);
       if (why) return { problem: why };
@@ -915,13 +942,21 @@ export async function handleAdminInput(m: AdminMessage, updateId: number): Promi
         if (!(e instanceof ApiError)) throw e;
         return reprompt(channelProblemScreen(l, at(l, "ch.bad", { why: e.message }))).then(() => true);
       }
+      // A soft-deleted channel is not «already connected»: connecting it again restores it (its claims stay).
       if (resolved.existingId) {
         await sendScreen(chatId, { text: `${tgEmoji("warn")} ${at(l, "ch.exists")}` });
         await show(channelsScreen(admin, (await listBonusChannels()).items));
         await clearState(chatId);
         return true;
       }
-      const d: ChannelDraft = { t: "ch", chatId: resolved.chatId, title: resolved.title, username: resolved.username, botAdmin: resolved.botAdmin };
+      const d: ChannelDraft = {
+        t: "ch",
+        chatId: resolved.chatId,
+        title: resolved.title,
+        username: resolved.username,
+        botAdmin: resolved.botAdmin,
+        ...(resolved.deletedId ? { restoreClaims: resolved.deletedClaims } : {}),
+      };
       await show(channelKindScreen(l, d));
       await writeState(chatId, admin.adminId, { step: null, draft: d });
       return true;

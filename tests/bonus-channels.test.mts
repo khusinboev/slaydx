@@ -30,6 +30,10 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *      a notice also on «already» → the same test (notices ≠ join payments);
  *  J3. the blocked checks removed from `recordChannelJoin` and `payJoin` → «chat_member join ignored: blocked …»;
  *  J4. `channelsAvailable` counts the stay bonus of a channel the user left → «bonusTasks totals».
+ *  D1–D4 (migration 051, soft delete): `AND ch.deleted_at IS NULL` dropped from bonusTasks (D1), from
+ *      checkChannel's read (D2), from recordChannelJoin's lookup (D3), from the sweep's due query (D4)
+ *      → «a soft-deleted channel is invisible to the user side». (The re-checks under lock in `payJoin`
+ *      and in the sweep's transaction sit behind those reads and are not separately mutated.)
  */
 
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
@@ -862,6 +866,48 @@ test("joinUrl: t.me/<username>, else the stored invite link of a private channel
   ]);
   assert.equal(bc.channelInviteLink("javascript:alert(1)"), null);
   assert.equal(bc.channelInviteLink("https://t.me/+short"), null);
+});
+
+/* ───────────────────────── Soft-deleted channels (migration 051) ───────────────────────── */
+
+test("a soft-deleted channel is invisible to the user side even with active = true: no task, checkChannel «inactive», chat_member join ignored, stay sweep never asks — MUTATSIYA D1–D4", { skip }, async () => {
+  const live = await newChannel({ title: "Tirik kanal", sort: -900 });
+  const gone = await newChannel({ title: "O‘chirilgan kanal", stay: 2000, sort: -901 });
+  // `active` is left TRUE on purpose: the `deleted_at` filters must hold on their own (delete sets both).
+  await query("UPDATE bonus_channels SET deleted_at = now() WHERE id = $1", [gone]);
+  const goneChat = await chatIdOf(gone);
+  const u = await newUser();
+  member = { [String(u.tg)]: "member" };
+  installFetch();
+
+  const tasks = await bc.bonusTasks(u.id, { botUsername: "slaydx_test_bot", appUrl: "https://slaydx.test" });
+  assert.ok(tasks.channels.some((c) => c.id === live), "the live channel is listed");
+  assert.ok(!tasks.channels.some((c) => c.id === gone), "D1: the deleted channel is not a task");
+
+  assert.deepEqual(await bc.checkChannel(u.id, u.tg, gone), { status: "inactive" }, "D2");
+  assert.equal(memberCalls(), 0, "no Bot API call for a deleted channel");
+  assert.equal(await bc.recordChannelJoin({ chat: { id: goneChat }, new_chat_member: { status: "member", user: { id: u.tg } } }), null, "D3");
+  assert.equal(await claim(u.id, gone), null, "no claim, no money");
+  assert.deepEqual(await ledger(u.id), []);
+
+  // A claim that would be due for the stay bonus: the sweep never even asks Telegram about it.
+  const w = await newUser();
+  await joinedAgo(w.id, gone, 30);
+  const asked: string[] = [];
+  await bc.staySweep(500, {
+    member: async (chatId) => {
+      asked.push(chatId);
+      return "member";
+    },
+    notify: async () => {},
+    sleep: async () => {},
+    configured: () => true,
+  });
+  assert.ok(!asked.includes(String(goneChat)), "D4: the sweep skips a deleted channel");
+  assert.equal((await claim(w.id, gone))!.stay_paid, null);
+  assert.deepEqual(await ledger(w.id), []);
+  await query("DELETE FROM bonus_channel_claims WHERE channel_id = ANY($1::bigint[])", [[live, gone]]);
+  await query("DELETE FROM bonus_channels WHERE id = ANY($1::bigint[])", [[live, gone]]);
 });
 
 /* ───────────────────────── Signup bonus ───────────────────────── */

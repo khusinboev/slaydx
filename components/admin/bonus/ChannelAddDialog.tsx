@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Search } from "lucide-react";
 import { Button, ConfirmDialog, toast } from "@/components/admin/ui";
 import { cn } from "@/lib/cn";
+import { fmtNumber } from "@/lib/admin-format";
 import { adminErrorMessage, isAbortError } from "@/lib/admin-api/core";
 import { createBonusChannel, resolveBonusChannel, type BonusChannel, type ResolvedChannel } from "@/lib/admin-api/bonus";
 import { AmountFields, FIELD } from "./AmountFields";
@@ -91,7 +92,7 @@ function Body({ existingCount, onClose, onCreated }: ChannelAddDialogProps) {
       title="Kanal qo'shish"
       description="Avval botni kanalga admin qilib qo'shing, keyin kanal manzilini kiriting."
       reason={{ required: false, label: "Sabab (ixtiyoriy)" }}
-      confirmLabel="Qo'shish"
+      confirmLabel={current?.deletedId ? "Qayta tiklash" : "Qo'shish"}
       confirmDisabled={!ready}
       onConfirm={async ({ reason }) => {
         if (!current || !amountsCheck.ok || !titleCheck.ok || !inviteCheck.ok) return;
@@ -103,7 +104,7 @@ function Body({ existingCount, onClose, onCreated }: ChannelAddDialogProps) {
           mandatory,
           ...(reason ? { reason } : {}),
         });
-        toast(`«${r.item.title}» qo'shildi`);
+        toast(r.restored ? `«${r.item.title}» qayta tiklandi — avval bonus olganlarga qayta to'lanmaydi` : `«${r.item.title}» qo'shildi`);
         if (r.warning) toast(r.warning, { tone: "error" });
         onCreated(r.item, { status: r.botAdmin, warning: r.warning });
       }}
@@ -150,7 +151,11 @@ function Body({ existingCount, onClose, onCreated }: ChannelAddDialogProps) {
           {current.warning ? <p className="text-badge-warning-text text-xs font-medium">{current.warning}</p> : null}
           {current.existingId ? (
             <p role="alert" className="text-destructive text-xs font-medium">
-              Bu kanal allaqachon qo&apos;shilgan.
+              {current.existingTitle ? `Bu kanal allaqachon qo'shilgan: «${current.existingTitle}».` : "Bu kanal allaqachon qo'shilgan."}
+            </p>
+          ) : current.deletedId ? (
+            <p data-restore className="text-badge-warning-text text-xs font-medium">
+              ♻️ Bu kanal avval o&apos;chirilgan — qayta tiklanadi, oldingi {fmtNumber(current.deletedClaims ?? 0)} ta a&apos;zo qo&apos;shilish bonusini qayta olmaydi.
             </p>
           ) : null}
         </div>

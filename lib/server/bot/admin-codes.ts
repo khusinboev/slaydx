@@ -23,8 +23,9 @@
  *                     (optional: n news, e extra; mandatory: m with a bonus, z without — C-Q2)
  *   a:cc:<n|e|m|z>    connect (confirmed)       a:ct:<id>  toggle active (old inline buttons; the list opens the card now)
  *   a:cv:<id>         channel card (read-only for roles without bonus.edit)
- *   a:ce:<f>:<id>     edit a field of the card: f = t title, l link, j join bonus, s stay bonus, d stay days, o sort
- *                     (ask for the value), m mandatory / a active (confirm the flip)
+ *   a:ce:<f>:<id>     edit a field of the card: f = t title, u username, l link, j join bonus, s stay bonus, d stay days,
+ *                     o sort (ask for the value), m mandatory / a active (confirm the flip)
+ *   a:cr:<id>         «Telegramdan yangilash»: the stored username follows Telegram (`refreshBonusChannel`)
  *   a:cu:<id>         remove the invite link (confirm)     a:cs:<id>  save the pending field (confirmed)
  *   a:p               payment bonus card        a:po       «Boshqa»: ask for a typed percent
  *   a:pv:<0..50>      percent picked → confirm  a:pk:<0..50>  set it (confirmed)
@@ -51,6 +52,7 @@ export function typeFits(type: ChannelType, mandatory: boolean): boolean {
 /** The editable fields of the channel card = the keys of `updateBonusChannel`; the letter is the code's field part. */
 export const CHANNEL_FIELD_CODES = {
   title: "t",
+  username: "u",
   inviteLink: "l",
   joinBonus: "j",
   stayBonus: "s",
@@ -61,7 +63,7 @@ export const CHANNEL_FIELD_CODES = {
 } as const;
 export type ChannelField = keyof typeof CHANNEL_FIELD_CODES;
 /** The fields an admin types a value for (the others are flips: mandatory / active). */
-export const TYPED_FIELDS = ["title", "inviteLink", "joinBonus", "stayBonus", "stayDays", "sort"] as const satisfies readonly ChannelField[];
+export const TYPED_FIELDS = ["title", "username", "inviteLink", "joinBonus", "stayBonus", "stayDays", "sort"] as const satisfies readonly ChannelField[];
 export type TypedField = (typeof TYPED_FIELDS)[number];
 export const isTypedField = (f: ChannelField): f is TypedField => (TYPED_FIELDS as readonly string[]).includes(f);
 const FIELD_BY_CODE = new Map<string, ChannelField>((Object.entries(CHANNEL_FIELD_CODES) as [ChannelField, string][]).map(([f, c]) => [c, f]));
@@ -99,6 +101,7 @@ export const acb = {
   chEdit: (f: ChannelField, id: string) => `a:ce:${CHANNEL_FIELD_CODES[f]}:${id}`,
   chLinkDrop: (id: string) => `a:cu:${id}`,
   chSave: (id: string) => `a:cs:${id}`,
+  chRefresh: (id: string) => `a:cr:${id}`,
   payBonus: () => "a:p",
   pbOther: () => "a:po",
   pbPick: (p: number) => `a:pv:${p}`,
@@ -138,6 +141,7 @@ export type AdminCallback =
   | { kind: "chEdit"; field: ChannelField; id: string }
   | { kind: "chLinkDrop"; id: string }
   | { kind: "chSave"; id: string }
+  | { kind: "chRefresh"; id: string }
   | { kind: "payBonus" }
   | { kind: "pbOther" }
   | { kind: "pbPick"; percent: number }
@@ -232,6 +236,8 @@ export function parseAdminCallback(data: string | undefined | null): AdminCallba
       return ID.test(c) ? { kind: "chLinkDrop", id: c } : { kind: "unknown" };
     case "cs":
       return ID.test(c) ? { kind: "chSave", id: c } : { kind: "unknown" };
+    case "cr":
+      return ID.test(c) ? { kind: "chRefresh", id: c } : { kind: "unknown" };
     case "pv":
       return isPercentCode(c) ? { kind: "pbPick", percent: Number(c) } : { kind: "unknown" };
     case "pk":

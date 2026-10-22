@@ -171,7 +171,7 @@ after(async () => {
 });
 
 test("codes: every admin code parses back and fits 64 bytes; i18n filled in uz/ru/en", () => {
-  for (const d of [acb.panel(), acb.stats(), acb.bcPick("new"), acb.bcSend(123456789), acb.bcStop("999999999999999999"), acb.chCreate("e"), acb.chToggle("12"), acb.chDeleteAsk("12"), acb.chDelete("999999999999999999"), acb.chView("12"), acb.chEdit("title", "12"), acb.chEdit("active", "999999999999999999"), acb.chLinkDrop("12"), acb.chSave("999999999999999999"), acb.payBonus(), acb.pbOther(), acb.pbPick(0), acb.pbSet(50)]) {
+  for (const d of [acb.panel(), acb.stats(), acb.bcPick("new"), acb.bcSend(123456789), acb.bcStop("999999999999999999"), acb.chCreate("e"), acb.chToggle("12"), acb.chDeleteAsk("12"), acb.chDelete("999999999999999999"), acb.chView("12"), acb.chEdit("title", "12"), acb.chEdit("active", "999999999999999999"), acb.chLinkDrop("12"), acb.chSave("999999999999999999"), acb.chRefresh("999999999999999999"), acb.chEdit("username", "999999999999999999"), acb.payBonus(), acb.pbOther(), acb.pbPick(0), acb.pbSet(50)]) {
     assert.notEqual(parseAdminCallback(d).kind, "unknown", d);
     assert.ok(Buffer.byteLength(d) <= 64);
   }
@@ -179,7 +179,9 @@ test("codes: every admin code parses back and fits 64 bytes; i18n filled in uz/r
   assert.deepEqual(parseAdminCallback("a:pv:0"), { kind: "pbPick", percent: 0 });
   assert.deepEqual(parseAdminCallback("a:ce:o:77"), { kind: "chEdit", field: "sort", id: "77" });
   assert.deepEqual(parseAdminCallback("a:cv:5"), { kind: "chView", id: "5" });
-  for (const bad of ["a:ce:x:12", "a:ce:t:0", "a:ce:t", "a:ce:t:12:3", "a:ce:constructor:12", "a:cv:0", "a:cs:", "a:cu:1x", "a:cd:1:2:3"]) assert.equal(parseAdminCallback(bad).kind, "unknown", bad);
+  assert.deepEqual(parseAdminCallback("a:ce:u:77"), { kind: "chEdit", field: "username", id: "77" });
+  assert.deepEqual(parseAdminCallback("a:cr:9"), { kind: "chRefresh", id: "9" });
+  for (const bad of ["a:ce:x:12", "a:ce:t:0", "a:ce:t", "a:ce:t:12:3", "a:ce:constructor:12", "a:cv:0", "a:cs:", "a:cu:1x", "a:cd:1:2:3", "a:cr:0", "a:cr:", "a:cr:1:2"]) assert.equal(parseAdminCallback(bad).kind, "unknown", bad);
   // MUTATION: the code bound 50 → 99 lets a forged `a:pk:51` reach the service (it would still refuse with 400).
   for (const bad of ["a:bs:-1", "a:bu:vip", "a:ct:0x1", "a:bk:1:2", "a", "a:pk:51", "a:pk:-1", "a:pk:05", "a:pk:1.5", "a:pv:100", "a:pk:"]) {
     assert.equal(parseAdminCallback(bad).kind, "unknown", bad);
@@ -805,7 +807,7 @@ test("Kanal ulash: two channels with the SAME title get different labels and eac
   await tg.handleUpdate(textUpdate(a.tg, l1));
   assert.deepEqual(
     (await offered(a.tg)).filter((c) => c.startsWith("a:ce:")),
-    [acb.chEdit("title", ids[1]!), acb.chEdit("inviteLink", ids[1]!), acb.chEdit("joinBonus", ids[1]!), acb.chEdit("stayBonus", ids[1]!), acb.chEdit("stayDays", ids[1]!), acb.chEdit("sort", ids[1]!), acb.chEdit("mandatory", ids[1]!), acb.chEdit("active", ids[1]!)],
+    [acb.chEdit("title", ids[1]!), acb.chEdit("inviteLink", ids[1]!), acb.chEdit("username", ids[1]!), acb.chEdit("joinBonus", ids[1]!), acb.chEdit("stayBonus", ids[1]!), acb.chEdit("stayDays", ids[1]!), acb.chEdit("sort", ids[1]!), acb.chEdit("mandatory", ids[1]!), acb.chEdit("active", ids[1]!)],
     "the tapped row's card, not the other one's",
   );
   const rows = await query<{ id: string; active: boolean }>("SELECT id::text AS id, active FROM bonus_channels WHERE id = ANY($1::bigint[]) ORDER BY id", [ids]);
@@ -813,61 +815,169 @@ test("Kanal ulash: two channels with the SAME title get different labels and eac
   await query("UPDATE bonus_channels SET active = false WHERE id = ANY($1::bigint[])", [ids]);
 });
 
-test("Kanal o‘chirish: «🗑 O‘chirish» on the CARD only for a PAUSED channel without bonus claims; confirm → deleted + audited; active / claimed / viewer refused (owner 2026-10-09)", { skip }, async () => {
+test("Kanal o‘chirish: «🗑 O‘chirish» on EVERY card (active, with claims); confirm → soft-deleted + audited, claims kept, gone from the list; a second tap is stale; viewer refused (owner 2026-10-22) — MUTATSIYA (bot delete)", { skip }, async () => {
   const a = await newAdmin("owner");
   const mk = async (title: string, active: boolean) =>
     (await queryOne<{ id: string }>(
       `INSERT INTO bonus_channels (chat_id, title, join_bonus, stay_bonus, stay_days, sort, active) VALUES ($1, $2, 1000, 0, 7, -200, $3) RETURNING id::text AS id`,
       [-1_008_000_000_000 - randomInt(0, 999_999_999), title, active],
     ))!.id;
-  const live = await mk("Faol kanal", true);
-  const claimed = await mk("Bonusli kanal", false);
-  const free = await mk("Bo‘sh kanal", false);
+  const claimed = await mk("Bonusli kanal", true);
+  const paused = await mk("To‘xtatilgan kanal", false);
   const u = await newUser("Claimer");
   await query("INSERT INTO bonus_channel_claims (user_id, channel_id, join_paid) VALUES ($1, $2, 1000)", [u.id, claimed]);
 
   installFetch();
   await tg.handleUpdate(textUpdate(a.tg, "🔔 Kanal ulash"));
-  assert.ok(!(await offered(a.tg)).some((c) => c.startsWith("a:cx:")), "the list has no separate «🗑» rows any more");
-  // MUTATION: offering «🗑» for an active or a claimed channel.
-  for (const [id, want, why] of [[free, true, "paused + no claims → «🗑»"], [live, false, "active → no «🗑» (pause first)"], [claimed, false, "claims → no «🗑»"]] as const) {
+  assert.ok(!(await offered(a.tg)).some((c) => c.startsWith("a:cx:")), "the list has no separate «🗑» rows");
+  // MUTATION: the old rule (paused and without claims only) hides «🗑» on the active claimed channel.
+  for (const id of [claimed, paused]) {
     installFetch();
     await press(a, acb.chView(id));
-    assert.equal((await offered(a.tg)).includes(acb.chDeleteAsk(id)), want, why);
+    assert.equal(await labelFor(a.tg, acb.chDeleteAsk(id)), "🗑 O‘chirish");
     installFetch();
     await press(a, acb.channels());
   }
   installFetch();
-  await press(a, acb.chView(free));
-  assert.equal(await labelFor(a.tg, acb.chDeleteAsk(free)), "🗑 O‘chirish");
-
+  await press(a, acb.chView(claimed));
   installFetch();
-  await press(a, acb.chDeleteAsk(free));
-  assert.match(texts().at(-1)!, /Bo‘sh kanal<\/b> butunlay o‘chirilsinmi/);
-  assert.deepEqual(await offered(a.tg), [acb.chDelete(free), acb.chView(free)], "«Orqaga» returns to the card");
+  await press(a, acb.chDeleteAsk(claimed));
+  const ask = texts().at(-1)!;
+  assert.match(ask, /Bonusli kanal<\/b> o‘chirilsinmi\?/);
+  assert.match(ask, /botdan va majburiy obuna tekshiruvidan yo‘qoladi/);
+  assert.match(ask, /Tarix va berilgan bonuslar saqlanadi/);
+  assert.match(ask, /qayta to‘lanmaydi/);
+  assert.deepEqual(await offered(a.tg), [acb.chDelete(claimed), acb.chView(claimed)], "«Orqaga» returns to the card");
   installFetch();
-  await press(a, acb.chDelete(free));
+  await press(a, acb.chDelete(claimed));
   assert.match(texts().at(-1)!, /^🗑 Kanal o‘chirildi/);
-  assert.equal(await queryOne("SELECT 1 FROM bonus_channels WHERE id = $1", [free]), null, "deleted");
+  const row = await queryOne<{ deleted: boolean; active: boolean }>("SELECT deleted_at IS NOT NULL AS deleted, active FROM bonus_channels WHERE id = $1", [claimed]);
+  assert.deepEqual(row, { deleted: true, active: false }, "soft-deleted, the row stays");
+  assert.equal((await query("SELECT 1 FROM bonus_channel_claims WHERE channel_id = $1", [claimed])).length, 1, "the claim stays");
+  assert.ok(!(await offered(a.tg)).includes(acb.chView(claimed)), "gone from the list");
   const rows = await audit(a.adminId, "bonus_channel.delete");
   assert.equal(rows.length, 1);
-  assert.equal(rows[0]!.target_id, free);
+  assert.equal(rows[0]!.target_id, claimed);
 
-  // Forged / stale taps: the same rules on the server side.
-  installFetch();
-  await tg.handleUpdate(cbUpdate(a.tg, acb.chDelete(live)));
-  assert.match([...toasts(), ...texts()].join(" "), /Avval kanalni to‘xtating/);
-  installFetch();
-  await tg.handleUpdate(cbUpdate(a.tg, acb.chDelete(claimed)));
-  assert.match([...toasts(), ...texts()].join(" "), /1 kishi bonus olgan — o‘chirib bo‘lmaydi/);
-  assert.ok(await queryOne("SELECT 1 FROM bonus_channels WHERE id = $1", [live]));
-  assert.ok(await queryOne("SELECT 1 FROM bonus_channels WHERE id = $1", [claimed]));
+  // A stale tap on the deleted channel (its card, its delete) is just «eskirgan»: nothing more is written.
+  for (const code of [acb.chDelete(claimed), acb.chView(claimed), acb.chRefresh(claimed), acb.chEdit("title", claimed)]) {
+    installFetch();
+    await tg.handleUpdate(cbUpdate(a.tg, code));
+    assert.match([...toasts(), ...texts()].join(" "), /eskirgan/i, code);
+  }
+  assert.equal((await audit(a.adminId, "bonus_channel.delete")).length, 1);
 
   const v = await newAdmin("viewer");
   installFetch();
-  await tg.handleUpdate(cbUpdate(v.tg, acb.chDelete(claimed)));
+  await tg.handleUpdate(cbUpdate(v.tg, acb.chDelete(paused)));
   assert.deepEqual(toasts(), ["Ruxsat yo‘q"]);
-  await query("DELETE FROM bonus_channels WHERE id = ANY($1::bigint[])", [[live, claimed]]);
+  assert.equal((await queryOne<{ d: boolean }>("SELECT deleted_at IS NOT NULL AS d FROM bonus_channels WHERE id = $1", [paused]))!.d, false);
+  await query("DELETE FROM bonus_channel_claims WHERE channel_id = $1", [claimed]);
+  await query("DELETE FROM bonus_channels WHERE id = ANY($1::bigint[])", [[claimed, paused]]);
+});
+
+test("Kanal kartasi: «✏️ Username» (renamed channel, same chat → saved; another chat → refused) and «🔄 Telegramdan yangilash» go through the web services; re-connecting a deleted channel restores it with the note", { skip }, async () => {
+  const a = await newAdmin("owner");
+  const chatId = -1_011_000_000_000 - randomInt(0, 999_999_999);
+  const old = `eski_${randomInt(0, 99_999)}`;
+  const fresh = `yangi_${randomInt(0, 99_999)}`;
+  const id = (await queryOne<{ id: string }>(
+    `INSERT INTO bonus_channels (chat_id, username, title, join_bonus, stay_bonus, stay_days, sort) VALUES ($1, $2, 'Nomi o‘zgargan', 1000, 0, 7, -400) RETURNING id::text AS id`,
+    [chatId, old],
+  ))!.id;
+  const u = await newUser("Claimer");
+  await query("INSERT INTO bonus_channel_claims (user_id, channel_id, join_paid) VALUES ($1, $2, 1000)", [u.id, id]);
+  // The owner renamed the channel: Telegram knows it by the new name only.
+  const chat = { id: chatId, type: "channel", title: "Telegramdagi nom", username: fresh };
+  chats[String(chatId)] = chat;
+  chats[`@${fresh}`] = chat;
+  const other = -1_012_000_000_000 - randomInt(0, 999_999_999);
+  chats["@begona_kanal"] = { id: other, type: "channel", title: "Begona", username: "begona_kanal" };
+
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "🔔 Kanal ulash"));
+  installFetch();
+  await press(a, acb.chView(id));
+  const card = sends()[0]!.body;
+  assert.deepEqual(labels(card).slice(0, 4), ["✏️ Nomi", "🔗 Havola", "✏️ Username", "🔄 Telegramdan yangilash"]);
+
+  // ── «✏️ Username»: another channel's name is refused at the save (the service), nothing written.
+  installFetch();
+  await press(a, acb.chEdit("username", id));
+  assert.equal(await stepOf(a.tg), "ch_val");
+  assert.match(lastText(), new RegExp(`Hozir: @${old}`));
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "https://t.me/+AbCdEfGh12345"));
+  assert.match(lastText(), /Username @nom yoki t\.me\/nom/);
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, `@${old.toUpperCase()}`));
+  assert.match(lastText(), /o‘zgarmadi/);
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "@begona_kanal"));
+  assert.match(lastText(), /<b>Username<\/b>: @eski_\d+ → <b>@begona_kanal<\/b>/);
+  installFetch();
+  await press(a, acb.chSave(id));
+  assert.match(lastText(), /^Bu boshqa kanal: «Begona»/);
+  assert.equal((await queryOne<{ username: string }>("SELECT username FROM bonus_channels WHERE id = $1", [id]))!.username, old);
+  assert.equal((await audit(a.adminId, "bonus_channel.update")).length, 0, "nothing audited");
+
+  // The real new name: saved on the SAME row, claims continue.
+  installFetch();
+  await press(a, acb.chEdit("username", id));
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, `t.me/${fresh}`));
+  installFetch();
+  await press(a, acb.chSave(id));
+  assert.match(lastText(), /^✅ Saqlandi\n\n/);
+  assert.match(lastText(), new RegExp(`@${fresh} · ID`));
+  assert.equal((await queryOne<{ username: string }>("SELECT username FROM bonus_channels WHERE id = $1", [id]))!.username, fresh);
+  assert.equal((await query("SELECT 1 FROM bonus_channel_claims WHERE channel_id = $1", [id])).length, 1);
+  const ups = await audit(a.adminId, "bonus_channel.update");
+  assert.equal(ups.length, 1);
+  assert.deepEqual(ups[0]!.after, { username: fresh });
+
+  // ── «🔄 Telegramdan yangilash»: unchanged → toast, no audit row; the channel went private → null + the warning.
+  installFetch();
+  await press(a, acb.chRefresh(id));
+  assert.match(lastText(), /^🔄 Telegramdagi ma’lumot bilan bir xil/);
+  assert.ok(calls.some((c) => c.method === "getChat" && c.body.chat_id === String(chatId)), "asked Telegram by chat id");
+  assert.equal((await audit(a.adminId, "bonus_channel.refresh")).length, 0);
+  chats[String(chatId)] = { id: chatId, type: "channel", title: "Telegramdagi nom" };
+  installFetch();
+  await press(a, acb.chRefresh(id));
+  assert.match(lastText(), /^🔄 Username yangilandi: yopiq kanal\n⚠️ Kanalda endi ommaviy username yo‘q/);
+  assert.equal((await queryOne<{ username: string | null }>("SELECT username FROM bonus_channels WHERE id = $1", [id]))!.username, null);
+  const refreshed = await audit(a.adminId, "bonus_channel.refresh");
+  assert.equal(refreshed.length, 1);
+  assert.deepEqual(refreshed[0]!.after, { username: null });
+  assert.equal(refreshed[0]!.user_agent, "telegram-bot");
+
+  // ── delete, then connect the same channel again → the note, then restored (same row, claims kept).
+  installFetch();
+  await press(a, acb.chDeleteAsk(id));
+  installFetch();
+  await press(a, acb.chDelete(id));
+  installFetch();
+  await press(a, acb.chConnect());
+  installFetch();
+  await tg.handleUpdate(textUpdate(a.tg, "post", { forward_origin: { type: "channel", chat: { id: chatId, type: "channel", title: "x" }, message_id: 5 } }));
+  assert.match(lastText(), /♻️ Bu kanal avval o‘chirilgan — qayta tiklanadi\. Oldingi 1 ta a’zo qo‘shilish bonusini qayta olmaydi\./);
+  installFetch();
+  await press(a, acb.chKind("o"));
+  installFetch();
+  await press(a, acb.chType("n"));
+  installFetch();
+  await press(a, acb.chCreate("n"));
+  assert.match(lastText(), /^♻️ Kanal qayta tiklandi/);
+  const back = await queryOne<{ id: string; deleted: boolean; active: boolean }>(
+    "SELECT id::text AS id, deleted_at IS NOT NULL AS deleted, active FROM bonus_channels WHERE chat_id = $1",
+    [chatId],
+  );
+  assert.deepEqual(back, { id, deleted: false, active: true });
+  assert.equal((await audit(a.adminId, "bonus_channel.restore")).length, 1);
+  assert.equal((await query("SELECT 1 FROM bonus_channel_claims WHERE channel_id = $1", [id])).length, 1);
+  await query("DELETE FROM bonus_channel_claims WHERE channel_id = $1", [id]);
+  await query("DELETE FROM bonus_channels WHERE id = $1", [id]);
 });
 
 /* ───────────── Channel card: settings editable from the bot (owner 2026-10-09) ───────────── */
@@ -913,8 +1023,21 @@ test("Kanal kartasi: a list row opens the card; every field is edited end to end
   assert.match(t, /0 ta bonus olgan/);
   assert.match(t, /✅ Bot kanalda admin\./);
   assert.ok(calls.some((c) => c.method === "getChatMember"), "the bot's admin status is read for the card");
-  assert.deepEqual(labels(card), ["✏️ Nomi", "🔗 Havola", "💰 Obuna bonusi", "🎁 Qolish bonusi", "📅 Qolish kunlari", "↕️ Tartib", "🔒 Majburiy qilish", "⏸ To‘xtatish", "⬅️ Orqaga"]);
-  assert.ok(!(await offered(a.tg)).includes(acb.chDeleteAsk(id)), "an active channel has no «🗑»");
+  assert.deepEqual(labels(card), [
+    "✏️ Nomi",
+    "🔗 Havola",
+    "✏️ Username",
+    "🔄 Telegramdan yangilash",
+    "💰 Obuna bonusi",
+    "🎁 Qolish bonusi",
+    "📅 Qolish kunlari",
+    "↕️ Tartib",
+    "🔒 Majburiy qilish",
+    "⏸ To‘xtatish",
+    "🗑 O‘chirish",
+    "⬅️ Orqaga",
+  ]);
+  assert.ok((await offered(a.tg)).includes(acb.chDeleteAsk(id)), "an active channel can be (soft-)deleted too");
   assert.equal((await channelRow(id))!.title, "Karta kanali", "opening the card changes nothing");
 
   /** Asks for `field`, then types each of `bad` (each re-asked, still waiting), then the good value → the confirm screen text. */
@@ -1038,7 +1161,7 @@ test("Kanal kartasi: a list row opens the card; every field is edited end to end
   assert.match(await save(), /Holat: <b>⏸ To‘xtatilgan<\/b>/);
   assert.equal((await channelRow(id))!.active, false);
   assert.equal(await labelFor(a.tg, acb.chEdit("active", id)), "✅ Yoqish");
-  assert.ok((await offered(a.tg)).includes(acb.chDeleteAsk(id)), "paused + no claims → «🗑»");
+  assert.ok((await offered(a.tg)).includes(acb.chDeleteAsk(id)), "paused → «🗑» as well");
   ups = await channelUpdates(a.adminId);
   assert.deepEqual([ups[8]!.before, ups[8]!.after], [{ active: true }, { active: false }]);
   assert.equal(ups.length, 9, "exactly one audit row per saved field");
@@ -1183,7 +1306,7 @@ test("Kanal kartasi: a viewer sees the card read-only; forged edit codes are ref
   assert.deepEqual(await offered(v.tg), [acb.channels()], "read-only: only «Orqaga»");
   assert.deepEqual(labels(sends()[0]!.body), ["⬅️ Orqaga"]);
   // Forged / old codes: every edit is refused with «Ruxsat yo‘q» and one auth.denied row each.
-  const forged = [acb.chEdit("title", id), acb.chEdit("active", id), acb.chEdit("mandatory", id), acb.chLinkDrop(id), acb.chSave(id), acb.chDeleteAsk(id), acb.chDelete(id), acb.chToggle(id)];
+  const forged = [acb.chEdit("title", id), acb.chEdit("active", id), acb.chEdit("mandatory", id), acb.chLinkDrop(id), acb.chSave(id), acb.chDeleteAsk(id), acb.chDelete(id), acb.chToggle(id), acb.chEdit("username", id), acb.chRefresh(id)];
   for (const code of forged) {
     installFetch();
     await tg.handleUpdate(cbUpdate(v.tg, code));

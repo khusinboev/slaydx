@@ -37,7 +37,6 @@ export function ChannelRow({ item, bot, canEdit, toggling, onToggle, onEdit, onD
   // Re-checked before it becomes an href: a row from the API is never trusted blindly.
   const invite = inviteHref(item.inviteLink);
   const s = item.stats;
-  const hasClaims = s.joined > 0;
   return (
     <li data-channel={item.id} className="flex flex-col gap-3 border-t px-4 py-4 first:border-t-0 lg:grid lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.3fr)_auto] lg:items-start lg:gap-5">
       <div className="flex min-w-0 flex-col gap-1">
@@ -152,8 +151,6 @@ export function ChannelRow({ item, bot, canEdit, toggling, onToggle, onEdit, onD
               <Button
                 variant="dangerOutline"
                 onClick={() => onDelete(item)}
-                disabled={hasClaims}
-                title={hasClaims ? "Bonus olganlar bor — o'chirib bo'lmaydi, faolsizlantiring" : undefined}
                 icon={<Trash2 className="size-3.5" aria-hidden="true" />}
                 aria-label={`${item.title}: o'chirish`}
               >

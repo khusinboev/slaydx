@@ -49,7 +49,13 @@ export type ResolvedChannel = {
   type: "channel" | "supergroup";
   botAdmin: BotAdminStatus;
   warning: string | null;
+  /** A LIVE channel with this chat id (saving is a 409 duplicate). */
   existingId: string | null;
+  existingTitle: string | null;
+  /** A soft-deleted channel with this chat id: saving restores it (same row, same claims). */
+  deletedId: string | null;
+  /** Users who already claimed it — they are not paid again after the restore. */
+  deletedClaims: number;
 };
 
 export type BonusChannelCreate = {
@@ -63,8 +69,21 @@ export type BonusChannelCreate = {
   reason?: string;
 };
 
-export type BonusChannelPatch = Partial<Pick<BonusChannel, "title" | "inviteLink" | "joinBonus" | "stayBonus" | "stayDays" | "active" | "mandatory" | "sort">> & {
+/** `username`: the channel's new `@name` (verified by the server to be the same chat), `null` = a private channel. */
+export type BonusChannelPatch = Partial<
+  Pick<BonusChannel, "title" | "username" | "inviteLink" | "joinBonus" | "stayBonus" | "stayDays" | "active" | "mandatory" | "sort">
+> & {
   reason?: string;
+};
+
+export type BonusChannelRefresh = {
+  item: BonusChannel;
+  /** The stored username changed (and was audited). */
+  changed: boolean;
+  /** Telegram's current title (shown only; the admin's title is kept). */
+  telegramTitle: string;
+  /** The channel is private now and has no invite link. */
+  warning: string | null;
 };
 
 const BASE = "/api/admin/bonus-channels";
@@ -82,7 +101,7 @@ export function resolveBonusChannel(q: string, opts: AdminCallOptions = {}): Pro
 export function createBonusChannel(
   body: BonusChannelCreate,
   opts: AdminCallOptions = {},
-): Promise<{ item: BonusChannel; botAdmin: BotAdminStatus; warning: string | null }> {
+): Promise<{ item: BonusChannel; botAdmin: BotAdminStatus; warning: string | null; restored: boolean }> {
   return adminSend("POST", BASE, body, opts);
 }
 
@@ -92,6 +111,11 @@ export function updateBonusChannel(id: string, patch: BonusChannelPatch, opts: A
 
 export function deleteBonusChannel(id: string, reason: string, opts: AdminCallOptions = {}): Promise<{ id: string; deleted: true }> {
   return adminSend<{ id: string; deleted: true }>("DELETE", pathOf(id), reason ? { reason } : {}, opts);
+}
+
+/** «Telegramdan yangilash»: the stored username follows Telegram's current one (audited only when it changed). */
+export function refreshBonusChannel(id: string, opts: AdminCallOptions = {}): Promise<BonusChannelRefresh> {
+  return adminSend<BonusChannelRefresh>("POST", `${pathOf(id)}/refresh`, {}, opts);
 }
 
 /** «Havola yaratish»: a new Telegram invite link for `input` (`@name` / `-100…`); stores nothing. */

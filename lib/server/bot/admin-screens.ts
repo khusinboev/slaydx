@@ -353,6 +353,8 @@ function fieldValueText(lang: Lang, field: ChannelField, v: FieldValue): string 
   switch (field) {
     case "title":
       return esc(clip(String(v ?? ""), 60));
+    case "username":
+      return v ? `@${esc(String(v))}` : at(lang, "ch.private");
     case "inviteLink":
       return v ? esc(String(v)) : at(lang, "ch.none");
     case "joinBonus":
@@ -374,7 +376,8 @@ export const channelFieldValue = (c: BonusChannelItem, field: ChannelField): Fie
 
 /**
  * The channel card (owner 2026-10-09): everything the web's edit dialog edits, and the buttons that edit it (roles
- * with bonus.edit; «🗑» only for a PAUSED channel nobody got a bonus from — the web's rule). Others see it read-only.
+ * with bonus.edit). «✏️ Username» / «🔄 Telegramdan yangilash» follow a channel renamed by its owner; «🗑» is a soft
+ * delete (migration 051), offered for every channel — claims are kept. Others see it read-only.
  */
 export function channelCardScreen(a: BotAdmin, c: BonusChannelItem, botAdmin?: BotAdminStatus): AdminScreen {
   const l = a.lang;
@@ -394,15 +397,15 @@ export function channelCardScreen(a: BotAdmin, c: BonusChannelItem, botAdmin?: B
   ];
   if (botAdmin) lines.push("", botAdmin === "admin" ? at(l, "ch.botAdmin") : botAdmin === "not_admin" ? at(l, "ch.botNotAdmin") : at(l, "ch.botUnknown"));
   lines.push("", edit ? at(l, "ch.cardHint") : at(l, "ch.viewOnly"));
-  const canDelete = !c.active && c.stats.joined === 0;
   const rows: (KeyDef | false)[][] = edit
     ? [
         [key("edit", at(l, "ch.btn.title"), acb.chEdit("title", c.id)), key("link", at(l, "ch.btn.inviteLink"), acb.chEdit("inviteLink", c.id))],
+        [key("edit", at(l, "ch.btn.username"), acb.chEdit("username", c.id)), key(null, `🔄 ${at(l, "ch.btn.refresh")}`, acb.chRefresh(c.id))],
         [key("wallet", at(l, "ch.btn.joinBonus"), acb.chEdit("joinBonus", c.id)), key("gift", at(l, "ch.btn.stayBonus"), acb.chEdit("stayBonus", c.id))],
         [key(null, `📅 ${at(l, "ch.btn.stayDays")}`, acb.chEdit("stayDays", c.id)), key(null, `↕️ ${at(l, "ch.btn.sort")}`, acb.chEdit("sort", c.id))],
         [c.mandatory ? key("plus", at(l, "ch.btn.makeOptional"), acb.chEdit("mandatory", c.id)) : key("lock", at(l, "ch.btn.makeMandatory"), acb.chEdit("mandatory", c.id))],
         [c.active ? key(null, `⏸ ${at(l, "ch.btn.pause")}`, acb.chEdit("active", c.id)) : key("save", at(l, "ch.btn.resume"), acb.chEdit("active", c.id), "success")],
-        [canDelete && key(null, `🗑 ${at(l, "ch.btn.delete")}`, acb.chDeleteAsk(c.id), "danger")],
+        [key(null, `🗑 ${at(l, "ch.btn.delete")}`, acb.chDeleteAsk(c.id), "danger")],
       ]
     : [];
   return keyScreen(lines.join("\n"), ...rows, [back(l, acb.channels())]);
@@ -427,7 +430,7 @@ export function channelChangeConfirmScreen(lang: Lang, c: BonusChannelItem, fiel
   );
 }
 
-/** «🗑 O‘chirish» on the card → confirm: the channel is removed for good (the service audits it). */
+/** «🗑 O‘chirish» on the card → confirm: the channel leaves the list / bot / mandatory check; history and paid bonuses stay. */
 export function channelDeleteAskScreen(lang: Lang, c: BonusChannelItem): AdminScreen {
   return keyScreen(
     `${head("warn", at(lang, "ch.deleteTitle"))}\n\n${at(lang, "ch.deleteAsk", { title: esc(clip(c.title, 60)) })}`,
@@ -448,7 +451,9 @@ export function channelProblemScreen(lang: Lang, why: string): AdminScreen {
 function channelHead(lang: Lang, d: ChannelDraft): string[] {
   const where = d.username ? `@${esc(d.username)}` : at(lang, "ch.private");
   const bot = d.botAdmin === "admin" ? at(lang, "ch.botAdmin") : d.botAdmin === "not_admin" ? at(lang, "ch.botNotAdmin") : at(lang, "ch.botUnknown");
-  return [head("megaphone", esc(clip(d.title, 60))), `${where} · ID <code>${esc(d.chatId)}</code>`, "", bot];
+  const lines = [head("megaphone", esc(clip(d.title, 60))), `${where} · ID <code>${esc(d.chatId)}</code>`, "", bot];
+  if (d.restoreClaims !== undefined) lines.push("", at(lang, "ch.restoreNote", { n: g(d.restoreClaims) }));
+  return lines;
 }
 
 /** After resolving the channel: «🔒 Majburiy» or «➕ Ixtiyoriy» (docs/bonus/BONUS3.md C-Q2), then the bonus presets. */

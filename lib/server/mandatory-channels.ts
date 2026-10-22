@@ -95,7 +95,7 @@ function publicChannel(r: ChannelRow): MandatoryChannel {
 export async function activeMandatoryChannels(): Promise<(MandatoryChannel & { chatId: string })[]> {
   const rows = await query<ChannelRow>(
     `SELECT id::text AS id, chat_id::text AS chat_id, title, username, invite_link
-       FROM bonus_channels WHERE active AND mandatory ORDER BY sort, id`,
+       FROM bonus_channels WHERE active AND mandatory AND deleted_at IS NULL ORDER BY sort, id`,
   );
   return rows.map((r) => ({ ...publicChannel(r), chatId: r.chat_id }));
 }

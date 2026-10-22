@@ -7,19 +7,25 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import type * as IdentityModule from "../../components/admin/shell/admin-identity.tsx";
 import type * as ToasterModule from "../../components/admin/ui/Toaster.tsx";
 import { BonusPage } from "../../components/admin/bonus/BonusPage.tsx";
-import { bonusText, checkAmounts, checkIntText, checkInviteText, defaultPreset, inviteHref } from "../../components/admin/bonus/format.ts";
+import { bonusText, checkAmounts, checkIntText, checkInviteText, checkUsernameText, defaultPreset, inviteHref } from "../../components/admin/bonus/format.ts";
 
 /**
  * `/admin/bonus` «Bonus kanallar» (docs/bonus/PLAN.md K2): helpers; loading / empty (with the
  * bot-admin instructions) / error / forbidden; rows with link, «1 000 + 2 000 / 7 kun», stats
  * and the live bot status (+ «Qayta tekshirish»); viewers see no controls; add flow (resolve
  * preview → owner's default amounts → POST body); edit sends only changed fields; the active
- * switch; delete is disabled while claims exist and otherwise confirms before DELETE.
+ * switch; delete is enabled for every channel (a soft delete on the server) and confirms before
+ * DELETE with the «history kept, re-adding restores» note; the add dialog shows the restore note
+ * for a deleted channel; the edit dialog edits the username and runs «Telegramdan yangilash».
  *
  * Mutation checks (each made the named test fail, then restored):
  *   - `defaultPreset` always "extra" → "add: first channel" (POST joinBonus 1000, not 2000);
  *   - edit dialog sending every field instead of the diff → "edit: only changed fields";
- *   - `disabled={hasClaims}` removed from the delete button → "delete: disabled while claims exist";
+ *   - `disabled={hasClaims}` put back on the delete button → "ready: rows" (delete disabled on row 1);
+ *   - the restore note dropped from the add dialog → "add: a deleted channel";
+ *   - the edit dialog never sending `username` → "username: edit";
+ *   - the case-insensitive username compare made exact → "username: edit" (case-only change enabled «Saqlash»);
+ *   - «Telegramdan yangilash» not updating the field → "username: edit";
  *   - the bot-status effect not started after the list loads → "ready: rows" (no «Bot admin»);
  *   - the preview kept after the address changes → "add: first channel";
  *   - the edit dialog never sending `inviteLink` → "invite link: private channel";
@@ -193,8 +199,8 @@ test("ready: rows with link, amounts, stats, live bot status; «Qayta tekshirish
   fireEvent.click(partner.getByRole("button", { name: "Hamkor kanal: botni qayta tekshirish" }));
   await waitFor(() => assert.equal(calls.filter((c) => c.url.endsWith("/2/bot-status")).length, 2));
 
-  // Delete is disabled while claims exist (row 1 has 12), enabled without (row 2).
-  assert.equal((news.getByRole("button", { name: "SlaydX Yangiliklar: o'chirish" }) as HTMLButtonElement).disabled, true);
+  // Delete is a soft delete now: enabled with claims (row 1 has 12) and without (row 2).
+  assert.equal((news.getByRole("button", { name: "SlaydX Yangiliklar: o'chirish" }) as HTMLButtonElement).disabled, false);
   assert.equal((partner.getByRole("button", { name: "Hamkor kanal: o'chirish" }) as HTMLButtonElement).disabled, false);
 });
 
@@ -326,32 +332,32 @@ test("active switch: PATCH {active:false}; the row shows «O'chiq»", async () =
   assert.deepEqual(calls.find((c) => c.method === "PATCH")!.body, { active: false });
 });
 
-test("delete: confirm dialog, DELETE, the row disappears; a 409 has_claims stays in the dialog", async () => {
-  const calls = stubFetch([listRoute([NEWS, PARTNER]), botRoute({}), (c) => (c.method === "DELETE" ? json(200, { id: "2", deleted: true }) : null)]);
+test("delete: confirm dialog (history kept, re-adding restores), DELETE of a channel WITH claims, the row disappears; a 404 (deleted meanwhile) stays in the dialog and reloads the list", async () => {
+  const calls = stubFetch([listRoute([NEWS, PARTNER]), botRoute({}), (c) => (c.method === "DELETE" ? json(200, { id: "1", deleted: true }) : null)]);
   mount(h(BonusPage));
-  await screen.findByText("Hamkor kanal");
-  fireEvent.click(button("Hamkor kanal: o'chirish"));
+  await screen.findByText("SlaydX Yangiliklar");
+  fireEvent.click(button("SlaydX Yangiliklar: o'chirish"));
   const dialog = within(await screen.findByRole("dialog"));
-  assert.ok(dialog.getByText(/qaytarib bo'lmaydi/));
+  assert.ok(dialog.getByText(/botdan va majburiy obuna tekshiruvidan yo'qoladi/));
+  assert.ok(dialog.getByText(/Tarix va berilgan bonuslar saqlanadi/));
+  assert.ok(dialog.getByText(/qayta qo'shsangiz, u tiklanadi — avval bonus olganlarga qayta to'lanmaydi/));
+  assert.ok(!dialog.queryByText(/qaytarib bo'lmaydi/), "no «cannot be undone» any more");
   fireEvent.click(dialog.getByRole("button", { name: "O'chirish" }));
   await waitFor(() => assert.ok(!screen.queryByRole("dialog")));
   const d = calls.find((c) => c.method === "DELETE")!;
-  assert.equal(d.url, "/api/admin/bonus-channels/2");
-  assert.ok(!document.querySelector('[data-channel="2"]'));
-  assert.ok(rowOf("1"));
+  assert.equal(d.url, "/api/admin/bonus-channels/1");
+  assert.ok(!document.querySelector('[data-channel="1"]'));
+  assert.ok(rowOf("2"));
   cleanup();
 
-  stubFetch([
-    listRoute([PARTNER]),
-    botRoute({}),
-    (c) => (c.method === "DELETE" ? json(409, { error: "Bu kanal bo'yicha 1 ta foydalanuvchi bonus olgan — o'chirib bo'lmaydi.", code: "has_claims" }) : null),
-  ]);
+  const calls2 = stubFetch([listRoute([PARTNER]), botRoute({}), (c) => (c.method === "DELETE" ? json(404, { error: "Kanal topilmadi", code: "not_found" }) : null)]);
   mount(h(BonusPage));
   await screen.findByText("Hamkor kanal");
   fireEvent.click(button("Hamkor kanal: o'chirish"));
   const d2 = within(await screen.findByRole("dialog"));
   fireEvent.click(d2.getByRole("button", { name: "O'chirish" }));
-  await d2.findByText(/o'chirib bo'lmaydi/);
+  await d2.findByText(/Kanal topilmadi/);
+  await waitFor(() => assert.equal(calls2.filter((c) => c.method === "GET" && c.url === "/api/admin/bonus-channels").length, 2, "the stale list is reloaded"));
 });
 
 test("invite link: an unexpected stored value is rendered as text, never as an href", async () => {
@@ -430,4 +436,110 @@ test("invite link: private channel row warns without a link; add fills it via «
   await waitFor(() => assert.ok(!screen.queryByRole("dialog")));
   assert.deepEqual(calls.find((c) => c.method === "PATCH")!.body, { inviteLink: null });
   await waitFor(() => assert.ok(within(rowOf("3")).getByText("Taklif havolasi yo'q")));
+});
+
+test("add: a deleted channel — the preview says it will be restored and how many will not be paid again; «Qayta tiklash» → POST; the toast says restored", async () => {
+  const restored = { ...PARTNER, id: "7", title: "Qaytgan kanal", stats: stats({ joined: 3 }) };
+  const calls = stubFetch([
+    listRoute([NEWS]),
+    botRoute({}),
+    (c) =>
+      c.url.startsWith("/api/admin/bonus-channels/resolve")
+        ? json(200, { chatId: "-1001000000007", title: "Qaytgan kanal", username: "qaytgan_kanal", type: "channel", botAdmin: "admin", warning: null, existingId: null, existingTitle: null, deletedId: "7", deletedClaims: 3 })
+        : null,
+    (c) => (c.method === "POST" ? json(201, { item: restored, botAdmin: "admin", warning: null, restored: true }) : null),
+  ]);
+  mount(h(BonusPage));
+  await screen.findByText("SlaydX Yangiliklar");
+  fireEvent.click(button("Kanal qo'shish"));
+  const dialog = within(await screen.findByRole("dialog"));
+  fireEvent.change(dialog.getByLabelText("Kanal manzili"), { target: { value: "@qaytgan_kanal" } });
+  fireEvent.click(dialog.getByRole("button", { name: "Tekshirish" }));
+  await dialog.findByText(/Bu kanal avval o'chirilgan — qayta tiklanadi, oldingi 3 ta a'zo qo'shilish bonusini qayta olmaydi/);
+  const save = button("Qayta tiklash");
+  assert.equal(save.disabled, false, "a deleted channel is not a duplicate");
+  fireEvent.click(save);
+  await waitFor(() => assert.ok(!screen.queryByRole("dialog")));
+  assert.equal(calls.find((c) => c.method === "POST")!.body.input, "@qaytgan_kanal");
+  await screen.findByText("Qaytgan kanal");
+  assert.ok(toasts().some((m) => /qayta tiklandi — avval bonus olganlarga qayta to'lanmaydi/.test(m)), toasts().join(" | "));
+  cleanup();
+
+  // A LIVE duplicate names the existing channel and blocks saving.
+  stubFetch([
+    listRoute([NEWS]),
+    botRoute({}),
+    (c) =>
+      c.url.startsWith("/api/admin/bonus-channels/resolve")
+        ? json(200, { chatId: NEWS.chatId, title: "Boshqa nom", username: NEWS.username, type: "channel", botAdmin: "admin", warning: null, existingId: "1", existingTitle: NEWS.title, deletedId: null, deletedClaims: 0 })
+        : null,
+  ]);
+  mount(h(BonusPage));
+  await screen.findByText("SlaydX Yangiliklar");
+  fireEvent.click(button("Kanal qo'shish"));
+  const d2 = within(await screen.findByRole("dialog"));
+  fireEvent.change(d2.getByLabelText("Kanal manzili"), { target: { value: "@slaydx_news" } });
+  fireEvent.click(d2.getByRole("button", { name: "Tekshirish" }));
+  await d2.findByText("Bu kanal allaqachon qo'shilgan: «SlaydX Yangiliklar».");
+  assert.equal(button("Qo'shish").disabled, true);
+});
+
+test("username: edit — the field shows @username / «yopiq kanal»; a new name is sent as {username}; case-only is no change; clearing needs an invite link; «Telegramdan yangilash» updates the field, the note and the row", async () => {
+  assert.deepEqual(checkUsernameText(" @Yangi_Nom "), { ok: true, value: "Yangi_Nom" });
+  assert.deepEqual(checkUsernameText("https://t.me/yangi_nom/"), { ok: true, value: "yangi_nom" });
+  assert.deepEqual(checkUsernameText(""), { ok: true, value: null });
+  for (const bad of ["https://t.me/+AbCdEfGh12", "-1001000000001", "@ab", "bad name"]) assert.equal(checkUsernameText(bad).ok, false, bad);
+
+  const renamed = { ...NEWS, username: "slaydx_yangi" };
+  let refreshed = { item: { ...NEWS, username: "slaydx_tg" }, changed: true, telegramTitle: "SlaydX (Telegram)", warning: null as string | null };
+  const calls = stubFetch([
+    listRoute([NEWS, PARTNER]),
+    botRoute({}),
+    (c) => (c.method === "POST" && c.url === "/api/admin/bonus-channels/1/refresh" ? json(200, refreshed) : null),
+    (c) => (c.method === "PATCH" ? json(200, { item: renamed }) : null),
+  ]);
+  mount(h(BonusPage));
+  await screen.findByText("SlaydX Yangiliklar");
+
+  // A private channel shows the placeholder.
+  fireEvent.click(button("Hamkor kanal: tahrirlash"));
+  let dialog = within(await screen.findByRole("dialog"));
+  const priv = dialog.getByLabelText("Username") as HTMLInputElement;
+  assert.equal(priv.value, "");
+  assert.equal(priv.getAttribute("placeholder"), "yopiq kanal");
+  fireEvent.keyDown(priv, { key: "Escape" });
+  await waitFor(() => assert.ok(!screen.queryByRole("dialog")));
+
+  fireEvent.click(button("SlaydX Yangiliklar: tahrirlash"));
+  dialog = within(await screen.findByRole("dialog"));
+  const field = dialog.getByLabelText("Username") as HTMLInputElement;
+  assert.equal(field.value, "@slaydx_news");
+  fireEvent.change(field, { target: { value: "@SLAYDX_NEWS" } });
+  assert.equal(button("Saqlash").disabled, true, "case only is no change");
+  fireEvent.change(field, { target: { value: "" } });
+  assert.ok(dialog.getByText(/Yopiq kanal uchun avval taklif havolasini kiriting/));
+  assert.equal(button("Saqlash").disabled, true, "private without an invite link");
+  fireEvent.change(field, { target: { value: "t.me/+AbCdEfGh12" } });
+  assert.ok(dialog.getByText(/Username @nom yoki t\.me\/nom/));
+  assert.equal(button("Saqlash").disabled, true);
+
+  // «Telegramdan yangilash»: POST …/refresh; the field, the note and the row follow; the dialog stays open.
+  fireEvent.click(dialog.getByRole("button", { name: "Telegramdan yangilash" }));
+  await waitFor(() => assert.equal(field.value, "@slaydx_tg"));
+  assert.ok(dialog.getByText(/Username yangilandi: @slaydx_tg\. Telegramdagi nomi: «SlaydX \(Telegram\)»/));
+  assert.equal(calls.filter((c) => c.url === "/api/admin/bonus-channels/1/refresh").length, 1);
+  await waitFor(() => assert.ok(within(rowOf("1")).getByRole("link", { name: /@slaydx_tg/ })));
+  assert.ok(screen.getByRole("dialog"), "still open");
+  // Unchanged: a note and the warning.
+  refreshed = { ...refreshed, changed: false, warning: "Kanalning ommaviy username'i yo'q" };
+  fireEvent.click(dialog.getByRole("button", { name: "Telegramdan yangilash" }));
+  await dialog.findByText(/O'zgarish yo'q — Telegramdagi bilan bir xil \(@slaydx_tg\)/);
+  assert.ok(dialog.getAllByText("Kanalning ommaviy username'i yo'q").length >= 1);
+
+  // A new name: PATCH {username} only.
+  fireEvent.change(field, { target: { value: "https://t.me/slaydx_yangi" } });
+  fireEvent.click(button("Saqlash"));
+  await waitFor(() => assert.ok(!screen.queryByRole("dialog")));
+  assert.deepEqual(calls.find((c) => c.method === "PATCH")!.body, { username: "slaydx_yangi" });
+  await waitFor(() => assert.ok(within(rowOf("1")).getByRole("link", { name: /@slaydx_yangi/ })));
 });
