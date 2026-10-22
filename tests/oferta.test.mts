@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomInt } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createIsolatedDb } from "./helpers/isolated-db.mts";
@@ -45,6 +45,23 @@ delete process.env.BOT_PREMIUM_EMOJI;
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
 const iso = hasDb ? await createIsolatedDb("oferta") : { isolated: false, drop: async () => {} };
 const skip = !hasDb ? "Postgres kerak (DATABASE_URL)" : iso.isolated ? false : "alohida Postgres baza yaratilmadi";
+
+// CI has no LibreOffice. The bot / route flows only need SOME PDF, so without a real soffice a tiny stand-in writes a
+// minimal PDF into --outdir (same CLI shape as lib/server/pdf.ts). The real-conversion assertions (pdftotext) need the
+// real binary and are skipped without it, like the other LibreOffice tests (article-docx, download-produce).
+const realSoffice = ["/usr/bin/soffice", "/usr/bin/libreoffice", "/usr/local/bin/soffice"].some((b) => existsSync(b));
+if (!realSoffice && !process.env.SOFFICE_BIN) {
+  const fakeDir = mkdtempSync(join(tmpdir(), "oferta-fake-soffice-"));
+  const fake = join(fakeDir, "soffice");
+  writeFileSync(
+    fake,
+    '#!/bin/sh\nout=""; prev=""; src=""\nfor a in "$@"; do [ "$prev" = "--outdir" ] && out="$a"; prev="$a"; src="$a"; done\n' +
+      'b=$(basename "$src"); printf "%%PDF-1.4\\n%%%%EOF\\n" > "$out/${b%.*}.pdf"\n',
+  );
+  chmodSync(fake, 0o755);
+  process.env.SOFFICE_BIN = fake;
+}
+const skipRealPdf = skip || (realSoffice ? false : "LibreOffice yo'q (haqiqiy o'girish)");
 if (!hasDb) process.env.DATABASE_URL = "postgres://unused/unused";
 
 const { query, queryOne, pool, ensureMigrated, transaction } = await import("../lib/server/db.ts");
@@ -327,7 +344,7 @@ test("gate ON: webhooks, reads and the session are never gated; admin accounts a
 
 /* ───────────────────────── page + PDF ───────────────────────── */
 
-test("page: /oferta renders the module with the requisites; PDF: real conversion carries the requisites, cached, 503 fallbacks", { skip }, async () => {
+test("page: /oferta renders the module with the requisites; PDF: real conversion carries the requisites, cached, 503 fallbacks", { skip: skipRealPdf }, async () => {
   await gate(true, REQ, 1);
   // tsx compiles JSX to the classic runtime here (Next uses the automatic one).
   (globalThis as { React?: unknown }).React = await import("react");

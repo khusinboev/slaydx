@@ -54,6 +54,7 @@ export const ROUTE_RULES: readonly RouteRule[] = [
   { route: "/", match: /^\/$/, parent: null },
   { route: "/uz", match: /^\/uz$/, parent: null },
   { route: "/o/[token]", match: new RegExp(`^/o/${SEG}$`), parent: null },
+  { route: "/oferta", match: /^\/oferta$/, parent: null },
   // The panel's home goes back to the profile, where «Admin panel» lives (docs/nav/ADMIN-BACK.md).
   { route: "/admin", match: /^\/admin$/, parent: "/uz/profile" },
   { route: "/admin/login", match: /^\/admin\/login$/, parent: null },
