@@ -165,15 +165,15 @@ const T = {
   /* ── Referral ── */
   "ref.title": { uz: "Do'stlarni taklif qiling", ru: "Приглашайте друзей", en: "Invite your friends" },
   "ref.rule": {
-    uz: "Do'st uchun bonus: 1–{u1}-do'st — {a} so'm, {u1p}–{u2}-do'st — {b} so'm, {u2p}-dan boshlab — {c} so'm. Keyingi do'stingiz uchun: {n} so'm. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi.",
-    ru: "Бонус за друга: 1–{u1}-й — {a} сум, {u1p}–{u2}-й — {b} сум, с {u2p}-го — {c} сум. За следующего друга: {n} сум. Начисляется, когда друг впервые войдёт в приложение.",
-    en: "Bonus per friend: friends 1–{u1} — {a} UZS, {u1p}–{u2} — {b} UZS, from {u2p} on — {c} UZS. Your next friend earns {n} UZS. Counted when your friend opens the app for the first time.",
+    uz: "Har bir do'st uchun: 1–{u1}-do'st — {a} bonus so'm, {u1p}–{u2}-do'st — {b} bonus so'm, {u2p}-dan boshlab — {c} bonus so'm. Keyingi do'stingiz uchun: {n} bonus so'm. Do'stingiz ilovaga birinchi marta kirganda hisoblanadi.",
+    ru: "За каждого друга: 1–{u1}-й — {a} бонусных сум, {u1p}–{u2}-й — {b} бонусных сум, с {u2p}-го — {c} бонусных сум. За следующего друга: {n} бонусных сум. Начисляется, когда друг впервые войдёт в приложение.",
+    en: "Per friend: friends 1–{u1} — {a} bonus UZS, {u1p}–{u2} — {b} bonus UZS, from {u2p} on — {c} bonus UZS. Your next friend earns {n} bonus UZS. Counted when your friend opens the app for the first time.",
   },
   "ref.link": { uz: "Sizning havolangiz:", ru: "Ваша ссылка:", en: "Your link:" },
   "ref.counts": {
-    uz: "Taklif qilinganlar: <b>{a}</b> · Topilgan bonus: <b>{b} so'm</b>",
-    ru: "Приглашено: <b>{a}</b> · Получено бонусов: <b>{b} сум</b>",
-    en: "Invited: <b>{a}</b> · Bonus earned: <b>{b} UZS</b>",
+    uz: "Taklif qilinganlar: <b>{a}</b> · Topilgan: <b>{b} bonus so'm</b>",
+    ru: "Приглашено: <b>{a}</b> · Получено: <b>{b} бонусных сум</b>",
+    en: "Invited: <b>{a}</b> · Earned: <b>{b} bonus UZS</b>",
   },
   "ref.groupOnly": {
     uz: "Taklif havolasini olish uchun botga shaxsiy chatda /taklif yozing.",
@@ -193,9 +193,9 @@ const T = {
   "prof.work": { uz: "Ish joyi", ru: "Работа", en: "Work" },
   "prof.course": { uz: "{n}-kurs", ru: "{n} курс", en: "year {n}" },
   "prof.money": {
-    uz: "{total} tanga · {star} bonus {points} so‘m",
-    ru: "{total} монет · {star} бонус {points} сум",
-    en: "{total} coins · {star} bonus {points} UZS",
+    uz: "{total} so‘m · {star} {points} bonus so‘m",
+    ru: "{total} сум · {star} {points} бонусных сум",
+    en: "{total} UZS · {star} {points} bonus UZS",
   },
   "prof.complete": { uz: "Profil {p}% to‘ldirilgan", ru: "Профиль заполнен на {p}%", en: "Profile {p}% complete" },
   "prof.lead": {
@@ -300,7 +300,7 @@ const T = {
   /* ── Hamyon ── */
   "wallet.title": { uz: "Hamyon", ru: "Кошелёк", en: "Wallet" },
   "wallet.balance": { uz: "Balans: <b>{n}</b>", ru: "Баланс: <b>{n}</b>", en: "Balance: <b>{n}</b>" },
-  "wallet.bonus": { uz: "Shundan bonus: {n}", ru: "Из них бонус: {n}", en: "Of which bonus: {n}" },
+  "wallet.bonus": { uz: "Shundan: {n}", ru: "Из них: {n}", en: "Of which: {n}" },
   "wallet.recent": { uz: "So‘nggi amallar", ru: "Последние операции", en: "Recent activity" },
   "wallet.none": { uz: "Hali amallar yo‘q.", ru: "Операций пока нет.", en: "No activity yet." },
   "wallet.payNote": {
@@ -313,9 +313,10 @@ const T = {
   "btn.topup": { uz: "To‘ldirish", ru: "Пополнить", en: "Top up" },
   "btn.inviteFriend": { uz: "Do‘st taklif qilish", ru: "Пригласить друга", en: "Invite a friend" },
   "btn.backWallet": { uz: "Hamyonga qaytish", ru: "Назад в кошелёк", en: "Back to wallet" },
-  "unit.tanga": { uz: "{n} tanga", ru: "{n} монет", en: "{n} coins" },
-  /** Bonus amounts (B2-Q3): so‘m / сум / UZS. Balances stay in tanga. */
+  /** Paid amounts and the whole balance (program 17 D1: 1 point = 1 so‘m). */
   "unit.som": { uz: "{n} so‘m", ru: "{n} сум", en: "{n} UZS" },
+  /** Bonus amounts (program 17 D1): bonus so‘m / бонусных сум / bonus UZS. */
+  "unit.bonusSom": { uz: "{n} bonus so‘m", ru: "{n} бонусных сум", en: "{n} bonus UZS" },
   "ledger.charge": { uz: "Hujjat uchun to‘lov", ru: "Оплата документа", en: "Document payment" },
   "ledger.refund": { uz: "Pul qaytarildi", ru: "Возврат", en: "Refund" },
   "ledger.topup": { uz: "Balans to‘ldirildi", ru: "Пополнение баланса", en: "Balance top-up" },
@@ -341,14 +342,14 @@ const T = {
   "btn.refresh": { uz: "Yangilash", ru: "Обновить", en: "Refresh" },
   "bonus.title": { uz: "Sizning bonuslaringiz", ru: "Ваши бонусы", en: "Your bonuses" },
   "bonus.summary": {
-    uz: "Jami olgan bonusingiz: <b>{e}</b> · yana olish mumkin: <b>{a}</b>",
-    ru: "Всего получено бонусов: <b>{e}</b> · можно получить ещё: <b>{a}</b>",
-    en: "Bonus earned so far: <b>{e}</b> · still available: <b>{a}</b>",
+    uz: "Jami olgan: <b>{e}</b> · yana olish mumkin: <b>{a}</b>",
+    ru: "Всего получено: <b>{e}</b> · можно получить ещё: <b>{a}</b>",
+    en: "Earned so far: <b>{e}</b> · still available: <b>{a}</b>",
   },
   "bonus.lead": {
-    uz: "Har bir tugma — bitta vazifa: bajaring, bonus hamyoningizga o‘zi tushadi (✅ — bajarilgan). Bonus xizmatlar uchun tanga kabi sarflanadi.",
-    ru: "Каждая кнопка — одно задание: выполните его, и бонус сам придёт в кошелёк (✅ — выполнено). Бонус тратится на услуги так же, как монеты.",
-    en: "Each button is one task: complete it and the bonus lands in your wallet by itself (✅ — done). Bonuses pay for services just like coins.",
+    uz: "Har bir tugma — bitta vazifa: bajaring, bonus hamyoningizga o‘zi tushadi (✅ — bajarilgan). Bonus so‘m xizmatlar uchun to‘langan so‘m kabi sarflanadi.",
+    ru: "Каждая кнопка — одно задание: выполните его, и бонус сам придёт в кошелёк (✅ — выполнено). Бонусные сумы тратятся на услуги так же, как обычные.",
+    en: "Each button is one task: complete it and the bonus lands in your wallet by itself (✅ — done). Bonus UZS pays for services just like regular UZS.",
   },
   "bonus.refreshHint": {
     uz: "Kanalga obuna bo‘lgach bonus tushmasa — «Yangilash»ni bosing.",
@@ -361,7 +362,7 @@ const T = {
   "task.stayWait": { uz: "⏳ {d} kun: {n} kun", ru: "⏳ {d} дн.: {n} дн.", en: "⏳ {d}d: {n}d" },
   /** C-Q4 payment bonus (`payment-bonus.ts`): every paid top-up earns +{p}%. */
   "task.topup": { uz: "Har to‘ldirishga +{p}% bonus", ru: "+{p}% бонус к каждому пополнению", en: "+{p}% bonus on every top-up" },
-  "bonus.paidTitle": { uz: "+{n} bonus!", ru: "+{n} бонуса!", en: "+{n} bonus!" },
+  "bonus.paidTitle": { uz: "+{n}!", ru: "+{n}!", en: "+{n}!" },
   "bonus.joinText": {
     uz: "«{c}» kanaliga obuna bo‘lganingiz uchun.",
     ru: "За подписку на канал «{c}».",
@@ -377,7 +378,7 @@ const T = {
     ru: "Спасибо, что остаётесь в канале «{c}» {d} дн.! Бонус зачислен в кошелёк.",
     en: "Thanks for staying in «{c}» for {d} days! The bonus is in your wallet.",
   },
-  "toast.bonusPaid": { uz: "🎉 +{n} bonus!", ru: "🎉 +{n} бонуса!", en: "🎉 +{n} bonus!" },
+  "toast.bonusPaid": { uz: "🎉 +{n}!", ru: "🎉 +{n}!", en: "🎉 +{n}!" },
   "toast.bonusDone": { uz: "✅ Bajarilgan", ru: "✅ Выполнено", en: "✅ Done" },
   "toast.bonusRefreshed": { uz: "Yangilandi", ru: "Обновлено", en: "Updated" },
   "toast.bonusAlready": { uz: "Bu vazifa allaqachon bajarilgan", ru: "Это задание уже выполнено", en: "This task is already done" },
@@ -440,15 +441,15 @@ const T = {
   },
   "help.q2": { uz: "Ish yaratilmasa pul nima bo‘ladi?", ru: "Что с деньгами, если работа не создалась?", en: "What if a file is not made?" },
   "help.a2": {
-    uz: "Hujjat yaratilmasa, tanga to‘liq qaytariladi.",
-    ru: "Если документ не создан, монеты возвращаются полностью.",
-    en: "If a document is not made, the coins are fully refunded.",
+    uz: "Hujjat yaratilmasa, so‘m to‘liq qaytariladi.",
+    ru: "Если документ не создан, сумы возвращаются полностью.",
+    en: "If a document is not made, the UZS are fully refunded.",
   },
   "help.q3": { uz: "Bonus nima?", ru: "Что такое бонус?", en: "What is a bonus?" },
   "help.a3": {
-    uz: "So‘mda hisoblanadi: ro‘yxatdan o‘tganda, har bir taklif qilingan do‘st, kanal obunasi va birinchi to‘ldirish uchun beriladi; tanga bilan birga sarflanadi. Hammasi «Hamyon / Bonus» → «Bonuslar»da.",
-    ru: "Считается в сумах: даётся при регистрации, за каждого приглашённого друга, подписку на канал и первое пополнение; тратится вместе с монетами. Всё — в «Кошелёк / Бонус» → «Бонусы».",
-    en: "Counted in UZS: given at sign-up, for every friend you invite, for joining channels and for your first top-up; spent together with coins. See «Wallet / Bonus» → «Bonuses».",
+    uz: "Bonus so‘mda hisoblanadi: ro‘yxatdan o‘tganda, har bir taklif qilingan do‘st, kanal obunasi va birinchi to‘ldirish uchun beriladi; to‘langan so‘m bilan birga sarflanadi. Hammasi «Hamyon / Bonus» → «Bonuslar»da.",
+    ru: "Считается в бонусных сумах: даётся при регистрации, за каждого приглашённого друга, подписку на канал и первое пополнение; тратится вместе с оплаченными сумами. Всё — в «Кошелёк / Бонус» → «Бонусы».",
+    en: "Counted in bonus UZS: given at sign-up, for every friend you invite, for joining channels and for your first top-up; spent together with paid UZS. See «Wallet / Bonus» → «Bonuses».",
   },
   "help.q4": { uz: "Profil nimaga kerak?", ru: "Зачем заполнять профиль?", en: "Why fill in the profile?" },
   "help.a4": {

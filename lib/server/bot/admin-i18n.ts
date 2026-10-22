@@ -429,9 +429,9 @@ const A = {
   /* ── To‘lov bonusi (C-Q4, payment-bonus.ts) ── */
   "pb.title": { uz: "To‘lov bonusi", ru: "Бонус за пополнение", en: "Payment bonus" },
   "pb.now": {
-    uz: "Hozir: <b>{p}%</b> — har bir to‘langan to‘ldirishga summaning {p}% i bonus ball bo‘lib tushadi.",
-    ru: "Сейчас: <b>{p}%</b> — к каждому оплаченному пополнению начисляется {p}% суммы бонусными баллами.",
-    en: "Now: <b>{p}%</b> — every paid top-up earns {p}% of its amount as bonus points.",
+    uz: "Hozir: <b>{p}%</b> — har bir to‘langan to‘ldirishga summaning {p}% i bonus so‘m bo‘lib tushadi.",
+    ru: "Сейчас: <b>{p}%</b> — к каждому оплаченному пополнению начисляется {p}% суммы бонусными сумами.",
+    en: "Now: <b>{p}%</b> — every paid top-up earns {p}% of its amount as bonus UZS.",
   },
   "pb.off": {
     uz: "Hozir: <b>0%</b> — to‘lov bonusi o‘chirilgan.",

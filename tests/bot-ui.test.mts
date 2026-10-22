@@ -21,7 +21,7 @@ import assert from "node:assert/strict";
  *   B2. the invite button green at 0 invites → «before the first invite / after the first top-up»;
  *   B3. the Hamyon history not cut to WALLET_RECENT → «Hamyon card: only the LAST 3»;
  *   B4. the blank line after the greeting removed → «/start welcome»;
- *   B5. a bonus ledger line in tanga → «Hamyon, referral, Yordam, Til».
+ *   B5. a bonus ledger line in bonus so‘m → «Hamyon, referral, Yordam, Til».
  */
 
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
@@ -394,7 +394,7 @@ test("Profilim card: masked phone, study summary, money, completion, buttons (co
   assert.match(s.text, /📞 Telefon: <b>\+998 90 ••• •• 67<\/b>/);
   assert.match(s.text, /🎓 O‘qish: <b>TDPU · 3-kurs<\/b>/);
   assert.match(s.text, /💼 Ish joyi: —/);
-  assert.match(s.text, /💰 12\s500 tanga · ⭐ bonus 2\s000 so‘m/);
+  assert.match(s.text, /💰 12\s500 so‘m · ⭐ 2\s000 bonus so‘m/);
   assert.match(s.text, /Profil 50% to‘ldirilgan/);
   const b = inline(s);
   assert.deepEqual(b.find((x) => x.copy_text)?.copy_text, { text: "https://t.me/slaydx_test_bot?start=ref_abcdefgh" });
@@ -431,14 +431,14 @@ test("section, prompt, saved: values on buttons, danger cancel, success Profilim
 
 test("Hamyon, referral, Yordam, Til", async () => {
   const w = allScreens("uz").wallet;
-  assert.match(w.text, /Balans: <b>12\s500 tanga<\/b>/);
-  assert.match(w.text, /⭐ Shundan bonus: 2\s000 so‘m/);
-  assert.match(w.text, /<b>\+20\s000 tanga<\/b> — To‘ldirish · Payme · 05\.10\.2026/);
-  assert.match(w.text, /<b>−3\s000 tanga<\/b> — Slayd: Iqlim o'zgarishi · 07\.10\.2026/);
-  assert.match(w.text, /<b>\+2\s000 so‘m<\/b> — Taklif bonusi · Ali/);
-  assert.match(allScreens("en").wallet.text, /<b>−3\s000 coins<\/b> — Slides: Iqlim o'zgarishi/);
-  assert.match(allScreens("ru").wallet.text, /<b>\+2\s000 сум<\/b> — Бонус за приглашение · Ali/);
-  assert.match(allScreens("en").wallet.text, /<b>\+2\s000 UZS<\/b> — Invite bonus · Ali/);
+  assert.match(w.text, /Balans: <b>12\s500 so‘m<\/b>/);
+  assert.match(w.text, /⭐ Shundan: 2\s000 bonus so‘m/);
+  assert.match(w.text, /<b>\+20\s000 so‘m<\/b> — To‘ldirish · Payme · 05\.10\.2026/);
+  assert.match(w.text, /<b>−3\s000 so‘m<\/b> — Slayd: Iqlim o'zgarishi · 07\.10\.2026/);
+  assert.match(w.text, /<b>\+2\s000 bonus so‘m<\/b> — Taklif bonusi · Ali/);
+  assert.match(allScreens("en").wallet.text, /<b>−3\s000 UZS<\/b> — Slides: Iqlim o'zgarishi/);
+  assert.match(allScreens("ru").wallet.text, /<b>\+2\s000 бонусных сум<\/b> — Бонус за приглашение · Ali/);
+  assert.match(allScreens("en").wallet.text, /<b>\+2\s000 bonus UZS<\/b> — Invite bonus · Ali/);
   // B2-Q4: big green «🎁 Bonuslar» (full row), then «💳 To‘ldirish» (web app) — nothing else.
   const wRows = (w.reply_markup as { inline_keyboard: Btn[][] }).inline_keyboard;
   assert.deepEqual(wRows, [
@@ -529,9 +529,9 @@ test("bonuses message (uz): summary, short explanation, ONE button per task in o
     [
       "🎁 <b>Sizning bonuslaringiz</b>",
       "",
-      "<blockquote>⭐ Jami olgan bonusingiz: <b>10 000 so‘m</b> · yana olish mumkin: <b>8 000 so‘m</b></blockquote>",
+      "<blockquote>⭐ Jami olgan: <b>10 000 bonus so‘m</b> · yana olish mumkin: <b>8 000 bonus so‘m</b></blockquote>",
       "",
-      "Har bir tugma — bitta vazifa: bajaring, bonus hamyoningizga o‘zi tushadi (✅ — bajarilgan). Bonus xizmatlar uchun tanga kabi sarflanadi.",
+      "Har bir tugma — bitta vazifa: bajaring, bonus hamyoningizga o‘zi tushadi (✅ — bajarilgan). Bonus so‘m xizmatlar uchun to‘langan so‘m kabi sarflanadi.",
       "<i>Kanalga obuna bo‘lgach bonus tushmasa — «Yangilash»ni bosing.</i>",
     ].join("\n"),
   );
@@ -586,7 +586,7 @@ test("bonuses message (ru/en): labels, units, styles; every label ≤ 44 chars a
     ["📢 SlaydX yangiliklari · +2 000 сум | https://t.me/slaydx_news | "],
     ["✅ Talabalar <ka… · +1 000 сум · ⏳ 7 дн.: 4 дн. | b:d | success"],
   ]);
-  assert.match(allScreens("ru").bonus.text, /Всего получено бонусов: <b>10 000 сум<\/b> · можно получить ещё: <b>8 000 сум<\/b>/);
+  assert.match(allScreens("ru").bonus.text, /Всего получено: <b>10 000 бонусных сум<\/b> · можно получить ещё: <b>8 000 бонусных сум<\/b>/);
   assert.deepEqual(kbRows(allScreens("en").bonus).map((r) => r.map(brief)).slice(-2), [
     ["💳 +10% bonus on every top-up | app:https://slaydx.test/uz/wallet | "],
     ["🔄 Refresh | b:r | ", "⬅️ Wallet | w:h | "],
@@ -634,19 +634,19 @@ test("bonuses message with premium emoji: icon ids on the task buttons, no dupli
 test("join / stay notices: so‘m units in 3 languages, escaped titles, «🎁 Bonuslar» button", () => {
   assert.equal(
     allScreens("uz").joinNotice.text,
-    "🎉 <b>+1 000 so‘m bonus!</b>\n«Kanal &amp; &lt;b&gt;» kanaliga obuna bo‘lganingiz uchun.\n7 kun obuna bo‘lib qolsangiz — yana +2 000 so‘m.",
+    "🎉 <b>+1 000 bonus so‘m!</b>\n«Kanal &amp; &lt;b&gt;» kanaliga obuna bo‘lganingiz uchun.\n7 kun obuna bo‘lib qolsangiz — yana +2 000 bonus so‘m.",
   );
   assert.equal(
     bonus.joinPaidNotice("uz", { points: 2000, title: "SlaydX", stayBonus: 0, stayDays: 7 }).text,
-    "🎉 <b>+2 000 so‘m bonus!</b>\n«SlaydX» kanaliga obuna bo‘lganingiz uchun.",
+    "🎉 <b>+2 000 bonus so‘m!</b>\n«SlaydX» kanaliga obuna bo‘lganingiz uchun.",
   );
-  assert.match(allScreens("ru").joinNotice.text, /^🎉 <b>\+1 000 сум бонуса!<\/b>\nЗа подписку на канал «Kanal &amp; &lt;b&gt;»\.\nОстаньтесь подписанным 7 дн\. — и получите ещё \+2 000 сум\.$/);
-  assert.match(allScreens("en").joinNotice.text, /^🎉 <b>\+1 000 UZS bonus!<\/b>/);
+  assert.match(allScreens("ru").joinNotice.text, /^🎉 <b>\+1 000 бонусных сум!<\/b>\nЗа подписку на канал «Kanal &amp; &lt;b&gt;»\.\nОстаньтесь подписанным 7 дн\. — и получите ещё \+2 000 бонусных сум\.$/);
+  assert.match(allScreens("en").joinNotice.text, /^🎉 <b>\+1 000 bonus UZS!<\/b>/);
   assert.equal(
     allScreens("uz").stayNotice.text,
-    "🎉 <b>+2 000 so‘m bonus!</b>\n«Kanal &amp; &lt;b&gt;» kanalida 7 kun qolganingiz uchun rahmat! Bonus hamyoningizga qo‘shildi.",
+    "🎉 <b>+2 000 bonus so‘m!</b>\n«Kanal &amp; &lt;b&gt;» kanalida 7 kun qolganingiz uchun rahmat! Bonus hamyoningizga qo‘shildi.",
   );
-  assert.match(allScreens("en").stayNotice.text, /^🎉 <b>\+2 000 UZS bonus!<\/b>\nThanks for staying in «Kanal &amp; &lt;b&gt;» for 7 days! The bonus is in your wallet\.$/);
+  assert.match(allScreens("en").stayNotice.text, /^🎉 <b>\+2 000 bonus UZS!<\/b>\nThanks for staying in «Kanal &amp; &lt;b&gt;» for 7 days! The bonus is in your wallet\.$/);
   for (const n of [allScreens("uz").joinNotice, allScreens("uz").stayNotice]) {
     assert.deepEqual(inline(n).map(brief), ["🎁 Bonuslar | b:h | success"]);
   }
@@ -686,7 +686,7 @@ test("Hamyon card (B2-Q4): only the LAST 3 entries, inside <blockquote expandabl
   assert.deepEqual(quote[1]!.split("\n").map((l) => /Mavzu (\d)/.exec(l)?.[1]), ["0", "1", "2"]);
   assert.ok(!w.text.includes("Mavzu 3"));
   assert.match(scr.walletScreen("uz", USER, []).text, /<blockquote expandable>🧾 <b>So‘nggi amallar<\/b>\nHali amallar yo‘q\.<\/blockquote>/);
-  assert.match(w.text, /^💰 <b>Hamyon<\/b>\n\n<blockquote>💰 Balans: <b>12 500 tanga<\/b>\n⭐ Shundan bonus: 2 000 so‘m<\/blockquote>\n\n<blockquote expandable>/);
+  assert.match(w.text, /^💰 <b>Hamyon<\/b>\n\n<blockquote>💰 Balans: <b>12 500 so‘m<\/b>\n⭐ Shundan: 2 000 bonus so‘m<\/blockquote>\n\n<blockquote expandable>/);
 });
 
 test("/start welcome: a blank line between greeting · pitch · balance quote · app/site (3 languages) — MUTATSIYA B4", () => {
@@ -698,25 +698,29 @@ test("/start welcome: a blank line between greeting · pitch · balance quote ·
     assert.match(sections[2]!, /^<blockquote>💰 [\s\S]*<\/blockquote>$/);
     assert.match(sections[3]!, /^📱 [\s\S]*\n🌐 /);
   }
-  assert.match(allScreens("uz").welcome.text, /🎁 Do‘st taklif qiling — har biriga <b>2 000 so‘m<\/b> gacha/);
-  assert.match(allScreens("ru").welcome.text, /до <b>2 000 сум<\/b> за каждого/);
+  assert.match(allScreens("uz").welcome.text, /🎁 Do‘st taklif qiling — har biriga <b>2 000 bonus so‘m<\/b> gacha/);
+  assert.match(allScreens("ru").welcome.text, /до <b>2 000 бонусных сум<\/b> за каждого/);
   // Without an account (a group): greeting · pitch · app/site.
   const anon = scr.welcomeScreen("uz", { user: null, loginLink: "https://slaydx.test/api/auth/telegram/enter?t=" + "x".repeat(43), rewardPoints: 2000 });
   assert.equal(anon.text.split("\n\n").length, 3);
 });
 
-test("units (B2-Q3): bonus amounts are so‘m / сум / UZS everywhere in the bot; no «ball» / «баллов» / «points» left", () => {
+test("units (program 17 D1): paid amounts are so‘m / сум / UZS, bonus amounts bonus so‘m / бонусных сум / bonus UZS; no «ball» / «tanga» / «монет» / «coins» left", () => {
   for (const lang of LANGS) {
     for (const [name, s] of Object.entries(allScreens(lang))) {
       const all = `${s.text}\n${JSON.stringify(s.reply_markup ?? {})}`;
-      assert.doesNotMatch(all, /\bball\b|балл|\bpoints?\b/i, `${lang}/${name}`);
+      assert.doesNotMatch(all, /\bball\b|балл|\bpoints?\b|tanga|монет|\bcoins?\b/i, `${lang}/${name}`);
     }
   }
-  assert.match(allScreens("uz").referral.text, /Do'st uchun bonus: 1–25-do'st — 2\s000 so'm, 26–50-do'st — 1\s000 so'm, 51-dan boshlab — 500 so'm\. Keyingi do'stingiz uchun: 2\s000 so'm\./);
-  assert.match(allScreens("uz").referral.text, /Taklif qilinganlar: <b>3<\/b> · Topilgan bonus: <b>6 000 so'm<\/b>/);
-  assert.match(allScreens("en").referral.text, /Bonus earned: <b>6 000 UZS<\/b>/);
-  assert.match(allScreens("ru").profile.text, /бонус 2 000 сум/);
+  assert.match(allScreens("uz").referral.text, /Har bir do'st uchun: 1–25-do'st — 2\s000 bonus so'm, 26–50-do'st — 1\s000 bonus so'm, 51-dan boshlab — 500 bonus so'm\. Keyingi do'stingiz uchun: 2\s000 bonus so'm\./);
+  assert.match(allScreens("uz").referral.text, /Taklif qilinganlar: <b>3<\/b> · Topilgan: <b>6 000 bonus so'm<\/b>/);
+  assert.match(allScreens("en").referral.text, /Earned: <b>6 000 bonus UZS<\/b>/);
+  assert.match(allScreens("ru").profile.text, /2 000 бонусных сум/);
   assert.equal(i18n.t("en", "unit.som", { n: "1 000" }), "1 000 UZS");
+  assert.equal(i18n.t("uz", "unit.bonusSom", { n: "1 000" }), "1 000 bonus so‘m");
+  assert.equal(i18n.t("ru", "unit.bonusSom", { n: "1 000" }), "1 000 бонусных сум");
+  assert.equal(i18n.t("en", "unit.bonusSom", { n: "1 000" }), "1 000 bonus UZS");
+  assert.equal(i18n.t("uz", "unit.som", { n: "1 000" }), "1 000 so‘m");
 });
 
 /* ── bonus2 review fixes ── */
