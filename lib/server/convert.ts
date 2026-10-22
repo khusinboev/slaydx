@@ -105,7 +105,6 @@ export async function detectFormat(bytes: Uint8Array): Promise<Detected | null> 
 function safeBase(name: string): string {
   const base = name
     .replace(/\.[A-Za-z0-9]{1,8}$/, "")
-    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f/\\:*?"<>|]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()

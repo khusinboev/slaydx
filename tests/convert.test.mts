@@ -52,15 +52,15 @@ const fakePdftoppm = join(fakeDir, "pdftoppm");
 writeFileSync(fakePdftoppm, `#!/bin/sh\nfor a in "$@"; do p="$a"; done\ncp ${fakePng} "$p-1.png"\ncp ${fakePng} "$p-2.png"\n`);
 chmodSync(fakeSoffice, 0o755);
 chmodSync(fakePdftoppm, 0o755);
-function useFake() {
+function fakeBins() {
   process.env.SOFFICE_BIN = fakeSoffice;
   process.env.PDFTOPPM_BIN = fakePdftoppm;
 }
-function useReal() {
+function realBins() {
   delete process.env.SOFFICE_BIN;
   delete process.env.PDFTOPPM_BIN;
 }
-useFake();
+fakeBins();
 
 const { query, queryOne, ensureMigrated } = await import("../lib/server/db.ts");
 const settings = await import("../lib/server/settings.ts");
@@ -289,7 +289,7 @@ test("busy lane -> 503 with the Uzbek message and Retry-After; quota untouched; 
 /* ───────────────────────── conversions (stand-in binaries: run in CI) ───────────────────────── */
 
 test("fake binaries: docx -> pdf, pdf -> png ZIP (2 pages), pdf -> jpg ZIP", { skip }, async () => {
-  useFake();
+  fakeBins();
   const uid = await user();
   const pdf = await post(uid, "Hisobot.docx", await makeDocx(), "pdf");
   assert.equal(pdf.status, 200);
@@ -369,7 +369,7 @@ test("PDF -> Word (DOCX) reuses the translator's PDF reader; a scanned PDF says 
 /* ───────────────────────── real binaries (skipped in CI) ───────────────────────── */
 
 test("real LibreOffice: docx -> pdf", { skip: skipRealSoffice }, async () => {
-  useReal();
+  realBins();
   try {
     const uid = await user();
     const res = await post(uid, "real.docx", await makeDocx(), "pdf");
@@ -378,12 +378,12 @@ test("real LibreOffice: docx -> pdf", { skip: skipRealSoffice }, async () => {
     assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
     assert.ok(pdf.length > 1000, "a real PDF, not the stand-in");
   } finally {
-    useFake();
+    fakeBins();
   }
 });
 
 test("real pdftoppm: pdf -> png (single page = plain file)", { skip: skipRealPdftoppm }, async () => {
-  useReal();
+  realBins();
   try {
     const uid = await user();
     const res = await post(uid, "one.pdf", makeBlankPdf(), "png");
@@ -391,12 +391,12 @@ test("real pdftoppm: pdf -> png (single page = plain file)", { skip: skipRealPdf
     assert.equal(res.headers.get("content-type"), "image/png");
     assert.equal((await sharp(Buffer.from(await res.arrayBuffer())).metadata()).format, "png");
   } finally {
-    useFake();
+    fakeBins();
   }
 });
 
 test("real: jpg -> pdf -> png round trip (LibreOffice not needed)", { skip: skipRealPdftoppm }, async () => {
-  useReal();
+  realBins();
   try {
     const uid = await user();
     const jpg = await sharp(png).jpeg().toBuffer();
@@ -406,6 +406,6 @@ test("real: jpg -> pdf -> png round trip (LibreOffice not needed)", { skip: skip
     const meta = await sharp(Buffer.from(await page.arrayBuffer())).metadata();
     assert.ok((meta.width ?? 0) > 100);
   } finally {
-    useFake();
+    fakeBins();
   }
 });
