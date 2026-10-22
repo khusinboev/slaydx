@@ -11,7 +11,7 @@ import { adminGet, adminSend, type AdminCallOptions } from "./core";
  */
 
 export type SettingSource = "db" | "env" | "default";
-export type SettingType = "bool" | "int" | "number" | "tool_ids";
+export type SettingType = "bool" | "int" | "number" | "tool_ids" | "text";
 
 type SettingBase = {
   key: string;
@@ -35,10 +35,11 @@ export type SettingItem = SettingBase &
     | { type: "bool"; value: boolean; envValue: boolean }
     | { type: "int" | "number"; value: number; envValue: number }
     | { type: "tool_ids"; value: string[]; envValue: string[] }
+    | { type: "text"; value: string; envValue: string }
   );
 
 /** The value a write sends: boolean, number or a list of tool ids. */
-export type SettingValue = boolean | number | string[];
+export type SettingValue = boolean | number | string[] | string;
 
 export function listSettings(opts: AdminCallOptions = {}): Promise<{ items: SettingItem[] }> {
   return adminGet<{ items: SettingItem[] }>("/api/admin/settings", undefined, opts);

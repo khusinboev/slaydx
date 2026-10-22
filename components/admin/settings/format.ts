@@ -16,6 +16,7 @@ export type ToolOption = { value: string; label: string };
 /** Display text of a value. Tool ids not in the registry are shown by their id. */
 export function formatValue(item: Pick<SettingItem, "type">, value: SettingValue, tools: ReadonlyArray<ToolOption>): string {
   if (item.type === "bool") return value ? "Yoqilgan" : "O'chiq";
+  if (item.type === "text") return typeof value === "string" && value.trim() ? value : "Kiritilmagan";
   if (item.type === "tool_ids") {
     const ids = Array.isArray(value) ? value : [];
     if (ids.length === 0) return "Hech biri";

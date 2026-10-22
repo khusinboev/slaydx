@@ -311,7 +311,12 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     assert.ok(await remindedCol(), "052 payment_reminder column created");
     assert.ok(await paynetCol(), "050 column created");
     for (const def of await providerChecks()) assert.match(def, /'paynet'/, "050 widened the provider CHECKs");
+    const offerCols = async () =>
+      (await query<{ column_name: string }>("SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name IN ('offer_version', 'offer_accepted_at') ORDER BY column_name")).map((r) => r.column_name);
+    assert.deepEqual(await offerCols(), ["offer_accepted_at", "offer_version"], "054 columns created");
     for (const f of [
+      // 054: public offer acceptance (docs/program-17 item 12) -- users.offer_version / offer_accepted_at.
+      "054_offer_acceptance.sql",
       // 053: app rating bonus (docs/program-17 item 9) -- app_ratings.
       "053_app_ratings.sql",
       // 052: payment reminder (owner 2026-10-22) -- payment_orders.reminded_at + partial index.
@@ -346,6 +351,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     ]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
+      if (f === "054_offer_acceptance.sql") assert.deepEqual(await offerCols(), [], "054 rollback drops both columns");
       if (f === "053_app_ratings.sql") assert.ok(!(await exists("app_ratings")), "053 rollback drops the table");
       if (f === "052_payment_reminder.sql") assert.ok(!(await remindedCol()), "052 reminder rollback drops the column");
       if (f === "051_bonus_channel_soft_delete.sql") assert.ok(!(await deletedCol()), "051 rollback drops the column");

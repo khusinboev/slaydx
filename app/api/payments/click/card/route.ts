@@ -1,5 +1,6 @@
 import { ApiError, handler, json, readJson, requireUser } from "@/lib/server/api";
 import { startCardPayment } from "@/lib/server/click-direct";
+import { assertOfferAccepted } from "@/lib/server/oferta";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ export const dynamic = "force-dynamic";
  */
 export const POST = handler("payments/click/card", async (req) => {
   const { user } = await requireUser(req);
+  await assertOfferAccepted(user.id); // public offer (D6); gate off = no-op
   const body = await readJson<{ orderId?: unknown; cardNumber?: unknown; expireDate?: unknown }>(req, 2_000);
   if (typeof body.orderId !== "string" || typeof body.cardNumber !== "string" || typeof body.expireDate !== "string") {
     throw new ApiError("So'rov noto'g'ri", 400);

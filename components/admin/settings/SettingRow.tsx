@@ -26,6 +26,10 @@ function ValueView({ item, tools }: { item: SettingItem; tools: ReadonlyArray<To
       </Badge>
     );
   }
+  if (item.type === "text") {
+    if (!item.value.trim()) return <span className="text-muted-foreground text-[13px]">Kiritilmagan</span>;
+    return <span className="max-w-full text-[13px] whitespace-pre-line [overflow-wrap:anywhere]">{item.value}</span>;
+  }
   if (item.type === "tool_ids") {
     if (item.value.length === 0) return <span className="text-muted-foreground text-[13px]">Hech biri</span>;
     const label = new Map(tools.map((t) => [t.value, t.label]));

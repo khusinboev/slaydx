@@ -613,6 +613,27 @@ function markupOf(screen: Screen): Record<string, unknown> {
 }
 
 /**
+ * The normal `/start` welcome: the welcome card, the persistent main keyboard and (C-Q2) the mandatory-channels
+ * card. Shared by plain `/start` and the public-offer accept button (`bot/router.ts`).
+ */
+export async function sendWelcome(
+  chatId: number,
+  lang: Lang,
+  me: SessionUser | null,
+  profile: TelegramProfile,
+  ctx: { chatId: number; telegramId: number; lang: Lang; user: SessionUser } | null,
+): Promise<void> {
+  const bot = await import("./bot/router");
+  const screen = welcomeScreen(lang, { user: me, loginLink: await createBotLoginLink(profile), rewardPoints: REFERRAL_REWARD_POINTS });
+  await sendMessage(chatId, screen.text, markupOf(screen));
+  if (ctx) {
+    await bot.sendMainKeyboard(ctx, "note");
+    // C-Q2: mandatory channels not joined yet → a short card with their buttons.
+    await bot.sendMandatoryCard(ctx);
+  }
+}
+
+/**
  * Foydalanuvchi botga o'z kontaktini ulashdi (`/admin` javobi).
  *
  * Faqat O'ZINING kontaktini qabul qilamiz (`contact.user_id ===
@@ -987,13 +1008,10 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
     // B2: the welcome card (inline buttons) + the persistent main keyboard in a
     // second message (one message holds one reply_markup); the keyboard's
     // personal links are refreshed by every /start.
-    const screen = welcomeScreen(lang, { user: me, loginLink: await createBotLoginLink(profile), rewardPoints: REFERRAL_REWARD_POINTS });
-    await sendMessage(msg.chat.id, screen.text, markupOf(screen));
-    if (ctx) {
-      await bot.sendMainKeyboard(ctx, "note");
-      // C-Q2: mandatory channels not joined yet → a short card with their buttons.
-      await bot.sendMandatoryCard(ctx);
-    }
+    // Public offer (D6): a user who has not accepted the current version gets the offer FIRST (gate on only);
+    // the accept button sends the welcome (`sendWelcome`). Referral attribution already happened in `botUser`.
+    if (ctx && (await (await import("./bot/oferta")).sendOfferIfRequired(ctx))) return;
+    await sendWelcome(msg.chat.id, lang, me, profile, ctx);
     return;
   }
 
