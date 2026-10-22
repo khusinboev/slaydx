@@ -13,7 +13,7 @@
 -- ROLLBACK:
 --   DROP INDEX IF EXISTS payment_orders_unreminded_idx;
 --   ALTER TABLE payment_orders DROP COLUMN IF EXISTS reminded_at;
---   DELETE FROM schema_migrations WHERE name = '051_payment_reminder.sql';
+--   DELETE FROM schema_migrations WHERE name = '052_payment_reminder.sql';
 SET LOCAL lock_timeout = '5s';
 ALTER TABLE payment_orders ADD COLUMN IF NOT EXISTS reminded_at TIMESTAMPTZ;
 UPDATE payment_orders SET reminded_at = now() WHERE reminded_at IS NULL;

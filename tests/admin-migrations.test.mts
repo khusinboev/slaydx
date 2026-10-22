@@ -308,12 +308,12 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     assert.ok(await deletedCol(), "051 column created");
     const remindedCol = () =>
       queryOne("SELECT 1 FROM information_schema.columns WHERE table_name = 'payment_orders' AND column_name = 'reminded_at'");
-    assert.ok(await remindedCol(), "051 payment_reminder column created");
+    assert.ok(await remindedCol(), "052 payment_reminder column created");
     assert.ok(await paynetCol(), "050 column created");
     for (const def of await providerChecks()) assert.match(def, /'paynet'/, "050 widened the provider CHECKs");
     for (const f of [
-      // 051: payment reminder (owner 2026-10-22) -- payment_orders.reminded_at + partial index.
-      "051_payment_reminder.sql",
+      // 052: payment reminder (owner 2026-10-22) -- payment_orders.reminded_at + partial index.
+      "052_payment_reminder.sql",
       // 051: bonus channel soft delete (owner 2026-10-22) -- bonus_channels.deleted_at.
       "051_bonus_channel_soft_delete.sql",
       // 050: Paynet provider (docs/payments/PAYNET.md) -- provider CHECKs widened, paynet_trn_seq, payment_orders.paynet_trn_id.
@@ -344,7 +344,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     ]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
-      if (f === "051_payment_reminder.sql") assert.ok(!(await remindedCol()), "051 reminder rollback drops the column");
+      if (f === "052_payment_reminder.sql") assert.ok(!(await remindedCol()), "052 reminder rollback drops the column");
       if (f === "051_bonus_channel_soft_delete.sql") assert.ok(!(await deletedCol()), "051 rollback drops the column");
       if (f === "050_paynet.sql") {
         assert.ok(!(await paynetCol()) && !(await exists("paynet_trn_seq")), "050 rollback drops the column and the sequence");

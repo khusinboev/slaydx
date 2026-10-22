@@ -6,7 +6,7 @@ import { t, type Lang } from "./bot/i18n";
 import { appUrl, esc, inlineButton, isPublicHttps, rows, type Screen } from "./bot/ui";
 
 /**
- * «To'lovingiz yakunlanmadi» (owner request 2026-10-22, migration 051): a Click order that stayed
+ * «To'lovingiz yakunlanmadi» (owner request 2026-10-22, migration 052): a Click order that stayed
  * unpaid for 5 minutes gets ONE bot message with a support button and «Qayta to'lash». Called by the
  * leader-only `payment-reminder` housekeeping step every tick.
  */
@@ -40,6 +40,10 @@ async function claimDue(): Promise<Claimed[]> {
              AND NOT EXISTS (
                SELECT 1 FROM payment_orders l
                 WHERE l.user_id = p.user_id AND l.state = 'paid' AND l.created_at > p.created_at)
+             AND NOT EXISTS (
+               SELECT 1 FROM payment_orders r
+                WHERE r.user_id = p.user_id AND r.id <> p.id
+                  AND r.reminded_at > now() - make_interval(mins => $2::int))
            ORDER BY p.created_at
            LIMIT ${BATCH}
            FOR UPDATE OF p SKIP LOCKED)
@@ -65,7 +69,12 @@ export function paymentReminderScreen(lang: Lang): Screen {
 export async function remindUnpaidOrders(): Promise<number> {
   const due = await claimDue();
   let sent = 0;
+  // Several orders of one user can be claimed in one tick (the NOT EXISTS above sees the pre-update
+  // snapshot): the user still gets one message, the other orders are just marked.
+  const seen = new Set<string>();
   for (const d of due) {
+    if (seen.has(d.user_id)) continue;
+    seen.add(d.user_id);
     const r = await sendUserDm({ userId: d.user_id, telegramId: d.telegram_id, language: d.language }, paymentReminderScreen);
     if (r === "sent") sent++;
   }

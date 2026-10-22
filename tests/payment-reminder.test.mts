@@ -98,6 +98,25 @@ test("pending orders are reminded too; default language is uz", { skip }, async 
   assert.equal(to(u.tg)[0]?.text, t("uz", "payReminder.text"));
 });
 
+test("one user, two unpaid orders due in the same tick → one message, both orders marked", { skip }, async () => {
+  const u = await newUser();
+  const a = await order(u.id, 7);
+  const b = await order(u.id, 6);
+  await remindUnpaidOrders();
+  assert.equal(to(u.tg).length, 1, "MUTATSIYA: per-tick user dedupe");
+  assert.ok((await remindedAt(a)) && (await remindedAt(b)), "both claimed");
+});
+
+test("a second order becoming due within 60 minutes of a reminder is not reminded again", { skip }, async () => {
+  const u = await newUser();
+  await order(u.id, 10);
+  await remindUnpaidOrders();
+  const later = await order(u.id, 6);
+  await remindUnpaidOrders();
+  assert.equal(to(u.tg).length, 1, "MUTATSIYA: recent-reminder exclusion");
+  assert.equal(await remindedAt(later), null, "left unclaimed");
+});
+
 test("younger than 5 minutes is left alone, then reminded once it ages", { skip }, async () => {
   const u = await newUser();
   const id = await order(u.id, 2);
