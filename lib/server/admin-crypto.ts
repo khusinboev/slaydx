@@ -129,26 +129,24 @@ function aadFor(context: string): Buffer {
 }
 
 /**
- * Encrypts `plain`. `context` is bound as additional authenticated data (the
- * admin id for TOTP secrets), so a ciphertext copied onto another account row
- * does not open there.
+ * The AES-256-GCM core, shared with other key stores (`providers/crypto.ts`): the caller picks the 32-byte
+ * key, the `version` prefix of the sealed text and the AAD. Format `<version>` + base64url(iv | tag | ct).
+ * Not exported through `seal`/`open`, whose key, prefix and AAD stay exactly as they were.
  */
-export function seal(plain: string, context = ""): string {
-  const { enc } = keys();
+export function sealWith(key: Buffer, version: string, aad: Buffer, plain: string): string {
   const iv = randomBytes(IV_LEN);
-  const cipher = createCipheriv("aes-256-gcm", enc, iv, { authTagLength: TAG_LEN });
-  cipher.setAAD(aadFor(context));
+  const cipher = createCipheriv("aes-256-gcm", key, iv, { authTagLength: TAG_LEN });
+  cipher.setAAD(aad);
   const ct = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
-  return VERSION + Buffer.concat([iv, tag, ct]).toString("base64url");
+  return version + Buffer.concat([iv, tag, ct]).toString("base64url");
 }
 
-export function open(sealed: string, context = ""): string {
-  const { enc } = keys();
-  if (typeof sealed !== "string" || !sealed.startsWith(VERSION)) {
+export function openWith(key: Buffer, version: string, aad: Buffer, sealed: string): string {
+  if (typeof sealed !== "string" || !sealed.startsWith(version)) {
     throw new AdminCryptoError("bad_version", "unsupported sealed value version");
   }
-  const body = sealed.slice(VERSION.length);
+  const body = sealed.slice(version.length);
   if (!/^[A-Za-z0-9_-]+$/.test(body)) throw new AdminCryptoError("bad_format", "sealed value is not base64url");
   const raw = Buffer.from(body, "base64url");
   if (raw.length < IV_LEN + TAG_LEN) throw new AdminCryptoError("bad_format", "sealed value is too short");
@@ -156,14 +154,27 @@ export function open(sealed: string, context = ""): string {
   const tag = raw.subarray(IV_LEN, IV_LEN + TAG_LEN);
   const ct = raw.subarray(IV_LEN + TAG_LEN);
   try {
-    const decipher = createDecipheriv("aes-256-gcm", enc, iv, { authTagLength: TAG_LEN });
-    decipher.setAAD(aadFor(context));
+    const decipher = createDecipheriv("aes-256-gcm", key, iv, { authTagLength: TAG_LEN });
+    decipher.setAAD(aad);
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(ct), decipher.final()]).toString("utf8");
   } catch {
     // Wrong key, wrong context or modified bytes — GCM cannot tell which.
     throw new AdminCryptoError("tampered", "sealed value failed authentication");
   }
+}
+
+/**
+ * Encrypts `plain`. `context` is bound as additional authenticated data (the
+ * admin id for TOTP secrets), so a ciphertext copied onto another account row
+ * does not open there.
+ */
+export function seal(plain: string, context = ""): string {
+  return sealWith(keys().enc, VERSION, aadFor(context), plain);
+}
+
+export function open(sealed: string, context = ""): string {
+  return openWith(keys().enc, VERSION, aadFor(context), sealed);
 }
 
 // ───────────────────────────── tokens and codes
