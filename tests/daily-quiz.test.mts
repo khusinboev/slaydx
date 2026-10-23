@@ -8,7 +8,9 @@
  *   1. first-answer lock removed (a replay overwrites the stored answer)      -> «the first answer is final»;
  *   2. monthly cap check removed from `applyReward`                           -> «monthly cap»;
  *   3. advisory lock (or the budget check) removed from `applyReward`          -> «global budget» / «concurrent winners»;
- *   4. per-day send claim removed from `runDailyQuizSend`                      -> «one send pass» / «two workers».
+ *   4. send claim: the persisted cursor ignored (every tick starts at user 0) -> «one send pass» / «paced in batches» / «recipients»;
+ *      the compare-and-set on the cursor removed                               -> «two parallel workers».
+ *      (Ignoring `finished_at` alone stays green on purpose: it is only a short-circuit, the cursor is the guard.)
  */
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
 process.env.APP_URL = "https://slaydx.test";
