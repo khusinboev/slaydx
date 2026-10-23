@@ -75,3 +75,19 @@ test("imageRatio o'lchamni HAM, promptdagi freym ko'rsatmasini HAM o'zgartiradi"
   assert.match(square.prompt, /Wide|Vertical/);
   assert.match(portrait.prompt, /Vertical/);
 });
+
+test("model faqat provayder va narxni o'zgartiradi — prompt/o'lcham o'zgarmaydi; boshqa parametrlar provayderni o'zgartirmaydi", () => {
+  // MUTATSIYA: dvigatel `model`ni e'tiborsiz qoldirsa (har doim Gemini) — bu test va zond qizil bo'ladi.
+  const g = signature({ model: "gemini" });
+  const o = signature({ model: "openai" });
+  assert.equal(g.provider, "gemini");
+  assert.equal(o.provider, "openai");
+  assert.equal(g.price, 2000);
+  assert.equal(o.price, 4000);
+  assert.equal(g.prompt, o.prompt);
+  assert.equal(g.size, o.size);
+  for (const id of ["imageStyle", "imageRatio", "imageCount", "prompt"]) {
+    const p = IMAGE_PARAMS.find((x) => x.id === id)!;
+    assert.equal(signature({ [id]: p.probeA }).provider, signature({ [id]: p.probeB }).provider, `${id} provayderni o'zgartirmasligi kerak`);
+  }
+});
