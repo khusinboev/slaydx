@@ -37,6 +37,7 @@ const ADMIN_SECTIONS = [
   "ai",
   "system",
   "settings",
+  "providers",
   "admins",
   "account",
 ] as const;

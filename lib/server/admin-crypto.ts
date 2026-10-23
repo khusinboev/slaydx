@@ -131,7 +131,7 @@ function aadFor(context: string): Buffer {
 /**
  * The AES-256-GCM core, shared with other key stores (`providers/crypto.ts`): the caller picks the 32-byte
  * key, the `version` prefix of the sealed text and the AAD. Format `<version>` + base64url(iv | tag | ct).
- * Not exported through `seal`/`open`, whose key, prefix and AAD stay exactly as they were.
+ * `seal`/`open` below keep their own key, prefix and AAD exactly as they were.
  */
 export function sealWith(key: Buffer, version: string, aad: Buffer, plain: string): string {
   const iv = randomBytes(IV_LEN);
