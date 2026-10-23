@@ -3,6 +3,7 @@ import { formatPoints } from "@/lib/referral";
 import { TOOL_BY_ID } from "@/lib/tools";
 import { FIRST_TOPUP_NOTE_PREFIX } from "@/lib/topup-bonus";
 import { RATING_NOTE } from "@/lib/rating";
+import { DAILY_QUIZ_NOTE } from "@/lib/daily-quiz/rules";
 import { PAYMENT_BONUS_NOTE_PREFIX } from "@/lib/payment-bonus";
 import { AMBASSADOR_NOTE_PREFIX } from "@/lib/ambassador";
 
@@ -88,6 +89,7 @@ export function describeEntry(e: Pick<LedgerEntry, "kind" | "note">): { title: s
       // Ambassador bonus «Do'st to'lovi bonusi (N%)» (`lib/ambassador.ts ambassadorNote`).
       if (note.startsWith(AMBASSADOR_NOTE_PREFIX)) return { title: note, detail: "" };
       if (note === RATING_NOTE) return { title: "Ilovani baholash bonusi", detail: "" };
+      if (note === DAILY_QUIZ_NOTE) return { title: DAILY_QUIZ_NOTE, detail: "" };
       // Channel bonus notes (lib/server/bonus-channels.ts JOIN_NOTE_PREFIX / STAY_NOTE_PREFIX).
       const join = /^Kanal obunasi:\s*(.+)$/.exec(note)?.[1];
       if (join) return { title: `Kanal obunasi bonusi · ${join}`, detail: "" };

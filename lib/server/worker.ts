@@ -61,6 +61,7 @@ import { processIdFor, startHeartbeat, stopHeartbeat } from "./heartbeat";
 import { recordStep } from "./housekeeping-status";
 import { STAY_BATCH, staySweep } from "./bonus-channels";
 import { remindUnpaidOrders } from "./payment-reminder";
+import { runDailyQuizSend } from "./daily-quiz-send";
 
 /**
  * Navbatni bajaruvchi worker.
@@ -1024,6 +1025,8 @@ export async function purgeHousekeeping(): Promise<void> {
   }
   // Leader-only; one DM per unpaid Click order (the claim is atomic, see payment-reminder.ts).
   await step("payment-reminder", () => remindUnpaidOrders());
+  // Leader-only; the morning «Kunlik savollar» DM (docs/program-17 item 16): per-day claim + paged cursor, see daily-quiz-send.ts.
+  await step("daily-quiz", () => runDailyQuizSend());
 }
 
 /** `error_log`: 90 days after `last_seen_at`, resolved or not (§5.5). */

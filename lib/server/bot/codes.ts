@@ -21,6 +21,10 @@ import { BOT_LANGUAGES, isProfileField, type BotLanguage, type FieldStepId, type
  *   b:c:<channelId>   check one bonus channel (a channel without a public link; old «Tekshirish»
  *                     buttons) — a positive BIGINT, ≤ 18 digits → ≤ 22 bytes
  *   o:a:<v>           «Qabul qilaman» on the public-offer message (D6); v = the offer version that was shown
+ *   dq:s              daily quiz «Boshlash» (start / resume today's questions)
+ *   dq:a:<d>:<q>:<c>  daily quiz answer: d = day number (days since 1970-01-01 of the Tashkent day the message
+ *                     belongs to), q = question 0-2, c = chosen option 0-3
+ *   dq:off | dq:on    daily quiz message off / on
  *   l:m:<o>           language menu; o = where it came from (p profile, y help, n none)
  *   l:s:<lang>:<o>    set the language, then show screen `o`
  *   n                 no-op (a label-only button)
@@ -51,6 +55,10 @@ export const cb = {
   bonusCheck: (channelId: string) => `b:c:${channelId}`,
   langMenu: (origin: Origin) => `l:m:${origin}`,
   langSet: (lang: BotLanguage, origin: Origin) => `l:s:${lang}:${origin}`,
+  dqStart: () => "dq:s",
+  dqAnswer: (day: number, q: number, choice: number) => `dq:a:${day}:${q}:${choice}`,
+  dqOff: () => "dq:off",
+  dqOn: () => "dq:on",
   noop: () => "n",
 };
 
@@ -72,6 +80,10 @@ export type Callback =
   | { kind: "bonusCheck"; channelId: string }
   | { kind: "langMenu"; origin: Origin }
   | { kind: "langSet"; lang: BotLanguage; origin: Origin }
+  | { kind: "dqStart" }
+  | { kind: "dqAnswer"; day: number; q: 0 | 1 | 2; choice: 0 | 1 | 2 | 3 }
+  | { kind: "dqOff" }
+  | { kind: "dqOn" }
   | { kind: "noop" }
   | { kind: "unknown" };
 
@@ -118,6 +130,14 @@ export function parseCallback(data: string | undefined | null): Callback {
       if (b === "m" && parts.length === 3 && isOrigin(c)) return { kind: "langMenu", origin: c };
       if (b === "s" && parts.length === 4 && (BOT_LANGUAGES as readonly string[]).includes(c ?? "") && isOrigin(d)) {
         return { kind: "langSet", lang: c as BotLanguage, origin: d };
+      }
+      break;
+    case "dq":
+      if (parts.length === 2 && b === "s") return { kind: "dqStart" };
+      if (parts.length === 2 && b === "off") return { kind: "dqOff" };
+      if (parts.length === 2 && b === "on") return { kind: "dqOn" };
+      if (parts.length === 5 && b === "a" && /^[1-9]\d{0,5}$/.test(c ?? "") && /^[0-2]$/.test(d ?? "") && /^[0-3]$/.test(parts[4] ?? "")) {
+        return { kind: "dqAnswer", day: Number(c), q: Number(d) as 0 | 1 | 2, choice: Number(parts[4]) as 0 | 1 | 2 | 3 };
       }
       break;
     case "n":

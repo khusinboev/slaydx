@@ -4,7 +4,8 @@
 --
 --   daily_quiz_attempts   one row per (user, Tashkent day): the chosen options so far (`answers`, in question order,
 --                         the first answer to a question is final), the correct count, when the 3rd answer landed
---                         (`finished_at`) and the bonus paid (`rewarded_points`, 0 = none). The primary key makes
+--                         (`finished_at`), the bonus paid (`rewarded_points`, 0 = none) and why (`outcome`:
+--                         lost / paid / cap / budget / none = reward switched off). The primary key makes
 --                         a second attempt on the same day impossible, even in a race. Monthly cap = the sum of
 --                         `rewarded_points` over the month.
 --   daily_quiz_sends      the leader's per-day mark: the row is INSERTed (claimed) before the first message, so a
@@ -32,6 +33,7 @@ CREATE TABLE IF NOT EXISTS daily_quiz_attempts (
   started_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   finished_at     TIMESTAMPTZ,
   rewarded_points INTEGER     NOT NULL DEFAULT 0 CHECK (rewarded_points >= 0),
+  outcome         TEXT        CHECK (outcome IN ('lost', 'paid', 'cap', 'budget', 'none')),
   PRIMARY KEY (user_id, day)
 );
 

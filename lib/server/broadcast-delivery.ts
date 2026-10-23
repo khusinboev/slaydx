@@ -423,7 +423,7 @@ const defaultSend = async (chatId: string, html: string): Promise<SendOutcome> =
 
 // One limiter for the whole process, so the 429 pause and the 25/s pace span successive passes.
 let sharedLimiter: Limiter | null = null;
-function processLimiter(): Limiter {
+export function processLimiter(): Limiter {
   return (sharedLimiter ??= createLimiter({ perSecond: BROADCAST_PER_SECOND }));
 }
 
