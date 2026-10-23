@@ -35,6 +35,7 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import type { AdapterOpts, Attempt, ProviderAdapter } from "./types";
+import { getProviderKey } from "../../server/providers/resolve";
 
 export type AnthropicDeps = {
   /** Testda haqiqiy SDK o'rniga stub — tarmoqqa chiqmasdan. */
@@ -95,6 +96,13 @@ export function makeAnthropicAdapter(deps: AnthropicDeps = {}): ProviderAdapter 
   return {
     id: "anthropic",
     async complete(model, system, user, opts: AdapterOpts): Promise<Attempt> {
+      /*
+       * The key is read ONCE and passed explicitly. `apiKey: undefined` would make the SDK fall back to
+       * the environment variable on its own, so a provider the admin switched off after the chain's
+       * check (or whose key was removed) would still be called with the env key. No key = no request.
+       */
+      const key = deps.client ? "" : getProviderKey("anthropic");
+      if (!deps.client && !key) return { ok: false, error: "ANTHROPIC_API_KEY yo'q", retryable: false };
       const client: Pick<Anthropic, "messages"> =
         /*
          * `maxRetries: 0` — SDK standarti 2: timeout'da uch urinish
@@ -104,7 +112,7 @@ export function makeAnthropicAdapter(deps: AnthropicDeps = {}): ProviderAdapter 
          * boshqaradi — muddat, jitter va `Retry-After` chegarasi bilan
          * (audit EXT-03).
          */
-        deps.client ?? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, defaultHeaders: workspaceHeaders(), timeout: opts.timeoutMs, maxRetries: 0 });
+        deps.client ?? new Anthropic({ apiKey: key, defaultHeaders: workspaceHeaders(), timeout: opts.timeoutMs, maxRetries: 0 });
       try {
         const res = await client.messages.create({
           model,

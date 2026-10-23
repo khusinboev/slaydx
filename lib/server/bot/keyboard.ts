@@ -1,4 +1,4 @@
-import { env, llmConfigured } from "../env";
+import { imagesConfigured, llmConfigured, ttsFeature } from "../env";
 import { botAppUrl } from "../bot-link";
 import { TOOL_BY_ID, toolBlockedReason, type ToolFeatures } from "../../tools";
 import { t, LANGS, type Lang, type TextKey } from "./i18n";
@@ -55,7 +55,7 @@ export function isToolAction(action: KeyboardAction): boolean {
 
 /** Server features, as `/api/auth/session` reports them. */
 export function botFeatures(): ToolFeatures {
-  return { llm: llmConfigured(), images: Boolean(env.gemini.key) };
+  return { llm: llmConfigured(), images: imagesConfigured(), tts: ttsFeature() };
 }
 
 /** The tool's block reason (`null` = usable). */

@@ -44,6 +44,12 @@ const KEYS = [
    */
   "GEMINI_IMAGE_MODEL",
   "GEMINI_IMAGE_SIZE",
+  /*
+   * Program-17 D7: master key of the provider API keys stored by the admin page. The web process seals
+   * them, the WORKER opens them (LLM/image/TTS run there): without it in the worker block every stored
+   * key would be unreadable there and the env keys would silently apply instead.
+   */
+  "PROVIDER_KEYS_KEY",
 ];
 
 function envBlock(yaml: string, service: string): string {

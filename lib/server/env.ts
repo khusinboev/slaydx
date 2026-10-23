@@ -1,6 +1,8 @@
 import "server-only";
 import { BRAND_NAME } from "../brand";
 import { acceptedPaymeKeys } from "./payme-keys";
+import { providersOfKind } from "./providers/registry";
+import { getProviderKey, isProviderEnabled, unreadableProviders } from "./providers/resolve";
 import { resolveSupportUrl } from "../support";
 
 /**
@@ -188,6 +190,16 @@ export const env = {
    */
   get adminTotpKey(): string {
     return str("ADMIN_TOTP_KEY");
+  },
+
+  /**
+   * Master key of the encrypted provider API keys (`lib/server/providers/crypto.ts`): base64 of exactly 32
+   * bytes (`openssl rand -base64 32`). Optional: without it the sealing key is derived from `ADMIN_TOTP_KEY`.
+   * Changing it makes keys sealed under the old one unreadable (the admin re-enters them). A getter, so tests
+   * flip it per case. Never log it.
+   */
+  get providerKeysKey(): string {
+    return str("PROVIDER_KEYS_KEY");
   },
 
   /**
@@ -383,7 +395,16 @@ export function parseAdminTotpKey(raw: string): Buffer | null {
 }
 
 export function llmConfigured(): boolean {
-  return Boolean(env.gemini.key || env.xai.key);
+  return Boolean(getProviderKey("gemini") || getProviderKey("xai"));
+}
+
+/**
+ * Image generation key present (the `images` feature flag of the Gemini image path: «Rasm», pro-slide). Goes
+ * through the provider resolver, so a Gemini key stored in the admin «Provayderlar» page counts and a
+ * disabled Gemini does not.
+ */
+export function imagesConfigured(): boolean {
+  return Boolean(getProviderKey("gemini"));
 }
 
 /**
@@ -404,7 +425,17 @@ export function telegramWebhookSecret(): string {
  * `GEMINI_API_KEY` ning o'zi preview TTS ni YOQMAYDI.
  */
 export function ttsConfigured(): boolean {
-  return Boolean((env.tts.azureKey && env.tts.azureRegion) || env.tts.aishaKey || (env.gemini.key && env.tts.geminiModel));
+  return Boolean((getProviderKey("azure") && env.tts.azureRegion) || getProviderKey("aisha") || (getProviderKey("gemini") && env.tts.geminiModel));
+}
+
+/**
+ * The `tts` feature flag (podcast, greeting). `false` ONLY when the admin switched a voice provider off in
+ * «Provayderlar» and none usable is left; a merely missing key blocks nothing here, exactly as before the key
+ * store existed (no `provider_settings` rows: always `true`).
+ */
+export function ttsFeature(): boolean {
+  if (ttsConfigured()) return true;
+  return !providersOfKind("tts").some((p) => p.implemented && !isProviderEnabled(p.id));
 }
 
 /**
@@ -454,7 +485,7 @@ export function assertRuntimeConfig(): string[] {
   if (isProd && !telegramWebhookSecret() && env.telegramBotToken) {
     problems.push("TELEGRAM_WEBHOOK_SECRET (yoki zaxira CRON_SECRET) yo'q — Telegram webhook'ni himoyalab bo'lmaydi");
   }
-  if (env.tts.azureKey && !env.tts.azureRegion) {
+  if (getProviderKey("azure") && !env.tts.azureRegion) {
     problems.push("AZURE_SPEECH_REGION yo'q — AZURE_SPEECH_KEY yolg'iz ishlamaydi");
   }
   return problems;
@@ -475,6 +506,11 @@ export function runtimeWarnings(): string[] {
   const warnings: string[] = [];
   if (!ttsConfigured()) {
     warnings.push("TTS kaliti yo'q (AZURE_SPEECH_KEY+AZURE_SPEECH_REGION / AISHA_API_KEY) — podkast va tabriknoma ishlamaydi");
+  }
+  // Provider keys stored in the admin page that cannot be decrypted (the sealing key changed): ignored, env applies.
+  const unreadable = unreadableProviders();
+  if (unreadable.length) {
+    warnings.push(`saqlangan kalit o'qilmaydi — PROVIDER_KEYS_KEY o'zgarganmi? (${unreadable.join(", ")}); admin «Provayderlar» sahifasida qayta kiriting`);
   }
   // EXT-14: zaxira ishlaydi, lekin health bearer'i webhook kaliti bo'lib qoladi.
   if (env.telegramBotToken && !env.telegramWebhookSecret && env.cronSecret) {

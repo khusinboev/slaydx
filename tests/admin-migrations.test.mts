@@ -318,7 +318,10 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
       queryOne("SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'daily_quiz_off'");
     assert.ok(await quizOffCol(), "055 column created");
     assert.ok((await exists("daily_quiz_attempts")) && (await exists("daily_quiz_sends")), "055 tables created");
+    assert.ok(await exists("provider_settings"), "056 table created");
     for (const f of [
+      // 056: provider key store (program-17 D7) -- provider_settings.
+      "056_provider_settings.sql",
       // 055: daily logic quiz (docs/program-17 item 16) -- daily_quiz_attempts / daily_quiz_sends + users.daily_quiz_off.
       "055_daily_quiz.sql",
       // 054: public offer acceptance (docs/program-17 item 12) -- users.offer_version / offer_accepted_at.
@@ -357,6 +360,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     ]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
+      if (f === "056_provider_settings.sql") assert.ok(!(await exists("provider_settings")), "056 rollback drops the table");
       if (f === "055_daily_quiz.sql") {
         assert.ok(!(await quizOffCol()), "055 rollback drops the users column");
         assert.ok(!(await exists("daily_quiz_attempts")) && !(await exists("daily_quiz_sends")), "055 rollback drops both tables");

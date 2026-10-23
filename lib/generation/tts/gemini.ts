@@ -23,10 +23,11 @@ import { TTS_LIMITS, TtsError, type TtsAudio, type TtsPaceCtx, type TtsProvider,
 import { pcmToWav, wavSeconds } from "./mp3";
 import { DIALOG_LABELS, renderDialog } from "./pack";
 import { geminiPacer } from "./pace";
+import { getProviderKey } from "../../server/providers/resolve";
 
 /* ══════════════════════════ sozlama ══════════════════════════ */
 
-export const geminiKey = (): string => process.env.GEMINI_API_KEY?.trim() || "";
+export const geminiKey = (): string => getProviderKey("gemini");
 
 /** Bo'sh — provayder O'CHIQ (fayl boshidagi izoh). Masalan `gemini-2.5-flash-preview-tts`. */
 export const geminiTtsModel = (): string => process.env.TTS_GEMINI_MODEL?.trim() || "";

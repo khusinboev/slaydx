@@ -10,7 +10,8 @@ import { ApiError } from "./api";
 import { costCaveats, soumPerUsd, spendBy, spendByProviderModel, spendCoverage, spendTotals, type SpendCoverage, type SpendGroupBy, type SpendRange } from "./admin-cost";
 import { parseDateRange, type DateRange } from "./admin-list";
 import { isStale } from "./admin-heartbeat";
-import { env } from "./env";
+import { getProviderKey } from "./providers/resolve";
+import { ensureProviderKeys } from "./providers/store";
 import { transaction, query } from "./db";
 import type { FreeLlmEndpoint } from "./spend";
 import { TOOL_BY_ID } from "../tools";
@@ -212,20 +213,21 @@ export type ProviderKeys = Record<ProviderKeyName, boolean>;
 const present = (v: string | undefined | null): boolean => Boolean(v && v.trim());
 
 /**
- * Which provider keys are configured. Booleans only (T12): the value is read
- * inside `Boolean(...)` and never stored, logged or returned. The accessors are
- * the ones the product code itself calls, so "true" means "the provider is
- * usable by this process". Anthropic, OpenAI and OpenRouter adapters read
- * `process.env` directly (no accessor exists), so the same names are read here.
+ * Which provider keys are usable. Booleans only (T12): the value is read
+ * inside `Boolean(...)` and never stored, logged or returned. Every entry goes
+ * through the provider resolver (`providers/resolve.ts`), the same call the
+ * adapters make, so "true" means "the provider is usable by this process":
+ * a key stored in the admin «Provayderlar» page counts, and a provider the
+ * admin switched off is `false` even when an env var exists.
  * `azureTts` needs both the key and the region, as `ttsConfigured()` does.
  */
 export function providerKeys(): ProviderKeys {
   return {
     gemini: present(geminiKey()),
-    anthropic: present(process.env.ANTHROPIC_API_KEY),
-    openai: present(process.env.OPENAI_API_KEY),
-    openrouter: present(process.env.OPENROUTER_API_KEY),
-    xai: present(env.xai.key),
+    anthropic: present(getProviderKey("anthropic")),
+    openai: present(getProviderKey("openai")),
+    openrouter: present(getProviderKey("openrouter")),
+    xai: present(getProviderKey("xai")),
     fal: present(falKey()),
     pexels: present(pexelsKey()),
     pixabay: present(pixabayKey()),
@@ -291,6 +293,7 @@ export function parseLimiters(raw: unknown, process: string, stale: boolean): Ai
 
 /** Key presence, per-process breakers and limiters, and the last 24 hours of spend by provider/model. */
 export async function aiProviders(nowMs: number = Date.now()): Promise<AiProvidersBody> {
+  await ensureProviderKeys();
   const beats = await query<HeartbeatRow>(
     `SELECT process_id, role, last_seen_at, breakers, limiters
        FROM process_heartbeats

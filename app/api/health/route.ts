@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { queryOne } from "@/lib/server/db";
-import { assertRuntimeConfig, env, llmConfigured, paymentsConfigured, runtimeWarnings } from "@/lib/server/env";
+import { assertRuntimeConfig, env, imagesConfigured, llmConfigured, paymentsConfigured, runtimeWarnings } from "@/lib/server/env";
 import { safeEqual } from "@/lib/server/session";
 
 export const runtime = "nodejs";
@@ -101,7 +101,7 @@ export async function GET(req: Request) {
       queue,
       features: {
         llm: llmConfigured(),
-        images: Boolean(env.gemini.key),
+        images: imagesConfigured(),
         telegram: Boolean(env.telegramBotToken),
         payments: paymentsConfigured(),
         worker: env.worker.inline ? "inline" : "external",

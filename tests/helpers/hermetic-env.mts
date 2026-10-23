@@ -61,6 +61,10 @@ const PROVIDER_ENV_KEYS = [
   "AZURE_SPEECH_KEY",
   "AZURE_SPEECH_REGION",
   "AISHA_API_KEY",
+  // Reserved providers (admin «Provayderlar», program-17 D7) and the key store's own master key.
+  "KLING_API_KEY",
+  "ELEVENLABS_API_KEY",
+  "PROVIDER_KEYS_KEY",
   "TTS_GEMINI_MODEL",
   "TTS_VOICE_UZ",
   "TTS_VOICE_RU",

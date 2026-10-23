@@ -14,6 +14,7 @@
  */
 import { requestBudget, type FalFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
 import { recordFalImage } from "./job-cost";
+import { getProviderKey } from "../server/providers/resolve";
 
 export type FalSize = { width: number; height: number };
 export type SlideImage = { url: string; alt?: string };
@@ -50,7 +51,7 @@ function falUrl(premium = false) {
 }
 
 export function falKey() {
-  return process.env.FAL_KEY?.trim() || "";
+  return getProviderKey("fal");
 }
 
 /**

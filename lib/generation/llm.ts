@@ -8,13 +8,14 @@ import { BREAKER_WAIT_MAX_MS, CHAIN_MIN_ATTEMPT_MS, CHAIN_SAFETY_MS, DeadlineErr
 import { classifyFailure, isMaxTokensFinish, isSafetyFinish, reportFailure, withJsonRetry, type FailureKind } from "./llm/failure";
 import { limiterFor } from "./llm/limiter";
 import { log } from "../server/log";
+import { getProviderKey } from "../server/providers/resolve";
 import { backoffMs, equalJitterMs, geminiRetryDelayMs, parseRetryAfter } from "./llm/retry";
 
 type Provider = "gemini" | "xai" | null;
 
 export function llmProvider(): Provider {
-  if (process.env.GEMINI_API_KEY) return "gemini";
-  if (process.env.XAI_API_KEY) return "xai";
+  if (getProviderKey("gemini")) return "gemini";
+  if (getProviderKey("xai")) return "xai";
   return null;
 }
 
@@ -439,7 +440,7 @@ async function completeGemini(
   maxTokens: number,
   opts: LlmOpts,
 ): Promise<Attempt<GroundedResult>> {
-  const key = process.env.GEMINI_API_KEY;
+  const key = getProviderKey("gemini");
   if (!key) return { value: null, retryable: false, kind: "other", message: "GEMINI_API_KEY missing" };
   const model = llmModel();
   const ctrl = new AbortController();
@@ -664,7 +665,7 @@ async function streamGemini(
   opts: LlmOpts,
   onText: (partial: string) => void,
 ): Promise<Attempt<string>> {
-  const key = process.env.GEMINI_API_KEY;
+  const key = getProviderKey("gemini");
   if (!key) return { value: null, retryable: false, kind: "other", message: "GEMINI_API_KEY missing" };
   const model = llmModel();
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
@@ -852,7 +853,7 @@ async function completeXai(
   maxTokens: number,
   opts: LlmOpts,
 ): Promise<Attempt<GroundedResult>> {
-  const key = process.env.XAI_API_KEY;
+  const key = getProviderKey("xai");
   if (!key) return { value: null, retryable: false, kind: "other", message: "XAI_API_KEY missing" };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 25_000);
@@ -948,7 +949,7 @@ async function rawGemini(
   maxTokens: number,
   opts: LlmOpts & { fetchImpl?: typeof fetch },
 ): Promise<RawAttempt> {
-  const key = process.env.GEMINI_API_KEY;
+  const key = getProviderKey("gemini");
   if (!key) return { ok: false, error: "GEMINI_API_KEY yo'q", retryable: false };
   const fetchImpl = opts.fetchImpl ?? fetch;
   const ctrl = new AbortController();
@@ -1017,7 +1018,7 @@ async function rawXai(
   maxTokens: number,
   opts: LlmOpts & { fetchImpl?: typeof fetch },
 ): Promise<RawAttempt> {
-  const key = process.env.XAI_API_KEY;
+  const key = getProviderKey("xai");
   if (!key) return { ok: false, error: "XAI_API_KEY yo'q", retryable: false };
   const fetchImpl = opts.fetchImpl ?? fetch;
   const ctrl = new AbortController();

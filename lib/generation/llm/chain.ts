@@ -31,6 +31,7 @@
  * soni; navbatda kutilgan vaqt urinish timeout'idan ayriladi.
  */
 import { recordLlmUsage } from "../job-cost";
+import { getProviderKey } from "../../server/providers/resolve";
 import { LLM_BREAKER, allowOrWait, breakerFor, type CircuitBreaker } from "./breaker";
 import { classifyFailure, reportFailure, type FailureKind } from "./failure";
 import { limiterFor, type Semaphore } from "./limiter";
@@ -88,14 +89,6 @@ export class DeadlineError extends Error {
     this.role = role;
   }
 }
-
-const KEY_ENV: Record<ProviderId, string> = {
-  gemini: "GEMINI_API_KEY",
-  anthropic: "ANTHROPIC_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-  xai: "XAI_API_KEY",
-  openai: "OPENAI_API_KEY",
-};
 
 const MAX_ATTEMPTS = 3;
 
@@ -273,7 +266,7 @@ export async function completeWithChain(
   const random = deps.random ?? Math.random;
   let outOfTime = false;
   for (const [specIndex, spec] of specs.entries()) {
-    if (!process.env[KEY_ENV[spec.provider]]?.trim()) {
+    if (!getProviderKey(spec.provider)) {
       log(`[llm:${role}] ${spec.provider}:${spec.model} → kalit yo'q, o'tkazib yuborildi`);
       continue;
     }
