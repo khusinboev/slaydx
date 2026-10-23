@@ -5,6 +5,7 @@ import { Pencil, Redo2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { planArticle, type CiteSpan } from "@/lib/generation/article/layout";
 import { planWork } from "@/lib/generation/work/layout";
+import { handCssVars, handGeometry, handText } from "@/lib/generation/work/handwriting";
 import { isTeacherDoc, planTeacher } from "@/lib/generation/teacher/layout";
 import { isGameDoc, planGame } from "@/lib/generation/games/layout";
 import type { ArticleOp } from "@/lib/generation/article/edit";
@@ -26,7 +27,7 @@ import type { EditActionsState } from "../files/EditActions";
 import { ArticleHeadItem, CiteText } from "./ArticleHead";
 import { ArticleEditor, articleEditTargets, isTeacherEditorOp, isWorkOp, legacyEditTargets, targetAttr, teacherEditTargets, workEditTargets, type EditCitePlan, type EditTarget } from "./ArticleEditor";
 import { PageRow, ZoomFrame, Workspace } from "./sheet";
-import { TitlePage } from "./TitlePage";
+import { HandCover, TitlePage } from "./TitlePage";
 import { TOUCH_BOX, VIEWER_TOOLBAR_H, ViewerToolbar } from "./toolbar";
 import { DocEditHint, EditDoneBar, useDocEditHint, useEditFocusZoom } from "./EditDoneBar";
 import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
@@ -205,8 +206,37 @@ function workSheet(doc: AcademicDoc) {
   if (!doc.work) return null;
   const plan = planWork(doc);
   const m = plan.page.marginsCm;
+  /*
+   * Qo'lyozma mustaqil ish: varaq o'lchovlari DAFTAR geometriyasidan
+   * (`handGeometry`), qator balandligi = chiziq oralig'i. Bir varaqqa BUTUN
+   * qatorlar sig'adi (`limit`), shuning uchun sahifalash qatorlarni chiziqdan
+   * uzmaydi. Chiziq foni va shrift `.word-hand` qoidasida (`app/globals.css`).
+   */
+  if (plan.style) {
+    const g = handGeometry(plan.style.paper, plan.style.font);
+    const vars = handCssVars(plan.style);
+    return {
+      plan,
+      hand: { vars: vars as React.CSSProperties, paper: plan.style.paper },
+      style: {
+        ...vars,
+        padding: "var(--hand-pad)",
+        fontSize: "var(--hand-size)",
+        lineHeight: "var(--hand-pitch)",
+        "--doc-table-size": "var(--hand-size)",
+        "--doc-refs-size": "var(--hand-size)",
+        "--doc-refs-line": "var(--hand-pitch)",
+        "--doc-small": "var(--hand-size)",
+        "--doc-p-after": "0pt",
+        "--doc-h1-align": plan.headingAlign,
+      } as React.CSSProperties,
+      measureWidth: `${(g.contentTw / 1440) * 25.4}mm`,
+      limit: Math.floor(g.lines * g.pitchPx + 1),
+    };
+  }
   return {
     plan,
+    hand: null,
     style: {
       padding: `${m.top}cm ${m.right}cm ${m.bottom}cm ${m.left}cm`,
       fontSize: `${plan.page.sizePt}pt`,
@@ -307,7 +337,8 @@ export function WordViewer({
   const [flow, setFlow] = useState<{ base: FlowItem[]; list: FlowItem[]; fonts: number } | null>(null);
   const renderItems = flow && flow.base === items && flow.fonts === fontEpoch ? flow.list : items;
   const title = useMemo(() => titleModel(doc), [doc]);
-  const toc = useMemo(() => tocRows(doc), [doc]);
+  const handFont = work?.plan.style?.font;
+  const toc = useMemo(() => (handFont ? tocRows(doc).map((r) => ({ ...r, text: handText(handFont, r.text) })) : tocRows(doc)), [doc, handFont]);
   const labels = useMemo(() => docLabels(doc.meta.language), [doc.meta.language]);
   const continuedLabel = useMemo(() => sectionLabels(doc.meta.language).continued, [doc.meta.language]);
   /**
@@ -407,7 +438,12 @@ export function WordViewer({
   const [editOn, setEditOn] = useState(false);
   /** Faol tahrir oqimi: maqola yoki talaba ishi (ikkalasi birga bo'lmaydi). */
   const active = ed.editable ? ed : wed.editable ? wed : ted.editable ? ted : null;
-  const editable = Boolean(active) && !(active === ed && ed.legacy);
+  /*
+   * Qo'lyozma varaqda tahrir YO'Q: matn shrift yopmaydigan belgidan tozalangan
+   * (`handText`), tahrirda u modelga qaytib yozilardi; chiziqli varaq ham
+   * tahrir nishonlari bilan hisoblanmagan. Matnni o'zgartirish — oddiy ko'rinishda.
+   */
+  const editable = Boolean(active) && !(active === ed && ed.legacy) && !work?.hand;
   // Editing only in «Varaq» (owner decision): reading mode has no edit layer at all.
   const editing = editOn && editable && !reading;
   const { undo, redo, save, pending, discard, saving, saveFailed, justSaved } = active ?? ed;
@@ -637,11 +673,16 @@ export function WordViewer({
                       pageRefs.current[i] = el;
                     }}
                     data-page={i + 1}
-                    className={cn("word-sheet", teacher?.landscape && "word-sheet-ls", frame && "word-sheet--framed")}
-                    style={frame ? ({ "--sheet-frame": frame } as React.CSSProperties) : undefined}
+                    className={cn("word-sheet", teacher?.landscape && "word-sheet-ls", frame && "word-sheet--framed", work?.hand && `word-hand word-hand--${work.hand.paper}`)}
+                    data-hand={work?.hand ? work.plan.style?.ink : undefined}
+                    style={frame ? ({ "--sheet-frame": frame } as React.CSSProperties) : work?.hand ? work.hand.vars : undefined}
                   >
                     {isTitle ? (
-                      <TitlePage title={title} />
+                      work?.hand && work.plan.style ? (
+                        <HandCover title={title} font={work.plan.style.font} style={work.style} />
+                      ) : (
+                        <TitlePage title={title} />
+                      )
                     ) : (
                       <div className={profiled ? "word-inner word-article" : "word-inner"} style={profiled?.style}>
                         <PageBody
@@ -676,7 +717,7 @@ export function WordViewer({
         aria-hidden
         className={
           profiled
-            ? "word-article invisible pointer-events-none fixed top-0 -left-[12000px] font-[family-name:var(--font-doc)]"
+            ? cn("word-article invisible pointer-events-none fixed top-0 -left-[12000px] font-[family-name:var(--font-doc)]", work?.hand && "word-hand")
             : "invisible pointer-events-none fixed top-0 -left-[12000px] w-[165mm] font-[family-name:var(--font-doc)] text-[14pt] leading-[1.5]"
         }
         // Maqola: o'lchov kengligi/shrifti/intervali ham profildan — varaq bilan bir xil.
@@ -977,7 +1018,8 @@ function FlowBlock({
               key={`${i}-${row.text}`}
               // DOCX `tocLine`: `spacing: { line, after: 0 }` — qatorlar
               // orasida qo'shimcha bo'shliq yo'q.
-              className="text-[14pt] break-words hyphens-auto"
+              className="word-toc-row text-[14pt] break-words hyphens-auto"
+              data-level={row.level}
               style={{
                 textIndent: 0,
                 fontWeight: row.level === 1 ? 700 : 400,
@@ -1293,7 +1335,7 @@ function FlowBlock({
     case "table-source":
       // «Manba: …» — jadval OSTIDA, chapda, 10 pt kursiv (DOCX bilan bir xil).
       return (
-        <div style={{ textAlign: "left", textIndent: 0, fontStyle: "italic", fontSize: "var(--doc-small, 10pt)", margin: "0 0 8pt" }}>
+        <div className="word-table-source" style={{ textAlign: "left", textIndent: 0, fontStyle: "italic", fontSize: "var(--doc-small, 10pt)", margin: "0 0 8pt" }}>
           {item.text}
         </div>
       );
@@ -1370,10 +1412,20 @@ function FlowBlock({
  * (KaTeX matn tugunlari OMML `<m:t>` bilan taqqoslanmaydi).
  */
 function Formula({ item }: { item: Extract<FlowItem, { type: "formula" }> }) {
+  /* Qo'lyozma: formula oddiy matn (DOCX ham shuni yozadi), KaTeX emas. */
+  const handPlain = item.plain !== undefined;
   const html = useMemo(
-    () => katex.renderToString(item.latex, { throwOnError: false, displayMode: item.display, strict: "ignore" }),
-    [item.latex, item.display],
+    () => (handPlain ? "" : katex.renderToString(item.latex, { throwOnError: false, displayMode: item.display, strict: "ignore" })),
+    [item.latex, item.display, handPlain],
   );
+  if (handPlain) {
+    return (
+      <div className="word-formula">
+        <span className="word-formula-body">{item.plain}</span>
+        <span className="word-formula-num">{item.number}</span>
+      </div>
+    );
+  }
   return (
     <div className="word-formula">
       <span className="word-formula-body" data-formula dangerouslySetInnerHTML={{ __html: html }} />

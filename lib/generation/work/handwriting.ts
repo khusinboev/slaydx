@@ -244,6 +244,11 @@ export function handCssVars(style: HandStyle): Record<string, string> {
   const spec = HAND_PAPER_SPECS[style.paper];
   const px = (n: number) => `${Math.round(n * 1000) / 1000}px`;
   const mmPx = (mm: number) => (mm / 25.4) * 96;
+  const ruleW = Math.max(1, mmPx(spec.ruleMm));
+  const redX = mmPx(HAND_PAGE.redLineMm);
+  /* Chiziq qadami: chiziqlida = qator oralig'i; katakli varaqda ikki katak = bir qator. */
+  const cell = style.paper === "grid" ? g.pitchPx / 2 : g.pitchPx;
+  const mod = (v: number, m: number) => v - Math.floor(v / m) * m;
   return {
     "--hand-ink": `#${style.inkHex}`,
     "--hand-family": `"${g.font.family}"`,
@@ -251,12 +256,15 @@ export function handCssVars(style: HandStyle): Record<string, string> {
     "--hand-pitch": px(g.pitchPx),
     "--hand-lines": String(g.lines),
     "--hand-rule": `#${spec.ruleHex}`,
-    "--hand-rule-w": px(Math.max(1, mmPx(spec.ruleMm))),
+    "--hand-rule-w": px(ruleW),
     "--hand-red": `#${HAND_PAGE.redHex}`,
-    "--hand-red-x": px(mmPx(HAND_PAGE.redLineMm)),
+    "--hand-red-x": px(redX),
     "--hand-red-w": px(Math.max(1, mmPx(HAND_PAGE.redMm))),
     "--hand-y0": px(g.viewerRuleY0Px),
-    "--hand-cell": px(mmPx(spec.cellMm)),
+    "--hand-cell": px(cell),
+    /** Birinchi gorizontal chiziq `--hand-phase` da (0…cell), birinchi vertikal katak chizig'i `--hand-vphase` da. */
+    "--hand-phase": px(mod(g.viewerRuleY0Px, cell)),
+    "--hand-vphase": px(mod(redX, cell)),
     "--hand-first-line": px(twToPx(HAND_PAGE.firstLineTw)),
     "--hand-pad": `${px(twToPx(g.margins.top))} ${px(twToPx(g.margins.right))} ${px(twToPx(g.margins.bottom))} ${px(twToPx(g.margins.left))}`,
   };

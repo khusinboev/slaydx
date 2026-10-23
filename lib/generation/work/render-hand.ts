@@ -228,7 +228,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
       switch (b.k) {
         case "h1": {
           const brk = takeBreak(b.pageBreak);
-          out.push(para([run(b.text, { underline: true })], { align: AlignmentType.CENTER, heading: HeadingLevel.HEADING_1, keepNext: true, pageBreakBefore: brk, before: brk ? 0 : 1 }));
+          out.push(para([run(b.text, { underline: true })], { align: AlignmentType.CENTER, heading: HeadingLevel.HEADING_1, keepNext: true, pageBreakBefore: brk, after: 1 }));
           break;
         }
         case "h2":
@@ -244,7 +244,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
           out.push(para([run(b.numberLine)], { align: AlignmentType.RIGHT, keepNext: true }));
           if (b.caption) out.push(para([run(b.caption)], { align: AlignmentType.CENTER, keepNext: true }));
           out.push(penTable(b.table.headers, b.table.rows, b.table.widths));
-          out.push(b.source ? para([run(b.source, { italics: true })]) : blank());
+          if (b.source) out.push(para([run(b.source, { italics: true })]));
           break;
         case "figure":
           takeBreak(false);
@@ -292,7 +292,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
 
   if (plan.refs.length) {
     const brk = takeBreak(true);
-    out.push(para([run(plan.refsLabel, { underline: true })], { align: AlignmentType.CENTER, heading: HeadingLevel.HEADING_1, keepNext: true, pageBreakBefore: brk }));
+    out.push(para([run(plan.refsLabel, { underline: true })], { align: AlignmentType.CENTER, heading: HeadingLevel.HEADING_1, keepNext: true, pageBreakBefore: brk, after: 1 }));
     for (const r of plan.refs) out.push(para([run(r.line)], { left: lines(1), hanging: lines(1) }));
   }
   drawBody(plan.appendix);
