@@ -66,6 +66,11 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "queue.mean_service_sec",
     "convert.daily_limit",
     "convert.disabled",
+    "daily_quiz.enabled",
+    "daily_quiz.reward",
+    "daily_quiz.monthly_cap",
+    "daily_quiz.daily_budget",
+    "daily_quiz.hour",
   ]);
   for (const k of s.SETTING_KEYS) {
     const d = s.settingDef(k);
@@ -101,6 +106,25 @@ test("standart qiymatlar = env (mahsulot xulqi o'zgarmaydi)", () => {
   assert.equal(d("queue.mean_service_sec"), env.queue.meanServiceSec, "0 (env unset) = measured automatically");
   assert.equal(d("convert.daily_limit"), 20);
   assert.equal(d("convert.disabled"), false);
+  // Daily quiz (docs/program-17 item 16): OFF until the owner has read the questions.
+  assert.equal(d("daily_quiz.enabled"), false);
+  assert.equal(d("daily_quiz.reward"), 500);
+  assert.equal(d("daily_quiz.monthly_cap"), 5000);
+  assert.equal(d("daily_quiz.daily_budget"), 300_000);
+  assert.equal(d("daily_quiz.hour"), 9);
+});
+
+test("validatsiya: daily_quiz.* (yoqish, bonus, chegara, fond, soat)", () => {
+  good("daily_quiz.enabled", true);
+  for (const v of ["true", 1, null]) bad("daily_quiz.enabled", v);
+  for (const k of ["daily_quiz.reward", "daily_quiz.monthly_cap", "daily_quiz.daily_budget"] as const) {
+    good(k, 0);
+    good(k, 500);
+    for (const v of [-1, 1.5, "5", NaN, null, 1e15]) bad(k, v);
+  }
+  good("daily_quiz.hour", 0);
+  good("daily_quiz.hour", 23);
+  for (const v of [-1, 24, 9.5, "9", null]) bad("daily_quiz.hour", v);
 });
 
 test("validatsiya: bool", () => {
