@@ -6,7 +6,7 @@ import { processLimiter } from "./broadcast-delivery";
 import type { Limiter } from "./send-limiter";
 import { getSetting } from "./settings";
 import { log } from "./log";
-import { inviteScreen } from "./bot/daily-quiz";
+import { inviteScreen } from "./bot/daily-quiz-screens";
 import { DQ_ENABLED_KEY, DQ_HOUR_KEY, DQ_REWARD_KEY, tashkentDay, tashkentHour } from "../daily-quiz/rules";
 
 /**

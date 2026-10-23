@@ -598,7 +598,7 @@ test("sender end to end: the invitation text, both buttons, the user's language;
 const tg = await import("../lib/server/telegram.ts");
 const router = await import("../lib/server/bot/router.ts");
 const { parseCallback } = await import("../lib/server/bot/codes.ts");
-const dqBot = await import("../lib/server/bot/daily-quiz.ts");
+const dqBot = await import("../lib/server/bot/daily-quiz-screens.ts");
 let seq = Date.now() * 1000 + 900_000;
 const textUpdate = (from: number, text: string) => ({
   update_id: ++seq,
