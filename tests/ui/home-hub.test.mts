@@ -419,6 +419,18 @@ test("«Barcha vositalar»: one chip per visible group (registry), the chosen gr
   assert.equal(q("[data-hub-catalogue]")!.getAttribute("href"), "/uz/create");
 });
 
+test("free tools: «Fayl konvertatsiya (tekin)» and «Alifbo o'giruvchi (tekin)» are link cards, side by side", () => {
+  signIn();
+  mount();
+  const convert = q("[data-hub-convert]")!;
+  const alifbo = q("[data-hub-alifbo]")!;
+  assert.equal(convert.getAttribute("href"), "/uz/convert");
+  assert.equal(alifbo.getAttribute("href"), "/uz/alifbo");
+  assert.match(convert.textContent!, /Fayl konvertatsiya \(tekin\)/);
+  assert.match(alifbo.textContent!, /Alifbo o'giruvchi \(tekin\)/);
+  assert.equal(convert.nextElementSibling, alifbo, "the alifbo card follows the converter card");
+});
+
 test("sections: three, labelled, staggered ≤ 200 ms and motion-safe only", () => {
   signIn();
   mount();
