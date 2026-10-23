@@ -8,7 +8,7 @@ import type { FormValues } from "../lib/types.ts";
 import { extractMeta } from "../lib/generation/meta.ts";
 import { WORK_HAND_PARAMS } from "../lib/generation/work-params.ts";
 import { workInputFromValues, encodeWorkValues } from "../lib/generation/work/input.ts";
-import { buildWorkDoc, EMPTY_RESEARCH_STATS, type WorkResearchAsk } from "../lib/generation/work/engine.ts";
+import { buildWorkDoc, EMPTY_RESEARCH_STATS } from "../lib/generation/work/engine.ts";
 import { planWork } from "../lib/generation/work/layout.ts";
 import { workFlow } from "../lib/viewers/flow.ts";
 import { renderDocx } from "../lib/generation/render-docx.ts";
@@ -174,7 +174,7 @@ async function build(values: FormValues): Promise<AcademicDoc> {
   const built = await buildWorkDoc(extractMeta(tool, v), v, {
     deadline: Date.now() + 90_000,
     complete: stubComplete,
-    research: async (_ask: WorkResearchAsk) => ({ refs: REFS.map((r) => ({ ...r })), stats: { ...EMPTY_RESEARCH_STATS } }),
+    research: async () => ({ refs: REFS.map((r) => ({ ...r })), stats: { ...EMPTY_RESEARCH_STATS } }),
     buildFigures: async (figs: Figure[]) => figs,
     polish: false,
     now: new Date("2026-10-24T10:00:00Z"),

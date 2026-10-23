@@ -8,7 +8,7 @@ import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.
 import { WorkComposer } from "../../components/forms/WorkComposer.tsx";
 import { WORK_HAND_PARAMS, WORK_PARAMS } from "../../lib/generation/work-params.ts";
 import { TOOL_BY_ID, priceFor } from "../../lib/tools.ts";
-import type { UserProfile } from "../../lib/types.ts";
+import type { FormValues, UserProfile } from "../../lib/types.ts";
 
 /**
  * Qo'lyozma mustaqil ish formasi (Program 17 band 10): «Ko'rinish» faqat
@@ -107,7 +107,7 @@ test("tanlov submit tanasiga tushadi (workView/handInk/handPaper/handFont) va na
   });
   await waitFor(() => assert.ok(calls.some((c) => c.url === "/api/generations" && c.method === "POST")));
   const post = calls.find((c) => c.url === "/api/generations" && c.method === "POST")!;
-  const values = (post.body as { values: Record<string, unknown> }).values;
+  const values = (post.body as { values: FormValues }).values;
   assert.equal(values.workView, "hand");
   assert.equal(values.handInk, "black");
   assert.equal(values.handPaper, "grid");
