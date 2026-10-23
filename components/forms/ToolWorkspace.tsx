@@ -38,6 +38,7 @@ const WorkComposer = lazy(() => import("./WorkComposer").then((m) => ({ default:
 const TeacherComposer = lazy(() => import("./TeacherComposer").then((m) => ({ default: m.TeacherComposer })));
 const MediaComposer = lazy(() => import("./MediaComposer").then((m) => ({ default: m.MediaComposer })));
 const InfographicComposer = lazy(() => import("./InfographicComposer").then((m) => ({ default: m.InfographicComposer })));
+const PortraitComposer = lazy(() => import("./PortraitComposer").then((m) => ({ default: m.PortraitComposer })));
 const GameComposer = lazy(() => import("./GameComposer").then((m) => ({ default: m.GameComposer })));
 
 const LOADING = <div className="text-muted-foreground p-8 text-[14.5px]">Yuklanmoqda...</div>;
@@ -151,6 +152,7 @@ function toolForm(tool: ToolConfig, profile: UserProfile, user: ServerUser | nul
   if (tool.custom === "game") return <GameComposer tool={tool} />;
   if (tool.custom === "media") return <MediaComposer tool={tool} />;
   if (tool.custom === "infographic") return <InfographicComposer tool={tool} />;
+  if (tool.custom === "portrait") return <PortraitComposer tool={tool} />;
 
   return <StandardForm tool={tool} profile={profile} />;
 }

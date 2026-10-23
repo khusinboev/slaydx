@@ -27,6 +27,7 @@ import {
   TRANSLATION_STEP_CHARS,
   type PriceAdjust,
 } from "../tools";
+import { PORTRAIT_VARIANTS } from "../generation/portrait/registry";
 import { ARTICLE_TYPES } from "../generation/article/types-registry";
 import { ESSAY_LIMITS } from "../generation/essay/types";
 import { PRO_SLIDE_DEFAULT, PRO_SLIDE_MAX, PRO_SLIDE_MIN, SLIDE_DEFAULT, SLIDE_INCLUDED, SLIDE_MAX, SLIDE_MIN } from "../generation/slide-params";
@@ -125,6 +126,7 @@ export const UNIT_OF: Record<ToolId, PricingUnit> = {
   listening: "job",
   podcast: "job",
   greeting: "job",
+  portrait: "job",
 };
 
 /** Uzbek unit labels for the UI (the client never imports lib/tools). */
@@ -232,6 +234,9 @@ export function ladderInputs(toolId: ToolId): LadderInput[] {
       // File mode: `translationChars` reads the server-filled `sourceChars`.
       return chars.map((n) => ({ label: `${fmtInt(n)} belgi`, values: { sourceAssetId: "ladder", sourceChars: n } }));
     }
+    case "portrait":
+      // Priced per variant: 1 and 2 variants (`portraitPrice`).
+      return PORTRAIT_VARIANTS.map((n) => ({ label: `${n} variant`, values: { variants: n } }));
     case "glossary":
       return [10, 20, 40].map((n) => ({ label: `${n} atama`, values: { termCount: n } }));
     default:

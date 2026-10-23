@@ -167,6 +167,18 @@ function errorDetail(body: unknown): string {
   return typeof msg === "string" && msg ? msg : "request failed";
 }
 
+/**
+ * `input` of the interactions request: the optional source images FIRST (an edit instruction reads
+ * best after the picture it refers to), then the text. An image part has the same flat shape as the
+ * image the endpoint returns -- `{ type: "image", data: <base64>, mime_type }`.
+ */
+export function geminiInputParts(ask: Pick<ImageAsk, "prompt" | "inputImages">) {
+  return [
+    ...(ask.inputImages ?? []).map((im) => ({ type: "image", data: im.base64, mime_type: im.mime })),
+    { type: "text", text: ask.prompt },
+  ];
+}
+
 export async function requestGeminiImage(ask: ImageAsk, deadline?: number): Promise<ImageResult> {
   const key = geminiKey();
   if (!key) {
@@ -193,7 +205,7 @@ export async function requestGeminiImage(ask: ImageAsk, deadline?: number): Prom
       },
       body: JSON.stringify({
         model: geminiImageModel(),
-        input: [{ type: "text", text: ask.prompt }],
+        input: geminiInputParts(ask),
         response_format: {
           type: "image",
           mime_type: "image/jpeg",

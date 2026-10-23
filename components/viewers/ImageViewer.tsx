@@ -77,7 +77,11 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
       >
         <span className="min-w-0 truncate font-medium">{poster ? poster.spec.title || doc.meta.topic : doc.imagePrompt || doc.meta.topic}</span>
         <span className="hidden shrink-0 text-white/40 sm:inline">
-          {poster ? `Infografika · ${poster.spec.size} · ${poster.spec.blocks.length} blok` : `${style.name} · ${ratio.label} · ${images.length} rasm`}
+          {poster
+            ? `Infografika · ${poster.spec.size} · ${poster.spec.blocks.length} blok`
+            : doc.portrait
+              ? `Portret · ${doc.imageScene ?? ""} · ${images.length} rasm`
+              : `${style.name} · ${ratio.label} · ${images.length} rasm`}
         </span>
         {poster && images[0] ? (
           // Plakat tik va uzun: amallar sticky qatorda — rasm ustidagi tugmalar scroll bilan ketib qoladi.

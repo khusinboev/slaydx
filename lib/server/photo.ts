@@ -126,6 +126,30 @@ export async function getPhoto(userId: string, assetId: string): Promise<PhotoRo
   return { bytes: row.bytes, mime: row.mime, kind: row.kind, crop: row.crop, originalAssetId: row.original_asset_id };
 }
 
+/** The upload exists and is the user's own (a cheap probe: no bytes are read). */
+export async function photoExists(userId: string, assetId: string): Promise<boolean> {
+  if (!/^[0-9a-f]{24}$/i.test(assetId)) return false;
+  const row = await queryOne<{ ok: number }>(`SELECT 1 AS ok FROM photo_uploads WHERE user_id = $1 AND asset_id = $2`, [userId, assetId.toLowerCase()]);
+  return Boolean(row);
+}
+
+/**
+ * Deletes a selfie right after the job that used it succeeded (graduation portrait: a face photo is
+ * not kept longer than the job needs). Takes the stored original too if there is one. The asset must be
+ * the user's own (SQL ownership). Returns the number of deleted rows.
+ */
+export async function deleteUserPhoto(userId: string, assetId: string): Promise<number> {
+  if (!/^[0-9a-f]{24}$/i.test(assetId)) return 0;
+  const rows = await query<{ asset_id: string }>(
+    `DELETE FROM photo_uploads
+      WHERE user_id = $1
+        AND (asset_id = $2 OR asset_id = (SELECT original_asset_id FROM photo_uploads WHERE user_id = $1 AND asset_id = $2))
+      RETURNING asset_id`,
+    [userId, assetId.toLowerCase()],
+  );
+  return rows.length;
+}
+
 /**
  * Worker `photoAssetId` ni `data:` URL ga aylantiradi (`logoDataUrl`
  * naqshi). Topilmasa `undefined` — XATO EMAS: rezyume suratsiz chiqadi,

@@ -135,8 +135,9 @@ test("MP3 chiqaradigan HAR vosita `audio` ko'ruvchisiga tushadi", () => {
   for (const t of TOOLS) {
     if (t.output !== "mp3") assert.notEqual(viewerKind(t.id), "audio", `${t.id}: audio bo'lmagan vosita audio ko'ruvchida`);
   }
-  // «Media» bo'limi = MP3 vositalari (hozircha aynan mos).
-  assert.deepEqual(TOOLS.filter((t) => t.group === "media").map((t) => t.id).sort(), ["greeting", "podcast"]);
+  // «Media» bo'limi = MP3 vositalari + bitiruvchi portreti (program-17 item 14: rasm chiqaradi, `image` ko'ruvchisida).
+  assert.deepEqual(TOOLS.filter((t) => t.group === "media").map((t) => t.id).sort(), ["greeting", "podcast", "portrait"]);
+  assert.equal(viewerKind("portrait"), "image");
 });
 
 test("`audio` ko'ruvchisi `ArtifactViewer` da ulangan va generatsiya id sini oladi", () => {
