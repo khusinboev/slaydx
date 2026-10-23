@@ -33,6 +33,7 @@ import { formatReference } from "../cite";
 import { orderUzReferences } from "../cite/order";
 import { citedOnly } from "../research/verify";
 import type { AcademicDoc, Block, DocSection, DocTable, Figure } from "../types";
+import { handStyleOf, type HandStyle } from "./handwriting";
 import { workLabels, type WorkDocLabels } from "./labels";
 import { workVisualNumbers } from "./plan";
 import { genreOf, workKindOf, type WorkGenre, type WorkKind } from "./registry";
@@ -131,6 +132,12 @@ export type WorkPlan = {
   tableNumberAlign: "right";
   /** Bob sarlavhasi — doim markazda, BOSH HARF. */
   headingAlign: "center";
+  /**
+   * Qo'lyozma ko'rinishi (`WorkModel.hand`, mustaqil ish): siyoh, varaq va shrift.
+   * Berilsa DOCX (`work/render-hand.ts`) ham, ko'ruvchi ham ruchka bilan daftarga
+   * yozilgandek chizadi; TARTIB va RAQAMLASH o'zgarmaydi. Yo'q = oddiy ko'rinish.
+   */
+  style?: HandStyle;
 };
 
 /* ────────────────────────── yordamchilar ────────────────────────── */
@@ -398,6 +405,7 @@ export function planWork(doc: AcademicDoc): WorkPlan {
     page: { marginsCm: workMarginsCm(subject), ...WORK_TYPE },
     tableNumberAlign: "right",
     headingAlign: "center",
+    ...(model.hand ? { style: handStyleOf(model.hand) } : {}),
   };
 }
 

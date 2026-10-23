@@ -22,6 +22,7 @@ import type { DocReview } from "../report/types";
  * Faqat TIP importi — ishga tushirish paytida aylanma bog'liqlik yo'q.
  */
 import type { Figure, Reference, ReferenceKind } from "../types";
+import type { WorkHand } from "./handwriting";
 
 /* ────────────────────────── janr va tur ────────────────────────── */
 
@@ -146,6 +147,12 @@ export type WorkModel = WorkTitleFields & {
   refsMin: number;
   /** Q-3 qabul chegarasi (X-5: baholovchi shovqini uchun kurs ishida +2). */
   polishAccept?: number;
+  /**
+   * Qo'lyozma ko'rinishi (mustaqil ish, Program 17 band 10): MAZMUN o'zgarmaydi,
+   * faqat chizilishi — `planWork` uni `style` ga aylantiradi (`handwriting.ts`).
+   * Yo'q = oddiy (Word) ko'rinish.
+   */
+  hand?: WorkHand;
 };
 
 export const WORK_LIMITS = {

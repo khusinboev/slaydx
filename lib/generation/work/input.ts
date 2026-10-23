@@ -22,6 +22,7 @@ import { type ArticleUserRef } from "../article/input";
 import { WORK_LIMITS, isWorkMinistryId, type SubjectProfileId, type WorkGenreId, type WorkKindId, type WorkMinistryId } from "./types";
 import { normalizeWorkKind, normalizeWorkPages, pagesMid, workKindOf, type WorkKind } from "./registry";
 import { SUBJECT_PROFILES, normalizeSubjectProfile } from "./subjects";
+import { normalizeHand, type WorkHand } from "./handwriting";
 
 /* ────────────────────────── tiplar ────────────────────────── */
 
@@ -66,6 +67,8 @@ export type WorkInput = {
   userRefs: ArticleUserRef[];
   refsMin: number;
   extra: string;
+  /** Qo'lyozma ko'rinishi (faqat mustaqil ish); yo'q = oddiy (Word). */
+  hand?: WorkHand;
 };
 
 export const WORK_INPUT_LIMITS = {
@@ -350,7 +353,17 @@ export function workInputFromValues(values: FormValues, genre: WorkGenreId): Wor
     userRefs: parseWorkUserRefs(values),
     refsMin: num(values.refsMin ?? kind.refsMin, kind.refsMin, 0, WORK_INPUT_LIMITS.refsMinMax),
     extra: text(values.extra, WORK_LIMITS.extraChars),
+    ...handInputOf(values, genre),
   };
+}
+
+/**
+ * «Ko'rinish» = Qo'lyozma — FAQAT mustaqil ishda (kurs ishi/referat
+ * daftarga ko'chirilmaydi); qolgan janrlarda forma qiymatlari e'tiborsiz.
+ */
+export function handInputOf(values: FormValues, genre: WorkGenreId): { hand?: WorkHand } {
+  if (genre !== "independent" || str(values.workView, 10) !== "hand") return {};
+  return { hand: normalizeHand({ ink: str(values.handInk, 12), paper: str(values.handPaper, 12), font: str(values.handFont, 12) }) };
 }
 
 /** Klient uchun teskari yo'l — forma holatidan `FormValues` (qoralama). */
@@ -385,6 +398,14 @@ export function encodeWorkValues(input: WorkInput): FormValues {
   };
   if (input.ministryCustom) out.ministryCustom = input.ministryCustom;
   if (input.sourceText) out.sourceText = input.sourceText;
+  if (input.genre === "independent") {
+    out.workView = input.hand ? "hand" : "plain";
+    if (input.hand) {
+      out.handInk = input.hand.ink;
+      out.handPaper = input.hand.paper;
+      out.handFont = input.hand.font;
+    }
+  }
   return out;
 }
 
