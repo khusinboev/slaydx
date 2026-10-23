@@ -11,7 +11,7 @@ import type { ReferralClaim } from "./referrals";
 import { inlineButton, tgEmoji, type Screen } from "./bot/ui";
 import { langFromTelegram, langOf, t, LANGS, type Lang } from "./bot/i18n";
 import { mainKeyboard } from "./bot/keyboard";
-import { blockedText, loginScreen, welcomeScreen } from "./bot/screens";
+import { alifboScreen, blockedText, loginScreen, welcomeScreen } from "./bot/screens";
 
 /**
  * Telegram bot: kirish chiptasi va kod yetkazish.
@@ -254,7 +254,7 @@ export async function botUsername(now: number = Date.now()): Promise<string | nu
 }
 
 /** The bot's commands, in menu order. */
-export const BOT_COMMANDS = ["start", "login", "taklif", "admin", "til"] as const;
+export const BOT_COMMANDS = ["start", "login", "taklif", "admin", "til", "alifbo"] as const;
 
 /**
  * Bot menyusidagi buyruqlar (Telegram «/» tugmasi). Idempotent — har
@@ -959,6 +959,12 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
       return;
     }
     await bot.sendReferral(msg.chat.id, me, lang);
+    return;
+  }
+
+  if (text.startsWith("/alifbo")) {
+    const screen = alifboScreen(lang);
+    await sendMessage(msg.chat.id, screen.text, markupOf(screen));
     return;
   }
 

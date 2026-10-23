@@ -419,7 +419,7 @@ test("isProtectedToken", () => {
   for (const t of ["шаҳар", "kitob", "5.000", "tugadi.", "salom,"]) assert.equal(isProtectedToken(t), false, t);
 });
 
-/* ───────────────────────── corpus: 31 sentences, every direction ───────────────────────── */
+/* ───────────────────────── corpus: 33 sentences, every direction ───────────────────────── */
 
 /** [Cyrillic, current Latin] — hand written; the new Latin is derived by an independent oracle below. */
 const CORPUS: [string, string][] = [
@@ -453,6 +453,8 @@ const CORPUS: [string, string][] = [
   ["ШАҲАР ҲОКИМИ ҚЎШИҚ ВА РАҚС КЕЧАСИНИ ОЧДИ.", "SHAHAR HOKIMI QOʻSHIQ VA RAQS KECHASINI OCHDI."],
   ["Қонун ижроси барчамиз учун бурч ва шарафли вазифадир.", "Qonun ijrosi barchamiz uchun burch va sharafli vazifadir."],
   ["Ғолиблар мукофотланди: Ғайрат, Ўткир ва Шоира.", "Gʻoliblar mukofotlandi: Gʻayrat, Oʻtkir va Shoira."],
+  ["Европа ва Осиё ерлари, еттита мева.", "Yevropa va Osiyo yerlari, yettita meva."],
+  ["Бу районда янги станция ва лицей қурилди.", "Bu rayonda yangi stansiya va litsey qurildi."],
   // The alphabet line of the law (Art. 1), one letter per word: A B D E F G Ğ H I J K L M N O Ö P Q R S Ş Ç T U V X Y Z
   ["А Б Д Э Ф Г Ғ Ҳ И Ж К Л М Н О Ў П Қ Р С Ш Ч Т У В Х Й З", "A B D E F G Gʻ H I J K L M N O Oʻ P Q R S Sh Ch T U V X Y Z"],
 ];
@@ -471,8 +473,8 @@ function newLatinOracle(lat: string): string {
     .replace(/ch/g, "ç");
 }
 
-test("corpus: 31 sentences (incl. the law's alphabet line) convert in all 6 directions", () => {
-  assert.equal(CORPUS.length, 31);
+test("corpus: 33 sentences (incl. the law's alphabet line) convert in all 6 directions", () => {
+  assert.equal(CORPUS.length, 33);
   assert.equal(newLatinOracle(CORPUS.at(-1)![1]), LAW_ALPHABET, "the oracle reproduces the law's own alphabet line");
   CORPUS.forEach(([cyr, lat], i) => {
     const nw = newLatinOracle(lat);
