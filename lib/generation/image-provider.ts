@@ -46,8 +46,23 @@ export const IMAGE_QUOTA_COOLDOWN_MS = 60_000;
  * bu yerda u provayderning o'z sozlamasi uchun (jurnal, kelajakda uslubga
  * mos model tanlash) qoladi — provayder uni e'tiborsiz qoldirishi mumkin.
  */
+export type ImageInput = {
+  /** `image/jpeg` | `image/png` | `image/webp` — the sniffed type of the bytes, never the client's claim. */
+  mime: string;
+  /** Raw base64 (no `data:` prefix). */
+  base64: string;
+};
+
 export type ImageAsk = {
   prompt: string;
+  /**
+   * Reference / source image(s) for an EDIT-style request (graduation portrait: the user's selfie).
+   *
+   * Only the Gemini provider uses it; text-to-image providers (fal, Pexels, Pixabay) ignore it, so a
+   * caller that needs the input MUST ask Gemini directly (never through a chain that could fall
+   * through to a provider that would draw an unrelated picture).
+   */
+  inputImages?: ImageInput[];
   size: { width: number; height: number };
   styleId: SlideImageStyle;
   /** Deka bo'ylab BITTA seed — 8–30 rasm bitta «kamera»dan chiqsin. */
