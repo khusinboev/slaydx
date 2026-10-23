@@ -1,6 +1,7 @@
 import { ApiError, checkOrigin, handler, json, optionalUser, requireUser } from "@/lib/server/api";
 import { clearSessionCookie, revokeAllSessions, revokeCurrentSession } from "@/lib/server/session";
-import { clickDirectConfigured, env, llmConfigured, paymentsConfigured, paynetConfigured } from "@/lib/server/env";
+import { clickDirectConfigured, env, imagesConfigured, llmConfigured, paymentsConfigured, paynetConfigured } from "@/lib/server/env";
+import { ensureProviderKeys } from "@/lib/server/providers/store";
 import { pdfAvailable } from "@/lib/server/pdf";
 import { getAllToolPricing } from "@/lib/server/pricing";
 
@@ -10,11 +11,13 @@ export const dynamic = "force-dynamic";
 /** Joriy sessiya. Kirmagan foydalanuvchi uchun `user: null` — 401 emas. */
 export const GET = handler("auth/session", async (req) => {
   const { user } = await optionalUser(req);
+  // The feature flags follow the admin «Provayderlar» switches; reload the snapshot when it is older than the TTL.
+  await ensureProviderKeys();
   return json({
     user,
     features: {
       llm: llmConfigured(),
-      images: Boolean(env.gemini.key),
+      images: imagesConfigured(),
       telegram: Boolean(env.telegramBotToken),
       telegramBot: env.telegramBotUsername || null,
       devLogin: env.devLoginEnabled,

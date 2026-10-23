@@ -30,10 +30,11 @@
  */
 import { TTS_LIMITS, TtsError, type TtsAudio, type TtsProvider, type TtsSynthOpts } from "./types";
 import { mp3Seconds } from "./mp3";
+import { getProviderKey } from "../../server/providers/resolve";
 
 /* ══════════════════════════ sozlama ══════════════════════════ */
 
-export const azureKey = (): string => process.env.AZURE_SPEECH_KEY?.trim() || "";
+export const azureKey = (): string => getProviderKey("azure");
 export const azureRegion = (): string => process.env.AZURE_SPEECH_REGION?.trim() || "";
 
 /**

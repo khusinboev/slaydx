@@ -62,6 +62,7 @@ import { recordStep } from "./housekeeping-status";
 import { STAY_BATCH, staySweep } from "./bonus-channels";
 import { remindUnpaidOrders } from "./payment-reminder";
 import { runDailyQuizSend } from "./daily-quiz-send";
+import { ensureProviderKeys, startProviderKeyRefresh } from "./providers/store";
 
 /**
  * Navbatni bajaruvchi worker.
@@ -452,6 +453,9 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
     }
     return;
   }
+
+  // The admin «Provayderlar» keys and switches (≤ 30 s old) must be in place before the first provider call of this job.
+  await ensureProviderKeys();
 
   // Faqat slayd/pro-slayd jonli deka yuboradi (`slide-write.ts`/`slide-images.ts`
   // shu ikkisi uchun `onProgress` chaqiradi) — boshqa vositalarga reporter kerak
@@ -1338,5 +1342,7 @@ export async function runWorkerProcess(): Promise<void> {
   process.on("SIGINT", shutdown);
   // Persist this process's error lines for the admin error log (§6.11).
   registerErrorSink("worker");
+  // Provider keys and on/off switches stored by the admin (docs/program-17 D7): load now, refresh every 30 s.
+  await startProviderKeyRefresh();
   await loop();
 }

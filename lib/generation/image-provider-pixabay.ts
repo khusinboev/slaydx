@@ -10,11 +10,12 @@
  * qiladi). Javob: `hits[].largeImageURL`.
  */
 import { photoOrientation, requestBudget, type FalFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
+import { getProviderKey } from "../server/providers/resolve";
 
 const PIXABAY_URL = "https://pixabay.com/api/";
 
 export function pixabayKey() {
-  return process.env.PIXABAY_API_KEY?.trim() || "";
+  return getProviderKey("pixabay");
 }
 
 /**

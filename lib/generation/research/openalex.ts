@@ -15,6 +15,7 @@
 import type { Reference } from "../types";
 import { cached, queryKey } from "./cache";
 import { getJson, withParams, type HttpOpts } from "./http";
+import { getProviderKey } from "../../server/providers/resolve";
 
 const BASE = "https://api.openalex.org/works";
 const SELECT = "id,title,publication_year,doi,authorships,primary_location,cited_by_count,abstract_inverted_index";
@@ -43,7 +44,7 @@ type RawWork = {
 };
 
 function apiKey(): string {
-  return (process.env.OPENALEX_API_KEY || "").trim();
+  return getProviderKey("openalex");
 }
 
 function mailto(): string {

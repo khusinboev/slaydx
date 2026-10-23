@@ -29,6 +29,7 @@
  */
 import { requestBudget, type FalFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
 import { recordImage } from "./job-cost";
+import { getProviderKey } from "../server/providers/resolve";
 
 /**
  * Bitta rasm so'rovining eng katta vaqti. O'lchov (2026-09-08,
@@ -62,7 +63,7 @@ export function geminiImageSize() {
 }
 
 export function geminiKey() {
-  return process.env.GEMINI_API_KEY?.trim() || "";
+  return getProviderKey("gemini");
 }
 
 /**

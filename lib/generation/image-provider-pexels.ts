@@ -15,11 +15,12 @@
  * baytlarini SNIFF qiladi (soxta MIME'ga ishonmaydi).
  */
 import { photoOrientation, requestBudget, type FalFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
+import { getProviderKey } from "../server/providers/resolve";
 
 const PEXELS_URL = "https://api.pexels.com/v1/search";
 
 export function pexelsKey() {
-  return process.env.PEXELS_API_KEY?.trim() || "";
+  return getProviderKey("pexels");
 }
 
 /**

@@ -24,6 +24,7 @@
 import { TTS_LIMITS, TtsError, type TtsAudio, type TtsProvider, type TtsSynthOpts } from "./types";
 import { wavSeconds } from "./mp3";
 import { safeFetchUrl, UnsafeUrlError } from "../safe-fetch";
+import { getProviderKey } from "../../server/providers/resolve";
 
 /** Havola orqali yuklanadigan audio fayl chegarasi (EXT-15). */
 const AISHA_MAX_AUDIO_BYTES = 20 * 1024 * 1024;
@@ -46,7 +47,7 @@ export function httpsForAisha(url: string): string {
 
 /* ══════════════════════════ sozlama ══════════════════════════ */
 
-export const aishaKey = (): string => process.env.AISHA_API_KEY?.trim() || "";
+export const aishaKey = (): string => getProviderKey("aisha");
 
 export const AISHA_URL = "https://back.aisha.group/api/v1/tts/post/";
 

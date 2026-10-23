@@ -8,6 +8,7 @@
  * `chain.ts` uni jimgina o'tkazib yuboradi.
  */
 import type { AdapterOpts, Attempt, ProviderAdapter } from "./types";
+import { getProviderKey } from "../../server/providers/resolve";
 
 export type OpenaiDeps = { fetchImpl?: typeof fetch };
 
@@ -24,7 +25,7 @@ export function makeOpenaiAdapter(deps: OpenaiDeps = {}): ProviderAdapter {
   return {
     id: "openai",
     async complete(model, system, user, opts: AdapterOpts): Promise<Attempt> {
-      const key = process.env.OPENAI_API_KEY;
+      const key = getProviderKey("openai");
       if (!key) return { ok: false, error: "OPENAI_API_KEY yo'q", retryable: false };
       const fetchImpl = deps.fetchImpl ?? fetch;
       const ctrl = new AbortController();

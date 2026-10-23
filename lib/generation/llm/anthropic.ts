@@ -35,6 +35,7 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import type { AdapterOpts, Attempt, ProviderAdapter } from "./types";
+import { getProviderKey } from "../../server/providers/resolve";
 
 export type AnthropicDeps = {
   /** Testda haqiqiy SDK o'rniga stub — tarmoqqa chiqmasdan. */
@@ -104,7 +105,7 @@ export function makeAnthropicAdapter(deps: AnthropicDeps = {}): ProviderAdapter 
          * boshqaradi — muddat, jitter va `Retry-After` chegarasi bilan
          * (audit EXT-03).
          */
-        deps.client ?? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, defaultHeaders: workspaceHeaders(), timeout: opts.timeoutMs, maxRetries: 0 });
+        deps.client ?? new Anthropic({ apiKey: getProviderKey("anthropic") || undefined, defaultHeaders: workspaceHeaders(), timeout: opts.timeoutMs, maxRetries: 0 });
       try {
         const res = await client.messages.create({
           model,

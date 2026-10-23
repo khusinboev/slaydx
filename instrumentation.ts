@@ -76,6 +76,17 @@ export async function register() {
     }
   }
 
+  // Provider API keys and on/off switches stored by the admin (docs/program-17 D7): load now, refresh every
+  // 30 s. Failure-tolerant: with no table/rows or a DB error the env keys apply, as before the store.
+  if (process.env.NEXT_PHASE !== "phase-production-build") {
+    try {
+      const { startProviderKeyRefresh } = await import("./lib/server/providers/store");
+      await startProviderKeyRefresh();
+    } catch (e) {
+      console.warn("[boot] provayder kalitlari yuklanmadi:", e instanceof Error ? e.message : e);
+    }
+  }
+
   if (env.worker.inline) {
     const { startInlineWorker } = await import("./lib/server/worker");
     startInlineWorker();

@@ -8,6 +8,7 @@
  * ilova" sifatida ko'rinadi.
  */
 import type { AdapterOpts, Attempt, ProviderAdapter } from "./types";
+import { getProviderKey } from "../../server/providers/resolve";
 
 export type OpenrouterDeps = { fetchImpl?: typeof fetch };
 
@@ -24,7 +25,7 @@ export function makeOpenrouterAdapter(deps: OpenrouterDeps = {}): ProviderAdapte
   return {
     id: "openrouter",
     async complete(model, system, user, opts: AdapterOpts): Promise<Attempt> {
-      const key = process.env.OPENROUTER_API_KEY;
+      const key = getProviderKey("openrouter");
       if (!key) return { ok: false, error: "OPENROUTER_API_KEY yo'q", retryable: false };
       const fetchImpl = deps.fetchImpl ?? fetch;
       const ctrl = new AbortController();
