@@ -20,6 +20,7 @@ import { ESSAY_LIMITS } from "./generation/essay/types";
 import { glossaryTermCount } from "./generation/teacher/input";
 import { clientAdjustedPrice } from "./price-adjust";
 import { portraitPrice } from "./generation/portrait/registry";
+import { imageBasePrice, imageModelError, imageModelOf } from "./generation/image-models";
 import { groupDigits } from "./format";
 
 const TOPIC_FILE_MODES = [
@@ -1243,6 +1244,8 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
   if (tool.custom === "image") {
     const n = String(values.prompt ?? "").trim().length;
     if (n > 0 && n < IMAGE_PROMPT_MIN) return "Rasm tavsifi juda qisqa — nima chizilishini yozing.";
+    const modelError = imageModelError(values);
+    if (modelError) return modelError;
   }
   /*
    * Maqola 2: tur va profil — REYESTRDAN. `missingRequired` faqat
@@ -1369,6 +1372,11 @@ export type ToolFeatures = {
    * the two audio tools instead of letting them fail after payment.
    */
   tts?: boolean;
+  /**
+   * `rasm` models whose provider is enabled AND has a key (`image-models.ts` ids). Optional: absent = not
+   * known (older server) -> the `images` flag decides, exactly as before the model choice existed.
+   */
+  imageModels?: string[];
 };
 
 /**
@@ -1393,6 +1401,10 @@ export type ToolFeatures = {
  */
 export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | null): string | null {
   if (!features) return null;
+  if (tool.custom === "image" && features.imageModels) {
+    // The model list is the truth for `rasm` (OpenAI alone can serve it); the `images` flag is Gemini's.
+    return features.imageModels.length > 0 ? null : "Rasm xizmati vaqtincha o‘chiq: serverda rasm kaliti sozlanmagan.";
+  }
   if (tool.custom === "image" || tool.custom === "portrait") {
     return features.images
       ? null
@@ -1515,10 +1527,8 @@ function essayPricePages(values: FormValues): number {
 export function basePriceFor(tool: ToolConfig, values: FormValues): number {
   if (tool.id === "portrait") return portraitPrice(values);
   if (tool.id === "image") {
-    const n = Number(values.imageCount || 1);
-    if (n >= 4) return 6000;
-    if (n >= 2) return 3500;
-    return 2000;
+    // Per model (`image-models.ts`): Gemini keeps 2 000 / 3 500 / 6 000, ChatGPT is its own table.
+    return imageBasePrice(imageModelOf(values), Number(values.imageCount || 1));
   }
   if (tool.id === "slide") {
     // Slayder (4–30): 20 tagacha 3 000, keyingi har slayd +500 — `extractMeta`

@@ -43,8 +43,9 @@ export const PROVIDERS = [
   { id: "aisha", label: "Aisha (o'zbekcha ovoz)", kinds: ["tts"], envKeys: ["AISHA_API_KEY"], keyHint: "Aisha kaliti", implemented: true, testable: false },
   { id: "openalex", label: "OpenAlex", kinds: ["research"], envKeys: ["OPENALEX_API_KEY"], keyHint: "OpenAlex kaliti", implemented: true, testable: true },
   { id: "googlebooks", label: "Google Books", kinds: ["research"], envKeys: ["GOOGLE_BOOKS_API_KEY"], keyHint: "AIza…", implemented: true, testable: true },
+  // `openai-image`: «ChatGPT» choice of the `rasm` tool (image-provider-openai.ts); shares OPENAI_API_KEY with the text provider.
+  { id: "openai-image", label: "OpenAI (rasm)", kinds: ["image"], envKeys: ["OPENAI_API_KEY"], keyHint: "sk-…", implemented: true, testable: false },
   // Reserved: the adapters are built later (program-17 D7); the key can be entered now.
-  { id: "openai-image", label: "OpenAI (rasm)", kinds: ["image"], envKeys: ["OPENAI_API_KEY"], keyHint: "sk-…", implemented: false, testable: false },
   { id: "veo", label: "Google Veo (video)", kinds: ["video"], envKeys: ["GEMINI_API_KEY"], keyHint: "AIza… (Gemini kaliti)", implemented: false, testable: false },
   { id: "kling", label: "Kling (video)", kinds: ["video"], envKeys: ["KLING_API_KEY"], keyHint: "Kling kaliti", implemented: false, testable: false },
   { id: "elevenlabs", label: "ElevenLabs (ovoz)", kinds: ["tts"], envKeys: ["ELEVENLABS_API_KEY"], keyHint: "sk_…", implemented: false, testable: false },

@@ -134,7 +134,7 @@ export type FalFailure =
   /** Qolgan hammasi: 5xx, tarmoq, javobda rasm yo'q. */
   | "failed";
 
-export type ImageProviderId = "fal" | "gemini" | "pexels" | "pixabay" | "stock";
+export type ImageProviderId = "fal" | "gemini" | "openai" | "pexels" | "pixabay" | "stock";
 
 export interface ImageProvider {
   /**

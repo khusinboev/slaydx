@@ -7,11 +7,13 @@ import type { FormValues, ToolConfig } from "@/lib/types";
 import { IMAGE_PROMPT_MIN, priceFor } from "@/lib/tools";
 import { IMAGE_RATIOS, IMAGE_STYLES } from "@/lib/generation/image-studio-options";
 import { IMAGE_PROMPT_LIMIT } from "@/lib/generation/image-params";
+import { DEFAULT_IMAGE_MODEL, imageModelById, offeredImageModels, type ImageModelId } from "@/lib/generation/image-models";
+import { useAppStore } from "@/lib/store";
 import { Card, Row, Segmented, SelectField } from "./compact";
 import { ClearFormButton, Field, LimitedTextarea, SettingsDetails } from "./shared";
 import { ToolChrome, TopicChips } from "./ToolChrome";
 import { runGeneration } from "./runGeneration";
-import { formatSom } from "@/lib/format";
+import { formatSom, groupDigits } from "@/lib/format";
 
 /*
  * Rasm formasi (WP-E, Formalar 3) — ilgari `ToolChrome`SIZ, o'zining
@@ -40,6 +42,10 @@ const STYLE_OPTIONS = IMAGE_STYLES.map((st) => ({ value: st.id, label: `${st.nam
 const RATIO_OPTIONS = IMAGE_RATIOS.map((r) => ({ value: r.id, label: r.label }));
 const COUNT_OPTIONS = [1, 2, 4].map((n) => ({ value: String(n), label: String(n) }));
 
+/*
+ * Model tanlovi (program-17 item 5): server FAQAT provayderi yoqilgan VA kaliti bor modellarni yuboradi
+ * (`features.imageModels`). Bittagina model bo'lsa tanlagich chizilmaydi va forma avvalgidek ishlaydi.
+ */
 const INITIAL: FormValues = {
   prompt: "",
   imageStyle: "photo",
@@ -54,7 +60,17 @@ export function ImageStudio({ tool }: { tool: ToolConfig }) {
   const [error, setError] = useState<string | null>(null);
   const set = (name: string, v: string | number) => setValues((s) => ({ ...s, [name]: v }));
 
-  const price = priceFor(tool, values);
+  const offered = offeredImageModels(useAppStore((s) => s.features?.imageModels));
+  // A saved/stale choice that is no longer offered falls back to the first available model.
+  const chosen = String(values.model || DEFAULT_IMAGE_MODEL);
+  const model: ImageModelId = (offered as string[]).includes(chosen) ? (chosen as ImageModelId) : (offered[0] ?? DEFAULT_IMAGE_MODEL);
+  const showModel = offered.length > 1;
+  // `model` goes to the server only when it is a real choice (or the sole model is not Gemini); Gemini alone sends exactly today's body.
+  const sent: FormValues = { ...values };
+  if (showModel || model !== DEFAULT_IMAGE_MODEL) sent.model = model;
+  else delete sent.model;
+  const price = priceFor(tool, sent);
+  const priceHint = [1, 2, 4].map((n) => `${n} rasm ${groupDigits(priceFor(tool, { ...sent, imageCount: n }))}`).join(" · ");
   const ratio = IMAGE_RATIOS.find((r) => r.id === values.imageRatio) ?? IMAGE_RATIOS[0];
 
   const clearConfirm = useConfirmClick(() => setValues({ ...INITIAL }));
@@ -70,7 +86,7 @@ export function ImageStudio({ tool }: { tool: ToolConfig }) {
     }
     setLoading(true);
     try {
-      const id = await runGeneration(tool, { ...values, topic: prompt.slice(0, 72) });
+      const id = await runGeneration(tool, { ...sent, topic: prompt.slice(0, 72) });
       router.push(`/uz/files/${id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Xatolik");
@@ -95,6 +111,21 @@ export function ImageStudio({ tool }: { tool: ToolConfig }) {
         <TopicChips examples={EXAMPLES} onPick={(ex) => set("prompt", ex)} />
       </Card>
 
+      {showModel ? (
+        <Card title="Model">
+          <Row label="Model" hint="Rasmni qaysi sun’iy intellekt chizadi — narx modelga qarab farq qiladi">
+            <Field id="model">
+              <Segmented
+                ariaLabel="Model"
+                options={offered.map((id) => ({ value: id, label: imageModelById(id).label }))}
+                value={model}
+                onChange={(v) => set("model", v)}
+              />
+            </Field>
+          </Row>
+        </Card>
+      ) : null}
+
       <Card title="Uslub">
         <Row label="Uslub" hint="Rasmning vizual uslubi — foto, kino kadri, illyustratsiya va h.k.">
           <Field id="imageStyle">
@@ -116,7 +147,7 @@ export function ImageStudio({ tool }: { tool: ToolConfig }) {
             <Segmented ariaLabel="Nisbat" options={RATIO_OPTIONS} value={String(values.imageRatio || "1:1")} onChange={(v) => set("imageRatio", v)} />
           </Field>
         </Row>
-        <Row label="Nechta rasm" hint="1 rasm 2 000 · 2 rasm 3 500 · 4 rasm 6 000">
+        <Row label="Nechta rasm" hint={priceHint}>
           <Field id="imageCount">
             <Segmented ariaLabel="Nechta rasm" options={COUNT_OPTIONS} value={String(values.imageCount ?? 1)} onChange={(v) => set("imageCount", Number(v))} />
           </Field>

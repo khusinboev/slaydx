@@ -229,6 +229,11 @@ export function recordImage(provider: string, model: string, count = 1): void {
   store.getStore()?.addImage(provider, model, count);
 }
 
+/** One successful image whose real cost is known (OpenAI: priced from the answer's token `usage`). */
+export function recordImageUsd(provider: string, model: string, unitUsd: number): void {
+  store.getStore()?.addImage(provider, model, 1, unitUsd);
+}
+
 /** One successful fal.ai image (priced per megapixel when the model's price is documented). */
 export function recordFalImage(model: string, width: number, height: number): void {
   const meter = store.getStore();

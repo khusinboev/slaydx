@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { TOOL_BY_ID, priceFor } from "../lib/tools.ts";
 import type { FormValues } from "../lib/types.ts";
-import { composePrompt, imageRatioById } from "../lib/generation/image-studio.ts";
+import { composePrompt, imageProviderFor, imageRatioById } from "../lib/generation/image-studio.ts";
 import { IMAGE_FORM_FIELDS, IMAGE_PARAMS, type ImageParamImpact } from "../lib/generation/image-params.ts";
 
 /**
@@ -31,6 +31,7 @@ function signature(v: FormValues) {
     prompt: composePrompt(String(merged.prompt || ""), styleId, ratio.w, ratio.h),
     size: `${ratio.w}x${ratio.h}`,
     price: priceFor(image, merged),
+    provider: imageProviderFor(merged).id,
   };
 }
 
@@ -42,7 +43,7 @@ test("reyestr: id lar noyob, har parametrda ta'sir va ikki xil zond bor", () => 
     assert.ok(p.impacts.length > 0, `${p.id}: ta'sir e'lon qilinmagan — bezak maydon`);
     assert.notEqual(p.probeA, p.probeB, `${p.id}: zond qiymatlari bir xil`);
   }
-  assert.deepEqual(IMAGE_FORM_FIELDS, ["prompt", "imageStyle", "imageRatio", "imageCount"]);
+  assert.deepEqual(IMAGE_FORM_FIELDS, ["prompt", "imageStyle", "imageRatio", "imageCount", "model"]);
 });
 
 test("har parametr e'lon qilingan HAR ta'sirda A ≠ B beradi", () => {

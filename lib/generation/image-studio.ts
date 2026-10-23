@@ -1,6 +1,9 @@
 import { fetchImageBytes } from "./slide-images";
 import { geminiProvider } from "./image-provider-gemini";
-import { limitedProvider } from "./image-provider";
+import { openaiProvider } from "./image-provider-openai";
+import { limitedProvider, type ImageProvider, type ImageResult } from "./image-provider";
+import { imageModelOf, type ImageModelId } from "./image-models";
+import { UserFacingError } from "../server/user-error";
 import { imageExt } from "../viewers/kind";
 import { parseLlmObject } from "./json";
 import { mapPool } from "./quality";
@@ -105,7 +108,18 @@ function dataToBytes(dataUrl: string): Uint8Array | null {
  * kvotani cheklagichsiz bo'lishardi. Modul darajasida bitta o'rovchi —
  * semafor baribir `limiterFor` reyestridan (jarayonda yagona).
  */
-const imageProvider = limitedProvider(geminiProvider);
+const IMAGE_PROVIDERS: Record<ImageModelId, ImageProvider> = {
+  gemini: limitedProvider(geminiProvider),
+  openai: limitedProvider(openaiProvider),
+};
+
+/** The provider that draws for the form's `model` choice (`image-models.ts`); absent = Gemini, as always. */
+export function imageProviderFor(values: { model?: unknown }): ImageProvider {
+  return IMAGE_PROVIDERS[imageModelOf(values)];
+}
+
+/** `moderation_blocked` is the detail prefix the OpenAI adapter gives to a content-policy refusal. */
+const isRefusal = (r: ImageResult): boolean => !r.ok && r.detail.startsWith("moderation_blocked");
 
 export async function buildImageArtifact(
   tool: ToolConfig,
@@ -123,6 +137,9 @@ export async function buildImageArtifact(
   const ratio = imageRatioById(String(values.imageRatio || "1:1"));
   const count = Math.max(1, Math.min(4, Number(values.imageCount || 1)));
   const size = { width: ratio.w, height: ratio.h };
+  const model = imageModelOf(values);
+  const imageProvider = imageProviderFor(values);
+  const refused: ImageResult[] = [];
   const scene = await expandPrompt(prompt, styleId, ratio.id, deadline);
   const full = composePrompt(scene, styleId, ratio.w, ratio.h);
   stage(10, count > 1 ? `Rasm chizilmoqda · 0/${count}` : "Rasm chizilmoqda");
@@ -130,13 +147,15 @@ export async function buildImageArtifact(
   let drawn = 0;
   const raw = await mapPool(Array.from({ length: count }, (_, i) => i), 2, async (i) => {
     /*
-     * `rasm` — mustaqil pullik mahsulot, fal endi ishlatilmaydi. Gemini
+     * `rasm` — mustaqil pullik mahsulot, fal endi ishlatilmaydi. Provayder
+     * foydalanuvchi tanlovidan (`model`: Gemini yoki ChatGPT). Gemini
      * lite ($0.034) matnni (ayniqsa o'zbekcha mavzu) aniq o'qiydi —
      * uslub farqi asosan promptga bog'liq (yuqoridagi izoh).
      */
     // Muddat (EXT-03): har so'rov byudjeti ish muddati bilan cheklanadi (ilgari 120 s shift, muddatsiz).
     const res = await imageProvider.fetchImage({ prompt: full, size, styleId: "photo" }, deadline);
     const im = res.ok ? res.image : null;
+    if (isRefusal(res)) refused.push(res);
     drawn++;
     if (count > 1) stage(10 + Math.round((70 * drawn) / count), `Rasm chizilmoqda · ${drawn}/${count}`);
     if (!im) return null;
@@ -153,7 +172,11 @@ export async function buildImageArtifact(
     return out;
   });
   const images = raw.filter((x): x is GenImage => Boolean(x));
-  if (!images.length) throw new Error("Rasm yaratilmadi. Qayta urinib ko‘ring.");
+  if (!images.length) {
+    // A content-policy refusal gets its own message (the prompt has to change; a plain retry would be refused again).
+    if (refused.length) throw new UserFacingError("Tavsif rasm modelining kontent qoidalariga mos kelmadi — mazmunini o‘zgartirib, qayta urinib ko‘ring. Kredit qaytariladi.");
+    throw new Error("Rasm yaratilmadi. Qayta urinib ko‘ring.");
+  }
   stage(85, "Fayl saqlanmoqda");
 
   const doc: AcademicDoc = {
@@ -172,6 +195,8 @@ export async function buildImageArtifact(
     imageScene: scene,
     imageStyle: styleId,
     imageRatio: ratio.id,
+    // Which model drew the pictures: the viewer names it.
+    imageModel: model,
   };
 
   const files = await resolveImageFiles(images);

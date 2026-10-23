@@ -260,6 +260,8 @@ export type Features = {
   images: boolean;
   /** A voice provider is usable (podcast, greeting); absent on an older server. */
   tts?: boolean;
+  /** `rasm` models that are usable now (provider enabled + key); absent on an older server. */
+  imageModels?: string[];
   telegram: boolean;
   telegramBot: string | null;
   devLogin: boolean;
