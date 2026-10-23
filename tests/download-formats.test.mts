@@ -49,6 +49,7 @@ const MATRIX: Record<string, Row> = {
   listening: { format: "docx", on: ["native", "pdf"], off: ["native"] },
   image: { format: "png", on: ["native", "jpg"], off: ["native", "jpg"] },
   infographic: { format: "png", on: ["native", "jpg"], off: ["native", "jpg"] },
+  portrait: { format: "png", on: ["native", "jpg"], off: ["native", "jpg"] },
   podcast: { format: "mp3", on: ["native", "transcript-txt"], off: ["native", "transcript-txt"] },
   greeting: { format: "mp3", on: ["native", "transcript-txt"], off: ["native", "transcript-txt"] },
 };

@@ -247,9 +247,10 @@ test("kalitsiz xizmat sotilmaydi", async () => {
     assert.equal(toolBlockedReason(t, all), null, `${t.id} to'silmasligi kerak`);
   }
 
-  // Rasm kaliti yo'q — FAQAT rasm vositasi to'siladi.
+  // Rasm kaliti yo'q — FAQAT rasm vositalari (rasm, bitiruvchi portreti: ikkalasi Gemini rasm modeli) to'siladi.
   assert.ok(toolBlockedReason(TOOL_BY_ID.image, noImages), "rasm vositasi to'silishi kerak");
-  for (const t of TOOLS.filter((x) => x.custom !== "image")) {
+  assert.ok(toolBlockedReason(TOOL_BY_ID.portrait, noImages), "portret vositasi rasm kalitisiz to'silishi kerak");
+  for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait")) {
     assert.equal(toolBlockedReason(t, noImages), null, `${t.id}: matn xizmati ishlashi kerak`);
   }
 
@@ -259,11 +260,12 @@ test("kalitsiz xizmat sotilmaydi", async () => {
    * bo'lsa esa shablon hujjatni qaytaradi va TO'LIQ narx olinadi. Ya'ni
    * kalitsiz rejim dev/demo uchun, sotuv uchun emas.
    */
-  for (const t of TOOLS.filter((x) => x.custom !== "image")) {
+  for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait")) {
     assert.ok(toolBlockedReason(t, noLlm), `${t.id}: matn kalitisiz sotilmasligi kerak`);
   }
-  // Rasm vositasi matn kalitiga BOG'LIQ EMAS — u Gemini rasm modeli bilan ishlaydi.
+  // Rasm vositalari matn kalitiga BOG'LIQ EMAS — ular Gemini rasm modeli bilan ishlaydi (portret hech qanday matn LLM chaqirmaydi).
   assert.equal(toolBlockedReason(TOOL_BY_ID.image, noLlm), null);
+  assert.equal(toolBlockedReason(TOOL_BY_ID.portrait, noLlm), null);
 
   // Hech narsa sozlanmagan — hamma vosita to'silади.
   for (const t of TOOLS) {
