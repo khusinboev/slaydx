@@ -26,7 +26,7 @@ import { deleteGenerationFile } from "./storage";
 import { deleteAssets, extractAssets, putAssetBytes, slideViewCopies, viewCopyBudget } from "./assets";
 import { buildPreview } from "./preview";
 import { logoDataUrl } from "./logo";
-import { photoDataUrl, purgeOldPhotos } from "./photo";
+import { deleteUserPhoto, photoDataUrl, purgeOldPhotos } from "./photo";
 import { templateForJob } from "./template-upload";
 import { purgeOldSources, sourceForJob } from "./source-upload";
 import { LiveReporter } from "./live";
@@ -560,7 +560,9 @@ async function execute(
      * Topilmasa `undefined` — rezyume suratsiz chiqadi (`logo` naqshi).
      */
     const photo =
-      tool.id === "resume" ? await photoDataUrl(job.userId, String(job.values.photoAssetId ?? "")) : undefined;
+      tool.id === "resume" || tool.id === "portrait"
+        ? await photoDataUrl(job.userId, String(job.values.photoAssetId ?? ""))
+        : undefined;
     tracked = trackJobCost(() => build(tool, job.values, {
       deadline,
       logo,
@@ -653,6 +655,16 @@ async function execute(
     );
     // The build's spend is final here; a discarded result counts as abandoned.
     outcome = won ? "completed" : "abandoned";
+    /*
+     * Graduation portrait: the selfie is deleted as soon as the pictures are committed (privacy: a face
+     * photo is kept no longer than the job needs). A failed / abandoned job keeps it for a retry; the
+     * 90-day `purgeOldPhotos` removes it in the end. Never fails the job.
+     */
+    if (won && tool.id === "portrait") {
+      await deleteUserPhoto(job.userId, String(job.values.photoAssetId ?? "")).catch((e) => {
+        log("warn", `[worker] job ${job.id}: selfie not deleted`, { jobId: job.id, err: e });
+      });
+    }
     completedCost = won ? file.cost : undefined;
     if (!won) {
       // Qulf boshqada (ish qayta navbatga tushgan, muddat o'tib FAILED

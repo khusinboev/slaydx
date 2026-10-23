@@ -22,6 +22,9 @@ export function PhotoField({
   shape,
   savedShape,
   onChange,
+  keepOriginal = true,
+  hint = "PNG yoki JPEG, 5 MB gacha",
+  alt = "Rezyume surati",
 }: {
   assetId: string;
   originalAssetId: string;
@@ -31,6 +34,14 @@ export function PhotoField({
   /** Surat AYNAN qaysi shaklda kesilgan (yuklashda qaytadi). */
   savedShape?: "circle" | "square";
   onChange: (v: { assetId: string; originalAssetId: string; crop?: Crop; shape?: "circle" | "square" }) => void;
+  /**
+   * Also upload the uncropped original (for «Markazlash»). The graduation portrait turns it OFF: it needs
+   * the cropped face only, and a face photo is not stored longer or bigger than the job needs.
+   */
+  keepOriginal?: boolean;
+  /** Helper line under the buttons while idle. */
+  hint?: string;
+  alt?: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<File | null>(null);
@@ -73,7 +84,7 @@ export function PhotoField({
     setBusy(true);
     setError(null);
     try {
-      const res = await uploadResumePhoto({ blob: out.blob, original: pending, crop: out.crop, shape: out.shape });
+      const res = await uploadResumePhoto({ blob: out.blob, original: keepOriginal ? pending : null, crop: out.crop, shape: out.shape });
       setExpired(false);
       onChange({ assetId: res.assetId, originalAssetId: res.originalAssetId ?? originalAssetId, crop: out.crop, shape: out.shape });
     } catch (e) {
@@ -93,7 +104,7 @@ export function PhotoField({
         {showImg ? (
           <ApiImg
             src={photoUrl(assetId)}
-            alt="Rezyume surati"
+            alt={alt}
             className="size-full object-cover"
             onError={() => void onImgError(assetId)}
           />
@@ -153,7 +164,7 @@ export function PhotoField({
             Shablon {shape === "circle" ? "doira" : "kvadrat"} surat kutadi — «Markazlash» bilan qayta kesing.
           </p>
         ) : (
-          <p className="text-muted-foreground mt-0.5 text-[13px]">{busy ? "Yuklanmoqda…" : "PNG yoki JPEG, 5 MB gacha"}</p>
+          <p className="text-muted-foreground mt-0.5 text-[13px]">{busy ? "Yuklanmoqda…" : hint}</p>
         )}
         {error ? <p className="text-destructive mt-0.5 text-[13px]">{error}</p> : null}
       </div>

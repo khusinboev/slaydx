@@ -598,6 +598,11 @@ export type AcademicDoc = {
   imageScene?: string;
   imageStyle?: string;
   imageRatio?: string;
+  /**
+   * Graduation portrait (program-17 item 14): the options the pictures were made with. The viewer
+   * reads it for its label (no model prompt is shown for this tool); `images` holds the results.
+   */
+  portrait?: { gown: string; background: string; sash: string; variants: number };
 };
 
 export type BuiltFile = {

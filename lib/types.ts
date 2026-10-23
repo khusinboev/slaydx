@@ -41,7 +41,9 @@ export type ToolId =
   | "sorting"
   | "listening"
   | "podcast"
-  | "greeting";
+  | "greeting"
+  /** Program-17 item 14: selfie -> graduation portrait (`portrait/` engine, Gemini image edit, group `media`). */
+  | "portrait";
 
 /**
  * Bo'lim (landing, nav, `CreateGrid`).
@@ -135,7 +137,7 @@ export type ToolConfig = {
    * ko'radi.
    */
   output: "docx" | "pptx" | "png" | "mp3";
-  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "teacher" | "game" | "media" | "infographic";
+  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "teacher" | "game" | "media" | "infographic" | "portrait";
   basePrice: number;
 };
 

@@ -12,6 +12,7 @@ import { renderPptxWithTemplate } from "./render-pptx-template";
 import type { CustomTemplate } from "./pptx-template";
 import { buildImageArtifact } from "./image-studio";
 import { buildInfographicArtifact } from "./infographic/engine";
+import { buildPortraitArtifact } from "./portrait/engine";
 import { buildTranslationArtifact } from "./translate/engine";
 import { buildResumeDoc } from "./resume/write";
 import type { SlideProgressSink } from "./slide-progress";
@@ -484,6 +485,8 @@ export function fileSuffix(toolId: string): string {
       return "-podkast";
     case "greeting":
       return "-tabriknoma";
+    case "portrait":
+      return "-portret";
     default:
       return "";
   }
@@ -554,6 +557,14 @@ async function buildArtifactInner(
 
   if (tool.id === "image") {
     return buildImageArtifact(tool, values, deadline, opts.onStage);
+  }
+
+  /*
+   * Graduation portrait (program-17 item 14): selfie -> 1-2 pictures, the `image` pattern (the engine
+   * returns the `BuiltFile`; no pictures = it throws = the worker refunds in full).
+   */
+  if (tool.id === "portrait") {
+    return buildPortraitArtifact(tool, values, { deadline, photo: opts.photo, ...(opts.onStage ? { onStage: opts.onStage } : {}) });
   }
 
   /*

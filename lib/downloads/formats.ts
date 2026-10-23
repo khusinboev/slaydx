@@ -115,6 +115,7 @@ const TOOL_PLANS: Readonly<Record<ToolId, ToolPlan>> = {
   infographic: { extras: ["jpg"] },
   podcast: { extras: ["transcript-txt"] },
   greeting: { extras: ["transcript-txt"] },
+  portrait: { extras: ["jpg"] },
 };
 
 /** Tool ids that have a download decision (equals every `ToolId`). */

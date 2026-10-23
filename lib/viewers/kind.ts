@@ -76,6 +76,7 @@ export function viewerKind(id: ToolId): ViewerKind {
     case "translation":
       return "translation";
     case "image":
+    case "portrait":
     case "infographic":
       // AUDIT-21: infografika — bir betlik PNG plakat, `rasm` bilan bir
       // xil ko'ruvchi (`ImageViewer`, `packImages` qadoqlash naqshi).

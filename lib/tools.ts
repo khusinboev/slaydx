@@ -19,6 +19,7 @@ import { ESSAY_CONTEXTS, essayWords } from "./generation/essay/registry";
 import { ESSAY_LIMITS } from "./generation/essay/types";
 import { glossaryTermCount } from "./generation/teacher/input";
 import { clientAdjustedPrice } from "./price-adjust";
+import { portraitPrice } from "./generation/portrait/registry";
 import { groupDigits } from "./format";
 
 const TOPIC_FILE_MODES = [
@@ -109,6 +110,11 @@ const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
     { kind: "text", name: "university", legend: "Ta'lim muassasasi nomi", required: true },
     { kind: "text", name: "author", legend: "Tuzuvchi (F.I.Sh)", required: true },
   ],
+  /*
+   * Bitiruvchi portreti: surat MAJBURIY — usiz yuz saqlanadigan tahrir bo'lmaydi. Server uni bo'sh
+   * so'rovda rad etadi (pul yechilmaydi); suratning bazada borligi route'da tekshiriladi.
+   */
+  portrait: [{ kind: "text", name: "photoAssetId", legend: "Surat", required: true }],
 };
 
 /**
@@ -929,6 +935,25 @@ export const TOOLS: ToolConfig[] = [
     fields: AUDIO_FIELDS.greeting,
     custom: "media",
   },
+  {
+    id: "portrait",
+    slug: "portrait",
+    title: "Bitiruvchi portreti",
+    pageTitle: "Bitiruvchi portreti",
+    group: "media",
+    icon: "graduation-cap",
+    tc: "202 138 4",
+    description: "Selfingizdan xalat va shapkali bitiruv portreti — yuzingiz o‘zgarmaydi, fon va xalat rangini tanlaysiz",
+    submitLabel: "Portret yaratish",
+    creatingLabel: "Portret chizilmoqda...",
+    createdLabel: "portret tayyor!",
+    extraOptional: false,
+    output: "png",
+    // Har variant 2 000 so'm (`portraitPrice`); admin «Narxlar» sahifasi foiz bilan sozlaydi.
+    basePrice: 2000,
+    fields: [],
+    custom: "portrait",
+  },
 ];
 
 /*
@@ -1368,7 +1393,7 @@ export type ToolFeatures = {
  */
 export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | null): string | null {
   if (!features) return null;
-  if (tool.custom === "image") {
+  if (tool.custom === "image" || tool.custom === "portrait") {
     return features.images
       ? null
       : "Rasm xizmati vaqtincha o‘chiq: serverda rasm kaliti sozlanmagan.";
@@ -1488,6 +1513,7 @@ function essayPricePages(values: FormValues): number {
  * `lib/server/pricing.ts`; it never reads the client registry below.
  */
 export function basePriceFor(tool: ToolConfig, values: FormValues): number {
+  if (tool.id === "portrait") return portraitPrice(values);
   if (tool.id === "image") {
     const n = Number(values.imageCount || 1);
     if (n >= 4) return 6000;

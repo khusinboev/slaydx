@@ -14,6 +14,8 @@ import { effectivePrice } from "@/lib/server/pricing";
 import { getSetting } from "@/lib/server/settings";
 import { assertCanCreate } from "@/lib/server/mandatory-channels";
 import { assertOfferAccepted } from "@/lib/server/oferta";
+import { photoExists } from "@/lib/server/photo";
+import { portraitInputFromValues } from "@/lib/generation/portrait/registry";
 import type { ToolId } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -149,6 +151,12 @@ export const POST = handler("generations/create", async (req) => {
    * replays (same tool and values) or rejects with 422 (different ones).
    */
   const replay = idempotencyKey ? await idempotencyKeyTaken(user.id, idempotencyKey) : false;
+
+  // Graduation portrait: the selfie must exist and be the user's own BEFORE anything is priced or charged.
+  // (A replay is a job already created; its selfie may be deleted by now.)
+  if (tool.id === "portrait" && !replay && !(await photoExists(user.id, portraitInputFromValues(values).photoAssetId))) {
+    throw new ApiError("Surat topilmadi — suratni qayta yuklang", 400);
+  }
 
   /*
    * Mandatory channels (docs/bonus/BONUS3.md C-Q2/C-Q3): 403 `channel_required` /
