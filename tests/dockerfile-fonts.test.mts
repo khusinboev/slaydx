@@ -47,3 +47,24 @@ test("Dockerfile: worker image also installs latin/cyrillic fonts (ttf-liberatio
   }
   assert.ok(text.includes("fc-cache"), "worker: shrift keshi (fc-cache) yo'q");
 });
+
+/**
+ * Qo'lyozma mustaqil ish (Program 17 band 10): DOCX qo'lyozma shriftini NOM bilan
+ * so'raydi. PDF'ni web konteynerdagi LibreOffice chizadi, DOCX'ni worker yozadi
+ * (shrift faylini ichiga joylaydi) — ikkala image ham shriftni o'rnatgan bo'lishi
+ * va `fc-cache` yangilanishi kerak. Fayllar `os-base` da (ikkala image uchun
+ * umumiy), manba esa `public/fonts/handwriting/` (ko'ruvchi ham shundan oladi).
+ */
+test("Dockerfile: both images get the handwriting fonts (os-base COPY of every bundled .ttf + fc-cache)", async () => {
+  const { readdirSync } = await import("node:fs");
+  const df = readDockerfile();
+  const files = readdirSync(new URL("../public/fonts/handwriting/", import.meta.url)).filter((f) => f.endsWith(".ttf"));
+  assert.ok(files.length >= 2, "kamida ikkita qo'lyozma shrifti bor");
+  for (const image of ["runner", "worker"]) {
+    const text = imageText(df, image);
+    assert.match(text, /^COPY public\/fonts\/handwriting\/\*\.ttf \/usr\/share\/fonts\/slaydx-handwriting\/\s*$/m, `${image}: qo'lyozma shriftlari COPY qilinmagan`);
+    const copyAt = text.indexOf("slaydx-handwriting");
+    assert.ok(text.indexOf("fc-cache", copyAt) > copyAt, `${image}: COPY'dan KEYIN fc-cache kerak`);
+  }
+  assert.ok(stageChain(df, "worker").some((s) => s.name === "os-base") && stageChain(df, "runner").some((s) => s.name === "os-base"), "umumiy os-base");
+});

@@ -144,6 +144,13 @@ export function pageGateApplies(toolId: string, doc: AcademicDoc): boolean {
    */
   if (teacherKindOf(toolId)) return false;
   if (!LENGTH_GATED.has(toolId)) return false;
+  /*
+   * Qo'lyozma mustaqil ish (Program 17 band 10): daftar varag'ida bir bet ~29 qator
+   * (Bad Script 16 pt) — betlar soni oddiy hujjatdan farq qiladi, shuning uchun
+   * renderlangan BET darvozasi qo'llanmaydi. SO'Z darvozasi (yuqorida) esa o'z
+   * kuchida: yozilgan matn hajmi va'dadan kam bo'lmaydi.
+   */
+  if (doc.work?.hand) return false;
   if (isArticleTool(toolId) && articleWordRange(doc)) return false;
   return essayGateWords(toolId, doc) === null;
 }
