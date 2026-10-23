@@ -77,12 +77,12 @@ test("SURATLI shablon aynan bitta `<w:drawing>` va bitta media fayl beradi", asy
     assert.equal(drawings(xml), 1, `${id}: drawing soni`);
     assert.equal(media.length, 1, `${id}: media fayl soni`);
   }
-  assert.equal(PHOTO_TEMPLATE_IDS.length, 6, "suratli shablonlar soni");
+  assert.equal(PHOTO_TEMPLATE_IDS.length, 7, "suratli shablonlar soni");
 });
 
 test("SURATSIZ shablon yuklangan suratni ham chizmaydi", async () => {
   /*
-   * Mahsulot qarori (AUDIT-16): 4 shablon ataylab suratsiz (ATS va
+   * Mahsulot qarori (AUDIT-16, Program 17): 5 shablon ataylab suratsiz (ATS va
    * rasmiy hujjat uchun). Foydalanuvchi surat yuklab, keyin shunday
    * shablonni tanlasa — surat CHIZILMAYDI, forma buni ogohlantiradi.
    */
@@ -91,7 +91,7 @@ test("SURATSIZ shablon yuklangan suratni ham chizmaydi", async () => {
     assert.equal(drawings(xml), 0, `${id}: suratsiz shablonda drawing chiqdi`);
     assert.equal(media.length, 0, `${id}: suratsiz shablonda media chiqdi`);
   }
-  assert.equal(PHOTOLESS_TEMPLATE_IDS.length, 4, "suratsiz shablonlar soni");
+  assert.equal(PHOTOLESS_TEMPLATE_IDS.length, 5, "suratsiz shablonlar soni");
 });
 
 test("suratsiz rezyumeda drawing ham, media ham yo'q", async () => {

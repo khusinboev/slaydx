@@ -1,5 +1,5 @@
 /**
- * Rezyume shablonlari (Rezyume 2 → AUDIT-16) — 10 ta maket, 6 ta palitra.
+ * Rezyume shablonlari (Rezyume 2 → AUDIT-16, Program 17 item 17) — 12 ta maket, 6 ta palitra.
  *
  * Shablon — DATA: `planResume` (`layout.ts`) undan zonalarni yasaydi,
  * `render-docx.ts` va `ResumePage.tsx` ikkalasi ham shu ma'lumotdan
@@ -14,9 +14,17 @@
  * o'rni (`heading`) — to'rt mustaqil o'lcham. Har shablon shu o'lchamlarda
  * boshqalardan kamida ikkitasi bilan ajralib turadi.
  *
- * Surat: 4 shablonda SLOT UMUMAN YO'Q (`photo: null`) — ular ATS va
- * rasmiy hujjat uchun; qolgan 6 tasida bor. Bu foydalanuvchi talabi:
- * «4 ta rasmsiz, 6 ta rasmli».
+ * Surat: 5 shablonda SLOT UMUMAN YO'Q (`photo: null`) — ular ATS va
+ * rasmiy hujjat uchun; qolgan 7 tasida bor. AUDIT-16 talabi «4 ta
+ * rasmsiz, 6 ta rasmli» edi; Program 17 (17-band) bittadan qo'shdi:
+ *
+ *  - `executive` (suratsiz) — varaq kengligidagi TO'Q sarlavha tasmasi
+ *    + serif matn. Suratsiz to'rtlikning birortasida rangli blok yo'q
+ *    edi; bu yerda tasma suratsiz ham ishlaydi (bir oqimli, ATS uchun
+ *    mos). Klassik ATS (`ats`) allaqachon bor — takrorlanmadi.
+ *  - `sidetime` (suratli) — OCHIQ chap panel + asosiy ustunda TAYMLAYN
+ *    (`rowStyle: "rail"`). Yon panel va taymlayn ilgari hech bir
+ *    shablonda birga kelmagan: `modern/twocol/split` qatorlari inline.
  */
 
 export const RESUME_TEMPLATE_IDS = [
@@ -25,6 +33,7 @@ export const RESUME_TEMPLATE_IDS = [
   "timeline",
   "compact",
   "letter",
+  "executive",
   // Suratli:
   "modern",
   "twocol",
@@ -32,6 +41,7 @@ export const RESUME_TEMPLATE_IDS = [
   "card",
   "split",
   "portrait",
+  "sidetime",
 ] as const;
 export type ResumeTemplateId = (typeof RESUME_TEMPLATE_IDS)[number];
 
@@ -214,6 +224,25 @@ export const RESUME_TEMPLATES: Record<ResumeTemplateId, ResumeTemplate> = {
     marginsMm: { top: 20, bottom: 18, left: 18, right: 18 },
   },
 
+  executive: {
+    id: "executive",
+    title: "Rahbar",
+    hint: "To‘q sarlavha tasmasi, serif matn, suratsiz — bir oqim",
+    columns: "single",
+    header: "banner",
+    rowStyle: "inline",
+    heading: "rule",
+    sidebarMm: 0,
+    bannerMm: 40,
+    railMm: 0,
+    photo: null,
+    defaultPalette: "ember",
+    darkAside: true,
+    type: { font: "Times New Roman", body: 11, h1: 26, h2: 12, small: 9.5, line: 1.2 },
+    asideSections: [],
+    marginsMm: { top: 0, bottom: 16, left: 20, right: 20 },
+  },
+
   /* ─────────────── SURATLI ─────────────── */
   modern: {
     id: "modern",
@@ -322,6 +351,25 @@ export const RESUME_TEMPLATES: Record<ResumeTemplateId, ResumeTemplate> = {
     type: { ...SANS, h1: 23 },
     asideSections: [],
     marginsMm: { top: 16, bottom: 16, left: 20, right: 20 },
+  },
+  sidetime: {
+    id: "sidetime",
+    title: "Yon taymlayn",
+    hint: "Ochiq chap panel, kvadrat surat; tajriba sanalari vertikal chiziqda",
+    columns: "sidebar-left",
+    header: "aside",
+    rowStyle: "rail",
+    heading: "hairline",
+    sidebarMm: 64,
+    bannerMm: 0,
+    railMm: 24,
+    photo: { shape: "square", sizeMm: 34, where: "aside" },
+    defaultPalette: "plum",
+    darkAside: false,
+    type: { ...SANS },
+    // Sertifikat qatorlari panelga TUSHMAYDI: `rail` qatori tor panelda sig'maydi.
+    asideSections: ["skills", "languages", "links"],
+    marginsMm: { top: 0, bottom: 0, left: 0, right: 0 },
   },
 };
 

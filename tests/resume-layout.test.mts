@@ -133,8 +133,8 @@ test("ikkinchi ustun SHABLON bo'yicha: panel, oddiy ustun yoki umuman yo'q", () 
 });
 
 test("suratsiz shablonda surat maketga UMUMAN tushmaydi", () => {
-  // Mahsulot qarori: 4 shablon (`ats`, `timeline`, `compact`, `letter`)
-  // suratsiz; yuklangan surat ularda chizilmaydi.
+  // Mahsulot qarori: 5 shablon (`ats`, `timeline`, `compact`, `letter`,
+  // `executive`) suratsiz; yuklangan surat ularda chizilmaydi.
   for (const id of PHOTOLESS_TEMPLATE_IDS) {
     const m = { ...sampleResume(id, undefined, false), photo: { url: "data:image/png;base64,AA", shape: "circle" as const, assetId: "" } };
     const L = planResume(m);
@@ -142,8 +142,8 @@ test("suratsiz shablonda surat maketga UMUMAN tushmaydi", () => {
     const all = L.zones.flatMap((z) => z.items);
     assert.ok(!all.some((it) => it.k === "photo"), `${id}: surat itemi chiqdi`);
   }
-  assert.equal(PHOTOLESS_TEMPLATE_IDS.length, 4);
-  assert.equal(PHOTO_TEMPLATE_IDS.length, 6);
+  assert.equal(PHOTOLESS_TEMPLATE_IDS.length, 5);
+  assert.equal(PHOTO_TEMPLATE_IDS.length, 7);
 });
 
 
@@ -246,4 +246,70 @@ test("palitra va tipografika shablondan keladi (chizuvchilar uchun yagona manba)
   }
   // Aniq palitra tanlansa u ustun.
   assert.equal(planResume(sampleResume("modern", "forest")).palette.id, "forest");
+});
+
+// ───────────────────────────────────────────── Program 17 (17-band): `executive`, `sidetime`
+
+test("hech bir shablon boshqasining tuzilmasi bilan bir xil emas (columns × header × rowStyle × heading × surat)", () => {
+  // Yangi shablon faqat qayta bo'yalgan nusxa bo'lib qolmasin (AUDIT-16 saboqi).
+  const seen = new Map<string, string>();
+  for (const id of RESUME_TEMPLATE_IDS) {
+    const t = RESUME_TEMPLATES[id];
+    const key = [t.columns, t.header, t.rowStyle, t.heading, t.photo ? t.photo.where : "no-photo"].join("|");
+    const prev = seen.get(key);
+    assert.equal(prev, undefined, `${id} va ${prev} bir xil tuzilma: ${key}`);
+    seen.set(key, id);
+  }
+});
+
+test("`executive`: suratsiz, to'q tasma sarlavhasi, bitta oqim; surat yuklansa ham chizilmaydi", () => {
+  const t = RESUME_TEMPLATES.executive;
+  assert.equal(t.photo, null);
+  assert.equal(t.header, "banner");
+  assert.equal(t.columns, "single");
+  assert.ok(PHOTOLESS_TEMPLATE_IDS.includes("executive"));
+  const m = { ...sampleResume("executive", undefined, false), photo: { url: "data:image/png;base64,AA", shape: "circle" as const, assetId: "" } };
+  const L = planResume(m);
+  assert.equal(L.photo, false);
+  assert.equal(L.asideKind, "none");
+  assert.equal(L.asideWidthMm, 0);
+  assert.ok(!L.zones.some((z) => z.id === "aside"));
+  const header = zoneOf(L, "header");
+  assert.deepEqual(kinds(header).filter((k) => k !== "contact"), ["name", "headline"]);
+  // Barcha bo'limlar (ko'nikma/til/havola ham) asosiy oqimda.
+  assert.deepEqual(headings(zoneOf(L, "main")), ["summary", "experience", "education", "certificates", "languages", "skills", "links"]);
+});
+
+test("`sidetime`: ochiq chap panel + taymlayn qatorlar; sertifikat panelga TUSHMAYDI (rail tor panelda sig'maydi)", () => {
+  const t = RESUME_TEMPLATES.sidetime;
+  assert.equal(t.columns, "sidebar-left");
+  assert.equal(t.rowStyle, "rail");
+  assert.equal(t.darkAside, false);
+  assert.ok(PHOTO_TEMPLATE_IDS.includes("sidetime"));
+  const L = planResume(sampleResume("sidetime"));
+  assert.equal(L.asideKind, "panel");
+  assert.equal(L.photo, true);
+  const aside = zoneOf(L, "aside");
+  assert.deepEqual(kinds(aside).slice(0, 2), ["photo", "name"]);
+  assert.deepEqual(headings(aside).filter((s) => s !== "summary"), ["skills", "languages", "links"]);
+  // `row` item'lari (tajriba/ta'lim/sertifikat) faqat asosiy ustunda.
+  assert.ok(!aside.some((i) => i.k === "row"), "panelga row (rail) tushib qoldi");
+  const main = zoneOf(L, "main");
+  assert.deepEqual(headings(main), ["summary", "experience", "education", "certificates"]);
+  assert.ok(main.some((i) => i.k === "row" && i.section === "certificates"));
+  // Rail qator chap ustuni (railMm) panel va asosiy ustun ichiga sig'adi.
+  assert.ok(t.railMm > 0 && t.railMm < L.mainWidthMm / 2, "rail ustuni asosiy ustunning yarmidan kam bo'lsin");
+});
+
+test("yangi shablonlar 6 palitrada ham to'liq maket beradi (palitra faqat rang)", () => {
+  for (const id of ["executive", "sidetime"] as const) {
+    let first: string | null = null;
+    for (const pal of ["ember", "ocean", "forest", "graphite", "plum", "sand"] as const) {
+      const L = planResume(sampleResume(id, pal));
+      assert.equal(L.palette.id, pal);
+      const shape = JSON.stringify(L.zones.map((z) => z.items.map((i) => i.k)));
+      first ??= shape;
+      assert.equal(shape, first, `${id}/${pal}: palitra maket tuzilmasini o'zgartirdi`);
+    }
+  }
 });
