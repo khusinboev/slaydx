@@ -485,6 +485,15 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
         }
         return;
       }
+      case "dqStart":
+      case "dqAnswer":
+      case "dqOff":
+      case "dqOn": {
+        // Daily logic quiz: all rules live in lib/server/daily-quiz.ts, the screens in ./daily-quiz.
+        const dq = await import("./daily-quiz");
+        toast = await dq.handleQuizCallback(ctx, msg.message_id, c);
+        return;
+      }
       case "noop":
         return;
       case "unknown":

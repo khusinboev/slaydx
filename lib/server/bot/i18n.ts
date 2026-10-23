@@ -533,6 +533,71 @@ const T = {
   "payReminder.help": { uz: "Yordam", ru: "Помощь", en: "Help" },
   "payReminder.retry": { uz: "Qayta to‘lash", ru: "Оплатить снова", en: "Pay again" },
 
+  /* ── Daily logic quiz (lib/server/daily-quiz.ts; questions are Uzbek only) ── */
+  "dq.invite": {
+    uz: "🧠 Kunlik savollar: 3 ta savolga to‘g‘ri javob bering — +{n}!",
+    ru: "🧠 Вопросы дня: ответьте правильно на 3 вопроса — +{n}!",
+    en: "🧠 Daily questions: answer 3 questions correctly — +{n}!",
+  },
+  "dq.inviteNoReward": {
+    uz: "🧠 Kunlik savollar: bugungi 3 ta mantiqiy savolga javob bering!",
+    ru: "🧠 Вопросы дня: ответьте на 3 логических вопроса!",
+    en: "🧠 Daily questions: try today’s 3 logic questions!",
+  },
+  "dq.ledger": { uz: "Kunlik savollar bonusi", ru: "Бонус за вопросы дня", en: "Daily questions bonus" },
+  "dq.start": { uz: "Boshlash", ru: "Начать", en: "Start" },
+  "dq.offBtn": { uz: "Obunani o‘chirish", ru: "Отписаться", en: "Unsubscribe" },
+  "dq.onBtn": { uz: "Obunani yoqish", ru: "Подписаться", en: "Subscribe" },
+  "dq.question": { uz: "Savol {i}/{n}", ru: "Вопрос {i}/{n}", en: "Question {i}/{n}" },
+  "dq.right": { uz: "✅ To‘g‘ri!", ru: "✅ Верно!", en: "✅ Correct!" },
+  "dq.wrong": { uz: "❌ Noto‘g‘ri. To‘g‘ri javob: {a}", ru: "❌ Неверно. Правильный ответ: {a}", en: "❌ Wrong. The right answer: {a}" },
+  "dq.toastRight": { uz: "✅ To‘g‘ri!", ru: "✅ Верно!", en: "✅ Correct!" },
+  "dq.toastWrong": { uz: "❌ Noto‘g‘ri", ru: "❌ Неверно", en: "❌ Wrong" },
+  "dq.toastLocked": { uz: "Bu savolga javob allaqachon qabul qilingan", ru: "Ответ на этот вопрос уже принят", en: "This question is already answered" },
+  "dq.won": {
+    uz: "3/3 — +{n} hamyoningizga tushdi!",
+    ru: "3/3 — +{n} зачислено на ваш кошелёк!",
+    en: "3/3 — +{n} added to your wallet!",
+  },
+  "dq.lost": { uz: "{c}/3 — ertaga yana urinib ko‘ring", ru: "{c}/3 — попробуйте завтра снова", en: "{c}/3 — try again tomorrow" },
+  "dq.none": { uz: "3/3 — barakalla!", ru: "3/3 — отлично!", en: "3/3 — well done!" },
+  "dq.cap": {
+    uz: "3/3 — barakalla! Lekin bu oy uchun kunlik savollar bonusi chegarasi ({n}) to‘lgan, bonus berilmaydi.",
+    ru: "3/3 — отлично! Но месячный лимит бонуса за вопросы дня ({n}) исчерпан, бонус не начисляется.",
+    en: "3/3 — well done! But this month’s daily-questions bonus limit ({n}) is used up, so no bonus is paid.",
+  },
+  "dq.budget": {
+    uz: "3/3 — barakalla! Lekin bugungi bonus fondi tugadi, bonus berilmaydi. Ertaga yana urinib ko‘ring.",
+    ru: "3/3 — отлично! Но бонусный фонд на сегодня закончился, бонус не начисляется. Попробуйте завтра.",
+    en: "3/3 — well done! But today’s bonus fund is used up, so no bonus is paid. Try again tomorrow.",
+  },
+  "dq.done": {
+    uz: "Siz bugungi savollarga allaqachon javob berdingiz ({c}/3). Yangi savollar ertaga.",
+    ru: "Вы уже ответили на сегодняшние вопросы ({c}/3). Новые вопросы будут завтра.",
+    en: "You already answered today’s questions ({c}/3). New ones tomorrow.",
+  },
+  "dq.disabled": { uz: "Kunlik savollar hozircha o‘chiq.", ru: "Вопросы дня сейчас отключены.", en: "Daily questions are switched off for now." },
+  "dq.stale": {
+    uz: "Bu savol eskirgan — yangisini /savol bilan oling.",
+    ru: "Этот вопрос устарел — получите новый командой /savol.",
+    en: "This question is out of date — get a new one with /savol.",
+  },
+  "dq.error": {
+    uz: "Hozir bajarib bo‘lmadi, birozdan keyin qayta urinib ko‘ring.",
+    ru: "Сейчас не получилось, попробуйте чуть позже.",
+    en: "That did not work right now, please try again a bit later.",
+  },
+  "dq.offDone": {
+    uz: "Kunlik savollar xabari o‘chirildi. Qayta yoqish: /obuna. Savollarni istalgan payt /savol orqali olishingiz mumkin.",
+    ru: "Рассылка вопросов дня отключена. Включить снова: /obuna. Вопросы всегда можно получить командой /savol.",
+    en: "The daily-questions message is switched off. Turn it back on with /obuna. You can always get the questions with /savol.",
+  },
+  "dq.onDone": {
+    uz: "Kunlik savollar xabari yoqildi: har kuni ertalab 3 ta savol yuboramiz.",
+    ru: "Рассылка вопросов дня включена: каждое утро мы будем присылать 3 вопроса.",
+    en: "The daily-questions message is on: we will send 3 questions every morning.",
+  },
+
   /* ── Til ── */
   "lang.title": { uz: "Bot tilini tanlang", ru: "Выберите язык бота", en: "Choose the bot language" },
   "lang.saved": { uz: "Bot tili: O‘zbekcha", ru: "Язык бота: русский", en: "Bot language: English" },
@@ -544,6 +609,8 @@ const T = {
   "cmd.admin": { uz: "Admin sifatida tasdiqlash", ru: "Подтвердить права админа", en: "Confirm admin rights" },
   "cmd.til": { uz: "Bot tilini o‘zgartirish", ru: "Сменить язык бота", en: "Change the bot language" },
   "cmd.alifbo": { uz: "Kirill ↔ Lotin ↔ Yangi lotin", ru: "Кириллица ↔ латиница ↔ новая латиница", en: "Cyrillic ↔ Latin ↔ new Latin" },
+  "cmd.savol": { uz: "Kunlik 3 ta savol (bonus)", ru: "3 вопроса дня (бонус)", en: "Today’s 3 questions (bonus)" },
+  "cmd.obuna": { uz: "Kunlik savollar xabarini yoqish/o‘chirish", ru: "Включить/выключить вопросы дня", en: "Turn the daily questions on/off" },
   "menu.app": { uz: "Ilova", ru: "Приложение", en: "App" },
 } as const satisfies Record<string, Entry>;
 

@@ -1,5 +1,6 @@
 import { env } from "../env";
 import { RATING_NOTE } from "../../rating";
+import { DAILY_QUIZ_NOTE } from "../../daily-quiz/rules";
 import { REFERRAL_TIERS, formatJoinDate, formatPoints, telegramShareUrl } from "../../referral";
 import { TOOL_BY_ID } from "../../tools";
 import { BOT_LANGUAGES } from "../../profile/fields";
@@ -201,6 +202,7 @@ export function ledgerTitle(lang: Lang, e: Pick<LedgerItem, "kind" | "note">): s
       const amb = /^Do'st to'lovi bonusi \((\d{1,2})%\)$/.exec(note)?.[1];
       if (amb) return t(lang, "ambassador.ledger", { p: amb });
       if (note === RATING_NOTE) return t(lang, "rating.ledger");
+      if (note === DAILY_QUIZ_NOTE) return t(lang, "dq.ledger");
       if (/^Birinchi to[‘']ldirish bonusi/.test(note)) return t(lang, "ledger.firstTopup");
       return lang === "uz" && note ? note : t(lang, "ledger.bonus");
     }

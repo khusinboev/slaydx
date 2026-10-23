@@ -254,7 +254,7 @@ export async function botUsername(now: number = Date.now()): Promise<string | nu
 }
 
 /** The bot's commands, in menu order. */
-export const BOT_COMMANDS = ["start", "login", "taklif", "admin", "til", "alifbo"] as const;
+export const BOT_COMMANDS = ["start", "login", "taklif", "admin", "til", "alifbo", "savol", "obuna"] as const;
 
 /**
  * Bot menyusidagi buyruqlar (Telegram «/» tugmasi). Idempotent — har
@@ -970,6 +970,14 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
 
   if (text.startsWith("/til") && ctx) {
     await bot.sendLanguageMenu(ctx);
+    return;
+  }
+
+  // Daily logic quiz (lib/server/daily-quiz.ts): `/savol` starts today's questions, `/obuna` toggles the morning message.
+  if (ctx && (text.startsWith("/savol") || text.startsWith("/obuna"))) {
+    const dq = await import("./bot/daily-quiz");
+    if (text.startsWith("/savol")) await dq.sendQuiz(ctx);
+    else await dq.toggleSubscription(ctx);
     return;
   }
 

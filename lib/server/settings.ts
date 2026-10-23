@@ -11,6 +11,14 @@ import { log } from "./log";
 import { PAYMENT_BONUS_DEFAULT, PAYMENT_BONUS_MAX, PAYMENT_BONUS_MIN } from "../payment-bonus";
 import { AMBASSADOR_DEFAULT, AMBASSADOR_MAX, AMBASSADOR_MIN } from "../ambassador";
 import { RATING_BONUS_DEFAULT, RATING_BONUS_MAX } from "../rating";
+import {
+  DQ_BUDGET_DEFAULT,
+  DQ_CAP_DEFAULT,
+  DQ_HOUR_DEFAULT,
+  DQ_MONEY_MAX,
+  DQ_REWARD_DEFAULT,
+  DQ_REWARD_MAX,
+} from "../daily-quiz/rules";
 
 /**
  * Runtime settings (docs/admin/02-plan.md §6.10, §17.7).
@@ -54,6 +62,11 @@ export type SettingValues = {
   "queue.mean_service_sec": number;
   "convert.daily_limit": number;
   "convert.disabled": boolean;
+  "daily_quiz.enabled": boolean;
+  "daily_quiz.reward": number;
+  "daily_quiz.monthly_cap": number;
+  "daily_quiz.daily_budget": number;
+  "daily_quiz.hour": number;
 };
 
 export type SettingKey = keyof SettingValues;
@@ -182,6 +195,7 @@ const PRICING_GROUP = "Narxlar";
 const QUEUE_GROUP = "Navbat va yuklama";
 const OFERTA_GROUP = "Oferta";
 const CONVERT_GROUP = "Fayl konvertatsiya";
+const QUIZ_GROUP = "Kunlik savollar";
 
 type DailyKey = "free_llm.daily.outline" | "free_llm.daily.udk" | "free_llm.daily.rewrite" | "free_llm.daily.polish";
 
@@ -432,6 +446,62 @@ const CATALOG: Catalog = {
     type: "bool",
     validate: boolValidator,
     envDefault: () => false,
+  },
+  "daily_quiz.enabled": {
+    key: "daily_quiz.enabled",
+    group: QUIZ_GROUP,
+    label: "Kunlik savollar yoqilgan",
+    description:
+      "Yoqilsa, bot har kuni ertalab (Toshkent vaqti) so'nggi 30 kunda faol bo'lgan, obunani o'chirmagan va botni bloklamagan foydalanuvchilarga 3 ta mantiqiy savol yuboradi; /savol buyrug'i ham ishlaydi. O'chiq bo'lsa hech narsa yuborilmaydi va bonus berilmaydi. Savollarni docs/program-17/daily-quiz-questions.md da tekshirib chiqing.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => false,
+  },
+  "daily_quiz.reward": {
+    key: "daily_quiz.reward",
+    group: QUIZ_GROUP,
+    label: "3/3 uchun bonus (bonus so'm)",
+    description: "Uchala savolga to'g'ri javob bergan foydalanuvchiga kuniga BIR MARTA beriladigan bonus so'm. 0 — savollar bor, bonus yo'q.",
+    type: "int",
+    min: 0,
+    max: DQ_REWARD_MAX,
+    validate: intValidator(0, DQ_REWARD_MAX),
+    envDefault: () => DQ_REWARD_DEFAULT,
+  },
+  "daily_quiz.monthly_cap": {
+    key: "daily_quiz.monthly_cap",
+    group: QUIZ_GROUP,
+    label: "Oylik bonus chegarasi (bitta foydalanuvchi)",
+    description:
+      "Bitta foydalanuvchi kunlik savollar uchun bir kalendar oyda (Toshkent) ko'pi bilan shuncha bonus so'm oladi. Chegara to'lsa foydalanuvchi o'ynay oladi, lekin bonus berilmaydi va unga shu aytiladi. 0 — bonus umuman berilmaydi.",
+    type: "int",
+    min: 0,
+    max: DQ_MONEY_MAX,
+    validate: intValidator(0, DQ_MONEY_MAX),
+    envDefault: () => DQ_CAP_DEFAULT,
+  },
+  "daily_quiz.daily_budget": {
+    key: "daily_quiz.daily_budget",
+    group: QUIZ_GROUP,
+    label: "Kunlik umumiy bonus fondi (bonus so'm)",
+    description:
+      "Bir kunda (Toshkent) hamma foydalanuvchilarga kunlik savollar uchun beriladigan bonus so'mning umumiy yuqori chegarasi. Fond tugasa g'oliblar «bugungi bonus fondi tugadi» xabarini oladi, bonus berilmaydi. 0 — bonus umuman berilmaydi.",
+    type: "int",
+    min: 0,
+    max: DQ_MONEY_MAX,
+    validate: intValidator(0, DQ_MONEY_MAX),
+    envDefault: () => DQ_BUDGET_DEFAULT,
+  },
+  "daily_quiz.hour": {
+    key: "daily_quiz.hour",
+    group: QUIZ_GROUP,
+    label: "Yuborish soati (Toshkent)",
+    description: "Kunlik savollar xabari shu soatdan (Toshkent vaqti, 0-23) boshlab yuboriladi; foydalanuvchilar ketma-ket, sekin yuboriladi.",
+    type: "int",
+    min: 0,
+    max: 23,
+    validate: intValidator(0, 23),
+    envDefault: () => DQ_HOUR_DEFAULT,
   },
 };
 
