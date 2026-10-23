@@ -231,5 +231,5 @@ test("INT-02: qisqa bandli reja 879f495 bilan AYNAN teng (barmoq izi) — eski 1
 });
 
 test("INT-02: qisqa bandli reja barmoq izi — yangi dizaynlar (conference, grid)", () => {
-  assert.equal(agendaFingerprint([...NEW_VISUALS]), "PENDING", "yangi dizayn reja geometriyasi o'zgardi");
+  assert.equal(agendaFingerprint([...NEW_VISUALS]), "0809594b20830fc5829e78a39a288a91", "yangi dizayn reja geometriyasi o'zgardi");
 });

@@ -161,3 +161,145 @@ test("har dizayn juftligi titul/bo'lim/bandlar/reja/iqtibos/yakunda farq qiladi"
   }
   void LAYOUT_KIT;
 });
+
+// ═════════════════ Program 17 (17-band): `conference` va `grid` dizaynlari ═════════════════
+
+type TextL = Extract<ReturnType<typeof planSlide>["layers"][number], { t: "text" }>;
+const textLayers = (layers: ReturnType<typeof planSlide>["layers"]) => layers.filter((l): l is TextL => l.t === "text");
+const bare = (n: string) => /^\d{1,2}$/.test(n);
+
+test("reyestr: ikki yangi shablon (Ilmiy konferensiya, Minimal grid) — noyob dizayn, guruh, palitra, 10 beat, ≥ 8 to'ldirgich", () => {
+  for (const [id, visual, group, theme] of [
+    ["conference", "conference", "ilmiy", "summit"],
+    ["grid", "grid", "bayon", "clinic"],
+  ] as const) {
+    const t = SLIDE_TEMPLATE_BY_ID[id];
+    assert.equal(t.visual, visual);
+    assert.equal(t.group, group);
+    assert.equal(t.defaultTheme, theme);
+    assert.equal(t.beats.length, 10);
+    assert.equal(t.beats[0].layout, "title");
+    assert.equal(t.beats[t.beats.length - 1].layout, "closing");
+    assert.ok(t.fillers.length >= 8, `${id}: to'ldirgichlar`);
+    assert.ok((DESIGN_VISUALS as readonly string[]).includes(visual));
+    assert.equal(templates.filter((x) => x.visual === visual).length, 1, `${id}: dizayn bitta shablonniki`);
+  }
+  assert.equal(SLIDE_TEMPLATES.length, 13, "auto + 12 shablon");
+  assert.equal(DESIGN_VISUALS.length, 12);
+});
+
+test("conference: har mazmun slaydi tepasida to'liq kenglikdagi to'q tasma; reja — raqamli plitkalar; bo'limda chapda to'q panel", () => {
+  const theme = getSlideTheme("atlas");
+  const band = (layout: SlideLayout) => {
+    const p = planSlide(sampleFor(layout), theme, "conference", 2, 9, "auto", "conference", { bodyType });
+    return p.layers.find((l) => l.t === "rect" && l.box.x === 0 && l.box.y === 0 && l.box.w >= W - 0.01 && l.box.h > 1 && l.box.h < 1.6 && l.fill?.color === theme.titleBg);
+  };
+  assert.ok(band("bullets"), "bullets: tasma yo'q");
+  assert.ok(band("agenda"), "agenda: tasma yo'q");
+  assert.ok(!band("quote"), "quote: tasma bo'lmasligi kerak (u chap panelli)");
+  // Reja: «01 02 03» to'q kvadratlar ichida, matn src bilan.
+  const ag = planSlide(sampleFor("agenda"), theme, "conference", 2, 9, "auto", "conference", { bodyType });
+  const nums = textLayers(ag.layers).filter((l) => bare(l.text ?? "") && l.src === undefined).map((l) => l.text);
+  assert.deepEqual(nums, ["01", "02", "03"]);
+  // Bo'lim: chap panel kengligi 4.6″ va raqam FAQAT rejadan.
+  const sec = { ...sampleFor("section"), plan: 2 };
+  const sp = planSlide(sec, theme, "conference", 2, 9, "auto", "conference", { bodyType });
+  const panel = sp.layers.find((l) => l.t === "rect" && l.box.x === 0 && l.box.w > 4 && l.box.w < 5 && l.box.h >= H - 0.01);
+  assert.ok(panel, "bo'lim chap paneli");
+  assert.deepEqual(textLayers(sp.layers).map((l) => l.text ?? "").filter(bare), ["02"]);
+  assert.deepEqual(textLayers(planSlide(sampleFor("section"), theme, "conference", 2, 9, "auto", "conference", { bodyType }).layers).map((l) => l.text ?? "").filter(bare), []);
+});
+
+test("grid: bandlar — har biri o'z plitkasi (tartib raqami + src matn); yolg'iz oxirgi plitka butun qatorni oladi; rasm — plitka", () => {
+  const theme = getSlideTheme("atlas");
+  for (const withImg of [false, true]) {
+    for (const n of [1, 2, 3, 4, 5, 6]) {
+      const s = sampleFor("bullets");
+      s.bullets = Array.from({ length: n }, (_, i) => `Band ${i + 1} matni.`);
+      if (!withImg) delete s.image;
+      const bt = bodyRules({ planItems: 5, textVolume: "standart" }, "lecture");
+      const p = planSlide(s, theme, "grid", 2, 9, "auto", "grid", { bodyType: { ...bt, maxBullets: 6 } });
+      const tag = `grid/bullets/${n}/${withImg ? "rasm" : "rasmsiz"}`;
+      const rows = textLayers(p.layers).filter((l) => l.src?.f === "bullets");
+      assert.equal(rows.length, n, `${tag}: band plitkalari`);
+      assert.deepEqual(rows.map((l) => (l.src as { i: number }).i), Array.from({ length: n }, (_, i) => i), `${tag}: src indekslari`);
+      const ords = textLayers(p.layers).filter((l) => bare(l.text ?? "") && l.src === undefined).map((l) => l.text);
+      assert.deepEqual(ords, Array.from({ length: n }, (_, i) => String(i + 1)), `${tag}: tartib raqamlari`);
+      const img = p.layers.filter((l) => l.t === "image");
+      assert.equal(img.length, withImg ? 1 : 0, `${tag}: rasm plitkasi`);
+      // Plitkalar kesishmaydi (rasm plitkasi bilan ham).
+      const rects = p.layers.filter((l) => l.t === "rect" && l.line && l.box.h > 1);
+      for (let i = 0; i < rects.length; i++)
+        for (let j = i + 1; j < rects.length; j++) {
+          const a = rects[i].box, b = rects[j].box;
+          const ov = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > 0.01 && Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > 0.01;
+          assert.ok(!ov, `${tag}: plitkalar kesishdi`);
+        }
+      if (withImg) for (const r of rects) assert.ok(!(Math.min(r.box.x + r.box.w, 4.5) - Math.max(r.box.x, 0.6) > 0.01), `${tag}: plitka rasm ustiga chiqdi`);
+      // Toq soni ikki ustunda — oxirgi plitka to'la kenglikda.
+      if (withImg && n >= 3 && n % 2 === 1) {
+        const widths = rects.map((r) => r.box.w);
+        assert.ok(Math.max(...widths) > 1.8 * Math.min(...widths), `${tag}: yolg'iz plitka kengaymadi`);
+      }
+    }
+  }
+});
+
+test("grid: bo'lim raqami — ulkan (≥ 120 pt) va FAQAT rejadan; titul/yakunda yalang raqam yo'q", () => {
+  const theme = getSlideTheme("atlas");
+  const sec = planSlide({ ...sampleFor("section"), plan: 3 }, theme, "grid", 2, 9, "auto", "grid", { bodyType });
+  const big = textLayers(sec.layers).filter((l) => l.text === "03");
+  assert.equal(big.length, 1);
+  assert.ok(big[0].size >= 120, `raqam ${big[0].size} pt`);
+  for (const layout of ["title", "closing"] as const) {
+    const p = planSlide({ ...sampleFor(layout), plan: 3 }, theme, "grid", 2, 9, "auto", "grid", { bodyType });
+    assert.deepEqual(textLayers(p.layers).map((l) => l.text ?? "").filter(bare), [], `grid/${layout}`);
+  }
+});
+
+test("yangi dizaynlar: rasm slotlari — titul/bandlar/iqtibos/yakunda; boshqalarda null; slot ichida rasm qatlami AYNAN shu quti", () => {
+  const theme = getSlideTheme("atlas");
+  for (const v of ["conference", "grid"] as const) {
+    for (const layout of ["title", "bullets", "quote", "closing"] as const) {
+      const slot = photoSlot(layout, v);
+      const p = planSlide(sampleFor(layout), theme, v, 2, 9, "auto", v, { bodyType });
+      const im = p.layers.filter((l) => l.t === "image");
+      if (v === "conference" && layout === "quote") {
+        assert.equal(slot, null);
+        assert.equal(im.length, 0);
+        continue;
+      }
+      assert.ok(slot, `${v}/${layout}: slot`);
+      assert.equal(im.length, 1, `${v}/${layout}: rasm qatlami`);
+      assert.deepEqual(im[0].box, slot, `${v}/${layout}: rasm qutisi slotdan farq qiladi`);
+    }
+    for (const layout of ["section", "agenda"] as const) assert.equal(photoSlot(layout, v), null, `${v}/${layout}`);
+  }
+});
+
+test("yangi dizaynlar: tahrir `src` xaritasi to'liq — kicker, sarlavha, izoh, iqtibos, muallif, reja bandlari, kolontitul", () => {
+  const theme = getSlideTheme("atlas");
+  const want: Record<string, string[]> = {
+    title: ["kicker", "title", "subtitle", "footer"],
+    section: ["title", "subtitle", "footer"],
+    bullets: ["title", "bullets", "footer"],
+    agenda: ["title", "bullets", "footer"],
+    quote: ["quote", "quoteBy", "footer"],
+    closing: ["title", "subtitle", "footer"],
+  };
+  for (const v of ["conference", "grid"] as const) {
+    for (const [layout, fields] of Object.entries(want)) {
+      const s = sampleFor(layout as SlideLayout);
+      const p = planSlide(s, theme, v, 2, 9, "auto", v, { bodyType });
+      for (const f of fields) {
+        const hit = textLayers(p.layers).filter((l) => l.src?.f === f || l.srcLines?.some((x) => x?.f === f));
+        assert.ok(hit.length >= 1, `${v}/${layout}: «${f}» src qatlami yo'q`);
+        // Maydon matni aynan model matni (transformatsiyasiz): tahrir ko'rsatkichi to'g'ri joyga borishi uchun.
+        if (f === "quoteBy") assert.equal(hit[0].text, s.quoteBy);
+        if (f === "quote") assert.equal(hit[0].text, s.quote);
+        if (f === "kicker") assert.equal(hit[0].text, s.kicker);
+        if (f === "subtitle") assert.equal(hit[0].text, s.subtitle);
+      }
+    }
+  }
+});

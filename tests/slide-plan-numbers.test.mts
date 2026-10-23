@@ -542,7 +542,7 @@ test("P9: plan'siz mazmun slaydlari geometriyasi (eski 17 vizual) 879f495 bilan 
 });
 
 test("P9: plan'siz mazmun slaydlari geometriyasi — yangi dizaynlar (conference, grid) barmoq izi", () => {
-  assert.equal(badgeFingerprint([...NEW_VISUALS]), "PENDING", "yangi dizayn geometriyasi o'zgardi");
+  assert.equal(badgeFingerprint([...NEW_VISUALS]), "ed0fee52abbe83f4bd7639c782727574", "yangi dizayn geometriyasi o'zgardi");
 });
 
 /**

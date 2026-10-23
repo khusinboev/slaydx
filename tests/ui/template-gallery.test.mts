@@ -97,6 +97,23 @@ test("karta bosilsa: tanlov + shablonning standart palitrasi, oyna yopiladi, pli
   assert.equal(card("Dars / trening").getAttribute("aria-checked"), "true", "oynada tanlangani belgilangan");
 });
 
+test("Program 17: yangi shablonlar galereyada — «Ilmiy konferensiya» va «Minimal grid» haqiqiy slayd renderi, tanlanadi, palitrasi qo'llanadi", () => {
+  for (const [name, id] of [["Ilmiy konferensiya", "conference"], ["Minimal grid", "grid"]] as const) {
+    mount();
+    openDialog();
+    const c = card(name);
+    assert.ok(c.querySelector('[data-thumb="main"] [data-src=\'{"f":"title"}\']'), `${name}: titul haqiqiy render emas`);
+    assert.equal(c.querySelectorAll('[data-thumb="small"]').length, 3, `${name}: uchta eskiz`);
+    // Namuna rasmi (`public/samples/tpl-<id>.jpg`) kartada.
+    assert.ok(c.querySelector(`img[src*="tpl-${id}"], [style*="tpl-${id}"]`), `${name}: namuna rasmi`);
+    fireEvent.click(c);
+    assert.equal(tile().getAttribute("data-template-tile"), id);
+    const def = getSlideTheme(SLIDE_TEMPLATE_BY_ID[id].defaultTheme);
+    assert.equal(within(themeGroup()).getByRole("radio", { name: def.nameUz }).getAttribute("aria-checked"), "true", `${name}: standart palitra`);
+    cleanup();
+  }
+});
+
 // ───────────────────────── «O'z shablonim» (faqat pro) ─────────────────────────
 
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
