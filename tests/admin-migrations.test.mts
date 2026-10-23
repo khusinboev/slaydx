@@ -314,7 +314,13 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     const offerCols = async () =>
       (await query<{ column_name: string }>("SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name IN ('offer_version', 'offer_accepted_at') ORDER BY column_name")).map((r) => r.column_name);
     assert.deepEqual(await offerCols(), ["offer_accepted_at", "offer_version"], "054 columns created");
+    const quizOffCol = () =>
+      queryOne("SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'daily_quiz_off'");
+    assert.ok(await quizOffCol(), "055 column created");
+    assert.ok((await exists("daily_quiz_attempts")) && (await exists("daily_quiz_sends")), "055 tables created");
     for (const f of [
+      // 055: daily logic quiz (docs/program-17 item 16) -- daily_quiz_attempts / daily_quiz_sends + users.daily_quiz_off.
+      "055_daily_quiz.sql",
       // 054: public offer acceptance (docs/program-17 item 12) -- users.offer_version / offer_accepted_at.
       "054_offer_acceptance.sql",
       // 053: app rating bonus (docs/program-17 item 9) -- app_ratings.
@@ -351,6 +357,10 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     ]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
+      if (f === "055_daily_quiz.sql") {
+        assert.ok(!(await quizOffCol()), "055 rollback drops the users column");
+        assert.ok(!(await exists("daily_quiz_attempts")) && !(await exists("daily_quiz_sends")), "055 rollback drops both tables");
+      }
       if (f === "054_offer_acceptance.sql") assert.deepEqual(await offerCols(), [], "054 rollback drops both columns");
       if (f === "053_app_ratings.sql") assert.ok(!(await exists("app_ratings")), "053 rollback drops the table");
       if (f === "052_payment_reminder.sql") assert.ok(!(await remindedCol()), "052 reminder rollback drops the column");
