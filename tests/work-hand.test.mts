@@ -260,6 +260,12 @@ test("DOCX: qo'lyozma shrifti, siyoh rangi, aniq qator balandligi, varaq foni (h
   const g = handGeometry("lined", "badscript");
   assert.match(x.document, /w:rFonts w:ascii="Bad Script"/, "matn qo'lyozma shriftida");
   assert.ok(!/w:rFonts w:ascii="Times New Roman"/.test(x.document), "Times New Roman qolmagan");
+  // HAR matnli run qo'lyozma shriftida va siyoh rangida (bittasi tushib qolsa Word uni boshqa shriftda chizadi).
+  const textRuns = [...x.document.matchAll(/<w:r>(?:(?!<\/w:r>)[\s\S])*?<w:t[ >](?:(?!<\/w:r>)[\s\S])*?<\/w:r>/g)].map((m) => m[0]);
+  assert.ok(textRuns.length > 40, `matnli run'lar soni: ${textRuns.length}`);
+  const noFont = textRuns.filter((r) => !r.includes('w:rFonts w:ascii="Bad Script"'));
+  const noInk = textRuns.filter((r) => !r.includes(`w:color w:val="${HAND_INK_HEX.blue}"`));
+  assert.deepEqual([noFont.length, noInk.length], [0, 0], `shriftsiz run: ${noFont[0] ?? ""} | rangsiz run: ${noInk[0] ?? ""}`);
   assert.match(x.document, new RegExp(`w:color w:val="${HAND_INK_HEX.blue}"`), "siyoh rangi");
   assert.match(x.document, new RegExp(`w:sz w:val="${g.sizePt * 2}"`), "yozuv o'lchami");
   assert.match(x.document, new RegExp(`w:spacing[^>]*w:line="${g.pitchTw}"[^>]*w:lineRule="exact"|w:spacing[^>]*w:lineRule="exact"[^>]*w:line="${g.pitchTw}"`), "qator = daftar oralig'i, EXACT");

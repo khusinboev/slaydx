@@ -143,7 +143,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
     });
   const blank = () => para([run("")]);
   /** Tab — `run()` bo'shliqlarni kesadi, shuning uchun alohida. */
-  const tab = () => new TextRun({ text: "\t", font: spec.family, size });
+  const tab = () => new TextRun({ text: "\t", font: spec.family, size, color: ink });
 
   const out: Array<Paragraph | Table> = [];
   /** Titul varaqni allaqachon yopdi: keyingi birinchi band yangi varaqdan boshlanadi. */
@@ -164,7 +164,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
       for (const l of handCoverLines(T)) {
         if (l.role === "gap") out.push(blank());
         else if (l.role === "center") out.push(para([run(l.text, l.big ? { size: Math.round(size * 1.25) } : {})], { align: AlignmentType.CENTER }));
-        else out.push(para([...(l.label ? [run(`${l.label}:`), new TextRun({ text: " ", font: spec.family, size })] : []), run(l.text, { underline: true })], { left: lines(2) }));
+        else out.push(para([...(l.label ? [run(`${l.label}:`), new TextRun({ text: " ", font: spec.family, size, color: ink })] : []), run(l.text, { underline: true })], { left: lines(2) }));
       }
       pendingBreak = true;
     }
