@@ -599,7 +599,7 @@ button {
 .word-hand .word-inner,
 .word-hand.word-article,
 .word-hand .word-article {
-  font-family: var(--hand-family), var(--font-doc), serif;
+  font-family: var(--hand-family), var(--font-doc, serif), serif;
   font-size: var(--hand-size);
   line-height: var(--hand-pitch);
   color: var(--hand-ink);
@@ -713,9 +713,38 @@ button {
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
 }
+/* Forma namunasi (`WorkComposer HandPreview`): ko'ruvchi bilan bir xil o'zgaruvchi/chiziq qoidasi, 2 qator. */
+.hand-preview {
+  --hand-vlines: none;
+  box-sizing: border-box;
+  height: calc(2 * var(--hand-pitch));
+  margin-top: 4px;
+  padding: 0 12px;
+  border: 1px solid var(--hand-rule);
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: var(--hand-family), var(--font-doc, serif), serif;
+  font-size: var(--hand-size);
+  line-height: var(--hand-pitch);
+  color: var(--hand-ink);
+  background-color: #fff;
+  background-image:
+    var(--hand-vlines),
+    repeating-linear-gradient(to bottom, var(--hand-rule) 0, var(--hand-rule) var(--hand-rule-w), transparent var(--hand-rule-w), transparent var(--hand-cell));
+  background-repeat: repeat, repeat;
+  background-size:
+    calc(100% + var(--hand-cell)) 100%,
+    100% calc(100% + var(--hand-cell));
+  background-position:
+    calc(var(--hand-vphase) - var(--hand-cell)) 0,
+    0 calc(var(--hand-phase) - var(--hand-cell));
+}
+.hand-preview--grid {
+  --hand-vlines: repeating-linear-gradient(to right, var(--hand-rule) 0, var(--hand-rule) var(--hand-rule-w), transparent var(--hand-rule-w), transparent var(--hand-cell));
+}
 .word-sheet.word-hand .word-footer-num {
   bottom: 7mm;
-  font-family: var(--hand-family), var(--font-doc), serif;
+  font-family: var(--hand-family), var(--font-doc, serif), serif;
   font-size: calc(var(--hand-size) * 0.9);
   color: var(--hand-ink);
 }

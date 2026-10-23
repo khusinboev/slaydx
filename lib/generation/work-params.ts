@@ -91,3 +91,27 @@ export const WORK_PARAMS: WorkParam[] = [
 ];
 
 export const WORK_FORM_FIELDS = WORK_PARAMS.map((p) => p.id);
+
+/**
+ * QO'LYOZMA ko'rinishi (Program 17 band 10) — FAQAT mustaqil ish formasida.
+ *
+ * `WORK_PARAMS` dan ALOHIDA ro'yxat: bu maydonlar kurs ishi/referat formasida
+ * chizilmaydi (ularning formasi `WORK_PARAMS` ning aynan o'zini qamrab oladi).
+ * `tests/work-hand.test.mts` har birini differensial zond bilan qulflaydi:
+ * qiymat o'zgarsa model, DOCX va ko'ruvchi o'zgaruvchilari O'ZGARISHI shart.
+ * Sub-parametrlar faqat `workView: "hand"` da ko'rinadi — zond ham shu holatda.
+ * Narx o'zgarmaydi (oddiy mustaqil ish bilan bir xil).
+ */
+export type WorkHandParam = Omit<WorkParam, "impacts"> & {
+  /** Qo'lyozma parametri DOIM bir xil ta'sir beradi: model → reja uslubi → DOCX → ko'ruvchi. */
+  impacts: ["style"];
+};
+
+export const WORK_HAND_PARAMS: WorkHandParam[] = [
+  { id: "workView", encode: "string", probeA: "plain", probeB: "hand", impacts: ["style"] },
+  { id: "handInk", encode: "string", probeA: "blue", probeB: "black", probeWith: { workView: "hand" }, impacts: ["style"] },
+  { id: "handPaper", encode: "string", probeA: "lined", probeB: "grid", probeWith: { workView: "hand" }, impacts: ["style"] },
+  { id: "handFont", encode: "string", probeA: "badscript", probeB: "caveat", probeWith: { workView: "hand" }, impacts: ["style"] },
+];
+
+export const WORK_HAND_FORM_FIELDS = WORK_HAND_PARAMS.map((p) => p.id);
