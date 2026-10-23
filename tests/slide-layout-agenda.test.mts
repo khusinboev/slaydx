@@ -194,10 +194,13 @@ test("INT-02: 40 belgili band — har maket × 14 auditoriya × n 3–6 da audit
  * matnda pastga davom etadi. `dashboard` 5–6 band — ataylab o'zgargan
  * (INT-01), shuning uchun u yerda faqat 3–4 band.
  */
-test("INT-02: qisqa bandli reja 879f495 bilan AYNAN teng (barmoq izi)", () => {
+/** Program 17 (17-band): yangi dizaynlar — eski 17 ta barmoq izidan TASHQARIDA, o'z izi bilan. */
+const NEW_VISUALS = ["conference", "grid"] as const;
+
+function agendaFingerprint(visuals: SlideVisual[]): string {
   const out: string[] = [];
   const theme = getSlideTheme("atlas");
-  for (const visual of VISUALS) {
+  for (const visual of visuals) {
     for (const n of [3, 4, 5, 6]) {
       if (visual === "dashboard" && n > 4) continue;
       for (const img of [false, true]) {
@@ -219,6 +222,14 @@ test("INT-02: qisqa bandli reja 879f495 bilan AYNAN teng (barmoq izi)", () => {
       }
     }
   }
-  const hash = createHash("sha256").update(out.join("\n")).digest("hex").slice(0, 32);
+  return createHash("sha256").update(out.join("\n")).digest("hex").slice(0, 32);
+}
+
+test("INT-02: qisqa bandli reja 879f495 bilan AYNAN teng (barmoq izi) — eski 17 vizual", () => {
+  const hash = agendaFingerprint(VISUALS.filter((v) => !(NEW_VISUALS as readonly string[]).includes(v)));
   assert.equal(hash, "34e0b602adc7566fbb7daedaebd99f2a", "qisqa bandli reja geometriyasi o'zgardi — eski dekalar boshqacha chiziladi");
+});
+
+test("INT-02: qisqa bandli reja barmoq izi — yangi dizaynlar (conference, grid)", () => {
+  assert.equal(agendaFingerprint([...NEW_VISUALS]), "PENDING", "yangi dizayn reja geometriyasi o'zgardi");
 });

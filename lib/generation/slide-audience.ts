@@ -94,7 +94,7 @@ export const AUDIENCE_RULES: Record<Exclude<SlideAudience, "auto">, AudienceRule
 export function audienceRules(a: SlideAudience | string | undefined, tplId: SlideTemplateId): AudienceRule {
   const id = normalizeAudienceId(a);
   if (id !== "auto") return AUDIENCE_RULES[id];
-  if (tplId === "defense") return AUDIENCE_RULES.students_master;
+  if (tplId === "defense" || tplId === "conference") return AUDIENCE_RULES.students_master;
   // Eski `school` aliasi bilan BIR XIL — `auto`+dars shabloni ilgari ham shu auditoriyani berardi.
   if (tplId === "lesson") return AUDIENCE_RULES.school_5_7;
   if (tplId === "pitch") return AUDIENCE_RULES.management;

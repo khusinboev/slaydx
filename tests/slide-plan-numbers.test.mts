@@ -499,11 +499,14 @@ test("P9: reja nishoni ro'yxat raqamlaridan boshqa registrda (rang yoki o'lcham)
  * mixlangan. `planBadgeBox` doim sursa yoki dizayn sarlavhasi doim
  * toraysa — xesh qizaradi.
  */
-test("P9: plan'siz mazmun slaydlari geometriyasi (17 maket) 879f495 bilan AYNAN teng (barmoq izi)", () => {
+/** Program 17 (17-band): yangi dizaynlar eski 17 ta barmoq izidan TASHQARIDA — o'z izi bilan. */
+const NEW_VISUALS = ["conference", "grid"] as const;
+
+function badgeFingerprint(visuals: SlideVisual[]): string {
   const theme = getSlideTheme("atlas");
   const rows: string[] = [];
   // Barcha 17 maket (dizayn + eski oila): dense iqtibos ham `planBadgeBox` dan o'tadi.
-  for (const visual of VISUALS) {
+  for (const visual of visuals) {
     for (const layout of BADGE_LAYOUTS) {
       for (const img of [false, true]) {
         // Qisqa VA 72 belgili sarlavha — sarlavha o'lchami/qutisi ham qulflansin.
@@ -530,8 +533,16 @@ test("P9: plan'siz mazmun slaydlari geometriyasi (17 maket) 879f495 bilan AYNAN 
       }
     }
   }
-  const hash = createHash("sha256").update(rows.join("\n")).digest("hex").slice(0, 32);
+  return createHash("sha256").update(rows.join("\n")).digest("hex").slice(0, 32);
+}
+
+test("P9: plan'siz mazmun slaydlari geometriyasi (eski 17 vizual) 879f495 bilan AYNAN teng (barmoq izi)", () => {
+  const hash = badgeFingerprint(VISUALS.filter((v) => !(NEW_VISUALS as readonly string[]).includes(v)));
   assert.equal(hash, "5338a2afd603cbb88278b80f35083c76", "plan'siz dizayn slaydi geometriyasi o'zgardi — nishon kodi eski doc_json ga sizib o'tgan");
+});
+
+test("P9: plan'siz mazmun slaydlari geometriyasi — yangi dizaynlar (conference, grid) barmoq izi", () => {
+  assert.equal(badgeFingerprint([...NEW_VISUALS]), "PENDING", "yangi dizayn geometriyasi o'zgardi");
 });
 
 /**

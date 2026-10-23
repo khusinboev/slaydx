@@ -42,6 +42,8 @@ export const DESIGN_VISUALS = [
   "dashboard",
   "rail",
   "editorial",
+  "conference",
+  "grid",
 ] as const;
 export type DesignVisual = (typeof DESIGN_VISUALS)[number];
 

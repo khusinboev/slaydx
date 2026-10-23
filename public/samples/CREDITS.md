@@ -12,5 +12,7 @@ Galereya preview'lari uchun. Manba va muallif:
 - tpl-report.jpg — MART  PRODUCTION (https://www.pexels.com/photo/photo-of-papers-on-table-7605981/)
 - tpl-timeline.jpg — AXP Photography (https://www.pexels.com/photo/registan-square-in-samarkand-16386337/)
 - tpl-case.jpg — Mustafa  Fatemi (https://www.pexels.com/photo/dramatic-mountain-range-in-ladakh-india-39201461/)
+- tpl-conference.jpg — tpl-lecture.jpg dan qirqilgan kadr (Yan Krukau, yuqoridagi manba)
+- tpl-grid.jpg — tpl-timeline.jpg dan qirqilgan kadr (AXP Photography, yuqoridagi manba)
 
 - `resume-photo.jpg` / `resume-photo-circle.png` — **rasm emas, chizma**: rezyume shablon galereyasi uchun neytral avatar silueti (PIL bilan yasalgan, mualliflik huquqi yo'q). Ataylab haqiqiy odam surati emas — namuna rezyumeda begona yuz turishi ham noto'g'ri, ham keraksiz.
