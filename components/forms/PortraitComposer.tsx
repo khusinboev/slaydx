@@ -84,7 +84,7 @@ export function PortraitComposer({ tool }: { tool: ToolConfig }) {
   return (
     <ToolChrome title={tool.pageTitle} submitLabel={tool.submitLabel} price={price} loading={loading} onSubmit={submit} error={error}>
       <Card title="Sizning suratingiz">
-        <Row label="Surat" hint="Yuzingiz aniq ko‘rinadigan, yolg‘iz o‘zingiz tushgan, yorug‘ surat. Ko‘zoynak va soch yangi portretda ham aynan shunday qoladi." wide>
+        <Row label="Surat" wide>
           <Field id="photoAssetId">
             <PhotoField
               assetId={input.photoAssetId}
@@ -96,7 +96,10 @@ export function PortraitComposer({ tool }: { tool: ToolConfig }) {
               onChange={(v) => set("photoAssetId", v.assetId)}
             />
           </Field>
-          <p className="text-muted-foreground mt-1 text-[13px]">Surat portret tayyor bo‘lgach serverdan o‘chiriladi.</p>
+          <p className="text-muted-foreground mt-1 text-[13px]">
+            Yuzingiz aniq ko‘rinadigan, yolg‘iz o‘zingiz tushgan, yorug‘ surat tanlang. Yuz, soch va ko‘zoynak portretda ham aynan shunday qoladi.
+          </p>
+          <p className="text-muted-foreground mt-0.5 text-[13px]">Surat portret tayyor bo‘lgach serverdan o‘chiriladi.</p>
         </Row>
       </Card>
 
