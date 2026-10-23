@@ -362,7 +362,7 @@ export const RESUME_TEMPLATES: Record<ResumeTemplateId, ResumeTemplate> = {
     heading: "hairline",
     sidebarMm: 64,
     bannerMm: 0,
-    railMm: 24,
+    railMm: 27,
     photo: { shape: "square", sizeMm: 34, where: "aside" },
     defaultPalette: "plum",
     darkAside: false,

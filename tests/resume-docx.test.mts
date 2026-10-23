@@ -300,3 +300,28 @@ test("qator sarlavhasi va bo'lim sarlavhasi keyingi paragraf bilan birga qoladi 
   // Namunada 7 ta bo'lim sarlavhasi + 4 ta qator (2 ish, 1 ta'lim, 1 sertifikat) = 11.
   assert.ok(keeps >= 11, `keepNext soni: ${keeps}`);
 });
+
+/* ══════════════════ Program 17: daraja yorlig'i va yo'nalish orasida bo'shliq ══════════════════ */
+
+test("ta'lim sarlavhasi: «Bakalavr, » oxiridagi bo'shliq faylda saqlanadi (har shablonda)", async () => {
+  // `cleanText` trim qilardi → «Bakalavr,Moliya va kredit» (ko'ruvchida esa bo'shliq bor).
+  for (const id of RESUME_TEMPLATE_IDS) {
+    const { xml } = await xmlOf(docFor(id));
+    assert.ok(/<w:t[^>]*>Bakalavr, <\/w:t>/.test(xml), `${id}: daraja yorlig'ining bo'shlig'i yo'qoldi`);
+  }
+});
+
+test("yangi shablonlar (`executive`, `sidetime`): DOCX tuzilmasi", async () => {
+  const exec = await xmlOf(docFor("executive"));
+  // To'q tasma — bitta katakli jadval, fon = palitra `dark`; ikkinchi ustun/panel yo'q.
+  assert.equal((exec.xml.match(/<w:tbl>/g) ?? []).length, 1, "executive: faqat tasma jadvali");
+  assert.ok(exec.xml.includes(`w:fill="${RESUME_PALETTES[RESUME_TEMPLATES.executive.defaultPalette].dark}"`), "executive: tasma foni");
+  assert.equal(drawings(exec.xml), 0);
+
+  const side = await xmlOf(docFor("sidetime", { photo: PNG_URL }));
+  const m = sampleResume("sidetime", undefined, false);
+  const rows = m.experience.length + m.education.length + m.certificates.length;
+  assert.equal((side.xml.match(/<w:tbl>/g) ?? []).length, 1 + rows, "sidetime: 1 tashqi + har qator uchun taymlayn jadvali");
+  assert.equal(drawings(side.xml), 1);
+  assert.ok(side.xml.includes(`w:fill="${RESUME_PALETTES[RESUME_TEMPLATES.sidetime.defaultPalette].panel}"`), "sidetime: ochiq panel foni");
+});
