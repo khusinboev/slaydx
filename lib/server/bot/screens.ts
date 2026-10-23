@@ -78,6 +78,14 @@ export function loginScreen(lang: Lang, link: string): Screen {
   };
 }
 
+/** `/alifbo`: what the free script converter does and a Mini App button to the web page (the bot has no logic of its own). */
+export function alifboScreen(lang: Lang): Screen {
+  const text = t(lang, "alifbo.text");
+  const page = appUrl("/uz/alifbo");
+  if (!page) return { text };
+  return { text, reply_markup: rows([inlineButton("app", t(lang, "alifbo.open"), { web_app: { url: page } }, "primary")]) };
+}
+
 /* ───────────────────────── Ishlarim ───────────────────────── */
 
 export type FileItem = { id: string; type: string; topic: string; status: string; progress: number; createdAt: string };

@@ -129,6 +129,18 @@ export function HomeHub() {
           </span>
           <ArrowRight className="size-5 shrink-0" aria-hidden />
         </Link>
+
+        <Link
+          href="/uz/alifbo"
+          data-hub-alifbo
+          className="bg-card hover:bg-accent focus-visible:ring-ring flex min-h-14 items-center justify-between gap-3 rounded-[20px] border p-4 outline-none focus-visible:ring-2"
+        >
+          <span className="flex flex-col">
+            <span className="text-[15.5px] font-semibold">Alifbo o&apos;giruvchi (tekin)</span>
+            <span className="text-muted-foreground text-[13.5px]">Kirill, Lotin va yangi Lotin</span>
+          </span>
+          <ArrowRight className="size-5 shrink-0" aria-hidden />
+        </Link>
       </div>
     </div>
   );

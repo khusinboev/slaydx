@@ -104,6 +104,32 @@ const T = {
   },
   "login.app": { uz: "Ilovada ochish", ru: "В приложении", en: "In the app" },
   "login.site": { uz: "Saytda ochish", ru: "На сайте", en: "On the website" },
+
+  /* ── /alifbo: the free script converter (web page; the bot only links to it) ── */
+  "alifbo.text": {
+    uz: [
+      "<b>Alifbo o‘giruvchi</b> — tekin",
+      "",
+      "Matn va fayllarni (DOCX, PPTX, TXT) Kirill, Lotin va yangi Lotin alifbolari orasida o‘giring.",
+      "",
+      "<i>Yangi lotin alifbosi — ЎРҚ-1184 qonuni (21.10.2026), 22.04.2027 dan kuchga kiradi.</i>",
+    ].join("\n"),
+    ru: [
+      "<b>Конвертер алфавита</b> — бесплатно",
+      "",
+      "Переводите текст и файлы (DOCX, PPTX, TXT) между кириллицей, латиницей и новой латиницей.",
+      "",
+      "<i>Новый латинский алфавит — закон ЎРҚ-1184 (21.10.2026), вступает в силу 22.04.2027.</i>",
+    ].join("\n"),
+    en: [
+      "<b>Alphabet converter</b> — free",
+      "",
+      "Convert text and files (DOCX, PPTX, TXT) between Cyrillic, the current Latin and the new Latin alphabet.",
+      "",
+      "<i>The new Latin alphabet is Law ЎРҚ-1184 (21.10.2026), in force from 22.04.2027.</i>",
+    ].join("\n"),
+  },
+  "alifbo.open": { uz: "Alifbo o‘giruvchini ochish", ru: "Открыть конвертер", en: "Open the converter" },
   "ticket.text": {
     uz: [
       "Kirish uchun quyidagi tugmani bosing 👇",
@@ -517,6 +543,7 @@ const T = {
   "cmd.taklif": { uz: "Do'stlarni taklif qilish havolasi", ru: "Ссылка для приглашения друзей", en: "Invite link for friends" },
   "cmd.admin": { uz: "Admin sifatida tasdiqlash", ru: "Подтвердить права админа", en: "Confirm admin rights" },
   "cmd.til": { uz: "Bot tilini o‘zgartirish", ru: "Сменить язык бота", en: "Change the bot language" },
+  "cmd.alifbo": { uz: "Kirill ↔ Lotin ↔ Yangi lotin", ru: "Кириллица ↔ латиница ↔ новая латиница", en: "Cyrillic ↔ Latin ↔ new Latin" },
   "menu.app": { uz: "Ilova", ru: "Приложение", en: "App" },
 } as const satisfies Record<string, Entry>;
 

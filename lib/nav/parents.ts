@@ -42,7 +42,7 @@ const ADMIN_SECTIONS = [
 ] as const;
 
 /** `/uz/<x>` segments that are their own pages, not tool slugs. */
-const UZ_RESERVED = ["create", "purchase", "wallet", "profile", "login", "files", "admin", "convert"] as const;
+const UZ_RESERVED = ["create", "purchase", "wallet", "profile", "login", "files", "admin", "convert", "alifbo"] as const;
 
 /** `/uz/profile/<step>` (docs/redesign/PLAN.md; kept in sync with `lib/nav/tabs.ts PROFILE_STEPS` by a test). */
 const PROFILE_STEP_RE = "(?:shaxsiy|oqish|ish|korinish|xavfsizlik)";
@@ -68,6 +68,7 @@ export const ROUTE_RULES: readonly RouteRule[] = [
   { route: "/uz/profile", match: /^\/uz\/profile$/, parent: "/uz" },
   { route: "/uz/profile/[step]", match: new RegExp(`^/uz/profile/${PROFILE_STEP_RE}$`), parent: "/uz/profile" },
   { route: "/uz/convert", match: /^\/uz\/convert$/, parent: "/uz" },
+  { route: "/uz/alifbo", match: /^\/uz\/alifbo$/, parent: "/uz" },
   { route: "/uz/admin", match: /^\/uz\/admin$/, parent: "/uz" },
   { route: "/uz/files/[id]", match: new RegExp(`^/uz/files/${SEG}$`), parent: "/uz/files" },
   {

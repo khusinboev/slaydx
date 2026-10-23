@@ -3,6 +3,9 @@ import JSZip from "jszip";
 import { CONVERT_MAX_PAGES, imageFormatOfName, maxBytesFor, sourceOfName, targetsFor, type ConvertSource, type ConvertTarget } from "../convert/matrix";
 import { buildJpegPdf, type JpegPage } from "../convert/jpeg-pdf";
 import { PdfPageLimitError } from "../generation/translate/pdf";
+import { ZipLimitError } from "../generation/translate/xml-scan";
+import { convertDocx, convertPptx, convertTxt, NotTextError } from "../translit/files";
+import { alifboKindOfName, SCRIPT_FILE_SUFFIX, type AlifboFileKind, type Script } from "../translit/script";
 import { ApiError } from "./api";
 import { query } from "./db";
 import { isDownloadError } from "./downloads/errors";
@@ -278,6 +281,63 @@ export async function convertFile(userId: string, file: ConvertInput, target: Co
     if (refundable) await refund(userId, chargedAt);
     if (e instanceof ApiError) throw e;
     console.warn("[convert]", e instanceof Error ? e.message : e);
+    throw FAILED();
+  }
+}
+
+/* ───────────────────────────── alifbo (script converter, owner request 6) ───────────────────────────── */
+
+/** Plain text is converted in the event loop, so it gets a smaller cap than the OOXML families. */
+export const ALIFBO_TXT_MAX_BYTES = 5 * 1024 * 1024;
+
+const ALIFBO_MIME: Record<AlifboFileKind, string> = {
+  docx: DOCX_MIME,
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  txt: "text/plain; charset=utf-8",
+};
+
+/**
+ * FREE script converter for files (Kirill / Lotin / Yangi lotin): DOCX and PPTX in place (text nodes only),
+ * plain TXT. Same login, daily quota (one unit per file, charged inside the lane, refunded on failure), size
+ * caps and lane as `convertFile`; no LibreOffice is involved. Nothing is stored.
+ */
+export async function convertAlifbo(userId: string, file: ConvertInput, req: { from: Script; to: Script }): Promise<ConvertResult> {
+  const policy = await convertPolicy();
+  if (!policy.enabled) throw new ApiError(DISABLED_TEXT, 503, { code: "disabled" });
+
+  const kind = alifboKindOfName(file.name);
+  if (!kind) throw new ApiError("Alifbo o'girish uchun faqat DOCX, PPTX yoki TXT fayl yuklang", 400, { code: "unsupported" });
+  if (req.from === req.to) throw new ApiError("Boshlang'ich va natija alifbosi bir xil", 400, { code: "same_script" });
+  if (!file.bytes.byteLength) throw new ApiError("Fayl bo'sh", 400);
+  const cap = kind === "txt" ? ALIFBO_TXT_MAX_BYTES : maxBytesFor("word");
+  if (file.bytes.byteLength > cap) {
+    throw new ApiError(`Fayl ${Math.round(cap / 1024 / 1024)} MB dan katta bo'lmasligi kerak`, 413, { code: "too_large" });
+  }
+  const detected = await detectFormat(file.bytes);
+  const matches =
+    kind === "docx" ? detected?.format === "docx" : kind === "pptx" ? detected?.format === "pptx" : detected === null;
+  if (!matches) throw new ApiError("Fayl mazmuni kengaytmasiga mos emas yoki buzilgan", 400, { code: "mismatch" });
+
+  const base = safeBase(file.name);
+  let chargedAt = 0;
+  try {
+    return await convertLightGate().run(async () => {
+      chargedAt = await charge(userId, policy.limit);
+      const out =
+        kind === "docx"
+          ? await convertDocx(file.bytes, req.from, req.to)
+          : kind === "pptx"
+            ? await convertPptx(file.bytes, req.from, req.to)
+            : convertTxt(file.bytes, req.from, req.to);
+      return { bytes: Buffer.from(out.bytes), mime: ALIFBO_MIME[kind], fileName: `${base}-${SCRIPT_FILE_SUFFIX[req.to]}.${kind}` };
+    });
+  } catch (e) {
+    if (e instanceof SofficeBusyError) throw apiBusy();
+    if (chargedAt > 0) await refund(userId, chargedAt);
+    if (e instanceof ApiError) throw e;
+    if (e instanceof NotTextError) throw new ApiError("Fayl UTF-8 matn emas", 400, { code: "mismatch" });
+    if (e instanceof ZipLimitError) throw new ApiError("Fayl juda katta yoki murakkab", 413, { code: "too_large" });
+    console.warn("[convert] alifbo", e instanceof Error ? e.message : e);
     throw FAILED();
   }
 }
