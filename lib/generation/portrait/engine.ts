@@ -21,6 +21,7 @@ import { packImages, type ImageFile } from "../image-studio";
 import { imageExt } from "../../viewers/kind";
 import type { AcademicDoc, BuiltFile, GenImage } from "../types";
 import type { FormValues, ToolConfig } from "../../types";
+import { UserFacingError } from "../../server/user-error";
 import { portraitPrompt } from "./prompt";
 import { portraitBackgroundOf, portraitGownOf, portraitInputFromValues, portraitSashOf } from "./registry";
 
@@ -42,12 +43,12 @@ const geminiLimited = () => (defaultProvider ??= limitedProvider(geminiProvider)
 /** The user-facing reason for an all-failed run. */
 export function portraitFailureMessage(fails: ImageFail[]): string {
   if (fails.some((f) => f.detail.startsWith("javobda rasm yo'q"))) {
-    return "Suratda bitta aniq yuz topilmadi. Yuzingiz yaxshi ko‘rinadigan, yolg‘iz o‘zingiz tushgan suratni yuklang.";
+    return "Suratda bitta aniq yuz topilmadi. Yuzingiz yaxshi ko‘rinadigan, yolg‘iz o‘zingiz tushgan suratni yuklang. Pul qaytariladi.";
   }
   if (fails.some((f) => f.reason === "no-key" || f.reason === "blocked")) {
-    return "Rasm xizmati vaqtincha ishlamayapti. Keyinroq urinib ko‘ring.";
+    return "Rasm xizmati vaqtincha ishlamayapti. Keyinroq urinib ko‘ring. Pul qaytariladi.";
   }
-  return "Portret yaratilmadi. Qayta urinib ko‘ring.";
+  return "Portret yaratilmadi. Pul qaytariladi — qayta urinib ko‘ring.";
 }
 
 export async function buildPortraitArtifact(tool: ToolConfig, values: FormValues, opts: PortraitBuildOptions = {}): Promise<BuiltFile> {
@@ -56,7 +57,7 @@ export async function buildPortraitArtifact(tool: ToolConfig, values: FormValues
   const input = portraitInputFromValues(values);
 
   const src = opts.photo?.url ? await fetchImageBytes(opts.photo.url) : null;
-  if (!src) throw new Error("Surat topilmadi. Suratni qayta yuklang.");
+  if (!src) throw new UserFacingError("Surat topilmadi. Suratni qayta yuklang. Pul qaytariladi.");
   const mime = src.type === "png" ? "image/png" : "image/jpeg";
   const base64 = src.data.slice(src.data.indexOf("base64,") + "base64,".length);
 
@@ -97,7 +98,7 @@ export async function buildPortraitArtifact(tool: ToolConfig, values: FormValues
     return out;
   });
   const images = raw.filter((x): x is GenImage => Boolean(x));
-  if (!images.length) throw new Error(portraitFailureMessage(fails));
+  if (!images.length) throw new UserFacingError(portraitFailureMessage(fails));
   stage(85, "Fayl saqlanmoqda");
 
   const files: ImageFile[] = images.map((im, i) => {
