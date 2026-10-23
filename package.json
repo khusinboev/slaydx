@@ -27,7 +27,8 @@
     "tts-lab": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/tts-lab.mts",
     "test:viewer": "tsx --tsconfig tsconfig.viewer.json --test --test-concurrency=2 tests/viewer/*.test.mts",
     "test:ui": "tsx --tsconfig tsconfig.viewer.json --test --test-concurrency=2 tests/ui/*.test.mts",
-    "gen:icons": "tsx scripts/gen-icons.mts"
+    "gen:icons": "tsx scripts/gen-icons.mts",
+    "translit:exceptions": "tsx scripts/translit-exceptions.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",
