@@ -32,6 +32,14 @@ ARG NODE_IMAGE=node:22.23.2-alpine3.24
 # and pulled once on the server instead of once per image.
 FROM ${NODE_IMAGE} AS os-base
 RUN apk add --no-cache fontconfig ttf-liberation font-noto && fc-cache -f >/dev/null 2>&1 || true
+# Handwritten mustaqil ish (Program 17 band 10): the DOCX uses the OFL handwriting
+# fonts (Bad Script, Caveat — Latin + Cyrillic + Uzbek letters) by family name.
+# LibreOffice (web image, PDF export) and the DOCX writer (worker image) both
+# need them installed; the browser viewer gets the same files from
+# `public/fonts/handwriting/` (served by Next). Fonts are build-context files,
+# not an apk package; the licence texts stay next to them in `public/`.
+COPY public/fonts/handwriting/*.ttf /usr/share/fonts/slaydx-handwriting/
+RUN fc-cache -f >/dev/null 2>&1 || true
 RUN addgroup -g 1001 -S nodejs
 
 # ─── Bog'liqliklar ────────────────────────────────────────────────────

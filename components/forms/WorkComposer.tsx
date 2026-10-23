@@ -27,6 +27,26 @@ import {
   type WorkMinistryId,
 } from "@/lib/generation/work/types";
 import { workInputFromValues, encodeWorkValues, parseWorkOutline, maxVisualsFor, WORK_INPUT_LIMITS, type WorkInput } from "@/lib/generation/work/input";
+import {
+  HAND_DEFAULTS,
+  HAND_FONT_LIST,
+  HAND_FONTS,
+  HAND_INKS,
+  HAND_INK_LABELS,
+  HAND_PAPERS,
+  HAND_PAPER_LABELS,
+  WORK_VIEWS,
+  WORK_VIEW_LABELS,
+  handBaselinePx,
+  handCssVars,
+  handGeometry,
+  handStyleOf,
+  normalizeHand,
+  type HandFontId,
+  type HandInk,
+  type HandPaper,
+  type WorkView,
+} from "@/lib/generation/work/handwriting";
 import { Card, Row, Segmented, Switch } from "./compact";
 import { TextArea, TextInput } from "./fields";
 import { Combobox } from "./Combobox";
@@ -122,6 +142,11 @@ type Ui = {
   visualsTouched: boolean;
   fileName: string;
   sourceText: string;
+  /** Mustaqil ish: «Ko'rinish» — oddiy (Word) yoki qo'lyozma daftar (siyoh/qog'oz/shrift pastda). */
+  workView: WorkView;
+  handInk: HandInk;
+  handPaper: HandPaper;
+  handFont: HandFontId;
 };
 
 /** «Titul» maydonlari — `AuthorRows` id lari AYNAN `Ui`/`FormValues` kalitlari. */
@@ -183,6 +208,26 @@ function SubHead({ children }: { children: ReactNode }) {
   return <h3 className="text-muted-foreground mt-4 mb-1 text-[13px] font-semibold tracking-wide uppercase first:mt-1">{children}</h3>;
 }
 
+/** Qo'lyozma tanlovining kichik namunasi — ko'ruvchi bilan BIR XIL o'zgaruvchi va chiziq qoidasi (`.hand-preview`). */
+function HandPreview({ ink, paper, font }: { ink: HandInk; paper: HandPaper; font: HandFontId }) {
+  const style = handStyleOf({ ink, paper, font });
+  const vars = handCssVars(style);
+  const g = handGeometry(paper, font);
+  const cell = Number.parseFloat(vars["--hand-cell"]);
+  const phase = handBaselinePx(HAND_FONTS[font], g.sizePt, g.pitchPx) % cell;
+  return (
+    <div
+      className={`hand-preview hand-preview--${paper}`}
+      data-hand-preview
+      aria-hidden
+      style={{ ...vars, "--hand-phase": `${phase}px`, "--hand-vphase": "0px" } as React.CSSProperties}
+    >
+      <div>Mustaqil ish — qo‘lyozma namuna</div>
+      <div>O‘zbekiston, ўқув, 2026</div>
+    </div>
+  );
+}
+
 function emptyUi(profile: UserProfile, tool: ToolConfig, genre: WorkGenreId): Ui {
   const g = WORK_GENRES[genre];
   const kind = g.kinds[g.defaultKind]!;
@@ -219,6 +264,10 @@ function emptyUi(profile: UserProfile, tool: ToolConfig, genre: WorkGenreId): Ui
     visualsTouched: false,
     fileName: "",
     sourceText: "",
+    workView: "plain",
+    handInk: HAND_DEFAULTS.ink,
+    handPaper: HAND_DEFAULTS.paper,
+    handFont: HAND_DEFAULTS.font,
   };
 }
 
@@ -260,6 +309,9 @@ function uiFromValues(values: FormValues, base: Ui, genre: WorkGenreId): Ui {
     extra: input.extra,
     fileName: typeof values.fileName === "string" ? values.fileName : base.fileName,
     sourceText: input.sourceText,
+    ...(input.hand
+      ? { workView: "hand" as const, handInk: input.hand.ink, handPaper: input.hand.paper, handFont: input.hand.font }
+      : { workView: "plain" as const }),
   };
 }
 
@@ -311,6 +363,7 @@ function toValues(ui: Ui, genre: WorkGenreId): FormValues {
     userRefs,
     refsMin: ui.refsMin,
     extra: ui.extra,
+    ...(genre === "independent" && ui.workView === "hand" ? { hand: normalizeHand({ ink: ui.handInk, paper: ui.handPaper, font: ui.handFont }) } : {}),
   };
 
   const out = encodeWorkValues(input);
@@ -507,6 +560,35 @@ export function WorkComposer({
             <Segmented ariaLabel="Til" options={LANGUAGE_OPTIONS} value={ui.language} onChange={(v) => set("language", v as Ui["language"])} />
           </Field>
         </Row>
+        {genre === "independent" ? (
+          <>
+            <Row label="Ko‘rinish" hint="Qo‘lyozma — maktab daftari ko‘rinishida chop etish uchun; mazmun va narx o‘zgarmaydi" wide>
+              <Field id="workView">
+                <Segmented ariaLabel="Ko‘rinish" options={WORK_VIEWS.map((v) => ({ value: v, label: WORK_VIEW_LABELS[v] }))} value={ui.workView} onChange={(v) => set("workView", v as WorkView)} />
+              </Field>
+            </Row>
+            {ui.workView === "hand" ? (
+              <>
+                <Row label="Siyoh rangi">
+                  <Field id="handInk">
+                    <Segmented ariaLabel="Siyoh rangi" options={HAND_INKS.map((v) => ({ value: v, label: HAND_INK_LABELS[v] }))} value={ui.handInk} onChange={(v) => set("handInk", v as HandInk)} />
+                  </Field>
+                </Row>
+                <Row label="Qog‘oz">
+                  <Field id="handPaper">
+                    <Segmented ariaLabel="Qog‘oz" options={HAND_PAPERS.map((v) => ({ value: v, label: HAND_PAPER_LABELS[v] }))} value={ui.handPaper} onChange={(v) => set("handPaper", v as HandPaper)} />
+                  </Field>
+                </Row>
+                <Row label="Shrift">
+                  <Field id="handFont">
+                    <Segmented ariaLabel="Shrift" options={HAND_FONT_LIST.map((f) => ({ value: f.id, label: f.label }))} value={ui.handFont} onChange={(v) => set("handFont", v as HandFontId)} />
+                  </Field>
+                </Row>
+                <HandPreview ink={ui.handInk} paper={ui.handPaper} font={ui.handFont} />
+              </>
+            ) : null}
+          </>
+        ) : null}
       </Card>
 
       <Card title="Titul">

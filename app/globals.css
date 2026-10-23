@@ -552,6 +552,204 @@ button {
 }
 
 /*
+ * ── Qo'lyozma mustaqil ish (Program 17 band 10) — `.word-hand`.
+ *
+ * O'lchovlar/ranglar `lib/generation/work/handwriting.ts handCssVars` dan
+ * CSS o'zgaruvchi bo'lib keladi (`--hand-*`); DOCX (`work/render-hand.ts`)
+ * ham shu faylning sonlaridan chiziladi. Qoida: HAR qator bitta daftar
+ * chizig'i oralig'i (`--hand-pitch`), barcha bo'shliqlar shu oraliqning
+ * butun karrasi — shuning uchun matn chiziqda turadi. Chiziq foni
+ * `.word-sheet.word-hand` da: `repeating-linear-gradient` (kasr o'lchamli
+ * plitka yaxlitlanmaydi), birinchi chiziq matn asosiga (baseline) tushadi.
+ */
+@font-face {
+  font-family: "Bad Script";
+  src: url("/fonts/handwriting/BadScript-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "Caveat";
+  src: url("/fonts/handwriting/Caveat-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+
+.word-sheet.word-hand {
+  --hand-vlines: none;
+  background-color: #fff;
+  background-image:
+    linear-gradient(var(--hand-red), var(--hand-red)),
+    var(--hand-vlines),
+    repeating-linear-gradient(to bottom, var(--hand-rule) 0, var(--hand-rule) var(--hand-rule-w), transparent var(--hand-rule-w), transparent var(--hand-cell));
+  background-repeat: no-repeat, repeat, repeat;
+  background-size:
+    var(--hand-red-w) 100%,
+    calc(100% + var(--hand-cell)) 100%,
+    100% calc(100% + var(--hand-cell));
+  background-position:
+    var(--hand-red-x) 0,
+    calc(var(--hand-vphase) - var(--hand-cell)) 0,
+    0 calc(var(--hand-phase) - var(--hand-cell));
+}
+.word-sheet.word-hand--grid {
+  --hand-vlines: repeating-linear-gradient(to right, var(--hand-rule) 0, var(--hand-rule) var(--hand-rule-w), transparent var(--hand-rule-w), transparent var(--hand-cell));
+}
+.word-hand {
+  color: var(--hand-ink);
+}
+.word-hand .word-inner,
+.word-hand.word-article,
+.word-hand .word-article {
+  font-family: var(--hand-family), var(--font-doc, serif), serif;
+  font-size: var(--hand-size);
+  line-height: var(--hand-pitch);
+  color: var(--hand-ink);
+}
+.word-hand .word-p {
+  margin: 0;
+  text-align: left;
+  text-indent: var(--hand-first-line);
+}
+.word-hand .word-h1,
+.word-hand .word-h2,
+.word-hand .word-h3 {
+  font-weight: 400;
+  font-size: inherit;
+  text-transform: none;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+.word-hand .word-h1 {
+  margin: 0 0 var(--hand-pitch);
+  text-align: center;
+}
+.word-hand .word-h2 {
+  margin: 0;
+  text-indent: var(--hand-first-line);
+}
+.word-hand .word-h3 {
+  margin: 0;
+  text-align: center;
+}
+.word-hand .word-toc-row {
+  font-size: inherit !important;
+  font-weight: 400 !important;
+}
+.word-hand .word-toc-row[data-level="2"] {
+  margin-left: var(--hand-first-line) !important;
+}
+.word-hand .word-li {
+  margin: 0 0 0 0.5in;
+  gap: 0.45em;
+}
+.word-hand .word-quote {
+  margin: 0 0 0 var(--hand-pitch);
+  font-style: normal;
+}
+.word-hand .word-cite::after {
+  content: none !important;
+}
+.word-hand .word-table {
+  margin: 0;
+  font-size: inherit;
+}
+.word-hand .word-table th,
+.word-hand .word-table td {
+  border: 0.5pt solid var(--hand-ink);
+  padding: 0 5.333px;
+  font-weight: 400;
+  line-height: var(--hand-pitch);
+}
+.word-hand .word-table-caption {
+  margin: 0 !important;
+  font-weight: 400 !important;
+  line-height: var(--hand-pitch);
+}
+.word-hand .word-figure {
+  margin: 0;
+}
+.word-hand .word-figure-placeholder {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(5 * var(--hand-pitch));
+  padding: 0;
+  border: 0.5pt solid var(--hand-ink);
+  color: var(--hand-ink);
+  font-style: normal;
+}
+.word-hand .word-figure-caption {
+  margin: 0;
+}
+.word-hand .word-figure-source,
+.word-hand .word-table-source {
+  margin: 0 !important;
+  font-size: inherit !important;
+}
+.word-hand .word-formula {
+  margin: 0;
+}
+.word-hand .word-ref {
+  margin: 0;
+  text-align: left;
+  font-size: inherit;
+  line-height: var(--hand-pitch);
+  padding-left: var(--hand-pitch);
+  text-indent: calc(-1 * var(--hand-pitch));
+}
+.word-hand .word-hand-gap {
+  height: var(--hand-pitch);
+}
+.word-hand .word-hand-line {
+  min-height: var(--hand-pitch);
+  text-indent: 0;
+}
+.word-hand .word-hand-big {
+  font-size: 1.25em;
+}
+.word-hand .word-hand-ul {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+/* Forma namunasi (`WorkComposer HandPreview`): ko'ruvchi bilan bir xil o'zgaruvchi/chiziq qoidasi, 2 qator. */
+.hand-preview {
+  --hand-vlines: none;
+  box-sizing: border-box;
+  height: calc(2 * var(--hand-pitch));
+  margin-top: 4px;
+  padding: 0 12px;
+  border: 1px solid var(--hand-rule);
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: var(--hand-family), var(--font-doc, serif), serif;
+  font-size: var(--hand-size);
+  line-height: var(--hand-pitch);
+  color: var(--hand-ink);
+  background-color: #fff;
+  background-image:
+    var(--hand-vlines),
+    repeating-linear-gradient(to bottom, var(--hand-rule) 0, var(--hand-rule) var(--hand-rule-w), transparent var(--hand-rule-w), transparent var(--hand-cell));
+  background-repeat: repeat, repeat;
+  background-size:
+    calc(100% + var(--hand-cell)) 100%,
+    100% calc(100% + var(--hand-cell));
+  background-position:
+    calc(var(--hand-vphase) - var(--hand-cell)) 0,
+    0 calc(var(--hand-phase) - var(--hand-cell));
+}
+.hand-preview--grid {
+  --hand-vlines: repeating-linear-gradient(to right, var(--hand-rule) 0, var(--hand-rule) var(--hand-rule-w), transparent var(--hand-rule-w), transparent var(--hand-cell));
+}
+.word-sheet.word-hand .word-footer-num {
+  bottom: 7mm;
+  font-family: var(--hand-family), var(--font-doc, serif), serif;
+  font-size: calc(var(--hand-size) * 0.9);
+  color: var(--hand-ink);
+}
+
+/*
   Jonli generatsiya (L5) — skelet eskizi va «yozilmoqda» nuqtasi.
 
   Ikkalasi ham `prefers-reduced-motion` da to'xtaydi: harakat MA'LUMOT

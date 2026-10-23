@@ -1,5 +1,6 @@
 import { planArticle, type ArticleAuthorLine, type ArticlePlan, type CiteSpan } from "@/lib/generation/article/layout";
 import { planWork, type WorkBodyItem, type WorkPlan } from "@/lib/generation/work/layout";
+import { handFormulaText, handText } from "@/lib/generation/work/handwriting";
 import { isTeacherDoc, planTeacher, type TeacherPlan } from "@/lib/generation/teacher/layout";
 import { isGameDoc, planGame, type GameCardFace, type GameCluesItem, type GamePlan } from "@/lib/generation/games/layout";
 import { docLabels } from "@/lib/generation/i18n";
@@ -77,7 +78,11 @@ export type FlowItem =
    */
   | { type: "figure"; id: string; figureId: string; url?: string; w?: number; h?: number; widthMm?: number; number: string; caption: string; placeholder: string; source?: string }
   /** Formula — KaTeX SSR; raqam o'ngda. Bitta atom band. */
-  | { type: "formula"; id: string; latex: string; number: string; display: boolean }
+  /**
+   * `plain` — qo'lyozma mustaqil ishda formula oddiy matn (`handFormulaText`): KaTeX
+   * o'rniga shu chiziladi (DOCX ham aynan shuni yozadi).
+   */
+  | { type: "formula"; id: string; latex: string; number: string; display: boolean; plain?: string }
   /** OAK «REFERENCES» ikkinchi ro'yxatining sarlavhasi (`h1` kabi chiziladi). */
   | { type: "refs2"; id: string; text: string }
   /*
@@ -324,6 +329,13 @@ export function workFlow(plan: WorkPlan, doc: AcademicDoc): FlowItem[] {
   const items: FlowItem[] = [];
   let n = 0;
   const id = (p: string) => `${p}-${++n}`;
+  /*
+   * Qo'lyozma ko'rinishi: matn shrift yopmaydigan belgidan tozalanadi (`handText`),
+   * rasmlar chizilmaydi (bo'sh ramka — DOCX ham shunday), formula oddiy matn.
+   */
+  const hand = plan.style;
+  const tx = (t: string): string => (hand ? handText(hand.font, t) : t);
+  const txSpans = (spans: CiteSpan[]): CiteSpan[] => (hand ? spans.map((sp) => ({ ...sp, text: tx(sp.text) })) : spans);
 
   if (doc.titlePage) items.push({ type: "title", id: id("title") });
   if (doc.toc && plan.toc.length) items.push({ type: "toc", id: id("toc") });
@@ -331,44 +343,49 @@ export function workFlow(plan: WorkPlan, doc: AcademicDoc): FlowItem[] {
   const push = (b: WorkBodyItem) => {
     switch (b.k) {
       case "h1":
-        items.push({ type: "h1", id: id("h1"), text: b.text, ...(b.sectionId ? { sectionId: b.sectionId } : {}), pageBreak: b.pageBreak });
+        items.push({ type: "h1", id: id("h1"), text: tx(b.text), ...(b.sectionId ? { sectionId: b.sectionId } : {}), pageBreak: b.pageBreak });
         break;
       case "h2":
-        items.push({ type: "h2", id: id("h2"), text: b.text, ...(b.sectionId ? { sectionId: b.sectionId } : {}) });
+        items.push({ type: "h2", id: id("h2"), text: tx(b.text), ...(b.sectionId ? { sectionId: b.sectionId } : {}) });
         break;
       case "h3":
-        items.push({ type: "h3", id: id("h3"), text: b.text });
+        items.push({ type: "h3", id: id("h3"), text: tx(b.text) });
         break;
       case "p":
       case "li":
       case "quote":
-        items.push({ type: b.k, id: id(b.k), text: b.text, spans: b.spans });
+        items.push({ type: b.k, id: id(b.k), text: tx(b.text), spans: txSpans(b.spans) });
         break;
       case "code":
-        items.push({ type: "code", id: id("code"), text: b.text, caption: b.caption });
+        items.push({ type: "code", id: id("code"), text: tx(b.text), caption: b.caption === undefined ? undefined : tx(b.caption) });
         break;
       case "figure":
         items.push({
           type: "figure",
           id: id("fig"),
           figureId: b.figureId,
-          url: b.figure?.url,
-          w: b.figure?.w,
-          h: b.figure?.h,
+          url: hand ? undefined : b.figure?.url,
+          w: hand ? undefined : b.figure?.w,
+          h: hand ? undefined : b.figure?.h,
           number: b.number,
-          caption: b.caption,
+          caption: tx(b.caption),
           placeholder: b.placeholder,
-          source: b.source,
+          source: b.source === undefined ? undefined : tx(b.source),
         });
         break;
       case "table":
         items.push({ type: "table-number", id: id("tbn"), text: b.numberLine });
-        items.push({ type: "table-head", id: id("tbh"), table: { ...b.table, caption: b.caption }, captionAlign: "center" });
-        for (const row of b.table.rows) items.push({ type: "table-row", id: id("tbr"), row });
-        if (b.source) items.push({ type: "table-source", id: id("tbs"), text: b.source });
+        items.push({
+          type: "table-head",
+          id: id("tbh"),
+          table: hand ? { ...b.table, caption: tx(b.caption), headers: b.table.headers.map(tx) } : { ...b.table, caption: b.caption },
+          captionAlign: "center",
+        });
+        for (const row of b.table.rows) items.push({ type: "table-row", id: id("tbr"), row: hand ? row.map(tx) : row });
+        if (b.source) items.push({ type: "table-source", id: id("tbs"), text: tx(b.source) });
         break;
       case "formula":
-        items.push({ type: "formula", id: id("eq"), latex: b.latex, number: b.number, display: b.display });
+        items.push({ type: "formula", id: id("eq"), latex: b.latex, number: b.number, display: b.display, ...(hand ? { plain: tx(handFormulaText(b.latex)) } : {}) });
         break;
     }
   };
@@ -377,7 +394,7 @@ export function workFlow(plan: WorkPlan, doc: AcademicDoc): FlowItem[] {
 
   if (plan.refs.length) {
     items.push({ type: "h1", id: id("h1"), text: plan.refsLabel, sectionId: "refs", pageBreak: true });
-    for (const r of plan.refs) items.push({ type: "ref", id: id("ref"), n: r.n, text: r.text, line: r.line });
+    for (const r of plan.refs) items.push({ type: "ref", id: id("ref"), n: r.n, text: tx(r.text), line: tx(r.line) });
   }
 
   for (const b of plan.appendix) push(b);

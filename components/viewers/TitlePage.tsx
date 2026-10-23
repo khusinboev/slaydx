@@ -3,6 +3,7 @@
 import type { AcademicDoc } from "@/lib/generation/types";
 import { titleModel, type TitleModel } from "@/lib/viewers/flow";
 import { A4, LANDSCAPE } from "@/lib/viewers/metrics";
+import { handCoverLines, handText, type HandFontId } from "@/lib/generation/work/handwriting";
 import { ZoomFrame } from "./sheet";
 
 /**
@@ -90,6 +91,36 @@ export function TitlePage({ title }: { title: TitleModel }) {
       <div className="flex-1" />
       <div className="text-center text-[14pt]">{title.academicYear}</div>
       <div className="pb-2 text-center text-[14pt] font-bold">{title.cityYear}</div>
+    </div>
+  );
+}
+
+/**
+ * Qo'lyozma mustaqil ish muqovasi — daftar muqovasi (Program 17 band 10).
+ *
+ * Qatorlar `handCoverLines` dan (DOCX `render-hand.ts` ham shuni chizadi);
+ * har qator bitta daftar chizig'i oralig'ida, shuning uchun matn chiziqda turadi.
+ * Rasmiy titulning vazirlik/fakultet/kafedra qatorlari ATAYIN yo'q.
+ */
+export function HandCover({ title, font, style }: { title: TitleModel; font: HandFontId; style?: React.CSSProperties }) {
+  if (title.kind !== "gost") return <TitlePage title={title} />;
+  const tx = (t: string) => handText(font, t);
+  return (
+    <div className="word-inner word-article" style={style} data-hand-cover>
+      {handCoverLines(title).map((l, i) =>
+        l.role === "gap" ? (
+          <div key={i} className="word-hand-gap" />
+        ) : l.role === "center" ? (
+          <div key={i} className={l.big ? "word-hand-line word-hand-big" : "word-hand-line"} style={{ textAlign: "center" }}>
+            {tx(l.text)}
+          </div>
+        ) : (
+          <div key={i} className="word-hand-line" style={{ paddingLeft: "calc(2 * var(--hand-pitch))" }}>
+            {l.label ? <span>{tx(l.label)}: </span> : null}
+            <span className="word-hand-ul">{tx(l.text)}</span>
+          </div>
+        ),
+      )}
     </div>
   );
 }

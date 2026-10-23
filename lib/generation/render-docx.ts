@@ -28,6 +28,7 @@ import {
 import { ESSAY_DESIGNS } from "../languages";
 import { planArticle, type ArticlePlan, type HeadItem, type BodyItem } from "./article/layout";
 import { planWork, type WorkBodyItem, type WorkPlan } from "./work/layout";
+import { renderHandDocx } from "./work/render-hand";
 import { isTeacherDoc, planTeacher, type TeacherPlan } from "./teacher/layout";
 import { isGameDoc, planGame, type GamePlan } from "./games/layout";
 import { articleProfile, CM, contentWidth, gameProfile, profileFor, resumeProfile, teacherProfile, workProfile, type DocProfile } from "./docx-profile";
@@ -1514,6 +1515,11 @@ export async function renderDocx(doc: AcademicDoc, opts: ResumeDocxOpts = {}): P
    * quyidagi umumiy yo'l (titul, mundarija, jadval oxirida) o'zgarishsiz.
    */
   const work = !article && doc.work ? planWork(doc) : null;
+  /*
+   * Qo'lyozma mustaqil ish (Program 17 band 10): mazmun/tartib shu rejadan,
+   * lekin butun hujjat daftar varag'ida chiziladi — alohida chizuvchi.
+   */
+  if (work?.style) return renderHandDocx(doc, { ...work, style: work.style });
   /*
    * O'qituvchi vositalari 2 (AUDIT-20 WP-C): beshala vosita — dars
    * ishlanmasi, texnologik xarita, glossariy, keys, test — `planTeacher`

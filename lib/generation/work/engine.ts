@@ -538,6 +538,7 @@ export async function buildWorkDoc(meta: DocMeta, values: FormValues, opts: Work
     ...(input.userFacts ? { userFacts: input.userFacts } : {}),
     refsMin: input.refsMin,
     polishAccept: WORK_ACCEPT_DELTA,
+    ...(input.hand ? { hand: input.hand } : {}),
   };
   const anyUnverified = refs.some((r) => r.verified === "unverified");
   let doc: AcademicDoc = {
