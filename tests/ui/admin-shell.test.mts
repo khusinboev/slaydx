@@ -109,10 +109,10 @@ const json = (status: number, data: unknown) =>
 const EXPECTED_BY_ROLE: Record<Role, string[]> = {
   owner: ADMIN_NAV.map((i) => i.href),
   admin: ADMIN_NAV.map((i) => i.href),
-  finance: ["/admin", "/admin/users", "/admin/generations", "/admin/payments", "/admin/finance", "/admin/ai", "/admin/pricing", "/admin/bonus", "/admin/ratings", "/admin/settings", "/admin/system", "/admin/account"],
+  finance: ["/admin", "/admin/users", "/admin/generations", "/admin/payments", "/admin/finance", "/admin/ai", "/admin/pricing", "/admin/bonus", "/admin/ratings", "/admin/settings", "/admin/providers", "/admin/system", "/admin/account"],
   support: ["/admin", "/admin/users", "/admin/generations", "/admin/payments", "/admin/moderation", "/admin/broadcasts", "/admin/system", "/admin/errors", "/admin/account"],
   moderator: ["/admin", "/admin/users", "/admin/generations", "/admin/moderation", "/admin/account"],
-  viewer: ["/admin", "/admin/users", "/admin/generations", "/admin/payments", "/admin/finance", "/admin/ai", "/admin/pricing", "/admin/bonus", "/admin/ratings", "/admin/settings", "/admin/system", "/admin/errors", "/admin/account"],
+  viewer: ["/admin", "/admin/users", "/admin/generations", "/admin/payments", "/admin/finance", "/admin/ai", "/admin/pricing", "/admin/bonus", "/admin/ratings", "/admin/settings", "/admin/providers", "/admin/system", "/admin/errors", "/admin/account"],
 };
 
 for (const role of Object.keys(ROLE_FIXTURE) as Role[]) {

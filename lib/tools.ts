@@ -1335,7 +1335,16 @@ export function profileDefaults(profile: Partial<UserProfile>): FormValues {
  * ko'rinishini biladi). Bu modul sof bo'lishi kerak, shuning uchun tur
  * shu yerda qayta e'lon qilinadi.
  */
-export type ToolFeatures = { llm: boolean; images: boolean };
+export type ToolFeatures = {
+  llm: boolean;
+  images: boolean;
+  /**
+   * A voice provider is usable (podcast, greeting). Optional: absent = not known, nothing is blocked. The server
+   * sends it from the provider resolver, so a voice provider switched off in the admin «Provayderlar» page hides
+   * the two audio tools instead of letting them fail after payment.
+   */
+  tts?: boolean;
+};
 
 /**
  * Vosita hozir ishlay oladimi — yo'q bo'lsa SABABI.
@@ -1366,6 +1375,9 @@ export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | nu
   }
   if (!features.llm) {
     return "AI xizmati vaqtincha o‘chiq: serverda matn kaliti sozlanmagan.";
+  }
+  if ((tool.id === "podcast" || tool.id === "greeting") && features.tts === false) {
+    return "Ovoz xizmati vaqtincha o‘chiq: serverda ovoz kaliti sozlanmagan.";
   }
   return null;
 }

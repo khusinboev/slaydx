@@ -64,6 +64,11 @@ export function providerDef(id: string): ProviderDef | null {
   return BY_ID.get(id) ?? null;
 }
 
+/** Every provider that serves `kind`. */
+export function providersOfKind(kind: ProviderKind): readonly ProviderDef[] {
+  return PROVIDERS.filter((p) => (p.kinds as readonly ProviderKind[]).includes(kind));
+}
+
 /** Stored key shape: one printable-ASCII token. Providers differ, so only sanity is checked (the page shows a hint). */
 export const KEY_MIN_LEN = 8;
 export const KEY_MAX_LEN = 512;

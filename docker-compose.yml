@@ -151,6 +151,11 @@ services:
       # Admin panel 2FA master key (docs/admin/02-plan.md §3.4) — web: login/enrollment;
       # worker: `npm run admin:create`. Empty → admin login is off (503), the app runs.
       ADMIN_TOTP_KEY: ${ADMIN_TOTP_KEY:-}
+      # Master key of the provider API keys stored in the admin «Provayderlar» page
+      # (docs/program-17 D7): the web process seals them, the worker MUST read the same
+      # value to open them. Empty -> derived from ADMIN_TOTP_KEY (HKDF); set it BEFORE
+      # entering keys, changing it later makes stored keys unreadable.
+      PROVIDER_KEYS_KEY: ${PROVIDER_KEYS_KEY:-}
       # Admin 2FA switch (docs/admin/HANDOFF.md "Admin 2FA switch"): false = simple entry
       # from the site's "Admin panel" button, no TOTP; true = the strengthened flow above.
       ADMIN_2FA_REQUIRED: ${ADMIN_2FA_REQUIRED:-false}
@@ -314,6 +319,11 @@ services:
       # Admin panel 2FA master key (docs/admin/02-plan.md §3.4) — web: login/enrollment;
       # worker: `npm run admin:create`. Empty → admin login is off (503), the app runs.
       ADMIN_TOTP_KEY: ${ADMIN_TOTP_KEY:-}
+      # Master key of the provider API keys stored in the admin «Provayderlar» page
+      # (docs/program-17 D7): the web process seals them, the worker MUST read the same
+      # value to open them. Empty -> derived from ADMIN_TOTP_KEY (HKDF); set it BEFORE
+      # entering keys, changing it later makes stored keys unreadable.
+      PROVIDER_KEYS_KEY: ${PROVIDER_KEYS_KEY:-}
       # Admin 2FA switch — `npm run admin:create` runs here and must create the account
       # in the same mode as web (active + no link, or pending + enrollment link).
       ADMIN_2FA_REQUIRED: ${ADMIN_2FA_REQUIRED:-false}

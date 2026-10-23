@@ -1,7 +1,8 @@
 import "server-only";
 import { BRAND_NAME } from "../brand";
 import { acceptedPaymeKeys } from "./payme-keys";
-import { getProviderKey } from "./providers/resolve";
+import { providersOfKind } from "./providers/registry";
+import { getProviderKey, isProviderEnabled } from "./providers/resolve";
 import { resolveSupportUrl } from "../support";
 
 /**
@@ -425,6 +426,16 @@ export function telegramWebhookSecret(): string {
  */
 export function ttsConfigured(): boolean {
   return Boolean((getProviderKey("azure") && env.tts.azureRegion) || getProviderKey("aisha") || (getProviderKey("gemini") && env.tts.geminiModel));
+}
+
+/**
+ * The `tts` feature flag (podcast, greeting). `false` ONLY when the admin switched a voice provider off in
+ * «Provayderlar» and none usable is left; a merely missing key blocks nothing here, exactly as before the key
+ * store existed (no `provider_settings` rows: always `true`).
+ */
+export function ttsFeature(): boolean {
+  if (ttsConfigured()) return true;
+  return !providersOfKind("tts").some((p) => p.implemented && !isProviderEnabled(p.id));
 }
 
 /**

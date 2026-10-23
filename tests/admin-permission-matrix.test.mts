@@ -362,6 +362,8 @@ const PATH_FAMILIES: ReadonlyArray<readonly [RegExp, readonly string[]]> = [
   [/^moderation\//, ["moderation"]],
   [/^broadcasts\//, ["broadcasts"]],
   [/^settings\//, ["settings"]],
+  // program-17 D7: the provider key store reuses the settings permissions (view / edit with step-up).
+  [/^providers\//, ["settings"]],
   [/^system\//, ["system"]],
   [/^errors\//, ["errors"]],
   [/^audit\//, ["audit"]],
@@ -544,6 +546,7 @@ function paramsFor(e: Entry, role: Role | null): Record<string, string> {
     else if (/^(audit|errors|broadcasts|bonus-channels)\/\[id\]/.test(e.rel)) value = "900000000000";
     else if (/^(generations|orders|moderation\/game-links|moderation\/game-results)\/\[id\]/.test(e.rel)) value = randomUUID();
     else if (e.rel.startsWith("settings/[key]")) value = "no_such_setting";
+    else if (e.rel.startsWith("providers/[id]")) value = "no_such_provider";
     else if (e.rel.startsWith("pricing/[toolId]")) value = PRICING_TOOL_ID;
     assert.ok(value !== null, `${e.rel}: no fixture value for dynamic segment [${name}] — extend paramsFor()`);
     out[name] = value;

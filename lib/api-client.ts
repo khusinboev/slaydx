@@ -258,6 +258,8 @@ export type ServerUser = {
 export type Features = {
   llm: boolean;
   images: boolean;
+  /** A voice provider is usable (podcast, greeting); absent on an older server. */
+  tts?: boolean;
   telegram: boolean;
   telegramBot: string | null;
   devLogin: boolean;

@@ -25,6 +25,7 @@ export type AdminNavIcon =
   | "moderation"
   | "broadcasts"
   | "settings"
+  | "providers"
   | "system"
   | "errors"
   | "audit"
@@ -62,6 +63,7 @@ export const ADMIN_NAV: ReadonlyArray<AdminNavItem> = [
   { href: "/admin/moderation", label: "Moderatsiya", icon: "moderation", permission: "moderation.view", group: "manage" },
   { href: "/admin/broadcasts", label: "E'lonlar", icon: "broadcasts", permission: "broadcasts.view", group: "manage" },
   { href: "/admin/settings", label: "Sozlamalar", icon: "settings", permission: "settings.view", group: "manage" },
+  { href: "/admin/providers", label: "Provayderlar", icon: "providers", permission: "settings.view", group: "manage" },
   { href: "/admin/system", label: "Tizim holati", icon: "system", permission: "system.view", group: "system" },
   { href: "/admin/errors", label: "Xatolar", icon: "errors", permission: "errors.view", group: "system" },
   { href: "/admin/audit", label: "Audit jurnali", icon: "audit", permission: "audit.view", group: "system" },
