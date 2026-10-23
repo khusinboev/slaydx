@@ -129,7 +129,12 @@ type RunOpts = { size?: number; bold?: boolean; color?: string; caps?: boolean; 
 
 function run(d: Draw, text: string, o: RunOpts = {}): TextRun {
   return new TextRun({
-    text: cleanText(text),
+    /*
+     * `cleanText` bo'sh joylarni qirqadi, lekin `titlePrefix` («Bakalavr, »)
+     * KEYINGI run bilan yopishmasligi uchun oxirgi bo'sh joyni saqlaydi —
+     * aks holda faylda «Bakalavr,Moliya» chiqardi (ko'ruvchida esa bo'sh joy bor).
+     */
+    text: cleanText(text) + (/\s$/.test(text) ? " " : ""),
     font: d.t.type.font,
     size: hp(o.size ?? d.t.type.body),
     ...(o.bold ? { bold: true } : {}),

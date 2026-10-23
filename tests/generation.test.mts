@@ -1571,3 +1571,23 @@ test("infografika `buildArtifact` da RASM yo'lidan o'tadi; stub xato bilan tugay
   assert.equal(new Set(suffixes).size, suffixes.length, "fayl nomi qo'shimchalari takrorlandi");
   assert.equal(fileSuffix("essay"), "", "boshqa vositalarga qo'shimcha qo'shilmadi");
 }));
+
+// ───────────────────────────────── Program 17 (17-band): yangi shablonlar
+
+test("inferSlideTemplate: konferensiya/ilmiy loyiha → conference; grid mavzudan taxmin qilinmaydi", () => {
+  assert.equal(inferSlideTemplate("Ilmiy konferensiya ma’ruzasi: STEM"), "conference");
+  assert.equal(inferSlideTemplate("Talabalar ilmiy anjumani — ma’ruza"), "conference");
+  assert.equal(inferSlideTemplate("Ilmiy loyiha taqdimoti"), "conference");
+  // Mavjud xulq o'zgarmadi: himoya hamon `defense`.
+  assert.equal(inferSlideTemplate("Diplom himoya taqdimoti"), "defense");
+  for (const topic of ["Jurnal setkasi", "Minimal grid uslubida taqdimot", "Samarqand me’morchiligi"]) {
+    assert.notEqual(inferSlideTemplate(topic), "grid", topic);
+  }
+  assert.equal(normalizeTemplateId("grid"), "grid");
+  assert.equal(normalizeTemplateId("conference"), "conference");
+});
+
+test("conference shablonida `auto` auditoriya — magistr/ilmiy qoidalari (defense bilan bir xil)", () => {
+  assert.equal(audienceRules("auto", "conference"), audienceRules("auto", "defense"));
+  assert.notEqual(audienceRules("auto", "grid"), audienceRules("auto", "defense"));
+});

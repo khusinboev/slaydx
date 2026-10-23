@@ -656,7 +656,7 @@ test("INT-02: invariant — BARCHA 14 auditoriya × 17 vizual: va'da qilingan N 
       checked += 1;
     }
   }
-  assert.equal(checked, 14 * 17, "auditoriya/vizual soni o'zgargan — testni yangilang");
+  assert.equal(checked, 14 * 19, "auditoriya/vizual soni o'zgargan — testni yangilang (17 eski + conference + grid)");
 });
 
 // ───────────────────────────────────────────── 9-qoida (X-5): sig'im urushi

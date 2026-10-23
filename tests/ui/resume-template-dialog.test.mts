@@ -17,12 +17,12 @@ function open(onPick: (t: string, p: string) => void = () => {}, onClose = () =>
   return render(h(ResumeTemplateDialog, { template: "modern", palette: "ember", withPhoto: false, onClose, onPick }));
 }
 
-test("galereya ikki guruh: suratsiz 4 ta, suratli 6 ta karta", () => {
+test("galereya ikki guruh: suratsiz 5 ta, suratli 7 ta karta", () => {
   open();
   const photoless = document.querySelectorAll('[data-template-group="photoless"] [data-template-card]');
   const photo = document.querySelectorAll('[data-template-group="photo"] [data-template-card]');
-  assert.equal(photoless.length, 4);
-  assert.equal(photo.length, 6);
+  assert.equal(photoless.length, 5);
+  assert.equal(photo.length, 7);
   assert.deepEqual(
     Array.from(photoless).map((el) => el.getAttribute("data-template-card")),
     [...PHOTOLESS_TEMPLATE_IDS],

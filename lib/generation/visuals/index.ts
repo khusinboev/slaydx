@@ -1,9 +1,11 @@
 import { academicVisual } from "./academic";
 import { boldVisual } from "./bold";
 import { circleVisual } from "./circle";
+import { conferenceVisual } from "./conference";
 import { dashboardVisual } from "./dashboard";
 import { editorialVisual } from "./editorial";
 import { formalVisual } from "./formal";
+import { gridVisual } from "./grid";
 import { notebookVisual } from "./notebook";
 import { railVisual } from "./rail";
 import { splitVisual } from "./split";
@@ -25,6 +27,8 @@ export const VISUALS: Record<DesignVisual, VisualSpec> = {
   dashboard: dashboardVisual,
   rail: railVisual,
   editorial: editorialVisual,
+  conference: conferenceVisual,
+  grid: gridVisual,
 };
 
 /** Dizayn bo'lsa spec, eski oila bo'lsa `null`. */

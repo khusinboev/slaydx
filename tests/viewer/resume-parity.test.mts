@@ -162,3 +162,37 @@ test("panel 1-varaqda to'liq balandlikda, keyingilarida mazmun bo'yicha", () => 
   assert.ok(/display:flex;height:100%/.test(page1), "1-varaqda panel to'liq balandlikda emas");
   assert.ok(!/display:flex;height:100%/.test(page2), "2-varaqda panel to'liq balandlikda — faylda esa mazmun qadar");
 });
+
+/* ══════════════ Program 17 (17-band): `executive` va `sidetime` × 6 palitra ══════════════ */
+
+for (const id of ["executive", "sidetime"] as const) {
+  for (const pal of RESUME_PALETTE_IDS) {
+    test(`${id}/${pal}: matn paritet, rang ikkala tomonda (DOCX \`w:fill\`/\`w:color\` ⇔ HTML)`, async () => {
+      const m: ResumeModel = { ...modelFor(id, true), palette: pal };
+      const L = planResume(m);
+      const xml = await docxOf(docFromResume(m, META));
+      const html = viewerHtml(m);
+      assert.deepEqual(htmlTexts(html), docxTexts(xml));
+      // Aksent (sarlavha rangi) har ikki tomonda.
+      assert.ok(html.toLowerCase().includes(`#${L.palette.accent}`.toLowerCase()), `${pal}: aksent HTML da yo'q`);
+      assert.ok(xml.toUpperCase().includes(`"${L.palette.accent}"`.toUpperCase()), `${pal}: aksent DOCX da yo'q`);
+      // To'q tasma (executive) — `dark`, ochiq panel (sidetime) — `panel` fon.
+      const fill = id === "executive" ? L.palette.dark : L.palette.panel;
+      assert.ok(html.toLowerCase().includes(`#${fill}`.toLowerCase()), `${pal}: fon HTML da yo'q`);
+      assert.ok(xml.toUpperCase().includes(`w:fill="${fill}"`.toUpperCase()), `${pal}: fon DOCX da yo'q`);
+    });
+  }
+}
+
+test("`sidetime`: taymlayn qatorlari ikkala tomonda, panelda esa yo'q", async () => {
+  const m = modelFor("sidetime", false);
+  const html = viewerHtml(m);
+  const xml = await docxOf(docFromResume(m, META));
+  const asideHtml = html.slice(html.indexOf('data-resume-zone="aside"'), html.indexOf('data-resume-zone="main"'));
+  assert.ok(!asideHtml.includes("data-resume-rail"), "panelda rail qatori");
+  const railCount = (html.match(/data-resume-rail=/g) ?? []).length;
+  assert.equal(railCount, m.experience.length + m.education.length + m.certificates.length, "ko'ruvchi rail qatorlari soni");
+  // DOCX: har rail qatori — ichki jadval; tashqi (panel/asosiy) jadval + rail qatorlari.
+  const tables = (xml.match(/<w:tbl>/g) ?? []).length;
+  assert.equal(tables, 1 + railCount, "DOCX jadvallari = 1 tashqi + rail qatorlari");
+});

@@ -31,6 +31,7 @@ export const SLIDE_TEMPLATE_IDS = [
   "science",
   // ilmiy
   "defense",
+  "conference",
   "story",
   // tahlil
   "compare",
@@ -39,6 +40,7 @@ export const SLIDE_TEMPLATE_IDS = [
   // bayon
   "timeline",
   "case",
+  "grid",
 ] as const;
 
 export type SlideTemplateId = (typeof SLIDE_TEMPLATE_IDS)[number];
@@ -85,6 +87,8 @@ export const LEGACY_TEMPLATE_ALIASES: Record<string, SlideTemplateId> = {
  *   dashboard  Hisobot — KPI plitkalar, ingichka tasma, karta ichida rasm
  *   rail       Vaqt chizig'i — rels va nuqtalar, gorizontal chiziq motivi
  *   editorial  Keys — baland o'ng rasm ustuni, katta kicker raqam
+ *   conference Ilmiy konferensiya — to'q sarlavha tasmasi, raqamli reja plitkalari (Program 17)
+ *   grid       Minimal grid — jurnal setkasi, ulkan raqamlar, rasm plitkalari (Program 17)
  */
 export type SlideVisual =
   | "classic"
@@ -103,7 +107,9 @@ export type SlideVisual =
   | "bold"
   | "dashboard"
   | "rail"
-  | "editorial";
+  | "editorial"
+  | "conference"
+  | "grid";
 
 /** Formadagi yig'iluvchi guruhlar. */
 export const SLIDE_TEMPLATE_GROUPS = [
@@ -314,6 +320,43 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
   },
   {
     /*
+     * Ilmiy konferensiya (Program 17, 17-band) — talaba/o'qituvchi ma'ruzasi:
+     * dolzarblik → metod → natija (diagramma) → xulosa → «Rahmat». `defense`
+     * (Himoya) hujjat tilida; bu shablon zamonaviy: to'q sarlavha tasmasi,
+     * raqamli reja plitkalari, natijalar to'q sahifada (`conference` dizayni).
+     */
+    id: "conference",
+    nameUz: "Ilmiy konferensiya",
+    blurb: "Dolzarblik → metod → natija diagrammalari → «Rahmat»",
+    group: "ilmiy",
+    visual: "conference",
+    defaultTheme: "summit",
+    beats: [
+      { layout: "title", role: "Ma’ruza mavzusi, muallif va tashkilot" },
+      { layout: "agenda", role: "Ma’ruza rejasi" },
+      { layout: "section", role: "Dolzarblik va maqsad" },
+      { layout: "bullets", role: "Muammo, maqsad va vazifalar" },
+      { layout: "process", role: "Tadqiqot metodologiyasi" },
+      { layout: "stats", role: "Asosiy natijalar ko‘rsatkichlari" },
+      { layout: "table", role: "Natijalar jadvali" },
+      { layout: "twoCol", role: "Muhokama: kutilgan va olingan natija" },
+      { layout: "bullets", role: "Xulosa va tavsiyalar" },
+      { layout: "closing", role: "Rahmat — e’tiboringiz uchun" },
+    ],
+    fillers: [
+      { layout: "bullets", role: "Mavzuning ilmiy-nazariy asoslari" },
+      { layout: "table", role: "Tajriba va nazorat guruhlari ko‘rsatkichlari" },
+      { layout: "stats", role: "Dinamika: boshlang‘ich va yakuniy o‘lchov" },
+      { layout: "process", role: "Natijalarni qayta ishlash bosqichlari" },
+      { layout: "twoCol", role: "Kutilgan ta’sir / amaliy ahamiyat" },
+      { layout: "section", role: "Natijalar muhokamasi" },
+      { layout: "bullets", role: "Tadqiqot cheklovlari va keyingi yo‘nalishlar" },
+      { layout: "quote", role: "Mavzu bo‘yicha yetakchi olim fikri" },
+      { layout: "stats", role: "Nashrlar va ilmiy faollik ko‘rsatkichlari" },
+    ],
+  },
+  {
+    /*
      * Foto-hikoya — Adabiyot, Hayotnoma va Esse/foto-insho birlashmasi
      * (uchalasi ham `magazine` oilasini bo'lishardi). Beats: asar/shaxs →
      * davr → obraz/g'oya → iqtibos → meros; to'ldirgichlar uchalasidan.
@@ -491,6 +534,41 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
       { layout: "quote", role: "Ishtirokchi so‘zi" },
     ],
   },
+  {
+    /*
+     * Minimal grid (Program 17, 17-band) — jurnal setkasi: har band o'z
+     * plitkasida, ulkan raqamlar, rasm — plitkalardan biri (`grid` dizayni).
+     * Mavzudan taxmin qilinmaydi (`inferSlideTemplate`) — uslub tanlovi.
+     */
+    id: "grid",
+    nameUz: "Minimal grid",
+    blurb: "Jurnal setkasi: ulkan raqamlar va rasm plitkalari",
+    group: "bayon",
+    visual: "grid",
+    defaultTheme: "clinic",
+    beats: [
+      { layout: "title", role: "Mavzu va muallif — jurnal muqovasi" },
+      { layout: "agenda", role: "Mundarija: asosiy yo‘nalishlar" },
+      { layout: "section", role: "Birinchi yo‘nalish" },
+      { layout: "bullets", role: "Asosiy fikrlar — har biri alohida plitkada" },
+      { layout: "stats", role: "Mavzu raqamlarda" },
+      { layout: "section", role: "Ikkinchi yo‘nalish" },
+      { layout: "twoCol", role: "Ikki nuqtai nazar" },
+      { layout: "process", role: "Amalga oshirish qadamlari" },
+      { layout: "quote", role: "Kalit iqtibos" },
+      { layout: "closing", role: "Yakuniy fikr" },
+    ],
+    fillers: [
+      { layout: "bullets", role: "Qiziqarli faktlar to‘plami" },
+      { layout: "twoCol", role: "Mif / haqiqat" },
+      { layout: "stats", role: "Eng muhim uchta raqam" },
+      { layout: "process", role: "Misol ustida qadamma-qadam" },
+      { layout: "section", role: "Uchinchi yo‘nalish" },
+      { layout: "table", role: "Qiyosiy ma’lumotlar jadvali" },
+      { layout: "quote", role: "Mavzu bo‘yicha mashhur fikr" },
+      { layout: "bullets", role: "Amaliy maslahatlar to‘plami" },
+    ],
+  },
 ];
 
 export const SLIDE_TEMPLATE_BY_ID = Object.fromEntries(SLIDE_TEMPLATES.map((t) => [t.id, t])) as Record<
@@ -510,6 +588,7 @@ export function inferSlideTemplate(topic: string, extra = ""): Exclude<SlideTemp
   const t = `${topic} ${extra}`.toLowerCase();
   if (/pitch|startup|invest|biznes[- ]reja|sotuv|mahsulot lans/.test(t)) return "pitch";
   if (/himoya|dissertats|diplom himoya|tadqiqot savol/.test(t)) return "defense";
+  if (/konferensiya|anjuman|ilmiy loyiha|ilmiy-amaliy/.test(t)) return "conference";
   if (/munozara|debat|bahs|tezisga qarshi/.test(t)) return "compare";
   if (/qiyos|solishtir|\bvs\b|farqi|ikkita yondashuv/.test(t)) return "compare";
   if (/keys|vaziyat|case study|holat tahlil/.test(t)) return "case";
