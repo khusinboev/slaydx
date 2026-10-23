@@ -133,7 +133,7 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 test("registry covers every provider key env var the generation code reads, and nothing reads one directly", () => {
-  const known = new Set(ALL_ENV);
+  const known = new Set<string>(ALL_ENV);
   // Not provider keys: sealing/signing keys and payment secrets live elsewhere.
   const NOT_PROVIDER = new Set(["ADMIN_TOTP_KEY", "PROVIDER_KEYS_KEY", "PAYME_KEY", "PAYME_TEST_KEY", "CLICK_SECRET_KEY", "CRON_SECRET", "TELEGRAM_WEBHOOK_SECRET", "SESSION_SECRET"]);
   const files = [...walk(path.join(ROOT, "lib/generation")), ...walk(path.join(ROOT, "lib/server"))];

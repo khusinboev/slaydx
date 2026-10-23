@@ -62,7 +62,7 @@ const toasts = () => useToastStore.getState().toasts.map((t) => t.message);
 type Item = {
   id: string;
   label: string;
-  kinds: string[];
+  kinds: Array<"llm" | "image" | "tts" | "video" | "research">;
   implemented: boolean;
   testable: boolean;
   keyFormat: string;
