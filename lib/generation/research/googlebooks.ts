@@ -21,7 +21,7 @@ import type { Reference } from "../types";
 import { cached, queryKey } from "./cache";
 import { getJson, withParams, type HttpOpts } from "./http";
 import { normalizeIsbn } from "./isbn";
-import { getProviderKey } from "../../server/providers/resolve";
+import { getProviderKey, isProviderEnabled } from "../../server/providers/resolve";
 
 // Sof yordamchi `isbn.ts` da — forma/klient kodi (`article/input.ts` → `tools.ts`)
 // bu faylni tortmasin: `cache.ts` → `lib/server/db.ts` server-only.
@@ -122,6 +122,8 @@ function booksUrl(q: string, opts: BooksOpts): string {
  * oddiy holat: o'zbek darsligi Google Books da kam). Kesh `gb:` 30 kun.
  */
 export async function searchBooks(query: string, opts: BooksOpts = {}): Promise<Reference[]> {
+  // Switched off in the admin «Provayderlar» page: no request, no cached answer (`verifyIsbn` goes through here).
+  if (!isProviderEnabled("googlebooks")) return [];
   const isbn = normalizeIsbn(opts.isbn);
   const q = isbn ? `isbn:${isbn}` : query.replace(/\s+/g, " ").trim();
   if (!q) return [];

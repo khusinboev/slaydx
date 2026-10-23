@@ -194,6 +194,17 @@ export function ProvidersPage() {
         </div>
       ) : null}
 
+      {data && data.sealingKey === "admin" ? (
+        <div role="note" data-key-fallback className="bg-info/10 text-foreground flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-[13px]">
+          <Info className="text-info mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <p>
+            Tavsiya: serverda <span className="font-mono">PROVIDER_KEYS_KEY</span> o&apos;rnating. Hozir kalitlar{" "}
+            <span className="font-mono">ADMIN_TOTP_KEY</span> asosida shifrlanmoqda; <span className="font-mono">PROVIDER_KEYS_KEY</span> keyin
+            qo&apos;yilsa, saqlangan kalitlar o&apos;qilmay qoladi — uni birinchi kalit kiritishdan oldin qo&apos;ying.
+          </p>
+        </div>
+      ) : null}
+
       {state.status === "loading" ? <Loading /> : null}
       {state.status === "forbidden" ? <Forbidden /> : null}
       {state.status === "error" ? (

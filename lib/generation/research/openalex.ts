@@ -15,7 +15,7 @@
 import type { Reference } from "../types";
 import { cached, queryKey } from "./cache";
 import { getJson, withParams, type HttpOpts } from "./http";
-import { getProviderKey } from "../../server/providers/resolve";
+import { getProviderKey, isProviderEnabled } from "../../server/providers/resolve";
 
 const BASE = "https://api.openalex.org/works";
 const SELECT = "id,title,publication_year,doi,authorships,primary_location,cited_by_count,abstract_inverted_index";
@@ -116,6 +116,8 @@ export function referenceFromWork(w: RawWork | null | undefined): OpenAlexWork |
  * relevance tartibida (`sort` berilmaydi).
  */
 export async function searchWorks(query: string, opts: SearchOpts = {}): Promise<OpenAlexWork[]> {
+  // Switched off in the admin «Provayderlar» page: no request (the API also works without a key), no cached answer.
+  if (!isProviderEnabled("openalex")) return [];
   const q = query.replace(/\s+/g, " ").trim();
   if (!q) return [];
   const perPage = Math.max(1, Math.min(50, opts.perPage ?? 25));
@@ -146,6 +148,7 @@ export async function searchWorks(query: string, opts: SearchOpts = {}): Promise
 
 /** Bitta ish — `W…` id yoki DOI bo'yicha (`/works/W123`, `/works/https://doi.org/…`). */
 export async function getWork(id: string, opts: HttpOpts = {}): Promise<OpenAlexWork | null> {
+  if (!isProviderEnabled("openalex")) return null;
   const wid = openAlexId(id);
   const doi = wid ? "" : stripDoi(id);
   if (!wid && !doi) return null;

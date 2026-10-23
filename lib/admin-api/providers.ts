@@ -43,6 +43,8 @@ export type ProvidersResponse = {
   items: ProviderItem[];
   /** Keys can be stored: a sealing key is configured on the server. */
   canStoreKeys: boolean;
+  /** `provider` = PROVIDER_KEYS_KEY, `admin` = the ADMIN_TOTP_KEY fallback, `none`. */
+  sealingKey: "provider" | "admin" | "none";
   /** A change reaches the other process (web <-> worker) within this many seconds. */
   propagationSec: number;
 };

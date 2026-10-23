@@ -2,7 +2,7 @@ import "server-only";
 import { BRAND_NAME } from "../brand";
 import { acceptedPaymeKeys } from "./payme-keys";
 import { providersOfKind } from "./providers/registry";
-import { getProviderKey, isProviderEnabled } from "./providers/resolve";
+import { getProviderKey, isProviderEnabled, unreadableProviders } from "./providers/resolve";
 import { resolveSupportUrl } from "../support";
 
 /**
@@ -485,7 +485,7 @@ export function assertRuntimeConfig(): string[] {
   if (isProd && !telegramWebhookSecret() && env.telegramBotToken) {
     problems.push("TELEGRAM_WEBHOOK_SECRET (yoki zaxira CRON_SECRET) yo'q — Telegram webhook'ni himoyalab bo'lmaydi");
   }
-  if (env.tts.azureKey && !env.tts.azureRegion) {
+  if (getProviderKey("azure") && !env.tts.azureRegion) {
     problems.push("AZURE_SPEECH_REGION yo'q — AZURE_SPEECH_KEY yolg'iz ishlamaydi");
   }
   return problems;
@@ -506,6 +506,11 @@ export function runtimeWarnings(): string[] {
   const warnings: string[] = [];
   if (!ttsConfigured()) {
     warnings.push("TTS kaliti yo'q (AZURE_SPEECH_KEY+AZURE_SPEECH_REGION / AISHA_API_KEY) — podkast va tabriknoma ishlamaydi");
+  }
+  // Provider keys stored in the admin page that cannot be decrypted (the sealing key changed): ignored, env applies.
+  const unreadable = unreadableProviders();
+  if (unreadable.length) {
+    warnings.push(`saqlangan kalit o'qilmaydi — PROVIDER_KEYS_KEY o'zgarganmi? (${unreadable.join(", ")}); admin «Provayderlar» sahifasida qayta kiriting`);
   }
   // EXT-14: zaxira ishlaydi, lekin health bearer'i webhook kaliti bo'lib qoladi.
   if (env.telegramBotToken && !env.telegramWebhookSecret && env.cronSecret) {

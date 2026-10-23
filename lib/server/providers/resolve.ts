@@ -176,6 +176,11 @@ export function keySourceOf(id: ProviderId | string): "db" | "env" | "none" {
   return envKey(id) ? "env" : "none";
 }
 
+/** Providers whose stored key could not be decrypted by the last load (sorted), for the health warning. */
+export function unreadableProviders(): string[] {
+  return [...state().snapshot].filter(([, r]) => r.unreadable).map(([id]) => id).sort();
+}
+
 /** The raw env fallback, ignoring the DB and the switch: whether an env var is set at all (admin page). */
 export function hasEnvKey(id: ProviderId | string): boolean {
   return envKey(id) !== "";

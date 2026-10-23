@@ -49,6 +49,9 @@ const { completeWithChain } = await import("../lib/generation/llm/chain.ts");
 const { parseRoleSpec } = await import("../lib/generation/llm/types.ts");
 const { llmProvider, llmEnabled } = await import("../lib/generation/llm.ts");
 const { makeOpenrouterAdapter } = await import("../lib/generation/llm/openrouter.ts");
+const { makeAnthropicAdapter } = await import("../lib/generation/llm/anthropic.ts");
+const openalex = await import("../lib/generation/research/openalex.ts");
+const googlebooks = await import("../lib/generation/research/googlebooks.ts");
 const { chainProvider, pickProvider } = await import("../lib/generation/image-provider.ts");
 const { pexelsProvider } = await import("../lib/generation/image-provider-pexels.ts");
 const { pixabayProvider } = await import("../lib/generation/image-provider-pixabay.ts");
@@ -660,6 +663,115 @@ test("admin-ai providerKeys(): a DB key counts, a disabled provider is false eve
   assert.equal(adminAi.providerKeys().azureTts, false, "Azure still needs its region");
   setEnv({ AZURE_SPEECH_REGION: "westeurope" });
   assert.equal(adminAi.providerKeys().azureTts, true);
+});
+
+// ───────────────────────────── review fixes: no implicit env fallback, research gating, warnings
+
+test("anthropic adapter: a provider switched off AFTER the chain's check sends no request (the SDK must not fall back to the env key)", async () => {
+  setEnv({ ANTHROPIC_API_KEY: "env-anthropic-key-1" });
+  const requests: { url: string; key: string | null }[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const h = new Headers(init?.headers);
+    requests.push({ url: String(input), key: h.get("x-api-key") });
+    return new Response(JSON.stringify({ type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } }), { status: 401, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    const adapter = makeAnthropicAdapter();
+    const opts = { maxTokens: 100, timeoutMs: 5_000 };
+    // Control: enabled, env key -> the request goes out WITH the env key (so the stub really sees SDK traffic).
+    const on = await adapter.complete("claude-x", "s", "u", opts);
+    assert.equal(on.ok, false);
+    assert.ok(requests.length >= 1, "control: a request went out");
+    assert.equal(requests[0]!.key, "env-anthropic-key-1");
+    // The chain checks the key, then the admin switches the provider off, then the adapter runs.
+    requests.length = 0;
+    assert.ok(resolve.getProviderKey("anthropic"), "chain check passes");
+    resolve.setProviderSnapshot(snap({ anthropic: { enabled: false } }));
+    const off = await adapter.complete("claude-x", "s", "u", opts);
+    assert.equal(off.ok, false);
+    assert.equal(!off.ok && off.retryable, false);
+    assert.equal(requests.length, 0, "no request: the env key must not be used");
+    // Same when the env var is gone and nothing is stored.
+    resolve.setProviderSnapshot(snap({}));
+    delete process.env.ANTHROPIC_API_KEY;
+    assert.equal((await adapter.complete("claude-x", "s", "u", opts)).ok, false);
+    assert.equal(requests.length, 0);
+    // A stored key is passed explicitly.
+    resolve.setProviderSnapshot(snap({ anthropic: { key: "db-anthropic-key-1" } }));
+    await adapter.complete("claude-x", "s", "u", opts);
+    assert.equal(requests[0]!.key, "db-anthropic-key-1");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("research sources: OpenAlex and Google Books switched off make NO call (and ignore the cache); on, they call", async () => {
+  const calls: string[] = [];
+  const fetchImpl = (async (url: string | URL | Request) => {
+    calls.push(String(url));
+    return new Response(JSON.stringify({ results: [], items: [] }), { status: 200, headers: { "content-type": "application/json" } });
+  }) as unknown as typeof fetch;
+  const tag = randomBytes(4).toString("hex");
+  // Control: both enabled.
+  await openalex.searchWorks(`teaching ${tag}`, { fetchImpl });
+  await googlebooks.searchBooks(`pedagogika ${tag}`, { fetchImpl });
+  await openalex.getWork("W1234567", { fetchImpl });
+  assert.equal(calls.length, 3, `control: ${calls.join(", ")}`);
+  // OpenAlex off.
+  calls.length = 0;
+  resolve.setProviderSnapshot(snap({ openalex: { enabled: false } }));
+  assert.deepEqual(await openalex.searchWorks(`teaching ${tag}`, { fetchImpl }), []);
+  assert.equal(await openalex.getWork("W1234567", { fetchImpl }), null);
+  assert.deepEqual(calls, [], "OpenAlex off: no request");
+  await googlebooks.searchBooks(`pedagogika ${tag}-2`, { fetchImpl });
+  assert.equal(calls.length, 1, "Google Books is independent");
+  // Google Books off (searchBooks and verifyIsbn, which goes through it).
+  calls.length = 0;
+  resolve.setProviderSnapshot(snap({ googlebooks: { enabled: false } }));
+  assert.deepEqual(await googlebooks.searchBooks(`pedagogika ${tag}`, { fetchImpl }), []);
+  assert.equal(await googlebooks.verifyIsbn("9780306406157", { fetchImpl }), null);
+  assert.deepEqual(calls, [], "Google Books off: no request");
+  // Without any row both are enabled again.
+  resolve.setProviderSnapshot(snap({}));
+  await openalex.searchWorks(`teaching ${tag}-3`, { fetchImpl });
+  assert.equal(calls.length, 1);
+});
+
+test("runtime config: the Azure key is read through the resolver; unreadable stored keys raise a warning", () => {
+  Object.assign(serverEnv.env.tts, { azureRegion: "" });
+  const regionProblems = () => serverEnv.assertRuntimeConfig().filter((p) => p.includes("AZURE_SPEECH_REGION"));
+  assert.deepEqual(regionProblems(), []);
+  // A key stored in the DB (no env var) without a region is the same misconfiguration as the env one.
+  resolve.setProviderSnapshot(snap({ azure: { key: "db-azure-key-1234" } }));
+  assert.equal(regionProblems().length, 1);
+  // Switched off: the key is not in use, nothing to complain about.
+  setEnv({ AZURE_SPEECH_KEY: "env-azure-key-1234" });
+  resolve.setProviderSnapshot(snap({ azure: { enabled: false } }));
+  assert.deepEqual(regionProblems(), []);
+  resolve.setProviderSnapshot(snap({}));
+  assert.equal(regionProblems().length, 1, "env key without region, as before");
+
+  const warn = () => serverEnv.runtimeWarnings().filter((w) => w.includes("saqlangan kalit o'qilmaydi"));
+  assert.deepEqual(warn(), []);
+  resolve.setProviderSnapshot(snap({ fal: { unreadable: true }, aisha: { unreadable: true }, pexels: { key: "db-pexels-key-1" } }));
+  assert.deepEqual(resolve.unreadableProviders(), ["aisha", "fal"]);
+  const w = warn();
+  assert.equal(w.length, 1);
+  assert.match(w[0]!, /PROVIDER_KEYS_KEY o'zgarganmi\?/);
+  assert.ok(w[0]!.includes("aisha, fal") && !w[0]!.includes("db-pexels-key-1"));
+  Object.assign(serverEnv.env.tts, TTS_BACKUP);
+});
+
+test("sealingKeySource: provider / admin fallback / none", () => {
+  assert.equal(crypto.sealingKeySource(), "admin");
+  process.env.PROVIDER_KEYS_KEY = randomBytes(32).toString("base64");
+  assert.equal(crypto.sealingKeySource(), "provider");
+  process.env.PROVIDER_KEYS_KEY = "broken";
+  assert.equal(crypto.sealingKeySource(), "none", "a malformed PROVIDER_KEYS_KEY is not usable and is not replaced by the fallback");
+  delete process.env.PROVIDER_KEYS_KEY;
+  delete process.env.ADMIN_TOTP_KEY;
+  assert.equal(crypto.sealingKeySource(), "none");
 });
 
 test("env is restored for the other suites", () => {

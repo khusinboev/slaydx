@@ -57,6 +57,15 @@ function aadFor(providerId: string): Buffer {
   return Buffer.from(`slaydx-provider-key:v1:${providerId}`);
 }
 
+/**
+ * Which master key seals the stored keys: `provider` (`PROVIDER_KEYS_KEY`), `admin` (the `ADMIN_TOTP_KEY` fallback)
+ * or `none` (nothing usable, keys cannot be stored). The admin page recommends `PROVIDER_KEYS_KEY` in the second case.
+ */
+export function sealingKeySource(): "provider" | "admin" | "none" {
+  if (!providerCryptoAvailable()) return "none";
+  return env.providerKeysKey ? "provider" : "admin";
+}
+
 /** `true` when a usable master key exists, i.e. keys can be stored and read. */
 export function providerCryptoAvailable(): boolean {
   try {

@@ -225,8 +225,12 @@ test("GET: every registry provider with the exact shape; no key anywhere", { ski
   process.env.GEMINI_API_KEY = "env-gemini-secret-1234";
   const r = await list(s.cookie);
   assert.equal(r.status, 200, r.text);
-  assert.deepEqual(Object.keys(r.body).sort(), ["canStoreKeys", "items", "propagationSec"]);
+  assert.deepEqual(Object.keys(r.body).sort(), ["canStoreKeys", "items", "propagationSec", "sealingKey"]);
   assert.equal(r.body.canStoreKeys, true);
+  assert.equal(r.body.sealingKey, "admin", "only ADMIN_TOTP_KEY is set: the fallback");
+  process.env.PROVIDER_KEYS_KEY = randomBytes(32).toString("base64");
+  assert.equal((await list(s.cookie)).body.sealingKey, "provider");
+  delete process.env.PROVIDER_KEYS_KEY;
   assert.equal(r.body.propagationSec, 30);
   const items = r.body.items as Item[];
   assert.deepEqual(items.map((i) => i.id), [...registry.PROVIDER_IDS]);
@@ -499,6 +503,7 @@ test("no sealing key: PUT key is 503 crypto_unavailable and writes nothing; togg
     const g = await list(s.cookie);
     assert.equal(g.status, 200);
     assert.equal(g.body.canStoreKeys, false);
+    assert.equal(g.body.sealingKey, "none");
     assert.equal((await putEnabled(s.cookie, "fal", { enabled: false, reason: REASON })).status, 200);
   } finally {
     process.env.ADMIN_TOTP_KEY = ADMIN_KEY;

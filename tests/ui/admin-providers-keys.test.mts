@@ -97,7 +97,7 @@ const XAI = item({ id: "xai", label: "xAI (Grok)" });
 const PEXELS = item({ id: "pexels", label: "Pexels", kinds: ["image"], enabled: false, envPresent: true });
 const KLING = item({ id: "kling", label: "Kling (video)", kinds: ["video"], implemented: false, testable: false });
 const ITEMS = [GEMINI, FAL, XAI, PEXELS, KLING];
-const BODY = { items: ITEMS, canStoreKeys: true, propagationSec: 30 };
+const BODY = { items: ITEMS, canStoreKeys: true, sealingKey: "provider" as const, propagationSec: 30 };
 
 const rowOf = (id: string): HTMLElement => {
   const el = document.querySelector<HTMLElement>(`[data-provider="${id}"]`);
@@ -176,13 +176,29 @@ test("ready: one row per provider with switch, key state and actions", async () 
 });
 
 test("no sealing key on the server: warning, key buttons disabled, switches still work", async () => {
-  stubFetch([() => json(200, { ...BODY, canStoreKeys: false })]);
+  stubFetch([() => json(200, { ...BODY, canStoreKeys: false, sealingKey: "none" })]);
   mount(h(ProvidersPage));
   await ready();
   assert.ok(document.querySelector("[data-crypto-missing]"));
   assert.match(screen.getByRole("alert").textContent ?? "", /PROVIDER_KEYS_KEY/);
   assert.equal(within(rowOf("xai")).getByRole("button", { name: "Kalitni kiritish" }).hasAttribute("disabled"), true);
   assert.equal(within(rowOf("xai")).getByRole("switch").hasAttribute("disabled"), false);
+});
+
+test("fallback sealing key: a recommendation to set PROVIDER_KEYS_KEY is shown, and only then", async () => {
+  stubFetch([() => json(200, { ...BODY, sealingKey: "admin" })]);
+  mount(h(ProvidersPage));
+  await ready();
+  const note = document.querySelector("[data-key-fallback]");
+  assert.ok(note, "banner present");
+  assert.match(note.textContent ?? "", /Tavsiya: serverda PROVIDER_KEYS_KEY o'rnating/);
+  assert.ok(!document.querySelector("[data-crypto-missing]"), "keys can be stored: no 'missing' warning");
+  assert.equal(within(rowOf("xai")).getByRole("button", { name: "Kalitni kiritish" }).hasAttribute("disabled"), false);
+  cleanup();
+  stubFetch([() => json(200, BODY)]);
+  mount(h(ProvidersPage));
+  await ready();
+  assert.ok(!document.querySelector("[data-key-fallback]"), "PROVIDER_KEYS_KEY set: no banner");
 });
 
 test("error: message + request id, retry loads again; forbidden: «Ruxsat yo'q»", async () => {

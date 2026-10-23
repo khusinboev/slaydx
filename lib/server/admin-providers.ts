@@ -7,7 +7,7 @@ import { can } from "./admin-rbac";
 import type { AdminActor } from "./admin-handler";
 import { query, queryOne } from "./db";
 import { log } from "./log";
-import { openProviderKey, providerCryptoAvailable, sealProviderKey } from "./providers/crypto";
+import { openProviderKey, sealProviderKey, sealingKeySource } from "./providers/crypto";
 import { probeProvider, type ProbeResult } from "./providers/probe";
 import {
   PROVIDERS,
@@ -62,6 +62,8 @@ export type AdminProvidersBody = {
   items: AdminProviderItem[];
   /** Keys can be stored: `PROVIDER_KEYS_KEY` or `ADMIN_TOTP_KEY` is set and valid. Toggles work without it. */
   canStoreKeys: boolean;
+  /** Which key seals them: `provider` = PROVIDER_KEYS_KEY, `admin` = the ADMIN_TOTP_KEY fallback (the page recommends the former), `none`. */
+  sealingKey: "provider" | "admin" | "none";
   /** A change made through this page reaches the other process (web <-> worker) within this many seconds. */
   propagationSec: number;
 };
@@ -133,7 +135,8 @@ export async function listAdminProviders(role: string): Promise<AdminProvidersBo
   const showHint = can(role, "settings.edit");
   return {
     items: PROVIDERS.map((p) => toItem(p.id, rows.get(p.id), showHint)),
-    canStoreKeys: providerCryptoAvailable(),
+    canStoreKeys: sealingKeySource() !== "none",
+    sealingKey: sealingKeySource(),
     propagationSec: Math.round(PROVIDER_CACHE_TTL_MS / 1000),
   };
 }
