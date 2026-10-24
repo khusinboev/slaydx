@@ -172,17 +172,24 @@ test("AI chat quota and charging", { skip }, async (t) => {
     assert.equal((await chat.chatStatus(uid)).enabled, false);
   });
 
-  await t.test("the global free cap stops free messages (503) without touching the wallet", async (tt) => {
+  await t.test("the global free cap: a user inside the personal quota is served as a paid message; with price 0 it is a 503; the personal slot is given back", async (tt) => {
     const uid = await mkUser(query, { balance: 500 });
     const llm = stubLlm();
     await setSetting(query, "free_llm.daily.global", 0);
     tt.after(() => clearSetting(query, "free_llm.daily.global"));
+    const r = await chat.sendChatMessage({ userId: uid, channel: "web", text: "x", clientId: cid() }, { complete: llm.complete });
+    assert.equal(r.charged, 100, "paid fallback while the global free cap is full");
+    assert.equal((await wallet(query, uid)).balance, 400);
+    assert.equal(r.status.freeLeft, 10, "the personal free slot was not used up");
+    assert.equal(llm.calls.length, 1);
+    await setSetting(query, "chat.price_per_message", 0);
+    tt.after(() => clearSetting(query, "chat.price_per_message"));
     await assert.rejects(
-      chat.sendChatMessage({ userId: uid, channel: "web", text: "x", clientId: cid() }, { complete: llm.complete }),
+      chat.sendChatMessage({ userId: uid, channel: "web", text: "y", clientId: cid() }, { complete: llm.complete }),
       (e: { status?: number; extra?: Record<string, unknown> }) => e.status === 503 && e.extra?.code === "global",
     );
-    assert.equal(llm.calls.length, 0);
-    assert.equal((await wallet(query, uid)).balance, 500);
+    assert.equal(llm.calls.length, 1);
+    assert.equal((await wallet(query, uid)).balance, 400);
   });
 
   await t.test("the free count resets with the Tashkent day", async () => {
@@ -196,15 +203,21 @@ test("AI chat quota and charging", { skip }, async (t) => {
     assert.equal((await chat.chatStatus(uid, { now: Date.parse("2026-11-03T19:00:00Z") })).freeLeft, 10);
   });
 
-  await t.test("spend lands in ai_usage as free:chat, also for a paid message", async () => {
+  await t.test("spend lands in ai_usage: free messages as free:chat, paid ones as their own 'paid' bucket with the ledger reference", async () => {
     const { flushAiUsage } = await import("../lib/server/ai-usage.ts");
     const uid = await mkUser(query, { balance: 500 });
     const llm = stubLlm();
     for (let i = 0; i < 11; i++) await chat.sendChatMessage({ userId: uid, channel: "web", text: "x", clientId: cid() }, { complete: llm.complete });
     await flushAiUsage();
-    const rows = await query<{ tool_id: string; calls: number }>("SELECT tool_id, calls FROM ai_usage WHERE user_id = $1", [uid]);
+    const rows = await query<{ tool_id: string; source: string; outcome: string; ref: string | null; calls: number }>("SELECT tool_id, source, outcome, ref, calls FROM ai_usage WHERE user_id = $1 ORDER BY id", [uid]);
     assert.equal(rows.length, 11);
-    assert.ok(rows.every((r) => r.tool_id === "free:chat" && r.calls === 1));
+    const free = rows.filter((r) => r.source === "free");
+    const paid = rows.filter((r) => r.source === "paid");
+    assert.equal(free.length, 10);
+    assert.ok(free.every((r) => r.tool_id === "free:chat" && r.outcome === "free" && r.ref === null && r.calls === 1));
+    assert.equal(paid.length, 1);
+    const msg = (await query<{ id: string }>("SELECT m.id::text AS id FROM chat_messages m JOIN chat_conversations c ON c.id = m.conversation_id WHERE c.user_id = $1 AND m.charged_points > 0", [uid]))[0]!;
+    assert.deepEqual({ tool: paid[0]!.tool_id, outcome: paid[0]!.outcome, ref: paid[0]!.ref, calls: paid[0]!.calls }, { tool: "chat:paid", outcome: "paid", ref: `chat:${msg.id}`, calls: 1 });
   });
 
   await t.test("input checks: empty, too long, bad client id", async () => {
@@ -226,5 +239,105 @@ test("AI chat quota and charging", { skip }, async (t) => {
     assert.ok(last.includes("turn-13") && last.includes("turn-4"), "turns 4..13 are in the context");
     assert.ok(!last.includes("turn-3<") && !/turn-3\n/.test(last) && !last.includes("turn-2\n") && !last.includes("turn-1\n"), "older turns are not");
     assert.ok(last.includes("turn-14"), "the new message");
+  });
+
+  await t.test("a retry while the first send still waits for the model gets 409 busy -- even 100 s in -- and never starts a second model call", async () => {
+    const uid = await mkUser(query, { balance: 1000 });
+    const ok = stubLlm();
+    for (let i = 0; i < 10; i++) await chat.sendChatMessage({ userId: uid, channel: "web", text: "x", clientId: cid() }, { complete: ok.complete });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let modelCalls = 0;
+    const slow = (async (...args: unknown[]) => {
+      modelCalls += 1;
+      await gate;
+      return (ok.complete as unknown as (...a: unknown[]) => Promise<unknown>)(...args);
+    }) as unknown as typeof ok.complete;
+    const id = cid();
+    const first = chat.sendChatMessage({ userId: uid, channel: "web", text: "sekin", clientId: id }, { complete: slow });
+    for (let i = 0; i < 100 && modelCalls === 0; i++) await new Promise((r) => setTimeout(r, 20));
+    assert.equal(modelCalls, 1);
+    // 100 s into the wait: older than the former 60 s window, inside the 180 s one.
+    await query("UPDATE chat_messages SET created_at = now() - interval '100 seconds' WHERE client_id = $1", [id]);
+    await assert.rejects(
+      chat.sendChatMessage({ userId: uid, channel: "web", text: "sekin", clientId: id }, { complete: slow }),
+      (e: { status?: number; extra?: Record<string, unknown> }) => e.status === 409 && e.extra?.code === "busy",
+    );
+    assert.equal(modelCalls, 1, "no second model call");
+    assert.equal((await charges(uid)).length, 1, "one charge");
+    release();
+    const done = await first;
+    assert.equal(done.charged, 100);
+    const again = await chat.sendChatMessage({ userId: uid, channel: "web", text: "sekin", clientId: id }, { complete: slow });
+    assert.equal(again.replayed, true);
+    assert.equal(again.reply.id, done.reply.id);
+    assert.equal(modelCalls, 1);
+    assert.equal((await wallet(query, uid)).balance, 900);
+  });
+
+  await t.test("a claim that is really dead (older than 180 s, no reply) is reaped: its charge is refunded and the retry is served once", async () => {
+    const { chargeInTx } = await import("../lib/server/credits.ts");
+    const { transaction } = await import("../lib/server/db.ts");
+    const uid = await mkUser(query, { balance: 1000 });
+    const llm = stubLlm();
+    for (let i = 0; i < 10; i++) await chat.sendChatMessage({ userId: uid, channel: "web", text: "x", clientId: cid() }, { complete: llm.complete });
+    const conv = (await query<{ id: string }>("SELECT id::text AS id FROM chat_conversations WHERE user_id = $1", [uid]))[0]!.id;
+    const id = cid();
+    const dead = (await query<{ id: string }>("INSERT INTO chat_messages (conversation_id, role, content, client_id, charged_points, created_at) VALUES ($1, 'user', 'o''lik', $2, 100, now() - interval '200 seconds') RETURNING id::text AS id", [conv, id]))[0]!.id;
+    await transaction((c) => chargeInTx(c, uid, 100, `chat:${dead}`, "AI chat xabari"));
+    assert.equal((await wallet(query, uid)).balance, 900);
+    const r = await chat.sendChatMessage({ userId: uid, channel: "web", text: "o'lik", clientId: id }, { complete: llm.complete });
+    assert.equal(r.charged, 100);
+    assert.equal((await wallet(query, uid)).balance, 900, "refund of the dead claim + one new charge");
+    assert.equal(llm.calls.length, 11);
+  });
+
+  await t.test("housekeeping chat-refund: a charged message with no reply older than 5 minutes is refunded once and removed; fresh and answered ones stay", async () => {
+    const { chargeInTx } = await import("../lib/server/credits.ts");
+    const { transaction } = await import("../lib/server/db.ts");
+    const uid = await mkUser(query, { balance: 1000 });
+    const llm = stubLlm();
+    const answered = await chat.sendChatMessage({ userId: uid, channel: "web", text: "javobli", clientId: cid() }, { complete: llm.complete });
+    const conv = (await query<{ id: string }>("SELECT id::text AS id FROM chat_conversations WHERE user_id = $1", [uid]))[0]!.id;
+    const mkCharged = async (age: string) => {
+      const id = (await query<{ id: string }>(`INSERT INTO chat_messages (conversation_id, role, content, client_id, charged_points, created_at) VALUES ($1, 'user', 'yetim', $2, 100, now() - interval '${age}') RETURNING id::text AS id`, [conv, cid()]))[0]!.id;
+      await transaction((c) => chargeInTx(c, uid, 100, `chat:${id}`, "AI chat xabari"));
+      return id;
+    };
+    const old = await mkCharged("6 minutes");
+    const fresh = await mkCharged("2 minutes");
+    // An old charged message that WAS answered is not an orphan.
+    const okMsg = (await query<{ id: string }>("INSERT INTO chat_messages (conversation_id, role, content, client_id, charged_points, created_at) VALUES ($1, 'user', 'javob bor', $2, 100, now() - interval '10 minutes') RETURNING id::text AS id", [conv, cid()]))[0]!.id;
+    await query("INSERT INTO chat_messages (conversation_id, role, content, reply_to) VALUES ($1, 'assistant', 'ha', $2)", [conv, okMsg]);
+    assert.equal((await wallet(query, uid)).balance, 800);
+    assert.equal(await chat.refundOrphanedChat(), 1);
+    assert.equal((await wallet(query, uid)).balance, 900, "only the old orphan was refunded");
+    const left = (await query<{ id: string }>("SELECT id::text AS id FROM chat_messages WHERE id = ANY($1::bigint[])", [[old, fresh, okMsg]])).map((r) => r.id);
+    assert.deepEqual(left.sort(), [fresh, okMsg].sort());
+    assert.equal(await chat.refundOrphanedChat(), 0, "idempotent");
+    assert.equal((await wallet(query, uid)).balance, 900);
+    assert.ok(answered.reply.id);
+    await query("UPDATE chat_messages SET created_at = now() - interval '6 minutes' WHERE id = $1", [fresh]);
+    assert.equal(await chat.refundOrphanedChat(), 1);
+    assert.equal((await wallet(query, uid)).balance, 1000);
+  });
+
+  await t.test("a parallel send race at 9/10: exactly one message is free, the other is paid (or refused for an empty wallet) -- never two free", async () => {
+    const llm = stubLlm();
+    const poor = await mkUser(query, { balance: 0 });
+    for (let i = 0; i < 9; i++) await chat.sendChatMessage({ userId: poor, channel: "web", text: "x", clientId: cid() }, { complete: llm.complete });
+    const settled = await Promise.allSettled([1, 2].map(() => chat.sendChatMessage({ userId: poor, channel: "web", text: "poyga", clientId: cid() }, { complete: llm.complete })));
+    assert.equal(settled.filter((x) => x.status === "fulfilled").length, 1);
+    const rej = settled.find((x) => x.status === "rejected") as PromiseRejectedResult;
+    assert.equal(rej.reason.status, 402);
+    assert.equal((await chat.chatStatus(poor)).freeLeft, 0);
+    assert.equal((await charges(poor)).length, 0);
+
+    const rich = await mkUser(query, { balance: 1000 });
+    for (let i = 0; i < 9; i++) await chat.sendChatMessage({ userId: rich, channel: "web", text: "x", clientId: cid() }, { complete: llm.complete });
+    const both = await Promise.all([1, 2].map(() => chat.sendChatMessage({ userId: rich, channel: "web", text: "poyga", clientId: cid() }, { complete: llm.complete })));
+    assert.deepEqual(both.map((r) => r.charged).sort(), [0, 100]);
+    assert.equal((await wallet(query, rich)).balance, 900);
+    assert.equal((await charges(rich)).length, 1);
   });
 });

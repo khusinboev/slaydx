@@ -1012,6 +1012,8 @@ export async function purgeHousekeeping(): Promise<void> {
       return n;
     });
   }
+  // AI chat: a message charged but never answered (the process died mid-send) is refunded after 5 minutes.
+  await step("chat-refund", async () => (await import("./chat/service")).refundOrphanedChat());
   // AI chat retention (owner request 8): messages and proposals older than 30 days.
   if (Date.now() - lastChatPurgeAt >= RETENTION_EVERY_MS) {
     await step("chat-purge", async () => {

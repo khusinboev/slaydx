@@ -15,16 +15,18 @@ import { log } from "./log";
  * no-op thanks to `ai_usage_job_once_idx`.
  */
 
-export type AiUsageSource = "job" | "free";
-export type AiUsageOutcome = "completed" | "failed" | "abandoned" | "free";
+export type AiUsageSource = "job" | "free" | "paid";
+export type AiUsageOutcome = "completed" | "failed" | "abandoned" | "free" | "paid";
 
 export type AiUsageInput = {
   source: AiUsageSource;
   outcome: AiUsageOutcome;
   generationId?: string | null;
   userId?: string | number | null;
-  /** Tool id, or `free:<endpoint>` for the free endpoints. */
+  /** Tool id, or `free:<endpoint>` for the free endpoints, `chat:paid` for a paid chat message. */
   toolId: string;
+  /** Ledger reference of paid spend (`chat:<message id>`); unique per outcome, so a repeated flush is a no-op. */
+  ref?: string | null;
   cost: CostJson;
 };
 
@@ -52,9 +54,9 @@ async function insert(r: AiUsageInput): Promise<boolean> {
   const userId = r.userId !== null && r.userId !== undefined && /^\d{1,18}$/.test(String(r.userId)) ? String(r.userId) : null;
   const usd = Number(r.cost.usd);
   const rows = await query<{ id: string }>(
-    `INSERT INTO ai_usage (source, outcome, generation_id, user_id, tool_id, calls, input_tokens, output_tokens, usd, parts)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
-     ON CONFLICT (generation_id, outcome) WHERE generation_id IS NOT NULL DO NOTHING
+    `INSERT INTO ai_usage (source, outcome, generation_id, user_id, tool_id, calls, input_tokens, output_tokens, usd, parts, ref)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11)
+     ON CONFLICT DO NOTHING
      RETURNING id`,
     [
       r.source,
@@ -67,6 +69,7 @@ async function insert(r: AiUsageInput): Promise<boolean> {
       count(r.cost.outputTokens),
       Number.isFinite(usd) && usd > 0 ? Math.min(Number(usd.toFixed(6)), MAX_USD) : 0,
       toJsonb(Array.isArray(r.cost.parts) ? r.cost.parts : []),
+      r.ref ? String(r.ref).slice(0, 80) : null,
     ],
   );
   return rows.length > 0;

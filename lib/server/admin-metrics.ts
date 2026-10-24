@@ -436,6 +436,7 @@ const FREE_TITLES: Record<string, string> = {
   "free:rewrite": "Bepul AI: tuzatish",
   "free:polish": "Bepul AI: sayqal",
   "free:chat": "Bepul AI: chat",
+  "chat:paid": "AI chat (pullik xabarlar)",
 };
 
 export function toolTitle(toolId: string): string {

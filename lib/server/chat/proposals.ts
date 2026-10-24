@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, hkdfSync, timingSafeEqual } from "node:crypto";
 import type { ChatConfirmCard } from "../../chat/types";
 import { PROPOSAL_TTL_MS } from "../../chat/types";
 import { TOOL_BY_ID } from "../../tools";
@@ -39,8 +39,20 @@ export function valuesHash(tool: string, values: FormValues, price: number): str
   return createHash("sha256").update(`${tool}\n${price}\n${canonicalValues(values)}`).digest("hex");
 }
 
+const KEY_INFO = "slaydx-chat-proposal-token-v1";
+let cachedKey: { secret: string; key: Buffer } | null = null;
+
+/** An HKDF subkey of SESSION_SECRET, so the session secret itself never keys this MAC (same pattern as the download tokens). */
+function subkey(): Buffer {
+  const secret = env.sessionSecret;
+  if (cachedKey && cachedKey.secret === secret) return cachedKey.key;
+  const key = Buffer.from(hkdfSync("sha256", Buffer.from(secret, "utf8"), Buffer.alloc(0), KEY_INFO, 32));
+  cachedKey = { secret, key };
+  return key;
+}
+
 function tokenFor(id: string, userId: string, hash: string, expiresAtMs: number): string {
-  return createHmac("sha256", env.sessionSecret).update(`chat-proposal\n${id}\n${userId}\n${hash}\n${expiresAtMs}`).digest("base64url");
+  return createHmac("sha256", subkey()).update(`chat-proposal\n${id}\n${userId}\n${hash}\n${expiresAtMs}`).digest("base64url");
 }
 
 function sha256(text: string): string {
@@ -122,7 +134,7 @@ export type ConfirmFailure =
   | { ok: false; reason: "adjust"; issues: string[] }
   | { ok: false; reason: "price_changed"; price: number }
   | { ok: false; reason: "insufficient"; required: number; available: number }
-  | { ok: false; reason: "refused"; status: number; message: string; code?: string }
+  | { ok: false; reason: "refused"; status: number; message: string; code?: string; extra?: Record<string, unknown> }
   | { ok: false; reason: "admission"; message: string; retryAfterSec: number };
 export type ConfirmResult = { ok: true; generationId: string; price: number; replayed: boolean } | ConfirmFailure;
 
@@ -154,7 +166,9 @@ export async function confirmProposal(input: { userId: string; token: unknown; h
   if (echo.length < 8 || !row.values_hash.startsWith(echo)) return { ok: false, reason: "tampered" };
   if (valuesHash(row.tool, row.values, row.price) !== row.values_hash) return { ok: false, reason: "tampered" };
 
+  // The same budgets as `POST /api/generations`, shared with it: a chat confirmation is a generation.
   if (!(await rateLimit(`gen:burst:${userId}`, 5, 60)).ok) return { ok: false, reason: "rate" };
+  if (!(await rateLimit(`gen:hour:${userId}`, 60, 3600)).ok) return { ok: false, reason: "rate" };
 
   // Single use: one UPDATE decides which tap wins.
   const claimed = await queryOne<{ id: string }>(
@@ -162,8 +176,9 @@ export async function confirmProposal(input: { userId: string; token: unknown; h
     [row.id],
   );
   if (!claimed) {
-    if (row.used_at) return { ok: false, reason: "used" };
-    return { ok: false, reason: "expired" };
+    // Read the row again: a racing tap may have used it between our SELECT and the claim, and that is "used", not "expired".
+    const now = await queryOne<{ used: boolean; expired: boolean }>("SELECT used_at IS NOT NULL AS used, expires_at <= now() AS expired FROM chat_proposals WHERE id = $1", [row.id]);
+    return { ok: false, reason: now?.used ? "used" : "expired" };
   }
 
   try {
@@ -204,7 +219,7 @@ export async function confirmProposal(input: { userId: string; token: unknown; h
         return { ok: false, reason: "insufficient", required: Number(e.extra.required) || row.price, available: Number(e.extra.available) || 0 };
       }
       if (e.status === 409 && e.extra.code === "price_changed") return { ok: false, reason: "price_changed", price: Number(e.extra.price) || row.price };
-      return { ok: false, reason: "refused", status: e.status, message: e.message, code: typeof e.extra.code === "string" ? e.extra.code : undefined };
+      return { ok: false, reason: "refused", status: e.status, message: e.message, code: typeof e.extra.code === "string" ? e.extra.code : undefined, extra: e.extra };
     }
     // An unexpected error: if the generation exists the charge happened -- keep the claim; otherwise free it.
     const made = await queryOne<{ id: string }>("SELECT id::text AS id FROM generations WHERE user_id = $1 AND idempotency_key = $2", [userId, idemKey(row.id)]);

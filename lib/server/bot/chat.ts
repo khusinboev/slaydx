@@ -8,6 +8,9 @@ import { log } from "../log";
 import { rateLimit } from "../ratelimit";
 import { t, toolTitle, type Lang } from "./i18n";
 import { sendScreen, type ChatCtx } from "./router";
+import { mandatoryScreen } from "./bonus";
+import { sendOfferIfRequired } from "./oferta";
+import type { MandatoryChannel } from "../mandatory-channels";
 import { appUrl, esc, inlineButton, rows, type Screen } from "./ui";
 
 /**
@@ -110,6 +113,10 @@ export async function handleChatText(ctx: ChatCtx, text: string, updateId: numbe
     await sendScreen(ctx.chatId, { text: t(ctx.lang, "chat.err.rate") });
     return true;
   }
+  if (!(await rateLimit(`chat:hour:${ctx.user.id}`, 200, 3600)).ok) {
+    await sendScreen(ctx.chatId, { text: t(ctx.lang, "chat.err.rate") });
+    return true;
+  }
   await callBot("sendChatAction", { chat_id: ctx.chatId, action: "typing" }).catch(() => undefined);
   try {
     const r = await sendChatMessage({ userId: ctx.user.id, channel: "bot", text, clientId: `tg${updateId}` });
@@ -181,6 +188,15 @@ export async function handleChatCallback(ctx: ChatCtx, messageId: number, data: 
       ...(files ? { reply_markup: rows([inlineButton("files", t(ctx.lang, "chat.openFiles"), { web_app: { url: files } })]) } : {}),
     });
     return t(ctx.lang, "chat.started");
+  }
+  // The same gates as the web form: the offer not accepted / mandatory channels not joined are fixed with the existing screens.
+  if (r.reason === "refused" && r.code === "offer_required") {
+    await sendOfferIfRequired({ chatId: ctx.chatId, lang: ctx.lang, user: ctx.user });
+    return t(ctx.lang, "chat.err.refused", { reason: r.message }).slice(0, 190);
+  }
+  if (r.reason === "refused" && r.code === "channel_required" && Array.isArray(r.extra?.channels)) {
+    await sendScreen(ctx.chatId, mandatoryScreen(ctx.lang, r.extra!.channels as MandatoryChannel[]));
+    return t(ctx.lang, "chat.err.refused", { reason: r.message }).slice(0, 190);
   }
   const { toast, screen } = failureToast(ctx.lang, r);
   if (r.reason === "used" || r.reason === "expired" || r.reason === "invalid" || r.reason === "tampered") await dropButtons(ctx, messageId);

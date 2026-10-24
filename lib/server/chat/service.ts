@@ -9,7 +9,7 @@ import {
   type ChatReply,
   type ChatStatus,
 } from "../../chat/types";
-import { complete as completeRole, type LlmRole, type RoleResult } from "../../generation/llm-roles";
+import { complete as completeRole, DeadlineError, type LlmRole, type RoleResult } from "../../generation/llm-roles";
 import { parseLlmObject } from "../../generation/json";
 import { trackJobCost } from "../../generation/job-cost";
 import { ApiError } from "../api";
@@ -17,7 +17,8 @@ import { chargeInTx, refund, walletTotal } from "../credits";
 import { query, queryOne, transaction } from "../db";
 import { env } from "../env";
 import { toJsonb } from "../jsonb";
-import { effectiveFreeLlmPolicy, flushFreeUsage, FREE_LLM_WEIGHT, TASHKENT_UTC_OFFSET_SEC, tashkentDayStart, withFreeLlm, assertFreeLlmEnabled } from "../spend";
+import { effectiveFreeLlmPolicy, FREE_LLM_WEIGHT, TASHKENT_UTC_OFFSET_SEC, tashkentDayStart, withFreeLlm, assertFreeLlmEnabled } from "../spend";
+import { recordAiUsage } from "../ai-usage";
 import { getUserById, type SessionUser } from "../session";
 import { getSetting } from "../settings";
 import { knowledgePack } from "./knowledge";
@@ -50,7 +51,16 @@ export type ChatDeps = {
   bucketPrefix?: string;
 };
 
-const CLAIM_STALE_MS = 60_000;
+/**
+ * A send with no reply yet is "in flight" for this long. It is longer than the model deadline below, so a retry (the
+ * client's, or a nginx 504 retry) arriving while the first request still waits for the model gets 409 `busy` instead of
+ * starting a second model call and a second charge.
+ */
+const CLAIM_STALE_MS = 180_000;
+/** Total time one message may wait for the model chain (all attempts and fallbacks); must stay below `CLAIM_STALE_MS`. */
+const MODEL_DEADLINE_MS = 120_000;
+/** A charged message with no answer after this long is an orphan (the process died mid-send): the housekeeping refunds it. */
+const ORPHAN_AFTER_MINUTES = 5;
 const DISABLED_TEXT = "AI chat hozircha o'chirilgan.";
 
 /* ───────────────────────── status ───────────────────────── */
@@ -234,7 +244,13 @@ export function parseModelAnswer(res: RoleResult): ModelOut {
 }
 
 async function ask(complete: typeof completeRole, system: string, user: string): Promise<ModelOut> {
-  const res = await complete("fast" as LlmRole, system, user, { json: true, maxTokens: 1200, timeoutMs: 30_000 });
+  let res: RoleResult | null;
+  try {
+    res = await complete("fast" as LlmRole, system, user, { json: true, maxTokens: 1200, timeoutMs: 30_000, deadline: Date.now() + MODEL_DEADLINE_MS });
+  } catch (e) {
+    if (!(e instanceof DeadlineError)) throw e;
+    res = null;
+  }
   if (!res || !res.text.trim()) throw new ApiError("AI hozir javob bermadi. Birozdan keyin qayta urinib ko'ring.", 503, { code: "no_answer" });
   return parseModelAnswer(res);
 }
@@ -337,14 +353,18 @@ export async function sendChatMessage(input: SendInput, deps: ChatDeps = {}): Pr
       throw e;
     });
   } catch (e) {
-    if (!(e instanceof ApiError && e.status === 429 && e.extra.code === "daily")) {
+    const dailyDone = e instanceof ApiError && e.status === 429 && e.extra.code === "daily";
+    // The GLOBAL free cap is full: a user still inside the personal free quota is served as a paid message instead of a 503.
+    const globalFull = e instanceof ApiError && e.status === 503 && e.extra.code === "global";
+    if (!dailyDone && !globalFull) {
       await dropClaim(messageId);
       throw e;
     }
-    // The free messages of the day are used up: this one is paid.
+    if (globalFull) await giveBackFree(userId, now, pre);
     const price = await getSetting("chat.price_per_message");
     if (price <= 0) {
       await dropClaim(messageId);
+      if (globalFull) throw e;
       throw new ApiError("Bugungi tekin xabarlar tugadi — ertaga (Toshkent vaqti bilan 00:00 dan keyin) davom etishingiz mumkin.", 429, { code: "free_exhausted" });
     }
     const paid = await transaction(async (client) => {
@@ -369,7 +389,8 @@ export async function sendChatMessage(input: SendInput, deps: ChatDeps = {}): Pr
       await dropClaim(messageId);
       throw err;
     } finally {
-      flushFreeUsage("chat", userId, tracked.snapshot);
+      // Paid spend is its own bucket in ai_usage (source/outcome 'paid', ref = the ledger reference), not "free" spend.
+      void recordAiUsage({ source: "paid", outcome: "paid", userId, toolId: "chat:paid", ref: `chat:${messageId}`, cost: tracked.snapshot().toJson() });
     }
   }
 
@@ -418,7 +439,30 @@ async function cardFor(out: ModelOut, user: SessionUser): Promise<ChatCard | nul
   };
 }
 
-/* ───────────────────────── retention ───────────────────────── */
+/* ───────────────────────── orphans and retention ───────────────────────── */
+
+/**
+ * Housekeeping (leader only): a message that was charged but never answered -- the process died between the charge and the
+ * reply -- older than 5 minutes is refunded (`refund` is idempotent per `chat:<id>`) and removed, so the user is never
+ * left paying for nothing. Returns how many messages were refunded.
+ */
+export async function refundOrphanedChat(): Promise<number> {
+  const rows = await query<{ id: string; user_id: string }>(
+    `SELECT m.id::text AS id, c.user_id::text AS user_id
+       FROM chat_messages m JOIN chat_conversations c ON c.id = m.conversation_id
+      WHERE m.role = 'user' AND m.charged_points > 0 AND m.created_at < now() - ($1::int * interval '1 minute')
+        AND NOT EXISTS (SELECT 1 FROM chat_messages r WHERE r.reply_to = m.id)
+      ORDER BY m.id LIMIT 100`,
+    [ORPHAN_AFTER_MINUTES],
+  );
+  let n = 0;
+  for (const r of rows) {
+    await refund(r.user_id, `chat:${r.id}`, "AI chat: javob berilmadi");
+    await query("DELETE FROM chat_messages WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM chat_messages x WHERE x.reply_to = $1)", [r.id]);
+    n += 1;
+  }
+  return n;
+}
 
 /** Housekeeping: messages (and proposals) older than 30 days go; empty old conversations with them. */
 export async function purgeChat(days: number = CHAT_RETENTION_DAYS): Promise<number> {

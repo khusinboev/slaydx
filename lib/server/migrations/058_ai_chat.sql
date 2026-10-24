@@ -11,9 +11,20 @@
 --                       (`token_hash`); `values_hash` binds the token to the exact values; `used_at` is the claim.
 --                       The model's text can never confirm a proposal -- only a user tap with the token does.
 --
--- Backward compatible: new tables only; old code never reads them.
+-- Spend of a PAID chat message goes to `ai_usage` as source/outcome 'paid' with the ledger reference `chat:<message id>`
+-- (`ai_usage.ref`, unique per outcome), so admin margins can tell it from free spend. The CHECKs are widened for that;
+-- the free chat (`free:chat`) keeps source 'free'.
+--
+-- Backward compatible: new tables, one nullable column and two widened CHECKs; old code never reads them.
 --
 -- ROLLBACK:
+--   DELETE FROM ai_usage WHERE source = 'paid' OR outcome = 'paid';
+--   DROP INDEX IF EXISTS ai_usage_ref_once_idx;
+--   ALTER TABLE ai_usage DROP COLUMN IF EXISTS ref;
+--   ALTER TABLE ai_usage DROP CONSTRAINT IF EXISTS ai_usage_source_check;
+--   ALTER TABLE ai_usage ADD CONSTRAINT ai_usage_source_check CHECK (source IN ('job','free'));
+--   ALTER TABLE ai_usage DROP CONSTRAINT IF EXISTS ai_usage_outcome_check;
+--   ALTER TABLE ai_usage ADD CONSTRAINT ai_usage_outcome_check CHECK (outcome IN ('completed','failed','abandoned','free'));
 --   DROP TABLE IF EXISTS chat_proposals;
 --   DROP TABLE IF EXISTS chat_messages;
 --   DROP TABLE IF EXISTS chat_conversations;
@@ -60,3 +71,13 @@ CREATE TABLE IF NOT EXISTS chat_proposals (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS chat_proposals_user_idx ON chat_proposals (user_id, created_at DESC);
+
+-- An orphaned paid message (charged, never answered) is found by the housekeeping refund step.
+CREATE INDEX IF NOT EXISTS chat_messages_orphan_idx ON chat_messages (created_at) WHERE role = 'user' AND charged_points > 0;
+
+ALTER TABLE ai_usage ADD COLUMN IF NOT EXISTS ref TEXT;
+ALTER TABLE ai_usage DROP CONSTRAINT IF EXISTS ai_usage_source_check;
+ALTER TABLE ai_usage ADD CONSTRAINT ai_usage_source_check CHECK (source IN ('job','free','paid'));
+ALTER TABLE ai_usage DROP CONSTRAINT IF EXISTS ai_usage_outcome_check;
+ALTER TABLE ai_usage ADD CONSTRAINT ai_usage_outcome_check CHECK (outcome IN ('completed','failed','abandoned','free','paid'));
+CREATE UNIQUE INDEX IF NOT EXISTS ai_usage_ref_once_idx ON ai_usage (ref, outcome) WHERE ref IS NOT NULL;

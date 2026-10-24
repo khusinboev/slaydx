@@ -84,6 +84,7 @@ test("worker housekeeping records every named step and runs the new purges", asy
     "refund-reconcile",
     "retention",
     "payment-events",
+    "chat-refund",
     "chat-purge",
     "sessions",
     "game-sessions",

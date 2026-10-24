@@ -33,7 +33,7 @@ export function confirmFailureResponse(f: ConfirmFailure): { status: number; bod
         },
       };
     case "refused":
-      return { status: f.status, body: { error: f.message, ...(f.code ? { code: f.code } : {}) } };
+      return { status: f.status, body: { error: f.message, ...(f.extra ?? {}), ...(f.code ? { code: f.code } : {}) } };
     case "admission":
       return { status: 429, body: { error: f.message, code: "admission", retryAfterSec: f.retryAfterSec } };
   }
