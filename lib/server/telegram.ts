@@ -269,9 +269,12 @@ const COMMAND_TEXT: Partial<Record<(typeof BOT_COMMANDS)[number], TextKey>> = { 
  */
 export async function setBotCommands(): Promise<boolean> {
   let ok = true;
+  // `/test` is listed only while the paid tests are switched on (`tests.enabled`); the admin settings write re-runs this.
+  const testsOn = await (await import("./settings")).getSetting("tests.enabled");
+  const commands = BOT_COMMANDS.filter((c) => c !== "test" || testsOn);
   for (const lang of LANGS) {
     const out = await call("setMyCommands", {
-      commands: BOT_COMMANDS.map((command) => ({ command, description: t(lang, COMMAND_TEXT[command] ?? (`cmd.${command}` as TextKey)) })),
+      commands: commands.map((command) => ({ command, description: t(lang, COMMAND_TEXT[command] ?? (`cmd.${command}` as TextKey)) })),
       ...(lang === "uz" ? {} : { language_code: lang }),
     });
     ok &&= out !== null;

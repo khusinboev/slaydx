@@ -217,12 +217,32 @@ test("setBotCommands lists /taklif with an Uzbek description", { skip }, async (
   assert.equal(await tg.setBotCommands(), true);
   const cmds = calls[0]!.body.commands as { command: string; description: string }[];
   // B2: + /til; the default (Uzbek) list first, then the ru/en scopes.
-  assert.deepEqual(cmds.map((c) => c.command), ["start", "login", "taklif", "admin", "til", "alifbo", "savol", "obuna", "domla", "chat", "stop", "test"], "MUTATSIYA 5");
+  assert.deepEqual(cmds.map((c) => c.command), ["start", "login", "taklif", "admin", "til", "alifbo", "savol", "obuna", "domla", "chat", "stop"], "MUTATSIYA 5: /test is hidden while tests.enabled is off");
   assert.equal(cmds.find((c) => c.command === "taklif")!.description, "Do'stlarni taklif qilish havolasi");
   assert.equal(calls[0]!.body.language_code, undefined);
   assert.deepEqual(calls.slice(1).map((c) => c.body.language_code), ["ru", "en"]);
   const ru = calls[1]!.body.commands as { command: string; description: string }[];
   assert.equal(ru.find((c) => c.command === "til")!.description, "Сменить язык бота");
+
+  // Paid tests: /test appears in every language scope once tests.enabled is on, and goes away again when it is off.
+  const settings = await import("../lib/server/settings.ts");
+  await query("INSERT INTO app_settings (key, value) VALUES ('tests.enabled', 'true'::jsonb) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value");
+  settings.invalidateSettingsCache();
+  try {
+    installFetch();
+    assert.equal(await tg.setBotCommands(), true);
+    for (const c of calls) {
+      const list = (c.body.commands as { command: string; description: string }[]).map((x) => x.command);
+      assert.equal(list.at(-1), "test", `/test listed for ${String(c.body.language_code ?? "uz")}`);
+      assert.ok(!(c.body.commands as { description: string }[]).some((x) => !x.description), "every command has a description");
+    }
+  } finally {
+    await query("DELETE FROM app_settings WHERE key = 'tests.enabled'");
+    settings.invalidateSettingsCache();
+  }
+  installFetch();
+  await tg.setBotCommands();
+  assert.ok(!(calls[0]!.body.commands as { command: string }[]).some((x) => x.command === "test"));
 });
 
 test("botUsername: the configured NEXT_PUBLIC_TELEGRAM_BOT, no getMe call", async () => {

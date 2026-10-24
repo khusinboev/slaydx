@@ -11,6 +11,9 @@ process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long"
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createIsolatedDb } from "./helpers/isolated-db.mts";
 
@@ -100,6 +103,32 @@ test("a disk image source never leaves its folder", () => {
   assert.equal(src.read("math"), null, "a directory is not a file");
 });
 
+test("a symlink inside the images folder that points outside is not followed", () => {
+  const base = mkdtempSync(join(tmpdir(), "bmb-img-"));
+  try {
+    const inside = join(base, "images");
+    const outside = join(base, "secret");
+    mkdirSync(inside);
+    mkdirSync(outside);
+    writeFileSync(join(outside, "stolen.png"), PNG_A);
+    writeFileSync(join(inside, "ok.png"), PNG_A);
+    symlinkSync(join(outside, "stolen.png"), join(inside, "link.png"));
+    symlinkSync(outside, join(inside, "dir"));
+    symlinkSync(join(inside, "ok.png"), join(inside, "alias.png"));
+    const src = imp.dirImages(inside);
+    assert.ok(src.read("ok.png"));
+    assert.equal(src.read("link.png"), null, "file symlink to outside");
+    assert.equal(src.read("dir/stolen.png"), null, "directory symlink to outside");
+    assert.ok(src.read("alias.png"), "a link that stays inside the folder is fine");
+    // A symlinked root itself is accepted (the folder the operator named).
+    symlinkSync(inside, join(base, "root-link"));
+    assert.ok(imp.dirImages(join(base, "root-link")).read("ok.png"));
+    assert.equal(imp.dirImages(join(base, "root-link")).read("link.png"), null);
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
 test("the same image under two questions of one subject: the second is skipped and reported", () => {
   const built = imp.buildPlan(
     exportOf([
@@ -143,6 +172,10 @@ test("import is idempotent (keyed by legacy_ref and image sha256)", { skip }, as
   edited.questions.find((q) => q.legacyRef === "bmb:history:31")!.explanation = "Izoh";
   const third = await imp.importPlan(edited);
   assert.deepEqual(third.questions, { inserted: 0, updated: 2, unchanged: 4, skippedDuplicates: 0 });
+  assert.deepEqual(third.changedAnswers, ["bmb:math:12"], "only the corrected KEY is listed (an explanation edit is not)");
+  assert.match(imp.formatSummary(third), /ANSWER KEY CHANGED for 1 existing question\(s\)[\s\S]*- bmb:math:12/);
+  assert.deepEqual(first.changedAnswers, []);
+  assert.ok(!/ANSWER KEY CHANGED/.test(imp.formatSummary(first)));
   const after2 = await query<{ answer: number; active: boolean }>("SELECT answer, active FROM test_questions WHERE legacy_ref = 'bmb:math:12'");
   assert.deepEqual(after2[0], { answer: 2, active: false });
   assert.deepEqual(await counts(), { banks: 1, subjects: 3, questions: 6, assets: 2 });

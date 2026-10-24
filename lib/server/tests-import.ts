@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, normalize, relative, resolve } from "node:path";
 import { transaction } from "./db";
 import { OPTION_COUNT, parseAnswerLetter } from "../tests/rules";
@@ -53,13 +53,16 @@ export type ImageSource = { read(relPath: string): Buffer | null };
 
 /** Disk source: never leaves `root` (a `..` or absolute path is simply "not found"). */
 export function dirImages(root: string): ImageSource {
-  const base = resolve(root);
+  const base = existsSync(root) ? realpathSync(resolve(root)) : resolve(root);
   return {
     read(relPath) {
       if (!relPath || isAbsolute(relPath)) return null;
-      const full = resolve(base, normalize(relPath));
+      const joined = resolve(base, normalize(relPath));
+      if (!existsSync(joined)) return null;
+      // Resolve symlinks BEFORE the containment check: a link inside the folder that points outside must not be followed.
+      const full = realpathSync(joined);
       const rel = relative(base, full);
-      if (rel.startsWith("..") || isAbsolute(rel) || !existsSync(full) || !statSync(full).isFile()) return null;
+      if (rel.startsWith("..") || isAbsolute(rel) || !statSync(full).isFile()) return null;
       return readFileSync(full);
     },
   };
@@ -231,6 +234,8 @@ export type ImportSummary = {
   questions: { inserted: number; updated: number; unchanged: number; skippedDuplicates: number };
   assets: { inserted: number; reused: number; bytes: number };
   perSubject: Record<string, { questions: number; variants: number }>;
+  /** `legacy_ref`s that already existed with a DIFFERENT answer key (a corrected key; finished attempts keep their snapshot). */
+  changedAnswers: string[];
 };
 
 class DryRunRollback extends Error {
@@ -250,6 +255,7 @@ export async function importPlan(plan: Plan, opts: { dryRun?: boolean } = {}): P
     questions: { inserted: 0, updated: 0, unchanged: 0, skippedDuplicates: plan.duplicates.length },
     assets: { inserted: 0, reused: 0, bytes: 0 },
     perSubject: {},
+    changedAnswers: [],
   };
   try {
     await transaction(async (client) => {
@@ -327,6 +333,7 @@ export async function importPlan(plan: Plan, opts: { dryRun?: boolean } = {}): P
           summary.questions.unchanged++;
         } else {
           // `active` is deliberately not touched: a question the admin switched off stays off after a re-import.
+          if (row.answer !== q.answer) summary.changedAnswers.push(q.legacyRef);
           await client.query(
             `UPDATE test_questions SET subject_id = $2, variant = $3, question_text = $4, image_asset_id = $5, options = $6::jsonb,
                     answer = $7, explanation = $8, updated_at = now() WHERE id = $1`,
@@ -354,6 +361,9 @@ export function formatSummary(s: ImportSummary, warnings: string[] = []): string
     `  questions: ${s.questions.inserted} inserted, ${s.questions.updated} updated, ${s.questions.unchanged} unchanged, ${s.questions.skippedDuplicates} duplicate image(s) skipped`,
     `  images:    ${s.assets.inserted} stored (${s.assets.bytes} bytes), ${s.assets.reused} already present`,
     ...Object.entries(s.perSubject).map(([c, v]) => `  ${c}: ${v.questions} question(s) in ${v.variants} variant(s)`),
+    ...(s.changedAnswers.length
+      ? [`  ANSWER KEY CHANGED for ${s.changedAnswers.length} existing question(s) (finished attempts keep their own copy of the key):`, ...s.changedAnswers.map((r) => `    - ${r}`)]
+      : []),
     ...warnings.map((w) => `  warning: ${w}`),
   ];
   return lines.join("\n");

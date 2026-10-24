@@ -11,6 +11,9 @@
 --   test_attempts         one attempt: frozen question order (`question_ids`), server deadline, price charged at start (ledger reference
 --                         'test:<id>'), score snapshot (`points_per_correct` copied at start so a later settings change cannot move it).
 --                         A user has at most ONE active attempt (partial unique index) and `client_key` makes a retried start idempotent.
+--                         `key_snapshot` is the answer key (0..3 per question, in `question_ids` order) copied when the attempt is
+--                         FINISHED: scoring and the review read only this copy, so a later correction of a question's key never
+--                         changes a finished result. A running attempt is scored with the key as it is at the moment it finishes.
 --   test_attempt_answers  the chosen letter per question. A row exists only for answered questions; rows after `deadline_at` are never
 --                         written by the service and never counted by the scoring.
 --
@@ -92,7 +95,9 @@ CREATE TABLE IF NOT EXISTS test_attempts (
   correct           INTEGER     CHECK (correct >= 0),
   score             NUMERIC(8, 2) CHECK (score >= 0),
   charged_points    BIGINT      NOT NULL DEFAULT 0 CHECK (charged_points >= 0),
-  client_key        TEXT
+  client_key        TEXT,
+  key_snapshot      SMALLINT[],
+  CONSTRAINT test_attempts_finished_has_key CHECK (status = 'active' OR (key_snapshot IS NOT NULL AND cardinality(key_snapshot) = total))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS test_attempts_one_active_idx ON test_attempts (user_id) WHERE status = 'active';
 CREATE UNIQUE INDEX IF NOT EXISTS test_attempts_client_key_idx ON test_attempts (user_id, client_key) WHERE client_key IS NOT NULL;

@@ -94,15 +94,19 @@ type AttemptRow = {
   score: string | null;
   charged_points: string;
   subject_name: string | null;
+  key_snapshot: number[] | null;
+  /** The DATABASE clock when the row was read: the time source of every deadline decision (tests may inject another). */
+  db_now: Date;
 };
 
 const ATTEMPT_COLS = `a.id, a.user_id::text AS user_id, a.bank_id::text AS bank_id, a.subject_id::text AS subject_id, a.mode, a.question_ids, a.total,
   a.status, a.finish_reason, a.started_at, a.deadline_at, a.finished_at, a.points_per_correct::text AS points_per_correct, a.correct,
-  a.score::text AS score, a.charged_points::text AS charged_points, s.name AS subject_name`;
+  a.score::text AS score, a.charged_points::text AS charged_points, s.name AS subject_name, a.key_snapshot, clock_timestamp() AS db_now`;
 const ATTEMPT_FROM = "test_attempts a LEFT JOIN test_subjects s ON s.id = a.subject_id";
 
 const iso = (d: Date): string => new Date(d).toISOString();
-const imageUrl = (attemptId: string, questionId: number): string => `/api/tests/attempts/${attemptId}/image/${questionId}`;
+/** `?v=` is the first 8 hex of the image hash: a corrected screenshot gets a new URL, the old one stays cacheable. */
+const imageUrl = (attemptId: string, questionId: number, version: string): string => `/api/tests/attempts/${attemptId}/image/${questionId}?v=${version}`;
 
 /** A question as the client sees it DURING an attempt: no answer, no explanation. */
 export type ActiveQuestion = {
@@ -181,24 +185,29 @@ const num = (s: string | null): number | null => (s === null ? null : Number(s))
 /* ───────────────────────── finishing ───────────────────────── */
 
 /**
- * Scores and closes a locked, still-active attempt. Only answers stored AT OR BEFORE the deadline count (the
- * service never writes later ones; the filter is the second line of defence). A timeout is dated at the
- * deadline, a manual finish at `now`.
+ * Scores and closes a locked, still-active attempt. The answer key is read HERE, once, and stored as
+ * `key_snapshot` (one entry per question, unanswered included): the score and the finished review use only
+ * that copy, so correcting a question's key afterwards cannot change a finished result. Only answers stored AT OR
+ * BEFORE the deadline count (the service never writes later ones; the filter is the second line of defence).
+ * A timeout is dated at the deadline, a manual finish at `now`.
  */
 async function finalizeInTx(client: PoolClient, a: AttemptRow, reason: "manual" | "timeout", now: Date): Promise<void> {
-  const r = await client.query<{ n: number }>(
-    `SELECT count(*)::int AS n
-       FROM test_attempt_answers x JOIN test_questions q ON q.id = x.question_id
-      WHERE x.attempt_id = $1 AND x.chosen = q.answer AND x.answered_at <= $2`,
+  const ids = a.question_ids.map(Number);
+  const keys = await client.query<{ id: string; answer: number }>("SELECT id::text AS id, answer FROM test_questions WHERE id = ANY($1::bigint[])", [ids]);
+  const keyOf = new Map(keys.rows.map((r) => [Number(r.id), r.answer]));
+  const snapshot = ids.map((id) => keyOf.get(id) ?? 0);
+  const given = await client.query<{ question_id: string; chosen: number }>(
+    "SELECT question_id::text AS question_id, chosen FROM test_attempt_answers WHERE attempt_id = $1 AND answered_at <= $2",
     [a.id, a.deadline_at],
   );
-  const correct = r.rows[0]?.n ?? 0;
+  const chosen = new Map(given.rows.map((r) => [Number(r.question_id), r.chosen]));
+  const correct = ids.filter((id, i) => chosen.get(id) === snapshot[i]).length;
   const score = scoreOf(correct, Number(a.points_per_correct));
   const finishedAt = reason === "timeout" ? a.deadline_at : now;
   await client.query(
-    `UPDATE test_attempts SET status = 'finished', finish_reason = $2, finished_at = $3, correct = $4, score = $5
+    `UPDATE test_attempts SET status = 'finished', finish_reason = $2, finished_at = $3, correct = $4, score = $5, key_snapshot = $6::smallint[]
       WHERE id = $1 AND status = 'active'`,
-    [a.id, reason, finishedAt, correct, score],
+    [a.id, reason, finishedAt, correct, score, snapshot],
   );
 }
 
@@ -213,24 +222,25 @@ async function lockAttempt(client: PoolClient, userId: string, attemptId: string
 }
 
 /** Finishes one attempt because its time is up (idempotent; a finished one is left alone). */
-export async function finishByTimeout(attemptId: string, now: Date = new Date()): Promise<boolean> {
+export async function finishByTimeout(attemptId: string, now?: Date): Promise<boolean> {
   return transaction(async (client) => {
     const r = await client.query<AttemptRow>(
       `SELECT ${ATTEMPT_COLS} FROM test_attempts a LEFT JOIN test_subjects s ON s.id = a.subject_id WHERE a.id = $1 FOR UPDATE OF a`,
       [attemptId],
     );
     const a = r.rows[0];
-    if (!a || a.status !== "active" || !isPastDeadline(a.deadline_at, now)) return false;
-    await finalizeInTx(client, a, "timeout", now);
+    const at = now ?? a?.db_now;
+    if (!a || !at || a.status !== "active" || !isPastDeadline(a.deadline_at, at)) return false;
+    await finalizeInTx(client, a, "timeout", at);
     return true;
   });
 }
 
 /** Worker housekeeping: finishes abandoned attempts whose deadline passed. Returns how many. */
-export async function sweepExpiredAttempts(now: Date = new Date(), batch = 200): Promise<number> {
+export async function sweepExpiredAttempts(now?: Date, batch = 200): Promise<number> {
   const rows = await query<{ id: string }>(
-    "SELECT id FROM test_attempts WHERE status = 'active' AND deadline_at < $1 ORDER BY deadline_at LIMIT $2",
-    [now, batch],
+    "SELECT id FROM test_attempts WHERE status = 'active' AND deadline_at < COALESCE($1::timestamptz, clock_timestamp()) ORDER BY deadline_at LIMIT $2",
+    [now ?? null, batch],
   );
   let n = 0;
   for (const { id } of rows) if (await finishByTimeout(id, now)) n++;
@@ -287,10 +297,10 @@ export async function listHistory(userId: string, limit = 20): Promise<HistoryIt
 }
 
 /** Everything the page shows before an attempt: switch, price, subjects, the open attempt and the history. Charges nothing. */
-export async function overview(userId: string, now: Date = new Date()): Promise<Overview> {
+export async function overview(userId: string, now?: Date): Promise<Overview> {
   const cfg = await testsConfig();
   // An attempt past its deadline is closed first, so it neither blocks a new start nor shows as «open».
-  const stale = await queryOne<{ id: string }>("SELECT id FROM test_attempts WHERE user_id = $1 AND status = 'active' AND deadline_at < $2", [userId, now]);
+  const stale = await queryOne<{ id: string }>("SELECT id FROM test_attempts WHERE user_id = $1 AND status = 'active' AND deadline_at < COALESCE($2::timestamptz, clock_timestamp())", [userId, now ?? null]);
   if (stale) await finishByTimeout(stale.id, now);
 
   const bank = await activeBank();
@@ -341,10 +351,11 @@ export async function startAttempt(userId: string, input: StartInput, opts: Star
   const cfg = await testsConfig();
   if (!cfg.enabled) throw new ApiError("Test ishlash hozircha o‘chiq", 503, { code: "disabled" });
   const rng = opts.rng ?? cryptoRng;
-  const now = opts.now ?? new Date();
 
   return transaction(async (client): Promise<StartResult> => {
     await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);
+    // The database clock (read after the lock, so queued taps get their own time) unless a test injects one.
+    const now = opts.now ?? (await client.query<{ n: Date }>("SELECT clock_timestamp() AS n")).rows[0]!.n;
 
     if (key) {
       const again = await client.query<AttemptRow>(
@@ -421,12 +432,13 @@ export type AnswerResult =
  * Stores the user's choice for a question (the last choice before the deadline wins). Past the deadline the
  * answer is NOT stored or counted and the attempt is finished on the spot. Nothing about correctness is returned.
  */
-export async function answerQuestion(userId: string, attemptId: string, questionId: number, choice: number, now: Date = new Date()): Promise<AnswerResult> {
+export async function answerQuestion(userId: string, attemptId: string, questionId: number, choice: number, injectedNow?: Date): Promise<AnswerResult> {
   if (!Number.isInteger(choice) || choice < 0 || choice >= LETTERS.length) return { ok: false, reason: "bad_choice" };
   return transaction(async (client): Promise<AnswerResult> => {
     const a = await lockAttempt(client, userId, attemptId);
     if (!a) return { ok: false, reason: "not_found" };
     if (a.status === "finished") return { ok: false, reason: "finished" };
+    const now = injectedNow ?? a.db_now;
     if (isPastDeadline(a.deadline_at, now)) {
       await finalizeInTx(client, a, "timeout", now);
       return { ok: false, reason: "expired" };
@@ -446,10 +458,11 @@ export async function answerQuestion(userId: string, attemptId: string, question
  * «Tugatish». Idempotent: a finished attempt stays as it is. Called after the deadline it finishes as 'timeout'.
  * Returns whether the attempt exists for this user.
  */
-export async function finishAttempt(userId: string, attemptId: string, now: Date = new Date()): Promise<boolean> {
+export async function finishAttempt(userId: string, attemptId: string, injectedNow?: Date): Promise<boolean> {
   return transaction(async (client) => {
     const a = await lockAttempt(client, userId, attemptId);
     if (!a) return false;
+    const now = injectedNow ?? a.db_now;
     if (a.status === "active") await finalizeInTx(client, a, isPastDeadline(a.deadline_at, now) ? "timeout" : "manual", now);
     return true;
   });
@@ -462,42 +475,33 @@ async function attemptRow(userId: string, attemptId: string): Promise<AttemptRow
   return queryOne<AttemptRow>(`SELECT ${ATTEMPT_COLS} FROM ${ATTEMPT_FROM} WHERE a.id = $1 AND a.user_id = $2`, [attemptId, userId]);
 }
 
-/** The questions of an attempt in the frozen order. `withKey` selects the answer + explanation: ONLY for a finished attempt. */
-async function loadQuestions(ids: number[], withKey: false): Promise<Map<number, { text: string | null; options: string[] | null; hasImage: boolean; subject: string }>>;
-async function loadQuestions(
-  ids: number[],
-  withKey: true,
-): Promise<Map<number, { text: string | null; options: string[] | null; hasImage: boolean; subject: string; answer: number; explanation: string | null }>>;
-async function loadQuestions(ids: number[], withKey: boolean) {
-  const sql = withKey
-    ? `SELECT q.id::int AS id, q.question_text, q.options, q.image_asset_id IS NOT NULL AS has_image, s.name AS subject, q.answer, q.explanation
-         FROM test_questions q JOIN test_subjects s ON s.id = q.subject_id WHERE q.id = ANY($1::bigint[])`
-    : `SELECT q.id::int AS id, q.question_text, q.options, q.image_asset_id IS NOT NULL AS has_image, s.name AS subject
-         FROM test_questions q JOIN test_subjects s ON s.id = q.subject_id WHERE q.id = ANY($1::bigint[])`;
-  const rows = await query<{
-    id: number;
-    question_text: string | null;
-    options: string[] | null;
-    has_image: boolean;
-    subject: string;
-    answer?: number;
-    explanation?: string | null;
-  }>(sql, [ids]);
-  return new Map(
-    rows.map((r) => [
-      r.id,
-      { text: r.question_text, options: r.options, hasImage: r.has_image, subject: r.subject, ...(withKey ? { answer: r.answer!, explanation: r.explanation ?? null } : {}) },
-    ]),
+type QuestionRow = { text: string | null; options: string[] | null; imageV: string | null; subject: string; explanation: string | null };
+
+/**
+ * The questions of an attempt (text, options, image version, subject). `withExplanation` also selects the explanation:
+ * ONLY for a finished attempt. The answer key is NEVER selected here -- the review reads `key_snapshot`.
+ */
+async function loadQuestions(ids: number[], withExplanation: boolean): Promise<Map<number, QuestionRow>> {
+  const rows = await query<{ id: number; question_text: string | null; options: string[] | null; img_v: string | null; subject: string; explanation: string | null }>(
+    `SELECT q.id::int AS id, q.question_text, q.options, substr(sa.sha256, 1, 8) AS img_v, s.name AS subject,
+            ${withExplanation ? "q.explanation" : "NULL::text AS explanation"}
+       FROM test_questions q
+       JOIN test_subjects s ON s.id = q.subject_id
+       LEFT JOIN test_assets sa ON sa.id = q.image_asset_id
+      WHERE q.id = ANY($1::bigint[])`,
+    [ids],
   );
+  return new Map(rows.map((r) => [r.id, { text: r.question_text, options: r.options, imageV: r.img_v, subject: r.subject, explanation: r.explanation }]));
 }
 
 /**
  * The attempt as the owner may see it NOW: an active one without any key, or a finished one with the full
  * review. An attempt past its deadline is finished first. `null` = not found (or not the caller's).
  */
-export async function getAttemptView(userId: string, attemptId: string, now: Date = new Date()): Promise<AttemptView | null> {
+export async function getAttemptView(userId: string, attemptId: string, injectedNow?: Date): Promise<AttemptView | null> {
   let a = await attemptRow(userId, attemptId);
   if (!a) return null;
+  const now = injectedNow ?? a.db_now;
   if (a.status === "active" && isPastDeadline(a.deadline_at, now)) {
     await finishByTimeout(a.id, now);
     a = await attemptRow(userId, attemptId);
@@ -525,7 +529,7 @@ export async function getAttemptView(userId: string, attemptId: string, now: Dat
           subject: q?.subject ?? "",
           text: q?.text ?? null,
           options: q?.options ?? null,
-          imageUrl: q?.hasImage ? imageUrl(a!.id, id) : null,
+          imageUrl: q?.imageV ? imageUrl(a!.id, id, q.imageV) : null,
         };
       }),
       answers: Object.fromEntries(ans.map((r) => [r.question_id, r.chosen])),
@@ -539,17 +543,19 @@ export async function getAttemptView(userId: string, attemptId: string, now: Dat
   );
   // Same rule as the scoring: only answers given up to the deadline count.
   const chosenOf = new Map(ans.filter((r) => new Date(r.answered_at).getTime() <= new Date(a!.deadline_at).getTime()).map((r) => [Number(r.question_id), r.chosen]));
+  // The key comes ONLY from the snapshot taken when the attempt finished (the CHECK guarantees it is present).
+  const snapshot = a.key_snapshot ?? [];
   const review = ids.map((id, i): ReviewItem => {
     const q = qs.get(id);
     const chosen = chosenOf.get(id) ?? null;
-    const correct = q?.answer ?? 0;
+    const correct = snapshot[i] ?? 0;
     return {
       position: i + 1,
       id,
       subject: q?.subject ?? "",
       text: q?.text ?? null,
       options: q?.options ?? null,
-      imageUrl: q?.hasImage ? imageUrl(a!.id, id) : null,
+      imageUrl: q?.imageV ? imageUrl(a!.id, id, q.imageV) : null,
       chosen,
       chosenLetter: chosen === null ? null : letterOf(chosen),
       correct,

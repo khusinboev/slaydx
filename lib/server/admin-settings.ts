@@ -90,6 +90,12 @@ function snapshot(s: Snapshot): Snapshot {
   return { value: s.value, source: s.source };
 }
 
+/** `/test` is in the bot menu only while `tests.enabled` is true: a change of that switch re-registers the commands (best effort). */
+function refreshBotMenuFor(key: string): void {
+  if (key !== "tests.enabled") return;
+  void import("./telegram").then((m) => (m.botConfigured() ? m.setBotCommands() : undefined)).catch(() => undefined);
+}
+
 /**
  * PUT: validates `value` with the catalog (400 with the validator's message),
  * upserts the row and writes `settings.update` (before/after = `{value, source}`)
@@ -119,6 +125,7 @@ export async function updateAdminSetting(
   });
   // After COMMIT: the next read in this process reloads (others within 15 s).
   invalidateSettingsCache();
+  refreshBotMenuFor(key);
   return itemOf(key);
 }
 
@@ -146,5 +153,6 @@ export async function resetAdminSetting(admin: AdminActor, rawKey: unknown, body
     });
   });
   invalidateSettingsCache();
+  refreshBotMenuFor(key);
   return itemOf(key);
 }

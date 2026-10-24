@@ -9,6 +9,8 @@
  *   2. the deadline check removed from `answerQuestion`             -> «server-side deadline»;
  *   3. start charges twice (the existing-attempt early return and the per-attempt charge reference made per call)
  *                                                                   -> «start charges once»;
+ *   5. the finished review built from the LIVE key instead of the snapshot
+ *                                                                   -> «key snapshot: a finished result never follows a corrected key…»;
  *   4. the explanation / key selected for an ACTIVE attempt (`loadQuestions(ids, false)` -> `true`)
  *                                                                   -> «the answer key is never in a pre-finish response».
  */
@@ -399,6 +401,7 @@ test("paid tests: service and API", { skip }, async (t) => {
     };
     const ok = await get(u.cookie, imgQ!.imageUrl!);
     assert.equal(ok.status, 200);
+    assert.match(imgQ!.imageUrl!, /\?v=abababab$/, "the URL carries the first 8 hex of the image hash");
     assert.equal(ok.headers.get("content-type"), "image/png");
     assert.equal(ok.headers.get("cache-control"), "private, max-age=86400");
     assert.deepEqual(Buffer.from(await ok.arrayBuffer()), PNG);
@@ -548,6 +551,64 @@ test("paid tests: service and API", { skip }, async (t) => {
     const hist = (await svc.overview(u.uid, at(40 * MIN))).history;
     assert.equal(hist[0]!.id, a.attemptId);
     assert.deepEqual([hist[0]!.status, hist[0]!.correct, hist[0]!.score, hist[0]!.total], ["finished", 5, 5.5, 30]);
+  });
+
+  await t.test("key snapshot: a finished result never follows a corrected key; a running attempt is scored with the key at finish time", async () => {
+    const u = await login({ points: 50_000 });
+    const a = await svc.startAttempt(u.uid, { mode: "subject", subjectCode: "math" }, { ...seeded(71), now: T0 });
+    const v = await active(u.uid, a.attemptId, T0);
+    const ids = v.questions.map((q) => q.id);
+    const keys = await Promise.all(ids.map(keyOf));
+    for (let i = 0; i < 6; i++) await svc.answerQuestion(u.uid, a.attemptId, ids[i]!, keys[i]!, at(MIN));
+    // The owner corrects the key of question 1 WHILE the attempt runs: the finish uses the key as it is then.
+    await query("UPDATE test_questions SET answer = (answer + 1) % 4 WHERE id = $1", [ids[0]]);
+    await svc.finishAttempt(u.uid, a.attemptId, at(2 * MIN));
+    const fin = (await svc.getAttemptView(u.uid, a.attemptId, at(3 * MIN))) as import("../lib/server/paid-tests.ts").FinishedView;
+    assert.equal(fin.correct, 5, "the answer to the corrected question no longer counts");
+    assert.equal(fin.score, 5.5);
+    assert.equal(fin.review[0]!.isCorrect, false);
+    assert.equal(fin.review[0]!.correct, (keys[0]! + 1) % 4);
+    const snap = (await queryOne<{ key_snapshot: number[] }>("SELECT key_snapshot FROM test_attempts WHERE id = $1", [a.attemptId]))!.key_snapshot;
+    assert.equal(snap.length, 10, "every question is in the snapshot, unanswered ones too");
+    assert.deepEqual(snap, [(keys[0]! + 1) % 4, ...keys.slice(1)]);
+
+    // Corrections AFTER the finish change nothing: the review, the counts and the stored score stay as they were.
+    for (const i of [1, 2, 8]) await query("UPDATE test_questions SET answer = (answer + 2) % 4 WHERE id = $1", [ids[i]]);
+    const later = (await svc.getAttemptView(u.uid, a.attemptId, at(60 * MIN))) as import("../lib/server/paid-tests.ts").FinishedView;
+    assert.deepEqual(later, fin, "the old review is unchanged");
+    assert.equal(later.review.filter((r) => r.isCorrect).length, later.correct, "the review matches the score");
+    assert.equal(later.bySubject.reduce((n, s) => n + s.correct, 0), later.correct);
+    assert.equal((await queryOne<{ score: string }>("SELECT score::text AS score FROM test_attempts WHERE id = $1", [a.attemptId]))!.score, "5.50");
+    await svc.finishAttempt(u.uid, a.attemptId, at(61 * MIN));
+    assert.deepEqual(await svc.getAttemptView(u.uid, a.attemptId, at(62 * MIN)), fin, "finishing again does not re-snapshot");
+
+    // A timeout finish snapshots too, and a NEW attempt sees the corrected key.
+    const b = await svc.startAttempt(u.uid, { mode: "subject", subjectCode: "math" }, { ...seeded(71), now: T0 });
+    const bv = await active(u.uid, b.attemptId, T0);
+    const q1 = bv.questions.find((q) => q.id === ids[1])!;
+    await svc.answerQuestion(u.uid, b.attemptId, q1.id, (keys[1]! + 2) % 4, at(MIN));
+    const bFin = (await svc.getAttemptView(u.uid, b.attemptId, at(30 * MIN))) as import("../lib/server/paid-tests.ts").FinishedView;
+    assert.equal(bFin.reason, "timeout");
+    assert.equal(bFin.review.find((r) => r.id === q1.id)!.isCorrect, true, "the new attempt uses the corrected key");
+    assert.equal(bFin.correct, 1);
+    for (const i of [0, 1, 2, 8]) await query("UPDATE test_questions SET answer = $2 WHERE id = $1", [ids[i], keys[i]]);
+  });
+
+  await t.test("clock: without an injected time the database clock sets the deadline and the answer time", async () => {
+    const u = await login({ points: 50_000 });
+    const a = await svc.startAttempt(u.uid, { mode: "subject", subjectCode: "math" }, seeded(81));
+    const row = await queryOne<{ span: boolean; near: boolean }>(
+      "SELECT deadline_at - started_at = interval '20 minutes' AS span, abs(extract(epoch FROM started_at - clock_timestamp())) < 5 AS near FROM test_attempts WHERE id = $1",
+      [a.attemptId],
+    );
+    assert.deepEqual(row, { span: true, near: true });
+    const v = await svc.getAttemptView(u.uid, a.attemptId);
+    assert.ok(v && v.state === "active" && Math.abs(Date.parse(v.serverNow) - Date.now()) < 5000, "serverNow comes from the database clock");
+    assert.deepEqual(await svc.answerQuestion(u.uid, a.attemptId, (v as import("../lib/server/paid-tests.ts").ActiveView).questions[0]!.id, 1), { ok: true, answered: 1 });
+    const ans = await queryOne<{ near: boolean }>("SELECT abs(extract(epoch FROM answered_at - clock_timestamp())) < 5 AS near FROM test_attempt_answers WHERE attempt_id = $1", [a.attemptId]);
+    assert.equal(ans!.near, true);
+    await svc.sweepExpiredAttempts();
+    assert.equal((await queryOne<{ status: string }>("SELECT status FROM test_attempts WHERE id = $1", [a.attemptId]))!.status, "active", "a fresh attempt is not swept");
   });
 
   await t.test("a foreign attempt is rejected everywhere (looks like a missing one)", async () => {
