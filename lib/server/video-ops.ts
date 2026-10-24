@@ -5,7 +5,6 @@ import { log } from "./log";
 import { getPhoto } from "./photo";
 import { putGenerationFile } from "./storage";
 import { refundInTx } from "./refund-tx";
-import { refundPartial } from "./credits";
 import { toJsonb } from "./jsonb";
 import { UserFacingError, userMessage } from "./user-error";
 import { isProviderEnabled } from "./providers/resolve";
@@ -35,12 +34,14 @@ import type { FormValues } from "../types";
  * A video takes minutes. Holding a worker slot for that whole time would starve every other tool, and the 11-minute
  * job timeout would kill it. So the job is split in two:
  *
- *   1. SUBMIT (`submitVideoJob`, on a worker, seconds). Starts the provider operation, stores its id in `video_ops`
- *      and RELEASES the lease in the same transaction: the generation stays IN_PROGRESS with `locked_by = NULL`.
- *      `reclaimStaleJobs` only looks at rows whose lease is stale, so it never touches a waiting video, and the
- *      claim query does not count such a row as a running job.
- *   2. POLL (`pollDueVideoOps`, the leader's `video-poll` housekeeping step). Asks the provider about every due op
- *      with a backoff and a 20-minute deadline per op. On success it downloads the MP4 and finishes the generation
+ *   1. SUBMIT (`submitVideoJob`, on a worker, seconds). Writes the `video_ops` row as 'submitting' BEFORE the provider
+ *      is called, starts the operation, stores its id ('pending') and RELEASES the lease: the generation stays
+ *      IN_PROGRESS with `locked_by = NULL`. `reclaimStaleJobs` only looks at rows whose lease is stale, so it never
+ *      touches a waiting video, and the claim query does not count such a row as a running job. A 'submitting' row
+ *      found on a re-claim means the previous worker died between the call and the update: the provider may be
+ *      working on a paid operation nobody knows the id of, so the job is FAILED and refunded -- never submitted twice.
+ *   2. POLL (`pollDueVideoOps`, its OWN leader-locked loop `video-poll-loop.ts`, never part of housekeeping or the job
+ *      tick). Asks the provider about every due op with a backoff and a 20-minute deadline per op. On success it downloads the MP4 and finishes the generation
  *      (`finalizeVideo`); on a provider failure, a safety refusal or the deadline it fails the generation and
  *      refunds it (`failVideo`).
  *
@@ -58,22 +59,28 @@ export type VideoOpsDeps = {
 
 const adaptersOf = (d: VideoOpsDeps): Readonly<Record<VideoProviderId, VideoAdapter>> => d.adapters ?? VIDEO_ADAPTERS;
 
-/** Seconds until the next poll after `attempts` polls: 10, 15, 20, 30, 45, 60 and then every 60 (the housekeeping tick is 60 s anyway). */
+/** Seconds until the next poll after `attempts` polls: 10, 15, 20, 30, 45, 60 and then every 60. */
 export function videoPollDelaySec(attempts: number): number {
   const ladder = [10, 15, 20, 30, 45, 60];
   return ladder[Math.min(Math.max(0, attempts), ladder.length - 1)]!;
 }
 
-/** A poller's claim on an op: if it dies, the op is due again after this. */
-const CLAIM_LEASE_SEC = 180;
-/** Ops handled per `video-poll` run (each may download a file). */
-export const VIDEO_POLL_BATCH = 10;
-/** Transient errors (download not ready, 5xx) tolerated before the op is failed ahead of its deadline. */
-const MAX_TRANSIENT_ERRORS = 30;
+/**
+ * A poller's claim on an op: if it dies, the op is due again after this. MUST stay above the worst-case time of ONE op
+ * (a 30 s poll + a 60 s download = 90 s), or a slow op would be picked up a second time while still being handled.
+ */
+export const CLAIM_LEASE_SEC = 180;
+/** Ops claimed per `video-poll` run: small, so a run never hoards claims it cannot finish. */
+export const VIDEO_POLL_BATCH = 3;
+/** One `video-poll` run starts no new op after this long (worst case: 45 s + one 90 s op). */
+export const VIDEO_POLL_BUDGET_MS = 45_000;
+/** Transient errors (download not ready, 5xx), counted on their own, tolerated before the op is failed ahead of its deadline. */
+export const MAX_TRANSIENT_ERRORS = 30;
 
 export const VIDEO_DEADLINE_MESSAGE = "Video belgilangan vaqtda tayyor bo‘lmadi. Pul qaytarildi — qayta urinib ko‘ring.";
 export const VIDEO_FAILED_MESSAGE = "Provayder videoni yaratmadi. Pul qaytarildi — qayta urinib ko‘ring.";
 export const VIDEO_UNAVAILABLE_MESSAGE = "Video xizmati hozir mavjud emas. Pul qaytarildi — keyinroq qayta urinib ko‘ring.";
+export const VIDEO_LOST_MESSAGE = "Video so‘rovi yo‘qoldi (server qayta ishga tushdi). Pul qaytarildi — qayta urinib ko‘ring.";
 export const VIDEO_IMAGE_MISSING_MESSAGE = "Boshlang‘ich surat topilmadi. Pul qaytarildi — suratni qayta yuklab, urinib ko‘ring.";
 
 /* ══════════════════════════ 1. submit ══════════════════════════ */
@@ -90,13 +97,23 @@ export async function submitVideoJob(job: VideoJob, deps: VideoOpsDeps = {}): Pr
   const adapter = adaptersOf(deps)[input.provider];
 
   /*
-   * A re-claimed job (the worker died after the provider call, before the handoff committed -- or the lease expired and
-   * the row was requeued) must NOT start a second, paid operation: adopt the one already stored.
+   * A re-claimed job must NOT start a second, paid operation. What the stored row says:
+   *   'pending'    the previous run stored the op id: adopt it (just release the lease);
+   *   'submitting' the previous run died between the provider call and the update -- the op id is unknown: fail + refund;
+   *   'succeeded' / 'failed' the operation already ended: the job cannot be waiting for it -- fail (the refund is idempotent).
    */
   const existing = await queryOne<{ status: string }>("SELECT status FROM video_ops WHERE generation_id = $1", [job.id]);
   if (existing) {
-    await releaseLease(job, null);
-    return "waiting";
+    if (existing.status === "pending") {
+      await releaseLease(job);
+      return "waiting";
+    }
+    if (existing.status === "submitting") {
+      await query("UPDATE video_ops SET status = 'failed', finished_at = now(), last_error = 'lost between the provider call and the update' WHERE generation_id = $1 AND status = 'submitting'", [job.id]);
+      log("error", "[video] a previous submit died before storing the operation id -- failing and refunding instead of paying twice", { jobId: job.id });
+      throw new UserFacingError(VIDEO_LOST_MESSAGE);
+    }
+    throw new UserFacingError(VIDEO_FAILED_MESSAGE);
   }
 
   if (!isProviderEnabled(spec.registryId) || !adapter.configured()) throw new UserFacingError(VIDEO_UNAVAILABLE_MESSAGE);
@@ -109,49 +126,59 @@ export async function submitVideoJob(job: VideoJob, deps: VideoOpsDeps = {}): Pr
     image = { mime: photo.mime, base64: photo.bytes.toString("base64") };
   }
 
+  // The row goes in BEFORE the provider call (see the file header): the primary key also makes a racing second claim lose here.
+  const inserted = await query(
+    `INSERT INTO video_ops (generation_id, provider, deadline_at, seconds)
+     VALUES ($1, $2, now() + $3::int * interval '1 millisecond', $4)
+     ON CONFLICT (generation_id) DO NOTHING
+     RETURNING generation_id`,
+    [job.id, input.provider, VIDEO_OP_DEADLINE_MS, input.seconds],
+  );
+  if (!inserted.length) throw new UserFacingError(VIDEO_LOST_MESSAGE);
+
   let opId: string;
   try {
     ({ opId } = await adapter.submit({ prompt: input.prompt, seconds: input.seconds, aspect: input.aspect, ...(image ? { image } : {}) }, { fetchImpl: deps.fetchImpl }));
   } catch (e) {
     const err = e instanceof VideoProviderError ? e : null;
     log("error", "[video] submit failed", { jobId: job.id, provider: input.provider, status: err?.status, safety: err?.safety, err });
+    await query("UPDATE video_ops SET status = 'failed', finished_at = now(), last_error = $2 WHERE generation_id = $1 AND status = 'submitting'", [job.id, (err?.message ?? "submit failed").slice(0, 300)]).catch(() => undefined);
     throw new UserFacingError(err?.safety ? VIDEO_SAFETY_MESSAGE : VIDEO_FAILED_MESSAGE);
   }
 
-  await releaseLease(job, { provider: input.provider, opId, seconds: input.seconds });
+  /*
+   * The op id is stored FIRST, on its own and whatever happens to the lease: a SIGTERM (`releaseJobs`) or a reclaim
+   * during the provider call must not lose the id of an operation that is being paid for -- the next claim adopts it.
+   */
+  await query(
+    `UPDATE video_ops SET op_id = $2, status = 'pending', next_poll_at = now() + interval '10 seconds'
+      WHERE generation_id = $1 AND status = 'submitting'`,
+    [job.id, opId],
+  );
+  await releaseLease(job);
   log("info", "[video] operation started", { jobId: job.id, provider: input.provider, seconds: input.seconds });
   return "waiting";
 }
 
-/** Stores the op (when given) and releases the lease in ONE transaction; refuses when the lease is no longer ours. */
-async function releaseLease(job: VideoJob, op: { provider: VideoProviderId; opId: string; seconds: number } | null): Promise<void> {
-  await transaction(async (client) => {
-    if (op) {
-      await client.query(
-        `INSERT INTO video_ops (generation_id, provider, op_id, deadline_at, seconds, next_poll_at)
-         VALUES ($1, $2, $3, now() + $4::int * interval '1 millisecond', $5, now() + interval '10 seconds')
-         ON CONFLICT (generation_id) DO NOTHING`,
-        [job.id, op.provider, op.opId, VIDEO_OP_DEADLINE_MS, op.seconds],
-      );
-    }
-    const res = await client.query(
-      `UPDATE generations
-          SET locked_by = NULL, locked_at = NULL, progress = GREATEST(progress, 10), step = 'Video tayyorlanmoqda'
-        WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS'`,
-      [job.id, job.lease],
-    );
-    if (!res.rowCount) {
-      // The lease was lost (reclaimed / force-failed): roll the op row back too. The provider operation, if one was
-      // started, is orphaned -- logged so it can be found; it cannot be cancelled through either API.
-      if (op) log("error", "[video] lease lost after the provider call -- operation orphaned", { jobId: job.id, provider: op.provider });
-      throw new Error("video: lease lost");
-    }
-  });
+/**
+ * Releases the lease (the job becomes «waiting»). When the lease is no longer ours (SIGTERM requeued the job, or the
+ * stale-lease reclaim did) nothing is lost: the op id is already stored, the job is QUEUED again and its next claim
+ * adopts the operation.
+ */
+async function releaseLease(job: VideoJob): Promise<void> {
+  const res = await query<{ id: string }>(
+    `UPDATE generations
+        SET locked_by = NULL, locked_at = NULL, progress = GREATEST(progress, 10), step = 'Video tayyorlanmoqda'
+      WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS'
+      RETURNING id`,
+    [job.id, job.lease],
+  );
+  if (!res.length) log("warn", "[video] the lease was lost during the submit -- the stored operation is adopted by the next claim", { jobId: job.id });
 }
 
 /* ══════════════════════════ 2. poll ══════════════════════════ */
 
-type DueOp = { generation_id: string; provider: VideoProviderId; op_id: string; attempts: number; seconds: number };
+type DueOp = { generation_id: string; provider: VideoProviderId; op_id: string; attempts: number; errors: number; seconds: number };
 
 /**
  * Claims up to `limit` due ops by pushing their `next_poll_at` forward (a lease): another process / tick will not take
@@ -167,7 +194,7 @@ export async function claimDueOps(limit: number = VIDEO_POLL_BATCH): Promise<Due
                ORDER BY next_poll_at
                LIMIT $1
                FOR UPDATE SKIP LOCKED)
-      RETURNING generation_id, provider, op_id, attempts, seconds`,
+      RETURNING generation_id, provider, op_id, attempts, errors, seconds`,
     [limit, CLAIM_LEASE_SEC],
   );
 }
@@ -193,6 +220,7 @@ async function reschedule(op: DueOp, error: string | null): Promise<void> {
   await query(
     `UPDATE video_ops
         SET attempts = attempts + 1,
+            errors = errors + CASE WHEN $3::text IS NULL THEN 0 ELSE 1 END,
             next_poll_at = now() + $2::int * interval '1 second',
             last_error = COALESCE($3, last_error)
       WHERE generation_id = $1 AND status = 'pending'`,
@@ -209,7 +237,7 @@ export async function pollOp(op: DueOp, deps: VideoOpsDeps = {}): Promise<PollOu
   const transient = async (e: unknown): Promise<PollOutcome> => {
     const msg = e instanceof Error ? e.message.slice(0, 300) : "xato";
     if (await pastDeadline(op.generation_id)) return (await failVideo(op.generation_id, VIDEO_DEADLINE_MESSAGE, msg)) ? "failed" : "skipped";
-    if (op.attempts + 1 >= MAX_TRANSIENT_ERRORS) return (await failVideo(op.generation_id, VIDEO_FAILED_MESSAGE, msg)) ? "failed" : "skipped";
+    if (op.errors + 1 >= MAX_TRANSIENT_ERRORS) return (await failVideo(op.generation_id, VIDEO_FAILED_MESSAGE, msg)) ? "failed" : "skipped";
     log("warn", "[video] poll error, will retry", { jobId: op.generation_id, provider: op.provider, attempt: op.attempts + 1, err: e });
     await reschedule(op, msg);
     return "pending";
@@ -251,11 +279,20 @@ export async function pollOp(op: DueOp, deps: VideoOpsDeps = {}): Promise<PollOu
   return (await finalizeVideo(op.generation_id, bytes)) ? "succeeded" : "skipped";
 }
 
-/** The `video-poll` housekeeping step: polls every due op. Returns how many ops reached a terminal state. */
-export async function pollDueVideoOps(deps: VideoOpsDeps = {}, limit: number = VIDEO_POLL_BATCH): Promise<number> {
-  const due = await claimDueOps(limit);
+export type PollRunOpts = { limit?: number; budgetMs?: number };
+
+/**
+ * One `video-poll` run: polls the due ops (at most `limit`, no new op after `budgetMs`). Returns how many ops reached a
+ * terminal state. Called by the poll loop (`video-poll-loop.ts`) -- never from the job tick or housekeeping.
+ */
+export async function pollDueVideoOps(deps: VideoOpsDeps = {}, run: PollRunOpts = {}): Promise<number> {
+  const started = Date.now();
+  const budgetMs = run.budgetMs ?? VIDEO_POLL_BUDGET_MS;
+  const due = await claimDueOps(run.limit ?? VIDEO_POLL_BATCH);
   let done = 0;
   for (const op of due) {
+    // Out of time: the claim lease of the rest simply expires (180 s) and the next run takes them.
+    if (Date.now() - started >= budgetMs) break;
     try {
       const outcome = await pollOp(op, deps);
       if (outcome === "succeeded" || outcome === "failed") done++;
@@ -330,20 +367,22 @@ export async function finalizeVideo(generationId: string, bytes: Uint8Array): Pr
       [generationId, toJsonb(doc), fileName, delivered ? toJsonb(delivered) : null, toJsonb(cost)],
     );
     await client.query("UPDATE video_ops SET status = 'succeeded', finished_at = now() WHERE generation_id = $1", [generationId]);
-    return { userId: String(row.user_id), delivered };
+    /*
+     * A clip shorter than the seconds paid for: the difference is refunded in THIS transaction (the `delivered`
+     * mechanism of every tool, but atomic): a crash after the commit can never leave a COMPLETED short clip without its
+     * refund, and a failing refund rolls the whole finalisation back (the op stays pending and is retried).
+     */
+    const ratio = refundRatio(delivered);
+    let refunded = false;
+    if (delivered && ratio !== null) {
+      refunded = await refundInTx(client, String(row.user_id), generationId, `${delivered.want} soniyadan ${delivered.got} soniya yaratildi — farq qaytarildi`, ratio);
+    }
+    return { delivered, ratio, refunded };
   });
   if (!out) return false;
 
   log("info", "[video] finished", { jobId: generationId, bytes: bytes.byteLength });
-  // A clip shorter than the seconds paid for: the difference is refunded (the `delivered` mechanism of every tool).
-  const ratio = refundRatio(out.delivered ?? undefined);
-  if (out.delivered && ratio !== null) {
-    const ok = await refundPartial(out.userId, generationId, ratio, `${out.delivered.want} soniyadan ${out.delivered.got} soniya yaratildi — farq qaytarildi`).catch((e) => {
-      log("error", "[video] partial refund failed", { jobId: generationId, alert: "REFUND_FAILED", err: e });
-      return false;
-    });
-    log("warn", "[video] short clip refunded", { jobId: generationId, ratio, refunded: ok });
-  }
+  if (out.delivered) log("warn", "[video] short clip refunded", { jobId: generationId, ratio: out.ratio, refunded: out.refunded });
   return true;
 }
 

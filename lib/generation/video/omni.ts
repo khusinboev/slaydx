@@ -192,13 +192,25 @@ export function makeOmniAdapter(opts: { key?: () => string } = {}): VideoAdapter
       const k = key();
       let res: Response;
       try {
-        res = await safeFetchUrl(media.url, {
-          fetchImpl: deps.fetchImpl,
-          timeoutMs: Math.max(5_000, deps.timeoutMs ?? 60_000),
-          maxBytes: VIDEO_MAX_BYTES,
-          // The key goes only to Google's own host; a forged URL elsewhere gets no credentials.
-          headers: isGoogleHost(media.url) ? { "x-goog-api-key": k } : {},
-        });
+        /*
+         * Redirects are followed HERE, one hop at a time, so the key is decided per hop: it travels only to a Google host
+         * (`isGoogleHost`) and never across a redirect to anything else (`safeFetchUrl` itself would resend the same
+         * headers to the redirect target). Each hop still passes the public-https / DNS checks of `safeFetchUrl`.
+         */
+        let url = media.url;
+        for (let hop = 0; ; hop++) {
+          res = await safeFetchUrl(url, {
+            fetchImpl: deps.fetchImpl,
+            timeoutMs: Math.max(5_000, deps.timeoutMs ?? 60_000),
+            maxBytes: VIDEO_MAX_BYTES,
+            maxRedirects: 0,
+            headers: isGoogleHost(url) ? { "x-goog-api-key": k } : {},
+          });
+          if (res.status < 300 || res.status >= 400) break;
+          const loc = res.headers.get("location");
+          if (!loc || hop >= 3) throw new UnsafeUrlError("redirect", "redirect zanjiri yaroqsiz");
+          url = new URL(loc, url).toString();
+        }
       } catch (e) {
         if (e instanceof UnsafeUrlError && e.reason === "size") throw new VideoProviderError("veo", "video fayli juda katta");
         throw new VideoProviderError("veo", scrubSecrets(e instanceof Error ? e.message : "yuklab bo'lmadi", [k]), { retryable: !(e instanceof UnsafeUrlError) });

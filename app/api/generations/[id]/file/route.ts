@@ -6,6 +6,7 @@ import { contentDisposition } from "@/lib/server/pdf-serve";
 import { getGenerationFile } from "@/lib/server/storage";
 import { bytesBody } from "@/lib/server/http-bytes";
 import { parseByteRange } from "@/lib/server/http-range";
+import { cachedVideo, rememberVideo } from "@/lib/server/video-file-cache";
 
 export { contentDisposition };
 
@@ -83,8 +84,14 @@ export const GET = handler("generations/file", async (req, ctx: Ctx) => {
     });
   }
 
-  const file = await getGenerationFile(id, user.id);
+  /*
+   * A Range request (video playback / seeking) is served from the small per-process video cache when possible
+   * (`video-file-cache.ts`: ownership + version are re-checked by a tiny query); everything else reads the file as before.
+   */
+  const hit = req.headers.has("range") ? await cachedVideo(id, user.id) : null;
+  const file = hit ?? (await getGenerationFile(id, user.id));
   if (!file) throw new ApiError("Fayl topilmadi yoki muddati tugagan", 404);
+  if (!hit && file.mime.startsWith("video/")) await rememberVideo(id, user.id, file).catch(() => undefined);
 
   /*
    * AUDIO (AUDIT-22): `<audio>` elementi faylni SAHIFA ICHIDA o'ynatadi

@@ -17,6 +17,8 @@ import { refundShares } from "./credits";
  *   - `charge` qatori yo'q yoki nol bo'lsa — `false`;
  *   - aks holda olingan hamyonlarga qaytaradi: `points` → `points`, kvota va
  *     balans ulushi → `balance` (`refundShares`: kvota yopiq, u o'smaydi).
+ * `ratio` (default 1) — qisman qaytarish (`credits.ts refundPartial` bilan bir qoida: `refundShares(row, ratio)`,
+ * bir reference uchun yo to'liq, yo qisman — ikkalasi emas). Video: qisqa klip farqi COMPLETED bilan BITTA tranzaksiyada.
  * Qaytaradi: pul haqiqatan qaytdimi.
  */
 export async function refundInTx(
@@ -24,7 +26,9 @@ export async function refundInTx(
   userId: string,
   reference: string,
   note = "",
+  ratio = 1,
 ): Promise<boolean> {
+  if (!(ratio > 0)) return false;
   const done = await client.query("SELECT 1 FROM transactions WHERE kind = 'refund' AND reference = $1", [
     reference,
   ]);
@@ -37,7 +41,7 @@ export async function refundInTx(
   const row = charged.rows[0];
   if (!row) return false;
 
-  const { points, balance } = refundShares(row);
+  const { points, balance } = refundShares(row, Math.min(1, ratio));
   if (points + balance === 0) return false;
 
   await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);

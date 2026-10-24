@@ -65,7 +65,8 @@ import { runDailyQuizSend } from "./daily-quiz-send";
 import { claimJob as claimDomlaJob } from "./domla";
 import { domlaHousekeeping, runJob as runDomlaJob } from "./domla-engine";
 import { ensureProviderKeys, startProviderKeyRefresh } from "./providers/store";
-import { pollDueVideoOps, submitVideoJob } from "./video-ops";
+import { submitVideoJob } from "./video-ops";
+import { startVideoPollLoop } from "./video-poll-loop";
 
 /**
  * Navbatni bajaruvchi worker.
@@ -465,7 +466,7 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
 
   /*
    * VIDEO (program-17 item 5): only the SUBMIT half runs here -- start the provider operation, store its id, release the
-   * lease (`submitVideoJob`). The job then waits in `video_ops` WITHOUT a worker slot; the leader's `video-poll`
+   * lease (`submitVideoJob`). The job then waits in `video_ops` WITHOUT a worker slot; the `video-poll` loop
    * housekeeping step finishes it. A failure here is an ordinary failure: FAILED + refund while the lease is still ours.
    */
   if (tool.id === "video") {
@@ -996,12 +997,6 @@ export async function purgeHousekeeping(): Promise<void> {
    */
   await step("server-metrics", async () => (await recordAppSample()) ? 1 : 0);
   await step("server-alerts", async () => (await runAlerts()).sent.length);
-  /*
-   * Video operations waiting for their provider (program-17 item 5): poll the due ones, finish or fail+refund them.
-   * Early and bounded (10 ops per run); the claim is a short lease on `video_ops.next_poll_at`, so a second process
-   * running it concurrently never takes the same op, and every terminal step is guarded by the op row lock.
-   */
-  await step("video-poll", () => pollDueVideoOps());
   if (Date.now() - lastServerMetricsPurgeAt >= RETENTION_EVERY_MS) {
     await step("server-metrics-purge", async () => {
       lastServerMetricsPurgeAt = Date.now();
@@ -1279,6 +1274,8 @@ async function loop(): Promise<void> {
   startHeartbeat({ role: "worker", concurrency: env.worker.concurrency, getRunning: () => running });
   // Telegram broadcast delivery: its own loop (leader by advisory lock), independent of the job tick and housekeeping.
   const broadcastLoop = startBroadcastLoop();
+  // Videos waiting for their provider are polled in their OWN leader-locked loop, so a slow provider never blocks claiming.
+  const videoPollLoop = startVideoPollLoop();
   let sinceHousekeeping = 0;
 
   while (!stopped) {
@@ -1307,6 +1304,7 @@ async function loop(): Promise<void> {
     await sleep(wait);
   }
   await broadcastLoop.stop();
+  await videoPollLoop.stop();
   // Stopped: the row goes stale and the system page shows the worker as gone.
   stopHeartbeat("worker");
 }

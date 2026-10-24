@@ -307,7 +307,8 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
         input.price,
         id,
         safeSlice(`${input.toolId}: ${topic}`, 200),
-        input.paidOnly ? { paidOnly: true } : {},
+        // Bonus so'm never pays for video (D5): derived HERE from the tool, so no caller can forget it (callers pass it too).
+        input.paidOnly || input.toolId === "video" ? { paidOnly: true } : {},
       );
       if (!charged.ok) {
         return {
@@ -753,6 +754,9 @@ export function newLease(workerId: string): string {
   return `${workerId}:${randomUUID()}`;
 }
 
+/** Advisory transaction lock that serialises the claim of video jobs (`video.max_concurrent`). */
+export const VIDEO_CLAIM_LOCK_ID = 727_000_005;
+
 /**
  * Navbatdan bitta ish oladi.
  *
@@ -788,7 +792,7 @@ export async function claimJob(
   const cap = Math.max(1, Math.floor(opts.userMaxRunning ?? env.queue.userMaxInflight) || 1);
   // `video.max_concurrent`: videos in flight at once (submitting on a worker + waiting for the provider), all users.
   const videoCap = Math.max(1, Math.floor(opts.videoMax ?? 2) || 1);
-  const row = await queryOne<{
+  type ClaimRow = {
     id: string;
     user_id: string;
     tool_id: string;
@@ -798,8 +802,8 @@ export async function claimJob(
     budget_ms: number;
     progress: number;
     step: string;
-  }>(
-    `UPDATE generations g
+  };
+  const sql = `UPDATE generations g
         SET status = 'IN_PROGRESS',
             locked_by = $1,
             locked_at = now(),
@@ -819,9 +823,21 @@ export async function claimJob(
          LIMIT 1
          FOR UPDATE SKIP LOCKED
       )
-      RETURNING g.id, g.user_id, g.tool_id, g.values_json, g.price, g.attempts, g.budget_ms, g.progress, g.step`,
-    [lease, cap, RESTART_STEP, videoCap],
-  );
+      RETURNING g.id, g.user_id, g.tool_id, g.values_json, g.price, g.attempts, g.budget_ms, g.progress, g.step`;
+  const params = [lease, cap, RESTART_STEP, videoCap];
+  /*
+   * `video.max_concurrent` is a count taken inside the claim, so two workers claiming two DIFFERENT queued videos at the
+   * same instant could both see «below the cap» and exceed it by one. While any video is queued the claim therefore runs
+   * under a transaction-scoped advisory lock: video claims are serialised (a count taken after the other commits sees
+   * its row). Without a queued video the plain single statement runs, as before -- the hot path is unchanged.
+   */
+  const videoQueued = await queryOne<{ n: number }>("SELECT 1 AS n FROM generations WHERE status = 'QUEUED' AND tool_id = 'video' LIMIT 1");
+  const row = videoQueued
+    ? await transaction(async (client) => {
+        await client.query("SELECT pg_advisory_xact_lock($1)", [VIDEO_CLAIM_LOCK_ID]);
+        return (await client.query<ClaimRow>(sql, params)).rows[0] ?? null;
+      })
+    : await queryOne<ClaimRow>(sql, params);
   if (!row) return null;
   return {
     id: row.id,

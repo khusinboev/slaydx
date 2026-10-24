@@ -3,13 +3,18 @@
 --
 --   video_ops   one row per video generation (generation_id is the PRIMARY KEY: a job can own at most one provider
 --               operation, so a re-claimed job never starts a second, paid one).
---               op_id         the provider's operation id (Gemini `interaction.id`, Kling `<kind>:<task_id>`);
---               status        'pending'   submitted, waiting for the provider (the poll step owns it);
+--               op_id         the provider's operation id (Gemini `interaction.id`, Kling `<kind>:<task_id>`); NULL while
+--                             'submitting';
+--               status        'submitting' the row is written BEFORE the provider is called: a worker that dies between the
+--                             call and the update leaves this row with no op id, so a re-claim FAILS + refunds the job
+--                             instead of paying for a second operation;
+--                             'pending'   submitted, waiting for the provider (the poll step owns it);
 --                             'succeeded' the MP4 was stored and the generation completed (exactly once);
 --                             'failed'    the generation was failed and refunded (provider error, safety refusal, deadline);
 --               next_poll_at  the next poll is due at this time; the poll step claims a row by pushing it forward,
 --                             so a crashed poller's claim simply expires and another process picks the op up;
 --               attempts      polls made so far (drives the backoff);
+--               errors        polls / downloads that failed transiently (bounded separately from `attempts`);
 --               deadline_at   hard per-op deadline (20 minutes after the submit): past it the job fails and is refunded;
 --               seconds       the clip length that was paid for (the delivered length is compared with it);
 --               finished_at   when the row left 'pending'.
@@ -28,10 +33,11 @@ SET LOCAL lock_timeout = '5s';
 CREATE TABLE IF NOT EXISTS video_ops (
   generation_id UUID        PRIMARY KEY REFERENCES generations(id) ON DELETE CASCADE,
   provider      TEXT        NOT NULL CHECK (provider IN ('veo', 'kling')),
-  op_id         TEXT        NOT NULL,
-  status        TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'succeeded', 'failed')),
+  op_id         TEXT,
+  status        TEXT        NOT NULL DEFAULT 'submitting' CHECK (status IN ('submitting', 'pending', 'succeeded', 'failed')),
   next_poll_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   attempts      INTEGER     NOT NULL DEFAULT 0,
+  errors        INTEGER     NOT NULL DEFAULT 0,
   deadline_at   TIMESTAMPTZ NOT NULL,
   seconds       INTEGER     NOT NULL DEFAULT 0,
   last_error    TEXT,
