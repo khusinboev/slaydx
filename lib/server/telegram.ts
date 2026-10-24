@@ -254,7 +254,7 @@ export async function botUsername(now: number = Date.now()): Promise<string | nu
 }
 
 /** The bot's commands, in menu order. */
-export const BOT_COMMANDS = ["start", "login", "taklif", "admin", "til", "alifbo", "savol", "obuna"] as const;
+export const BOT_COMMANDS = ["start", "login", "taklif", "admin", "til", "alifbo", "savol", "obuna", "domla"] as const;
 
 /**
  * Bot menyusidagi buyruqlar (Telegram «/» tugmasi). Idempotent — har
@@ -268,7 +268,7 @@ export async function setBotCommands(): Promise<boolean> {
   let ok = true;
   for (const lang of LANGS) {
     const out = await call("setMyCommands", {
-      commands: BOT_COMMANDS.map((command) => ({ command, description: t(lang, `cmd.${command}`) })),
+      commands: BOT_COMMANDS.map((command) => ({ command, description: t(lang, command === "domla" ? "domla.cmd" : `cmd.${command}`) })),
       ...(lang === "uz" ? {} : { language_code: lang }),
     });
     ok &&= out !== null;
@@ -508,6 +508,10 @@ export type TelegramUpdate = {
     caption_entities?: unknown[];
     photo?: Array<{ file_id: string; width?: number; height?: number; file_size?: number }>;
     video?: { file_id: string };
+    // «Qattiqqo'l domla»: an answer as a voice message (OGG/Opus) or an audio file. Only the file id and the
+    // reported size / length are read in the webhook; the worker downloads (capped at 2 MB).
+    voice?: { file_id: string; file_unique_id?: string; duration?: number; mime_type?: string; file_size?: number };
+    audio?: { file_id: string; file_unique_id?: string; duration?: number; mime_type?: string; file_size?: number; file_name?: string };
   };
   /**
    * Inline mode (`@bot …` typed in any chat). Arrives only when inline mode
@@ -900,6 +904,11 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
     const adminBot = await import("./bot/admin");
     if (await adminBot.handleAdminInput(msg, update.update_id)) return;
   }
+  // A voice answer to the strict professor (private chat only). Only a row is written here; the worker listens.
+  if (isPrivate && (msg.voice || msg.audio)) {
+    await (await import("./bot/domla")).handleVoice(msg.from.id, msg.chat.id, msg);
+    return;
+  }
   if (!msg.text) return;
 
   const profile: TelegramProfile = {
@@ -950,7 +959,15 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
         return;
       }
       if (await bot.handlePendingInput(ctx, msg.text, update.update_id)) return;
+      // The text fallback of a defence answer (only when a question is waiting for one).
+      if (await (await import("./bot/domla")).handleText(ctx, text)) return;
     }
+  }
+
+  // «Qattiqqo'l domla»: `/domla` lists the last slide works to defend (or resumes the open defence).
+  if (ctx && text.startsWith("/domla")) {
+    await (await import("./bot/domla")).sendList(ctx);
+    return;
   }
 
   if (text.startsWith("/taklif")) {

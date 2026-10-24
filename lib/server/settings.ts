@@ -19,6 +19,7 @@ import {
   DQ_REWARD_DEFAULT,
   DQ_REWARD_MAX,
 } from "../daily-quiz/rules";
+import { DOMLA_PRICE_DEFAULT, DOMLA_PRICE_MAX } from "../domla/rules";
 
 /**
  * Runtime settings (docs/admin/02-plan.md §6.10, §17.7).
@@ -67,6 +68,8 @@ export type SettingValues = {
   "daily_quiz.monthly_cap": number;
   "daily_quiz.daily_budget": number;
   "daily_quiz.hour": number;
+  "domla.enabled": boolean;
+  "domla.price": number;
 };
 
 export type SettingKey = keyof SettingValues;
@@ -196,6 +199,7 @@ const QUEUE_GROUP = "Navbat va yuklama";
 const OFERTA_GROUP = "Oferta";
 const CONVERT_GROUP = "Fayl konvertatsiya";
 const QUIZ_GROUP = "Kunlik savollar";
+const DOMLA_GROUP = "Qattiqqo‘l domla";
 
 type DailyKey = "free_llm.daily.outline" | "free_llm.daily.udk" | "free_llm.daily.rewrite" | "free_llm.daily.polish";
 
@@ -502,6 +506,28 @@ const CATALOG: Catalog = {
     max: 23,
     validate: intValidator(0, 23),
     envDefault: () => DQ_HOUR_DEFAULT,
+  },
+  "domla.enabled": {
+    key: "domla.enabled",
+    group: DOMLA_GROUP,
+    label: "Qattiqqo‘l domla yoqilgan",
+    description:
+      "O‘chirilsa yangi himoya boshlab bo‘lmaydi (/domla va /uz/domla «hozircha o‘chiq» deydi). Boshlangan himoyalar to‘lov qilingani uchun tugatiladi. Favqulodda tugma: AI va ovoz sarfi oshib ketsa.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => true,
+  },
+  "domla.price": {
+    key: "domla.price",
+    group: DOMLA_GROUP,
+    label: "Bitta himoya narxi (so‘m)",
+    description:
+      "Bitta himoya (5 ta savol) boshlanganda yechiladigan narx. Savollar tuzilmasa to‘liq qaytariladi. 0 — bepul. Faqat shu qiymat ishlatiladi (klient narx yubormaydi).",
+    type: "int",
+    min: 0,
+    max: DOMLA_PRICE_MAX,
+    validate: intValidator(0, DOMLA_PRICE_MAX),
+    envDefault: () => DOMLA_PRICE_DEFAULT,
   },
 };
 

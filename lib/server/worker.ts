@@ -62,6 +62,8 @@ import { recordStep } from "./housekeeping-status";
 import { STAY_BATCH, staySweep } from "./bonus-channels";
 import { remindUnpaidOrders } from "./payment-reminder";
 import { runDailyQuizSend } from "./daily-quiz-send";
+import { claimJob as claimDomlaJob } from "./domla";
+import { domlaHousekeeping, runJob as runDomlaJob } from "./domla-engine";
 import { ensureProviderKeys, startProviderKeyRefresh } from "./providers/store";
 
 /**
@@ -861,6 +863,31 @@ async function tick(): Promise<boolean> {
   return true;
 }
 
+/** «Qattiqqo'l domla» jobs running at once in this process (each is an LLM / TTS / audio-scoring call of tens of seconds). */
+const DOMLA_CONCURRENCY = 2;
+let domlaRunning = 0;
+
+/**
+ * Claims and starts ONE «Qattiqqo'l domla» job without waiting for it (the loop must keep claiming generations and
+ * keep the liveness file fresh). `true` = a job was started.
+ */
+async function domlaStep(): Promise<boolean> {
+  if (stopped || domlaRunning >= DOMLA_CONCURRENCY) return false;
+  const job = await claimDomlaJob();
+  if (!job) return false;
+  domlaRunning++;
+  void (async () => {
+    try {
+      await runDomlaJob(job);
+    } catch (e) {
+      log("error", "[domla] unexpected", { jobId: job.id, err: e });
+    } finally {
+      domlaRunning--;
+    }
+  })();
+  return true;
+}
+
 /**
  * Bitta housekeeping qadami — ALOHIDA (AUDIT prod-readiness DB-10).
  *
@@ -1043,6 +1070,8 @@ export async function purgeHousekeeping(): Promise<void> {
   await step("payment-reminder", () => remindUnpaidOrders());
   // Leader-only; the morning «Kunlik savollar» DM (docs/program-17 item 16): per-day claim + paged cursor, see daily-quiz-send.ts.
   await step("daily-quiz", () => runDailyQuizSend());
+  // «Qattiqqo'l domla»: idle defences expire (the student is told once), stuck ones are refunded.
+  await step("domla", () => domlaHousekeeping());
 }
 
 /** `error_log`: 90 days after `last_seen_at`, resolved or not (§5.5). */
@@ -1217,6 +1246,7 @@ async function loop(): Promise<void> {
     let healthy = true;
     try {
       busy = await tick();
+      if (await domlaStep()) busy = true;
     } catch (e) {
       healthy = false;
       log("error", "[worker] tick", { err: e });

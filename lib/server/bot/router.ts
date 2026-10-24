@@ -494,6 +494,14 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
         toast = await dq.handleQuizCallback(ctx, msg.message_id, c);
         return;
       }
+      case "domlaList":
+      case "domlaStart":
+      case "domlaResume": {
+        // Qattiqqo'l domla: all rules live in lib/server/domla.ts, the screens in ./domla.
+        const dm = await import("./domla");
+        toast = await dm.handleDomlaCallback(ctx, msg.message_id, c);
+        return;
+      }
       case "noop":
         return;
       case "unknown":

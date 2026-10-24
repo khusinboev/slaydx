@@ -71,6 +71,8 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "daily_quiz.monthly_cap",
     "daily_quiz.daily_budget",
     "daily_quiz.hour",
+    "domla.enabled",
+    "domla.price",
   ]);
   for (const k of s.SETTING_KEYS) {
     const d = s.settingDef(k);
@@ -112,6 +114,17 @@ test("standart qiymatlar = env (mahsulot xulqi o'zgarmaydi)", () => {
   assert.equal(d("daily_quiz.monthly_cap"), 5000);
   assert.equal(d("daily_quiz.daily_budget"), 300_000);
   assert.equal(d("daily_quiz.hour"), 9);
+  // Qattiqqo'l domla (owner request 15): on by default, 3 000 so'm.
+  assert.equal(d("domla.enabled"), true);
+  assert.equal(d("domla.price"), 3000);
+});
+
+test("validatsiya: domla.* (yoqish, narx)", () => {
+  good("domla.enabled", false);
+  for (const v of ["true", 1, null]) bad("domla.enabled", v);
+  good("domla.price", 0);
+  good("domla.price", 3000);
+  for (const v of [-1, 1.5, "3000", NaN, null, 1e15]) bad("domla.price", v);
 });
 
 test("validatsiya: daily_quiz.* (yoqish, bonus, chegara, fond, soat)", () => {

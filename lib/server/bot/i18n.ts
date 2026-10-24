@@ -19,6 +19,86 @@ export const LANGS: readonly Lang[] = ["uz", "ru", "en"];
 type Entry = { uz: string; ru: string; en: string };
 
 const T = {
+  /* ── Qattiqqo‘l domla (owner request 15; every key starts with `domla.`) ── */
+  "domla.intro": {
+    uz: "🎓 <b>Qattiqqo‘l domla</b>\nSlaydingizni himoya qiling: domla 5 ta savolni OVOZ bilan so‘raydi, siz ovozli xabar bilan javob berasiz. Oxirida baho qo‘yadi va adashgan joyingizni aytadi.\nNarxi: <b>{price}</b>. Qaysi ishni himoya qilamiz?",
+    ru: "🎓 <b>Строгий профессор</b>\nЗащитите свои слайды: профессор задаёт 5 вопросов ГОЛОСОМ, вы отвечаете голосовыми сообщениями. В конце он ставит оценку и показывает, где вы ошиблись.\nЦена: <b>{price}</b>. Какую работу защищаем?",
+    en: "🎓 <b>The Strict Professor</b>\nDefend your slides: the professor asks 5 questions OUT LOUD and you answer with voice messages. At the end you get a grade and the question you got wrong.\nPrice: <b>{price}</b>. Which work shall we defend?",
+  },
+  "domla.none": {
+    uz: "🎓 Himoya qilish uchun tayyor slayd yo‘q. Avval slayd yarating, keyin qaytib keling.",
+    ru: "🎓 Нет готовых слайдов для защиты. Сначала создайте презентацию, затем возвращайтесь.",
+    en: "🎓 You have no finished slides to defend yet. Create a presentation first, then come back.",
+  },
+  "domla.disabled": {
+    uz: "🎓 Qattiqqo‘l domla hozircha dam olyapti. Birozdan keyin qayting.",
+    ru: "🎓 Строгий профессор сейчас отдыхает. Загляните позже.",
+    en: "🎓 The Strict Professor is taking a break. Please come back later.",
+  },
+  "domla.open": {
+    uz: "🎓 Sizda tugallanmagan himoya bor: «{topic}». Davom ettiramizmi?",
+    ru: "🎓 У вас есть незавершённая защита: «{topic}». Продолжим?",
+    en: "🎓 You have an unfinished defence: “{topic}”. Shall we continue?",
+  },
+  "domla.resumeBtn": { uz: "Davom ettirish", ru: "Продолжить", en: "Continue" },
+  "domla.appBtn": { uz: "Tarix va ilova", ru: "История и приложение", en: "History and app" },
+  "domla.topUpBtn": { uz: "Hisobni to‘ldirish", ru: "Пополнить счёт", en: "Top up" },
+  "domla.started": {
+    uz: "🎓 Domla savollarni tayyorlayapti… Birozdan keyin birinchi savol ovozli xabar bo‘lib keladi. To‘landi: {price}.",
+    ru: "🎓 Профессор готовит вопросы… Скоро придёт первый вопрос голосовым сообщением. Оплачено: {price}.",
+    en: "🎓 The professor is preparing the questions… The first one arrives as a voice message shortly. Paid: {price}.",
+  },
+  "domla.again": {
+    uz: "🎓 Bu himoya allaqachon boshlangan — qayta to‘lov yechilmadi.",
+    ru: "🎓 Эта защита уже начата — повторно деньги не списаны.",
+    en: "🎓 This defence has already started — nothing was charged again.",
+  },
+  "domla.insufficient": {
+    uz: "Hisobda mablag‘ yetarli emas. Himoya narxi: {price}.",
+    ru: "Недостаточно средств. Цена защиты: {price}.",
+    en: "Not enough balance. The defence costs {price}.",
+  },
+  "domla.notFound": { uz: "Bu ish topilmadi.", ru: "Эта работа не найдена.", en: "That work was not found." },
+  "domla.openFirst": {
+    uz: "Avval boshlangan himoyani tugating.",
+    ru: "Сначала завершите начатую защиту.",
+    en: "Finish the defence you already started first.",
+  },
+  "domla.resumed": { uz: "Savol qayta yuboriladi", ru: "Вопрос отправляется снова", en: "The question is being sent again" },
+  "domla.expired": { uz: "Himoya muddati tugagan", ru: "Время защиты истекло", en: "The defence has expired" },
+  "domla.preparing": { uz: "Savollar tayyorlanmoqda…", ru: "Вопросы готовятся…", en: "The questions are being prepared…" },
+  "domla.finished": { uz: "Bu himoya tugagan", ru: "Эта защита завершена", en: "This defence is over" },
+  "domla.voiceHint": {
+    uz: "Hozir domlaning savoli yo‘q. /domla bilan himoyani boshlang.",
+    ru: "Сейчас нет вопроса профессора. Начните защиту командой /domla.",
+    en: "There is no question from the professor right now. Start a defence with /domla.",
+  },
+  "domla.voiceBad": {
+    uz: "Bu turdagi audio qabul qilinmaydi. Oddiy ovozli xabar yuboring.",
+    ru: "Этот тип аудио не принимается. Отправьте обычное голосовое сообщение.",
+    en: "This audio type is not accepted. Send a regular voice message.",
+  },
+  "domla.listening": { uz: "🎧 Domla tinglayapti…", ru: "🎧 Профессор слушает…", en: "🎧 The professor is listening…" },
+  "domla.busy": {
+    uz: "Domla oldingi javobingizni hali tinglayapti. Biroz kuting.",
+    ru: "Профессор ещё слушает предыдущий ответ. Подождите немного.",
+    en: "The professor is still listening to your previous answer. Please wait.",
+  },
+  "domla.wait": {
+    uz: "Domla savolni hali aytib bo‘lmadi. Biroz kuting.",
+    ru: "Профессор ещё не договорил вопрос. Подождите немного.",
+    en: "The professor has not finished asking yet. Please wait.",
+  },
+  "domla.tooBig": {
+    uz: "Ovozli xabar juda katta (2 MB dan oshmasin). Qisqaroq qilib qayta yuboring.",
+    ru: "Голосовое сообщение слишком большое (не более 2 МБ). Отправьте покороче.",
+    en: "The voice message is too big (2 MB at most). Send a shorter one.",
+  },
+  "domla.tooLong": {
+    uz: "Ovozli xabar juda uzun (ko‘pi bilan 2 daqiqa). Qisqaroq qilib qayta yuboring.",
+    ru: "Голосовое сообщение слишком длинное (не более 2 минут). Отправьте покороче.",
+    en: "The voice message is too long (2 minutes at most). Send a shorter one.",
+  },
   /* ── Main keyboard ── */
   "kb.slide": { uz: "Slayd", ru: "Слайды", en: "Slides" },
   "kb.image": { uz: "Rasm", ru: "Картинка", en: "Image" },
@@ -610,6 +690,7 @@ const T = {
   "cmd.til": { uz: "Bot tilini o‘zgartirish", ru: "Сменить язык бота", en: "Change the bot language" },
   "cmd.alifbo": { uz: "Kirill ↔ Lotin ↔ Yangi lotin", ru: "Кириллица ↔ латиница ↔ новая латиница", en: "Cyrillic ↔ Latin ↔ new Latin" },
   "cmd.savol": { uz: "Kunlik 3 ta savol (bonus)", ru: "3 вопроса дня (бонус)", en: "Today’s 3 questions (bonus)" },
+  "domla.cmd": { uz: "Qattiqqo‘l domla — slayd himoyasi", ru: "Строгий профессор — защита слайдов", en: "Strict Professor — defend your slides" },
   "cmd.obuna": { uz: "Kunlik savollar xabarini yoqish/o‘chirish", ru: "Включить/выключить вопросы дня", en: "Turn the daily questions on/off" },
   "menu.app": { uz: "Ilova", ru: "Приложение", en: "App" },
 } as const satisfies Record<string, Entry>;
