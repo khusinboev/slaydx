@@ -62,11 +62,11 @@ test("computed caveats: rollout coverage, historical split, unpriced, estimated,
     );
     return id;
   }
-  async function usage(o: { at: string; source?: "job" | "free"; outcome?: string; genId?: string | null; tool: string; cost: CostJson }) {
+  async function usage(o: { at: string; source?: "job" | "free"; outcome?: string; genId?: string | null; tool: string; cost: CostJson; paidRef?: string }) {
     await query(
-      `INSERT INTO ai_usage (at, source, outcome, generation_id, user_id, tool_id, calls, input_tokens, output_tokens, usd, parts)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)`,
-      [o.at, o.source ?? "job", o.outcome ?? "completed", o.genId ?? null, uid, o.tool, o.cost.calls, o.cost.inputTokens, o.cost.outputTokens, o.cost.usd, JSON.stringify(o.cost.parts ?? [])],
+      `INSERT INTO ai_usage (at, source, outcome, generation_id, user_id, tool_id, calls, input_tokens, output_tokens, usd, parts, paid_ref)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)`,
+      [o.at, o.source ?? "job", o.outcome ?? "completed", o.genId ?? null, uid, o.tool, o.cost.calls, o.cost.inputTokens, o.cost.outputTokens, o.cost.usd, JSON.stringify(o.cost.parts ?? []), o.paidRef ?? null],
     );
   }
   const reset = async () => {
@@ -235,6 +235,16 @@ test("computed caveats: rollout coverage, historical split, unpriced, estimated,
     );
     // An estimate is priced, not «unpriced».
     assert.ok(!caveats.some((x) => x.startsWith("Narxlanmagan") || x.startsWith("Narxi noma'lum")));
+  });
+
+  await t.test("paid chat spend (paid_ref set) is not counted as FREE spend in the free-LLM note", async () => {
+    await reset();
+    const c = meter((m) => m.addLlm(SONNET(500_000, 50_000))); // $1.50
+    await usage({ at: tk(R, "12:00:00"), source: "free", outcome: "free", tool: "free:chat", cost: c });
+    await usage({ at: tk(R, "12:00:01"), source: "free", outcome: "free", tool: "chat:paid", cost: c, paidRef: "chat:1" });
+    const note = (await cost.costCaveats(pool(), rWide)).find((x) => x.startsWith("Bepul AI so'rovlari"));
+    // total $3.00, FREE $1.50 (1 call) = 50,0 %; the paid message is spend, not free spend.
+    assert.ok(note && note.includes("1 ta chaqiruv, $1.50") && note.includes("50,0%"), String(note));
   });
 
   await t.test("grounding is listed with the query count and cost; free-LLM share with its percentage", async () => {

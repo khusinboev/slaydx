@@ -389,8 +389,8 @@ export async function sendChatMessage(input: SendInput, deps: ChatDeps = {}): Pr
       await dropClaim(messageId);
       throw err;
     } finally {
-      // Paid spend is its own bucket in ai_usage (source/outcome 'paid', ref = the ledger reference), not "free" spend.
-      void recordAiUsage({ source: "paid", outcome: "paid", userId, toolId: "chat:paid", ref: `chat:${messageId}`, cost: tracked.snapshot().toJson() });
+      // Paid spend is told apart from free spend by `paid_ref` (the ledger reference) and the tool key `chat:paid`.
+      void recordAiUsage({ source: "free", outcome: "free", userId, toolId: "chat:paid", paidRef: `chat:${messageId}`, cost: tracked.snapshot().toJson() });
     }
   }
 

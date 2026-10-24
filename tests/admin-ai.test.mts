@@ -280,7 +280,7 @@ test("toolKeyTitle: registry titles, Uzbek free endpoints, unknown and retired k
   assert.equal(ai.toolKeyTitle("free:rewrite"), "Bepul AI: qayta yozish");
   assert.equal(ai.toolKeyTitle("free:polish"), "Bepul AI: sayqal");
   assert.equal(ai.toolKeyTitle("free:chat"), "Bepul AI: AI chat");
-  assert.equal(ai.toolKeyTitle("chat:paid"), "AI chat (pullik xabarlar)");
+  assert.equal(ai.toolKeyTitle("chat:paid"), "AI chat (pullik)");
   assert.equal(ai.toolKeyTitle("free:new-endpoint"), "Bepul AI: new-endpoint");
   assert.equal(ai.toolKeyTitle("unknown"), "Noma'lum vosita");
   assert.equal(ai.toolKeyTitle(""), "Noma'lum vosita");

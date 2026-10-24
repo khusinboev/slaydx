@@ -65,7 +65,7 @@ export function toolKeyTitle(key: string): string {
     const name = Object.prototype.hasOwnProperty.call(FREE_ENDPOINT_TITLES, endpoint) ? FREE_ENDPOINT_TITLES[endpoint as FreeLlmEndpoint] : endpoint;
     return `Bepul AI: ${name || "noma'lum"}`;
   }
-  if (key === "chat:paid") return "AI chat (pullik xabarlar)";
+  if (key === "chat:paid") return "AI chat (pullik)";
   if (key === "" || key === "unknown") return "Noma'lum vosita";
   return key;
 }

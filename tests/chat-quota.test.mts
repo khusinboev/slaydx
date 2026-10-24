@@ -203,21 +203,22 @@ test("AI chat quota and charging", { skip }, async (t) => {
     assert.equal((await chat.chatStatus(uid, { now: Date.parse("2026-11-03T19:00:00Z") })).freeLeft, 10);
   });
 
-  await t.test("spend lands in ai_usage: free messages as free:chat, paid ones as their own 'paid' bucket with the ledger reference", async () => {
+  await t.test("spend lands in ai_usage: free messages as free:chat, paid ones as chat:paid with the ledger reference in paid_ref", async () => {
     const { flushAiUsage } = await import("../lib/server/ai-usage.ts");
     const uid = await mkUser(query, { balance: 500 });
     const llm = stubLlm();
     for (let i = 0; i < 11; i++) await chat.sendChatMessage({ userId: uid, channel: "web", text: "x", clientId: cid() }, { complete: llm.complete });
     await flushAiUsage();
-    const rows = await query<{ tool_id: string; source: string; outcome: string; ref: string | null; calls: number }>("SELECT tool_id, source, outcome, ref, calls FROM ai_usage WHERE user_id = $1 ORDER BY id", [uid]);
+    const rows = await query<{ tool_id: string; source: string; outcome: string; paid_ref: string | null; calls: number }>("SELECT tool_id, source, outcome, paid_ref, calls FROM ai_usage WHERE user_id = $1 ORDER BY id", [uid]);
     assert.equal(rows.length, 11);
-    const free = rows.filter((r) => r.source === "free");
-    const paid = rows.filter((r) => r.source === "paid");
+    assert.ok(rows.every((r) => r.source === "free" && r.outcome === "free" && r.calls === 1), "existing CHECK values only");
+    const free = rows.filter((r) => r.paid_ref === null);
+    const paid = rows.filter((r) => r.paid_ref !== null);
     assert.equal(free.length, 10);
-    assert.ok(free.every((r) => r.tool_id === "free:chat" && r.outcome === "free" && r.ref === null && r.calls === 1));
+    assert.ok(free.every((r) => r.tool_id === "free:chat"));
     assert.equal(paid.length, 1);
     const msg = (await query<{ id: string }>("SELECT m.id::text AS id FROM chat_messages m JOIN chat_conversations c ON c.id = m.conversation_id WHERE c.user_id = $1 AND m.charged_points > 0", [uid]))[0]!;
-    assert.deepEqual({ tool: paid[0]!.tool_id, outcome: paid[0]!.outcome, ref: paid[0]!.ref, calls: paid[0]!.calls }, { tool: "chat:paid", outcome: "paid", ref: `chat:${msg.id}`, calls: 1 });
+    assert.deepEqual({ tool: paid[0]!.tool_id, ref: paid[0]!.paid_ref }, { tool: "chat:paid", ref: `chat:${msg.id}` });
   });
 
   await t.test("input checks: empty, too long, bad client id", async () => {
