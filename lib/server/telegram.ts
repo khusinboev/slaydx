@@ -254,10 +254,10 @@ export async function botUsername(now: number = Date.now()): Promise<string | nu
 }
 
 /** The bot's commands, in menu order. */
-export const BOT_COMMANDS = ["start", "login", "taklif", "admin", "til", "alifbo", "savol", "obuna", "domla", "chat", "stop"] as const;
+export const BOT_COMMANDS = ["start", "login", "taklif", "admin", "til", "alifbo", "savol", "obuna", "domla", "chat", "stop", "test"] as const;
 
 /** Menu descriptions that live under another key prefix than `cmd.` (the AI chat and the domla keep their texts under `chat.` / `domla.`). */
-const COMMAND_TEXT: Partial<Record<(typeof BOT_COMMANDS)[number], TextKey>> = { domla: "domla.cmd", chat: "chat.cmd", stop: "chat.cmdStop" };
+const COMMAND_TEXT: Partial<Record<(typeof BOT_COMMANDS)[number], TextKey>> = { domla: "domla.cmd", chat: "chat.cmd", stop: "chat.cmdStop", test: "tests.cmd" };
 
 /**
  * Bot menyusidagi buyruqlar (Telegram «/» tugmasi). Idempotent — har
@@ -982,6 +982,12 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
   // «Qattiqqo'l domla»: `/domla` lists the last slide works to defend (or resumes the open defence).
   if (ctx && text.startsWith("/domla")) {
     await (await import("./bot/domla")).sendList(ctx);
+    return;
+  }
+
+  // Paid tests: `/test` opens the Mini App page (all rules live in lib/server/paid-tests.ts).
+  if (ctx && /^\/test(@\w+)?(\s|$)/.test(text)) {
+    await (await import("./bot/tests")).sendEntry(ctx);
     return;
   }
 

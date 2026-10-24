@@ -431,6 +431,15 @@ test("free tools: «Fayl konvertatsiya (tekin)» and «Alifbo o'giruvchi (tekin)
   assert.equal(convert.nextElementSibling, alifbo, "the alifbo card follows the converter card");
 });
 
+test("hub card «Test ishlash» links to /uz/tests", () => {
+  signIn();
+  mount();
+  const card = q<HTMLAnchorElement>("[data-hub-tests]")!;
+  assert.ok(card, "the card exists");
+  assert.equal(card.getAttribute("href"), "/uz/tests");
+  assert.match(card.textContent!, /Test ishlash/);
+});
+
 test("sections: three, labelled, staggered ≤ 200 ms and motion-safe only", () => {
   signIn();
   mount();
