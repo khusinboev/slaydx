@@ -259,7 +259,7 @@ export async function withFreeLlm<T>(
 }
 
 /** Records the free call's spend (nothing when no provider call was made). Never throws. */
-function flushFreeUsage(endpoint: FreeLlmEndpoint, userId: string, snapshot: () => JobCost): void {
+export function flushFreeUsage(endpoint: FreeLlmEndpoint, userId: string, snapshot: () => JobCost): void {
   try {
     void recordAiUsage({ source: "free", outcome: "free", userId, toolId: `free:${endpoint}`, cost: snapshot().toJson() });
   } catch {
