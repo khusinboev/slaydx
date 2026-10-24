@@ -36,7 +36,7 @@ function policy(over: Partial<Policy> = {}, daily: Partial<Policy["daily"]> = {}
     disabled: false,
     globalDaily: 1_000_000,
     ...over,
-    daily: { outline: 100, udk: 100, rewrite: 100, polish: 100, ...daily },
+    daily: { outline: 100, udk: 100, rewrite: 100, polish: 100, chat: 100, ...daily },
   };
 }
 
@@ -62,7 +62,7 @@ test("Toshkent kuni: 19:00 UTC da almashadi, UTC yarim tunda emas", async () => 
 
 test("siyosat: standartlar va env o'qilishi", async () => {
   const { FREE_LLM_DEFAULTS, freeLlmPolicy } = await import("../lib/server/spend.ts");
-  assert.deepEqual(FREE_LLM_DEFAULTS.daily, { outline: 20, udk: 20, rewrite: 30, polish: 10 });
+  assert.deepEqual(FREE_LLM_DEFAULTS.daily, { outline: 20, udk: 20, rewrite: 30, polish: 10, chat: 10 });
   assert.equal(FREE_LLM_DEFAULTS.globalDaily, 20_000);
   const p = freeLlmPolicy();
   assert.equal(p.disabled, false);
@@ -176,7 +176,7 @@ test("compose: bepul LLM sozlamalari web'ga uzatiladi va .env.example da hujjatl
   const next = rest.slice(1).search(/\n {2}[a-z]/);
   const web = next >= 0 ? rest.slice(0, next + 1) : rest;
   const example = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
-  for (const k of ["FREE_LLM_DISABLED", "FREE_LLM_DAILY_OUTLINE", "FREE_LLM_DAILY_UDK", "FREE_LLM_DAILY_REWRITE", "FREE_LLM_DAILY_POLISH", "FREE_LLM_DAILY_GLOBAL"]) {
+  for (const k of ["FREE_LLM_DISABLED", "FREE_LLM_DAILY_OUTLINE", "FREE_LLM_DAILY_UDK", "FREE_LLM_DAILY_REWRITE", "FREE_LLM_DAILY_POLISH", "FREE_LLM_DAILY_CHAT", "FREE_LLM_DAILY_GLOBAL"]) {
     assert.match(web, new RegExp(`^\\s+${k}: \\$\\{${k}:-[^}]*\\}$`, "m"), `web: ${k} uzatilmaydi`);
     assert.match(example, new RegExp(`^#? ?${k}=`, "m"), `${k} .env.example da yo'q`);
   }

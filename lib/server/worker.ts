@@ -114,6 +114,8 @@ const PAYMENT_EVENTS_RETENTION_DAYS = 365;
 let lastPaymentEventsPurgeAt = -Infinity;
 /** `server_metrics` retention purge (90 days): same 6 hour cadence, mark before the DELETE. */
 let lastServerMetricsPurgeAt = -Infinity;
+/** AI chat messages / proposals older than 30 days (`purgeChat`): same 6 hour cadence, mark before the DELETE. */
+let lastChatPurgeAt = -Infinity;
 
 /**
  * Sinov uchun: keyingi `housekeeping()` 6 soatlik qadamlarni (saqlash
@@ -123,6 +125,7 @@ export function resetRetentionScan(): void {
   lastRetentionAt = -Infinity;
   lastPaymentEventsPurgeAt = -Infinity;
   lastServerMetricsPurgeAt = -Infinity;
+  lastChatPurgeAt = -Infinity;
   lastStaySweepAt = -Infinity;
 }
 
@@ -1007,6 +1010,15 @@ export async function purgeHousekeeping(): Promise<void> {
       const n = await purgePaymentEvents(PAYMENT_EVENTS_RETENTION_DAYS);
       if (n) log("info", "[worker] payment_events tozalandi", { deleted: n, retentionDays: PAYMENT_EVENTS_RETENTION_DAYS });
       return n;
+    });
+  }
+  // AI chat: a message charged but never answered (the process died mid-send) is refunded after 5 minutes.
+  await step("chat-refund", async () => (await import("./chat/service")).refundOrphanedChat());
+  // AI chat retention (owner request 8): messages and proposals older than 30 days.
+  if (Date.now() - lastChatPurgeAt >= RETENTION_EVERY_MS) {
+    await step("chat-purge", async () => {
+      lastChatPurgeAt = Date.now();
+      return (await import("./chat/service")).purgeChat();
     });
   }
   // Click direct card payments: a one-time card token nobody confirmed is dropped after 30 min (048).

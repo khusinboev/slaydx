@@ -693,6 +693,81 @@ const T = {
   "domla.cmd": { uz: "Qattiqqo‘l domla — slayd himoyasi", ru: "Строгий профессор — защита слайдов", en: "Strict Professor — defend your slides" },
   "cmd.obuna": { uz: "Kunlik savollar xabarini yoqish/o‘chirish", ru: "Включить/выключить вопросы дня", en: "Turn the daily questions on/off" },
   "menu.app": { uz: "Ilova", ru: "Приложение", en: "App" },
+
+  /* ── AI chat (owner request 8; keys are prefixed `chat.`) ── */
+  "chat.cmd": { uz: "AI yordamchi bilan suhbat", ru: "Чат с ИИ-помощником", en: "Chat with the AI assistant" },
+  "chat.cmdStop": { uz: "AI suhbatni tugatish", ru: "Завершить чат с ИИ", en: "End the AI chat" },
+  "chat.on": {
+    uz: "AI yordamchi yoqildi. Savol bering yoki hujjat buyuring — masalan: «Suv haqida 10 slaydli taqdimot qil».\nTugatish: /stop\n{free}",
+    ru: "ИИ-помощник включён. Задайте вопрос или закажите документ — например: «Сделай презентацию на 10 слайдов про воду».\nЗавершить: /stop\n{free}",
+    en: "The AI assistant is on. Ask a question or order a document — e.g. “Make a 10-slide presentation about water”.\nEnd: /stop\n{free}",
+  },
+  "chat.off": {
+    uz: "AI suhbat tugadi. Oddiy menyuga qaytdingiz.",
+    ru: "Чат с ИИ завершён. Вы вернулись в обычное меню.",
+    en: "The AI chat has ended. You are back in the normal menu.",
+  },
+  "chat.offAlready": {
+    uz: "AI suhbat yoqilmagan. Boshlash: /chat",
+    ru: "Чат с ИИ не включён. Начать: /chat",
+    en: "The AI chat is not on. Start it with /chat",
+  },
+  "chat.free": { uz: "Bugun tekin: {left}/{limit}", ru: "Бесплатно сегодня: {left}/{limit}", en: "Free today: {left}/{limit}" },
+  "chat.next": { uz: "Keyingi xabar: {price}", ru: "Следующее сообщение: {price}", en: "Next message: {price}" },
+  "chat.price": { uz: "Narx: {price}", ru: "Цена: {price}", en: "Price: {price}" },
+  "chat.expires": {
+    uz: "10 daqiqa ichida tasdiqlang.",
+    ru: "Подтвердите в течение 10 минут.",
+    en: "Confirm within 10 minutes.",
+  },
+  "chat.yes": { uz: "Tasdiqlash", ru: "Подтвердить", en: "Confirm" },
+  "chat.no": { uz: "Bekor qilish", ru: "Отмена", en: "Cancel" },
+  "chat.topup": { uz: "Hamyonni to‘ldirish", ru: "Пополнить кошелёк", en: "Top up the wallet" },
+  "chat.openFiles": { uz: "Ishlarim", ru: "Мои работы", en: "My files" },
+  "chat.cancelled": { uz: "Bekor qilindi.", ru: "Отменено.", en: "Cancelled." },
+  "chat.started": {
+    uz: "Boshlandi! Natijani «Ishlarim» bo‘limida kuzating.",
+    ru: "Запущено! Следите за результатом в разделе «Мои работы».",
+    en: "Started! Follow the result in “My files”.",
+  },
+  "chat.adjust": {
+    uz: "{tool}: ma’lumotni to‘g‘rilash kerak:\n{issues}\nYetishmayotgan qiymatni yozing — kartani qayta tayyorlayman.",
+    ru: "{tool}: нужно поправить данные:\n{issues}\nНапишите недостающее — я подготовлю карточку заново.",
+    en: "{tool}: the details need fixing:\n{issues}\nSend the missing value and I will prepare the card again.",
+  },
+  "chat.err.disabled": { uz: "AI chat hozircha o‘chirilgan.", ru: "ИИ-чат сейчас отключён.", en: "The AI chat is switched off for now." },
+  "chat.err.insufficient": {
+    uz: "Bugungi tekin xabarlar tugadi. Davom etish uchun {price} kerak, hamyonda {have} bor.",
+    ru: "Бесплатные сообщения на сегодня закончились. Чтобы продолжить, нужно {price}, в кошельке {have}.",
+    en: "Today’s free messages are used up. To continue you need {price}; the wallet has {have}.",
+  },
+  "chat.err.freeExhausted": {
+    uz: "Bugungi tekin xabarlar tugadi — ertaga (Toshkent vaqti bilan 00:00 dan keyin) davom eting.",
+    ru: "Бесплатные сообщения на сегодня закончились — продолжайте завтра (после 00:00 по Ташкенту).",
+    en: "Today’s free messages are used up — continue tomorrow (after 00:00 Tashkent time).",
+  },
+  "chat.err.busy": { uz: "Xabar hali qayta ishlanmoqda — biroz kuting.", ru: "Сообщение ещё обрабатывается — подождите.", en: "The message is still being processed — please wait." },
+  "chat.err.noAnswer": {
+    uz: "AI hozir javob bermadi. Birozdan keyin qayta urinib ko‘ring (pul yechilmadi).",
+    ru: "ИИ сейчас не ответил. Попробуйте чуть позже (деньги не списаны).",
+    en: "The AI did not answer. Try again in a moment (nothing was charged).",
+  },
+  "chat.err.rate": { uz: "Juda tez yozyapsiz — biroz kuting.", ru: "Вы пишете слишком быстро — подождите.", en: "You are writing too fast — please wait." },
+  "chat.err.generic": { uz: "Xabarni yuborib bo‘lmadi. Qayta urinib ko‘ring.", ru: "Не удалось отправить сообщение. Попробуйте ещё раз.", en: "The message could not be sent. Please try again." },
+  "chat.err.invalid": { uz: "Bu tugma eskirgan. Taklifni qaytadan so‘rang.", ru: "Эта кнопка устарела. Запросите предложение заново.", en: "This button is out of date. Ask for the proposal again." },
+  "chat.err.used": { uz: "Bu taklif allaqachon ishlatilgan.", ru: "Это предложение уже использовано.", en: "This proposal was already used." },
+  "chat.err.expired": { uz: "Taklif muddati tugadi — qaytadan so‘rang.", ru: "Срок предложения истёк — запросите заново.", en: "The proposal expired — ask again." },
+  "chat.err.priceChanged": {
+    uz: "Narx o‘zgardi: {price}. Taklifni qaytadan so‘rang.",
+    ru: "Цена изменилась: {price}. Запросите предложение заново.",
+    en: "The price changed: {price}. Ask for the proposal again.",
+  },
+  "chat.err.confirmInsufficient": {
+    uz: "Balans yetarli emas: kerak {price}, mavjud {have}. Hamyonni to‘ldirib, «Tasdiqlash» ni qayta bosing.",
+    ru: "Недостаточно средств: нужно {price}, доступно {have}. Пополните кошелёк и снова нажмите «Подтвердить».",
+    en: "Not enough balance: {price} needed, {have} available. Top up and tap “Confirm” again.",
+  },
+  "chat.err.refused": { uz: "Hozir yaratib bo‘lmadi: {reason}", ru: "Сейчас создать нельзя: {reason}", en: "Cannot create it now: {reason}" },
 } as const satisfies Record<string, Entry>;
 
 export type TextKey = keyof typeof T;

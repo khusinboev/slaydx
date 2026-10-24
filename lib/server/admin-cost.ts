@@ -177,7 +177,7 @@ export function spendRowsSql(range: SpendRange, firstParam = 1): SpendRowsSql {
  */
 function canonicalRowsSql(usageFilter: string, legacyFilter: string): string {
   return `SELECT u.at, u.source, u.outcome, u.generation_id, u.user_id, u.tool_id,
-         u.calls::bigint AS calls, u.input_tokens, u.output_tokens, u.usd::numeric AS usd, u.parts
+         u.calls::bigint AS calls, u.input_tokens, u.output_tokens, u.usd::numeric AS usd, u.parts, u.paid_ref
     FROM ai_usage u
    WHERE ${usageFilter}
   UNION ALL
@@ -187,7 +187,7 @@ function canonicalRowsSql(usageFilter: string, legacyFilter: string): string {
          ${jsonCount("g.cost_json->'inputTokens'")} AS input_tokens,
          ${jsonCount("g.cost_json->'outputTokens'")} AS output_tokens,
          GREATEST(${jsonNum("g.cost_json->'usd'")}, 0) AS usd,
-         ${LEGACY_PARTS} AS parts
+         ${LEGACY_PARTS} AS parts, NULL::text AS paid_ref
     FROM generations g
    WHERE g.status = 'COMPLETED'
      AND jsonb_typeof(g.cost_json) = 'object'
@@ -673,8 +673,8 @@ export async function costCaveats(db: Queryable, range: SpendRange): Promise<str
   // 7: free-LLM spend belongs to no tool.
   const money = await db.query<{ all_usd: string | number | null; free_usd: string | number | null; free_calls: string | number | null }>(
     `SELECT COALESCE(sum(s.usd), 0) AS all_usd,
-            COALESCE(sum(s.usd) FILTER (WHERE s.source = 'free'), 0) AS free_usd,
-            COALESCE(sum(s.calls) FILTER (WHERE s.source = 'free'), 0) AS free_calls
+            COALESCE(sum(s.usd) FILTER (WHERE s.source = 'free' AND s.paid_ref IS NULL), 0) AS free_usd,
+            COALESCE(sum(s.calls) FILTER (WHERE s.source = 'free' AND s.paid_ref IS NULL), 0) AS free_calls
        FROM (${spend.sql}) s`,
     spend.params,
   );

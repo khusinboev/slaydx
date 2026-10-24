@@ -26,6 +26,7 @@ import { cancelInput, claimInput, finishInput, keyboardStale, markKeyboard, repr
 import { clearState as clearAdminState, dropPendingStep } from "./admin-state";
 import { isLinkedAdmin } from "./admin-access";
 import { isAdminCallback } from "./admin-codes";
+import { isChatCallback } from "./chat-codes";
 import type { Screen } from "./ui";
 import { rateLimit } from "../ratelimit";
 import { bonusTasks, checkChannel } from "../bonus-channels";
@@ -383,6 +384,11 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
       return;
     }
     const ctx: ChatCtx = { chatId: msg.chat.id, telegramId: q.from.id, lang: langOf(user.language), user };
+    if (isChatCallback(q.data)) {
+      // AI chat proposal buttons (`chy:` / `chn:`): the rules live in lib/server/chat, see ./chat.
+      toast = await (await import("./chat")).handleChatCallback(ctx, msg.message_id, q.data!);
+      return;
+    }
     const c = parseCallback(q.data);
     const edit = (screen: Screen) => editScreen(ctx.chatId, msg.message_id, screen);
 

@@ -84,6 +84,8 @@ test("worker housekeeping records every named step and runs the new purges", asy
     "refund-reconcile",
     "retention",
     "payment-events",
+    "chat-refund",
+    "chat-purge",
     "sessions",
     "game-sessions",
     "rate-limits",
@@ -121,7 +123,7 @@ test("worker housekeeping records every named step and runs the new purges", asy
   await worker.housekeeping();
   await hs.flushStepStatus();
   const again = seen.filter((q) => /INSERT INTO housekeeping_status/.test(q.text)).map((q) => q.params[0]);
-  assert.ok(!again.includes("retention") && !again.includes("payment-events"));
+  assert.ok(!again.includes("retention") && !again.includes("payment-events") && !again.includes("chat-purge"));
   assert.ok(again.includes("sessions"));
 });
 
