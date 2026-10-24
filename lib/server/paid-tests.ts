@@ -169,8 +169,9 @@ export type HistoryItem = {
   subject: string | null;
   status: "active" | "finished";
   total: number;
-  correct: number | null;
-  score: number | null;
+  /** Present only once the attempt is finished (a running attempt exposes no result). */
+  correct?: number;
+  score?: number;
   startedAt: string;
   finishedAt: string | null;
 };
@@ -279,8 +280,7 @@ export async function listHistory(userId: string, limit = 20): Promise<HistoryIt
     subject: a.subject_name,
     status: a.status,
     total: a.total,
-    correct: a.correct,
-    score: num(a.score),
+    ...(a.status === "finished" ? { correct: a.correct ?? 0, score: num(a.score) ?? 0 } : {}),
     startedAt: iso(a.started_at),
     finishedAt: a.finished_at ? iso(a.finished_at) : null,
   }));
