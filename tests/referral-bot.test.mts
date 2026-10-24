@@ -217,7 +217,7 @@ test("setBotCommands lists /taklif with an Uzbek description", { skip }, async (
   assert.equal(await tg.setBotCommands(), true);
   const cmds = calls[0]!.body.commands as { command: string; description: string }[];
   // B2: + /til; the default (Uzbek) list first, then the ru/en scopes.
-  assert.deepEqual(cmds.map((c) => c.command), ["start", "login", "taklif", "admin", "til", "alifbo", "savol", "obuna"], "MUTATSIYA 5");
+  assert.deepEqual(cmds.map((c) => c.command), ["start", "login", "taklif", "admin", "til", "alifbo", "savol", "obuna", "chat", "stop"], "MUTATSIYA 5");
   assert.equal(cmds.find((c) => c.command === "taklif")!.description, "Do'stlarni taklif qilish havolasi");
   assert.equal(calls[0]!.body.language_code, undefined);
   assert.deepEqual(calls.slice(1).map((c) => c.body.language_code), ["ru", "en"]);

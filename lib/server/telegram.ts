@@ -9,7 +9,7 @@ import type { SessionUser } from "./session";
 import { normalizeRefCode, refCodeFromStartPayload, REFERRAL_REWARD_POINTS } from "../referral";
 import type { ReferralClaim } from "./referrals";
 import { inlineButton, tgEmoji, type Screen } from "./bot/ui";
-import { langFromTelegram, langOf, t, LANGS, type Lang } from "./bot/i18n";
+import { langFromTelegram, langOf, t, LANGS, type Lang, type TextKey } from "./bot/i18n";
 import { mainKeyboard } from "./bot/keyboard";
 import { alifboScreen, blockedText, loginScreen, welcomeScreen } from "./bot/screens";
 
@@ -254,7 +254,10 @@ export async function botUsername(now: number = Date.now()): Promise<string | nu
 }
 
 /** The bot's commands, in menu order. */
-export const BOT_COMMANDS = ["start", "login", "taklif", "admin", "til", "alifbo", "savol", "obuna"] as const;
+export const BOT_COMMANDS = ["start", "login", "taklif", "admin", "til", "alifbo", "savol", "obuna", "chat", "stop"] as const;
+
+/** Menu descriptions that live under another key prefix than `cmd.` (the AI chat keeps all its texts under `chat.`). */
+const COMMAND_TEXT: Partial<Record<(typeof BOT_COMMANDS)[number], TextKey>> = { chat: "chat.cmd", stop: "chat.cmdStop" };
 
 /**
  * Bot menyusidagi buyruqlar (Telegram «/» tugmasi). Idempotent — har
@@ -268,7 +271,7 @@ export async function setBotCommands(): Promise<boolean> {
   let ok = true;
   for (const lang of LANGS) {
     const out = await call("setMyCommands", {
-      commands: BOT_COMMANDS.map((command) => ({ command, description: t(lang, `cmd.${command}`) })),
+      commands: BOT_COMMANDS.map((command) => ({ command, description: t(lang, COMMAND_TEXT[command] ?? (`cmd.${command}` as TextKey)) })),
       ...(lang === "uz" ? {} : { language_code: lang }),
     });
     ok &&= out !== null;
@@ -950,7 +953,19 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
         return;
       }
       if (await bot.handlePendingInput(ctx, msg.text, update.update_id)) return;
+      // AI chat mode (`/chat`, ended by `/stop` or 15 idle minutes): LAST, so it never takes a text another flow wants.
+      if (await (await import("./bot/chat")).handleChatText(ctx, text, update.update_id)) return;
     }
+  }
+
+  // AI chat: `/chat` turns chat mode on, `/stop` turns it off.
+  if (ctx && /^\/chat(@\w+)?(\s|$)/.test(text)) {
+    await (await import("./bot/chat")).startChat(ctx);
+    return;
+  }
+  if (ctx && /^\/stop(@\w+)?(\s|$)/.test(text)) {
+    await (await import("./bot/chat")).stopChat(ctx);
+    return;
   }
 
   if (text.startsWith("/taklif")) {
