@@ -71,6 +71,9 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "daily_quiz.monthly_cap",
     "daily_quiz.daily_budget",
     "daily_quiz.hour",
+    "free_llm.daily.chat",
+    "chat.enabled",
+    "chat.price_per_message",
   ]);
   for (const k of s.SETTING_KEYS) {
     const d = s.settingDef(k);
@@ -93,6 +96,11 @@ test("standart qiymatlar = env (mahsulot xulqi o'zgarmaydi)", () => {
   assert.equal(d("free_llm.daily.rewrite"), env.freeLlm.dailyRewrite);
   assert.equal(d("free_llm.daily.polish"), env.freeLlm.dailyPolish);
   assert.equal(d("free_llm.daily.global"), env.freeLlm.dailyGlobal);
+  // AI chat (program-17 item 8): 10 free messages a day, then 100 so'm each; on by default.
+  assert.equal(d("free_llm.daily.chat"), env.freeLlm.dailyChat);
+  assert.equal(d("free_llm.daily.chat"), 10);
+  assert.equal(d("chat.enabled"), true);
+  assert.equal(d("chat.price_per_message"), 100);
   assert.equal(d("generation.paused"), false);
   assert.deepEqual(d("generation.paused_tools"), []);
   assert.equal(d("admin.wallet_confirm_threshold"), 1_000_000);
@@ -280,6 +288,10 @@ test("sozlamalar bazada (haqiqiy Postgres)", { skip }, async (t) => {
       ["generation.paused_tools", ["slide", "nope"], 400],
       ["free_llm.daily.polish", -1, 400],
       ["free_llm.daily.polish", 2.5, 400],
+      ["free_llm.daily.chat", -1, 400],
+      ["chat.enabled", "yes", 400],
+      ["chat.price_per_message", 10_001, 400],
+      ["chat.price_per_message", 99.5, 400],
       ["pricing.target_markup", 25, 400],
       ["pricing.target_markup", 0.5, 400],
       ["pricing.payment_fee_percent", 11, 400],

@@ -47,6 +47,7 @@ const FREE_ENDPOINT_TITLES: Record<FreeLlmEndpoint, string> = {
   udk: "UDK",
   rewrite: "qayta yozish",
   polish: "sayqal",
+  chat: "AI chat",
 };
 
 /**

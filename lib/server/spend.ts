@@ -40,7 +40,7 @@ import { trackJobCost, type JobCost } from "../generation/job-cost";
  * eskirgan tab egasining kunlik hisobini yemaydi.
  */
 
-export type FreeLlmEndpoint = "outline" | "udk" | "rewrite" | "polish";
+export type FreeLlmEndpoint = "outline" | "udk" | "rewrite" | "polish" | "chat";
 
 export type FreeLlmPolicy = {
   disabled: boolean;
@@ -52,7 +52,7 @@ export type FreeLlmPolicy = {
 
 export const FREE_LLM_DEFAULTS: FreeLlmPolicy = {
   disabled: false,
-  daily: { outline: 20, udk: 20, rewrite: 30, polish: 10 },
+  daily: { outline: 20, udk: 20, rewrite: 30, polish: 10, chat: 10 },
   globalDaily: 20_000,
 };
 
@@ -61,7 +61,7 @@ export function freeLlmPolicy(): FreeLlmPolicy {
   const f = env.freeLlm;
   return {
     disabled: f.disabled,
-    daily: { outline: f.dailyOutline, udk: f.dailyUdk, rewrite: f.dailyRewrite, polish: f.dailyPolish },
+    daily: { outline: f.dailyOutline, udk: f.dailyUdk, rewrite: f.dailyRewrite, polish: f.dailyPolish, chat: f.dailyChat },
     globalDaily: f.dailyGlobal,
   };
 }
@@ -81,16 +81,17 @@ let knownDisabled: boolean | undefined;
  * or the env value — and the fail-closed buckets below are unaffected.
  */
 export async function effectiveFreeLlmPolicy(): Promise<FreeLlmPolicy> {
-  const [disabled, outline, udk, rewrite, polish, globalDaily] = await Promise.all([
+  const [disabled, outline, udk, rewrite, polish, chat, globalDaily] = await Promise.all([
     getSetting("free_llm.disabled"),
     getSetting("free_llm.daily.outline"),
     getSetting("free_llm.daily.udk"),
     getSetting("free_llm.daily.rewrite"),
     getSetting("free_llm.daily.polish"),
+    getSetting("free_llm.daily.chat"),
     getSetting("free_llm.daily.global"),
   ]);
   knownDisabled = disabled;
-  return { disabled, daily: { outline, udk, rewrite, polish }, globalDaily };
+  return { disabled, daily: { outline, udk, rewrite, polish, chat }, globalDaily };
 }
 
 /** Kill switch for the synchronous route check: last known effective value, env until one is known. */
@@ -115,7 +116,7 @@ function disabledNow(): boolean {
  * «Hammasini tuzatish» ≤6 yozuvchi + 1 baholovchi. Shunda global shift
  * so'rov soni emas, chaqiruvlar soniga yaqin.
  */
-export const FREE_LLM_WEIGHT: Record<FreeLlmEndpoint, number> = { outline: 2, udk: 1, rewrite: 1, polish: 7 };
+export const FREE_LLM_WEIGHT: Record<FreeLlmEndpoint, number> = { outline: 2, udk: 1, rewrite: 1, polish: 7, chat: 1 };
 
 /**
  * Qisqa oynali chegaralar — o'zgarmadi (chelak nomlari ham eskisi, ya'ni
@@ -275,13 +276,14 @@ async function hit(bucket: string, count: number, windowSec: number, opts: RateO
     console.warn("[free-llm] global kunlik chegara tugadi", { limit: count });
     throw new ApiError(GLOBAL_TEXT, 503, { code: "global", retryAfter: res.retryAfterSec });
   }
+  // `code: "daily"` lets a caller with a paid fallback (the AI chat) tell the per-user daily cap from a burst or doc cap.
   const text =
     kind === "burst"
       ? `Juda ko'p so'rov. ${res.retryAfterSec} soniyadan keyin urinib ko'ring.`
       : kind === "doc"
         ? `Bu hujjat bugun ${count} marta sayqallandi — ertaga (Toshkent vaqti bilan 00:00 dan keyin) qayta urinib ko'ring.`
         : `Bugungi bepul chegara tugadi (${count} ta). Ertaga (Toshkent vaqti bilan 00:00 dan keyin) qayta urinib ko'ring.`;
-  throw new ApiError(text, 429, { retryAfter: res.retryAfterSec });
+  throw new ApiError(text, 429, { retryAfter: res.retryAfterSec, ...(kind === "daily" ? { code: "daily" } : {}) });
 }
 
 /**

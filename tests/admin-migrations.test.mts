@@ -319,7 +319,10 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     assert.ok(await quizOffCol(), "055 column created");
     assert.ok((await exists("daily_quiz_attempts")) && (await exists("daily_quiz_sends")), "055 tables created");
     assert.ok(await exists("provider_settings"), "056 table created");
+    assert.ok((await exists("chat_conversations")) && (await exists("chat_messages")) && (await exists("chat_proposals")), "057 tables created");
     for (const f of [
+      // 057: AI chat (docs/program-17 item 8) -- chat_conversations / chat_messages / chat_proposals.
+      "057_ai_chat.sql",
       // 056: provider key store (program-17 D7) -- provider_settings.
       "056_provider_settings.sql",
       // 055: daily logic quiz (docs/program-17 item 16) -- daily_quiz_attempts / daily_quiz_sends + users.daily_quiz_off.
@@ -360,6 +363,9 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     ]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
+      if (f === "057_ai_chat.sql") {
+        assert.ok(!(await exists("chat_conversations")) && !(await exists("chat_messages")) && !(await exists("chat_proposals")), "057 rollback drops the three tables");
+      }
       if (f === "056_provider_settings.sql") assert.ok(!(await exists("provider_settings")), "056 rollback drops the table");
       if (f === "055_daily_quiz.sql") {
         assert.ok(!(await quizOffCol()), "055 rollback drops the users column");

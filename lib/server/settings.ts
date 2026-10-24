@@ -67,6 +67,9 @@ export type SettingValues = {
   "daily_quiz.monthly_cap": number;
   "daily_quiz.daily_budget": number;
   "daily_quiz.hour": number;
+  "free_llm.daily.chat": number;
+  "chat.enabled": boolean;
+  "chat.price_per_message": number;
 };
 
 export type SettingKey = keyof SettingValues;
@@ -196,8 +199,12 @@ const QUEUE_GROUP = "Navbat va yuklama";
 const OFERTA_GROUP = "Oferta";
 const CONVERT_GROUP = "Fayl konvertatsiya";
 const QUIZ_GROUP = "Kunlik savollar";
+const CHAT_GROUP = "AI chat";
+/** AI chat price per message after the free ones: default 100 so'm; the cap stops a typo from charging a fortune per message. */
+const CHAT_PRICE_DEFAULT = 100;
+const CHAT_PRICE_MAX = 10_000;
 
-type DailyKey = "free_llm.daily.outline" | "free_llm.daily.udk" | "free_llm.daily.rewrite" | "free_llm.daily.polish";
+type DailyKey = "free_llm.daily.outline" | "free_llm.daily.udk" | "free_llm.daily.rewrite" | "free_llm.daily.polish" | "free_llm.daily.chat";
 
 function dailyCap<K extends DailyKey>(key: K, label: string, envVar: string, read: () => number): SettingDef<K> {
   return {
@@ -502,6 +509,28 @@ const CATALOG: Catalog = {
     max: 23,
     validate: intValidator(0, 23),
     envDefault: () => DQ_HOUR_DEFAULT,
+  },
+  "free_llm.daily.chat": dailyCap("free_llm.daily.chat", "AI chat: kunlik bepul xabarlar", "FREE_LLM_DAILY_CHAT", () => env.freeLlm.dailyChat),
+  "chat.enabled": {
+    key: "chat.enabled",
+    group: CHAT_GROUP,
+    label: "AI chat yoqilgan",
+    description: "O'chirilsa AI chat (sayt va bot) darhol to'xtaydi — provayder chaqirilmaydi, pul yechilmaydi.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => true,
+  },
+  "chat.price_per_message": {
+    key: "chat.price_per_message",
+    group: CHAT_GROUP,
+    label: "AI chat: bepul xabarlardan keyingi narx (so'm)",
+    description:
+      "Kunlik bepul xabarlar tugagach har bir xabar uchun yechiladigan so'm (bonus so'm ham ishlatiladi). 0 — kunlik bepul chegaradan keyin chat yopiladi. Yangi qiymat keyingi xabarlarga qo'llanadi.",
+    type: "int",
+    min: 0,
+    max: CHAT_PRICE_MAX,
+    validate: intValidator(0, CHAT_PRICE_MAX),
+    envDefault: () => CHAT_PRICE_DEFAULT,
   },
 };
 
