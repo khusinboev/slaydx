@@ -92,6 +92,48 @@ export function rowToSession(r: Row): DomlaSession {
 /** The ledger reference of a session's charge (and of its refund). */
 export const chargeRef = (sessionId: string): string => `domla:${sessionId}`;
 
+/**
+ * What the page may see of a session. The ideal answers of questions the student has not answered yet NEVER
+ * leave the server (they would give the defence away); a finished defence shows the weakest question's ideal.
+ */
+export type PublicSession = {
+  id: string;
+  status: DomlaStatus;
+  topic: string;
+  grade: Grade | null;
+  chargedPoints: number;
+  createdAt: string;
+  finishedAt: string | null;
+  progress: { answered: number; total: number };
+  results: { question: string; score: number; verdict: string }[];
+  weakest: { question: string; mistake: string; ideal: string } | null;
+};
+
+export function publicSession(s: DomlaSession): PublicSession {
+  const done = s.status === "finished";
+  const results = done ? s.questions.map((q, i) => ({ question: q.text, score: s.answers.find((a) => a.idx === i)?.score ?? 0, verdict: s.answers.find((a) => a.idx === i)?.verdict ?? "" })) : [];
+  let weakest: PublicSession["weakest"] = null;
+  if (done && results.length) {
+    let w = 0;
+    results.forEach((r, i) => {
+      if (r.score < results[w]!.score) w = i;
+    });
+    weakest = { question: s.questions[w]!.text, mistake: s.answers.find((a) => a.idx === w)?.mistake ?? "", ideal: s.questions[w]!.ideal };
+  }
+  return {
+    id: s.id,
+    status: s.status,
+    topic: s.topic,
+    grade: s.grade,
+    chargedPoints: s.chargedPoints,
+    createdAt: s.createdAt,
+    finishedAt: s.finishedAt,
+    progress: { answered: s.answers.length, total: s.questions.length || DOMLA_QUESTIONS },
+    results,
+    weakest,
+  };
+}
+
 /* ───────────────────────── settings ───────────────────────── */
 
 export const domlaEnabled = (): Promise<boolean> => getSetting(DOMLA_ENABLED_KEY);
@@ -215,6 +257,9 @@ export async function startDefence(userId: string, generationId: string): Promis
         [generationId, userId, [...DOMLA_SOURCE_TOOLS]],
       );
       if (!gen.rows[0]) throw new ApiError("Bu ish topilmadi yoki himoya uchun yaroqsiz", 404, { code: "not_found" });
+      // The defence is spoken in the user's Telegram chat: a web-only account has nowhere to hear the questions.
+      const tg = await client.query<{ telegram_id: string | null }>("SELECT telegram_id::text AS telegram_id FROM users WHERE id = $1", [userId]);
+      if (!tg.rows[0]?.telegram_id) throw new ApiError("Himoya Telegram botda o‘tadi — avval Telegram akkauntini bog‘lang", 409, { code: "no_telegram" });
 
       const open = await client.query<Row>(
         `SELECT ${COLS} FROM domla_sessions WHERE user_id = $1 AND status = ANY($2::text[]) FOR UPDATE`,
