@@ -183,8 +183,9 @@ on_exit() {
     } 2>/dev/null || true
   fi
   if [ -n "$RUN_ID" ]; then
-    printf 'rc=%s\n' "$rc" > "$STATE_DIR/runs/.$RUN_ID.$$" 2>/dev/null \
-      && mv -f "$STATE_DIR/runs/.$RUN_ID.$$" "$STATE_DIR/runs/$RUN_ID" 2>/dev/null || true
+    {
+      printf 'rc=%s\n' "$rc" > "$STATE_DIR/runs/.$RUN_ID.$$" && mv -f "$STATE_DIR/runs/.$RUN_ID.$$" "$STATE_DIR/runs/$RUN_ID"
+    } 2>/dev/null || true
   fi
   exit "$rc"
 }
