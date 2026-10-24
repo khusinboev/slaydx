@@ -1,6 +1,6 @@
 # bmbtestbot (@BMB_testbot) analysis and SlaydX import plan
 
-Date: 2026-10-24. Source: read-only inspection of 193.187.129.197 (code, `pg_stat`, schema, counts, 3 sample rows). Nothing was changed on the server. No secrets were read or printed.
+Date: 2026-10-24. Source: read-only inspection of <prod-server> (code, `pg_stat`, schema, counts, 3 sample rows). Nothing was changed on the server. No secrets were read or printed.
 
 ## 1. TL;DR
 
