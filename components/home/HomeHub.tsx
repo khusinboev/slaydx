@@ -155,6 +155,18 @@ export function HomeHub() {
         </Link>
 
         <Link
+          href="/uz/tests"
+          data-hub-tests
+          className="bg-card hover:bg-accent focus-visible:ring-ring flex min-h-14 items-center justify-between gap-3 rounded-[20px] border p-4 outline-none focus-visible:ring-2"
+        >
+          <span className="flex flex-col">
+            <span className="text-[15.5px] font-semibold">Test ishlash</span>
+            <span className="text-muted-foreground text-[13.5px]">Matematika, Ona tili, Tarix · vaqt bilan, oxirida to‘g‘ri javoblar</span>
+          </span>
+          <ArrowRight className="size-5 shrink-0" aria-hidden />
+        </Link>
+
+        <Link
           href="/uz/chat"
           data-hub-chat
           className="bg-card hover:bg-accent focus-visible:ring-ring flex min-h-14 items-center justify-between gap-3 rounded-[20px] border p-4 outline-none focus-visible:ring-2"

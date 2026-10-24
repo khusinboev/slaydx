@@ -84,6 +84,7 @@ test("konfiguratsiya: bayt route'lariga `Cache-Control` qo'yilmaydi — route'ni
     `/api/generations/${ID}/assets/${ASSET}`,
     `/api/o/${"a".repeat(22)}/audio/${ASSET}`,
     `/api/uploads/photo/${ASSET}`,
+    `/api/tests/attempts/${ID}/image/42`,
   ]) {
     const h = await configHeaders(path);
     // MUTATSIYA: istisnoni olib tashlash (eski `/api/:path*`) → bu yerda `private, no-store`.
@@ -111,6 +112,9 @@ test("konfiguratsiya: istisno faqat aniq bayt yo'llariga — qo'shni/uzunroq yo'
     `/api/generations/${ID}/thumbnail`,
     `/api/o/${"a".repeat(22)}/audio`,
     `/api/uploads/photo/${ASSET}/crop`,
+    `/api/tests/attempts/${ID}/image`,
+    `/api/tests/attempts/${ID}`,
+    `/api/tests/attempts/${ID}/image/42/extra`,
   ]) {
     const h = await configHeaders(path);
     assert.equal(h["cache-control"], "private, no-store", `${path}: istisno juda keng`);

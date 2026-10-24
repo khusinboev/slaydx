@@ -19,6 +19,25 @@ export const LANGS: readonly Lang[] = ["uz", "ru", "en"];
 type Entry = { uz: string; ru: string; en: string };
 
 const T = {
+  /* ── Paid tests «Test ishlash» (owner request 7; every key starts with `tests.`) ── */
+  "tests.cmd": { uz: "Test ishlash — fanlar bo‘yicha testlar", ru: "Тесты по предметам", en: "Subject tests" },
+  "tests.intro": {
+    uz: "📝 <b>Test ishlash</b>\nMatematika, Ona tili va Tarix bo‘yicha tayyor testlar: vaqt bilan ishlaysiz, to‘g‘ri javoblar test tugagach ko‘rsatiladi.\nBitta urinish narxi: <b>{price}</b>.",
+    ru: "📝 <b>Тесты</b>\nГотовые тесты по математике, родному языку и истории: на время, правильные ответы показываются после завершения.\nЦена одной попытки: <b>{price}</b>.",
+    en: "📝 <b>Tests</b>\nReady-made tests in mathematics, the mother tongue and history: timed, and the correct answers are shown when you finish.\nPrice of one attempt: <b>{price}</b>.",
+  },
+  "tests.introFree": {
+    uz: "📝 <b>Test ishlash</b>\nMatematika, Ona tili va Tarix bo‘yicha tayyor testlar: vaqt bilan ishlaysiz, to‘g‘ri javoblar test tugagach ko‘rsatiladi.\nBirinchi urinish <b>bepul</b>, keyingilari: <b>{price}</b>.",
+    ru: "📝 <b>Тесты</b>\nГотовые тесты по математике, родному языку и истории: на время, правильные ответы показываются после завершения.\nПервая попытка <b>бесплатно</b>, следующие: <b>{price}</b>.",
+    en: "📝 <b>Tests</b>\nReady-made tests in mathematics, the mother tongue and history: timed, and the correct answers are shown when you finish.\nThe first attempt is <b>free</b>, then <b>{price}</b>.",
+  },
+  "tests.disabled": {
+    uz: "📝 Testlar hozircha yopiq. Birozdan keyin qayting.",
+    ru: "📝 Тесты пока закрыты. Загляните позже.",
+    en: "📝 Tests are closed for now. Please come back later.",
+  },
+  "tests.openBtn": { uz: "Testni ochish", ru: "Открыть тесты", en: "Open the tests" },
+
   /* ── Qattiqqo‘l domla (owner request 15; every key starts with `domla.`) ── */
   "domla.intro": {
     uz: "🎓 <b>Qattiqqo‘l domla</b>\nSlaydingizni himoya qiling: domla 5 ta savolni OVOZ bilan so‘raydi, siz ovozli xabar bilan javob berasiz. Oxirida baho qo‘yadi va adashgan joyingizni aytadi.\nNarxi: <b>{price}</b>. Qaysi ishni himoya qilamiz?",

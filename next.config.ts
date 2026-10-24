@@ -98,6 +98,7 @@ const BYTE_ROUTES = [
   "generations/[^/]+/thumb",
   "o/[^/]+/audio/[^/]+",
   "uploads/photo/[^/]+",
+  "tests/attempts/[^/]+/image/[^/]+",
 ].join("|");
 
 const nextConfig: NextConfig = {

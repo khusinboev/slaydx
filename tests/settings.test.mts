@@ -76,6 +76,13 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "free_llm.daily.chat",
     "chat.enabled",
     "chat.price_per_message",
+    "tests.enabled",
+    "tests.price_per_attempt",
+    "tests.first_attempt_free",
+    "tests.questions_per_subject",
+    "tests.minutes_per_subject",
+    "tests.minutes_all",
+    "tests.points_per_correct",
   ]);
   for (const k of s.SETTING_KEYS) {
     const d = s.settingDef(k);
@@ -125,6 +132,36 @@ test("standart qiymatlar = env (mahsulot xulqi o'zgarmaydi)", () => {
   // Qattiqqo'l domla (owner request 15): on by default, 3 000 so'm.
   assert.equal(d("domla.enabled"), true);
   assert.equal(d("domla.price"), 3000);
+});
+
+test("tests.* defaults match BMB and the feature ships dark", () => {
+  const d = <K extends (typeof s.SETTING_KEYS)[number]>(k: K) => s.settingDef(k).envDefault();
+  assert.equal(d("tests.enabled"), false, "kill switch: dark by default");
+  assert.equal(d("tests.price_per_attempt"), 2000);
+  assert.equal(d("tests.first_attempt_free"), false);
+  assert.equal(d("tests.questions_per_subject"), 10);
+  assert.equal(d("tests.minutes_per_subject"), 20);
+  assert.equal(d("tests.minutes_all"), 60);
+  assert.equal(d("tests.points_per_correct"), 1.1);
+});
+
+test("validatsiya: tests.*", () => {
+  good("tests.enabled", true);
+  for (const v of ["true", 1, null]) bad("tests.enabled", v);
+  good("tests.price_per_attempt", 0);
+  good("tests.price_per_attempt", 2500);
+  for (const v of [-1, 1.5, "2000", NaN, null, 1e15]) bad("tests.price_per_attempt", v);
+  good("tests.first_attempt_free", true);
+  for (const v of ["yes", 0, null]) bad("tests.first_attempt_free", v);
+  for (const k of ["tests.questions_per_subject", "tests.minutes_per_subject", "tests.minutes_all"] as const) {
+    good(k, 1);
+    for (const v of [0, -5, 2.5, "10", null, 100_000]) bad(k, v);
+  }
+  good("tests.points_per_correct", 1.1);
+  good("tests.points_per_correct", 2);
+  for (const v of [0, 0.05, 1.15, -1, 11, "1.1", NaN, null]) bad("tests.points_per_correct", v);
+  const ok = s.settingDef("tests.points_per_correct").validate(0.1 * 3);
+  assert.ok(ok.ok && ok.value === 0.3, "float noise is cleaned");
 });
 
 test("validatsiya: domla.* (yoqish, narx)", () => {

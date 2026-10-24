@@ -1021,6 +1021,8 @@ export async function purgeHousekeeping(): Promise<void> {
       return (await import("./chat/service")).purgeChat();
     });
   }
+  // Paid tests: an attempt nobody finished past its server deadline is scored and closed (owner request 7).
+  await step("test-attempts", async () => (await import("./paid-tests")).sweepExpiredAttempts());
   // Click direct card payments: a one-time card token nobody confirmed is dropped after 30 min (048).
   await step("click-tokens", () => purgeStaleCardTokens());
   await step("sessions", () => purgeExpiredSessions());

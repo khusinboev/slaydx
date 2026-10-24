@@ -20,6 +20,19 @@ import {
   DQ_REWARD_MAX,
 } from "../daily-quiz/rules";
 import { DOMLA_PRICE_DEFAULT, DOMLA_PRICE_MAX } from "../domla/rules";
+import {
+  TESTS_ENABLED_DEFAULT,
+  TESTS_FIRST_FREE_DEFAULT,
+  TESTS_MINUTES_ALL_DEFAULT,
+  TESTS_MINUTES_MAX,
+  TESTS_MINUTES_SUBJECT_DEFAULT,
+  TESTS_PER_SUBJECT_DEFAULT,
+  TESTS_PER_SUBJECT_MAX,
+  TESTS_POINTS_DEFAULT,
+  TESTS_POINTS_MAX,
+  TESTS_PRICE_DEFAULT,
+  TESTS_PRICE_MAX,
+} from "../tests/rules";
 
 /**
  * Runtime settings (docs/admin/02-plan.md §6.10, §17.7).
@@ -73,6 +86,13 @@ export type SettingValues = {
   "free_llm.daily.chat": number;
   "chat.enabled": boolean;
   "chat.price_per_message": number;
+  "tests.enabled": boolean;
+  "tests.price_per_attempt": number;
+  "tests.first_attempt_free": boolean;
+  "tests.questions_per_subject": number;
+  "tests.minutes_per_subject": number;
+  "tests.minutes_all": number;
+  "tests.points_per_correct": number;
 };
 
 export type SettingKey = keyof SettingValues;
@@ -204,6 +224,7 @@ const CONVERT_GROUP = "Fayl konvertatsiya";
 const QUIZ_GROUP = "Kunlik savollar";
 const DOMLA_GROUP = "Qattiqqo‘l domla";
 const CHAT_GROUP = "AI chat";
+const TESTS_GROUP = "Test ishlash";
 /** AI chat price per message after the free ones: default 100 so'm; the cap stops a typo from charging a fortune per message. */
 const CHAT_PRICE_DEFAULT = 100;
 const CHAT_PRICE_MAX = 10_000;
@@ -557,6 +578,81 @@ const CATALOG: Catalog = {
     max: CHAT_PRICE_MAX,
     validate: intValidator(0, CHAT_PRICE_MAX),
     envDefault: () => CHAT_PRICE_DEFAULT,
+  },
+  "tests.enabled": {
+    key: "tests.enabled",
+    group: TESTS_GROUP,
+    label: "Test ishlash yoqilgan",
+    description:
+      "O‘chirilsa yangi urinish boshlab bo‘lmaydi (/test va /uz/tests «hozircha o‘chiq» deydi). Boshlangan urinishlar to‘lov qilingani uchun yakunlanadi. Standart: o‘chiq — egasi savollarni ko‘rib chiqqach yoqiladi.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => TESTS_ENABLED_DEFAULT,
+  },
+  "tests.price_per_attempt": {
+    key: "tests.price_per_attempt",
+    group: TESTS_GROUP,
+    label: "Bitta urinish narxi (so‘m)",
+    description:
+      "Urinish boshlanganda BIR marta yechiladi (bonus so‘m ham ishlatiladi); bitta fan ham, «Hammasi» ham shu narxda. 0 — bepul. Faqat shu qiymat ishlatiladi (klient narx yubormaydi).",
+    type: "int",
+    min: 0,
+    max: TESTS_PRICE_MAX,
+    validate: intValidator(0, TESTS_PRICE_MAX),
+    envDefault: () => TESTS_PRICE_DEFAULT,
+  },
+  "tests.first_attempt_free": {
+    key: "tests.first_attempt_free",
+    group: TESTS_GROUP,
+    label: "Birinchi urinish bepul",
+    description: "Yoqilsa, foydalanuvchining eng birinchi test urinishi (bitta fan yoki «Hammasi») bepul bo‘ladi.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => TESTS_FIRST_FREE_DEFAULT,
+  },
+  "tests.questions_per_subject": {
+    key: "tests.questions_per_subject",
+    group: TESTS_GROUP,
+    label: "Fan bo‘yicha savollar soni",
+    description: "Bitta fandan tasodifiy variantdagi shuncha savol beriladi. «Hammasi» = bu son × fanlar soni (standart 10 × 3 = 30). Yangi qiymat keyingi urinishlarga qo‘llanadi.",
+    type: "int",
+    min: 1,
+    max: TESTS_PER_SUBJECT_MAX,
+    validate: intValidator(1, TESTS_PER_SUBJECT_MAX),
+    envDefault: () => TESTS_PER_SUBJECT_DEFAULT,
+  },
+  "tests.minutes_per_subject": {
+    key: "tests.minutes_per_subject",
+    group: TESTS_GROUP,
+    label: "Bitta fan uchun vaqt (daqiqa)",
+    description: "Server hisoblaydi: muddatdan keyingi javoblar hisobga olinmaydi va urinish o‘zi yakunlanadi.",
+    type: "int",
+    min: 1,
+    max: TESTS_MINUTES_MAX,
+    validate: intValidator(1, TESTS_MINUTES_MAX),
+    envDefault: () => TESTS_MINUTES_SUBJECT_DEFAULT,
+  },
+  "tests.minutes_all": {
+    key: "tests.minutes_all",
+    group: TESTS_GROUP,
+    label: "«Hammasi» uchun vaqt (daqiqa)",
+    description: "Barcha fanlar birga bo‘lgan urinish uchun umumiy vaqt (standart 60).",
+    type: "int",
+    min: 1,
+    max: TESTS_MINUTES_MAX,
+    validate: intValidator(1, TESTS_MINUTES_MAX),
+    envDefault: () => TESTS_MINUTES_ALL_DEFAULT,
+  },
+  "tests.points_per_correct": {
+    key: "tests.points_per_correct",
+    group: TESTS_GROUP,
+    label: "To‘g‘ri javob uchun ball",
+    description: "Har to‘g‘ri javobga shuncha ball (standart 1,1), noto‘g‘ri javob uchun ayirilmaydi. Urinish boshlanganda qiymat urinishga yoziladi.",
+    type: "number",
+    min: 0.1,
+    max: TESTS_POINTS_MAX,
+    validate: stepNumberValidator(0.1, TESTS_POINTS_MAX, 0.1),
+    envDefault: () => TESTS_POINTS_DEFAULT,
   },
 };
 
