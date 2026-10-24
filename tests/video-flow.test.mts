@@ -65,10 +65,10 @@ test("video: money (paid only), async submit/poll, exactly-once, refunds, recove
   });
 
   /* ── provider stub: Gemini Omni (Interactions API) ── */
-  type Stub = { submits: number; polls: number; submitStatus: number; submitBody: unknown; pollBody: unknown; fileBytes: Uint8Array; lastSubmit: Record<string, unknown> | null; counter: number };
-  const stub: Stub = { submits: 0, polls: 0, submitStatus: 200, submitBody: null, pollBody: { status: "in_progress" }, fileBytes: fakeMp4(5), lastSubmit: null, counter: 0 };
+  type Stub = { submits: number; polls: number; submitStatus: number; submitBody: unknown; pollBody: unknown; fileBytes: Uint8Array; lastSubmit: Record<string, unknown> | null; counter: number; pollGate: Promise<void> | null; onSubmit: (() => Promise<void> | void) | null };
+  const stub: Stub = { submits: 0, polls: 0, submitStatus: 200, submitBody: null, pollBody: { status: "in_progress" }, fileBytes: fakeMp4(5), lastSubmit: null, counter: 0, pollGate: null, onSubmit: null };
   const resetStub = () => {
-    Object.assign(stub, { submits: 0, polls: 0, submitStatus: 200, submitBody: null, pollBody: { status: "in_progress" }, fileBytes: fakeMp4(5), lastSubmit: null, counter: 0 });
+    Object.assign(stub, { submits: 0, polls: 0, submitStatus: 200, submitBody: null, pollBody: { status: "in_progress" }, fileBytes: fakeMp4(5), lastSubmit: null, counter: 0, pollGate: null, onSubmit: null });
   };
   const doneBody = { status: "completed", steps: [{ type: "model_output", content: [{ type: "video", uri: `${GURL}/files/vid1` }] }] };
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
@@ -77,10 +77,12 @@ test("video: money (paid only), async submit/poll, exactly-once, refunds, recove
     if (url === `${GURL}/interactions` && method === "POST") {
       stub.submits++;
       stub.lastSubmit = JSON.parse(String(init?.body));
+      await stub.onSubmit?.();
       return jsonRes(stub.submitBody ?? { id: `int_${++stub.counter}`, status: "in_progress" }, stub.submitStatus);
     }
     if (url.startsWith(`${GURL}/interactions/`) && method === "GET") {
       stub.polls++;
+      if (stub.pollGate) await stub.pollGate; // a slow provider
       return jsonRes(stub.pollBody);
     }
     if (url.startsWith(`${GURL}/files/`)) return new Response(Buffer.from(stub.fileBytes), { status: 200, headers: { "content-type": "video/mp4" } });
@@ -296,7 +298,7 @@ test("video: money (paid only), async submit/poll, exactly-once, refunds, recove
     assert.equal(ga.status, "FAILED");
     assert.equal(ga.error, VIDEO_SAFETY_MESSAGE);
     assert.equal(await refunds(a.body.id!), "1");
-    assert.equal((await op(a.body.id!)), undefined, "no operation row for a refused submit");
+    assert.deepEqual([(await op(a.body.id!))?.status, (await op(a.body.id!))?.op_id], ["failed", null], "the 'submitting' row is closed, never left behind");
 
     stub.submitStatus = 503;
     stub.submitBody = { error: { message: "backend down" } };
@@ -373,7 +375,7 @@ test("video: money (paid only), async submit/poll, exactly-once, refunds, recove
     const id2 = await startWaiting(me);
     stub.pollBody = doneBody;
     await makeDue(id2);
-    const row = { generation_id: id2, provider: "veo" as const, op_id: "int_1", attempts: 0, seconds: 5 };
+    const row = { generation_id: id2, provider: "veo" as const, op_id: "int_1", attempts: 0, errors: 0, seconds: 5 };
     const outcomes = await Promise.all([ops.pollOp(row), ops.pollOp(row)]);
     assert.deepEqual(outcomes.filter((o) => o === "succeeded").length, 1, `outcomes ${outcomes.join(",")}`);
     assert.equal((await gen(id2)).status, "COMPLETED");
@@ -638,6 +640,343 @@ test("video: money (paid only), async submit/poll, exactly-once, refunds, recove
     assert.equal((await gen(id)).status, "FAILED");
     assert.equal((await op(id))?.status, "failed");
     assert.equal((await getGenerationFile(id, me)), null);
+  });
+
+  /* ═════════════ review fixes ═════════════ */
+
+  const withTimeout = <T,>(p: Promise<T>, ms: number, what: string) =>
+    Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error(`${what}: still blocked after ${ms} ms`)), ms))]);
+  const releaseGate = () => {
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    return { gate, open };
+  };
+
+  await t.test("M1: housekeeping never polls videos and never waits for a slow provider", async () => {
+    await clearAll();
+    resetStub();
+    const me = await mkUser({ balance: 100_000 });
+    const id = await startWaiting(me);
+    await makeDue(id);
+    const { gate, open } = releaseGate();
+    stub.pollGate = gate; // the provider hangs
+    try {
+      await withTimeout(worker.purgeHousekeeping(), 20_000, "purgeHousekeeping");
+      assert.equal(stub.polls, 0, "MUTATSIYA: video-poll yana housekeeping qadami bo'lsa qizaradi");
+    } finally {
+      open();
+    }
+  });
+
+  await t.test("M1: a slow poll runs in its own loop and does not delay claiming a normal job", async () => {
+    await clearAll();
+    resetStub();
+    const { startVideoPollLoop } = await import("../lib/server/video-poll-loop.ts");
+    const me = await mkUser({ balance: 100_000 });
+    const id = await startWaiting(me);
+    await makeDue(id);
+    const { gate, open } = releaseGate();
+    stub.pollGate = gate;
+    const loop = startVideoPollLoop({ noLock: true, idleMs: 50 });
+    try {
+      const deadline = Date.now() + 10_000;
+      while (stub.polls === 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 20));
+      assert.equal(stub.polls, 1, "the loop is inside the (hung) provider call");
+      // The job queue is unaffected: a normal job is claimed, and housekeeping completes, while the poll hangs.
+      const slide = await post(me, "slide", { topic: "Fotosintez", slideCount: 10 });
+      const job = await withTimeout(worker.claimNext(), 5_000, "claimNext");
+      assert.equal(job?.id, slide.body.id);
+      await withTimeout(worker.housekeepingTick({ run: async () => {} }), 5_000, "housekeepingTick");
+    } finally {
+      open();
+      await withTimeout(loop.stop(), 10_000, "loop.stop");
+    }
+  });
+
+  await t.test("M1: the loop finishes a due video by itself and a run claims at most 3 ops", async () => {
+    await clearAll();
+    resetStub();
+    await setSetting("video.max_concurrent", 5);
+    const { startVideoPollLoop } = await import("../lib/server/video-poll-loop.ts");
+    const me = await mkUser({ balance: 1_000_000 });
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i++) ids.push(await startWaiting(me));
+    for (const id of ids) await makeDue(id);
+    stub.pollBody = doneBody;
+    // One run: at most the batch (3) is polled.
+    assert.equal(await ops.pollDueVideoOps(), 3);
+    assert.equal(stub.polls, 3);
+    // A zero time budget starts no op at all: the claims just wait out their lease.
+    for (const id of ids) await makeDue(id);
+    const before = stub.polls;
+    assert.equal(await ops.pollDueVideoOps({}, { budgetMs: 0 }), 0);
+    assert.equal(stub.polls, before);
+    // The loop drains the rest on its own.
+    await query(`UPDATE video_ops SET next_poll_at = now() - interval '1 second' WHERE status = 'pending'`);
+    const loop = startVideoPollLoop({ noLock: true, idleMs: 50 });
+    try {
+      const deadline = Date.now() + 15_000;
+      while (Date.now() < deadline) {
+        const left = await query(`SELECT 1 FROM video_ops WHERE status = 'pending'`);
+        if (!left.length) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    } finally {
+      await loop.stop();
+    }
+    for (const id of ids) assert.equal((await gen(id)).status, "COMPLETED");
+  });
+
+  await t.test("m1: the op row exists as 'submitting' (no op id) BEFORE the provider is called", async () => {
+    await clearAll();
+    resetStub();
+    const me = await mkUser({ balance: 100_000 });
+    let seen: { status: string; op_id: string | null }[] = [];
+    stub.onSubmit = async () => {
+      seen = await query(`SELECT status, op_id FROM video_ops`);
+    };
+    const id = await startWaiting(me);
+    assert.deepEqual(seen, [{ status: "submitting", op_id: null }], "MUTATSIYA: qator provayder chaqiruvidan KEYIN yozilsa qizaradi");
+    assert.deepEqual([(await op(id))?.status, (await op(id))?.op_id], ["pending", "int_1"]);
+  });
+
+  await t.test("m1: a crash between the provider call and the update -> the re-claim fails and refunds, it does not pay twice", async () => {
+    await clearAll();
+    resetStub();
+    const me = await mkUser({ balance: 100_000 });
+    const r = await post(me, "video", VIDEO);
+    // The first run got as far as the 'submitting' row, called the provider and died: the job was requeued.
+    await query(`INSERT INTO video_ops (generation_id, provider, deadline_at, seconds) VALUES ($1, 'veo', now() + interval '20 minutes', 5)`, [r.body.id]);
+    const job = await worker.claimNext();
+    assert.equal(job?.id, r.body.id);
+    await worker.runJob(job!);
+    assert.equal(stub.submits, 0, "no second paid operation");
+    const g = await gen(r.body.id!);
+    assert.equal(g.status, "FAILED");
+    assert.match(String(g.error), /Pul qaytarildi/);
+    assert.equal(await refunds(r.body.id!), "1");
+    assert.equal((await wallet(me)).balance, 100_000);
+    assert.equal((await op(r.body.id!))?.status, "failed");
+  });
+
+  await t.test("NIT: an existing op in a TERMINAL status fails the job instead of parking it", async () => {
+    await clearAll();
+    resetStub();
+    const me = await mkUser({ balance: 100_000 });
+    const r = await post(me, "video", VIDEO);
+    await query(`INSERT INTO video_ops (generation_id, provider, op_id, status, deadline_at, seconds, finished_at) VALUES ($1, 'veo', 'int_old', 'succeeded', now(), 5, now())`, [r.body.id]);
+    await worker.runJob((await worker.claimNext())!);
+    assert.equal((await gen(r.body.id!)).status, "FAILED");
+    assert.equal(await refunds(r.body.id!), "1");
+    assert.equal(stub.submits, 0);
+  });
+
+  await t.test("m5: the lease is lost DURING the provider call (stale reclaim) -> the op id is kept and the next claim adopts it", async () => {
+    await clearAll();
+    resetStub();
+    const me = await mkUser({ balance: 100_000 });
+    const r = await post(me, "video", VIDEO);
+    stub.onSubmit = async () => {
+      await query(`UPDATE generations SET status = 'QUEUED', locked_by = NULL, locked_at = NULL WHERE id = $1`, [r.body.id]);
+    };
+    await worker.runJob((await worker.claimNext())!);
+    assert.deepEqual([(await op(r.body.id!))?.status, (await op(r.body.id!))?.op_id], ["pending", "int_1"], "the paid operation's id is not lost");
+    assert.equal((await gen(r.body.id!)).status, "QUEUED");
+    stub.onSubmit = null;
+    const again = await worker.claimNext();
+    assert.equal(again?.id, r.body.id);
+    await worker.runJob(again!);
+    assert.equal(stub.submits, 1, "adopted, not submitted again");
+    assert.equal((await gen(r.body.id!)).status, "IN_PROGRESS");
+    assert.equal((await gen(r.body.id!)).locked_by, null);
+    stub.pollBody = doneBody;
+    await makeDue(r.body.id!);
+    assert.equal(await ops.pollDueVideoOps(), 1);
+    assert.equal((await gen(r.body.id!)).status, "COMPLETED");
+  });
+
+  await t.test("m5: SIGTERM (releaseJobs) during the submit -> the op id is kept, the job is QUEUED, the next claim adopts it", async () => {
+    await clearAll();
+    resetStub();
+    const me = await mkUser({ balance: 100_000 });
+    const r = await post(me, "video", VIDEO);
+    const job = await worker.claimNext();
+    assert.equal(job?.id, r.body.id);
+    stub.onSubmit = async () => {
+      assert.deepEqual(await jobs.releaseJobs([job!.lease]), [r.body.id]);
+    };
+    await worker.runJob(job!);
+    assert.equal((await op(r.body.id!))?.op_id, "int_1");
+    assert.equal((await gen(r.body.id!)).status, "QUEUED");
+    stub.onSubmit = null;
+    await worker.runJob((await worker.claimNext())!);
+    assert.equal(stub.submits, 1);
+    assert.equal((await op(r.body.id!))?.status, "pending");
+    assert.equal((await gen(r.body.id!)).locked_by, null);
+    assert.equal(await refunds(r.body.id!), "0");
+  });
+
+  await t.test("m5: finalizeVideo racing failVideo -> exactly one wins and money / state agree (never COMPLETED + refunded)", async () => {
+    await clearAll();
+    resetStub();
+    const outcomes = new Set<string>();
+    for (let i = 0; i < 6; i++) {
+      resetStub();
+      const me = await mkUser({ balance: 1_000_000 }); // a fresh user per round: the per-user create rate limit
+      const id = await startWaiting(me);
+      const bytes = fakeMp4(5);
+      const [fin, fail] = i % 2 ? await Promise.all([ops.finalizeVideo(id, bytes), ops.failVideo(id, "x", "race")]) : (await Promise.all([ops.failVideo(id, "x", "race"), ops.finalizeVideo(id, bytes)])).reverse();
+      assert.equal([fin, fail].filter(Boolean).length, 1, `iteration ${i}: one winner, got fin=${fin} fail=${fail}`);
+      const g = await gen(id);
+      if (fin) {
+        outcomes.add("completed");
+        assert.equal(g.status, "COMPLETED");
+        assert.equal(await refunds(id), "0");
+        assert.ok(await getGenerationFile(id, me));
+      } else {
+        outcomes.add("failed");
+        assert.equal(g.status, "FAILED");
+        assert.equal(await refunds(id), "1");
+        assert.equal(await getGenerationFile(id, me), null, "no file on a failed video");
+      }
+      assert.notEqual((await op(id))?.status, "pending");
+    }
+    assert.ok(outcomes.size >= 1);
+  });
+
+  await t.test("m2: the short-clip refund is part of the finalisation transaction (a failing refund rolls the finalisation back)", async () => {
+    await clearAll();
+    resetStub();
+    const me = await mkUser({ balance: 100_000 });
+    const id = await startWaiting(me, { ...VIDEO, seconds: 8 });
+    await query(`CREATE OR REPLACE FUNCTION video_test_block_refund() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'refund blocked for the test'; END $$ LANGUAGE plpgsql`);
+    await query(`CREATE TRIGGER video_test_block_refund BEFORE INSERT ON transactions FOR EACH ROW WHEN (NEW.kind = 'refund') EXECUTE FUNCTION video_test_block_refund()`);
+    try {
+      await assert.rejects(ops.finalizeVideo(id, fakeMp4(3)), /refund blocked/);
+      const g = await gen(id);
+      assert.equal(g.status, "IN_PROGRESS", "MUTATSIYA: qaytarish tranzaksiyadan tashqarida bo'lsa COMPLETED qoladi va qizaradi");
+      assert.equal((await op(id))?.status, "pending");
+      assert.equal(await getGenerationFile(id, me), null);
+    } finally {
+      await query(`DROP TRIGGER IF EXISTS video_test_block_refund ON transactions`);
+      await query(`DROP FUNCTION IF EXISTS video_test_block_refund()`);
+    }
+    // Retried: COMPLETED and the refund appear together.
+    assert.equal(await ops.finalizeVideo(id, fakeMp4(3)), true);
+    assert.equal((await gen(id)).status, "COMPLETED");
+    assert.equal(await refunds(id), "1");
+    assert.equal((await wallet(me)).balance, 76_000 + 15_000);
+  });
+
+  await t.test("NIT: transient errors are counted apart from polls", async () => {
+    await clearAll();
+    resetStub();
+    const me = await mkUser({ balance: 100_000 });
+    const id = await startWaiting(me);
+    for (let i = 0; i < 2; i++) {
+      await makeDue(id);
+      await ops.pollDueVideoOps(); // running
+    }
+    let o = (await query<{ attempts: number; errors: number }>(`SELECT attempts, errors FROM video_ops WHERE generation_id = $1`, [id]))[0]!;
+    assert.deepEqual([o.attempts, o.errors], [2, 0], "running polls are not errors");
+    stub.pollBody = doneBody;
+    stub.fileBytes = new TextEncoder().encode("not an mp4");
+    await makeDue(id);
+    await ops.pollDueVideoOps();
+    o = (await query<{ attempts: number; errors: number }>(`SELECT attempts, errors FROM video_ops WHERE generation_id = $1`, [id]))[0]!;
+    assert.deepEqual([o.attempts, o.errors], [3, 1]);
+    // MAX_TRANSIENT_ERRORS counts ERRORS: 29 errors on record -> the next one fails and refunds the job.
+    await query(`UPDATE video_ops SET errors = ${ops.MAX_TRANSIENT_ERRORS - 1} WHERE generation_id = $1`, [id]);
+    await makeDue(id);
+    await ops.pollDueVideoOps();
+    assert.equal((await gen(id)).status, "FAILED");
+    assert.equal(await refunds(id), "1");
+  });
+
+  await t.test("NIT: video.max_concurrent is enforced under concurrent claims (advisory lock in claimJob)", async () => {
+    await clearAll();
+    resetStub();
+    await setSetting("video.max_concurrent", 1);
+    for (let round = 0; round < 8; round++) {
+      const me = await mkUser({ balance: 1_000_000 });
+      const other = await mkUser({ balance: 1_000_000 });
+      await query(`UPDATE generations SET status = 'REVOKED' WHERE status IN ('QUEUED','IN_PROGRESS')`);
+      await post(me, "video", VIDEO);
+      await post(other, "video", VIDEO);
+      const claimed = await Promise.all([jobs.claimJob(jobs.newLease("a"), { videoMax: 1 }), jobs.claimJob(jobs.newLease("b"), { videoMax: 1 })]);
+      assert.equal(claimed.filter(Boolean).length, 1, `round ${round}: the cap of 1 holds under a race`);
+    }
+  });
+
+  await t.test("NIT: enqueueGeneration derives paidOnly from the tool: a caller that forgets it still cannot spend bonus on video", async () => {
+    await clearAll();
+    const me = await mkUser({ points: 500_000, balance: 0 });
+    const res = await jobs.enqueueGeneration({ userId: me, toolId: "video", topic: "t", price: 15000, format: "mp4", values: VIDEO, budgetMs: 90_000 });
+    assert.equal(res.ok, false);
+    assert.ok(!res.ok && res.reason === "insufficient" && res.paidOnly === true && res.bonus === 500_000);
+    assert.deepEqual(await wallet(me), { points: 500_000, balance: 0 });
+  });
+
+  await t.test("m4: Range requests are served from a small bounded cache (3 files / 60 s) that re-checks ownership and version", async () => {
+    await clearAll();
+    resetStub();
+    await setSetting("video.max_concurrent", 6);
+    const cache = await import("../lib/server/video-file-cache.ts");
+    cache.resetVideoCache();
+    const fileRoute = await import("../app/api/generations/[id]/file/route.ts");
+    const me = await mkUser({ balance: 1_000_000 });
+    const { token } = await createSession(me);
+    const finish = async () => {
+      resetStub();
+      const id = await startWaiting(me);
+      stub.pollBody = doneBody;
+      stub.fileBytes = fakeMp4(5, 4096);
+      await makeDue(id);
+      await ops.pollDueVideoOps();
+      return id;
+    };
+    const get = async (id: string, headers: Record<string, string> = {}, tok = token) => {
+      const req = new Request(`http://localhost/api/generations/${id}/file?inline=1`, { headers: { cookie: `${SESSION_COOKIE}=${tok}`, ...headers } });
+      return inRequest(req, () => fileRoute.GET(req, { params: Promise.resolve({ id }) }));
+    };
+    const reads = async (id: string) => Number((await query<{ d: string }>(`SELECT downloads::text AS d FROM generation_files WHERE generation_id = $1`, [id]))[0]!.d);
+    const id = await finish();
+    assert.equal((await get(id)).status, 200); // first read: database, remembered
+    await new Promise((r) => setTimeout(r, 100)); // the downloads counter is bumped fire-and-forget
+    const base = await reads(id);
+    for (let i = 0; i < 4; i++) assert.equal((await get(id, { range: `bytes=${i * 10}-${i * 10 + 9}` })).status, 206);
+    await new Promise((r) => setTimeout(r, 100));
+    assert.equal(await reads(id), base, "MUTATSIYA: kesh bo'lmasa har 206 bazadan o'qiydi va qizaradi");
+    assert.ok(cache.videoCacheStats().hits >= 4);
+
+    // Another user never gets it from memory (and the route answers 404 as before).
+    const other = await mkUser({ balance: 0 });
+    const otherToken = (await createSession(other)).token;
+    assert.equal((await get(id, { range: "bytes=0-9" }, otherToken)).status, 404);
+    // A changed file version is a miss.
+    await query(`UPDATE generations SET file_version = file_version + 1 WHERE id = $1`, [id]);
+    const hitsBefore = cache.videoCacheStats().hits;
+    assert.equal((await get(id, { range: "bytes=0-9" })).status, 206);
+    assert.equal(cache.videoCacheStats().hits, hitsBefore, "a new version is read from the database");
+    // A deleted file is not served from memory.
+    await query(`DELETE FROM generation_files WHERE generation_id = $1`, [id]);
+    assert.equal((await get(id, { range: "bytes=0-9" })).status, 404);
+
+    // Bounded: at most 3 files stay.
+    cache.resetVideoCache();
+    const four: string[] = [];
+    for (let i = 0; i < 4; i++) four.push(await finish());
+    for (const f of four) assert.equal((await get(f)).status, 200);
+    assert.equal(cache.videoCacheStats().entries, cache.VIDEO_CACHE_MAX_ENTRIES);
+    // The oldest was evicted (miss), the newest is a hit.
+    const h0 = cache.videoCacheStats().hits;
+    await get(four[0]!, { range: "bytes=0-9" });
+    assert.equal(cache.videoCacheStats().hits, h0, "the oldest entry was evicted");
+    await get(four[3]!, { range: "bytes=0-9" });
+    assert.equal(cache.videoCacheStats().hits, h0 + 1);
+    // TTL: an entry older than 60 s is dropped.
+    const gen3 = four[3]!;
+    assert.equal(await cache.cachedVideo(gen3, me, Date.now() + cache.VIDEO_CACHE_TTL_MS + 1000), null);
   });
 
   /* ═════════════ the file route: Range (iOS Safari plays an MP4 only through 206) ═════════════ */

@@ -150,6 +150,31 @@ test("Omni download sends the key only to Google; a non-MP4 body is a retryable 
   await assert.rejects(a.download({ kind: "inline", bytes: new Uint8Array([1, 2, 3]) }), VideoProviderError);
 });
 
+test("Omni download: the key is never sent across a redirect to a foreign host; a Google -> Google hop keeps it", async () => {
+  const a = makeOmniAdapter({ key: () => GKEY });
+  const redirect = (to: string) => new Response(null, { status: 302, headers: { location: to } });
+  const keyOf = (seen: Seen[], i: number) => (seen[i]!.init.headers as Record<string, string>)["x-goog-api-key"];
+
+  const foreign = stub((n) => (n === 1 ? redirect("https://cdn.evil.example.com/v.mp4") : mp4Res()));
+  await a.download({ kind: "url", url: "https://generativelanguage.googleapis.com/v1beta/files/abc:download?alt=media" }, { fetchImpl: foreign.fetchImpl });
+  assert.equal(foreign.seen.length, 2, "the redirect was followed");
+  assert.equal(keyOf(foreign.seen, 0), GKEY, "the first hop (Google) carries the key");
+  assert.equal(keyOf(foreign.seen, 1), undefined, "MUTATSIYA: kalit redirect orqali begona xostga ketsa qizaradi");
+
+  const google = stub((n) => (n === 1 ? redirect("https://storage.googleapis.com/dl/v.mp4") : mp4Res()));
+  await a.download({ kind: "url", url: "https://generativelanguage.googleapis.com/v1beta/files/abc:download?alt=media" }, { fetchImpl: google.fetchImpl });
+  assert.equal(keyOf(google.seen, 1), GKEY, "a Google host keeps the key");
+
+  // A hop to a private address / plain http is refused by the safe fetch and never retried; a redirect loop is bounded.
+  const toPrivate = stub(() => redirect("http://169.254.169.254/v.mp4"));
+  const e1 = await a.download({ kind: "url", url: "https://generativelanguage.googleapis.com/v1beta/files/a:download?alt=media" }, { fetchImpl: toPrivate.fetchImpl }).then(() => null, (e: unknown) => e as VideoProviderError);
+  assert.ok(e1 instanceof VideoProviderError && !e1.retryable);
+  const loop = stub(() => redirect("https://generativelanguage.googleapis.com/v1beta/files/a:download?alt=media"));
+  const e2 = await a.download({ kind: "url", url: "https://generativelanguage.googleapis.com/v1beta/files/a:download?alt=media" }, { fetchImpl: loop.fetchImpl }).then(() => null, (e: unknown) => e as VideoProviderError);
+  assert.ok(e2 instanceof VideoProviderError && !e2.retryable);
+  assert.ok(loop.seen.length <= 5, `bounded hops, saw ${loop.seen.length}`);
+});
+
 test("Omni without a key: not configured, submit refuses before any request", async () => {
   const { fetchImpl, seen } = stub(() => jsonRes({}));
   const a = makeOmniAdapter({ key: () => "" });
