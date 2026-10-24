@@ -9,11 +9,13 @@ import { cid, clearSetting, mkUser, setSetting, stubLlm, wallet } from "./helper
  * Real Postgres, stubbed LLM.
  *
  * Mutations (each turned a test red, then restored):
- *   1. confirm without a token: `confirmProposal` looks the proposal up without the token condition -> "no token / wrong token";
- *   2. the model's text can enqueue: a `propose.confirm` shortcut calling `submitGeneration` -> "prompt injection";
- *   3. the single-use claim (`used_at IS NULL`) removed -> "token reuse";
- *   4. the user check removed -> "foreign user";
- *   5. the values-hash echo not compared -> "tampered hash".
+ *   1. confirm without a token (lookup by "latest open proposal of the user") -> "no token / wrong token", "tampered hash";
+ *   2. the model's text can enqueue (an auto-confirm shortcut for `propose.confirm`) -> "PROMPT INJECTION";
+ *   3. the single-use claim (`used_at IS NULL`) removed -> "confirm ... ONE generation", "parallel taps", "cancel";
+ *   4. the user check removed -> "a foreign user's tap", "a model reply containing a real token";
+ *   5. the values-hash echo not compared -> "a tampered values hash";
+ *   6. the HMAC check removed -> "a genuinely elapsed proposal ... 'tampered'";
+ *   7. the SQL expiry removed -> "a genuinely elapsed proposal ... 'expired'".
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -220,6 +222,24 @@ test("AI chat proposals and confirmation", { skip }, async (t) => {
     assert.equal(open.length, 2);
     assert.equal((open[0]!.card as { state?: string }).state, "expired");
     assert.equal((open[1]!.card as { state?: string }).state, "open");
+  });
+
+  await t.test("a genuinely elapsed proposal (issued 11 minutes ago) is 'expired'; a token that is not the server's HMAC is 'tampered'", async () => {
+    const spec = await import("../lib/server/chat/toolspec.ts");
+    const { getUserById } = await import("../lib/server/session.ts");
+    const { createHash } = await import("node:crypto");
+    const uid = await mkUser(query, { balance: 20_000 });
+    const me = (await getUserById(uid))!;
+    const check = await spec.checkProposal("slide", { topic: "Suv" }, me);
+    if (!check.ok) assert.fail(JSON.stringify(check));
+    const old = await props.issueProposal(uid, check, Date.now() - 11 * 60_000);
+    assert.deepEqual(await props.confirmProposal({ userId: uid, token: old.token, hash: old.hash }), { ok: false, reason: "expired" });
+    const fresh = await props.issueProposal(uid, check);
+    // A forged token whose hash was planted in the row (only the server can compute the HMAC).
+    const forged = "A".repeat(43);
+    await query("UPDATE chat_proposals SET token_hash = $2 WHERE id = $1", [fresh.id, createHash("sha256").update(forged).digest("hex")]);
+    assert.deepEqual(await props.confirmProposal({ userId: uid, token: forged, hash: fresh.hash }), { ok: false, reason: "tampered" });
+    assert.equal(await gens(uid), 0);
   });
 
   await t.test("cancel kills the token", async () => {

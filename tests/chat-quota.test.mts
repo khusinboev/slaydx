@@ -8,8 +8,8 @@ import { cid, clearSetting, mkUser, setSetting, silentLlm, stubLlm, wallet } fro
  * charged once per message id; kill switches; refunds. Real Postgres, stubbed LLM.
  *
  * Mutations (each turned a test red, then restored):
- *   1. `FREE_LLM_WEIGHT.chat` / the daily bucket miscounted (chat counted twice per message) -> "10 free messages, then paid";
- *   2. the per-message idempotency (`claimMessage` conflict clause / replay) removed -> "a retried send ...";
+ *   1. the free quota miscounted (the daily cap passed to `withFreeLlm` +1, or `freeLeft` off by one) -> "10 free messages, then paid" and 6 more;
+ *   2. the per-message idempotency removed (`claimMessage` inserts without the client id) -> "a retried send ...";
  *   3. `chat.enabled` check removed from `sendChatMessage` -> "kill switch".
  */
 
