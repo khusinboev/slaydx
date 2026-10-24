@@ -28,6 +28,7 @@ import {
   type PriceAdjust,
 } from "../tools";
 import { PORTRAIT_VARIANTS } from "../generation/portrait/registry";
+import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "../generation/image-models";
 import { ARTICLE_TYPES } from "../generation/article/types-registry";
 import { ESSAY_LIMITS } from "../generation/essay/types";
 import { PRO_SLIDE_DEFAULT, PRO_SLIDE_MAX, PRO_SLIDE_MIN, SLIDE_DEFAULT, SLIDE_INCLUDED, SLIDE_MAX, SLIDE_MIN } from "../generation/slide-params";
@@ -202,8 +203,13 @@ export function ladderInputs(toolId: ToolId): LadderInput[] {
       return counts.map((n) => ({ label: `${n} slayd`, values: { slideCount: n } }));
     }
     case "image":
-      // `basePriceFor` prices 1, 2–3 and 4+ images.
-      return [1, 2, 4].map((n) => ({ label: `${n} rasm`, values: { imageCount: n } }));
+      // `basePriceFor` prices 1, 2–3 and 4+ images, per model (`image-models.ts`): Gemini first (today's labels), then each other model.
+      return IMAGE_MODELS.flatMap((m) =>
+        [1, 2, 4].map((n) => ({
+          label: m.id === DEFAULT_IMAGE_MODEL ? `${n} rasm` : `${n} rasm · ${m.short}`,
+          values: { imageCount: n, model: m.id },
+        })),
+      );
     case "coursework":
       return COURSEWORK_PAGES.map((p) => ({ label: `${p} bet`, values: { pages: p } }));
     case "referat":

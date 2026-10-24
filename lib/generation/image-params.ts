@@ -12,7 +12,7 @@
  *
  * Zond TO'LIQ `buildImageArtifact`ni chaqirmaydi (u fal.ai/LLM ga tarmoq
  * so'rovi yuboradi) — faqat sof funksiyalar: `composePrompt`,
- * `imageRatioById`, `priceFor`. `expandPrompt` (LLM boyitish) tarmoqqa
+ * `imageRatioById`, `priceFor`, `imageProviderFor`. `expandPrompt` (LLM boyitish) tarmoqqa
  * bog'liq, shuning uchun bu yerda zond qilinmaydi.
  */
 import type { FormValues } from "../types";
@@ -23,7 +23,9 @@ export type ImageParamImpact =
   /** Chiqish o'lchami (`imageRatioById(...).w/h`) */
   | "size"
   /** `priceFor(image, values)` */
-  | "price";
+  | "price"
+  /** the provider the engine draws with (`imageProviderFor(values).id`) */
+  | "provider";
 
 export type ImageParam = {
   id: string;
@@ -40,6 +42,8 @@ export const IMAGE_PARAMS: ImageParam[] = [
   { id: "imageStyle", encode: "string", probeA: "photo", probeB: "pencil", impacts: ["prompt"] },
   { id: "imageRatio", encode: "string", probeA: "1:1", probeB: "9:16", impacts: ["prompt", "size"] },
   { id: "imageCount", encode: "number", probeA: 1, probeB: 4, impacts: ["price"] },
+  // Model choice (program-17 item 5): picks the provider AND the price table. Shown only when >= 2 models are available.
+  { id: "model", encode: "string", probeA: "gemini", probeB: "openai", impacts: ["provider", "price"] },
 ];
 
 /**
@@ -47,6 +51,12 @@ export const IMAGE_PARAMS: ImageParam[] = [
  * qamrov testi shu ro'yxat bilan DOM dagi `data-field` larni solishtiradi.
  */
 export const IMAGE_FORM_FIELDS: string[] = IMAGE_PARAMS.map((p) => p.id);
+
+/**
+ * Fields the form draws only when the server offers a choice: `model` is hidden while a single model is
+ * available (today's form, byte for byte). `tests/ui/image-studio.test.mts` checks both states.
+ */
+export const IMAGE_CONDITIONAL_FIELDS: string[] = ["model"];
 
 /** Tavsif maydoni uzunlik chegarasi — `LimitedTextarea` hisoblagichi uchun. */
 export const IMAGE_PROMPT_LIMIT = 500;

@@ -107,7 +107,11 @@ test("registry: unique ids, Uzbek labels, kinds, env names; reserved providers a
     assert.ok(p.envKeys.every((e) => /^[A-Z0-9_]+$/.test(e)), p.id);
     assert.ok(p.id.length <= 40, "the table CHECK allows 40 characters");
   }
-  for (const id of ["openai-image", "veo", "kling", "elevenlabs"]) {
+  // `openai-image` became real with the `rasm` model choice (image-provider-openai.ts); it shares OPENAI_API_KEY with the text provider.
+  const oi = registry.providerDef("openai-image")!;
+  assert.equal(oi.implemented, true);
+  assert.deepEqual(oi.envKeys, ["OPENAI_API_KEY"]);
+  for (const id of ["veo", "kling", "elevenlabs"]) {
     const def = registry.providerDef(id)!;
     assert.equal(def.implemented, false, `${id}: reserved`);
     assert.equal(def.testable, false);

@@ -57,3 +57,14 @@ test("infografika: yorliq «Infografika · A4 · N blok» (doc.infographic dan)"
   assert.doesNotMatch(text, /rasm$/m, "eski «N rasm» so'zi ko'rinmasligi kerak");
   assert.match(text, /Suv aylanishi — asosiy jihatlari/, "sarlavha spec.title dan");
 });
+
+test("rasm vositasi: hujjat modelini saqlagan bo'lsa yorliqda model nomi chiqadi; eski hujjatda (modelsiz) yorliq o'zgarmaydi", () => {
+  render(h(ImageViewer, { doc: { ...fotoDoc(), imageModel: "openai" } as AcademicDoc }));
+  assert.match(document.body.textContent ?? "", /1:1 · 1 rasm · ChatGPT/);
+  cleanup();
+  render(h(ImageViewer, { doc: { ...fotoDoc(), imageModel: "gemini" } as AcademicDoc }));
+  assert.match(document.body.textContent ?? "", /1:1 · 1 rasm · Nano Banana/);
+  cleanup();
+  render(h(ImageViewer, { doc: fotoDoc() }));
+  assert.doesNotMatch(document.body.textContent ?? "", /ChatGPT|Nano Banana/);
+});

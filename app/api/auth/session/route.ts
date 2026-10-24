@@ -1,6 +1,6 @@
 import { ApiError, checkOrigin, handler, json, optionalUser, requireUser } from "@/lib/server/api";
 import { clearSessionCookie, revokeAllSessions, revokeCurrentSession } from "@/lib/server/session";
-import { clickDirectConfigured, env, imagesConfigured, llmConfigured, paymentsConfigured, paynetConfigured, ttsFeature } from "@/lib/server/env";
+import { clickDirectConfigured, env, imageModelsAvailable, imagesConfigured, llmConfigured, paymentsConfigured, paynetConfigured, ttsFeature } from "@/lib/server/env";
 import { ensureProviderKeys } from "@/lib/server/providers/store";
 import { pdfAvailable } from "@/lib/server/pdf";
 import { getAllToolPricing } from "@/lib/server/pricing";
@@ -18,6 +18,8 @@ export const GET = handler("auth/session", async (req) => {
     features: {
       llm: llmConfigured(),
       images: imagesConfigured(),
+      // `rasm` model choice: only providers that are enabled AND keyed (admin «Provayderlar»).
+      imageModels: imageModelsAvailable(),
       tts: ttsFeature(),
       telegram: Boolean(env.telegramBotToken),
       telegramBot: env.telegramBotUsername || null,

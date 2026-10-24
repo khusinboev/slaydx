@@ -598,6 +598,8 @@ export type AcademicDoc = {
   imageScene?: string;
   imageStyle?: string;
   imageRatio?: string;
+  /** `rasm` tool: the model that drew the pictures (`image-models.ts` id). Absent in older documents = Gemini. */
+  imageModel?: string;
   /**
    * Graduation portrait (program-17 item 14): the options the pictures were made with. The viewer
    * reads it for its label (no model prompt is shown for this tool); `images` holds the results.

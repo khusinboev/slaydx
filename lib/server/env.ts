@@ -3,6 +3,7 @@ import { BRAND_NAME } from "../brand";
 import { acceptedPaymeKeys } from "./payme-keys";
 import { providersOfKind } from "./providers/registry";
 import { getProviderKey, isProviderEnabled, unreadableProviders } from "./providers/resolve";
+import { IMAGE_MODELS, imageModelOf, type ImageModelId } from "../generation/image-models";
 import { resolveSupportUrl } from "../support";
 
 /**
@@ -405,6 +406,20 @@ export function llmConfigured(): boolean {
  */
 export function imagesConfigured(): boolean {
   return Boolean(getProviderKey("gemini"));
+}
+
+/**
+ * The `rasm` models a user may pick right now (`image-models.ts` ids): provider ENABLED in the admin
+ * «Provayderlar» page AND a key (DB or env) present. The session sends it as `features.imageModels`; the
+ * generations route checks the submitted `model` against it again.
+ */
+export function imageModelsAvailable(): ImageModelId[] {
+  return IMAGE_MODELS.filter((m) => isProviderEnabled(m.provider) && Boolean(getProviderKey(m.provider))).map((m) => m.id);
+}
+
+/** Why the `rasm` request's model cannot be served now (Uzbek, for a 400), `null` when it can. */
+export function imageModelUnavailable(values: { model?: unknown }): string | null {
+  return imageModelsAvailable().includes(imageModelOf(values)) ? null : "Tanlangan rasm modeli hozir mavjud emas — boshqa modelni tanlang.";
 }
 
 /**

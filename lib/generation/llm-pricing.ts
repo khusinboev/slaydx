@@ -152,6 +152,27 @@ export function costSoum(usage: UsageLike, at: Date = new Date()): number {
  */
 export const GROUNDING_USD = 0.014;
 
+/*
+ * OpenAI GPT Image (`image-provider-openai.ts`). Source: https://developers.openai.com/api/docs/pricing and
+ * .../models/gpt-image-2.5-flare (checked 2026-10-24) -- billed PER TOKEN, USD per 1M tokens (standard tier):
+ * text input 5, image input 8, image output 30; `gpt-image-2.5-flare` and `-sunburst` share the rates.
+ * The adapter prices a picture from the `usage` OpenAI returns, so the telemetry is exact.
+ */
+export const OPENAI_IMAGE_USD_PER_MTOK = { textIn: 5, imageIn: 8, imageOut: 30 } as const;
+
+export function openaiImageUsd(t: { textIn: number; imageIn: number; imageOut: number }): number {
+  const r = OPENAI_IMAGE_USD_PER_MTOK;
+  return (t.textIn * r.textIn + t.imageIn * r.imageIn + t.imageOut * r.imageOut) / 1_000_000;
+}
+
+/**
+ * ESTIMATE (not a published per-image price): OpenAI publishes no per-image table for the 2.5 models, only an
+ * interactive calculator. Used ONLY when an answer carries no `usage`. Basis: the published GPT Image 2 table,
+ * medium quality, 1024x1024 = $0.053 (the 2.5 models share its token rate; their token counts per picture
+ * were not verifiable). A missing `usage` is therefore recorded as this, never as zero.
+ */
+export const OPENAI_IMAGE_FALLBACK_USD = 0.053;
+
 /**
  * Gemini rasm modeli → bitta rasm narxi (USD, 1K). Model nomi PREFIKS
  * bo'yicha (eng uzuni); jadvalda yo'q model — standart lite narxi va
@@ -160,6 +181,9 @@ export const GROUNDING_USD = 0.014;
 export const IMAGE_PRICES: Record<string, number> = {
   "gemini-3.1-flash-lite-image": 0.034,
   "gemini-3.1-flash-image": 0.067,
+  // OpenAI: ESTIMATE, see OPENAI_IMAGE_FALLBACK_USD (medium quality, 1 MP).
+  "gpt-image-2.5-flare": OPENAI_IMAGE_FALLBACK_USD,
+  "gpt-image-2.5-sunburst": OPENAI_IMAGE_FALLBACK_USD,
 };
 export const IMAGE_DEFAULT_USD = 0.034;
 

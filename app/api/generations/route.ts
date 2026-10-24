@@ -7,7 +7,8 @@ import { sanitizeValues } from "@/lib/server/validate";
 import { sourceCharsForRequest } from "@/lib/server/source-upload";
 import { missingRequired, preflightError, TOOL_BY_SLUG, topicOf } from "@/lib/tools";
 import { startInlineWorker } from "@/lib/server/worker";
-import { env } from "@/lib/server/env";
+import { env, imageModelUnavailable } from "@/lib/server/env";
+import { ensureProviderKeys } from "@/lib/server/providers/store";
 import { queueLimits } from "@/lib/server/queue-limits";
 import { queryOne } from "@/lib/server/db";
 import { effectivePrice } from "@/lib/server/pricing";
@@ -151,6 +152,17 @@ export const POST = handler("generations/create", async (req) => {
    * replays (same tool and values) or rejects with 422 (different ones).
    */
   const replay = idempotencyKey ? await idempotencyKeyTaken(user.id, idempotencyKey) : false;
+
+  /*
+   * `rasm` model choice (program-17 item 5): the chosen model's provider must be enabled AND keyed RIGHT NOW --
+   * checked again here, whatever the form offered (a stale page, a direct POST). 400 before anything is priced
+   * or charged. A replay is a job that already exists; it is answered, not re-checked.
+   */
+  if (tool.id === "image" && !replay) {
+    await ensureProviderKeys();
+    const unavailable = imageModelUnavailable(values);
+    if (unavailable) throw new ApiError(unavailable, 400);
+  }
 
   // Graduation portrait: the selfie must exist and be the user's own BEFORE anything is priced or charged.
   // (A replay is a job already created; its selfie may be deleted by now.)
