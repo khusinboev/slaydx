@@ -144,7 +144,10 @@ test("heartbeat: locked_at=now() bilan bir xil predikat, boshqa ustunga tegmaydi
 test("claimJob: live_json = NULL yoziladi (MUTATSIYA: olib tashlansa bu assert yiqiladi)", async (t) => {
   const seen = mockQuery(t, []);
   await claimJob("worker-1");
-  assert.match(sql(seen[0]), /live_json = NULL/);
+  // claimJob first probes for a queued video (to decide on the claim lock), then runs the claim UPDATE: assert on the UPDATE.
+  const claim = seen.map(sql).find((q) => /UPDATE generations/.test(q));
+  assert.ok(claim, "the claim UPDATE ran");
+  assert.match(claim, /live_json = NULL/);
 });
 
 test("completeJob: live_json = NULL yoziladi", async (t) => {
