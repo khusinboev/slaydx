@@ -237,10 +237,12 @@ test("kalitsiz xizmat sotilmaydi", async () => {
    * ko'rinar va sotilardi: to'lov → navbat → «FAL_KEY missing» → xato →
    * qaytarish. Pul qaytadi, vaqt qaytmaydi.
    */
-  const all = { llm: true, images: true };
-  const noImages = { llm: true, images: false };
-  const noLlm = { llm: false, images: true };
-  const nothing = { llm: false, images: false };
+  // `videoProviders` (program-17 item 5): the video tool follows ITS providers, not the text / image keys.
+  const videoOn = ["veo", "kling"];
+  const all = { llm: true, images: true, videoProviders: videoOn };
+  const noImages = { llm: true, images: false, videoProviders: videoOn };
+  const noLlm = { llm: false, images: true, videoProviders: videoOn };
+  const nothing = { llm: false, images: false, videoProviders: [] as string[] };
 
   // Hammasi sozlangan — hech narsa to'silmaydi.
   for (const t of TOOLS) {
@@ -253,6 +255,9 @@ test("kalitsiz xizmat sotilmaydi", async () => {
   for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait")) {
     assert.equal(toolBlockedReason(t, noImages), null, `${t.id}: matn xizmati ishlashi kerak`);
   }
+  // Video: no provider -> hidden (whatever the text / image keys say); a provider -> shown (whatever they say).
+  assert.ok(toolBlockedReason(TOOL_BY_ID.video, { llm: true, images: true, videoProviders: [] }), "provayderi yo'q video to'silishi kerak");
+  assert.equal(toolBlockedReason(TOOL_BY_ID.video, { llm: false, images: false, videoProviders: ["kling"] }), null, "video matn/rasm kalitiga bog'liq emas");
 
   /*
    * Matn kaliti yo'q — barcha matn xizmatlari to'siladi. Sabab
@@ -260,9 +265,10 @@ test("kalitsiz xizmat sotilmaydi", async () => {
    * bo'lsa esa shablon hujjatni qaytaradi va TO'LIQ narx olinadi. Ya'ni
    * kalitsiz rejim dev/demo uchun, sotuv uchun emas.
    */
-  for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait")) {
+  for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait" && x.custom !== "video")) {
     assert.ok(toolBlockedReason(t, noLlm), `${t.id}: matn kalitisiz sotilmasligi kerak`);
   }
+  assert.equal(toolBlockedReason(TOOL_BY_ID.video, noLlm), null, "video matn kalitiga BOG'LIQ EMAS");
   // Rasm vositalari matn kalitiga BOG'LIQ EMAS — ular Gemini rasm modeli bilan ishlaydi (portret hech qanday matn LLM chaqirmaydi).
   assert.equal(toolBlockedReason(TOOL_BY_ID.image, noLlm), null);
   assert.equal(toolBlockedReason(TOOL_BY_ID.portrait, noLlm), null);

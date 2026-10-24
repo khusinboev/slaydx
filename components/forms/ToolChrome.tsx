@@ -22,7 +22,7 @@ import { formatSom } from "@/lib/format";
  * shu sababli matn bo'yicha taniladi; qo'shimcha ravishda store dagi
  * balans narxdan kam bo'lsa ham (quyida) havola chiqadi.
  */
-const INSUFFICIENT_RE = /balans yetarli emas/i;
+const INSUFFICIENT_RE = /balans yetarli emas|to.langan balans bilan/i;
 
 /** Submit bar bottom padding: 12 px, or the home indicator when larger (Telegram's `--tg-safe-bottom` first). */
 export const SUBMIT_BAR_PB = "pb-[max(0.75rem,var(--tg-safe-bottom,env(safe-area-inset-bottom,0px)))]";
@@ -58,6 +58,7 @@ export function ToolChrome({
   loading,
   onSubmit,
   error,
+  paidOnly,
 }: {
   title: string;
   children: React.ReactNode;
@@ -71,10 +72,12 @@ export function ToolChrome({
   loading?: boolean;
   onSubmit: () => void;
   error?: string | null;
+  /** Bonus so'm cannot pay for this tool (video, program-17 D5): the balance check counts the paid wallet only. */
+  paidOnly?: boolean;
 }) {
   const loggedIn = useAppStore((s) => s.loggedIn);
   const user = useAppStore((s) => s.user);
-  const total = creditTotal(user);
+  const total = paidOnly ? (user?.quota ?? 0) + (user?.balance ?? 0) : creditTotal(user);
   const tool = useChromeTool(title);
   // The gate card already explains a 403 `channel_required` / `telegram_required` (no second error line).
   const gated = useChannelGate((s) => s.gate !== null);
@@ -153,7 +156,8 @@ export function ToolChrome({
           </p>
         ) : short ? (
           <p className="text-muted-foreground mb-4 text-[14.5px] leading-snug" data-balance-short>
-            Balansingiz: {formatSom(total)} — bu hujjat uchun {formatSom(price ?? 0)} kerak. {topUp}
+            {paidOnly ? "To‘langan balansingiz" : "Balansingiz"}: {formatSom(total)} — {paidOnly ? "bu video" : "bu hujjat"} uchun {formatSom(price ?? 0)} kerak.
+            {paidOnly && (user?.points ?? 0) > 0 ? " Bonus so‘m video uchun ishlamaydi." : ""} {topUp}
           </p>
         ) : null}
 

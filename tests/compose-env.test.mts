@@ -50,6 +50,9 @@ const KEYS = [
    * key would be unreadable there and the env keys would silently apply instead.
    */
   "PROVIDER_KEYS_KEY",
+  // Program-17 item 5: the premium voice and Kling video keys must reach both services (the admin store is primary).
+  "ELEVENLABS_API_KEY",
+  "KLING_API_KEY",
 ];
 
 function envBlock(yaml: string, service: string): string {

@@ -52,6 +52,8 @@ const MATRIX: Record<string, Row> = {
   portrait: { format: "png", on: ["native", "jpg"], off: ["native", "jpg"] },
   podcast: { format: "mp3", on: ["native", "transcript-txt"], off: ["native", "transcript-txt"] },
   greeting: { format: "mp3", on: ["native", "transcript-txt"], off: ["native", "transcript-txt"] },
+  // Program-17 item 5: the MP4 is the only file; nothing is derived from it, with or without LibreOffice.
+  video: { format: "mp4", on: ["native"], off: ["native"] },
 };
 
 test("every tool in lib/tools.ts has a download decision (registry and this matrix)", () => {
@@ -76,6 +78,7 @@ test("native row follows the stored format", () => {
     ["image", "jpg", "Rasm (JPG)", "image/jpeg"],
     ["image", "zip", "Barcha rasmlar (ZIP)", "application/zip"],
     ["podcast", "mp3", "Audio (MP3)", "audio/mpeg"],
+    ["video", "mp4", "Video (MP4)", "video/mp4"],
     ["translation", "txt", "Matn (TXT)", "text/plain; charset=utf-8"],
     ["translation", "md", "Markdown (MD)", "text/markdown; charset=utf-8"],
     ["translation", "csv", "Jadval (CSV)", "text/csv; charset=utf-8"],

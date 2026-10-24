@@ -311,7 +311,7 @@ test("narx sozlamasi va to'xtatish (haqiqiy Postgres)", { skip }, async (t) => {
     assert.deepEqual(empty.features.pricing, {});
     assert.deepEqual(
       Object.keys(empty.features).sort(),
-      ["devLogin", "imageModels", "images", "llm", "payments", "pdf", "pricing", "telegram", "telegramBot", "tts"],
+      ["devLogin", "imageModels", "images", "llm", "payments", "pdf", "pricing", "telegram", "telegramBot", "tts", "ttsPremium", "videoProviders"],
       "boshqa kalitlar o'zgarmagan",
     );
     await setPrice("slide", 120, 500);

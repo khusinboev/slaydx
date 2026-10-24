@@ -39,6 +39,8 @@ const FIXED: Partial<Record<ToolId, number>> = {
   image: 90_000,
   // Graduation portrait: up to 2 edits (pool of 2, ~35-45 s each with the input image) + the 2 s floor.
   portrait: 150_000,
+  // Video: only the SUBMIT phase runs on a worker (the provider call + the handoff); the wait is `video_ops`, not this budget.
+  video: 90_000,
   /*
    * Rezyume 2: prompt kattalashdi (tuzilmali faktlar JSON, 18 til uchun
    * yorliqlar, boyitish qoidalari) va qisqa summary da BIR marta STRICT

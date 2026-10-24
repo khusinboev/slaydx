@@ -83,6 +83,8 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "tests.minutes_per_subject",
     "tests.minutes_all",
     "tests.points_per_correct",
+    "video.enabled",
+    "video.max_concurrent",
   ]);
   for (const k of s.SETTING_KEYS) {
     const d = s.settingDef(k);
@@ -162,6 +164,17 @@ test("validatsiya: tests.*", () => {
   for (const v of [0, 0.05, 1.15, -1, 11, "1.1", NaN, null]) bad("tests.points_per_correct", v);
   const ok = s.settingDef("tests.points_per_correct").validate(0.1 * 3);
   assert.ok(ok.ok && ok.value === 0.3, "float noise is cleaned");
+});
+
+test("video.*: standart O'CHIQ (qorong'ida yuboriladi), bir vaqtda 2 ta; validatsiya", () => {
+  assert.equal(s.settingDef("video.enabled").envDefault(), false, "video ships dark: the owner switches it on");
+  assert.equal(s.settingDef("video.max_concurrent").envDefault(), 2);
+  good("video.enabled", false);
+  good("video.enabled", true);
+  for (const v of ["true", 1, null]) bad("video.enabled", v);
+  good("video.max_concurrent", 1);
+  good("video.max_concurrent", 20);
+  for (const v of [0, -1, 21, 1.5, "2", NaN, null]) bad("video.max_concurrent", v);
 });
 
 test("validatsiya: domla.* (yoqish, narx)", () => {

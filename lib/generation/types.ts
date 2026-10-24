@@ -478,6 +478,18 @@ export type SlideImageReport = {
   blockReason?: string;
 };
 
+export type VideoDocModel = {
+  provider: string;
+  prompt: string;
+  aspect: string;
+  /** Seconds paid for. */
+  requestedSeconds: number;
+  /** Seconds the MP4 actually has (`mp4Seconds`; the requested length when it cannot be read). */
+  seconds: number;
+  /** Started from the user's own picture. */
+  fromImage: boolean;
+};
+
 export type AcademicDoc = {
   meta: DocMeta;
   titlePage: boolean;
@@ -516,6 +528,8 @@ export type AcademicDoc = {
    * keyin «nega bu deka rasmsiz chiqqan» degan savolga baza javob beradi.
    */
   slideImages?: SlideImageReport;
+  /** Video (program-17 item 5): what was asked and what the provider delivered; the viewer plays `/file`. */
+  video?: VideoDocModel;
   /** Internet tadqiqoti natijasi (faktlar, manbalar, ToS entry point). */
   slideResearch?: SlideResearch;
   /**
@@ -654,14 +668,14 @@ export type CostJson = {
 };
 
 export type CostPart = {
-  kind: "llm" | "image" | "grounding" | "tts";
+  kind: "llm" | "image" | "grounding" | "tts" | "video";
   provider: string;
   /** LLM/rasm modeli; TTS da model (Gemini) yoki `provider:ovoz`; grounding da `google_search`. */
   model: string;
   calls: number;
   inputTokens: number;
   outputTokens: number;
-  /** Rasm soni / grounding so'rovi / TTS belgisi (LLM da 0). */
+  /** Rasm soni / grounding so'rovi / TTS belgisi / video soniyasi (LLM da 0). */
   units: number;
   usd: number;
   /**

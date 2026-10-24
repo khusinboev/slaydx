@@ -5,6 +5,7 @@ import { produceDownload, recordDownload } from "@/lib/server/downloads/produce"
 import { contentDisposition } from "@/lib/server/pdf-serve";
 import { getGenerationFile } from "@/lib/server/storage";
 import { bytesBody } from "@/lib/server/http-bytes";
+import { parseByteRange } from "@/lib/server/http-range";
 
 export { contentDisposition };
 
@@ -104,6 +105,32 @@ export const GET = handler("generations/file", async (req, ctx: Ctx) => {
    * va o'shanda fayl brauzer tabida ochilib qolmasdan YUKLANADI.
    */
   const isAudio = file.mime.startsWith("audio/");
+  const isVideo = file.mime.startsWith("video/");
+  /*
+   * VIDEO (program-17 item 5): iOS Safari plays an MP4 only if the server answers `Range` with 206, and every browser
+   * needs it to seek -- so for video the range request IS honoured (the slice of the buffer already read).
+   */
+  if (isVideo) {
+    const range = parseByteRange(req.headers.get("range"), file.bytes.byteLength);
+    const common = {
+      "Content-Type": file.mime,
+      "Content-Disposition": contentDisposition(file.fileName, inline ? "inline" : "attachment"),
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+      "Accept-Ranges": "bytes",
+    };
+    if (range === "unsatisfiable") {
+      return new Response(null, { status: 416, headers: { ...common, "Content-Range": `bytes */${file.bytes.byteLength}` } });
+    }
+    if (range) {
+      const part = file.bytes.subarray(range.start, range.end + 1);
+      return new Response(bytesBody(part), {
+        status: 206,
+        headers: { ...common, "Content-Length": String(part.byteLength), "Content-Range": `bytes ${range.start}-${range.end}/${file.bytes.byteLength}` },
+      });
+    }
+    return new Response(bytesBody(file.bytes), { headers: { ...common, "Content-Length": String(file.bytes.byteLength) } });
+  }
   // `bytesBody` — nusxasiz ko'rinish (DB-06/SCALE-08): 25 MB faylni yana nusxalamaydi.
   return new Response(bytesBody(file.bytes), {
     headers: {

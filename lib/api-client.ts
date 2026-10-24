@@ -262,6 +262,10 @@ export type Features = {
   tts?: boolean;
   /** `rasm` models that are usable now (provider enabled + key); absent on an older server. */
   imageModels?: string[];
+  /** The premium ElevenLabs voice (podcast, greeting) is usable now; absent on an older server. */
+  ttsPremium?: boolean;
+  /** `video` providers usable now (enabled + keyed, `video.enabled` on); absent on an older server (tool hidden). */
+  videoProviders?: string[];
   telegram: boolean;
   telegramBot: string | null;
   devLogin: boolean;

@@ -29,6 +29,7 @@ export const VIEWER_FRAME: Record<ViewerKind, FrameSpec> = {
   resume: { mode: "flow", boxed: false }, // V1
   image: { mode: "flow", boxed: false }, // V4
   audio: { mode: "flow", boxed: false }, // V4
+  video: { mode: "flow", boxed: false }, // program-17 item 5
   translation: { mode: "flow", boxed: false }, // V4
 };
 

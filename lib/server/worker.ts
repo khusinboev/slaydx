@@ -65,6 +65,7 @@ import { runDailyQuizSend } from "./daily-quiz-send";
 import { claimJob as claimDomlaJob } from "./domla";
 import { domlaHousekeeping, runJob as runDomlaJob } from "./domla-engine";
 import { ensureProviderKeys, startProviderKeyRefresh } from "./providers/store";
+import { pollDueVideoOps, submitVideoJob } from "./video-ops";
 
 /**
  * Navbatni bajaruvchi worker.
@@ -462,6 +463,22 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
   // The admin «Provayderlar» keys and switches (≤ 30 s old) must be in place before the first provider call of this job.
   await ensureProviderKeys();
 
+  /*
+   * VIDEO (program-17 item 5): only the SUBMIT half runs here -- start the provider operation, store its id, release the
+   * lease (`submitVideoJob`). The job then waits in `video_ops` WITHOUT a worker slot; the leader's `video-poll`
+   * housekeeping step finishes it. A failure here is an ordinary failure: FAILED + refund while the lease is still ours.
+   */
+  if (tool.id === "video") {
+    try {
+      await submitVideoJob({ id: job.id, userId: job.userId, lease: job.lease, values: job.values });
+    } catch (e) {
+      const message = userMessage(e);
+      log("error", `[worker] video job ${job.id} failed to start`, { jobId: job.id, userId: job.userId, attempt: job.attempts, userError: message, err: e });
+      await failAndCleanup(job, job.lease, message);
+    }
+    return;
+  }
+
   // Faqat slayd/pro-slayd jonli deka yuboradi (`slide-write.ts`/`slide-images.ts`
   // shu ikkisi uchun `onProgress` chaqiradi) — boshqa vositalarga reporter kerak
   // emas.
@@ -841,7 +858,10 @@ export async function claimNext(): Promise<ClaimedJob | null> {
     return null;
   }
   // The per-user running cap is the admin's `queue.user_max_inflight` (Sozlamalar), env as the default.
-  return claimJob(newLease(WORKER_ID), { userMaxRunning: await getSetting("queue.user_max_inflight").catch(() => env.queue.userMaxInflight) });
+  return claimJob(newLease(WORKER_ID), {
+    userMaxRunning: await getSetting("queue.user_max_inflight").catch(() => env.queue.userMaxInflight),
+    videoMax: await getSetting("video.max_concurrent").catch(() => 2),
+  });
 }
 
 async function tick(): Promise<boolean> {
@@ -976,6 +996,12 @@ export async function purgeHousekeeping(): Promise<void> {
    */
   await step("server-metrics", async () => (await recordAppSample()) ? 1 : 0);
   await step("server-alerts", async () => (await runAlerts()).sent.length);
+  /*
+   * Video operations waiting for their provider (program-17 item 5): poll the due ones, finish or fail+refund them.
+   * Early and bounded (10 ops per run); the claim is a short lease on `video_ops.next_poll_at`, so a second process
+   * running it concurrently never takes the same op, and every terminal step is guarded by the op row lock.
+   */
+  await step("video-poll", () => pollDueVideoOps());
   if (Date.now() - lastServerMetricsPurgeAt >= RETENTION_EVERY_MS) {
     await step("server-metrics-purge", async () => {
       lastServerMetricsPurgeAt = Date.now();

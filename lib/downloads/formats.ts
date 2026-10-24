@@ -116,6 +116,8 @@ const TOOL_PLANS: Readonly<Record<ToolId, ToolPlan>> = {
   podcast: { extras: ["transcript-txt"] },
   greeting: { extras: ["transcript-txt"] },
   portrait: { extras: ["jpg"] },
+  // The MP4 is the only file; nothing is derived from it.
+  video: { extras: [] },
 };
 
 /** Tool ids that have a download decision (equals every `ToolId`). */
@@ -146,6 +148,7 @@ const NATIVE: Readonly<Record<string, { label: string; hint?: string; mime: stri
   png: { label: "Rasm (PNG)", hint: "Asl sifatda", mime: "image/png" },
   jpg: { label: "Rasm (JPG)", hint: "Asl sifatda", mime: "image/jpeg" },
   zip: { label: "Barcha rasmlar (ZIP)", mime: "application/zip" },
+  mp4: { label: "Video (MP4)", hint: "Ko‘rish va yuborish uchun", mime: "video/mp4" },
   mp3: { label: "Audio (MP3)", hint: "Tinglash va yuborish uchun", mime: "audio/mpeg" },
   txt: { label: "Matn (TXT)", mime: "text/plain; charset=utf-8" },
   md: { label: "Markdown (MD)", mime: "text/markdown; charset=utf-8" },

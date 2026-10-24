@@ -40,14 +40,18 @@ test("Sozlamalar YOPIQ holatda render qilinadi (SSR)", () => {
 });
 
 test("podkast (standart mode=topic): reyestrdagi ko'rinadigan maydonlar `data-field` bilan", () => {
-  const visible = audioParamsOf("podcast").filter((p) => p.id !== "sourceText");
+  // `voiceProvider` (premium voice) is drawn only when the server offers it (`features.ttsPremium`); no features in SSR.
+  const visible = audioParamsOf("podcast").filter((p) => p.id !== "sourceText" && p.id !== "voiceProvider");
   const missing = visible.map((p) => p.id).filter((id) => !podcastHtml.includes(`data-field="${id}"`));
   assert.deepEqual(missing, [], `formada yo'q parametrlar: ${missing.join(", ")}`);
   assert.ok(!podcastHtml.includes('data-field="sourceText"'), "topic rejimida manba matni chizilmaydi");
+  assert.ok(!podcastHtml.includes('data-field="voiceProvider"'), "premium ovoz serverdan kalit kelmaguncha chizilmaydi");
 });
 
 test("tabriknoma: reyestrdagi HAR maydon `data-field` bilan, teskari yo'nalish ham toza", () => {
   const known = new Set(audioParamsOf("greeting").map((p) => p.id));
+  assert.ok(!greetingHtml.includes('data-field="voiceProvider"'), "premium ovoz serverdan kalit kelmaguncha chizilmaydi");
+  known.delete("voiceProvider"); // drawn only when the server offers it (jsdom test: tests/ui/media-composer.test.mts)
   const missing = [...known].filter((id) => !greetingHtml.includes(`data-field="${id}"`));
   assert.deepEqual(missing, []);
   const found = [...greetingHtml.matchAll(/data-field="([a-zA-Z0-9_]+)"/g)].map((m) => m[1]);

@@ -27,6 +27,7 @@
  *   [tts:uz] aisha → kalit yo'q, o'tkazib yuborildi
  */
 import {
+  TTS_ELEVENLABS_VOICES,
   TTS_GEMINI_SPECS,
   TTS_LIMITS,
   TTS_PROVIDERS,
@@ -41,6 +42,7 @@ import {
   type TtsVoiceChoice,
   type TtsVoiceSpec,
   ttsChoiceVoices,
+  otherVoiceChoice,
   ttsUsageCost,
   ttsVoicesFor,
 } from "./types";
@@ -48,6 +50,7 @@ import { recordTts } from "../job-cost";
 import { currentSoumPerUsd } from "../llm-pricing";
 import { makeAzureTts } from "./azure";
 import { makeAishaTts } from "./aisha";
+import { makeElevenLabsTts } from "./elevenlabs";
 import { GEMINI_DAILY_QUOTA_MESSAGE, makeGeminiTts } from "./gemini";
 import { geminiPacer } from "./pace";
 import { packParts } from "./pack";
@@ -149,6 +152,8 @@ export type TtsChain = {
   configured(): boolean;
   /** Shu til uchun haqiqatan ishlaydigan provayderlar (sozlangan + jadvalda bor). */
   providersFor(lang: string): TtsProviderId[];
+  /** One named provider (the premium voice) is usable, whether or not it is in the standard chain. */
+  providerReady?(id: TtsProviderId): boolean;
   synthesizeAll(parts: readonly TtsPart[], opts: TtsRunOpts): Promise<TtsRun>;
 };
 
@@ -176,7 +181,19 @@ export type TtsClock = { now(): number; sleep(ms: number): Promise<void> };
  * `voice` — the user's female / male choice (`groupForChoice`): role A speaks in it,
  * role B in the other gender's voice. Absent → the group's own voice list.
  */
-export type TtsRunOpts = { lang: string; speed?: number; timeoutMs?: number; deadline?: number; voice?: TtsVoiceChoice };
+export type TtsRunOpts = {
+  lang: string;
+  speed?: number;
+  timeoutMs?: number;
+  deadline?: number;
+  voice?: TtsVoiceChoice;
+  /**
+   * Run on THIS provider only (the form's «Premium ovoz» = `elevenlabs`). No fallback to the standard chain: a
+   * failure fails the job and refunds it, instead of serving a cheaper voice at the premium price. Absent = the
+   * standard chain, which never contains ElevenLabs unless the operator listed it in `TTS_VOICE_<LANG>`.
+   */
+  provider?: TtsProviderId;
+};
 
 const MAX_ATTEMPTS = 2;
 /** Muddatdan oldin qoldiriladigan zaxira (MP3 yig'ish, yozish). */
@@ -200,7 +217,7 @@ function finalError(e: unknown): unknown {
 }
 
 export function makeTtsChain(deps: TtsChainDeps = {}): TtsChain {
-  const providers = deps.providers ?? [makeAzureTts(), makeAishaTts(), makeGeminiTts({ pace: geminiPacer })];
+  const providers = deps.providers ?? [makeAzureTts(), makeAishaTts(), makeGeminiTts({ pace: geminiPacer }), makeElevenLabsTts()];
   const env = deps.env ?? process.env;
   const log = deps.log ?? ((line: string) => console.log(line));
   const clock = deps.clock ?? REAL_CLOCK;
@@ -217,9 +234,22 @@ export function makeTtsChain(deps: TtsChainDeps = {}): TtsChain {
     return out;
   };
 
+  /** A single named provider: the operator's voice list when `TTS_VOICE_<LANG>` names it, else its gender table. */
+  const premiumChain = (id: TtsProviderId, lang: string, choice?: TtsVoiceChoice): { group: TtsProviderGroup; provider: TtsProvider }[] => {
+    const provider = byId(id);
+    if (!provider || !provider.configured()) return [];
+    const listed = ttsGroups(lang, env).find((g) => g.provider === id);
+    if (listed) return [{ group: listed, provider }];
+    if (id !== "elevenlabs") return [];
+    const a = choice ?? "female";
+    return [{ group: { provider: id, voices: [TTS_ELEVENLABS_VOICES[a], TTS_ELEVENLABS_VOICES[otherVoiceChoice(a)]] }, provider }];
+  };
+
   return {
-    configured: () => providers.some((p) => p.configured()),
+    // ElevenLabs is opt-in per job (`opts.provider`): its key alone must not make the standard voice chain «configured».
+    configured: () => providers.some((p) => p.id !== "elevenlabs" && p.configured()),
     providersFor: (lang) => usable(lang).map((u) => u.group.provider),
+    providerReady: (id) => Boolean(byId(id)?.configured()),
 
     async synthesizeAll(parts, opts) {
       const lang = String(opts.lang ?? "uz").toLowerCase();
@@ -234,7 +264,8 @@ export function makeTtsChain(deps: TtsChainDeps = {}): TtsChain {
         else if (!p.configured()) log(`[tts:${lang}] ${group.provider} → kalit yo'q, o'tkazib yuborildi`);
       }
 
-      const chain = usable(lang);
+      const only = opts.provider;
+      const chain = only ? premiumChain(only, lang, opts.voice) : usable(lang);
       if (!chain.length) throw new TtsError("azure", "Ovoz provayderi sozlanmagan", { retryable: false });
 
       let last: unknown = null;
@@ -416,6 +447,7 @@ export function chainOfProvider(provider: TtsProvider, voices?: string[], log?: 
   return {
     configured: () => provider.configured(),
     providersFor: () => (provider.configured() ? [provider.id] : []),
+    providerReady: (id) => provider.id === id && provider.configured(),
     async synthesizeAll(parts, opts) {
       const lang = String(opts.lang ?? "uz").toLowerCase();
       if (!provider.configured()) throw new TtsError(provider.id, "Ovoz provayderi sozlanmagan", { retryable: false });

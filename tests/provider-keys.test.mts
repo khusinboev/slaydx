@@ -111,9 +111,13 @@ test("registry: unique ids, Uzbek labels, kinds, env names; reserved providers a
   const oi = registry.providerDef("openai-image")!;
   assert.equal(oi.implemented, true);
   assert.deepEqual(oi.envKeys, ["OPENAI_API_KEY"]);
-  for (const id of ["veo", "kling", "elevenlabs"]) {
+  // `elevenlabs` became real with the premium voice (tts/elevenlabs.ts); it is not in the cheap-probe list.
+  assert.equal(registry.providerDef("elevenlabs")!.implemented, true);
+  assert.equal(registry.providerDef("elevenlabs")!.testable, false);
+  // Program-17 item 5: the video adapters exist (Veo on Gemini Omni, Kling with a JWT); neither has a cheap probe call.
+  for (const id of ["veo", "kling"]) {
     const def = registry.providerDef(id)!;
-    assert.equal(def.implemented, false, `${id}: reserved`);
+    assert.equal(def.implemented, true, `${id}: implemented`);
     assert.equal(def.testable, false);
   }
   assert.deepEqual(registry.providerDef("veo")!.envKeys, ["GEMINI_API_KEY"], "Veo uses the Gemini key");

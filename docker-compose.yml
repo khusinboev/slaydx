@@ -201,6 +201,10 @@ services:
       AZURE_SPEECH_KEY: ${AZURE_SPEECH_KEY:-}
       AZURE_SPEECH_REGION: ${AZURE_SPEECH_REGION:-}
       AISHA_API_KEY: ${AISHA_API_KEY:-}
+      # Program-17 item 5: premium voice (ElevenLabs) and video (Kling; Veo uses GEMINI_API_KEY). The admin «Provayderlar»
+      # page is the main place for these keys; the env vars are the fallback and must reach BOTH services.
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      KLING_API_KEY: ${KLING_API_KEY:-}
       TTS_GEMINI_MODEL: ${TTS_GEMINI_MODEL:-}
       TTS_GEMINI_RPM: ${TTS_GEMINI_RPM:-8}
       TTS_VOICE_UZ: ${TTS_VOICE_UZ:-}
@@ -377,6 +381,10 @@ services:
       AZURE_SPEECH_KEY: ${AZURE_SPEECH_KEY:-}
       AZURE_SPEECH_REGION: ${AZURE_SPEECH_REGION:-}
       AISHA_API_KEY: ${AISHA_API_KEY:-}
+      # Program-17 item 5: premium voice (ElevenLabs) and video (Kling; Veo uses GEMINI_API_KEY). The admin «Provayderlar»
+      # page is the main place for these keys; the env vars are the fallback and must reach BOTH services.
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      KLING_API_KEY: ${KLING_API_KEY:-}
       TTS_GEMINI_MODEL: ${TTS_GEMINI_MODEL:-}
       TTS_GEMINI_RPM: ${TTS_GEMINI_RPM:-8}
       TTS_VOICE_UZ: ${TTS_VOICE_UZ:-}

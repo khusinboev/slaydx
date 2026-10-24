@@ -45,10 +45,13 @@ export const PROVIDERS = [
   { id: "googlebooks", label: "Google Books", kinds: ["research"], envKeys: ["GOOGLE_BOOKS_API_KEY"], keyHint: "AIza…", implemented: true, testable: true },
   // `openai-image`: «ChatGPT» choice of the `rasm` tool (image-provider-openai.ts); shares OPENAI_API_KEY with the text provider.
   { id: "openai-image", label: "OpenAI (rasm)", kinds: ["image"], envKeys: ["OPENAI_API_KEY"], keyHint: "sk-…", implemented: true, testable: false },
-  // Reserved: the adapters are built later (program-17 D7); the key can be entered now.
-  { id: "veo", label: "Google Veo (video)", kinds: ["video"], envKeys: ["GEMINI_API_KEY"], keyHint: "AIza… (Gemini kaliti)", implemented: false, testable: false },
-  { id: "kling", label: "Kling (video)", kinds: ["video"], envKeys: ["KLING_API_KEY"], keyHint: "Kling kaliti", implemented: false, testable: false },
-  { id: "elevenlabs", label: "ElevenLabs (ovoz)", kinds: ["tts"], envKeys: ["ELEVENLABS_API_KEY"], keyHint: "sk_…", implemented: false, testable: false },
+  // Video (lib/generation/video/): `veo` runs on Gemini Omni Flash through the Interactions API (Google shut the Veo REST
+  // models down in the Gemini API on 2026-10-22, see omni.ts), so it shares the Gemini key; `kling` signs a JWT, so its
+  // one secret is stored as `<accessKey>:<secretKey>`.
+  { id: "veo", label: "Google Veo (video)", kinds: ["video"], envKeys: ["GEMINI_API_KEY"], keyHint: "AIza… (Gemini kaliti)", implemented: true, testable: false },
+  { id: "kling", label: "Kling (video)", kinds: ["video"], envKeys: ["KLING_API_KEY"], keyHint: "<accessKey>:<secretKey>", implemented: true, testable: false },
+  // ElevenLabs: the «Premium ovoz» of podcast / greeting (lib/generation/tts/elevenlabs.ts); never part of the default chain.
+  { id: "elevenlabs", label: "ElevenLabs (ovoz)", kinds: ["tts"], envKeys: ["ELEVENLABS_API_KEY"], keyHint: "sk_…", implemented: true, testable: false },
 ] as const satisfies readonly ProviderDef[];
 
 export type ProviderId = (typeof PROVIDERS)[number]["id"];

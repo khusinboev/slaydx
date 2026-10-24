@@ -67,7 +67,7 @@ test("har parametr unikal id ga ega, shakli to'g'ri va probeA ≠ probeB", () =>
   }
 });
 
-test("har parametrning egasi (kinds) va ta'siri (impacts) bor; narx HECH BIR parametrga bog'liq emas", () => {
+test("har parametrning egasi (kinds) va ta'siri (impacts) bor; narxga FAQAT `voiceProvider` ta'sir qiladi", () => {
   for (const p of AUDIO_PARAMS) {
     assert.ok(p.kinds.length > 0, `${p.id}: hech qaysi vositaga tegishli emas`);
     for (const k of p.kinds) assert.ok((AUDIO_KINDS as readonly string[]).includes(k), `${p.id}: noma'lum kind ${k}`);
@@ -75,14 +75,20 @@ test("har parametrning egasi (kinds) va ta'siri (impacts) bor; narx HECH BIR par
     assert.ok(p.impacts.length > 0, `${p.id}: «bezak maydon» — impacts bo'sh`);
     assert.equal(new Set(p.impacts).size, p.impacts.length, `${p.id}: takroriy impact`);
   }
-  const KNOWN: readonly AudioParamImpact[] = ["prompt", "structure", "model", "tts", "review", "source", "language", "budget"];
+  const KNOWN: readonly AudioParamImpact[] = ["prompt", "structure", "model", "tts", "price", "review", "source", "language", "budget"];
   for (const p of AUDIO_PARAMS) for (const im of p.impacts) assert.ok((KNOWN as readonly string[]).includes(im), `${p.id}: noma'lum impact ${im}`);
-  // Egasi qarori 6: ikkala vosita ham tekis 4 000, davomiylik/tur narxga tegmaydi.
-  const impacts = new Set<string>(AUDIO_PARAMS.flatMap((p) => p.impacts as readonly string[]));
-  assert.ok(!impacts.has("price"), "MUTATSIYA: biror parametr narxga ta'sir qilsa, tekis narx va'dasi buziladi");
+  // Egasi qarori 6: ikkala vosita ham tekis 4 000, davomiylik/tur narxga tegmaydi. YAGONA istisno: premium ovoz
+  // (`voiceProvider = elevenlabs`) daqiqasiga ustama oladi va narxni faqat OSHIRADI.
+  const priced = AUDIO_PARAMS.filter((p) => p.impacts.includes("price")).map((p) => p.id);
+  assert.deepEqual(priced, ["voiceProvider"], "MUTATSIYA: voiceProvider'dan boshqa parametr narxga ta'sir qilsa, tekis narx va'dasi buziladi");
   for (const p of AUDIO_PARAMS) {
-    const tool = toolOf(p.kinds[0]);
-    assert.equal(priceFor(tool, { topic: "x", ...p.probeWith }), priceFor(tool, { topic: "x", ...p.probeWith, [p.id]: p.probeB }), `${p.id}: narxga ta'sir qildi`);
+    for (const kind of p.kinds) {
+      const tool = toolOf(kind);
+      const a = priceFor(tool, { topic: "x", ...p.probeWith, [p.id]: p.probeA });
+      const b = priceFor(tool, { topic: "x", ...p.probeWith, [p.id]: p.probeB });
+      if (p.id === "voiceProvider") assert.ok(b > a && a === 4000, `${p.id} (${kind}): premium ${b} standartdan (${a}) qimmat bo'lishi kerak`);
+      else assert.equal(a, b, `${p.id}: narxga ta'sir qildi`);
+    }
   }
 });
 
@@ -116,7 +122,7 @@ test("reyestr: formadagi HAR maydon reyestrda e'lon qilingan (va aksincha)", () 
 
 test("zond maydonlari o'lik emas: har ta'sir kamida bitta parametrda e'lon qilingan", () => {
   const declared = new Set(AUDIO_PARAMS.flatMap((p) => p.impacts));
-  for (const impact of ["prompt", "structure", "model", "tts", "review", "source", "language", "budget"] as AudioParamImpact[]) {
+  for (const impact of ["prompt", "structure", "model", "tts", "price", "review", "source", "language", "budget"] as AudioParamImpact[]) {
     assert.ok(declared.has(impact), `${impact}: hech bir parametr bu ta'sirni e'lon qilmagan — zond o'lik`);
   }
 });
@@ -195,12 +201,24 @@ async function probe(kind: AudioKind, values: FormValues): Promise<Probe> {
   const ctx = audioCtx(spec, input);
 
   const tts = fakeTts();
+  // The chain wrapper records WHICH provider the engine asked for (`TtsRunOpts.provider`): the `voiceProvider` probe
+  // is visible there. The fake provider stands in for ElevenLabs when the engine asks for it.
+  const asked: string[] = [];
+  const base = chainOfProvider(tts);
+  const chain = {
+    ...base,
+    providerReady: () => true,
+    synthesizeAll: (parts: Parameters<typeof base.synthesizeAll>[0], o: Parameters<typeof base.synthesizeAll>[1]) => {
+      asked.push(o.provider ?? "auto");
+      return base.synthesizeAll(parts, { ...o, provider: undefined });
+    },
+  };
   const built = await buildAudioArtifact(tool, meta, v, {
     deadline: Date.now() + 300_000,
     complete: makeStubComplete(ctx),
     // No explicit voices: the voices come from the language table with the user's
     // female / male choice applied — so a `voice` probe is visible in `tts.calls`.
-    tts: chainOfProvider(tts),
+    tts: chain,
     judge: false,
     polish: false,
   });
@@ -228,7 +246,9 @@ async function probe(kind: AudioKind, values: FormValues): Promise<Probe> {
     tts: JSON.stringify({
       voices: ttsGroups(input.language).map((g) => [g.provider, g.voices]),
       calls: tts.calls.map((c) => [c.voice, c.text.length, c.pauseMs]),
+      provider: asked,
     }),
+    price: String(priceFor(tool, v)),
     review: JSON.stringify((model.review?.checks ?? []).filter((c) => !c.id.startsWith("judge:")).map((c) => [c.id, c.level, c.detail])),
     source: JSON.stringify({ mode: input.mode, sourceText: input.sourceText }),
     language: `${input.language}/${model.language}`,

@@ -249,7 +249,8 @@ test("GET: every registry provider with the exact shape; no key anywhere", { ski
   assert.equal(g.keySource, "env");
   assert.deepEqual(g.kinds, ["llm", "image", "tts"]);
   assert.equal(itemOf(r, "anthropic").keySource, "none");
-  assert.equal(itemOf(r, "kling").implemented, false);
+  // Program-17 item 5: Kling, Veo and ElevenLabs have adapters now (no provider is merely reserved any more).
+  for (const id of ["kling", "veo", "elevenlabs"]) assert.equal(itemOf(r, id).implemented, true, id);
   assert.equal(itemOf(r, "veo").envPresent, true, "Veo reads the Gemini env var");
   assert.ok(!r.text.includes("env-gemini-secret-1234"), "an env key is never sent");
 });
@@ -378,13 +379,13 @@ test("PUT key: sealed in the DB, masked in the answer and the audit row, DB wins
   assert.equal((await audits(s.admin.adminId, "providers.key_delete")).length, 1, "a refused delete writes no audit row");
 });
 
-test("PUT key: a reserved provider (kling) accepts a key and says it is not implemented yet", { skip }, async () => {
+test("PUT key: Kling (video) accepts an <accessKey>:<secretKey> key and is implemented", { skip }, async () => {
   const s = await session("admin");
-  const K = fresh();
+  const K = `AK${fresh()}:SK${fresh()}`;
   const r = await putKey(s.cookie, "kling", { key: K, reason: REASON });
   assert.equal(r.status, 200, r.text);
   const item = r.body.item as Item;
-  assert.equal(item.implemented, false);
+  assert.equal(item.implemented, true);
   assert.equal(item.hasDbKey, true);
   assert.equal(resolve.getProviderKey("kling"), K);
 });

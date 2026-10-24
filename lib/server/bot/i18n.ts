@@ -925,6 +925,7 @@ const TOOL_TITLES: Record<string, { ru: string; en: string }> = {
   podcast: { ru: "Подкаст", en: "Podcast" },
   greeting: { ru: "Поздравительная открытка", en: "Greeting card" },
   portrait: { ru: "Выпускной портрет", en: "Graduation portrait" },
+  video: { ru: "Создание видео", en: "Video creation" },
 };
 
 /** A tool's title in `lang` — the Uzbek web title for uz (or an unknown id in any language). */

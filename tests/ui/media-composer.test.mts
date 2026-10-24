@@ -56,9 +56,14 @@ function stubApi(toolId: string, draft: Record<string, unknown> | null = null) {
   return calls;
 }
 
-async function login() {
+async function login(premium = false) {
   const { useAppStore } = await import("../../lib/store.ts");
-  useAppStore.setState({ loggedIn: true, sessionChecked: true });
+  useAppStore.setState({
+    loggedIn: true,
+    sessionChecked: true,
+    // `ttsPremium` = the server says the ElevenLabs voice is enabled AND keyed; without it the field is not drawn.
+    features: premium ? { llm: true, images: true, ttsPremium: true, telegram: false, telegramBot: null, devLogin: true, pdf: true, payments: { click: false, payme: false } } : null,
+  });
 }
 
 function mount(tool: typeof podcastTool) {
@@ -83,7 +88,7 @@ async function pick(id: string, re: RegExp) {
 
 test("QAMROV (podkast): har `AUDIO_PARAMS` id (kind=podcast) formada `data-field` bilan — uch rejim bo'ylab", async () => {
   stubApi("podcast");
-  await login();
+  await login(true);
   mount(podcastTool);
   await act(async () => {
     fireEvent.click(screen.getByText("Sozlamalar"));
@@ -111,7 +116,7 @@ test("QAMROV (podkast): har `AUDIO_PARAMS` id (kind=podcast) formada `data-field
 
 test("QAMROV (tabriknoma): har `AUDIO_PARAMS` id (kind=greeting) formada `data-field` bilan", async () => {
   stubApi("greeting");
-  await login();
+  await login(true);
   mount(greetingTool);
   await act(async () => {
     fireEvent.click(screen.getByText("Sozlamalar"));
@@ -537,3 +542,41 @@ test("voice samples: both files exist, are real MP3 audio, and differ", async ()
   });
   assert.ok(!bytes[0]!.equals(bytes[1]!), "the female and male samples must be different recordings");
 });
+
+/* ══════════════════════════════ premium ovoz (ElevenLabs) ══════════════════════════════ */
+
+for (const [name, tool] of [["podcast", podcastTool], ["greeting", greetingTool]] as const) {
+  test(`premium voice (${name}): the «Ovoz sifati» field is drawn ONLY when the server offers it`, async () => {
+    stubApi(tool.id);
+    await login(false);
+    mount(tool);
+    assert.ok(!field("voiceProvider"), "no key / provider off -> no field");
+    cleanup();
+    await login(true);
+    mount(tool);
+    assert.deepEqual(chipText("voiceProvider"), ["Standart", "Premium (ElevenLabs)"]);
+    assert.equal(checked("voiceProvider"), "Standart", "standard is the default");
+  });
+
+  test(`premium voice (${name}): picking Premium sends voiceProvider=elevenlabs and the price grows per minute`, async () => {
+    const calls = stubApi(tool.id);
+    await login(true);
+    mount(tool);
+    const before = document.body.textContent ?? "";
+    assert.ok(/4[\s\u00a0\u202f]?000/.test(before), "standard price stays 4 000");
+    await pick("voiceProvider", /Premium/);
+    assert.notEqual(document.body.textContent ?? "", before, "the displayed price changed with the premium choice");
+    const topic = name === "podcast" ? screen.getByPlaceholderText(tool.topicPlaceholder!) : null;
+    if (topic) fireEvent.change(topic, { target: { value: "Orol dengizi" } });
+    else {
+      const to = document.querySelector('[data-field="recipient"] input') as HTMLInputElement;
+      fireEvent.change(to, { target: { value: "Dilnoza opa" } });
+    }
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: new RegExp(tool.submitLabel.split(" ")[0]!) }));
+    });
+    await waitFor(() => assert.ok(calls.some((c) => c.url === "/api/generations" && c.method === "POST")));
+    const body = calls.find((c) => c.url === "/api/generations" && c.method === "POST")!.body as { values: Record<string, unknown> };
+    assert.equal(body.values.voiceProvider, "elevenlabs");
+  });
+}

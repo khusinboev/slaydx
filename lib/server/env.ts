@@ -4,6 +4,9 @@ import { acceptedPaymeKeys } from "./payme-keys";
 import { providersOfKind } from "./providers/registry";
 import { getProviderKey, isProviderEnabled, unreadableProviders } from "./providers/resolve";
 import { IMAGE_MODELS, imageModelOf, type ImageModelId } from "../generation/image-models";
+import { normalizeVoiceProvider } from "../generation/tts/types";
+import { VIDEO_PROVIDERS, videoInputFromValues, type VideoProviderId } from "../generation/video/registry";
+import { parseKlingKey } from "../generation/video/kling";
 import { resolveSupportUrl } from "../support";
 
 /**
@@ -453,6 +456,39 @@ export function ttsConfigured(): boolean {
 export function ttsFeature(): boolean {
   if (ttsConfigured()) return true;
   return !providersOfKind("tts").some((p) => p.implemented && !isProviderEnabled(p.id));
+}
+
+/**
+ * The premium ElevenLabs voice of podcast / greeting is usable: the provider is enabled in the admin
+ * «Provayderlar» page AND has a key (DB or env). Without a key this is `false` and nothing else changes.
+ * The session sends it as `features.ttsPremium`; `submitGeneration` checks the submitted `voiceProvider` again.
+ */
+export function ttsPremiumAvailable(): boolean {
+  return isProviderEnabled("elevenlabs") && Boolean(getProviderKey("elevenlabs"));
+}
+
+/**
+ * The `video` providers a user may pick right now: each provider ENABLED in the admin «Provayderlar» page, with a key
+ * (DB or env), and -- for Kling -- a key of the `<accessKey>:<secretKey>` shape. The caller adds the `video.enabled`
+ * setting (async). The session sends it as `features.videoProviders`; the tool is hidden when it is empty.
+ */
+export function videoProvidersAvailable(): VideoProviderId[] {
+  return VIDEO_PROVIDERS.filter((p) => {
+    if (!isProviderEnabled(p.registryId)) return false;
+    const key = getProviderKey(p.registryId);
+    return p.id === "kling" ? parseKlingKey(key) !== null : Boolean(key);
+  }).map((p) => p.id);
+}
+
+/** Why a video request cannot be served now (Uzbek, for a 400), `null` when its provider is available. */
+export function videoProviderUnavailable(values: { provider?: unknown }): string | null {
+  return videoProvidersAvailable().includes(videoInputFromValues(values).provider) ? null : "Tanlangan video provayderi hozir mavjud emas — boshqasini tanlang.";
+}
+
+/** Why a podcast / greeting request cannot use the voice it asked for (Uzbek, for a 400), `null` when it can. */
+export function voiceProviderUnavailable(values: { voiceProvider?: unknown }): string | null {
+  if (normalizeVoiceProvider(values.voiceProvider) !== "elevenlabs") return null;
+  return ttsPremiumAvailable() ? null : "Premium ovoz hozir mavjud emas — standart ovozni tanlang.";
 }
 
 /**

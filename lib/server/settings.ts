@@ -93,6 +93,8 @@ export type SettingValues = {
   "tests.minutes_per_subject": number;
   "tests.minutes_all": number;
   "tests.points_per_correct": number;
+  "video.enabled": boolean;
+  "video.max_concurrent": number;
 };
 
 export type SettingKey = keyof SettingValues;
@@ -225,6 +227,10 @@ const QUIZ_GROUP = "Kunlik savollar";
 const DOMLA_GROUP = "Qattiqqo‘l domla";
 const CHAT_GROUP = "AI chat";
 const TESTS_GROUP = "Test ishlash";
+const VIDEO_GROUP = "Video";
+/** Default / ceiling of videos in flight at once (submitting + waiting for the provider), across all users. */
+export const VIDEO_MAX_CONCURRENT_DEFAULT = 2;
+export const VIDEO_MAX_CONCURRENT_MAX = 20;
 /** AI chat price per message after the free ones: default 100 so'm; the cap stops a typo from charging a fortune per message. */
 const CHAT_PRICE_DEFAULT = 100;
 const CHAT_PRICE_MAX = 10_000;
@@ -653,6 +659,28 @@ const CATALOG: Catalog = {
     max: TESTS_POINTS_MAX,
     validate: stepNumberValidator(0.1, TESTS_POINTS_MAX, 0.1),
     envDefault: () => TESTS_POINTS_DEFAULT,
+  },
+  "video.enabled": {
+    key: "video.enabled",
+    group: VIDEO_GROUP,
+    label: "Video yaratish yoqilgan",
+    description:
+      "Standart: O'CHIQ (video har soniyasi pullik provayderga ketadi, shuning uchun egasi ataylab yoqadi). O'chiq bo'lsa «Video yaratish» vositasi hamma uchun yashirin va yangi ish qabul qilinmaydi — provayder kaliti bo'lsa ham. Yoqilgandan keyin ham vosita faqat kaliti bor provayderlar bilan ko'rinadi. Boshlangan videolar tugatiladi.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => false,
+  },
+  "video.max_concurrent": {
+    key: "video.max_concurrent",
+    group: VIDEO_GROUP,
+    label: "Video: bir vaqtdagi ishlar",
+    description:
+      "Provayderda tayyorlanayotgan videolar soni (barcha foydalanuvchilar bo'yicha). To'lsa yangi video navbatda kutadi. Har video daqiqalab davom etadi va pulli, shuning uchun kichik son qo'ying.",
+    type: "int",
+    min: 1,
+    max: VIDEO_MAX_CONCURRENT_MAX,
+    validate: intValidator(1, VIDEO_MAX_CONCURRENT_MAX),
+    envDefault: () => VIDEO_MAX_CONCURRENT_DEFAULT,
   },
 };
 

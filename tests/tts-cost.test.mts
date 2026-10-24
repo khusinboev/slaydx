@@ -81,7 +81,8 @@ test("ttsCost: per-character providers — Azure $16/1M, Aisha 1 so'm per char v
   assert.equal(ttsCost({ provider: "azure", chars: 1_000_000 }).usd, 16);
   assert.equal(ttsCost({ provider: "azure", chars: 4000 }).usd, 0.064);
   assert.equal(ttsCost({ provider: "google", chars: 1_000_000 }).usd, 16);
-  assert.equal(ttsCost({ provider: "elevenlabs", chars: 1_000_000 }).usd, 165);
+  // ElevenLabs API price: $0.08 per 1K characters (https://elevenlabs.io/pricing/api, 2026-10-24).
+  assert.equal(ttsCost({ provider: "elevenlabs", chars: 1_000_000 }).usd, 80);
   // Characters are what these providers bill, tokens given are ignored.
   assert.deepEqual(ttsCost({ provider: "azure", chars: 1000, inputTokens: 5, outputTokens: 5 }), { usd: 0.016, priced: true, estimated: false, textTokens: 0, audioTokens: 0 });
 

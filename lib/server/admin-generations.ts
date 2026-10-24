@@ -107,11 +107,13 @@ const BASE = `(SELECT id, user_id, tool_id, topic, status, price, progress, atte
  * Stuck = IN_PROGRESS whose lease is older than its own budget + 30 s, the
  * exact rule of `reclaimStaleJobs` (jobs.ts; legacy rows with `budget_ms = 0`
  * use the global job timeout, `$n`). An IN_PROGRESS row with no lease at all is
- * an orphan nothing will ever reclaim, so it counts as stuck too.
+ * an orphan nothing will ever reclaim, so it counts as stuck too -- EXCEPT a video waiting for its provider: that row is
+ * IN_PROGRESS with no lease by design (`video_ops` row 'pending'; the poll step owns it and fails it at its own deadline).
  */
 const stuckSql = (alias: string, timeoutParam: number): string =>
   `(${alias}.status = 'IN_PROGRESS' AND (${alias}.locked_at IS NULL OR ${alias}.locked_at < now() - make_interval(secs =>
-      (CASE WHEN ${alias}.budget_ms > 0 THEN ${alias}.budget_ms / 1000 ELSE $${timeoutParam}::int END) + 30)))`;
+      (CASE WHEN ${alias}.budget_ms > 0 THEN ${alias}.budget_ms / 1000 ELSE $${timeoutParam}::int END) + 30))
+    AND NOT EXISTS (SELECT 1 FROM video_ops vo WHERE vo.generation_id = ${alias}.id AND vo.status = 'pending'))`;
 
 /** The charge row of a job counts only when non-zero, as in `refundInTx`. */
 const CHARGED = `EXISTS (SELECT 1 FROM transactions c2 WHERE c2.kind = 'charge' AND c2.reference = g.id::text

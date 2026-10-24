@@ -43,7 +43,9 @@ export type ToolId =
   | "podcast"
   | "greeting"
   /** Program-17 item 14: selfie -> graduation portrait (`portrait/` engine, Gemini image edit, group `media`). */
-  | "portrait";
+  | "portrait"
+  /** Program-17 item 5: text/image -> short video (`video/` adapters, async provider operation, group `media`). */
+  | "video";
 
 /**
  * Bo'lim (landing, nav, `CreateGrid`).
@@ -136,8 +138,8 @@ export type ToolConfig = {
    * ko'ruvchi (`AudioViewer`) va yuklash tugmasi to'g'ri kengaytmani
    * ko'radi.
    */
-  output: "docx" | "pptx" | "png" | "mp3";
-  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "teacher" | "game" | "media" | "infographic" | "portrait";
+  output: "docx" | "pptx" | "png" | "mp3" | "mp4";
+  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "teacher" | "game" | "media" | "infographic" | "portrait" | "video";
   basePrice: number;
 };
 
@@ -168,7 +170,7 @@ export type Generation = {
    * Ilgari ro'yxatda faqat `docx|pptx` bor edi va `formatOf` qaytargan
    * haqiqiy kengaytma tipga sig'masdi.
    */
-  format: "docx" | "pptx" | "png" | "jpg" | "zip" | "xlsx" | "txt" | "md" | "csv" | "mp3";
+  format: "docx" | "pptx" | "png" | "jpg" | "zip" | "xlsx" | "txt" | "md" | "csv" | "mp3" | "mp4";
   progress: number;
   step: string;
   doc?: AcademicDoc;

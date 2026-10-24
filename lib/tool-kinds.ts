@@ -42,6 +42,7 @@ export const TOOL_KINDS: Readonly<Record<ToolId, ToolKind>> = {
   podcast: { group: "media", output: "mp3" },
   greeting: { group: "media", output: "mp3" },
   portrait: { group: "media", output: "png" },
+  video: { group: "media", output: "mp4" },
 };
 
 /** Every tool id, in `TOOLS` order. */

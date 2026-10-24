@@ -492,7 +492,7 @@ test("filter chips: one scrolling row, 44 px targets, «Hammasi · N» first, pr
 
 /* ───────────────────────────── catalogue ───────────────────────────── */
 
-const features = { llm: true, images: true, telegram: false, telegramBot: null, devLogin: false, pdf: true, payments: { click: false, payme: false } };
+const features = { llm: true, images: true, videoProviders: ["veo"], telegram: false, telegramBot: null, devLogin: false, pdf: true, payments: { click: false, payme: false } };
 
 function mountCatalogue() {
   useAppStore.setState({ hydrated: true, sessionChecked: true, loggedIn: true, features } as never);
@@ -586,6 +586,16 @@ test("catalogue: the chip bar is sticky, prices and routes of the cards are unch
     "every tool reachable at its own route",
   );
   assert.ok(document.body.textContent?.includes("so'm dan"));
+});
+
+test("catalogue: the video card is disabled with the reason (no link) while no video provider is keyed, reachable once one is", () => {
+  useAppStore.setState({ hydrated: true, sessionChecked: true, loggedIn: true, features: { ...features, videoProviders: [] } } as never);
+  render(h(AppRouterContext.Provider, { value: router }, h(CreateGrid)));
+  assert.ok(!document.querySelector("a[href='/uz/video']"), "MUTATSIYA: provayderlarsiz video havolasi bo'lsa qizaradi");
+  assert.match(document.body.textContent ?? "", /Video xizmati hozircha mavjud emas/);
+  cleanup();
+  mountCatalogue();
+  assert.ok(document.querySelector("a[href='/uz/video']"));
 });
 
 /*

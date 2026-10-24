@@ -11,7 +11,7 @@ import { TARGET_LANGUAGES } from "@/lib/languages";
 import { AUDIO_LIMITS, audioWordBudget, type AudioKind } from "@/lib/generation/audio/types";
 import { audioDefaultTypeId, audioKindOf, audioTypeOf, audioTypesOf, type GreetingTypeSpec } from "@/lib/generation/audio/registry";
 import { audioInputFromValues, encodeAudioValues, type AudioInput, type AudioMode } from "@/lib/generation/audio/input";
-import { TTS_VOICE_DEFAULT, type TtsVoiceChoice } from "@/lib/generation/tts/types";
+import { TTS_VOICE_DEFAULT, VOICE_PROVIDER_DEFAULT, type TtsVoiceChoice, type VoiceProviderChoice } from "@/lib/generation/tts/types";
 import { SettingsDetails, Field, TopicRow, LimitedTextarea, SourceFileRow, RangeRow, ClearFormButton, type SourceFileValue } from "./shared";
 import { Card, Row, Segmented, SelectField } from "./compact";
 import { TextInput } from "./fields";
@@ -60,6 +60,7 @@ type Ui = {
   durationMin: number;
   language: string;
   voice: TtsVoiceChoice;
+  voiceProvider: VoiceProviderChoice;
   extra: string;
 };
 
@@ -89,6 +90,7 @@ function emptyUi(kind: AudioKind): Ui {
     durationMin: kind === "podcast" ? AUDIO_LIMITS.podcastMinutesDefault : AUDIO_LIMITS.greetingMinutesDefault,
     language: "uz",
     voice: TTS_VOICE_DEFAULT,
+    voiceProvider: VOICE_PROVIDER_DEFAULT,
     extra: "",
   };
 }
@@ -110,6 +112,7 @@ function uiFromValues(values: FormValues, base: Ui, kind: AudioKind): Ui {
     durationMin: input.minutes,
     language: input.language,
     voice: input.voice,
+    voiceProvider: input.voiceProvider,
     extra: input.extra,
     fileName: typeof values.fileName === "string" ? values.fileName : base.fileName,
   };
@@ -127,6 +130,7 @@ function toValues(ui: Ui, kind: AudioKind): FormValues {
     wordBudget: audioWordBudget(ui.durationMin),
     speakers: spec.speakers,
     voice: ui.voice,
+    voiceProvider: ui.voiceProvider,
     mode: kind === "podcast" ? ui.mode : "topic",
     topic: ui.topic,
     sourceText: ui.sourceText,
@@ -143,6 +147,8 @@ function toValues(ui: Ui, kind: AudioKind): FormValues {
 export function MediaComposer({ tool }: { tool: ToolConfig }) {
   const router = useRouter();
   const loggedIn = useAppStore((s) => s.loggedIn);
+  // The premium voice is offered only when the server says its provider is enabled AND keyed.
+  const premiumOffered = useAppStore((s) => s.features?.ttsPremium) === true;
   const kind: AudioKind = audioKindOf(tool.id) ?? "podcast";
   const [ui, setUi] = useState<Ui>(() => emptyUi(kind));
   const [loading, setLoading] = useState(false);
@@ -170,7 +176,8 @@ export function MediaComposer({ tool }: { tool: ToolConfig }) {
 
   const podcastType = audioTypeOf("podcast", ui.podcastType);
   const occasionType = audioTypeOf("greeting", ui.occasion) as GreetingTypeSpec;
-  const values = toValues(ui, kind);
+  // A saved choice that is no longer offered (key removed, provider switched off) is sent as the standard voice.
+  const values = toValues(premiumOffered ? ui : { ...ui, voiceProvider: VOICE_PROVIDER_DEFAULT }, kind);
   const price = priceFor(tool, values);
   const durationOptions = kind === "podcast" ? AUDIO_LIMITS.podcastMinutes : AUDIO_LIMITS.greetingMinutes;
   const durationMin = durationOptions[0]!;
@@ -329,7 +336,7 @@ export function MediaComposer({ tool }: { tool: ToolConfig }) {
           onChange={(v) => set("durationMin", v)}
           format={(v) => `${v} daqiqa`}
           price={price}
-          rule="Narx davomiylikka bog‘liq emas — istalgan daqiqa bir xil narxda."
+          rule={premiumOffered && ui.voiceProvider === "elevenlabs" ? "Premium ovozda narx davomiylikka qarab o‘sadi (har daqiqa uchun qo‘shimcha)." : "Narx davomiylikka bog‘liq emas — istalgan daqiqa bir xil narxda."}
         />
         <Row label="Til">
           <Field id="language">
@@ -348,6 +355,21 @@ export function MediaComposer({ tool }: { tool: ToolConfig }) {
                 : "Butun tabrik shu ovozda o‘qiladi."}
           </p>
         </Row>
+        {premiumOffered ? (
+          <Row label="Ovoz sifati" hint="Premium ovoz daqiqasiga qo‘shimcha to‘lov bilan" wide>
+            <Field id="voiceProvider">
+              <Segmented
+                ariaLabel="Ovoz sifati"
+                options={[
+                  { value: "auto", label: "Standart" },
+                  { value: "elevenlabs", label: "Premium (ElevenLabs)" },
+                ]}
+                value={ui.voiceProvider}
+                onChange={(v) => set("voiceProvider", v as VoiceProviderChoice)}
+              />
+            </Field>
+          </Row>
+        ) : null}
       </Card>
 
       <SettingsDetails title="Sozlamalar" summary={summary} open={settingsOpen} onToggle={setSettingsOpen}>

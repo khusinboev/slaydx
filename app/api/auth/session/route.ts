@@ -1,9 +1,10 @@
 import { ApiError, checkOrigin, handler, json, optionalUser, requireUser } from "@/lib/server/api";
 import { clearSessionCookie, revokeAllSessions, revokeCurrentSession } from "@/lib/server/session";
-import { clickDirectConfigured, env, imageModelsAvailable, imagesConfigured, llmConfigured, paymentsConfigured, paynetConfigured, ttsFeature } from "@/lib/server/env";
+import { clickDirectConfigured, env, imageModelsAvailable, imagesConfigured, llmConfigured, paymentsConfigured, paynetConfigured, ttsFeature, ttsPremiumAvailable, videoProvidersAvailable } from "@/lib/server/env";
 import { ensureProviderKeys } from "@/lib/server/providers/store";
 import { pdfAvailable } from "@/lib/server/pdf";
 import { getAllToolPricing } from "@/lib/server/pricing";
+import { getSetting } from "@/lib/server/settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,10 @@ export const GET = handler("auth/session", async (req) => {
       // `rasm` model choice: only providers that are enabled AND keyed (admin «Provayderlar»).
       imageModels: imageModelsAvailable(),
       tts: ttsFeature(),
+      // Premium ElevenLabs voice of podcast / greeting: only when the provider is enabled AND keyed.
+      ttsPremium: ttsPremiumAvailable(),
+      // `video`: only providers that are enabled AND keyed, and none while the admin switch `video.enabled` is off.
+      videoProviders: (await getSetting("video.enabled")) ? videoProvidersAvailable() : [],
       telegram: Boolean(env.telegramBotToken),
       telegramBot: env.telegramBotUsername || null,
       devLogin: env.devLoginEnabled,
