@@ -60,6 +60,12 @@ Prices: one place, `priceFor` (server); admin «Narxlar» page adjusts 25–1000
 - Reply-keyboard web_app buttons give empty `initData` → signed `?bt=` link (nginx redacts it from logs). Telegram Desktop drops session cookies →
   opt-in Bearer fallback (`docs/auth/COOKIELESS.md`). Webhook has its own secret (`TELEGRAM_WEBHOOK_SECRET`).
 - Support group link `https://t.me/SlaydX_support` is used everywhere (`lib/support.ts`).
+- **Qattiqqo'l domla** (owner request 15, migration 057; `/domla`, `/uz/domla`): spoken defence of a slide / pro-slide work. Settings `domla.enabled` (default on,
+  stops NEW starts only) and `domla.price` (default 3 000 so'm, charged once at start, ledger ref `domla:<sessionId>`; full refund only when question writing fails).
+  The webhook only writes rows (`domla_sessions`, `domla_jobs`); the worker loop (`domlaStep` in `worker.ts`, 2 jobs at once) does LLM / TTS / scoring.
+  Audio OUT: Gemini TTS voice **Charon** (needs `TTS_GEMINI_MODEL`), WAV 24 kHz -> **MP3 via lamejs** (the worker image has no ffmpeg) -> `sendAudio`, the text is the caption;
+  no TTS -> the question goes out as text. Audio IN: Telegram voice (OGG/Opus, <= 2 MB, <= 120 s) is downloaded by the worker and sent inline to ONE Gemini call that
+  transcribes and scores (JSON schema); only the transcript is stored, never audio. Idle 30 min -> expired (resumable inside the window). Spend: `ai_usage` tool `free:domla`.
 - Running-job page: stage checklist, percent, ETA (`docs/ux/GENERATION-PROGRESS.md`).
 
 ## 7. Known open items (2026-10-22)

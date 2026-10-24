@@ -781,7 +781,16 @@ test("starting from the bot: charged once, a double tap does not charge again", 
 /* ───────────────────────── Gemini scoring request ───────────────────────── */
 
 test("the scorer is ONE Gemini call: audio inline, JSON schema, key in the header; errors throw", async () => {
-  let seen: { url: string; headers: Record<string, string>; body: Record<string, any> } | null = null;
+  type Seen = {
+    url: string;
+    headers: Record<string, string>;
+    body: {
+      contents: { parts: { text?: string; inlineData?: { mimeType: string; data: string } }[] }[];
+      generationConfig: { responseMimeType: string; responseSchema: { required: string[] } };
+      system_instruction: { parts: { text: string }[] };
+    };
+  };
+  let seen: Seen | null = null;
   const ok = (async (url: string, init: { headers: Record<string, string>; body: string }) => {
     seen = { url, headers: init.headers, body: JSON.parse(init.body) };
     return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ transcript: "salom", score: 4, verdict: "Yaxshi", mistake: "Kam" }) }] } }], usageMetadata: { promptTokenCount: 900, candidatesTokenCount: 30 } }));
@@ -791,17 +800,17 @@ test("the scorer is ONE Gemini call: audio inline, JSON schema, key in the heade
   assert.match(seen!.url, /generativelanguage\.googleapis\.com\/v1beta\/models\/[^/]+:generateContent$/);
   assert.equal(seen!.headers["x-goog-api-key"], "test-gemini-key");
   assert.ok(!seen!.url.includes("test-gemini-key"), "the key is never in the URL");
-  const parts = seen!.body.contents[0].parts;
-  assert.equal(parts[1].inlineData.mimeType, "audio/ogg");
-  assert.equal(parts[1].inlineData.data, Buffer.from([1, 2, 3]).toString("base64"));
-  assert.match(parts[0].text, /Ideal answer: Chunki xlorofill/);
+  const parts = seen!.body.contents[0]!.parts;
+  assert.equal(parts[1]!.inlineData!.mimeType, "audio/ogg");
+  assert.equal(parts[1]!.inlineData!.data, Buffer.from([1, 2, 3]).toString("base64"));
+  assert.match(parts[0]!.text!, /Ideal answer: Chunki xlorofill/);
   assert.equal(seen!.body.generationConfig.responseMimeType, "application/json");
   assert.deepEqual(seen!.body.generationConfig.responseSchema.required, ["transcript", "score", "verdict", "mistake"]);
-  assert.match(seen!.body.system_instruction.parts[0].text, /NEVER rude/);
+  assert.match(seen!.body.system_instruction.parts[0]!.text, /NEVER rude/);
 
   await edges.scoreWithGemini({ question: QUESTIONS[0]!, topic: "T", deck: "D", text: "mening javobim" }, ok);
-  assert.equal(seen!.body.contents[0].parts.length, 1, "text answer: no audio part");
-  assert.match(seen!.body.contents[0].parts[0].text, /<answer>\nmening javobim\n<\/answer>/);
+  assert.equal(seen!.body.contents[0]!.parts.length, 1, "text answer: no audio part");
+  assert.match(seen!.body.contents[0]!.parts[0]!.text!, /<answer>\nmening javobim\n<\/answer>/);
 
   const bad = (async () => new Response(JSON.stringify({ error: { message: "quota" } }), { status: 429 })) as unknown as typeof fetch;
   await assert.rejects(edges.scoreWithGemini({ question: QUESTIONS[0]!, topic: "T", deck: "D", text: "x" }, bad), /Gemini 429/);
