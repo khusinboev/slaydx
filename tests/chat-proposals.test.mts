@@ -103,8 +103,8 @@ test("AI chat proposals and confirmation", { skip }, async (t) => {
       const values: Record<string, string> = {};
       for (const h of hints.filter((x) => x.required)) values[h.key] = tool.id === "thesis" && h.key === "articleType" ? "conference_thesis" : (sample[h.key] ?? "x");
       const check = await spec.checkProposal(tool.id, values, me);
-      assert.ok(check.ok, `${tool.id}: ${JSON.stringify(check)}`);
-      assert.equal((check as { price: number }).price, priceFor(tool, (check as { values: never }).values), `${tool.id} price`);
+      if (!check.ok) assert.fail(`${tool.id}: ${JSON.stringify(check)}`);
+      assert.equal(check.price, priceFor(tool, check.values), `${tool.id} price`);
     }
     for (const id of ["resume", "translation", "portrait"]) assert.equal(spec.isChatTool(id), false);
   });

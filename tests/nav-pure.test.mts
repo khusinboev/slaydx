@@ -89,6 +89,7 @@ test("parentOf: the R4 §6 table", () => {
     ["/uz/admin", "/uz"],
     ["/uz/convert", "/uz"],
     ["/uz/alifbo", "/uz"],
+    ["/uz/chat", "/uz"],
     ["/admin/users", "/admin"],
     ["/admin/audit", "/admin"],
     ["/admin/account", "/admin"],
