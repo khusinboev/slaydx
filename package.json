@@ -21,6 +21,7 @@
     "live": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/live-engine.mts",
     "slide-audit": "tsx scripts/slide-audit.mts",
     "shots": "tsx --conditions=react-server scripts/visual-shots.mts",
+    "import:tests": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/import-bmb-tests.mts",
     "seed": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-demo.mts",
     "seed-images": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-images.mts",
     "image-lab": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/image-lab.mts",

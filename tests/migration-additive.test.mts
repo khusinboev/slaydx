@@ -31,6 +31,19 @@ test("the guard's regex flags what it should (sanity)", () => {
   assert.equal(guardHits("ALTER TABLE t ADD COLUMN IF NOT EXISTS c TEXT;").length, 0);
 });
 
+test("060 (paid tests) is additive: only new tables and indexes, rollback documented", () => {
+  const sql = readFileSync(new URL("../lib/server/migrations/060_paid_tests.sql", import.meta.url), "utf8");
+  assert.deepEqual(guardHits(sql), []);
+  assert.match(sql, /^-- ROLLBACK:/m);
+  for (const t of ["test_attempt_answers", "test_attempts", "test_questions", "test_assets", "test_subjects", "test_banks"]) {
+    assert.match(sql, new RegExp(`^--   DROP TABLE IF EXISTS ${t};`, "m"), `rollback drops ${t}`);
+    assert.match(sql, new RegExp(`^CREATE TABLE IF NOT EXISTS ${t} \\(`, "m"), `creates ${t}`);
+  }
+  // Nothing outside the comments touches an existing table.
+  const code = sql.replace(/--.*$/gm, "");
+  assert.ok(!/ALTER TABLE/i.test(code), "no ALTER TABLE at all");
+});
+
 test("058 is additive: no DROP / RENAME / TRUNCATE / SET NOT NULL / ALTER COLUMN TYPE outside comments", () => {
   const sql = readFileSync(new URL("../lib/server/migrations/058_ai_chat.sql", import.meta.url), "utf8");
   assert.deepEqual(guardHits(sql), []);

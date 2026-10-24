@@ -321,7 +321,11 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     assert.ok(await exists("provider_settings"), "056 table created");
     assert.ok((await exists("domla_sessions")) && (await exists("domla_jobs")), "057 tables created");
     assert.ok((await exists("chat_conversations")) && (await exists("chat_messages")) && (await exists("chat_proposals")), "058 tables created");
+    const TEST_TABLES = ["test_banks", "test_subjects", "test_assets", "test_questions", "test_attempts", "test_attempt_answers"];
+    for (const tb of TEST_TABLES) assert.ok(await exists(tb), `060 ${tb} created`);
     for (const f of [
+      // 060: paid tests (docs/program-17 item 7) -- test_banks / test_subjects / test_assets / test_questions / test_attempts / test_attempt_answers.
+      "060_paid_tests.sql",
       // 058: AI chat (docs/program-17 item 8) -- chat_conversations / chat_messages / chat_proposals.
       "058_ai_chat.sql",
       // 057: Qattiqqo'l domla (owner request 15) -- domla_sessions / domla_jobs.
@@ -366,6 +370,9 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     ]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
+      if (f === "060_paid_tests.sql") {
+        for (const tb of TEST_TABLES) assert.ok(!(await exists(tb)), `060 rollback drops ${tb}`);
+      }
       if (f === "058_ai_chat.sql") {
         assert.ok(!(await exists("chat_conversations")) && !(await exists("chat_messages")) && !(await exists("chat_proposals")), "058 rollback drops the three tables");
       }

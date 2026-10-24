@@ -1,0 +1,52 @@
+{
+  "bank": { "slug": "bmb", "title": "Tayyor testlar banki", "source": "fixture" },
+  "subjects": [
+    {
+      "code": "math",
+      "name": "Matematika",
+      "sort": 0,
+      "variants": [
+        {
+          "variant": 1,
+          "questions": [
+            { "legacy_ref": "bmb:math:11", "image_path": "math/img.png", "file_id": "AgACmathNotUsed001", "answer_letter": "B" },
+            { "legacy_ref": "bmb:math:12", "text": "2 + 2 nechaga teng?", "options": ["3", "4", "5", "6"], "answer_letter": "b", "explanation": "Ikkita ikkini qo'shsak to'rt chiqadi." }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "ona_tili",
+      "name": "Ona tili",
+      "sort": 1,
+      "variants": [
+        {
+          "variant": 1,
+          "questions": [
+            { "legacy_ref": "bmb:literature:21", "file_id": "AgACfixtureFileId1", "answer_letter": "c" }
+          ]
+        },
+        {
+          "variant": 2,
+          "questions": [
+            { "legacy_ref": "bmb:literature:22", "text": "Qaysi so'z sifat?", "options": ["kitob", "chiroyli", "yugurmoq", "uch"], "answer_letter": "D" }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "tarix",
+      "name": "Tarix",
+      "sort": 2,
+      "variants": [
+        {
+          "variant": 1,
+          "questions": [
+            { "legacy_ref": "bmb:history:31", "text": "Amir Temur qaysi yili tug'ilgan?", "options": ["1336", "1405", "1370", "1500"], "answer_letter": "a" },
+            { "legacy_ref": "bmb:history:32", "text": "Mirzo Ulug'bek rasadxonasi qaysi shaharda?", "options": ["Samarqand", "Buxoro", "Xiva", "Toshkent"], "answer_letter": "A" }
+          ]
+        }
+      ]
+    }
+  ]
+}
