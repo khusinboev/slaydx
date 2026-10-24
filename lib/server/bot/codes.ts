@@ -25,6 +25,9 @@ import { BOT_LANGUAGES, isProfileField, type BotLanguage, type FieldStepId, type
  *   dq:a:<d>:<q>:<c>  daily quiz answer: d = day number (days since 1970-01-01 of the Tashkent day the message
  *                     belongs to), q = question 0-2, c = chosen option 0-3
  *   dq:off | dq:on    daily quiz message off / on
+ *   dm:l              «Qattiqqo'l domla»: the list of works to defend (last 5 slide works)
+ *   dm:s:<uuid>       start the defence of that work (generation id; ownership is checked in SQL)
+ *   dm:r:<uuid>       resume the open defence (session id; ownership is checked in SQL)
  *   l:m:<o>           language menu; o = where it came from (p profile, y help, n none)
  *   l:s:<lang>:<o>    set the language, then show screen `o`
  *   n                 no-op (a label-only button)
@@ -57,6 +60,9 @@ export const cb = {
   langSet: (lang: BotLanguage, origin: Origin) => `l:s:${lang}:${origin}`,
   dqStart: () => "dq:s",
   dqAnswer: (day: number, q: number, choice: number) => `dq:a:${day}:${q}:${choice}`,
+  domlaList: () => "dm:l",
+  domlaStart: (generationId: string) => `dm:s:${generationId}`,
+  domlaResume: (sessionId: string) => `dm:r:${sessionId}`,
   dqOff: () => "dq:off",
   dqOn: () => "dq:on",
   noop: () => "n",
@@ -84,8 +90,13 @@ export type Callback =
   | { kind: "dqAnswer"; day: number; q: 0 | 1 | 2; choice: 0 | 1 | 2 | 3 }
   | { kind: "dqOff" }
   | { kind: "dqOn" }
+  | { kind: "domlaList" }
+  | { kind: "domlaStart"; generationId: string }
+  | { kind: "domlaResume"; sessionId: string }
   | { kind: "noop" }
   | { kind: "unknown" };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const isOrigin = (v: string | undefined): v is Origin => v === "p" || v === "y" || v === "n";
 
@@ -139,6 +150,11 @@ export function parseCallback(data: string | undefined | null): Callback {
       if (parts.length === 5 && b === "a" && /^[1-9]\d{0,5}$/.test(c ?? "") && /^[0-2]$/.test(d ?? "") && /^[0-3]$/.test(parts[4] ?? "")) {
         return { kind: "dqAnswer", day: Number(c), q: Number(d) as 0 | 1 | 2, choice: Number(parts[4]) as 0 | 1 | 2 | 3 };
       }
+      break;
+    case "dm":
+      if (parts.length === 2 && b === "l") return { kind: "domlaList" };
+      if (parts.length === 3 && b === "s" && UUID_RE.test(c ?? "")) return { kind: "domlaStart", generationId: c!.toLowerCase() };
+      if (parts.length === 3 && b === "r" && UUID_RE.test(c ?? "")) return { kind: "domlaResume", sessionId: c!.toLowerCase() };
       break;
     case "n":
       if (parts.length === 1) return { kind: "noop" };

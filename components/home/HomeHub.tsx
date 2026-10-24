@@ -143,6 +143,18 @@ export function HomeHub() {
         </Link>
 
         <Link
+          href="/uz/domla"
+          data-hub-domla
+          className="bg-card hover:bg-accent focus-visible:ring-ring flex min-h-14 items-center justify-between gap-3 rounded-[20px] border p-4 outline-none focus-visible:ring-2"
+        >
+          <span className="flex flex-col">
+            <span className="text-[15.5px] font-semibold">Qattiqqo‘l domla</span>
+            <span className="text-muted-foreground text-[13.5px]">Slaydingizni ovoz bilan himoya qiling</span>
+          </span>
+          <ArrowRight className="size-5 shrink-0" aria-hidden />
+        </Link>
+
+        <Link
           href="/uz/chat"
           data-hub-chat
           className="bg-card hover:bg-accent focus-visible:ring-ring flex min-h-14 items-center justify-between gap-3 rounded-[20px] border p-4 outline-none focus-visible:ring-2"

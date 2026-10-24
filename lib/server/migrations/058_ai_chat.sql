@@ -17,7 +17,7 @@
 --   DROP TABLE IF EXISTS chat_proposals;
 --   DROP TABLE IF EXISTS chat_messages;
 --   DROP TABLE IF EXISTS chat_conversations;
---   DELETE FROM schema_migrations WHERE name = '057_ai_chat.sql';
+--   DELETE FROM schema_migrations WHERE name = '058_ai_chat.sql';
 SET LOCAL lock_timeout = '5s';
 
 CREATE TABLE IF NOT EXISTS chat_conversations (
