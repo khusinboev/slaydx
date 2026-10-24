@@ -66,7 +66,7 @@ Prices: one place, `priceFor` (server); admin «Narxlar» page adjusts 25–1000
   Audio OUT: Gemini TTS voice **Charon** (needs `TTS_GEMINI_MODEL`), WAV 24 kHz -> **MP3 via lamejs** (the worker image has no ffmpeg) -> `sendAudio`, the text is the caption;
   no TTS -> the question goes out as text. Audio IN: Telegram voice (OGG/Opus, <= 2 MB, <= 120 s) is downloaded by the worker and sent inline to ONE Gemini call that
   transcribes and scores (JSON schema); only the transcript is stored, never audio. Idle 30 min -> expired (resumable inside the window). Spend: `ai_usage` tool `free:domla`.
-- **Test ishlash / paid tests** (owner request 7, migration 060; `/test`, `/uz/tests`, `/api/tests/*`): ready-made image/text question bank (BMB mechanics: one random variant per
+- **Test ishlash / paid tests** (owner request 7, migration 059; `/test`, `/uz/tests`, `/api/tests/*`): ready-made image/text question bank (BMB mechanics: one random variant per
   subject, 10 random questions, 20 min; «hammasi» = 30 questions / 60 min; +1.1 per correct, no negatives). SHIPS DARK: `tests.enabled` defaults to false. Settings `tests.*`
   (price 2 000 charged once at start, ref `test:<attemptId>`; `first_attempt_free`; questions/minutes/points). Server-side deadline and scoring; the answer key reaches the client only in
   the finished view. Bank import: `npm run import:tests -- export.json images [--dry-run]`, export runbook `scripts/export-bmb-tests.md`. Needs the owner's answers before switching on.

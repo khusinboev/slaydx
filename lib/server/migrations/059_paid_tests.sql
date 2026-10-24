@@ -28,7 +28,7 @@
 --   DROP TABLE IF EXISTS test_assets;
 --   DROP TABLE IF EXISTS test_subjects;
 --   DROP TABLE IF EXISTS test_banks;
---   DELETE FROM schema_migrations WHERE name = '060_paid_tests.sql';
+--   DELETE FROM schema_migrations WHERE name = '059_paid_tests.sql';
 SET LOCAL lock_timeout = '5s';
 
 CREATE TABLE IF NOT EXISTS test_banks (

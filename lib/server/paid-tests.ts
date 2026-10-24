@@ -24,7 +24,7 @@ import {
 } from "../tests/rules";
 
 /**
- * «Test ishlash» -- paid tests (owner request 7, migration 060). The ONE service of the web page and the bot
+ * «Test ishlash» -- paid tests (owner request 7, migration 059). The ONE service of the web page and the bot
  * (CLAUDE.md «Bot va web -- bitta servis qatlami»).
  *
  *  - An attempt = a frozen list of questions (BMB mechanics: one random variant per subject, N random questions,
