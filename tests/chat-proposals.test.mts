@@ -21,6 +21,7 @@ import { cid, clearSetting, mkUser, setSetting, stubLlm, wallet } from "./helper
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 process.env.APP_URL = "https://slaydx.test";
 process.env.WORKER_INLINE = "false";
+process.env.TELEGRAM_BOT_TOKEN = "123456:FAKE-chat-proposals-token";
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
 const iso = hasDb ? await createIsolatedDb("chatprop") : { isolated: false, drop: async () => {} };
 const skip = hasDb && iso.isolated ? false : "alohida Postgres baza yo'q";
@@ -161,6 +162,8 @@ test("AI chat proposals and confirmation", { skip }, async (t) => {
     const card = confirmCard(await ask(uid, SUV));
     const taps = await Promise.all([1, 2, 3, 4].map(() => props.confirmProposal({ userId: uid, token: card.token, hash: card.hash })));
     assert.equal(taps.filter((x) => x.ok).length, 1, JSON.stringify(taps));
+    // The losers of the race were beaten by a tap that used the proposal: "used", never "expired".
+    assert.deepEqual(taps.filter((x) => !x.ok).map((x) => (x as { reason: string }).reason), ["used", "used", "used"]);
     assert.equal(await gens(uid), 1);
   });
 
@@ -240,6 +243,106 @@ test("AI chat proposals and confirmation", { skip }, async (t) => {
     await query("UPDATE chat_proposals SET token_hash = $2 WHERE id = $1", [fresh.id, createHash("sha256").update(forged).digest("hex")]);
     assert.deepEqual(await props.confirmProposal({ userId: uid, token: forged, hash: fresh.hash }), { ok: false, reason: "tampered" });
     assert.equal(await gens(uid), 0);
+  });
+
+  await t.test("confirm while generations are paused: refused (nothing charged), the claim is released and the same token works after the pause", async () => {
+    const uid = await mkUser(query, { balance: 20_000 });
+    const card = confirmCard(await ask(uid, SUV));
+    await setSetting(query, "generation.paused", true);
+    try {
+      const r = await props.confirmProposal({ userId: uid, token: card.token, hash: card.hash });
+      assert.equal(r.ok, false);
+      assert.equal((r as { reason: string }).reason, "refused");
+      assert.equal((r as { status: number }).status, 503);
+      assert.equal((r as { code?: string }).code, "paused");
+      assert.equal(await gens(uid), 0);
+      assert.equal((await wallet(query, uid)).total, 20_000);
+    } finally {
+      await clearSetting(query, "generation.paused");
+    }
+    assert.equal((await props.confirmProposal({ userId: uid, token: card.token, hash: card.hash })).ok, true);
+    assert.equal(await gens(uid), 1);
+  });
+
+  await t.test("confirm with the offer not accepted: refused with offer_required (nothing charged); accepted -> the same token works", async () => {
+    const uid = await mkUser(query, { balance: 20_000 });
+    const card = confirmCard(await ask(uid, SUV));
+    await setSetting(query, "oferta.requisites", "Test MChJ\nSTIR 123456789");
+    await setSetting(query, "oferta.gate_enabled", true);
+    try {
+      const r = await props.confirmProposal({ userId: uid, token: card.token, hash: card.hash });
+      assert.equal(r.ok, false);
+      assert.equal((r as { reason: string }).reason, "refused");
+      assert.equal((r as { status: number }).status, 403);
+      assert.equal((r as { code?: string }).code, "offer_required");
+      assert.equal(await gens(uid), 0);
+      assert.equal((await wallet(query, uid)).total, 20_000);
+      const http = (await import("../lib/server/chat/api-map.ts")).confirmFailureResponse(r as never);
+      assert.equal(http.status, 403);
+      assert.equal(http.body.code, "offer_required", "the web client's offer dialog keys on this code");
+      assert.equal(http.body.version, 1);
+      await query("UPDATE users SET offer_version = 1, offer_accepted_at = now() WHERE id = $1", [uid]);
+      assert.equal((await props.confirmProposal({ userId: uid, token: card.token, hash: card.hash })).ok, true);
+    } finally {
+      await clearSetting(query, "oferta.gate_enabled");
+      await clearSetting(query, "oferta.requisites");
+    }
+  });
+
+  await t.test("confirm with a mandatory channel not joined: refused with channel_required and the channels (nothing charged)", async () => {
+    const mc = await import("../lib/server/mandatory-channels.ts");
+    const uid = await mkUser(query, { balance: 20_000 });
+    const tgId = 7_900_000_000 + Math.floor(Math.random() * 99_999_999);
+    await query("UPDATE users SET telegram_id = $2 WHERE id = $1", [uid, String(tgId)]);
+    const card = confirmCard(await ask(uid, SUV));
+    let status = "left";
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL) => {
+      const m = /^https:\/\/api\.telegram\.org\/bot[^/]+\/(\w+)$/.exec(String(url));
+      assert.ok(m, `unexpected URL ${url}`);
+      if (m[1] === "getChatMember") return new Response(JSON.stringify({ ok: true, result: { status } }));
+      return new Response(JSON.stringify({ ok: true, result: true }));
+    }) as typeof fetch;
+    const chatId = -1_003_000_000_000 - Math.floor(Math.random() * 999_999);
+    await query("INSERT INTO bonus_channels (chat_id, username, title, join_bonus, stay_bonus, active, mandatory) VALUES ($1, 'majburiy_chat', 'Majburiy kanal', 0, 0, true, true)", [chatId]);
+    mc.resetMandatoryCache();
+    try {
+      const r = await props.confirmProposal({ userId: uid, token: card.token, hash: card.hash });
+      assert.equal(r.ok, false);
+      assert.equal((r as { code?: string }).code, "channel_required");
+      assert.equal(((r as { extra?: { channels?: unknown[] } }).extra?.channels ?? []).length, 1);
+      assert.equal(await gens(uid), 0);
+      assert.equal((await wallet(query, uid)).total, 20_000);
+      status = "member";
+      mc.resetMandatoryCache();
+      assert.equal((await props.confirmProposal({ userId: uid, token: card.token, hash: card.hash })).ok, true);
+    } finally {
+      globalThis.fetch = realFetch;
+      await query("DELETE FROM bonus_channels WHERE chat_id = $1", [chatId]);
+      mc.resetMandatoryCache();
+    }
+  });
+
+  await t.test("confirm shares the generation hourly budget (60/h): over it -> 'rate', the token is not burnt", async () => {
+    const { rateLimit } = await import("../lib/server/ratelimit.ts");
+    const uid = await mkUser(query, { balance: 20_000 });
+    const card = confirmCard(await ask(uid, SUV));
+    await rateLimit(`gen:hour:${uid}`, 60, 3600, { weight: 60 });
+    assert.deepEqual(await props.confirmProposal({ userId: uid, token: card.token, hash: card.hash }), { ok: false, reason: "rate" });
+    assert.equal(await gens(uid), 0);
+    await query("DELETE FROM rate_limits WHERE bucket = $1", [`gen:hour:${uid}`]);
+    assert.equal((await props.confirmProposal({ userId: uid, token: card.token, hash: card.hash })).ok, true);
+  });
+
+  await t.test("the token is an HMAC under an HKDF subkey of SESSION_SECRET, never under the session secret itself", async () => {
+    const { createHmac, hkdfSync } = await import("node:crypto");
+    const uid = await mkUser(query, { balance: 20_000 });
+    const card = confirmCard(await ask(uid, SUV));
+    const row = (await query<{ values_hash: string; expires_at: Date }>("SELECT values_hash, expires_at FROM chat_proposals WHERE id = $1", [card.proposalId]))[0]!;
+    const payload = `chat-proposal\n${card.proposalId}\n${uid}\n${row.values_hash}\n${row.expires_at.getTime()}`;
+    const sub = Buffer.from(hkdfSync("sha256", Buffer.from(env.sessionSecret, "utf8"), Buffer.alloc(0), "slaydx-chat-proposal-token-v1", 32));
+    assert.equal(card.token, createHmac("sha256", sub).update(payload).digest("base64url"));
+    assert.notEqual(card.token, createHmac("sha256", env.sessionSecret).update(payload).digest("base64url"));
   });
 
   await t.test("cancel kills the token", async () => {

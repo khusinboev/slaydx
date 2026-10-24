@@ -47,7 +47,9 @@ function installFetch(): void {
   geminiQueue = [];
   globalThis.fetch = (async (url: string | URL, init?: { body?: unknown }) => {
     const u = String(url);
-    const body = init?.body ? JSON.parse(String(init.body)) : {};
+    const raw = init?.body;
+    // JSON for ordinary calls; a multipart upload (the offer PDF) is reduced to its string fields.
+    const body = raw instanceof FormData ? Object.fromEntries([...raw.entries()].filter(([, v]) => typeof v === "string")) : raw ? JSON.parse(String(raw)) : {};
     if (u.startsWith("https://generativelanguage.googleapis.com/")) {
       geminiCalls.push({ system: String(body.system_instruction?.parts?.[0]?.text ?? ""), user: String(body.contents?.[0]?.parts?.[0]?.text ?? "") });
       const next = geminiQueue.shift() ?? { reply: "Salom! Qanday yordam bera olaman?", propose: null };
@@ -273,4 +275,76 @@ test("kill switch chat.enabled=false: /chat says so and no mode starts", { skip 
     await query("DELETE FROM app_settings WHERE key = 'chat.enabled'");
     (await import("../lib/server/settings.ts")).invalidateSettingsCache();
   }
+});
+
+test("bot confirm with the offer not accepted: the offer screen with «Qabul qilaman» is shown, nothing is charged, the card stays usable", { skip }, async () => {
+  installFetch();
+  const u = await mkUser(20_000);
+  await tg.handleUpdate(textUpdate(u.tgId, "/chat"));
+  geminiQueue.push({ reply: "Mana:", propose: { tool: "slide", values: { topic: "Suv" } } });
+  sent.length = 0;
+  await tg.handleUpdate(textUpdate(u.tgId, "taqdimot qil"));
+  const yes = sent.filter((c) => c.method === "sendMessage")[1]!.body.reply_markup!.inline_keyboard.flat().find((b) => b.callback_data.startsWith("chy:"))!;
+  const set = async (key: string, value: unknown) => {
+    await query("INSERT INTO app_settings (key, value) VALUES ($1, $2::jsonb) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", [key, JSON.stringify(value)]);
+    (await import("../lib/server/settings.ts")).invalidateSettingsCache();
+  };
+  await set("oferta.requisites", "Test MChJ\nSTIR 123456789");
+  await set("oferta.gate_enabled", true);
+  try {
+    sent.length = 0;
+    await tg.handleUpdate(cbUpdate(u.tgId, yes.callback_data));
+    assert.equal(await gens(u.uid), 0);
+    const offer = sent.find((c) => (c.method === "sendDocument" || c.method === "sendMessage") && JSON.stringify(c.body.reply_markup ?? c.body).includes("o:a:"));
+    assert.ok(offer, `the offer with the accept button was sent: ${sent.map((c) => c.method).join(",")}`);
+    await query("UPDATE users SET offer_version = 1, offer_accepted_at = now() WHERE id = $1", [u.uid]);
+    sent.length = 0;
+    await tg.handleUpdate(cbUpdate(u.tgId, yes.callback_data));
+    assert.equal(await gens(u.uid), 1, "after accepting, the same button starts the generation");
+  } finally {
+    await query("DELETE FROM app_settings WHERE key IN ('oferta.gate_enabled', 'oferta.requisites')");
+    (await import("../lib/server/settings.ts")).invalidateSettingsCache();
+  }
+});
+
+test("bot confirm with a mandatory channel not joined: the channel screen is shown instead of only a toast", { skip }, async () => {
+  installFetch();
+  const mc = await import("../lib/server/mandatory-channels.ts");
+  const u = await mkUser(20_000);
+  await tg.handleUpdate(textUpdate(u.tgId, "/chat"));
+  geminiQueue.push({ reply: "Mana:", propose: { tool: "slide", values: { topic: "Suv" } } });
+  sent.length = 0;
+  await tg.handleUpdate(textUpdate(u.tgId, "taqdimot qil"));
+  const yes = sent.filter((c) => c.method === "sendMessage")[1]!.body.reply_markup!.inline_keyboard.flat().find((b) => b.callback_data.startsWith("chy:"))!;
+  const chatId = -1_004_000_000_000 - randomInt(0, 999_999);
+  await query("INSERT INTO bonus_channels (chat_id, username, title, join_bonus, stay_bonus, active, mandatory) VALUES ($1, 'majburiy_bot', 'Majburiy bot kanali', 0, 0, true, true)", [chatId]);
+  mc.resetMandatoryCache();
+  const inner = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL, init?: { body?: unknown }) => {
+    if (String(url).endsWith("/getChatMember")) return new Response(JSON.stringify({ ok: true, result: { status: "left" } }));
+    return inner(url, init as never);
+  }) as typeof fetch;
+  try {
+    sent.length = 0;
+    await tg.handleUpdate(cbUpdate(u.tgId, yes.callback_data));
+    assert.equal(await gens(u.uid), 0);
+    const card = sent.find((c) => c.method === "sendMessage" && JSON.stringify(c.body).includes("Majburiy bot kanali"));
+    assert.ok(card, `the channel card was sent: ${JSON.stringify(sent.map((c) => [c.method, c.body.text]))}`);
+  } finally {
+    globalThis.fetch = inner;
+    await query("DELETE FROM bonus_channels WHERE chat_id = $1", [chatId]);
+    mc.resetMandatoryCache();
+  }
+});
+
+test("bot chat has the same hourly cap as the web route (200/h): over it the model is not called", { skip }, async () => {
+  installFetch();
+  const { rateLimit } = await import("../lib/server/ratelimit.ts");
+  const u = await mkUser(1000);
+  await tg.handleUpdate(textUpdate(u.tgId, "/chat"));
+  await rateLimit(`chat:hour:${u.uid}`, 200, 3600, { weight: 200 });
+  sent.length = 0;
+  await tg.handleUpdate(textUpdate(u.tgId, "salom"));
+  assert.equal(geminiCalls.length, 0);
+  assert.match(texts()[0]!, /Juda tez yozyapsiz/);
 });
