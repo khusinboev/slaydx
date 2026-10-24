@@ -173,12 +173,19 @@ on_exit() {
     esac
   fi
   # The exit code is recorded for whoever follows the run (and for later inspection).
-  if [ -n "$RUN_ID" ]; then
-    printf 'rc=%s\n' "$rc" > "$STATE_DIR/runs/$RUN_ID" 2>/dev/null || true
-  fi
+  # ORDER MATTERS: last-run.env goes first (temp file + mv, so a reader never sees a partial
+  # file); the per-run status file goes last, because the launcher stops following and exits the
+  # moment it appears — anything written after it would race with the launcher's caller.
   if [ -n "$RUN_ID" ] && [ "$HAVE_LOCK" = 1 ]; then
-    printf 'run=%s\nsha=%s\nrc=%s\nlog=%s\nat=%s\n' "$RUN_ID" "${SHA:-$ARG}" "$rc" "${SLAYDX_RUN_LOG:-}" "$(date -Is)" \
-      > "$STATE_DIR/last-run.env" 2>/dev/null || true
+    {
+      printf 'run=%s\nsha=%s\nrc=%s\nlog=%s\nat=%s\n' "$RUN_ID" "${SHA:-$ARG}" "$rc" "${SLAYDX_RUN_LOG:-}" "$(date -Is)" \
+        > "$STATE_DIR/.last-run.env.$$" && mv -f "$STATE_DIR/.last-run.env.$$" "$STATE_DIR/last-run.env"
+    } 2>/dev/null || true
+  fi
+  if [ -n "$RUN_ID" ]; then
+    {
+      printf 'rc=%s\n' "$rc" > "$STATE_DIR/runs/.$RUN_ID.$$" && mv -f "$STATE_DIR/runs/.$RUN_ID.$$" "$STATE_DIR/runs/$RUN_ID"
+    } 2>/dev/null || true
   fi
   exit "$rc"
 }

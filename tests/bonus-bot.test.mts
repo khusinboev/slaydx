@@ -250,14 +250,21 @@ test("someone else's button / a blocked account / no account: no getChatMember, 
   assert.equal(sends().length, 0);
 });
 
-test("«🔄 Yangilash» is rate limited per user (one tap checks every channel) — MUTATSIYA 4", { skip }, async () => {
+test("«🔄 Yangilash» is rate limited per user (one tap checks every channel) — MUTATSIYA 4", { skip }, async (t) => {
   await freshChannels();
   const u = await newUser();
   await newChannel();
   await newChannel("Ikkinchi");
   member = { [u.tg]: "left" };
   installFetch();
+  // The limiter is a FIXED 60 s window (`windowStartOf`). Four taps that straddle a minute boundary
+  // land in two windows and none is limited (the old flake: 8 getChatMember calls, no rate toast).
+  // Pin the clock one second into a window so all four taps share it; the bucket is per user, so
+  // nothing else can touch it.
+  const pinned = Math.floor(Date.now() / 60_000) * 60_000 + 1_000;
+  t.mock.method(Date, "now", () => pinned);
   for (let i = 0; i < 4; i++) await tg.handleUpdate(cbUpdate(u.tg, "b:r"));
+  t.mock.restoreAll();
   assert.equal(memberCalls().length, 6, "3 taps × 2 channels");
   assert.equal(toasts().at(-1), "Juda tez — bir daqiqadan keyin qayta urinib ko‘ring");
 });

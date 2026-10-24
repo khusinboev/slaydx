@@ -414,7 +414,7 @@ async function waitFor(what: string, cond: () => boolean, ms = 20_000): Promise<
   }
 }
 
-test("deploy-pull: runs detached — log file under the backup dir, exit code in last-run.env, swap leaves postgres alone", (t) => {
+test("deploy-pull: runs detached — log file under the backup dir, exit code in last-run.env, swap leaves postgres alone", async (t) => {
   const sb = sandbox(t);
   const r = run(PULL, [SHA], sb);
   assert.equal(r.code, 0, r.out);
@@ -422,7 +422,11 @@ test("deploy-pull: runs detached — log file under the backup dir, exit code in
   const logText = readFileSync(deployLog(sb), "utf8");
   assert.match(logText, /deployed 0123456 in \d+s/);
   assert.ok(r.out.includes("deployed 0123456"), "the launcher relays the log");
-  assert.match(readFileSync(path.join(sb.state, "last-run.env"), "utf8"), new RegExp(`^run=[0-9-]+\nsha=${SHA}\nrc=0\nlog=.*deploy-`));
+  // The detached process records last-run.env on its way out; wait (bounded) for the final content
+  // instead of assuming it is there the instant the launcher returns.
+  const lastRun = path.join(sb.state, "last-run.env");
+  await waitFor("last-run.env with the final rc", () => existsSync(lastRun) && /\nrc=\d+\n/.test(readFileSync(lastRun, "utf8")));
+  assert.match(readFileSync(lastRun, "utf8"), new RegExp(`^run=[0-9-]+\nsha=${SHA}\nrc=0\nlog=.*deploy-`));
   assert.deepEqual(readdirSync(path.join(sb.state, "runs")), [], "the per-run status file is consumed");
   const ups = sb.calls().filter((c) => isCompose(c, "up"));
   assert.deepEqual(ups.map((c) => c.args), ["compose -p slaydx up -d --no-build --no-deps web worker"]);
@@ -440,7 +444,10 @@ test("deploy-pull: the deploy survives the operator's session dying after the sw
   assert.ok(!sb.calls().some((c) => c.tag === "rollback" && isCompose(c, "up")), "killed before the rollback");
   process.kill(-launcher.pid!, "SIGHUP");
   process.kill(-launcher.pid!, "SIGKILL");
-  await waitFor("the detached deploy to finish", () => existsSync(path.join(sb.state, "last-run.env")));
+  await waitFor("the detached deploy to finish", () => {
+    const f = path.join(sb.state, "last-run.env");
+    return existsSync(f) && /\nrc=\d+\n/.test(readFileSync(f, "utf8"));
+  });
   assert.match(readFileSync(path.join(sb.state, "last-run.env"), "utf8"), /\nrc=1\n/);
   assert.ok(sb.calls().some((c) => c.tag === "rollback" && c.args === "compose -p slaydx up -d --no-build --no-deps web worker"));
   assert.match(readFileSync(path.join(sb.state, "history.log"), "utf8"), new RegExp(`${SHA} FAILED rolled_back_to=${PREV}`));
