@@ -8,7 +8,7 @@ import { getSetting } from "./settings";
  * Effective admission limits = the admin's settings (`queue.*`, env as the default) + the measured mean job
  * duration. `admissionDecision` / `queueEtaSec` stay pure; this module only feeds them.
  *
- * Mean duration: when `queue.mean_service_sec` is 0 (auto) it is the mean of the last `SAMPLE` finished jobs (7 days),
+ * Mean duration: when `queue.mean_service_sec` is 0 (auto) it is the mean of the last `SAMPLE` finished jobs (7 days, videos excluded),
  * each clipped at `CAP_SEC` so one runaway job does not skew the wait estimate. It is NOT clipped at a percentile: the slow tail
  * holds most of the slot-seconds, and a p95 clip would hide exactly that load from admission. Too few samples → 200 s.
  * Cached 60 s per process, one query at a time (single-flight). Known limit: a MEAN assumes the queued tool mix equals the
@@ -35,6 +35,9 @@ async function measuredMeanSec(): Promise<number> {
        SELECT extract(epoch FROM finished_at - started_at) AS d
          FROM generations
         WHERE status = 'COMPLETED' AND started_at IS NOT NULL AND finished_at IS NOT NULL
+          -- A video spends minutes WAITING for its provider without holding a worker slot (video-ops.ts): its wall time
+          -- says nothing about the load of the slots and would inflate every other tool's queue estimate.
+          AND tool_id <> 'video'
           AND created_at > now() - interval '8 days' AND finished_at > now() - interval '7 days'
         ORDER BY finished_at DESC LIMIT $1
      )

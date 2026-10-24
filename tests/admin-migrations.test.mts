@@ -323,7 +323,10 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     assert.ok((await exists("chat_conversations")) && (await exists("chat_messages")) && (await exists("chat_proposals")), "058 tables created");
     const TEST_TABLES = ["test_banks", "test_subjects", "test_assets", "test_questions", "test_attempts", "test_attempt_answers"];
     for (const tb of TEST_TABLES) assert.ok(await exists(tb), `059 ${tb} created`);
+    assert.ok(await exists("video_ops"), "060 table created");
     for (const f of [
+      // 060: video operations waiting for their provider (program-17 item 5) -- video_ops.
+      "060_video_ops.sql",
       // 059: paid tests (docs/program-17 item 7) -- test_banks / test_subjects / test_assets / test_questions / test_attempts / test_attempt_answers.
       "059_paid_tests.sql",
       // 058: AI chat (docs/program-17 item 8) -- chat_conversations / chat_messages / chat_proposals.
@@ -370,6 +373,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     ]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
+      if (f === "060_video_ops.sql") assert.ok(!(await exists("video_ops")), "060 rollback drops the table");
       if (f === "059_paid_tests.sql") {
         for (const tb of TEST_TABLES) assert.ok(!(await exists(tb)), `059 rollback drops ${tb}`);
       }

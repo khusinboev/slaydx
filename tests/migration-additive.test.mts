@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
 /**
- * Migration 058 (AI chat) must stay strictly ADDITIVE: the server's deploy guard (`deploy/deploy-pull.sh DESTRUCTIVE_RE`)
+ * Migrations 058 (AI chat) and 060 (video_ops) must stay strictly ADDITIVE: the server's deploy guard (`deploy/deploy-pull.sh DESTRUCTIVE_RE`)
  * refuses an added migration line with DROP / RENAME / TRUNCATE / SET NOT NULL / ALTER COLUMN .. TYPE unless a human passes
  * `--allow-destructive`, and auto-deploy would stall. The regex is read from the script itself (one source of truth) and applied
  * the way the script does: only the non-comment SQL, upper-cased.
@@ -52,4 +52,25 @@ test("058 is additive: no DROP / RENAME / TRUNCATE / SET NOT NULL / ALTER COLUMN
   assert.match(sql, /^--   ALTER TABLE ai_usage DROP COLUMN IF EXISTS paid_ref;/m);
   // The existing CHECK constraints are not touched.
   assert.ok(!/ai_usage_(source|outcome)_check/.test(sql.replace(/--.*$/gm, "")));
+});
+
+test("060 is additive: video_ops is a new table with a new index; no DROP / RENAME / TRUNCATE / SET NOT NULL / ALTER COLUMN TYPE outside comments", () => {
+  const sql = readFileSync(new URL("../lib/server/migrations/060_video_ops.sql", import.meta.url), "utf8");
+  assert.deepEqual(guardHits(sql), [], "MUTATSIYA: 060 ga DROP/ALTER ... TYPE qo'shilsa qizaradi");
+  // The rollback is documented (in comments) and the migration only creates things.
+  assert.match(sql, /^-- ROLLBACK:/m);
+  assert.match(sql, /^--   DROP TABLE IF EXISTS video_ops;/m);
+  const code = sql.replace(/--.*$/gm, "");
+  assert.ok(/CREATE TABLE IF NOT EXISTS video_ops/.test(code));
+  assert.ok(/CREATE INDEX IF NOT EXISTS video_ops_due_idx/.test(code));
+  // No statement touches an existing table other than the foreign key it references.
+  assert.ok(!/ALTER\s+TABLE/i.test(code), "060 must not alter any existing table");
+  assert.ok(!/generations_status_check|CHECK \(status IN \('QUEUED'/.test(code), "the generations status CHECK is untouched (a waiting video is IN_PROGRESS without a lease)");
+});
+
+test("every migration from 060 on is additive (the deploy guard's rule, applied to all new files)", () => {
+  const dir = new URL("../lib/server/migrations/", import.meta.url);
+  const files = readdirSync(dir).filter((f) => /^(0(6\d|[7-9]\d)|[1-9]\d\d)_.*\.sql$/.test(f));
+  assert.ok(files.includes("060_video_ops.sql"));
+  for (const f of files) assert.deepEqual(guardHits(readFileSync(new URL(f, dir), "utf8")), [], f);
 });

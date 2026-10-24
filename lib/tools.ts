@@ -3,6 +3,7 @@ import { gameTypesOf } from "./generation/games/registry";
 import { GAME_LIMITS } from "./generation/games/types";
 import { AUDIO_VOICE_OPTIONS, audioTypesOf } from "./generation/audio/registry";
 import { AUDIO_LIMITS } from "./generation/audio/types";
+import { premiumVoiceSurcharge } from "./generation/audio/input";
 import { infographicTypes } from "./generation/infographic/registry";
 import { INFOGRAPHIC_LIMITS, INFOGRAPHIC_SIZES, PALETTES } from "./generation/infographic/types";
 import { PRO_SLIDE_DEFAULT, PRO_SLIDE_MAX, PRO_SLIDE_MIN, PRO_SLIDE_PER_SLIDE, clampInt, slidePrice } from "./generation/slide-params";
@@ -20,6 +21,7 @@ import { ESSAY_LIMITS } from "./generation/essay/types";
 import { glossaryTermCount } from "./generation/teacher/input";
 import { clientAdjustedPrice } from "./price-adjust";
 import { portraitPrice } from "./generation/portrait/registry";
+import { VIDEO_ASPECTS, VIDEO_PROVIDERS, videoParamsError, videoPrice } from "./generation/video/registry";
 import { imageBasePrice, imageModelError, imageModelOf } from "./generation/image-models";
 import { groupDigits } from "./format";
 
@@ -290,6 +292,20 @@ const INTERACTIVE_GAME_FIELDS: Record<"sorting" | "listening", ToolField[]> = {
  */
 const VOICE_FIELD: ToolField = { kind: "chips", name: "voice", legend: "Ovoz", options: AUDIO_VOICE_OPTIONS.map((o) => ({ value: o.value, label: o.label })) };
 
+/**
+ * «Ovoz sifati»: standard chain or the premium ElevenLabs voice. The form (`MediaComposer`) shows it only when the
+ * session says the provider is usable (`features.ttsPremium`); the server checks it again (`submitGeneration`).
+ */
+const VOICE_PROVIDER_FIELD: ToolField = {
+  kind: "chips",
+  name: "voiceProvider",
+  legend: "Ovoz sifati",
+  options: [
+    { value: "auto", label: "Standart" },
+    { value: "elevenlabs", label: "Premium (ElevenLabs)" },
+  ],
+};
+
 const AUDIO_FIELDS: Record<"podcast" | "greeting", ToolField[]> = {
   podcast: [
     {
@@ -314,6 +330,7 @@ const AUDIO_FIELDS: Record<"podcast" | "greeting", ToolField[]> = {
     },
     LANGUAGE_FIELD,
     VOICE_FIELD,
+    VOICE_PROVIDER_FIELD,
   ],
   greeting: [
     { kind: "text", name: "recipient", legend: "Kimga?", placeholder: "Dilnoza opa", required: true },
@@ -327,6 +344,7 @@ const AUDIO_FIELDS: Record<"podcast" | "greeting", ToolField[]> = {
     { kind: "chips", name: "durationMin", legend: "Davomiyligi", options: numberChips(AUDIO_LIMITS.greetingMinutes, "daqiqa") },
     LANGUAGE_FIELD,
     VOICE_FIELD,
+    VOICE_PROVIDER_FIELD,
   ],
 };
 
@@ -955,6 +973,43 @@ export const TOOLS: ToolConfig[] = [
     fields: [],
     custom: "portrait",
   },
+  {
+    id: "video",
+    slug: "video",
+    title: "Video yaratish",
+    pageTitle: "Video yaratish",
+    group: "media",
+    icon: "video",
+    tc: "14 165 233",
+    description: "Tavsifdan (yoki suratdan) 5–10 soniyalik qisqa video — AI provayder tayyorlaydi, bir necha daqiqa oladi",
+    submitLabel: "Video yaratish",
+    creatingLabel: "Video tayyorlanmoqda...",
+    createdLabel: "video tayyor!",
+    // No `topicLegend`: the prompt IS the topic and is required through its own field below.
+    topicPlaceholder: "Tong chog‘ida Registon maydoni, kamera sekin yaqinlashadi",
+    extraOptional: true,
+    output: "mp4",
+    // Per second, by provider (`video/registry.ts videoPrice`): Veo 3 000 so'm/s, Kling 2 000 so'm/s. basePrice = the cheapest clip.
+    basePrice: 10000,
+    fields: [
+      { kind: "textarea", name: "prompt", legend: "Video tavsifi", placeholder: "Tong chog‘ida Registon maydoni, kamera sekin yaqinlashadi", required: true },
+      {
+        kind: "chips",
+        name: "provider",
+        legend: "Provayder",
+        options: VIDEO_PROVIDERS.map((p) => ({ value: p.id, label: p.label })),
+      },
+      {
+        kind: "chips",
+        name: "seconds",
+        legend: "Davomiyligi",
+        options: [...new Set(VIDEO_PROVIDERS.flatMap((p) => p.seconds))].sort((a, b) => a - b).map((n) => ({ value: String(n), label: `${n} soniya` })),
+      },
+      { kind: "chips", name: "aspect", legend: "Tomonlar nisbati", options: VIDEO_ASPECTS.map((a) => ({ value: a, label: a === "16:9" ? "16:9 (keng)" : "9:16 (vertikal)" })) },
+      { kind: "text", name: "imageAssetId", legend: "Boshlang‘ich surat" },
+    ],
+    custom: "video",
+  },
 ];
 
 /*
@@ -1241,6 +1296,7 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
    * (`ImageStudio`: `< 3`, `TranslationForm`: `< 8`), ya'ni
    * to'g'ridan-to'g'ri yuborilgan so'rov ularni chetlab o'tardi.
    */
+  if (tool.custom === "video") return videoParamsError(values);
   if (tool.custom === "image") {
     const n = String(values.prompt ?? "").trim().length;
     if (n > 0 && n < IMAGE_PROMPT_MIN) return "Rasm tavsifi juda qisqa — nima chizilishini yozing.";
@@ -1377,6 +1433,16 @@ export type ToolFeatures = {
    * known (older server) -> the `images` flag decides, exactly as before the model choice existed.
    */
   imageModels?: string[];
+  /**
+   * The premium ElevenLabs voice of podcast / greeting is usable (provider enabled AND keyed). Optional: absent =
+   * not known -> the form does not offer it (the standard voice is today's behaviour).
+   */
+  ttsPremium?: boolean;
+  /**
+   * `video` providers that are enabled AND keyed (`video/registry.ts` ids), empty when the admin switched
+   * `video.enabled` off. The tool is hidden when the list is empty (or the server did not send it).
+   */
+  videoProviders?: string[];
 };
 
 /**
@@ -1401,6 +1467,9 @@ export type ToolFeatures = {
  */
 export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | null): string | null {
   if (!features) return null;
+  if (tool.custom === "video") {
+    return features.videoProviders && features.videoProviders.length > 0 ? null : "Video xizmati hozircha mavjud emas: provayder sozlanmagan.";
+  }
   if (tool.custom === "image" && features.imageModels) {
     // The model list is the truth for `rasm` (OpenAI alone can serve it); the `images` flag is Gemini's.
     return features.imageModels.length > 0 ? null : "Rasm xizmati vaqtincha o‘chiq: serverda rasm kaliti sozlanmagan.";
@@ -1526,6 +1595,7 @@ function essayPricePages(values: FormValues): number {
  */
 export function basePriceFor(tool: ToolConfig, values: FormValues): number {
   if (tool.id === "portrait") return portraitPrice(values);
+  if (tool.id === "video") return videoPrice(values);
   if (tool.id === "image") {
     // Per model (`image-models.ts`): Gemini keeps 2 000 / 3 500 / 6 000, ChatGPT is its own table.
     return imageBasePrice(imageModelOf(values), Number(values.imageCount || 1));
@@ -1608,6 +1678,8 @@ export function basePriceFor(tool: ToolConfig, values: FormValues): number {
     const n = glossaryTermCount(values);
     return { "10": 6000, "20": 9000, "40": 15000 }[glossaryPriceTier(n)];
   }
+  // Podcast / greeting: flat 4 000, plus the per-minute surcharge of the premium voice (0 for the standard one).
+  if (tool.id === "podcast" || tool.id === "greeting") return tool.basePrice + premiumVoiceSurcharge(tool.id, values);
   return tool.basePrice;
 }
 
@@ -1641,6 +1713,9 @@ export {
 export type { PriceAdjust, PriceAdjustMap } from "./price-adjust";
 
 export function topicOf(values: FormValues, tool: ToolConfig) {
+  if (tool.id === "video") {
+    return String(values.prompt || "Video").replace(/\s+/g, " ").trim().slice(0, 72) || "Video";
+  }
   if (tool.id === "image") {
     return String(values.prompt || values.topic || "Rasm").replace(/\s+/g, " ").trim().slice(0, 72) || "Rasm";
   }

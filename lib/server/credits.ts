@@ -17,7 +17,20 @@ export type ChargeSplit = { points: number; quota: number; balance: number };
 
 export type ChargeResult =
   | { ok: true; split: ChargeSplit; alreadyCharged: boolean }
-  | { ok: false; reason: "insufficient"; required: number; available: number };
+  | {
+      ok: false;
+      reason: "insufficient";
+      required: number;
+      /** What could be spent: the whole wallet, or (`paidOnly`) the paid part only. */
+      available: number;
+      /** Set by a `paidOnly` charge: the wallet could not cover it WITHOUT bonus so'm. */
+      paidOnly?: true;
+      /** With `paidOnly`: the bonus so'm the user holds (it exists, it just may not pay for this). */
+      bonus?: number;
+    };
+
+/** Options of a charge. `paidOnly`: bonus so'm (`points`) never pays -- only the paid balance does (program-17 D5, video). */
+export type ChargeOpts = { paidOnly?: boolean };
 
 const ZERO: ChargeSplit = { points: 0, quota: 0, balance: 0 };
 
@@ -63,8 +76,9 @@ export async function charge(
   amount: number,
   reference: string,
   note = "",
+  opts: ChargeOpts = {},
 ): Promise<ChargeResult> {
-  return transaction((client) => chargeInTx(client, userId, amount, reference, note));
+  return transaction((client) => chargeInTx(client, userId, amount, reference, note, opts));
 }
 
 /**
@@ -80,6 +94,7 @@ export async function chargeInTx(
   amount: number,
   reference: string,
   note = "",
+  opts: ChargeOpts = {},
 ): Promise<ChargeResult> {
   if (amount <= 0) return { ok: true, split: ZERO, alreadyCharged: false };
 
@@ -101,10 +116,17 @@ export async function chargeInTx(
       };
     }
 
-    const wallet = await walletOf(client, userId);
+    const full = await walletOf(client, userId);
+    /*
+     * Bonus so'm cannot pay for video (D5): with `paidOnly` the bonus pool is hidden from the split, so it is
+     * neither counted as available nor ever drawn from -- whatever the bonus balance is.
+     */
+    const wallet = opts.paidOnly ? { ...full, points: 0 } : full;
     const available = walletTotal(wallet);
     if (available < amount) {
-      return { ok: false as const, reason: "insufficient" as const, required: amount, available };
+      return opts.paidOnly
+        ? { ok: false as const, reason: "insufficient" as const, required: amount, available, paidOnly: true as const, bonus: full.points }
+        : { ok: false as const, reason: "insufficient" as const, required: amount, available };
     }
 
     const split = splitFor(amount, wallet);

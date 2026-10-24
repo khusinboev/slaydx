@@ -65,6 +65,8 @@ import { runDailyQuizSend } from "./daily-quiz-send";
 import { claimJob as claimDomlaJob } from "./domla";
 import { domlaHousekeeping, runJob as runDomlaJob } from "./domla-engine";
 import { ensureProviderKeys, startProviderKeyRefresh } from "./providers/store";
+import { submitVideoJob } from "./video-ops";
+import { startVideoPollLoop } from "./video-poll-loop";
 
 /**
  * Navbatni bajaruvchi worker.
@@ -462,6 +464,22 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
   // The admin «Provayderlar» keys and switches (≤ 30 s old) must be in place before the first provider call of this job.
   await ensureProviderKeys();
 
+  /*
+   * VIDEO (program-17 item 5): only the SUBMIT half runs here -- start the provider operation, store its id, release the
+   * lease (`submitVideoJob`). The job then waits in `video_ops` WITHOUT a worker slot; the `video-poll` loop
+   * housekeeping step finishes it. A failure here is an ordinary failure: FAILED + refund while the lease is still ours.
+   */
+  if (tool.id === "video") {
+    try {
+      await submitVideoJob({ id: job.id, userId: job.userId, lease: job.lease, values: job.values });
+    } catch (e) {
+      const message = userMessage(e);
+      log("error", `[worker] video job ${job.id} failed to start`, { jobId: job.id, userId: job.userId, attempt: job.attempts, userError: message, err: e });
+      await failAndCleanup(job, job.lease, message);
+    }
+    return;
+  }
+
   // Faqat slayd/pro-slayd jonli deka yuboradi (`slide-write.ts`/`slide-images.ts`
   // shu ikkisi uchun `onProgress` chaqiradi) — boshqa vositalarga reporter kerak
   // emas.
@@ -841,7 +859,10 @@ export async function claimNext(): Promise<ClaimedJob | null> {
     return null;
   }
   // The per-user running cap is the admin's `queue.user_max_inflight` (Sozlamalar), env as the default.
-  return claimJob(newLease(WORKER_ID), { userMaxRunning: await getSetting("queue.user_max_inflight").catch(() => env.queue.userMaxInflight) });
+  return claimJob(newLease(WORKER_ID), {
+    userMaxRunning: await getSetting("queue.user_max_inflight").catch(() => env.queue.userMaxInflight),
+    videoMax: await getSetting("video.max_concurrent").catch(() => 2),
+  });
 }
 
 async function tick(): Promise<boolean> {
@@ -1253,6 +1274,8 @@ async function loop(): Promise<void> {
   startHeartbeat({ role: "worker", concurrency: env.worker.concurrency, getRunning: () => running });
   // Telegram broadcast delivery: its own loop (leader by advisory lock), independent of the job tick and housekeeping.
   const broadcastLoop = startBroadcastLoop();
+  // Videos waiting for their provider are polled in their OWN leader-locked loop, so a slow provider never blocks claiming.
+  const videoPollLoop = startVideoPollLoop();
   let sinceHousekeeping = 0;
 
   while (!stopped) {
@@ -1281,6 +1304,7 @@ async function loop(): Promise<void> {
     await sleep(wait);
   }
   await broadcastLoop.stop();
+  await videoPollLoop.stop();
   // Stopped: the row goes stale and the system page shows the worker as gone.
   stopHeartbeat("worker");
 }

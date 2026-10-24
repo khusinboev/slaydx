@@ -41,7 +41,9 @@ export type ViewerKind =
    */
   | "audio"
   | "translation"
-  | "image";
+  | "image"
+  /** Program-17 item 5: one MP4 -- `<video controls playsinline>` + download / Telegram (`VideoViewer`). */
+  | "video";
 
 export function viewerKind(id: ToolId): ViewerKind {
   switch (id) {
@@ -73,6 +75,8 @@ export function viewerKind(id: ToolId): ViewerKind {
     case "greeting":
       // AUDIT-22: chiqish MP3 — pleer + transkript (`AudioViewer`).
       return "audio";
+    case "video":
+      return "video";
     case "translation":
       return "translation";
     case "image":

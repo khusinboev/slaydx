@@ -131,6 +131,18 @@ export class JobCost {
     if (extra.audioTokens) p.audioTokens = (p.audioTokens ?? 0) + Math.round(extra.audioTokens);
   }
 
+  /**
+   * A finished video. `units` — seconds delivered; `usd` from `videoCost` (price book). `priced: false` marks a
+   * provider whose per-second price is not in the book (usd 0 -- never to be read as a real $0).
+   */
+  addVideo(provider: string, model: string, seconds: number, usd: number, priced = true): void {
+    const p = this.part("video", provider, model);
+    p.calls += 1;
+    p.units += Math.max(0, Math.round(seconds));
+    p.usd += Math.max(0, usd);
+    if (!priced) p.priced = false;
+  }
+
   get calls(): number {
     let n = 0;
     for (const p of this.parts.values()) n += p.calls;

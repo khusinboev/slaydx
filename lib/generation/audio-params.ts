@@ -22,10 +22,9 @@
  *
  * Manba: `docs/research/{podcast,greeting}.md` §3 jadvallari.
  *
- * NARX: HECH BIR parametr narxga ta'sir qilmaydi — ikkala vosita ham
- * tekis 4 000 (mahsulot egasi qarori 6). Shuning uchun `price` ta'siri
- * bu reyestrda umuman yo'q; `tests/pricing.test.mts` buni mutatsiya
- * bilan tekshiradi.
+ * NARX: faqat `voiceProvider` (premium ovoz, daqiqasiga ustama) narxga ta'sir
+ * qiladi — qolgan parametrlar bo'yicha ikkala vosita ham tekis 4 000
+ * (mahsulot egasi qarori 6); `tests/audio-params.test.mts` buni qulflaydi.
  */
 import type { FormValues } from "../types";
 import { AUDIO_KINDS, type AudioKind } from "./audio/types";
@@ -39,6 +38,8 @@ export type AudioParamImpact =
   | "model"
   /** TTS: ovoz tanlovi yoki bo'laklar soni. */
   | "tts"
+  /** Price: ONLY `voiceProvider` (premium voice = per-minute surcharge); every other param keeps the flat 4 000. */
+  | "price"
   /** Hisobot qoidalari (`AUDIO_RULE_IDS`) yoki baholovchi. */
   | "review"
   /** Manba: yuklangan fayl yoki qo'yilgan matn. */
@@ -73,6 +74,12 @@ export const AUDIO_PARAMS: AudioParam[] = [
    * script text, the structure and the price do not depend on it.
    */
   { id: "voice", kinds: ALL, encode: "string", probeA: "female", probeB: "male", impacts: ["tts"] },
+  /*
+   * `voiceProvider` — «Ovoz sifati»: `auto` = the standard chain, `elevenlabs` = premium voice. Shown only when the
+   * provider is enabled and keyed. It reaches the TTS call (`TtsRunOpts.provider`) AND the price (a per-minute
+   * surcharge, `premiumVoiceSurcharge`), so it is the one audio param with a `price` impact.
+   */
+  { id: "voiceProvider", kinds: ALL, encode: "string", probeA: "auto", probeB: "elevenlabs", impacts: ["tts", "price"] },
   { id: "extra", kinds: ALL, encode: "string", probeA: "", probeB: "7-sinf o'quvchilariga mo'ljallang.", impacts: ["prompt"] },
 
   /* ── podkast (podcast.md §3) ── */

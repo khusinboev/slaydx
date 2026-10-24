@@ -1,7 +1,7 @@
 "use client";
 
 import { lazy, memo, Suspense, useState } from "react";
-import { FileText, Image as ImageIcon, Mic, Presentation } from "lucide-react";
+import { FileText, Image as ImageIcon, Mic, Presentation, Video as VideoIcon } from "lucide-react";
 import type { ServerGeneration } from "@/lib/api-client";
 import { thumbUrl } from "@/lib/api-client";
 import { ApiImg } from "@/lib/use-api-src";
@@ -146,7 +146,7 @@ export const FilePreview = memo(function FilePreview({ gen }: { gen: ServerGener
  */
 function KindPlaceholder({ type }: { type: string }) {
   const Icon =
-    type === "slide" || type === "pro-slide" ? Presentation : type === "image" || type === "infographic" ? ImageIcon : FileText;
+    type === "slide" || type === "pro-slide" ? Presentation : type === "image" || type === "infographic" ? ImageIcon : type === "video" ? VideoIcon : FileText;
   return (
     <div className="bg-muted flex h-full w-full items-center justify-center" data-preview-empty>
       <Icon className="text-muted-foreground size-7 opacity-70" aria-hidden />

@@ -20,6 +20,7 @@ import {
   PieChart,
   Presentation,
   Puzzle,
+  Video,
 } from "lucide-react";
 
 export const TOOL_ICONS: Record<string, LucideIcon> = {
@@ -47,6 +48,7 @@ export const TOOL_ICONS: Record<string, LucideIcon> = {
   headphones: Headphones,
   mic: Mic,
   gift: Gift,
+  video: Video,
   /* AUDIT-21: krossvord, flesh kartalar, infografika. */
   puzzle: Puzzle,
   layers: Layers,

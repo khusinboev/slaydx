@@ -38,6 +38,7 @@ const WorkComposer = lazy(() => import("./WorkComposer").then((m) => ({ default:
 const TeacherComposer = lazy(() => import("./TeacherComposer").then((m) => ({ default: m.TeacherComposer })));
 const MediaComposer = lazy(() => import("./MediaComposer").then((m) => ({ default: m.MediaComposer })));
 const InfographicComposer = lazy(() => import("./InfographicComposer").then((m) => ({ default: m.InfographicComposer })));
+const VideoComposer = lazy(() => import("./VideoComposer").then((m) => ({ default: m.VideoComposer })));
 const PortraitComposer = lazy(() => import("./PortraitComposer").then((m) => ({ default: m.PortraitComposer })));
 const GameComposer = lazy(() => import("./GameComposer").then((m) => ({ default: m.GameComposer })));
 
@@ -153,6 +154,7 @@ function toolForm(tool: ToolConfig, profile: UserProfile, user: ServerUser | nul
   if (tool.custom === "media") return <MediaComposer tool={tool} />;
   if (tool.custom === "infographic") return <InfographicComposer tool={tool} />;
   if (tool.custom === "portrait") return <PortraitComposer tool={tool} />;
+  if (tool.custom === "video") return <VideoComposer tool={tool} />;
 
   return <StandardForm tool={tool} profile={profile} />;
 }

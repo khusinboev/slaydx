@@ -309,6 +309,30 @@ export function normalizeVoiceChoice(v: unknown): TtsVoiceChoice {
 /** The other gender — speaker B of a two-speaker podcast takes this voice. */
 export const otherVoiceChoice = (c: TtsVoiceChoice): TtsVoiceChoice => (c === "female" ? "male" : "female");
 
+/* ────────────────────────── voice quality (standard / premium) ────────────────────────── */
+
+/**
+ * «Ovoz sifati» of the podcast / greeting form: `auto` = the standard chain (Azure -> Aisha -> Gemini, today's
+ * behaviour), `elevenlabs` = the premium ElevenLabs voice (`elevenlabs.ts`). The form offers the second value only
+ * when the provider is enabled AND keyed (`features.ttsPremium`); the server checks it again before charging.
+ */
+export const VOICE_PROVIDER_CHOICES = ["auto", "elevenlabs"] as const;
+export type VoiceProviderChoice = (typeof VOICE_PROVIDER_CHOICES)[number];
+export const VOICE_PROVIDER_DEFAULT: VoiceProviderChoice = "auto";
+
+/** Form/API value -> a known choice; anything else (an old client sends nothing) -> `auto`. */
+export function normalizeVoiceProvider(v: unknown): VoiceProviderChoice {
+  const s = String(v ?? "").trim().toLowerCase();
+  return (VOICE_PROVIDER_CHOICES as readonly string[]).includes(s) ? (s as VoiceProviderChoice) : VOICE_PROVIDER_DEFAULT;
+}
+
+/**
+ * Premium surcharge, so'm per minute of audio, on top of the flat 4 000 (owner decision pending, flagged).
+ * Cost basis: ElevenLabs bills $0.08 per 1 000 characters and a minute of speech is ~900 characters, so a minute
+ * costs about $0.072 (~920 so'm at the admin rate); 2 000 so'm per minute keeps roughly a 2x margin.
+ */
+export const PREMIUM_VOICE_SOUM_PER_MIN = 2_000;
+
 /**
  * Gemini prebuilt voices. Language-neutral (Gemini TTS detects the text language), so
  * there are no per-language rows. Names are case-sensitive for the API. The form
@@ -316,6 +340,12 @@ export const otherVoiceChoice = (c: TtsVoiceChoice): TtsVoiceChoice => (c === "f
  * Uzbek sentence; they were generated once and are never regenerated at runtime.
  */
 export const TTS_GEMINI_VOICES: Readonly<Record<TtsVoiceChoice, string>> = { female: "Kore", male: "Charon" };
+
+/**
+ * ElevenLabs premade voices (female Rachel / male Adam), language-neutral. Lives here (not in `elevenlabs.ts`, which
+ * reads the key store) so the voice tables stay isomorphic. Replaceable per language: `TTS_VOICE_<LANG>=elevenlabs:<id>`.
+ */
+export const TTS_ELEVENLABS_VOICES: Readonly<Record<TtsVoiceChoice, string>> = { female: "21m00Tcm4TlvDq8ikWAM", male: "pNInz6obpgDQGcFmaJgB" };
 
 /**
  * Gemini rows appended to the TABLE path of `ttsVoiceChain`. The provider stays off

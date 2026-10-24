@@ -2,11 +2,11 @@ import "server-only";
 import { ApiError } from "./api";
 import { budgetFor } from "../generation/budget";
 import { isAudioToolId } from "../generation/audio/types";
-import { normalizeVoiceChoice } from "../generation/tts/types";
+import { normalizeVoiceChoice, normalizeVoiceProvider } from "../generation/tts/types";
 import { enqueueGeneration, IDEMPOTENCY_WINDOW_HOURS } from "./jobs";
 import { sourceCharsForRequest } from "./source-upload";
 import { missingRequired, preflightError, topicOf } from "../tools";
-import { env, imageModelUnavailable } from "./env";
+import { env, imageModelUnavailable, videoProviderUnavailable, voiceProviderUnavailable } from "./env";
 import { ensureProviderKeys } from "./providers/store";
 import { queueLimits } from "./queue-limits";
 import { queryOne } from "./db";
@@ -16,6 +16,7 @@ import { assertCanCreate } from "./mandatory-channels";
 import { assertOfferAccepted } from "./oferta";
 import { photoExists } from "./photo";
 import { portraitInputFromValues } from "../generation/portrait/registry";
+import { videoInputFromValues } from "../generation/video/registry";
 import type { FormValues, ToolConfig, ToolId } from "../types";
 
 /**
@@ -52,7 +53,10 @@ export async function submitGeneration(input: SubmitInput): Promise<SubmitResult
    * job stores in `values_json`, so the worker and a later look at the job agree on
    * which voice was asked for.
    */
-  if (isAudioToolId(tool.id)) values.voice = normalizeVoiceChoice(values.voice);
+  if (isAudioToolId(tool.id)) {
+    values.voice = normalizeVoiceChoice(values.voice);
+    values.voiceProvider = normalizeVoiceProvider(values.voiceProvider);
+  }
 
   /*
    * Tarjima hajmi — SERVERDA aniqlanadi (Tarjimon 2, WP1).
@@ -133,6 +137,30 @@ export async function submitGeneration(input: SubmitInput): Promise<SubmitResult
     if (unavailable) throw new ApiError(unavailable, 400);
   }
 
+  /*
+   * Premium voice (podcast / greeting): the provider must be enabled AND keyed RIGHT NOW -- 400 before anything is priced or
+   * charged, whatever the form offered (a stale page, a direct POST). A replay is a job that already exists.
+   */
+  if (isAudioToolId(tool.id) && !replay) {
+    await ensureProviderKeys();
+    const unavailable = voiceProviderUnavailable(values);
+    if (unavailable) throw new ApiError(unavailable, 400);
+  }
+
+  /*
+   * Video: the tool switch, the provider (enabled AND keyed RIGHT NOW) and the start image (the user's own upload) are
+   * checked before anything is priced or charged. A replay is a job that already exists.
+   */
+  if (tool.id === "video" && !replay) {
+    // Ships DARK: `video.enabled` defaults to false, so a deploy with a keyed provider (prod has a Gemini key) offers nothing until the owner switches it on.
+    if (!(await getSetting("video.enabled"))) throw new ApiError("Video yaratish hozircha mavjud emas.", 400, { code: "video_disabled" });
+    await ensureProviderKeys();
+    const unavailable = videoProviderUnavailable(values);
+    if (unavailable) throw new ApiError(unavailable, 400);
+    const image = videoInputFromValues(values).imageAssetId;
+    if (image && !(await photoExists(userId, image))) throw new ApiError("Boshlang'ich surat topilmadi — suratni qayta yuklang", 400);
+  }
+
   // Graduation portrait: the selfie must exist and be the user's own BEFORE anything is priced or charged.
   // (A replay is a job already created; its selfie may be deleted by now.)
   if (tool.id === "portrait" && !replay && !(await photoExists(userId, portraitInputFromValues(values).photoAssetId))) {
@@ -190,6 +218,8 @@ export async function submitGeneration(input: SubmitInput): Promise<SubmitResult
      * bo'lsa 429 — pul ham, qator ham yo'q.
      */
     admission: await queueLimits(),
+    // Bonus so'm cannot pay for video (program-17 D5): only the paid balance is charged.
+    paidOnly: tool.id === "video",
   });
 
   if (!result.ok && result.reason === "idempotency_conflict") {
@@ -198,6 +228,14 @@ export async function submitGeneration(input: SubmitInput): Promise<SubmitResult
   if (!result.ok && result.reason === "admission") {
     const { code, retryAfterSec, error } = result.decision;
     return { kind: "admission", error, code, retryAfterSec };
+  }
+  if (!result.ok && result.paidOnly) {
+    const bonusNote = result.bonus ? ` Bonus so'mingiz (${result.bonus.toLocaleString("uz-UZ")}) video uchun ishlamaydi.` : "";
+    throw new ApiError(
+      `Video faqat to'langan balans bilan yaratiladi. Kerak: ${result.required.toLocaleString("uz-UZ")} so'm, to'langan balansingizda: ${result.available.toLocaleString("uz-UZ")} so'm.${bonusNote} Balansni to'ldiring: /uz/wallet`,
+      402,
+      { required: result.required, available: result.available, bonus: result.bonus ?? 0, code: "paid_balance_required", topUp: "/uz/wallet" },
+    );
   }
   if (!result.ok) {
     throw new ApiError(

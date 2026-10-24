@@ -14,7 +14,7 @@ import type { ToolId } from "./types";
 export type StageDef = { readonly from: number; readonly label: string };
 
 /** Visual flavour of the running panel (`components/files/GenerationProgress.tsx`). */
-export type ProgressKind = "doc" | "article" | "essay" | "teacher" | "game" | "listening" | "infographic" | "audio" | "image" | "translation" | "resume" | "slides";
+export type ProgressKind = "doc" | "article" | "essay" | "teacher" | "game" | "listening" | "infographic" | "audio" | "image" | "translation" | "resume" | "slides" | "video";
 
 const STAGES: Record<ProgressKind, readonly StageDef[]> = {
   // coursework / referat / mustaqil-ish — `work/engine.ts`
@@ -93,6 +93,12 @@ const STAGES: Record<ProgressKind, readonly StageDef[]> = {
     { from: 10, label: "Rasm chizilmoqda" },
     { from: 85, label: "Fayl saqlanmoqda" },
   ],
+  // video — `video-ops.ts`: submit (0-10), the provider works (10-90, creeps with time), download + save (90-)
+  video: [
+    { from: 0, label: "So‘rov provayderga yuborilmoqda" },
+    { from: 10, label: "Video tayyorlanmoqda" },
+    { from: 90, label: "Fayl saqlanmoqda" },
+  ],
   // `translate/engine.ts`
   translation: [
     { from: 0, label: "Manba o‘qilmoqda" },
@@ -128,6 +134,7 @@ const KIND_BY_TOOL: Record<ToolId, ProgressKind> = {
   translation: "translation",
   image: "image",
   portrait: "image",
+  video: "video",
   infographic: "infographic",
   "lesson-plan": "teacher",
   "texnologik-xarita": "teacher",

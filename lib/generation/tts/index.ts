@@ -15,6 +15,7 @@
  */
 export {
   TTS_FALLBACK_LANG,
+  TTS_ELEVENLABS_VOICES,
   TTS_GEMINI_SPECS,
   TTS_GEMINI_VOICES,
   TTS_LANG_VOICES,
@@ -65,6 +66,7 @@ export type { AudioPiece, Mp3EncoderFactory, Mp3EncoderLike, Mp3Frame, Mp3Profil
 
 export { AZURE_OUTPUT_FORMAT, azureEndpoint, azureKey, azureRegion, azureSsml, azureTts, localeOfVoice, makeAzureTts, prosodyRate, xmlEscape } from "./azure";
 export { AISHA_MAX_CHARS, AISHA_URL, aishaAudioRef, aishaBody, aishaKey, aishaTts, makeAishaTts } from "./aisha";
+export { ELEVENLABS_BASE, ELEVENLABS_MODEL, ELEVENLABS_OUTPUT_FORMAT, elevenLabsBody, elevenLabsKey, elevenLabsTts, elevenLabsUrl, makeElevenLabsTts } from "./elevenlabs";
 export { GEMINI_TTS_BASE, geminiAudioPart, geminiKey, geminiTts, geminiTtsModel, geminiTtsUsage, makeGeminiTts, pcmRateOf } from "./gemini";
 
 export { asTtsChain, chainOfProvider, groupForChoice, makeTtsChain, ttsChain, ttsGroups, ttsVoiceChain, ttsVoiceEnvName } from "./chain";

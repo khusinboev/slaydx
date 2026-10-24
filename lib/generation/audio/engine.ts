@@ -225,7 +225,9 @@ export const buildAudioArtifact: AudioBuilder = async (tool, meta, values, opts)
    * mantiqsiz — foydalanuvchi baribir faylni olmaydi.
    */
   const chain = opts.tts ? asTtsChain(opts.tts) : defaultChain;
-  if (!chain.configured() || !chain.providersFor(input.language).length) {
+  const premium = input.voiceProvider === "elevenlabs";
+  const voiceReady = premium ? (chain.providerReady?.("elevenlabs") ?? false) : chain.configured() && chain.providersFor(input.language).length > 0;
+  if (!voiceReady) {
     throw new Error("Ovoz provayderi sozlanmagan. Yordam xizmatiga murojaat qiling: t.me/SlaydX_support — to‘lov qaytarildi.");
   }
 
@@ -319,7 +321,7 @@ export const buildAudioArtifact: AudioBuilder = async (tool, meta, values, opts)
    */
   // `voice` — the user's female / male choice: single-speaker formats read entirely in it,
   // in a dialog speaker A takes it and speaker B the other gender's voice.
-  const run = await chain.synthesizeAll(parts, { lang: input.language, voice: input.voice, timeoutMs: Math.min(TTS_LIMITS.callTimeoutMs, Math.max(1_000, remainingMs(deadline))), deadline });
+  const run = await chain.synthesizeAll(parts, { lang: input.language, voice: input.voice, ...(input.voiceProvider === "elevenlabs" ? { provider: "elevenlabs" as const } : {}), timeoutMs: Math.min(TTS_LIMITS.callTimeoutMs, Math.max(1_000, remainingMs(deadline))), deadline });
   for (const u of run.usages) ttsMeter.add(u);
 
   stage(92, "Audio yig‘ilmoqda");

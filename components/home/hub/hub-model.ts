@@ -35,7 +35,7 @@ export function greetingTitle(user: Pick<ServerUser, "name" | "author"> | null |
 /** «Tez boshlash» — the four big cards (variant A mockup), in this order. */
 export const QUICK_TOOL_IDS = ["slide", "referat", "essay", "resume"] as const satisfies readonly ToolId[];
 
-const OUTPUT_LABEL: Record<ToolConfig["output"], string> = { pptx: "PPTX", docx: "DOCX", png: "PNG", mp3: "MP3" };
+const OUTPUT_LABEL: Record<ToolConfig["output"], string> = { pptx: "PPTX", docx: "DOCX", png: "PNG", mp3: "MP3", mp4: "MP4" };
 
 export { groupDigits } from "@/lib/format";
 import { groupDigits } from "@/lib/format";

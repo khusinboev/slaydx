@@ -254,7 +254,7 @@ export const TTS_PRICING: readonly TtsPriceRow[] = [
   { billing: "tokens", provider: "gemini", model: "gemini-2.5-pro-preview-tts", inUsdPerM: 1, outUsdPerM: 20, note: "Gemini 2.5 Pro TTS preview — $1/M text-in + $20/M audio-out" },
   { billing: "chars", provider: "azure", usdPerMChars: 16, note: "Azure Neural TTS — $16/1M chars" },
   { billing: "chars", provider: "google", usdPerMChars: 16, note: "Google Cloud TTS Neural2 — $16/1M chars" },
-  { billing: "chars", provider: "elevenlabs", usdPerMChars: 165, note: "ElevenLabs Creator — ≈$165/1M chars" },
+  { billing: "chars", provider: "elevenlabs", usdPerMChars: 80, note: "ElevenLabs API — eleven_v3 / Multilingual v2 $0.08 per 1K chars (https://elevenlabs.io/pricing/api, checked 2026-10-24)" },
   { billing: "chars", provider: "aisha", soumPerChar: 1, note: "Aisha AI — 1 so'm/char (converted with the admin rate finance.soum_per_usd, env SOUM_PER_USD by default)" },
 ];
 
@@ -335,4 +335,23 @@ export function ttsCost(u: TtsUsageLike, at: Date = new Date()): TtsCost {
   }
   const usd = (textTokens / 1_000_000) * row.inUsdPerM + (audioTokens / 1_000_000) * row.outUsdPerM;
   return { usd: Number(usd.toFixed(6)), priced: true, estimated, textTokens, audioTokens };
+}
+
+/* ══════════════════════════════ VIDEO ══════════════════════════════ */
+
+/**
+ * Provider cost of one second of video, USD. A provider with no documented price is absent: `videoCost` then answers
+ * `priced: false` instead of a silent $0.
+ *   - veo: Gemini Omni Flash, $17.50 per 1M output tokens x 5 792 tokens per second of 720p video = $0.1014 / s
+ *     (https://ai.google.dev/gemini-api/docs/pricing, checked 2026-10-24).
+ *   - kling: no public price could be read (developer site is a JS app); to be set from the account's price list.
+ */
+export const VIDEO_PRICING: readonly { provider: string; model: string; usdPerSecond: number; note: string }[] = [
+  { provider: "veo", model: "gemini-omni-1.1-flash", usdPerSecond: Number(((17.5 * 5792) / 1_000_000).toFixed(4)), note: "Gemini Omni Flash — $17.50/1M output tokens, 5 792 tokens per second of 720p video" },
+];
+
+export function videoCost(provider: string, seconds: number): { usd: number; priced: boolean } {
+  const row = VIDEO_PRICING.find((r) => r.provider === provider);
+  if (!row) return { usd: 0, priced: false };
+  return { usd: Number((row.usdPerSecond * Math.max(0, seconds)).toFixed(4)), priced: true };
 }

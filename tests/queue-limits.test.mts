@@ -112,3 +112,23 @@ test("auto mean keeps a slow tail: 8 pro-slide-like jobs at 240 s among 192 at 1
   await query("DELETE FROM users WHERE id = $1", [uid]);
   resetQueueLimitsCache();
 });
+
+test("auto mean ignores videos: they wait for their provider without holding a slot, so their wall time must not inflate the queue estimate", { skip }, async () => {
+  const { query, migrate } = await import("../lib/server/db.ts");
+  const { autoMeanServiceSec, resetQueueLimitsCache } = await import("../lib/server/queue-limits.ts");
+  await migrate();
+  const [u] = await query<{ id: string }>(`INSERT INTO users (username, name, points, quota, balance) VALUES ('qlim-video', 'Q', 0, 0, 0) RETURNING id`);
+  const add = (tool: string, secs: number, n: number) =>
+    query(
+      `INSERT INTO generations (id, user_id, tool_id, topic, status, price, format, values_json, started_at, finished_at)
+       SELECT gen_random_uuid(), $1, $2, 't', 'COMPLETED', 0, 'mp4', '{}'::jsonb, now() - interval '30 minutes', now() - interval '30 minutes' + make_interval(secs => $3)
+         FROM generate_series(1, $4)`,
+      [String(u.id), tool, secs, n],
+    );
+  await add("slide", 40, 25);
+  resetQueueLimitsCache();
+  const before = await autoMeanServiceSec(500_000);
+  await add("video", 500, 150);
+  resetQueueLimitsCache();
+  assert.equal(await autoMeanServiceSec(500_000), before, "MUTATSIYA: video qatorlari o'rtachaga kirsa qizaradi");
+});

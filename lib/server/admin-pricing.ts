@@ -28,6 +28,7 @@ import {
   type PriceAdjust,
 } from "../tools";
 import { PORTRAIT_VARIANTS } from "../generation/portrait/registry";
+import { VIDEO_PROVIDERS } from "../generation/video/registry";
 import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "../generation/image-models";
 import { ARTICLE_TYPES } from "../generation/article/types-registry";
 import { ESSAY_LIMITS } from "../generation/essay/types";
@@ -128,6 +129,7 @@ export const UNIT_OF: Record<ToolId, PricingUnit> = {
   podcast: "job",
   greeting: "job",
   portrait: "job",
+  video: "job",
 };
 
 /** Uzbek unit labels for the UI (the client never imports lib/tools). */
@@ -243,6 +245,9 @@ export function ladderInputs(toolId: ToolId): LadderInput[] {
     case "portrait":
       // Priced per variant: 1 and 2 variants (`portraitPrice`).
       return PORTRAIT_VARIANTS.map((n) => ({ label: `${n} variant`, values: { variants: n } }));
+    case "video":
+      // One rung per provider x clip length (`videoPrice` = the provider's per-second base price x seconds).
+      return VIDEO_PROVIDERS.flatMap((p) => p.seconds.map((n) => ({ label: `${p.short} · ${n} soniya`, values: { provider: p.id, seconds: n } })));
     case "glossary":
       return [10, 20, 40].map((n) => ({ label: `${n} atama`, values: { termCount: n } }));
     default:

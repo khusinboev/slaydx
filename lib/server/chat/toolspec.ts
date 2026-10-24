@@ -39,7 +39,7 @@ import { effectivePrice } from "../pricing";
  */
 
 /** Tools the chat cannot create: they need a photo, an uploaded file, or a structured form too large for a chat. */
-export const CHAT_EXCLUDED_TOOLS: readonly ToolId[] = ["portrait", "translation", "resume"];
+export const CHAT_EXCLUDED_TOOLS: readonly ToolId[] = ["portrait", "translation", "resume", "video"];
 
 export function isChatTool(id: string): id is ToolId {
   return Object.prototype.hasOwnProperty.call(TOOL_BY_ID, id) && !CHAT_EXCLUDED_TOOLS.includes(id as ToolId);

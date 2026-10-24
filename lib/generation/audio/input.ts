@@ -21,7 +21,7 @@
 import type { FormValues } from "../../types";
 import type { DocMeta } from "../types";
 import { AUDIO_LIMITS, audioWordBudget, normalizeAudioMinutes, type AudioKind, type AudioLine } from "./types";
-import { normalizeVoiceChoice, type TtsVoiceChoice } from "../tts/types";
+import { PREMIUM_VOICE_SOUM_PER_MIN, normalizeVoiceChoice, normalizeVoiceProvider, type TtsVoiceChoice, type VoiceProviderChoice } from "../tts/types";
 import { audioTypeOf, type AudioTypeSpec, type GreetingTypeSpec } from "./registry";
 
 /* ══════════════════════════ rejim ══════════════════════════ */
@@ -55,6 +55,8 @@ export type AudioInput = {
    * voice and speaker B takes the other gender's (`tts/chain.ts groupForChoice`).
    */
   voice: TtsVoiceChoice;
+  /** `auto` = standard voice chain, `elevenlabs` = premium (`tts/elevenlabs.ts`); priced per minute (`premiumVoiceSurcharge`). */
+  voiceProvider: VoiceProviderChoice;
 
   /* ── podkast ── */
   mode: AudioMode;
@@ -92,6 +94,7 @@ export function audioInputFromValues(kind: AudioKind, meta: DocMeta, values: For
     speakers: type.speakers,
     // Missing (old client) or unknown value → female; the job stores the normalized value.
     voice: normalizeVoiceChoice(values.voice),
+    voiceProvider: normalizeVoiceProvider(values.voiceProvider),
     mode,
     topic: str(values.topic ?? meta.topic, AUDIO_LIMITS.topicChars),
     /*
@@ -109,7 +112,7 @@ export function audioInputFromValues(kind: AudioKind, meta: DocMeta, values: For
 
 /** Qoralama/forma uchun teskari yo'nalish (`infographic/input.ts` naqshi). */
 export function encodeAudioValues(input: AudioInput): FormValues {
-  const common = { durationMin: input.minutes, language: input.language, extra: input.extra, voice: input.voice };
+  const common = { durationMin: input.minutes, language: input.language, extra: input.extra, voice: input.voice, voiceProvider: input.voiceProvider };
   return input.kind === "podcast"
     ? { ...common, mode: input.mode, topic: input.topic, sourceText: input.sourceText, podcastType: input.type }
     : { ...common, recipient: input.recipient, relation: input.relation, occasion: input.type };
@@ -218,4 +221,13 @@ export function splitLine(text: string, max: number): string[] {
 /** Tur spetsifikatsiyasi — chaqiruvchilar reyestrni qayta izlamasin. */
 export function audioSpecOf(input: AudioInput): AudioTypeSpec {
   return audioTypeOf(input.kind, input.type);
+}
+
+/**
+ * Premium-voice surcharge in so'm: 0 for the standard voice, `PREMIUM_VOICE_SOUM_PER_MIN x minutes` for ElevenLabs.
+ * The ONE formula the price (`tools.ts basePriceFor`), the form and the tests read.
+ */
+export function premiumVoiceSurcharge(kind: AudioKind, values: FormValues): number {
+  if (normalizeVoiceProvider(values.voiceProvider) !== "elevenlabs") return 0;
+  return normalizeAudioMinutes(kind, values.durationMin) * PREMIUM_VOICE_SOUM_PER_MIN;
 }

@@ -22,6 +22,7 @@ export const SlideViewer = retryableLazy(() => import("./SlideViewer").then((m) 
 const WordViewer = retryableLazy(() => import("./WordViewer").then((m) => ({ default: m.WordViewer })));
 const TranslationViewer = retryableLazy(() => import("./TranslationViewer").then((m) => ({ default: m.TranslationViewer })));
 const ImageViewer = retryableLazy(() => import("./ImageViewer").then((m) => ({ default: m.ImageViewer })));
+const VideoViewer = retryableLazy(() => import("./VideoViewer").then((m) => ({ default: m.VideoViewer })));
 const AudioViewer = retryableLazy(() => import("./AudioViewer").then((m) => ({ default: m.AudioViewer })));
 
 
@@ -156,6 +157,13 @@ function viewerFor({
       return (
         <div className="flex min-h-0 flex-1 flex-col">
           <ImageViewer doc={doc} />
+        </div>
+      );
+    case "video":
+      // Program-17 item 5: one MP4, played from the same URL the download uses (no editing, like audio).
+      return (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <VideoViewer doc={doc} gen={{ id: gen.id }} />
         </div>
       );
     case "translation":
