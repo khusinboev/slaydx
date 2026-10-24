@@ -45,7 +45,7 @@ test("chat API routes", { skip }, async (t) => {
     if (cookie) headers.cookie = cookie;
     const req = new Request(`http://localhost${url}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     const res = await inRequest(req, () => handler(req));
-    return { status: res.status, body: (await res.json()) as Record<string, any> };
+    return { status: res.status, body: (await res.json()) as Record<string, unknown> };
   }
   const gens = async (uid: string) => Number((await query<{ n: string }>("SELECT count(*) AS n FROM generations WHERE user_id = $1", [uid]))[0]!.n);
 
@@ -86,7 +86,7 @@ test("chat API routes", { skip }, async (t) => {
     assert.equal(r.status, 503, JSON.stringify(r.body));
     assert.equal(r.body.code, "no_answer");
     const g = await call(root.GET, "/api/chat", "GET", u.cookie);
-    assert.equal(g.body.status.freeLeft, 10);
+    assert.equal((g.body.status as { freeLeft: number }).freeLeft, 10);
     assert.deepEqual(g.body.messages, []);
   });
 

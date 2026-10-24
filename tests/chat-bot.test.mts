@@ -34,7 +34,9 @@ if (hasDb) await ensureMigrated();
 Object.assign(env.worker, { inline: false });
 Object.assign(env.queue, { userMaxInflight: 20, totalSlots: 8, meanServiceSec: 200, maxWaitSec: 100_000 });
 
-type Sent = { method: string; body: Record<string, any> };
+type Button = { text: string; callback_data: string; web_app?: { url: string } };
+type Body = { text?: string; parse_mode?: string; commands?: Array<{ command: string; description: string }>; reply_markup?: { inline_keyboard: Button[][] } };
+type Sent = { method: string; body: Body };
 let sent: Sent[] = [];
 let geminiCalls: Array<{ system: string; user: string }> = [];
 let geminiQueue: Array<Record<string, unknown> | string> = [];
@@ -196,7 +198,7 @@ test("a proposal card in the bot: buttons fit 64 bytes, the tap starts ONE gener
   assert.match(String(card.text), /Slayd/);
   assert.match(String(card.text), /Mavzu: Suv/);
   assert.match(String(card.text).replace(/[\u00a0\u202f]/g, " "), /Narx: 3 000 so‘m/);
-  const buttons = (card.reply_markup.inline_keyboard as Array<Array<{ text: string; callback_data: string }>>).flat();
+  const buttons = card.reply_markup!.inline_keyboard.flat();
   assert.equal(buttons.length, 2);
   for (const b of buttons) assert.ok(Buffer.byteLength(b.callback_data) <= 64, b.callback_data);
   const yes = buttons.find((b) => b.callback_data.startsWith("chy:"))!;
@@ -234,7 +236,7 @@ test("«Bekor qilish» kills the token; a garbled callback is harmless", { skip 
   geminiQueue.push({ reply: "Mana:", propose: { tool: "slide", values: { topic: "Havo" } } });
   sent.length = 0;
   await tg.handleUpdate(textUpdate(u.tgId, "taqdimot qil"));
-  const buttons = (sent.filter((c) => c.method === "sendMessage")[1]!.body.reply_markup.inline_keyboard as Array<Array<{ callback_data: string }>>).flat();
+  const buttons = sent.filter((c) => c.method === "sendMessage")[1]!.body.reply_markup!.inline_keyboard.flat();
   await tg.handleUpdate(cbUpdate(u.tgId, buttons.find((b) => b.callback_data.startsWith("chn:"))!.callback_data));
   assert.match(toast(), /Bekor qilindi/);
   await tg.handleUpdate(cbUpdate(u.tgId, buttons.find((b) => b.callback_data.startsWith("chy:"))!.callback_data));
@@ -255,7 +257,7 @@ test("after the free messages an empty wallet gets the refusal with a top-up but
   assert.equal(geminiCalls.length, 10);
   const m = sent.find((c) => c.method === "sendMessage")!.body;
   assert.match(String(m.text), /Bugungi tekin xabarlar tugadi/);
-  assert.equal(m.reply_markup.inline_keyboard[0][0].web_app.url, "https://slaydx.test/uz/wallet");
+  assert.equal(m.reply_markup!.inline_keyboard[0]![0]!.web_app!.url, "https://slaydx.test/uz/wallet");
 });
 
 test("kill switch chat.enabled=false: /chat says so and no mode starts", { skip }, async () => {
