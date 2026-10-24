@@ -1,6 +1,7 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes, randomInt } from "node:crypto";
+import { createIsolatedDb } from "./helpers/isolated-db.mts";
 
 /**
  * Bot AI chat (owner request 8): `/chat` turns chat mode on, `/stop` or 15 idle minutes turn it off; in chat mode a plain
@@ -22,15 +23,17 @@ delete process.env.LLM_FAST;
 delete process.env.BOT_PREMIUM_EMOJI;
 process.env.WORKER_INLINE = "false";
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
+// Own database: this file enqueues generations, and tests/queue.test.mts claims the oldest QUEUED job of the shared one.
+const iso = hasDb ? await createIsolatedDb("chatbot") : { isolated: false, drop: async () => {} };
 process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://unused/unused";
-const skip = hasDb ? false : "Postgres kerak (DATABASE_URL)";
+const skip = hasDb && iso.isolated ? false : "alohida Postgres baza yo'q";
 
 const { query, queryOne, ensureMigrated } = await import("../lib/server/db.ts");
 const tg = await import("../lib/server/telegram.ts");
 const { upsertTelegramUser } = await import("../lib/server/auth.ts");
 const { env } = await import("../lib/server/env.ts");
 const { startInput } = await import("../lib/server/bot/state.ts");
-if (hasDb) await ensureMigrated();
+if (hasDb && iso.isolated) await ensureMigrated();
 Object.assign(env.worker, { inline: false });
 Object.assign(env.queue, { userMaxInflight: 20, totalSlots: 8, meanServiceSec: 200, maxWaitSec: 100_000 });
 
@@ -86,6 +89,11 @@ const toast = () => String(sent.filter((c) => c.method === "answerCallbackQuery"
 after(async () => {
   globalThis.fetch = realFetch;
   if (hasDb && tgIds.length) await query("DELETE FROM users WHERE telegram_id = ANY($1::text[])", [tgIds]).catch(() => undefined);
+  if (hasDb) {
+    const { pool } = await import("../lib/server/db.ts");
+    await pool().end().catch(() => undefined);
+    await iso.drop();
+  }
 });
 
 test("menu commands: /chat and /stop are listed with a description in every language", { skip }, async () => {
