@@ -15,7 +15,7 @@ function slideLines(s: SlideModel): string[] {
   const lines: string[] = [];
   const push = (label: string, v: unknown) => {
     const t = one(v);
-    if (t) lines.push(label ? `${label}: ${t}` : t);
+    if (t) lines.push(label === "-" ? `- ${t}` : label ? `${label}: ${t}` : t);
   };
   push("", s.title);
   push("", s.subtitle);
