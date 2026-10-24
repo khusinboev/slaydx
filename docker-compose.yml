@@ -235,6 +235,7 @@ services:
       FREE_LLM_DAILY_UDK: ${FREE_LLM_DAILY_UDK:-}
       FREE_LLM_DAILY_REWRITE: ${FREE_LLM_DAILY_REWRITE:-}
       FREE_LLM_DAILY_POLISH: ${FREE_LLM_DAILY_POLISH:-}
+      FREE_LLM_DAILY_CHAT: ${FREE_LLM_DAILY_CHAT:-}
       FREE_LLM_DAILY_GLOBAL: ${FREE_LLM_DAILY_GLOBAL:-}
       # Prod-readiness W2 (audit/designs/*.md): navbat, saqlash, PDF, Payme sandbox, pool.
       QUEUE_TOTAL_SLOTS: ${QUEUE_TOTAL_SLOTS:-}

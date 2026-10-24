@@ -176,7 +176,7 @@ test("compose: bepul LLM sozlamalari web'ga uzatiladi va .env.example da hujjatl
   const next = rest.slice(1).search(/\n {2}[a-z]/);
   const web = next >= 0 ? rest.slice(0, next + 1) : rest;
   const example = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
-  for (const k of ["FREE_LLM_DISABLED", "FREE_LLM_DAILY_OUTLINE", "FREE_LLM_DAILY_UDK", "FREE_LLM_DAILY_REWRITE", "FREE_LLM_DAILY_POLISH", "FREE_LLM_DAILY_GLOBAL"]) {
+  for (const k of ["FREE_LLM_DISABLED", "FREE_LLM_DAILY_OUTLINE", "FREE_LLM_DAILY_UDK", "FREE_LLM_DAILY_REWRITE", "FREE_LLM_DAILY_POLISH", "FREE_LLM_DAILY_CHAT", "FREE_LLM_DAILY_GLOBAL"]) {
     assert.match(web, new RegExp(`^\\s+${k}: \\$\\{${k}:-[^}]*\\}$`, "m"), `web: ${k} uzatilmaydi`);
     assert.match(example, new RegExp(`^#? ?${k}=`, "m"), `${k} .env.example da yo'q`);
   }
