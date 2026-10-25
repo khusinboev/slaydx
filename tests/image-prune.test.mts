@@ -45,7 +45,7 @@ function sandbox(t: { after(fn: () => void): void }, images: string[], ps: strin
   const log = path.join(dir, "calls.log");
   writeFileSync(log, "");
   const env = {
-    NODE_ENV: "test",
+    NODE_ENV: "test" as const,
     PATH: `${bin}:/usr/bin:/bin`,
     HOME: dir,
     STUB_LOG: log,
@@ -121,7 +121,7 @@ test("image-prune: skips while a deploy holds the lock", (t) => {
   const sb = sandbox(t, s.flatMap(pair), [], hist(s[2]), s[2]);
   const lock = path.join(sb.dir, "deploy.lock");
   const r = spawnSync("flock", [lock, "bash", SCRIPT], {
-    env: { NODE_ENV: "test", PATH: `${path.join(sb.dir, "bin")}:/usr/bin:/bin`, STUB_LOG: path.join(sb.dir, "calls.log"), STUB_IMAGES: path.join(sb.dir, "images"), STUB_PS: path.join(sb.dir, "ps"), SLAYDX_STATE_DIR: path.join(sb.dir, "state"), SLAYDX_LOCK_FILE: lock },
+    env: { NODE_ENV: "test" as const, PATH: `${path.join(sb.dir, "bin")}:/usr/bin:/bin`, STUB_LOG: path.join(sb.dir, "calls.log"), STUB_IMAGES: path.join(sb.dir, "images"), STUB_PS: path.join(sb.dir, "ps"), SLAYDX_STATE_DIR: path.join(sb.dir, "state"), SLAYDX_LOCK_FILE: lock },
     encoding: "utf8",
   });
   assert.equal(r.status, 0);
@@ -150,7 +150,7 @@ test("install-ops.sh --dry-run: the prune cron runs daily as root from the root-
       chmodSync(path.join(bin, b), 0o755);
     }
     const r = spawnSync("bash", [path.join(ROOT, "deploy/install-ops.sh"), "--dry-run"], {
-      env: { NODE_ENV: "test", PATH: "/usr/bin:/bin", SLAYDX_APP_DIR: app, SLAYDX_BIN_DIR: bin, SLAYDX_CRON_DIR: path.join(dir, "cron"), SLAYDX_LOGROTATE_DIR: path.join(dir, "lr") },
+      env: { NODE_ENV: "test" as const, PATH: "/usr/bin:/bin", SLAYDX_APP_DIR: app, SLAYDX_BIN_DIR: bin, SLAYDX_CRON_DIR: path.join(dir, "cron"), SLAYDX_LOGROTATE_DIR: path.join(dir, "lr") },
       encoding: "utf8",
     });
     assert.equal(r.status, 0, r.stderr);
