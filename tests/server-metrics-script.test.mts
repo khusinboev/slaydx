@@ -53,7 +53,7 @@ test("install-ops.sh --dry-run: the metrics cron runs every 5 minutes as root fr
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /=== \S*\/slaydx-metrics\n/);
     assert.ok(r.stdout.includes(`*/5 * * * * root umask 077; ${bin}/slaydx-metrics >> /var/log/slaydx-metrics.log 2>&1`), r.stdout);
-    assert.match(r.stdout, /\/var\/log\/slaydx-metrics\.log \{/, "logrotate covers the metrics log");
+    assert.match(r.stdout, /\/var\/log\/slaydx-metrics\.log[^\n]* \{/, "logrotate covers the metrics log");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
