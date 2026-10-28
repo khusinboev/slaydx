@@ -81,6 +81,13 @@ export type HandFontSpec = {
   /** Belgi diapazoni bo'yicha yo'ldosh yuzlar (kirill: Marck Script, Қ Ғ Ҳ: Bad Script). */
   companions: readonly HandCompanion[];
   /**
+   * Muqova sarlavhasi (`handCoverLines` dagi `big` qator) uchun kalligrafik yuz
+   * (Great Vibes). Yopmagan belgi (Қ Ғ Ҳ…) oddiy yuzlarga tushadi; `scale` — asosiy
+   * yuz x-balandligiga nisbatan. `css` — ko'ruvchidagi alohida oila nomi (har
+   * shriftda o'z `size-adjust` i bor).
+   */
+  title?: HandCompanion & { css: string };
+  /**
    * Hech bir yuz YOPMAYDIGAN, lekin hujjatda uchrashi mumkin bo'lgan belgilar
    * va ularning o'rinbosari. Test faylning haqiqiy `cmap` ini solishtiradi
    * (ro'yxat eskirsa qizaradi).
@@ -98,6 +105,10 @@ const RIGHT_QUOTE = 0x2019;
 const MARCK_RANGES = [[0x0400, 0x045f], [0x2116, 0x2116]] as const;
 /** Қ қ Ғ ғ Ҳ ҳ — Marck Script da yo'q, Bad Script (maktab/qalam uslubiga eng yaqin) yopadi. */
 const EXT_CYRILLIC_RANGES = [[0x0490, 0x04ff]] as const;
+
+/** Great Vibes qamrovi: lotin (+ kengaytma), kirill (rus + ў), tinish, №. Қ Ғ Ҳ yo'q (test haqiqiy `cmap` bilan solishtiradi). */
+const GREAT_VIBES_RANGES = [[0x20, 0x7e], [0xa1, 0xac], [0xae, 0xff], [0x2013, 0x2014], [0x2018, 0x2019], [0x201c, 0x201d], [0x0400, 0x045f], [0x2116, 0x2116]] as const;
+const GREAT_VIBES_FACE = { family: "Great Vibes", file: "GreatVibes-Regular.ttf", url: "/fonts/handwriting/GreatVibes-Regular.ttf", ranges: GREAT_VIBES_RANGES } as const;
 
 const BAD_SCRIPT_FACE = { family: "Bad Script", file: "BadScript-Regular.ttf", url: "/fonts/handwriting/BadScript-Regular.ttf" } as const;
 const MARCK_FACE = { family: "Marck Script", file: "MarckScript-Regular.ttf", url: "/fonts/handwriting/MarckScript-Regular.ttf" } as const;
@@ -117,6 +128,7 @@ export const HAND_FONTS: Record<HandFontId, HandFontSpec> = {
       { ...MARCK_FACE, scale: 1.38, ranges: MARCK_RANGES },
       { ...BAD_SCRIPT_FACE, scale: 1.03, ranges: EXT_CYRILLIC_RANGES },
     ],
+    title: { ...GREAT_VIBES_FACE, css: "SlaydX Title Maktab", scale: 1.45 },
     fallback: { [TURNED_COMMA]: LEFT_QUOTE, [MODIFIER_APOSTROPHE]: RIGHT_QUOTE },
   },
   pen: {
@@ -130,6 +142,7 @@ export const HAND_FONTS: Record<HandFontId, HandFontSpec> = {
     ascent: 0.864,
     descent: 0.385,
     companions: [{ ...BAD_SCRIPT_FACE, scale: 0.74, ranges: EXT_CYRILLIC_RANGES }],
+    title: { ...GREAT_VIBES_FACE, css: "SlaydX Title Pen", scale: 1.04 },
     fallback: { [TURNED_COMMA]: LEFT_QUOTE, [MODIFIER_APOSTROPHE]: RIGHT_QUOTE },
   },
   badscript: {
@@ -205,6 +218,27 @@ export function handSegments(font: HandFontId, text: string): HandSegment[] {
     const last = out[out.length - 1];
     if (last && (last.face.family === face.family || /\s/.test(ch))) last.text += ch;
     else out.push({ text: ch, face });
+  }
+  return out;
+}
+
+/**
+ * Muqova sarlavhasi bo'laklari: Great Vibes yopgan belgi — sarlavha yuzida
+ * (`title: true`), qolgani (Қ Ғ Ҳ, ‘) — oddiy yuzlarda. Sarlavhasiz shriftda
+ * `handSegments` bilan bir xil.
+ */
+export type HandTitleSegment = HandSegment & { title: boolean };
+export function handTitleSegments(font: HandFontId, text: string): HandTitleSegment[] {
+  const t = HAND_FONTS[font].title;
+  if (!t) return handSegments(font, text).map((x) => ({ ...x, title: false }));
+  const out: HandTitleSegment[] = [];
+  for (const ch of handText(font, text)) {
+    const cp = ch.codePointAt(0)!;
+    const isTitle = t.ranges.some(([lo, hi]) => cp >= lo && cp <= hi);
+    const face: HandFace = isTitle ? { family: t.family, file: t.file, url: t.url, scale: t.scale } : handFaceOf(font, cp);
+    const last = out[out.length - 1];
+    if (last && (last.face.family === face.family || /\s/.test(ch))) last.text += ch;
+    else out.push({ text: ch, face, title: isTitle });
   }
   return out;
 }
@@ -346,6 +380,7 @@ export function handCssVars(style: HandStyle): Record<string, string> {
     "--hand-ink": `#${style.inkHex}`,
     "--hand-family": `"${g.font.css}"`,
     "--hand-size": `${g.sizePt}pt`,
+    ...(g.font.title ? { "--hand-title-family": `"${g.font.title.css}", "${g.font.css}"` } : {}),
     "--hand-pitch": px(g.pitchPx),
     "--hand-lines": String(g.lines),
     "--hand-rule": `#${spec.ruleHex}`,
@@ -379,6 +414,7 @@ export function handFontFaceCss(): string {
   for (const f of HAND_FONT_LIST) {
     out.push(face(f.css, f.url));
     for (const c of f.companions) out.push(face(f.css, c.url, `size-adjust:${Math.round(c.scale * 100)}%;unicode-range:${unicodeRange(c.ranges)};`));
+    if (f.title) out.push(face(f.title.css, f.title.url, `size-adjust:${Math.round(f.title.scale * 100)}%;unicode-range:${unicodeRange(f.title.ranges)};`));
   }
   return out.join("\n");
 }

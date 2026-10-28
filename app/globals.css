@@ -593,6 +593,13 @@ button {
   font-display: swap;
 }
 @font-face {
+  font-family: "SlaydX Title Maktab";
+  src: url("/fonts/handwriting/GreatVibes-Regular.ttf") format("truetype");
+  size-adjust: 145%;
+  unicode-range: U+0020-007E, U+00A1-00AC, U+00AE-00FF, U+2013-2014, U+2018-2019, U+201C-201D, U+0400-045F, U+2116;
+  font-display: swap;
+}
+@font-face {
   font-family: "SlaydX Pen";
   src: url("/fonts/handwriting/MarckScript-Regular.ttf") format("truetype");
   font-display: swap;
@@ -602,6 +609,13 @@ button {
   src: url("/fonts/handwriting/BadScript-Regular.ttf") format("truetype");
   size-adjust: 74%;
   unicode-range: U+0490-04FF;
+  font-display: swap;
+}
+@font-face {
+  font-family: "SlaydX Title Pen";
+  src: url("/fonts/handwriting/GreatVibes-Regular.ttf") format("truetype");
+  size-adjust: 104%;
+  unicode-range: U+0020-007E, U+00A1-00AC, U+00AE-00FF, U+2013-2014, U+2018-2019, U+201C-201D, U+0400-045F, U+2116;
   font-display: swap;
 }
 
@@ -739,6 +753,8 @@ button {
 }
 .word-hand .word-hand-big {
   font-size: 1.25em;
+  /* Maktab/Qalam: kalligrafik sarlavha (Great Vibes); boshqa shriftlarda o'zgaruvchi yo'q → oddiy oila. */
+  font-family: var(--hand-title-family, var(--hand-family)), var(--font-doc, serif), serif;
 }
 .word-hand .word-hand-ul {
   text-decoration: underline;

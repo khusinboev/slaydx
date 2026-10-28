@@ -60,6 +60,8 @@ import {
   handFormulaText,
   handGeometry,
   handSegments,
+  handTitleSegments,
+  HAND_FONTS,
   type HandGeometry,
   type HandStyle,
 } from "./handwriting";
@@ -75,7 +77,7 @@ function fontFileBytes(file: string): Buffer | null {
   return null;
 }
 
-type RunExtra = { size?: number; underline?: boolean; italics?: boolean };
+type RunExtra = { size?: number; underline?: boolean; italics?: boolean; /** Muqova sarlavhasi: kalligrafik yuz (bor bo'lsa). */ title?: boolean };
 
 export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style: HandStyle }): Promise<Uint8Array> {
   const style = plan.style;
@@ -92,7 +94,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
    * QAT'IY, shuning uchun yuzlar o'lchami farqi chiziqlarni buzmaydi.
    */
   const runs = (text: string, extra: RunExtra = {}): TextRun[] =>
-    handSegments(style.font, text).map(
+    (extra.title ? handTitleSegments(style.font, text) : handSegments(style.font, text)).map(
       (seg) =>
         new TextRun({
           text: seg.text,
@@ -167,7 +169,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
     if (T.kind === "gost") {
       for (const l of handCoverLines(T)) {
         if (l.role === "gap") out.push(blank());
-        else if (l.role === "center") out.push(para([run(l.text, l.big ? { size: Math.round(size * 1.25) } : {})], { align: AlignmentType.CENTER }));
+        else if (l.role === "center") out.push(para([run(l.text, l.big ? { size: Math.round(size * 1.25), title: true } : {})], { align: AlignmentType.CENTER }));
         else out.push(para([...(l.label ? [run(`${l.label}:`), new TextRun({ text: " ", font: primary.family, size, color: ink })] : []), run(l.text, { underline: true })], { left: lines(2) }));
       }
       pendingBreak = true;
@@ -339,7 +341,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
   const blankFooter = new Footer({ children: [new Paragraph({})] });
 
   /** Har yuz (Playwrite, Marck, Bad Script…) o'z faylidan DOCX ga joylanadi. */
-  const embedded = handFaces(style.font).flatMap((f) => {
+  const embedded = [...handFaces(style.font), ...(HAND_FONTS[style.font].title ? [HAND_FONTS[style.font].title!] : [])].flatMap((f) => {
     const data = fontFileBytes(f.file);
     return data ? [{ name: f.family, data, characterSet: "00" as const }] : [];
   });

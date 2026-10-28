@@ -28,6 +28,7 @@ import {
   handFormulaText,
   handGeometry,
   handSegments,
+  handTitleSegments,
   handStyleOf,
   handText,
   normalizeHand,
@@ -110,6 +111,34 @@ test("yuzlar: maktab = lotin Playwrite + kirill Marck (+ Қ Ғ Ҳ Bad Script), q
   assert.deepEqual(segs.map((x) => x.face.family), ["Playwrite US Trad", "Marck Script", "Playwrite US Trad", "Bad Script", "Marck Script", "Playwrite US Trad"]);
   assert.deepEqual(handSegments("badscript", "abc қ").map((x) => x.face.family), ["Bad Script"], "yo'ldoshsiz shrift — bitta bo'lak");
   assert.deepEqual(handSegments("school", ""), []);
+});
+
+test("muqova sarlavhasi: Great Vibes faqat o'zi yopgan belgilarda (haqiqiy `cmap` bilan), Қ Ғ Ҳ va ‘ oddiy yuzda; yo'ldoshsiz/sarlavhasiz shriftda oddiy", () => {
+  for (const id of ["school", "pen"] as const) {
+    const t = HAND_FONTS[id].title!;
+    const cps = fontCodepoints(fontBytes(t.file));
+    for (const [lo, hi] of t.ranges) for (let cp = lo; cp <= hi; cp++) assert.ok(cps.has(cp), `${id}: Great Vibes U+${cp.toString(16)} yo'q, lekin diapazonda`);
+    // talab qilingan harflardan Қ Ғ Ҳ dan tashqari hammasi sarlavha yuzida.
+    for (const ch of HAND_REQUIRED_TEXT.latin + HAND_REQUIRED_TEXT.cyrillic + "ЎўЁё") assert.ok(t.ranges.some(([lo, hi]) => ch.codePointAt(0)! >= lo && ch.codePointAt(0)! <= hi), `${id}: «${ch}»`);
+  }
+  const segs = handTitleSegments("school", "Мустақил иш oʻ");
+  assert.equal(segs.map((x) => x.text).join(""), "Мустақил иш o‘");
+  assert.deepEqual(segs.map((x) => [x.face.family, x.title]), [["Great Vibes", true], ["Bad Script", false], ["Great Vibes", true]], "қ — Bad Script, qolgani Great Vibes");
+  assert.ok(handTitleSegments("badscript", "Mustaqil ish").every((x) => !x.title && x.face.family === "Bad Script"));
+  assert.equal(HAND_FONTS.caveat.title, undefined);
+});
+
+test("DOCX muqovasi: sarlavha qatori Great Vibes (embed ham), matn Playwrite; ko'ruvchi CSS: --hand-title-family faqat sarlavhali shriftda", async () => {
+  const doc = sampleWorkDoc({ topic: "Qo‘lyozma sinovi", workLabel: "Mustaqil ish", language: "uz", toolId: "mustaqil-ish" } as never, { genre: "independent", kind: "written" });
+  doc.work!.hand = { ink: "blue", paper: "lined", font: "school" };
+  const x = await unzip(await renderDocx(doc));
+  assert.match(x.document, /w:rFonts w:ascii="Great Vibes"/, "muqova sarlavhasi Great Vibes");
+  assert.match(x.document, /w:rFonts w:ascii="Playwrite US Trad"/);
+  const zip = await JSZip.loadAsync(await renderDocx(doc));
+  const embedded = Object.keys(zip.files).filter((f) => /^word\/fonts\/.+\.odttf$/.test(f));
+  assert.equal(embedded.length, 4, `4 yuz joylanadi: ${embedded.join(", ")}`);
+  assert.equal(handCssVars(handStyleOf({ ink: "blue", paper: "lined", font: "school" }))["--hand-title-family"], '"SlaydX Title Maktab", "SlaydX Maktab"');
+  assert.equal(handCssVars(handStyleOf({ ink: "blue", paper: "lined", font: "caveat" }))["--hand-title-family"], undefined);
 });
 
 test("shrift fayllari va OFL litsenziyalari repoda; ko'ruvchi URL i fayl nomiga mos; globals.css @font-face lar `handFontFaceCss` bilan bir xil", () => {
