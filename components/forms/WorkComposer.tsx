@@ -32,7 +32,17 @@ import {
   HAND_COVERS,
   HAND_COVER_DEFAULT,
   HAND_COVER_LABELS,
+  HAND_CELLS,
+  HAND_CELLS_DEFAULT,
+  HAND_CELLS_LABELS,
   HAND_FONT_LIST,
+  HAND_FORMATS,
+  HAND_FORMAT_DEFAULT,
+  HAND_FORMAT_LABELS,
+  HAND_MARGINS,
+  HAND_MARGIN_DEFAULT,
+  HAND_MARGIN_LABELS,
+  HAND_PAPER_SPECS,
   HAND_HEADINGS,
   HAND_HEADINGS_DEFAULT,
   HAND_HEADINGS_LABELS,
@@ -58,7 +68,11 @@ import {
   handStyleOf,
   normalizeHand,
   type HandFontId,
+  type HandCellsValue,
   type HandCoverValue,
+  type HandFormatValue,
+  type HandMarginValue,
+  type WorkHand,
   type HandHeadingsValue,
   type HandInk,
   type HandUnderlineValue,
@@ -167,6 +181,9 @@ type Ui = {
   handPaper: HandPaper;
   handFont: HandFontId;
   handLively: HandLivelyValue;
+  handFormat: HandFormatValue;
+  handMargin: HandMarginValue;
+  handCells: HandCellsValue;
   handHeadings: HandHeadingsValue;
   handCover: HandCoverValue;
   handUnderline: HandUnderlineValue;
@@ -232,15 +249,16 @@ function SubHead({ children }: { children: ReactNode }) {
 }
 
 /** Qo'lyozma tanlovining kichik namunasi — ko'ruvchi bilan BIR XIL o'zgaruvchi va chiziq qoidasi (`.hand-preview`). */
-function HandPreview({ ink, paper, font, lively }: { ink: HandInk; paper: HandPaper; font: HandFontId; lively: boolean }) {
-  const style = handStyleOf({ ink, paper, font, ...(lively ? { lively: true as const } : {}) });
+function HandPreview({ hand }: { hand: WorkHand }) {
+  const style = handStyleOf(hand);
   const vars = handCssVars(style);
-  const g = handGeometry(paper, font);
-  const cell = Number.parseFloat(vars["--hand-cell"]);
-  const phase = handBaselinePx(HAND_FONTS[font], g.sizePt, g.pitchPx) % cell;
+  const g = handGeometry(hand.paper, hand.font, hand);
+  const cell = Number.parseFloat(vars["--hand-cell"]!);
+  const phase = handBaselinePx(HAND_FONTS[hand.font], g.sizePt, g.pitchPx) % cell;
+  const lively = Boolean(hand.lively);
   return (
     <div
-      className={`hand-preview hand-preview--${paper}`}
+      className={`hand-preview hand-preview--${hand.paper}`}
       data-hand-preview
       aria-hidden
       style={{ ...vars, "--hand-phase": `${phase}px`, "--hand-vphase": "0px" } as React.CSSProperties}
@@ -309,6 +327,9 @@ function emptyUi(profile: UserProfile, tool: ToolConfig, genre: WorkGenreId): Ui
     handPaper: HAND_DEFAULTS.paper,
     handFont: HAND_DEFAULTS.font,
     handLively: HAND_LIVELY_DEFAULT,
+    handFormat: HAND_FORMAT_DEFAULT,
+    handMargin: HAND_MARGIN_DEFAULT,
+    handCells: HAND_CELLS_DEFAULT,
     handHeadings: HAND_HEADINGS_DEFAULT,
     handCover: HAND_COVER_DEFAULT,
     handUnderline: HAND_UNDERLINE_DEFAULT,
@@ -354,7 +375,7 @@ function uiFromValues(values: FormValues, base: Ui, genre: WorkGenreId): Ui {
     fileName: typeof values.fileName === "string" ? values.fileName : base.fileName,
     sourceText: input.sourceText,
     ...(input.hand
-      ? { workView: "hand" as const, handInk: input.hand.ink, handPaper: input.hand.paper, handFont: input.hand.font, handLively: (input.hand.lively ? "on" : "off") as HandLivelyValue, handHeadings: input.hand.headings ?? "caps", handCover: input.hand.cover ?? "plain", handUnderline: (input.hand.underline === false ? "off" : "on") as HandUnderlineValue }
+      ? { workView: "hand" as const, handInk: input.hand.ink, handPaper: input.hand.paper, handFont: input.hand.font, handLively: (input.hand.lively ? "on" : "off") as HandLivelyValue, handHeadings: input.hand.headings ?? "caps", handCover: input.hand.cover ?? "plain", handUnderline: (input.hand.underline === false ? "off" : "on") as HandUnderlineValue, handFormat: (input.hand.format ?? "a4") as HandFormatValue, handMargin: (input.hand.margin ?? "left") as HandMarginValue, handCells: (input.hand.cells ? "1" : "2") as HandCellsValue }
       : { workView: "plain" as const }),
   };
 }
@@ -407,7 +428,7 @@ function toValues(ui: Ui, genre: WorkGenreId): FormValues {
     userRefs,
     refsMin: ui.refsMin,
     extra: ui.extra,
-    ...(genre === "independent" && ui.workView === "hand" ? { hand: normalizeHand({ ink: ui.handInk, paper: ui.handPaper, font: ui.handFont, lively: ui.handLively, headings: ui.handHeadings, cover: ui.handCover, underline: ui.handUnderline }) } : {}),
+    ...(genre === "independent" && ui.workView === "hand" ? { hand: normalizeHand({ ink: ui.handInk, paper: ui.handPaper, font: ui.handFont, lively: ui.handLively, headings: ui.handHeadings, cover: ui.handCover, underline: ui.handUnderline, format: ui.handFormat, margin: ui.handMargin, cells: ui.handCells }) } : {}),
   };
 
   const out = encodeWorkValues(input);
@@ -623,6 +644,25 @@ export function WorkComposer({
                     <Segmented ariaLabel="Qog‘oz" options={HAND_PAPERS.map((v) => ({ value: v, label: HAND_PAPER_LABELS[v] }))} value={ui.handPaper} onChange={(v) => set("handPaper", v as HandPaper)} />
                   </Field>
                 </Row>
+                <Row label="Format" hint="A5 × 2 — bitta A4 yuziga ikkita A5 sahifa; 100 % o‘lchamda chop eting, katak va qatorlar o‘zgarmaydi" wide>
+                  <Field id="handFormat">
+                    <Segmented ariaLabel="Format" options={HAND_FORMATS.map((v) => ({ value: v, label: HAND_FORMAT_LABELS[v] }))} value={ui.handFormat} onChange={(v) => set("handFormat", v as HandFormatValue)} />
+                  </Field>
+                </Row>
+                {ui.handPaper !== "lined" ? (
+                  <Row label="Qator oralig‘i" hint="Katakli daftarda bir qator necha katak">
+                    <Field id="handCells">
+                      <Segmented ariaLabel="Qator oralig‘i" options={HAND_CELLS.map((v) => ({ value: v, label: HAND_CELLS_LABELS[v] }))} value={ui.handCells} onChange={(v) => set("handCells", v as HandCellsValue)} />
+                    </Field>
+                  </Row>
+                ) : null}
+                {HAND_PAPER_SPECS[ui.handPaper].ruled ? (
+                  <Row label="Qizil chiziq" hint="Navbatma-navbat — toq varaqda chapda, juft varaqda o‘ngda">
+                    <Field id="handMargin">
+                      <Segmented ariaLabel="Qizil chiziq" options={HAND_MARGINS.map((v) => ({ value: v, label: HAND_MARGIN_LABELS[v] }))} value={ui.handMargin} onChange={(v) => set("handMargin", v as HandMarginValue)} />
+                    </Field>
+                  </Row>
+                ) : null}
                 <Row label="Shrift">
                   <Field id="handFont">
                     <Segmented ariaLabel="Shrift" options={HAND_FONT_LIST.map((f) => ({ value: f.id, label: f.label }))} value={ui.handFont} onChange={(v) => set("handFont", v as HandFontId)} />
@@ -650,7 +690,7 @@ export function WorkComposer({
                     </Field>
                   </Row>
                 ) : null}
-                <HandPreview ink={ui.handInk} paper={ui.handPaper} font={ui.handFont} lively={ui.handLively === "on"} />
+                <HandPreview hand={normalizeHand({ ink: ui.handInk, paper: ui.handPaper, font: ui.handFont, lively: ui.handLively, headings: ui.handHeadings, cover: ui.handCover, underline: ui.handUnderline, format: ui.handFormat, margin: ui.handMargin, cells: ui.handCells })} />
               </>
             ) : null}
           </>

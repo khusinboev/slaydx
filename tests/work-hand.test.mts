@@ -626,6 +626,19 @@ test("varaq PNG: A4 254 dpi, chiziqlar MATN ASOSIGA tushadi (pitch oralig'ida), 
   assert.notEqual(paperPng("lined", "badscript"), paperPng("grid", "badscript"));
 });
 
+test("form values <-> model: format/margin/cells round-trip, blank paper drops the margin line, legacy values (absent fields) keep old behaviour", () => {
+  const v = { topic: "T", workView: "hand", handPaper: "grid", handFormat: "a5x2", handMargin: "alternate", handCells: "1" } as FormValues;
+  const input = workInputFromValues(v, "independent");
+  assert.deepEqual(input.hand, { ink: "blue", paper: "grid", font: "school", format: "a5x2", margin: "alternate", cells: 1 });
+  assert.deepEqual(workInputFromValues(encodeWorkValues(input), "independent").hand, input.hand);
+  const blank = workInputFromValues({ ...v, handPaper: "blank" }, "independent").hand!;
+  assert.equal(blank.margin, undefined, "no margin line on blank paper");
+  assert.equal(blank.cells, 1);
+  const legacy = workInputFromValues({ topic: "T", workView: "hand", handPaper: "grid" } as FormValues, "independent").hand!;
+  assert.deepEqual(legacy, { ink: "blue", paper: "grid", font: "school" }, "absent fields = a4 / margin left / 2 cells");
+  assert.deepEqual(handGeometry("grid", "school", legacy).lines, handGeometry("grid", "school").lines);
+});
+
 test("DOCX layouts: A5 page size, alternate → mirrored margins + odd/even background, two-up → A4 landscape with two columns and ONE sheet image, blank/print → no background", async () => {
   const mk = async (hand: WorkHand) => {
     const doc = sampleWorkDoc({ topic: "Layout", workLabel: "Mustaqil ish", language: "uz", toolId: "mustaqil-ish" } as never, { genre: "independent", kind: "written" });

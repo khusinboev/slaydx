@@ -794,6 +794,10 @@ button {
     calc(var(--hand-vphase) - var(--hand-cell)) 0,
     0 calc(var(--hand-phase) - var(--hand-cell));
 }
+.hand-preview--blank,
+.hand-preview--print {
+  background-image: none;
+}
 .hand-preview--grid {
   --hand-vlines: repeating-linear-gradient(to right, var(--hand-rule) 0, var(--hand-rule) var(--hand-rule-w), transparent var(--hand-rule-w), transparent var(--hand-cell));
 }

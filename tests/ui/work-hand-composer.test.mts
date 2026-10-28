@@ -77,6 +77,11 @@ test("mustaqil ish: standart «Oddiy» — workView bor, sub-parametrlar yo'q; �
   for (const id of ["handInk", "handPaper", "handFont"]) assert.ok(!found.includes(id), `${id} «Oddiy» da yashirin`);
   assert.ok(!document.querySelector("[data-hand-preview]"));
   await pick("Ko‘rinish", "Qo‘lyozma");
+  // Conditional rows: cells exist only on cell paper, the margin line only on ruled paper (a decorative field must not exist).
+  assert.ok(!fields().includes("handCells") && fields().includes("handMargin"), "lined: no cells row, margin line row");
+  await pick("Qog‘oz", "Oq qog‘oz");
+  assert.ok(fields().includes("handCells") && !fields().includes("handMargin"), "blank: cells row, no margin line row");
+  await pick("Qog‘oz", "Katakli");
   found = fields();
   for (const p of WORK_HAND_PARAMS) assert.equal(found.filter((x) => x === p.id).length, 1, `${p.id} aynan bitta data-field`);
   assert.ok(document.querySelector("[data-hand-preview]"), "namuna ko'rinadi");

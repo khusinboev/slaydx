@@ -651,6 +651,8 @@ export function handCssVars(style: HandStyle): Record<string, string> {
     /** Heading case is in the text itself (`planWork`); this marker also tells viewer measure trees apart. */
     "--hand-headings": style.headings === "plain" ? "plain" : "caps",
     "--hand-head-decoration": style.underline === false ? "none" : "underline",
+    /** Margin-line mode marker (the line itself is per page: `handPageVars`); also tells viewer measure trees apart. */
+    "--hand-margin": g.marginMode,
     "--hand-sheet-w": `${Math.round(twToMm(g.page.widthTw) * 100) / 100}mm`,
     "--hand-sheet-h": `${Math.round(twToMm(g.page.heightTw) * 100) / 100}mm`,
     "--hand-pitch": cssPx(g.pitchPx),
