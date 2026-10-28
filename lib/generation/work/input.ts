@@ -22,7 +22,7 @@ import { type ArticleUserRef } from "../article/input";
 import { WORK_LIMITS, isWorkMinistryId, type SubjectProfileId, type WorkGenreId, type WorkKindId, type WorkMinistryId } from "./types";
 import { normalizeWorkKind, normalizeWorkPages, pagesMid, workKindOf, type WorkKind } from "./registry";
 import { SUBJECT_PROFILES, normalizeSubjectProfile } from "./subjects";
-import { normalizeHand, type WorkHand } from "./handwriting";
+import { handCapsOf, normalizeHand, restrictHand, type WorkHand } from "./handwriting";
 
 /* ────────────────────────── tiplar ────────────────────────── */
 
@@ -358,12 +358,13 @@ export function workInputFromValues(values: FormValues, genre: WorkGenreId): Wor
 }
 
 /**
- * «Ko'rinish» = Qo'lyozma — FAQAT mustaqil ishda (kurs ishi/referat
- * daftarga ko'chirilmaydi); qolgan janrlarda forma qiymatlari e'tiborsiz.
+ * «Ko'rinish» = Qo'lyozma — only for services with a capability entry (`HAND_SERVICE_CAPS`: independent work,
+ * referat); other genres ignore the form values, and a service keeps only the parameters it exposes.
  */
 export function handInputOf(values: FormValues, genre: WorkGenreId): { hand?: WorkHand } {
-  if (genre !== "independent" || str(values.workView, 10) !== "hand") return {};
-  return { hand: normalizeHand({ ink: str(values.handInk, 12), paper: str(values.handPaper, 12), font: str(values.handFont, 12), lively: str(values.handLively, 5), headings: str(values.handHeadings, 8), cover: str(values.handCover, 12), underline: str(values.handUnderline, 5), format: str(values.handFormat, 8), margin: str(values.handMargin, 12), cells: str(values.handCells, 3) }) };
+  const caps = handCapsOf(genre);
+  if (!caps || str(values.workView, 10) !== "hand") return {};
+  return { hand: restrictHand(normalizeHand({ ink: str(values.handInk, 12), paper: str(values.handPaper, 12), font: str(values.handFont, 12), lively: str(values.handLively, 5), headings: str(values.handHeadings, 8), cover: str(values.handCover, 12), underline: str(values.handUnderline, 5), format: str(values.handFormat, 8), margin: str(values.handMargin, 12), cells: str(values.handCells, 3) }), caps) };
 }
 
 /** Klient uchun teskari yo'l — forma holatidan `FormValues` (qoralama). */
@@ -398,7 +399,7 @@ export function encodeWorkValues(input: WorkInput): FormValues {
   };
   if (input.ministryCustom) out.ministryCustom = input.ministryCustom;
   if (input.sourceText) out.sourceText = input.sourceText;
-  if (input.genre === "independent") {
+  if (handCapsOf(input.genre)) {
     out.workView = input.hand ? "hand" : "plain";
     if (input.hand) {
       out.handInk = input.hand.ink;

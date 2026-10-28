@@ -25,7 +25,12 @@ import {
   handFaceOf,
   handFaces,
   handFontFaceCss,
+  handCapsOf,
   handFormulaText,
+  HAND_FIELD_OF,
+  HAND_PARAM_IDS,
+  restrictHand,
+  type HandParamId,
   handPageMargins,
   handPageVars,
   handRedSide,
@@ -301,12 +306,12 @@ test("geometriya: butun qatorlar sahifaga sig'adi, pastki chegara yetarli, matn 
 
 /* ───────────────────────────── forma → kirish ───────────────────────────── */
 
-test("workInputFromValues: faqat mustaqil ishda, faqat workView=hand; noma'lum qiymat standartga tushadi", () => {
+test("workInputFromValues: only services with capabilities (independent, referat), only workView=hand; noma'lum qiymat standartga tushadi", () => {
   const v: FormValues = { topic: "T", workView: "hand", handInk: "purple", handPaper: "grid", handFont: "caveat" };
   assert.deepEqual(workInputFromValues(v, "independent").hand, { ink: "purple", paper: "grid", font: "caveat" });
   assert.equal(workInputFromValues({ ...v, workView: "plain" }, "independent").hand, undefined);
   assert.equal(workInputFromValues(v, "coursework").hand, undefined, "kurs ishi daftarga ko'chirilmaydi");
-  assert.equal(workInputFromValues(v, "referat").hand, undefined);
+  assert.deepEqual(workInputFromValues(v, "referat").hand, { ink: "purple", paper: "grid", font: "caveat" }, "referat offers handwriting too");
   assert.deepEqual(workInputFromValues({ workView: "hand", handInk: "red", handPaper: "x", handFont: "comic" }, "independent").hand, { ink: "blue", paper: "lined", font: "school" });
   assert.deepEqual(normalizeHand({}), { ink: "blue", paper: "lined", font: "school" });
 });
@@ -637,6 +642,41 @@ test("form values <-> model: format/margin/cells round-trip, blank paper drops t
   const legacy = workInputFromValues({ topic: "T", workView: "hand", handPaper: "grid" } as FormValues, "independent").hand!;
   assert.deepEqual(legacy, { ink: "blue", paper: "grid", font: "school" }, "absent fields = a4 / margin left / 2 cells");
   assert.deepEqual(handGeometry("grid", "school", legacy).lines, handGeometry("grid", "school").lines);
+});
+
+test("service capabilities: independent work and referat expose every parameter, coursework none; restrictHand resets what a service does not expose", () => {
+  assert.deepEqual([...handCapsOf("independent")!].sort(), [...HAND_PARAM_IDS].sort());
+  assert.deepEqual([...handCapsOf("referat")!].sort(), [...HAND_PARAM_IDS].sort());
+  assert.equal(handCapsOf("coursework"), null);
+  assert.equal(handCapsOf("essay"), null, "essay joins in its own stage");
+  // Every capability maps to a registry parameter (no orphan ids), and every registry param belongs to a capability.
+  const registry = new Set(WORK_HAND_PARAMS.map((p) => p.id));
+  for (const id of HAND_PARAM_IDS) assert.ok(registry.has(HAND_FIELD_OF[id]), `${id} → ${HAND_FIELD_OF[id]} is not in WORK_HAND_PARAMS`);
+  const fields = new Set(Object.values(HAND_FIELD_OF));
+  for (const p of WORK_HAND_PARAMS) assert.ok(p.id === "workView" || fields.has(p.id), `${p.id} has no capability id`);
+  const full = { ink: "purple", paper: "grid", font: "pen", lively: true, headings: "plain", cover: "calligraphy", underline: false, format: "a5x2", margin: "alternate", cells: 1 } as const satisfies WorkHand;
+  assert.deepEqual(restrictHand(full, new Set(HAND_PARAM_IDS)), full);
+  // A service without cover/underline/headings/margin keeps only what it exposes; the rest is the legacy default.
+  assert.deepEqual(restrictHand(full, new Set<HandParamId>(["font", "ink", "lively", "paper", "format", "cells"])), { ink: "purple", paper: "grid", font: "pen", lively: true, format: "a5x2", cells: 1 });
+  assert.deepEqual(restrictHand(full, new Set<HandParamId>()), { ink: "blue", paper: "lined", font: "school" });
+});
+
+test("referat: every handwriting parameter changes the DOCX through the real form path (workInputFromValues → model → render)", async () => {
+  const failures: string[] = [];
+  const docxOf = async (values: FormValues) => {
+    const hand = workInputFromValues({ topic: "T", ...values }, "referat").hand;
+    assert.ok(hand, "referat accepts the hand view");
+    const doc = sampleWorkDoc({ topic: "Referat", workLabel: "Referat", language: "uz", toolId: "referat" } as never, { genre: "referat", kind: "informative" });
+    doc.work!.hand = hand;
+    const x = await unzip(await renderDocx(doc));
+    return JSON.stringify({ document: x.document, header: x.header, styles: x.styles, media: x.media });
+  };
+  for (const p of WORK_HAND_PARAMS.filter((q) => q.id !== "workView")) {
+    const base = { ...(p.probeWith ?? {}), workView: "hand" };
+    const [a, b] = [await docxOf({ ...base, [p.id]: p.probeA }), await docxOf({ ...base, [p.id]: p.probeB })];
+    if (a === b) failures.push(p.id);
+  }
+  assert.deepEqual(failures, [], `referat: parameters without a DOCX effect: ${failures.join(", ")}`);
 });
 
 test("DOCX layouts: A5 page size, alternate → mirrored margins + odd/even background, two-up → A4 landscape with two columns and ONE sheet image, blank/print → no background", async () => {

@@ -65,7 +65,10 @@ import {
   handJitterCss,
   handWordJitter,
   handWordPieces,
+  handCapsOf,
   handStyleOf,
+  restrictHand,
+  type HandParamId,
   normalizeHand,
   type HandFontId,
   type HandCellsValue,
@@ -428,7 +431,7 @@ function toValues(ui: Ui, genre: WorkGenreId): FormValues {
     userRefs,
     refsMin: ui.refsMin,
     extra: ui.extra,
-    ...(genre === "independent" && ui.workView === "hand" ? { hand: normalizeHand({ ink: ui.handInk, paper: ui.handPaper, font: ui.handFont, lively: ui.handLively, headings: ui.handHeadings, cover: ui.handCover, underline: ui.handUnderline, format: ui.handFormat, margin: ui.handMargin, cells: ui.handCells }) } : {}),
+    ...(handCapsOf(genre) && ui.workView === "hand" ? { hand: restrictHand(normalizeHand({ ink: ui.handInk, paper: ui.handPaper, font: ui.handFont, lively: ui.handLively, headings: ui.handHeadings, cover: ui.handCover, underline: ui.handUnderline, format: ui.handFormat, margin: ui.handMargin, cells: ui.handCells }), handCapsOf(genre)!) } : {}),
   };
 
   const out = encodeWorkValues(input);
@@ -449,7 +452,12 @@ export function WorkComposer({
   const router = useRouter();
   const loggedIn = useAppStore((s) => s.loggedIn);
   const genre: WorkGenreId = workGenreOfTool(tool.id) ?? "coursework";
+  /* Handwriting parameters this service exposes (`HAND_SERVICE_CAPS`); rows that depend on another choice use the EFFECTIVE value. */
+  const handCaps = handCapsOf(genre);
+  const has = (id: HandParamId) => handCaps?.has(id) ?? false;
   const [ui, setUi] = useState<Ui>(() => emptyUi(profile, tool, genre));
+  const effPaper = has("paper") ? ui.handPaper : HAND_DEFAULTS.paper;
+  const effFont = has("font") ? ui.handFont : HAND_DEFAULTS.font;
   const [loading, setLoading] = useState(false);
   const [fileBusy, setFileBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -625,7 +633,7 @@ export function WorkComposer({
             <Segmented ariaLabel="Til" options={LANGUAGE_OPTIONS} value={ui.language} onChange={(v) => set("language", v as Ui["language"])} />
           </Field>
         </Row>
-        {genre === "independent" ? (
+        {handCaps ? (
           <>
             <Row label="Ko‘rinish" hint="Qo‘lyozma — maktab daftari ko‘rinishida chop etish uchun; mazmun va narx o‘zgarmaydi" wide>
               <Field id="workView">
@@ -634,63 +642,77 @@ export function WorkComposer({
             </Row>
             {ui.workView === "hand" ? (
               <>
-                <Row label="Siyoh rangi">
-                  <Field id="handInk">
-                    <Segmented ariaLabel="Siyoh rangi" options={HAND_INKS.map((v) => ({ value: v, label: HAND_INK_LABELS[v] }))} value={ui.handInk} onChange={(v) => set("handInk", v as HandInk)} />
-                  </Field>
-                </Row>
-                <Row label="Qog‘oz">
-                  <Field id="handPaper">
-                    <Segmented ariaLabel="Qog‘oz" options={HAND_PAPERS.map((v) => ({ value: v, label: HAND_PAPER_LABELS[v] }))} value={ui.handPaper} onChange={(v) => set("handPaper", v as HandPaper)} />
-                  </Field>
-                </Row>
-                <Row label="Format" hint="A5 × 2 — bitta A4 yuziga ikkita A5 sahifa; 100 % o‘lchamda chop eting, katak va qatorlar o‘zgarmaydi" wide>
-                  <Field id="handFormat">
-                    <Segmented ariaLabel="Format" options={HAND_FORMATS.map((v) => ({ value: v, label: HAND_FORMAT_LABELS[v] }))} value={ui.handFormat} onChange={(v) => set("handFormat", v as HandFormatValue)} />
-                  </Field>
-                </Row>
-                {ui.handPaper !== "lined" ? (
+                {has("ink") ? (
+                  <Row label="Siyoh rangi">
+                    <Field id="handInk">
+                      <Segmented ariaLabel="Siyoh rangi" options={HAND_INKS.map((v) => ({ value: v, label: HAND_INK_LABELS[v] }))} value={ui.handInk} onChange={(v) => set("handInk", v as HandInk)} />
+                    </Field>
+                  </Row>
+                ) : null}
+                {has("paper") ? (
+                  <Row label="Qog‘oz">
+                    <Field id="handPaper">
+                      <Segmented ariaLabel="Qog‘oz" options={HAND_PAPERS.map((v) => ({ value: v, label: HAND_PAPER_LABELS[v] }))} value={ui.handPaper} onChange={(v) => set("handPaper", v as HandPaper)} />
+                    </Field>
+                  </Row>
+                ) : null}
+                {has("format") ? (
+                  <Row label="Format" hint="A5 × 2 — bitta A4 yuziga ikkita A5 sahifa; 100 % o‘lchamda chop eting, katak va qatorlar o‘zgarmaydi" wide>
+                    <Field id="handFormat">
+                      <Segmented ariaLabel="Format" options={HAND_FORMATS.map((v) => ({ value: v, label: HAND_FORMAT_LABELS[v] }))} value={ui.handFormat} onChange={(v) => set("handFormat", v as HandFormatValue)} />
+                    </Field>
+                  </Row>
+                ) : null}
+                {has("cells") && effPaper !== "lined" ? (
                   <Row label="Qator oralig‘i" hint="Katakli daftarda bir qator necha katak">
                     <Field id="handCells">
                       <Segmented ariaLabel="Qator oralig‘i" options={HAND_CELLS.map((v) => ({ value: v, label: HAND_CELLS_LABELS[v] }))} value={ui.handCells} onChange={(v) => set("handCells", v as HandCellsValue)} />
                     </Field>
                   </Row>
                 ) : null}
-                {HAND_PAPER_SPECS[ui.handPaper].ruled ? (
+                {has("margin") && HAND_PAPER_SPECS[effPaper].ruled ? (
                   <Row label="Qizil chiziq" hint="Navbatma-navbat — toq varaqda chapda, juft varaqda o‘ngda">
                     <Field id="handMargin">
                       <Segmented ariaLabel="Qizil chiziq" options={HAND_MARGINS.map((v) => ({ value: v, label: HAND_MARGIN_LABELS[v] }))} value={ui.handMargin} onChange={(v) => set("handMargin", v as HandMarginValue)} />
                     </Field>
                   </Row>
                 ) : null}
-                <Row label="Shrift">
-                  <Field id="handFont">
-                    <Segmented ariaLabel="Shrift" options={HAND_FONT_LIST.map((f) => ({ value: f.id, label: f.label }))} value={ui.handFont} onChange={(v) => set("handFont", v as HandFontId)} />
-                  </Field>
-                </Row>
-                <Row label="Yozuv" hint="Jonli — har so‘z biroz boshqacha: balandligi va siyoh to‘qligi, haqiqiy qo‘lda yozilgandek">
-                  <Field id="handLively">
-                    <Segmented ariaLabel="Yozuv" options={HAND_LIVELY_VALUES.map((v) => ({ value: v, label: HAND_LIVELY_LABELS[v] }))} value={ui.handLively} onChange={(v) => set("handLively", v as HandLivelyValue)} />
-                  </Field>
-                </Row>
-                <Row label="Sarlavhalar" hint="Oddiy — «Kirish», «1-bob. …» (daftarda shunday yoziladi); BOSH HARFLI — «KIRISH», «1-BOB. …»">
-                  <Field id="handHeadings">
-                    <Segmented ariaLabel="Sarlavhalar" options={HAND_HEADINGS.map((v) => ({ value: v, label: HAND_HEADINGS_LABELS[v] }))} value={ui.handHeadings} onChange={(v) => set("handHeadings", v as HandHeadingsValue)} />
-                  </Field>
-                </Row>
-                <Row label="Sarlavha tagi chizig‘i">
-                  <Field id="handUnderline">
-                    <Segmented ariaLabel="Sarlavha tagi chizig‘i" options={HAND_UNDERLINES.map((v) => ({ value: v, label: HAND_UNDERLINE_LABELS[v] }))} value={ui.handUnderline} onChange={(v) => set("handUnderline", v as HandUnderlineValue)} />
-                  </Field>
-                </Row>
-                {HAND_FONTS[ui.handFont].title ? (
+                {has("font") ? (
+                  <Row label="Shrift">
+                    <Field id="handFont">
+                      <Segmented ariaLabel="Shrift" options={HAND_FONT_LIST.map((f) => ({ value: f.id, label: f.label }))} value={ui.handFont} onChange={(v) => set("handFont", v as HandFontId)} />
+                    </Field>
+                  </Row>
+                ) : null}
+                {has("lively") ? (
+                  <Row label="Yozuv" hint="Jonli — har so‘z biroz boshqacha: balandligi va siyoh to‘qligi, haqiqiy qo‘lda yozilgandek">
+                    <Field id="handLively">
+                      <Segmented ariaLabel="Yozuv" options={HAND_LIVELY_VALUES.map((v) => ({ value: v, label: HAND_LIVELY_LABELS[v] }))} value={ui.handLively} onChange={(v) => set("handLively", v as HandLivelyValue)} />
+                    </Field>
+                  </Row>
+                ) : null}
+                {has("headings") ? (
+                  <Row label="Sarlavhalar" hint="Oddiy — «Kirish», «1-bob. …» (daftarda shunday yoziladi); BOSH HARFLI — «KIRISH», «1-BOB. …»">
+                    <Field id="handHeadings">
+                      <Segmented ariaLabel="Sarlavhalar" options={HAND_HEADINGS.map((v) => ({ value: v, label: HAND_HEADINGS_LABELS[v] }))} value={ui.handHeadings} onChange={(v) => set("handHeadings", v as HandHeadingsValue)} />
+                    </Field>
+                  </Row>
+                ) : null}
+                {has("underline") ? (
+                  <Row label="Sarlavha tagi chizig‘i">
+                    <Field id="handUnderline">
+                      <Segmented ariaLabel="Sarlavha tagi chizig‘i" options={HAND_UNDERLINES.map((v) => ({ value: v, label: HAND_UNDERLINE_LABELS[v] }))} value={ui.handUnderline} onChange={(v) => set("handUnderline", v as HandUnderlineValue)} />
+                    </Field>
+                  </Row>
+                ) : null}
+                {has("cover") && HAND_FONTS[effFont].title ? (
                   <Row label="Muqova sarlavhasi" hint="Kalligrafik — «Mustaqil ish» bezakli yozuvda">
                     <Field id="handCover">
                       <Segmented ariaLabel="Muqova sarlavhasi" options={HAND_COVERS.map((v) => ({ value: v, label: HAND_COVER_LABELS[v] }))} value={ui.handCover} onChange={(v) => set("handCover", v as HandCoverValue)} />
                     </Field>
                   </Row>
                 ) : null}
-                <HandPreview hand={normalizeHand({ ink: ui.handInk, paper: ui.handPaper, font: ui.handFont, lively: ui.handLively, headings: ui.handHeadings, cover: ui.handCover, underline: ui.handUnderline, format: ui.handFormat, margin: ui.handMargin, cells: ui.handCells })} />
+                <HandPreview hand={restrictHand(normalizeHand({ ink: ui.handInk, paper: ui.handPaper, font: ui.handFont, lively: ui.handLively, headings: ui.handHeadings, cover: ui.handCover, underline: ui.handUnderline, format: ui.handFormat, margin: ui.handMargin, cells: ui.handCells }), handCaps)} />
               </>
             ) : null}
           </>
