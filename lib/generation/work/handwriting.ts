@@ -44,8 +44,18 @@ export type HandFontId = (typeof HAND_FONT_IDS)[number];
 
 export const HAND_DEFAULTS = { ink: "blue", paper: "lined", font: "school" } as const satisfies { ink: HandInk; paper: HandPaper; font: HandFontId };
 
-/** Modelga (`WorkModel.hand`) saqlanadigan tanlov. */
-export type WorkHand = { ink: HandInk; paper: HandPaper; font: HandFontId };
+/**
+ * Modelga (`WorkModel.hand`) saqlanadigan tanlov. `lively` — «jonli yozuv»
+ * (har so'z biroz boshqacha); o'chiq bo'lsa maydon umuman yo'q (eski ishlar o'zgarmaydi).
+ */
+export type WorkHand = { ink: HandInk; paper: HandPaper; font: HandFontId; lively?: true };
+
+/** Formadagi «Yozuv» tanlovi: tekis (standart emas, eski xulq) yoki jonli. */
+export const HAND_LIVELY_VALUES = ["off", "on"] as const;
+export type HandLivelyValue = (typeof HAND_LIVELY_VALUES)[number];
+export const HAND_LIVELY_LABELS: Record<HandLivelyValue, string> = { off: "Tekis", on: "Jonli" };
+/** Yangi forma standarti: haqiqiy qo'lda yozilgandek. */
+export const HAND_LIVELY_DEFAULT: HandLivelyValue = "on";
 
 /* ────────────────────────── shriftlar ────────────────────────── */
 
@@ -352,12 +362,69 @@ export const isHandPaper = (v: unknown): v is HandPaper => (HAND_PAPERS as reado
 export const isHandFont = (v: unknown): v is HandFontId => (HAND_FONT_IDS as readonly string[]).includes(String(v));
 
 /** Tashqi (xom) qiymatdan toza tanlov; noma'lum qiymat standartga tushadi. */
-export function normalizeHand(raw: { ink?: unknown; paper?: unknown; font?: unknown }): WorkHand {
+export function normalizeHand(raw: { ink?: unknown; paper?: unknown; font?: unknown; lively?: unknown }): WorkHand {
   return {
     ink: isHandInk(raw.ink) ? raw.ink : HAND_DEFAULTS.ink,
     paper: isHandPaper(raw.paper) ? raw.paper : HAND_DEFAULTS.paper,
     font: isHandFont(raw.font) ? raw.font : HAND_DEFAULTS.font,
+    ...(raw.lively === true || raw.lively === "on" ? { lively: true as const } : {}),
   };
+}
+
+/* ────────────────────────── jonli yozuv ────────────────────────── */
+
+/**
+ * JONLI YOZUV: har so'z o'z balandligi (asosdan ±1 pt gacha) va siyoh to'qligi
+ * bilan chiziladi — qo'lda yozilganda so'zlar chiziqda bir xil turmaydi.
+ * FAQAT so'z kengligiga TEGMAYDIGAN o'zgarish (vertikal siljish, rang): shunda
+ * DOCX va ko'ruvchida qator uzilishi bir xil qoladi. Qiyalik (rotate) DOCX da yo'q,
+ * shuning uchun ishlatilmaydi.
+ *
+ * Tasodif DETERMINISTIK — `index` (paragrafdagi so'z tartibi) va so'zning o'zidan;
+ * DOCX va ko'ruvchi bir xil paragrafga bir xil siljish beradi, qayta chizsa ham o'zgarmaydi.
+ */
+export type HandWordJitter = {
+  /** Asosdan siljish, yarim-punktda (DOCX `w:position`); musbat — yuqoriga. */
+  dyHalfPt: number;
+  /** Siyohning oq tomonga aralashishi, foizda (0–16): 0 — to'liq to'q. */
+  tonePct: number;
+};
+
+const JITTER_DY = [-2, -1, -1, 0, 0, 0, 0, 1, 1, 2] as const;
+
+function fnv1a(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+export function handWordJitter(index: number, word: string): HandWordJitter {
+  const h = fnv1a(`${index}:${word.trim()}`);
+  return { dyHalfPt: JITTER_DY[h % JITTER_DY.length]!, tonePct: (h >>> 8) % 17 };
+}
+
+/**
+ * Ko'ruvchi/forma namunasi uchun inline uslub (`CiteSpan.j`): `position: relative` joylashuvga
+ * TEGMAYDI; siyoh `color-mix` bilan oqaradi (DOCX `handToneHex` bilan bir xil natija).
+ */
+export function handJitterCss(j: { dy: number; t: number }): { position: "relative"; top: string; color?: string } {
+  return { position: "relative", top: `${-j.dy * 0.5}pt`, ...(j.t ? { color: `color-mix(in srgb, var(--hand-ink), #fff ${j.t}%)` } : {}) };
+}
+
+/** Matnni so'z + undan keyingi bo'shliq bo'laklariga ajratadi (birlashtirilsa matn aynan tiklanadi). */
+export function handWordPieces(text: string): string[] {
+  return text.match(/\S+\s*|\s+/g) ?? [];
+}
+
+/** Siyoh HEX ini oq tomonga `pct` foiz aralashtiradi (DOCX ranggi; ko'ruvchida `color-mix` bir xil natija beradi). */
+export function handToneHex(inkHex: string, pct: number): string {
+  const n = Number.parseInt(inkHex, 16);
+  const mix = (c: number) => Math.round(c + ((255 - c) * pct) / 100);
+  const hex = (c: number) => mix(c).toString(16).padStart(2, "0").toUpperCase();
+  return `${hex((n >> 16) & 255)}${hex((n >> 8) & 255)}${hex(n & 255)}`;
 }
 
 /* ────────────────────────── ko'ruvchi CSS ────────────────────────── */
@@ -380,6 +447,7 @@ export function handCssVars(style: HandStyle): Record<string, string> {
     "--hand-ink": `#${style.inkHex}`,
     "--hand-family": `"${g.font.css}"`,
     "--hand-size": `${g.sizePt}pt`,
+    "--hand-lively": style.lively ? "1" : "0",
     ...(g.font.title ? { "--hand-title-family": `"${g.font.title.css}", "${g.font.css}"` } : {}),
     "--hand-pitch": px(g.pitchPx),
     "--hand-lines": String(g.lines),

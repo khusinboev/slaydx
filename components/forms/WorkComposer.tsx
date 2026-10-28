@@ -30,6 +30,9 @@ import { workInputFromValues, encodeWorkValues, parseWorkOutline, maxVisualsFor,
 import {
   HAND_DEFAULTS,
   HAND_FONT_LIST,
+  HAND_LIVELY_DEFAULT,
+  HAND_LIVELY_LABELS,
+  HAND_LIVELY_VALUES,
   HAND_FONTS,
   HAND_INKS,
   HAND_INK_LABELS,
@@ -40,10 +43,14 @@ import {
   handBaselinePx,
   handCssVars,
   handGeometry,
+  handJitterCss,
+  handWordJitter,
+  handWordPieces,
   handStyleOf,
   normalizeHand,
   type HandFontId,
   type HandInk,
+  type HandLivelyValue,
   type HandPaper,
   type WorkView,
 } from "@/lib/generation/work/handwriting";
@@ -147,6 +154,7 @@ type Ui = {
   handInk: HandInk;
   handPaper: HandPaper;
   handFont: HandFontId;
+  handLively: HandLivelyValue;
 };
 
 /** «Titul» maydonlari — `AuthorRows` id lari AYNAN `Ui`/`FormValues` kalitlari. */
@@ -209,8 +217,8 @@ function SubHead({ children }: { children: ReactNode }) {
 }
 
 /** Qo'lyozma tanlovining kichik namunasi — ko'ruvchi bilan BIR XIL o'zgaruvchi va chiziq qoidasi (`.hand-preview`). */
-function HandPreview({ ink, paper, font }: { ink: HandInk; paper: HandPaper; font: HandFontId }) {
-  const style = handStyleOf({ ink, paper, font });
+function HandPreview({ ink, paper, font, lively }: { ink: HandInk; paper: HandPaper; font: HandFontId; lively: boolean }) {
+  const style = handStyleOf({ ink, paper, font, ...(lively ? { lively: true as const } : {}) });
   const vars = handCssVars(style);
   const g = handGeometry(paper, font);
   const cell = Number.parseFloat(vars["--hand-cell"]);
@@ -222,8 +230,25 @@ function HandPreview({ ink, paper, font }: { ink: HandInk; paper: HandPaper; fon
       aria-hidden
       style={{ ...vars, "--hand-phase": `${phase}px`, "--hand-vphase": "0px" } as React.CSSProperties}
     >
-      <div>Mustaqil ish — qo‘lyozma namuna</div>
-      <div>O‘zbekiston, ўқув, 2026</div>
+      <PreviewLine text="Mustaqil ish — qo‘lyozma namuna" lively={lively} />
+      <PreviewLine text="O‘zbekiston, ўқув, 2026" lively={lively} />
+    </div>
+  );
+}
+
+/** Namuna qatori: jonli rejimda so'zlar ko'ruvchidagi qoida bilan siljiydi (`handWordJitter`). */
+function PreviewLine({ text, lively }: { text: string; lively: boolean }) {
+  if (!lively) return <div>{text}</div>;
+  return (
+    <div>
+      {handWordPieces(text).map((w, i) => {
+        const j = handWordJitter(i, w);
+        return (
+          <span key={i} style={handJitterCss({ dy: j.dyHalfPt, t: j.tonePct })}>
+            {w}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -268,6 +293,7 @@ function emptyUi(profile: UserProfile, tool: ToolConfig, genre: WorkGenreId): Ui
     handInk: HAND_DEFAULTS.ink,
     handPaper: HAND_DEFAULTS.paper,
     handFont: HAND_DEFAULTS.font,
+    handLively: HAND_LIVELY_DEFAULT,
   };
 }
 
@@ -310,7 +336,7 @@ function uiFromValues(values: FormValues, base: Ui, genre: WorkGenreId): Ui {
     fileName: typeof values.fileName === "string" ? values.fileName : base.fileName,
     sourceText: input.sourceText,
     ...(input.hand
-      ? { workView: "hand" as const, handInk: input.hand.ink, handPaper: input.hand.paper, handFont: input.hand.font }
+      ? { workView: "hand" as const, handInk: input.hand.ink, handPaper: input.hand.paper, handFont: input.hand.font, handLively: (input.hand.lively ? "on" : "off") as HandLivelyValue }
       : { workView: "plain" as const }),
   };
 }
@@ -363,7 +389,7 @@ function toValues(ui: Ui, genre: WorkGenreId): FormValues {
     userRefs,
     refsMin: ui.refsMin,
     extra: ui.extra,
-    ...(genre === "independent" && ui.workView === "hand" ? { hand: normalizeHand({ ink: ui.handInk, paper: ui.handPaper, font: ui.handFont }) } : {}),
+    ...(genre === "independent" && ui.workView === "hand" ? { hand: normalizeHand({ ink: ui.handInk, paper: ui.handPaper, font: ui.handFont, lively: ui.handLively }) } : {}),
   };
 
   const out = encodeWorkValues(input);
@@ -584,7 +610,12 @@ export function WorkComposer({
                     <Segmented ariaLabel="Shrift" options={HAND_FONT_LIST.map((f) => ({ value: f.id, label: f.label }))} value={ui.handFont} onChange={(v) => set("handFont", v as HandFontId)} />
                   </Field>
                 </Row>
-                <HandPreview ink={ui.handInk} paper={ui.handPaper} font={ui.handFont} />
+                <Row label="Yozuv" hint="Jonli — har so‘z biroz boshqacha: balandligi va siyoh to‘qligi, haqiqiy qo‘lda yozilgandek">
+                  <Field id="handLively">
+                    <Segmented ariaLabel="Yozuv" options={HAND_LIVELY_VALUES.map((v) => ({ value: v, label: HAND_LIVELY_LABELS[v] }))} value={ui.handLively} onChange={(v) => set("handLively", v as HandLivelyValue)} />
+                  </Field>
+                </Row>
+                <HandPreview ink={ui.handInk} paper={ui.handPaper} font={ui.handFont} lively={ui.handLively === "on"} />
               </>
             ) : null}
           </>

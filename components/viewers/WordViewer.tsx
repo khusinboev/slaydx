@@ -57,7 +57,7 @@ function sliceSpans(text: string, spans: CiteSpan[] | undefined, part: string): 
   for (const s of spans) {
     const a = Math.max(pos, from);
     const b = Math.min(pos + s.text.length, to);
-    if (b > a) out.push({ text: s.text.slice(a - pos, b - pos), ...(s.cite ? { cite: s.cite } : {}) });
+    if (b > a) out.push({ text: s.text.slice(a - pos, b - pos), ...(s.cite ? { cite: s.cite } : {}), ...(s.j ? { j: s.j } : {}) });
     pos += s.text.length;
   }
   return out;

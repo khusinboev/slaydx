@@ -61,6 +61,10 @@ import {
   handGeometry,
   handSegments,
   handTitleSegments,
+  handToneHex,
+  handWordJitter,
+  handWordPieces,
+  type HandWordJitter,
   HAND_FONTS,
   type HandGeometry,
   type HandStyle,
@@ -77,7 +81,7 @@ function fontFileBytes(file: string): Buffer | null {
   return null;
 }
 
-type RunExtra = { size?: number; underline?: boolean; italics?: boolean; /** Muqova sarlavhasi: kalligrafik yuz (bor bo'lsa). */ title?: boolean };
+type RunExtra = { size?: number; underline?: boolean; italics?: boolean; /** Muqova sarlavhasi: kalligrafik yuz (bor bo'lsa). */ title?: boolean; /** «Jonli yozuv»: so'zning siljishi va siyoh to'qligi. */ jitter?: HandWordJitter };
 
 export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style: HandStyle }): Promise<Uint8Array> {
   const style = plan.style;
@@ -101,7 +105,9 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
           font: seg.face.family,
           size: Math.round((extra.size ?? size) * seg.face.scale),
           bold: false,
-          color: ink,
+          color: extra.jitter?.tonePct ? handToneHex(ink, extra.jitter.tonePct) : ink,
+          /* `w:position` — butun YARIM-PUNKT (ST_SignedHpsMeasure); `docx` turi UniversalMeasure so'raydi, lekin qiymatni o'zgartirmay yozadi. */
+          ...(extra.jitter?.dyHalfPt ? { position: String(extra.jitter.dyHalfPt) as never } : {}),
           ...(extra.italics ? { italics: true } : {}),
           ...(extra.underline ? { underline: { type: UnderlineType.SINGLE, color: ink } } : {}),
         }),
@@ -112,11 +118,17 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
     return r.length ? r : [new TextRun({ text: "", font: primary.family, size: extra.size ?? size, color: ink })];
   };
 
-  /** Iqtibosli matn — HAR bo'lak alohida `<w:t>` (ko'ruvchidagi `<span>` lar bilan juft). */
-  const spanRuns = (spans: { text: string }[]): TextRun[] =>
-    spans
-      .filter((s) => s.text.length)
-      .flatMap((s) => runs(`${/^\s/.test(s.text) ? " " : ""}${cleanText(s.text)}${/\s$/.test(s.text) ? " " : ""}`));
+  /**
+   * Iqtibosli matn — HAR bo'lak alohida `<w:t>` (ko'ruvchidagi `<span>` lar bilan juft).
+   * Jonli yozuvda har SO'Z o'z siljishi/to'qligi bilan alohida run (`handWordJitter`:
+   * ko'ruvchi bilan bir xil qoida, paragraf boshidan sanaladi).
+   */
+  const spanRuns = (spans: { text: string }[]): TextRun[] => {
+    const parts = spans.filter((s) => s.text.length).map((s) => `${/^\s/.test(s.text) ? " " : ""}${cleanText(s.text)}${/\s$/.test(s.text) ? " " : ""}`);
+    if (!style.lively) return parts.flatMap((t) => runs(t));
+    let i = 0;
+    return parts.flatMap((t) => handWordPieces(t).flatMap((w) => runs(w, { jitter: handWordJitter(i++, w) })));
+  };
 
   /** Bo'shliq — qator OLDIDA/KEYIN faqat butun qator soni. */
   const lines = (n: number) => Math.round(n * pitch);

@@ -30,13 +30,16 @@ import {
   handSegments,
   handTitleSegments,
   handStyleOf,
+  handToneHex,
+  handWordJitter,
+  handWordPieces,
   handText,
   normalizeHand,
   twToMm,
   type WorkHand,
 } from "../lib/generation/work/handwriting.ts";
 import { HAND_REQUIRED_ALL, HAND_REQUIRED_TEXT } from "../lib/generation/work/handwriting-coverage.ts";
-import { fontCodepoints, fontMetrics } from "../lib/generation/work/font-cmap.ts";
+import { fontCodepoints, fontMetrics, fontTableTags } from "../lib/generation/work/font-cmap.ts";
 import { paperPng, PAPER_PX } from "../lib/generation/work/paper-png.ts";
 import type { AcademicDoc, Figure, Reference } from "../lib/generation/types.ts";
 import type { LlmRole } from "../lib/generation/llm-roles.ts";
@@ -75,6 +78,13 @@ test("shrift qamrovi: har belgi o'z yuzida bor; yuz yopmaydigan belgi FAQAT fall
       for (const ch of HAND_REQUIRED_TEXT[group]) assert.equal(spec.fallback[ch.codePointAt(0)!], undefined, `${spec.label}: ${group} «${ch}» fallback'ga tushmasligi kerak`);
     }
   }
+});
+
+test("shrift fayllari STATIK (o'zgaruvchan emas): LibreOffice PDF eksporti `fvar` shriftni buzadi (matn tushib qoladi, harflar oralig'i yoriladi)", () => {
+  for (const id of HAND_FONT_IDS) {
+    for (const f of handFaces(id)) assert.ok(!fontTableTags(fontBytes(f.file)).includes("fvar"), `${f.file}: o'zgaruvchan shrift — statik Regular nusxa kerak (fonttools varLib.instancer wght=400)`);
+  }
+  assert.ok(!fontTableTags(fontBytes(HAND_FONTS.school.title!.file)).includes("fvar"));
 });
 
 test("shrift o'lchamlari (`hhea`) reyestrdagi qiymatlarga teng — ko'ruvchi asosi shundan hisoblanadi", () => {
@@ -139,6 +149,23 @@ test("DOCX muqovasi: sarlavha qatori Great Vibes (embed ham), matn Playwrite; ko
   assert.equal(embedded.length, 4, `4 yuz joylanadi: ${embedded.join(", ")}`);
   assert.equal(handCssVars(handStyleOf({ ink: "blue", paper: "lined", font: "school" }))["--hand-title-family"], '"SlaydX Title Maktab", "SlaydX Maktab"');
   assert.equal(handCssVars(handStyleOf({ ink: "blue", paper: "lined", font: "caveat" }))["--hand-title-family"], undefined);
+});
+
+test("jonli yozuv: deterministik, chegaralangan (±1 pt, ≤16 % oqarish), birlashtirilsa matn tiklanadi; `lively` faqat yoqilganda modelda", () => {
+  for (let i = 0; i < 200; i++) {
+    const a = handWordJitter(i, "salom");
+    assert.deepEqual(a, handWordJitter(i, "salom "), "oxiridagi bo'shliq ta'sir qilmaydi");
+    assert.ok(Math.abs(a.dyHalfPt) <= 2 && Number.isInteger(a.dyHalfPt) && a.tonePct >= 0 && a.tonePct <= 16);
+  }
+  const spread = new Set(Array.from({ length: 200 }, (_, i) => handWordJitter(i, "so'z").dyHalfPt));
+  assert.ok(spread.size >= 4, "siljishlar xilma-xil");
+  const text = "  Mustaqil  ish — qo‘lyozma\n namuna ";
+  assert.equal(handWordPieces(text).join(""), text);
+  assert.equal(handToneHex("1B3AA6", 0), "1B3AA6");
+  assert.equal(handToneHex("1B3AA6", 100), "FFFFFF");
+  assert.deepEqual(normalizeHand({ lively: "on" }), { ink: "blue", paper: "lined", font: "school", lively: true });
+  assert.deepEqual(normalizeHand({ lively: "off" }), { ink: "blue", paper: "lined", font: "school" });
+  assert.deepEqual(normalizeHand({ lively: true }).lively, true);
 });
 
 test("shrift fayllari va OFL litsenziyalari repoda; ko'ruvchi URL i fayl nomiga mos; globals.css @font-face lar `handFontFaceCss` bilan bir xil", () => {
