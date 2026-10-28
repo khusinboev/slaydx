@@ -45,7 +45,7 @@ import {
 } from "../lib/generation/work/handwriting.ts";
 import { HAND_REQUIRED_ALL, HAND_REQUIRED_TEXT } from "../lib/generation/work/handwriting-coverage.ts";
 import { fontCodepoints, fontMetrics, fontTableTags } from "../lib/generation/work/font-cmap.ts";
-import { paperPng, PAPER_PX } from "../lib/generation/work/paper-png.ts";
+import { paperPng, paperPx, PAPER_PX } from "../lib/generation/work/paper-png.ts";
 import type { AcademicDoc, Figure, Reference } from "../lib/generation/types.ts";
 import type { LlmRole } from "../lib/generation/llm-roles.ts";
 
@@ -624,6 +624,39 @@ test("varaq PNG: A4 254 dpi, chiziqlar MATN ASOSIGA tushadi (pitch oralig'ida), 
     assert.equal(vertical, paper === "grid", `${paper}: vertikal katak chizig'i`);
   }
   assert.notEqual(paperPng("lined", "badscript"), paperPng("grid", "badscript"));
+});
+
+test("paper PNG layouts: A5 page, margin-line side by page parity, two-up A4 landscape sheet with two pages, blank/print have nothing to draw", () => {
+  const a5 = { format: "a5", margin: "alternate", cells: 1 } as const;
+  const g = handGeometry("grid", "school", a5);
+  const odd = decodePng(paperPng("grid", "school", a5, 0));
+  const even = decodePng(paperPng("grid", "school", a5, 1));
+  assert.deepEqual([odd.w, odd.h], [1485, 2100]);
+  assert.deepEqual(paperPx(g), { w: 1485, h: 2100 });
+  assert.equal(odd.rows[5]![200], 2, "odd page: margin line 20 mm from the left");
+  assert.equal(even.rows[5]![1485 - 200 - 4], 2, "even page: margin line 20 mm from the right");
+  assert.notEqual(even.rows[5]![200], 2, "even page: nothing at the left");
+  // 1-cell rows: a horizontal ruling under EVERY text row (not every other one), on the 5 mm grid.
+  const mid = 700;
+  for (let k = 0; k < 20; k++) {
+    const y = Math.round((g.docxRuleY0Mm + k * twToMm(g.pitchTw)) * 10);
+    assert.equal(odd.rows[y]![mid], 1, `row ${k} ruling at ${y}`);
+  }
+  // Two-up: A4 landscape, both pages drawn, verticals stay inside their page.
+  const two = { format: "a5x2", margin: "alternate", cells: 1 } as const;
+  const sheet = decodePng(paperPng("grid", "school", two));
+  assert.deepEqual([sheet.w, sheet.h], [2970, 2100]);
+  assert.equal(sheet.rows[5]![200], 2, "left page: line at its left edge");
+  assert.equal(sheet.rows[5]![1485 + 1485 - 200 - 4], 2, "right page: line at the sheet's right edge");
+  assert.notEqual(sheet.rows[5]![1485 + 200], 2);
+  const plainSheet = decodePng(paperPng("lined", "school", { format: "a5x2" }));
+  assert.equal(plainSheet.rows[5]![200], 2);
+  assert.equal(plainSheet.rows[5]![1485 + 200], 2, "margin: left → each page has its own left line");
+  // Cached by layout; different layouts differ; unruled paper has no PNG.
+  assert.equal(paperPng("grid", "school", two), paperPng("grid", "school", two));
+  assert.notEqual(paperPng("grid", "school", two), paperPng("grid", "school", { ...two, margin: "none" }));
+  assert.throws(() => paperPng("blank", "school"), /no ruling/);
+  assert.throws(() => paperPng("print", "school"), /no ruling/);
 });
 
 test("ko'ruvchi o'zgaruvchilari: siyoh/qog'oz/shrift/qator oralig'i handGeometry bilan bir xil manbadan", () => {
