@@ -716,6 +716,28 @@ export const TOOLS: ToolConfig[] = [
     fields: [],
   },
   {
+    id: "konspekt",
+    slug: "konspekt",
+    title: "Konspekt",
+    pageTitle: "Konspekt",
+    group: "talaba",
+    icon: "notebook-pen",
+    tc: "2 132 199",
+    description: "Mavzu yoki fayl asosida daftarga yoziladigan zich konspekt",
+    submitLabel: "Konspektni yaratish",
+    creatingLabel: "Konspekt yozilmoqda...",
+    createdLabel: "konspekt tayyor!",
+    topicLegend: "Konspekt mavzusini kiriting",
+    topicPlaceholder: "O'zbekistonda davlatchilik tarixi",
+    modes: TOPIC_FILE_MODES,
+    extraOptional: true,
+    output: "docx",
+    custom: "konspekt",
+    basePrice: 4000,
+    // `KonspektComposer` draws its own form (topic or file, language, sheets, handwriting).
+    fields: [],
+  },
+  {
     id: "lesson-plan",
     slug: "lesson-plan",
     title: "Dars rejasi",
@@ -1511,6 +1533,7 @@ export function defaultPages(toolId: ToolId): string {
   if (toolId === "article") return "3-5";
   if (toolId === "thesis") return "1-2";
   if (toolId === "coursework") return "20-25";
+  if (toolId === "konspekt") return "10-20";
   return "10-15";
 }
 
@@ -1633,6 +1656,11 @@ export function basePriceFor(tool: ToolConfig, values: FormValues): number {
         "25-30": 6000,
       }[pages] ?? 3000
     );
+  }
+  if (tool.id === "konspekt") {
+    /* Notebook sheets, three tiers (owner decision 2026-10-28). */
+    const pages = workPagesFor(tool.id, values);
+    return { "5-10": 3000, "10-20": 4000, "20-30": 5000 }[pages] ?? 4000;
   }
   if (tool.id === "coursework") {
     const pages = workPagesFor(tool.id, values);

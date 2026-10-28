@@ -29,53 +29,23 @@ import {
 import { workInputFromValues, encodeWorkValues, parseWorkOutline, maxVisualsFor, WORK_INPUT_LIMITS, type WorkInput } from "@/lib/generation/work/input";
 import {
   HAND_DEFAULTS,
-  HAND_COVERS,
   HAND_COVER_DEFAULT,
-  HAND_COVER_LABELS,
-  HAND_CELLS,
   HAND_CELLS_DEFAULT,
-  HAND_CELLS_LABELS,
-  HAND_FONT_LIST,
-  HAND_FORMATS,
   HAND_FORMAT_DEFAULT,
-  HAND_FORMAT_LABELS,
-  HAND_MARGINS,
   HAND_MARGIN_DEFAULT,
-  HAND_MARGIN_LABELS,
-  HAND_PAPER_SPECS,
-  HAND_HEADINGS,
   HAND_HEADINGS_DEFAULT,
-  HAND_HEADINGS_LABELS,
-  HAND_UNDERLINES,
   HAND_UNDERLINE_DEFAULT,
-  HAND_UNDERLINE_LABELS,
   HAND_LIVELY_DEFAULT,
-  HAND_LIVELY_LABELS,
-  HAND_LIVELY_VALUES,
-  HAND_FONTS,
-  HAND_INKS,
-  HAND_INK_LABELS,
-  HAND_PAPERS,
-  HAND_PAPER_LABELS,
   WORK_VIEWS,
   WORK_VIEW_LABELS,
-  handBaselinePx,
-  handCssVars,
-  handGeometry,
-  handJitterCss,
-  handWordJitter,
-  handWordPieces,
   handCapsOf,
-  handStyleOf,
   restrictHand,
-  type HandParamId,
   normalizeHand,
   type HandFontId,
   type HandCellsValue,
   type HandCoverValue,
   type HandFormatValue,
   type HandMarginValue,
-  type WorkHand,
   type HandHeadingsValue,
   type HandInk,
   type HandUnderlineValue,
@@ -103,6 +73,7 @@ import {
 } from "./shared";
 import { ToolChrome, TopicChips } from "./ToolChrome";
 import { useFormDraft } from "./useFormDraft";
+import { HandRows, type HandForm } from "./HandRows";
 import { runGeneration } from "./runGeneration";
 import { formatSom } from "@/lib/format";
 
@@ -251,43 +222,19 @@ function SubHead({ children }: { children: ReactNode }) {
   return <h3 className="text-muted-foreground mt-4 mb-1 text-[13px] font-semibold tracking-wide uppercase first:mt-1">{children}</h3>;
 }
 
-/** Qo'lyozma tanlovining kichik namunasi — ko'ruvchi bilan BIR XIL o'zgaruvchi va chiziq qoidasi (`.hand-preview`). */
-function HandPreview({ hand }: { hand: WorkHand }) {
-  const style = handStyleOf(hand);
-  const vars = handCssVars(style);
-  const g = handGeometry(hand.paper, hand.font, hand);
-  const cell = Number.parseFloat(vars["--hand-cell"]!);
-  const phase = handBaselinePx(HAND_FONTS[hand.font], g.sizePt, g.pitchPx) % cell;
-  const lively = Boolean(hand.lively);
-  return (
-    <div
-      className={`hand-preview hand-preview--${hand.paper}`}
-      data-hand-preview
-      aria-hidden
-      style={{ ...vars, "--hand-phase": `${phase}px`, "--hand-vphase": "0px" } as React.CSSProperties}
-    >
-      <PreviewLine text="Mustaqil ish — qo‘lyozma namuna" lively={lively} />
-      <PreviewLine text="O‘zbekiston, ўқув, 2026" lively={lively} />
-    </div>
-  );
-}
-
-/** Namuna qatori: jonli rejimda so'zlar ko'ruvchidagi qoida bilan siljiydi (`handWordJitter`). */
-function PreviewLine({ text, lively }: { text: string; lively: boolean }) {
-  if (!lively) return <div>{text}</div>;
-  return (
-    <div>
-      {handWordPieces(text).map((w, i) => {
-        const j = handWordJitter(i, w);
-        return (
-          <span key={i} style={handJitterCss({ dy: j.dyHalfPt, t: j.tonePct })}>
-            {w}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
+/** `HandForm` key → this form's state key. */
+const HAND_UI_KEY: Record<keyof HandForm, keyof Ui> = {
+  ink: "handInk",
+  paper: "handPaper",
+  font: "handFont",
+  lively: "handLively",
+  headings: "handHeadings",
+  cover: "handCover",
+  underline: "handUnderline",
+  format: "handFormat",
+  margin: "handMargin",
+  cells: "handCells",
+};
 
 function emptyUi(profile: UserProfile, tool: ToolConfig, genre: WorkGenreId): Ui {
   const g = WORK_GENRES[genre];
@@ -454,10 +401,20 @@ export function WorkComposer({
   const genre: WorkGenreId = workGenreOfTool(tool.id) ?? "coursework";
   /* Handwriting parameters this service exposes (`HAND_SERVICE_CAPS`); rows that depend on another choice use the EFFECTIVE value. */
   const handCaps = handCapsOf(genre);
-  const has = (id: HandParamId) => handCaps?.has(id) ?? false;
   const [ui, setUi] = useState<Ui>(() => emptyUi(profile, tool, genre));
-  const effPaper = has("paper") ? ui.handPaper : HAND_DEFAULTS.paper;
-  const effFont = has("font") ? ui.handFont : HAND_DEFAULTS.font;
+  const handForm: HandForm = {
+    ink: ui.handInk,
+    paper: ui.handPaper,
+    font: ui.handFont,
+    lively: ui.handLively,
+    headings: ui.handHeadings,
+    cover: ui.handCover,
+    underline: ui.handUnderline,
+    format: ui.handFormat,
+    margin: ui.handMargin,
+    cells: ui.handCells,
+  };
+  const setHand = <K extends keyof HandForm>(k: K, v: HandForm[K]) => setUi((x) => ({ ...x, [HAND_UI_KEY[k]]: v }));
   const [loading, setLoading] = useState(false);
   const [fileBusy, setFileBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -641,79 +598,7 @@ export function WorkComposer({
               </Field>
             </Row>
             {ui.workView === "hand" ? (
-              <>
-                {has("ink") ? (
-                  <Row label="Siyoh rangi">
-                    <Field id="handInk">
-                      <Segmented ariaLabel="Siyoh rangi" options={HAND_INKS.map((v) => ({ value: v, label: HAND_INK_LABELS[v] }))} value={ui.handInk} onChange={(v) => set("handInk", v as HandInk)} />
-                    </Field>
-                  </Row>
-                ) : null}
-                {has("paper") ? (
-                  <Row label="Qog‘oz">
-                    <Field id="handPaper">
-                      <Segmented ariaLabel="Qog‘oz" options={HAND_PAPERS.map((v) => ({ value: v, label: HAND_PAPER_LABELS[v] }))} value={ui.handPaper} onChange={(v) => set("handPaper", v as HandPaper)} />
-                    </Field>
-                  </Row>
-                ) : null}
-                {has("format") ? (
-                  <Row label="Format" hint="A5 × 2 — bitta A4 yuziga ikkita A5 sahifa; 100 % o‘lchamda chop eting, katak va qatorlar o‘zgarmaydi" wide>
-                    <Field id="handFormat">
-                      <Segmented ariaLabel="Format" options={HAND_FORMATS.map((v) => ({ value: v, label: HAND_FORMAT_LABELS[v] }))} value={ui.handFormat} onChange={(v) => set("handFormat", v as HandFormatValue)} />
-                    </Field>
-                  </Row>
-                ) : null}
-                {has("cells") && effPaper !== "lined" ? (
-                  <Row label="Qator oralig‘i" hint="Katakli daftarda bir qator necha katak">
-                    <Field id="handCells">
-                      <Segmented ariaLabel="Qator oralig‘i" options={HAND_CELLS.map((v) => ({ value: v, label: HAND_CELLS_LABELS[v] }))} value={ui.handCells} onChange={(v) => set("handCells", v as HandCellsValue)} />
-                    </Field>
-                  </Row>
-                ) : null}
-                {has("margin") && HAND_PAPER_SPECS[effPaper].ruled ? (
-                  <Row label="Qizil chiziq" hint="Navbatma-navbat — toq varaqda chapda, juft varaqda o‘ngda">
-                    <Field id="handMargin">
-                      <Segmented ariaLabel="Qizil chiziq" options={HAND_MARGINS.map((v) => ({ value: v, label: HAND_MARGIN_LABELS[v] }))} value={ui.handMargin} onChange={(v) => set("handMargin", v as HandMarginValue)} />
-                    </Field>
-                  </Row>
-                ) : null}
-                {has("font") ? (
-                  <Row label="Shrift">
-                    <Field id="handFont">
-                      <Segmented ariaLabel="Shrift" options={HAND_FONT_LIST.map((f) => ({ value: f.id, label: f.label }))} value={ui.handFont} onChange={(v) => set("handFont", v as HandFontId)} />
-                    </Field>
-                  </Row>
-                ) : null}
-                {has("lively") ? (
-                  <Row label="Yozuv" hint="Jonli — har so‘z biroz boshqacha: balandligi va siyoh to‘qligi, haqiqiy qo‘lda yozilgandek">
-                    <Field id="handLively">
-                      <Segmented ariaLabel="Yozuv" options={HAND_LIVELY_VALUES.map((v) => ({ value: v, label: HAND_LIVELY_LABELS[v] }))} value={ui.handLively} onChange={(v) => set("handLively", v as HandLivelyValue)} />
-                    </Field>
-                  </Row>
-                ) : null}
-                {has("headings") ? (
-                  <Row label="Sarlavhalar" hint="Oddiy — «Kirish», «1-bob. …» (daftarda shunday yoziladi); BOSH HARFLI — «KIRISH», «1-BOB. …»">
-                    <Field id="handHeadings">
-                      <Segmented ariaLabel="Sarlavhalar" options={HAND_HEADINGS.map((v) => ({ value: v, label: HAND_HEADINGS_LABELS[v] }))} value={ui.handHeadings} onChange={(v) => set("handHeadings", v as HandHeadingsValue)} />
-                    </Field>
-                  </Row>
-                ) : null}
-                {has("underline") ? (
-                  <Row label="Sarlavha tagi chizig‘i">
-                    <Field id="handUnderline">
-                      <Segmented ariaLabel="Sarlavha tagi chizig‘i" options={HAND_UNDERLINES.map((v) => ({ value: v, label: HAND_UNDERLINE_LABELS[v] }))} value={ui.handUnderline} onChange={(v) => set("handUnderline", v as HandUnderlineValue)} />
-                    </Field>
-                  </Row>
-                ) : null}
-                {has("cover") && HAND_FONTS[effFont].title ? (
-                  <Row label="Muqova sarlavhasi" hint="Kalligrafik — «Mustaqil ish» bezakli yozuvda">
-                    <Field id="handCover">
-                      <Segmented ariaLabel="Muqova sarlavhasi" options={HAND_COVERS.map((v) => ({ value: v, label: HAND_COVER_LABELS[v] }))} value={ui.handCover} onChange={(v) => set("handCover", v as HandCoverValue)} />
-                    </Field>
-                  </Row>
-                ) : null}
-                <HandPreview hand={restrictHand(normalizeHand({ ink: ui.handInk, paper: ui.handPaper, font: ui.handFont, lively: ui.handLively, headings: ui.handHeadings, cover: ui.handCover, underline: ui.handUnderline, format: ui.handFormat, margin: ui.handMargin, cells: ui.handCells }), handCaps)} />
-              </>
+              <HandRows caps={handCaps} value={handForm} onChange={(k, v) => setHand(k, v)} />
             ) : null}
           </>
         ) : null}

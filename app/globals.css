@@ -695,6 +695,14 @@ button {
   margin: 0 0 0 0.5in;
   gap: 0.45em;
 }
+/* A notebook list marker is a handwritten dash, not a black dot (the DOCX numbering uses "–" too); the marker is not text, so the text parity is unchanged. */
+.word-hand .word-li > span:first-child {
+  font-size: 0;
+}
+.word-hand .word-li > span:first-child::before {
+  content: "–";
+  font-size: var(--hand-size);
+}
 .word-hand .word-quote {
   margin: 0 0 0 var(--hand-pitch);
   font-style: normal;

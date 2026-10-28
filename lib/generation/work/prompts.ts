@@ -133,6 +133,7 @@ const SHAPE_HINT: Record<WorkKind["shape"], string> = {
   "review-experiment-results": "chapter 1 = literature and normative basis, chapter 2 = the procedure (calculation, experiment or case analysis), chapter 3 = results and their discussion",
   "theory-analysis-practice": "part 1 = theory, part 2 = analysis of the chosen case, part 3 = the student's own practical result (example, calculation, recommendations)",
   sections: "independent SECTIONS of the topic (not chapters): each covers one aspect and can be read on its own",
+  notes: "short sub-headed blocks of notes in the order of the source (written by the konspekt engine, not by this planner)",
 };
 
 /** Kirish elementlari ro'yxati — prompt va hisobot bitta manbadan. */

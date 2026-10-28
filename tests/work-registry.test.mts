@@ -24,8 +24,10 @@ import { TOOL_BY_ID, priceFor } from "../lib/tools.ts";
  * kirish 10–15 %, xulosa 2–4 bet) shu yerda qulflanadi.
  */
 
-test("3 janr, har biri o'z turlari bilan; janr vosita id siga bog'langan", () => {
-  assert.deepEqual([...WORK_GENRE_IDS], ["coursework", "referat", "independent"]);
+test("4 genres, each with its kinds; a genre is bound to its tool id", () => {
+  assert.deepEqual([...WORK_GENRE_IDS], ["coursework", "referat", "independent", "konspekt"]);
+  assert.deepEqual(workKindsOf("konspekt").map((k) => k.id), ["notes"]);
+  assert.equal(workGenreOfTool("konspekt"), "konspekt");
   assert.deepEqual(workKindsOf("coursework").map((k) => k.id), ["theory", "applied", "project"]);
   assert.deepEqual(workKindsOf("referat").map((k) => k.id), ["informative", "analytic", "evaluative", "report"]);
   assert.deepEqual(workKindsOf("independent").map((k) => k.id), ["written"]);
@@ -41,7 +43,8 @@ test("kirish elementlari: kurs ishi 7, referat 3, mustaqil 4 — hammasi ma'lum 
   assert.deepEqual(COURSEWORK_INTRO_PARTS, ["relevance", "aim", "tasks", "object", "subject", "methods", "structure"]);
   assert.equal(REFERAT_INTRO_PARTS.length, 3);
   assert.equal(INDEPENDENT_INTRO_PARTS.length, 4);
-  for (const g of WORK_GENRE_IDS)
+  assert.deepEqual(workKindOf("konspekt", "notes").introParts, [], "konspekt has no introduction");
+  for (const g of WORK_GENRE_IDS.filter((x) => x !== "konspekt"))
     for (const k of workKindsOf(g)) {
       assert.ok(k.introParts.length >= 3, `${k.id}: kirish elementlari kam`);
       for (const p of k.introParts) assert.ok(WORK_INTRO_PART_IDS.includes(p), `${k.id}: noma'lum element ${p}`);
@@ -51,7 +54,8 @@ test("kirish elementlari: kurs ishi 7, referat 3, mustaqil 4 — hammasi ma'lum 
 });
 
 test("hajm/ulush standartlari: kirish 10–15 %, xulosa kurs 2–4 bet / referat ≈1, refsMin 15/5+/8", () => {
-  for (const g of WORK_GENRE_IDS)
+  /* Konspekt has no introduction/conclusion/references by design (shape "notes"). */
+  for (const g of WORK_GENRE_IDS.filter((x) => x !== "konspekt"))
     for (const k of workKindsOf(g)) {
       assert.deepEqual(k.introShare, [0.1, 0.15], `${k.id}: kirish ulushi standartdan chetda`);
       assert.ok(k.conclusionPages[0] > 0 && k.conclusionPages[1] >= k.conclusionPages[0], `${k.id}: xulosa beti`);

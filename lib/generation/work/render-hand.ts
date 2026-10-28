@@ -35,6 +35,7 @@ import {
   HeightRule,
   HorizontalPositionRelativeFrom,
   ImageRun,
+  LevelFormat,
   LineRuleType,
   Packer,
   PageNumber,
@@ -86,6 +87,9 @@ function fontFileBytes(file: string): Buffer | null {
   }
   return null;
 }
+
+/** Numbering reference of the list marker: a handwritten dash in the ink colour, not Word's black dot. */
+const DASH_LIST = "hand-dash";
 
 type RunExtra = { size?: number; underline?: boolean; italics?: boolean; /** Muqova sarlavhasi: kalligrafik yuz (bor bo'lsa). */ title?: boolean; /** «Jonli yozuv»: so'zning siljishi va siyoh to'qligi. */ jitter?: HandWordJitter };
 
@@ -164,7 +168,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
       /* Two-up: a "new page" is the next A5 page = the next COLUMN (a page break would start a new sheet). */
       ...(o.pageBreakBefore && !G.twoUp ? { pageBreakBefore: true } : {}),
       ...(o.heading ? { heading: o.heading } : {}),
-      ...(o.bullet ? { bullet: { level: 0 } } : {}),
+      ...(o.bullet ? { numbering: { reference: DASH_LIST, level: 0 } } : {}),
       ...(o.tabs ? { tabStops: o.tabs } : {}),
       children: o.pageBreakBefore && G.twoUp ? [new ColumnBreak(), ...children.flat()] : children.flat(),
     });
@@ -409,6 +413,22 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
       },
     },
     ...(embedded.length ? { fonts: embedded } : {}),
+    numbering: {
+      config: [
+        {
+          reference: DASH_LIST,
+          levels: [
+            {
+              level: 0,
+              format: LevelFormat.BULLET,
+              text: "–",
+              alignment: AlignmentType.LEFT,
+              style: { run: { font: primary.family, size, color: ink }, paragraph: { indent: { left: lines(1), hanging: lines(1) / 2 } } },
+            },
+          ],
+        },
+      ],
+    },
     sections: [
       {
         properties: {

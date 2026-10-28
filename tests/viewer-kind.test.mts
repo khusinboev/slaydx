@@ -27,11 +27,12 @@ test("maxsus (custom) vositalar umumiy Word ko'ruvchisiga tushmaydi", () => {
      * chiqish hali ham oddiy AcademicDoc/DOCX — «ko'rdim = oldim»
      * bo'yicha UMUMIY Word ko'ruvchisida ochiladi (CLAUDE.md: `doc.work`
      * shu bitta yagona ko'ruvchining USTIGA qo'shiladi, alohida ko'ruvchi
-     * emas). Shuning uchun `custom` mavjudligi bu yerda YETARLI belgi
+     * emas). `konspekt` is the same: its own form, a `doc.work` (genre
+     * `konspekt`) rendered by the one Word viewer. Shuning uchun `custom` mavjudligi bu yerda YETARLI belgi
      * emas — faqat haqiqatan BOSHQA shaklga chiqadigan vositalar (slayd,
      * rezyume, rasm, tarjima, maqola) tekshiriladi.
      */
-    if (t.custom && t.custom !== "work") assert.notEqual(viewerKind(t.id), "academic", `${t.id}: custom vosita academic ko'ruvchida`);
+    if (t.custom && t.custom !== "work" && t.custom !== "konspekt") assert.notEqual(viewerKind(t.id), "academic", `${t.id}: custom vosita academic ko'ruvchida`);
   }
 });
 

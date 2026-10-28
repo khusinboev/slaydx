@@ -914,7 +914,7 @@ async function defaultBuildFigures(): Promise<((f: Figure[], o: { lang: string }
 }
 
 /** Yuklangan fayldan matn — tarjima ekstraktori orqali (bo'sh bo'lsa ""). */
-async function sourceTextOf(source: TranslationSource): Promise<string> {
+export async function sourceTextOf(source: TranslationSource): Promise<string> {
   try {
     const { extractSegments } = await import("../translate/index");
     const ex = await extractSegments(source.kind, source.bytes);

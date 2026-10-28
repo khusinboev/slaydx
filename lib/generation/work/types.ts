@@ -26,7 +26,7 @@ import type { WorkHand } from "./handwriting";
 
 /* ────────────────────────── janr va tur ────────────────────────── */
 
-export const WORK_GENRE_IDS = ["coursework", "referat", "independent"] as const;
+export const WORK_GENRE_IDS = ["coursework", "referat", "independent", "konspekt"] as const;
 export type WorkGenreId = (typeof WORK_GENRE_IDS)[number];
 
 /**
@@ -36,9 +36,10 @@ export type WorkGenreId = (typeof WORK_GENRE_IDS)[number];
  *   referat     — `informative` (manba mazmunining qisqa bayoni),
  *                 `analytic` (tahliliy-taqqoslovchi), `evaluative`
  *                 (baholovchi), `report` (DOKLAD — 3 qism, sxema/jadval);
- *   independent — `written` (yozma; taqdimot/buklet/test — keyingi sprint).
+ *   independent — `written` (yozma; taqdimot/buklet/test — keyingi sprint);
+ *   konspekt    — `notes` (lecture notes: dense information, no cover/contents/references).
  */
-export const WORK_KIND_IDS = ["theory", "applied", "project", "informative", "analytic", "evaluative", "report", "written"] as const;
+export const WORK_KIND_IDS = ["theory", "applied", "project", "informative", "analytic", "evaluative", "report", "written", "notes"] as const;
 export type WorkKindId = (typeof WORK_KIND_IDS)[number];
 
 /** Fan profili — hajm/tuzilma emas, YOZISH va MANBA qoidalarini o'zgartiradi. */
@@ -196,5 +197,6 @@ export function workGenreOfTool(toolId: string): WorkGenreId | null {
   if (toolId === "coursework") return "coursework";
   if (toolId === "referat") return "referat";
   if (toolId === "mustaqil-ish") return "independent";
+  if (toolId === "konspekt") return "konspekt";
   return null;
 }

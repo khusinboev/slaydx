@@ -770,7 +770,7 @@ async function buildArtifactInner(
     }
   }
 
-  const bytes = await renderDocx(academic);
+  let bytes = await renderDocx(academic);
 
   /**
    * Renderlangan sahifa soni darvozasi.
@@ -812,6 +812,40 @@ async function buildArtifactInner(
         if (e instanceof Error && e.message.startsWith("Hujjat sahifa soni")) throw e;
         console.warn("[gen] page gate: PDF o‘qib bo‘lmadi", e);
       }
+    }
+  }
+
+  /*
+   * Konspekt: the volume is paid per TIER of notebook pages. The word plan is an estimate (rows × characters), so
+   * the rendered file is measured (DOCX → PDF → page count): over the tier's upper bound the notes are cut from the
+   * end and re-rendered (≤ 3 passes); far below its lower bound the job fails and the credits are refunded.
+   */
+  if (tool.id === "konspekt" && llmDoc && academic.work && pdfAvailable() && remainingMs(deadline) > 30_000) {
+    const { pagesRange } = await import("./work/registry");
+    const { konspektWords, trimKonspektDoc } = await import("./konspekt");
+    const [minP, maxP] = pagesRange(meta.pagesLabel ?? "10-20");
+    const perSheet = academic.work.hand?.format === "a5x2" ? 2 : 1;
+    for (let pass = 0; pass < 3 && remainingMs(deadline) > 20_000; pass++) {
+      const pdf = await toPdf(bytes, `${meta.fileNameHint}.docx`).catch(() => null);
+      if (!pdf) break;
+      let sheets: number;
+      try {
+        const { getDocumentProxy } = await import("unpdf");
+        sheets = (await getDocumentProxy(new Uint8Array(pdf))).numPages;
+      } catch {
+        break;
+      }
+      const pages = sheets * perSheet;
+      if (pages <= maxP) {
+        if (pages < Math.floor(minP * 0.8)) {
+          console.warn(`[gen] konspekt fit: ${pages}/${minP}-${maxP} pages (rendered)`);
+          throw new Error(`Konspekt hajmi yetarli chiqmadi (renderlangan ${pages} sahifa, kerak: ${minP}–${maxP}). Kredit qaytariladi — qayta urinib ko‘ring.`);
+        }
+        break;
+      }
+      console.warn(`[gen] konspekt fit: ${pages} pages > ${maxP}, trimming (pass ${pass + 1})`);
+      trimKonspektDoc(academic, Math.floor(konspektWords(academic) * (maxP / pages) * 0.97));
+      bytes = await renderDocx(academic);
     }
   }
 

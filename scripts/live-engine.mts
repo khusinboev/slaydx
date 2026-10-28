@@ -1472,6 +1472,35 @@ const CASES: Case[] = [
       },
     };
   }),
+  /* ── Konspekt (husnixat 2): topic mode in uz + ru; the render is two A5 pages per A4 sheet, so sheets ≈ pages / 2 ── */
+  ...(["konspekt", "konspekt-ru"] as const).map((name): Case => {
+    const values: FormValues =
+      name === "konspekt"
+        ? { topic: "Amir Temur davrida davlat boshqaruvi", language: "uz", pages: "5-10" }
+        : { topic: "Исторические корни идей независимости в Узбекистане", language: "ru", pages: "5-10", handPaper: "grid", handFormat: "a5x2", handCells: "1" };
+    return {
+      name,
+      tool: "konspekt",
+      budgetMs: 240_000,
+      values,
+      checks: (f, pages) => {
+        const w = f.doc.work;
+        const secs = f.doc.sections;
+        const words = secs.reduce((n, x) => n + x.blocks.filter((b) => b.kind === "p" || b.kind === "li").reduce((m, b) => m + b.text.split(/\s+/).length, 0), 0);
+        const joined = secs.map((x) => x.blocks.map((b) => ("text" in b ? b.text : "")).join(" ")).join(" ");
+        return [
+          ok("doc.work konspekt", w?.genre === "konspekt" && w.kind === "notes", w ? `${w.genre}/${w.kind}` : "yo'q"),
+          ok("sarlavha/mundarija/adabiyot yo'q", f.doc.titlePage === false && f.doc.toc === false && (w?.references.length ?? 1) === 0 && !secs.some((x) => /^(intro|conclusion)$/.test(x.id)), secs.map((x) => x.id).join(",")),
+          ok("bo'limlar ≥ 4", secs.length >= 4, `${secs.length} bo'lim: ${secs.map((x) => x.title).slice(0, 4).join(" | ")}`),
+          ok("hajm: so'z ≥ 55 % rejadan", words >= 0.55 * 7.5 * 150, `${words} so'z`),
+          ok("iqtibos/markdown belgisi yo'q", !/\[\d+\]|\*\*|^#|\[W\d+/m.test(joined), "toza matn"),
+          ok("renderlangan varaq (A4 albom ≈ sahifa / 2)", pages === null || (pages >= 2 && pages <= 8), `${pages ?? "—"} varaq`),
+          ok("qo'lyozma modeli", Boolean(w?.hand && w.hand.format === (name === "konspekt" ? "a5x2" : w.hand.format)), JSON.stringify(w?.hand)),
+          ok("cost.calls > 0", (f.cost?.calls ?? 0) > 0, f.cost ? `${f.cost.calls} chaqiruv, ${f.cost.provider}/${f.cost.model}` : "yo'q"),
+        ];
+      },
+    };
+  }),
   /*
    * ── O'qituvchi vositalari 2 (AUDIT-20 WP-F) — 7 jonli holat ──
    *

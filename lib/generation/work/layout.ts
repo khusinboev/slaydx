@@ -209,6 +209,8 @@ export function planWork(doc: AcademicDoc): WorkPlan {
   const L = plainHeads ? plainLabels(workLabels(language)) : workLabels(language);
   /** Referat — BOB emas, BO'LIM: «1. Nom», vizual raqami tekis. */
   const flat = kind.shape === "sections";
+  /** Konspekt: a title and unnumbered sub-headings, no page breaks between sections. */
+  const notes = kind.shape === "notes";
 
   /* ── manbalar: faqat `cited`, O'zbekiston tartibi, raqam qayta beriladi ── */
   const ordered = orderUzReferences(citedOnly(model.references ?? []));
@@ -326,11 +328,24 @@ export function planWork(doc: AcademicDoc): WorkPlan {
   const fcount: Record<number, { n: number }> = {};
   const counterFor = (ch: number) => (fcount[ch] ??= { n: 0 });
 
+  /* Konspekt starts with the topic as a centred title (it has no cover page). */
+  if (notes) {
+    const title = (model.title || doc.meta.topic || "").trim();
+    if (title) body.push({ k: "h1", text: title, title, sectionId: "", path: "work.title", head: "structural", pageBreak: false });
+  }
+
   doc.sections.forEach((s) => {
     const index = doc.sections.indexOf(s);
     const path = `sections.${index}`;
     if (isAppendixId(s.id)) {
       appendices.push(s);
+      return;
+    }
+    if (notes && isChapterHeadId(s.id)) {
+      const text = head.title(s.title || "");
+      sink.push({ k: "h2", text, title: s.title, number: "", sectionId: s.id, path: `${path}.title` });
+      pushHead({ text, level: 1 });
+      pushBlocks(s.blocks, path, 0, counterFor(0));
       return;
     }
     if (isChapterHeadId(s.id)) {
