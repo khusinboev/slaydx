@@ -573,6 +573,8 @@ export const HAND_SERVICE_CAPS: Record<string, readonly HandParamId[]> = {
   /* Independent work and referat are full documents (cover, headings, references): every parameter applies. */
   independent: HAND_PARAM_IDS,
   referat: HAND_PARAM_IDS,
+  /* Lecture notes have no cover, headings style or underline choices: the notebook itself is the point. */
+  konspekt: ["font", "ink", "lively", "paper", "format", "margin", "cells"],
 };
 
 /** Capability set of a service, or `null` when handwriting is not offered there. */

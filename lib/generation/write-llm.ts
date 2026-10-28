@@ -24,6 +24,7 @@ import { buildResumeDoc } from "./resume/write";
 import { buildArticleDoc, type ArticleBuildOpts } from "./article/engine";
 import { buildEssayDoc } from "./essay/engine";
 import { buildWorkDoc } from "./work/engine";
+import { buildKonspektDoc } from "./konspekt";
 import { buildTeacherDoc } from "./teacher/engine";
 import { TEACHER_TOOL_LIST } from "./teacher/types";
 import { buildGameDoc, type GameBuildOpts } from "./games/engine";
@@ -926,6 +927,17 @@ export async function writeWithLlm(
    * avto-sayqal). `WORK_ENGINE=0` — eski yozuvchi yo'li (favqulodda
    * qaytish); tezis maqola dvigatelida.
    */
+  /* Konspekt (lecture notes): its own light engine; no old path, `null` = job failed (credits refunded). */
+  if (meta.toolId === "konspekt") {
+    const built = await buildKonspektDoc(meta, values as FormValues, {
+      deadline: deadline ?? Date.now() + 300_000,
+      ...(extras.onStage ? { onStage: extras.onStage } : {}),
+      ...(extras.source ? { source: extras.source } : {}),
+    });
+    if (!built) return null;
+    extras.onCost?.(built.cost);
+    return built.doc;
+  }
   if (WORK_TOOLS.has(meta.toolId) && process.env.WORK_ENGINE !== "0") {
     const built = await buildWorkDoc(meta, values as FormValues, {
       deadline: deadline ?? Date.now() + 480_000,
