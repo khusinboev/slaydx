@@ -33,7 +33,7 @@ import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "../generation/image-models";
 import { ARTICLE_TYPES } from "../generation/article/types-registry";
 import { ESSAY_LIMITS } from "../generation/essay/types";
 import { PRO_SLIDE_DEFAULT, PRO_SLIDE_MAX, PRO_SLIDE_MIN, SLIDE_DEFAULT, SLIDE_INCLUDED, SLIDE_MAX, SLIDE_MIN } from "../generation/slide-params";
-import { COURSEWORK_PAGES, INDEPENDENT_PAGES, REFERAT_PAGES } from "../generation/work/registry";
+import { COURSEWORK_PAGES, INDEPENDENT_PAGES, KONSPEKT_PAGES, REFERAT_PAGES } from "../generation/work/registry";
 import type { FormValues, ToolGroup, ToolId } from "../types";
 
 /**
@@ -110,6 +110,7 @@ export const UNIT_OF: Record<ToolId, PricingUnit> = {
   coursework: "page",
   referat: "page",
   "mustaqil-ish": "page",
+  konspekt: "page",
   essay: "page",
   article: "page",
   thesis: "page",
@@ -218,6 +219,8 @@ export function ladderInputs(toolId: ToolId): LadderInput[] {
       return REFERAT_PAGES.map((p) => ({ label: `${p} bet`, values: { pages: p } }));
     case "mustaqil-ish":
       return INDEPENDENT_PAGES.map((p) => ({ label: `${p} bet`, values: { pages: p } }));
+    case "konspekt":
+      return KONSPEKT_PAGES.map((p) => ({ label: `${p} varaq`, values: { pages: p } }));
     case "essay": {
       const out: LadderInput[] = [];
       for (let n = ESSAY_LIMITS.pagesMin; n <= ESSAY_LIMITS.pagesMax; n++) {

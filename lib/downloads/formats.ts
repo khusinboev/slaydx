@@ -97,6 +97,7 @@ const TOOL_PLANS: Readonly<Record<ToolId, ToolPlan>> = {
   coursework: DOC,
   referat: DOC,
   "mustaqil-ish": DOC,
+  konspekt: DOC,
   essay: DOC,
   article: DOC,
   thesis: DOC,

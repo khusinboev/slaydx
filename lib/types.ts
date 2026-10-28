@@ -15,6 +15,8 @@ export type ToolId =
   | "glossary"
   | "keys"
   | "mustaqil-ish"
+  /** Lecture notes (konspekt) — `work/` genre `konspekt`, hand-written by default; own composer. */
+  | "konspekt"
   | "lesson-plan"
   /** Test yaratuvchi (AUDIT-20) — `teacher/` dvigateli, `custom: "teacher"`. */
   | "test"
@@ -139,7 +141,7 @@ export type ToolConfig = {
    * ko'radi.
    */
   output: "docx" | "pptx" | "png" | "mp3" | "mp4";
-  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "teacher" | "game" | "media" | "infographic" | "portrait" | "video";
+  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "konspekt" | "teacher" | "game" | "media" | "infographic" | "portrait" | "video";
   basePrice: number;
 };
 

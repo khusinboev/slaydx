@@ -16,6 +16,7 @@ import {
   Layers,
   ListChecks,
   Newspaper,
+  NotebookPen,
   PenTool,
   PieChart,
   Presentation,
@@ -36,6 +37,7 @@ export const TOOL_ICONS: Record<string, LucideIcon> = {
   "file-spreadsheet": FileSpreadsheet,
   "key-round": KeyRound,
   files: Files,
+  "notebook-pen": NotebookPen,
   /*
    * `list-checks` AUDIT-20 da `test` vositasiga berilgan, lekin bu
    * jadvalga QO'SHILMAGAN edi: `CreateGrid`/`Sidebar` `TOOL_ICONS[t.icon]`

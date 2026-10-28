@@ -62,9 +62,10 @@ function judgeSpec(typeLabel: string, o: { describe?: Partial<Record<WorkJudgeCr
  *   `theory-2x2`                 — 2 bob × 2 paragraf (gumanitar/iqtisodiy kurs ishi);
  *   `review-experiment-results`  — adabiyot sharhi → tajriba/hisob → natijalar (tabiiy/texnik);
  *   `theory-analysis-practice`   — nazariy + tahliliy + amaliy (mustaqil ish, VM 824);
- *   `sections`                   — BOB EMAS, bo'limlar (referat): raqamlanadi, lekin «1-BOB» yozilmaydi.
+ *   `sections`                   — BOB EMAS, bo'limlar (referat): raqamlanadi, lekin «1-BOB» yozilmaydi;
+ *   `notes`                      — konspekt: a title and unnumbered sub-headings, no intro / conclusion / references.
  */
-export type WorkShape = "theory-2x2" | "review-experiment-results" | "theory-analysis-practice" | "sections";
+export type WorkShape = "theory-2x2" | "review-experiment-results" | "theory-analysis-practice" | "sections" | "notes";
 
 /** Vizual talabi: majburiy (hisobotda qizil) / tavsiya (sariq) / talab qilinmaydi. */
 export type WorkVisualNeed = "required" | "optional" | "none";
@@ -109,6 +110,8 @@ export type WorkGenre = {
 export const COURSEWORK_PAGES = ["10-15", "15-20", "20-25", "25-30", "30-35", "35-40", "40-45"] as const;
 export const REFERAT_PAGES = ["10-15", "15-20", "20-25", "25-30"] as const;
 export const INDEPENDENT_PAGES = ["10-15", "15-20", "20-25", "25-30"] as const;
+/** Konspekt sheets (notebook pages, not A4 report pages). */
+export const KONSPEKT_PAGES = ["5-10", "10-20", "20-30"] as const;
 
 /** Kurs ishi kirishining 7 majburiy elementi (BuxDU/TATU uslubiy ko'rsatmasi). */
 export const COURSEWORK_INTRO_PARTS: WorkIntroPartId[] = ["relevance", "aim", "tasks", "object", "subject", "methods", "structure"];
@@ -354,6 +357,42 @@ export const WORK_GENRES: Record<WorkGenreId, WorkGenre> = {
       },
     },
   },
+  konspekt: {
+    id: "konspekt",
+    label: { uz: "Konspekt", ru: "Конспект", en: "Lecture notes" },
+    hint: "Daftarga yoziladigan zich ma'lumot: sarlavha va bo'limlar, kirish/xulosa/adabiyotlarsiz",
+    toolId: "konspekt",
+    defaultKind: "notes",
+    kinds: {
+      notes: {
+        id: "notes",
+        genre: "konspekt",
+        label: { uz: "Ma'ruza konspekti", ru: "Конспект лекции", en: "Lecture notes" },
+        hint: "Mavzu yoki fayl asosida zich konspekt",
+        introParts: [],
+        chapters: { min: 3, max: 30 },
+        paragraphsPerChapter: { min: 0, max: 0 },
+        shape: "notes",
+        introShare: [0, 0],
+        conclusionPages: [0, 0],
+        refsMin: 0,
+        pages: KONSPEKT_PAGES,
+        visuals: { tables: "none", figures: "none" },
+        guidance: [
+          "Lecture notes (konspekt): the reader is a student copying into a notebook — dense, factual, compressed sentences; no introduction, conclusion, reference list or filler.",
+          "Facts only from the topic and the supplied source material; never invent dates, names, figures or quotations. If the source is silent, leave the point out.",
+          "Group the material under short sub-headings in the order of the source; inside a section use short paragraphs and dash lists of facts, definitions, dates and names.",
+        ],
+        judge: judgeSpec("Lecture notes (konspekt)", {
+          describe: {
+            style: "compressed note-taking register: short factual sentences, definitions, dates, names; no filler or rhetoric.",
+            logic: "sections follow the source order and each states the facts that belong to it.",
+          },
+          skip: ["originality"],
+        }),
+      },
+    },
+  },
 };
 
 /* ────────────────────────── kirish nuqtalari ────────────────────────── */
@@ -382,7 +421,7 @@ export function normalizeWorkKind(genre: WorkGenreId, v: unknown): WorkKindId {
 /** Hajm paketi turga mos bo'lishi kerak (narx ham shu qoidadan). */
 export function normalizeWorkPages(kind: WorkKind, raw: unknown): string {
   const v = String(raw ?? "").trim();
-  return kind.pages.includes(v) ? v : (kind.pages.find((p) => p === "20-25") ?? kind.pages[0]);
+  return kind.pages.includes(v) ? v : (kind.pages.find((p) => p === "20-25") ?? kind.pages.find((p) => p === "10-20") ?? kind.pages[0]);
 }
 
 /** Paket yorlig'ining chegaralari («25-30» → [25, 30]). */
