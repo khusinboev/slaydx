@@ -110,6 +110,15 @@ test("QAMROV: har `ESSAY_PARAMS.id` formada `data-field` bilan chizilgan (kontek
   collect();
   await pick("essayContext", /IELTS/i);
   collect();
+  // Qo'lyozma ko'rinishi → daftar tanlovlari (har xizmatga o'z ro'yxati: insho sarlavha/tagchiziq/muqovani TANLAMAYDI).
+  assert.ok(!field("handFont"), "Oddiy ko'rinishda qo'lyozma maydonlari yo'q");
+  await pick("workView", /Qo.lyozma/i);
+  assert.ok(field("handPaper") && !field("handCells") && field("handMargin"), "chiziqli: qizil chiziq bor, katak qatori yo'q");
+  await pick("handPaper", /Oq/i);
+  assert.ok(field("handCells") && !field("handMargin"), "oq qog'oz: katak qatori bor, qizil chiziq yo'q");
+  await pick("handPaper", /Katakli/i);
+  collect();
+  for (const gone of ["handHeadings", "handUnderline", "handCover"]) assert.ok(!field(gone), `${gone} insho tanlovi emas`);
 
   const missing = ESSAY_PARAMS.map((p) => p.id).filter((id) => !seen.has(id));
   assert.deepEqual(missing, [], `reyestrdagi maydon formada yo'q: ${missing.join(", ")}`);

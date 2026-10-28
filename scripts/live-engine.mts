@@ -1501,6 +1501,20 @@ const CASES: Case[] = [
       },
     };
   }),
+  /* Handwritten essay (husnixat 2 stage 4): the same engine, written into a notebook; the layout rides on doc.work. */
+  {
+    name: "essay-hand",
+    tool: "essay",
+    budgetMs: 200_000,
+    values: { topic: "Kitob — bilim manbai", essayContext: "school_dtm", essayKind: "reflective", pages: "2", language: "uz", workView: "hand", handPaper: "lined", handFormat: "a4", handLively: "on" },
+    checks: (f, pages) => [
+      ok("doc.work essay/handwritten", f.doc.work?.genre === "essay" && f.doc.work.kind === "handwritten", `${f.doc.work?.genre}/${f.doc.work?.kind}`),
+      ok("titulsiz (daftar)", f.doc.titlePage === false, String(f.doc.titlePage)),
+      ok("qo'lyozma modeli", f.doc.work?.hand?.paper === "lined" && f.doc.work.hand.lively === true, JSON.stringify(f.doc.work?.hand)),
+      ok("insho modeli saqlangan", Boolean(f.doc.essay) && f.doc.sections.length === 1, `${f.doc.sections.length} bo'lim`),
+      ok("renderlangan sahifa ≥ 1", pages === null || pages >= 1, `${pages ?? "—"} bet`),
+    ],
+  },
   /*
    * ── O'qituvchi vositalari 2 (AUDIT-20 WP-F) — 7 jonli holat ──
    *

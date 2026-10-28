@@ -74,4 +74,20 @@ export const ESSAY_PARAMS: EssayParam[] = [
   { id: "essayLevel", encode: "string", probeA: "A2", probeB: "C1", probeWith: { essayContext: "academic", essayKind: "argumentative" }, impacts: ["prompt", "review", "layout"] },
 ];
 
+/*
+ * Handwriting (husnixat 2, stage 4): the view choice + the parameters `HAND_SERVICE_CAPS.essay` exposes. They change
+ * `doc.work` (the hand layout the shared renderer reads) and `doc.titlePage` — impact `layout`; never the price.
+ */
+const HAND_ON = { workView: "hand" } as const;
+ESSAY_PARAMS.push(
+  { id: "workView", encode: "string", probeA: "plain", probeB: "hand", impacts: ["layout"] },
+  { id: "handFont", encode: "string", probeA: "school", probeB: "pen", probeWith: HAND_ON, impacts: ["layout"] },
+  { id: "handInk", encode: "string", probeA: "blue", probeB: "black", probeWith: HAND_ON, impacts: ["layout"] },
+  { id: "handLively", encode: "string", probeA: "on", probeB: "off", probeWith: HAND_ON, impacts: ["layout"] },
+  { id: "handPaper", encode: "string", probeA: "grid", probeB: "lined", probeWith: HAND_ON, impacts: ["layout"] },
+  { id: "handFormat", encode: "string", probeA: "a4", probeB: "a5", probeWith: HAND_ON, impacts: ["layout"] },
+  { id: "handMargin", encode: "string", probeA: "left", probeB: "alternate", probeWith: { ...HAND_ON, handPaper: "grid" }, impacts: ["layout"] },
+  { id: "handCells", encode: "string", probeA: "2", probeB: "1", probeWith: { ...HAND_ON, handPaper: "grid" }, impacts: ["layout"] },
+);
+
 export const ESSAY_FORM_FIELDS = ESSAY_PARAMS.map((p) => p.id);

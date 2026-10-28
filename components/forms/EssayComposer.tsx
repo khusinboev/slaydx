@@ -20,6 +20,8 @@ import { encodeEssayValues, essayInputFromValues, type EssayInput } from "@/lib/
 // CEFR level (mobile sprint): pure data + caption — the caption's «~N so‘z» is the prompt's own target.
 import { CEFR_UI, LEVEL_HINT, defaultEssayLevel, levelCaption, type CefrLevel } from "@/lib/generation/essay/level";
 import { Card, Row, Segmented, SelectField } from "./compact";
+import { HandRows, handFormOf, handOfForm, type HandForm } from "./HandRows";
+import { HAND_DEFAULTS, WORK_VIEWS, WORK_VIEW_LABELS, handCapsOf, type WorkView } from "@/lib/generation/work/handwriting";
 import { TextInput } from "./fields";
 import { ToolChrome } from "./ToolChrome";
 import { useFormDraft } from "./useFormDraft";
@@ -79,6 +81,9 @@ type Ui = {
    * survives a context switch, an untouched level follows the new default.
    */
   level: CefrLevel | null;
+  /** Plain Word view or a notebook page; the hand choices are kept while the view is plain. */
+  view: WorkView;
+  hand: HandForm;
 };
 
 /** The level shown and submitted: the user's choice, else the context default. */
@@ -134,8 +139,12 @@ function emptyUi(): Ui {
     person: ESSAY_CONTEXTS.school_dtm.person,
     extra: "",
     level: null,
+    view: "plain",
+    hand: { ...handFormOf({ ink: HAND_DEFAULTS.ink, paper: HAND_DEFAULTS.paper, font: HAND_DEFAULTS.font }), format: "a4", margin: "left", cells: "1" },
   };
 }
+
+const ESSAY_HAND_CAPS = handCapsOf("essay")!;
 
 /* ────────────────────────── holat ↔ qiymatlar ────────────────────────── */
 
@@ -168,6 +177,7 @@ function toValues(ui: Ui): FormValues {
     person: ui.person,
     extra: ui.extra,
     level: levelOf(ui),
+    hand: ui.view === "hand" ? handOfForm(ui.hand, ESSAY_HAND_CAPS) : null,
   };
   return encodeEssayValues(input);
 }
@@ -201,6 +211,8 @@ function uiFromValues(values: FormValues, base: Ui): Ui {
     // Server rule: junk/missing → the context default. A level equal to that default stays «untouched»
     // (so switching to IELTS still gives C1); anything else is the user's explicit choice.
     level: input.level === defaultEssayLevel(input.context) && base.level === null ? null : input.level,
+    view: input.hand ? "hand" : "plain",
+    hand: input.hand ? handFormOf(input.hand) : base.hand,
   };
 }
 
@@ -400,6 +412,15 @@ export function EssayComposer({ tool }: { tool: ToolConfig }) {
             {levelCaption(levelOf(ui), ui.language)}
           </p>
         </Row>
+      </Card>
+
+      <Card title="Ko‘rinish">
+        <Row label="Ko‘rinish" hint="Qo‘lyozma — insho daftar varag‘iga qo‘lda yozilgandek chiqariladi; mazmun va narx o‘zgarmaydi" wide>
+          <Field id="workView">
+            <Segmented ariaLabel="Ko‘rinish" options={WORK_VIEWS.map((v) => ({ value: v, label: WORK_VIEW_LABELS[v] }))} value={ui.view} onChange={(v) => set("view", v as WorkView)} />
+          </Field>
+        </Row>
+        {ui.view === "hand" ? <HandRows caps={ESSAY_HAND_CAPS} value={ui.hand} onChange={(k, v) => set("hand", { ...ui.hand, [k]: v })} /> : null}
       </Card>
 
       {/*

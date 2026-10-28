@@ -86,6 +86,8 @@ async function probe(values: FormValues): Promise<Probe> {
       design: d.meta.design,
       model: { ...model, review: undefined },
       firstBlock: d.sections[0]?.blocks[0]?.kind,
+      /* Hand layout rides on `doc.work` (husnixat 2 stage 4). */
+      work: d.work ? { genre: d.work.genre, kind: d.work.kind, title: d.work.title, hand: d.work.hand } : null,
     }),
     price: String(priceFor(essay, v)),
   };
@@ -93,8 +95,8 @@ async function probe(values: FormValues): Promise<Probe> {
 
 /* ────────────────────────── testlar ────────────────────────── */
 
-test("reyestr: 13 parametr (mobile sprint: + essayLevel), forma qamrovi ro'yxati bilan mos", () => {
-  assert.equal(ESSAY_PARAMS.length, 13);
+test("reyestr: 13 parametr (mobile sprint: + essayLevel) + 8 qo'lyozma (husnixat 2), forma qamrovi ro'yxati bilan mos", () => {
+  assert.equal(ESSAY_PARAMS.length, 21);
   assert.ok(ESSAY_PARAMS.some((p) => p.id === "essayLevel" && !p.impacts.includes("price")), "essayLevel — narxga ta'sirsiz");
   assert.deepEqual(ESSAY_FORM_FIELDS, ESSAY_PARAMS.map((p) => p.id));
   assert.equal(new Set(ESSAY_FORM_FIELDS).size, ESSAY_PARAMS.length, "id lar takrorlanmasin");
@@ -160,4 +162,15 @@ test("essayLevel narxni o'zgartirmaydi: har daraja × kontekst × hajm — narx 
   }
   // Eski jadval o'z joyida: 2 varaq — 2 500, daraja bilan ham.
   assert.equal(priceFor(essay, { ...BASE, pages: "2", essayLevel: "C2" }), 2500);
+});
+
+test("handwritten essay: the text is the engine's, the layout rides on doc.work; no cover page; the plain view has no doc.work", async () => {
+  const plain = await probe({});
+  assert.equal(JSON.parse(plain.layout).work, null);
+  const hand = JSON.parse((await probe({ workView: "hand", handFont: "pen", handPaper: "grid", handCells: "1", handFormat: "a5x2", handMargin: "alternate" })).layout);
+  assert.equal(hand.titlePage, false);
+  assert.equal(hand.work.genre, "essay");
+  assert.equal(hand.work.kind, "handwritten");
+  assert.equal(hand.work.title, hand.title);
+  assert.deepEqual(hand.work.hand, { ink: "blue", paper: "grid", font: "pen", headings: "plain", format: "a5x2", margin: "alternate", cells: 1 });
 });

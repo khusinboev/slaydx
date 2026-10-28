@@ -15,6 +15,8 @@
  *
  * Server importi YO'Q (izomorf).
  */
+import { encodeHandValues, handInputOf } from "../work/input";
+import type { WorkHand } from "../work/handwriting";
 import type { FormValues } from "../../types";
 import {
   ESSAY_CONTEXTS,
@@ -61,6 +63,8 @@ export type EssayInput = {
    * are then byte-identical to the pre-level code.
    */
   level: CefrLevel | null;
+  /** Handwriting layout (`workView = hand`), restricted to what the essay service exposes; `null` = plain Word view. */
+  hand: WorkHand | null;
 };
 
 /* ────────────────────────── yordamchilar ────────────────────────── */
@@ -141,6 +145,7 @@ export function essayInputFromValues(values: FormValues): EssayInput {
     sourceText: typeof values.sourceText === "string" ? values.sourceText : "",
     // Missing/invalid → the context default (C1 for IELTS, B2 elsewhere).
     level: essayLevelOf(context, values.essayLevel),
+    hand: handInputOf(values, "essay").hand ?? null,
   };
 }
 
@@ -168,5 +173,6 @@ export function encodeEssayValues(input: Partial<EssayInput>): FormValues {
   if (input.person !== undefined) out.person = input.person;
   if (input.extra !== undefined) out.extra = input.extra;
   if (input.level !== undefined) out.essayLevel = input.level ?? "";
+  if (input.hand !== undefined) Object.assign(out, encodeHandValues(input.hand));
   return out;
 }

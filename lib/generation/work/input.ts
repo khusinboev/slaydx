@@ -367,6 +367,24 @@ export function handInputOf(values: FormValues, genre: WorkGenreId): { hand?: Wo
   return { hand: restrictHand(normalizeHand({ ink: str(values.handInk, 12), paper: str(values.handPaper, 12), font: str(values.handFont, 12), lively: str(values.handLively, 5), headings: str(values.handHeadings, 8), cover: str(values.handCover, 12), underline: str(values.handUnderline, 5), format: str(values.handFormat, 8), margin: str(values.handMargin, 12), cells: str(values.handCells, 3) }), caps) };
 }
 
+/** Form values of a hand choice (`null` = the plain view) — the inverse of `handInputOf`, shared by every service. */
+export function encodeHandValues(hand: WorkHand | null | undefined): FormValues {
+  const out: FormValues = { workView: hand ? "hand" : "plain" };
+  if (hand) {
+    out.handInk = hand.ink;
+    out.handPaper = hand.paper;
+    out.handFont = hand.font;
+    out.handLively = hand.lively ? "on" : "off";
+    out.handHeadings = hand.headings ?? "caps";
+    out.handCover = hand.cover ?? "plain";
+    out.handUnderline = hand.underline === false ? "off" : "on";
+    out.handFormat = hand.format ?? "a4";
+    out.handMargin = hand.margin ?? "left";
+    out.handCells = hand.cells ? "1" : "2";
+  }
+  return out;
+}
+
 /** Klient uchun teskari yo'l — forma holatidan `FormValues` (qoralama). */
 export function encodeWorkValues(input: WorkInput): FormValues {
   const out: FormValues = {
@@ -399,21 +417,7 @@ export function encodeWorkValues(input: WorkInput): FormValues {
   };
   if (input.ministryCustom) out.ministryCustom = input.ministryCustom;
   if (input.sourceText) out.sourceText = input.sourceText;
-  if (handCapsOf(input.genre)) {
-    out.workView = input.hand ? "hand" : "plain";
-    if (input.hand) {
-      out.handInk = input.hand.ink;
-      out.handPaper = input.hand.paper;
-      out.handFont = input.hand.font;
-      out.handLively = input.hand.lively ? "on" : "off";
-      out.handHeadings = input.hand.headings ?? "caps";
-      out.handCover = input.hand.cover ?? "plain";
-      out.handUnderline = input.hand.underline === false ? "off" : "on";
-      out.handFormat = input.hand.format ?? "a4";
-      out.handMargin = input.hand.margin ?? "left";
-      out.handCells = input.hand.cells ? "1" : "2";
-    }
-  }
+  if (handCapsOf(input.genre)) Object.assign(out, encodeHandValues(input.hand));
   return out;
 }
 

@@ -67,6 +67,27 @@ export type HandForm = {
   cells: HandCellsValue;
 };
 
+/** Hand model → form state (reading a saved draft). Heading/cover/underline are not choices of the services that use this. */
+export function handFormOf(h: WorkHand): HandForm {
+  return {
+    ink: h.ink,
+    paper: h.paper,
+    font: h.font,
+    lively: h.lively ? "on" : "off",
+    headings: h.headings ?? "caps",
+    cover: h.cover ?? "plain",
+    underline: h.underline === false ? "off" : "on",
+    format: h.format ?? "a4",
+    margin: h.margin ?? (h.paper === "lined" || h.paper === "grid" ? "left" : "none"),
+    cells: h.cells ? "1" : "2",
+  };
+}
+
+/** Form state → hand model, restricted to what the service exposes. */
+export function handOfForm(form: HandForm, caps: ReadonlySet<HandParamId>): WorkHand {
+  return restrictHand(normalizeHand(form), caps);
+}
+
 export function HandRows({ caps, value, onChange }: { caps: ReadonlySet<HandParamId>; value: HandForm; onChange: <K extends keyof HandForm>(key: K, v: HandForm[K]) => void }) {
   const has = (id: HandParamId) => caps.has(id);
   const effPaper = has("paper") ? value.paper : HAND_DEFAULTS.paper;
