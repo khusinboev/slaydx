@@ -661,7 +661,7 @@ button {
   font-weight: 400;
   font-size: inherit;
   text-transform: none;
-  text-decoration: underline;
+  text-decoration: var(--hand-head-decoration, underline);
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
 }

@@ -44,7 +44,7 @@ function measureTree(doc: AcademicDoc): string {
   assert.ok(i > 0, "o'lchov daraxti topilmadi");
   return html.slice(i);
 }
-const fromToc = (list: string[]) => list.slice(list.indexOf("MUNDARIJA"));
+const fromToc = (list: string[]) => list.slice(list.findIndex((t) => t === "MUNDARIJA" || t === "Mundarija"));
 
 test("qo'lyozma: o'lchov daraxti `word-hand` sinfi va --hand-* o'zgaruvchilarni oladi (siyoh, shrift, qator oralig'i, kenglik)", () => {
   const html = measureTree(handDoc({ ink: "purple", paper: "grid", font: "caveat" }));
@@ -65,7 +65,7 @@ test("oddiy mustaqil ish: `word-hand` YO'Q (regressiya)", () => {
 });
 
 test("«ko'rdim = oldim»: qo'lyozma ko'ruvchi matni DOCX matniga AYNAN teng (mundarijadan boshlab; `ʻ` → `‘` ikkala tomonda)", async () => {
-  for (const hand of [{ ink: "blue", paper: "lined", font: "badscript" }, { ink: "black", paper: "grid", font: "caveat" }, { ink: "blue", paper: "lined", font: "school", lively: true }, { ink: "purple", paper: "grid", font: "pen", lively: true }] as WorkHand[]) {
+  for (const hand of [{ ink: "blue", paper: "lined", font: "badscript" }, { ink: "black", paper: "grid", font: "caveat" }, { ink: "blue", paper: "lined", font: "school", lively: true }, { ink: "purple", paper: "grid", font: "pen", lively: true }, { ink: "black", paper: "lined", font: "school", headings: "plain", underline: false, cover: "calligraphy" }] as WorkHand[]) {
     const doc = handDoc(hand);
     const view = fromToc(htmlTexts(measureTree(doc)));
     const file = fromToc(docxTexts(await docxXml(doc)));
@@ -143,4 +143,14 @@ test("jonli yozuv DOCX: so'z siljishi `w:position`, o'lcham/kenglik o'zgarmaydi 
   const sizes = (x: string) => new Set([...x.matchAll(/<w:sz w:val="(\d+)"/g)].map((m) => m[1]));
   assert.deepEqual([...sizes(on)].sort(), [...sizes(off)].sort(), "o'lcham to'plami bir xil — qator uzilishi o'zgarmaydi");
   assert.ok(/w:color w:val="(?!1B3AA6)[0-9A-F]{6}"/.test(on), "siyoh to'qligi o'zgargan so'zlar bor");
+});
+
+test("sarlavha: oddiy rejimda ko'ruvchi mundarijani BOSH HARFGA o'tkazmaydi, tagchiziq o'zgaruvchisi va muqova yuzi parametrga ergashadi", () => {
+  const plain = measureTree(handDoc({ ink: "blue", paper: "lined", font: "school", headings: "plain", underline: false, cover: "calligraphy" }));
+  const caps = measureTree(handDoc({ ink: "blue", paper: "lined", font: "school" }));
+  const texts = htmlTexts(plain);
+  assert.ok(texts.includes("Mundarija") && texts.includes("Kirish") && !texts.includes("KIRISH"), texts.slice(0, 40).join(" | "));
+  assert.ok(htmlTexts(caps).includes("MUNDARIJA") && htmlTexts(caps).includes("KIRISH"));
+  assert.ok(plain.includes("--hand-head-decoration:none") && caps.includes("--hand-head-decoration:underline"));
+  assert.ok(plain.includes("--hand-title-family") && !caps.includes("--hand-title-family"));
 });

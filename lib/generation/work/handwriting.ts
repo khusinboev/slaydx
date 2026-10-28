@@ -48,7 +48,34 @@ export const HAND_DEFAULTS = { ink: "blue", paper: "lined", font: "school" } as 
  * Modelga (`WorkModel.hand`) saqlanadigan tanlov. `lively` — «jonli yozuv»
  * (har so'z biroz boshqacha); o'chiq bo'lsa maydon umuman yo'q (eski ishlar o'zgarmaydi).
  */
-export type WorkHand = { ink: HandInk; paper: HandPaper; font: HandFontId; lively?: true };
+export type WorkHand = {
+  ink: HandInk;
+  paper: HandPaper;
+  font: HandFontId;
+  lively?: true;
+  /** `plain` — sarlavha oddiy yoziladi («Kirish»); yo'q = BOSH HARFLI (eski ishlar o'zgarmaydi). */
+  headings?: "plain";
+  /** `calligraphy` — muqova sarlavhasi Great Vibes'da; yo'q = oddiy qo'lyozma shrifti. */
+  cover?: "calligraphy";
+  /** `false` — sarlavha tagiga chiziq chizilmaydi; yo'q = chiziladi. */
+  underline?: false;
+};
+
+/** Formadagi qo'shimcha tanlovlar (qiymat = forma maydoni); `…_DEFAULT` — yangi forma standarti. */
+export const HAND_HEADINGS = ["plain", "caps"] as const;
+export type HandHeadingsValue = (typeof HAND_HEADINGS)[number];
+export const HAND_HEADINGS_LABELS: Record<HandHeadingsValue, string> = { plain: "Oddiy", caps: "BOSH HARFLI" };
+export const HAND_HEADINGS_DEFAULT: HandHeadingsValue = "plain";
+
+export const HAND_COVERS = ["plain", "calligraphy"] as const;
+export type HandCoverValue = (typeof HAND_COVERS)[number];
+export const HAND_COVER_LABELS: Record<HandCoverValue, string> = { plain: "Oddiy", calligraphy: "Kalligrafik" };
+export const HAND_COVER_DEFAULT: HandCoverValue = "plain";
+
+export const HAND_UNDERLINES = ["on", "off"] as const;
+export type HandUnderlineValue = (typeof HAND_UNDERLINES)[number];
+export const HAND_UNDERLINE_LABELS: Record<HandUnderlineValue, string> = { on: "Bor", off: "Yo‘q" };
+export const HAND_UNDERLINE_DEFAULT: HandUnderlineValue = "on";
 
 /** Formadagi «Yozuv» tanlovi: tekis (standart emas, eski xulq) yoki jonli. */
 export const HAND_LIVELY_VALUES = ["off", "on"] as const;
@@ -362,12 +389,16 @@ export const isHandPaper = (v: unknown): v is HandPaper => (HAND_PAPERS as reado
 export const isHandFont = (v: unknown): v is HandFontId => (HAND_FONT_IDS as readonly string[]).includes(String(v));
 
 /** Tashqi (xom) qiymatdan toza tanlov; noma'lum qiymat standartga tushadi. */
-export function normalizeHand(raw: { ink?: unknown; paper?: unknown; font?: unknown; lively?: unknown }): WorkHand {
+export function normalizeHand(raw: { ink?: unknown; paper?: unknown; font?: unknown; lively?: unknown; headings?: unknown; cover?: unknown; underline?: unknown }): WorkHand {
+  const font = isHandFont(raw.font) ? raw.font : HAND_DEFAULTS.font;
   return {
     ink: isHandInk(raw.ink) ? raw.ink : HAND_DEFAULTS.ink,
     paper: isHandPaper(raw.paper) ? raw.paper : HAND_DEFAULTS.paper,
-    font: isHandFont(raw.font) ? raw.font : HAND_DEFAULTS.font,
+    font,
     ...(raw.lively === true || raw.lively === "on" ? { lively: true as const } : {}),
+    ...(raw.headings === "plain" ? { headings: "plain" as const } : {}),
+    ...(raw.cover === "calligraphy" && HAND_FONTS[font].title ? { cover: "calligraphy" as const } : {}),
+    ...(raw.underline === false || raw.underline === "off" ? { underline: false as const } : {}),
   };
 }
 
@@ -448,7 +479,10 @@ export function handCssVars(style: HandStyle): Record<string, string> {
     "--hand-family": `"${g.font.css}"`,
     "--hand-size": `${g.sizePt}pt`,
     "--hand-lively": style.lively ? "1" : "0",
-    ...(g.font.title ? { "--hand-title-family": `"${g.font.title.css}", "${g.font.css}"` } : {}),
+    ...(g.font.title && style.cover === "calligraphy" ? { "--hand-title-family": `"${g.font.title.css}", "${g.font.css}"` } : {}),
+    /** Sarlavha harf shakli matnning o'zida (`planWork`); bu belgi ko'ruvchi o'lchov daraxtini ham ajratadi. */
+    "--hand-headings": style.headings === "plain" ? "plain" : "caps",
+    "--hand-head-decoration": style.underline === false ? "none" : "underline",
     "--hand-pitch": px(g.pitchPx),
     "--hand-lines": String(g.lines),
     "--hand-rule": `#${spec.ruleHex}`,

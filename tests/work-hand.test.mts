@@ -140,14 +140,18 @@ test("muqova sarlavhasi: Great Vibes faqat o'zi yopgan belgilarda (haqiqiy `cmap
 
 test("DOCX muqovasi: sarlavha qatori Great Vibes (embed ham), matn Playwrite; ko'ruvchi CSS: --hand-title-family faqat sarlavhali shriftda", async () => {
   const doc = sampleWorkDoc({ topic: "Qo‘lyozma sinovi", workLabel: "Mustaqil ish", language: "uz", toolId: "mustaqil-ish" } as never, { genre: "independent", kind: "written" });
-  doc.work!.hand = { ink: "blue", paper: "lined", font: "school" };
+  doc.work!.hand = { ink: "blue", paper: "lined", font: "school", cover: "calligraphy" };
   const x = await unzip(await renderDocx(doc));
   assert.match(x.document, /w:rFonts w:ascii="Great Vibes"/, "muqova sarlavhasi Great Vibes");
+  doc.work!.hand = { ink: "blue", paper: "lined", font: "school" };
+  assert.doesNotMatch((await unzip(await renderDocx(doc))).document, /Great Vibes/, "standart muqova oddiy shriftda");
+  doc.work!.hand = { ink: "blue", paper: "lined", font: "school", cover: "calligraphy" };
   assert.match(x.document, /w:rFonts w:ascii="Playwrite US Trad"/);
   const zip = await JSZip.loadAsync(await renderDocx(doc));
   const embedded = Object.keys(zip.files).filter((f) => /^word\/fonts\/.+\.odttf$/.test(f));
   assert.equal(embedded.length, 4, `4 yuz joylanadi: ${embedded.join(", ")}`);
-  assert.equal(handCssVars(handStyleOf({ ink: "blue", paper: "lined", font: "school" }))["--hand-title-family"], '"SlaydX Title Maktab", "SlaydX Maktab"');
+  assert.equal(handCssVars(handStyleOf({ ink: "blue", paper: "lined", font: "school", cover: "calligraphy" }))["--hand-title-family"], '"SlaydX Title Maktab", "SlaydX Maktab"');
+  assert.equal(handCssVars(handStyleOf({ ink: "blue", paper: "lined", font: "school" }))["--hand-title-family"], undefined, "standart: sarlavha yuzi yo'q");
   assert.equal(handCssVars(handStyleOf({ ink: "blue", paper: "lined", font: "caveat" }))["--hand-title-family"], undefined);
 });
 
@@ -166,6 +170,33 @@ test("jonli yozuv: deterministik, chegaralangan (±1 pt, ≤16 % oqarish), birla
   assert.deepEqual(normalizeHand({ lively: "on" }), { ink: "blue", paper: "lined", font: "school", lively: true });
   assert.deepEqual(normalizeHand({ lively: "off" }), { ink: "blue", paper: "lined", font: "school" });
   assert.deepEqual(normalizeHand({ lively: true }).lively, true);
+});
+
+test("qo'shimcha tanlovlar: normalizeHand faqat eski xulqdan farqlisini saqlaydi; sarlavhasiz shriftda `cover` tashlanadi", () => {
+  assert.deepEqual(normalizeHand({ headings: "plain", underline: "off", cover: "calligraphy" }), { ink: "blue", paper: "lined", font: "school", headings: "plain", cover: "calligraphy", underline: false });
+  assert.deepEqual(normalizeHand({ headings: "caps", underline: "on", cover: "plain" }), { ink: "blue", paper: "lined", font: "school" });
+  assert.equal(normalizeHand({ font: "caveat", cover: "calligraphy" }).cover, undefined, "Caveat da kalligrafik sarlavha yuzi yo'q");
+});
+
+test("sarlavha harf shakli: oddiy — «Kirish», «1-bob. …», «Mundarija» (modelning o'z sarlavhasi o'zgarmaydi); BOSH HARFLI — eski; mundarija = tana", () => {
+  const mk = (hand: WorkHand) => {
+    const doc = sampleWorkDoc({ topic: "Qo‘lyozma sinovi", workLabel: "Mustaqil ish", language: "uz", toolId: "mustaqil-ish" } as never, { genre: "independent", kind: "written" });
+    doc.work!.hand = hand;
+    return planWork(doc);
+  };
+  const base = { ink: "blue", paper: "lined", font: "school" } as const;
+  const caps = mk(base);
+  const plain = mk({ ...base, headings: "plain" });
+  const heads = (p: ReturnType<typeof planWork>) => p.body.filter((b) => b.k === "h1").map((b) => (b as { text: string }).text);
+  assert.ok(heads(caps).includes("KIRISH") && heads(caps).some((t) => /^1-BOB\. [A-Z‘’' ,.-]+$/.test(t)), heads(caps).join(" | "));
+  assert.ok(heads(plain).includes("Kirish") && heads(plain).includes("Xulosa"), heads(plain).join(" | "));
+  assert.ok(heads(plain).some((t) => /^1-bob\. [A-Z][a-z]/.test(t)), heads(plain).join(" | "));
+  assert.equal(plain.labels.toc, "Mundarija");
+  assert.equal(plain.refsLabel, "Foydalanilgan adabiyotlar");
+  assert.equal(caps.labels.toc, caps.labels.toc.toUpperCase());
+  // mundarija qatorlari tanadagi sarlavhalar bilan AYNAN bir xil.
+  const bodyHeads = new Set(plain.body.filter((b) => b.k === "h1" || b.k === "h2").map((b) => (b as { text: string }).text));
+  for (const r of plain.toc.filter((r) => r.level === 1 || r.level === 2)) assert.ok(bodyHeads.has(r.text) || r.text === plain.refsLabel || /^\d-ilova/i.test(r.text), `mundarija: ${r.text}`);
 });
 
 test("shrift fayllari va OFL litsenziyalari repoda; ko'ruvchi URL i fayl nomiga mos; globals.css @font-face lar `handFontFaceCss` bilan bir xil", () => {

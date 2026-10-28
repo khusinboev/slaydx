@@ -164,12 +164,34 @@ function isParagraphId(id: string): boolean {
  * TAKRORLAYDI, shuning uchun matnning o'zi ham shu shaklda bo'lishi
  * kerak — aks holda paritet testi ikki xil matn ko'rardi).
  */
-function structuralText(s: DocSection, L: WorkDocLabels, appendixN: number): string {
-  if (s.id === "intro") return L.intro.toUpperCase();
-  if (s.id === "conclusion") return L.conclusion.toUpperCase();
-  if (isAppendixId(s.id)) return L.appendix(appendixN).toUpperCase();
-  return (s.title || "").toUpperCase();
+function structuralText(s: DocSection, L: WorkDocLabels, appendixN: number, head: HeadCase): string {
+  if (s.id === "intro") return head.label(L.intro);
+  if (s.id === "conclusion") return head.label(L.conclusion);
+  if (isAppendixId(s.id)) return head.label(L.appendix(appendixN));
+  return head.title(s.title || "");
 }
+
+/**
+ * Sarlavha harf shakli. Standart — BOSH HARF (uslubiy ko'rsatma). Qo'lyozmada
+ * `hand.headings === "plain"` bo'lsa sarlavha oddiy yoziladi: doimiy yorliqlar
+ * («KIRISH», «1-BOB.») kichiklashtirilib birinchi harfi bosh qilinadi, modelning
+ * o'z sarlavhasi (allaqachon to'g'ri yozilgan, qisqartmalar bilan) o'zgarmaydi —
+ * faqat birinchi harfi bosh bo'ladi. Yorliq/prefikslar `WorkDocLabels` ga ham
+ * shu shaklda beriladi — DOCX va ko'ruvchi `plan.labels` dan o'qiydi.
+ */
+type HeadCase = { label: (t: string) => string; title: (t: string) => string };
+const capFirst = (t: string) => t.charAt(0).toLocaleUpperCase() + t.slice(1);
+const UPPER_HEAD: HeadCase = { label: (t) => t.toUpperCase(), title: (t) => t.toUpperCase() };
+const PLAIN_HEAD: HeadCase = { label: (t) => capFirst(t.toLocaleLowerCase()), title: capFirst };
+const plainLabels = (L: WorkDocLabels): WorkDocLabels => ({
+  ...L,
+  intro: PLAIN_HEAD.label(L.intro),
+  conclusion: PLAIN_HEAD.label(L.conclusion),
+  references: PLAIN_HEAD.label(L.references),
+  toc: PLAIN_HEAD.label(L.toc),
+  chapterPrefix: (n) => PLAIN_HEAD.label(L.chapterPrefix(n)),
+  appendix: (n) => PLAIN_HEAD.label(L.appendix(n)),
+});
 
 /* ────────────────────────── raqamlash ────────────────────────── */
 
@@ -182,7 +204,9 @@ export function planWork(doc: AcademicDoc): WorkPlan {
   const kind = workKindOf(model.genre, model.kind);
   const subject = SUBJECT_PROFILES[model.subject] ?? SUBJECT_PROFILES.humanities;
   const language = model.language || doc.meta.language || "uz";
-  const L = workLabels(language);
+  const plainHeads = model.hand?.headings === "plain";
+  const head = plainHeads ? PLAIN_HEAD : UPPER_HEAD;
+  const L = plainHeads ? plainLabels(workLabels(language)) : workLabels(language);
   /** Referat — BOB emas, BO'LIM: «1. Nom», vizual raqami tekis. */
   const flat = kind.shape === "sections";
 
@@ -313,7 +337,7 @@ export function planWork(doc: AcademicDoc): WorkPlan {
       chapterN++;
       paragraphN = 0;
       const number = flat ? `${chapterN}.` : L.chapterPrefix(chapterN);
-      const text = `${number} ${(s.title || "").toUpperCase()}`.trim();
+      const text = `${number} ${head.title(s.title || "")}`.trim();
       sink.push({
         k: "h1",
         text,
@@ -344,7 +368,7 @@ export function planWork(doc: AcademicDoc): WorkPlan {
     }
     // KIRISH / XULOSA / boshqa raqamsiz bo'lim.
     if (!s.blocks.length) return;
-    const text = structuralText(s, L, 0);
+    const text = structuralText(s, L, 0, head);
     sink.push({
       k: "h1",
       text,
@@ -370,7 +394,7 @@ export function planWork(doc: AcademicDoc): WorkPlan {
   }
 
   /* ── adabiyotlar (yangi varaqdan) ── */
-  const refsLabel = L.references.toUpperCase();
+  const refsLabel = head.label(L.references);
   if (refs.length) pushHead({ text: refsLabel, level: 1 });
 
   /* ── ilovalar (har biri yangi varaqdan, ADABIYOTLARDAN KEYIN) ── */
@@ -378,10 +402,10 @@ export function planWork(doc: AcademicDoc): WorkPlan {
   appendices.forEach((s, i) => {
     const index = doc.sections.indexOf(s);
     const path = `sections.${index}`;
-    const text = structuralText(s, L, i + 1);
+    const text = structuralText(s, L, i + 1, head);
     sink.push({ k: "h1", text, title: s.title, sectionId: s.id, path: `${path}.title`, head: "structural", pageBreak: true });
     pushHead({ text, level: 1 });
-    if (s.title && s.title.toUpperCase() !== text) {
+    if (s.title && head.title(s.title) !== text) {
       // «1-ILOVA» ostidagi ilova NOMI — alohida markazlashgan qator.
       sink.push({ k: "h3", text: s.title, path: `${path}.title` });
     }

@@ -87,6 +87,8 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
   const style = plan.style;
   const G: HandGeometry = handGeometry(style.paper, style.font);
   const primary = handFaces(style.font)[0]!;
+  /** Sarlavha tagi chizig'i (`style.underline === false` bo'lsa chizilmaydi); muqovadagi to'ldirish chiziqlari doim. */
+  const ul = style.underline !== false;
   const pitch = G.pitchTw;
   const size = G.sizePt * 2;
   const ink = style.inkHex;
@@ -181,7 +183,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
     if (T.kind === "gost") {
       for (const l of handCoverLines(T)) {
         if (l.role === "gap") out.push(blank());
-        else if (l.role === "center") out.push(para([run(l.text, l.big ? { size: Math.round(size * 1.25), title: true } : {})], { align: AlignmentType.CENTER }));
+        else if (l.role === "center") out.push(para([run(l.text, l.big ? { size: Math.round(size * 1.25), title: style.cover === "calligraphy" } : {})], { align: AlignmentType.CENTER }));
         else out.push(para([...(l.label ? [run(`${l.label}:`), new TextRun({ text: " ", font: primary.family, size, color: ink })] : []), run(l.text, { underline: true })], { left: lines(2) }));
       }
       pendingBreak = true;
@@ -190,7 +192,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
 
   /* ── mundarija: oddiy qatorlar (Word maydoni yo'q — yangilash qatorlarni buzmasin) ── */
   if (doc.toc && plan.toc.length) {
-    out.push(para([run(plan.labels.toc, { underline: true })], { align: AlignmentType.CENTER, heading: HeadingLevel.HEADING_1, keepNext: true, after: 1, pageBreakBefore: takeBreak(false) }));
+    out.push(para([run(plan.labels.toc, { underline: ul })], { align: AlignmentType.CENTER, heading: HeadingLevel.HEADING_1, keepNext: true, after: 1, pageBreakBefore: takeBreak(false) }));
     for (const r of plan.toc) out.push(para([run(r.text)], { left: r.level === 2 ? HAND_PAGE.firstLineTw : 0 }));
   }
 
@@ -246,16 +248,16 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
       switch (b.k) {
         case "h1": {
           const brk = takeBreak(b.pageBreak);
-          out.push(para([run(b.text, { underline: true })], { align: AlignmentType.CENTER, heading: HeadingLevel.HEADING_1, keepNext: true, pageBreakBefore: brk, after: 1 }));
+          out.push(para([run(b.text, { underline: ul })], { align: AlignmentType.CENTER, heading: HeadingLevel.HEADING_1, keepNext: true, pageBreakBefore: brk, after: 1 }));
           break;
         }
         case "h2":
           takeBreak(false);
-          out.push(para([run(b.text, { underline: true })], { heading: HeadingLevel.HEADING_2, keepNext: true, firstLine: HAND_PAGE.firstLineTw }));
+          out.push(para([run(b.text, { underline: ul })], { heading: HeadingLevel.HEADING_2, keepNext: true, firstLine: HAND_PAGE.firstLineTw }));
           break;
         case "h3":
           takeBreak(false);
-          out.push(para([run(b.text, { underline: true })], { align: AlignmentType.CENTER, keepNext: true }));
+          out.push(para([run(b.text, { underline: ul })], { align: AlignmentType.CENTER, keepNext: true }));
           break;
         case "table":
           takeBreak(false);
@@ -310,7 +312,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
 
   if (plan.refs.length) {
     const brk = takeBreak(true);
-    out.push(para([run(plan.refsLabel, { underline: true })], { align: AlignmentType.CENTER, heading: HeadingLevel.HEADING_1, keepNext: true, pageBreakBefore: brk, after: 1 }));
+    out.push(para([run(plan.refsLabel, { underline: ul })], { align: AlignmentType.CENTER, heading: HeadingLevel.HEADING_1, keepNext: true, pageBreakBefore: brk, after: 1 }));
     for (const r of plan.refs) out.push(para([run(r.line)], { left: lines(1), hanging: lines(1) }));
   }
   drawBody(plan.appendix);
@@ -353,7 +355,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
   const blankFooter = new Footer({ children: [new Paragraph({})] });
 
   /** Har yuz (Playwrite, Marck, Bad Script…) o'z faylidan DOCX ga joylanadi. */
-  const embedded = [...handFaces(style.font), ...(HAND_FONTS[style.font].title ? [HAND_FONTS[style.font].title!] : [])].flatMap((f) => {
+  const embedded = [...handFaces(style.font), ...(style.cover === "calligraphy" && HAND_FONTS[style.font].title ? [HAND_FONTS[style.font].title!] : [])].flatMap((f) => {
     const data = fontFileBytes(f.file);
     return data ? [{ name: f.family, data, characterSet: "00" as const }] : [];
   });

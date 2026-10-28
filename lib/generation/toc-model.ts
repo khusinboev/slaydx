@@ -2,7 +2,12 @@ import { docLabels } from "./i18n";
 import { planWork } from "./work/layout";
 import type { AcademicDoc } from "./types";
 
-export type TocRow = { text: string; level: 1 | 2 };
+export type TocRow = {
+  text: string;
+  level: 1 | 2;
+  /** Ko'ruvchi matnni o'zgartirmasin (qo'lyozma: harf shakli `planWork` da belgilangan). */
+  asIs?: boolean;
+};
 
 /**
  * Mundarija qatorlari — DOCX va veb ko'rinish uchun YAGONA manba.

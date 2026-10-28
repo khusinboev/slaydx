@@ -29,7 +29,16 @@ import {
 import { workInputFromValues, encodeWorkValues, parseWorkOutline, maxVisualsFor, WORK_INPUT_LIMITS, type WorkInput } from "@/lib/generation/work/input";
 import {
   HAND_DEFAULTS,
+  HAND_COVERS,
+  HAND_COVER_DEFAULT,
+  HAND_COVER_LABELS,
   HAND_FONT_LIST,
+  HAND_HEADINGS,
+  HAND_HEADINGS_DEFAULT,
+  HAND_HEADINGS_LABELS,
+  HAND_UNDERLINES,
+  HAND_UNDERLINE_DEFAULT,
+  HAND_UNDERLINE_LABELS,
   HAND_LIVELY_DEFAULT,
   HAND_LIVELY_LABELS,
   HAND_LIVELY_VALUES,
@@ -49,7 +58,10 @@ import {
   handStyleOf,
   normalizeHand,
   type HandFontId,
+  type HandCoverValue,
+  type HandHeadingsValue,
   type HandInk,
+  type HandUnderlineValue,
   type HandLivelyValue,
   type HandPaper,
   type WorkView,
@@ -155,6 +167,9 @@ type Ui = {
   handPaper: HandPaper;
   handFont: HandFontId;
   handLively: HandLivelyValue;
+  handHeadings: HandHeadingsValue;
+  handCover: HandCoverValue;
+  handUnderline: HandUnderlineValue;
 };
 
 /** «Titul» maydonlari — `AuthorRows` id lari AYNAN `Ui`/`FormValues` kalitlari. */
@@ -294,6 +309,9 @@ function emptyUi(profile: UserProfile, tool: ToolConfig, genre: WorkGenreId): Ui
     handPaper: HAND_DEFAULTS.paper,
     handFont: HAND_DEFAULTS.font,
     handLively: HAND_LIVELY_DEFAULT,
+    handHeadings: HAND_HEADINGS_DEFAULT,
+    handCover: HAND_COVER_DEFAULT,
+    handUnderline: HAND_UNDERLINE_DEFAULT,
   };
 }
 
@@ -336,7 +354,7 @@ function uiFromValues(values: FormValues, base: Ui, genre: WorkGenreId): Ui {
     fileName: typeof values.fileName === "string" ? values.fileName : base.fileName,
     sourceText: input.sourceText,
     ...(input.hand
-      ? { workView: "hand" as const, handInk: input.hand.ink, handPaper: input.hand.paper, handFont: input.hand.font, handLively: (input.hand.lively ? "on" : "off") as HandLivelyValue }
+      ? { workView: "hand" as const, handInk: input.hand.ink, handPaper: input.hand.paper, handFont: input.hand.font, handLively: (input.hand.lively ? "on" : "off") as HandLivelyValue, handHeadings: input.hand.headings ?? "caps", handCover: input.hand.cover ?? "plain", handUnderline: (input.hand.underline === false ? "off" : "on") as HandUnderlineValue }
       : { workView: "plain" as const }),
   };
 }
@@ -389,7 +407,7 @@ function toValues(ui: Ui, genre: WorkGenreId): FormValues {
     userRefs,
     refsMin: ui.refsMin,
     extra: ui.extra,
-    ...(genre === "independent" && ui.workView === "hand" ? { hand: normalizeHand({ ink: ui.handInk, paper: ui.handPaper, font: ui.handFont, lively: ui.handLively }) } : {}),
+    ...(genre === "independent" && ui.workView === "hand" ? { hand: normalizeHand({ ink: ui.handInk, paper: ui.handPaper, font: ui.handFont, lively: ui.handLively, headings: ui.handHeadings, cover: ui.handCover, underline: ui.handUnderline }) } : {}),
   };
 
   const out = encodeWorkValues(input);
@@ -615,6 +633,23 @@ export function WorkComposer({
                     <Segmented ariaLabel="Yozuv" options={HAND_LIVELY_VALUES.map((v) => ({ value: v, label: HAND_LIVELY_LABELS[v] }))} value={ui.handLively} onChange={(v) => set("handLively", v as HandLivelyValue)} />
                   </Field>
                 </Row>
+                <Row label="Sarlavhalar" hint="Oddiy — «Kirish», «1-bob. …» (daftarda shunday yoziladi); BOSH HARFLI — «KIRISH», «1-BOB. …»">
+                  <Field id="handHeadings">
+                    <Segmented ariaLabel="Sarlavhalar" options={HAND_HEADINGS.map((v) => ({ value: v, label: HAND_HEADINGS_LABELS[v] }))} value={ui.handHeadings} onChange={(v) => set("handHeadings", v as HandHeadingsValue)} />
+                  </Field>
+                </Row>
+                <Row label="Sarlavha tagi chizig‘i">
+                  <Field id="handUnderline">
+                    <Segmented ariaLabel="Sarlavha tagi chizig‘i" options={HAND_UNDERLINES.map((v) => ({ value: v, label: HAND_UNDERLINE_LABELS[v] }))} value={ui.handUnderline} onChange={(v) => set("handUnderline", v as HandUnderlineValue)} />
+                  </Field>
+                </Row>
+                {HAND_FONTS[ui.handFont].title ? (
+                  <Row label="Muqova sarlavhasi" hint="Kalligrafik — «Mustaqil ish» bezakli yozuvda">
+                    <Field id="handCover">
+                      <Segmented ariaLabel="Muqova sarlavhasi" options={HAND_COVERS.map((v) => ({ value: v, label: HAND_COVER_LABELS[v] }))} value={ui.handCover} onChange={(v) => set("handCover", v as HandCoverValue)} />
+                    </Field>
+                  </Row>
+                ) : null}
                 <HandPreview ink={ui.handInk} paper={ui.handPaper} font={ui.handFont} lively={ui.handLively === "on"} />
               </>
             ) : null}
