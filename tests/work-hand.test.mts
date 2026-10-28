@@ -26,6 +26,11 @@ import {
   handFaces,
   handFontFaceCss,
   handFormulaText,
+  handPageMargins,
+  handPageVars,
+  handRedSide,
+  HAND_PAGE_A5,
+  twToPx,
   handGeometry,
   handSegments,
   handTitleSegments,
@@ -40,7 +45,7 @@ import {
 } from "../lib/generation/work/handwriting.ts";
 import { HAND_REQUIRED_ALL, HAND_REQUIRED_TEXT } from "../lib/generation/work/handwriting-coverage.ts";
 import { fontCodepoints, fontMetrics, fontTableTags } from "../lib/generation/work/font-cmap.ts";
-import { paperPng, PAPER_PX } from "../lib/generation/work/paper-png.ts";
+import { paperPng, paperPx, PAPER_PX } from "../lib/generation/work/paper-png.ts";
 import type { AcademicDoc, Figure, Reference } from "../lib/generation/types.ts";
 import type { LlmRole } from "../lib/generation/llm-roles.ts";
 
@@ -220,6 +225,64 @@ test("shrift fayllari va OFL litsenziyalari repoda; ko'ruvchi URL i fayl nomiga 
 });
 
 /* ───────────────────────────── geometriya ───────────────────────────── */
+
+test("layout: legacy geometry is untouched; 1-cell rows, A5, two-up and margin modes derive from one place", () => {
+  // Legacy (no layout) is byte-identical to what existing jobs were rendered with.
+  const legacy = handGeometry("grid", "school");
+  assert.equal(legacy.pitchTw, 567);
+  assert.equal(legacy.margins.top, HAND_PAGE.topTw);
+  assert.equal(legacy.pageFormat, "a4");
+  assert.equal(legacy.marginMode, "left");
+  // 1 cell per row: 5 mm rows, first ruling on a whole 5 mm from the sheet edge.
+  const one = handGeometry("grid", "school", { cells: 1 });
+  assert.equal(one.pitchTw, 283);
+  assert.equal(one.cellsPerRow, 1);
+  assert.ok(one.lines > legacy.lines * 1.9, `${one.lines} rows vs ${legacy.lines}`);
+  assert.ok(Math.abs(one.docxRuleY0Mm / 5 - Math.round(one.docxRuleY0Mm / 5)) < 0.04, `first ruling ${one.docxRuleY0Mm} mm is not on the 5 mm grid`);
+  assert.equal(handGeometry("lined", "school", { cells: 1 }).pitchTw, 510, "lined paper has no cells");
+  // A5 is exactly half of the A4 landscape sheet; two-up only changes the export sheet.
+  const a5 = handGeometry("grid", "school", { format: "a5", cells: 1 });
+  const two = handGeometry("grid", "school", { format: "a5x2", cells: 1 });
+  assert.equal(a5.page.widthTw, HAND_PAGE_A5.widthTw);
+  assert.equal(a5.sheetTw.width, a5.page.widthTw);
+  assert.deepEqual(two.sheetTw, { width: 2 * HAND_PAGE_A5.widthTw, height: HAND_PAGE_A5.heightTw });
+  assert.equal(two.pageFormat, "a5");
+  assert.equal(two.lines, a5.lines);
+  // Blank / print: nothing is drawn, margins are the symmetric printing margins.
+  for (const paper of ["blank", "print"] as const) {
+    const g = handGeometry(paper, "school", { cells: 1 });
+    assert.equal(g.marginMode, "none");
+    assert.equal(handRedSide(g, 0), null);
+    assert.equal(g.margins.left, g.page.plainLeftTw);
+    assert.ok(Math.abs(g.docxRuleY0Mm / 5 - Math.round(g.docxRuleY0Mm / 5)) < 0.04, `${paper} rows must sit on the 5 mm grid`);
+  }
+});
+
+test("margin line: alternate swaps the text margins and the line side on even pages, width stays equal; none draws nothing", () => {
+  const g = handGeometry("grid", "school", { margin: "alternate", cells: 1 });
+  assert.deepEqual(handPageMargins(g, 0), { left: g.page.leftTw, right: g.page.rightTw });
+  assert.deepEqual(handPageMargins(g, 1), { left: g.page.rightTw, right: g.page.leftTw });
+  assert.equal(handRedSide(g, 0), "left");
+  assert.equal(handRedSide(g, 1), "right");
+  assert.equal(handRedSide(g, 2), "left");
+  assert.equal(g.contentTw, g.page.widthTw - g.page.leftTw - g.page.rightTw);
+  const style = handStyleOf({ ink: "blue", paper: "grid", font: "school", margin: "alternate", cells: 1 });
+  const odd = handPageVars(style, 0);
+  const even = handPageVars(style, 1);
+  const pageW = twToPx(g.page.widthTw);
+  assert.ok(Number.parseFloat(odd["--hand-red-x"]!) < 100, "odd: line at the left");
+  assert.ok(Math.abs(Number.parseFloat(even["--hand-red-x"]!) - (pageW - 20 * 96 / 25.4 - Number.parseFloat(even["--hand-red-w"]!))) < 0.01, "even: line 20 mm from the right edge");
+  assert.notEqual(odd["--hand-pad"], even["--hand-pad"]);
+  // `left` keeps both pages identical; `none` has no line width.
+  const left = handStyleOf({ ink: "blue", paper: "grid", font: "school" });
+  assert.deepEqual(handPageVars(left, 0), handPageVars(left, 1));
+  const none = handStyleOf({ ink: "blue", paper: "grid", font: "school", margin: "none" });
+  assert.equal(handPageVars(none, 0)["--hand-red-w"], "0px");
+  // The normalised choice never stores what the paper cannot use.
+  assert.equal(normalizeHand({ paper: "blank", margin: "alternate" }).margin, undefined);
+  assert.equal(normalizeHand({ paper: "lined", cells: 1 }).cells, undefined);
+  assert.deepEqual(normalizeHand({ paper: "grid", cells: "1", format: "a5x2", margin: "alternate" }), { ink: "blue", paper: "grid", font: "school", cells: 1, format: "a5x2", margin: "alternate" });
+});
 
 test("geometriya: butun qatorlar sahifaga sig'adi, pastki chegara yetarli, matn asosi qator balandligining 80 %", () => {
   for (const paper of ["lined", "grid"] as const) {
@@ -561,6 +624,94 @@ test("varaq PNG: A4 254 dpi, chiziqlar MATN ASOSIGA tushadi (pitch oralig'ida), 
     assert.equal(vertical, paper === "grid", `${paper}: vertikal katak chizig'i`);
   }
   assert.notEqual(paperPng("lined", "badscript"), paperPng("grid", "badscript"));
+});
+
+test("form values <-> model: format/margin/cells round-trip, blank paper drops the margin line, legacy values (absent fields) keep old behaviour", () => {
+  const v = { topic: "T", workView: "hand", handPaper: "grid", handFormat: "a5x2", handMargin: "alternate", handCells: "1" } as FormValues;
+  const input = workInputFromValues(v, "independent");
+  assert.deepEqual(input.hand, { ink: "blue", paper: "grid", font: "school", format: "a5x2", margin: "alternate", cells: 1 });
+  assert.deepEqual(workInputFromValues(encodeWorkValues(input), "independent").hand, input.hand);
+  const blank = workInputFromValues({ ...v, handPaper: "blank" }, "independent").hand!;
+  assert.equal(blank.margin, undefined, "no margin line on blank paper");
+  assert.equal(blank.cells, 1);
+  const legacy = workInputFromValues({ topic: "T", workView: "hand", handPaper: "grid" } as FormValues, "independent").hand!;
+  assert.deepEqual(legacy, { ink: "blue", paper: "grid", font: "school" }, "absent fields = a4 / margin left / 2 cells");
+  assert.deepEqual(handGeometry("grid", "school", legacy).lines, handGeometry("grid", "school").lines);
+});
+
+test("DOCX layouts: A5 page size, alternate → mirrored margins + odd/even background, two-up → A4 landscape with two columns and ONE sheet image, blank/print → no background", async () => {
+  const mk = async (hand: WorkHand) => {
+    const doc = sampleWorkDoc({ topic: "Layout", workLabel: "Mustaqil ish", language: "uz", toolId: "mustaqil-ish" } as never, { genre: "independent", kind: "written" });
+    doc.titlePage = false as never;
+    doc.work!.hand = hand;
+    const zip = await JSZip.loadAsync(Buffer.from(await renderDocx(doc)));
+    const text = async (f: string) => (await zip.file(f)?.async("string")) ?? "";
+    return { zip, document: await text("word/document.xml"), settings: await text("word/settings.xml"), names: Object.keys(zip.files) };
+  };
+  const base = { ink: "blue", font: "school", paper: "grid" } as const;
+  // A5, margin line on the left for every page: no mirroring, one background.
+  const a5 = await mk({ ...base, format: "a5", cells: 1 });
+  assert.match(a5.document, /<w:pgSz w:w="8419" w:h="11906"/);
+  assert.ok(!a5.settings.includes("mirrorMargins") && !/<w:evenAndOddHeaders\s*\/>/.test(a5.settings), "no mirroring without alternate");
+  assert.equal(a5.names.filter((n) => /^word\/media\/.*\.png$/.test(n)).length, 1);
+  // A5, alternate: mirrored margins, odd + even background images (two different PNGs).
+  const alt = await mk({ ...base, format: "a5", margin: "alternate", cells: 1 });
+  assert.ok(alt.settings.includes("<w:mirrorMargins/><w:evenAndOddHeaders/>"), "settings.xml");
+  assert.match(alt.document, /<w:headerReference w:type="even"/);
+  const pngs = alt.names.filter((n) => /^word\/media\/.*\.png$/.test(n));
+  assert.equal(pngs.length, 2);
+  assert.notDeepEqual(await alt.zip.file(pngs[0]!)!.async("uint8array"), await alt.zip.file(pngs[1]!)!.async("uint8array"));
+  const g = handGeometry("grid", "school", { format: "a5", margin: "alternate", cells: 1 });
+  assert.match(alt.document, new RegExp(`w:left="${g.margins.left}"`));
+  assert.match(alt.document, new RegExp(`w:right="${g.margins.right}"`));
+  // Two-up: A4 landscape, two columns (page width each), one sheet image, no page-number footer.
+  const two = await mk({ ...base, format: "a5x2", margin: "alternate", cells: 1 });
+  const g2 = handGeometry("grid", "school", { format: "a5x2", margin: "alternate", cells: 1 });
+  assert.match(two.document, /<w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/);
+  assert.match(two.document, /<w:cols [^>]*w:num="2"/);
+  assert.equal([...two.document.matchAll(/<w:col w:w="(\d+)"/g)].map((m) => Number(m[1])).join(","), `${g2.contentTw},${g2.contentTw}`);
+  assert.ok(!two.settings.includes("mirrorMargins"), "two-up places the margins itself");
+  assert.equal(two.names.filter((n) => /^word\/media\/.*\.png$/.test(n)).length, 1);
+  assert.ok(!two.names.some((n) => /footer/.test(n) && n.endsWith(".xml") && !n.includes("rels")) || !two.document.includes("footerReference"), "no footers");
+  // Blank / print: nothing drawn behind the text.
+  for (const paper of ["blank", "print"] as const) {
+    const r = await mk({ ink: "blue", font: "school", paper, cells: 1, format: "a5" });
+    assert.ok(!r.names.some((n) => /^word\/media\//.test(n)), `${paper}: no background image`);
+    assert.ok(!r.document.includes("headerReference"), `${paper}: no header`);
+  }
+});
+
+test("paper PNG layouts: A5 page, margin-line side by page parity, two-up A4 landscape sheet with two pages, blank/print have nothing to draw", () => {
+  const a5 = { format: "a5", margin: "alternate", cells: 1 } as const;
+  const g = handGeometry("grid", "school", a5);
+  const odd = decodePng(paperPng("grid", "school", a5, 0));
+  const even = decodePng(paperPng("grid", "school", a5, 1));
+  assert.deepEqual([odd.w, odd.h], [1485, 2100]);
+  assert.deepEqual(paperPx(g), { w: 1485, h: 2100 });
+  assert.equal(odd.rows[5]![200], 2, "odd page: margin line 20 mm from the left");
+  assert.equal(even.rows[5]![1485 - 200 - 4], 2, "even page: margin line 20 mm from the right");
+  assert.notEqual(even.rows[5]![200], 2, "even page: nothing at the left");
+  // 1-cell rows: a horizontal ruling under EVERY text row (not every other one), on the 5 mm grid.
+  const mid = 700;
+  for (let k = 0; k < 20; k++) {
+    const y = Math.round((g.docxRuleY0Mm + k * twToMm(g.pitchTw)) * 10);
+    assert.equal(odd.rows[y]![mid], 1, `row ${k} ruling at ${y}`);
+  }
+  // Two-up: A4 landscape, both pages drawn, verticals stay inside their page.
+  const two = { format: "a5x2", margin: "alternate", cells: 1 } as const;
+  const sheet = decodePng(paperPng("grid", "school", two));
+  assert.deepEqual([sheet.w, sheet.h], [2970, 2100]);
+  assert.equal(sheet.rows[5]![200], 2, "left page: line at its left edge");
+  assert.equal(sheet.rows[5]![1485 + 1485 - 200 - 4], 2, "right page: line at the sheet's right edge");
+  assert.notEqual(sheet.rows[5]![1485 + 200], 2);
+  const plainSheet = decodePng(paperPng("lined", "school", { format: "a5x2" }));
+  assert.equal(plainSheet.rows[5]![200], 2);
+  assert.equal(plainSheet.rows[5]![1485 + 200], 2, "margin: left → each page has its own left line");
+  // Cached by layout; different layouts differ; unruled paper has no PNG.
+  assert.equal(paperPng("grid", "school", two), paperPng("grid", "school", two));
+  assert.notEqual(paperPng("grid", "school", two), paperPng("grid", "school", { ...two, margin: "none" }));
+  assert.throws(() => paperPng("blank", "school"), /no ruling/);
+  assert.throws(() => paperPng("print", "school"), /no ruling/);
 });
 
 test("ko'ruvchi o'zgaruvchilari: siyoh/qog'oz/shrift/qator oralig'i handGeometry bilan bir xil manbadan", () => {

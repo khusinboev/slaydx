@@ -35,9 +35,32 @@ export const HAND_INK_LABELS: Record<HandInk, string> = { blue: "Ko‘k", black:
 /** Siyoh ranglari (HEX, `#` siz) — ruchka siyohiga yaqin, oq qog'ozda o'qiladigan to'qlikda. */
 export const HAND_INK_HEX: Record<HandInk, string> = { blue: "1B3AA6", black: "1C1C1E", purple: "5B2A9E" };
 
-export const HAND_PAPERS = ["lined", "grid"] as const;
+/**
+ * `blank` — plain white paper, text only (no ruling, no margin line);
+ * `print` — no ruling either, but rows and margins are aligned to a real 5 mm notebook
+ * so the text lands on the printed rules when a notebook page is fed to the printer.
+ */
+export const HAND_PAPERS = ["lined", "grid", "blank", "print"] as const;
 export type HandPaper = (typeof HAND_PAPERS)[number];
-export const HAND_PAPER_LABELS: Record<HandPaper, string> = { lined: "Chiziqli", grid: "Katakli" };
+export const HAND_PAPER_LABELS: Record<HandPaper, string> = { lined: "Chiziqli", grid: "Katakli", blank: "Oq qog‘oz", print: "Daftarga chop etish" };
+
+/** Sheet format. `a5x2` = two A5 pages side by side on one A4 landscape sheet (export wrapper only, 100 % scale). */
+export const HAND_FORMATS = ["a4", "a5", "a5x2"] as const;
+export type HandFormatValue = (typeof HAND_FORMATS)[number];
+export const HAND_FORMAT_LABELS: Record<HandFormatValue, string> = { a4: "A4 (to‘liq varoq)", a5: "A5 (daftar)", a5x2: "A5 × 2 (bitta A4 da ikkita)" };
+export const HAND_FORMAT_DEFAULT: HandFormatValue = "a4";
+
+/** Red margin line: on every page at the left / alternating (odd left, even right) / none. */
+export const HAND_MARGINS = ["left", "alternate", "none"] as const;
+export type HandMarginValue = (typeof HAND_MARGINS)[number];
+export const HAND_MARGIN_LABELS: Record<HandMarginValue, string> = { left: "Chapda", alternate: "Navbatma-navbat", none: "Yo‘q" };
+export const HAND_MARGIN_DEFAULT: HandMarginValue = "left";
+
+/** Rows per text line on cell-based paper (grid / print / blank). */
+export const HAND_CELLS = ["1", "2"] as const;
+export type HandCellsValue = (typeof HAND_CELLS)[number];
+export const HAND_CELLS_LABELS: Record<HandCellsValue, string> = { "1": "1 katak (5 mm)", "2": "2 katak (10 mm)" };
+export const HAND_CELLS_DEFAULT: HandCellsValue = "1";
 
 export const HAND_FONT_IDS = ["school", "pen", "badscript", "caveat"] as const;
 export type HandFontId = (typeof HAND_FONT_IDS)[number];
@@ -59,6 +82,12 @@ export type WorkHand = {
   cover?: "calligraphy";
   /** `false` — sarlavha tagiga chiziq chizilmaydi; yo'q = chiziladi. */
   underline?: false;
+  /** Sheet format; absent = `a4` (legacy). */
+  format?: "a5" | "a5x2";
+  /** Red margin line mode; absent = `left` on ruled paper, `none` on blank/print. */
+  margin?: "alternate" | "none";
+  /** `1` — one cell (5 mm) per text line on cell-based paper; absent = 2 cells (legacy). */
+  cells?: 1;
 };
 
 /** Formadagi qo'shimcha tanlovlar (qiymat = forma maydoni); `…_DEFAULT` — yangi forma standarti. */
@@ -292,79 +321,176 @@ export const BASELINE_FRACTION = 0.8;
 
 export type HandPaperSpec = {
   id: HandPaper;
-  /** Matn qatorlari oralig'i (twip) — bitta qator = bitta daftar oralig'i. */
+  /** Text row pitch (twips) — one text row = one notebook ruling step (legacy / 2-cell value). */
   pitchTw: number;
-  /** Chizma oralig'i (mm): chiziqlida = qator; katakli daftarda 5 mm katak, qator ikki katak. */
+  /** Ruling step (mm): lined = the row; cell paper = 5 mm cell. */
   cellMm: number;
   ruleHex: string;
-  /** Chiziq qalinligi (mm). */
+  /** Ruling thickness (mm). */
   ruleMm: number;
+  /** Ruling and margin line are drawn (lined / grid). */
+  ruled: boolean;
 };
 
 export const HAND_PAPER_SPECS: Record<HandPaper, HandPaperSpec> = {
-  lined: { id: "lined", pitchTw: 510, cellMm: twToMm(510), ruleHex: "8FB3D9", ruleMm: 0.3 },
-  grid: { id: "grid", pitchTw: 567, cellMm: 5, ruleHex: "A9C4E4", ruleMm: 0.25 },
+  lined: { id: "lined", pitchTw: 510, cellMm: twToMm(510), ruleHex: "8FB3D9", ruleMm: 0.3, ruled: true },
+  grid: { id: "grid", pitchTw: 567, cellMm: 5, ruleHex: "A9C4E4", ruleMm: 0.25, ruled: true },
+  blank: { id: "blank", pitchTw: 567, cellMm: 5, ruleHex: "A9C4E4", ruleMm: 0.25, ruled: false },
+  print: { id: "print", pitchTw: 567, cellMm: 5, ruleHex: "A9C4E4", ruleMm: 0.25, ruled: false },
 };
 
-/** Sahifa (A4) va chap chegara chizig'i. */
+/** One 5 mm cell in twips (283.46 rounded: line heights must be whole twips). */
+export const CELL_TW = 283;
+
+export type HandPageSpec = {
+  widthTw: number;
+  heightTw: number;
+  topTw: number;
+  /** Bottom margin is at least this (page number fits), the rest is made of whole rows. */
+  bottomMinTw: number;
+  /** Red margin line distance from the sheet edge (mm). */
+  redLineMm: number;
+  redHex: string;
+  redMm: number;
+  /** Text margin on the margin-line side — 5 mm past the line (lands on a cell rule). */
+  leftTw: number;
+  /** Text margin on the other side. */
+  rightTw: number;
+  /** Symmetric margins used when there is no margin line (printing on plain paper). */
+  plainLeftTw: number;
+  plainRightTw: number;
+  /** Paragraph indent. */
+  firstLineTw: number;
+};
+
+/** A4 notebook page (legacy; the values the existing jobs were rendered with). */
 export const HAND_PAGE = {
   widthTw: 11906,
   heightTw: 16838,
   topTw: mmToTw(18),
-  /** Pastki chegara kamida shuncha (sahifa raqami sig'sin), qolgani butun qatorlardan chiqadi. */
   bottomMinTw: 1000,
-  /** Qizil chap chegara chizig'i (mm, sahifa chetidan). */
   redLineMm: 20,
   redHex: "E0736F",
   redMm: 0.4,
-  /** Matn chap chekkasi — qizil chiziqdan 5 mm o'ngda (katak chizig'iga tushadi). */
   leftTw: mmToTw(25),
   rightTw: mmToTw(12),
-  /** Abzats chekinishi. */
+  plainLeftTw: mmToTw(20),
+  plainRightTw: mmToTw(15),
   firstLineTw: mmToTw(12),
-} as const;
+} as const satisfies HandPageSpec;
+
+/** A5 notebook page: exactly half of an A4 landscape sheet (so two-up is a plain two-column section). */
+export const HAND_PAGE_A5 = {
+  widthTw: 8419,
+  heightTw: 11906,
+  topTw: mmToTw(15),
+  bottomMinTw: 700,
+  redLineMm: 20,
+  redHex: "E0736F",
+  redMm: 0.4,
+  leftTw: mmToTw(25),
+  rightTw: mmToTw(8),
+  plainLeftTw: mmToTw(15),
+  plainRightTw: mmToTw(10),
+  firstLineTw: mmToTw(10),
+} as const satisfies HandPageSpec;
+
+/** Layout choices that are not part of the paper itself (a subset of `WorkHand`). */
+export type HandLayout = Pick<WorkHand, "format" | "margin" | "cells">;
+
+export type HandMargins = { left: number; right: number };
 
 export type HandGeometry = {
   paper: HandPaper;
   font: HandFontSpec;
+  /** `a4` or `a5`; `a5x2` has A5 pages, only the export wraps two of them on one sheet. */
+  pageFormat: "a4" | "a5";
+  twoUp: boolean;
+  page: HandPageSpec;
+  /** Export sheet size: the page itself, or A4 landscape for two-up. */
+  sheetTw: { width: number; height: number };
+  marginMode: HandMarginValue;
+  /** Cells per text row on cell paper (1 or 2); lined paper has no cells. */
+  cellsPerRow: 1 | 2;
   pitchTw: number;
   pitchPx: number;
-  /** Bir sahifadagi qatorlar soni. */
+  /** Rows on one page. */
   lines: number;
+  /** Odd-page margins (`left`/`right` are the text margins); `marginsEven` is for even pages. */
   margins: { top: number; bottom: number; left: number; right: number; header: number; footer: number };
+  marginsEven: HandMargins;
   sizePt: number;
-  /** Matn kengligi (twip). */
+  /** Text width (twips), the same on odd and even pages. */
   contentTw: number;
-  /** DOCX (LibreOffice/Word) da birinchi chiziq: sahifa tepasidan mm. */
+  /** First ruling in DOCX (LibreOffice/Word): mm from the page top. */
   docxRuleY0Mm: number;
-  /** Ko'ruvchida (brauzer) birinchi chiziq: sahifa tepasidan px. */
+  /** First ruling in the browser viewer: px from the page top. */
   viewerRuleY0Px: number;
 };
 
-/** Brauzerda qator ichida matn asosi (px, qator qutisi tepasidan): yarim-leading + ascent. */
+/** Which side the red margin line is on for a 0-based page index (null = none drawn). */
+export function handRedSide(g: Pick<HandGeometry, "paper" | "marginMode">, pageIndex: number): "left" | "right" | null {
+  if (!HAND_PAPER_SPECS[g.paper].ruled || g.marginMode === "none") return null;
+  return g.marginMode === "alternate" && pageIndex % 2 === 1 ? "right" : "left";
+}
+
+/** Text margins for a 0-based page index. */
+export function handPageMargins(g: Pick<HandGeometry, "margins" | "marginsEven" | "marginMode">, pageIndex: number): HandMargins {
+  return g.marginMode === "alternate" && pageIndex % 2 === 1 ? g.marginsEven : { left: g.margins.left, right: g.margins.right };
+}
+
+/** Browser: where the text baseline sits inside a row box (px from its top): half-leading + ascent. */
 export function handBaselinePx(font: HandFontSpec, sizePt: number, pitchPx: number): number {
   const sizePx = (sizePt * 96) / 72;
   return (pitchPx - (font.ascent + font.descent) * sizePx) / 2 + font.ascent * sizePx;
 }
 
-export function handGeometry(paper: HandPaper, fontId: HandFontId): HandGeometry {
+/** Top margin that puts the first ruling on a whole 5 mm from the sheet edge (notebook grid anchored to the edge). */
+function alignedTopTw(targetTw: number, pitchTw: number): number {
+  const baseline = Math.round(BASELINE_FRACTION * pitchTw);
+  const n = Math.round((twToMm(targetTw) + twToMm(baseline)) / 5);
+  return mmToTw(5 * n) - baseline;
+}
+
+export function handGeometry(paper: HandPaper, fontId: HandFontId, layout?: HandLayout): HandGeometry {
   const spec = HAND_PAPER_SPECS[paper];
   const font = HAND_FONTS[fontId];
-  const lines = Math.floor((HAND_PAGE.heightTw - HAND_PAGE.topTw - HAND_PAGE.bottomMinTw) / spec.pitchTw);
-  // +10 twip zaxira: yaxlitlash oxirgi qatorni keyingi sahifaga tashlamasin.
-  const bottom = HAND_PAGE.heightTw - HAND_PAGE.topTw - lines * spec.pitchTw - 10;
-  const pitchPx = twToPx(spec.pitchTw);
+  const twoUp = layout?.format === "a5x2";
+  const pageFormat = layout?.format === "a5" || twoUp ? "a5" : "a4";
+  const page: HandPageSpec = pageFormat === "a5" ? HAND_PAGE_A5 : HAND_PAGE;
+  /* Legacy = ruled paper with no layout choice at all: geometry stays byte-identical to the jobs already rendered. */
+  const legacy = spec.ruled && !layout?.format && !layout?.margin && !layout?.cells;
+  const cellsPerRow: 1 | 2 = paper !== "lined" && layout?.cells === 1 ? 1 : 2;
+  const pitchTw = paper === "lined" ? spec.pitchTw : cellsPerRow === 1 ? CELL_TW : spec.pitchTw;
+  const marginMode: HandMarginValue = layout?.margin ?? (spec.ruled ? "left" : "none");
+  const topTw = legacy ? page.topTw : alignedTopTw(page.topTw, pitchTw);
+  const lines = Math.floor((page.heightTw - topTw - page.bottomMinTw) / pitchTw);
+  // +10 twips of slack: rounding must not push the last row to the next page.
+  const bottom = page.heightTw - topTw - lines * pitchTw - 10;
+  const pitchPx = twToPx(pitchTw);
+  /* A 5 mm row cannot carry the full-size writing (ascenders/descenders would overlap the rows above/below):
+     writing shrinks with the row, down to ~10 pt at one cell. Rows of 9 mm and up keep the font's own size. */
+  const sizePt = Math.round(font.sizePt * Math.min(1, (pitchTw / 510) * 1.2) * 2) / 2;
+  const left = marginMode === "none" ? page.plainLeftTw : page.leftTw;
+  const right = marginMode === "none" ? page.plainRightTw : page.rightTw;
   return {
     paper,
     font,
-    pitchTw: spec.pitchTw,
+    pageFormat,
+    twoUp,
+    page,
+    sheetTw: twoUp ? { width: HAND_PAGE.heightTw, height: HAND_PAGE_A5.heightTw } : { width: page.widthTw, height: page.heightTw },
+    marginMode,
+    cellsPerRow,
+    pitchTw,
     pitchPx,
     lines,
-    margins: { top: HAND_PAGE.topTw, bottom, left: HAND_PAGE.leftTw, right: HAND_PAGE.rightTw, header: 0, footer: mmToTw(7) },
-    sizePt: font.sizePt,
-    contentTw: HAND_PAGE.widthTw - HAND_PAGE.leftTw - HAND_PAGE.rightTw,
-    docxRuleY0Mm: twToMm(HAND_PAGE.topTw + BASELINE_FRACTION * spec.pitchTw),
-    viewerRuleY0Px: twToPx(HAND_PAGE.topTw) + handBaselinePx(font, font.sizePt, pitchPx),
+    margins: { top: topTw, bottom, left, right, header: 0, footer: mmToTw(7) },
+    marginsEven: marginMode === "alternate" ? { left: right, right: left } : { left, right },
+    sizePt,
+    contentTw: page.widthTw - left - right,
+    docxRuleY0Mm: twToMm(topTw + BASELINE_FRACTION * pitchTw),
+    viewerRuleY0Px: twToPx(topTw) + handBaselinePx(font, font.sizePt, pitchPx),
   };
 }
 
@@ -389,16 +515,33 @@ export const isHandPaper = (v: unknown): v is HandPaper => (HAND_PAPERS as reado
 export const isHandFont = (v: unknown): v is HandFontId => (HAND_FONT_IDS as readonly string[]).includes(String(v));
 
 /** Tashqi (xom) qiymatdan toza tanlov; noma'lum qiymat standartga tushadi. */
-export function normalizeHand(raw: { ink?: unknown; paper?: unknown; font?: unknown; lively?: unknown; headings?: unknown; cover?: unknown; underline?: unknown }): WorkHand {
+export function normalizeHand(raw: {
+  ink?: unknown;
+  paper?: unknown;
+  font?: unknown;
+  lively?: unknown;
+  headings?: unknown;
+  cover?: unknown;
+  underline?: unknown;
+  format?: unknown;
+  margin?: unknown;
+  cells?: unknown;
+}): WorkHand {
   const font = isHandFont(raw.font) ? raw.font : HAND_DEFAULTS.font;
+  const paper = isHandPaper(raw.paper) ? raw.paper : HAND_DEFAULTS.paper;
+  const ruled = HAND_PAPER_SPECS[paper].ruled;
   return {
     ink: isHandInk(raw.ink) ? raw.ink : HAND_DEFAULTS.ink,
-    paper: isHandPaper(raw.paper) ? raw.paper : HAND_DEFAULTS.paper,
+    paper,
     font,
     ...(raw.lively === true || raw.lively === "on" ? { lively: true as const } : {}),
     ...(raw.headings === "plain" ? { headings: "plain" as const } : {}),
     ...(raw.cover === "calligraphy" && HAND_FONTS[font].title ? { cover: "calligraphy" as const } : {}),
     ...(raw.underline === false || raw.underline === "off" ? { underline: false as const } : {}),
+    ...(raw.format === "a5" || raw.format === "a5x2" ? { format: raw.format } : {}),
+    /* Margin line only exists on ruled paper; `none` is the implicit mode of blank/print, so it is not stored there. */
+    ...(ruled && (raw.margin === "alternate" || raw.margin === "none") ? { margin: raw.margin } : {}),
+    ...(paper !== "lined" && (raw.cells === 1 || raw.cells === "1") ? { cells: 1 as const } : {}),
   };
 }
 
@@ -460,43 +603,69 @@ export function handToneHex(inkHex: string, pct: number): string {
 
 /* ────────────────────────── ko'ruvchi CSS ────────────────────────── */
 
+const cssPx = (n: number) => `${Math.round(n * 1000) / 1000}px`;
+const mmToPx = (mm: number) => (mm / 25.4) * 96;
+const modPx = (v: number, m: number) => v - Math.floor(v / m) * m;
+
 /**
- * Ko'ruvchi varag'i uchun CSS o'zgaruvchilar. Chiziq fonini `app/globals.css`
- * `.word-hand` qoidasi shu o'zgaruvchilardan quradi.
+ * Per-page CSS variables: the margin line side and the text padding follow the page parity
+ * (`alternate` margin mode). `pageIndex` is 0-based. The viewer applies these on every sheet.
+ */
+export function handPageVars(style: HandStyle, pageIndex: number): Record<string, string> {
+  const g = handGeometry(style.paper, style.font, style);
+  const side = handRedSide(g, pageIndex);
+  const m = handPageMargins(g, pageIndex);
+  const pageW = twToPx(g.page.widthTw);
+  const redW = Math.max(1, mmToPx(g.page.redMm));
+  const redX = side === "right" ? pageW - mmToPx(g.page.redLineMm) - redW : mmToPx(g.page.redLineMm);
+  const cell = handCellPx(g);
+  return {
+    "--hand-red-x": cssPx(redX),
+    "--hand-red-w": cssPx(side ? redW : 0),
+    /** First vertical cell rule: cells are anchored at the margin line. */
+    "--hand-vphase": cssPx(modPx(redX, cell)),
+    "--hand-pad": `${cssPx(twToPx(g.margins.top))} ${cssPx(twToPx(m.right))} ${cssPx(twToPx(g.margins.bottom))} ${cssPx(twToPx(m.left))}`,
+  };
+}
+
+/** Ruling step in px: lined = the row; cell paper = one cell (a row is 1 or 2 cells). */
+function handCellPx(g: Pick<HandGeometry, "paper" | "pitchPx" | "cellsPerRow">): number {
+  return g.paper === "lined" ? g.pitchPx : g.pitchPx / g.cellsPerRow;
+}
+
+/**
+ * CSS variables of the viewer sheet (odd page). `app/globals.css` `.word-hand` builds the ruling
+ * from them; `handPageVars` overrides the page-dependent ones on even pages.
  */
 export function handCssVars(style: HandStyle): Record<string, string> {
-  const g = handGeometry(style.paper, style.font);
+  const g = handGeometry(style.paper, style.font, style);
   const spec = HAND_PAPER_SPECS[style.paper];
-  const px = (n: number) => `${Math.round(n * 1000) / 1000}px`;
-  const mmPx = (mm: number) => (mm / 25.4) * 96;
-  const ruleW = Math.max(1, mmPx(spec.ruleMm));
-  const redX = mmPx(HAND_PAGE.redLineMm);
-  /* Chiziq qadami: chiziqlida = qator oralig'i; katakli varaqda ikki katak = bir qator. */
-  const cell = style.paper === "grid" ? g.pitchPx / 2 : g.pitchPx;
-  const mod = (v: number, m: number) => v - Math.floor(v / m) * m;
+  const ruleW = Math.max(1, mmToPx(spec.ruleMm));
+  const cell = handCellPx(g);
   return {
     "--hand-ink": `#${style.inkHex}`,
     "--hand-family": `"${g.font.css}"`,
     "--hand-size": `${g.sizePt}pt`,
     "--hand-lively": style.lively ? "1" : "0",
     ...(g.font.title && style.cover === "calligraphy" ? { "--hand-title-family": `"${g.font.title.css}", "${g.font.css}"` } : {}),
-    /** Sarlavha harf shakli matnning o'zida (`planWork`); bu belgi ko'ruvchi o'lchov daraxtini ham ajratadi. */
+    /** Heading case is in the text itself (`planWork`); this marker also tells viewer measure trees apart. */
     "--hand-headings": style.headings === "plain" ? "plain" : "caps",
     "--hand-head-decoration": style.underline === false ? "none" : "underline",
-    "--hand-pitch": px(g.pitchPx),
+    /** Margin-line mode marker (the line itself is per page: `handPageVars`); also tells viewer measure trees apart. */
+    "--hand-margin": g.marginMode,
+    "--hand-sheet-w": `${Math.round(twToMm(g.page.widthTw) * 100) / 100}mm`,
+    "--hand-sheet-h": `${Math.round(twToMm(g.page.heightTw) * 100) / 100}mm`,
+    "--hand-pitch": cssPx(g.pitchPx),
     "--hand-lines": String(g.lines),
     "--hand-rule": `#${spec.ruleHex}`,
-    "--hand-rule-w": px(ruleW),
-    "--hand-red": `#${HAND_PAGE.redHex}`,
-    "--hand-red-x": px(redX),
-    "--hand-red-w": px(Math.max(1, mmPx(HAND_PAGE.redMm))),
-    "--hand-y0": px(g.viewerRuleY0Px),
-    "--hand-cell": px(cell),
-    /** Birinchi gorizontal chiziq `--hand-phase` da (0…cell), birinchi vertikal katak chizig'i `--hand-vphase` da. */
-    "--hand-phase": px(mod(g.viewerRuleY0Px, cell)),
-    "--hand-vphase": px(mod(redX, cell)),
-    "--hand-first-line": px(twToPx(HAND_PAGE.firstLineTw)),
-    "--hand-pad": `${px(twToPx(g.margins.top))} ${px(twToPx(g.margins.right))} ${px(twToPx(g.margins.bottom))} ${px(twToPx(g.margins.left))}`,
+    "--hand-rule-w": cssPx(ruleW),
+    "--hand-red": `#${g.page.redHex}`,
+    "--hand-y0": cssPx(g.viewerRuleY0Px),
+    "--hand-cell": cssPx(cell),
+    /** First horizontal ruling is at `--hand-phase` (0…cell). */
+    "--hand-phase": cssPx(modPx(g.viewerRuleY0Px, cell)),
+    "--hand-first-line": cssPx(twToPx(g.page.firstLineTw)),
+    ...handPageVars(style, 0),
   };
 }
 

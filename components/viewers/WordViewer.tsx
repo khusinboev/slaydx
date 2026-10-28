@@ -5,7 +5,7 @@ import { Pencil, Redo2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { planArticle, type CiteSpan } from "@/lib/generation/article/layout";
 import { planWork } from "@/lib/generation/work/layout";
-import { handCssVars, handGeometry, handText } from "@/lib/generation/work/handwriting";
+import { handCssVars, handGeometry, handPageVars, handText, twToPx } from "@/lib/generation/work/handwriting";
 import { isTeacherDoc, planTeacher } from "@/lib/generation/teacher/layout";
 import { isGameDoc, planGame } from "@/lib/generation/games/layout";
 import type { ArticleOp } from "@/lib/generation/article/edit";
@@ -213,13 +213,18 @@ function workSheet(doc: AcademicDoc) {
    * uzmaydi. Chiziq foni va shrift `.word-hand` qoidasida (`app/globals.css`).
    */
   if (plan.style) {
-    const g = handGeometry(plan.style.paper, plan.style.font);
+    const g = handGeometry(plan.style.paper, plan.style.font, plan.style);
     const vars = handCssVars(plan.style);
+    /* Page-dependent variables (margin line side, text padding) are set per sheet (`handPageVars`); the inner box must
+       inherit them, so it must not re-declare the odd-page values. */
+    const inner: Record<string, string> = { ...vars };
+    for (const k of Object.keys(handPageVars(plan.style, 0))) delete inner[k];
     return {
       plan,
       hand: { vars: vars as React.CSSProperties, paper: plan.style.paper },
+      sheetPx: { w: Math.round(twToPx(g.page.widthTw)), h: Math.round(twToPx(g.page.heightTw)) },
       style: {
-        ...vars,
+        ...inner,
         padding: "var(--hand-pad)",
         fontSize: "var(--hand-size)",
         lineHeight: "var(--hand-pitch)",
@@ -321,8 +326,9 @@ export function WordViewer({
   const game = useMemo(() => gameSheet(doc), [doc]);
   const profiled = sheet ?? work ?? teacher ?? game;
   const limit = profiled?.limit ?? contentHeightPx({ footer: true });
-  const sheetW = teacher?.wPx ?? A4.wPx;
-  const sheetH = teacher?.hPx ?? A4.hPx;
+  const handSheetPx = work?.hand ? work.sheetPx : undefined;
+  const sheetW = handSheetPx?.w ?? teacher?.wPx ?? A4.wPx;
+  const sheetH = handSheetPx?.h ?? teacher?.hPx ?? A4.hPx;
   // Sahifadan uzun matnli bandlar bo'lib ko'rsatiladi (Word kabi) —
   // yuqoridagi `FLOW_SPLITTER` izohiga qarang.
   // Bo'lingan ro'yxat O'Z `items` iga bog'lanadi: hujjat tahrirdan keyin
@@ -677,7 +683,7 @@ export function WordViewer({
                     data-page={i + 1}
                     className={cn("word-sheet", teacher?.landscape && "word-sheet-ls", frame && "word-sheet--framed", work?.hand && `word-hand word-hand--${work.hand.paper}`)}
                     data-hand={work?.hand ? work.plan.style?.ink : undefined}
-                    style={frame ? ({ "--sheet-frame": frame } as React.CSSProperties) : work?.hand ? work.hand.vars : undefined}
+                    style={frame ? ({ "--sheet-frame": frame } as React.CSSProperties) : work?.hand && work.plan.style ? ({ ...work.hand.vars, ...handPageVars(work.plan.style, i) } as React.CSSProperties) : undefined}
                   >
                     {isTitle ? (
                       work?.hand && work.plan.style ? (

@@ -363,7 +363,7 @@ export function workInputFromValues(values: FormValues, genre: WorkGenreId): Wor
  */
 export function handInputOf(values: FormValues, genre: WorkGenreId): { hand?: WorkHand } {
   if (genre !== "independent" || str(values.workView, 10) !== "hand") return {};
-  return { hand: normalizeHand({ ink: str(values.handInk, 12), paper: str(values.handPaper, 12), font: str(values.handFont, 12), lively: str(values.handLively, 5), headings: str(values.handHeadings, 8), cover: str(values.handCover, 12), underline: str(values.handUnderline, 5) }) };
+  return { hand: normalizeHand({ ink: str(values.handInk, 12), paper: str(values.handPaper, 12), font: str(values.handFont, 12), lively: str(values.handLively, 5), headings: str(values.handHeadings, 8), cover: str(values.handCover, 12), underline: str(values.handUnderline, 5), format: str(values.handFormat, 8), margin: str(values.handMargin, 12), cells: str(values.handCells, 3) }) };
 }
 
 /** Klient uchun teskari yo'l — forma holatidan `FormValues` (qoralama). */
@@ -408,6 +408,9 @@ export function encodeWorkValues(input: WorkInput): FormValues {
       out.handHeadings = input.hand.headings ?? "caps";
       out.handCover = input.hand.cover ?? "plain";
       out.handUnderline = input.hand.underline === false ? "off" : "on";
+      out.handFormat = input.hand.format ?? "a4";
+      out.handMargin = input.hand.margin ?? "left";
+      out.handCells = input.hand.cells ? "1" : "2";
     }
   }
   return out;

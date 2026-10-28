@@ -1,5 +1,5 @@
 /**
- * DAFTAR VARAG'I PNG si (qo'lyozma mustaqil ish, DOCX foni) — bog'liqliksiz.
+ * NOTEBOOK PAGE PNG (handwritten work, DOCX background) — dependency-free.
  *
  * 254 dpi da 1 piksel = 0,1 mm: A4 = 2100 × 2970 px, chiziq oralig'i,
  * qizil chegara va katak butun pikselga tushadi (yaxlitlash xatosi yo'q).
@@ -11,7 +11,7 @@
  * asosga tushadi (harflar chiziq ustida «turadi»).
  */
 import { crc32, deflateSync } from "node:zlib";
-import { HAND_PAGE, HAND_PAPER_SPECS, handGeometry, twToMm, type HandFontId, type HandPaper } from "./handwriting";
+import { HAND_PAPER_SPECS, handGeometry, handRedSide, twToMm, type HandFontId, type HandLayout, type HandPaper } from "./handwriting";
 
 const DPMM = 10; // 254 dpi
 export const PAPER_PX = { w: 2100, h: 2970 } as const;
@@ -31,46 +31,63 @@ function chunk(type: string, data: Buffer): Buffer {
 
 const cache = new Map<string, Buffer>();
 
-/** A4 daftar varag'i (PNG bayt). Natija keshlanadi — bir xil kalit bir xil Buffer. */
-export function paperPng(paper: HandPaper, font: HandFontId): Buffer {
-  const key = `${paper}:${font}`;
+/** Pixel size of the sheet this layout exports (A4 / A5 page, or the A4 landscape two-up sheet). */
+export function paperPx(g: ReturnType<typeof handGeometry>): { w: number; h: number } {
+  return { w: Math.round(twToMm(g.sheetTw.width) * DPMM), h: Math.round(twToMm(g.sheetTw.height) * DPMM) };
+}
+
+/**
+ * Ruled sheet (lined / grid) as an indexed PNG, 1 px = 0.1 mm. `pageIndex` (0 = odd, 1 = even) picks the margin-line
+ * side for a single page; the two-up sheet draws pages 0 and 1 side by side. Blank / print paper has no ruling, so
+ * there is nothing to draw — callers must check `HAND_PAPER_SPECS[paper].ruled` first. Same key = same Buffer.
+ */
+export function paperPng(paper: HandPaper, font: HandFontId, layout?: HandLayout, pageIndex = 0): Buffer {
+  const spec = HAND_PAPER_SPECS[paper];
+  if (!spec.ruled) throw new Error(`paperPng: ${paper} paper has no ruling to draw`);
+  const geo = handGeometry(paper, font, layout);
+  const first = geo.twoUp ? 0 : pageIndex % 2;
+  const key = `${paper}:${font}:${geo.pageFormat}:${geo.twoUp}:${geo.marginMode}:${geo.cellsPerRow}:${first}`;
   const hit = cache.get(key);
   if (hit) return hit;
 
-  const { w, h } = PAPER_PX;
-  const spec = HAND_PAPER_SPECS[paper];
-  const geo = handGeometry(paper, font);
-  const pitchMm = twToMm(spec.pitchTw);
+  const { w, h } = paperPx(geo);
+  const pageW = Math.round(twToMm(geo.page.widthTw) * DPMM);
+  const pitchMm = twToMm(geo.pitchTw);
   const ruleRows = Math.max(1, Math.round(spec.ruleMm * DPMM));
-  const redRows = Math.max(1, Math.round(HAND_PAGE.redMm * DPMM));
-  const redX = Math.round(HAND_PAGE.redLineMm * DPMM);
+  const redRows = Math.max(1, Math.round(geo.page.redMm * DPMM));
 
-  /* Gorizontal chiziqlar: chiziqlida har qator, katakli varaqda har katak (5 mm). */
-  const stepMm = paper === "lined" ? pitchMm : spec.cellMm;
+  /* Horizontal rulings: lined = every row; cell paper = every cell (5 mm; a 1-cell row follows the text pitch exactly). */
+  const stepMm = paper === "lined" ? pitchMm : geo.cellsPerRow === 2 ? spec.cellMm : pitchMm;
   const hLine = new Uint8Array(h);
   const y0 = geo.docxRuleY0Mm;
-  const first = Math.ceil(-y0 / stepMm) - 1;
-  for (let k = first; ; k++) {
+  const firstK = Math.ceil(-y0 / stepMm) - 1;
+  for (let k = firstK; ; k++) {
     const y = Math.round((y0 + k * stepMm) * DPMM);
     if (y >= h) break;
     for (let r = 0; r < ruleRows; r++) if (y + r >= 0 && y + r < h) hLine[y + r] = 1;
   }
 
-  /* Vertikal katak chiziqlari (faqat katakli): qizil chiziqdan boshlab har 5 mm. */
-  const vCols: number[] = [];
-  if (paper === "grid") {
-    const step = spec.cellMm * DPMM;
-    for (let x = redX % step; x < w; x += step) for (let r = 0; r < Math.max(1, Math.round(spec.ruleMm * DPMM)); r++) vCols.push(Math.round(x) + r);
-  }
-
-  // Palitra: 0 oq, 1 chiziq, 2 qizil.
+  // Palette: 0 white, 1 ruling, 2 margin line. One template row per kind; the left/right halves draw their own verticals.
   const plain = Buffer.alloc(w + 1, 0);
-  for (const x of vCols) if (x < w) plain[1 + x] = 1;
   const rule = Buffer.alloc(w + 1, 1);
-  rule[0] = 0; // satr filtri (None) — palitra indeksi emas
-  for (let r = 0; r < redRows; r++) {
-    plain[1 + redX + r] = 2;
-    rule[1 + redX + r] = 2;
+  rule[0] = 0; // row filter (None) — not a palette index
+  const halves = geo.twoUp ? 2 : 1;
+  for (let half = 0; half < halves; half++) {
+    const x0 = half * pageW;
+    const side = handRedSide(geo, first + half);
+    const redX = side === "right" ? pageW - Math.round(geo.page.redLineMm * DPMM) - redRows : Math.round(geo.page.redLineMm * DPMM);
+    if (paper === "grid") {
+      /* Vertical cell rules, anchored at the margin line (5 mm cells), only inside this page. */
+      const step = spec.cellMm * DPMM;
+      for (let x = redX % step; x < pageW; x += step) for (let r = 0; r < ruleRows; r++) {
+        const col = x0 + Math.round(x) + r;
+        if (col < x0 + pageW) plain[1 + col] = 1;
+      }
+    }
+    if (side) for (let r = 0; r < redRows; r++) {
+      plain[1 + x0 + redX + r] = 2;
+      rule[1 + x0 + redX + r] = 2;
+    }
   }
   const rows: Buffer[] = [];
   for (let y = 0; y < h; y++) rows.push(hLine[y] ? rule : plain);
@@ -81,11 +98,11 @@ export function paperPng(paper: HandPaper, font: HandFontId): Buffer {
   ihdr.writeUInt32BE(h, 4);
   ihdr[8] = 8; // bit depth
   ihdr[9] = 3; // indexed
-  const plte = Buffer.from([255, 255, 255, ...hexRgb(spec.ruleHex), ...hexRgb(HAND_PAGE.redHex)]);
+  const plte = Buffer.from([255, 255, 255, ...hexRgb(spec.ruleHex), ...hexRgb(geo.page.redHex)]);
   const phys = Buffer.alloc(9);
   phys.writeUInt32BE(DPMM * 1000, 0);
   phys.writeUInt32BE(DPMM * 1000, 4);
-  phys[8] = 1; // metr
+  phys[8] = 1; // metre
   const png = Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk("IHDR", ihdr),
