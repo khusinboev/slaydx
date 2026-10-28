@@ -620,6 +620,9 @@ button {
 }
 
 .word-sheet.word-hand {
+  /* A4 or A5 page (handCssVars); blank / print paper has no ruling at all. */
+  width: var(--hand-sheet-w, 210mm);
+  height: var(--hand-sheet-h, 297mm);
   --hand-vlines: none;
   background-color: #fff;
   background-image:
@@ -635,6 +638,10 @@ button {
     var(--hand-red-x) 0,
     calc(var(--hand-vphase) - var(--hand-cell)) 0,
     0 calc(var(--hand-phase) - var(--hand-cell));
+}
+.word-sheet.word-hand--blank,
+.word-sheet.word-hand--print {
+  background-image: none;
 }
 .word-sheet.word-hand--grid {
   --hand-vlines: repeating-linear-gradient(to right, var(--hand-rule) 0, var(--hand-rule) var(--hand-rule-w), transparent var(--hand-rule-w), transparent var(--hand-cell));

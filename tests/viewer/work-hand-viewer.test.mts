@@ -10,7 +10,7 @@ import { renderDocx } from "../../lib/generation/render-docx.ts";
 import { planWork } from "../../lib/generation/work/layout.ts";
 import { sampleWorkDoc } from "../../lib/generation/work/samples.ts";
 import { titleModel } from "../../lib/generation/title-model.ts";
-import { handCoverLines, handCssVars, handGeometry, handStyleOf, HAND_FONTS, HAND_INK_HEX, type WorkHand } from "../../lib/generation/work/handwriting.ts";
+import { handCoverLines, handCssVars, handGeometry, handPageVars, handStyleOf, HAND_FONTS, HAND_INK_HEX, type WorkHand } from "../../lib/generation/work/handwriting.ts";
 import type { AcademicDoc, DocMeta } from "../../lib/generation/types.ts";
 
 /**
@@ -153,4 +153,15 @@ test("sarlavha: oddiy rejimda ko'ruvchi mundarijani BOSH HARFGA o'tkazmaydi, tag
   assert.ok(htmlTexts(caps).includes("MUNDARIJA") && htmlTexts(caps).includes("KIRISH"));
   assert.ok(plain.includes("--hand-head-decoration:none") && caps.includes("--hand-head-decoration:underline"));
   assert.ok(plain.includes("--hand-title-family") && !caps.includes("--hand-title-family"));
+});
+
+test("layout: A5 sheet vars and measure width follow the geometry; page vars are NOT redeclared on the inner box (they inherit from the sheet)", () => {
+  const hand: WorkHand = { ink: "blue", paper: "grid", font: "school", format: "a5", margin: "alternate", cells: 1 };
+  const html = measureTree(handDoc(hand));
+  const g = handGeometry("grid", "school", hand);
+  assert.ok(html.includes("--hand-sheet-w:148.5mm") && /--hand-sheet-h:210(\.\d+)?mm/.test(html), "sheet size vars");
+  assert.ok(html.includes(`width:${(g.contentTw / 1440) * 25.4}mm`), "measure width = A5 text width");
+  assert.ok(html.includes(`--hand-pitch:${Math.round(g.pitchPx * 1000) / 1000}px`), "1-cell row pitch");
+  // The sheet gets page vars (`handPageVars`); the measure tree (inner box) must not carry the odd-page copies.
+  for (const k of Object.keys(handPageVars(handStyleOf(hand), 0))) assert.ok(!html.includes(`${k}:`), `${k} must not be redeclared on the inner box`);
 });
