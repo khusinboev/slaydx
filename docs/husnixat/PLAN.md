@@ -37,3 +37,11 @@ Mexanizm: `HAND_SERVICE_CAPS` — xizmat → ruxsat etilgan parametrlar. Forma f
 2. **Xizmat ro'yxati** (`HAND_SERVICE_CAPS`) + Referatga ochish.
 3. **Konspekt xizmati** (tool, dvigatel, varaq soniga moslash, narx).
 4. **Insho** (alohida dvigatelga ulash).
+
+## Status (2026-10-28)
+- Stage 1 (paper/format core) — deployed (PR #88). Stage 2 (service capabilities, referat) — deployed (PR #89).
+- Stage 3 (konspekt service) — `lib/generation/konspekt/` (input/plan, engine, params registry), `KonspektComposer`,
+  genre `konspekt` / shape `notes` in the work registry, tool `konspekt` (3 000 / 4 000 / 5 000 by notebook pages).
+  Volume: word plan from the hand geometry (`FILL` calibrated on a rendered live konspekt) + a rendered-size fit in
+  `buildArtifact` (DOCX → PDF page count; over the tier → trim from the end, far below → refund).
+- Stage 4 (essay) — not started.

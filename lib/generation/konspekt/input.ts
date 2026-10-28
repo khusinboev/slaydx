@@ -59,8 +59,12 @@ export function konspektInputFromValues(values: FormValues): KonspektInput {
 const AVG_WORD_CHARS: Record<string, number> = { uz: 7.2, ru: 7.5, en: 6.5 };
 /** Calibrated on rendered notebooks: characters per row ≈ 4.3 × text width (mm) / writing size (pt). */
 const CHARS_PER_ROW_K = 4.3;
-/** Paragraph ends, indents and headings leave rows partly empty. */
-const FILL = 0.92;
+/**
+ * Paragraph ends, indents, headings and short dash-list lines leave rows partly empty. Calibrated on a rendered
+ * Russian konspekt (14 sections, many lists): 3 480 words filled 24 A5 pages ≈ 145 words/page, i.e. 0.61 of the
+ * raw row capacity; a paragraph-only text reaches ~0.9. The engine also re-measures the rendered file (`fit`).
+ */
+const FILL = 0.65;
 
 /** Words one notebook page of this layout holds (the single source of the volume plan). */
 export function konspektWordsPerPage(hand: WorkHand, language: string): number {

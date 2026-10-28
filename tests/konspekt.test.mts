@@ -25,7 +25,10 @@ function stub(o: { sections?: number; perSection?: number; outline?: string } = 
       const n = o.sections ?? 6;
       return { text: JSON.stringify({ sections: Array.from({ length: n }, (_, i) => ({ title: `Bo‘lim ${i + 1}`, brief: "x", words: 200 })) }), usage };
     }
-    return { text: JSON.stringify({ blocks: [{ kind: "p", text: words(o.perSection ?? 200, "fakt") }] }), usage };
+    /* Blocks of ≤ 120 words like a real answer: the clamp to the tier maximum works on whole blocks. */
+    const total = o.perSection ?? 200;
+    const blocks = Array.from({ length: Math.ceil(total / 120) }, (_, i) => ({ kind: i % 3 === 2 ? "li" : "p", text: words(Math.min(120, total - i * 120), "fakt") }));
+    return { text: JSON.stringify({ blocks }), usage };
   }) as never;
   return { fn, calls };
 }
@@ -155,4 +158,21 @@ test("differential probe: EVERY registry parameter changes the result (the promp
     if (a === b) failures.push(p.id);
   }
   assert.deepEqual(failures, [], `parameters without any effect: ${failures.join(", ")}`);
+});
+
+test("fit helpers: trimKonspektDoc cuts from the end by whole blocks, renumbers sections and keeps the model in sync; the word plan matches the calibrated density", async () => {
+  const { r } = await run({ pages: "10-20" }, { sections: 6, perSection: 700 });
+  assert.ok(r);
+  const { konspektWords, trimKonspektDoc } = await import("../lib/generation/konspekt/index.ts");
+  const total = konspektWords(r.doc);
+  trimKonspektDoc(r.doc, Math.floor(total / 2));
+  assert.ok(konspektWords(r.doc) <= total / 2 && konspektWords(r.doc) > total / 2 - 800, `${konspektWords(r.doc)} of ${total}`);
+  assert.deepEqual(r.doc.sections.map((s) => s.id), r.doc.sections.map((_, i) => `ch${i + 1}`), "renumbered");
+  assert.deepEqual(r.doc.work!.chapters.map((c) => c.id), r.doc.sections.map((s) => s.id), "model chapters follow the sections");
+  trimKonspektDoc(r.doc, 0);
+  assert.equal(r.doc.sections.length, 0);
+  // Calibration: Russian A5 1-cell page ≈ 145 measured words (rendered live konspekt, many lists).
+  const hand = konspektInputFromValues({ topic: "T" }).hand;
+  const perPage = konspektWordsPerPage(hand, "ru");
+  assert.ok(perPage >= 120 && perPage <= 175, `A5 1-cell ru: ${perPage} words/page (measured ≈145)`);
 });

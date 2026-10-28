@@ -616,7 +616,8 @@ test("maxsus formali vositalar serverda ham tekshiriladi", async () => {
    * asosiysi — HAR custom vositada kamida bitta server tomonidagi
    * majburiy kirish bo'lishi (P0-5). Istisno ro'yxati BITTA joyda tursin.
    */
-  const TOPIC_LEGEND_CUSTOMS = new Set(["slide", "pro-slide", "game", "media", "infographic"]);
+  /* `konspekt`: the topic (`topicLegend`) is the required input; the form fills it from the file name when only a file is given. */
+  const TOPIC_LEGEND_CUSTOMS = new Set(["slide", "pro-slide", "game", "media", "infographic", "konspekt"]);
   for (const tool of TOOLS.filter((t) => t.custom && TOPIC_LEGEND_CUSTOMS.has(t.custom))) {
     assert.ok(
       tool.topicLegend || tool.fields.some((f) => f.required && !f.extra),

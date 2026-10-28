@@ -211,3 +211,34 @@ export async function buildKonspektDoc(meta: DocMeta, values: FormValues, opts: 
 
 
 export { KONSPEKT_HAND_DEFAULTS, konspektInputFromValues, konspektWordPlan, konspektWordsPerPage, type KonspektInput } from "./input";
+
+/** Words of the notes (paragraphs, list items, quotes). */
+export function konspektWords(doc: AcademicDoc): number {
+  return doc.sections.reduce((n, s) => n + wordCount(s.blocks), 0);
+}
+
+/**
+ * Cuts the notes from the END until at most `maxWords` words remain (whole blocks; a section that loses all its
+ * blocks is dropped). Used by the rendered-size fit: a konspekt must never exceed the sheets the tier was paid for.
+ */
+export function trimKonspektDoc(doc: AcademicDoc, maxWords: number): void {
+  let left = Math.max(0, Math.floor(maxWords));
+  const kept: DocSection[] = [];
+  for (const sec of doc.sections) {
+    const blocks: Block[] = [];
+    for (const b of sec.blocks) {
+      const w = wordCount([b]);
+      if (w > left) {
+        left = 0;
+        break;
+      }
+      blocks.push(b);
+      left -= w;
+    }
+    if (blocks.length) kept.push({ ...sec, blocks });
+    if (left === 0) break;
+  }
+  const renumbered = kept.map((sec, i) => ({ ...sec, id: `ch${i + 1}` }));
+  doc.sections = renumbered;
+  if (doc.work) doc.work.chapters = renumbered.map((sec) => ({ id: sec.id, title: sec.title, paragraphs: [] }));
+}

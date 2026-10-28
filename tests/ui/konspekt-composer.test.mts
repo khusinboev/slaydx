@@ -8,7 +8,7 @@ import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.
 import { KonspektComposer } from "../../components/forms/KonspektComposer.tsx";
 import { KONSPEKT_FORM_FIELDS } from "../../lib/generation/konspekt/params.ts";
 import { TOOL_BY_ID, priceFor } from "../../lib/tools.ts";
-import type { FormValues, UserProfile } from "../../lib/types.ts";
+import type { FormValues } from "../../lib/types.ts";
 
 /**
  * Konspekt form: every registry id is rendered exactly once, rows that cannot work are hidden, the
@@ -18,10 +18,6 @@ import type { FormValues, UserProfile } from "../../lib/types.ts";
 afterEach(() => cleanup());
 
 const router: AppRouterInstance = { back() {}, forward() {}, refresh() {}, push() {}, replace() {}, prefetch() {} };
-const profile: UserProfile = {
-  name: "Aliyev Ali", language: "uz", points: 0, quota: 0, balance: 100000, university: "TDPU", faculty: "", department: "", group: "", course: "",
-  author: "Aliyev Ali", subject: "", teacher: "", city: "Toshkent", position: "", organization: "",
-};
 
 type Call = { url: string; method: string; body?: unknown };
 function stubApi(draft: Record<string, unknown> | null = null) {
