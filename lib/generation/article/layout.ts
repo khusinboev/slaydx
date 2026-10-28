@@ -43,6 +43,8 @@ import { formatReference, formatReferenceEnglish } from "../cite";
 export type CiteSpan = {
   text: string;
   cite?: { ids: string[]; ns: number[]; verified: ReferenceVerified };
+  /** Qo'lyozma «jonli yozuv» (`handWordJitter`): bu so'zning siljishi (yarim-pt) va siyoh to'qligi (%). */
+  j?: { dy: number; t: number };
 };
 
 export type ArticleAuthorLine = {

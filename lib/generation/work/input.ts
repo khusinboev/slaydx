@@ -363,7 +363,7 @@ export function workInputFromValues(values: FormValues, genre: WorkGenreId): Wor
  */
 export function handInputOf(values: FormValues, genre: WorkGenreId): { hand?: WorkHand } {
   if (genre !== "independent" || str(values.workView, 10) !== "hand") return {};
-  return { hand: normalizeHand({ ink: str(values.handInk, 12), paper: str(values.handPaper, 12), font: str(values.handFont, 12) }) };
+  return { hand: normalizeHand({ ink: str(values.handInk, 12), paper: str(values.handPaper, 12), font: str(values.handFont, 12), lively: str(values.handLively, 5), headings: str(values.handHeadings, 8), cover: str(values.handCover, 12), underline: str(values.handUnderline, 5) }) };
 }
 
 /** Klient uchun teskari yo'l — forma holatidan `FormValues` (qoralama). */
@@ -404,6 +404,10 @@ export function encodeWorkValues(input: WorkInput): FormValues {
       out.handInk = input.hand.ink;
       out.handPaper = input.hand.paper;
       out.handFont = input.hand.font;
+      out.handLively = input.hand.lively ? "on" : "off";
+      out.handHeadings = input.hand.headings ?? "caps";
+      out.handCover = input.hand.cover ?? "plain";
+      out.handUnderline = input.hand.underline === false ? "off" : "on";
     }
   }
   return out;

@@ -22,16 +22,24 @@ import {
   HAND_PAPER_SPECS,
   handCoverLines,
   handCssVars,
+  handFaceOf,
+  handFaces,
+  handFontFaceCss,
   handFormulaText,
   handGeometry,
+  handSegments,
+  handTitleSegments,
   handStyleOf,
+  handToneHex,
+  handWordJitter,
+  handWordPieces,
   handText,
   normalizeHand,
   twToMm,
   type WorkHand,
 } from "../lib/generation/work/handwriting.ts";
 import { HAND_REQUIRED_ALL, HAND_REQUIRED_TEXT } from "../lib/generation/work/handwriting-coverage.ts";
-import { fontCodepoints, fontMetrics, missingChars } from "../lib/generation/work/font-cmap.ts";
+import { fontCodepoints, fontMetrics, fontTableTags } from "../lib/generation/work/font-cmap.ts";
 import { paperPng, PAPER_PX } from "../lib/generation/work/paper-png.ts";
 import type { AcademicDoc, Figure, Reference } from "../lib/generation/types.ts";
 import type { LlmRole } from "../lib/generation/llm-roles.ts";
@@ -48,22 +56,35 @@ const fontBytes = (file: string) => new Uint8Array(readFileSync(new URL(file, FO
 
 /* ───────────────────────────── shrift qamrovi ───────────────────────────── */
 
-test("shrift qamrovi: har shrift lotin/kirill/o'zbek harflarini yopadi, yopmaydigani FAQAT `ʻ` va o'rinbosari bor", () => {
+test("shrift qamrovi: har belgi o'z yuzida bor; yuz yopmaydigan belgi FAQAT fallback jadvalida (va o'rinbosar bor)", () => {
   for (const id of HAND_FONT_IDS) {
     const spec = HAND_FONTS[id];
-    const cps = fontCodepoints(fontBytes(spec.file));
-    const missing = missingChars(cps, HAND_REQUIRED_ALL);
-    // `handwriting.ts fallback` ro'yxati haqiqiy yopilmaganlar bilan AYNAN teng (eskirsa qizaradi).
-    assert.deepEqual(
-      missing.map((c) => c.codePointAt(0)).sort(),
-      Object.keys(spec.fallback).map(Number).sort(),
-      `${spec.label}: yopilmagan belgilar fallback jadvaliga mos emas (${missing.join(" ")})`,
-    );
-    for (const to of Object.values(spec.fallback)) assert.ok(cps.has(to), `${spec.label}: o'rinbosar U+${to.toString(16)} shriftda yo'q`);
-    // o'zbek kirill va lotin harflari aniq yopilgan.
-    for (const group of ["uzbekCyrillic", "cyrillic", "latin"] as const) assert.deepEqual(missingChars(cps, HAND_REQUIRED_TEXT[group]), [], `${spec.label}: ${group}`);
-    assert.ok(cps.has(0x2bc), `${spec.label}: ʼ (U+02BC)`);
+    const cmaps = new Map(handFaces(id).map((f) => [f.file, fontCodepoints(fontBytes(f.file))]));
+    for (const ch of HAND_REQUIRED_ALL) {
+      const cp = ch.codePointAt(0)!;
+      const face = handFaceOf(id, cp);
+      const has = cmaps.get(face.file)!.has(cp);
+      if (spec.fallback[cp] === undefined) {
+        assert.ok(has, `${spec.label}: «${ch}» (U+${cp.toString(16)}) ${face.family} da yo'q, fallback ham yo'q`);
+      } else {
+        // fallback ro'yxati eskirmasin: yuz haqiqatan yopmaydi, o'rinbosarni esa yuz yopadi.
+        assert.ok(!has, `${spec.label}: «${ch}» yuzda bor — fallback keraksiz`);
+        const to = spec.fallback[cp]!;
+        assert.ok(cmaps.get(handFaceOf(id, to).file)!.has(to), `${spec.label}: o'rinbosar U+${to.toString(16)} yuzda yo'q`);
+      }
+    }
+    // o'zbek kirill va lotin harflari fallback'siz yopiladi.
+    for (const group of ["uzbekCyrillic", "cyrillic", "latin"] as const) {
+      for (const ch of HAND_REQUIRED_TEXT[group]) assert.equal(spec.fallback[ch.codePointAt(0)!], undefined, `${spec.label}: ${group} «${ch}» fallback'ga tushmasligi kerak`);
+    }
   }
+});
+
+test("shrift fayllari STATIK (o'zgaruvchan emas): LibreOffice PDF eksporti `fvar` shriftni buzadi (matn tushib qoladi, harflar oralig'i yoriladi)", () => {
+  for (const id of HAND_FONT_IDS) {
+    for (const f of handFaces(id)) assert.ok(!fontTableTags(fontBytes(f.file)).includes("fvar"), `${f.file}: o'zgaruvchan shrift — statik Regular nusxa kerak (fonttools varLib.instancer wght=400)`);
+  }
+  assert.ok(!fontTableTags(fontBytes(HAND_FONTS.school.title!.file)).includes("fvar"));
 });
 
 test("shrift o'lchamlari (`hhea`) reyestrdagi qiymatlarga teng — ko'ruvchi asosi shundan hisoblanadi", () => {
@@ -76,24 +97,125 @@ test("shrift o'lchamlari (`hhea`) reyestrdagi qiymatlarga teng — ko'ruvchi aso
   }
 });
 
-test("`ʻ` → `‘` o'rinbosari: ikkala shriftda ham, boshqa belgilarga tegmaydi", () => {
+test("o'rinbosar: `ʻ`/`ʼ` faqat shrift yopmasa almashadi (maktab/qalam: `‘`/`’`), boshqa belgilarga tegmaydi", () => {
   for (const id of HAND_FONT_IDS) {
+    const fb = HAND_FONTS[id].fallback;
     assert.equal(handText(id, "oʻzbek gʻoya"), "o‘zbek g‘oya");
-    assert.equal(handText(id, "maʼno o‘ 'x' ўқув"), "maʼno o‘ 'x' ўқув", "ʼ, ‘, ' va kirill o'zgarmaydi");
+    const apostrophe = fb[0x2bc] === undefined ? "ʼ" : "’";
+    assert.equal(handText(id, `maʼno o‘ 'x' ўқув`), `ma${apostrophe}no o‘ 'x' ўқув`, `${id}: ʼ, ‘, ' va kirill`);
   }
 });
 
-test("shrift fayllari va OFL litsenziyalari repoda; ko'ruvchi URL i fayl nomiga mos", () => {
-  for (const id of HAND_FONT_IDS) {
-    const spec = HAND_FONTS[id];
-    assert.equal(spec.url, `/fonts/handwriting/${spec.file}`);
-    assert.ok(fontBytes(spec.file).length > 100_000);
+test("yuzlar: maktab = lotin Playwrite + kirill Marck (+ Қ Ғ Ҳ Bad Script), qalam = Marck + Bad Script; o'zbek harflari to'g'ri yuzga tushadi", () => {
+  const fam = (id: "school" | "pen" | "badscript", ch: string) => handFaceOf(id, ch.codePointAt(0)!).family;
+  assert.equal(fam("school", "a"), "Playwrite US Trad");
+  assert.equal(fam("school", "ў"), "Marck Script");
+  assert.equal(fam("school", "№"), "Marck Script", "Playwrite № ni yopmaydi");
+  for (const ch of "ҚқҒғҲҳ") assert.equal(fam("school", ch), "Bad Script", ch);
+  assert.equal(fam("pen", "a"), "Marck Script");
+  assert.equal(fam("pen", "қ"), "Bad Script");
+  assert.equal(fam("badscript", "қ"), "Bad Script");
+  // Bo'laklash: bo'shliq oldingi harf yuzida, matn birlashtirilganda o'zgarmaydi, o'rinbosar qo'llangan.
+  const segs = handSegments("school", "Sana: бугун, қалам 12 oʻ");
+  assert.equal(segs.map((x) => x.text).join(""), "Sana: бугун, қалам 12 o‘");
+  assert.deepEqual(segs.map((x) => x.face.family), ["Playwrite US Trad", "Marck Script", "Playwrite US Trad", "Bad Script", "Marck Script", "Playwrite US Trad"]);
+  assert.deepEqual(handSegments("badscript", "abc қ").map((x) => x.face.family), ["Bad Script"], "yo'ldoshsiz shrift — bitta bo'lak");
+  assert.deepEqual(handSegments("school", ""), []);
+});
+
+test("muqova sarlavhasi: Great Vibes faqat o'zi yopgan belgilarda (haqiqiy `cmap` bilan), Қ Ғ Ҳ va ‘ oddiy yuzda; yo'ldoshsiz/sarlavhasiz shriftda oddiy", () => {
+  for (const id of ["school", "pen"] as const) {
+    const t = HAND_FONTS[id].title!;
+    const cps = fontCodepoints(fontBytes(t.file));
+    for (const [lo, hi] of t.ranges) for (let cp = lo; cp <= hi; cp++) assert.ok(cps.has(cp), `${id}: Great Vibes U+${cp.toString(16)} yo'q, lekin diapazonda`);
+    // talab qilingan harflardan Қ Ғ Ҳ dan tashqari hammasi sarlavha yuzida.
+    for (const ch of HAND_REQUIRED_TEXT.latin + HAND_REQUIRED_TEXT.cyrillic + "ЎўЁё") assert.ok(t.ranges.some(([lo, hi]) => ch.codePointAt(0)! >= lo && ch.codePointAt(0)! <= hi), `${id}: «${ch}»`);
   }
-  for (const f of ["OFL-Caveat.txt", "OFL-BadScript.txt"]) assert.match(readFileSync(new URL(f, FONT_DIR), "utf8"), /SIL OPEN FONT LICENSE Version 1\.1/i);
-  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const segs = handTitleSegments("school", "Мустақил иш oʻ");
+  assert.equal(segs.map((x) => x.text).join(""), "Мустақил иш o‘");
+  assert.deepEqual(segs.map((x) => [x.face.family, x.title]), [["Great Vibes", true], ["Bad Script", false], ["Great Vibes", true]], "қ — Bad Script, qolgani Great Vibes");
+  assert.ok(handTitleSegments("badscript", "Mustaqil ish").every((x) => !x.title && x.face.family === "Bad Script"));
+  assert.equal(HAND_FONTS.caveat.title, undefined);
+});
+
+test("DOCX muqovasi: sarlavha qatori Great Vibes (embed ham), matn Playwrite; ko'ruvchi CSS: --hand-title-family faqat sarlavhali shriftda", async () => {
+  const doc = sampleWorkDoc({ topic: "Qo‘lyozma sinovi", workLabel: "Mustaqil ish", language: "uz", toolId: "mustaqil-ish" } as never, { genre: "independent", kind: "written" });
+  doc.work!.hand = { ink: "blue", paper: "lined", font: "school", cover: "calligraphy" };
+  const x = await unzip(await renderDocx(doc));
+  assert.match(x.document, /w:rFonts w:ascii="Great Vibes"/, "muqova sarlavhasi Great Vibes");
+  doc.work!.hand = { ink: "blue", paper: "lined", font: "school" };
+  assert.doesNotMatch((await unzip(await renderDocx(doc))).document, /Great Vibes/, "standart muqova oddiy shriftda");
+  doc.work!.hand = { ink: "blue", paper: "lined", font: "school", cover: "calligraphy" };
+  assert.match(x.document, /w:rFonts w:ascii="Playwrite US Trad"/);
+  const zip = await JSZip.loadAsync(await renderDocx(doc));
+  const embedded = Object.keys(zip.files).filter((f) => /^word\/fonts\/.+\.odttf$/.test(f));
+  assert.equal(embedded.length, 4, `4 yuz joylanadi: ${embedded.join(", ")}`);
+  assert.equal(handCssVars(handStyleOf({ ink: "blue", paper: "lined", font: "school", cover: "calligraphy" }))["--hand-title-family"], '"SlaydX Title Maktab", "SlaydX Maktab"');
+  assert.equal(handCssVars(handStyleOf({ ink: "blue", paper: "lined", font: "school" }))["--hand-title-family"], undefined, "standart: sarlavha yuzi yo'q");
+  assert.equal(handCssVars(handStyleOf({ ink: "blue", paper: "lined", font: "caveat" }))["--hand-title-family"], undefined);
+});
+
+test("jonli yozuv: deterministik, chegaralangan (±1 pt, ≤16 % oqarish), birlashtirilsa matn tiklanadi; `lively` faqat yoqilganda modelda", () => {
+  for (let i = 0; i < 200; i++) {
+    const a = handWordJitter(i, "salom");
+    assert.deepEqual(a, handWordJitter(i, "salom "), "oxiridagi bo'shliq ta'sir qilmaydi");
+    assert.ok(Math.abs(a.dyHalfPt) <= 2 && Number.isInteger(a.dyHalfPt) && a.tonePct >= 0 && a.tonePct <= 16);
+  }
+  const spread = new Set(Array.from({ length: 200 }, (_, i) => handWordJitter(i, "so'z").dyHalfPt));
+  assert.ok(spread.size >= 4, "siljishlar xilma-xil");
+  const text = "  Mustaqil  ish — qo‘lyozma\n namuna ";
+  assert.equal(handWordPieces(text).join(""), text);
+  assert.equal(handToneHex("1B3AA6", 0), "1B3AA6");
+  assert.equal(handToneHex("1B3AA6", 100), "FFFFFF");
+  assert.deepEqual(normalizeHand({ lively: "on" }), { ink: "blue", paper: "lined", font: "school", lively: true });
+  assert.deepEqual(normalizeHand({ lively: "off" }), { ink: "blue", paper: "lined", font: "school" });
+  assert.deepEqual(normalizeHand({ lively: true }).lively, true);
+});
+
+test("qo'shimcha tanlovlar: normalizeHand faqat eski xulqdan farqlisini saqlaydi; sarlavhasiz shriftda `cover` tashlanadi", () => {
+  assert.deepEqual(normalizeHand({ headings: "plain", underline: "off", cover: "calligraphy" }), { ink: "blue", paper: "lined", font: "school", headings: "plain", cover: "calligraphy", underline: false });
+  assert.deepEqual(normalizeHand({ headings: "caps", underline: "on", cover: "plain" }), { ink: "blue", paper: "lined", font: "school" });
+  assert.equal(normalizeHand({ font: "caveat", cover: "calligraphy" }).cover, undefined, "Caveat da kalligrafik sarlavha yuzi yo'q");
+});
+
+test("sarlavha harf shakli: oddiy — «Kirish», «1-bob. …», «Mundarija» (modelning o'z sarlavhasi o'zgarmaydi); BOSH HARFLI — eski; mundarija = tana", () => {
+  const mk = (hand: WorkHand) => {
+    const doc = sampleWorkDoc({ topic: "Qo‘lyozma sinovi", workLabel: "Mustaqil ish", language: "uz", toolId: "mustaqil-ish" } as never, { genre: "independent", kind: "written" });
+    doc.work!.hand = hand;
+    return planWork(doc);
+  };
+  const base = { ink: "blue", paper: "lined", font: "school" } as const;
+  const caps = mk(base);
+  const plain = mk({ ...base, headings: "plain" });
+  const heads = (p: ReturnType<typeof planWork>) => p.body.filter((b) => b.k === "h1").map((b) => (b as { text: string }).text);
+  assert.ok(heads(caps).includes("KIRISH") && heads(caps).some((t) => /^1-BOB\. [A-Z‘’' ,.-]+$/.test(t)), heads(caps).join(" | "));
+  assert.ok(heads(plain).includes("Kirish") && heads(plain).includes("Xulosa"), heads(plain).join(" | "));
+  assert.ok(heads(plain).some((t) => /^1-bob\. [A-Z][a-z]/.test(t)), heads(plain).join(" | "));
+  assert.equal(plain.labels.toc, "Mundarija");
+  assert.equal(plain.refsLabel, "Foydalanilgan adabiyotlar");
+  assert.equal(caps.labels.toc, caps.labels.toc.toUpperCase());
+  // mundarija qatorlari tanadagi sarlavhalar bilan AYNAN bir xil.
+  const bodyHeads = new Set(plain.body.filter((b) => b.k === "h1" || b.k === "h2").map((b) => (b as { text: string }).text));
+  for (const r of plain.toc.filter((r) => r.level === 1 || r.level === 2)) assert.ok(bodyHeads.has(r.text) || r.text === plain.refsLabel || /^\d-ilova/i.test(r.text), `mundarija: ${r.text}`);
+});
+
+test("shrift fayllari va OFL litsenziyalari repoda; ko'ruvchi URL i fayl nomiga mos; globals.css @font-face lar `handFontFaceCss` bilan bir xil", () => {
   for (const id of HAND_FONT_IDS) {
-    const spec = HAND_FONTS[id];
-    assert.ok(css.includes(`font-family: "${spec.family}"`) && css.includes(spec.url), `globals.css: ${spec.family} @font-face`);
+    for (const f of handFaces(id)) {
+      assert.equal(f.url, `/fonts/handwriting/${f.file}`);
+      assert.ok(fontBytes(f.file).length > 50_000, f.file);
+    }
+  }
+  for (const f of ["OFL-Caveat.txt", "OFL-BadScript.txt", "OFL-MarckScript.txt", "OFL-PlaywriteUSTrad.txt", "OFL-GreatVibes.txt"]) {
+    assert.match(readFileSync(new URL(f, FONT_DIR), "utf8"), /SIL OPEN FONT LICENSE Version 1\.1/i, f);
+  }
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\s+/g, " ");
+  // Har `@font-face{...}` ni normallashtiramiz va globals.css da AYNAN shunday blok borligini tekshiramiz.
+  const norm = (b: string) => b.replace(/\s+/g, "").replace(/;font-display:swap/, "").replace(/format\("truetype"\)/, "").replace(/;$/, "");
+  const inCss = new Set([...css.matchAll(/@font-face \{([^}]*)\}/g)].map((m) => norm(m[1]!)));
+  for (const block of handFontFaceCss().split("\n")) {
+    const body = /@font-face\{(.*)\}$/.exec(block)![1]!;
+    assert.ok(inCss.has(norm(body)), `globals.css da yo'q: ${block}`);
   }
 });
 
@@ -122,8 +244,8 @@ test("workInputFromValues: faqat mustaqil ishda, faqat workView=hand; noma'lum q
   assert.equal(workInputFromValues({ ...v, workView: "plain" }, "independent").hand, undefined);
   assert.equal(workInputFromValues(v, "coursework").hand, undefined, "kurs ishi daftarga ko'chirilmaydi");
   assert.equal(workInputFromValues(v, "referat").hand, undefined);
-  assert.deepEqual(workInputFromValues({ workView: "hand", handInk: "red", handPaper: "x", handFont: "comic" }, "independent").hand, { ink: "blue", paper: "lined", font: "badscript" });
-  assert.deepEqual(normalizeHand({}), { ink: "blue", paper: "lined", font: "badscript" });
+  assert.deepEqual(workInputFromValues({ workView: "hand", handInk: "red", handPaper: "x", handFont: "comic" }, "independent").hand, { ink: "blue", paper: "lined", font: "school" });
+  assert.deepEqual(normalizeHand({}), { ink: "blue", paper: "lined", font: "school" });
 });
 
 test("encodeWorkValues ↔ workInputFromValues: qo'lyozma tanlovi aylanib keladi", () => {

@@ -112,6 +112,10 @@ export const WORK_HAND_PARAMS: WorkHandParam[] = [
   { id: "handInk", encode: "string", probeA: "blue", probeB: "black", probeWith: { workView: "hand" }, impacts: ["style"] },
   { id: "handPaper", encode: "string", probeA: "lined", probeB: "grid", probeWith: { workView: "hand" }, impacts: ["style"] },
   { id: "handFont", encode: "string", probeA: "badscript", probeB: "caveat", probeWith: { workView: "hand" }, impacts: ["style"] },
+  { id: "handHeadings", encode: "string", probeA: "plain", probeB: "caps", probeWith: { workView: "hand" }, impacts: ["style"] },
+  { id: "handCover", encode: "string", probeA: "plain", probeB: "calligraphy", probeWith: { workView: "hand" }, impacts: ["style"] },
+  { id: "handUnderline", encode: "string", probeA: "on", probeB: "off", probeWith: { workView: "hand" }, impacts: ["style"] },
+  { id: "handLively", encode: "string", probeA: "off", probeB: "on", probeWith: { workView: "hand" }, impacts: ["style"] },
 ];
 
 export const WORK_HAND_FORM_FIELDS = WORK_HAND_PARAMS.map((p) => p.id);

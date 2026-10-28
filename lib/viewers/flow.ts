@@ -1,6 +1,6 @@
 import { planArticle, type ArticleAuthorLine, type ArticlePlan, type CiteSpan } from "@/lib/generation/article/layout";
 import { planWork, type WorkBodyItem, type WorkPlan } from "@/lib/generation/work/layout";
-import { handFormulaText, handText } from "@/lib/generation/work/handwriting";
+import { handFormulaText, handText, handWordJitter, handWordPieces } from "@/lib/generation/work/handwriting";
 import { isTeacherDoc, planTeacher, type TeacherPlan } from "@/lib/generation/teacher/layout";
 import { isGameDoc, planGame, type GameCardFace, type GameCluesItem, type GamePlan } from "@/lib/generation/games/layout";
 import { docLabels } from "@/lib/generation/i18n";
@@ -335,7 +335,19 @@ export function workFlow(plan: WorkPlan, doc: AcademicDoc): FlowItem[] {
    */
   const hand = plan.style;
   const tx = (t: string): string => (hand ? handText(hand.font, t) : t);
-  const txSpans = (spans: CiteSpan[]): CiteSpan[] => (hand ? spans.map((sp) => ({ ...sp, text: tx(sp.text) })) : spans);
+  const txSpans = (spans: CiteSpan[]): CiteSpan[] => {
+    if (!hand) return spans;
+    const mapped = spans.map((sp) => ({ ...sp, text: tx(sp.text) }));
+    if (!hand.lively) return mapped;
+    /* Jonli yozuv: har so'z o'z bo'lagi (`j`); iqtibos bo'lagi so'zlarga bo'linsa ham `cite` saqlanadi. */
+    let i = 0;
+    return mapped.flatMap((sp) =>
+      handWordPieces(sp.text).map((w) => {
+        const j = handWordJitter(i++, w);
+        return { ...sp, text: w, j: { dy: j.dyHalfPt, t: j.tonePct } };
+      }),
+    );
+  };
 
   if (doc.titlePage) items.push({ type: "title", id: id("title") });
   if (doc.toc && plan.toc.length) items.push({ type: "toc", id: id("toc") });

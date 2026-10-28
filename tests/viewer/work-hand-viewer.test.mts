@@ -10,7 +10,7 @@ import { renderDocx } from "../../lib/generation/render-docx.ts";
 import { planWork } from "../../lib/generation/work/layout.ts";
 import { sampleWorkDoc } from "../../lib/generation/work/samples.ts";
 import { titleModel } from "../../lib/generation/title-model.ts";
-import { handCoverLines, handCssVars, handGeometry, handStyleOf, HAND_INK_HEX, type WorkHand } from "../../lib/generation/work/handwriting.ts";
+import { handCoverLines, handCssVars, handGeometry, handStyleOf, HAND_FONTS, HAND_INK_HEX, type WorkHand } from "../../lib/generation/work/handwriting.ts";
 import type { AcademicDoc, DocMeta } from "../../lib/generation/types.ts";
 
 /**
@@ -44,7 +44,7 @@ function measureTree(doc: AcademicDoc): string {
   assert.ok(i > 0, "o'lchov daraxti topilmadi");
   return html.slice(i);
 }
-const fromToc = (list: string[]) => list.slice(list.indexOf("MUNDARIJA"));
+const fromToc = (list: string[]) => list.slice(list.findIndex((t) => t === "MUNDARIJA" || t === "Mundarija"));
 
 test("qo'lyozma: o'lchov daraxti `word-hand` sinfi va --hand-* o'zgaruvchilarni oladi (siyoh, shrift, qator oralig'i, kenglik)", () => {
   const html = measureTree(handDoc({ ink: "purple", paper: "grid", font: "caveat" }));
@@ -65,13 +65,16 @@ test("oddiy mustaqil ish: `word-hand` YO'Q (regressiya)", () => {
 });
 
 test("«ko'rdim = oldim»: qo'lyozma ko'ruvchi matni DOCX matniga AYNAN teng (mundarijadan boshlab; `ʻ` → `‘` ikkala tomonda)", async () => {
-  for (const hand of [{ ink: "blue", paper: "lined", font: "badscript" }, { ink: "black", paper: "grid", font: "caveat" }] as WorkHand[]) {
+  for (const hand of [{ ink: "blue", paper: "lined", font: "badscript" }, { ink: "black", paper: "grid", font: "caveat" }, { ink: "blue", paper: "lined", font: "school", lively: true }, { ink: "purple", paper: "grid", font: "pen", lively: true }, { ink: "black", paper: "lined", font: "school", headings: "plain", underline: false, cover: "calligraphy" }] as WorkHand[]) {
     const doc = handDoc(hand);
     const view = fromToc(htmlTexts(measureTree(doc)));
     const file = fromToc(docxTexts(await docxXml(doc)));
     assert.ok(file.length > 40);
-    assert.deepEqual(view, file);
-    assert.ok(file.some((t) => t.includes("O‘zbek g‘oyasi")), "‘ ga almashgan");
+    /* Yo'ldoshli shriftda DOCX yuz almashganda (`№`, kirill) run'ga bo'linadi, ko'ruvchi esa `unicode-range` bilan bitta tugun —
+       shuning uchun tugunlar ro'yxati emas, bo'shliqsiz matn solishtiriladi. Yo'ldoshsiz shriftda ro'yxat AYNAN teng. */
+    if (HAND_FONTS[hand.font].companions.length === 0 && !hand.lively) assert.deepEqual(view, file);
+    else assert.equal(view.join("").replace(/\s+/g, ""), file.join("").replace(/\s+/g, ""));
+    assert.ok(file.join(" ").includes("O‘zbek g‘oyasi"), "‘ ga almashgan");
   }
 });
 
@@ -116,4 +119,38 @@ test("CSS: `.word-hand` qoidalari mavjud (fon chiziqlari, shrift, qator oralig'i
 test("planWork: ko'ruvchi varag'i uchun uslub reja bilan keladi", () => {
   const plan = planWork(handDoc());
   assert.equal(plan.style?.kind, "handwritten");
+});
+
+test("jonli yozuv: so'z bo'laklari `position: relative` + siyoh to'qligi (joylashuv va matn TEGMAYDI), o'chiq bo'lsa hech narsa yo'q, qayta chizsa bir xil", () => {
+  const lively = (on: boolean) => handDoc({ ink: "blue", paper: "lined", font: "school", ...(on ? { lively: true as const } : {}) });
+  const on = measureTree(lively(true));
+  const off = measureTree(lively(false));
+  assert.ok(on.includes("--hand-lively:1") && off.includes("--hand-lively:0"));
+  assert.ok(/position:relative;top:[-0-9.]+pt/.test(on), "so'z siljishi");
+  assert.ok(on.includes("color-mix(in srgb, var(--hand-ink), #fff"), "siyoh to'qligi");
+  assert.ok(!/position:relative;top:/.test(off), "o'chiq rejimda siljish yo'q");
+  assert.equal(measureTree(lively(true)), on, "deterministik");
+  // Matn birlashtirilganda aynan bir xil (jonli rejim faqat ko'rinish).
+  assert.equal(htmlTexts(on).join("").replace(/\s+/g, ""), htmlTexts(off).join("").replace(/\s+/g, ""));
+});
+
+test("jonli yozuv DOCX: so'z siljishi `w:position`, o'lcham/kenglik o'zgarmaydi (jonli ↔ tekis: `w:sz` to'plami bir xil)", async () => {
+  const base = { ink: "blue", paper: "lined", font: "school" } as const;
+  const on = await docxXml(handDoc({ ...base, lively: true }));
+  const off = await docxXml(handDoc(base));
+  assert.ok(/<w:position w:val="-?\d+"\/>/.test(on), "w:position bor (butun yarim-punkt)");
+  assert.ok(!/<w:position /.test(off), "tekis rejimda w:position yo'q");
+  const sizes = (x: string) => new Set([...x.matchAll(/<w:sz w:val="(\d+)"/g)].map((m) => m[1]));
+  assert.deepEqual([...sizes(on)].sort(), [...sizes(off)].sort(), "o'lcham to'plami bir xil — qator uzilishi o'zgarmaydi");
+  assert.ok(/w:color w:val="(?!1B3AA6)[0-9A-F]{6}"/.test(on), "siyoh to'qligi o'zgargan so'zlar bor");
+});
+
+test("sarlavha: oddiy rejimda ko'ruvchi mundarijani BOSH HARFGA o'tkazmaydi, tagchiziq o'zgaruvchisi va muqova yuzi parametrga ergashadi", () => {
+  const plain = measureTree(handDoc({ ink: "blue", paper: "lined", font: "school", headings: "plain", underline: false, cover: "calligraphy" }));
+  const caps = measureTree(handDoc({ ink: "blue", paper: "lined", font: "school" }));
+  const texts = htmlTexts(plain);
+  assert.ok(texts.includes("Mundarija") && texts.includes("Kirish") && !texts.includes("KIRISH"), texts.slice(0, 40).join(" | "));
+  assert.ok(htmlTexts(caps).includes("MUNDARIJA") && htmlTexts(caps).includes("KIRISH"));
+  assert.ok(plain.includes("--hand-head-decoration:none") && caps.includes("--hand-head-decoration:underline"));
+  assert.ok(plain.includes("--hand-title-family") && !caps.includes("--hand-title-family"));
 });

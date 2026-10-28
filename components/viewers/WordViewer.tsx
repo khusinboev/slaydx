@@ -57,7 +57,7 @@ function sliceSpans(text: string, spans: CiteSpan[] | undefined, part: string): 
   for (const s of spans) {
     const a = Math.max(pos, from);
     const b = Math.min(pos + s.text.length, to);
-    if (b > a) out.push({ text: s.text.slice(a - pos, b - pos), ...(s.cite ? { cite: s.cite } : {}) });
+    if (b > a) out.push({ text: s.text.slice(a - pos, b - pos), ...(s.cite ? { cite: s.cite } : {}), ...(s.j ? { j: s.j } : {}) });
     pos += s.text.length;
   }
   return out;
@@ -338,8 +338,10 @@ export function WordViewer({
   const renderItems = flow && flow.base === items && flow.fonts === fontEpoch ? flow.list : items;
   const title = useMemo(() => titleModel(doc), [doc]);
   const handFont = work?.plan.style?.font;
-  const toc = useMemo(() => (handFont ? tocRows(doc).map((r) => ({ ...r, text: handText(handFont, r.text) })) : tocRows(doc)), [doc, handFont]);
-  const labels = useMemo(() => docLabels(doc.meta.language), [doc.meta.language]);
+  /* Qo'lyozmada mundarija matni `planWork` dan keladi (BOSH HARFLI yoki oddiy — `hand.headings`): ko'ruvchi uni o'zgartirmaydi (`asIs`). */
+  const toc = useMemo(() => (handFont ? tocRows(doc).map((r) => ({ ...r, text: handText(handFont, r.text), asIs: true })) : tocRows(doc)), [doc, handFont]);
+  const handTocLabel = work?.plan.style ? work.plan.labels.toc : undefined;
+  const labels = useMemo(() => (handTocLabel ? { ...docLabels(doc.meta.language), toc: handTocLabel } : docLabels(doc.meta.language)), [doc.meta.language, handTocLabel]);
   const continuedLabel = useMemo(() => sectionLabels(doc.meta.language).continued, [doc.meta.language]);
   /**
    * Sahifa ramkasi ko'ruvchida ham FAQAT inshoda — `render-docx.ts`
@@ -1027,7 +1029,7 @@ function FlowBlock({
                 marginLeft: row.level === 2 ? "0.75cm" : 0,
               }}
             >
-              {row.level === 1 ? row.text.toUpperCase() : row.text}
+              {row.level === 1 && !row.asIs ? row.text.toUpperCase() : row.text}
             </div>
           ))}
         </div>

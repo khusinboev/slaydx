@@ -1,4 +1,5 @@
 import type { CiteSpan } from "@/lib/generation/article/layout";
+import { handJitterCss } from "@/lib/generation/work/handwriting";
 import type { FlowItem } from "@/lib/viewers/flow";
 
 /**
@@ -92,6 +93,8 @@ const VERIFIED_TITLE: Record<NonNullable<CiteSpan["cite"]>["verified"], string> 
   unverified: "Manba TEKSHIRILMAGAN — hisobotga qarang",
 };
 
+const jitterStyle = (j: CiteSpan["j"]): React.CSSProperties | undefined => (j ? handJitterCss(j) : undefined);
+
 /**
  * Iqtibosli matn: `[1; 25-b.]` bo'laklari `data-ref-verified` bilan
  * o'raladi (✅/⚠️ belgisi CSS `::after` dan — matn tuguniga kirmaydi,
@@ -105,6 +108,7 @@ export function CiteText({ text, spans }: { text: string; spans?: CiteSpan[] }) 
         s.cite ? (
           <span
             key={i}
+            style={jitterStyle(s.j)}
             className="word-cite"
             data-ref-verified={s.cite.verified}
             data-ref-ids={s.cite.ids.join(" ")}
@@ -113,7 +117,7 @@ export function CiteText({ text, spans }: { text: string; spans?: CiteSpan[] }) 
             {s.text}
           </span>
         ) : (
-          <span key={i}>{s.text}</span>
+          <span key={i} style={jitterStyle(s.j)}>{s.text}</span>
         ),
       )}
     </>

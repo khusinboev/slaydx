@@ -23,6 +23,11 @@ function tablesOf(view: DataView): Tables {
   return out;
 }
 
+/** Shrift jadvallari teglari (`fvar` bor = o'zgaruvchan shrift). */
+export function fontTableTags(bytes: Uint8Array): string[] {
+  return [...tablesOf(new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)).keys()];
+}
+
 /** Shrift qamrab olgan Unicode nuqtalari (glyph 0 = `.notdef` hisoblanmaydi). */
 export function fontCodepoints(bytes: Uint8Array): Set<number> {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
