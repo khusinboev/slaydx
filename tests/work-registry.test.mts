@@ -24,8 +24,10 @@ import { TOOL_BY_ID, priceFor } from "../lib/tools.ts";
  * kirish 10–15 %, xulosa 2–4 bet) shu yerda qulflanadi.
  */
 
-test("4 genres, each with its kinds; a genre is bound to its tool id", () => {
-  assert.deepEqual([...WORK_GENRE_IDS], ["coursework", "referat", "independent", "konspekt"]);
+test("5 genres, each with its kinds; a genre is bound to its tool id", () => {
+  assert.deepEqual([...WORK_GENRE_IDS], ["coursework", "referat", "independent", "konspekt", "essay"]);
+  assert.deepEqual(workKindsOf("essay").map((k) => k.id), ["handwritten"]);
+  assert.equal(workGenreOfTool("essay"), null, "essay keeps its own tool plumbing: the genre only rides on doc.work");
   assert.deepEqual(workKindsOf("konspekt").map((k) => k.id), ["notes"]);
   assert.equal(workGenreOfTool("konspekt"), "konspekt");
   assert.deepEqual(workKindsOf("coursework").map((k) => k.id), ["theory", "applied", "project"]);
@@ -36,6 +38,7 @@ test("4 genres, each with its kinds; a genre is bound to its tool id", () => {
   assert.equal(workGenreOfTool("mustaqil-ish"), "independent");
   assert.equal(workGenreOfTool("article"), null);
   for (const g of WORK_GENRE_IDS) assert.ok(TOOL_BY_ID[WORK_GENRES[g].toolId as "coursework"], `${g}: vosita topilmadi`);
+  assert.equal(workKindOf("essay", "handwritten").introParts.length, 0, "the essay engine owns the text: no intro parts");
 });
 
 test("kirish elementlari: kurs ishi 7, referat 3, mustaqil 4 — hammasi ma'lum id", () => {
@@ -44,7 +47,7 @@ test("kirish elementlari: kurs ishi 7, referat 3, mustaqil 4 — hammasi ma'lum 
   assert.equal(REFERAT_INTRO_PARTS.length, 3);
   assert.equal(INDEPENDENT_INTRO_PARTS.length, 4);
   assert.deepEqual(workKindOf("konspekt", "notes").introParts, [], "konspekt has no introduction");
-  for (const g of WORK_GENRE_IDS.filter((x) => x !== "konspekt"))
+  for (const g of WORK_GENRE_IDS.filter((x) => x !== "konspekt" && x !== "essay"))
     for (const k of workKindsOf(g)) {
       assert.ok(k.introParts.length >= 3, `${k.id}: kirish elementlari kam`);
       for (const p of k.introParts) assert.ok(WORK_INTRO_PART_IDS.includes(p), `${k.id}: noma'lum element ${p}`);
@@ -55,7 +58,7 @@ test("kirish elementlari: kurs ishi 7, referat 3, mustaqil 4 — hammasi ma'lum 
 
 test("hajm/ulush standartlari: kirish 10–15 %, xulosa kurs 2–4 bet / referat ≈1, refsMin 15/5+/8", () => {
   /* Konspekt has no introduction/conclusion/references by design (shape "notes"). */
-  for (const g of WORK_GENRE_IDS.filter((x) => x !== "konspekt"))
+  for (const g of WORK_GENRE_IDS.filter((x) => x !== "konspekt" && x !== "essay"))
     for (const k of workKindsOf(g)) {
       assert.deepEqual(k.introShare, [0.1, 0.15], `${k.id}: kirish ulushi standartdan chetda`);
       assert.ok(k.conclusionPages[0] > 0 && k.conclusionPages[1] >= k.conclusionPages[0], `${k.id}: xulosa beti`);
@@ -98,7 +101,7 @@ test("bob shakli janrga mos: referat BO'LIMLAR (bob emas), kurs ishi 2 bob × 2 
 
 test("guidance: har turda ≥3 qator, INGLIZCHA, qo'shni turdan FARQ qiladi (nusxa emas)", () => {
   const seen = new Map<string, string>();
-  for (const g of WORK_GENRE_IDS)
+  for (const g of WORK_GENRE_IDS.filter((x) => x !== "essay"))
     for (const k of workKindsOf(g)) {
       assert.ok(k.guidance.length >= 3, `${k.id}: guidance ${k.guidance.length} qator (≥3 kerak)`);
       for (const line of k.guidance) assert.ok(line.length > 60 && /[a-z]/.test(line), `${k.id}: guidance qatori juda qisqa`);

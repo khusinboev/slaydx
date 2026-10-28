@@ -8,14 +8,14 @@ import { priceFor } from "@/lib/tools";
 import { formatSom } from "@/lib/format";
 import { WORK_LIMITS } from "@/lib/generation/work/types";
 import { KONSPEKT_PAGES } from "@/lib/generation/work/registry";
-import { HAND_FIELD_OF, handCapsOf, type WorkHand } from "@/lib/generation/work/handwriting";
+import { HAND_FIELD_OF, handCapsOf } from "@/lib/generation/work/handwriting";
 import { KONSPEKT_HAND_DEFAULTS, konspektInputFromValues, konspektWordsPerPage } from "@/lib/generation/konspekt/input";
 import { Card, Row, Segmented } from "./compact";
 import { ToolChrome } from "./ToolChrome";
 import { useFormDraft } from "./useFormDraft";
 import { runGeneration } from "./runGeneration";
 import { Field, LimitedTextarea, SourceFileRow, TopicRow } from "./shared";
-import { HandRows, type HandForm } from "./HandRows";
+import { HandRows, handFormOf, type HandForm } from "./HandRows";
 
 /**
  * Konspekt (lecture notes) form: a topic and/or a source file, the language, the volume tier and the
@@ -55,25 +55,9 @@ function emptyUi(): Ui {
   };
 }
 
-/** Hand model → form state (reading a saved draft). */
-function handFormOf(h: WorkHand): HandForm {
-  return {
-    ink: h.ink,
-    paper: h.paper,
-    font: h.font,
-    lively: h.lively ? "on" : "off",
-    headings: "plain",
-    cover: "plain",
-    underline: "on",
-    format: h.format ?? "a4",
-    margin: h.margin ?? (h.paper === "lined" || h.paper === "grid" ? "left" : "none"),
-    cells: h.cells ? "1" : "2",
-  };
-}
-
 function uiFromValues(values: FormValues): Ui {
   const input = konspektInputFromValues(values);
-  return { topic: input.topic, language: input.language, pages: input.pages, extra: input.extra, fileName: String(values.fileName ?? ""), sourceText: input.sourceText, hand: handFormOf(input.hand) };
+  return { topic: input.topic, language: input.language, pages: input.pages, extra: input.extra, fileName: String(values.fileName ?? ""), sourceText: input.sourceText, hand: { ...handFormOf(input.hand), headings: "plain", cover: "plain", underline: "on" } };
 }
 
 function toValues(ui: Ui): FormValues {

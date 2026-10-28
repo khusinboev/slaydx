@@ -575,6 +575,8 @@ export const HAND_SERVICE_CAPS: Record<string, readonly HandParamId[]> = {
   referat: HAND_PARAM_IDS,
   /* Lecture notes have no cover, headings style or underline choices: the notebook itself is the point. */
   konspekt: ["font", "ink", "lively", "paper", "format", "margin", "cells"],
+  /* An essay is one block of text under a title: no cover, heading style or underline to choose. */
+  essay: ["font", "ink", "lively", "paper", "format", "margin", "cells"],
 };
 
 /** Capability set of a service, or `null` when handwriting is not offered there. */

@@ -211,6 +211,8 @@ export function planWork(doc: AcademicDoc): WorkPlan {
   const flat = kind.shape === "sections";
   /** Konspekt: a title and unnumbered sub-headings, no page breaks between sections. */
   const notes = kind.shape === "notes";
+  /** Handwritten essay: the essay engine's single section IS the text; its title is the page title, no sub-heading. */
+  const essayText = kind.id === "handwritten";
 
   /* ── manbalar: faqat `cited`, O'zbekiston tartibi, raqam qayta beriladi ── */
   const ordered = orderUzReferences(citedOnly(model.references ?? []));
@@ -339,6 +341,10 @@ export function planWork(doc: AcademicDoc): WorkPlan {
     const path = `sections.${index}`;
     if (isAppendixId(s.id)) {
       appendices.push(s);
+      return;
+    }
+    if (essayText) {
+      pushBlocks(s.blocks, path, 0, counterFor(0));
       return;
     }
     if (notes && isChapterHeadId(s.id)) {

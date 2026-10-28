@@ -45,3 +45,4 @@ Mexanizm: `HAND_SERVICE_CAPS` — xizmat → ruxsat etilgan parametrlar. Forma f
   Volume: word plan from the hand geometry (`FILL` calibrated on a rendered live konspekt) + a rendered-size fit in
   `buildArtifact` (DOCX → PDF page count; over the tier → trim from the end, far below → refund).
 - Stage 4 (essay) — not started.
+- Stage 4 (essay) — `HAND_SERVICE_CAPS.essay` (font/ink/lively/paper/format/margin/cells), `EssayInput.hand`, the essay engine attaches a `doc.work` (genre `essay`, kind `handwritten`, shape `notes`, no cover page) that carries the layout for the shared renderer/viewer; essay form: «Ko'rinish» + `HandRows`; 8 new registry params with differential probes. Note: 2026-10-28 stage-2 deploy (7573dbf) aborted before the swap (registry pull reset); the next commit's deploy carries it.

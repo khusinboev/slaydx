@@ -22,6 +22,7 @@
  * o'tadi. Bo'sh matn XATO EMAS: hujjat qaytadi, hajm darvozasi
  * (`index.ts LENGTH_GATED`) uni yiqitadi va kredit qaytadi.
  */
+import { essayHandWork } from "../work/essay-hand";
 import type { FormValues } from "../../types";
 import type { AcademicDoc, Block, DocMeta, DocSection } from "../types";
 import { llmEnabled } from "../llm";
@@ -206,10 +207,12 @@ export async function buildEssayDoc(meta: DocMeta, values: FormValues, opts: Ess
   };
   const docFor = (body: Block[]): AcademicDoc => ({
     meta: { ...meta, language: input.language, design: input.design },
-    titlePage: ctx.context.titlePage,
+    /* A hand essay is written into a notebook: no cover page; `doc.work` carries the hand layout for the shared renderer. */
+    titlePage: input.hand ? false : ctx.context.titlePage,
     toc: false,
     sections: [{ id: "essay", title: outline.title, blocks: withEpigraph(input, body) } satisfies DocSection],
     essay: model,
+    ...(input.hand ? { work: essayHandWork(outline.title, input.language, input.hand) } : {}),
   });
 
   /* ── 3b. level repair: ONE extra call, only when the text is clearly (RED) off-level ── */

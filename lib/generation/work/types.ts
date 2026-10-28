@@ -26,7 +26,7 @@ import type { WorkHand } from "./handwriting";
 
 /* ────────────────────────── janr va tur ────────────────────────── */
 
-export const WORK_GENRE_IDS = ["coursework", "referat", "independent", "konspekt"] as const;
+export const WORK_GENRE_IDS = ["coursework", "referat", "independent", "konspekt", "essay"] as const;
 export type WorkGenreId = (typeof WORK_GENRE_IDS)[number];
 
 /**
@@ -37,9 +37,11 @@ export type WorkGenreId = (typeof WORK_GENRE_IDS)[number];
  *                 `analytic` (tahliliy-taqqoslovchi), `evaluative`
  *                 (baholovchi), `report` (DOKLAD — 3 qism, sxema/jadval);
  *   independent — `written` (yozma; taqdimot/buklet/test — keyingi sprint);
- *   konspekt    — `notes` (lecture notes: dense information, no cover/contents/references).
+ *   konspekt    — `notes` (lecture notes: dense information, no cover/contents/references);
+ *   essay       — `handwritten` (an essay written into a notebook: the essay engine owns the text, this genre only
+ *                 carries the hand layout so the shared renderer/viewer can draw it).
  */
-export const WORK_KIND_IDS = ["theory", "applied", "project", "informative", "analytic", "evaluative", "report", "written", "notes"] as const;
+export const WORK_KIND_IDS = ["theory", "applied", "project", "informative", "analytic", "evaluative", "report", "written", "notes", "handwritten"] as const;
 export type WorkKindId = (typeof WORK_KIND_IDS)[number];
 
 /** Fan profili — hajm/tuzilma emas, YOZISH va MANBA qoidalarini o'zgartiradi. */
@@ -198,5 +200,7 @@ export function workGenreOfTool(toolId: string): WorkGenreId | null {
   if (toolId === "referat") return "referat";
   if (toolId === "mustaqil-ish") return "independent";
   if (toolId === "konspekt") return "konspekt";
+  /* `essay` is deliberately NOT mapped: the essay engine owns its tool (pricing, budget, form); the `essay` genre only
+     rides on `doc.work` to carry the hand layout. */
   return null;
 }

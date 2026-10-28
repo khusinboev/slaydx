@@ -393,6 +393,32 @@ export const WORK_GENRES: Record<WorkGenreId, WorkGenre> = {
       },
     },
   },
+  essay: {
+    id: "essay",
+    label: { uz: "Insho", ru: "Сочинение", en: "Essay" },
+    hint: "Insho dvigateli yozadi; bu janr faqat daftar ko'rinishini (qo'lyozma) tashiydi",
+    toolId: "essay",
+    defaultKind: "handwritten",
+    kinds: {
+      handwritten: {
+        id: "handwritten",
+        genre: "essay",
+        label: { uz: "Qo'lyozma insho", ru: "Сочинение от руки", en: "Handwritten essay" },
+        hint: "Insho matni daftar varag'iga qo'lyozma shriftda chiqariladi",
+        introParts: [],
+        chapters: { min: 1, max: 1 },
+        paragraphsPerChapter: { min: 0, max: 0 },
+        shape: "notes",
+        introShare: [0, 0],
+        conclusionPages: [0, 0],
+        refsMin: 0,
+        pages: ["1", "2", "3", "4", "5"],
+        visuals: { tables: "none", figures: "none" },
+        guidance: ["The text is written by the essay engine; this kind only draws it in a notebook."],
+        judge: judgeSpec("Handwritten essay", { skip: ["originality"] }),
+      },
+    },
+  },
 };
 
 /* ────────────────────────── kirish nuqtalari ────────────────────────── */
