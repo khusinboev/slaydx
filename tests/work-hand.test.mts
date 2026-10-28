@@ -648,7 +648,8 @@ test("service capabilities: independent work and referat expose every parameter,
   assert.deepEqual([...handCapsOf("independent")!].sort(), [...HAND_PARAM_IDS].sort());
   assert.deepEqual([...handCapsOf("referat")!].sort(), [...HAND_PARAM_IDS].sort());
   assert.equal(handCapsOf("coursework"), null);
-  assert.equal(handCapsOf("essay"), null, "essay joins in its own stage");
+  assert.deepEqual([...handCapsOf("essay")!].sort(), ["cells", "font", "format", "ink", "lively", "margin", "paper"], "essay: no cover/headings/underline");
+  assert.deepEqual([...handCapsOf("konspekt")!].sort(), [...handCapsOf("essay")!].sort());
   // Every capability maps to a registry parameter (no orphan ids), and every registry param belongs to a capability.
   const registry = new Set(WORK_HAND_PARAMS.map((p) => p.id));
   for (const id of HAND_PARAM_IDS) assert.ok(registry.has(HAND_FIELD_OF[id]), `${id} → ${HAND_FIELD_OF[id]} is not in WORK_HAND_PARAMS`);
