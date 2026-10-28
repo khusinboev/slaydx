@@ -57,16 +57,23 @@ const pick = async (group: string, label: string) => {
   });
 };
 
-test("«Ko'rinish» faqat mustaqil ishda: kurs ishi va referat formasida YO'Q", async () => {
+test("«Ko'rinish» only where the service has handwriting capabilities: coursework has none, referat has the full set", async () => {
   stubApi();
   await login();
-  for (const id of ["coursework", "referat"] as const) {
-    mount(id);
-    const found = fields();
-    for (const p of WORK_HAND_PARAMS) assert.ok(!found.includes(p.id), `${id}: ${p.id} chizilmasligi kerak`);
-    cleanup();
-  }
+  mount("coursework");
+  const cw = fields();
+  assert.ok(!cw.includes("workView"));
+  for (const p of WORK_HAND_PARAMS) assert.ok(!cw.includes(p.id), `coursework: ${p.id} must not render`);
+  cleanup();
+  mount("referat");
+  assert.ok(fields().includes("workView"));
+  await pick("Ko‘rinish", "Qo‘lyozma");
+  await pick("Qog‘oz", "Katakli");
+  const found = fields();
+  for (const p of WORK_HAND_PARAMS) assert.equal(found.filter((x) => x === p.id).length, 1, `referat: ${p.id} exactly once`);
+  cleanup();
 });
+
 
 test("mustaqil ish: standart «Oddiy» — workView bor, sub-parametrlar yo'q; «Qo'lyozma» uchtasini ochadi (har id AYNAN bitta)", async () => {
   stubApi();

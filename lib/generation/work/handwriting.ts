@@ -545,6 +545,58 @@ export function normalizeHand(raw: {
   };
 }
 
+/* ────────────────────────── per-service capabilities ────────────────────────── */
+
+/**
+ * Which handwriting parameters a service exposes. A parameter that a service does not list is neither shown in
+ * its form nor accepted by its server input (`restrictHand` resets it to the default), so no service carries
+ * a control that cannot work there. Keys are service ids: work genres today, `konspekt` / `essay` later.
+ */
+export const HAND_PARAM_IDS = ["font", "ink", "lively", "headings", "underline", "cover", "paper", "format", "margin", "cells"] as const;
+export type HandParamId = (typeof HAND_PARAM_IDS)[number];
+
+/** Form field id (`data-field`, `FormValues` key) of each parameter. */
+export const HAND_FIELD_OF: Record<HandParamId, string> = {
+  font: "handFont",
+  ink: "handInk",
+  lively: "handLively",
+  headings: "handHeadings",
+  underline: "handUnderline",
+  cover: "handCover",
+  paper: "handPaper",
+  format: "handFormat",
+  margin: "handMargin",
+  cells: "handCells",
+};
+
+export const HAND_SERVICE_CAPS: Record<string, readonly HandParamId[]> = {
+  /* Independent work and referat are full documents (cover, headings, references): every parameter applies. */
+  independent: HAND_PARAM_IDS,
+  referat: HAND_PARAM_IDS,
+};
+
+/** Capability set of a service, or `null` when handwriting is not offered there. */
+export function handCapsOf(service: string): ReadonlySet<HandParamId> | null {
+  const caps = HAND_SERVICE_CAPS[service];
+  return caps ? new Set(caps) : null;
+}
+
+/** Drops (resets to the default) every choice the service does not expose. */
+export function restrictHand(hand: WorkHand, caps: ReadonlySet<HandParamId>): WorkHand {
+  return normalizeHand({
+    ink: caps.has("ink") ? hand.ink : undefined,
+    paper: caps.has("paper") ? hand.paper : undefined,
+    font: caps.has("font") ? hand.font : undefined,
+    lively: caps.has("lively") ? hand.lively : undefined,
+    headings: caps.has("headings") ? hand.headings : undefined,
+    cover: caps.has("cover") ? hand.cover : undefined,
+    underline: caps.has("underline") ? hand.underline : undefined,
+    format: caps.has("format") ? hand.format : undefined,
+    margin: caps.has("margin") ? hand.margin : undefined,
+    cells: caps.has("cells") ? hand.cells : undefined,
+  });
+}
+
 /* ────────────────────────── jonli yozuv ────────────────────────── */
 
 /**
