@@ -572,6 +572,38 @@ button {
   src: url("/fonts/handwriting/Caveat-Regular.ttf") format("truetype");
   font-display: swap;
 }
+/* Maktab husnixati / Qalam-pero: bitta oila, `unicode-range` bilan yuzlarga bo'lingan (`handFontFaceCss` bilan bir xil; test solishtiradi). */
+@font-face {
+  font-family: "SlaydX Maktab";
+  src: url("/fonts/handwriting/PlaywriteUSTrad.ttf") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "SlaydX Maktab";
+  src: url("/fonts/handwriting/MarckScript-Regular.ttf") format("truetype");
+  size-adjust: 138%;
+  unicode-range: U+0400-045F, U+2116;
+  font-display: swap;
+}
+@font-face {
+  font-family: "SlaydX Maktab";
+  src: url("/fonts/handwriting/BadScript-Regular.ttf") format("truetype");
+  size-adjust: 103%;
+  unicode-range: U+0490-04FF;
+  font-display: swap;
+}
+@font-face {
+  font-family: "SlaydX Pen";
+  src: url("/fonts/handwriting/MarckScript-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "SlaydX Pen";
+  src: url("/fonts/handwriting/BadScript-Regular.ttf") format("truetype");
+  size-adjust: 74%;
+  unicode-range: U+0490-04FF;
+  font-display: swap;
+}
 
 .word-sheet.word-hand {
   --hand-vlines: none;

@@ -55,11 +55,11 @@ import { titleModel } from "../title-model";
 import type { AcademicDoc } from "../types";
 import {
   HAND_PAGE,
-  HAND_FONTS,
   handCoverLines,
+  handFaces,
   handFormulaText,
   handGeometry,
-  handText,
+  handSegments,
   type HandGeometry,
   type HandStyle,
 } from "./handwriting";
@@ -80,37 +80,41 @@ type RunExtra = { size?: number; underline?: boolean; italics?: boolean };
 export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style: HandStyle }): Promise<Uint8Array> {
   const style = plan.style;
   const G: HandGeometry = handGeometry(style.paper, style.font);
-  const spec = HAND_FONTS[style.font];
+  const primary = handFaces(style.font)[0]!;
   const pitch = G.pitchTw;
   const size = G.sizePt * 2;
   const ink = style.inkHex;
   const W = G.contentTw;
 
-  const run = (text: string, extra: RunExtra = {}): TextRun =>
-    new TextRun({
-      text: handText(style.font, cleanText(text)),
-      font: spec.family,
-      size: extra.size ?? size,
-      bold: false,
-      color: ink,
-      ...(extra.italics ? { italics: true } : {}),
-      ...(extra.underline ? { underline: { type: UnderlineType.SINGLE, color: ink } } : {}),
-    });
+  /**
+   * Matn → `w:r` lar: yo'ldoshli shriftda (Maktab: lotin Playwrite, kirill Marck)
+   * har yuz alohida run, o'z shrift nomi va o'lchami bilan. Qator balandligi
+   * QAT'IY, shuning uchun yuzlar o'lchami farqi chiziqlarni buzmaydi.
+   */
+  const runs = (text: string, extra: RunExtra = {}): TextRun[] =>
+    handSegments(style.font, text).map(
+      (seg) =>
+        new TextRun({
+          text: seg.text,
+          font: seg.face.family,
+          size: Math.round((extra.size ?? size) * seg.face.scale),
+          bold: false,
+          color: ink,
+          ...(extra.italics ? { italics: true } : {}),
+          ...(extra.underline ? { underline: { type: UnderlineType.SINGLE, color: ink } } : {}),
+        }),
+    );
+  /** Bo'sh matn ham bitta run beradi (bo'sh qator o'z balandligini saqlasin). */
+  const run = (text: string, extra: RunExtra = {}): TextRun[] => {
+    const r = runs(cleanText(text), extra);
+    return r.length ? r : [new TextRun({ text: "", font: primary.family, size: extra.size ?? size, color: ink })];
+  };
 
   /** Iqtibosli matn — HAR bo'lak alohida `<w:t>` (ko'ruvchidagi `<span>` lar bilan juft). */
   const spanRuns = (spans: { text: string }[]): TextRun[] =>
     spans
       .filter((s) => s.text.length)
-      .map(
-        (s) =>
-          new TextRun({
-            text: handText(style.font, `${/^\s/.test(s.text) ? " " : ""}${cleanText(s.text)}${/\s$/.test(s.text) ? " " : ""}`),
-            font: spec.family,
-            size,
-            bold: false,
-            color: ink,
-          }),
-      );
+      .flatMap((s) => runs(`${/^\s/.test(s.text) ? " " : ""}${cleanText(s.text)}${/\s$/.test(s.text) ? " " : ""}`));
 
   /** Bo'shliq — qator OLDIDA/KEYIN faqat butun qator soni. */
   const lines = (n: number) => Math.round(n * pitch);
@@ -127,7 +131,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
     bullet?: boolean;
     tabs?: { type: (typeof TabStopType)[keyof typeof TabStopType]; position: number }[];
   };
-  const para = (children: TextRun[], o: POpts = {}): Paragraph =>
+  const para = (children: (TextRun | TextRun[])[], o: POpts = {}): Paragraph =>
     new Paragraph({
       alignment: o.align ?? AlignmentType.LEFT,
       spacing: { before: lines(o.before ?? 0), after: lines(o.after ?? 0), line: pitch, lineRule: LineRuleType.EXACT },
@@ -139,11 +143,11 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
       ...(o.heading ? { heading: o.heading } : {}),
       ...(o.bullet ? { bullet: { level: 0 } } : {}),
       ...(o.tabs ? { tabStops: o.tabs } : {}),
-      children,
+      children: children.flat(),
     });
   const blank = () => para([run("")]);
   /** Tab — `run()` bo'shliqlarni kesadi, shuning uchun alohida. */
-  const tab = () => new TextRun({ text: "\t", font: spec.family, size, color: ink });
+  const tab = () => new TextRun({ text: "\t", font: primary.family, size, color: ink });
 
   const out: Array<Paragraph | Table> = [];
   /** Titul varaqni allaqachon yopdi: keyingi birinchi band yangi varaqdan boshlanadi. */
@@ -164,7 +168,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
       for (const l of handCoverLines(T)) {
         if (l.role === "gap") out.push(blank());
         else if (l.role === "center") out.push(para([run(l.text, l.big ? { size: Math.round(size * 1.25) } : {})], { align: AlignmentType.CENTER }));
-        else out.push(para([...(l.label ? [run(`${l.label}:`), new TextRun({ text: " ", font: spec.family, size, color: ink })] : []), run(l.text, { underline: true })], { left: lines(2) }));
+        else out.push(para([...(l.label ? [run(`${l.label}:`), new TextRun({ text: " ", font: primary.family, size, color: ink })] : []), run(l.text, { underline: true })], { left: lines(2) }));
       }
       pendingBreak = true;
     }
@@ -328,25 +332,29 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { line: pitch, lineRule: LineRuleType.EXACT },
-        children: [new TextRun({ children: [PageNumber.CURRENT], font: spec.family, size: Math.round(size * 0.9), color: ink, bold: false })],
+        children: [new TextRun({ children: [PageNumber.CURRENT], font: primary.family, size: Math.round(size * 0.9), color: ink, bold: false })],
       }),
     ],
   });
   const blankFooter = new Footer({ children: [new Paragraph({})] });
 
-  const fontBytes = fontFileBytes(spec.file);
+  /** Har yuz (Playwrite, Marck, Bad Script…) o'z faylidan DOCX ga joylanadi. */
+  const embedded = handFaces(style.font).flatMap((f) => {
+    const data = fontFileBytes(f.file);
+    return data ? [{ name: f.family, data, characterSet: "00" as const }] : [];
+  });
 
   const document = new Document({
     creator: "SlaydX",
     styles: {
       default: {
         document: {
-          run: { font: spec.family, size, color: ink },
+          run: { font: primary.family, size, color: ink },
           paragraph: { spacing: { line: pitch, lineRule: LineRuleType.EXACT, before: 0, after: 0 } },
         },
       },
     },
-    ...(fontBytes ? { fonts: [{ name: spec.family, data: fontBytes, characterSet: "00" }] } : {}),
+    ...(embedded.length ? { fonts: embedded } : {}),
     sections: [
       {
         properties: {

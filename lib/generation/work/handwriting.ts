@@ -39,52 +39,110 @@ export const HAND_PAPERS = ["lined", "grid"] as const;
 export type HandPaper = (typeof HAND_PAPERS)[number];
 export const HAND_PAPER_LABELS: Record<HandPaper, string> = { lined: "Chiziqli", grid: "Katakli" };
 
-export const HAND_FONT_IDS = ["badscript", "caveat"] as const;
+export const HAND_FONT_IDS = ["school", "pen", "badscript", "caveat"] as const;
 export type HandFontId = (typeof HAND_FONT_IDS)[number];
 
-export const HAND_DEFAULTS = { ink: "blue", paper: "lined", font: "badscript" } as const satisfies { ink: HandInk; paper: HandPaper; font: HandFontId };
+export const HAND_DEFAULTS = { ink: "blue", paper: "lined", font: "school" } as const satisfies { ink: HandInk; paper: HandPaper; font: HandFontId };
 
 /** Modelga (`WorkModel.hand`) saqlanadigan tanlov. */
 export type WorkHand = { ink: HandInk; paper: HandPaper; font: HandFontId };
 
 /* ────────────────────────── shriftlar ────────────────────────── */
 
+/**
+ * Shrift YUZI (face): DOCX da alohida `w:rFonts`, ko'ruvchida alohida `@font-face`.
+ * `scale` — asosiy shriftga nisbatan o'lcham (x-balandlik tenglashtiriladi: Marck
+ * Script xuddi shu pt da Playwrite'dan kichikroq ko'rinadi).
+ */
+export type HandFace = { family: string; file: string; url: string; scale: number };
+
+/** Asosiy shrift yopmaydigan belgilarni (kirill) chizadigan yo'ldosh yuz; `ranges` — Unicode [dan, gacha]. */
+export type HandCompanion = HandFace & { ranges: readonly (readonly [number, number])[] };
+
 export type HandFontSpec = {
   id: HandFontId;
   label: string;
-  /** CSS/DOCX oila nomi (shrift faylining ichidagi nom). */
+  /** Asosiy yuz: CSS/DOCX oila nomi (shrift faylining ichidagi nom). */
   family: string;
   /** `public/fonts/handwriting/` ichidagi fayl. */
   file: string;
   /** Sayt ko'ruvchisi uchun URL. */
   url: string;
-  /** Yozuv o'lchami (pt) — daftar chizig'iga nisbatan. */
+  /**
+   * Ko'ruvchi CSS oilasi. Yo'ldoshsiz shriftda `family` ga teng; yo'ldoshli
+   * shriftda `handFontFaceCss` bitta oilaga `unicode-range` bilan birlashtirgan nom.
+   */
+  css: string;
+  /** Yozuv o'lchami (pt) — daftar chizig'iga nisbatan (asosiy yuz). */
   sizePt: number;
   /** `hhea` (em ulushi) — brauzer asosini hisoblash uchun; test fayl bilan solishtiradi. */
   ascent: number;
   descent: number;
+  /** Belgi diapazoni bo'yicha yo'ldosh yuzlar (kirill: Marck Script, Қ Ғ Ҳ: Bad Script). */
+  companions: readonly HandCompanion[];
   /**
-   * Shrift YOPMAYDIGAN, lekin hujjatda uchrashi mumkin bo'lgan belgilar
+   * Hech bir yuz YOPMAYDIGAN, lekin hujjatda uchrashi mumkin bo'lgan belgilar
    * va ularning o'rinbosari. Test faylning haqiqiy `cmap` ini solishtiradi
    * (ro'yxat eskirsa qizaradi).
    */
   fallback: Record<number, number>;
 };
 
-/** U+02BB «ʻ» (o‘/g‘ ning belgisi) — ikkala shriftda ham yo'q; U+2018 «‘» bor. */
+/** U+02BB «ʻ» (o‘/g‘ ning belgisi) va U+02BC «ʼ» (maʼno) — Playwrite/Bad Script/Caveat/Marck da yo'q; U+2018/U+2019 bor. */
 const TURNED_COMMA = 0x02bb;
+const MODIFIER_APOSTROPHE = 0x02bc;
 const LEFT_QUOTE = 0x2018;
+const RIGHT_QUOTE = 0x2019;
+
+/** Kirill (rus + o'zbek ў) va № — Marck Script yopadi; Қ Ғ Ҳ (U+0490–04FF) ni yopmaydi. */
+const MARCK_RANGES = [[0x0400, 0x045f], [0x2116, 0x2116]] as const;
+/** Қ қ Ғ ғ Ҳ ҳ — Marck Script da yo'q, Bad Script (maktab/qalam uslubiga eng yaqin) yopadi. */
+const EXT_CYRILLIC_RANGES = [[0x0490, 0x04ff]] as const;
+
+const BAD_SCRIPT_FACE = { family: "Bad Script", file: "BadScript-Regular.ttf", url: "/fonts/handwriting/BadScript-Regular.ttf" } as const;
+const MARCK_FACE = { family: "Marck Script", file: "MarckScript-Regular.ttf", url: "/fonts/handwriting/MarckScript-Regular.ttf" } as const;
 
 export const HAND_FONTS: Record<HandFontId, HandFontSpec> = {
+  school: {
+    id: "school",
+    label: "Maktab husnixati",
+    family: "Playwrite US Trad",
+    file: "PlaywriteUSTrad.ttf",
+    url: "/fonts/handwriting/PlaywriteUSTrad.ttf",
+    css: "SlaydX Maktab",
+    sizePt: 15,
+    ascent: 1.428,
+    descent: 0.504,
+    companions: [
+      { ...MARCK_FACE, scale: 1.38, ranges: MARCK_RANGES },
+      { ...BAD_SCRIPT_FACE, scale: 1.03, ranges: EXT_CYRILLIC_RANGES },
+    ],
+    fallback: { [TURNED_COMMA]: LEFT_QUOTE, [MODIFIER_APOSTROPHE]: RIGHT_QUOTE },
+  },
+  pen: {
+    id: "pen",
+    label: "Qalam-pero",
+    family: "Marck Script",
+    file: "MarckScript-Regular.ttf",
+    url: "/fonts/handwriting/MarckScript-Regular.ttf",
+    css: "SlaydX Pen",
+    sizePt: 20,
+    ascent: 0.864,
+    descent: 0.385,
+    companions: [{ ...BAD_SCRIPT_FACE, scale: 0.74, ranges: EXT_CYRILLIC_RANGES }],
+    fallback: { [TURNED_COMMA]: LEFT_QUOTE, [MODIFIER_APOSTROPHE]: RIGHT_QUOTE },
+  },
   badscript: {
     id: "badscript",
     label: "Bad Script",
     family: "Bad Script",
     file: "BadScript-Regular.ttf",
     url: "/fonts/handwriting/BadScript-Regular.ttf",
+    css: "Bad Script",
     sizePt: 16,
     ascent: 1.324,
     descent: 0.648,
+    companions: [],
     fallback: { [TURNED_COMMA]: LEFT_QUOTE },
   },
   caveat: {
@@ -93,9 +151,11 @@ export const HAND_FONTS: Record<HandFontId, HandFontSpec> = {
     family: "Caveat",
     file: "Caveat-Regular.ttf",
     url: "/fonts/handwriting/Caveat-Regular.ttf",
+    css: "Caveat",
     sizePt: 20,
     ascent: 0.96,
     descent: 0.3,
+    companions: [],
     fallback: { [TURNED_COMMA]: LEFT_QUOTE },
   },
 };
@@ -112,6 +172,39 @@ export function handText(font: HandFontId, text: string): string {
   for (const ch of text) {
     const to = map[ch.codePointAt(0)!];
     out += to === undefined ? ch : String.fromCodePoint(to);
+  }
+  return out;
+}
+
+/** Belgi (`cp`) qaysi yuzda chiziladi: yo'ldosh diapazoni, bo'lmasa asosiy yuz. */
+export function handFaceOf(font: HandFontId, cp: number): HandFace {
+  const spec = HAND_FONTS[font];
+  const c = spec.companions.find((x) => x.ranges.some(([lo, hi]) => cp >= lo && cp <= hi));
+  return c ?? { family: spec.family, file: spec.file, url: spec.url, scale: 1 };
+}
+
+/** Shriftning barcha yuzlari (asosiy birinchi) — DOCX ga joylash va `fc-cache` uchun. */
+export function handFaces(font: HandFontId): HandFace[] {
+  const spec = HAND_FONTS[font];
+  return [{ family: spec.family, file: spec.file, url: spec.url, scale: 1 }, ...spec.companions];
+}
+
+export type HandSegment = { text: string; face: HandFace };
+
+/**
+ * Matnni (avval `handText`) yuzlar bo'yicha bo'laklarga ajratadi. Bo'shliq
+ * oldingi harfning yuzini oladi (so'z orasida bo'lak uzilmasin), qolgan
+ * belgi (raqam, tinish) o'z yuzida chiziladi. DOCX har bo'lakni alohida
+ * `w:r` qiladi; ko'ruvchi buni `unicode-range` bilan o'zi bajaradi.
+ */
+export function handSegments(font: HandFontId, text: string): HandSegment[] {
+  const out: HandSegment[] = [];
+  for (const ch of handText(font, text)) {
+    const cp = ch.codePointAt(0)!;
+    const face = handFaceOf(font, cp);
+    const last = out[out.length - 1];
+    if (last && (last.face.family === face.family || /\s/.test(ch))) last.text += ch;
+    else out.push({ text: ch, face });
   }
   return out;
 }
@@ -251,7 +344,7 @@ export function handCssVars(style: HandStyle): Record<string, string> {
   const mod = (v: number, m: number) => v - Math.floor(v / m) * m;
   return {
     "--hand-ink": `#${style.inkHex}`,
-    "--hand-family": `"${g.font.family}"`,
+    "--hand-family": `"${g.font.css}"`,
     "--hand-size": `${g.sizePt}pt`,
     "--hand-pitch": px(g.pitchPx),
     "--hand-lines": String(g.lines),
@@ -270,9 +363,24 @@ export function handCssVars(style: HandStyle): Record<string, string> {
   };
 }
 
-/** `@font-face` (ko'ruvchi va forma namunasi) — `app/globals.css` bilan bir xil nom/URL. */
+/** `unicode-range` qiymati: `U+0400-045F,U+2116`. */
+const unicodeRange = (ranges: HandCompanion["ranges"]) =>
+  ranges.map(([lo, hi]) => (lo === hi ? `U+${lo.toString(16).toUpperCase().padStart(4, "0")}` : `U+${lo.toString(16).toUpperCase().padStart(4, "0")}-${hi.toString(16).toUpperCase().padStart(4, "0")}`)).join(",");
+
+/**
+ * `@font-face` (ko'ruvchi va forma namunasi) — `app/globals.css` bilan bir xil
+ * nom/URL/`unicode-range`/`size-adjust` (test solishtiradi). Yo'ldoshli shrift
+ * BITTA oilaga birlashadi: asosiy yuz hammasini, yo'ldoshlar o'z diapazonini yopadi
+ * (keyin e'lon qilingan yuz ustun).
+ */
 export function handFontFaceCss(): string {
-  return HAND_FONT_LIST.map((f) => `@font-face{font-family:"${f.family}";src:url("${f.url}") format("truetype");font-display:swap}`).join("\n");
+  const face = (family: string, url: string, extra = "") => `@font-face{font-family:"${family}";src:url("${url}") format("truetype");${extra}font-display:swap}`;
+  const out: string[] = [];
+  for (const f of HAND_FONT_LIST) {
+    out.push(face(f.css, f.url));
+    for (const c of f.companions) out.push(face(f.css, c.url, `size-adjust:${Math.round(c.scale * 100)}%;unicode-range:${unicodeRange(c.ranges)};`));
+  }
+  return out.join("\n");
 }
 
 /* ────────────────────────── titul (daftar muqovasi) ────────────────────────── */
