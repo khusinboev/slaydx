@@ -9,6 +9,7 @@ import { buildKonspektDoc, konspektInputFromValues, konspektWordPlan, konspektWo
 import { planWork } from "../lib/generation/work/layout.ts";
 import { renderDocx } from "../lib/generation/render-docx.ts";
 import { handGeometry } from "../lib/generation/work/handwriting.ts";
+import { KONSPEKT_PARAMS } from "../lib/generation/konspekt/params.ts";
 
 const META = { topic: "Davlatchilik tarixi", workLabel: "Konspekt", language: "uz", toolId: "konspekt" } as unknown as DocMeta;
 const words = (n: number, tag: string) => Array.from({ length: n }, (_, i) => `${tag}${i % 7}`).join(" ");
@@ -129,4 +130,29 @@ test("DOCX: the konspekt renders through the hand renderer — A4 landscape two-
   assert.ok(Object.keys(zip.files).filter((f) => /^word\/media\/.*\.png$/.test(f)).length === 1, "one sheet image (two pages)");
   assert.ok(!/MUNDARIJA|Mundarija|Kirish|KIRISH|Xulosa/.test(doc), "no contents / introduction / conclusion");
   assert.ok(doc.includes("Davlatchilik") && doc.includes("Bo"), "title and sub-headings are present");
+});
+
+test("differential probe: EVERY registry parameter changes the result (the prompts the model sees, or the rendered DOCX) — no decorative field", async () => {
+  const observe = async (values: FormValues) => {
+    /* Plenty of text per section: the volume clamp (tier maximum) keeps every tier valid, a thin stub would fail the 20-30 tier. */
+    const s = stub({ sections: 6, perSection: 1500 });
+    const r = await buildKonspektDoc(META, { topic: "Davlatchilik tarixi", pages: "5-10", ...values }, { deadline: Date.now() + 120_000, complete: s.fn });
+    assert.ok(r, `built for ${JSON.stringify(values)}`);
+    const zip = await JSZip.loadAsync(Buffer.from(await renderDocx(r.doc)));
+    const part = async (f: string) => (await zip.file(f)?.async("string")) ?? "";
+    return JSON.stringify({
+      prompts: s.calls.map((c) => c.user),
+      topic: r.doc.meta.topic,
+      model: r.doc.work,
+      docx: { document: await part("word/document.xml"), settings: await part("word/settings.xml"), media: Object.keys(zip.files).filter((f) => f.startsWith("word/media/")).sort() },
+    });
+  };
+  const failures: string[] = [];
+  for (const p of KONSPEKT_PARAMS) {
+    const base = p.probeWith ?? {};
+    const a = await observe({ ...base, [p.id]: p.probeA });
+    const b = await observe({ ...base, [p.id]: p.probeB });
+    if (a === b) failures.push(p.id);
+  }
+  assert.deepEqual(failures, [], `parameters without any effect: ${failures.join(", ")}`);
 });
