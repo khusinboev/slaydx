@@ -468,6 +468,9 @@ export function handGeometry(paper: HandPaper, fontId: HandFontId, layout?: Hand
   // +10 twips of slack: rounding must not push the last row to the next page.
   const bottom = page.heightTw - topTw - lines * pitchTw - 10;
   const pitchPx = twToPx(pitchTw);
+  /* A 5 mm row cannot carry the full-size writing (ascenders/descenders would overlap the rows above/below):
+     writing shrinks with the row, down to ~10 pt at one cell. Rows of 9 mm and up keep the font's own size. */
+  const sizePt = Math.round(font.sizePt * Math.min(1, (pitchTw / 510) * 1.2) * 2) / 2;
   const left = marginMode === "none" ? page.plainLeftTw : page.leftTw;
   const right = marginMode === "none" ? page.plainRightTw : page.rightTw;
   return {
@@ -484,7 +487,7 @@ export function handGeometry(paper: HandPaper, fontId: HandFontId, layout?: Hand
     lines,
     margins: { top: topTw, bottom, left, right, header: 0, footer: mmToTw(7) },
     marginsEven: marginMode === "alternate" ? { left: right, right: left } : { left, right },
-    sizePt: font.sizePt,
+    sizePt,
     contentTw: page.widthTw - left - right,
     docxRuleY0Mm: twToMm(topTw + BASELINE_FRACTION * pitchTw),
     viewerRuleY0Px: twToPx(topTw) + handBaselinePx(font, font.sizePt, pitchPx),

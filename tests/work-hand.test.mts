@@ -626,6 +626,48 @@ test("varaq PNG: A4 254 dpi, chiziqlar MATN ASOSIGA tushadi (pitch oralig'ida), 
   assert.notEqual(paperPng("lined", "badscript"), paperPng("grid", "badscript"));
 });
 
+test("DOCX layouts: A5 page size, alternate → mirrored margins + odd/even background, two-up → A4 landscape with two columns and ONE sheet image, blank/print → no background", async () => {
+  const mk = async (hand: WorkHand) => {
+    const doc = sampleWorkDoc({ topic: "Layout", workLabel: "Mustaqil ish", language: "uz", toolId: "mustaqil-ish" } as never, { genre: "independent", kind: "written" });
+    doc.titlePage = false as never;
+    doc.work!.hand = hand;
+    const zip = await JSZip.loadAsync(Buffer.from(await renderDocx(doc)));
+    const text = async (f: string) => (await zip.file(f)?.async("string")) ?? "";
+    return { zip, document: await text("word/document.xml"), settings: await text("word/settings.xml"), names: Object.keys(zip.files) };
+  };
+  const base = { ink: "blue", font: "school", paper: "grid" } as const;
+  // A5, margin line on the left for every page: no mirroring, one background.
+  const a5 = await mk({ ...base, format: "a5", cells: 1 });
+  assert.match(a5.document, /<w:pgSz w:w="8419" w:h="11906"/);
+  assert.ok(!a5.settings.includes("mirrorMargins") && !/<w:evenAndOddHeaders\s*\/>/.test(a5.settings), "no mirroring without alternate");
+  assert.equal(a5.names.filter((n) => /^word\/media\/.*\.png$/.test(n)).length, 1);
+  // A5, alternate: mirrored margins, odd + even background images (two different PNGs).
+  const alt = await mk({ ...base, format: "a5", margin: "alternate", cells: 1 });
+  assert.ok(alt.settings.includes("<w:mirrorMargins/><w:evenAndOddHeaders/>"), "settings.xml");
+  assert.match(alt.document, /<w:headerReference w:type="even"/);
+  const pngs = alt.names.filter((n) => /^word\/media\/.*\.png$/.test(n));
+  assert.equal(pngs.length, 2);
+  assert.notDeepEqual(await alt.zip.file(pngs[0]!)!.async("uint8array"), await alt.zip.file(pngs[1]!)!.async("uint8array"));
+  const g = handGeometry("grid", "school", { format: "a5", margin: "alternate", cells: 1 });
+  assert.match(alt.document, new RegExp(`w:left="${g.margins.left}"`));
+  assert.match(alt.document, new RegExp(`w:right="${g.margins.right}"`));
+  // Two-up: A4 landscape, two columns (page width each), one sheet image, no page-number footer.
+  const two = await mk({ ...base, format: "a5x2", margin: "alternate", cells: 1 });
+  const g2 = handGeometry("grid", "school", { format: "a5x2", margin: "alternate", cells: 1 });
+  assert.match(two.document, /<w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/);
+  assert.match(two.document, /<w:cols [^>]*w:num="2"/);
+  assert.equal([...two.document.matchAll(/<w:col w:w="(\d+)"/g)].map((m) => Number(m[1])).join(","), `${g2.contentTw},${g2.contentTw}`);
+  assert.ok(!two.settings.includes("mirrorMargins"), "two-up places the margins itself");
+  assert.equal(two.names.filter((n) => /^word\/media\/.*\.png$/.test(n)).length, 1);
+  assert.ok(!two.names.some((n) => /footer/.test(n) && n.endsWith(".xml") && !n.includes("rels")) || !two.document.includes("footerReference"), "no footers");
+  // Blank / print: nothing drawn behind the text.
+  for (const paper of ["blank", "print"] as const) {
+    const r = await mk({ ink: "blue", font: "school", paper, cells: 1, format: "a5" });
+    assert.ok(!r.names.some((n) => /^word\/media\//.test(n)), `${paper}: no background image`);
+    assert.ok(!r.document.includes("headerReference"), `${paper}: no header`);
+  }
+});
+
 test("paper PNG layouts: A5 page, margin-line side by page parity, two-up A4 landscape sheet with two pages, blank/print have nothing to draw", () => {
   const a5 = { format: "a5", margin: "alternate", cells: 1 } as const;
   const g = handGeometry("grid", "school", a5);

@@ -27,6 +27,8 @@ import {
   AlignmentType,
   BorderStyle,
   Document,
+  Column,
+  ColumnBreak,
   Footer,
   Header,
   HeadingLevel,
@@ -36,6 +38,7 @@ import {
   LineRuleType,
   Packer,
   PageNumber,
+  PageOrientation,
   Paragraph,
   Table,
   TableCell,
@@ -54,7 +57,6 @@ import { columnPercents } from "../table-columns";
 import { titleModel } from "../title-model";
 import type { AcademicDoc } from "../types";
 import {
-  HAND_PAGE,
   handCoverLines,
   handFaces,
   handFormulaText,
@@ -66,10 +68,14 @@ import {
   handWordPieces,
   type HandWordJitter,
   HAND_FONTS,
+  HAND_PAPER_SPECS,
+  handPageMargins,
+  twToMm,
   type HandGeometry,
   type HandStyle,
 } from "./handwriting";
 import type { WorkBodyItem, WorkPlan } from "./layout";
+import JSZip from "jszip";
 import { paperPng } from "./paper-png";
 
 /** Shriftni DOCX ga joylash uchun qidiriladigan kataloglar (dev: `public/`, konteyner: o'rnatilgan shriftlar). */
@@ -85,7 +91,7 @@ type RunExtra = { size?: number; underline?: boolean; italics?: boolean; /** Muq
 
 export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style: HandStyle }): Promise<Uint8Array> {
   const style = plan.style;
-  const G: HandGeometry = handGeometry(style.paper, style.font);
+  const G: HandGeometry = handGeometry(style.paper, style.font, style);
   const primary = handFaces(style.font)[0]!;
   /** Sarlavha tagi chizig'i (`style.underline === false` bo'lsa chizilmaydi); muqovadagi to'ldirish chiziqlari doim. */
   const ul = style.underline !== false;
@@ -155,11 +161,12 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
         ? { indent: { ...(o.left ? { left: o.left } : {}), ...(o.firstLine ? { firstLine: o.firstLine } : {}), ...(o.hanging ? { hanging: o.hanging } : {}) } }
         : {}),
       ...(o.keepNext ? { keepNext: true } : {}),
-      ...(o.pageBreakBefore ? { pageBreakBefore: true } : {}),
+      /* Two-up: a "new page" is the next A5 page = the next COLUMN (a page break would start a new sheet). */
+      ...(o.pageBreakBefore && !G.twoUp ? { pageBreakBefore: true } : {}),
       ...(o.heading ? { heading: o.heading } : {}),
       ...(o.bullet ? { bullet: { level: 0 } } : {}),
       ...(o.tabs ? { tabStops: o.tabs } : {}),
-      children: children.flat(),
+      children: o.pageBreakBefore && G.twoUp ? [new ColumnBreak(), ...children.flat()] : children.flat(),
     });
   const blank = () => para([run("")]);
   /** Tab — `run()` bo'shliqlarni kesadi, shuning uchun alohida. */
@@ -193,7 +200,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
   /* ── mundarija: oddiy qatorlar (Word maydoni yo'q — yangilash qatorlarni buzmasin) ── */
   if (doc.toc && plan.toc.length) {
     out.push(para([run(plan.labels.toc, { underline: ul })], { align: AlignmentType.CENTER, heading: HeadingLevel.HEADING_1, keepNext: true, after: 1, pageBreakBefore: takeBreak(false) }));
-    for (const r of plan.toc) out.push(para([run(r.text)], { left: r.level === 2 ? HAND_PAGE.firstLineTw : 0 }));
+    for (const r of plan.toc) out.push(para([run(r.text)], { left: r.level === 2 ? G.page.firstLineTw : 0 }));
   }
 
   const colPercents = (headers: string[], widths?: number[]) => widths ?? columnPercents(headers) ?? headers.map(() => Math.round(100 / headers.length));
@@ -253,7 +260,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
         }
         case "h2":
           takeBreak(false);
-          out.push(para([run(b.text, { underline: ul })], { heading: HeadingLevel.HEADING_2, keepNext: true, firstLine: HAND_PAGE.firstLineTw }));
+          out.push(para([run(b.text, { underline: ul })], { heading: HeadingLevel.HEADING_2, keepNext: true, firstLine: G.page.firstLineTw }));
           break;
         case "h3":
           takeBreak(false);
@@ -285,7 +292,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
           break;
         case "p":
           takeBreak(false);
-          out.push(para(spanRuns(b.spans), { firstLine: HAND_PAGE.firstLineTw }));
+          out.push(para(spanRuns(b.spans), { firstLine: G.page.firstLineTw }));
           break;
         case "li":
           takeBreak(false);
@@ -317,9 +324,15 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
   }
   drawBody(plan.appendix);
 
-  /* ── varaq foni: header'ga langarlangan A4 PNG, matn ORQASIDA ── */
-  const paper = paperPng(style.paper, style.font);
-  const background = () =>
+  /*
+   * Page background: the ruling PNG anchored to the header, behind the text (blank / print paper has none).
+   * A4 / A5: one page per image; with the `alternate` margin line the odd and even pages get mirrored images
+   * and mirrored text margins. Two-up: ONE image holds both A5 pages of the A4 landscape sheet.
+   */
+  const ruled = HAND_PAPER_SPECS[style.paper].ruled;
+  const mirrored = G.marginMode === "alternate" && !G.twoUp;
+  const sheetMm = { w: twToMm(G.sheetTw.width), h: twToMm(G.sheetTw.height) };
+  const background = (png: Buffer) =>
     new Header({
       children: [
         new Paragraph({
@@ -327,8 +340,8 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
           children: [
             new ImageRun({
               type: "png",
-              data: paper,
-              transformation: { width: (210 / 25.4) * 96, height: (297 / 25.4) * 96 },
+              data: png,
+              transformation: { width: (sheetMm.w / 25.4) * 96, height: (sheetMm.h / 25.4) * 96 },
               altText: { name: "Daftar varag'i", title: "Daftar varag'i", description: "Chiziqli/katakli daftar varag'i foni" },
               floating: {
                 horizontalPosition: { relative: HorizontalPositionRelativeFrom.PAGE, offset: 0 },
@@ -343,16 +356,40 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
       ],
     });
 
-  const numberedFooter = new Footer({
-    children: [
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { line: pitch, lineRule: LineRuleType.EXACT },
-        children: [new TextRun({ children: [PageNumber.CURRENT], font: primary.family, size: Math.round(size * 0.9), color: ink, bold: false })],
-      }),
-    ],
-  });
-  const blankFooter = new Footer({ children: [new Paragraph({})] });
+  /** Page number footer; the two-up sheet has none (one footer cannot number two pages). */
+  const numberedFooter = () =>
+    new Footer({
+      children: [
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { line: pitch, lineRule: LineRuleType.EXACT },
+          children: [new TextRun({ children: [PageNumber.CURRENT], font: primary.family, size: Math.round(size * 0.9), color: ink, bold: false })],
+        }),
+      ],
+    });
+  const blankFooter = () => new Footer({ children: [new Paragraph({})] });
+  const footers = G.twoUp
+    ? undefined
+    : {
+        default: numberedFooter(),
+        ...(hasTitle ? { first: blankFooter() } : {}),
+        ...(mirrored ? { even: numberedFooter() } : {}),
+      };
+  const headers = ruled
+    ? {
+        default: background(paperPng(style.paper, style.font, style, 0)),
+        ...(hasTitle ? { first: background(paperPng(style.paper, style.font, style, 0)) } : {}),
+        ...(mirrored ? { even: background(paperPng(style.paper, style.font, style, 1)) } : {}),
+      }
+    : undefined;
+
+  /* Two-up: one A4 landscape section, two columns = the two A5 pages (left page margins, gap, right page margins). */
+  const left = handPageMargins(G, 0);
+  const right = handPageMargins(G, 1);
+  const pageSize = G.twoUp
+    ? { width: Math.min(G.sheetTw.width, G.sheetTw.height), height: Math.max(G.sheetTw.width, G.sheetTw.height), orientation: PageOrientation.LANDSCAPE }
+    : { width: G.sheetTw.width, height: G.sheetTw.height };
+  const margin = G.twoUp ? { ...G.margins, left: left.left, right: right.right } : G.margins;
 
   /** Har yuz (Playwrite, Marck, Bad Script…) o'z faylidan DOCX ga joylanadi. */
   const embedded = [...handFaces(style.font), ...(style.cover === "calligraphy" && HAND_FONTS[style.font].title ? [HAND_FONTS[style.font].title!] : [])].flatMap((f) => {
@@ -362,6 +399,7 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
 
   const document = new Document({
     creator: "SlaydX",
+    ...(mirrored ? { evenAndOddHeaderAndFooters: true } : {}),
     styles: {
       default: {
         document: {
@@ -375,18 +413,24 @@ export async function renderHandDocx(doc: AcademicDoc, plan: WorkPlan & { style:
       {
         properties: {
           titlePage: hasTitle,
-          page: {
-            size: { width: HAND_PAGE.widthTw, height: HAND_PAGE.heightTw },
-            margin: G.margins,
-            pageNumbers: { start: 1 },
-          },
+          page: { size: pageSize, margin, pageNumbers: { start: 1 } },
+          ...(G.twoUp
+            ? { column: { count: 2, equalWidth: false, children: [new Column({ width: G.contentTw, space: left.right + right.left }), new Column({ width: G.contentTw })] } }
+            : {}),
         },
-        headers: hasTitle ? { default: background(), first: background() } : { default: background() },
-        footers: hasTitle ? { first: blankFooter, default: numberedFooter } : { default: numberedFooter },
+        ...(headers ? { headers } : {}),
+        ...(footers ? { footers } : {}),
         children: out,
       },
     ],
   });
 
-  return new Uint8Array(await Packer.toBuffer(document));
+  const bytes = await Packer.toBuffer(document);
+  if (!mirrored) return new Uint8Array(bytes);
+  /* `docx` has no switch for mirrored margins (inside = the margin-line side on odd pages, outside on even): patch settings.xml. */
+  const zip = await JSZip.loadAsync(bytes);
+  const settings = await zip.file("word/settings.xml")!.async("string");
+  if (!/<w:evenAndOddHeaders\s*\/>/.test(settings)) throw new Error("renderHandDocx: evenAndOddHeaders missing from settings.xml");
+  zip.file("word/settings.xml", settings.replace(/<w:evenAndOddHeaders\s*\/>/, "<w:mirrorMargins/><w:evenAndOddHeaders/>"));
+  return new Uint8Array(await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" }));
 }
