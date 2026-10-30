@@ -71,15 +71,16 @@ Behind the flag `PAYNET_SHARED_WITH_VAKANT` (default OFF — turn it on only onc
 
 | Call | Rule |
 |---|---|
-| GetInformation / PerformTransaction, payer `vk-…` | relayed verbatim to `VAKANT_PAYNET_FORWARD_URL` **after our own Basic auth** (same login for both, so only an authenticated Paynet call is relayed; the IP allow-list still comes first). A SlaydX order under the same transactionId wins (201). A successful relayed Perform records the id in `paynet_routes` (migration 061). |
-| CheckTransaction / CancelTransaction | SlaydX order → answered here; else a `paynet_routes` row → relayed; else answered locally (state 3 / 203). Bandlik unreachable → `-32603 forward_failed` (never «not found»). |
-| GetStatement | our rows + Bandlik's `result.statements` (same request relayed, 4 MB reply cap), one row per transactionId (ours win), ordered by time then id. **All or nothing**: if Bandlik's list cannot be read or is malformed the call is `-32603` (Paynet retries) — never half a statement. |
+| GetInformation / PerformTransaction, payer `vk-…` | relayed verbatim to `VAKANT_PAYNET_FORWARD_URL` **after our own Basic auth** (same login for both, so only an authenticated Paynet call is relayed; the IP allow-list still comes first). Perform: an invalid transactionId is `-32602` locally; a SlaydX order under the id → 201; otherwise the id is **claimed for Bandlik in `paynet_routes` BEFORE the relay** (if the claim cannot be written nothing is relayed). |
+| PerformTransaction, digit payer | claims the id for SlaydX **inside the credit transaction**; a claim conflict (Bandlik already owns the id) → 201, nothing credited. So ONE system owns every transactionId — the primary key decides atomically, one Paynet payment can never be credited twice. |
+| CheckTransaction / CancelTransaction | SlaydX order / `slaydx` claim → answered here; `vakant` claim → relayed (also while Bandlik's Perform is still in flight or its reply was lost — never «not found»); unowned id → answered locally (state 3 / 203). Bandlik unreachable → `-32603 forward_failed`. |
+| GetStatement | our rows + Bandlik's `result.statements` (same request relayed, 4 MB reply cap), one row per transactionId (ours win, but a transactionId reported by BOTH is logged at error level), ordered by time then id. Bandlik rows are validated strictly (unique transactionId, providerTrnId > 0, positive integer tiyin amount, valid GMT+5 time). **All or nothing**: if Bandlik's list cannot be read or is malformed the call is `-32603` (Paynet retries) — never half a statement. |
 | everything else | SlaydX, as before. Nothing is written to payment tables for relayed calls (only the route row). |
 
 **Contract for the Bandlik side** (`POST VAKANT_PAYNET_FORWARD_URL`, default `https://abitur24.uz/api/payments/paynet`): it receives exactly what Paynet sent, including the
 `Authorization: Basic …` header (the SAME login/password as SlaydX's — verify it) and `X-Forwarded-By: slaydx`; answers HTTP 200 + a JSON-RPC 2.0 response with the request `id`.
 Methods: GetInformation, PerformTransaction (idempotent by `transactionId`: a repeat is error 201), CheckTransaction, CancelTransaction, GetStatement
-(only Bandlik's own transactions, `amount` in tiyin, `timestamp` `YYYY-MM-DD HH:mm:ss` GMT+5). Its payer ids start with `vk-` / `vk_`. Do not IP-filter SlaydX's server;
+(only Bandlik's own transactions, `amount` in tiyin, `timestamp` `YYYY-MM-DD HH:mm:ss` GMT+5). Its payer ids start with `vk-` / `vk_`. **Its `providerTrnId` values start at 1 000 000 000** so they never overlap SlaydX's sequence inside one merged statement. It may receive a retry of the same Perform (answer 201, never credit twice) and a Check/Cancel for an id it never committed (state 3 / 203). Do not IP-filter SlaydX's server;
 answer within ~400 ms (our relay adds ~20–50 ms to Paynet's 500 ms budget). The Bandlik repo is not touched from here.
 
 ## Wallet / bot

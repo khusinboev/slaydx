@@ -497,6 +497,7 @@ test("Hamyon Paynet: «Paynet ilovasida to'lash» is a safe external link shown 
   assert.equal(link.getAttribute("href"), "https://app.paynet.test/?m=54883");
   assert.equal(link.getAttribute("target"), "_blank");
   assert.match(link.getAttribute("rel") ?? "", /noopener/);
+  assert.match(link.getAttribute("rel") ?? "", /noreferrer/);
   assert.match(link.textContent ?? "", /Paynet ilovasida to'lash/);
   cleanup();
   // No URL from the server → no button (the card still works).

@@ -174,6 +174,7 @@ export function parseVakantStatement(text: string): StatementRow[] | null {
   }
   if (!isPlainObject(json) || json.error !== undefined || !isPlainObject(json.result) || !Array.isArray(json.result.statements)) return null;
   const out: StatementRow[] = [];
+  const seen = new Set<number>();
   for (const r of json.result.statements) {
     if (!isPlainObject(r)) return null;
     const txn = toTransactionId(r.transactionId);
@@ -185,13 +186,22 @@ export function parseVakantStatement(text: string): StatementRow[] | null {
       r.amount <= 0 ||
       typeof trn !== "number" ||
       !Number.isSafeInteger(trn) ||
-      parseTashkent(r.timestamp) === null
+      trn <= 0 ||
+      parseTashkent(r.timestamp) === null ||
+      seen.has(Number(txn))
     ) {
       return null;
     }
+    seen.add(Number(txn));
     out.push({ amount: r.amount, transactionId: Number(txn), providerTrnId: trn, timestamp: String(r.timestamp) });
   }
   return out;
+}
+
+/** transactionIds that BOTH systems report: one Paynet payment credited twice (must never happen once `paynet_routes` owns ids). */
+export function statementOverlap(own: readonly StatementRow[], theirs: readonly StatementRow[]): number[] {
+  const mine = new Set(own.map((r) => r.transactionId));
+  return theirs.filter((r) => mine.has(r.transactionId)).map((r) => r.transactionId);
 }
 
 /** Own rows + Bandlik's, one row per transactionId (ours win), ordered by time then id. Pure. */
@@ -310,13 +320,21 @@ function requireTimestamp(v: unknown): number {
 // ───────────────────────────── shared service (Bandlik.uz)
 
 /** `paynet_routes`: where the follow-up calls of a forwarded Paynet transaction go (only `vakant` exists). */
-export async function paynetRouteOf(transactionId: string): Promise<"vakant" | null> {
+export async function paynetRouteOf(transactionId: string): Promise<"vakant" | "slaydx" | null> {
   const row = await queryOne<{ target: string }>(`SELECT target FROM paynet_routes WHERE transaction_id = $1::bigint`, [transactionId]);
-  return row?.target === "vakant" ? "vakant" : null;
+  return row?.target === "vakant" || row?.target === "slaydx" ? row.target : null;
 }
 
-export async function recordPaynetRoute(transactionId: string): Promise<void> {
+/**
+ * Claims `transactionId` for Bandlik BEFORE a vk- Perform is relayed. Returns the owner afterwards: `vakant` (claimed now, or an
+ * earlier retry of the same Perform) or `slaydx` (already credited here → the caller answers 201). Throws when the claim cannot be
+ * written (the caller must then NOT relay).
+ */
+export async function claimPaynetRoute(transactionId: string): Promise<"vakant" | "slaydx"> {
   await query(`INSERT INTO paynet_routes (transaction_id, target) VALUES ($1::bigint, 'vakant') ON CONFLICT (transaction_id) DO NOTHING`, [transactionId]);
+  const owner = await paynetRouteOf(transactionId);
+  if (owner === null) throw new Error("paynet route claim not readable");
+  return owner;
 }
 
 /** Content-Type + Authorization pass through untouched (Bandlik verifies the same login). */
@@ -342,16 +360,6 @@ function forwardToBandlik(ctx: RpcCtx, method: string, serviceId: number | null,
   });
 }
 
-/** True when `text` (a Bandlik JSON-RPC reply) is a success: a `result` and no `error`. */
-function isRpcSuccess(text: string): boolean {
-  try {
-    const j = JSON.parse(text) as unknown;
-    return isPlainObject(j) && j.result !== undefined && j.error === undefined;
-  } catch {
-    return false;
-  }
-}
-
 type SharedOut = { text: string; forwarded: ForwardResult } | { body: Body; forwarded?: ForwardResult };
 
 /**
@@ -367,25 +375,24 @@ async function routeShared(rpc: Envelope, ctx: RpcCtx): Promise<SharedOut | null
   if (rpc.method === "GetInformation" || rpc.method === "PerformTransaction") {
     const fields = rpc.params.fields;
     if (!isPlainObject(fields) || !isVakantPayer(fields[env.paynet.clientParam])) return null;
-    let txn: string | null = null;
     if (rpc.method === "PerformTransaction") {
-      txn = toTransactionId(rpc.params.transactionId);
-      // A SlaydX order under this id wins: never hand a known transaction to the other system.
-      if (txn !== null && (await findPaynetOrder(txn))) return { body: rpcError(rpc.id, PAYNET_ERR.TXN_EXISTS) };
+      const txn = toTransactionId(rpc.params.transactionId);
+      if (txn === null) return { body: rpcError(rpc.id, PAYNET_ERR.INVALID_PARAMS) };
+      // A SlaydX order under this id (credited before the flag was on) wins: never hand a known transaction to the other system.
+      if (await findPaynetOrder(txn)) return { body: rpcError(rpc.id, PAYNET_ERR.TXN_EXISTS) };
+      // CLAIM FIRST, relay second: from this moment the id belongs to Bandlik, so a Check arriving while Bandlik is still working
+      // (or after a lost reply) is relayed instead of answering «not found», and a digit-payer Perform of the same id is a 201.
+      // If the claim cannot be written nothing is relayed.
+      if ((await claimPaynetRoute(txn)) === "slaydx") return { body: rpcError(rpc.id, PAYNET_ERR.TXN_EXISTS) };
     }
     const fwd = await forwardToBandlik(ctx, rpc.method, sid);
-    if (!fwd.ok) return fail(fwd);
-    if (txn !== null && isRpcSuccess(fwd.text)) {
-      // The reply already goes back; a failed note only means the follow-ups answer «not found» (logged, never fatal).
-      await recordPaynetRoute(txn).catch((e) => log("error", "[paynet] route not recorded", { transactionId: txn, err: e }));
-    }
-    return { text: fwd.text, forwarded: fwd };
+    return fwd.ok ? { text: fwd.text, forwarded: fwd } : fail(fwd);
   }
 
   if (rpc.method === "CheckTransaction" || rpc.method === "CancelTransaction") {
     const txn = toTransactionId(rpc.params.transactionId);
     if (txn === null || (await findPaynetOrder(txn))) return null;
-    if ((await paynetRouteOf(txn)) !== "vakant") return null;
+    if ((await paynetRouteOf(txn)) !== "vakant") return null; // unowned → local «not found»; `slaydx` → answered here
     const fwd = await forwardToBandlik(ctx, rpc.method, sid);
     return fwd.ok ? { text: fwd.text, forwarded: fwd } : fail(fwd);
   }
@@ -435,7 +442,7 @@ async function performTransaction(p: Body): Promise<MethodOut> {
   const transactionId = requireTransactionId(p);
   const amountSoum = requireAmountSoum(p.amount);
   const payer = await requirePayer(p);
-  const out = await createPaidPaynetOrder({ userId: payer.id, amountSoum, transactionId });
+  const out = await createPaidPaynetOrder({ userId: payer.id, amountSoum, transactionId, claimRoute: env.paynet.sharedWithVakant });
   if (out.status === "duplicate") {
     const existing = await findPaynetOrder(transactionId);
     throw new RpcError(PAYNET_ERR.TXN_EXISTS, { orderId: existing?.order.id ?? null, providerTxn: transactionId });
@@ -499,6 +506,8 @@ async function getStatement(p: Body, ctx: RpcCtx): Promise<MethodOut> {
     const fwd = await forwardToBandlik(ctx, "GetStatement", sid, VAKANT_STATEMENT_MAX_BYTES);
     const theirs = fwd.ok ? parseVakantStatement(fwd.text) : null;
     if (!theirs) throw new RpcError(PAYNET_ERR.INTERNAL, { detail: fwd.ok ? "vakant statement malformed" : `vakant statement ${fwd.reason}` });
+    const both = statementOverlap(statements, theirs);
+    if (both.length) log("error", "[paynet] transactionId credited in BOTH systems", { transactionIds: both.slice(0, 20), count: both.length });
     statements = mergeStatements(statements, theirs);
   }
   return { result: { statements } };
@@ -612,7 +621,16 @@ export async function handlePaynetPost(req: Request): Promise<Response> {
     }
     if (shared) {
       forwarded = shared.forwarded ?? null;
-      if ("text" in shared) return finish(new Response(shared.text, { status: 200, headers: JSON_HEADERS }));
+      if ("text" in shared) {
+        // The log line carries Bandlik's own answer code (relayed calls leave no payment_events row).
+        try {
+          const j = JSON.parse(shared.text) as { error?: { code?: unknown } };
+          if (typeof j.error?.code === "number") code = j.error.code;
+        } catch {
+          /* the relay already validated it is a JSON object */
+        }
+        return finish(new Response(shared.text, { status: 200, headers: JSON_HEADERS }));
+      }
       code = (shared.body.error as { code: number }).code;
       return finish(json(shared.body));
     }

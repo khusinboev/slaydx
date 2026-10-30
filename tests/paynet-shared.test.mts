@@ -11,8 +11,10 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  * MUTATIONS checked (each turned the named test red, then reverted):
  *   S1 flag ignored (always relay vk- payers)                        → «flag off»
  *   S2 relay BEFORE our auth                                         → «unauthenticated»
- *   S3 route row written on a Bandlik ERROR reply                    → «Perform … failure»
+ *   S3 route claimed only AFTER Bandlik answers / only on success      → «claimed BEFORE the relay»
  *   S4 route row never written                                       → «Check / Cancel follow the route»
+ *   S10 a digit Perform ignores a Bandlik-owned id / no claim in the credit transaction → «ONE owner»
+ *   S11 statement overlap not logged / Bandlik rows not strictly parsed → «overlap», «parseVakantStatement»
  *   S5 own order under the id ignored (a SlaydX txn handed to Bandlik) → «SlaydX order under the id»
  *   S6 Check relayed without the route row (every unknown id relayed) → «unknown id answered locally»
  *   S7 statement: Bandlik failure answered with own rows only        → «GetStatement … all or nothing»
@@ -75,6 +77,8 @@ test("parseVakantStatement / mergeStatements: strict rows, one per transactionId
     JSON.stringify({ result: { statements: [row(1, "30.10.2026 10:00")] } }),
     JSON.stringify({ result: { statements: [{ ...row(1, "2026-10-30 10:00:00"), amount: "10" }] } }),
     JSON.stringify({ result: { statements: [{ ...row(1, "2026-10-30 10:00:00"), transactionId: -4 }] } }),
+    JSON.stringify({ result: { statements: [row(1, "2026-10-30 10:00:00", 1000, 0)] } }),
+    JSON.stringify({ result: { statements: [row(7, "2026-10-30 10:00:00"), row(7, "2026-10-30 11:00:00")] } }),
   ]) {
     assert.equal(p.parseVakantStatement(bad), null, bad.slice(0, 60));
   }
@@ -86,6 +90,23 @@ test("parseVakantStatement / mergeStatements: strict rows, one per transactionId
     [[3, 1000], [4, 1000], [5, 1000]],
     "ordered by time then id; the duplicate id keeps OUR row",
   );
+});
+
+test("env: PAYNET_SHARED_WITH_VAKANT is off for unset / empty (docker-compose passes \"\") / 0 / false and on only for 1 / true / yes", async () => {
+  const saved = process.env.PAYNET_SHARED_WITH_VAKANT;
+  try {
+    for (const [v, expected] of [["", false], ["0", false], ["false", false], ["off", false], ["1", true], ["true", true], ["YES", true]] as const) {
+      process.env.PAYNET_SHARED_WITH_VAKANT = v;
+      const fresh = (await import(`../lib/server/env.ts?shared=${encodeURIComponent(v)}-${Date.now()}`)) as { env: { paynet: { sharedWithVakant: boolean } } };
+      assert.equal(fresh.env.paynet.sharedWithVakant, expected, JSON.stringify(v));
+    }
+    delete process.env.PAYNET_SHARED_WITH_VAKANT;
+    const unset = (await import(`../lib/server/env.ts?shared=unset-${Date.now()}`)) as { env: { paynet: { sharedWithVakant: boolean } } };
+    assert.equal(unset.env.paynet.sharedWithVakant, false);
+  } finally {
+    if (saved === undefined) delete process.env.PAYNET_SHARED_WITH_VAKANT;
+    else process.env.PAYNET_SHARED_WITH_VAKANT = saved;
+  }
 });
 
 test("paynetAppUrl: only when Paynet is live AND the value is an https URL", async () => {
@@ -109,7 +130,7 @@ test("shared service (real Postgres)", { skip: SKIP_DB }, async (t) => {
   const { query, queryOne, migrate, pool } = await import("../lib/server/db.ts");
   const { env } = await import("../lib/server/env.ts");
   const route = await import("../app/api/payments/paynet/route.ts");
-  const { paynetRouteOf, recordPaynetRoute } = await import("../lib/server/paynet.ts");
+  const { paynetRouteOf, claimPaynetRoute } = await import("../lib/server/paynet.ts");
   await migrate();
   t.after(async () => {
     await pool().end();
@@ -148,6 +169,14 @@ test("shared service (real Postgres)", { skip: SKIP_DB }, async (t) => {
     assert.equal(parse(r.text).error?.code, 401);
   });
 
+  await t.test("flag off: a Check of an id that has a route row is answered locally (no relay) — the table is dormant", async () => {
+    await claimPaynetRoute("1900");
+    const calls = stubFetch(() => ok({}));
+    const r = await send(body("CheckTransaction", { serviceId: 101, transactionId: 1900, timestamp: "2026-10-30 10:00:00" }));
+    assert.equal(parse(r.text).result?.transactionState, 3);
+    assert.equal(calls.length, 0);
+  });
+
   Object.assign(env.paynet, { sharedWithVakant: true });
   await t.test("flag on, UNAUTHENTICATED vk- call: never relayed (our auth first), 401", async () => {
     const calls = stubFetch(() => ok({}));
@@ -173,27 +202,94 @@ test("shared service (real Postgres)", { skip: SKIP_DB }, async (t) => {
     assert.deepEqual(await tables(), before, "no order / event / ledger row for a relayed call");
   });
 
-  await t.test("Perform of a vk- payer: success → route recorded; Bandlik ERROR reply → no route; Bandlik down → -32603 forward_failed, no route", async () => {
-    const perform = (txn: number) => body("PerformTransaction", { serviceId: 101, amount: 100000, transactionId: txn, fields: { client_id: "vk-9" } }, `p${txn}`);
+  await t.test("Perform of a vk- payer: the id is claimed BEFORE the relay (success, Bandlik error, Bandlik down, Bandlik slow), a bad id is -32602 locally", async () => {
+    const perform = (txn: unknown) => body("PerformTransaction", { serviceId: 101, amount: 100000, transactionId: txn, fields: { client_id: "vk-9" } }, `p${String(txn)}`);
+    const before = await tables();
     // success
     let calls = stubFetch(() => ok({ jsonrpc: "2.0", id: "p1001", result: { providerTrnId: 5, timestamp: "2026-10-30 10:00:00", fields: { balance: 1 } } }));
     let r = await send(perform(1001));
     assert.equal(calls.length, 1);
     assert.ok(parse(r.text).result);
     assert.equal(await routesOf(1001), 1, "MUTATION S4: route never written");
-    // Bandlik says «client not found»
+    // Bandlik says «client not found» (their error returned verbatim) — the id STAYS claimed: the Check goes to Bandlik, which is authoritative
     calls = stubFetch(() => ok({ jsonrpc: "2.0", id: "p1002", error: { code: 302, message: "Клиент не найден" } }));
     r = await send(perform(1002));
-    assert.equal(parse(r.text).error?.code, 302, "their error is returned verbatim");
-    assert.equal(await routesOf(1002), 0, "MUTATION S3: route written on an error reply");
-    // Bandlik unreachable / not JSON / 500
-    for (const h of [() => { throw new TypeError("fetch failed"); }, () => new Response("<html>", { status: 200 }), () => new Response("boom", { status: 500 })]) {
+    assert.equal(parse(r.text).error?.code, 302);
+    assert.equal(await routesOf(1002), 1, "MUTATION S3: the claim must exist even when Bandlik answers an error");
+    // Bandlik unreachable / not JSON / 500: -32603, claim kept (a lost reply may hide a committed payment)
+    for (const [txn, h] of [
+      [1003, () => { throw new TypeError("fetch failed"); }],
+      [1004, () => new Response("<html>", { status: 200 })],
+      [1005, () => new Response("boom", { status: 500 })],
+    ] as const) {
       stubFetch(h);
-      r = await send(perform(1003));
+      r = await send(perform(txn));
       assert.deepEqual(parse(r.text).error, { code: -32603, message: "forward_failed" });
-      assert.equal(parse(r.text).id, "p1003");
-      assert.equal(await routesOf(1003), 0);
+      assert.equal(parse(r.text).id, `p${txn}`);
+      assert.equal(await routesOf(txn), 1, `claim kept for ${txn}`);
     }
+    // Bandlik SLOW: while its Perform is in flight a Check for the same id must already be relayed (never «not found»).
+    let release!: () => void;
+    const gate = new Promise<void>((res) => (release = res));
+    calls = stubFetch(async (seen) => {
+      if (seen.body.includes('"PerformTransaction"')) await gate;
+      return ok({ jsonrpc: "2.0", id: 7, result: { transactionState: seen.body.includes('"CheckTransaction"') ? 1 : 0, providerTrnId: 6 } });
+    });
+    const slow = send(perform(1006));
+    await new Promise((res) => setTimeout(res, 50));
+    const during = await send(body("CheckTransaction", { serviceId: 101, transactionId: 1006, timestamp: "2026-10-30 10:00:00" }));
+    assert.equal(parse(during.text).result?.transactionState, 1, "the Check during the slow Perform is relayed, not answered «not found»");
+    release();
+    await slow;
+    // a Bandlik 201 on a retry keeps the claim and is returned verbatim
+    calls = stubFetch(() => ok({ jsonrpc: "2.0", id: "p1001", error: { code: 201, message: "dup" } }));
+    r = await send(perform(1001));
+    assert.equal(parse(r.text).error?.code, 201);
+    assert.equal(calls.length, 1, "a retry of a Bandlik-owned id is relayed (Bandlik is idempotent)");
+    // an invalid transactionId is refused locally, nothing relayed
+    calls = stubFetch(() => ok({}));
+    for (const bad of [null, 0, -5, "abc", 2 ** 60]) {
+      r = await send(perform(bad));
+      assert.equal(parse(r.text).error?.code, -32602, String(bad));
+    }
+    assert.equal(calls.length, 0);
+    // no SlaydX payment table was touched by any of the relayed Performs
+    const after = await tables();
+    assert.deepEqual(after, before, "orders / events / ledger unchanged");
+  });
+
+  await t.test("ONE owner per transactionId: a digit-payer Perform of a Bandlik-owned id is a 201 and credits nothing (and a vk- Perform of a SlaydX-credited id is a 201)", async () => {
+    const uid = await mkUser();
+    await claimPaynetRoute("5001"); // Bandlik owns 5001
+    stubFetch(() => ok({}));
+    const before = await tables();
+    const dup = await send(body("PerformTransaction", { serviceId: 101, amount: 100000, transactionId: 5001, fields: { client_id: uid } }));
+    assert.equal(parse(dup.text).error?.code, 201, "MUTATION S10: SlaydX credited a Bandlik-owned id");
+    const afterDup = await tables();
+    assert.equal(afterDup.orders, before.orders, "no order");
+    assert.equal(afterDup.ledger, before.ledger, "nothing credited");
+    assert.equal(afterDup.events, before.events + 1, "the authenticated 201 call is audited like any own call");
+    // a SlaydX credit claims its own id in the same transaction ...
+    const own = await send(body("PerformTransaction", { serviceId: 101, amount: 100000, transactionId: 5002, fields: { client_id: uid } }));
+    assert.ok(parse(own.text).result);
+    assert.equal(await paynetRouteOf("5002"), "slaydx");
+    // ... so a vk- Perform of that id is a 201 and never relayed
+    const calls = stubFetch(() => ok({}));
+    const vk = await send(body("PerformTransaction", { serviceId: 101, amount: 100000, transactionId: 5002, fields: { client_id: "vk-1" } }));
+    assert.equal(parse(vk.text).error?.code, 201);
+    assert.equal(calls.length, 0);
+    // concurrency: a digit and a vk- Perform of ONE new id at the same time → exactly one owner, never both
+    stubFetch(() => ok({ jsonrpc: "2.0", id: 1, result: { providerTrnId: 9, timestamp: "2026-10-30 10:00:00", fields: { balance: 1 } } }));
+    const [a, b] = await Promise.all([
+      send(body("PerformTransaction", { serviceId: 101, amount: 100000, transactionId: 5003, fields: { client_id: uid } })),
+      send(body("PerformTransaction", { serviceId: 101, amount: 100000, transactionId: 5003, fields: { client_id: "vk-1" } })),
+    ]);
+    const owner = await paynetRouteOf("5003");
+    const slaydxOk = Boolean(parse(a.text).result);
+    const vakantRelayed = Boolean(parse(b.text).result);
+    assert.ok(owner === "slaydx" || owner === "vakant");
+    assert.notEqual(slaydxOk, vakantRelayed, "exactly one side owns the payment");
+    assert.equal(slaydxOk, owner === "slaydx");
   });
 
   await t.test("Perform of a vk- payer under a transactionId that is a SlaydX order → 201, never handed to Bandlik", async () => {
@@ -208,9 +304,8 @@ test("shared service (real Postgres)", { skip: SKIP_DB }, async (t) => {
   });
 
   await t.test("Check / Cancel follow the route; a SlaydX order answers itself; an unknown id is answered locally (no relay)", async () => {
-    await recordPaynetRoute("3001");
-    assert.equal(await paynetRouteOf("3001"), "vakant");
-    await recordPaynetRoute("3001"); // idempotent
+    assert.equal(await claimPaynetRoute("3001"), "vakant");
+    assert.equal(await claimPaynetRoute("3001"), "vakant", "claiming again is idempotent");
     assert.equal(await paynetRouteOf("3999"), null);
     const check = (txn: number) => body("CheckTransaction", { serviceId: 101, transactionId: txn, timestamp: "2026-10-30 10:00:00" });
     const cancel = (txn: number) => body("CancelTransaction", { serviceId: 101, transactionId: txn, timestamp: "2026-10-30 10:00:00" });
@@ -234,11 +329,11 @@ test("shared service (real Postgres)", { skip: SKIP_DB }, async (t) => {
     r = await send(cancel(3777));
     assert.equal(parse(r.text).error?.code, 203);
     assert.equal(calls.length, 0, "MUTATION S6: an unknown id was relayed");
-    // a SlaydX order wins even when a (stray) route row exists for the id
+    // a SlaydX-owned id is answered by SlaydX (the claim says `slaydx`)
     const uid = await mkUser();
     stubFetch(() => ok({}));
     await send(body("PerformTransaction", { serviceId: 101, amount: 100000, transactionId: 3002, fields: { client_id: uid } }));
-    await recordPaynetRoute("3002");
+    assert.equal(await paynetRouteOf("3002"), "slaydx", "the SlaydX credit claimed its id");
     calls = stubFetch(() => ok({}));
     r = await send(check(3002));
     assert.equal(parse(r.text).result?.transactionState, 1);
@@ -274,8 +369,14 @@ test("shared service (real Postgres)", { skip: SKIP_DB }, async (t) => {
     assert.equal(calls.length, 1);
     assert.equal(calls[0]!.body, stmt, "the SAME request goes to Bandlik");
     const rows = parse(r.text).result!.statements as Array<{ transactionId: number; amount: number }>;
-    // Own rows: the SlaydX orders of the earlier subtests (2001, 3002) and 4001, all «now»; Bandlik's two sit before / after them.
-    assert.deepEqual(rows.map((x) => x.transactionId), [4900, 2001, 3002, 4001, 4901], "merged and ordered by time");
+    // Own rows = the SlaydX orders of the earlier subtests (2001, 3002, 5002 …) + 4001; Bandlik's two bracket them in time.
+    const ids = rows.map((x) => x.transactionId);
+    assert.equal(ids[0], 4900, "Bandlik's oldest row first");
+    assert.equal(ids.at(-1), 4901, "Bandlik's newest row last");
+    for (const own of [2001, 3002, 4001, 5002]) assert.ok(ids.includes(own), `own row ${own}`);
+    assert.equal(new Set(ids).size, ids.length, "one row per transactionId");
+    const stamps = (parse(r.text).result!.statements as Array<{ timestamp: string; transactionId: number }>).map((x) => `${x.timestamp}#${String(x.transactionId).padStart(16, "0")}`);
+    assert.deepEqual(stamps, [...stamps].sort(), "ordered by time then id");
     assert.equal(rows.find((x) => x.transactionId === 4001)!.amount, 150000, "own amount in tiyin");
     // all or nothing
     for (const h of [
@@ -298,8 +399,31 @@ test("shared service (real Postgres)", { skip: SKIP_DB }, async (t) => {
     calls = stubFetch(() => ok({}));
     r = await send(stmt);
     assert.equal(calls.length, 0);
-    assert.deepEqual((parse(r.text).result!.statements as Array<{ transactionId: number }>).map((x) => x.transactionId), [2001, 3002, 4001]);
+    const flagOffIds = (parse(r.text).result!.statements as Array<{ transactionId: number }>).map((x) => x.transactionId);
+    for (const own of [2001, 3002, 4001, 5002]) assert.ok(flagOffIds.includes(own), `own row ${own}`);
+    assert.ok(!flagOffIds.includes(4900) && !flagOffIds.includes(4901), "flag off: only our own rows");
     Object.assign(env.paynet, { sharedWithVakant: true });
+  });
+
+  await t.test("statement overlap (a transactionId reported by BOTH systems) is logged as an error and ours wins; a Bandlik reply over 4 MB fails the whole call", async () => {
+    const { setErrorSink } = await import("../lib/server/log.ts");
+    const errors: string[] = [];
+    setErrorSink((e: { msg?: string; message?: string }) => void errors.push(String(e.msg ?? e.message ?? JSON.stringify(e))));
+    let rows: Array<{ transactionId: number; amount: number }>;
+    try {
+      stubFetch(() => ok({ jsonrpc: "2.0", id: 7, result: { statements: [{ amount: 999000, transactionId: 4001, providerTrnId: 77, timestamp: "2026-10-02 10:00:00" }] } }));
+      const r = await send(body("GetStatement", { serviceId: 101, dateFrom: "2000-01-01 00:00:00", dateTo: "2999-01-01 00:00:00" }));
+      rows = parse(r.text).result!.statements as typeof rows;
+    } finally {
+      setErrorSink(null);
+    }
+    assert.equal(rows.filter((x) => x.transactionId === 4001).length, 1);
+    assert.equal(rows.find((x) => x.transactionId === 4001)!.amount, 150000, "ours wins");
+    assert.ok(errors.some((m) => m.includes("credited in BOTH systems")), `MUTATION S11: overlap not logged (${errors.join(" | ")})`);
+    // > 4 MB
+    stubFetch(() => new Response(`{"jsonrpc":"2.0","id":7,"result":{"statements":[],"pad":"${"x".repeat(4 * 1024 * 1024 + 10)}"}}`, { status: 200 }));
+    const big = await send(body("GetStatement", { serviceId: 101, dateFrom: "2000-01-01 00:00:00", dateTo: "2999-01-01 00:00:00" }));
+    assert.equal(parse(big.text).error?.code, -32603);
   });
 
   await t.test("a big Bandlik statement (well over the one-payment 16 KB cap) is accepted", async () => {

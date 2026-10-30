@@ -598,6 +598,9 @@ export type PaynetPerformOutcome =
 /** The unique index `(provider, provider_txn)` (001_init.sql): the idempotency guard of PerformTransaction. */
 const ORDER_TXN_UNIQUE = "payment_orders_txn_idx";
 
+/** Thrown inside the credit transaction when `paynet_routes` already owns the transactionId (rolls everything back). */
+const PAYNET_ROUTE_TAKEN = new Error("paynet transactionId already claimed");
+
 /** Paynet's `transactionId` as stored in `provider_txn`: a positive integer without leading zeros. */
 const PAYNET_TXN_RE = /^[1-9]\d{0,15}$/;
 
@@ -621,6 +624,11 @@ export async function createPaidPaynetOrder(input: {
   amountSoum: number;
   transactionId: string;
   now?: number;
+  /**
+   * Shared-service mode: claim the transactionId in `paynet_routes` (target `slaydx`) INSIDE this transaction. A conflict means the id
+   * is already owned by the other system (or by an earlier call) → `duplicate`, nothing credited.
+   */
+  claimRoute?: boolean;
 }): Promise<PaynetPerformOutcome> {
   const amount = input.amountSoum;
   if (!Number.isSafeInteger(amount) || amount < MIN_TOPUP_SOUM || amount > MAX_TOPUP_SOUM) {
@@ -632,6 +640,13 @@ export async function createPaidPaynetOrder(input: {
   let res: { order: PaymentOrder; providerTrnId: number; balance: number; settled: SettleInTxResult };
   try {
     res = await transaction(async (client) => {
+      if (input.claimRoute) {
+        const claim = await client.query(
+          `INSERT INTO paynet_routes (transaction_id, target) VALUES ($1::bigint, 'slaydx') ON CONFLICT (transaction_id) DO NOTHING RETURNING transaction_id`,
+          [input.transactionId],
+        );
+        if (!claim.rowCount) throw PAYNET_ROUTE_TAKEN;
+      }
       const ins = await client.query<{ id: string; paynet_trn_id: string }>(
         `INSERT INTO payment_orders (id, user_id, provider, purpose, amount_soum, state, provider_txn, create_time, paynet_trn_id)
          VALUES ($1, $2, 'paynet', 'topup', $3, 'pending', $4, $5, nextval('paynet_trn_seq'))
@@ -648,7 +663,7 @@ export async function createPaidPaynetOrder(input: {
       return { order: settled.outcome.order, providerTrnId: Number(paynet_trn_id), balance: Number(bal.rows[0]!.balance), settled };
     });
   } catch (e) {
-    if (isUniqueViolation(e, ORDER_TXN_UNIQUE)) {
+    if (e === PAYNET_ROUTE_TAKEN || isUniqueViolation(e, ORDER_TXN_UNIQUE)) {
       log("info", "[payments] paynet: duplicate transactionId", { provider: "paynet", providerTxn: input.transactionId, userId: input.userId });
       return { status: "duplicate" };
     }
