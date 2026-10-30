@@ -66,5 +66,20 @@ test("session: payments.paynet is true only when login, password and a serviceId
 test("session: paymentsConfigured stays click/payme — Paynet is never a checkout provider", { skip }, async () => {
   assert.deepEqual(Object.keys(paymentsConfigured()).sort(), ["click", "payme"]);
   const f = await features();
-  assert.deepEqual(Object.keys(f.payments).sort(), ["click", "clickDirect", "payme", "paynet"]);
+  assert.deepEqual(Object.keys(f.payments).sort(), ["click", "clickDirect", "payme", "paynet", "paynetUrl"]);
+});
+
+test("session: payments.paynetUrl is the https app link only while Paynet is live; null otherwise", { skip }, async () => {
+  const saved = { ...env.paynet };
+  try {
+    assert.equal((await features()).payments.paynetUrl, null, "no PAYNET_APP_URL → null");
+    Object.assign(env.paynet, { appUrl: "https://app.paynet.test/?m=1" });
+    assert.equal((await features()).payments.paynetUrl, "https://app.paynet.test/?m=1");
+    Object.assign(env.paynet, { appUrl: "http://app.paynet.test/?m=1" });
+    assert.equal((await features()).payments.paynetUrl, null, "plain http is never offered");
+    Object.assign(env.paynet, { appUrl: "https://app.paynet.test/?m=1", password: "" });
+    assert.equal((await features()).payments.paynetUrl, null, "Paynet not live → no link");
+  } finally {
+    Object.assign(env.paynet, saved);
+  }
 });

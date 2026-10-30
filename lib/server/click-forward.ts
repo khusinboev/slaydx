@@ -88,6 +88,8 @@ export async function forwardRaw(r: {
   raw: string;
   headers: Record<string, string>;
   logFields: Record<string, unknown>;
+  /** Reply cap in bytes (default `MAX_REPLY_BYTES`); a reconciliation list needs more than a one-payment reply. */
+  maxReplyBytes?: number;
 }): Promise<ForwardResult> {
   const started = Date.now();
   const done = (result: ForwardResult, upstreamStatus: number | null): ForwardResult => {
@@ -122,7 +124,7 @@ export async function forwardRaw(r: {
       await res.body?.cancel().catch(() => undefined);
       return done({ ok: false, reason: "status", status: res.status }, res.status);
     }
-    const text = await readTextCapped(res.body, MAX_REPLY_BYTES);
+    const text = await readTextCapped(res.body, r.maxReplyBytes ?? MAX_REPLY_BYTES);
     if (text === null) return done({ ok: false, reason: "too_large" }, res.status);
     try {
       const parsed = JSON.parse(text) as unknown;

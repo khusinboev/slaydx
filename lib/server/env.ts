@@ -302,6 +302,15 @@ export const env = {
     vakantServiceIds: intList("PAYNET_VAKANT_SERVICE_IDS"),
     // `||`: docker-compose passes an EMPTY string when the variable is unset in `.env`.
     vakantForwardUrl: str("VAKANT_PAYNET_FORWARD_URL") || "https://abitur24.uz/api/payments/paynet",
+    /**
+     * ONE Paynet service for SlaydX AND Bandlik.uz (owner 2026-10-30): payers whose id starts with `vk-` / `vk_` belong to
+     * Bandlik and are forwarded; their follow-up Check / Cancel go the same way (`paynet_routes`), GetStatement merges both lists.
+     * OFF by default: turn it on only once Bandlik.uz serves the Paynet endpoint (docs/payments/PAYNET.md), or the nightly
+     * reconciliation (GetStatement) would fail.
+     */
+    sharedWithVakant: bool("PAYNET_SHARED_WITH_VAKANT"),
+    /** The public «pay in the Paynet app» link shown on the wallet (empty = no button). */
+    appUrl: str("PAYNET_APP_URL"),
   },
   payme: {
     merchantId: str("PAYME_MERCHANT_ID"),
@@ -498,6 +507,12 @@ export function voiceProviderUnavailable(values: { voiceProvider?: unknown }): s
  */
 export function clickDirectConfigured(): boolean {
   return paymentsConfigured().click && Boolean(env.click.merchantUserId);
+}
+
+/** The public Paynet app payment link (wallet / bot button): only when Paynet is live and the value is an https URL, else null. */
+export function paynetAppUrl(): string | null {
+  const u = env.paynet.appUrl;
+  return paynetConfigured() && /^https:\/\/[^\s<>"']+$/i.test(u) ? u : null;
 }
 
 /** Paynet is live only when the login, the password and at least one of our serviceIds are set. */

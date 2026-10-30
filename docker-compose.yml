@@ -225,6 +225,8 @@ services:
       PAYNET_ALLOWED_IPS: ${PAYNET_ALLOWED_IPS:-}
       PAYNET_VAKANT_SERVICE_IDS: ${PAYNET_VAKANT_SERVICE_IDS:-}
       VAKANT_PAYNET_FORWARD_URL: ${VAKANT_PAYNET_FORWARD_URL:-https://abitur24.uz/api/payments/paynet}
+      PAYNET_SHARED_WITH_VAKANT: ${PAYNET_SHARED_WITH_VAKANT:-}
+      PAYNET_APP_URL: ${PAYNET_APP_URL:-}
       PAYME_TEST_KEY: ${PAYME_TEST_KEY:-}
       CRON_SECRET: ${CRON_SECRET:-}
       # EXT-14: webhook'ning ALOHIDA kaliti (bo'sh → vaqtincha CRON_SECRET + ogohlantirish).

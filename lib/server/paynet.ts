@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { forwardRaw, MAX_BODY_BYTES, readTextCapped, type ForwardResult } from "./click-forward";
-import { ensureMigrated, queryOne } from "./db";
+import { ensureMigrated, query, queryOne } from "./db";
 import { env, paynetConfigured } from "./env";
 import { log } from "./log";
 import { recordPaymentEvent } from "./payment-events";
@@ -15,6 +15,12 @@ import { clientIp } from "./ratelimit";
  * authenticates with its own credentials) → IP allow-list (403 / 601) → HTTP Basic (401 / 412) → method. Every call that
  * passed auth is written to `payment_events` (params redacted, response code) and every call gets one log line
  * (method, serviceId, ms, code) — the Authorization header and the password are never logged or stored.
+ *
+ * Shared service (PAYNET_SHARED_WITH_VAKANT, owner 2026-10-30): ONE Paynet service for SlaydX and Bandlik.uz. Payers `vk-…` / `vk_…`
+ * (GetInformation / PerformTransaction) are forwarded AFTER our own Basic auth (the same login serves both projects, so only an
+ * authenticated Paynet call is ever relayed); a successful forwarded Perform records the transactionId in `paynet_routes`, so the
+ * payer-less CheckTransaction / CancelTransaction of that id follow it; GetStatement merges SlaydX's and Bandlik's lists and fails as a
+ * whole when Bandlik's cannot be read (half a statement would look like lost payments at the nightly reconciliation).
  *
  * Money: PerformTransaction inserts the order and credits it in ONE transaction (`createPaidPaynetOrder`); a repeated or
  * concurrent `transactionId` is a 201 and credits nothing. CancelTransaction never cancels (owner: payments are final).
@@ -150,6 +156,61 @@ export function isVakantPaynet(body: unknown, vakantServiceIds: readonly number[
   return sid !== null && vakantServiceIds.includes(sid) && !ownServiceIds.includes(sid);
 }
 
+/** A Bandlik.uz payer id: `vk-…` / `vk_…` (SlaydX ids are digits only, so the two can never be confused). */
+export function isVakantPayer(v: unknown): boolean {
+  return typeof v === "string" && /^vk[-_]/.test(v);
+}
+
+/** The shared reply of the forwarded Bandlik list: rows must be well formed, or the whole statement fails. */
+export type StatementRow = { amount: number; transactionId: number; providerTrnId: number; timestamp: string };
+
+/** `result.statements` of Bandlik's GetStatement reply → validated rows, or null when anything is malformed. */
+export function parseVakantStatement(text: string): StatementRow[] | null {
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!isPlainObject(json) || json.error !== undefined || !isPlainObject(json.result) || !Array.isArray(json.result.statements)) return null;
+  const out: StatementRow[] = [];
+  const seen = new Set<number>();
+  for (const r of json.result.statements) {
+    if (!isPlainObject(r)) return null;
+    const txn = toTransactionId(r.transactionId);
+    const trn = r.providerTrnId;
+    if (
+      txn === null ||
+      typeof r.amount !== "number" ||
+      !Number.isSafeInteger(r.amount) ||
+      r.amount <= 0 ||
+      typeof trn !== "number" ||
+      !Number.isSafeInteger(trn) ||
+      trn <= 0 ||
+      parseTashkent(r.timestamp) === null ||
+      seen.has(Number(txn))
+    ) {
+      return null;
+    }
+    seen.add(Number(txn));
+    out.push({ amount: r.amount, transactionId: Number(txn), providerTrnId: trn, timestamp: String(r.timestamp) });
+  }
+  return out;
+}
+
+/** transactionIds that BOTH systems report: one Paynet payment credited twice (must never happen once `paynet_routes` owns ids). */
+export function statementOverlap(own: readonly StatementRow[], theirs: readonly StatementRow[]): number[] {
+  const mine = new Set(own.map((r) => r.transactionId));
+  return theirs.filter((r) => mine.has(r.transactionId)).map((r) => r.transactionId);
+}
+
+/** Own rows + Bandlik's, one row per transactionId (ours win), ordered by time then id. Pure. */
+export function mergeStatements(own: readonly StatementRow[], theirs: readonly StatementRow[]): StatementRow[] {
+  const seen = new Set(own.map((r) => r.transactionId));
+  const merged = [...own, ...theirs.filter((r) => !seen.has(r.transactionId))];
+  return merged.sort((a, b) => (a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : a.transactionId - b.transactionId));
+}
+
 const sha256 = (s: string) => createHash("sha256").update(s, "utf8").digest();
 
 /** HTTP Basic against the configured login/password, constant time (sha256 digests); false when not configured. */
@@ -256,6 +317,88 @@ function requireTimestamp(v: unknown): number {
   return ms;
 }
 
+// ───────────────────────────── shared service (Bandlik.uz)
+
+/** `paynet_routes`: where the follow-up calls of a forwarded Paynet transaction go (only `vakant` exists). */
+export async function paynetRouteOf(transactionId: string): Promise<"vakant" | "slaydx" | null> {
+  const row = await queryOne<{ target: string }>(`SELECT target FROM paynet_routes WHERE transaction_id = $1::bigint`, [transactionId]);
+  return row?.target === "vakant" || row?.target === "slaydx" ? row.target : null;
+}
+
+/**
+ * Claims `transactionId` for Bandlik BEFORE a vk- Perform is relayed. Returns the owner afterwards: `vakant` (claimed now, or an
+ * earlier retry of the same Perform) or `slaydx` (already credited here → the caller answers 201). Throws when the claim cannot be
+ * written (the caller must then NOT relay).
+ */
+export async function claimPaynetRoute(transactionId: string): Promise<"vakant" | "slaydx"> {
+  await query(`INSERT INTO paynet_routes (transaction_id, target) VALUES ($1::bigint, 'vakant') ON CONFLICT (transaction_id) DO NOTHING`, [transactionId]);
+  const owner = await paynetRouteOf(transactionId);
+  if (owner === null) throw new Error("paynet route claim not readable");
+  return owner;
+}
+
+/** Content-Type + Authorization pass through untouched (Bandlik verifies the same login). */
+function passHeaders(req: Request): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const ct = req.headers.get("content-type");
+  if (ct) headers["content-type"] = ct;
+  const auth = req.headers.get("authorization");
+  if (auth) headers.authorization = auth;
+  return headers;
+}
+
+type RpcCtx = { req: Request; raw: string; id: RpcId };
+
+function forwardToBandlik(ctx: RpcCtx, method: string, serviceId: number | null, maxReplyBytes?: number): Promise<ForwardResult> {
+  return forwardRaw({
+    channel: "paynet",
+    url: env.paynet.vakantForwardUrl,
+    raw: ctx.raw,
+    headers: passHeaders(ctx.req),
+    logFields: { method: method.slice(0, 64), serviceId },
+    ...(maxReplyBytes ? { maxReplyBytes } : {}),
+  });
+}
+
+type SharedOut = { text: string; forwarded: ForwardResult } | { body: Body; forwarded?: ForwardResult };
+
+/**
+ * Shared-service routing of ONE authenticated call (flag on): `null` = SlaydX answers itself. Get / Perform of a `vk-` payer and the
+ * Check / Cancel of a transaction recorded in `paynet_routes` (and not a SlaydX order) are relayed verbatim; GetStatement is merged in
+ * `getStatement`. Only our own serviceIds are considered (anything else is the normal 305).
+ */
+async function routeShared(rpc: Envelope, ctx: RpcCtx): Promise<SharedOut | null> {
+  const sid = toServiceId(rpc.params.serviceId);
+  if (sid === null || !env.paynet.serviceIds.includes(sid)) return null;
+  const fail = (forwarded: ForwardResult): SharedOut => ({ body: rpcError(rpc.id, PAYNET_ERR.INTERNAL, "forward_failed"), forwarded });
+
+  if (rpc.method === "GetInformation" || rpc.method === "PerformTransaction") {
+    const fields = rpc.params.fields;
+    if (!isPlainObject(fields) || !isVakantPayer(fields[env.paynet.clientParam])) return null;
+    if (rpc.method === "PerformTransaction") {
+      const txn = toTransactionId(rpc.params.transactionId);
+      if (txn === null) return { body: rpcError(rpc.id, PAYNET_ERR.INVALID_PARAMS) };
+      // A SlaydX order under this id (credited before the flag was on) wins: never hand a known transaction to the other system.
+      if (await findPaynetOrder(txn)) return { body: rpcError(rpc.id, PAYNET_ERR.TXN_EXISTS) };
+      // CLAIM FIRST, relay second: from this moment the id belongs to Bandlik, so a Check arriving while Bandlik is still working
+      // (or after a lost reply) is relayed instead of answering «not found», and a digit-payer Perform of the same id is a 201.
+      // If the claim cannot be written nothing is relayed.
+      if ((await claimPaynetRoute(txn)) === "slaydx") return { body: rpcError(rpc.id, PAYNET_ERR.TXN_EXISTS) };
+    }
+    const fwd = await forwardToBandlik(ctx, rpc.method, sid);
+    return fwd.ok ? { text: fwd.text, forwarded: fwd } : fail(fwd);
+  }
+
+  if (rpc.method === "CheckTransaction" || rpc.method === "CancelTransaction") {
+    const txn = toTransactionId(rpc.params.transactionId);
+    if (txn === null || (await findPaynetOrder(txn))) return null;
+    if ((await paynetRouteOf(txn)) !== "vakant") return null; // unowned → local «not found»; `slaydx` → answered here
+    const fwd = await forwardToBandlik(ctx, rpc.method, sid);
+    return fwd.ok ? { text: fwd.text, forwarded: fwd } : fail(fwd);
+  }
+  return null;
+}
+
 type Payer = { id: string; name: string; balance: number };
 
 /** `fields[PAYNET_CLIENT_PARAM]` → the SlaydX user (411 absent, 401 malformed, 302 unknown, 501 blocked). */
@@ -299,7 +442,7 @@ async function performTransaction(p: Body): Promise<MethodOut> {
   const transactionId = requireTransactionId(p);
   const amountSoum = requireAmountSoum(p.amount);
   const payer = await requirePayer(p);
-  const out = await createPaidPaynetOrder({ userId: payer.id, amountSoum, transactionId });
+  const out = await createPaidPaynetOrder({ userId: payer.id, amountSoum, transactionId, claimRoute: env.paynet.sharedWithVakant });
   if (out.status === "duplicate") {
     const existing = await findPaynetOrder(transactionId);
     throw new RpcError(PAYNET_ERR.TXN_EXISTS, { orderId: existing?.order.id ?? null, providerTxn: transactionId });
@@ -340,28 +483,37 @@ async function cancelTransaction(p: Body): Promise<MethodOut> {
   throw new RpcError(found ? PAYNET_ERR.NOT_REFUNDABLE : PAYNET_ERR.TXN_NOT_FOUND, { orderId: found?.order.id ?? null, providerTxn: transactionId });
 }
 
-async function getStatement(p: Body): Promise<MethodOut> {
+/** Bandlik's reconciliation list may be long; the one-payment reply cap would make every busy day fail. */
+const VAKANT_STATEMENT_MAX_BYTES = 4 * 1024 * 1024;
+
+async function getStatement(p: Body, ctx: RpcCtx): Promise<MethodOut> {
   requireParams(p, ["serviceId", "dateFrom", "dateTo"]);
-  requireOurService(p);
+  const sid = requireOurService(p);
   const from = requireTimestamp(p.dateFrom);
   const to = requireTimestamp(p.dateTo);
   if (from > to) throw new RpcError(PAYNET_ERR.BAD_DATE, { detail: "dateFrom > dateTo" });
   // Both ends inclusive at second resolution: everything up to dateTo + 999 ms.
   const rows = await paynetStatement(from, to + 1_000, STATEMENT_MAX_ROWS);
   if (rows.length >= STATEMENT_MAX_ROWS) log("warn", "[paynet] GetStatement hit the row cap", { rows: rows.length });
-  return {
-    result: {
-      statements: rows.map((r) => ({
-        amount: r.amountSoum * TIEN_PER_SOUM,
-        transactionId: Number(r.transactionId),
-        providerTrnId: r.providerTrnId,
-        timestamp: formatTashkent(r.performTime),
-      })),
-    },
-  };
+  let statements: StatementRow[] = rows.map((r) => ({
+    amount: r.amountSoum * TIEN_PER_SOUM,
+    transactionId: Number(r.transactionId),
+    providerTrnId: r.providerTrnId,
+    timestamp: formatTashkent(r.performTime),
+  }));
+  if (env.paynet.sharedWithVakant) {
+    // Shared service: Bandlik's list is part of the same reconciliation. All or nothing — never half a statement.
+    const fwd = await forwardToBandlik(ctx, "GetStatement", sid, VAKANT_STATEMENT_MAX_BYTES);
+    const theirs = fwd.ok ? parseVakantStatement(fwd.text) : null;
+    if (!theirs) throw new RpcError(PAYNET_ERR.INTERNAL, { detail: fwd.ok ? "vakant statement malformed" : `vakant statement ${fwd.reason}` });
+    const both = statementOverlap(statements, theirs);
+    if (both.length) log("error", "[paynet] transactionId credited in BOTH systems", { transactionIds: both.slice(0, 20), count: both.length });
+    statements = mergeStatements(statements, theirs);
+  }
+  return { result: { statements } };
 }
 
-const METHODS: Record<string, (p: Body) => Promise<MethodOut>> = {
+const METHODS: Record<string, (p: Body, ctx: RpcCtx) => Promise<MethodOut>> = {
   GetInformation: getInformation,
   PerformTransaction: performTransaction,
   CheckTransaction: checkTransaction,
@@ -456,7 +608,35 @@ export async function handlePaynetPost(req: Request): Promise<Response> {
     return finish(json(rpcError(null, PAYNET_ERR.AUTH), 401, { "www-authenticate": 'Basic realm="paynet"' }));
   }
 
-  // 4. Envelope and method.
+  // 4. Shared service: Bandlik's payers and their follow-ups are relayed (after OUR auth); nothing is written to SlaydX tables.
+  if (env.paynet.sharedWithVakant && parsed.ok && raw !== null) {
+    let shared: SharedOut | null = null;
+    try {
+      await ensureMigrated();
+      shared = await routeShared(parsed.rpc, { req, raw, id });
+    } catch (e) {
+      log("error", "[paynet] shared routing failed", { method, serviceId, err: e });
+      code = PAYNET_ERR.INTERNAL;
+      return finish(json(rpcError(id, PAYNET_ERR.INTERNAL)));
+    }
+    if (shared) {
+      forwarded = shared.forwarded ?? null;
+      if ("text" in shared) {
+        // The log line carries Bandlik's own answer code (relayed calls leave no payment_events row).
+        try {
+          const j = JSON.parse(shared.text) as { error?: { code?: unknown } };
+          if (typeof j.error?.code === "number") code = j.error.code;
+        } catch {
+          /* the relay already validated it is a JSON object */
+        }
+        return finish(new Response(shared.text, { status: 200, headers: JSON_HEADERS }));
+      }
+      code = (shared.body.error as { code: number }).code;
+      return finish(json(shared.body));
+    }
+  }
+
+  // 5. Envelope and method.
   let orderId: string | null = null;
   let providerTxn: string | null = null;
   let reply: Body;
@@ -469,7 +649,7 @@ export async function handlePaynetPost(req: Request): Promise<Response> {
   } else {
     try {
       await ensureMigrated();
-      const out = await METHODS[parsed.rpc.method]!(parsed.rpc.params);
+      const out = await METHODS[parsed.rpc.method]!(parsed.rpc.params, { req, raw: raw ?? "", id });
       orderId = out.orderId ?? null;
       providerTxn = out.providerTxn ?? null;
       reply = rpcResult(id, out.result);

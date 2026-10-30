@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, Landmark } from "lucide-react";
+import { Check, Copy, ExternalLink, Landmark } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { copyToClipboard } from "@/lib/share";
 import { paymentBonusHint } from "@/lib/payment-bonus";
@@ -23,7 +23,7 @@ type Notice = { text: string; tone: "ok" | "error" };
  * PayDialog — carries it: the user's SlaydX ID (the `client_id` the agent types) with a copy button and three steps.
  * The payment bonus applies like any other top-up (the same hint as «Tez to'ldirish»).
  */
-export function PaynetCard({ userId, bonusPercent, className }: { userId: string; bonusPercent: number; className?: string }) {
+export function PaynetCard({ userId, bonusPercent, appUrl, className }: { userId: string; bonusPercent: number; appUrl?: string | null; className?: string }) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -89,6 +89,19 @@ export function PaynetCard({ userId, bonusPercent, className }: { userId: string
         >
           {notice?.text ?? ""}
         </p>
+
+        {appUrl ? (
+          <a
+            href={appUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-wallet-paynet-open
+            className={cn("bg-primary text-primary-foreground mb-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-[14px] px-4 text-[15px] font-semibold", FOCUS)}
+          >
+            <ExternalLink className="size-4 shrink-0" aria-hidden="true" />
+            Paynet ilovasida to&apos;lash
+          </a>
+        ) : null}
 
         <ol className="mt-1 grid gap-2.5" data-wallet-paynet-steps>
           {PAYNET_STEPS.map((step, i) => (

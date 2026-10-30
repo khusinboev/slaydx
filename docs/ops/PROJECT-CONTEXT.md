@@ -47,6 +47,8 @@ Prices: one place, `priceFor` (server); admin «Narxlar» page adjusts 25–1000
 - Live results: app payment works end to end (bonus credited). Card 6262… got no SMS (asked Click); phone-invoice method not yet live-tested.
 - Refund policy: the bot only accepts payments; money paid is not refunded to the user (owner decision).
 
+- **Paynet** (JSON-RPC provider endpoint `/api/payments/paynet`, `docs/payments/PAYNET.md`): live, one service `serviceId 1`, payer = SlaydX ID; no IP allow-list (Paynet's real source differs from the document's ranges). Shared with Bandlik.uz by payer prefix `vk-` behind `PAYNET_SHARED_WITH_VAKANT` (OFF until Bandlik serves its endpoint). Commission 0 %.
+
 ## 5. AI providers
 - Text/LLM: Gemini (default), roles `LLM_WRITER/RESEARCHER/JUDGE/FAST` with fallbacks (Anthropic via `ANTHROPIC_WORKSPACE_ID` header when set, OpenRouter);
   images: Gemini lite image (fal.ai code kept but dead); TTS: **Gemini** (`TTS_GEMINI_MODEL`, two voices: female Kore / male Charon,

@@ -49,6 +49,7 @@ export function WalletPage() {
   const open = useUi((s) => s.open);
   /** Paynet is paid at an agent (not in PayDialog): its card shows only while the server has it configured. */
   const paynetOn = useAppStore((s) => s.features?.payments.paynet === true);
+  const paynetUrl = useAppStore((s) => s.features?.payments.paynetUrl ?? null);
   const pay = usePaymentReturn();
   /** `GET /api/users/me` `paymentBonusPercent` (loaded with the ledger, again after a payment lands); 0 = no hint. */
   const [bonusPercent, setBonusPercent] = useState(0);
@@ -147,7 +148,7 @@ export function WalletPage() {
 
       {sessionChecked && !(loggedIn && !user) ? <QuickTopUp bonusPercent={ready ? bonusPercent : 0} /> : null}
 
-      {ready && paynetOn ? <PaynetCard userId={user!.id} bonusPercent={bonusPercent} /> : null}
+      {ready && paynetOn ? <PaynetCard userId={user!.id} bonusPercent={bonusPercent} appUrl={paynetUrl} /> : null}
 
       {ready ? (
         <>
