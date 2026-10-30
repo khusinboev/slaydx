@@ -428,6 +428,12 @@ const T = {
   "wallet.bonus": { uz: "Shundan: {n}", ru: "Из них: {n}", en: "Of which: {n}" },
   "wallet.recent": { uz: "So‘nggi amallar", ru: "Последние операции", en: "Recent activity" },
   "wallet.none": { uz: "Hali amallar yo‘q.", ru: "Операций пока нет.", en: "No activity yet." },
+  "wallet.paynet": {
+    uz: "Paynet orqali ham to‘ldirish mumkin. Paynet’da «SlaydX» xizmatini tanlab, SlaydX ID ni kiriting: <code>{id}</code>",
+    ru: "Пополнить можно и через Paynet: выберите услугу «SlaydX» и введите SlaydX ID: <code>{id}</code>",
+    en: "You can also top up via Paynet: pick the «SlaydX» service and enter your SlaydX ID: <code>{id}</code>",
+  },
+  "btn.paynet": { uz: "Paynet’da to‘lash", ru: "Оплатить в Paynet", en: "Pay in Paynet" },
   "wallet.payNote": {
     uz: "To‘lov ilovada — Click yoki Payme orqali. Hujjat yaratilmasa, pul to‘liq qaytariladi.",
     ru: "Оплата — в приложении, через Click или Payme. Если документ не создан, деньги вернутся полностью.",

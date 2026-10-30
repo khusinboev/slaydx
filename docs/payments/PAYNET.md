@@ -63,3 +63,24 @@ Go-live checklist: `PAYNET_ALLOWED_IPS` set (needs `TRUST_PROXY=true`, nginx `X-
 ## UI
 Wallet: a «Paynet orqali to'lash» card (only when Paynet is configured) showing the user's SlaydX ID with a copy button and 3 short steps (Paynet agent → service «SlaydX» → enter the ID).
 Admin: provider `Paynet` everywhere providers appear (labels, filters, revenue by provider, order search / settle-ref matching, exports, bot admin stats if provider-specific).
+
+## Shared service with Bandlik.uz — ONE Paynet service (owner 2026-10-30)
+Supersedes «Bandlik needs its own serviceId» for the default setup (dedicated `PAYNET_VAKANT_SERVICE_IDS` still work, unchanged). Paynet has ONE service
+(`serviceId` 1) and ONE login/password; the two projects are told apart only by the payer id: **Bandlik payers start with `vk-` / `vk_`** (SlaydX ids are digits).
+Behind the flag `PAYNET_SHARED_WITH_VAKANT` (default OFF — turn it on only once Bandlik.uz serves the endpoint below, otherwise GetStatement would fail):
+
+| Call | Rule |
+|---|---|
+| GetInformation / PerformTransaction, payer `vk-…` | relayed verbatim to `VAKANT_PAYNET_FORWARD_URL` **after our own Basic auth** (same login for both, so only an authenticated Paynet call is relayed; the IP allow-list still comes first). A SlaydX order under the same transactionId wins (201). A successful relayed Perform records the id in `paynet_routes` (migration 061). |
+| CheckTransaction / CancelTransaction | SlaydX order → answered here; else a `paynet_routes` row → relayed; else answered locally (state 3 / 203). Bandlik unreachable → `-32603 forward_failed` (never «not found»). |
+| GetStatement | our rows + Bandlik's `result.statements` (same request relayed, 4 MB reply cap), one row per transactionId (ours win), ordered by time then id. **All or nothing**: if Bandlik's list cannot be read or is malformed the call is `-32603` (Paynet retries) — never half a statement. |
+| everything else | SlaydX, as before. Nothing is written to payment tables for relayed calls (only the route row). |
+
+**Contract for the Bandlik side** (`POST VAKANT_PAYNET_FORWARD_URL`, default `https://abitur24.uz/api/payments/paynet`): it receives exactly what Paynet sent, including the
+`Authorization: Basic …` header (the SAME login/password as SlaydX's — verify it) and `X-Forwarded-By: slaydx`; answers HTTP 200 + a JSON-RPC 2.0 response with the request `id`.
+Methods: GetInformation, PerformTransaction (idempotent by `transactionId`: a repeat is error 201), CheckTransaction, CancelTransaction, GetStatement
+(only Bandlik's own transactions, `amount` in tiyin, `timestamp` `YYYY-MM-DD HH:mm:ss` GMT+5). Its payer ids start with `vk-` / `vk_`. Do not IP-filter SlaydX's server;
+answer within ~400 ms (our relay adds ~20–50 ms to Paynet's 500 ms budget). The Bandlik repo is not touched from here.
+
+## Wallet / bot
+`PAYNET_APP_URL` (https only, shown only while Paynet is live): wallet card button «Paynet ilovasida to'lash» and, in the bot wallet, the SlaydX ID block + «Paynet'da to'lash» button.

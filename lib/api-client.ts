@@ -278,6 +278,8 @@ export type Features = {
     clickDirect?: boolean;
     /** Paynet agents can top up by SlaydX ID (wallet card only; never a checkout method in PayDialog). */
     paynet?: boolean;
+    /** Public «pay in the Paynet app» link (https); null/absent = no button. */
+    paynetUrl?: string | null;
   };
   /** Admin price adjustments (non-default tools only); untrusted, validated by `parsePriceAdjustments`. */
   pricing?: unknown;

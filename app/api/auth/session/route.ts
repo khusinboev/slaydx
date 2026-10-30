@@ -1,6 +1,6 @@
 import { ApiError, checkOrigin, handler, json, optionalUser, requireUser } from "@/lib/server/api";
 import { clearSessionCookie, revokeAllSessions, revokeCurrentSession } from "@/lib/server/session";
-import { clickDirectConfigured, env, imageModelsAvailable, imagesConfigured, llmConfigured, paymentsConfigured, paynetConfigured, ttsFeature, ttsPremiumAvailable, videoProvidersAvailable } from "@/lib/server/env";
+import { clickDirectConfigured, env, imageModelsAvailable, imagesConfigured, llmConfigured, paymentsConfigured, paynetAppUrl, paynetConfigured, ttsFeature, ttsPremiumAvailable, videoProvidersAvailable } from "@/lib/server/env";
 import { ensureProviderKeys } from "@/lib/server/providers/store";
 import { pdfAvailable } from "@/lib/server/pdf";
 import { getAllToolPricing } from "@/lib/server/pricing";
@@ -32,7 +32,7 @@ export const GET = handler("auth/session", async (req) => {
       pdf: pdfAvailable(),
       // `clickDirect`: the wallet offers the Click card / phone / app methods only when the Merchant API is set up.
       // `paynet`: the wallet shows the «Paynet orqali to'lash» card (paid at an agent); deliberately not in `paymentsConfigured()`.
-      payments: { ...paymentsConfigured(), clickDirect: clickDirectConfigured(), paynet: paynetConfigured() },
+      payments: { ...paymentsConfigured(), clickDirect: clickDirectConfigured(), paynet: paynetConfigured(), paynetUrl: paynetAppUrl() },
       /*
        * Admin price adjustments, non-default tools only ({} when none), so the
        * client displays what the server charges (docs/admin/02-plan.md §17.2).

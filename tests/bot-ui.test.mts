@@ -824,3 +824,18 @@ test("ledger title of the rating bonus in 3 languages", () => {
   assert.equal(scr.ledgerTitle("ru", { kind: "bonus", note: "Baholash bonusi" }), "Бонус за оценку приложения");
   assert.equal(scr.ledgerTitle("en", { kind: "bonus", note: "Baholash bonusi" }), "App rating bonus");
 });
+
+test("wallet card: Paynet block (ID + app link button) only when Paynet is live; 3 languages; no link without a public https URL", () => {
+  const urls = (x: { reply_markup?: unknown }) => inline(x).map((b) => b.url ?? "");
+  const link = "https://app.paynet.test/?m=54883";
+  const on = scr.walletScreen("uz", USER, [], 0, { userId: "42", url: link });
+  assert.match(on.text, /Paynet orqali ham to‘ldirish mumkin\. Paynet’da «SlaydX» xizmatini tanlab, SlaydX ID ni kiriting: <code>42<\/code>/);
+  assert.match(scr.walletScreen("ru", USER, [], 0, { userId: "42", url: null }).text, /введите SlaydX ID: <code>42<\/code>/);
+  assert.match(scr.walletScreen("en", USER, [], 0, { userId: "42", url: null }).text, /enter your SlaydX ID: <code>42<\/code>/);
+  assert.ok(urls(on).includes(link), "the app link button");
+  assert.ok(inline(on).some((b) => /Paynet’da to‘lash/.test(b.text)));
+  // MUTATION: block shown while Paynet is off / button with a missing or non-public URL.
+  assert.ok(!/Paynet/.test(scr.walletScreen("uz", USER, []).text), "off: no Paynet text");
+  assert.ok(!urls(scr.walletScreen("uz", USER, [], 0, { userId: "42", url: null })).some((u) => /paynet/i.test(u)), "no URL: no button");
+  assert.ok(!urls(scr.walletScreen("uz", USER, [], 0, { userId: "42", url: "http://localhost:3000/x" })).some((u) => /localhost/.test(u)), "non-public URL: no button");
+});

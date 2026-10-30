@@ -485,3 +485,24 @@ test("wallet-model: Tashkent-time labels and kind fallbacks", () => {
   assert.equal(ledgerRow({ id: "z", kind: "quota_merge", amount: 0, note: "", createdAt: "2026-10-07T05:24:00.000Z" }, now).amount, "0");
   assert.equal(ledgerRow({ id: "z", kind: "quota_merge", amount: 0, note: "", createdAt: "2026-10-07T05:24:00.000Z" }, now).tone, "zero");
 });
+
+test("Hamyon Paynet: «Paynet ilovasida to'lash» is a safe external link shown only when the server sends https paynetUrl", async () => {
+  signInWithPaynet(true);
+  useAppStore.setState({ features: { payments: { click: true, payme: true, paynet: true, paynetUrl: "https://app.paynet.test/?m=54883" } } as never });
+  stub({ me: meWith(0) });
+  mount();
+  await waitFor(() => assert.ok(paynetCard()));
+  const link = document.querySelector("[data-wallet-paynet-open]") as HTMLAnchorElement;
+  assert.ok(link, "MUTATION: the link block removed");
+  assert.equal(link.getAttribute("href"), "https://app.paynet.test/?m=54883");
+  assert.equal(link.getAttribute("target"), "_blank");
+  assert.match(link.getAttribute("rel") ?? "", /noopener/);
+  assert.match(link.textContent ?? "", /Paynet ilovasida to'lash/);
+  cleanup();
+  // No URL from the server → no button (the card still works).
+  useAppStore.setState({ features: { payments: { click: true, payme: true, paynet: true, paynetUrl: null } } as never });
+  stub({ me: meWith(0) });
+  mount();
+  await waitFor(() => assert.ok(paynetCard()));
+  assert.ok(!document.querySelector("[data-wallet-paynet-open]"), "no link without paynetUrl");
+});
