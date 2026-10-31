@@ -21,6 +21,13 @@ import { VIDEO_PARAMS } from "../../lib/generation/video-params.ts";
  *
  * Mutation (by hand): drop `paidOnly` from `ToolChrome` -> «paid balance» goes red; draw `provider` unconditionally ->
  * «single provider» goes red; send `seconds` as the Veo default after a Kling switch -> «lengths follow the provider» red.
+ *
+ * Space key (prompt kept as typed, normalized only on the way out) -- mutations, each turned the named tests red, then restored:
+ *   per-keystroke `videoInputFromValues({ prompt })` in the change handler -> «the space key works», «whitespace is normalized only on the way out», «a restored draft»;
+ *   submit sends `encodeVideoValues(input)` (raw)                          -> «whitespace is normalized only on the way out»;
+ *   validation on `input.prompt` (raw length)                              -> «validity is judged on the normalized prompt»;
+ *   draft saves the raw prompt                                             -> «whitespace is normalized only on the way out»;
+ *   `set()` / `setProvider()` drop the raw prompt                          -> «changing another setting mid-sentence».
  */
 afterEach(() => cleanup());
 
