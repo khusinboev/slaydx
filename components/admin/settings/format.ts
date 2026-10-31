@@ -49,6 +49,7 @@ function formatNumber(item: Pick<SettingItem, "type"> & { key?: string }, value:
   if (key === "daily_quiz.hour") return `${String(value).padStart(2, "0")}:00`;
   if (key === "pricing.target_markup") return `×${n}`;
   if (key === "tests.points_per_correct") return `${n} ball`;
+  if (key === "free_llm.daily.chat") return `${n} xabar`;
   if (key.startsWith("free_llm.daily.")) return `${n} birlik`;
   return n;
 }
