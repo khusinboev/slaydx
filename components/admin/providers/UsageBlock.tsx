@@ -3,7 +3,7 @@
 import { Sparkline } from "@/components/admin/ui";
 import { fmtIsoDate, fmtNumber, fmtUsd } from "@/lib/admin-format";
 import type { ProviderItem } from "@/lib/admin-api/providers";
-import { moneyText, totalsOf, usageKindLabel, usageLine, type Period } from "./format";
+import { moneyText, totalsOf, unitText, usageKindLabel, usageLine, type Period } from "./format";
 
 /**
  * What a provider was used for in the chosen period: the headline figure (money for paid providers, request count
@@ -25,14 +25,17 @@ export function UsageBlock({ item, period, soumPerUsd }: { item: ProviderItem; p
           <p className="text-[15px] leading-tight font-semibold tabular-nums">{idle ? (free ? "0 ta so'rov" : "Ishlatilmagan") : line.primary}</p>
           {!idle && line.secondary.length > 0 ? <p className="text-muted-foreground mt-0.5 text-xs">{line.secondary.join(" · ")}</p> : null}
         </div>
-        <Sparkline values={trend} title={trendTitle} formatValue={(n) => (free ? fmtNumber(n) : fmtUsd(n))} width={104} height={30} />
+        {item.usage.d30.calls > 0 ? <Sparkline values={trend} title={trendTitle} formatValue={(n) => (free ? fmtNumber(n) : fmtUsd(n))} width={104} height={30} /> : null}
       </div>
       {item.usage.kinds.length > 0 ? (
         <ul className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 text-xs" aria-label="30 kunlik taqsimot">
           {item.usage.kinds.map((k) => (
             <li key={k.kind}>
               {usageKindLabel(k.kind)}{" "}
-              <span className="text-foreground tabular-nums">{free || k.usd === 0 ? `${fmtNumber(k.calls)} ta` : moneyText(k.usd, soumPerUsd)}</span>
+              <span className="text-foreground tabular-nums">
+                {free || k.usd === 0 ? `${fmtNumber(k.calls)} ta` : moneyText(k.usd, soumPerUsd)}
+                {unitText(k.kind, k.units) ? ` · ${unitText(k.kind, k.units)}` : ""}
+              </span>
             </li>
           ))}
         </ul>

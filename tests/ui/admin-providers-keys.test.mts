@@ -10,7 +10,7 @@ import type * as ToasterModule from "../../components/admin/ui/Toaster.tsx";
 import type { ProviderItem, ProvidersResponse, PurposeItem, RouteItem, UsageTotals } from "../../lib/admin-api/providers.ts";
 import { ProvidersPage } from "../../components/admin/providers/ProvidersPage.tsx";
 import { keyProblem } from "../../components/admin/providers/ProviderDialogs.tsx";
-import { compact, keyState, moneyText, providerStatus, routeText, sameEntries, usageLine } from "../../components/admin/providers/format.ts";
+import { compact, keyState, moneyText, providerStatus, routeText, sameEntries, unitText, usageLine } from "../../components/admin/providers/format.ts";
 
 /**
  * `/admin/providers` «Provayderlar va AI sozlamalari» (program-17 decision D7, redesigned 2026-10-31):
@@ -297,7 +297,12 @@ test("usage figures: money for paid providers, request counts for free ones", ()
   assert.equal(compact(950), "950");
   const paid = usageLine(GEMINI, GEMINI.usage.d30, 12_700);
   assert.equal(paid.primary, moneyText(70.91, 12_700));
-  assert.ok(paid.secondary.some((s) => s.includes("so'rov")) && paid.secondary.some((s) => s.includes("token")) && paid.secondary.some((s) => s.includes("ta rasm")), paid.secondary.join("|"));
+  assert.ok(paid.secondary.some((s) => s.includes("so'rov")) && paid.secondary.some((s) => s.includes("token")), paid.secondary.join("|"));
+  assert.ok(!paid.secondary.some((s) => s.includes("ta rasm")), "units are shown per kind, never summed across images, voice characters and searches");
+  assert.equal(unitText("image", 169), "169 ta rasm");
+  assert.equal(unitText("tts", 25_000), "25 ming ta belgi");
+  assert.equal(unitText("llm", 5), null);
+  assert.equal(unitText("image", 0), null);
   const free = usageLine(PEXELS, PEXELS.usage.d30, 12_700);
   assert.match(free.primary, /^120 ta so'rov$/);
   assert.ok(free.secondary.includes("3 ta xato"));
@@ -356,6 +361,7 @@ test("ready: summary tiles, purpose cards with verdicts, provider cards with bil
   const gemini = within(cardOf("gemini"));
   assert.ok(gemini.getByText("To'lovli") && gemini.getByText("Majburiy") && gemini.getByText("Ishlayapti"));
   assert.ok(gemini.getByText(/Narxi:/));
+  assert.match(cardOf("gemini").querySelector("[aria-label='30 kunlik taqsimot']")!.textContent ?? "", /Rasm.*169 ta rasm/, "the image line carries its own unit");
   assert.match(cardOf("gemini").textContent ?? "", /Ishtirok etadi: Matn yozish va baholash · Ovoz \(TTS\)/);
   assert.equal(gemini.getByRole("switch").getAttribute("aria-checked"), "true");
   assert.equal(cardOf("gemini").querySelector("[data-key-state]")!.textContent, "Serverda (env)");

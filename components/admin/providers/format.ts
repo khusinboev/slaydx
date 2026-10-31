@@ -64,6 +64,11 @@ export function usageKindLabel(kind: string): string {
 
 const UNIT_LABEL: Readonly<Record<string, string>> = { image: "ta rasm", tts: "ta belgi", video: "soniya", grounding: "ta qidiruv" };
 
+/** `169 ta rasm` for a kind whose calls carry a unit (images, voice characters, video seconds); `null` otherwise. */
+export function unitText(kind: string, units: number): string | null {
+  return units > 0 && UNIT_LABEL[kind] ? `${compact(units)} ${UNIT_LABEL[kind]}` : null;
+}
+
 export const PERIODS = [
   { value: "today", label: "Bugun" },
   { value: "d7", label: "7 kun" },
@@ -95,8 +100,6 @@ export function usageLine(item: ProviderItem, t: UsageTotals, soumPerUsd: number
   const secondary: string[] = [];
   if (!free) secondary.push(`${fmtNumber(t.calls)} ta so'rov`);
   if (t.inputTokens + t.outputTokens > 0) secondary.push(`${compact(t.inputTokens)} kirish / ${compact(t.outputTokens)} chiqish token`);
-  const kind = item.usage.kinds.find((k) => k.units > 0)?.kind;
-  if (t.units > 0 && kind && UNIT_LABEL[kind]) secondary.push(`${compact(t.units)} ${UNIT_LABEL[kind]}`);
   if (t.errors !== null && t.errors > 0) secondary.push(`${fmtNumber(t.errors)} ta xato`);
   return { primary: free ? `${fmtNumber(t.calls)} ta so'rov` : moneyText(t.usd, soumPerUsd), secondary };
 }
