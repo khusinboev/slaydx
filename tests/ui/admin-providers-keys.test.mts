@@ -425,7 +425,12 @@ test("viewer and finance: read only -- no switch, no buttons, no editable select
     assert.ok(screen.getByText(/faqat ko'rish huquqi/));
     assert.equal(cardOf("anthropic").querySelector("[data-key-state]")!.textContent, "Bazada", `${role}: no hint`);
     assert.ok(!document.body.textContent?.includes("a1B2"));
-    for (const sel of document.querySelectorAll("select")) assert.equal((sel as HTMLSelectElement).disabled, true, `${role}: selects are disabled`);
+    // A read-only role can still open a folded editor to SEE what is chosen, but nothing in it is editable.
+    fireEvent.click(within(purposeOf("text")).getByRole("button", { name: /Qaysi provayder va model ishlatiladi/ }));
+    const selects = [...document.querySelectorAll("select")] as HTMLSelectElement[];
+    assert.ok(selects.length >= 2, `${role}: the editors are visible`);
+    for (const sel of selects) assert.equal(sel.disabled, true, `${role}: selects are disabled`);
+    assert.equal(screen.queryAllByRole("button", { name: /yuqoriga|pastga|olib tashlash|Standartga/ }).length, 0, `${role}: no list controls`);
     cleanup();
   }
 });
