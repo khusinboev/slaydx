@@ -6,7 +6,7 @@ process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://unused/unused
 const { PROVIDERS, PROVIDER_IDS } = await import("../lib/server/providers/registry.ts");
 const { PROVIDER_META, PURPOSES, ROUTE_INFO, purposeVerdict } = await import("../lib/server/providers/catalog.ts");
 const { ROUTE_IDS, ROUTE_SPECS, checkRoute, isRouteId, modelOptions } = await import("../lib/server/providers/routes.ts");
-const { effectiveRoute, geminiImageModelName, geminiTextModel, ttsProviderRank, DEFAULT_GEMINI_MODEL, DEFAULT_GEMINI_IMAGE_MODEL } = await import("../lib/server/providers/route-effective.ts");
+const { effectiveRoute, geminiImageModelName, geminiTextModel, testsAnalysisModel, ttsProviderRank, DEFAULT_GEMINI_MODEL, DEFAULT_GEMINI_IMAGE_MODEL, DEFAULT_TESTS_ANALYSIS_MODEL } = await import("../lib/server/providers/route-effective.ts");
 const { resetRouteSnapshot, setRouteSnapshot } = await import("../lib/server/providers/route-resolve.ts");
 const { foldUsage, registryIdOf, tashkentDay, usageDays, SERIES_DAYS } = await import("../lib/server/admin-provider-usage.ts");
 const { providerOfUrl, recordProviderCall, registerProviderCallSink } = await import("../lib/generation/provider-calls.ts");
@@ -190,6 +190,26 @@ test("effectiveRoute: db beats env beats default", () => {
   assert.equal(effectiveRoute("llm.judge", env, { ignoreStored: true }).source, "env", "what «Standartga qaytarish» restores");
   resetRouteSnapshot();
   assert.equal(effectiveRoute("llm.judge", env).source, "env");
+});
+
+test("tests.analysis: one Gemini text model, default Gemini 3.1 Pro, stored choice wins, under «text»", () => {
+  assert.deepEqual(ROUTE_SPECS["tests.analysis"], { id: "tests.analysis", shape: "model", providers: ["gemini"], max: 1 });
+  assert.equal(PURPOSES.find((p) => p.routes.includes("tests.analysis"))!.id, "text");
+  assert.match(ROUTE_INFO["tests.analysis"].help, /xato javob/);
+  assert.equal(DEFAULT_TESTS_ANALYSIS_MODEL, "gemini-3.1-pro");
+  const opts = modelOptions("tests.analysis");
+  assert.ok(opts.some((o) => o.model === "gemini-3.1-pro") && opts.every((o) => o.provider === "gemini" && o.inUsdPerM! > 0), "priced Gemini text models only");
+  assert.ok(!opts.some((o) => o.model.includes("image")), "no image model");
+  assert.equal(checkRoute("tests.analysis", [{ provider: "gemini", model: "gemini-3.7-flash" }]).ok, true);
+  assert.equal(checkRoute("tests.analysis", [{ provider: "anthropic", model: "claude-sonnet-5" }]).ok, false, "Gemini only (it must read the image inline)");
+  assert.equal(checkRoute("tests.analysis", [{ provider: "gemini", model: "gemini-3.1-flash-lite-image" }]).ok, false);
+  const env = envOf({ GEMINI_MODEL: "gemini-3.5-flash-lite" });
+  assert.deepEqual(effectiveRoute("tests.analysis", env), { source: "default", entries: [{ provider: "gemini", model: "gemini-3.1-pro" }] }, "does not follow the general text model");
+  assert.equal(testsAnalysisModel(env), "gemini-3.1-pro");
+  setRouteSnapshot(new Map([["tests.analysis", [{ provider: "gemini", model: "gemini-3.7-flash" }]]]));
+  assert.equal(testsAnalysisModel(env), "gemini-3.7-flash");
+  assert.equal(effectiveRoute("tests.analysis", env).source, "db");
+  resetRouteSnapshot();
 });
 
 test("an env chain naming a provider that was removed keeps the valid entries", () => {

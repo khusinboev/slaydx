@@ -20,7 +20,7 @@ export type ProviderBilling = "paid" | "free" | "free-tier";
 export type ProviderNeed = "required" | "recommended" | "optional";
 export type PurposeId = "text" | "image" | "stock" | "tts" | "stt" | "search" | "sources" | "video";
 export type Verdict = "ok" | "single" | "missing" | "off";
-export type RouteId = "llm.model" | "llm.writer" | "llm.researcher" | "llm.judge" | "llm.fast" | "image.gemini" | "tts.order";
+export type RouteId = "llm.model" | "llm.writer" | "llm.researcher" | "llm.judge" | "llm.fast" | "tests.analysis" | "image.gemini" | "tts.order";
 export type RouteShape = "chain" | "model" | "order";
 export type RouteSource = "db" | "env" | "default";
 
