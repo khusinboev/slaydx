@@ -440,6 +440,29 @@ test("hub card «Test ishlash» links to /uz/tests", () => {
   assert.match(card.textContent!, /Test ishlash/);
 });
 
+test("«Qattiqqo'l domla» is a tile in the «Talaba» group and a card while features.domla; both hidden when off (owner report 2026-10-31)", () => {
+  signIn();
+  useAppStore.setState({ features: { llm: true, images: true, telegram: false, telegramBot: null, domla: true } as never });
+  mount();
+  assert.ok(q("[data-hub-domla]"), "card on");
+  fireEvent.click(q('[data-hub-group="talaba"]')!);
+  const tile = q<HTMLAnchorElement>('[data-hub-tool="domla"]')!;
+  assert.ok(tile, "tile in the Talaba group");
+  assert.equal(tile.getAttribute("href"), "/uz/domla");
+  fireEvent.click(q('[data-hub-group="oqituvchi"]')!);
+  assert.ok(!q('[data-hub-tool="domla"]'), "only in Talaba");
+  cleanup();
+
+  for (const features of [null, { llm: true, images: true, telegram: false, telegramBot: null, domla: false }]) {
+    useAppStore.setState({ features: features as never });
+    mount();
+    assert.ok(!q("[data-hub-domla]"), "card hidden when off");
+    fireEvent.click(q('[data-hub-group="talaba"]')!);
+    assert.ok(!q('[data-hub-tool="domla"]'), "tile hidden when off");
+    cleanup();
+  }
+});
+
 test("sections: three, labelled, staggered ≤ 200 ms and motion-safe only", () => {
   signIn();
   mount();

@@ -341,7 +341,8 @@ export function blockedText(lang: Lang): string {
   return t(lang, "account.blocked", { url: env.supportUrl });
 }
 
-export function helpScreen(lang: Lang): Screen {
+/** `opts.domla`: «Qattiqqo'l domla» is on (`domla.enabled`) — the help names it and offers a button; absent/false hides both. */
+export function helpScreen(lang: Lang, opts: { domla?: boolean } = {}): Screen {
   const faq = ([1, 2, 3, 4, 5] as const)
     .map((i) => `<b>${t(lang, `help.q${i}`)}</b>\n${t(lang, `help.a${i}`)}`)
     .join("\n\n");
@@ -351,6 +352,7 @@ export function helpScreen(lang: Lang): Screen {
     t(lang, "help.about"),
     "",
     `${tgEmoji("pin")} ${t(lang, "help.how")}`,
+    ...(opts.domla ? ["", t(lang, "help.domla")] : []),
     "",
     `<blockquote expandable>${tgEmoji("info")} <b>${t(lang, "help.faq")}</b>\n\n${faq}</blockquote>`,
   ].join("\n");
@@ -362,6 +364,7 @@ export function helpScreen(lang: Lang): Screen {
         inlineButton("lang", t(lang, "btn.lang"), { callback_data: cb.langMenu("y") }),
         inlineButton("support", t(lang, "btn.support"), { url: env.supportUrl }),
       ],
+      [opts.domla ? inlineButton("study", t(lang, "btn.domla"), { callback_data: cb.domlaList() }) : null],
       [app ? inlineButton("app", t(lang, "btn.openApp"), { web_app: { url: app } }, "primary") : null],
     ),
   };

@@ -266,6 +266,8 @@ export type Features = {
   ttsPremium?: boolean;
   /** `video` providers usable now (enabled + keyed, `video.enabled` on); absent on an older server (tool hidden). */
   videoProviders?: string[];
+  /** `domla.enabled` is on: «Qattiqqo'l domla» is listed among the tools; absent (older server) or false = hidden. */
+  domla?: boolean;
   telegram: boolean;
   telegramBot: string | null;
   devLogin: boolean;

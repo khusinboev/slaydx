@@ -6,6 +6,8 @@ import { TOOLS, visibleToolGroups } from "@/lib/tools";
 import type { ToolConfig, ToolGroup } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { TOOL_ICONS } from "@/components/shell/icons";
+import { useAppStore } from "@/lib/store";
+import { GraduationCap } from "lucide-react";
 
 /**
  * «Barcha vositalar»: one chip per group (`visibleToolGroups()` — the one
@@ -17,6 +19,8 @@ export function ToolsByGroup({ onPick }: { onPick: (href: string) => void }) {
   const groups = visibleToolGroups();
   const [group, setGroup] = useState<ToolGroup>(groups[0]!.id);
   const tools = TOOLS.filter((t) => t.group === group);
+  // «Qattiqqo'l domla» is not a ToolId (no form / generation) but it is a student tool: a tile in «Talaba» while `domla.enabled`.
+  const domla = useAppStore((s) => s.features?.domla === true) && group === "talaba";
   return (
     <div data-hub-tools>
       <div
@@ -52,6 +56,22 @@ export function ToolsByGroup({ onPick }: { onPick: (href: string) => void }) {
             <ToolTile tool={t} onPick={onPick} />
           </li>
         ))}
+        {domla ? (
+          <li className="min-w-0">
+            <Link
+              href="/uz/domla"
+              data-hub-tool="domla"
+              onClick={() => onPick("/uz/domla")}
+              style={{ ["--tc" as string]: "225 29 72" }}
+              className="hover:bg-accent focus-visible:ring-ring flex min-h-[5.75rem] flex-col items-center gap-1.5 rounded-2xl px-1 pt-2 pb-1.5 text-center outline-none focus-visible:ring-2"
+            >
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-[16px] bg-[rgb(var(--tc)/0.14)]">
+                <GraduationCap className="size-6 text-[rgb(var(--tc))]" aria-hidden />
+              </span>
+              <span className="line-clamp-2 text-[13px] leading-tight font-medium break-words">Qattiqqo‘l domla</span>
+            </Link>
+          </li>
+        ) : null}
       </ul>
     </div>
   );

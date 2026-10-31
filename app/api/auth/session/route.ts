@@ -26,6 +26,8 @@ export const GET = handler("auth/session", async (req) => {
       ttsPremium: ttsPremiumAvailable(),
       // `video`: only providers that are enabled AND keyed, and none while the admin switch `video.enabled` is off.
       videoProviders: (await getSetting("video.enabled")) ? videoProvidersAvailable() : [],
+      // «Qattiqqo'l domla» is listed among the tools only while the admin switch `domla.enabled` is on.
+      domla: await getSetting("domla.enabled"),
       telegram: Boolean(env.telegramBotToken),
       telegramBot: env.telegramBotUsername || null,
       devLogin: env.devLoginEnabled,

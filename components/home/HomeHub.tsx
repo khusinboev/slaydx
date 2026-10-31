@@ -40,6 +40,8 @@ export function HomeHub() {
   const user = useAppStore((s) => s.user);
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const loggedIn = useAppStore((s) => s.loggedIn);
+  // «Qattiqqo'l domla» card: hidden while the admin switch `domla.enabled` is off (features.domla).
+  const domlaOn = useAppStore((s) => s.features?.domla === true);
   const open = useUi((s) => s.open);
   const gate = useLoginGate();
   const recent = useRecentFiles();
@@ -142,17 +144,19 @@ export function HomeHub() {
           <ArrowRight className="size-5 shrink-0" aria-hidden />
         </Link>
 
-        <Link
-          href="/uz/domla"
-          data-hub-domla
-          className="bg-card hover:bg-accent focus-visible:ring-ring flex min-h-14 items-center justify-between gap-3 rounded-[20px] border p-4 outline-none focus-visible:ring-2"
-        >
-          <span className="flex flex-col">
-            <span className="text-[15.5px] font-semibold">Qattiqqo‘l domla</span>
-            <span className="text-muted-foreground text-[13.5px]">Slaydingizni ovoz bilan himoya qiling</span>
-          </span>
-          <ArrowRight className="size-5 shrink-0" aria-hidden />
-        </Link>
+        {domlaOn ? (
+          <Link
+            href="/uz/domla"
+            data-hub-domla
+            className="bg-card hover:bg-accent focus-visible:ring-ring flex min-h-14 items-center justify-between gap-3 rounded-[20px] border p-4 outline-none focus-visible:ring-2"
+          >
+            <span className="flex flex-col">
+              <span className="text-[15.5px] font-semibold">Qattiqqo‘l domla</span>
+              <span className="text-muted-foreground text-[13.5px]">Slaydingizni ovoz bilan himoya qiling</span>
+            </span>
+            <ArrowRight className="size-5 shrink-0" aria-hidden />
+          </Link>
+        ) : null}
 
         <Link
           href="/uz/tests"

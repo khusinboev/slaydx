@@ -422,6 +422,20 @@ test("kill switch: no new defence, the bot says so, nothing is charged", { skip 
   assert.equal((await svc.startDefence(u.id, gen)).alreadyOpen, false, "switched back on");
 });
 
+test("session features.domla follows the domla.enabled switch (web tool grid and card are hidden when off)", { skip }, async () => {
+  const sessionRoute = await import("../app/api/auth/session/route.ts");
+  const flag = async () => {
+    const req = new Request("https://slaydx.test/api/auth/session");
+    const res = await inRequest(req, () => sessionRoute.GET(req));
+    return ((await res.json()) as { features: { domla?: boolean } }).features.domla;
+  };
+  await setSetting("domla.enabled", true);
+  assert.equal(await flag(), true);
+  await setSetting("domla.enabled", false);
+  assert.equal(await flag(), false);
+  await setSetting("domla.enabled", true);
+});
+
 /* ───────────────────────── questions ───────────────────────── */
 
 test("question generation fails: retried, then the session fails and the WHOLE charge comes back once", { skip }, async () => {

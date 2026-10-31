@@ -34,6 +34,9 @@ import { BONUS_MAX_CHANNELS, bonusScreen, mandatoryScreen, som } from "./bonus";
 import { missingMandatory, type MandatoryChannel } from "../mandatory-channels";
 import { log } from "../log";
 
+/** `domla.enabled` (lazy import: the domla service stays out of the webhook's static graph). */
+const domlaEnabled = async (): Promise<boolean> => (await import("../domla")).domlaEnabled();
+
 /**
  * Bot chat routing for the new screens (docs/bot/PLAN.md, B2). Loaded lazily
  * by `telegram.ts processUpdate` (like `telegram-files.ts`), so the static
@@ -258,7 +261,7 @@ export async function handleKeyboard(ctx: ChatCtx, action: KeyboardAction): Prom
       await sendScreen(ctx.chatId, await walletCard(ctx));
       break;
     case "help":
-      await sendScreen(ctx.chatId, helpScreen(ctx.lang));
+      await sendScreen(ctx.chatId, helpScreen(ctx.lang, { domla: await domlaEnabled() }));
       break;
   }
   // Owner decision Q1: a chat-screen tap refreshes the keyboard when its personal links are getting old
@@ -349,7 +352,7 @@ export type CallbackQuery = {
 
 async function originScreen(ctx: ChatCtx, origin: Origin): Promise<Screen> {
   if (origin === "p") return profileScreen(ctx);
-  if (origin === "y") return helpScreen(ctx.lang);
+  if (origin === "y") return helpScreen(ctx.lang, { domla: await domlaEnabled() });
   return languageSavedScreen(ctx.lang);
 }
 
@@ -476,7 +479,7 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
         return;
       case "help":
         await cancelInput(ctx.chatId);
-        await edit(helpScreen(ctx.lang));
+        await edit(helpScreen(ctx.lang, { domla: await domlaEnabled() }));
         return;
       case "langMenu":
         await cancelInput(ctx.chatId);

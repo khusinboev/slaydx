@@ -847,6 +847,17 @@ test("«Elchi dasturi» is findable in the bot: referral screen block + profile 
   assert.ok(!kbRows(prof.profileCard(USER, "uz", ref.link, 0)).flat().some((b) => b.callback_data === codes.cb.invite()), "off => no button");
 });
 
+test("«Qattiqqo‘l domla» is findable from the bot help while domla.enabled, hidden when off (owner report 2026-10-31)", () => {
+  for (const lang of ["uz", "ru", "en"] as const) {
+    const on = scr.helpScreen(lang, { domla: true });
+    assert.match(on.text, /\/domla/, `${lang}: help names /domla`);
+    assert.ok(kbRows(on).flat().some((b) => b.callback_data === codes.cb.domlaList()), `${lang}: help has the domla button`);
+    const off = scr.helpScreen(lang);
+    assert.ok(!/\/domla/.test(off.text), `${lang}: off => no mention`);
+    assert.ok(!kbRows(off).flat().some((b) => b.callback_data === codes.cb.domlaList()), `${lang}: off => no button`);
+  }
+});
+
 test("ledger title of the rating bonus in 3 languages", () => {
   assert.equal(scr.ledgerTitle("uz", { kind: "bonus", note: "Baholash bonusi" }), "Ilovani baholash bonusi");
   assert.equal(scr.ledgerTitle("ru", { kind: "bonus", note: "Baholash bonusi" }), "Бонус за оценку приложения");

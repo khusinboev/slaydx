@@ -726,6 +726,12 @@ const T = {
   "cmd.til": { uz: "Bot tilini o‘zgartirish", ru: "Сменить язык бота", en: "Change the bot language" },
   "cmd.alifbo": { uz: "Kirill ↔ Lotin ↔ Yangi lotin", ru: "Кириллица ↔ латиница ↔ новая латиница", en: "Cyrillic ↔ Latin ↔ new Latin" },
   "cmd.savol": { uz: "Kunlik 3 ta savol (bonus)", ru: "3 вопроса дня (бонус)", en: "Today’s 3 questions (bonus)" },
+  "help.domla": {
+    uz: "🎓 «Qattiqqo‘l domla»: slaydingizni domla oldida ovoz bilan himoya qiling — /domla yoki pastdagi tugma.",
+    ru: "🎓 «Строгий профессор»: защитите слайды голосом перед профессором — /domla или кнопка ниже.",
+    en: "🎓 “Strict Professor”: defend your slides out loud in front of a professor — /domla or the button below.",
+  },
+  "btn.domla": { uz: "Qattiqqo‘l domla", ru: "Строгий профессор", en: "Strict Professor" },
   "domla.cmd": { uz: "Qattiqqo‘l domla — slayd himoyasi", ru: "Строгий профессор — защита слайдов", en: "Strict Professor — defend your slides" },
   "cmd.obuna": { uz: "Kunlik savollar xabarini yoqish/o‘chirish", ru: "Включить/выключить вопросы дня", en: "Turn the daily questions on/off" },
   "menu.app": { uz: "Ilova", ru: "Приложение", en: "App" },

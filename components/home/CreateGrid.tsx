@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Search, X } from "lucide-react";
+import { GraduationCap, Search, X } from "lucide-react";
 import { TOOLS, clientAdjustedPrice, toolBlockedReason, visibleToolGroups } from "@/lib/tools";
 import { TOOL_ICONS } from "../shell/icons";
 import { PageBack } from "../shell/PageBack";
@@ -10,7 +10,7 @@ import { useAppStore, usePricingVersion } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { cn } from "@/lib/cn";
 import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
-import { filterCatalogue, type CatalogueGroup } from "./catalogue-filter";
+import { filterCatalogue, normalizeQuery, type CatalogueGroup } from "./catalogue-filter";
 import { formatSom } from "@/lib/format";
 
 export function CreateGrid() {
@@ -26,6 +26,11 @@ export function CreateGrid() {
   const [group, setGroup] = useState<CatalogueGroup>("all");
   const [query, setQuery] = useState("");
   const shown = useMemo(() => filterCatalogue(TOOLS, group, query), [group, query]);
+  // «Qattiqqo'l domla» (no ToolId, own page) is listed in «Talaba» while `domla.enabled`; the search matches its name.
+  const domlaListed =
+    features?.domla === true &&
+    (group === "all" || group === "talaba") &&
+    (!normalizeQuery(query) || normalizeQuery(query).split(" ").every((w) => normalizeQuery("Qattiqqo'l domla slaydni ovoz bilan himoya qilish").includes(w)));
 
   /*
    * FE-09: kirish oynasi faqat seans SERVERDAN tekshirilgandan keyin.
@@ -111,7 +116,7 @@ export function CreateGrid() {
           ))}
         </div>
       </div>
-      {shown.length === 0 ? (
+      {shown.length === 0 && !domlaListed ? (
         <div data-catalogue-empty className="bg-card rounded-2xl border px-6 py-12 text-center">
           <p className="font-medium">Hech narsa topilmadi</p>
           <p className="text-muted-foreground mt-1 text-sm">Boshqa so‘z yozing yoki bo‘limni almashtiring</p>
@@ -128,7 +133,7 @@ export function CreateGrid() {
         </div>
       ) : null}
       {groups
-        .filter((g) => shown.some((t) => t.group === g.id))
+        .filter((g) => shown.some((t) => t.group === g.id) || (g.id === "talaba" && domlaListed))
         .map((g) => (
         <section key={g.id} data-catalogue-group={g.id} className="mb-8 scroll-mt-32">
           <h2 className="text-muted-foreground mb-3 text-[13px] font-semibold tracking-wider uppercase">
@@ -188,6 +193,23 @@ export function CreateGrid() {
                 </Link>
               );
             })}
+            {g.id === "talaba" && domlaListed ? (
+              <Link
+                href="/uz/domla"
+                data-catalogue-domla
+                style={{ ["--tc" as string]: "225 29 72" }}
+                className="bg-card hover:border-primary/40 overflow-hidden rounded-2xl border transition-colors"
+              >
+                <div className="h-1 bg-[rgb(var(--tc))]" />
+                <div className="p-4">
+                  <div className="mb-3 flex items-center gap-2.5">
+                    <GraduationCap className="size-5 text-[rgb(var(--tc))]" />
+                    <span className="font-medium">Qattiqqo‘l domla</span>
+                  </div>
+                  <p className="text-muted-foreground text-sm">Slaydingizni domla oldida ovoz bilan himoya qiling</p>
+                </div>
+              </Link>
+            ) : null}
           </div>
         </section>
       ))}
