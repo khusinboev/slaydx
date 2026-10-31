@@ -5,7 +5,8 @@
  * Mutation checks (each broken on purpose, the named test failed, then restored):
  *   1. the answer letter is not lower-cased (`parseAnswerLetter` without toLowerCase) -> «fixture: letters in any case»;
  *   2. the upsert always UPDATEs / INSERTs (`unchanged` branch removed)                -> «import is idempotent»;
- *   3. dry run commits (the `DryRunRollback` throw removed)                            -> «dry run writes nothing».
+ *   3. dry run commits (the `DryRunRollback` throw removed)                            -> «dry run writes nothing»;
+ *   4. the text kept for an export without text removed (`keepText` always false)      -> «an export without text keeps the text stored».
  */
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
 import test, { after } from "node:test";
@@ -179,6 +180,23 @@ test("import is idempotent (keyed by legacy_ref and image sha256)", { skip }, as
   const after2 = await query<{ answer: number; active: boolean }>("SELECT answer, active FROM test_questions WHERE legacy_ref = 'bmb:math:12'");
   assert.deepEqual(after2[0], { answer: 2, active: false });
   assert.deepEqual(await counts(), { banks: 1, subjects: 3, questions: 6, assets: 2 });
+});
+
+test("an export without text keeps the text stored for a question (migration 064); an export with text replaces it", { skip }, async () => {
+  const plan = imp.loadExportFile(`${FIX}export.json`, `${FIX}images`).plan!;
+  const stored = () => query<{ question_text: string | null; options: string[] | null; has_figure: boolean }>("SELECT question_text, options, has_figure FROM test_questions WHERE legacy_ref = 'bmb:math:11'");
+  assert.equal(plan.questions.find((q) => q.legacyRef === "bmb:math:11")!.text, null, "fixture: an image-only question");
+  await query(`UPDATE test_questions SET question_text = 'Matn', options = '["a","b","c","d"]'::jsonb, has_figure = TRUE WHERE legacy_ref = 'bmb:math:11'`);
+  await imp.importPlan(plan);
+  assert.deepEqual((await stored())[0], { question_text: "Matn", options: ["a", "b", "c", "d"], has_figure: true }, "the image-only export did not wipe the transcribed text");
+  const again = await imp.importPlan(plan);
+  assert.equal(again.questions.updated, 0, "and it is not reported as a change either");
+  const withText = structuredClone(plan);
+  const q = withText.questions.find((x) => x.legacyRef === "bmb:math:11")!;
+  q.text = "Yangi matn";
+  q.options = ["1", "2", "3", "4"];
+  await imp.importPlan(withText);
+  assert.deepEqual((await stored())[0], { question_text: "Yangi matn", options: ["1", "2", "3", "4"], has_figure: true }, "an export that HAS text replaces it; has_figure is not the importer's business");
 });
 
 test("dry run writes nothing but counts exactly like the real run", { skip }, async () => {
