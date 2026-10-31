@@ -7,6 +7,7 @@ import {
   VIDEO_PROVIDERS,
   VIDEO_PROMPT_MAX,
   encodeVideoValues,
+  normalizeVideoPrompt,
   offeredVideoProviders,
   videoInputFromValues,
   videoParamsError,
@@ -126,6 +127,14 @@ test("price per second per provider: Veo 3 000, Kling 2 000 so'm / second x the 
   }
   // Concrete numbers a human can check: 5 s Veo = 15 000, 8 s Veo = 24 000, 5 s Kling = 10 000, 10 s Kling = 20 000.
   assert.deepEqual([videoPrice({ provider: "veo", seconds: 5 }), videoPrice({ provider: "veo", seconds: 8 }), videoPrice({ provider: "kling", seconds: 5 }), videoPrice({ provider: "kling", seconds: 10 })], [15000, 24000, 10000, 20000]);
+});
+
+test("normalizeVideoPrompt: collapses whitespace runs (tabs, newlines, NBSP), trims, clips; videoInputFromValues uses it", () => {
+  assert.equal(normalizeVideoPrompt("  salom \t\n dunyo\u00a0 "), "salom dunyo");
+  assert.equal(normalizeVideoPrompt(undefined), "");
+  assert.equal(normalizeVideoPrompt(null), "");
+  assert.equal(normalizeVideoPrompt("a ".repeat(VIDEO_PROMPT_MAX)).length, VIDEO_PROMPT_MAX);
+  assert.equal(videoInputFromValues({ prompt: "  salom   dunyo " }).prompt, normalizeVideoPrompt("  salom   dunyo "));
 });
 
 test("normalizer: a length the provider does not offer falls back to its first one (price and request agree)", () => {

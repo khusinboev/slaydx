@@ -76,6 +76,15 @@ export type VideoInput = {
 };
 
 /**
+ * The prompt as it goes out (server, price, budget, submit body, draft): whitespace runs collapsed, trimmed, clipped to
+ * `VIDEO_PROMPT_MAX`. The FORM must not run this on every keystroke (it would delete a just-typed space): it keeps the
+ * text as typed and normalizes only here, on the way out.
+ */
+export function normalizeVideoPrompt(raw: unknown): string {
+  return String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, VIDEO_PROMPT_MAX);
+}
+
+/**
  * The ONE normalizer: the form, the price, the budget, the request builders and the worker all read the form values
  * through it. An absent / unknown `provider` is NOT silently mapped on the server (`videoParamsError` rejects it before
  * anything is charged); here it falls back to the default only so the pure functions never throw.
@@ -90,7 +99,7 @@ export function videoInputFromValues(values: Record<string, unknown>): VideoInpu
   const image = String(values.imageAssetId ?? "").trim().toLowerCase();
   return {
     provider,
-    prompt: String(values.prompt ?? "").replace(/\s+/g, " ").trim().slice(0, VIDEO_PROMPT_MAX),
+    prompt: normalizeVideoPrompt(values.prompt),
     seconds,
     aspect,
     imageAssetId: /^[0-9a-f]{24}$/.test(image) ? image : "",
