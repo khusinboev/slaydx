@@ -248,7 +248,7 @@ test("ReferralCard: «Elchi dasturi» block shows code, percent, friends, earned
   assert.equal(block.querySelector("[data-ambassador-code]")!.textContent, "k7m3p9qx");
   assert.equal(block.querySelector("[data-ambassador-invited]")!.textContent, "3");
   assert.match(block.querySelector("[data-ambassador-earned]")!.textContent!, /^12\s500$/);
-  assert.match(block.querySelector("[data-ambassador-rules]")!.textContent!, /15 %.*pulga yechib bo'lmaydi/s);
+  assert.match(block.querySelector("[data-ambassador-rules]")!.textContent!, /15 %[\s\S]*pulga yechib bo'lmaydi/);
   cleanup();
   await ready({ ...DATA, ambassadorPercent: 0 });
   assert.ok(!document.querySelector("[data-ambassador-block]"));
