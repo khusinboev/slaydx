@@ -150,8 +150,8 @@ async function putEnabled(cookie: string, id: string, enabled: boolean): Promise
   return readResult(await inRequest(req, () => enabledRoute.PUT(req, { params: Promise.resolve({ id }) })));
 }
 
-type Purpose = { id: string; verdict: string; headline: string; setting: { enabled: boolean } | null; routes: Array<{ id: string; source: string; entries: Array<{ provider: string; model: string | null; usable: boolean }>; fallbackEntries: unknown[]; updatedBy: string | null }> };
-type Item = { id: string; usable: boolean; billing: string; need: string; usage: { today: { calls: number; usd: number }; d30: { calls: number; errors: number | null; usd: number }; lastDay: string | null; kinds: Array<{ kind: string; calls: number }> }; breaker: unknown };
+type Purpose = { id: string; verdict: string; headline: string; detail: string; setting: { enabled: boolean } | null; routes: Array<{ id: string; source: string; entries: Array<{ provider: string; model: string | null; usable: boolean }>; fallbackEntries: unknown[]; updatedBy: string | null }> };
+type Item = { id: string; usable: boolean; keySource: string; billing: string; need: string; usage: { today: { calls: number; usd: number }; d30: { calls: number; errors: number | null; usd: number }; lastDay: string | null; kinds: Array<{ kind: string; calls: number }> }; breaker: unknown };
 const purposeOf = (r: Result, id: string): Purpose => {
   const found = (r.body.purposes as Purpose[]).find((p) => p.id === id);
   assert.ok(found, `${id} vazifasi yo'q`);
