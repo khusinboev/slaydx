@@ -383,7 +383,7 @@ test("viewer and finance: values only, no edit or reset buttons", async () => {
 
 /* ───────────────────────────── edit flows ───────────────────────────── */
 
-test("bool: switch + reason → PUT {value, reason}; the row flips to «Admin qiymati» and offers the reset", async () => {
+test("bool: switch + reason → PUT {value, reason}; the row is marked «O'zgartirilgan» and offers the reset", async () => {
   const saved = { ...PAUSED, value: true, source: "db", updatedBy: "Admin", updatedAt: "2026-10-02T07:00:00.000Z" };
   const calls = stubFetch([() => json(200, { items: ITEMS }), () => json(200, { item: saved })]);
   mount(h(SettingsPage, { tools: TOOLS }), "owner", "queue");

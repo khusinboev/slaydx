@@ -129,7 +129,7 @@ export const isFeatureKey = (key: string): boolean => key in FEATURE_EFFECT;
 
 /** First sentence of the catalog description: the one-line explanation under a label. */
 export function shortHint(description: string): string {
-  const m = /^.*?[.!?](?=\s|$)/s.exec(description.trim());
+  const m = /^[\s\S]*?[.!?](?=\s|$)/.exec(description.trim());
   const first = (m ? m[0] : description).trim();
   return first.length > 150 ? `${first.slice(0, 147).trimEnd()}…` : first;
 }

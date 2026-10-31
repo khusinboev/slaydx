@@ -129,7 +129,7 @@ export function SettingsPage({ tools }: { tools: ReadonlyArray<ToolOption> }) {
     if (tab === OVERVIEW_TAB) {
       return (
         <TabPanel idPrefix={ID_PREFIX} id={OVERVIEW_TAB}>
-          <Overview items={items} tools={tools} row={row} onOpenTab={selectTab} />
+          <Overview items={items} row={row} onOpenTab={selectTab} />
         </TabPanel>
       );
     }
@@ -217,12 +217,10 @@ export function SettingsPage({ tools }: { tools: ReadonlyArray<ToolOption> }) {
 /** «Umumiy»: what is on or off, what differs from the default, and what needs attention. */
 function Overview({
   items,
-  tools,
   row,
   onOpenTab,
 }: {
   items: ReadonlyArray<SettingItem>;
-  tools: ReadonlyArray<ToolOption>;
   row: (item: SettingItem) => React.ReactNode;
   onOpenTab: (tab: string) => void;
 }) {
