@@ -38,7 +38,7 @@ const FAKE = {
   PEXELS_API_KEY: "fake-pexels-key-DDDD4444",
   AZURE_SPEECH_KEY: "fake-azure-key-EEEE5555",
 } as const;
-for (const k of ["GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "FAL_KEY", "PEXELS_API_KEY", "PIXABAY_API_KEY", "AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION", "AISHA_API_KEY"]) {
+for (const k of ["GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "PEXELS_API_KEY", "PIXABAY_API_KEY", "AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION", "AISHA_API_KEY"]) {
   delete process.env[k];
 }
 Object.assign(process.env, FAKE);

@@ -16,7 +16,6 @@ import {
   geminiProvider,
   geminiImageModel,
 } from "../lib/generation/image-provider-gemini.ts";
-import { falProvider } from "../lib/generation/image-provider-fal.ts";
 import { buildImageArtifact } from "../lib/generation/image-studio.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
 import { bodyRules } from "../lib/generation/slide-audience.ts";
@@ -117,33 +116,34 @@ test("localExamples rasm promptini o'zgartiradi — tanilmagan mavzuda ham", () 
 
 // ───────────────────────────────────────────── 2. Provayder tanlash
 
-test("pickProvider: pro-slide → gemini, slide → stock (fal YO'Q), meta yo'q → fal", () => {
+test("pickProvider: pro-slide → gemini, slide va meta'siz chaqiruv → stock (pullik bo'g'insiz)", () => {
   assert.equal(pickProvider(meta({}, pro)).id, "gemini");
   assert.equal(pickProvider(meta({}, slide)).id, "stock");
   /*
-   * Oddiy slayd zanjirida fal BO'LMASLIGI kerak: faqat FAL_KEY bor,
-   * stock kalitlari yo'q muhitda zanjir «kalit yo'q» deyishi shart.
-   * MUTATSIYA: zanjirga `falProvider` qo'shilsa `hasKey()` true bo'ladi.
+   * Stock zanjirida Pexels/Pixabay'dan boshqa kalit HECH NARSANI ochmaydi:
+   * stock kalitlari yo'q muhitda (olib tashlangan provayderning eski env
+   * qiymati qolgan bo'lsa ham) zanjir «kalit yo'q» deyishi shart.
+   * MUTATSIYA: zanjirga pullik provayder qo'shilsa `hasKey()` true bo'ladi.
    */
   const saved = { FAL_KEY: process.env.FAL_KEY, PEXELS_API_KEY: process.env.PEXELS_API_KEY, PIXABAY_API_KEY: process.env.PIXABAY_API_KEY };
-  process.env.FAL_KEY = "test-fal-key";
+  process.env.FAL_KEY = "test-legacy-key";
   delete process.env.PEXELS_API_KEY;
   delete process.env.PIXABAY_API_KEY;
   try {
-    assert.equal(pickProvider(meta({}, slide)).hasKey(), false, "oddiy slayd fal ga tushmasin");
-    assert.equal(pickProvider().hasKey(), true, "meta'siz eski zanjirda fal qoladi");
+    assert.equal(pickProvider(meta({}, slide)).hasKey(), false, "oddiy slayd pullik provayderga tushmasin");
+    assert.equal(pickProvider().hasKey(), false, "meta'siz yo'l ham xuddi shunday");
   } finally {
     for (const [k, v] of Object.entries(saved)) {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
     }
   }
-  // Eski (meta'siz) chaqiruv yo'li o'zgarmaydi — regressiya qulfi.
-  assert.equal(pickProvider().id, "fal");
-  assert.equal(pickProvider(undefined).id, "fal");
-  assert.equal(pickProvider(null).id, "fal");
-  // Slayd bo'lmagan vosita ham fal da qoladi.
-  assert.equal(pickProvider(extractMeta(TOOL_BY_ID.image, { topic: "olma" })).id, "fal");
+  // Eski (meta'siz) chaqiruv yo'li ham shu stock zanjiri — regressiya qulfi.
+  assert.equal(pickProvider().id, "stock");
+  assert.equal(pickProvider(undefined).id, "stock");
+  assert.equal(pickProvider(null).id, "stock");
+  // Slayd bo'lmagan vosita ham shu zanjirda.
+  assert.equal(pickProvider(extractMeta(TOOL_BY_ID.image, { topic: "olma" })).id, "stock");
 });
 
 // ───────────────────────────────────────────── 3. Gemini nisbat tanlash
@@ -329,7 +329,7 @@ test("gemini: kalitsiz `no-key`, byudjetsiz `timeout` — tarmoqqa chiqmaydi", a
 });
 
 /**
- * 2026-09-22: rasm yaratish fal.ai'dan Gemini `gemini-3.1-flash-lite-image`
+ * 2026-09-22: rasm yaratish Gemini `gemini-3.1-flash-lite-image`
  * ga o'tdi ($0.034/rasm, 1K) — egasi qarori. Standart env'siz shu model
  * ishlatilishi kerak, `GEMINI_IMAGE_MODEL` berilsa esa u ustun bo'ladi
  * (masalan yuqori sifat `gemini-3.1-flash-image`, $0.067).
@@ -349,13 +349,13 @@ test("gemini rasm modeli standarti — lite ($0.034), env berilsa ustun", () => 
 });
 
 /**
- * «Rasm» vositasi (`buildImageArtifact`) ENDI Gemini'ga boradi, fal.ai'ga
- * EMAS — o'lik `generateFalImage` yo'li endi bu funksiyadan chaqirilmaydi.
+ * «Rasm» vositasi (`buildImageArtifact`) Gemini'ga boradi va boshqa
+ * rasm provayderiga chiqmaydi.
  * `expandPrompt` ham LLM ga (`GEMINI_API_KEY` bo'lgani uchun `llmEnabled()`
  * true) chaqiruv qiladi — o'sha stub 500 qaytaradi (URL da `/interactions`
  * yo'q), shu bilan LLM zaxiraga tushadi va `withGrounding(user)` ishlatiladi.
  */
-test("buildImageArtifact: Gemini'ga boradi, fal.run ga so'rov yo'q", async () => {
+test("buildImageArtifact: Gemini'ga boradi, boshqa xostga so'rov yo'q", async () => {
   const restore = geminiEnv();
   const urls: string[] = [];
   let interactionsBody: Record<string, unknown> | null = null;
@@ -381,7 +381,7 @@ test("buildImageArtifact: Gemini'ga boradi, fal.run ga so'rov yo'q", async () =>
       imageCount: 1,
     });
 
-    assert.ok(!urls.some((u) => u.includes("fal.run")), "fal.run ga so'rov ketmasligi kerak — endi ishlatilmaydi");
+    assert.ok(urls.every((u) => new URL(u).hostname === "generativelanguage.googleapis.com"), `faqat Gemini xostiga so'rov ketishi kerak: ${urls.join(", ")}`);
     assert.ok(interactionsBody, "/interactions ga so'rov borishi kerak");
     assert.equal((interactionsBody as Record<string, unknown>).model, "gemini-3.1-flash-lite-image", "env yo'q — standart lite model");
     assert.equal(
@@ -463,13 +463,12 @@ test("pro deka: 30 slaydda va'da slot soniga teng, 8/10 shift yo'q", async () =>
 });
 
 /**
- * Pro yo'li Gemini ga boradi, oddiy `slide` esa fal da QOLADI. Ikkinchisi
- * regressiya qulfi: WP-E oddiy vositaning rasm yo'liga tegmasligi kerak.
+ * Pro yo'li Gemini ga boradi, oddiy `slide` esa faqat bepul stock'ga (kalitsiz —
+ * so'rov yo'q). Ikkinchisi regressiya qulfi: WP-E oddiy vositaning rasm yo'liga
+ * tegmasligi kerak.
  */
 test("attachSlideImages meta orqali provayderni almashtiradi", async () => {
   const restore = geminiEnv();
-  const savedFal = process.env.FAL_KEY;
-  process.env.FAL_KEY = "test-fal-key";
   // Stock kalitlari (.env.local da bo'lishi mumkin) — bu test «kalitsiz» holatni sinaydi.
   const savedStock = { PEXELS_API_KEY: process.env.PEXELS_API_KEY, PIXABAY_API_KEY: process.env.PIXABAY_API_KEY };
   delete process.env.PEXELS_API_KEY;
@@ -481,10 +480,6 @@ test("attachSlideImages meta orqali provayderni almashtiradi", async () => {
       hits.push("gemini");
       return jsonRes(200, geminiOkBody());
     }
-    if (u.startsWith("https://fal.run/")) {
-      hits.push("fal");
-      return jsonRes(200, { images: [{ url: `data:image/jpeg;base64,${JPEG_1PX}` }] });
-    }
     return jsonRes(500, {});
   }) as unknown as typeof fetch;
 
@@ -494,7 +489,7 @@ test("attachSlideImages meta orqali provayderni almashtiradi", async () => {
 
     hits.length = 0;
     const stockless = await attachSlideImages(bulletDeck(4), "Suv aylanishi", "classic", 60_000, { meta: meta({}, slide) });
-    assert.deepEqual(hits, [], "oddiy slayd fal ga BORMAYDI (faqat bepul stock; kalit yo'q — so'rov yo'q)");
+    assert.deepEqual(hits, [], "oddiy slayd faqat bepul stock'ga boradi; kalit yo'q — so'rov yo'q");
     assert.equal(stockless.want, 0, "stock kalitsiz — rasm va'da qilinmaydi");
 
     // Gemini kaliti yo'q bo'lsa pro deka rasm VA'DA QILMAYDI (pul ushlanmaydi).
@@ -502,8 +497,6 @@ test("attachSlideImages meta orqali provayderni almashtiradi", async () => {
     const dry = await attachSlideImages(bulletDeck(4), "Suv aylanishi", "classic", 60_000, { meta: meta({}, pro) });
     assert.equal(dry.want, 0, "kalitsiz gemini yo'lida va'da nol bo'lishi kerak");
   } finally {
-    if (savedFal === undefined) delete process.env.FAL_KEY;
-    else process.env.FAL_KEY = savedFal;
     for (const [k, v] of Object.entries(savedStock)) {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
@@ -513,11 +506,11 @@ test("attachSlideImages meta orqali provayderni almashtiradi", async () => {
 });
 
 /**
- * Gemini 403 bergan holat fal bilan BIR XIL ishlanishi kerak: hisobot
- * `blocked` bo'ladi, sabab `blockReason` da qoladi va qolgan so'rovlar
- * yuborilmaydi (jonli sinovda fal da 19 → 3 chaqiruv tejagan mexanizm).
+ * Gemini 403 bergan holat: hisobot `blocked` bo'ladi, sabab `blockReason`
+ * da qoladi va qolgan so'rovlar yuborilmaydi (jonli sinovda 19 → 3
+ * chaqiruv tejagan mexanizm).
  */
-test("gemini bloklansa hisobot fal bilan bir xil to'ldiriladi va so'rov to'xtaydi", async () => {
+test("gemini bloklansa hisobot to'ldiriladi va so'rov to'xtaydi", async () => {
   const restore = geminiEnv();
   let calls = 0;
   globalThis.fetch = (async (url: string) => {
@@ -546,16 +539,17 @@ test("gemini bloklansa hisobot fal bilan bir xil to'ldiriladi va so'rov to'xtayd
 
 /*
  * X-2 (AUDIT-9, jonli sinovda topilgan): Gemini rasm so'rovining shifti
- * fal ga mo'ljallangan 45 s edi. O'lchov: sarlavha ~13 s + 2.3 MB tanani
+ * stock manbalar uchun mos 45 s edi. O'lchov: sarlavha ~13 s + 2.3 MB tanani
  * o'qish ~20 s; uzunroq promptda 45 s dan oshadi va `res.json()` uzilib,
  * xato «javobda rasm yo'q» (failed) bo'lib ko'rinardi — jonli dekada
  * 7/7 rasm shu sabab yo'qolgan edi. Endi shift 120 s va uzilish
  * `timeout` (skipped) deb tasniflanadi.
  */
-test("gemini rasm shifti fal nikidan katta va tana uzilishi timeout deb sanaladi", async () => {
+test("gemini rasm shifti standart (stock) shiftdan katta va tana uzilishi timeout deb sanaladi", async () => {
   const restore = geminiEnv();
   try {
     assert.ok(GEMINI_IMAGE_CAP_MS >= 90_000, `shift juda kichik: ${GEMINI_IMAGE_CAP_MS}`);
+    assert.ok(GEMINI_IMAGE_CAP_MS > requestBudget(undefined)!, "standart (45 s) shiftdan katta bo'lishi kerak");
     // Byudjet shiftni ham, muddatni ham hisobga oladi — kichigi yutadi.
     assert.equal(requestBudget(Date.now() + 300_000, GEMINI_IMAGE_CAP_MS), GEMINI_IMAGE_CAP_MS);
 
@@ -608,7 +602,7 @@ test("byudjet provayder minimumidan kam bo'lsa so'rov yuborilmaydi (pul sarflanm
     assert.equal(report.skipped, report.want);
     assert.equal(report.failed, 0);
     assert.ok(geminiProvider.minMs >= 30_000, "Gemini minimumi o'lchovga mos emas");
-    assert.ok(falProvider.minMs < geminiProvider.minMs, "fal tezroq — minimumi ham kichik bo'lsin");
+    assert.ok(pickProvider(meta({}, slide)).minMs < geminiProvider.minMs, "stock tezroq — minimumi ham kichik bo'lsin");
   } finally {
     restore();
   }

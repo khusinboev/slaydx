@@ -292,15 +292,15 @@ test("magazine bo'lim slaydi to'la ekran kadr va pastki tasma beradi", () => {
   assert.ok(classicImg && classicImg.box.w < 6, "classic da rasm yon ustunda qoladi");
   assert.equal(mag.bg, theme.titleBg, "magazine bo'limi muqova foniga o'tadi");
 
-  // Rasmsiz ham tasma qoladi — fal.ai yiqilsa maket buzilmasin.
+  // Rasmsiz ham tasma qoladi — rasm provayderi yiqilsa maket buzilmasin.
   const noImg = planSlide({ ...s, image: undefined }, theme, "magazine", 1, 10);
   assert.equal(noImg.bg, theme.titleBg);
   assert.ok(texts(noImg.layers).some((t) => t.text === "1-lavha"));
 
   /*
    * `photoSlot` maketdan ALOHIDA tekshiriladi: u rasm SO'ROVIGA tushadi
-   * (`slide-images.ts` → `slotPixels`). Slot yon ustunda qolsa, fal.ai
-   * dan tik (5.2 × 7.5) kadr so'ralar va u to'la ekranga cho'zilib
+   * (`slide-images.ts` → `slotPixels`). Slot yon ustunda qolsa, provayderdan
+   * tik (5.2 × 7.5) kadr so'ralar va u to'la ekranga cho'zilib
    * buzilardi — maketda esa bu ko'rinmasdi, chunki `planSectionMagazine`
    * qutini o'zi yozadi.
    */

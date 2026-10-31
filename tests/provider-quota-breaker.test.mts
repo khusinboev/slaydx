@@ -73,7 +73,7 @@ test("research: muddat (deadline) yetmasa 5xx qayta urinilmaydi", async () => {
   assert.equal(urls.length, 1, "qolgan vaqt minimal urinishdan kam — qayta urinish yo'q");
 });
 
-function fakeProvider(id: "pexels" | "pixabay" | "fal", impl: () => Promise<ImageResult>): ImageProvider & { calls: () => number } {
+function fakeProvider(id: "pexels" | "pixabay", impl: () => Promise<ImageResult>): ImageProvider & { calls: () => number } {
   let n = 0;
   return {
     id,

@@ -1631,21 +1631,26 @@ test("A2: keys hujjatida mundarija yo'q (ko'ruvchi bilan bir xil)", async () => 
  * Rasm bosqichi uchun umumiy sozlash.
  *
  * LLM kaliti O'CHIRILADI (`writeSlideImagePrompts` tarmoqqa chiqmasin —
- * u holda faqat zaxira promptlar ishlatiladi), `FAL_KEY` esa QO'YILADI:
- * `attachSlideImages` kalitsiz holatda umuman rasm va'da qilmaydi.
+ * u holda faqat zaxira promptlar ishlatiladi), `PEXELS_API_KEY` esa QO'YILADI
+ * (Pixabay kalitsiz — zanjirda bitta manba): `attachSlideImages` kalitsiz
+ * holatda umuman rasm va'da qilmaydi.
  */
 function slideImageEnv() {
   const saved = {
-    fal: process.env.FAL_KEY,
+    pexels: process.env.PEXELS_API_KEY,
+    pixabay: process.env.PIXABAY_API_KEY,
     gemini: process.env.GEMINI_API_KEY,
     fetch: globalThis.fetch,
   };
-  process.env.FAL_KEY = "test-fal-key";
+  process.env.PEXELS_API_KEY = "test-pexels-key";
+  delete process.env.PIXABAY_API_KEY;
   delete process.env.GEMINI_API_KEY;
   return () => {
     globalThis.fetch = saved.fetch;
-    if (saved.fal === undefined) delete process.env.FAL_KEY;
-    else process.env.FAL_KEY = saved.fal;
+    if (saved.pexels === undefined) delete process.env.PEXELS_API_KEY;
+    else process.env.PEXELS_API_KEY = saved.pexels;
+    if (saved.pixabay === undefined) delete process.env.PIXABAY_API_KEY;
+    else process.env.PIXABAY_API_KEY = saved.pixabay;
     if (saved.gemini === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = saved.gemini;
   };
@@ -1659,16 +1664,16 @@ const bulletDeck = (n: number): SlideModel[] =>
   }));
 
 /**
- * AYNAN O-1 (AUDIT-7). Jonli sinovda fal.ai 19 ta so'rovning 19 tasini
+ * AYNAN O-1 (AUDIT-7). Jonli sinovda rasm provayderi 19 ta so'rovning 19 tasini
  *
- *   [fal] 403 User is locked. Reason: TOP_UP.
+ *   403 User is locked. Reason: TOP_UP.
  *
  * bilan rad etdi. Deka rasmsiz `COMPLETED` bo'ldi, «Premium uzun ·
  * sifatliroq rasm · 8 000» ning butun narxi olindi va foydalanuvchi
  * buni HECH QAYERDAN bilmadi: yagona signal `console.warn` edi, ya'ni
  * faqat server jurnalida.
  */
-test("fal.ai hisobni bloklasa rasm bosqichi buni hisobotga yozadi", async () => {
+test("rasm provayderi hisobni bloklasa rasm bosqichi buni hisobotga yozadi", async () => {
   const { attachSlideImages } = await import("../lib/generation/slide-images.ts");
   const restore = slideImageEnv();
   let calls = 0;
@@ -1677,7 +1682,8 @@ test("fal.ai hisobni bloklasa rasm bosqichi buni hisobotga yozadi", async () => 
     return {
       ok: false,
       status: 403,
-      json: async () => ({ detail: "User is locked. Reason: TOP_UP." }),
+      statusText: "User is locked. Reason: TOP_UP.",
+      json: async () => ({}),
     } as never;
   }) as typeof fetch;
 
@@ -1758,9 +1764,9 @@ test("rasm va'dasi reja bilan bir xil songa asoslanadi", async () => {
 
     // Kalitsiz muhitda rasm umuman va'da qilinmaydi — aks holda har
     // lokal deka «kam yetkazildi» bo'lib, pul qaytarilardi.
-    delete process.env.FAL_KEY;
+    delete process.env.PEXELS_API_KEY;
     const noKey = await attachSlideImages(bulletDeck(16), "Fotosintez", "classic", 60_000, { premium: true });
-    assert.equal(noKey.want, 0, "FAL_KEY yo'q bo'lsa rasm va'da qilinmaydi");
+    assert.equal(noKey.want, 0, "rasm kaliti yo'q bo'lsa rasm va'da qilinmaydi");
   } finally {
     restore();
   }

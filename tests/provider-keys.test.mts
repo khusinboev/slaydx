@@ -103,7 +103,7 @@ test("registry: unique ids, Uzbek labels, kinds, env names; reserved providers a
   );
   // Removed providers (fal.ai, xAI, OpenRouter, OpenAI as a TEXT provider) are not in the registry: no key is read for them.
   for (const id of ["fal", "xai", "openrouter", "openai"]) assert.equal(registry.providerDef(id), null, `${id} is removed`);
-  for (const name of ["FAL_KEY", "XAI_API_KEY", "OPENROUTER_API_KEY"]) assert.ok(!ALL_ENV.includes(name), `${name} is no longer a provider env var`);
+  for (const name of ["FAL_KEY", "XAI_API_KEY", "OPENROUTER_API_KEY"]) assert.ok(!(ALL_ENV as string[]).includes(name), `${name} is no longer a provider env var`);
   for (const p of registry.PROVIDERS) {
     assert.ok(p.label.trim() && p.kinds.length > 0 && p.envKeys.length > 0 && p.keyHint.trim(), p.id);
     assert.ok(p.envKeys.every((e) => /^[A-Z0-9_]+$/.test(e)), p.id);

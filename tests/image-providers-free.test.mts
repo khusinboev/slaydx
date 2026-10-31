@@ -21,13 +21,13 @@ setSafeFetchLookup(async () => ["104.18.1.1"]);
 test.beforeEach(() => resetBreakers());
 
 /**
- * BEPUL FOTO ZANJIRI (AUDIT-9 P3): Pexels → Pixabay → fal.
+ * BEPUL FOTO ZANJIRI (AUDIT-9 P3): Pexels → Pixabay.
  *
  * Hech bir test JONLI so'rov qilmaydi — `fetch` stub qilinadi
  * (`tests/slide-images.test.mts` bilan bir xil naqsh). Bu yerda MANTIQ
  * sinaladi: qidiruv so'rovi yasash, HTTP javob shakli, xato tasnifi,
- * zanjir tartibi/qaytish, takrorlanmaslik (`seen`), uslub bo'yicha
- * to'g'ridan-to'g'ri fal ga o'tish.
+ * zanjir tartibi/qaytish, takrorlanmaslik (`seen`), uslub fotodan boshqa
+ * bo'lsa stock manbalarni umuman so'ramaslik.
  */
 
 const slide = TOOL_BY_ID.slide;
@@ -41,17 +41,14 @@ function keysEnv() {
   const saved = {
     pexels: process.env.PEXELS_API_KEY,
     pixabay: process.env.PIXABAY_API_KEY,
-    fal: process.env.FAL_KEY,
     gemini: process.env.GEMINI_API_KEY,
     fetch: globalThis.fetch,
   };
-  return (next: Partial<{ pexels: string; pixabay: string; fal: string }> = {}) => {
+  return (next: Partial<{ pexels: string; pixabay: string }> = {}) => {
     if (next.pexels !== undefined) process.env.PEXELS_API_KEY = next.pexels;
     else delete process.env.PEXELS_API_KEY;
     if (next.pixabay !== undefined) process.env.PIXABAY_API_KEY = next.pixabay;
     else delete process.env.PIXABAY_API_KEY;
-    if (next.fal !== undefined) process.env.FAL_KEY = next.fal;
-    else delete process.env.FAL_KEY;
     // Matn LLM (rasm PROMPTINI yozadigan `writeSlideImagePrompts`) shu
     // testlarga umuman aloqasi yo'q — kalit turib qolsa har chaqiruvda
     // real Gemini matn manziliga so'rov ketardi (stub uni 500 deb
@@ -63,7 +60,6 @@ function keysEnv() {
       const restore = (k: string, v: string | undefined) => (v === undefined ? delete process.env[k] : (process.env[k] = v));
       restore("PEXELS_API_KEY", saved.pexels);
       restore("PIXABAY_API_KEY", saved.pixabay);
-      restore("FAL_KEY", saved.fal);
       restore("GEMINI_API_KEY", saved.gemini);
     };
   };
@@ -83,7 +79,7 @@ const JPEG_1PX_BYTES = Buffer.from(
 const JPEG_PADDED = Buffer.concat([Buffer.from(JPEG_1PX_BYTES), Buffer.alloc(1200, 0)]);
 
 /**
- * `fetchImageBytes` ning IKKINCHI bosqichi — Pexels/Pixabay/fal `https:`
+ * `fetchImageBytes` ning IKKINCHI bosqichi — Pexels/Pixabay `https:`
  * URL qaytarsa, `persistImage` uni HAQIQATAN yuklab olishga urinadi
  * (`slide-images.ts`). Shu javob shu ikkinchi so'rovni simulyatsiya
  * qiladi — haqiqiy JPEG baytlar bilan, aks holda `sniffImageType` rad
@@ -121,7 +117,7 @@ test("searchQueryFor: localExamples yoqilsa «Uzbekistan» qo'shiladi", () => {
   assert.ok(String(on).split(" ").length <= 5);
 });
 
-test("searchQueryFor: illustration/chalk/minimal uslubida null (fal ga to'g'ridan-to'g'ri)", () => {
+test("searchQueryFor: illustration/chalk/minimal uslubida null (stock so'ralmaydi)", () => {
   for (const styleId of ["illustration", "chalk", "minimal"] as const) {
     const q = searchQueryFor("Suv aylanishi", { title: "" }, { slideImageStyle: styleId, localExamples: false });
     assert.equal(q, null, `${styleId}: bepul manba so'ralmasligi kerak`);
@@ -288,13 +284,13 @@ test("photoOrientation: kvadrat/tik/keng slotlarni to'g'ri belgilaydi", () => {
 
 // ───────────────────────────────────────────── 7. chainProvider — zanjir mantig'i
 
-function fakeProvider(id: "pexels" | "pixabay" | "fal", impl: ImageProvider["fetchImage"], key = true): ImageProvider {
+function fakeProvider(id: "pexels" | "pixabay", impl: ImageProvider["fetchImage"], key = true): ImageProvider {
   return { id, minMs: 1, hasKey: () => key, fetchImage: impl };
 }
 
 test("chainProvider: kalitsiz bo'g'in sinab ko'rilmaydi, keyingisi ishlaydi", async () => {
   let pexelsCalls = 0;
-  let falCalls = 0;
+  let pixabayCalls = 0;
   const pexels = fakeProvider(
     "pexels",
     async () => {
@@ -303,17 +299,17 @@ test("chainProvider: kalitsiz bo'g'in sinab ko'rilmaydi, keyingisi ishlaydi", as
     },
     false, // kalitsiz
   );
-  const fal = fakeProvider("fal", async () => {
-    falCalls += 1;
-    return { ok: true, image: { url: "https://fal.example/x.jpg" } };
+  const pixabay = fakeProvider("pixabay", async () => {
+    pixabayCalls += 1;
+    return { ok: true, image: { url: "https://pixabay.example/x.jpg" } };
   });
-  const chain = chainProvider([pexels, fal]);
-  assert.equal(chain.id, "fal", "zanjir identifikatori regressiya uchun `fal` bo'lib qolishi kerak");
+  const chain = chainProvider([pexels, pixabay]);
+  assert.equal(chain.id, "stock", "zanjirning standart identifikatori `stock`");
   assert.equal(chain.hasKey(), true, "hech bo'lmasa bitta bo'g'in kalitga ega bo'lsa true");
   const res = await chain.fetchImage({ prompt: "x", size: { width: 1, height: 1 }, styleId: "photo" });
   assert.ok(res.ok);
   assert.equal(pexelsCalls, 0, "kalitsiz bo'g'in HECH chaqirilmasligi kerak");
-  assert.equal(falCalls, 1);
+  assert.equal(pixabayCalls, 1);
 });
 
 test("chainProvider: birinchi bo'g'in failed/rate bo'lsa keyingisiga o'tadi", async () => {
@@ -340,22 +336,21 @@ test("chainProvider: blocked bo'g'in DEKA OXIRIGACHA sakrab o'tiladi (qayta chaq
     pexelsCalls += 1;
     return { ok: false, reason: "blocked", detail: "403" };
   });
-  const fal = fakeProvider("fal", async () => ({ ok: true, image: { url: "https://fal.example/x.jpg" } }));
-  const chain = chainProvider([pexels, fal]);
+  const pixabay = fakeProvider("pixabay", async () => ({ ok: true, image: { url: "https://pixabay.example/x.jpg" } }));
+  const chain = chainProvider([pexels, pixabay]);
   await chain.fetchImage({ prompt: "x", size: { width: 1, height: 1 }, styleId: "photo" }); // slayd 1
   await chain.fetchImage({ prompt: "x", size: { width: 1, height: 1 }, styleId: "photo" }); // slayd 2
   await chain.fetchImage({ prompt: "x", size: { width: 1, height: 1 }, styleId: "photo" }); // slayd 3
   assert.equal(pexelsCalls, 1, "bloklangan bo'g'in bitta sinovdan keyin butun deka davomida chaqirilmasligi kerak");
 });
 
-test("chainProvider: hammasi yiqilsa OXIRGI natija (odatda fal) qaytariladi", async () => {
+test("chainProvider: hammasi yiqilsa OXIRGI natija (oxirgi bo'g'in) qaytariladi", async () => {
   const pexels = fakeProvider("pexels", async () => ({ ok: false, reason: "failed", detail: "a" }));
-  const pixabay = fakeProvider("pixabay", async () => ({ ok: false, reason: "failed", detail: "b" }));
-  const fal = fakeProvider("fal", async () => ({ ok: false, reason: "blocked", detail: "403 hisob bloklangan" }));
-  const chain = chainProvider([pexels, pixabay, fal]);
+  const pixabay = fakeProvider("pixabay", async () => ({ ok: false, reason: "blocked", detail: "403 hisob bloklangan" }));
+  const chain = chainProvider([pexels, pixabay]);
   const res = await chain.fetchImage({ prompt: "x", size: { width: 1, height: 1 }, styleId: "photo" });
   assert.equal(res.ok, false);
-  assert.equal(!res.ok && res.reason, "blocked", "fal ning haqiqiy blok holati zanjirdan yo'qolmasligi kerak");
+  assert.equal(!res.ok && res.reason, "blocked", "oxirgi bo'g'inning haqiqiy blok holati zanjirdan yo'qolmasligi kerak");
   assert.match(!res.ok ? res.detail : "", /403/);
 });
 
@@ -384,9 +379,20 @@ test("chainProvider: bitta dekada bir xil foto takrorlanmaydi (seen)", async () 
 
 // ───────────────────────────────────────────── 8. pickProvider — regressiya
 
-test("pickProvider: slide → FAQAT stock zanjiri (`stock`), meta'siz → eski zanjir (`fal`)", () => {
+test("pickProvider: slide va meta'siz chaqiruv — BITTA stock zanjiri (`stock`), pullik bo'g'insiz", () => {
   assert.equal(pickProvider(meta()).id, "stock");
-  assert.equal(pickProvider().id, "fal", "meta'siz chaqiruv yo'li o'zgarmaydi — regressiya qulfi");
+  assert.equal(pickProvider().id, "stock", "meta'siz chaqiruv yo'li ham shu zanjir — regressiya qulfi");
+  // Pexels va Pixabay kalitlari ikkala yo'lni birdek ochadi/yopadi: bu zanjirda boshqa kalit YO'Q.
+  const restore = keysEnv()({});
+  try {
+    assert.equal(pickProvider(meta()).hasKey(), false);
+    assert.equal(pickProvider().hasKey(), false);
+    process.env.PIXABAY_API_KEY = "k";
+    assert.equal(pickProvider(meta()).hasKey(), true);
+    assert.equal(pickProvider().hasKey(), true);
+  } finally {
+    restore();
+  }
 });
 
 // ───────────────────────────────────────────── 9. attachSlideImages — to'liq zanjir integratsiyasi
@@ -394,8 +400,8 @@ test("pickProvider: slide → FAQAT stock zanjiri (`stock`), meta'siz → eski z
 const bullet = (i: number, title = `Mavzu ${i}`): SlideModel => ({ id: `s${i}`, layout: "bullets", title });
 const deck = (n: number): SlideModel[] => Array.from({ length: n }, (_, i) => bullet(i));
 
-test("attachSlideImages: pexels ishlasa pixabay/fal umuman chaqirilmaydi", async () => {
-  const restore = keysEnv()({ pexels: "k", pixabay: "k", fal: "k" });
+test("attachSlideImages: pexels ishlasa pixabay umuman chaqirilmaydi", async () => {
+  const restore = keysEnv()({ pexels: "k", pixabay: "k" });
   const hits: string[] = [];
   globalThis.fetch = (async (url: string) => {
     const u = String(url);
@@ -406,10 +412,6 @@ test("attachSlideImages: pexels ishlasa pixabay/fal umuman chaqirilmaydi", async
     if (u.startsWith("https://pixabay.com/api/")) {
       hits.push("pixabay");
       return jsonRes(200, { hits: [] });
-    }
-    if (u.startsWith("https://fal.run/")) {
-      hits.push("fal");
-      return jsonRes(200, { images: [{ url: "https://fal.example/z.jpg" }] });
     }
     return imgRes(); // rasm baytlarini yuklab olish bosqichi
   }) as unknown as typeof fetch;
@@ -422,9 +424,12 @@ test("attachSlideImages: pexels ishlasa pixabay/fal umuman chaqirilmaydi", async
   }
 });
 
-test("attachSlideImages: oddiy slayd stock kalitsiz bo'lsa RASMSIZ qoladi — fal chaqirilmaydi, va'da nol; meta'siz yo'l fal da qoladi", async () => {
-  const restore = keysEnv()({ fal: "k" }); // faqat FAL_KEY
+test("attachSlideImages: stock kalitsiz bo'lsa RASMSIZ qoladi, va'da nol — olib tashlangan provayder kaliti hech narsani ochmaydi (meta bilan ham, metasiz ham)", async () => {
+  const restore = keysEnv()({}); // na Pexels, na Pixabay kaliti
   const hits: string[] = [];
+  // Olib tashlangan rasm provayderining eski env qiymati serverda qolgan bo'lishi mumkin — hech narsa o'qimasligi kerak.
+  const prevLegacy = process.env.FAL_KEY;
+  process.env.FAL_KEY = "k";
   globalThis.fetch = (async (url: string) => {
     const u = String(url);
     if (u.startsWith("https://api.pexels.com/") || u.startsWith("https://pixabay.com/api/")) {
@@ -432,38 +437,37 @@ test("attachSlideImages: oddiy slayd stock kalitsiz bo'lsa RASMSIZ qoladi — fa
       return jsonRes(200, {});
     }
     if (u.startsWith("https://fal.run/")) {
-      hits.push("fal");
+      hits.push("legacy");
       return jsonRes(200, { images: [{ url: "https://fal.example/z.jpg" }] });
     }
     return imgRes();
   }) as unknown as typeof fetch;
   try {
     const report = await attachSlideImages(deck(2), "Suv aylanishi", "classic", 60_000, { meta: meta() });
-    // MUTATSIYA: `pickProvider` oddiy slayd zanjiriga `falProvider` qo'shsa — got 2, hits ["fal","fal"].
-    assert.equal(report.got, 0, "oddiy slayd pullik fal ga tushmasin");
+    // MUTATSIYA: `pickProvider` zanjiriga eski pullik provayderni qaytarsa — got 2, hits ["legacy","legacy"].
+    assert.equal(report.got, 0, "pullik provayderga tushmasin");
     assert.equal(report.want, 0, "kalitsiz stock — rasm VA'DA qilinmaydi (pul ushlanmaydi)");
-    assert.deepEqual(hits, [], "na stock (kalit yo'q), na fal");
-    // Meta'siz chaqiruv (eski yo'l, image-lab) — fal hamon ishlaydi.
-    const legacy = await attachSlideImages(deck(2), "Suv aylanishi", "classic", 60_000, {});
-    assert.equal(legacy.got, 2);
-    assert.deepEqual(hits, ["fal", "fal"]);
+    assert.deepEqual(hits, [], "na stock (kalit yo'q), na eski provayder");
+    // Meta'siz chaqiruv (eski yo'l) — o'sha zanjir, o'sha natija.
+    const noMeta = await attachSlideImages(deck(2), "Suv aylanishi", "classic", 60_000, {});
+    assert.equal(noMeta.got, 0);
+    assert.equal(noMeta.want, 0);
+    assert.deepEqual(hits, []);
   } finally {
+    if (prevLegacy === undefined) delete process.env.FAL_KEY;
+    else process.env.FAL_KEY = prevLegacy;
     restore();
   }
 });
 
-test("attachSlideImages: oddiy slaydda `chalk` yuborilsa ham uslub foto — stock sinaladi, fal chaqirilmaydi", async () => {
-  const restore = keysEnv()({ pexels: "k", pixabay: "k", fal: "k" });
+test("attachSlideImages: oddiy slaydda `chalk` yuborilsa ham uslub foto — stock sinaladi", async () => {
+  const restore = keysEnv()({ pexels: "k", pixabay: "k" });
   const hits: string[] = [];
   globalThis.fetch = (async (url: string) => {
     const u = String(url);
     if (u.startsWith("https://api.pexels.com/")) {
       hits.push("stock");
       return jsonRes(200, { photos: [{ src: { large2x: "https://pexels.example/p.jpg" }, alt: "p" }] });
-    }
-    if (u.startsWith("https://fal.run/")) {
-      hits.push("fal");
-      return jsonRes(200, { images: [{ url: "https://fal.example/z.jpg" }] });
     }
     return imgRes();
   }) as unknown as typeof fetch;
@@ -487,7 +491,7 @@ test("attachSlideImages: oddiy slaydda `chalk` yuborilsa ham uslub foto — stoc
  * bilan ham barqaror).
  */
 test("attachSlideImages: pexels rate bersa (blok emas) pixabay har slaydda qayta sinaladi va yetkazadi", async () => {
-  const restore = keysEnv()({ pexels: "k", pixabay: "k", fal: "k" });
+  const restore = keysEnv()({ pexels: "k", pixabay: "k" });
   const hits: string[] = [];
   globalThis.fetch = (async (url: string) => {
     const u = String(url);
@@ -499,25 +503,20 @@ test("attachSlideImages: pexels rate bersa (blok emas) pixabay har slaydda qayta
       hits.push("pixabay");
       return jsonRes(200, { hits: [{ largeImageURL: "https://pixabay.example/ok.jpg" }] });
     }
-    if (u.startsWith("https://fal.run/")) {
-      hits.push("fal");
-      return jsonRes(200, { images: [{ url: "https://fal.example/z.jpg" }] });
-    }
-    return imgRes(); // rasm baytlarini yuklab olish bosqichi (pixabay/fal URL'lari)
+    return imgRes(); // rasm baytlarini yuklab olish bosqichi (pixabay URL'lari)
   }) as unknown as typeof fetch;
   try {
     const report = await attachSlideImages(deck(3), "Suv aylanishi", "classic", 60_000, { meta: meta() });
     assert.equal(report.got, 3, "pixabay har slaydda yetkazishi kerak");
     assert.equal(hits.filter((h) => h === "pexels").length, 3, "pexels HAR slaydda qayta sinaladi — 429 blok emas");
     assert.equal(hits.filter((h) => h === "pixabay").length, 3);
-    assert.equal(hits.filter((h) => h === "fal").length, 0, "pixabay yetkazgach fal umuman kerak emas");
   } finally {
     restore();
   }
 });
 
-test("attachSlideImages: pexels va pixabay ikkalasi ham yiqilsa — oddiy slayd RASMSIZ (fal zaxira EMAS); meta'siz yo'lda fal zaxira", async () => {
-  const restore = keysEnv()({ pexels: "k", pixabay: "k", fal: "k" });
+test("attachSlideImages: pexels va pixabay ikkalasi ham yiqilsa — RASMSIZ (pullik zaxira yo'q), meta bilan ham, metasiz ham", async () => {
+  const restore = keysEnv()({ pexels: "k", pixabay: "k" });
   const hits: string[] = [];
   globalThis.fetch = (async (url: string) => {
     const u = String(url);
@@ -529,21 +528,17 @@ test("attachSlideImages: pexels va pixabay ikkalasi ham yiqilsa — oddiy slayd 
       hits.push("pixabay");
       return jsonRes(500, {});
     }
-    if (u.startsWith("https://fal.run/")) {
-      hits.push("fal");
-      return jsonRes(200, { images: [{ url: "https://fal.example/z.jpg" }] });
-    }
-    return imgRes(); // rasm baytlarini yuklab olish bosqichi (pixabay/fal URL'lari)
+    return imgRes(); // rasm baytlarini yuklab olish bosqichi (pixabay URL'lari)
   }) as unknown as typeof fetch;
   try {
     const report = await attachSlideImages(deck(3), "Suv aylanishi", "classic", 60_000, { meta: meta() });
-    assert.equal(report.got, 0, "oddiy slaydda fal zaxira emas — rasmsiz qoladi");
-    assert.equal(hits.filter((h) => h === "fal").length, 0, "fal umuman chaqirilmaydi");
+    assert.equal(report.got, 0, "zaxira yo'q — rasmsiz qoladi");
     assert.ok(hits.includes("pexels") && hits.includes("pixabay"), "ikkala bepul manba sinaladi");
     hits.length = 0;
-    const legacy = await attachSlideImages(deck(3), "Suv aylanishi", "classic", 60_000, {});
-    assert.equal(legacy.got, 3, "meta'siz (eski) yo'lda fal yakuniy zaxira bo'lib qoladi");
-    assert.equal(hits.filter((h) => h === "fal").length, 3);
+    resetBreakers(); // pexels 429 kvota saqlagichini ochgan — ikkinchi yo'l ham ikkala manbani sinasin
+    const noMeta = await attachSlideImages(deck(3), "Suv aylanishi", "classic", 60_000, {});
+    assert.equal(noMeta.got, 0, "meta'siz (eski) yo'l ham xuddi shunday — pullik zaxira yo'q");
+    assert.ok(hits.includes("pexels") && hits.includes("pixabay"), "meta'siz yo'lda ham ikkala manba sinaladi");
   } finally {
     restore();
   }
