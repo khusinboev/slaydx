@@ -28,10 +28,10 @@ const WIDTH = "max-w-[1040px]";
  *     account has no real name), «Bugun nima yaratamiz?», search / quick theme
  *     / notifications; the balance chip (→ Hamyon) beside the search field;
  *   - «Vosita yoki fayl qidirish» → the search dialog (Cmd/Ctrl+K hint);
- *   - «Tez boshlash»: Slayd, Referat, Insho, Rezyume;
+ *   - «Tez boshlash»: the «AI yordamchi» promo card, Slayd, Referat, Insho, Rezyume, the «Qattiqqo'l domla» promo;
  *   - «Davom ettirish»: the 3 latest files + «Barchasi →» Ishlarim; signed out,
  *     a login card instead;
- *   - «Barcha vositalar» by group + «Hammasi» → `/uz/create`.
+ *   - «Barcha vositalar» by group (tools + link-only services, `lib/services.ts`) + «Hammasi» → `/uz/create`.
  * Tool links keep the «+» sheet's login gate. ≥ 1024 px: quick start and
  * recent files side by side. `?returnTo=` opens the login (`useReturnToLogin`).
  */
@@ -40,8 +40,6 @@ export function HomeHub() {
   const user = useAppStore((s) => s.user);
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const loggedIn = useAppStore((s) => s.loggedIn);
-  // «Qattiqqo'l domla» card: hidden while the admin switch `domla.enabled` is off (features.domla).
-  const domlaOn = useAppStore((s) => s.features?.domla === true);
   const open = useUi((s) => s.open);
   const gate = useLoginGate();
   const recent = useRecentFiles();
@@ -118,69 +116,6 @@ export function HomeHub() {
         >
           <ToolsByGroup onPick={gate} />
         </HubSection>
-
-        {/* Static link card, not a ToolId: the free converter has no price, form or generation. */}
-        <Link
-          href="/uz/convert"
-          data-hub-convert
-          className="bg-card hover:bg-accent focus-visible:ring-ring flex min-h-14 items-center justify-between gap-3 rounded-[20px] border p-4 outline-none focus-visible:ring-2"
-        >
-          <span className="flex flex-col">
-            <span className="text-[15.5px] font-semibold">Fayl konvertatsiya (tekin)</span>
-            <span className="text-muted-foreground text-[13.5px]">Word, PowerPoint, PDF va rasmlar</span>
-          </span>
-          <ArrowRight className="size-5 shrink-0" aria-hidden />
-        </Link>
-
-        <Link
-          href="/uz/alifbo"
-          data-hub-alifbo
-          className="bg-card hover:bg-accent focus-visible:ring-ring flex min-h-14 items-center justify-between gap-3 rounded-[20px] border p-4 outline-none focus-visible:ring-2"
-        >
-          <span className="flex flex-col">
-            <span className="text-[15.5px] font-semibold">Alifbo o&apos;giruvchi (tekin)</span>
-            <span className="text-muted-foreground text-[13.5px]">Kirill, Lotin va yangi Lotin</span>
-          </span>
-          <ArrowRight className="size-5 shrink-0" aria-hidden />
-        </Link>
-
-        {domlaOn ? (
-          <Link
-            href="/uz/domla"
-            data-hub-domla
-            className="bg-card hover:bg-accent focus-visible:ring-ring flex min-h-14 items-center justify-between gap-3 rounded-[20px] border p-4 outline-none focus-visible:ring-2"
-          >
-            <span className="flex flex-col">
-              <span className="text-[15.5px] font-semibold">Qattiqqo‘l domla</span>
-              <span className="text-muted-foreground text-[13.5px]">Slaydingizni ovoz bilan himoya qiling</span>
-            </span>
-            <ArrowRight className="size-5 shrink-0" aria-hidden />
-          </Link>
-        ) : null}
-
-        <Link
-          href="/uz/tests"
-          data-hub-tests
-          className="bg-card hover:bg-accent focus-visible:ring-ring flex min-h-14 items-center justify-between gap-3 rounded-[20px] border p-4 outline-none focus-visible:ring-2"
-        >
-          <span className="flex flex-col">
-            <span className="text-[15.5px] font-semibold">Test ishlash</span>
-            <span className="text-muted-foreground text-[13.5px]">Matematika, Ona tili, Tarix · vaqt bilan, oxirida to‘g‘ri javoblar</span>
-          </span>
-          <ArrowRight className="size-5 shrink-0" aria-hidden />
-        </Link>
-
-        <Link
-          href="/uz/chat"
-          data-hub-chat
-          className="bg-card hover:bg-accent focus-visible:ring-ring flex min-h-14 items-center justify-between gap-3 rounded-[20px] border p-4 outline-none focus-visible:ring-2"
-        >
-          <span className="flex flex-col">
-            <span className="text-[15.5px] font-semibold">AI yordamchi</span>
-            <span className="text-muted-foreground text-[13.5px]">Savol bering yoki hujjat buyuring · kuniga 10 ta tekin</span>
-          </span>
-          <ArrowRight className="size-5 shrink-0" aria-hidden />
-        </Link>
       </div>
     </div>
   );

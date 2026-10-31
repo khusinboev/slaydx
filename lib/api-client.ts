@@ -268,6 +268,10 @@ export type Features = {
   videoProviders?: string[];
   /** `domla.enabled` is on: «Qattiqqo'l domla» is listed among the tools; absent (older server) or false = hidden. */
   domla?: boolean;
+  /** `chat.enabled` is on: «AI yordamchi» is listed; absent (older server) or false = hidden. */
+  chat?: boolean;
+  /** `tests.enabled` is on: «Test ishlash» is listed; absent (older server) or false = hidden. */
+  tests?: boolean;
   telegram: boolean;
   telegramBot: string | null;
   devLogin: boolean;
