@@ -311,9 +311,13 @@ test("narx sozlamasi va to'xtatish (haqiqiy Postgres)", { skip }, async (t) => {
     assert.deepEqual(empty.features.pricing, {});
     assert.deepEqual(
       Object.keys(empty.features).sort(),
-      ["devLogin", "domla", "imageModels", "images", "llm", "payments", "pdf", "pricing", "telegram", "telegramBot", "tts", "ttsPremium", "videoProviders"],
+      ["chat", "devLogin", "domla", "imageModels", "images", "llm", "payments", "pdf", "pricing", "telegram", "telegramBot", "tests", "tts", "ttsPremium", "videoProviders"],
       "boshqa kalitlar o'zgarmagan",
     );
+    // The home hub lists chat / tests / domla by these switches: real booleans (chat on, tests off by default).
+    assert.equal(empty.features.chat, true, "chat.enabled default on");
+    assert.equal(empty.features.tests, false, "tests.enabled default off");
+    assert.equal(typeof empty.features.domla, "boolean");
     await setPrice("slide", 120, 500);
     await setPrice("essay", 100, 1000);
     const one = await session();
