@@ -10,7 +10,7 @@
  * differensial zond o'tkazadi: har `id` uchun `probeA`/`probeB` e'lon
  * qilingan ta'sirda (`prompt`/`size`/`price`) farq berishi SHART.
  *
- * Zond TO'LIQ `buildImageArtifact`ni chaqirmaydi (u fal.ai/LLM ga tarmoq
+ * Zond TO'LIQ `buildImageArtifact`ni chaqirmaydi (u rasm provayderi/LLM ga tarmoq
  * so'rovi yuboradi) — faqat sof funksiyalar: `composePrompt`,
  * `imageRatioById`, `priceFor`, `imageProviderFor`. `expandPrompt` (LLM boyitish) tarmoqqa
  * bog'liq, shuning uchun bu yerda zond qilinmaydi.

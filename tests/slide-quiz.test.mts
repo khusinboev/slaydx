@@ -45,9 +45,7 @@ const allText = (p: { layers: SlideLayer[] }) =>
 async function deckFrom(slides: unknown[], over: Record<string, unknown> = {}): Promise<SlideModel[] | null> {
   const realFetch = globalThis.fetch;
   const savedGemini = process.env.GEMINI_API_KEY;
-  const savedXai = process.env.XAI_API_KEY;
   process.env.GEMINI_API_KEY = "test-key";
-  delete process.env.XAI_API_KEY;
   globalThis.fetch = (async () =>
     new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ slides }) }] } }] }), {
       status: 200,
@@ -66,7 +64,6 @@ async function deckFrom(slides: unknown[], over: Record<string, unknown> = {}): 
     globalThis.fetch = realFetch;
     if (savedGemini === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = savedGemini;
-    if (savedXai !== undefined) process.env.XAI_API_KEY = savedXai;
   }
 }
 

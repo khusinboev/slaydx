@@ -39,7 +39,7 @@ function fakeAdapter(id: ProviderAdapter["id"], replies: Attempt[]): { adapter: 
 }
 
 function withKeys(keys: Record<string, string | undefined>, fn: () => Promise<void>): Promise<void> {
-  const ENV_NAMES = ["GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY"];
+  const ENV_NAMES = ["GEMINI_API_KEY", "ANTHROPIC_API_KEY"];
   const saved = Object.fromEntries(ENV_NAMES.map((n) => [n, process.env[n]]));
   for (const n of ENV_NAMES) delete process.env[n];
   for (const [k, v] of Object.entries(keys)) if (v !== undefined) process.env[k] = v;
@@ -165,13 +165,13 @@ test("Retry-After — eksponensial o'rniga shu qiymat kutiladi", async () => {
 });
 
 test("adapter ro'yxatda yo'q — o'tkazib yuboriladi (kalit bor bo'lsa ham)", async () => {
-  await withKeys({ OPENAI_API_KEY: "o", GEMINI_API_KEY: "g" }, async () => {
+  await withKeys({ ANTHROPIC_API_KEY: "a", GEMINI_API_KEY: "g" }, async () => {
     const g = fakeAdapter("gemini", [{ ok: true, text: "gemini javobi", usage: { inputTokens: 1, outputTokens: 1 } }]);
     const specs: RoleSpec[] = [
-      { provider: "openai", model: "gpt-5.6-luna" },
+      { provider: "anthropic", model: "claude-haiku-4-5" },
       { provider: "gemini", model: "gemini-3.7-flash" },
     ];
-    // `adapters` da "openai" YO'Q — chain uni o'tkazib yuborishi kerak.
+    // `adapters` da "anthropic" YO'Q — chain uni o'tkazib yuborishi kerak.
     const res = await completeWithChain("fast", specs, "S", "U", OPTS, { adapters: { gemini: g.adapter } });
     assert.equal(res?.text, "gemini javobi");
   });

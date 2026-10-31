@@ -64,6 +64,7 @@ import { remindUnpaidOrders } from "./payment-reminder";
 import { runDailyQuizSend } from "./daily-quiz-send";
 import { claimJob as claimDomlaJob } from "./domla";
 import { domlaHousekeeping, runJob as runDomlaJob } from "./domla-engine";
+import { startProviderUsageFlush } from "./provider-usage";
 import { ensureProviderKeys, startProviderKeyRefresh } from "./providers/store";
 import { submitVideoJob } from "./video-ops";
 import { startVideoPollLoop } from "./video-poll-loop";
@@ -1424,5 +1425,7 @@ export async function runWorkerProcess(): Promise<void> {
   registerErrorSink("worker");
   // Provider keys and on/off switches stored by the admin (docs/program-17 D7): load now, refresh every 30 s.
   await startProviderKeyRefresh();
+  // Free-provider request counters (stock photos, research APIs) for the admin «Provayderlar» page.
+  startProviderUsageFlush();
   await loop();
 }

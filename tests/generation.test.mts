@@ -1507,7 +1507,7 @@ test("o'yin byudjeti element soniga ergashadi; infografika blok soniga", async (
  * bermadi» holati endi haqiqiy rad javobi bilan sinaladi.
  */
 async function withRefusingLlm(fn: () => Promise<void>): Promise<void> {
-  const keys = ["GEMINI_API_KEY", "XAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "OPENAI_API_KEY", "LLM_WRITER", "LLM_RESEARCHER", "LLM_JUDGE", "LLM_FAST"];
+  const keys = ["GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "LLM_WRITER", "LLM_RESEARCHER", "LLM_JUDGE", "LLM_FAST"];
   const saved = new Map(keys.map((k) => [k, process.env[k]]));
   const realFetch = globalThis.fetch;
   for (const k of keys) delete process.env[k];

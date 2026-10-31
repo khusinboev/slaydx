@@ -1,5 +1,5 @@
 import { mapPool } from "./quality";
-import { pickProvider } from "./image-provider";
+import { pickProvider, type ImageSize, type SlideImage, type VisualTier } from "./image-provider";
 import { photoSlot, slotPixels } from "./slide-layout";
 import { composeSlideImagePrompt, writeSlideImagePrompts } from "./slide-image-prompts";
 import { searchQueryFor } from "./image-search-query";
@@ -9,17 +9,6 @@ import { safeFetchUrl, UnsafeUrlError } from "./safe-fetch";
 import type { SlideVisual } from "./slide-templates";
 import type { SlideModel } from "./slide-types";
 import type { DocMeta, SlideImageReport } from "./types";
-import type { FalSize, SlideImage, VisualTier } from "./image-provider-fal";
-
-/*
- * fal.ai ning HTTP mantig'i endi `image-provider-fal.ts` da (WP-E) —
- * bu yerdan QAYTA EKSPORT qilinadi, chunki `image-studio.ts` va
- * `scripts/image-lab.mts` uni shu yo'ldan import qiladi: provayder
- * ajratilishi ularga umuman ko'rinmasligi kerak edi.
- */
-export { generateFalImage, requestFalImage } from "./image-provider-fal";
-export type { FalResult, FalSize, SlideImage, VisualTier } from "./image-provider-fal";
-export type { FalFailure } from "./image-provider";
 
 export type ImageBytes = { data: string; type: "jpg" | "png"; w?: number; h?: number };
 
@@ -171,7 +160,7 @@ export async function fetchImageBytes(url: string): Promise<ImageBytes | null> {
     if (buf.length < 800) return null;
     const type = sniffImageType(buf);
     if (!type) {
-      console.warn("[fal] rasm formati qo‘llab-quvvatlanmaydi, tashlandi");
+      console.warn("[rasm] rasm formati qo‘llab-quvvatlanmaydi, tashlandi");
       return null;
     }
     const dim = type === "png" ? pngSize(buf) : jpegSize(buf);
@@ -198,7 +187,7 @@ export async function fetchImageBytes(url: string): Promise<ImageBytes | null> {
 async function persistImage(remote: SlideImage): Promise<SlideImage | null> {
   const bytes = await fetchImageBytes(remote.url);
   if (!bytes) {
-    console.warn("[fal] rasm saqlanmadi, tashlandi");
+    console.warn("[rasm] rasm saqlanmadi, tashlandi");
     return null;
   }
   return { url: `data:${bytes.data}`, alt: remote.alt };
@@ -236,7 +225,7 @@ export function plannedImageSlots(
   premium = false,
   pro = false,
   rules?: BodyRules,
-): { s: SlideModel; size: FalSize }[] {
+): { s: SlideModel; size: ImageSize }[] {
   const eligible = slides.filter((s) => IMAGE_LAYOUTS.has(s.layout) && !(rules && !s.image && imageYieldField(s, rules, visual)));
   /*
    * Shift YO'Q — na oddiy, na pro (AUDIT-14). Formalar 2 dan beri oddiy
@@ -253,7 +242,7 @@ export function plannedImageSlots(
       const slot = photoSlot(s.layout, visual);
       return slot ? { s, size: slotPixels(slot) } : null;
     })
-    .filter((x): x is { s: SlideModel; size: FalSize } => x !== null);
+    .filter((x): x is { s: SlideModel; size: ImageSize } => x !== null);
 }
 
 /**
@@ -272,9 +261,9 @@ export function plannedImageSlots(
  * `deliveredCount` pul qaroriga aylantiradi.
  *
  * `opts.meta` (WP-E) — provayder tanlash, rasm uslubi va mahalliy
- * misollar uchun. Berilmasa hamma narsa ESKICHA qoladi: fal.ai,
+ * misollar uchun. Berilmasa hamma narsa ESKICHA qoladi: stock zanjiri,
  * `photo` uslubi, `imageBudget` shifti — ya'ni eski chaqiruvlar
- * (`scripts/image-lab.mts`, mavjud testlar) regressiyasiz ishlaydi.
+ * (mavjud testlar) regressiyasiz ishlaydi.
  */
 export type AttachImageOpts = VisualTier & {
   meta?: DocMeta;
@@ -400,7 +389,7 @@ export async function attachSlideImages(
     }
     const prompt = prompts[s.id] || composeSlideImagePrompt(topic, s, size, opts.meta);
     // `null` bo'lsa (uslub fotodan boshqa) bepul manbalar bu so'rovni
-    // sinamaydi — zanjir darhol fal ga tushadi (`image-provider.ts`
+    // sinamaydi — zanjir bo'sh `failed` qaytaradi (`image-provider.ts`
     // `chainProvider`).
     const searchQuery = searchQueryFor(topic, s, opts.meta);
     const res = await provider.fetchImage(
@@ -439,7 +428,7 @@ export async function attachSlideImages(
    *
    * Ilgari ikkalasi ham bir xil jimlik bilan o'tardi: bloklangan hisob
    * ham, tugagan byudjet ham faqat `console.warn` qoldirardi va
-   * `[fal] image budget exhausted` satri hisob blokida ham chiqardi.
+   * «image budget exhausted» satri hisob blokida ham chiqardi.
    * Endi blok XATO darajasida va sababi bilan yoziladi.
    */
   const tag = `[${provider.id}]`;

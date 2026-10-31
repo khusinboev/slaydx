@@ -1,159 +1,84 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Info, TriangleAlert } from "lucide-react";
 import { useCan } from "@/components/admin/shell";
-import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Forbidden, Skeleton } from "@/components/admin/ui";
-import { cn } from "@/lib/cn";
-import { fmtDateTime } from "@/lib/admin-format";
+import { Card, EmptyState, ErrorState, Forbidden, Segmented, Skeleton } from "@/components/admin/ui";
 import { AdminReauthCancelledError, adminErrorMessage, isAbortError } from "@/lib/admin-api/core";
-import { testProvider, type ProviderItem, type ProviderTestResult } from "@/lib/admin-api/providers";
+import { testProvider, type ProviderItem, type ProvidersResponse } from "@/lib/admin-api/providers";
 import { ProviderDeleteKeyDialog, ProviderKeyDialog, ProviderToggleDialog } from "./ProviderDialogs";
-import { KIND_LABEL, keyState, propagationNote } from "./format";
+import { ProviderCard, type TestState } from "./ProviderCard";
+import { PurposeCard } from "./PurposeCard";
+import { SummaryStrip } from "./SummaryStrip";
+import { SystemSection } from "./SystemSection";
+import { PERIODS, propagationNote, providerNeedsAttention, type Period } from "./format";
 import { useProviders } from "./useProviders";
 
 function Loading() {
   return (
-    <Card>
-      <div aria-busy="true" aria-label="Yuklanmoqda">
+    <div aria-busy="true" aria-label="Yuklanmoqda" className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="flex flex-col gap-2 border-t px-4 py-4 first:border-t-0">
-            <Skeleton className="h-4 w-48 max-w-full" />
-            <Skeleton className="h-3 w-72 max-w-full" />
-          </div>
+          <Skeleton key={i} className="h-[88px] w-full rounded-xl" />
         ))}
       </div>
-    </Card>
+      {[0, 1, 2].map((i) => (
+        <Skeleton key={i} className="h-32 w-full rounded-xl" />
+      ))}
+    </div>
   );
 }
 
-type TestState = { status: "running" } | ({ status: "done" } & ProviderTestResult);
+const NEED_RANK = { required: 0, recommended: 1, optional: 2 } as const;
 
-function Row({
-  item,
-  canEdit,
-  canStoreKeys,
-  test,
-  onToggle,
-  onKey,
-  onDeleteKey,
-  onTest,
-}: {
-  item: ProviderItem;
-  canEdit: boolean;
-  canStoreKeys: boolean;
-  test: TestState | undefined;
-  onToggle: (item: ProviderItem) => void;
-  onKey: (item: ProviderItem) => void;
-  onDeleteKey: (item: ProviderItem) => void;
-  onTest: (item: ProviderItem) => void;
-}) {
-  const state = keyState(item);
-  return (
-    <li data-provider={item.id} data-enabled={item.enabled ? "1" : "0"} className="flex flex-wrap items-start gap-x-5 gap-y-3 border-t px-4 py-3.5 first:border-t-0">
-      <div className="min-w-[min(100%,14rem)] flex-1">
-        <p className="text-[13.5px] font-semibold">{item.label}</p>
-        <p className="text-muted-foreground mt-0.5 font-mono text-[11.5px] break-all">{item.id}</p>
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {item.kinds.map((k) => (
-            <Badge key={k}>{KIND_LABEL[k]}</Badge>
-          ))}
-        </div>
-        {item.updatedAt ? (
-          <p className="text-muted-foreground mt-1.5 text-xs">
-            O&apos;zgartirgan: <span className="text-foreground">{item.updatedBy ?? "noma'lum admin"}</span> · {fmtDateTime(item.updatedAt)}
-          </p>
-        ) : null}
-      </div>
+type Filter = "all" | "paid" | "free" | "attention";
 
-      <div className="flex min-w-[8.5rem] flex-col gap-1 text-[13px]">
-        <span className="text-muted-foreground text-xs">Holat</span>
-        {!item.implemented ? (
-          <Badge tone="neutral" title="Adapter hali yozilmagan: kalit saqlanadi, lekin hech narsa uni o'qimaydi">
-            Tez orada
-          </Badge>
-        ) : canEdit ? (
-          <label className="inline-flex min-h-9 cursor-pointer items-center gap-2">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={item.enabled}
-              aria-label={`${item.label}: yoqilgan`}
-              onClick={() => onToggle(item)}
-              className={cn(
-                "focus-visible:ring-ring relative h-6 w-11 shrink-0 rounded-full border transition-colors outline-none focus-visible:ring-2",
-                item.enabled ? "border-primary bg-primary" : "border-input bg-muted",
-              )}
-            >
-              <span
-                aria-hidden="true"
-                className={cn("bg-card absolute top-0.5 left-0.5 size-4.5 rounded-full shadow transition-transform", item.enabled ? "translate-x-5" : "translate-x-0")}
-              />
-            </button>
-            <span aria-hidden="true">{item.enabled ? "Yoqilgan" : "O'chirilgan"}</span>
-          </label>
-        ) : (
-          <Badge tone={item.enabled ? "success" : "warning"} dot>
-            {item.enabled ? "Yoqilgan" : "O'chirilgan"}
-          </Badge>
-        )}
-      </div>
-
-      <div className="flex min-w-[10rem] flex-col gap-1 text-[13px]">
-        <span className="text-muted-foreground text-xs">Kalit</span>
-        <span data-key-state>
-          <Badge tone={state.tone} dot>
-            {state.label}
-          </Badge>
-        </span>
-        {!item.implemented ? null : !item.enabled ? <span className="text-badge-warning-text text-xs font-medium">O&apos;chirilgan: kalit ishlatilmaydi</span> : null}
-      </div>
-
-      {canEdit ? (
-        <div className="flex flex-col gap-2 sm:items-end">
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => onKey(item)} disabled={!canStoreKeys} title={canStoreKeys ? undefined : "Serverda shifrlash kaliti sozlanmagan"}>
-              {item.hasDbKey ? "Almashtirish" : "Kalitni kiritish"}
-            </Button>
-            {item.hasDbKey ? (
-              <Button size="sm" variant="dangerOutline" onClick={() => onDeleteKey(item)}>
-                O&apos;chirish
-              </Button>
-            ) : null}
-            {item.testable ? (
-              <Button size="sm" variant="ghost" loading={test?.status === "running"} onClick={() => onTest(item)}>
-                Tekshirish
-              </Button>
-            ) : null}
-          </div>
-          {test?.status === "done" ? (
-            <p role="status" data-test-result={test.ok ? "ok" : "fail"} className={cn("max-w-xs text-xs font-medium sm:text-right", test.ok ? "text-badge-success-text" : "text-destructive")}>
-              {test.message}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-    </li>
-  );
+function matches(item: ProviderItem, filter: Filter): boolean {
+  if (filter === "paid") return item.billing !== "free";
+  if (filter === "free") return item.billing === "free";
+  if (filter === "attention") return providerNeedsAttention(item) || !item.usable;
+  return true;
 }
 
 /**
- * `/admin/providers` «Provayderlar» (program-17 decision D7; `settings.view`, edits `settings.edit` with step-up):
- * one row per AI provider with its on/off switch, where its key comes from (the encrypted database, the env var
- * or nowhere) and the actions Kalitni kiritish / Almashtirish / O'chirish / Tekshirish. A key is typed into a
- * password field and never shown again; roles without edit rights see no hint at all. Permissions are enforced
- * by the API; hiding the controls is cosmetic.
+ * `/admin/providers` «Provayderlar» (program-17 D7, redesigned 2026-10-31; `settings.view`, edits `settings.edit` with
+ * step-up). One page answers three questions in plain words:
+ *   1. What does the product need each provider FOR, and is the current setup enough? (purpose cards, with the
+ *      provider/model order editable right there);
+ *   2. Which providers cost money, which are free, and how much has each been used? (provider cards, today / 7 / 30
+ *      days, daily trend, split by kind);
+ *   3. Is the machinery behind them healthy? (processes, circuit breakers, limiters).
+ * Every provider action is here: switch on/off, key in / replace / delete, live test. A key is typed into a password
+ * field and never shown again; roles without edit rights see no hint at all. Permissions are enforced by the API;
+ * hiding the controls is cosmetic.
  */
 export function ProvidersPage() {
   const canEdit = useCan("settings.edit");
-  const { state, reload, replace } = useProviders();
+  const { state, refreshing, reload } = useProviders();
   const [keyFor, setKeyFor] = useState<ProviderItem | null>(null);
   const [deleteFor, setDeleteFor] = useState<ProviderItem | null>(null);
   const [toggleFor, setToggleFor] = useState<ProviderItem | null>(null);
   const [tests, setTests] = useState<Record<string, TestState>>({});
+  const [period, setPeriod] = useState<Period>("d30");
+  const [filter, setFilter] = useState<Filter>("all");
 
-  const data = state.status === "ready" ? state.data : null;
+  const data: ProvidersResponse | null = state.status === "ready" ? state.data : null;
   const propagationSec = data?.propagationSec ?? 30;
+
+  const byId = useMemo(() => Object.fromEntries((data?.items ?? []).map((i) => [i.id, i])) as Record<string, ProviderItem>, [data]);
+  const purposeTitles = useMemo(() => Object.fromEntries((data?.purposes ?? []).map((p) => [p.id, p.title])), [data]);
+  const sorted = useMemo(
+    () => [...(data?.items ?? [])].sort((a, b) => NEED_RANK[a.need] - NEED_RANK[b.need] || b.usage.d30.usd - a.usage.d30.usd || b.usage.d30.calls - a.usage.d30.calls || a.label.localeCompare(b.label)),
+    [data],
+  );
+  const visible = sorted.filter((i) => matches(i, filter));
+
+  const counts = {
+    all: sorted.length,
+    paid: sorted.filter((i) => matches(i, "paid")).length,
+    free: sorted.filter((i) => matches(i, "free")).length,
+    attention: sorted.filter((i) => matches(i, "attention")).length,
+  };
 
   async function runTest(item: ProviderItem) {
     setTests((t) => ({ ...t, [item.id]: { status: "running" } }));
@@ -170,40 +95,15 @@ export function ProvidersPage() {
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-5">
+    <div className="flex min-w-0 flex-col gap-6">
       <header className="flex flex-col gap-1">
-        <h1 className="text-[22px] font-semibold tracking-tight">Provayderlar</h1>
-        <p className="text-muted-foreground text-[13px]">
-          AI provayderlarning API kalitlari va yoqish/o&apos;chirish tugmalari. Bazadagi kalit muhitdagi (env) kalitdan ustun turadi; o&apos;chirilgan
-          provayder hech qachon ishlatilmaydi.{canEdit ? "" : " Sizda faqat ko'rish huquqi bor."}
+        <h1 className="text-[22px] font-semibold tracking-tight">Provayderlar va AI sozlamalari</h1>
+        <p className="text-muted-foreground max-w-3xl text-[13px]">
+          Saytdagi AI xizmatlari qaysi provayderlarda ishlaydi, qaysilari pullik, qancha ishlatilgan va hozirgi sozlama yetarlimi — hammasi shu
+          yerda. Kalit, yoqish/o&apos;chirish va ishlatish tartibini ham shu yerdan o&apos;zgartirasiz.{canEdit ? "" : " Sizda faqat ko'rish huquqi bor."}
+          {refreshing ? <span className="text-muted-foreground"> Yangilanmoqda…</span> : null}
         </p>
       </header>
-
-      <div role="note" className="bg-info/10 text-foreground flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-[13px]">
-        <Info className="text-info mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        <p>{propagationNote(propagationSec)}</p>
-      </div>
-
-      {data && !data.canStoreKeys ? (
-        <div role="alert" data-crypto-missing className="bg-warning/10 text-foreground flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-[13px]">
-          <TriangleAlert className="text-warning mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <p>
-            Kalitlarni saqlash uchun serverda shifrlash kaliti sozlanmagan (<span className="font-mono">PROVIDER_KEYS_KEY</span> yoki{" "}
-            <span className="font-mono">ADMIN_TOTP_KEY</span>). Provayderlarni yoqish va o&apos;chirish ishlayveradi.
-          </p>
-        </div>
-      ) : null}
-
-      {data && data.sealingKey === "admin" ? (
-        <div role="note" data-key-fallback className="bg-info/10 text-foreground flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-[13px]">
-          <Info className="text-info mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <p>
-            Tavsiya: serverda <span className="font-mono">PROVIDER_KEYS_KEY</span> o&apos;rnating. Hozir kalitlar{" "}
-            <span className="font-mono">ADMIN_TOTP_KEY</span> asosida shifrlanmoqda; <span className="font-mono">PROVIDER_KEYS_KEY</span> keyin
-            qo&apos;yilsa, saqlangan kalitlar o&apos;qilmay qoladi — uni birinchi kalit kiritishdan oldin qo&apos;ying.
-          </p>
-        </div>
-      ) : null}
 
       {state.status === "loading" ? <Loading /> : null}
       {state.status === "forbidden" ? <Forbidden /> : null}
@@ -212,48 +112,125 @@ export function ProvidersPage() {
           <ErrorState message={state.message} requestId={state.requestId} onRetry={reload} />
         </Card>
       ) : null}
-      {data && data.items.length === 0 ? (
-        <Card>
-          <EmptyState title="Provayderlar yo'q" description="Reyestrda provayder topilmadi." />
-        </Card>
-      ) : null}
-      {data && data.items.length > 0 ? (
-        <Card>
-          <CardHeader title="Provayderlar" description="Matn, rasm, ovoz, video va manba qidiruv xizmatlari." />
-          <ul>
-            {data.items.map((item) => (
-              <Row
-                key={item.id}
-                item={item}
-                canEdit={canEdit}
-                canStoreKeys={data.canStoreKeys}
-                test={tests[item.id]}
-                onToggle={setToggleFor}
-                onKey={setKeyFor}
-                onDeleteKey={setDeleteFor}
-                onTest={(it) => void runTest(it)}
+
+      {data ? (
+        <>
+          {!data.canStoreKeys ? (
+            <div role="alert" data-crypto-missing className="bg-warning/10 text-foreground flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-[13px]">
+              <TriangleAlert className="text-warning mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <p>
+                Kalitlarni saqlash uchun serverda shifrlash kaliti sozlanmagan (<span className="font-mono">PROVIDER_KEYS_KEY</span> yoki{" "}
+                <span className="font-mono">ADMIN_TOTP_KEY</span>). Provayderlarni yoqish va o&apos;chirish ishlayveradi.
+              </p>
+            </div>
+          ) : null}
+          {data.sealingKey === "admin" ? (
+            <div role="note" data-key-fallback className="bg-info/10 text-foreground flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-[13px]">
+              <Info className="text-info mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <p>
+                Tavsiya: serverda <span className="font-mono">PROVIDER_KEYS_KEY</span> o&apos;rnating. Hozir kalitlar{" "}
+                <span className="font-mono">ADMIN_TOTP_KEY</span> asosida shifrlanmoqda; <span className="font-mono">PROVIDER_KEYS_KEY</span> keyin
+                qo&apos;yilsa, saqlangan kalitlar o&apos;qilmay qoladi — uni birinchi kalit kiritishdan oldin qo&apos;ying.
+              </p>
+            </div>
+          ) : null}
+
+          <SummaryStrip data={data} />
+
+          <section aria-labelledby="purposes-h" className="flex flex-col gap-3">
+            <div>
+              <h2 id="purposes-h" className="text-base font-semibold">
+                Nima uchun nima kerak
+              </h2>
+              <p className="text-muted-foreground text-[12.5px]">
+                Har bir vazifa uchun: nima yetarli, qaysi provayderlar xizmat qila oladi va hozir qaysi biri ishlayapti. {propagationNote(propagationSec)}
+              </p>
+            </div>
+            <div className="grid gap-3 xl:grid-cols-2">
+              {data.purposes.map((p) => (
+                <PurposeCard key={p.id} purpose={p} providers={byId} canEdit={canEdit} propagationSec={propagationSec} onChanged={reload} />
+              ))}
+            </div>
+          </section>
+
+          <section aria-labelledby="providers-h" className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
+              <div className="min-w-0 flex-1">
+                <h2 id="providers-h" className="text-base font-semibold">
+                  Provayderlar
+                </h2>
+                <p className="text-muted-foreground text-[12.5px]">Kim pullik, kim bepul, qancha ishlatilgan. Bazadagi kalit serverdagi (env) kalitdan ustun turadi.</p>
+              </div>
+              <Segmented
+                ariaLabel="Ishlatilish davri"
+                value={period}
+                onChange={(v) => setPeriod(v as Period)}
+                options={PERIODS.map((p) => ({ value: p.value, label: p.label }))}
               />
-            ))}
-          </ul>
-        </Card>
+              <Segmented
+                ariaLabel="Provayderlarni saralash"
+                value={filter}
+                onChange={(v) => setFilter(v as Filter)}
+                options={[
+                  { value: "all", label: `Hammasi ${counts.all}` },
+                  { value: "paid", label: `To'lovli ${counts.paid}` },
+                  { value: "free", label: `Bepul ${counts.free}` },
+                  { value: "attention", label: `Ishlamayotgan ${counts.attention}` },
+                ]}
+              />
+            </div>
+            {visible.length === 0 ? (
+              <Card>
+                <EmptyState title="Bu saralashda provayder yo'q" description="Boshqa saralashni tanlang." />
+              </Card>
+            ) : (
+              <div className="grid gap-3 xl:grid-cols-2">
+                {visible.map((item) => (
+                  <ProviderCard
+                    key={item.id}
+                    item={item}
+                    canEdit={canEdit}
+                    canStoreKeys={data.canStoreKeys}
+                    period={period}
+                    soumPerUsd={data.soumPerUsd}
+                    purposeTitles={purposeTitles}
+                    test={tests[item.id]}
+                    onToggle={setToggleFor}
+                    onKey={setKeyFor}
+                    onDeleteKey={setDeleteFor}
+                    onTest={(it) => void runTest(it)}
+                  />
+                ))}
+              </div>
+            )}
+            {data.otherUsage.length > 0 ? (
+              <p data-other-usage className="text-muted-foreground text-xs">
+                Eski provayderlar sarfi (30 kun): {data.otherUsage.map((o) => `${o.provider} — ${o.calls} ta so'rov, $${o.usd.toFixed(2)}`).join("; ")}. Ular endi ishlatilmaydi,
+                tarix umumiy sarfda saqlanadi.
+              </p>
+            ) : null}
+          </section>
+
+          <SystemSection system={data.system} />
+        </>
       ) : null}
 
       <ProviderKeyDialog
         item={keyFor}
         propagationSec={propagationSec}
         onClose={() => setKeyFor(null)}
-        onSaved={(item) => {
-          replace(item);
+        onSaved={() => {
           setKeyFor(null);
+          reload();
         }}
       />
       <ProviderDeleteKeyDialog
         item={deleteFor}
         propagationSec={propagationSec}
         onClose={() => setDeleteFor(null)}
-        onSaved={(item) => {
-          replace(item);
+        onSaved={() => {
           setDeleteFor(null);
+          reload();
         }}
         onStale={reload}
       />
@@ -261,9 +238,9 @@ export function ProvidersPage() {
         item={toggleFor}
         propagationSec={propagationSec}
         onClose={() => setToggleFor(null)}
-        onSaved={(item) => {
-          replace(item);
+        onSaved={() => {
           setToggleFor(null);
+          reload();
         }}
         onStale={reload}
       />

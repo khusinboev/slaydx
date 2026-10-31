@@ -338,7 +338,7 @@ test("`buildGameDoc` saralashni SHU dvigatelga uzatadi (statik dispatch shartnom
 });
 
 test("LLM kalitisiz muhitda `complete` berilmasa — `null` (shablon hujjat chiqmaydi)", async () => {
-  const keys = ["GEMINI_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY"] as const;
+  const keys = ["GEMINI_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"] as const;
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   for (const k of keys) delete process.env[k];
   try {

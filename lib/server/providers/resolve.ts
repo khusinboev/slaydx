@@ -99,6 +99,14 @@ export function invalidateProviderCache(): void {
   s.inflight = null;
 }
 
+/**
+ * Bumped by every invalidation. A loader that also fills a companion snapshot (the routing slots) reads it before
+ * its queries and applies its result only when it is unchanged, exactly like the provider snapshot below.
+ */
+export function providerCacheVersion(): number {
+  return state().version;
+}
+
 /** Age of the snapshot in ms, `Infinity` when never loaded. */
 export function providerCacheAgeMs(now: number = Date.now()): number {
   const s = state();

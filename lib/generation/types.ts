@@ -679,7 +679,7 @@ export type CostPart = {
   units: number;
   usd: number;
   /**
-   * `false`: the price book has no price for this part, so `usd` is 0 (fal models
+   * `false`: the price book has no price for this part, so `usd` is 0 (image models
    * without a documented price, TTS models missing from `TTS_PRICING`). The admin
    * reports it as «unpriced» instead of treating the 0 as real.
    */

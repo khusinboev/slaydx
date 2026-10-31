@@ -153,9 +153,8 @@ test("SAHIFA DARVOZASI inshoda o'tkazib yuboriladi (`essay.words` bo'lsa), eski 
  */
 async function liveish<T>(body: string, fn: () => Promise<T>): Promise<T> {
   const realFetch = globalThis.fetch;
-  const saved = { gemini: process.env.GEMINI_API_KEY, xai: process.env.XAI_API_KEY, polish: process.env.ESSAY_POLISH };
+  const saved = { gemini: process.env.GEMINI_API_KEY, polish: process.env.ESSAY_POLISH };
   process.env.GEMINI_API_KEY = "test-key";
-  delete process.env.XAI_API_KEY;
   // Avto-sayqal o'chiq: u yana bir necha chaqiruv qiladi va DARVOZA
   // qaroriga aloqasi yo'q.
   process.env.ESSAY_POLISH = "0";
@@ -180,7 +179,7 @@ async function liveish<T>(body: string, fn: () => Promise<T>): Promise<T> {
     return await fn();
   } finally {
     globalThis.fetch = realFetch;
-    for (const [k, v] of [["GEMINI_API_KEY", saved.gemini], ["XAI_API_KEY", saved.xai], ["ESSAY_POLISH", saved.polish]] as const) {
+    for (const [k, v] of [["GEMINI_API_KEY", saved.gemini], ["ESSAY_POLISH", saved.polish]] as const) {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
     }

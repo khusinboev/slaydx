@@ -316,16 +316,15 @@ type Reply = (url: string, body: string) => unknown;
 
 /** `globalThis.fetch` + kalitlarni almashtiradi va oxirida TIKLAYDI (`slide-live.test.mts` naqshi). */
 async function withLlm(reply: Reply, fn: () => Promise<void>) {
-  const saved = { fetch: globalThis.fetch, gemini: process.env.GEMINI_API_KEY, xai: process.env.XAI_API_KEY, stream: process.env.LLM_STREAM };
+  const saved = { fetch: globalThis.fetch, gemini: process.env.GEMINI_API_KEY, stream: process.env.LLM_STREAM };
   process.env.GEMINI_API_KEY = "test-key";
-  delete process.env.XAI_API_KEY;
   delete process.env.LLM_STREAM;
   globalThis.fetch = (async (url: string, init?: { body?: unknown }) => reply(String(url), String(init?.body ?? "")) as never) as unknown as typeof fetch;
   try {
     await fn();
   } finally {
     globalThis.fetch = saved.fetch;
-    for (const [name, v] of [["GEMINI_API_KEY", saved.gemini], ["XAI_API_KEY", saved.xai], ["LLM_STREAM", saved.stream]] as const) {
+    for (const [name, v] of [["GEMINI_API_KEY", saved.gemini], ["LLM_STREAM", saved.stream]] as const) {
       if (v === undefined) delete process.env[name];
       else process.env[name] = v;
     }

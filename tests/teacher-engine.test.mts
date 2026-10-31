@@ -414,7 +414,7 @@ test("TEACHER_ENGINE=0 — dvigatel chetlab o'tiladi (eski `write-specials` yo'l
   const prev = process.env.TEACHER_ENGINE;
   // `npm test` `.env.local` bilan yuradi — kalit bo'lsa eski yo'l HAQIQIY LLM ga
   // borib hujjat qaytaradi (va pul sarflaydi); kalitlarni vaqtincha olib qo'yamiz.
-  const keys = ["GEMINI_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY"] as const;
+  const keys = ["GEMINI_API_KEY", "OPENAI_API_KEY"] as const;
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   for (const k of keys) delete process.env[k];
   process.env.TEACHER_ENGINE = "0";
@@ -433,10 +433,8 @@ test("TEACHER_ENGINE=0 — dvigatel chetlab o'tiladi (eski `write-specials` yo'l
 
 test("LLM yo'q va `complete` berilmagan — dvigatel `null` (eski yo'lga qaytish)", async () => {
   const prevGemini = process.env.GEMINI_API_KEY;
-  const prevXai = process.env.XAI_API_KEY;
   const prevOpenai = process.env.OPENAI_API_KEY;
   delete process.env.GEMINI_API_KEY;
-  delete process.env.XAI_API_KEY;
   delete process.env.OPENAI_API_KEY;
   try {
     const meta = extractMeta(TOOL_BY_ID.glossary, BASE);
@@ -444,7 +442,6 @@ test("LLM yo'q va `complete` berilmagan — dvigatel `null` (eski yo'lga qaytish
     assert.equal(built, null);
   } finally {
     if (prevGemini !== undefined) process.env.GEMINI_API_KEY = prevGemini;
-    if (prevXai !== undefined) process.env.XAI_API_KEY = prevXai;
     if (prevOpenai !== undefined) process.env.OPENAI_API_KEY = prevOpenai;
   }
 });

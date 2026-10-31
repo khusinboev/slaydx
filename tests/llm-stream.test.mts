@@ -17,14 +17,14 @@ import { llmStream } from "../lib/generation/llm.ts";
  *  3. O'YLASH. `thought: true` qismlari javob EMAS; ular oqib chiqsa
  *     foydalanuvchi model mulohazasini o'qir, JSON esa buzilardi.
  *  4. YIQILISH — HALOKAT EMAS. Timeout, 5xx, oqimni rad etuvchi 4xx,
- *     kill-switch, xAI: hech biri throw bo'lmasin va matn baribir
+ *     kill-switch: hech biri throw bo'lmasin va matn baribir
  *     yetkazilsin (yoki halol `null`).
  */
 
 /** Bitta tutilgan so'rov. */
 type Caught = { url: string; body: string; method: string };
 
-type Env = { gemini?: string; xai?: string; stream?: string };
+type Env = { gemini?: string; stream?: string };
 
 /**
  * `globalThis.fetch` ni almashtiradi va oxirida TIKLAYDI.
@@ -42,15 +42,13 @@ async function withFetch(
   const realFetch = globalThis.fetch;
   const saved = {
     gemini: process.env.GEMINI_API_KEY,
-    xai: process.env.XAI_API_KEY,
     stream: process.env.LLM_STREAM,
   };
-  const put = (name: "GEMINI_API_KEY" | "XAI_API_KEY" | "LLM_STREAM", v: string | undefined) => {
+  const put = (name: "GEMINI_API_KEY" | "LLM_STREAM", v: string | undefined) => {
     if (v === undefined) delete process.env[name];
     else process.env[name] = v;
   };
   put("GEMINI_API_KEY", "gemini" in env ? env.gemini : "test-key");
-  put("XAI_API_KEY", env.xai);
   put("LLM_STREAM", env.stream);
   const calls: Caught[] = [];
   globalThis.fetch = (async (url: string, init?: { body?: string; method?: string }) => {
@@ -63,7 +61,6 @@ async function withFetch(
   } finally {
     globalThis.fetch = realFetch;
     put("GEMINI_API_KEY", saved.gemini);
-    put("XAI_API_KEY", saved.xai);
     put("LLM_STREAM", saved.stream);
   }
 }
@@ -276,25 +273,6 @@ test("LLM_STREAM=false — kill-switch, oqimsiz yo'l", async () => {
       assert.deepEqual(seen, ["Oqimsiz"]);
     },
     { stream: "false" },
-  );
-});
-
-test("xAI — oqim yo'q, bitta to'liq onText", async () => {
-  await withFetch(
-    () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ choices: [{ message: { content: "Grok javobi" } }] }),
-    }),
-    async (calls) => {
-      const seen: string[] = [];
-      const out = await llmStream("S", "U", 1200, { onText: (t) => seen.push(t) });
-      assert.equal(out, "Grok javobi");
-      assert.equal(calls.length, 1);
-      assert.ok(calls[0].url.includes("chat/completions"), calls[0].url);
-      assert.deepEqual(seen, ["Grok javobi"]);
-    },
-    { gemini: undefined, xai: "xai-key" },
   );
 });
 

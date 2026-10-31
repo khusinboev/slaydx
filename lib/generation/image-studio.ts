@@ -147,7 +147,7 @@ export async function buildImageArtifact(
   let drawn = 0;
   const raw = await mapPool(Array.from({ length: count }, (_, i) => i), 2, async (i) => {
     /*
-     * `rasm` — mustaqil pullik mahsulot, fal endi ishlatilmaydi. Provayder
+     * `rasm` — mustaqil pullik mahsulot. Provayder
      * foydalanuvchi tanlovidan (`model`: Gemini yoki ChatGPT). Gemini
      * lite ($0.034) matnni (ayniqsa o'zbekcha mavzu) aniq o'qiydi —
      * uslub farqi asosan promptga bog'liq (yuqoridagi izoh).

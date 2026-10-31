@@ -34,12 +34,6 @@ export function probeRequest(id: string, key: string, deps: ProbeDeps = {}): Req
       return { url: "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1", headers: { "x-goog-api-key": key } };
     case "anthropic":
       return { url: "https://api.anthropic.com/v1/models?limit=1", headers: { "x-api-key": key, "anthropic-version": "2023-06-01" } };
-    case "openrouter":
-      return { url: "https://openrouter.ai/api/v1/auth/key", headers: { Authorization: `Bearer ${key}` } };
-    case "xai":
-      return { url: "https://api.x.ai/v1/models", headers: { Authorization: `Bearer ${key}` } };
-    case "openai":
-      return { url: "https://api.openai.com/v1/models", headers: { Authorization: `Bearer ${key}` } };
     case "pexels":
       return { url: "https://api.pexels.com/v1/search?query=nature&per_page=1", headers: { Authorization: key } };
     case "pixabay":

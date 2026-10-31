@@ -95,9 +95,9 @@ const MAX_ATTEMPTS = 3;
 const sleep = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
 
 /**
- * Xabar matnidan timeout/abort ni taniydi — Gemini/xAI/OpenRouter/OpenAI
- * fetch yo'lida "aborted" (`AbortController`), Anthropic SDKda "timed
- * out"/"aborted" (`APIConnectionTimeoutError`/`APIUserAbortError`).
+ * Xabar matnidan timeout/abort ni taniydi — Gemini fetch yo'lida "aborted"
+ * (`AbortController`), Anthropic SDKda "timed out"/"aborted"
+ * (`APIConnectionTimeoutError`/`APIUserAbortError`).
  */
 function isTimeoutSignal(error: string): boolean {
   // `\b` — `ETIMEDOUT`/`UND_ERR_CONNECT_TIMEOUT` (ulanish uzilishi) timeout

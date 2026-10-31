@@ -9,28 +9,26 @@
  *
  * WP8: `.env` dagi `LLM_<ROL>=provider:model,provider:model,…` ro'yxati
  * `llm/chain.ts` orqali ZAXIRA ZANJIRIGA aylanadi (birinchisi 429/5xx dan
- * keyin ham yiqilsa — keyingisi). Har provayder `llm/{gemini,anthropic,
- * openrouter,xai,openai}.ts` adapteri orqali chaqiriladi.
+ * keyin ham yiqilsa — keyingisi). Har provayder `llm/{gemini,anthropic}.ts`
+ * adapteri orqali chaqiriladi.
  *
  * ENV BERILMAGAN holat — bu BOSHQA VOSITALARGA (slayd, kurs ishi,
  * tarjimon) TA'SIR QILMASLIGI kerak bo'lgan chegara: ular `llm.ts`
  * `llmComplete`/`llmGrounded`ni TO'G'RIDAN-TO'G'RI chaqiradi va WP8 ULARGA
  * UMUMAN TEGMAGAN. `complete(role, …)` o'zi ham env yo'q bo'lsa xuddi
- * o'sha standart provayderga (`llmProvider()` — Gemini bo'lsa Gemini,
- * bo'lmasa xAI) BITTA spec bilan tushadi — natijada xatti-harakat
+ * o'sha standart provayderga (`llmProvider()` — Gemini kaliti
+ * bo'lsa Gemini) BITTA spec bilan tushadi — natijada xatti-harakat
  * "hozirgidek" (Gemini standart), faqat endi `usage` HAM qaytadi (buni
  * eski `llmComplete` bermas edi — token sonini bilmasdi).
  */
-import { llmModel, llmProvider, type LlmOpts } from "./llm";
+import { llmProvider, type LlmOpts } from "./llm";
+import { effectiveRoute } from "../server/providers/route-effective";
 import { completeWithChain, type ChainResult, type ChainUsage } from "./llm/chain";
 import { withJsonRetry } from "./llm/failure";
 export { DeadlineError } from "./llm/chain";
 import { anthropicAdapter } from "./llm/anthropic";
 import { geminiAdapter } from "./llm/gemini";
-import { openaiAdapter } from "./llm/openai";
-import { openrouterAdapter } from "./llm/openrouter";
-import { parseRoleSpec, type ProviderAdapter, type ProviderId, type RoleSpec } from "./llm/types";
-import { xaiAdapter } from "./llm/xai";
+import type { ProviderAdapter, ProviderId, RoleSpec } from "./llm/types";
 import { costUsd } from "./llm-pricing";
 import { recordLlmUsage } from "./job-cost";
 
@@ -67,27 +65,20 @@ export type RoleOpts = Pick<LlmOpts, "json" | "timeoutMs" | "thinking"> & {
 const ADAPTERS: Partial<Record<ProviderId, ProviderAdapter>> = {
   gemini: geminiAdapter,
   anthropic: anthropicAdapter,
-  openrouter: openrouterAdapter,
-  xai: xaiAdapter,
-  openai: openaiAdapter,
-};
-
-const ROLE_ENV: Record<LlmRole, string> = {
-  writer: "LLM_WRITER",
-  researcher: "LLM_RESEARCHER",
-  judge: "LLM_JUDGE",
-  fast: "LLM_FAST",
 };
 
 /**
- * `.env`da `LLM_<ROL>` bo'lmasa (yoki buzuq) — hozirgi standart provayder
- * (`llm.ts llmProvider()`, Gemini bo'lsa Gemini) bitta spec sifatida.
- * Kalit umuman yo'q bo'lsa `[]` — `complete()` `null` qaytaradi, aynan
- * eski `llmComplete` ham kalitsiz `null` qaytargani kabi.
+ * The provider:model chain of `role`, first = preferred, the rest = fallbacks. Precedence (admin «Provayderlar»):
+ * the admin's stored choice, else the `LLM_<ROL>` environment variable (how it ran before the page existed), else the
+ * current default provider (`llm.ts llmProvider()`: Gemini when its key resolves) with the default text model.
+ * No key at all gives `[]`, so `complete()` returns `null` exactly like the old `llmComplete` did without a key.
+ * `route-effective.ts` is the ONE place that decides this; the admin page shows the same result.
  */
-function defaultSpec(): RoleSpec[] {
-  const provider = llmProvider();
-  return provider ? [{ provider, model: llmModel() }] : [];
+export function roleSpecs(role: LlmRole): RoleSpec[] {
+  const eff = effectiveRoute(`llm.${role}`);
+  if (eff.source === "default" && !llmProvider()) return [];
+  // A slot entry whose provider has no adapter (a provider that was removed) is dropped instead of failing the call.
+  return eff.entries.flatMap((e) => (e.model && ADAPTERS[e.provider as ProviderId] ? [{ provider: e.provider as ProviderId, model: e.model }] : []));
 }
 
 /**
@@ -102,8 +93,7 @@ export async function complete(
   opts: RoleOpts = {},
 ): Promise<RoleResult | null> {
   const { maxTokens = 2048, timeoutMs = 40_000, ...rest } = opts;
-  const envSpecs = parseRoleSpec(process.env[ROLE_ENV[role]]);
-  const specs = envSpecs.length > 0 ? envSpecs : defaultSpec();
+  const specs = roleSpecs(role);
   if (specs.length === 0) return null;
 
   const deps = { adapters: ADAPTERS, log: (line: string) => console.log(line) };

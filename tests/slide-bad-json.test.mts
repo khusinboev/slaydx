@@ -238,9 +238,8 @@ async function withGemini(reply: (seen: Seen, index: number) => unknown, fn: (se
   resetBreakers();
   resetLimiters();
   resetFailureCounters();
-  const saved = { fetch: globalThis.fetch, warn: console.warn, log: console.log, g: process.env.GEMINI_API_KEY, x: process.env.XAI_API_KEY, s: process.env.LLM_STREAM };
+  const saved = { fetch: globalThis.fetch, warn: console.warn, log: console.log, g: process.env.GEMINI_API_KEY, s: process.env.LLM_STREAM };
   process.env.GEMINI_API_KEY = "test-key";
-  delete process.env.XAI_API_KEY;
   delete process.env.LLM_STREAM;
   const seen: Seen[] = [];
   const logs: string[] = [];
@@ -257,7 +256,7 @@ async function withGemini(reply: (seen: Seen, index: number) => unknown, fn: (se
     globalThis.fetch = saved.fetch;
     console.warn = saved.warn;
     console.log = saved.log;
-    for (const [k, v] of [["GEMINI_API_KEY", saved.g], ["XAI_API_KEY", saved.x], ["LLM_STREAM", saved.s]] as const) {
+    for (const [k, v] of [["GEMINI_API_KEY", saved.g], ["LLM_STREAM", saved.s]] as const) {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
     }

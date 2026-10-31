@@ -334,7 +334,7 @@ test("`buildGameDoc` flesh kartalarni SHU dvigatelga uzatadi (dispatch shartnoma
 
 test("LLM kalitisiz muhitda `complete` berilmasa — `null` (shablon hujjat chiqmaydi)", async () => {
   // `npm test` `.env.local` bilan yuradi — kalit bo'lsa haqiqiy LLM ga borib pul sarflaydi; vaqtincha olib qo'yamiz.
-  const keys = ["GEMINI_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY"] as const;
+  const keys = ["GEMINI_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"] as const;
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   for (const k of keys) delete process.env[k];
   try {

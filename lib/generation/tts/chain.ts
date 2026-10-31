@@ -46,6 +46,7 @@ import {
   ttsUsageCost,
   ttsVoicesFor,
 } from "./types";
+import { ttsProviderRank } from "../../server/providers/route-effective";
 import { recordTts } from "../job-cost";
 import { currentSoumPerUsd } from "../llm-pricing";
 import { makeAzureTts } from "./azure";
@@ -91,7 +92,11 @@ export function ttsVoiceChain(lang: string, env: NodeJS.ProcessEnv = process.env
     if (parsed.length) return parsed;
   }
   // Table path: the language rows, then Gemini (off unless TTS_GEMINI_MODEL is set).
-  return [...ttsVoicesFor(lang), ...TTS_GEMINI_SPECS];
+  const table = [...ttsVoicesFor(lang), ...TTS_GEMINI_SPECS];
+  // The admin's voice-provider order (`tts.order` slot, admin «Provayderlar»). An operator's `TTS_VOICE_<LANG>` above
+  // still wins; here the stable sort only moves whole providers, so each provider keeps its own voice order.
+  const rank = ttsProviderRank();
+  return rank ? [...table].sort((a, b) => rank(a.provider) - rank(b.provider)) : table;
 }
 
 export type TtsProviderGroup = { provider: TtsProviderId; voices: string[] };

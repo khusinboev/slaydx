@@ -1,6 +1,5 @@
 import "server-only";
 import type { PoolClient } from "pg";
-import { falKey } from "../generation/image-provider-fal";
 import { pexelsKey } from "../generation/image-provider-pexels";
 import { pixabayKey } from "../generation/image-provider-pixabay";
 import { aishaKey } from "../generation/tts/aisha";
@@ -208,7 +207,7 @@ export async function aiCost(range: DateRange, groupBy: AiGroupBy): Promise<AiCo
 // ---------------------------------------------------------------------------
 // Providers
 
-export const PROVIDER_KEY_NAMES = ["gemini", "anthropic", "openai", "openrouter", "xai", "fal", "pexels", "pixabay", "azureTts", "aisha"] as const;
+export const PROVIDER_KEY_NAMES = ["gemini", "anthropic", "openai", "pexels", "pixabay", "azureTts", "aisha"] as const;
 export type ProviderKeyName = (typeof PROVIDER_KEY_NAMES)[number];
 export type ProviderKeys = Record<ProviderKeyName, boolean>;
 
@@ -227,10 +226,8 @@ export function providerKeys(): ProviderKeys {
   return {
     gemini: present(geminiKey()),
     anthropic: present(getProviderKey("anthropic")),
-    openai: present(getProviderKey("openai")),
-    openrouter: present(getProviderKey("openrouter")),
-    xai: present(getProviderKey("xai")),
-    fal: present(falKey()),
+    // OpenAI is used for the «ChatGPT» image choice only (registry id `openai-image`).
+    openai: present(getProviderKey("openai-image")),
     pexels: present(pexelsKey()),
     pixabay: present(pixabayKey()),
     azureTts: present(azureKey()) && present(azureRegion()),

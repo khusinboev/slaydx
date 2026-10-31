@@ -2,7 +2,7 @@
  * Pexels bepul stock-foto provayderi (AUDIT-9 P3).
  *
  * Zanjirning BIRINCHI bo'g'ini (`chainProvider([pexelsProvider,
- * pixabayProvider, falProvider])`, `image-provider.ts` `pickProvider`).
+ * pixabayProvider])`, `image-provider.ts` `pickProvider`).
  * Faqat oddiy `slide` vositasi uchun ishlaydi va faqat uslub `photo`
  * bo'lganda (`ask.searchQuery` bo'lmasa — pastga qarang — darhol
  * o'tkazib yuboriladi, tarmoqqa chiqilmaydi).
@@ -14,8 +14,9 @@
  * (`slide-images.ts`) uni yuklab `data:` ga aylantiradi va PNG/JPEG
  * baytlarini SNIFF qiladi (soxta MIME'ga ishonmaydi).
  */
-import { photoOrientation, requestBudget, type FalFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
+import { photoOrientation, requestBudget, type ImageFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
 import { getProviderKey } from "../server/providers/resolve";
+import { recordProviderCall } from "./provider-calls";
 
 const PEXELS_URL = "https://api.pexels.com/v1/search";
 
@@ -30,7 +31,7 @@ export function pexelsKey() {
  * ma'nosiz, `chainProvider` shu provayderni DEKA OXIRIGACHA belgilaydi.
  * 429 — vaqtinchalik so'rov chegarasi.
  */
-function pexelsReason(status: number): FalFailure {
+function pexelsReason(status: number): ImageFailure {
   if (status === 401 || status === 403) return "blocked";
   if (status === 429) return "rate";
   return "failed";
@@ -53,12 +54,16 @@ export async function requestPexelsImage(ask: ImageAsk, deadline?: number): Prom
   const budget = requestBudget(deadline);
   if (budget === null) return { ok: false, reason: "timeout", detail: "byudjet 2 s dan kam" };
 
+  // Usage counter for the admin «Provayderlar» page: one count per request that actually went out.
+  let sent = false;
   try {
     const url = `${PEXELS_URL}?query=${encodeURIComponent(query)}&orientation=${photoOrientation(ask.size)}&per_page=5`;
     const res = await fetch(url, {
       signal: AbortSignal.timeout(budget),
       headers: { Authorization: key },
     });
+    sent = true;
+    recordProviderCall("pexels", res.ok);
     if (!res.ok) {
       const reason = pexelsReason(res.status);
       const line = `${res.status} ${res.statusText || "request failed"}`;
@@ -79,6 +84,7 @@ export async function requestPexelsImage(ask: ImageAsk, deadline?: number): Prom
     const alt = photos.find((p) => (p.src?.large2x || p.src?.large) === url2)?.alt || query;
     return { ok: true, image: { url: url2, alt } };
   } catch (e) {
+    if (!sent) recordProviderCall("pexels", false);
     const msg = e instanceof Error ? e.message : "network";
     console.warn("[pexels]", msg);
     const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
@@ -88,8 +94,8 @@ export async function requestPexelsImage(ask: ImageAsk, deadline?: number): Prom
 
 export const pexelsProvider: ImageProvider = {
   id: "pexels",
-  // Stock API HTTP so'rovi — Gemini/fal chizishdan tezroq, lekin
-  // fal (8s) dan kamroq qilib qo'yish shart emas: aynan shu qiymat
+  // Stock API HTTP so'rovi — Gemini chizishdan tezroq, lekin juda
+  // qisqa qilib qo'yish shart emas: aynan shu qiymat
   // `deadline - Date.now() < minMs` bilan "so'rov umuman yubormaslik"
   // chegarasi, past qilinsa vaqt tugaganda ham behuda so'rov ketardi.
   minMs: 6_000,

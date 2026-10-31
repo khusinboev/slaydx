@@ -77,7 +77,7 @@ export type SpendGroupRow = SpendTotals & {
   units: number | null;
   /**
    * Calls of parts with no known price, recorded at usd 0: parts marked
-   * `priced: false` (fal models without a documented price, job-cost.ts) and
+   * `priced: false` (image models without a documented price, job-cost.ts) and
    * LLM parts with tokens but usd 0 (model missing from llm-pricing.ts).
    */
   unpricedCalls: number;
@@ -107,7 +107,7 @@ export type ToolSpendCoverage = SpendCoverage & { toolId: string };
 
 /**
  * The permanent limits of the data, true for every period. The former ten-sentence
- * list (stale fal.ai / «Gemini TTS is free» rows included) is replaced by
+ * list (stale provider / «Gemini TTS is free» rows included) is replaced by
  * `costCaveats`, which computes what applies, with real numbers, and ENDS with
  * these always-true notes (so the AI screen and the pricing screen both show them).
  */
@@ -433,6 +433,41 @@ export async function spendByProviderModel(db: Queryable, range: SpendRange): Pr
   }));
 }
 
+export type SpendPartDayRow = SpendTotals & {
+  /** Tashkent day, `YYYY-MM-DD`. */
+  day: string;
+  provider: string;
+  kind: string;
+  model: string;
+  units: number;
+};
+
+/**
+ * Spend per Tashkent day x provider x kind x model, from the same exploded parts as the other part groupings
+ * (so its sums equal `spendTotals`). Small by construction (a handful of providers and models per day): the
+ * admin «Provayderlar» page folds it into today / 7 / 30 day windows and a daily series.
+ */
+export async function spendByDayPart(db: Queryable, range: SpendRange): Promise<SpendPartDayRow[]> {
+  const spend = spendRowsSql(range);
+  const res = await db.query<SumRow & { day: string; provider: string; kind: string; model: string; units: string | number | null }>(
+    `WITH spend AS (${spend.sql})
+      SELECT to_char((s.at AT TIME ZONE '${TZ}')::date, 'YYYY-MM-DD') AS day,
+             ${PART_KEYS.provider} AS provider, ${PART_KEYS.kind} AS kind, ${PART_KEYS.model} AS model, ${PART_AGGREGATES}
+        ${PARTS_FROM}
+       GROUP BY 1, 2, 3, 4
+       ORDER BY 1, 2, 3, 4`,
+    spend.params,
+  );
+  return res.rows.map((r) => ({
+    day: String(r.day),
+    provider: String(r.provider),
+    kind: String(r.kind),
+    model: String(r.model),
+    ...toTotals(r),
+    units: n(r.units),
+  }));
+}
+
 export type ToolKindSpendRow = { toolId: string; kind: string; usd: number; unpricedCalls: number };
 
 /**
@@ -592,7 +627,7 @@ const partName = (r: FlaggedRow): string => `${r.provider}:${r.model}`;
  *   1. NEW jobs (finished after the rollout) without cost data, per tool;
  *   2. HISTORICAL jobs (finished before the first `ai_usage` row) without cost data;
  *   3. LLM models with tokens but no price (recorded at usd 0);
- *   4. other unpriced services (fal models, TTS models missing from the price book);
+ *   4. other unpriced services (image models, TTS models missing from the price book);
  *   5. estimated prices (default image price, TTS tokens estimated from audio length);
  *   6. Google Search grounding, billed per query with the free quota NOT deducted;
  *   7. free-LLM calls (outline, UDK, rewrite, polish): their share of the spend;

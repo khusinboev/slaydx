@@ -3,9 +3,12 @@ import { query } from "../db";
 import { log } from "../log";
 import { openProviderKey } from "./crypto";
 import { isProviderId } from "./registry";
+import { setRouteSnapshot } from "./route-resolve";
+import { checkRoute, isRouteId, type RouteEntry } from "./routes";
 import {
   PROVIDER_CACHE_TTL_MS,
   invalidateProviderCache,
+  providerCacheVersion,
   primeProviderKeys,
   registerProviderSource,
   type ProviderRuntime,
@@ -56,7 +59,54 @@ export async function loadProviderSnapshot(): Promise<ProviderSnapshot> {
   return out;
 }
 
-registerProviderSource(loadProviderSnapshot);
+/** Reports each unreadable route row once, so the 30 s reload does not repeat the same line. */
+const reportedBadRoutes = new Set<string>();
+
+/**
+ * Reads `ai_routes` into the route snapshot. A row the loader cannot read (unknown slot, entries that no longer
+ * pass `checkRoute`, e.g. a model that left the price book) is IGNORED: the slot keeps its env / built-in value.
+ */
+export async function loadRouteSnapshot(): Promise<ReadonlyMap<string, readonly RouteEntry[]>> {
+  const rows = await query<{ route: string; entries: unknown }>("SELECT route, entries FROM ai_routes");
+  const out = new Map<string, readonly RouteEntry[]>();
+  for (const r of rows) {
+    const check = isRouteId(r.route) ? checkRoute(r.route, r.entries) : null;
+    if (check?.ok) {
+      out.set(r.route, check.entries);
+      reportedBadRoutes.delete(r.route);
+    } else if (!reportedBadRoutes.has(r.route)) {
+      reportedBadRoutes.add(r.route);
+      log("warn", "[providers] saqlangan zanjir o'qilmadi, env/standart ishlatiladi", { route: r.route });
+    }
+  }
+  return out;
+}
+
+let lastRouteWarnAt = 0;
+
+/**
+ * The loader `resolve.ts` calls: provider keys plus the routing slots, in one refresh cycle. The routes are applied only
+ * when no invalidation happened meanwhile (the same rule `resolve.ts` applies to the provider snapshot): a load that read
+ * before an admin's COMMIT and finishes after the forced reload must not put stale routes back for a whole TTL.
+ */
+export async function loadProviderAndRouteSnapshots(): Promise<ProviderSnapshot> {
+  const version = providerCacheVersion();
+  const providers = await loadProviderSnapshot();
+  try {
+    const routes = await loadRouteSnapshot();
+    if (providerCacheVersion() === version) setRouteSnapshot(routes);
+  } catch (e) {
+    // A failing route read keeps the previous routes; provider keys must still refresh. Logged at most once a minute.
+    const now = Date.now();
+    if (now - lastRouteWarnAt > 60_000) {
+      lastRouteWarnAt = now;
+      log("warn", "[providers] ai_routes o'qib bo'lmadi: oxirgi qiymatlar ishlatiladi", { err: e });
+    }
+  }
+  return providers;
+}
+
+registerProviderSource(loadProviderAndRouteSnapshots);
 
 type Globals = typeof globalThis & { __slaydxProviderRefresh?: ReturnType<typeof setInterval> };
 const g = globalThis as Globals;

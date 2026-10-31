@@ -50,9 +50,21 @@ Prices: one place, `priceFor` (server); admin «Narxlar» page adjusts 25–1000
 - **Paynet** (JSON-RPC provider endpoint `/api/payments/paynet`, `docs/payments/PAYNET.md`): live, one service `serviceId 1`, payer = SlaydX ID; no IP allow-list (Paynet's real source differs from the document's ranges). Shared with Bandlik.uz by payer prefix `vk-` behind `PAYNET_SHARED_WITH_VAKANT` (OFF until Bandlik serves its endpoint). Commission 0 %.
 
 ## 5. AI providers
-- Text/LLM: Gemini (default), roles `LLM_WRITER/RESEARCHER/JUDGE/FAST` with fallbacks (Anthropic via `ANTHROPIC_WORKSPACE_ID` header when set, OpenRouter);
-  images: Gemini lite image (fal.ai code kept but dead); TTS: **Gemini** (`TTS_GEMINI_MODEL`, two voices: female Kore / male Charon,
+- Text/LLM: only **Gemini** (default) and **Anthropic** (via `ANTHROPIC_WORKSPACE_ID` header when set); roles `LLM_WRITER/RESEARCHER/JUDGE/FAST`
+  with fallbacks. xAI/Grok, OpenRouter and OpenAI-as-text were removed (2026-10-31); a leftover `LLM_<ROLE>` entry naming one of them is skipped with a
+  warn line and the valid entries keep working. Old `ai_usage`/`cost_json` rows of those providers stay readable in the admin cost reports.
+  Images: Gemini lite image for «Rasm»/pro slides, OpenAI gpt-image («ChatGPT» choice of «Rasm», `OPENAI_API_KEY`, registry id `openai-image`),
+  free stock Pexels → Pixabay for plain slides (fal.ai was removed); TTS: **Gemini** (`TTS_GEMINI_MODEL`, two voices: female Kore / male Charon,
   preview in the form). Gemini TTS preview quota ≈ 10 requests/min/model → chunks ≤ 1 400 chars, 90 s call timeout, pg rate limit `tts:gemini:rpm`.
+- **Admin «Provayderlar» (redesigned 2026-10-31)** — one page for everything about providers: purpose cards («Nima uchun nima kerak»: what each purpose
+  needs and whether the setup is enough — Yetarli / Yetarli, zaxirasiz / Yetarli emas / Yoqilmagan, `lib/server/providers/catalog.ts`), provider cards
+  (To'lovli / Bepul / Bepul limit bilan, real status, price note from the price book, usage today/7/30 days from `ai_usage`, free providers' request
+  counters from `provider_calls`), key in/replace/delete, on/off, live test, and system health (breakers, limiters). The old «AI xarajat → Provayderlar»
+  tab is gone (`?tab=providers` forwards here). **Routing slots** (`ai_routes`, migration 062, `lib/server/providers/routes.ts`): `llm.model` (default Gemini
+  text model), `llm.writer/researcher/judge/fast` (provider:model chains), `image.gemini` (image model), `tts.order` (voice-provider order). Precedence:
+  admin's stored choice > `LLM_*`/`GEMINI_*` env > built-in default, decided in ONE place (`providers/route-effective.ts`) which the generation layer
+  and the page both read; changes reach the other process within ~30 s. Only models of the price book can be chosen. `TTS_VOICE_<LANG>` still beats
+  the stored voice order. Writes need `settings.edit` + step-up + reason and are audited (`routes.set` / `routes.reset`).
 - Metering: `ai_usage` + `cost_json`; pricing tables in `lib/generation/llm-pricing.ts`. Roughly 25 % of price is AI cost; bonus points are a marketing cost.
 - Failure logging: `[llm] attempt failed`, `[llm] json repaired`, `[llm] stream anomaly` lines (worker logs). Slide JSON repair: `docs/llm/SLIDE-BAD-JSON.md`.
 

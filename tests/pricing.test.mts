@@ -233,8 +233,8 @@ test("kalitsiz xizmat sotilmaydi", async () => {
   /*
    * AYNAN N-6 (Sprint 14). `/api/auth/session` `llm` va `images`
    * bayroqlarini allaqachon qaytarardi, lekin UI da ikkalasi ham HECH
-   * QAYERDA o'qilmasdi. `FAL_KEY` yo'q bo'lsa «Rasm generate» to'liq
-   * ko'rinar va sotilardi: to'lov → navbat → «FAL_KEY missing» → xato →
+   * QAYERDA o'qilmasdi. Rasm kaliti yo'q bo'lsa «Rasm generate» to'liq
+   * ko'rinar va sotilardi: to'lov → navbat → «key missing» → xato →
    * qaytarish. Pul qaytadi, vaqt qaytmaydi.
    */
   // `videoProviders` (program-17 item 5): the video tool follows ITS providers, not the text / image keys.

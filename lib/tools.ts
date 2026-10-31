@@ -1473,8 +1473,8 @@ export type ToolFeatures = {
  * Bayroqlar `/api/auth/session` da allaqachon qaytarilardi, lekin UI da
  * `llm` ham, `images` ham HECH QAYERDA o'qilmasdi (N-6). Natijasi:
  *
- *   • `FAL_KEY` yo'q → «Rasm generate» to'liq ko'rinar va sotilardi.
- *     To'lov → navbat → `generateFalImage` «FAL_KEY missing» → xato →
+ *   • rasm kaliti yo'q → «Rasm generate» to'liq ko'rinar va sotilardi.
+ *     To'lov → navbat → rasm provayderi «key missing» → xato →
  *     qaytarish. Ya'ni «xizmat ishlamayapti» xabari eng qimmat yo'l
  *     bilan yetkazilardi: pul qaytadi, vaqt qaytmaydi.
  *

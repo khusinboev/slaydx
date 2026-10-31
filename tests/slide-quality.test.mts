@@ -475,9 +475,8 @@ test("clipLimit: statik qopqoqdan oshmaydi, pol shriftidagi sig'imgacha tushadi,
 type Reply = (url: string, body: { system: string; user: string }) => unknown;
 
 async function withLlm(reply: Reply, fn: (calls: { system: string; user: string }[]) => Promise<void>) {
-  const saved = { fetch: globalThis.fetch, gemini: process.env.GEMINI_API_KEY, xai: process.env.XAI_API_KEY };
+  const saved = { fetch: globalThis.fetch, gemini: process.env.GEMINI_API_KEY };
   process.env.GEMINI_API_KEY = "test-key";
-  delete process.env.XAI_API_KEY;
   const calls: { system: string; user: string }[] = [];
   globalThis.fetch = (async (url: string, init?: { body?: string }) => {
     const b = JSON.parse(String(init?.body ?? "{}")) as {
@@ -494,7 +493,6 @@ async function withLlm(reply: Reply, fn: (calls: { system: string; user: string 
     globalThis.fetch = saved.fetch;
     if (saved.gemini === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = saved.gemini;
-    if (saved.xai !== undefined) process.env.XAI_API_KEY = saved.xai;
   }
 }
 
@@ -665,9 +663,8 @@ test("repair: vaqt yetmasa (bosqich yoki ish muddati) — chaqiruv YO'Q", async 
 });
 
 test("repair: LLM kalitsiz yoki yupqa slayd yo'q — chaqiruv YO'Q", async () => {
-  const saved = { g: process.env.GEMINI_API_KEY, x: process.env.XAI_API_KEY };
+  const saved = { g: process.env.GEMINI_API_KEY };
   delete process.env.GEMINI_API_KEY;
-  delete process.env.XAI_API_KEY;
   try {
     const input = deck();
     const out = await repairThinSlides(input, meta, tpl, {}, later(), later());
@@ -675,7 +672,6 @@ test("repair: LLM kalitsiz yoki yupqa slayd yo'q — chaqiruv YO'Q", async () =>
     assert.deepEqual(out, input);
   } finally {
     if (saved.g !== undefined) process.env.GEMINI_API_KEY = saved.g;
-    if (saved.x !== undefined) process.env.XAI_API_KEY = saved.x;
   }
   await withLlm(
     () => jsonReply(good),

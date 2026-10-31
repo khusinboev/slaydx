@@ -116,7 +116,7 @@ test("canonical spend: dedupe, legacy, outcomes, Tashkent days, groupings, cover
   const costD = meter((c) => {
     c.addLlm(SONNET(10_000, 2_000));
     c.addUnpricedImage("fal", "fal-ai/flux/dev");
-    c.addLlm({ provider: "openrouter", model: "mystery-model", inputTokens: 100, outputTokens: 50 });
+    c.addLlm({ provider: "anthropic", model: "mystery-model", inputTokens: 100, outputTokens: 50 });
   });
   const genD = await gen({ tool: "pro-slide", status: "FAILED", finishedAt: tk(D, "13:00:00"), costJson: costD });
   await usage({ at: tk(D, "13:00:01"), source: "job", outcome: "failed", genId: genD, tool: "pro-slide", cost: costD });
@@ -360,7 +360,7 @@ test("canonical spend: dedupe, legacy, outcomes, Tashkent days, groupings, cover
     near(find("openai", "gpt-legacy")?.usd ?? -1, costC.usd, "legacy pair");
     assert.equal(find("gemini", "gemini-3.1-flash-lite-image")?.units, 2);
     assert.equal(find("fal", "fal-ai/flux/dev")?.unpricedCalls, 1);
-    assert.equal(find("openrouter", "mystery-model")?.unpricedCalls, 1);
+    assert.equal(find("anthropic", "mystery-model")?.unpricedCalls, 1);
   });
 
   await t.test("spendByProviderModel: an empty range gives no rows", async () => {

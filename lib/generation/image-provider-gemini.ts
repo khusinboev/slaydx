@@ -27,7 +27,8 @@
  * `steps[2]` ga surilardi va qattiq yo'l jimgina `failed` bera
  * boshlardi.
  */
-import { requestBudget, type FalFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
+import { geminiImageModelName } from "../server/providers/route-effective";
+import { requestBudget, type ImageFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
 import { recordImage } from "./job-cost";
 import { getProviderKey } from "../server/providers/resolve";
 
@@ -40,7 +41,6 @@ import { getProviderKey } from "../server/providers/resolve";
 export const GEMINI_IMAGE_CAP_MS = 120_000;
 
 const GEMINI_IMAGE_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
-const DEFAULT_MODEL = "gemini-3.1-flash-lite-image";
 const DEFAULT_SIZE = "1K";
 
 /**
@@ -54,8 +54,9 @@ const DEFAULT_SIZE = "1K";
 export const GEMINI_ASPECTS = ["1:1", "3:2", "2:3", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"] as const;
 export type GeminiAspect = (typeof GEMINI_ASPECTS)[number];
 
+/** The Gemini image model: the admin's choice (`image.gemini` slot), else `GEMINI_IMAGE_MODEL`, else the default. */
 export function geminiImageModel() {
-  return process.env.GEMINI_IMAGE_MODEL?.trim() || DEFAULT_MODEL;
+  return geminiImageModelName();
 }
 
 export function geminiImageSize() {
@@ -95,7 +96,7 @@ export function aspectFor(size: { width: number; height: number }): GeminiAspect
  * `blocked`, ya'ni `attachSlideImages` qolgan so'rovlarni umuman
  * yubormaydi. 429 — vaqtinchalik chastota chegarasi.
  */
-function geminiReason(status: number): FalFailure {
+function geminiReason(status: number): ImageFailure {
   if (status === 401 || status === 402 || status === 403) return "blocked";
   if (status === 429) return "rate";
   return "failed";
@@ -186,7 +187,7 @@ export async function requestGeminiImage(ask: ImageAsk, deadline?: number): Prom
     return { ok: false, reason: "no-key", detail: "GEMINI_API_KEY yo'q" };
   }
   /*
-   * 45 s (fal uchun mos shift) Gemini uchun YETMAYDI: o'lchandi —
+   * 45 s (stock manbalar uchun mos shift) Gemini uchun YETMAYDI: o'lchandi —
    * sarlavhagacha ~13 s, keyin 2.3 MB base64 tanani o'qish yana ~20 s,
    * uzunroq promptda 45 s dan oshadi. Abort esa `res.json()` ni
    * yiqitardi va xato «javobda rasm yo'q» bo'lib ko'rinardi (jonli
@@ -195,6 +196,8 @@ export async function requestGeminiImage(ask: ImageAsk, deadline?: number): Prom
   const budget = requestBudget(deadline, GEMINI_IMAGE_CAP_MS);
   if (budget === null) return { ok: false, reason: "timeout", detail: "byudjet 2 s dan kam" };
 
+  // Read once: a snapshot refresh between the request and the cost record must not bill another model.
+  const model = geminiImageModel();
   try {
     const res = await fetch(GEMINI_IMAGE_URL, {
       method: "POST",
@@ -204,7 +207,7 @@ export async function requestGeminiImage(ask: ImageAsk, deadline?: number): Prom
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: geminiImageModel(),
+        model,
         input: geminiInputParts(ask),
         response_format: {
           type: "image",
@@ -261,7 +264,7 @@ export async function requestGeminiImage(ask: ImageAsk, deadline?: number): Prom
      * `mime_type` yuborsa ham PNG/JPEG bo'lmagan bayt o'tmaydi.
      */
     // Pullik rasm — ish sarfiga (EXT-11; kontekstdan tashqarida no-op).
-    recordImage("gemini", geminiImageModel());
+    recordImage("gemini", model);
     return {
       ok: true,
       image: { url: `data:${part.mime};base64,${part.data}`, alt: ask.prompt.slice(0, 80) },
