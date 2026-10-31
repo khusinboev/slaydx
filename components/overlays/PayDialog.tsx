@@ -99,7 +99,8 @@ export function PayDialog() {
   const amountErr = topupAmountError(amount);
 
   function openPaynet() {
-    if (needLogin() || amountErr) return;
+    // `user` (the ID shown) can still be loading right after sign-in: stay on the list rather than open an empty step.
+    if (needLogin() || amountErr || !user) return;
     setError(null);
     setView("paynet");
   }

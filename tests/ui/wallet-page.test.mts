@@ -463,6 +463,24 @@ test("Hamyon Paynet: signed out → the Paynet row opens login, not the step", a
   assert.equal(useUi.getState().overlay, "login");
 });
 
+test("Hamyon Paynet: signed in but the user not loaded yet → stays on the method list (no empty step)", async () => {
+  // MUTATION: `!user` dropped from `openPaynet` → the dialog switches to an empty «Paynet orqali to'lash» view.
+  signInWithPaynet(true);
+  useAppStore.setState({ user: null });
+  stub();
+  mount();
+  await act(async () => {
+    useUi.getState().open("pay");
+  });
+  const dialog = screen.getByRole("dialog");
+  await act(async () => {
+    fireEvent.click(paynetRow(dialog)!);
+  });
+  assert.ok(paynetRow(screen.getByRole("dialog")), "still on the method list");
+  assert.ok(!within(screen.getByRole("dialog")).queryByRole("heading", { name: "Paynet orqali to'lash" }));
+  assert.equal(useUi.getState().overlay, "pay");
+});
+
 test("Hamyon Paynet: copy button writes the ID to the clipboard and says so", async () => {
   signInWithPaynet(true);
   stub();
