@@ -621,6 +621,52 @@ test("Paynet route (real Postgres)", { skip: SKIP_DB }, async (t) => {
     assert.equal((await wallet(uid)).balance, 10_003_000);
   });
 
+  await t.test("any amount (owner 2026-10-31): less / more / exactly the amount shown in the dialog → the PAID sum is credited once; bonus + ambassador on the paid sum", async () => {
+    const setPercent = async (key: string, n: number | null) => {
+      if (n === null) await query(`DELETE FROM app_settings WHERE key = $1`, [key]);
+      else await query(`INSERT INTO app_settings (key, value) VALUES ($1, $2::jsonb) ON CONFLICT (key) DO UPDATE SET value = $2::jsonb`, [key, JSON.stringify(n)]);
+    };
+    await setPercent("payment_bonus_percent", 10);
+    await setPercent("ambassador.percent", 5);
+    try {
+      const referrer = await mkUser("Ref Erer");
+      const uid = await mkUser("Pay Er", { balance: 700 });
+      await query(`INSERT INTO referrals (referee_user_id, referee_telegram_id, referrer_user_id, source) VALUES ($1, $2, $3, 'bot')`, [uid, 8_800_000 + ++seq, referrer]);
+      // The user typed 25 000 in the dialog and also opened a Click order for it: Paynet must neither need nor touch it.
+      const shown = await payments.createOrder({ userId: uid, provider: "click", purpose: "topup", amountSoum: 25_000, clickMethod: "card" });
+      let balance = 700;
+      let points = 0;
+      let refPoints = 0;
+      for (const paid of [18_000, 41_500, 25_000, 1_001]) {
+        const txn = nextTxn();
+        const r = await perform(uid, paid * 100, txn, {});
+        assert.equal(r.body.error, undefined, `${paid}: ${JSON.stringify(r.body)}`);
+        balance += paid;
+        points += Math.floor(paid * 0.1);
+        refPoints += Math.floor((paid * 5) / 100);
+        assert.equal((r.body.result!.fields as { balance: number }).balance, balance, `${paid}: the reply carries the balance after the PAID sum`);
+        // Paynet's retry of the same payment: 201, nothing more.
+        assert.equal((await perform(uid, paid * 100, txn, {})).body.error?.code, 201);
+        assert.equal((await perform(uid, 2_500_000, txn, {})).body.error?.code, 201, "a retry with another amount is still a duplicate");
+        const [o, ...rest] = await ordersOf(txn);
+        assert.equal(rest.length, 0);
+        assert.equal(Number(o!.amount_soum), paid, `${paid}: the order holds the paid sum, not the shown 25 000`);
+        assert.deepEqual(await wallet(uid), { balance, points }, `${paid}: payer`);
+        assert.deepEqual(await wallet(referrer), { balance: 0, points: refPoints }, `${paid}: ambassador`);
+      }
+      const l = await ledger(uid);
+      assert.deepEqual(l.filter((x) => x.kind === "topup").map((x) => Number(x.balance_delta)), [18_000, 41_500, 25_000, 1_001]);
+      assert.deepEqual(l.filter((x) => x.kind === "bonus").map((x) => Number(x.points_delta)), [1_800, 4_150, 2_500, 100]);
+      assert.deepEqual((await ledger(referrer)).map((x) => Number(x.points_delta)), [900, 2_075, 1_250, 50]);
+      const still = (await query<{ state: string }>(`SELECT state FROM payment_orders WHERE id = $1`, [shown.id]))[0]!;
+      assert.equal(still.state, shown.state, "the dialog's Click order is untouched by Paynet");
+      assert.notEqual(still.state, "paid");
+    } finally {
+      await setPercent("payment_bonus_percent", null);
+      await setPercent("ambassador.percent", null);
+    }
+  });
+
   await t.test("transactionId must be a positive safe integer (digit string ok) → else -32602; missing params → -32602", async () => {
     const uid = await mkUser();
     for (const bad of [0, -1, 1.5, "abc", "", "-7", 2 ** 53, true, {}]) {
