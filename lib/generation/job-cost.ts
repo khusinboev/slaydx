@@ -10,7 +10,7 @@
  * tannarx bilan hisoblardi.
  *
  * Yechim: sarf MANBADA yoziladi — LLM chaqiruvi (`llm-roles complete`,
- * `llm.ts` Gemini/xAI), rasm (`image-provider-gemini`), grounding
+ * `llm.ts` Gemini), rasm (`image-provider-gemini`), grounding
  * (`llmGrounded`), TTS (`tts/chain`) — ish KONTEKSTIDAGI hisoblagichga.
  * Kontekstni `buildArtifact` (`withJobCost`) ochadi; undan tashqaridagi
  * chaqiruv (so'rov yo'li: sayqal/qayta yozish/UDK, testlar) hech narsa
@@ -27,14 +27,14 @@
  * bir jarayonda birga yursa ham sarflar aralashmaydi.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
-import { FAL_USD_PER_MEGAPIXEL, GROUNDING_USD, IMAGE_PRICES, costUsd, falImageUnitUsd, imagePriceOf, imageUnitUsd, type UsageLike } from "./llm-pricing";
+import { GROUNDING_USD, IMAGE_PRICES, costUsd, imagePriceOf, imageUnitUsd, type UsageLike } from "./llm-pricing";
 import type { CostJson, CostPart } from "./types";
 
 /*
  * Every price lives in `llm-pricing.ts` (the price book); these re-exports keep the
  * historical import path working.
  */
-export { FAL_USD_PER_MEGAPIXEL, GROUNDING_USD, IMAGE_PRICES, falImageUnitUsd, imageUnitUsd };
+export { GROUNDING_USD, IMAGE_PRICES, imageUnitUsd };
 
 type Key = `${CostPart["kind"]}|${string}|${string}`;
 
@@ -76,7 +76,11 @@ export class JobCost {
     p.usd += count * (unitUsd ?? imageUnitUsd(model));
   }
 
-  /** An image from a model without a documented price: counted, usd 0, `priced: false`. */
+  /**
+   * An image from a model without a documented price: counted, usd 0, `priced: false`
+   * (`admin-cost.ts costCaveats` lists it). No recorder uses it today; kept because
+   * stored parts of this shape (images of providers that were removed) are still read by the reports.
+   */
   addUnpricedImage(provider: string, model: string, count = 1): void {
     const p = this.part("image", provider, model);
     p.calls += count;
@@ -244,15 +248,6 @@ export function recordImage(provider: string, model: string, count = 1): void {
 /** One successful image whose real cost is known (OpenAI: priced from the answer's token `usage`). */
 export function recordImageUsd(provider: string, model: string, unitUsd: number): void {
   store.getStore()?.addImage(provider, model, 1, unitUsd);
-}
-
-/** One successful fal.ai image (priced per megapixel when the model's price is documented). */
-export function recordFalImage(model: string, width: number, height: number): void {
-  const meter = store.getStore();
-  if (!meter) return;
-  const unitUsd = falImageUnitUsd(model, width, height);
-  if (unitUsd === null) meter.addUnpricedImage("fal", model);
-  else meter.addImage("fal", model, 1, unitUsd);
 }
 
 export function recordGrounding(queries = 1): void {

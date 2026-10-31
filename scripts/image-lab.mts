@@ -4,28 +4,32 @@
  * Bazaga yozmaydi, navbatga qo'ymaydi: `image-studio.ts` dagi haqiqiy
  * `composePrompt` funksiyasini TO'G'RIDAN-TO'G'RI chaqiradi (xuddi
  * `live-engine.mts` kabi), natijalarni diskka yozadi — ko'z bilan
- * tekshirish uchun. Har doim `premium` yo'ldan ishlaydi, chunki
- * ishlab chiqarishdagi `buildImageArtifact` ham shunday ishlaydi.
+ * tekshirish uchun. Ishlab chiqarishdagi «Rasm» vositasi kabi Gemini
+ * rasm provayderidan foydalanadi (`GEMINI_API_KEY` kerak).
  *
  * Foydalanish: npm run image-lab
  */
 import { writeFile, mkdir } from "node:fs/promises";
-import { generateFalImage, fetchImageBytes } from "../lib/generation/slide-images.ts";
+import { fetchImageBytes } from "../lib/generation/slide-images.ts";
+import { geminiProvider } from "../lib/generation/image-provider-gemini.ts";
 import { IMAGE_STYLES, composePrompt } from "../lib/generation/image-studio.ts";
 
 const OUT = "eval-out/image-lab";
 await mkdir(OUT, { recursive: true });
 
 async function save(name: string, prompt: string, w: number, h: number, seed?: number) {
-  const im = await generateFalImage(prompt, { width: w, height: h }, undefined, {
+  const res = await geminiProvider.fetchImage({
+    prompt,
+    size: { width: w, height: h },
+    styleId: "photo",
     premium: true,
     ...(seed == null ? {} : { seed }),
   });
-  if (!im) {
-    console.log(`  ✘ ${name}: rasm qaytmadi`);
+  if (!res.ok) {
+    console.log(`  ✘ ${name}: rasm qaytmadi (${res.reason}: ${res.detail})`);
     return;
   }
-  const bytes = await fetchImageBytes(im.url);
+  const bytes = await fetchImageBytes(res.image.url);
   if (!bytes) {
     console.log(`  ✘ ${name}: yuklab bo'lmadi`);
     return;

@@ -1,3 +1,4 @@
+import type { ImageSize } from "./image-provider";
 import { imageStyleById, withGrounding } from "./image-studio";
 import { parseLlmJson } from "./json";
 import { llmComplete, llmEnabled } from "./llm";
@@ -6,8 +7,6 @@ import type { SlideVisual } from "./slide-templates";
 import type { SlideModel } from "./slide-types";
 import type { DocMeta } from "./types";
 import { groundUzbekScene } from "./uz-gazetteer";
-
-type FalSize = { width: number; height: number };
 
 /**
  * Rasm promptiga ta'sir qiladigan meta maydonlari.
@@ -57,7 +56,7 @@ function localLine(meta: SlideImageMeta | undefined, scene: string): string {
  * (doska, illyustratsiya) va kadr so'zining o'zi past qadamli modelni
  * fotorealizmga qaytarib turardi.
  */
-function frameLine(size: FalSize) {
+function frameLine(size: ImageSize) {
   const portrait = size.height > size.width;
   return portrait
     ? `Vertical ${size.width}x${size.height} composition, subject fills the height, no empty band.`
@@ -68,7 +67,7 @@ function frameLine(size: FalSize) {
 export function composeSlideImagePrompt(
   topic: string,
   slide: Pick<SlideModel, "title" | "layout" | "subtitle" | "imageHint" | "quote">,
-  size: FalSize,
+  size: ImageSize,
   meta?: SlideImageMeta,
 ) {
   const hint = (slide.imageHint || "").trim();
@@ -126,7 +125,7 @@ export async function writeSlideImagePrompts(
       const slot = photoSlot(s.layout, visual);
       return slot ? { s, size: slotPixels(slot) } : null;
     })
-    .filter((x): x is { s: SlideModel; size: FalSize } => Boolean(x))
+    .filter((x): x is { s: SlideModel; size: ImageSize } => Boolean(x))
     .slice(0, MAX_PROMPT_JOBS);
 
   const fallback: Record<string, string> = {};

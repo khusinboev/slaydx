@@ -27,7 +27,7 @@
  * `steps[2]` ga surilardi va qattiq yo'l jimgina `failed` bera
  * boshlardi.
  */
-import { requestBudget, type FalFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
+import { requestBudget, type ImageFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
 import { recordImage } from "./job-cost";
 import { getProviderKey } from "../server/providers/resolve";
 
@@ -95,7 +95,7 @@ export function aspectFor(size: { width: number; height: number }): GeminiAspect
  * `blocked`, ya'ni `attachSlideImages` qolgan so'rovlarni umuman
  * yubormaydi. 429 — vaqtinchalik chastota chegarasi.
  */
-function geminiReason(status: number): FalFailure {
+function geminiReason(status: number): ImageFailure {
   if (status === 401 || status === 402 || status === 403) return "blocked";
   if (status === 429) return "rate";
   return "failed";
@@ -186,7 +186,7 @@ export async function requestGeminiImage(ask: ImageAsk, deadline?: number): Prom
     return { ok: false, reason: "no-key", detail: "GEMINI_API_KEY yo'q" };
   }
   /*
-   * 45 s (fal uchun mos shift) Gemini uchun YETMAYDI: o'lchandi —
+   * 45 s (stock manbalar uchun mos shift) Gemini uchun YETMAYDI: o'lchandi —
    * sarlavhagacha ~13 s, keyin 2.3 MB base64 tanani o'qish yana ~20 s,
    * uzunroq promptda 45 s dan oshadi. Abort esa `res.json()` ni
    * yiqitardi va xato «javobda rasm yo'q» bo'lib ko'rinardi (jonli

@@ -1141,7 +1141,7 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
    * `plan` — LLM dan OLDIN, reja tayyor bo'lishi bilanoq.
    *
    * Shu bitta hodisa jonli ko'rinishning butun poydevori: streaming
-   * ishlamasa ham (`LLM_STREAM=false`, xAI, proksi buferlashi)
+   * ishlamasa ham (`LLM_STREAM=false`, proksi buferlashi)
    * foydalanuvchi darhol to'g'ri sondagi QURUQ sahifalarni ko'radi,
    * matn esa keyin joyiga «yoziladi». Skelet aynan `fallbackSlides` —
    * ya'ni indekslar `writeSlidesWithLlm` ichidagi `plan` massivi bilan
@@ -1201,7 +1201,7 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
   /*
    * Rasm bosqichining hisoboti SAQLANADI.
    *
-   * Ilgari bu chaqiruvning natijasi tashlab yuborilardi: fal.ai hamma
+   * Ilgari bu chaqiruvning natijasi tashlab yuborilardi: rasm provayderi hamma
    * so'rovni rad etsa ham (jonli sinovda 19/19 — `403 User is locked`)
    * deka `COMPLETED` bo'lib, rasmsiz chiqar, foydalanuvchi esa buni
    * faqat ekranga qarab taxmin qilardi. Endi hisobot `doc.slideImages`

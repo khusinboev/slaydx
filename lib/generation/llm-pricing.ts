@@ -1,7 +1,7 @@
 /**
  * THE PRICE BOOK: every price the cost telemetry (`job-cost.ts`, `ai_usage`) uses
- * lives in this one file — LLM tokens (`PRICING`), images (`IMAGE_PRICES`,
- * `FAL_USD_PER_MEGAPIXEL`), Google Search grounding (`GROUNDING_USD`) and TTS
+ * lives in this one file — LLM tokens (`PRICING`), images (`IMAGE_PRICES`),
+ * Google Search grounding (`GROUNDING_USD`) and TTS
  * (`TTS_PRICING`). A paid kind with no row here is never priced at a silent 0: the
  * recorder marks the part `priced: false` (or `estimated` for a documented default)
  * and `admin-cost.ts costCaveats` lists it. Verify new numbers against
@@ -191,29 +191,6 @@ export function imageUnitUsd(model: string): number {
   if (known !== null) return known;
   console.warn(`[job-cost] noma'lum rasm modeli: ${model} — ${IMAGE_DEFAULT_USD} USD deb hisoblanadi`);
   return IMAGE_DEFAULT_USD;
-}
-
-/**
- * fal.ai price per started megapixel, by exact model id. Only models with a
- * documented price are listed: docs/research/provider-pricing.md §3 records
- * `fal-ai/flux/schnell` at $0.003 per megapixel (checked 2026-09-20) and no
- * price for the other FLUX variants. Unlisted models are recorded with their
- * image count, usd 0 and `priced: false`, so reports can show the gap.
- */
-export const FAL_USD_PER_MEGAPIXEL: Record<string, number> = {
-  "fal-ai/flux/schnell": 0.003,
-};
-
-/**
- * USD for one fal image of `width`×`height`, or `null` when the model has no
- * documented price. The megapixel count is rounded UP (an upper bound, like
- * `GROUNDING_USD`): fal bills whole megapixels.
- */
-export function falImageUnitUsd(model: string, width: number, height: number): number | null {
-  const perMp = FAL_USD_PER_MEGAPIXEL[model];
-  if (perMp === undefined) return null;
-  const mp = Math.max(1, Math.ceil((Math.max(0, width) * Math.max(0, height)) / 1_000_000));
-  return mp * perMp;
 }
 
 /* ══════════════════════════════ TTS ══════════════════════════════ */
