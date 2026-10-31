@@ -38,6 +38,13 @@ function emptyInput(): VideoInput {
   return videoInputFromValues({});
 }
 
+/*
+ * Form state = a `VideoInput` whose settings are normalized on every change, but whose `prompt` is the text EXACTLY AS
+ * TYPED. Running the prompt through `videoInputFromValues` per keystroke deleted the trailing space the moment it was
+ * typed, so two words could not be separated. The normalized view (`effective`) is what the price, the validation, the
+ * draft and the request use.
+ */
+
 export function VideoComposer({ tool }: { tool: ToolConfig }) {
   const router = useRouter();
   const loggedIn = useAppStore((s) => s.loggedIn);
@@ -56,16 +63,18 @@ export function VideoComposer({ tool }: { tool: ToolConfig }) {
 
   useEffect(() => {
     if (!restored) return;
-    save({ ...encodeVideoValues({ ...input, imageAssetId: "" }) });
+    save(encodeVideoValues(videoInputFromValues({ ...encodeVideoValues(input), imageAssetId: "" })));
   }, [input, restored, save]);
 
   // A provider that is no longer offered (key removed, switched off) falls back to the first available one.
   const provider = offered.includes(input.provider) ? input.provider : (offered[0] ?? input.provider);
-  const effective: VideoInput = provider === input.provider ? input : videoInputFromValues({ ...encodeVideoValues(input), provider });
+  const effective: VideoInput = videoInputFromValues({ ...encodeVideoValues(input), provider });
   const spec = videoProviderById(effective.provider);
 
-  const set = <K extends keyof VideoInput>(key: K, v: VideoInput[K]) => setInput((s) => ({ ...videoInputFromValues({ ...encodeVideoValues(s), provider: effective.provider, [key]: v }) }));
-  const setProvider = (id: string) => setInput((s) => videoInputFromValues({ ...encodeVideoValues(s), provider: id }));
+  const setPrompt = (v: string) => setInput((s) => ({ ...s, prompt: v }));
+  const set = <K extends Exclude<keyof VideoInput, "prompt">>(key: K, v: VideoInput[K]) =>
+    setInput((s) => ({ ...videoInputFromValues({ ...encodeVideoValues(s), provider: effective.provider, [key]: v }), prompt: s.prompt }));
+  const setProvider = (id: string) => setInput((s) => ({ ...videoInputFromValues({ ...encodeVideoValues(s), provider: id }), prompt: s.prompt }));
 
   const values: FormValues = encodeVideoValues(effective);
   const price = priceFor(tool, values);
@@ -96,8 +105,8 @@ export function VideoComposer({ tool }: { tool: ToolConfig }) {
         <Row label="Tavsif" hint="Kim, qayerda, nima qiladi, kamera qanday harakatlanadi" wide>
           <Field id="prompt">
             <LimitedTextarea
-              value={effective.prompt}
-              onChange={(v) => set("prompt", v)}
+              value={input.prompt}
+              onChange={setPrompt}
               limit={VIDEO_PROMPT_MAX}
               placeholder={tool.topicPlaceholder}
               rows={3}

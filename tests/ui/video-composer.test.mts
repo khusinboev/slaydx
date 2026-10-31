@@ -21,6 +21,13 @@ import { VIDEO_PARAMS } from "../../lib/generation/video-params.ts";
  *
  * Mutation (by hand): drop `paidOnly` from `ToolChrome` -> «paid balance» goes red; draw `provider` unconditionally ->
  * «single provider» goes red; send `seconds` as the Veo default after a Kling switch -> «lengths follow the provider» red.
+ *
+ * Space key (prompt kept as typed, normalized only on the way out) -- mutations, each turned the named tests red, then restored:
+ *   per-keystroke `videoInputFromValues({ prompt })` in the change handler -> «the space key works», «whitespace is normalized only on the way out», «a restored draft»;
+ *   submit sends `encodeVideoValues(input)` (raw)                          -> «whitespace is normalized only on the way out»;
+ *   validation on `input.prompt` (raw length)                              -> «validity is judged on the normalized prompt»;
+ *   draft saves the raw prompt                                             -> «whitespace is normalized only on the way out»;
+ *   `set()` / `setProvider()` drop the raw prompt                          -> «changing another setting mid-sentence».
  */
 afterEach(() => cleanup());
 
@@ -30,7 +37,7 @@ const tool = TOOL_BY_ID.video;
 const IMG = "0123456789abcdef01234567";
 
 type Call = { url: string; method: string; body?: unknown };
-function stubApi() {
+function stubApi(stored?: Record<string, unknown>) {
   const calls: Call[] = [];
   const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
   (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, opts?: RequestInit) => {
@@ -38,7 +45,7 @@ function stubApi() {
     const method = opts?.method ?? "GET";
     const body = typeof opts?.body === "string" ? JSON.parse(opts.body) : opts?.body;
     calls.push({ url, method, body });
-    if (url === "/api/forms/video/draft" && method === "GET") return json(200, { draft: null });
+    if (url === "/api/forms/video/draft" && method === "GET") return json(200, { draft: stored ? { data: stored, updatedAt: "now" } : null });
     if (url === "/api/forms/video/draft") return json(200, { ok: true, updatedAt: "now" });
     if (url === "/api/uploads/photo" && method === "POST") return json(200, { assetId: IMG, mime: "image/jpeg", size: 100, shape: "square" });
     if (url === `/api/uploads/photo/${IMG}`) return new Response("img", { status: 200 });
@@ -80,6 +87,22 @@ const typePrompt = async (text: string) => {
     fireEvent.change(ta, { target: { value: text } });
   });
 };
+
+const promptBox = () => document.querySelector('[data-field="prompt"] textarea') as HTMLTextAreaElement;
+/** Types like a browser: ONE change event per character, each appended to what the textarea shows RIGHT NOW. */
+const typeKeys = async (text: string) => {
+  const ta = promptBox();
+  assert.ok(ta, "prompt textarea");
+  const shown: string[] = [];
+  for (const ch of text) {
+    await act(async () => {
+      fireEvent.change(ta, { target: { value: ta.value + ch } });
+    });
+    shown.push(ta.value);
+  }
+  return shown;
+};
+const submitBody = (calls: Call[]) => calls.find((c) => c.url === "/api/generations" && c.method === "POST")?.body as { values: Record<string, unknown> } | undefined;
 
 test("COVERAGE: with two providers offered every VIDEO_PARAMS.id is drawn exactly once", async () => {
   stubApi();
@@ -156,6 +179,81 @@ test("submit body: provider, prompt, seconds, aspect, imageAssetId -- and the pi
   await waitFor(() => assert.ok(pushes.some((u) => u.includes("/uz/files/"))));
   const drafts = calls.filter((c) => c.method === "PUT" && c.url === "/api/forms/video/draft");
   for (const d of drafts) assert.equal((d.body as { data?: { imageAssetId?: string } }).data?.imageAssetId ?? "", "", "the picture id never reaches the draft");
+});
+
+test("the space key works: typing «salom dunyo» char by char keeps every space, and the payload carries the text", async () => {
+  const calls = stubApi();
+  await setup(["veo"]);
+  mount();
+  const shown = await typeKeys("salom dunyo");
+  const typed = [..."salom dunyo"].map((_, i) => "salom dunyo".slice(0, i + 1));
+  assert.deepEqual(shown, typed, "MUTATSIYA: prompt har tugmada normallashtirilsa («salom » -> «salom») qizaradi");
+  assert.equal(promptBox().value, "salom dunyo");
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: tool.submitLabel }));
+  });
+  await waitFor(() => assert.ok(submitBody(calls)));
+  assert.equal(submitBody(calls)!.values.prompt, "salom dunyo");
+});
+
+test("changing another setting mid-sentence does not eat the typed space (length, aspect, provider)", async () => {
+  stubApi();
+  await setup(["veo", "kling"]);
+  mount();
+  await typeKeys("salom ");
+  await pick("seconds", /8 soniya/);
+  assert.equal(promptBox().value, "salom ", "MUTATSIYA: set() xom promptni tashlab ketsa qizaradi");
+  await pick("aspect", /9:16/);
+  assert.equal(promptBox().value, "salom ");
+  await pick("provider", /Kling/);
+  assert.equal(promptBox().value, "salom ");
+  await typeKeys("dunyo");
+  assert.equal(promptBox().value, "salom dunyo");
+});
+
+test("whitespace is normalized only on the way out: the box shows what was typed, the payload and the draft are collapsed and trimmed", async () => {
+  const calls = stubApi();
+  await setup(["veo"]);
+  mount();
+  const raw = "  salom   dunyo \n";
+  const shown = await typeKeys(raw);
+  assert.deepEqual(shown, [...raw].map((_, i) => raw.slice(0, i + 1)), "every keystroke is shown exactly as typed");
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: tool.submitLabel }));
+  });
+  await waitFor(() => assert.ok(submitBody(calls)));
+  assert.equal(submitBody(calls)!.values.prompt, "salom dunyo", "MUTATSIYA: xom matn yuborilsa qizaradi");
+  const drafts = calls.filter((c) => c.method === "PUT" && c.url === "/api/forms/video/draft");
+  assert.ok(drafts.length > 0, "the draft was flushed on submit");
+  assert.equal((drafts[drafts.length - 1]!.body as { data: { prompt: string } }).data.prompt, "salom dunyo", "the draft keeps the normalized prompt");
+});
+
+test("validity is judged on the normalized prompt: spaces alone do not make a prompt", async () => {
+  const calls = stubApi();
+  await setup(["veo"]);
+  mount();
+  await typeKeys("a  b      ");
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: tool.submitLabel }));
+  });
+  await waitFor(() => assert.ok(screen.getByText("Videoda nima bo‘lishini yozing")));
+  assert.ok(!submitBody(calls), "MUTATSIYA: uzunlik xom matndan olinsa (9 belgi) qizaradi");
+});
+
+test("a restored draft shows its prompt and typing continues after it (space included)", async () => {
+  const calls = stubApi({ provider: "veo", prompt: "salom dunyo", seconds: 8, aspect: "9:16", imageAssetId: "" });
+  await setup(["veo"]);
+  mount();
+  await waitFor(() => assert.equal(promptBox().value, "salom dunyo"));
+  assert.equal(checked("seconds"), "8 soniya");
+  const shown = await typeKeys(" yana");
+  assert.equal(shown[0], "salom dunyo ", "the space right after the restored text stays");
+  assert.equal(promptBox().value, "salom dunyo yana");
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: tool.submitLabel }));
+  });
+  await waitFor(() => assert.ok(submitBody(calls)));
+  assert.deepEqual(submitBody(calls)!.values, { provider: "veo", prompt: "salom dunyo yana", seconds: 8, aspect: "9:16", imageAssetId: "" });
 });
 
 test("paid balance: bonus so'm does not count -- the short-balance hint names the PAID balance and the bonus", async () => {

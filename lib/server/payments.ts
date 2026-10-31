@@ -7,6 +7,7 @@ import { topUpInTx } from "./credits";
 import { log } from "./log";
 import { payPaymentBonusInTx } from "./payment-bonus";
 import { notifyAmbassador, payAmbassadorInTx, type AmbassadorPaid } from "./ambassador";
+import { notifyTopup, type TopupPaid } from "./topup-notice";
 import { MAX_TOPUP_SOUM, MIN_TOPUP_SOUM, topupRangeMessage } from "../topup-limits";
 
 /**
@@ -398,6 +399,7 @@ export async function settleOrder(
     ambassador: res.ambassador?.points,
   });
   // Not awaited: the provider's webhook must get its answer now, not after a slow Telegram call (never throws).
+  void notifyTopup(res.topup);
   void notifyAmbassador(res.ambassador);
   return res.outcome;
 }
@@ -411,6 +413,8 @@ export type SettleInTxResult = {
   bonusPercent: number;
   /** The referrer's ambassador bonus paid by this call (D4), for the post-commit DM; null when none. */
   ambassador: AmbassadorPaid | null;
+  /** The payer's «balance topped up» message data, for the post-commit DM: set only when THIS call credited a `topup` order; else null. */
+  topup: TopupPaid | null;
 };
 
 /**
@@ -429,7 +433,8 @@ export async function settleOrderInTx(
   let bonusPoints = 0;
   let bonusPercent = 0;
   let ambassador: AmbassadorPaid | null = null;
-  const done = (outcome: SettleOutcome): SettleInTxResult => ({ outcome, credited, bonusPoints, bonusPercent, ambassador });
+  let topup: TopupPaid | null = null;
+  const done = (outcome: SettleOutcome): SettleInTxResult => ({ outcome, credited, bonusPoints, bonusPercent, ambassador, topup });
   const row = await lockOrder(client, orderId);
   if (!row) return done({ status: "not_found", order: null });
   const order = toOrder(row);
@@ -493,6 +498,7 @@ export async function settleOrderInTx(
       const b = await payPaymentBonusInTx(client, { userId: order.userId, orderId: order.id, amountSoum: order.amountSoum });
       bonusPoints = b.points;
       bonusPercent = b.percent;
+      topup = { userId: order.userId, orderId: order.id, amountSoum: order.amountSoum, bonusPoints: b.points };
       /*
        * Ambassador bonus (D4, `lib/server/ambassador.ts`): the inviter of a referred payer earns N % of the
        * money actually paid (`amountSoum`, not the payer's bonus). Own savepoint; its failure never undoes this settlement.
@@ -678,6 +684,7 @@ export async function createPaidPaynetOrder(input: {
     ambassador: res.settled.ambassador?.points,
   });
   // Not awaited: Paynet's PerformTransaction must get its answer now (never throws).
+  void notifyTopup(res.settled.topup);
   void notifyAmbassador(res.settled.ambassador);
   return { status: "paid", order: res.order, providerTrnId: res.providerTrnId, balance: res.balance, bonusPoints: res.settled.bonusPoints };
 }
