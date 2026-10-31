@@ -27,6 +27,7 @@ const { NavProvider } = await import("../../components/nav/NavProvider.tsx");
 const { useUi } = await import("../../lib/ui.ts");
 const { useAppStore } = await import("../../lib/store.ts");
 const { TOOLS, visibleToolGroups } = await import("../../lib/tools.ts");
+const { servicesOfGroup } = await import("../../lib/services.ts");
 
 const calls: string[] = [];
 const tree = (href: string) => ["", { children: [href] }];
@@ -189,13 +190,14 @@ test("catalogue: every visible group (visibleToolGroups) with all its tools; mos
     const section = sheet()!.querySelector(`[data-create-group="${g.id}"]`)!;
     assert.equal(section.querySelector("h3")?.textContent, g.label);
     const ids = [...section.querySelectorAll("[data-create-tool]")].map((a) => a.getAttribute("data-create-tool"));
-    assert.deepEqual(ids, TOOLS.filter((t) => t.group === g.id).map((t) => t.id), g.id);
+    // Link-only services follow the group's tools; with no session features only the ungated ones show.
+    assert.deepEqual(ids, [...TOOLS.filter((t) => t.group === g.id).map((t) => t.id), ...servicesOfGroup(g.id, null).map((v) => v.id)], g.id);
   }
   const top = [...sheet()!.querySelectorAll("[data-create-top] [data-create-tool]")].map((a) => a.getAttribute("data-create-tool"));
   assert.deepEqual(top.slice(0, 2), ["crossword", "test"], "the user's most-used tools lead");
   assert.equal(top.length, 4);
   for (const a of sheet()!.querySelectorAll<HTMLAnchorElement>("[data-create-tool]")) {
-    const t = TOOLS.find((x) => x.id === a.getAttribute("data-create-tool"))!;
+    const t = TOOLS.find((x) => x.id === a.getAttribute("data-create-tool")) ?? { id: a.getAttribute("data-create-tool")!, slug: a.getAttribute("href")!.slice(4) };
     assert.equal(a.getAttribute("href"), `/uz/${t.slug}`);
     assert.ok(a.querySelector("svg"), `${t.id}: icon`);
     assert.ok(a.className.includes("min-h-[5.5rem]"), `${t.id}: ≥ 44 px target`);
@@ -204,6 +206,32 @@ test("catalogue: every visible group (visibleToolGroups) with all its tools; mos
   assert.equal(all.getAttribute("href"), "/uz/create");
   assert.equal(all.textContent, "Barchasi");
   assert.ok(all.className.includes("h-12"));
+});
+
+test("services in the sheet: icon + badge, gated by session features (chat/tests/domla off → hidden)", async () => {
+  fresh("/uz");
+  signedIn();
+  shell();
+  await settle();
+  await openSheet();
+  const seen = () => [...sheet()!.querySelectorAll<HTMLElement>("[data-create-service]")].map((a) => a.dataset.createTool);
+  assert.deepEqual(seen(), ["convert", "alifbo"], "ungated only");
+  const convert = sheet()!.querySelector<HTMLAnchorElement>('[data-create-tool="convert"]')!;
+  assert.equal(convert.getAttribute("href"), "/uz/convert");
+  assert.ok(convert.querySelector("svg"), "icon");
+  assert.match(convert.textContent!, /Tekin/);
+  assert.ok(convert.className.includes("min-h-[5.5rem]"));
+  cleanup();
+  await settle();
+  useUi.setState({ overlay: null, returnTo: null });
+  fresh("/uz");
+  useAppStore.setState({ features: { llm: true, images: true, telegram: false, telegramBot: null, chat: true, tests: true, domla: true } as never });
+  shell();
+  await settle();
+  await openSheet();
+  assert.deepEqual(seen(), ["chat", "convert", "alifbo", "tests", "domla"]);
+  assert.equal(sheet()!.querySelector('[data-create-group="talaba"] [data-create-tool="domla"]')?.getAttribute("href"), "/uz/domla");
+  useAppStore.setState({ features: null });
 });
 
 test("a tool tap (signed in): the sheet's entry is REPLACED by the tool page; back returns to the page under the sheet", async () => {

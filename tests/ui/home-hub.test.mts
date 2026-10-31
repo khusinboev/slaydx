@@ -35,6 +35,8 @@ const { HomeHub } = await import("../../components/home/HomeHub.tsx");
 const { useAppStore } = await import("../../lib/store.ts");
 const { useUi } = await import("../../lib/ui.ts");
 const { TOOLS, TOOL_BY_ID, visibleToolGroups, clientAdjustedPrice } = await import("../../lib/tools.ts");
+const { SERVICES, servicesOfGroup } = await import("../../lib/services.ts");
+const { TOOL_ICONS } = await import("../../components/shell/icons.tsx");
 const model = await import("../../components/home/hub/hub-model.ts");
 
 const pushes: string[] = [];
@@ -412,53 +414,83 @@ test("«Barcha vositalar»: one chip per visible group (registry), the chosen gr
     fireEvent.click(q(`[data-hub-group="${g.id}"]`)!);
     assert.equal(q(`[data-hub-group="${g.id}"]`)!.getAttribute("aria-pressed"), "true");
     const shown = [...document.querySelectorAll<HTMLAnchorElement>("[data-hub-tool]")];
-    const want = TOOLS.filter((t) => t.group === g.id);
+    const want = [
+      ...TOOLS.filter((t) => t.group === g.id).map((t) => ({ id: t.id as string, href: `/uz/${t.slug}` })),
+      ...servicesOfGroup(g.id, null).map((v) => ({ id: v.id as string, href: v.href })),
+    ];
     assert.deepEqual(shown.map((a) => a.dataset.hubTool), want.map((t) => t.id), g.id);
-    assert.deepEqual(shown.map((a) => a.getAttribute("href")), want.map((t) => `/uz/${t.slug}`));
+    assert.deepEqual(shown.map((a) => a.getAttribute("href")), want.map((t) => t.href));
   }
   assert.equal(q("[data-hub-catalogue]")!.getAttribute("href"), "/uz/create");
 });
 
-test("free tools: «Fayl konvertatsiya (tekin)» and «Alifbo o'giruvchi (tekin)» are link cards, side by side", () => {
+const ALL_ON = { llm: true, images: true, telegram: false, telegramBot: null, domla: true, chat: true, tests: true } as never;
+
+test("services live in the tool grid by group (no bottom list): Umumiy = chat, convert, alifbo; Talaba = tests, domla; each with an icon", () => {
   signIn();
+  useAppStore.setState({ features: ALL_ON });
   mount();
-  const convert = q("[data-hub-convert]")!;
-  const alifbo = q("[data-hub-alifbo]")!;
-  assert.equal(convert.getAttribute("href"), "/uz/convert");
-  assert.equal(alifbo.getAttribute("href"), "/uz/alifbo");
-  assert.match(convert.textContent!, /Fayl konvertatsiya \(tekin\)/);
-  assert.match(alifbo.textContent!, /Alifbo o'giruvchi \(tekin\)/);
-  assert.equal(convert.nextElementSibling, alifbo, "the alifbo card follows the converter card");
+  for (const old of ["convert", "alifbo", "domla", "tests", "chat"]) assert.ok(!q(`[data-hub-${old}]`), `no bottom card ${old}`);
+  const ids = (g: string) => {
+    fireEvent.click(q(`[data-hub-group="${g}"]`)!);
+    return [...document.querySelectorAll<HTMLElement>("[data-hub-service]")].map((a) => a.dataset.hubTool);
+  };
+  assert.deepEqual(ids("umumiy"), ["chat", "convert", "alifbo"]);
+  assert.deepEqual(ids("talaba"), ["tests", "domla"]);
+  assert.deepEqual(ids("oqituvchi"), []);
+  fireEvent.click(q('[data-hub-group="umumiy"]')!);
+  const hrefs = [...document.querySelectorAll<HTMLAnchorElement>("[data-hub-service]")].map((a) => a.getAttribute("href"));
+  assert.deepEqual(hrefs, ["/uz/chat", "/uz/convert", "/uz/alifbo"]);
+  for (const a of document.querySelectorAll("[data-hub-service]")) assert.ok(a.querySelector("svg"), "icon drawn");
+  const convert = q('[data-hub-tool="convert"]')!;
+  assert.match(convert.textContent!, /Fayl konvertatsiya/);
+  assert.match(convert.querySelector("[data-service-badge]")!.textContent!, /Tekin/);
+  assert.match(q('[data-hub-tool="alifbo"]')!.textContent!, /Alifbo o'giruvchi/);
+  // Every registry icon exists in the icon table (a missing one is silently dropped).
+  for (const v of SERVICES) assert.ok(TOOL_ICONS[v.icon], `icon ${v.icon}`);
 });
 
-test("hub card «Test ishlash» links to /uz/tests", () => {
+test("promo cards: «AI yordamchi» above the quick tools, «Qattiqqo'l domla» below; CTA ≥ 44 px, links, gated by login", () => {
   signIn();
+  useAppStore.setState({ features: ALL_ON });
   mount();
-  const card = q<HTMLAnchorElement>("[data-hub-tests]")!;
-  assert.ok(card, "the card exists");
-  assert.equal(card.getAttribute("href"), "/uz/tests");
-  assert.match(card.textContent!, /Test ishlash/);
+  const chat = q<HTMLAnchorElement>('[data-hub-promo="chat"]')!;
+  const domla = q<HTMLAnchorElement>('[data-hub-promo="domla"]')!;
+  assert.equal(chat.getAttribute("href"), "/uz/chat");
+  assert.equal(domla.getAttribute("href"), "/uz/domla");
+  assert.match(chat.textContent!, /Savol bering yoki hujjat buyuring/);
+  assert.match(chat.textContent!, /Kuniga 10 ta tekin/);
+  assert.match(chat.textContent!, /Suhbatni boshlash/);
+  assert.match(domla.textContent!, /Slaydingizni ovoz bilan himoya qiling/);
+  const quick = q("[data-hub-quick]")!;
+  assert.ok(chat.compareDocumentPosition(quick) & Node.DOCUMENT_POSITION_FOLLOWING, "chat before the grid");
+  assert.ok(quick.compareDocumentPosition(domla) & Node.DOCUMENT_POSITION_FOLLOWING, "domla after the grid");
+  assert.match(chat.querySelector("[data-promo-cta]")!.className, /min-h-11/);
+  assert.ok(chat.querySelector("svg"), "icon");
+  fireEvent.click(chat);
+  assert.ok(!q("[data-hub-signed-out]"), "signed in: no login");
 });
 
-test("«Qattiqqo'l domla» is a tile in the «Talaba» group and a card while features.domla; both hidden when off (owner report 2026-10-31)", () => {
+test("services follow their feature switches: chat / tests / domla hidden when off or unknown; convert + alifbo always", () => {
   signIn();
-  useAppStore.setState({ features: { llm: true, images: true, telegram: false, telegramBot: null, domla: true } as never });
-  mount();
-  assert.ok(q("[data-hub-domla]"), "card on");
-  fireEvent.click(q('[data-hub-group="talaba"]')!);
-  const tile = q<HTMLAnchorElement>('[data-hub-tool="domla"]')!;
-  assert.ok(tile, "tile in the Talaba group");
-  assert.equal(tile.getAttribute("href"), "/uz/domla");
-  fireEvent.click(q('[data-hub-group="oqituvchi"]')!);
-  assert.ok(!q('[data-hub-tool="domla"]'), "only in Talaba");
-  cleanup();
-
-  for (const features of [null, { llm: true, images: true, telegram: false, telegramBot: null, domla: false }]) {
+  const cases: [unknown, string[]][] = [
+    [null, ["convert", "alifbo"]],
+    [{ llm: true, images: true, telegram: false, telegramBot: null }, ["convert", "alifbo"]],
+    [{ llm: true, images: true, telegram: false, telegramBot: null, chat: true }, ["chat", "convert", "alifbo"]],
+    [{ llm: true, images: true, telegram: false, telegramBot: null, chat: false, tests: true }, ["convert", "alifbo", "tests"]],
+    [{ llm: true, images: true, telegram: false, telegramBot: null, domla: true }, ["convert", "alifbo", "domla"]],
+  ];
+  for (const [features, want] of cases) {
     useAppStore.setState({ features: features as never });
     mount();
-    assert.ok(!q("[data-hub-domla]"), "card hidden when off");
-    fireEvent.click(q('[data-hub-group="talaba"]')!);
-    assert.ok(!q('[data-hub-tool="domla"]'), "tile hidden when off");
+    const seen: string[] = [];
+    for (const g of ["umumiy", "talaba"]) {
+      fireEvent.click(q(`[data-hub-group="${g}"]`)!);
+      for (const a of document.querySelectorAll<HTMLElement>("[data-hub-service]")) seen.push(a.dataset.hubTool!);
+    }
+    assert.deepEqual([...seen].sort(), [...want].sort(), JSON.stringify(features));
+    assert.equal(!!q('[data-hub-promo="chat"]'), want.includes("chat"), "chat promo");
+    assert.equal(!!q('[data-hub-promo="domla"]'), want.includes("domla"), "domla promo");
     cleanup();
   }
 });

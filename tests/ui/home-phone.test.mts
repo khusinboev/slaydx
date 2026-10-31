@@ -582,10 +582,37 @@ test("catalogue: the chip bar is sticky, prices and routes of the cards are unch
   const links = [...document.querySelectorAll("[data-catalogue-group] a[href^='/uz/']")].map((a) => a.getAttribute("href"));
   assert.deepEqual(
     links.sort(),
-    TOOLS.map((t) => `/uz/${t.slug}`).sort(),
-    "every tool reachable at its own route",
+    [...TOOLS.map((t) => `/uz/${t.slug}`), "/uz/convert", "/uz/alifbo"].sort(),
+    "every tool (and the ungated services) reachable at its own route",
   );
   assert.ok(document.body.textContent?.includes("so'm dan"));
+});
+
+test("catalogue: link-only services sit in their group with icon, description and «Tekin» badge; gated ones follow the session switches; searchable", async () => {
+  mountCatalogue();
+  const svc = (g: string) => [...document.querySelectorAll(`[data-catalogue-group="${g}"] [data-catalogue-service]`)].map((a) => a.getAttribute("data-catalogue-service"));
+  assert.deepEqual(svc("umumiy"), ["convert", "alifbo"]);
+  assert.deepEqual(svc("talaba"), [], "tests/domla/chat hidden without their switches");
+  const conv = document.querySelector<HTMLAnchorElement>('[data-catalogue-service="convert"]')!;
+  assert.equal(conv.getAttribute("href"), "/uz/convert");
+  assert.ok(conv.querySelector("svg"), "icon");
+  assert.match(conv.textContent!, /Word, PowerPoint, PDF/);
+  assert.match(conv.querySelector("[data-service-badge]")!.textContent!, /Tekin/);
+  cleanup();
+  useAppStore.setState({ hydrated: true, sessionChecked: true, loggedIn: true, features: { ...features, chat: true, tests: true, domla: true } } as never);
+  render(h(AppRouterContext.Provider, { value: router }, h(CreateGrid)));
+  assert.deepEqual(svc("umumiy"), ["chat", "convert", "alifbo"]);
+  assert.deepEqual(svc("talaba"), ["tests", "domla"]);
+  const input = document.querySelector("[data-catalogue-search]") as HTMLInputElement;
+  await act(async () => {
+    fireEvent.change(input, { target: { value: "domla" } });
+  });
+  assert.deepEqual(sections(), ["talaba"]);
+  assert.deepEqual(svc("talaba"), ["domla"]);
+  await act(async () => {
+    fireEvent.change(input, { target: { value: "alifbo" } });
+  });
+  assert.deepEqual(svc("umumiy"), ["alifbo"]);
 });
 
 test("catalogue: the video card is disabled with the reason (no link) while no video provider is keyed, reachable once one is", () => {
