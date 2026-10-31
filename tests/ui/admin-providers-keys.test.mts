@@ -8,8 +8,11 @@ import type * as CoreModule from "../../lib/admin-api/core.ts";
 import type * as IdentityModule from "../../components/admin/shell/admin-identity.tsx";
 import type * as ToasterModule from "../../components/admin/ui/Toaster.tsx";
 import type { ProviderItem, ProvidersResponse, PurposeItem, RouteItem, UsageTotals } from "../../lib/admin-api/providers.ts";
+import { SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 import { ProvidersPage } from "../../components/admin/providers/ProvidersPage.tsx";
 import { keyProblem } from "../../components/admin/providers/ProviderDialogs.tsx";
+import { buildCategories, kpis, parseTab, providerFigures, worstVerdict } from "../../components/admin/providers/categories.ts";
+import { fmtSoum } from "../../lib/admin-format.ts";
 import { compact, keyState, moneyText, providerStatus, routeText, sameEntries, unitText, usageLine } from "../../components/admin/providers/format.ts";
 
 /**
@@ -58,8 +61,14 @@ function stubFetch(responders: Array<(c: Call) => Response | Promise<Response>>)
   return calls;
 }
 
-function mount(node: ReactNode, role: Role = "owner") {
-  render(h(AdminIdentityProvider, { value: { adminId: "1", role, permissions: PERMS[role], name: "Admin", username: null, twoFactor: true }, children: node }));
+function mount(node: ReactNode, role: Role = "owner", query = "") {
+  window.history.replaceState(null, "", `/admin/providers${query}`);
+  render(
+    h(AdminIdentityProvider, {
+      value: { adminId: "1", role, permissions: PERMS[role], name: "Admin", username: null, twoFactor: true },
+      children: h(SearchParamsContext.Provider, { value: new URLSearchParams(query) as never }, node),
+    }),
+  );
 }
 
 const toasts = () => useToastStore.getState().toasts.map((t) => t.message);
@@ -104,7 +113,7 @@ const GEMINI = item({
   usable: true,
   need: "required",
   role: "Asosiy motor: barcha matn vositalari.",
-  purposes: ["text", "tts"],
+  purposes: ["text", "tts", "image"],
   usage: {
     today: tot(120, 3.5, { inputTokens: 2_000_000, outputTokens: 400_000 }),
     d7: tot(900, 21.25),
@@ -228,9 +237,11 @@ const VIDEO = purpose({
   detail: "Ixtiyoriy vosita.",
   setting: { key: "video.enabled", label: "Video yaratish yoqilgan", enabled: false },
 });
+const IMAGE = purpose({ id: "image", title: "Rasm chizish", providerIds: ["gemini"], detail: "Google Gemini ishlayapti." });
+const STOCK = purpose({ id: "stock", title: "Stok fotolar", need: "recommended", providerIds: ["pexels"], detail: "Pexels ishlamayapti.", verdict: "missing", headline: "Yetarli emas" });
 const BODY: ProvidersResponse = {
   items: ITEMS,
-  purposes: [TEXT, TTS, VIDEO],
+  purposes: [TEXT, IMAGE, STOCK, TTS, VIDEO],
   system: {
     processes: [{ process: "web-1", role: "web", lastSeenAt: "2026-10-31T10:00:00.000Z", stale: false }],
     breakers: [{ process: "web-1", name: "gemini", state: "closed", openUntil: null, failures: 0, stale: false }],
@@ -250,18 +261,16 @@ const cardOf = (id: string): HTMLElement => {
   assert.ok(el, `${id} kartasi yo'q`);
   return el;
 };
-const purposeOf = (id: string): HTMLElement => {
-  const el = document.querySelector<HTMLElement>(`[data-purpose="${id}"]`);
-  assert.ok(el, `${id} vazifa kartasi yo'q`);
-  return el;
-};
+const TAB_NAME = { overview: /^Umumiy/, text: /^Matn/, image: /^Rasm/, tts: /^Ovoz/, video: /^Video/, sources: /^Ilmiy/, listen: /^Tinglash/ } as const;
+const openTab = (id: keyof typeof TAB_NAME) => fireEvent.click(screen.getByRole("tab", { name: TAB_NAME[id] }));
+const editRoute = (title: string) => fireEvent.click(screen.getByRole("button", { name: `${title}: tahrirlash` }));
 const routeOf = (id: string): HTMLElement => {
   const el = document.querySelector<HTMLElement>(`[data-route="${id}"]`);
   assert.ok(el, `${id} sozlamasi ko'rinmayapti`);
   return el;
 };
 const button = (name: string) => screen.getByRole("button", { name }) as HTMLButtonElement;
-const ready = async () => screen.findByText("Tizim holati"); // rendered only once the data is in
+const ready = async () => screen.findByRole("tablist"); // rendered only once the data is in
 const SECRET = "Zq7Kp9Xw3Lm5Rt8Vb2NcQ9ZZ";
 /** Testing Library collapses every whitespace run (so'm has a no-break space) before matching. */
 const norm = (t: string): string => t.replace(/\s+/g, " ");
@@ -350,74 +359,183 @@ test("error: message + request id, retry loads again; forbidden: «Ruxsat yo'q»
 
 /* ───────────────────────────── the page ───────────────────────────── */
 
-test("ready: summary tiles, purpose cards with verdicts, provider cards with billing, need and status", async () => {
+test("ready: KPI tiles, overview table with a verdict per category, tab dots", async () => {
   const calls = stubFetch([() => json(200, BODY)]);
   mount(h(ProvidersPage));
   await ready();
   assert.equal(calls[0].url, "/api/admin/providers");
 
   const summary = within(document.querySelector<HTMLElement>("[data-summary]")!);
-  assert.ok(summary.getByText(norm(moneyText(82.93, 12_700))), "30-day total in USD and so'm");
-  assert.ok(summary.getByText("2 / 5"), "usable: gemini and anthropic (pexels is off, azure and kling have no key)");
-  assert.ok(summary.getByText("1 ta"), "attention: only the voice purpose without a fallback");
+  assert.ok(summary.getByText("$82,93"), "30-day total in USD");
+  assert.ok(summary.getByText((c) => norm(c) === `≈ ${norm(fmtSoum(Math.round(82.93 * 12_700)))} · 10 637 ta so'rov`), "so'm and requests in the hint");
+  assert.ok(summary.getByText("Matn (LLM) · 92%"), "biggest category with its share of the attributed spend (69,97 of 75,72)");
+  assert.ok(summary.getByText(/Google Gemini \$57,95 · Anthropic \(Claude\) \$12,02/), "its two biggest providers");
+  assert.ok(summary.getByText("2 / 5") && summary.getByText("2 to'lovli · 0 bepul"), "usable: gemini and anthropic");
+  assert.ok(summary.getByText("2 ta"), "attention: stock without a working provider and voice without a fallback");
+  assert.ok(summary.getByText("Stok fotolar: yetarli emas"), "the first reason is named");
 
-  assert.equal(document.querySelectorAll("[data-purpose]").length, 3);
-  assert.equal(purposeOf("text").getAttribute("data-verdict"), "ok");
-  assert.ok(within(purposeOf("text")).getByText("Yetarli"));
-  assert.ok(within(purposeOf("tts")).getByText("Yetarli, zaxirasiz"));
-  assert.match(purposeOf("tts").querySelector("[data-verdict-detail]")!.textContent ?? "", /to'xtasa bu vazifa ham to'xtaydi/);
-  assert.ok(within(purposeOf("video")).getByText("Sozlamalar", { selector: "a" }), "the flag lives in Sozlamalar");
+  // The tablist has the overview first, and one dot per category = the worst verdict of its purposes.
+  const tabs = screen.getAllByRole("tab");
+  assert.deepEqual(tabs.map((t) => t.textContent?.replace(/ — .*$/, "")), ["Umumiy", "Matn (LLM)", "Rasm", "Ovoz", "Video"]);
+  const dot = (id: keyof typeof TAB_NAME) => screen.getByRole("tab", { name: TAB_NAME[id] }).querySelector("[data-tab-dot]")?.getAttribute("data-tab-dot");
+  assert.equal(dot("text"), "ok");
+  assert.equal(dot("image"), "missing", "stock is missing");
+  assert.equal(dot("tts"), "single");
+  assert.equal(dot("video"), "off");
+  assert.ok(!screen.getByRole("tab", { name: TAB_NAME.overview }).querySelector("[data-tab-dot]"), "the overview has no dot");
 
-  assert.equal(document.querySelectorAll("[data-provider]").length, ITEMS.length);
+  const row = (id: string) => within(document.querySelector<HTMLElement>(`[data-category="${id}"]`)!);
+  assert.equal(document.querySelectorAll("[data-category]").length, 4);
+  assert.ok(row("text").getByText("Yetarli") && row("text").getByText("Google Gemini") && row("text").getByText("Anthropic (Claude)"), "primary and fallback");
+  assert.ok(row("text").getByText("$69,97"), "30-day spend of the category");
+  assert.ok(row("tts").getByText("Yetarli, zaxirasiz"));
+  assert.ok(row("tts").getByText("— (yo'q)"), "no second working voice");
+  assert.ok(row("video").getByText("O'chirilgan"));
+  assert.ok(document.querySelector("[data-other-usage]")?.textContent?.includes("xai"), "history of removed providers stays visible");
+  assert.ok(screen.getByText(/^Tizim holati \(/), "system health is at the bottom of the overview");
+  assert.equal(document.querySelector<HTMLDetailsElement>("details[data-system]")!.open, false, "folded by default");
+  assert.ok(!screen.queryByRole("alert"), "sealing key present: no warning");
+});
+
+test("tabs: «Ochish» switches, the tab is in the URL and survives a reload, arrow keys move, unknown ?tab= is the overview", async () => {
+  stubFetch([() => json(200, BODY)]);
+  mount(h(ProvidersPage));
+  await ready();
+  assert.equal(screen.getByRole("tab", { name: TAB_NAME.overview }).getAttribute("aria-selected"), "true");
+  assert.equal(window.location.search, "");
+  fireEvent.click(within(document.querySelector<HTMLElement>('[data-category="tts"]')!).getByRole("button", { name: "Ochish: Ovoz" }));
+  assert.equal(screen.getByRole("tab", { name: TAB_NAME.tts }).getAttribute("aria-selected"), "true");
+  assert.equal(window.location.search, "?tab=tts");
+  assert.ok(document.querySelector("[data-provider='azure']") && !document.querySelector("[data-category]"), "the voice table, not the overview");
+  openTab("overview");
+  assert.equal(window.location.search, "", "overview leaves the URL clean");
+  openTab("video");
+  assert.equal(window.location.search, "?tab=video");
+
+  // Keyboard: roving tabindex + arrows (Tabs primitive), the URL follows.
+  const video = screen.getByRole("tab", { name: TAB_NAME.video });
+  assert.equal(video.getAttribute("tabindex"), "0");
+  assert.equal(screen.getByRole("tab", { name: TAB_NAME.text }).getAttribute("tabindex"), "-1");
+  fireEvent.keyDown(video, { key: "ArrowLeft" });
+  assert.equal(screen.getByRole("tab", { name: TAB_NAME.tts }).getAttribute("aria-selected"), "true");
+  assert.equal(window.location.search, "?tab=tts");
+  fireEvent.keyDown(screen.getByRole("tab", { name: TAB_NAME.tts }), { key: "Home" });
+  assert.equal(screen.getByRole("tab", { name: TAB_NAME.overview }).getAttribute("aria-selected"), "true");
+  assert.equal(screen.getByRole("tab", { name: TAB_NAME.overview }).ownerDocument.activeElement, screen.getByRole("tab", { name: TAB_NAME.overview }), "focus follows");
+
+  // Reload: a fresh mount with ?tab= opens that tab.
+  cleanup();
+  stubFetch([() => json(200, BODY)]);
+  mount(h(ProvidersPage), "owner", "?tab=tts");
+  await ready();
+  assert.equal(screen.getByRole("tab", { name: TAB_NAME.tts }).getAttribute("aria-selected"), "true");
+  assert.ok(document.querySelector("[data-provider='azure']"));
+  cleanup();
+  stubFetch([() => json(200, BODY)]);
+  mount(h(ProvidersPage), "owner", "?tab=nope");
+  await ready();
+  assert.equal(screen.getByRole("tab", { name: TAB_NAME.overview }).getAttribute("aria-selected"), "true");
+  assert.equal(parseTab("listen"), "listen");
+  assert.equal(parseTab(null), "overview");
+});
+
+test("category tab: banner, provider rows with billing / status / key / usage, route order and spend bars", async () => {
+  stubFetch([() => json(200, BODY)]);
+  mount(h(ProvidersPage));
+  await ready();
+  openTab("text");
+  const banner = within(document.querySelector<HTMLElement>('[aria-label="Toifa holati"]')!);
+  assert.ok(banner.getByText("Yetarli") && banner.getByText(/zaxira bor/) && banner.getByText(/Yetarlilik:/));
+  assert.equal(document.querySelectorAll("[data-provider]").length, 2, "only the text providers");
+
   const gemini = within(cardOf("gemini"));
   assert.ok(gemini.getByText("To'lovli") && gemini.getByText("Majburiy") && gemini.getByText("Ishlayapti"));
-  assert.ok(gemini.getByText(/Narxi:/));
-  assert.match(cardOf("gemini").querySelector("[aria-label='30 kunlik taqsimot']")!.textContent ?? "", /Rasm.*169 ta rasm/, "the image line carries its own unit");
-  assert.match(cardOf("gemini").textContent ?? "", /Ishtirok etadi: Matn yozish va baholash · Ovoz \(TTS\)/);
+  assert.ok(gemini.getByText(/\$2 kirish/), "price note in the name cell");
   assert.equal(gemini.getByRole("switch").getAttribute("aria-checked"), "true");
   assert.equal(cardOf("gemini").querySelector("[data-key-state]")!.textContent, "Serverda (env)");
-  assert.ok(gemini.getByRole("button", { name: "Kalitni kiritish" }));
+  assert.ok(gemini.getByRole("button", { name: "Kalitni kiritish" }) && gemini.getByRole("button", { name: "Tekshirish" }));
   assert.ok(!gemini.queryByRole("button", { name: "O'chirish" }), "nothing stored: nothing to delete");
+  // Gemini serves text AND voice: in the Matn tab its 30-day figure is the text share only ($57,95), not the $70,91 total.
+  assert.ok(gemini.getByText("$57,95") && !gemini.queryByText("$70,91"), "30 days are split by kind across tabs");
+  assert.ok(gemini.getByText("9 847 ta so'rov"));
 
   const claude = within(cardOf("anthropic"));
   assert.equal(cardOf("anthropic").querySelector("[data-key-state]")!.textContent, "Bazada …a1B2");
   assert.ok(claude.getByRole("button", { name: "Almashtirish" }) && claude.getByRole("button", { name: "O'chirish" }));
   assert.ok(claude.getByText("Dilnoza Admin") && claude.getByText(/01\.10\.2026 14:30/), "who changed it, Tashkent time");
 
+  // Right column: numbered route entries with state, then the spend bars.
+  const slot = within(document.querySelector<HTMLElement>('[data-route-slot="llm.writer"]')!);
+  assert.ok(slot.getByText("Yozuvchi") && slot.getByText("Google Gemini · gemini-3.7-flash") && slot.getByText("Ishlayapti"));
+  assert.equal(document.querySelector("[data-route-slot='llm.writer'] [data-entry='0']")!.getAttribute("data-usable"), "1");
+  const spend = [...document.querySelectorAll("[data-spend-row]")].map((r) => r.textContent ?? "");
+  assert.equal(spend.length, 2, "gemini image belongs to the Rasm tab, not here");
+  assert.ok(spend[0].includes("Google Gemini · Matn") && spend[0].includes("$57,95"));
+  assert.ok(spend[1].includes("Anthropic (Claude) · Matn") && spend[1].includes("$12,02"));
+  assert.equal(document.querySelector("[data-spend-total]")!.textContent, "$69,97");
+  assert.equal((document.querySelector("[data-spend-row] [data-bar]") as HTMLElement).style.width, "83%");
+
+  // Free provider, switched off, in the image tab.
+  openTab("image");
   const pexels = within(cardOf("pexels"));
-  assert.ok(pexels.getByText("Bepul") && pexels.getAllByText("O'chirilgan").length >= 1, "badge and switch both say it is off");
+  assert.ok(pexels.getByText("Bepul") && pexels.getByText("O'chirilgan"));
   assert.equal(cardOf("pexels").getAttribute("data-usable"), "0");
   assert.ok(pexels.getByText("120 ta so'rov"), "free providers: requests, not money");
+  const rows = [...document.querySelectorAll("[data-spend-row]")].map((r) => r.textContent ?? "");
+  assert.ok(rows.some((r) => /Pexels · So'rovlar.*Bepul/.test(r)) && rows.some((r) => /Google Gemini · Rasm.*\$5,75/.test(r)), rows.join("|"));
 
+  openTab("tts");
   assert.ok(within(cardOf("azure")).getByText("Bepul limit bilan"));
+  assert.match(document.querySelector<HTMLElement>('[aria-label="Toifa holati"]')!.textContent ?? "", /to'xtasa bu vazifa ham to'xtaydi/);
+  openTab("video");
   assert.ok(!within(cardOf("kling")).queryByRole("button", { name: "Tekshirish" }), "no live test for kling");
-  assert.ok(document.querySelector("[data-other-usage]")?.textContent?.includes("xai"), "history of removed providers stays visible");
-  assert.ok(screen.getByText("Tizim holati"));
-  assert.ok(!screen.queryByRole("alert"), "sealing key present: no warning");
+  assert.ok(screen.getByText("Sozlamalar", { selector: "a" }), "the flag lives in Sozlamalar");
+  assert.ok(screen.getByText(/30 kunda bu toifada so'rov bo'lmagan/));
 });
 
-test("the period switch changes the usage figures; the filters narrow the cards", async () => {
+test("the period switch changes the usage figures (today / 7 / 30), shared providers say so", async () => {
   stubFetch([() => json(200, BODY)]);
   mount(h(ProvidersPage));
   await ready();
-  assert.ok(within(cardOf("gemini")).getByText(norm(moneyText(70.91, 12_700))), "30 days by default");
+  openTab("text");
+  assert.ok(within(cardOf("gemini")).getByText("$57,95"), "30 days by default");
   fireEvent.click(screen.getByRole("radio", { name: "Bugun" }));
-  assert.ok(within(cardOf("gemini")).getByText(norm(moneyText(3.5, 12_700))));
+  assert.ok(within(cardOf("gemini")).getByText("$3,50"));
+  assert.match(cardOf("gemini").textContent ?? "", /barcha toifalar/, "no per-kind split for today: the total is shown and labelled");
   fireEvent.click(screen.getByRole("radio", { name: "7 kun" }));
-  assert.ok(within(cardOf("gemini")).getByText(norm(moneyText(21.25, 12_700))));
+  assert.ok(within(cardOf("gemini")).getByText("$21,25"));
+  assert.ok(!/barcha toifalar/.test(cardOf("anthropic").textContent ?? ""), "a single-tab provider is never labelled shared");
+  fireEvent.click(screen.getByRole("radio", { name: "30 kun" }));
+  assert.ok(within(cardOf("gemini")).getByText("$57,95"));
+});
 
-  fireEvent.click(screen.getByRole("radio", { name: /^To'lovli/ }));
-  assert.deepEqual([...document.querySelectorAll("[data-provider]")].map((e) => e.getAttribute("data-provider")).sort(), ["anthropic", "azure", "gemini", "kling"]);
-  fireEvent.click(screen.getByRole("radio", { name: /^Bepul \d/ }));
-  assert.deepEqual([...document.querySelectorAll("[data-provider]")].map((e) => e.getAttribute("data-provider")), ["pexels"]);
-  fireEvent.click(screen.getByRole("radio", { name: /^Ishlamayotgan/ }));
-  assert.deepEqual([...document.querySelectorAll("[data-provider]")].map((e) => e.getAttribute("data-provider")).sort(), ["azure", "kling", "pexels"]);
+test("categories model: worst verdict, tab mapping, primary/fallback, kpis", () => {
+  assert.equal(worstVerdict(["ok", "single"]), "single");
+  assert.equal(worstVerdict(["ok", "missing", "single"]), "missing");
+  assert.equal(worstVerdict(["off", "ok"]), "ok", "an off purpose is not a problem");
+  assert.equal(worstVerdict(["off", "off"]), "off");
+  const cats = buildCategories(BODY);
+  assert.deepEqual(cats.map((c) => c.id), ["text", "image", "tts", "video"]);
+  assert.deepEqual(cats.find((c) => c.id === "image")!.purposes.map((p) => p.id), ["image", "stock"], "image + stock = Rasm");
+  const merged = buildCategories({ ...BODY, purposes: [...BODY.purposes, purpose({ id: "stt", title: "Tinglash" }), purpose({ id: "search", title: "Qidiruv", verdict: "single", fallback: false })] });
+  assert.equal(merged.find((c) => c.id === "image")!.verdict, "missing", "worst of the two");
+  assert.equal(merged.find((c) => c.id === "listen")!.verdict, "single", "stt + search = Tinglash va qidiruv");
+  const tts = cats.find((c) => c.id === "tts")!;
+  assert.equal(tts.primary, "Google Gemini", "the voice order decides, and azure is down");
+  assert.equal(tts.fallback, "— (yo'q)");
+  assert.equal(cats.find((c) => c.id === "text")!.fallback, "Anthropic (Claude)");
+  const k = kpis(BODY, cats);
+  assert.deepEqual([k.usable, k.total, k.paidUsable, k.freeUsable, k.attention], [2, 5, 2, 0, 2]);
+  assert.deepEqual(k.top && [k.top.label, k.top.share], ["Matn (LLM)", 92]);
+  assert.equal(providerFigures(GEMINI, "tts", "d30", 2).usd, 0, "gemini has no voice kind in the fixture");
+  assert.equal(providerFigures(GEMINI, "text", "d30", 1).usd, 70.91, "a single-tab provider shows its total");
 });
 
 test("no sealing key: warning, key buttons disabled, switches still work; fallback key: recommendation only then", async () => {
   stubFetch([() => json(200, { ...BODY, canStoreKeys: false, sealingKey: "none" })]);
   mount(h(ProvidersPage));
   await ready();
+  openTab("video");
   assert.ok(document.querySelector("[data-crypto-missing]"));
   assert.match(screen.getByRole("alert").textContent ?? "", /PROVIDER_KEYS_KEY/);
   assert.equal(within(cardOf("kling")).getByRole("button", { name: "Kalitni kiritish" }).hasAttribute("disabled"), true);
@@ -430,40 +548,45 @@ test("no sealing key: warning, key buttons disabled, switches still work; fallba
   assert.ok(!document.querySelector("[data-crypto-missing]"));
 });
 
-test("viewer and finance: read only -- no switch, no buttons, no editable selects, no hint", async () => {
+test("viewer and finance: read only -- no switch, no buttons, no editor, no key hint", async () => {
   for (const role of ["viewer", "finance"] as const) {
     stubFetch([() => json(200, { ...BODY, items: ITEMS.map((i) => ({ ...i, keyHint: null })) })]);
     mount(h(ProvidersPage), role);
     await ready();
-    assert.equal(screen.queryAllByRole("switch").length, 0, role);
-    for (const name of ["Kalitni kiritish", "Almashtirish", "O'chirish", "Tekshirish", "Saqlash", "Zaxira qo'shish"]) {
-      assert.equal(screen.queryAllByRole("button", { name }).length, 0, `${role}: ${name}`);
+    for (const tab of ["text", "image", "tts", "video"] as const) {
+      openTab(tab);
+      assert.equal(screen.queryAllByRole("switch").length, 0, `${role}/${tab}`);
+      for (const name of [/Kalitni kiritish/, /Almashtirish/, /^O'chirish/, /Tekshirish/, /Saqlash/, /Zaxira qo'shish/, /tahrirlash/, /Yuqoriga/]) {
+        assert.equal(screen.queryAllByRole("button", { name }).length, 0, `${role}/${tab}: ${String(name)}`);
+      }
+      assert.equal(document.querySelectorAll("select").length, 0, `${role}/${tab}: no selects`);
     }
     assert.ok(screen.getByText(/faqat ko'rish huquqi/));
+    openTab("text");
     assert.equal(cardOf("anthropic").querySelector("[data-key-state]")!.textContent, "Bazada", `${role}: no hint`);
     assert.ok(!document.body.textContent?.includes("a1B2"));
-    // A read-only role can still open a folded editor to SEE what is chosen, but nothing in it is editable.
-    fireEvent.click(within(purposeOf("text")).getByRole("button", { name: /Qaysi provayder va model ishlatiladi/ }));
-    const selects = [...document.querySelectorAll("select")] as HTMLSelectElement[];
-    assert.ok(selects.length >= 2, `${role}: the editors are visible`);
-    for (const sel of selects) assert.equal(sel.disabled, true, `${role}: selects are disabled`);
-    assert.equal(screen.queryAllByRole("button", { name: /yuqoriga|pastga|olib tashlash|Standartga/ }).length, 0, `${role}: no list controls`);
+    assert.ok(within(document.querySelector<HTMLElement>('[data-route-slot="llm.writer"]')!).getByText("Google Gemini · gemini-3.7-flash"), `${role}: the order is still readable`);
     cleanup();
   }
 });
 
 /* ───────────────────────────── routing editor ───────────────────────────── */
 
-test("purposes that are not enough open by themselves; the others fold their editors", async () => {
+test("«Tahrirlash» swaps one slot for its editor inline; «Yopish» goes back; the other slots stay summaries", async () => {
   stubFetch([() => json(200, BODY)]);
   mount(h(ProvidersPage));
   await ready();
-  assert.ok(within(purposeOf("tts")).queryByText("Ovoz provayderlari tartibi"), "single -> open");
-  assert.ok(!within(purposeOf("text")).queryByText("Yozuvchi"), "ok -> folded");
-  fireEvent.click(within(purposeOf("text")).getByRole("button", { name: /Sozlash/ }));
-  assert.ok(within(purposeOf("text")).getByText("Yozuvchi") && within(purposeOf("text")).getByText("Asosiy matn modeli"));
+  openTab("text");
+  assert.equal(document.querySelectorAll("select").length, 0, "summaries only");
+  editRoute("Yozuvchi");
+  assert.equal(routeOf("llm.writer").querySelectorAll("select").length, 1);
+  assert.ok(screen.getByRole("button", { name: "Asosiy matn modeli: tahrirlash" }), "others still folded");
   assert.equal(routeOf("llm.writer").getAttribute("data-source"), "env");
   assert.ok(within(routeOf("llm.writer")).getByText("Server sozlamasi (env)"));
+  fireEvent.click(screen.getByRole("button", { name: "Yopish" }));
+  assert.equal(document.querySelectorAll("select").length, 0);
+  openTab("tts");
+  assert.ok(screen.getByRole("button", { name: "Ovoz provayderlari tartibi: tahrirlash" }));
 });
 
 test("chain editor: change the model, add a fallback, reorder, remove; save sends exactly {entries, reason} and reloads", async () => {
@@ -481,7 +604,8 @@ test("chain editor: change the model, add a fallback, reorder, remove; save send
   ]);
   mount(h(ProvidersPage));
   await ready();
-  fireEvent.click(within(purposeOf("text")).getByRole("button", { name: /Sozlash/ }));
+  openTab("text");
+  editRoute("Yozuvchi");
   const editor = within(routeOf("llm.writer"));
   assert.ok(!editor.queryByRole("button", { name: "Saqlash" }) || (editor.getByRole("button", { name: "Saqlash" }) as HTMLButtonElement).disabled, "nothing changed yet");
 
@@ -525,7 +649,8 @@ test("chain editor guards: duplicates cannot be saved, the last row cannot be re
   ]);
   mount(h(ProvidersPage));
   await ready();
-  fireEvent.click(within(purposeOf("text")).getByRole("button", { name: /Sozlash/ }));
+  openTab("text");
+  editRoute("Yozuvchi");
   const editor = within(routeOf("llm.writer"));
   assert.ok(editor.getByRole("button", { name: "Standartga qaytarish" }), "stored choice -> reset offered");
 
@@ -552,11 +677,14 @@ test("model slot: one select, no list controls; voice order: every voice listed,
   stubFetch([() => json(200, BODY)]);
   mount(h(ProvidersPage));
   await ready();
-  fireEvent.click(within(purposeOf("text")).getByRole("button", { name: /Sozlash/ }));
+  openTab("text");
+  editRoute("Asosiy matn modeli");
   const model = within(routeOf("llm.model"));
   assert.equal(routeOf("llm.model").querySelectorAll("select").length, 1);
   assert.ok(!model.queryByRole("button", { name: /yuqoriga|pastga|olib tashlash|qo'shish/ }), "a single model has no list controls");
 
+  openTab("tts");
+  editRoute("Ovoz provayderlari tartibi");
   const order = within(routeOf("tts.order"));
   assert.ok(order.getByText("Birinchi") && order.getByText("Zaxira 1"));
   assert.equal(routeOf("tts.order").querySelectorAll("select").length, 0, "voices have no models to pick");
@@ -573,6 +701,8 @@ test("a stored voice order that lists only some voices shows all of them; the un
   stubFetch([() => json(200, { ...BODY, purposes: [{ ...TTS, routes: [partial] }] })]);
   mount(h(ProvidersPage));
   await ready();
+  openTab("tts");
+  editRoute("Ovoz provayderlari tartibi");
   const rows = [...routeOf("tts.order").querySelectorAll("[data-entry]")].map((e) => e.textContent ?? "");
   assert.equal(rows.length, 2);
   assert.ok(rows[0].includes("Google Gemini") && rows[1].includes("Azure Speech"), rows.join(" | "));
@@ -584,7 +714,8 @@ test("a value from the server's env that is outside the price book stays visible
   stubFetch([() => json(200, { ...BODY, purposes: [{ ...TEXT, routes: [odd] }] })]);
   mount(h(ProvidersPage));
   await ready();
-  fireEvent.click(within(purposeOf("text")).getByRole("button", { name: /Sozlash/ }));
+  openTab("text");
+  editRoute("Yozuvchi");
   const editor = within(routeOf("llm.writer"));
   const select = editor.getByLabelText("Yozuvchi: 1-qator") as HTMLSelectElement;
   assert.equal(select.value, "gemini|gemini-2.5-flash", "the real value is selected, not silently the first option");
@@ -601,7 +732,8 @@ test("rows keep their identity while edited or moved, so keyboard focus survives
   stubFetch([() => json(200, BODY)]);
   mount(h(ProvidersPage));
   await ready();
-  fireEvent.click(within(purposeOf("text")).getByRole("button", { name: /Sozlash/ }));
+  openTab("text");
+  editRoute("Yozuvchi");
   const editor = within(routeOf("llm.writer"));
   fireEvent.click(editor.getByRole("button", { name: "Zaxira qo'shish" }));
   const second = editor.getByLabelText("Yozuvchi: 2-qator") as HTMLSelectElement;
@@ -617,6 +749,8 @@ test("a chain with no working provider is called out", async () => {
   stubFetch([() => json(200, { ...BODY, items, purposes: [{ ...TEXT, verdict: "missing", headline: "Yetarli emas", routes: [dead] }] })]);
   mount(h(ProvidersPage));
   await ready();
+  openTab("text");
+  editRoute("Yozuvchi");
   assert.match(within(routeOf("llm.writer")).getByRole("alert").textContent ?? "", /hech bir provayder hozir ishlamayapti/);
 });
 
@@ -627,6 +761,7 @@ test("«Kalitni kiritish»: password field, reason, exact body, the key is never
   const calls = stubFetch([() => json(200, BODY), () => json(200, { item: saved }), () => json(200, { ...BODY, items: ITEMS.map((i) => (i.id === "kling" ? saved : i)) })]);
   mount(h(ProvidersPage));
   await ready();
+  openTab("video");
 
   fireEvent.click(within(cardOf("kling")).getByRole("button", { name: "Kalitni kiritish" }));
   const dialog = await screen.findByRole("dialog");
@@ -663,6 +798,7 @@ test("«Almashtirish»: a server error stays inline and the typed key is kept fo
   ]);
   mount(h(ProvidersPage));
   await ready();
+  openTab("text");
   fireEvent.click(within(cardOf("anthropic")).getByRole("button", { name: "Almashtirish" }));
   const dialog = await screen.findByRole("dialog");
   assert.ok(within(dialog).getByText("Kalitni almashtirish"));
@@ -676,6 +812,7 @@ test("«Almashtirish»: a server error stays inline and the typed key is kept fo
   assert.equal(calls.length >= 3, true);
   assert.ok(!document.body.innerHTML.includes(SECRET));
 
+  openTab("video");
   fireEvent.click(within(cardOf("kling")).getByRole("button", { name: "Kalitni kiritish" }));
   const d2 = await screen.findByRole("dialog");
   fireEvent.change(within(d2).getByLabelText("API kalit"), { target: { value: SECRET } });
@@ -690,6 +827,7 @@ test("«O'chirish» (key): a reason, DELETE {reason}, then the page reloads", as
   const calls = stubFetch([() => json(200, BODY), () => json(200, { item: { ...ANTHROPIC, hasDbKey: false } }), () => json(200, BODY)]);
   mount(h(ProvidersPage));
   await ready();
+  openTab("text");
   fireEvent.click(within(cardOf("anthropic")).getByRole("button", { name: "O'chirish" }));
   const dialog = await screen.findByRole("dialog");
   assert.ok(within(dialog).getByText(/Muhitda \(env\) kalit yo'q/), "no env fallback: warns");
@@ -713,6 +851,7 @@ test("the switch: confirmation, PUT {enabled, reason}; a 409 reloads the page", 
   ]);
   mount(h(ProvidersPage));
   await ready();
+  openTab("text");
   fireEvent.click(within(cardOf("gemini")).getByRole("switch"));
   let dialog = await screen.findByRole("dialog");
   assert.ok(within(dialog).getByText("Provayderni o'chirish"));
@@ -725,6 +864,7 @@ test("the switch: confirmation, PUT {enabled, reason}; a 409 reloads the page", 
   assert.deepEqual(calls[1].body, { enabled: false, reason: "Kvota tugadi" });
   await waitFor(() => assert.equal(calls.length, 3));
 
+  openTab("image");
   fireEvent.click(within(cardOf("pexels")).getByRole("switch"));
   dialog = await screen.findByRole("dialog");
   assert.ok(within(dialog).getByText("Provayderni yoqish"));
@@ -742,6 +882,7 @@ test("«Tekshirish»: shows the server's answer inline; a cancelled step-up leav
   ]);
   mount(h(ProvidersPage));
   await ready();
+  openTab("text");
   fireEvent.click(within(cardOf("gemini")).getByRole("button", { name: "Tekshirish" }));
   await waitFor(() => assert.equal(cardOf("gemini").querySelector("[data-test-result]")?.getAttribute("data-test-result"), "ok"));
   assert.equal(calls[1].url, "/api/admin/providers/gemini/test");
@@ -755,6 +896,7 @@ test("«Tekshirish»: shows the server's answer inline; a cancelled step-up leav
   stubFetch([() => json(200, BODY), () => json(401, { error: "Bu amal uchun kodni qayta kiriting", code: "reauth" })]);
   mount(h(ProvidersPage));
   await ready();
+  openTab("text");
   fireEvent.click(within(cardOf("gemini")).getByRole("button", { name: "Tekshirish" }));
   await waitFor(() => assert.ok(!within(cardOf("gemini")).getByRole("button", { name: "Tekshirish" }).hasAttribute("aria-busy")));
   assert.equal(cardOf("gemini").querySelector("[data-test-result]"), null);
@@ -775,6 +917,8 @@ test("step-up: 401 reauth on a route save -> the code is asked once and the SAME
   ]);
   mount(h(ProvidersPage));
   await ready();
+  openTab("tts");
+  editRoute("Ovoz provayderlari tartibi");
   const order = within(routeOf("tts.order"));
   fireEvent.click(order.getByRole("button", { name: "Google Geminini yuqoriga" }));
   fireEvent.click(order.getByRole("button", { name: "Saqlash" }));
