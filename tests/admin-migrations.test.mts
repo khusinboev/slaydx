@@ -327,7 +327,22 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     assert.ok(await exists("paynet_routes"), "061 table created");
     assert.ok((await exists("ai_routes")) && (await exists("provider_calls")), "062 tables created");
     assert.ok(await exists("test_analyses"), "063 table created");
+    const figureCol = () =>
+      queryOne("SELECT 1 FROM information_schema.columns WHERE table_name = 'test_questions' AND column_name = 'has_figure'");
+    assert.ok(await figureCol(), "064 column created");
+    // 064 rollback fixtures: two questions of its id list (one image + text, one TEXT ONLY) and one outside the list.
+    await runSql(`
+      INSERT INTO test_banks (slug, title) VALUES ('mig064', 'x');
+      INSERT INTO test_subjects (bank_id, code, name) SELECT id, 'm', 'M' FROM test_banks WHERE slug = 'mig064';
+      INSERT INTO test_assets (sha256, mime, size_bytes, bytes) VALUES (repeat('ab', 32), 'image/png', 1, '\\x00');
+      INSERT INTO test_questions (id, subject_id, variant, question_text, image_asset_id, options, answer, has_figure, legacy_ref)
+        SELECT v.id, (SELECT id FROM test_subjects WHERE code = 'm' LIMIT 1), 1, 'matn', CASE WHEN v.img THEN (SELECT id FROM test_assets LIMIT 1) END,
+               '["a","b","c","d"]'::jsonb, 0, TRUE, 'mig064:' || v.id
+          FROM (VALUES (396, TRUE), (397, FALSE), (9999999, TRUE)) AS v(id, img);
+    `);
     for (const f of [
+      // 064: «Test ishlash» question TEXT (generated data migration) -- test_questions.has_figure + guarded text/options UPDATEs.
+      "064_test_questions_text.sql",
       // 063: «Test ishlash» AI analysis of the wrong answers -- test_analyses (shared per-question cache).
       "063_test_analyses.sql",
       // 062: admin «Provayderlar» redesign -- ai_routes (routing slots) and provider_calls (free-provider request counters).
@@ -382,6 +397,19 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     ]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
+      if (f === "064_test_questions_text.sql") {
+        assert.ok(!(await figureCol()), "064 rollback drops has_figure");
+        const left = await query<{ id: string; text: string | null; options: unknown; image: boolean }>(
+          "SELECT id::text AS id, question_text AS text, options, image_asset_id IS NOT NULL AS image FROM test_questions WHERE legacy_ref LIKE 'mig064:%' ORDER BY id",
+        );
+        assert.deepEqual(left.map((r) => r.id), ["396", "397", "9999999"], "no question row is deleted");
+        // The listed question with an image: text and options reset, the image stays.
+        assert.deepEqual(left[0], { id: "396", text: null, options: null, image: true }, "064 rollback resets the text of an id of its list");
+        // The listed TEXT-ONLY question has no image to fall back on: it is left alone (the has_stem CHECK would refuse a reset).
+        assert.equal(left[1]!.text, "matn", "a text-only question keeps its text");
+        // An id outside the list is never touched.
+        assert.equal(left[2]!.text, "matn", "an id outside the list keeps its text");
+      }
       if (f === "063_test_analyses.sql") assert.ok(!(await exists("test_analyses")), "063 rollback drops the table");
       if (f === "062_ai_routes.sql") assert.ok(!(await exists("ai_routes")) && !(await exists("provider_calls")), "062 rollback drops both tables");
       if (f === "061_paynet_routes.sql") assert.ok(!(await exists("paynet_routes")), "061 rollback drops the table");
@@ -425,6 +453,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     await migrate(quiet);
     assert.deepEqual(await applied(), ALL);
     for (const tb of NEW_TABLES) assert.ok(await exists(tb), `${tb} qayta yaratilmadi`);
+    assert.ok(await figureCol(), "064 column re-created");
     await assertScrubbed("full re-apply");
     await assertAudit("full re-apply");
   });

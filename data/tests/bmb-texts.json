@@ -1,0 +1,5853 @@
+[
+ {
+  "question_id": 391,
+  "file": "rasmlar/math_v01_q391.jpg",
+  "subject": "Matematika",
+  "question": "O‘lchamlari 2m×1m×3m bo‘lgan to‘g‘ri to‘rtburchakli parallelipiped shaklidagi akvariumning hajmini toping (m³).",
+  "options": {
+   "A": "3",
+   "B": "6",
+   "C": "5",
+   "D": "4"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 392,
+  "file": "rasmlar/math_v01_q392.jpg",
+  "subject": "Matematika",
+  "question": "Uchburchakning bir tomoni 12 sm. Undan ikkinchi tomoni 3 sm qisqa, uchunchi tomoni 5 sm uzun. Uchburchak perimetrini toping.",
+  "options": {
+   "A": "25",
+   "B": "26",
+   "C": "38",
+   "D": "36"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 393,
+  "file": "rasmlar/math_v01_q393.jpg",
+  "subject": "Matematika",
+  "question": "1 ta ot bir kunda 5 kg pichan yeydi. 3 ta ot 4 kunda qancha kg pichan yeydi?",
+  "options": {
+   "A": "60",
+   "B": "65",
+   "C": "50",
+   "D": "55"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 394,
+  "file": "rasmlar/math_v01_q394.jpg",
+  "subject": "Matematika",
+  "question": "0,25; 1,4; 0,75 sonlari proporsiyaning hadlari bo‘lsa, proporsiyaning to‘rtinchi hadini toping.",
+  "options": {
+   "A": "4,2",
+   "B": "2,1",
+   "C": "1,05",
+   "D": "0,5"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 395,
+  "file": "rasmlar/math_v01_q395.jpg",
+  "subject": "Matematika",
+  "question": "10 ta odam qo‘l berib salomlashdi. Jami necha marta qo‘l berib salomlashilgan?",
+  "options": {
+   "A": "20",
+   "B": "41",
+   "C": "42",
+   "D": "45"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 396,
+  "file": "rasmlar/math_v01_q396.jpg",
+  "subject": "Matematika",
+  "question": "Jadvalda yer maydoniga ekilgan bug‘doy, paxta, sholi gektor o‘lchovlari berilgan. Umumiy maydoni(ga) va umumiy to‘lovini (so‘m) toping.",
+  "options": {
+   "A": "51",
+   "B": "41",
+   "C": "56",
+   "D": "45"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "Jadval: Nomi | Maydoni (ga) — Bug‘doy 15, Paxta 16, Sholi 20"
+ },
+ {
+  "question_id": 397,
+  "file": "rasmlar/math_v01_q397.jpg",
+  "subject": "Matematika",
+  "question": "Quyida mahsulotlarning sotilish diagrammasi berilgan. To‘g‘ri tasdiqni toping.",
+  "options": {
+   "A": "1-kun 25 kg sotilgan",
+   "B": "3- kun 15 kg sotilgan",
+   "C": "5-kun 20 kg sotilgan",
+   "D": "6-kun 20 kg sotilgan"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "Chiziqli diagramma; Y o‘q: 0, 5, 10, 15, 20, 25, 30; X o‘q: 1-kun, 2-kun, 3-kun, 4-kun, 5-kun, 6-kun; qiymatlar taxminan: 1-kun≈10, 2-kun≈15, 3-kun=25, 4-kun=25, 5-kun≈20, 6-kun≈15"
+ },
+ {
+  "question_id": 398,
+  "file": "rasmlar/math_v01_q398.jpg",
+  "subject": "Matematika",
+  "question": "15 kg unning 80% ini toping.",
+  "options": {
+   "A": "10",
+   "B": "11",
+   "C": "12",
+   "D": "9"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 399,
+  "file": "rasmlar/math_v01_q399.jpg",
+  "subject": "Matematika",
+  "question": "Hisoblang: $\\frac{1}{4}-\\frac{1}{5}+\\frac{1}{6}-\\frac{2}{8}+\\frac{2}{10}-\\frac{2}{12}$",
+  "options": {
+   "A": "0",
+   "B": "1",
+   "C": "−1",
+   "D": "$\\frac{1}{5}$"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 400,
+  "file": "rasmlar/math_v01_q400.jpg",
+  "subject": "Matematika",
+  "question": "Rasmda sonlar nuri berilgan. Undan ML kesmaning uzunligini toping.",
+  "options": {
+   "A": "12",
+   "B": "16",
+   "C": "14",
+   "D": "28"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "Sonlar nuri OX; nuqtalar: O=0, M=8, (16), L=24, (32, 40, 48, 56), K=64, (72), N=80, X o‘q uchi"
+ },
+ {
+  "question_id": 401,
+  "file": "rasmlar/math_v02_q401.jpg",
+  "subject": "Matematika",
+  "question": "Tenglamani yeching: $\\frac{1}{2-x}=\\frac{3}{4+x}$",
+  "options": {
+   "A": "$\\frac{1}{3}$",
+   "B": "$\\frac{2}{3}$",
+   "C": "$\\frac{1}{4}$",
+   "D": "$\\frac{1}{2}$"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 402,
+  "file": "rasmlar/math_v02_q402.jpg",
+  "subject": "Matematika",
+  "question": "Benzin baki va kanistrning hajmlari mos ravishda 9:1 nisbatda. Benzinga to‘la bakni bo‘shatish uchun eng kamida nechta (hajmi dastlabki kanistr hajmi bilan bir xil bo‘lgan) kanistr kerak bo‘ladi?",
+  "options": {
+   "A": "10",
+   "B": "7",
+   "C": "8",
+   "D": "9"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 403,
+  "file": "rasmlar/math_v02_q403.jpg",
+  "subject": "Matematika",
+  "question": "Hisoblang: 351 : 100 + 11 : 10",
+  "options": {
+   "A": "4,53",
+   "B": "3,62",
+   "C": "3,61",
+   "D": "4,61"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 404,
+  "file": "rasmlar/math_v02_q404.jpg",
+  "subject": "Matematika",
+  "question": "Hisoblang: 42 · 25 + 18 · (97 − 87)",
+  "options": {
+   "A": "1220",
+   "B": "1230",
+   "C": "1330",
+   "D": "1320"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 405,
+  "file": "rasmlar/math_v02_q405.jpg",
+  "subject": "Matematika",
+  "question": "17 metr necha millimetrga teng?",
+  "options": {
+   "A": "17000",
+   "B": "1700",
+   "C": "170",
+   "D": "170000"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 406,
+  "file": "rasmlar/math_v02_q406.jpg",
+  "subject": "Matematika",
+  "question": "8 ≤ x ≤ 14 qo‘sh tengsizlikni qanoatlantiruvchi sonlardan eng katta tub sonni toping.",
+  "options": {
+   "A": "9",
+   "B": "17",
+   "C": "13",
+   "D": "11"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 407,
+  "file": "rasmlar/math_v02_q407.jpg",
+  "subject": "Matematika",
+  "question": "Rasmda tasvirlangan to‘g‘ri to‘rtburchakning bo‘yalgan qismining yuzini (cm²) toping. Bunda AB=15 cm, BC=12 cm.",
+  "options": {
+   "A": "11,25",
+   "B": "22,5",
+   "C": "45",
+   "D": "16"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "To‘g‘ri to‘rtburchak ABCD: A yuqori chap, B yuqori o‘ng, C pastki o‘ng, D pastki chap; AB ustida 15 cm, BC o‘ngida 12 cm; ikkala diagonal chizilgan; pastki o‘ng qism (C burchagi atrofi) bo‘yalgan"
+ },
+ {
+  "question_id": 408,
+  "file": "rasmlar/math_v02_q408.jpg",
+  "subject": "Matematika",
+  "question": "To‘g‘ri burchakli parallelepipedning bo‘yi, eni va balandligi mos ravishda 8 cm, 5 cm va 10 cm ga teng bo‘lsa, uning hajmini (cm³) toping.",
+  "options": {
+   "A": "250",
+   "B": "425",
+   "C": "430",
+   "D": "400"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 409,
+  "file": "rasmlar/math_v02_q409.jpg",
+  "subject": "Matematika",
+  "question": "Uy mushugi hayoti davomida o‘rtacha umrining $\\frac{2}{3}$ qismini uyquda o‘tkazadi. Uy mushugi o‘rtacha bir sutkaning necha soatini uyquda o‘tkazadi?",
+  "options": {
+   "A": "20",
+   "B": "14",
+   "C": "16",
+   "D": "18"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 410,
+  "file": "rasmlar/math_v02_q410.jpg",
+  "subject": "Matematika",
+  "question": "8 ta ko‘ylakdan birini ko‘pi bilan necha xil usulda tanlash mumkin?",
+  "options": {
+   "A": "3",
+   "B": "2",
+   "C": "8",
+   "D": "4"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 411,
+  "file": "rasmlar/math_v03_q411.jpg",
+  "subject": "Matematika",
+  "question": "Rasmdan foydalanib ABC burchakning gradus o‘lchovini toping.",
+  "options": {
+   "A": "120°",
+   "B": "130°",
+   "C": "100°",
+   "D": "110°"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "Burchak ABC; B uchi. BA dan BC tomon ketma-ket 50°, 30°, 20°, 10° belgilangan ichki nurlari bor."
+ },
+ {
+  "question_id": 412,
+  "file": "rasmlar/math_v03_q412.jpg",
+  "subject": "Matematika",
+  "question": "2907 soni quyidagi sonlardan qaysi biriga qoldiqsiz bo‘linadi?",
+  "options": {
+   "A": "9",
+   "B": "11",
+   "C": "23",
+   "D": "27"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 413,
+  "file": "rasmlar/math_v03_q413.jpg",
+  "subject": "Matematika",
+  "question": "Hajmi 1000 m³ ga teng bo‘lgan kubning qirrasini (m) toping.",
+  "options": {
+   "A": "9",
+   "B": "10",
+   "C": "8",
+   "D": "7"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 414,
+  "file": "rasmlar/math_v03_q414.jpg",
+  "subject": "Matematika",
+  "question": "Xaridor 4 ta har xil shokoladlardan birini ko‘pi bilan necha xil usulda tanlab, sotib olishi mumkin?",
+  "options": {
+   "A": "2",
+   "B": "3",
+   "C": "4",
+   "D": "1"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 415,
+  "file": "rasmlar/math_v03_q415.jpg",
+  "subject": "Matematika",
+  "question": "Avtomobil 100 km yo‘l yursa, o‘rtacha 8 litr benzin sarflaydi. Avtomobil 650 km yo‘l yursa, o‘rtacha necha litr benzin sarflaydi?",
+  "options": {
+   "A": "54",
+   "B": "50",
+   "C": "52",
+   "D": "48"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 416,
+  "file": "rasmlar/math_v03_q416.jpg",
+  "subject": "Matematika",
+  "question": "Metall qotishmasi massasining o‘rtacha $\\frac{2}{5}$ qismini temir tashkil qiladi. 70 kg li metall qotishmasining o‘rtacha necha kilogrammini temir tashkil qiladi?",
+  "options": {
+   "A": "28 kg",
+   "B": "30 kg",
+   "C": "35 kg",
+   "D": "24 kg"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 417,
+  "file": "rasmlar/math_v03_q417.jpg",
+  "subject": "Matematika",
+  "question": "Quyidagi sonlardan qaysi biri 84 sonining natural bo‘luvchisi bo‘la olmaydi?",
+  "options": {
+   "A": "16",
+   "B": "14",
+   "C": "21",
+   "D": "12"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 418,
+  "file": "rasmlar/math_v03_q418.jpg",
+  "subject": "Matematika",
+  "question": "Tenglamani yeching: 2(2x − 3) − 3(x + 3) = 3",
+  "options": {
+   "A": "12",
+   "B": "18",
+   "C": "0",
+   "D": "−6"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 419,
+  "file": "rasmlar/math_v03_q419.jpg",
+  "subject": "Matematika",
+  "question": "5 sutka necha minutga teng?",
+  "options": {
+   "A": "7200",
+   "B": "3600",
+   "C": "1540",
+   "D": "1800"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 420,
+  "file": "rasmlar/math_v03_q420.jpg",
+  "subject": "Matematika",
+  "question": "Hisoblang: $\\left(1-2\\frac{1}{3}\\right)\\cdot 6+12$",
+  "options": {
+   "A": "3",
+   "B": "6",
+   "C": "5",
+   "D": "4"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 421,
+  "file": "rasmlar/math_v04_q421.jpg",
+  "subject": "Matematika",
+  "question": "Skuter narxi 9850000 so‘m. Skuterni 20 % chegirma bilan necha so‘mga sotib olish mumkin?",
+  "options": {
+   "A": "7800000",
+   "B": "7880000",
+   "C": "7900000",
+   "D": "8000000"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 422,
+  "file": "rasmlar/math_v04_q422.jpg",
+  "subject": "Matematika",
+  "question": "Tenglamani yeching: 15x − 32 = 6x + 76",
+  "options": {
+   "A": "10",
+   "B": "11",
+   "C": "12",
+   "D": "13"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 423,
+  "file": "rasmlar/math_v04_q423.jpg",
+  "subject": "Matematika",
+  "question": "Har bir o‘quvchiga 7 tadan darslik kitobi berilsa, 56 ta o‘quvchiga jami nechta darslik kitobi beriladi?",
+  "options": {
+   "A": "7",
+   "B": "392",
+   "C": "8",
+   "D": "384"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 424,
+  "file": "rasmlar/math_v04_q424.jpg",
+  "subject": "Matematika",
+  "question": "Qirrasi 2 m bo‘lgan kichik kubning yoniga rasmda ko‘rsatilganidek katta kub joylashtirilgan. Katta kubning barcha qirralari yig‘indisini (m) toping (kichik kubning qirrasi katta kub qirrasining yarmiga teng).",
+  "options": {
+   "A": "32",
+   "B": "48",
+   "C": "64",
+   "D": "96"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "Chapda kichik kub, ustki qirrasi 2 m; o‘ngda katta kub; yashirin qirralar punktir."
+ },
+ {
+  "question_id": 425,
+  "file": "rasmlar/math_v04_q425.jpg",
+  "subject": "Matematika",
+  "question": "Hisoblang: $\\left(6+\\frac{1}{8}\\right):\\frac{49}{64}-3$",
+  "options": {
+   "A": "5",
+   "B": "3",
+   "C": "4",
+   "D": "6"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 426,
+  "file": "rasmlar/math_v04_q426.jpg",
+  "subject": "Matematika",
+  "question": "Hisoblang: 2 · (18 − 10) + 3 · (15 − 12)",
+  "options": {
+   "A": "15",
+   "B": "30",
+   "C": "20",
+   "D": "25"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 427,
+  "file": "rasmlar/math_v04_q427.jpg",
+  "subject": "Matematika",
+  "question": "Soat 7:45 bo‘lgan vaqtdan necha daqiqa vaqt o‘tgach soat 9:15 bo‘ladi?",
+  "options": {
+   "A": "80",
+   "B": "89",
+   "C": "90",
+   "D": "85"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 428,
+  "file": "rasmlar/math_v04_q428.jpg",
+  "subject": "Matematika",
+  "question": "12 ta o‘quvchidan birini ko‘pi bilan necha xil usulda tanlab olish mumkin?",
+  "options": {
+   "A": "10",
+   "B": "11",
+   "C": "6",
+   "D": "12"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 429,
+  "file": "rasmlar/math_v04_q429.jpg",
+  "subject": "Matematika",
+  "question": "Chizmadan eng uzun kesmani toping. AB ∥ CD, AB ∥ KN",
+  "options": {
+   "A": "EF",
+   "B": "AB",
+   "C": "KN",
+   "D": "CD"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "Aylana, markaz O. Vertikal diametr EF (E yuqori, F past). Gorizontal akkordlar: CD markazdan o‘tadi (C chap, D o‘ng); AB CD dan yuqorida (A chap, B o‘ng); KN AB dan yuqorida, E ga yaqin (K chap, N o‘ng)."
+ },
+ {
+  "question_id": 430,
+  "file": "rasmlar/math_v04_q430.jpg",
+  "subject": "Matematika",
+  "question": "Har kuni ovqat tayyorlashga 0,5 litrdan yog‘ ishlatilsa, 3 litr yog‘ necha kunga yetadi?",
+  "options": {
+   "A": "7",
+   "B": "6",
+   "C": "8",
+   "D": "9"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 431,
+  "file": "rasmlar/math_v05_q431.jpg",
+  "subject": "Matematika",
+  "question": "n ning qanday natural qiymatlarida $\\frac{18}{n}$ kasrning qiymati natural son bo‘ladi?",
+  "options": {
+   "A": "1; 2; 3; 6; 9; 18",
+   "B": "1; 2; 4; 8; 16; 18",
+   "C": "1; 2; 4; 6; 8; 10",
+   "D": "3; 6; 9; 12; 15; 18"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 432,
+  "file": "rasmlar/math_v05_q432.jpg",
+  "subject": "Matematika",
+  "question": "Tenglamani yeching: (7 − x) − (3 − 2x) = −5 − 3x",
+  "options": {
+   "A": "2,25",
+   "B": "−2,5",
+   "C": "2,5",
+   "D": "−2,25"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 433,
+  "file": "rasmlar/math_v05_q433.jpg",
+  "subject": "Matematika",
+  "question": "9786 sonining raqamlari o‘rini almashtirib eng kichik sonni hosil qiling.",
+  "options": {
+   "A": "6879",
+   "B": "6897",
+   "C": "6987",
+   "D": "6789"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 434,
+  "file": "rasmlar/math_v05_q434.jpg",
+  "subject": "Matematika",
+  "question": "Shaklning perimetrini hisoblang.",
+  "options": {
+   "A": "52",
+   "B": "56",
+   "C": "58",
+   "D": "57"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "To‘rtburchakli spiral; tashqi yuqori o‘ng tomonda yo‘lak kengligi 1; ichki kichik to‘rtburchakning chapida 1."
+ },
+ {
+  "question_id": 435,
+  "file": "rasmlar/math_v05_q435.jpg",
+  "subject": "Matematika",
+  "question": "32 soni 160 sonining qancha qismini tashkil qiladi?",
+  "options": {
+   "A": "$\\frac{1}{2}$",
+   "B": "$\\frac{2}{5}$",
+   "C": "$\\frac{1}{5}$",
+   "D": "$\\frac{1}{4}$"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 436,
+  "file": "rasmlar/math_v05_q436.jpg",
+  "subject": "Matematika",
+  "question": "Son o‘qida −7,6 dan katta va 8,4 dan kichik bo‘lgan nechta butun son mavjud?",
+  "options": {
+   "A": "13",
+   "B": "14",
+   "C": "15",
+   "D": "16"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 437,
+  "file": "rasmlar/math_v05_q437.jpg",
+  "subject": "Matematika",
+  "question": "$\\frac{21}{49} = \\frac{x}{7}$ proporsiyaning x-noma’lum hadini toping.",
+  "options": {
+   "A": "7",
+   "B": "4",
+   "C": "2",
+   "D": "3"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 438,
+  "file": "rasmlar/math_v05_q438.jpg",
+  "subject": "Matematika",
+  "question": "Chizmadagi silindrsimon idish jami 12 l suv bo‘lgan. Idishdan ma’lum miqdorda suv olingan. Idishda qancha suv (litr) qolgan?",
+  "options": {
+   "A": "8",
+   "B": "6",
+   "C": "7",
+   "D": "9"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "Silindrsimon idish, yuqorisida kichik qopqoq; suv gorizontal chiziqlar bilan; o‘ngda qavs: 3/4 qismida suv."
+ },
+ {
+  "question_id": 439,
+  "file": "rasmlar/math_v05_q439.jpg",
+  "subject": "Matematika",
+  "question": "To‘g‘ri burchakli parallelepipedning bo‘yi, eni va balandligi mos ravishda 9 cm, 5 cm va 10 cm ga teng bo‘lsa, uning hajmini (cm³) toping.",
+  "options": {
+   "A": "445",
+   "B": "435",
+   "C": "450",
+   "D": "455"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 440,
+  "file": "rasmlar/math_v05_q440.jpg",
+  "subject": "Matematika",
+  "question": "Son o‘qida quyidagi sonlardan qaysi biri 1 soniga eng yaqin masofada joylashgan?",
+  "options": {
+   "A": "$\\frac{1}{4}$",
+   "B": "$\\frac{1}{8}$",
+   "C": "$\\frac{1}{2}$",
+   "D": "$\\frac{3}{4}$"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 441,
+  "file": "rasmlar/math_v06_q441.jpg",
+  "subject": "Matematika",
+  "question": "Shunday butun sonni o‘ylangki, u songa 3 ni qo‘shib, yig‘indini 12 ga ko‘paytirsak, natijada nol hosil bo‘lsin. O‘ylagan sonni toping.",
+  "options": {
+   "A": "−3",
+   "B": "−12",
+   "C": "0",
+   "D": "−36"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 442,
+  "file": "rasmlar/math_v06_q442.jpg",
+  "subject": "Matematika",
+  "question": "Metall qotishmasi massasining 56 % ini mis tashkil qiladi. 3 kg qotishmaning necha grammini mis tashkil qiladi?",
+  "options": {
+   "A": "2130",
+   "B": "1860",
+   "C": "1680",
+   "D": "1500"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 443,
+  "file": "rasmlar/math_v06_q443.jpg",
+  "subject": "Matematika",
+  "question": "Nechta ikki xonali natural son 11 ga qoldiqsiz bo‘linadi?",
+  "options": {
+   "A": "11",
+   "B": "9",
+   "C": "10",
+   "D": "8"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 444,
+  "file": "rasmlar/math_v06_q444.jpg",
+  "subject": "Matematika",
+  "question": "Qaysi javobda tub raqamlar to‘liq ifodalangan?",
+  "options": {
+   "A": "1; 2; 3; 5; 7",
+   "B": "2; 3; 5; 7",
+   "C": "3; 5; 7; 11",
+   "D": "2; 3; 5; 7; 9"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 445,
+  "file": "rasmlar/math_v06_q445.jpg",
+  "subject": "Matematika",
+  "question": "To‘g‘ri burchakli parallelepipedning bo‘yi, eni va balandligi mos ravishda 9 dm, 5 dm va 10 dm ga teng bo‘lsa, to‘g‘ri burchakli parallelepiped asosining yuzini (dm²) toping.",
+  "options": {
+   "A": "24",
+   "B": "90",
+   "C": "50",
+   "D": "45"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 446,
+  "file": "rasmlar/math_v06_q446.jpg",
+  "subject": "Matematika",
+  "question": "Agar daraxt kesuvchi 2 ta daraxtni kesish uchun 1 soat vaqt sarflagan bo‘lsa, 9 ta xuddi shunday daraxtni kesishi uchun u necha daqiqa vaqt sarflaydi?",
+  "options": {
+   "A": "300",
+   "B": "270",
+   "C": "240",
+   "D": "330"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 447,
+  "file": "rasmlar/math_v06_q447.jpg",
+  "subject": "Matematika",
+  "question": "Chizmadagi kvadratning bo‘yalgan sohalari yuzalarining yig‘indisini (m²) toping.",
+  "options": {
+   "A": "45",
+   "B": "40",
+   "C": "44",
+   "D": "46"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "Kvadrat, chap tomoni 9 m; yuqori chap kichik kvadrat shtrixlangan; pastki o‘ng kvadrat shtrixlangan, pastki tomoni 6 m, o‘ng tomoni 6 m."
+ },
+ {
+  "question_id": 448,
+  "file": "rasmlar/math_v06_q448.jpg",
+  "subject": "Matematika",
+  "question": "a = (1 − 0,2)², b = 1 − 0,2², c = 1 − 0,2 sonlarni taqqoslang.",
+  "options": {
+   "A": "c > b > a",
+   "B": "a > c > b",
+   "C": "b > c > a",
+   "D": "a > b > c"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 449,
+  "file": "rasmlar/math_v06_q449.jpg",
+  "subject": "Matematika",
+  "question": "4 sutka necha minutga teng?",
+  "options": {
+   "A": "1540",
+   "B": "5760",
+   "C": "2880",
+   "D": "1440"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 450,
+  "file": "rasmlar/math_v06_q450.jpg",
+  "subject": "Matematika",
+  "question": "Birinchi kuni jami mahsulotning $\\frac{1}{2}$ qismi, ikkinchi kuni esa qolgan 12 tonnasi qayta ishlandi. Bu ikki kunda necha tonna mahsulot qayta ishlangan?",
+  "options": {
+   "A": "27",
+   "B": "24",
+   "C": "19",
+   "D": "21"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 451,
+  "file": "rasmlar/math_v06_q451.png",
+  "subject": "Matematika",
+  "question": "Agar bir qarich (taqribiy) 22 cm bo‘lsa, 308 cm necha qarich bo‘ladi?",
+  "options": {
+   "A": "16",
+   "B": "13",
+   "C": "12",
+   "D": "14"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 452,
+  "file": "rasmlar/math_v06_q452.png",
+  "subject": "Matematika",
+  "question": "Qirrasi 8 cm bo‘lgan kubning yoniga rasmda ko‘rsatilganidek kichik kub joylashtirilgan. Kichik kubning to‘la sirtini (cm²) toping (kichik kubning qirrasi katta kub qirrasining yarmiga teng).",
+  "options": {
+   "A": "216",
+   "B": "96",
+   "C": "320",
+   "D": "384"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "Katta kubning yuqori qirrasi 8 cm deb belgilangan; kichik kub katta kubning o‘ng yon sirtiga yopishgan."
+ },
+ {
+  "question_id": 453,
+  "file": "rasmlar/math_v06_q453.png",
+  "subject": "Matematika",
+  "question": "$\\frac{17}{6}$ noto‘g‘ri kasrning butun qismi nechaga teng?",
+  "options": {
+   "A": "1",
+   "B": "3",
+   "C": "2",
+   "D": "4"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 454,
+  "file": "rasmlar/math_v06_q454.png",
+  "subject": "Matematika",
+  "question": "Rasmda jami nechta to‘g‘ri to‘rtburchak tasvirlangan?",
+  "options": {
+   "A": "3",
+   "B": "5",
+   "C": "6",
+   "D": "4"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "Katta to‘g‘ri to‘rtburchak: chapda bitta katta to‘g‘ri to‘rtburchak, o‘ngda ikkita kichik to‘g‘ri to‘rtburchak bir-birining ustida."
+ },
+ {
+  "question_id": 455,
+  "file": "rasmlar/math_v06_q455.png",
+  "subject": "Matematika",
+  "question": "Tenglamani yeching: −3 : x = $\\frac{1}{2}$",
+  "options": {
+   "A": "−6",
+   "B": "3",
+   "C": "−3",
+   "D": "6"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 456,
+  "file": "rasmlar/math_v06_q456.png",
+  "subject": "Matematika",
+  "question": "1260000 so‘mning 20 %i necha so‘m bo‘ladi?",
+  "options": {
+   "A": "252000",
+   "B": "242000",
+   "C": "262000",
+   "D": "232000"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 457,
+  "file": "rasmlar/math_v06_q457.png",
+  "subject": "Matematika",
+  "question": "Quyidagi sonlardan qaysi biri 5 ga qoldiqsiz bo‘linadi?",
+  "options": {
+   "A": "100498",
+   "B": "1077745",
+   "C": "125479",
+   "D": "210456"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 458,
+  "file": "rasmlar/math_v06_q458.png",
+  "subject": "Matematika",
+  "question": "Hasan 8 ta har xil kitobdan birini ko‘pi bilan necha xil usulda tanlab olishi mumkin?",
+  "options": {
+   "A": "1",
+   "B": "8",
+   "C": "4",
+   "D": "7"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 459,
+  "file": "rasmlar/math_v06_q459.png",
+  "subject": "Matematika",
+  "question": "Avtomobil 100 km yo‘l yursa, o‘rtacha 8 litr benzin sarflaydi. Avtomobil 550 km yo‘l yursa, o‘rtacha necha litr benzin sarflaydi?",
+  "options": {
+   "A": "44",
+   "B": "42",
+   "C": "40",
+   "D": "46"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 460,
+  "file": "rasmlar/math_v06_q460.png",
+  "subject": "Matematika",
+  "question": "Amallarni bajaring: (132 + 18) : 5 · 3 − 10",
+  "options": {
+   "A": "0",
+   "B": "90",
+   "C": "80",
+   "D": "210"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 461,
+  "file": "rasmlar/math_v07_q461.jpg",
+  "subject": "Matematika",
+  "question": "Tenglamani yeching: 7 (2 − x) = 6 (1 − x)",
+  "options": {
+   "A": "9",
+   "B": "8",
+   "C": "7",
+   "D": "6"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 462,
+  "file": "rasmlar/math_v07_q462.jpg",
+  "subject": "Matematika",
+  "question": "Quyidagi oddiy kasrlardan qaysi biri 0,125 o‘nli kasrga teng?",
+  "options": {
+   "A": "$\\frac{1}{5}$",
+   "B": "$\\frac{2}{5}$",
+   "C": "$\\frac{1}{4}$",
+   "D": "$\\frac{1}{8}$"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 463,
+  "file": "rasmlar/math_v07_q463.jpg",
+  "subject": "Matematika",
+  "question": "Har bir o‘quvchiga 8 tadan darslik kitobi berilsa, 64 ta o‘quvchiga jami nechta darslik kitobi beriladi?",
+  "options": {
+   "A": "506",
+   "B": "512",
+   "C": "9",
+   "D": "8"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 464,
+  "file": "rasmlar/math_v07_q464.jpg",
+  "subject": "Matematika",
+  "question": "To‘g‘ri burchakli parallelepipedning eni, bo‘yi va balandligi mos ravishda 8 dm, 9 dm va 10 dm ga teng bo‘lsa, to‘g‘ri burchakli parallelepiped asosining yuzini (dm²) toping",
+  "options": {
+   "A": "90",
+   "B": "72",
+   "C": "80",
+   "D": "27"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 465,
+  "file": "rasmlar/math_v07_q465.jpg",
+  "subject": "Matematika",
+  "question": "Nusrat aka 18 ta shokoladni farzandlarining har biriga 6 tadan taqsimlab berdi. Nusrat akaning nechta farzandi bor?",
+  "options": {
+   "A": "2",
+   "B": "4",
+   "C": "3",
+   "D": "5"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 466,
+  "file": "rasmlar/math_v07_q466.jpg",
+  "subject": "Matematika",
+  "question": "2 ta 8 raqami va 1 ta 3 raqamidan nechta turli 3 xonali son tuzish mumkin?",
+  "options": {
+   "A": "2",
+   "B": "1",
+   "C": "6",
+   "D": "3"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 467,
+  "file": "rasmlar/math_v07_q467.jpg",
+  "subject": "Matematika",
+  "question": "Rasmdagi to‘g‘ri to‘rtburchakning perimetri 100 cm ga teng. x ni (cm) toping.",
+  "options": {
+   "A": "7",
+   "B": "8",
+   "C": "6",
+   "D": "11"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "To‘g‘ri to‘rtburchak ABCD (A pastki chap, B pastki o‘ng, C yuqori o‘ng, D yuqori chap); to‘rt burchakda to‘g‘ri burchak belgilari; AD = (4x − 3) cm, AB = (6x − 7) cm."
+ },
+ {
+  "question_id": 468,
+  "file": "rasmlar/math_v07_q468.jpg",
+  "subject": "Matematika",
+  "question": "20 metr uzunlikdagi mato 2:3 nisbatda bo‘lingan. Kichik matoning uzunligini (m) toping.",
+  "options": {
+   "A": "9",
+   "B": "8",
+   "C": "12",
+   "D": "6"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 469,
+  "file": "rasmlar/math_v07_q469.jpg",
+  "subject": "Matematika",
+  "question": "Hisoblang: 3 · (21 − 10) − 2 · (14 − 15)",
+  "options": {
+   "A": "35",
+   "B": "33",
+   "C": "31",
+   "D": "29"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 470,
+  "file": "rasmlar/math_v07_q470.jpg",
+  "subject": "Matematika",
+  "question": "Soat 7:45 bo‘lgan vaqtdan necha daqiqa vaqt o‘tgach soat 10:15 bo‘ladi?",
+  "options": {
+   "A": "145",
+   "B": "120",
+   "C": "90",
+   "D": "150"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 471,
+  "file": "rasmlar/math_v07_q471.png",
+  "subject": "Matematika",
+  "question": "Amallarni bajaring: (132 + 18) : 5 · 3 − 10",
+  "options": {
+   "A": "0",
+   "B": "80",
+   "C": "210",
+   "D": "90"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 472,
+  "file": "rasmlar/math_v07_q472.png",
+  "subject": "Matematika",
+  "question": "Hasan 8 ta har xil kitobdan birini ko‘pi bilan necha xil usulda tanlab olishi mumkin?",
+  "options": {
+   "A": "8",
+   "B": "7",
+   "C": "1",
+   "D": "4"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 473,
+  "file": "rasmlar/math_v07_q473.png",
+  "subject": "Matematika",
+  "question": "$\\frac{17}{6}$ noto‘g‘ri kasrning butun qismi nechaga teng?",
+  "options": {
+   "A": "2",
+   "B": "1",
+   "C": "4",
+   "D": "3"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 474,
+  "file": "rasmlar/math_v07_q474.png",
+  "subject": "Matematika",
+  "question": "Qirrasi 8 cm bo‘lgan kubning yoniga rasmda ko‘rsatilganidek kichik kub joylashtirilgan. Kichik kubning to‘la sirtini (cm²) toping (kichik kubning qirrasi katta kub qirrasining yarmiga teng).",
+  "options": {
+   "A": "384",
+   "B": "96",
+   "C": "216",
+   "D": "320"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "Katta kubning yuqori qirrasi 8 cm deb belgilangan; kichik kub katta kubning o‘ng yon sirtiga yopishgan."
+ },
+ {
+  "question_id": 475,
+  "file": "rasmlar/math_v07_q475.png",
+  "subject": "Matematika",
+  "question": "1260000 so‘mning 20 %i necha so‘m bo‘ladi?",
+  "options": {
+   "A": "242000",
+   "B": "262000",
+   "C": "252000",
+   "D": "232000"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 476,
+  "file": "rasmlar/math_v07_q476.png",
+  "subject": "Matematika",
+  "question": "Sotuvchida 115 kg olma bor edi. U olmaning x kilogrammini sotdi va unda 65 kg olma qoldi. Quyidagi tenglamalardan qaysi biri masala shartiga mos tuzilgan?",
+  "options": {
+   "A": "x − 65 = 115",
+   "B": "65 − x = 115",
+   "C": "x − 115 = 65",
+   "D": "115 − x = 65"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 477,
+  "file": "rasmlar/math_v07_q477.png",
+  "subject": "Matematika",
+  "question": "Rasmda jami nechta to‘g‘ri to‘rtburchak tasvirlangan?",
+  "options": {
+   "A": "5",
+   "B": "6",
+   "C": "4",
+   "D": "3"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "Katta to‘g‘ri to‘rtburchak: chapda bitta katta to‘g‘ri to‘rtburchak, o‘ngda ikkita kichik to‘g‘ri to‘rtburchak bir-birining ustida."
+ },
+ {
+  "question_id": 478,
+  "file": "rasmlar/math_v07_q478.png",
+  "subject": "Matematika",
+  "question": "Sinfda 27 nafar o‘quvchi bor. Ular teng sonli 3 ta guruhga bo‘lindi. Har bir guruhda necha nafar o‘quvchi bor?",
+  "options": {
+   "A": "11",
+   "B": "10",
+   "C": "8",
+   "D": "9"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Asl rasmda savol matni yo‘q edi; to‘g‘ri javob (D=9) bo‘yicha qayta yozildi (2026-10-31).",
+  "generated": true
+ },
+ {
+  "question_id": 479,
+  "file": "rasmlar/math_v07_q479.png",
+  "subject": "Matematika",
+  "question": "Agar bir qarich (taqribiy) 22 cm bo‘lsa, 308 cm necha qarich bo‘ladi?",
+  "options": {
+   "A": "13",
+   "B": "14",
+   "C": "16",
+   "D": "12"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 480,
+  "file": "rasmlar/math_v07_q480.png",
+  "subject": "Matematika",
+  "question": "Avtomobil 100 km yo‘l yursa, o‘rtacha 8 litr benzin sarflaydi. Avtomobil 550 km yo‘l yursa, o‘rtacha necha litr benzin sarflaydi?",
+  "options": {
+   "A": "42",
+   "B": "46",
+   "C": "40",
+   "D": "44"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 481,
+  "file": "rasmlar/math_v08_q481.jpg",
+  "subject": "Matematika",
+  "question": "Rasmda berilgan uchburchakning perimetrini toping.",
+  "options": {
+   "A": "23",
+   "B": "21",
+   "C": "20",
+   "D": "22"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "Uchburchak ABC; AB=8, AC=7, BC=6; ichida P=?"
+ },
+ {
+  "question_id": 482,
+  "file": "rasmlar/math_v08_q482.jpg",
+  "subject": "Matematika",
+  "question": "Tenglamani yeching: $\\frac{7}{8-x}=\\frac{10}{9+x}$",
+  "options": {
+   "A": "1",
+   "B": "0",
+   "C": "2",
+   "D": "3"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 483,
+  "file": "rasmlar/math_v08_q483.jpg",
+  "subject": "Matematika",
+  "question": "Quyidagilardan qaysi biri to‘g‘ri?",
+  "options": {
+   "A": "10 m²=10000 mm²",
+   "B": "10 m²=100 dm²",
+   "C": "10 m²=1000 cm²",
+   "D": "10 m²=1000 dm²"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 484,
+  "file": "rasmlar/math_v08_q484.jpg",
+  "subject": "Matematika",
+  "question": "7,37; 5,45 va 2,18 sonlarining o‘rta arifmetik qiymati nechaga teng?",
+  "options": {
+   "A": "6",
+   "B": "7",
+   "C": "4",
+   "D": "5"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 485,
+  "file": "rasmlar/math_v08_q485.jpg",
+  "subject": "Matematika",
+  "question": "Rasmdagi ma’lumotlardan foydalanib baliq uzunligining necha foizi havoda ekanligini aniqlang.",
+  "options": {
+   "A": "16",
+   "B": "$16\\frac{2}{3}$",
+   "C": "15",
+   "D": "$16\\frac{1}{3}$"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "Geometrik baliq, umumiy balandlik 12 dm. Yuqoridan pastga: 1/6 qismi havoda, 1/2 qismi suvda, 1/3 qismi loyda; zonalar gorizontal chiziqlar bilan ajratilgan; yuqori qanotlar bo‘yalgan."
+ },
+ {
+  "question_id": 486,
+  "file": "rasmlar/math_v08_q486.jpg",
+  "subject": "Matematika",
+  "question": "Arqon 2:3 nisbatda ikki bo‘lakka bo‘lindi. Kichik bo‘lakning uzunligi 12 metr bo‘lsa, dastlab (bo‘linmagan) arqonning uzunligi necha metr bo‘lgan?",
+  "options": {
+   "A": "24",
+   "B": "25",
+   "C": "30",
+   "D": "36"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 487,
+  "file": "rasmlar/math_v08_q487.jpg",
+  "subject": "Matematika",
+  "question": "Kubning qirrasi 5 dm bo‘lsa, hajmini (dm³) toping.",
+  "options": {
+   "A": "1000",
+   "B": "512",
+   "C": "729",
+   "D": "125"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 488,
+  "file": "rasmlar/math_v08_q488.jpg",
+  "subject": "Matematika",
+  "question": "Quyidagi tengliklardan qaysi biri to‘g‘ri?",
+  "options": {
+   "A": "48 = 7 · 5 + 6",
+   "B": "48 = 6 · 5 + 9",
+   "C": "48 = 6 · 5 + 6",
+   "D": "48 = 8 · 5 + 8"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 489,
+  "file": "rasmlar/math_v08_q489.jpg",
+  "subject": "Matematika",
+  "question": "Oilada 4 kishi bor. Ulardan har birining tug‘ilgan kunida qolganlarining har biri bittadan sovg‘a berishadi. Bir yilda bu oilada (tug‘ilgan kun uchun yig‘ilgan) jami sovg‘alar soni eng ko‘pi bilan nechta bo‘ladi?",
+  "options": {
+   "A": "12",
+   "B": "16",
+   "C": "4",
+   "D": "8"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 490,
+  "file": "rasmlar/math_v08_q490.jpg",
+  "subject": "Matematika",
+  "question": "Hisoblang: 2 · (18 − 6) + 3 · (9 − 12)",
+  "options": {
+   "A": "39",
+   "B": "15",
+   "C": "27",
+   "D": "−15"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 491,
+  "file": "rasmlar/math_v08_q491.png",
+  "subject": "Matematika",
+  "question": "Bochkada 300 litr yog‘ bor. Birinchi kuni bu yog‘ning 25 dm³ i, ikkinchi kuni esa 50 dm³ i ishlatildi. Bochkada necha litr yog‘ (ishlatilmay) qolgan?",
+  "options": {
+   "A": "225",
+   "B": "235",
+   "C": "220",
+   "D": "215"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 492,
+  "file": "rasmlar/math_v08_q492.png",
+  "subject": "Matematika",
+  "question": "Nol raqami 482068 sonining qaysi xona birligida joylashgan?",
+  "options": {
+   "A": "minglar",
+   "B": "o‘n minglar",
+   "C": "yuz minglar",
+   "D": "yuzlar"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 493,
+  "file": "rasmlar/math_v08_q493.png",
+  "subject": "Matematika",
+  "question": "Hajmi 135 cm³ ga teng bo‘lgan to‘g‘ri burchakli parallelepipedning balandligi 9 cm ga teng. To‘g‘ri burchakli parallelepiped asosining yuzini (cm²) toping.",
+  "options": {
+   "A": "12",
+   "B": "14",
+   "C": "15",
+   "D": "13"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 494,
+  "file": "rasmlar/math_v08_q494.png",
+  "subject": "Matematika",
+  "question": "Nuqtalar o‘rniga qaysi eng katta butun sonni qo‘ysak, 225 − … > 144 tengsizlik to‘g‘ri bo‘ladi?",
+  "options": {
+   "A": "82",
+   "B": "81",
+   "C": "−140",
+   "D": "80"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 495,
+  "file": "rasmlar/math_v08_q495.png",
+  "subject": "Matematika",
+  "question": "Avtomobil 60 km/h tezlik bilan belgilangan butun yo‘lni 3,6 soatda bosib o‘tadi. Avtomobil qanday tezlikda (km/h) harakatlansa, belgilangan butun yo‘lni 2,4 soatda bosib o‘tadi?",
+  "options": {
+   "A": "85",
+   "B": "90",
+   "C": "95",
+   "D": "80"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 496,
+  "file": "rasmlar/math_v08_q496.png",
+  "subject": "Matematika",
+  "question": "Tenglamani yeching: $\\frac{6}{x} \\cdot \\frac{9}{16} = \\frac{27}{32}$",
+  "options": {
+   "A": "4",
+   "B": "8",
+   "C": "2",
+   "D": "6"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 497,
+  "file": "rasmlar/math_v08_q497.png",
+  "subject": "Matematika",
+  "question": "Hisoblang: $\\frac{1}{2} + \\frac{1}{4} + \\frac{1}{6} + \\frac{1}{12}$",
+  "options": {
+   "A": "1",
+   "B": "$\\frac{11}{12}$",
+   "C": "$\\frac{1}{6}$",
+   "D": "$\\frac{9}{12}$"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 498,
+  "file": "rasmlar/math_v08_q498.png",
+  "subject": "Matematika",
+  "question": "O‘quvchi 8 ta har xil she’rdan birini ko‘pi bilan necha xil usulda tanlab yod olishi mumkin?",
+  "options": {
+   "A": "1",
+   "B": "4",
+   "C": "8",
+   "D": "7"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 499,
+  "file": "rasmlar/math_v08_q499.png",
+  "subject": "Matematika",
+  "question": "Ikkita son berilgan. Birinchisi 80 ga teng. Ikkinchi son birinchisidan 20 % ga ortiq bo‘lsa, berilgan sonlardan kattasini toping.",
+  "options": {
+   "A": "16",
+   "B": "80",
+   "C": "64",
+   "D": "96"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 500,
+  "file": "rasmlar/math_v08_q500.png",
+  "subject": "Matematika",
+  "question": "Chizmadagi shakllarning bo‘yalgan qismlarini ifodalovchi kasr sonlar yig‘indisini hisoblang.",
+  "options": {
+   "A": "$\\frac{4}{5}$",
+   "B": "$\\frac{2}{3}$",
+   "C": "$\\frac{7}{10}$",
+   "D": "$1\\frac{1}{2}$"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "Ikki 5 qirrali yulduz, har biri markazdan 10 ta uchburchakka bo‘lingan; orasida + va o‘ngda =. Chap yulduz: yuqori uchning chap yarmi qora; markazdan o‘ngga ichki uchburchak qora. O‘ng yulduz: yuqori uchning o‘ng yarmi qora; pastki-chap uch qora; markazdan pastki-o‘ng botiqqa ichki uchburchak qora."
+ },
+ {
+  "question_id": 501,
+  "file": "rasmlar/math_v09_q501.jpg",
+  "subject": "Matematika",
+  "question": "Ikkita son berilgan. Birinchisi 80 ga teng. Ikkinchi son birinchisidan 20 % ga ortiq bo‘lsa, berilgan sonlardan kattasini toping.",
+  "options": {
+   "A": "96",
+   "B": "80",
+   "C": "64",
+   "D": "16"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 502,
+  "file": "rasmlar/math_v09_q502.jpg",
+  "subject": "Matematika",
+  "question": "Chizmadagi shakllarning bo‘yalgan qismlarini ifodalovchi kasr sonlar yig‘indisini hisoblang.",
+  "options": {
+   "A": "$\\frac{7}{10}$",
+   "B": "$\\frac{4}{5}$",
+   "C": "$\\frac{2}{3}$",
+   "D": "$1\\frac{1}{2}$"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "Ikki 5 qirrali yulduz, har biri markazdan 10 ta uchburchakka bo‘lingan; orasida + va o‘ngda =. Chap yulduz: pastki-chap va pastki-o‘ng uchlari markazgacha qora. O‘ng yulduz: yuqori uchning o‘ng yarmi qora; markazdan pastki-o‘ng botiqqa ichki uchburchak qora."
+ },
+ {
+  "question_id": 503,
+  "file": "rasmlar/math_v09_q503.jpg",
+  "subject": "Matematika",
+  "question": "Hajmi 135 cm³ ga teng bo‘lgan to‘g‘ri burchakli parallelepipedning balandligi 9 cm ga teng. To‘g‘ri burchakli parallelepiped asosining yuzini (cm²) toping.",
+  "options": {
+   "A": "15",
+   "B": "14",
+   "C": "12",
+   "D": "13"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 504,
+  "file": "rasmlar/math_v09_q504.jpg",
+  "subject": "Matematika",
+  "question": "5,86; 7,04 va 2,1 sonlarining o‘rta arifmetik qiymati nechaga teng?",
+  "options": {
+   "A": "5",
+   "B": "4,85",
+   "C": "5,25",
+   "D": "6"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 505,
+  "file": "rasmlar/math_v09_q505.jpg",
+  "subject": "Matematika",
+  "question": "Bochkada 300 litr yog‘ bor. Birinchi kuni bu yog‘ning 25 dm³ i, ikkinchi kuni esa 50 dm³ i ishlatildi. Bochkada necha litr yog‘ (ishlatilmay) qolgan?",
+  "options": {
+   "A": "235",
+   "B": "225",
+   "C": "215",
+   "D": "220"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 506,
+  "file": "rasmlar/math_v09_q506.jpg",
+  "subject": "Matematika",
+  "question": "Nol raqami 482068 sonining qaysi xona birligida joylashgan?",
+  "options": {
+   "A": "yuz minglar",
+   "B": "minglar",
+   "C": "o‘n minglar",
+   "D": "yuzlar"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 507,
+  "file": "rasmlar/math_v09_q507.jpg",
+  "subject": "Matematika",
+  "question": "Tenglamani yeching: 2(5x + 1) = 8x + 10",
+  "options": {
+   "A": "6",
+   "B": "7",
+   "C": "4",
+   "D": "5"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 508,
+  "file": "rasmlar/math_v09_q508.jpg",
+  "subject": "Matematika",
+  "question": "O‘quvchi 8 ta har xil she’rdan birini ko‘pi bilan necha xil usulda tanlab yod olishi mumkin?",
+  "options": {
+   "A": "7",
+   "B": "8",
+   "C": "1",
+   "D": "4"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 509,
+  "file": "rasmlar/math_v09_q509.jpg",
+  "subject": "Matematika",
+  "question": "Avtomobil 60 km/h tezlik bilan belgilangan butun yo‘lni 3,6 soatda bosib o‘tadi. Avtomobil qanday tezlikda (km/h) harakatlansa, belgilangan butun yo‘lni 2,4 soatda bosib o‘tadi?",
+  "options": {
+   "A": "80",
+   "B": "90",
+   "C": "95",
+   "D": "85"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 510,
+  "file": "rasmlar/math_v09_q510.jpg",
+  "subject": "Matematika",
+  "question": "Nuqtalar o‘rniga qaysi eng katta butun sonni qo‘ysak, 225 − … > 144 tengsizlik to‘g‘ri bo‘ladi?",
+  "options": {
+   "A": "−140",
+   "B": "81",
+   "C": "80",
+   "D": "82"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 511,
+  "file": "rasmlar/math_v10_q511.jpg",
+  "subject": "Matematika",
+  "question": "Quyidagi sonlardan qaysi biri $\\frac{3}{4}$ ga teng?",
+  "options": {
+   "A": "$\\frac{60}{72}$",
+   "B": "$\\frac{64}{80}$",
+   "C": "$\\frac{72}{90}$",
+   "D": "$\\frac{69}{92}$"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 512,
+  "file": "rasmlar/math_v10_q512.jpg",
+  "subject": "Matematika",
+  "question": "Rasmning qancha qismi bo‘yalgan?",
+  "options": {
+   "A": "$\\frac{2}{5}$",
+   "B": "$\\frac{3}{5}$",
+   "C": "$\\frac{1}{2}$",
+   "D": "$\\frac{7}{10}$"
+  },
+  "has_figure": true,
+  "confidence": "high",
+  "notes": "2 qatorli to‘g‘ri to‘rtburchak, 5 ta vertikal bo‘lak (3-bo‘lak kengroq). Yuqori: bo‘yalgan, oq, bo‘yalgan, oq, bo‘yalgan. Pastki: oq, bo‘yalgan, oq, bo‘yalgan, oq. Chapda har qator yonida kichik gorizontal chiziqcha."
+ },
+ {
+  "question_id": 513,
+  "file": "rasmlar/math_v10_q513.jpg",
+  "subject": "Matematika",
+  "question": "Kubning qirrasining uzunligi 6 cm ga teng bo‘lsa, uning to‘la sirti yuzini (cm²) toping.",
+  "options": {
+   "A": "36",
+   "B": "64",
+   "C": "128",
+   "D": "216"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 514,
+  "file": "rasmlar/math_v10_q514.jpg",
+  "subject": "Matematika",
+  "question": "965412 soni necha xonali son hisoblanadi?",
+  "options": {
+   "A": "6",
+   "B": "4",
+   "C": "2",
+   "D": "5"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 515,
+  "file": "rasmlar/math_v10_q515.jpg",
+  "subject": "Matematika",
+  "question": "Hisoblang: 16 · 6 + 4 · 16",
+  "options": {
+   "A": "160",
+   "B": "150",
+   "C": "140",
+   "D": "144"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 516,
+  "file": "rasmlar/math_v10_q516.jpg",
+  "subject": "Matematika",
+  "question": "300 ning 5 %ini toping.",
+  "options": {
+   "A": "60",
+   "B": "15",
+   "C": "30",
+   "D": "12"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 517,
+  "file": "rasmlar/math_v10_q517.jpg",
+  "subject": "Matematika",
+  "question": "41 kilometr necha detsimetrga teng?",
+  "options": {
+   "A": "410000",
+   "B": "4100000",
+   "C": "41000",
+   "D": "41000000"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 518,
+  "file": "rasmlar/math_v10_q518.jpg",
+  "subject": "Matematika",
+  "question": "x ning o‘rniga qaysi son qo‘yilsa, 7 : 8 = 3,5 : x proporsiya to‘g‘ri tenglikka aylanadi?",
+  "options": {
+   "A": "3.5",
+   "B": "4.5",
+   "C": "5",
+   "D": "4"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 519,
+  "file": "rasmlar/math_v10_q519.jpg",
+  "subject": "Matematika",
+  "question": "20 ta har xil guldan birini necha xil usulda tanlab olish mumkin?",
+  "options": {
+   "A": "40",
+   "B": "10",
+   "C": "20",
+   "D": "30"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 520,
+  "file": "rasmlar/math_v10_q520.jpg",
+  "subject": "Matematika",
+  "question": "Tenglamani yeching: $\\frac{3}{2x - 1} = \\frac{1}{5}$",
+  "options": {
+   "A": "9",
+   "B": "7",
+   "C": "6",
+   "D": "8"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 521,
+  "file": "rasmlar/ona_tili_v01_q521.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobdagi so‘zlar to‘g‘ri yozilgan?",
+  "options": {
+   "A": "poyema, kulgi",
+   "B": "fojia,qutulmoq",
+   "C": "sharoyit, mudir",
+   "D": "ukrain, quvir"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 522,
+  "file": "rasmlar/ona_tili_v01_q522.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda asos va qo‘shimchalar imlosi bilan bog‘liq xatolik KUZATILMAYDI?",
+  "options": {
+   "A": "Rostgo‘yilik insonni ulug‘lar darajasiga yetgazadi.",
+   "B": "Taxtga chiqqach, adolat bilan ish tutipti.",
+   "C": "Haqqa ergashgan xalqqa yetishadi.",
+   "D": "Yil choraklarining hisobi esa yilboshidan yurutiladi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 523,
+  "file": "rasmlar/ona_tili_v01_q523.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobdagi juftliklar ajratib yoziladi?",
+  "options": {
+   "A": "Sharqiy//Afrika, bir//muncha",
+   "B": "ayta//oladi, bir//kuni",
+   "C": "Yakka//saroy, gul//beor",
+   "D": "nuqtayi//nazar, bira//to‘la"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 524,
+  "file": "rasmlar/ona_tili_v01_q524.jpg",
+  "subject": "Ona tili",
+  "question": "Quyidagi parchada necha o‘rinda vergul tushirib qoldirilgan? Do‘stim shuni bilingki Vatanimiz jahonning rivojlangan mamlakatlari qatoridan o‘rin olajak. Bunga biz ham shubhasiz o‘z hissamizni qo‘shamiz.",
+  "options": {
+   "A": "4 ta",
+   "B": "2 ta",
+   "C": "3 ta",
+   "D": "5 ta"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 525,
+  "file": "rasmlar/ona_tili_v01_q525.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobdagi ajratib ko‘rsatilgan so‘z ko‘chma ma’noda qo‘llangan?",
+  "options": {
+   "A": "maxsus <u>topshiriq</u>",
+   "B": "<u>yuqumli</u> kasallik",
+   "C": "<u>serhosil</u> urug‘",
+   "D": "<u>mayda</u> muammo"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 526,
+  "file": "rasmlar/ona_tili_v01_q526.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda bir necha turkum doirasida shakldoshlik hosil qiladigan omonim so‘z berilgan?",
+  "options": {
+   "A": "chakka",
+   "B": "qovoq",
+   "C": "bo‘y",
+   "D": "shim"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 527,
+  "file": "rasmlar/ona_tili_v01_q527.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda ham sof, ham vazifadosh ko‘makchi ishtirok etgan?",
+  "options": {
+   "A": "Siz bilan hamsuhbat bo‘lmasdan avval boshqacha xayolda edim.",
+   "B": "Yo‘lchida Gulnor haqida ikki og‘iz so‘z eshitish orzusi kuchli edi.",
+   "C": "Bu to‘g‘rida o‘qituvchilar gapirsa, o‘zimga olmas edim.",
+   "D": "Gap futbol o‘yini ustida ketardi. Birdan xona eshigi ochildi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 528,
+  "file": "rasmlar/ona_tili_v01_q528.jpg",
+  "subject": "Ona tili",
+  "question": "“Boshi shishmoq” iborasining ma’nodosini toping.",
+  "options": {
+   "A": "O‘ylayverib gangimoq",
+   "B": "enka-tenkasini chiqarmoq",
+   "C": "Enka-tenkasi chiqmoq",
+   "D": "miyasi g‘ovlab ketmoq"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 529,
+  "file": "rasmlar/ona_tili_v01_q529.jpg",
+  "subject": "Ona tili",
+  "question": "Buyruq maylidagi fe’l qatnashgan gap berilgan javobni aniqlang.",
+  "options": {
+   "A": "Huquqshunosning xohish-istagiga binoan, bankirning chorbog‘ida miltiqdan ikki marta o‘q uzildi.",
+   "B": "Huquqshunosning mutolaasi halokatga uchragan kema parchasiga yopishib olgan kishi holatiga o‘xshardi.",
+   "C": "Keling, garov o‘ynaymiz: siz kazematda besh yil ham o‘tira olmaysiz!",
+   "D": "Roziman! Siz millionlaringizni, men bo‘lsam o‘z erkimni tikaman! – dedi huquqshunos."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 530,
+  "file": "rasmlar/ona_tili_v01_q530.jpg",
+  "subject": "Ona tili",
+  "question": "Quyidagi qo‘shma gap turini aniqlang. Shogirdlar qancha ko‘p bo‘lsa, ko‘ngil qafasi shuncha ravshanroq bo‘ladi.",
+  "options": {
+   "A": "bog‘lovchisiz qo‘shma gap",
+   "B": "bog‘langan qo‘shma gap",
+   "C": "ergash gapli qo‘shma gap",
+   "D": "ko‘chirma gapli qo‘shma gap"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 531,
+  "file": "rasmlar/ona_tili_v02_q531.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda so‘z va ibora ma’nodoshligi berilgan?",
+  "options": {
+   "A": "lapashang – landavur",
+   "B": "aytib bermoq – bayon qilmoq",
+   "C": "xursand bo‘lmoq – do‘ppisini osmonga otmoq",
+   "D": "ko‘zini shira bosgan – dimog‘i ko‘tarilgan"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 532,
+  "file": "rasmlar/ona_tili_v02_q532.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi so‘zlarning yozilishida bosh harflar imlosiga amal qilingan?",
+  "options": {
+   "A": "“O‘zbekiston qahramoni” unvoni, ToshDU",
+   "B": "8-Mart – xalqaro xotin-qizlar kuni, Hamza hakimzoda Niyoziy",
+   "C": "O‘zbekiston Respublikasi Vazirlar Mahkamasi, Ichki ishlar vazirligi",
+   "D": "Janubiy koreya, To‘rtko‘l tumani"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 533,
+  "file": "rasmlar/ona_tili_v02_q533.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda tushum kelishigini tushirib qo‘llash uslubiy jihatdan xato sanaladi?",
+  "options": {
+   "A": "Otam yo‘qolgan qo‘yimizni qidirib tuni bilan mijja qoqmadi, tongga yaqin topib keldi.",
+   "B": "U kitobni o‘qishga berilib ketganidan qorong‘i tushganiga ham e’tibor bermasdi.",
+   "C": "Ertasi kuni maktabga borganida kutubxonadan qushlar haqida yozilgan kitobni oldi.",
+   "D": "Narsalarining ichidan o‘zining nomiga yozilgan xatni topib oldi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 534,
+  "file": "rasmlar/ona_tili_v02_q534.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda qismlari qo‘shib yoziladigan so‘zlar berilgan?",
+  "options": {
+   "A": "hamma//vaqt, to‘q//qizil",
+   "B": "sap//sariq, och//sariq",
+   "C": "adirma//adir, Bo‘z//suv",
+   "D": "taklif//noma, xush//xabar"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 535,
+  "file": "rasmlar/ona_tili_v02_q535.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda o‘rin bildiruvchi ravishlar qatori berilgan?",
+  "options": {
+   "A": "hamma yoqda, oldinda, kechasi",
+   "B": "ichkarida, tashqarida, shu payt",
+   "C": "uzoqda, nari, shu kuni",
+   "D": "shu yoqda, o‘rtada, yuqoriga"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 536,
+  "file": "rasmlar/ona_tili_v02_q536.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobdagi so‘zlar to‘g‘ri yozilgan?",
+  "options": {
+   "A": "avtomat, exson",
+   "B": "maqsad, baho",
+   "C": "hamon, okeyan",
+   "D": "xarorat, davomad"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 537,
+  "file": "rasmlar/ona_tili_v02_q537.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda so‘zlashuv uslubiga oid gap berilgan?",
+  "options": {
+   "A": "Hazrat Mir Alisher Navoiy Hirot osmonining ma’naviy quyoshi edi.",
+   "B": "Ushbu ma’lumotnoma so‘ralgan joyga taqdim etish uchun berildi.",
+   "C": "– Ke, picha dam ol, qo‘zichog‘im, toza charchabsan.",
+   "D": "Uchrashuv 15-may kuni soat 15⁰⁰ da maktabning majlislar zalida boshlanadi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 538,
+  "file": "rasmlar/ona_tili_v02_q538.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda tinish belgisi bilan bog‘liq xatolik mavjud emas?",
+  "options": {
+   "A": "Kishini g‘azab yoki shunga o‘xshash his egallasa; uning qabul qilgan qarori albatta noto‘g‘ri bo‘ladi.",
+   "B": "Haqiqiy olimning so‘zi, o‘yi, fikri va ishi bir xil bo‘ladi.",
+   "C": "Shunday harakat qilingki – birovga yuk bo‘lmang balki hamroh bo‘ling.",
+   "D": "Hayotning boshqalar ko‘rmagan tomonini ko‘rish ham – talant."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 539,
+  "file": "rasmlar/ona_tili_v02_q539.jpg",
+  "subject": "Ona tili",
+  "question": "Kesim ajratib ko‘rsatilgan gapni toping.",
+  "options": {
+   "A": "<u>Yasanib olgan</u> Naziraxon chiqib keldi.",
+   "B": "<u>O‘ylamay</u> qilingan ish boshga keltirar tashvish.",
+   "C": "U o‘z ishini juda pishiq <u>bajargan</u>, xatosini topolmaysiz.",
+   "D": "Xonaga shoshib <u>kirgan</u> yigit biroz o‘ng‘aysiz ahvolga tushdi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 540,
+  "file": "rasmlar/ona_tili_v02_q540.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda rost so‘zi “adil, tik” ma’nolarida qo‘llangan?",
+  "options": {
+   "A": "Musibat ba’zan eng zabardast yigitlarning ham rost qomatini egib qo‘yadi.",
+   "B": "Yolg‘onchining rost so‘zi ham atrofdagilar uchun yolg‘ondek tuyulaveradi.",
+   "C": "Rost, ba’zi vaqtlarda atrofdagilardan ham to‘yib ketasan kishi.",
+   "D": "Rostini aytsam, bugun ham siz aytgan joyga bora olmayman."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 541,
+  "file": "rasmlar/ona_tili_v03_q541.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda tinish belgisi bilan bog‘liq xatolik mavjud emas?",
+  "options": {
+   "A": "Hayotning boshqalar ko‘rmagan tomonini ko‘rish – talant.",
+   "B": "Kishini g‘azab yoki shunga o‘xshash his egallasa; uning qabul qilgan qarori albatta noto‘g‘ri bo‘ladi.",
+   "C": "Shunday harakat qilingki – birovga yuk bo‘lmang balki hamroh bo‘ling.",
+   "D": "Kelajak bundan buyon ikki xil toifa kishilar: aqliy, hamda jismoniy mehnat kishilari qo‘lidadir."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 542,
+  "file": "rasmlar/ona_tili_v03_q542.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi so‘zlar ravish turkumiga mansub?",
+  "options": {
+   "A": "hech nima, har gal",
+   "B": "vijdonan, hech qanday",
+   "C": "mardona, to‘yona",
+   "D": "darrov, majburan"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 543,
+  "file": "rasmlar/ona_tili_v03_q543.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda ega qatnashmagan?",
+  "options": {
+   "A": "Dunyoda kitobdan yaxshi do‘st yo‘qdir.",
+   "B": "O‘qishga arziydigan narsalarni yozish kerak.",
+   "C": "Yuzaki o‘ylash yaxshi ish emas.",
+   "D": "Ilg‘orlarga mukofot puli berildi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 544,
+  "file": "rasmlar/ona_tili_v03_q544.jpg",
+  "subject": "Ona tili",
+  "question": "Imloviy jihatdan to‘g‘ri yozilgan so‘zlarni toping.",
+  "options": {
+   "A": "mustahkam, ma’ruza",
+   "B": "qarong‘i, soviq",
+   "C": "munosibat, muvoffiq",
+   "D": "paskashlik, loyixa"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 545,
+  "file": "rasmlar/ona_tili_v03_q545.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda ajratib ko‘rsatilgan so‘z “o‘git, pand-nasihat” ma’nolarida qo‘llangan?",
+  "options": {
+   "A": "Shu voqea sababli orangizdan biror <u>so‘z</u> o‘tdimi, ancha xafa ko‘rinasan?",
+   "B": "Bu gap tarkibidagi bir nechta <u>so‘z</u> o‘z o‘rnida qo‘llanmagan ekan.",
+   "C": "Menga ishoning, bu haqida hech kimga aytmaslikka <u>so‘z</u> beraman.",
+   "D": "Do‘st <u>so‘zini</u> tasilama, tashlab boshing qashlama."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 546,
+  "file": "rasmlar/ona_tili_v03_q546.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda ko‘p nuqta o‘rnida “urib” so‘zini ham, “tushirib” so‘zini ham qo‘llash mumkin?",
+  "options": {
+   "A": "Shu sohadagi kamchiliklarni bir necha bor gazetada ... chiqdi, ammo foydasi bo‘lmadi.",
+   "B": "Ertalabdan yomg‘ir maydalab ... turdi, kechga yaqin qorga aylandi.",
+   "C": "Elmurod hammani mukofotga taqdim etganda o‘zini ... qoldirgan edi.",
+   "D": "Jo‘raboshining g‘alati qiliqlari bor edi, ba’zan to‘satdan kimningdir yelkasiga mushti bilan ... qolar edi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 547,
+  "file": "rasmlar/ona_tili_v03_q547.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda rasmiy uslubga oid gap berilgan?",
+  "options": {
+   "A": "Hazrat Alisher Navoiy Hirotning ma’naviy quyoshi edi.",
+   "B": "Tovush to‘lqinlarining vujudga kelishi va tarqalishi bilan bog‘liq hodisalar akustik hodisalar deb yuritiladi.",
+   "C": "– Ke, picha dam ol, qo‘zichog‘im, toza charchabsan.",
+   "D": "Ushbu ma’lumotnoma so‘ralgan joyga taqdim etish uchun berildi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 548,
+  "file": "rasmlar/ona_tili_v03_q548.jpg",
+  "subject": "Ona tili",
+  "question": "Ajratib yoziladigan qo‘shma so‘zlar qatorini toping.",
+  "options": {
+   "A": "savdo//sotiq, ichak//uzdi",
+   "B": "hamma//vaqt, isrof//qilmoq",
+   "C": "tele//ko‘rsatuv, sap//sariq",
+   "D": "ko‘rmoqchi//emish, xon//taxta"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 549,
+  "file": "rasmlar/ona_tili_v03_q549.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda bosh harflar imlosiga amal qilingan?",
+  "options": {
+   "A": "Erkin Vohidov Toshkent davlat universitetining filologiya fakultetida tahsil olgan.",
+   "B": "Erkin Vohidov “Ruhlar Isyoni” dostonining muallifidir.",
+   "C": "O‘zbekiston Xalq Shoiri Erkin Vohidov 1964-yil “Nido” dostonini yaratdi.",
+   "D": "Erkin Vohidov Farg‘ona Viloyatining Oltiariq tumanida tavallud topgan."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 550,
+  "file": "rasmlar/ona_tili_v03_q550.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda kelishik qo‘shimchasini qo‘llash bilan bog‘liq uslubiy xatolik mavjud?",
+  "options": {
+   "A": "Onam kechasi uy yumushlarini bajarar, kunduzi esa dalada ishlar edilar.",
+   "B": "Siz bilan hamsuhbat bo‘lganimdan xursandman.",
+   "C": "Jaloliddin singlisini so‘nggi marta Samarqandga ko‘rgan edi.",
+   "D": "U ham sen kabi yoshligidan fantastik asar o‘qishga qiziqardi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 551,
+  "file": "rasmlar/ona_tili_v04_q551.jpg",
+  "subject": "Ona tili",
+  "question": "Qo‘shib yoziladigan so‘zlar qatorini aniqlang.",
+  "options": {
+   "A": "olov//rang, shu//vaqt",
+   "B": "olib//keldi, oy//singari",
+   "C": "mehmon//do‘st, qishin//yozin",
+   "D": "umum//xalq, dev//sifat"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 552,
+  "file": "rasmlar/ona_tili_v04_q552.jpg",
+  "subject": "Ona tili",
+  "question": "Aniqlovchi ajratib ko‘rsatilgan gapni toping.",
+  "options": {
+   "A": "<u>Yasanib olgan</u> Naziraxon chiqib keldi.",
+   "B": "Ey Vatan, sening tog‘laring <u>buyuk</u>, bog‘laring beqiyos!",
+   "C": "<u>O‘ylamay</u> qilingan ish boshga keltirar tashvish.",
+   "D": "U o‘z ishini juda pishiq <u>bajargan</u>, xatosini topolmaysiz."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 553,
+  "file": "rasmlar/ona_tili_v04_q553.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda so‘z va ibora ma’nodoshligi berilgan?",
+  "options": {
+   "A": "olamdan o‘tmoq – ko‘z yummoq",
+   "B": "mizg‘imoq – ko‘zi ilinmoq",
+   "C": "yerga urmoq – oyoqosti qilmoq",
+   "D": "cho‘chib ketmoq – qo‘rqib ketmoq"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 554,
+  "file": "rasmlar/ona_tili_v04_q554.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi so‘zlar ravish turkumiga mansub?",
+  "options": {
+   "A": "yuzlarcha, do‘stlarcha",
+   "B": "zo‘rg‘a, sovg‘a",
+   "C": "bafurja, arang",
+   "D": "minglab, so‘zlab"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 555,
+  "file": "rasmlar/ona_tili_v04_q555.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapdagi ajratib ko‘rsatilgan so‘z uslubiy jihatdan noto‘g‘ri qo‘llangan?",
+  "options": {
+   "A": "Hayot yo‘llaridan ishonch bilan borayotgan bolani ko‘rish dunyodagi eng go‘zal <u>manzaradir</u>.",
+   "B": "Tomog‘iga ovqat tiqilib qolgan kishining yelkasiga ohistagina urib “Osh bo‘lsin!”, “Halolingiz bo‘lsin!” deyish <u>jo‘yalidir</u>.",
+   "C": "Ota-bobolarimiz yoshligimizdanoq halollik haqidagi tushunchalarni pand-nasihat yo‘li bilan ongimizga singdirishga <u>uringanlar</u>.",
+   "D": "Har xil sabablarga ko‘ra taom tanovul qilinayotganda davra <u>aholisidan</u> birortasining tomog‘iga ovqat tiqilib qolishi mumkin."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 556,
+  "file": "rasmlar/ona_tili_v04_q556.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda jo‘nalish kelishigini qo‘llash bilan bog‘liq uslubiy xatolik mavjud?",
+  "options": {
+   "A": "Ular ishni bitirgandan so‘ng ketishga qaror qilishdi.",
+   "B": "Birga o‘sgan o‘rtoqlariga ham bu haqida hech narsa demadi.",
+   "C": "Bog‘ tomonga bir-ikki qadam bosdi-yu, yana iziga qaytdi.",
+   "D": "U o‘rtog‘ini shu yerga kutib turishni rejalashtirdi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 557,
+  "file": "rasmlar/ona_tili_v04_q557.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda tinish belgisi bilan bog‘liq xatolik mavjud?",
+  "options": {
+   "A": "Ey gul, nega qoshingda xor o‘ldim?",
+   "B": "G‘afur G‘ulomning “Vaqt” she’rini yod oldik.",
+   "C": "Bola tarbiyasida hamma: ota-ona ham ustozlar ham, javobgardir.",
+   "D": "Qo‘shiq – hayotning qalbdagi aks-sadosi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 558,
+  "file": "rasmlar/ona_tili_v04_q558.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda qo‘shimcha qo‘shilishi bilan bog‘liq imloviy xatolik mavjud?",
+  "options": {
+   "A": "Oshni hammaga bir xil qilib suzdirdi.",
+   "B": "Bu gap osmonlarda uchib yurgan yigitni birpasda yerga tushirdi.",
+   "C": "Shimoldan esgan kuchli shamol uzoq davom etgan edi.",
+   "D": "Og‘ir mehnat uni nihoyatda toliqdirib qo‘ygan edi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 559,
+  "file": "rasmlar/ona_tili_v04_q559.jpg",
+  "subject": "Ona tili",
+  "question": "To‘g‘ri yozilgan so‘zlar qatorini toping.",
+  "options": {
+   "A": "ishtaxa, etiqod",
+   "B": "xavo, qa’tiy",
+   "C": "taom, tafakkur",
+   "D": "maslaxat, memor"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 560,
+  "file": "rasmlar/ona_tili_v04_q560.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapdagi ajratib ko‘rsatilgan so‘z ko‘chma ma’noda qo‘llangan?",
+  "options": {
+   "A": "Yaqinginasida <u>shovullab</u> oqayotgan katta daryo, uning yoqasida cho‘ponlarning o‘tovi tikilgan.",
+   "B": "U ancha <u>keksayib qolgan</u> otasini davolatish uchun bu yerga olib kelgan edi.",
+   "C": "G‘azabdan <u>qaltirab</u> momaqaldiroq, Boshiga osmonni qulatishga shay.",
+   "D": "Og‘riqdan yuzi <u>qizarib ketdi</u>, biror bahona topib bu yerdan chiqib ketishga harakat qildi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 561,
+  "file": "rasmlar/ona_tili_v05_q561.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapdagi ajratib ko‘rsatilgan so‘z ko‘chma ma’noda qo‘llangan?",
+  "options": {
+   "A": "Qiz <u>shohi</u> ko‘ylagini hilpiratib o‘ynayotgan shabadaga yuzlarini tutib turardi.",
+   "B": "Qizning bo‘ynidagi munchoq <u>shodasi</u> uzilib har tomonga sochilib ketdi.",
+   "C": "Cholning <u>yuzi</u> g‘azabdan dir-dir titrar, uni urib yuborguday bo‘lar edi.",
+   "D": "Ko‘p <u>og‘iz</u> bir bo‘lsa, bir og‘iz yengiladi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 562,
+  "file": "rasmlar/ona_tili_v05_q562.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda tushum kelishigini tushirib qo‘llash uslubiy jihatdan xato sanaladi?",
+  "options": {
+   "A": "Ertasi kuni maktabga borganida kutubxonadan qushlar haqida yozilgan kitobni oldi.",
+   "B": "U kitobni o‘qishga berilib ketganidan qorong‘i tushganiga ham e’tibor bermasdi.",
+   "C": "Narsalarining ichidan o‘zining nomiga yozilgan xatni topib oldi.",
+   "D": "Qarasak, bitta jonivor to‘rni yirtib chiqib ketishga harakat qilar, ammo uddasidan chiqa olmas edi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 563,
+  "file": "rasmlar/ona_tili_v05_q563.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda imloviy xatolik mavjud emas?",
+  "options": {
+   "A": "Ustoz abadiy tiriklikka erishkan avliyolar haqida so‘zlab berdi.",
+   "B": "Suv yuziga suzub chiqqan baliqlarni ko‘rdi.",
+   "C": "Uy to‘rida ilingan surat unga yoshligini eslatti.",
+   "D": "Biz ichki intizomga rioya qilishga majburmiz, hurmatli hamkasblar."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 564,
+  "file": "rasmlar/ona_tili_v05_q564.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda berilgan so‘zlar ajratib yozilishi kerak?",
+  "options": {
+   "A": "tim//qora, har//zamon",
+   "B": "hamma//yoq, taklif//noma",
+   "C": "dev//sifat, sovuq//mijoz",
+   "D": "to‘q //qizil, dardi//sar"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 565,
+  "file": "rasmlar/ona_tili_v05_q565.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda ajratib ko‘rsatilgan so‘z aniqlovchi vazifasini bajargan?",
+  "options": {
+   "A": "Bolalar <u>yangi</u> bog‘da o‘ynayotgan edilar.",
+   "B": "Har narsaga <u>qiziqish</u> – biz uchun eski odat.",
+   "C": "U eski ko‘ylagining <u>tugmasini</u> olib, o‘zini tashlab yubordi.",
+   "D": "<u>Yuzaki</u> o‘ylagan odam yutqazadi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 566,
+  "file": "rasmlar/ona_tili_v05_q566.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda ilmiy uslubga oid gap berilgan?",
+  "options": {
+   "A": "Muxbirimizning xabar berishicha, yurtdoshlarimiz saylovda faol qatnashmoqda.",
+   "B": "Fe’llar harakat va holat ma’nosini bildiruvchi so‘zlardir.",
+   "C": "Yomg‘irdan keyin bulutlar orasidan quyosh mo‘ralab qaraydi.",
+   "D": "Tadbir har oyning juma kunida o‘tkazilishiga ma’muriyat kafolat beradi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 567,
+  "file": "rasmlar/ona_tili_v05_q567.jpg",
+  "subject": "Ona tili",
+  "question": "Imloviy jihatdan to‘g‘ri yozilgan so‘zlarni toping.",
+  "options": {
+   "A": "favvora, aloxida",
+   "B": "maxtamoq, minnatdor",
+   "C": "dorboz, ravnaq",
+   "D": "tassavur, inshoat"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 568,
+  "file": "rasmlar/ona_tili_v05_q568.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda berilgan so‘zlar juftligi o‘zaro ma’nodosh so‘zlar hisoblanadi?",
+  "options": {
+   "A": "uzun – kalta",
+   "B": "olis – yaqin",
+   "C": "adl – adil",
+   "D": "ranj – alam"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 569,
+  "file": "rasmlar/ona_tili_v05_q569.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda ajratib ko‘rsatilgan so‘z payt ma’nosini bildirgan?",
+  "options": {
+   "A": "Yigitlar <u>nari-beri</u> ovqatlanishdi-yu, darhol uxlagani yotdilar.",
+   "B": "Sarvigulni podsho hammadan <u>ko‘proq</u> sevar ekan.",
+   "C": "\"<u>Keyin</u> u yoqqa o‘tamiz\", – deb o‘ng tarafdagi oynavand uyga ishora qildi.",
+   "D": "Bu gapdan ruhlangan yigitlar <u>olg‘a</u> yurishibdi va manzilga yetib borishibdi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 570,
+  "file": "rasmlar/ona_tili_v05_q570.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda vergulning qo‘llanish qoidalariga amal qilingan?",
+  "options": {
+   "A": "Bu fikrga qo‘shilmadi balki, jon-jahdi bilan qarshi chiqdi.",
+   "B": "Biz bugun, albatta, g‘alaba qozonamiz.",
+   "C": "Bizga kitob, daftar, qalam, kerak.",
+   "D": "Bu safar Nazira ham, Nodira ham, biz bilan, bordi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 571,
+  "file": "rasmlar/ona_tili_v06_q571.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi so‘zlarning yozilishida bosh harflar imlosiga amal qilingan?",
+  "options": {
+   "A": "8-dekabr – Konstitutsiya kuni, Xalq ta’limi vazirligi",
+   "B": "Adliya Vazirligi, Yozuvchilar Uyushmasi Raisi",
+   "C": "Buyuk britaniya, Shirmonbuloq qishlog‘i",
+   "D": "Jahon tinchlik kengashi, “Nuroniy” Jamg‘armasi"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 572,
+  "file": "rasmlar/ona_tili_v06_q572.jpg",
+  "subject": "Ona tili",
+  "question": "muhayyo so‘ziga ma’nodosh bo‘lmagan so‘zni toping.",
+  "options": {
+   "A": "taxt",
+   "B": "huzur",
+   "C": "shay",
+   "D": "tayyor"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 573,
+  "file": "rasmlar/ona_tili_v06_q573.jpg",
+  "subject": "Ona tili",
+  "question": "Quyidagi gapda ko‘p nuqta o‘rniga qaysi so‘zni qo‘yish uslubiy jihatdan to‘g‘ri hisoblanadi? Sokinlikni xush ko‘radigan Mirzo Ulug‘bek shu keng, ... xonani ko‘proq xushlar edi.",
+  "options": {
+   "A": "jim",
+   "B": "osuda",
+   "C": "tek",
+   "D": "shovqinli"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 574,
+  "file": "rasmlar/ona_tili_v06_q574.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda tinish belgisi bilan bog‘liq xatolik mavjud emas?",
+  "options": {
+   "A": "Ey farzand o‘zingni mol jam qilishdan g‘ofil tutma, ammo halollik bilan mol to‘plashga harakat qil.",
+   "B": "Dono bo‘lmoq uchun donishmanddan ham, bilimsizdan ham o‘rganmoq kerak.",
+   "C": "Samimiylik ham – xuddi husn va aql kabi ehson.",
+   "D": "Odamda tasavvur bor, xayoliga nimaningdir, yoki kimningdir suratini keltira oladi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 575,
+  "file": "rasmlar/ona_tili_v06_q575.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda jo‘nalish kelishigi qo‘shimchasining noo‘rin qo‘llanishi uchraydi?",
+  "options": {
+   "A": "Tarbiyasi va tabiiyligi bir-biri bilan muvozanatga kelgandagina kishi ulug‘ bo‘ladi.",
+   "B": "Odamzod nima uchun osmonda charaqlab yotgan yulduzlarni ko‘rib ko‘ngli zavqqa to‘ladi?",
+   "C": "Yoshlarga bepisand bo‘lmaslik kerak, ulg‘ayganda ulardan buyuk kishilar chiqishi mumkin.",
+   "D": "Hech bo‘lmaganga ozgina rahmdilroq bo‘lishga harakat qiling."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 576,
+  "file": "rasmlar/ona_tili_v06_q576.jpg",
+  "subject": "Ona tili",
+  "question": "Qo‘shib yoziladigan so‘zlar qatorini aniqlang.",
+  "options": {
+   "A": "tim//qora, ikki//kilogramm",
+   "B": "aytib//yubordi, bodom//qovoq",
+   "C": "to‘y//tomosha, ishladi//qo‘ydi",
+   "D": "havo//rang, umum//xalq"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 577,
+  "file": "rasmlar/ona_tili_v06_q577.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapdagi ajratib ko‘rsatilgan so‘z hol vazifasini bajargan?",
+  "options": {
+   "A": "Men <u>O‘zbekistonni</u> juda sevaman, uning farzandi ekanligimdan faxrlanaman.",
+   "B": "Qizcha <u>yelib-yugurib</u> mehmonlarga xizmat qilardi, barchaga birday tabassum bilan boqardi.",
+   "C": "<u>Sershovqin</u> ko‘chalarda odamlar daryoday oqadi, xalq shahar maydoni tomon shoshadi.",
+   "D": "Bu qizning <u>harakatlarini</u> kuzatar ekan, birdan o‘z bolaligi esiga tushdi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 578,
+  "file": "rasmlar/ona_tili_v06_q578.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapdagi ajratib ko‘rsatilgan so‘z ko‘chma ma’noda qo‘llangan?",
+  "options": {
+   "A": "O‘rik daraxti orqasida <u>yashirinib</u> turgan bolakayni imlab yoniga chaqirdi.",
+   "B": "Quvonchdan <u>kuladi</u> osmonning yuzi, Quyosh ham, qamar ham betakror bugun.",
+   "C": "Bir chekkada uni <u>kuzatib turgan</u> kishilarni ko‘rib ularning oldiga borishga qaror qildi.",
+   "D": "U bu xushxabarni aytib bobosini xursand qilish uchun <u>yugurib ketdi</u>."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 579,
+  "file": "rasmlar/ona_tili_v06_q579.jpg",
+  "subject": "Ona tili",
+  "question": "To‘g‘ri yozilgan so‘zlar qatorini toping.",
+  "options": {
+   "A": "sanaot, manaviyat",
+   "B": "torovat, inshaot",
+   "C": "isnod, daromad",
+   "D": "suxbat, tamon"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 580,
+  "file": "rasmlar/ona_tili_v06_q580.jpg",
+  "subject": "Ona tili",
+  "question": "Biz o‘z Vatanimizni sevamiz, uni avaylab-asrash bizning burchimizdir. Ushbu gapda uni olmoshi qaysi so‘zga ishora qilgan?",
+  "options": {
+   "A": "Vatanimizni",
+   "B": "bizning",
+   "C": "burchimizdir",
+   "D": "sevamiz"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 581,
+  "file": "rasmlar/ona_tili_v06_q581.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda imloviy xatolik mavjud emas?",
+  "options": {
+   "A": "To‘pni unga qarata otkan edim, ammo yetib bormadi.",
+   "B": "Bu holat uzoqqa bormaydi, bilib qo‘ying.",
+   "C": "Anjumanda mashhur shoirning ishtirogi bizga quvonch baxsh etdi.",
+   "D": "Dadam uyimizda sayroqi qush asrashni yoqdirardi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 582,
+  "file": "rasmlar/ona_tili_v06_q582.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapdagi so‘zlarning barchasi o‘z ma’nosida qo‘llangan?",
+  "options": {
+   "A": "Bu achchiq gapni eshitgan zahotimoq peshonamdan sovuq ter chiqib ketdi, yuragimni qo‘rquv eza boshladi.",
+   "B": "Bulut bugun o‘zining ko‘kish ko‘ylagini erinmay yuvishga tushdi, shekilli, yomg‘ir tinay demasdi.",
+   "C": "G‘azal ham bo‘lurmi buncha dilrabo, Bunchalar serishva, bunchalar tannoz?",
+   "D": "Men gulzordagi chiroyli gullardan guldasta yasab oyimga sovg‘a qildim."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 583,
+  "file": "rasmlar/ona_tili_v06_q583.png",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda qismlari qo‘shib yoziladigan so‘zlar berilgan?",
+  "options": {
+   "A": "suv//ilon, taklif//qil",
+   "B": "olib//sotar, ko‘pdan//ko‘p",
+   "C": "umum//milliy, binafsha//rang",
+   "D": "bodom//qovoq, ko‘chama//ko‘cha"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 584,
+  "file": "rasmlar/ona_tili_v06_q584.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda kelishik qo‘shimchasini qo‘llash bilan bog‘liq uslubiy xatolik mavjud?",
+  "options": {
+   "A": "O‘rinsiz aytilgan gap-so‘zlar insonning diliga ozor yetkazadi.",
+   "B": "Odobli va odobsizni o‘rtasidagi farqni ayting.",
+   "C": "Bog‘bonning gaplari barchani o‘ylantirib qo‘ydi.",
+   "D": "Bobomlar bizning hol-ahvolimizdan xabardor ekanlar."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 585,
+  "file": "rasmlar/ona_tili_v06_q585.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda tinish belgisi bilan bog‘liq xatolik mavjud emas?",
+  "options": {
+   "A": "Najot ikki narsa: taqvo bilan niyatda ekanligini biling.",
+   "B": "Qadamingni o‘rinsiz tezlashtirsang: qoqilib yiqilishing mumkin.",
+   "C": "Tinchlik eng bebaho ne’mat, u baraka keltiradi o‘g‘lim.",
+   "D": "Muhammad Yusufning Osmonning oxiri dostonini o‘qiganmisiz?"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 586,
+  "file": "rasmlar/ona_tili_v06_q586.png",
+  "subject": "Ona tili",
+  "question": "Xato yozilgan so‘zlar qatorini toping.",
+  "options": {
+   "A": "tafsif, okeyan",
+   "B": "hamon, konstitutsiya",
+   "C": "qadriyat, marketing",
+   "D": "hukm, internet"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 587,
+  "file": "rasmlar/ona_tili_v06_q587.png",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda holat bildiruvchi ravishlar qatori berilgan?",
+  "options": {
+   "A": "hali, mardlarcha, jim",
+   "B": "astoydil, piyoda, hozircha",
+   "C": "yaqqol, majburan, tiriklay",
+   "D": "qo‘qqisdan, birdan, bugundan"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 588,
+  "file": "rasmlar/ona_tili_v06_q588.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda ko‘p nuqta o‘rnida “qattiq” so‘zini ham, “astoydil” so‘zini ham qo‘llash mumkin?",
+  "options": {
+   "A": "Sodiqboy juda ... odam, qishda qor so‘rasang ham, bermaydi.",
+   "B": "Ilgari ... qish kunlarida ana shu choponi asqatar edi.",
+   "C": "Fe’l-atvori tushunarsiz, bir qarasang, qahri ... ota, bir qarasang, yosh boladek sho‘x yigit.",
+   "D": "Ishga ... berilib ketgan ekan, eshikni ochganimda cho‘chib tushdi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 589,
+  "file": "rasmlar/ona_tili_v06_q589.png",
+  "subject": "Ona tili",
+  "question": "Hol ajratib ko‘rsatilgan gapni toping.",
+  "options": {
+   "A": "<u>Bizga</u> ham shunday kunlar ato etsin, farzandlar kamolini ko‘raylik.",
+   "B": "Bizning yurtimiz boy, <u>tog‘larimizda</u> bebaho ma’danlar ko‘p.",
+   "C": "<u>Tabiatni</u> avaylab-asraylik, avlodlarga omon yetkazaylik.",
+   "D": "<u>Yo‘qotilgan</u> vaqtni ortga qaytarib bo‘lmaydi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 590,
+  "file": "rasmlar/ona_tili_v06_q590.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapdagi ayirmoq so‘zi \"turli ko‘z bilan qaramoq\" ma’nosida qo‘llangan?",
+  "options": {
+   "A": "Qo‘shnilarning bu gapi Malika opani es-hushidan ayirdi, devorga majolsiz suyanib qoldi.",
+   "B": "Bu ikki kasallikni bir-biridan ayira olmasangiz, o‘zingizcha davolanishga harakat qilmang.",
+   "C": "Ikki do‘stning hazili janjalga aylanib ketdi, Nodirjon ularni zo‘rg‘a ayirib qo‘ydi.",
+   "D": "Siz odam ayirmang, biz hammamiz sizning xodimlaringiz sanalamiz."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 591,
+  "file": "rasmlar/ona_tili_v07_q591.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda imloviy xatolik mavjud emas?",
+  "options": {
+   "A": "U yumshoqqina qilib xamir qordi.",
+   "B": "Qo‘li cho‘qqa tegishi bilan seskanib ketdi.",
+   "C": "Osmonda uchub yurgan varrak olis bolalik yillarini esiga tushirdi.",
+   "D": "O‘lmaslikka ishora – o‘langa oshiqligim."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 592,
+  "file": "rasmlar/ona_tili_v07_q592.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda tinish belgisi bilan bog‘liq xatolik mavjud emas?",
+  "options": {
+   "A": "Ma’rifat izlagan inson – xato qilishdan cho‘chimaydi.",
+   "B": "Birovga sog‘insa, har kim yomonlik ul o‘zi topmas omonlik.",
+   "C": "“Ufq” romani Said Ahmad qalamiga mansub trilogiyadir.",
+   "D": "Yoshlikda olingan bilim, o‘g‘lim toshga o‘yilgan naqsh kabidir."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 593,
+  "file": "rasmlar/ona_tili_v07_q593.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda ajratib yoziladigan so‘zlar berilgan?",
+  "options": {
+   "A": "ochiqdan//ochiq, liq//to‘la",
+   "B": "xush// fe’l, tog‘ma//tog‘",
+   "C": "orom//baxsh, dil//tortar",
+   "D": "multi//ilova, qo‘y//mijoz"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 594,
+  "file": "rasmlar/ona_tili_v07_q594.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda kelishik qo‘shimchasini qo‘llash bilan bog‘liq uslubiy xatolik mavjud?",
+  "options": {
+   "A": "Unga o‘z ulushining qoldirishimiz to‘g‘ri bo‘lar edi.",
+   "B": "Bog‘bonning gaplari barchani o‘ylantirib qo‘ydi.",
+   "C": "Bobomlar bizning hol-ahvolimizdan xabardor ekanlar.",
+   "D": "O‘rinsiz aytilgan gap-so‘zlar insonning diliga ozor yetkazadi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 595,
+  "file": "rasmlar/ona_tili_v07_q595.jpg",
+  "subject": "Ona tili",
+  "question": "To‘g‘ri yozilgan so‘zlar qatorini toping.",
+  "options": {
+   "A": "ishtaxa, etiqod",
+   "B": "ehtirom, doim",
+   "C": "xavo, qa’tiy",
+   "D": "maslaxat, memor"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 596,
+  "file": "rasmlar/ona_tili_v07_q596.jpg",
+  "subject": "Ona tili",
+  "question": "U tog‘asinikida uch yil yurib, keyin yana qishloqqa qaytdi. Ushbu gapdagi yurmoq so‘zi qanday ma’noni ifodalash uchun qo‘llangan?",
+  "options": {
+   "A": "tarqalmoq",
+   "B": "istiqomat qilmoq",
+   "C": "davom etmoq",
+   "D": "qatnamoq"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 597,
+  "file": "rasmlar/ona_tili_v07_q597.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda ajratib ko‘rsatilgan so‘z “mish-mish, xabar, axborot” ma’nolarida qo‘llangan?",
+  "options": {
+   "A": "Bunisi ham, unisi ham bir <u>gap</u>dan qolay demasdi.",
+   "B": "Orasidan biror jiddiyroq <u>gap</u> o‘tgan, shekilli, shunga kechira olmadi.",
+   "C": "Bu <u>gap</u> tarkibidagi bir nechta so‘z o‘z o‘rnida qo‘llanmagan ekan.",
+   "D": "Qishloqqa kelishi bilan Azimjon haqida turli <u>gap</u> tarqadi, go‘yo mashina yutib olgan emish."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 598,
+  "file": "rasmlar/ona_tili_v07_q598.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapdagi ajratib ko‘rsatilgan birlik to‘ldiruvchi vazifasini bajargan?",
+  "options": {
+   "A": "Biz <u>so‘qmoq bilan</u> yurib katta yo‘lga chiqdik.",
+   "B": "Endigina <u>og‘iz ochishim bilan</u> uning o‘zi kelib qoldi.",
+   "C": "Manavi <u>supurgi bilan</u> hamma yoqni supurib chiq.",
+   "D": "O‘ziga <u>hayrat bilan</u> qarab turgan bolani erkalab qo‘ydi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 599,
+  "file": "rasmlar/ona_tili_v07_q599.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi so‘zlar ravish turkumiga mansub?",
+  "options": {
+   "A": "mardona, to‘yona",
+   "B": "saharlab, mardlarcha",
+   "C": "yuzlarcha, do‘stlarcha",
+   "D": "beodob, oshxona"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 600,
+  "file": "rasmlar/ona_tili_v07_q600.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda berilgan so‘zlar o‘zaro ma’nodosh emas?",
+  "options": {
+   "A": "malomat, ta’na",
+   "B": "iroda, qat’iyat",
+   "C": "halovat, saxovat",
+   "D": "g‘urur, faxr"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 601,
+  "file": "rasmlar/ona_tili_v07_q601.png",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda holat bildiruvchi ravishlar qatori berilgan?",
+  "options": {
+   "A": "yaqqol, majburan, tiriklay",
+   "B": "qo‘qqisdan, birdan, bugundan",
+   "C": "hali, mardlarcha, jim",
+   "D": "astoydil, piyoda, hozircha"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 602,
+  "file": "rasmlar/ona_tili_v07_q602.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda imloviy xatolik mavjud emas?",
+  "options": {
+   "A": "To‘pni unga qarata otkan edim, ammo yetib bormadi.",
+   "B": "Dadam uyimizda sayroqi qush asrashni yoqdirardi.",
+   "C": "Bu holat uzoqqa bormaydi, bilib qo‘ying.",
+   "D": "Anjumanda mashhur shoirning ishtirogi bizga quvonch baxsh etdi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 603,
+  "file": "rasmlar/ona_tili_v07_q603.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapdagi ayirmoq so‘zi \"turli ko‘z bilan qaramoq\" ma’nosida qo‘llangan?",
+  "options": {
+   "A": "Ikki do‘stning hazili janjalga aylanib ketdi, Nodirjon ularni zo‘rg‘a ayirib qo‘ydi.",
+   "B": "Bu ikki kasallikni bir-biridan ayira olmasangiz, o‘zingizcha davolanishga harakat qilmang.",
+   "C": "Siz odam ayirmang, biz hammamiz sizning xodimlaringiz sanalamiz.",
+   "D": "Qo‘shnilarning bu gapi Malika opani es-hushidan ayirdi, devorga majolsiz suyanib qoldi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 604,
+  "file": "rasmlar/ona_tili_v07_q604.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda ko‘p nuqta o‘rnida “qattiq” so‘zini ham, “astoydil” so‘zini ham qo‘llash mumkin?",
+  "options": {
+   "A": "Ishga … berilib ketgan ekan, eshikni ochganimda cho‘chib tushdi.",
+   "B": "Sodiqboy juda … odam, qishda qor so‘rasang ham, bermaydi.",
+   "C": "Fe’l-atvori tushunarsiz, bir qarasang, qahri … ota, bir qarasang, yosh boladek sho‘x yigit.",
+   "D": "Ilgari … qish kunlarida ana shu choponi asqatar edi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 605,
+  "file": "rasmlar/ona_tili_v07_q605.png",
+  "subject": "Ona tili",
+  "question": "Imloviy jihatdan xato yozilgan so‘zlarni toping.",
+  "options": {
+   "A": "maraka, tabiyat",
+   "B": "muattar, mussafo",
+   "C": "xayol, huquq",
+   "D": "dilozor, alomot"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 606,
+  "file": "rasmlar/ona_tili_v07_q606.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda qaratqich kelishigini tushirib qo‘llash uslubiy jihatdan xato sanaladi?",
+  "options": {
+   "A": "Abdulhamid Cho‘lponning taxallusi ana shu yorug‘ yulduzga qiyoslab olingan.",
+   "B": "Davlatimizning ramzi bo‘lgan gerbimizda ham bug‘doy boshoqlari tasviri bor.",
+   "C": "Bu ishonch bizning faoliyatimizga ta’sir etmasdan qolmaydi.",
+   "D": "Dunyo shoirlarining anjumani bo‘lib o‘tayotgan bu davlatda avval bo‘lmagan edim."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 607,
+  "file": "rasmlar/ona_tili_v07_q607.png",
+  "subject": "Ona tili",
+  "question": "Hol ajratib ko‘rsatilgan gapni toping.",
+  "options": {
+   "A": "<u>Tabiatni</u> avaylab-asraylik, avlodlarga omon yetkazaylik.",
+   "B": "Bizning yurtimiz boy, <u>tog‘larimizda</u> bebaho ma’danlar ko‘p.",
+   "C": "<u>Yo‘qotilgan</u> vaqtni ortga qaytarib bo‘lmaydi.",
+   "D": "<u>Bizga</u> ham shunday kunlar ato etsin, farzandlar kamolini ko‘raylik."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 608,
+  "file": "rasmlar/ona_tili_v07_q608.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda ajratib ko‘rsatilgan so‘zning ma’nosi aloqadorlik asosida ko‘chgan?",
+  "options": {
+   "A": "Bugun <u>samovarda</u> osh bo‘ladi, kechikmay boringlar, yigitlar.",
+   "B": "Anavi ko‘k <u>ko‘ylakni</u> yuvib qo‘ying, ertaga kiyaman.",
+   "C": "Aylanay, bu gapingiz eshitgan <u>quloqqa</u> yaxshi emas.",
+   "D": "Maktabimiz <u>qaldirg‘ochlari</u> katta hayotga qadam qo‘ymoqda."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 609,
+  "file": "rasmlar/ona_tili_v07_q609.png",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda qismlari qo‘shib yoziladigan so‘zlar berilgan?",
+  "options": {
+   "A": "suv//ilon, taklif//qil",
+   "B": "umum//milliy, binafsha//rang",
+   "C": "bodom//qovoq, ko‘chama//ko‘cha",
+   "D": "olib//sotar, ko‘pdan//ko‘p"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 610,
+  "file": "rasmlar/ona_tili_v07_q610.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda tinish belgisi bilan bog‘liq xatolik mavjud emas?",
+  "options": {
+   "A": "Tinchlik eng bebaho ne’mat, u baraka keltiradi o‘g‘lim.",
+   "B": "Qadamingni o‘rinsiz tezlashtirsang: qoqilib yiqilishing mumkin.",
+   "C": "Muhammad Yusufning Osmonning oxiri dostonini o‘qiganmisiz?",
+   "D": "Najot ikki narsa: taqvo bilan niyatda ekanligini biling."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 611,
+  "file": "rasmlar/ona_tili_v08_q611.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda qo‘shimcha qo‘shilishi bilan bog‘liq imloviy xatolik mavjud?",
+  "options": {
+   "A": "Bu gapni hammaga eshittirib aytdi.",
+   "B": "Yarasini qandaydir dori bilan kuydiribdi.",
+   "C": "Kun bo‘yi ishlab toliqgan Ilhomjon darrov uxlab qoldi.",
+   "D": "Biz bu qishloqqa ikki marta kelgan edik."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 612,
+  "file": "rasmlar/ona_tili_v08_q612.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda payt bildiruvchi ravishlar qatori berilgan?",
+  "options": {
+   "A": "ertalab, hali, zo‘rg‘a",
+   "B": "hamisha, allamahal, endi",
+   "C": "jimgina, ertadan, buguncha",
+   "D": "har gal, majburan, hanuz"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 613,
+  "file": "rasmlar/ona_tili_v08_q613.jpg",
+  "subject": "Ona tili",
+  "question": "Xato yozilgan so‘zlar qatorini toping.",
+  "options": {
+   "A": "sharoit, taraqqiyot",
+   "B": "qanoat, madad",
+   "C": "muovin, maxfiy",
+   "D": "xushmuomila, tushinmoq"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 614,
+  "file": "rasmlar/ona_tili_v08_q614.jpg",
+  "subject": "Ona tili",
+  "question": "Quyidagi gapda ko‘p nuqta o‘rniga qaysi so‘zni qo‘yish uslubiy jihatdan to‘g‘ri hisoblanadi?\nMustaqillik sharofati bilan yurtimizda ko‘plab chiroyli bog‘lar ...",
+  "options": {
+   "A": "yasaldi",
+   "B": "taxtlab chiqildi",
+   "C": "barpo qilindi",
+   "D": "farovon qilindi"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 615,
+  "file": "rasmlar/ona_tili_v08_q615.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda tinish belgisi bilan bog‘liq xatolik mavjud emas?",
+  "options": {
+   "A": "Ey farzand o‘zingni mol jam qilishdan g‘ofil tutma, ammo halollik bilan mol to‘plashga harakat qil.",
+   "B": "Samimiylik ham – xuddi husn va aql kabi ehson.",
+   "C": "Odamda tasavvur bor, shuning uchun nimaningdir yoki kimningdir suratini xayoliga keltira oladi.",
+   "D": "Dono bo‘lmoq uchun bilimsizdan ham, o‘rganmoq kerak."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 616,
+  "file": "rasmlar/ona_tili_v08_q616.jpg",
+  "subject": "Ona tili",
+  "question": "Tog‘lar qo‘ynidadir mening qishlog‘im,\nCho‘qqilari osha ko‘rinar olam.\nUshbu she’riy parchadagi kesim(lar)ni toping.",
+  "options": {
+   "A": "osha, ko‘rinar",
+   "B": "qishlog‘im, ko‘rinar",
+   "C": "qo‘ynidadir, ko‘rinar",
+   "D": "qishlog‘im, olam"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 617,
+  "file": "rasmlar/ona_tili_v08_q617.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda o‘zaro ma’nodosh so‘zlar ishtirok etgan?",
+  "options": {
+   "A": "Bolangga ham, uyingga ham qara, ham dam ol.",
+   "B": "Qon yugurdi ol yonog‘iga,\nBargi g‘ubor – changdan aridi.",
+   "C": "Quyosh chiqdi, gul yaprog‘iga\nTunda qo‘ngan shabnam aridi.",
+   "D": "Gunafshalar qulog‘imga madhingni\nSo‘zlab-so‘zlab charchadilar, bitmadi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 618,
+  "file": "rasmlar/ona_tili_v08_q618.jpg",
+  "subject": "Ona tili",
+  "question": "Biz... birov... uyi... mehmon kelsa, yon qo‘shnisi, albatta, un... xabar oladi.\nUshbu gapda nuqtalar o‘rnida qaysi kelishik qo‘shimchasini qo‘llab bo‘lmaydi?",
+  "options": {
+   "A": "chiqish",
+   "B": "o‘rin-payt",
+   "C": "tushum",
+   "D": "jo‘nalish"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 619,
+  "file": "rasmlar/ona_tili_v08_q619.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda ajratib ko‘rsatilgan so‘z ko‘chma ma’noda qo‘llanmagan?",
+  "options": {
+   "A": "Otning porlab turgan <u>qop-qora</u> ko‘zlari qizning qalbini zavqqa to‘ldirib yuborgan edi.",
+   "B": "Yosh chog‘im – <u>oltin</u> chog‘im, hayot tashvishlaridan xoli damlardir yoshlik.",
+   "C": "Deraza oynasiga <u>kumush</u> yog‘du yopirildi, osuda tun butun <u>borliqni</u> allalay boshladi.",
+   "D": "Do‘stim, biz ham Aliyevning <u>soyasida</u> shunaqa mansablarni egallab o‘tiribmiz."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 620,
+  "file": "rasmlar/ona_tili_v08_q620.jpg",
+  "subject": "Ona tili",
+  "question": "Chiziqcha bilan yoziladigan so‘zlar qatorini belgilang.",
+  "options": {
+   "A": "tom//orqa, liq//to‘la",
+   "B": "cho‘l//yalpiz, har//xil",
+   "C": "bug‘doy//rang, suv//talab",
+   "D": "pak//pakana, yilma//yil"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 621,
+  "file": "rasmlar/ona_tili_v08_q621.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda imloviy xatolik mavjud emas?",
+  "options": {
+   "A": "Biz tong otkuncha shu yerda kutishga qaror qildik.",
+   "B": "Ertalab hammamizni oshka aytib ketishdi.",
+   "C": "Ishdan kech qaytkan G‘ayratjonni qo‘shnisi kutib oldi.",
+   "D": "O‘sha tog‘ga borishni biz ham orzu qilar edik."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 622,
+  "file": "rasmlar/ona_tili_v08_q622.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapdagi ajratib ko‘rsatilgan so‘z “uzun” so‘zi bilan o‘zaro ma’nodoshlik hosil qila olmaydi?",
+  "options": {
+   "A": "<u>Baland</u> bo‘yli, chayir gavdali yigit o‘rnidan turib gapira boshladi.",
+   "B": "Qishning <u>uzoq</u> tunlari buvimning ertaklari bilan o‘tar edi.",
+   "C": "U <u>yuqori</u> lavozimlarda ham ishlagan.",
+   "D": "Katalakdekkina hovli ekan: ikki-uch uy, oxirida nurab yotgan <u>cho‘ziq</u> ayvondan iborat."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 623,
+  "file": "rasmlar/ona_tili_v08_q623.png",
+  "subject": "Ona tili",
+  "question": "Suhbat birdan jonlanib ketdi, hamma o‘z fikrini dadil o‘rtaga tashlay boshladi.\nUshbu gapda qo‘llangan <u>jonlanmoq</u> so‘zi qanday ma’no(lar)ni ifodalash uchun qo‘llangan?",
+  "options": {
+   "A": "qizg‘in tus olmoq, qizimoq",
+   "B": "ravnaq topmoq, rivojlanmoq",
+   "C": "sog‘aymoq, tuzalmoq",
+   "D": "namoyon bo‘lmoq, gavdalanmoq"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 624,
+  "file": "rasmlar/ona_tili_v08_q624.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda ajratib ko‘rsatilgan birlik sabab holi vazifasini bajargan?",
+  "options": {
+   "A": "Bu ishni <u>yeng shimarib</u> bajargan Odiljonni otasi maqtab qo‘ydi.",
+   "B": "<u>Ikki oyog‘ini bir etikka tiqib olgani uchun</u> shu velosipedni olib berdim.",
+   "C": "Shunaqa gaplarni aytadiki, <u>ilon po‘st tashlaydi-ya</u>.",
+   "D": "<u>Hafsalasi pir bo‘lgan</u> Anvarjon uyga qaytib keldi va kun bo‘yi xonasidan chiqmadi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 625,
+  "file": "rasmlar/ona_tili_v08_q625.png",
+  "subject": "Ona tili",
+  "question": "To‘g‘ri yozilgan so‘zlar qatorini toping.",
+  "options": {
+   "A": "xatar, ma’rifat",
+   "B": "horijiy, muvafaqiyat",
+   "C": "xashamat, davat",
+   "D": "isnot, extiyot"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 626,
+  "file": "rasmlar/ona_tili_v08_q626.png",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda qaratqich kelishigining belgisiz qo‘llanishi kuzatiladi?",
+  "options": {
+   "A": "Biling, ushbu zamon g‘amnokidurman,\nKuyib, o‘rtanmish elning xokidurman.",
+   "B": "Sulton ne zotlarning qo‘lin qayirib,\nMuhtasham saltanat aylamish barpo.",
+   "C": "Qachongacha qorning o‘ylab o‘tadirsan?\nQachongacha ko‘kdan chalpak kutadirsan.",
+   "D": "Ochsang davronlarning kitoblarini,\nQancha karvonlarning ertagi bordir."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 627,
+  "file": "rasmlar/ona_tili_v08_q627.png",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda holat ravishi qatnashgan?",
+  "options": {
+   "A": "Yo‘qlik olamiga ko‘z tashlaganda\nKelmagan ko‘p ko‘rdim, ketgan ko‘p ko‘rdim.",
+   "B": "Ona kelar yo‘lda yugurib,\nKo‘ringandan qizini so‘rab.",
+   "C": "Kecha oqshom falakda oy bo‘zarib botganda...\nMen seni esga oldim, birinchi muhabbatim.",
+   "D": "Vodiylarni yayov kezganda\nBir ajib his bor edi menda."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 628,
+  "file": "rasmlar/ona_tili_v08_q628.png",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda ajratib yoziladigan so‘zlar berilgan?",
+  "options": {
+   "A": "umum//milliy, shirin//so‘z",
+   "B": "ko‘z//oynak, kunma//kun",
+   "C": "och//sariq, har//xil",
+   "D": "qabul//xona, viloyatlar//aro"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 629,
+  "file": "rasmlar/ona_tili_v08_q629.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda tinish belgisi bilan bog‘liq xatolik mavjud emas?",
+  "options": {
+   "A": "Dono bo‘lmoq uchun bilimsizdan ham, o‘rganmoq kerak.",
+   "B": "Ey farzand o‘zingni mol jam qilishdan g‘ofil tutma, ammo halollik bilan mol to‘plashga harakat qil.",
+   "C": "Odamda tasavvur bor, xayoliga nimaningdir, yoki kimningdir suratini keltira oladi.",
+   "D": "Samimiylik ham xuddi zehn, husn va aql kabi ehson."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 630,
+  "file": "rasmlar/ona_tili_v08_q630.png",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda ajratib ko‘rsatilgan so‘z “va’da, lafz” ma’nolarida qo‘llangan?",
+  "options": {
+   "A": "Mansur endi do‘sti o‘z <u>so‘zidan</u> qaytmasligini tushundi.",
+   "B": "Shu voqea sababli orangizdan biror <u>so‘z</u> o‘tdimi, ancha xafa ko‘rinasan?",
+   "C": "Bu gap tarkibidagi bir nechta <u>so‘z</u> o‘z o‘rnida qo‘llanmagan ekan.",
+   "D": "Hamisha otangning <u>so‘ziga</u> quloq sol, shunda hech qachon to‘g‘ri yo‘ldan adashmaysan."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 631,
+  "file": "rasmlar/ona_tili_v09_q631.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda qo‘shma sifatlar berilgan?",
+  "options": {
+   "A": "serg‘ayrat, kaltafahm",
+   "B": "devsifat, sovuqmijoz",
+   "C": "suvilon, shirinzabon",
+   "D": "orzumand, balandparvoz"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 632,
+  "file": "rasmlar/ona_tili_v09_q632.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapdagi ajratib ko‘rsatilgan so‘z “uzun” so‘zi bilan o‘zaro ma’nodoshlik hosil qila olmaydi?",
+  "options": {
+   "A": "<u>Baland</u> bo‘yli, chayir gavdali yigit o‘rnidan turib gapira boshladi.",
+   "B": "U <u>yuqori</u> lavozimlarda ham ishlagan.",
+   "C": "Qishning <u>uzoq</u> tunlari buvimning ertaklari bilan o‘tar edi.",
+   "D": "Katalakdekkina hovli ekan: ikki-uch uy, oxirida nurab yotgan <u>cho‘ziq</u> ayvondan iborat."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 633,
+  "file": "rasmlar/ona_tili_v09_q633.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda imloviy xatolik mavjud emas?",
+  "options": {
+   "A": "Ishdan kech qaytkan G‘ayratjonni qo‘shnisi kutib oldi.",
+   "B": "Biz tong otkuncha shu yerda kutishga qaror qildik.",
+   "C": "Ertalab hammamizni oshka aytib ketishdi.",
+   "D": "O‘sha tog‘ga borishni biz ham orzu qilar edik."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 634,
+  "file": "rasmlar/ona_tili_v09_q634.jpg",
+  "subject": "Ona tili",
+  "question": "Suhbat birdan jonlanib ketdi, hamma o‘z fikrini dadil o‘rtaga tashlay boshladi.\nUshbu gapda qo‘llangan jonlanmoq so‘zi qanday ma’no(lar)ni ifodalash uchun qo‘llangan?",
+  "options": {
+   "A": "ravnaq topmoq, rivojlanmoq",
+   "B": "sog‘aymoq, tuzalmoq",
+   "C": "namoyon bo‘lmoq, gavdalanmoq",
+   "D": "qizg‘in tus olmoq, qizimoq"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 635,
+  "file": "rasmlar/ona_tili_v09_q635.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda ajratib yoziladigan so‘zlar berilgan?",
+  "options": {
+   "A": "tom//orqa, suv//talab",
+   "B": "ham//maktab, veb//sahifa",
+   "C": "hech//qachon, jiqqa//ho‘l",
+   "D": "mehmon//xona, omma//bop"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 636,
+  "file": "rasmlar/ona_tili_v09_q636.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda tinish belgisi bilan bog‘liq xatolik mavjud emas?",
+  "options": {
+   "A": "Samimiylik ham xuddi zehn, husn va aql kabi ehson.",
+   "B": "Odamda tasavvur bor, xayoliga nimaningdir, yoki kimningdir suratini keltira oladi.",
+   "C": "Dono bo‘lmoq uchun bilimsizdan ham, o‘rganmoq kerak.",
+   "D": "Ey farzand o‘zingni mol jam qilishdan g‘ofil tutma, ammo halollik bilan mol to‘plashga harakat qil."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 637,
+  "file": "rasmlar/ona_tili_v09_q637.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda qaratqich kelishigining belgisiz qo‘llanishi kuzatiladi?",
+  "options": {
+   "A": "Biling, ushbu zamon g‘amnokidurman,\nKuyib, o‘rtanmish elning xokidurman.",
+   "B": "Sulton ne zotlarning qo‘lin qayirib,\nMuhtasham saltanat aylamish barpo.",
+   "C": "Ochsang davronlarning kitoblarini,\nQancha karvonlarning ertagi bordir.",
+   "D": "Qachongacha qorning o‘ylab o‘tadirsan?\nQachongacha ko‘kdan chalpak kutadirsan."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 638,
+  "file": "rasmlar/ona_tili_v09_q638.jpg",
+  "subject": "Ona tili",
+  "question": "To‘g‘ri yozilgan so‘zlar qatorini toping.",
+  "options": {
+   "A": "horijiy, muvafaqiyat",
+   "B": "ogoh, saxovat",
+   "C": "isnot, extiyot",
+   "D": "xashamat, davat"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 639,
+  "file": "rasmlar/ona_tili_v09_q639.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapdagi ajratib ko‘rsatilgan so‘z ko‘chma ma’noda qo‘llangan?",
+  "options": {
+   "A": "<u>Buloqning</u> ko‘zi qayta ochildi, obihayot jildirab-jildirab oqardi.",
+   "B": "<u>Ma’yus</u> majnuntollar ularni hamon kutishayotgan ekanmi?",
+   "C": "U yoshlikdagi <u>qadrdon</u> o‘rtog‘ini juda sog‘ingan ekan, gaplashib to‘ymasdi.",
+   "D": "G‘amdan o‘rtangan <u>tanbur</u> ovozi uni allaqayoqlarga olib ketgandek bo‘ldi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 640,
+  "file": "rasmlar/ona_tili_v09_q640.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda ajratib ko‘rsatilgan birlik sabab holi vazifasini bajargan?",
+  "options": {
+   "A": "Shunaqa gaplarni aytadiki, <u>ilon po‘st tashlaydi-ya</u>.",
+   "B": "<u>Ikki oyog‘ini bir etikka tiqib olgani uchun</u> shu velosipedni olib berdim.",
+   "C": "<u>Hafsalasi pir bo‘lgan</u> Anvarjon uyga qaytib keldi va kun bo‘yi xonasidan chiqmadi.",
+   "D": "Bu ishni <u>yeng shimarib</u> bajargan Odiljonni otasi maqtab qo‘ydi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 641,
+  "file": "rasmlar/ona_tili_v10_q641.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda ajratib ko‘rsatilgan so‘z “va’da, lafz” ma’nolarida qo‘llangan?",
+  "options": {
+   "A": "Shu voqea sababli orangizdan biror <u>so‘z</u> o‘tdimi, ancha xafa ko‘rinasan?",
+   "B": "Bu gap tarkibidagi bir nechta <u>so‘z</u> o‘z o‘rnida qo‘llanmagan ekan.",
+   "C": "Menga ishoning, bu haqida hech kimga aytmaslikka <u>so‘z</u> beraman.",
+   "D": "Bu <u>so‘z</u> gapda kesim vazifasini bajargan."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 642,
+  "file": "rasmlar/ona_tili_v10_q642.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda tinish belgisini qo‘llash bilan bog‘liq xatolik mavjud?",
+  "options": {
+   "A": "Takrorlash — bilimning onasi.",
+   "B": "O‘g‘lim, Nosirjon sizga muhim topshiriq bor.",
+   "C": "Haqiqat shunday jonki, pardoz uning husnini buzadi.",
+   "D": "Suv keldi — nur keldi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 643,
+  "file": "rasmlar/ona_tili_v10_q643.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda qaratqich kelishigini tushirib qo‘llash uslubiy jihatdan xato sanaladi?",
+  "options": {
+   "A": "Otaning yuziga tik boqib gapiradigan farzandlarga bu voqea ibrat bo‘lsin.",
+   "B": "Siz bu ishingiz bilan uning jinoyatiga sherik bo‘lib qoldingiz, uka.",
+   "C": "Ona yerning bag‘ridan unib chiqqan boychechaklar misoli nafis edi.",
+   "D": "Bu Navoiyning g‘azaliga nazira tarzida yozilgan she’r edi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 644,
+  "file": "rasmlar/ona_tili_v10_q644.jpg",
+  "subject": "Ona tili",
+  "question": "Berilgan qaysi javobda sifatning bir ma’no turi qo‘llangan?",
+  "options": {
+   "A": "Yashil barglari tukli, tuxumsimon yoki keng ellipssimon, shoxlarda ketma-ket joylashgan.",
+   "B": "Elchi o‘rnidan turib, ko‘zlari katta-katta, bo‘yi novcha Siparganizga ta’zim qildi.",
+   "C": "Yomg‘irda cho‘milgan ulkan bog‘, qizil qum sepilgan xiyobonlar, gulzorlar yanada go‘zal ko‘rinardi.",
+   "D": "Sadafbibi qoramag‘izdan kelgan, yuzlari yumaloq, qosh-ko‘zlari qop-qora qiz edi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 645,
+  "file": "rasmlar/ona_tili_v10_q645.jpg",
+  "subject": "Ona tili",
+  "question": "Quyidagi qaysi juftliklardan qo‘shma so‘z hosil qilinganda qo‘shib yoziladi?",
+  "options": {
+   "A": "hech//vaqt, Qum//qo‘rg‘on",
+   "B": "dev//qomat, har//xil",
+   "C": "hurmat//talab, bug‘doy//rang",
+   "D": "Boltiq//bo‘yi, ta’sir//et"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 646,
+  "file": "rasmlar/ona_tili_v10_q646.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda qo‘shimcha qo‘shilishi bilan bog‘liq imloviy xatolik mavjud?",
+  "options": {
+   "A": "Men sirtqi bo‘limda o‘qishka qaror qildim.",
+   "B": "Har kim o‘z ekkanini o‘radi.",
+   "C": "Hukmdor shu zahotiyoq bu qo‘zg‘olonni kuch bilan bostirdi.",
+   "D": "Biz ertaga tog‘ga chiqishga qaror qildik."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 647,
+  "file": "rasmlar/ona_tili_v10_q647.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda bir so‘zi “o‘xshash”, “umumiy” ma’nolarini anglatgan?",
+  "options": {
+   "A": "Xonaga baland bo‘yli, keng yag‘rinli bir yigit kirib keldi.",
+   "B": "Uning xirgoyisi bir chiroyli, bir yoqimli, eshitganingiz sayin rohatlanasiz.",
+   "C": "Bahor havosi g‘alati: bir yomg‘ir yog‘adi, bir quyosh charaqlaydi.",
+   "D": "Unutma, bolam, kemaga tushganning taqdiri birdir."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 648,
+  "file": "rasmlar/ona_tili_v10_q648.jpg",
+  "subject": "Ona tili",
+  "question": "Xato yozilgan so‘zlar qatorini toping.",
+  "options": {
+   "A": "hukumat, kompyuter",
+   "B": "maxalliy, kridit",
+   "C": "ahdnoma, millioner",
+   "D": "unsur, parlament"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 649,
+  "file": "rasmlar/ona_tili_v10_q649.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi gapda ajratib ko‘rsatilgan so‘z aniqlovchi vazifasini bajargan?",
+  "options": {
+   "A": "Besh-olti <u>keksa</u> yig‘ilib maslahat qilishdi.",
+   "B": "Uning <u>o‘ychan</u> ko‘zlarida mahzunlik alomatini ko‘raman.",
+   "C": "Shu gapni <u>besh marta</u> takrorladi.",
+   "D": "Shamol <u>g‘ir-g‘ir</u> esardi."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": "Tagiga chizilgan so‘z/birikmalar <u>…</u> bilan belgilangan."
+ },
+ {
+  "question_id": 650,
+  "file": "rasmlar/ona_tili_v10_q650.jpg",
+  "subject": "Ona tili",
+  "question": "Qaysi javobda so‘z va ibora ma’nodoshligi berilgan?",
+  "options": {
+   "A": "ko‘zi ilinmoq – pinakka ketmoq",
+   "B": "uxlab qolmoq – mizg‘imoq",
+   "C": "gapirmaslik – og‘ziga olmaslik",
+   "D": "hafsalasi pir bo‘lmoq – tarvuzi qo‘ltig‘idan tushmoq"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 651,
+  "file": "rasmlar/tarix_v01_q651.jpg",
+  "subject": "Tarix",
+  "question": "O‘rta Osiyo hududini bosib olishga harakat qilib ko‘rgan ilk fors podshosini belgilang.",
+  "options": {
+   "A": "Kambiz I",
+   "B": "Kir II",
+   "C": "Doro I",
+   "D": "Doro III"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 652,
+  "file": "rasmlar/tarix_v01_q652.jpg",
+  "subject": "Tarix",
+  "question": "Ma’muniylar davrida Xorazmshohlar davlatidagi vazir lavozimi qanday atalgan?",
+  "options": {
+   "A": "sohibbadr",
+   "B": "xo‘jayi buzruk",
+   "C": "xorazmshoh",
+   "D": "hojib ul-buzruk"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 653,
+  "file": "rasmlar/tarix_v01_q653.jpg",
+  "subject": "Tarix",
+  "question": "Qo‘qon xonligi tarixiga oid quyidagi atamalarni muvofiqlashtiring.\n1. Xon yerlarida ishlash uchun safarbar etilganlar;\n2. xususiy yerlarda hosilning 1/4 qismi uchun yollanib ishlovchi dehqonlar;\n3. hosilning 1/2 qismini olish sharti bilan yerlarni ijaraga olib ishlovchilar.\na) chorikorlar; b) mardikorlar; c) korandalar.",
+  "options": {
+   "A": "1-a, 2-c, 3-b",
+   "B": "1-a, 2-b, 3-c",
+   "C": "1-b, 2-a, 3-c",
+   "D": "1-b, 2-c, 3-a"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 654,
+  "file": "rasmlar/tarix_v01_q654.jpg",
+  "subject": "Tarix",
+  "question": "XIX asr o‘rtalarida O‘rta Osiyo xonliklarida sug‘orish ishlarini yuritish va nazorat qilish bilan kimlar shug‘ullanganlar?",
+  "options": {
+   "A": "oqsoqollar",
+   "B": "muftiylar",
+   "C": "qorovullar",
+   "D": "miroblar"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 655,
+  "file": "rasmlar/tarix_v01_q655.jpg",
+  "subject": "Tarix",
+  "question": "31-avgust O‘zbekiston Respublikasida qanday kun sifatida nishonlanadi?",
+  "options": {
+   "A": "qatag‘on qurbonlarini yod etish kuni",
+   "B": "muzeylar kuni",
+   "C": "advokatura xodimlari kuni",
+   "D": "ziyolilar kuni"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 656,
+  "file": "rasmlar/tarix_v01_q656.jpg",
+  "subject": "Tarix",
+  "question": "Qaysi yildan boshlab yurtimizda «O‘zbekiston Arxeologiyasi» ilmiy jurnali chop etila boshlangan?",
+  "options": {
+   "A": "2008-yil",
+   "B": "2010-yil",
+   "C": "2012-yil",
+   "D": "2017-yil"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 657,
+  "file": "rasmlar/tarix_v01_q657.jpg",
+  "subject": "Tarix",
+  "question": "Arab xalifaligida mavjud soliqlarni ma’nosiga ko‘ra moslashtiring.\n1) xiroj; 2) zakot; 3) jizya; 4) ushr.\na) mol-mulkning 1/40 qismi hajmida olinadigan soliq;\nb) hosilning 1/3 qismi miqdorida olinadigan yer solig‘i;\nc) idora ishlari uchun daromadning 1/10 hajmi hisobida olinadigan soliq.\nd) islomni qabul qilmagan aholidan olinadigan soliq",
+  "options": {
+   "A": "1-c, 2-d, 3-a, 4-b",
+   "B": "1-b, 2-a, 3-d, 4-c",
+   "C": "1-b, 2-a, 3-c, 4-d",
+   "D": "1-a, 2-b, 3-c, 4-d"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 658,
+  "file": "rasmlar/tarix_v01_q658.jpg",
+  "subject": "Tarix",
+  "question": "XIX asrda Buxoro amirligi hududi qancha edi?",
+  "options": {
+   "A": "400 ming km. kv.",
+   "B": "350 ming km. kv.",
+   "C": "280 ming km. kv.",
+   "D": "200 ming km. kv."
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 659,
+  "file": "rasmlar/tarix_v01_q659.jpg",
+  "subject": "Tarix",
+  "question": "Jadidchilik harakatining asoschisi kim edi?",
+  "options": {
+   "A": "Ahmad Donish",
+   "B": "Dukchi eshon",
+   "C": "IsmoilGaspirali",
+   "D": "Mahmudxo‘ja Behbudiy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 660,
+  "file": "rasmlar/tarix_v01_q660.jpg",
+  "subject": "Tarix",
+  "question": "Oliy ta’lim dasturining birinchi bosqichini tugallagan talabalarning ilmiy darajasini anglatuvchi atamani toping.",
+  "options": {
+   "A": "bakalavr",
+   "B": "magistr",
+   "C": "doktorant",
+   "D": "akademik"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 661,
+  "file": "rasmlar/tarix_v02_q661.jpg",
+  "subject": "Tarix",
+  "question": "1898-yili Turkiston general-gubernatori etib tayinlangan shaxsni aniqlang.",
+  "options": {
+   "A": "A.N.Kuropatkin",
+   "B": "G.Rozenbax",
+   "C": "K.P.Kaufman",
+   "D": "S.M.Duxovskoy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 662,
+  "file": "rasmlar/tarix_v02_q662.jpg",
+  "subject": "Tarix",
+  "question": "Amudaryodan shimolda joylashgan boy viloyatlarni arablar nima deb atashgan?",
+  "options": {
+   "A": "Movarounnahr",
+   "B": "Xuroson",
+   "C": "Chag‘oniyon",
+   "D": "Marv"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 663,
+  "file": "rasmlar/tarix_v02_q663.jpg",
+  "subject": "Tarix",
+  "question": "Quyidagi shaxslardan qaysi biri 1271-yil Chig‘atoy ulusida pul islohotini o‘tkazgan?",
+  "options": {
+   "A": "Ma’sudbek",
+   "B": "Mahmud Yalavoch",
+   "C": "Shamsiddin Mahbubiy",
+   "D": "Mahmud Torobiy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 664,
+  "file": "rasmlar/tarix_v02_q664.jpg",
+  "subject": "Tarix",
+  "question": "Quyidagi shaxslardan qaysi biri Qo‘qondagi minglar sulolasiga asos solgan?",
+  "options": {
+   "A": "Shohruxbiy",
+   "B": "Abdulkarimbiy",
+   "C": "Abdurahimbiy",
+   "D": "Erdonabiy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 665,
+  "file": "rasmlar/tarix_v02_q665.jpg",
+  "subject": "Tarix",
+  "question": "1917-yil 14-martda Toshkent shahrida Turkiston taraqqiyparvarlari tomonidan tuzilgan ijtimoiy-siyosiy tashkilotni toping.",
+  "options": {
+   "A": "\"Ittifoqi muslimin\"",
+   "B": "\"Sho‘roi Islomiya\"",
+   "C": "\"Taraqqiy\"",
+   "D": "\"Kengash\""
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 666,
+  "file": "rasmlar/tarix_v02_q666.jpg",
+  "subject": "Tarix",
+  "question": "V asr boshlarida O‘rta Osiyo hududiga Sharqdan kirib kelgan qabilani toping.",
+  "options": {
+   "A": "qarluqlar",
+   "B": "eftallar",
+   "C": "o‘g‘uzlar",
+   "D": "xioniylar"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 667,
+  "file": "rasmlar/tarix_v02_q667.jpg",
+  "subject": "Tarix",
+  "question": "2003-yilda qaysi alloma tavalludining 900 yilligi keng nishonlangan?",
+  "options": {
+   "A": "Amir Temur",
+   "B": "Mirzo Ulug‘bek",
+   "C": "Abduxoliq G‘ijduvoniy",
+   "D": "Imom al-Buxoriy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 668,
+  "file": "rasmlar/tarix_v02_q668.jpg",
+  "subject": "Tarix",
+  "question": "Rossiya hukumati tomonidan 1858-yilda Buxoro va Xivaga yuborilgan diplomatik missiya rahbarini toping.",
+  "options": {
+   "A": "A.Jenkinson",
+   "B": "A.Byorns",
+   "C": "N.Ignatyev",
+   "D": "V.Vyatkin"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 669,
+  "file": "rasmlar/tarix_v02_q669.jpg",
+  "subject": "Tarix",
+  "question": "1875-yil Turkiston general-gubernatori K.P.Kaufman bilan shartnoma imzolagan Qo‘qon hukmdorini toping.",
+  "options": {
+   "A": "Nasriddinbek",
+   "B": "Norbo‘tabiy",
+   "C": "Xudoyorxon",
+   "D": "Sheralixon"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 670,
+  "file": "rasmlar/tarix_v02_q670.jpg",
+  "subject": "Tarix",
+  "question": "Mil. avv. 3-ming yillik o‘rtalaridan boshlab asta-sekin mehnat qurollari, qurol-yarog‘lar va zeb-ziynatlar tayyorlashda ishlatiluvchi asosiy ashyoga aylanib qolgan metalni toping.",
+  "options": {
+   "A": "bronza",
+   "B": "kumush",
+   "C": "oltin",
+   "D": "temir"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 671,
+  "file": "rasmlar/tarix_v03_q671.jpg",
+  "subject": "Tarix",
+  "question": "Mo‘g‘ullarga qarshi kurash olib borgan Temur Malik quyidagi qaysi shahar hokimi edi?",
+  "options": {
+   "A": "Xo‘jand",
+   "B": "O‘tror",
+   "C": "Samarqand",
+   "D": "Buxoro"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 672,
+  "file": "rasmlar/tarix_v03_q672.jpg",
+  "subject": "Tarix",
+  "question": "1480-yil O‘zbek ulusi davlatini qayta tiklagan shaxsni aniqlang.",
+  "options": {
+   "A": "Abu Said",
+   "B": "Mahmud Sulton",
+   "C": "Muhammad Shayboniyxon",
+   "D": "Shohbudog‘ Sulton"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 673,
+  "file": "rasmlar/tarix_v03_q673.jpg",
+  "subject": "Tarix",
+  "question": "Qoraxoniylar davlatida viloyatlarni kimlar boshqargan?",
+  "options": {
+   "A": "arslonxon",
+   "B": "kutvol",
+   "C": "eloqxonlar",
+   "D": "amid"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 674,
+  "file": "rasmlar/tarix_v03_q674.jpg",
+  "subject": "Tarix",
+  "question": "1533-yil Buxoro xonligining poytaxti etib belgilangan shaharni aniqlang.",
+  "options": {
+   "A": "Samarqand",
+   "B": "Shahrisabz",
+   "C": "Qarshi",
+   "D": "Buxoro"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 675,
+  "file": "rasmlar/tarix_v03_q675.jpg",
+  "subject": "Tarix",
+  "question": "Quyida sanab o‘tilgan shaxslardan qaysi biri O‘zbekiston Kompartiyasi Markaziy Komitetining birinchi sekretari vazifasida faoliyat yuritmagan?",
+  "options": {
+   "A": "Sobir Kamolov",
+   "B": "Mahmudxo‘ja Behbudiy",
+   "C": "Amin Niyozov",
+   "D": "Nuriddin Muhitdinov"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 676,
+  "file": "rasmlar/tarix_v03_q676.jpg",
+  "subject": "Tarix",
+  "question": "Makedoniyalik Aleksandr bosqini davrida o‘z mustaqilligini saqlab qolgan davlat(hudud)ni toping.",
+  "options": {
+   "A": "So‘g‘diyona",
+   "B": "Baqtriya",
+   "C": "Xorazm",
+   "D": "Marg‘iyona"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 677,
+  "file": "rasmlar/tarix_v03_q677.jpg",
+  "subject": "Tarix",
+  "question": "Qo‘qon xonligi o‘rnida Turkiston general-gubernatorligi tarkibiga kiruvchi qaysi viloyat tashkil qilingan?",
+  "options": {
+   "A": "Farg‘ona",
+   "B": "Toshkent",
+   "C": "Sirdaryo",
+   "D": "Andijon"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 678,
+  "file": "rasmlar/tarix_v03_q678.jpg",
+  "subject": "Tarix",
+  "question": "2007-yilda Respublikamizda qaysi shaharning 2000 yillik yubileyi nishonlangan?",
+  "options": {
+   "A": "Termiz",
+   "B": "Marg‘ilon",
+   "C": "Qarshi",
+   "D": "Toshkent"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 679,
+  "file": "rasmlar/tarix_v03_q679.jpg",
+  "subject": "Tarix",
+  "question": "Rossiya imperiyasining Buxoro amirligidagi birinchi vakilining qarorgohi qaysi shaharda joylashgan edi?",
+  "options": {
+   "A": "Kogon",
+   "B": "Buxoro",
+   "C": "Samarqand",
+   "D": "Kattaqo‘rg‘on"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 680,
+  "file": "rasmlar/tarix_v03_q680.jpg",
+  "subject": "Tarix",
+  "question": "1433-yilda qaysi shaharda Mirzo Ulug‘bek tomonidan madrasa qurdirilgan?",
+  "options": {
+   "A": "Samarqandda",
+   "B": "G‘ijduvonda",
+   "C": "Hirotda",
+   "D": "Buxoroda"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 681,
+  "file": "rasmlar/tarix_v04_q681.jpg",
+  "subject": "Tarix",
+  "question": "1917-yilda tashkil etilgan Turkiston o‘lkasi musulmonlar kengashi (kraymussovet) raisi bo‘lgan shaxsni toping.",
+  "options": {
+   "A": "Mustafa Cho‘qay",
+   "B": "Usmon Yusupov",
+   "C": "Mahmudxo‘ja Behbudiy",
+   "D": "Ismoil G‘aspirali"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 682,
+  "file": "rasmlar/tarix_v04_q682.jpg",
+  "subject": "Tarix",
+  "question": "Rossiya imperiyasining Buxoro amirligidagi birinchi vakili etib tayinlangan shaxsni aniqlang.",
+  "options": {
+   "A": "P.Lessar",
+   "B": "F.Girs",
+   "C": "S.M.Duxovskoy",
+   "D": "M.Skobelev"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 683,
+  "file": "rasmlar/tarix_v04_q683.jpg",
+  "subject": "Tarix",
+  "question": "Sulton Ahmad davrida Bobur Mirzoning otasi Umarshayx Mirzoga qaysi hududlar qo‘shib berilgan?",
+  "options": {
+   "A": "Aksi va Kesh",
+   "B": "Toshkent va Sayram",
+   "C": "Turkiston va Taroz",
+   "D": "Farg‘ona va Xo‘jand"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 684,
+  "file": "rasmlar/tarix_v04_q684.jpg",
+  "subject": "Tarix",
+  "question": "1370-yilning bahorida Amir Temur kimga qarshi qo‘shin tortgan?",
+  "options": {
+   "A": "Barquq",
+   "B": "Boyazid Yildirim",
+   "C": "Amir Husayn",
+   "D": "To‘xtamishxon"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 685,
+  "file": "rasmlar/tarix_v04_q685.jpg",
+  "subject": "Tarix",
+  "question": "1018 ta qo‘zg‘almas yulduzning o‘rni va holatini aniqlab, ularning astronomik jadvalini tuzgan olimni aniqlang.",
+  "options": {
+   "A": "Mirzo Ulug‘bek",
+   "B": "Ali Qushchi",
+   "C": "Qozizoda Rumiy",
+   "D": "Abu Rayhon Beruniy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 686,
+  "file": "rasmlar/tarix_v04_q686.jpg",
+  "subject": "Tarix",
+  "question": "1873-yil Xiva bosib olingach, xon xazinasini kontributsiya (tovon) evaziga musodara qilib Sankt-Peterburgga jo‘natgan shaxsni aniqlang.",
+  "options": {
+   "A": "M.Skobelev",
+   "B": "K.P.Kaufman",
+   "C": "M.Chernyayev",
+   "D": "N.Veryovkin"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 687,
+  "file": "rasmlar/tarix_v04_q687.jpg",
+  "subject": "Tarix",
+  "question": "Somoniylar davlatida xalqaro savdo-sotiqda ishlatilgan kumush tangalar nima deb atalgan?",
+  "options": {
+   "A": "dirham",
+   "B": "kepaki",
+   "C": "fulusi adliya",
+   "D": "fals"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 688,
+  "file": "rasmlar/tarix_v04_q688.jpg",
+  "subject": "Tarix",
+  "question": "Qaysi shahar Xitoy manbalarida Bityan deb atalgan?",
+  "options": {
+   "A": "Maroqanda",
+   "B": "Ershi",
+   "C": "Qang‘dez",
+   "D": "Baqtra"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 689,
+  "file": "rasmlar/tarix_v04_q689.jpg",
+  "subject": "Tarix",
+  "question": "O‘zbekistonda 1996-yil qanday yil deb e’lon qilingan?",
+  "options": {
+   "A": "\"Alisher Navoiy\" yili",
+   "B": "\"Amir Temur\" yili",
+   "C": "\"Mirzo Ulug‘bek\" yili",
+   "D": "\"Jaloliddin Manguberdi\" yili"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 690,
+  "file": "rasmlar/tarix_v04_q690.jpg",
+  "subject": "Tarix",
+  "question": "Ahmad Donish Buxoroning qaysi amiri haqida quyidagi fikrlarni bayon qilgan?\n\"U amirlik qalamini kambag‘alik kiyimi bilan bezadi. Jahon bog‘idan dushmanlik va yomonlikni tomiri bilan sug‘urib tashladi va adolat nihollarini o‘tqazdi.\"",
+  "options": {
+   "A": "Amir Haydar",
+   "B": "Amir Nasrullo",
+   "C": "Amir Shohmurod",
+   "D": "Amir Muzaffar"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 691,
+  "file": "rasmlar/tarix_v05_q691.jpg",
+  "subject": "Tarix",
+  "question": "1918-yilda qaysi shaharda Turkiston Avtonom Sovet Sotsialistik Respublikasi (TASSR) tuzilgani e’lon qilingan?",
+  "options": {
+   "A": "Jizzaxda",
+   "B": "Qarshida",
+   "C": "Farg‘onada",
+   "D": "Toshkentda"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 692,
+  "file": "rasmlar/tarix_v05_q692.jpg",
+  "subject": "Tarix",
+  "question": "1405-yil 18-mart kuni Samarqandni egallab, o‘zini Movarounnahrning oliy hukmdori deb e’lon qilgan shaxsni toping.",
+  "options": {
+   "A": "Xalil Sulton Mirzo",
+   "B": "Zahiriddin Muhammad Bobur",
+   "C": "Sulton Husayn Boyqaro",
+   "D": "Mirzo Ulug‘bek"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 693,
+  "file": "rasmlar/tarix_v05_q693.jpg",
+  "subject": "Tarix",
+  "question": "“Shajarai Xorazmshohiy” asarining muallifini aniqlang.",
+  "options": {
+   "A": "Xudoyberdi Avaz Muhammad",
+   "B": "Hasanbek Rumlu",
+   "C": "Shermuhammad Munis",
+   "D": "Muhammad Yusuf Bayoniy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 694,
+  "file": "rasmlar/tarix_v05_q694.jpg",
+  "subject": "Tarix",
+  "question": "Qadimgi davrning qaysi bosqichiga kelib O‘rta Osiyoda jamiyat harbiy demokratiya tamoyillari asosida yashay boshladi?",
+  "options": {
+   "A": "temir asri",
+   "B": "neolit",
+   "C": "bronza davri",
+   "D": "eneolit"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 695,
+  "file": "rasmlar/tarix_v05_q695.jpg",
+  "subject": "Tarix",
+  "question": "Qaysi shahar mil.avv. V asrda bunyod etilgan?",
+  "options": {
+   "A": "Toshkent",
+   "B": "Xiva",
+   "C": "Samarqand",
+   "D": "Yangi Urganch"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 696,
+  "file": "rasmlar/tarix_v05_q696.jpg",
+  "subject": "Tarix",
+  "question": "Amir Temur vafotidan keyin mamlakatda boshlanib ketgan o‘zaro kurash va isyonlarga chek qo‘yib, 1409-yilda hokimiyatni o‘z qo‘liga olgan temuriyzodani aniqlang.",
+  "options": {
+   "A": "Shohrux",
+   "B": "Mironshoh",
+   "C": "Pirmuhammad",
+   "D": "Husayn Boyqaro"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 697,
+  "file": "rasmlar/tarix_v05_q697.jpg",
+  "subject": "Tarix",
+  "question": "O‘zbekiston Respublikasi Prezidenti lavozimiga necha yoshdan kichik bo‘lmagan fuqarolar saylanish huquqiga ega?",
+  "options": {
+   "A": "18 yoshdan",
+   "B": "21 yoshdan",
+   "C": "25 yoshdan",
+   "D": "35 yoshdan"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 698,
+  "file": "rasmlar/tarix_v05_q698.jpg",
+  "subject": "Tarix",
+  "question": "Qal’a shaklida qurilgan quyidagi shaharlardan qaysi biri qoraqalpoq xalqi tomonidan yaratilgan me’moriy madaniyat yodgorligi hisoblanadi? (Uch xonliklar davri)",
+  "options": {
+   "A": "Jonbosqal’a",
+   "B": "Eshonqal’a",
+   "C": "Qo‘yqirilganqal’a",
+   "D": "Tuproqqal’a"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 699,
+  "file": "rasmlar/tarix_v05_q699.jpg",
+  "subject": "Tarix",
+  "question": "XIX asr o‘rtalarida Xiva xonligida xon qarorgohi qaysi shaharda joylashgan?",
+  "options": {
+   "A": "Hazorasp",
+   "B": "Xiva",
+   "C": "Nukus",
+   "D": "Tuproqqal’a"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 700,
+  "file": "rasmlar/tarix_v05_q700.jpg",
+  "subject": "Tarix",
+  "question": "Ma’muniylar hukmronligi davrida Xorazmshohlar davlatining poytaxtiga aylangan shaharni toping.",
+  "options": {
+   "A": "Tuproqqal’a",
+   "B": "Ko‘hna Urganch",
+   "C": "Kat",
+   "D": "Xiva"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 701,
+  "file": "rasmlar/tarix_v06_q701.jpg",
+  "subject": "Tarix",
+  "question": "Xiva xonligida xon farmonlarini tasdiqlovchi kengash bu – …",
+  "options": {
+   "A": "Devon al-mag‘rib",
+   "B": "Devon al-xaraj",
+   "C": "Devon al-mashriq",
+   "D": "Oliy Kengash"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 702,
+  "file": "rasmlar/tarix_v06_q702.jpg",
+  "subject": "Tarix",
+  "question": "Qo‘qon xonligida Xudoyorxondan so‘ng taxtga o‘tirgan hukmdorni toping.",
+  "options": {
+   "A": "Said Abdulla",
+   "B": "Nasriddinbek",
+   "C": "Muhammad Rahimxon II",
+   "D": "Amir Abdulahad"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 703,
+  "file": "rasmlar/tarix_v06_q703.jpg",
+  "subject": "Tarix",
+  "question": "O‘zbekiston Respublikasida qaysi davlat vakillik organi qonun chiqaruvchi hokimiyatni amalga oshiradi?",
+  "options": {
+   "A": "Oliy Majlis",
+   "B": "Vazirlar Mahkamasi",
+   "C": "Oliy Sud",
+   "D": "Konstitutsiyaviy Sud"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 704,
+  "file": "rasmlar/tarix_v06_q704.jpg",
+  "subject": "Tarix",
+  "question": "1420-yilda Mirzo Ulug‘bek farmoni bilan qaysi shaharda madrasa barpo etilgan?",
+  "options": {
+   "A": "Hirotda",
+   "B": "Buxoroda",
+   "C": "G‘ijduvonda",
+   "D": "Samarqandda"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 705,
+  "file": "rasmlar/tarix_v06_q705.jpg",
+  "subject": "Tarix",
+  "question": "Bobur Mirzo Muhammad Shayboniyxondan yengilgach, 1504-yilda qaysi viloyatda o‘z hokimiyatini o‘rnatgan?",
+  "options": {
+   "A": "O‘ratepa",
+   "B": "Balx",
+   "C": "Kobul",
+   "D": "Marv"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 706,
+  "file": "rasmlar/tarix_v06_q706.jpg",
+  "subject": "Tarix",
+  "question": "Quyidagilardan “Qadimgi xalqlardan qolgan yodgorliklar” asari muallifini toping.",
+  "options": {
+   "A": "Abu Nasr Farobiy",
+   "B": "Abu Ali ibn Sino",
+   "C": "Ahmad al-Farg‘oniy",
+   "D": "Abu Rayhon Beruniy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 707,
+  "file": "rasmlar/tarix_v06_q707.jpg",
+  "subject": "Tarix",
+  "question": "Qadimda so‘g‘diylar qaysi hududlarda istiqomat qilishgan?",
+  "options": {
+   "A": "Zarafshon va Qashqadaryo vohasida",
+   "B": "Zarafshon vodiysi va Toshkent vohasida",
+   "C": "Farg‘ona vodiysi va Surxon vohasida",
+   "D": "Surxon va Qashqadaryo vohasida"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 708,
+  "file": "rasmlar/tarix_v06_q708.jpg",
+  "subject": "Tarix",
+  "question": "Oqmachit qal’asi rus qo‘shinlari tomonidan egallangach, unga qanday nom berilgan?",
+  "options": {
+   "A": "Perovskiy forti",
+   "B": "Verniy forti",
+   "C": "Veryovkin forti",
+   "D": "Chernyayev forti"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 709,
+  "file": "rasmlar/tarix_v06_q709.jpg",
+  "subject": "Tarix",
+  "question": "Quyidagilardan qaysi biri XX asrning birinchi yarmida tashkil topgan?",
+  "options": {
+   "A": "Turkiston general-gubernatorligi",
+   "B": "Xorazm Xalq Sovet Respublikasi",
+   "C": "Samarqand xonligi",
+   "D": "Toshkent bekligi"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 710,
+  "file": "rasmlar/tarix_v06_q710.jpg",
+  "subject": "Tarix",
+  "question": "992-yilda kim boshchiligidagi qoraxoniylar Movarounnahrga hujum boshlagan?",
+  "options": {
+   "A": "Ibrohim Bo‘ritegin",
+   "B": "Horun Bug‘roxon",
+   "C": "Sobuqtegin",
+   "D": "Nuh"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 711,
+  "file": "rasmlar/tarix_v06_q711.png",
+  "subject": "Tarix",
+  "question": "Qaysi dostonda qoraqalpoqlarning ozodlik va mustaqillik uchun fidoyilarcha kurashi tasvirlangan?",
+  "options": {
+   "A": "\"Qirqqiz\"",
+   "B": "\"Bo‘zatov\"",
+   "C": "\"Alpomish\"",
+   "D": "\"Edigey\""
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 712,
+  "file": "rasmlar/tarix_v06_q712.png",
+  "subject": "Tarix",
+  "question": "Loydan yasalgan va olovda pishirilgan idishlarni yasash sohasi – kulolchilik tosh davrining qaysi bosqichi muhim ixtirosi hisoblanadi?",
+  "options": {
+   "A": "mezolit",
+   "B": "neolit",
+   "C": "eneolit",
+   "D": "bronza"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 713,
+  "file": "rasmlar/tarix_v06_q713.png",
+  "subject": "Tarix",
+  "question": "Mahmud Yalavoch Movarounnahrni idora etish uchun qaysi shaharni o‘ziga qarorgoh qilib olgan edi?",
+  "options": {
+   "A": "Qarshi",
+   "B": "Xo‘jand",
+   "C": "Buxoro",
+   "D": "Samarqand"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 714,
+  "file": "rasmlar/tarix_v06_q714.png",
+  "subject": "Tarix",
+  "question": "O‘zbekiston Respublikasi Oliy Kengashining 1991-yil 18-noyabrida bo‘lib o‘tgan VIII sessiyasida qabul qilingan qonunni toping.",
+  "options": {
+   "A": "“O‘zbekiston Respublikasi Oliy Majlisining Qonunchilik palatasi to‘g‘risida”",
+   "B": "“O‘zbekiston Respublikasi Prezidenti saylovi to‘g‘risida”",
+   "C": "“O‘zbekiston Respublikasining Davlat gerbi to‘g‘risida”",
+   "D": "“O‘zbekiston Respublikasi Vazirlar Mahkamasining tarkibini tasdiqlash to‘g‘risida”"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 715,
+  "file": "rasmlar/tarix_v06_q715.png",
+  "subject": "Tarix",
+  "question": "“Teatr – bu ibratxonadir” degan fikr qaysi jadid namoyandasiga tegishli?",
+  "options": {
+   "A": "Mahmudxo‘ja Behbudiy",
+   "B": "Abdulhamid Cho‘lpon",
+   "C": "Fayzulla Xo‘jayev",
+   "D": "Abdulla Qodiriy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 716,
+  "file": "rasmlar/tarix_v06_q716.png",
+  "subject": "Tarix",
+  "question": "“Musiqa kitobi” asari muallifini toping.",
+  "options": {
+   "A": "Muhammad ibn Muso al-Xorazmiy",
+   "B": "Ahmad al-Farg‘oniy",
+   "C": "Abu Ali ibn Sino",
+   "D": "Abu Nasr Farobiy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 717,
+  "file": "rasmlar/tarix_v06_q717.png",
+  "subject": "Tarix",
+  "question": "Quyidagi qaysi asar Amir Temurning harbiy san’ati va davlat boshqarish uslubiga bag‘ishlangan?",
+  "options": {
+   "A": "“Ravzat us-safo”",
+   "B": "“Al-Komil fit-tarix”",
+   "C": "“Habib us-siyar”",
+   "D": "“Temur tuzuklari”"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 718,
+  "file": "rasmlar/tarix_v06_q718.png",
+  "subject": "Tarix",
+  "question": "1878-yilda qaysi hududda mustamlakachilar zulmiga qarshi Yetimxon boshchiligida qo‘zg‘olon ko‘tarilgan?",
+  "options": {
+   "A": "Namanganda",
+   "B": "Toshkentda",
+   "C": "Mingtepeda",
+   "D": "Samarqandda"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 719,
+  "file": "rasmlar/tarix_v06_q719.png",
+  "subject": "Tarix",
+  "question": "Quyida sanab o‘tilgan siyosiy arboblardan qaysi biri O‘zbekiston Kompartiyasi Markaziy Komitetining birinchi sekretari vazifasida faoliyat yuritmagan?",
+  "options": {
+   "A": "Usmon Yusupov",
+   "B": "Abdulhamid Cho‘lpon",
+   "C": "Nuriddin Muhitdinov",
+   "D": "Sharof Rashidov"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 720,
+  "file": "rasmlar/tarix_v06_q720.png",
+  "subject": "Tarix",
+  "question": "1507-yilda pul islohoti o‘tkazgan shayboniy hukmdorni toping.",
+  "options": {
+   "A": "Muhammad Shayboniyxon",
+   "B": "Ubaydullaxon",
+   "C": "Boqi Muhammadxon",
+   "D": "Abdulazizxon"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 721,
+  "file": "rasmlar/tarix_v07_q721.jpg",
+  "subject": "Tarix",
+  "question": "Qaysi tariqat asoschisining fikricha, shariatsiz tariqat, tariqatsiz ma’rifat, ma’rifatsiz haqiqat bo‘la olmaydi, ularning har biri ikkinchisini to‘ldiradi va takomillashtiradi?",
+  "options": {
+   "A": "Kubroviya",
+   "B": "Moturidiya",
+   "C": "Yassaviya",
+   "D": "Naqshbandiya"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 722,
+  "file": "rasmlar/tarix_v07_q722.jpg",
+  "subject": "Tarix",
+  "question": "Quyidagi qo‘zg‘olonlardan qaysi biri 1916-yilda bo‘lib o‘tgan?",
+  "options": {
+   "A": "Po‘latxon qo‘zg‘oloni",
+   "B": "Jizzax qo‘zg‘oloni",
+   "C": "Ernazarbiy qo‘zg‘oloni",
+   "D": "Dukchi Eshon qo‘zg‘oloni"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 723,
+  "file": "rasmlar/tarix_v07_q723.jpg",
+  "subject": "Tarix",
+  "question": "XVI asr oxirida kimning hukmronligi davrida Buxoro xonligi ulkan markazlashgan davlatga aylangan?",
+  "options": {
+   "A": "Muhammad Shayboniyxon",
+   "B": "Abulg‘oziyxon",
+   "C": "Abdullaxon II",
+   "D": "Ismoil Safaviy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 724,
+  "file": "rasmlar/tarix_v07_q724.jpg",
+  "subject": "Tarix",
+  "question": "1990-yilning martida O‘zbekistonning yangi Konstitutsiyasini tayyorlash g‘oyasini ilgari surgan siyosiy arbobni aniqlang.",
+  "options": {
+   "A": "Abdurahim Po‘latov",
+   "B": "Inomjon Usmonxo‘jayev",
+   "C": "Rafiq Nishonov",
+   "D": "Islom Karimov"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 725,
+  "file": "rasmlar/tarix_v07_q725.jpg",
+  "subject": "Tarix",
+  "question": "O‘rta Osiyo hududida vujudga kelgan qaysi davlatning poytaxti Ershi shahri bo‘lgan?",
+  "options": {
+   "A": "Davan",
+   "B": "Kushon",
+   "C": "Xorazm",
+   "D": "Qang‘"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 726,
+  "file": "rasmlar/tarix_v07_q726.jpg",
+  "subject": "Tarix",
+  "question": "1997-yilda Respublikamizda quyidagi qaysi shaharning 2500 yillik yubileyi keng nishonlangan?",
+  "options": {
+   "A": "Xiva",
+   "B": "Termiz",
+   "C": "Samarqand",
+   "D": "Shahrisabz"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 727,
+  "file": "rasmlar/tarix_v07_q727.jpg",
+  "subject": "Tarix",
+  "question": "Qaysi alloma al-jabrni mustaqil fan darajasiga ko‘tarib, algebra faniga asos solgan va tarixda o‘zidan o‘chmas iz qoldirgan?",
+  "options": {
+   "A": "Ahmad al-Farg‘oniy",
+   "B": "Abu Ali ibn Sino",
+   "C": "Mahmud az-Zamaxshariy",
+   "D": "Muhammad al-Xorazmiy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 728,
+  "file": "rasmlar/tarix_v07_q728.jpg",
+  "subject": "Tarix",
+  "question": "1885-yil Buxoro amirligining Baljuvon bekligida bo‘lib o‘tgan dehqonlar qo‘zg‘oloniga kim rahbarlik qilgan?",
+  "options": {
+   "A": "Iso Avliyo",
+   "B": "Po‘latxon",
+   "C": "Darvishxon",
+   "D": "Vose"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 729,
+  "file": "rasmlar/tarix_v07_q729.jpg",
+  "subject": "Tarix",
+  "question": "Alisher Navoiyga qadar o‘zbek she’riyatida … ning darajasiga yetadigan shoir bo‘lmagan.",
+  "options": {
+   "A": "Lutfiy",
+   "B": "Boborahim Mashrab",
+   "C": "Zahiriddin Muhammad Bobur",
+   "D": "Atoiy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 730,
+  "file": "rasmlar/tarix_v07_q730.jpg",
+  "subject": "Tarix",
+  "question": "Yalangto‘sh Bahodir tomonidan qaysi hududda Tillakori masjid-madrasasi qurdirilgan?",
+  "options": {
+   "A": "Toshkentda",
+   "B": "Buxoroda",
+   "C": "Samarqandda",
+   "D": "Xivada"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 731,
+  "file": "rasmlar/tarix_v07_q731.png",
+  "subject": "Tarix",
+  "question": "Quyidagi qaysi asar Amir Temurning harbiy san’ati va davlat boshqarish uslubiga bag‘ishlangan?",
+  "options": {
+   "A": "“Habib us-siyar”",
+   "B": "“Temur tuzuklari”",
+   "C": "“Ravzat us-safo”",
+   "D": "“Al-Komil fit-tarix”"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 732,
+  "file": "rasmlar/tarix_v07_q732.png",
+  "subject": "Tarix",
+  "question": "1507-yilda pul islohoti o‘tkazgan shayboniy hukmdorni toping.",
+  "options": {
+   "A": "Abdulazizxon",
+   "B": "Boqi Muhammadxon",
+   "C": "Ubaydullaxon",
+   "D": "Muhammad Shayboniyxon"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 733,
+  "file": "rasmlar/tarix_v07_q733.png",
+  "subject": "Tarix",
+  "question": "1878-yilda qaysi hududda mustamlakachilar zulmiga qarshi Yetimxon boshchiligida qo‘zg‘olon ko‘tarilgan?",
+  "options": {
+   "A": "Toshkentda",
+   "B": "Namanganda",
+   "C": "Samarqandda",
+   "D": "Mingtepada"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 734,
+  "file": "rasmlar/tarix_v07_q734.png",
+  "subject": "Tarix",
+  "question": "Turk xoqonligi davrida O‘rta Osiyoda ko‘tarilgan qo‘zg‘olonni toping.",
+  "options": {
+   "A": "Mahmud Torobiy boshchiligidagi qo‘zg‘olon",
+   "B": "“Oq kiyimlilar” qo‘zg‘oloni",
+   "C": "Abruy boshchiligidagi qo‘zg‘olon",
+   "D": "Rofe ibn Lays boshchiligidagi qo‘zg‘olon"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 735,
+  "file": "rasmlar/tarix_v07_q735.png",
+  "subject": "Tarix",
+  "question": "Qaysi dostonda qoraqalpoqlarning ozodlik va mustaqillik uchun fidoyilarcha kurashi tasvirlangan?",
+  "options": {
+   "A": "\"Qirqqiz\"",
+   "B": "\"Alpomish\"",
+   "C": "\"Bo‘zatov\"",
+   "D": "\"Edigey\""
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 736,
+  "file": "rasmlar/tarix_v07_q736.png",
+  "subject": "Tarix",
+  "question": "Quyida sanab o‘tilgan siyosiy arboblardan qaysi biri O‘zbekiston Kompartiyasi Markaziy Komitetining birinchi sekretari vazifasida faoliyat yuritmagan?",
+  "options": {
+   "A": "Nuriddin Muhitdinov",
+   "B": "Usmon Yusupov",
+   "C": "Abdulhamid Cho‘lpon",
+   "D": "Sharof Rashidov"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 737,
+  "file": "rasmlar/tarix_v07_q737.png",
+  "subject": "Tarix",
+  "question": "Loydan yasalgan va olovda pishirilgan idishlarni yasash sohasi – kulolchilik tosh davrining qaysi bosqichi muhim ixtirosi hisoblanadi?",
+  "options": {
+   "A": "mezolit",
+   "B": "bronza",
+   "C": "eneolit",
+   "D": "neolit"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 738,
+  "file": "rasmlar/tarix_v07_q738.png",
+  "subject": "Tarix",
+  "question": "“Teatr – bu ibratxonadir” degan fikr qaysi jadid namoyandasiga tegishli?",
+  "options": {
+   "A": "Abdulhamid Cho‘lpon",
+   "B": "Fayzulla Xo‘jayev",
+   "C": "Mahmudxo‘ja Behbudiy",
+   "D": "Abdulla Qodiriy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 739,
+  "file": "rasmlar/tarix_v07_q739.png",
+  "subject": "Tarix",
+  "question": "O‘zbekiston Respublikasi Oliy Kengashining 1991-yil 18-noyabrida bo‘lib o‘tgan VIII sessiyasida qabul qilingan qonunni toping.",
+  "options": {
+   "A": "“O‘zbekiston Respublikasi Oliy Majlisining Qonunchilik palatasi to‘g‘risida”",
+   "B": "“O‘zbekiston Respublikasining Davlat gerbi to‘g‘risida”",
+   "C": "“O‘zbekiston Respublikasi Prezidenti saylovi to‘g‘risida”",
+   "D": "“O‘zbekiston Respublikasi Vazirlar Mahkamasining tarkibini tasdiqlash to‘g‘risida”"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 740,
+  "file": "rasmlar/tarix_v07_q740.png",
+  "subject": "Tarix",
+  "question": "Mahmud Yalavoch Movarounnahrni idora etish uchun qaysi shaharni o‘ziga qarorgoh qilib olgan edi?",
+  "options": {
+   "A": "Qarshi",
+   "B": "Xo‘jand",
+   "C": "Samarqand",
+   "D": "Buxoro"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 741,
+  "file": "rasmlar/tarix_v08_q741.jpg",
+  "subject": "Tarix",
+  "question": "Shohrux 1409-yilda kimni Movarounnahr va Turkistonga hokim qilib tayinlagan?",
+  "options": {
+   "A": "Xalil Sultonni",
+   "B": "Mirzo Ulug‘bekni",
+   "C": "Husayn Boyqaroni",
+   "D": "Mironshohni"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 742,
+  "file": "rasmlar/tarix_v08_q742.jpg",
+  "subject": "Tarix",
+  "question": "Xiva xonligida yerni ijaraga olib, hosilning teng yarmiga ishlovchilar qanday atalgan?",
+  "options": {
+   "A": "vaqfchilar",
+   "B": "bevatanlar",
+   "C": "barzikorlar",
+   "D": "yarimchilar"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 743,
+  "file": "rasmlar/tarix_v08_q743.jpg",
+  "subject": "Tarix",
+  "question": "1932-1936-yillarda RSFSR tarkibida bo‘lgan davlat tuzilmasini aniqlang.",
+  "options": {
+   "A": "Xiva xonligi",
+   "B": "Buxoro amirligi",
+   "C": "Turkiston general-gubernatorligi",
+   "D": "Qoraqalpog‘iston"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 744,
+  "file": "rasmlar/tarix_v08_q744.jpg",
+  "subject": "Tarix",
+  "question": "1186-yilda butunlay tugatilgan davlatni toping.",
+  "options": {
+   "A": "G‘aznaviylar davlati",
+   "B": "Qoraxoniylar davlati",
+   "C": "Saljuqiylar davlati",
+   "D": "Somoniylar davlati"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 745,
+  "file": "rasmlar/tarix_v08_q745.jpg",
+  "subject": "Tarix",
+  "question": "1864-yil M.Chernyayev qaysi shaharni egallash uchun olib borgan birinchi harakatida mag‘lubiyatga uchragan?",
+  "options": {
+   "A": "Samarqand",
+   "B": "Xiva",
+   "C": "O‘ratepa",
+   "D": "Toshkent"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 746,
+  "file": "rasmlar/tarix_v08_q746.jpg",
+  "subject": "Tarix",
+  "question": "Buxoro xonligida xon va shahzodalar o‘rtasidagi munosabatlar masalasi bilan qaysi mansabdagi amaldor shug‘ullangan?",
+  "options": {
+   "A": "mehtar",
+   "B": "xon yasovuli",
+   "C": "ko‘kaldosh",
+   "D": "dodxoh"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 747,
+  "file": "rasmlar/tarix_v08_q747.jpg",
+  "subject": "Tarix",
+  "question": "\"Ipak yo‘li\"ga shu nom 1877-yilda kim tomonidan berilgan?",
+  "options": {
+   "A": "fransuz olimi A.Dyuperron",
+   "B": "nemis olimi Genrix Shlimann",
+   "C": "nemis geografi F.Rixtgofen",
+   "D": "fransuz olimi Jak-Fransua Shampolyon"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 748,
+  "file": "rasmlar/tarix_v08_q748.jpg",
+  "subject": "Tarix",
+  "question": "O‘zbekiston Respublikasida 1995-yilda tashkil etilgan siyosiy partiyani toping.",
+  "options": {
+   "A": "O‘zbekiston Xalq demokratik partiyasi",
+   "B": "O‘zbekiston “Fidokorlar” milliy demokratik partiyasi",
+   "C": "O‘zbekiston Liberal-demokratik partiyasi",
+   "D": "O‘zbekiston “Milliy tiklanish” demokratik partiyasi"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 749,
+  "file": "rasmlar/tarix_v08_q749.jpg",
+  "subject": "Tarix",
+  "question": "Quyida berilgan lavozimlardan qaysi biri Buxoro xonligida ashtarxoniylar davrida joriy etilgan.",
+  "options": {
+   "A": "otaliq",
+   "B": "saroy qutvoli",
+   "C": "shayxulislom",
+   "D": "devonbegi"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 750,
+  "file": "rasmlar/tarix_v08_q750.jpg",
+  "subject": "Tarix",
+  "question": "Quyidagilardan kim qoraqo‘yunlar, muzaffariylar, jaloyiriylarning Amir Temurga qarshi harakatlarini qo‘llab-quvvatlagan?",
+  "options": {
+   "A": "Amir Xudoydot",
+   "B": "Amir Husayn",
+   "C": "Amirak Ahmad",
+   "D": "Boyazid Yildirim"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 751,
+  "file": "rasmlar/tarix_v08_q751.png",
+  "subject": "Tarix",
+  "question": "XIX asr o‘rtalarida Buxoro amirligi, Xiva va Qo‘qon xonliklarida vaqf yerlaridan olinadigan foydaning hisob-kitobi va taqsimoti bilan qaysi lavozim egasi shug‘ullangan?",
+  "options": {
+   "A": "shayxulislom",
+   "B": "mushrif",
+   "C": "mehtar",
+   "D": "mutavalli"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 752,
+  "file": "rasmlar/tarix_v08_q752.png",
+  "subject": "Tarix",
+  "question": "1810-yilda Toshkentni Qo‘qon xonligi tarkibiga qo‘shib olgan hukmdorni aniqlang.",
+  "options": {
+   "A": "Muhammad Ali",
+   "B": "Norbo‘tabiy",
+   "C": "Olimxon",
+   "D": "Xudoyorxon"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 753,
+  "file": "rasmlar/tarix_v08_q753.png",
+  "subject": "Tarix",
+  "question": "2016-yilda Rio-de-Janeyroda o‘tkazilgan olimpiada o‘yinlarining oltin medaliga sazovor bo‘lgan vatandoshimizni aniqlang.",
+  "options": {
+   "A": "Yekaterina Xilko",
+   "B": "Murodjon Ahmadaliev",
+   "C": "Iroda To‘laganova",
+   "D": "Ruslan Nuriddinov"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 754,
+  "file": "rasmlar/tarix_v08_q754.png",
+  "subject": "Tarix",
+  "question": "Xiva xonligida urush paytlarida qoraqalpoqlardan qanday soliq yig‘ib olingan?",
+  "options": {
+   "A": "salg‘ut",
+   "B": "zakot",
+   "C": "qozon puli",
+   "D": "ushr"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 755,
+  "file": "rasmlar/tarix_v08_q755.png",
+  "subject": "Tarix",
+  "question": "769-783-yillarda bo‘lib o‘tgan \"Oq kiyimlilar\" qo‘zg‘olonining rahbarini \"Muqanna\" laqabi bilan atashgan. \"Muqanna\" so‘zining ma’nosi nima?",
+  "options": {
+   "A": "\"niqobdor\"",
+   "B": "\"musulmonlar e’tiqodini tuzatuvchi\"",
+   "C": "\"hidoyat yo‘lining sarboni\"",
+   "D": "\"dinning ulug‘ yulduzi\""
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 756,
+  "file": "rasmlar/tarix_v08_q756.png",
+  "subject": "Tarix",
+  "question": "O‘zbek adabiyotida poeziyaga masalni birinchi bo‘lib mustaqil janr sifatida kiritgan ijodkorni toping.",
+  "options": {
+   "A": "Turdi Farog‘iy",
+   "B": "Gulxaniy",
+   "C": "Muqimiy",
+   "D": "Maxmur"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 757,
+  "file": "rasmlar/tarix_v08_q757.png",
+  "subject": "Tarix",
+  "question": "Ilk o‘rta asrlarda O‘rta Osiyoda qishloq jamoalari yerlarida yashab, yer va suvdan iborat umumiy mulkka ega bo‘lgan erkin ziroatchilar tabaqasi qanday atalgan?",
+  "options": {
+   "A": "kashovarz",
+   "B": "kadivar",
+   "C": "chokar",
+   "D": "dehqon"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 758,
+  "file": "rasmlar/tarix_v08_q758.png",
+  "subject": "Tarix",
+  "question": "Ikkinchi jahon urushi yillarida O‘zbekistonning qaysi shahrida metallurgiya kombinati bunyod etilgan?",
+  "options": {
+   "A": "Buxoro",
+   "B": "Bekobod",
+   "C": "Qo‘qon",
+   "D": "Navoiy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 759,
+  "file": "rasmlar/tarix_v08_q759.png",
+  "subject": "Tarix",
+  "question": "Qaysi davrdan boshlab hozirgi qiyofadagi odam – kromanyon odami yashagan?",
+  "options": {
+   "A": "o‘rta paleolit",
+   "B": "mezolit",
+   "C": "so‘nggi paleolit",
+   "D": "neolit"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 760,
+  "file": "rasmlar/tarix_v08_q760.png",
+  "subject": "Tarix",
+  "question": "Quyidagi shaxslardan qaysi biri \"xorazmshoh\" unvonini tiklagan?",
+  "options": {
+   "A": "Elarslon",
+   "B": "Takash",
+   "C": "Qutbiddin Muhammad",
+   "D": "Otsiz"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 761,
+  "file": "rasmlar/tarix_v09_q761.jpg",
+  "subject": "Tarix",
+  "question": "O‘zbek adabiyotida poeziyaga masalni birinchi bo‘lib mustaqil janr sifatida kiritgan ijodkorni toping.",
+  "options": {
+   "A": "Maxmur",
+   "B": "Gulxaniy",
+   "C": "Muqimiy",
+   "D": "Turdi Farog‘iy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 762,
+  "file": "rasmlar/tarix_v09_q762.jpg",
+  "subject": "Tarix",
+  "question": "XIX asr o‘rtalarida Buxoro amirligi, Xiva va Qo‘qon xonliklarida vaqf yerlaridan olinadigan foydaning hisob-kitobi va taqsimoti bilan qaysi lavozim egasi shug‘ullangan?",
+  "options": {
+   "A": "mutavalli",
+   "B": "shayxulislom",
+   "C": "mehtar",
+   "D": "mushrif"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 763,
+  "file": "rasmlar/tarix_v09_q763.jpg",
+  "subject": "Tarix",
+  "question": "Quyidagi shaxslardan qaysi biri \"xorazmshoh\" unvonini tiklagan?",
+  "options": {
+   "A": "Otsiz",
+   "B": "Takash",
+   "C": "Qutbiddin Muhammad",
+   "D": "Elarslon"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 764,
+  "file": "rasmlar/tarix_v09_q764.jpg",
+  "subject": "Tarix",
+  "question": "Xiva xonligida urush paytlarida qoraqalpoqlardan qanday soliq yig‘ib olingan?",
+  "options": {
+   "A": "ushr",
+   "B": "qozon puli",
+   "C": "zakot",
+   "D": "salg‘ut"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 765,
+  "file": "rasmlar/tarix_v09_q765.jpg",
+  "subject": "Tarix",
+  "question": "1810-yilda Toshkentni Qo‘qon xonligi tarkibiga qo‘shib olgan hukmdorni aniqlang.",
+  "options": {
+   "A": "Norbo‘tabiy",
+   "B": "Xudoyorxon",
+   "C": "Muhammad Ali",
+   "D": "Olimxon"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 766,
+  "file": "rasmlar/tarix_v09_q766.jpg",
+  "subject": "Tarix",
+  "question": "Qaysi davrdan boshlab hozirgi qiyofadagi odam – kromanyon odami yashagan?",
+  "options": {
+   "A": "so‘nggi paleolit",
+   "B": "o‘rta paleolit",
+   "C": "neolit",
+   "D": "mezolit"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 767,
+  "file": "rasmlar/tarix_v09_q767.jpg",
+  "subject": "Tarix",
+  "question": "Ilk o‘rta asrlarda O‘rta Osiyoda qishloq jamoalari yerlarida yashab, yer va suvdan iborat umumiy mulkka ega bo‘lgan erkin ziroatchilar tabaqasi qanday atalgan?",
+  "options": {
+   "A": "dehqon",
+   "B": "chokar",
+   "C": "kadivar",
+   "D": "kashovarz"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 768,
+  "file": "rasmlar/tarix_v09_q768.jpg",
+  "subject": "Tarix",
+  "question": "2016-yilda Rio-de-Janeyroda o‘tkazilgan olimpiada o‘yinlarining oltin medaliga sazovor bo‘lgan vatandoshimizni aniqlang.",
+  "options": {
+   "A": "Iroda To‘laganova",
+   "B": "Murodjon Ahmadaliev",
+   "C": "Ruslan Nuriddinov",
+   "D": "Yekaterina Xilko"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 769,
+  "file": "rasmlar/tarix_v09_q769.jpg",
+  "subject": "Tarix",
+  "question": "G‘arbiy Turk xoqonligiga Yettisuv va Sharqiy Turkistondan tashqari yana qaysi hududlar kirgan?",
+  "options": {
+   "A": "Shimoliy Xitoy",
+   "B": "Irtish daryosi havzasi",
+   "C": "G‘arbiy Sibir",
+   "D": "Sirdaryo va Amudaryo havzalari"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 770,
+  "file": "rasmlar/tarix_v09_q770.jpg",
+  "subject": "Tarix",
+  "question": "Ikkinchi jahon urushi yillarida O‘zbekistonning qaysi shahrida metallurgiya kombinati bunyod etilgan?",
+  "options": {
+   "A": "Qo‘qon",
+   "B": "Buxoro",
+   "C": "Bekobod",
+   "D": "Navoiy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 771,
+  "file": "rasmlar/tarix_v10_q771.jpg",
+  "subject": "Tarix",
+  "question": "1852-yilda Toshkentdan chaqirilgan qo‘shin bilan qipchoqlar qirg‘inini uyushtirgan Qo‘qon xonini aniqlang.",
+  "options": {
+   "A": "Xudoyorxon",
+   "B": "Umarxon",
+   "C": "Sheralixon",
+   "D": "Olimxon"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 772,
+  "file": "rasmlar/tarix_v10_q772.jpg",
+  "subject": "Tarix",
+  "question": "1365-yil Amir Temur va Ilyosxo‘ja qo‘shinlari o‘rtasidagi jang tarixda qanday nom bilan shuhrat topdi?",
+  "options": {
+   "A": "\"Loy jangi\"",
+   "B": "\"Parvon jangi\"",
+   "C": "\"Tarak daryosi bo‘yidagi jang\"",
+   "D": "\"Anqara jangi\""
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 773,
+  "file": "rasmlar/tarix_v10_q773.jpg",
+  "subject": "Tarix",
+  "question": "Amir Temur sarbadorlar harakati rahbarlaridan bo‘lgan kimning hayotini Amir Husayndan so‘rab oladi va uni o‘limdan saqlab qoladi?",
+  "options": {
+   "A": "Abu Bakr Kalaviy",
+   "B": "Mahmud Torobiy",
+   "C": "Hoshim ibn Hakim",
+   "D": "Mavlonozoda Samarqandiy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 774,
+  "file": "rasmlar/tarix_v10_q774.jpg",
+  "subject": "Tarix",
+  "question": "Qutayba qo‘shinlari Samarqandga hujum qilgan vaqtda kim Sug‘d podshosi edi?",
+  "options": {
+   "A": "Divashtich",
+   "B": "G‘urak",
+   "C": "Hurzod",
+   "D": "Chag‘on"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 775,
+  "file": "rasmlar/tarix_v10_q775.jpg",
+  "subject": "Tarix",
+  "question": "“Avesto” qaysi dinning muqaddas kitobi hisoblanadi?",
+  "options": {
+   "A": "nasroniylik",
+   "B": "buddaviylik",
+   "C": "moniylik",
+   "D": "zardushtiylik"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 776,
+  "file": "rasmlar/tarix_v10_q776.jpg",
+  "subject": "Tarix",
+  "question": "1583-yildan boshlab Shayboniylar davlatida kim rasman xon deb e’lon qilingan?",
+  "options": {
+   "A": "Nodir Muhammadxon",
+   "B": "Abdullaxon II",
+   "C": "Abdulazizxon",
+   "D": "Navro‘z Ahmadxon"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 777,
+  "file": "rasmlar/tarix_v10_q777.jpg",
+  "subject": "Tarix",
+  "question": "1996-yilda qaysi shaharda Amir Temur haykali ochilgan?",
+  "options": {
+   "A": "Termiz",
+   "B": "Buxoro",
+   "C": "Samarqand",
+   "D": "Xiva"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 778,
+  "file": "rasmlar/tarix_v10_q778.jpg",
+  "subject": "Tarix",
+  "question": "Andijondagi 1898-yil qo‘zg‘olonidan keyin podsho Nikolay II Turkiston general-gubernatori A.Vrevskiyni lavozimidan chetlatib, uning vazifasini vaqtinchalik kimning zimmasiga yuklagan?",
+  "options": {
+   "A": "K.P.Kaufman",
+   "B": "G.Rozenbax",
+   "C": "N.Korolkov",
+   "D": "S.M.Duxovskoy"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 779,
+  "file": "rasmlar/tarix_v10_q779.jpg",
+  "subject": "Tarix",
+  "question": "Quyida berilgan qo‘zg‘olonlardan qaysi biriga Dukchi eshon rahbarlik qilgan?",
+  "options": {
+   "A": "Miyonqol qo‘zg‘oloniga",
+   "B": "Jizzax qo‘zg‘oloniga",
+   "C": "Vabo isyoniga",
+   "D": "Andijon qo‘zg‘oloniga"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ },
+ {
+  "question_id": 780,
+  "file": "rasmlar/tarix_v10_q780.jpg",
+  "subject": "Tarix",
+  "question": "1917-yilda quyidagi qaysi shaharda bo‘lib o‘tgan Butunturkiston o‘lka musulmonlarining favqulodda IV qurultoyida Turkiston Muxtoriyati tuzilganligi e’lon qilingan?",
+  "options": {
+   "A": "Toshkent",
+   "B": "Qo‘qon",
+   "C": "Buxoro",
+   "D": "Samarqand"
+  },
+  "has_figure": false,
+  "confidence": "high",
+  "notes": ""
+ }
+]
