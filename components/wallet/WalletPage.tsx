@@ -11,7 +11,6 @@ import { ReferralCard } from "../profile/ReferralCard";
 import { DEFAULT_TOPUP, TOPUP_PRESETS, openPay } from "../overlays/pay-amount";
 import { formatBonusSom, groupDigits } from "@/lib/format";
 import { PaymentBanner } from "./PaymentBanner";
-import { PaynetCard } from "./PaynetCard";
 import { usePaymentReturn } from "./usePaymentReturn";
 import { isPaymentBonusPercent, paymentBonusHint } from "@/lib/payment-bonus";
 import { TOPUP_FEATURES, UNIT_LABEL, formatWhen, ledgerRow, orderStateLabel, providerLabel } from "./wallet-model";
@@ -39,17 +38,14 @@ const heroFocus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-
  * return banner (`?order=`), the ledger («Harakatlar»), recent payments and the
  * referral card. No page header — the shell's `PageHeader` «Hamyon» wraps it.
  *
- * «To'ldirish» opens the existing `PayDialog` (amount presets + Click/Payme live
- * there, unchanged), as the old purchase page did.
+ * «To'ldirish» opens the existing `PayDialog` (amount presets + Click/Payme/Paynet
+ * live there), as the old purchase page did.
  */
 export function WalletPage() {
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const loggedIn = useAppStore((s) => s.loggedIn);
   const user = useAppStore((s) => s.user);
   const open = useUi((s) => s.open);
-  /** Paynet is paid at an agent (not in PayDialog): its card shows only while the server has it configured. */
-  const paynetOn = useAppStore((s) => s.features?.payments.paynet === true);
-  const paynetUrl = useAppStore((s) => s.features?.payments.paynetUrl ?? null);
   const pay = usePaymentReturn();
   /** `GET /api/users/me` `paymentBonusPercent` (loaded with the ledger, again after a payment lands); 0 = no hint. */
   const [bonusPercent, setBonusPercent] = useState(0);
@@ -147,8 +143,6 @@ export function WalletPage() {
       )}
 
       {sessionChecked && !(loggedIn && !user) ? <QuickTopUp bonusPercent={ready ? bonusPercent : 0} /> : null}
-
-      {ready && paynetOn ? <PaynetCard userId={user!.id} bonusPercent={bonusPercent} appUrl={paynetUrl} /> : null}
 
       {ready ? (
         <>
