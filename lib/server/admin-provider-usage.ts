@@ -2,6 +2,7 @@ import "server-only";
 import { aiReadOnlyTx } from "./admin-ai";
 import { spendByDayPart } from "./admin-cost";
 import { query } from "./db";
+import { PROVIDER_META } from "./providers/catalog";
 import { PROVIDERS, isProviderId } from "./providers/registry";
 
 /**
@@ -161,7 +162,8 @@ export function foldUsage(
 ): ProviderUsageBody {
   const days = usageDays(now);
   const accs = new Map<string, Acc>();
-  const free = new Set(["pexels", "pixabay", "openalex", "googlebooks"]);
+  // Providers that cost nothing leave no spend row: their requests and failures come from `provider_calls`.
+  const free = new Set(Object.entries(PROVIDER_META).filter(([, m]) => m.billing === "free").map(([id]) => id));
   const accOf = (id: string): Acc => {
     let a = accs.get(id);
     if (!a) {

@@ -82,6 +82,9 @@ export async function register() {
     try {
       const { startProviderKeyRefresh } = await import("./lib/server/providers/store");
       await startProviderKeyRefresh();
+      // Free-provider request counters for the admin «Provayderlar» page (batched, best effort).
+      const { startProviderUsageFlush } = await import("./lib/server/provider-usage");
+      startProviderUsageFlush();
     } catch (e) {
       console.warn("[boot] provayder kalitlari yuklanmadi:", e instanceof Error ? e.message : e);
     }
