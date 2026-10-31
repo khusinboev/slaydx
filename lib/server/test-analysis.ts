@@ -2,7 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { parseLlmJson } from "../generation/json";
 import { recordLlmUsage, trackJobCost } from "../generation/job-cost";
-import { ANALYSIS_SCHEMA, ANALYSIS_SYSTEM, analysisUser, parseAnalysis, type AnalysisStem, type ParsedAnalysis } from "../tests/analysis";
+import { ANALYSIS_SCHEMA, ANALYSIS_SYSTEM, analysisUser, parseAnalysis, sendsImage, type AnalysisStem, type ParsedAnalysis } from "../tests/analysis";
 import { letterOf } from "../tests/rules";
 import { recordAiUsage } from "./ai-usage";
 import { query, queryOne } from "./db";
@@ -23,8 +23,11 @@ import { testsAnalysisModel } from "./providers/route-effective";
  *  - The model call runs in the background of this process behind a cap of `MAX_CONCURRENT` calls; the page polls.
  *    A failure marks the row 'failed' (the page offers «Qayta urinish»; a retry is accepted after a short cool-down).
  *    A crashed process leaves a 'pending' row whose lease runs out, then the next request takes it over.
- *  - The model is the `tests.analysis` routing slot (default Gemini 3.1 Pro) and SEES the question image (inline
- *    bytes from `test_assets`). Spend goes to `ai_usage` as tool `tests:analysis`.
+ *  - The model is the `tests.analysis` routing slot (default Gemini 3.1 Pro). It reads the transcribed TEXT and options when the
+ *    question has them (migration 064) and sees the image (inline bytes from `test_assets`) only when the question has no text
+ *    or the image holds a figure / table (`has_figure`): cheaper and exact. Spend goes to `ai_usage` as tool `tests:analysis`.
+ *  - Rows written while a question was image-only (key = the image hash alone) stay valid after its text arrived: a `ready` row
+ *    under that old hash is served until an analysis under the new hash exists (`legacyHash`).
  */
 
 export const ANALYSIS_TOOL_ID = "tests:analysis";
@@ -149,18 +152,20 @@ async function runOne(k: Key, userId: string): Promise<void> {
       k.stemHash,
       CALL_LEASE_SEC,
     ]);
-    const q = await queryOne<{ subject: string; question_text: string | null; options: string[] | null; bytes: Buffer | null; mime: string | null }>(
-      `SELECT s.name AS subject, q.question_text, q.options, a.bytes, a.mime
+    const q = await queryOne<{ subject: string; question_text: string | null; options: string[] | null; has_figure: boolean; bytes: Buffer | null; mime: string | null }>(
+      `SELECT s.name AS subject, q.question_text, q.options, q.has_figure, a.bytes, a.mime
          FROM test_questions q JOIN test_subjects s ON s.id = q.subject_id LEFT JOIN test_assets a ON a.id = q.image_asset_id
         WHERE q.id = $1`,
       [k.questionId],
     );
     const tracked = trackJobCost(async () => {
       if (!q) throw new Error("savol topilmadi");
+      // The image only where the text cannot replace it (no text, or a figure / table).
+      const image = q.bytes && q.mime && sendsImage({ question_text: q.question_text, has_figure: q.has_figure, hasBytes: true }) ? { bytes: Buffer.from(q.bytes), mime: q.mime } : null;
       return analyzer({
-        stem: { subject: q.subject, text: q.question_text, options: q.options, hasImage: Boolean(q.bytes) },
+        stem: { subject: q.subject, text: q.question_text, options: q.options, hasImage: image !== null },
         correct: k.correct,
-        image: q.bytes && q.mime ? { bytes: Buffer.from(q.bytes), mime: q.mime } : null,
+        image,
       });
     });
     try {
@@ -253,20 +258,32 @@ export async function attemptAnalysis(userId: string, attemptId: string, opts: {
     [wrong.map((w) => w.id)],
   );
   const hashOf = new Map(stems.map((s) => [s.id, stemHash(s.sha256, s.question_text, s.options)]));
-  const keys = wrong.filter((w) => hashOf.has(w.id)).map((w): Key & { position: number; chosen: number | null } => ({ ...w, questionId: w.id, stemHash: hashOf.get(w.id)! }));
+  // A question that has text AND an image was image-only before migration 064: its older rows are keyed by the image alone.
+  const legacyOf = new Map(stems.filter((s) => s.sha256 && s.question_text).map((s) => [s.id, stemHash(s.sha256, null, null)]));
+  const keys = wrong
+    .filter((w) => hashOf.has(w.id))
+    .map((w): Key & { position: number; chosen: number | null; legacyHash: string | null } => ({ ...w, questionId: w.id, stemHash: hashOf.get(w.id)!, legacyHash: legacyOf.get(w.id) ?? null }));
 
   const read = async () => {
+    const lookups = keys.flatMap((k): Key[] => (k.legacyHash ? [k, { questionId: k.questionId, correct: k.correct, stemHash: k.legacyHash }] : [k]));
     const rows = await query<Row>(
       `SELECT t.question_id::text AS question_id, t.correct, t.stem_hash, t.status, t.explanation, t.wrong
          FROM test_analyses t JOIN unnest($1::bigint[], $2::smallint[], $3::text[]) AS k(q, c, h) ON t.question_id = k.q AND t.correct = k.c AND t.stem_hash = k.h`,
-      [keys.map((k) => k.questionId), keys.map((k) => k.correct), keys.map((k) => k.stemHash)],
+      [lookups.map((k) => k.questionId), lookups.map((k) => k.correct), lookups.map((k) => k.stemHash)],
     );
     return new Map(rows.map((r) => [`${r.question_id}:${r.correct}:${r.stem_hash}`, r]));
   };
   let byKey = await read();
+  /** The row of a key: its own when ready, else a READY row written while the question was image-only (never a pending / failed one), else its own. */
+  const rowOf = (k: (typeof keys)[number]): Row | undefined => {
+    const own = byKey.get(keyText(k));
+    if (own?.status === "ready" || !k.legacyHash) return own;
+    const old = byKey.get(keyText({ questionId: k.questionId, correct: k.correct, stemHash: k.legacyHash }));
+    return old?.status === "ready" ? old : own;
+  };
   let claimed = 0;
   for (const k of keys) {
-    const row = byKey.get(keyText(k));
+    const row = rowOf(k);
     const wanted = !row || row.status === "pending" || (row.status === "failed" && opts.retry);
     if (wanted && !inflight.has(keyText(k)) && (await claim(k, Boolean(opts.retry)))) {
       start(k, userId);
@@ -276,7 +293,7 @@ export async function attemptAnalysis(userId: string, attemptId: string, opts: {
   if (claimed) byKey = await read();
 
   const items = keys.map((k): AnalysisItem => {
-    const row = byKey.get(keyText(k));
+    const row = rowOf(k);
     const status = row?.status ?? "pending";
     const ready = status === "ready" && row;
     return {
