@@ -10,7 +10,10 @@
  *   3. `claim` always succeeds (the ON CONFLICT ... WHERE made `true`)       -> «concurrent requests: one model call per question»;
  *   4. the cache read skipped (every request claims a new row)              -> «cache: a second user ... no second model call»;
  *   5. the image not attached to the Gemini request                         -> «Gemini call: the image goes inline, the model comes from the slot»;
- *   6. `MAX_CONCURRENT` gate removed from `slot`                            -> «at most 3 model calls at once».
+ *   6. `MAX_CONCURRENT` gate removed from `slot`                            -> «at most 3 model calls at once»;
+ *   7. the image always attached (`sendsImage` -> true)                      -> «text questions (migration 064)» and «the image goes to the model only for ...»;
+ *   8. the image-only fallback removed (`rowOf` returns only the own row)    -> «text questions (migration 064)» (the cached one is re-analysed);
+ *   9. the fallback serving a FAILED old row (`old?.status === "ready"` dropped) -> same test (the failed one never restarts).
  */
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 process.env.APP_URL = "https://slaydx.test";
@@ -53,6 +56,27 @@ test("prompt: names the subject, the correct letter, the text options and asks a
   assert.match(u, /\(A, C, D\)/);
   assert.match(pure.analysisUser({ subject: "Tarix", text: null, options: null, hasImage: true }, 3), /Savol rasmda berilgan/);
   assert.match(pure.ANALYSIS_SYSTEM, /o‘zbek tilida/);
+});
+
+test("prompt with text (migration 064): the text and options are in it; a figure is announced only when the image goes along; LaTeX is flagged", () => {
+  const textOnly = pure.analysisUser({ subject: "Matematika", text: "Hisoblang: $\\frac{1}{4}$", options: ["0", "1", "−1", "$\\frac{1}{5}$"], hasImage: false }, 3);
+  assert.match(textOnly, /Savol: Hisoblang: \$\\frac\{1\}\{4\}\$/);
+  assert.match(textOnly, /D\) \$\\frac\{1\}\{5\}\$/);
+  assert.match(textOnly, /LaTeX/, "formulas are flagged so the answer is plain text");
+  assert.ok(!/rasm/i.test(textOnly), "no image: the prompt does not mention one");
+  const figure = pure.analysisUser({ subject: "Matematika", text: "Jadvalda berilgan.", options: ["1", "2", "3", "4"], hasImage: true }, 0);
+  assert.match(figure, /Rasmda savolga tegishli chizma yoki jadval berilgan/);
+  assert.match(figure, /Savol: Jadvalda berilgan\./);
+  assert.ok(!/Savol rasmda berilgan/.test(figure), "the question itself is the text, the image only a figure");
+  assert.ok(!/LaTeX/.test(figure), "no formula, no LaTeX note");
+});
+
+test("the image goes to the model only for an image-only question or a figure", () => {
+  const q = (question_text: string | null, has_figure: boolean, hasBytes = true) => pure.sendsImage({ question_text, has_figure, hasBytes });
+  assert.equal(q(null, false), true, "image-only");
+  assert.equal(q("matn", true), true, "text + figure");
+  assert.equal(q("matn", false), false, "text only: cheaper and exact");
+  assert.equal(q(null, false, false), false, "nothing to send");
 });
 
 /* ───────────────────────── service + route ───────────────────────── */
@@ -399,6 +423,93 @@ test("tests analysis: service and API", { skip }, async (t) => {
       globalThis.fetch = realFetch;
       an.setAnalyzer(okAnalyzer);
     }
+  });
+
+  await t.test("text questions (migration 064): the model gets the text and no image unless there is a figure; image-only rows stay valid", async () => {
+    await clearCache();
+    // A second subject: four questions that all have BOTH text and the image.
+    const tid = (await queryOne<{ id: string }>("INSERT INTO test_subjects (bank_id, code, name, sort) VALUES ($1, 'tarix', 'Tarix', 1) RETURNING id::text AS id", [bank]))!.id;
+    const mk = async (k: string, text: string, figure: boolean) =>
+      Number((await queryOne<{ id: string }>(
+        `INSERT INTO test_questions (subject_id, variant, question_text, image_asset_id, options, answer, has_figure, legacy_ref)
+         VALUES ($1, 1, $2, $3, $4::jsonb, 1, $5, $6) RETURNING id::text AS id`,
+        [tid, text, asset, JSON.stringify([`${k}-a`, `${k}-b`, `${k}-c`, `${k}-d`]), figure, `an:t:${k}`],
+      ))!.id);
+    const plain = await mk("plain", "Matnli savol", false);
+    const figure = await mk("figure", "Jadvalli savol", true);
+    const cached = await mk("cached", "Eski tahlili bor savol", false);
+    const failed = await mk("failed", "Eski tahlili xato savol", false);
+    const SHA = "cd".repeat(32);
+    const optionsOf = (k: string) => [`${k}-a`, `${k}-b`, `${k}-c`, `${k}-d`];
+    // Rows written while the questions were image-only: keyed by the image hash alone.
+    const oldHash = an.stemHash(SHA, null, null);
+    const wrongJson = JSON.stringify({ "0": "a xato", "2": "c xato", "3": "d xato" });
+    await query(
+      `INSERT INTO test_analyses (question_id, correct, stem_hash, status, explanation, wrong, model) VALUES ($1, 1, $2, 'ready', 'ESKI TAHLIL', $3::jsonb, 'eski-model')`,
+      [cached, oldHash, wrongJson],
+    );
+    await query(`INSERT INTO test_analyses (question_id, correct, stem_hash, status, error) VALUES ($1, 1, $2, 'failed', 'eski xato')`, [failed, oldHash]);
+
+    const u = await login();
+    const a = await svc.startAttempt(u.uid, { mode: "subject", subjectCode: "tarix" });
+    for (const qid of [plain, figure, cached, failed]) assert.equal((await svc.answerQuestion(u.uid, a.attemptId, qid, 0)).ok, true);
+    assert.ok(await svc.finishAttempt(u.uid, a.attemptId));
+
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    an.setAnalyzer(async (input) => {
+      calls.push(input);
+      await gate;
+      return answer(input);
+    });
+    const first = await get(u.cookie, a.attemptId).finally(() => setTimeout(release, 0));
+    const status = (r: typeof first, qid: number) => r.body.items!.find((i) => i.questionId === qid)!;
+    assert.equal(status(first, cached).status, "ready", "the image-only row is served at once");
+    assert.equal(status(first, cached).explanation, "ESKI TAHLIL");
+    assert.equal(status(first, cached).chosenWhy, "a xato");
+    assert.equal(status(first, failed).status, "pending", "an old FAILED row is not served: a new analysis starts");
+    await an.settleAnalyses();
+    assert.deepEqual(calls.map((c) => c.stem.text).sort(), ["Eski tahlili xato savol", "Jadvalli savol", "Matnli savol"], "no model call for the cached one");
+
+    const byText = (text: string) => calls.find((c) => c.stem.text === text)!;
+    const p = byText("Matnli savol");
+    assert.equal(p.image, null, "text without a figure: no image bytes");
+    assert.equal(p.stem.hasImage, false);
+    assert.deepEqual(p.stem.options, optionsOf("plain"));
+    const f = byText("Jadvalli savol");
+    assert.ok(f.image!.bytes.equals(PNG) && f.image!.mime === "image/png", "a figure keeps the image");
+    assert.equal(f.stem.hasImage, true);
+    assert.deepEqual(f.stem.options, optionsOf("figure"));
+    assert.equal(byText("Eski tahlili xato savol").image, null);
+
+    // Every one of them is ready now; the cached question was never re-analysed.
+    const second = await get(u.cookie, a.attemptId);
+    assert.equal(second.body.done, true);
+    assert.ok(second.body.items!.every((i) => i.status === "ready"));
+    assert.equal(status(second, cached).explanation, "ESKI TAHLIL");
+    assert.equal(Number((await queryOne<{ n: string }>("SELECT count(*) n FROM test_analyses WHERE question_id = $1", [cached]))!.n), 1, "still one row for the cached question");
+
+    // An analysis under the NEW hash (text + options) wins over the old image-only one.
+    await query(
+      `INSERT INTO test_analyses (question_id, correct, stem_hash, status, explanation, wrong, model) VALUES ($1, 1, $2, 'ready', 'YANGI TAHLIL', $3::jsonb, 'yangi-model')`,
+      [cached, an.stemHash(SHA, "Eski tahlili bor savol", optionsOf("cached")), wrongJson],
+    );
+    assert.equal(status(await get(u.cookie, a.attemptId), cached).explanation, "YANGI TAHLIL");
+
+    // The Gemini request: text and options in the prompt; the image part only for the figure.
+    const sent: { parts: { text?: string; inlineData?: unknown }[] }[] = [];
+    const stub = (async (_url: string | URL, init?: RequestInit) => {
+      sent.push((JSON.parse(String(init?.body)) as { contents: typeof sent }).contents[0]!);
+      const out = { correct: "Sabab.", options: [0, 2, 3].map((i) => ({ letter: "ABCD"[i], why: "xato" })) };
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(out) }] } }] }), { status: 200 });
+    }) as typeof fetch;
+    await an.analyzeWithGemini(p, stub);
+    await an.analyzeWithGemini(f, stub);
+    assert.match(sent[0]!.parts[0]!.text!, /Savol: Matnli savol\nA\) plain-a\nB\) plain-b\nC\) plain-c\nD\) plain-d/);
+    assert.equal(sent[0]!.parts.length, 1, "text only: no inlineData part");
+    assert.match(sent[1]!.parts[0]!.text!, /Savol: Jadvalli savol/);
+    assert.match(sent[1]!.parts[0]!.text!, /chizma yoki jadval/);
+    assert.ok(sent[1]!.parts[1]!.inlineData, "the figure rides along inline");
   });
 
   await t.test("an all-correct attempt has nothing to analyse", async () => {

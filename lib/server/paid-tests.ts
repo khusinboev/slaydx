@@ -122,6 +122,11 @@ export type ActiveQuestion = {
   /** `null` for an image-only question: the A-D letters are the buttons. */
   options: string[] | null;
   imageUrl: string | null;
+  /**
+   * `true` = the image holds a drawing or a table the text cannot replace (migration 064): the page shows it next to the text.
+   * Without it a question that has text is shown as text only (the image stays reachable through `imageUrl`, «Asl rasm»).
+   */
+  hasFigure: boolean;
 };
 
 export type ActiveView = {
@@ -145,6 +150,7 @@ export type ReviewItem = {
   text: string | null;
   options: string[] | null;
   imageUrl: string | null;
+  hasFigure: boolean;
   /** The user's choice, `null` = not answered. */
   chosen: number | null;
   chosenLetter: string | null;
@@ -481,15 +487,15 @@ async function attemptRow(userId: string, attemptId: string): Promise<AttemptRow
   return queryOne<AttemptRow>(`SELECT ${ATTEMPT_COLS} FROM ${ATTEMPT_FROM} WHERE a.id = $1 AND a.user_id = $2`, [attemptId, userId]);
 }
 
-type QuestionRow = { text: string | null; options: string[] | null; imageV: string | null; subject: string; explanation: string | null };
+type QuestionRow = { text: string | null; options: string[] | null; imageV: string | null; hasFigure: boolean; subject: string; explanation: string | null };
 
 /**
  * The questions of an attempt (text, options, image version, subject). `withExplanation` also selects the explanation:
  * ONLY for a finished attempt. The answer key is NEVER selected here -- the review reads `key_snapshot`.
  */
 async function loadQuestions(ids: number[], withExplanation: boolean): Promise<Map<number, QuestionRow>> {
-  const rows = await query<{ id: number; question_text: string | null; options: string[] | null; img_v: string | null; subject: string; explanation: string | null }>(
-    `SELECT q.id::int AS id, q.question_text, q.options, substr(sa.sha256, 1, 8) AS img_v, s.name AS subject,
+  const rows = await query<{ id: number; question_text: string | null; options: string[] | null; img_v: string | null; has_figure: boolean; subject: string; explanation: string | null }>(
+    `SELECT q.id::int AS id, q.question_text, q.options, substr(sa.sha256, 1, 8) AS img_v, q.has_figure, s.name AS subject,
             ${withExplanation ? "q.explanation" : "NULL::text AS explanation"}
        FROM test_questions q
        JOIN test_subjects s ON s.id = q.subject_id
@@ -497,7 +503,7 @@ async function loadQuestions(ids: number[], withExplanation: boolean): Promise<M
       WHERE q.id = ANY($1::bigint[])`,
     [ids],
   );
-  return new Map(rows.map((r) => [r.id, { text: r.question_text, options: r.options, imageV: r.img_v, subject: r.subject, explanation: r.explanation }]));
+  return new Map(rows.map((r) => [r.id, { text: r.question_text, options: r.options, imageV: r.img_v, hasFigure: r.has_figure, subject: r.subject, explanation: r.explanation }]));
 }
 
 /**
@@ -536,6 +542,7 @@ export async function getAttemptView(userId: string, attemptId: string, injected
           text: q?.text ?? null,
           options: q?.options ?? null,
           imageUrl: q?.imageV ? imageUrl(a!.id, id, q.imageV) : null,
+          hasFigure: q?.hasFigure ?? false,
         };
       }),
       answers: Object.fromEntries(ans.map((r) => [r.question_id, r.chosen])),
@@ -562,6 +569,7 @@ export async function getAttemptView(userId: string, attemptId: string, injected
       text: q?.text ?? null,
       options: q?.options ?? null,
       imageUrl: q?.imageV ? imageUrl(a!.id, id, q.imageV) : null,
+      hasFigure: q?.hasFigure ?? false,
       chosen,
       chosenLetter: chosen === null ? null : letterOf(chosen),
       correct,

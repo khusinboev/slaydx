@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, ClipboardCheck, Loader2, RotateCcw, Sparkles, Timer, XCircle, ZoomIn } from "lucide-react";
+import { CheckCircle2, ClipboardCheck, Image as ImageIcon, Loader2, RotateCcw, Sparkles, Timer, XCircle, ZoomIn } from "lucide-react";
 import { Card } from "@/components/forms/compact";
+import { MathText } from "@/components/tests/MathText";
 import { ApiError, request } from "@/lib/api-client";
 import { formatPoints } from "@/lib/referral";
 
@@ -31,7 +32,11 @@ type Overview = {
   open: { id: string; mode: "subject" | "all"; subject: string | null; deadlineAt: string } | null;
   history: HistoryItem[];
 };
-type Question = { id: number; position: number; subject: string; text: string | null; options: string[] | null; imageUrl: string | null };
+/**
+ * `text` + `options`: the transcribed question (migration 064), shown as text. `imageUrl`: the original screenshot; it is the
+ * question itself for an image-only one, a drawing / table next to the text when `hasFigure`, else only behind «Asl rasm».
+ */
+type Question = { id: number; position: number; subject: string; text: string | null; options: string[] | null; imageUrl: string | null; hasFigure: boolean };
 type Active = {
   state: "active";
   id: string;
@@ -77,19 +82,32 @@ const msg = (e: unknown): string => (e instanceof ApiError || e instanceof Error
 const priceText = (n: number): string => (n === 0 ? "Bepul" : `${formatPoints(n)} so‘m`);
 const label = (h: { mode: "subject" | "all"; subject: string | null }): string => (h.mode === "all" ? "Hammasi" : (h.subject ?? "Fan"));
 
-/** A question image: lazy, and a tap opens it large (a second tap zooms to full width, scrolling inside). */
-function Stem({ q }: { q: Pick<Question, "imageUrl" | "text"> }) {
+/**
+ * The question itself. With text: the text (formulas rendered), the image only when it holds a figure / table (`hasFigure`) or
+ * when the user asks for the original («Asl rasm»). Image-only: the image, as before. The image is lazy and a tap opens it
+ * large (a second tap zooms to full width, scrolling inside).
+ */
+function Stem({ q }: { q: Pick<Question, "imageUrl" | "text" | "hasFigure"> }) {
   const [open, setOpen] = useState(false);
   const [full, setFull] = useState(false);
+  const [original, setOriginal] = useState(false);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
+  const hasText = Boolean(q.text);
+  const showImage = Boolean(q.imageUrl) && (!hasText || q.hasFigure || original);
+  const canToggle = Boolean(q.imageUrl) && hasText && !q.hasFigure;
   return (
     <>
-      {q.imageUrl ? (
+      {hasText ? (
+        <p data-tests-text className="text-[17px] leading-relaxed break-words whitespace-pre-wrap">
+          <MathText text={q.text!} />
+        </p>
+      ) : null}
+      {showImage ? (
         <button
           type="button"
           data-tests-zoom
@@ -101,14 +119,21 @@ function Stem({ q }: { q: Pick<Question, "imageUrl" | "text"> }) {
           className="bg-card relative block w-full overflow-hidden rounded-2xl border"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img data-tests-image src={q.imageUrl} alt="Savol rasmi" loading="lazy" className="mx-auto max-h-[60vh] w-full object-contain" />
+          <img data-tests-image src={q.imageUrl!} alt="Savol rasmi" loading="lazy" className="mx-auto max-h-[60vh] w-full object-contain" />
           <ZoomIn className="text-muted-foreground absolute right-2 bottom-2 size-5" aria-hidden />
         </button>
       ) : null}
-      {q.text ? (
-        <p data-tests-text className="text-[16px] leading-relaxed whitespace-pre-wrap">
-          {q.text}
-        </p>
+      {canToggle ? (
+        <button
+          type="button"
+          data-tests-original
+          aria-expanded={original}
+          onClick={() => setOriginal((v) => !v)}
+          className="text-muted-foreground inline-flex min-h-11 items-center gap-1.5 self-start rounded-xl px-1 text-[14px] font-medium"
+        >
+          <ImageIcon className="size-4" aria-hidden />
+          {original ? "Asl rasmni yashirish" : "Asl rasm"}
+        </button>
       ) : null}
       {open && q.imageUrl ? (
         <div role="dialog" aria-modal="true" aria-label="Savol rasmi" data-tests-lightbox className="fixed inset-0 z-50 overflow-auto bg-black/85" onClick={() => setOpen(false)}>
@@ -129,6 +154,18 @@ function Stem({ q }: { q: Pick<Question, "imageUrl" | "text"> }) {
           </button>
         </div>
       ) : null}
+    </>
+  );
+}
+
+/** One option of a text question: the letter hangs, a long (or multi-line, or formula) option wraps under the text, not under the letter. */
+function OptionLabel({ letter, text }: { letter: string; text: string }) {
+  return (
+    <>
+      <span className="shrink-0 font-semibold">{letter}.</span>
+      <span className="min-w-0 flex-1 font-normal break-words whitespace-pre-wrap">
+        <MathText text={text} />
+      </span>
     </>
   );
 }
@@ -205,7 +242,7 @@ function Runner({ attempt, onDone, onExit }: { attempt: Active; onDone: (f: Fini
 
       <section data-tests-question={q.id} className="bg-card flex flex-col gap-3 rounded-[20px] border p-4">
         {attempt.mode === "all" ? <p className="text-muted-foreground text-[13px] font-semibold uppercase">{q.subject}</p> : null}
-        <Stem q={q} />
+        <Stem key={q.id} q={q} />
         <div role="radiogroup" aria-label="Javob variantlari" className={q.options ? "flex flex-col gap-2" : "grid grid-cols-4 gap-2"}>
           {LETTERS.map((L, i) => (
             <button
@@ -216,16 +253,9 @@ function Runner({ attempt, onDone, onExit }: { attempt: Active; onDone: (f: Fini
               data-tests-choice={L}
               disabled={busy}
               onClick={() => pick(i)}
-              className={`min-h-12 rounded-2xl border px-3 py-2 text-left text-[15.5px] font-semibold disabled:opacity-60 ${chosen === i ? "border-primary bg-accent" : "border-input"} ${q.options ? "" : "text-center"}`}
+              className={`min-h-12 rounded-2xl border px-3 py-2.5 text-left text-[16px] leading-snug disabled:opacity-60 ${chosen === i ? "border-primary bg-accent" : "border-input"} ${q.options ? "flex items-baseline gap-2" : "text-[15.5px] font-semibold text-center"}`}
             >
-              {q.options ? (
-                <>
-                  <span className="mr-2">{L}.</span>
-                  <span className="font-normal">{q.options[i]}</span>
-                </>
-              ) : (
-                L
-              )}
+              {q.options ? <OptionLabel letter={L} text={q.options[i]!} /> : L}
             </button>
           ))}
         </div>
@@ -365,6 +395,37 @@ function Analysis({ item, failedAll, onRetry }: { item: AnalysisItem | undefined
   );
 }
 
+/** The four options of a text question in the review: the correct one in green, the user's wrong pick in red (a label too, not colour alone). */
+function ReviewOptions({ it, options }: { it: Pick<ReviewItem, "correct" | "chosen">; options: string[] }) {
+  return (
+    <ul data-tests-review-options className="mt-2 flex flex-col gap-1.5">
+      {LETTERS.map((L, i) => {
+        const state = i === it.correct ? "correct" : i === it.chosen ? "wrong" : "plain";
+        const tone =
+          state === "correct"
+            ? "border-green-600/60 bg-green-50 dark:border-green-500/50 dark:bg-green-950/30"
+            : state === "wrong"
+              ? "border-destructive/60 bg-red-50 dark:bg-red-950/30"
+              : "border-input";
+        return (
+          <li key={L} data-option={L} data-state={state} className={`flex items-baseline gap-2 rounded-2xl border px-3 py-2.5 text-[15.5px] leading-snug ${tone}`}>
+            <OptionLabel letter={L} text={options[i]!} />
+            {state === "correct" ? (
+              <span className="inline-flex shrink-0 items-center gap-1 self-center text-[12.5px] font-semibold text-green-700 dark:text-green-400">
+                <CheckCircle2 className="size-4" aria-hidden /> To‘g‘ri
+              </span>
+            ) : state === "wrong" ? (
+              <span className="text-destructive inline-flex shrink-0 items-center gap-1 self-center text-[12.5px] font-semibold">
+                <XCircle className="size-4" aria-hidden /> Sizniki
+              </span>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function Result({ r, onBack }: { r: Finished; onBack: () => void }) {
   const anyWrong = r.review.some((it) => !it.isCorrect);
   const analyses = useAnalyses(r.id, anyWrong);
@@ -415,18 +476,17 @@ function Result({ r, onBack }: { r: Finished; onBack: () => void }) {
                 )}
               </div>
               <div className="flex flex-col gap-2">
-                <Stem q={it} />
+                <Stem key={it.id} q={it} />
               </div>
+              {it.options ? <ReviewOptions it={it} options={it.options} /> : null}
               <p className="mt-2 text-[14.5px]">
                 {it.chosenLetter ? (
                   <>
                     Sizning javobingiz: <b data-tests-chosen-letter>{it.chosenLetter}</b>
-                    {it.options ? ` — ${it.options[it.chosen!]}` : ""}
                     <br />
                   </>
                 ) : null}
                 To‘g‘ri javob: <b data-tests-correct-letter>{it.correctLetter}</b>
-                {it.options ? ` — ${it.options[it.correct]}` : ""}
               </p>
               {it.explanation ? (
                 <p data-tests-explanation className="bg-muted mt-2 rounded-xl p-2.5 text-[14px] whitespace-pre-wrap">

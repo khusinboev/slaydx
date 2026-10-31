@@ -321,25 +321,32 @@ export async function importPlan(plan: Plan, opts: { dryRun?: boolean } = {}): P
             [sid, q.variant, q.text, assetId, q.options ? JSON.stringify(q.options) : null, q.answer, q.explanation, q.legacyRef],
           );
           summary.questions.inserted++;
-        } else if (
-          row.subject_id === sid &&
-          row.variant === q.variant &&
-          row.question_text === q.text &&
-          row.answer === q.answer &&
-          row.explanation === q.explanation &&
-          row.image_asset_id === assetId &&
-          same(row.options, q.options)
-        ) {
-          summary.questions.unchanged++;
         } else {
-          // `active` is deliberately not touched: a question the admin switched off stays off after a re-import.
-          if (row.answer !== q.answer) summary.changedAnswers.push(q.legacyRef);
-          await client.query(
-            `UPDATE test_questions SET subject_id = $2, variant = $3, question_text = $4, image_asset_id = $5, options = $6::jsonb,
-                    answer = $7, explanation = $8, updated_at = now() WHERE id = $1`,
-            [row.id, sid, q.variant, q.text, assetId, q.options ? JSON.stringify(q.options) : null, q.answer, q.explanation],
-          );
-          summary.questions.updated++;
+          // An export WITHOUT text never wipes the text already stored (migration 064 carries the transcribed text of the
+          // image bank): the stored stem and options stay, only an export that has text replaces them.
+          const keepText = q.text === null && row.question_text !== null;
+          const text = keepText ? row.question_text : q.text;
+          const options = keepText ? row.options : q.options;
+          if (
+            row.subject_id === sid &&
+            row.variant === q.variant &&
+            row.question_text === text &&
+            row.answer === q.answer &&
+            row.explanation === q.explanation &&
+            row.image_asset_id === assetId &&
+            same(row.options, options)
+          ) {
+            summary.questions.unchanged++;
+          } else {
+            // `active` is deliberately not touched: a question the admin switched off stays off after a re-import.
+            if (row.answer !== q.answer) summary.changedAnswers.push(q.legacyRef);
+            await client.query(
+              `UPDATE test_questions SET subject_id = $2, variant = $3, question_text = $4, image_asset_id = $5, options = $6::jsonb,
+                      answer = $7, explanation = $8, updated_at = now() WHERE id = $1`,
+              [row.id, sid, q.variant, text, assetId, options ? JSON.stringify(options) : null, q.answer, q.explanation],
+            );
+            summary.questions.updated++;
+          }
         }
       }
       for (const code of Object.keys(summary.perSubject)) {

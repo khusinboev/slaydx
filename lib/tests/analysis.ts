@@ -5,6 +5,7 @@
  * One model call per question and answer key explains the correct option AND every other option, so one cached row
  * answers every user whatever they chose.
  */
+import { hasMath } from "./math-text";
 import { LETTERS, letterOf } from "./rules";
 
 /** Longest explanation kept (the model is asked for 2-4 sentences; a runaway answer is clipped at a word boundary). */
@@ -38,14 +39,25 @@ export const ANALYSIS_SCHEMA = {
   required: ["correct", "options"],
 } as const;
 
+/**
+ * What the model reads. `text` + `options` are the transcribed question (migration 064). `hasImage`: the image is sent too -- it
+ * is the question itself for an image-only one, a drawing / table next to the text for a `has_figure` one; a question with text
+ * and no figure is sent as text only (cheaper and exact).
+ */
 export type AnalysisStem = { subject: string; text: string | null; options: string[] | null; hasImage: boolean };
+
+/** Whether the question image goes to the model: always for an image-only question, else only when it holds a figure / table. */
+export const sendsImage = (q: { question_text: string | null; has_figure: boolean; hasBytes: boolean }): boolean => q.hasBytes && (!q.question_text || q.has_figure);
 
 /** The user part of the prompt (the image, when there is one, is sent next to it inline). */
 export function analysisUser(stem: AnalysisStem, correct: number): string {
   const lines = [`Fan: ${stem.subject}`];
-  if (stem.hasImage) lines.push("Savol rasmda berilgan (variantlar ham rasmda bo‘lishi mumkin).");
+  if (stem.hasImage) {
+    lines.push(stem.text ? "Rasmda savolga tegishli chizma yoki jadval berilgan (savol matni va variantlar quyida)." : "Savol rasmda berilgan (variantlar ham rasmda bo‘lishi mumkin).");
+  }
   if (stem.text) lines.push(`Savol: ${stem.text}`);
   if (stem.options) stem.options.forEach((o, i) => lines.push(`${letterOf(i)}) ${o}`));
+  if (hasMath([stem.text ?? "", ...(stem.options ?? [])].join("\n"))) lines.push("Formulalar $…$ ichida LaTeX bilan yozilgan; javobingda ularni oddiy matnda yoz.");
   lines.push(`To‘g‘ri javob: ${letterOf(correct)}.`);
   const others = LETTERS.filter((_, i) => i !== correct).join(", ");
   lines.push(`Har bir boshqa variant (${others}) nega noto‘g‘ri ekanini ham yoz.`);

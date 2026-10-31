@@ -463,6 +463,39 @@ test("paid tests: service and API", { skip }, async (t) => {
     assert.equal(err.headers.get("cache-control"), "private, no-store", "an error is never cached");
   });
 
+  await t.test("views: every question says hasFigure; a text question's image stays reachable (migration 064)", async () => {
+    const u = await login({ points: 50_000 });
+    const a = await svc.startAttempt(u.uid, { mode: "all" }, { ...seeded(21) });
+    const first = await active(u.uid, a.attemptId);
+    const textQs = first.questions.filter((q) => q.text);
+    assert.ok(textQs.length >= 3);
+    const [fig, plain, other] = textQs as [(typeof textQs)[number], (typeof textQs)[number], (typeof textQs)[number]];
+    try {
+      // `fig`: text + an image that holds a drawing; `plain`: text + the original screenshot; `other`: text only.
+      await query("UPDATE test_questions SET image_asset_id = $2, has_figure = TRUE WHERE id = $1", [fig.id, asset]);
+      await query("UPDATE test_questions SET image_asset_id = $2 WHERE id = $1", [plain.id, asset]);
+      const view = await active(u.uid, a.attemptId);
+      const by = (id: number) => view.questions.find((q) => q.id === id)!;
+      assert.deepEqual([by(fig.id).hasFigure, Boolean(by(fig.id).imageUrl), Boolean(by(fig.id).text), by(fig.id).options?.length], [true, true, true, 4]);
+      assert.deepEqual([by(plain.id).hasFigure, Boolean(by(plain.id).imageUrl), Boolean(by(plain.id).text)], [false, true, true], "text + screenshot: the page shows text, «Asl rasm» opens the image");
+      assert.deepEqual([by(other.id).hasFigure, by(other.id).imageUrl], [false, null]);
+      const imageOnly = view.questions.find((q) => !q.text)!;
+      assert.deepEqual([imageOnly.hasFigure, Boolean(imageOnly.imageUrl), imageOnly.options], [false, true, null], "an image-only question is unchanged");
+      // The image of a text question is served like any other.
+      const req = new Request(`http://localhost${by(plain.id).imageUrl}`, { headers: { cookie: u.cookie } });
+      const res = await inRequest(req, () => imageRoute.GET(req, { params: Promise.resolve({ id: a.attemptId, qid: String(plain.id) }) }));
+      assert.equal(res.status, 200);
+      // The review carries the same flag.
+      assert.ok(await svc.finishAttempt(u.uid, a.attemptId));
+      const fin = (await svc.getAttemptView(u.uid, a.attemptId)) as import("../lib/server/paid-tests.ts").FinishedView;
+      const rv = (id: number) => fin.review.find((r) => r.id === id)!;
+      assert.deepEqual([rv(fig.id).hasFigure, rv(plain.id).hasFigure, rv(other.id).hasFigure], [true, false, false]);
+      assert.ok(rv(fig.id).imageUrl && rv(plain.id).imageUrl && rv(plain.id).text);
+    } finally {
+      await query("UPDATE test_questions SET image_asset_id = NULL, has_figure = FALSE WHERE id = ANY($1::bigint[])", [[fig.id, plain.id]]);
+    }
+  });
+
   await t.test("server-side deadline: late answers are not stored or counted, the attempt finishes itself", async () => {
     const u = await login({ points: 50_000 });
     const a = await svc.startAttempt(u.uid, { mode: "subject", subjectCode: "math" }, { ...seeded(3), now: T0 });

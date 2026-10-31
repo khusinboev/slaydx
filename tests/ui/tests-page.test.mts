@@ -41,9 +41,9 @@ const OV = {
   history: [] as unknown[],
 };
 const QUESTIONS = [
-  { id: 11, position: 1, subject: "Matematika", text: null, options: null, imageUrl: "/api/tests/attempts/A1/image/11" },
-  { id: 12, position: 2, subject: "Matematika", text: "2 + 2 nechaga teng?", options: ["3", "4", "5", "6"], imageUrl: null },
-  { id: 13, position: 3, subject: "Matematika", text: "3 x 3?", options: ["6", "7", "8", "9"], imageUrl: null },
+  { id: 11, position: 1, subject: "Matematika", text: null, options: null, imageUrl: "/api/tests/attempts/A1/image/11", hasFigure: false },
+  { id: 12, position: 2, subject: "Matematika", text: "2 + 2 nechaga teng?", options: ["3", "4", "5", "6"], imageUrl: null, hasFigure: false },
+  { id: 13, position: 3, subject: "Matematika", text: "3 x 3?", options: ["6", "7", "8", "9"], imageUrl: null, hasFigure: false },
 ];
 const activeView = (deadlineMs = 20 * 60_000, extra: Record<string, unknown> = {}) => ({
   state: "active",
@@ -70,9 +70,9 @@ const FINISHED = {
   reason: "manual",
   bySubject: [{ subject: "Matematika", correct: 2, total: 3 }],
   review: [
-    { id: 11, position: 1, subject: "Matematika", text: null, options: null, imageUrl: "/api/tests/attempts/A1/image/11", chosen: 0, chosenLetter: "A", correct: 0, correctLetter: "A", isCorrect: true, explanation: null },
-    { id: 12, position: 2, subject: "Matematika", text: "2 + 2 nechaga teng?", options: ["3", "4", "5", "6"], imageUrl: null, chosen: 2, chosenLetter: "C", correct: 1, correctLetter: "B", isCorrect: false, explanation: "Ikkita ikkini qo'shsak to'rt chiqadi." },
-    { id: 13, position: 3, subject: "Matematika", text: "3 x 3?", options: ["6", "7", "8", "9"], imageUrl: null, chosen: 3, chosenLetter: "D", correct: 3, correctLetter: "D", isCorrect: true, explanation: null },
+    { id: 11, position: 1, subject: "Matematika", text: null, options: null, imageUrl: "/api/tests/attempts/A1/image/11", hasFigure: false, chosen: 0, chosenLetter: "A", correct: 0, correctLetter: "A", isCorrect: true, explanation: null },
+    { id: 12, position: 2, subject: "Matematika", text: "2 + 2 nechaga teng?", options: ["3", "4", "5", "6"], imageUrl: null, hasFigure: false, chosen: 2, chosenLetter: "C", correct: 1, correctLetter: "B", isCorrect: false, explanation: "Ikkita ikkini qo'shsak to'rt chiqadi." },
+    { id: 13, position: 3, subject: "Matematika", text: "3 x 3?", options: ["6", "7", "8", "9"], imageUrl: null, hasFigure: false, chosen: 3, chosenLetter: "D", correct: 3, correctLetter: "D", isCorrect: true, explanation: null },
   ],
 };
 
@@ -227,7 +227,12 @@ test("question flow: image question, text question, Keyingi / Tugatish wait for 
   assert.deepEqual(items.map((i) => i.dataset.correct), ["true", "false", "true"]);
   assert.equal(items[1]!.querySelector("[data-tests-correct-letter]")!.textContent, "B");
   assert.equal(items[1]!.querySelector("[data-tests-chosen-letter]")!.textContent, "C");
-  assert.match(items[1]!.textContent!, /To‘g‘ri javob: B — 4/);
+  // A text question shows its four options in the review: the correct one marked, the user's wrong pick marked.
+  const rows = [...items[1]!.querySelectorAll<HTMLElement>("[data-tests-review-options] [data-option]")];
+  assert.deepEqual(rows.map((r) => [r.dataset.option, r.dataset.state]), [["A", "plain"], ["B", "correct"], ["C", "wrong"], ["D", "plain"]]);
+  assert.match(rows[1]!.textContent!, /B\.\s*4.*To‘g‘ri/);
+  assert.match(rows[2]!.textContent!, /C\.\s*5.*Sizniki/);
+  assert.ok(!items[0]!.querySelector("[data-tests-review-options]"), "an image-only question has no option rows");
   assert.match(items[1]!.querySelector("[data-tests-explanation]")!.textContent!, /to'rt chiqadi/);
   assert.ok(!items[0]!.querySelector("[data-tests-explanation]"), "an explanation only where one exists");
   assert.ok(items[0]!.querySelector("[data-tests-image]"), "image questions keep their image in the review");
@@ -473,4 +478,130 @@ test("an unavailable subject cannot be picked", async () => {
   assert.ok((q('[data-tests-subject="math"]') as HTMLButtonElement).disabled);
   assert.ok((q('[data-tests-subject="all"]') as HTMLButtonElement).disabled);
   assert.equal(q('[data-tests-subject="ona_tili"]')!.getAttribute("aria-checked"), "true", "the first AVAILABLE subject is preselected");
+});
+
+/* ───────────────────────── text questions (migration 064): text, formulas, figure, «Asl rasm» ───────────────────────── */
+
+const IMG = (id: number) => `/api/tests/attempts/A1/image/${id}?v=abababab`;
+const TEXT_QUESTIONS = [
+  // 21: text only, the original screenshot behind «Asl rasm».
+  { id: 21, position: 1, subject: "Matematika", text: "O‘lchamlari 2m×1m×3m bo‘lgan akvariumning hajmini toping (m³).", options: ["3", "6", "5", "4"], imageUrl: IMG(21), hasFigure: false },
+  // 22: a figure: the image stays next to the text.
+  { id: 22, position: 2, subject: "Matematika", text: "Jadvalda ekin maydonlari berilgan. Umumiy maydonni toping.", options: ["51", "41", "56", "45"], imageUrl: IMG(22), hasFigure: true },
+  // 23: LaTeX in the stem and in an option; a multi-line option.
+  { id: 23, position: 3, subject: "Matematika", text: "Hisoblang: $\\frac{1}{4}-\\frac{1}{5}+\\frac{1}{6}$", options: ["0", "1", "−1", "$\\frac{1}{5}$"], imageUrl: IMG(23), hasFigure: false },
+  // 24: an image-only question next to them.
+  { id: 24, position: 4, subject: "Matematika", text: null, options: null, imageUrl: IMG(24), hasFigure: false },
+];
+async function startTextAttempt(questions: typeof TEXT_QUESTIONS = TEXT_QUESTIONS) {
+  const calls = stub({
+    "GET /api/tests": () => json(200, OV),
+    "POST /api/tests/start": () => json(200, { ok: true, attemptId: "A1" }),
+    "GET /api/tests/attempts/A1": () => json(200, activeView(20 * 60_000, { total: questions.length, questions })),
+    "POST /api/tests/attempts/A1/answer": () => json(200, { ok: true, answered: 1 }),
+  });
+  render(h(TestsPage));
+  await waitFor(() => assert.ok(q("[data-tests-start]")));
+  fireEvent.click(q("[data-tests-start]")!);
+  await waitFor(() => assert.ok(q("[data-tests-run]")));
+  return calls;
+}
+const choose = async (L: string) => {
+  fireEvent.click(q(`[data-tests-choice="${L}"]`)!);
+  await waitFor(() => assert.equal(q(`[data-tests-choice="${L}"]`)!.getAttribute("aria-checked"), "true"));
+  fireEvent.click(q("[data-tests-next]")!);
+};
+
+test("text question: the text and four tappable option rows; the image is hidden behind «Asl rasm» and comes back on demand", async () => {
+  await startTextAttempt();
+  assert.equal(q("[data-tests-text]")!.textContent, "O‘lchamlari 2m×1m×3m bo‘lgan akvariumning hajmini toping (m³).");
+  assert.deepEqual(all("[data-tests-choice]").map((b) => b.textContent), ["A.3", "B.6", "C.5", "D.4"]);
+  assert.ok(all("[data-tests-choice]").every((b) => b.getAttribute("role") === "radio"));
+  assert.ok(!q("[data-tests-image]"), "text only: no image yet");
+  const toggle = q("[data-tests-original]")!;
+  assert.equal(toggle.textContent, "Asl rasm");
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  fireEvent.click(toggle);
+  assert.equal((q("[data-tests-image]") as HTMLImageElement).getAttribute("src"), IMG(21));
+  assert.equal(q("[data-tests-original]")!.textContent, "Asl rasmni yashirish");
+  assert.ok(q("[data-tests-text]"), "the text stays while the original is shown");
+  fireEvent.click(q("[data-tests-zoom]")!);
+  assert.ok(q("[data-tests-lightbox]"), "the original zooms like any question image");
+  fireEvent.click(q("[data-tests-lightbox-close]")!);
+  fireEvent.click(q("[data-tests-original]")!);
+  assert.ok(!q("[data-tests-image]"), "hidden again");
+});
+
+test("«Asl rasm» opened on one question does not stay open on the next text question", async () => {
+  await startTextAttempt([TEXT_QUESTIONS[0]!, TEXT_QUESTIONS[2]!]);
+  fireEvent.click(q("[data-tests-original]")!);
+  assert.equal((q("[data-tests-image]") as HTMLImageElement).getAttribute("src"), IMG(21));
+  await choose("B");
+  await waitFor(() => assert.equal(q("[data-tests-progress]")!.textContent, "2 / 2"));
+  assert.ok(q("[data-tests-original]"), "the next question has its own toggle");
+  assert.ok(!q("[data-tests-image]"), "closed: the original of question 1 is not carried over");
+  assert.equal(q("[data-tests-original]")!.getAttribute("aria-expanded"), "false");
+});
+
+test("figure question: the image stays next to the text, no «Asl rasm» toggle; image-only is unchanged", async () => {
+  await startTextAttempt();
+  await choose("A");
+  await waitFor(() => assert.equal(q("[data-tests-progress]")!.textContent, "2 / 4"));
+  assert.match(q("[data-tests-text]")!.textContent!, /Jadvalda ekin maydonlari/);
+  assert.equal((q("[data-tests-image]") as HTMLImageElement).getAttribute("src"), IMG(22));
+  assert.ok(!q("[data-tests-original]"));
+  assert.deepEqual(all("[data-tests-choice]").map((b) => b.textContent), ["A.51", "B.41", "C.56", "D.45"]);
+  await choose("A");
+  await choose("A");
+  await waitFor(() => assert.equal(q("[data-tests-progress]")!.textContent, "4 / 4"));
+  assert.ok(!q("[data-tests-text]") && !q("[data-tests-original]"), "image-only: no text, no toggle");
+  assert.equal((q("[data-tests-image]") as HTMLImageElement).getAttribute("src"), IMG(24));
+  assert.deepEqual(all("[data-tests-choice]").map((b) => b.textContent), ["A", "B", "C", "D"], "image-only keeps the letter buttons");
+});
+
+test("LaTeX in `$…$` is rendered with KaTeX in the question and in an option; the rest stays plain text", async () => {
+  await startTextAttempt();
+  await choose("A");
+  await choose("A");
+  await waitFor(() => assert.equal(q("[data-tests-progress]")!.textContent, "3 / 4"));
+  await waitFor(() => assert.ok(q("[data-tests-text] .katex"), "the stem formula is typeset"));
+  const stem = q("[data-tests-text]")!;
+  assert.equal(stem.querySelectorAll("[data-tests-math]").length, 1, "one formula in the stem");
+  assert.equal(stem.querySelectorAll(".katex-html .mfrac").length, 3, "with three fractions, typeset");
+  assert.ok(stem.textContent!.startsWith("Hisoblang: "), "the plain part is kept");
+  assert.ok(!stem.textContent!.includes("$"), "the delimiters are gone");
+  assert.ok(!stem.querySelector(".katex-html")!.textContent!.includes("\\frac"), "no raw LaTeX in the visible part");
+  const optionD = q('[data-tests-choice="D"]')!;
+  assert.ok(optionD.querySelector(".katex"), "an option formula is typeset too");
+  assert.ok(optionD.textContent!.startsWith("D."), "the letter stays");
+  assert.deepEqual(all("[data-tests-choice]").slice(0, 3).map((b) => b.querySelector(".katex")), [null, null, null], "plain options carry no KaTeX");
+  // A broken formula never breaks the question (KaTeX throwOnError: false).
+  assert.equal(q('[data-tests-choice="C"]')!.textContent, "C.−1");
+});
+
+test("review: a text question shows its four options with the correct / chosen marks and the figure it needs", async () => {
+  const review = [
+    { id: 21, position: 1, subject: "Matematika", text: TEXT_QUESTIONS[0]!.text, options: TEXT_QUESTIONS[0]!.options, imageUrl: IMG(21), hasFigure: false, chosen: 0, chosenLetter: "A", correct: 1, correctLetter: "B", isCorrect: false, explanation: null },
+    { id: 22, position: 2, subject: "Matematika", text: TEXT_QUESTIONS[1]!.text, options: TEXT_QUESTIONS[1]!.options, imageUrl: IMG(22), hasFigure: true, chosen: null, chosenLetter: null, correct: 2, correctLetter: "C", isCorrect: false, explanation: null },
+    { id: 23, position: 3, subject: "Matematika", text: TEXT_QUESTIONS[2]!.text, options: TEXT_QUESTIONS[2]!.options, imageUrl: IMG(23), hasFigure: false, chosen: 3, chosenLetter: "D", correct: 3, correctLetter: "D", isCorrect: true, explanation: null },
+  ];
+  stub({
+    "GET /api/tests": () => json(200, { ...OV, history: [{ id: "A1", mode: "subject", subject: "Matematika", status: "finished", total: 3, correct: 1, score: 1.1, startedAt: "2026-10-20T10:00:00Z" }] }),
+    "GET /api/tests/attempts/A1": () => json(200, { ...FINISHED, total: 3, correct: 1, review }),
+    "GET /api/tests/attempts/A1/analysis": () => json(200, { attemptId: "A1", done: true, items: [] }),
+  });
+  render(h(TestsPage));
+  await waitFor(() => assert.ok(q("[data-tests-history-item]")));
+  fireEvent.click(q("[data-tests-history-item]")!);
+  await waitFor(() => assert.ok(q("[data-tests-result]")));
+  const items = all("[data-tests-review-item]");
+  const marks = (i: number) => [...items[i]!.querySelectorAll<HTMLElement>("[data-option]")].map((r) => `${r.dataset.option}:${r.dataset.state}`);
+  assert.deepEqual(marks(0), ["A:wrong", "B:correct", "C:plain", "D:plain"]);
+  assert.deepEqual(marks(1), ["A:plain", "B:plain", "C:correct", "D:plain"], "unanswered: only the correct one is marked");
+  assert.deepEqual(marks(2), ["A:plain", "B:plain", "C:plain", "D:correct"], "a right answer is just the correct row");
+  assert.ok(!items[0]!.querySelector("[data-tests-image]") && items[0]!.querySelector("[data-tests-original]"), "text only + «Asl rasm»");
+  assert.ok(items[1]!.querySelector("[data-tests-image]") && !items[1]!.querySelector("[data-tests-original]"), "the figure stays in the review");
+  assert.ok(!items[2]!.querySelector("[data-tests-image]"));
+  await waitFor(() => assert.ok(items[2]!.querySelector('[data-option="D"] .katex'), "formulas are typeset in the review too"));
+  assert.match(items[0]!.textContent!, /Sizning javobingiz: A/);
 });
