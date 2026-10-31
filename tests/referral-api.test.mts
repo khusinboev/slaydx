@@ -120,8 +120,9 @@ test("GET /api/referral: exact shape, links, counters, recent names only (no ids
   await registerBotUser({ telegramId: friendTg, username: "dost_secret_handle", name: "Dilnoza Do'st", photoUrl: null }, { code: inv.code, source: "bot" });
   const r = await run(summaryRoute.GET, request("/api/referral", { cookie: inv.cookie }));
   assert.equal(r.status, 200, r.text);
-  assert.deepEqual(Object.keys(r.body).sort(), ["ambassadorPercent", "botLink", "code", "earnedPoints", "invitedCount", "recent", "rewardPoints", "webLink"]);
+  assert.deepEqual(Object.keys(r.body).sort(), ["ambassadorEarned", "ambassadorPercent", "botLink", "code", "earnedPoints", "invitedCount", "recent", "rewardPoints", "webLink"]);
   assert.equal(r.body.ambassadorPercent, 10, "D4: default ambassador percent is sent to the card");
+  assert.equal(r.body.ambassadorEarned, 0, "no invitee payment yet");
   assert.equal(r.body.code, inv.code);
   assert.equal(r.body.botLink, `https://t.me/slaydx_test_bot?start=ref_${inv.code}`);
   assert.equal(r.body.webLink, `http://localhost:3000/uz?ref=${inv.code}`);

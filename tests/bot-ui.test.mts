@@ -832,6 +832,21 @@ test("rating task without a finished generation explains itself instead of openi
   assert.match(i18n.t("uz", "toast.ratingLocked"), /hujjat yarating/);
 });
 
+test("«Elchi dasturi» is findable in the bot: referral screen block + profile button, hidden while the percent is 0", () => {
+  const ref = { link: "https://t.me/slaydx_test_bot?start=ref_abcdefgh", rewardPoints: 1000, invitedCount: 3, earnedPoints: 6000, code: "abcdefgh", ambassadorEarned: 12500 };
+  for (const lang of ["uz", "ru", "en"] as const) {
+    const on = scr.referralScreen(lang, { ...ref, ambassadorPercent: 15 }, null).text;
+    assert.match(on, /15 %/, `${lang}: percent`);
+    assert.match(on, /<code>abcdefgh<\/code>/, `${lang}: code`);
+    assert.match(on, /12\s500/, `${lang}: ambassador earnings`);
+    assert.equal(scr.referralScreen(lang, { ...ref, ambassadorPercent: 0 }, null).text.includes("abcdefgh</code>"), false, `${lang}: off => no block`);
+  }
+  assert.match(scr.referralScreen("uz", { ...ref, ambassadorPercent: 15 }, null).text, /Elchi dasturi/);
+  const btn = kbRows(prof.profileCard(USER, "uz", ref.link, 15)).flat().find((b) => b.callback_data === codes.cb.invite());
+  assert.ok(btn && /Elchi dasturi · 15 %/.test(btn.text), "profile has the Elchi button");
+  assert.ok(!kbRows(prof.profileCard(USER, "uz", ref.link, 0)).flat().some((b) => b.callback_data === codes.cb.invite()), "off => no button");
+});
+
 test("ledger title of the rating bonus in 3 languages", () => {
   assert.equal(scr.ledgerTitle("uz", { kind: "bonus", note: "Baholash bonusi" }), "Ilovani baholash bonusi");
   assert.equal(scr.ledgerTitle("ru", { kind: "bonus", note: "Baholash bonusi" }), "Бонус за оценку приложения");

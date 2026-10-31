@@ -280,6 +280,10 @@ export type ReferralInput = {
   earnedPoints: number;
   /** Ambassador percent (`ambassador.percent`); 0 / absent hides the rule line. */
   ambassadorPercent?: number;
+  /** Own invite code (shown in the «Elchi dasturi» block). */
+  code?: string;
+  /** Ambassador bonus earned so far (ledger `ambassador:%`). */
+  ambassadorEarned?: number;
 };
 
 /** `/taklif`, the welcome «Taklif» and Hamyon → «Do‘st taklif qilish» (with a way back). */
@@ -305,6 +309,18 @@ export function referralScreen(lang: Lang, r: ReferralInput, back: "wallet" | nu
     esc(r.link),
     "",
     t(lang, "ref.counts", { a: formatPoints(r.invitedCount), b: formatPoints(r.earnedPoints) }),
+    // «Elchi dasturi»: own block (code, %, friends, earned) so the program is findable (owner report 2026-10-31).
+    ...(r.ambassadorPercent && r.ambassadorPercent > 0
+      ? [
+          "",
+          t(lang, "ambassador.block", {
+            p: r.ambassadorPercent,
+            code: esc(r.code ?? ""),
+            a: formatPoints(r.invitedCount),
+            b: formatPoints(r.ambassadorEarned ?? 0),
+          }),
+        ]
+      : []),
   ].join("\n");
   // t.me links are public https (always valid button URLs); a local web link is not.
   const share = isPublicHttps(r.link) ? inlineButton("share", t(lang, "btn.shareFriends"), { url: telegramShareUrl(r.link) }, "primary") : null;

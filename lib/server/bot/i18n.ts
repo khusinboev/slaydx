@@ -501,6 +501,12 @@ const T = {
     ru: "{p} % бонусных сум с каждого платежа ваших друзей",
     en: "{p} % bonus UZS from every payment your friends make",
   },
+  "ambassador.title": { uz: "Elchi dasturi", ru: "Программа «Посол»", en: "Ambassador programme" },
+  "ambassador.block": {
+    uz: "<b>🏅 Elchi dasturi</b>\nDo'stingiz sizning havolangiz orqali kirib to'lov qilsa — har to'lovdan <b>{p} %</b> bonus so'm sizga (muddatsiz, avtomatik; pulga yechib bo'lmaydi).\nKodingiz: <code>{code}</code>\nDo'stlar: <b>{a}</b> · Elchi bonusi: <b>{b} bonus so'm</b>",
+    ru: "<b>🏅 Программа «Посол»</b>\nЕсли друг зашёл по вашей ссылке и пополнил баланс — вы получаете <b>{p} %</b> бонусных сум с каждого платежа (без срока, автоматически; вывести деньгами нельзя).\nВаш код: <code>{code}</code>\nДрузей: <b>{a}</b> · Бонус посла: <b>{b} бонусных сум</b>",
+    en: "<b>🏅 Ambassador programme</b>\nWhen a friend joins via your link and tops up, you get <b>{p} %</b> bonus UZS of every payment (no time limit, automatic; cannot be cashed out).\nYour code: <code>{code}</code>\nFriends: <b>{a}</b> · Ambassador bonus: <b>{b} bonus UZS</b>",
+  },
   "ambassador.dm": {
     uz: "🎉 Siz taklif qilgan do'stingiz to'lov qildi — sizga +{n} bonus so'm!",
     ru: "🎉 Приглашённый вами друг совершил оплату — вам +{n} бонусных сум!",

@@ -121,11 +121,12 @@ export async function cancelPending(chatId: number): Promise<void> {
 
 async function referral(userId: string) {
   const s = await referralSummary(userId, { botUsername: await botUsername(), appUrl: env.appUrl });
-  return { link: s.botLink ?? s.webLink, rewardPoints: s.rewardPoints, invitedCount: s.invitedCount, earnedPoints: s.earnedPoints, ambassadorPercent: s.ambassadorPercent };
+  return { link: s.botLink ?? s.webLink, rewardPoints: s.rewardPoints, invitedCount: s.invitedCount, earnedPoints: s.earnedPoints, ambassadorPercent: s.ambassadorPercent, code: s.code, ambassadorEarned: s.ambassadorEarned };
 }
 
 async function profileScreen(ctx: Pick<ChatCtx, "user" | "lang">): Promise<Screen> {
-  return profileCard(ctx.user, ctx.lang, (await referral(ctx.user.id)).link);
+  const r = await referral(ctx.user.id);
+  return profileCard(ctx.user, ctx.lang, r.link, r.ambassadorPercent);
 }
 
 async function filesPage(ctx: Pick<ChatCtx, "user" | "lang" | "telegramId">, page: number): Promise<Screen> {

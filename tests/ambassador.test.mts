@@ -64,7 +64,7 @@ test("ambassador bonus: settlement, guards, isolation, concurrency", { skip }, a
   const { query, queryOne, migrate, pool } = await import("../lib/server/db.ts");
   const { settleOrder, createPaidPaynetOrder } = await import("../lib/server/payments.ts");
   const { invalidateSettingsCache } = await import("../lib/server/settings.ts");
-  const { adminReferralInfo } = await import("../lib/server/referrals.ts");
+  const { adminReferralInfo, referralSummary } = await import("../lib/server/referrals.ts");
   await migrate();
   t.after(async () => {
     await pool().end();
@@ -291,5 +291,17 @@ test("ambassador bonus: settlement, guards, isolation, concurrency", { skip }, a
     } finally {
       c.release();
     }
+  });
+
+  await t.test("user referral summary shows the ambassador total (the «Elchi dasturi» block)", async () => {
+    const { referrer, payer } = await pair();
+    const links = { botUsername: "slaydx_test_bot", appUrl: "https://slaydx.test" };
+    assert.equal((await referralSummary(referrer, links)).ambassadorEarned, 0);
+    await settleOrder(await order(payer, 20_000), Date.now());
+    await settleOrder(await order(payer, 30_000), Date.now());
+    const s = await referralSummary(referrer, links);
+    assert.equal(s.ambassadorEarned, 5_000, "10 % of 50 000");
+    assert.equal(s.ambassadorPercent, 10);
+    assert.equal((await referralSummary(payer, links)).ambassadorEarned, 0, "the payer earned nothing");
   });
 });
