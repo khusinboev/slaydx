@@ -83,7 +83,7 @@ Prices: one place, `priceFor` (server); admin «Narxlar» page adjusts 25–1000
 - **Test ishlash / paid tests** (owner request 7, migration 059; `/test`, `/uz/tests`, `/api/tests/*`): ready-made image/text question bank (BMB mechanics: one random variant per
   subject, 10 random questions, 20 min; «hammasi» = 30 questions / 60 min; +1.1 per correct, no negatives). SHIPS DARK: `tests.enabled` defaults to false. Settings `tests.*`
   (`tests.price_subject` 1 500 / `tests.price_all` 4 000 by mode, charged once at start, ref `test:<attemptId>`; `first_attempt_free`; questions/minutes/points). Server-side deadline and scoring; the answer key reaches the client only in
-  the finished view. Bank import: `npm run import:tests -- export.json images [--dry-run]`, export runbook `scripts/export-bmb-tests.md`. Needs the owner's answers before switching on.
+  the finished view. **AI analysis of wrong answers** (migration 063, `lib/server/test-analysis.ts`, `GET /api/tests/attempts/{id}/analysis`, finished attempts only): one multimodal Gemini call per question+key (image inline), cached in `test_analyses` for all users, ≤ 3 calls at once, failed → «Qayta urinish»; model = routing slot `tests.analysis` (default `gemini-3.1-pro`), spend in `ai_usage` as `tests:analysis`, included in the price. Bank import: `npm run import:tests -- export.json images [--dry-run]`, export runbook `scripts/export-bmb-tests.md`. Needs the owner's answers before switching on.
 - Running-job page: stage checklist, percent, ETA (`docs/ux/GENERATION-PROGRESS.md`).
 
 ## 7. Known open items (2026-10-22)
