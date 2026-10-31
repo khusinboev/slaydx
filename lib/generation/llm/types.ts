@@ -1,18 +1,19 @@
 /**
  * LLM adapter umumiy tili (Maqola 2 / AUDIT-17, WP8).
  *
- * Har provayder (`gemini.ts`, `anthropic.ts`, `openrouter.ts`, `xai.ts`,
- * `openai.ts`) shu tipga qarab yoziladi — `chain.ts` va `llm-roles.ts`
- * provayderga xos hech narsani BILMAYDI: JSON rejimi, thinking, xatolar
- * hammasi `Attempt` shakliga normallashtirilgan bo'lib keladi.
+ * Har provayder (`gemini.ts`, `anthropic.ts`) shu tipga qarab yoziladi —
+ * `chain.ts` va `llm-roles.ts` provayderga xos hech narsani BILMAYDI: JSON
+ * rejimi, thinking, xatolar hammasi `Attempt` shakliga normallashtirilgan
+ * bo'lib keladi.
  */
 
+import { log } from "../../server/log";
 import type { FailureKind } from "./failure";
 
 /** `LLM_<ROL>` env qiymatidagi bitta yozuv: `"anthropic:claude-sonnet-5"`. */
-export type ProviderId = "gemini" | "anthropic" | "openrouter" | "xai" | "openai";
+export type ProviderId = "gemini" | "anthropic";
 
-const PROVIDER_IDS: readonly ProviderId[] = ["gemini", "anthropic", "openrouter", "xai", "openai"];
+const PROVIDER_IDS: readonly ProviderId[] = ["gemini", "anthropic"];
 
 export type AdapterOpts = {
   json?: boolean;
@@ -36,7 +37,7 @@ export type Usage = { inputTokens: number; outputTokens: number };
  * chain o'zi eksponensial hisoblaydi).
  */
 export type Attempt =
-  // `finishReason` — provider's raw stop reason (Gemini `finishReason`, Anthropic `stop_reason`, OpenAI `finish_reason`).
+  // `finishReason` — provider's raw stop reason (Gemini `finishReason`, Anthropic `stop_reason`).
   | { ok: true; text: string; usage: Usage; finishReason?: string }
   | {
       ok: false;
@@ -58,17 +59,34 @@ export type ProviderAdapter = {
 
 export type RoleSpec = { provider: ProviderId; model: string };
 
+/** Unknown provider ids already reported by `parseRoleSpec` (one warn line per id per process, not per LLM call). */
+const warnedUnknown = new Set<string>();
+
+/** Tests: forget which unknown provider ids were already warned about. */
+export function resetRoleSpecWarnings(): void {
+  warnedUnknown.clear();
+}
+
 /**
  * `"anthropic:claude-sonnet-5,gemini:gemini-3.7-flash"` → zaxira zanjiri
- * tartibda. Bo'sh (`undefined`/`""`) yoki NOTO'G'RI (bo'sh model, provayder
- * ro'yxatda yo'q, `:` yo'q yozuv) — BUTUN natija `[]`: chaqiruvchi
- * (`llm-roles.ts`) buni "env berilmagan" bilan bir xil ko'radi va eski
- * standart yo'lga (Gemini) tushadi — yarim buzuq zanjir bilan jimgina
- * ishlashdan ko'ra shov-shuvsiz standart xatti-harakat xavfsizroq.
+ * tartibda.
+ *
+ *  - Bo'sh (`undefined`/`""`) yoki SHAKLI buzuq yozuv (`provider:model`
+ *    ko'rinishi yo'q: `:` yo'q, provayder yoki model bo'sh) — BUTUN natija
+ *    `[]`: chaqiruvchi (`llm-roles.ts`) buni "env berilmagan" bilan bir xil
+ *    ko'radi va standart yo'lga (Gemini) tushadi — yarim buzuq zanjir bilan
+ *    jimgina ishlashdan ko'ra shov-shuvsiz standart xatti-harakat xavfsizroq.
+ *  - Shakli to'g'ri, lekin provayder ro'yxatda YO'Q (olib tashlangan
+ *    provayder qoldiq env qiymatida: `anthropic:claude-sonnet-5,removed:x`)
+ *    — faqat o'sha yozuv o'tkazib yuboriladi (har noma'lum id uchun BITTA
+ *    ogohlantirish), qolgan to'g'ri yozuvlar saqlanadi. Aks holda bitta
+ *    eski yozuv butun zanjirni, masalan Anthropic baholovchini, jimgina
+ *    tashlab yuborardi.
  */
 export function parseRoleSpec(spec: string | undefined | null): RoleSpec[] {
   if (!spec || !spec.trim()) return [];
   const out: RoleSpec[] = [];
+  const unknown: string[] = [];
   for (const raw of spec.split(",")) {
     const part = raw.trim();
     if (!part) continue;
@@ -76,8 +94,17 @@ export function parseRoleSpec(spec: string | undefined | null): RoleSpec[] {
     if (i <= 0) return [];
     const provider = part.slice(0, i).trim();
     const model = part.slice(i + 1).trim();
-    if (!model || !PROVIDER_IDS.includes(provider as ProviderId)) return [];
+    if (!provider || !model) return [];
+    if (!PROVIDER_IDS.includes(provider as ProviderId)) {
+      unknown.push(provider);
+      continue;
+    }
     out.push({ provider: provider as ProviderId, model });
+  }
+  for (const id of new Set(unknown)) {
+    if (warnedUnknown.has(id)) continue;
+    warnedUnknown.add(id);
+    log("warn", `[llm] LLM_<ROL> env: noma'lum provayder "${id}" o'tkazib yuborildi (qo'llab-quvvatlanadi: ${PROVIDER_IDS.join(", ")})`);
   }
   return out;
 }

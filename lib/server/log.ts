@@ -101,7 +101,7 @@ const TEXT_RULES: Array<[RegExp, string | ((m: string, ...g: string[]) => string
     /([?&;\s]|^)((?:api[_-]?)?key|access_token|token|session_?token|secret|sign_string|password|passwd|signature|session|sessionid|card_number|card_token|expire_date|sms_code)(=|:\s*)([^&\s"'#;,]+)/gi,
     (_m, pre: string, name: string, sep: string) => `${pre}${name}${sep}${REDACTED}`,
   ],
-  // Google API kaliti (`AIza` + 35), Anthropic/OpenRouter/OpenAI (`sk-…`), xAI (`xai-…`).
+  // Google API kaliti (`AIza` + 35), Anthropic/OpenAI (`sk-…`). The legacy xAI shape (`xai-…`) stays redacted on purpose: an old key may still be pasted into logs.
   [/AIza[0-9A-Za-z_-]{20,}/g, REDACTED],
   [/\bsk-[A-Za-z0-9_-]{8,}/g, REDACTED],
   [/\bxai-[A-Za-z0-9_-]{8,}/g, REDACTED],

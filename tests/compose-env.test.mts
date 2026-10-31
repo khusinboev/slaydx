@@ -16,8 +16,6 @@ const KEYS = [
   "LLM_RESEARCHER",
   "LLM_FAST",
   "ANTHROPIC_API_KEY",
-  "OPENROUTER_API_KEY",
-  "XAI_API_KEY",
   "OPENAI_API_KEY",
   "OPENALEX_API_KEY",
   "OPENALEX_MAILTO",
@@ -37,7 +35,7 @@ const KEYS = [
   "AISHA_API_KEY",
   "TTS_GEMINI_MODEL",
   /*
-   * 2026-09-22: «Rasm» vositasi fal.ai'dan Gemini'ga o'tdi. Rasm modeli
+   * 2026-09-22: «Rasm» vositasi Gemini'ga o'tdi. Rasm modeli
    * `.env` dan almashtirilsin (standart — kod ichida `gemini-3.1-flash-
    * lite-image`, $0.034/rasm) — 2026-09-21 gacha compose bu ikkalasini
    * konteynerga umuman uzatmasdi.
@@ -73,7 +71,7 @@ test("docker-compose: LLM rollari va manba qidiruv kalitlari web va worker'ga uz
   }
   // `.env.example` da ham hujjatlangan bo'lsin.
   const example = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
-  for (const k of KEYS.filter((k) => !/^(XAI|OPENAI)_/.test(k))) assert.match(example, new RegExp(`^${k}=`, "m"), `${k} .env.example da yo'q`);
+  for (const k of KEYS) assert.match(example, new RegExp(`^${k}=`, "m"), `${k} .env.example da yo'q`);
 });
 
 /**

@@ -6,7 +6,7 @@ import { queryOne } from "./db";
  * Fixed-window rate limit.
  *
  * Ilgari `/api/generate` va `/api/extract` umuman himoyalanmagan edi:
- * bitta skript cheksiz so'rov yuborib Gemini/fal.ai kaliti hisobidagi
+ * bitta skript cheksiz so'rov yuborib Gemini kaliti hisobidagi
  * pulni tugatishi mumkin edi. Endi har bucket uchun oynadagi urinishlar
  * bazada sanaladi (bir nechta instansiya bo'lsa ham umumiy hisob).
  */

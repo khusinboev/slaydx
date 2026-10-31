@@ -11,10 +11,10 @@
  * `process.env`ga tushib qoladi. Testlarning ko'pi bunga qarshi o'zi
  * ehtiyot chorasi ko'radi (masalan `GEMINI_API_KEY`ni saqlab-o'chiradi),
  * lekin `tests/document.test.mts`dagi `slideImageEnv()` yordamchisi faqat
- * `FAL_KEY`/`GEMINI_API_KEY`/`XAI_API_KEY`ni tozalaydi — `PEXELS_API_KEY`/
- * `PIXABAY_API_KEY` haqiqiy qiymati bilan qoladi. Natijada "FAL bloklangan"
- * ssenariysida test fetch'ni faqat FAL uchun kutadi, aslida kod haqiqiy
- * kalit borligi sababli Pexels/Pixabay'ga ham murojaat qiladi — testlar
+ * `GEMINI_API_KEY`ni tozalaydi — `PEXELS_API_KEY`/`PIXABAY_API_KEY` haqiqiy
+ * qiymati bilan qoladi. Natijada «provayder bloklangan» ssenariysida test
+ * fetch'ni faqat bitta provayder uchun kutadi, aslida kod haqiqiy kalit
+ * borligi sababli Pexels/Pixabay'ga ham murojaat qiladi — testlar
  * `.env.local` bor/yo'qligiga qarab yashil/qizil bo'lib qoladi.
  *
  * Tuzatish shu yerda, HARNESS darajasida: barcha tashqi provayder
@@ -37,20 +37,13 @@ const PROVIDER_ENV_KEYS = [
   "GEMINI_IMAGE_SIZE",
   "OPENAI_IMAGE_MODEL",
   "GEMINI_THINKING_BUDGET",
-  "XAI_API_KEY",
-  "XAI_MODEL",
   "ANTHROPIC_API_KEY",
-  "OPENROUTER_API_KEY",
   "OPENAI_API_KEY",
   "LLM_WRITER",
   "LLM_JUDGE",
   "LLM_RESEARCHER",
   "LLM_FAST",
-  // Rasm provayderlari (fal.ai + bepul stock zanjiri)
-  "FAL_KEY",
-  "FAL_MODEL",
-  "FAL_MODEL_PREMIUM",
-  "FAL_STEPS_PREMIUM",
+  // Rasm provayderlari (bepul stock zanjiri)
   "PEXELS_API_KEY",
   "PIXABAY_API_KEY",
   // Ilmiy manba qidiruvi (Maqola 2)

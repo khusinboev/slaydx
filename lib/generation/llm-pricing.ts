@@ -33,9 +33,6 @@ export type PricingRow = {
   from?: string;
 };
 
-/** OpenRouter — asosiy model narxiga ustama (OpenRouter komissiyasi). */
-export const OPENROUTER_SURCHARGE = 1.055;
-
 export const PRICING: PricingRow[] = [
   // ── Gemini (yozuvchi/tadqiqot/tez) ──────────────────────────────
   { provider: "gemini", model: "gemini-3.7-flash", inUsdPerM: 0.75, outUsdPerM: 3.75 },
@@ -47,13 +44,6 @@ export const PRICING: PricingRow[] = [
   { provider: "anthropic", model: "claude-sonnet-5", inUsdPerM: 2, outUsdPerM: 10 },
   { provider: "anthropic", model: "claude-opus-5", inUsdPerM: 5, outUsdPerM: 25 },
   { provider: "anthropic", model: "claude-haiku-4-5", inUsdPerM: 1, outUsdPerM: 5 },
-
-  // ── OpenAI (OpenRouter orqali; to'g'ridan-to'g'ri sotib olinmaydi) ─
-  { provider: "openai", model: "gpt-5.6-terra", inUsdPerM: 2, outUsdPerM: 12 },
-  { provider: "openai", model: "gpt-5.6-luna", inUsdPerM: 0.2, outUsdPerM: 1.2 },
-
-  // ── xAI (faqat zaxira yozuvchi) ──────────────────────────────────
-  { provider: "xai", model: "grok-4.3", inUsdPerM: 1.25, outUsdPerM: 2.5 },
 ];
 
 /** Bitta chaqiruv sarfi — `CostMeter`/`generations.cost_json` shakli. */
@@ -90,8 +80,9 @@ function pickRow<T extends { from?: string }>(rows: T[], at: Date): T | undefine
  * ogohlantirish (uydirma narx bilan marjani noto'g'ri ko'rsatishdan
  * ko'ra, "hisoblanmadi" deb 0 ko'rsatish xavfsizroq).
  *
- * `provider === "openrouter"` — asosiy model narxiga `OPENROUTER_SURCHARGE`
- * qo'llanadi (OpenRouter narxi = manba model narxi × 1.055 ustama).
+ * Narx faqat YOZISH paytida hisoblanadi: `ai_usage`/`cost_json` ga tushgan
+ * `usd` saqlanadi va admin hisobotlari shuni yig'adi — olib tashlangan
+ * provayderlarning eski qatorlari narx jadvalisiz ham o'qiladi.
  */
 export function costUsd(usage: UsageLike, at: Date = new Date()): number {
   const rows = rowsForModel(usage.model);
@@ -100,8 +91,7 @@ export function costUsd(usage: UsageLike, at: Date = new Date()): number {
     console.warn(`[llm-pricing] noma'lum model: ${usage.provider}:${usage.model} — narx 0 deb hisoblanadi`);
     return 0;
   }
-  const raw = (usage.inputTokens / 1_000_000) * row.inUsdPerM + (usage.outputTokens / 1_000_000) * row.outUsdPerM;
-  return usage.provider === "openrouter" ? raw * OPENROUTER_SURCHARGE : raw;
+  return (usage.inputTokens / 1_000_000) * row.inUsdPerM + (usage.outputTokens / 1_000_000) * row.outUsdPerM;
 }
 
 /** `SOUM_PER_USD` env (standart 12 700 — `scripts/cost-report.mts` bilan bir xil). */

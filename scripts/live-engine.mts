@@ -1932,7 +1932,7 @@ async function main() {
     process.stdout.write(`\nJami: ${CASES.length} holat\n`);
     process.exit(0);
   }
-  if (!process.env.GEMINI_API_KEY && !process.env.XAI_API_KEY) {
+  if (!process.env.GEMINI_API_KEY) {
     console.error("GEMINI_API_KEY yo'q — jonli tekshiruv o'tkazib yuborildi.");
     process.exit(2);
   }
