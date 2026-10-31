@@ -77,7 +77,9 @@ const P = (id: string) => PURPOSES.find((p) => p.id === id)!;
 test("verdict: missing / single / ok / off follow the rules", () => {
   const text = P("text");
   assert.equal(purposeVerdict(text, [], label).verdict, "missing", "a required purpose with nothing working");
-  assert.match(purposeVerdict(text, [], label).detail, /GEMINI, ANTHROPIC/, "names what to switch on");
+  assert.match(purposeVerdict(text, [], label).detail, /GEMINI/, "names what to switch on");
+  assert.equal(purposeVerdict(P("stock"), [], label).verdict, "missing", "a recommended purpose with nothing working");
+  assert.match(purposeVerdict(P("stock"), [], label).detail, /PEXELS, PIXABAY/, "a purpose without a hard requirement lists every candidate");
   assert.equal(purposeVerdict(text, ["gemini"], label).verdict, "single", "one of a fallback chain");
   assert.equal(purposeVerdict(text, ["gemini", "anthropic"], label).verdict, "ok");
   assert.equal(purposeVerdict(P("video"), [], label).verdict, "off", "optional and nobody switched it on");
@@ -85,6 +87,21 @@ test("verdict: missing / single / ok / off follow the rules", () => {
   assert.equal(purposeVerdict(P("image"), ["gemini"], label).verdict, "ok", "ChatGPT is a user's choice, not a fallback");
   assert.equal(purposeVerdict(P("stt"), ["gemini"], label).verdict, "ok", "a purpose with one possible provider is never «zaxirasiz»");
   assert.equal(purposeVerdict(P("stock"), ["pixabay"], label).verdict, "single");
+});
+
+test("verdict: a purpose that REQUIRES a provider is not enough without it, whatever else works", () => {
+  const text = P("text");
+  assert.equal(text.requires, "gemini");
+  const only = purposeVerdict(text, ["anthropic"], label);
+  assert.equal(only.verdict, "missing", "the direct text path is Gemini-only: Claude alone cannot write a slide");
+  assert.match(only.detail, /GEMINI ishlamayapti/);
+  assert.match(only.detail, /ANTHROPIC/, "says what could not replace it");
+  assert.equal(purposeVerdict(P("image"), ["openai-image"], label).verdict, "missing", "pro-slide and portrait images need Gemini");
+  assert.equal(purposeVerdict(text, ["gemini"], label).verdict, "single", "with Gemini the usual rules apply");
+});
+
+test("catalog: only OpenAlex and Google Books work without a key", () => {
+  assert.deepEqual(Object.entries(PROVIDER_META).filter(([, m]) => m.keyless).map(([id]) => id).sort(), ["googlebooks", "openalex"]);
 });
 
 test("verdict: premium voice does not count", () => {

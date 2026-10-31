@@ -23,6 +23,8 @@ export type ProviderMeta = {
   /** One sentence: what the product uses it for. */
   role: string;
   need: Need;
+  /** Works without a key (OpenAlex, Google Books): a key only raises the quota, so «Kalit yo'q» is not «ishlamaydi». */
+  keyless: boolean;
   /** Where the owner gets a key (a public sign-up / console page, never a secret). */
   keyUrl: string | null;
 };
@@ -43,6 +45,7 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
     priceNote: `${llmNote("gemini", "gemini-3.7-flash")} · rasm ${usd(IMAGE_PRICES["gemini-3.1-flash-lite-image"])} / dona · internet qidiruvi ${usd(GROUNDING_USD)} / so'rov`,
     role: "Asosiy motor: barcha matn vositalari, AI rasm (Nano Banana), ovoz (TTS), domla javobini tinglash, pro-slayddagi internet qidiruvi va AI chat.",
     need: "required",
+    keyless: false,
     keyUrl: "https://aistudio.google.com/apikey",
   },
   anthropic: {
@@ -50,6 +53,7 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
     priceNote: llmNote("anthropic", "claude-sonnet-5"),
     role: "Maqolaning «baholovchisi» (tayyorlik hisoboti): Gemini'dan qattiqroq tekshiradi. Yo'q bo'lsa baholashni Gemini bajaradi.",
     need: "recommended",
+    keyless: false,
     keyUrl: "https://console.anthropic.com/settings/keys",
   },
   pexels: {
@@ -57,6 +61,7 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
     priceNote: "Bepul · soatiga 200 so'rov limiti bor",
     role: "Oddiy slayddagi stok fotosuratlar (birinchi manba).",
     need: "recommended",
+    keyless: false,
     keyUrl: "https://www.pexels.com/api/",
   },
   pixabay: {
@@ -64,6 +69,7 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
     priceNote: "Bepul · daqiqasiga 100 so'rov limiti bor",
     role: "Stok fotosuratlarning zaxira manbasi (Pexels topolmasa).",
     need: "optional",
+    keyless: false,
     keyUrl: "https://pixabay.com/api/docs/",
   },
   azure: {
@@ -71,6 +77,7 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
     priceNote: `${tts("azure")?.billing === "chars" ? usd((tts("azure") as { usdPerMChars: number }).usdPerMChars) : "$16"} / 1M belgi · oyiga 500 ming belgi bepul (F0 tarif)`,
     role: "Podkast, tabriknoma va tinglash o'yini uchun o'zbek va boshqa tillardagi ovoz (birinchi tanlov, barqaror kvota).",
     need: "optional",
+    keyless: false,
     keyUrl: "https://portal.azure.com/",
   },
   aisha: {
@@ -78,6 +85,7 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
     priceNote: "1 so'm / belgi",
     role: "Mahalliy o'zbek ovozi — Azure bo'lmasa zaxira.",
     need: "optional",
+    keyless: false,
     keyUrl: "https://voicelab.uz/",
   },
   elevenlabs: {
@@ -85,6 +93,7 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
     priceNote: `${usd(((tts("elevenlabs") as { usdPerMChars?: number } | undefined)?.usdPerMChars ?? 80) / 1000)} / 1000 belgi`,
     role: "«Premium ovoz» (podkast, tabriknoma) — foydalanuvchi alohida tanlaydi, standart zanjirga kirmaydi.",
     need: "optional",
+    keyless: false,
     keyUrl: "https://elevenlabs.io/app/settings/api-keys",
   },
   openalex: {
@@ -92,6 +101,7 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
     priceNote: "Bepul",
     role: "Maqola va ilmiy ishlar uchun manbalarni topish va tekshirish (Crossref bilan birga).",
     need: "recommended",
+    keyless: true,
     keyUrl: "https://openalex.org/",
   },
   googlebooks: {
@@ -99,6 +109,7 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
     priceNote: "Bepul · kunlik kvota bor",
     role: "Maqola va kurs ishida kitob manbalarini topish.",
     need: "optional",
+    keyless: true,
     keyUrl: "https://console.cloud.google.com/apis/library/books.googleapis.com",
   },
   "openai-image": {
@@ -106,6 +117,7 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
     priceNote: `Token bo'yicha: rasm chiqishi ${usd(OPENAI_IMAGE_USD_PER_MTOK.imageOut)} / 1M token (1 rasm taxminan $0.05)`,
     role: "«Rasm» vositasidagi ChatGPT tanlovi. Kalitsiz bu tanlov foydalanuvchiga ko'rsatilmaydi.",
     need: "optional",
+    keyless: false,
     keyUrl: "https://platform.openai.com/api-keys",
   },
   veo: {
@@ -113,6 +125,7 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
     priceNote: "Taxminan $0.10 / soniya video (8 soniya ≈ $0.81) · Gemini kaliti bilan ishlaydi",
     role: "«Video yaratish» vositasi (Google Gemini Omni Flash). Sozlamalarda «Video yaratish yoqilgan» bo'lsa ishlaydi.",
     need: "optional",
+    keyless: false,
     keyUrl: "https://aistudio.google.com/apikey",
   },
   kling: {
@@ -120,6 +133,7 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
     priceNote: "Har soniya video pullik (narx kalit kiritilgach hisobotda ko'rinadi)",
     role: "Video yaratishning ikkinchi varianti (Kling AI). Google video yetarli bo'lsa shart emas.",
     need: "optional",
+    keyless: false,
     keyUrl: "https://app.klingai.com/global/dev/api-key",
   },
 };
@@ -138,6 +152,11 @@ export type Purpose = {
   providers: readonly ProviderId[];
   /** Providers shown with it but never part of the standard chain (the premium voice): they do not count for the verdict. */
   premium: readonly ProviderId[];
+  /**
+   * A provider the purpose cannot work WITHOUT, whatever else is switched on (the direct text path and the image
+   * tools are Gemini-only: a working Claude alone cannot write a slide). `null` = any listed provider will do.
+   */
+  requires: ProviderId | null;
   /** Routing slots editable inside this purpose. */
   routes: readonly RouteId[];
   /**
@@ -159,6 +178,7 @@ export const PURPOSES: readonly Purpose[] = [
     minimum: "Kamida bitta matn provayderi (Gemini) ishlashi shart. Ikkinchisi (Claude) — baholovchi va zaxira sifatida tavsiya etiladi.",
     providers: ["gemini", "anthropic"],
     premium: [],
+    requires: "gemini",
     routes: ["llm.model", "llm.writer", "llm.researcher", "llm.judge", "llm.fast"],
     fallback: true,
     setting: null,
@@ -171,6 +191,7 @@ export const PURPOSES: readonly Purpose[] = [
     minimum: "Gemini (Nano Banana) yetarli. ChatGPT — foydalanuvchiga qo'shimcha tanlov, shart emas.",
     providers: ["gemini", "openai-image"],
     premium: [],
+    requires: "gemini",
     routes: ["image.gemini"],
     fallback: false,
     setting: null,
@@ -183,6 +204,7 @@ export const PURPOSES: readonly Purpose[] = [
     minimum: "Bittasi yetarli (Pexels). Ikkinchisi zaxira; ikkalasi ham bo'lmasa slaydlar fotosuratsiz chiqadi.",
     providers: ["pexels", "pixabay"],
     premium: [],
+    requires: null,
     routes: [],
     fallback: true,
     setting: null,
@@ -195,6 +217,7 @@ export const PURPOSES: readonly Purpose[] = [
     minimum: "Bitta ovoz provayderi yetarli. Hozir Gemini ovozi ishlaydi, lekin kvotasi cheklangan — Azure qo'shilsa barqarorroq bo'ladi.",
     providers: ["azure", "aisha", "gemini"],
     premium: ["elevenlabs"],
+    requires: null,
     routes: ["tts.order"],
     fallback: true,
     setting: null,
@@ -207,6 +230,7 @@ export const PURPOSES: readonly Purpose[] = [
     minimum: "Faqat Gemini bilan ishlaydi (boshqa variant yo'q).",
     providers: ["gemini"],
     premium: [],
+    requires: null,
     routes: [],
     fallback: false,
     setting: null,
@@ -219,6 +243,7 @@ export const PURPOSES: readonly Purpose[] = [
     minimum: "Faqat Gemini bilan ishlaydi (boshqa variant yo'q).",
     providers: ["gemini"],
     premium: [],
+    requires: null,
     routes: [],
     fallback: false,
     setting: null,
@@ -231,6 +256,7 @@ export const PURPOSES: readonly Purpose[] = [
     minimum: "OpenAlex yetarli (Crossref kalitsiz ishlaydi). Google Books — kitoblar uchun qo'shimcha.",
     providers: ["openalex", "googlebooks"],
     premium: [],
+    requires: null,
     routes: [],
     fallback: false,
     setting: null,
@@ -243,6 +269,7 @@ export const PURPOSES: readonly Purpose[] = [
     minimum: "Google video (Gemini kaliti bilan) yetarli. Kling — ikkinchi variant.",
     providers: ["veo", "kling"],
     premium: [],
+    requires: null,
     routes: [],
     fallback: false,
     setting: { key: "video.enabled", label: "Video yaratish yoqilgan" },
@@ -262,6 +289,14 @@ export type VerdictInfo = { verdict: Verdict; headline: string; detail: string }
  */
 export function purposeVerdict(purpose: Purpose, usable: readonly ProviderId[], labelOf: (id: ProviderId) => string): VerdictInfo {
   const working = purpose.providers.filter((p) => usable.includes(p));
+  if (purpose.requires && !usable.includes(purpose.requires)) {
+    const must = labelOf(purpose.requires);
+    return {
+      verdict: "missing",
+      headline: "Yetarli emas",
+      detail: `${must} ishlamayapti — bu vazifa usiz bajarilmaydi${working.length > 0 ? `, boshqa provayderlar (${working.map(labelOf).join(", ")}) uning o'rnini bosa olmaydi` : ""}. ${must}ni yoqing yoki kalitini kiriting.`,
+    };
+  }
   if (working.length === 0) {
     if (purpose.need === "optional") {
       return { verdict: "off", headline: "Yoqilmagan", detail: "Ixtiyoriy vosita: provayder kaliti kiritilmaguncha foydalanuvchiga ko'rinmaydi." };
@@ -308,6 +343,6 @@ export const ROUTE_INFO: Readonly<Record<RouteId, { title: string; help: string 
   },
   "tts.order": {
     title: "Ovoz provayderlari tartibi",
-    help: "Birinchisi ishlamasa keyingisi o'qiydi. Serverdagi TTS_VOICE_<til> muhit o'zgaruvchisi bo'lsa, o'sha til uchun u ustun turadi.",
+    help: "Yuqoridagi provayder birinchi o'qiydi, ishlamasa keyingisi. Provayderni butunlay to'xtatish uchun uni «Provayderlar» ro'yxatida o'chiring. Serverdagi TTS_VOICE_<til> bo'lsa, o'sha til uchun u ustun turadi.",
   },
 };

@@ -193,6 +193,10 @@ test("GET: purposes with verdicts computed from what really works; the new shape
   assert.equal(purposeOf(r, "video").verdict, "off");
   assert.equal(purposeOf(r, "video").setting!.enabled, false, "video.enabled defaults to off");
   assert.equal(purposeOf(r, "stt").verdict, "ok");
+  assert.equal(purposeOf(r, "sources").verdict, "ok", "OpenAlex and Google Books work without a key");
+  assert.equal(itemOf(r, "openalex").usable, true);
+  assert.equal(itemOf(r, "openalex").keySource, "none");
+  assert.equal(itemOf(r, "pexels").usable, false, "a stock provider needs its key");
 
   process.env.ANTHROPIC_API_KEY = "env-anthropic-secret";
   process.env.TTS_GEMINI_MODEL = "gemini-2.5-flash-preview-tts";
@@ -209,7 +213,7 @@ test("GET: purposes with verdicts computed from what really works; the new shape
   const off = await putEnabled(s.cookie, "gemini", false);
   assert.equal(off.status, 200, off.text);
   r = await list(s.cookie);
-  assert.equal(purposeOf(r, "text").verdict, "single", "only Claude is left");
+  assert.equal(purposeOf(r, "text").verdict, "missing", "only Claude is left, and the direct text path cannot run without Gemini");
   assert.equal(purposeOf(r, "image").verdict, "missing", "image is required and nothing works without Gemini");
   assert.equal(itemOf(r, "gemini").usable, false);
   assert.equal(itemOf(r, "veo").usable, true, "Veo has its own switch and reads the Gemini env key");
@@ -217,6 +221,26 @@ test("GET: purposes with verdicts computed from what really works; the new shape
   assert.equal(itemOf(r, "pexels").billing, "free");
   assert.equal(itemOf(r, "gemini").billing, "paid");
   assert.equal(itemOf(r, "azure").billing, "free-tier");
+});
+
+test("GET: a purpose that requires Gemini is not enough with Claude alone; the voice slot knows Gemini voices need their model", { skip }, async () => {
+  const s = await session("owner");
+  process.env.ANTHROPIC_API_KEY = "env-anthropic-secret";
+  let r = await list(s.cookie);
+  assert.equal(purposeOf(r, "text").verdict, "missing", "Claude alone cannot run the direct text path");
+  assert.match(purposeOf(r, "text").detail, /Gemini/);
+  assert.equal(purposeOf(r, "image").verdict, "missing");
+  process.env.GEMINI_API_KEY = "env-gemini-secret-1234";
+  r = await list(s.cookie);
+  const tts = () => purposeOf(r, "tts").routes[0] as unknown as { usable: Record<string, boolean>; entries: Array<{ provider: string; usable: boolean }> };
+  assert.deepEqual(tts().usable, { azure: false, aisha: false, gemini: false }, "a Gemini key alone does not give a Gemini voice");
+  assert.equal(tts().entries.find((e) => e.provider === "gemini")!.usable, false);
+  process.env.TTS_GEMINI_MODEL = "gemini-2.5-flash-preview-tts";
+  r = await list(s.cookie);
+  assert.equal(tts().usable.gemini, true);
+  assert.equal(itemOf(r, "gemini").usable, true);
+  const text = purposeOf(r, "text").routes.find((x) => x.id === "llm.writer") as unknown as { usable: Record<string, boolean> };
+  assert.deepEqual(text.usable, { gemini: true, anthropic: true });
 });
 
 test("GET: slots carry source, entries with their state, the fallback and the model prices", { skip }, async () => {
@@ -372,6 +396,17 @@ test("the loader ignores unreadable rows: an unknown slot, a model that left the
   assert.equal(effective.effectiveRoute("llm.writer").source, "default", "the unreadable stored row never reaches the generation layer");
   assert.equal(effective.effectiveRoute("llm.judge").source, "db");
   assert.equal(routeResolve.getRoute("tts.order"), null);
+});
+
+test("the loader applies the routes only when no invalidation happened during the load", { skip }, async () => {
+  await query(`INSERT INTO ai_routes (route, entries) VALUES ('llm.judge', $1::jsonb)`, [JSON.stringify(JUDGE)]);
+  routeResolve.resetRouteSnapshot();
+  const racing = store.loadProviderAndRouteSnapshots();
+  resolve.invalidateProviderCache(); // an admin's write committed while the load was reading
+  await racing;
+  assert.equal(routeResolve.getRoute("llm.judge"), null, "stale routes from a load that raced an invalidation are discarded");
+  await store.loadProviderAndRouteSnapshots();
+  assert.deepEqual(routeResolve.getRoute("llm.judge"), JUDGE, "an undisturbed load applies them");
 });
 
 /* ───────────────────────────── free-provider counters ───────────────────────────── */

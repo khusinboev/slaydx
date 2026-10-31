@@ -28,6 +28,8 @@ export function keyState(item: ProviderItem): KeyState {
   }
   if (item.hasDbKey) return { tone: "success", label: item.keyHint ? `Bazada ${item.keyHint}` : "Bazada" };
   if (item.envPresent) return { tone: "info", label: "Serverda (env)" };
+  // OpenAlex and Google Books work without a key (a key only raises the quota).
+  if (item.keyless) return { tone: "neutral", label: "Kalitsiz ishlaydi" };
   return { tone: "neutral", label: "Yo'q" };
 }
 

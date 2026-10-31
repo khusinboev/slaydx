@@ -87,6 +87,7 @@ const item = (p: Partial<ProviderItem> & Pick<ProviderItem, "id" | "label">): Pr
   priceNote: "$2 kirish / $10 chiqish (1M token)",
   role: "Test provayder.",
   need: "optional",
+  keyless: false,
   keyUrl: null,
   purposes: [],
   breaker: null,
@@ -144,6 +145,7 @@ const PEXELS = item({
 });
 const AZURE = item({ id: "azure", label: "Azure Speech", kinds: ["tts"], billing: "free-tier", priceNote: "$16 / 1M belgi · oyiga 500 ming belgi bepul (F0 tarif)", purposes: ["tts"], usage: { ...GEMINI.usage, today: tot(0, 0), d7: tot(0, 0), d30: tot(0, 0), lastDay: null, kinds: [] } });
 const KLING = item({ id: "kling", label: "Kling (video)", kinds: ["video"], testable: false, purposes: ["video"] });
+const OPENALEX = item({ id: "openalex", label: "OpenAlex", kinds: ["research"], billing: "free", keyless: true, usable: true, need: "recommended", purposes: ["sources"], priceNote: "Bepul" });
 const ITEMS = [GEMINI, ANTHROPIC, PEXELS, AZURE, KLING];
 
 const entry = (provider: string, label: string, model: string | null, usable = true) => ({ provider, label, model, usable });
@@ -163,6 +165,7 @@ const WRITER: RouteItem = {
     { id: "anthropic", label: "Anthropic (Claude)" },
   ],
   models: MODELS,
+  usable: { gemini: true, anthropic: true },
   source: "env",
   entries: [entry("gemini", "Google Gemini", "gemini-3.7-flash")],
   fallbackEntries: [entry("gemini", "Google Gemini", "gemini-3.7-flash")],
@@ -181,6 +184,7 @@ const TTS_ORDER: RouteItem = {
     { id: "gemini", label: "Google Gemini" },
   ],
   models: [],
+  usable: { azure: false, gemini: true },
   source: "db",
   entries: [entry("azure", "Azure Speech", null, false), entry("gemini", "Google Gemini", null)],
   fallbackEntries: [entry("azure", "Azure Speech", null, false), entry("gemini", "Google Gemini", null)],
@@ -257,7 +261,7 @@ const routeOf = (id: string): HTMLElement => {
   return el;
 };
 const button = (name: string) => screen.getByRole("button", { name }) as HTMLButtonElement;
-const ready = async () => screen.findByText("Provayderlar va AI sozlamalari");
+const ready = async () => screen.findByText("Tizim holati"); // rendered only once the data is in
 const SECRET = "Zq7Kp9Xw3Lm5Rt8Vb2NcQ9ZZ";
 /** Testing Library collapses every whitespace run (so'm has a no-break space) before matching. */
 const norm = (t: string): string => t.replace(/\s+/g, " ");
@@ -271,6 +275,13 @@ test("keyProblem mirrors the server's key check", () => {
   assert.match(keyProblem("a".repeat(513)) ?? "", /uzun/);
   assert.match(keyProblem("abcd efgh ijkl") ?? "", /bo'sh joy/);
   assert.match(keyProblem("kalit-ўзбек-1234") ?? "", /ASCII/);
+});
+
+test("a keyless provider without a key works and says so", () => {
+  assert.deepEqual(keyState(OPENALEX), { tone: "neutral", label: "Kalitsiz ishlaydi" });
+  assert.equal(providerStatus(OPENALEX).label, "Ishlayapti");
+  assert.deepEqual(keyState({ ...OPENALEX, keyless: false }), { tone: "neutral", label: "Yo'q" }, "only a provider that really works without a key");
+  assert.equal(keyState({ ...OPENALEX, hasDbKey: true, keyHint: "…z9Y8", keySource: "db" }).label, "Bazada …z9Y8", "a stored key still shows");
 });
 
 test("keyState: Bazada …a1B2 / Serverda (env) / Yo'q / unreadable", () => {
@@ -537,7 +548,7 @@ test("chain editor guards: duplicates cannot be saved, the last row cannot be re
   assert.deepEqual(calls[1].body, { reason: "Eski holatga" });
 });
 
-test("model slot: one select, no reorder or add; voice order: reorder and add providers, warning when nothing works", async () => {
+test("model slot: one select, no list controls; voice order: every voice listed, reorder only", async () => {
   stubFetch([() => json(200, BODY)]);
   mount(h(ProvidersPage));
   await ready();
@@ -549,16 +560,59 @@ test("model slot: one select, no reorder or add; voice order: reorder and add pr
   const order = within(routeOf("tts.order"));
   assert.ok(order.getByText("Birinchi") && order.getByText("Zaxira 1"));
   assert.equal(routeOf("tts.order").querySelectorAll("select").length, 0, "voices have no models to pick");
+  assert.ok(!order.queryByRole("button", { name: /olib tashlash|qo'shish/ }), "an order has every provider; a provider is switched off with its own switch");
   assert.ok(!order.queryByText(/hech bir provayder hozir ishlamayapti/), "gemini still works");
   assert.ok(order.getByText(/Birinchi provayder ishlamayapti/), "azure first but down: say so");
   fireEvent.click(order.getByRole("button", { name: "Google Geminini yuqoriga" }));
   assert.equal(routeOf("tts.order").querySelector("[data-entry='0']")!.textContent?.includes("Google Gemini"), true);
   assert.ok(!order.queryByText(/Birinchi provayder ishlamayapti/), "a working one leads now");
-  assert.equal((order.getByRole("button", { name: "Provayder qo'shish" }) as HTMLButtonElement).disabled, true, "every allowed provider is listed");
+});
+
+test("a stored voice order that lists only some voices shows all of them; the unlisted run last", async () => {
+  const partial: RouteItem = { ...TTS_ORDER, entries: [entry("gemini", "Google Gemini", null)] };
+  stubFetch([() => json(200, { ...BODY, purposes: [{ ...TTS, routes: [partial] }] })]);
+  mount(h(ProvidersPage));
+  await ready();
+  const rows = [...routeOf("tts.order").querySelectorAll("[data-entry]")].map((e) => e.textContent ?? "");
+  assert.equal(rows.length, 2);
+  assert.ok(rows[0].includes("Google Gemini") && rows[1].includes("Azure Speech"), rows.join(" | "));
+  assert.equal((within(routeOf("tts.order")).getByRole("button", { name: "Saqlash" }) as HTMLButtonElement).disabled, true, "showing the full list is not a change");
+});
+
+test("a value from the server's env that is outside the price book stays visible, is flagged and cannot be saved", async () => {
+  const odd: RouteItem = { ...WRITER, entries: [entry("gemini", "Google Gemini", "gemini-2.5-flash")], fallbackEntries: [entry("gemini", "Google Gemini", "gemini-2.5-flash")] };
+  stubFetch([() => json(200, { ...BODY, purposes: [{ ...TEXT, routes: [odd] }] })]);
+  mount(h(ProvidersPage));
+  await ready();
+  fireEvent.click(within(purposeOf("text")).getByRole("button", { name: /Sozlash/ }));
+  const editor = within(routeOf("llm.writer"));
+  const select = editor.getByLabelText("Yozuvchi: 1-qator") as HTMLSelectElement;
+  assert.equal(select.value, "gemini|gemini-2.5-flash", "the real value is selected, not silently the first option");
+  assert.ok([...select.options].some((o) => o.textContent?.includes("narxsiz")));
+  assert.match(routeOf("llm.writer").querySelector("[data-unpriced]")!.textContent ?? "", /gemini-2\.5-flash.*saqlab bo'lmaydi/);
+  fireEvent.click(editor.getByRole("button", { name: "Zaxira qo'shish" }));
+  assert.equal((editor.getByRole("button", { name: "Saqlash" }) as HTMLButtonElement).disabled, true, "an unpriced model blocks saving");
+  fireEvent.change(select, { target: { value: "gemini|gemini-3.1-pro" } });
+  assert.ok(!routeOf("llm.writer").querySelector("[data-unpriced]"), "choosing a priced model clears the warning");
+  assert.equal((editor.getByRole("button", { name: "Saqlash" }) as HTMLButtonElement).disabled, false);
+});
+
+test("rows keep their identity while edited or moved, so keyboard focus survives", async () => {
+  stubFetch([() => json(200, BODY)]);
+  mount(h(ProvidersPage));
+  await ready();
+  fireEvent.click(within(purposeOf("text")).getByRole("button", { name: /Sozlash/ }));
+  const editor = within(routeOf("llm.writer"));
+  fireEvent.click(editor.getByRole("button", { name: "Zaxira qo'shish" }));
+  const second = editor.getByLabelText("Yozuvchi: 2-qator") as HTMLSelectElement;
+  fireEvent.change(second, { target: { value: "anthropic|claude-sonnet-5" } });
+  assert.ok(editor.getByLabelText("Yozuvchi: 2-qator") === second, "changing a value does not remount its select");
+  fireEvent.click(editor.getByRole("button", { name: "Anthropic (Claude)ni yuqoriga" }));
+  assert.ok(editor.getByLabelText("Yozuvchi: 1-qator") === second, "moving a row moves the same element");
 });
 
 test("a chain with no working provider is called out", async () => {
-  const dead: RouteItem = { ...WRITER, entries: [entry("anthropic", "Anthropic (Claude)", "claude-sonnet-5", false)] };
+  const dead: RouteItem = { ...WRITER, usable: { gemini: true, anthropic: false }, entries: [entry("anthropic", "Anthropic (Claude)", "claude-sonnet-5", false)] };
   const items = ITEMS.map((i) => (i.id === "anthropic" ? { ...i, usable: false } : i));
   stubFetch([() => json(200, { ...BODY, items, purposes: [{ ...TEXT, verdict: "missing", headline: "Yetarli emas", routes: [dead] }] })]);
   mount(h(ProvidersPage));

@@ -74,6 +74,8 @@ export type ProviderItem = {
   /** What the product uses it for, one sentence. */
   role: string;
   need: ProviderNeed;
+  /** Works without a key (a key only raises the quota). */
+  keyless: boolean;
   keyUrl: string | null;
   purposes: PurposeId[];
   /** A circuit breaker of this provider is open: requests are skipped until `openUntil`. */
@@ -93,6 +95,8 @@ export type RouteItem = {
   max: number;
   providers: { id: string; label: string }[];
   models: ModelOption[];
+  /** For each allowed provider: can it serve this slot right now. */
+  usable: Record<string, boolean>;
   /** `db` = the admin's choice, `env` = the server's environment variable, `default` = built in. */
   source: RouteSource;
   entries: RouteEntryState[];

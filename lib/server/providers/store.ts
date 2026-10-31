@@ -8,6 +8,7 @@ import { checkRoute, isRouteId, type RouteEntry } from "./routes";
 import {
   PROVIDER_CACHE_TTL_MS,
   invalidateProviderCache,
+  providerCacheVersion,
   primeProviderKeys,
   registerProviderSource,
   type ProviderRuntime,
@@ -81,14 +82,26 @@ export async function loadRouteSnapshot(): Promise<ReadonlyMap<string, readonly 
   return out;
 }
 
-/** The loader `resolve.ts` calls: provider keys plus the routing slots, in one refresh cycle. */
+let lastRouteWarnAt = 0;
+
+/**
+ * The loader `resolve.ts` calls: provider keys plus the routing slots, in one refresh cycle. The routes are applied only
+ * when no invalidation happened meanwhile (the same rule `resolve.ts` applies to the provider snapshot): a load that read
+ * before an admin's COMMIT and finishes after the forced reload must not put stale routes back for a whole TTL.
+ */
 export async function loadProviderAndRouteSnapshots(): Promise<ProviderSnapshot> {
+  const version = providerCacheVersion();
   const providers = await loadProviderSnapshot();
   try {
-    setRouteSnapshot(await loadRouteSnapshot());
+    const routes = await loadRouteSnapshot();
+    if (providerCacheVersion() === version) setRouteSnapshot(routes);
   } catch (e) {
-    // A failing route read keeps the previous routes; provider keys must still refresh.
-    log("warn", "[providers] ai_routes o'qib bo'lmadi: oxirgi qiymatlar ishlatiladi", { err: e });
+    // A failing route read keeps the previous routes; provider keys must still refresh. Logged at most once a minute.
+    const now = Date.now();
+    if (now - lastRouteWarnAt > 60_000) {
+      lastRouteWarnAt = now;
+      log("warn", "[providers] ai_routes o'qib bo'lmadi: oxirgi qiymatlar ishlatiladi", { err: e });
+    }
   }
   return providers;
 }

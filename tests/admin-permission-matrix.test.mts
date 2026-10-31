@@ -547,6 +547,7 @@ function paramsFor(e: Entry, role: Role | null): Record<string, string> {
     else if (/^(generations|orders|moderation\/game-links|moderation\/game-results)\/\[id\]/.test(e.rel)) value = randomUUID();
     else if (e.rel.startsWith("settings/[key]")) value = "no_such_setting";
     else if (e.rel.startsWith("providers/[id]")) value = "no_such_provider";
+    else if (e.rel.startsWith("providers/routes/[id]")) value = "no.such.route";
     else if (e.rel.startsWith("pricing/[toolId]")) value = PRICING_TOOL_ID;
     assert.ok(value !== null, `${e.rel}: no fixture value for dynamic segment [${name}] — extend paramsFor()`);
     out[name] = value;

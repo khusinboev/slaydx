@@ -196,6 +196,8 @@ export async function requestGeminiImage(ask: ImageAsk, deadline?: number): Prom
   const budget = requestBudget(deadline, GEMINI_IMAGE_CAP_MS);
   if (budget === null) return { ok: false, reason: "timeout", detail: "byudjet 2 s dan kam" };
 
+  // Read once: a snapshot refresh between the request and the cost record must not bill another model.
+  const model = geminiImageModel();
   try {
     const res = await fetch(GEMINI_IMAGE_URL, {
       method: "POST",
@@ -205,7 +207,7 @@ export async function requestGeminiImage(ask: ImageAsk, deadline?: number): Prom
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: geminiImageModel(),
+        model,
         input: geminiInputParts(ask),
         response_format: {
           type: "image",
@@ -262,7 +264,7 @@ export async function requestGeminiImage(ask: ImageAsk, deadline?: number): Prom
      * `mime_type` yuborsa ham PNG/JPEG bo'lmagan bayt o'tmaydi.
      */
     // Pullik rasm — ish sarfiga (EXT-11; kontekstdan tashqarida no-op).
-    recordImage("gemini", geminiImageModel());
+    recordImage("gemini", model);
     return {
       ok: true,
       image: { url: `data:${part.mime};base64,${part.data}`, alt: ask.prompt.slice(0, 80) },

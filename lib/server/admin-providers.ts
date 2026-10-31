@@ -73,6 +73,8 @@ export type AdminProviderItem = {
   /** What the product uses it for, one sentence. */
   role: string;
   need: Need;
+  /** Works without a key (a key only raises the quota): «Kalit yo'q» does not mean «ishlamaydi». */
+  keyless: boolean;
   keyUrl: string | null;
   /** The purposes (`AdminPurposeItem.id`) this provider takes part in. */
   purposes: PurposeId[];
@@ -82,6 +84,17 @@ export type AdminProviderItem = {
 };
 
 export type AdminRouteEntryState = RouteEntry & { label: string; usable: boolean };
+
+/**
+ * Can `item` serve the purpose a routing slot belongs to? The provider's own `usable`, except where the purpose needs
+ * more: Gemini voices are a preview model that stays off until `TTS_GEMINI_MODEL` is set. Shared by the purpose verdict,
+ * the slot editor and the entry states, so the page never contradicts itself.
+ */
+export function usableFor(purposeOrRoute: PurposeId | RouteId, item: Pick<AdminProviderItem, "id" | "usable"> | undefined): boolean {
+  if (!item?.usable) return false;
+  if ((purposeOrRoute === "tts" || purposeOrRoute === "tts.order") && item.id === "gemini") return Boolean(geminiTtsModel());
+  return true;
+}
 
 export type AdminRouteItem = {
   id: RouteId;
@@ -93,6 +106,8 @@ export type AdminRouteItem = {
   providers: { id: ProviderId; label: string }[];
   /** Selectable models with their price (empty for the voice order). */
   models: ModelOption[];
+  /** For each allowed provider: can it serve this slot right now (the editor's «Ishlayapti» badge). */
+  usable: Record<string, boolean>;
   /** `db` = the admin's choice, `env` = the server's environment variable, `default` = built in. */
   source: RouteSource;
   entries: AdminRouteEntryState[];
@@ -200,8 +215,8 @@ function toItem(id: ProviderId, row: DbRow | undefined, ctx: ItemCtx): AdminProv
   const unreadable = hasDbKey && !isReadable(id, row!.key_ciphertext!);
   const envPresent = hasEnvKey(id);
   const keySource = !enabled ? "none" : hasDbKey && !unreadable ? "db" : envPresent ? "env" : "none";
-  // Azure Speech is a key plus a region: without the region it cannot synthesise.
-  const usable = keySource !== "none" && (id !== "azure" || Boolean(azureRegion()));
+  // A keyless provider (OpenAlex, Google Books) works switched on without a key; Azure Speech is a key plus a region.
+  const usable = enabled && (keySource !== "none" || meta.keyless) && (id !== "azure" || Boolean(azureRegion()));
   return {
     id,
     label: def.label,
@@ -222,6 +237,7 @@ function toItem(id: ProviderId, row: DbRow | undefined, ctx: ItemCtx): AdminProv
     priceNote: meta.priceNote,
     role: meta.role,
     need: meta.need,
+    keyless: meta.keyless,
     keyUrl: meta.keyUrl,
     purposes: PURPOSES.filter((pu) => pu.providers.includes(id) || pu.premium.includes(id)).map((pu) => pu.id),
     breaker: breakerOf(id, ctx.system),
@@ -268,9 +284,9 @@ async function readRouteRows(): Promise<Map<string, RouteRow>> {
   return new Map(rows.map((r) => [r.route, r]));
 }
 
-function entryState(e: RouteEntry, items: ReadonlyMap<string, AdminProviderItem>): AdminRouteEntryState {
+function entryState(routeId: RouteId, e: RouteEntry, items: ReadonlyMap<string, AdminProviderItem>): AdminRouteEntryState {
   const it = items.get(e.provider);
-  return { ...e, label: it?.label ?? e.provider, usable: it?.usable ?? false };
+  return { ...e, label: it?.label ?? e.provider, usable: usableFor(routeId, it) };
 }
 
 function routeItem(id: RouteId, items: ReadonlyMap<string, AdminProviderItem>, rows: ReadonlyMap<string, RouteRow>): AdminRouteItem {
@@ -286,9 +302,10 @@ function routeItem(id: RouteId, items: ReadonlyMap<string, AdminProviderItem>, r
     max: spec.max,
     providers: spec.providers.map((p) => ({ id: p, label: providerDef(p)?.label ?? p })),
     models: modelOptions(id),
+    usable: Object.fromEntries(spec.providers.map((p) => [p, usableFor(id, items.get(p))])),
     source: eff.source,
-    entries: eff.entries.map((e) => entryState(e, items)),
-    fallbackEntries: effectiveRoute(id, process.env, { ignoreStored: true }).entries.map((e) => entryState(e, items)),
+    entries: eff.entries.map((e) => entryState(id, e, items)),
+    fallbackEntries: effectiveRoute(id, process.env, { ignoreStored: true }).entries.map((e) => entryState(id, e, items)),
     updatedBy: row ? (row.updated_by_name?.trim() || null) : null,
     updatedAt: row ? new Date(row.updated_at).toISOString() : null,
   };
@@ -297,13 +314,7 @@ function routeItem(id: RouteId, items: ReadonlyMap<string, AdminProviderItem>, r
 async function buildPurposes(items: ReadonlyMap<string, AdminProviderItem>, rows: ReadonlyMap<string, RouteRow>): Promise<AdminPurposeItem[]> {
   const out: AdminPurposeItem[] = [];
   for (const pu of PURPOSES) {
-    const usable = pu.providers.filter((id) => {
-      const it = items.get(id);
-      if (!it?.usable) return false;
-      // Gemini voices are a preview model that stays off until TTS_GEMINI_MODEL is set.
-      if (pu.id === "tts" && id === "gemini") return Boolean(geminiTtsModel());
-      return true;
-    });
+    const usable = pu.providers.filter((id) => usableFor(pu.id, items.get(id)));
     const labelOf = (id: ProviderId) => items.get(id)?.label ?? id;
     let v = purposeVerdict(pu, usable, labelOf);
     let setting: AdminPurposeItem["setting"] = null;

@@ -33,7 +33,6 @@ export function PurposeCard({
   const [open, setOpen] = useState(purpose.verdict === "missing" || purpose.verdict === "single");
   const Icon = VERDICT_ICON[purpose.verdict];
   const need = NEED[purpose.need];
-  const providerUsable = Object.fromEntries(Object.values(providers).map((p) => [p.id, p.usable]));
   const hasRoutes = purpose.routes.length > 0;
   const panelId = `purpose-${purpose.id}-panel`;
   const chips = [...purpose.providerIds, ...purpose.premiumIds];
@@ -112,7 +111,6 @@ export function PurposeCard({
                   key={`${r.id}:${r.source}:${r.entries.map((e) => `${e.provider}/${e.model ?? ""}`).join(",")}`}
                   route={r}
                   canEdit={canEdit}
-                  providerUsable={providerUsable}
                   propagationSec={propagationSec}
                   onChanged={onChanged}
                 />
