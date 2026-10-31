@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ComponentType } from "react";
-import { ChevronRight, CreditCard, Phone, Smartphone, Wallet } from "lucide-react";
+import { ChevronRight, CreditCard, Landmark, Phone, Smartphone, Wallet } from "lucide-react";
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { useNav } from "@/components/nav/NavProvider";
@@ -18,6 +18,7 @@ import { useDialog } from "./useDialog";
 import { AmountField } from "./pay/AmountField";
 import { CardStep } from "./pay/CardStep";
 import { PhoneStep } from "./pay/PhoneStep";
+import { PaynetStep } from "./pay/PaynetStep";
 import { WaitStep, type WaitSource } from "./pay/WaitStep";
 import { sectionLabel, textBtn } from "./pay/ui";
 
@@ -26,7 +27,7 @@ const methodBtn =
 
 export { TOPUP_PRESETS, DEFAULT_TOPUP, PAY_RETURN_PATH, openPay } from "./pay-amount";
 
-type View = "home" | "card" | "phone" | "wait";
+type View = "home" | "card" | "phone" | "wait" | "paynet";
 
 type ClickOrder = { id: string; amount: number; method: ClickMethod; checkoutUrl: string };
 
@@ -35,6 +36,7 @@ const TITLES: Record<View, string> = {
   card: "Karta orqali to'lash",
   phone: "Telefon raqam orqali",
   wait: "To'lov",
+  paynet: "Paynet orqali to'lash",
 };
 
 /**
@@ -50,6 +52,10 @@ const TITLES: Record<View, string> = {
  * sozlanmagan bo'lsa (`features.payments.clickDirect`) faqat oddiy «Click» tugmasi chiqadi.
  *
  * Redesign W5 (variant A): telefonda pastki varaq, kompyuterda markazdagi dialog.
+ *
+ * Paynet (owner 2026-10-31): summa tanlangach Click bilan bir qatorda «Paynet» usuli — buyurtma
+ * yaratilmaydi (Paynet agentda to'lanadi, hisobni Paynet chaqiruvi to'ldiradi), `PaynetStep` summa,
+ * SlaydX ID va ilova tugmasini ko'rsatadi. Faqat server Paynet'ni sozlagan bo'lsa (`features.payments.paynet`).
  */
 export function PayDialog() {
   const open = useUi((s) => s.overlay === "pay");
@@ -57,6 +63,7 @@ export function PayDialog() {
   const openUi = useUi((s) => s.open);
   const loggedIn = useAppStore((s) => s.loggedIn);
   const features = useAppStore((s) => s.features);
+  const user = useAppStore((s) => s.user);
 
   const amount = usePayAmount((s) => s.amount);
   const setAmount = usePayAmount((s) => s.setAmount);
@@ -87,8 +94,20 @@ export function PayDialog() {
   const clickOn = features?.payments.click ?? false;
   const directOn = clickOn && features?.payments.clickDirect === true;
   const paymeOn = features?.payments.payme ?? false;
-  const anyEnabled = clickOn || paymeOn;
+  const paynetOn = features?.payments.paynet === true;
+  const anyEnabled = clickOn || paymeOn || paynetOn;
   const amountErr = topupAmountError(amount);
+
+  function openPaynet() {
+    // `user` (the ID shown) can still be loading right after sign-in: stay on the list rather than open an empty step.
+    if (needLogin() || amountErr || !user) return;
+    setError(null);
+    setView("paynet");
+  }
+
+  const paynetRow = paynetOn ? (
+    <MethodRow method="paynet" icon={Landmark} title="Paynet" hint="Paynet ilovasi, terminal yoki kassa orqali" busy={busy} disabled={busy !== null || !!amountErr} onClick={openPaynet} />
+  ) : null;
 
   function needLogin(): boolean {
     if (loggedIn) return false;
@@ -197,6 +216,8 @@ export function PayDialog() {
           />
         ) : null}
 
+        {view === "paynet" && user ? <PaynetStep userId={user.id} amount={amount} appUrl={features?.payments.paynetUrl ?? null} onBack={back} /> : null}
+
         {view === "home" ? (
           <>
             <p className="text-muted-foreground mb-5 text-[14.5px] leading-snug">
@@ -221,32 +242,38 @@ export function PayDialog() {
                 {paymeOn ? (
                   <MethodRow method="payme" icon={Wallet} title="Payme" hint="Payme to'lov sahifasiga o'tasiz" busy={busy} disabled={busy !== null || !!amountErr} onClick={() => void payViaPage("payme", "payme")} />
                 ) : null}
+                {paynetRow}
               </div>
             ) : (
               // Merchant API not configured: the plain Click page button (the pre-2026-10-09 flow).
-              <div className="grid grid-cols-2 gap-2" data-pay-methods>
-                {clickOn ? (
-                  <button
-                    type="button"
-                    data-pay-method="click"
-                    disabled={busy !== null || !!amountErr}
-                    onClick={() => void payViaPage("click", "click")}
-                    className={cn(methodBtn, "bg-primary text-primary-foreground hover:brightness-95", !paymeOn && "col-span-2")}
-                  >
-                    {busy === "click" ? "Ochilmoqda..." : "Click"}
-                  </button>
+              <div className="flex flex-col gap-2" data-pay-methods>
+                {clickOn || paymeOn ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {clickOn ? (
+                      <button
+                        type="button"
+                        data-pay-method="click"
+                        disabled={busy !== null || !!amountErr}
+                        onClick={() => void payViaPage("click", "click")}
+                        className={cn(methodBtn, "bg-primary text-primary-foreground hover:brightness-95", !paymeOn && "col-span-2")}
+                      >
+                        {busy === "click" ? "Ochilmoqda..." : "Click"}
+                      </button>
+                    ) : null}
+                    {paymeOn ? (
+                      <button
+                        type="button"
+                        data-pay-method="payme"
+                        disabled={busy !== null || !!amountErr}
+                        onClick={() => void payViaPage("payme", "payme")}
+                        className={cn(methodBtn, "bg-primary text-primary-foreground hover:brightness-95", !clickOn && "col-span-2")}
+                      >
+                        {busy === "payme" ? "Ochilmoqda..." : "Payme"}
+                      </button>
+                    ) : null}
+                  </div>
                 ) : null}
-                {paymeOn ? (
-                  <button
-                    type="button"
-                    data-pay-method="payme"
-                    disabled={busy !== null || !!amountErr}
-                    onClick={() => void payViaPage("payme", "payme")}
-                    className={cn(methodBtn, "bg-primary text-primary-foreground hover:brightness-95", !clickOn && "col-span-2")}
-                  >
-                    {busy === "payme" ? "Ochilmoqda..." : "Payme"}
-                  </button>
-                ) : null}
+                {paynetRow}
               </div>
             )}
 

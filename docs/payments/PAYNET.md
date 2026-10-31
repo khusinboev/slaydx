@@ -61,7 +61,7 @@ Contract for the vakant3 side: it receives exactly what Paynet sent (including t
 Go-live checklist: `PAYNET_ALLOWED_IPS` set (needs `TRUST_PROXY=true`, nginx `X-Forwarded-For`), `runtimeWarnings` flags an empty list, a missing TRUST_PROXY and overlapping serviceIds.
 
 ## UI
-Wallet: a «Paynet orqali to'lash» card (only when Paynet is configured) showing the user's SlaydX ID with a copy button and 3 short steps (Paynet agent → service «SlaydX» → enter the ID).
+Wallet (owner 2026-10-31): the top-up dialog (`PayDialog`) lists «Paynet» next to the Click/Payme methods (only when Paynet is configured); after the amount is chosen it opens the Paynet step (`components/overlays/pay/PaynetStep.tsx`): the amount, the user's SlaydX ID with a copy button and 3 short steps (Paynet app/terminal → service «SlaydX» → enter the ID and pay the amount). No order is created — Paynet's own call credits the wallet. The former standalone wallet card was removed.
 Admin: provider `Paynet` everywhere providers appear (labels, filters, revenue by provider, order search / settle-ref matching, exports, bot admin stats if provider-specific).
 
 ## Shared service with Bandlik.uz — ONE Paynet service (owner 2026-10-30)
@@ -84,4 +84,4 @@ Methods: GetInformation, PerformTransaction (idempotent by `transactionId`: a re
 answer within ~400 ms (our relay adds ~20–50 ms to Paynet's 500 ms budget). The Bandlik repo is not touched from here.
 
 ## Wallet / bot
-`PAYNET_APP_URL` (https only, shown only while Paynet is live): wallet card button «Paynet ilovasida to'lash» and, in the bot wallet, the SlaydX ID block + «Paynet'da to'lash» button.
+`PAYNET_APP_URL` (https only, shown only while Paynet is live): Paynet step button «Paynet ilovasida to'lash» in the top-up dialog and, in the bot wallet, the SlaydX ID block + «Paynet'da to'lash» button.
