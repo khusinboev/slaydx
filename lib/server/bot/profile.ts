@@ -89,7 +89,7 @@ export function creditTotal(user: Pick<ProfileUser, "points" | "quota" | "balanc
   return (Number(user.points) || 0) + (Number(user.quota) || 0) + (Number(user.balance) || 0);
 }
 
-export function profileCard(user: ProfileUser, lang: Lang, inviteLink: string | null): Screen {
+export function profileCard(user: ProfileUser, lang: Lang, inviteLink: string | null, ambassadorPercent = 0): Screen {
   const line = (icon: IconKey, label: string, value: string) => `${tgEmoji(icon)} ${label}: ${value || DASH}`;
   const study = studySummary(user, lang);
   const work = workSummary(user);
@@ -125,6 +125,8 @@ export function profileCard(user: ProfileUser, lang: Lang, inviteLink: string | 
         wallet ? inlineButton("wallet", t(lang, "btn.wallet"), { web_app: { url: wallet } }) : null,
       ],
       [inviteLink ? inlineButton("link", t(lang, "btn.copyInvite"), { copy_text: { text: inviteLink.slice(0, 256) } }) : null],
+      // The ambassador programme lives on the invite screen: one tap from the profile (discoverability).
+      [ambassadorPercent > 0 ? inlineButton("gift", `${t(lang, "ambassador.title")} · ${ambassadorPercent} %`, { callback_data: cb.invite() }) : null],
       [inlineButton("lang", t(lang, "btn.lang"), { callback_data: cb.langMenu("p") })],
       [full ? inlineButton("app", t(lang, "btn.openFull"), { web_app: { url: full } }, "primary") : null],
     ),

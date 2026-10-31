@@ -112,7 +112,7 @@ function bonusTasks() {
     referral: { link: "https://t.me/slaydx_test_bot?start=ref_abcdefgh", rewardPoints: 2000, invitedCount: 3, earnedPoints: 6000 },
     signupPoints: 2000,
     paymentBonus: { percent: 10, earnedPoints: 0 },
-    rating: { done: false, points: 500 },
+    rating: { done: false, points: 500, eligible: true },
     earnedTotal: 10000,
     availableTotal: 8000,
   };
@@ -311,6 +311,7 @@ test("callback codes: round trip, ≤ 64 bytes, unknown/forged codes rejected", 
     codes.cb.bonus(),
     codes.cb.bonusRefresh(),
     codes.cb.bonusDone(),
+    codes.cb.ratingLocked(),
     codes.cb.bonusCheck("1"),
     codes.cb.bonusCheck("999999999999999999"),
     ...codes.SECTIONS.map((s) => codes.cb.section(s)),
@@ -810,13 +811,51 @@ test("rating task on the bonuses screen: opens the profile card, green once rate
   assert.ok(open, "task present");
   assert.equal(open!.text, "⭐ Ilovani baholash · +500 so‘m");
   assert.deepEqual((open as { web_app?: { url: string } }).web_app, { url: "https://slaydx.test/uz/profile#rating" });
-  const done = kbRows(bonus.bonusScreen("uz", { ...bonusTasks(), rating: { done: true, points: 500 } }, BONUS_NOW)).flat().find((b) => b.text.includes("Ilovani baholadingiz"));
+  const done = kbRows(bonus.bonusScreen("uz", { ...bonusTasks(), rating: { done: true, points: 500, eligible: true } }, BONUS_NOW)).flat().find((b) => b.text.includes("Ilovani baholadingiz"));
   assert.ok(done, "done state");
   assert.equal(done!.text, "✅ Ilovani baholadingiz · +500 so‘m");
   assert.equal(done!.style, "success");
   assert.equal(done!.callback_data, "b:d");
-  assert.ok(!labels(bonus.bonusScreen("uz", { ...bonusTasks(), rating: { done: false, points: 0 } }, BONUS_NOW)).some((l) => l.includes("baholash")));
+  assert.ok(!labels(bonus.bonusScreen("uz", { ...bonusTasks(), rating: { done: false, points: 0, eligible: true } }, BONUS_NOW)).some((l) => l.includes("baholash")));
   assert.ok(labels(bonus.bonusScreen("ru", bonusTasks(), BONUS_NOW)).some((l) => l.includes("Оценить приложение")));
+});
+
+test("rating task without a finished generation explains itself instead of opening a locked card (owner report 2026-10-31)", () => {
+  const tasks = { ...bonusTasks(), rating: { done: false, points: 500, eligible: false } };
+  for (const lang of ["uz", "ru", "en"] as const) {
+    const b = kbRows(bonus.bonusScreen(lang, tasks, BONUS_NOW)).flat().find((x) => x.callback_data === codes.cb.ratingLocked());
+    assert.ok(b, `${lang}: tap target present`);
+    assert.equal((b as { web_app?: unknown }).web_app, undefined, "no web_app button for an ineligible user");
+  }
+  assert.deepEqual(codes.parseCallback("b:g"), { kind: "ratingLocked" });
+  assert.equal(codes.parseCallback("b:g:1").kind, "unknown");
+  assert.match(i18n.t("uz", "toast.ratingLocked"), /hujjat yarating/);
+});
+
+test("«Elchi dasturi» is findable in the bot: referral screen block + profile button, hidden while the percent is 0", () => {
+  const ref = { link: "https://t.me/slaydx_test_bot?start=ref_abcdefgh", rewardPoints: 1000, invitedCount: 3, earnedPoints: 6000, code: "abcdefgh", ambassadorEarned: 12500 };
+  for (const lang of ["uz", "ru", "en"] as const) {
+    const on = scr.referralScreen(lang, { ...ref, ambassadorPercent: 15 }, null).text;
+    assert.match(on, /15 %/, `${lang}: percent`);
+    assert.match(on, /<code>abcdefgh<\/code>/, `${lang}: code`);
+    assert.match(on, /12\s500/, `${lang}: ambassador earnings`);
+    assert.equal(scr.referralScreen(lang, { ...ref, ambassadorPercent: 0 }, null).text.includes("abcdefgh</code>"), false, `${lang}: off => no block`);
+  }
+  assert.match(scr.referralScreen("uz", { ...ref, ambassadorPercent: 15 }, null).text, /Elchi dasturi/);
+  const btn = kbRows(prof.profileCard(USER, "uz", ref.link, 15)).flat().find((b) => b.callback_data === codes.cb.invite());
+  assert.ok(btn && /Elchi dasturi · 15 %/.test(btn.text), "profile has the Elchi button");
+  assert.ok(!kbRows(prof.profileCard(USER, "uz", ref.link, 0)).flat().some((b) => b.callback_data === codes.cb.invite()), "off => no button");
+});
+
+test("«Qattiqqo‘l domla» is findable from the bot help while domla.enabled, hidden when off (owner report 2026-10-31)", () => {
+  for (const lang of ["uz", "ru", "en"] as const) {
+    const on = scr.helpScreen(lang, { domla: true });
+    assert.match(on.text, /\/domla/, `${lang}: help names /domla`);
+    assert.ok(kbRows(on).flat().some((b) => b.callback_data === codes.cb.domlaList()), `${lang}: help has the domla button`);
+    const off = scr.helpScreen(lang);
+    assert.ok(!/\/domla/.test(off.text), `${lang}: off => no mention`);
+    assert.ok(!kbRows(off).flat().some((b) => b.callback_data === codes.cb.domlaList()), `${lang}: off => no button`);
+  }
 });
 
 test("ledger title of the rating bonus in 3 languages", () => {

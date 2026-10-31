@@ -99,7 +99,7 @@ export type BonusTasks = {
    */
   paymentBonus: { percent: number; earnedPoints: number };
   /** «Ilovani baholash» (lib/server/ratings.ts): `done` once rated; `points` = the bonus paid (done) or on offer. */
-  rating: { done: boolean; points: number };
+  rating: { done: boolean; points: number; /** At least one finished generation (the rating needs it); false = the bot explains instead of opening the card. */ eligible: boolean };
   /** Bonus earned so far: sign-up + channel tasks + invites + payment bonuses (the screen's summary). */
   earnedTotal: number;
   /**
@@ -175,7 +175,7 @@ export async function bonusTasks(
   const signupPoints = Math.max(0, Number(signupRow?.p ?? 0));
   const paymentBonus = { percent: await getPaymentBonusPercent(), earnedPoints: await paymentBonusEarned(userId) };
   const rs = await getRatingStatus(userId);
-  const rating = { done: rs.rated, points: rs.rewardPoints };
+  const rating = { done: rs.rated, points: rs.rewardPoints, eligible: rs.hasFinished };
   const s = await referralSummary(userId, links ?? { botUsername: await botUsername(), appUrl: env.appUrl });
   const referral = { link: s.botLink ?? s.webLink, rewardPoints: s.rewardPoints, invitedCount: s.invitedCount, earnedPoints: s.earnedPoints };
   const channels: ChannelTask[] = rows.map((r) => ({

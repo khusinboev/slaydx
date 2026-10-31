@@ -107,6 +107,8 @@ function topupButton(lang: Lang, b: BonusTasks["paymentBonus"]): InlineButton | 
 function ratingButton(lang: Lang, r: BonusTasks["rating"]): InlineButton | null {
   if (r.done) return inlineButton("save", t(lang, "rating.done", { n: buttonSom(lang, r.points) }), { callback_data: cb.bonusDone() }, "success");
   if (!(r.points > 0)) return null;
+  // No finished generation yet: the web card would refuse, so the tap explains why instead of opening a locked form.
+  if (!r.eligible) return inlineButton("star", t(lang, "rating.task", { n: buttonSom(lang, r.points) }), { callback_data: cb.ratingLocked() });
   const profile = appUrl("/uz/profile#rating");
   return profile ? inlineButton("star", t(lang, "rating.task", { n: buttonSom(lang, r.points) }), { web_app: { url: profile } }) : null;
 }

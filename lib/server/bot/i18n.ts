@@ -501,6 +501,12 @@ const T = {
     ru: "{p} % бонусных сум с каждого платежа ваших друзей",
     en: "{p} % bonus UZS from every payment your friends make",
   },
+  "ambassador.title": { uz: "Elchi dasturi", ru: "Программа «Посол»", en: "Ambassador programme" },
+  "ambassador.block": {
+    uz: "<b>🏅 Elchi dasturi</b>\nDo'stingiz sizning havolangiz orqali kirib to'lov qilsa — har to'lovdan <b>{p} %</b> bonus so'm sizga (muddatsiz, avtomatik; pulga yechib bo'lmaydi).\nKodingiz: <code>{code}</code>\nDo'stlar: <b>{a}</b> · Elchi bonusi: <b>{b} bonus so'm</b>",
+    ru: "<b>🏅 Программа «Посол»</b>\nЕсли друг зашёл по вашей ссылке и пополнил баланс — вы получаете <b>{p} %</b> бонусных сум с каждого платежа (без срока, автоматически; вывести деньгами нельзя).\nВаш код: <code>{code}</code>\nДрузей: <b>{a}</b> · Бонус посла: <b>{b} бонусных сум</b>",
+    en: "<b>🏅 Ambassador programme</b>\nWhen a friend joins via your link and tops up, you get <b>{p} %</b> bonus UZS of every payment (no time limit, automatic; cannot be cashed out).\nYour code: <code>{code}</code>\nFriends: <b>{a}</b> · Ambassador bonus: <b>{b} bonus UZS</b>",
+  },
   "ambassador.dm": {
     uz: "🎉 Siz taklif qilgan do'stingiz to'lov qildi — sizga +{n} bonus so'm!",
     ru: "🎉 Приглашённый вами друг совершил оплату — вам +{n} бонусных сум!",
@@ -525,6 +531,11 @@ const T = {
     en: "Thanks for staying in «{c}» for {d} days! The bonus is in your wallet.",
   },
   "toast.bonusPaid": { uz: "🎉 +{n}!", ru: "🎉 +{n}!", en: "🎉 +{n}!" },
+  "toast.ratingLocked": {
+    uz: "Baholash uchun avval kamida bitta hujjat yarating — tayyor bo‘lgach baholab, bonus olasiz.",
+    ru: "Чтобы оценить приложение, сначала создайте хотя бы один документ — после готовности оцените и получите бонус.",
+    en: "To rate the app, first create at least one document — rate it once it is ready and get the bonus.",
+  },
   "toast.bonusDone": { uz: "✅ Bajarilgan", ru: "✅ Выполнено", en: "✅ Done" },
   "toast.bonusRefreshed": { uz: "Yangilandi", ru: "Обновлено", en: "Updated" },
   "toast.bonusAlready": { uz: "Bu vazifa allaqachon bajarilgan", ru: "Это задание уже выполнено", en: "This task is already done" },
@@ -715,6 +726,12 @@ const T = {
   "cmd.til": { uz: "Bot tilini o‘zgartirish", ru: "Сменить язык бота", en: "Change the bot language" },
   "cmd.alifbo": { uz: "Kirill ↔ Lotin ↔ Yangi lotin", ru: "Кириллица ↔ латиница ↔ новая латиница", en: "Cyrillic ↔ Latin ↔ new Latin" },
   "cmd.savol": { uz: "Kunlik 3 ta savol (bonus)", ru: "3 вопроса дня (бонус)", en: "Today’s 3 questions (bonus)" },
+  "help.domla": {
+    uz: "🎓 «Qattiqqo‘l domla»: slaydingizni domla oldida ovoz bilan himoya qiling — /domla yoki pastdagi tugma.",
+    ru: "🎓 «Строгий профессор»: защитите слайды голосом перед профессором — /domla или кнопка ниже.",
+    en: "🎓 “Strict Professor”: defend your slides out loud in front of a professor — /domla or the button below.",
+  },
+  "btn.domla": { uz: "Qattiqqo‘l domla", ru: "Строгий профессор", en: "Strict Professor" },
   "domla.cmd": { uz: "Qattiqqo‘l domla — slayd himoyasi", ru: "Строгий профессор — защита слайдов", en: "Strict Professor — defend your slides" },
   "cmd.obuna": { uz: "Kunlik savollar xabarini yoqish/o‘chirish", ru: "Включить/выключить вопросы дня", en: "Turn the daily questions on/off" },
   "menu.app": { uz: "Ilova", ru: "Приложение", en: "App" },

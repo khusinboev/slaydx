@@ -262,6 +262,8 @@ export type ReferralSummary = {
   earnedPoints: number;
   /** `ambassador.percent` (0 = the program is off): shown as one rule line. */
   ambassadorPercent: number;
+  /** Total ambassador bonus (ledger refs `ambassador:%`) this user earned from invitees' payments, in bonus so'm. */
+  ambassadorEarned: number;
   /** Display names only — never ids, usernames or phones of other people. */
   recent: { name: string; joinedAt: string }[];
 };
@@ -296,6 +298,14 @@ export async function referralSummary(
     invitedCount: Number(totals.n),
     earnedPoints: Number(totals.pts),
     ambassadorPercent: await getSetting(AMBASSADOR_KEY),
+    ambassadorEarned: Number(
+      (
+        await queryOne<{ pts: string }>(
+          "SELECT COALESCE(SUM(points_delta), 0)::text AS pts FROM transactions WHERE user_id = $1 AND kind = 'bonus' AND reference LIKE 'ambassador:%'",
+          [userId],
+        )
+      )?.pts ?? 0,
+    ),
     recent: recent.map((r) => ({
       name: (r.name ?? "").replace(/\s+/g, " ").trim().slice(0, 60) || "Foydalanuvchi",
       joinedAt: new Date(r.created_at).toISOString(),

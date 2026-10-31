@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Copy, Gift, Send } from "lucide-react";
 import { request } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
-import { ambassadorRuleText } from "@/lib/ambassador";
+import { AMBASSADOR_TITLE, ambassadorRules, ambassadorRuleText } from "@/lib/ambassador";
 import { REFERRAL_SHARE_TEXT, formatJoinDate, formatPoints, referralRuleText } from "@/lib/referral";
 import { copyToClipboard } from "@/lib/share";
 import { useLinkShare } from "../share/ShareMenu";
@@ -19,6 +19,8 @@ export type ReferralSummaryView = {
   earnedPoints: number;
   /** Ambassador percent; absent (older server) or 0 hides the rule line. */
   ambassadorPercent?: number;
+  /** Total ambassador bonus earned (ledger `ambassador:%`); absent on an older server. */
+  ambassadorEarned?: number;
   recent: { name: string; joinedAt: string }[];
 };
 
@@ -216,6 +218,38 @@ export function ReferralCard({ className = "mb-6" }: { className?: string } = {}
           <div className="text-muted-foreground text-[13px]">Ishlangan bonus so&apos;m</div>
         </div>
       </div>
+
+      {data.ambassadorPercent && data.ambassadorPercent > 0 ? (
+        <div className="mt-5 rounded-2xl border p-4" data-ambassador-block>
+          <h3 className="text-[16px] font-semibold">{AMBASSADOR_TITLE}</h3>
+          <p className="mt-1 text-[14px] leading-snug" data-ambassador-percent>
+            Har to&apos;lovdan <b>{data.ambassadorPercent} %</b> bonus so&apos;m — do&apos;stlaringiz to&apos;lov qilgan sari ko&apos;payadi.
+          </p>
+          <p className="text-muted-foreground mt-2 text-[13px]">Sizning kodingiz</p>
+          <p className="font-mono text-[15px] font-semibold break-all select-all" data-ambassador-code>
+            {data.code}
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-3 text-center">
+            <div className="bg-muted/60 rounded-xl px-3 py-2.5">
+              <div className="text-[18px] font-bold tabular-nums" data-ambassador-invited>
+                {formatPoints(data.invitedCount)}
+              </div>
+              <div className="text-muted-foreground text-[12.5px]">Do&apos;stlar</div>
+            </div>
+            <div className="bg-muted/60 rounded-xl px-3 py-2.5">
+              <div className="text-[18px] font-bold tabular-nums" data-ambassador-earned>
+                {formatPoints(data.ambassadorEarned ?? 0)}
+              </div>
+              <div className="text-muted-foreground text-[12.5px]">Elchi bonusi, so&apos;m</div>
+            </div>
+          </div>
+          <ul className="text-muted-foreground mt-3 list-disc space-y-1 pl-5 text-[13.5px] leading-snug" data-ambassador-rules>
+            {ambassadorRules(data.ambassadorPercent).map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <h3 className="text-muted-foreground mt-5 text-[13px] font-semibold tracking-[0.06em] uppercase">Oxirgi qo&apos;shilganlar</h3>
       {data.recent.length ? (

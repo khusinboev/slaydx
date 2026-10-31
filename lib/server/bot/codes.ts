@@ -53,6 +53,7 @@ export const cb = {
   bonus: () => "b:h",
   bonusRefresh: () => "b:r",
   bonusDone: () => "b:d",
+  ratingLocked: () => "b:g",
   mandatoryCheck: () => "b:m",
   offerAccept: (version: number) => `o:a:${version}`,
   bonusCheck: (channelId: string) => `b:c:${channelId}`,
@@ -81,6 +82,7 @@ export type Callback =
   | { kind: "bonus" }
   | { kind: "bonusRefresh" }
   | { kind: "bonusDone" }
+  | { kind: "ratingLocked" }
   | { kind: "mandatoryCheck" }
   | { kind: "offerAccept"; version: number }
   | { kind: "bonusCheck"; channelId: string }
@@ -130,6 +132,7 @@ export function parseCallback(data: string | undefined | null): Callback {
       if (parts.length === 2 && b === "h") return { kind: "bonus" };
       if (parts.length === 2 && b === "r") return { kind: "bonusRefresh" };
       if (parts.length === 2 && b === "d") return { kind: "bonusDone" };
+      if (parts.length === 2 && b === "g") return { kind: "ratingLocked" };
       if (parts.length === 2 && b === "m") return { kind: "mandatoryCheck" };
       // Decimal, no sign, no leading zero; never trusted further — `checkChannel` reads the row itself.
       if (parts.length === 3 && b === "c" && /^[1-9]\d{0,17}$/.test(c ?? "")) return { kind: "bonusCheck", channelId: c! };

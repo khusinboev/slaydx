@@ -238,3 +238,21 @@ test("ReferralCard: ambassador rule line shown with the percent, hidden for 0 an
   await ready(DATA);
   assert.ok(!document.querySelector("[data-referral-ambassador]"));
 });
+
+test("ReferralCard: «Elchi dasturi» block shows code, percent, friends, earned and rules; hidden while the program is off", async () => {
+  await ready({ ...DATA, ambassadorPercent: 15, ambassadorEarned: 12500 });
+  const block = document.querySelector("[data-ambassador-block]")!;
+  assert.ok(block, "block present");
+  assert.match(block.querySelector("h3")!.textContent!, /Elchi dasturi/);
+  assert.match(block.querySelector("[data-ambassador-percent]")!.textContent!, /15 %/);
+  assert.equal(block.querySelector("[data-ambassador-code]")!.textContent, "k7m3p9qx");
+  assert.equal(block.querySelector("[data-ambassador-invited]")!.textContent, "3");
+  assert.match(block.querySelector("[data-ambassador-earned]")!.textContent!, /^12\s500$/);
+  assert.match(block.querySelector("[data-ambassador-rules]")!.textContent!, /15 %[\s\S]*pulga yechib bo'lmaydi/);
+  cleanup();
+  await ready({ ...DATA, ambassadorPercent: 0 });
+  assert.ok(!document.querySelector("[data-ambassador-block]"));
+  cleanup();
+  await ready(DATA);
+  assert.ok(!document.querySelector("[data-ambassador-block]"));
+});

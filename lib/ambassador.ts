@@ -36,6 +36,19 @@ export function ambassadorNote(percent: number): string {
   return `${AMBASSADOR_NOTE_PREFIX} (${percent}%)`;
 }
 
+/** Program name shown to users. */
+export const AMBASSADOR_TITLE = "Elchi dasturi";
+
+/** Short rules of the «Elchi dasturi» block (same wording on the web and, shortened, in the bot); [] while the program is off. */
+export function ambassadorRules(percent: number): string[] {
+  if (!isAmbassadorPercent(percent) || percent <= 0) return [];
+  return [
+    `Do'stingiz sizning havolangiz orqali kirib, balansini to'ldirsa — har safar to'lov summasining ${percent} % i sizga bonus so'm bo'lib tushadi.`,
+    "Bonus har to'lovda, muddatsiz beriladi va hamyoningizga avtomatik qo'shiladi.",
+    "Bonus so'mni pulga yechib bo'lmaydi — undan ilovadagi xizmatlar uchun foydalaning.",
+  ];
+}
+
 /** The rule line of the referral card: «Do'stlaringiz har to'lovidan N % bonus so'm»; "" when the program is off. */
 export function ambassadorRuleText(percent: number): string {
   return isAmbassadorPercent(percent) && percent > 0 ? `Do'stlaringiz har to'lovidan ${percent} % bonus so'm` : "";

@@ -93,7 +93,7 @@ export function ProfileHome({ onNavigate, header }: ProfileHomeProps) {
         <SectionLabel>Hisob</SectionLabel>
         <Group label="Hisob">
           <RowLink id="hamyon" href={WALLET} icon={Wallet} label="Hamyon" hint={formatSom(creditTotal(user))} />
-          <RowLink id="taklif" href={WALLET} icon={Gift} label="Do'stlarni taklif qilish" hint="Bonus so'm" />
+          <RowLink id="taklif" href={WALLET} icon={Gift} label="Do'stlarni taklif qilish" hint="Elchi dasturi" />
           {user.isAdmin ? <RowLink id="admin" href="/admin" icon={ShieldCheck} label="Admin panel" /> : null}
           <RowExternal id="yordam" href={SUPPORT_URL} icon={LifeBuoy} label="Yordam" hint="Admin bilan bog'lanish" onClick={onSupportClick} />
           <RowLink {...step("xavfsizlik")} icon={Lock} label="Xavfsizlik va chiqish" />
