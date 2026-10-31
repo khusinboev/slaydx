@@ -26,9 +26,8 @@ type Call = { url: string; signal?: AbortSignal };
 async function withGemini(reply: (n: number) => Response | Promise<Response>, fn: (calls: Call[]) => Promise<void>) {
   resetBreakers();
   resetLimiters();
-  const saved = { fetch: globalThis.fetch, g: process.env.GEMINI_API_KEY, x: process.env.XAI_API_KEY, s: process.env.LLM_STREAM };
+  const saved = { fetch: globalThis.fetch, g: process.env.GEMINI_API_KEY, s: process.env.LLM_STREAM };
   process.env.GEMINI_API_KEY = "test-key";
-  delete process.env.XAI_API_KEY;
   delete process.env.LLM_STREAM;
   const calls: Call[] = [];
   globalThis.fetch = (async (url: string, init?: RequestInit) => {
@@ -39,7 +38,7 @@ async function withGemini(reply: (n: number) => Response | Promise<Response>, fn
     await fn(calls);
   } finally {
     globalThis.fetch = saved.fetch;
-    for (const [k, v] of [["GEMINI_API_KEY", saved.g], ["XAI_API_KEY", saved.x], ["LLM_STREAM", saved.s]] as const) {
+    for (const [k, v] of [["GEMINI_API_KEY", saved.g], ["LLM_STREAM", saved.s]] as const) {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
     }

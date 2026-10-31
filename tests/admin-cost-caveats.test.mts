@@ -198,8 +198,8 @@ test("computed caveats: rollout coverage, historical split, unpriced, estimated,
     await reset();
     const c = meter((m) => {
       m.addLlm(SONNET(1_000, 100));
-      m.addLlm({ provider: "openrouter", model: "mystery-model", inputTokens: 100, outputTokens: 50 });
-      m.addLlm({ provider: "openrouter", model: "mystery-model", inputTokens: 100, outputTokens: 50 });
+      m.addLlm({ provider: "anthropic", model: "mystery-model", inputTokens: 100, outputTokens: 50 });
+      m.addLlm({ provider: "anthropic", model: "mystery-model", inputTokens: 100, outputTokens: 50 });
       m.addUnpricedImage("fal", "fal-ai/flux/dev", 3);
       m.addTts("gemini", "gemini-3.1-flash-tts-preview", 500, 0, { priced: false });
       m.addTts("gemini", "gemini-3.1-flash-tts-preview", 500, 0, { priced: false });
@@ -210,7 +210,7 @@ test("computed caveats: rollout coverage, historical split, unpriced, estimated,
     const caveats = await cost.costCaveats(pool(), rWide);
     assert.equal(
       caveats.find((x) => x.startsWith("Narxi noma'lum LLM modellari")),
-      "Narxi noma'lum LLM modellari: openrouter:mystery-model (2 chaqiruv). Ular 0 dollar deb hisoblangan, haqiqiy xarajat yuqoriroq; model narxlar jadvaliga (llm-pricing.ts) qo'shilishi kerak.",
+      "Narxi noma'lum LLM modellari: anthropic:mystery-model (2 chaqiruv). Ular 0 dollar deb hisoblangan, haqiqiy xarajat yuqoriroq; model narxlar jadvaliga (llm-pricing.ts) qo'shilishi kerak.",
     );
     assert.equal(
       caveats.find((x) => x.startsWith("Narxlanmagan xizmatlar")),
@@ -282,11 +282,11 @@ test("computed caveats: rollout coverage, historical split, unpriced, estimated,
   await t.test("a long list of unpriced names is capped, the rest summarised", async () => {
     await reset();
     const c = meter((m) => {
-      for (let i = 0; i < 8; i++) m.addLlm({ provider: "openrouter", model: `m${i}`, inputTokens: 10, outputTokens: 5 });
+      for (let i = 0; i < 8; i++) m.addLlm({ provider: "anthropic", model: `m${i}`, inputTokens: 10, outputTokens: 5 });
     });
     await usage({ at: tk(R, "12:00:01"), source: "free", outcome: "free", tool: "free:polish", cost: c });
     const line = (await cost.costCaveats(pool(), rWide)).find((x) => x.startsWith("Narxi noma'lum LLM"))!;
     assert.match(line, /va yana 3 ta\./);
-    assert.equal((line.match(/openrouter:m\d/g) ?? []).length, 5);
+    assert.equal((line.match(/anthropic:m\d/g) ?? []).length, 5);
   });
 });

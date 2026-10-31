@@ -258,19 +258,19 @@ test("GET: every registry provider with the exact shape; no key anywhere", { ski
 test("GET never carries a key: not the env one, not the stored one, for any role", { skip }, async () => {
   const owner = await session("owner");
   const K = fresh();
-  process.env.FAL_KEY = "env-fal-secret-5678";
-  assert.equal((await putKey(owner.cookie, "fal", { key: K, reason: REASON })).status, 200);
+  process.env.ELEVENLABS_API_KEY = "env-eleven-secret-5678";
+  assert.equal((await putKey(owner.cookie, "elevenlabs", { key: K, reason: REASON })).status, 200);
   for (const role of ["owner", "admin", "finance", "viewer"] as const) {
     const s = await session(role);
     const r = await list(s.cookie);
     assert.equal(r.status, 200, role);
     assert.ok(!r.text.includes(K), `${role}: stored key leaked`);
-    assert.ok(!r.text.includes("env-fal-secret-5678"), `${role}: env key leaked`);
-    const fal = itemOf(r, "fal");
-    assert.equal(fal.hasDbKey, true, role);
-    assert.equal(fal.keySource, "db");
+    assert.ok(!r.text.includes("env-eleven-secret-5678"), `${role}: env key leaked`);
+    const eleven = itemOf(r, "elevenlabs");
+    assert.equal(eleven.hasDbKey, true, role);
+    assert.equal(eleven.keySource, "db");
     // The masked hint only for those who can edit.
-    assert.equal(fal.keyHint, role === "owner" || role === "admin" ? `…${K.slice(-4)}` : null, role);
+    assert.equal(eleven.keyHint, role === "owner" || role === "admin" ? `…${K.slice(-4)}` : null, role);
   }
   for (const role of ["support", "moderator"] as const) {
     const s = await session(role);
@@ -320,10 +320,10 @@ test("PUT key: sealed in the DB, masked in the answer and the audit row, DB wins
   const s = await session("owner");
   const K1 = fresh();
   const K2 = fresh();
-  process.env.FAL_KEY = "env-fal-key-1";
-  assert.equal(resolve.getProviderKey("fal"), "env-fal-key-1");
+  process.env.ELEVENLABS_API_KEY = "env-eleven-key-1";
+  assert.equal(resolve.getProviderKey("elevenlabs"), "env-eleven-key-1");
 
-  const r1 = await putKey(s.cookie, "fal", { key: `  ${K1}  `, reason: REASON });
+  const r1 = await putKey(s.cookie, "elevenlabs", { key: `  ${K1}  `, reason: REASON });
   assert.equal(r1.status, 200, r1.text);
   const item = r1.body.item as Item;
   assert.equal(item.hasDbKey, true);
@@ -333,27 +333,27 @@ test("PUT key: sealed in the DB, masked in the answer and the audit row, DB wins
   assert.equal(item.updatedBy, "Admin owner");
   assert.ok(!r1.text.includes(K1), "response holds no key");
 
-  const row = await rowOf("fal");
+  const row = await rowOf("elevenlabs");
   assert.ok(row?.key_ciphertext && row.key_hint === `…${K1.slice(-4)}`);
   for (const enc of ["utf8", "latin1", "base64", "base64url", "hex"] as const) assert.ok(!row!.key_ciphertext!.toString(enc).includes(K1), `ciphertext shows the key as ${enc}`);
   assert.ok(row!.key_ciphertext!.toString("ascii").startsWith("pk1."));
-  assert.equal(crypto.openProviderKey("fal", row!.key_ciphertext!), K1, "trimmed, sealed under the provider id");
+  assert.equal(crypto.openProviderKey("elevenlabs", row!.key_ciphertext!), K1, "trimmed, sealed under the provider id");
 
   // The very next read in this process resolves the stored key; the env var is only the fallback.
-  assert.equal(resolve.getProviderKey("fal"), K1);
+  assert.equal(resolve.getProviderKey("elevenlabs"), K1);
 
   const a1 = await audits(s.admin.adminId, "providers.key_set");
   assert.equal(a1.length, 1);
-  assert.deepEqual([a1[0]!.outcome, a1[0]!.target_type, a1[0]!.target_id, a1[0]!.reason], ["ok", "provider", "fal", REASON]);
+  assert.deepEqual([a1[0]!.outcome, a1[0]!.target_type, a1[0]!.target_id, a1[0]!.reason], ["ok", "provider", "elevenlabs", REASON]);
   assert.deepEqual(a1[0]!.before, { hasKey: false, hint: null });
   assert.deepEqual(a1[0]!.after, { hasKey: true, hint: `…${K1.slice(-4)}` });
   assert.ok(!JSON.stringify(a1[0]).includes(K1), "audit row holds no key");
 
   // Replace.
-  const r2 = await putKey(s.cookie, "fal", { key: K2, reason: "Kalit almashtirildi" });
+  const r2 = await putKey(s.cookie, "elevenlabs", { key: K2, reason: "Kalit almashtirildi" });
   assert.equal(r2.status, 200, r2.text);
   assert.equal((r2.body.item as Item).keyHint, `…${K2.slice(-4)}`);
-  assert.equal(resolve.getProviderKey("fal"), K2);
+  assert.equal(resolve.getProviderKey("elevenlabs"), K2);
   const a2 = await audits(s.admin.adminId, "providers.key_replace");
   assert.equal(a2.length, 1);
   assert.deepEqual(a2[0]!.before, { hasKey: true, hint: `…${K1.slice(-4)}` });
@@ -361,19 +361,19 @@ test("PUT key: sealed in the DB, masked in the answer and the audit row, DB wins
   assert.ok(!JSON.stringify(a2[0]).includes(K1) && !JSON.stringify(a2[0]).includes(K2));
 
   // Delete: the env var applies again.
-  const bad = await delKey(s.cookie, "fal", {});
+  const bad = await delKey(s.cookie, "elevenlabs", {});
   assert.equal(bad.status, 400, "reason required");
-  const d = await delKey(s.cookie, "fal", { reason: "Kalit eskirgan" });
+  const d = await delKey(s.cookie, "elevenlabs", { reason: "Kalit eskirgan" });
   assert.equal(d.status, 200, d.text);
   assert.equal((d.body.item as Item).hasDbKey, false);
   assert.equal((d.body.item as Item).keyHint, null);
   assert.equal((d.body.item as Item).keySource, "env");
-  assert.equal(resolve.getProviderKey("fal"), "env-fal-key-1");
+  assert.equal(resolve.getProviderKey("elevenlabs"), "env-eleven-key-1");
   const a3 = await audits(s.admin.adminId, "providers.key_delete");
   assert.equal(a3.length, 1);
   assert.deepEqual(a3[0]!.before, { hasKey: true, hint: `…${K2.slice(-4)}` });
   assert.deepEqual(a3[0]!.after, { hasKey: false, hint: null });
-  const again = await delKey(s.cookie, "fal", { reason: "Yana o'chirish" });
+  const again = await delKey(s.cookie, "elevenlabs", { reason: "Yana o'chirish" });
   assert.equal(again.status, 409);
   assert.equal(again.body.code, "state");
   assert.equal((await audits(s.admin.adminId, "providers.key_delete")).length, 1, "a refused delete writes no audit row");
@@ -394,15 +394,15 @@ test("step-up: every write needs a fresh re-authentication (401 reauth) and writ
   const stale = await session("owner", false);
   const K = fresh();
   for (const [name, r] of [
-    ["PUT key", await putKey(stale.cookie, "fal", { key: K, reason: REASON })],
-    ["DELETE key", await delKey(stale.cookie, "fal", { reason: REASON })],
-    ["PUT enabled", await putEnabled(stale.cookie, "fal", { enabled: false, reason: REASON })],
+    ["PUT key", await putKey(stale.cookie, "elevenlabs", { key: K, reason: REASON })],
+    ["DELETE key", await delKey(stale.cookie, "elevenlabs", { reason: REASON })],
+    ["PUT enabled", await putEnabled(stale.cookie, "elevenlabs", { enabled: false, reason: REASON })],
     ["POST test", await postTest(stale.cookie, "gemini")],
   ] as const) {
     assert.equal(r.status, 401, name);
     assert.equal(r.body.code, "reauth", name);
   }
-  assert.equal(await rowOf("fal"), null);
+  assert.equal(await rowOf("elevenlabs"), null);
   assert.equal((await audits(stale.admin.adminId)).length, 0);
   // A read needs no step-up.
   assert.equal((await list(stale.cookie)).status, 200);
@@ -415,9 +415,9 @@ test("RBAC: only owner and admin write; finance/viewer/support/moderator are ref
   for (const role of ["finance", "viewer", "support", "moderator"] as const) {
     const s = await session(role);
     for (const [name, r] of [
-      ["PUT key", await putKey(s.cookie, "fal", { key: K, reason: REASON })],
-      ["DELETE key", await delKey(s.cookie, "fal", { reason: REASON })],
-      ["PUT enabled", await putEnabled(s.cookie, "fal", { enabled: false, reason: REASON })],
+      ["PUT key", await putKey(s.cookie, "elevenlabs", { key: K, reason: REASON })],
+      ["DELETE key", await delKey(s.cookie, "elevenlabs", { reason: REASON })],
+      ["PUT enabled", await putEnabled(s.cookie, "elevenlabs", { enabled: false, reason: REASON })],
       ["POST test", await postTest(s.cookie, "gemini")],
     ] as const) {
       assert.equal(r.status, 403, `${role} ${name}`);
@@ -426,7 +426,7 @@ test("RBAC: only owner and admin write; finance/viewer/support/moderator are ref
     const denied = (await audits(s.admin.adminId)).filter((a) => a.outcome === "denied");
     assert.equal(denied.length, 4, `${role}: one denied row per refused call`);
   }
-  assert.equal(await rowOf("fal"), null);
+  assert.equal(await rowOf("elevenlabs"), null);
   assert.equal(await providersRows(), before, "no providers.* row from refused calls");
   // owner and admin both may (the owner switches Pexels off, the admin back on).
   const owner = await session("owner");
@@ -496,16 +496,16 @@ test("no sealing key: PUT key is 503 crypto_unavailable and writes nothing; togg
   const s = await session("owner");
   delete process.env.ADMIN_TOTP_KEY;
   try {
-    const r = await putKey(s.cookie, "fal", { key: fresh(), reason: REASON });
+    const r = await putKey(s.cookie, "elevenlabs", { key: fresh(), reason: REASON });
     assert.equal(r.status, 503, r.text);
     assert.equal(r.body.code, "crypto_unavailable");
-    assert.equal(await rowOf("fal"), null);
+    assert.equal(await rowOf("elevenlabs"), null);
     assert.equal((await audits(s.admin.adminId, "providers.key_set")).length, 0);
     const g = await list(s.cookie);
     assert.equal(g.status, 200);
     assert.equal(g.body.canStoreKeys, false);
     assert.equal(g.body.sealingKey, "none");
-    assert.equal((await putEnabled(s.cookie, "fal", { enabled: false, reason: REASON })).status, 200);
+    assert.equal((await putEnabled(s.cookie, "elevenlabs", { enabled: false, reason: REASON })).status, 200);
   } finally {
     process.env.ADMIN_TOTP_KEY = ADMIN_KEY;
   }
@@ -514,21 +514,21 @@ test("no sealing key: PUT key is 503 crypto_unavailable and writes nothing; togg
 test("a stored key that cannot be opened is reported, ignored (env fallback) and can be replaced", { skip }, async () => {
   const s = await session("owner");
   const K = fresh();
-  assert.equal((await putKey(s.cookie, "fal", { key: K, reason: REASON })).status, 200);
+  assert.equal((await putKey(s.cookie, "elevenlabs", { key: K, reason: REASON })).status, 200);
   // The row is copied onto another provider (swapped ciphertext): the AAD makes it unreadable there.
   await query(
-    "INSERT INTO provider_settings (provider, key_ciphertext, key_hint) SELECT 'pexels', key_ciphertext, key_hint FROM provider_settings WHERE provider = 'fal'",
+    "INSERT INTO provider_settings (provider, key_ciphertext, key_hint) SELECT 'pexels', key_ciphertext, key_hint FROM provider_settings WHERE provider = 'elevenlabs'",
   );
   process.env.PEXELS_API_KEY = "env-pexels-key-1";
   await store.reloadProviderKeys();
   assert.equal(resolve.getProviderKey("pexels"), "env-pexels-key-1", "unreadable -> env");
-  assert.equal(resolve.getProviderKey("fal"), K, "the row's own provider still opens it");
+  assert.equal(resolve.getProviderKey("elevenlabs"), K, "the row's own provider still opens it");
   const g = await list(s.cookie);
   const px = itemOf(g, "pexels");
   assert.equal(px.hasDbKey, true);
   assert.equal(px.unreadable, true);
   assert.equal(px.keySource, "env");
-  assert.equal(itemOf(g, "fal").unreadable, false);
+  assert.equal(itemOf(g, "elevenlabs").unreadable, false);
   // Entering a key again fixes it.
   const K2 = fresh();
   assert.equal((await putKey(s.cookie, "pexels", { key: K2, reason: REASON })).status, 200);
@@ -538,10 +538,10 @@ test("a stored key that cannot be opened is reported, ignored (env fallback) and
   process.env.PROVIDER_KEYS_KEY = randomBytes(32).toString("base64");
   try {
     await store.reloadProviderKeys();
-    assert.equal(resolve.getProviderKey("fal"), "", "unreadable and no env var: not configured, not a crash");
-    process.env.FAL_KEY = "env-fal-key-1";
-    assert.equal(resolve.getProviderKey("fal"), "env-fal-key-1");
-    assert.equal(itemOf(await list(s.cookie), "fal").unreadable, true);
+    assert.equal(resolve.getProviderKey("elevenlabs"), "", "unreadable and no env var: not configured, not a crash");
+    process.env.ELEVENLABS_API_KEY = "env-eleven-key-1";
+    assert.equal(resolve.getProviderKey("elevenlabs"), "env-eleven-key-1");
+    assert.equal(itemOf(await list(s.cookie), "elevenlabs").unreadable, true);
   } finally {
     delete process.env.PROVIDER_KEYS_KEY;
   }
@@ -551,14 +551,14 @@ test("the worker process (fresh cache, same env) opens what the web process stor
   const s = await session("owner");
   const K = fresh();
   assert.equal((await putKey(s.cookie, "gemini", { key: K, reason: REASON })).status, 200);
-  assert.equal((await putEnabled(s.cookie, "xai", { enabled: false, reason: REASON })).status, 200);
-  process.env.XAI_API_KEY = "env-xai-key-1234";
+  assert.equal((await putEnabled(s.cookie, "anthropic", { enabled: false, reason: REASON })).status, 200);
+  process.env.ANTHROPIC_API_KEY = "env-anthropic-key-1234";
   // A different process starts with an empty cache and loads from the same database.
   resolve.resetProviderCache();
   assert.equal(resolve.getProviderKey("gemini"), "", "nothing loaded yet");
   await store.ensureProviderKeys();
   assert.equal(resolve.getProviderKey("gemini"), K);
-  assert.equal(resolve.getProviderKey("xai"), "", "the switch is visible there too");
+  assert.equal(resolve.getProviderKey("anthropic"), "", "the switch is visible there too");
 });
 
 test("audit failure rolls the change back: the audit row is in the same transaction", { skip }, async () => {
@@ -567,13 +567,13 @@ test("audit failure rolls the change back: the audit row is in the same transact
   await query("CREATE TRIGGER provider_test_block BEFORE INSERT ON admin_audit_log FOR EACH ROW EXECUTE FUNCTION provider_test_block()");
   try {
     const K = fresh();
-    const r = await putKey(s.cookie, "fal", { key: K, reason: REASON });
+    const r = await putKey(s.cookie, "elevenlabs", { key: K, reason: REASON });
     assert.equal(r.status, 500);
-    assert.equal(await rowOf("fal"), null, "the key was not stored without its audit row");
-    const e = await putEnabled(s.cookie, "fal", { enabled: false, reason: REASON });
+    assert.equal(await rowOf("elevenlabs"), null, "the key was not stored without its audit row");
+    const e = await putEnabled(s.cookie, "elevenlabs", { enabled: false, reason: REASON });
     assert.equal(e.status, 500);
-    assert.equal(await rowOf("fal"), null, "the switch was not stored either");
-    assert.equal(resolve.isProviderEnabled("fal"), true);
+    assert.equal(await rowOf("elevenlabs"), null, "the switch was not stored either");
+    assert.equal(resolve.isProviderEnabled("elevenlabs"), true);
   } finally {
     await query("DROP TRIGGER provider_test_block ON admin_audit_log");
     await query("DROP FUNCTION provider_test_block()");
@@ -664,8 +664,10 @@ test("test: no key, not testable, reserved and unknown providers", { skip }, asy
     assert.equal(none.body.ok, false);
     assert.match(String(none.body.message), /Kalit yo'q/);
     assert.equal(stub.calls.length, 0, "no key, no outbound call");
-    assert.equal((await postTest(s.cookie, "fal")).status, 409, "no cheap call for fal.ai");
+    assert.equal((await postTest(s.cookie, "openai-image")).status, 409, "no cheap call for the OpenAI image provider");
     assert.equal((await postTest(s.cookie, "elevenlabs")).status, 409, "reserved");
+    // Removed providers are unknown ids now.
+    for (const id of ["fal", "xai", "openrouter", "openai"]) assert.equal((await postTest(s.cookie, id)).status, 404, `${id} is removed`);
     assert.equal((await postTest(s.cookie, "nope")).status, 404);
     // Azure needs its region.
     process.env.AZURE_SPEECH_KEY = fresh();
@@ -695,11 +697,10 @@ test("probe: 10 s timeout contract, redirects not followed, request builders", a
   const header = (id: string) => (probe.probeRequest(id, K) as { headers?: Record<string, string> }).headers;
   assert.equal(header("gemini")!["x-goog-api-key"], K);
   assert.equal(header("anthropic")!["x-api-key"], K);
-  assert.equal(header("openai")!.Authorization, `Bearer ${K}`);
-  assert.equal(header("xai")!.Authorization, `Bearer ${K}`);
-  assert.equal(header("openrouter")!.Authorization, `Bearer ${K}`);
   assert.equal(header("pexels")!.Authorization, K);
-  for (const id of ["gemini", "anthropic", "openai", "xai", "openrouter", "pexels"]) assert.ok(!(probe.probeRequest(id, K) as { url: string }).url.includes(K), `${id}: key not in URL`);
+  for (const id of ["gemini", "anthropic", "pexels"]) assert.ok(!(probe.probeRequest(id, K) as { url: string }).url.includes(K), `${id}: key not in URL`);
+  // The removed providers have no probe any more.
+  for (const id of ["openai", "xai", "openrouter", "fal"]) assert.ok("error" in probe.probeRequest(id, K), `${id}: no probe`);
   // The Azure region is validated before it becomes a host name.
   assert.ok("error" in probe.probeRequest("azure", K, { azureRegion: "evil.example.com/x" }));
   assert.ok(!("error" in probe.probeRequest("azure", K, { azureRegion: "westeurope" })));
@@ -723,5 +724,5 @@ test("the plaintext of every key used in this file appears in no response, log l
     assert.ok(!dump.includes(k), `a key appeared in the audit log or provider_settings: …${k.slice(-4)}`);
   }
   // The env-only secrets used here as well.
-  for (const k of ["env-gemini-secret-1234", "env-fal-secret-5678"]) assert.ok(!everything.includes(k), k);
+  for (const k of ["env-gemini-secret-1234", "env-eleven-secret-5678"]) assert.ok(!everything.includes(k), k);
 });

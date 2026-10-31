@@ -1143,9 +1143,7 @@ test("buildArtifact yetkazilgan miqdorni faylga biriktiradi", async () => {
    * beradi. Foydalanuvchi 40 ta so'ragan bo'lsa, farq qaytishi kerak.
    */
   const savedGemini = process.env.GEMINI_API_KEY;
-  const savedXai = process.env.XAI_API_KEY;
   delete process.env.GEMINI_API_KEY;
-  delete process.env.XAI_API_KEY;
 
   try {
     const file = await buildArtifact(
@@ -1176,7 +1174,6 @@ test("buildArtifact yetkazilgan miqdorni faylga biriktiradi", async () => {
     assert.equal(essay.delivered, undefined, "inshoda miqdor va'dasi yo'q");
   } finally {
     if (savedGemini !== undefined) process.env.GEMINI_API_KEY = savedGemini;
-    if (savedXai !== undefined) process.env.XAI_API_KEY = savedXai;
   }
 });
 
@@ -1589,9 +1586,7 @@ test("A2: keys hujjatida mundarija yo'q (ko'ruvchi bilan bir xil)", async () => 
 
   const realFetch = globalThis.fetch;
   const savedGemini = process.env.GEMINI_API_KEY;
-  const savedXai = process.env.XAI_API_KEY;
   process.env.GEMINI_API_KEY = "test-key";
-  delete process.env.XAI_API_KEY;
 
   const keysJson = JSON.stringify({
     intro: "Kirish matni yetarli uzunlikda bo'lishi uchun bir necha so'z.",
@@ -1627,7 +1622,6 @@ test("A2: keys hujjatida mundarija yo'q (ko'ruvchi bilan bir xil)", async () => 
     globalThis.fetch = realFetch;
     if (savedGemini === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = savedGemini;
-    if (savedXai !== undefined) process.env.XAI_API_KEY = savedXai;
   }
 });
 
@@ -1644,20 +1638,16 @@ function slideImageEnv() {
   const saved = {
     fal: process.env.FAL_KEY,
     gemini: process.env.GEMINI_API_KEY,
-    xai: process.env.XAI_API_KEY,
     fetch: globalThis.fetch,
   };
   process.env.FAL_KEY = "test-fal-key";
   delete process.env.GEMINI_API_KEY;
-  delete process.env.XAI_API_KEY;
   return () => {
     globalThis.fetch = saved.fetch;
     if (saved.fal === undefined) delete process.env.FAL_KEY;
     else process.env.FAL_KEY = saved.fal;
     if (saved.gemini === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = saved.gemini;
-    if (saved.xai === undefined) delete process.env.XAI_API_KEY;
-    else process.env.XAI_API_KEY = saved.xai;
   };
 }
 

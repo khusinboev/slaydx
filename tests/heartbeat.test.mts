@@ -121,7 +121,7 @@ test("heartbeat row (Postgres)", { skip }, async (t) => {
   });
   resetBreakers();
   resetLimiters();
-  breakerFor("hb-xai", { log: () => {} }).trip(60_000);
+  breakerFor("hb-anthropic", { log: () => {} }).trip(60_000);
   const rel = await limiterFor("gemini").acquire();
 
   let running = 2;
@@ -146,7 +146,7 @@ test("heartbeat row (Postgres)", { skip }, async (t) => {
   assert.equal(rows[0].role, "worker");
   assert.equal(rows[0].running, 2);
   assert.equal(rows[0].concurrency, 3);
-  assert.deepEqual(rows[0].breakers.map((b) => [b.name, b.state]), [["hb-xai", "open"]]);
+  assert.deepEqual(rows[0].breakers.map((b) => [b.name, b.state]), [["hb-anthropic", "open"]]);
   assert.deepEqual(rows[0].limiters, [{ name: "gemini", active: 1, waiting: 0, max: 10 }]);
   const firstSeen = rows[0].last_seen_at;
   const startedAt = rows[0].started_at;

@@ -43,7 +43,6 @@ function keysEnv() {
     pixabay: process.env.PIXABAY_API_KEY,
     fal: process.env.FAL_KEY,
     gemini: process.env.GEMINI_API_KEY,
-    xai: process.env.XAI_API_KEY,
     fetch: globalThis.fetch,
   };
   return (next: Partial<{ pexels: string; pixabay: string; fal: string }> = {}) => {
@@ -59,7 +58,6 @@ function keysEnv() {
     // qaytaradi, natija baribir zaxiraga tushadi, lekin shovqin va
     // ortiqcha tarmoq qatlami qo'shardi).
     delete process.env.GEMINI_API_KEY;
-    delete process.env.XAI_API_KEY;
     return () => {
       globalThis.fetch = saved.fetch;
       const restore = (k: string, v: string | undefined) => (v === undefined ? delete process.env[k] : (process.env[k] = v));
@@ -67,7 +65,6 @@ function keysEnv() {
       restore("PIXABAY_API_KEY", saved.pixabay);
       restore("FAL_KEY", saved.fal);
       restore("GEMINI_API_KEY", saved.gemini);
-      restore("XAI_API_KEY", saved.xai);
     };
   };
 }

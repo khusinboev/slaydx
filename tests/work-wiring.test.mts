@@ -70,7 +70,7 @@ test("teacher dvigateli stub: `null` qaytaradi, xato TASHLAMAYDI", async () => {
    * yiqilardi). Endi model har so'rovni rad etadi (400), kalit soxta,
    * `LLM_*` rollari olib tashlanadi: «model javob bermadi → `null`» sinaladi.
    */
-  const keys = ["GEMINI_API_KEY", "XAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "OPENAI_API_KEY", "LLM_WRITER", "LLM_RESEARCHER", "LLM_JUDGE", "LLM_FAST"];
+  const keys = ["GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "LLM_WRITER", "LLM_RESEARCHER", "LLM_JUDGE", "LLM_FAST"];
   const saved = new Map(keys.map((k) => [k, process.env[k]]));
   const realFetch = globalThis.fetch;
   for (const k of keys) delete process.env[k];

@@ -33,12 +33,12 @@ process.env.TELEGRAM_BOT_TOKEN = "123456:admin-ai-test-token-never-called";
 // Provider keys: start from a known state (`.env.local` may hold real ones), then seed fakes.
 const FAKE = {
   GEMINI_API_KEY: "fake-gemini-key-AAAA1111",
-  XAI_API_KEY: "fake-xai-key-BBBB2222",
+  ANTHROPIC_API_KEY: "fake-anthropic-key-BBBB2222",
   OPENAI_API_KEY: "fake-openai-key-CCCC3333",
   PEXELS_API_KEY: "fake-pexels-key-DDDD4444",
   AZURE_SPEECH_KEY: "fake-azure-key-EEEE5555",
 } as const;
-for (const k of ["GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "XAI_API_KEY", "FAL_KEY", "PEXELS_API_KEY", "PIXABAY_API_KEY", "AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION", "AISHA_API_KEY"]) {
+for (const k of ["GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "FAL_KEY", "PEXELS_API_KEY", "PIXABAY_API_KEY", "AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION", "AISHA_API_KEY"]) {
   delete process.env[k];
 }
 Object.assign(process.env, FAKE);
@@ -178,7 +178,7 @@ async function seed(): Promise<void> {
   const costD = meter((c) => {
     c.addLlm(SONNET(10_000, 2_000));
     c.addUnpricedImage("fal", "fal-ai/flux/dev");
-    c.addLlm({ provider: "openrouter", model: "mystery-model", inputTokens: 100, outputTokens: 50 });
+    c.addLlm({ provider: "anthropic", model: "mystery-model", inputTokens: 100, outputTokens: 50 });
   });
   const genD = await gen({ tool: "pro-slide", status: "FAILED", finishedAt: tk(D, "13:00:00"), costJson: costD });
   await usage({ at: tk(D, "13:00:01"), source: "job", outcome: "failed", genId: genD, tool: "pro-slide", cost: costD });
@@ -258,7 +258,7 @@ test("cost: every groupBy equals admin-cost exactly; totals, coverage, caveats, 
     assert.deepEqual(b.caveats, await cost.costCaveats(pool(), range), `${by} caveats`);
     const has = (start: string) => assert.ok(b.caveats.some((c) => c.startsWith(start)), `${by}: «${start}» missing in ${JSON.stringify(b.caveats)}`);
     has("1 ta yangi ishda (4 ta tugallangandan, 25,0%) tannarx umuman yozilmagan: Slayd (1/2)");
-    has("Narxi noma'lum LLM modellari: openrouter:mystery-model (1 chaqiruv)");
+    has("Narxi noma'lum LLM modellari: anthropic:mystery-model (1 chaqiruv)");
     has("Narxlanmagan xizmatlar: rasm fal:fal-ai/flux/dev (1 chaqiruv)");
     has("Google qidiruvi: 2 ta so'rov");
     has("Bepul AI so'rovlari");
@@ -444,11 +444,8 @@ test("providers: keys are booleans, true exactly for the configured ones, and no
   for (const [k, v] of Object.entries(r.body.keys)) assert.equal(typeof v, "boolean", `keys.${k}`);
   assert.deepEqual(r.body.keys, {
     gemini: true,
-    anthropic: false,
+    anthropic: true,
     openai: true,
-    openrouter: false,
-    xai: true,
-    fal: false,
     pexels: true,
     pixabay: false,
     azureTts: false, // key without region is not usable
@@ -484,7 +481,7 @@ test("providers: breakers and limiters per process, stale marked, malformed JSON
     breakers: [
       { name: "gemini", state: "open", openUntil: until, failures: 0 },
       { name: "image:pexels", state: "closed", openUntil: null, failures: 2 },
-      { name: "xai", state: "half-open", openUntil: null, failures: 0 },
+      { name: "anthropic", state: "half-open", openUntil: null, failures: 0 },
     ],
     limiters: [{ name: "gemini", active: 7, waiting: 2, max: 10 }],
   });
@@ -507,7 +504,7 @@ test("providers: breakers and limiters per process, stale marked, malformed JSON
   ]);
   const gemA = r.body.breakers.find((b) => b.process === "worker@host-a:11" && b.name === "gemini");
   assert.deepEqual(gemA, { process: "worker@host-a:11", name: "gemini", state: "open", openUntil: until, failures: 0, stale: false });
-  assert.equal(r.body.breakers.find((b) => b.process === "worker@host-a:11" && b.name === "xai")?.state, "half-open");
+  assert.equal(r.body.breakers.find((b) => b.process === "worker@host-a:11" && b.name === "anthropic")?.state, "half-open");
   const gemStale = r.body.breakers.find((b) => b.process === "web@host-b:22");
   assert.equal(gemStale?.stale, true);
   assert.equal(gemStale?.failures, 9);

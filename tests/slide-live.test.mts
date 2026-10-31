@@ -104,12 +104,10 @@ async function withLlm(reply: Reply, fn: (urls: string[]) => Promise<void>, stre
   const saved = {
     fetch: globalThis.fetch,
     gemini: process.env.GEMINI_API_KEY,
-    xai: process.env.XAI_API_KEY,
     fal: process.env.FAL_KEY,
     stream: process.env.LLM_STREAM,
   };
   process.env.GEMINI_API_KEY = "test-key";
-  delete process.env.XAI_API_KEY;
   delete process.env.FAL_KEY;
   if (stream === undefined) delete process.env.LLM_STREAM;
   else process.env.LLM_STREAM = stream;
@@ -124,7 +122,6 @@ async function withLlm(reply: Reply, fn: (urls: string[]) => Promise<void>, stre
     globalThis.fetch = saved.fetch;
     for (const [name, v] of [
       ["GEMINI_API_KEY", saved.gemini],
-      ["XAI_API_KEY", saved.xai],
       ["FAL_KEY", saved.fal],
       ["LLM_STREAM", saved.stream],
     ] as const) {

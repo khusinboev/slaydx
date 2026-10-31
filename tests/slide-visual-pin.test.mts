@@ -14,7 +14,6 @@ import type { AcademicDoc } from "../lib/generation/types.ts";
  * `dense`) `formal` bo'lib chizila boshlagan edi — fayl va sayt ajralgan.
  */
 delete process.env.GEMINI_API_KEY;
-delete process.env.XAI_API_KEY;
 
 const meta = (tpl: string) => extractMeta(TOOL_BY_ID.slide, { topic: "Himoya", slideTemplate: tpl } as never);
 const base = (tpl: string, extra: Partial<AcademicDoc> = {}): AcademicDoc =>

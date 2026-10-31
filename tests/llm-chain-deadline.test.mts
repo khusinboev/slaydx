@@ -18,7 +18,7 @@ import type { AdapterOpts, Attempt, ProviderAdapter, ProviderId, RoleSpec } from
  *  - backoff jitter'li (`random` seam).
  */
 
-const KEYS = ["GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY"];
+const KEYS = ["GEMINI_API_KEY", "ANTHROPIC_API_KEY"];
 for (const k of KEYS) process.env[k] = "test";
 
 const ok = (text: string): Attempt => ({ ok: true, text, usage: { inputTokens: 1, outputTokens: 1 } });

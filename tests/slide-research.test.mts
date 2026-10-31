@@ -49,9 +49,7 @@ async function withFetch(
   resetBreakers();
   const realFetch = globalThis.fetch;
   const savedGemini = process.env.GEMINI_API_KEY;
-  const savedXai = process.env.XAI_API_KEY;
   process.env.GEMINI_API_KEY = "test-key";
-  delete process.env.XAI_API_KEY;
   const calls: Caught[] = [];
   // Germetik: redirect xostini haqiqiy DNS siz «ommaviy» deb ochamiz (EXT-15).
   setSafeFetchLookup(async () => ["142.250.1.1"]);
@@ -67,8 +65,6 @@ async function withFetch(
     setSafeFetchLookup(null);
     if (savedGemini === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = savedGemini;
-    if (savedXai === undefined) delete process.env.XAI_API_KEY;
-    else process.env.XAI_API_KEY = savedXai;
   }
 }
 
@@ -529,27 +525,22 @@ test("llmGrounded + json — QULF, throw", async () => {
 
 test("qulf kalitsiz ham otiladi — dastur xatosi provayderga bog'liq emas", async () => {
   const savedGemini = process.env.GEMINI_API_KEY;
-  const savedXai = process.env.XAI_API_KEY;
   delete process.env.GEMINI_API_KEY;
-  delete process.env.XAI_API_KEY;
   try {
     await assert.rejects(() => llmGrounded("s", "u", 2048, { json: true }), /mos emas/);
   } finally {
     if (savedGemini !== undefined) process.env.GEMINI_API_KEY = savedGemini;
-    if (savedXai !== undefined) process.env.XAI_API_KEY = savedXai;
   }
 });
 
-test("xAI yo'lida grounding yo'q — `null`, tarmoqqa chiqmaydi", async () => {
+test("Gemini kalitisiz grounding yo'q — `null`, tarmoqqa chiqmaydi", async () => {
   const realFetch = globalThis.fetch;
   const savedGemini = process.env.GEMINI_API_KEY;
-  const savedXai = process.env.XAI_API_KEY;
   delete process.env.GEMINI_API_KEY;
-  process.env.XAI_API_KEY = "test-xai";
   let calls = 0;
   globalThis.fetch = (async () => {
     calls += 1;
-    throw new Error("xAI da grounding yo'q, so'rov ketmasligi kerak");
+    throw new Error("kalitsiz grounding'da so'rov ketmasligi kerak");
   }) as typeof fetch;
   try {
     /*
@@ -560,12 +551,10 @@ test("xAI yo'lida grounding yo'q — `null`, tarmoqqa chiqmaydi", async () => {
      */
     assert.equal(await llmGrounded("s", "u"), null);
     assert.equal(await runSlideResearch(meta({ internetSearch: true }), Date.now() + 60_000), null);
-    assert.equal(calls, 0, "xAI ga tadqiqot so'rovi yuborilmasin");
+    assert.equal(calls, 0, "kalitsiz tadqiqot so'rovi yuborilmasin");
   } finally {
     globalThis.fetch = realFetch;
     if (savedGemini !== undefined) process.env.GEMINI_API_KEY = savedGemini;
-    if (savedXai === undefined) delete process.env.XAI_API_KEY;
-    else process.env.XAI_API_KEY = savedXai;
   }
 });
 

@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { complete } from "../lib/generation/llm-roles.ts";
-import { parseRoleSpec } from "../lib/generation/llm/types.ts";
+import { parseRoleSpec, resetRoleSpecWarnings } from "../lib/generation/llm/types.ts";
 
 /**
  * LLM ROLLARI FASADI (`llm-roles.ts complete`) — Maqola 2 / AUDIT-17, WP8.
  *
  * `globalThis.fetch` stub qilinadi (`tests/llm-stream.test.mts` naqshi) —
- * `gemini.ts`/`xai.ts` adapterlari mavjud `llm.ts` HTTP yo'lidan
+ * `gemini.ts` adapteri mavjud `llm.ts` HTTP yo'lidan
  * foydalanadi, shuning uchun HAQIQIY tarmoqqa chiqmasdan ham chain va
  * "env yo'q" yo'llarini bir xil darajada sinash mumkin.
  *
@@ -24,9 +24,7 @@ import { parseRoleSpec } from "../lib/generation/llm/types.ts";
 const ENV_NAMES = [
   "GEMINI_API_KEY",
   "GEMINI_MODEL",
-  "XAI_API_KEY",
   "ANTHROPIC_API_KEY",
-  "OPENROUTER_API_KEY",
   "OPENAI_API_KEY",
   "LLM_WRITER",
   "LLM_RESEARCHER",
@@ -155,4 +153,81 @@ test("maxTokens/timeoutMs standart qiymatlari qo'llanadi", async () => {
     // `maxOutputTokens` `llm.ts geminiBody`da `Math.max(maxTokens, 4096)` — standart 2048 → 4096 ga ko'tariladi.
     assert.equal(body.generationConfig.maxOutputTokens, 4096);
   });
+});
+
+/* ───────────── olib tashlangan provayderlar: qoldiq env qiymati ───────────── */
+
+/** `log("warn", …)` JSON qatorini `console.warn` ga yozadi — shuni ushlaymiz. */
+function captureWarns<T>(fn: () => T): { out: T; lines: string[] } {
+  const realWarn = console.warn;
+  const lines: string[] = [];
+  console.warn = (...a: unknown[]) => void lines.push(a.map(String).join(" "));
+  try {
+    return { out: fn(), lines };
+  } finally {
+    console.warn = realWarn;
+  }
+}
+
+test("parseRoleSpec: noma'lum provayder yozuvi o'tkazib yuboriladi, to'g'ri yozuvlar SAQLANADI (bitta ogohlantirish)", () => {
+  resetRoleSpecWarnings();
+  const { out, lines } = captureWarns(() => parseRoleSpec("anthropic:claude-sonnet-5,openrouter:x/y,gemini:gemini-3.7-flash"));
+  assert.deepEqual(out, [
+    { provider: "anthropic", model: "claude-sonnet-5" },
+    { provider: "gemini", model: "gemini-3.7-flash" },
+  ]);
+  assert.equal(lines.length, 1, lines.join("\n"));
+  assert.match(lines[0]!, /"level":"warn"/);
+  assert.match(lines[0]!, /openrouter/);
+  // Tartib va model nomi saqlanadi, noma'lum yozuv o'rtada bo'lsa ham.
+  assert.deepEqual(parseRoleSpec("xai:grok-4.3,gemini:g1,fal:m,anthropic:a1").map((r) => `${r.provider}:${r.model}`), ["gemini:g1", "anthropic:a1"]);
+});
+
+test("parseRoleSpec: har noma'lum id uchun BITTA ogohlantirish — chaqiruv sonidan va takrordan qat'i nazar", () => {
+  resetRoleSpecWarnings();
+  const { lines } = captureWarns(() => {
+    for (let i = 0; i < 5; i++) parseRoleSpec("openrouter:a,xai:b,openrouter:c,gemini:g");
+  });
+  assert.equal(lines.length, 2, `openrouter va xai — har biri bir marta:\n${lines.join("\n")}`);
+  assert.ok(lines.some((l) => l.includes("openrouter")) && lines.some((l) => l.includes("xai")));
+  // Faqat noma'lum id bo'lsa — natija bo'sh (standart yo'l), lekin ogohlantirish baribir.
+  resetRoleSpecWarnings();
+  const only = captureWarns(() => parseRoleSpec("openai:gpt-5.6-luna"));
+  assert.deepEqual(only.out, []);
+  assert.equal(only.lines.length, 1);
+});
+
+test("parseRoleSpec: `provider:model` shakli buzuq yozuv BUTUN natijani bekor qiladi (eski qoida)", () => {
+  resetRoleSpecWarnings();
+  const { lines } = captureWarns(() => {
+    assert.deepEqual(parseRoleSpec("gemini:g1,ikki-nuqtasiz"), []);
+    assert.deepEqual(parseRoleSpec("gemini:g1,anthropic:"), [], "bo'sh model");
+    assert.deepEqual(parseRoleSpec(":model,gemini:g1"), [], "bo'sh provayder");
+    assert.deepEqual(parseRoleSpec("openrouter:x,buzuq"), [], "noma'lum id ham, buzuq yozuv ham — buzuq ustun");
+    assert.deepEqual(parseRoleSpec("gemini:g1,openrouter:"), [], "noma'lum id + bo'sh model = buzuq");
+    assert.deepEqual(parseRoleSpec("   "), []);
+    assert.deepEqual(parseRoleSpec(undefined), []);
+  });
+  assert.deepEqual(lines, [], "buzuq spec ogohlantirish yozmaydi");
+});
+
+test("ENV qoldig'i: LLM_WRITER=openrouter:x,gemini:… — to'g'ri yozuv (model) ishlatiladi, standart modelga tushmaydi", async () => {
+  resetRoleSpecWarnings();
+  await withFetchAndEnv(
+    { GEMINI_API_KEY: "g-key", GEMINI_MODEL: "gemini-3.7-flash", LLM_WRITER: "openrouter:x/y,gemini:gemini-3.1-pro" },
+    () => geminiOk("qoldiqdan keyin"),
+    async (calls) => {
+      const realWarn = console.warn;
+      console.warn = () => {};
+      try {
+        const res = await complete("writer", "SYS", "USER");
+        assert.equal(res?.text, "qoldiqdan keyin");
+        assert.equal(res?.usage?.model, "gemini-3.1-pro", "bitta eski yozuv butun zanjirni tashlab yubormasin");
+        assert.ok(calls[0].url.includes("gemini-3.1-pro"));
+        assert.equal(calls.length, 1);
+      } finally {
+        console.warn = realWarn;
+      }
+    },
+  );
 });

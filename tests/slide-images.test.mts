@@ -172,14 +172,12 @@ test("aspectFor haqiqiy slaydlar slotidan ruxsat etilgan eng yaqin nisbatni bera
 // ───────────────────────────────────────────── 4. Gemini javob shakli
 
 function geminiEnv() {
-  const saved = { gemini: process.env.GEMINI_API_KEY, xai: process.env.XAI_API_KEY, fetch: globalThis.fetch };
+  const saved = { gemini: process.env.GEMINI_API_KEY, fetch: globalThis.fetch };
   process.env.GEMINI_API_KEY = "test-gemini-key";
-  delete process.env.XAI_API_KEY;
   return () => {
     globalThis.fetch = saved.fetch;
     if (saved.gemini === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = saved.gemini;
-    if (saved.xai !== undefined) process.env.XAI_API_KEY = saved.xai;
   };
 }
 

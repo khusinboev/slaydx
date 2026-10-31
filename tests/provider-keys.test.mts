@@ -22,7 +22,7 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  * for the API ones; here
  *   - drop the AAD in `providers/crypto.ts` -> "wrong provider id" + "swapped row" tests;
  *   - ignore `enabled` in `getProviderKey` -> "disabled hides both" + the chain/image skip tests;
- *   - prefer the env key over the DB key -> "DB key wins" + the openrouter header test.
+ *   - prefer the env key over the DB key -> "DB key wins" + the Gemini header test.
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -48,14 +48,13 @@ const adminAi = await import("../lib/server/admin-ai.ts");
 const { completeWithChain } = await import("../lib/generation/llm/chain.ts");
 const { parseRoleSpec } = await import("../lib/generation/llm/types.ts");
 const { llmProvider, llmEnabled } = await import("../lib/generation/llm.ts");
-const { makeOpenrouterAdapter } = await import("../lib/generation/llm/openrouter.ts");
+const { makeGeminiAdapter } = await import("../lib/generation/llm/gemini.ts");
 const { makeAnthropicAdapter } = await import("../lib/generation/llm/anthropic.ts");
 const openalex = await import("../lib/generation/research/openalex.ts");
 const googlebooks = await import("../lib/generation/research/googlebooks.ts");
 const { chainProvider, pickProvider } = await import("../lib/generation/image-provider.ts");
 const { pexelsProvider } = await import("../lib/generation/image-provider-pexels.ts");
 const { pixabayProvider } = await import("../lib/generation/image-provider-pixabay.ts");
-const { falProvider } = await import("../lib/generation/image-provider-fal.ts");
 const { geminiProvider } = await import("../lib/generation/image-provider-gemini.ts");
 const ttsGemini = await import("../lib/generation/tts/gemini.ts");
 const ttsAzure = await import("../lib/generation/tts/azure.ts");
@@ -100,14 +99,17 @@ test("registry: unique ids, Uzbek labels, kinds, env names; reserved providers a
   assert.equal(new Set(ids).size, ids.length);
   assert.deepEqual(
     [...ids].sort(),
-    ["anthropic", "aisha", "azure", "elevenlabs", "fal", "gemini", "googlebooks", "kling", "openai", "openai-image", "openalex", "openrouter", "pexels", "pixabay", "veo", "xai"].sort(),
+    ["anthropic", "aisha", "azure", "elevenlabs", "gemini", "googlebooks", "kling", "openai-image", "openalex", "pexels", "pixabay", "veo"].sort(),
   );
+  // Removed providers (fal.ai, xAI, OpenRouter, OpenAI as a TEXT provider) are not in the registry: no key is read for them.
+  for (const id of ["fal", "xai", "openrouter", "openai"]) assert.equal(registry.providerDef(id), null, `${id} is removed`);
+  for (const name of ["FAL_KEY", "XAI_API_KEY", "OPENROUTER_API_KEY"]) assert.ok(!ALL_ENV.includes(name), `${name} is no longer a provider env var`);
   for (const p of registry.PROVIDERS) {
     assert.ok(p.label.trim() && p.kinds.length > 0 && p.envKeys.length > 0 && p.keyHint.trim(), p.id);
     assert.ok(p.envKeys.every((e) => /^[A-Z0-9_]+$/.test(e)), p.id);
     assert.ok(p.id.length <= 40, "the table CHECK allows 40 characters");
   }
-  // `openai-image` became real with the `rasm` model choice (image-provider-openai.ts); it shares OPENAI_API_KEY with the text provider.
+  // `openai-image` became real with the `rasm` model choice (image-provider-openai.ts); it is the only OpenAI use (OpenAI is not a text provider).
   const oi = registry.providerDef("openai-image")!;
   assert.equal(oi.implemented, true);
   assert.deepEqual(oi.envKeys, ["OPENAI_API_KEY"]);
@@ -126,12 +128,11 @@ test("registry: unique ids, Uzbek labels, kinds, env names; reserved providers a
   assert.equal(registry.isProviderId("constructor"), false);
 });
 
-test("registry: every LLM adapter id exists with kind llm; non-LLM ids are not valid LLM role specs", () => {
-  for (const id of ["gemini", "anthropic", "openrouter", "xai", "openai"]) {
-    assert.ok(registry.providerDef(id)?.kinds.includes("llm" as never), id);
-    assert.equal(parseRoleSpec(`${id}:m`).length, 1, id);
-  }
-  for (const id of ["fal", "pexels", "azure", "kling"]) assert.deepEqual(parseRoleSpec(`${id}:m`), [], id);
+test("registry: every LLM adapter id exists with kind llm; non-LLM and removed ids are not valid LLM role specs", () => {
+  const llmIds = registry.PROVIDERS.filter((p) => (p.kinds as readonly string[]).includes("llm")).map((p) => p.id);
+  assert.deepEqual([...llmIds].sort(), ["anthropic", "gemini"], "the LLM providers are gemini and anthropic only");
+  for (const id of llmIds) assert.equal(parseRoleSpec(`${id}:m`).length, 1, id);
+  for (const id of ["fal", "xai", "openrouter", "openai", "pexels", "azure", "kling"]) assert.deepEqual(parseRoleSpec(`${id}:m`), [], id);
 });
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -161,7 +162,7 @@ test("registry covers every provider key env var the generation code reads, and 
       else if (!ALLOWED_DIRECT.has(rel)) direct.push(`${rel}: ${name}`);
     }
     // `env.<group>.key` style reads of the boot-time snapshot would bypass the resolver as well.
-    if (!ALLOWED_DIRECT.has(rel) && /\benv\.(gemini|xai|fal)\.key\b/.test(src)) direct.push(`${rel}: env.<provider>.key`);
+    if (!ALLOWED_DIRECT.has(rel) && /\benv\.gemini\.key\b/.test(src)) direct.push(`${rel}: env.<provider>.key`);
   }
   assert.deepEqual(unknown, [], "a key env var the registry does not know");
   assert.deepEqual(direct, [], "a provider key read that bypasses the resolver");
@@ -192,17 +193,17 @@ test("crypto: the provider id is bound as AAD -- a ciphertext of another provide
 });
 
 test("crypto: a modified ciphertext, a wrong version and garbage are errors, never a different value", () => {
-  const blob = crypto.sealProviderKey("fal", PLAIN);
+  const blob = crypto.sealProviderKey("elevenlabs", PLAIN);
   const text = blob.toString("ascii");
   // Flip one base64url character in the middle (the tag and the ciphertext are both covered by GCM).
   const i = Math.floor((text.length + 4) / 2);
   const flipped = text.slice(0, i) + (text[i] === "A" ? "B" : "A") + text.slice(i + 1);
-  assert.throws(() => crypto.openProviderKey("fal", Buffer.from(flipped, "ascii")), (e: { code?: string }) => e.code === "tampered");
-  assert.throws(() => crypto.openProviderKey("fal", Buffer.from(text.replace("pk1.", "pk2."), "ascii")), (e: { code?: string }) => e.code === "bad_version");
-  assert.throws(() => crypto.openProviderKey("fal", Buffer.from("v1." + text.slice(4), "ascii")), (e: { code?: string }) => e.code === "bad_version", "an admin-seal prefix is not accepted");
-  assert.throws(() => crypto.openProviderKey("fal", Buffer.from("pk1.!!!", "ascii")), (e: { code?: string }) => e.code === "bad_format");
-  assert.throws(() => crypto.openProviderKey("fal", Buffer.from("pk1.AAAA", "ascii")), (e: { code?: string }) => e.code === "bad_format");
-  assert.throws(() => crypto.openProviderKey("fal", Buffer.alloc(0)));
+  assert.throws(() => crypto.openProviderKey("elevenlabs", Buffer.from(flipped, "ascii")), (e: { code?: string }) => e.code === "tampered");
+  assert.throws(() => crypto.openProviderKey("elevenlabs", Buffer.from(text.replace("pk1.", "pk2."), "ascii")), (e: { code?: string }) => e.code === "bad_version");
+  assert.throws(() => crypto.openProviderKey("elevenlabs", Buffer.from("v1." + text.slice(4), "ascii")), (e: { code?: string }) => e.code === "bad_version", "an admin-seal prefix is not accepted");
+  assert.throws(() => crypto.openProviderKey("elevenlabs", Buffer.from("pk1.!!!", "ascii")), (e: { code?: string }) => e.code === "bad_format");
+  assert.throws(() => crypto.openProviderKey("elevenlabs", Buffer.from("pk1.AAAA", "ascii")), (e: { code?: string }) => e.code === "bad_format");
+  assert.throws(() => crypto.openProviderKey("elevenlabs", Buffer.alloc(0)));
 });
 
 test("crypto: without PROVIDER_KEYS_KEY the key is HKDF(ADMIN_TOTP_KEY, context); with it, HKDF of that master", () => {
@@ -268,19 +269,19 @@ test("resolver: no snapshot = the env var; trimmed; blank is none; unknown ids a
 });
 
 test("resolver: the DB key wins over the env var; without a DB key the env var applies", () => {
-  process.env.FAL_KEY = "env-fal-key-1";
+  process.env.ELEVENLABS_API_KEY = "env-eleven-key-1";
   process.env.PEXELS_API_KEY = "env-pexels-1";
-  resolve.setProviderSnapshot(snap({ fal: { key: "db-fal-key-1" }, pexels: { key: null } }));
-  assert.equal(resolve.getProviderKey("fal"), "db-fal-key-1");
-  assert.equal(resolve.keySourceOf("fal"), "db");
+  resolve.setProviderSnapshot(snap({ elevenlabs: { key: "db-eleven-key-1" }, pexels: { key: null } }));
+  assert.equal(resolve.getProviderKey("elevenlabs"), "db-eleven-key-1");
+  assert.equal(resolve.keySourceOf("elevenlabs"), "db");
   assert.equal(resolve.getProviderKey("pexels"), "env-pexels-1", "a row without a key falls back");
   assert.equal(resolve.keySourceOf("pexels"), "env");
   // A key stored for a provider with no env var at all works as well.
   resolve.setProviderSnapshot(snap({ anthropic: { key: "db-anthropic-1" } }));
   assert.equal(resolve.getProviderKey("anthropic"), "db-anthropic-1");
   // A key that cannot be decrypted is ignored.
-  resolve.setProviderSnapshot(snap({ fal: { key: null, unreadable: true } }));
-  assert.equal(resolve.getProviderKey("fal"), "env-fal-key-1");
+  resolve.setProviderSnapshot(snap({ elevenlabs: { key: null, unreadable: true } }));
+  assert.equal(resolve.getProviderKey("elevenlabs"), "env-eleven-key-1");
 });
 
 test("resolver: a disabled provider hides BOTH the DB key and the env var", () => {
@@ -296,15 +297,15 @@ test("resolver: a disabled provider hides BOTH the DB key and the env var", () =
   resolve.setProviderSnapshot(snap({ gemini: { enabled: true, key: null } }));
   assert.equal(resolve.getProviderKey("gemini"), "env-gemini-1234");
   // Disabling one provider leaves the others alone.
-  process.env.XAI_API_KEY = "env-xai-1234";
+  process.env.ANTHROPIC_API_KEY = "env-anthropic-1234";
   resolve.setProviderSnapshot(snap({ gemini: { enabled: false } }));
-  assert.equal(resolve.getProviderKey("xai"), "env-xai-1234");
+  assert.equal(resolve.getProviderKey("anthropic"), "env-anthropic-1234");
 });
 
 test("cache: loads once per TTL, an invalidation forces a reload, a failing load keeps the last snapshot and backs off", async () => {
   let loads = 0;
   let fail = false;
-  let rows = snap({ fal: { key: "v1-fal-key-1" } });
+  let rows = snap({ elevenlabs: { key: "v1-eleven-key-1" } });
   resolve.registerProviderSource(async () => {
     loads++;
     if (fail) throw new Error("db down");
@@ -313,30 +314,30 @@ test("cache: loads once per TTL, an invalidation forces a reload, a failing load
   const T0 = 1_000_000;
   await resolve.primeProviderKeys({ now: T0 });
   assert.equal(loads, 1);
-  assert.equal(resolve.getProviderKey("fal"), "v1-fal-key-1");
+  assert.equal(resolve.getProviderKey("elevenlabs"), "v1-eleven-key-1");
 
-  rows = snap({ fal: { key: "v2-fal-key-2" } });
+  rows = snap({ elevenlabs: { key: "v2-eleven-key-2" } });
   await resolve.primeProviderKeys({ now: T0 + resolve.PROVIDER_CACHE_TTL_MS - 1 });
   assert.equal(loads, 1, "fresh: no reload");
-  assert.equal(resolve.getProviderKey("fal"), "v1-fal-key-1", "the change is not visible inside the TTL");
+  assert.equal(resolve.getProviderKey("elevenlabs"), "v1-eleven-key-1", "the change is not visible inside the TTL");
   await resolve.primeProviderKeys({ now: T0 + resolve.PROVIDER_CACHE_TTL_MS });
   assert.equal(loads, 2, "TTL over: reload");
-  assert.equal(resolve.getProviderKey("fal"), "v2-fal-key-2");
+  assert.equal(resolve.getProviderKey("elevenlabs"), "v2-eleven-key-2");
   assert.equal(resolve.PROVIDER_CACHE_TTL_MS, 30_000);
 
   // This process's own write: invalidation, then the very next prime reloads even inside the TTL.
-  rows = snap({ fal: { key: "v3-fal-key-3" } });
+  rows = snap({ elevenlabs: { key: "v3-eleven-key-3" } });
   resolve.invalidateProviderCache();
   await resolve.primeProviderKeys({ now: T0 + resolve.PROVIDER_CACHE_TTL_MS + 1 });
   assert.equal(loads, 3);
-  assert.equal(resolve.getProviderKey("fal"), "v3-fal-key-3");
+  assert.equal(resolve.getProviderKey("elevenlabs"), "v3-eleven-key-3");
 
   // A failing load keeps the last good snapshot, does not throw, and does not hammer the database.
   fail = true;
   const T1 = T0 + 10 * resolve.PROVIDER_CACHE_TTL_MS;
   await resolve.primeProviderKeys({ now: T1 });
   assert.equal(loads, 4);
-  assert.equal(resolve.getProviderKey("fal"), "v3-fal-key-3");
+  assert.equal(resolve.getProviderKey("elevenlabs"), "v3-eleven-key-3");
   await resolve.primeProviderKeys({ now: T1 + 1_000 });
   assert.equal(loads, 4, "backing off after a failure");
   await resolve.primeProviderKeys({ now: T1 + 1_000, force: true });
@@ -354,7 +355,7 @@ test("cache: concurrent primes share one load; a load racing an invalidation is 
   resolve.registerProviderSource(async () => {
     loads++;
     await gate;
-    return snap({ fal: { key: "racing-fal-key" } });
+    return snap({ elevenlabs: { key: "racing-eleven-key" } });
   });
   const a = resolve.primeProviderKeys({ now: 5 });
   const b = resolve.primeProviderKeys({ now: 5 });
@@ -377,29 +378,33 @@ test("resolver: a synchronous throw in the source is contained", async () => {
 
 test("store: rows are decrypted into the snapshot; unreadable and unknown rows are contained", { skip }, async () => {
   await query("DELETE FROM provider_settings");
-  const sealed = crypto.sealProviderKey("fal", PLAIN);
-  await query("INSERT INTO provider_settings (provider, enabled, key_ciphertext, key_hint) VALUES ('fal', true, $1, '…AA11')", [sealed]);
-  // A ciphertext copied from the fal row onto the pexels row (AAD mismatch): unreadable, not decrypted as fal's key.
+  const sealed = crypto.sealProviderKey("elevenlabs", PLAIN);
+  await query("INSERT INTO provider_settings (provider, enabled, key_ciphertext, key_hint) VALUES ('elevenlabs', true, $1, '…AA11')", [sealed]);
+  // A ciphertext copied from the elevenlabs row onto the pexels row (AAD mismatch): unreadable, not decrypted as elevenlabs's key.
   await query("INSERT INTO provider_settings (provider, enabled, key_ciphertext, key_hint) VALUES ('pexels', true, $1, '…AA11')", [sealed]);
   await query("INSERT INTO provider_settings (provider, enabled) VALUES ('gemini', false)");
   await query("INSERT INTO provider_settings (provider, enabled) VALUES ('retired-provider', false)");
+  // Rows left behind by the removed providers (history stays in the table) are ignored as well, and never switch
+  // the OpenAI IMAGE provider off.
+  for (const id of ["fal", "xai", "openrouter", "openai"]) await query("INSERT INTO provider_settings (provider, enabled) VALUES ($1, false)", [id]);
   const s = await store.loadProviderSnapshot();
-  assert.deepEqual([...s.keys()].sort(), ["fal", "gemini", "pexels"], "a row of a provider the registry does not know is ignored");
-  assert.deepEqual(s.get("fal"), { enabled: true, key: PLAIN, unreadable: false });
+  assert.deepEqual([...s.keys()].sort(), ["elevenlabs", "gemini", "pexels"], "a row of a provider the registry does not know is ignored");
+  assert.deepEqual(s.get("elevenlabs"), { enabled: true, key: PLAIN, unreadable: false });
   assert.deepEqual(s.get("pexels"), { enabled: true, key: null, unreadable: true }, "swapped row does not open");
   assert.deepEqual(s.get("gemini"), { enabled: false, key: null, unreadable: false });
 
   process.env.PEXELS_API_KEY = "env-pexels-1";
   resolve.setProviderSnapshot(s);
-  assert.equal(resolve.getProviderKey("fal"), PLAIN);
+  assert.equal(resolve.getProviderKey("elevenlabs"), PLAIN);
+  assert.equal(resolve.isProviderEnabled("openai-image"), true, "a leftover `openai` row does not disable the image provider");
   assert.equal(resolve.getProviderKey("pexels"), "env-pexels-1", "unreadable falls back to the env var");
   await query("DELETE FROM provider_settings");
 });
 
 test("store: the table enforces key/hint pairing and the id length", { skip }, async () => {
   await query("DELETE FROM provider_settings");
-  await assert.rejects(query("INSERT INTO provider_settings (provider, key_ciphertext) VALUES ('fal', $1)", [Buffer.from("x")]), /provider_settings_key_pair/);
-  await assert.rejects(query("INSERT INTO provider_settings (provider, key_hint) VALUES ('fal', '…abcd')"), /provider_settings_key_pair/);
+  await assert.rejects(query("INSERT INTO provider_settings (provider, key_ciphertext) VALUES ('elevenlabs', $1)", [Buffer.from("x")]), /provider_settings_key_pair/);
+  await assert.rejects(query("INSERT INTO provider_settings (provider, key_hint) VALUES ('elevenlabs', '…abcd')"), /provider_settings_key_pair/);
   await assert.rejects(query("INSERT INTO provider_settings (provider) VALUES ($1)", ["x".repeat(41)]));
 });
 
@@ -408,13 +413,13 @@ test("store: another process sees a change only after the TTL (the documented pr
   resolve.registerProviderSource(store.loadProviderSnapshot);
   const T0 = 9_000_000;
   await resolve.primeProviderKeys({ now: T0, force: true });
-  assert.equal(resolve.isProviderEnabled("xai"), true);
-  // "The other process" (web) switches xai off.
-  await query("INSERT INTO provider_settings (provider, enabled) VALUES ('xai', false)");
+  assert.equal(resolve.isProviderEnabled("anthropic"), true);
+  // "The other process" (web) switches anthropic off.
+  await query("INSERT INTO provider_settings (provider, enabled) VALUES ('anthropic', false)");
   await resolve.primeProviderKeys({ now: T0 + 29_000 });
-  assert.equal(resolve.isProviderEnabled("xai"), true, "still the old snapshot inside the TTL");
+  assert.equal(resolve.isProviderEnabled("anthropic"), true, "still the old snapshot inside the TTL");
   await resolve.primeProviderKeys({ now: T0 + 30_000 });
-  assert.equal(resolve.isProviderEnabled("xai"), false, "visible after the TTL");
+  assert.equal(resolve.isProviderEnabled("anthropic"), false, "visible after the TTL");
   await query("DELETE FROM provider_settings");
 });
 
@@ -452,17 +457,14 @@ function fakeAdapters(calls: FakeCall[]) {
       return { ok: true as const, text: "ok", usage: { inputTokens: 1, outputTokens: 1 } };
     },
   });
-  return { gemini: mk("gemini"), anthropic: mk("anthropic"), openrouter: mk("openrouter"), xai: mk("xai"), openai: mk("openai") } as never;
+  return { gemini: mk("gemini"), anthropic: mk("anthropic") } as never;
 }
 
 const LLM_ENV: Record<string, string> = {
   gemini: "GEMINI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-  xai: "XAI_API_KEY",
-  openai: "OPENAI_API_KEY",
 };
-const ORDER = ["anthropic", "gemini", "openrouter", "xai", "openai"] as const;
+const ORDER = ["anthropic", "gemini"] as const;
 const SPECS = ORDER.map((provider) => ({ provider, model: "m" }));
 
 async function runChain(): Promise<{ called: string[]; used: string | null; log: string[] }> {
@@ -486,14 +488,12 @@ test("NO ROWS = before: the LLM chain picks what the env-only rule picks, over e
     const { called, used } = await runChain();
     assert.equal(used, expected, `mask ${mask}`);
     assert.deepEqual(called, expected ? [expected] : [], `mask ${mask}`);
-    // Defaults of llm.ts: Gemini first, then xAI, else none.
-    assert.equal(llmProvider(), oldKey("GEMINI_API_KEY") ? "gemini" : oldKey("XAI_API_KEY") ? "xai" : null, `llmProvider ${mask}`);
+    // Default of llm.ts: Gemini when it has a key, else none.
+    assert.equal(llmProvider(), oldKey("GEMINI_API_KEY") ? "gemini" : null, `llmProvider ${mask}`);
     assert.equal(llmEnabled(), llmProvider() !== null);
-    assert.equal(serverEnv.llmConfigured(), Boolean(oldKey("GEMINI_API_KEY") || oldKey("XAI_API_KEY")), `llmConfigured ${mask}`);
+    assert.equal(serverEnv.llmConfigured(), Boolean(oldKey("GEMINI_API_KEY")), `llmConfigured ${mask}`);
     assert.equal(adminAi.providerKeys().anthropic, oldKey("ANTHROPIC_API_KEY") !== "", `providerKeys ${mask}`);
-    assert.equal(adminAi.providerKeys().openai, oldKey("OPENAI_API_KEY") !== "");
-    assert.equal(adminAi.providerKeys().openrouter, oldKey("OPENROUTER_API_KEY") !== "");
-    assert.equal(adminAi.providerKeys().xai, oldKey("XAI_API_KEY") !== "");
+    assert.equal(adminAi.providerKeys().openai, oldKey("OPENAI_API_KEY") !== "", "OpenAI key presence = the image key");
     assert.equal(adminAi.providerKeys().gemini, oldKey("GEMINI_API_KEY") !== "");
   }
 });
@@ -504,12 +504,13 @@ test("NO ROWS = before: image sources, TTS providers, feature flags and key pres
     { GEMINI_API_KEY: "env-gemini-1234" },
     { GEMINI_API_KEY: "env-gemini-1234", TTS_GEMINI_MODEL: "tts-model" },
     { PEXELS_API_KEY: "env-pexels-1", PIXABAY_API_KEY: "env-pixabay-1" },
-    { FAL_KEY: "env-fal-key-1" },
-    { FAL_KEY: "  ", PEXELS_API_KEY: "\t" },
+    { PEXELS_API_KEY: "env-pexels-1" },
+    { PIXABAY_API_KEY: "  ", PEXELS_API_KEY: "\t" },
     { AZURE_SPEECH_KEY: "env-azure-1234" },
     { AZURE_SPEECH_KEY: "env-azure-1234", AZURE_SPEECH_REGION: "westeurope" },
     { AISHA_API_KEY: "env-aisha-1234" },
-    { GEMINI_API_KEY: "env-gemini-1234", XAI_API_KEY: "env-xai-1234", FAL_KEY: "env-fal-key-1", PEXELS_API_KEY: "env-pexels-1", PIXABAY_API_KEY: "env-pixabay-1", AZURE_SPEECH_KEY: "env-azure-1234", AZURE_SPEECH_REGION: "westeurope", AISHA_API_KEY: "env-aisha-1234", TTS_GEMINI_MODEL: "tts-model" },
+    { OPENAI_API_KEY: "env-openai-1234" },
+    { GEMINI_API_KEY: "env-gemini-1234", ANTHROPIC_API_KEY: "env-anthropic-1", PEXELS_API_KEY: "env-pexels-1", PIXABAY_API_KEY: "env-pixabay-1", AZURE_SPEECH_KEY: "env-azure-1234", AZURE_SPEECH_REGION: "westeurope", AISHA_API_KEY: "env-aisha-1234", TTS_GEMINI_MODEL: "tts-model" },
   ];
   for (const vars of combos) {
     for (const k of [...ALL_ENV, "AZURE_SPEECH_REGION", "TTS_GEMINI_MODEL"]) delete process.env[k];
@@ -518,9 +519,9 @@ test("NO ROWS = before: image sources, TTS providers, feature flags and key pres
     // Image sources.
     assert.equal(pexelsProvider.hasKey(), oldKey("PEXELS_API_KEY") !== "", where);
     assert.equal(pixabayProvider.hasKey(), oldKey("PIXABAY_API_KEY") !== "", where);
-    assert.equal(falProvider.hasKey(), oldKey("FAL_KEY") !== "", where);
     assert.equal(geminiProvider.hasKey(), oldKey("GEMINI_API_KEY") !== "", where);
-    assert.equal(chainProvider([pexelsProvider, pixabayProvider, falProvider]).hasKey(), Boolean(oldKey("PEXELS_API_KEY") || oldKey("PIXABAY_API_KEY") || oldKey("FAL_KEY")), where);
+    assert.equal(chainProvider([pexelsProvider, pixabayProvider]).hasKey(), Boolean(oldKey("PEXELS_API_KEY") || oldKey("PIXABAY_API_KEY")), where);
+    assert.equal(pickProvider().hasKey(), Boolean(oldKey("PEXELS_API_KEY") || oldKey("PIXABAY_API_KEY")), where);
     assert.equal(pickProvider({ toolId: "pro-slide" }).hasKey(), oldKey("GEMINI_API_KEY") !== "", where);
     assert.equal(pickProvider({ toolId: "slide" }).hasKey(), Boolean(oldKey("PEXELS_API_KEY") || oldKey("PIXABAY_API_KEY")), where);
     // TTS.
@@ -545,8 +546,8 @@ test("NO ROWS = before: image sources, TTS providers, feature flags and key pres
     // admin-ai key presence.
     const k = adminAi.providerKeys();
     assert.deepEqual(
-      [k.fal, k.pexels, k.pixabay, k.azureTts, k.aisha],
-      [oldKey("FAL_KEY") !== "", oldKey("PEXELS_API_KEY") !== "", oldKey("PIXABAY_API_KEY") !== "", azureOn, aishaOn],
+      [k.openai, k.pexels, k.pixabay, k.azureTts, k.aisha],
+      [oldKey("OPENAI_API_KEY") !== "", oldKey("PEXELS_API_KEY") !== "", oldKey("PIXABAY_API_KEY") !== "", azureOn, aishaOn],
       where,
     );
   }
@@ -555,7 +556,7 @@ test("NO ROWS = before: image sources, TTS providers, feature flags and key pres
 // ───────────────────────────── disabled / DB key wiring
 
 test("a disabled LLM provider is skipped and the chain falls through to the next", async () => {
-  setEnv({ GEMINI_API_KEY: "env-gemini-1234", ANTHROPIC_API_KEY: "env-anthropic-1", XAI_API_KEY: "env-xai-1234" });
+  setEnv({ GEMINI_API_KEY: "env-gemini-1234", ANTHROPIC_API_KEY: "env-anthropic-1" });
   assert.equal((await runChain()).used, "anthropic", "baseline: first key wins");
   resolve.setProviderSnapshot(snap({ anthropic: { enabled: false } }));
   resetBreakers();
@@ -563,11 +564,8 @@ test("a disabled LLM provider is skipped and the chain falls through to the next
   assert.equal(r.used, "gemini");
   assert.deepEqual(r.called, ["gemini"], "the disabled provider's adapter is never called");
   assert.ok(r.log.some((l) => l.includes("anthropic:m") && l.includes("kalit yo'q")), "reported as no key");
-  // Disable the next two as well: the last enabled provider answers; with all off nothing is called.
+  // Disable the next one as well: with all off nothing is called.
   resolve.setProviderSnapshot(snap({ anthropic: { enabled: false }, gemini: { enabled: false } }));
-  resetBreakers();
-  assert.equal((await runChain()).used, "xai");
-  resolve.setProviderSnapshot(snap({ anthropic: { enabled: false }, gemini: { enabled: false }, xai: { enabled: false } }));
   resetBreakers();
   const none = await runChain();
   assert.equal(none.used, null);
@@ -579,25 +577,25 @@ test("a disabled LLM provider is skipped and the chain falls through to the next
 });
 
 test("a key stored in the DB is used by the adapter, and wins over the env var", async () => {
-  setEnv({ OPENROUTER_API_KEY: "env-openrouter-key-1" });
+  setEnv({ GEMINI_API_KEY: "env-gemini-key-1" });
   const seen: string[] = [];
   const fetchImpl = (async (_url: string, init: { headers: Record<string, string> }) => {
-    seen.push(init.headers.Authorization!);
-    return new Response(JSON.stringify({ choices: [{ message: { content: "hi" }, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1 } }), { status: 200 });
+    seen.push(init.headers["x-goog-api-key"]!);
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "hi" }] }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 } }), { status: 200 });
   }) as unknown as typeof fetch;
-  const adapter = makeOpenrouterAdapter({ fetchImpl });
+  const adapter = makeGeminiAdapter({ fetchImpl });
   const opts = { maxTokens: 10, timeoutMs: 5_000 };
   assert.equal((await adapter.complete("m", "s", "u", opts)).ok, true);
-  resolve.setProviderSnapshot(snap({ openrouter: { key: "db-openrouter-key-1" } }));
+  resolve.setProviderSnapshot(snap({ gemini: { key: "db-gemini-key-1" } }));
   assert.equal((await adapter.complete("m", "s", "u", opts)).ok, true);
-  resolve.setProviderSnapshot(snap({ openrouter: { key: "db-openrouter-key-1", enabled: false } }));
+  resolve.setProviderSnapshot(snap({ gemini: { key: "db-gemini-key-1", enabled: false } }));
   const off = await adapter.complete("m", "s", "u", opts);
   assert.equal(off.ok, false, "disabled: the adapter has no key");
-  assert.deepEqual(seen, ["Bearer env-openrouter-key-1", "Bearer db-openrouter-key-1"]);
+  assert.deepEqual(seen, ["env-gemini-key-1", "db-gemini-key-1"]);
 });
 
 test("a disabled image source is skipped; the chain falls through to the next one", async () => {
-  setEnv({ PEXELS_API_KEY: "env-pexels-1", PIXABAY_API_KEY: "env-pixabay-1", FAL_KEY: "env-fal-key-1" });
+  setEnv({ PEXELS_API_KEY: "env-pexels-1", PIXABAY_API_KEY: "env-pixabay-1" });
   const urls: string[] = [];
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async (input: string | URL | Request) => {
@@ -609,19 +607,19 @@ test("a disabled image source is skipped; the chain falls through to the next on
   }) as typeof fetch;
   const ask = { prompt: "p", size: { width: 1024, height: 768 }, styleId: "photo" as never, searchQuery: "nature" };
   try {
-    const first = await chainProvider([pexelsProvider, pixabayProvider, falProvider]).fetchImage(ask);
+    const first = await chainProvider([pexelsProvider, pixabayProvider]).fetchImage(ask);
     assert.equal(first.ok && first.image.url, "https://images.pexels.com/a.jpg", "baseline: Pexels first");
     urls.length = 0;
     resolve.setProviderSnapshot(snap({ pexels: { enabled: false } }));
-    const chain = chainProvider([pexelsProvider, pixabayProvider, falProvider]);
+    const chain = chainProvider([pexelsProvider, pixabayProvider]);
     assert.equal(chain.hasKey(), true);
     const second = await chain.fetchImage(ask);
     assert.equal(second.ok && second.image.url, "https://pixabay.com/b.jpg");
     assert.ok(urls.every((u) => !u.includes("pexels")), `Pexels was never contacted: ${urls.join(", ")}`);
-    // Both stock sources off and no fal: nothing is contacted at all.
+    // Both stock sources off: nothing is contacted at all.
     urls.length = 0;
-    resolve.setProviderSnapshot(snap({ pexels: { enabled: false }, pixabay: { enabled: false }, fal: { enabled: false } }));
-    const chain3 = chainProvider([pexelsProvider, pixabayProvider, falProvider]);
+    resolve.setProviderSnapshot(snap({ pexels: { enabled: false }, pixabay: { enabled: false } }));
+    const chain3 = chainProvider([pexelsProvider, pixabayProvider]);
     assert.equal(chain3.hasKey(), false);
     const res = await chain3.fetchImage(ask);
     assert.equal(res.ok, false);
@@ -662,10 +660,16 @@ test("disabled voice providers: TTS stops, the audio tools hide only when none i
 });
 
 test("admin-ai providerKeys(): a DB key counts, a disabled provider is false even with an env var", () => {
-  setEnv({ FAL_KEY: "env-fal-key-1" });
-  assert.equal(adminAi.providerKeys().fal, true);
-  resolve.setProviderSnapshot(snap({ fal: { enabled: false } }));
-  assert.equal(adminAi.providerKeys().fal, false);
+  setEnv({ PEXELS_API_KEY: "env-pexels-1" });
+  assert.equal(adminAi.providerKeys().pexels, true);
+  resolve.setProviderSnapshot(snap({ pexels: { enabled: false } }));
+  assert.equal(adminAi.providerKeys().pexels, false);
+  // The OpenAI entry is the IMAGE provider (`openai-image`): its own switch decides, a stray `openai` row does not.
+  setEnv({ OPENAI_API_KEY: "env-openai-1234" });
+  resolve.setProviderSnapshot(snap({ openai: { enabled: false } }));
+  assert.equal(adminAi.providerKeys().openai, true);
+  resolve.setProviderSnapshot(snap({ "openai-image": { enabled: false } }));
+  assert.equal(adminAi.providerKeys().openai, false);
   resolve.setProviderSnapshot(snap({ anthropic: { key: "db-anthropic-1" }, azure: { key: "db-azure-key-1" } }));
   assert.equal(adminAi.providerKeys().anthropic, true, "stored in the DB only");
   assert.equal(adminAi.providerKeys().azureTts, false, "Azure still needs its region");
@@ -762,12 +766,12 @@ test("runtime config: the Azure key is read through the resolver; unreadable sto
 
   const warn = () => serverEnv.runtimeWarnings().filter((w) => w.includes("saqlangan kalit o'qilmaydi"));
   assert.deepEqual(warn(), []);
-  resolve.setProviderSnapshot(snap({ fal: { unreadable: true }, aisha: { unreadable: true }, pexels: { key: "db-pexels-key-1" } }));
-  assert.deepEqual(resolve.unreadableProviders(), ["aisha", "fal"]);
+  resolve.setProviderSnapshot(snap({ elevenlabs: { unreadable: true }, aisha: { unreadable: true }, pexels: { key: "db-pexels-key-1" } }));
+  assert.deepEqual(resolve.unreadableProviders(), ["aisha", "elevenlabs"]);
   const w = warn();
   assert.equal(w.length, 1);
   assert.match(w[0]!, /PROVIDER_KEYS_KEY o'zgarganmi\?/);
-  assert.ok(w[0]!.includes("aisha, fal") && !w[0]!.includes("db-pexels-key-1"));
+  assert.ok(w[0]!.includes("aisha, elevenlabs") && !w[0]!.includes("db-pexels-key-1"));
   Object.assign(serverEnv.env.tts, TTS_BACKUP);
 });
 
