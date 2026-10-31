@@ -15,6 +15,8 @@ export type SettingEditDialogProps = {
   onClose: () => void;
   /** Called with the server's updated item after a successful save. */
   onSaved: (item: SettingItem) => void;
+  /** For a flag opened from its row switch: the dialog starts on this value (the flipped one) instead of the current one. */
+  presetBool?: boolean;
 };
 
 const FIELD = "border-input bg-card focus:ring-ring h-9 w-full rounded-lg border px-2.5 text-[13px] tabular-nums outline-none focus:ring-2 disabled:opacity-60";
@@ -29,17 +31,17 @@ export function SettingEditDialog(props: SettingEditDialogProps) {
   return <Body key={props.item.key} {...props} item={props.item} />;
 }
 
-function initialDraft(item: SettingItem): { bool: boolean; text: string; tools: string[] } {
+function initialDraft(item: SettingItem, presetBool?: boolean): { bool: boolean; text: string; tools: string[] } {
   return {
-    bool: item.type === "bool" ? item.value : false,
+    bool: item.type === "bool" ? (presetBool ?? item.value) : false,
     text: item.type === "int" || item.type === "number" ? numberText(item.value) : item.type === "text" ? item.value : "",
     tools: item.type === "tool_ids" ? [...item.value] : [],
   };
 }
 
-function Body({ item, tools, onClose, onSaved }: SettingEditDialogProps & { item: SettingItem }) {
+function Body({ item, tools, onClose, onSaved, presetBool }: SettingEditDialogProps & { item: SettingItem }) {
   const ids = useId();
-  const [draft, setDraft] = useState(() => initialDraft(item));
+  const [draft, setDraft] = useState(() => initialDraft(item, presetBool));
 
   let next: SettingValue | null = null;
   let error: string | null = null;
