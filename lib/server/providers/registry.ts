@@ -33,17 +33,13 @@ export type ProviderDef = {
 export const PROVIDERS = [
   { id: "gemini", label: "Google Gemini", kinds: ["llm", "image", "tts"], envKeys: ["GEMINI_API_KEY"], keyHint: "AIza… (39 belgi)", implemented: true, testable: true },
   { id: "anthropic", label: "Anthropic (Claude)", kinds: ["llm"], envKeys: ["ANTHROPIC_API_KEY"], keyHint: "sk-ant-…", implemented: true, testable: true },
-  { id: "openrouter", label: "OpenRouter", kinds: ["llm"], envKeys: ["OPENROUTER_API_KEY"], keyHint: "sk-or-…", implemented: true, testable: true },
-  { id: "xai", label: "xAI (Grok)", kinds: ["llm"], envKeys: ["XAI_API_KEY"], keyHint: "xai-…", implemented: true, testable: true },
-  { id: "openai", label: "OpenAI (matn)", kinds: ["llm"], envKeys: ["OPENAI_API_KEY"], keyHint: "sk-…", implemented: true, testable: true },
-  { id: "fal", label: "fal.ai", kinds: ["image"], envKeys: ["FAL_KEY"], keyHint: "<id>:<secret>", implemented: true, testable: false },
   { id: "pexels", label: "Pexels", kinds: ["image"], envKeys: ["PEXELS_API_KEY"], keyHint: "56 belgili kalit", implemented: true, testable: true },
   { id: "pixabay", label: "Pixabay", kinds: ["image"], envKeys: ["PIXABAY_API_KEY"], keyHint: "12345678-abcdef…", implemented: true, testable: true },
   { id: "azure", label: "Azure Speech", kinds: ["tts"], envKeys: ["AZURE_SPEECH_KEY"], keyHint: "32 ta hex belgi (region AZURE_SPEECH_REGION muhitida)", implemented: true, testable: true },
   { id: "aisha", label: "Aisha (o'zbekcha ovoz)", kinds: ["tts"], envKeys: ["AISHA_API_KEY"], keyHint: "Aisha kaliti", implemented: true, testable: false },
   { id: "openalex", label: "OpenAlex", kinds: ["research"], envKeys: ["OPENALEX_API_KEY"], keyHint: "OpenAlex kaliti", implemented: true, testable: true },
   { id: "googlebooks", label: "Google Books", kinds: ["research"], envKeys: ["GOOGLE_BOOKS_API_KEY"], keyHint: "AIza…", implemented: true, testable: true },
-  // `openai-image`: «ChatGPT» choice of the `rasm` tool (image-provider-openai.ts); shares OPENAI_API_KEY with the text provider.
+  // `openai-image`: «ChatGPT» choice of the `rasm` tool (image-provider-openai.ts); the only OpenAI use (no OpenAI text provider).
   { id: "openai-image", label: "OpenAI (rasm)", kinds: ["image"], envKeys: ["OPENAI_API_KEY"], keyHint: "sk-…", implemented: true, testable: false },
   // Video (lib/generation/video/): `veo` runs on Gemini Omni Flash through the Interactions API (Google shut the Veo REST
   // models down in the Gemini API on 2026-10-22, see omni.ts), so it shares the Gemini key; `kling` signs a JWT, so its

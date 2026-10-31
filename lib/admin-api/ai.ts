@@ -62,7 +62,7 @@ export type AiCostResponse = {
   soumPerUsd: number;
 };
 
-export type AiProviderKeyName = "gemini" | "anthropic" | "openai" | "openrouter" | "xai" | "fal" | "pexels" | "pixabay" | "azureTts" | "aisha";
+export type AiProviderKeyName = "gemini" | "anthropic" | "openai" | "pexels" | "pixabay" | "azureTts" | "aisha";
 
 export type AiProcess = { process: string; role: "web" | "worker"; lastSeenAt: string; stale: boolean };
 export type AiBreaker = { process: string; name: string; state: "closed" | "open" | "half-open"; openUntil: string | null; failures: number; stale: boolean };

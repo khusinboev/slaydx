@@ -172,11 +172,9 @@ services:
       # Rasm yaratish modeli (bo'sh → kod standarti gemini-3.1-flash-lite-image / 1K)
       GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-}
       GEMINI_IMAGE_SIZE: ${GEMINI_IMAGE_SIZE:-}
-      FAL_KEY: ${FAL_KEY:-}
-      # Bepul foto manbalari (oddiy slayd): Pexels → Pixabay → fal (AUDIT-10 P3)
+      # Bepul foto manbalari (oddiy slayd): Pexels → Pixabay (AUDIT-10 P3)
       PEXELS_API_KEY: ${PEXELS_API_KEY:-}
       PIXABAY_API_KEY: ${PIXABAY_API_KEY:-}
-      FAL_MODEL: ${FAL_MODEL:-fal-ai/flux/schnell}
       # Maqola 2 (AUDIT-17): LLM rollari zaxira zanjiri va manba qidiruv —
       # compose faqat SANAB O'TILGAN o'zgaruvchilarni uzatadi; `.env` ga
       # qo'shish yetarli emas (2026-09-12 deployda baholovchi Gemini'da qoldi).
@@ -187,8 +185,7 @@ services:
       LLM_FAST: ${LLM_FAST:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_WORKSPACE_ID: ${ANTHROPIC_WORKSPACE_ID:-}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      XAI_API_KEY: ${XAI_API_KEY:-}
+      # OpenAI: faqat «ChatGPT» rasm tanlovi (image-provider-openai.ts).
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
       OPENALEX_MAILTO: ${OPENALEX_MAILTO:-}
@@ -348,16 +345,9 @@ services:
       # Rasm yaratish modeli (bo'sh → kod standarti gemini-3.1-flash-lite-image / 1K)
       GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-}
       GEMINI_IMAGE_SIZE: ${GEMINI_IMAGE_SIZE:-}
-      FAL_KEY: ${FAL_KEY:-}
-      # Bepul foto manbalari (oddiy slayd): Pexels → Pixabay → fal (AUDIT-10 P3)
+      # Bepul foto manbalari (oddiy slayd): Pexels → Pixabay (AUDIT-10 P3)
       PEXELS_API_KEY: ${PEXELS_API_KEY:-}
       PIXABAY_API_KEY: ${PIXABAY_API_KEY:-}
-      FAL_MODEL: ${FAL_MODEL:-fal-ai/flux/schnell}
-      FAL_MODEL_PREMIUM: ${FAL_MODEL_PREMIUM:-}
-      # `FAL_MODEL_PREMIUM` sozlangan bo'lsa ham, qadam soni shu yerdan
-      # o'tmasa `slide-images.ts` sukut bo'yicha 8 taga tushib qoladi —
-      # standalone «Rasm» vositasi endi shu (premium) yo'ldan ishlaydi.
-      FAL_STEPS_PREMIUM: ${FAL_STEPS_PREMIUM:-}
       GEMINI_THINKING_BUDGET: ${GEMINI_THINKING_BUDGET:-}
       # Maqola 2 (AUDIT-17): LLM rollari zaxira zanjiri va manba qidiruv —
       # compose faqat SANAB O'TILGAN o'zgaruvchilarni uzatadi; `.env` ga
@@ -369,8 +359,7 @@ services:
       LLM_FAST: ${LLM_FAST:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_WORKSPACE_ID: ${ANTHROPIC_WORKSPACE_ID:-}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      XAI_API_KEY: ${XAI_API_KEY:-}
+      # OpenAI: faqat «ChatGPT» rasm tanlovi (image-provider-openai.ts).
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
       OPENALEX_MAILTO: ${OPENALEX_MAILTO:-}

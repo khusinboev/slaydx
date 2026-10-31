@@ -35,7 +35,7 @@
  * NOT verified live: there is no OpenAI key on the build machine. The request/response shape follows the
  * docs above and is locked by `tests/image-provider-openai.test.mts` with a stubbed `fetch`.
  */
-import { requestBudget, type FalFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
+import { requestBudget, type ImageFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
 import { recordImageUsd } from "./job-cost";
 import { OPENAI_IMAGE_FALLBACK_USD, imagePriceOf, openaiImageUsd } from "./llm-pricing";
 import { getProviderKey } from "../server/providers/resolve";
@@ -101,7 +101,7 @@ export function openaiSizeFor(size: { width: number; height: number }): string {
  * 401/403 -- key or organisation (GPT Image needs a verified organisation: a 403): `blocked`, the stage
  * stops asking. 429 -- rate limit. Everything else, a moderation refusal included, is `failed`.
  */
-function openaiReason(status: number): FalFailure {
+function openaiReason(status: number): ImageFailure {
   if (status === 401 || status === 402 || status === 403) return "blocked";
   if (status === 429) return "rate";
   return "failed";

@@ -50,8 +50,11 @@ Prices: one place, `priceFor` (server); admin «Narxlar» page adjusts 25–1000
 - **Paynet** (JSON-RPC provider endpoint `/api/payments/paynet`, `docs/payments/PAYNET.md`): live, one service `serviceId 1`, payer = SlaydX ID; no IP allow-list (Paynet's real source differs from the document's ranges). Shared with Bandlik.uz by payer prefix `vk-` behind `PAYNET_SHARED_WITH_VAKANT` (OFF until Bandlik serves its endpoint). Commission 0 %.
 
 ## 5. AI providers
-- Text/LLM: Gemini (default), roles `LLM_WRITER/RESEARCHER/JUDGE/FAST` with fallbacks (Anthropic via `ANTHROPIC_WORKSPACE_ID` header when set, OpenRouter);
-  images: Gemini lite image (fal.ai code kept but dead); TTS: **Gemini** (`TTS_GEMINI_MODEL`, two voices: female Kore / male Charon,
+- Text/LLM: only **Gemini** (default) and **Anthropic** (via `ANTHROPIC_WORKSPACE_ID` header when set); roles `LLM_WRITER/RESEARCHER/JUDGE/FAST`
+  with fallbacks. xAI/Grok, OpenRouter and OpenAI-as-text were removed (2026-10-31); a leftover `LLM_<ROLE>` entry naming one of them is skipped with a
+  warn line and the valid entries keep working. Old `ai_usage`/`cost_json` rows of those providers stay readable in the admin cost reports.
+  Images: Gemini lite image for «Rasm»/pro slides, OpenAI gpt-image («ChatGPT» choice of «Rasm», `OPENAI_API_KEY`, registry id `openai-image`),
+  free stock Pexels → Pixabay for plain slides (fal.ai was removed); TTS: **Gemini** (`TTS_GEMINI_MODEL`, two voices: female Kore / male Charon,
   preview in the form). Gemini TTS preview quota ≈ 10 requests/min/model → chunks ≤ 1 400 chars, 90 s call timeout, pg rate limit `tts:gemini:rpm`.
 - Metering: `ai_usage` + `cost_json`; pricing tables in `lib/generation/llm-pricing.ts`. Roughly 25 % of price is AI cost; bonus points are a marketing cost.
 - Failure logging: `[llm] attempt failed`, `[llm] json repaired`, `[llm] stream anomaly` lines (worker logs). Slide JSON repair: `docs/llm/SLIDE-BAD-JSON.md`.

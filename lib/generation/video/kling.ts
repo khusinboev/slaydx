@@ -9,7 +9,7 @@
  *
  *   auth      `Authorization: Bearer <JWT>`, HS256, header {alg:"HS256",typ:"JWT"}, payload {iss: <access key>,
  *             exp: now+1800, nbf: now-5}, signed with the secret key. The registry holds ONE secret, so the key is
- *             stored as `<accessKey>:<secretKey>` (the same convention as fal.ai's `<id>:<secret>`).
+ *             stored as `<accessKey>:<secretKey>`.
  *   create    POST {BASE}/v1/videos/text2video   { model_name, prompt, duration: "5"|"10", aspect_ratio, mode }
  *             POST {BASE}/v1/videos/image2video  { model_name, image: <raw base64>, prompt, duration, mode }
  *   query     GET  {BASE}/v1/videos/text2video/{task_id}   (image2video likewise)

@@ -9,15 +9,15 @@
  *
  * WP8: `.env` dagi `LLM_<ROL>=provider:model,provider:model,…` ro'yxati
  * `llm/chain.ts` orqali ZAXIRA ZANJIRIGA aylanadi (birinchisi 429/5xx dan
- * keyin ham yiqilsa — keyingisi). Har provayder `llm/{gemini,anthropic,
- * openrouter,xai,openai}.ts` adapteri orqali chaqiriladi.
+ * keyin ham yiqilsa — keyingisi). Har provayder `llm/{gemini,anthropic}.ts`
+ * adapteri orqali chaqiriladi.
  *
  * ENV BERILMAGAN holat — bu BOSHQA VOSITALARGA (slayd, kurs ishi,
  * tarjimon) TA'SIR QILMASLIGI kerak bo'lgan chegara: ular `llm.ts`
  * `llmComplete`/`llmGrounded`ni TO'G'RIDAN-TO'G'RI chaqiradi va WP8 ULARGA
  * UMUMAN TEGMAGAN. `complete(role, …)` o'zi ham env yo'q bo'lsa xuddi
- * o'sha standart provayderga (`llmProvider()` — Gemini bo'lsa Gemini,
- * bo'lmasa xAI) BITTA spec bilan tushadi — natijada xatti-harakat
+ * o'sha standart provayderga (`llmProvider()` — Gemini kaliti
+ * bo'lsa Gemini) BITTA spec bilan tushadi — natijada xatti-harakat
  * "hozirgidek" (Gemini standart), faqat endi `usage` HAM qaytadi (buni
  * eski `llmComplete` bermas edi — token sonini bilmasdi).
  */
@@ -27,10 +27,7 @@ import { withJsonRetry } from "./llm/failure";
 export { DeadlineError } from "./llm/chain";
 import { anthropicAdapter } from "./llm/anthropic";
 import { geminiAdapter } from "./llm/gemini";
-import { openaiAdapter } from "./llm/openai";
-import { openrouterAdapter } from "./llm/openrouter";
 import { parseRoleSpec, type ProviderAdapter, type ProviderId, type RoleSpec } from "./llm/types";
-import { xaiAdapter } from "./llm/xai";
 import { costUsd } from "./llm-pricing";
 import { recordLlmUsage } from "./job-cost";
 
@@ -67,9 +64,6 @@ export type RoleOpts = Pick<LlmOpts, "json" | "timeoutMs" | "thinking"> & {
 const ADAPTERS: Partial<Record<ProviderId, ProviderAdapter>> = {
   gemini: geminiAdapter,
   anthropic: anthropicAdapter,
-  openrouter: openrouterAdapter,
-  xai: xaiAdapter,
-  openai: openaiAdapter,
 };
 
 const ROLE_ENV: Record<LlmRole, string> = {
@@ -81,7 +75,7 @@ const ROLE_ENV: Record<LlmRole, string> = {
 
 /**
  * `.env`da `LLM_<ROL>` bo'lmasa (yoki buzuq) — hozirgi standart provayder
- * (`llm.ts llmProvider()`, Gemini bo'lsa Gemini) bitta spec sifatida.
+ * (`llm.ts llmProvider()`: Gemini kaliti bo'lsa Gemini) bitta spec sifatida.
  * Kalit umuman yo'q bo'lsa `[]` — `complete()` `null` qaytaradi, aynan
  * eski `llmComplete` ham kalitsiz `null` qaytargani kabi.
  */

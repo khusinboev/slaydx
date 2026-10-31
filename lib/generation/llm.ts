@@ -1,22 +1,20 @@
 /**
- * Gemini (asosiy) yoki ixtiyoriy xAI.
+ * Gemini orqali LLM chaqiruvlari (standart yo'l).
  * Kalit bo‘lmasa chaqiruv ketmaydi.
  */
 import { recordGrounding, recordLlmUsage } from "./job-cost";
 import { allowOrWait, breakerFor } from "./llm/breaker";
 import { BREAKER_WAIT_MAX_MS, CHAIN_MIN_ATTEMPT_MS, CHAIN_SAFETY_MS, DeadlineError, TIMEOUT_RETRY_MIN_LEFT_MS } from "./llm/chain";
-import { classifyFailure, isMaxTokensFinish, isSafetyFinish, reportFailure, withJsonRetry, type FailureKind } from "./llm/failure";
+import { classifyFailure, isSafetyFinish, reportFailure, withJsonRetry, type FailureKind } from "./llm/failure";
 import { limiterFor } from "./llm/limiter";
 import { log } from "../server/log";
 import { getProviderKey } from "../server/providers/resolve";
 import { backoffMs, equalJitterMs, geminiRetryDelayMs, parseRetryAfter } from "./llm/retry";
 
-type Provider = "gemini" | "xai" | null;
+type Provider = "gemini" | null;
 
 export function llmProvider(): Provider {
-  if (getProviderKey("gemini")) return "gemini";
-  if (getProviderKey("xai")) return "xai";
-  return null;
+  return getProviderKey("gemini") ? "gemini" : null;
 }
 
 export function llmEnabled() {
@@ -24,10 +22,7 @@ export function llmEnabled() {
 }
 
 export function llmModel() {
-  if (llmProvider() === "gemini") {
-    return process.env.GEMINI_MODEL || "gemini-3.7-flash";
-  }
-  return process.env.XAI_MODEL || "grok-4.3";
+  return process.env.GEMINI_MODEL || "gemini-3.7-flash";
 }
 
 export type LlmOpts = {
@@ -176,7 +171,7 @@ export function describeNetError(e: unknown): string {
  * urinishsiz qolar va bitta tarmoq uzilishi butun tadqiqotni o'chirardi.
  */
 async function withRetry<T>(
-  provider: "gemini" | "xai",
+  provider: "gemini",
   budget: number,
   call: (timeoutMs: number) => Promise<Attempt<T>>,
   deadline?: number,
@@ -288,8 +283,7 @@ async function withRetry<T>(
 /**
  * Provayderga so'rov — qayta urinish bilan.
  *
- * Gemini ham, xAI ham `GroundedResult` qaytaradi; grounding so'ralmagan
- * (yoki xAI) yo'lda `sources`/`queries` bo'sh bo'ladi. Shu tufayli
+ * Grounding so'ralmagan yo'lda `sources`/`queries` bo'sh bo'ladi. Shu tufayli
  * `llmComplete` va `llmGrounded` bitta tanadan foydalanadi.
  */
 async function runLlm(
@@ -302,7 +296,7 @@ async function runLlm(
   assertGroundingMode(opts);
   const provider = llmProvider();
   if (!provider) return null;
-  const call = provider === "gemini" ? completeGemini : completeXai;
+  const call = completeGemini;
   const budget = opts.timeoutMs ?? 40_000;
   const once = async (o: { system: string; maxTokens: number; retry?: boolean }): Promise<GroundedResult | null> => {
     const done = await withRetry(provider, budget, (timeoutMs) => call(o.system, user, o.maxTokens, { ...retryOpts(opts, o.retry), timeoutMs }), opts.deadline, role, opts.noTimeoutRetry);
@@ -325,9 +319,9 @@ export async function llmComplete(
 /**
  * Internet qidiruvi bilan chaqiruv (Gemini grounding).
  *
- * Faqat Gemini yo'lida ishlaydi. xAI da qidiruv vositasi YO'Q va u yerda
- * `null` qaytadi — ataylab: grounding'siz javob oddiy model bilimi
- * bo'lardi, uni esa promptga «internetdan, TEKSHIRILGAN» sarlavhasi
+ * Faqat Gemini yo'lida ishlaydi (qidiruv vositasi shu provayderda). Kalit
+ * yo'q bo'lsa `null` qaytadi — ataylab: grounding'siz javob oddiy model
+ * bilimi bo'lardi, uni esa promptga «internetdan, TEKSHIRILGAN» sarlavhasi
  * bilan qo'yish uydirma raqamni ishonchli qilib ko'rsatishdan boshqa
  * narsa emas, ustiga manba ham bo'lmaydi. Tadqiqot bo'lmasa deck
  * baribir yoziladi — `runSlideResearch` `null` ni shunday o'qiydi.
@@ -339,12 +333,8 @@ export async function llmGrounded(
   opts: LlmOpts = {},
 ): Promise<GroundedResult | null> {
   const grounded: LlmOpts = { ...opts, grounding: true };
-  // Qulf provayderdan OLDIN: xAI da ham, kalitsiz ham bir xil otiladi.
+  // Qulf kalitdan OLDIN: kalitsiz ham bir xil otiladi.
   assertGroundingMode(grounded);
-  if (llmEnabled() && llmProvider() !== "gemini") {
-    console.warn("[llm] grounding faqat Gemini da bor — tadqiqot o'tkazib yuborildi");
-    return null;
-  }
   const res = await runLlm(system, user, maxTokens, grounded, "grounded");
   // Qidiruv haqiqatan bo'lgan javob — alohida pullik birlik (EXT-11).
   if (res && (res.queries.length || res.sources.length)) recordGrounding(res.queries.length);
@@ -788,13 +778,12 @@ async function streamGemini(
  * Ataylab ALOHIDA funksiya: mavjud chaqiruvchilarning hech biri
  * o'zgarmaydi va oqim faqat progress kerak bo'lgan joyda yoqiladi.
  *
- * Oqimsiz yo'lga uchta chiqish bor va uchalasi ham `onText` ni BIR
+ * Oqimsiz yo'lga ikkita chiqish bor va ikkalasi ham `onText` ni BIR
  * MARTA to'liq matn bilan chaqiradi — chaqiruvchi uchun ikki yo'l
  * farqsiz:
  *   1. `LLM_STREAM=false` — kill-switch (oqim ishonchsiz chiqsa
  *      serverni qayta yig'masdan o'chirish);
- *   2. xAI provayderi — u yerda oqim qo'llanmaydi;
- *   3. Gemini oqim endpointi 4xx bersa (`streamGemini` ichida).
+ *   2. Gemini oqim endpointi 4xx bersa (`streamGemini` ichida).
  */
 export async function llmStream(
   system: string,
@@ -804,9 +793,8 @@ export async function llmStream(
 ): Promise<string | null> {
   const { onText, ...rest } = opts;
   assertGroundingMode(rest);
-  const provider = llmProvider();
-  if (!provider) return null;
-  if (provider !== "gemini" || process.env.LLM_STREAM === "false") {
+  if (!llmProvider()) return null;
+  if (process.env.LLM_STREAM === "false") {
     const res = await runLlm(system, user, maxTokens, rest, "stream");
     if (!res) return null;
     onText(res.text);
@@ -847,81 +835,13 @@ export async function llmStream(
   return res?.text ?? null;
 }
 
-async function completeXai(
-  system: string,
-  user: string,
-  maxTokens: number,
-  opts: LlmOpts,
-): Promise<Attempt<GroundedResult>> {
-  const key = getProviderKey("xai");
-  if (!key) return { value: null, retryable: false, kind: "other", message: "XAI_API_KEY missing" };
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 25_000);
-  try {
-    const res = await fetch("https://api.x.ai/v1/chat/completions", {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: llmModel(),
-        temperature: 0.4,
-        max_tokens: maxTokens,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-        // Gemini o'chib qolganda slayd/dars/glossariy JSON so'raydi;
-        // `response_format` bo'lmasa model matn qaytarib, parse yiqilardi.
-        ...(opts.json ? { response_format: { type: "json_object" } } : {}),
-      }),
-    });
-    if (!res.ok) {
-      return {
-        value: null,
-        retryable: res.status === 429 || res.status >= 500,
-        status: res.status,
-        message: `HTTP ${res.status}`,
-        retryAfterMs: retryAfterMs(res.headers),
-      };
-    }
-    const data = (await res.json()) as {
-      choices?: { message?: { content?: string }; finish_reason?: string }[];
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-    const text = data.choices?.[0]?.message?.content?.trim();
-    const finish = data.choices?.[0]?.finish_reason;
-    const usage = data.usage ? { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0 } : undefined;
-    if (!text) {
-      const blocked = isSafetyFinish(finish);
-      return { value: null, retryable: !blocked, kind: blocked ? "safety" : "empty", message: `empty answer (finish_reason=${finish ?? "none"})`, ...(finish ? { finishReason: finish } : {}), ...(usage ? { usage } : {}) };
-    }
-    // xAI da qidiruv vositasi yo'q — manba ham, so'rov ham bo'sh.
-    return {
-      value: { text, queries: [], sources: [] },
-      retryable: false,
-      ...(finish ? { finishReason: isMaxTokensFinish(finish) ? "MAX_TOKENS" : finish } : {}),
-      ...(data.usage ? { usage: { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0 } } : {}),
-    };
-  } catch (e) {
-    const message = describeNetError(e);
-    // Faqat BIZNING timer abort'imiz; `ETIMEDOUT`/`UND_ERR_CONNECT_TIMEOUT` — tarmoq xatosi, qayta uriladi (review R2).
-    const timedOut = /abort/i.test(message);
-    return { value: null, retryable: !timedOut, timedOut, message };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 /* ------------------------------------------------------------------ *
  * WP8 SEAM — `runLlmRaw` (token telemetriyasi uchun, AUDIT-17)
  * ------------------------------------------------------------------ *
- * `llm/gemini.ts` va `llm/xai.ts` adapterlari (va `llm-roles.ts`ning
+ * `llm/gemini.ts` adapteri (va `llm-roles.ts`ning
  * `LLM_<ROL>` env BERILMAGAN standart yo'li) shu orqali `usageMetadata`/
  * `usage` token sonlarini oladi. `llmComplete`/`llmGrounded`/`llmStream`
- * VA ularning yo'lidagi `completeGemini`/`completeXai`ga BUTUNLAY
+ * VA ularning yo'lidagi `completeGemini`ga BUTUNLAY
  * TEGILMAYDI — boshqa vositalar (slayd, kurs ishi, tarjimon) shulardan
  * foydalanadi va xatti-harakati o'zgarmasligi shart.
  *
@@ -1011,85 +931,17 @@ async function rawGemini(
   }
 }
 
-async function rawXai(
-  model: string,
-  system: string,
-  user: string,
-  maxTokens: number,
-  opts: LlmOpts & { fetchImpl?: typeof fetch },
-): Promise<RawAttempt> {
-  const key = getProviderKey("xai");
-  if (!key) return { ok: false, error: "XAI_API_KEY yo'q", retryable: false };
-  const fetchImpl = opts.fetchImpl ?? fetch;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 25_000);
-  try {
-    const res = await fetchImpl("https://api.x.ai/v1/chat/completions", {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        temperature: 0.4,
-        max_tokens: maxTokens,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-        ...(opts.json ? { response_format: { type: "json_object" } } : {}),
-      }),
-    });
-    const data = (await res.json()) as {
-      choices?: { message?: { content?: string } }[];
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-      error?: { message?: string };
-    };
-    if (!res.ok) {
-      return {
-        ok: false,
-        error: data.error?.message ?? `HTTP ${res.status}`,
-        retryable: res.status === 429 || res.status >= 500,
-        status: res.status,
-        retryAfterMs: retryAfterMs(res.headers),
-      };
-    }
-    const text = data.choices?.[0]?.message?.content?.trim();
-    const finish = (data.choices?.[0] as { finish_reason?: string } | undefined)?.finish_reason;
-    if (!text) {
-      const blocked = isSafetyFinish(finish);
-      return { ok: false, error: "bo'sh javob", retryable: !blocked, kind: blocked ? "safety" : "empty", ...(finish ? { finishReason: finish } : {}) };
-    }
-    return {
-      ok: true,
-      text,
-      ...(finish ? { finishReason: isMaxTokensFinish(finish) ? "MAX_TOKENS" : finish } : {}),
-      usage: {
-        inputTokens: data.usage?.prompt_tokens ?? 0,
-        outputTokens: data.usage?.completion_tokens ?? 0,
-      },
-    };
-  } catch (e) {
-    const message = describeNetError(e);
-    return { ok: false, error: message, retryable: !/abort/i.test(message) };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 /**
- * Provayder + ANIQ model (spec'dan, `llmModel()` env'idan emas) bilan
- * BITTA urinish, `usage` bilan. `llm/gemini.ts`/`llm/xai.ts` adapterlari
+ * ANIQ Gemini modeli (spec'dan, `llmModel()` env'idan emas) bilan
+ * BITTA urinish, `usage` bilan. `llm/gemini.ts` adapteri
  * va `llm-roles.ts`ning standart (env'siz) yo'li shundan foydalanadi.
  */
 export async function runLlmRaw(
-  provider: "gemini" | "xai",
   model: string,
   system: string,
   user: string,
   maxTokens: number,
   opts: LlmOpts & { fetchImpl?: typeof fetch } = {},
 ): Promise<RawAttempt> {
-  return provider === "gemini"
-    ? rawGemini(model, system, user, maxTokens, opts)
-    : rawXai(model, system, user, maxTokens, opts);
+  return rawGemini(model, system, user, maxTokens, opts);
 }

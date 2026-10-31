@@ -140,7 +140,7 @@ test("runLlmRaw (zanjir Gemini adapteri): 429 tanasidagi RetryInfo → retryAfte
   const { runLlmRaw } = await import("../lib/generation/llm.ts");
   const r = retryInfo("34s");
   const fetchImpl = (async () => new Response(JSON.stringify(r.body), { status: 429 })) as typeof fetch;
-  const res = await runLlmRaw("gemini", "m", "s", "u", 100, { timeoutMs: 5_000, fetchImpl });
+  const res = await runLlmRaw("m", "s", "u", 100, { timeoutMs: 5_000, fetchImpl });
   assert.equal(res.ok, false);
   assert.equal(!res.ok && res.retryAfterMs, 34_000);
 });

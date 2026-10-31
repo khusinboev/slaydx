@@ -184,7 +184,7 @@ export function photoSlot(layout: string, visual: SlideVisual = "classic"): Box 
   }
   // `magazine` bo'lim slaydi ham to'la ekran — muqova bilan bir tilda
   // gapirsin. Bu slot rasm SO'ROVIGA ham tushadi (`slide-images.ts`),
-  // ya'ni fal.ai dan darhol 16:9 kadr so'raladi, keyin qirqilmaydi.
+  // ya'ni provayderdan darhol 16:9 kadr so'raladi, keyin qirqilmaydi.
   if (layout === "section" && visual === "magazine") return { x: 0, y: 0, w: W, h: H };
   return { x: RIGHT_IMG_X, y: 0, w: W - RIGHT_IMG_X, h: H };
 }
@@ -623,7 +623,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
    * Ilgari sharti `visual === "magazine" && img` edi va rasm kelmagan
    * dekada muqova pastdagi umumiy tarmoqqa tushardi — «Esse»,
    * «Adabiyot», «Hayotnoma» tanlagan foydalanuvchi `classic` bilan
-   * AYNAN bir xil titul olardi. fal.ai bloklangan davrda bu 100%
+   * AYNAN bir xil titul olardi. Rasm provayderi bloklangan davrda bu 100%
    * hollarda sodir bo'lgan (AUDIT-8 N-7: `magazine-01.png` bilan
    * `lecture-01.png` ni ajratib bo'lmasdi).
    *
@@ -1049,7 +1049,7 @@ export function pushPlanBadgeAt(
  * Ilgari `magazine` faqat TITUL slaydiga ta'sir qilardi, ya'ni «Esse»
  * yoki «Adabiyot» tanlagan foydalanuvchi 16 slaydning 15 tasini
  * `classic` bilan bir xil olardi. Tasma rasmsiz ham chiziladi —
- * fal.ai yiqilsa maket «buzilib» emas, shunchaki to'q muqova bo'lib
+ * rasm provayderi yiqilsa maket «buzilib» emas, shunchaki to'q muqova bo'lib
  * qoladi.
  */
 function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
@@ -1061,7 +1061,7 @@ function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, to
    * Matn tasmasi RASM BORLIGIGA qarab joylashadi.
    *
    * Ilgari u har doim pastda (y=4.15) turardi. Rasmsiz slaydda — ya'ni
-   * fal.ai kalitsiz yoki byudjet tugagan har bir generatsiyada — slaydning
+   * rasm kalitsiz yoki byudjet tugagan har bir generatsiyada — slaydning
    * yuqori 4 dyuymi butunlay bo'sh to'q maydon bo'lib qolardi. PDF ga
    * o'girib ko'rilganda aynan shu ko'rindi.
    */

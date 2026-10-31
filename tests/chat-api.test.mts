@@ -14,7 +14,7 @@ import { cid, mkUser, stubLlm, wallet } from "./helpers/chat-fixtures.mts";
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 process.env.APP_URL = "https://slaydx.test";
 process.env.WORKER_INLINE = "false";
-for (const k of ["GEMINI_API_KEY", "GOOGLE_API_KEY", "LLM_FAST", "XAI_API_KEY"]) delete process.env[k];
+for (const k of ["GEMINI_API_KEY", "GOOGLE_API_KEY", "LLM_FAST"]) delete process.env[k];
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
 const iso = hasDb ? await createIsolatedDb("chatapi") : { isolated: false, drop: async () => {} };
 const skip = hasDb && iso.isolated ? false : "alohida Postgres baza yo'q";

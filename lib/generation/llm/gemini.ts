@@ -16,7 +16,7 @@ export function makeGeminiAdapter(deps: GeminiDeps = {}): ProviderAdapter {
   return {
     id: "gemini",
     async complete(model, system, user, opts: AdapterOpts): Promise<Attempt> {
-      const res = await runLlmRaw("gemini", model, system, user, opts.maxTokens, {
+      const res = await runLlmRaw(model, system, user, opts.maxTokens, {
         json: opts.json,
         timeoutMs: opts.timeoutMs,
         thinking: opts.thinking,

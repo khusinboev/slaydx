@@ -49,12 +49,10 @@ async function withGemini(
     warn: console.warn,
     log: console.log,
     g: process.env.GEMINI_API_KEY,
-    x: process.env.XAI_API_KEY,
     w: process.env.LLM_WRITER,
     s: process.env.LLM_STREAM,
   };
   process.env.GEMINI_API_KEY = "test-key";
-  delete process.env.XAI_API_KEY;
   delete process.env.LLM_WRITER;
   delete process.env.LLM_STREAM;
   const reqs: Req[] = [];
@@ -79,7 +77,6 @@ async function withGemini(
     console.log = saved.log;
     for (const [k, v] of [
       ["GEMINI_API_KEY", saved.g],
-      ["XAI_API_KEY", saved.x],
       ["LLM_WRITER", saved.w],
       ["LLM_STREAM", saved.s],
     ] as const) {
@@ -406,7 +403,7 @@ test("complete(): barcha urinishlar yiqilsa — null (ishchi pulni qaytaradi) va
 const SPEC: RoleSpec[] = [{ provider: "gemini", model: "m1" }];
 const TWO: RoleSpec[] = [
   { provider: "gemini", model: "m1" },
-  { provider: "openrouter", model: "m2" },
+  { provider: "anthropic", model: "m2" },
 ];
 
 function fake(id: ProviderAdapter["id"], replies: Attempt[]): { adapter: ProviderAdapter; calls: number[] } {
@@ -426,9 +423,9 @@ function fake(id: ProviderAdapter["id"], replies: Attempt[]): { adapter: Provide
 
 async function withChainEnv(fn: () => Promise<void>) {
   resetFailureCounters();
-  const saved = { g: process.env.GEMINI_API_KEY, o: process.env.OPENROUTER_API_KEY, warn: console.warn };
+  const saved = { g: process.env.GEMINI_API_KEY, o: process.env.ANTHROPIC_API_KEY, warn: console.warn };
   process.env.GEMINI_API_KEY = "k";
-  process.env.OPENROUTER_API_KEY = "k";
+  process.env.ANTHROPIC_API_KEY = "k";
   console.warn = () => {};
   try {
     await fn();
@@ -436,8 +433,8 @@ async function withChainEnv(fn: () => Promise<void>) {
     console.warn = saved.warn;
     if (saved.g === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = saved.g;
-    if (saved.o === undefined) delete process.env.OPENROUTER_API_KEY;
-    else process.env.OPENROUTER_API_KEY = saved.o;
+    if (saved.o === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = saved.o;
   }
 }
 
@@ -480,8 +477,8 @@ test("zanjir: timeout — oxirgi specda va muddat bilan BITTA qayta urinish; mud
     assert.equal(b.calls.length, 1);
 
     const c = fake("gemini", [TO, OKA]);
-    const d = fake("openrouter", [OKA]);
-    const res2 = await completeWithChain("writer", TWO, "s", "u", { ...OPTS, deadline: Date.now() + 120_000 }, DEPS({ gemini: c.adapter, openrouter: d.adapter }));
+    const d = fake("anthropic", [OKA]);
+    const res2 = await completeWithChain("writer", TWO, "s", "u", { ...OPTS, deadline: Date.now() + 120_000 }, DEPS({ gemini: c.adapter, anthropic: d.adapter }));
     assert.equal(res2?.text, "javob");
     assert.equal(c.calls.length, 1, "zaxira spec bor — sekin provayder qayta urinilmaydi");
     assert.equal(d.calls.length, 1);

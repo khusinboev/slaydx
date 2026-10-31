@@ -77,7 +77,7 @@ export type SpendGroupRow = SpendTotals & {
   units: number | null;
   /**
    * Calls of parts with no known price, recorded at usd 0: parts marked
-   * `priced: false` (fal models without a documented price, job-cost.ts) and
+   * `priced: false` (image models without a documented price, job-cost.ts) and
    * LLM parts with tokens but usd 0 (model missing from llm-pricing.ts).
    */
   unpricedCalls: number;
@@ -107,7 +107,7 @@ export type ToolSpendCoverage = SpendCoverage & { toolId: string };
 
 /**
  * The permanent limits of the data, true for every period. The former ten-sentence
- * list (stale fal.ai / «Gemini TTS is free» rows included) is replaced by
+ * list (stale provider / «Gemini TTS is free» rows included) is replaced by
  * `costCaveats`, which computes what applies, with real numbers, and ENDS with
  * these always-true notes (so the AI screen and the pricing screen both show them).
  */
@@ -627,7 +627,7 @@ const partName = (r: FlaggedRow): string => `${r.provider}:${r.model}`;
  *   1. NEW jobs (finished after the rollout) without cost data, per tool;
  *   2. HISTORICAL jobs (finished before the first `ai_usage` row) without cost data;
  *   3. LLM models with tokens but no price (recorded at usd 0);
- *   4. other unpriced services (fal models, TTS models missing from the price book);
+ *   4. other unpriced services (image models, TTS models missing from the price book);
  *   5. estimated prices (default image price, TTS tokens estimated from audio length);
  *   6. Google Search grounding, billed per query with the free quota NOT deducted;
  *   7. free-LLM calls (outline, UDK, rewrite, polish): their share of the spend;

@@ -11,8 +11,8 @@ import { costUsd, costSoum, soumPerUsd, PRICING } from "../lib/generation/llm-pr
  *  2. PREFIKS MOS KELISH — versiya qo'shimchasi bilan kelgan model nomi
  *     ham to'g'ri qatorga tushishi kerak.
  *  3. NOMA'LUM MODEL — 0, XATO EMAS (dastur yiqilmasin).
- *  4. OPENROUTER USTAMASI — bir xil token bilan `openrouter` provayderi
- *     asosiy narxdan 1,055× qimmat chiqishi kerak.
+ *  4. JADVAL FAQAT HOZIRGI PROVAYDERLAR — Gemini va Anthropic; olib tashlangan
+ *     provayderlarning modellari narxlanmaydi (eski `usd` saqlangan holda o'qiladi).
  */
 
 test("Gemini 3.7 Flash — 2026 sanasida eski narx", () => {
@@ -56,12 +56,10 @@ test("noma'lum model — 0, xato tashlamaydi", () => {
   assert.equal(usd, 0);
 });
 
-test("OpenRouter — asosiy model narxidan 1,055× qimmat", () => {
-  const usage = { inputTokens: 1_000_000, outputTokens: 1_000_000 };
-  const direct = costUsd({ provider: "anthropic", model: "claude-sonnet-5", ...usage }, new Date("2026-06-01"));
-  const viaRouter = costUsd({ provider: "openrouter", model: "claude-sonnet-5", ...usage }, new Date("2026-06-01"));
-  assert.ok(Math.abs(viaRouter - direct * 1.055) < 1e-9, `${viaRouter} !== ${direct * 1.055}`);
-  assert.notEqual(viaRouter, direct, "openrouter narxi asosiy narxdan farqli bo'lishi SHART");
+test("narx jadvali faqat Gemini va Anthropic qatorlarini saqlaydi (olib tashlangan provayderlar yo'q)", () => {
+  assert.deepEqual([...new Set(PRICING.map((r) => r.provider))].sort(), ["anthropic", "gemini"]);
+  // Eski qatorlar narxlanmaydi: ularning `usd` qiymati yozilgan paytda saqlangan va hisobotlar SHUNI yig'adi.
+  assert.equal(costUsd({ provider: "xai", model: "grok-4.3", inputTokens: 1_000_000, outputTokens: 1_000_000 }, new Date("2026-06-01")), 0);
 });
 
 test("claude-opus-5 va claude-haiku-4-5 narxlari jadvaldan", () => {

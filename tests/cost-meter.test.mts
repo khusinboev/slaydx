@@ -60,7 +60,7 @@ test("provider/model — chiqish tokenlari YIG'INDISI eng katta juftlik (bitta c
   const meter = new CostMeter();
   meter.add({ provider: "gemini", model: "gemini-3.7-flash", inputTokens: 5000, outputTokens: 100 });
   meter.add({ provider: "anthropic", model: "claude-sonnet-5", inputTokens: 25_000, outputTokens: 2_000 });
-  meter.add({ provider: "xai", model: "grok-4.3", inputTokens: 1000, outputTokens: 500 });
+  meter.add({ provider: "gemini", model: "gemini-3.5-flash-lite", inputTokens: 1000, outputTokens: 500 });
   const json = meter.toJson();
   assert.equal(json.provider, "anthropic", "MUTATSIYA: kirish tokeniga qarab tanlansa bu qizaradi");
   assert.equal(json.model, "claude-sonnet-5");
@@ -75,7 +75,7 @@ test("provider/model — chiqish tokenlari YIG'INDISI eng katta juftlik (bitta c
 test("provider/model — teng chiqishda BIRINCHI chaqiruv saqlanadi (barqaror)", () => {
   const meter = new CostMeter();
   meter.add({ provider: "gemini", model: "gemini-3.7-flash", inputTokens: 100, outputTokens: 500 });
-  meter.add({ provider: "xai", model: "grok-4.3", inputTokens: 100, outputTokens: 500 });
+  meter.add({ provider: "anthropic", model: "claude-haiku-4-5", inputTokens: 100, outputTokens: 500 });
   const json = meter.toJson();
   assert.equal(json.provider, "gemini");
   assert.equal(json.model, "gemini-3.7-flash");

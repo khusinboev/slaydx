@@ -342,14 +342,12 @@ test("reja JSON buzuq — deterministik reja (skelet), hujjat baribir chiqadi", 
 });
 
 test("LLM yo'q (seam ham, kalit ham) → null", async () => {
-  const saved = { g: process.env.GEMINI_API_KEY, x: process.env.XAI_API_KEY };
+  const saved = { g: process.env.GEMINI_API_KEY };
   delete process.env.GEMINI_API_KEY;
-  delete process.env.XAI_API_KEY;
   try {
     assert.equal(await buildArticleDoc(extractMeta(tool, BASE), BASE, { deadline: Date.now() + 10_000 }), null);
   } finally {
     if (saved.g) process.env.GEMINI_API_KEY = saved.g;
-    if (saved.x) process.env.XAI_API_KEY = saved.x;
   }
 });
 

@@ -294,7 +294,7 @@ test("cost: 403 renders the forbidden state, with no data", async () => {
 
 const NOW = Date.now();
 const providers: AiProvidersResponse = {
-  keys: { gemini: true, anthropic: false, openai: true, openrouter: false, xai: false, fal: false, pexels: true, pixabay: false, azureTts: true, aisha: false },
+  keys: { gemini: true, anthropic: false, openai: true, pexels: true, pixabay: false, azureTts: true, aisha: false },
   processes: [
     { process: "worker@host-a:11", role: "worker", lastSeenAt: new Date(NOW - 5_000).toISOString(), stale: false },
     { process: "web@host-b:22", role: "web", lastSeenAt: new Date(NOW - 600_000).toISOString(), stale: true },
@@ -325,7 +325,7 @@ test("providers: key grid (Bor / Yo'q), open breaker red, stale process neutral 
 
   // Keys: one tile per provider, present exactly where the API said true.
   const present = Object.fromEntries([...container.querySelectorAll("li[data-key]")].map((li) => [li.getAttribute("data-key"), li.getAttribute("data-present")]));
-  assert.deepEqual(present, { gemini: "1", anthropic: "0", openai: "1", openrouter: "0", xai: "0", fal: "0", pexels: "1", pixabay: "0", azureTts: "1", aisha: "0" });
+  assert.deepEqual(present, { gemini: "1", anthropic: "0", openai: "1", pexels: "1", pixabay: "0", azureTts: "1", aisha: "0" });
   assert.equal(within(container.querySelector("li[data-key='gemini']") as HTMLElement).getByText("Bor").textContent, "Bor");
   assert.ok(within(container.querySelector("li[data-key='anthropic']") as HTMLElement).getByText("Yo'q"));
 

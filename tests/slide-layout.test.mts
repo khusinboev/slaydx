@@ -292,15 +292,15 @@ test("magazine bo'lim slaydi to'la ekran kadr va pastki tasma beradi", () => {
   assert.ok(classicImg && classicImg.box.w < 6, "classic da rasm yon ustunda qoladi");
   assert.equal(mag.bg, theme.titleBg, "magazine bo'limi muqova foniga o'tadi");
 
-  // Rasmsiz ham tasma qoladi — fal.ai yiqilsa maket buzilmasin.
+  // Rasmsiz ham tasma qoladi — rasm provayderi yiqilsa maket buzilmasin.
   const noImg = planSlide({ ...s, image: undefined }, theme, "magazine", 1, 10);
   assert.equal(noImg.bg, theme.titleBg);
   assert.ok(texts(noImg.layers).some((t) => t.text === "1-lavha"));
 
   /*
    * `photoSlot` maketdan ALOHIDA tekshiriladi: u rasm SO'ROVIGA tushadi
-   * (`slide-images.ts` → `slotPixels`). Slot yon ustunda qolsa, fal.ai
-   * dan tik (5.2 × 7.5) kadr so'ralar va u to'la ekranga cho'zilib
+   * (`slide-images.ts` → `slotPixels`). Slot yon ustunda qolsa, provayderdan
+   * tik (5.2 × 7.5) kadr so'ralar va u to'la ekranga cho'zilib
    * buzilardi — maketda esa bu ko'rinmasdi, chunki `planSectionMagazine`
    * qutini o'zi yozadi.
    */
@@ -507,9 +507,7 @@ test("rasm prompti imageBudget kengaygan dekaning barcha slaydiga yetadi", async
   const { imageBudget } = await import("../lib/generation/slide-images.ts");
 
   const saved = process.env.GEMINI_API_KEY;
-  const savedX = process.env.XAI_API_KEY;
   delete process.env.GEMINI_API_KEY;
-  delete process.env.XAI_API_KEY;
   try {
     const n = imageBudget(16, true); // 13
     assert.ok(n > 8, `sinov ma'noli bo'lishi uchun 8 dan ko'p bo'lishi kerak: ${n}`);
@@ -525,8 +523,6 @@ test("rasm prompti imageBudget kengaygan dekaning barcha slaydiga yetadi", async
   } finally {
     if (saved === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = saved;
-    if (savedX === undefined) delete process.env.XAI_API_KEY;
-    else process.env.XAI_API_KEY = savedX;
   }
 });
 
@@ -572,9 +568,7 @@ test("deka slaydlarining id lari noyob va tartibli", async () => {
 
   // LLM kalitisiz `fallbackSlides` yo'li ishlaydi — id mantig'i o'sha.
   const saved = process.env.GEMINI_API_KEY;
-  const savedX = process.env.XAI_API_KEY;
   delete process.env.GEMINI_API_KEY;
-  delete process.env.XAI_API_KEY;
   try {
     for (const quality of [10, 30]) {
       const meta = extractMeta(TOOL_BY_ID["slide"], {
@@ -589,7 +583,6 @@ test("deka slaydlarining id lari noyob va tartibli", async () => {
     }
   } finally {
     if (saved) process.env.GEMINI_API_KEY = saved;
-    if (savedX) process.env.XAI_API_KEY = savedX;
   }
 });
 
@@ -744,7 +737,6 @@ test("byudjet tugagan bo'lsa slayd yozuvchisi tarmoqqa chiqmaydi", async () => {
    */
   const realFetch = globalThis.fetch;
   const savedGemini = process.env.GEMINI_API_KEY;
-  const savedXai = process.env.XAI_API_KEY;
   let calls = 0;
   globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
     calls += 1;
@@ -752,7 +744,6 @@ test("byudjet tugagan bo'lsa slayd yozuvchisi tarmoqqa chiqmaydi", async () => {
   }) as typeof fetch;
   // Kalit BOR — ya'ni `llmEnabled()` to'siq emas, to'siq byudjet bo'lishi kerak.
   process.env.GEMINI_API_KEY = "test-key-not-used";
-  delete process.env.XAI_API_KEY;
 
   try {
     const meta = extractMeta(TOOL_BY_ID.slide, {
@@ -770,7 +761,6 @@ test("byudjet tugagan bo'lsa slayd yozuvchisi tarmoqqa chiqmaydi", async () => {
     globalThis.fetch = realFetch;
     if (savedGemini === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = savedGemini;
-    if (savedXai !== undefined) process.env.XAI_API_KEY = savedXai;
   }
 });
 

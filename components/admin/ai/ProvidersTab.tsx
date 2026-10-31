@@ -10,10 +10,7 @@ import { numText, soumText, usdText, useLoad, useReportForbidden } from "./share
 const KEY_LABELS: ReadonlyArray<{ name: AiProviderKeyName; label: string; hint: string }> = [
   { name: "gemini", label: "Gemini", hint: "matn, rasm, ovoz" },
   { name: "anthropic", label: "Anthropic", hint: "Claude modellari" },
-  { name: "openai", label: "OpenAI", hint: "matn zaxirasi" },
-  { name: "openrouter", label: "OpenRouter", hint: "matn zaxirasi" },
-  { name: "xai", label: "xAI", hint: "Grok modellari" },
-  { name: "fal", label: "fal.ai", hint: "rasm" },
+  { name: "openai", label: "OpenAI", hint: "rasm (ChatGPT)" },
   { name: "pexels", label: "Pexels", hint: "foto" },
   { name: "pixabay", label: "Pixabay", hint: "foto" },
   { name: "azureTts", label: "Azure TTS", hint: "ovoz (kalit va region)" },

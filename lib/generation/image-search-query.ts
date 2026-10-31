@@ -54,7 +54,7 @@ const STOPWORDS = new Set([
  * o'tadi — ba'zan bu allaqachon ingliz so'zi (masalan «robot», «internet»),
  * ba'zan yo'q. Ikkinchi holatda qidiruv kam natija berishi mumkin, lekin
  * bu XAVFSIZ: `chainProvider` bo'sh/yiqilgan natijani keyingi manbaga
- * (oxir-oqibat fal AI ga) o'tkazadi — hech qachon rasmsiz qolinmaydi.
+ * o'tkazadi; manbalar tugasa slayd rasmsiz qoladi (rasm va'da qilinmaydi).
  */
 // Kalitlar `translateWord` bilan bir xil normallashda: apostrof/tutuq
 // belgisi ('  ’  ʻ  `) OLIB TASHLANGAN, kichik harf. Shu sabab «o'zgarishi»
@@ -125,7 +125,7 @@ const MIN_WORDS_WITH_SUFFIX = 4;
  *
  * `null` qaytishi — bepul manbalar bu slayd uchun UMUMAN so'ralmasin
  * degani: uslub `photo` bo'lmasa (illustration/chalk/minimal), stock
- * foto arxivi mos kelmaydi — to'g'ridan-to'g'ri fal (AI) chizadi.
+ * foto arxivi mos kelmaydi — stock manbalar so'ralmaydi.
  */
 export function searchQueryFor(
   topic: string,

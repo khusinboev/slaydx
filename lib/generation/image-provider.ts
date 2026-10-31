@@ -2,20 +2,19 @@
  * RASM PROVAYDERI — yagona shartnoma (AUDIT-9 WP-E).
  *
  * Nega bu fayl bor. Ilgari rasm olishning YAGONA yo'li `slide-images.ts`
- * ichidagi `requestFalImage` edi: fal.ai ning URL i, sarlavhasi, tana
- * shakli va xato kodlari `attachSlideImages` bilan bitta faylda
- * chirmashib yotardi. Ikkinchi provayder qo'shish uchun o'sha
- * funksiyani `if (gemini) …` bilan ikkiga bo'lish kerak bo'lardi —
- * ya'ni har bir yangi provayder rasm bosqichining MANTIG'INI
- * (byudjet, blok qisqa tutashuvi, hisobot) qayta yozishga majbur
- * qilardi.
+ * ichida edi: provayderning URL i, sarlavhasi, tana shakli va xato
+ * kodlari `attachSlideImages` bilan bitta faylda chirmashib yotardi.
+ * Ikkinchi provayder qo'shish uchun o'sha funksiyani `if (gemini) …`
+ * bilan ikkiga bo'lish kerak bo'lardi — ya'ni har bir yangi provayder
+ * rasm bosqichining MANTIG'INI (byudjet, blok qisqa tutashuvi,
+ * hisobot) qayta yozishga majbur qilardi.
  *
  * Endi ajratish shunday:
  *   — provayder FAQAT «shu promptdan shu o'lchamda rasm ol» ni biladi;
  *   — `slide-images.ts` FAQAT «nechta rasm, qancha vaqt, nima hisobot»
  *     ni biladi va provayder qaysiligini bilmaydi.
  *
- * Shu sababli yiqilish TASNIFI (`FalFailure`) ham shartnomaning bir
+ * Shu sababli yiqilish TASNIFI (`ImageFailure`) ham shartnomaning bir
  * qismi: `attachSlideImages` `blocked` ni ko'rib qolgan so'rovlarni
  * bekor qiladi, `timeout` ni esa `skipped` deb sanaydi. Yangi provayder
  * o'z HTTP kodlarini shu beshta holatga o'girishi SHART, aks holda
@@ -24,12 +23,20 @@
 import type { ToolId } from "../types";
 import type { SlideImageStyle } from "./slide-params";
 import type { DocMeta } from "./types";
-import { falProvider } from "./image-provider-fal";
 import { geminiProvider } from "./image-provider-gemini";
 import { pexelsProvider } from "./image-provider-pexels";
 import { pixabayProvider } from "./image-provider-pixabay";
 import { breakerFor } from "./llm/breaker";
 import { limiterFor, type Semaphore } from "./llm/limiter";
+
+/** Rasm o'lchami (piksel) — slot (`slotPixels`) va provayder so'rovi uchun. */
+export type ImageSize = { width: number; height: number };
+
+/** Slaydga qo'yiladigan rasm: `https:` yoki `data:` manzil. */
+export type SlideImage = { url: string; alt?: string };
+
+/** Paket darajasidagi rasm sozlamalari (`AttachImageOpts` ga qo'shiladi). */
+export type VisualTier = { premium?: boolean; seed?: number };
 
 /**
  * Rasm manbasi 429 (kvota) bergandan keyin qancha vaqt so'ralmaydi.
@@ -58,23 +65,23 @@ export type ImageAsk = {
   /**
    * Reference / source image(s) for an EDIT-style request (graduation portrait: the user's selfie).
    *
-   * Only the Gemini provider uses it; text-to-image providers (fal, Pexels, Pixabay) ignore it, so a
+   * Only the Gemini provider uses it; the stock providers (Pexels, Pixabay) ignore it, so a
    * caller that needs the input MUST ask Gemini directly (never through a chain that could fall
    * through to a provider that would draw an unrelated picture).
    */
   inputImages?: ImageInput[];
-  size: { width: number; height: number };
+  size: ImageSize;
   styleId: SlideImageStyle;
-  /** Deka bo'ylab BITTA seed — 8–30 rasm bitta «kamera»dan chiqsin. */
+  /**
+   * Deka bo'ylab BITTA seed — 8–30 rasm bitta «kamera»dan chiqsin.
+   * Hozirgi provayderlarning hech biri uni o'qimaydi (seed qabul qiladigan
+   * model yo'q), lekin shartnomada qoladi: yangi model uni qaytarishi mumkin.
+   */
   seed?: number;
   /**
-   * Premium yo'l.
-   *
-   * Interfeysga ATAYIN kirdi: fal.ai da bu boshqa model va boshqa
-   * inference qadami degani (`FAL_MODEL_PREMIUM`, `FAL_STEPS_PREMIUM`),
-   * ya'ni uni tashlab yuborsak premium paket jimgina standartga
-   * aylanardi. Gemini yo'lida esa bu bayroq hech nimani o'zgartirmaydi —
-   * provayder uni shunchaki e'tiborsiz qoldiradi.
+   * Premium yo'l. Hozirgi provayderlar (Gemini, Pexels, Pixabay) uni
+   * e'tiborsiz qoldiradi — avval u boshqa model/qadamni tanlardi; chaqiruvchilar
+   * (`attachSlideImages`, `slide-write`) uni uzatishda davom etadi.
    */
   premium?: boolean;
   /**
@@ -85,8 +92,8 @@ export type ImageAsk = {
    * `slideImageStyle` foto emas (illustration/chalk/minimal) yoki
    * chaqiruvchi buni ataylab bermagan (AI chizishni xohlaydi). Pexels/Pixabay provayderlari bu holatda darhol
    * `failed` qaytaradi (tarmoqqa chiqmasdan) — `chainProvider` keyingi
-   * bosqichga (oxir-oqibat fal) o'tadi. Gemini/fal buni e'tiborsiz
-   * qoldiradi.
+   * bosqichga o'tadi (oxirgisi bo'lsa — `failed`). Gemini buni
+   * e'tiborsiz qoldiradi.
    */
   searchQuery?: string | null;
   /**
@@ -94,16 +101,16 @@ export type ImageAsk = {
    *
    * `chainProvider` egallaydi va har chaqiruvdan oldin qo'yadi — bitta
    * dekada bir xil stock foto ikki marta chiqmasin (`per_page=5`
-   * natijadan birinchi ISHLATILMAGANI tanlanadi). Fal/Gemini buni
-   * e'tiborsiz qoldiradi — ular har doim yangi rasm CHIZADI.
+   * natijadan birinchi ISHLATILMAGANI tanlanadi). Gemini buni
+   * e'tiborsiz qoldiradi — u har doim yangi rasm CHIZADI.
    */
   seen?: Set<string>;
 };
 
 /** `slide-images.ts` `persistImage` ga beriladigan manzil: `https:` yoki `data:`. */
-export type ImageOk = { ok: true; image: { url: string; alt?: string } };
+export type ImageOk = { ok: true; image: SlideImage };
 
-export type ImageFail = { ok: false; reason: FalFailure; detail: string };
+export type ImageFail = { ok: false; reason: ImageFailure; detail: string };
 
 export type ImageResult = ImageOk | ImageFail;
 
@@ -111,18 +118,13 @@ export type ImageResult = ImageOk | ImageFail;
  * Rasm so'rovi NEGA yiqilgani.
  *
  * Ilgari hamma yiqilish bitta `null` edi va bitta `console.warn` bilan
- * o'tardi. Jonli sinovda 19 ta so'rovning hammasi
- * `[fal] 403 User is locked. Reason: TOP_UP.` bilan rad etildi — ya'ni
- * HISOB bloklangan edi — lekin bu jurnalda vaqt tugagan holatdan
+ * o'tardi. Jonli sinovda 19 ta so'rovning hammasi 403 «hisob
+ * bloklangan» bilan rad etildi, lekin bu jurnalda vaqt tugagan holatdan
  * (`budget exhausted`) hech nima bilan farq qilmasdi. Ikkisining
  * yechimi butunlay boshqa: birinchisi hisobni to'ldirishni talab
  * qiladi, ikkinchisi byudjetni.
- *
- * Nom `Fal…` bo'lib qoldi (provayder-neytral bo'lsa ham): u
- * `slide-images.ts` dan eksport qilinadi va tashqi kod shu nom bilan
- * ishlaydi — qayta nomlash shartnomani buzardi, foyda bermay.
  */
-export type FalFailure =
+export type ImageFailure =
   /** Kalit umuman sozlanmagan. */
   | "no-key"
   /** Hisob yoki kalit rad etdi: 401/402/403. Qayta urinish ma'nosiz. */
@@ -134,7 +136,7 @@ export type FalFailure =
   /** Qolgan hammasi: 5xx, tarmoq, javobda rasm yo'q. */
   | "failed";
 
-export type ImageProviderId = "fal" | "gemini" | "openai" | "pexels" | "pixabay" | "stock";
+export type ImageProviderId = "gemini" | "openai" | "pexels" | "pixabay" | "stock";
 
 export interface ImageProvider {
   /**
@@ -185,7 +187,7 @@ export function photoOrientation(size: { width: number; height: number }): "land
 
 /**
  * Bir nechta provayderni ZANJIRGA ulaydi (P3, «Oddiy vosita rasmi:
- * Pexels → Pixabay → fal», `docs/AUDIT-9.md`).
+ * Pexels → Pixabay», `docs/AUDIT-9.md`).
  *
  * Nega alohida funksiya. `attachSlideImages` BITTA `ImageProvider`
  * bilan ishlaydi — ular ichida "agar pexels
@@ -197,20 +199,21 @@ export function photoOrientation(size: { width: number; height: number }): "land
  * Qoidalar:
  *   — kalitsiz provayder UMUMAN chaqirilmaydi (tarmoqqa chiqmaydi);
  *   — `no-key`/`failed`/`rate`/`timeout`/natija yo'q — keyingisiga
- *     o'tiladi (bepul manba muvaffaqiyatsiz bo'lsa fal baribir ishlasin);
+ *     o'tiladi (birinchi manba topolmasa ikkinchisi sinab ko'rilsin);
  *   — `blocked` HAM keyingisiga o'tadi, lekin shu provayder ID si
  *     DEKA OXIRIGACHA "bloklangan" deb belgilanadi (`blockedIds`) —
  *     har slaydda qayta 403 kutib vaqt sarflanmasin;
  *   — hech biri berolmasa OXIRGI urinishning natijasi qaytariladi —
- *     odatda shu fal bo'ladi, ya'ni `attachSlideImages`ning fal/Gemini
- *     uchun mo'ljallangan `blocked` qisqa tutashuvi ZANJIR OXIRIDA ham
- *     to'g'ri ishlaydi (regressiya yo'q).
+ *     ya'ni `attachSlideImages`ning `blocked` qisqa tutashuvi ZANJIR
+ *     OXIRIDA ham to'g'ri ishlaydi.
  *
- * `id` ATAYLAB birinchi provayderning EMAS, `"fal"` — chaqiruvchi kod
- * (`pickProvider` regressiya testi, jurnal yorlig'i) buni "oddiy slayd
- * rasm yo'li" deb taniydi; zanjirning qaysi bo'g'ini haqiqatan
- * yetkazgani natijaning O'ZIDA (`image.url` manbasi) ko'rinadi, alohida
- * kuzatish shart emas.
+ * `id` ATAYLAB birinchi provayderning EMAS, zanjirning umumiy nomi
+ * (`"stock"`) — chaqiruvchi kod (`pickProvider` regressiya testi, jurnal
+ * yorlig'i) buni "oddiy slayd rasm yo'li" deb taniydi; zanjirning qaysi
+ * bo'g'ini haqiqatan yetkazgani natijaning O'ZIDA (`image.url` manbasi)
+ * ko'rinadi, alohida kuzatish shart emas. Bu id hech qayerda provayder
+ * KALITI sifatida ishlatilmaydi: kvota saqlagichi, `blockedIds` va
+ * cheklagich HAR BIR bo'g'inning o'z id si bilan ishlaydi.
  *
  * `seen` — YOPIQ holat, har chaqiruvda `chainProvider(...)` YANGI
  * tuziladi (`pickProvider` har `attachSlideImages` chaqirig'ida qayta
@@ -218,7 +221,7 @@ export function photoOrientation(size: { width: number; height: number }): "land
  * boshqa foydalanuvchining generatsiyasi bilan aralashmaydi, xotira
  * to'planib qolmaydi.
  */
-export function chainProvider(providers: ImageProvider[], id: ImageProviderId = "fal"): ImageProvider {
+export function chainProvider(providers: ImageProvider[], id: ImageProviderId = "stock"): ImageProvider {
   const seen = new Set<string>();
   const blockedIds = new Set<ImageProviderId>();
   return {
@@ -260,20 +263,19 @@ export function chainProvider(providers: ImageProvider[], id: ImageProviderId = 
  *
  * Oddiy `slide` — FAQAT BEPUL stock-foto manbalar (Pexels → Pixabay),
  * `id: "stock"` (Formalar 2, foydalanuvchi qarori: «rasmlar tekin
- * manbalardan izlansin doim»). fal.ai bu zanjirda YO'Q: kalitsiz muhitda
- * yoki manbalar topolmasa slayd rasmsiz qoladi — pullik provayderga
- * tushmaydi. `extractMeta` oddiy slaydda uslubni `photo` ga majburlaydi,
- * shuning uchun `searchQueryFor` doim so'rov beradi.
+ * manbalardan izlansin doim»). Kalitsiz muhitda yoki manbalar topolmasa
+ * slayd rasmsiz qoladi — pullik provayderga tushmaydi. `extractMeta`
+ * oddiy slaydda uslubni `photo` ga majburlaydi, shuning uchun
+ * `searchQueryFor` doim so'rov beradi.
  *
- * `meta` berilmasa yoki boshqa vosita — eski zanjir (stock → fal):
- * `attachSlideImages` ning meta'siz chaqiruvlari, `scripts/image-lab.mts`
- * va mavjud testlar o'z holida qoladi.
+ * `meta` berilmasa yoki boshqa vosita — o'sha stock zanjiri:
+ * `attachSlideImages` ning meta'siz chaqiruvlari va mavjud testlar o'z
+ * holida qoladi.
  */
 export function pickProvider(meta?: Pick<DocMeta, "toolId"> | null): ImageProvider {
   const toolId: ToolId | undefined = meta?.toolId;
   if (toolId === "pro-slide") return limitedProvider(geminiProvider);
-  if (toolId === "slide") return chainProvider([pexelsProvider, pixabayProvider], "stock");
-  return chainProvider([pexelsProvider, pixabayProvider, falProvider]);
+  return chainProvider([pexelsProvider, pixabayProvider], "stock");
 }
 
 /**

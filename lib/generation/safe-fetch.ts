@@ -2,7 +2,7 @@
  * TASHQI URL ni xavfsiz yuklash (audit EXT-15).
  *
  * Qachon kerak: URL BIZNING doimiy sozlamamizdan emas, PROVAYDER
- * javobidan kelganda — stock rasm havolasi (Pexels/Pixabay/fal JSON),
+ * javobidan kelganda — stock rasm havolasi (Pexels/Pixabay JSON),
  * Aisha TTS audio havolasi, Gemini grounding `uri`si, model taklif
  * qilgan lex.uz sahifasi. Buzilgan yoki yolg'on provayder javobi (yoki
  * uning redirecti) worker'ni `http://169.254.169.254/…` (bulut metadata)

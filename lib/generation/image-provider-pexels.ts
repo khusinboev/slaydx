@@ -2,7 +2,7 @@
  * Pexels bepul stock-foto provayderi (AUDIT-9 P3).
  *
  * Zanjirning BIRINCHI bo'g'ini (`chainProvider([pexelsProvider,
- * pixabayProvider, falProvider])`, `image-provider.ts` `pickProvider`).
+ * pixabayProvider])`, `image-provider.ts` `pickProvider`).
  * Faqat oddiy `slide` vositasi uchun ishlaydi va faqat uslub `photo`
  * bo'lganda (`ask.searchQuery` bo'lmasa — pastga qarang — darhol
  * o'tkazib yuboriladi, tarmoqqa chiqilmaydi).
@@ -14,7 +14,7 @@
  * (`slide-images.ts`) uni yuklab `data:` ga aylantiradi va PNG/JPEG
  * baytlarini SNIFF qiladi (soxta MIME'ga ishonmaydi).
  */
-import { photoOrientation, requestBudget, type FalFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
+import { photoOrientation, requestBudget, type ImageFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
 import { getProviderKey } from "../server/providers/resolve";
 
 const PEXELS_URL = "https://api.pexels.com/v1/search";
@@ -30,7 +30,7 @@ export function pexelsKey() {
  * ma'nosiz, `chainProvider` shu provayderni DEKA OXIRIGACHA belgilaydi.
  * 429 — vaqtinchalik so'rov chegarasi.
  */
-function pexelsReason(status: number): FalFailure {
+function pexelsReason(status: number): ImageFailure {
   if (status === 401 || status === 403) return "blocked";
   if (status === 429) return "rate";
   return "failed";
@@ -88,8 +88,8 @@ export async function requestPexelsImage(ask: ImageAsk, deadline?: number): Prom
 
 export const pexelsProvider: ImageProvider = {
   id: "pexels",
-  // Stock API HTTP so'rovi — Gemini/fal chizishdan tezroq, lekin
-  // fal (8s) dan kamroq qilib qo'yish shart emas: aynan shu qiymat
+  // Stock API HTTP so'rovi — Gemini chizishdan tezroq, lekin juda
+  // qisqa qilib qo'yish shart emas: aynan shu qiymat
   // `deadline - Date.now() < minMs` bilan "so'rov umuman yubormaslik"
   // chegarasi, past qilinsa vaqt tugaganda ham behuda so'rov ketardi.
   minMs: 6_000,

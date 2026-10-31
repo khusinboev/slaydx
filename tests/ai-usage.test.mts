@@ -4,12 +4,12 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
 
 /**
  * AI spend capture `ai_usage` (WP-X1; docs/admin/02-plan.md §17.3, §17.7):
- * `lib/server/ai-usage.ts`, `trackJobCost` / `recordFalImage` in
+ * `lib/server/ai-usage.ts`, `trackJobCost` / `recordImage` in
  * `lib/generation/job-cost.ts`, the worker flush and the free endpoints.
  *
  * Unit: a tracker sees the spend of a build that throws (nested
  * `withJobCost` included) while `withJobCost`'s own success result is
- * unchanged; fal images are priced only where a price is documented.
+ * unchanged; an image is priced only where a price is documented.
  * DB (throwaway database, real `runJob` with stub builds): a failed job's
  * spend is recorded; an abandoned (hard-stopped) build is recorded when it
  * settles; a completed job is recorded once with exactly its `cost_json`; the
@@ -63,51 +63,24 @@ test("trackJobCost: spend of a build that throws is retrievable; withJobCost suc
   assert.doesNotThrow(() => jc.recordLlmUsage(USAGE));
 });
 
-test("fal images: schnell priced per started megapixel (provider-pricing.md §3), others unpriced", async () => {
-  assert.equal(jc.falImageUnitUsd("fal-ai/flux/schnell", 1280, 720), 0.003);
-  assert.equal(jc.falImageUnitUsd("fal-ai/flux/schnell", 1600, 1200), 0.006);
-  assert.equal(jc.falImageUnitUsd("fal-ai/flux/dev", 1024, 1024), null);
+test("image parts: the price book prices a known model, an undocumented one is unpriced (usd 0, priced:false)", async () => {
   const { cost } = await jc.withJobCost(async () => {
-    jc.recordFalImage("fal-ai/flux/schnell", 1280, 720);
-    jc.recordFalImage("fal-ai/flux/schnell", 1280, 720);
-    jc.recordFalImage("fal-ai/flux/dev", 1024, 1024);
+    jc.recordImage("gemini", "gemini-3.1-flash-lite-image");
+    jc.recordImage("gemini", "gemini-3.1-flash-lite-image");
+    // The shape of stored parts of a removed image provider: counted, never priced.
+    jc.currentJobCost()!.addUnpricedImage("fal", "fal-ai/flux/dev");
   });
   const parts = cost.toJson().parts!;
-  const schnell = parts.find((p) => p.model === "fal-ai/flux/schnell")!;
-  assert.deepEqual({ ...schnell }, { kind: "image", provider: "fal", model: "fal-ai/flux/schnell", calls: 2, inputTokens: 0, outputTokens: 0, units: 2, usd: 0.006 });
-  const dev = parts.find((p) => p.model === "fal-ai/flux/dev")! as (typeof parts)[number] & { priced?: boolean };
-  assert.equal(dev.units, 1);
-  assert.equal(dev.usd, 0);
-  assert.equal(dev.priced, false);
-  assert.equal(cost.toJson().usd, 0.006);
-});
-
-test("fal provider records a successful image into the job meter", async (t) => {
-  quiet(t);
-  const prevKey = process.env.FAL_KEY;
-  process.env.FAL_KEY = "test-fal-key";
-  delete process.env.FAL_MODEL;
-  const realFetch = globalThis.fetch;
-  let ok = true;
-  globalThis.fetch = (async () =>
-    ok
-      ? new Response(JSON.stringify({ images: [{ url: "https://fal.media/x.jpg", width: 1280, height: 720 }] }))
-      : new Response(JSON.stringify({ detail: "boom" }), { status: 500 })) as typeof fetch;
-  t.after(() => {
-    globalThis.fetch = realFetch;
-    if (prevKey === undefined) delete process.env.FAL_KEY;
-    else process.env.FAL_KEY = prevKey;
-  });
-  const { requestFalImage } = await import("../lib/generation/image-provider-fal.ts");
-  const { cost } = await jc.withJobCost(async () => {
-    assert.equal((await requestFalImage("p", { width: 1280, height: 720 })).ok, true);
-    ok = false;
-    assert.equal((await requestFalImage("p", { width: 1280, height: 720 })).ok, false);
-  });
-  const json = cost.toJson();
-  assert.equal(json.calls, 1, "only the successful image is billed");
-  assert.equal(json.usd, 0.003);
-  assert.equal(json.parts![0].provider, "fal");
+  const lite = parts.find((p) => p.model === "gemini-3.1-flash-lite-image")!;
+  assert.deepEqual({ ...lite }, { kind: "image", provider: "gemini", model: "gemini-3.1-flash-lite-image", calls: 2, inputTokens: 0, outputTokens: 0, units: 2, usd: 0.068 });
+  const legacy = parts.find((p) => p.model === "fal-ai/flux/dev")! as (typeof parts)[number] & { priced?: boolean };
+  assert.equal(legacy.units, 1);
+  assert.equal(legacy.usd, 0);
+  assert.equal(legacy.priced, false);
+  assert.equal(cost.toJson().usd, 0.068, "the unpriced part adds nothing");
+  // The recorder API of the removed provider is gone.
+  assert.equal((jc as Record<string, unknown>).recordFalImage, undefined);
+  assert.equal((jc as Record<string, unknown>).falImageUnitUsd, undefined);
 });
 
 test("ai_usage (Postgres)", { skip }, async (t) => {

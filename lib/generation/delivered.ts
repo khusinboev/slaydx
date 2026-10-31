@@ -37,7 +37,7 @@ import type { AcademicDoc, Delivered, DocMeta } from "./types";
  * tashlab qo'yilgan edi: «rasm soni yorliqda va'da qilinmagan, unga
  * nisbat bo'yicha pul qaytarish o'lchanmagan narsaga narx qo'yish
  * bo'lardi». Jonli sinov shu mulohazaning ikkinchi yarmi yo'qligini
- * ko'rsatdi: fal.ai 19 ta so'rovning 19 tasini rad etganda
+ * ko'rsatdi: rasm provayderi 19 ta so'rovning 19 tasini rad etganda
  * («403 User is locked») deka rasmsiz `COMPLETED` bo'lar, premium
  * paketning butun narxi olinar va foydalanuvchi buni HECH QAYERDAN
  * bilmasdi — yagona signal server jurnalidagi `console.warn` edi.

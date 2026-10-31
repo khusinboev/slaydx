@@ -9,7 +9,7 @@
  * kalit QUERY parametrida (sarlavhada emas — Pixabay shunday talab
  * qiladi). Javob: `hits[].largeImageURL`.
  */
-import { photoOrientation, requestBudget, type FalFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
+import { photoOrientation, requestBudget, type ImageFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
 import { getProviderKey } from "../server/providers/resolve";
 
 const PIXABAY_URL = "https://pixabay.com/api/";
@@ -27,7 +27,7 @@ export function pixabayKey() {
  * ko'rish xavfsiz, chunki bu SO'ROV shaklidagi xato bo'lishi ham
  * mumkin, hisob bloki emas).
  */
-function pixabayReason(status: number): FalFailure {
+function pixabayReason(status: number): ImageFailure {
   if (status === 401 || status === 403) return "blocked";
   if (status === 429) return "rate";
   return "failed";

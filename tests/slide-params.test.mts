@@ -345,9 +345,7 @@ async function researchProbe(values: FormValues, tool = pro): Promise<string> {
   const m = extractMeta(tool, { topic: "Suv aylanishi", ...values });
   const realFetch = globalThis.fetch;
   const savedGemini = process.env.GEMINI_API_KEY;
-  const savedXai = process.env.XAI_API_KEY;
   process.env.GEMINI_API_KEY = "test-key";
-  delete process.env.XAI_API_KEY;
   const trace: string[] = [];
   globalThis.fetch = (async (url: string, init?: { body?: string }) => {
     const body = String(init?.body ?? "");
@@ -364,8 +362,6 @@ async function researchProbe(values: FormValues, tool = pro): Promise<string> {
     globalThis.fetch = realFetch;
     if (savedGemini === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = savedGemini;
-    if (savedXai === undefined) delete process.env.XAI_API_KEY;
-    else process.env.XAI_API_KEY = savedXai;
   }
   return JSON.stringify(trace);
 }

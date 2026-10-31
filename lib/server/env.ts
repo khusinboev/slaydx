@@ -242,14 +242,6 @@ export const env = {
     key: str("GEMINI_API_KEY"),
     model: str("GEMINI_MODEL", "gemini-3.7-flash"),
   },
-  xai: {
-    key: str("XAI_API_KEY"),
-    model: str("XAI_MODEL", "grok-4.3"),
-  },
-  fal: {
-    key: str("FAL_KEY"),
-    model: str("FAL_MODEL", "fal-ai/flux/schnell"),
-  },
 
   /**
    * TTS (AUDIT-22: podkast, tabriknoma) — `docs/research/tts.md` §3.
@@ -410,7 +402,7 @@ export function parseAdminTotpKey(raw: string): Buffer | null {
 }
 
 export function llmConfigured(): boolean {
-  return Boolean(getProviderKey("gemini") || getProviderKey("xai"));
+  return Boolean(getProviderKey("gemini"));
 }
 
 /**
