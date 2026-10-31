@@ -54,8 +54,10 @@ const TITLES: Record<View, string> = {
  * Redesign W5 (variant A): telefonda pastki varaq, kompyuterda markazdagi dialog.
  *
  * Paynet (owner 2026-10-31): summa tanlangach Click bilan bir qatorda «Paynet» usuli — buyurtma
- * yaratilmaydi (Paynet agentda to'lanadi, hisobni Paynet chaqiruvi to'ldiradi), `PaynetStep` summa,
- * SlaydX ID va ilova tugmasini ko'rsatadi. Faqat server Paynet'ni sozlagan bo'lsa (`features.payments.paynet`).
+ * yaratilmaydi (Paynet agentda to'lanadi, hisobni Paynet chaqiruvi to'ldiradi), `PaynetStep` SlaydX ID,
+ * «istalgan summa» qoidasi (min/max) va ilova tugmasini ko'rsatadi. Paynet o'zi to'langan summani
+ * yuboradi va AYNAN shu summa hisobga tushadi (egasi 2026-10-31) — dialogdagi summa Paynet uchun shart
+ * emas, shuning uchun Paynet qatori summa xatosida ham ochiq. Faqat server Paynet'ni sozlagan bo'lsa (`features.payments.paynet`).
  */
 export function PayDialog() {
   const open = useUi((s) => s.overlay === "pay");
@@ -100,13 +102,14 @@ export function PayDialog() {
 
   function openPaynet() {
     // `user` (the ID shown) can still be loading right after sign-in: stay on the list rather than open an empty step.
-    if (needLogin() || amountErr || !user) return;
+    // No `amountErr` gate: Paynet credits what is paid there, the dialog's amount is not used.
+    if (needLogin() || !user) return;
     setError(null);
     setView("paynet");
   }
 
   const paynetRow = paynetOn ? (
-    <MethodRow method="paynet" icon={Landmark} title="Paynet" hint="Paynet ilovasi, terminal yoki kassa orqali" busy={busy} disabled={busy !== null || !!amountErr} onClick={openPaynet} />
+    <MethodRow method="paynet" icon={Landmark} title="Paynet" hint="Ilova, terminal yoki kassa — istalgan summa" busy={busy} disabled={busy !== null} onClick={openPaynet} />
   ) : null;
 
   function needLogin(): boolean {
@@ -216,7 +219,7 @@ export function PayDialog() {
           />
         ) : null}
 
-        {view === "paynet" && user ? <PaynetStep userId={user.id} amount={amount} appUrl={features?.payments.paynetUrl ?? null} onBack={back} /> : null}
+        {view === "paynet" && user ? <PaynetStep userId={user.id} appUrl={features?.payments.paynetUrl ?? null} onBack={back} /> : null}
 
         {view === "home" ? (
           <>
