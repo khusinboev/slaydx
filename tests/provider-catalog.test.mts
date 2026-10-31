@@ -11,6 +11,7 @@ const { resetRouteSnapshot, setRouteSnapshot } = await import("../lib/server/pro
 const { foldUsage, registryIdOf, tashkentDay, usageDays, SERIES_DAYS } = await import("../lib/server/admin-provider-usage.ts");
 const { providerOfUrl, recordProviderCall, registerProviderCallSink } = await import("../lib/generation/provider-calls.ts");
 const { getJson } = await import("../lib/generation/research/http.ts");
+const { breakerFor, resetBreakers } = await import("../lib/generation/llm/breaker.ts");
 const { imagePriceOf, costUsd } = await import("../lib/generation/llm-pricing.ts");
 const { ttsGroups, ttsVoiceChain } = await import("../lib/generation/tts/chain.ts");
 
@@ -239,7 +240,8 @@ test("foldUsage: windows, kinds, models, daily series, free counters and the his
     [
       row("2026-10-31", "gemini", "llm", "gemini-3.7-flash", 10, 1.5, { inputTokens: 1000, outputTokens: 200 }),
       row("2026-10-28", "gemini", "llm", "gemini-3.7-flash", 5, 0.5),
-      row("2026-10-24", "gemini", "llm", "gemini-3.7-flash", 1, 0.25), // the 8th day back: in 30 days, NOT in 7
+      row("2026-10-25", "gemini", "llm", "gemini-3.7-flash", 1, 0.25), // the 7th day back: the first day of the 7-day window
+      row("2026-10-24", "gemini", "llm", "gemini-3.7-flash", 1, 0.0625), // the 8th day back: in 30 days, NOT in 7
       row("2026-10-10", "gemini", "image", "gemini-3.1-flash-lite-image", 3, 0.1, { units: 3 }),
       row("2026-09-01", "gemini", "llm", "gemini-3.7-flash", 99, 99), // outside the window: ignored everywhere
       row("2026-10-30", "openai", "image", "gpt-image-2.5-flare", 2, 0.1),
@@ -254,16 +256,16 @@ test("foldUsage: windows, kinds, models, daily series, free counters and the his
     ],
   );
   const g = body.byProvider.gemini;
-  assert.deepEqual([g.today.calls, g.d7.calls, g.d30.calls], [10, 15, 19], "windows: today / 7 days (10-25 .. 10-31) / 30 days");
+  assert.deepEqual([g.today.calls, g.d7.calls, g.d30.calls], [10, 16, 20], "windows: today / 7 days (10-25 .. 10-31, both ends inclusive) / 30 days");
   assert.equal(g.today.usd, 1.5);
-  assert.equal(g.d7.usd, 2);
-  assert.equal(g.d30.usd, 2.35);
+  assert.equal(g.d7.usd, 2.25);
+  assert.equal(g.d30.usd, 2.4125);
   assert.deepEqual([g.today.inputTokens, g.today.outputTokens], [1000, 200]);
   assert.equal(g.d30.units, 3);
   assert.equal(g.today.errors, null, "paid usage does not track failures");
   assert.equal(g.lastDay, "2026-10-31");
   assert.deepEqual(g.kinds.map((k) => k.kind), ["llm", "image"], "biggest spend first");
-  assert.equal(g.kinds[0].calls, 16);
+  assert.equal(g.kinds[0].calls, 17);
   assert.deepEqual(g.models.map((m) => m.model), ["gemini-3.7-flash", "gemini-3.1-flash-lite-image"]);
   assert.equal(g.daily.length, 14);
   assert.equal(g.daily.at(-1)!.day, "2026-10-31");
@@ -281,8 +283,8 @@ test("foldUsage: windows, kinds, models, daily series, free counters and the his
   assert.equal(body.byProvider.azure.d30.errors, null, "a paid provider does not track failures");
 
   assert.deepEqual(body.other, [{ provider: "xai", calls: 1, usd: 0.2 }, { provider: "fal", calls: 4, usd: 0.012 }], "history of removed providers stays visible, biggest first");
-  assert.equal(body.total30.calls, 10 + 5 + 1 + 3 + 2 + 4 + 1 + 10, "totals include removed providers and free calls; nothing outside 30 days");
-  assert.equal(body.total30.usd, 2.662);
+  assert.equal(body.total30.calls, 10 + 5 + 1 + 1 + 3 + 2 + 4 + 1 + 10, "totals include removed providers and free calls; nothing outside 30 days");
+  assert.equal(body.total30.usd, 2.7245);
 });
 
 /* ───────────────────────────── free-provider counters ───────────────────────────── */
@@ -328,6 +330,13 @@ test("research http counts real requests only", async () => {
   seen.length = 0;
   await getJson("https://api.crossref.org/works?x=4", { fetchImpl: (async () => res(200)) as typeof fetch, retries: 0 });
   assert.deepEqual(seen, [], "hosts without a provider card are not counted");
+
+  seen.length = 0;
+  breakerFor("research:api.openalex.org").trip(30_000, "test quota stop");
+  const skipped = await getJson("https://api.openalex.org/works?x=6", { fetchImpl: (async () => res(200)) as typeof fetch, retries: 0 });
+  assert.equal(skipped.ok, false);
+  assert.deepEqual(seen, [], "a call the open breaker skipped never reached the network, so it is not a request");
+  resetBreakers();
 
   seen.length = 0;
   await getJson("https://api.openalex.org/works?x=5", { fetchImpl: (async () => res(200)) as typeof fetch, retries: 0, deadline: Date.now() - 1 });
