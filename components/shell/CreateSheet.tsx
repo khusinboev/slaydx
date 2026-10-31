@@ -183,7 +183,7 @@ function ServiceTile({ service, onPick }: { service: ServiceConfig; onPick: (hre
       <span className="relative flex size-12 shrink-0 items-center justify-center rounded-[16px] bg-[rgb(var(--tc)/0.14)]">
         {Icon ? <Icon className="size-6 text-[rgb(var(--tc))]" aria-hidden /> : null}
         {service.badge ? (
-          <span className="bg-card absolute -bottom-1.5 left-1/2 -translate-x-1/2 rounded-full border px-1.5 text-[10.5px] leading-4 font-semibold text-[rgb(var(--tc))]">
+          <span className="bg-card absolute -top-1.5 -right-3 rounded-full border px-1.5 text-[10.5px] leading-4 font-semibold text-[rgb(var(--tc))]">
             {service.badge}
           </span>
         ) : null}
