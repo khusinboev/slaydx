@@ -512,6 +512,14 @@ const T = {
     ru: "🎉 Приглашённый вами друг совершил оплату — вам +{n} бонусных сум!",
     en: "🎉 A friend you invited made a payment — you get +{n} bonus UZS!",
   },
+  // Payer's message after a credited top-up (lib/server/topup-notice.ts): one line per fact, the bonus line only when a bonus was paid.
+  "topup.dm": {
+    uz: "✅ Balansingiz <b>{n}</b> so‘mga to‘ldirildi",
+    ru: "✅ Ваш баланс пополнен на <b>{n}</b> сум",
+    en: "✅ Your balance was topped up by <b>{n}</b> UZS",
+  },
+  "topup.dmBonus": { uz: "🎁 +{n} bonus so‘m", ru: "🎁 +{n} бонусных сум", en: "🎁 +{n} bonus UZS" },
+  "topup.dmBalance": { uz: "Joriy balans: <b>{n}</b> so‘m", ru: "Текущий баланс: <b>{n}</b> сум", en: "Current balance: <b>{n}</b> UZS" },
   "rating.task": { uz: "Ilovani baholash · +{n}", ru: "Оценить приложение · +{n}", en: "Rate the app · +{n}" },
   "rating.done": { uz: "Ilovani baholadingiz · +{n}", ru: "Вы оценили приложение · +{n}", en: "You rated the app · +{n}" },
   "bonus.paidTitle": { uz: "+{n}!", ru: "+{n}!", en: "+{n}!" },
