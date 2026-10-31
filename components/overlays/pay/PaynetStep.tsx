@@ -14,8 +14,16 @@ type Notice = { text: string; tone: "ok" | "error" };
 export const PAYNET_STEPS: readonly string[] = [
   "Paynet ilovasi yoki terminalini oching",
   "«SlaydX» xizmatini tanlang",
-  "SlaydX ID ni kiriting va istalgan summani to'lang — u balansga darhol tushadi",
+  "ID maydoniga ID raqamingizni kiriting",
+  "Paynet ko'rsatgan ism sizniki ekanini tekshirib, istalgan summani to'lang — u balansga darhol tushadi",
 ];
+
+/**
+ * Prod incident 2026-10-31: a payer typed the AMOUNT («3000») into Paynet's client-id field, GetInformation showed
+ * user #3000's masked name and the money went to that account. The step therefore warns before paying.
+ */
+export const PAYNET_ID_WARNING =
+  "ID maydoniga summani emas, shu raqamni kiriting; to'lashdan oldin Paynet ko'rsatgan ism sizniki ekanini tekshiring.";
 
 /**
  * The amount rule at Paynet (owner 2026-10-31): whatever the payer pays there within the top-up limits is credited
@@ -51,12 +59,12 @@ export function PaynetStep({ userId, appUrl, onBack }: { userId: string; appUrl:
   return (
     <div data-pay-step="paynet">
       <p className="text-muted-foreground mb-4 text-[14.5px] leading-snug">
-        Paynet to&apos;lovni o&apos;zida qabul qiladi: SlaydX ID ni nusxalab, Paynet&apos;da kiriting.
+        Paynet to&apos;lovni o&apos;zida qabul qiladi: ID raqamingizni nusxalab, Paynet&apos;da kiriting.
       </p>
 
       <div className="bg-muted/60 flex items-center justify-between gap-3 rounded-[14px] px-3.5 py-3">
         <div className="min-w-0">
-          <p className="text-muted-foreground text-[13px] font-medium">SlaydX ID</p>
+          <p className="text-muted-foreground text-[13px] font-medium">Sizning ID raqamingiz</p>
           <p className="mt-0.5 font-mono text-[28px] leading-tight font-bold tracking-[0.02em] tabular-nums break-all select-all" data-paynet-id>
             {userId}
           </p>
@@ -78,6 +86,10 @@ export function PaynetStep({ userId, appUrl, onBack }: { userId: string; appUrl:
         className={cn("mt-2 min-h-5 text-[13px]", notice?.tone === "error" ? "text-destructive" : "text-emerald-700 dark:text-emerald-400")}
       >
         {notice?.text ?? ""}
+      </p>
+
+      <p role="note" className="mb-3 rounded-[14px] bg-amber-500/10 px-3.5 py-2.5 text-[14px] leading-snug font-medium text-amber-800 dark:text-amber-300" data-paynet-warning>
+        {PAYNET_ID_WARNING}
       </p>
 
       <p className="mb-4 rounded-[14px] bg-emerald-500/10 px-3.5 py-2.5 text-[14px] leading-snug text-emerald-800 dark:text-emerald-300" data-paynet-any-amount>

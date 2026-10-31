@@ -331,8 +331,9 @@ test("Hamyon ?order=: cancelled → «bekor qilindi»", async (t) => {
  *   `paynetOn` gate dropped in PayDialog → "offered only while the server has Paynet configured";
  *   `amountErr` gate re-added to the Paynet row / `openPaynet` → "any amount: the row opens even with an invalid dialog amount";
  *   `needLogin()` dropped from `openPaynet` → "signed out → login";
- *   PaynetStep shows a constant id / the dialog amount again / «X so'm to'lang» step → "shows the SlaydX ID and the any-amount rule";
- *   the limits not read from `lib/topup-limits` (hard-coded) → "shows the SlaydX ID and the any-amount rule" (limits line);
+ *   PaynetStep shows a constant id / the dialog amount again / «X so'm to'lang» step → "shows «Sizning ID raqamingiz» ...";
+ *   the «Sizning ID raqamingiz» label / the wrong-ID warning removed → "shows «Sizning ID raqamingiz», the wrong-ID warning ...";
+ *   the limits not read from `lib/topup-limits` (hard-coded) → "shows «Sizning ID raqamingiz» ..." (limits line);
  *   an order created on the Paynet tap → "no order is created";
  *   the copy handler copies something else than the ID → "copy button";
  *   `rel` without noreferrer / link drawn without paynetUrl → "safe external link";
@@ -418,7 +419,7 @@ test("Hamyon Paynet: any amount — the row opens even with an invalid dialog am
   assert.ok(paynetStep(), "the Paynet step opens");
 });
 
-test("Hamyon Paynet: shows the SlaydX ID and the any-amount rule, three steps; no amount is required; no order is created; «Orqaga» returns", async () => {
+test("Hamyon Paynet: shows «Sizning ID raqamingiz», the wrong-ID warning and the any-amount rule, four steps; no amount is required; no order is created; «Orqaga» returns", async () => {
   signInWithPaynet(true);
   const calls = stub();
   mount();
@@ -438,6 +439,14 @@ test("Hamyon Paynet: shows the SlaydX ID and the any-amount rule, three steps; n
   const id = step.querySelector("[data-paynet-id]") as HTMLElement;
   assert.equal(id.textContent, "u1", "the user's id, nothing else");
   assert.ok(id.className.includes("text-[28px]"), "large");
+  assert.equal(id.previousElementSibling?.textContent, "Sizning ID raqamingiz", "the ID is labelled as the user's own");
+  // Prod incident 2026-10-31 (the amount «3000» typed into the ID field paid user #3000): the warning sits right under the ID.
+  const warning = step.querySelector("[data-paynet-warning]")!;
+  assert.equal(
+    warning.textContent,
+    "ID maydoniga summani emas, shu raqamni kiriting; to'lashdan oldin Paynet ko'rsatgan ism sizniki ekanini tekshiring.",
+  );
+  assert.ok(warning.compareDocumentPosition(step.querySelector("[data-paynet-steps]")!) & Node.DOCUMENT_POSITION_FOLLOWING, "warning before the steps");
   assert.equal(
     step.querySelector("[data-paynet-any-amount]")!.textContent,
     `Paynet'da istalgan summani to'lashingiz mumkin: eng kami ${groupDigits(MIN_TOPUP_SOUM)}, eng ko'pi ${groupDigits(MAX_TOPUP_SOUM)} so'm. Balansga aynan to'lagan summangiz tushadi.`,
@@ -446,7 +455,8 @@ test("Hamyon Paynet: shows the SlaydX ID and the any-amount rule, three steps; n
   assert.deepEqual(steps, [
     "1Paynet ilovasi yoki terminalini oching",
     "2«SlaydX» xizmatini tanlang",
-    "3SlaydX ID ni kiriting va istalgan summani to'lang — u balansga darhol tushadi",
+    "3ID maydoniga ID raqamingizni kiriting",
+    "4Paynet ko'rsatgan ism sizniki ekanini tekshirib, istalgan summani to'lang — u balansga darhol tushadi",
   ]);
   assert.ok(within(step).getByRole("button", { name: "SlaydX ID ni nusxalash" }).className.includes("h-11"), "44 px touch target");
   assert.ok(!calls.some((c) => c === "POST /api/payments/orders"), `no order: ${calls.join(" | ")}`);
