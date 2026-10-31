@@ -69,6 +69,7 @@ test("purposes name only registry providers; every routing slot belongs to exact
   assert.deepEqual(PURPOSES.find((p) => p.id === "tts")!.premium, ["elevenlabs"]);
 });
 
+const envOf = (o: Record<string, string>) => o as unknown as NodeJS.ProcessEnv;
 const label = (id: string) => id.toUpperCase();
 const P = (id: string) => PURPOSES.find((p) => p.id === id)!;
 
@@ -148,12 +149,12 @@ test("checkRoute rejects a model that is not in the price book, an unknown or fo
 });
 
 test("effectiveRoute: db beats env beats default", () => {
-  const env = { GEMINI_MODEL: "gemini-3.5-flash-lite", LLM_JUDGE: "anthropic:claude-sonnet-5,gemini:gemini-3.7-flash", GEMINI_IMAGE_MODEL: "gemini-3.1-flash-image" } as NodeJS.ProcessEnv;
+  const env = envOf({ GEMINI_MODEL: "gemini-3.5-flash-lite", LLM_JUDGE: "anthropic:claude-sonnet-5,gemini:gemini-3.7-flash", GEMINI_IMAGE_MODEL: "gemini-3.1-flash-image" });
   // default
-  assert.deepEqual(effectiveRoute("llm.writer", {}), { source: "default", entries: [{ provider: "gemini", model: DEFAULT_GEMINI_MODEL }] });
-  assert.equal(geminiTextModel({}), DEFAULT_GEMINI_MODEL);
-  assert.equal(geminiImageModelName({}), DEFAULT_GEMINI_IMAGE_MODEL);
-  assert.deepEqual(effectiveRoute("tts.order", {}).entries.map((e) => e.provider), ["azure", "aisha", "gemini"]);
+  assert.deepEqual(effectiveRoute("llm.writer", envOf({})), { source: "default", entries: [{ provider: "gemini", model: DEFAULT_GEMINI_MODEL }] });
+  assert.equal(geminiTextModel(envOf({})), DEFAULT_GEMINI_MODEL);
+  assert.equal(geminiImageModelName(envOf({})), DEFAULT_GEMINI_IMAGE_MODEL);
+  assert.deepEqual(effectiveRoute("tts.order", envOf({})).entries.map((e) => e.provider), ["azure", "aisha", "gemini"]);
   // env
   assert.deepEqual(effectiveRoute("llm.judge", env), {
     source: "env",
@@ -174,7 +175,7 @@ test("effectiveRoute: db beats env beats default", () => {
 });
 
 test("an env chain naming a provider that was removed keeps the valid entries", () => {
-  const env = { LLM_WRITER: "openrouter:x/y,gemini:gemini-3.7-flash" } as NodeJS.ProcessEnv;
+  const env = envOf({ LLM_WRITER: "openrouter:x/y,gemini:gemini-3.7-flash" });
   assert.deepEqual(effectiveRoute("llm.writer", env), { source: "env", entries: [{ provider: "gemini", model: "gemini-3.7-flash" }] });
 });
 
@@ -186,13 +187,13 @@ test("ttsProviderRank: null without a stored order; listed providers first, the 
 });
 
 test("the stored voice order moves whole providers and never beats an operator's TTS_VOICE_<LANG>", () => {
-  const env = { TTS_GEMINI_MODEL: "gemini-2.5-flash-preview-tts" } as NodeJS.ProcessEnv;
+  const env = envOf({ TTS_GEMINI_MODEL: "gemini-2.5-flash-preview-tts" });
   assert.deepEqual(ttsGroups("uz", env).map((g) => g.provider), ["azure", "aisha", "gemini"], "default: the table order");
   setRouteSnapshot(new Map([["tts.order", [{ provider: "gemini", model: null }, { provider: "azure", model: null }]]]));
   assert.deepEqual(ttsGroups("uz", env).map((g) => g.provider), ["gemini", "azure", "aisha"], "listed first, unlisted after, in table order");
   const azure = ttsGroups("uz", env).find((g) => g.provider === "azure")!;
   assert.deepEqual(azure.voices, ["uz-UZ-MadinaNeural", "uz-UZ-SardorNeural"], "a provider keeps its own voice order (female then male)");
-  const pinned = { ...env, TTS_VOICE_UZ: "aisha:gulnoza,azure:uz-UZ-MadinaNeural" } as NodeJS.ProcessEnv;
+  const pinned = envOf({ ...env, TTS_VOICE_UZ: "aisha:gulnoza,azure:uz-UZ-MadinaNeural" });
   assert.deepEqual(ttsVoiceChain("uz", pinned).map((v) => v.provider), ["aisha", "azure"], "the operator's list is untouched by the stored order");
 });
 

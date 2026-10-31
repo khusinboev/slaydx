@@ -5,7 +5,7 @@ import { createElement as h, type ReactNode } from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
-import type { AiCostResponse, AiProvidersResponse } from "../../lib/admin-api/ai.ts";
+import type { AiCostResponse } from "../../lib/admin-api/ai.ts";
 import { AiPage } from "../../components/admin/ai/AiPage.tsx";
 import { parseCostSort, sortCostRows } from "../../components/admin/ai/shared.ts";
 
@@ -290,121 +290,14 @@ test("cost: 403 renders the forbidden state, with no data", async () => {
   assert.ok(screen.getByText("Ruxsat yo'q"));
 });
 
-// ───────────────────────────── providers tab
+// ───────────────────────────── the old «Provayderlar» tab moved
 
-const NOW = Date.now();
-const providers: AiProvidersResponse = {
-  keys: { gemini: true, anthropic: false, openai: true, pexels: true, pixabay: false, azureTts: true, aisha: false },
-  processes: [
-    { process: "worker@host-a:11", role: "worker", lastSeenAt: new Date(NOW - 5_000).toISOString(), stale: false },
-    { process: "web@host-b:22", role: "web", lastSeenAt: new Date(NOW - 600_000).toISOString(), stale: true },
-  ],
-  breakers: [
-    { process: "worker@host-a:11", name: "gemini", state: "open", openUntil: new Date(NOW + 42_000).toISOString(), failures: 0, stale: false },
-    { process: "worker@host-a:11", name: "image:pexels", state: "closed", openUntil: null, failures: 2, stale: false },
-    { process: "web@host-b:22", name: "gemini", state: "open", openUntil: new Date(NOW + 42_000).toISOString(), failures: 9, stale: true },
-  ],
-  limiters: [
-    { process: "worker@host-a:11", name: "gemini", active: 10, waiting: 3, max: 10, stale: false },
-    { process: "worker@host-a:11", name: "anthropic", active: 0, waiting: 0, max: 4, stale: false },
-  ],
-  usage24h: [
-    { provider: "gemini", model: "gemini-3.7-flash", calls: 4_120, usd: 38.4, },
-    { provider: "unknown", model: "unknown", calls: 2, usd: 0.03 },
-  ],
-  soumPerUsd: 12_700,
-};
-
-test("providers: key grid (Bor / Yo'q), open breaker red, stale process neutral and marked, limiter load, 24 h usage", async () => {
-  const calls = stubFetch(() => json(200, providers));
-  const { container } = renderPage("tab=providers");
-  assert.ok(container.querySelector('[aria-busy="true"]'), "loading skeleton");
-  await screen.findByText("API kalitlari");
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].url.pathname, "/api/admin/ai/providers");
-
-  // Keys: one tile per provider, present exactly where the API said true.
-  const present = Object.fromEntries([...container.querySelectorAll("li[data-key]")].map((li) => [li.getAttribute("data-key"), li.getAttribute("data-present")]));
-  assert.deepEqual(present, { gemini: "1", anthropic: "0", openai: "1", pexels: "1", pixabay: "0", azureTts: "1", aisha: "0" });
-  assert.equal(within(container.querySelector("li[data-key='gemini']") as HTMLElement).getByText("Bor").textContent, "Bor");
-  assert.ok(within(container.querySelector("li[data-key='anthropic']") as HTMLElement).getByText("Yo'q"));
-
-  // Breakers: the live open one is red; the stale process's open one is NOT red and is marked.
-  const liveRow = [...container.querySelectorAll("tr[data-row-key]")].find((r) => r.getAttribute("data-row-key") === "worker@host-a:11|gemini")!;
-  const liveBadge = within(liveRow as HTMLElement).getByText("Ochiq");
-  assert.match(liveBadge.className, /destructive/);
-  assert.match(liveRow.textContent ?? "", /soniyadan keyin/, "open until");
-  const staleRow = [...container.querySelectorAll("tr[data-row-key]")].find((r) => r.getAttribute("data-row-key") === "web@host-b:22|gemini")!;
-  const staleBadge = within(staleRow as HTMLElement).getByText("Ochiq");
-  assert.doesNotMatch(staleBadge.className, /destructive/);
-  assert.ok(within(staleRow as HTMLElement).getByText("Eskirgan"));
-  const closed = [...container.querySelectorAll("tr[data-row-key]")].find((r) => r.getAttribute("data-row-key") === "worker@host-a:11|image:pexels")!;
-  assert.match(within(closed as HTMLElement).getByText("Yopiq").className, /success/);
-  assert.ok(screen.getByText("1 ta ochiq"));
-  assert.ok(screen.getByText("1 ta eskirgan jarayon"));
-
-  // Limiter: a full limiter shows load 10 / 10 and the queue.
-  const lim = [...container.querySelectorAll("tr[data-row-key]")].find((r) => r.getAttribute("data-row-key") === "worker@host-a:11|gemini" && /\/\s*10/.test(r.textContent ?? "") && /3/.test(r.textContent ?? ""))!;
-  assert.ok(lim);
-
-  // 24 h usage with so'm; the unknown pair in Uzbek.
-  assert.ok(screen.getAllByText("$38,40").length >= 1);
-  assert.ok(screen.getAllByText(/487\s680\s+so'm/).length >= 1, "38.4 × 12 700");
-  assert.ok(screen.getAllByText("noma'lum").length >= 2);
-});
-
-test("providers: an open breaker whose window already ended says so instead of a stale countdown", async () => {
-  const past = { ...providers, breakers: [{ process: "worker@host-a:11", name: "gemini", state: "open" as const, openUntil: new Date(NOW - 60_000).toISOString(), failures: 0, stale: false }] };
-  stubFetch(() => json(200, past));
-  const { container } = renderPage("tab=providers");
-  await screen.findByText("API kalitlari");
-  const row = container.querySelector("tr[data-row-key='worker@host-a:11|gemini']") as HTMLElement;
-  assert.match(row.textContent ?? "", /muddat tugagan/);
-});
-
-test("providers: no processes yet → an empty state, not a blank table", async () => {
-  stubFetch(() => json(200, { ...providers, processes: [], breakers: [], limiters: [], usage24h: [] }));
-  renderPage("tab=providers");
-  await screen.findByText("Jarayonlardan signal kelmagan");
-  assert.ok(screen.getByText("Limiter ma'lumoti yo'q"));
-  assert.ok(screen.getByText("Oxirgi 24 soatda AI xarajati yo'q"));
-});
-
-test("providers: error with requestId and retry; 403 forbidden", async () => {
-  let n = 0;
-  stubFetch(() => {
-    n += 1;
-    return n === 1 ? json(500, { error: "Ichki xatolik", requestId: "req-prov-7" }) : json(200, providers);
-  });
-  renderPage("tab=providers");
-  const alert = await screen.findByRole("alert");
-  assert.match(alert.textContent ?? "", /req-prov-7/);
-  fireEvent.click(within(alert).getByRole("button", { name: "Qayta urinish" }));
-  await screen.findByText("API kalitlari");
-  cleanup();
-
-  stubFetch(() => json(403, { error: "Bu amal uchun ruxsatingiz yo'q", code: "forbidden" }));
-  renderPage("tab=providers");
-  await screen.findByText("Ruxsat yo'q");
-  assert.ok(!screen.queryByText("API kalitlari"));
-  await waitFor(() => assert.ok(!screen.queryByRole("tablist"), "no tabs above the forbidden state"));
-});
-
-test("providers: the refresh button reloads", async () => {
-  const calls = stubFetch(() => json(200, providers));
-  renderPage("tab=providers");
-  await screen.findByText("API kalitlari");
-  fireEvent.click(screen.getByRole("button", { name: /Yangilash/ }));
-  await waitFor(() => assert.equal(calls.length, 2));
-});
-
-test("tabs: the active tab is in the URL; switching writes it (default tab omits the param)", async () => {
-  stubFetch(costHandler);
-  const { calls } = renderPage(Q);
-  await screen.findAllByText("claude-sonnet-5");
-  fireEvent.click(screen.getByRole("tab", { name: "Provayderlar" }));
-  assert.equal(calls.replace.at(-1), "/admin/ai?from=2026-03-10&to=2026-03-12&tab=providers");
-  assert.equal(screen.getByRole("tab", { name: "Xarajat" }).getAttribute("aria-selected"), "true");
+test("an old ?tab=providers link is forwarded to the redesigned /admin/providers page and loads no AI cost", async () => {
+  const calls = stubFetch(costHandler);
+  const { calls: nav } = renderPage("tab=providers");
+  await waitFor(() => assert.equal(nav.replace.at(-1), "/admin/providers"));
+  assert.equal(calls.length, 0, "the cost endpoint is not requested for a forwarded link");
+  assert.ok(!screen.queryByRole("tablist"), "the cost page has no tabs any more");
 });
 
 // ───────────────────────────── sort helpers

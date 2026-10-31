@@ -8,6 +8,7 @@ import { BREAKER_WAIT_MAX_MS, CHAIN_MIN_ATTEMPT_MS, CHAIN_SAFETY_MS, DeadlineErr
 import { classifyFailure, isSafetyFinish, reportFailure, withJsonRetry, type FailureKind } from "./llm/failure";
 import { limiterFor } from "./llm/limiter";
 import { log } from "../server/log";
+import { geminiTextModel } from "../server/providers/route-effective";
 import { getProviderKey } from "../server/providers/resolve";
 import { backoffMs, equalJitterMs, geminiRetryDelayMs, parseRetryAfter } from "./llm/retry";
 
@@ -21,8 +22,9 @@ export function llmEnabled() {
   return llmProvider() !== null;
 }
 
+/** The default Gemini text model: the admin's choice (`llm.model` slot), else `GEMINI_MODEL`, else the built-in default. */
 export function llmModel() {
-  return process.env.GEMINI_MODEL || "gemini-3.7-flash";
+  return geminiTextModel();
 }
 
 export type LlmOpts = {

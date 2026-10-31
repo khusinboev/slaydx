@@ -62,28 +62,7 @@ export type AiCostResponse = {
   soumPerUsd: number;
 };
 
-export type AiProviderKeyName = "gemini" | "anthropic" | "openai" | "pexels" | "pixabay" | "azureTts" | "aisha";
-
-export type AiProcess = { process: string; role: "web" | "worker"; lastSeenAt: string; stale: boolean };
-export type AiBreaker = { process: string; name: string; state: "closed" | "open" | "half-open"; openUntil: string | null; failures: number; stale: boolean };
-export type AiLimiter = { process: string; name: string; active: number; waiting: number; max: number; stale: boolean };
-export type AiUsage24h = { provider: string; model: string; calls: number; usd: number };
-
-export type AiProvidersResponse = {
-  keys: Record<AiProviderKeyName, boolean>;
-  processes: AiProcess[];
-  breakers: AiBreaker[];
-  limiters: AiLimiter[];
-  usage24h: AiUsage24h[];
-  soumPerUsd: number;
-};
-
 /** GET /api/admin/ai/cost. Errors: 400 bad range/groupBy, 403 `forbidden`, 503 `timeout`. */
 export function getAiCost(params: { from: string; to: string; groupBy: AiGroupBy }, opts?: AdminCallOptions): Promise<AiCostResponse> {
   return adminGet<AiCostResponse>("/api/admin/ai/cost", params, opts);
-}
-
-/** GET /api/admin/ai/providers. Provider keys arrive as booleans only. */
-export function getAiProviders(opts?: AdminCallOptions): Promise<AiProvidersResponse> {
-  return adminGet<AiProvidersResponse>("/api/admin/ai/providers", undefined, opts);
 }

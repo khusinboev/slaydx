@@ -11,6 +11,7 @@
  */
 import { photoOrientation, requestBudget, type ImageFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
 import { getProviderKey } from "../server/providers/resolve";
+import { recordProviderCall } from "./provider-calls";
 
 const PIXABAY_URL = "https://pixabay.com/api/";
 
@@ -52,11 +53,15 @@ export async function requestPixabayImage(ask: ImageAsk, deadline?: number): Pro
   const budget = requestBudget(deadline);
   if (budget === null) return { ok: false, reason: "timeout", detail: "byudjet 2 s dan kam" };
 
+  // Usage counter for the admin «Provayderlar» page: one count per request that actually went out.
+  let sent = false;
   try {
     const url =
       `${PIXABAY_URL}?key=${encodeURIComponent(key)}&q=${encodeURIComponent(query)}` +
       `&image_type=photo&orientation=${pixabayOrientation(ask.size)}&per_page=5&safesearch=true`;
     const res = await fetch(url, { signal: AbortSignal.timeout(budget) });
+    sent = true;
+    recordProviderCall("pixabay", res.ok);
     if (!res.ok) {
       const reason = pixabayReason(res.status);
       const line = `${res.status} ${res.statusText || "request failed"}`;
@@ -72,6 +77,7 @@ export async function requestPixabayImage(ask: ImageAsk, deadline?: number): Pro
     const alt = hits.find((h) => h.largeImageURL === picked)?.tags || query;
     return { ok: true, image: { url: picked, alt } };
   } catch (e) {
+    if (!sent) recordProviderCall("pixabay", false);
     const msg = e instanceof Error ? e.message : "network";
     console.warn("[pixabay]", msg);
     const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");

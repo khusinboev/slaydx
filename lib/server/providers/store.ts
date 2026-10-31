@@ -82,7 +82,7 @@ export async function loadRouteSnapshot(): Promise<ReadonlyMap<string, readonly 
 }
 
 /** The loader `resolve.ts` calls: provider keys plus the routing slots, in one refresh cycle. */
-async function loadSnapshots(): Promise<ProviderSnapshot> {
+export async function loadProviderAndRouteSnapshots(): Promise<ProviderSnapshot> {
   const providers = await loadProviderSnapshot();
   try {
     setRouteSnapshot(await loadRouteSnapshot());
@@ -93,7 +93,7 @@ async function loadSnapshots(): Promise<ProviderSnapshot> {
   return providers;
 }
 
-registerProviderSource(loadSnapshots);
+registerProviderSource(loadProviderAndRouteSnapshots);
 
 type Globals = typeof globalThis & { __slaydxProviderRefresh?: ReturnType<typeof setInterval> };
 const g = globalThis as Globals;

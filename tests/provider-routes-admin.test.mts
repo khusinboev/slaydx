@@ -67,7 +67,7 @@ beforeEach(async () => {
   for (const id of registry.PROVIDER_IDS) for (const e of registry.providerDef(id)!.envKeys) delete process.env[e];
   for (const v of ["LLM_WRITER", "LLM_RESEARCHER", "LLM_JUDGE", "LLM_FAST", "GEMINI_MODEL", "GEMINI_IMAGE_MODEL", "TTS_GEMINI_MODEL", "AZURE_SPEECH_REGION"]) delete process.env[v];
   if (hasDb) {
-    resolve.registerProviderSource(store.loadProviderSnapshot);
+    resolve.registerProviderSource(store.loadProviderAndRouteSnapshots);
     await query("DELETE FROM provider_settings");
     await query("DELETE FROM ai_routes");
     await query("DELETE FROM provider_calls");
@@ -271,7 +271,7 @@ test("GET: roles — owner/admin/finance/viewer read, support/moderator and non-
 test("PUT route validation: reason, shape, models of the price book, unknown slot, Origin — nothing is written", { skip }, async () => {
   const s = await session("owner");
   const cases: Array<[string, string, unknown, unknown, number]> = [
-    ["no reason", "llm.judge", JUDGE, undefined, 400],
+    ["no reason", "llm.judge", JUDGE, null, 400],
     ["short reason", "llm.judge", JUDGE, "abc", 400],
     ["empty entries", "llm.judge", [], REASON, 400],
     ["entries is not an array", "llm.judge", "gemini", REASON, 400],

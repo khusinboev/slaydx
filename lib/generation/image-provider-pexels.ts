@@ -16,6 +16,7 @@
  */
 import { photoOrientation, requestBudget, type ImageFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
 import { getProviderKey } from "../server/providers/resolve";
+import { recordProviderCall } from "./provider-calls";
 
 const PEXELS_URL = "https://api.pexels.com/v1/search";
 
@@ -53,12 +54,16 @@ export async function requestPexelsImage(ask: ImageAsk, deadline?: number): Prom
   const budget = requestBudget(deadline);
   if (budget === null) return { ok: false, reason: "timeout", detail: "byudjet 2 s dan kam" };
 
+  // Usage counter for the admin «Provayderlar» page: one count per request that actually went out.
+  let sent = false;
   try {
     const url = `${PEXELS_URL}?query=${encodeURIComponent(query)}&orientation=${photoOrientation(ask.size)}&per_page=5`;
     const res = await fetch(url, {
       signal: AbortSignal.timeout(budget),
       headers: { Authorization: key },
     });
+    sent = true;
+    recordProviderCall("pexels", res.ok);
     if (!res.ok) {
       const reason = pexelsReason(res.status);
       const line = `${res.status} ${res.statusText || "request failed"}`;
@@ -79,6 +84,7 @@ export async function requestPexelsImage(ask: ImageAsk, deadline?: number): Prom
     const alt = photos.find((p) => (p.src?.large2x || p.src?.large) === url2)?.alt || query;
     return { ok: true, image: { url: url2, alt } };
   } catch (e) {
+    if (!sent) recordProviderCall("pexels", false);
     const msg = e instanceof Error ? e.message : "network";
     console.warn("[pexels]", msg);
     const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");

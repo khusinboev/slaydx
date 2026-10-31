@@ -225,7 +225,7 @@ test("GET: every registry provider with the exact shape; no key anywhere", { ski
   process.env.GEMINI_API_KEY = "env-gemini-secret-1234";
   const r = await list(s.cookie);
   assert.equal(r.status, 200, r.text);
-  assert.deepEqual(Object.keys(r.body).sort(), ["canStoreKeys", "items", "propagationSec", "sealingKey"]);
+  assert.deepEqual(Object.keys(r.body).sort(), ["canStoreKeys", "generatedAt", "items", "otherUsage", "propagationSec", "purposes", "sealingKey", "soumPerUsd", "system", "total30"]);
   assert.equal(r.body.canStoreKeys, true);
   assert.equal(r.body.sealingKey, "admin", "only ADMIN_TOTP_KEY is set: the fallback");
   process.env.PROVIDER_KEYS_KEY = randomBytes(32).toString("base64");
@@ -237,7 +237,10 @@ test("GET: every registry provider with the exact shape; no key anywhere", { ski
   for (const i of items) {
     assert.deepEqual(
       Object.keys(i).sort(),
-      ["enabled", "envPresent", "hasDbKey", "id", "implemented", "keyFormat", "keyHint", "keySource", "kinds", "label", "testable", "unreadable", "updatedAt", "updatedBy"],
+      [
+        "billing", "breaker", "enabled", "envPresent", "hasDbKey", "id", "implemented", "keyFormat", "keyHint", "keySource", "keyUrl", "kinds", "label", "need",
+        "priceNote", "purposes", "role", "testable", "unreadable", "updatedAt", "updatedBy", "usable", "usage",
+      ],
     );
     assert.equal(i.enabled, true);
     assert.equal(i.hasDbKey, false);

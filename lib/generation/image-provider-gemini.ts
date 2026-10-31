@@ -27,6 +27,7 @@
  * `steps[2]` ga surilardi va qattiq yo'l jimgina `failed` bera
  * boshlardi.
  */
+import { geminiImageModelName } from "../server/providers/route-effective";
 import { requestBudget, type ImageFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
 import { recordImage } from "./job-cost";
 import { getProviderKey } from "../server/providers/resolve";
@@ -40,7 +41,6 @@ import { getProviderKey } from "../server/providers/resolve";
 export const GEMINI_IMAGE_CAP_MS = 120_000;
 
 const GEMINI_IMAGE_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
-const DEFAULT_MODEL = "gemini-3.1-flash-lite-image";
 const DEFAULT_SIZE = "1K";
 
 /**
@@ -54,8 +54,9 @@ const DEFAULT_SIZE = "1K";
 export const GEMINI_ASPECTS = ["1:1", "3:2", "2:3", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"] as const;
 export type GeminiAspect = (typeof GEMINI_ASPECTS)[number];
 
+/** The Gemini image model: the admin's choice (`image.gemini` slot), else `GEMINI_IMAGE_MODEL`, else the default. */
 export function geminiImageModel() {
-  return process.env.GEMINI_IMAGE_MODEL?.trim() || DEFAULT_MODEL;
+  return geminiImageModelName();
 }
 
 export function geminiImageSize() {

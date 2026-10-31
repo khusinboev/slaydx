@@ -21,13 +21,14 @@
  * "hozirgidek" (Gemini standart), faqat endi `usage` HAM qaytadi (buni
  * eski `llmComplete` bermas edi — token sonini bilmasdi).
  */
-import { llmModel, llmProvider, type LlmOpts } from "./llm";
+import { llmProvider, type LlmOpts } from "./llm";
+import { effectiveRoute } from "../server/providers/route-effective";
 import { completeWithChain, type ChainResult, type ChainUsage } from "./llm/chain";
 import { withJsonRetry } from "./llm/failure";
 export { DeadlineError } from "./llm/chain";
 import { anthropicAdapter } from "./llm/anthropic";
 import { geminiAdapter } from "./llm/gemini";
-import { parseRoleSpec, type ProviderAdapter, type ProviderId, type RoleSpec } from "./llm/types";
+import type { ProviderAdapter, ProviderId, RoleSpec } from "./llm/types";
 import { costUsd } from "./llm-pricing";
 import { recordLlmUsage } from "./job-cost";
 
@@ -66,22 +67,18 @@ const ADAPTERS: Partial<Record<ProviderId, ProviderAdapter>> = {
   anthropic: anthropicAdapter,
 };
 
-const ROLE_ENV: Record<LlmRole, string> = {
-  writer: "LLM_WRITER",
-  researcher: "LLM_RESEARCHER",
-  judge: "LLM_JUDGE",
-  fast: "LLM_FAST",
-};
-
 /**
- * `.env`da `LLM_<ROL>` bo'lmasa (yoki buzuq) — hozirgi standart provayder
- * (`llm.ts llmProvider()`: Gemini kaliti bo'lsa Gemini) bitta spec sifatida.
- * Kalit umuman yo'q bo'lsa `[]` — `complete()` `null` qaytaradi, aynan
- * eski `llmComplete` ham kalitsiz `null` qaytargani kabi.
+ * The provider:model chain of `role`, first = preferred, the rest = fallbacks. Precedence (admin «Provayderlar»):
+ * the admin's stored choice, else the `LLM_<ROL>` environment variable (how it ran before the page existed), else the
+ * current default provider (`llm.ts llmProvider()`: Gemini when its key resolves) with the default text model.
+ * No key at all gives `[]`, so `complete()` returns `null` exactly like the old `llmComplete` did without a key.
+ * `route-effective.ts` is the ONE place that decides this; the admin page shows the same result.
  */
-function defaultSpec(): RoleSpec[] {
-  const provider = llmProvider();
-  return provider ? [{ provider, model: llmModel() }] : [];
+export function roleSpecs(role: LlmRole): RoleSpec[] {
+  const eff = effectiveRoute(`llm.${role}`);
+  if (eff.source === "default" && !llmProvider()) return [];
+  // A slot entry whose provider has no adapter (a provider that was removed) is dropped instead of failing the call.
+  return eff.entries.flatMap((e) => (e.model && ADAPTERS[e.provider as ProviderId] ? [{ provider: e.provider as ProviderId, model: e.model }] : []));
 }
 
 /**
@@ -96,8 +93,7 @@ export async function complete(
   opts: RoleOpts = {},
 ): Promise<RoleResult | null> {
   const { maxTokens = 2048, timeoutMs = 40_000, ...rest } = opts;
-  const envSpecs = parseRoleSpec(process.env[ROLE_ENV[role]]);
-  const specs = envSpecs.length > 0 ? envSpecs : defaultSpec();
+  const specs = roleSpecs(role);
   if (specs.length === 0) return null;
 
   const deps = { adapters: ADAPTERS, log: (line: string) => console.log(line) };

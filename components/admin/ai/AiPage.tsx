@@ -1,35 +1,28 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { AiGroupBy } from "@/lib/admin-api/ai";
 import { isIsoDate } from "@/lib/admin-format";
-import { Card, Forbidden, TabPanel, Tabs, presetRange, validateRange, type DateRange } from "@/components/admin/ui";
+import { Card, Forbidden, presetRange, validateRange, type DateRange } from "@/components/admin/ui";
 import { CostTab } from "./CostTab";
-import { ProvidersTab } from "./ProvidersTab";
 import { DEFAULT_COST_SORT, DEFAULT_GROUP_BY, GROUP_BY_VALUES } from "./shared";
 
-const TABS = [
-  { id: "cost", label: "Xarajat" },
-  { id: "providers", label: "Provayderlar" },
-] as const;
-type TabId = (typeof TABS)[number]["id"];
-
-const ID_PREFIX = "ai";
-
 /**
- * S11 `/admin/ai`: tab "Xarajat" (period, group-by, sortable table, daily
- * chart, coverage banner) and tab "Provayderlar" (keys, breakers, limiters,
- * 24 h usage). Everything that selects data lives in the URL query
- * (`tab`, `from`, `to`, `groupBy`, `sort`), so a view can be shared and the
- * back button works.
+ * S11 `/admin/ai`: AI cost (period, group-by, sortable table, daily chart, coverage banner). Everything that selects
+ * data lives in the URL query (`from`, `to`, `groupBy`, `sort`), so a view can be shared and the back button works.
+ * The old «Provayderlar» tab (keys, breakers, limiters, 24 h usage) moved into the redesigned `/admin/providers` page
+ * on 2026-10-31; an old `?tab=providers` link is forwarded there.
  */
 export function AiPage() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
 
-  const tab: TabId = params.get("tab") === "providers" ? "providers" : "cost";
+  const legacyProviders = params.get("tab") === "providers";
+  useEffect(() => {
+    if (legacyProviders) router.replace("/admin/providers");
+  }, [legacyProviders, router]);
   const defaultRange = presetRange("30d");
   const rawFrom = params.get("from") ?? "";
   const rawTo = params.get("to") ?? "";
@@ -39,7 +32,7 @@ export function AiPage() {
   const rawGroup = params.get("groupBy");
   const groupBy: AiGroupBy = GROUP_BY_VALUES.includes(rawGroup as AiGroupBy) ? (rawGroup as AiGroupBy) : DEFAULT_GROUP_BY;
   const sort = params.get("sort");
-  // A 403 from either tab (both need ai.view): only the forbidden state is shown, without tabs.
+  // A 403 shows only the forbidden state.
   const [forbidden, setForbidden] = useState(false);
   const onForbidden = useCallback(() => setForbidden(true), []);
 
@@ -59,35 +52,26 @@ export function AiPage() {
   return (
     <div className="flex flex-col gap-4">
       <header className="flex flex-col gap-1">
-        <h1 className="text-[22px] font-semibold tracking-tight">AI xarajat va provayderlar</h1>
-        <p className="text-muted-foreground text-[13px]">Xarajat manbasi: tugagan, xato bilan tugagan va bepul AI chaqiruvlari yozuvlari (admin hisoboti).</p>
+        <h1 className="text-[22px] font-semibold tracking-tight">AI xarajat</h1>
+        <p className="text-muted-foreground text-[13px]">Xarajat manbasi: tugagan, xato bilan tugagan va bepul AI chaqiruvlari yozuvlari (admin hisoboti). Provayderlar, kalitlar va ularning ishlatilishi — «Provayderlar» bo'limida.</p>
       </header>
 
       {forbidden ? (
         <Card>
           <Forbidden />
         </Card>
-      ) : (
-        <div>
-          <Tabs tabs={TABS} value={tab} onChange={(id) => update({ tab: id === "cost" ? null : id })} ariaLabel="AI bo'limlari" idPrefix={ID_PREFIX} />
-          <TabPanel idPrefix={ID_PREFIX} id={tab}>
-            {tab === "cost" ? (
-              <CostTab
-                range={range}
-                defaultRange={defaultRange}
-                groupBy={groupBy}
-                sort={sort}
-                onRange={(r) => update({ from: r.from, to: r.to })}
-                onGroupBy={(g) => update({ groupBy: g === DEFAULT_GROUP_BY ? null : g })}
-                onSort={(s) => update({ sort: s === DEFAULT_COST_SORT ? null : s })}
-                onClear={() => update({ from: null, to: null, groupBy: null, sort: null })}
-                onForbidden={onForbidden}
-              />
-            ) : (
-              <ProvidersTab onForbidden={onForbidden} />
-            )}
-          </TabPanel>
-        </div>
+      ) : legacyProviders ? null : (
+        <CostTab
+          range={range}
+          defaultRange={defaultRange}
+          groupBy={groupBy}
+          sort={sort}
+          onRange={(r) => update({ from: r.from, to: r.to })}
+          onGroupBy={(g) => update({ groupBy: g === DEFAULT_GROUP_BY ? null : g })}
+          onSort={(s) => update({ sort: s === DEFAULT_COST_SORT ? null : s })}
+          onClear={() => update({ from: null, to: null, groupBy: null, sort: null })}
+          onForbidden={onForbidden}
+        />
       )}
     </div>
   );
