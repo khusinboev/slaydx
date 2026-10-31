@@ -53,7 +53,7 @@ export function AiPage() {
     <div className="flex flex-col gap-4">
       <header className="flex flex-col gap-1">
         <h1 className="text-[22px] font-semibold tracking-tight">AI xarajat</h1>
-        <p className="text-muted-foreground text-[13px]">Xarajat manbasi: tugagan, xato bilan tugagan va bepul AI chaqiruvlari yozuvlari (admin hisoboti). Provayderlar, kalitlar va ularning ishlatilishi — «Provayderlar» bo'limida.</p>
+        <p className="text-muted-foreground text-[13px]">Xarajat manbasi: tugagan, xato bilan tugagan va bepul AI chaqiruvlari yozuvlari (admin hisoboti). Provayderlar, kalitlar va ularning ishlatilishi — «Provayderlar» bo&apos;limida.</p>
       </header>
 
       {forbidden ? (
