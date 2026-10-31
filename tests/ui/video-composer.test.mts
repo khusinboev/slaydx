@@ -189,6 +189,21 @@ test("the space key works: typing «salom dunyo» char by char keeps every space
   assert.equal(submitBody(calls)!.values.prompt, "salom dunyo");
 });
 
+test("changing another setting mid-sentence does not eat the typed space (length, aspect, provider)", async () => {
+  stubApi();
+  await setup(["veo", "kling"]);
+  mount();
+  await typeKeys("salom ");
+  await pick("seconds", /8 soniya/);
+  assert.equal(promptBox().value, "salom ", "MUTATSIYA: set() xom promptni tashlab ketsa qizaradi");
+  await pick("aspect", /9:16/);
+  assert.equal(promptBox().value, "salom ");
+  await pick("provider", /Kling/);
+  assert.equal(promptBox().value, "salom ");
+  await typeKeys("dunyo");
+  assert.equal(promptBox().value, "salom dunyo");
+});
+
 test("whitespace is normalized only on the way out: the box shows what was typed, the payload and the draft are collapsed and trimmed", async () => {
   const calls = stubApi();
   await setup(["veo"]);
