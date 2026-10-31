@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Star } from "lucide-react";
 import { ApiError, request } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
@@ -44,8 +45,10 @@ export function RatingCard({ className = "mb-6", onRated }: { className?: string
     if (status && window.location.hash === "#rating") root.current?.scrollIntoView?.({ block: "center" });
   }, [status]);
 
-  const hint = feedbackHint(text);
-  const canSubmit = Boolean(status?.hasFinished) && stars >= 1 && hint === null && !busy;
+  const textHint = feedbackHint(text);
+  // What is still missing, in one visible line (a disabled button alone never says why: owner report 2026-10-31).
+  const hint = textHint ?? (stars < 1 ? "Yulduzchalardan birini bosib baho bering (1–5)." : null);
+  const canSubmit = Boolean(status?.hasFinished) && hint === null && !busy;
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -121,9 +124,12 @@ export function RatingCard({ className = "mb-6", onRated }: { className?: string
       </div>
 
       {status.hasFinished ? null : (
-        <p className="bg-muted/70 mt-3 rounded-[14px] px-3 py-2.5 text-[14px]" data-rating-locked>
-          Baholash uchun avval kamida bitta hujjat yarating — tayyor bo&apos;lgach shu yerda baholay olasiz.
-        </p>
+        <div className="bg-muted/70 mt-3 rounded-[14px] px-3 py-2.5 text-[14px]" data-rating-locked>
+          <p>Baholash uchun avval kamida bitta hujjat yarating — tayyor bo&apos;lgach shu yerda baholay olasiz.</p>
+          <Link href="/uz/create" data-rating-create className={cn("text-primary mt-1.5 inline-flex min-h-11 items-center font-semibold underline", FOCUS)}>
+            Hujjat yaratish
+          </Link>
+        </div>
       )}
 
       <div role="radiogroup" aria-label="Baho" className="mt-4 flex justify-between gap-1" data-rating-stars>
@@ -163,7 +169,7 @@ export function RatingCard({ className = "mb-6", onRated }: { className?: string
         data-rating-hint={hint ? "need" : "ok"}
         className={cn("mt-1.5 min-h-5 text-[13px]", hint ? "text-muted-foreground" : "text-emerald-700 dark:text-emerald-400")}
       >
-        {status.hasFinished ? (hint ?? "Fikr yetarli.") : ""}
+        {status.hasFinished ? (hint ?? "Hammasi tayyor — «Yuborish» tugmasini bosing.") : ""}
       </p>
       {error ? (
         <p role="alert" className="text-destructive mt-1 text-[13px]" data-rating-error>

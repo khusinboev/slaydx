@@ -442,6 +442,9 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
       case "bonusDone":
         toast = t(ctx.lang, "toast.bonusDone");
         return;
+      case "ratingLocked":
+        toast = t(ctx.lang, "toast.ratingLocked");
+        return;
       case "mandatoryCheck": {
         const r = await mandatoryCheck(ctx);
         toast = r.toast;

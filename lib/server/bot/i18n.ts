@@ -525,6 +525,11 @@ const T = {
     en: "Thanks for staying in «{c}» for {d} days! The bonus is in your wallet.",
   },
   "toast.bonusPaid": { uz: "🎉 +{n}!", ru: "🎉 +{n}!", en: "🎉 +{n}!" },
+  "toast.ratingLocked": {
+    uz: "Baholash uchun avval kamida bitta hujjat yarating — tayyor bo‘lgach baholab, bonus olasiz.",
+    ru: "Чтобы оценить приложение, сначала создайте хотя бы один документ — после готовности оцените и получите бонус.",
+    en: "To rate the app, first create at least one document — rate it once it is ready and get the bonus.",
+  },
   "toast.bonusDone": { uz: "✅ Bajarilgan", ru: "✅ Выполнено", en: "✅ Done" },
   "toast.bonusRefreshed": { uz: "Yangilandi", ru: "Обновлено", en: "Updated" },
   "toast.bonusAlready": { uz: "Bu vazifa allaqachon bajarilgan", ru: "Это задание уже выполнено", en: "This task is already done" },

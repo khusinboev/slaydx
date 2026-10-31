@@ -47,6 +47,8 @@ test("ready card: stars + valid text enable the button; junk text keeps it off w
 
   type(GOOD);
   assert.equal(submit().disabled, true, "no star yet");
+  assert.match(q("[data-rating-hint]").textContent!, /yulduzcha/i, "a valid text without a star must say why the button is off");
+  assert.equal(q("[data-rating-hint]").getAttribute("data-rating-hint"), "need");
   fireEvent.click(q('[data-rating-star="4"]'));
   assert.equal(q('[data-rating-star="4"]').getAttribute("aria-checked"), "true");
   assert.equal(submit().disabled, false);
@@ -73,6 +75,7 @@ test("no finished generation: explained, stars and text disabled", async () => {
   assert.equal((q("[data-rating-text]") as HTMLTextAreaElement).disabled, true);
   assert.equal((q('[data-rating-star="5"]') as HTMLButtonElement).disabled, true);
   assert.equal(submit().disabled, true);
+  assert.equal(q("[data-rating-create]").getAttribute("href"), "/uz/create", "a way out: create a document");
 });
 
 test("rated: only Rahmat, no form", async () => {
