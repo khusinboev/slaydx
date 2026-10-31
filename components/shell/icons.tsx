@@ -1,8 +1,12 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  ArrowLeftRight,
   BookOpen,
   Boxes,
   Briefcase,
+  ClipboardCheck,
+  FileOutput,
+  MessageCircle,
   Gift,
   Headphones,
   Mic,
@@ -55,4 +59,9 @@ export const TOOL_ICONS: Record<string, LucideIcon> = {
   puzzle: Puzzle,
   layers: Layers,
   "pie-chart": PieChart,
+  /* Link-only services (lib/services.ts): chat, converter, script converter, tests. */
+  "message-circle": MessageCircle,
+  "file-output": FileOutput,
+  "arrow-left-right": ArrowLeftRight,
+  "clipboard-check": ClipboardCheck,
 };

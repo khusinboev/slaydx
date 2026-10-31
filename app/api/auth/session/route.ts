@@ -28,6 +28,9 @@ export const GET = handler("auth/session", async (req) => {
       videoProviders: (await getSetting("video.enabled")) ? videoProvidersAvailable() : [],
       // «Qattiqqo'l domla» is listed among the tools only while the admin switch `domla.enabled` is on.
       domla: await getSetting("domla.enabled"),
+      // «AI yordamchi» / «Test ishlash» are listed only while `chat.enabled` / `tests.enabled` are on.
+      chat: await getSetting("chat.enabled"),
+      tests: await getSetting("tests.enabled"),
       telegram: Boolean(env.telegramBotToken),
       telegramBot: env.telegramBotUsername || null,
       devLogin: env.devLoginEnabled,

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useMemo } from "react";
 import { LayoutGrid, X } from "lucide-react";
 import { TOOLS, TOOL_BY_ID, visibleToolGroups } from "@/lib/tools";
+import { servicesOfGroup, type ServiceConfig } from "@/lib/services";
 import type { ToolConfig } from "@/lib/types";
 import { useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
@@ -44,6 +45,7 @@ export function CreateSheet() {
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const loggedIn = useAppStore((s) => s.loggedIn);
   const generations = useAppStore((s) => s.generations);
+  const features = useAppStore((s) => s.features);
   const top = useMemo(
     () => mostUsedToolIds(generations, KNOWN).map((id) => TOOL_BY_ID[id as keyof typeof TOOL_BY_ID]).filter(Boolean),
     [generations],
@@ -114,6 +116,11 @@ export function CreateSheet() {
                     <ToolTile tool={t} onPick={onPick} />
                   </li>
                 ))}
+                {servicesOfGroup(g.id, features).map((v) => (
+                  <li key={v.id}>
+                    <ServiceTile service={v} onPick={onPick} />
+                  </li>
+                ))}
               </ul>
             </section>
           ))}
@@ -158,6 +165,30 @@ function ToolTile({ tool, onPick }: { tool: ToolConfig; onPick: (href: string) =
         {Icon ? <Icon className="size-6 text-[rgb(var(--tc))]" aria-hidden /> : null}
       </span>
       <span className={cn("line-clamp-2 text-[12.5px] leading-tight font-medium break-words")}>{tool.title}</span>
+    </Link>
+  );
+}
+
+function ServiceTile({ service, onPick }: { service: ServiceConfig; onPick: (href: string) => void }) {
+  const Icon = TOOL_ICONS[service.icon];
+  return (
+    <Link
+      href={service.href}
+      data-create-tool={service.id}
+      data-create-service
+      onClick={() => onPick(service.href)}
+      className="hover:bg-accent focus-visible:ring-ring flex min-h-[5.5rem] flex-col items-center gap-1.5 rounded-2xl px-1 pt-2 pb-1.5 text-center outline-none focus-visible:ring-2"
+      style={{ ["--tc" as string]: service.tc }}
+    >
+      <span className="relative flex size-12 shrink-0 items-center justify-center rounded-[16px] bg-[rgb(var(--tc)/0.14)]">
+        {Icon ? <Icon className="size-6 text-[rgb(var(--tc))]" aria-hidden /> : null}
+        {service.badge ? (
+          <span className="bg-card absolute -top-1.5 -right-3 rounded-full border px-1.5 text-[12.5px] leading-4 font-semibold text-[rgb(var(--tc))]">
+            {service.badge}
+          </span>
+        ) : null}
+      </span>
+      <span className="line-clamp-2 text-[12.5px] leading-tight font-medium break-words">{service.title}</span>
     </Link>
   );
 }
