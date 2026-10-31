@@ -79,26 +79,53 @@ test("closed while tests.enabled is off: a notice, no button, nothing charged", 
   assert.equal(await attemptsCount(), 0);
 });
 
-test("opens the Mini App page with the server's price (and the free first attempt)", { skip }, async () => {
+test("opens the Mini App page with the server's prices per mode (and the free first attempt)", { skip }, async () => {
   await setSetting(query, "tests.enabled", true);
   const id = await newUser();
   await tg.handleUpdate(textUpdate(id, "/test"));
   assert.match(String(last().body.text), /Test ishlash/);
-  assert.match(String(last().body.text), /2\s?000 so‘m/);
+  assert.match(String(last().body.text), /bitta fan — <b>1\s?500 so‘m<\/b>, «Hammasi» — <b>4\s?000 so‘m<\/b>/);
+  assert.match(String(last().body.text), /AI tahlili/);
   const btn = buttons(last());
-  assert.equal(btn.length, 1);
+  assert.equal(btn.length, 1, "no result button before any finished attempt");
   assert.equal(btn[0]!.web_app?.url, "https://slaydx.test/uz/tests", "opens the Mini App page");
   assert.equal(await attemptsCount(), 0, "the bot starts nothing and charges nothing");
 
-  await setSetting(query, "tests.price_per_attempt", 3500);
+  await setSetting(query, "tests.price_subject", 3500);
+  await setSetting(query, "tests.price_all", 9000);
   await tg.handleUpdate(textUpdate(id, "/test"));
   assert.match(String(last().body.text), /3\s?500 so‘m/);
+  assert.match(String(last().body.text), /9\s?000 so‘m/);
 
   await setSetting(query, "tests.first_attempt_free", true);
   await tg.handleUpdate(textUpdate(id, "/test"));
   assert.match(String(last().body.text), /Birinchi urinish <b>bepul<\/b>/);
   await clearSetting(query, "tests.first_attempt_free");
-  await clearSetting(query, "tests.price_per_attempt");
+  await clearSetting(query, "tests.price_subject");
+  await clearSetting(query, "tests.price_all");
+  await clearSetting(query, "tests.enabled");
+});
+
+test("the latest finished attempt gets a button to its web result page (the AI analysis lives there)", { skip }, async () => {
+  await setSetting(query, "tests.enabled", true);
+  const tgId = await newUser();
+  const uid = (await query<{ id: string }>("SELECT id::text AS id FROM users WHERE telegram_id = $1", [String(tgId)]))[0]!.id;
+  const bank = (await query<{ id: string }>("INSERT INTO test_banks (slug, title) VALUES ('bot-' || $1, 'B') RETURNING id::text AS id", [String(tgId)]))[0]!.id;
+  const mk = async (status: "active" | "finished", startedAt: string) =>
+    (await query<{ id: string }>(
+      `INSERT INTO test_attempts (id, user_id, bank_id, mode, question_ids, total, status, started_at, deadline_at, finished_at, points_per_correct, correct, score, key_snapshot)
+       VALUES (gen_random_uuid(), $1, $2, 'all', '[1]'::jsonb, 1, $3, $4::timestamptz, $4::timestamptz + interval '1 hour',
+               CASE WHEN $3 = 'finished' THEN $4::timestamptz END, 1.1, CASE WHEN $3 = 'finished' THEN 0 END, CASE WHEN $3 = 'finished' THEN 0 END,
+               CASE WHEN $3 = 'finished' THEN ARRAY[0]::smallint[] END) RETURNING id::text AS id`,
+      [uid, bank, status, startedAt],
+    ))[0]!.id;
+  await mk("finished", "2026-10-01T10:00:00Z");
+  const latest = await mk("finished", "2026-10-02T10:00:00Z");
+  await tg.handleUpdate(textUpdate(tgId, "/test"));
+  const btn = buttons(last());
+  assert.equal(btn.length, 2);
+  assert.equal(btn[1]!.web_app?.url, `https://slaydx.test/uz/tests?attempt=${latest}`, "the newest finished attempt");
+  assert.match(btn[1]!.text, /AI tahlil/);
   await clearSetting(query, "tests.enabled");
 });
 
@@ -106,10 +133,10 @@ test("speaks the user's language", { skip }, async () => {
   await setSetting(query, "tests.enabled", true);
   const ru = await newUser("ru");
   await tg.handleUpdate(textUpdate(ru, "/test"));
-  assert.match(String(last().body.text), /Цена одной попытки/);
+  assert.match(String(last().body.text), /один предмет/);
   assert.match(buttons(last())[0]!.text, /Открыть тесты/);
   const en = await newUser("en");
   await tg.handleUpdate(textUpdate(en, "/test"));
-  assert.match(String(last().body.text), /Price of one attempt/);
+  assert.match(String(last().body.text), /one subject/);
   await clearSetting(query, "tests.enabled");
 });

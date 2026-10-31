@@ -26,7 +26,7 @@ const all = (sel: string) => [...document.querySelectorAll(sel)] as HTMLElement[
 
 const OV = {
   enabled: true,
-  price: 2000,
+  prices: { subject: 1500, all: 4000 },
   firstFree: false,
   pointsPerCorrect: 1.1,
   subjects: [
@@ -97,22 +97,37 @@ test("list: subjects in order, «Hammasi» 30 questions / 60 minutes, the server
   assert.match(all("[data-tests-subject]")[3]!.textContent!, /Hammasi/);
   assert.match(all("[data-tests-subject]")[3]!.textContent!, /30 ta savol · 60 daqiqa/);
   assert.match(all("[data-tests-subject]")[0]!.textContent!, /10 ta savol · 20 daqiqa/);
-  assert.match(q("[data-tests-price]")!.textContent!, /2\s000 so‘m/);
+  assert.match(q("[data-tests-price]")!.textContent!, /1\s500 so‘m/, "a subject is picked: the one-subject price");
   assert.equal(all("[data-tests-subject]")[0]!.getAttribute("aria-checked"), "true", "the first subject is preselected");
   assert.match(q("[data-tests-rules]")!.textContent!, /1,1 ball/);
   assert.ok(q("[data-tests-history-empty]"));
 });
 
-test("price follows the server: custom, free first attempt, free", async () => {
-  stub({ "GET /api/tests": () => json(200, { ...OV, price: 1500 }) });
+test("price by mode: each option shows its price, the header follows the picked mode", async () => {
+  stub({ "GET /api/tests": () => json(200, OV) });
   render(h(TestsPage));
-  await waitFor(() => assert.match(q("[data-tests-price]")!.textContent!, /1\s500 so‘m/));
+  await waitFor(() => assert.ok(q("[data-tests-price]")));
+  const opt = all("[data-tests-option-price]").map((e) => e.textContent!.replace(/\s/g, " "));
+  assert.deepEqual(opt, ["1 500 so‘m", "1 500 so‘m", "1 500 so‘m", "4 000 so‘m"]);
+  fireEvent.click(q('[data-tests-subject="all"]')!);
+  assert.match(q("[data-tests-price]")!.textContent!, /4\s000 so‘m/, "«Hammasi» picked: the all-subjects price");
+  fireEvent.click(q('[data-tests-subject="tarix"]')!);
+  assert.match(q("[data-tests-price]")!.textContent!, /1\s500 so‘m/);
+  assert.match(q("[data-tests-rules]")!.textContent!, /AI tahlili/);
+});
+
+test("price follows the server: custom, free first attempt, free", async () => {
+  stub({ "GET /api/tests": () => json(200, { ...OV, prices: { subject: 700, all: 2500 } }) });
+  render(h(TestsPage));
+  await waitFor(() => assert.match(q("[data-tests-price]")!.textContent!, /700 so‘m/));
+  fireEvent.click(q('[data-tests-subject="all"]')!);
+  assert.match(q("[data-tests-price]")!.textContent!, /2\s500 so‘m/);
   cleanup();
   stub({ "GET /api/tests": () => json(200, { ...OV, firstFree: true }) });
   render(h(TestsPage));
   await waitFor(() => assert.match(q("[data-tests-price]")!.textContent!, /Birinchi urinish bepul/));
   cleanup();
-  stub({ "GET /api/tests": () => json(200, { ...OV, price: 0 }) });
+  stub({ "GET /api/tests": () => json(200, { ...OV, prices: { subject: 0, all: 0 } }) });
   render(h(TestsPage));
   await waitFor(() => assert.equal(q("[data-tests-price]")!.textContent, "Bepul"));
 });
@@ -120,7 +135,7 @@ test("price follows the server: custom, free first attempt, free", async () => {
 test("start posts only the mode, subject and key -- then the first question shows", async () => {
   const calls = stub({
     "GET /api/tests": () => json(200, OV),
-    "POST /api/tests/start": () => json(200, { ok: true, attemptId: "A1", alreadyOpen: false, price: 2000 }),
+    "POST /api/tests/start": () => json(200, { ok: true, attemptId: "A1", alreadyOpen: false, price: 1500 }),
     "GET /api/tests/attempts/A1": () => json(200, activeView()),
   });
   render(h(TestsPage));

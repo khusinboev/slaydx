@@ -22,7 +22,8 @@ const SOUM_KEYS = new Set([
   "daily_quiz.daily_budget",
   "domla.price",
   "chat.price_per_message",
-  "tests.price_per_attempt",
+  "tests.price_subject",
+  "tests.price_all",
 ]);
 const PERCENT_KEYS = new Set(["payment_bonus_percent", "ambassador.percent", "pricing.payment_fee_percent"]);
 const MINUTE_KEYS = new Set(["tests.minutes_per_subject", "tests.minutes_all"]);

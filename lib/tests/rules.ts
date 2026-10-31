@@ -5,7 +5,9 @@
  */
 
 export const TESTS_ENABLED_KEY = "tests.enabled";
-export const TESTS_PRICE_KEY = "tests.price_per_attempt";
+/** Price of one attempt by mode (owner 2026-10-31): one subject vs «hammasi» (every subject). */
+export const TESTS_PRICE_SUBJECT_KEY = "tests.price_subject";
+export const TESTS_PRICE_ALL_KEY = "tests.price_all";
 export const TESTS_FIRST_FREE_KEY = "tests.first_attempt_free";
 export const TESTS_PER_SUBJECT_KEY = "tests.questions_per_subject";
 export const TESTS_MINUTES_SUBJECT_KEY = "tests.minutes_per_subject";
@@ -14,7 +16,8 @@ export const TESTS_POINTS_KEY = "tests.points_per_correct";
 
 /** Ships dark: the owner switches it on after reviewing the bank. */
 export const TESTS_ENABLED_DEFAULT = false;
-export const TESTS_PRICE_DEFAULT = 2000;
+export const TESTS_PRICE_SUBJECT_DEFAULT = 1500;
+export const TESTS_PRICE_ALL_DEFAULT = 4000;
 export const TESTS_PRICE_MAX = 1_000_000;
 export const TESTS_FIRST_FREE_DEFAULT = false;
 /** BMB: 10 random questions of one random variant per subject; «hammasi» = this x the number of subjects (30). */
@@ -105,6 +108,9 @@ export function scoreOf(correct: number, pointsPerCorrect: number): number {
 export function isPastDeadline(deadline: Date | string, now: Date): boolean {
   return now.getTime() > new Date(deadline).getTime();
 }
+
+/** Price of an attempt of `mode` (single subject or «hammasi»), before the free-first-attempt rule. */
+export const priceFor = (mode: TestMode, prices: { subject: number; all: number }): number => (mode === "all" ? prices.all : prices.subject);
 
 /** Minutes allowed for an attempt of `mode` (single subject or «hammasi»). */
 export const minutesFor = (mode: TestMode, subject: number, all: number): number => (mode === "all" ? all : subject);

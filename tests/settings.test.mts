@@ -77,7 +77,8 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "chat.enabled",
     "chat.price_per_message",
     "tests.enabled",
-    "tests.price_per_attempt",
+    "tests.price_subject",
+    "tests.price_all",
     "tests.first_attempt_free",
     "tests.questions_per_subject",
     "tests.minutes_per_subject",
@@ -139,7 +140,8 @@ test("standart qiymatlar = env (mahsulot xulqi o'zgarmaydi)", () => {
 test("tests.* defaults match BMB and the feature ships dark", () => {
   const d = <K extends (typeof s.SETTING_KEYS)[number]>(k: K) => s.settingDef(k).envDefault();
   assert.equal(d("tests.enabled"), false, "kill switch: dark by default");
-  assert.equal(d("tests.price_per_attempt"), 2000);
+  assert.equal(d("tests.price_subject"), 1500, "one subject");
+  assert.equal(d("tests.price_all"), 4000, "«hammasi»");
   assert.equal(d("tests.first_attempt_free"), false);
   assert.equal(d("tests.questions_per_subject"), 10);
   assert.equal(d("tests.minutes_per_subject"), 20);
@@ -150,9 +152,11 @@ test("tests.* defaults match BMB and the feature ships dark", () => {
 test("validatsiya: tests.*", () => {
   good("tests.enabled", true);
   for (const v of ["true", 1, null]) bad("tests.enabled", v);
-  good("tests.price_per_attempt", 0);
-  good("tests.price_per_attempt", 2500);
-  for (const v of [-1, 1.5, "2000", NaN, null, 1e15]) bad("tests.price_per_attempt", v);
+  for (const k of ["tests.price_subject", "tests.price_all"] as const) {
+    good(k, 0);
+    good(k, 2500);
+    for (const v of [-1, 1.5, "2000", NaN, null, 1e15]) bad(k, v);
+  }
   good("tests.first_attempt_free", true);
   for (const v of ["yes", 0, null]) bad("tests.first_attempt_free", v);
   for (const k of ["tests.questions_per_subject", "tests.minutes_per_subject", "tests.minutes_all"] as const) {

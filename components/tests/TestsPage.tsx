@@ -20,7 +20,8 @@ type Subject = { code: string; name: string; questions: number; minutes: number;
 type HistoryItem = { id: string; mode: "subject" | "all"; subject: string | null; status: "active" | "finished"; total: number; correct?: number; score?: number; startedAt: string };
 type Overview = {
   enabled: boolean;
-  price: number;
+  /** The server's price per mode (one subject / «hammasi»); the start request carries none. */
+  prices: { subject: number; all: number };
   firstFree: boolean;
   pointsPerCorrect: number;
   subjects: Subject[];
@@ -71,6 +72,7 @@ const clock = (ms: number): string => {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 };
 const msg = (e: unknown): string => (e instanceof ApiError || e instanceof Error ? e.message : "Xatolik");
+const priceText = (n: number): string => (n === 0 ? "Bepul" : `${formatPoints(n)} so‘m`);
 const label = (h: { mode: "subject" | "all"; subject: string | null }): string => (h.mode === "all" ? "Hammasi" : (h.subject ?? "Fan"));
 
 /** A question image: lazy, and a tap opens it large (a second tap zooms to full width, scrolling inside). */
@@ -358,6 +360,15 @@ export function TestsPage() {
     );
   }, []);
   useEffect(load, [load]);
+  // `?attempt=<id>` (the bot's «Oxirgi natija» button) opens that attempt's result once.
+  const deepLinked = useRef(false);
+  useEffect(() => {
+    if (deepLinked.current) return;
+    deepLinked.current = true;
+    const id = new URLSearchParams(window.location.search).get("attempt");
+    if (id && /^[0-9a-f-]{36}$/i.test(id)) void openAttempt(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const openAttempt = async (id: string) => {
     setBusy(true);
@@ -452,9 +463,7 @@ export function TestsPage() {
         <Card
           title="Testni tanlang"
           aside={
-            <span data-tests-price>
-              {ov.firstFree ? "Birinchi urinish bepul" : ov.price === 0 ? "Bepul" : `${formatPoints(ov.price)} so‘m`}
-            </span>
+            <span data-tests-price>{ov.firstFree ? "Birinchi urinish bepul" : priceText(pick === "all" ? ov.prices.all : ov.prices.subject)}</span>
           }
         >
           {options.length === 0 ? (
@@ -477,13 +486,13 @@ export function TestsPage() {
                   >
                     <span className="font-medium">{o.name}</span>
                     <span className="text-muted-foreground block text-[13px]">
-                      {o.questions} ta savol · {o.minutes} daqiqa
+                      {o.questions} ta savol · {o.minutes} daqiqa · <span data-tests-option-price>{priceText(o.code === "all" ? ov.prices.all : ov.prices.subject)}</span>
                     </span>
                   </button>
                 ))}
               </div>
               <p className="text-muted-foreground mt-3 text-[13.5px]" data-tests-rules>
-                Har to‘g‘ri javob uchun {num(ov.pointsPerCorrect)} ball, noto‘g‘ri javob ball ayirmaydi. To‘g‘ri javoblar test tugagach ko‘rsatiladi.
+                Har to‘g‘ri javob uchun {num(ov.pointsPerCorrect)} ball, noto‘g‘ri javob ball ayirmaydi. Test tugagach to‘g‘ri javoblar va har xato javobning AI tahlili ko‘rsatiladi (narx ichida).
               </p>
               <button
                 type="button"

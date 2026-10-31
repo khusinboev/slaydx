@@ -22,14 +22,14 @@ const T = {
   /* ── Paid tests «Test ishlash» (owner request 7; every key starts with `tests.`) ── */
   "tests.cmd": { uz: "Test ishlash — fanlar bo‘yicha testlar", ru: "Тесты по предметам", en: "Subject tests" },
   "tests.intro": {
-    uz: "📝 <b>Test ishlash</b>\nMatematika, Ona tili va Tarix bo‘yicha tayyor testlar: vaqt bilan ishlaysiz, to‘g‘ri javoblar test tugagach ko‘rsatiladi.\nBitta urinish narxi: <b>{price}</b>.",
-    ru: "📝 <b>Тесты</b>\nГотовые тесты по математике, родному языку и истории: на время, правильные ответы показываются после завершения.\nЦена одной попытки: <b>{price}</b>.",
-    en: "📝 <b>Tests</b>\nReady-made tests in mathematics, the mother tongue and history: timed, and the correct answers are shown when you finish.\nPrice of one attempt: <b>{price}</b>.",
+    uz: "📝 <b>Test ishlash</b>\nMatematika, Ona tili va Tarix bo‘yicha tayyor testlar: vaqt bilan ishlaysiz, test tugagach to‘g‘ri javoblar va har xato javobning AI tahlili ko‘rsatiladi.\nNarx: bitta fan — <b>{subject}</b>, «Hammasi» — <b>{all}</b>.",
+    ru: "📝 <b>Тесты</b>\nГотовые тесты по математике, родному языку и истории: на время, после завершения — правильные ответы и разбор каждой ошибки от ИИ.\nЦена: один предмет — <b>{subject}</b>, «Все предметы» — <b>{all}</b>.",
+    en: "📝 <b>Tests</b>\nReady-made tests in mathematics, the mother tongue and history: timed; when you finish you see the correct answers and an AI analysis of every mistake.\nPrice: one subject — <b>{subject}</b>, «All subjects» — <b>{all}</b>.",
   },
   "tests.introFree": {
-    uz: "📝 <b>Test ishlash</b>\nMatematika, Ona tili va Tarix bo‘yicha tayyor testlar: vaqt bilan ishlaysiz, to‘g‘ri javoblar test tugagach ko‘rsatiladi.\nBirinchi urinish <b>bepul</b>, keyingilari: <b>{price}</b>.",
-    ru: "📝 <b>Тесты</b>\nГотовые тесты по математике, родному языку и истории: на время, правильные ответы показываются после завершения.\nПервая попытка <b>бесплатно</b>, следующие: <b>{price}</b>.",
-    en: "📝 <b>Tests</b>\nReady-made tests in mathematics, the mother tongue and history: timed, and the correct answers are shown when you finish.\nThe first attempt is <b>free</b>, then <b>{price}</b>.",
+    uz: "📝 <b>Test ishlash</b>\nMatematika, Ona tili va Tarix bo‘yicha tayyor testlar: vaqt bilan ishlaysiz, test tugagach to‘g‘ri javoblar va har xato javobning AI tahlili ko‘rsatiladi.\nBirinchi urinish <b>bepul</b>, keyingilari: bitta fan — <b>{subject}</b>, «Hammasi» — <b>{all}</b>.",
+    ru: "📝 <b>Тесты</b>\nГотовые тесты по математике, родному языку и истории: на время, после завершения — правильные ответы и разбор каждой ошибки от ИИ.\nПервая попытка <b>бесплатно</b>, далее: один предмет — <b>{subject}</b>, «Все предметы» — <b>{all}</b>.",
+    en: "📝 <b>Tests</b>\nReady-made tests in mathematics, the mother tongue and history: timed; when you finish you see the correct answers and an AI analysis of every mistake.\nThe first attempt is <b>free</b>, then: one subject — <b>{subject}</b>, «All subjects» — <b>{all}</b>.",
   },
   "tests.disabled": {
     uz: "📝 Testlar hozircha yopiq. Birozdan keyin qayting.",
@@ -37,6 +37,7 @@ const T = {
     en: "📝 Tests are closed for now. Please come back later.",
   },
   "tests.openBtn": { uz: "Testni ochish", ru: "Открыть тесты", en: "Open the tests" },
+  "tests.lastResultBtn": { uz: "Oxirgi natija va AI tahlil", ru: "Последний результат и разбор ИИ", en: "Last result and AI analysis" },
 
   /* ── Qattiqqo‘l domla (owner request 15; every key starts with `domla.`) ── */
   "domla.intro": {

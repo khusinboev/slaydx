@@ -11,6 +11,8 @@
  *                                                                   -> «start charges once»;
  *   5. the finished review built from the LIVE key instead of the snapshot
  *                                                                   -> «key snapshot: a finished result never follows a corrected key…»;
+ *   6. «hammasi» charged the one-subject price (`priceFor` returns `prices.subject` for both modes)
+ *                                                                   -> «price by mode…»;
  *   4. the explanation / key selected for an ACTIVE attempt (`loadQuestions(ids, false)` -> `true`)
  *                                                                   -> «the answer key is never in a pre-finish response».
  */
@@ -208,17 +210,17 @@ test("paid tests: service and API", { skip }, async (t) => {
     const u = await login();
     const first = await svc.startAttempt(u.uid, { mode: "subject", subjectCode: "math" }, { ...seeded(1), now: T0 });
     assert.equal(first.alreadyOpen, false);
-    assert.equal(first.price, 2000);
-    assert.equal((await wallet(query, u.uid)).total, 18_000);
+    assert.equal(first.price, 1500, "one subject = tests.price_subject");
+    assert.equal((await wallet(query, u.uid)).total, 18_500);
     const rows = await ledger(u.uid);
     assert.equal(rows.length, 1);
     assert.equal(rows[0]!.reference, `test:${first.attemptId}`);
-    assert.equal(Number(rows[0]!.points_delta), -2000, "bonus so'm is spent first");
+    assert.equal(Number(rows[0]!.points_delta), -1500, "bonus so'm is spent first");
 
     const again = await svc.startAttempt(u.uid, { mode: "subject", subjectCode: "math" }, { ...seeded(2), now: at(MIN) });
     assert.equal(again.attemptId, first.attemptId);
     assert.equal(again.alreadyOpen, true);
-    assert.equal((await wallet(query, u.uid)).total, 18_000, "no second charge");
+    assert.equal((await wallet(query, u.uid)).total, 18_500, "no second charge");
     assert.equal((await ledger(u.uid)).length, 1);
 
     // A different subject while one is open: refused, nothing charged.
@@ -232,7 +234,7 @@ test("paid tests: service and API", { skip }, async (t) => {
     assert.equal(results.filter((r) => !r.alreadyOpen).length, 1);
     assert.equal((await attempts(race.uid)).length, 1);
     assert.equal((await ledger(race.uid)).length, 1);
-    assert.equal((await wallet(query, race.uid)).total, 18_000);
+    assert.equal((await wallet(query, race.uid)).total, 18_500);
   });
 
   await t.test("start is idempotent by key, even after the attempt ended", async () => {
@@ -251,19 +253,19 @@ test("paid tests: service and API", { skip }, async (t) => {
   });
 
   await t.test("insufficient balance: 402, no attempt, wallet untouched", async () => {
-    const poor = await login({ points: 1000, balance: 999 });
-    await assert.rejects(svc.startAttempt(poor.uid, { mode: "subject", subjectCode: "math" }), (e: { status?: number; extra?: { code?: string; required?: number; available?: number } }) => e.status === 402 && e.extra?.code === "insufficient" && e.extra.required === 2000 && e.extra.available === 1999);
+    const poor = await login({ points: 1000, balance: 499 });
+    await assert.rejects(svc.startAttempt(poor.uid, { mode: "subject", subjectCode: "math" }), (e: { status?: number; extra?: { code?: string; required?: number; available?: number } }) => e.status === 402 && e.extra?.code === "insufficient" && e.extra.required === 1500 && e.extra.available === 1499);
     assert.deepEqual(await attempts(poor.uid), []);
     assert.deepEqual(await ledger(poor.uid), []);
-    assert.deepEqual(await wallet(query, poor.uid), { points: 1000, balance: 999, total: 1999 });
+    assert.deepEqual(await wallet(query, poor.uid), { points: 1000, balance: 499, total: 1499 });
     const r = await call(startRoute.POST, "/api/tests/start", "POST", poor.cookie, { mode: "subject", subject: "math" });
     assert.equal(r.status, 402);
-    // Bonus so'm and money together pay: 1000 + 1000 exactly covers the price.
-    const mixed = await login({ points: 1000, balance: 1000 });
+    // Bonus so'm and money together pay: 1000 + 500 exactly covers the price.
+    const mixed = await login({ points: 1000, balance: 500 });
     await svc.startAttempt(mixed.uid, { mode: "subject", subjectCode: "math" });
     assert.deepEqual(await wallet(query, mixed.uid), { points: 0, balance: 0, total: 0 });
     const row = (await ledger(mixed.uid))[0]!;
-    assert.deepEqual([Number(row.points_delta), Number(row.balance_delta)], [-1000, -1000]);
+    assert.deepEqual([Number(row.points_delta), Number(row.balance_delta)], [-1000, -500]);
   });
 
   await t.test("first attempt free is a setting; the price is the server's (body price ignored)", async () => {
@@ -278,20 +280,64 @@ test("paid tests: service and API", { skip }, async (t) => {
     assert.equal((await svc.overview(u.uid)).firstFree, false);
     await svc.finishAttempt(u.uid, a.attemptId);
     const b = await svc.startAttempt(u.uid, { mode: "subject", subjectCode: "math" });
-    assert.equal(b.price, 2000);
-    assert.equal((await wallet(query, u.uid)).total, 1000);
+    assert.equal(b.price, 1500);
+    assert.equal((await wallet(query, u.uid)).total, 1500);
     await clearSetting(query, "tests.first_attempt_free");
 
-    await setSetting(query, "tests.price_per_attempt", 500);
+    await setSetting(query, "tests.price_subject", 500);
     const v = await login({ points: 5000 });
     const r = await call(startRoute.POST, "/api/tests/start", "POST", v.cookie, { mode: "subject", subject: "math", price: 1, amount: 1 });
     assert.equal(r.status, 200);
     assert.equal(r.body.price, 500, "the client's price field is ignored");
     assert.equal((await wallet(query, v.uid)).total, 4500);
-    await setSetting(query, "tests.price_per_attempt", 0);
+    await setSetting(query, "tests.price_subject", 0);
     const w = await login({ points: 0 });
     assert.equal((await svc.startAttempt(w.uid, { mode: "subject", subjectCode: "math" })).price, 0);
-    await clearSetting(query, "tests.price_per_attempt");
+    await clearSetting(query, "tests.price_subject");
+  });
+
+  await t.test("price by mode: one subject 1 500, «hammasi» 4 000; each from its own setting; first-free covers both modes", async () => {
+    const u = await login({ points: 10_000 });
+    const all = await svc.startAttempt(u.uid, { mode: "all" }, seeded(5));
+    assert.equal(all.price, 4000, "«hammasi» = tests.price_all");
+    assert.equal((await wallet(query, u.uid)).total, 6000);
+    assert.deepEqual((await ledger(u.uid)).map((r) => [r.reference, Number(r.points_delta)]), [[`test:${all.attemptId}`, -4000]]);
+    assert.equal((await attempts(u.uid))[0]!.charged_points, "4000");
+    // The same «hammasi» start again (open attempt) and a retried key change nothing.
+    assert.equal((await svc.startAttempt(u.uid, { mode: "all" })).alreadyOpen, true);
+    assert.equal((await wallet(query, u.uid)).total, 6000);
+    await svc.finishAttempt(u.uid, all.attemptId);
+    const one = await svc.startAttempt(u.uid, { mode: "subject", subjectCode: "tarix" });
+    assert.equal(one.price, 1500);
+    assert.equal((await wallet(query, u.uid)).total, 4500);
+    await svc.finishAttempt(u.uid, one.attemptId);
+
+    // Each mode reads ITS key: changing one leaves the other alone.
+    await setSetting(query, "tests.price_all", 3000);
+    await setSetting(query, "tests.price_subject", 700);
+    assert.deepEqual((await svc.overview(u.uid)).prices, { subject: 700, all: 3000 });
+    const r = await call(startRoute.POST, "/api/tests/start", "POST", u.cookie, { mode: "all", price: 1 });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.price, 3000, "the client's price is ignored for «hammasi» too");
+    assert.equal((await wallet(query, u.uid)).total, 1500);
+    await svc.finishAttempt(u.uid, String(r.body.attemptId));
+    const o = await call(overviewRoute.GET, "/api/tests", "GET", u.cookie);
+    assert.deepEqual(o.body.prices, { subject: 700, all: 3000 });
+    assert.equal("price" in o.body, false, "the single price is gone");
+    await clearSetting(query, "tests.price_all");
+    await clearSetting(query, "tests.price_subject");
+
+    // Not enough for «hammasi» but enough for one subject.
+    const p = await login({ points: 3999 });
+    await assert.rejects(svc.startAttempt(p.uid, { mode: "all" }), (e: { status?: number; extra?: { required?: number } }) => e.status === 402 && e.extra?.required === 4000);
+    assert.equal((await svc.startAttempt(p.uid, { mode: "subject", subjectCode: "math" })).price, 1500);
+
+    // First attempt free also covers a «hammasi» first attempt.
+    await setSetting(query, "tests.first_attempt_free", true);
+    const f = await login({ points: 5000 });
+    assert.equal((await svc.startAttempt(f.uid, { mode: "all" })).price, 0);
+    assert.deepEqual(await ledger(f.uid), []);
+    await clearSetting(query, "tests.first_attempt_free");
   });
 
   await t.test("selection in the service: seeded, one variant per subject, fixed option order, «hammasi» = 3 x 10", async () => {
@@ -673,7 +719,7 @@ test("paid tests: service and API", { skip }, async (t) => {
     const u = await login({ points: 50_000 });
     const ov = await svc.overview(u.uid, T0);
     assert.equal(ov.enabled, true);
-    assert.equal(ov.price, 2000);
+    assert.deepEqual(ov.prices, { subject: 1500, all: 4000 });
     assert.equal(ov.pointsPerCorrect, 1.1);
     assert.deepEqual(ov.subjects, [
       { code: "math", name: "Matematika", questions: 10, minutes: 20, available: true },
