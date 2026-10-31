@@ -6,12 +6,12 @@ import { Info, TriangleAlert } from "lucide-react";
 import { useCan } from "@/components/admin/shell";
 import { Button, Card, ErrorState, Forbidden, KpiTile, Skeleton, TabPanel, Tabs, type TabItem } from "@/components/admin/ui";
 import { AdminReauthCancelledError, adminErrorMessage, isAbortError } from "@/lib/admin-api/core";
-import { fmtNumber, fmtUsd } from "@/lib/admin-format";
+import { fmtNumber, fmtSoum, fmtUsd } from "@/lib/admin-format";
 import { testProvider, type ProviderItem, type ProvidersResponse } from "@/lib/admin-api/providers";
 import { ProviderDeleteKeyDialog, ProviderKeyDialog, ProviderToggleDialog } from "./ProviderDialogs";
 import { CategoryTab, OverviewTab } from "./CategoryViews";
 import { buildCategories, kpis, parseTab, type TabId } from "./categories";
-import { moneyText, type Period } from "./format";
+import type { Period } from "./format";
 import type { TestState } from "./ProviderTable";
 import { useProviders } from "./useProviders";
 
@@ -91,11 +91,12 @@ export function ProvidersPage() {
     ...categories.map((c) => ({
       id: c.id,
       label: c.label,
+      // `relative`: the sr-only text is absolutely positioned and must be clipped by the scrolling tab strip, not widen the page.
       badge: (
-        <>
+        <span className="relative inline-flex items-center">
           <span data-tab-dot={c.verdict} aria-hidden="true" className={`inline-block size-2 rounded-full ${DOT[c.verdict]}`} />
           <span className="sr-only"> — {DOT_TEXT[c.verdict]}</span>
-        </>
+        </span>
       ),
     })),
   ];
@@ -150,7 +151,7 @@ export function ProvidersPage() {
           ) : null}
 
           <section aria-label="Umumiy ko'rsatkichlar" data-summary className="grid grid-cols-2 gap-3 min-[1100px]:grid-cols-4">
-            <KpiTile label="30 kunlik AI sarfi" value={moneyText(data.total30.usd, data.soumPerUsd)} hint={`${fmtNumber(data.total30.calls)} ta so'rov`} />
+            <KpiTile label="30 kunlik AI sarfi" value={fmtUsd(data.total30.usd)} hint={`≈ ${fmtSoum(Math.round(data.total30.usd * data.soumPerUsd))} · ${fmtNumber(data.total30.calls)} ta so'rov`} />
             <KpiTile
               label="Eng katta xarajat"
               value={k.top ? `${k.top.label} · ${k.top.share}%` : "—"}

@@ -14,10 +14,10 @@ export type TestState = { status: "running" } | ({ status: "done" } & ProviderTe
 // One grid, three layouts: <760 px stacked 2-column card, 760-1099 px five columns with key + actions on a second line,
 // >=1100 px the full seven-column table. Static strings so Tailwind sees every class.
 const GRID =
-  "grid grid-cols-2 items-center gap-x-3 gap-y-2.5 min-[760px]:grid-cols-[minmax(0,2fr)_104px_128px_104px_64px] min-[1100px]:grid-cols-[minmax(0,2fr)_104px_128px_minmax(0,1fr)_104px_64px_auto]";
-const NAME = "col-span-full min-w-0 min-[760px]:col-span-1";
-const WIDE_ONLY_ROW = "col-span-full flex min-w-0 flex-col gap-1 min-[1100px]:col-span-1";
-const LABEL = "text-muted-foreground mb-0.5 block text-[11px] font-semibold min-[760px]:hidden";
+  "grid grid-cols-2 items-center gap-x-3 gap-y-2.5 @min-[560px]:grid-cols-[minmax(0,2fr)_104px_128px_104px_64px] @min-[980px]:grid-cols-[minmax(0,2fr)_104px_128px_minmax(0,1fr)_104px_64px_auto]";
+const NAME = "col-span-full min-w-0 @min-[560px]:col-span-1";
+const WIDE_ONLY_ROW = "col-span-full @min-[560px]:order-8 @min-[980px]:order-none flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 @min-[980px]:col-span-1 @min-[980px]:flex-col @min-[980px]:items-start";
+const LABEL = "text-muted-foreground mb-0.5 block text-[11px] font-semibold @min-[560px]:hidden";
 
 function Cell({ label, className, children }: { label?: string; className?: string; children: ReactNode }) {
   return (
@@ -58,7 +58,7 @@ function ProviderRow({
   const free = item.billing === "free";
   const idle = row.calls === 0;
   const errors = row.errors !== null && row.errors > 0 ? ` · ${fmtNumber(row.errors)} ta xato` : "";
-  const btn = "max-[759px]:h-10 max-[759px]:w-full";
+  const btn = "@max-[559px]:h-10 @max-[559px]:w-full";
   return (
     <div
       role="row"
@@ -109,7 +109,7 @@ function ProviderRow({
           </span>
         ) : null}
       </Cell>
-      <Cell label={PERIODS.find((p) => p.value === period)?.label} className="text-left min-[760px]:text-right">
+      <Cell label={PERIODS.find((p) => p.value === period)?.label} className="text-left @min-[560px]:text-right">
         <div data-usage data-period={period}>
           <p className="text-[13px] font-semibold tabular-nums">{idle ? (free ? "0 ta so'rov" : "—") : free ? `${fmtNumber(row.calls)} ta so'rov` : fmtUsd(row.usd)}</p>
           <p className="text-muted-foreground text-[11.5px]">
@@ -138,7 +138,7 @@ function ProviderRow({
         )}
       </Cell>
       {canEdit ? (
-        <Cell className="col-span-full flex flex-wrap items-center gap-2 max-[759px]:grid max-[759px]:grid-cols-1 min-[1100px]:col-span-1 min-[1100px]:justify-end">
+        <Cell className="col-span-full @min-[560px]:order-9 @min-[980px]:order-none flex flex-wrap items-center gap-2 @max-[559px]:grid @max-[559px]:grid-cols-1 @min-[980px]:col-span-1 @min-[980px]:justify-end">
           <Button size="sm" className={btn} onClick={() => onKey(item)} disabled={!canStoreKeys} title={canStoreKeys ? undefined : "Serverda shifrlash kaliti sozlanmagan"}>
             {item.hasDbKey ? "Almashtirish" : "Kalitni kiritish"}
           </Button>
@@ -155,7 +155,7 @@ function ProviderRow({
         </Cell>
       ) : null}
       {test?.status === "done" ? (
-        <p role="status" data-test-result={test.ok ? "ok" : "fail"} className={cn("col-span-full text-xs font-medium", test.ok ? "text-badge-success-text" : "text-destructive")}>
+        <p role="status" data-test-result={test.ok ? "ok" : "fail"} className={cn("order-10 col-span-full text-xs font-medium", test.ok ? "text-badge-success-text" : "text-destructive")}>
           {test.message}
         </p>
       ) : null}
@@ -166,14 +166,14 @@ function ProviderRow({
 function Head() {
   const h = "text-muted-foreground text-xs font-semibold";
   return (
-    <div role="row" className={cn("bg-muted/40 hidden px-4 py-2.5 min-[760px]:grid min-[760px]:grid-cols-[minmax(0,2fr)_104px_128px_104px_64px] min-[1100px]:grid-cols-[minmax(0,2fr)_104px_128px_minmax(0,1fr)_104px_64px_auto] gap-x-3")}>
+    <div role="row" className={cn("bg-muted/40 hidden px-4 py-2.5 @min-[560px]:grid @min-[560px]:grid-cols-[minmax(0,2fr)_104px_128px_104px_64px] @min-[980px]:grid-cols-[minmax(0,2fr)_104px_128px_minmax(0,1fr)_104px_64px_auto] gap-x-3")}>
       <span role="columnheader" className={h}>Provayder</span>
       <span role="columnheader" className={h}>To&apos;lov</span>
       <span role="columnheader" className={h}>Holat</span>
-      <span role="columnheader" className={cn(h, "max-[1099px]:hidden")}>Kalit</span>
+      <span role="columnheader" className={cn(h, "@max-[979px]:hidden")}>Kalit</span>
       <span role="columnheader" className={cn(h, "text-right")}>Ishlatilgan</span>
       <span role="columnheader" className={h}>Yoqiq</span>
-      <span role="columnheader" className={cn(h, "max-[1099px]:hidden min-[1100px]:min-w-[200px]")}><span className="sr-only">Amallar</span></span>
+      <span role="columnheader" className={cn(h, "@max-[979px]:hidden @min-[980px]:min-w-[200px]")}><span className="sr-only">Amallar</span></span>
     </div>
   );
 }
@@ -202,7 +202,7 @@ export function ProviderTable({
   onTest: (item: ProviderItem) => void;
 }) {
   return (
-    <section aria-label="Provayderlar" className="bg-card min-w-0 flex-[999_1_640px] overflow-hidden rounded-xl border">
+    <section aria-label="Provayderlar" className="@container bg-card min-w-0 flex-[999_1_640px] overflow-hidden rounded-xl border">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
         <div className="min-w-0 flex-1">
           <h3 className="text-[15px] font-semibold">Provayderlar</h3>

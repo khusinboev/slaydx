@@ -35,7 +35,7 @@ export function RoutePanel({ category, canEdit, propagationSec, onChanged }: { c
                   onChanged();
                 }}
               />
-              <Button size="sm" className="self-start max-[759px]:h-10 max-[759px]:w-full" onClick={() => setEditing(null)}>
+              <Button size="sm" className="self-start max-[640px]:h-10 max-[640px]:w-full" onClick={() => setEditing(null)}>
                 Yopish
               </Button>
             </div>
@@ -77,7 +77,7 @@ function RouteSummary({ route, canEdit, onEdit }: { route: RouteItem; canEdit: b
         ))}
       </ol>
       {canEdit ? (
-        <Button size="sm" className="self-start max-[759px]:h-10 max-[759px]:w-full" onClick={onEdit} aria-label={`${route.title}: tahrirlash`}>
+        <Button size="sm" className="self-start max-[640px]:h-10 max-[640px]:w-full" onClick={onEdit} aria-label={`${route.title}: tahrirlash`}>
           Tahrirlash
         </Button>
       ) : null}

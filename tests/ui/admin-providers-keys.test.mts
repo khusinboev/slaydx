@@ -12,6 +12,7 @@ import { SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.s
 import { ProvidersPage } from "../../components/admin/providers/ProvidersPage.tsx";
 import { keyProblem } from "../../components/admin/providers/ProviderDialogs.tsx";
 import { buildCategories, kpis, parseTab, providerFigures, worstVerdict } from "../../components/admin/providers/categories.ts";
+import { fmtSoum } from "../../lib/admin-format.ts";
 import { compact, keyState, moneyText, providerStatus, routeText, sameEntries, unitText, usageLine } from "../../components/admin/providers/format.ts";
 
 /**
@@ -365,7 +366,8 @@ test("ready: KPI tiles, overview table with a verdict per category, tab dots", a
   assert.equal(calls[0].url, "/api/admin/providers");
 
   const summary = within(document.querySelector<HTMLElement>("[data-summary]")!);
-  assert.ok(summary.getByText(norm(moneyText(82.93, 12_700))), "30-day total in USD and so'm");
+  assert.ok(summary.getByText("$82,93"), "30-day total in USD");
+  assert.ok(summary.getByText((c) => norm(c) === `≈ ${norm(fmtSoum(Math.round(82.93 * 12_700)))} · 10 637 ta so'rov`), "so'm and requests in the hint");
   assert.ok(summary.getByText("Matn (LLM) · 92%"), "biggest category with its share of the attributed spend (69,97 of 75,72)");
   assert.ok(summary.getByText(/Google Gemini \$57,95 · Anthropic \(Claude\) \$12,02/), "its two biggest providers");
   assert.ok(summary.getByText("2 / 5") && summary.getByText("2 to'lovli · 0 bepul"), "usable: gemini and anthropic");

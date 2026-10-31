@@ -22,21 +22,21 @@ const BANNER: Record<Verdict, string> = {
 const TEXT: Record<Verdict, string> = { ok: "text-success-text", single: "text-badge-warning-text", missing: "text-destructive", off: "text-muted-foreground" };
 
 const OV_GRID =
-  "grid grid-cols-2 items-center gap-x-3 gap-y-2.5 min-[760px]:grid-cols-[minmax(0,2fr)_150px_minmax(0,1fr)_minmax(0,1fr)_84px_84px] min-[1100px]:grid-cols-[minmax(0,2.4fr)_170px_minmax(0,1.3fr)_minmax(0,1.3fr)_120px_92px]";
-const LBL = "text-muted-foreground mb-0.5 block text-[11px] font-semibold min-[760px]:hidden";
+  "grid grid-cols-2 items-center gap-x-3 gap-y-2.5 @min-[700px]:grid-cols-[minmax(0,2fr)_150px_minmax(0,1fr)_minmax(0,1fr)_84px_84px] @min-[960px]:grid-cols-[minmax(0,2.4fr)_170px_minmax(0,1.3fr)_minmax(0,1.3fr)_120px_92px]";
+const LBL = "text-muted-foreground mb-0.5 block text-[11px] font-semibold @min-[700px]:hidden";
 
 /** «Umumiy»: one row per cost category; «Ochish» switches to its tab. System health sits below, folded. */
 export function OverviewTab({ categories, system, legacy, onOpen }: { categories: Category[]; system: SystemBody; legacy: ReactNode; onOpen: (id: TabId) => void }) {
   const h = "text-muted-foreground text-xs font-semibold";
   return (
     <div className="flex flex-col gap-4">
-      <section aria-label="Toifalar holati" className="bg-card overflow-hidden rounded-xl border">
+      <section aria-label="Toifalar holati" className="@container bg-card overflow-hidden rounded-xl border">
         <header className="flex flex-wrap items-baseline gap-2 px-4 py-3">
           <h2 className="flex-1 text-[15px] font-semibold">Toifalar bo&apos;yicha holat</h2>
           <span className="text-muted-foreground text-xs">Toifaga o&apos;tish uchun «Ochish»ni bosing</span>
         </header>
         <div role="table" aria-label="Toifalar">
-          <div role="row" className={cn(OV_GRID, "bg-muted/40 hidden px-4 py-2.5 min-[760px]:grid")}>
+          <div role="row" className={cn(OV_GRID, "bg-muted/40 hidden px-4 py-2.5 @min-[700px]:grid")}>
             <span role="columnheader" className={h}>Toifa</span>
             <span role="columnheader" className={h}>Holat</span>
             <span role="columnheader" className={h}>Asosiy</span>
@@ -46,7 +46,7 @@ export function OverviewTab({ categories, system, legacy, onOpen }: { categories
           </div>
           {categories.map((c) => (
             <div key={c.id} role="row" data-category={c.id} data-verdict={c.verdict} className={cn(OV_GRID, "border-t px-4 py-3.5")}>
-              <div role="cell" className="col-span-full min-w-0 min-[760px]:col-span-1">
+              <div role="cell" className="col-span-full min-w-0 @min-[700px]:col-span-1">
                 <p className="font-semibold">{c.label}</p>
                 <p className="text-muted-foreground text-[12.5px]">{c.desc}</p>
               </div>
@@ -64,12 +64,12 @@ export function OverviewTab({ categories, system, legacy, onOpen }: { categories
                 <span className={LBL}>Zaxira</span>
                 {c.fallback}
               </div>
-              <div role="cell" className="font-semibold tabular-nums min-[760px]:text-right">
+              <div role="cell" className="font-semibold tabular-nums @min-[700px]:text-right">
                 <span className={LBL}>30 kun</span>
                 {fmtUsd(c.spendUsd)}
               </div>
-              <div role="cell" className="col-span-full min-[760px]:col-span-1 min-[760px]:text-right">
-                <Button size="sm" className="max-[759px]:h-10 max-[759px]:w-full" aria-label={`Ochish: ${c.label}`} onClick={() => onOpen(c.id)}>
+              <div role="cell" className="col-span-full @min-[700px]:col-span-1 @min-[700px]:text-right">
+                <Button size="sm" className="@max-[699px]:h-10 @max-[699px]:w-full" aria-label={`Ochish: ${c.label}`} onClick={() => onOpen(c.id)}>
                   Ochish
                 </Button>
               </div>
