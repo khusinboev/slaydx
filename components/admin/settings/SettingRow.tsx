@@ -7,8 +7,8 @@ import type { SettingItem } from "@/lib/admin-api/settings";
 import { formatValue, type ToolOption } from "./format";
 import { FEATURE_EFFECT, isFeatureKey, shortHint, STOP_KEYS } from "./layout";
 
-/** Shared by the column header and every row: four columns from 760 px, one stacked card below. */
-export const ROW_GRID = "min-[760px]:grid min-[760px]:grid-cols-[minmax(0,2.4fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(10rem,auto)] min-[760px]:gap-x-5";
+/** Shared by the column header and every row: table columns from 1100 px, one stacked card below. */
+export const ROW_GRID = "min-[1100px]:grid min-[1100px]:grid-cols-[minmax(0,2.4fr)_minmax(0,1.5fr)_minmax(0,1fr)_16rem] min-[1100px]:gap-x-5";
 
 export type SettingRowProps = {
   item: SettingItem;
@@ -81,14 +81,14 @@ function ValueView({ item, tools }: { item: SettingItem; tools: ReadonlyArray<To
 
 /**
  * One setting: Uzbek label, a one-line explanation, the current value, the default,
- * who changed it and when, and the actions. Table row from 760 px, stacked card below.
+ * who changed it and when, and the actions. Table row from 1100 px, stacked card below.
  */
 export function SettingRow({ item, tools, canEdit, onEdit, onReset, onToggle, note }: SettingRowProps) {
   const feature = isFeatureKey(item.key);
   const overridden = item.source === "db";
   return (
-    <li data-setting={item.key} className="flex flex-col gap-3 border-t px-4 py-3.5 first:border-t-0 min-[760px]:items-start">
-      <div className={cn("flex w-full flex-col gap-3", ROW_GRID, "min-[760px]:items-start")}>
+    <li data-setting={item.key} className="flex flex-col gap-3 border-t px-4 py-3.5 first:border-t-0 min-[1100px]:items-start">
+      <div className={cn("flex w-full flex-col gap-3", ROW_GRID, "min-[1100px]:items-start")}>
         <div className="min-w-0">
           <p className="text-[13.5px] font-semibold">{item.label}</p>
           <p className="text-muted-foreground mt-0.5 text-xs">{feature ? FEATURE_EFFECT[item.key] : shortHint(item.description)}</p>
@@ -100,7 +100,7 @@ export function SettingRow({ item, tools, canEdit, onEdit, onReset, onToggle, no
         </div>
 
         <div className="flex min-w-0 flex-col items-start gap-1.5">
-          <span className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase min-[760px]:hidden">Hozirgi qiymat</span>
+          <span className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase min-[1100px]:hidden">Hozirgi qiymat</span>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <ValueView item={item} tools={tools} />
             {overridden ? <Badge tone="primary">O&apos;zgartirilgan</Badge> : null}
@@ -112,22 +112,22 @@ export function SettingRow({ item, tools, canEdit, onEdit, onReset, onToggle, no
           ) : null}
         </div>
 
-        <p className="text-muted-foreground min-w-0 text-xs min-[760px]:text-[13px]">
-          <span className="min-[760px]:hidden">Standart: </span>
+        <p className="text-muted-foreground min-w-0 text-xs min-[1100px]:text-[13px]">
+          <span className="min-[1100px]:hidden">Standart: </span>
           <span data-setting-default className="text-foreground tabular-nums">
             {formatValue(item, item.envValue, tools)}
           </span>
         </p>
 
-        <div className="flex min-w-0 flex-wrap items-center gap-2 min-[760px]:justify-end">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 min-[1100px]:justify-end">
           {canEdit && item.type === "bool" ? <FlagSwitch item={item} onToggle={onToggle} /> : null}
           {canEdit && item.type !== "bool" ? (
-            <Button className="max-[759px]:min-h-10" onClick={() => onEdit(item)}>
+            <Button className="max-[1099px]:min-h-10" onClick={() => onEdit(item)}>
               O&apos;zgartirish
             </Button>
           ) : null}
           {canEdit && overridden ? (
-            <Button variant="ghost" className="max-[759px]:min-h-10" onClick={() => onReset(item)}>
+            <Button variant="ghost" className="max-[1099px]:min-h-10" onClick={() => onReset(item)}>
               Standartga qaytarish
             </Button>
           ) : null}

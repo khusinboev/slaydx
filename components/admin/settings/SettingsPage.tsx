@@ -30,7 +30,7 @@ function Loading() {
   );
 }
 
-/** Column captions: shown from 760 px, where rows are table rows. */
+/** Column captions: shown from 1100 px, where rows are table rows. */
 function ColumnHeader() {
   return (
     <div className={`text-muted-foreground hidden border-b px-4 py-2 text-[11px] font-medium tracking-wide uppercase ${ROW_GRID}`}>
@@ -182,7 +182,7 @@ export function SettingsPage({ tools }: { tools: ReadonlyArray<ToolOption> }) {
               placeholder="Sozlamalardan qidirish…"
               aria-label="Sozlamalardan qidirish"
               autoComplete="off"
-              className="border-input bg-card focus:ring-ring h-10 w-full rounded-lg border pr-3 pl-9 text-[13px] outline-none focus:ring-2 min-[760px]:max-w-sm"
+              className="border-input bg-card focus:ring-ring h-10 w-full rounded-lg border pr-3 pl-9 text-[13px] outline-none focus:ring-2 min-[1100px]:max-w-sm"
             />
           </div>
           {needle ? null : <Tabs tabs={tabItems} value={tab} onChange={selectTab} ariaLabel="Sozlamalar bo'limlari" idPrefix={ID_PREFIX} />}
@@ -239,7 +239,7 @@ function Overview({
         <Badge tone={good ? "success" : stop ? "warning" : "neutral"} dot>
           {text}
         </Badge>
-        <Button variant="ghost" className="max-[759px]:min-h-10" onClick={() => onOpenTab(tabOfKey(item.key))}>
+        <Button className="max-[1099px]:min-h-10" onClick={() => onOpenTab(tabOfKey(item.key))}>
           Ochish
         </Button>
       </li>
@@ -260,7 +260,7 @@ function Overview({
               <li key={w.id} data-warning={w.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t px-4 py-3 first:border-t-0">
                 <TriangleAlert className="text-warning size-4 shrink-0" aria-hidden="true" />
                 <span className="min-w-[min(100%,14rem)] flex-1 text-[13px]">{w.text}</span>
-                <Button className="max-[759px]:min-h-10" onClick={() => onOpenTab(w.tab)}>
+                <Button className="max-[1099px]:min-h-10" onClick={() => onOpenTab(w.tab)}>
                   Tuzatish
                 </Button>
               </li>
