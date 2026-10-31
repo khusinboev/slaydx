@@ -11,7 +11,9 @@ import { TestsPage } from "../../components/tests/TestsPage.tsx";
  * correct letter, explanation), the history, the open attempt, the kill switch and the server's refusals.
  * Mutations (restored): the start POST carrying a price -> «start posts only the mode, subject and key»; the page showing a
  * correct letter while the attempt runs -> «no answer key on the running screen»; the finish button enabled before a choice
- * -> «Keyingi / Tugatish wait for a choice»; the timer ignoring the deadline -> «the timer finishes the attempt at the server deadline».
+ * -> «Keyingi / Tugatish wait for a choice»; the timer ignoring the deadline -> «the timer finishes the attempt at the server deadline»;
+ * the analysis rendered for a correct answer too -> «analysis: skeleton first, then the text»; the poll stopped after the first
+ * answer -> same test; the retry posting without `retry=1` -> «analysis failed: a short notice and a retry».
  */
 
 const realFetch = globalThis.fetch;
@@ -26,7 +28,7 @@ const all = (sel: string) => [...document.querySelectorAll(sel)] as HTMLElement[
 
 const OV = {
   enabled: true,
-  price: 2000,
+  prices: { subject: 1500, all: 4000 },
   firstFree: false,
   pointsPerCorrect: 1.1,
   subjects: [
@@ -74,6 +76,8 @@ const FINISHED = {
   ],
 };
 
+const READY_12 = { questionId: 12, position: 2, status: "ready", correctLetter: "B", chosenLetter: "C", explanation: "2 + 2 = 4, demak B.", chosenWhy: "5 — bitta ortiq." };
+
 type Call = { url: string; method: string; body: string | null };
 type Routes = Partial<Record<string, (c: Call) => Response>>;
 /** Routes keyed `METHOD /path`; anything unlisted fails the test. */
@@ -97,22 +101,37 @@ test("list: subjects in order, «Hammasi» 30 questions / 60 minutes, the server
   assert.match(all("[data-tests-subject]")[3]!.textContent!, /Hammasi/);
   assert.match(all("[data-tests-subject]")[3]!.textContent!, /30 ta savol · 60 daqiqa/);
   assert.match(all("[data-tests-subject]")[0]!.textContent!, /10 ta savol · 20 daqiqa/);
-  assert.match(q("[data-tests-price]")!.textContent!, /2\s000 so‘m/);
+  assert.match(q("[data-tests-price]")!.textContent!, /1\s500 so‘m/, "a subject is picked: the one-subject price");
   assert.equal(all("[data-tests-subject]")[0]!.getAttribute("aria-checked"), "true", "the first subject is preselected");
   assert.match(q("[data-tests-rules]")!.textContent!, /1,1 ball/);
   assert.ok(q("[data-tests-history-empty]"));
 });
 
-test("price follows the server: custom, free first attempt, free", async () => {
-  stub({ "GET /api/tests": () => json(200, { ...OV, price: 1500 }) });
+test("price by mode: each option shows its price, the header follows the picked mode", async () => {
+  stub({ "GET /api/tests": () => json(200, OV) });
   render(h(TestsPage));
-  await waitFor(() => assert.match(q("[data-tests-price]")!.textContent!, /1\s500 so‘m/));
+  await waitFor(() => assert.ok(q("[data-tests-price]")));
+  const opt = all("[data-tests-option-price]").map((e) => e.textContent!.replace(/\s/g, " "));
+  assert.deepEqual(opt, ["1 500 so‘m", "1 500 so‘m", "1 500 so‘m", "4 000 so‘m"]);
+  fireEvent.click(q('[data-tests-subject="all"]')!);
+  assert.match(q("[data-tests-price]")!.textContent!, /4\s000 so‘m/, "«Hammasi» picked: the all-subjects price");
+  fireEvent.click(q('[data-tests-subject="tarix"]')!);
+  assert.match(q("[data-tests-price]")!.textContent!, /1\s500 so‘m/);
+  assert.match(q("[data-tests-rules]")!.textContent!, /AI tahlili/);
+});
+
+test("price follows the server: custom, free first attempt, free", async () => {
+  stub({ "GET /api/tests": () => json(200, { ...OV, prices: { subject: 700, all: 2500 } }) });
+  render(h(TestsPage));
+  await waitFor(() => assert.match(q("[data-tests-price]")!.textContent!, /700 so‘m/));
+  fireEvent.click(q('[data-tests-subject="all"]')!);
+  assert.match(q("[data-tests-price]")!.textContent!, /2\s500 so‘m/);
   cleanup();
   stub({ "GET /api/tests": () => json(200, { ...OV, firstFree: true }) });
   render(h(TestsPage));
   await waitFor(() => assert.match(q("[data-tests-price]")!.textContent!, /Birinchi urinish bepul/));
   cleanup();
-  stub({ "GET /api/tests": () => json(200, { ...OV, price: 0 }) });
+  stub({ "GET /api/tests": () => json(200, { ...OV, prices: { subject: 0, all: 0 } }) });
   render(h(TestsPage));
   await waitFor(() => assert.equal(q("[data-tests-price]")!.textContent, "Bepul"));
 });
@@ -120,7 +139,7 @@ test("price follows the server: custom, free first attempt, free", async () => {
 test("start posts only the mode, subject and key -- then the first question shows", async () => {
   const calls = stub({
     "GET /api/tests": () => json(200, OV),
-    "POST /api/tests/start": () => json(200, { ok: true, attemptId: "A1", alreadyOpen: false, price: 2000 }),
+    "POST /api/tests/start": () => json(200, { ok: true, attemptId: "A1", alreadyOpen: false, price: 1500 }),
     "GET /api/tests/attempts/A1": () => json(200, activeView()),
   });
   render(h(TestsPage));
@@ -162,11 +181,13 @@ test("question flow: image question, text question, Keyingi / Tugatish wait for 
     "GET /api/tests/attempts/A1": () => json(200, activeView()),
     "POST /api/tests/attempts/A1/answer": () => json(200, { ok: true, answered: 1 }),
     "POST /api/tests/attempts/A1/finish": () => json(200, FINISHED),
+    "GET /api/tests/attempts/A1/analysis": () => json(200, { attemptId: "A1", done: true, items: [READY_12] }),
   });
   render(h(TestsPage));
   await waitFor(() => assert.ok(q("[data-tests-start]")));
   fireEvent.click(q("[data-tests-start]")!);
   await waitFor(() => assert.ok(q("[data-tests-run]")));
+  assert.ok(!calls.some((c) => c.url.includes("/analysis")), "no analysis request while the attempt runs");
 
   // 1: image-only -- lazy image, letters only.
   const img = q("[data-tests-image]") as HTMLImageElement;
@@ -211,6 +232,87 @@ test("question flow: image question, text question, Keyingi / Tugatish wait for 
   assert.ok(!items[0]!.querySelector("[data-tests-explanation]"), "an explanation only where one exists");
   assert.ok(items[0]!.querySelector("[data-tests-image]"), "image questions keep their image in the review");
   assert.ok(!q("[data-tests-timeout]"));
+  await waitFor(() => assert.ok(items[1]!.querySelector('[data-tests-analysis="ready"]')));
+  assert.ok(!items[0]!.querySelector("[data-tests-analysis]") && !items[2]!.querySelector("[data-tests-analysis]"), "no analysis for a correct answer");
+});
+
+test("analysis: skeleton first, then the text (polled while pending); the result never waits for it", async () => {
+  let n = 0;
+  stub({
+    "GET /api/tests": () => json(200, { ...OV, history: [{ id: "A1", mode: "subject", subject: "Matematika", status: "finished", total: 3, correct: 2, score: 2.2, startedAt: "2026-10-20T10:00:00Z" }] }),
+    "GET /api/tests/attempts/A1": () => json(200, FINISHED),
+    "GET /api/tests/attempts/A1/analysis": () => {
+      n++;
+      return json(200, n === 1 ? { attemptId: "A1", done: false, items: [{ ...READY_12, status: "pending", explanation: null, chosenWhy: null }] } : { attemptId: "A1", done: true, items: [READY_12] });
+    },
+  });
+  render(h(TestsPage));
+  await waitFor(() => assert.ok(q("[data-tests-history-item]")));
+  fireEvent.click(q("[data-tests-history-item]")!);
+  await waitFor(() => assert.ok(q("[data-tests-result]")));
+  const wrong = q('[data-tests-review-item="2"]')!;
+  await waitFor(() => assert.ok(wrong.querySelector('[data-tests-analysis="pending"]'), "a skeleton while the model works"));
+  assert.ok(q("[data-tests-score]"), "the score is already there");
+  await waitFor(() => assert.ok(wrong.querySelector('[data-tests-analysis="ready"]')), { timeout: 5000 });
+  assert.equal(n, 2, "polled once more, then stopped");
+  assert.match(wrong.querySelector("[data-tests-analysis-correct]")!.textContent!, /Nega B to‘g‘ri: 2 \+ 2 = 4/);
+  assert.match(wrong.querySelector("[data-tests-analysis-chosen]")!.textContent!, /Nega C xato: 5 — bitta ortiq/);
+  await new Promise((r) => setTimeout(r, 3300));
+  assert.equal(n, 2, "no polling after done");
+});
+
+test("analysis failed: a short notice and a retry (retry=1); a broken request never breaks the page", async () => {
+  const urls: string[] = [];
+  let mode: "failed" | "ready" | "error" = "failed";
+  globalThis.fetch = (async (input: unknown) => {
+    const url = String(input);
+    if (url === "/api/tests") return json(200, { ...OV, history: [{ id: "A1", mode: "subject", subject: "Matematika", status: "finished", total: 3, correct: 2, score: 2.2, startedAt: "2026-10-20T10:00:00Z" }] });
+    if (url === "/api/tests/attempts/A1") return json(200, FINISHED);
+    if (url.startsWith("/api/tests/attempts/A1/analysis")) {
+      urls.push(url);
+      if (mode === "error") return json(500, { error: "Ichki xatolik" });
+      return json(200, { attemptId: "A1", done: true, items: [mode === "failed" ? { ...READY_12, status: "failed", explanation: null, chosenWhy: null } : READY_12] });
+    }
+    throw new Error(`unexpected ${url}`);
+  }) as typeof fetch;
+  render(h(TestsPage));
+  await waitFor(() => assert.ok(q("[data-tests-history-item]")));
+  fireEvent.click(q("[data-tests-history-item]")!);
+  await waitFor(() => assert.ok(q('[data-tests-analysis="failed"]')));
+  assert.match(q('[data-tests-analysis="failed"]')!.textContent!, /Tahlil hozircha tayyor emas/);
+  assert.deepEqual(urls, ["/api/tests/attempts/A1/analysis"]);
+  mode = "ready";
+  fireEvent.click(q("[data-tests-analysis-retry]")!);
+  await waitFor(() => assert.ok(q('[data-tests-analysis="ready"]')));
+  assert.deepEqual(urls, ["/api/tests/attempts/A1/analysis", "/api/tests/attempts/A1/analysis?retry=1"]);
+
+  cleanup();
+  urls.length = 0;
+  mode = "error";
+  render(h(TestsPage));
+  await waitFor(() => assert.ok(q("[data-tests-history-item]")));
+  fireEvent.click(q("[data-tests-history-item]")!);
+  await waitFor(() => assert.ok(q('[data-tests-analysis="failed"]')));
+  assert.ok(q("[data-tests-score]") && q('[data-tests-review-item="2"] [data-tests-correct-letter]'), "the result itself is intact");
+  mode = "ready";
+  fireEvent.click(q("[data-tests-analysis-retry]")!);
+  await waitFor(() => assert.ok(q('[data-tests-analysis="ready"]')));
+});
+
+test("?attempt=<id> (the bot's result button) opens that result directly", async () => {
+  window.history.replaceState(null, "", "/uz/tests?attempt=00000000-0000-4000-8000-0000000000a1");
+  try {
+    stub({
+      "GET /api/tests": () => json(200, OV),
+      "GET /api/tests/attempts/00000000-0000-4000-8000-0000000000a1": () => json(200, { ...FINISHED, id: "00000000-0000-4000-8000-0000000000a1" }),
+      "GET /api/tests/attempts/00000000-0000-4000-8000-0000000000a1/analysis": () => json(200, { attemptId: "x", done: true, items: [READY_12] }),
+    });
+    render(h(TestsPage));
+    await waitFor(() => assert.ok(q("[data-tests-result]")));
+    await waitFor(() => assert.ok(q('[data-tests-analysis="ready"]')));
+  } finally {
+    window.history.replaceState(null, "", "/");
+  }
 });
 
 test("zoom: a tap opens the image large, a second tap zooms, Esc closes", async () => {

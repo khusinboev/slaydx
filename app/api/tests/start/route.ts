@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * `POST /api/tests/start` `{ mode: "subject" | "all", subject?: code, key?: string }` -- starts an attempt: picks the
- * questions, charges `tests.price_per_attempt` and opens the timer in ONE transaction. The body carries no price.
+ * questions, charges the mode's price (`tests.price_subject` or `tests.price_all`) and opens the timer in ONE transaction. The body carries no price.
  * Idempotent: the same open attempt (or the same `key`) comes back with `alreadyOpen: true` and nothing is charged again.
  */
 export const POST = handler("tests/start", async (req) => {

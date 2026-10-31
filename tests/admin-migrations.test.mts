@@ -326,7 +326,10 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     assert.ok(await exists("video_ops"), "060 table created");
     assert.ok(await exists("paynet_routes"), "061 table created");
     assert.ok((await exists("ai_routes")) && (await exists("provider_calls")), "062 tables created");
+    assert.ok(await exists("test_analyses"), "063 table created");
     for (const f of [
+      // 063: «Test ishlash» AI analysis of the wrong answers -- test_analyses (shared per-question cache).
+      "063_test_analyses.sql",
       // 062: admin «Provayderlar» redesign -- ai_routes (routing slots) and provider_calls (free-provider request counters).
       "062_ai_routes.sql",
       // 061: Paynet shared with Bandlik.uz -- the paynet_routes table (docs/payments/PAYNET.md «Shared service»).
@@ -379,6 +382,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     ]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
+      if (f === "063_test_analyses.sql") assert.ok(!(await exists("test_analyses")), "063 rollback drops the table");
       if (f === "062_ai_routes.sql") assert.ok(!(await exists("ai_routes")) && !(await exists("provider_calls")), "062 rollback drops both tables");
       if (f === "061_paynet_routes.sql") assert.ok(!(await exists("paynet_routes")), "061 rollback drops the table");
       if (f === "060_video_ops.sql") assert.ok(!(await exists("video_ops")), "060 rollback drops the table");

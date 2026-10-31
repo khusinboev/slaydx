@@ -13,11 +13,13 @@ import {
   TESTS_MINUTES_SUBJECT_KEY,
   TESTS_PER_SUBJECT_KEY,
   TESTS_POINTS_KEY,
-  TESTS_PRICE_KEY,
+  TESTS_PRICE_ALL_KEY,
+  TESTS_PRICE_SUBJECT_KEY,
   isPastDeadline,
   letterOf,
   minutesFor,
   pickSubjectQuestions,
+  priceFor,
   scoreOf,
   type Rng,
   type TestMode,
@@ -29,7 +31,8 @@ import {
  *
  *  - An attempt = a frozen list of questions (BMB mechanics: one random variant per subject, N random questions,
  *    random order; «hammasi» = every subject), a SERVER deadline and a price charged at start in the SAME
- *    transaction (`chargeInTx`, reference `test:<attemptId>`).
+ *    transaction (`chargeInTx`, reference `test:<attemptId>`). The price depends on the mode: one subject
+ *    (`tests.price_subject`) or «hammasi» (`tests.price_all`); the AI analysis of the wrong answers is included.
  *  - THE ANSWER KEY NEVER LEAVES THE SERVER BEFORE THE ATTEMPT IS FINISHED. The active view is built by a query
  *    that does not select `answer` / `explanation`; the review (with the correct letter and the explanation) is
  *    built only for a finished attempt. Scoring happens here, from the stored choices.
@@ -48,12 +51,13 @@ export const testChargeRef = (attemptId: string): string => `test:${attemptId}`;
 /* ───────────────────────── settings ───────────────────────── */
 
 export const testsEnabled = (): Promise<boolean> => getSetting(TESTS_ENABLED_KEY);
-/** The only place the price is read (the client sends none). */
-export const testsPrice = (): Promise<number> => getSetting(TESTS_PRICE_KEY);
+/** Price of one attempt by mode: one subject (`tests.price_subject`) or «hammasi» (`tests.price_all`). */
+export type TestPrices = { subject: number; all: number };
 
 export type TestsConfig = {
   enabled: boolean;
-  price: number;
+  /** The only place the prices are read (the client sends none). */
+  prices: TestPrices;
   firstFree: boolean;
   perSubject: number;
   minutesSubject: number;
@@ -62,16 +66,17 @@ export type TestsConfig = {
 };
 
 export async function testsConfig(): Promise<TestsConfig> {
-  const [enabled, price, firstFree, perSubject, minutesSubject, minutesAll, pointsPerCorrect] = await Promise.all([
+  const [enabled, priceSubject, priceAll, firstFree, perSubject, minutesSubject, minutesAll, pointsPerCorrect] = await Promise.all([
     getSetting(TESTS_ENABLED_KEY),
-    getSetting(TESTS_PRICE_KEY),
+    getSetting(TESTS_PRICE_SUBJECT_KEY),
+    getSetting(TESTS_PRICE_ALL_KEY),
     getSetting(TESTS_FIRST_FREE_KEY),
     getSetting(TESTS_PER_SUBJECT_KEY),
     getSetting(TESTS_MINUTES_SUBJECT_KEY),
     getSetting(TESTS_MINUTES_ALL_KEY),
     getSetting(TESTS_POINTS_KEY),
   ]);
-  return { enabled, price, firstFree, perSubject, minutesSubject, minutesAll, pointsPerCorrect };
+  return { enabled, prices: { subject: priceSubject, all: priceAll }, firstFree, perSubject, minutesSubject, minutesAll, pointsPerCorrect };
 }
 
 /* ───────────────────────── rows and views ───────────────────────── */
@@ -259,7 +264,8 @@ export type SubjectInfo = { code: string; name: string; questions: number; minut
 
 export type Overview = {
   enabled: boolean;
-  price: number;
+  /** Price of the next attempt per mode (before the free first attempt). */
+  prices: TestPrices;
   /** True when THIS user's next attempt is free (`tests.first_attempt_free` and no attempt yet). */
   firstFree: boolean;
   pointsPerCorrect: number;
@@ -320,7 +326,7 @@ export async function overview(userId: string, now?: Date): Promise<Overview> {
   const prior = await queryOne<{ one: number }>("SELECT 1 AS one FROM test_attempts WHERE user_id = $1 LIMIT 1", [userId]);
   return {
     enabled: cfg.enabled,
-    price: cfg.price,
+    prices: cfg.prices,
     firstFree: cfg.firstFree && !prior,
     pointsPerCorrect: cfg.pointsPerCorrect,
     subjects,
@@ -405,7 +411,7 @@ export async function startAttempt(userId: string, input: StartInput, opts: Star
     }
 
     const prior = await client.query("SELECT 1 FROM test_attempts WHERE user_id = $1 LIMIT 1", [userId]);
-    const price = cfg.firstFree && !prior.rows[0] ? 0 : cfg.price;
+    const price = cfg.firstFree && !prior.rows[0] ? 0 : priceFor(input.mode, cfg.prices);
     const minutes = minutesFor(input.mode, cfg.minutesSubject, cfg.minutesAll);
     const deadline = new Date(now.getTime() + minutes * 60_000);
     const id = randomUUID();

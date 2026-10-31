@@ -253,7 +253,9 @@ test("GET: slots carry source, entries with their state, the fallback and the mo
   assert.deepEqual(judge.entries.map((e) => `${e.provider}:${e.model}:${e.usable}`), ["anthropic:claude-sonnet-5:false", "gemini:gemini-3.7-flash:true"]);
   const writer = purposeOf(r, "text").routes.find((x) => x.id === "llm.writer")!;
   assert.equal(writer.source, "default");
-  assert.equal((r.body.purposes as Purpose[]).flatMap((p) => p.routes).length, 7, "every slot is shown once");
+  assert.equal((r.body.purposes as Purpose[]).flatMap((p) => p.routes).length, 8, "every slot is shown once");
+  const analysis = purposeOf(r, "text").routes.find((x) => x.id === "tests.analysis")!;
+  assert.deepEqual([analysis.source, analysis.entries.map((e) => `${e.provider}:${e.model}`)], ["default", ["gemini:gemini-3.1-pro"]], "the test-analysis slot defaults to Gemini 3.1 Pro");
   const tts = purposeOf(r, "tts").routes[0];
   assert.deepEqual(tts.entries.map((e) => e.provider), ["azure", "aisha", "gemini"]);
 });

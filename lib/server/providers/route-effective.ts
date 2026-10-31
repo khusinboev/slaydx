@@ -13,6 +13,8 @@ import type { RouteEntry, RouteId } from "./routes";
 
 export const DEFAULT_GEMINI_MODEL = "gemini-3.7-flash";
 export const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-lite-image";
+/** «Test ishlash» wrong-answer analysis (owner 2026-10-31): the strongest priced Gemini, it must read a math image. */
+export const DEFAULT_TESTS_ANALYSIS_MODEL = "gemini-3.1-pro";
 /** Voice providers in the order the standard chain tries them (`tts/types.ts` tables list Azure, then Aisha, then Gemini). */
 export const DEFAULT_TTS_ORDER = ["azure", "aisha", "gemini"] as const;
 
@@ -48,6 +50,9 @@ export function effectiveRoute(id: RouteId, env: NodeJS.ProcessEnv = process.env
         ? { source: "env", entries: [{ provider: "gemini", model: fromEnv }] }
         : { source: "default", entries: [{ provider: "gemini", model: DEFAULT_GEMINI_IMAGE_MODEL }] };
     }
+    case "tests.analysis":
+      // No env variable: the slot is new, the admin's choice or the default.
+      return { source: "default", entries: [{ provider: "gemini", model: DEFAULT_TESTS_ANALYSIS_MODEL }] };
     case "tts.order":
       return { source: "default", entries: DEFAULT_TTS_ORDER.map((provider) => ({ provider, model: null })) };
     default: {
@@ -66,6 +71,11 @@ export function geminiTextModel(env: NodeJS.ProcessEnv = process.env): string {
 /** The Gemini image model (the `image.gemini` slot). */
 export function geminiImageModelName(env: NodeJS.ProcessEnv = process.env): string {
   return modelOf(effectiveRoute("image.gemini", env).entries) ?? DEFAULT_GEMINI_IMAGE_MODEL;
+}
+
+/** The Gemini model of the «Test ishlash» wrong-answer analysis (the `tests.analysis` slot). */
+export function testsAnalysisModel(env: NodeJS.ProcessEnv = process.env): string {
+  return modelOf(effectiveRoute("tests.analysis", env).entries) ?? DEFAULT_TESTS_ANALYSIS_MODEL;
 }
 
 /**

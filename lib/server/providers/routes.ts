@@ -8,7 +8,8 @@ import { isProviderId, type ProviderId } from "./registry";
  *
  *   shape  chain  an ordered list of provider:model (the LLM roles: the first that answers wins, the next is the
  *                 fallback);
- *          model  exactly one model of a fixed provider (the default Gemini text model, the Gemini image model);
+ *          model  exactly one model of a fixed provider (the default Gemini text model, the test-analysis model, the
+ *                 Gemini image model);
  *          order  an ordered list of providers, no models (text-to-speech: which voice provider runs first).
  *
  * A slot WITHOUT a stored row keeps today's behaviour: the `LLM_*` / `GEMINI_*` env value, else the built-in
@@ -18,7 +19,7 @@ import { isProviderId, type ProviderId } from "./registry";
  * every cost report show a silent $0, so the admin cannot select it. Adding a priced model makes it selectable.
  */
 
-export const ROUTE_IDS = ["llm.model", "llm.writer", "llm.researcher", "llm.judge", "llm.fast", "image.gemini", "tts.order"] as const;
+export const ROUTE_IDS = ["llm.model", "llm.writer", "llm.researcher", "llm.judge", "llm.fast", "tests.analysis", "image.gemini", "tts.order"] as const;
 export type RouteId = (typeof ROUTE_IDS)[number];
 
 export type RouteShape = "chain" | "model" | "order";
@@ -40,6 +41,8 @@ export const ROUTE_SPECS: Readonly<Record<RouteId, RouteSpec>> = {
   "llm.researcher": { id: "llm.researcher", shape: "chain", providers: ["gemini", "anthropic"], max: 4 },
   "llm.judge": { id: "llm.judge", shape: "chain", providers: ["gemini", "anthropic"], max: 4 },
   "llm.fast": { id: "llm.fast", shape: "chain", providers: ["gemini", "anthropic"], max: 4 },
+  /** «Test ishlash»: the multimodal model that explains the wrong answers (it reads the question image). */
+  "tests.analysis": { id: "tests.analysis", shape: "model", providers: ["gemini"], max: 1 },
   "image.gemini": { id: "image.gemini", shape: "model", providers: ["gemini"], max: 1 },
   "tts.order": { id: "tts.order", shape: "order", providers: ["azure", "aisha", "gemini"], max: 3 },
 };

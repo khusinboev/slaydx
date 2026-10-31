@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, ClipboardCheck, Loader2, Timer, XCircle, ZoomIn } from "lucide-react";
+import { CheckCircle2, ClipboardCheck, Loader2, RotateCcw, Sparkles, Timer, XCircle, ZoomIn } from "lucide-react";
 import { Card } from "@/components/forms/compact";
 import { ApiError, request } from "@/lib/api-client";
 import { formatPoints } from "@/lib/referral";
@@ -11,7 +11,9 @@ import { formatPoints } from "@/lib/referral";
  *   - the list: subjects + «Hammasi», the server's price, «Boshlash», the open attempt and the history;
  *   - the running attempt: one question at a time (image or text), A-D buttons, progress, a timer that follows the
  *     SERVER deadline (clock skew corrected), «Keyingi» / «Tugatish»;
- *   - the result: score, per-question correctness, the correct letter and the explanation.
+ *   - the result: score, per-question correctness, the correct letter and the explanation; then the AI analysis of
+ *     every wrong / unanswered question is fetched separately (`.../analysis`, polled while pending), so the result
+ *     never waits for the model: a skeleton per question, the text when ready, «Qayta urinish» when it failed.
  * The page never holds an answer key while the attempt runs -- the API does not send one. The price and the time
  * limits come from the server only; the start request carries no price.
  */
@@ -20,7 +22,8 @@ type Subject = { code: string; name: string; questions: number; minutes: number;
 type HistoryItem = { id: string; mode: "subject" | "all"; subject: string | null; status: "active" | "finished"; total: number; correct?: number; score?: number; startedAt: string };
 type Overview = {
   enabled: boolean;
-  price: number;
+  /** The server's price per mode (one subject / «hammasi»); the start request carries none. */
+  prices: { subject: number; all: number };
   firstFree: boolean;
   pointsPerCorrect: number;
   subjects: Subject[];
@@ -71,6 +74,7 @@ const clock = (ms: number): string => {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 };
 const msg = (e: unknown): string => (e instanceof ApiError || e instanceof Error ? e.message : "Xatolik");
+const priceText = (n: number): string => (n === 0 ? "Bepul" : `${formatPoints(n)} so‘m`);
 const label = (h: { mode: "subject" | "all"; subject: string | null }): string => (h.mode === "all" ? "Hammasi" : (h.subject ?? "Fan"));
 
 /** A question image: lazy, and a tap opens it large (a second tap zooms to full width, scrolling inside). */
@@ -264,7 +268,106 @@ function Runner({ attempt, onDone, onExit }: { attempt: Active; onDone: (f: Fini
   );
 }
 
+type AnalysisItem = {
+  questionId: number;
+  status: "pending" | "ready" | "failed";
+  correctLetter: string;
+  chosenLetter: string | null;
+  explanation: string | null;
+  chosenWhy: string | null;
+};
+type AnalysisView = { items: AnalysisItem[]; done: boolean };
+const POLL_MS = 3000;
+/** ~3 minutes of polling, then the pending ones are shown as «not ready» with a retry. */
+const POLL_MAX = 60;
+
+/**
+ * The AI analyses of a finished attempt, by question id. Polls while anything is pending; a failed request marks
+ * every analysis as failed (the page itself stays). `retry()` asks the server to restart the failed ones.
+ */
+function useAnalyses(attemptId: string, wanted: boolean) {
+  const [items, setItems] = useState<Map<number, AnalysisItem>>(new Map());
+  const [failedAll, setFailedAll] = useState(false);
+  const [round, setRound] = useState(0);
+  const retryNext = useRef(false);
+  useEffect(() => {
+    if (!wanted) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let polls = 0;
+    const tick = async () => {
+      const retry = retryNext.current;
+      retryNext.current = false;
+      try {
+        const v = await request<AnalysisView>(`/api/tests/attempts/${attemptId}/analysis${retry ? "?retry=1" : ""}`);
+        if (!alive) return;
+        setFailedAll(false);
+        const done = v.done || ++polls >= POLL_MAX;
+        setItems(new Map(v.items.map((i) => [i.questionId, done && i.status === "pending" ? { ...i, status: "failed" } : i])));
+        if (!done) timer = setTimeout(() => void tick(), POLL_MS);
+      } catch {
+        if (alive) setFailedAll(true);
+      }
+    };
+    void tick();
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [attemptId, wanted, round]);
+  const retry = useCallback(() => {
+    retryNext.current = true;
+    setFailedAll(false);
+    setItems((m) => new Map([...m].map(([k, v]) => [k, v.status === "failed" ? { ...v, status: "pending" as const } : v])));
+    setRound((n) => n + 1);
+  }, []);
+  return { items, failedAll, retry };
+}
+
+function Analysis({ item, failedAll, onRetry }: { item: AnalysisItem | undefined; failedAll: boolean; onRetry: () => void }) {
+  const status = failedAll ? "failed" : (item?.status ?? "pending");
+  if (status === "pending") {
+    return (
+      <div data-tests-analysis="pending" role="status" aria-label="AI tahlil tayyorlanmoqda" className="bg-muted mt-2 flex flex-col gap-2 rounded-xl p-2.5">
+        <span className="text-muted-foreground inline-flex items-center gap-1.5 text-[13px] font-semibold">
+          <Sparkles className="size-4" aria-hidden /> AI tahlil tayyorlanmoqda…
+        </span>
+        <span className="bg-foreground/10 h-3 w-11/12 animate-pulse rounded" />
+        <span className="bg-foreground/10 h-3 w-4/5 animate-pulse rounded" />
+        <span className="bg-foreground/10 h-3 w-2/3 animate-pulse rounded" />
+      </div>
+    );
+  }
+  if (status === "failed" || !item) {
+    return (
+      <div data-tests-analysis="failed" className="bg-muted mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl p-2.5 text-[14px]">
+        <span className="text-muted-foreground">Tahlil hozircha tayyor emas.</span>
+        <button type="button" data-tests-analysis-retry onClick={onRetry} className="border-input inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-3 text-[14px] font-semibold">
+          <RotateCcw className="size-4" aria-hidden /> Qayta urinish
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div data-tests-analysis="ready" className="mt-2 flex flex-col gap-2 rounded-xl border border-violet-300/60 bg-violet-50 p-2.5 text-[14.5px] leading-relaxed dark:border-violet-400/30 dark:bg-violet-950/30">
+      <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-violet-800 dark:text-violet-300">
+        <Sparkles className="size-4" aria-hidden /> AI tahlili
+      </span>
+      <p data-tests-analysis-correct className="whitespace-pre-wrap">
+        <b>Nega {item.correctLetter} to‘g‘ri:</b> {item.explanation}
+      </p>
+      {item.chosenLetter && item.chosenWhy ? (
+        <p data-tests-analysis-chosen className="whitespace-pre-wrap">
+          <b>Nega {item.chosenLetter} xato:</b> {item.chosenWhy}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function Result({ r, onBack }: { r: Finished; onBack: () => void }) {
+  const anyWrong = r.review.some((it) => !it.isCorrect);
+  const analyses = useAnalyses(r.id, anyWrong);
   return (
     <div data-tests-result className="mx-auto w-full max-w-xl px-4 pb-8">
       <Card title={r.mode === "all" ? "Natija — Hammasi" : `Natija — ${r.subject ?? ""}`}>
@@ -330,6 +433,7 @@ function Result({ r, onBack }: { r: Finished; onBack: () => void }) {
                   {it.explanation}
                 </p>
               ) : null}
+              {it.isCorrect ? null : <Analysis item={analyses.items.get(it.id)} failedAll={analyses.failedAll} onRetry={analyses.retry} />}
             </li>
           ))}
         </ol>
@@ -358,6 +462,14 @@ export function TestsPage() {
     );
   }, []);
   useEffect(load, [load]);
+  // `?attempt=<id>` (the bot's «Oxirgi natija» button) opens that attempt's result once.
+  const deepLinked = useRef(false);
+  useEffect(() => {
+    if (deepLinked.current) return;
+    deepLinked.current = true;
+    const id = new URLSearchParams(window.location.search).get("attempt");
+    if (id && /^[0-9a-f-]{36}$/i.test(id)) void openAttempt(id);
+  }, []);
 
   const openAttempt = async (id: string) => {
     setBusy(true);
@@ -452,9 +564,7 @@ export function TestsPage() {
         <Card
           title="Testni tanlang"
           aside={
-            <span data-tests-price>
-              {ov.firstFree ? "Birinchi urinish bepul" : ov.price === 0 ? "Bepul" : `${formatPoints(ov.price)} so‘m`}
-            </span>
+            <span data-tests-price>{ov.firstFree ? "Birinchi urinish bepul" : priceText(pick === "all" ? ov.prices.all : ov.prices.subject)}</span>
           }
         >
           {options.length === 0 ? (
@@ -477,13 +587,13 @@ export function TestsPage() {
                   >
                     <span className="font-medium">{o.name}</span>
                     <span className="text-muted-foreground block text-[13px]">
-                      {o.questions} ta savol · {o.minutes} daqiqa
+                      {o.questions} ta savol · {o.minutes} daqiqa · <span data-tests-option-price>{priceText(o.code === "all" ? ov.prices.all : ov.prices.subject)}</span>
                     </span>
                   </button>
                 ))}
               </div>
               <p className="text-muted-foreground mt-3 text-[13.5px]" data-tests-rules>
-                Har to‘g‘ri javob uchun {num(ov.pointsPerCorrect)} ball, noto‘g‘ri javob ball ayirmaydi. To‘g‘ri javoblar test tugagach ko‘rsatiladi.
+                Har to‘g‘ri javob uchun {num(ov.pointsPerCorrect)} ball, noto‘g‘ri javob ball ayirmaydi. Test tugagach to‘g‘ri javoblar va har xato javobning AI tahlili ko‘rsatiladi (narx ichida).
               </p>
               <button
                 type="button"

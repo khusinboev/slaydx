@@ -71,7 +71,8 @@ export const TAB_DEFS: readonly TabDef[] = [
     label: "Testlar",
     blurb: "Test ishlash: narx, savollar soni, vaqt va ball. Yoqish — «Funksiyalar» tabida.",
     keys: [
-      "tests.price_per_attempt",
+      "tests.price_subject",
+      "tests.price_all",
       "tests.first_attempt_free",
       "tests.questions_per_subject",
       "tests.minutes_per_subject",

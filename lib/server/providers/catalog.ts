@@ -173,13 +173,13 @@ export const PURPOSES: readonly Purpose[] = [
   {
     id: "text",
     title: "Matn yozish va baholash",
-    summary: "Slayd, kurs ishi, referat, insho, maqola, tarjima, rezyume, AI chat, domla savollari va hujjat tahriri — barcha matn shu yerdan keladi.",
+    summary: "Slayd, kurs ishi, referat, insho, maqola, tarjima, rezyume, AI chat, domla savollari, test xatolari tahlili va hujjat tahriri — barcha matn shu yerdan keladi.",
     need: "required",
     minimum: "Kamida bitta matn provayderi (Gemini) ishlashi shart. Ikkinchisi (Claude) — baholovchi va zaxira sifatida tavsiya etiladi.",
     providers: ["gemini", "anthropic"],
     premium: [],
     requires: "gemini",
-    routes: ["llm.model", "llm.writer", "llm.researcher", "llm.judge", "llm.fast"],
+    routes: ["llm.model", "llm.writer", "llm.researcher", "llm.judge", "llm.fast", "tests.analysis"],
     fallback: true,
     setting: null,
   },
@@ -336,6 +336,10 @@ export const ROUTE_INFO: Readonly<Record<RouteId, { title: string; help: string 
   "llm.fast": {
     title: "Tez yordamchi",
     help: "Kichik tezkor vazifalar: AI chat, lex.uz va manba so'rovlarini tayyorlash.",
+  },
+  "tests.analysis": {
+    title: "Test tahlili modeli",
+    help: "«Test ishlash» natijasida har xato javobni tushuntiradi: savol rasmini o'qib, to'g'ri javob nega to'g'riligini va tanlangan javob nega xatoligini yozadi. Har savol bir marta tahlil qilinadi va hamma uchun saqlanadi. Rasmni o'qiy oladigan kuchli model kerak (standart: Gemini 3.1 Pro).",
   },
   "image.gemini": {
     title: "Gemini rasm modeli",

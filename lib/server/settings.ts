@@ -30,7 +30,8 @@ import {
   TESTS_PER_SUBJECT_MAX,
   TESTS_POINTS_DEFAULT,
   TESTS_POINTS_MAX,
-  TESTS_PRICE_DEFAULT,
+  TESTS_PRICE_ALL_DEFAULT,
+  TESTS_PRICE_SUBJECT_DEFAULT,
   TESTS_PRICE_MAX,
 } from "../tests/rules";
 
@@ -87,7 +88,8 @@ export type SettingValues = {
   "chat.enabled": boolean;
   "chat.price_per_message": number;
   "tests.enabled": boolean;
-  "tests.price_per_attempt": number;
+  "tests.price_subject": number;
+  "tests.price_all": number;
   "tests.first_attempt_free": boolean;
   "tests.questions_per_subject": number;
   "tests.minutes_per_subject": number;
@@ -595,17 +597,29 @@ const CATALOG: Catalog = {
     validate: boolValidator,
     envDefault: () => TESTS_ENABLED_DEFAULT,
   },
-  "tests.price_per_attempt": {
-    key: "tests.price_per_attempt",
+  "tests.price_subject": {
+    key: "tests.price_subject",
     group: TESTS_GROUP,
-    label: "Bitta urinish narxi (so‘m)",
+    label: "Bitta fan narxi (so‘m)",
     description:
-      "Urinish boshlanganda BIR marta yechiladi (bonus so‘m ham ishlatiladi); bitta fan ham, «Hammasi» ham shu narxda. 0 — bepul. Faqat shu qiymat ishlatiladi (klient narx yubormaydi).",
+      "Bitta fan bo‘yicha urinish boshlanganda BIR marta yechiladi (bonus so‘m ham ishlatiladi). Xato javoblarning AI tahlili shu narx ichida. 0 — bepul. Klient narx yubormaydi.",
     type: "int",
     min: 0,
     max: TESTS_PRICE_MAX,
     validate: intValidator(0, TESTS_PRICE_MAX),
-    envDefault: () => TESTS_PRICE_DEFAULT,
+    envDefault: () => TESTS_PRICE_SUBJECT_DEFAULT,
+  },
+  "tests.price_all": {
+    key: "tests.price_all",
+    group: TESTS_GROUP,
+    label: "«Hammasi» narxi (so‘m)",
+    description:
+      "Barcha fanlar birga bo‘lgan urinish boshlanganda BIR marta yechiladi (bonus so‘m ham ishlatiladi). Xato javoblarning AI tahlili shu narx ichida. 0 — bepul.",
+    type: "int",
+    min: 0,
+    max: TESTS_PRICE_MAX,
+    validate: intValidator(0, TESTS_PRICE_MAX),
+    envDefault: () => TESTS_PRICE_ALL_DEFAULT,
   },
   "tests.first_attempt_free": {
     key: "tests.first_attempt_free",

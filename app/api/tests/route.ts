@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * `GET /api/tests` -- everything the «Test ishlash» page shows before an attempt: the kill switch, the price (the
+ * `GET /api/tests` -- everything the «Test ishlash» page shows before an attempt: the kill switch, the price per mode (the
  * server's only price), the subjects, the open attempt and the history. Charges nothing, reveals no answers.
  */
 export const GET = handler("tests/get", async (req) => {
