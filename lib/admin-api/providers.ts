@@ -16,6 +16,36 @@ import { adminGet, adminSend, type AdminCallOptions } from "./core";
 export type ProviderKind = "llm" | "image" | "tts" | "video" | "research";
 export type ProviderKeySource = "db" | "env" | "none";
 
+export type ProviderBilling = "paid" | "free" | "free-tier";
+export type ProviderNeed = "required" | "recommended" | "optional";
+export type PurposeId = "text" | "image" | "stock" | "tts" | "stt" | "search" | "sources" | "video";
+export type Verdict = "ok" | "single" | "missing" | "off";
+export type RouteId = "llm.model" | "llm.writer" | "llm.researcher" | "llm.judge" | "llm.fast" | "image.gemini" | "tts.order";
+export type RouteShape = "chain" | "model" | "order";
+export type RouteSource = "db" | "env" | "default";
+
+export type UsageTotals = {
+  calls: number;
+  /** Failed requests; `null` when the source does not track failures (paid providers). */
+  errors: number | null;
+  inputTokens: number;
+  outputTokens: number;
+  units: number;
+  usd: number;
+};
+export type KindUsage = { kind: string; calls: number; units: number; inputTokens: number; outputTokens: number; usd: number };
+export type ModelUsage = { model: string; kind: string; calls: number; usd: number };
+export type DayUsage = { day: string; calls: number; usd: number };
+export type ProviderUsage = {
+  today: UsageTotals;
+  d7: UsageTotals;
+  d30: UsageTotals;
+  lastDay: string | null;
+  kinds: KindUsage[];
+  models: ModelUsage[];
+  daily: DayUsage[];
+};
+
 export type ProviderItem = {
   id: string;
   label: string;
@@ -37,10 +67,72 @@ export type ProviderItem = {
   unreadable: boolean;
   updatedBy: string | null;
   updatedAt: string | null;
+  /** Can serve requests right now: switched on and a key resolves. */
+  usable: boolean;
+  billing: ProviderBilling;
+  priceNote: string;
+  /** What the product uses it for, one sentence. */
+  role: string;
+  need: ProviderNeed;
+  keyUrl: string | null;
+  purposes: PurposeId[];
+  /** A circuit breaker of this provider is open: requests are skipped until `openUntil`. */
+  breaker: { state: "open" | "half-open"; openUntil: string | null } | null;
+  usage: ProviderUsage;
+};
+
+export type RouteEntry = { provider: string; model: string | null };
+export type RouteEntryState = RouteEntry & { label: string; usable: boolean };
+export type ModelOption = { provider: string; model: string; inUsdPerM: number | null; outUsdPerM: number | null; perImageUsd: number | null };
+
+export type RouteItem = {
+  id: RouteId;
+  title: string;
+  help: string;
+  shape: RouteShape;
+  max: number;
+  providers: { id: string; label: string }[];
+  models: ModelOption[];
+  /** `db` = the admin's choice, `env` = the server's environment variable, `default` = built in. */
+  source: RouteSource;
+  entries: RouteEntryState[];
+  /** What «Standartga qaytarish» restores. */
+  fallbackEntries: RouteEntryState[];
+  updatedBy: string | null;
+  updatedAt: string | null;
+};
+
+export type PurposeItem = {
+  id: PurposeId;
+  title: string;
+  summary: string;
+  need: ProviderNeed;
+  minimum: string;
+  fallback: boolean;
+  providerIds: string[];
+  premiumIds: string[];
+  verdict: Verdict;
+  headline: string;
+  detail: string;
+  setting: { key: string; label: string; enabled: boolean } | null;
+  routes: RouteItem[];
+};
+
+export type SystemBody = {
+  processes: { process: string; role: "web" | "worker"; lastSeenAt: string; stale: boolean }[];
+  breakers: { process: string; name: string; state: "closed" | "open" | "half-open"; openUntil: string | null; failures: number; stale: boolean }[];
+  limiters: { process: string; name: string; active: number; waiting: number; max: number; stale: boolean }[];
 };
 
 export type ProvidersResponse = {
   items: ProviderItem[];
+  purposes: PurposeItem[];
+  system: SystemBody;
+  /** 30-day spend of providers that are no longer offered (kept so history stays in the totals). */
+  otherUsage: { provider: string; calls: number; usd: number }[];
+  total30: { calls: number; usd: number };
+  soumPerUsd: number;
+  generatedAt: string;
   /** Keys can be stored: a sealing key is configured on the server. */
   canStoreKeys: boolean;
   /** `provider` = PROVIDER_KEYS_KEY, `admin` = the ADMIN_TOTP_KEY fallback, `none`. */
@@ -77,4 +169,14 @@ export function deleteProviderKey(id: string, reason: string, opts: AdminCallOpt
 /** «Tekshirish»: one cheap live call with the key in use. */
 export function testProvider(id: string, opts: AdminCallOptions = {}): Promise<ProviderTestResult> {
   return adminSend<ProviderTestResult>("POST", pathOf(id, "test"), {}, opts);
+}
+
+/** Stores the admin's choice for a routing slot (step-up and a reason). */
+export function setRoute(id: RouteId, entries: RouteEntry[], reason: string, opts: AdminCallOptions = {}): Promise<{ route: RouteItem }> {
+  return adminSend<{ route: RouteItem }>("PUT", `/api/admin/providers/routes/${encodeURIComponent(id)}`, { entries, reason }, opts);
+}
+
+/** Removes the admin's choice: the slot goes back to the server's environment value or the built-in default (step-up and a reason). */
+export function resetRoute(id: RouteId, reason: string, opts: AdminCallOptions = {}): Promise<{ route: RouteItem }> {
+  return adminSend<{ route: RouteItem }>("DELETE", `/api/admin/providers/routes/${encodeURIComponent(id)}`, { reason }, opts);
 }

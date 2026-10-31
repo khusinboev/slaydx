@@ -15,6 +15,7 @@
  * esa host saqlagichini ochadi (quyidagi `QUOTA_*` izohi).
  */
 import { breakerFor } from "../llm/breaker";
+import { providerOfUrl, recordProviderCall } from "../provider-calls";
 import { backoffMs, parseRetryAfter } from "../llm/retry";
 import { readCapped } from "../safe-fetch";
 
@@ -113,6 +114,7 @@ async function request<T>(
   const retries = opts.retries ?? RESEARCH_RETRIES;
   const base = opts.retryBaseMs ?? 500;
   const breaker = hostBreaker(url);
+  const counted = providerOfUrl(url);
   const left = () => (opts.deadline === undefined ? Number.POSITIVE_INFINITY : opts.deadline - Date.now());
   let last: { ok: false; status: number; error: string } = { ok: false, status: 0, error: "no attempt" };
   let wait = 0;
@@ -131,6 +133,8 @@ async function request<T>(
         headers: { Accept: accept, "User-Agent": userAgent(), ...(opts.headers ?? {}) },
         signal: combineSignals(opts.signal, Math.min(opts.timeoutMs ?? RESEARCH_TIMEOUT_MS, left())),
       });
+      // Usage counter of the free research APIs (admin «Provayderlar»): one count per HTTP request actually made.
+      if (counted) recordProviderCall(counted, res.ok);
       if (res.ok) {
         breaker.success();
         try {
@@ -157,6 +161,7 @@ async function request<T>(
       if (!retryable) return last;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      if (counted) recordProviderCall(counted, false);
       last = { ok: false, status: 0, error: msg };
       wait = backoffMs(0, base * 3 ** attempt);
       // Timeout — qayta urinilmaydi (byudjet ketgan); tarmoq xatosi — uriniladi.

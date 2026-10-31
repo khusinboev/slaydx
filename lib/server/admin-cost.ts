@@ -433,6 +433,41 @@ export async function spendByProviderModel(db: Queryable, range: SpendRange): Pr
   }));
 }
 
+export type SpendPartDayRow = SpendTotals & {
+  /** Tashkent day, `YYYY-MM-DD`. */
+  day: string;
+  provider: string;
+  kind: string;
+  model: string;
+  units: number;
+};
+
+/**
+ * Spend per Tashkent day x provider x kind x model, from the same exploded parts as the other part groupings
+ * (so its sums equal `spendTotals`). Small by construction (a handful of providers and models per day): the
+ * admin «Provayderlar» page folds it into today / 7 / 30 day windows and a daily series.
+ */
+export async function spendByDayPart(db: Queryable, range: SpendRange): Promise<SpendPartDayRow[]> {
+  const spend = spendRowsSql(range);
+  const res = await db.query<SumRow & { day: string; provider: string; kind: string; model: string; units: string | number | null }>(
+    `WITH spend AS (${spend.sql})
+      SELECT to_char((s.at AT TIME ZONE '${TZ}')::date, 'YYYY-MM-DD') AS day,
+             ${PART_KEYS.provider} AS provider, ${PART_KEYS.kind} AS kind, ${PART_KEYS.model} AS model, ${PART_AGGREGATES}
+        ${PARTS_FROM}
+       GROUP BY 1, 2, 3, 4
+       ORDER BY 1, 2, 3, 4`,
+    spend.params,
+  );
+  return res.rows.map((r) => ({
+    day: String(r.day),
+    provider: String(r.provider),
+    kind: String(r.kind),
+    model: String(r.model),
+    ...toTotals(r),
+    units: n(r.units),
+  }));
+}
+
 export type ToolKindSpendRow = { toolId: string; kind: string; usd: number; unpricedCalls: number };
 
 /**
