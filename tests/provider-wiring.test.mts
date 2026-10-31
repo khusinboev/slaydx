@@ -149,5 +149,6 @@ test("stock providers count every real request, and only those", async () => {
   seen.length = 0;
   globalThis.fetch = (async () => ({ ok: true, status: 200, statusText: "ok", json: async () => Promise.reject(new Error("bad json")) }) as never) as typeof fetch;
   await requestPexelsImage(ASK);
-  assert.deepEqual(seen, [["pexels", true]], "a broken body after a good response is NOT counted twice");
+  await requestPixabayImage(ASK);
+  assert.deepEqual(seen, [["pexels", true], ["pixabay", true]], "a broken body after a good response is NOT counted twice");
 });
