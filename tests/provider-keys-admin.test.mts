@@ -238,7 +238,7 @@ test("GET: every registry provider with the exact shape; no key anywhere", { ski
     assert.deepEqual(
       Object.keys(i).sort(),
       [
-        "billing", "breaker", "enabled", "envPresent", "hasDbKey", "id", "implemented", "keyFormat", "keyHint", "keySource", "keyUrl", "kinds", "label", "need",
+        "billing", "breaker", "enabled", "envPresent", "hasDbKey", "id", "implemented", "keyFormat", "keyHint", "keySource", "keyUrl", "keyless", "kinds", "label", "need",
         "priceNote", "purposes", "role", "testable", "unreadable", "updatedAt", "updatedBy", "usable", "usage",
       ],
     );
