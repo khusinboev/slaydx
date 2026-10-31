@@ -13,8 +13,48 @@ export const SOURCE_LABEL: Record<SettingSource, string> = {
 /** `{ value, label }` of the tool registry, passed down by the server page. */
 export type ToolOption = { value: string; label: string };
 
+const SOUM_KEYS = new Set([
+  "finance.soum_per_usd",
+  "admin.wallet_confirm_threshold",
+  "bonus.rating_points",
+  "daily_quiz.reward",
+  "daily_quiz.monthly_cap",
+  "daily_quiz.daily_budget",
+  "domla.price",
+  "chat.price_per_message",
+  "tests.price_per_attempt",
+]);
+const PERCENT_KEYS = new Set(["payment_bonus_percent", "ambassador.percent", "pricing.payment_fee_percent"]);
+const MINUTE_KEYS = new Set(["tests.minutes_per_subject", "tests.minutes_all"]);
+const COUNT_KEYS = new Set(["queue.user_max_inflight", "queue.total_slots", "video.max_concurrent", "tests.questions_per_subject", "convert.daily_limit"]);
+
+/** Seconds as «15 daqiqa» / «3 daqiqa 20 soniya» / «45 soniya». */
+export function fmtDuration(sec: number): string {
+  if (sec < 60) return `${fmtNumber(sec)} soniya`;
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec - m * 60);
+  return s ? `${fmtNumber(m)} daqiqa ${s} soniya` : `${fmtNumber(m)} daqiqa`;
+}
+
+/** The number of a setting with its unit (so'm, %, daqiqa, ...) chosen by key. */
+function formatNumber(item: Pick<SettingItem, "type"> & { key?: string }, value: number): string {
+  const key = item.key ?? "";
+  const n = fmtNumber(value, { digits: item.type === "number" ? 2 : 0 });
+  if (SOUM_KEYS.has(key)) return `${n}\u00a0so'm`;
+  if (PERCENT_KEYS.has(key)) return `${n}%`;
+  if (MINUTE_KEYS.has(key)) return `${n} daqiqa`;
+  if (COUNT_KEYS.has(key)) return `${n} ta`;
+  if (key === "queue.max_wait_sec") return fmtDuration(value);
+  if (key === "queue.mean_service_sec") return value === 0 ? "Avtomatik" : fmtDuration(value);
+  if (key === "daily_quiz.hour") return `${String(value).padStart(2, "0")}:00`;
+  if (key === "pricing.target_markup") return `×${n}`;
+  if (key === "tests.points_per_correct") return `${n} ball`;
+  if (key.startsWith("free_llm.daily.")) return `${n} birlik`;
+  return n;
+}
+
 /** Display text of a value. Tool ids not in the registry are shown by their id. */
-export function formatValue(item: Pick<SettingItem, "type">, value: SettingValue, tools: ReadonlyArray<ToolOption>): string {
+export function formatValue(item: Pick<SettingItem, "type"> & { key?: string }, value: SettingValue, tools: ReadonlyArray<ToolOption>): string {
   if (item.type === "bool") return value ? "Yoqilgan" : "O'chiq";
   if (item.type === "text") return typeof value === "string" && value.trim() ? value : "Kiritilmagan";
   if (item.type === "tool_ids") {
@@ -23,7 +63,7 @@ export function formatValue(item: Pick<SettingItem, "type">, value: SettingValue
     const label = new Map(tools.map((t) => [t.value, t.label]));
     return ids.map((id) => label.get(id) ?? id).join(", ");
   }
-  return typeof value === "number" ? fmtNumber(value, { digits: item.type === "number" ? 2 : 0 }) : "—";
+  return typeof value === "number" ? formatNumber(item, value) : "—";
 }
 
 export type NumberCheck = { ok: true; value: number } | { ok: false; error: string };
@@ -64,13 +104,30 @@ export function noteFor(item: SettingItem, all: ReadonlyArray<SettingItem>): str
   return req && req.type === "text" && !req.value.trim() ? OFERTA_INACTIVE_NOTE : undefined;
 }
 
-/** Groups in order of first appearance (the catalog order decides the card order). */
-export function groupItems(items: ReadonlyArray<SettingItem>): Array<{ group: string; items: SettingItem[] }> {
-  const out: Array<{ group: string; items: SettingItem[] }> = [];
-  for (const item of items) {
-    const found = out.find((g) => g.group === item.group);
-    if (found) found.items.push(item);
-    else out.push({ group: item.group, items: [item] });
+/** A warning on the overview tab; `tab` is where to fix it. */
+export type SettingsWarning = { id: string; text: string; tab: string };
+
+/** Things the owner should know about, computed from the loaded items. */
+export function warningsFor(items: ReadonlyArray<SettingItem>): SettingsWarning[] {
+  const get = (key: string) => items.find((i) => i.key === key);
+  const out: SettingsWarning[] = [];
+  const oferta = get("oferta.gate_enabled");
+  if (oferta && noteFor(oferta, items)) {
+    out.push({ id: "oferta", text: "Oferta tekshiruvi yoqilgan, lekin rekvizitlar bo'sh — amalda ishlamayapti. Rekvizitlarni kiriting.", tab: "oferta" });
   }
+  const fee = get("pricing.payment_fee_percent");
+  if (fee && fee.type === "number" && fee.value === 0) {
+    out.push({ id: "fee", text: "To'lov komissiyasi 0% — hisobotlardagi marja haqiqatdagidan yuqori ko'rinadi.", tab: "pricing" });
+  }
+  const paused = get("generation.paused");
+  if (paused && paused.value === true) out.push({ id: "paused", text: "Barcha generatsiyalar to'xtatilgan — yangi ish qabul qilinmayapti.", tab: "queue" });
+  const tools = get("generation.paused_tools");
+  if (tools && tools.type === "tool_ids" && tools.value.length > 0) {
+    out.push({ id: "paused_tools", text: `${tools.value.length} ta vosita uchun generatsiya to'xtatilgan.`, tab: "queue" });
+  }
+  const free = get("free_llm.disabled");
+  if (free && free.value === true) out.push({ id: "free", text: "Bepul AI o'chirilgan — reja, UDK va «Tuzatish» ishlamayapti.", tab: "free" });
+  const convert = get("convert.disabled");
+  if (convert && convert.value === true) out.push({ id: "convert", text: "Fayl konvertatsiyasi o'chirilgan.", tab: "queue" });
   return out;
 }
