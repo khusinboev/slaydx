@@ -108,7 +108,7 @@ async function runAsk(job: DomlaJob, s: DomlaSession & { chatId: string | null }
   await ctx.deps.telegram.sendAction(ctx.chatId, "record_voice");
   let audio = null;
   try {
-    audio = await ctx.deps.synthesize(spokenQuestion(idx, q, { greet: first, resume: resend }));
+    audio = await ctx.deps.synthesize(spokenQuestion(idx, q, { greet: first, resume: resend }), { generationId: s.sourceGenerationId, scope: `domla:${job.id}` });
   } catch (e) {
     // The voice is an extra: the question still goes out as text.
     log("warn", "[domla] ovoz yaratilmadi, savol matn bilan yuboriladi", { err: e, sessionId: s.id });
