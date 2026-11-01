@@ -272,7 +272,7 @@ test("PayDialog: provayderga ketishdan oldin dialog tarix yozuvi olib tashlanadi
   });
   await settle();
   assert.ok(sx()?.o, "dialog yozuvi turibdi");
-  fireEvent.click(screen.getByText("Click"));
+  fireEvent.click(document.querySelector("[data-pay-method=\"click\"]")!);
   await settle();
   await settle();
   assert.equal(window.location.hash, "#provayder", "provayder sahifasiga o'tildi");

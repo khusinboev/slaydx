@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, type ComponentType } from "react";
-import { ChevronRight, CreditCard, Landmark, Phone, Smartphone, Wallet } from "lucide-react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { CreditCard, Smartphone, Wallet } from "lucide-react";
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { useNav } from "@/components/nav/NavProvider";
@@ -9,6 +9,8 @@ import { useUi } from "@/lib/ui";
 import { cn } from "@/lib/cn";
 import { groupDigits } from "@/lib/format";
 import { openClickApp } from "@/lib/open-click-app";
+import { openExternalLink } from "@/lib/telegram-webapp";
+import { paynetPayLink } from "@/lib/paynet-link";
 import type { ClickMethod } from "@/lib/click-input";
 import { topupAmountError } from "@/lib/topup-limits";
 import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
@@ -19,11 +21,9 @@ import { AmountField } from "./pay/AmountField";
 import { CardStep } from "./pay/CardStep";
 import { PhoneStep } from "./pay/PhoneStep";
 import { PaynetStep } from "./pay/PaynetStep";
+import { ClickLogo, PaynetLogo } from "./pay/brand";
 import { WaitStep, type WaitSource } from "./pay/WaitStep";
 import { sectionLabel, textBtn } from "./pay/ui";
-
-const methodBtn =
-  "focus-visible:ring-ring h-12 rounded-[16px] text-[15.5px] font-semibold outline-none transition-[background-color,transform] focus-visible:ring-2 active:scale-[0.98] disabled:opacity-40 motion-reduce:transform-none";
 
 export { TOPUP_PRESETS, DEFAULT_TOPUP, PAY_RETURN_PATH, openPay } from "./pay-amount";
 
@@ -57,7 +57,13 @@ const TITLES: Record<View, string> = {
  * yaratilmaydi (Paynet agentda to'lanadi, hisobni Paynet chaqiruvi to'ldiradi), `PaynetStep` SlaydX ID,
  * «istalgan summa» qoidasi (min/max) va ilova tugmasini ko'rsatadi. Paynet o'zi to'langan summani
  * yuboradi va AYNAN shu summa hisobga tushadi (egasi 2026-10-31) — dialogdagi summa Paynet uchun shart
- * emas, shuning uchun Paynet qatori summa xatosida ham ochiq. Faqat server Paynet'ni sozlagan bo'lsa (`features.payments.paynet`).
+ * emas. Faqat server Paynet'ni sozlagan bo'lsa (`features.payments.paynet`).
+ *
+ * Plitkalar (owner 2026-11-01): summa tepada; ostida yonma-yon **Click** va **Paynet** (logotiplar bilan) —
+ * bosilganda ilova shu summa bilan ochiladi va faqat tasdiqlash qoladi (Click: buyurtma deeplink'i, Paynet:
+ * `paynetPayLink` — ID va summa havolada); ularning ostida yonma-yon «Telefon raqam» va «Karta» (Click).
+ * Paynet plitkasi endi summani yuborgani uchun noto'g'ri summada boshqalari kabi yopiq; `PaynetStep` esa
+ * ilova ochilmasa qo'lda to'lash uchun zaxira bo'lib qoladi.
  */
 export function PayDialog() {
   const open = useUi((s) => s.overlay === "pay");
@@ -75,6 +81,7 @@ export function PayDialog() {
   const [waitInitial, setWaitInitial] = useState<"polling" | "paid">("polling");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [paynetLaunched, setPaynetLaunched] = useState<"prefilled" | "plain" | null>(null);
   const panelRef = useDialog(open, close);
   const nav = useNav();
   /** Telefon (docs/mobile/PLAN.md O5): 44 px tugmalar, ekranga sig'adi va ichida aylanadi. */
@@ -88,6 +95,7 @@ export function PayDialog() {
     setView("home");
     setOrder(null);
     setWaitInitial("polling");
+    setPaynetLaunched(null);
   }, [open]);
 
   if (!open) return null;
@@ -100,17 +108,22 @@ export function PayDialog() {
   const anyEnabled = clickOn || paymeOn || paynetOn;
   const amountErr = topupAmountError(amount);
 
+  const paynetBase = features?.payments.paynetUrl ?? null;
+  /** Prefill (`PAYNET_APP_PREFILL`) is switched on only after the `c`/`a` link params were checked in the real app. */
+  const paynetPrefill = features?.payments.paynetPrefill === true;
+  /** The app link: with the payer id and the amount when prefill is on and the amount is valid, else the bare merchant link. */
+  const paynetLink = paynetBase && user && paynetPrefill && !amountErr ? paynetPayLink(paynetBase, user.id, amount) : paynetBase;
+
   function openPaynet() {
-    // `user` (the ID shown) can still be loading right after sign-in: stay on the list rather than open an empty step.
-    // No `amountErr` gate: Paynet credits what is paid there, the dialog's amount is not used.
-    if (needLogin() || !user) return;
+    // `user` (the ID sent) can still be loading right after sign-in: stay on the list rather than open an empty step.
+    if (needLogin() || amountErr || !user) return;
     setError(null);
+    // Paynet has no return URL: never replace this tab. Telegram → `openLink` (external); elsewhere a new tab,
+    // which the OS hands to the Paynet app; the step below stays here as the manual fallback.
+    if (paynetLink && !openExternalLink(paynetLink)) window.open(paynetLink, "_blank", "noopener,noreferrer");
+    setPaynetLaunched(paynetLink ? (paynetPrefill && paynetLink !== paynetBase ? "prefilled" : "plain") : null);
     setView("paynet");
   }
-
-  const paynetRow = paynetOn ? (
-    <MethodRow method="paynet" icon={Landmark} title="Paynet" hint="Ilova, terminal yoki kassa — istalgan summa" busy={busy} disabled={busy !== null} onClick={openPaynet} />
-  ) : null;
 
   function needLogin(): boolean {
     if (loggedIn) return false;
@@ -219,7 +232,7 @@ export function PayDialog() {
           />
         ) : null}
 
-        {view === "paynet" && user ? <PaynetStep userId={user.id} appUrl={features?.payments.paynetUrl ?? null} onBack={back} /> : null}
+        {view === "paynet" && user ? <PaynetStep userId={user.id} appUrl={paynetLink} launched={paynetLaunched} onBack={back} /> : null}
 
         {view === "home" ? (
           <>
@@ -231,54 +244,53 @@ export function PayDialog() {
 
             {!anyEnabled ? (
               <p className="mb-4 rounded-[14px] bg-amber-500/10 px-3.5 py-2.5 text-[13.5px] leading-snug text-amber-800 dark:text-amber-300">
-                To&apos;lov provayderi hali ulanmagan. Administrator Click yoki Payme kalitlarini
+                To&apos;lov provayderi hali ulanmagan. Administrator Click, Payme yoki Paynet kalitlarini
                 sozlashi kerak.
               </p>
             ) : null}
 
             <p className={sectionLabel}>To&apos;lov usuli</p>
-            {directOn ? (
-              <div className="flex flex-col gap-2" data-pay-methods>
-                <MethodRow method="card" icon={CreditCard} title="Karta" hint="Bank kartasi — SMS kod bilan" busy={busy} disabled={busy !== null || !!amountErr} onClick={() => void startDirect("card")} />
-                <MethodRow method="phone" icon={Phone} title="Telefon raqam" hint="Click ilovasiga hisob yuboriladi" busy={busy} disabled={busy !== null || !!amountErr} onClick={() => void startDirect("phone")} />
-                <MethodRow method="app" icon={Smartphone} title="Click ilovasi" hint="Ilovani ochib, to'lovni tasdiqlaysiz" busy={busy} disabled={busy !== null || !!amountErr} onClick={() => void startDirect("app")} />
-                {paymeOn ? (
-                  <MethodRow method="payme" icon={Wallet} title="Payme" hint="Payme to'lov sahifasiga o'tasiz" busy={busy} disabled={busy !== null || !!amountErr} onClick={() => void payViaPage("payme", "payme")} />
-                ) : null}
-                {paynetRow}
-              </div>
-            ) : (
-              // Merchant API not configured: the plain Click page button (the pre-2026-10-09 flow).
-              <div className="flex flex-col gap-2" data-pay-methods>
-                {clickOn || paymeOn ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    {clickOn ? (
-                      <button
-                        type="button"
-                        data-pay-method="click"
-                        disabled={busy !== null || !!amountErr}
-                        onClick={() => void payViaPage("click", "click")}
-                        className={cn(methodBtn, "bg-primary text-primary-foreground hover:brightness-95", !paymeOn && "col-span-2")}
-                      >
-                        {busy === "click" ? "Ochilmoqda..." : "Click"}
-                      </button>
-                    ) : null}
-                    {paymeOn ? (
-                      <button
-                        type="button"
-                        data-pay-method="payme"
-                        disabled={busy !== null || !!amountErr}
-                        onClick={() => void payViaPage("payme", "payme")}
-                        className={cn(methodBtn, "bg-primary text-primary-foreground hover:brightness-95", !clickOn && "col-span-2")}
-                      >
-                        {busy === "payme" ? "Ochilmoqda..." : "Payme"}
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-                {paynetRow}
-              </div>
-            )}
+            <div className="flex flex-col gap-2" data-pay-methods>
+              {clickOn || paynetOn ? (
+                <div className="grid grid-cols-2 gap-2" data-pay-apps>
+                  {clickOn ? (
+                    <BrandTile
+                      method={directOn ? "app" : "click"}
+                      label={directOn ? "Click ilovasi" : "Click"}
+                      hint={directOn ? "Ilovada tasdiqlaysiz" : "Click sahifasida to'laysiz"}
+                      busy={busy}
+                      disabled={busy !== null || !!amountErr}
+                      onClick={() => void (directOn ? startDirect("app") : payViaPage("click", "click"))}
+                      className={cn(!paynetOn && "col-span-2")}
+                    >
+                      <ClickLogo className="text-foreground h-[26px] w-auto" />
+                    </BrandTile>
+                  ) : null}
+                  {paynetOn ? (
+                    <BrandTile
+                      method="paynet"
+                      label="Paynet"
+                      hint="Ilovada tasdiqlaysiz"
+                      busy={busy}
+                      disabled={busy !== null || !!amountErr || (loggedIn && !user)}
+                      onClick={openPaynet}
+                      className={cn(!clickOn && "col-span-2")}
+                    >
+                      <PaynetLogo className="text-foreground text-[24px]" />
+                    </BrandTile>
+                  ) : null}
+                </div>
+              ) : null}
+              {directOn ? (
+                <div className="grid grid-cols-2 gap-2" data-pay-direct>
+                  <IconTile method="phone" icon={Smartphone} title="Telefon raqam" hint="Click'ga hisob" busy={busy} disabled={busy !== null || !!amountErr} onClick={() => void startDirect("phone")} />
+                  <IconTile method="card" icon={CreditCard} title="Karta" hint="SMS kod bilan" busy={busy} disabled={busy !== null || !!amountErr} onClick={() => void startDirect("card")} />
+                </div>
+              ) : null}
+              {paymeOn ? (
+                <IconTile method="payme" icon={Wallet} title="Payme" hint="Payme sahifasiga o'tasiz" busy={busy} disabled={busy !== null || !!amountErr} onClick={() => void payViaPage("payme", "payme")} />
+              ) : null}
+            </div>
 
             {directOn ? (
               <div className="mt-1 flex justify-center">
@@ -311,8 +323,39 @@ export function PayDialog() {
   );
 }
 
-/** One payment method: a ≥ 56 px row with an icon, the name and a one-line hint (the button's accessible name is both). */
-function MethodRow({
+const tileCls =
+  "focus-visible:ring-ring bg-card enabled:hover:bg-accent flex w-full flex-col items-center justify-center gap-1.5 rounded-[18px] border px-2 text-center outline-none transition-[background-color,transform] focus-visible:ring-2 active:scale-[0.98] disabled:opacity-40 motion-reduce:transform-none";
+
+/** A provider app tile (Click / Paynet): the logo large, one hint line; the accessible name is the label. */
+function BrandTile({
+  method,
+  label,
+  hint,
+  busy,
+  disabled,
+  onClick,
+  className,
+  children,
+}: {
+  method: string;
+  label: string;
+  hint: string;
+  busy: string | null;
+  disabled: boolean;
+  onClick: () => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <button type="button" data-pay-method={method} aria-label={label} disabled={disabled} onClick={onClick} className={cn(tileCls, "min-h-[84px] py-3", className)}>
+      <span className="flex h-7 items-center">{children}</span>
+      <span className="text-muted-foreground text-[12.5px] leading-snug">{busy === method ? "Ochilmoqda..." : hint}</span>
+    </button>
+  );
+}
+
+/** A secondary method tile (phone / card / Payme): an icon in a soft disc, the name and a short hint. */
+function IconTile({
   method,
   icon: Icon,
   title,
@@ -329,21 +372,15 @@ function MethodRow({
   disabled: boolean;
   onClick: () => void;
 }) {
-  const loading = busy === method;
   return (
-    <button
-      type="button"
-      data-pay-method={method}
-      disabled={disabled}
-      onClick={onClick}
-      className="focus-visible:ring-ring bg-card hover:bg-accent flex min-h-14 w-full items-center gap-3 rounded-[16px] border px-3.5 py-2 text-left outline-none transition-[background-color,transform] focus-visible:ring-2 active:scale-[0.99] disabled:opacity-40 motion-reduce:transform-none"
-    >
-      <Icon aria-hidden className="text-primary size-5 shrink-0" />
-      <span className="min-w-0 flex-1">
-        <span className="block text-[15.5px] leading-tight font-semibold">{loading ? "Ochilmoqda..." : title}</span>
+    <button type="button" data-pay-method={method} disabled={disabled} onClick={onClick} className={cn(tileCls, "min-h-[76px] flex-row justify-start gap-2.5 px-2.5 py-2.5 text-left")}>
+      <span className="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-full max-[389px]:hidden">
+        <Icon aria-hidden className="size-[18px]" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[15px] leading-tight font-semibold whitespace-nowrap">{busy === method ? "Ochilmoqda..." : title}</span>
         <span className="text-muted-foreground block text-[12.5px] leading-snug">{hint}</span>
       </span>
-      <ChevronRight aria-hidden className="text-muted-foreground size-4 shrink-0" />
     </button>
   );
 }

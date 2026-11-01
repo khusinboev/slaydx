@@ -126,6 +126,24 @@ test("paynetAppUrl: only when Paynet is live AND the value is an https URL", asy
   }
 });
 
+test("paynetAppPrefill: on only with PAYNET_APP_PREFILL AND a live https app link", async () => {
+  // MUTATIONS: the switch ignored (always on) / prefill without a link → this test is red.
+  const { env, paynetAppPrefill } = await import("../lib/server/env.ts");
+  const saved = { ...env.paynet };
+  try {
+    Object.assign(env.paynet, { appUrl: "https://app.paynet.test/?m=1", appPrefill: false });
+    assert.equal(paynetAppPrefill(), false, "switch off");
+    Object.assign(env.paynet, { appPrefill: true });
+    assert.equal(paynetAppPrefill(), true);
+    Object.assign(env.paynet, { appUrl: "" });
+    assert.equal(paynetAppPrefill(), false, "no link → nothing to prefill");
+    Object.assign(env.paynet, { appUrl: "https://app.paynet.test/?m=1", password: "" });
+    assert.equal(paynetAppPrefill(), false, "Paynet not live");
+  } finally {
+    Object.assign(env.paynet, saved);
+  }
+});
+
 test("shared service (real Postgres)", { skip: SKIP_DB }, async (t) => {
   const { query, queryOne, migrate, pool } = await import("../lib/server/db.ts");
   const { env } = await import("../lib/server/env.ts");
