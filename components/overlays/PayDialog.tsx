@@ -370,12 +370,12 @@ function IconTile({
   onClick: () => void;
 }) {
   return (
-    <button type="button" data-pay-method={method} disabled={disabled} onClick={onClick} className={cn(tileCls, "min-h-[76px] flex-row justify-start gap-3 px-3 py-2.5 text-left")}>
-      <span className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-full">
-        <Icon aria-hidden className="size-5" />
+    <button type="button" data-pay-method={method} disabled={disabled} onClick={onClick} className={cn(tileCls, "min-h-[76px] flex-row justify-start gap-2.5 px-2.5 py-2.5 text-left")}>
+      <span className="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-full max-[359px]:hidden">
+        <Icon aria-hidden className="size-[18px]" />
       </span>
       <span className="min-w-0">
-        <span className="block text-[15px] leading-tight font-semibold">{busy === method ? "Ochilmoqda..." : title}</span>
+        <span className="block text-[15px] leading-tight font-semibold whitespace-nowrap">{busy === method ? "Ochilmoqda..." : title}</span>
         <span className="text-muted-foreground block text-[12.5px] leading-snug">{hint}</span>
       </span>
     </button>
