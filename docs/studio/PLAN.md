@@ -325,3 +325,10 @@ storage, not CPU. Video is the heavy part: 10k videos/day × ~10 MB ≈ **100 GB
    + managed Postgres (or a DB box with replicas) + object storage/CDN; load test (k6) at 2× target before launch.
 
 **Immediate risk:** disk at 81 % — before any video-heavy phase, object storage must land (P0) or the disk fills.
+
+## 20. Owner decision — server (2026-11-01)
+**Contabo Cloud VPS 6** (6 vCPU, 12 GB RAM, 200 GB SSD / 100 GB NVMe, $8.06/mo for 24 months), **SlaydX only**; the
+old shared box keeps the other projects. Fits today's 11.5k users and early growth **only if** media goes to object
+storage (R2/CDN) and document workers stay ≤ 2–3 LibreOffice processes. Upgrade path: VPS 8/12 (same provider,
+in-place) when the load-history page shows sustained CPU > 70 % or RAM > 80 %; DB moves to its own box at ~50k DAU.
+Still open: provider budgets (fal, Kling, ElevenLabs), design feedback, phase order confirmation.
