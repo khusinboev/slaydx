@@ -223,3 +223,66 @@ ParamSchema + a live smoke**, so new features keep landing without rewiring.
 Canvas: https://claude.ai/artifact/RKtqPUxeyEnV5F5dJJ7m1A — phone (Rasm tab), phone model picker sheet, Telegram
 Mini App (Video + effect templates, dark), tablet (Ovoz: TTS / cloning / music), desktop (3 columns + compare).
 Prices on the mock-ups = cost × 2 at ~12 800 so'm/$, rounded; placeholders, not final.
+
+## 17. Provider capability matrix (owner 2026-11-01: «integrate the main features of ElevenLabs and the other services»)
+Each row becomes catalog entries (one per capability × model). ✓ = planned, phase in brackets. «verify» = confirm on
+the provider's docs/console before that phase (language lists and prices change).
+
+### ElevenLabs
+| Capability | What the user gets | Phase |
+|---|---|---|
+| Text to Speech (Eleven v3; Flash/Turbo for non-Uzbek) | Uzbek narration, 18-language output | ✓ P5 |
+| Text to Dialogue | multi-speaker scenes / podcasts in one call | ✓ P5 |
+| Voice library + voice design (voice from a text description) | pick / invent a voice | ✓ P5 |
+| Instant voice cloning (Professional cloning later) | «my own voice» | ✓ P5 |
+| Voice changer (speech → speech) | re-voice a recording | ✓ P6 |
+| Voice isolator | clean noisy recordings | ✓ P6 |
+| Sound effects (≤30 s, 4 variants) | SFX / ambience for videos | ✓ P6 |
+| Music (Eleven Music) | songs, jingles, background tracks | ✓ P6 |
+| Speech to Text (Scribe v2) — **Uzbek: verify** | transcripts, subtitles | ✓ P10 |
+| Dubbing (90+ languages) — **Uzbek: verify** | translate + re-voice a video | ✓ P10 |
+| Agents (conversational) | out of Studio scope | — |
+
+### Google (direct)
+| Capability | Phase |
+|---|---|
+| Nano Banana: text → image, **edit with a prompt**, multi-image fusion | ✓ P1 (gen), P2 (edit/fusion) |
+| Gemini Omni: text → video, **image → video**, native audio | ✓ P3 |
+| Gemini TTS: Uzbek voices, **multi-speaker** | ✓ P5 |
+| Lyria (music) — verify API availability | P9 |
+
+### OpenAI (direct)
+| Capability | Phase |
+|---|---|
+| GPT Image 2.5: generate, **edit / inpaint with mask**, reference images, transparent background | ✓ P1 (gen), P2 (edit) |
+| Sora 2: text/image → video | ✓ P9 |
+
+### Kling (direct, key exists)
+| Capability | Phase |
+|---|---|
+| Text → video, image → video (3.0 / Omni, 3–15 s, up to 4K, native audio) | ✓ P3 |
+| **Effect templates** (one photo → ready scene) | ✓ P3 |
+| Start/end frame, camera / motion control (motion from a reference video) | ✓ P4 |
+| Video extend (+~4.5 s, chainable), multi-shot | ✓ P4 |
+| Lip-sync (talking photo / dub a clip) | ✓ P4 |
+| Virtual try-on (garment on a model photo) | ✓ P4 |
+| Elements (reusable character / object across videos) | ✓ P7 |
+
+### Aggregator models (fal primary, WaveSpeed second route)
+| Capability | Phase |
+|---|---|
+| FLUX, Seedream, Reve: generate + edit | ✓ P2 |
+| Ideogram: typography posters, remix | ✓ P2 |
+| Recraft: vector SVG, logos, **vectorize** an image | ✓ P2 |
+| Wan 3.0, Seedance 2.5, Hailuo/MiniMax: t2v, i2v | ✓ P4 |
+| **Utility tools**: upscale ×2/×4, background removal, face restore, relight | ✓ P2 (image), P4 (video upscale) |
+| HeyGen avatars | ✓ P9 |
+
+### Cross-provider «chains» (P7)
+image → upscale → video → voice-over (ElevenLabs/Gemini) → music + SFX → subtitles (Scribe) — each step is a normal
+catalog job, the chain is a saved recipe the user can re-run with another model at any step.
+
+### Roadmap delta
+P2 gains image editing + utility tools; P4 gains Kling motion/extend/lip-sync/try-on; P5 gains dialogue + voice
+design; P6 becomes «Audio»: music + sound effects + voice changer + isolator; **P10 (new)**: transcription and
+dubbing (after the Uzbek check).
