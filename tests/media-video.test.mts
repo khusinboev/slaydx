@@ -22,10 +22,13 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *             switch flips (no resubmit).
  *
  * Mutations (each turned the named test red, then restored):
- *   1. 'submitting' guard of the media row removed (`parked.status === "submitting"` branch deleted)
- *        -> «parity: crash in 'submitting'» (a second paid submit);
- *   2. `media_jobs` dropped from the poll (`claimDueOps` returns only `video_ops`) -> «parity: success» and «drain»;
- *   3. capacity counts only `video_ops` waiters (claimJob's video count joined to video_ops pending) -> «drain: capacity»;
+ *   1. 'submitting' guard of the media row: (a) branch disabled -> «parity: crash in 'submitting'» (wrong message);
+ *      (b) a 'submitting' row skipped AND the `!fresh` guard of beginMediaJob disabled -> the same test (a second paid
+ *      submit: «no second paid operation»);
+ *   2. `media_jobs` dropped from the poll (`claimDueOps` returns only `video_ops`) -> 17 tests, «parity: success» and
+ *      both «drain» tests among them;
+ *   3. capacity counts only `video_ops` waiters (jobs.ts claimJob's video count limited to leased rows + video_ops
+ *      pending) -> «drain: … capacity counts both»;
  *   4. wrong refund message on the core deadline path (VIDEO_FAILED_MESSAGE instead of VIDEO_DEADLINE_MESSAGE when
  *      `op.mediaJobId`) -> «parity: deadline»;
  *   5. `attempts - 1` dropped in `dueFromMediaJob` -> «parity: success» (backoff differs: 20 s vs 15 s);
@@ -514,7 +517,6 @@ test("video on media_jobs: parity with the video_ops path, tables, drain, capaci
     stub.pollBody = doneBody;
     const freshAdapters = await import("../lib/generation/video/index.ts");
     assert.equal(await ops.pollDueVideoOps({ adapters: { ...freshAdapters.VIDEO_ADAPTERS } }), 1);
-    // recoverJobs never touches a waiting video, on either table.
     return { claimed, second, polledWhileLeased, g: await outcome(id, me), op: await opOf(mode, id) };
   });
 
