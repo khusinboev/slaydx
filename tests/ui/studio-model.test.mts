@@ -7,6 +7,7 @@ const { parseCatalog } = await import("../../components/studio/studio-api.ts");
 const { studioBasePrice, studioPrice, unitPrice, outputCount, badgeText, initials, BADGE_LABEL, FILTER_BADGES } = await import("../../components/studio/studio-price.ts");
 const { resolveEntry } = await import("../../components/studio/StudioPage.tsx");
 const { STUDIO_ENTRY, studioFirst } = await import("../../components/studio/studio-entry.ts");
+const { TOOL_BY_ID, applyPriceAdjust, basePriceFor } = await import("../../lib/tools.ts");
 
 /**
  * Pure part of the Studio UI: the catalog parser (untrusted JSON → typed models), the price preview and the model
@@ -38,7 +39,7 @@ test("parser keeps the usable image models only: a video, a malformed param list
   const noLabel = { ...NANO, id: "x/no-label", label: "" };
   const parsed = parseCatalog({ ...catalogBody([NANO, GPT]), models: [NANO, video, badParams, noCost, noLabel, "junk", null, GPT] })!;
   assert.deepEqual(parsed.models.map((m) => m.id), [NANO.id, GPT.id], "MUTATSIYA: video qabul qilinsa qizaradi");
-  assert.deepEqual(parsed.pricing, PRICING);
+  assert.deepEqual(parsed.pricing, PRICING, "the block as the server sent it (costUsd included)");
   assert.equal(parsed.defaultModelId, NANO.id);
 });
 
@@ -53,16 +54,49 @@ test("parser needs the pricing context (no honest price preview without it) and 
 test("default falls back to the first model when the server's default is not in the list; an empty list is allowed", () => {
   assert.equal(parseCatalog(catalogBody([NANO, GPT], PRICING, "openai/gone"))!.defaultModelId, NANO.id);
   assert.equal(parseCatalog(catalogBody([NANO, GPT], PRICING, GPT.id))!.defaultModelId, GPT.id);
-  const none = parseCatalog(catalogBody([], PRICING, undefined))!;
+  const none = parseCatalog({ ...catalogBody([], PRICING, undefined), defaultModelId: null })!;
   assert.deepEqual(none.models, []);
-  assert.equal(none.defaultModelId, "");
+  assert.equal(none.defaultModelId, null, "nothing available: the picker's «no model» state");
+  assert.equal(resolveEntry(none, null), null);
 });
 
-test("pricing: markup defaults to 2 and step to 100; an override below ×1 or without a number is dropped", () => {
-  const p = parseCatalog({ ...catalogBody([NANO]), pricing: { soumPerUsd: 12_800, overrides: { a: { markup: 0.5 }, b: { markup: 4 }, c: {}, d: "x" } } })!.pricing;
+test("pricing block = the server's validator: no markup -> no catalog; step 100; bad overrides / unit costs dropped", () => {
+  assert.equal(parseCatalog({ ...catalogBody([NANO]), pricing: { soumPerUsd: 12_800 } }), null, "no guessed markup: no honest preview");
+  const p = parseCatalog({
+    ...catalogBody([NANO]),
+    pricing: { soumPerUsd: 12_800, markup: 2, step: 7, overrides: { a: { markup: 0.5 }, b: { markup: 4 }, c: {}, d: "x" }, costUsd: { [NANO.id]: 0.067, x: -1, y: "0.1", z: 500 } },
+  })!.pricing;
   assert.equal(p.markup, 2);
   assert.equal(p.step, 100);
   assert.deepEqual(p.overrides, { b: { markup: 4 } });
+  assert.deepEqual(p.costUsd, { [NANO.id]: 0.067 });
+});
+
+/*
+ * Reconcile (P1): the preview IS the server price. For every model × count × (no override | an override) × (no % |
+ * a tool_pricing %) × (catalog cost | a live slot cost), the page's `studioPrice` equals what the server charges:
+ * `applyPriceAdjust(basePriceFor(studio-image, values, block), %)` (= `effectivePrice`). Mutation: `studioBasePrice`
+ * back to its own formula without the live cost -> red on the live-cost rows.
+ */
+test("preview == server price (basePriceFor + tool_pricing %) per model × count × override × % × live unit cost", () => {
+  let rows = 0;
+  for (const costUsd of [{}, { [NANO.id]: 0.067, [GPT.id]: 0.04 }]) {
+    for (const overrides of [{}, { [GPT.id]: { markup: 3.5 } }, { [NANO.id]: { markup: 1.2 } }]) {
+      const pricing = { ...PRICING, soumPerUsd: 12_650, markup: 2.5, overrides, costUsd };
+      for (const adj of [undefined, { percent: 130, roundTo: 100 as const }, { percent: 75, roundTo: 500 as const }]) {
+        for (const m of [NANO, GPT]) {
+          for (const imageCount of [1, 2, 3, 4]) {
+            const values = { modelId: m.id, prompt: "Registon", imageCount };
+            const server = applyPriceAdjust(basePriceFor(TOOL_BY_ID["studio-image"], values, pricing), adj);
+            assert.equal(studioPrice(m, values, pricing, adj), server, `${m.id} ×${imageCount} ${JSON.stringify({ overrides, costUsd, adj })}`);
+            if (!adj) assert.equal(studioBasePrice(m, values, pricing), expectedPrice(m, imageCount, pricing), "and the independent copy");
+            rows++;
+          }
+        }
+      }
+    }
+  }
+  assert.equal(rows, 2 * 3 * 3 * 2 * 4);
 });
 
 test("PRICE = the formula (independent copy): cost × markup rounded UP to the step, for every model × count", () => {

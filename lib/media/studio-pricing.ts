@@ -9,9 +9,9 @@
  *
  * Client-safe: no server imports.
  */
-import { isValidMarkup } from "../studio-core";
-import { MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "./catalog";
-import { MEDIA_MARKUP_DEFAULT, MEDIA_PRICE_STEP, mediaQuote } from "./quote";
+import { isValidMarkup, normalize, price, roundUpTo, type CatalogEntry, type CostRule } from "../studio-core";
+import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "./catalog";
+import { MEDIA_MARKUP_DEFAULT, MEDIA_PRICE_STEP } from "./quote";
 import { soumPerUsd } from "../generation/llm-pricing";
 
 /** The `pricing` block of `GET /api/media/catalog` (contract, P1-SPEC «Session / API»). */
@@ -20,11 +20,27 @@ export type MediaPricing = {
   markup: number;
   step: number;
   overrides: Readonly<Record<string, { markup: number }>>;
+  /**
+   * Provider cost of ONE unit (one picture) per model, in USD, of the upstream model the route uses RIGHT NOW (the admin
+   * `image.gemini` slot / the OpenAI image model, priced by `imagePriceOf`). Absent for a model = the catalog CostRule
+   * (the default upstream). The price follows the real spend: a pricier slot model is never sold at the lite price.
+   */
+  costUsd?: Readonly<Record<string, number>>;
 };
 
 /** Used only when no pricing is known (a server helper outside a request, the very first render). Never charges. */
 export function defaultMediaPricing(): MediaPricing {
-  return { soumPerUsd: Math.max(1, Math.round(soumPerUsd())), markup: MEDIA_MARKUP_DEFAULT, step: MEDIA_PRICE_STEP, overrides: {} };
+  return { soumPerUsd: Math.max(1, Math.round(soumPerUsd())), markup: MEDIA_MARKUP_DEFAULT, step: MEDIA_PRICE_STEP, overrides: {}, costUsd: {} };
+}
+
+const isCost = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v > 0 && v < 100;
+
+/** The model's CostRule with the block's live unit cost swapped in (only per-output rules carry a unit price). */
+export function liveCostRule(rule: CostRule, unitUsd: number | undefined): CostRule {
+  if (rule.per !== "output" || !isCost(unitUsd)) return rule;
+  const { by: _by, ...rest } = rule;
+  void _by;
+  return { ...rest, usd: unitUsd };
 }
 
 /** The model a Studio form asks for: blank = the purpose default (as the form starts); anything else verbatim. */
@@ -51,8 +67,27 @@ export function markupOf(pricing: MediaPricing, modelId: string): number {
  */
 export function studioImagePrice(values: Readonly<Record<string, unknown>>, pricing: MediaPricing): number | null {
   const modelId = studioModelOf(values);
-  if (!isStudioImageModel(modelId)) return null;
-  return mediaQuote(modelId, values, { soumPerUsd: pricing.soumPerUsd, markup: pricing.markup, override: { mode: "markup", markup: markupOf(pricing, modelId) } });
+  const entry = isStudioImageModel(modelId) ? MEDIA_CATALOG.byId(modelId) : null;
+  return entry ? studioEntryPrice(entry, values, pricing) : null;
+}
+
+/** The part of a catalog entry the price reads; the browser has it as the catalog endpoint's client view. */
+export type PricedEntry = Pick<CatalogEntry, "id" | "cost" | "params">;
+
+/**
+ * THE Studio price formula, for one entry: its cost rule (with the block's live unit cost), its normalized params,
+ * × the effective markup, rounded UP to `pricing.step` (the server always sends 100). The server prices with the
+ * catalog's own entry (`studioImagePrice`), the browser with the same entry from `GET /api/media/catalog` — one function,
+ * one number. The tool's `tool_pricing` % comes after, as for every tool (`applyPriceAdjust`).
+ */
+export function studioEntryPrice(entry: PricedEntry, values: Readonly<Record<string, unknown>>, pricing: MediaPricing): number {
+  const step = Number.isInteger(pricing.step) && pricing.step >= 1 ? pricing.step : MEDIA_PRICE_STEP;
+  return price(liveCostRule(entry.cost, pricing.costUsd?.[entry.id]), normalize(entry.params, values), {
+    rate: pricing.soumPerUsd,
+    markup: pricing.markup,
+    round: roundUpTo(step),
+    override: { mode: "markup", markup: markupOf(pricing, entry.id) },
+  });
 }
 
 /** A `pricing` block from the network, validated (`null` when it is not one). */
@@ -69,7 +104,11 @@ export function parseMediaPricing(raw: unknown): MediaPricing | null {
       if (isValidMarkup(m)) overrides[id] = { markup: m };
     }
   }
-  return { soumPerUsd: rate, markup: r.markup, step: MEDIA_PRICE_STEP, overrides };
+  const costUsd: Record<string, number> = {};
+  if (r.costUsd && typeof r.costUsd === "object" && !Array.isArray(r.costUsd)) {
+    for (const [id, c] of Object.entries(r.costUsd as Record<string, unknown>)) if (isCost(c)) costUsd[id] = c;
+  }
+  return { soumPerUsd: rate, markup: r.markup, step: MEDIA_PRICE_STEP, overrides, costUsd };
 }
 
 /*

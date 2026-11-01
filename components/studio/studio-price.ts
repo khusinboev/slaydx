@@ -1,38 +1,26 @@
-import { normalize, price, roundUpTo, type Badge, type ClientEntry } from "@/lib/studio-core";
+import { normalize, type Badge, type ClientEntry } from "@/lib/studio-core";
 import { applyPriceAdjust, getClientPriceAdjust, type PriceAdjust } from "@/lib/price-adjust";
+import { studioEntryPrice } from "@/lib/media/studio-pricing";
 import type { ToolId } from "@/lib/types";
 import type { StudioPricing } from "./studio-types";
 
 /**
- * Studio price preview — the client side of `priceFor(studio-image, values)` (docs/studio/P1-SPEC.md «Contract»):
+ * Studio price preview — the browser side of `priceFor(studio-image, values)` (docs/studio/P1-SPEC.md «Contract»).
  *
- *   mediaQuote(modelId, values, { soumPerUsd, markup, override })   →   the tool's `tool_pricing` % (`applyPriceAdjust`)
- *
- * The server is the only authority (the request carries this number as `expectedPrice`, a mismatch is a 409 and
- * nothing is charged). The context comes from `GET /api/media/catalog` → `pricing`; the model's own `cost` rule travels
- * in the entry. Only the core's pure functions run here (`price`, `normalize`), never a second copy of the formula.
- *
- * This is the legacy ladder's opposite on purpose: Studio sells provider cost × markup, so the P0 `fixed` overrides of
- * `lib/media/catalog.ts` do NOT apply (the old «Rasm» tool keeps them).
+ * NOT a second formula: the base is `studioEntryPrice` (`lib/media/studio-pricing.ts`), the very function the server's
+ * `basePriceFor` / `effectivePrice` price with, fed the catalog endpoint's entry and `pricing` block (provider cost —
+ * live upstream unit cost included — × markup, the model's override wins, rounded up); then the session's `tool_pricing`
+ * % exactly as `priceFor` applies it. The request still carries it as `expectedPrice`: a mismatch is a 409, nothing is
+ * charged. `tests/ui/studio-model.test.mts` proves preview == server price per model × count × override × %.
  */
 
-/**
- * The tool id of Studio's image generations. Written as a cast so this module compiles on a tree where the backend has
- * not added `studio-image` to `ToolId` yet; once it has, the cast is a no-op.
- */
-export const STUDIO_TOOL_ID = "studio-image" as unknown as ToolId;
+export const STUDIO_TOOL_ID: ToolId = "studio-image";
 
 type Values = Readonly<Record<string, unknown>>;
 
-/** Price before the admin's per-tool adjustment: provider cost × markup (the model's override wins), rounded up. */
+/** Price before the admin's per-tool adjustment (the shared formula). */
 export function studioBasePrice(entry: ClientEntry, values: Values, pricing: StudioPricing): number {
-  const override = pricing.overrides[entry.id];
-  return price(entry.cost, normalize(entry.params, values), {
-    rate: pricing.soumPerUsd,
-    markup: pricing.markup,
-    round: roundUpTo(pricing.step),
-    override: override ? { mode: "markup", markup: override.markup } : null,
-  });
+  return studioEntryPrice(entry, values, pricing);
 }
 
 /** What the button shows and `expectedPrice` carries. `adjust` defaults to the session's adjustment of this tool. */

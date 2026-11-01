@@ -935,7 +935,7 @@ export const TOOLS: ToolConfig[] = [
     title: "Studio",
     pageTitle: "Studio",
     group: "media",
-    icon: "image",
+    icon: "sparkles",
     tc: "234 88 12",
     description: "Bir nechta AI model bilan rasm — modelni o‘zingiz tanlaysiz, narx modelga qarab",
     submitLabel: "Yaratish",

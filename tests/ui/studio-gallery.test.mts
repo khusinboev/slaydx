@@ -20,10 +20,12 @@ const { useAppStore } = await import("../../lib/store.ts");
  *   - PAGING: the first page is requested without a cursor, «Yana ko'rsatish» asks for `?cursor=<nextCursor>` and
  *     APPENDS (a repeated id is not shown twice); no `nextCursor` → no button; the end of the list scrolling into view
  *     loads the next page too, and the observer and the button never fetch the same cursor twice;
- *   - cards: thumbnail from the API's list or, without one, the existing `/api/generations/<id>/thumb`; «×N» for a job of
- *     several pictures; the prompt, model and date; a card opens the full result page; «Boshqa modelda» hands the item back;
+ *   - cards: the job's first stored picture (`images[].url`, the API's real shape) or a placeholder when none is left
+ *     (the `/thumb` endpoint does not render images); «×N» for a job of several pictures; the prompt, model and date; a
+ *     card opens the full result page; «Boshqa modelda» hands the item back;
  *   - states: loading skeleton, empty (with «Rasm yaratish»), first-page error with a retry, a later page's error keeps the list;
- *   - the parser accepts the contract's snake_case and camelCase and drops rows without an id;
+ *   - the parser reads the server's shape (`lib/server/media/public.ts`: camelCase, `images[].url`, `fileUrl`) and drops
+ *     rows without an id;
  *   - inside the Studio page the gallery has its own history entry: the phone's back returns to the form.
  *
  * Mutations (each turned the named tests red, then restored):
@@ -31,8 +33,9 @@ const { useAppStore } = await import("../../lib/store.ts");
  *   page 2 REPLACES the list instead of appending                        -> «PAGING», «observer…»;
  *   no id de-duplication                                                 -> «PAGING»;
  *   the observer calls `load(cursor)` without the `busy` guard           -> «observer…one request»;
- *   thumbnail falls back to the full file URL                            -> «cards: API thumbnail list…»;
- *   `parseItem` reads only `createdAt`                                   -> «parser»;
+ *   thumbnail falls back to the full file URL                            -> «cards: …»;
+ *   `parseItem` takes the count from a field instead of `images`         -> «parser», «cards: …» (×N);
+ *   `parseItem` keeps a non-string image URL                             -> «parser»;
  *   `useOverlayHistory(view === "gallery", …)` removed                   -> «back returns to the form».
  */
 
@@ -76,8 +79,16 @@ const click = async (el: Element | null | undefined) => {
   await act(async () => void fireEvent.click(el));
 };
 const ids = () => qa("[data-gallery-item]").map((e) => e.getAttribute("data-gallery-item"));
+/** One gallery row exactly as `GET /api/media/gallery` serves it (`lib/server/media/public.ts studioGallery`). */
 const item = (id: string, patch: Record<string, unknown> = {}) => ({
-  id, createdAt: "2026-11-01T10:05:00.000Z", modelId: "google/nano-banana", modelLabel: "Nano Banana", prompt: `Prompt ${id}`, count: 1, ...patch,
+  id,
+  createdAt: "2026-11-01T10:05:00.000Z",
+  modelId: "google/nano-banana",
+  modelLabel: "Nano Banana",
+  prompt: `Prompt ${id}`,
+  images: [{ url: `/api/generations/${id}/assets/a1`, w: 1024, h: 1024 }],
+  fileUrl: `/api/generations/${id}/file`,
+  ...patch,
 });
 const mount = (props: Partial<Parameters<typeof Gallery>[0]> = {}) =>
   render(h(AppRouterContext.Provider, { value: router }, h(Gallery, { onOtherModel: () => {}, onCreate: () => {}, ...props })));
@@ -147,13 +158,14 @@ test("observer: the end of the list scrolling into view loads the next page; obs
   assert.ok(observers.every((o) => o.disconnected), "no next page: the observer is gone");
 });
 
-test("cards: API thumbnail list or the existing thumb endpoint; «×N»; prompt, model, date; links to the result page", async () => {
+test("cards: the first stored picture (or a placeholder); «×N»; prompt, model, date; links to the result page", async () => {
   installApi({
     gallery: {
       "": {
         items: [
-          item("t1", { thumbs: ["/api/generations/t1/assets/a", "/api/generations/t1/assets/b"], count: 2 }),
-          item("t2", { fileVersion: 3 }),
+          item("t1", { images: [{ url: "/api/generations/t1/assets/a", w: 1024, h: 1024 }, { url: "/api/generations/t1/assets/b", w: 1024, h: 1024 }] }),
+          item("t2"),
+          item("t3", { images: [] }),
         ],
         nextCursor: null,
       },
@@ -161,9 +173,11 @@ test("cards: API thumbnail list or the existing thumb endpoint; «×N»; prompt,
   });
   mount();
   await settle();
-  const src = (id: string) => q<HTMLImageElement>(`[data-gallery-item="${id}"] img`)!.getAttribute("src");
+  const src = (id: string) => q<HTMLImageElement>(`[data-gallery-item="${id}"] img`)?.getAttribute("src");
   assert.equal(src("t1"), "/api/generations/t1/assets/a");
-  assert.equal(src("t2"), "/api/generations/t2/thumb?v=3", "MUTATSIYA: kichik rasm o'rniga to'liq fayl bo'lsa qizaradi");
+  assert.equal(src("t2"), "/api/generations/t2/assets/a1", "MUTATSIYA: kichik rasm o'rniga to'liq fayl bo'lsa qizaradi");
+  assert.ok(!src("t3"), "no picture left: no broken image");
+  assert.ok(q('[data-gallery-item="t3"] [data-gallery-no-thumb]'), "a placeholder instead");
   assert.equal(q('[data-gallery-item="t1"] [data-gallery-count]')?.textContent, "×2");
   assert.ok(!q('[data-gallery-item="t2"] [data-gallery-count]'), "a single picture has no badge");
   const card = q('[data-gallery-item="t1"]')!;
@@ -222,11 +236,11 @@ test("states: empty offers «Rasm yaratish»; a first-page error has a retry; a 
   assert.ok(q("[data-gallery-more]"), "and can be retried");
 });
 
-test("parser: contract's snake_case and camelCase both read; a row without an id is dropped", () => {
+test("parser: the server's shape (images[].url, fileUrl); count = stored pictures; a row without an id is dropped", () => {
   const page = parseGalleryPage({
     items: [
-      { id: "a", created_at: "2026-11-01T08:00:00Z", model_label: "GPT", model_id: "openai/gpt-image", prompt: "p", thumbs: ["/t/a"] },
-      { id: "b", createdAt: "2026-11-02T08:00:00Z", modelLabel: "Nano", prompt: "q", imageCount: 4 },
+      { id: "a", createdAt: "2026-11-01T08:00:00Z", modelLabel: "GPT", modelId: "openai/gpt-image", prompt: "p", images: [{ url: "/t/a", w: 1, h: 1 }, { url: 7 }, { url: "/t/b" }], fileUrl: "/api/generations/a/file" },
+      { id: "b", createdAt: "2026-11-02T08:00:00Z", modelLabel: "Nano", modelId: null, prompt: "q", images: [] },
       { prompt: "no id" },
       "junk",
     ],
@@ -234,11 +248,16 @@ test("parser: contract's snake_case and camelCase both read; a row without an id
   });
   assert.equal(page.nextCursor, "next");
   assert.deepEqual(page.items.map((i) => i.id), ["a", "b"]);
-  assert.equal(page.items[0]!.createdAt, "2026-11-01T08:00:00Z", "MUTATSIYA: faqat createdAt o'qilsa qizaradi");
+  assert.equal(page.items[0]!.createdAt, "2026-11-01T08:00:00Z");
   assert.equal(page.items[0]!.modelLabel, "GPT");
   assert.equal(page.items[0]!.modelId, "openai/gpt-image");
-  assert.equal(page.items[1]!.count, 4);
-  assert.deepEqual(page.items[0]!.thumbs, ["/t/a"]);
+  assert.deepEqual(page.items[0]!.thumbs, ["/t/a", "/t/b"], "a non-string url is dropped");
+  assert.equal(page.items[0]!.count, 2);
+  assert.equal(page.items[0]!.fileUrl, "/api/generations/a/file");
+  assert.deepEqual(page.items[1]!.thumbs, []);
+  assert.equal(page.items[1]!.count, 1);
+  assert.equal(page.items[1]!.modelId, null);
+  assert.equal(page.items[1]!.fileUrl, "/api/generations/b/file", "fileUrl falls back to the file endpoint");
   assert.deepEqual(parseGalleryPage(null), { items: [], nextCursor: null });
   assert.equal(formatStamp("nope"), "");
 });

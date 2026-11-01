@@ -9,14 +9,15 @@ const view = MEDIA_CATALOG.clientView();
 export const NANO = view.find((e) => e.id === "google/nano-banana")!;
 export const GPT = view.find((e) => e.id === "openai/gpt-image")!;
 
-export const PRICING = { soumPerUsd: 12_800, markup: 2, step: 100, overrides: {} as Record<string, { markup: number }> };
-export type Pricing = typeof PRICING;
+export const PRICING = { soumPerUsd: 12_800, markup: 2, step: 100, overrides: {} as Record<string, { markup: number }>, costUsd: {} as Record<string, number> };
+export type Pricing = { soumPerUsd: number; markup: number; step: number; overrides: Record<string, { markup: number }>; costUsd?: Record<string, number> };
 
 /** An independent copy of the price formula (provider cost × markup, rounded UP to the step) — never imports the product's. */
 export function expectedPrice(entry: ClientEntry, count: number, pricing: Pricing = PRICING): number {
-  const rule = entry.cost as { usd: number };
+  // The live unit cost of the block (admin slot model) replaces the catalog's default when the server sends one.
+  const usd = pricing.costUsd?.[entry.id] ?? (entry.cost as { usd: number }).usd;
   const markup = pricing.overrides[entry.id]?.markup ?? pricing.markup;
-  return Math.max(1, Math.ceil((rule.usd * count * pricing.soumPerUsd * markup) / pricing.step - 1e-9) * pricing.step);
+  return Math.max(1, Math.ceil((usd * count * pricing.soumPerUsd * markup) / pricing.step - 1e-9) * pricing.step);
 }
 
 export const withParams = (e: ClientEntry, id: string, params: readonly ParamSchema[], label = e.label): ClientEntry => ({ ...e, id, label, params });

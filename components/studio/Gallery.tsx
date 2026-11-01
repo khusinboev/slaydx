@@ -107,7 +107,11 @@ export function Gallery({ onOtherModel, onCreate }: { onOtherModel: (item: Galle
         {items.map((it) => (
           <li key={it.id} data-gallery-item={it.id} className="bg-card flex min-w-0 flex-col overflow-hidden rounded-[18px] border">
             <Link href={`/uz/files/${it.id}`} aria-label={it.prompt || "Rasmni ochish"} className="focus-visible:ring-ring relative block outline-none focus-visible:ring-2">
-              <ApiImg src={it.thumbs[0]} alt={it.prompt} loading="lazy" className="bg-muted aspect-square w-full object-cover" />
+              {it.thumbs[0] ? (
+                <ApiImg src={it.thumbs[0]} alt={it.prompt} loading="lazy" className="bg-muted aspect-square w-full object-cover" />
+              ) : (
+                <div aria-hidden className="bg-muted aspect-square w-full" data-gallery-no-thumb />
+              )}
               {it.count > 1 ? (
                 <span className="absolute top-2 right-2 rounded-full bg-black/70 px-2 py-0.5 text-[12px] font-semibold text-white" data-gallery-count>
                   ×{it.count}

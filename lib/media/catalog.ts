@@ -31,11 +31,15 @@ const OPENAI_IMAGE_DEFAULT = "gpt-image-2.5-flare";
 /** USD per second of video. Omni: $17.50 / 1M output tokens × 5 792 tokens/s (video/registry.ts). Kling: UNVERIFIED. */
 export const VIDEO_USD_PER_SECOND: Readonly<Record<VideoProviderId, number>> = { veo: 0.1, kling: 0.1 };
 
+/**
+ * Order = the Studio form's row order (P1 contract with the UI): O'lcham, Soni, then Uslub under «Qo'shimcha
+ * sozlamalar» (`advanced`). The «Rasm» tool has its own form; validation and prices do not depend on the order.
+ */
 const imageParams: readonly ParamSchema[] = [
   { name: "prompt", label: "Rasm tavsifi", type: "text", min: MEDIA_IMAGE_PROMPT_MIN, max: IMAGE_PROMPT_LIMIT, affects: "request" },
-  { name: "imageStyle", label: "Uslub", type: "enum", options: IMAGE_STYLES.map((s) => ({ value: s.id, label: s.name })), default: IMAGE_STYLES[0].id, affects: "request" },
   { name: "imageRatio", label: "O'lcham", type: "enum", options: IMAGE_RATIOS.map((r) => ({ value: r.id, label: r.label })), default: IMAGE_RATIOS[0].id, affects: "request" },
   { name: "imageCount", label: "Soni", type: "int", min: 1, max: 4, default: 1, affects: "price" },
+  { name: "imageStyle", label: "Uslub", type: "enum", options: IMAGE_STYLES.map((s) => ({ value: s.id, label: s.name })), default: IMAGE_STYLES[0].id, affects: "request", advanced: true },
 ];
 
 /**

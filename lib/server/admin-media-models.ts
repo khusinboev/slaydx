@@ -13,7 +13,7 @@ import { mediaPricing } from "./media/pricing";
 import { applyPriceAdjust } from "../price-adjust";
 import { costUsd, isValidMarkup, MARKUP_MAX, MARKUP_MIN, normalize } from "../studio-core";
 import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "../media/catalog";
-import { markupOf, studioImagePrice } from "../media/studio-pricing";
+import { liveCostRule, markupOf, studioImagePrice } from "../media/studio-pricing";
 
 /**
  * Admin «Narxlar» → «Media modellari» (docs/studio/P1-SPEC.md «Admin»): per Studio model the provider cost of ONE unit
@@ -73,7 +73,8 @@ export async function mediaModelsOverview(): Promise<MediaModelsOverview> {
   const models = managedModelIds().map((id): MediaModelItem => {
     const entry = MEDIA_CATALOG.byId(id)!;
     const one = { modelId: id, imageCount: 1 };
-    const usd = costUsd(entry.cost, normalize(entry.params, one));
+    // The live unit cost (admin slot model), the very number the price is built from.
+    const usd = costUsd(liveCostRule(entry.cost, pricing.costUsd?.[id]), normalize(entry.params, one));
     const costSoum = round2(usd * pricing.soumPerUsd);
     const priceBase = studioImagePrice(one, pricing)!;
     const price = applyPriceAdjust(priceBase, adj);

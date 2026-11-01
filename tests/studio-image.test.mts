@@ -118,11 +118,23 @@ test("price goldens: cost × markup per model × count, override wins, rounded u
   assert.equal(costUsd(MEDIA_CATALOG.byId(NANO)!.cost, normalize(MEDIA_CATALOG.byId(NANO)!.params, { imageCount: 3 })), USD[NANO] * 3);
 });
 
+test("live unit cost: the block's costUsd replaces the catalog's default unit price (server and browser alike)", () => {
+  // The admin slot draws Nano Banana with the flash model ($0.067): 0.067 × 12 800 × 2 = 1 715.2 → 1 800 per picture.
+  const live = pricing();
+  const flash = { ...live, costUsd: { [NANO]: 0.067 } };
+  assert.equal(studioImagePrice({ modelId: NANO, imageCount: 1 }, flash), 1800);
+  assert.equal(studioImagePrice({ modelId: NANO, imageCount: 3 }, flash), 5200, "0.067 × 3 × 12 800 × 2 = 5 145.6 → 5 200");
+  assert.equal(studioImagePrice({ modelId: GPT, imageCount: 1 }, flash), 1400, "another model keeps its catalog cost");
+  assert.equal(studioImagePrice({ modelId: NANO, imageCount: 1 }, { ...flash, costUsd: { [NANO]: -1 } }), 900, "a junk cost never applies");
+  assert.equal(basePriceFor(STUDIO, { modelId: NANO, imageCount: 1 }, flash), 1800, "basePriceFor reads the same block");
+  assert.deepEqual(parseMediaPricing({ ...flash, costUsd: { [NANO]: 0.067, x: 0, y: "1" } })?.costUsd, { [NANO]: 0.067 });
+});
+
 test("pricing block: parse rejects junk; the browser registry is invisible on the server", () => {
   assert.equal(parseMediaPricing(null), null);
   assert.equal(parseMediaPricing({ soumPerUsd: 0, markup: 2 }), null);
   assert.equal(parseMediaPricing({ soumPerUsd: 12_800, markup: 0.5 }), null);
-  assert.deepEqual(parseMediaPricing({ soumPerUsd: 12_800, markup: 2, overrides: { [NANO]: { markup: 3 }, x: { markup: 99 }, y: 5 } }), pricing({ overrides: { [NANO]: { markup: 3 } } }));
+  assert.deepEqual(parseMediaPricing({ soumPerUsd: 12_800, markup: 2, overrides: { [NANO]: { markup: 3 }, x: { markup: 99 }, y: 5 } }), { ...pricing({ overrides: { [NANO]: { markup: 3 } } }), costUsd: {} });
   // No window: priceFor ignores the registry and prices at the default block.
   setClientMediaPricing(pricing({ markup: 9 }));
   assert.equal(priceFor(STUDIO, { modelId: NANO }), studioImagePrice({ modelId: NANO }, defaultMediaPricing()));
@@ -382,7 +394,7 @@ test("client preview == server price == charge (catalog pricing block + session 
   const c = await catalog();
   assert.equal(c.status, 200);
   const block = c.body.pricing as ReturnType<typeof pricing>;
-  assert.deepEqual(block, { soumPerUsd: 12_900, markup: 2.5, step: 100, overrides: { [GPT]: { markup: 4 } } });
+  assert.deepEqual(block, { soumPerUsd: 12_900, markup: 2.5, step: 100, overrides: { [GPT]: { markup: 4 } }, costUsd: { [NANO]: USD[NANO], [GPT]: USD[GPT] } });
   // Server prices are taken BEFORE the simulated browser exists: with a `window` the server path would read the
   // browser registry and agree with the client by accident.
   const serverPrice = new Map<string, number>();
@@ -429,6 +441,34 @@ test("client preview == server price == charge (catalog pricing block + session 
   await query("UPDATE generations SET status = 'REVOKED' WHERE id = $1", [ok.body.id]);
 });
 
+test("live upstream: the admin slot's model sets the Studio price (catalog block, effectivePrice, the real charge)", { skip: skipDb }, async (t) => {
+  quiet(t);
+  const { query } = await db();
+  const { effectivePrice } = await import("../lib/server/pricing.ts");
+  const { getSetting } = await import("../lib/server/settings.ts");
+  await query("DELETE FROM tool_pricing");
+  setEnv(t, "GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image");
+  await refresh();
+  const rate = await getSetting("finance.soum_per_usd");
+  const c = await catalog();
+  assert.equal((c.body.pricing as { costUsd: Record<string, number> }).costUsd[NANO], 0.067, "the slot's model, priced by imagePriceOf");
+  const values = { ...VALUES, imageCount: 2 };
+  const price = await effectivePrice(STUDIO, values);
+  assert.equal(price, Math.ceil((0.067 * 2 * rate * 2) / 100 - 1e-9) * 100, "never the lite price for a flash picture");
+  assert.ok(price > Math.ceil((USD[NANO]! * 2 * rate * 2) / 100) * 100);
+  const me = await mkUser();
+  const before = await balanceOf(me);
+  const r = await post(me, values, price);
+  assert.equal(r.status, 202, JSON.stringify(r.body));
+  assert.equal(before - (await balanceOf(me)), price);
+  await query("UPDATE generations SET status = 'REVOKED' WHERE id = $1", [r.body.id]);
+  // An upstream the price book does not know falls back to the catalog cost (never free, never a guess).
+  setEnv(t, "GEMINI_IMAGE_MODEL", "gemini-unknown-image");
+  await refresh();
+  assert.equal(((await catalog()).body.pricing as { costUsd: Record<string, number> }).costUsd[NANO], undefined);
+  assert.equal(await effectivePrice(STUDIO, values), Math.ceil((USD[NANO]! * 2 * rate * 2) / 100 - 1e-9) * 100);
+});
+
 /* ───────────────────────────── catalog endpoint ───────────────────────────── */
 
 test("catalog: shape, available models only, default model, pricing = server, no routes or upstream ids", { skip: skipDb }, async (t) => {
@@ -453,7 +493,10 @@ test("catalog: shape, available models only, default model, pricing = server, no
   for (const m of models) {
     assert.ok(!("routes" in m), "routes stripped");
     assert.deepEqual(m, JSON.parse(JSON.stringify(client.find((c) => c.id === m.id))), "exactly the client view");
-    assert.ok(Array.isArray(m.params) && (m.params as { name: string }[]).map((p) => p.name).join() === "prompt,imageStyle,imageRatio,imageCount");
+    assert.ok(Array.isArray(m.params) && (m.params as { name: string }[]).map((p) => p.name).join() === "prompt,imageRatio,imageCount,imageStyle");
+    // Contract with the UI: Uslub sits under «Qo'shimcha sozlamalar».
+    assert.deepEqual((m.params as { name: string; advanced?: boolean }[]).filter((p) => p.advanced).map((p) => p.name), ["imageStyle"]);
+    assert.ok(m.cost, "cost rule shipped for the client preview");
   }
   for (const secret of ["gemini-3.1-flash-lite-image", "gpt-image-2.5-flare", "upstream", "adapter", "google-image", "\"openai-image\"", "routes", "test-gemini-key", "sk-test"]) {
     assert.ok(!both.text.includes(secret), `payload leaks ${secret}`);

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { request, thumbUrl } from "@/lib/api-client";
+import { request } from "@/lib/api-client";
+import { parseMediaPricing, setClientMediaPricing } from "@/lib/media/studio-pricing";
 import type { ClientEntry } from "@/lib/studio-core";
 import type { GalleryItem, GalleryPage, MediaCatalog, StudioPricing } from "./studio-types";
 
@@ -10,7 +11,6 @@ export const STUDIO_IMAGE_PURPOSE = "studio.image";
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
-const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 /* ───────────────────────── catalog ───────────────────────── */
 
@@ -23,21 +23,8 @@ function parseEntry(raw: unknown): ClientEntry | null {
   return { ...raw, badges, maker: typeof raw.maker === "string" ? raw.maker : "" } as unknown as ClientEntry;
 }
 
-function parsePricing(raw: unknown): StudioPricing | null {
-  if (!isObj(raw)) return null;
-  const soumPerUsd = num(raw.soumPerUsd);
-  if (soumPerUsd === null || soumPerUsd <= 0) return null;
-  const markup = num(raw.markup);
-  const step = num(raw.step);
-  const overrides: Record<string, { markup: number }> = {};
-  if (isObj(raw.overrides)) {
-    for (const [id, o] of Object.entries(raw.overrides)) {
-      const m = isObj(o) ? num(o.markup) : null;
-      if (m !== null && m >= 1) overrides[id] = { markup: m };
-    }
-  }
-  return { soumPerUsd, markup: markup !== null && markup >= 1 ? markup : 2, step: step !== null && step >= 1 ? Math.round(step) : 100, overrides };
-}
+/** The server's own validator (`parseMediaPricing`): an invalid block is no block — no honest price preview without it. */
+const parsePricing = (raw: unknown): StudioPricing | null => parseMediaPricing(raw);
 
 /** `null` when the answer is not a catalog at all (no pricing context = no honest price preview). */
 export function parseCatalog(raw: unknown): MediaCatalog | null {
@@ -46,13 +33,16 @@ export function parseCatalog(raw: unknown): MediaCatalog | null {
   if (!pricing || !Array.isArray(raw.models)) return null;
   const models = raw.models.map(parseEntry).filter((m): m is ClientEntry => m !== null);
   const wanted = str(raw.defaultModelId);
-  const defaultModelId = wanted && models.some((m) => m.id === wanted) ? wanted : (models[0]?.id ?? "");
+  // `null` from the server = nothing available now; the picker then shows «Hozircha modellar mavjud emas».
+  const defaultModelId = wanted && models.some((m) => m.id === wanted) ? wanted : (models[0]?.id ?? null);
   return { purpose: str(raw.purpose) ?? "", defaultModelId, models, pricing };
 }
 
 export async function fetchMediaCatalog(purpose: string, signal?: AbortSignal): Promise<MediaCatalog> {
   const catalog = parseCatalog(await request<unknown>(`/api/media/catalog?purpose=${encodeURIComponent(purpose)}`, signal ? { signal } : {}));
   if (!catalog) throw new Error("Modellar ro‘yxati noto‘g‘ri keldi. Birozdan keyin qayta urinib ko‘ring.");
+  // `priceFor(studio-image, …)` anywhere in the app now shows what the server charges.
+  setClientMediaPricing(catalog.pricing);
   return catalog;
 }
 
@@ -123,29 +113,32 @@ export function useMediaCatalog(purpose: string, enabled = true): { state: Catal
 
 /* ───────────────────────── gallery ───────────────────────── */
 
-const first = (...vals: unknown[]): unknown => vals.find((v) => v !== undefined && v !== null);
 
+/**
+ * One item of `GET /api/media/gallery` (`lib/server/media/public.ts`): `{ id, createdAt, modelId, modelLabel, prompt,
+ * images: [{ url, w, h }], fileUrl }`. The pictures ARE the thumbnails (stored asset URLs; the `/thumb` endpoint does
+ * not render images); a job whose pictures are gone keeps its card with a placeholder.
+ */
 function parseItem(raw: unknown): GalleryItem | null {
   if (!isObj(raw)) return null;
   const id = str(raw.id);
   if (!id) return null;
-  const listed = first(raw.thumbs, raw.thumbnails, raw.thumbUrls);
-  const thumbs = Array.isArray(listed) ? listed.filter((t): t is string => typeof t === "string" && t !== "") : [];
-  const count = num(first(raw.count, raw.imageCount, raw.images));
+  const images = Array.isArray(raw.images) ? raw.images : [];
+  const thumbs = images.map((im) => (isObj(im) ? str(im.url) : null)).filter((u): u is string => u !== null);
   return {
     id,
-    createdAt: str(first(raw.createdAt, raw.created_at)) ?? "",
-    modelId: str(first(raw.modelId, raw.model_id)),
-    modelLabel: str(first(raw.modelLabel, raw.model_label, raw.model)) ?? "",
+    createdAt: str(raw.createdAt) ?? "",
+    modelId: str(raw.modelId),
+    modelLabel: str(raw.modelLabel) ?? "",
     prompt: str(raw.prompt) ?? "",
-    count: count !== null && count >= 1 ? Math.round(count) : Math.max(1, thumbs.length),
-    // No list of its own: the existing per-generation thumbnail endpoint.
-    thumbs: thumbs.length ? thumbs : [thumbUrl(id, num(raw.fileVersion) ?? undefined)],
+    count: Math.max(1, thumbs.length),
+    thumbs,
+    fileUrl: str(raw.fileUrl) ?? `/api/generations/${id}/file`,
   };
 }
 
 export function parseGalleryPage(raw: unknown): GalleryPage {
-  const list = isObj(raw) ? first(raw.items, raw.generations) : null;
+  const list = isObj(raw) ? raw.items : null;
   const items = Array.isArray(list) ? list.map(parseItem).filter((i): i is GalleryItem => i !== null) : [];
   return { items, nextCursor: isObj(raw) ? str(raw.nextCursor) : null };
 }
