@@ -179,7 +179,7 @@ test("PayDialog signed out: a method opens the login returning to /uz/wallet (no
   render(inRouter(h(PayDialog)));
   await act(async () => openPay({ amount: 100_000 }));
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Payme" }));
+    fireEvent.click(document.querySelector("[data-pay-method=\"payme\"]")!);
   });
   assert.equal(useUi.getState().overlay, "login");
   assert.equal(useUi.getState().returnTo, "/uz/wallet");

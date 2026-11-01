@@ -366,17 +366,17 @@ test("PayDialog phone: a bottom sheet with ≥ 64 px amount cards, 44 px close a
     features: { llm: true, images: true, telegram: false, telegramBot: null, devLogin: false, pdf: true, payments: { click: true, payme: true } } as never,
   });
   render(inRouter(h(PayDialog)));
-  for (const m of ["Click", "Payme"]) {
-    const b = screen.getByText(new RegExp(`^${m}`));
-    assert.ok(has(b, "h-12"), `${m} button ≥ 48 px`);
+  // Tiles (owner 2026-11-01): the app tiles are ≥ 84 px, the secondary ones ≥ 76 px.
+  for (const [m, cls] of [["click", "min-h-[84px]"], ["payme", "min-h-[76px]"]] as const) {
+    assert.ok(has(document.querySelector(`[data-pay-method="${m}"]`), cls), `${m} tile ≥ 48 px`);
   }
-  // Merchant API on (owner 2026-10-09): Karta / Telefon raqam / Click ilovasi are ≥ 56 px rows, the input is 48 px.
+  // Merchant API on (owner 2026-10-09): Click app / Telefon raqam / Karta tiles ≥ 76 px, the input is 48 px.
   cleanup();
   useAppStore.setState({
     features: { llm: true, images: true, telegram: false, telegramBot: null, devLogin: false, pdf: true, payments: { click: true, payme: true, clickDirect: true } } as never,
   });
   render(inRouter(h(PayDialog)));
-  for (const m of ["card", "phone", "app", "payme"]) assert.ok(has(document.querySelector(`[data-pay-method="${m}"]`), "min-h-14"), `${m} row ≥ 56 px`);
+  for (const m of ["card", "phone", "app", "payme"]) assert.match(document.querySelector(`[data-pay-method="${m}"]`)!.className, /min-h-\[(7[6-9]|8\d)px\]/, `${m} tile ≥ 76 px`);
   assert.ok(has(document.querySelector("[data-pay-input]"), "h-12"), "free amount input ≥ 48 px");
   assert.ok(has(document.querySelector("[data-pay-input]"), "text-base"), "16 px text: iOS does not zoom");
 });
