@@ -24,6 +24,9 @@ import { portraitPrice } from "./generation/portrait/registry";
 import { VIDEO_ASPECTS, VIDEO_PROVIDERS, videoParamsError, videoPrice } from "./generation/video/registry";
 import { imageBasePrice, imageModelError, imageModelOf } from "./generation/image-models";
 import { groupDigits } from "./format";
+import { MEDIA_CATALOG } from "./media/catalog";
+import { defaultMediaPricing, getClientMediaPricing, isStudioImageModel, studioImagePrice, studioModelOf, type MediaPricing } from "./media/studio-pricing";
+import { validate as validateParams } from "./studio-core";
 
 const TOPIC_FILE_MODES = [
   {
@@ -63,6 +66,7 @@ const TOPIC_FILE_MODES = [
  */
 const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
   image: [{ kind: "textarea", name: "prompt", legend: "Rasm tavsifi", required: true }],
+  "studio-image": [{ kind: "textarea", name: "prompt", legend: "Rasm tavsifi", required: true }],
   resume: [
     { kind: "text", name: "fullName", legend: "To'liq ism", required: true },
     { kind: "text", name: "targetRole", legend: "Maqsadli lavozim", required: true },
@@ -921,6 +925,30 @@ export const TOOLS: ToolConfig[] = [
     fields: INTERACTIVE_GAME_FIELDS.listening,
   },
   {
+    /*
+     * Studio «Rasm» tab (docs/studio/P1-SPEC.md): the user picks a catalog model (`modelId`), the form is that model's
+     * ParamSchema, the price is provider cost × markup (`lib/media/studio-pricing.ts`), the engine always runs through
+     * the media core (`lib/generation/studio/`). The page is `/uz/studio` (its own route, not the generic tool page).
+     */
+    id: "studio-image",
+    slug: "studio",
+    title: "Studio",
+    pageTitle: "Studio",
+    group: "media",
+    icon: "image",
+    tc: "234 88 12",
+    description: "Bir nechta AI model bilan rasm — modelni o‘zingiz tanlaysiz, narx modelga qarab",
+    submitLabel: "Yaratish",
+    creatingLabel: "Rasm chizilmoqda...",
+    createdLabel: "rasm tayyor!",
+    extraOptional: false,
+    output: "png",
+    custom: "studio-image",
+    // The cheapest job (1 picture, default model, default pricing) for the «… dan» labels; the real price is `priceFor`.
+    basePrice: studioImagePrice({}, defaultMediaPricing()) ?? 1000,
+    fields: [],
+  },
+  {
     id: "podcast",
     slug: "podcast",
     title: "Podkast",
@@ -1308,6 +1336,18 @@ export function translationPrice(chars: number): number {
  */
 /** Rasm tavsifi shundan qisqa bo'lsa model uchun ma'no tashimaydi. */
 export const IMAGE_PROMPT_MIN = 3;
+/**
+ * Studio picture request before any charge: the model must be a Studio model (`studio.image`), and every value must
+ * pass the model's own ParamSchema (`validate`: an unknown style / ratio / count is refused, never mapped). Whether the
+ * model is available RIGHT NOW is the server's async check (`lib/server/media/availability.ts`).
+ */
+export function studioImageError(values: FormValues): string | null {
+  const modelId = studioModelOf(values);
+  const entry = isStudioImageModel(modelId) ? MEDIA_CATALOG.byId(modelId) : null;
+  if (!entry) return "Noma'lum rasm modeli — boshqa modelni tanlang.";
+  return validateParams(entry.params, values);
+}
+
 /** Tarjima uchun eng kam matn — bundan qisqasi hujjat emas. */
 export const TRANSLATION_MIN_CHARS = 8;
 
@@ -1319,6 +1359,7 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
    * to'g'ridan-to'g'ri yuborilgan so'rov ularni chetlab o'tardi.
    */
   if (tool.custom === "video") return videoParamsError(values);
+  if (tool.custom === "studio-image") return studioImageError(values);
   if (tool.custom === "image") {
     const n = String(values.prompt ?? "").trim().length;
     if (n > 0 && n < IMAGE_PROMPT_MIN) return "Rasm tavsifi juda qisqa — nima chizilishini yozing.";
@@ -1465,6 +1506,11 @@ export type ToolFeatures = {
    * `video.enabled` off. The tool is hidden when the list is empty (or the server did not send it).
    */
   videoProviders?: string[];
+  /**
+   * Studio picture models (catalog ids) available right now (`lib/server/media/availability.ts`). Optional: absent =
+   * not known -> the `rasm` model list (or the `images` flag) decides.
+   */
+  studioImageModels?: string[];
 };
 
 /**
@@ -1491,6 +1537,11 @@ export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | nu
   if (!features) return null;
   if (tool.custom === "video") {
     return features.videoProviders && features.videoProviders.length > 0 ? null : "Video xizmati hozircha mavjud emas: provayder sozlanmagan.";
+  }
+  if (tool.custom === "studio-image") {
+    const known = features.studioImageModels ?? features.imageModels;
+    const ok = known ? known.length > 0 : features.images;
+    return ok ? null : "Rasm xizmati vaqtincha o‘chiq: serverda rasm kaliti sozlanmagan.";
   }
   if (tool.custom === "image" && features.imageModels) {
     // The model list is the truth for `rasm` (OpenAI alone can serve it); the `images` flag is Gemini's.
@@ -1616,7 +1667,16 @@ function essayPricePages(values: FormValues): number {
  * charges `applyPriceAdjust(basePriceFor(...), <tool_pricing row>)` via
  * `lib/server/pricing.ts`; it never reads the client registry below.
  */
-export function basePriceFor(tool: ToolConfig, values: FormValues): number {
+export function basePriceFor(tool: ToolConfig, values: FormValues, media?: MediaPricing | null): number {
+  if (tool.id === "studio-image") {
+    /*
+     * Cost × markup (`studio-pricing.ts`), with the pricing block the caller passes (server: settings + overrides,
+     * `lib/server/media/pricing.ts`), else the browser's block from the catalog endpoint. A model outside the Studio is
+     * refused by `preflightError` before any price is used; here it is priced as the default model so this stays total.
+     */
+    const pricing = media ?? getClientMediaPricing() ?? defaultMediaPricing();
+    return studioImagePrice(values, pricing) ?? studioImagePrice({ ...values, modelId: "" }, pricing)!;
+  }
   if (tool.id === "portrait") return portraitPrice(values);
   if (tool.id === "video") return videoPrice(values);
   if (tool.id === "image") {
@@ -1717,8 +1777,8 @@ export function basePriceFor(tool: ToolConfig, values: FormValues): number {
  * is applied, so every displayed price matches what the server will charge.
  * Signature unchanged: every existing caller keeps working.
  */
-export function priceFor(tool: ToolConfig, values: FormValues): number {
-  return clientAdjustedPrice(tool.id, basePriceFor(tool, values));
+export function priceFor(tool: ToolConfig, values: FormValues, media?: MediaPricing | null): number {
+  return clientAdjustedPrice(tool.id, basePriceFor(tool, values, media));
 }
 
 // ---------------------------------------------------------------------------
@@ -1744,7 +1804,7 @@ export function topicOf(values: FormValues, tool: ToolConfig) {
   if (tool.id === "video") {
     return String(values.prompt || "Video").replace(/\s+/g, " ").trim().slice(0, 72) || "Video";
   }
-  if (tool.id === "image") {
+  if (tool.id === "image" || tool.id === "studio-image") {
     return String(values.prompt || values.topic || "Rasm").replace(/\s+/g, " ").trim().slice(0, 72) || "Rasm";
   }
   if (tool.id === "translation") {

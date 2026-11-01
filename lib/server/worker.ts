@@ -121,6 +121,8 @@ let lastPaymentEventsPurgeAt = -Infinity;
 let lastServerMetricsPurgeAt = -Infinity;
 /** AI chat messages / proposals older than 30 days (`purgeChat`): same 6 hour cadence, mark before the DELETE. */
 let lastChatPurgeAt = -Infinity;
+/** `media_jobs` older than 90 days (M5): same 6 hour cadence, mark before the DELETE. */
+let lastMediaJobsPurgeAt = -Infinity;
 
 /**
  * Sinov uchun: keyingi `housekeeping()` 6 soatlik qadamlarni (saqlash
@@ -132,6 +134,7 @@ export function resetRetentionScan(): void {
   lastServerMetricsPurgeAt = -Infinity;
   lastChatPurgeAt = -Infinity;
   lastStaySweepAt = -Infinity;
+  lastMediaJobsPurgeAt = -Infinity;
 }
 
 /**
@@ -1112,6 +1115,17 @@ export async function purgeHousekeeping(): Promise<void> {
   await step("daily-quiz", () => runDailyQuizSend());
   // «Qattiqqo'l domla»: idle defences expire (the student is told once), stuck ones are refunded.
   await step("domla", () => domlaHousekeeping());
+  /*
+   * Media engine rows (M5, docs/studio/P1-SPEC.md): sync rows stuck in 'submitting' past 1 h are closed every tick (a
+   * partial index keeps it cheap); rows older than 90 days go in batches on the 6 hour cadence, mark before the run.
+   */
+  await step("media-jobs-stuck", async () => (await import("./media/jobs")).failStuckMediaJobs());
+  if (Date.now() - lastMediaJobsPurgeAt >= RETENTION_EVERY_MS) {
+    await step("media-jobs-purge", async () => {
+      lastMediaJobsPurgeAt = Date.now();
+      return (await import("./media/jobs")).purgeOldMediaJobs();
+    });
+  }
 }
 
 /** `error_log`: 90 days after `last_seen_at`, resolved or not (§5.5). */

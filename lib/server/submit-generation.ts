@@ -18,6 +18,9 @@ import { photoExists } from "./photo";
 import { portraitInputFromValues } from "../generation/portrait/registry";
 import { videoInputFromValues } from "../generation/video/registry";
 import type { FormValues, ToolConfig, ToolId } from "../types";
+import { modelUnavailable } from "./media/availability";
+import { STUDIO_IMAGE_PURPOSE } from "../media/catalog";
+import { studioModelOf } from "../media/studio-pricing";
 
 /**
  * The paid-generation pipeline behind `POST /api/generations`, shared with the AI chat's confirmation.
@@ -159,6 +162,16 @@ export async function submitGeneration(input: SubmitInput): Promise<SubmitResult
     if (unavailable) throw new ApiError(unavailable, 400);
     const image = videoInputFromValues(values).imageAssetId;
     if (image && !(await photoExists(userId, image))) throw new ApiError("Boshlang'ich surat topilmadi — suratni qayta yuklang", 400);
+  }
+
+  /*
+   * Studio pictures (docs/studio/P1-SPEC.md): the chosen catalog model must be sold by the Studio AND available RIGHT
+   * NOW (provider on + keyed + not switched off by the admin) — the same function the catalog endpoint lists with.
+   * 400 before anything is priced or charged; a replay is a job that already exists.
+   */
+  if (tool.id === "studio-image" && !replay) {
+    const unavailable = await modelUnavailable(STUDIO_IMAGE_PURPOSE, studioModelOf(values));
+    if (unavailable) throw new ApiError(unavailable, 400, { code: "model_unavailable" });
   }
 
   // Graduation portrait: the selfie must exist and be the user's own BEFORE anything is priced or charged.

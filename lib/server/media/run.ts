@@ -22,7 +22,7 @@ import {
   type Route,
   type RouteHealth,
 } from "../../studio-core";
-import { MEDIA_CATALOG } from "../../media/catalog";
+import { MEDIA_CATALOG, MEDIA_PURPOSES } from "../../media/catalog";
 import { mediaContext } from "../../media/context";
 
 /** Breaker health shared with the LLM layer's registry (the admin heartbeat lists both). */
@@ -75,9 +75,17 @@ function redacted(params: Readonly<Record<string, ParamValue>>, keys: readonly s
   return out;
 }
 
+/**
+ * N3 (P0 review): a call names a purpose, and its model must be one the purpose allows — a caller can never spend on a
+ * model its purpose does not sell. An unknown purpose is a programmer error (plain `Error`, never mapped to a user
+ * message); an unknown or disallowed model is a `MediaError` (the engines turn it into an ordinary failure + refund).
+ */
 export async function runMedia(i: RunInput): Promise<RunOutput> {
+  const purpose = MEDIA_PURPOSES.byId(i.purpose);
+  if (!purpose) throw new Error(`media: unknown purpose "${i.purpose}"`);
   const entry = MEDIA_CATALOG.byId(i.modelId);
   if (!entry) throw new MediaError("media", `unknown model ${i.modelId}`);
+  if (!purpose.allowed.includes(entry.id)) throw new MediaError("media", `model ${entry.id} is not allowed for ${purpose.id}`);
   const params = normalize(entry.params, i.values);
   const routes = entry.routes.map((r) => (i.upstream ? { ...r, upstreamModel: i.upstream(r) } : r));
   const ctx = mediaContext();

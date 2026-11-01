@@ -47,7 +47,9 @@ export type ToolId =
   /** Program-17 item 14: selfie -> graduation portrait (`portrait/` engine, Gemini image edit, group `media`). */
   | "portrait"
   /** Program-17 item 5: text/image -> short video (`video/` adapters, async provider operation, group `media`). */
-  | "video";
+  | "video"
+  /** Studio P1 (docs/studio/P1-SPEC.md): pictures from a catalog model the user picks, always through the media core. */
+  | "studio-image";
 
 /**
  * Bo'lim (landing, nav, `CreateGrid`).
@@ -141,7 +143,7 @@ export type ToolConfig = {
    * ko'radi.
    */
   output: "docx" | "pptx" | "png" | "mp3" | "mp4";
-  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "konspekt" | "teacher" | "game" | "media" | "infographic" | "portrait" | "video";
+  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "konspekt" | "teacher" | "game" | "media" | "infographic" | "portrait" | "video" | "studio-image";
   basePrice: number;
 };
 
