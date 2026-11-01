@@ -48,6 +48,11 @@ export type RunInput = {
    * Absent = the catalog CostRule.
    */
   costUsd?: number;
+  /**
+   * Params stored only as their length (`{ chars: n }`) in `media_jobs.params`: long user text (speech chunks) would
+   * bloat the table and copy the user's content a second time. The price quote still sees the full value.
+   */
+  redact?: readonly string[];
   /** Swap a route's upstream model (admin routing slot, e.g. `image.gemini`). */
   upstream?: (route: Route) => string;
   deps?: AdapterDeps;
@@ -62,6 +67,12 @@ async function record<T>(what: string, fn: () => Promise<T>): Promise<T | null> 
     console.warn(`[media] ${what} not recorded:`, e instanceof Error ? e.message : e);
     return null;
   }
+}
+
+function redacted(params: Readonly<Record<string, ParamValue>>, keys: readonly string[] | undefined): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...params };
+  for (const k of keys ?? []) if (k in out) out[k] = { chars: String(out[k] ?? "").length };
+  return out;
 }
 
 export async function runMedia(i: RunInput): Promise<RunOutput> {
@@ -82,7 +93,7 @@ export async function runMedia(i: RunInput): Promise<RunOutput> {
           provider: primary.provider,
           upstreamModel: primary.upstreamModel,
           idempotencyKey: key,
-          params: { ...params },
+          params: redacted(params, i.redact),
           costUsd: i.costUsd ?? costUsd(entry.cost, params),
         }),
       )

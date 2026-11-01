@@ -197,7 +197,7 @@ type JobRow = {
   errors: number;
   last_error: string | null;
   outputs: { mime: string; size: number }[] | null;
-  params: { text?: string; voice?: string };
+  params: { text?: { chars: number }; voice?: string };
   cost_usd: string | null;
 };
 const rowsOf = (gen: string) =>
@@ -447,7 +447,7 @@ test("ON: one row per chunk — purpose, catalog model, provider, upstream, key,
     assert.equal(r.attempts, 1);
     assert.equal(r.errors, 0);
     assert.deepEqual(r.outputs, [{ mime: "audio/mpeg", size: mp3Of(2).byteLength }]);
-    assert.equal(r.params.text, parts3[i]!.text);
+    assert.deepEqual(r.params.text, { chars: parts3[i]!.text.replace(/\s+/g, " ").trim().length }, "the row keeps the chunk length, never the user's text");
     assert.equal(r.params.voice, p.calls[i]!.opts.voice, "the voice the chain chose");
     // MUTATION 9: a quote without the text is $0.
     const expected = (entry.cost.per === "kchar" ? entry.cost.usd : 0) * (parts3[i]!.text.length / 1000);
@@ -474,7 +474,7 @@ test("ON: packed Gemini chunks — one row per packed call, the operator's TTS_G
   // MUTATION 10: without the hook the row would say «gemini», not the model that served it.
   assert.equal(rows[0]!.upstream_model, "gemini-2.5-flash-preview-tts");
   assert.equal(rows[0]!.purpose, "greeting.voice");
-  assert.equal(rows[0]!.params.text, "Bir. Ikki. Uch.", "the quote is for the packed text");
+  assert.deepEqual(rows[0]!.params.text, { chars: "Bir. Ikki. Uch.".length }, "the quote is for the packed text (stored as its length)");
 });
 
 test("ON: no row without the switch, without a label, or for a provider the catalog does not sell", { skip }, async () => {
@@ -714,7 +714,7 @@ test("listening: one row per word — the per-run scope keeps every key unique, 
   // MUTATION 6 / 14: without a scope or counter all three words would share `speech:0:azure` — one row.
   assert.deepEqual(keysOf(gen, rows), ["speech:listening:0:0:azure", "speech:listening:1:0:azure", "speech:listening:2:0:azure"]);
   assert.ok(rows.every((r) => r.purpose === "listening.voice" && r.status === "succeeded" && r.attempts === 1));
-  assert.deepEqual(rows.map((r) => r.params.text), ["bir", "ikki", "uch"]);
+  assert.deepEqual(rows.map((r) => r.params.text), [{ chars: 3 }, { chars: 4 }, { chars: 3 }]);
 
   await withMediaContext(ctx, synthAll);
   rows = await rowsOf(gen);

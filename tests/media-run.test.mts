@@ -8,7 +8,7 @@ import type { AdapterInput, MediaAdapter } from "../lib/studio-core/index.ts";
  * `runMedia` (lib/server/media/run.ts): one sync call through the core, recorded in `media_jobs` inside a job.
  *
  * Mutations (each turned the named step red, then restored): `{ ...params, ...i.extra }` → `params` -> "extra reaches
- * the adapter"; `upstream` hook ignored -> "upstream override"; failMediaJob call removed -> "failure is recorded"; `i.costUsd ??` dropped -> "explicit cost wins".
+ * the adapter"; `upstream` hook ignored -> "upstream override"; failMediaJob call removed -> "failure is recorded"; `i.costUsd ??` dropped -> "explicit cost wins"; redact ignored -> "redacted text is stored as its length".
  */
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
@@ -71,9 +71,13 @@ test("runMedia: inside a job — succeeded and failed rows", { skip }, async (t)
     /blocked/,
   );
   await withMediaContext(ctx, () => runMedia({ purpose: "rasm.image", modelId: "google/nano-banana", values: { imageCount: 1 }, costUsd: 0.067, step: "image:2", adapters: { "google-image": adapter([]) } }));
-  const rows = (await mediaJobsOf(gen)).filter((r) => !r.idempotency_key.endsWith(":image:2"));
+  const rows = (await mediaJobsOf(gen)).filter((r) => r.idempotency_key.endsWith(":image:0") || r.idempotency_key.endsWith(":image:1"));
   const priced = (await mediaJobsOf(gen)).find((r) => r.idempotency_key.endsWith(":image:2"))!;
   assert.equal(Number((priced as unknown as { cost_usd: string }).cost_usd), 0.067, "explicit cost wins");
+  await withMediaContext(ctx, () => runMedia({ purpose: "podcast.voice", modelId: "elevenlabs/tts", values: { text: "x".repeat(2000) }, redact: ["text"], step: "speech:0:elevenlabs", adapters: { "elevenlabs-speech": { ...adapter([]), id: "elevenlabs-speech", submit: async () => ({ done: [{ kind: "inline", bytes: new Uint8Array([0x49, 0x44, 0x33, 3, 0, 0, 0, 0, 0, 0, 0, 0]), mime: "audio/mpeg" }] }) } } }));
+  const speech = (await mediaJobsOf(gen)).find((r) => r.idempotency_key.endsWith(":speech:0:elevenlabs"))!;
+  assert.deepEqual(speech.params.text, { chars: 2000 }, "redacted text is stored as its length");
+  assert.equal(Number((speech as unknown as { cost_usd: string }).cost_usd), 0.16, "the quote still prices the full text");
   assert.deepEqual(rows.map((r) => [r.idempotency_key, r.status]), [[`${gen}:image:0`, "succeeded"], [`${gen}:image:1`, "failed"]]);
   assert.deepEqual(rows[0].outputs, [{ mime: "image/png", size: PNG.byteLength }]);
   assert.equal(Number((rows[0] as unknown as { cost_usd: string }).cost_usd), 0.034);

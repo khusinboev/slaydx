@@ -338,6 +338,8 @@ async function synthesizeViaCore(provider: TtsProvider, text: string, call: TtsS
       purpose: label.purpose,
       modelId: sold.entry.id,
       values: { text, voice: call.voice ?? "" },
+      // The chunk text is the user's content: the row keeps its length only (the quote still prices the full text).
+      redact: ["text"],
       extra: speechExtraOf(text, call),
       step: label.step,
       adapters: { [sold.route.adapter]: speechAdapter(sold.route.adapter, provider, { onAudio: (a) => (got.audio = a) }) },
