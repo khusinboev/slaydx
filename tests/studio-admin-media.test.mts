@@ -287,6 +287,23 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
     assert.deepEqual(last.after, DEF);
   });
 
+  await t.test("live upstream: the admin slot's flash model shows its own cost and the price built from it", async () => {
+    const saved = process.env.GEMINI_IMAGE_MODEL;
+    process.env.GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image";
+    try {
+      await reloadProviderKeys();
+      const r = await get(owner.cookie);
+      const nano = r.body.models.find((m) => m.modelId === NANO)!;
+      assert.equal(nano.costUsd, 0.067, "the cost the admin sees is the cost the price is built from");
+      assert.equal(nano.price, up100(0.067 * rate * 2));
+      assert.equal(nano.price, await effectivePrice(STUDIO, { modelId: NANO, imageCount: 1 }));
+    } finally {
+      if (saved === undefined) delete process.env.GEMINI_IMAGE_MODEL;
+      else process.env.GEMINI_IMAGE_MODEL = saved;
+      await reloadProviderKeys();
+    }
+  });
+
   invalidateMediaOverrides();
   invalidateSettingsCache();
   invalidatePricingCache();
