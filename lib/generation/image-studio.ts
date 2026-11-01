@@ -1,8 +1,11 @@
 import { fetchImageBytes } from "./slide-images";
-import { geminiProvider } from "./image-provider-gemini";
-import { openaiProvider } from "./image-provider-openai";
+import { geminiImageModel, geminiProvider } from "./image-provider-gemini";
+import { openaiImageModel, openaiProvider } from "./image-provider-openai";
 import { limitedProvider, type ImageProvider, type ImageResult } from "./image-provider";
 import { imageModelOf, type ImageModelId } from "./image-models";
+import { mediaCoreOn } from "../media/context";
+import { coreImageProvider } from "../media/image";
+import { IMAGE_MODEL_TO_MEDIA } from "../media/catalog";
 import { UserFacingError } from "../server/user-error";
 import { imageExt } from "../viewers/kind";
 import { parseLlmObject } from "./json";
@@ -118,6 +121,22 @@ export function imageProviderFor(values: { model?: unknown }): ImageProvider {
   return IMAGE_PROVIDERS[imageModelOf(values)];
 }
 
+/**
+ * The same providers behind the media core (`media.core.image`, docs/studio/P0-SPEC.md §6.3): every picture goes through
+ * the router with breaker health and a `media_jobs` row, and comes back as the provider's own `ImageResult`. The limiter
+ * stays OUTSIDE the core call (same `${id}-image` semaphore as above), so concurrency and queue timeouts are unchanged.
+ * `recorded` is what `media_jobs.params` shows: the user's prompt and style (the engine sends the composed prompt).
+ */
+const CORE_BASES: Record<ImageModelId, { provider: ImageProvider; upstream: () => string }> = {
+  gemini: { provider: geminiProvider, upstream: geminiImageModel },
+  openai: { provider: openaiProvider, upstream: openaiImageModel },
+};
+
+function coreImageProviderFor(model: ImageModelId, recorded: { prompt: string; imageStyle: string; imageRatio: string }): ImageProvider {
+  const { provider, upstream } = CORE_BASES[model];
+  return limitedProvider(coreImageProvider("rasm.image", IMAGE_MODEL_TO_MEDIA[model], provider, { upstream, values: recorded }));
+}
+
 /** `moderation_blocked` is the detail prefix the OpenAI adapter gives to a content-policy refusal. */
 const isRefusal = (r: ImageResult): boolean => !r.ok && r.detail.startsWith("moderation_blocked");
 
@@ -138,7 +157,8 @@ export async function buildImageArtifact(
   const count = Math.max(1, Math.min(4, Number(values.imageCount || 1)));
   const size = { width: ratio.w, height: ratio.h };
   const model = imageModelOf(values);
-  const imageProvider = imageProviderFor(values);
+  // Decided per job at the worker (`media.core.image`); off or outside a job = today's providers, untouched.
+  const imageProvider = mediaCoreOn("image") ? coreImageProviderFor(model, { prompt, imageStyle: styleId, imageRatio: ratio.id }) : imageProviderFor(values);
   const refused: ImageResult[] = [];
   const scene = await expandPrompt(prompt, styleId, ratio.id, deadline);
   const full = composePrompt(scene, styleId, ratio.w, ratio.h);

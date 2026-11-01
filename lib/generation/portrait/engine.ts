@@ -12,7 +12,7 @@
  * source that would draw a stranger), and it is NOT stored in the result: the document keeps only the
  * options and the finished pictures. The worker deletes the uploaded selfie after a successful build.
  */
-import { geminiProvider } from "../image-provider-gemini";
+import { geminiImageModel, geminiProvider } from "../image-provider-gemini";
 import { limitedProvider, type ImageFail, type ImageProvider } from "../image-provider";
 import { fetchImageBytes, sniffImageType } from "../slide-images";
 import { extractMeta } from "../meta";
@@ -22,6 +22,9 @@ import { imageExt } from "../../viewers/kind";
 import type { AcademicDoc, BuiltFile, GenImage } from "../types";
 import type { FormValues, ToolConfig } from "../../types";
 import { UserFacingError } from "../../server/user-error";
+import { mediaCoreOn } from "../../media/context";
+import { coreImageProvider } from "../../media/image";
+import { IMAGE_MODEL_TO_MEDIA } from "../../media/catalog";
 import { portraitPrompt } from "./prompt";
 import { portraitBackgroundOf, portraitGownOf, portraitInputFromValues, portraitSashOf } from "./registry";
 
@@ -39,6 +42,12 @@ export type PortraitBuildOptions = {
 
 let defaultProvider: ImageProvider | undefined;
 const geminiLimited = () => (defaultProvider ??= limitedProvider(geminiProvider));
+
+// `media.core.image` on in this job: the same Gemini edit call through the media core (docs/studio/P0-SPEC.md §6.3),
+// the limiter still outside. The core provider holds no per-job state (steps live in the job's media context).
+let coreProvider: ImageProvider | undefined;
+const geminiCore = () =>
+  (coreProvider ??= limitedProvider(coreImageProvider("portrait.edit", IMAGE_MODEL_TO_MEDIA.gemini, geminiProvider, { upstream: geminiImageModel })));
 
 /** The user-facing reason for an all-failed run. */
 export function portraitFailureMessage(fails: ImageFail[]): string {
@@ -61,7 +70,7 @@ export async function buildPortraitArtifact(tool: ToolConfig, values: FormValues
   const mime = src.type === "png" ? "image/png" : "image/jpeg";
   const base64 = src.data.slice(src.data.indexOf("base64,") + "base64,".length);
 
-  const provider = opts.provider ?? geminiLimited();
+  const provider = opts.provider ?? (mediaCoreOn("image") ? geminiCore() : geminiLimited());
   const want = input.variants;
   const meta = extractMeta(tool, { ...values, topic: "Bitiruvchi portreti" });
   stage(10, want > 1 ? `Portret chizilmoqda · 0/${want}` : "Portret chizilmoqda");
