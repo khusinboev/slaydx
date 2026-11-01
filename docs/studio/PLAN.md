@@ -286,3 +286,42 @@ catalog job, the chain is a saved recipe the user can re-run with another model 
 P2 gains image editing + utility tools; P4 gains Kling motion/extend/lip-sync/try-on; P5 gains dialogue + voice
 design; P6 becomes «Audio»: music + sound effects + voice changer + isolator; **P10 (new)**: transcription and
 dubbing (after the Uzbek check).
+
+## 18. Media engine as a platform service (owner 2026-11-01)
+The core (§14) is **the one place every SlaydX feature calls** to make an image, a video or audio — Studio is only
+its biggest client. Contract for a caller (slides, coursework, greeting, podcast, infographic, bot…):
+- `media.request({ kind: "image"|"video"|"speech"|"music"|"sfx", purpose, input, modelId? , params? })` → job.
+- **`purpose`** (e.g. `slide.illustration`, `greeting.card`, `podcast.voice`) has an **admin-set default model** and
+  an allowed list; the caller never hard-codes a provider.
+- **Embeddable model picker** (`<MediaModelPicker purpose=… />`, one React component): shows the default model,
+  lets the user switch to a cheaper / better one inside ANY form, price updates live (`priceFor` = catalog cost × markup).
+- Same job record, wallet charge/refund, telemetry, moderation and storage for every caller → one place to fix,
+  measure and price. Existing engines migrate in P0/P8.
+
+## 19. Scale target: ~100 000 users (design now, build in steps)
+**Today (measured 2026-11-01):** 11 505 users, DB 5.7 GB, one shared box (4 vCPU, 7 GB RAM), files on the local disk
+(`STORAGE_DIR`), **disk 81 % full (77 / 96 GB)**, Postgres queue with `FOR UPDATE SKIP LOCKED`, `WORKER_CONCURRENCY=2`.
+
+**Load model for 100k users:** ~10 % daily active → ~10k/day; peak ~5–10 % of those at once → 500–1 000 concurrent
+sessions; media jobs mostly WAIT on providers (I/O-bound), so throughput is limited by provider rate limits, money and
+storage, not CPU. Video is the heavy part: 10k videos/day × ~10 MB ≈ **100 GB/day**.
+
+**Design decisions (built into P0–P1, not retrofitted):**
+1. **Object storage + CDN** for all generated media (S3-compatible, e.g. Cloudflare R2 — no egress fees), signed URLs,
+   lifecycle rules (e.g. originals kept N days for free users); never on the app disk. Existing files migrate.
+2. **Async everywhere**: provider **webhooks** where offered (fal, Kling, ElevenLabs async), polling only as fallback;
+   a media worker holds hundreds of in-flight jobs with async I/O instead of 2 blocking slots.
+3. **Separate media workers** from document workers (their own containers / machines), scaled horizontally.
+4. **Per-provider concurrency + rate limits** (token buckets), **circuit breaker** and **fallback route** (§12);
+   back-pressure: honest queue position + ETA, reject before charging when over capacity (extends today's queue limits).
+5. **Idempotency keys** on every request and provider submit; exactly-once charge, refund on failure (existing ledger).
+6. **Queue**: Postgres `SKIP LOCKED` with partitioned / indexed job tables is fine to a few hundred jobs/s; the queue
+   sits behind an interface so it can move to Redis/BullMQ-style or a managed queue without touching callers.
+7. **Per-user and global caps**: jobs in flight per user, daily spend caps, abuse limits; prepaid **provider balance
+   monitors** with bot alerts and auto-hide of models whose balance is low.
+8. **Observability**: per provider/model latency, error rate, cost, queue depth dashboards + alerts (extends «Yuklama
+   tarixi»).
+9. **Infrastructure step-up** (owner decision, money): move SlaydX off the shared 7 GB box → dedicated app server(s)
+   + managed Postgres (or a DB box with replicas) + object storage/CDN; load test (k6) at 2× target before launch.
+
+**Immediate risk:** disk at 81 % — before any video-heavy phase, object storage must land (P0) or the disk fills.
