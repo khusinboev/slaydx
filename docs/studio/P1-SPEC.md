@@ -8,7 +8,7 @@ model picker screens, desktop 3-column layout (`https://claude.ai/artifact/RKtqP
   so'm. The old «Rasm» tool keeps its ladder (2 000 / 3 500 / 6 000) until P8 folds it into Studio.
 - **Entry**: a large «Studio» card on the home page + first item of the Media group. Bottom tabs unchanged.
 - Video / Ovoz tabs appear when their phases land (P3 / P5); P1 shows the Rasm tab only (no «tez orada» decoration).
-- Every live test lands on the admin account (`adkhambek_4`, +998997333896) through the real queue.
+- Every live test lands on the admin account (`adkhambek_4`) through the real queue.
 
 ## User-visible result
 `/uz/studio` (and the localized twins of other pages' pattern): prompt box, model row + «Barcha modellar» picker
