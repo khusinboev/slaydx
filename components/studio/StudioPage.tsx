@@ -195,7 +195,7 @@ function StudioApp() {
           <>
             <div data-studio-form className="min-w-0">
               <div role="tablist" aria-label="Studio bo‘limlari" data-studio-tabs className="bg-muted/70 mb-3 inline-flex rounded-[14px] p-1">
-                <button type="button" role="tab" aria-selected="true" className="bg-card min-h-10 rounded-[10px] px-5 text-[15px] font-semibold shadow-sm">
+                <button type="button" role="tab" aria-selected="true" className="bg-card min-h-11 rounded-[10px] px-5 text-[15px] font-semibold shadow-sm">
                   Rasm
                 </button>
               </div>

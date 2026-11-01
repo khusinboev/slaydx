@@ -27,14 +27,14 @@ const { groupDigits } = await import("../../lib/format.ts");
  *     host can control `open` (the «Boshqa modelda» button opens it).
  *
  * Mutations (each turned the named tests red, then restored):
- *   chips drawn for every FILTER_BADGES entry (no `models.some` check)    -> «chips only for a badge…»;
- *   chip filter ignored (`shown = models`)                                -> «a chip narrows»;
+ *   chips drawn for every FILTER_BADGES entry (no `models.some` check)    -> «the sheet lists ALL models; chips only…», «the real catalog's two models…»;
+ *   chip filter ignored (`shown = models`)                                -> «the sheet lists ALL models; … a chip narrows»;
  *   «Tanlash» does not call `onPick`                                      -> «Tanlash applies…»;
- *   closing applies the draft (onClose also calls onPick)                 -> «closing any other way…»;
+ *   Escape / back (the `useDialog` close) also applies the draft          -> «Tanlash applies… closing any other way…» (the Escape branch);
  *   `useDialog(true, onClose, { history: false })`                        -> «back closes the sheet»;
- *   `rowModels` drops the chosen model when it is beyond the 3rd          -> «row shows at most 3…»;
- *   cards show the price of the whole `values` (count included)           -> «price of ONE picture»;
- *   `useMediaCatalog(purpose, true)` ignoring `catalog`                   -> «embeddable»: a second request when the host passed one.
+ *   `rowModels` drops the chosen model when it is beyond the 3rd          -> «the row shows at most 3…», «Tanlash applies…»;
+ *   cards show the price of the whole `values` (count included)           -> «the row: … price of ONE picture»;
+ *   `useMediaCatalog(purpose, true)` ignoring `catalog`                   -> «a host that already holds the catalog does not make a second request».
  */
 
 const tree = (href: string) => ["", { children: [href] }];

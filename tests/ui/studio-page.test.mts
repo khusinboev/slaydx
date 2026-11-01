@@ -32,17 +32,18 @@ const { IMAGE_PROMPT_LIMIT } = await import("../../lib/generation/image-params.t
  *   - money edges: balance below the price is said before the press, 402 → top-up link, 409 → the new price, no job.
  *
  * Mutations (each turned the named tests red, then restored):
- *   price button uses `unitPrice` instead of `studioPrice`                          -> «PRICE: button», «override»;
- *   studio-price `roundUpTo(pricing.step)` -> `Math.round`                          -> «PRICE: button» (870 → 900 expected);
- *   `studioBasePrice` ignores `pricing.overrides`                                   -> «override»;
+ *   page's `price` uses the count-1 price                                           -> «switching the model…», both «PRICE» tests, «SUBMIT»;
+ *   studio-price `roundUpTo(pricing.step)` -> `Math.round`                          -> «switching…», «PRICE: button» (870 → 900 expected), «PRICE: markup…»;
+ *   `studioBasePrice` ignores `pricing.overrides`                                   -> «PRICE: the global markup and a per-model override»;
  *   requestValues adds `topic`                                                      -> «SUBMIT sends exactly the contract»;
  *   send(): `expectedPrice` of the unit price                                       -> «SUBMIT sends exactly the contract»;
- *   send(): `{ repeat: true }` removed                                              -> «Qayta is a new request»;
- *   resolveEntry returns `catalog.models[0]` for an unknown id (no default)         -> «stale choice»;
+ *   send(): `{ repeat: true }` removed                                              -> «Qayta is a NEW request»;
+ *   resolveEntry skips the server's default (first model instead)                   -> «a refused model» (the default there is not the first model);
  *   400 handler does not `reload(true)`                                             -> «a refused model»;
  *   StudioPage draws a «Video» tab                                                  -> «shell»;
  *   `otherModel` does not open the picker                                           -> «Boshqa modelda»;
- *   `otherModel` does not restore the prompt                                        -> «Boshqa modelda».
+ *   `otherModel` does not restore the prompt                                        -> «Boshqa modelda»;
+ *   `useOverlayHistory` of the gallery view removed                                 -> studio-gallery «back returns to the form».
  */
 
 Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
@@ -129,8 +130,10 @@ test("unavailable model is not offered; a stale choice falls back to the server'
 
 test("a refused model (400 before charging) re-reads the catalog: the choice falls back to the default, nothing is queued", async () => {
   let reads = 0;
+  // The default (OTHER) is not the first model, so «falls back to the default» differs from «falls back to the first».
+  const OTHER = withParams(GPT, "openai/other", GPT.params, "Boshqa model");
   const api = installApi({
-    catalog: () => json(200, catalogBody(reads++ === 0 ? [NANO, GPT] : [NANO], PRICING, NANO.id)),
+    catalog: () => json(200, reads++ === 0 ? catalogBody([NANO, GPT, OTHER], PRICING, NANO.id) : catalogBody([NANO, OTHER], PRICING, OTHER.id)),
     create: () => json(400, { error: "Bu model hozir mavjud emas" }),
   });
   await mount();
@@ -142,7 +145,8 @@ test("a refused model (400 before charging) re-reads the catalog: the choice fal
   assert.match(text("[data-studio-error]"), /Bu model hozir mavjud emas/);
   assert.equal(api.catalogCalls().length, 2, "MUTATSIYA: 400 da katalog qayta o'qilmasa qizaradi");
   assert.ok(!card(GPT), "the model is gone from the list");
-  assert.equal(card(NANO)?.getAttribute("aria-checked"), "true", "the stale choice fell back to the default");
+  assert.equal(card(OTHER)?.getAttribute("aria-checked"), "true", "MUTATSIYA: default o'rniga birinchi model tanlansa qizaradi");
+  assert.equal(card(NANO)?.getAttribute("aria-checked"), "false");
   assert.ok(!q("[data-studio-job]"), "no job");
 });
 

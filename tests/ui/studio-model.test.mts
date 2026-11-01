@@ -26,8 +26,9 @@ const { STUDIO_ENTRY, studioFirst } = await import("../../components/studio/stud
  *   parseCatalog returns a catalog without pricing                          -> «parser needs the pricing context»;
  *   `defaultModelId` taken on trust (no `models.some`)                      -> «default falls back…»;
  *   studioPrice skips `applyPriceAdjust`                                    -> «the tool's adjustment is applied after»;
- *   studioBasePrice reads `pricing.markup` for an overridden model          -> «override wins»;
- *   outputCount reads the raw (un-normalized) count                         -> «outputCount…».
+ *   studioBasePrice ignores `pricing.overrides`                             -> «override wins»;
+ *   outputCount reads the raw (un-normalized) count                         -> «unitPrice…outputCount…»;
+ *   resolveEntry without the server's default (first model instead)         -> «resolveEntry…»;
  */
 
 test("parser keeps the usable image models only: a video, a malformed param list and a missing cost are not offered", () => {

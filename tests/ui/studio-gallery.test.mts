@@ -27,11 +27,11 @@ const { useAppStore } = await import("../../lib/store.ts");
  *   - inside the Studio page the gallery has its own history entry: the phone's back returns to the form.
  *
  * Mutations (each turned the named tests red, then restored):
- *   `fetchGallery` ignores the cursor                                    -> «PAGING»;
- *   page 2 REPLACES the list instead of appending                        -> «PAGING»;
+ *   `fetchGallery` ignores the cursor                                    -> «PAGING», «observer…», «states…» (3 of 7);
+ *   page 2 REPLACES the list instead of appending                        -> «PAGING», «observer…»;
  *   no id de-duplication                                                 -> «PAGING»;
  *   the observer calls `load(cursor)` without the `busy` guard           -> «observer…one request»;
- *   thumbnail falls back to the full file URL                            -> «thumbnail»;
+ *   thumbnail falls back to the full file URL                            -> «cards: API thumbnail list…»;
  *   `parseItem` reads only `createdAt`                                   -> «parser»;
  *   `useOverlayHistory(view === "gallery", …)` removed                   -> «back returns to the form».
  */

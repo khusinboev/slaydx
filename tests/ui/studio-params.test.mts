@@ -23,11 +23,11 @@ const { carryOver, effective, requestValues, normalizedPrompt, promptLimit, prom
  *   - `carryOver` keeps what the new model accepts (the prompt always) and defaults what it does not.
  *
  * Mutations (each turned the named tests red, then restored):
- *   ParamRows draws `p.advanced` rows in the main card too                -> «advanced params…collapsed», «a model without advanced…»;
- *   Control: enum threshold `>= SELECT_FROM` -> `> SELECT_FROM`            -> «control by type»;
+ *   ParamRows draws `p.advanced` rows in the main card too                -> «advanced params…collapsed» (the param is drawn twice);
+ *   Control: enum threshold `>= SELECT_FROM` -> `> SELECT_FROM`            -> «control by type», «a change reaches…»;
  *   Control: int always `Segmented` (drop the stepper branch)              -> «control by type», «the stepper…»;
- *   ParamRows forgets to skip the prompt param                             -> «coverage» (prompt drawn twice: box + row);
- *   Row without `<Field id>`                                               -> «coverage»;
+ *   ParamRows forgets to skip the prompt param                             -> «coverage», «advanced…», «a model without advanced…» (prompt drawn twice: box + row);
+ *   Row without `<Field id>`                                               -> «coverage» and every test that reads `data-field` (7 of 9);
  *   carryOver keeps invalid values (`validate` check removed)              -> «carryOver»;
  *   requestValues drops `modelId`                                          -> «request values».
  */
