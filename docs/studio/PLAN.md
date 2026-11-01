@@ -188,3 +188,38 @@ Source of truth: Artificial Analysis arenas (text-to-image v2.1, text-to-video v
   Note: ×2 must also cover failed-job cost, payment fees and the payment bonus — the admin margin page watches it.
 - **Screens to design**: phone (site), Telegram Mini App, tablet, desktop.
 - Owner: **do not start coding** until providers and designs are agreed.
+
+## 14. Reusable core (owner 2026-11-01: «quality mechanism for each, easy to reuse in other projects and other parts»)
+The Studio is built as a **provider-agnostic core with thin adapters**, not as SlaydX screens:
+- `lib/studio-core/` (no SlaydX imports; could become a package later): `catalog` (model entries + ParamSchema +
+  CostRule + capabilities), `router` (route list per model, fallback on 5xx/timeout, health), `adapters/` (google,
+  openai, elevenlabs, kling, fal, wavespeed — one interface: `submit(input) → jobRef`, `poll(jobRef)`, `fetchOutputs`),
+  `pricing` (cost → price with a markup function injected by the host), `moderation` hooks, `telemetry` (cost per call).
+- The **host** (SlaydX) plugs in: wallet charge/refund, queue/worker, storage, settings, admin pages, UI.
+- Every existing SlaydX feature that makes media moves onto the core over time (slide/pro-slide images, «Rasm»,
+  infographic, podcast/greeting TTS, listening audio, video) — one catalog, one price rule, one telemetry.
+- Quality bar per adapter: contract tests against recorded provider responses, a live smoke script per model
+  (`npm run studio-live -- <model>`), output validation (type, size, duration, dimensions), mutation-tested pricing.
+
+## 15. Phased roadmap (each phase ships a usable increment; later phases only ADD)
+| # | Phase | User-visible result | Builds on |
+|---|---|---|---|
+| **P0** | Core + catalog + pricing + router (no new UI) | nothing visible; old Rasm/Video/TTS now run through the core (same behaviour, same prices) | — |
+| **P1** | Studio shell + **Rasm** tab: Nano Banana + GPT Image 2.5, model picker, ParamSchema form, live price, gallery | Studio section with 2 image models | P0 |
+| **P2** | fal adapter + FLUX / Seedream / Reve / Ideogram / Recraft; prompt library + image templates | 7 image models, templates, «Namuna promptlar» | P1 |
+| **P3** | **Video** tab: Gemini Omni + Kling 3.0 (+ effect templates) | video with templates | P1 |
+| **P4** | More video: Wan 3.0, Seedance 2.5, Hailuo/MiniMax (fal/WaveSpeed routes), image → video | 6+ video models | P2, P3 |
+| **P5** | **Ovoz** tab: Gemini TTS + ElevenLabs v3 + voice cloning; voice library with previews | Uzbek voices, own voice | P1 |
+| **P6** | **Musiqa**: ElevenLabs Music; voice + background music mixing | songs / jingles | P5 |
+| **P7** | Compare mode (2–4 models), remix chains (image → video → voice-over), favourites | desktop power features | P2–P5 |
+| **P8** | Old tools fold into Studio as templates (Rasm, Video, Podkast, Tabriknoma); redirects | one place for media | P1–P6 |
+| **P9** | Sora 2, HeyGen avatars, new models as they trend (catalog entries) | ongoing | P0 |
+
+Each phase: plan check with the owner → code → tests + mutations → independent review → CI → deploy (dark switch)
+→ owner device check (phone, Telegram, tablet, desktop) → switch on. A model is added by **one catalog entry + its
+ParamSchema + a live smoke**, so new features keep landing without rewiring.
+
+## 16. Design (draft v1, 2026-11-01)
+Canvas: https://claude.ai/artifact/RKtqPUxeyEnV5F5dJJ7m1A — phone (Rasm tab), phone model picker sheet, Telegram
+Mini App (Video + effect templates, dark), tablet (Ovoz: TTS / cloning / music), desktop (3 columns + compare).
+Prices on the mock-ups = cost × 2 at ~12 800 so'm/$, rounded; placeholders, not final.
