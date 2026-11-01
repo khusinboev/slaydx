@@ -162,7 +162,6 @@ const SPEECH_CHAIN = ["azure/tts", "aisha/tts", "google/tts"];
 
 export const MEDIA_PURPOSES = definePurposes(MEDIA_CATALOG, [
   { id: "rasm.image", kind: "image", allowed: ["google/nano-banana", "openai/gpt-image"], default: "google/nano-banana", userCanChoose: true },
-  { id: "slide.illustration", kind: "image", allowed: ["google/nano-banana"], default: "google/nano-banana", userCanChoose: false },
   { id: "proslide.illustration", kind: "image", allowed: ["google/nano-banana"], default: "google/nano-banana", userCanChoose: false },
   { id: "portrait.edit", kind: "image", allowed: ["google/nano-banana"], default: "google/nano-banana", userCanChoose: false },
   { id: "video.clip", kind: "video", allowed: ["google/omni-video", "kling/video"], default: "google/omni-video", userCanChoose: true },

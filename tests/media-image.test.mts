@@ -417,7 +417,7 @@ test("media_jobs rows: one per drawn picture, unique stable keys, upstream = adm
     assert.equal(r.model_id, "google/nano-banana");
     assert.equal(r.provider, "gemini");
     assert.equal(r.upstream_model, "gemini-3.1-flash-image", "upstream follows the admin slot / env, not the catalog default");
-    assert.equal(Number((r as unknown as { cost_usd: string }).cost_usd), 0.034, "one picture per row");
+    assert.equal(Number((r as unknown as { cost_usd: string }).cost_usd), 0.067, "one picture per row, priced at the slot model (flash), not the catalog default (lite)");
     assert.deepEqual(
       { ...r.params },
       { prompt: "the user's own words", imageStyle: "watercolor", imageRatio: "16:9", imageCount: 1 },

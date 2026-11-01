@@ -43,6 +43,11 @@ export type RunInput = {
   /** Unique per call inside the job, e.g. `image:0`; the generation id is prefixed here. */
   step: string;
   adapters: Readonly<Record<string, MediaAdapter>>;
+  /**
+   * Provider cost of this call when the catalog rule cannot know it (the admin slot picked a pricier upstream model).
+   * Absent = the catalog CostRule.
+   */
+  costUsd?: number;
   /** Swap a route's upstream model (admin routing slot, e.g. `image.gemini`). */
   upstream?: (route: Route) => string;
   deps?: AdapterDeps;
@@ -78,7 +83,7 @@ export async function runMedia(i: RunInput): Promise<RunOutput> {
           upstreamModel: primary.upstreamModel,
           idempotencyKey: key,
           params: { ...params },
-          costUsd: costUsd(entry.cost, params),
+          costUsd: i.costUsd ?? costUsd(entry.cost, params),
         }),
       )
     : null;

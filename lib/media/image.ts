@@ -20,6 +20,7 @@ import { nextMediaStep } from "./context";
 import { ImageMediaError, imageProviderAdapter, originalImage } from "./adapters/image";
 import { runMedia } from "../server/media/run";
 import { IMAGE_RATIOS, IMAGE_STYLES } from "../generation/image-studio-options";
+import { imagePriceOf } from "../generation/llm-pricing";
 import type { ImageAsk, ImageProvider, ImageResult } from "../generation/image-provider";
 
 export type CoreImageOpts = {
@@ -70,6 +71,7 @@ export function coreImageProvider(purpose: string, modelId: string, base: ImageP
             ...opts.values,
           },
           extra,
+          costUsd: imagePriceOf(opts.upstream()) ?? undefined,
           assets: ask.inputImages?.length ? { inputImages: ask.inputImages } : undefined,
           step: nextMediaStep("image", tagOf(ask)),
           adapters: adapterId ? { [adapterId]: imageProviderAdapter(adapterId, base) } : {},

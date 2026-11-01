@@ -278,8 +278,8 @@ export function chainProvider(providers: ImageProvider[], id: ImageProviderId = 
 export function pickProvider(meta?: Pick<DocMeta, "toolId"> | null): ImageProvider {
   const toolId: ToolId | undefined = meta?.toolId;
   /*
-   * Pro slide illustrations are the only AI drawing in the slide chain (ordinary slides use stock only, so the
-   * `slide.illustration` purpose has no caller). With `media.core.image` on in this job the Gemini member is the
+   * Pro slide illustrations are the only AI drawing in the slide chain (ordinary slides use stock only, so there
+   * is no plain-slide purpose). With `media.core.image` on in this job the Gemini member is the
    * core-backed one (docs/studio/P0-SPEC.md §6.3); stock providers never go through the core. The limiter stays outside.
    */
   if (toolId === "pro-slide") {
