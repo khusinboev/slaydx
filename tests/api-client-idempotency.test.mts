@@ -83,3 +83,30 @@ test("C34: chaqiruvchi kalitni o'zi bersa — aynan u yuboriladi", async (t) => 
   await api.createGeneration("referat", values("E1"), { idempotencyKey: k });
   assert.equal(keys[0], k);
 });
+
+/*
+ * `repeat` (Studio: the same prompt again on purpose is a new picture). Mutation: `submitKey` ignores `repeat` for a
+ * `done` request -> the first assertion below goes red.
+ */
+test("repeat: muvaffaqiyatdan keyingi ataylab takror — YANGI kalit; javobi yo'qolgan yuborishning qayta urinishi esa o'sha kalitni oladi", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: 5_000_000 });
+  const keys = stub(t, [ok, ok, () => json(502, {}), ok]);
+  await api.createGeneration("studio", values("R1"), { repeat: true });
+  t.mock.timers.tick(5_000);
+  await api.createGeneration("studio", values("R1"), { repeat: true });
+  assert.notEqual(keys[1], keys[0], "30 s ichida bo'lsa ham: bu yangi rasm, ikki marta bosish emas");
+  // A lost answer is not a success: the retry (also a repeat) still replays the SAME key — no second charge.
+  t.mock.timers.tick(5_000);
+  await assert.rejects(api.createGeneration("studio", values("R2"), { repeat: true }), ApiError);
+  await api.createGeneration("studio", values("R2"), { repeat: true });
+  assert.equal(keys[3], keys[2], "javobi yo'qolgan yuborishning qayta urinishi — o'sha kalit");
+});
+
+test("repeat yo'q bo'lsa eski xulq o'zgarmaydi (muvaffaqiyatdan keyingi ikkinchi bosish — o'sha kalit)", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: 9_000_000 });
+  const keys = stub(t, [ok, ok]);
+  await api.createGeneration("referat", values("S1"));
+  t.mock.timers.tick(1_000);
+  await api.createGeneration("referat", values("S1"));
+  assert.equal(keys[1], keys[0]);
+});
