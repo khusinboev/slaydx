@@ -36,26 +36,35 @@ import type { CompleteFn } from "../lib/generation/research/pipeline.ts";
  *              per word and every word gets its own row; domla (own worker loop, no build context) attaches its rows to
  *              the deck the defence is about and records nothing when that deck is gone.
  *
- * Mutations (each turned the named test red, then restored):
- *   1. `turns` dropped from `speechExtraOf` -> «params: …» and «parity: Gemini dialog»; `pauseMs` / `speed` / `timeoutMs`
- *      dropped one by one -> «params: …» and «parity: Azure …»;
- *   2. `text` removed from `speechExtraOf` (the provider gets the core's whitespace-collapsed text) -> «params: the
- *      provider gets the exact text»;
- *   3. `accepted` set for HTTP errors / not set for timeouts in `toSpeechError` -> «adapter: failure mapping»;
- *   4. `unwrapSpeechError` returns the `MediaError` instead of the provider's exception -> «chain ON: a provider error
- *      reaches the chain unchanged», «parity: Gemini 429 …»;
- *   5. `speech:` step without the provider -> «fallback: the provider that served the job is recorded»;
- *   6. step without `scope` -> «listening: one row per word»;
- *   7. the chain ignores `mediaCoreOn("speech")` -> «OFF: the core is never touched»;
- *   8. the chain never uses the core -> «ON: one row per chunk», «parity: …»;
- *   9. `text` left out of `values` in `synthesizeViaCore` (quote without text) -> «ON: one row per chunk» (cost);
- *  10. Gemini `upstream` hook removed -> «ON: packed Gemini chunks»;
- *  11. `audioVoicePurpose` constant `podcast.voice` -> «audio engine: purpose per kind» and «audio engine: same MP3»;
- *  12. domla scope without the job id -> «domla: ON»; domla context without the switch check -> «domla: OFF»; domla
- *      context for a null generation -> «domla: no generation»;
- *  13. `SPEECH_PROVIDER_TO_MEDIA.azure` -> `aisha/tts` -> «catalog: every speech provider»;
- *  14. `providerOfChain` run counter removed -> «providerOfChain: label per word» and «listening: one row per word».
- */
+ * Mutations (each turned the named tests red, then was restored; test titles shortened):
+ *   1. `turns` / `pauseMs` / `speed` / `timeoutMs` dropped from `speechExtraOf`, one at a time -> «params: the call the
+ *      provider gets…» for all four, plus «parity: Gemini dialog» (turns), «parity: Azure» and «audio engine: same MP3»
+ *      (pauseMs), «parity: Azure» and «params: …exact text» (speed), «parity: the options…» (timeoutMs);
+ *   2. `text` removed from `speechExtraOf` (the provider gets the core's whitespace-collapsed text) -> «params: the call…»,
+ *      «params: the provider gets the exact text»;
+ *   3. `toSpeechError`: `accepted` true for HTTP errors / never true / `retryable` always true -> «adapter: failure mapping»;
+ *   4. `unwrapSpeechError` hands back the `MediaError` instead of the provider's exception -> «adapter: failure mapping»,
+ *      «fallback», «ON: a retried chunk…», «parity: Gemini 429», «parity: Gemini daily quota»;
+ *   5. step without the provider (`speech:<chunk>`) -> «ON: one row per chunk», «ON: packed Gemini», «fallback»,
+ *      «listening», «domla: ON»;
+ *   6. step without the run's `scope` -> «listening: one row per word», «domla: ON»;
+ *   7. chain ignores `mediaCoreOn("speech")` -> «OFF: the core is never touched», «ON: no row without the switch…»,
+ *      «fallback», «parity: Azure», «audio engine: same MP3», «domla: OFF…»; a run without a label uses the core when the
+ *      switch is on -> «ON: no row without the switch…»;
+ *   8. the chain never uses the core -> «ON: one row per chunk», «ON: packed Gemini», «ON: a retried chunk», «fallback»,
+ *      «parity: Azure / Gemini dialog / 429 / daily quota» (rows), «audio engine: same MP3», «listening», «domla: ON»;
+ *   9. `text` left out of `values` in `synthesizeViaCore` (a $0 quote) -> «ON: one row per chunk», «ON: packed Gemini»,
+ *      «listening»;
+ *  10. Gemini `upstream` hook removed (row says `gemini`, not the model) -> «ON: packed Gemini chunks»;
+ *  11. `audioVoicePurpose` constant `podcast.voice` -> «purposes: …», «audio engine: purpose per kind», «audio engine: same
+ *      MP3»; the engine stops passing the label -> «audio engine: purpose per kind», «audio engine: same MP3»;
+ *  12. domla: scope without the job id -> «domla: ON»; core context without the switch check -> «domla: ON» (OFF half),
+ *      «domla: OFF…»; context for a null generation (orphan rows) -> «domla: OFF…, no generation»;
+ *  13. `SPEECH_PROVIDER_TO_MEDIA.azure` -> `aisha/tts` -> «catalog: every speech provider» and every Azure row test;
+ *  14. `providerOfChain` run counter removed -> «providerOfChain: label per word», «listening: one row per word»;
+ *      `media` not forwarded by `makeTtsChain` -> every chain «ON» test; by `chainOfProvider` -> «audio engine: same MP3»,
+ *      «listening», «domla: ON».
+  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 process.env.APP_URL = "https://slaydx.test";
@@ -591,6 +600,24 @@ test("parity: Azure — same requests, same run with the switch OFF (no context)
   assert.deepEqual(c.done, a.done, "ON = OFF: requests, run (audios, usages, seconds, chars), waits");
   assert.deepEqual(await rowsOf(b.gen!), []);
   assert.equal((await rowsOf(c.gen!)).length, 3);
+});
+
+test("parity: the options the provider is called with are identical ON and OFF (voices, speed, pause, timeouts)", { skip }, async () => {
+  const parts = [{ text: "Salom.", voice: 0, pauseMs: 250 }, { text: "Qalaysiz?", voice: 1 }, { text: "Yaxshi.", voice: 0, pauseMs: 700 }];
+  const run = async (mode: Mode, withDeadline: boolean) => {
+    const p = fake("azure");
+    const { c } = clock();
+    await inMode(mode, () => chainOf([p], c).synthesizeAll(parts, { lang: "uz", voice: "male", speed: 1.15, timeoutMs: 12_345, ...(withDeadline ? { deadline: c.now() + 600_000 } : {}), media: { purpose: "podcast.voice" } }));
+    return p.calls;
+  };
+  const plain = await run("off", false);
+  assert.equal(plain.length, 3);
+  assert.deepEqual(plain.map((c) => c.opts.timeoutMs), [12_345, 12_345, 12_345]);
+  assert.deepEqual(plain.map((c) => c.opts.pauseMs), [250, undefined, 700]);
+  assert.ok(plain.every((c) => c.opts.speed === 1.15 && c.opts.lang === "uz"));
+  assert.deepEqual(await run("on", false), plain, "no deadline: the same calls");
+  const capped = await run("off", true);
+  assert.deepEqual(await run("on", true), capped, "with a job deadline: the same (deadline-capped) calls");
 });
 
 test("parity: Gemini dialog — one packed two-speaker request, same body ON and OFF, the pacing gate before every attempt", { skip }, async () => {
