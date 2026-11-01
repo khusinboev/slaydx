@@ -668,7 +668,6 @@ test("test: no key, not testable, reserved and unknown providers", { skip }, asy
     assert.match(String(none.body.message), /Kalit yo'q/);
     assert.equal(stub.calls.length, 0, "no key, no outbound call");
     assert.equal((await postTest(s.cookie, "openai-image")).status, 409, "no cheap call for the OpenAI image provider");
-    assert.equal((await postTest(s.cookie, "elevenlabs")).status, 409, "reserved");
     // Removed providers are unknown ids now.
     for (const id of ["fal", "xai", "openrouter", "openai"]) assert.equal((await postTest(s.cookie, id)).status, 404, `${id} is removed`);
     assert.equal((await postTest(s.cookie, "nope")).status, 404);
@@ -706,6 +705,22 @@ test("probe: 10 s timeout contract, redirects not followed, request builders", a
   for (const id of ["openai", "xai", "openrouter", "fal"]) assert.ok("error" in probe.probeRequest(id, K), `${id}: no probe`);
   // The Azure region is validated before it becomes a host name.
   assert.ok("error" in probe.probeRequest("azure", K, { azureRegion: "evil.example.com/x" }));
+  // ElevenLabs: key in the header, never in the URL; the free subscription read.
+  const el = probe.probeRequest("elevenlabs", K) as { url: string; headers: Record<string, string> };
+  assert.equal(el.url, "https://api.elevenlabs.io/v1/user/subscription");
+  assert.equal(el.headers["xi-api-key"], K);
+  const okEl = await probe.probeProvider("elevenlabs", K, {
+    fetchImpl: (async () => new Response(JSON.stringify({ tier: "creator", status: "active", character_count: 1234, character_limit: 121000 }), { status: 200 })) as typeof fetch,
+  });
+  assert.deepEqual(okEl, { ok: true, message: "Kalit qabul qilindi · tarif: creator · qoldi 119 766 / 121 000 kredit" });
+  assert.equal(probe.elevenLabsMessage({ tier: "<script>", character_count: "x" }), "Kalit qabul qilindi", "odd fields are dropped, never echoed");
+  const deniedEl = await probe.probeProvider("elevenlabs", K, {
+    fetchImpl: (async () => new Response(JSON.stringify({ detail: { status: "missing_permissions", message: `The API key ${K} is missing the permission user_read` } }), { status: 401 })) as typeof fetch,
+  });
+  assert.equal(deniedEl.ok, false);
+  assert.match(deniedEl.message, /HTTP 401.*missing the permission user_read/, "the ElevenLabs `detail.message` reaches the admin");
+  assert.ok(!deniedEl.message.includes(K), "without the key");
+  assert.ok(!deniedEl.message.includes("{") && !deniedEl.message.includes("missing_permissions"), "the message text only, not the raw JSON body");
   assert.ok(!("error" in probe.probeRequest("azure", K, { azureRegion: "westeurope" })));
   assert.equal((await probe.probeProvider("nope", K)).ok, false);
   assert.equal((await probe.probeProvider("gemini", "")).ok, false);

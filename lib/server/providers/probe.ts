@@ -42,6 +42,9 @@ export function probeRequest(id: string, key: string, deps: ProbeDeps = {}): Req
       return { url: `https://api.openalex.org/works?per-page=1&api_key=${encodeURIComponent(key)}` };
     case "googlebooks":
       return { url: `https://www.googleapis.com/books/v1/volumes?q=test&maxResults=1&key=${encodeURIComponent(key)}` };
+    case "elevenlabs":
+      // Subscription read: free (no credits spent); needs the key's «User: read» permission.
+      return { url: "https://api.elevenlabs.io/v1/user/subscription", headers: { "xi-api-key": key } };
     case "azure": {
       const region = (deps.azureRegion ?? process.env.AZURE_SPEECH_REGION ?? "").trim().toLowerCase();
       if (!REGION_RE.test(region)) return { error: "AZURE_SPEECH_REGION sozlanmagan yoki noto'g'ri" };
@@ -65,8 +68,8 @@ async function errorText(res: Response): Promise<string> {
   try {
     const raw = (await res.text()).slice(0, 2000);
     try {
-      const j = JSON.parse(raw) as { error?: unknown; message?: unknown };
-      const e = j.error;
+      const j = JSON.parse(raw) as { error?: unknown; message?: unknown; detail?: unknown };
+      const e = j.error ?? j.detail;
       if (typeof e === "string") return e;
       if (e && typeof e === "object" && typeof (e as { message?: unknown }).message === "string") return (e as { message: string }).message;
       if (typeof j.message === "string") return j.message;
@@ -77,6 +80,22 @@ async function errorText(res: Response): Promise<string> {
   } catch {
     return "";
   }
+}
+
+const groupDigits = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+
+/**
+ * ElevenLabs answers with the plan and its character credits: the admin sees at once whether the paid plan is active
+ * and how much is left (the first piece of the provider balance monitor, docs/studio/PLAN.md §19.7).
+ */
+export function elevenLabsMessage(body: unknown): string {
+  const b = (body && typeof body === "object" ? body : {}) as { tier?: unknown; status?: unknown; character_count?: unknown; character_limit?: unknown };
+  const used = Number(b.character_count);
+  const limit = Number(b.character_limit);
+  const parts = ["Kalit qabul qilindi"];
+  if (typeof b.tier === "string" && /^[\w -]{1,40}$/.test(b.tier)) parts.push(`tarif: ${b.tier}`);
+  if (Number.isFinite(used) && Number.isFinite(limit) && limit > 0) parts.push(`qoldi ${groupDigits(Math.max(0, limit - used))} / ${groupDigits(limit)} kredit`);
+  return parts.join(" · ");
 }
 
 /** Runs the probe of `id` with `key`. Never throws, never returns the key. */
@@ -90,7 +109,7 @@ export async function probeProvider(id: string, key: string, deps: ProbeDeps = {
   const timer = setTimeout(() => ctrl.abort(), deps.timeoutMs ?? PROBE_TIMEOUT_MS);
   try {
     const res = await fetchImpl(req.url, { method: "GET", headers: req.headers, signal: ctrl.signal, redirect: "manual" });
-    if (res.ok) return { ok: true, message: "Kalit qabul qilindi" };
+    if (res.ok) return { ok: true, message: id === "elevenlabs" ? elevenLabsMessage(await res.json().catch(() => null)) : "Kalit qabul qilindi" };
     const detail = redactProbeText(await errorText(res), key);
     return { ok: false, message: `Provayder rad etdi (HTTP ${res.status})${detail ? `: ${detail}` : ""}` };
   } catch (e) {

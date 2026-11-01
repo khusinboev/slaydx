@@ -47,7 +47,8 @@ export const PROVIDERS = [
   { id: "veo", label: "Google Veo (video)", kinds: ["video"], envKeys: ["GEMINI_API_KEY"], keyHint: "AIza… (Gemini kaliti)", implemented: true, testable: false },
   { id: "kling", label: "Kling (video)", kinds: ["video"], envKeys: ["KLING_API_KEY"], keyHint: "<accessKey>:<secretKey>", implemented: true, testable: false },
   // ElevenLabs: the «Premium ovoz» of podcast / greeting (lib/generation/tts/elevenlabs.ts); never part of the default chain.
-  { id: "elevenlabs", label: "ElevenLabs (ovoz)", kinds: ["tts"], envKeys: ["ELEVENLABS_API_KEY"], keyHint: "sk_…", implemented: true, testable: false },
+  // «Tekshirish» reads the subscription (free): plan + credits left.
+  { id: "elevenlabs", label: "ElevenLabs (ovoz)", kinds: ["tts"], envKeys: ["ELEVENLABS_API_KEY"], keyHint: "sk_…", implemented: true, testable: true },
 ] as const satisfies readonly ProviderDef[];
 
 export type ProviderId = (typeof PROVIDERS)[number]["id"];
