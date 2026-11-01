@@ -12,6 +12,8 @@ import { DOMLA_VOICE_MAX_BYTES, parseQuestions, parseScore, type DomlaQuestion, 
 import { env } from "./env";
 import { getProviderKey } from "./providers/resolve";
 import { callBot, isTransientBotFailure, sendMessage, TelegramTransientError } from "./telegram";
+import { withMediaContext } from "../media/context";
+import { mediaCoreSwitches } from "./media/switches";
 
 /**
  * The network edges of «Qattiqqo'l domla» (owner request 15) behind one interface, so `domla-engine.ts` is tested
@@ -31,11 +33,19 @@ export type SpokenAudio = { bytes: Uint8Array; seconds: number };
 
 export type ScoreInput = { question: DomlaQuestion; topic: string; deck: string; audio?: DomlaAudio; text?: string };
 
+/**
+ * Where a spoken question belongs for the media core (`media.core.speech`, docs/studio/P0-SPEC.md §6.5): the worker's
+ * domla loop runs OUTSIDE a generation's media context, so the engine names the generation the defence is about (the
+ * session's slide deck) and a scope that is unique per domla job. No generation (`source_generation_id` is nullable) =
+ * nothing to attach a `media_jobs` row to: the direct provider call.
+ */
+export type VoiceAt = { generationId: string | null; scope: string };
+
 export type DomlaDeps = {
   now(): Date;
   generateQuestions(input: { topic: string; deck: string }): Promise<DomlaQuestion[]>;
   /** Spoken question as MP3, or `null` when no voice is available (the caption then carries the question). */
-  synthesize(text: string): Promise<SpokenAudio | null>;
+  synthesize(text: string, at?: VoiceAt): Promise<SpokenAudio | null>;
   score(input: ScoreInput): Promise<ScoreResult>;
   telegram: {
     sendText(chatId: string, text: string, markup?: unknown): Promise<boolean>;
@@ -59,10 +69,13 @@ async function generateQuestions(input: { topic: string; deck: string }): Promis
 /* ───────────────────────── TTS ───────────────────────── */
 
 /** Gemini voice for the examiner: the male voice (Charon). Output WAV -> MP3 (no ffmpeg in the image; lamejs does it). */
-async function synthesize(text: string): Promise<SpokenAudio | null> {
+async function synthesize(text: string, at?: VoiceAt): Promise<SpokenAudio | null> {
   const chain = chainOfProvider(geminiTts, [TTS_GEMINI_VOICES.male]);
   if (!chain.configured()) return null;
-  const run = await chain.synthesizeAll([{ text }], { lang: "uz", timeoutMs: 60_000, deadline: Date.now() + 90_000 });
+  const speak = () => chain.synthesizeAll([{ text }], { lang: "uz", timeoutMs: 60_000, deadline: Date.now() + 90_000, media: { purpose: "domla.voice", scope: at?.scope ?? "domla" } });
+  // Like the video poller, this loop reads the switches itself (the build's media context does not reach it).
+  const core = at?.generationId ? await mediaCoreSwitches() : null;
+  const run = core?.speech && at?.generationId ? await withMediaContext({ generationId: at.generationId, core }, speak) : await speak();
   const audio = run.audios[0];
   if (!audio) return null;
   const mp3 = audio.mp3 ?? (audio.wav ? await wavToMp3(audio.wav) : null);
