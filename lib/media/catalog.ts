@@ -19,7 +19,7 @@ import { imageBasePrice, type ImageModelId } from "../generation/image-models";
 import { IMAGE_PROMPT_LIMIT } from "../generation/image-params";
 import { VIDEO_ASPECTS, VIDEO_PROMPT_MAX, VIDEO_PROMPT_MIN, videoProviderById, type VideoProviderId } from "../generation/video/registry";
 import { VIDEO_MAX_BYTES } from "../generation/video/types";
-import { PPTX_SIZE_LIMIT } from "../generation/pptx-image";
+import { PPTX_SIZE_LIMIT } from "../generation/size-limits";
 
 /** Same as `IMAGE_PROMPT_MIN` in `lib/tools.ts` (not imported: tools.ts will read this file; a test keeps them equal). */
 export const MEDIA_IMAGE_PROMPT_MIN = 3;

@@ -17,8 +17,8 @@
  */
 import type { ImageBytes } from "./slide-images";
 
-/** Largest stored file. Mirrors `lib/server/storage.ts MAX_FILE_BYTES` (a test keeps them equal). */
-export const PPTX_SIZE_LIMIT = 25 * 1024 * 1024;
+/** Largest stored file (client-safe home: `size-limits.ts`, so the media catalog never pulls `sharp` into a browser bundle). */
+export { PPTX_SIZE_LIMIT } from "./size-limits";
 
 export type ImageProfile = { name: "normal" | "compact"; maxSide: number; quality: number };
 
