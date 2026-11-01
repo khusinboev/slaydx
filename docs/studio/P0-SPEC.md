@@ -33,6 +33,12 @@ than the «~50k DAU» line in §20 because that line is now the starting point. 
 7. Host bindings `lib/server/media/` (wallet, settings, keys, storage, telemetry, worker loop).
 8. Dark switch per kind so the old path stays one setting away until the new one has run a week in prod.
 
+**Build notes (2026-11-01):** SlaydX adapters live in the host (`lib/media/adapters/`), so the core purity rule has
+no exceptions; `lib/server/media/run.ts runMedia` is the shared sync call; migration 065 creates only `media_jobs` —
+overrides, purpose defaults and provider balances land with the phase that reads them (P1), and `media.markup` with
+the admin page that edits it. The circuit breaker and Semaphore moved into the core (the LLM layer re-exports them).
+Router rule added: the last usable route is never skipped on health. The CostRule `megapixel` shape is not needed yet.
+
 **Not in P0:** new models, the Studio UI, the model picker, webhooks (interface only; the first provider that uses
 them, fal in P2, lands its route), templates, gallery, R2 (infra track I2).
 
