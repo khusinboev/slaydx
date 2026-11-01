@@ -19,19 +19,30 @@ import { inRequest } from "./helpers/next-request.mts";
  *               give the same file / doc / provider requests / error / charge / refund with the switch on as off;
  *   limiter     the process limiter still wraps the core call from outside (a queue timeout never starts a row).
  *
- * Mutations (each turned the named test red, then restored):
- *   flags     rate `retryable` false -> "failure mapping"; `NOT_SENT` ignored (timeout always accepted) -> same test
- *             (budget + queue cases); REFUSAL not `safety` -> same test (OpenAI refusal); NO_PICTURE not accepted ->
- *             same test (200 without a picture); 4xx treated as retryable -> same test (Gemini 400).
- *   core      `ImageMediaError` mapped to a plain `failed(e.message)` -> "failure mapping" (round trip) and
- *             "core provider: results pass through verbatim"; `originalImage` ignored -> "pass through verbatim"
- *             (image identity); `deps: { deadline }` dropped -> "pass through verbatim" (deadline); `assets` dropped ->
- *             "pass through verbatim" (input images) and "portrait parity"; `upstream` ignored -> "media_jobs rows";
- *             `nextMediaStep` counter not advanced -> "nextMediaStep" and "media_jobs rows"; `tagOf` constant ->
- *             "nextMediaStep via the provider" / "media_jobs rows" (key shape).
- *   wiring    `mediaCoreOn("image")` ignored in image-studio.ts (always core) -> "switch off" tests; ignored in
- *             pickProvider (never core) -> "pro-slide parity" rows; portrait ON branch removed -> "portrait parity" rows;
- *             limiter moved inside the core provider -> "limiter stays outside".
+ * Mutations (25, each turned the named test(s) red, then restored; adapter = lib/media/adapters/image.ts,
+ * core = lib/media/image.ts):
+ *   adapter flags   rate `retryable` false -> "adapter: failure mapping" (429 cases); timeout always `accepted` ->
+ *                   same (budget < 2 s and limiter-queue cases); REFUSAL not `safety` -> same (OpenAI refusal);
+ *                   NO_PICTURE not `accepted` -> same (200 without a picture); any 4xx `retryable` -> same (Gemini
+ *                   400); `status` not set on the error -> same (every status case); `configured()` = hasKey() ->
+ *                   same (no-key cases lose their reason through «no route available»).
+ *   adapter I/O     inline mime fixed to image/png -> "adapter: success", "media_jobs rows"; `width` ignored in askOf ->
+ *                   "askOf", pro-slide and portrait parity (their slots are not the 1024 preset).
+ *   core provider   `ImageMediaError` not mapped back to reason/detail -> "failure mapping", "pass through verbatim",
+ *                   portrait parity (readable messages); `originalImage` ignored -> "pass through verbatim" (image
+ *                   identity); `deps: { deadline }` dropped -> "pass through verbatim" (the deadline assertion, run on
+ *                   its own) and the budget / queue cases of "failure mapping"; input images (`assets`) dropped ->
+ *                   "pass through verbatim" and portrait parity (selfie missing from the request); `seed` not passed ->
+ *                   "pass through verbatim"; `hasKey` constant true -> "pass through verbatim"; `upstream` ignored ->
+ *                   "media_jobs rows" (upstream_model = admin slot); `imageCount: 2` -> "media_jobs rows" (cost per
+ *                   picture); recorded `values` dropped -> "media_jobs rows" and every «Rasm» parity row.
+ *   step names      `nextMediaStep` counter not advanced -> "nextMediaStep", "media_jobs rows", «Rasm» parity and the
+ *                   worker flow (duplicate keys, rows lost); tag constant -> "media_jobs rows" (key per prompt).
+ *   wiring          rasm ALWAYS core -> every «Rasm» parity row (the no-context and switch-off runs grow rows /
+ *                   breakers) and the worker flow; rasm NEVER core -> the same tests (ON rows missing); pickProvider
+ *                   never core -> pro-slide parity rows and "limiter stays outside"; portrait never core -> portrait
+ *                   parity rows; limiter moved inside the core provider -> "limiter stays outside" (the queue timeout
+ *                   starts a row) and pro-slide parity.
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
