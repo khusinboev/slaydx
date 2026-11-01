@@ -284,7 +284,8 @@ One commit per step, each with its parity test green before the next:
 - **I1 — new server** (owner buys it within 3–4 days): runbook `docs/ops/VPS6-CUTOVER.md` in the 2026-09-30 style —
   provision, docker + compose, `.env` copy (owner), DB restore from the nightly dump + final core dump, DNS switch,
   ~10 min downtime at night, rollback = DNS back to the old box (kept read-only 48 h).
-- **I2 — R2 storage**: `store-r2.ts` behind `MediaStore` (S3 API, SigV4 via `aws4fetch` — one tiny justified
+- **I2 — R2 storage** (**deferred by the owner 2026-11-01**: «Cloudflare later, files stay on the server for now»;
+  until then the pg store stays and a local-disk store on the new server is the interim option): `store-r2.ts` behind `MediaStore` (S3 API, SigV4 via `aws4fetch` — one tiny justified
   dependency instead of the AWS SDK); `MEDIA_STORE=pg|r2`; new files go to R2 when configured; reads prefer
   `object_key`, fall back to `bytes`. Backfill script `scripts/media-backfill-r2.mts`: batches of 200, upload →
   re-download sha256 check → set `object_key`; `--dry-run`; bytes are cleared **only** in a second, separate,
