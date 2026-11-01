@@ -96,6 +96,38 @@ export async function mediaJobByKey(idempotencyKey: string): Promise<MediaJobRow
   return queryOne<MediaJobRow>("SELECT * FROM media_jobs WHERE idempotency_key = $1", [idempotencyKey]);
 }
 
+/** `mediaJobByKey` inside the caller's transaction. */
+export async function mediaJobByKeyTx(client: Queryable, idempotencyKey: string): Promise<MediaJobRow | null> {
+  return (await client.query<MediaJobRow>("SELECT * FROM media_jobs WHERE idempotency_key = $1", [idempotencyKey])).rows[0] ?? null;
+}
+
+/**
+ * The INSERT half of `beginMediaJob` inside the caller's transaction: a fresh 'submitting' row (attempts 1), or `null`
+ * when the key already exists (the caller decides; nothing is bumped).
+ */
+export async function insertMediaJobTx(client: Queryable, i: BeginInput): Promise<MediaJobRow | null> {
+  const res = await client.query<MediaJobRow>(
+    `INSERT INTO media_jobs (id, generation_id, purpose, model_id, provider, upstream_model, idempotency_key, params, cost_usd, deadline_at, attempts)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, 1)
+     ON CONFLICT (idempotency_key) DO NOTHING
+     RETURNING *`,
+    [randomUUID(), i.generationId, i.purpose, i.modelId, i.provider, i.upstreamModel, i.idempotencyKey, JSON.stringify(i.params), i.costUsd ?? null, i.deadlineAt ?? null],
+  );
+  return res.rows[0] ?? null;
+}
+
+/**
+ * Fails a row ONLY while it is still 'submitting' (the guard of an async submit): a row another worker has parked in
+ * the meantime ('pending', with its op id) is never overwritten. Returns whether it failed the row.
+ */
+export async function failSubmittingMediaJob(id: string, error: string): Promise<boolean> {
+  const res = await query<{ id: string }>(
+    "UPDATE media_jobs SET status = 'failed', errors = errors + 1, last_error = left($2, 500), next_poll_at = NULL, finished_at = now() WHERE id = $1 AND status = 'submitting' RETURNING id",
+    [id, scrubSecrets(error, [])],
+  );
+  return res.length > 0;
+}
+
 /**
  * Claims up to `limit` due 'pending' rows of `purpose` by pushing their `next_poll_at` forward by `leaseSec` (a lease,
  * as on `video_ops`): another poller does not take the same op meanwhile, and a crashed poller's claim expires.

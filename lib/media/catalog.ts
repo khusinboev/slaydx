@@ -38,11 +38,28 @@ const imageParams: readonly ParamSchema[] = [
   { name: "imageCount", label: "Soni", type: "int", min: 1, max: 4, default: 1, affects: "price" },
 ];
 
+/**
+ * The provider's allowed clip lengths as an int param that accepts EXACTLY that list (and nothing between).
+ *
+ * Not an enum: the core's enum compares strings strictly, and the forms / API send `seconds` as a number, so an enum
+ * would reject `5` where `videoParamsError` accepts it. An int with `step` accepts exactly the list only when the list
+ * is evenly spaced, so that is CHECKED here: a provider whose lengths are not (e.g. 5, 8, 10) fails at load time instead
+ * of silently accepting lengths it does not offer. `tests/media-catalog.test.mts` compares the accepted set with the list.
+ */
+export function videoSecondsParam(secs: readonly number[]): ParamSchema {
+  const sorted = [...secs].sort((a, b) => a - b);
+  const step = sorted.length > 1 ? sorted[1]! - sorted[0]! : undefined;
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i]! - sorted[i - 1]! !== step) throw new Error(`media catalog: video seconds ${sorted.join(", ")} are not evenly spaced; an int param cannot express them`);
+  }
+  return { name: "seconds", label: "Davomiylik", type: "int", min: sorted[0]!, max: sorted[sorted.length - 1]!, ...(step ? { step } : {}), default: secs[0]!, affects: "both" };
+}
+
 function videoParams(id: VideoProviderId): readonly ParamSchema[] {
   const secs = videoProviderById(id).seconds;
   return [
     { name: "prompt", label: "Video tavsifi", type: "text", min: VIDEO_PROMPT_MIN, max: VIDEO_PROMPT_MAX, affects: "request" },
-    { name: "seconds", label: "Davomiylik", type: "int", min: secs[0], max: secs[secs.length - 1], step: secs[secs.length - 1] - secs[0], default: secs[0], affects: "both" },
+    videoSecondsParam(secs),
     { name: "aspect", label: "O'lcham", type: "enum", options: VIDEO_ASPECTS.map((a) => ({ value: a, label: a })), default: VIDEO_ASPECTS[0], affects: "request" },
     { name: "imageAssetId", label: "Boshlang'ich surat", type: "image", max: 1, mimes: ["image/jpeg", "image/png", "image/webp"], maxBytes: 10 * 1024 * 1024, affects: "request" },
   ];

@@ -98,6 +98,56 @@ test("video adapter on the core: shapes and error mapping", async (t) => {
     const ok = videoAdapter("google-video", { ...fake, poll: async () => ({ state: "done" as const, media: { kind: "url" as const, url: "https://x/v" } }) });
     assert.deepEqual(await ok.poll!("op"), { state: "done", outputs: [{ kind: "url", url: "https://x/v", mime: "video/mp4" }] });
   });
+
+  await t.test("M4: a submit error with NO HTTP status (timeout / network / abort / no op id) is accepted:true; an HTTP error answer stays accepted:false", async () => {
+    const input = { upstreamModel: "omni-flash", idempotencyKey: "k", params: { prompt: "abcde", seconds: 5, aspect: "16:9" } };
+    const base = { ...VIDEO_ADAPTERS.veo, configured: () => true };
+    const submitErr = async (e: unknown) => {
+      const a = videoAdapter("google-video", { ...base, submit: async () => { throw e; } });
+      try {
+        await a.submit(input);
+      } catch (err) {
+        return err as InstanceType<typeof MediaError>;
+      }
+      throw new Error("no error");
+    };
+    const net = await submitErr(new VideoProviderError("veo", "fetch failed: socket hang up", { retryable: true }));
+    assert.deepEqual([net.accepted, net.retryable, net.status], [true, true, undefined], "network / timeout: the provider may have started the job");
+    const noId = await submitErr(new VideoProviderError("veo", "javobda interaction id yo'q"));
+    assert.equal(noId.accepted, true);
+    for (const status of [400, 401, 429, 500, 503]) {
+      const http = await submitErr(new VideoProviderError("veo", `${status} no`, { status, retryable: status === 429 || status >= 500 }));
+      assert.equal(http.accepted, false, `HTTP ${status}: the provider answered no`);
+    }
+    // Through the real Omni adapter: an aborted fetch (timeout) has no status -> accepted.
+    const omni = videoAdapter("google-video", VIDEO_ADAPTERS.veo);
+    const prevKey = process.env.GEMINI_API_KEY;
+    process.env.GEMINI_API_KEY = "AIza-test-gemini-key-0123456789";
+    try {
+      await assert.rejects(
+        omni.submit(input, { fetchImpl: (async () => { throw new DOMException("The operation was aborted due to timeout", "TimeoutError"); }) as unknown as typeof fetch }),
+        (e: unknown) => e instanceof MediaError && e.accepted && e.retryable,
+      );
+      await assert.rejects(
+        omni.submit(input, { fetchImpl: (async () => new Response(JSON.stringify({ error: { message: "bad" } }), { status: 400 })) as unknown as typeof fetch }),
+        (e: unknown) => e instanceof MediaError && !e.accepted && e.status === 400,
+      );
+    } finally {
+      process.env.GEMINI_API_KEY = prevKey;
+    }
+  });
+
+  await t.test("N2: scrubSecrets removes sk-… / sk_… / xi-… keys (20+ chars) and keeps short look-alikes", async () => {
+    const { scrubSecrets } = await import("../lib/generation/video/types.ts");
+    const keys = [`sk-${"a1B2".repeat(6)}`, `sk-proj-${"x9".repeat(12)}`, `sk-ant-api03-${"Q".repeat(20)}`, `sk_live_${"7".repeat(20)}`, `xi-${"f0".repeat(12)}`];
+    for (const k of keys) {
+      const out = scrubSecrets(`provider said: key ${k} is invalid`, []);
+      assert.equal(out, "provider said: key [key] is invalid", k);
+    }
+    assert.equal(scrubSecrets("task-sk-short and xi-abc and risk-free", []), "task-sk-short and xi-abc and risk-free", "short / embedded words are not keys");
+    // The existing rules still hold.
+    assert.equal(scrubSecrets(`AIza${"z".repeat(30)} Bearer abc.def`, []), "[key] Bearer [key]");
+  });
 });
 
 type Mode = "old" | "core";
@@ -246,6 +296,8 @@ test("video on media_jobs: parity with the video_ops path, tables, drain, capaci
     await query(`UPDATE video_ops SET next_poll_at = now() - interval '1 second' WHERE generation_id = $1`, [id]);
     await query(`UPDATE media_jobs SET next_poll_at = now() - interval '1 second' WHERE generation_id = $1`, [id]);
   };
+  /** `makeDue` that touches only video_ops (for a test where media_jobs is unavailable). */
+  const makeDueOld = (id: string) => query(`UPDATE video_ops SET next_poll_at = now() - interval '1 second' WHERE generation_id = $1`, [id]);
   const expire = async (id: string) => {
     await query(`UPDATE video_ops SET deadline_at = now() - interval '1 minute', next_poll_at = now() - interval '1 second' WHERE generation_id = $1`, [id]);
     await query(`UPDATE media_jobs SET deadline_at = now() - interval '1 minute', next_poll_at = now() - interval '1 second' WHERE generation_id = $1`, [id]);
@@ -679,5 +731,93 @@ test("video on media_jobs: parity with the video_ops path, tables, drain, capaci
     await makeDue(id);
     assert.equal(await ops.pollDueVideoOps(), 1, "the OFF switch still polls media_jobs");
     assert.equal((await outcome(id, me)).status, "COMPLETED");
+  });
+
+  /* ═════════════ review fixes ═════════════ */
+
+  await t.test("M1: with media_jobs broken, the OFF path still submits and video_ops still drains; ON fails the job and refunds", async () => {
+    await clearAll("old");
+    const me = await mkUser(100_000);
+    const before = await startWaiting(me); // waiting in video_ops
+    await query(`ALTER TABLE media_jobs RENAME TO media_jobs_broken`);
+    try {
+      // A new OFF submit: the guard's media_jobs read fails, counts as «no row».
+      const id = await startWaiting(me);
+      assert.equal(stub.submits, 2, "the OFF submit reached the provider");
+      assert.equal((await query<{ status: string }>(`SELECT status FROM video_ops WHERE generation_id = $1`, [id]))[0]?.status, "pending");
+      // The poll: the media claim fails, video_ops is still claimed and finished.
+      stub.pollBody = doneBody;
+      await makeDueOld(before);
+      await makeDueOld(id);
+      assert.equal(await ops.pollDueVideoOps(), 2);
+      for (const g of [before, id]) assert.equal((await outcome(g, me)).status, "COMPLETED");
+      // ON: the same broken table fails the job (as before the fix), refunded, nothing submitted.
+      await setMode("core");
+      const on = await post(me, VIDEO);
+      await worker.runJob((await worker.claimNext())!);
+      const g = await outcome(on, me);
+      assert.equal(g.status, "FAILED");
+      assert.deepEqual(g.money.map((m) => m[0]), ["charge", "refund"]);
+      assert.equal(stub.submits, 2);
+    } finally {
+      await query(`ALTER TABLE media_jobs_broken RENAME TO media_jobs`);
+    }
+  });
+
+  await t.test("M2: two submits of ONE generation with the switch in both states -> one provider submit, one table row", async () => {
+    for (const [first, second] of [[false, true], [true, false]] as const) {
+      await clearAll("old");
+      const me = await mkUser(100_000);
+      const id = await post(me, VIDEO);
+      const job = await jobs.claimJob(jobs.newLease("t"));
+      assert.equal(job?.id, id);
+      const vjob = { id, userId: me, lease: job!.lease, values: job!.values };
+      // The first submit pauses INSIDE its guard (rows checked, none written yet) while the second one starts.
+      let entered!: () => void;
+      const inGuard = new Promise<void>((r) => (entered = r));
+      const a = ops.submitVideoJob(vjob, { core: first, afterGuard: async () => { entered(); await new Promise((r) => setTimeout(r, 300)); } });
+      await inGuard;
+      const b = ops.submitVideoJob(vjob, { core: second });
+      const [ra, rb] = await Promise.allSettled([a, b]);
+      assert.equal(stub.submits, 1, `first=${first}: exactly one paid provider operation`);
+      const rows = (await query(`SELECT 1 FROM video_ops WHERE generation_id = $1`, [id])).length + (await query(`SELECT 1 FROM media_jobs WHERE generation_id = $1`, [id])).length;
+      assert.equal(rows, 1, "never a row in both tables");
+      assert.equal(ra.status, "fulfilled");
+      // The second one met the first one's row: adopted it ('pending') or failed as lost ('submitting').
+      assert.ok(rb.status === "fulfilled" || String((rb as PromiseRejectedResult).reason?.message) === ops.VIDEO_LOST_MESSAGE, String((rb as PromiseRejectedResult).reason));
+    }
+  });
+
+  await t.test("M3: a media_jobs op whose poller cannot be built still fails at its deadline and is refunded", async () => {
+    await clearAll("core");
+    const me = await mkUser(100_000);
+    const id = await startWaiting(me);
+    await query(`UPDATE media_jobs SET provider = 'retired-provider' WHERE generation_id = $1`, [id]);
+    await makeDue(id);
+    assert.equal(await ops.pollDueVideoOps(), 0, "before the deadline: skipped, still waiting");
+    assert.equal((await outcome(id, me)).status, "IN_PROGRESS");
+    await expire(id);
+    assert.equal(await ops.pollDueVideoOps(), 1);
+    const g = await outcome(id, me);
+    assert.equal(g.status, "FAILED");
+    assert.equal(g.error, ops.VIDEO_DEADLINE_MESSAGE);
+    assert.deepEqual(g.money.map((m) => m[0]), ["charge", "refund"]);
+    assert.equal(g.balance, 100_000);
+    assert.equal((await query<{ status: string }>(`SELECT status FROM media_jobs WHERE generation_id = $1`, [id]))[0]!.status, "failed");
+    assert.equal(stub.polls, 0);
+  });
+
+  await t.test("N1: the 'submitting' guard never overwrites a row another worker already parked", async () => {
+    await clearAll("core");
+    const mj = await import("../lib/server/media/jobs.ts");
+    const me = await mkUser(100_000);
+    const id = await startWaiting(me);
+    const [row] = await query<{ id: string }>(`SELECT id FROM media_jobs WHERE generation_id = $1`, [id]);
+    assert.equal(await mj.failSubmittingMediaJob(row!.id, "lost"), false, "a parked row is not failed");
+    const [after] = await query<{ status: string; op_id: string }>(`SELECT status, op_id FROM media_jobs WHERE id = $1`, [row!.id]);
+    assert.deepEqual([after!.status, after!.op_id], ["pending", "int_1"]);
+    await query(`UPDATE media_jobs SET status = 'submitting' WHERE id = $1`, [row!.id]);
+    assert.equal(await mj.failSubmittingMediaJob(row!.id, "lost"), true);
+    assert.equal((await query<{ status: string }>(`SELECT status FROM media_jobs WHERE id = $1`, [row!.id]))[0]!.status, "failed");
   });
 });

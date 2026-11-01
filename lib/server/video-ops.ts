@@ -31,18 +31,18 @@ import {
 } from "../generation/video";
 import type { AcademicDoc, CostJson, Delivered } from "../generation/types";
 import type { FormValues } from "../types";
-import { MediaError, costUsd, normalize, submitWithRoutes, type AdapterAsset, type AdapterDeps } from "../studio-core";
+import { MediaError, costUsd, normalize, submitWithRoutes, type AdapterAsset, type AdapterDeps, type CatalogEntry, type NormalizedParams } from "../studio-core";
 import { videoMediaAdapters, videoRoute } from "../media/adapters/video";
 import { breakerHealth } from "./media/run";
 import { mediaCoreSwitches } from "./media/switches";
 import {
-  beginMediaJob,
   claimDueMediaJobs,
-  failMediaJob,
   failMediaJobTx,
+  failSubmittingMediaJob,
   finishMediaJobTx,
+  insertMediaJobTx,
   lockMediaJobByKey,
-  mediaJobByKey,
+  mediaJobByKeyTx,
   mediaJobPastDeadline,
   parkMediaJob,
   rescheduleMediaJob,
@@ -85,6 +85,10 @@ import {
 export type VideoOpsDeps = {
   adapters?: Readonly<Record<VideoProviderId, VideoAdapter>>;
   fetchImpl?: typeof fetch;
+  /** Test seam: the `media.core.video` switch for this submit (default: the setting, read at the moment of the submit). */
+  core?: boolean;
+  /** Test seam: runs inside the submit guard, after the row checks and before the row is written. */
+  afterGuard?: () => Promise<void>;
 };
 
 const adaptersOf = (d: VideoOpsDeps): Readonly<Record<VideoProviderId, VideoAdapter>> => d.adapters ?? VIDEO_ADAPTERS;
@@ -117,6 +121,48 @@ export const VIDEO_IMAGE_MISSING_MESSAGE = "Boshlang‘ich surat topilmadi. Pul 
 
 export type VideoJob = { id: string; userId: string; lease: string; values: FormValues };
 
+/** The catalog purpose of a user's clip (`lib/media/catalog.ts` MEDIA_PURPOSES). */
+export const VIDEO_PURPOSE = "video.clip";
+
+/** The `media_jobs` idempotency key of a generation's one provider operation. */
+export function videoMediaKey(generationId: string): string {
+  return `${generationId}:video:0`;
+}
+
+/**
+ * Namespace of the per-generation submit lock (`pg_advisory_xact_lock(ns, hashtext(id))`). The TWO-int form is its own
+ * key space, so a hash can never collide with the single-key locks (`VIDEO_POLL_LOCK_ID`, `VIDEO_CLAIM_LOCK_ID`).
+ */
+export const VIDEO_SUBMIT_LOCK_NS = 727_000_006;
+
+const coreDeps = (d: VideoOpsDeps): AdapterDeps => (d.fetchImpl ? { fetchImpl: d.fetchImpl } : {});
+
+/** What the submit guard found or wrote, decided under the per-generation lock. */
+type Guarded =
+  | { found: "video_ops"; status: string }
+  | { found: "media_jobs"; status: string; id: string }
+  | { start: "old"; image: AdapterAsset | undefined }
+  | { start: "core"; image: AdapterAsset | undefined; row: MediaJobRow; params: NormalizedParams; entry: CatalogEntry };
+
+/**
+ * The generation's `media_jobs` row inside the guard. With the switch OFF the old path must not depend on the core's
+ * table: a failing read (table missing, broken) is logged and counts as «no row», behind a savepoint so the guard's
+ * transaction survives it. With the switch ON the error fails the job.
+ */
+async function mediaRowInGuard(client: PoolClient, key: string, core: boolean): Promise<MediaJobRow | null> {
+  if (core) return mediaJobByKeyTx(client, key);
+  await client.query("SAVEPOINT video_media_row");
+  try {
+    const row = await mediaJobByKeyTx(client, key);
+    await client.query("RELEASE SAVEPOINT video_media_row");
+    return row;
+  } catch (e) {
+    await client.query("ROLLBACK TO SAVEPOINT video_media_row");
+    log("warn", "[video] media_jobs could not be read -- the switch is off, the submit goes on without it", { key, err: e });
+    return null;
+  }
+}
+
 /**
  * Starts the provider operation of a claimed `video` job and parks the job as «waiting». Throws a `UserFacingError`
  * (or any error) when the job must fail: the worker then runs its normal fail + refund path while it still owns the lease.
@@ -125,64 +171,85 @@ export async function submitVideoJob(job: VideoJob, deps: VideoOpsDeps = {}): Pr
   const input = videoInputFromValues(job.values);
   const spec = videoProviderById(input.provider);
   const adapter = adaptersOf(deps)[input.provider];
+  // Read at the moment of the submit: the video branch of the worker runs outside the build's media context.
+  const core = deps.core ?? (await mediaCoreSwitches()).video;
+  const key = videoMediaKey(job.id);
 
   /*
-   * A re-claimed job must NOT start a second, paid operation. What the stored row says:
+   * The guard and the row it writes run in ONE transaction under a per-generation advisory lock: two submits of the
+   * same generation (a lost lease re-claimed elsewhere, possibly with the switch in the other state) are serialised,
+   * so the second always sees the first one's row and the two tables can never both get a row for one generation.
+   * The row is committed BEFORE the provider call (see the file header).
+   *
+   * A re-claimed job must NOT start a second, paid operation. What the stored row (either table, whatever the switch
+   * says now) says:
    *   'pending'    the previous run stored the op id: adopt it (just release the lease);
    *   'submitting' the previous run died between the provider call and the update -- the op id is unknown: fail + refund;
    *   'succeeded' / 'failed' the operation already ended: the job cannot be waiting for it -- fail (the refund is idempotent).
    */
-  const existing = await queryOne<{ status: string }>("SELECT status FROM video_ops WHERE generation_id = $1", [job.id]);
-  if (existing) {
-    if (existing.status === "pending") {
+  const g = await transaction(async (client): Promise<Guarded> => {
+    await client.query("SELECT pg_advisory_xact_lock($1::int, hashtext($2))", [VIDEO_SUBMIT_LOCK_NS, job.id]);
+    const existing = (await client.query<{ status: string }>("SELECT status FROM video_ops WHERE generation_id = $1", [job.id])).rows[0];
+    if (existing) return { found: "video_ops", status: existing.status };
+    const parked = await mediaRowInGuard(client, key, core);
+    if (parked) return { found: "media_jobs", status: parked.status, id: parked.id };
+    await deps.afterGuard?.();
+
+    if (!isProviderEnabled(spec.registryId) || !adapter.configured()) throw new UserFacingError(VIDEO_UNAVAILABLE_MESSAGE);
+    let image: AdapterAsset | undefined;
+    if (input.imageAssetId) {
+      // SQL ownership: another user's upload cannot be read.
+      const photo = await getPhoto(job.userId, input.imageAssetId);
+      if (!photo) throw new UserFacingError(VIDEO_IMAGE_MISSING_MESSAGE);
+      image = { mime: photo.mime, base64: photo.bytes.toString("base64") };
+    }
+
+    if (core) {
+      const { entry } = videoRoute(input.provider);
+      const params = normalize(entry.params, encodeVideoValues(input));
+      const primary = entry.routes[0]!;
+      const row = await insertMediaJobTx(client, {
+        generationId: job.id,
+        purpose: VIDEO_PURPOSE,
+        modelId: entry.id,
+        provider: primary.provider,
+        upstreamModel: primary.upstreamModel,
+        idempotencyKey: key,
+        params: { ...params },
+        costUsd: costUsd(entry.cost, params),
+        deadlineAt: new Date(Date.now() + VIDEO_OP_DEADLINE_MS),
+      });
+      if (!row) throw new UserFacingError(VIDEO_LOST_MESSAGE);
+      return { start: "core", image, row, params, entry };
+    }
+    const inserted = await client.query(
+      `INSERT INTO video_ops (generation_id, provider, deadline_at, seconds)
+       VALUES ($1, $2, now() + $3::int * interval '1 millisecond', $4)
+       ON CONFLICT (generation_id) DO NOTHING
+       RETURNING generation_id`,
+      [job.id, input.provider, VIDEO_OP_DEADLINE_MS, input.seconds],
+    );
+    if (!inserted.rows.length) throw new UserFacingError(VIDEO_LOST_MESSAGE);
+    return { start: "old", image };
+  });
+
+  if ("found" in g) {
+    if (g.status === "pending") {
       await releaseLease(job);
       return "waiting";
     }
-    if (existing.status === "submitting") {
-      await query("UPDATE video_ops SET status = 'failed', finished_at = now(), last_error = 'lost between the provider call and the update' WHERE generation_id = $1 AND status = 'submitting'", [job.id]);
-      log("error", "[video] a previous submit died before storing the operation id -- failing and refunding instead of paying twice", { jobId: job.id });
+    if (g.status === "submitting") {
+      // Only a row that is STILL 'submitting' is failed: one parked meanwhile keeps its op id.
+      if (g.found === "video_ops") await query("UPDATE video_ops SET status = 'failed', finished_at = now(), last_error = 'lost between the provider call and the update' WHERE generation_id = $1 AND status = 'submitting'", [job.id]);
+      else await failSubmittingMediaJob(g.id, "lost between the provider call and the update");
+      log("error", "[video] a previous submit died before storing the operation id -- failing and refunding instead of paying twice", { jobId: job.id, table: g.found });
       throw new UserFacingError(VIDEO_LOST_MESSAGE);
     }
     throw new UserFacingError(VIDEO_FAILED_MESSAGE);
   }
-  // The same guard over the core's row (a job submitted while `media.core.video` was on), whatever the switch says now.
-  const parked = await mediaJobByKey(videoMediaKey(job.id));
-  if (parked) {
-    if (parked.status === "pending") {
-      await releaseLease(job);
-      return "waiting";
-    }
-    if (parked.status === "submitting") {
-      await failMediaJob(parked.id, "lost between the provider call and the update");
-      log("error", "[video] a previous submit died before storing the operation id -- failing and refunding instead of paying twice", { jobId: job.id, mediaJobId: parked.id });
-      throw new UserFacingError(VIDEO_LOST_MESSAGE);
-    }
-    throw new UserFacingError(VIDEO_FAILED_MESSAGE);
-  }
+  if (g.start === "core") return submitThroughCore(job, input, g, deps);
 
-  if (!isProviderEnabled(spec.registryId) || !adapter.configured()) throw new UserFacingError(VIDEO_UNAVAILABLE_MESSAGE);
-
-  let image: { mime: string; base64: string } | undefined;
-  if (input.imageAssetId) {
-    // SQL ownership: another user's upload cannot be read.
-    const photo = await getPhoto(job.userId, input.imageAssetId);
-    if (!photo) throw new UserFacingError(VIDEO_IMAGE_MISSING_MESSAGE);
-    image = { mime: photo.mime, base64: photo.bytes.toString("base64") };
-  }
-
-  // Read at the moment of the submit: the video branch of the worker runs outside the build's media context.
-  if ((await mediaCoreSwitches()).video) return submitThroughCore(job, input, image, deps);
-
-  // The row goes in BEFORE the provider call (see the file header): the primary key also makes a racing second claim lose here.
-  const inserted = await query(
-    `INSERT INTO video_ops (generation_id, provider, deadline_at, seconds)
-     VALUES ($1, $2, now() + $3::int * interval '1 millisecond', $4)
-     ON CONFLICT (generation_id) DO NOTHING
-     RETURNING generation_id`,
-    [job.id, input.provider, VIDEO_OP_DEADLINE_MS, input.seconds],
-  );
-  if (!inserted.length) throw new UserFacingError(VIDEO_LOST_MESSAGE);
-
+  const image = g.image;
   let opId: string;
   try {
     ({ opId } = await adapter.submit({ prompt: input.prompt, seconds: input.seconds, aspect: input.aspect, ...(image ? { image } : {}) }, { fetchImpl: deps.fetchImpl }));
@@ -207,39 +274,13 @@ export async function submitVideoJob(job: VideoJob, deps: VideoOpsDeps = {}): Pr
   return "waiting";
 }
 
-/** The catalog purpose of a user's clip (`lib/media/catalog.ts` MEDIA_PURPOSES). */
-export const VIDEO_PURPOSE = "video.clip";
-
-/** The `media_jobs` idempotency key of a generation's one provider operation. */
-export function videoMediaKey(generationId: string): string {
-  return `${generationId}:video:0`;
-}
-
-const coreDeps = (d: VideoOpsDeps): AdapterDeps => (d.fetchImpl ? { fetchImpl: d.fetchImpl } : {});
-
 /**
- * The submit of `submitVideoJob` through the media core: the same 'submitting' → provider → 'pending' order and the
- * same failure messages as the `video_ops` path, on a `media_jobs` row.
+ * The provider half of `submitVideoJob` through the media core, on the 'submitting' `media_jobs` row the guard wrote:
+ * the same provider → 'pending' order and the same failure messages as the `video_ops` path.
  */
-async function submitThroughCore(job: VideoJob, input: VideoInput, image: AdapterAsset | undefined, deps: VideoOpsDeps): Promise<"waiting"> {
-  const { entry } = videoRoute(input.provider);
-  const params = normalize(entry.params, encodeVideoValues(input));
+async function submitThroughCore(job: VideoJob, input: VideoInput, g: Extract<Guarded, { start: "core" }>, deps: VideoOpsDeps): Promise<"waiting"> {
+  const { row, params, entry, image } = g;
   const primary = entry.routes[0]!;
-  const key = videoMediaKey(job.id);
-  // The row goes in as 'submitting' BEFORE the provider call; the unique key makes a racing second claim lose here.
-  const { row, fresh } = await beginMediaJob({
-    generationId: job.id,
-    purpose: VIDEO_PURPOSE,
-    modelId: entry.id,
-    provider: primary.provider,
-    upstreamModel: primary.upstreamModel,
-    idempotencyKey: key,
-    params: { ...params },
-    costUsd: costUsd(entry.cost, params),
-    deadlineAt: new Date(Date.now() + VIDEO_OP_DEADLINE_MS),
-  });
-  if (!fresh) throw new UserFacingError(VIDEO_LOST_MESSAGE);
-
   let opId: string;
   try {
     const { route, result } = await submitWithRoutes(
@@ -247,7 +288,7 @@ async function submitThroughCore(job: VideoJob, input: VideoInput, image: Adapte
       videoMediaAdapters(adaptersOf(deps)),
       breakerHealth,
       // The provider request is built from today's normalizer (`videoInputFromValues`), so it is byte-identical to the old path.
-      { params: { ...params, prompt: input.prompt, seconds: input.seconds, aspect: input.aspect }, ...(image ? { assets: { imageAssetId: [image] } } : {}), idempotencyKey: key },
+      { params: { ...params, prompt: input.prompt, seconds: input.seconds, aspect: input.aspect }, ...(image ? { assets: { imageAssetId: [image] } } : {}), idempotencyKey: row.idempotency_key },
       coreDeps(deps),
     );
     if (!("opId" in result)) throw new MediaError(route.provider, "a video route answered synchronously");
@@ -256,7 +297,7 @@ async function submitThroughCore(job: VideoJob, input: VideoInput, image: Adapte
   } catch (e) {
     const err = e instanceof MediaError ? e : null;
     log("error", "[video] submit failed", { jobId: job.id, provider: input.provider, status: err?.status, safety: err?.safety, err });
-    await failMediaJob(row.id, (err?.message ?? "submit failed").slice(0, 300)).catch(() => undefined);
+    await failSubmittingMediaJob(row.id, (err?.message ?? "submit failed").slice(0, 300)).catch(() => undefined);
     throw new UserFacingError(err?.safety ? VIDEO_SAFETY_MESSAGE : VIDEO_FAILED_MESSAGE);
   }
 
@@ -305,7 +346,14 @@ function dueFromMediaJob(r: MediaJobRow): DueOp | null {
 export async function claimDueOps(limit: number = VIDEO_POLL_BATCH): Promise<DueOp[]> {
   const old = await claimDueVideoOps(limit);
   if (old.length >= limit) return old;
-  const parked = await claimDueMediaJobs(VIDEO_PURPOSE, limit - old.length, CLAIM_LEASE_SEC);
+  let parked: MediaJobRow[];
+  try {
+    parked = await claimDueMediaJobs(VIDEO_PURPOSE, limit - old.length, CLAIM_LEASE_SEC);
+  } catch (e) {
+    // The old path must not depend on the core's table: `video_ops` keeps draining while media_jobs is broken.
+    log("error", "[video] media_jobs could not be claimed -- polling video_ops only this run", { err: e });
+    return old;
+  }
   return [...old, ...parked.map(dueFromMediaJob).filter((o): o is DueOp => o !== null)];
 }
 
@@ -402,7 +450,13 @@ function pollerFor(op: DueOp, deps: VideoOpsDeps): (() => Promise<Polled>) | nul
 
 export async function pollOp(op: DueOp, deps: VideoOpsDeps = {}): Promise<PollOutcome> {
   const poller = pollerFor(op, deps);
-  if (!poller) return "skipped";
+  if (!poller) {
+    // No way to ask the provider (unknown route / adapter): the op must still end at its deadline, refunded -- never
+    // stay «skipped» forever. Before the deadline its claim lease simply expires and it is tried again.
+    if (await pastDeadline(op)) return (await failVideo(op.generation_id, VIDEO_DEADLINE_MESSAGE, "no poller for this operation")) ? "failed" : "skipped";
+    log("warn", "[video] no poller for an operation, it waits for its deadline", { jobId: op.generation_id, provider: op.provider, mediaJobId: op.mediaJobId });
+    return "skipped";
+  }
 
   const transient = async (e: unknown): Promise<PollOutcome> => {
     const msg = e instanceof Error ? e.message.slice(0, 300) : "xato";

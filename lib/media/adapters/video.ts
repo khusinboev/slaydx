@@ -4,9 +4,10 @@
  * `download` are the same functions, only the shapes are translated.
  *
  * Failure mapping (`VideoProviderError` → `MediaError`): `retryable` and `safety` are kept as they are. `accepted` is
- * `false` for an error of `submit` (the provider answered with an error instead of an operation id, so it holds no job
- * of ours) and `true` for an error of `poll` / `fetchOutput` (the operation exists and may already be billed): the
- * router never moves to another route after that.
+ * `false` ONLY for a submit the provider answered with an HTTP error status (it said no: it holds no job of ours). A
+ * submit error without a status (timeout, network drop, abort, an answer without an operation id) may have reached the
+ * provider and started a paid job we never heard about, so it is `accepted: true` -- the router must not send the same
+ * clip to a second route. Errors of `poll` / `fetchOutput` are always `accepted: true` (the operation exists).
  *
  * Client-safe like the wrapped adapters: no server imports.
  */
@@ -41,7 +42,7 @@ export function videoAdapter(adapterId: string, a: VideoAdapter): MediaAdapter {
       try {
         return await a.submit(videoRequestInput(input), videoDeps(deps));
       } catch (e) {
-        throw toMediaError(e, false);
+        throw toMediaError(e, !(e instanceof VideoProviderError && e.status !== undefined));
       }
     },
     async poll(opId, deps): Promise<PollResult> {

@@ -14,6 +14,7 @@ import {
   MEDIA_IMAGE_PROMPT_MIN,
   MEDIA_PURPOSES,
   VIDEO_PROVIDER_TO_MEDIA,
+  videoSecondsParam,
 } from "../lib/media/catalog.ts";
 import { MEDIA_MARKUP_DEFAULT, mediaQuote } from "../lib/media/quote.ts";
 
@@ -23,7 +24,8 @@ import { MEDIA_MARKUP_DEFAULT, mediaQuote } from "../lib/media/quote.ts";
  * Mutations (each turned the named test red, then restored): image ladder reads `count - 1` -> "price parity: rasm";
  * kling ladder uses veo's per-second price -> "price parity: video"; video seconds step removed in `videoParams`
  * -> "validation parity: video seconds"; Gemini cost row swapped to the flash (non-lite) model -> "costs come from
- * the price book".
+ * the price book"; `videoSecondsParam` without its even-spacing check -> "video seconds … EXACTLY …" (5, 8, 10 loads);
+ * its step dropped -> the same test and "validation parity: video seconds".
  */
 
 const RATE = 12_800;
@@ -63,6 +65,20 @@ test("validation parity: video seconds", () => {
       assert.equal(validate(entry.params, values) === null, videoParamsError(values) === null, `${id} ${seconds}s`);
     }
   }
+});
+
+test("video seconds: the int param accepts EXACTLY the provider's list; an uneven list is refused at load time", () => {
+  for (const p of VIDEO_PROVIDERS) {
+    const entry = MEDIA_CATALOG.byId(VIDEO_PROVIDER_TO_MEDIA[p.id])!;
+    const accepted: number[] = [];
+    for (let s = 0; s <= 60; s++) if (validate(entry.params, { prompt: "Tong chog'ida Registon", seconds: s }) === null) accepted.push(s);
+    assert.deepEqual(accepted, [...p.seconds], p.id);
+  }
+  assert.deepEqual(validate([videoSecondsParam([5, 10, 15])], { seconds: 15 }), null, "evenly spaced: 3 values");
+  assert.notEqual(validate([videoSecondsParam([5, 10, 15])], { seconds: 12 }), null);
+  assert.equal(validate([videoSecondsParam([6])], { seconds: 6 }), null, "a single length");
+  assert.notEqual(validate([videoSecondsParam([6])], { seconds: 7 }), null);
+  assert.throws(() => videoSecondsParam([5, 8, 10]), /not evenly spaced/);
 });
 
 test("validation parity: prompt minimum", () => {
