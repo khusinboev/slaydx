@@ -8,6 +8,7 @@
  * Telemetry only for sync kinds: a failed write here is logged and never fails the user's job.
  */
 import { randomUUID } from "node:crypto";
+import type { PoolClient } from "pg";
 import { query, queryOne } from "../db";
 import { scrubSecrets } from "../../generation/video/types";
 
@@ -85,4 +86,72 @@ export async function failMediaJob(id: string, error: string, secrets: readonly 
 /** Rows of one generation, oldest first (admin / tests). */
 export async function mediaJobsOf(generationId: string): Promise<MediaJobRow[]> {
   return query<MediaJobRow>("SELECT * FROM media_jobs WHERE generation_id = $1 ORDER BY created_at, idempotency_key", [generationId]);
+}
+
+/* ── async ops (video, docs/studio/P0-SPEC.md §6.4): the poll loop's side of a parked row ── */
+
+type Queryable = Pick<PoolClient, "query">;
+
+export async function mediaJobByKey(idempotencyKey: string): Promise<MediaJobRow | null> {
+  return queryOne<MediaJobRow>("SELECT * FROM media_jobs WHERE idempotency_key = $1", [idempotencyKey]);
+}
+
+/**
+ * Claims up to `limit` due 'pending' rows of `purpose` by pushing their `next_poll_at` forward by `leaseSec` (a lease,
+ * as on `video_ops`): another poller does not take the same op meanwhile, and a crashed poller's claim expires.
+ */
+export async function claimDueMediaJobs(purpose: string, limit: number, leaseSec: number): Promise<MediaJobRow[]> {
+  if (limit <= 0) return [];
+  return query<MediaJobRow>(
+    `UPDATE media_jobs
+        SET next_poll_at = now() + $3::int * interval '1 second'
+      WHERE id IN (
+              SELECT id FROM media_jobs
+               WHERE status = 'pending' AND purpose = $1 AND next_poll_at <= now()
+               ORDER BY next_poll_at
+               LIMIT $2
+               FOR UPDATE SKIP LOCKED)
+      RETURNING *`,
+    [purpose, limit, leaseSec],
+  );
+}
+
+/** One more poll of a still-pending row: `attempts + 1`, `errors + 1` when `error` is given, next poll in `delaySec`. */
+export async function rescheduleMediaJob(id: string, delaySec: number, error: string | null): Promise<void> {
+  await query(
+    `UPDATE media_jobs
+        SET attempts = attempts + 1,
+            errors = errors + CASE WHEN $3::text IS NULL THEN 0 ELSE 1 END,
+            next_poll_at = now() + $2::int * interval '1 second',
+            last_error = COALESCE(left($3, 500), last_error)
+      WHERE id = $1 AND status = 'pending'`,
+    [id, delaySec, error === null ? null : scrubSecrets(error, [])],
+  );
+}
+
+/** A pending row whose `deadline_at` has passed. */
+export async function mediaJobPastDeadline(id: string): Promise<boolean> {
+  const row = await queryOne<{ late: boolean }>("SELECT deadline_at <= now() AS late FROM media_jobs WHERE id = $1 AND status = 'pending'", [id]);
+  return row?.late === true;
+}
+
+/** Row lock inside the caller's transaction (terminal steps serialise on it, as on `video_ops`). */
+export async function lockMediaJobByKey(client: Queryable, idempotencyKey: string): Promise<MediaJobRow | null> {
+  return (await client.query<MediaJobRow>("SELECT * FROM media_jobs WHERE idempotency_key = $1 FOR UPDATE", [idempotencyKey])).rows[0] ?? null;
+}
+
+/** `finishMediaJob` inside the caller's transaction. */
+export async function finishMediaJobTx(client: Queryable, id: string, outputs: readonly MediaOutputMeta[]): Promise<void> {
+  await client.query(
+    "UPDATE media_jobs SET status = 'succeeded', outputs = $2::jsonb, next_poll_at = NULL, finished_at = now() WHERE id = $1 AND status <> 'succeeded'",
+    [id, JSON.stringify(outputs)],
+  );
+}
+
+/** `failMediaJob` inside the caller's transaction. */
+export async function failMediaJobTx(client: Queryable, id: string, error: string): Promise<void> {
+  await client.query(
+    "UPDATE media_jobs SET status = 'failed', errors = errors + 1, last_error = left($2, 500), next_poll_at = NULL, finished_at = now() WHERE id = $1 AND status <> 'succeeded'",
+    [id, scrubSecrets(error, [])],
+  );
 }
