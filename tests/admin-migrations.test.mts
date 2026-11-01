@@ -330,6 +330,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     const figureCol = () =>
       queryOne("SELECT 1 FROM information_schema.columns WHERE table_name = 'test_questions' AND column_name = 'has_figure'");
     assert.ok(await figureCol(), "064 column created");
+    assert.ok(await exists("media_jobs"), "065 table created");
     // 064 rollback fixtures: two questions of its id list (one image + text, one TEXT ONLY) and one outside the list.
     await runSql(`
       INSERT INTO test_banks (slug, title) VALUES ('mig064', 'x');
@@ -341,6 +342,8 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
           FROM (VALUES (396, TRUE), (397, FALSE), (9999999, TRUE)) AS v(id, img);
     `);
     for (const f of [
+      // 065: media engine core (docs/studio/P0-SPEC.md §5) -- media_jobs.
+      "065_media_jobs.sql",
       // 064: «Test ishlash» question TEXT (generated data migration) -- test_questions.has_figure + guarded text/options UPDATEs.
       "064_test_questions_text.sql",
       // 063: «Test ishlash» AI analysis of the wrong answers -- test_analyses (shared per-question cache).
@@ -410,6 +413,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
         // An id outside the list is never touched.
         assert.equal(left[2]!.text, "matn", "an id outside the list keeps its text");
       }
+      if (f === "065_media_jobs.sql") assert.ok(!(await exists("media_jobs")), "065 rollback drops the table");
       if (f === "063_test_analyses.sql") assert.ok(!(await exists("test_analyses")), "063 rollback drops the table");
       if (f === "062_ai_routes.sql") assert.ok(!(await exists("ai_routes")) && !(await exists("provider_calls")), "062 rollback drops both tables");
       if (f === "061_paynet_routes.sql") assert.ok(!(await exists("paynet_routes")), "061 rollback drops the table");

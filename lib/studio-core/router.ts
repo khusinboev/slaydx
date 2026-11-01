@@ -5,7 +5,9 @@ import { MediaError } from "./types";
 /**
  * Router (docs/studio/P0-SPEC.md §3.9): tries a model's routes in order.
  *
- *   - a route whose health gate says no (breaker open, balance below floor) is skipped;
+ *   - a route whose health gate says no (breaker open, balance below floor) is skipped — except the LAST usable one:
+ *     with nowhere else to go, skipping would fail a job the provider may still serve (a single-route model keeps
+ *     today's behaviour exactly);
  *   - on failure it moves to the next route ONLY when the provider had not accepted the job and the error is
  *     retryable — never after acceptance (double cost, double output) and never on a safety refusal (another provider
  *     drawing the refused content would defeat the refusal);
@@ -34,9 +36,10 @@ export async function submitWithRoutes(
   deps: AdapterDeps = {},
 ): Promise<Routed> {
   let last: MediaError | null = null;
-  for (const route of routes) {
-    const adapter = adapters[route.adapter];
-    if (!adapter || !adapter.configured() || !health.allow(route)) continue;
+  const usable = routes.filter((r) => adapters[r.adapter]?.configured());
+  for (const [i, route] of usable.entries()) {
+    const adapter = adapters[route.adapter]!;
+    if (i < usable.length - 1 && !health.allow(route)) continue;
     try {
       const result = await adapter.submit({ ...input, upstreamModel: route.upstreamModel }, deps);
       health.success(route);

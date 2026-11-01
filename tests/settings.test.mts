@@ -86,6 +86,9 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "tests.points_per_correct",
     "video.enabled",
     "video.max_concurrent",
+    "media.core.image",
+    "media.core.video",
+    "media.core.speech",
   ]);
   for (const k of s.SETTING_KEYS) {
     const d = s.settingDef(k);

@@ -87,6 +87,12 @@ export const TAB_DEFS: readonly TabDef[] = [
     keys: ["video.max_concurrent"],
   },
   {
+    id: "media",
+    label: "Media dvigateli",
+    blurb: "Rasm, video va ovozni yagona media dvigateli orqali yuritish (har tur alohida). Natija va narx o'zgarmaydi.",
+    keys: ["media.core.image", "media.core.video", "media.core.speech"],
+  },
+  {
     id: "oferta",
     label: "Oferta",
     blurb: "Ommaviy oferta matni uchun rekvizitlar va tahrir raqami. Majburiy qabul qilish — «Funksiyalar» tabida.",

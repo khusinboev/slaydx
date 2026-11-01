@@ -52,6 +52,8 @@ import { cleanText, safeSlice } from "../generation/safe-text";
 import type { CostJson, Delivered } from "../generation/types";
 import { trackJobCost, type TrackedJobCost } from "../generation/job-cost";
 import { log, withFreshLogContext, type LogFields } from "./log";
+import { withMediaContext } from "../media/context";
+import { mediaCoreSwitches } from "./media/switches";
 import { providerOf, userMessage } from "./user-error";
 import { recordAiUsage, type AiUsageOutcome } from "./ai-usage";
 import { startBroadcastLoop } from "./broadcast-delivery";
@@ -587,7 +589,9 @@ async function execute(
       tool.id === "resume" || tool.id === "portrait"
         ? await photoDataUrl(job.userId, String(job.values.photoAssetId ?? ""))
         : undefined;
-    tracked = trackJobCost(() => build(tool, job.values, {
+    // Media engine path per kind, read ONCE so a running job never switches (docs/studio/P0-SPEC.md §6).
+    const mediaCtx = { generationId: job.id, core: await mediaCoreSwitches() };
+    tracked = trackJobCost(() => withMediaContext(mediaCtx, () => build(tool, job.values, {
       deadline,
       logo,
       template,
@@ -609,7 +613,7 @@ async function execute(
         );
         return write;
       },
-    }));
+    })));
     const file = await tracked.promise;
 
     if (ctl.abandoned) {

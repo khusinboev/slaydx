@@ -33,7 +33,7 @@ import {
  *   cost     second rule multiplies by count param -> "per second"; `by` table ignored -> "by table".
  *   params   unknown enum mapped to default in validate -> "unknown enum rejected"; int step check removed -> "int step".
  *   router   `e.accepted ||` removed -> "no fallback after accept"; `e.safety ||` removed -> "no fallback on safety";
- *            health.allow skipped -> "open breaker skipped".
+ *            health.allow skipped -> "open breaker skipped…"; last-route exception removed -> same test.
  *   purposes requested model swapped for the default when unavailable -> "a pick is never swapped".
  */
 
@@ -245,12 +245,20 @@ test("router: no fallback on safety or a permanent error", async () => {
   }
 });
 
-test("router: open breaker skipped, all down = retryable error", async () => {
+test("router: open breaker skipped, the last usable route is still tried", async () => {
   const calls: string[] = [];
   const r = await submitWithRoutes([route("a"), route("b")], { a: fakeAdapter("a", ok, calls), b: fakeAdapter("b", ok, calls) }, health(["a"]), { params: {}, idempotencyKey: "k" });
   assert.equal(r.route.provider, "b");
+  assert.deepEqual(calls, ["b:b-m:k"]);
+  const single: string[] = [];
+  await submitWithRoutes([route("a")], { a: fakeAdapter("a", ok, single) }, health(["a"]), { params: {}, idempotencyKey: "k" });
+  assert.deepEqual(single, ["a:a-m:k"]);
+});
+
+test("router: no configured route = retryable error", async () => {
+  const off: MediaAdapter = { ...fakeAdapter("a", ok, []), configured: () => false };
   await assert.rejects(
-    submitWithRoutes([route("a")], { a: fakeAdapter("a", ok, []) }, health(["a"]), { params: {}, idempotencyKey: "k" }),
+    submitWithRoutes([route("a")], { a: off }, health(), { params: {}, idempotencyKey: "k" }),
     (e: unknown) => e instanceof MediaError && e.retryable,
   );
 });
