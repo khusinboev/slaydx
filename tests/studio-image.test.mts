@@ -383,6 +383,20 @@ test("client preview == server price == charge (catalog pricing block + session 
   assert.equal(c.status, 200);
   const block = c.body.pricing as ReturnType<typeof pricing>;
   assert.deepEqual(block, { soumPerUsd: 12_900, markup: 2.5, step: 100, overrides: { [GPT]: { markup: 4 } } });
+  // Server prices are taken BEFORE the simulated browser exists: with a `window` the server path would read the
+  // browser registry and agree with the client by accident.
+  const serverPrice = new Map<string, number>();
+  for (const modelId of [NANO, GPT]) {
+    for (const imageCount of [1, 2, 3, 4]) {
+      const values = { ...VALUES, modelId, imageCount };
+      const server = await effectivePrice(STUDIO, values);
+      // Hand check: cost × markup (2.5, or GPT's own 4) rounded up to 100, then 130 % rounded to 100.
+      const m = modelId === GPT ? 4 : 2.5;
+      const base = Math.ceil((USD[modelId]! * imageCount * 12_900 * m) / 100 - 1e-9) * 100;
+      assert.equal(server, Math.max(100, Math.round((base * 130) / 100 / 100) * 100), `server ${modelId} × ${imageCount}`);
+      serverPrice.set(`${modelId}:${imageCount}`, server);
+    }
+  }
   const g = globalThis as { window?: unknown };
   const hadWindow = "window" in g;
   g.window = {};
@@ -392,13 +406,7 @@ test("client preview == server price == charge (catalog pricing block + session 
     for (const modelId of [NANO, GPT]) {
       for (const imageCount of [1, 2, 3, 4]) {
         const values = { ...VALUES, modelId, imageCount };
-        const client = priceFor(STUDIO, values);
-        const server = await effectivePrice(STUDIO, values);
-        assert.equal(client, server, `${modelId} × ${imageCount}`);
-        // Hand check: cost × markup (2.5, or GPT's own 4) rounded up to 100, then 130 % rounded to 100.
-        const m = modelId === GPT ? 4 : 2.5;
-        const base = Math.ceil((USD[modelId] * imageCount * 12_900 * m) / 100 - 1e-9) * 100;
-        assert.equal(server, Math.max(100, Math.round((base * 130) / 100 / 100) * 100));
+        assert.equal(priceFor(STUDIO, values), serverPrice.get(`${modelId}:${imageCount}`), `client ${modelId} × ${imageCount}`);
       }
     }
   } finally {
