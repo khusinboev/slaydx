@@ -1,6 +1,6 @@
 # SlaydX Studio — AI image / video / voice studio (plan, 2026-11-01)
 
-Status: **plan approved in principle** (owner 2026-11-01, §10); shortlist §11; no code yet.
+Status: **plan approved** (owner 2026-11-01, §10, §13, §21); P0 spec `P0-SPEC.md` awaits «ok»; no code yet.
 
 ## 1. Goal
 One «Studio» section where a user picks a modality (Rasm / Video / Ovoz), then a **model** from several well-known
@@ -332,3 +332,14 @@ old shared box keeps the other projects. Fits today's 11.5k users and early grow
 storage (R2/CDN) and document workers stay ≤ 2–3 LibreOffice processes. Upgrade path: VPS 8/12 (same provider,
 in-place) when the load-history page shows sustained CPU > 70 % or RAM > 80 %; DB moves to its own box at ~50k DAU.
 Still open: provider budgets (fal, Kling, ElevenLabs), design feedback, phase order confirmation.
+
+## 21. Owner decisions — round 3 (2026-11-01)
+- **Budgets: minimal start**, topped up when the phase starts, not before: fal.ai $20 (P2), Kling trial $9.80 (P3),
+  ElevenLabs Starter $6/mo (P5).
+- **Design canvas approved as is**; small adjustments during the P1 browser smoke.
+- **Phase order confirmed**: P0 → P1 → P2 → P3 → P5 → P4 → P6 → P7 → P8 → P9 → P10.
+- **Infra**: the owner creates the Cloudflare account + R2 bucket and writes the keys into the server `.env`; the new
+  server is bought **within 3–4 days**, then SlaydX moves to it (cutover runbook first, window agreed then).
+- **Scale target raised: at least 50 000 active users** (not 100k registered). §19's numbers are superseded by
+  `P0-SPEC.md` §0 (≈5× more load; DB box becomes the first upgrade, earlier than §20 assumed).
+- Next: `docs/studio/P0-SPEC.md` → owner «ok» → build P0 on `feat/studio-p0`.
