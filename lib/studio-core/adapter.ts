@@ -36,8 +36,8 @@ export type SubmitResult = { done: MediaOutput[] } | { opId: string };
 export interface MediaAdapter {
   id: string;
   configured(): boolean;
-  /** Pure: what `submit` would send (contract and probe tests). No key inside. */
-  buildRequest(input: AdapterInput): { url: string; headers: Record<string, string>; body: unknown };
+  /** Pure: what `submit` would send (contract and probe tests). No key inside. Absent when the wrapped request builder is not pure yet (P0 image/speech wrappers). */
+  buildRequest?(input: AdapterInput): { url: string; headers: Record<string, string>; body: unknown };
   submit(input: AdapterInput, deps?: AdapterDeps): Promise<SubmitResult>;
   poll?(opId: string, deps?: AdapterDeps): Promise<PollResult>;
   fetchOutput(o: MediaOutput, deps?: AdapterDeps): Promise<Uint8Array>;
