@@ -20,6 +20,8 @@ import {
   DQ_REWARD_MAX,
 } from "../daily-quiz/rules";
 import { DOMLA_PRICE_DEFAULT, DOMLA_PRICE_MAX } from "../domla/rules";
+import { MARKUP_MAX, MARKUP_MIN } from "../studio-core";
+import { MEDIA_MARKUP_DEFAULT } from "../media/quote";
 import {
   TESTS_ENABLED_DEFAULT,
   TESTS_FIRST_FREE_DEFAULT,
@@ -100,6 +102,7 @@ export type SettingValues = {
   "media.core.image": boolean;
   "media.core.video": boolean;
   "media.core.speech": boolean;
+  "media.markup": number;
 };
 
 export type SettingKey = keyof SettingValues;
@@ -708,6 +711,22 @@ const CATALOG: Catalog = {
   "media.core.image": mediaCoreSwitch("media.core.image", "Rasm: yangi media dvigateli", "«Rasm», slayd rasmlari va portret yangi dvigatel orqali chiziladi."),
   "media.core.video": mediaCoreSwitch("media.core.video", "Video: yangi media dvigateli", "Yangi videolar yangi dvigatel orqali yuboriladi va kuzatiladi; boshlangan videolar eski yo'lda tugaydi."),
   "media.core.speech": mediaCoreSwitch("media.core.speech", "Ovoz: yangi media dvigateli", "Podkast, tabriknoma va domla ovozi yangi dvigatel orqali yoziladi."),
+  /*
+   * Studio price rule (owner 2026-11-01, docs/studio/P1-SPEC.md): price = provider cost × this markup, rounded up to
+   * 100 so'm; a model's own markup in «Narxlar» → «Media modellari» wins. Read by `lib/server/media/pricing.ts`.
+   */
+  "media.markup": {
+    key: "media.markup",
+    group: PRICING_GROUP,
+    label: "Studio ustamasi (×)",
+    description:
+      "Studio narxi = provayder xarajati × shu ustama, 100 so'mga yuqoriga yaxlitlanadi (standart 2). Modelning o'z ustamasi «Narxlar» → «Media modellari»da beriladi va undan ustun turadi. Eski «Rasm» vositasi narxiga ta'sir qilmaydi.",
+    type: "number",
+    min: MARKUP_MIN,
+    max: MARKUP_MAX,
+    validate: numberValidator(MARKUP_MIN, MARKUP_MAX),
+    envDefault: () => MEDIA_MARKUP_DEFAULT,
+  },
 };
 
 function mediaCoreSwitch<K extends "media.core.image" | "media.core.video" | "media.core.speech">(key: K, label: string, what: string): SettingDef<K> {

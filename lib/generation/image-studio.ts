@@ -127,7 +127,7 @@ export function imageProviderFor(values: { model?: unknown }): ImageProvider {
  * stays OUTSIDE the core call (same `${id}-image` semaphore as above), so concurrency and queue timeouts are unchanged.
  * `recorded` is what `media_jobs.params` shows: the user's prompt and style (the engine sends the composed prompt).
  */
-const CORE_BASES: Record<ImageModelId, { provider: ImageProvider; upstream: () => string }> = {
+export const CORE_BASES: Record<ImageModelId, { provider: ImageProvider; upstream: () => string }> = {
   gemini: { provider: geminiProvider, upstream: geminiImageModel },
   openai: { provider: openaiProvider, upstream: openaiImageModel },
 };
@@ -147,18 +147,45 @@ export async function buildImageArtifact(
   onStage?: (ev: { progress: number; step: string }) => void,
 ): Promise<BuiltFile> {
   // Real stages for the running panel (`lib/progress-stages.ts` "image"); otherwise only the time-based fallback curve.
-  const stage = (progress: number, step: string) => onStage?.({ progress, step });
-  stage(0, "So‘rov tayyorlanmoqda");
-  const meta = extractMeta(tool, { ...values, topic: String(values.prompt || values.topic || "Rasm") });
+  onStage?.({ progress: 0, step: "So‘rov tayyorlanmoqda" });
   const prompt = String(values.prompt || "").trim();
   if (prompt.length < 3) throw new Error("Rasm uchun tavsif yozing");
   const styleId = String(values.imageStyle || "photo");
   const ratio = imageRatioById(String(values.imageRatio || "1:1"));
   const count = Math.max(1, Math.min(4, Number(values.imageCount || 1)));
-  const size = { width: ratio.w, height: ratio.h };
   const model = imageModelOf(values);
   // Decided per job at the worker (`media.core.image`); off or outside a job = today's providers, untouched.
   const imageProvider = mediaCoreOn("image") ? coreImageProviderFor(model, { prompt, imageStyle: styleId, imageRatio: ratio.id }) : imageProviderFor(values);
+  return drawImageJob({ tool, values, prompt, styleId, ratio, count, provider: imageProvider, imageModel: model, deadline, onStage });
+}
+
+export type ImageJob = {
+  tool: ToolConfig;
+  values: FormValues;
+  /** The user's description, trimmed (≥ 3 characters, checked by the caller). */
+  prompt: string;
+  styleId: string;
+  ratio: ReturnType<typeof imageRatioById>;
+  count: number;
+  /** Draws ONE picture; the caller decides which provider (and whether it goes through the media core). */
+  provider: ImageProvider;
+  /** `doc.imageModel`: what the viewer names («Rasm»: the form's model id; Studio: the catalog id). */
+  imageModel: string;
+  deadline?: number;
+  onStage?: (ev: { progress: number; step: string }) => void;
+};
+
+/**
+ * The picture job shared by «Rasm» and the Studio (`lib/generation/studio/`): prompt expansion, `count` pictures two at
+ * a time, the refusal message, the doc and the packed file with its `delivered` gap (partial refund in the worker).
+ * Moved out of `buildImageArtifact` unchanged; only the provider and the `imageModel` label differ per caller.
+ */
+export async function drawImageJob(job: ImageJob): Promise<BuiltFile> {
+  const { tool, values, prompt, styleId, ratio, count, deadline, onStage } = job;
+  const stage = (progress: number, step: string) => onStage?.({ progress, step });
+  const meta = extractMeta(tool, { ...values, topic: String(values.prompt || values.topic || "Rasm") });
+  const size = { width: ratio.w, height: ratio.h };
+  const imageProvider = job.provider;
   const refused: ImageResult[] = [];
   const scene = await expandPrompt(prompt, styleId, ratio.id, deadline);
   const full = composePrompt(scene, styleId, ratio.w, ratio.h);
@@ -216,7 +243,7 @@ export async function buildImageArtifact(
     imageStyle: styleId,
     imageRatio: ratio.id,
     // Which model drew the pictures: the viewer names it.
-    imageModel: model,
+    imageModel: job.imageModel,
   };
 
   const files = await resolveImageFiles(images);

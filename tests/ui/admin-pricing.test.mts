@@ -59,6 +59,22 @@ type Role = keyof typeof PERMS;
 const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 
 type Call = { url: URL; init: RequestInit; body: Record<string, unknown> | null; signal: AbortSignal | null | undefined };
+
+/** The «Media modellari» block (Studio P1) loads on its own; the tool-table tests below answer it here and do not count it. */
+const MEDIA_MODELS = {
+  soumPerUsd: 12_800,
+  markup: 2,
+  step: 100,
+  markupMin: 1,
+  markupMax: 20,
+  models: [
+    { modelId: "google/nano-banana", label: "Nano Banana", maker: "Google", kind: "image", unit: "rasm", costUsd: 0.034, costSoum: 435.2, providerReady: true, enabled: true, available: true, markupOverride: null, markup: 2, priceBase: 900, price: 900, marginSoum: 464.8, marginPct: 51.64, updatedAt: null },
+    { modelId: "openai/gpt-image", label: "ChatGPT (GPT Image)", maker: "OpenAI", kind: "image", unit: "rasm", costUsd: 0.053, costSoum: 678.4, providerReady: false, enabled: true, available: false, markupOverride: 3, markup: 3, priceBase: 2100, price: 2100, marginSoum: 1421.6, marginPct: 67.7, updatedAt: null },
+  ],
+};
+let mediaHandler: (c: Call) => Response | Promise<Response> = () => json(200, MEDIA_MODELS);
+const mediaCalls: Call[] = [];
+
 function stubFetch(handler: (c: Call, n: number) => Response | Promise<Response>): Call[] {
   const calls: Call[] = [];
   globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
@@ -68,6 +84,10 @@ function stubFetch(handler: (c: Call, n: number) => Response | Promise<Response>
       body: init.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : null,
       signal: init.signal,
     };
+    if (c.url.pathname === "/api/admin/pricing/media") {
+      mediaCalls.push(c);
+      return mediaHandler(c);
+    }
     calls.push(c);
     return handler(c, calls.length);
   }) as typeof fetch;
@@ -923,4 +943,53 @@ test("tools without a job in the period sit behind one toggle; on phones the str
   assert.deepEqual(entries.map((e) => e.className.includes("max-sm:hidden")), [false, false, false, true, true]);
   assert.match(text(strip()), /Yana 3 ta vosita — ro'yxatda belgilangan/);
   assert.match(text(strip()), /Yana 1 ta vosita — jadvalda belgilangan/);
+});
+
+/*
+ * «Media modellari» (Studio P1): the server's numbers as sent (cost USD + so'm, markup, price, margin, status), an
+ * owner-only «O‘zgartirish» with a reason, PUT {modelId, enabled, markup, reason, expected}, the block re-rendered from
+ * the answer; a blank markup is «umumiy» (null); an out-of-range markup keeps the button disabled; viewers only read.
+ * Mutations: `expected` dropped from the PUT body -> red; blank markup sent as 0 -> red; the button shown to a viewer -> red.
+ */
+test("media models: rows from the server, owner edit PUT with expected, blank markup = global, viewer read-only", async () => {
+  stubAll();
+  mediaCalls.length = 0;
+  let put: Call | null = null;
+  mediaHandler = (c) => {
+    if (method(c) !== "PUT") return json(200, MEDIA_MODELS);
+    put = c;
+    return json(200, { ...MEDIA_MODELS, models: [{ ...MEDIA_MODELS.models[0], enabled: false, available: false }, MEDIA_MODELS.models[1]] });
+  };
+  try {
+    renderPage(Q);
+    const table = await screen.findByTestId("media-models");
+    const nano = table.querySelector('[data-model="google/nano-banana"]')!;
+    const gpt = table.querySelector('[data-model="openai/gpt-image"]')!;
+    assert.match(text(nano), /Nano Banana/);
+    assert.match(text(nano), /Sotuvda/);
+    assert.match(text(nano), /umumiy/);
+    assert.match(text(gpt), /Provayder sozlanmagan/);
+    assert.match(text(gpt), /o‘z ustamasi/);
+    fireEvent.click(within(nano as HTMLElement).getByRole("button", { name: "O‘zgartirish" }));
+    const dq = within(await lastDialog());
+    const confirm = dq.getByRole("button", { name: "Qo‘llash" }) as HTMLButtonElement;
+    assert.equal(confirm.disabled, true, "unchanged");
+    fireEvent.change(dq.getByLabelText(/O‘z ustamasi/), { target: { value: "25" } });
+    fireEvent.change(dq.getByLabelText("Sabab"), { target: { value: "Modelni vaqtincha yopamiz" } });
+    assert.equal(confirm.disabled, true, "markup out of range");
+    fireEvent.change(dq.getByLabelText(/O‘z ustamasi/), { target: { value: "" } });
+    fireEvent.click(dq.getByLabelText("Studio’da sotiladi"));
+    assert.equal(confirm.disabled, false);
+    fireEvent.click(confirm);
+    await waitFor(() => assert.ok(put));
+    assert.deepEqual(put!.body, { modelId: "google/nano-banana", enabled: false, markup: null, reason: "Modelni vaqtincha yopamiz", expected: { enabled: true, markup: null } });
+    await waitFor(() => assert.match(text(screen.getByTestId("media-models").querySelector('[data-model="google/nano-banana"]')), /O‘chirilgan/));
+  } finally {
+    mediaHandler = () => json(200, MEDIA_MODELS);
+  }
+  cleanup();
+  stubAll();
+  renderPage(Q, "viewer");
+  const ro = await screen.findByTestId("media-models");
+  assert.ok(!within(ro).queryByRole("button", { name: "O‘zgartirish" }), "viewers only read");
 });

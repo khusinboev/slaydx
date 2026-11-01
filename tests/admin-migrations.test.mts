@@ -331,6 +331,10 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
       queryOne("SELECT 1 FROM information_schema.columns WHERE table_name = 'test_questions' AND column_name = 'has_figure'");
     assert.ok(await figureCol(), "064 column created");
     assert.ok(await exists("media_jobs"), "065 table created");
+    assert.ok(await exists("media_model_overrides"), "066 table created");
+    assert.ok((await exists("media_jobs_submitting_idx")) && (await exists("media_jobs_created_idx")), "066 indexes created");
+    // 066 CHECK: a markup outside 1–20 is refused by the database itself.
+    await assert.rejects(runSql("INSERT INTO media_model_overrides (model_id, markup) VALUES ('x/y', 0.5)"), /check/i, "066 markup CHECK");
     // 064 rollback fixtures: two questions of its id list (one image + text, one TEXT ONLY) and one outside the list.
     await runSql(`
       INSERT INTO test_banks (slug, title) VALUES ('mig064', 'x');
@@ -342,6 +346,8 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
           FROM (VALUES (396, TRUE), (397, FALSE), (9999999, TRUE)) AS v(id, img);
     `);
     for (const f of [
+      // 066: Studio P1 admin overrides (docs/studio/P1-SPEC.md «Admin») -- media_model_overrides.
+      "066_media_model_overrides.sql",
       // 065: media engine core (docs/studio/P0-SPEC.md §5) -- media_jobs.
       "065_media_jobs.sql",
       // 064: «Test ishlash» question TEXT (generated data migration) -- test_questions.has_figure + guarded text/options UPDATEs.
@@ -412,6 +418,10 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
         assert.equal(left[1]!.text, "matn", "a text-only question keeps its text");
         // An id outside the list is never touched.
         assert.equal(left[2]!.text, "matn", "an id outside the list keeps its text");
+      }
+      if (f === "066_media_model_overrides.sql") {
+        assert.ok(!(await exists("media_model_overrides")), "066 rollback drops the table");
+        assert.ok(!(await exists("media_jobs_submitting_idx")) && !(await exists("media_jobs_created_idx")), "066 rollback drops both indexes");
       }
       if (f === "065_media_jobs.sql") assert.ok(!(await exists("media_jobs")), "065 rollback drops the table");
       if (f === "063_test_analyses.sql") assert.ok(!(await exists("test_analyses")), "063 rollback drops the table");

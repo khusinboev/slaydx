@@ -40,6 +40,7 @@ export const TOOL_KINDS: Readonly<Record<ToolId, ToolKind>> = {
   infographic: { group: "oqituvchi", output: "png" },
   sorting: { group: "oyinlar", output: "docx" },
   listening: { group: "oyinlar", output: "docx" },
+  "studio-image": { group: "media", output: "png" },
   podcast: { group: "media", output: "mp3" },
   greeting: { group: "media", output: "mp3" },
   portrait: { group: "media", output: "png" },

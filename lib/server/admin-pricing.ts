@@ -35,6 +35,9 @@ import { ESSAY_LIMITS } from "../generation/essay/types";
 import { PRO_SLIDE_DEFAULT, PRO_SLIDE_MAX, PRO_SLIDE_MIN, SLIDE_DEFAULT, SLIDE_INCLUDED, SLIDE_MAX, SLIDE_MIN } from "../generation/slide-params";
 import { COURSEWORK_PAGES, INDEPENDENT_PAGES, KONSPEKT_PAGES, REFERAT_PAGES } from "../generation/work/registry";
 import type { FormValues, ToolGroup, ToolId } from "../types";
+import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "../media/catalog";
+import type { MediaPricing } from "../media/studio-pricing";
+import { mediaPricing } from "./media/pricing";
 
 /**
  * Pricing and unit economics for the admin panel (docs/admin/02-plan.md §17).
@@ -131,6 +134,7 @@ export const UNIT_OF: Record<ToolId, PricingUnit> = {
   greeting: "job",
   portrait: "job",
   video: "job",
+  "studio-image": "image",
 };
 
 /** Uzbek unit labels for the UI (the client never imports lib/tools). */
@@ -245,6 +249,11 @@ export function ladderInputs(toolId: ToolId): LadderInput[] {
       // File mode: `translationChars` reads the server-filled `sourceChars`.
       return chars.map((n) => ({ label: `${fmtInt(n)} belgi`, values: { sourceAssetId: "ladder", sourceChars: n } }));
     }
+    case "studio-image":
+      // Cost × markup per catalog model (`studio-pricing.ts`): 1, 2 and 4 pictures of every Studio model.
+      return MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.allowed.flatMap((id) =>
+        [1, 2, 4].map((n) => ({ label: `${n} rasm · ${MEDIA_CATALOG.byId(id)!.label}`, values: { modelId: id, imageCount: n } })),
+      );
     case "portrait":
       // Priced per variant: 1 and 2 variants (`portraitPrice`).
       return PORTRAIT_VARIANTS.map((n) => ({ label: `${n} variant`, values: { variants: n } }));
@@ -258,10 +267,15 @@ export function ladderInputs(toolId: ToolId): LadderInput[] {
   }
 }
 
-/** The ladder priced by the code formula. */
-export function ladderFor(toolId: ToolId): LadderStep[] {
+/** The ladder priced by the code formula (`media`: the server's Studio pricing block, read by `studio-image` only). */
+export function ladderFor(toolId: ToolId, media?: MediaPricing | null): LadderStep[] {
   const tool = TOOL_BY_ID[toolId];
-  return ladderInputs(toolId).map((s) => ({ label: s.label, base: basePriceFor(tool, s.values) }));
+  return ladderInputs(toolId).map((s) => ({ label: s.label, base: basePriceFor(tool, s.values, media) }));
+}
+
+/** The Studio pricing block when `toolId` needs one (the price the server charges is cost × the CURRENT markup). */
+async function mediaPricingFor(toolId: ToolId): Promise<MediaPricing | null> {
+  return toolId === "studio-image" ? mediaPricing() : null;
 }
 
 export function effectiveLadder(steps: ReadonlyArray<LadderStep>, adj: PriceAdjust | null): LadderRow[] {
@@ -840,13 +854,15 @@ type EconomicsInputs = {
   soumPerCoin: number;
   /** The days of the list trend (the last `LIST_TREND_DAYS` of the range). */
   trendDays: string[];
+  /** Studio pricing block (the `studio-image` ladder). */
+  media: MediaPricing;
 };
 
 export async function pricingOverview(range: DateRange, opts?: MoneyOptions & { includeAdmins?: boolean }): Promise<PricingOverview> {
   const k = soumPerCoinOf(opts);
   const includeAdmins = opts?.includeAdmins === true;
   const prevRange = previousRangeOf(range);
-  const [agg, prevAgg, adjustments, lastChanges, fx, targetMarkup, feePercent] = await Promise.all([
+  const [agg, prevAgg, adjustments, lastChanges, fx, targetMarkup, feePercent, media] = await Promise.all([
     cachedAggregates(range, includeAdmins),
     cachedAggregates(prevRange, includeAdmins),
     adjustmentsOf(pool()),
@@ -854,8 +870,9 @@ export async function pricingOverview(range: DateRange, opts?: MoneyOptions & { 
     soumPerUsd(),
     getSetting("pricing.target_markup"),
     getSetting("pricing.payment_fee_percent"),
+    mediaPricing(),
   ]);
-  const inputs: EconomicsInputs = { adjustments, lastChanges, fx, targetMarkup, feePercent, soumPerCoin: k, trendDays: daysOf(range).slice(-LIST_TREND_DAYS) };
+  const inputs: EconomicsInputs = { adjustments, lastChanges, fx, targetMarkup, feePercent, soumPerCoin: k, trendDays: daysOf(range).slice(-LIST_TREND_DAYS), media };
   const { items, totals } = economics(agg, inputs);
   const previous = economics(prevAgg, { ...inputs, trendDays: [] }).totals;
 
@@ -965,7 +982,7 @@ function economics(agg: Aggregates, inputs: EconomicsInputs): { items: PricingIt
       unit: UNIT_OF[id],
       unitLabel: UNIT_LABELS[UNIT_OF[id]],
       adjust,
-      ladder: effectiveLadder(ladderFor(id), adjust),
+      ladder: effectiveLadder(ladderFor(id, inputs.media), adjust),
       jobs: o.jobs,
       completed: oc.completed,
       failed: oc.failed,
@@ -1110,14 +1127,14 @@ export async function priceHistory(toolId: ToolId): Promise<PriceHistoryRow[]> {
 
 export async function pricingDetail(toolId: ToolId, days: number, includeAdmins = false): Promise<PricingDetail> {
   const range = parseDateRange(null, null, { defaultDays: days, maxDays: TREND_MAX_DAYS });
-  const [agg, adjust, history, fx] = await Promise.all([cachedAggregates(range, includeAdmins), adjustmentOf(pool(), toolId), priceHistory(toolId), soumPerUsd()]);
+  const [agg, adjust, history, fx, media] = await Promise.all([cachedAggregates(range, includeAdmins), adjustmentOf(pool(), toolId), priceHistory(toolId), soumPerUsd(), mediaPricingFor(toolId)]);
   const tool = TOOL_BY_ID[toolId];
   return {
     tool: { toolId, title: tool.title, group: tool.group, unit: UNIT_OF[toolId], unitLabel: UNIT_LABELS[UNIT_OF[toolId]], adjust },
     range: { from: range.fromDay, to: range.toDay, days: range.days },
     trend: trendOf(agg.trend.get(toolId), daysOf(range), fx),
     history,
-    ladder: effectiveLadder(ladderFor(toolId), adjust),
+    ladder: effectiveLadder(ladderFor(toolId, media), adjust),
     fx,
   };
 }
@@ -1201,7 +1218,7 @@ const PRICE_INPUTS_SQL = `jsonb_strip_nulls(jsonb_build_object(
     'slideCount', g.values_json->'slideCount', 'imageCount', g.values_json->'imageCount',
     'essayContext', g.values_json->'essayContext', 'essayKind', g.values_json->'essayKind', 'wordTarget', g.values_json->'wordTarget',
     'articleType', g.values_json->'articleType', 'termCount', g.values_json->'termCount', 'glossaryType', g.values_json->'glossaryType',
-    'type', g.values_json->'type',
+    'type', g.values_json->'type', 'modelId', g.values_json->'modelId',
     'sourceChars', COALESCE(g.values_json->'sourceChars', to_jsonb(length(g.values_json->>'sourceText'))),
     'sourceAssetId', CASE WHEN g.tool_id = 'translation' THEN to_jsonb('projection'::text) END))`;
 
@@ -1223,6 +1240,7 @@ async function projectionInputs(toolId: ToolId, includeAdmins: boolean): Promise
   return cached(`proj|${toolId}|${range.fromDay}|${range.toDay}|${includeAdmins ? "a" : "n"}`, () =>
     readOnlyTx(async (c) => {
       const tool = TOOL_BY_ID[toolId];
+      const media = await mediaPricingFor(toolId);
       // The same jobs the table's revenue is on: COMPLETED, finished in the window, admin accounts left out by default.
       const rows = await c.query<ProjectionRow>(
         `SELECT g.price::text AS price, GREATEST(g.price - rf.points - rf.cash, 0)::text AS net,
@@ -1246,7 +1264,7 @@ async function projectionInputs(toolId: ToolId, includeAdmins: boolean): Promise
         const net = num(r.net);
         paidPoints += num(r.net_points);
         paidTotal += num(r.net_points) + num(r.net_cash);
-        return { net, ratio: price > 0 ? net / price : 0, base: basePriceFor(tool, r.inputs ?? {}) };
+        return { net, ratio: price > 0 ? net / price : 0, base: basePriceFor(tool, r.inputs ?? {}, media) };
       });
       const spend = spendRowsSql({ fromTs: range.fromTs, toTsExclusive: range.toTsExclusive });
       const cost = await c.query<{ c_usd: string; c_records: string; f_usd: string }>(
@@ -1280,7 +1298,7 @@ async function projectionInputs(toolId: ToolId, includeAdmins: boolean): Promise
 export async function simulatePricing(toolId: ToolId, proposed: PriceAdjust, opts?: MoneyOptions & { includeAdmins?: boolean }): Promise<Simulation> {
   const k = soumPerCoinOf(opts);
   const includeAdmins = opts?.includeAdmins === true;
-  const [inputs, fx, feePercent] = await Promise.all([projectionInputs(toolId, includeAdmins), soumPerUsd(), getSetting("pricing.payment_fee_percent")]);
+  const [inputs, fx, feePercent, media] = await Promise.all([projectionInputs(toolId, includeAdmins), soumPerUsd(), getSetting("pricing.payment_fee_percent"), mediaPricingFor(toolId)]);
   const adj: PriceAdjust | null = proposed.percent === 100 ? null : proposed;
   const sp = inputs.spend;
   const jobsCount = inputs.jobs.length;
@@ -1307,7 +1325,7 @@ export async function simulatePricing(toolId: ToolId, proposed: PriceAdjust, opt
   return {
     toolId,
     proposed,
-    ladder: effectiveLadder(ladderFor(toolId), adj),
+    ladder: effectiveLadder(ladderFor(toolId, media), adj),
     window: { from: inputs.range.fromDay, to: inputs.range.toDay, days: inputs.range.days },
     current: { ...projection(currentRevenue), jobs: inputs.jobs.length },
     projected: projection(Math.round(projectedRevenue)),
@@ -1325,8 +1343,8 @@ export async function simulatePricing(toolId: ToolId, proposed: PriceAdjust, opt
 export type PricingItemResult = { toolId: ToolId; title: string; adjust: PriceAdjust; ladder: LadderRow[]; history: PriceHistoryRow[] };
 
 async function itemResult(toolId: ToolId): Promise<PricingItemResult> {
-  const [adjust, history] = await Promise.all([adjustmentOf(pool(), toolId), priceHistory(toolId)]);
-  return { toolId, title: TOOL_BY_ID[toolId].title, adjust, ladder: effectiveLadder(ladderFor(toolId), adjust), history };
+  const [adjust, history, media] = await Promise.all([adjustmentOf(pool(), toolId), priceHistory(toolId), mediaPricingFor(toolId)]);
+  return { toolId, title: TOOL_BY_ID[toolId].title, adjust, ladder: effectiveLadder(ladderFor(toolId, media), adjust), history };
 }
 
 /** Serialises writers of one tool's row (also when the row does not exist yet, which `FOR UPDATE` cannot lock). */

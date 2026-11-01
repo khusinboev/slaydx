@@ -4,6 +4,7 @@ import type { PriceAdjust, PriceAdjustMap } from "../tools";
 import type { FormValues, ToolConfig, ToolId } from "../types";
 import { query } from "./db";
 import { log } from "./log";
+import { mediaPricing } from "./media/pricing";
 
 /**
  * Admin price adjustments read side (docs/admin/02-plan.md §17.2, §17.7).
@@ -134,5 +135,7 @@ export async function getAllToolPricing(): Promise<PriceAdjustMap> {
  * browser-only client registry) with the tool's admin adjustment applied.
  */
 export async function effectivePrice(tool: ToolConfig, values: FormValues): Promise<number> {
-  return applyPriceAdjust(basePriceFor(tool, values), await getToolPricing(tool.id));
+  // Studio pictures: cost × markup with the server's pricing block (the one the catalog endpoint sends the browser).
+  const media = tool.id === "studio-image" ? await mediaPricing() : null;
+  return applyPriceAdjust(basePriceFor(tool, values, media), await getToolPricing(tool.id));
 }

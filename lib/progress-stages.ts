@@ -135,6 +135,7 @@ const KIND_BY_TOOL: Record<ToolId, ProgressKind> = {
   translation: "translation",
   image: "image",
   portrait: "image",
+  "studio-image": "image",
   video: "video",
   infographic: "infographic",
   "lesson-plan": "teacher",

@@ -998,12 +998,14 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     assert.equal(again.body.price, base);
     // Every ladder of every tool is byte-identical to priceFor again.
     const o = await list(owner.cookie, RANGE);
+    // Studio prices read the server's pricing block (rate + `media.markup` + overrides); every other tool ignores it.
+    const media = await (await import("../lib/server/media/pricing.ts")).mediaPricing();
     for (const item of o.body.items as Item[]) {
       assert.deepEqual(item.adjust, { percent: 100, roundTo: 500 }, item.toolId);
       const inputs = ap.ladderInputs(item.toolId as never);
       item.ladder.forEach((s, i) => {
         assert.equal(s.effective, s.base, `${item.toolId} ${s.label}`);
-        assert.equal(s.effective, priceFor(TOOL_BY_ID[item.toolId as never], inputs[i].values), `${item.toolId} ${s.label} = priceFor`);
+        assert.equal(s.effective, priceFor(TOOL_BY_ID[item.toolId as never], inputs[i].values, media), `${item.toolId} ${s.label} = priceFor`);
       });
     }
   });

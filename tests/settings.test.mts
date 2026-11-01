@@ -89,6 +89,7 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "media.core.image",
     "media.core.video",
     "media.core.speech",
+    "media.markup",
   ]);
   for (const k of s.SETTING_KEYS) {
     const d = s.settingDef(k);
@@ -150,6 +151,18 @@ test("tests.* defaults match BMB and the feature ships dark", () => {
   assert.equal(d("tests.minutes_per_subject"), 20);
   assert.equal(d("tests.minutes_all"), 60);
   assert.equal(d("tests.points_per_correct"), 1.1);
+});
+
+test("media.markup: default ×2 (owner 2026-11-01), group «Narxlar», bounds 1–20", () => {
+  // Mutations: default 3 -> red here; bounds 0–20 / 1–50 -> red on the 0.5 / 21 rows.
+  const def = s.settingDef("media.markup");
+  assert.equal(def.envDefault(), 2);
+  assert.equal(def.group, "Narxlar");
+  assert.equal(def.type, "number");
+  assert.equal(def.min, 1);
+  assert.equal(def.max, 20);
+  for (const v of [1, 2, 2.5, 20]) good("media.markup", v);
+  for (const v of [0.5, 0, 21, -2, "2", NaN, null, true]) bad("media.markup", v);
 });
 
 test("validatsiya: tests.*", () => {

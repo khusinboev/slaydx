@@ -177,6 +177,9 @@ export const LEGACY_PRICE_OVERRIDES: Readonly<Record<string, PriceOverride>> = {
 
 const SPEECH_CHAIN = ["azure/tts", "aisha/tts", "google/tts"];
 
+/** Purpose of the Studio «Rasm» tab (tool `studio-image`). */
+export const STUDIO_IMAGE_PURPOSE = "studio.image";
+
 export const MEDIA_PURPOSES = definePurposes(MEDIA_CATALOG, [
   { id: "rasm.image", kind: "image", allowed: ["google/nano-banana", "openai/gpt-image"], default: "google/nano-banana", userCanChoose: true },
   { id: "proslide.illustration", kind: "image", allowed: ["google/nano-banana"], default: "google/nano-banana", userCanChoose: false },
@@ -186,5 +189,8 @@ export const MEDIA_PURPOSES = definePurposes(MEDIA_CATALOG, [
   { id: "podcast.voice", kind: "speech", allowed: [...SPEECH_CHAIN, "elevenlabs/tts"], default: "azure/tts", userCanChoose: false },
   { id: "greeting.voice", kind: "speech", allowed: [...SPEECH_CHAIN, "elevenlabs/tts"], default: "azure/tts", userCanChoose: false },
   { id: "domla.voice", kind: "speech", allowed: ["google/tts"], default: "google/tts", userCanChoose: false },
-  { id: "listening.voice", kind: "speech", allowed: SPEECH_CHAIN, default: "azure/tts", userCanChoose: false },
+  // The operator may put ElevenLabs into `tts.order`; the listening chain then speaks through it (N3: allowed, not chosen).
+  { id: "listening.voice", kind: "speech", allowed: [...SPEECH_CHAIN, "elevenlabs/tts"], default: "azure/tts", userCanChoose: false },
+  // Studio «Rasm» tab (docs/studio/P1-SPEC.md): the user picks the model; priced cost × markup (lib/media/studio-pricing.ts).
+  { id: STUDIO_IMAGE_PURPOSE, kind: "image", allowed: ["google/nano-banana", "openai/gpt-image"], default: "google/nano-banana", userCanChoose: true },
 ]);
