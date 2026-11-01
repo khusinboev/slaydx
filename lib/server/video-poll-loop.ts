@@ -8,7 +8,8 @@ import { VIDEO_POLL_BATCH, VIDEO_POLL_BUDGET_MS, pollDueVideoOps } from "./video
 
 /**
  * THE `video-poll` LOOP (program-17 item 5): polls the videos that wait for their provider, in its OWN loop under its
- * OWN advisory lock -- the `startBroadcastLoop` pattern.
+ * OWN advisory lock -- the `startBroadcastLoop` pattern. One run covers both op tables (`video_ops` and the media
+ * core's `media_jobs` rows of purpose `video.clip`, docs/studio/P0-SPEC.md §6.4): `pollDueVideoOps` claims from both.
  *
  * Why not a housekeeping step: housekeeping is awaited inside the worker loop, so a slow provider (a 30 s poll and a 60 s
  * download per op) would hold up job claiming for EVERY tool and stale the alive-file health check. Here a slow
