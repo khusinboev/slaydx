@@ -177,3 +177,14 @@ Source of truth: Artificial Analysis arenas (text-to-image v2.1, text-to-video v
 - Alternatives: **Replicate** (broadest catalogue, slower cold starts), **WaveSpeed** (ByteDance / Alibaba / Kuaishou
   models — Seedream, Wan, Kling — often cheaper). Recommendation: fal primary, WaveSpeed as the second route for the
   ByteDance/Alibaba models.
+
+## 13. Owner decisions — round 2 (2026-11-01)
+- **Image: all shortlisted models** (GPT Image 2.5, Nano Banana, FLUX, Seedream, Reve, Ideogram, Recraft).
+- **Video: all shortlisted models** (Gemini Omni, Kling 3.0 + effect templates, Wan 3.0, Seedance 2.5, Hailuo/MiniMax,
+  Sora 2, HeyGen) — rolled out in waves, the catalogue makes each model one entry + its ParamSchema.
+- **Voice**: Gemini TTS (live) + **ElevenLabs v3 with voice cloning** + **ElevenLabs Music**. (Azure/Aisha stay as
+  silent fallbacks only.)
+- **Markup: ×2 of provider cost for now** (cost 100 → price 200), one global setting, per-model override possible.
+  Note: ×2 must also cover failed-job cost, payment fees and the payment bonus — the admin margin page watches it.
+- **Screens to design**: phone (site), Telegram Mini App, tablet, desktop.
+- Owner: **do not start coding** until providers and designs are agreed.
