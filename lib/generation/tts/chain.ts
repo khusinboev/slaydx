@@ -52,12 +52,13 @@ import { currentSoumPerUsd } from "../llm-pricing";
 import { makeAzureTts } from "./azure";
 import { makeAishaTts } from "./aisha";
 import { makeElevenLabsTts } from "./elevenlabs";
-import { GEMINI_DAILY_QUOTA_MESSAGE, makeGeminiTts } from "./gemini";
+import { GEMINI_DAILY_QUOTA_MESSAGE, geminiTtsModel, makeGeminiTts } from "./gemini";
 import { geminiPacer } from "./pace";
 import { packParts } from "./pack";
 import { DeadlineError } from "../llm/chain";
 import { backoffMs } from "../llm/retry";
 import { UserFacingError } from "../../server/user-error";
+import { mediaCoreOn } from "../../media/context";
 
 /* ══════════════════════════ ovoz zanjiri ══════════════════════════ */
 
@@ -198,7 +199,18 @@ export type TtsRunOpts = {
    * standard chain, which never contains ElevenLabs unless the operator listed it in `TTS_VOICE_<LANG>`.
    */
   provider?: TtsProviderId;
+  /**
+   * Media-core label of this run (docs/studio/P0-SPEC.md §6.5). With `media.core.speech` ON for the job
+   * (`mediaCoreOn("speech")`) every provider call of the run goes through `runMedia`: breaker health and one
+   * `media_jobs` row per chunk, `purpose` naming the caller (`podcast.voice`, `greeting.voice`, `listening.voice`,
+   * `domla.voice`). `scope` keeps the row key unique when ONE job runs the chain more than once (a listening job
+   * synthesizes every word as its own run). Absent = the direct provider call, whatever the switch says.
+   */
+  media?: TtsMediaLabel;
 };
+
+/** Which caller a speech run belongs to, for the media core (`TtsRunOpts.media`). */
+export type TtsMediaLabel = { purpose: string; scope?: string };
 
 const MAX_ATTEMPTS = 2;
 /** Muddatdan oldin qoldiriladigan zaxira (MP3 yig'ish, yozish). */
@@ -284,6 +296,7 @@ export function makeTtsChain(deps: TtsChainDeps = {}): TtsChain {
             ...(opts.speed !== undefined ? { speed: opts.speed } : {}),
             ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
             ...(opts.deadline !== undefined ? { deadline: opts.deadline } : {}),
+            ...(opts.media ? { media: opts.media } : {}),
           });
           log(`[tts:${lang}] ${provider.id} → ok ${clock.now() - started} ms (${run.audios.length} bo'lak, ${run.chars} belgi)`);
           return run;
@@ -301,6 +314,44 @@ export function makeTtsChain(deps: TtsChainDeps = {}): TtsChain {
 }
 
 type GroupOpts = TtsRunOpts & { clock?: TtsClock; log?: (line: string) => void };
+
+/**
+ * `media_jobs` step of one chunk: unique inside the job (`scope` per run, the chunk's index in the packed call list,
+ * the provider) and deterministic, so a retried job finds its rows again instead of adding new ones.
+ */
+export const speechStep = (media: TtsMediaLabel, callIndex: number, provider: TtsProviderId): string => `speech:${media.scope ? `${media.scope}:` : ""}${callIndex}:${provider}`;
+
+/**
+ * ONE provider call through the media core (`runMedia`): the same `provider.synthesize(text, call)` runs inside the
+ * speech adapter, so the request is identical; the core adds breaker health and the `media_jobs` row. Pacing, the
+ * 429 wait, retries, the deadline and the metering stay with the caller (`runGroup`), and the provider's own exception
+ * is handed back untouched. A provider the catalog does not sell keeps the direct call.
+ */
+async function synthesizeViaCore(provider: TtsProvider, text: string, call: TtsSynthOpts, label: { purpose: string; step: string }): Promise<TtsAudio> {
+  const { speechAdapter, speechExtraOf, speechRoute, unwrapSpeechError } = await import("../../media/adapters/speech");
+  const sold = speechRoute(provider.id);
+  if (!sold) return provider.synthesize(text, call);
+  const { runMedia } = await import("../../server/media/run");
+  const got: { audio: TtsAudio | null } = { audio: null };
+  try {
+    await runMedia({
+      purpose: label.purpose,
+      modelId: sold.entry.id,
+      values: { text, voice: call.voice ?? "" },
+      // The chunk text is the user's content: the row keeps its length only (the quote still prices the full text).
+      redact: ["text"],
+      extra: speechExtraOf(text, call),
+      step: label.step,
+      adapters: { [sold.route.adapter]: speechAdapter(sold.route.adapter, provider, { onAudio: (a) => (got.audio = a) }) },
+      // The catalog names the provider; Gemini's model is the operator's `TTS_GEMINI_MODEL` (what the row should show).
+      upstream: (route) => (provider.id === "gemini" ? geminiTtsModel() || route.upstreamModel : route.upstreamModel),
+    });
+  } catch (e) {
+    throw unwrapSpeechError(e, provider.id);
+  }
+  if (!got.audio) throw new TtsError(provider.id, "sintez natijasi bo'sh", { retryable: false });
+  return got.audio;
+}
 
 /**
  * Bitta provayder BUTUN ishni bajaradi.
@@ -339,7 +390,10 @@ async function runGroup(provider: TtsProvider, group: TtsProviderGroup, parts: r
   const calls = packParts(parts, { provider: provider.id, multiSpeaker: provider.multiSpeaker === true, twoVoices: voiceA !== voiceB });
   const paceCtx = (): TtsPaceCtx => ({ left: () => leftMs(opts.deadline, clock), reserveMs: TTS_MIN_ATTEMPT_MS, sleep: (ms) => clock.sleep(ms), now: () => clock.now() });
 
-  for (const part of calls) {
+  // Media core (§6.5): the switch is the job's (read once by the worker); a run without a label never uses it.
+  const media = opts.media && mediaCoreOn("speech") ? opts.media : null;
+
+  for (const [callIndex, part] of calls.entries()) {
     const text = part.text;
     if (!text) continue;
     const voice = part.voice === 1 ? voiceB : voiceA;
@@ -365,7 +419,7 @@ async function runGroup(provider: TtsProvider, group: TtsProviderGroup, parts: r
       if (afterPace < TTS_MIN_ATTEMPT_MS) throw new DeadlineError(`tts:${opts.lang}`, afterPace);
       const call: TtsSynthOpts = opts.deadline === undefined ? synth : { ...synth, timeoutMs: Math.min(opts.timeoutMs ?? TTS_LIMITS.callTimeoutMs, afterPace) };
       try {
-        audio = await provider.synthesize(text, call);
+        audio = media ? await synthesizeViaCore(provider, text, call, { purpose: media.purpose, step: speechStep(media, callIndex, provider.id) }) : await provider.synthesize(text, call);
       } catch (e) {
         const err = e instanceof TtsError ? e : null;
 
@@ -466,6 +520,7 @@ export function chainOfProvider(provider: TtsProvider, voices?: string[], log?: 
           ...(opts.speed !== undefined ? { speed: opts.speed } : {}),
           ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
           ...(opts.deadline !== undefined ? { deadline: opts.deadline } : {}),
+          ...(opts.media ? { media: opts.media } : {}),
         });
       } catch (e) {
         throw finalError(e);
@@ -497,7 +552,10 @@ export const ttsChain = makeTtsChain();
  * tinglash va podkast bir xil ovozda chiqadi va `TTS_VOICE_*` bitta
  * joydan boshqariladi.
  */
-export function providerOfChain(chain: TtsChain): TtsProvider {
+export function providerOfChain(chain: TtsChain, purpose = "listening.voice"): TtsProvider {
+  // Every word is its own chain run: the per-adapter counter keeps the media-core step of each one unique and, because
+  // the listening engine synthesizes in order, deterministic across a retry of the job.
+  let runs = 0;
   return {
     get id(): TtsProviderId {
       return chain.providersFor("uz")[0] ?? TTS_PROVIDERS[0];
@@ -508,6 +566,7 @@ export function providerOfChain(chain: TtsChain): TtsProvider {
         lang: opts.lang,
         ...(opts.speed !== undefined ? { speed: opts.speed } : {}),
         ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+        media: { purpose, scope: `${purpose.split(".")[0]}:${runs++}` },
       });
       const audio = run.audios[0];
       if (!audio) throw new TtsError(run.provider, "sintez natijasi bo'sh", { retryable: false });

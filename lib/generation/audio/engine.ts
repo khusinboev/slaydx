@@ -46,7 +46,7 @@ import { TTS_LIMITS, TtsMeter, ttsVerified, type TtsProvider } from "../tts/type
 import { mergeToMp3, mp3Seconds } from "../tts/mp3";
 import { asTtsChain, ttsChain as defaultChain, type TtsChain } from "../tts/chain";
 import { audioKindOf, audioTypeOf } from "./registry";
-import { AUDIO_LIMITS, scriptWords, type AudioLine, type AudioModel } from "./types";
+import { AUDIO_LIMITS, scriptWords, type AudioKind, type AudioLine, type AudioModel } from "./types";
 import { audioInputFromValues, audioTitleOf, audioUserFacts, normalizeScript, type AudioInput } from "./input";
 import { audioCtx, audioPrompt, audioRetryPrompt, audioSystemPrompt } from "./prompts";
 import { scriptChars, speakerShares, speechParts, withinBudget, wordRange } from "./script";
@@ -97,6 +97,9 @@ export const AUDIO_POLISH_RESERVE_MS = 50_000;
 export const AUDIO_TTS_RESERVE_MS = 60_000;
 
 export const AUDIO_MIME = "audio/mpeg";
+
+/** The media-core purpose of a kind's voice (`podcast.voice`, `greeting.voice`: `lib/media/catalog.ts` MEDIA_PURPOSES). */
+export const audioVoicePurpose = (kind: AudioKind): string => `${kind}.voice`;
 
 /* ────────────────────────── yordamchilar ────────────────────────── */
 
@@ -321,7 +324,7 @@ export const buildAudioArtifact: AudioBuilder = async (tool, meta, values, opts)
    */
   // `voice` — the user's female / male choice: single-speaker formats read entirely in it,
   // in a dialog speaker A takes it and speaker B the other gender's voice.
-  const run = await chain.synthesizeAll(parts, { lang: input.language, voice: input.voice, ...(input.voiceProvider === "elevenlabs" ? { provider: "elevenlabs" as const } : {}), timeoutMs: Math.min(TTS_LIMITS.callTimeoutMs, Math.max(1_000, remainingMs(deadline))), deadline });
+  const run = await chain.synthesizeAll(parts, { lang: input.language, voice: input.voice, ...(input.voiceProvider === "elevenlabs" ? { provider: "elevenlabs" as const } : {}), timeoutMs: Math.min(TTS_LIMITS.callTimeoutMs, Math.max(1_000, remainingMs(deadline))), deadline, media: { purpose: audioVoicePurpose(kind) } });
   for (const u of run.usages) ttsMeter.add(u);
 
   stage(92, "Audio yig‘ilmoqda");

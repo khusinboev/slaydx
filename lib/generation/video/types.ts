@@ -80,5 +80,9 @@ export function looksLikeSafetyRefusal(text: string): boolean {
 export function scrubSecrets(text: string, secrets: readonly string[]): string {
   let out = String(text ?? "");
   for (const s of secrets) if (s && s.length >= 6) out = out.split(s).join("[key]");
-  return out.replace(/AIza[0-9A-Za-z_-]{20,}/g, "[key]").replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [key]");
+  return out
+    .replace(/AIza[0-9A-Za-z_-]{20,}/g, "[key]")
+    // OpenAI / Anthropic style (`sk-…`, `sk-proj-…`, `sk-ant-…`), Stripe-like `sk_…`, ElevenLabs `xi-…`: 20+ chars in all.
+    .replace(/\b(?:sk[-_]|xi-)[A-Za-z0-9_-]{17,}/g, "[key]")
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [key]");
 }

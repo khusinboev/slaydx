@@ -97,6 +97,9 @@ export type SettingValues = {
   "tests.points_per_correct": number;
   "video.enabled": boolean;
   "video.max_concurrent": number;
+  "media.core.image": boolean;
+  "media.core.video": boolean;
+  "media.core.speech": boolean;
 };
 
 export type SettingKey = keyof SettingValues;
@@ -230,6 +233,7 @@ const DOMLA_GROUP = "Qattiqqo‘l domla";
 const CHAT_GROUP = "AI chat";
 const TESTS_GROUP = "Test ishlash";
 const VIDEO_GROUP = "Video";
+const MEDIA_GROUP = "Media dvigateli";
 /** Default / ceiling of videos in flight at once (submitting + waiting for the provider), across all users. */
 export const VIDEO_MAX_CONCURRENT_DEFAULT = 2;
 export const VIDEO_MAX_CONCURRENT_MAX = 20;
@@ -696,7 +700,27 @@ const CATALOG: Catalog = {
     validate: intValidator(1, VIDEO_MAX_CONCURRENT_MAX),
     envDefault: () => VIDEO_MAX_CONCURRENT_DEFAULT,
   },
+  /*
+   * Media engine core (docs/studio/P0-SPEC.md §6): per kind, run today's engine through `lib/studio-core` instead of the
+   * old direct path. Same requests, prices and refunds either way; off = the old path, so a problem is one switch away
+   * from being undone. Read once per job (a running job never changes path).
+   */
+  "media.core.image": mediaCoreSwitch("media.core.image", "Rasm: yangi media dvigateli", "«Rasm», slayd rasmlari va portret yangi dvigatel orqali chiziladi."),
+  "media.core.video": mediaCoreSwitch("media.core.video", "Video: yangi media dvigateli", "Yangi videolar yangi dvigatel orqali yuboriladi va kuzatiladi; boshlangan videolar eski yo'lda tugaydi."),
+  "media.core.speech": mediaCoreSwitch("media.core.speech", "Ovoz: yangi media dvigateli", "Podkast, tabriknoma va domla ovozi yangi dvigatel orqali yoziladi."),
 };
+
+function mediaCoreSwitch<K extends "media.core.image" | "media.core.video" | "media.core.speech">(key: K, label: string, what: string): SettingDef<K> {
+  return {
+    key,
+    group: MEDIA_GROUP,
+    label,
+    description: `${what} Natija, narx va pul qaytarish o'zgarmaydi; muammo bo'lsa o'chiring — eski yo'lga qaytadi.`,
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => false,
+  } as SettingDef<K>;
+}
 
 /** Catalog order = display order. */
 export const SETTING_KEYS: readonly SettingKey[] = Object.keys(CATALOG) as SettingKey[];

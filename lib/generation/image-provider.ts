@@ -23,11 +23,14 @@
 import type { ToolId } from "../types";
 import type { SlideImageStyle } from "./slide-params";
 import type { DocMeta } from "./types";
-import { geminiProvider } from "./image-provider-gemini";
+import { geminiImageModel, geminiProvider } from "./image-provider-gemini";
 import { pexelsProvider } from "./image-provider-pexels";
 import { pixabayProvider } from "./image-provider-pixabay";
 import { breakerFor } from "./llm/breaker";
 import { limiterFor, type Semaphore } from "./llm/limiter";
+import { mediaCoreOn } from "../media/context";
+import { coreImageProvider } from "../media/image";
+import { IMAGE_MODEL_TO_MEDIA } from "../media/catalog";
 
 /** Rasm o'lchami (piksel) — slot (`slotPixels`) va provayder so'rovi uchun. */
 export type ImageSize = { width: number; height: number };
@@ -274,7 +277,18 @@ export function chainProvider(providers: ImageProvider[], id: ImageProviderId = 
  */
 export function pickProvider(meta?: Pick<DocMeta, "toolId"> | null): ImageProvider {
   const toolId: ToolId | undefined = meta?.toolId;
-  if (toolId === "pro-slide") return limitedProvider(geminiProvider);
+  /*
+   * Pro slide illustrations are the only AI drawing in the slide chain (ordinary slides use stock only, so there
+   * is no plain-slide purpose). With `media.core.image` on in this job the Gemini member is the
+   * core-backed one (docs/studio/P0-SPEC.md §6.3); stock providers never go through the core. The limiter stays outside.
+   */
+  if (toolId === "pro-slide") {
+    return limitedProvider(
+      mediaCoreOn("image")
+        ? coreImageProvider("proslide.illustration", IMAGE_MODEL_TO_MEDIA.gemini, geminiProvider, { upstream: geminiImageModel })
+        : geminiProvider,
+    );
+  }
   return chainProvider([pexelsProvider, pixabayProvider], "stock");
 }
 
