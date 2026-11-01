@@ -252,7 +252,11 @@ test("kalitsiz xizmat sotilmaydi", async () => {
   // Rasm kaliti yo'q — FAQAT rasm vositalari (rasm, bitiruvchi portreti: ikkalasi Gemini rasm modeli) to'siladi.
   assert.ok(toolBlockedReason(TOOL_BY_ID.image, noImages), "rasm vositasi to'silishi kerak");
   assert.ok(toolBlockedReason(TOOL_BY_ID.portrait, noImages), "portret vositasi rasm kalitisiz to'silishi kerak");
-  for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait")) {
+  // Studio (P1): an image tool too; its own model list wins when the server sends it.
+  assert.ok(toolBlockedReason(TOOL_BY_ID["studio-image"], noImages), "Studio rasm kalitisiz to'silishi kerak");
+  assert.equal(toolBlockedReason(TOOL_BY_ID["studio-image"], { ...noImages, studioImageModels: ["openai/gpt-image"] }), null, "GPT Image alone serves the Studio");
+  assert.ok(toolBlockedReason(TOOL_BY_ID["studio-image"], { ...all, studioImageModels: [] }), "no Studio model available -> blocked");
+  for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait" && x.custom !== "studio-image")) {
     assert.equal(toolBlockedReason(t, noImages), null, `${t.id}: matn xizmati ishlashi kerak`);
   }
   // Video: no provider -> hidden (whatever the text / image keys say); a provider -> shown (whatever they say).
@@ -265,9 +269,11 @@ test("kalitsiz xizmat sotilmaydi", async () => {
    * bo'lsa esa shablon hujjatni qaytaradi va TO'LIQ narx olinadi. Ya'ni
    * kalitsiz rejim dev/demo uchun, sotuv uchun emas.
    */
-  for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait" && x.custom !== "video")) {
+  for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait" && x.custom !== "video" && x.custom !== "studio-image")) {
     assert.ok(toolBlockedReason(t, noLlm), `${t.id}: matn kalitisiz sotilmasligi kerak`);
   }
+  // Studio (P1): like «Rasm», the prompt expansion falls back to the user's text without a text key.
+  assert.equal(toolBlockedReason(TOOL_BY_ID["studio-image"], noLlm), null);
   assert.equal(toolBlockedReason(TOOL_BY_ID.video, noLlm), null, "video matn kalitiga BOG'LIQ EMAS");
   // Rasm vositalari matn kalitiga BOG'LIQ EMAS — ular Gemini rasm modeli bilan ishlaydi (portret hech qanday matn LLM chaqirmaydi).
   assert.equal(toolBlockedReason(TOOL_BY_ID.image, noLlm), null);

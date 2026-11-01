@@ -65,7 +65,7 @@ const { IMAGE_RATIOS, IMAGE_STYLES } = await import("../lib/generation/image-stu
 const STUDIO = TOOL_BY_ID["studio-image"];
 const NANO = "google/nano-banana";
 const GPT = "openai/gpt-image";
-const USD = { [NANO]: IMAGE_PRICES["gemini-3.1-flash-lite-image"]!, [GPT]: OPENAI_IMAGE_FALLBACK_USD } as const;
+const USD: Record<string, number> = { [NANO]: IMAGE_PRICES["gemini-3.1-flash-lite-image"]!, [GPT]: OPENAI_IMAGE_FALLBACK_USD };
 const pricing = (o: Partial<{ soumPerUsd: number; markup: number; overrides: Record<string, { markup: number }> }> = {}) => ({
   soumPerUsd: o.soumPerUsd ?? 12_800,
   markup: o.markup ?? 2,
@@ -331,7 +331,7 @@ test("flow: route -> claimNext -> runJob through the core (media.core.image OFF)
       const before = await balanceOf(me);
       const rate = await getSetting("finance.soum_per_usd");
       const modelId = String(f.values.modelId);
-      const price = Math.ceil((USD[modelId as keyof typeof USD] * Number(f.values.imageCount) * rate * 2) / 100 - 1e-9) * 100;
+      const price = Math.ceil((USD[modelId]! * Number(f.values.imageCount) * rate * 2) / 100 - 1e-9) * 100;
       const r = await post(me, f.values, price);
       assert.equal(r.status, 202, JSON.stringify(r.body));
       assert.equal(r.body.price, price, "server price = cost × 2, rounded up to 100");

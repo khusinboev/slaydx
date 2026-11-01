@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS media_model_overrides (
   model_id    TEXT          PRIMARY KEY CHECK (length(model_id) BETWEEN 1 AND 80),
   enabled     BOOLEAN,
   markup      NUMERIC(6, 3) CHECK (markup IS NULL OR markup BETWEEN 1 AND 20),
-  updated_by  UUID,
+  updated_by  BIGINT        REFERENCES admin_accounts(id) ON DELETE SET NULL,
   updated_at  TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
 

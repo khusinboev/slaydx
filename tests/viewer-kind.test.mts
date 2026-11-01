@@ -136,9 +136,11 @@ test("MP3 chiqaradigan HAR vosita `audio` ko'ruvchisiga tushadi", () => {
   for (const t of TOOLS) {
     if (t.output !== "mp3") assert.notEqual(viewerKind(t.id), "audio", `${t.id}: audio bo'lmagan vosita audio ko'ruvchida`);
   }
-  // «Media» bo'limi = MP3 vositalari + bitiruvchi portreti (item 14: `image` ko'ruvchisida) + video (item 5: `video` ko'ruvchisida).
-  assert.deepEqual(TOOLS.filter((t) => t.group === "media").map((t) => t.id).sort(), ["greeting", "podcast", "portrait", "video"]);
+  // «Media» bo'limi = MP3 vositalari + bitiruvchi portreti (item 14: `image` ko'ruvchisida) + video (item 5: `video` ko'ruvchisida)
+  // + Studio rasmlari (P1: `image` ko'ruvchisida).
+  assert.deepEqual(TOOLS.filter((t) => t.group === "media").map((t) => t.id).sort(), ["greeting", "podcast", "portrait", "studio-image", "video"]);
   assert.equal(viewerKind("portrait"), "image");
+  assert.equal(viewerKind("studio-image"), "image");
   assert.equal(viewerKind("video"), "video");
   assert.equal(TOOLS.find((t) => t.id === "video")!.output, "mp4");
 });

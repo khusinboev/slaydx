@@ -24,6 +24,7 @@ import { ApplyRecommendationDialog } from "./ApplyRecommendationDialog";
 import { AttentionStrip } from "./AttentionStrip";
 import { HealthKpis, HealthKpisSkeleton } from "./HealthKpis";
 import { MethodNotes } from "./MethodNotes";
+import { MediaModels } from "./MediaModels";
 import { PricingDrawer } from "./PricingDrawer";
 import { PricingTable } from "./PricingTable";
 import { attentionList } from "./attention";
@@ -311,6 +312,8 @@ function Ready({
           </div>
         ) : null}
       </Card>
+
+      <MediaModels canEdit={canEdit} />
 
       <MethodNotes caveats={data.caveats} targetMarkup={data.targetMarkup} paymentFeePercent={data.paymentFeePercent} soumPerCoin={data.soumPerCoin} />
 

@@ -104,7 +104,9 @@ test("costs come from the price book", () => {
 test("defaults match the routing slots", () => {
   assert.equal(MEDIA_CATALOG.byId("google/nano-banana")!.routes[0].upstreamModel, DEFAULT_GEMINI_IMAGE_MODEL);
   const chain = MEDIA_PURPOSES.byId("listening.voice")!.allowed.map((id) => MEDIA_CATALOG.byId(id)!.routes[0].provider);
-  assert.deepEqual(chain, [...DEFAULT_TTS_ORDER]);
+  // P1 N3: ElevenLabs is ALLOWED (operator-configured `tts.order`), appended after the default order, never the default.
+  assert.deepEqual(chain, [...DEFAULT_TTS_ORDER, "elevenlabs"]);
+  assert.equal(MEDIA_PURPOSES.byId("listening.voice")!.default, "azure/tts");
 });
 
 test("purposes: rasm and video keep today's defaults and choices", () => {
