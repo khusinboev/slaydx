@@ -3,7 +3,7 @@
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { priceFor } from "@/lib/tools";
-import type { FormValues, ToolConfig } from "@/lib/types";
+import type { FormValues, Generation, ToolConfig, ToolId } from "@/lib/types";
 import { confirmAccepted, confirmClock } from "../overlays/useConfirmClick";
 import { formatSom } from "@/lib/format";
 
@@ -28,17 +28,43 @@ import { formatSom } from "@/lib/format";
  * the price that was shown to them.
  */
 export async function runGeneration(tool: ToolConfig, values: FormValues): Promise<string> {
+  const { id } = await queueGeneration(
+    { slug: tool.slug, id: tool.id, title: String(values.topic || tool.title), output: tool.output },
+    values,
+    priceFor(tool, values),
+  );
+  return id;
+}
+
+/** What `queueGeneration` needs of a tool: its route slug, id, the list title and the output format. */
+export type GenerationTarget = { slug: string; id: ToolId; title: string; output: Generation["format"] };
+
+/**
+ * The queueing core of `runGeneration`, for callers that price the job themselves (Studio: the price comes from the
+ * model catalog, not from `priceFor(tool, values)`). `shownPrice` is the number on the button, sent as
+ * `expectedPrice` unless a price confirmation is armed (see the price guard above).
+ *
+ * `repeat`: the caller can make the SAME request again on purpose (Studio's «Yaratish» / «Qayta» with an unchanged
+ * prompt is a new picture, not a double click). A repeat still replays the first request while that one is in flight
+ * or its answer was lost, but never after it succeeded.
+ */
+export async function queueGeneration(
+  target: GenerationTarget,
+  values: FormValues,
+  shownPrice: number,
+  opts: { repeat?: boolean } = {},
+): Promise<{ id: string; price: number }> {
   const store = useAppStore.getState();
-  const intent = intentOf(tool, values);
+  const intent = intentOf(target.slug, values);
   const pending = takePendingConfirm(intent);
-  const expectedPrice = pending ?? priceFor(tool, values);
+  const expectedPrice = pending ?? shownPrice;
 
   let created: Awaited<ReturnType<typeof api.createGeneration>>;
   try {
     // The idempotency key is derived from the intent inside `createGeneration`.
     // After a 409 the old key is dropped (a 4xx is "rejected"), so the
     // confirmed retry is a new intent with a new key, as it must be.
-    created = await api.createGeneration(tool.slug, values, { expectedPrice });
+    created = await api.createGeneration(target.slug, values, { expectedPrice, repeat: opts.repeat });
   } catch (e) {
     if (e instanceof api.PriceChangedError) {
       armConfirm(intent, e.price);
@@ -54,13 +80,13 @@ export async function runGeneration(tool: ToolConfig, values: FormValues): Promi
   // Ro'yxatda darhol ko'rinsin — server javobini kutmaymiz.
   store.upsertGeneration({
     id,
-    type: tool.id,
-    topic: String(values.topic || tool.title),
+    type: target.id,
+    topic: target.title,
     status: "QUEUED",
     createdAt: new Date().toISOString(),
     price,
     fileName: "",
-    format: tool.output,
+    format: target.output,
     progress: 0,
     step: "Navbatga qo‘yildi",
     expiresAt: null,
@@ -70,7 +96,7 @@ export async function runGeneration(tool: ToolConfig, values: FormValues): Promi
 
   // Balans o'zgardi — sarlavhadagi raqamni yangilaymiz.
   void store.refreshSession();
-  return id;
+  return { id, price };
 }
 
 /*
@@ -84,8 +110,8 @@ export async function runGeneration(tool: ToolConfig, values: FormValues): Promi
 const CONFIRM_TTL_MS = 10 * 60_000;
 let pendingConfirm: { intent: string; price: number; armedAt: number; at: number } | null = null;
 
-function intentOf(tool: ToolConfig, values: FormValues): string {
-  return JSON.stringify({ slug: tool.slug, values });
+function intentOf(slug: string, values: FormValues): string {
+  return JSON.stringify({ slug, values });
 }
 
 function armConfirm(intent: string, price: number) {

@@ -8,6 +8,7 @@ import { useAppStore, usePricingVersion } from "@/lib/store";
 import type { ToolConfig } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { TOOL_ICONS } from "@/components/shell/icons";
+import { STUDIO_ENTRY } from "@/components/studio/studio-entry";
 import { QUICK_TOOL_IDS, outputLabel, quickDetail } from "./hub-model";
 
 const CARD =
@@ -26,6 +27,8 @@ export function QuickStart({ onPick }: { onPick: (href: string) => void }) {
   usePricingVersion(); // admin price adjustments re-render the «from» prices
   return (
     <div className="flex flex-col gap-2.5">
+      {/* Studio (docs/studio/P1-SPEC.md «Entry»): the large card, first. */}
+      <PromoCard service={STUDIO_ENTRY} promise="Eng kuchli modellar bilan rasm yarating" note="Narx yaratishdan oldin ko‘rinadi" cta="Studiyani ochish" onPick={onPick} />
       {serviceVisible(SERVICE_BY_ID.chat, features) ? (
         <PromoCard service={SERVICE_BY_ID.chat} promise="Savol bering yoki hujjat buyuring" note="Kuniga 10 ta tekin" cta="Suhbatni boshlash" onPick={onPick} />
       ) : null}
@@ -135,7 +138,7 @@ function PromoCard({
   cta,
   onPick,
 }: {
-  service: ServiceConfig;
+  service: Pick<ServiceConfig, "href" | "title" | "icon" | "tc"> & { id: string };
   promise: string;
   note: string;
   cta: string;
