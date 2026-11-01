@@ -33,7 +33,9 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *      `op.mediaJobId`) -> «parity: deadline»;
  *   5. `attempts - 1` dropped in `dueFromMediaJob` -> «parity: success» (backoff differs: 20 s vs 15 s);
  *   6. media row's existence not checked when the switch is OFF (parked lookup skipped) -> «switch flip keeps the table»;
- *   7. adapter maps a submit error with `accepted: true` -> «adapter: error mapping».
+ *   7. adapter maps a submit error with `accepted: true` -> «adapter: error mapping»;
+ *   8. admin-generations.ts stuckSql without the media_jobs exemption -> «ON: the admin «stuck» view …» (waiting video
+ *      flagged); the exemption without `AND mj.status = 'pending'` -> the same test (failed / succeeded rows exempt).
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -592,6 +594,25 @@ test("video on media_jobs: parity with the video_ops path, tables, drain, capaci
     const g = await outcome(id, me);
     assert.equal(g.status, "COMPLETED");
     assert.equal((g.cost as { provider: string }).provider, "kling");
+  });
+
+  await t.test("ON: the admin «stuck» view does not flag a video waiting in media_jobs; a failed / succeeded media row does not exempt", async () => {
+    await clearAll("core");
+    const me = await mkUser(1_000_000);
+    const { listAdminGenerations, parseGenerationsQuery } = await import("../lib/server/admin-generations.ts");
+    const stuckIds = async () => (await listAdminGenerations(parseGenerationsQuery(new URL("http://localhost/api/admin/generations?stuck=1")))).items.map((i) => i.id);
+    await setSetting("video.max_concurrent", 5);
+    const waiting = await startWaiting(me);
+    const failedRow = await startWaiting(me);
+    const doneRow = await startWaiting(me);
+    for (const id of [waiting, failedRow, doneRow]) await query(`UPDATE generations SET started_at = now() - interval '2 hours' WHERE id = $1`, [id]);
+    // The generation stays IN_PROGRESS without a lease, but its media row is no longer pending: nothing will finish it.
+    await query(`UPDATE media_jobs SET status = 'failed' WHERE generation_id = $1`, [failedRow]);
+    await query(`UPDATE media_jobs SET status = 'succeeded' WHERE generation_id = $1`, [doneRow]);
+    const ids = await stuckIds();
+    assert.ok(!ids.includes(waiting), "a video waiting for its provider in media_jobs is not stuck");
+    assert.ok(ids.includes(failedRow), "a 'failed' media row does not exempt an orphan");
+    assert.ok(ids.includes(doneRow), "a 'succeeded' media row does not exempt an orphan");
   });
 
   /* ═════════════ drain: both tables at once ═════════════ */
