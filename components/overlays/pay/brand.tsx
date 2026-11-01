@@ -1,3 +1,5 @@
+import { useId } from "react";
+
 /**
  * Payment provider marks for the top-up dialog's tiles. Click: the paths of click.uz's own
  * `logo.svg` (the blue mark keeps its brand colour, the «click» wordmark follows the text colour).
@@ -22,17 +24,18 @@ export function ClickLogo({ className }: { className?: string }) {
 }
 
 export function PaynetLogo({ className }: { className?: string }) {
+  const gid = `paynet-sphere-${useId().replace(/:/g, "")}`;
   return (
     <span className={`inline-flex items-center gap-1.5 ${className ?? ""}`} aria-hidden="true">
       <svg viewBox="0 0 40 40" className="size-[1.15em] shrink-0">
         <defs>
-          <radialGradient id="paynet-sphere" cx="0.38" cy="0.32" r="0.75">
+          <radialGradient id={gid} cx="0.38" cy="0.32" r="0.75">
             <stop offset="0" stopColor="#8BF5A6" />
             <stop offset="0.55" stopColor="#3FDA6C" />
             <stop offset="1" stopColor="#1FB94F" />
           </radialGradient>
         </defs>
-        <circle cx="20" cy="20" r="20" fill="url(#paynet-sphere)" />
+        <circle cx="20" cy="20" r="20" fill={`url(#${gid})`} />
       </svg>
       <span className="leading-none font-extrabold tracking-[-0.02em]">paynet</span>
     </span>

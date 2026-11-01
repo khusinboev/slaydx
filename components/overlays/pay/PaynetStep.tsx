@@ -40,7 +40,7 @@ export const paynetAmountNote = (): string =>
  * `launched` (owner 2026-11-01): the dialog's Paynet tile already opened the app with the id and the amount
  * filled in (`lib/paynet-link.ts`); this step then stays as the manual fallback.
  */
-export function PaynetStep({ userId, appUrl, launched = false, onBack }: { userId: string; appUrl: string | null; launched?: boolean; onBack: () => void }) {
+export function PaynetStep({ userId, appUrl, launched = null, onBack }: { userId: string; appUrl: string | null; launched?: "prefilled" | "plain" | null; onBack: () => void }) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -62,7 +62,9 @@ export function PaynetStep({ userId, appUrl, launched = false, onBack }: { userI
     <div data-pay-step="paynet">
       {launched ? (
         <p className="bg-primary/10 mb-3 rounded-[14px] px-3.5 py-2.5 text-[14.5px] leading-snug font-medium" data-paynet-launched>
-          Paynet ilovasi ochildi: ID va summa tayyor — ilovada faqat to&apos;lovni tasdiqlang. Ilova ochilmasa yoki maydonlar bo&apos;sh bo&apos;lsa, quyidagicha to&apos;lang.
+          {launched === "prefilled"
+            ? "Paynet ilovasi ochildi: ID va summa tayyor — ilovada faqat to'lovni tasdiqlang. Ilova ochilmasa yoki maydonlar bo'sh bo'lsa, quyidagicha to'lang."
+            : "Paynet ilovasi ochildi: «SlaydX» xizmatida quyidagi ID ni kiriting va to'lang."}
         </p>
       ) : null}
       <p className="text-muted-foreground mb-4 text-[14.5px] leading-snug">

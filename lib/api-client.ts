@@ -286,6 +286,8 @@ export type Features = {
     paynet?: boolean;
     /** Public «pay in the Paynet app» link (https); null/absent = no button. */
     paynetUrl?: string | null;
+    /** `PAYNET_APP_PREFILL`: the app link may carry the payer id + amount. */
+    paynetPrefill?: boolean;
   };
   /** Admin price adjustments (non-default tools only); untrusted, validated by `parsePriceAdjustments`. */
   pricing?: unknown;

@@ -303,6 +303,8 @@ export const env = {
     sharedWithVakant: bool("PAYNET_SHARED_WITH_VAKANT"),
     /** The public «pay in the Paynet app» link shown on the wallet (empty = no button). */
     appUrl: str("PAYNET_APP_URL"),
+    /** Fill the payer id + amount into the app link (`c`/`a`, lib/paynet-link.ts) — on only after a real-app check. */
+    appPrefill: bool("PAYNET_APP_PREFILL"),
   },
   payme: {
     merchantId: str("PAYME_MERCHANT_ID"),
@@ -505,6 +507,11 @@ export function clickDirectConfigured(): boolean {
 export function paynetAppUrl(): string | null {
   const u = env.paynet.appUrl;
   return paynetConfigured() && /^https:\/\/[^\s<>"']+$/i.test(u) ? u : null;
+}
+
+/** Whether the wallet may prefill the payer id and the amount into the Paynet app link (needs the link itself). */
+export function paynetAppPrefill(): boolean {
+  return paynetAppUrl() !== null && env.paynet.appPrefill;
 }
 
 /** Paynet is live only when the login, the password and at least one of our serviceIds are set. */

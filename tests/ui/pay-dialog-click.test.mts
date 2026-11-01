@@ -270,7 +270,8 @@ test("Merchant API off: only the plain «Click» button (and Payme); unconfigure
   await openDialog();
   const ids = () => [...document.querySelectorAll("[data-pay-methods] button")].map((b) => b.getAttribute("data-pay-method"));
   assert.deepEqual(ids(), ["click", "payme"]);
-  assert.equal(method("click")!.getAttribute("aria-label"), "Click ilovasi");
+  assert.equal(method("click")!.getAttribute("aria-label"), "Click", "no app promise without the Merchant API");
+  assert.match(method("click")!.textContent ?? "", /Click sahifasida/);
   assert.ok(!q("[data-pay-fallback]") && !method("card") && !q("[data-pay-direct]"));
   cleanup();
   setup({ click: false, payme: true });

@@ -9,6 +9,7 @@ import { useUi } from "@/lib/ui";
 import { cn } from "@/lib/cn";
 import { groupDigits } from "@/lib/format";
 import { openClickApp } from "@/lib/open-click-app";
+import { openExternalLink } from "@/lib/telegram-webapp";
 import { paynetPayLink } from "@/lib/paynet-link";
 import type { ClickMethod } from "@/lib/click-input";
 import { topupAmountError } from "@/lib/topup-limits";
@@ -80,7 +81,7 @@ export function PayDialog() {
   const [waitInitial, setWaitInitial] = useState<"polling" | "paid">("polling");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [paynetLaunched, setPaynetLaunched] = useState(false);
+  const [paynetLaunched, setPaynetLaunched] = useState<"prefilled" | "plain" | null>(null);
   const panelRef = useDialog(open, close);
   const nav = useNav();
   /** Telefon (docs/mobile/PLAN.md O5): 44 px tugmalar, ekranga sig'adi va ichida aylanadi. */
@@ -94,7 +95,7 @@ export function PayDialog() {
     setView("home");
     setOrder(null);
     setWaitInitial("polling");
-    setPaynetLaunched(false);
+    setPaynetLaunched(null);
   }, [open]);
 
   if (!open) return null;
@@ -108,17 +109,19 @@ export function PayDialog() {
   const amountErr = topupAmountError(amount);
 
   const paynetBase = features?.payments.paynetUrl ?? null;
-  /** The app link with the payer id and the amount filled in; the bare merchant link while the amount is invalid. */
-  const paynetLink = paynetBase && user ? (amountErr ? paynetBase : paynetPayLink(paynetBase, user.id, amount)) : paynetBase;
+  /** Prefill (`PAYNET_APP_PREFILL`) is switched on only after the `c`/`a` link params were checked in the real app. */
+  const paynetPrefill = features?.payments.paynetPrefill === true;
+  /** The app link: with the payer id and the amount when prefill is on and the amount is valid, else the bare merchant link. */
+  const paynetLink = paynetBase && user && paynetPrefill && !amountErr ? paynetPayLink(paynetBase, user.id, amount) : paynetBase;
 
   function openPaynet() {
     // `user` (the ID sent) can still be loading right after sign-in: stay on the list rather than open an empty step.
     if (needLogin() || amountErr || !user) return;
     setError(null);
-    const link = paynetBase ? paynetPayLink(paynetBase, user.id, amount) : null;
-    // Telegram: `openLink` (external), elsewhere plain navigation — the same opener as the Click app deeplink.
-    if (link) openClickApp(link);
-    setPaynetLaunched(!!link);
+    // Paynet has no return URL: never replace this tab. Telegram → `openLink` (external); elsewhere a new tab,
+    // which the OS hands to the Paynet app; the step below stays here as the manual fallback.
+    if (paynetLink && !openExternalLink(paynetLink)) window.open(paynetLink, "_blank", "noopener,noreferrer");
+    setPaynetLaunched(paynetLink ? (paynetPrefill && paynetLink !== paynetBase ? "prefilled" : "plain") : null);
     setView("paynet");
   }
 
@@ -241,7 +244,7 @@ export function PayDialog() {
 
             {!anyEnabled ? (
               <p className="mb-4 rounded-[14px] bg-amber-500/10 px-3.5 py-2.5 text-[13.5px] leading-snug text-amber-800 dark:text-amber-300">
-                To&apos;lov provayderi hali ulanmagan. Administrator Click yoki Payme kalitlarini
+                To&apos;lov provayderi hali ulanmagan. Administrator Click, Payme yoki Paynet kalitlarini
                 sozlashi kerak.
               </p>
             ) : null}
@@ -253,8 +256,8 @@ export function PayDialog() {
                   {clickOn ? (
                     <BrandTile
                       method={directOn ? "app" : "click"}
-                      label="Click ilovasi"
-                      hint="Ilovada tasdiqlaysiz"
+                      label={directOn ? "Click ilovasi" : "Click"}
+                      hint={directOn ? "Ilovada tasdiqlaysiz" : "Click sahifasida to'laysiz"}
                       busy={busy}
                       disabled={busy !== null || !!amountErr}
                       onClick={() => void (directOn ? startDirect("app") : payViaPage("click", "click"))}
@@ -269,7 +272,7 @@ export function PayDialog() {
                       label="Paynet"
                       hint="Ilovada tasdiqlaysiz"
                       busy={busy}
-                      disabled={busy !== null || !!amountErr}
+                      disabled={busy !== null || !!amountErr || (loggedIn && !user)}
                       onClick={openPaynet}
                       className={cn(!clickOn && "col-span-2")}
                     >
@@ -321,7 +324,7 @@ export function PayDialog() {
 }
 
 const tileCls =
-  "focus-visible:ring-ring bg-card hover:bg-accent flex w-full flex-col items-center justify-center gap-1.5 rounded-[18px] border px-2 text-center outline-none transition-[background-color,transform] focus-visible:ring-2 active:scale-[0.98] disabled:opacity-40 motion-reduce:transform-none";
+  "focus-visible:ring-ring bg-card enabled:hover:bg-accent flex w-full flex-col items-center justify-center gap-1.5 rounded-[18px] border px-2 text-center outline-none transition-[background-color,transform] focus-visible:ring-2 active:scale-[0.98] disabled:opacity-40 motion-reduce:transform-none";
 
 /** A provider app tile (Click / Paynet): the logo large, one hint line; the accessible name is the label. */
 function BrandTile({
@@ -371,7 +374,7 @@ function IconTile({
 }) {
   return (
     <button type="button" data-pay-method={method} disabled={disabled} onClick={onClick} className={cn(tileCls, "min-h-[76px] flex-row justify-start gap-2.5 px-2.5 py-2.5 text-left")}>
-      <span className="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-full max-[359px]:hidden">
+      <span className="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-full max-[389px]:hidden">
         <Icon aria-hidden className="size-[18px]" />
       </span>
       <span className="min-w-0">
