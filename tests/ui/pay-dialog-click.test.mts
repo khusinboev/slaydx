@@ -239,20 +239,26 @@ test("invalid amount: inline message, methods disabled, total «—», nothing i
 
 // ------------------------------------------------------------------ what is drawn
 
-test("Merchant API on: Karta, Telefon raqam, Click ilovasi (≥ 56 px rows) + the small Click-page fallback; Payme as a row", async () => {
+test("Merchant API on: the Click app tile on top, Telefon raqam + Karta side by side below, Payme under them; the small Click-page fallback", async () => {
+  // Owner 2026-11-01: tiles, not a one-column list. MUTATION: phone/card back in one column → "side by side".
   setup({ ...DIRECT, payme: true });
   await openDialog();
   assert.deepEqual(
     [...document.querySelectorAll("[data-pay-methods] [data-pay-method]")].map((b) => b.getAttribute("data-pay-method")),
-    ["card", "phone", "app", "payme"],
+    ["app", "phone", "card", "payme"],
   );
   for (const b of document.querySelectorAll<HTMLButtonElement>("[data-pay-methods] button")) {
-    assert.ok(b.className.includes("min-h-14"), "≥ 56 px");
+    assert.match(b.className, /min-h-\[(7[6-9]|8\d)px\]/, "≥ 76 px tiles");
     assert.ok(!b.disabled);
   }
+  assert.ok(q("[data-pay-apps]")!.contains(method("app")), "the Click app tile is in the top row");
+  assert.ok(method("app")!.querySelector("svg"), "the Click logo");
+  assert.equal(method("app")!.getAttribute("aria-label"), "Click ilovasi");
+  const direct = q("[data-pay-direct]")!;
+  assert.ok(direct.className.includes("grid-cols-2"), "side by side");
+  assert.deepEqual([...direct.querySelectorAll("[data-pay-method]")].map((b) => b.getAttribute("data-pay-method")), ["phone", "card"]);
   assert.match(method("card")!.textContent ?? "", /^Karta/);
   assert.match(method("phone")!.textContent ?? "", /^Telefon raqam/);
-  assert.match(method("app")!.textContent ?? "", /^Click ilovasi/);
   const fallback = q("[data-pay-fallback]")!;
   assert.equal(fallback.textContent, "Click sahifasi orqali to'lash");
   assert.ok(!document.body.textContent?.includes("Karta orqali"), "the Uzcard / Humo split is gone");
@@ -262,12 +268,14 @@ test("Merchant API on: Karta, Telefon raqam, Click ilovasi (≥ 56 px rows) + th
 test("Merchant API off: only the plain «Click» button (and Payme); unconfigured providers are not drawn", async () => {
   setup({ click: true, payme: true });
   await openDialog();
-  assert.deepEqual([...document.querySelectorAll("[data-pay-methods] button")].map((b) => b.textContent), ["Click", "Payme"]);
-  assert.ok(!q("[data-pay-fallback]") && !method("card"));
+  const ids = () => [...document.querySelectorAll("[data-pay-methods] button")].map((b) => b.getAttribute("data-pay-method"));
+  assert.deepEqual(ids(), ["click", "payme"]);
+  assert.equal(method("click")!.getAttribute("aria-label"), "Click ilovasi");
+  assert.ok(!q("[data-pay-fallback]") && !method("card") && !q("[data-pay-direct]"));
   cleanup();
   setup({ click: false, payme: true });
   await openDialog();
-  assert.deepEqual([...document.querySelectorAll("[data-pay-methods] button")].map((b) => b.textContent), ["Payme"]);
+  assert.deepEqual(ids(), ["payme"]);
   cleanup();
   setup({ click: false, payme: false });
   await openDialog();

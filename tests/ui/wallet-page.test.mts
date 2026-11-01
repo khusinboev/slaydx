@@ -8,6 +8,7 @@ import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks
 import { WalletPage } from "../../components/wallet/WalletPage.tsx";
 import { describeEntry, formatWhen, ledgerRow, providerLabel } from "../../components/wallet/wallet-model.ts";
 import { paymentBonusNote } from "../../lib/payment-bonus.ts";
+import { __setBrowserOpenForTests } from "../../lib/open-click-app.ts";
 
 /** A legacy Bonus 2 first top-up row (history; new payments write `paymentBonusNote`). */
 const FIRST_TOPUP_NOTE = "Birinchi to‘ldirish bonusi (10%)";
@@ -339,6 +340,9 @@ test("Hamyon ?order=: cancelled → «bekor qilindi»", async (t) => {
  *   `rel` without noreferrer / link drawn without paynetUrl → "safe external link";
  *   the old wallet card re-added → "no separate Paynet card on the wallet page".
  */
+// jsdom cannot navigate: the Paynet tile opens the app link through this seam (a test records it when it cares).
+const noOpen = (): void => {};
+__setBrowserOpenForTests(noOpen);
 const paynetStep = () => document.querySelector('[data-pay-step="paynet"]');
 const paynetNotice = () => document.querySelector("[data-paynet-notice]")!;
 const docExec = document as unknown as { execCommand?: (c: string) => boolean };
@@ -379,14 +383,22 @@ test("Hamyon Paynet: offered in the dialog only while the server has Paynet conf
     assert.ok(!/Paynet/.test(dialog.textContent ?? ""), "no Paynet text in the dialog");
     cleanup();
   }
-  for (const direct of [false, true]) {
+  for (const [direct, want] of [
+    [false, ["click", "paynet", "payme"]],
+    [true, ["app", "paynet", "phone", "card", "payme"]],
+  ] as const) {
     signInWithPaynet(true, { clickDirect: direct });
     stub();
     mount();
     const dialog = await openDialog();
     const methods = [...dialog.querySelectorAll("[data-pay-methods] [data-pay-method]")].map((b) => b.getAttribute("data-pay-method"));
-    assert.equal(methods.at(-1), "paynet", `Paynet after the Click methods (clickDirect=${direct}): ${methods.join(",")}`);
-    assert.ok(methods.length > 1, "Click / Payme still listed");
+    assert.deepEqual(methods, [...want], `clickDirect=${direct}`);
+    // Owner 2026-11-01: Click and Paynet side by side in the top row, each with its logo.
+    const apps = dialog.querySelector("[data-pay-apps]")!;
+    assert.ok(apps.className.includes("grid-cols-2"));
+    assert.deepEqual([...apps.querySelectorAll("[data-pay-method]")].map((b) => b.getAttribute("data-pay-method")), [want[0], "paynet"]);
+    assert.equal(paynetRow(dialog)!.getAttribute("aria-label"), "Paynet");
+    assert.ok(paynetRow(dialog)!.querySelector("svg"), "the Paynet mark");
     cleanup();
   }
   // Paynet alone: no «provider not connected» warning, the row is there.
@@ -399,7 +411,8 @@ test("Hamyon Paynet: offered in the dialog only while the server has Paynet conf
   assert.ok(!/hali ulanmagan/.test(dialog.textContent ?? ""));
 });
 
-test("Hamyon Paynet: any amount — the row opens even with an invalid dialog amount (Paynet credits what is paid there)", async () => {
+test("Hamyon Paynet: the tile is disabled while the amount is invalid (the amount goes into the app link)", async () => {
+  // MUTATION: `amountErr` dropped from the Paynet tile → enabled at an invalid amount.
   signInWithPaynet(true);
   stub();
   mount();
@@ -409,14 +422,49 @@ test("Hamyon Paynet: any amount — the row opens even with an invalid dialog am
     await act(async () => {
       fireEvent.change(input, { target: { value } });
     });
-    const row = paynetRow(screen.getByRole("dialog"))!;
-    assert.equal(row.disabled, false, `enabled for ${JSON.stringify(value)}`);
-    assert.equal((screen.getByRole("dialog").querySelector('[data-pay-method="payme"]') as HTMLButtonElement).disabled, true, "Payme still needs a valid amount");
+    assert.equal(paynetRow(screen.getByRole("dialog"))!.disabled, true, `disabled for ${JSON.stringify(value)}`);
   }
   await act(async () => {
-    fireEvent.click(paynetRow(screen.getByRole("dialog"))!);
+    fireEvent.change(input, { target: { value: "30000" } });
   });
-  assert.ok(paynetStep(), "the Paynet step opens");
+  assert.equal(paynetRow(screen.getByRole("dialog"))!.disabled, false);
+});
+
+test("Hamyon Paynet: the tile opens the Paynet app with the ID and the amount (tiyin) filled in, then keeps the manual step", async () => {
+  // MUTATIONS: `a` in so'm instead of tiyin / `c` dropped / the app not opened → this test is red.
+  const opens: string[] = [];
+  __setBrowserOpenForTests((u) => void opens.push(u));
+  try {
+    signInWithPaynet(true, { paynetUrl: "https://app.paynet.test/?m=54883" });
+    stub();
+    mount();
+    const dialog = await openDialog();
+    await act(async () => {
+      fireEvent.change(dialog.querySelector("input") as HTMLInputElement, { target: { value: "37000" } });
+    });
+    await act(async () => {
+      fireEvent.click(paynetRow(dialog)!);
+    });
+    assert.deepEqual(opens, ["https://app.paynet.test/?m=54883&c=u1&a=3700000"]);
+    assert.ok(paynetStep(), "the step stays as the fallback");
+    assert.match(document.querySelector("[data-paynet-launched]")!.textContent ?? "", /faqat to.lovni tasdiqlang/);
+    assert.equal((document.querySelector("[data-paynet-open]") as HTMLAnchorElement).getAttribute("href"), "https://app.paynet.test/?m=54883&c=u1&a=3700000");
+    cleanup();
+    // No app link configured: nothing is opened, the step has no «launched» note.
+    opens.length = 0;
+    signInWithPaynet(true, { paynetUrl: null });
+    stub();
+    mount();
+    const d2 = await openDialog();
+    await act(async () => {
+      fireEvent.click(paynetRow(d2)!);
+    });
+    assert.deepEqual(opens, []);
+    assert.ok(paynetStep());
+    assert.ok(!document.querySelector("[data-paynet-launched]"));
+  } finally {
+    __setBrowserOpenForTests(noOpen);
+  }
 });
 
 test("Hamyon Paynet: shows «Sizning ID raqamingiz», the wrong-ID warning and the any-amount rule, four steps; no amount is required; no order is created; «Orqaga» returns", async () => {
@@ -551,11 +599,14 @@ test("Hamyon Paynet: «Paynet ilovasida to'lash» is a safe external link shown 
   mount();
   let dialog = await openDialog();
   await act(async () => {
+    fireEvent.change(dialog.querySelector("input") as HTMLInputElement, { target: { value: "25000" } });
+  });
+  await act(async () => {
     fireEvent.click(paynetRow(dialog)!);
   });
   const link = document.querySelector("[data-paynet-open]") as HTMLAnchorElement;
   assert.ok(link, "MUTATION: the link block removed");
-  assert.equal(link.getAttribute("href"), "https://app.paynet.test/?m=54883");
+  assert.equal(link.getAttribute("href"), "https://app.paynet.test/?m=54883&c=u1&a=2500000");
   assert.equal(link.getAttribute("target"), "_blank");
   assert.match(link.getAttribute("rel") ?? "", /noopener/);
   assert.match(link.getAttribute("rel") ?? "", /noreferrer/);
