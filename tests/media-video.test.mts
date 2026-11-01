@@ -35,7 +35,14 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *   6. media row's existence not checked when the switch is OFF (parked lookup skipped) -> «switch flip keeps the table»;
  *   7. adapter maps a submit error with `accepted: true` -> «adapter: error mapping»;
  *   8. admin-generations.ts stuckSql without the media_jobs exemption -> «ON: the admin «stuck» view …» (waiting video
- *      flagged); the exemption without `AND mj.status = 'pending'` -> the same test (failed / succeeded rows exempt).
+ *      flagged); the exemption without `AND mj.status = 'pending'` -> the same test (failed / succeeded rows exempt);
+ *   9. (review M1) the media claim's try/catch rethrows -> «M1»; the guard's media read without its savepoint while OFF
+ *      -> «M1» («the OFF submit reached the provider»);
+ *  10. (M2) the per-generation advisory lock removed -> «M2» (two paid submits);
+ *  11. (M3) the deadline check of a poller-less op removed -> «M3»;
+ *  12. (M4) every submit error mapped `accepted: false` -> «M4»;
+ *  13. (N1) `failSubmittingMediaJob` filters `status <> 'succeeded'` instead of `= 'submitting'` -> «N1»;
+ *  14. (N2) the sk-/sk_/xi- pattern removed from scrubSecrets -> «N2».
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
