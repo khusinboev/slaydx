@@ -37,6 +37,8 @@ import { COURSEWORK_PAGES, INDEPENDENT_PAGES, KONSPEKT_PAGES, REFERAT_PAGES } fr
 import type { FormValues, ToolGroup, ToolId } from "../types";
 import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "../media/catalog";
 import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
+import { STUDIO_SPEECH_PURPOSE } from "../media/catalog-speech";
+import { clonePriceOf } from "../media/studio-speech";
 import type { MediaPricing } from "../media/studio-pricing";
 import { mediaPricing } from "./media/pricing";
 
@@ -137,6 +139,8 @@ export const UNIT_OF: Record<ToolId, PricingUnit> = {
   video: "job",
   "studio-image": "image",
   "studio-video": "job",
+  "studio-speech": "kchars",
+  "studio-voice": "job",
 };
 
 /** Uzbek unit labels for the UI (the client never imports lib/tools). */
@@ -284,6 +288,15 @@ export function ladderInputs(toolId: ToolId): LadderInput[] {
       // Cost × markup per Studio video model (`studio-video-pricing.ts`): every model at its shortest and longest length
       // (silent; Kling also with sound), one rung per effect template.
       return MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed.flatMap((id) => studioVideoRungs(id));
+    case "studio-speech":
+      // Characters × provider rate × markup (`studio-speech.ts`): 1 000 characters on every «Ovoz» model.
+      return MEDIA_PURPOSES.byId(STUDIO_SPEECH_PURPOSE)!.allowed.map((id) => {
+        const field = MEDIA_CATALOG.byId(id)!.params.some((p) => p.name === "script") ? "script" : "text";
+        return { label: `1 000 belgi · ${MEDIA_CATALOG.byId(id)!.label}`, values: { modelId: id, [field]: "x".repeat(1000) } };
+      });
+    case "studio-voice":
+      // The fixed clone price (`studio.clone_price`).
+      return [{ label: "1 klon", values: {} }];
     case "portrait":
       // Priced per variant: 1 and 2 variants (`portraitPrice`).
       return PORTRAIT_VARIANTS.map((n) => ({ label: `${n} variant`, values: { variants: n } }));
@@ -305,7 +318,8 @@ export function ladderFor(toolId: ToolId, media?: MediaPricing | null): LadderSt
 
 /** The Studio pricing block when `toolId` needs one (the price the server charges is cost × the CURRENT markup). */
 async function mediaPricingFor(toolId: ToolId): Promise<MediaPricing | null> {
-  return toolId === "studio-image" || toolId === "studio-video" ? mediaPricing() : null;
+  if (toolId === "studio-voice") return { ...(await mediaPricing()), clonePrice: clonePriceOf(await getSetting("studio.clone_price")) };
+  return toolId === "studio-image" || toolId === "studio-video" || toolId === "studio-speech" ? mediaPricing() : null;
 }
 
 export function effectiveLadder(steps: ReadonlyArray<LadderStep>, adj: PriceAdjust | null): LadderRow[] {

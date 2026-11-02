@@ -27,6 +27,7 @@ import { studioVideoImageParams, studioVideoModelOf } from "../media/studio-vide
 import { isPaidOnlyTool } from "../tool-kinds";
 import { normalize } from "../studio-core";
 import { MEDIA_CATALOG } from "../media/catalog";
+import { assertCloneAllowed, assertOwnClones, speechModelUnavailable } from "./media/voices";
 
 /**
  * The paid-generation pipeline behind `POST /api/generations`, shared with the AI chat's confirmation.
@@ -207,6 +208,19 @@ export async function submitGeneration(input: SubmitInput): Promise<SubmitResult
     const inputs = await studioVideoInputsError(userId, entry, values, studioVideoImageParams(entry, values));
     if (inputs) throw new ApiError(inputs, 400, { code: "input_invalid" });
   }
+
+  /*
+   * Studio «Ovoz» (docs/studio/P5-SPEC.md): the tab's switch + the model available now, and every clone voice the
+   * request names must be the user's own ready clone (SQL) — 400 before anything is priced or charged. The voice clone:
+   * the tab / ElevenLabs on, the sample is the user's own (with its recorded consent), no active clone, a free voice slot
+   * at ElevenLabs. A replay is a job that already exists.
+   */
+  if (tool.id === "studio-speech" && !replay) {
+    const unavailable = await speechModelUnavailable(values);
+    if (unavailable) throw new ApiError(unavailable, 400, { code: "model_unavailable" });
+    await assertOwnClones(userId, values);
+  }
+  if (tool.id === "studio-voice" && !replay) await assertCloneAllowed(userId, values);
 
   // Graduation portrait: the selfie must exist and be the user's own BEFORE anything is priced or charged.
   // (A replay is a job already created; its selfie may be deleted by now.)

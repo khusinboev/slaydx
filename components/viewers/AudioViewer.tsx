@@ -27,7 +27,8 @@ import { useApiSrc } from "@/lib/use-api-src";
  * generatsiyada sarlavha tugmasi ham, pleer ham ishlamaydi — mos.
  */
 export function AudioViewer({ doc, gen }: { doc: AcademicDoc; gen: { id: string; fileName?: string } }) {
-  const audio = doc.audio;
+  // Studio «Ovoz» (P5) results carry `doc.speech`: the same player, its lines as the transcript.
+  const audio: { seconds?: number; script: { speaker: string; text: string }[] } | undefined = doc.audio ?? (doc.speech ? { seconds: doc.speech.seconds, script: doc.speech.lines } : undefined);
   // Bearer-mode webviews get the bytes through a `blob:` URL (docs/auth/COOKIELESS.md); unchanged otherwise.
   const src = useApiSrc(`/api/generations/${gen.id}/file?inline=1`);
   const script = audio?.script ?? [];

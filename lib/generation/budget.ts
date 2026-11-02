@@ -49,6 +49,12 @@ const FIXED: Partial<Record<ToolId, number>> = {
   // Studio video: the same submit-only phase on the worker (the clip waits in `media_jobs`).
   "studio-video": 90_000,
   /*
+   * Studio speech (P5): ≤ 4 000 characters — ElevenLabs in one call, Gemini in ≤ 3 chunks of ≤ 1 400 (each up to 90 s
+   * under the pacer). The voice clone: the IVC upload + one short preview.
+   */
+  "studio-speech": 300_000,
+  "studio-voice": 150_000,
+  /*
    * Rezyume 2: prompt kattalashdi (tuzilmali faktlar JSON, 18 til uchun
    * yorliqlar, boyitish qoidalari) va qisqa summary da BIR marta STRICT
    * retry bor — 90 s da katta tajribali rezyume retry'ga ulgurmasdi.

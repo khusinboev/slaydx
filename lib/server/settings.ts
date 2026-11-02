@@ -22,6 +22,7 @@ import {
 import { DOMLA_PRICE_DEFAULT, DOMLA_PRICE_MAX } from "../domla/rules";
 import { MARKUP_MAX, MARKUP_MIN } from "../studio-core";
 import { MEDIA_MARKUP_DEFAULT } from "../media/quote";
+import { STUDIO_CLONE_PRICE_DEFAULT, STUDIO_CLONE_PRICE_MAX } from "../media/studio-speech";
 import {
   TESTS_ENABLED_DEFAULT,
   TESTS_FIRST_FREE_DEFAULT,
@@ -104,6 +105,8 @@ export type SettingValues = {
   "media.core.speech": boolean;
   "media.markup": number;
   "free_llm.daily.enhance": number;
+  "studio.clone_price": number;
+  "studio.voice.enabled": boolean;
 };
 
 export type SettingKey = keyof SettingValues;
@@ -730,6 +733,30 @@ const CATALOG: Catalog = {
   },
   // Studio «Yaxshilash (AI)» (docs/studio/P2B-SPEC.md): free prompt rewrites per user per Tashkent day.
   "free_llm.daily.enhance": dailyCap("free_llm.daily.enhance", "Studio «Yaxshilash (AI)»: kunlik limit", "FREE_LLM_DAILY_ENHANCE", () => env.freeLlm.dailyEnhance),
+  // Studio «Ovoz» (docs/studio/P5-SPEC.md): the tab ships dark, like paid video.
+  "studio.voice.enabled": {
+    key: "studio.voice.enabled",
+    group: MEDIA_GROUP,
+    label: "Studio «Ovoz» bo‘limi yoqilgan",
+    description:
+      "Standart: O'CHIQ. Yoqilganda Studio'da «Ovoz» bo'limi (matnni ovozlash, suhbat, ovoz klonlash) ishlaydi — faqat kaliti bor provayderlar bilan (Gemini TTS uchun TTS_GEMINI_MODEL ham kerak). O'chiq bo'lsa yangi ish qabul qilinmaydi; mavjud klonlar saqlanadi.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => false,
+  },
+  // Studio «Ovoz» (docs/studio/P5-SPEC.md): the fixed price of one voice clone (owner 2026-11-02: 5 000 so'm).
+  "studio.clone_price": {
+    key: "studio.clone_price",
+    group: PRICING_GROUP,
+    label: "Ovoz klonlash narxi (so‘m)",
+    description:
+      "Bitta ovoz klonining bir martalik narxi (ElevenLabs). Klon bilan gapirish oddiy ElevenLabs narxida. Klon yaratilmasa pul to‘liq qaytariladi. «Narxlar»dagi vosita foizi ustidan qo‘llanadi.",
+    type: "int",
+    min: 100,
+    max: STUDIO_CLONE_PRICE_MAX,
+    validate: intValidator(100, STUDIO_CLONE_PRICE_MAX),
+    envDefault: () => STUDIO_CLONE_PRICE_DEFAULT,
+  },
 };
 
 function mediaCoreSwitch<K extends "media.core.image" | "media.core.video" | "media.core.speech">(key: K, label: string, what: string): SettingDef<K> {

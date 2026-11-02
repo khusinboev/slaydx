@@ -7,6 +7,7 @@ import { getAllToolPricing } from "@/lib/server/pricing";
 import { getSetting } from "@/lib/server/settings";
 import { availableModels, studioVideoModels } from "@/lib/server/media/availability";
 import { STUDIO_IMAGE_PURPOSE } from "@/lib/media/catalog";
+import { studioSpeechModels } from "@/lib/server/media/voices";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,8 @@ export const GET = handler("auth/session", async (req) => {
       studioImageModels: await availableModels(STUDIO_IMAGE_PURPOSE),
       // Studio video models + effects: the same availability, and none while the paid-video switch `video.enabled` is off.
       studioVideoModels: await studioVideoModels(),
+      // Studio «Ovoz» models: none while `studio.voice.enabled` is off; Gemini also needs `TTS_GEMINI_MODEL`.
+      studioSpeechModels: await studioSpeechModels(),
       tts: ttsFeature(),
       // Premium ElevenLabs voice of podcast / greeting: only when the provider is enabled AND keyed.
       ttsPremium: ttsPremiumAvailable(),

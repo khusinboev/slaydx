@@ -26,6 +26,8 @@ export type MediaPricing = {
    * (the default upstream). The price follows the real spend: a pricier slot model is never sold at the lite price.
    */
   costUsd?: Readonly<Record<string, number>>;
+  /** Studio P5: the fixed price of one voice clone (`studio.clone_price`), server side only (the voices endpoint sends it). */
+  clonePrice?: number;
 };
 
 /** Used only when no pricing is known (a server helper outside a request, the very first render). Never charges. */

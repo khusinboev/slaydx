@@ -12,6 +12,7 @@ import { renderPptxWithTemplate } from "./render-pptx-template";
 import type { CustomTemplate } from "./pptx-template";
 import { buildImageArtifact } from "./image-studio";
 import { buildStudioImage } from "./studio";
+import { buildStudioSpeech, type StudioSpeechCtx } from "./studio/speech";
 import { buildInfographicArtifact } from "./infographic/engine";
 import { buildPortraitArtifact } from "./portrait/engine";
 import { buildTranslationArtifact } from "./translate/engine";
@@ -204,6 +205,10 @@ export type BuildOptions = {
   source?: TranslationSource;
   /** Studio P2b: the user's input pictures by param name (worker: `studioInputsForJob`, ownership in SQL). */
   studioInputs?: Readonly<Record<string, readonly { mime: string; base64: string }[]>>;
+  /** Studio P5: the job owner's clones a speech job names (worker: `studioSpeechJobCtx`, ownership in SQL). */
+  studioSpeech?: StudioSpeechCtx;
+  /** Studio P5: the voice-clone job, bound by the worker to the job's user and id (`lib/server/media/voice-clone.ts`). */
+  studioClone?: (o: { deadline?: number; onStage?: (ev: { progress: number; step: string }) => void }) => Promise<BuiltFile>;
   /**
    * Tinglash o'yini (AUDIT-22 R): sintez qilingan parchani AKTIVGA yozadi
    * va id qaytaradi — worker `putAssetBytes(job.id, …)` beradi. Berilmasa
@@ -569,6 +574,14 @@ async function buildArtifactInner(
     return buildImageArtifact(tool, values, deadline, opts.onStage);
   }
 
+  // Studio «Ovoz» (docs/studio/P5-SPEC.md): speech / dialogue, and the voice clone — always through the media core.
+  if (tool.id === "studio-speech") {
+    return buildStudioSpeech(tool, values, opts.studioSpeech ?? { clones: {} }, { deadline, ...(opts.onStage ? { onStage: opts.onStage } : {}) });
+  }
+  if (tool.id === "studio-voice") {
+    if (!opts.studioClone) throw new Error("Ovoz klonlash faqat navbat orqali ishlaydi");
+    return opts.studioClone({ deadline, ...(opts.onStage ? { onStage: opts.onStage } : {}) });
+  }
   // Studio pictures (docs/studio/P1-SPEC.md): the chosen catalog model, always through the media core.
   if (tool.id === "studio-image") {
     return buildStudioImage(tool, values, deadline, opts.onStage, opts.studioInputs);

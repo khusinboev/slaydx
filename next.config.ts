@@ -100,6 +100,7 @@ const BYTE_ROUTES = [
   "uploads/photo/[^/]+",
   "tests/attempts/[^/]+/image/[^/]+",
   "media/library/preview/[^/]+",
+  "media/voices/preview/[^/]+",
 ].join("|");
 
 const nextConfig: NextConfig = {

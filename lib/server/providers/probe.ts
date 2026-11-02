@@ -1,6 +1,7 @@
 import { redact } from "../log";
 import { providerDef } from "./registry";
 import { FAL_IMAGE_MODELS, MEDIA_CATALOG } from "../../media/catalog";
+import { elevenLabsSlotsOf } from "../../generation/tts/elevenlabs";
 
 /**
  * «Tekshirish»: ONE cheap authenticated read per provider (list models, fetch one photo...), 10 s timeout, to
@@ -100,6 +101,9 @@ export function elevenLabsMessage(body: unknown): string {
   const parts = ["Kalit qabul qilindi"];
   if (typeof b.tier === "string" && /^[\w -]{1,40}$/.test(b.tier)) parts.push(`tarif: ${b.tier}`);
   if (Number.isFinite(used) && Number.isFinite(limit) && limit > 0) parts.push(`qoldi ${groupDigits(Math.max(0, limit - used))} / ${groupDigits(limit)} kredit`);
+  // Studio P5: the voice slots the clones take (docs/studio/P5-SPEC.md) — a full account refuses new clones before charging.
+  const slots = elevenLabsSlotsOf(body);
+  if (slots) parts.push(`ovoz slotlari: ${slots.used} / ${slots.limit} band`);
   return parts.join(" · ");
 }
 

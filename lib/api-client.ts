@@ -270,6 +270,8 @@ export type Features = {
   studioImageModels?: string[];
   /** Studio video models + effects (catalog ids) usable now; empty while `video.enabled` is off; absent on an older server. */
   studioVideoModels?: string[];
+  /** Studio «Ovoz» models (catalog ids) usable now; empty while `studio.voice.enabled` is off; absent on an older server. */
+  studioSpeechModels?: string[];
   /** `domla.enabled` is on: «Qattiqqo'l domla» is listed among the tools; absent (older server) or false = hidden. */
   domla?: boolean;
   /** `chat.enabled` is on: «AI yordamchi» is listed; absent (older server) or false = hidden. */

@@ -8,6 +8,8 @@ import { query } from "../db";
 import { decodeCursor, encodeCursor, type ListCursor } from "../jobs";
 import { availableModels, studioVideoModels } from "./availability";
 import { mediaPricing } from "./pricing";
+import { STUDIO_SPEECH_PURPOSE } from "../../media/catalog-speech";
+import { studioSpeechModels } from "./voices";
 
 /**
  * The two public Studio reads (docs/studio/P1-SPEC.md «Session / API»).
@@ -35,12 +37,16 @@ const CLIENT = new Map(MEDIA_CATALOG.clientView().map((e) => [e.id, e]));
  * only true for them). «Rasm» / «Video» keep their own forms and ladders; internal purposes are never public.
  * P2b: + the edit / upscale / background-removal purposes (same tool, same pricing block). P3 / P5 add theirs here.
  */
-export const CATALOG_PURPOSES: ReadonlySet<string> = new Set([...STUDIO_PURPOSES, STUDIO_VIDEO_PURPOSE]);
+export const CATALOG_PURPOSES: ReadonlySet<string> = new Set([...STUDIO_PURPOSES, STUDIO_VIDEO_PURPOSE, STUDIO_SPEECH_PURPOSE]);
 
 export async function mediaCatalog(purposeId: string): Promise<CatalogResponse> {
   if (!CATALOG_PURPOSES.has(purposeId) || !MEDIA_PURPOSES.byId(purposeId)) throw new ApiError("Noma'lum maqsad", 400);
   // The Video tab also follows the paid-video switch `video.enabled` (off = no model listed, the route refuses too).
-  const [available, pricing] = await Promise.all([purposeId === STUDIO_VIDEO_PURPOSE ? studioVideoModels() : availableModels(purposeId), mediaPricing()]);
+  // P5: the «Ovoz» tab follows `studio.voice.enabled` and Gemini's `TTS_GEMINI_MODEL` (`studioSpeechModels`).
+  const [available, pricing] = await Promise.all([
+    purposeId === STUDIO_VIDEO_PURPOSE ? studioVideoModels() : purposeId === STUDIO_SPEECH_PURPOSE ? studioSpeechModels() : availableModels(purposeId),
+    mediaPricing(),
+  ]);
   const resolved = resolveModel(MEDIA_PURPOSES, purposeId, { available: (id) => available.includes(id) });
   return {
     purpose: purposeId,
@@ -70,10 +76,14 @@ export type GalleryVideo = {
   effect: string | null;
   effectLabel: string | null;
 };
+/** A speech result in the gallery (P5): played from the MP3 itself (`?inline=1`). */
+export type GalleryAudio = { src: string; seconds: number | null; voices: string[]; clone: boolean };
 export type GalleryItem = {
   id: string;
-  /** `image` (Rasm tab) or `video` (Video tab). */
-  kind: "image" | "video";
+  /** `image` (Rasm tab), `video` (Video tab) or `audio` (Ovoz tab, P5). */
+  kind: "image" | "video" | "audio";
+  /** The speech of an audio item, `null` otherwise. */
+  audio: GalleryAudio | null;
   createdAt: string;
   modelId: string | null;
   modelLabel: string | null;
@@ -96,7 +106,14 @@ type Row = {
   prompt: string | null;
   images: unknown;
   video: unknown;
+  speech: unknown;
 };
+
+function audioOf(id: string, raw: unknown): GalleryAudio {
+  const s = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const voices = Array.isArray(s.voices) ? s.voices.filter((v): v is string => typeof v === "string").slice(0, 4) : [];
+  return { src: `/api/generations/${id}/file?inline=1`, seconds: num(s.seconds), voices, clone: s.clone === true };
+}
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
 
@@ -141,11 +158,11 @@ export async function studioGallery(userId: string, cursor: ListCursor | null, l
   const rows = await query<Row>(
     `SELECT id, tool_id, created_at, topic,
             to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS cursor_ts,
-            COALESCE(doc_json->>'imageModel', doc_json->'video'->>'model') AS model,
+            COALESCE(doc_json->>'imageModel', doc_json->'video'->>'model', doc_json->'speech'->>'model') AS model,
             COALESCE(doc_json->>'imagePrompt', doc_json->'video'->>'prompt') AS prompt,
-            doc_json->'images' AS images, doc_json->'video' AS video
+            doc_json->'images' AS images, doc_json->'video' AS video, doc_json->'speech' AS speech
        FROM generations
-      WHERE user_id = $1 AND tool_id IN ('studio-image', 'studio-video') AND status = 'COMPLETED' AND files_purged_at IS NULL
+      WHERE user_id = $1 AND tool_id IN ('studio-image', 'studio-video', 'studio-speech') AND status = 'COMPLETED' AND files_purged_at IS NULL
         AND ($2::timestamp IS NULL
              OR (created_at <= ($2::timestamp AT TIME ZONE 'UTC')
                  AND (created_at < ($2::timestamp AT TIME ZONE 'UTC') OR id < $3::uuid)))
@@ -158,15 +175,17 @@ export async function studioGallery(userId: string, cursor: ListCursor | null, l
   return {
     items: page.map((r) => {
       const isVideo = r.tool_id === "studio-video";
+      const isAudio = r.tool_id === "studio-speech";
       return {
         id: r.id,
-        kind: isVideo ? ("video" as const) : ("image" as const),
+        kind: isAudio ? ("audio" as const) : isVideo ? ("video" as const) : ("image" as const),
+        audio: isAudio ? audioOf(r.id, r.speech) : null,
         createdAt: new Date(r.created_at).toISOString(),
         modelId: r.model,
         modelLabel: r.model ? (MEDIA_CATALOG.byId(r.model)?.label ?? null) : null,
         // An effect clip has no prompt: the topic names it («Effekt: …»).
         prompt: r.prompt || r.topic,
-        images: isVideo ? [] : imagesOf(r.id, r.images),
+        images: isVideo || isAudio ? [] : imagesOf(r.id, r.images),
         video: isVideo ? videoOf(r.id, r.video) : null,
         fileUrl: `/api/generations/${r.id}/file`,
       };

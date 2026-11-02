@@ -597,6 +597,13 @@ async function execute(
         : undefined;
     // Studio P2b: the edit / utility job's input pictures (the user's own uploads; missing = the engine fails + refunds).
     const studioInputs = tool.id === "studio-image" ? await studioInputsForJob(job.userId, job.values) : undefined;
+    // Studio P5: the clones a speech job names (the owner's own, SQL), and the clone job bound to this user / job.
+    const studioSpeech = tool.id === "studio-speech" ? await (await import("./media/voices")).studioSpeechJobCtx(job.userId, job.values) : undefined;
+    const studioClone =
+      tool.id === "studio-voice"
+        ? async (o: { deadline?: number; onStage?: (ev: { progress: number; step: string }) => void }) =>
+            (await import("./media/voice-clone")).buildStudioClone(tool, { userId: job.userId, generationId: job.id }, job.values, o)
+        : undefined;
     // Media engine path per kind, read ONCE so a running job never switches (docs/studio/P0-SPEC.md §6).
     const mediaCtx = { generationId: job.id, core: await mediaCoreSwitches() };
     tracked = trackJobCost(() => withMediaContext(mediaCtx, () => build(tool, job.values, {
@@ -606,6 +613,8 @@ async function execute(
       source,
       photo,
       studioInputs,
+      studioSpeech,
+      studioClone,
       onStage,
       onProgress: live?.sink,
       // Tinglash o'yini TTS parchalari — shu ishning aktivlariga (`/api/o/[token]/audio/[assetId]` orqali ochiq).
@@ -1128,6 +1137,8 @@ export async function purgeHousekeeping(): Promise<void> {
    * partial index keeps it cheap); rows older than 90 days go in batches on the 6 hour cadence, mark before the run.
    */
   await step("media-jobs-stuck", async () => (await import("./media/jobs")).failStuckMediaJobs());
+  // Studio P5 clones: the 30-day unused warning + purge, provider deletes still owed, stale rows, old samples.
+  await step("studio-voices", async () => (await import("./media/voices")).studioVoicesHousekeeping());
   if (Date.now() - lastMediaJobsPurgeAt >= RETENTION_EVERY_MS) {
     await step("media-jobs-purge", async () => {
       lastMediaJobsPurgeAt = Date.now();

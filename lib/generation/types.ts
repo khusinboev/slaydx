@@ -605,6 +605,8 @@ export type AcademicDoc = {
    * (WP-A) — qidiruv, kartochka va eski kod uchun.
    */
   audio?: AudioModel;
+  /** Studio «Ovoz» (P5): what was spoken, by which model and voices (`AudioViewer` plays the file, lists `lines`). */
+  speech?: StudioSpeechDoc;
   /**
    * Infografika (AUDIT-21): bir betlik plakatning TO'LIQ
    * spetsifikatsiyasi. Bu oilada `sections` MATNI yo'q — chiqish bitta
@@ -625,6 +627,21 @@ export type AcademicDoc = {
    * reads it for its label (no model prompt is shown for this tool); `images` holds the results.
    */
   portrait?: { gown: string; background: string; sash: string; variants: number };
+};
+
+/** Studio «Ovoz» result (docs/studio/P5-SPEC.md). `voices` are display names; a clone's provider id is never stored here. */
+export type StudioSpeechDoc = {
+  /** Catalog id of the model. */
+  model: string;
+  /** Length of the delivered MP3 (measured). */
+  seconds: number;
+  /** Characters priced (the normalized text / script). */
+  chars: number;
+  voices: string[];
+  /** What was spoken: one line for a single voice, one per turn for a dialogue. */
+  lines: { speaker: string; text: string }[];
+  /** A user clone spoke (or, for the clone tool, this is its preview). */
+  clone: boolean;
 };
 
 export type BuiltFile = {

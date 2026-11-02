@@ -123,6 +123,9 @@ const TOOL_PLANS: Readonly<Record<ToolId, ToolPlan>> = {
   "studio-image": { extras: ["jpg"] },
   // Studio clips: the MP4 is the only file, as «Video».
   "studio-video": { extras: [] },
+  // Studio speech / the clone's preview: the MP3 is the only file.
+  "studio-speech": { extras: [] },
+  "studio-voice": { extras: [] },
 };
 
 /** Tool ids that have a download decision (equals every `ToolId`). */

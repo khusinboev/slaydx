@@ -29,6 +29,8 @@ import { KLING_EFFECT_SCENES } from "./media/catalog-video";
 import { defaultMediaPricing, getClientMediaPricing, isStudioImageModel, studioImagePrice, studioModelOf, type MediaPricing } from "./media/studio-pricing";
 import { validate as validateParams } from "./studio-core";
 import { studioVideoError, studioVideoPrice } from "./media/studio-video-pricing";
+import { STUDIO_CLONE_PRICE_DEFAULT, studioSpeechError, studioSpeechPrice } from "./media/studio-speech";
+import { getClientClonePrice } from "./media/studio-speech-client";
 
 const TOPIC_FILE_MODES = [
   {
@@ -71,6 +73,12 @@ const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
   "studio-image": [{ kind: "textarea", name: "prompt", legend: "Rasm tavsifi", required: true }],
   // Studio «Video»: the prompt is mode-dependent (effects need only a photo), the model is not — the tab sends it in both modes.
   "studio-video": [{ kind: "text", name: "modelId", legend: "Video modeli", required: true }],
+  // Studio «Ovoz» (P5): the spoken field depends on the model (`text` or the dialogue `script`); the model's own schema checks it.
+  "studio-speech": [{ kind: "text", name: "modelId", legend: "Ovoz modeli", required: true }],
+  "studio-voice": [
+    { kind: "text", name: "name", legend: "Ovoz nomi", required: true },
+    { kind: "text", name: "sampleId", legend: "Ovoz yozuvi", required: true },
+  ],
   resume: [
     { kind: "text", name: "fullName", legend: "To'liq ism", required: true },
     { kind: "text", name: "targetRole", legend: "Maqsadli lavozim", required: true },
@@ -978,6 +986,53 @@ export const TOOLS: ToolConfig[] = [
     fields: [],
   },
   {
+    /*
+     * Studio «Ovoz» tab (docs/studio/P5-SPEC.md): a catalog speech model (ElevenLabs v3, Gemini TTS, their two-speaker
+     * dialogue) + that entry's ParamSchema, priced characters × provider rate × markup (`lib/media/studio-speech.ts`),
+     * always through the media core. The page is the Studio's «Ovoz» tab; not listed on its own.
+     */
+    id: "studio-speech",
+    slug: "studio-speech",
+    title: "Studio ovoz",
+    pageTitle: "Studio ovoz",
+    group: "media",
+    icon: "mic",
+    tc: "234 88 12",
+    description: "Matnni AI ovoz bilan o‘qitish — o‘zbekcha ovozlar, suhbat va o‘z ovozingiz",
+    submitLabel: "Ovozlash",
+    creatingLabel: "Ovozlanmoqda...",
+    createdLabel: "audio tayyor!",
+    extraOptional: false,
+    output: "mp3",
+    custom: "studio-speech",
+    // 100 characters on the default model at the default pricing, for the «… dan» labels; the real price is `priceFor`.
+    basePrice: studioSpeechPrice({ text: "x".repeat(100) }, defaultMediaPricing()) ?? 300,
+    fields: [],
+  },
+  {
+    /*
+     * Studio voice clone (P5): the user's own recording → one ElevenLabs Instant Voice Clone, a fixed price
+     * (`studio.clone_price`, owner 2026-11-02: 5 000 so'm). One active clone per user; the result file is a short preview
+     * spoken with the new voice. Not listed on its own (the «Ovoz» tab sells it).
+     */
+    id: "studio-voice",
+    slug: "studio-voice",
+    title: "Ovoz klonlash",
+    pageTitle: "Ovoz klonlash",
+    group: "media",
+    icon: "mic",
+    tc: "234 88 12",
+    description: "O‘z ovozingizdan AI ovoz yaratish",
+    submitLabel: "Klonlash",
+    creatingLabel: "Ovoz klonlanmoqda...",
+    createdLabel: "ovoz tayyor!",
+    extraOptional: false,
+    output: "mp3",
+    custom: "studio-voice",
+    basePrice: STUDIO_CLONE_PRICE_DEFAULT,
+    fields: [],
+  },
+  {
     id: "podcast",
     slug: "podcast",
     title: "Podkast",
@@ -1155,7 +1210,7 @@ export function visibleToolGroups(): readonly { id: ToolGroup; label: string }[]
  * Tools that live INSIDE another page and get no card of their own: `studio-video` is the Studio's Video tab (the Studio
  * card already leads there). The catalogue, the create sheet, the search and the home groups list `listedTools()`.
  */
-export const UNLISTED_TOOL_IDS: ReadonlySet<ToolId> = new Set<ToolId>(["studio-video"]);
+export const UNLISTED_TOOL_IDS: ReadonlySet<ToolId> = new Set<ToolId>(["studio-video", "studio-speech", "studio-voice"]);
 export function listedTools(): ToolConfig[] {
   return TOOLS.filter((t) => !UNLISTED_TOOL_IDS.has(t.id));
 }
@@ -1412,6 +1467,7 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
   if (tool.custom === "video") return videoParamsError(values);
   if (tool.custom === "studio-image") return studioImageError(values);
   if (tool.custom === "studio-video") return studioVideoError(values);
+  if (tool.custom === "studio-speech") return studioSpeechError(values);
   if (tool.custom === "image") {
     const n = String(values.prompt ?? "").trim().length;
     if (n > 0 && n < IMAGE_PROMPT_MIN) return "Rasm tavsifi juda qisqa — nima chizilishini yozing.";
@@ -1568,6 +1624,8 @@ export type ToolFeatures = {
    * Absent = not known -> the «Video» providers decide (`videoProviders`); both absent -> not blocked.
    */
   studioVideoModels?: string[];
+  /** Studio «Ovoz» models (catalog ids) available right now (P5). Absent = not known -> not blocked. */
+  studioSpeechModels?: string[];
 };
 
 /**
@@ -1599,6 +1657,10 @@ export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | nu
     // Its own model list when the server sends it, else the «Video» providers (both empty while `video.enabled` is off).
     const known = features.studioVideoModels ?? features.videoProviders;
     return !known || known.length > 0 ? null : "Video xizmati hozircha mavjud emas.";
+  }
+  if (tool.custom === "studio-speech" || tool.custom === "studio-voice") {
+    const known = features.studioSpeechModels;
+    return !known || known.length > 0 ? null : "Ovoz xizmati hozircha mavjud emas.";
   }
   if (tool.custom === "studio-image") {
     const known = features.studioImageModels ?? features.imageModels;
@@ -1744,6 +1806,15 @@ export function basePriceFor(tool: ToolConfig, values: FormValues, media?: Media
     const pricing = media ?? getClientMediaPricing() ?? defaultMediaPricing();
     return studioVideoPrice(values, pricing) ?? studioVideoPrice({ ...values, modelId: "" }, pricing)!;
   }
+  if (tool.id === "studio-speech") {
+    // Characters × provider rate × markup (`studio-speech.ts`); a model outside the tab is refused by `preflightError` first.
+    const pricing = media ?? getClientMediaPricing() ?? defaultMediaPricing();
+    return studioSpeechPrice(values, pricing) ?? studioSpeechPrice({ ...values, modelId: "" }, pricing)!;
+  }
+  if (tool.id === "studio-voice") {
+    // Fixed (`studio.clone_price`): the server passes the setting in its pricing block, the browser has the voices endpoint's number.
+    return media?.clonePrice ?? getClientClonePrice() ?? STUDIO_CLONE_PRICE_DEFAULT;
+  }
   if (tool.id === "portrait") return portraitPrice(values);
   if (tool.id === "video") return videoPrice(values);
   if (tool.id === "image") {
@@ -1877,6 +1948,14 @@ export function topicOf(values: FormValues, tool: ToolConfig) {
     const label = KLING_EFFECT_SCENES.find((e) => e.id === effect)?.label;
     const prompt = String(values.prompt || "").replace(/\s+/g, " ").trim().slice(0, 72);
     return prompt || (label ? `Effekt: ${label}` : "Video");
+  }
+  if (tool.id === "studio-speech") {
+    const text = String(values.text || values.script || "").replace(/\s+/g, " ").trim().slice(0, 72);
+    return text || "Ovoz";
+  }
+  if (tool.id === "studio-voice") {
+    const name = String(values.name || "").replace(/\s+/g, " ").trim().slice(0, 40);
+    return name ? `Ovoz klonlash: ${name}` : "Ovoz klonlash";
   }
   if (tool.id === "image" || tool.id === "studio-image") {
     return String(values.prompt || values.topic || "Rasm").replace(/\s+/g, " ").trim().slice(0, 72) || "Rasm";
