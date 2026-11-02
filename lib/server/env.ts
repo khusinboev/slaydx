@@ -346,6 +346,8 @@ export const env = {
     dailyPolish: int("FREE_LLM_DAILY_POLISH", 10),
     /** AI chat assistant: free messages per user per Tashkent day (the next ones cost `chat.price_per_message`). */
     dailyChat: int("FREE_LLM_DAILY_CHAT", 10),
+    /** Studio «Yaxshilash (AI)» prompt rewrites per user per Tashkent day (docs/studio/P2B-SPEC.md). */
+    dailyEnhance: int("FREE_LLM_DAILY_ENHANCE", 30),
     /** Barcha foydalanuvchilar bo'yicha kunlik birlik (vazn bilan) — xarajat shifti. */
     dailyGlobal: int("FREE_LLM_DAILY_GLOBAL", 20_000),
   },

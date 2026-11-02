@@ -409,8 +409,14 @@ test("client preview == server price == charge (catalog pricing block + session 
     "bytedance/seedream-pro": IMAGE_PRICES["bytedance/seedream/v5/pro/text-to-image"],
     "recraft/recraft": IMAGE_PRICES["fal-ai/recraft/v4.1/text-to-image"],
     "recraft/recraft-pro": IMAGE_PRICES["fal-ai/recraft/v4.1/pro/text-to-image"],
+    // P2b (docs/studio/P2B-SPEC.md): the edit / utility models are in the same block (a per-job rule ignores it).
+    "bytedance/seedream-edit": IMAGE_PRICES["bytedance/seedream/v5/lite/edit"],
+    "bytedance/seedvr-upscale": IMAGE_PRICES["fal-ai/seedvr/upscale/image"],
+    "bria/background-remove": IMAGE_PRICES["fal-ai/bria/background/remove"],
   };
-  assert.deepEqual(block, { soumPerUsd: 12_900, markup: 2.5, step: 100, overrides: { [GPT]: { markup: 4 } }, costUsd: { [NANO]: USD[NANO], [GPT]: USD[GPT], ...FAL_LIVE } });
+  // The edit twin of Nano Banana follows the same live Gemini slot model.
+  const P2B_GEMINI = { "google/nano-banana-edit": USD[NANO] };
+  assert.deepEqual(block, { soumPerUsd: 12_900, markup: 2.5, step: 100, overrides: { [GPT]: { markup: 4 } }, costUsd: { [NANO]: USD[NANO], [GPT]: USD[GPT], ...P2B_GEMINI, ...FAL_LIVE } });
   // Server prices are taken BEFORE the simulated browser exists: with a `window` the server path would read the
   // browser registry and agree with the client by accident.
   const serverPrice = new Map<string, number>();

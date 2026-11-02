@@ -194,6 +194,17 @@ export const IMAGE_PRICES: Record<string, number> = {
   "bytedance/seedream/v5/pro/text-to-image": 0.0675,
   "fal-ai/recraft/v4.1/text-to-image": 0.035,
   "fal-ai/recraft/v4.1/pro/text-to-image": 0.21,
+  /*
+   * Studio P2b edit + utility endpoints (docs/studio/P2B-SPEC.md), read from each `llms.txt` on 2026-11-02:
+   *   bytedance/seedream/v5/lite/edit  «$0.035 per image» (flat) — per output picture;
+   *   fal-ai/seedvr/upscale/image      «$0.001 per megapixel» (input or output MP not stated, UNVERIFIED): the inputs are
+   *                                    capped so the OUTPUT is ≤ 16.8 MP (×2 ≤ 2048 px side, ×4 ≤ 1024 px side), so
+   *                                    $0.0168 is an upper bound per job whichever side fal bills;
+   *   fal-ai/bria/background/remove    «$0.018 per image without a prompt» (we never send a prompt) — per job.
+   */
+  "bytedance/seedream/v5/lite/edit": 0.035,
+  "fal-ai/seedvr/upscale/image": 0.0168,
+  "fal-ai/bria/background/remove": 0.018,
 };
 
 /**

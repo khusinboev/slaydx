@@ -19,7 +19,8 @@ import { portraitInputFromValues } from "../generation/portrait/registry";
 import { videoInputFromValues } from "../generation/video/registry";
 import type { FormValues, ToolConfig, ToolId } from "../types";
 import { modelUnavailable } from "./media/availability";
-import { STUDIO_IMAGE_PURPOSE } from "../media/catalog";
+import { STUDIO_IMAGE_PURPOSE, studioPurposeOf } from "../media/catalog";
+import { studioInputsError } from "./media/inputs";
 import { studioModelOf } from "../media/studio-pricing";
 import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
 import { studioVideoModelOf } from "../media/studio-video-pricing";
@@ -175,8 +176,13 @@ export async function submitGeneration(input: SubmitInput): Promise<SubmitResult
    * 400 before anything is priced or charged; a replay is a job that already exists.
    */
   if (tool.id === "studio-image" && !replay) {
-    const unavailable = await modelUnavailable(STUDIO_IMAGE_PURPOSE, studioModelOf(values));
+    // P2b: an edit / upscale / background-removal model is checked against ITS purpose (docs/studio/P2B-SPEC.md).
+    const modelId = studioModelOf(values);
+    const unavailable = await modelUnavailable(studioPurposeOf(modelId) ?? STUDIO_IMAGE_PURPOSE, modelId);
     if (unavailable) throw new ApiError(unavailable, 400, { code: "model_unavailable" });
+    // The input pictures must be the user's own (SQL), of the right type / size, before anything is charged.
+    const inputs = await studioInputsError(userId, values);
+    if (inputs) throw new ApiError(inputs, 400, { code: "input_invalid" });
   }
 
   /*

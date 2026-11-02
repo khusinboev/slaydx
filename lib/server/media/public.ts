@@ -1,6 +1,6 @@
 import "server-only";
 import { resolveModel, type ClientEntry } from "../../studio-core";
-import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "../../media/catalog";
+import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_PURPOSES } from "../../media/catalog";
 import { KLING_EFFECTS, STUDIO_VIDEO_PURPOSE } from "../../media/catalog-video";
 import type { MediaPricing } from "../../media/studio-pricing";
 import { ApiError } from "../api";
@@ -33,9 +33,9 @@ const CLIENT = new Map(MEDIA_CATALOG.clientView().map((e) => [e.id, e]));
 /**
  * Purposes this endpoint serves: Studio pickers, priced cost × markup by `studio-pricing.ts` (the `pricing` block is
  * only true for them). «Rasm» / «Video» keep their own forms and ladders; internal purposes are never public.
- * P3 / P5 add their Studio purposes here.
+ * P2b: + the edit / upscale / background-removal purposes (same tool, same pricing block). P3 / P5 add theirs here.
  */
-export const CATALOG_PURPOSES: ReadonlySet<string> = new Set([STUDIO_IMAGE_PURPOSE, STUDIO_VIDEO_PURPOSE]);
+export const CATALOG_PURPOSES: ReadonlySet<string> = new Set([...STUDIO_PURPOSES, STUDIO_VIDEO_PURPOSE]);
 
 export async function mediaCatalog(purposeId: string): Promise<CatalogResponse> {
   if (!CATALOG_PURPOSES.has(purposeId) || !MEDIA_PURPOSES.byId(purposeId)) throw new ApiError("Noma'lum maqsad", 400);

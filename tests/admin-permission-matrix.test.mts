@@ -364,6 +364,8 @@ const PATH_FAMILIES: ReadonlyArray<readonly [RegExp, readonly string[]]> = [
   [/^settings\//, ["settings"]],
   // program-17 D7: the provider key store reuses the settings permissions (view / edit with step-up).
   [/^providers\//, ["settings"]],
+  // Studio P2b (docs/studio/P2B-SPEC.md): the prompt library + templates reuse the settings permissions.
+  [/^studio-library(\/|$)/, ["settings"]],
   [/^system\//, ["system"]],
   [/^errors\//, ["errors"]],
   [/^audit\//, ["audit"]],
@@ -549,6 +551,7 @@ function paramsFor(e: Entry, role: Role | null): Record<string, string> {
     else if (e.rel.startsWith("providers/[id]")) value = "no_such_provider";
     else if (e.rel.startsWith("providers/routes/[id]")) value = "no.such.route";
     else if (e.rel.startsWith("pricing/[toolId]")) value = PRICING_TOOL_ID;
+    else if (/^studio-library\/(prompts|templates)\/\[id\]/.test(e.rel)) value = "900000000000";
     assert.ok(value !== null, `${e.rel}: no fixture value for dynamic segment [${name}] — extend paramsFor()`);
     out[name] = value;
   }

@@ -90,6 +90,7 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "media.core.video",
     "media.core.speech",
     "media.markup",
+    "free_llm.daily.enhance",
   ]);
   for (const k of s.SETTING_KEYS) {
     const d = s.settingDef(k);

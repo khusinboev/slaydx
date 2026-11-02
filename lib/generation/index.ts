@@ -202,6 +202,8 @@ export type BuildOptions = {
    * formati kirishga teng bo'ladi (WP3 shu tarmoqni yozadi).
    */
   source?: TranslationSource;
+  /** Studio P2b: the user's input pictures by param name (worker: `studioInputsForJob`, ownership in SQL). */
+  studioInputs?: Readonly<Record<string, readonly { mime: string; base64: string }[]>>;
   /**
    * Tinglash o'yini (AUDIT-22 R): sintez qilingan parchani AKTIVGA yozadi
    * va id qaytaradi — worker `putAssetBytes(job.id, …)` beradi. Berilmasa
@@ -569,7 +571,7 @@ async function buildArtifactInner(
 
   // Studio pictures (docs/studio/P1-SPEC.md): the chosen catalog model, always through the media core.
   if (tool.id === "studio-image") {
-    return buildStudioImage(tool, values, deadline, opts.onStage);
+    return buildStudioImage(tool, values, deadline, opts.onStage, opts.studioInputs);
   }
 
   /*

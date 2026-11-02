@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { LayoutGrid, Wand2 } from "lucide-react";
+import { LayoutGrid, Wand2, X } from "lucide-react";
 import { ApiError, PriceChangedError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
@@ -23,12 +23,16 @@ import { ParamRows } from "./ParamRows";
 import { PriceButton } from "./PriceButton";
 import { PromptBox } from "./PromptBox";
 import { StudioResults, type StudioJob } from "./StudioResults";
-import { STUDIO_IMAGE_PURPOSE, STUDIO_VIDEO_PURPOSE, useMediaCatalog } from "./studio-api";
+import { STUDIO_VIDEO_PURPOSE, enhancePrompt, inputFromResult, loadMediaCatalog, resultAssetOf, uploadStudioInput, useMediaCatalog } from "./studio-api";
 import { INITIAL_VIDEO_STATE, VideoTab, type VideoTabState } from "./video/VideoTab";
+import { LibrarySheet } from "./LibrarySheet";
+import { TemplateSlots, TemplatesRow } from "./TemplatesRow";
+import { INPUT_PARAM, MODE_LABEL, MODE_PURPOSE, applyTemplate, type StudioMode } from "./studio-modes";
+import { fillSkeleton, type StudioTemplate } from "@/lib/media/library";
 import { STUDIO_TOOL_SLUG } from "./studio-entry";
 import { STUDIO_TOOL_ID, outputCount, studioPrice } from "./studio-price";
-import type { GalleryItem, MediaCatalog } from "./studio-types";
-import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, promptMin, requestValues, type RawValues } from "./studio-values";
+import type { GalleryItem, MediaCatalog, StudioPricing } from "./studio-types";
+import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, promptMin, promptParam, requestValues, type RawValues } from "./studio-values";
 import { useStudioJobs } from "./useStudioJobs";
 
 const WIDTH = "max-w-[1320px]";
@@ -80,8 +84,16 @@ function StudioApp() {
   const loggedIn = useAppStore((s) => s.loggedIn);
   const user = useAppStore((s) => s.user);
   const gated = useChannelGate((s) => s.gate !== null);
-  const { state, reload } = useMediaCatalog(STUDIO_IMAGE_PURPOSE);
-  const catalog = state.status === "ready" ? state.catalog : null;
+  // P2b (docs/studio/P2B-SPEC.md): drawing, or an edit / upscale / background removal of the user's own picture.
+  const [mode, setMode] = useState<StudioMode>("image");
+  const purpose = MODE_PURPOSE[mode];
+  const { state, reload } = useMediaCatalog(purpose);
+  // A catalog of the previous mode is never used for this one (the hook keeps the last answer until the next arrives).
+  const catalog = state.status === "ready" && state.catalog.purpose === purpose ? state.catalog : null;
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [template, setTemplate] = useState<{ t: StudioTemplate; slots: Record<string, string> } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [enhancing, setEnhancing] = useState(false);
 
   const [chosen, setChosen] = useState<string | null>(null);
   const [raw, setRaw] = useState<RawValues>({});
@@ -126,14 +138,97 @@ function StudioApp() {
 
   const setParam = (name: string, value: unknown) => setRaw((prev) => ({ ...prev, [name]: value }));
 
+  /** Typing the prompt by hand leaves the template (its slots would overwrite the text). */
+  const setPrompt = (v: string) => {
+    setTemplate(null);
+    setParam(PROMPT_PARAM, v);
+  };
+
+  /** Switch the tab's mode: P2b modes start with the given picture; the prompt stays (it becomes the edit instruction). */
+  function enterMode(next: StudioMode, assetId?: string) {
+    setError(null);
+    setTemplate(null);
+    setChosen(null);
+    setMode(next);
+    setView("create");
+    setTab("rasm");
+    setRaw((prev) => {
+      const prompt = typeof prev[PROMPT_PARAM] === "string" ? { [PROMPT_PARAM]: prev[PROMPT_PARAM] } : {};
+      return next === "image" ? prompt : { ...(next === "edit" ? prompt : {}), [INPUT_PARAM]: assetId ? [assetId] : [] };
+    });
+    if (typeof window !== "undefined") rootRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }
+
+  /** «Rasm yuklash»: the picture is uploaded, the tab switches to editing it. */
+  async function uploadForEdit(file: File) {
+    setUploading(true);
+    setError(null);
+    try {
+      const got = await uploadStudioInput(file, file.name || "rasm");
+      enterMode("edit", got.assetId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Rasm yuklanmadi");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  /** «Tahrirlash» / «Sifatini oshirish» / «Fonni olib tashlash» on a finished picture of the user's own job. */
+  async function pictureTool(next: Exclude<StudioMode, "image">, picture: { url: string }) {
+    const ref = resultAssetOf(picture.url);
+    if (!ref) {
+      setError("Bu rasmni ochib bo‘lmadi — natija sahifasidan yuklab, «Rasm yuklash» orqali qo‘shing.");
+      return;
+    }
+    setError(null);
+    try {
+      const got = await inputFromResult(ref.generationId, ref.assetId);
+      enterMode(next, got.assetId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Rasm tayyorlanmadi");
+    }
+  }
+
+  /** «Shablonlar»: the template's model, preset values and the prompt built from its (empty) slots. */
+  function pickTemplate(t: StudioTemplate) {
+    const target = catalog?.models.find((m) => m.id === t.modelId);
+    if (!target) return;
+    setError(null);
+    setChosen(target.id);
+    setTemplate({ t, slots: {} });
+    setRaw(applyTemplate(target, t, {}));
+  }
+
+  function setSlot(name: string, value: string) {
+    if (!template || !entry) return;
+    const slots = { ...template.slots, [name]: value };
+    setTemplate({ t: template.t, slots });
+    setParam(PROMPT_PARAM, fillSkeleton(template.t.skeleton, template.t.slots, slots).slice(0, promptLimit(entry)));
+  }
+
+  /** «Yaxshilash (AI)»: a free rewrite shown in the box (editable); the template is left. */
+  async function enhance() {
+    if (!entry) return;
+    setEnhancing(true);
+    setError(null);
+    try {
+      const better = await enhancePrompt(normalizedPrompt(entry, raw));
+      setPrompt(better.slice(0, promptLimit(entry)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Tavsif yaxshilanmadi");
+    } finally {
+      setEnhancing(false);
+    }
+  }
+
   function scrollToResults() {
     // The three-column layout shows the results beside the form; below it they are under the form.
     if (typeof window.matchMedia === "function" && window.matchMedia("(min-width: 1280px)").matches) return;
     resultsRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }
 
-  async function send(target: ClientEntry, sent: Record<string, unknown>) {
-    if (!catalog) return;
+  async function send(target: ClientEntry, sent: Record<string, unknown>, pricing: StudioPricing | undefined = catalog?.pricing, jobPurpose: string = purpose) {
+    if (!pricing) return;
     setError(null);
     setSubmitting(true);
     const prompt = String(sent[PROMPT_PARAM] ?? "");
@@ -141,11 +236,11 @@ function StudioApp() {
       const { id, price: charged } = await queueGeneration(
         { slug: STUDIO_TOOL_SLUG, id: STUDIO_TOOL_ID, title: prompt.slice(0, 72), output: "png" },
         sent as unknown as FormValues,
-        studioPrice(target, sent, catalog.pricing),
+        studioPrice(target, sent, pricing),
         // A second press with the same prompt is a new picture, not a double click.
         { repeat: true },
       );
-      track({ id, modelId: target.id, modelLabel: target.label, prompt, price: charged, sent });
+      track({ id, modelId: target.id, modelLabel: target.label, prompt: prompt || (jobPurpose !== MODE_PURPOSE.image ? jobLabel(jobPurpose) : ""), price: charged, sent, purpose: jobPurpose });
       scrollToResults();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Xatolik");
@@ -160,14 +255,30 @@ function StudioApp() {
 
   function submit() {
     if (!entry) return;
-    if (normalizedPrompt(entry, raw).length < promptMin(entry)) {
-      setError("Nima chizish kerakligini yozing");
+    if (mode !== "image" && !(Array.isArray(values[INPUT_PARAM]) && (values[INPUT_PARAM] as unknown[]).length > 0)) {
+      setError("Avval rasm yuklang");
+      return;
+    }
+    if (promptParam(entry) && normalizedPrompt(entry, raw).length < promptMin(entry)) {
+      setError(mode === "edit" ? "Nimani o‘zgartirish kerakligini yozing" : "Nima chizish kerakligini yozing");
       return;
     }
     void send(entry, requestValues(entry, raw));
   }
 
   function again(job: StudioJob) {
+    // A job of another mode (an upscale while drawing) is repeated with ITS purpose's catalog and pricing.
+    if (job.purpose && job.purpose !== purpose) {
+      void loadMediaCatalog(job.purpose).then(
+        (c) => {
+          const m = c.models.find((x) => x.id === job.modelId);
+          if (m) void send(m, job.sent, c.pricing, c.purpose);
+          else setError("Bu model hozir mavjud emas.");
+        },
+        (e: unknown) => setError(e instanceof Error ? e.message : "Xatolik"),
+      );
+      return;
+    }
     const model = catalog?.models.find((m) => m.id === job.modelId);
     if (!model) {
       // The model is not offered any more: say so and let the user pick another for the same prompt.
@@ -180,6 +291,7 @@ function StudioApp() {
 
   /** «Boshqa modelda»: the same prompt back in the form, the model picker open. */
   function otherModel(prompt: string) {
+    if (mode !== "image") enterMode("image");
     setView("create");
     setTab("rasm");
     setRaw((prev) => ({ ...prev, [PROMPT_PARAM]: entry ? prompt.slice(0, promptLimit(entry)) : prompt }));
@@ -240,7 +352,11 @@ function StudioApp() {
         {view === "gallery" ? (
           <section aria-label="Galereya" data-studio-gallery className="md:col-span-2">
             <h2 className="mb-3 text-[20px] font-extrabold">Galereya</h2>
-            <Gallery onCreate={toCreate} onOtherModel={(item: GalleryItem) => (item.kind === "video" ? videoAgain(item) : otherModel(item.prompt))} />
+            <Gallery
+              onCreate={toCreate}
+              onOtherModel={(item: GalleryItem) => (item.kind === "video" ? videoAgain(item) : otherModel(item.prompt))}
+              onTool={(m, p) => void pictureTool(m, p)}
+            />
           </section>
         ) : (
           <>
@@ -267,6 +383,20 @@ function StudioApp() {
                 ))}
               </div>
               <ChannelGate />
+              {tab === "rasm" && mode !== "image" ? (
+                <div className="bg-accent-soft text-accent-soft-foreground mb-3 flex items-center justify-between gap-2 rounded-[14px] px-3.5 py-2" data-studio-mode={mode}>
+                  <p className="text-[14.5px] font-bold">{MODE_LABEL[mode]}</p>
+                  <button
+                    type="button"
+                    data-studio-mode-exit
+                    onClick={() => enterMode("image")}
+                    className="focus-visible:ring-ring inline-flex min-h-11 items-center gap-1 rounded-[10px] px-2 text-[13.5px] font-semibold outline-none focus-visible:ring-2"
+                  >
+                    <X className="size-4" aria-hidden />
+                    Yangi rasm
+                  </button>
+                </div>
+              ) : null}
               {tab === "video" ? (
                 <VideoTab
                   catalogState={video.state}
@@ -282,12 +412,26 @@ function StudioApp() {
               ) : !catalog ? (
                 <CatalogStatus status={state.status} message={state.status === "error" ? state.message : ""} onRetry={() => reload()} />
               ) : entry === null ? (
-                <MediaModelPicker purpose={STUDIO_IMAGE_PURPOSE} catalog={catalog} value="" values={{}} onChange={selectModel} />
+                <MediaModelPicker purpose={purpose} catalog={catalog} value="" values={{}} onChange={selectModel} />
               ) : (
                 <>
-                  <PromptBox value={String(raw[PROMPT_PARAM] ?? "")} onChange={(v) => setParam(PROMPT_PARAM, v)} limit={promptLimit(entry)} />
+                  {promptParam(entry) ? (
+                    <PromptBox
+                      value={String(raw[PROMPT_PARAM] ?? "")}
+                      onChange={setPrompt}
+                      limit={promptLimit(entry)}
+                      min={promptMin(entry)}
+                      label={mode === "edit" ? "Nimani o‘zgartiramiz?" : "Nimani chizamiz?"}
+                      {...(mode === "image"
+                        ? { onSamples: () => setLibraryOpen(true), onUpload: (f: File) => void uploadForEdit(f), uploading, onEnhance: () => void enhance(), enhancing }
+                        : {})}
+                    />
+                  ) : null}
+                  {mode === "image" ? <TemplatesRow modelIds={catalog.models.map((m) => m.id)} activeId={template?.t.id ?? null} onPick={pickTemplate} /> : null}
+                  {template ? <TemplateSlots template={template.t} values={template.slots} onChange={setSlot} onClose={() => setTemplate(null)} /> : null}
+                  {libraryOpen ? <LibrarySheet onPick={setPrompt} onClose={() => setLibraryOpen(false)} /> : null}
                   <MediaModelPicker
-                    purpose={STUDIO_IMAGE_PURPOSE}
+                    purpose={purpose}
                     catalog={catalog}
                     value={entry.id}
                     values={values}
@@ -315,7 +459,7 @@ function StudioApp() {
             </div>
             {tab === "rasm" ? (
               <section ref={resultsRef} aria-label="Natijalar" data-studio-results className={cn("min-w-0 md:mt-0", jobs.length > 0 && "mt-5")}>
-                <StudioResults jobs={jobs} busy={submitting} onAgain={again} onOtherModel={(job) => otherModel(job.prompt)} />
+                <StudioResults jobs={jobs} busy={submitting} onAgain={again} onOtherModel={(job) => otherModel(job.prompt)} onTool={(m, p) => void pictureTool(m, p)} />
               </section>
             ) : null}
           </>
@@ -323,6 +467,13 @@ function StudioApp() {
       </div>
     </div>
   );
+}
+
+/** The card line of a utility job (no prompt): what was done. */
+function jobLabel(jobPurpose: string): string {
+  if (jobPurpose === MODE_PURPOSE.upscale) return MODE_LABEL.upscale;
+  if (jobPurpose === MODE_PURPOSE.bgremove) return MODE_LABEL.bgremove;
+  return MODE_LABEL.edit;
 }
 
 const HEADER_BTN =

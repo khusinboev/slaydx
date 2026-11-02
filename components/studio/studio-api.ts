@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { request } from "@/lib/api-client";
 import { parseMediaPricing, setClientMediaPricing } from "@/lib/media/studio-pricing";
 import type { ClientEntry } from "@/lib/studio-core";
-import type { GalleryItem, GalleryPage, MediaCatalog, StudioPricing } from "./studio-types";
+import type { LibraryItem, StudioTemplate } from "@/lib/media/library";
+import type { GalleryItem, GalleryPage, LibraryData, MediaCatalog, StudioPricing } from "./studio-types";
 
 /** The catalog purpose Studio's Rasm tab reads (docs/studio/P1-SPEC.md). */
 export const STUDIO_IMAGE_PURPOSE = "studio.image";
@@ -167,4 +168,90 @@ export function parseGalleryPage(raw: unknown): GalleryPage {
 export async function fetchGallery(cursor: string | null, signal?: AbortSignal): Promise<GalleryPage> {
   const q = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
   return parseGalleryPage(await request<unknown>(`/api/media/gallery${q}`, signal ? { signal } : {}));
+}
+
+/* ───────────────────────── P2b: library, templates, inputs, enhance ───────────────────────── */
+
+/** `GET /api/media/library` → categories with items (docs/studio/P2B-SPEC.md). Untrusted JSON → typed, bad rows dropped. */
+export function parseLibrary(raw: unknown): LibraryData {
+  const r = isObj(raw) ? raw : {};
+  const categories = (Array.isArray(r.categories) ? r.categories : [])
+    .map((c) => (isObj(c) && str(c.id) && str(c.label) ? { id: c.id as string, label: c.label as string, count: typeof c.count === "number" ? c.count : 0 } : null))
+    .filter((c): c is LibraryData["categories"][number] => c !== null);
+  const items = (Array.isArray(r.items) ? r.items : [])
+    .map((i) =>
+      isObj(i) && str(i.id) && str(i.category) && str(i.title) && str(i.prompt)
+        ? { id: i.id as string, category: i.category as string, title: i.title as string, prompt: i.prompt as string, previewUrl: str(i.previewUrl) }
+        : null,
+    )
+    .filter((i): i is LibraryItem => i !== null);
+  return { categories, items };
+}
+
+export async function fetchLibrary(signal?: AbortSignal): Promise<LibraryData> {
+  return parseLibrary(await request<unknown>("/api/media/library", signal ? { signal } : {}));
+}
+
+/** `GET /api/media/templates` → templates (a row without a usable shape is dropped). */
+export function parseTemplates(raw: unknown): StudioTemplate[] {
+  const list = isObj(raw) && Array.isArray(raw.items) ? raw.items : [];
+  return list
+    .map((t): StudioTemplate | null => {
+      if (!isObj(t) || !str(t.id) || !str(t.title) || !str(t.modelId) || !str(t.skeleton) || !isObj(t.params) || !Array.isArray(t.slots)) return null;
+      const slots = t.slots
+        .map((s) =>
+          isObj(s) && str(s.name) && str(s.label) && typeof s.max === "number"
+            ? { name: s.name as string, label: s.label as string, max: s.max, ...(str(s.placeholder) ? { placeholder: s.placeholder as string } : {}) }
+            : null,
+        )
+        .filter((s): s is StudioTemplate["slots"][number] => s !== null);
+      return {
+        id: t.id as string,
+        category: str(t.category) ?? "",
+        title: t.title as string,
+        modelId: t.modelId as string,
+        params: { ...t.params },
+        skeleton: t.skeleton as string,
+        slots,
+        previewUrl: str(t.previewUrl),
+      };
+    })
+    .filter((t): t is StudioTemplate => t !== null);
+}
+
+export async function fetchTemplates(signal?: AbortSignal): Promise<StudioTemplate[]> {
+  return parseTemplates(await request<unknown>("/api/media/templates", signal ? { signal } : {}));
+}
+
+export type StudioInput = { assetId: string; mime: string; w: number | null; h: number | null };
+
+function parseInput(raw: unknown): StudioInput {
+  if (!isObj(raw) || !str(raw.assetId)) throw new Error("Rasm yuklanmadi");
+  return { assetId: raw.assetId as string, mime: str(raw.mime) ?? "image/png", w: typeof raw.w === "number" ? raw.w : null, h: typeof raw.h === "number" ? raw.h : null };
+}
+
+/** «Rasm yuklash»: `POST /api/media/inputs` (PNG / JPEG ≤ 5 MB). */
+export async function uploadStudioInput(file: Blob, name = "rasm"): Promise<StudioInput> {
+  const form = new FormData();
+  form.append("file", file, name);
+  return parseInput(await request<unknown>("/api/media/inputs", { method: "POST", body: form, timeoutMs: 60_000 }));
+}
+
+/** «Tahrirlash» / «Sifatini oshirish» / «Fonni olib tashlash» on a result: copies the user's own picture into the inputs. */
+export async function inputFromResult(generationId: string, assetId: string): Promise<StudioInput> {
+  return parseInput(await request<unknown>("/api/media/inputs/from-result", { method: "POST", body: JSON.stringify({ generationId, assetId }) }));
+}
+
+/** `{generationId, assetId}` of a stored result picture URL (`/api/generations/<id>/assets/<asset>`), else `null`. */
+export function resultAssetOf(url: string): { generationId: string; assetId: string } | null {
+  const m = /^\/api\/generations\/([0-9a-f-]{36})\/assets\/([0-9a-f]+)$/.exec(url);
+  return m ? { generationId: m[1]!, assetId: m[2]! } : null;
+}
+
+/** «Yaxshilash (AI)»: `POST /api/media/enhance` — free, rate-limited; the answer goes back into the prompt box. */
+export async function enhancePrompt(prompt: string): Promise<string> {
+  const r = await request<unknown>("/api/media/enhance", { method: "POST", body: JSON.stringify({ prompt }), timeoutMs: 30_000 });
+  const out = isObj(r) ? str(r.prompt) : null;
+  if (!out) throw new Error("Tavsif yaxshilanmadi");
+  return out;
 }

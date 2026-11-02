@@ -1,5 +1,6 @@
 import type { ClientEntry } from "@/lib/studio-core";
 import type { MediaPricing } from "@/lib/media/studio-pricing";
+import type { LibraryItem } from "@/lib/media/library";
 
 /**
  * Wire shapes of the Studio API (docs/studio/P1-SPEC.md «Contract»). The parsers in `studio-api.ts` build these from
@@ -56,3 +57,6 @@ export type GalleryItem = {
 };
 
 export type GalleryPage = { items: GalleryItem[]; nextCursor: string | null };
+
+/** `GET /api/media/library` (P2b): the categories that have prompts and the prompts. */
+export type LibraryData = { categories: { id: string; label: string; count: number }[]; items: LibraryItem[] };

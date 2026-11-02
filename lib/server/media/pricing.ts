@@ -6,7 +6,7 @@ import { mediaOverrides } from "./overrides";
 import { imagePriceOf } from "../../generation/llm-pricing";
 import { geminiImageModel } from "../../generation/image-provider-gemini";
 import { openaiImageModel } from "../../generation/image-provider-openai";
-import { FAL_IMAGE_MODELS, MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "../../media/catalog";
+import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_PURPOSES } from "../../media/catalog";
 
 /**
  * The upstream model each Studio model is drawn with RIGHT NOW (the same functions the engine routes with: the admin
@@ -15,6 +15,8 @@ import { FAL_IMAGE_MODELS, MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE }
 export const STUDIO_UPSTREAM: Readonly<Record<string, () => string>> = {
   "google/nano-banana": geminiImageModel,
   "openai/gpt-image": openaiImageModel,
+  // P2b: the edit twin draws on the same Gemini slot model, so it is priced at that model's live cost too.
+  "google/nano-banana-edit": geminiImageModel,
   ...falUpstreams(),
 };
 
@@ -26,8 +28,9 @@ export const STUDIO_UPSTREAM: Readonly<Record<string, () => string>> = {
  */
 function falUpstreams(): Record<string, () => string> {
   const out: Record<string, () => string> = {};
-  for (const id of FAL_IMAGE_MODELS) {
+  for (const id of studioModels()) {
     const e = MEDIA_CATALOG.byId(id)!;
+    if (!e.routes.some((x) => x.provider === "fal")) continue;
     if (e.cost.per === "output" && e.cost.by) continue;
     const endpoint = e.routes[0]!.upstreamModel;
     out[id] = () => endpoint;
@@ -35,10 +38,15 @@ function falUpstreams(): Record<string, () => string> {
   return out;
 }
 
+/** Every model a Studio purpose sells (P1 pictures + the P2b edit / utility models), catalog order of each purpose. */
+function studioModels(): string[] {
+  return STUDIO_PURPOSES.flatMap((p) => MEDIA_PURPOSES.byId(p)!.allowed);
+}
+
 /** USD of one picture per Studio model at today's upstream (`imagePriceOf`); unknown upstream → left to the catalog rule. */
 export function liveUnitCosts(): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const id of MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.allowed) {
+  for (const id of studioModels()) {
     const upstream = STUDIO_UPSTREAM[id]?.();
     const usd = upstream ? imagePriceOf(upstream) : null;
     if (usd !== null && usd > 0) out[id] = usd;

@@ -30,6 +30,8 @@ const EXPECTED: ReadonlyArray<[string, string]> = [
   ["/admin/broadcasts", "broadcasts.view"],
   ["/admin/settings", "settings.view"],
   ["/admin/providers", "settings.view"],
+  // Studio P2b (docs/studio/P2B-SPEC.md): prompt library + templates.
+  ["/admin/studio", "settings.view"],
   ["/admin/system", "system.view"],
   ["/admin/errors", "errors.view"],
   ["/admin/audit", "audit.view"],

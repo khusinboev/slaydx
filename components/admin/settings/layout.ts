@@ -57,6 +57,7 @@ export const TAB_DEFS: readonly TabDef[] = [
       "free_llm.daily.rewrite",
       "free_llm.daily.polish",
       "free_llm.daily.chat",
+      "free_llm.daily.enhance",
       "chat.price_per_message",
     ],
   },

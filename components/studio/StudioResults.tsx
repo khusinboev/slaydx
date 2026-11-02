@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, RefreshCw, Shuffle } from "lucide-react";
+import { Download, Eraser, Pencil, RefreshCw, Shuffle, ZoomIn } from "lucide-react";
 import type * as api from "@/lib/api-client";
 import type { GenImage } from "@/lib/generation/types";
 import { ApiImg } from "@/lib/use-api-src";
@@ -11,6 +11,40 @@ import { formatSom } from "@/lib/format";
 import { imageExt } from "@/lib/viewers/kind";
 import { currentDeliveryEnv, deliver, markGesture, type ReadyFile } from "@/lib/downloads/deliver";
 import { GenerationProgress } from "@/components/files/GenerationProgress";
+import { MODE_LABEL, TOOL_MODES, type StudioMode } from "./studio-modes";
+
+/** A P2b action on one finished picture: «Tahrirlash», «Sifatini oshirish», «Fonni olib tashlash». */
+export type PictureTool = (mode: Exclude<StudioMode, "image">, picture: { url: string }) => void;
+
+const TOOL_ICON = { edit: Pencil, upscale: ZoomIn, bgremove: Eraser } as const;
+
+/** The three P2b actions over a picture (icon buttons, 44 px, labelled). */
+export function PictureTools({ url, onTool, index, many, inline = false }: { url: string; onTool: PictureTool; index: number; many: boolean; inline?: boolean }) {
+  return (
+    <div className={inline ? "grid grid-cols-3 gap-1" : "absolute bottom-2 left-2 flex gap-1"} data-picture-tools>
+      {TOOL_MODES.map((m) => {
+        const Icon = TOOL_ICON[m];
+        return (
+          <button
+            key={m}
+            type="button"
+            data-result-action={m}
+            aria-label={many ? `${index + 1}-rasm: ${MODE_LABEL[m]}` : MODE_LABEL[m]}
+            title={MODE_LABEL[m]}
+            onClick={() => onTool(m, { url })}
+            className={
+              inline
+                ? "focus-visible:ring-ring hover:bg-muted inline-flex h-11 items-center justify-center rounded-[10px] border outline-none focus-visible:ring-2"
+                : "focus-visible:ring-ring inline-flex size-11 items-center justify-center rounded-lg bg-black/70 text-white outline-none hover:bg-black/85 focus-visible:ring-2"
+            }
+          >
+            <Icon className="size-[18px]" aria-hidden />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 /** One Studio generation the page is following (queued, running, done or failed). */
 export type StudioJob = {
@@ -22,6 +56,8 @@ export type StudioJob = {
   price: number;
   /** The request values: «Qayta» sends exactly these again. */
   sent: Record<string, unknown>;
+  /** The catalog purpose the job was priced under (P2b: edit / upscale / background removal); absent = pictures. */
+  purpose?: string;
   /** Latest state from the server; `null` until the first poll answers. */
   gen: api.GenerationDetail | null;
   /** The polling gave up (the job is gone, or the session ended). */
@@ -68,12 +104,15 @@ export function StudioResults({
   busy,
   onAgain,
   onOtherModel,
+  onTool,
 }: {
   jobs: readonly StudioJob[];
   /** A submit is in flight: «Qayta» waits. */
   busy: boolean;
   onAgain: (job: StudioJob) => void;
   onOtherModel: (job: StudioJob) => void;
+  /** P2b: edit / upscale / remove the background of one picture (absent = no tool buttons). */
+  onTool?: PictureTool;
 }) {
   if (jobs.length === 0) {
     return (
@@ -86,14 +125,14 @@ export function StudioResults({
     <ul className="flex flex-col gap-4" data-studio-jobs aria-label="Natijalar">
       {jobs.map((job) => (
         <li key={job.id} data-studio-job={job.id} data-job-status={job.gen?.status ?? "QUEUED"}>
-          <JobCard job={job} busy={busy} onAgain={onAgain} onOtherModel={onOtherModel} />
+          <JobCard job={job} busy={busy} onAgain={onAgain} onOtherModel={onOtherModel} onTool={onTool} />
         </li>
       ))}
     </ul>
   );
 }
 
-function JobCard({ job, busy, onAgain, onOtherModel }: { job: StudioJob; busy: boolean; onAgain: (j: StudioJob) => void; onOtherModel: (j: StudioJob) => void }) {
+function JobCard({ job, busy, onAgain, onOtherModel, onTool }: { job: StudioJob; busy: boolean; onAgain: (j: StudioJob) => void; onOtherModel: (j: StudioJob) => void; onTool?: PictureTool }) {
   const gen = job.gen;
   // No job state: the job may still finish on the server — say so before a retry charges again.
   if (job.error && !gen) return <Failure job={job} message={`${job.error} Oldingi ish baribir tugashi mumkin — «Ishlarim» yoki Galereyani tekshiring.`} busy={busy} onAgain={onAgain} />;
@@ -106,7 +145,7 @@ function JobCard({ job, busy, onAgain, onOtherModel }: { job: StudioJob; busy: b
     );
   }
   if (gen.status === "QUEUED" || gen.status === "IN_PROGRESS") return <GenerationProgress gen={gen} />;
-  if (gen.status === "COMPLETED") return <Pictures job={job} gen={gen} busy={busy} onAgain={onAgain} onOtherModel={onOtherModel} />;
+  if (gen.status === "COMPLETED") return <Pictures job={job} gen={gen} busy={busy} onAgain={onAgain} onOtherModel={onOtherModel} onTool={onTool} />;
   const message = gen.status === "FAILED" ? gen.error || "Rasm yaratilmadi. Pul balansingizga qaytarildi." : "Ish bekor qilindi.";
   return <Failure job={job} message={message} busy={busy} onAgain={onAgain} />;
 }
@@ -125,7 +164,21 @@ function Failure({ job, message, busy, onAgain }: { job: StudioJob; message: str
   );
 }
 
-function Pictures({ job, gen, busy, onAgain, onOtherModel }: { job: StudioJob; gen: api.GenerationDetail; busy: boolean; onAgain: (j: StudioJob) => void; onOtherModel: (j: StudioJob) => void }) {
+function Pictures({
+  job,
+  gen,
+  busy,
+  onAgain,
+  onOtherModel,
+  onTool,
+}: {
+  job: StudioJob;
+  gen: api.GenerationDetail;
+  busy: boolean;
+  onAgain: (j: StudioJob) => void;
+  onOtherModel: (j: StudioJob) => void;
+  onTool?: PictureTool;
+}) {
   const router = useRouter();
   const images = gen.doc?.images ?? [];
   const page = `/uz/files/${job.id}`;
@@ -150,6 +203,7 @@ function Pictures({ job, gen, busy, onAgain, onOtherModel }: { job: StudioJob; g
               >
                 <Download className="size-[18px]" aria-hidden />
               </button>
+              {onTool ? <PictureTools url={im.url} onTool={onTool} index={i} many={images.length > 1} /> : null}
             </figure>
           ))}
         </div>

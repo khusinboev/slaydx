@@ -92,7 +92,7 @@ async function typePrompt(value: string) {
 const submit = () => click(q("[data-studio-submit]"));
 const label = (n: number, price: number) => `Yaratish · ${n} ta rasm · ${formatSom(price)}`;
 
-test("shell: «Studio» header, subtitle, «Galereya» link, the «Rasm» | «Video» tabs (P3) — no Ovoz / templates decoration", async () => {
+test("shell: «Studio» header, subtitle, «Galereya» link, the «Rasm» | «Video» tabs (P3) — no Ovoz decoration", async () => {
   installApi();
   await mount();
   assert.equal(text("[data-page-header] h1"), "Studio");
@@ -104,7 +104,9 @@ test("shell: «Studio» header, subtitle, «Galereya» link, the «Rasm» | «Vi
   assert.equal(tabs[0]!.getAttribute("aria-selected"), "true");
   assert.equal(tabs[1]!.getAttribute("aria-selected"), "false");
   const page = document.body.textContent ?? "";
-  for (const word of ["Ovoz", "Namuna promptlar", "Shablonlar", "tez orada"]) assert.ok(!page.includes(word), `no «${word}»`);
+  for (const word of ["Ovoz", "tez orada"]) assert.ok(!page.includes(word), `no «${word}»`);
+  // P2b (docs/studio/P2B-SPEC.md): the prompt box's tool row is real now (each button is wired, tests/ui/studio-library.test.mts).
+  assert.ok(page.includes("Namuna promptlar"), "the samples button");
   assert.ok(prompt(), "the prompt box");
   assert.equal(q("[data-model-picker]")?.querySelectorAll("[data-model-card]").length, 2);
 });
@@ -290,7 +292,8 @@ test("a running job shows the app's progress panel; a finished one its pictures 
   const img = q<HTMLImageElement>("[data-studio-picture] img")!;
   assert.match(img.getAttribute("src") ?? "", /^\/api\/generations\/.+\/assets\//);
   const actions = qa("[data-result-action]").map((b) => b.getAttribute("data-result-action"));
-  assert.deepEqual(actions, ["download", "again", "other-model"]);
+  // P2b: + «Tahrirlash», «Sifatini oshirish», «Fonni olib tashlash» on the picture (tests/ui/studio-library.test.mts).
+  assert.deepEqual(actions, ["download", "edit", "upscale", "bgremove", "again", "other-model"]);
   assert.match(text("[data-studio-job-meta]"), new RegExp(`Nano Banana · ${groupDigits(expectedPrice(NANO, 1))} so'm`));
   assert.ok(q("[data-result-open]")?.getAttribute("href")?.startsWith("/uz/files/"), "the full result page");
 });

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Shuffle } from "lucide-react";
 import { ApiImg, useApiSrc } from "@/lib/use-api-src";
+import { PictureTools, type PictureTool } from "./StudioResults";
 import { fetchGallery } from "./studio-api";
 import type { GalleryItem } from "./studio-types";
 
@@ -37,7 +38,7 @@ function VideoThumb({ src, seconds }: { src: string; seconds: number | null }) {
  * ko'rsatish» button (also the only way where there is no observer, and the keyboard's way). A card opens the full
  * result page; «Boshqa modelda» hands its prompt back to the form with the model picker open.
  */
-export function Gallery({ onOtherModel, onCreate }: { onOtherModel: (item: GalleryItem) => void; onCreate: () => void }) {
+export function Gallery({ onOtherModel, onCreate, onTool }: { onOtherModel: (item: GalleryItem) => void; onCreate: () => void; onTool?: PictureTool }) {
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -146,6 +147,8 @@ export function Gallery({ onOtherModel, onCreate }: { onOtherModel: (item: Galle
                 <Shuffle className="size-3.5" aria-hidden />
                 {it.video ? "Yana yaratish" : "Boshqa modelda"}
               </button>
+              {/* P2b: the tools work on the card's first picture (the result page shows every picture); never on a video. */}
+              {onTool && !it.video && it.thumbs[0] ? <PictureTools url={it.thumbs[0]} onTool={onTool} index={0} many={false} inline /> : null}
             </div>
           </li>
         ))}

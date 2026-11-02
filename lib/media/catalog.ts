@@ -20,6 +20,7 @@ import { IMAGE_PROMPT_LIMIT } from "../generation/image-params";
 import { VIDEO_ASPECTS, VIDEO_PROMPT_MAX, VIDEO_PROMPT_MIN, videoProviderById, type VideoProviderId } from "../generation/video/registry";
 import { VIDEO_MAX_BYTES } from "../generation/video/types";
 import { PPTX_SIZE_LIMIT } from "../generation/size-limits";
+import { PHOTO_MAX_BYTES } from "../photo-accept";
 import { STUDIO_VIDEO_ENTRIES, STUDIO_VIDEO_PURPOSE_SPEC } from "./catalog-video";
 
 /** Same as `IMAGE_PROMPT_MIN` in `lib/tools.ts` (not imported: tools.ts will read this file; a test keeps them equal). */
@@ -82,6 +83,122 @@ function charsUsd(provider: string): number {
 
 const IMAGE_OUT = { mimes: ["image/png", "image/jpeg", "image/webp"], maxBytes: PPTX_SIZE_LIMIT } as const;
 const AUDIO_OUT = { mimes: ["audio/mpeg", "audio/wav"], maxBytes: PPTX_SIZE_LIMIT } as const;
+
+/* ═════════════════════ Studio P2b: edit + utility models (docs/studio/P2B-SPEC.md) ═════════════════════
+ * One block on purpose (P3 appends video entries in `catalog-video.ts`; keep merges trivial). Each entry takes the
+ * user's pictures as the `inputImages` param: asset ids of `photo_uploads` rows the user OWNS (an upload, or one of
+ * their own Studio results copied in by `POST /api/media/inputs/from-result`) — checked in SQL before any charge
+ * (`lib/server/media/inputs.ts`), resolved to bytes by the worker. Prices: provider cost × markup like every Studio
+ * model (`studio-pricing.ts`); the cost rows live in the price book (`IMAGE_PRICES`, sources there).
+ */
+
+/** Largest input picture (bytes): the photo upload limit (`lib/photo-accept.ts`) — fal receives inputs inline as data URIs (P2B-SPEC «gaps»). */
+export const STUDIO_INPUT_MAX_BYTES = PHOTO_MAX_BYTES;
+export const STUDIO_INPUT_MIMES = ["image/png", "image/jpeg"] as const;
+/** The one param name every edit / utility model reads its pictures from (the adapters' `assets` key). */
+export const INPUT_IMAGES_PARAM = "inputImages";
+/** Upscale: the longest input side per factor, so the output stays ≤ 4096 px (≤ 16.8 MP — the priced upper bound). */
+export const UPSCALE_MAX_INPUT_SIDE: Readonly<Record<string, number>> = { "2": 2048, "4": 1024 };
+
+const inputImagesParam = (max: number): ParamSchema => ({
+  name: INPUT_IMAGES_PARAM,
+  label: max > 1 ? "Rasmlar" : "Rasm",
+  hint: max > 1 ? `PNG yoki JPEG, ${max} tagacha` : "PNG yoki JPEG",
+  type: "image",
+  min: 1,
+  max,
+  mimes: STUDIO_INPUT_MIMES,
+  maxBytes: STUDIO_INPUT_MAX_BYTES,
+  affects: "request",
+});
+
+const editParams = (maxImages: number): readonly ParamSchema[] => [
+  { name: "prompt", label: "Nimani o'zgartiramiz?", type: "text", min: MEDIA_IMAGE_PROMPT_MIN, max: IMAGE_PROMPT_LIMIT, affects: "request" },
+  inputImagesParam(maxImages),
+  { name: "imageCount", label: "Soni", type: "int", min: 1, max: 4, default: 1, affects: "price" },
+];
+
+function bookPrice(key: string): number {
+  const usd = IMAGE_PRICES[key];
+  if (!(typeof usd === "number" && usd > 0)) throw new Error(`media catalog: no price for ${key}`);
+  return usd;
+}
+
+/** The P2b entries (edit: Nano Banana + Seedream 5 Lite; upscale: SeedVR; background removal: Bria). */
+function studioToolEntries(): CatalogEntry[] {
+  return [
+    {
+      id: "google/nano-banana-edit",
+      kind: "image",
+      capabilities: ["edit"],
+      label: "Nano Banana",
+      maker: "Google",
+      badges: ["tez", "arzon"],
+      params: editParams(3),
+      cost: { per: "output", usd: IMAGE_PRICES[GEMINI_IMAGE_DEFAULT], countParam: "imageCount" },
+      // The same Gemini route as Nano Banana (the admin `image.gemini` slot picks the upstream; the input pictures travel
+      // as `inputImages`, as the graduation portrait sends its selfie).
+      routes: [{ provider: "gemini", upstreamModel: GEMINI_IMAGE_DEFAULT, adapter: "google-image" }],
+      limits: { timeoutMs: 120_000 },
+      output: IMAGE_OUT,
+    },
+    {
+      id: "bytedance/seedream-edit",
+      kind: "image",
+      capabilities: ["edit"],
+      label: "Seedream 5 Lite",
+      maker: "ByteDance",
+      badges: ["sifatli"],
+      params: editParams(3),
+      cost: { per: "output", usd: bookPrice("bytedance/seedream/v5/lite/edit"), countParam: "imageCount" },
+      routes: [{ provider: "fal", upstreamModel: "bytedance/seedream/v5/lite/edit", adapter: "fal" }],
+      limits: { timeoutMs: 120_000 },
+      output: IMAGE_OUT,
+    },
+    {
+      id: "bytedance/seedvr-upscale",
+      kind: "image",
+      capabilities: ["upscale"],
+      label: "SeedVR Upscale",
+      maker: "ByteDance",
+      badges: ["arzon"],
+      params: [
+        inputImagesParam(1),
+        {
+          name: "factor",
+          label: "Kattalashtirish",
+          hint: "×2 — 2048 px gacha rasm, ×4 — 1024 px gacha",
+          type: "enum",
+          options: [
+            { value: "2", label: "×2" },
+            { value: "4", label: "×4" },
+          ],
+          default: "2",
+          affects: "request",
+        },
+      ],
+      cost: { per: "job", usd: bookPrice("fal-ai/seedvr/upscale/image") },
+      routes: [{ provider: "fal", upstreamModel: "fal-ai/seedvr/upscale/image", adapter: "fal" }],
+      limits: { timeoutMs: 120_000 },
+      output: IMAGE_OUT,
+    },
+    {
+      id: "bria/background-remove",
+      kind: "image",
+      capabilities: ["bg-remove"],
+      label: "Bria RMBG",
+      maker: "Bria",
+      badges: ["tez", "arzon"],
+      params: [inputImagesParam(1)],
+      cost: { per: "job", usd: bookPrice("fal-ai/bria/background/remove") },
+      routes: [{ provider: "fal", upstreamModel: "fal-ai/bria/background/remove", adapter: "fal" }],
+      limits: { timeoutMs: 60_000 },
+      // A cut-out must keep its transparency: PNG only (the adapter also checks the alpha channel).
+      output: { mimes: ["image/png"], maxBytes: PPTX_SIZE_LIMIT },
+    },
+  ];
+}
+/* ═════════════════════ end of the P2b block ═════════════════════ */
 
 export const MEDIA_ENTRIES: readonly CatalogEntry[] = [
   {
@@ -169,6 +286,8 @@ export const MEDIA_ENTRIES: readonly CatalogEntry[] = [
     output: { mimes: ["video/mp4"], maxBytes: VIDEO_MAX_BYTES },
   },
   ...STUDIO_VIDEO_ENTRIES,
+  // ───── Studio P2b: edit + utility models (docs/studio/P2B-SPEC.md) — kept as one block, see `STUDIO_TOOL_ENTRIES`.
+  ...studioToolEntries(),
   speech("google/tts", "Gemini TTS", "Google", "gemini", "gemini-speech", 0.015),
   speech("elevenlabs/tts", "ElevenLabs", "ElevenLabs", "elevenlabs", "elevenlabs-speech", charsUsd("elevenlabs")),
   speech("azure/tts", "Azure Speech", "Microsoft", "azure", "azure-speech", charsUsd("azure")),
@@ -236,7 +355,7 @@ function fal(
 export const MEDIA_CATALOG = defineCatalog(MEDIA_ENTRIES);
 
 /** The Studio image models drawn through fal (catalog order). */
-export const FAL_IMAGE_MODELS: readonly string[] = MEDIA_ENTRIES.filter((e) => e.kind === "image" && e.routes.some((r) => r.provider === "fal")).map((e) => e.id);
+export const FAL_IMAGE_MODELS: readonly string[] = MEDIA_ENTRIES.filter((e) => e.kind === "image" && e.capabilities.includes("t2i") && e.routes.some((r) => r.provider === "fal")).map((e) => e.id);
 
 /**
  * Short model name for the image viewer: the «Rasm» names for its two models (old docs store `gemini` / `openai`, the
@@ -267,6 +386,10 @@ const SPEECH_CHAIN = ["azure/tts", "aisha/tts", "google/tts"];
 
 /** Purpose of the Studio «Rasm» tab (tool `studio-image`). */
 export const STUDIO_IMAGE_PURPOSE = "studio.image";
+/** P2b purposes (docs/studio/P2B-SPEC.md): edit with a prompt, upscale, background removal. */
+export const STUDIO_EDIT_PURPOSE = "studio.edit";
+export const STUDIO_UPSCALE_PURPOSE = "studio.upscale";
+export const STUDIO_BGREMOVE_PURPOSE = "studio.bgremove";
 
 export const MEDIA_PURPOSES = definePurposes(MEDIA_CATALOG, [
   { id: "rasm.image", kind: "image", allowed: ["google/nano-banana", "openai/gpt-image"], default: "google/nano-banana", userCanChoose: true },
@@ -283,4 +406,16 @@ export const MEDIA_PURPOSES = definePurposes(MEDIA_CATALOG, [
   // P2a: + the fal models, Nano Banana stays the default.
   { id: STUDIO_IMAGE_PURPOSE, kind: "image", allowed: ["google/nano-banana", "openai/gpt-image", ...FAL_IMAGE_MODELS], default: "google/nano-banana", userCanChoose: true },
   STUDIO_VIDEO_PURPOSE_SPEC,
+  // P2b (docs/studio/P2B-SPEC.md): the Studio's edit and utility jobs — same tool, same charge / refund / gallery.
+  { id: STUDIO_EDIT_PURPOSE, kind: "image", allowed: ["google/nano-banana-edit", "bytedance/seedream-edit"], default: "google/nano-banana-edit", userCanChoose: true },
+  { id: STUDIO_UPSCALE_PURPOSE, kind: "image", allowed: ["bytedance/seedvr-upscale"], default: "bytedance/seedvr-upscale", userCanChoose: false },
+  { id: STUDIO_BGREMOVE_PURPOSE, kind: "image", allowed: ["bria/background-remove"], default: "bria/background-remove", userCanChoose: false },
 ]);
+
+/** Every purpose the Studio «Rasm» tab sells through tool `studio-image` (one model belongs to exactly one). */
+export const STUDIO_PURPOSES: readonly string[] = [STUDIO_IMAGE_PURPOSE, STUDIO_EDIT_PURPOSE, STUDIO_UPSCALE_PURPOSE, STUDIO_BGREMOVE_PURPOSE];
+
+/** The Studio purpose that sells `modelId`, or `null` when the Studio does not sell it. */
+export function studioPurposeOf(modelId: string): string | null {
+  return STUDIO_PURPOSES.find((p) => MEDIA_PURPOSES.byId(p)!.allowed.includes(modelId)) ?? null;
+}
