@@ -31,7 +31,7 @@ import { groupDigits } from "../lib/format.ts";
  *
  * Mutations (each turned the named test red, then restored):
  *   1. `buildKlingV3Request` drops `sound`                          -> «Kling 3.0 golden», «probe»;
- *   2. tier adapter `kling-v3-pro` sends mode `std`                 -> «Kling 3.0 golden», «probe»;
+ *   2. tier adapter `kling-v3-pro` sends mode `std`                 -> «Kling 3.0 golden»;
  *   3. effect body without `effect_scene`                           -> «effects golden», «probe»;
  *   4. cost table `sound.true` = the silent price                   -> «price goldens», «probe»;
  *   5. klingStudioAdapter submit maps a 4xx as accepted             -> «error mapping»;

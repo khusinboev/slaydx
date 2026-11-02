@@ -23,7 +23,7 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *
  * Mutations (each turned the named test red, then restored):
  *   1. `claimDueOps` without the `studio.video` claim                 -> «flow: Kling 3.0» (never finishes);
- *   2. `pollerFor` studio branch removed (old `videoRoute` path)      -> «flow: Kling 3.0», «flow: effect»;
+ *   2. `pollerFor` studio branch removed (old `videoRoute` path)      -> «flow: effect» (the old Kling adapter cannot ask /effects);
  *   3. `failVideo` without the refund                                 -> «refunds»;
  *   4. submit-generation without the `video.enabled` check for studio -> «gating»;
  *   5. `isPaidOnlyTool` = only `video`                                -> «money»;
