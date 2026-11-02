@@ -55,7 +55,7 @@ Prices: one place, `priceFor` (server); admin «Narxlar» page adjusts 25–1000
   with fallbacks. xAI/Grok, OpenRouter and OpenAI-as-text were removed (2026-10-31); a leftover `LLM_<ROLE>` entry naming one of them is skipped with a
   warn line and the valid entries keep working. Old `ai_usage`/`cost_json` rows of those providers stay readable in the admin cost reports.
   Images: Gemini lite image for «Rasm»/pro slides, OpenAI gpt-image («ChatGPT» choice of «Rasm», `OPENAI_API_KEY`, registry id `openai-image`),
-  free stock Pexels → Pixabay for plain slides (fal.ai was removed); TTS: **Gemini** (`TTS_GEMINI_MODEL`, two voices: female Kore / male Charon,
+  free stock Pexels → Pixabay for plain slides (the old fal.ai rasm provider was removed 2026-10-31; fal is back 2026-11-02 ONLY as the Studio aggregator, key in the admin store only — compose does not pass `FAL_KEY` on purpose); TTS: **Gemini** (`TTS_GEMINI_MODEL`, two voices: female Kore / male Charon,
   preview in the form). Gemini TTS preview quota ≈ 10 requests/min/model → chunks ≤ 1 400 chars, 90 s call timeout, pg rate limit `tts:gemini:rpm`.
 - **Admin «Provayderlar» (redesigned 2026-10-31)** — one page for everything about providers: purpose cards («Nima uchun nima kerak»: what each purpose
   needs and whether the setup is enough — Yetarli / Yetarli, zaxirasiz / Yetarli emas / Yoqilmagan, `lib/server/providers/catalog.ts`), provider cards
@@ -68,6 +68,13 @@ Prices: one place, `priceFor` (server); admin «Narxlar» page adjusts 25–1000
   the stored voice order. Writes need `settings.edit` + step-up + reason and are audited (`routes.set` / `routes.reset`).
 - Metering: `ai_usage` + `cost_json`; pricing tables in `lib/generation/llm-pricing.ts`. Roughly 25 % of price is AI cost; bonus points are a marketing cost.
 - Failure logging: `[llm] attempt failed`, `[llm] json repaired`, `[llm] stream anomaly` lines (worker logs). Slide JSON repair: `docs/llm/SLIDE-BAD-JSON.md`.
+
+- **Studio / media engine** (`docs/studio/PLAN.md`, `P0/P1/P2-SPEC.md`): one core `lib/studio-core/` + SlaydX catalog `lib/media/` + host `lib/server/media/`;
+  every provider call of a job is a `media_jobs` row (migration 065; sweeper fails stuck sync rows > 1 h, purges > 90 days). Switches
+  `media.core.image|video|speech` (default OFF) move today's engines onto the core. `/uz/studio` (tool `studio-image`): Nano Banana, GPT Image
+  (needs the OpenAI key), fal: FLUX 3, Seedream 5 Lite/Pro, Ideogram 4.5, Recraft 4.1/Pro. Price = live upstream cost × `media.markup` (2), up to
+  100 so'm, then `tool_pricing` %; per-model enable / markup override in admin «Narxlar» → «Media modellari» (migration 066). Old «Rasm» keeps its
+  ladder until P8. ElevenLabs Creator plan, Kling trial and fal $10 bought 2026-11-01/02.
 
 ## 6. Bot, Mini App, sessions
 - Bot = same services as the web (no business logic of its own). Admin panel inside the bot is a **reply keyboard**: Statistika, Xabar yuborish,
