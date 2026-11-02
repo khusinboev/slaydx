@@ -106,6 +106,8 @@ export type GalleryItem = {
   video: GalleryVideo | null;
   /** The packed result (one image, a zip, or the MP4): `/api/generations/<id>/file`. */
   fileUrl: string;
+  /** P7b: the user starred it (`studio_favorites`, read with the owner in the WHERE). */
+  favorite: boolean;
 };
 
 type Row = {
@@ -119,6 +121,7 @@ type Row = {
   images: unknown;
   video: unknown;
   speech: unknown;
+  favorite: boolean;
 };
 
 function audioOf(id: string, raw: unknown): GalleryAudio {
@@ -166,9 +169,19 @@ export function parseGalleryCursor(raw: string | null): ListCursor | null {
   return c;
 }
 
-export async function studioGallery(userId: string, cursor: ListCursor | null, limit = GALLERY_PAGE): Promise<{ items: GalleryItem[]; nextCursor: string | null }> {
+/**
+ * P7b «Sevimlilar» (`favorites: true`): only the starred items, with the same order and keyset cursor (a cursor of
+ * the full list is a valid starting point of the filtered one — both are ordered by `created_at, id`).
+ */
+export async function studioGallery(
+  userId: string,
+  cursor: ListCursor | null,
+  limit = GALLERY_PAGE,
+  opts: { favorites?: boolean } = {},
+): Promise<{ items: GalleryItem[]; nextCursor: string | null }> {
   const rows = await query<Row>(
     `SELECT id, tool_id, created_at, topic,
+            EXISTS (SELECT 1 FROM studio_favorites f WHERE f.user_id = $1 AND f.generation_id = generations.id) AS favorite,
             to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS cursor_ts,
             COALESCE(doc_json->>'imageModel', doc_json->'video'->>'model', doc_json->'speech'->>'model', doc_json->'studioAudio'->>'model') AS model,
             COALESCE(doc_json->>'imagePrompt', doc_json->'video'->>'prompt', doc_json->'studioAudio'->>'prompt') AS prompt,
@@ -178,9 +191,10 @@ export async function studioGallery(userId: string, cursor: ListCursor | null, l
         AND ($2::timestamp IS NULL
              OR (created_at <= ($2::timestamp AT TIME ZONE 'UTC')
                  AND (created_at < ($2::timestamp AT TIME ZONE 'UTC') OR id < $3::uuid)))
+        AND (NOT $5::boolean OR EXISTS (SELECT 1 FROM studio_favorites f WHERE f.user_id = $1 AND f.generation_id = generations.id))
       ORDER BY created_at DESC, id DESC
       LIMIT $4`,
-    [userId, cursor?.ts ?? null, cursor?.id ?? null, limit + 1],
+    [userId, cursor?.ts ?? null, cursor?.id ?? null, limit + 1, opts.favorites === true],
   );
   const page = rows.slice(0, limit);
   const last = page[page.length - 1];
@@ -201,6 +215,7 @@ export async function studioGallery(userId: string, cursor: ListCursor | null, l
         images: isVideo || isAudio ? [] : imagesOf(r.id, r.images),
         video: isVideo ? videoOf(r.id, r.video) : null,
         fileUrl: `/api/generations/${r.id}/file`,
+        favorite: r.favorite === true,
       };
     }),
     nextCursor: rows.length > limit && last ? encodeCursor({ ts: last.cursor_ts, id: last.id }) : null,
