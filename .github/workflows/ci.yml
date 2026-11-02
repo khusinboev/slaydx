@@ -7,8 +7,9 @@
 #   build         native `next build` (+ .next/cache)
 #   images        main pushes only: build web + worker in ONE BuildKit (shared stages built once, byte-identical
 #                 shared layers), push `build-<sha>` candidate tags to GHCR
-#   images-check  PRs / manual runs: the same image build with no push and no cache export, read-only token —
-#                 catches Dockerfile / lockfile / docker-only (esbuild parse-worker) breakage before merge
+#   images-check  PRs / manual runs: the same image build with no image push (catches Dockerfile / lockfile / docker-only
+#                 breakage before merge); same-repo PRs also export a BuildKit registry cache keyed by the merge TREE
+#                 (`slaydx-buildcache:<web|worker>-<tree>`) so the main run of that tree skips `next build` (owner 2026-11-02)
 #   ci-ok         the single aggregate status (require this one in branch protection)
 #   promote       main only, after ci-ok: re-tag the tested digests as `<sha>` (+ `main` if still the tip);
 #                 prints the deploy command. Only `<sha>` tags are deployable, so untested code never reaches prod.
@@ -46,6 +47,8 @@ env:
     variable "REGISTRY" { default = "ghcr.io/khusinboev" }
     variable "GIT_SHA" { default = "unknown" }
     variable "CACHE_EXPORT" { default = "false" }
+    variable "TREE" { default = "none" }
+    variable "REG_CACHE_EXPORT" { default = "false" }
     group "default" { targets = ["web", "worker"] }
     target "_common" {
       context    = "."
@@ -56,19 +59,19 @@ env:
         "org.opencontainers.image.source"   = "https://github.com/khusinboev/slaydx"
         "org.opencontainers.image.revision" = GIT_SHA
       }
-      cache-from = ["type=gha,scope=web", "type=gha,scope=worker"]
+      cache-from = ["type=gha,scope=web", "type=gha,scope=worker", "type=registry,ref=${REGISTRY}/slaydx-buildcache:web-${TREE}", "type=registry,ref=${REGISTRY}/slaydx-buildcache:worker-${TREE}"]
     }
     target "web" {
       inherits = ["_common"]
       target   = "runner"
       tags     = ["${REGISTRY}/slaydx-web:build-${GIT_SHA}"]
-      cache-to = CACHE_EXPORT == "true" ? ["type=gha,scope=web,mode=max"] : []
+      cache-to = concat(CACHE_EXPORT == "true" ? ["type=gha,scope=web,mode=max"] : [], REG_CACHE_EXPORT == "true" ? ["type=registry,ref=${REGISTRY}/slaydx-buildcache:web-${TREE},mode=max,image-manifest=true,oci-mediatypes=true"] : [])
     }
     target "worker" {
       inherits = ["_common"]
       target   = "worker"
       tags     = ["${REGISTRY}/slaydx-worker:build-${GIT_SHA}"]
-      cache-to = CACHE_EXPORT == "true" ? ["type=gha,scope=worker,mode=max"] : []
+      cache-to = concat(CACHE_EXPORT == "true" ? ["type=gha,scope=worker,mode=max"] : [], REG_CACHE_EXPORT == "true" ? ["type=registry,ref=${REGISTRY}/slaydx-buildcache:worker-${TREE},mode=max,image-manifest=true,oci-mediatypes=true"] : [])
     }
 
 jobs:
@@ -235,6 +238,11 @@ jobs:
         run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
       - name: Write bake definition
         run: printf '%s' "$SLAYDX_BAKE_HCL" >"$RUNNER_TEMP/slaydx-bake.hcl"
+      # The merge commit's TREE: when the PR was up to date with main, its image-check pushed a registry build cache under
+      # this tree, so `next build` (≈ 8 min in BuildKit) is a cache hit here. A different tree just misses (normal build).
+      - name: Tree hash
+        id: tree
+        run: echo "tree=$(git rev-parse 'HEAD^{tree}')" >>"$GITHUB_OUTPUT"
       # Both targets in one Bake run: BuildKit solves them concurrently and builds shared stages once.
       # provenance off → plain single-platform manifests, so `promote` can carbon-copy them by digest.
       - name: Build and push web + worker
@@ -249,6 +257,7 @@ jobs:
             REGISTRY=${{ env.REGISTRY }}
             GIT_SHA=${{ github.sha }}
             CACHE_EXPORT=true
+            TREE=${{ steps.tree.outputs.tree }}
       - name: Record digests
         id: digests
         env:
@@ -289,11 +298,21 @@ jobs:
     # Decision: PRs build both images WITHOUT pushing (instead of skipping). It costs no server or laptop resources,
     # proves the Dockerfile still builds before merge (P-IMG reshapes it this sprint; the parse-worker esbuild bundle
     # only exists in the image), reads main's gha cache but never writes PR-scoped cache entries, and runs with a
-    # read-only token — no job that executes PR code ever holds `packages: write`.
+    # read-only token for the IMAGES — they are never pushed.
+    # Deploy speed-up (owner decision 2026-11-02): PRs from THIS repository also push a BuildKit registry CACHE keyed by the
+    # merge tree (`slaydx-buildcache:<web|worker>-<tree>`), so the main run of the same tree skips the ≈ 8 min `next build`.
+    # Fork PRs get a read-only token from GitHub and never export (SAME_REPO below). Anyone who can push a branch here
+    # can already push to main, so the grant does not widen who can influence a main build; the deployable `<sha>` tags
+    # are still produced only by `images` + `promote` on main, after every test passed.
     name: images (build only, no push)
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      SAME_REPO: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -309,6 +328,15 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Write bake definition
         run: printf '%s' "$SLAYDX_BAKE_HCL" >"$RUNNER_TEMP/slaydx-bake.hcl"
+      - name: Tree hash
+        id: tree
+        run: echo "tree=$(git rev-parse 'HEAD^{tree}')" >>"$GITHUB_OUTPUT"
+      - name: Log in to GHCR (cache export, same-repo PRs only)
+        if: env.SAME_REPO == 'true'
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
       - name: Build web + worker (no push)
         uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
         with:
@@ -320,6 +348,11 @@ jobs:
             REGISTRY=${{ env.REGISTRY }}
             GIT_SHA=${{ github.sha }}
             CACHE_EXPORT=false
+            TREE=${{ steps.tree.outputs.tree }}
+            REG_CACHE_EXPORT=${{ env.SAME_REPO }}
+      - name: Log out of GHCR
+        if: always() && env.SAME_REPO == 'true'
+        run: docker logout ghcr.io
 
   ci-ok:
     # The one required status. `always()` (not `!cancelled()`): a skipped required check counts as passing in branch
