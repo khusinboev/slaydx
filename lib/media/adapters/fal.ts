@@ -28,6 +28,9 @@
  * why nothing here retries a submit and the router never falls back after acceptance.
  *
  * Error texts never contain the key: every message passes `scrub` (the key itself and `Key …` header shapes).
+ *
+ * VIDEO (Studio P4, docs/studio/P4-SPEC.md) is a separate ASYNC adapter at the end of this file (`falVideoAdapter`):
+ * submit only queues and returns an op id; the shared video poll loop polls it. The picture cycle above is unchanged.
  */
 import { MediaError, checkOutput, isRetryableStatus, type AdapterAsset, type AdapterDeps, type AdapterInput, type MediaAdapter, type MediaOutput, type NormalizedParams, type PollResult } from "../../studio-core";
 import { IMAGE_RATIOS } from "../../generation/image-studio-options";

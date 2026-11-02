@@ -19,8 +19,11 @@
  * EFFECT SCENES: Kling documents 219 effect scenes but its list page is not readable; the nine below are single-image
  * scenes that appear by these exact ids in BOTH pass-through lists — fal `fal-ai/kling-video/v1.6/standard/effects`
  * (https://fal.ai/models/fal-ai/kling-video/v1.6/standard/effects/llms.txt) and WaveSpeed `kwaivgi/kling-effects`
- * (URL above). The canvas's «Quchoqlash» (hug_pro: TWO photos), «Xotira tiriladi», «Trampolin» and «Kiyim» have no
- * single-image scene with a documented id and are not sold.
+ * (URL above). «Xotira tiriladi», «Trampolin» and «Kiyim» have no scene with a documented id and are not sold.
+ *
+ * STUDIO P4 (docs/studio/P4-SPEC.md): «Quchoqlash» is the direct API's documented TWO-photo scene `hug`
+ * (`KLING_DUAL_EFFECTS`; fal's `hug_pro` is a ONE-image scene, not the two-photo one); Kling 3.0 takes an end frame
+ * (`endImageAssetId` → `image_tail`); five more models through fal (`FAL_VIDEO_ENTRIES`, block below).
  */
 import type { CatalogEntry, ParamSchema, PurposeSpec } from "../studio-core";
 import { VIDEO_PROMPT_MAX, VIDEO_PROMPT_MIN } from "../generation/video/registry";
