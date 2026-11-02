@@ -75,9 +75,13 @@ test("docker-compose: LLM rollari va manba qidiruv kalitlari web va worker'ga uz
 });
 
 /**
- * fal.ai, xAI and OpenRouter were removed: nothing may pass or document their variables any more, while
+ * xAI and OpenRouter were removed: nothing may pass or document their variables any more, while
  * `OPENAI_API_KEY` stays (the «ChatGPT» image choice reads it) in BOTH services.
- * Mutation check: put `XAI_API_KEY: ${XAI_API_KEY:-}` back into either service block -> this fails.
+ * fal.ai came back for the Studio (P2a, 2026-11-02) but its key lives ONLY in the admin store: compose and
+ * `.env.example` deliberately carry no `FAL_*` variable, so a stale key left in the server `.env` from before the
+ * 2026-10-31 removal (its balance ran out) cannot switch the Studio's fal models on at deploy
+ * (`lib/server/providers/registry.ts`). This test keeps pinning that absence.
+ * Mutation check: put `XAI_API_KEY: ${XAI_API_KEY:-}` (or `FAL_KEY: ${FAL_KEY:-}`) back into either service block -> this fails.
  */
 test("docker-compose / .env.example: removed providers' variables are gone, OPENAI_API_KEY stays", () => {
   const yaml = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");

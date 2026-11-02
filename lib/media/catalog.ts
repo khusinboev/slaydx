@@ -13,9 +13,9 @@
  * (`providers/route-effective.ts`), the host swaps it into the route. The value below is only the default.
  */
 import { defineCatalog, definePurposes, type CatalogEntry, type NormalizedParams, type ParamSchema, type PriceOverride } from "../studio-core";
-import { IMAGE_PRICES, OPENAI_IMAGE_FALLBACK_USD, TTS_PRICING } from "../generation/llm-pricing";
+import { FAL_IDEOGRAM_QUALITY_USD, IMAGE_PRICES, OPENAI_IMAGE_FALLBACK_USD, TTS_PRICING } from "../generation/llm-pricing";
 import { IMAGE_RATIOS, IMAGE_STYLES } from "../generation/image-studio-options";
-import { imageBasePrice, type ImageModelId } from "../generation/image-models";
+import { imageBasePrice, imageModelById, type ImageModelId } from "../generation/image-models";
 import { IMAGE_PROMPT_LIMIT } from "../generation/image-params";
 import { VIDEO_ASPECTS, VIDEO_PROMPT_MAX, VIDEO_PROMPT_MIN, videoProviderById, type VideoProviderId } from "../generation/video/registry";
 import { VIDEO_MAX_BYTES } from "../generation/video/types";
@@ -109,6 +109,38 @@ export const MEDIA_ENTRIES: readonly CatalogEntry[] = [
     limits: { timeoutMs: 90_000 },
     output: IMAGE_OUT,
   },
+  // fal.ai models (docs/studio/P2-SPEC.md): one generic adapter (`adapters/fal.ts`), the endpoint id is the upstream.
+  fal("bfl/flux", "FLUX 3", "Black Forest Labs", ["sifatli"], "blackforestlabs/flux-3/text-to-image", flatFalCost("blackforestlabs/flux-3/text-to-image"), 90_000),
+  // Two tiers of one family are two models (owner 2026-11-02): the user sees and pays each tier's own price.
+  fal("bytedance/seedream", "Seedream 5 Lite", "ByteDance", ["arzon", "tez"], "bytedance/seedream/v5/lite/text-to-image", flatFalCost("bytedance/seedream/v5/lite/text-to-image"), 120_000),
+  fal("bytedance/seedream-pro", "Seedream 5 Pro", "ByteDance", ["sifatli"], "bytedance/seedream/v5/pro/text-to-image", flatFalCost("bytedance/seedream/v5/pro/text-to-image"), 120_000),
+  fal(
+    "ideogram/ideogram",
+    "Ideogram 4.5",
+    "Ideogram",
+    ["matn", "sifatli"],
+    "ideogram/v4.5",
+    { per: "output", usd: FAL_IDEOGRAM_QUALITY_USD.medium, countParam: "imageCount", by: { param: "quality", table: FAL_IDEOGRAM_QUALITY_USD } },
+    120_000,
+    [
+      {
+        name: "quality",
+        label: "Sifat",
+        hint: "Yuqori sifat qimmatroq",
+        type: "enum",
+        options: [
+          { value: "low", label: "Tez" },
+          { value: "medium", label: "Standart" },
+          { value: "high", label: "Yuqori" },
+        ],
+        default: "medium",
+        affects: "both",
+        advanced: true,
+      },
+    ],
+  ),
+  fal("recraft/recraft", "Recraft 4.1", "Recraft", ["arzon"], "fal-ai/recraft/v4.1/text-to-image", flatFalCost("fal-ai/recraft/v4.1/text-to-image"), 90_000),
+  fal("recraft/recraft-pro", "Recraft 4.1 Pro", "Recraft", ["sifatli"], "fal-ai/recraft/v4.1/pro/text-to-image", flatFalCost("fal-ai/recraft/v4.1/pro/text-to-image"), 120_000),
   {
     id: "google/omni-video",
     kind: "video",
@@ -162,7 +194,57 @@ function speech(id: string, label: string, maker: string, provider: string, adap
   };
 }
 
+/** Flat fal price per picture from the price book (`IMAGE_PRICES`, sources there); a missing row fails at load. */
+function flatFalCost(endpoint: string): CatalogEntry["cost"] {
+  const usd = IMAGE_PRICES[endpoint];
+  if (!(typeof usd === "number" && usd > 0)) throw new Error(`media catalog: no fal price for ${endpoint}`);
+  return { per: "output", usd, countParam: "imageCount" };
+}
+
+/**
+ * A text-to-image model on fal: the Studio's image params (same rows, same validation) + the model's own params, if
+ * any (each changes the request or the price: «every param must work», `tests/media-fal.test.mts`). The provider id
+ * `fal` decides availability (key + switch in «Provayderlar»), the adapter `fal` speaks to it.
+ */
+function fal(
+  id: string,
+  label: string,
+  maker: string,
+  badges: CatalogEntry["badges"],
+  endpoint: string,
+  cost: CatalogEntry["cost"],
+  timeoutMs: number,
+  extra: readonly ParamSchema[] = [],
+): CatalogEntry {
+  return {
+    id,
+    kind: "image",
+    capabilities: ["t2i"],
+    label,
+    maker,
+    badges,
+    params: [...imageParams, ...extra],
+    cost,
+    routes: [{ provider: "fal", upstreamModel: endpoint, adapter: "fal" }],
+    limits: { timeoutMs },
+    output: IMAGE_OUT,
+  };
+}
+
 export const MEDIA_CATALOG = defineCatalog(MEDIA_ENTRIES);
+
+/** The Studio image models drawn through fal (catalog order). */
+export const FAL_IMAGE_MODELS: readonly string[] = MEDIA_ENTRIES.filter((e) => e.kind === "image" && e.routes.some((r) => r.provider === "fal")).map((e) => e.id);
+
+/**
+ * Short model name for the image viewer: the «Rasm» names for its two models (old docs store `gemini` / `openai`, the
+ * Studio stores their catalog ids), the catalog label for every other catalog model, `null` for an unknown id.
+ */
+export function imageModelLabel(id: string): string | null {
+  const rasm = IMAGE_MODEL_TO_MEDIA[id as ImageModelId] ? id : Object.entries(IMAGE_MODEL_TO_MEDIA).find(([, v]) => v === id)?.[0];
+  if (rasm) return imageModelById(rasm).short;
+  return MEDIA_CATALOG.byId(id)?.label ?? null;
+}
 
 /** Today's `rasm` / `video` model ids ↔ catalog ids (the forms keep sending the old values in P0). */
 export const IMAGE_MODEL_TO_MEDIA: Readonly<Record<ImageModelId, string>> = { gemini: "google/nano-banana", openai: "openai/gpt-image" };
@@ -196,5 +278,6 @@ export const MEDIA_PURPOSES = definePurposes(MEDIA_CATALOG, [
   // The operator may put ElevenLabs into `tts.order`; the listening chain then speaks through it (N3: allowed, not chosen).
   { id: "listening.voice", kind: "speech", allowed: [...SPEECH_CHAIN, "elevenlabs/tts"], default: "azure/tts", userCanChoose: false },
   // Studio «Rasm» tab (docs/studio/P1-SPEC.md): the user picks the model; priced cost × markup (lib/media/studio-pricing.ts).
-  { id: STUDIO_IMAGE_PURPOSE, kind: "image", allowed: ["google/nano-banana", "openai/gpt-image"], default: "google/nano-banana", userCanChoose: true },
+  // P2a: + the fal models, Nano Banana stays the default.
+  { id: STUDIO_IMAGE_PURPOSE, kind: "image", allowed: ["google/nano-banana", "openai/gpt-image", ...FAL_IMAGE_MODELS], default: "google/nano-banana", userCanChoose: true },
 ]);

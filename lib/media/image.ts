@@ -14,14 +14,15 @@
  * it did not reach the provider — and the number of calls in flight is unchanged.
  */
 import { createHash } from "node:crypto";
-import { MediaError, type ParamValue } from "../studio-core";
+import { MediaError, costUsd, normalize, type MediaAdapter, type ParamValue } from "../studio-core";
 import { MEDIA_CATALOG } from "./catalog";
 import { nextMediaStep } from "./context";
 import { ImageMediaError, imageProviderAdapter, originalImage } from "./adapters/image";
 import { runMedia } from "../server/media/run";
 import { IMAGE_RATIOS, IMAGE_STYLES } from "../generation/image-studio-options";
 import { imagePriceOf } from "../generation/llm-pricing";
-import type { ImageAsk, ImageProvider, ImageResult } from "../generation/image-provider";
+import { recordImageUsd } from "../generation/job-cost";
+import type { ImageAsk, ImageFailure, ImageProvider, ImageProviderId, ImageResult } from "../generation/image-provider";
 
 export type CoreImageOpts = {
   /** Upstream model of the route right now: the admin slot (`image.gemini`) or env, so `media_jobs.upstream_model` is true. */
@@ -86,6 +87,69 @@ export function coreImageProvider(purpose: string, modelId: string, base: ImageP
         // The provider's own verdict, verbatim; anything else the core says (no route, unknown model) is a plain failure.
         if (e instanceof ImageMediaError) return { ok: false, reason: e.reason, detail: e.detail };
         if (e instanceof MediaError) return failed(e.message);
+        throw e;
+      }
+    },
+  };
+}
+
+export type CoreAdapterOpts = {
+  /** The `ImageProvider` id (limiter `<id>-image`, logs). */
+  id: ImageProviderId;
+  /** Shortest useful time for one picture (the limiter does not start a call with less left). */
+  minMs: number;
+  /** Param values recorded in `media_jobs.params` and priced (the user's prompt, style, ratio, the model's own params). */
+  values?: Readonly<Record<string, unknown>>;
+};
+
+/**
+ * A provider's `MediaError` in the engines' `ImageFailure` terms. A content-policy refusal keeps the
+ * `moderation_blocked` lead (`image-studio.ts isRefusal` gives the user the «change the description» message, as for
+ * OpenAI); an account answer (401 / 402 / 403) is `blocked`; 429 is `rate`; a timeout is `timeout`.
+ */
+export function failureOf(e: MediaError): { reason: ImageFailure; detail: string } {
+  const detail = `${e.status ? `${e.status} ` : ""}${e.message}`.replace(/^(\d{3}) \1 /, "$1 ");
+  if (e.safety) return { reason: "failed", detail: `moderation_blocked (${e.provider}): ${e.message}` };
+  if (e.status === 401 || e.status === 402 || e.status === 403) return { reason: "blocked", detail };
+  if (e.status === 429) return { reason: "rate", detail };
+  if (/vaqt tugadi|byudjet|timeout|aborted/i.test(e.message)) return { reason: "timeout", detail };
+  return { reason: "failed", detail };
+}
+
+/**
+ * An `ImageProvider` that draws with a NATIVE media-core adapter (fal, docs/studio/P2-SPEC.md) — no legacy provider
+ * behind it. Each `fetchImage` is one `runMedia` call (router, breaker, a `media_jobs` row), bounded by the job's
+ * deadline AND the model's own `limits.timeoutMs`; the inline output comes back as a `data:` URL, the spend is metered
+ * (`recordImageUsd`, the catalog cost of one picture with these params), and a failure is translated by `failureOf`.
+ * The limiter wraps it from outside, as for the other providers (`limitedProvider(coreAdapterImageProvider(…))`).
+ */
+export function coreAdapterImageProvider(purpose: string, modelId: string, adapter: MediaAdapter, opts: CoreAdapterOpts): ImageProvider {
+  const entry = MEDIA_CATALOG.byId(modelId);
+  const route = entry?.routes.find((r) => r.adapter === adapter.id);
+  return {
+    id: opts.id,
+    minMs: opts.minMs,
+    hasKey: () => adapter.configured(),
+    async fetchImage(ask, deadline) {
+      if (!entry || !route) return { ok: false, reason: "failed", detail: `media core: ${modelId} has no ${adapter.id} route` };
+      const values = { prompt: ask.prompt, imageRatio: nearestRatio(ask.size), ...opts.values, imageCount: 1 };
+      const cap = Date.now() + entry.limits.timeoutMs;
+      try {
+        const out = await runMedia({
+          purpose,
+          modelId,
+          values,
+          extra: { prompt: ask.prompt, width: ask.size.width, height: ask.size.height },
+          step: nextMediaStep("image", tagOf(ask)),
+          adapters: { [adapter.id]: adapter },
+          deps: { deadline: deadline === undefined ? cap : Math.min(deadline, cap) },
+        });
+        const first = out.outputs[0];
+        if (!first || first.kind !== "inline") return { ok: false, reason: "failed", detail: "javobda rasm yo'q (media core: no inline output)" };
+        recordImageUsd(out.route.provider, out.route.upstreamModel, costUsd(entry.cost, normalize(entry.params, values)));
+        return { ok: true, image: { url: `data:${first.mime};base64,${Buffer.from(first.bytes).toString("base64")}`, alt: ask.prompt.slice(0, 80) } };
+      } catch (e) {
+        if (e instanceof MediaError) return { ok: false, ...failureOf(e) };
         throw e;
       }
     },

@@ -139,7 +139,7 @@ export type ImageFailure =
   /** Qolgan hammasi: 5xx, tarmoq, javobda rasm yo'q. */
   | "failed";
 
-export type ImageProviderId = "gemini" | "openai" | "pexels" | "pixabay" | "stock";
+export type ImageProviderId = "gemini" | "openai" | "pexels" | "pixabay" | "stock" | "fal";
 
 export interface ImageProvider {
   /**

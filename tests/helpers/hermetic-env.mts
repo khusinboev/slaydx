@@ -46,6 +46,8 @@ const PROVIDER_ENV_KEYS = [
   // Rasm provayderlari (bepul stock zanjiri)
   "PEXELS_API_KEY",
   "PIXABAY_API_KEY",
+  // Studio fal.ai models (P2a): a developer's real key must never reach a test.
+  "FAL_KEY",
   // Ilmiy manba qidiruvi (Maqola 2)
   "OPENALEX_API_KEY",
   "OPENALEX_MAILTO",

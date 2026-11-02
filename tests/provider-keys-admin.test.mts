@@ -668,8 +668,8 @@ test("test: no key, not testable, reserved and unknown providers", { skip }, asy
     assert.match(String(none.body.message), /Kalit yo'q/);
     assert.equal(stub.calls.length, 0, "no key, no outbound call");
     assert.equal((await postTest(s.cookie, "openai-image")).status, 409, "no cheap call for the OpenAI image provider");
-    // Removed providers are unknown ids now.
-    for (const id of ["fal", "xai", "openrouter", "openai"]) assert.equal((await postTest(s.cookie, id)).status, 404, `${id} is removed`);
+    // Removed providers are unknown ids now (fal.ai is back since P2a and has a probe: tests/media-fal.test.mts).
+    for (const id of ["xai", "openrouter", "openai"]) assert.equal((await postTest(s.cookie, id)).status, 404, `${id} is removed`);
     assert.equal((await postTest(s.cookie, "nope")).status, 404);
     // Azure needs its region.
     process.env.AZURE_SPEECH_KEY = fresh();
@@ -701,8 +701,11 @@ test("probe: 10 s timeout contract, redirects not followed, request builders", a
   assert.equal(header("anthropic")!["x-api-key"], K);
   assert.equal(header("pexels")!.Authorization, K);
   for (const id of ["gemini", "anthropic", "pexels"]) assert.ok(!(probe.probeRequest(id, K) as { url: string }).url.includes(K), `${id}: key not in URL`);
-  // The removed providers have no probe any more.
-  for (const id of ["openai", "xai", "openrouter", "fal"]) assert.ok("error" in probe.probeRequest(id, K), `${id}: no probe`);
+  // The removed providers have no probe any more (fal.ai came back with the Studio, P2a: its price-list probe).
+  for (const id of ["openai", "xai", "openrouter"]) assert.ok("error" in probe.probeRequest(id, K), `${id}: no probe`);
+  const falReq = probe.probeRequest("fal", K) as { url: string; headers: Record<string, string> };
+  assert.equal(falReq.headers.Authorization, `Key ${K}`);
+  assert.ok(falReq.url.startsWith("https://api.fal.ai/v1/models/pricing?endpoint_id=") && !falReq.url.includes(K), "fal: key in the header only");
   // The Azure region is validated before it becomes a host name.
   assert.ok("error" in probe.probeRequest("azure", K, { azureRegion: "evil.example.com/x" }));
   // ElevenLabs: key in the header, never in the URL; the free subscription read.

@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Download, ImageOff, Maximize2, Minimize2, X 
 import type { AcademicDoc, GenImage } from "@/lib/generation/types";
 import { imageExt } from "@/lib/viewers/kind";
 import { imageRatioById, imageStyleById } from "@/lib/generation/image-studio-options";
-import { imageModelById } from "@/lib/generation/image-models";
+import { imageModelLabel } from "@/lib/media/catalog";
 import { cn } from "@/lib/cn";
 import { ApiImg } from "@/lib/use-api-src";
 import { useDialog } from "../overlays/useDialog";
@@ -82,7 +82,7 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
             ? `Infografika · ${poster.spec.size} · ${poster.spec.blocks.length} blok`
             : doc.portrait
               ? `Portret · ${doc.imageScene ?? ""} · ${images.length} rasm`
-              : `${style.name} · ${ratio.label} · ${images.length} rasm${doc.imageModel ? ` · ${imageModelById(doc.imageModel).short}` : ""}`}
+              : `${style.name} · ${ratio.label} · ${images.length} rasm${doc.imageModel && imageModelLabel(doc.imageModel) ? ` · ${imageModelLabel(doc.imageModel)}` : ""}`}
         </span>
         {poster && images[0] ? (
           // Plakat tik va uzun: amallar sticky qatorda — rasm ustidagi tugmalar scroll bilan ketib qoladi.
