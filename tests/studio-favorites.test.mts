@@ -134,6 +134,15 @@ test("ownership: another user's, a non-Studio, an unfinished, an unknown or malf
   assert.equal((await star(await cookieOf(other), theirs)).status, 200);
   assert.equal((await star(cookie, theirs, false)).status, 404);
   assert.deepEqual(await starsOf(other), [theirs]);
+  // Un-starring my generation deletes only MY row (a row of another user on it — impossible through the API, written
+  // here directly — stays).
+  const { query } = await db();
+  const mine = await gen(me);
+  assert.equal((await star(cookie, mine)).status, 200);
+  await query("INSERT INTO studio_favorites (user_id, generation_id) VALUES ($1, $2)", [other, mine]);
+  assert.equal((await star(cookie, mine, false)).status, 200);
+  assert.deepEqual(await starsOf(me), []);
+  assert.deepEqual(await starsOf(other), [theirs, mine].sort());
 });
 
 test("gallery filter: ?favorites=1 lists only my starred items, newest first, keyset-paged; never another user's star", { skip: skipDb }, async (t) => {
@@ -149,6 +158,9 @@ test("gallery filter: ?favorites=1 lists only my starred items, newest first, ke
   // Another user stars nothing of mine (they cannot) — but stars their own, and the filter never shows it to me.
   const theirs = await gen(other);
   assert.equal((await star(await cookieOf(other), theirs)).status, 200);
+  // A row of another user on one of MY un-starred items (impossible through the API, written directly): it is not my star.
+  const { query } = await db();
+  await query("INSERT INTO studio_favorites (user_id, generation_id) VALUES ($1, $2)", [other, mine[1]]);
 
   const all = await gallery(cookie);
   assert.equal(all.items.length, 24, "the unfiltered gallery is unchanged");
