@@ -1095,6 +1095,8 @@ export async function purgeHousekeeping(): Promise<void> {
    * «O'z shablonim» muddati egasi qaroriga bog'liq.
    */
   await step("source-cache", () => purgeSourceCache(60));
+  // Studio library previews no prompt / template points at, after 7 days (docs/studio/P2B-SPEC.md, review MINOR-2).
+  await step("studio-previews", async () => (await import("./admin-studio-library")).purgeUnusedPreviews(7));
   /*
    * Admin panel steps (docs/admin/02-plan.md §5.5, §6.9), after every existing
    * step so their order is unchanged. Broadcast delivery is NOT a housekeeping

@@ -63,6 +63,10 @@ const adminPrompt = await import("../app/api/admin/studio-library/prompts/[id]/r
 const adminTemplates = await import("../app/api/admin/studio-library/templates/route.ts");
 const adminTemplate = await import("../app/api/admin/studio-library/templates/[id]/route.ts");
 const adminReorder = await import("../app/api/admin/studio-library/reorder/route.ts");
+const adminPreviews = await import("../app/api/admin/studio-library/previews/route.ts");
+const adminPreview = await import("../app/api/admin/studio-library/previews/[id]/route.ts");
+const previewRoute = await import("../app/api/media/library/preview/[id]/route.ts");
+const { purgeUnusedPreviews } = await import("../lib/server/admin-studio-library.ts");
 
 const REAL_FETCH = globalThis.fetch;
 after(async () => {
@@ -107,6 +111,10 @@ test("pure: templateError against the catalog", () => {
   assert.match(String(lib.templateError({ ...ok, skeleton: "rasm chizing" }, nano)), /«mavzu» sloti skeletda ishlatilmagan/);
   assert.match(String(lib.templateError({ ...ok, skeleton: "{mavzu}", slots: [{ name: "mavzu", label: "M", max: 10 }] }, nano)), /juda qisqa/);
   assert.match(String(lib.templateError({ ...ok, skeleton: `${"a".repeat(490)} {mavzu}`, slots: [{ name: "mavzu", label: "M", max: 50 }] }, nano)), /oshib ketadi/);
+  // Review NIT-6: a brace that is not a well-formed slot never reaches the model as literal text.
+  for (const sk of ["{Mavzu} rasmi {mavzu}", "{mavzu} rasmi {", "{mavzu} rasmi {}", "{mavzu} rasmi }"]) {
+    assert.match(String(lib.templateError({ ...ok, skeleton: sk }, nano)), /noto'g'ri \{…\} belgisi/, sk);
+  }
   assert.match(String(lib.slotsError([{ name: "Bad", label: "x", max: 20 }])), /nomi noto'g'ri/);
   assert.match(String(lib.slotsError([{ name: "a", label: "x", max: 20 }, { name: "a", label: "y", max: 20 }])), /takrorlangan/);
   assert.match(String(lib.slotsError([{ name: "a", label: "x", max: 5 }])), /uzunligi/);
@@ -226,6 +234,13 @@ test("public: templates — enabled, valid and model available now", { skip }, a
   assert.ok(!titles.includes("Logotip"), "Recraft switched off");
   assert.ok(!titles.includes("Dars uchun illyustratsiya"), "invalid row hidden");
   assert.equal(after2.body.items.length, 8);
+  // Review NIT-7: a category the code does not know hides the template, as in the prompt library.
+  await query("UPDATE studio_templates SET category = 'retired' WHERE seed_key = 't10'");
+  t.after(async () => void (await query("UPDATE studio_templates SET category = 'tabiat' WHERE seed_key = 't10'")));
+  await refresh();
+  const after3 = await publicGet(templatesRoute.GET as Handler, "/api/media/templates");
+  assert.ok(!after3.body.items.some((i: Any) => i.title === "Manzara"), "unknown category hidden");
+  assert.equal(after3.body.items.length, 7);
 });
 
 test("admin: roles, reason, template validation", { skip }, async (t) => {
@@ -360,4 +375,76 @@ test("enhance: free, the rewrite returned, burst limit 10 / 10 min → 429", { s
   assert.equal(llm, 10, "the refused call never reached the LLM");
   const bal = await queryOne<{ b: string }>("SELECT (points + quota + balance)::text AS b FROM users WHERE id = $1", [u.id]);
   assert.equal(bal!.b, "5000", "free: nothing charged");
+});
+
+/** A PNG head with a real IHDR (w × h) and padding (`imageDims` reads the size from it). */
+function tinyPng(w: number, h: number, pad = 200): Buffer {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]), Buffer.from("IHDR"), ihdr, Buffer.alloc(4), Buffer.alloc(pad, 1)]);
+}
+async function uploadPreviewAs(cookie: string, bytes: Buffer, reason = REASON) {
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(bytes)]), "p.png");
+  form.append("reason", reason);
+  const h = headers(cookie);
+  delete h["content-type"];
+  const req = new Request("http://localhost:3000/api/admin/studio-library/previews", { method: "POST", headers: h, body: form });
+  return read(await inRequest(req, () => (adminPreviews.POST as Handler)(req, undefined)));
+}
+
+test("previews: tiny file 415 (not 500); upload, delete unreferenced (audited), 409 in use; purge of stale unreferenced", { skip }, async () => {
+  const owner = await session("owner");
+  // Review MINOR-1: 1–3 byte files are «not PNG/JPEG», never a RangeError.
+  for (const n of [1, 2, 3]) assert.equal((await uploadPreviewAs(owner.cookie, Buffer.alloc(n, 0x89))).status, 415, `${n} bytes`);
+  const up = await uploadPreviewAs(owner.cookie, tinyPng(300, 200));
+  assert.equal(up.status, 200, JSON.stringify(up.body));
+  const id = up.body.id as string;
+  // In use by a prompt: 409, nothing removed.
+  const p = await call(adminPrompts.POST as Handler, "POST", "/api/admin/studio-library/prompts", owner.cookie, { category: "logo", title: "Rasmli", prompt: "Rasmli namuna prompt", previewId: id, reason: REASON });
+  assert.equal(p.status, 200, JSON.stringify(p.body));
+  const inUse = await call(adminPreview.DELETE as Handler, "DELETE", `/api/admin/studio-library/previews/${id}`, owner.cookie, { reason: REASON }, { id });
+  assert.equal(inUse.status, 409);
+  assert.equal(inUse.body.code, "in_use");
+  // The public byte route serves it, with an IP rate limit (review MINOR-3).
+  const preq = new Request(`http://localhost/api/media/library/preview/${id}`, { headers: { "x-forwarded-for": "10.55.1.1" } });
+  const served = await inRequest(preq, () => (previewRoute.GET as Handler)(preq, { params: Promise.resolve({ id }) }));
+  assert.equal(served.status, 200);
+  assert.equal(served.headers.get("content-type"), "image/png");
+  // Detach, then delete: audited, gone.
+  await call(adminPrompt.DELETE as Handler, "DELETE", `/api/admin/studio-library/prompts/${p.body.id}`, owner.cookie, { reason: REASON }, { id: p.body.id });
+  const del = await call(adminPreview.DELETE as Handler, "DELETE", `/api/admin/studio-library/previews/${id}`, owner.cookie, { reason: REASON }, { id });
+  assert.equal(del.status, 200, JSON.stringify(del.body));
+  const [a] = await audits(owner.adminId, "studio_library.preview_delete");
+  assert.equal(a!.target_id, id);
+  assert.equal(a!.before!.mime, "image/png");
+  assert.equal(a!.after, null);
+  assert.equal(await queryOne("SELECT 1 FROM studio_library_previews WHERE id = $1", [id]), null);
+  assert.equal((await call(adminPreview.DELETE as Handler, "DELETE", `/api/admin/studio-library/previews/${id}`, owner.cookie, { reason: REASON }, { id })).status, 404);
+  assert.equal((await call(adminPreview.DELETE as Handler, "DELETE", `/api/admin/studio-library/previews/${id}`, owner.cookie, {}, { id })).status, 400, "reason required");
+
+  // Housekeeping: only previews nobody points at AND older than 7 days.
+  const old1 = (await uploadPreviewAs(owner.cookie, tinyPng(301, 200))).body.id as string;
+  const old2 = (await uploadPreviewAs(owner.cookie, tinyPng(302, 200))).body.id as string;
+  const fresh = (await uploadPreviewAs(owner.cookie, tinyPng(303, 200))).body.id as string;
+  await query("UPDATE studio_library_previews SET created_at = now() - interval '8 days' WHERE id = ANY($1::text[])", [[old1, old2]]);
+  await query("UPDATE studio_templates SET preview_id = $1 WHERE seed_key = 't01'", [old2]);
+  assert.equal(await purgeUnusedPreviews(7), 1);
+  assert.equal(await queryOne("SELECT 1 FROM studio_library_previews WHERE id = $1", [old1]), null, "stale + unreferenced: purged");
+  assert.ok(await queryOne("SELECT 1 FROM studio_library_previews WHERE id = $1", [old2]), "referenced: kept");
+  assert.ok(await queryOne("SELECT 1 FROM studio_library_previews WHERE id = $1", [fresh]), "fresh: kept");
+  await query("UPDATE studio_templates SET preview_id = NULL WHERE seed_key = 't01'");
+});
+
+test("preview route: IP rate limit (300 / min), like its sibling library routes (review MINOR-3)", { skip }, async () => {
+  const ip = `10.66.${randomInt(0, 250)}.${randomInt(1, 250)}`;
+  const get = async () => {
+    const req = new Request(`http://localhost/api/media/library/preview/${"0".repeat(24)}`, { headers: { "x-forwarded-for": ip } });
+    return (await inRequest(req, () => (previewRoute.GET as Handler)(req, { params: Promise.resolve({ id: "0".repeat(24) }) }))).status;
+  };
+  for (let i = 0; i < 300; i++) assert.equal(await get(), 404, `call ${i + 1}`);
+  assert.equal(await get(), 429, "the 301st call in a minute");
 });

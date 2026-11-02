@@ -158,6 +158,8 @@ export function templateError(
   const err = slotsError(t.slots);
   if (err) return err;
   const slots = cleanSlots(t.slots as Record<string, unknown>[]);
+  // A brace that is not a well-formed `{slot}` (`{Ism}`, `{ism`, `{}`) would reach the model as literal text (review NIT-6).
+  if (/[{}]/.test(String(t.skeleton).replace(/\{[a-z][a-z0-9_]{0,23}\}/g, ""))) return "Skeletda noto'g'ri {…} belgisi — slot nomi kichik lotin harflari, raqam va _ bo'lsin";
   const used = skeletonSlots(t.skeleton);
   for (const u of used) if (!slots.some((s) => s.name === u)) return `Skeletdagi {${u}} slot sifatida e'lon qilinmagan`;
   for (const s of slots) if (!used.includes(s.name)) return `«${s.name}» sloti skeletda ishlatilmagan`;

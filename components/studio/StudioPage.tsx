@@ -144,8 +144,12 @@ function StudioApp() {
     setParam(PROMPT_PARAM, v);
   };
 
-  /** Switch the tab's mode: P2b modes start with the given picture; the prompt stays (it becomes the edit instruction). */
-  function enterMode(next: StudioMode, assetId?: string) {
+  /**
+   * Switch the tab's mode: P2b modes start with the given picture. `keepPrompt` («Rasm yuklash» only): the text typed so
+   * far becomes the edit instruction; from a result card the instruction starts empty (the old prompt described the
+   * picture, it is not an edit — review NIT-9).
+   */
+  function enterMode(next: StudioMode, assetId?: string, keepPrompt = false) {
     setError(null);
     setTemplate(null);
     setChosen(null);
@@ -154,7 +158,7 @@ function StudioApp() {
     setTab("rasm");
     setRaw((prev) => {
       const prompt = typeof prev[PROMPT_PARAM] === "string" ? { [PROMPT_PARAM]: prev[PROMPT_PARAM] } : {};
-      return next === "image" ? prompt : { ...(next === "edit" ? prompt : {}), [INPUT_PARAM]: assetId ? [assetId] : [] };
+      return next === "image" ? prompt : { ...(next === "edit" && keepPrompt ? prompt : {}), [INPUT_PARAM]: assetId ? [assetId] : [] };
     });
     if (typeof window !== "undefined") rootRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }
@@ -165,7 +169,7 @@ function StudioApp() {
     setError(null);
     try {
       const got = await uploadStudioInput(file, file.name || "rasm");
-      enterMode("edit", got.assetId);
+      enterMode("edit", got.assetId, true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Rasm yuklanmadi");
     } finally {

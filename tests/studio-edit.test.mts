@@ -51,6 +51,7 @@ const { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_PURPOSES, studioPurposeOf, FAL_IMA
 const { studioImagePrice } = await import("../lib/media/studio-pricing.ts");
 const { MediaError, normalize, resetBreakers } = await import("../lib/studio-core/index.ts");
 const { composeEditPrompt } = await import("../lib/generation/studio/edit.ts");
+const { sniffInput } = await import("../lib/server/media/inputs.ts");
 const { TOOL_BY_ID, preflightError } = await import("../lib/tools.ts");
 
 const KEY = "fal0000-test-key:5ecr3t5ecr3t";
@@ -273,6 +274,13 @@ test("preflight: an edit / utility without a picture is refused by the ParamSche
   assert.equal(preflightError(tool, { modelId: BRIA, inputImages: ["a".repeat(24)] } as never), null);
 });
 
+test("sniffInput: PNG / JPEG by magic bytes; 0–3 byte inputs are «not an image», never a RangeError (review MINOR-1)", () => {
+  assert.equal(sniffInput(ALPHA_PNG), "image/png");
+  assert.equal(sniffInput(JPEG), "image/jpeg");
+  for (const n of [0, 1, 2, 3]) assert.equal(sniffInput(Buffer.alloc(n, 0x89)), null, `${n} bytes`);
+  assert.equal(sniffInput(Buffer.from([0xff, 0xd8])), null);
+});
+
 test("composeEditPrompt: instruction + keep-the-rest; several inputs name the first as the one to edit", () => {
   const one = composeEditPrompt(" Make the sky orange ", 1);
   assert.match(one, /^Edit the attached image exactly as instructed: Make the sky orange\. /);
@@ -387,6 +395,25 @@ test("ownership: another user's upload / result is refused BEFORE the charge; up
   assert.match(String(own.body.assetId), /^[0-9a-f]{24}$/);
   const bad = await importResult(alice, { generationId: "nope", assetId: "abc" });
   assert.equal(bad.status, 400);
+  // Review MINOR-4: a stored result over the input limit is refused by its size in SQL, with a clear message.
+  const huge = Buffer.concat([ALPHA_PNG, Buffer.alloc(5 * 1024 * 1024)]);
+  await query("INSERT INTO generation_assets (generation_id, asset_id, mime, size_bytes, bytes) VALUES ($1, 'abc123abc999', 'image/png', $2, $3)", [gen, huge.length, huge]);
+  const tooLarge = await importResult(alice, { generationId: gen, assetId: "abc123abc999" });
+  assert.equal(tooLarge.status, 413);
+  assert.match(String(tooLarge.body.error), /Natija juda katta/);
+
+  // Review MINOR-5: the pictures of one job together ≤ 8 MB — a 400 before the charge.
+  const pad = (n: number) => Buffer.concat([png(1000, 800, 6), Buffer.alloc(n)]);
+  const big1 = await upload(alice, pad(3 * 1024 * 1024));
+  const big2 = await upload(alice, pad(3 * 1024 * 1024 + 1));
+  const big3 = await upload(alice, pad(3 * 1024 * 1024 + 2));
+  const before5 = await balanceOf(alice);
+  const heavy = await post(alice, { modelId: SEED_EDIT, prompt: "osmonni o'zgartir", inputImages: [big1, big2, big3] });
+  assert.equal(heavy.status, 400, JSON.stringify(heavy.body));
+  assert.match(String(heavy.body.error), /jami 8 MB/);
+  assert.equal(await balanceOf(alice), before5, "nothing charged");
+  const two = await post(alice, { modelId: SEED_EDIT, prompt: "osmonni o'zgartir", inputImages: [big1, big2] });
+  assert.equal(two.status, 202, "6 MB together is fine");
 });
 
 test("flow: bria → import → upscale → seedream edit, with a stubbed fal; opaque answer refunded", { skip: skipDb }, async (t) => {
@@ -412,6 +439,8 @@ test("flow: bria → import → upscale → seedream edit, with a stubbed fal; o
     if (url.includes(":generateContent")) return json(200, { candidates: [{ content: { parts: [{ text: '{"instruction":"Make the sky orange"}' }] } }] });
     const c: Call = { url, method: String(init.method ?? "GET"), headers: { ...((init.headers ?? {}) as Record<string, string>) }, body: typeof init.body === "string" ? JSON.parse(init.body) : null };
     calls.push(c);
+    // Nano Banana edit: the Gemini interactions endpoint answers one picture.
+    if (url.endsWith("/v1beta/interactions")) return json(200, { status: "completed", steps: [{ type: "image", data: JPEG.toString("base64"), mime_type: "image/jpeg" }] });
     if (isSubmit(c)) return json(200, { request_id: `req-${String(n++).padStart(4, "0")}-flow` });
     if (isStatus(c)) return json(200, { status: "COMPLETED" });
     if (isResult(c)) return answer(c);
@@ -472,6 +501,19 @@ test("flow: bria → import → upscale → seedream edit, with a stubbed fal; o
     assert.equal(b.image_urls.length, 2);
   }
   assert.deepEqual((await mediaJobsOf(ed.id)).map((r) => r.purpose), ["studio.edit", "studio.edit"]);
+
+  // 5. Nano Banana edit (review NIT-8): the REAL Gemini request carries the input picture first, then the edit prompt,
+  //    and the frame of the input (800 × 600 → 4:3).
+  const nano = await run({ modelId: NANO_EDIT, prompt: "osmonni to'q sariq qil", inputImages: [photo], imageCount: 1 });
+  assert.equal(nano.gen?.status, "COMPLETED", String(nano.gen?.error));
+  const gem = calls.find((c) => c.url.endsWith("/v1beta/interactions"))!;
+  assert.ok(gem, "one Gemini image request");
+  const gb = gem.body as { input: { type: string; data?: string; mime_type?: string; text?: string }[]; response_format: { aspect_ratio: string } };
+  assert.deepEqual(gb.input[0], { type: "image", data: ALPHA_PNG.toString("base64"), mime_type: "image/png" }, "the user's picture, first");
+  assert.equal(gb.input[1]!.type, "text");
+  assert.match(String(gb.input[1]!.text), /^Edit the attached image exactly as instructed: Make the sky orange\./);
+  assert.equal(gb.response_format.aspect_ratio, "4:3", "the input's frame");
+  assert.deepEqual((await mediaJobsOf(nano.id)).map((r) => [r.purpose, r.model_id]), [["studio.edit", NANO_EDIT]]);
 
   // 4. bria answers an OPAQUE PNG: no cut-out delivered → FAILED, full refund.
   answer = () => json(200, { image: { url: uri(OPAQUE_PNG, "image/png") } });

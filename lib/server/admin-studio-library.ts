@@ -8,6 +8,7 @@ import type { AdminActor } from "./admin-handler";
 import { query } from "./db";
 import { readUploadForm } from "./upload-body";
 import { availableModels } from "./media/availability";
+import { sniffInput } from "./media/inputs";
 import { invalidateLibrary, previewUrl } from "./media/library";
 import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "../media/catalog";
 import { LIBRARY_CATEGORIES, LIBRARY_LIMITS, cleanSlots, isLibraryCategory, templateError, type TemplateSlot } from "../media/library";
@@ -391,7 +392,8 @@ export async function uploadPreview(admin: AdminActor, req: Request): Promise<{ 
   const bytes = Buffer.from(await file.arrayBuffer());
   if (bytes.byteLength === 0) throw new ApiError("Fayl bo'sh", 400);
   if (bytes.byteLength > PREVIEW_MAX_BYTES) throw new ApiError("Rasm 512 KB dan katta", 413);
-  const mime = bytes.readUInt32BE(0) === 0x89504e47 ? "image/png" : bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff ? "image/jpeg" : null;
+  // Length-guarded sniff (review MINOR-1): a 1–3 byte file is a 415, never a RangeError / 500.
+  const mime = sniffInput(bytes);
   if (!mime) throw new ApiError("Faqat PNG yoki JPEG", 415);
   const dims = imageDims(bytes);
   if (!dims || dims.w > PREVIEW_MAX_SIDE || dims.h > PREVIEW_MAX_SIDE) throw new ApiError(`Rasm ${PREVIEW_MAX_SIDE} pikseldan katta bo'lmasin`, 422);
@@ -404,4 +406,39 @@ export async function uploadPreview(admin: AdminActor, req: Request): Promise<{ 
     await audit({ action: "studio_library.preview_upload", targetType: "studio_preview", targetId: id, reason, before: null, after: { id, mime, size: bytes.byteLength, w: dims.w, h: dims.h } });
   });
   return { id, url: previewUrl(id)! };
+}
+
+/**
+ * `DELETE …/previews/<id>` `{reason}` (review MINOR-2): removes a preview no prompt / template points at. A referenced one
+ * is a 409 `in_use` (detach it first); a missing one 404. Audited with the old metadata (never the bytes).
+ */
+export async function deletePreview(admin: AdminActor, rawId: unknown, body: Record<string, unknown>): Promise<{ id: string }> {
+  const id = typeof rawId === "string" && /^[0-9a-f]{24}$/.test(rawId) ? rawId : null;
+  if (!id) throw new ApiError("Topilmadi", 404, { code: "not_found" });
+  const reason = parseReason(body.reason)!;
+  await adminTx(admin, async (client, audit) => {
+    const cur = await client.query<{ mime: string; size_bytes: number }>("SELECT mime, size_bytes FROM studio_library_previews WHERE id = $1 FOR UPDATE", [id]);
+    if (!cur.rows[0]) throw new ApiError("Ko'rinish rasmi topilmadi", 404, { code: "not_found" });
+    const used = await client.query(
+      "SELECT 1 FROM studio_prompts WHERE preview_id = $1 UNION ALL SELECT 1 FROM studio_templates WHERE preview_id = $1 LIMIT 1",
+      [id],
+    );
+    if (used.rowCount) throw new ApiError("Bu rasm prompt yoki shablonda ishlatilmoqda — avval uni olib tashlang", 409, { code: "in_use" });
+    await client.query("DELETE FROM studio_library_previews WHERE id = $1", [id]);
+    await audit({ action: "studio_library.preview_delete", targetType: "studio_preview", targetId: id, reason, before: { id, mime: cur.rows[0].mime, size: cur.rows[0].size_bytes }, after: null });
+  });
+  return { id };
+}
+
+/** Housekeeping (review MINOR-2): previews no row points at, older than `days` (an upload not yet saved into a row is kept a while). */
+export async function purgeUnusedPreviews(days = 7): Promise<number> {
+  const rows = await query<{ id: string }>(
+    `DELETE FROM studio_library_previews p
+      WHERE p.created_at < now() - ($1 || ' days')::interval
+        AND NOT EXISTS (SELECT 1 FROM studio_prompts s WHERE s.preview_id = p.id)
+        AND NOT EXISTS (SELECT 1 FROM studio_templates t WHERE t.preview_id = p.id)
+      RETURNING p.id`,
+    [String(days)],
+  );
+  return rows.length;
 }

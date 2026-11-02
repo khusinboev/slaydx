@@ -252,6 +252,19 @@ test("tools: «Sifatini oshirish» on a finished picture → its own input → u
   assert.match(q("[data-studio-submit]")?.textContent ?? "", new RegExp(formatSom(expectedPrice(UPSCALE, 1)).replace(/\s/g, "\\s")));
 });
 
+test("tools: «Tahrirlash» on a result starts with an EMPTY instruction (the old prompt described the picture) — review NIT-9", async () => {
+  const api = installApi();
+  await mount();
+  await type(prompt(), "Registon maydoni kechqurun");
+  await submit();
+  await settle(30);
+  await click(q('[data-studio-job] [data-result-action="edit"]'));
+  await settle();
+  assert.ok(api.calls.some((c) => c.url === "/api/media/inputs/from-result"));
+  assert.equal(q("[data-studio-mode]")?.getAttribute("data-studio-mode"), "edit");
+  assert.equal(prompt()!.value, "", "no carried-over picture description");
+});
+
 test("enhance: sends the prompt, writes the rewrite back; disabled under 3 characters", async () => {
   const api = installApi();
   await mount();

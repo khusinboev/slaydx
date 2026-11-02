@@ -1,4 +1,5 @@
-import { ApiError, handler } from "@/lib/server/api";
+import { ApiError, handler, limit } from "@/lib/server/api";
+import { clientIp } from "@/lib/server/ratelimit";
 import { bytesBody, noStoreOnError } from "@/lib/server/http-bytes";
 import { libraryPreview } from "@/lib/server/media/library";
 
@@ -12,7 +13,9 @@ type Ctx = { params: Promise<{ id: string }> };
  * the bytes, so one URL never serves other bytes → `immutable`.
  */
 export const GET = noStoreOnError(
-  handler("media/library/preview", async (_req, ctx: Ctx) => {
+  handler("media/library/preview", async (req, ctx: Ctx) => {
+    // Like the sibling library routes (review MINOR-3); a sheet shows ≤ ~50 previews, the browser caches them immutably.
+    await limit(`media:preview:${clientIp(req)}`, 300, 60);
     const { id } = await ctx.params;
     const row = await libraryPreview(id);
     if (!row) throw new ApiError("Topilmadi", 404);

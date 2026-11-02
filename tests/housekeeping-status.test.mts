@@ -94,6 +94,7 @@ test("worker housekeeping records every named step and runs the new purges", asy
     "sources",
     "photos",
     "source-cache",
+    "studio-previews",
     "error-log",
     "heartbeats",
     "admin-sessions",
@@ -110,6 +111,8 @@ test("worker housekeeping records every named step and runs the new purges", asy
   // Leader-only purges (§5.5).
   const texts = seen.map((q) => q.text);
   assert.ok(texts.some((q) => /DELETE FROM error_log WHERE last_seen_at < now\(\) - interval '90 days'/.test(q)));
+  // Studio P2b (review MINOR-2): previews no prompt / template points at, after 7 days.
+  assert.ok(texts.some((q) => /DELETE FROM studio_library_previews p\s+WHERE p\.created_at < now\(\) - \(\$1 \|\| ' days'\)::interval\s+AND NOT EXISTS \(SELECT 1 FROM studio_prompts/.test(q)), "studio preview purge");
   assert.ok(texts.some((q) => /DELETE FROM process_heartbeats WHERE last_seen_at < now\(\) - interval '1 day'/.test(q)));
   assert.ok(texts.some((q) => /DELETE FROM admin_sessions WHERE expires_at < now\(\) - interval '7 days'/.test(q)));
   assert.ok(texts.some((q) => /DELETE FROM admin_enrollments WHERE created_at < now\(\) - interval '7 days' AND \(consumed_at IS NOT NULL OR expires_at < now\(\)\)/.test(q)));

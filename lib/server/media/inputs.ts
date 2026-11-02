@@ -24,6 +24,11 @@ import { readUploadForm } from "../upload-body";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Longest side an uploaded input may have (a sanity bound; edit models re-frame anyway). */
 export const STUDIO_INPUT_MAX_SIDE = 4096;
+/**
+ * All input pictures of ONE job together (review MINOR-5): they travel to the provider inline (base64, +33 %), so three
+ * 5 MB pictures would make a ~20 MB request body. 8 MB of pictures ≈ 11 MB of JSON.
+ */
+export const STUDIO_INPUTS_MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 
 export type StudioInputInfo = { assetId: string; mime: string; size: number; w: number | null; h: number | null };
 
@@ -66,6 +71,8 @@ export async function studioInputsError(userId: string, values: Readonly<Record<
       if (Number(row.size_bytes) > param.maxBytes) return `${param.label}: fayl ${Math.round(param.maxBytes / (1024 * 1024))} MB dan katta`;
     }
   }
+  const total = all.reduce((sum, id) => sum + Number(byId.get(id)?.size_bytes ?? 0), 0);
+  if (total > STUDIO_INPUTS_MAX_TOTAL_BYTES) return `Rasmlar jami ${STUDIO_INPUTS_MAX_TOTAL_BYTES / (1024 * 1024)} MB dan oshmasin — kamroq yoki kichikroq rasm tanlang.`;
   // Upscale: the input's longest side must fit the factor (the price is the ≤ 16.8 MP output's upper bound).
   const factor = String(normalize(found.entry.params, values).factor ?? "");
   const side = found.entry.capabilities.includes("upscale") ? UPSCALE_MAX_INPUT_SIDE[factor] : undefined;
@@ -97,7 +104,8 @@ export async function studioInputsForJob(userId: string, values: Readonly<Record
   return out;
 }
 
-function sniffInput(bytes: Buffer): (typeof STUDIO_INPUT_MIMES)[number] | null {
+/** PNG / JPEG by magic bytes, length-guarded (a 1–3 byte file is simply «not an image», never a RangeError). */
+export function sniffInput(bytes: Buffer): (typeof STUDIO_INPUT_MIMES)[number] | null {
   if (bytes.length >= 8 && bytes.readUInt32BE(0) === 0x89504e47 && bytes.readUInt32BE(4) === 0x0d0a1a0a) return "image/png";
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
   return null;
@@ -132,14 +140,16 @@ export async function importStudioResult(userId: string, body: Record<string, un
   const generationId = typeof body.generationId === "string" ? body.generationId.trim() : "";
   const assetId = typeof body.assetId === "string" ? body.assetId.trim().toLowerCase() : "";
   if (!UUID_RE.test(generationId) || !/^[0-9a-f]{8,64}$/.test(assetId)) throw new ApiError("Noto'g'ri so'rov", 400);
-  const row = await queryOne<{ bytes: Buffer }>(
-    `SELECT a.bytes
+  // The size is checked in SQL BEFORE the bytes are read (review MINOR-4): an oversized result never leaves the table.
+  const row = await queryOne<{ size_bytes: string; bytes: Buffer | null }>(
+    `SELECT a.size_bytes, CASE WHEN a.size_bytes <= $4 THEN a.bytes END AS bytes
        FROM generation_assets a
        JOIN generations g ON g.id = a.generation_id
       WHERE a.generation_id = $1 AND a.asset_id = $2 AND g.user_id = $3
         AND g.tool_id = 'studio-image' AND g.status = 'COMPLETED' AND g.files_purged_at IS NULL`,
-    [generationId, assetId, userId],
+    [generationId, assetId, userId, STUDIO_INPUT_MAX_BYTES],
   );
   if (!row) throw new ApiError("Rasm topilmadi", 404, { code: "not_found" });
+  if (!row.bytes) throw new ApiError("Natija juda katta (5 MB dan ortiq) — avval kichikroq variantni tanlang yoki yuklab olib, kichraytirib yuklang.", 413, { code: "too_large" });
   return storeInput(userId, Buffer.from(row.bytes));
 }

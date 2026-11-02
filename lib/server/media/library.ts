@@ -61,6 +61,8 @@ export async function publicLibrary(category: string | null): Promise<LibraryRes
 
 /** A stored template as the public shape, or `null` when it does not validate against the catalog any more. */
 export function publicTemplate(r: TemplateRow): StudioTemplate | null {
+  // A category the code no longer knows hides the row, as in the prompt library (review NIT-7).
+  if (!isLibraryCategory(r.category)) return null;
   const studio = MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.allowed.includes(r.model_id);
   const model = studio ? MEDIA_CATALOG.byId(r.model_id) : null;
   if (templateError({ modelId: r.model_id, params: r.params, skeleton: r.skeleton, slots: r.slots }, model)) return null;
