@@ -37,6 +37,8 @@ import { STUDIO_TOOL_ID, outputCount, studioPrice } from "./studio-price";
 import type { GalleryItem, MediaCatalog, StudioPricing } from "./studio-types";
 import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, promptMin, promptParam, requestValues, type RawValues } from "./studio-values";
 import { useStudioJobs } from "./useStudioJobs";
+import { ComparePanel, CompareSwitch } from "./compare/ComparePanel";
+import { compareAvailability, enableCompare, useCompare } from "./compare/useCompare";
 
 const WIDTH = "max-w-[1320px]";
 const LOADING = <div className="text-muted-foreground p-8 text-[15px]">Yuklanmoqda...</div>;
@@ -125,6 +127,28 @@ function StudioApp() {
   const [audioState, setAudioState] = useState<AudioTabState>(INITIAL_AUDIO_STATE);
   const audioCatalog = useMediaCatalog(STUDIO_AUDIO_LISTING, audioSeen);
   const audioJobs = useStudioJobs();
+  // P7a «Solishtirish» (docs/studio/P7-SPEC.md, compare/): the Rasm tab's drawing mode and the Video tab, ≥ 2 models.
+  const compare = useCompare();
+  const compareKind = tab === "rasm" && mode === "image" ? "image" : tab === "video" ? "video" : null;
+  const compareCatalog = compareKind === "image" ? catalog : compareKind === "video" && video.state.status === "ready" ? video.state.catalog : null;
+  const comparing = compareAvailability(compareKind, compareCatalog) && compare[compareKind].state.on;
+  function toggleCompare(on: boolean) {
+    if (!compareAvailability(compareKind, compareCatalog) || !compareCatalog) return;
+    setError(null);
+    const seed = compareKind === "image" ? { chosen, raw } : { chosen: videoState.chosen, raw: videoState.raw };
+    compare[compareKind].setState((s) => (on ? enableCompare(s, compareCatalog.models, seed.chosen, seed.raw) : { ...s, on: false }));
+  }
+  /** «Shu modelni tanlash»: compare off, that model chosen in the tab's own form with the compared prompt. */
+  function pickCompared(kind: "image" | "video", modelId: string, prompt: string) {
+    compare[kind].setState((s) => ({ ...s, on: false }));
+    if (kind === "video") {
+      setVideoState((s) => ({ ...s, mode: "text", chosen: modelId, raw: { ...s.raw, [PROMPT_PARAM]: prompt } }));
+      return;
+    }
+    const next = catalog?.models.find((m) => m.id === modelId);
+    setChosen(modelId);
+    setRaw((prev) => (next ? carryOver(next, { ...prev, [PROMPT_PARAM]: prompt }) : { ...prev, [PROMPT_PARAM]: prompt }));
+  }
   useEffect(() => {
     const asked = typeof window !== "undefined" ? tabFromSearch(window.location.search) : "rasm";
     if (asked !== "rasm") setTab(asked);
@@ -395,7 +419,7 @@ function StudioApp() {
           </section>
         ) : (
           <>
-            <div data-studio-form className={cn("min-w-0", tab !== "rasm" && "md:col-span-2 md:max-w-[44rem]")}>
+            <div data-studio-form className={cn("min-w-0", (tab !== "rasm" || comparing) && "md:col-span-2", tab !== "rasm" && !comparing && "md:max-w-[44rem]")}>
               <div role="tablist" aria-label="Studio bo‘limlari" data-studio-tabs className="bg-muted/70 mb-3 inline-flex max-w-full rounded-[14px] p-1">
                 {STUDIO_TABS.map((t) => (
                   <button
@@ -434,7 +458,19 @@ function StudioApp() {
                   </button>
                 </div>
               ) : null}
-              {tab === "audio" ? (
+              {compareAvailability(compareKind, compareCatalog) ? <CompareSwitch checked={comparing} onChange={toggleCompare} /> : null}
+              {comparing && compareKind && compareCatalog ? (
+                <ComparePanel
+                  kind={compareKind}
+                  catalog={compareCatalog}
+                  tab={compare[compareKind]}
+                  balance={compareKind === "video" ? paidBalance : balance}
+                  typing={typing}
+                  gated={gated}
+                  reload={compareKind === "video" ? video.reload : reload}
+                  onPick={(id, prompt) => pickCompared(compareKind, id, prompt)}
+                />
+              ) : tab === "audio" ? (
                 <AudioTab
                   catalogState={audioCatalog.state}
                   reload={audioCatalog.reload}
@@ -520,7 +556,7 @@ function StudioApp() {
                 </>
               )}
             </div>
-            {tab === "rasm" ? (
+            {tab === "rasm" && !comparing ? (
               <section ref={resultsRef} aria-label="Natijalar" data-studio-results className={cn("min-w-0 md:mt-0", jobs.length > 0 && "mt-5")}>
                 <StudioResults
                   jobs={jobs}
