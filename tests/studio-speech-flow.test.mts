@@ -37,6 +37,15 @@ import { inRequest } from "./helpers/next-request.mts";
  *   review m2: the «job is over» clause dropped / 10 min → 60 min             -> "review m2";
  *   review m1: known / age / marker check dropped                             -> "review m1";
  *   NITs: loose UUID regex, `decodeURIComponent` uncaught                     -> "review NITs".
+ *
+ * P7c -- provider cost telemetry (every delivered call is one entry of the job's meter: `generations.cost_json`, the
+ * `ai_usage` row the admin cost reports read (`spendForJobs` / `spendBy` tool + kind), and the same number as
+ * `media_jobs.cost_usd`; a failed call or a failed job leaves no spend). Each turned the named test red, then restored:
+ *   `recordSpeechCall` removed from the single-voice branch (`speech.ts`)      -> "gating + speech";
+ *   `recordSpeechCall` removed from the dialogue branch                         -> "P7c dialogue";
+ *   `recordSpeechCall` removed from the clone job's preview (`voice-clone.ts`)  -> "clone";
+ *   a failed call recorded (call in `speech.ts`'s `catch`)                      -> "gating + speech" (the failed job shows spend);
+ *   a failed preview recorded (call in `voice-clone.ts`'s `catch`)              -> "clone" (IVC failure), "review m3".
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -177,6 +186,35 @@ async function idle() {
 }
 const wav = (seconds: number) => encodeWav(new Float32Array(24_000 * seconds).map((_, i) => Math.sin(i / 10) * 0.3));
 
+/* P7c: what a finished job left for the admin cost reports. */
+const usd6 = (n: number) => Number(n.toFixed(6));
+/** ElevenLabs eleven_v3 on the owner's Creator plan: 1 credit per character, $22 / 121 000 credits. */
+const EL_USD_PER_CHAR = 22 / 121_000;
+type Part = { kind: string; provider: string; model: string; calls: number; inputTokens: number; outputTokens: number; units: number; usd: number };
+/**
+ * `generations.cost_json`, the admin report's canonical rows for the job (`ai_usage`, via `spendForJobs`) and the sum of
+ * its succeeded `media_jobs.cost_usd` -- three views of one number.
+ */
+async function costOf(genId: string) {
+  const { query, pool } = await db();
+  const { flushAiUsage } = await import("../lib/server/ai-usage.ts");
+  await flushAiUsage();
+  const cj = (await query<{ c: { parts?: Part[]; usd: number; calls: number } | null }>("SELECT cost_json AS c FROM generations WHERE id = $1", [genId]))[0]!.c;
+  const { spendForJobs } = await import("../lib/server/admin-cost.ts");
+  const spend = (await spendForJobs(pool(), [genId])).get(genId);
+  const mediaJobsUsd = Number((await query<{ s: string }>("SELECT COALESCE(sum(cost_usd), 0)::text AS s FROM media_jobs WHERE generation_id = $1 AND status = 'succeeded'", [genId]))[0]!.s);
+  return { cj, spend, mediaJobsUsd };
+}
+/** The admin cost report's total for one tool (`spendBy` "tool") and one part kind, around now. */
+async function reportOf(toolId: string, kind: string) {
+  const { pool } = await db();
+  const { spendBy } = await import("../lib/server/admin-cost.ts");
+  const range = { fromTs: new Date(Date.now() - 3_600_000).toISOString(), toTsExclusive: new Date(Date.now() + 3_600_000).toISOString() };
+  const tool = (await spendBy(pool(), range, "tool")).find((r) => r.key === toolId);
+  const part = (await spendBy(pool(), range, "kind")).find((r) => r.key === kind);
+  return { toolUsd: tool?.usd ?? 0, toolCalls: tool?.calls ?? 0, kindUsd: part?.usd ?? 0, kindUnits: part?.units ?? 0 };
+}
+
 test("gating + speech: charge → one ElevenLabs call → MP3 + media_jobs row + gallery; a provider 500 refunds", { skip }, async (t) => {
   quiet(t);
   const { query } = await db();
@@ -204,6 +242,7 @@ test("gating + speech: charge → one ElevenLabs call → MP3 + media_jobs row +
   const { mediaPricing } = await import("../lib/server/media/pricing.ts");
   assert.equal(r.body.price, studioSpeechPrice(values, await mediaPricing()));
   assert.equal(100_000 - (await balanceOf(me)), r.body.price, "charged the shown price");
+  const reportBefore = await reportOf("studio-speech", "tts");
   const gen = await runNext(r.body.id!);
   assert.equal(gen?.status, "COMPLETED", String(gen?.error));
   const tts = calls.filter((c) => c.url.includes("/text-to-speech/"));
@@ -224,6 +263,23 @@ test("gating + speech: charge → one ElevenLabs call → MP3 + media_jobs row +
   assert.deepEqual(g.items[0]!.audio?.voices, ["Rachel"]);
   assert.equal(g.items[0]!.audio?.src, `/api/generations/${r.body.id}/file?inline=1`);
 
+  // P7c: the one delivered ElevenLabs call is the job's provider cost -- in cost_json, in the admin report's rows
+  // (ai_usage) and in the tool / kind totals -- and it is the number media_jobs.cost_usd holds.
+  const chars = values.text.length;
+  const want = usd6(chars * EL_USD_PER_CHAR);
+  assert.ok(want > 0);
+  const c = await costOf(r.body.id!);
+  assert.deepEqual(c.cj?.parts, [{ kind: "tts", provider: "elevenlabs", model: "eleven_v3", calls: 1, inputTokens: 0, outputTokens: 0, units: chars, usd: want }]);
+  assert.equal(c.cj?.usd, want);
+  assert.equal(c.cj?.calls, 1);
+  assert.equal(c.spend?.usd, want, "the admin cost report sees it");
+  assert.deepEqual(c.spend?.rows.map((x) => x.outcome), ["completed"]);
+  assert.ok(Math.abs(c.mediaJobsUsd - want) < 1e-6, `cost_json == media_jobs.cost_usd (${c.mediaJobsUsd})`);
+  const reportAfter = await reportOf("studio-speech", "tts");
+  assert.ok(Math.abs(reportAfter.toolUsd - reportBefore.toolUsd - want) < 1e-6, "tool total grew by the job's cost");
+  assert.ok(Math.abs(reportAfter.kindUsd - reportBefore.kindUsd - want) < 1e-6, "tts kind total grew by the job's cost");
+  assert.equal(reportAfter.kindUnits - reportBefore.kindUnits, chars);
+
   ttsStatus = 500;
   t.after(() => void (ttsStatus = 200));
   await idle();
@@ -235,6 +291,33 @@ test("gating + speech: charge → one ElevenLabs call → MP3 + media_jobs row +
   assert.match(String(failed?.error), /Kredit qaytariladi/);
   assert.equal(await balanceOf(me), before, "full refund");
   ttsStatus = 200;
+  // A failed call is not spend: no cost_json, no admin row (the user was refunded and nothing was delivered).
+  const fc = await costOf(bad.body.id!);
+  assert.equal(fc.cj, null);
+  assert.equal(fc.spend, undefined);
+});
+
+test("P7c dialogue: ONE call priced on the whole script; the admin tool / kind totals grow by exactly that", { skip }, async (t) => {
+  quiet(t);
+  installFetch();
+  await setVoiceSwitch(true);
+  await refresh();
+  const me = await mkUser();
+  const values = { modelId: "elevenlabs/v3-dialogue", script: "Ali: Salom!\nVali: Xayr!", voice1: RACHEL, voice2: "pNInz6obpgDQGcFmaJgB", stability: "0.5", lang: "uz" };
+  await idle();
+  const r = await post(me, "studio-speech", values);
+  assert.equal(r.status, 202, JSON.stringify(r.body));
+  const before = await reportOf("studio-speech", "tts");
+  const gen = await runNext(r.body.id!);
+  assert.equal(gen?.status, "COMPLETED", String(gen?.error));
+  const want = usd6(23 * EL_USD_PER_CHAR);
+  const c = await costOf(r.body.id!);
+  assert.deepEqual(c.cj?.parts, [{ kind: "tts", provider: "elevenlabs", model: "eleven_v3", calls: 1, inputTokens: 0, outputTokens: 0, units: 11, usd: want }]);
+  assert.equal(c.spend?.usd, want);
+  assert.ok(Math.abs(c.mediaJobsUsd - want) < 1e-6);
+  const after = await reportOf("studio-speech", "tts");
+  assert.ok(Math.abs(after.toolUsd - before.toolUsd - want) < 1e-6);
+  assert.equal(after.toolCalls - before.toolCalls, 1);
 });
 
 test("samples: consent required, type sniffed, length measured; consent stored", { skip }, async (t) => {
@@ -312,6 +395,13 @@ test("clone: slots, success, one active, speak with it, ownership, delete, new c
   assert.match(voice.consent_ip_hash, /^[0-9a-f]{64}$/);
   assert.equal((await query<{ b: unknown }>("SELECT bytes AS b FROM studio_voice_samples WHERE id = $1", [sample]))[0]!.b, null, "sample bytes cleared");
   assert.equal((await query("SELECT 1 FROM studio_voice_previews WHERE voice_key = $1", [`clone:${voice.id}`])).length, 1);
+  // P7c: the clone job's billable provider call is the preview (the IVC call costs $0): that is its cost_json.
+  const { VOICE_PREVIEW_TEXT } = await import("../lib/media/catalog-speech.ts");
+  const previewUsd = usd6(VOICE_PREVIEW_TEXT.length * EL_USD_PER_CHAR);
+  const cc = await costOf(r.body.id!);
+  assert.deepEqual(cc.cj?.parts, [{ kind: "tts", provider: "elevenlabs", model: "eleven_v3", calls: 1, inputTokens: 0, outputTokens: 0, units: VOICE_PREVIEW_TEXT.length, usd: previewUsd }]);
+  assert.equal(cc.spend?.usd, previewUsd, "the admin cost report sees the preview");
+  assert.ok(Math.abs(cc.mediaJobsUsd - previewUsd) < 1e-6, "the free IVC row adds nothing to the preview's cost_usd");
 
   // One active clone per user.
   const sample2 = (await upload(me, wav(41), true)).body.sampleId!;
@@ -366,6 +456,10 @@ test("clone: slots, success, one active, speak with it, ownership, delete, new c
   assert.match(String(failed?.error), /Kredit qaytariladi/);
   assert.equal(await balanceOf(me), before + 5000);
   assert.equal((await query("SELECT 1 FROM studio_voices WHERE user_id = $1 AND deleted_at IS NULL", [me])).length, 0);
+  // P7c: the IVC call failed before any preview was billed: nothing recorded.
+  const fc = await costOf(again.body.id!);
+  assert.equal(fc.cj, null);
+  assert.equal(fc.spend, undefined);
 });
 
 test("purge: warn once at 27 days, delete + provider DELETE at 30, retry an owed delete", { skip }, async (t) => {
@@ -464,6 +558,10 @@ test("review m3: IVC ok, preview fails → the ElevenLabs voice is deleted, dele
   const row = (await query<{ reason: string; pdel: boolean }>("SELECT delete_reason AS reason, provider_deleted_at IS NOT NULL AS pdel FROM studio_voices WHERE user_id = $1", [me]))[0]!;
   assert.deepEqual(row, { reason: "failed", pdel: true });
   assert.equal((await query("SELECT 1 FROM studio_voices WHERE user_id = $1 AND deleted_at IS NULL", [me])).length, 0, "no active clone left");
+  // P7c: the preview call failed (not delivered) and the IVC call is free: the failed clone job leaves no spend.
+  const fc = await costOf(r.body.id!);
+  assert.equal(fc.cj, null);
+  assert.equal(fc.spend, undefined);
 });
 
 test("review m2: a 'creating' row whose job is over, or older than 10 min, is swept; a live one stays", { skip }, async (t) => {
