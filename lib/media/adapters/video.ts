@@ -9,7 +9,8 @@
  * provider and started a paid job we never heard about, so it is `accepted: true` -- the router must not send the same
  * clip to a second route. Errors of `poll` / `fetchOutput` are always `accepted: true` (the operation exists).
  *
- * Client-safe like the wrapped adapters: no server imports.
+ * Server-side: the wrapped adapters read provider keys (`lib/server/providers/resolve`) and Kling signs with
+ * `node:crypto`, so this file is NOT client-safe; the browser reads only the catalog (`catalog.ts`, `catalog-video.ts`).
  */
 import { MediaError, type AdapterDeps, type AdapterInput, type MediaAdapter, type MediaOutput, type PollResult } from "../../studio-core";
 import { MEDIA_CATALOG, VIDEO_PROVIDER_TO_MEDIA } from "../catalog";

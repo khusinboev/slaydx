@@ -12,6 +12,7 @@ const { useAppStore } = await import("../../lib/store.ts");
 const { useUi } = await import("../../lib/ui.ts");
 const { dropMediaCatalog } = await import("../../components/studio/studio-api.ts");
 const { formatSom } = await import("../../lib/format.ts");
+const { PHOTO_MAX_BYTES, photoHint } = await import("../../lib/photo-accept.ts");
 
 /**
  * Studio «Video» tab (docs/studio/P3-SPEC.md) with the API stubbed at `fetch` and the REAL catalog entries.
@@ -32,7 +33,11 @@ const { formatSom } = await import("../../lib/format.ts");
  *   2. effect submit without the photo check                                   -> «effects grid»;
  *   3. the button names «effekt» instead of the chosen scene                   -> «effects grid»;
  *   4. picker cards without the video `priceOf` («so'm / rasm» wording)          -> «text form»;
- *   5. `parseCatalog` keeps picture models in the video purpose                -> «text form».
+ *   5. `parseCatalog` keeps picture models in the video purpose                -> «text form»;
+ *   6. `videoAgain` without `chosen: item.modelId`                             -> «gallery Yana yaratish»;
+ *   7. `videoAgain` without the stored length / sound                          -> «gallery Yana yaratish»;
+ *   8. effect cells without `aria-pressed`                                     -> «effects grid»;
+ *   9. upload hint hard-coded («10 MB»)                                         -> «effects grid».
  */
 
 Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
@@ -50,8 +55,8 @@ const up100 = (n: number) => Math.ceil(n / 100 - 1e-9) * 100;
 
 const videoCatalog = (models = [OMNI, K3, K3P, FX], extra: unknown[] = []) => ({ purpose: "studio.video", defaultModelId: "google/omni-video", models: [...models, ...extra], pricing: RATE });
 
-function api(opts: { video?: unknown; generation?: (id: string, n: number) => Record<string, unknown> } = {}) {
-  const base = installApi({ catalog: catalogBody([NANO, GPT]), generation: opts.generation });
+function api(opts: { video?: unknown; generation?: (id: string, n: number) => Record<string, unknown>; gallery?: Record<string, unknown> } = {}) {
+  const base = installApi({ catalog: catalogBody([NANO, GPT]), generation: opts.generation, gallery: opts.gallery });
   const inner = globalThis.fetch;
   (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) => {
     const url = String(input);
@@ -147,9 +152,18 @@ test("effects grid: 9 catalog scenes with the 5 s badge, the chosen one on the b
   const fxPrice = up100(0.84 * 12_700 * 2);
   assert.equal(fxPrice, 21_400);
   assert.equal(button(), `Yaratish · «Tug‘ilgan kun» · ${formatSom(fxPrice)}`);
+  // Plain buttons with `aria-pressed` (like the model cards): Tab / Enter / Space work natively, no radio roles.
+  assert.equal(qa('[data-effects-grid] [role="radio"]').length, 0);
+  for (const c of cells) assert.equal(c.tagName, "BUTTON");
+  assert.equal(cells[0]!.getAttribute("aria-pressed"), "true", "the first scene starts chosen");
   await click(q('[data-effect="zombie_transform"]'));
-  assert.equal(q('[data-effect="zombie_transform"]')!.getAttribute("aria-checked"), "true");
+  assert.equal(q('[data-effect="zombie_transform"]')!.getAttribute("aria-pressed"), "true");
+  assert.equal(cells[0]!.getAttribute("aria-pressed"), "false");
   assert.equal(button(), `Yaratish · «Zombi» · ${formatSom(fxPrice)}`, "MUTATSIYA: effekt nomi tugmadan tushsa qizaradi");
+  // The upload hint states the limit the upload endpoint enforces (one constant).
+  assert.equal((FX.params.find((p) => p.name === "imageAssetId") as unknown as { maxBytes: number }).maxBytes, PHOTO_MAX_BYTES, "the schema states the endpoint's limit");
+  assert.ok((q('[data-field="imageAssetId"]')?.textContent ?? "").includes(photoHint()), "the hint from photoHint()");
+  assert.match(photoHint(), /5 MB/);
   // Fields: exactly the effect entry's schema.
   assert.deepEqual(qa("[data-field]").map((e) => e.getAttribute("data-field")).sort(), ["effect", "imageAssetId"]);
   // No photo → no request, a clear message.
@@ -220,4 +234,42 @@ test("results: a running clip shows the progress panel, a finished one plays its
   assert.ok(cards[1]!.querySelector('[data-result-action="download"]'));
   assert.ok(cards[1]!.querySelector('[data-result-action="again"]'));
   assert.match(cards[1]!.querySelector("[data-studio-job-meta]")!.textContent ?? "", /5 soniya/);
+});
+
+test("gallery «Yana yaratish»: a text clip re-opens with ITS model, prompt, length, aspect and sound (same price); an effect with its scene", async () => {
+  const clip = "33333333-3333-4333-8333-333333333333";
+  const fx = "44444444-4444-4444-8444-444444444444";
+  const item = (id: string, patch: Record<string, unknown>) => ({ id, kind: "video", createdAt: "2026-11-02T10:00:00.000Z", images: [], fileUrl: `/api/generations/${id}/file`, ...patch });
+  api({
+    gallery: {
+      "": {
+        items: [
+          item(clip, { modelId: K3P.id, modelLabel: K3P.label, prompt: "Registon kechasi", video: { src: "x", seconds: 10, requestedSeconds: 10, aspect: "9:16", sound: true, effect: null, effectLabel: null } }),
+          item(fx, { modelId: FX.id, modelLabel: FX.label, prompt: "Effekt: Qorli shar", video: { src: "x", seconds: 5, requestedSeconds: null, aspect: null, sound: null, effect: "snowglobe", effectLabel: "Qorli shar" } }),
+        ],
+        nextCursor: null,
+      },
+    },
+  });
+  await mount();
+  await click(q("[data-studio-gallery-link]"));
+  await settle();
+  const again = (id: string) => q(`[data-gallery-item="${id}"] [data-gallery-other-model]`);
+  assert.match(again(clip)?.textContent ?? "", /Yana yaratish/);
+  await click(again(clip));
+  await settle();
+  assert.equal(q('[data-studio-tab="video"]')!.getAttribute("aria-selected"), "true");
+  assert.equal(q(`[data-model-card="${K3P.id}"]`)!.getAttribute("aria-pressed"), "true", "MUTATSIYA: klipning modeli tiklanmasa qizaradi");
+  assert.equal(q<HTMLTextAreaElement>("[data-video-prompt] textarea")!.value, "Registon kechasi");
+  assert.equal(q('[data-field="sound"] [role="switch"]')!.getAttribute("aria-checked"), "true");
+  assert.equal(q('[data-field="aspect"] [role="radio"][aria-checked="true"]')!.textContent, "9:16");
+  // Kling 3.0 Pro, 10 s, with sound: $0.168 × 10 × 12 700 × 2 — the price the clip was bought at.
+  assert.equal(button(), `Yaratish · 10 soniya · ${formatSom(up100(0.168 * 10 * 12_700 * 2))}`, "MUTATSIYA: uzunlik/ovoz tiklanmasa qizaradi");
+
+  await click(q("[data-studio-gallery-link]"));
+  await settle();
+  await click(again(fx));
+  await settle();
+  assert.equal(q('[data-effect="snowglobe"]')!.getAttribute("aria-pressed"), "true");
+  assert.equal(button(), `Yaratish · «Qorli shar» · ${formatSom(21_400)}`);
 });

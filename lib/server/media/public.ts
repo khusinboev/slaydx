@@ -53,8 +53,23 @@ export async function mediaCatalog(purposeId: string): Promise<CatalogResponse> 
 export const GALLERY_PAGE = 24;
 
 export type GalleryImage = { url: string; w: number | null; h: number | null };
-/** A Studio clip (P3): played from the result file itself (`?inline=1`, HTTP Range), as the result page does. */
-export type GalleryVideo = { src: string; seconds: number | null; aspect: string | null; effectLabel: string | null };
+/**
+ * A clip in the gallery (P3): played from the result file itself (`?inline=1`, HTTP Range). `requestedSeconds`, `aspect`,
+ * `sound` and `effect` are what was BOUGHT, so «Yana yaratish» re-opens the form at the same settings and price.
+ */
+export type GalleryVideo = {
+  src: string;
+  /** Length of the delivered MP4. */
+  seconds: number | null;
+  /** Length paid for (`null` for an effect: one fixed clip). */
+  requestedSeconds: number | null;
+  aspect: string | null;
+  /** Sound was bought (Kling); `null` when the result does not say. */
+  sound: boolean | null;
+  /** Kling `effect_scene` id of an effect clip. */
+  effect: string | null;
+  effectLabel: string | null;
+};
 export type GalleryItem = {
   id: string;
   /** `image` (Rasm tab) or `video` (Video tab). */
@@ -87,12 +102,15 @@ const num = (v: unknown): number | null => (typeof v === "number" && Number.isFi
 
 function videoOf(id: string, raw: unknown): GalleryVideo {
   const v = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-  const effect = typeof v.effect === "string" ? v.effect : "";
+  const effect = KLING_EFFECTS.find((e) => e.id === v.effect) ?? null;
   return {
     src: `/api/generations/${id}/file?inline=1`,
     seconds: num(v.seconds),
-    aspect: typeof v.aspect === "string" ? v.aspect : null,
-    effectLabel: KLING_EFFECTS.find((e) => e.id === effect)?.label ?? null,
+    requestedSeconds: effect ? null : num(v.requestedSeconds),
+    aspect: typeof v.aspect === "string" && v.aspect ? v.aspect : null,
+    sound: typeof v.sound === "boolean" ? v.sound : null,
+    effect: effect?.id ?? null,
+    effectLabel: effect?.label ?? null,
   };
 }
 

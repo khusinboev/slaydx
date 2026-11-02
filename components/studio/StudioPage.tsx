@@ -186,12 +186,24 @@ function StudioApp() {
     setPickerOpen(true);
   }
 
-  /** «Yana yaratish» on a gallery clip: back to the Video tab — the effect grid for an effect, else its prompt in the form. */
+  /**
+   * «Yana yaratish» on a gallery clip: back to the Video tab at what was bought — the effect scene for an effect; else
+   * the clip's model, prompt, length, aspect and sound (so the button shows the same price). A model the tab no longer
+   * offers falls back to the default as any stale choice does; the photo is never re-used (it may be purged).
+   */
   function videoAgain(item: GalleryItem) {
     setView("create");
     setTab("video");
-    if (item.video?.effectLabel) setVideoState((s) => ({ ...s, mode: "effects" }));
-    else setVideoState((s) => ({ ...s, mode: "text", raw: { ...s.raw, [PROMPT_PARAM]: item.prompt } }));
+    const v = item.video;
+    if (v?.effect) {
+      setVideoState((s) => ({ ...s, mode: "effects", effect: v.effect }));
+      return;
+    }
+    const next: RawValues = { [PROMPT_PARAM]: item.prompt };
+    if (v?.requestedSeconds) next.seconds = v.requestedSeconds;
+    if (v?.aspect) next.aspect = v.aspect;
+    if (v?.sound !== null && v?.sound !== undefined) next.sound = v.sound;
+    setVideoState((s) => ({ ...s, mode: "text", chosen: item.modelId ?? s.chosen, raw: next }));
   }
 
   const toGallery = () => setView("gallery");

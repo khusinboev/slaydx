@@ -27,8 +27,11 @@ effektlar» | «Matndan / rasmdan», 3×3 effect grid with a 5 s badge, upload b
   with `model` (catalog id) and `effect`, `cost_json` from the catalog cost rule at the delivered length; a clip more
   than 1 s short of a per-second price refunds the difference (as «Video»; effects are per clip, no partial refund).
 - **Gallery** (`GET /api/media/gallery`): pictures and clips together, newest first; an item has `kind: "image" | "video"`
-  and `video: { src: /api/generations/<id>/file?inline=1, seconds, aspect, effectLabel } | null` (pictures keep
-  `images`). The card plays the first frame of the file; «Yana yaratish» returns to the Video tab.
+  and `video: { src: /api/generations/<id>/file?inline=1, seconds, requestedSeconds, aspect, sound, effect, effectLabel } |
+  null` (pictures keep `images`). The card plays the first frame of the file; «Yana yaratish» returns to the Video tab at
+  what was bought (the clip's model, prompt, length, aspect, sound — the same price; an effect with its scene).
+- **Poll claim**: ONE claim across `video.clip` and `studio.video` rows, oldest-due first (`purpose = ANY(...)`), so
+  neither tool's clips wait behind the other's (legacy `video_ops` rows still drain first: that table only empties).
 - **UI** (`components/studio/video/`): tab bar in `StudioPage` (Rasm state and Video state both kept across switches,
   the video catalog loaded on first open); effects mode = the catalog's effect scenes as a 3×3 grid with «5 s», the
   photo (PhotoField, required); text/image mode = prompt, model picker (video models only, card «~X so'm / N s»), the
@@ -111,7 +114,8 @@ Not sold: «Quchoqlash» (`hug_pro` needs TWO photos — a two-photo upload is P
 - The gallery's clip card loads the MP4's first frame (`preload="metadata"`); in bearer-mode webviews `useApiSrc` turns
   each into a `blob:` URL, i.e. the whole file is fetched per card. A poster image (first-frame JPEG at finalise) is the
   follow-up if the Mini App gallery feels heavy.
-- Upload is the existing `PhotoField` (square crop, ≤ 5 MB): an effect photo is cropped square.
+- Upload is the existing `PhotoField` (square crop, PNG / JPEG ≤ `PHOTO_MAX_BYTES` = 5 MB, the one constant the upload
+  endpoint enforces, the schema states and the hint prints): an effect photo is cropped square.
 - A re-claimed job whose `media_jobs` row is `submitting` (worker died between the call and the update) is failed and
   refunded, never submitted twice — the provider may have started a paid clip nobody will download (as «Video»).
 - Kling 3.0 4K, multi-shot / storyboard, end frame, camera control, extend, lip-sync, try-on: P4 (PLAN §17).

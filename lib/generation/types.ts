@@ -492,6 +492,8 @@ export type VideoDocModel = {
   model?: string;
   /** Studio (P3): the Kling effect scene id of an effect clip. */
   effect?: string;
+  /** Studio (P3): sound was bought (models with a `sound` param only). */
+  sound?: boolean;
 };
 
 export type AcademicDoc = {

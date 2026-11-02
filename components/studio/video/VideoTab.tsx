@@ -11,6 +11,7 @@ import { AutoTextarea } from "@/components/common/AutoTextarea";
 import { Card, Row, Segmented } from "@/components/forms/compact";
 import { Counter, Field } from "@/components/forms/shared";
 import { PhotoField } from "@/components/forms/PhotoField";
+import { photoHint } from "@/lib/photo-accept";
 import { queueGeneration } from "@/components/forms/runGeneration";
 import { PAY_RETURN_PATH } from "@/components/overlays/pay-amount";
 import { MediaModelPicker } from "../MediaModelPicker";
@@ -240,15 +241,14 @@ export function VideoTab({
         <>
           <Card title="Effekt">
             <Field id="effect">
-              <div role="radiogroup" aria-label="Effekt" className="grid grid-cols-3 gap-2" data-effects-grid>
+              <div role="group" aria-label="Effekt" className="grid grid-cols-3 gap-2" data-effects-grid>
                 {options.map((o) => {
                   const on = effect?.value === o.value;
                   return (
                     <button
                       key={o.value}
                       type="button"
-                      role="radio"
-                      aria-checked={on}
+                      aria-pressed={on}
                       data-effect={o.value}
                       onClick={() => patch({ effect: o.value })}
                       className={cn(
@@ -273,7 +273,7 @@ export function VideoTab({
                   shape="square"
                   keepOriginal={false}
                   alt="Effekt surati"
-                  hint="PNG yoki JPEG, 5 MB gacha"
+                  hint={photoHint()}
                   onChange={(v) => patch({ effectImage: v.assetId })}
                 />
               </Field>
@@ -304,7 +304,7 @@ export function VideoTab({
                     shape="square"
                     keepOriginal={false}
                     alt="Boshlang‘ich surat"
-                    hint="PNG yoki JPEG, 5 MB gacha"
+                    hint={photoHint()}
                     onChange={(v) => setParam(IMAGE_PARAM, v.assetId)}
                   />
                 </Field>

@@ -6,6 +6,7 @@ import { ApiError } from "./api";
 import { readUploadForm } from "./upload-body";
 import { withUploadQuota } from "./upload-quota";
 import { imageDims, sniffImageType } from "../generation/slide-images";
+import { PHOTO_MAX_BYTES } from "../photo-accept";
 
 /**
  * Rezyume surati (Rezyume 2, AUDIT-15) — `logo.ts` shartnomasining
@@ -22,7 +23,8 @@ import { imageDims, sniffImageType } from "../generation/slide-images";
  */
 
 /** Asl surat chegarasi. Klient kesilgan nusxani 600×600 qilib yuboradi. */
-export const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+// One limit for the endpoint and the forms' hints (`lib/photo-accept.ts`).
+export { PHOTO_MAX_BYTES };
 /** Kesilgan nusxa uchun tomon chegarasi — undan kattasi rad etiladi. */
 export const PHOTO_CROP_MAX_SIDE = 1200;
 

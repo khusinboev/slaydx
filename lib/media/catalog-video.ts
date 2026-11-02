@@ -25,6 +25,7 @@
 import type { CatalogEntry, ParamSchema, PurposeSpec } from "../studio-core";
 import { VIDEO_PROMPT_MAX, VIDEO_PROMPT_MIN } from "../generation/video/registry";
 import { VIDEO_MAX_BYTES } from "../generation/video/types";
+import { PHOTO_MAX_BYTES } from "../photo-accept";
 import { KLING_EFFECT_SECONDS, KLING_V3_ASPECTS, KLING_V3_MODEL, KLING_V3_SECONDS } from "../generation/video/kling-options";
 
 /** Purpose of the Studio «Video» tab (tool `studio-video`). */
@@ -57,8 +58,9 @@ const START_IMAGE: ParamSchema = {
   label: "Boshlang'ich surat",
   type: "image",
   max: 1,
-  mimes: ["image/jpeg", "image/png", "image/webp"],
-  maxBytes: 10 * 1024 * 1024,
+  // What the photo upload accepts and enforces (`POST /api/uploads/photo`): the schema states the real limit.
+  mimes: ["image/jpeg", "image/png"],
+  maxBytes: PHOTO_MAX_BYTES,
   affects: "request",
 };
 

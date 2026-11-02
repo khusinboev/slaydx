@@ -28,7 +28,9 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *   4. submit-generation without the `video.enabled` check for studio -> «gating»;
  *   5. `isPaidOnlyTool` = only `video`                                -> «money»;
  *   6. `studioVideoModels` ignores `video.enabled`                    -> «gating» (catalog lists models while off);
- *   7. gallery SQL only `studio-image`                                -> «gallery».
+ *   7. gallery SQL only `studio-image`                                -> «gallery»;
+ *   8. `claimDueOps` claims `video.clip` first, then `studio.video`   -> «poll claim» (the oldest-due Studio row waits);
+ *   9. gallery `videoOf` without `sound` / `requestedSeconds`         -> «gallery».
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -107,10 +109,11 @@ test("studio-video: gating, money, async submit/poll on media_jobs, refunds, gal
     return { points: Number(r.points), balance: Number(r.balance) };
   };
   const cookieOf = async (userId: string) => `${SESSION_COOKIE}=${(await createSession(userId)).token}`;
-  const post = async (userId: string, values: Record<string, unknown>) => {
+  /** `expectedPrice` is a field of the request BODY (next to `slug` / `values`), as the client sends it. */
+  const post = async (userId: string, values: Record<string, unknown>, expectedPrice?: number) => {
     // The route's burst limit (5 / min) is not under test here.
     await query("DELETE FROM rate_limits WHERE bucket LIKE 'gen:%'");
-    const req = new Request("http://localhost/api/generations", { method: "POST", headers: { cookie: await cookieOf(userId), "content-type": "application/json" }, body: JSON.stringify({ slug: "studio-video", values }) });
+    const req = new Request("http://localhost/api/generations", { method: "POST", headers: { cookie: await cookieOf(userId), "content-type": "application/json" }, body: JSON.stringify({ slug: "studio-video", values, ...(expectedPrice === undefined ? {} : { expectedPrice }) }) });
     const r = await inRequest(req, () => route.POST(req));
     return { status: r.status, body: (await r.json()) as { id?: string; error?: string; code?: string; price?: number } };
   };
@@ -208,6 +211,7 @@ test("studio-video: gating, money, async submit/poll on media_jobs, refunds, gal
 
   await t.test("money: cost × markup from the catalog block, paid balance only (bonus refused, 402)", async () => {
     await clearAll();
+    // No `tool_pricing` row in this isolated database: the charged price IS the base formula (cost × markup).
     const price = studioVideoPrice(K3, await mediaPricing())!;
     assert.ok(price > 0);
     const bonusOnly = await mkUser({ points: 1_000_000, balance: 0 });
@@ -220,7 +224,16 @@ test("studio-video: gating, money, async submit/poll on media_jobs, refunds, gal
     assert.equal(ok.status, 202);
     assert.equal(ok.body.price, price);
     assert.deepEqual(await wallet(payer), { points: 9_000, balance: 1_000 });
-    assert.equal((await post(payer, { ...K3, expectedPrice: undefined })).status === 402, true, "the rest is not enough");
+    // The confirmed price is right, the paid balance left (1 000) is not enough: 402, nothing charged.
+    const again = await post(payer, K3, price);
+    assert.equal(again.status, 402, JSON.stringify(again.body));
+    assert.deepEqual(await wallet(payer), { points: 9_000, balance: 1_000 });
+    // A stale shown price is refused before anything else is decided (409, nothing charged).
+    const rich = await mkUser({ balance: 500_000 });
+    const stale = await post(rich, K3, price - 100);
+    assert.equal(stale.status, 409, JSON.stringify(stale.body));
+    assert.equal(stale.body.code, "price_changed");
+    assert.deepEqual(await wallet(rich), { points: 0, balance: 500_000 });
   });
 
   await t.test("flow: Kling 3.0 — one submit, media_jobs row, lease released, poll running → succeed → MP4 + doc + cost", async () => {
@@ -326,6 +339,30 @@ test("studio-video: gating, money, async submit/poll on media_jobs, refunds, gal
     assert.equal((await wallet(me)).balance, before, "every failed clip came back");
   });
 
+  await t.test("poll claim: one batch across «Video» and Studio rows, oldest-due first — neither purpose starves", async () => {
+    await clearAll();
+    const me = await mkUser({});
+    const mk = async (purpose: string, model: string, dueSecAgo: number) => {
+      const g = randomUUID();
+      await query(`INSERT INTO generations (id, user_id, tool_id, topic, status) VALUES ($1, $2, $3, 'claim', 'REVOKED')`, [g, me, purpose === "studio.video" ? "studio-video" : "video"]);
+      await query(
+        `INSERT INTO media_jobs (id, generation_id, purpose, model_id, provider, upstream_model, idempotency_key, op_id, status, attempts, next_poll_at, params)
+         VALUES ($1, $2, $3, $4, 'kling', 'x', $5, 'text2video:Z', 'pending', 1, now() - $6::int * interval '1 second', '{}'::jsonb)`,
+        [randomUUID(), g, purpose, model, `${g}:video:0`, dueSecAgo],
+      );
+      return g;
+    };
+    const studio = await mk("studio.video", "kling/kling-3", 300); // the longest overdue
+    const legacy = [await mk("video.clip", "kling/video", 200), await mk("video.clip", "kling/video", 100), await mk("video.clip", "kling/video", 50)];
+    const claimed = (await ops.claimDueOps(3)).map((o) => o.generation_id);
+    assert.equal(claimed.length, 3);
+    assert.ok(claimed.includes(studio), "MUTATSIYA: avval faqat video.clip olinsa Studio qatori kutib qoladi va qizaradi");
+    assert.deepEqual(new Set(claimed), new Set([studio, legacy[0], legacy[1]]), "the three oldest-due, whatever the purpose");
+    // The lease: claimed rows are not due again; the one left out is claimed by the next run.
+    assert.deepEqual((await ops.claimDueOps(3)).map((o) => o.generation_id), [legacy[2]]);
+    await query(`UPDATE media_jobs SET status = 'failed' WHERE generation_id = ANY($1::uuid[])`, [[studio, ...legacy]]);
+  });
+
   await t.test("gallery: my pictures and my clips together, newest first; a clip is `kind: video` with its own file", async () => {
     await clearAll();
     const me = await mkUser({ balance: 500_000 });
@@ -348,7 +385,8 @@ test("studio-video: gating, money, async submit/poll on media_jobs, refunds, gal
     assert.equal(v.modelLabel, "Kling 3.0");
     assert.equal(v.prompt, K3.prompt);
     assert.deepEqual(v.images, []);
-    assert.deepEqual(v.video, { src: `/api/generations/${clip}/file?inline=1`, seconds: 5, aspect: "16:9", effectLabel: null });
+    // What was bought (length, aspect, sound) travels with the clip: «Yana yaratish» re-opens the form at the same price.
+    assert.deepEqual(v.video, { src: `/api/generations/${clip}/file?inline=1`, seconds: 5, requestedSeconds: 5, aspect: "16:9", sound: true, effect: null, effectLabel: null });
     assert.equal(body.items[1]!.video, null);
   });
 });

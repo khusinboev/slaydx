@@ -130,22 +130,23 @@ export async function failSubmittingMediaJob(id: string, error: string): Promise
 }
 
 /**
- * Claims up to `limit` due 'pending' rows of `purpose` by pushing their `next_poll_at` forward by `leaseSec` (a lease,
+ * Claims up to `limit` due 'pending' rows of `purpose` (one purpose or several: ONE claim, oldest-due first across all
+ * of them, so no purpose starves behind another) by pushing their `next_poll_at` forward by `leaseSec` (a lease,
  * as on `video_ops`): another poller does not take the same op meanwhile, and a crashed poller's claim expires.
  */
-export async function claimDueMediaJobs(purpose: string, limit: number, leaseSec: number): Promise<MediaJobRow[]> {
+export async function claimDueMediaJobs(purpose: string | readonly string[], limit: number, leaseSec: number): Promise<MediaJobRow[]> {
   if (limit <= 0) return [];
   return query<MediaJobRow>(
     `UPDATE media_jobs
         SET next_poll_at = now() + $3::int * interval '1 second'
       WHERE id IN (
               SELECT id FROM media_jobs
-               WHERE status = 'pending' AND purpose = $1 AND next_poll_at <= now()
+               WHERE status = 'pending' AND purpose = ANY($1::text[]) AND next_poll_at <= now()
                ORDER BY next_poll_at
                LIMIT $2
                FOR UPDATE SKIP LOCKED)
       RETURNING *`,
-    [purpose, limit, leaseSec],
+    [typeof purpose === "string" ? [purpose] : [...purpose], limit, leaseSec],
   );
 }
 

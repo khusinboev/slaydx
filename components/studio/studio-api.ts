@@ -133,7 +133,17 @@ function parseItem(raw: unknown): GalleryItem | null {
   const v = raw.kind === "video" && isObj(raw.video) ? raw.video : null;
   const pos = (n: unknown): number | null => (typeof n === "number" && Number.isFinite(n) && n > 0 ? n : null);
   // Only the job's own file URL is played (never a provider URL from the wire).
-  const video = v ? { src: `/api/generations/${id}/file?inline=1`, seconds: pos(v.seconds), aspect: str(v.aspect), effectLabel: str(v.effectLabel) } : null;
+  const video = v
+    ? {
+        src: `/api/generations/${id}/file?inline=1`,
+        seconds: pos(v.seconds),
+        requestedSeconds: pos(v.requestedSeconds),
+        aspect: str(v.aspect),
+        sound: typeof v.sound === "boolean" ? v.sound : null,
+        effect: str(v.effect),
+        effectLabel: str(v.effectLabel),
+      }
+    : null;
   return {
     id,
     kind: video ? "video" : "image",

@@ -140,6 +140,9 @@ export type VideoJob = { id: string; userId: string; lease: string; values: Form
 /** The catalog purpose of a user's clip (`lib/media/catalog.ts` MEDIA_PURPOSES). */
 export const VIDEO_PURPOSE = "video.clip";
 
+/** The `media_jobs` purposes the video poll loop drives. */
+export const VIDEO_POLL_PURPOSES: readonly string[] = [VIDEO_PURPOSE, STUDIO_VIDEO_PURPOSE];
+
 /** The `media_jobs` idempotency key of a generation's one provider operation. */
 export function videoMediaKey(generationId: string): string {
   return `${generationId}:video:0`;
@@ -490,9 +493,8 @@ export async function claimDueOps(limit: number = VIDEO_POLL_BATCH): Promise<Due
   if (old.length >= limit) return old;
   let parked: MediaJobRow[];
   try {
-    parked = await claimDueMediaJobs(VIDEO_PURPOSE, limit - old.length, CLAIM_LEASE_SEC);
-    // Studio clips (P3) share the batch: same lease, same loop.
-    if (old.length + parked.length < limit) parked = [...parked, ...(await claimDueMediaJobs(STUDIO_VIDEO_PURPOSE, limit - old.length - parked.length, CLAIM_LEASE_SEC))];
+    // «Video» and Studio clips (P3) in ONE claim, oldest-due first whatever the purpose (neither starves the other).
+    parked = await claimDueMediaJobs(VIDEO_POLL_PURPOSES, limit - old.length, CLAIM_LEASE_SEC);
   } catch (e) {
     // The old path must not depend on the core's table: `video_ops` keeps draining while media_jobs is broken.
     log("error", "[video] media_jobs could not be claimed -- polling video_ops only this run", { err: e });
@@ -814,6 +816,7 @@ function studioResult(values: FormValues, s: { modelId: string; params: Normaliz
       fromImage,
       model: s.modelId,
       ...(isEffect ? { effect } : {}),
+      ...(typeof s.params.sound === "boolean" ? { sound: s.params.sound } : {}),
     },
   };
 }

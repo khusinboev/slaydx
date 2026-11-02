@@ -18,8 +18,23 @@ export type MediaCatalog = {
   pricing: StudioPricing;
 };
 
-/** A clip in the gallery (P3): played from the result file (`/api/generations/{id}/file?inline=1`). */
-export type GalleryVideo = { src: string; seconds: number | null; aspect: string | null; effectLabel: string | null };
+/**
+ * A clip in the gallery (P3): played from the result file itself (`/api/generations/{id}/file?inline=1`). `requestedSeconds`, `aspect`,
+ * `sound` and `effect` are what was BOUGHT, so «Yana yaratish» re-opens the form at the same settings and price.
+ */
+export type GalleryVideo = {
+  src: string;
+  /** Length of the delivered MP4. */
+  seconds: number | null;
+  /** Length paid for (`null` for an effect: one fixed clip). */
+  requestedSeconds: number | null;
+  aspect: string | null;
+  /** Sound was bought (Kling); `null` when the result does not say. */
+  sound: boolean | null;
+  /** Kling `effect_scene` id of an effect clip. */
+  effect: string | null;
+  effectLabel: string | null;
+};
 
 /** One completed Studio generation in the gallery. */
 export type GalleryItem = {
