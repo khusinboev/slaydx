@@ -49,6 +49,12 @@ export const PROVIDERS = [
   // ElevenLabs: the «Premium ovoz» of podcast / greeting (lib/generation/tts/elevenlabs.ts); never part of the default chain.
   // «Tekshirish» reads the subscription (free): plan + credits left.
   { id: "elevenlabs", label: "ElevenLabs (ovoz)", kinds: ["tts"], envKeys: ["ELEVENLABS_API_KEY"], keyHint: "sk_…", implemented: true, testable: true },
+  // fal.ai (Studio P2a, docs/studio/P2-SPEC.md): FLUX / Seedream / Ideogram / Recraft / Qwen Image through ONE generic
+  // adapter (lib/media/adapters/fal.ts). Removed on 2026-10-31 (the old slide adapter), back for the Studio only.
+  // `FAL_KEY` is a dev/script fallback: docker-compose deliberately does NOT pass it (a stale pre-removal key in the
+  // server `.env` must not switch the models on) — in production the key lives only in this store.
+  // «Tekshirish» reads fal's own price list for our endpoints (free, authenticated) and the balance when the key may.
+  { id: "fal", label: "fal.ai (rasm modellari)", kinds: ["image"], envKeys: ["FAL_KEY"], keyHint: "<key_id>:<key_secret>", implemented: true, testable: true },
 ] as const satisfies readonly ProviderDef[];
 
 export type ProviderId = (typeof PROVIDERS)[number]["id"];

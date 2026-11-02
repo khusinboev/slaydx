@@ -158,7 +158,14 @@ test("preflight: Studio model and its ParamSchema, before any charge", () => {
   assert.equal(TOOL_BY_SLUG.studio, STUDIO);
   assert.equal(STUDIO.group, "media");
   assert.equal(STUDIO.custom, "studio-image");
-  assert.deepEqual(MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE), { id: "studio.image", kind: "image", allowed: [NANO, GPT], default: NANO, userCanChoose: true });
+  // P2a: the five fal models joined the Studio after the two «Rasm» models; Nano Banana stays the default.
+  assert.deepEqual(MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE), {
+    id: "studio.image",
+    kind: "image",
+    allowed: [NANO, GPT, "bfl/flux", "bytedance/seedream", "ideogram/ideogram", "recraft/recraft", "alibaba/qwen-image"],
+    default: NANO,
+    userCanChoose: true,
+  });
   // The viewer names a Studio doc's catalog id correctly (the inverse map is the catalog's own).
   assert.deepEqual(Object.fromEntries(Object.entries(IMAGE_MODEL_TO_MEDIA).map(([k, v]) => [v, k])), MEDIA_TO_IMAGE_MODEL);
   assert.equal(imageModelById(GPT).id, "openai");
@@ -394,7 +401,15 @@ test("client preview == server price == charge (catalog pricing block + session 
   const c = await catalog();
   assert.equal(c.status, 200);
   const block = c.body.pricing as ReturnType<typeof pricing>;
-  assert.deepEqual(block, { soumPerUsd: 12_900, markup: 2.5, step: 100, overrides: { [GPT]: { markup: 4 } }, costUsd: { [NANO]: USD[NANO], [GPT]: USD[GPT] } });
+  // P2a: the flat-priced fal models carry their price-book cost too (Ideogram is priced by its quality table, so it has
+  // no live unit cost — `lib/server/media/pricing.ts falUpstreams`).
+  const FAL_LIVE = {
+    "bfl/flux": IMAGE_PRICES["blackforestlabs/flux-3/text-to-image"],
+    "bytedance/seedream": IMAGE_PRICES["bytedance/seedream/v5/lite/text-to-image"],
+    "recraft/recraft": IMAGE_PRICES["fal-ai/recraft/v4.1/text-to-image"],
+    "alibaba/qwen-image": IMAGE_PRICES["alibaba/qwen-image-3/text-to-image"],
+  };
+  assert.deepEqual(block, { soumPerUsd: 12_900, markup: 2.5, step: 100, overrides: { [GPT]: { markup: 4 } }, costUsd: { [NANO]: USD[NANO], [GPT]: USD[GPT], ...FAL_LIVE } });
   // Server prices are taken BEFORE the simulated browser exists: with a `window` the server path would read the
   // browser registry and agree with the client by accident.
   const serverPrice = new Map<string, number>();

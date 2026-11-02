@@ -6,7 +6,7 @@ import { mediaOverrides } from "./overrides";
 import { imagePriceOf } from "../../generation/llm-pricing";
 import { geminiImageModel } from "../../generation/image-provider-gemini";
 import { openaiImageModel } from "../../generation/image-provider-openai";
-import { MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "../../media/catalog";
+import { FAL_IMAGE_MODELS, MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "../../media/catalog";
 
 /**
  * The upstream model each Studio model is drawn with RIGHT NOW (the same functions the engine routes with: the admin
@@ -15,7 +15,25 @@ import { MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "../../media/catalog";
 export const STUDIO_UPSTREAM: Readonly<Record<string, () => string>> = {
   "google/nano-banana": geminiImageModel,
   "openai/gpt-image": openaiImageModel,
+  ...falUpstreams(),
 };
+
+/**
+ * fal models (P2a): the upstream is the catalog route's fixed endpoint, priced from the same price book row
+ * (`IMAGE_PRICES`) as the catalog rule. A model priced by a param table (Ideogram's `quality`) is left out ON PURPOSE:
+ * a live unit cost replaces the whole rule (`liveCostRule` drops the table), so its price would stop following the
+ * quality the user picked; its catalog rule already IS the fal price.
+ */
+function falUpstreams(): Record<string, () => string> {
+  const out: Record<string, () => string> = {};
+  for (const id of FAL_IMAGE_MODELS) {
+    const e = MEDIA_CATALOG.byId(id)!;
+    if (e.cost.per === "output" && e.cost.by) continue;
+    const endpoint = e.routes[0]!.upstreamModel;
+    out[id] = () => endpoint;
+  }
+  return out;
+}
 
 /** USD of one picture per Studio model at today's upstream (`imagePriceOf`); unknown upstream → left to the catalog rule. */
 export function liveUnitCosts(): Record<string, number> {

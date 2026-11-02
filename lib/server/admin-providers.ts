@@ -185,9 +185,16 @@ type ItemCtx = {
   system: AdminSystemBody;
 };
 
-/** The provider a circuit-breaker name belongs to: `gemini`, `image:pexels`, `research:api.openalex.org`. */
+/**
+ * The provider a circuit-breaker name belongs to: `gemini`, `image:pexels`, `research:api.openalex.org`, and the media
+ * core's route breakers `media:<provider>:<upstream>` (`studio-core/router.ts routeKey`, e.g. `media:fal:ideogram/v4.5`).
+ */
 export function providerOfBreaker(name: string): ProviderId | null {
   if (isProviderId(name)) return name;
+  if (name.startsWith("media:")) {
+    const id = name.slice("media:".length).split(":")[0] ?? "";
+    return isProviderId(id) ? id : null;
+  }
   if (name.startsWith("image:")) {
     const id = name.slice("image:".length);
     if (id === "openai") return "openai-image";

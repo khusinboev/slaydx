@@ -1,5 +1,6 @@
 import { redact } from "../log";
 import { providerDef } from "./registry";
+import { FAL_IMAGE_MODELS, MEDIA_CATALOG } from "../../media/catalog";
 
 /**
  * «Tekshirish»: ONE cheap authenticated read per provider (list models, fetch one photo...), 10 s timeout, to
@@ -45,6 +46,10 @@ export function probeRequest(id: string, key: string, deps: ProbeDeps = {}): Req
     case "elevenlabs":
       // Subscription read: free (no credits spent); needs the key's «User: read» permission.
       return { url: "https://api.elevenlabs.io/v1/user/subscription", headers: { "xi-api-key": key } };
+    case "fal":
+      // fal Platform API price list of OUR endpoints: needs a valid key, spends nothing
+      // (https://fal.ai/docs/platform-apis/v1/models/pricing, read 2026-11-02).
+      return { url: `${FAL_PRICING_URL}?endpoint_id=${encodeURIComponent(falEndpoints().join(","))}`, headers: { Authorization: `Key ${key}` } };
     case "azure": {
       const region = (deps.azureRegion ?? process.env.AZURE_SPEECH_REGION ?? "").trim().toLowerCase();
       if (!REGION_RE.test(region)) return { error: "AZURE_SPEECH_REGION sozlanmagan yoki noto'g'ri" };
@@ -98,6 +103,53 @@ export function elevenLabsMessage(body: unknown): string {
   return parts.join(" · ");
 }
 
+export const FAL_PRICING_URL = "https://api.fal.ai/v1/models/pricing";
+/** Balance read (`billing:usage:read`; a key without it answers 403, which is not a key problem). */
+export const FAL_BILLING_URL = "https://api.fal.ai/v1/account/billing?expand=credits";
+
+/** fal endpoint id → the catalog's flat USD per picture (`null` for a param-priced model such as Ideogram's quality). */
+export function falEndpointPrices(): Map<string, number | null> {
+  const out = new Map<string, number | null>();
+  for (const id of FAL_IMAGE_MODELS) {
+    const e = MEDIA_CATALOG.byId(id)!;
+    const flat = e.cost.per === "output" && !e.cost.by ? e.cost.usd : null;
+    for (const r of e.routes) if (r.provider === "fal") out.set(r.upstreamModel, flat);
+  }
+  return out;
+}
+
+const falEndpoints = () => [...falEndpointPrices().keys()];
+
+const usdText = (n: number) => `$${Number(n.toFixed(4))}`;
+
+/**
+ * The admin's answer for fal: the key works, and fal's OWN unit price of each endpoint against the price the catalog
+ * charges from (a changed fal price shows here before it shows in the margin), plus the balance when the key may read it.
+ */
+export function falMessage(pricing: unknown, billing: unknown): string {
+  const parts = ["Kalit qabul qilindi"];
+  const want = falEndpointPrices();
+  const rows = Array.isArray((pricing as { prices?: unknown } | null)?.prices) ? ((pricing as { prices: unknown[] }).prices as Record<string, unknown>[]) : [];
+  const diffs: string[] = [];
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const id = typeof r.endpoint_id === "string" ? r.endpoint_id : "";
+    const price = Number(r.unit_price);
+    if (!want.has(id) || !Number.isFinite(price)) continue;
+    seen.add(id);
+    const ours = want.get(id);
+    if (ours !== null && ours !== undefined && Math.abs(price - ours) > 1e-9) diffs.push(`${id}: fal ${usdText(price)}${typeof r.unit === "string" && /^[\w -]{1,20}$/.test(r.unit) ? `/${r.unit}` : ""}, bizda ${usdText(ours)}`);
+  }
+  const missing = [...want.keys()].filter((id) => !seen.has(id));
+  if (diffs.length) parts.push(`narx farqi — ${diffs.join("; ")}`);
+  else if (rows.length) parts.push("narxlar katalog bilan mos");
+  if (missing.length) parts.push(`fal narxini bermadi: ${missing.join(", ")}`);
+  const credits = (billing as { credits?: { current_balance?: unknown; currency?: unknown } } | null)?.credits;
+  const bal = Number(credits?.current_balance);
+  if (credits && Number.isFinite(bal)) parts.push(`balans ${typeof credits.currency === "string" && /^[A-Z]{3}$/.test(credits.currency) && credits.currency !== "USD" ? `${bal} ${credits.currency}` : usdText(bal)}`);
+  return parts.join(" · ");
+}
+
 /** Runs the probe of `id` with `key`. Never throws, never returns the key. */
 export async function probeProvider(id: string, key: string, deps: ProbeDeps = {}): Promise<ProbeResult> {
   if (!providerDef(id)) return { ok: false, message: "Noma'lum provayder" };
@@ -109,6 +161,18 @@ export async function probeProvider(id: string, key: string, deps: ProbeDeps = {
   const timer = setTimeout(() => ctrl.abort(), deps.timeoutMs ?? PROBE_TIMEOUT_MS);
   try {
     const res = await fetchImpl(req.url, { method: "GET", headers: req.headers, signal: ctrl.signal, redirect: "manual" });
+    if (res.ok && id === "fal") {
+      const pricing = await res.json().catch(() => null);
+      let billing: unknown = null;
+      try {
+        const b = await fetchImpl(FAL_BILLING_URL, { method: "GET", headers: req.headers, signal: ctrl.signal, redirect: "manual" });
+        if (b.ok) billing = await b.json().catch(() => null);
+      } catch {
+        // the balance is optional: the key already passed
+      }
+      // Built only from our endpoint ids and numbers (the unit is pattern-checked); the key cannot be in it, split anyway.
+      return { ok: true, message: falMessage(pricing, billing).split(key).join("…") };
+    }
     if (res.ok) return { ok: true, message: id === "elevenlabs" ? elevenLabsMessage(await res.json().catch(() => null)) : "Kalit qabul qilindi" };
     const detail = redactProbeText(await errorText(res), key);
     return { ok: false, message: `Provayder rad etdi (HTTP ${res.status})${detail ? `: ${detail}` : ""}` };

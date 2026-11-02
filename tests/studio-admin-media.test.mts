@@ -30,6 +30,8 @@ process.env.ADMIN_TOTP_KEY = randomBytes(32).toString("base64");
 process.env.ADMIN_2FA_REQUIRED = "true";
 process.env.GEMINI_API_KEY = "test-gemini-key";
 process.env.OPENAI_API_KEY = "sk-test-openai-key-123456";
+// P2a: with the fal key every Studio model is ready, so the block lists all seven as sellable.
+process.env.FAL_KEY = "test-fal-key-0000:abcdef";
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
 process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://unused/unused";
 const skip = hasDb ? false : "DATABASE_URL yo'q";
@@ -51,7 +53,15 @@ const generationsRoute = await import("../app/api/generations/route.ts");
 
 const NANO = "google/nano-banana";
 const GPT = "openai/gpt-image";
-const USD = { [NANO]: IMAGE_PRICES["gemini-3.1-flash-lite-image"]!, [GPT]: OPENAI_IMAGE_FALLBACK_USD };
+/** P2a: the fal models (key set above) — one picture at the default params (Ideogram: «Standart» quality, $0.06). */
+const FAL_USD: Record<string, number> = {
+  "bfl/flux": 0.048,
+  "bytedance/seedream": 0.035,
+  "ideogram/ideogram": 0.06,
+  "recraft/recraft": 0.035,
+  "alibaba/qwen-image": 0.04,
+};
+const USD: Record<string, number> = { [NANO]: IMAGE_PRICES["gemini-3.1-flash-lite-image"]!, [GPT]: OPENAI_IMAGE_FALLBACK_USD, ...FAL_USD };
 const STUDIO = TOOL_BY_ID["studio-image"];
 const REASON = "Provayder narxi oshgani uchun ustama tuzatildi";
 const up100 = (n: number) => Math.ceil(n / 100 - 1e-9) * 100;
@@ -145,9 +155,10 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.equal(r.body.markup, 2);
     assert.equal(r.body.soumPerUsd, rate);
-    assert.deepEqual(r.body.models.map((m: { modelId: string }) => m.modelId), [NANO, GPT]);
+    // The block lists every Studio model by itself (catalog + purpose), the fal ones included (P2a).
+    assert.deepEqual(r.body.models.map((m: { modelId: string }) => m.modelId), [NANO, GPT, ...Object.keys(FAL_USD)]);
     for (const m of r.body.models) {
-      const usd = USD[m.modelId as keyof typeof USD]!;
+      const usd = USD[m.modelId]!;
       assert.equal(m.costUsd, usd);
       assert.equal(m.costSoum, Math.round(usd * rate * 100) / 100);
       assert.equal(m.price, up100(usd * rate * 2));
@@ -267,7 +278,7 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
     assert.equal(nano.enabled, false);
     assert.equal(nano.available, false);
     const c = await catalog();
-    assert.deepEqual(c.body.models.map((m: { id: string }) => m.id), [GPT]);
+    assert.deepEqual(c.body.models.map((m: { id: string }) => m.id), [GPT, ...Object.keys(FAL_USD)]);
     assert.equal(c.body.defaultModelId, GPT);
     const buyer = await mkUser(100_000);
     await query("DELETE FROM rate_limits WHERE bucket LIKE 'gen:%'");

@@ -252,7 +252,8 @@ test("registryIdOf: the ChatGPT image part belongs to openai-image; a removed pr
   assert.equal(registryIdOf("openai", "image"), "openai-image");
   assert.equal(registryIdOf("gemini", "llm"), "gemini");
   assert.equal(registryIdOf("veo", "video"), "veo");
-  assert.equal(registryIdOf("fal", "image"), null);
+  // fal.ai came back for the Studio (P2a, docs/studio/P2-SPEC.md): its old and new image parts land on its own card.
+  assert.equal(registryIdOf("fal", "image"), "fal");
   assert.equal(registryIdOf("xai", "llm"), null);
   assert.equal(registryIdOf("unknown", "unknown"), null);
 });
@@ -319,7 +320,10 @@ test("foldUsage: windows, kinds, models, daily series, free counters and the his
   assert.equal(body.byProvider.pixabay.d30.errors, 0, "a free provider reports errors as a number");
   assert.equal(body.byProvider.azure.d30.errors, null, "a paid provider does not track failures");
 
-  assert.deepEqual(body.other, [{ provider: "xai", calls: 1, usd: 0.2 }, { provider: "fal", calls: 4, usd: 0.012 }], "history of removed providers stays visible, biggest first");
+  assert.deepEqual(body.other, [{ provider: "xai", calls: 1, usd: 0.2 }], "history of removed providers stays visible, biggest first");
+  // fal is a registry provider again (P2a): its history from before the removal is on its own card, not in `other`.
+  assert.equal(body.byProvider.fal.d30.calls, 4);
+  assert.equal(body.byProvider.fal.d30.usd, 0.012);
   assert.equal(body.total30.calls, 10 + 5 + 1 + 1 + 3 + 2 + 4 + 1 + 10, "totals include removed providers and free calls; nothing outside 30 days");
   assert.equal(body.total30.usd, 2.7245);
 });

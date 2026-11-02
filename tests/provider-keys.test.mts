@@ -99,11 +99,13 @@ test("registry: unique ids, Uzbek labels, kinds, env names; reserved providers a
   assert.equal(new Set(ids).size, ids.length);
   assert.deepEqual(
     [...ids].sort(),
-    ["anthropic", "aisha", "azure", "elevenlabs", "gemini", "googlebooks", "kling", "openai-image", "openalex", "pexels", "pixabay", "veo"].sort(),
+    ["anthropic", "aisha", "azure", "elevenlabs", "fal", "gemini", "googlebooks", "kling", "openai-image", "openalex", "pexels", "pixabay", "veo"].sort(),
   );
-  // Removed providers (fal.ai, xAI, OpenRouter, OpenAI as a TEXT provider) are not in the registry: no key is read for them.
-  for (const id of ["fal", "xai", "openrouter", "openai"]) assert.equal(registry.providerDef(id), null, `${id} is removed`);
-  for (const name of ["FAL_KEY", "XAI_API_KEY", "OPENROUTER_API_KEY"]) assert.ok(!(ALL_ENV as string[]).includes(name), `${name} is no longer a provider env var`);
+  // Removed providers (xAI, OpenRouter, OpenAI as a TEXT provider) are not in the registry: no key is read for them.
+  for (const id of ["xai", "openrouter", "openai"]) assert.equal(registry.providerDef(id), null, `${id} is removed`);
+  for (const name of ["XAI_API_KEY", "OPENROUTER_API_KEY"]) assert.ok(!(ALL_ENV as string[]).includes(name), `${name} is no longer a provider env var`);
+  // fal.ai came back for the Studio models (P2a, docs/studio/P2-SPEC.md): one image provider, key FAL_KEY, a probe.
+  assert.deepEqual(registry.providerDef("fal"), { id: "fal", label: "fal.ai (rasm modellari)", kinds: ["image"], envKeys: ["FAL_KEY"], keyHint: "<key_id>:<key_secret>", implemented: true, testable: true });
   for (const p of registry.PROVIDERS) {
     assert.ok(p.label.trim() && p.kinds.length > 0 && p.envKeys.length > 0 && p.keyHint.trim(), p.id);
     assert.ok(p.envKeys.every((e) => /^[A-Z0-9_]+$/.test(e)), p.id);
@@ -385,8 +387,8 @@ test("store: rows are decrypted into the snapshot; unreadable and unknown rows a
   await query("INSERT INTO provider_settings (provider, enabled) VALUES ('gemini', false)");
   await query("INSERT INTO provider_settings (provider, enabled) VALUES ('retired-provider', false)");
   // Rows left behind by the removed providers (history stays in the table) are ignored as well, and never switch
-  // the OpenAI IMAGE provider off.
-  for (const id of ["fal", "xai", "openrouter", "openai"]) await query("INSERT INTO provider_settings (provider, enabled) VALUES ($1, false)", [id]);
+  // the OpenAI IMAGE provider off. (fal.ai is a registry provider again since P2a, so its row is no longer a leftover.)
+  for (const id of ["xai", "openrouter", "openai"]) await query("INSERT INTO provider_settings (provider, enabled) VALUES ($1, false)", [id]);
   const s = await store.loadProviderSnapshot();
   assert.deepEqual([...s.keys()].sort(), ["elevenlabs", "gemini", "pexels"], "a row of a provider the registry does not know is ignored");
   assert.deepEqual(s.get("elevenlabs"), { enabled: true, key: PLAIN, unreadable: false });
