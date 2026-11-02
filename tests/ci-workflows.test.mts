@@ -85,17 +85,26 @@ test("ci.yml: triggers, and only pull_request runs cancel stale runs (main never
   assert.match(ci, /group: ci-\$\{\{ github\.event_name == 'pull_request' && github\.ref \|\| github\.run_id \}\}/);
 });
 
-test("ci.yml: least privilege — contents: read by default, packages: write only on images and promote", () => {
+test("ci.yml: least privilege — contents: read by default, packages: write only on images, promote and the PR build-cache export", () => {
   assert.match(ci, /\npermissions:\n {2}contents: read\n/);
   const j = jobs(ci);
   const writers = [...j].filter(([, body]) => /\n\s+permissions:\n(?:\s+[a-z-]+: [a-z]+\n)*?\s+packages: write\n/.test(body)).map(([name]) => name).sort();
-  assert.deepEqual(writers, ["images", "promote"]);
+  // images-check holds packages: write ONLY to export the tree-keyed BuildKit cache (deploy speed-up, owner 2026-11-02):
+  // it never pushes an image, and only same-repo PRs log in / export (fork PRs get a read-only token anyway).
+  assert.deepEqual(writers, ["images", "images-check", "promote"]);
   assert.match(j.get("images")!, /if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);
   // promote must not rely on the implicit success(): images-check is skipped on push (first main run skipped promote).
   assert.match(j.get("promote")!, /!cancelled\(\) && github\.event_name == 'push' && github\.ref == 'refs\/heads\/main' &&/);
   assert.match(j.get("promote")!, /needs\.ci-ok\.result == 'success' && needs\.images\.result == 'success'/);
-  assert.match(j.get("images-check")!, /push: false/);
-  assert.doesNotMatch(j.get("images-check")!, /permissions:|docker login/);
+  const check = j.get("images-check")!;
+  assert.match(check, /push: false/);
+  assert.match(check, /SAME_REPO: \$\{\{ github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository \}\}/);
+  assert.match(check, /name: Log in to GHCR \(cache export, same-repo PRs only\)\n\s+if: env\.SAME_REPO == 'true'/);
+  assert.match(check, /REG_CACHE_EXPORT=\$\{\{ env\.SAME_REPO \}\}/);
+  assert.doesNotMatch(check, /push: true|imagetools|build-\$\{/, "the PR job never pushes or tags an image");
+  // The cache is keyed by the git TREE and lives in its own package, never under a deployable tag.
+  assert.match(ci, /type=registry,ref=\$\{REGISTRY\}\/slaydx-buildcache:web-\$\{TREE\}/);
+  assert.match(j.get("images")!, /TREE=\$\{\{ steps\.tree\.outputs\.tree \}\}/);
   assert.match(j.get("ci-ok")!, /permissions: \{\}/);
 });
 
