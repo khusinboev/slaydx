@@ -23,6 +23,7 @@ import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, prom
 import type { StudioJob } from "../StudioResults";
 import { VideoResults } from "./VideoResults";
 import { STUDIO_VIDEO_SLUG, STUDIO_VIDEO_TOOL_ID, clipSeconds, isEffect, studioVideoClientPrice, videoCardPrice } from "./video-price";
+import { END_IMAGE_PARAM, SECOND_IMAGE_PARAM, effectPhotos } from "@/lib/media/catalog-video";
 
 /** «Shablon effektlar» (one photo → a ready clip) or «Matndan / rasmdan» (a model + a prompt, optional start image). */
 export type VideoMode = "effects" | "text";
@@ -38,12 +39,17 @@ export type VideoTabState = {
   effect: string | null;
   /** The effect's photo (`photo_uploads.asset_id`). */
   effectImage: string;
+  /** P4: the second photo of a two-photo effect («Quchoqlash»); sent only for such a scene. */
+  effectImage2?: string;
 };
 
-export const INITIAL_VIDEO_STATE: VideoTabState = { mode: null, chosen: null, raw: {}, effect: null, effectImage: "" };
+export const INITIAL_VIDEO_STATE: VideoTabState = { mode: null, chosen: null, raw: {}, effect: null, effectImage: "", effectImage2: "" };
 
 const INSUFFICIENT_RE = /balans yetarli emas|to.langan balans bilan/i;
 const IMAGE_PARAM = "imageAssetId";
+/** The two photos a model / scene may take besides the start image (P4). */
+const END_PARAM = END_IMAGE_PARAM;
+const SECOND_PARAM = SECOND_IMAGE_PARAM;
 
 /** The catalog split: the effect templates and the text/image → video models (each in catalog order). */
 export function splitVideoCatalog(catalog: MediaCatalog | null): { effects: ClientEntry | null; models: ClientEntry[] } {
@@ -69,10 +75,14 @@ export function videoSubmitLabel(what: string, price: number): string {
   return `Yaratish · ${what} · ${formatSom(price)}`;
 }
 
-/** The request carries the start image as one asset id string (the form value shape), never the normalized list. */
+/** The request carries each photo as one asset id string (the form value shape), never the normalized list. */
 function flatImage(values: Record<string, unknown>): Record<string, unknown> {
-  const v = values[IMAGE_PARAM];
-  return Array.isArray(v) ? { ...values, [IMAGE_PARAM]: String(v[0] ?? "") } : values;
+  const out = { ...values };
+  for (const name of [IMAGE_PARAM, END_PARAM]) {
+    const v = out[name];
+    if (Array.isArray(v)) out[name] = String(v[0] ?? "");
+  }
+  return out;
 }
 
 /** The tab's model: the text model chosen if still offered, else the server default when it is one, else the first. */
@@ -124,9 +134,11 @@ export function VideoTab({
   let entry: ClientEntry | null = null;
   let sent: Record<string, unknown> = {};
   let what = "";
+  const twoPhotos = effect ? effectPhotos(effect.value) === 2 : false;
   if (mode === "effects" && split.effects && effect) {
     entry = split.effects;
-    sent = { modelId: entry.id, effect: effect.value, [IMAGE_PARAM]: state.effectImage };
+    // The second photo goes out only for a two-photo scene (the server refuses it on a single-photo one).
+    sent = { modelId: entry.id, effect: effect.value, [IMAGE_PARAM]: state.effectImage, ...(twoPhotos ? { [SECOND_PARAM]: state.effectImage2 ?? "" } : {}) };
     what = `«${effect.label}»`;
   } else if (mode === "text" && model) {
     entry = model;
@@ -142,6 +154,7 @@ export function VideoTab({
   function selectModel(id: string) {
     const next = split.models.find((m) => m.id === id);
     if (!next) return;
+    // The photos stay across a model switch (`carryOver` keeps the end frame when the new model takes one).
     setState((s) => ({ ...s, chosen: id, raw: { ...carryOver(next, s.raw), ...(s.raw[IMAGE_PARAM] ? { [IMAGE_PARAM]: s.raw[IMAGE_PARAM] } : {}) } }));
   }
 
@@ -174,11 +187,19 @@ export function VideoTab({
         setError("Effekt uchun surat yuklang");
         return;
       }
+      if (twoPhotos && !state.effectImage2) {
+        setError("Bu effekt uchun ikkinchi suratni ham yuklang");
+        return;
+      }
       void send(entry, sent, `Effekt: ${effect?.label ?? ""}`);
       return;
     }
     if (normalizedPrompt(entry, state.raw).length < promptMin(entry)) {
       setError("Videoda nima bo‘lishini yozing (kamida 5 ta belgi)");
+      return;
+    }
+    if (String(sent[END_PARAM] ?? "") && !String(sent[IMAGE_PARAM] ?? "")) {
+      setError("Oxirgi kadr uchun boshlang‘ich suratni ham yuklang");
       return;
     }
     void send(entry, sent, normalizedPrompt(entry, state.raw));
@@ -220,6 +241,9 @@ export function VideoTab({
   const formEntry = textModel ? { ...textModel, params: textModel.params.filter((p) => p.type !== "image") } : null;
   const hasStart = textModel?.params.some((p) => p.name === IMAGE_PARAM) ?? false;
   const startImage = String(state.raw[IMAGE_PARAM] ?? "");
+  // P4: models that take a last frame (Kling 3.0, the fal models) show its upload next to the start image.
+  const hasEnd = textModel?.params.some((p) => p.name === END_PARAM) ?? false;
+  const endImage = String(state.raw[END_PARAM] ?? "");
 
   return (
     <div data-video-tab>
@@ -278,6 +302,21 @@ export function VideoTab({
                 />
               </Field>
             </Row>
+            {twoPhotos ? (
+              <Row label="Ikkinchi surat" hint="Effekt ikki kishini birga ko‘rsatadi: har biri o‘z suratida" wide>
+                <Field id={SECOND_PARAM}>
+                  <PhotoField
+                    assetId={state.effectImage2 ?? ""}
+                    originalAssetId=""
+                    shape="square"
+                    keepOriginal={false}
+                    alt="Ikkinchi surat"
+                    hint={photoHint()}
+                    onChange={(v) => patch({ effectImage2: v.assetId })}
+                  />
+                </Field>
+              </Row>
+            ) : null}
           </Card>
         </>
       ) : textModel && formEntry ? (
@@ -295,8 +334,8 @@ export function VideoTab({
           />
           <ParamRows entry={formEntry} raw={state.raw} onChange={setParam} />
           {hasStart ? (
-            <Card title="Boshlang‘ich surat (ixtiyoriy)">
-              <Row label="Surat" wide>
+            <Card title={hasEnd ? "Kadrlar (ixtiyoriy)" : "Boshlang‘ich surat (ixtiyoriy)"}>
+              <Row label={hasEnd ? "Birinchi kadr" : "Surat"} wide>
                 <Field id={IMAGE_PARAM}>
                   <PhotoField
                     assetId={startImage}
@@ -310,6 +349,21 @@ export function VideoTab({
                 </Field>
                 <p className="text-muted-foreground mt-1 text-[13px]">Surat berilsa video shu suratdan boshlanadi; nisbat suratdan olinadi.</p>
               </Row>
+              {hasEnd ? (
+                <Row label="Oxirgi kadr" hint="Ixtiyoriy: video shu surat bilan tugaydi (boshlang‘ich surat bilan birga)" wide>
+                  <Field id={END_PARAM}>
+                    <PhotoField
+                      assetId={endImage}
+                      originalAssetId=""
+                      shape="square"
+                      keepOriginal={false}
+                      alt="Oxirgi kadr"
+                      hint={photoHint()}
+                      onChange={(v) => setParam(END_PARAM, v.assetId)}
+                    />
+                  </Field>
+                </Row>
+              ) : null}
             </Card>
           ) : null}
         </>

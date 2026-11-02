@@ -74,7 +74,18 @@ const jsonRes = (body: unknown, status = 200) => new Response(JSON.stringify(bod
 
 test("catalog: studio.video = Omni (default) + Kling 3.0 + Kling 3.0 Pro + effects; client view has no routes", () => {
   const p = MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!;
-  assert.deepEqual(p.allowed, ["google/omni-video", "kling/kling-3", "kling/kling-3-pro", "kling/effects"]);
+  // P4 adds the fal models between Kling 3.0 and the effects (their own checks: tests/studio-video-fal.test.mts).
+  assert.deepEqual(p.allowed, [
+    "google/omni-video",
+    "kling/kling-3",
+    "kling/kling-3-pro",
+    "alibaba/wan-3",
+    "bytedance/seedance-2.5",
+    "bytedance/seedance-2-mini",
+    "minimax/h3",
+    "minimax/h3-max-turbo",
+    "kling/effects",
+  ]);
   assert.equal(p.default, "google/omni-video");
   assert.equal(p.userCanChoose, true);
   for (const id of p.allowed) assert.equal(entry(id).kind, "video");
@@ -125,8 +136,15 @@ test("probe: every param of every studio.video model changes the request or the 
     "kling/kling-3": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9", sound: false },
     "kling/kling-3-pro": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9", sound: false },
     "kling/effects": { effect: "happy_birthday", imageAssetId: ASSET },
+    // P4 (fal): defaults are 720p / 768p and sound on, so the probe values below differ from them.
+    "alibaba/wan-3": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9" },
+    "bytedance/seedance-2.5": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9" },
+    "bytedance/seedance-2-mini": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9" },
+    "minimax/h3": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9" },
+    "minimax/h3-max-turbo": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9" },
   };
-  const alt: Record<string, unknown> = { prompt: "A different prompt", seconds: undefined, aspect: "9:16", sound: true, effect: "snowglobe" };
+  const alt: Record<string, unknown> = { prompt: "A different prompt", seconds: undefined, aspect: "9:16", sound: true, effect: "snowglobe", resolution: "480p" };
+  const soundOff = new Set(["alibaba/wan-3", "bytedance/seedance-2.5", "bytedance/seedance-2-mini"]);
   for (const id of MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed) {
     const e = entry(id);
     const b = base[id]!;
@@ -134,9 +152,21 @@ test("probe: every param of every studio.video model changes the request or the 
     for (const p of e.params) {
       let next: unknown = alt[p.name];
       if (p.name === "seconds" && p.type === "int") next = p.max;
+      // The fal models default to sound ON (same price): the probe flips it off.
+      if (p.name === "sound" && soundOff.has(id)) next = false;
       if (p.type === "image") {
         // The start image: with vs without (the effect's photo is required, so it is probed by its presence in the build).
         if (needsImage) continue;
+        if (p.name === "endImageAssetId") {
+          // P4 end frame: start alone vs start + end (an end frame without a start is refused by the preflight).
+          const e2 = entry(id);
+          const ad = adapters().all[e2.routes[0]!.adapter]!;
+          const withStart = { upstreamModel: e2.routes[0]!.upstreamModel, params: normalize(e2.params, { ...b, imageAssetId: ASSET }), idempotencyKey: "g:video:0" };
+          const startOnly = ad.buildRequest!({ ...withStart, assets: { imageAssetId: [IMG] } });
+          const both = ad.buildRequest!({ ...withStart, params: normalize(e2.params, { ...b, imageAssetId: ASSET, endImageAssetId: ASSET }), assets: { imageAssetId: [IMG], endImageAssetId: [{ mime: "image/jpeg", base64: "ZW5kLWZyYW1l" }] } });
+          assert.notDeepEqual(both, startOnly, `${id}.${p.name} changes the request`);
+          continue;
+        }
         const without = requestOf(id, b);
         const withImg = requestOf(id, { ...b, imageAssetId: ASSET }, true);
         assert.notDeepEqual(withImg, without, `${id}.${p.name} changes the request`);
