@@ -89,3 +89,47 @@ ui/shell-phone. Browser smoke (Playwright, `scripts/heavy.sh`) of the Audio tab 
 Sources: https://elevenlabs.io/pricing/api, https://elevenlabs.io/pricing, https://elevenlabs.io/docs/api-reference/music/compose,
 https://elevenlabs.io/docs/api-reference/text-to-sound-effects/convert, https://elevenlabs.io/docs/overview/capabilities/sound-effects
 (40 credits / s with a duration), https://help.elevenlabs.io/hc/en-us/articles/26446706351377 (isolator 1 000 credits / min).
+
+## What shipped / decisions (builder, 2026-11-02, branch `feat/studio-p6`)
+- **Catalog** `lib/media/catalog-audio.ts`: `elevenlabs/music` (kind music), `elevenlabs/sfx` (kind sfx),
+  `elevenlabs/voice-changer` + `elevenlabs/isolator` (kind speech, new capabilities `voice-changer` / `isolate`); purposes
+  `studio.music` / `studio.sfx` / `studio.voice-changer` / `studio.isolate`, one model each, `userCanChoose: false`. Cost =
+  credits × `ELEVENLABS_CREATOR_USD_PER_CREDIT` (= 22 / 121 000, next to the per-M-chars constant in `llm-pricing.ts`).
+- **Core change (additive)**: `CostRule` `per: "second"` takes an optional `countParam` (SFX variants × seconds);
+  `defineCatalog` validates it.
+- **Tab listing**: the catalog endpoint takes the listing id `studio.audio` (not a job purpose) and returns the four
+  models at once (`studioAudioModels()`: none while `studio.audio.enabled` is off, then per mode: ElevenLabs on + keyed,
+  model not switched off). Session features carry `studioAudioModels`.
+- **Params**: music `prompt` (5–2 000), `length` enum 15/30/60/90/120/180 (default 30), `instrumental`; SFX `prompt`
+  (3–450), `duration` 1–30 (default 5, always sent), `influence` Erkin 0.3 / O‘rta 0.5 / Aniq 0.8, `loop`, `variants` 1–4;
+  voice changer `inputId`, `inputSeconds`, `voice` (ElevenLabs library + own READY clones), `removeNoise`; isolator
+  `inputId`, `inputSeconds`. Over-long prompts are refused (400), never cut.
+- **Server-measured price**: `POST /api/media/audio-inputs` sniffs WAV / MP3 (P5 `sniffAudio`), measures, stores
+  `billed_seconds` = ceil(measured − 10 ms); minimum on the measured length (≥ 3 s), maximum on the billed one (≤ 300).
+  `submitGeneration` overwrites the request's `inputSeconds` with the row's `billed_seconds` before pricing (the
+  translation `sourceChars` rule) → a lower client number is a 409 `price_changed`; another user's input is 400
+  `input_missing`; another user's clone 400 `voice_missing` (shared `assertOwnCloneIds`).
+- **Migration 069** `studio_audio_inputs` (own table — no consent fields, 3–300 s / 25 MB CHECKs, ids = 24 random hex
+  made in code). Housekeeping step `studio-audio-inputs` deletes rows older than 1 day. Rate limits 20 / h, 60 / day.
+- **SFX variants**: one call per variant; the first clip is the result file (always one MP3 — no ZIP); with > 1 variant
+  every delivered clip is also a generation asset (`putAsset`) listed with its own player + download on the result page.
+  A failed variant does not stop the others; `delivered {got, want}` → the existing partial refund; none → full refund.
+  The assets route now also serves `audio/mpeg` (owner-only, CSP sandbox, nosniff as before).
+- **Doc**: `doc.studioAudio` {mode, model, seconds, prompt, inputSeconds, voices, clone, variants}; `AudioViewer` plays
+  the file and shows the details / variants; the gallery lists `studio-audio` as `kind: "audio"` items.
+- **UI** `components/studio/audio/` (AudioTab, AudioInputRow, audio-api): 4th tab «Audio», mode chips (wrapping, ≥ 44 px),
+  per mode only its rows (one `data-field` per param), upload/record via the P5 converter (`prepareSample` → WAV),
+  ToS line as text, voice list from P5 (`VoiceList`, only `ready` clones), `ParamRows` for the rest, sticky
+  «Yaratish · <mode>[ ×N] · ~X so'm», results via P5 `VoiceResults`. Tab buttons got `px-3.5 sm:px-5` so four tabs fit
+  360 px. Progress kind `sound` («Audio yaratilmoqda»). Budget 360 s.
+- **toolBlockedReason**: the audio list when sent; an older server falls back to `ttsPremium`, then the text key.
+- Admin: «Media modellari» lists the four (unit 1 daqiqa / 10 soniya), price ladder rows = the price table above,
+  `studio.audio.enabled` in «Funksiyalar» with its effect sentence.
+
+## UNVERIFIED (updated)
+1. Credit rates (music 15 / s, SFX 40 / s, STS + isolator 1 000 / min) vs the ElevenLabs usage page — one job of each.
+2. Music API on the Creator plan; Uzbek prompts' quality; render time of 3-minute music within the 360 s budget.
+3. Voice changer quality on Uzbek speech (`eleven_multilingual_sts_v2`).
+4. That `/v1/audio-isolation` honours `?output_format=mp3_44100_128` (the engine refuses a non-MP3 answer → refund).
+5. Browser recording → WAV conversion on real phones (Safari MP4/AAC decode) for inputs up to 5 min (14.4 MB WAV).
+6. No live provider call was made (no keys here); all requests are golden-tested against the docs' shapes.
