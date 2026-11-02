@@ -122,7 +122,6 @@ type Model = {
   modelId: string;
   unit: string;
   id: string;
-  unit: string;
   costUsd: number;
   costSoum: number;
   price: number;
