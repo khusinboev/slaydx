@@ -41,6 +41,11 @@ export type VideoTabState = {
   effectImage: string;
   /** P4: the second photo of a two-photo effect («Quchoqlash»); sent only for such a scene. */
   effectImage2?: string;
+  /**
+   * P7b «Videoga aylantirish»: the start frame came from a Studio picture — the picker offers only the models that take
+   * a start image while it is set (removing the frame lifts the filter).
+   */
+  fromPicture?: boolean;
 };
 
 export const INITIAL_VIDEO_STATE: VideoTabState = { mode: null, chosen: null, raw: {}, effect: null, effectImage: "", effectImage2: "" };
@@ -55,6 +60,11 @@ const SECOND_PARAM = SECOND_IMAGE_PARAM;
 export function splitVideoCatalog(catalog: MediaCatalog | null): { effects: ClientEntry | null; models: ClientEntry[] } {
   const all = catalog?.models ?? [];
   return { effects: all.find(isEffect) ?? null, models: all.filter((m) => !isEffect(m)) };
+}
+
+/** P7b: the text/image models that take a start image (`imageAssetId`), in catalog order. */
+export function startImageModels(models: readonly ClientEntry[]): ClientEntry[] {
+  return models.filter((m) => m.params.some((p) => p.name === IMAGE_PARAM && p.type === "image"));
 }
 
 /** The effect scenes of the effects entry (its `effect` enum), in grid order. */
@@ -107,6 +117,8 @@ export function VideoTab({
   balance,
   typing,
   gated,
+  onMusic,
+  onVoice,
 }: {
   catalogState: CatalogState;
   reload: (silent?: boolean) => void;
@@ -118,12 +130,18 @@ export function VideoTab({
   balance: number | null;
   typing: boolean;
   gated: boolean;
+  /** P7b «Keyingi qadam» on a finished clip: «Musiqa yaratish» / «Ovoz qo'shish» with its prompt (absent = no button). */
+  onMusic?: (prompt: string) => void;
+  onVoice?: (text: string) => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const catalog = catalogState.status === "ready" ? catalogState.catalog : null;
-  const split = splitVideoCatalog(catalog);
+  const all = splitVideoCatalog(catalog);
+  // P7b: a picture handed over as the start frame keeps the picker on the models that take one.
+  const fromPicture = state.fromPicture === true && Boolean(state.raw[IMAGE_PARAM]);
+  const split = fromPicture ? { ...all, models: startImageModels(all.models) } : all;
   const mode = shownMode(state, split);
 
   const options = effectOptions(split.effects);
@@ -321,6 +339,11 @@ export function VideoTab({
         </>
       ) : textModel && formEntry ? (
         <>
+          {fromPicture ? (
+            <p className="bg-accent-soft text-accent-soft-foreground mb-3 rounded-[14px] px-3.5 py-2 text-[14px] leading-snug" data-video-from-picture>
+              Rasmdan video: rasmingiz birinchi kadr bo‘ladi. Faqat suratdan video yarata oladigan modellar ko‘rsatilgan.
+            </p>
+          ) : null}
           <VideoPromptBox value={String(state.raw[PROMPT_PARAM] ?? "")} onChange={(v) => setParam(PROMPT_PARAM, v)} limit={promptLimit(textModel)} />
           <MediaModelPicker
             purpose={STUDIO_VIDEO_PURPOSE}
@@ -345,8 +368,9 @@ export function VideoTab({
                     alt="Boshlang‘ich surat"
                     hint={photoHint()}
                     onChange={(v) =>
-                      // Removing the start frame removes the end frame too (an end frame alone is never sent).
-                      setState((s) => ({ ...s, raw: { ...s.raw, [IMAGE_PARAM]: v.assetId, ...(v.assetId ? {} : { [END_PARAM]: "" }) } }))
+                      // Removing the start frame removes the end frame too (an end frame alone is never sent), and lifts
+                      // the P7b start-image filter of the picker.
+                      setState((s) => ({ ...s, ...(v.assetId ? {} : { fromPicture: false }), raw: { ...s.raw, [IMAGE_PARAM]: v.assetId, ...(v.assetId ? {} : { [END_PARAM]: "" }) } }))
                     }
                   />
                 </Field>
@@ -408,7 +432,7 @@ export function VideoTab({
         paidOnly
       />
       <section aria-label="Videolar" data-video-results className={cn(jobs.length > 0 && "mt-5")}>
-        <VideoResults jobs={jobs} busy={submitting} onAgain={again} />
+        <VideoResults jobs={jobs} busy={submitting} onAgain={again} onMusic={onMusic} onVoice={onVoice} />
       </section>
     </div>
   );

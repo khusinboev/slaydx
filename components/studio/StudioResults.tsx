@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, Eraser, Pencil, RefreshCw, Shuffle, ZoomIn } from "lucide-react";
+import { Clapperboard, Download, Eraser, Mic, Pencil, RefreshCw, Shuffle, ZoomIn } from "lucide-react";
 import type * as api from "@/lib/api-client";
 import type { GenImage } from "@/lib/generation/types";
 import { ApiImg } from "@/lib/use-api-src";
@@ -11,12 +12,20 @@ import { formatSom } from "@/lib/format";
 import { imageExt } from "@/lib/viewers/kind";
 import { currentDeliveryEnv, deliver, markGesture, type ReadyFile } from "@/lib/downloads/deliver";
 import { GenerationProgress } from "@/components/files/GenerationProgress";
-import { MODE_LABEL, TOOL_MODES, type StudioMode } from "./studio-modes";
+import { FavoriteButton } from "./Favorite";
+import { MODE_LABEL, MODE_PURPOSE, TOOL_MODES, type StudioMode } from "./studio-modes";
 
 /** A P2b action on one finished picture: «Tahrirlash», «Sifatini oshirish», «Fonni olib tashlash». */
 export type PictureTool = (mode: Exclude<StudioMode, "image">, picture: { url: string }) => void;
 
 const TOOL_ICON = { edit: Pencil, upscale: ZoomIn, bgremove: Eraser } as const;
+
+/**
+ * P7b «Keyingi qadam» on a finished picture (docs/studio/P7-SPEC.md): «Videoga aylantirish» hands one picture (its
+ * stored result URL) and the prompt to the Video tab; «Ovoz qo'shish» hands the prompt to the «Ovoz» tab. Absent = no
+ * button.
+ */
+export type PictureNext = { onVideo?: (url: string, prompt: string) => void; onVoice?: (text: string) => void };
 
 /** The three P2b actions over a picture (icon buttons, 44 px, labelled). */
 export function PictureTools({ url, onTool, index, many, inline = false }: { url: string; onTool: PictureTool; index: number; many: boolean; inline?: boolean }) {
@@ -105,6 +114,8 @@ export function StudioResults({
   onAgain,
   onOtherModel,
   onTool,
+  onVideo,
+  onVoice,
 }: {
   jobs: readonly StudioJob[];
   /** A submit is in flight: «Qayta» waits. */
@@ -113,7 +124,7 @@ export function StudioResults({
   onOtherModel: (job: StudioJob) => void;
   /** P2b: edit / upscale / remove the background of one picture (absent = no tool buttons). */
   onTool?: PictureTool;
-}) {
+} & PictureNext) {
   if (jobs.length === 0) {
     return (
       <p className="text-muted-foreground bg-card hidden rounded-[20px] border p-6 text-center text-[14.5px] xl:block" data-studio-empty>
@@ -125,14 +136,22 @@ export function StudioResults({
     <ul className="flex flex-col gap-4" data-studio-jobs aria-label="Natijalar">
       {jobs.map((job) => (
         <li key={job.id} data-studio-job={job.id} data-job-status={job.gen?.status ?? "QUEUED"}>
-          <JobCard job={job} busy={busy} onAgain={onAgain} onOtherModel={onOtherModel} onTool={onTool} />
+          <JobCard job={job} busy={busy} onAgain={onAgain} onOtherModel={onOtherModel} onTool={onTool} onVideo={onVideo} onVoice={onVoice} />
         </li>
       ))}
     </ul>
   );
 }
 
-function JobCard({ job, busy, onAgain, onOtherModel, onTool }: { job: StudioJob; busy: boolean; onAgain: (j: StudioJob) => void; onOtherModel: (j: StudioJob) => void; onTool?: PictureTool }) {
+function JobCard({
+  job,
+  busy,
+  onAgain,
+  onOtherModel,
+  onTool,
+  onVideo,
+  onVoice,
+}: { job: StudioJob; busy: boolean; onAgain: (j: StudioJob) => void; onOtherModel: (j: StudioJob) => void; onTool?: PictureTool } & PictureNext) {
   const gen = job.gen;
   // No job state: the job may still finish on the server — say so before a retry charges again.
   if (job.error && !gen) return <Failure job={job} message={`${job.error} Oldingi ish baribir tugashi mumkin — «Ishlarim» yoki Galereyani tekshiring.`} busy={busy} onAgain={onAgain} />;
@@ -145,7 +164,7 @@ function JobCard({ job, busy, onAgain, onOtherModel, onTool }: { job: StudioJob;
     );
   }
   if (gen.status === "QUEUED" || gen.status === "IN_PROGRESS") return <GenerationProgress gen={gen} />;
-  if (gen.status === "COMPLETED") return <Pictures job={job} gen={gen} busy={busy} onAgain={onAgain} onOtherModel={onOtherModel} onTool={onTool} />;
+  if (gen.status === "COMPLETED") return <Pictures job={job} gen={gen} busy={busy} onAgain={onAgain} onOtherModel={onOtherModel} onTool={onTool} onVideo={onVideo} onVoice={onVoice} />;
   const message = gen.status === "FAILED" ? gen.error || "Rasm yaratilmadi. Pul balansingizga qaytarildi." : "Ish bekor qilindi.";
   return <Failure job={job} message={message} busy={busy} onAgain={onAgain} />;
 }
@@ -171,6 +190,8 @@ function Pictures({
   onAgain,
   onOtherModel,
   onTool,
+  onVideo,
+  onVoice,
 }: {
   job: StudioJob;
   gen: api.GenerationDetail;
@@ -178,8 +199,13 @@ function Pictures({
   onAgain: (j: StudioJob) => void;
   onOtherModel: (j: StudioJob) => void;
   onTool?: PictureTool;
-}) {
+} & PictureNext) {
   const router = useRouter();
+  const [favError, setFavError] = useState<string | null>(null);
+  // «Videoga aylantirish» on a job of several pictures first asks which one becomes the start frame.
+  const [choosing, setChoosing] = useState(false);
+  // A utility job (upscale / background removal / edit) carries a label or an instruction, not a description.
+  const prompt = !job.purpose || job.purpose === MODE_PURPOSE.image ? job.prompt.trim() : "";
   const images = gen.doc?.images ?? [];
   const page = `/uz/files/${job.id}`;
   const short = gen.delivered && gen.delivered.got < gen.delivered.want ? gen.delivered : null;
@@ -209,14 +235,22 @@ function Pictures({
         </div>
       )}
       <div className="flex flex-col gap-2.5 p-3.5">
-        <div className="min-w-0">
-          <p className="line-clamp-2 text-[14.5px] leading-snug break-words" data-studio-job-prompt>
-            {job.prompt}
-          </p>
-          <p className="text-muted-foreground mt-0.5 text-[12.5px]" data-studio-job-meta>
-            {job.modelLabel} · {formatSom(job.price)}
-          </p>
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="line-clamp-2 text-[14.5px] leading-snug break-words" data-studio-job-prompt>
+              {job.prompt}
+            </p>
+            <p className="text-muted-foreground mt-0.5 text-[12.5px]" data-studio-job-meta>
+              {job.modelLabel} · {formatSom(job.price)}
+            </p>
+          </div>
+          <FavoriteButton id={job.id} onError={setFavError} />
         </div>
+        {favError ? (
+          <p role="alert" className="text-destructive text-[13px]" data-favorite-error>
+            {favError}
+          </p>
+        ) : null}
         {short ? (
           <p className="text-muted-foreground text-[13px]" data-studio-delivered>
             {short.want} tadan {short.got} ta rasm tayyor bo‘ldi — farq balansingizga qaytarildi.
@@ -232,6 +266,51 @@ function Pictures({
             Boshqa modelda
           </button>
         </div>
+        {(onVideo && images.length > 0) || (onVoice && prompt) ? (
+          <div className="flex flex-col gap-1.5" data-next-step role="group" aria-label="Keyingi qadam">
+            <p className="text-muted-foreground text-[12.5px] font-semibold">Keyingi qadam</p>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {onVideo && images.length > 0 ? (
+                <button
+                  type="button"
+                  data-result-action="to-video"
+                  aria-expanded={images.length > 1 ? choosing : undefined}
+                  onClick={() => (images.length > 1 ? setChoosing((v) => !v) : onVideo(images[0]!.url, prompt))}
+                  className={ACTION}
+                >
+                  <Clapperboard className="size-4" aria-hidden />
+                  Videoga aylantirish
+                </button>
+              ) : null}
+              {onVoice && prompt ? (
+                <button type="button" data-result-action="to-voice" onClick={() => onVoice(prompt)} className={ACTION}>
+                  <Mic className="size-4" aria-hidden />
+                  Ovoz qo‘shish
+                </button>
+              ) : null}
+            </div>
+            {onVideo && choosing && images.length > 1 ? (
+              <div className="flex flex-wrap items-center gap-1.5" data-video-choose role="group" aria-label="Qaysi rasmdan video?">
+                <span className="text-muted-foreground text-[13px]">Qaysi rasmdan?</span>
+                {images.map((im, i) => (
+                  <button
+                    key={im.id}
+                    type="button"
+                    data-video-pick={i}
+                    aria-label={`${i + 1}-rasmdan video`}
+                    onClick={() => {
+                      setChoosing(false);
+                      onVideo(im.url, prompt);
+                    }}
+                    className={cn(ACTION, "min-w-11 px-0")}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <Link href={page} data-result-open className="text-accent-soft-foreground pointer-coarse:min-h-11 pointer-coarse:inline-flex pointer-coarse:items-center w-fit text-[13.5px] font-semibold underline underline-offset-2">
           To‘liq ko‘rish va ulashish →
         </Link>

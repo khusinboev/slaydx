@@ -59,6 +59,8 @@ export type GalleryItem = {
   thumbs: string[];
   /** The packed result (one image or a zip): `/api/generations/{id}/file`. */
   fileUrl: string;
+  /** P7b: the user starred it (the server's `studio_favorites`). */
+  favorite: boolean;
 };
 
 export type GalleryPage = { items: GalleryItem[]; nextCursor: string | null };

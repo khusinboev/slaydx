@@ -1,14 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, RefreshCw } from "lucide-react";
+import { Download, Mic, Music, RefreshCw } from "lucide-react";
 import type * as api from "@/lib/api-client";
 import { useApiSrc } from "@/lib/use-api-src";
 import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
 import { currentDeliveryEnv, deliver, markGesture, type ReadyFile } from "@/lib/downloads/deliver";
 import { GenerationProgress } from "@/components/files/GenerationProgress";
+import { FavoriteButton } from "../Favorite";
 import type { StudioJob } from "../StudioResults";
 
 const ACTION =
@@ -37,25 +39,29 @@ async function downloadClip(id: string, openPage: () => void): Promise<void> {
   }
 }
 
+/** P7b «Keyingi qadam» on a finished clip (absent = no button). */
+type Next = { onMusic?: (prompt: string) => void; onVoice?: (text: string) => void };
+
 /**
  * The Video tab's results, newest first: a waiting clip shows the app's progress panel (`GenerationProgress`, the
  * video stage list with its minutes ETA), a finished one plays here (the result file itself, `?inline=1`, as the
- * result page's `VideoViewer`) with «Yuklab olish» and «Qayta»; a failed one says why (the refund is automatic).
+ * result page's `VideoViewer`) with «Yuklab olish» and «Qayta», the P7b star and — for a clip made from a prompt —
+ * «Keyingi qadam»: «Musiqa yaratish» / «Ovoz qo'shish»; a failed one says why (the refund is automatic).
  */
-export function VideoResults({ jobs, busy, onAgain }: { jobs: readonly StudioJob[]; busy: boolean; onAgain: (job: StudioJob) => void }) {
+export function VideoResults({ jobs, busy, onAgain, onMusic, onVoice }: { jobs: readonly StudioJob[]; busy: boolean; onAgain: (job: StudioJob) => void } & Next) {
   if (jobs.length === 0) return null;
   return (
     <ul className="flex flex-col gap-4" data-studio-jobs aria-label="Videolar">
       {jobs.map((job) => (
         <li key={job.id} data-studio-job={job.id} data-job-status={job.gen?.status ?? "QUEUED"}>
-          <JobCard job={job} busy={busy} onAgain={onAgain} />
+          <JobCard job={job} busy={busy} onAgain={onAgain} onMusic={onMusic} onVoice={onVoice} />
         </li>
       ))}
     </ul>
   );
 }
 
-function JobCard({ job, busy, onAgain }: { job: StudioJob; busy: boolean; onAgain: (j: StudioJob) => void }) {
+function JobCard({ job, busy, onAgain, onMusic, onVoice }: { job: StudioJob; busy: boolean; onAgain: (j: StudioJob) => void } & Next) {
   const gen = job.gen;
   if (job.error && !gen) return <Failure job={job} message={`${job.error} Video baribir tayyor bo‘lishi mumkin — «Ishlarim» yoki Galereyani tekshiring.`} busy={busy} onAgain={onAgain} />;
   if (!gen) {
@@ -69,7 +75,7 @@ function JobCard({ job, busy, onAgain }: { job: StudioJob; busy: boolean; onAgai
     );
   }
   if (gen.status === "QUEUED" || gen.status === "IN_PROGRESS") return <GenerationProgress gen={gen} />;
-  if (gen.status === "COMPLETED") return <Clip job={job} gen={gen} busy={busy} onAgain={onAgain} />;
+  if (gen.status === "COMPLETED") return <Clip job={job} gen={gen} busy={busy} onAgain={onAgain} onMusic={onMusic} onVoice={onVoice} />;
   const message = gen.status === "FAILED" ? gen.error || "Video yaratilmadi. Pul balansingizga qaytarildi." : "Ish bekor qilindi.";
   return <Failure job={job} message={message} busy={busy} onAgain={onAgain} />;
 }
@@ -88,8 +94,11 @@ function Failure({ job, message, busy, onAgain }: { job: StudioJob; message: str
   );
 }
 
-function Clip({ job, gen, busy, onAgain }: { job: StudioJob; gen: api.GenerationDetail; busy: boolean; onAgain: (j: StudioJob) => void }) {
+function Clip({ job, gen, busy, onAgain, onMusic, onVoice }: { job: StudioJob; gen: api.GenerationDetail; busy: boolean; onAgain: (j: StudioJob) => void } & Next) {
   const router = useRouter();
+  const [favError, setFavError] = useState<string | null>(null);
+  // An effect clip has no prompt of its own («Effekt: …» names the scene): nothing to hand over.
+  const prompt = job.sent.effect ? "" : job.prompt.trim();
   const page = `/uz/files/${job.id}`;
   const src = useApiSrc(`/api/generations/${job.id}/file?inline=1`);
   const video = gen.doc?.video;
@@ -100,15 +109,23 @@ function Clip({ job, gen, busy, onAgain }: { job: StudioJob; gen: api.Generation
         Brauzeringiz videoni qo‘llab-quvvatlamaydi.
       </video>
       <div className="flex flex-col gap-2.5 p-3.5">
-        <div className="min-w-0">
-          <p className="line-clamp-2 text-[14.5px] leading-snug break-words" data-studio-job-prompt>
-            {job.prompt}
-          </p>
-          <p className="text-muted-foreground mt-0.5 text-[12.5px]" data-studio-job-meta>
-            {job.modelLabel}
-            {video ? ` · ${Math.round(video.seconds)} soniya` : ""} · {formatSom(job.price)}
-          </p>
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="line-clamp-2 text-[14.5px] leading-snug break-words" data-studio-job-prompt>
+              {job.prompt}
+            </p>
+            <p className="text-muted-foreground mt-0.5 text-[12.5px]" data-studio-job-meta>
+              {job.modelLabel}
+              {video ? ` · ${Math.round(video.seconds)} soniya` : ""} · {formatSom(job.price)}
+            </p>
+          </div>
+          <FavoriteButton id={job.id} onError={setFavError} />
         </div>
+        {favError ? (
+          <p role="alert" className="text-destructive text-[13px]" data-favorite-error>
+            {favError}
+          </p>
+        ) : null}
         {short ? (
           <p className="text-muted-foreground text-[13px]" data-studio-delivered>
             {short.want} soniyadan {short.got} soniya tayyor bo‘ldi — farq balansingizga qaytarildi.
@@ -124,6 +141,25 @@ function Clip({ job, gen, busy, onAgain }: { job: StudioJob; gen: api.Generation
             Qayta
           </button>
         </div>
+        {prompt && (onMusic || onVoice) ? (
+          <div className="flex flex-col gap-1.5" data-next-step aria-label="Keyingi qadam" role="group">
+            <p className="text-muted-foreground text-[12.5px] font-semibold">Keyingi qadam</p>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {onMusic ? (
+                <button type="button" data-result-action="to-music" onClick={() => onMusic(prompt)} className={ACTION}>
+                  <Music className="size-4" aria-hidden />
+                  Musiqa yaratish
+                </button>
+              ) : null}
+              {onVoice ? (
+                <button type="button" data-result-action="to-voice" onClick={() => onVoice(prompt)} className={ACTION}>
+                  <Mic className="size-4" aria-hidden />
+                  Ovoz qo‘shish
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         <Link href={page} data-result-open className="text-accent-soft-foreground pointer-coarse:min-h-11 pointer-coarse:inline-flex pointer-coarse:items-center w-fit text-[13.5px] font-semibold underline underline-offset-2">
           To‘liq ko‘rish va ulashish →
         </Link>

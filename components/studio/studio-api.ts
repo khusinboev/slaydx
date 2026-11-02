@@ -173,6 +173,7 @@ function parseItem(raw: unknown): GalleryItem | null {
     count: Math.max(1, thumbs.length),
     thumbs,
     fileUrl: str(raw.fileUrl) ?? `/api/generations/${id}/file`,
+    favorite: raw.favorite === true,
   };
 }
 
@@ -182,9 +183,13 @@ export function parseGalleryPage(raw: unknown): GalleryPage {
   return { items, nextCursor: isObj(raw) ? str(raw.nextCursor) : null };
 }
 
-export async function fetchGallery(cursor: string | null, signal?: AbortSignal): Promise<GalleryPage> {
-  const q = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-  return parseGalleryPage(await request<unknown>(`/api/media/gallery${q}`, signal ? { signal } : {}));
+/** One gallery page; `favorites` (P7b «Sevimlilar») lists only the starred items. */
+export async function fetchGallery(cursor: string | null, opts: { favorites?: boolean; signal?: AbortSignal } = {}): Promise<GalleryPage> {
+  const q = new URLSearchParams();
+  if (cursor) q.set("cursor", cursor);
+  if (opts.favorites) q.set("favorites", "1");
+  const qs = q.toString();
+  return parseGalleryPage(await request<unknown>(`/api/media/gallery${qs ? `?${qs}` : ""}`, opts.signal ? { signal: opts.signal } : {}));
 }
 
 /* ───────────────────────── P2b: library, templates, inputs, enhance ───────────────────────── */

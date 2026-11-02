@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LayoutGrid, Wand2, X } from "lucide-react";
 import { ApiError, PriceChangedError } from "@/lib/api-client";
@@ -27,6 +27,7 @@ import { STUDIO_AUDIO_LISTING, STUDIO_SPEECH_PURPOSE, STUDIO_VIDEO_PURPOSE, enha
 import { INITIAL_VIDEO_STATE, VideoTab, type VideoTabState } from "./video/VideoTab";
 import { INITIAL_VOICE_STATE, VoiceTab, type VoiceTabState } from "./voice/VoiceTab";
 import { AudioTab, INITIAL_AUDIO_STATE, type AudioTabState } from "./audio/AudioTab";
+import { HandoffAlert, useHandoffs } from "./handoff";
 import { LibrarySheet } from "./LibrarySheet";
 import { TemplateSlots, TemplatesRow } from "./TemplatesRow";
 import { INPUT_PARAM, MODE_LABEL, MODE_PURPOSE, applyTemplate, type StudioMode } from "./studio-modes";
@@ -139,6 +140,13 @@ function StudioApp() {
   const { typing } = useKeyboardInset(rootRef);
   // The gallery is a view of this page with its own history entry: back returns to the form.
   useOverlayHistory(view === "gallery", () => setView("create"));
+  // P7b «Keyingi qadam» (docs/studio/P7-SPEC.md): a result handed to the next tab, prefilled — each step is that tab's own priced job.
+  const openTab = useCallback((t: StudioTab) => {
+    setView("create");
+    setTab(t);
+    if (typeof window !== "undefined") rootRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, []);
+  const handoff = useHandoffs({ open: openTab, setVideoState, setVoiceState, setAudioState });
 
   const entry = resolveEntry(catalog, chosen);
   const values = entry ? effective(entry, raw) : {};
@@ -375,10 +383,14 @@ function StudioApp() {
         {view === "gallery" ? (
           <section aria-label="Galereya" data-studio-gallery className="md:col-span-2">
             <h2 className="mb-3 text-[20px] font-extrabold">Galereya</h2>
+            <HandoffAlert error={handoff.error} />
             <Gallery
               onCreate={toCreate}
               onOtherModel={(item: GalleryItem) => (item.kind === "video" ? videoAgain(item) : otherModel(item.prompt))}
               onTool={(m, p) => void pictureTool(m, p)}
+              onVideo={(url, prompt) => void handoff.toVideo(url, prompt)}
+              onVoice={(text) => void handoff.toVoice(text)}
+              onMusic={(prompt) => void handoff.toMusic(prompt)}
             />
           </section>
         ) : (
@@ -395,6 +407,7 @@ function StudioApp() {
                     onClick={() => {
                       setTab(t);
                       setError(null);
+                      handoff.clearError();
                     }}
                     className={cn(
                       "focus-visible:ring-ring min-h-11 rounded-[10px] px-3.5 text-[15px] font-semibold sm:px-5 outline-none focus-visible:ring-2",
@@ -406,6 +419,7 @@ function StudioApp() {
                 ))}
               </div>
               <ChannelGate />
+              <HandoffAlert error={handoff.error} />
               {tab === "rasm" && mode !== "image" ? (
                 <div className="bg-accent-soft text-accent-soft-foreground mb-3 flex items-center justify-between gap-2 rounded-[14px] px-3.5 py-2" data-studio-mode={mode}>
                   <p className="text-[14.5px] font-bold">{MODE_LABEL[mode]}</p>
@@ -455,6 +469,8 @@ function StudioApp() {
                   balance={paidBalance}
                   typing={typing}
                   gated={gated}
+                  onMusic={(prompt) => void handoff.toMusic(prompt)}
+                  onVoice={(text) => void handoff.toVoice(text)}
                 />
               ) : !catalog ? (
                 <CatalogStatus status={state.status} message={state.status === "error" ? state.message : ""} onRetry={() => reload()} />
@@ -506,7 +522,15 @@ function StudioApp() {
             </div>
             {tab === "rasm" ? (
               <section ref={resultsRef} aria-label="Natijalar" data-studio-results className={cn("min-w-0 md:mt-0", jobs.length > 0 && "mt-5")}>
-                <StudioResults jobs={jobs} busy={submitting} onAgain={again} onOtherModel={(job) => otherModel(job.prompt)} onTool={(m, p) => void pictureTool(m, p)} />
+                <StudioResults
+                  jobs={jobs}
+                  busy={submitting}
+                  onAgain={again}
+                  onOtherModel={(job) => otherModel(job.prompt)}
+                  onTool={(m, p) => void pictureTool(m, p)}
+                  onVideo={(url, prompt) => void handoff.toVideo(url, prompt)}
+                  onVoice={(text) => void handoff.toVoice(text)}
+                />
               </section>
             ) : null}
           </>

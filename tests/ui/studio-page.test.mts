@@ -295,7 +295,8 @@ test("a running job shows the app's progress panel; a finished one its pictures 
   assert.match(img.getAttribute("src") ?? "", /^\/api\/generations\/.+\/assets\//);
   const actions = qa("[data-result-action]").map((b) => b.getAttribute("data-result-action"));
   // P2b: + «Tahrirlash», «Sifatini oshirish», «Fonni olib tashlash» on the picture (tests/ui/studio-library.test.mts).
-  assert.deepEqual(actions, ["download", "edit", "upscale", "bgremove", "again", "other-model"]);
+  // P7b: + «Keyingi qadam» «Videoga aylantirish», «Ovoz qo'shish» (tests/ui/studio-chains.test.mts).
+  assert.deepEqual(actions, ["download", "edit", "upscale", "bgremove", "again", "other-model", "to-video", "to-voice"]);
   assert.match(text("[data-studio-job-meta]"), new RegExp(`Nano Banana · ${groupDigits(expectedPrice(NANO, 1))} so'm`));
   assert.ok(q("[data-result-open]")?.getAttribute("href")?.startsWith("/uz/files/"), "the full result page");
 });
