@@ -64,7 +64,7 @@ const calls: Call[] = [];
 let slots: unknown = { voice_slots_used: 1, voice_limit: 10, can_use_instant_voice_cloning: true };
 let ttsStatus = 200;
 let cloneAnswer: () => Response = () => json(200, { voice_id: PROVIDER_VOICE, requires_verification: false });
-let deleteStatus = 200;
+const deleteStatus = 200;
 function installFetch() {
   globalThis.fetch = (async (u: string | URL, init: RequestInit = {}) => {
     const url = String(u);

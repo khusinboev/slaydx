@@ -62,7 +62,6 @@ const CLONE = "elevenlabs/voice-clone";
 const RACHEL = "21m00Tcm4TlvDq8ikWAM";
 const ADAM = "pNInz6obpgDQGcFmaJgB";
 const PRICING = { soumPerUsd: 12_700, markup: 2, step: 100, overrides: {}, costUsd: {} };
-const up100 = (n: number) => Math.ceil(n / 100 - 1e-9) * 100;
 
 /** `frames` MPEG-1 Layer III 44.1 kHz 128 kbps frames (417 bytes, 1152 samples each): a valid MP3 for `mp3Seconds`. */
 export function mp3Bytes(frames = 40): Uint8Array {
