@@ -9,7 +9,7 @@ import { ADMISSION_COUNTS_SQL, IDEMPOTENCY_WINDOW_HOURS } from "./jobs";
 import { queueLimits } from "./queue-limits";
 import { toJsonb } from "./jsonb";
 import { log } from "./log";
-import { insufficientError, prepareGeneration } from "./submit-generation";
+import { insufficientError, prepareGeneration, type PreparedGeneration } from "./submit-generation";
 import { cleanText, safeSlice } from "../generation/safe-text";
 import { MEDIA_CATALOG, STUDIO_IMAGE_PURPOSE, studioPurposeOf } from "../media/catalog";
 import { isStudioVideoModel } from "../media/studio-video-pricing";
@@ -79,7 +79,7 @@ export function compareRequestError(kind: CompareKind, members: readonly { value
     const id = ids[i]!;
     const entry = MEDIA_CATALOG.byId(id);
     const fits =
-      entry !== undefined &&
+      entry !== null &&
       (kind === "image" ? studioPurposeOf(id) === STUDIO_IMAGE_PURPOSE : isStudioVideoModel(id) && !entry.capabilities.includes("effect"));
     if (!entry || !fits) return "Bu model solishtirishda ishlamaydi";
     const params = normalize(entry.params, m.values);
@@ -122,7 +122,7 @@ export async function submitCompare(input: CompareInput): Promise<CompareResult>
   }
 
   // EVERY model is validated and priced before anything is charged; the first refusal stops the batch.
-  const prepared = [];
+  const prepared: PreparedGeneration[] = [];
   for (const m of members) prepared.push(await prepareGeneration({ userId, tool, values: m.values, expectedPrice: m.expectedPrice }));
   const total = prepared.reduce((s, p) => s + p.price, 0);
   if (expectedTotal !== undefined && expectedTotal !== total) {
