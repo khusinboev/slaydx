@@ -32,6 +32,40 @@ chains». Builds on P1–P6 (all on `feat/studio-next`). **No merge to `main`, n
   «Sevimlilar». Additive migration **070** `studio_favorites` (user_id, generation_id, created_at; PK both; ON DELETE
   CASCADE). Free, no limits beyond ownership; star state survives reload.
 
+### P7b — what shipped / decisions (builder, 2026-11-03, branch `feat/studio-p7b`)
+- **Handoffs** live in `components/studio/handoff.tsx` (`useHandoffs` + the pure `videoFromPicture` / `voiceFromText` /
+  `musicFromPrompt`); `StudioPage` only wires them (one `useHandoffs` call, the props, two `HandoffAlert`s). Nothing is
+  charged by a handoff: the next tab opens prefilled and its own «Yaratish» is the normal priced job (same
+  `expectedPrice` rule, no price change).
+- **Picture → video**: `resultAssetOf(url)` → `POST /api/media/inputs/from-result` (the P2b path: SQL ownership, a copy
+  into the user's `photo_uploads` kind `studio`) → the copied asset id becomes `imageAssetId`; the submit re-checks it
+  is the user's own photo (`photoExists` + `studioVideoInputsError`, unchanged). The handoff reads the video catalog
+  FIRST and refuses with «Rasmdan video yaratish hozircha mavjud emas» when no start-image model is offered — no input
+  copy is made then. The Video tab opens on «Matndan / rasmdan», the picture's prompt prefilled (editable; a utility job
+  — upscale / bgremove / edit — hands an empty prompt), and `VideoTabState.fromPicture` keeps the picker on
+  `startImageModels` (models with an `imageAssetId` image param; effects excluded) while the frame is set; removing the
+  frame clears the flag (a later hand upload is an ordinary start frame). A job of several pictures asks «Qaysi
+  rasmdan?» (numbered buttons); a gallery card uses its first stored picture (as the P2b tools there).
+- **Clip → music**: «Audio», «Musiqa», the clip prompt as the description (cut to the model's max). **Prompt → Ovoz**:
+  «Ovoz», «Matn», the text field of the chosen / default text model (`speechTextParam`), cut to `spokenMax`. Each
+  handoff checks its tab offers the mode now (else a message). Offered on picture results / cards and on clips made
+  from a prompt; NOT on effect clips (no prompt of their own), utility picture jobs (label, not description) or audio
+  items. Gallery cards show them behind a «Keyingi qadam» disclosure (keeps the 2-column phone card short); result
+  cards show them in a «Keyingi qadam» row.
+- **Favourites**: migration **070** `studio_favorites (user_id, generation_id, created_at; PK both; both FKs ON DELETE
+  CASCADE; index on generation_id)`. `PUT` / `DELETE /api/media/favorites/<generationId>` (`lib/server/media/favorites.ts`):
+  idempotent, `{ id, favorite }`; a star only on the caller's OWN COMPLETED Studio generation (the INSERT selects from
+  `generations WHERE id AND user_id AND tool_id IN studio tools AND status`), anything else 404 (same as missing);
+  un-star deletes only the caller's row. No count limit; a 300 / 5 min rate limit only stops a runaway client. The
+  gallery item carries `favorite` (EXISTS with the owner) and `?favorites=1` filters with the same keyset cursor.
+- **Client**: `components/studio/Favorite.tsx` — a small zustand store of the stars toggled on this page (a result's star
+  shows on its gallery card and back without a reload), optimistic toggle reverted with the server's message on failure.
+  Gallery chips «Hammasi» / «Sevimlilar» (radio group, own empty state); an item un-starred inside «Sevimlilar» stays
+  visible (re-starrable) until the list is reloaded.
+- Tests: `tests/studio-favorites.test.mts` (4, real Postgres), `tests/ui/studio-chains.test.mts` (8),
+  `tests/admin-migrations.test.mts` (070 lines), `tests/ui/studio-page.test.mts` (result action list + `to-video`,
+  `to-voice`).
+
 ## P7c — provider cost telemetry for Studio speech + audio (review m3 of P6)
 - Studio speech (P5) and audio (P6) jobs write their provider cost into the generation's `cost_json` like the other
   engines (admin profit / cost reports read it), one entry per delivered call, using the same catalog cost as
