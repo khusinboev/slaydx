@@ -11,6 +11,8 @@ import type { GalleryItem, GalleryPage, LibraryData, MediaCatalog, StudioPricing
 export const STUDIO_IMAGE_PURPOSE = "studio.image";
 /** The catalog purpose of the Video tab (docs/studio/P3-SPEC.md). */
 export const STUDIO_VIDEO_PURPOSE = "studio.video";
+/** The catalog purpose of the «Ovoz» tab (docs/studio/P5-SPEC.md). */
+export const STUDIO_SPEECH_PURPOSE = "studio.speech";
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
@@ -19,7 +21,7 @@ const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? 
 
 /** One model of the response, or `null` when it is not a usable image / video model (it is then simply not offered). */
 function parseEntry(raw: unknown): ClientEntry | null {
-  if (!isObj(raw) || !str(raw.id) || (raw.kind !== "image" && raw.kind !== "video") || !str(raw.label)) return null;
+  if (!isObj(raw) || !str(raw.id) || (raw.kind !== "image" && raw.kind !== "video" && raw.kind !== "speech") || !str(raw.label)) return null;
   if (!Array.isArray(raw.params) || !isObj(raw.cost) || typeof raw.cost.per !== "string") return null;
   if (!raw.params.every((p) => isObj(p) && str(p.name) && typeof p.type === "string")) return null;
   const badges = Array.isArray(raw.badges) ? raw.badges.filter((b): b is string => typeof b === "string") : [];
@@ -36,7 +38,7 @@ export function parseCatalog(raw: unknown): MediaCatalog | null {
   const pricing = parsePricing(raw.pricing);
   if (!pricing || !Array.isArray(raw.models)) return null;
   // A purpose serves one kind: an entry of another kind is not offered (a picture model never lands in the Video tab).
-  const kind = str(raw.purpose) === STUDIO_VIDEO_PURPOSE ? "video" : "image";
+  const kind = str(raw.purpose) === STUDIO_VIDEO_PURPOSE ? "video" : str(raw.purpose) === STUDIO_SPEECH_PURPOSE ? "speech" : "image";
   const models = raw.models.map(parseEntry).filter((m): m is ClientEntry => m !== null && m.kind === kind);
   const wanted = str(raw.defaultModelId);
   // `null` from the server = nothing available now; the picker then shows «Hozircha modellar mavjud emas».
@@ -145,9 +147,19 @@ function parseItem(raw: unknown): GalleryItem | null {
         effectLabel: str(v.effectLabel),
       }
     : null;
+  const a = raw.kind === "audio" && isObj(raw.audio) ? raw.audio : null;
+  const audio = a
+    ? {
+        src: `/api/generations/${id}/file?inline=1`,
+        seconds: pos(a.seconds),
+        voices: Array.isArray(a.voices) ? a.voices.filter((x): x is string => typeof x === "string").slice(0, 4) : [],
+        clone: a.clone === true,
+      }
+    : null;
   return {
     id,
-    kind: video ? "video" : "image",
+    kind: audio ? "audio" : video ? "video" : "image",
+    audio,
     video,
     createdAt: str(raw.createdAt) ?? "",
     modelId: str(raw.modelId),

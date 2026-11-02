@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Shuffle } from "lucide-react";
+import { Mic, Shuffle } from "lucide-react";
 import { ApiImg, useApiSrc } from "@/lib/use-api-src";
 import { PictureTools, type PictureTool } from "./StudioResults";
 import { fetchGallery } from "./studio-api";
@@ -29,6 +29,27 @@ function VideoThumb({ src, seconds }: { src: string; seconds: number | null }) {
       <video src={url} muted playsInline preload="metadata" className="bg-muted aspect-square w-full object-cover" aria-hidden />
       <span className="absolute top-2 left-2 rounded-full bg-black/70 px-2 py-0.5 text-[12px] font-semibold text-white">▶ {seconds ? `${Math.round(seconds)} s` : "video"}</span>
     </span>
+  );
+}
+
+/** A speech result's card face (P5): the length and voices on a tile; the player sits in the card body. */
+function AudioThumb({ seconds, voices }: { seconds: number | null; voices: string[] }) {
+  return (
+    <span className="bg-accent-soft text-accent-soft-foreground flex aspect-square w-full flex-col items-center justify-center gap-1.5 p-3 text-center" data-gallery-audio>
+      <Mic className="size-8" aria-hidden />
+      <span className="text-[13px] font-semibold">{seconds ? `${Math.round(seconds)} s` : "audio"}</span>
+      {voices.length ? <span className="line-clamp-1 text-[12px]">{voices.join(" · ")}</span> : null}
+    </span>
+  );
+}
+
+/** The card's player: the job's own MP3, nothing loaded until play (`preload="none"`). */
+function AudioPlayer({ src }: { src: string }) {
+  const url = useApiSrc(src);
+  return (
+    <audio controls preload="none" src={url} className="w-full" data-gallery-audio-player>
+      Brauzeringiz audio pleerni qo‘llab-quvvatlamaydi.
+    </audio>
   );
 }
 
@@ -109,7 +130,7 @@ export function Gallery({ onOtherModel, onCreate, onTool }: { onOtherModel: (ite
     return (
       <div className="bg-card rounded-[20px] border p-6 text-center" data-gallery-empty>
         <p className="text-[15px] font-medium">Galereya hozircha bo‘sh</p>
-        <p className="text-muted-foreground mt-1 text-[14px]">Yaratgan rasm va videolaringiz shu yerda saqlanadi.</p>
+        <p className="text-muted-foreground mt-1 text-[14px]">Yaratgan rasm, video va audiolaringiz shu yerda saqlanadi.</p>
         <button type="button" onClick={onCreate} className="bg-primary text-primary-foreground mt-4 inline-flex h-11 items-center rounded-[14px] px-5 text-[14.5px] font-semibold">
           Rasm yaratish
         </button>
@@ -121,8 +142,10 @@ export function Gallery({ onOtherModel, onCreate, onTool }: { onOtherModel: (ite
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3" data-gallery-list>
         {items.map((it) => (
           <li key={it.id} data-gallery-item={it.id} className="bg-card flex min-w-0 flex-col overflow-hidden rounded-[18px] border">
-            <Link href={`/uz/files/${it.id}`} aria-label={it.prompt || (it.video ? "Videoni ochish" : "Rasmni ochish")} className="focus-visible:ring-ring relative block outline-none focus-visible:ring-2">
-              {it.video ? (
+            <Link href={`/uz/files/${it.id}`} aria-label={it.prompt || (it.audio ? "Audioni ochish" : it.video ? "Videoni ochish" : "Rasmni ochish")} className="focus-visible:ring-ring relative block outline-none focus-visible:ring-2">
+              {it.audio ? (
+                <AudioThumb seconds={it.audio.seconds} voices={it.audio.voices} />
+              ) : it.video ? (
                 <VideoThumb src={it.video.src} seconds={it.video.seconds} />
               ) : it.thumbs[0] ? (
                 <ApiImg src={it.thumbs[0]} alt={it.prompt} loading="lazy" className="bg-muted aspect-square w-full object-cover" />
@@ -138,6 +161,9 @@ export function Gallery({ onOtherModel, onCreate, onTool }: { onOtherModel: (ite
             <div className="flex flex-1 flex-col gap-1 p-2.5">
               <p className="line-clamp-2 text-[13.5px] leading-snug break-words">{it.prompt}</p>
               <p className="text-muted-foreground text-[12px]">{[it.modelLabel, formatStamp(it.createdAt)].filter(Boolean).join(" · ")}</p>
+              {it.audio ? <AudioPlayer src={it.audio.src} /> : null}
+              {/* An audio card has no «again» action: the gallery does not carry the full text (the result page has it). */}
+              {it.audio ? null : (
               <button
                 type="button"
                 data-gallery-other-model
@@ -147,8 +173,9 @@ export function Gallery({ onOtherModel, onCreate, onTool }: { onOtherModel: (ite
                 <Shuffle className="size-3.5" aria-hidden />
                 {it.video ? "Yana yaratish" : "Boshqa modelda"}
               </button>
+              )}
               {/* P2b: the tools work on the card's first picture (the result page shows every picture); never on a video. */}
-              {onTool && !it.video && it.thumbs[0] ? <PictureTools url={it.thumbs[0]} onTool={onTool} index={0} many={false} inline /> : null}
+              {onTool && !it.video && !it.audio && it.thumbs[0] ? <PictureTools url={it.thumbs[0]} onTool={onTool} index={0} many={false} inline /> : null}
             </div>
           </li>
         ))}
