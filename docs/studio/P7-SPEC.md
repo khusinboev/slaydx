@@ -38,6 +38,32 @@ chains». Builds on P1–P6 (all on `feat/studio-next`). **No merge to `main`, n
   `media_jobs.cost_usd` (one clip per call). Tests: the admin cost report shows a non-zero cost for a studio-speech and
   a studio-audio job; mutation for each.
 
+### P7c — what shipped (builder, 2026-11-03, branch `feat/studio-p7c`)
+- **Recording** (`lib/generation/studio/cost.ts`, called by `speech.ts`, `audio.ts` and the clone job `lib/server/media/voice-clone.ts`):
+  after the engine ACCEPTS a call's audio, one entry goes into the job's meter (`job-cost.ts`), so `buildArtifact` writes it to
+  `generations.cost_json` and the worker flushes it to `ai_usage` (the rows the admin cost / profit reports read). Amount =
+  `costUsd(entry.cost, normalize(entry.params, <the very values passed to runMedia>))` = that call's `media_jobs.cost_usd`
+  (SFX: values with `variants: 1`, one clip per call; speech chunk: priced on its own text; dialogue: the whole normalized
+  script, names included, `units` = the spoken characters). No change to prices, `runMedia` or the worker.
+- **Parts**: speech and the clone preview -> kind `tts` (provider = the route's: `elevenlabs` / `gemini` -- the catalog's id, not
+  `google`; model = the route's upstream model, e.g. `eleven_v3`, the operator's Gemini TTS model; units = characters; the Gemini
+  part is flagged `estimated` because its quote is a characters -> tokens estimate and the adapter returns no usage). Music /
+  effect / voice changer / isolator -> NEW kind `audio` (`JobCost.addAudio` / `recordAudio`, `CostPart.kind` widened; units =
+  the seconds the call was priced on; ElevenLabs bills these per second, so they are not `tts`).
+- **Failed calls** follow the existing convention (`coreAdapterImageProvider`, `tts/chain`): a call that failed or returned no
+  usable audio records nothing; calls delivered before a later failure stay in the meter (the worker's failed `ai_usage` row
+  carries them -- the provider billed them), `cost_json` itself is written only on COMPLETED. SFX 3 of 4 -> three clips.
+- **Clone job**: the IVC call costs $0 (catalog `per: job, usd: 0`) and records nothing; the preview call is the job's cost.
+- **Tests** (mutations listed in each file's header): `studio-speech` / `studio-audio` (pure, real engine + stubbed fetch inside a
+  meter: exact parts, price == the number `runMedia` prices, failed call / failed job records nothing), `studio-speech-flow` /
+  `studio-audio-flow` (worker + isolated DB: `cost_json`, `spendForJobs` and `spendBy` tool / kind of the admin cost report, and the
+  succeeded `media_jobs.cost_usd` sum agree; failed jobs leave no spend; speech, dialogue, clone, music, SFX 3 of 4, voice changer,
+  isolator).
+- **Not done / follow-ups**: the admin UI label maps (`components/admin/providers/format.ts`, `components/admin/pricing/shared.ts`,
+  `admin-cost.ts KIND_LABEL`) do not know kind `audio` yet (they fall back to the raw key, and the providers panel files the
+  part under the provider's own tab) -- a one-line label per map for the owner of the admin UI. Library-voice previews (`voicePreview`) run outside any job, so their
+  small cost is still unrecorded. Credit rates stay the P6 UNVERIFIED estimates until compared with the ElevenLabs usage page.
+
 ## File ownership (parallel agents — do not edit another package's files)
 - P7a: `components/studio/compare/*`, `lib/server/studio-compare.ts` (+ route), migration 071, its tests; in
   `StudioPage.tsx` ONLY the mount of the switch + results (small, isolated hunk).
