@@ -203,11 +203,21 @@ function studioVideoRungs(id: string): LadderInput[] {
   if (effect && effect.type === "enum") return effect.options.map((o) => ({ label: `${entry.label} · ${o.label}`, values: { modelId: id, effect: o.value } }));
   const secs = entry.params.find((p) => p.name === "seconds");
   const lengths = secs && secs.type === "int" ? [...new Set([secs.min, secs.max])] : [];
-  const sound = entry.params.some((p) => p.name === "sound" && p.type === "bool");
-  return lengths.flatMap((n) => [
-    { label: `${entry.label} · ${n} soniya`, values: { modelId: id, seconds: n } as FormValues },
-    ...(sound ? [{ label: `${entry.label} · ${n} soniya · ovozli`, values: { modelId: id, seconds: n, sound: true } as FormValues }] : []),
-  ]);
+  // A sound rung only where sound moves the price (Kling); on the fal models it is free (Studio P4).
+  const sound = entry.params.some((p) => p.name === "sound" && p.type === "bool" && p.affects !== "request");
+  // P4: a priced resolution tier (fal models) gets a rung per tier; other models one rung per length.
+  const res = entry.params.find((p) => p.name === "resolution");
+  const tiers: (string | null)[] = res && res.type === "enum" && res.affects !== "request" ? res.options.map((o) => o.value) : [null];
+  return lengths.flatMap((n) =>
+    tiers.flatMap((tier) => {
+      const at = tier ? { resolution: tier } : {};
+      const tag = tier ? ` · ${tier}` : "";
+      return [
+        { label: `${entry.label} · ${n} soniya${tag}`, values: { modelId: id, seconds: n, ...at } as FormValues },
+        ...(sound ? [{ label: `${entry.label} · ${n} soniya${tag} · ovozli`, values: { modelId: id, seconds: n, ...at, sound: true } as FormValues }] : []),
+      ];
+    }),
+  );
 }
 
 /**

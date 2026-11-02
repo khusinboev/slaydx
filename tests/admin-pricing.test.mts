@@ -110,6 +110,17 @@ test("UNIT_OF names every registry tool and the labels are Uzbek", () => {
   assert.equal(ap.UNIT_LABELS.kchars, "1 000 belgi");
 });
 
+test("studio-video ladder (P4): a rung per priced resolution tier of a fal model; a sound rung only where sound costs more", () => {
+  const labels = ap.ladderInputs("studio-video").map((s) => s.label);
+  // Wan 3.0: 2 s and 10 s × 480p / 720p / 1080p; its sound is free, so no «ovozli» rung.
+  for (const n of [2, 10]) for (const t of ["480p", "720p", "1080p"]) assert.ok(labels.includes(`Wan 3.0 · ${n} soniya · ${t}`), `Wan ${n} ${t}`);
+  assert.ok(!labels.some((l) => l.startsWith("Wan 3.0") && l.endsWith("ovozli")), "MUTATSIYA: free sound gets a rung");
+  assert.ok(labels.includes("MiniMax H3 · 5 soniya · 768p"));
+  // Kling keeps its rungs exactly (no resolution param; sound is priced).
+  assert.ok(labels.includes("Kling 3.0 · 3 soniya") && labels.includes("Kling 3.0 · 15 soniya · ovozli"));
+  assert.ok(labels.includes("Kling effektlar · Quchoqlash"));
+});
+
 test("every tool has a ladder whose base is exactly basePriceFor/priceFor of its inputs", () => {
   for (const tool of TOOLS) {
     const inputs = ap.ladderInputs(tool.id);
