@@ -253,7 +253,11 @@ export async function assertCloneAllowed(userId: string, values: FormValues, dep
 /** The clone voices of a speech request must be the user's own READY clones (400 before charging). */
 export async function assertOwnClones(userId: string, values: FormValues): Promise<void> {
   const entry = studioSpeechEntry(values);
-  const ids = entry ? cloneIdsOf(entry, values) : [];
+  await assertOwnCloneIds(userId, entry ? cloneIdsOf(entry, values) : []);
+}
+
+/** Every clone id must be one of the user's own READY clones (400 before charging); shared with the P6 voice changer. */
+export async function assertOwnCloneIds(userId: string, ids: readonly string[]): Promise<void> {
   if (!ids.length) return;
   const rows = await query<{ id: string }>(
     "SELECT id::text AS id FROM studio_voices WHERE user_id = $1 AND id = ANY($2::uuid[]) AND deleted_at IS NULL AND status = 'ready'",
@@ -265,7 +269,11 @@ export async function assertOwnClones(userId: string, values: FormValues): Promi
 /** The worker's view of a speech job: the owner's ready clones it names (provider ids stay server-side). */
 export async function studioSpeechJobCtx(userId: string, values: FormValues) {
   const entry = studioSpeechEntry(values);
-  const ids = entry ? cloneIdsOf(entry, values) : [];
+  return cloneJobCtx(userId, entry ? cloneIdsOf(entry, values) : []);
+}
+
+/** The owner's ready clones among `ids` + the `last_used_at` toucher (the speech job and the P6 voice changer). */
+export async function cloneJobCtx(userId: string, ids: readonly string[]) {
   const rows = ids.length
     ? await query<{ id: string; provider_voice_id: string; name: string }>(
         "SELECT id::text AS id, provider_voice_id, name FROM studio_voices WHERE user_id = $1 AND id = ANY($2::uuid[]) AND deleted_at IS NULL AND status = 'ready'",

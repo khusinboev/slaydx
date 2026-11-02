@@ -14,7 +14,7 @@ import type { ToolId } from "./types";
 export type StageDef = { readonly from: number; readonly label: string };
 
 /** Visual flavour of the running panel (`components/files/GenerationProgress.tsx`). */
-export type ProgressKind = "doc" | "article" | "essay" | "teacher" | "game" | "listening" | "infographic" | "audio" | "image" | "translation" | "resume" | "slides" | "video" | "speech";
+export type ProgressKind = "doc" | "article" | "essay" | "teacher" | "game" | "listening" | "infographic" | "audio" | "image" | "translation" | "resume" | "slides" | "video" | "speech" | "sound";
 
 const STAGES: Record<ProgressKind, readonly StageDef[]> = {
   // coursework / referat / mustaqil-ish — `work/engine.ts`
@@ -93,6 +93,12 @@ const STAGES: Record<ProgressKind, readonly StageDef[]> = {
     { from: 10, label: "Ovozga o‘girilmoqda" },
     { from: 90, label: "Audio yig‘ilmoqda" },
   ],
+  // Studio «Audio» (P6, `lib/generation/studio/audio.ts`): music / effects / voice changer / isolator.
+  sound: [
+    { from: 0, label: "So‘rov tayyorlanmoqda" },
+    { from: 10, label: "Audio yaratilmoqda" },
+    { from: 90, label: "Audio yig‘ilmoqda" },
+  ],
   // `image-studio.ts`
   image: [
     { from: 0, label: "So‘rov tayyorlanmoqda" },
@@ -146,6 +152,7 @@ const KIND_BY_TOOL: Record<ToolId, ProgressKind> = {
   "studio-video": "video",
   "studio-speech": "speech",
   "studio-voice": "speech",
+  "studio-audio": "sound",
   infographic: "infographic",
   "lesson-plan": "teacher",
   "texnologik-xarita": "teacher",

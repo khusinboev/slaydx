@@ -10,6 +10,8 @@ import { availableModels, studioVideoModels } from "./availability";
 import { mediaPricing } from "./pricing";
 import { STUDIO_SPEECH_PURPOSE } from "../../media/catalog-speech";
 import { studioSpeechModels } from "./voices";
+import { MUSIC_MODEL, STUDIO_AUDIO_LISTING } from "../../media/catalog-audio";
+import { studioAudioModels } from "./audio-inputs";
 
 /**
  * The two public Studio reads (docs/studio/P1-SPEC.md «Session / API»).
@@ -40,6 +42,16 @@ const CLIENT = new Map(MEDIA_CATALOG.clientView().map((e) => [e.id, e]));
 export const CATALOG_PURPOSES: ReadonlySet<string> = new Set([...STUDIO_PURPOSES, STUDIO_VIDEO_PURPOSE, STUDIO_SPEECH_PURPOSE]);
 
 export async function mediaCatalog(purposeId: string): Promise<CatalogResponse> {
+  // P6: the «Audio» tab lists its four modes at once (one model per purpose) — a listing id, not a job purpose.
+  if (purposeId === STUDIO_AUDIO_LISTING) {
+    const [available, pricing] = await Promise.all([studioAudioModels(), mediaPricing()]);
+    return {
+      purpose: purposeId,
+      defaultModelId: available.includes(MUSIC_MODEL) ? MUSIC_MODEL : (available[0] ?? null),
+      models: available.map((id) => CLIENT.get(id)!),
+      pricing,
+    };
+  }
   if (!CATALOG_PURPOSES.has(purposeId) || !MEDIA_PURPOSES.byId(purposeId)) throw new ApiError("Noma'lum maqsad", 400);
   // The Video tab also follows the paid-video switch `video.enabled` (off = no model listed, the route refuses too).
   // P5: the «Ovoz» tab follows `studio.voice.enabled` and Gemini's `TTS_GEMINI_MODEL` (`studioSpeechModels`).
@@ -158,11 +170,11 @@ export async function studioGallery(userId: string, cursor: ListCursor | null, l
   const rows = await query<Row>(
     `SELECT id, tool_id, created_at, topic,
             to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS cursor_ts,
-            COALESCE(doc_json->>'imageModel', doc_json->'video'->>'model', doc_json->'speech'->>'model') AS model,
-            COALESCE(doc_json->>'imagePrompt', doc_json->'video'->>'prompt') AS prompt,
-            doc_json->'images' AS images, doc_json->'video' AS video, doc_json->'speech' AS speech
+            COALESCE(doc_json->>'imageModel', doc_json->'video'->>'model', doc_json->'speech'->>'model', doc_json->'studioAudio'->>'model') AS model,
+            COALESCE(doc_json->>'imagePrompt', doc_json->'video'->>'prompt', doc_json->'studioAudio'->>'prompt') AS prompt,
+            doc_json->'images' AS images, doc_json->'video' AS video, COALESCE(doc_json->'speech', doc_json->'studioAudio') AS speech
        FROM generations
-      WHERE user_id = $1 AND tool_id IN ('studio-image', 'studio-video', 'studio-speech') AND status = 'COMPLETED' AND files_purged_at IS NULL
+      WHERE user_id = $1 AND tool_id IN ('studio-image', 'studio-video', 'studio-speech', 'studio-audio') AND status = 'COMPLETED' AND files_purged_at IS NULL
         AND ($2::timestamp IS NULL
              OR (created_at <= ($2::timestamp AT TIME ZONE 'UTC')
                  AND (created_at < ($2::timestamp AT TIME ZONE 'UTC') OR id < $3::uuid)))
@@ -175,7 +187,8 @@ export async function studioGallery(userId: string, cursor: ListCursor | null, l
   return {
     items: page.map((r) => {
       const isVideo = r.tool_id === "studio-video";
-      const isAudio = r.tool_id === "studio-speech";
+      // P6: an «Audio» result is an audio item too (the result file is always one MP3).
+      const isAudio = r.tool_id === "studio-speech" || r.tool_id === "studio-audio";
       return {
         id: r.id,
         kind: isAudio ? ("audio" as const) : isVideo ? ("video" as const) : ("image" as const),

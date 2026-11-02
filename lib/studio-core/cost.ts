@@ -8,7 +8,8 @@ import type { NormalizedParams } from "./params";
  *   job     flat per job;
  *   output  per produced item (image), × the `countParam` value (1 when absent); `by` swaps the unit price by a param
  *           value (quality, resolution);
- *   second  per second of output (video, music), × the `secondsParam` value; `by` as above;
+ *   second  per second of output (video, music), × the `secondsParam` value; `by` as above; × the `countParam` value
+ *           (1 when absent) when one job makes several clips (Studio P6 sound-effect variants);
  *   kchar   per 1 000 characters of the `textParam` value (speech).
  */
 export type CostTable = { param: string; table: Readonly<Record<string, number>> };
@@ -16,7 +17,7 @@ export type CostTable = { param: string; table: Readonly<Record<string, number>>
 export type CostRule =
   | { per: "job"; usd: number }
   | { per: "output"; usd: number; countParam?: string; by?: CostTable }
-  | { per: "second"; usd: number; secondsParam: string; by?: CostTable }
+  | { per: "second"; usd: number; secondsParam: string; countParam?: string; by?: CostTable }
   | { per: "kchar"; usd: number; textParam: string };
 
 function unit(usd: number, by: CostTable | undefined, p: NormalizedParams): number {
@@ -37,7 +38,7 @@ export function costUsd(rule: CostRule, p: NormalizedParams): number {
     case "output":
       return unit(rule.usd, rule.by, p) * (rule.countParam ? num(p[rule.countParam], 1) : 1);
     case "second":
-      return unit(rule.usd, rule.by, p) * num(p[rule.secondsParam], 0);
+      return unit(rule.usd, rule.by, p) * num(p[rule.secondsParam], 0) * (rule.countParam ? num(p[rule.countParam], 1) : 1);
     case "kchar":
       return (rule.usd * String(p[rule.textParam] ?? "").length) / 1000;
   }

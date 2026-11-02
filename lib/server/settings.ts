@@ -107,6 +107,7 @@ export type SettingValues = {
   "free_llm.daily.enhance": number;
   "studio.clone_price": number;
   "studio.voice.enabled": boolean;
+  "studio.audio.enabled": boolean;
 };
 
 export type SettingKey = keyof SettingValues;
@@ -740,6 +741,17 @@ const CATALOG: Catalog = {
     label: "Studio «Ovoz» bo‘limi yoqilgan",
     description:
       "Standart: O'CHIQ. Yoqilganda Studio'da «Ovoz» bo'limi (matnni ovozlash, suhbat, ovoz klonlash) ishlaydi — faqat kaliti bor provayderlar bilan (Gemini TTS uchun TTS_GEMINI_MODEL ham kerak). O'chiq bo'lsa yangi ish qabul qilinmaydi; mavjud klonlar saqlanadi.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => false,
+  },
+  // Studio «Audio» (docs/studio/P6-SPEC.md): music, sound effects, voice changer, isolator — ships dark like «Ovoz».
+  "studio.audio.enabled": {
+    key: "studio.audio.enabled",
+    group: MEDIA_GROUP,
+    label: "Studio «Audio» bo‘limi yoqilgan",
+    description:
+      "Standart: O'CHIQ. Yoqilganda Studio'da «Audio» bo'limi (AI musiqa, ovoz effektlari, ovozni almashtirish, shovqindan tozalash — ElevenLabs) ishlaydi. O'chiq bo'lsa yangi ish qabul qilinmaydi, pul yechilmaydi.",
     type: "bool",
     validate: boolValidator,
     envDefault: () => false,

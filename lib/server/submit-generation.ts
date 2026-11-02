@@ -28,6 +28,7 @@ import { isPaidOnlyTool } from "../tool-kinds";
 import { normalize } from "../studio-core";
 import { MEDIA_CATALOG } from "../media/catalog";
 import { assertCloneAllowed, assertOwnClones, speechModelUnavailable } from "./media/voices";
+import { audioModelUnavailable, prepareAudioRequest } from "./media/audio-inputs";
 
 /**
  * The paid-generation pipeline behind `POST /api/generations`, shared with the AI chat's confirmation.
@@ -221,6 +222,19 @@ export async function submitGeneration(input: SubmitInput): Promise<SubmitResult
     await assertOwnClones(userId, values);
   }
   if (tool.id === "studio-voice" && !replay) await assertCloneAllowed(userId, values);
+
+  /*
+   * Studio «Audio» (docs/studio/P6-SPEC.md): the tab's switch + the mode's model available now; the voice changer /
+   * isolator input must be the user's own upload, and its SERVER-measured billed seconds replace the request's
+   * `inputSeconds` before pricing (the translation `sourceChars` rule: the price follows the file, never the client);
+   * a clone voice must be the user's own ready clone. 400 before anything is priced or charged. A replay is a job that
+   * already exists (its values were overwritten the same way when it was bought).
+   */
+  if (tool.id === "studio-audio" && !replay) {
+    const unavailable = await audioModelUnavailable(values);
+    if (unavailable) throw new ApiError(unavailable, 400, { code: "model_unavailable" });
+    await prepareAudioRequest(userId, values);
+  }
 
   // Graduation portrait: the selfie must exist and be the user's own BEFORE anything is priced or charged.
   // (A replay is a job already created; its selfie may be deleted by now.)

@@ -22,7 +22,7 @@ async function downloadMp3(id: string, openPage: () => void): Promise<void> {
     openPage();
     return;
   }
-  const file: ReadyFile = { format: "native", url: `/api/generations/${id}/file`, fileName: "studio-ovoz.mp3", size: 0, mime: "audio/mpeg", expiresAt: new Date(Date.now() + 15 * 60_000).toISOString() };
+  const file: ReadyFile = { format: "native", url: `/api/generations/${id}/file`, fileName: "studio-audio.mp3", size: 0, mime: "audio/mpeg", expiresAt: new Date(Date.now() + 15 * 60_000).toISOString() };
   try {
     await deliver(file, env);
   } catch {
@@ -86,7 +86,8 @@ function Audio({ job, gen, busy, onAgain }: { job: StudioJob; gen: api.Generatio
   const router = useRouter();
   const page = `/uz/files/${job.id}`;
   const src = useApiSrc(`/api/generations/${job.id}/file?inline=1`);
-  const seconds = gen.doc?.speech?.seconds;
+  // P6: an «Audio» result carries `doc.studioAudio` (same player, same download).
+  const seconds = gen.doc?.speech?.seconds ?? gen.doc?.studioAudio?.seconds;
   return (
     <article className="bg-card flex flex-col gap-2.5 rounded-[20px] border p-3.5 shadow-[var(--shadow-card)]" data-studio-audio>
       <audio className="w-full" controls preload="metadata" src={src} data-audio-result>

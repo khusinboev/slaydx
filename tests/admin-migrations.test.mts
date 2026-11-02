@@ -359,6 +359,26 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
       SELECT id, 'b', repeat('ab', 32), 40, now(), repeat('c', 64), 'v' FROM users WHERE telegram_id = 777000068`);
     await runSql("DELETE FROM users WHERE telegram_id = 777000068");
     await runSql(sqlOf("068_studio_voices.sql"));
+    // 069: Studio P6 audio inputs (docs/studio/P6-SPEC.md) -- the voice changer / isolator uploads.
+    assert.ok(await exists("studio_audio_inputs"), "069 table created");
+    await runSql(`INSERT INTO users (telegram_id, username, name) VALUES (777000069, 'mig069', 'M');`);
+    await assert.rejects(
+      runSql(`INSERT INTO studio_audio_inputs (id, user_id, mime, size_bytes, seconds, billed_seconds, bytes)
+        SELECT repeat('a', 24), id, 'audio/wav', 10, 400, 400, '\\x00' FROM users WHERE telegram_id = 777000069`),
+      /check/i,
+      "069: an input over 300 billed seconds is refused by the database",
+    );
+    await assert.rejects(
+      runSql(`INSERT INTO studio_audio_inputs (id, user_id, mime, size_bytes, seconds, billed_seconds, bytes)
+        SELECT repeat('a', 24), id, 'audio/ogg', 10, 4, 4, '\\x00' FROM users WHERE telegram_id = 777000069`),
+      /check/i,
+      "069: only WAV / MP3 inputs",
+    );
+    await runSql(`INSERT INTO studio_audio_inputs (id, user_id, mime, size_bytes, seconds, billed_seconds, bytes)
+      SELECT repeat('a', 24), id, 'audio/wav', 10, 4.2, 5, '\\x00' FROM users WHERE telegram_id = 777000069`);
+    await runSql("DELETE FROM users WHERE telegram_id = 777000069");
+    assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_audio_inputs"))!.n, "0", "069: inputs go with their user");
+    await runSql(sqlOf("069_studio_audio_inputs.sql"));
     // Re-running the seed never duplicates it (ON CONFLICT (seed_key) DO NOTHING).
     await runSql(sqlOf("067_studio_library.sql"));
     assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_prompts"))!.n, "40", "067 is idempotent");
@@ -373,6 +393,8 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
           FROM (VALUES (396, TRUE), (397, FALSE), (9999999, TRUE)) AS v(id, img);
     `);
     for (const f of [
+      // 069: Studio P6 audio inputs (docs/studio/P6-SPEC.md) -- studio_audio_inputs.
+      "069_studio_audio_inputs.sql",
       // 068: Studio P5 voices (docs/studio/P5-SPEC.md) -- studio_voice_previews / studio_voices / studio_voice_samples.
       "068_studio_voices.sql",
       // 067: Studio library (docs/studio/P2B-SPEC.md) -- studio_prompts / studio_templates / studio_library_previews.
@@ -450,6 +472,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
         // An id outside the list is never touched.
         assert.equal(left[2]!.text, "matn", "an id outside the list keeps its text");
       }
+      if (f === "069_studio_audio_inputs.sql") assert.ok(!(await exists("studio_audio_inputs")), "069 rollback drops the table");
       if (f === "067_studio_library.sql") {
         assert.ok(!(await exists("studio_prompts")) && !(await exists("studio_templates")) && !(await exists("studio_library_previews")), "067 rollback drops the three tables");
       }

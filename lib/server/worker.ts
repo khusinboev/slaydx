@@ -604,6 +604,8 @@ async function execute(
         ? async (o: { deadline?: number; onStage?: (ev: { progress: number; step: string }) => void }) =>
             (await import("./media/voice-clone")).buildStudioClone(tool, { userId: job.userId, generationId: job.id }, job.values, o)
         : undefined;
+    // Studio P6: the «Audio» job's uploaded input and clone voice (the owner's own, SQL).
+    const studioAudio = tool.id === "studio-audio" ? await (await import("./media/audio-inputs")).studioAudioJobCtx(job.userId, job.values) : undefined;
     // Media engine path per kind, read ONCE so a running job never switches (docs/studio/P0-SPEC.md §6).
     const mediaCtx = { generationId: job.id, core: await mediaCoreSwitches() };
     tracked = trackJobCost(() => withMediaContext(mediaCtx, () => build(tool, job.values, {
@@ -615,6 +617,7 @@ async function execute(
       studioInputs,
       studioSpeech,
       studioClone,
+      studioAudio,
       onStage,
       onProgress: live?.sink,
       // Tinglash o'yini TTS parchalari — shu ishning aktivlariga (`/api/o/[token]/audio/[assetId]` orqali ochiq).
@@ -1139,6 +1142,8 @@ export async function purgeHousekeeping(): Promise<void> {
   await step("media-jobs-stuck", async () => (await import("./media/jobs")).failStuckMediaJobs());
   // Studio P5 clones: the 30-day unused warning + purge, provider deletes still owed, stale rows, old samples.
   await step("studio-voices", async () => (await import("./media/voices")).studioVoicesHousekeeping());
+  // Studio P6 «Audio» inputs (voice changer / isolator uploads): deleted after 1 day.
+  await step("studio-audio-inputs", async () => (await import("./media/audio-inputs")).studioAudioInputsHousekeeping());
   if (Date.now() - lastMediaJobsPurgeAt >= RETENTION_EVERY_MS) {
     await step("media-jobs-purge", async () => {
       lastMediaJobsPurgeAt = Date.now();

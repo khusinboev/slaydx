@@ -22,6 +22,7 @@ function Art({ kind }: { kind: ProgressKind }) {
   switch (kind) {
     case "audio":
     case "speech":
+    case "sound":
     case "listening":
       return (
         <div className="flex h-8 items-center gap-1">

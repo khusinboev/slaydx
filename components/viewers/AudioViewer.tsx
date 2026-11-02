@@ -1,7 +1,7 @@
 "use client";
 
 import { Mic } from "lucide-react";
-import type { AcademicDoc } from "@/lib/generation/types";
+import type { AcademicDoc, StudioAudioDoc } from "@/lib/generation/types";
 import { useApiSrc } from "@/lib/use-api-src";
 
 /**
@@ -28,7 +28,10 @@ import { useApiSrc } from "@/lib/use-api-src";
  */
 export function AudioViewer({ doc, gen }: { doc: AcademicDoc; gen: { id: string; fileName?: string } }) {
   // Studio «Ovoz» (P5) results carry `doc.speech`: the same player, its lines as the transcript.
-  const audio: { seconds?: number; script: { speaker: string; text: string }[] } | undefined = doc.audio ?? (doc.speech ? { seconds: doc.speech.seconds, script: doc.speech.lines } : undefined);
+  // Studio «Audio» (P6) results carry `doc.studioAudio`: the same player for the result file, its details below.
+  const audio: { seconds?: number; script: { speaker: string; text: string }[] } | undefined =
+    doc.audio ??
+    (doc.speech ? { seconds: doc.speech.seconds, script: doc.speech.lines } : doc.studioAudio ? { seconds: doc.studioAudio.seconds, script: [] } : undefined);
   // Bearer-mode webviews get the bytes through a `blob:` URL (docs/auth/COOKIELESS.md); unchanged otherwise.
   const src = useApiSrc(`/api/generations/${gen.id}/file?inline=1`);
   const script = audio?.script ?? [];
@@ -53,38 +56,98 @@ export function AudioViewer({ doc, gen }: { doc: AcademicDoc; gen: { id: string;
         ) : null}
       </div>
 
-      <div className="flex-1 px-4 py-5 sm:px-6" data-audio-transcript>
-        <div className="mx-auto max-w-3xl">
-          <h2 className="mb-3 text-[13px] font-semibold tracking-wide text-black/50 uppercase">Transkript</h2>
-          {script.length === 0 ? (
-            /*
-             * Ssenariy yo'q — dvigatel ishlamagan (WP-A gacha DOIM
-             * shunday). Matn `rasm` ko'ruvchisidan ko'chirilgan: bu
-             * foydalanuvchi uchun «xizmat javob bermadi, pul qaytadi»
-             * degani, «modul hali yozilmagan» emas.
-             */
-            <p className="text-sm text-black/55">Ssenariy yaratilmadi — farq balansingizga qaytarildi. Qayta urinib ko‘ring.</p>
-          ) : (
-            <ol className="space-y-3">
-              {script.map((line, i) => (
-                <li key={i} className="flex gap-3">
-                  <span
-                    className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
-                    style={{
-                      background: speakers.indexOf(line.speaker) === 0 ? "rgb(168 85 247 / 0.12)" : "rgb(14 165 233 / 0.12)",
-                      color: speakers.indexOf(line.speaker) === 0 ? "rgb(126 34 206)" : "rgb(2 132 199)",
-                    }}
-                  >
-                    {line.speaker}
-                  </span>
-                  <p className="text-[15px] leading-relaxed text-black/80">{line.text}</p>
-                </li>
-              ))}
-            </ol>
-          )}
+      {doc.studioAudio ? (
+        <StudioAudioDetails doc={doc.studioAudio} genId={gen.id} />
+      ) : (
+        <div className="flex-1 px-4 py-5 sm:px-6" data-audio-transcript>
+          <div className="mx-auto max-w-3xl">
+            <h2 className="mb-3 text-[13px] font-semibold tracking-wide text-black/50 uppercase">Transkript</h2>
+            {script.length === 0 ? (
+              /*
+               * Ssenariy yo'q — dvigatel ishlamagan (WP-A gacha DOIM
+               * shunday). Matn `rasm` ko'ruvchisidan ko'chirilgan: bu
+               * foydalanuvchi uchun «xizmat javob bermadi, pul qaytadi»
+               * degani, «modul hali yozilmagan» emas.
+               */
+              <p className="text-sm text-black/55">Ssenariy yaratilmadi — farq balansingizga qaytarildi. Qayta urinib ko‘ring.</p>
+            ) : (
+              <ol className="space-y-3">
+                {script.map((line, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span
+                      className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
+                      style={{
+                        background: speakers.indexOf(line.speaker) === 0 ? "rgb(168 85 247 / 0.12)" : "rgb(14 165 233 / 0.12)",
+                        color: speakers.indexOf(line.speaker) === 0 ? "rgb(126 34 206)" : "rgb(2 132 199)",
+                      }}
+                    >
+                      {line.speaker}
+                    </span>
+                    <p className="text-[15px] leading-relaxed text-black/80">{line.text}</p>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+const MODE_LABEL: Readonly<Record<StudioAudioDoc["mode"], string>> = {
+  music: "Musiqa",
+  sfx: "Ovoz effekti",
+  "voice-changer": "Ovozni almashtirish",
+  isolate: "Shovqindan tozalash",
+};
+
+/**
+ * Studio «Audio» (P6): what was made (mode, description, target voice, billed input length) and, for several
+ * sound-effect variants, one player + download per variant (the generation's own assets; the first is the result file).
+ */
+function StudioAudioDetails({ doc, genId }: { doc: StudioAudioDoc; genId: string }) {
+  return (
+    <div className="flex-1 px-4 py-5 sm:px-6" data-audio-details>
+      <div className="mx-auto flex max-w-3xl flex-col gap-3">
+        <p className="text-[13px] font-semibold tracking-wide text-black/50 uppercase">{MODE_LABEL[doc.mode] ?? "Audio"}</p>
+        {doc.prompt ? <p className="text-[15px] leading-relaxed break-words text-black/80">{doc.prompt}</p> : null}
+        {doc.voices.length ? <p className="text-[14px] text-black/70">Ovoz: {doc.voices.join(", ")}</p> : null}
+        {doc.inputSeconds ? <p className="text-[14px] text-black/70">Yuklangan yozuv: {formatDuration(doc.inputSeconds)}</p> : null}
+        {doc.variants.length > 1 ? (
+          <ol className="flex flex-col gap-3" data-audio-variants>
+            {doc.variants.map((v, i) => (
+              <Variant key={v.assetId} genId={genId} assetId={v.assetId} index={i} seconds={v.seconds} />
+            ))}
+          </ol>
+        ) : null}
       </div>
     </div>
+  );
+}
+
+function Variant({ genId, assetId, index, seconds }: { genId: string; assetId: string; index: number; seconds: number }) {
+  const url = `/api/generations/${genId}/assets/${assetId}`;
+  const src = useApiSrc(url);
+  return (
+    <li className="flex flex-col gap-1.5 rounded-[14px] border border-black/10 p-3" data-audio-variant={index + 1}>
+      <div className="flex items-center justify-between gap-2 text-[13.5px] font-semibold text-black/75">
+        <span>
+          {index + 1}-variant · {formatDuration(seconds)}
+        </span>
+        <a
+          href={src}
+          download={`effekt-${index + 1}.mp3`}
+          className="pointer-coarse:min-h-11 inline-flex min-h-9 items-center underline underline-offset-2"
+          data-variant-download
+        >
+          Yuklab olish (MP3)
+        </a>
+      </div>
+      <audio className="w-full" controls preload="none" src={src}>
+        Brauzeringiz audio pleerni qo‘llab-quvvatlamaydi.
+      </audio>
+    </li>
   );
 }
 

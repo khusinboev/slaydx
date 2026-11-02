@@ -13,6 +13,7 @@ import type { CustomTemplate } from "./pptx-template";
 import { buildImageArtifact } from "./image-studio";
 import { buildStudioImage } from "./studio";
 import { buildStudioSpeech, type StudioSpeechCtx } from "./studio/speech";
+import { buildStudioAudio, type StudioAudioCtx } from "./studio/audio";
 import { buildInfographicArtifact } from "./infographic/engine";
 import { buildPortraitArtifact } from "./portrait/engine";
 import { buildTranslationArtifact } from "./translate/engine";
@@ -209,6 +210,8 @@ export type BuildOptions = {
   studioSpeech?: StudioSpeechCtx;
   /** Studio P5: the voice-clone job, bound by the worker to the job's user and id (`lib/server/media/voice-clone.ts`). */
   studioClone?: (o: { deadline?: number; onStage?: (ev: { progress: number; step: string }) => void }) => Promise<BuiltFile>;
+  /** Studio P6: the job owner's uploaded input + clone an «Audio» job names (worker: `studioAudioJobCtx`, ownership in SQL). */
+  studioAudio?: StudioAudioCtx;
   /**
    * Tinglash o'yini (AUDIT-22 R): sintez qilingan parchani AKTIVGA yozadi
    * va id qaytaradi — worker `putAssetBytes(job.id, …)` beradi. Berilmasa
@@ -577,6 +580,14 @@ async function buildArtifactInner(
   // Studio «Ovoz» (docs/studio/P5-SPEC.md): speech / dialogue, and the voice clone — always through the media core.
   if (tool.id === "studio-speech") {
     return buildStudioSpeech(tool, values, opts.studioSpeech ?? { clones: {} }, { deadline, ...(opts.onStage ? { onStage: opts.onStage } : {}) });
+  }
+  // Studio «Audio» (docs/studio/P6-SPEC.md): music / sound effects / voice changer / isolator through the media core.
+  if (tool.id === "studio-audio") {
+    return buildStudioAudio(tool, values, opts.studioAudio ?? { input: null, clones: {} }, {
+      deadline,
+      ...(opts.onStage ? { onStage: opts.onStage } : {}),
+      ...(opts.putAsset ? { putAsset: opts.putAsset } : {}),
+    });
   }
   if (tool.id === "studio-voice") {
     if (!opts.studioClone) throw new Error("Ovoz klonlash faqat navbat orqali ishlaydi");

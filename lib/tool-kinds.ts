@@ -44,6 +44,7 @@ export const TOOL_KINDS: Readonly<Record<ToolId, ToolKind>> = {
   "studio-video": { group: "media", output: "mp4" },
   "studio-speech": { group: "media", output: "mp3" },
   "studio-voice": { group: "media", output: "mp3" },
+  "studio-audio": { group: "media", output: "mp3" },
   podcast: { group: "media", output: "mp3" },
   greeting: { group: "media", output: "mp3" },
   portrait: { group: "media", output: "png" },

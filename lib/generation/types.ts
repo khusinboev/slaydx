@@ -607,6 +607,8 @@ export type AcademicDoc = {
   audio?: AudioModel;
   /** Studio «Ovoz» (P5): what was spoken, by which model and voices (`AudioViewer` plays the file, lists `lines`). */
   speech?: StudioSpeechDoc;
+  /** Studio «Audio» (P6): music / sound effect / voice changer / isolator result (`AudioViewer` plays it). */
+  studioAudio?: StudioAudioDoc;
   /**
    * Infografika (AUDIT-21): bir betlik plakatning TO'LIQ
    * spetsifikatsiyasi. Bu oilada `sections` MATNI yo'q — chiqish bitta
@@ -642,6 +644,28 @@ export type StudioSpeechDoc = {
   lines: { speaker: string; text: string }[];
   /** A user clone spoke (or, for the clone tool, this is its preview). */
   clone: boolean;
+};
+
+/** Studio «Audio» result (docs/studio/P6-SPEC.md). A clone's provider id is never stored here; the input audio neither. */
+export type StudioAudioDoc = {
+  mode: "music" | "sfx" | "voice-changer" | "isolate";
+  /** Catalog id of the model. */
+  model: string;
+  /** Length of the result file's MP3 (measured). */
+  seconds: number;
+  /** The music / effect description (`null` for the audio-input modes). */
+  prompt: string | null;
+  /** Billed input length (voice changer / isolator), `null` otherwise. */
+  inputSeconds: number | null;
+  /** The voice changer's target voice (display name). */
+  voices: string[];
+  /** A user clone was the target voice. */
+  clone: boolean;
+  /**
+   * Sound-effect variants when more than one was asked: every delivered clip as a generation asset (the first one is
+   * also the result file). Empty for a single clip.
+   */
+  variants: { assetId: string; seconds: number }[];
 };
 
 export type BuiltFile = {

@@ -138,6 +138,6 @@ export async function getAllToolPricing(): Promise<PriceAdjustMap> {
  */
 export async function effectivePrice(tool: ToolConfig, values: FormValues): Promise<number> {
   // Studio pictures: cost × markup with the server's pricing block (the one the catalog endpoint sends the browser).
-  const media = tool.id === "studio-image" || tool.id === "studio-video" || tool.id === "studio-speech" ? await mediaPricing() : tool.id === "studio-voice" ? { ...(await mediaPricing()), clonePrice: clonePriceOf(await getSetting("studio.clone_price")) } : null;
+  const media = tool.id === "studio-image" || tool.id === "studio-video" || tool.id === "studio-speech" || tool.id === "studio-audio" ? await mediaPricing() : tool.id === "studio-voice" ? { ...(await mediaPricing()), clonePrice: clonePriceOf(await getSetting("studio.clone_price")) } : null;
   return applyPriceAdjust(basePriceFor(tool, values, media), await getToolPricing(tool.id));
 }

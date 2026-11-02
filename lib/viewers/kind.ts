@@ -75,6 +75,7 @@ export function viewerKind(id: ToolId): ViewerKind {
     case "greeting":
     case "studio-speech":
     case "studio-voice":
+    case "studio-audio":
       // AUDIT-22: chiqish MP3 — pleer + transkript (`AudioViewer`).
       return "audio";
     case "video":

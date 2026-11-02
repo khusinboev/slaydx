@@ -38,6 +38,7 @@ import type { FormValues, ToolGroup, ToolId } from "../types";
 import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "../media/catalog";
 import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
 import { STUDIO_SPEECH_PURPOSE } from "../media/catalog-speech";
+import { ISOLATOR_MODEL, MUSIC_MODEL, SFX_MODEL, VOICE_CHANGER_MODEL } from "../media/catalog-audio";
 import { clonePriceOf } from "../media/studio-speech";
 import type { MediaPricing } from "../media/studio-pricing";
 import { mediaPricing } from "./media/pricing";
@@ -141,6 +142,7 @@ export const UNIT_OF: Record<ToolId, PricingUnit> = {
   "studio-video": "job",
   "studio-speech": "kchars",
   "studio-voice": "job",
+  "studio-audio": "job",
 };
 
 /** Uzbek unit labels for the UI (the client never imports lib/tools). */
@@ -294,6 +296,17 @@ export function ladderInputs(toolId: ToolId): LadderInput[] {
         const field = MEDIA_CATALOG.byId(id)!.params.some((p) => p.name === "script") ? "script" : "text";
         return { label: `1 000 belgi · ${MEDIA_CATALOG.byId(id)!.label}`, values: { modelId: id, [field]: "x".repeat(1000) } };
       });
+    case "studio-audio":
+      // Seconds × credit rate × markup (`studio-audio.ts`): the P6-SPEC price rows, one rung each.
+      return [
+        { label: "Musiqa · 30 s", values: { modelId: MUSIC_MODEL, length: "30" } },
+        { label: "Musiqa · 1 daq", values: { modelId: MUSIC_MODEL, length: "60" } },
+        { label: "Musiqa · 3 daq", values: { modelId: MUSIC_MODEL, length: "180" } },
+        { label: "Effekt · 5 s", values: { modelId: SFX_MODEL, duration: 5 } },
+        { label: "Effekt · 30 s", values: { modelId: SFX_MODEL, duration: 30 } },
+        { label: "Ovozni almashtirish · 1 daq", values: { modelId: VOICE_CHANGER_MODEL, inputSeconds: 60 } },
+        { label: "Shovqindan tozalash · 1 daq", values: { modelId: ISOLATOR_MODEL, inputSeconds: 60 } },
+      ];
     case "studio-voice":
       // The fixed clone price (`studio.clone_price`).
       return [{ label: "1 klon", values: {} }];
@@ -319,7 +332,7 @@ export function ladderFor(toolId: ToolId, media?: MediaPricing | null): LadderSt
 /** The Studio pricing block when `toolId` needs one (the price the server charges is cost × the CURRENT markup). */
 async function mediaPricingFor(toolId: ToolId): Promise<MediaPricing | null> {
   if (toolId === "studio-voice") return { ...(await mediaPricing()), clonePrice: clonePriceOf(await getSetting("studio.clone_price")) };
-  return toolId === "studio-image" || toolId === "studio-video" || toolId === "studio-speech" ? mediaPricing() : null;
+  return toolId === "studio-image" || toolId === "studio-video" || toolId === "studio-speech" || toolId === "studio-audio" ? mediaPricing() : null;
 }
 
 export function effectiveLadder(steps: ReadonlyArray<LadderStep>, adj: PriceAdjust | null): LadderRow[] {

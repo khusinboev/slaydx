@@ -31,6 +31,7 @@ import { validate as validateParams } from "./studio-core";
 import { studioVideoError, studioVideoPrice } from "./media/studio-video-pricing";
 import { STUDIO_CLONE_PRICE_DEFAULT, studioSpeechError, studioSpeechPrice } from "./media/studio-speech";
 import { getClientClonePrice } from "./media/studio-speech-client";
+import { studioAudioError, studioAudioPrice } from "./media/studio-audio";
 
 const TOPIC_FILE_MODES = [
   {
@@ -75,6 +76,8 @@ const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
   "studio-video": [{ kind: "text", name: "modelId", legend: "Video modeli", required: true }],
   // Studio «Ovoz» (P5): the spoken field depends on the model (`text` or the dialogue `script`); the model's own schema checks it.
   "studio-speech": [{ kind: "text", name: "modelId", legend: "Ovoz modeli", required: true }],
+  // Studio «Audio» (P6): the mode's model; its own schema checks the prompt / the uploaded input.
+  "studio-audio": [{ kind: "text", name: "modelId", legend: "Audio rejimi", required: true }],
   "studio-voice": [
     { kind: "text", name: "name", legend: "Ovoz nomi", required: true },
     { kind: "text", name: "sampleId", legend: "Ovoz yozuvi", required: true },
@@ -1033,6 +1036,30 @@ export const TOOLS: ToolConfig[] = [
     fields: [],
   },
   {
+    /*
+     * Studio «Audio» tab (docs/studio/P6-SPEC.md): ElevenLabs music, sound effects, voice changer and voice isolator —
+     * per second × the mode's credit rate × markup (`lib/media/studio-audio.ts`), always through the media core. The
+     * page is the Studio's «Audio» tab; not listed on its own.
+     */
+    id: "studio-audio",
+    slug: "studio-audio",
+    title: "Studio audio",
+    pageTitle: "Studio audio",
+    group: "media",
+    icon: "mic",
+    tc: "234 88 12",
+    description: "AI musiqa, ovoz effektlari, ovozni almashtirish va shovqindan tozalash",
+    submitLabel: "Yaratish",
+    creatingLabel: "Audio yaratilmoqda...",
+    createdLabel: "audio tayyor!",
+    extraOptional: false,
+    output: "mp3",
+    custom: "studio-audio",
+    // 30 s of music at the default pricing, for the «… dan» labels; the real price is `priceFor`.
+    basePrice: studioAudioPrice({}, defaultMediaPricing()) ?? 2100,
+    fields: [],
+  },
+  {
     id: "podcast",
     slug: "podcast",
     title: "Podkast",
@@ -1210,7 +1237,7 @@ export function visibleToolGroups(): readonly { id: ToolGroup; label: string }[]
  * Tools that live INSIDE another page and get no card of their own: `studio-video` is the Studio's Video tab (the Studio
  * card already leads there). The catalogue, the create sheet, the search and the home groups list `listedTools()`.
  */
-export const UNLISTED_TOOL_IDS: ReadonlySet<ToolId> = new Set<ToolId>(["studio-video", "studio-speech", "studio-voice"]);
+export const UNLISTED_TOOL_IDS: ReadonlySet<ToolId> = new Set<ToolId>(["studio-video", "studio-speech", "studio-voice", "studio-audio"]);
 export function listedTools(): ToolConfig[] {
   return TOOLS.filter((t) => !UNLISTED_TOOL_IDS.has(t.id));
 }
@@ -1468,6 +1495,7 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
   if (tool.custom === "studio-image") return studioImageError(values);
   if (tool.custom === "studio-video") return studioVideoError(values);
   if (tool.custom === "studio-speech") return studioSpeechError(values);
+  if (tool.custom === "studio-audio") return studioAudioError(values);
   if (tool.custom === "image") {
     const n = String(values.prompt ?? "").trim().length;
     if (n > 0 && n < IMAGE_PROMPT_MIN) return "Rasm tavsifi juda qisqa — nima chizilishini yozing.";
@@ -1626,6 +1654,8 @@ export type ToolFeatures = {
   studioVideoModels?: string[];
   /** Studio «Ovoz» models (catalog ids) available right now (P5). Absent = not known -> not blocked. */
   studioSpeechModels?: string[];
+  /** Studio «Audio» models (catalog ids) available right now (P6). Absent = not known -> not blocked. */
+  studioAudioModels?: string[];
 };
 
 /**
@@ -1657,6 +1687,11 @@ export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | nu
     // Its own model list when the server sends it, else the «Video» providers (both empty while `video.enabled` is off).
     const known = features.studioVideoModels ?? features.videoProviders;
     return !known || known.length > 0 ? null : "Video xizmati hozircha mavjud emas.";
+  }
+  if (tool.custom === "studio-audio") {
+    // Its own model list when the server sends it (empty while `studio.audio.enabled` is off); unknown = not blocked.
+    const known = features.studioAudioModels;
+    return !known || known.length > 0 ? null : "Audio xizmati hozircha mavjud emas.";
   }
   if (tool.custom === "studio-speech" || tool.custom === "studio-voice") {
     // Its own model list when the server sends it (empty while `studio.voice.enabled` is off); an older server: the TTS
@@ -1814,6 +1849,11 @@ export function basePriceFor(tool: ToolConfig, values: FormValues, media?: Media
     const pricing = media ?? getClientMediaPricing() ?? defaultMediaPricing();
     return studioSpeechPrice(values, pricing) ?? studioSpeechPrice({ ...values, modelId: "" }, pricing)!;
   }
+  if (tool.id === "studio-audio") {
+    // Seconds × the mode's credit rate × markup (`studio-audio.ts`); a model outside the tab is refused by `preflightError` first.
+    const pricing = media ?? getClientMediaPricing() ?? defaultMediaPricing();
+    return studioAudioPrice(values, pricing) ?? studioAudioPrice({ ...values, modelId: "" }, pricing)!;
+  }
   if (tool.id === "studio-voice") {
     // Fixed (`studio.clone_price`): the server passes the setting in its pricing block, the browser has the voices endpoint's number.
     return media?.clonePrice ?? getClientClonePrice() ?? STUDIO_CLONE_PRICE_DEFAULT;
@@ -1955,6 +1995,11 @@ export function topicOf(values: FormValues, tool: ToolConfig) {
   if (tool.id === "studio-speech") {
     const text = String(values.text || values.script || "").replace(/\s+/g, " ").trim().slice(0, 72);
     return text || "Ovoz";
+  }
+  if (tool.id === "studio-audio") {
+    const prompt = String(values.prompt || "").replace(/\s+/g, " ").trim().slice(0, 72);
+    const mode = ({ "elevenlabs/voice-changer": "Ovozni almashtirish", "elevenlabs/isolator": "Shovqindan tozalash" } as Record<string, string>)[String(values.modelId ?? "")];
+    return prompt || mode || "Audio";
   }
   if (tool.id === "studio-voice") {
     const name = String(values.name || "").replace(/\s+/g, " ").trim().slice(0, 40);

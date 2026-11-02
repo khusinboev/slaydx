@@ -23,9 +23,10 @@ import { ParamRows } from "./ParamRows";
 import { PriceButton } from "./PriceButton";
 import { PromptBox } from "./PromptBox";
 import { StudioResults, type StudioJob } from "./StudioResults";
-import { STUDIO_SPEECH_PURPOSE, STUDIO_VIDEO_PURPOSE, enhancePrompt, inputFromResult, loadMediaCatalog, resultAssetOf, uploadStudioInput, useMediaCatalog } from "./studio-api";
+import { STUDIO_AUDIO_LISTING, STUDIO_SPEECH_PURPOSE, STUDIO_VIDEO_PURPOSE, enhancePrompt, inputFromResult, loadMediaCatalog, resultAssetOf, uploadStudioInput, useMediaCatalog } from "./studio-api";
 import { INITIAL_VIDEO_STATE, VideoTab, type VideoTabState } from "./video/VideoTab";
 import { INITIAL_VOICE_STATE, VoiceTab, type VoiceTabState } from "./voice/VoiceTab";
+import { AudioTab, INITIAL_AUDIO_STATE, type AudioTabState } from "./audio/AudioTab";
 import { LibrarySheet } from "./LibrarySheet";
 import { TemplateSlots, TemplatesRow } from "./TemplatesRow";
 import { INPUT_PARAM, MODE_LABEL, MODE_PURPOSE, applyTemplate, type StudioMode } from "./studio-modes";
@@ -66,20 +67,22 @@ export function StudioPage() {
 }
 
 type View = "create" | "gallery";
-/** The Studio's media tabs (P1 «Rasm», P3 «Video», P5 «Ovoz»). */
-export type StudioTab = "rasm" | "video" | "ovoz";
+/** The Studio's media tabs (P1 «Rasm», P3 «Video», P5 «Ovoz», P6 «Audio»). */
+export type StudioTab = "rasm" | "video" | "ovoz" | "audio";
+export const STUDIO_TABS: readonly StudioTab[] = ["rasm", "video", "ovoz", "audio"];
 
 /** The tab a link asks for (`/uz/studio?tab=video`, where `/uz/studio-video` redirects; `?tab=ovoz`); anything else = «Rasm». */
 export function tabFromSearch(search: string): StudioTab {
   const t = new URLSearchParams(search).get("tab");
-  return t === "video" ? "video" : t === "ovoz" ? "ovoz" : "rasm";
+  return t === "video" ? "video" : t === "ovoz" ? "ovoz" : t === "audio" ? "audio" : "rasm";
 }
 
-const TAB_LABEL: Readonly<Record<StudioTab, string>> = { rasm: "Rasm", video: "Video", ovoz: "Ovoz" };
+const TAB_LABEL: Readonly<Record<StudioTab, string>> = { rasm: "Rasm", video: "Video", ovoz: "Ovoz", audio: "Audio" };
 const SUBTITLE: Readonly<Record<StudioTab, string>> = {
   rasm: "Eng kuchli modellar bilan rasm yarating",
   video: "AI video va tayyor effektlar — narx yaratishdan oldin ko‘rinadi",
   ovoz: "Matnni o‘zbekcha AI ovoz bilan o‘qiting — o‘z ovozingiz bilan ham",
+  audio: "AI musiqa, ovoz effektlari, ovozni almashtirish va shovqindan tozalash",
 };
 
 function StudioApp() {
@@ -116,6 +119,11 @@ function StudioApp() {
   const [voiceState, setVoiceState] = useState<VoiceTabState>(INITIAL_VOICE_STATE);
   const voiceCatalog = useMediaCatalog(STUDIO_SPEECH_PURPOSE, voiceSeen);
   const voiceJobs = useStudioJobs();
+  // The «Audio» tab (P6): its own catalog listing (loaded once the tab is opened), form state and jobs.
+  const [audioSeen, setAudioSeen] = useState(false);
+  const [audioState, setAudioState] = useState<AudioTabState>(INITIAL_AUDIO_STATE);
+  const audioCatalog = useMediaCatalog(STUDIO_AUDIO_LISTING, audioSeen);
+  const audioJobs = useStudioJobs();
   useEffect(() => {
     const asked = typeof window !== "undefined" ? tabFromSearch(window.location.search) : "rasm";
     if (asked !== "rasm") setTab(asked);
@@ -123,6 +131,7 @@ function StudioApp() {
   useEffect(() => {
     if (tab === "video") setVideoSeen(true);
     if (tab === "ovoz") setVoiceSeen(true);
+    if (tab === "audio") setAudioSeen(true);
   }, [tab]);
 
   const rootRef = useRef<HTMLDivElement>(null);
@@ -375,8 +384,8 @@ function StudioApp() {
         ) : (
           <>
             <div data-studio-form className={cn("min-w-0", tab !== "rasm" && "md:col-span-2 md:max-w-[44rem]")}>
-              <div role="tablist" aria-label="Studio bo‘limlari" data-studio-tabs className="bg-muted/70 mb-3 inline-flex rounded-[14px] p-1">
-                {(["rasm", "video", "ovoz"] as const).map((t) => (
+              <div role="tablist" aria-label="Studio bo‘limlari" data-studio-tabs className="bg-muted/70 mb-3 inline-flex max-w-full rounded-[14px] p-1">
+                {STUDIO_TABS.map((t) => (
                   <button
                     key={t}
                     type="button"
@@ -388,7 +397,7 @@ function StudioApp() {
                       setError(null);
                     }}
                     className={cn(
-                      "focus-visible:ring-ring min-h-11 rounded-[10px] px-5 text-[15px] font-semibold outline-none focus-visible:ring-2",
+                      "focus-visible:ring-ring min-h-11 rounded-[10px] px-3.5 text-[15px] font-semibold sm:px-5 outline-none focus-visible:ring-2",
                       tab === t ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
@@ -411,7 +420,19 @@ function StudioApp() {
                   </button>
                 </div>
               ) : null}
-              {tab === "ovoz" ? (
+              {tab === "audio" ? (
+                <AudioTab
+                  catalogState={audioCatalog.state}
+                  reload={audioCatalog.reload}
+                  state={audioState}
+                  setState={setAudioState}
+                  jobs={audioJobs.jobs}
+                  track={audioJobs.track}
+                  balance={balance}
+                  typing={typing}
+                  gated={gated}
+                />
+              ) : tab === "ovoz" ? (
                 <VoiceTab
                   catalogState={voiceCatalog.state}
                   reload={voiceCatalog.reload}

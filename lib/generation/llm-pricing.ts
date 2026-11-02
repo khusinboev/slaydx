@@ -255,6 +255,11 @@ export type TtsPriceRow =
  */
 /** ElevenLabs Creator plan: $22 for 121 000 credits (1 credit = 1 eleven_v3 character), per 1M characters. */
 export const ELEVENLABS_CREATOR_USD_PER_M_CHARS = (22 / 121_000) * 1_000_000;
+/**
+ * The same plan per ONE credit ($22 / 121 000 ≈ $0.000181818): the Studio «Audio» tab (P6, `lib/media/catalog-audio.ts`)
+ * prices music / sound effects / voice changer / isolator by their credit rates on top of it.
+ */
+export const ELEVENLABS_CREATOR_USD_PER_CREDIT = 22 / 121_000;
 
 export const TTS_PRICING: readonly TtsPriceRow[] = [
   { billing: "tokens", provider: "gemini", model: "gemini-2.5-flash-preview-tts", inUsdPerM: 0.5, outUsdPerM: 10, note: "Gemini 2.5 Flash TTS preview — $0.50/M text-in + $10/M audio-out" },

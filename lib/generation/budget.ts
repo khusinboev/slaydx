@@ -54,6 +54,9 @@ const FIXED: Partial<Record<ToolId, number>> = {
    */
   "studio-speech": 300_000,
   "studio-voice": 150_000,
+  // Studio «Audio» (P6): one music render (up to 3 min of audio) or ≤ 4 sound-effect calls, or one voice-changer /
+  // isolator call on ≤ 5 min of input.
+  "studio-audio": 360_000,
   /*
    * Rezyume 2: prompt kattalashdi (tuzilmali faktlar JSON, 18 til uchun
    * yorliqlar, boyitish qoidalari) va qisqa summary da BIR marta STRICT
