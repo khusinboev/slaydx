@@ -551,7 +551,7 @@ function paramsFor(e: Entry, role: Role | null): Record<string, string> {
     else if (e.rel.startsWith("providers/[id]")) value = "no_such_provider";
     else if (e.rel.startsWith("providers/routes/[id]")) value = "no.such.route";
     else if (e.rel.startsWith("pricing/[toolId]")) value = PRICING_TOOL_ID;
-    else if (/^studio-library\/(prompts|templates)\/\[id\]/.test(e.rel)) value = "900000000000";
+    else if (/^studio-library\/(prompts|templates|previews)\/\[id\]/.test(e.rel)) value = "900000000000";
     assert.ok(value !== null, `${e.rel}: no fixture value for dynamic segment [${name}] — extend paramsFor()`);
     out[name] = value;
   }
