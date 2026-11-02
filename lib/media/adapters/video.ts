@@ -14,7 +14,10 @@
  */
 import { MediaError, type AdapterDeps, type AdapterInput, type MediaAdapter, type MediaOutput, type PollResult } from "../../studio-core";
 import { MEDIA_CATALOG, VIDEO_PROVIDER_TO_MEDIA } from "../catalog";
+import { END_IMAGE_PARAM, SECOND_IMAGE_PARAM, effectPhotos } from "../catalog-video";
+import { FAL_VIDEO_ADAPTER_ID, falVideoAdapter } from "./fal";
 import {
+  buildKlingDualEffectRequest,
   KLING_V3_ASPECTS,
   VIDEO_ASPECTS,
   VIDEO_PROVIDER_IDS,
@@ -105,6 +108,8 @@ export function klingV3Input(mode: KlingV3Mode, input: Omit<AdapterInput, "idemp
   const p = input.params;
   const aspect: KlingV3Aspect = (KLING_V3_ASPECTS as readonly string[]).includes(String(p.aspect)) ? (p.aspect as KlingV3Aspect) : KLING_V3_ASPECTS[0];
   const image = input.assets?.imageAssetId?.[0];
+  // P4: the end frame only together with the start (image2video's `image_tail`).
+  const tail = image ? input.assets?.[END_IMAGE_PARAM]?.[0] : undefined;
   return {
     model: input.upstreamModel,
     prompt: String(p.prompt ?? ""),
@@ -113,14 +118,23 @@ export function klingV3Input(mode: KlingV3Mode, input: Omit<AdapterInput, "idemp
     mode,
     sound: p.sound === true,
     ...(image ? { image: { mime: image.mime, base64: image.base64 } } : {}),
+    ...(tail ? { imageTail: { mime: tail.mime, base64: tail.base64 } } : {}),
   };
 }
 
-/** The effect request of a Studio job; `null` without the photo (the host refuses that before charging). */
+/**
+ * The effect request of a Studio job; `null` without the photo(s) the scene needs (the host refuses that before
+ * charging). A two-photo scene (P4, `effectPhotos`) sends both; a single-photo scene never reads the second.
+ */
 export function klingEffectRequest(input: Omit<AdapterInput, "idempotencyKey">): KlingTaskRequest | null {
   const image = input.assets?.imageAssetId?.[0];
   if (!image) return null;
-  return buildKlingEffectRequest({ effect: String(input.params.effect ?? ""), image });
+  const effect = String(input.params.effect ?? "");
+  if (effectPhotos(effect) === 2) {
+    const second = input.assets?.[SECOND_IMAGE_PARAM]?.[0];
+    return second ? buildKlingDualEffectRequest({ effect, images: [image, second] }) : null;
+  }
+  return buildKlingEffectRequest({ effect, image });
 }
 
 /** A Kling `MediaAdapter` over one request builder; same transport, same error mapping as the «Video» tool's adapter. */
@@ -169,11 +183,13 @@ function klingStudioAdapter(id: string, key: () => string, build: (input: Adapte
  * wrapped as today), `kling-v3-std` / `kling-v3-pro` (Kling 3.0 tiers) and `kling-effects`. `omni` and `klingKeyFn` are
  * test seams; production passes nothing.
  */
-export function studioVideoAdapters(opts: { omni?: VideoAdapter; klingKeyFn?: () => string } = {}): Record<string, MediaAdapter> {
+export function studioVideoAdapters(opts: { omni?: VideoAdapter; klingKeyFn?: () => string; falKeyFn?: () => string | null } = {}): Record<string, MediaAdapter> {
   const key = opts.klingKeyFn ?? klingKey;
   const out: Record<string, MediaAdapter> = { "google-video": videoAdapter("google-video", opts.omni ?? omniAdapter) };
   for (const [id, mode] of Object.entries(KLING_V3_TIERS)) out[id] = klingStudioAdapter(id, key, (input) => buildKlingV3Request(klingV3Input(mode, input)));
   out["kling-effects"] = klingStudioAdapter("kling-effects", key, klingEffectRequest);
+  // P4: Wan / Seedance / MiniMax through the fal queue (async: submit → op id → the shared video poll loop).
+  out[FAL_VIDEO_ADAPTER_ID] = falVideoAdapter(opts.falKeyFn ? { key: opts.falKeyFn } : {});
   return out;
 }
 

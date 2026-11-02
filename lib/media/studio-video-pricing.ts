@@ -8,7 +8,7 @@
  */
 import { validate, type CatalogEntry } from "../studio-core";
 import { MEDIA_CATALOG, MEDIA_PURPOSES } from "./catalog";
-import { STUDIO_VIDEO_PURPOSE } from "./catalog-video";
+import { END_IMAGE_PARAM, SECOND_IMAGE_PARAM, STUDIO_VIDEO_PURPOSE, effectPhotos } from "./catalog-video";
 import { studioEntryPrice, type MediaPricing } from "./studio-pricing";
 
 /** The model a Studio video form asks for: blank = the purpose default; anything else verbatim. */
@@ -46,6 +46,28 @@ export function studioVideoError(values: Readonly<Record<string, unknown>>): str
   if (!entry) return "Noma'lum video modeli — boshqa modelni tanlang.";
   const bad = validate(entry.params, values);
   if (bad) return bad;
-  if (isEffectEntry(entry) && !String(values.imageAssetId ?? "").trim()) return "Effekt uchun surat yuklang.";
+  const has = (name: string) => Boolean(String(values[name] ?? "").trim());
+  if (isEffectEntry(entry)) {
+    if (!has("imageAssetId")) return "Effekt uchun surat yuklang.";
+    // P4: a two-photo scene («Quchoqlash») needs the second photo; a single-photo scene must not carry one.
+    const two = effectPhotos(values.effect) === 2;
+    if (two && !has(SECOND_IMAGE_PARAM)) return "Bu effekt uchun ikkinchi suratni ham yuklang.";
+    if (!two && has(SECOND_IMAGE_PARAM)) return "Bu effekt bitta surat bilan ishlaydi.";
+    return null;
+  }
+  // P4: the end frame is the last frame of an image → video clip: only together with the start image.
+  if (has(END_IMAGE_PARAM) && !has("imageAssetId")) return "Oxirgi kadr uchun boshlang‘ich suratni ham yuklang.";
   return null;
+}
+
+/**
+ * The uploaded photos a job sends (P4): every `image` param of the model, minus the ones its values do not use (the
+ * second photo of a single-photo effect). The server checks ownership of exactly these before charging and resolves
+ * exactly these at submit.
+ */
+export function studioVideoImageParams(entry: Pick<CatalogEntry, "params" | "capabilities">, values: Readonly<Record<string, unknown>>): string[] {
+  return entry.params
+    .filter((p) => p.type === "image")
+    .map((p) => p.name)
+    .filter((name) => !(isEffectEntry(entry) && name === SECOND_IMAGE_PARAM && effectPhotos(values.effect) !== 2));
 }

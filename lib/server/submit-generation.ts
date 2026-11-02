@@ -23,7 +23,7 @@ import { STUDIO_IMAGE_PURPOSE, studioPurposeOf } from "../media/catalog";
 import { studioInputsError } from "./media/inputs";
 import { studioModelOf } from "../media/studio-pricing";
 import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
-import { studioVideoModelOf } from "../media/studio-video-pricing";
+import { studioVideoImageParams, studioVideoModelOf } from "../media/studio-video-pricing";
 import { isPaidOnlyTool } from "../tool-kinds";
 import { normalize } from "../studio-core";
 import { MEDIA_CATALOG } from "../media/catalog";
@@ -196,9 +196,13 @@ export async function submitGeneration(input: SubmitInput): Promise<SubmitResult
     const unavailable = await modelUnavailable(STUDIO_VIDEO_PURPOSE, modelId);
     if (unavailable) throw new ApiError(unavailable, 400, { code: "model_unavailable" });
     const entry = MEDIA_CATALOG.byId(modelId)!;
-    const image = normalize(entry.params, values).imageAssetId;
-    const imageId = Array.isArray(image) ? image[0] : undefined;
-    if (imageId && !(await photoExists(userId, imageId))) throw new ApiError("Surat topilmadi — suratni qayta yuklang", 400);
+    // Every photo the job sends (start, P4 end frame, the second photo of a two-photo effect): the user's own (SQL).
+    const params = normalize(entry.params, values);
+    for (const name of studioVideoImageParams(entry, values)) {
+      const ids = params[name];
+      const imageId = Array.isArray(ids) ? ids[0] : undefined;
+      if (imageId && !(await photoExists(userId, imageId))) throw new ApiError("Surat topilmadi — suratni qayta yuklang", 400);
+    }
   }
 
   // Graduation portrait: the selfie must exist and be the user's own BEFORE anything is priced or charged.

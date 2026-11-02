@@ -15,3 +15,11 @@ export type KlingV3Aspect = (typeof KLING_V3_ASPECTS)[number];
 export const KLING_V3_SECONDS = { min: 3, max: 15 } as const;
 /** An effect scene renders one fixed 5-second clip. */
 export const KLING_EFFECT_SECONDS = 5;
+/**
+ * Two-photo («dual character») effect scenes on the direct API (Studio P4, docs/studio/P4-SPEC.md): Kling's OpenAPI as
+ * vendored by ComfyUI (`comfy_api_nodes/apis/__init__.py` `KlingDualCharacterEffectInput`: `model_name` kling-v1 /
+ * kling-v1-5 / kling-v1-6, `mode` std, `images` exactly two, `duration` "5" | "10"; read 2026-11-02). The newest listed
+ * model and the 5-second clip of every other effect.
+ */
+export const KLING_DUAL_EFFECT_MODEL = "kling-v1-6";
+export const KLING_DUAL_EFFECT_MODE = "std";

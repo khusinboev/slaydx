@@ -25,7 +25,7 @@ import { VIDEO_ASPECTS, VIDEO_PROVIDERS, videoParamsError, videoPrice } from "./
 import { imageBasePrice, imageModelError, imageModelOf } from "./generation/image-models";
 import { groupDigits } from "./format";
 import { MEDIA_CATALOG } from "./media/catalog";
-import { KLING_EFFECTS } from "./media/catalog-video";
+import { KLING_EFFECT_SCENES } from "./media/catalog-video";
 import { defaultMediaPricing, getClientMediaPricing, isStudioImageModel, studioImagePrice, studioModelOf, type MediaPricing } from "./media/studio-pricing";
 import { validate as validateParams } from "./studio-core";
 import { studioVideoError, studioVideoPrice } from "./media/studio-video-pricing";
@@ -1874,7 +1874,7 @@ export function topicOf(values: FormValues, tool: ToolConfig) {
   if (tool.id === "studio-video") {
     // An effect has no prompt: its label names the job.
     const effect = String(values.effect ?? "");
-    const label = KLING_EFFECTS.find((e) => e.id === effect)?.label;
+    const label = KLING_EFFECT_SCENES.find((e) => e.id === effect)?.label;
     const prompt = String(values.prompt || "").replace(/\s+/g, " ").trim().slice(0, 72);
     return prompt || (label ? `Effekt: ${label}` : "Video");
   }
