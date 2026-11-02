@@ -28,7 +28,8 @@ import { inRequest } from "./helpers/next-request.mts";
  *   `compare_group` written as a new UUID per row                                            -> "money" (two groups);
  *   replay ignores the values (`same` dropped from the check)                                -> "replay" (202, not 422);
  *   `paidOnly` not passed to `chargeInTx` for the video batch                                -> "video" (bonus paid it).
- * Migration 071 is asserted (CHECK + rollback) in tests/admin-migrations.test.mts.
+ * Migration 071 is asserted (CHECK + rollback) in tests/admin-migrations.test.mts: the index CHECK widened to 0..9 and
+ * the ROLLBACK block without its `DROP COLUMN compare_index` — both turned that file red, then restored.
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
