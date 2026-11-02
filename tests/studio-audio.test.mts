@@ -386,5 +386,6 @@ test("engine: telemetry — the prompt is redacted in media_jobs; the input trav
 test("toolBlockedReason: «Audio» follows its own model list", () => {
   assert.equal(tools.toolBlockedReason(TOOL, { studioAudioModels: [] } as never), "Audio xizmati hozircha mavjud emas.");
   assert.equal(tools.toolBlockedReason(TOOL, { studioAudioModels: [MUSIC] } as never), null);
-  assert.equal(tools.toolBlockedReason(TOOL, {} as never), null, "an older server: not blocked");
+  assert.equal(tools.toolBlockedReason(TOOL, { ttsPremium: true } as never), null, "an older server: the ElevenLabs flag");
+  assert.ok(tools.toolBlockedReason(TOOL, { llm: false } as never), "an older server with nothing configured: blocked");
 });

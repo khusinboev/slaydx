@@ -1689,9 +1689,11 @@ export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | nu
     return !known || known.length > 0 ? null : "Video xizmati hozircha mavjud emas.";
   }
   if (tool.custom === "studio-audio") {
-    // Its own model list when the server sends it (empty while `studio.audio.enabled` is off); unknown = not blocked.
+    // Its own model list when the server sends it (empty while `studio.audio.enabled` is off); an older server: the
+    // ElevenLabs flag (`ttsPremium`), else the text-key flag (nothing configured = blocked, as every tool).
     const known = features.studioAudioModels;
-    return !known || known.length > 0 ? null : "Audio xizmati hozircha mavjud emas.";
+    const ok = known ? known.length > 0 : (features.ttsPremium ?? features.llm);
+    return ok ? null : "Audio xizmati hozircha mavjud emas.";
   }
   if (tool.custom === "studio-speech" || tool.custom === "studio-voice") {
     // Its own model list when the server sends it (empty while `studio.voice.enabled` is off); an older server: the TTS
