@@ -31,6 +31,12 @@ import assert from "node:assert/strict";
  *   engine stops at the first failed variant                                    -> "engine: SFX variants";
  *   `redact: ["prompt"]` dropped                                                -> "engine: telemetry";
  *   `studio-audio` branch removed from `toolBlockedReason`                       -> "toolBlockedReason".
+ *
+ * P7c (provider cost into the job meter -> cost_json / ai_usage; tests "cost: …"), each turned red, then restored:
+ *   `recordAudioCall` removed from the engine loop                               -> "cost: each delivered call", "cost: SFX 3 of 4";
+ *   the call recorded with `p` (all variants) instead of the one-clip values     -> "cost: SFX 3 of 4" (0.436364 not 0.109091);
+ *   a failed call recorded (call in the `catch`)                                 -> "cost: SFX 3 of 4";
+ *   only the first clip recorded (`if (i === 0)`)                                -> "cost: each delivered call", "cost: SFX 3 of 4".
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";

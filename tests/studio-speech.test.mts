@@ -34,6 +34,14 @@ import assert from "node:assert/strict";
  *   review M1: the engine's over-limit check dropped                          -> "review M1" (the provider was called);
  *   review M1: `doc.speech.chars` = the whole script                          -> "review M1";
  *   review m4: `voiceOf` reads the untrimmed value                            -> "review m4".
+ *
+ * P7c (provider cost into the job meter -> cost_json / ai_usage; tests "cost: …"), each turned red, then restored:
+ *   `recordSpeechCall` removed from the single-voice branch                    -> "cost: ElevenLabs", "cost: Gemini chunks", "cost: a chunk that failed";
+ *   chunk call priced on `p` (the whole text) instead of the chunk's values    -> "cost: Gemini chunks", "cost: a chunk that failed";
+ *   dialogue priced on the spoken turns instead of the whole script             -> "cost: a dialogue";
+ *   `recordSpeechCall` removed from the dialogue branch                         -> "cost: a dialogue";
+ *   a failed call recorded (call in the `catch`)                                -> "cost: a chunk that failed";
+ *   Gemini part no longer flagged `estimated` (`cost.ts`)                       -> "cost: Gemini chunks".
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -398,6 +406,100 @@ test("review m4: the worker uses the trimmed voice value (a padded library id st
   const r = await requestsOf({ ...BASE[EL_TTS], voice: `  ${ADAM}  ` });
   assert.equal(r[0]!.url, `https://api.elevenlabs.io/v1/text-to-speech/${ADAM}?output_format=mp3_44100_128`);
   assert.equal(rules.studioSpeechError({ ...BASE[EL_TTS], voice: `  ${ADAM}  ` }), null, "the route accepts the same value");
+});
+
+/* ───────────────────────── P7c: provider cost telemetry ───────────────────────── */
+
+const usd6 = (n: number) => Number(n.toFixed(6));
+/** ElevenLabs eleven_v3 on the owner's Creator plan: 1 credit per character, $22 / 121 000 credits. */
+const EL_USD_PER_CHAR = 22 / 121_000;
+const GM_MODEL = "gemini-2.5-flash-preview-tts";
+
+/** The real engine inside a job meter; what the worker would put in `cost_json` (also after a throw), and what each call was priced at. */
+async function speechCost(values: Record<string, unknown>, respond: (s: Seen, n: number) => Response) {
+  const { trackJobCost } = await import("../lib/generation/job-cost.ts");
+  const { fetchImpl, seen } = stub(respond);
+  const adapters = studioSpeechAdapters({ key: () => KEY, gemini: makeGeminiTts({ fetchImpl, key: () => "gem-key", model: () => GM_MODEL }) });
+  const priced: { usd: number; chars: number }[] = [];
+  core.resetBreakers();
+  const was = process.env.TTS_GEMINI_MODEL;
+  process.env.TTS_GEMINI_MODEL = GM_MODEL;
+  try {
+    const tracked = trackJobCost(() =>
+      buildStudioSpeech(tools.TOOL_BY_ID["studio-speech"], values as never, { clones: {} }, {}, {
+        adapters,
+        run: (i) => {
+          // What `runMedia` stores as this call's `media_jobs.cost_usd`: the SAME values priced with the catalog rule.
+          const entry = MEDIA_CATALOG.byId(i.modelId)!;
+          priced.push({ usd: core.costUsd(entry.cost, core.normalize(entry.params, i.values)), chars: String(i.extra?.text ?? "").length });
+          return runMedia({ ...i, deps: { fetchImpl } });
+        },
+      }),
+    );
+    const built = await tracked.promise.then(
+      (b) => ({ ok: true as const, b }),
+      (e: unknown) => ({ ok: false as const, e }),
+    );
+    return { built, cost: tracked.snapshot().toJson(), priced, calls: seen.length };
+  } finally {
+    if (was === undefined) delete process.env.TTS_GEMINI_MODEL;
+    else process.env.TTS_GEMINI_MODEL = was;
+  }
+}
+const okAudio = (s: Seen) => (s.url.includes("generativelanguage") ? geminiAudio() : audio());
+
+test("cost: an ElevenLabs speech job records ONE `tts` entry = chars × the Creator-plan rate (= its media_jobs.cost_usd)", async (t) => {
+  quiet(t);
+  const text = `${"Assalomu alaykum, aziz do‘stlar! ".repeat(30)}`.trim();
+  const r = await speechCost({ ...BASE[EL_TTS], text }, okAudio);
+  assert.equal(r.built.ok, true);
+  assert.equal(r.calls, 1);
+  assert.deepEqual(r.cost.parts, [{ kind: "tts", provider: "elevenlabs", model: "eleven_v3", calls: 1, inputTokens: 0, outputTokens: 0, units: text.length, usd: usd6(text.length * EL_USD_PER_CHAR) }]);
+  assert.equal(r.cost.usd, usd6(text.length * EL_USD_PER_CHAR));
+  assert.equal(r.cost.calls, 1);
+  assert.ok(Math.abs(r.priced[0]!.usd - text.length * EL_USD_PER_CHAR) < 1e-9, "the number runMedia writes to media_jobs");
+});
+
+test("cost: a dialogue is ONE call priced on the whole normalized script (names included), `units` = what was spoken", async (t) => {
+  quiet(t);
+  const values = BASE[EL_DIA]!;
+  const script = String(values.script);
+  assert.equal(script.length, 23, "Ali: Salom!\\nVali: Xayr!");
+  const r = await speechCost(values, okAudio);
+  assert.equal(r.built.ok, true);
+  assert.equal(r.calls, 1);
+  assert.deepEqual(r.cost.parts, [{ kind: "tts", provider: "elevenlabs", model: "eleven_v3", calls: 1, inputTokens: 0, outputTokens: 0, units: 11, usd: usd6(23 * EL_USD_PER_CHAR) }]);
+  assert.equal(r.cost.usd, usd6(23 * EL_USD_PER_CHAR));
+});
+
+test("cost: Gemini chunks -> one entry per delivered chunk, each priced on ITS text, flagged `estimated`", async (t) => {
+  quiet(t);
+  const sentence = (c: string) => `${c.repeat(900)}. `;
+  const text = (sentence("a") + sentence("b") + sentence("c")).trim();
+  const r = await speechCost({ ...BASE[GM_TTS], text }, okAudio);
+  assert.equal(r.built.ok, true);
+  assert.ok(r.calls >= 3, `three chunks (got ${r.calls})`);
+  const rate = sp.geminiUsdPerKchar() / 1000;
+  const chars = r.priced.reduce((n, c) => n + c.chars, 0);
+  assert.equal(r.cost.calls, r.calls);
+  assert.deepEqual(r.cost.parts, [{ kind: "tts", provider: "gemini", model: GM_MODEL, calls: r.calls, inputTokens: 0, outputTokens: 0, units: chars, usd: usd6(chars * rate), estimated: true }]);
+  // The chunks' own media_jobs numbers add up to the same total (every chunk priced on its own text, not on the whole).
+  assert.ok(Math.abs(r.priced.reduce((n, c) => n + c.usd, 0) - chars * rate) < 1e-9);
+  assert.ok(chars < text.length * 1.01 && chars > text.length * 0.95);
+});
+
+test("cost: a chunk that failed records nothing, the chunks delivered before it stay; a lone failure records nothing", async (t) => {
+  quiet(t);
+  const sentence = (c: string) => `${c.repeat(900)}. `;
+  const text = (sentence("a") + sentence("b") + sentence("c")).trim();
+  const second = await speechCost({ ...BASE[GM_TTS], text }, (s, n) => (n === 2 ? new Response("boom", { status: 400 }) : okAudio(s)));
+  assert.equal(second.built.ok, false, "one chunk lost = the job fails (refund)");
+  assert.equal(second.cost.calls, 1, "the delivered first chunk was billed and stays; the failed one is not recorded");
+  assert.equal(second.cost.usd, usd6(second.priced[0]!.usd));
+  const lone = await speechCost(BASE[EL_TTS]!, () => new Response("boom", { status: 400 }));
+  assert.equal(lone.built.ok, false);
+  assert.equal(lone.cost.calls, 0);
+  assert.deepEqual(lone.cost.parts, []);
 });
 
 test("4 000 characters: the speech cap is exactly what the form-field sanitizer keeps", () => {
