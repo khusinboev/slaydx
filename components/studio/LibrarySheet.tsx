@@ -54,7 +54,7 @@ export function LibrarySheet({ onPick, onClose }: { onPick: (prompt: string) => 
   return (
     <OverlayFrame label="Namuna promptlar" phone={phone} sheet className={phone ? "flex items-end justify-center" : "flex items-center justify-center p-4"}>
       <OverlayScrim onClose={onClose} />
-      <OverlayPanel ref={panelRef} phone={phone} sheet className={phone ? "min-h-[70svh]" : "max-w-xl"}>
+      <OverlayPanel ref={panelRef} phone={phone} sheet className={phone ? "min-h-[70svh]" : "max-h-[85vh] max-w-xl overflow-y-auto overscroll-contain"}>
         <div data-library-sheet>
           <OverlayHeader title="Namuna promptlar" phone={phone} onClose={onClose} className="mb-2" />
           {error ? (

@@ -190,7 +190,7 @@ function ModelSheet({
   return (
     <OverlayFrame label={video ? "Video modelini tanlash" : "Rasm modelini tanlash"} phone={phone} sheet className={phone ? "flex items-end justify-center" : "flex items-center justify-center p-4"}>
       <OverlayScrim onClose={onClose} />
-      <OverlayPanel ref={panelRef} phone={phone} sheet className={phone ? "min-h-[70svh]" : "max-w-lg"}>
+      <OverlayPanel ref={panelRef} phone={phone} sheet className={phone ? "min-h-[70svh]" : "max-h-[85vh] max-w-lg overflow-y-auto overscroll-contain"}>
         <div data-model-sheet>
           <OverlayHeader title={video ? "Video modeli" : "Rasm modeli"} phone={phone} onClose={onClose} className="mb-2" />
           <div role="group" aria-label="Filtr" className="mb-3 flex flex-wrap gap-1.5" data-model-chips>

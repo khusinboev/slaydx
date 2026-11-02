@@ -72,7 +72,7 @@ CREATE INDEX IF NOT EXISTS studio_templates_public_idx ON studio_templates (sort
 INSERT INTO studio_prompts (seed_key, category, sort, title, prompt) VALUES
   ('p01', 'portret', 10, 'Studiyadagi portret', 'Yosh ayolning studiya portreti, yumshoq yon yorug''lik, kulrang fon, tabiiy teri, kulimsirab turibdi, yelkagacha kadr'),
   ('p02', 'portret', 20, 'Keksa usta', 'Keksa kulol ustaxonasida, qo''llarida loy ko''za, derazadan tushgan iliq tong nuri, yuzida chuqur ajinlar, hujjatli foto uslubida'),
-  ('p03', 'portret', 30, 'Biznes portret', 'Ofis fonida o''ttiz yoshlardagi erkak, to''q ko''k kostyum, ishonchli nigoh, xira fon, LinkedIn profil surati uchun'),
+  ('p03', 'portret', 30, 'Biznes portret', 'Ofis fonida o''ttiz yoshlardagi erkak, to''q ko''k kostyum, ishonchli nigoh, xira fon, rezyume va ish profili uchun surat'),
   ('p04', 'portret', 40, 'Bola va kitob', 'Kutubxonada katta kitobni ochib o''tirgan qiz bola, hayratlangan yuz, iliq lampa nuri, yumshoq bokeh'),
   ('p05', 'mahsulot', 10, 'Atir shishasi', 'Oq marmar ustida shisha atir flakoni, orqada yumshoq soya, yon tomonda gul barglari, minimal reklama fotosurati'),
   ('p06', 'mahsulot', 20, 'Qo''l soati', 'Qora charm tasmali erkaklar qo''l soati, to''q yog''och stol, yon yorug''lik metallda yaltiraydi, makro foto'),
