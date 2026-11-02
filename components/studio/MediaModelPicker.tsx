@@ -31,6 +31,8 @@ export type MediaModelPickerProps = {
   /** Controlled sheet (the host can open it, e.g. «Boshqa modelda»); uncontrolled when omitted. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Card price text of a model (the Video tab: «~10 700 so'm / 5 s»); default «~X so'm / rasm». */
+  priceOf?: (model: ClientEntry) => string;
 };
 
 /** The cards the row shows: the first `max` models, with the chosen one always among them. */
@@ -50,7 +52,7 @@ export function rowModels(models: readonly ClientEntry[], value: string, max = R
  * BackButton close it before leaving the page. «Tanlash» applies the highlighted model; closing otherwise keeps the
  * previous choice.
  */
-export function MediaModelPicker({ purpose, value, onChange, values, catalog, open, onOpenChange }: MediaModelPickerProps) {
+export function MediaModelPicker({ purpose, value, onChange, values, catalog, open, onOpenChange, priceOf }: MediaModelPickerProps) {
   usePricingVersion(); // an admin price adjustment re-renders the prices on the cards
   const own = useMediaCatalog(purpose, !catalog);
   const [innerOpen, setInnerOpen] = useState(false);
@@ -107,7 +109,7 @@ export function MediaModelPicker({ purpose, value, onChange, values, catalog, op
       />
       <div role="group" aria-label="Model" className="grid grid-cols-2 gap-2 sm:grid-cols-3" data-model-row>
         {rowModels(models, value).map((m) => (
-          <ModelCard key={m.id} model={m} selected={m.id === value} price={unitPrice(m, values, pricing)} onPick={() => onChange(m.id)} />
+          <ModelCard key={m.id} model={m} selected={m.id === value} text={priceOf ? priceOf(m) : priceText(unitPrice(m, values, pricing))} onPick={() => onChange(m.id)} />
         ))}
       </div>
       {sheetOpen ? (
@@ -118,6 +120,7 @@ export function MediaModelPicker({ purpose, value, onChange, values, catalog, op
           value={value}
           onPick={onChange}
           onClose={() => setOpen(false)}
+          priceOf={priceOf}
         />
       ) : null}
     </section>
@@ -137,7 +140,7 @@ function priceText(price: number): string {
   return `~${groupDigits(price)} so'm / rasm`;
 }
 
-function ModelCard({ model, selected, price, onPick }: { model: ClientEntry; selected: boolean; price: number; onPick: () => void }) {
+function ModelCard({ model, selected, text, onPick }: { model: ClientEntry; selected: boolean; text: string; onPick: () => void }) {
   return (
     <button
       type="button"
@@ -152,7 +155,7 @@ function ModelCard({ model, selected, price, onPick }: { model: ClientEntry; sel
       <span className="block truncate text-[15px] font-bold">{model.label}</span>
       {badgeText(model) ? <span className="text-muted-foreground mt-0.5 block truncate text-[12.5px]">{badgeText(model)}</span> : null}
       <span className="text-accent-soft-foreground mt-1.5 block text-[13px] font-semibold tabular-nums" data-model-price>
-        {priceText(price)}
+        {text}
       </span>
     </button>
   );
@@ -165,6 +168,7 @@ function ModelSheet({
   value,
   onPick,
   onClose,
+  priceOf,
 }: {
   models: readonly ClientEntry[];
   pricing: StudioPricing;
@@ -172,6 +176,7 @@ function ModelSheet({
   value: string;
   onPick: (id: string) => void;
   onClose: () => void;
+  priceOf?: (model: ClientEntry) => string;
 }) {
   const phone = useCoarsePointer();
   const [draft, setDraft] = useState(value);
@@ -180,13 +185,14 @@ function ModelSheet({
   // A chip is drawn only when some model carries its badge (no chip that leads to an empty list).
   const chips = FILTER_BADGES.filter((b) => models.some((m) => m.badges.includes(b)));
   const shown = filter ? models.filter((m) => m.badges.includes(filter)) : models;
+  const video = models.some((m) => m.kind === "video");
   const chip = "pointer-coarse:min-h-11 focus-visible:ring-ring rounded-[12px] px-3 py-1.5 text-[13.5px] outline-none focus-visible:ring-2";
   return (
-    <OverlayFrame label="Rasm modelini tanlash" phone={phone} sheet className={phone ? "flex items-end justify-center" : "flex items-center justify-center p-4"}>
+    <OverlayFrame label={video ? "Video modelini tanlash" : "Rasm modelini tanlash"} phone={phone} sheet className={phone ? "flex items-end justify-center" : "flex items-center justify-center p-4"}>
       <OverlayScrim onClose={onClose} />
       <OverlayPanel ref={panelRef} phone={phone} sheet className={phone ? "min-h-[70svh]" : "max-w-lg"}>
         <div data-model-sheet>
-          <OverlayHeader title="Rasm modeli" phone={phone} onClose={onClose} className="mb-2" />
+          <OverlayHeader title={video ? "Video modeli" : "Rasm modeli"} phone={phone} onClose={onClose} className="mb-2" />
           <div role="group" aria-label="Filtr" className="mb-3 flex flex-wrap gap-1.5" data-model-chips>
             <button type="button" data-model-chip="all" aria-pressed={filter === null} onClick={() => setFilter(null)} className={cn(chip, filter === null ? "bg-foreground text-background font-semibold" : "bg-muted")}>
               Hammasi
@@ -218,7 +224,7 @@ function ModelSheet({
                     <span className="text-muted-foreground mt-0.5 block truncate text-[12.5px]">{[m.maker, badgeText(m)].filter(Boolean).join(" · ")}</span>
                   </span>
                   <span className="text-accent-soft-foreground shrink-0 text-right text-[14px] font-bold tabular-nums" data-model-price>
-                    {priceText(unitPrice(m, values, pricing))}
+                    {priceOf ? priceOf(m) : priceText(unitPrice(m, values, pricing))}
                   </span>
                 </button>
               </li>

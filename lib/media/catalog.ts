@@ -20,6 +20,7 @@ import { IMAGE_PROMPT_LIMIT } from "../generation/image-params";
 import { VIDEO_ASPECTS, VIDEO_PROMPT_MAX, VIDEO_PROMPT_MIN, videoProviderById, type VideoProviderId } from "../generation/video/registry";
 import { VIDEO_MAX_BYTES } from "../generation/video/types";
 import { PPTX_SIZE_LIMIT } from "../generation/size-limits";
+import { STUDIO_VIDEO_ENTRIES, STUDIO_VIDEO_PURPOSE_SPEC } from "./catalog-video";
 
 /** Same as `IMAGE_PROMPT_MIN` in `lib/tools.ts` (not imported: tools.ts will read this file; a test keeps them equal). */
 export const MEDIA_IMAGE_PROMPT_MIN = 3;
@@ -167,6 +168,7 @@ export const MEDIA_ENTRIES: readonly CatalogEntry[] = [
     limits: { timeoutMs: 60_000, deadlineMs: 20 * 60_000 },
     output: { mimes: ["video/mp4"], maxBytes: VIDEO_MAX_BYTES },
   },
+  ...STUDIO_VIDEO_ENTRIES,
   speech("google/tts", "Gemini TTS", "Google", "gemini", "gemini-speech", 0.015),
   speech("elevenlabs/tts", "ElevenLabs", "ElevenLabs", "elevenlabs", "elevenlabs-speech", charsUsd("elevenlabs")),
   speech("azure/tts", "Azure Speech", "Microsoft", "azure", "azure-speech", charsUsd("azure")),
@@ -280,4 +282,5 @@ export const MEDIA_PURPOSES = definePurposes(MEDIA_CATALOG, [
   // Studio «Rasm» tab (docs/studio/P1-SPEC.md): the user picks the model; priced cost × markup (lib/media/studio-pricing.ts).
   // P2a: + the fal models, Nano Banana stays the default.
   { id: STUDIO_IMAGE_PURPOSE, kind: "image", allowed: ["google/nano-banana", "openai/gpt-image", ...FAL_IMAGE_MODELS], default: "google/nano-banana", userCanChoose: true },
+  STUDIO_VIDEO_PURPOSE_SPEC,
 ]);

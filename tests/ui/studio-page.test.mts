@@ -18,7 +18,7 @@ const { IMAGE_PROMPT_LIMIT } = await import("../../lib/generation/image-params.t
  * Studio page (`/uz/studio`, docs/studio/P1-SPEC.md) with the API stubbed at `fetch`, the REAL catalog entries.
  *
  * Locked here:
- *   - shell: «Studio» header + subtitle + «Galereya» link, a «Rasm» tab ONLY (no Video / Ovoz / template / sample-prompt
+ *   - shell: «Studio» header + subtitle + «Galereya» link, «Rasm» | «Video» tabs (P3; no Ovoz / template / sample-prompt
  *     decoration); logged out → the login opens with `returnTo`;
  *   - the model list is the SERVER's: an unavailable model is not drawn, a stale choice falls back to the default, a
  *     refused model (400) re-reads the catalog; empty / failed catalog have honest states;
@@ -40,7 +40,7 @@ const { IMAGE_PROMPT_LIMIT } = await import("../../lib/generation/image-params.t
  *   send(): `{ repeat: true }` removed                                              -> «Qayta is a NEW request»;
  *   resolveEntry skips the server's default (first model instead)                   -> «a refused model» (the default there is not the first model);
  *   400 handler does not `reload(true)`                                             -> «a refused model»;
- *   StudioPage draws a «Video» tab                                                  -> «shell»;
+ *   StudioPage drops the «Video» tab (P3)                                           -> «shell»;
  *   `otherModel` does not open the picker                                           -> «Boshqa modelda»;
  *   `otherModel` does not restore the prompt                                        -> «Boshqa modelda»;
  *   `useOverlayHistory` of the gallery view removed                                 -> studio-gallery «back returns to the form».
@@ -92,17 +92,19 @@ async function typePrompt(value: string) {
 const submit = () => click(q("[data-studio-submit]"));
 const label = (n: number, price: number) => `Yaratish · ${n} ta rasm · ${formatSom(price)}`;
 
-test("shell: «Studio» header, subtitle, «Galereya» link and the «Rasm» tab only — no Video / Ovoz / templates decoration", async () => {
+test("shell: «Studio» header, subtitle, «Galereya» link, the «Rasm» | «Video» tabs (P3) — no Ovoz / templates decoration", async () => {
   installApi();
   await mount();
   assert.equal(text("[data-page-header] h1"), "Studio");
   assert.ok(text("[data-page-header]").length > "Studio".length, "a subtitle");
   assert.match(text("[data-studio-gallery-link]"), /Galereya/);
   const tabs = qa('[data-studio-tabs] button');
-  assert.deepEqual(tabs.map((t) => t.textContent), ["Rasm"], "MUTATSIYA: Video tabi chizilsa qizaradi");
-  assert.equal(tabs[0]!.getAttribute("aria-current"), "page");
+  // P3 adds «Video» (tests/ui/studio-video.test.mts); «Ovoz» lands with P5.
+  assert.deepEqual(tabs.map((t) => t.textContent), ["Rasm", "Video"]);
+  assert.equal(tabs[0]!.getAttribute("aria-selected"), "true");
+  assert.equal(tabs[1]!.getAttribute("aria-selected"), "false");
   const page = document.body.textContent ?? "";
-  for (const word of ["Video", "Ovoz", "Namuna promptlar", "Shablonlar", "tez orada"]) assert.ok(!page.includes(word), `no «${word}»`);
+  for (const word of ["Ovoz", "Namuna promptlar", "Shablonlar", "tez orada"]) assert.ok(!page.includes(word), `no «${word}»`);
   assert.ok(prompt(), "the prompt box");
   assert.equal(q("[data-model-picker]")?.querySelectorAll("[data-model-card]").length, 2);
 });

@@ -25,8 +25,10 @@ import { VIDEO_ASPECTS, VIDEO_PROVIDERS, videoParamsError, videoPrice } from "./
 import { imageBasePrice, imageModelError, imageModelOf } from "./generation/image-models";
 import { groupDigits } from "./format";
 import { MEDIA_CATALOG } from "./media/catalog";
+import { KLING_EFFECTS } from "./media/catalog-video";
 import { defaultMediaPricing, getClientMediaPricing, isStudioImageModel, studioImagePrice, studioModelOf, type MediaPricing } from "./media/studio-pricing";
 import { validate as validateParams } from "./studio-core";
+import { studioVideoError, studioVideoPrice } from "./media/studio-video-pricing";
 
 const TOPIC_FILE_MODES = [
   {
@@ -67,6 +69,8 @@ const TOPIC_FILE_MODES = [
 const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
   image: [{ kind: "textarea", name: "prompt", legend: "Rasm tavsifi", required: true }],
   "studio-image": [{ kind: "textarea", name: "prompt", legend: "Rasm tavsifi", required: true }],
+  // Studio «Video»: the prompt is mode-dependent (effects need only a photo), the model is not — the tab sends it in both modes.
+  "studio-video": [{ kind: "text", name: "modelId", legend: "Video modeli", required: true }],
   resume: [
     { kind: "text", name: "fullName", legend: "To'liq ism", required: true },
     { kind: "text", name: "targetRole", legend: "Maqsadli lavozim", required: true },
@@ -949,6 +953,31 @@ export const TOOLS: ToolConfig[] = [
     fields: [],
   },
   {
+    /*
+     * Studio «Video» tab (docs/studio/P3-SPEC.md): a catalog video model (Gemini Omni, Kling 3.0) or a Kling effect
+     * template (`modelId` + that entry's ParamSchema), priced cost × markup (`lib/media/studio-video-pricing.ts`), always
+     * submitted through the media core and parked in `media_jobs` (`lib/server/video-ops.ts submitStudioVideoJob`).
+     * The page is the Studio's Video tab: `/uz/studio-video` only redirects there. Not listed on its own (`LISTED_TOOLS`).
+     */
+    id: "studio-video",
+    slug: "studio-video",
+    title: "Studio video",
+    pageTitle: "Studio video",
+    group: "media",
+    icon: "video",
+    tc: "234 88 12",
+    description: "AI video va tayyor effektlar — modelni o‘zingiz tanlaysiz, narx soniyaga qarab",
+    submitLabel: "Yaratish",
+    creatingLabel: "Video tayyorlanmoqda...",
+    createdLabel: "video tayyor!",
+    extraOptional: false,
+    output: "mp4",
+    custom: "studio-video",
+    // The cheapest default job (default model, its default length) for the «… dan» labels; the real price is `priceFor`.
+    basePrice: studioVideoPrice({}, defaultMediaPricing()) ?? 10000,
+    fields: [],
+  },
+  {
     id: "podcast",
     slug: "podcast",
     title: "Podkast",
@@ -1119,7 +1148,16 @@ export const TOOL_GROUPS: readonly { id: ToolGroup; label: string }[] = [
  * xizmatni va'da qilardi.
  */
 export function visibleToolGroups(): readonly { id: ToolGroup; label: string }[] {
-  return TOOL_GROUPS.filter((g) => TOOLS.some((t) => t.group === g.id));
+  return TOOL_GROUPS.filter((g) => listedTools().some((t) => t.group === g.id));
+}
+
+/**
+ * Tools that live INSIDE another page and get no card of their own: `studio-video` is the Studio's Video tab (the Studio
+ * card already leads there). The catalogue, the create sheet, the search and the home groups list `listedTools()`.
+ */
+export const UNLISTED_TOOL_IDS: ReadonlySet<ToolId> = new Set<ToolId>(["studio-video"]);
+export function listedTools(): ToolConfig[] {
+  return TOOLS.filter((t) => !UNLISTED_TOOL_IDS.has(t.id));
 }
 
 export const TOOL_BY_SLUG = Object.fromEntries(TOOLS.map((t) => [t.slug, t])) as Record<
@@ -1360,6 +1398,7 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
    */
   if (tool.custom === "video") return videoParamsError(values);
   if (tool.custom === "studio-image") return studioImageError(values);
+  if (tool.custom === "studio-video") return studioVideoError(values);
   if (tool.custom === "image") {
     const n = String(values.prompt ?? "").trim().length;
     if (n > 0 && n < IMAGE_PROMPT_MIN) return "Rasm tavsifi juda qisqa — nima chizilishini yozing.";
@@ -1511,6 +1550,11 @@ export type ToolFeatures = {
    * not known -> the `rasm` model list (or the `images` flag) decides.
    */
   studioImageModels?: string[];
+  /**
+   * Studio video models + effect templates (catalog ids) available right now — empty while `video.enabled` is off.
+   * Absent = not known -> the «Video» providers decide (`videoProviders`); both absent -> not blocked.
+   */
+  studioVideoModels?: string[];
 };
 
 /**
@@ -1537,6 +1581,11 @@ export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | nu
   if (!features) return null;
   if (tool.custom === "video") {
     return features.videoProviders && features.videoProviders.length > 0 ? null : "Video xizmati hozircha mavjud emas: provayder sozlanmagan.";
+  }
+  if (tool.custom === "studio-video") {
+    // Its own model list when the server sends it, else the «Video» providers (both empty while `video.enabled` is off).
+    const known = features.studioVideoModels ?? features.videoProviders;
+    return !known || known.length > 0 ? null : "Video xizmati hozircha mavjud emas.";
   }
   if (tool.custom === "studio-image") {
     const known = features.studioImageModels ?? features.imageModels;
@@ -1677,6 +1726,11 @@ export function basePriceFor(tool: ToolConfig, values: FormValues, media?: Media
     const pricing = media ?? getClientMediaPricing() ?? defaultMediaPricing();
     return studioImagePrice(values, pricing) ?? studioImagePrice({ ...values, modelId: "" }, pricing)!;
   }
+  if (tool.id === "studio-video") {
+    // Same pricing block as the Rasm tab; a model outside the tab is refused by `preflightError` first.
+    const pricing = media ?? getClientMediaPricing() ?? defaultMediaPricing();
+    return studioVideoPrice(values, pricing) ?? studioVideoPrice({ ...values, modelId: "" }, pricing)!;
+  }
   if (tool.id === "portrait") return portraitPrice(values);
   if (tool.id === "video") return videoPrice(values);
   if (tool.id === "image") {
@@ -1803,6 +1857,13 @@ export type { PriceAdjust, PriceAdjustMap } from "./price-adjust";
 export function topicOf(values: FormValues, tool: ToolConfig) {
   if (tool.id === "video") {
     return String(values.prompt || "Video").replace(/\s+/g, " ").trim().slice(0, 72) || "Video";
+  }
+  if (tool.id === "studio-video") {
+    // An effect has no prompt: its label names the job.
+    const effect = String(values.effect ?? "");
+    const label = KLING_EFFECTS.find((e) => e.id === effect)?.label;
+    const prompt = String(values.prompt || "").replace(/\s+/g, " ").trim().slice(0, 72);
+    return prompt || (label ? `Effekt: ${label}` : "Video");
   }
   if (tool.id === "image" || tool.id === "studio-image") {
     return String(values.prompt || values.topic || "Rasm").replace(/\s+/g, " ").trim().slice(0, 72) || "Rasm";

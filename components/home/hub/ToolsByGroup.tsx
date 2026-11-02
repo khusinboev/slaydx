@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { TOOLS, visibleToolGroups } from "@/lib/tools";
+import { listedTools, visibleToolGroups } from "@/lib/tools";
 import type { ToolConfig, ToolGroup } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { TOOL_ICONS } from "@/components/shell/icons";
@@ -20,7 +20,7 @@ export function ToolsByGroup({ onPick }: { onPick: (href: string) => void }) {
   const groups = visibleToolGroups();
   const [group, setGroup] = useState<ToolGroup>(groups[0]!.id);
   // Studio (the `studio` tool) is the first tile of the Media group.
-  const tools = studioFirst(TOOLS.filter((t) => t.group === group));
+  const tools = studioFirst(listedTools().filter((t) => t.group === group));
   // Link-only services (chat, converters, tests, domla) sit in their group beside the tools, behind their feature switches.
   const features = useAppStore((s) => s.features);
   const services = servicesOfGroup(group, features);

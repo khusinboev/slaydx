@@ -21,6 +21,11 @@ import type { FormValues, ToolConfig, ToolId } from "../types";
 import { modelUnavailable } from "./media/availability";
 import { STUDIO_IMAGE_PURPOSE } from "../media/catalog";
 import { studioModelOf } from "../media/studio-pricing";
+import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
+import { studioVideoModelOf } from "../media/studio-video-pricing";
+import { isPaidOnlyTool } from "../tool-kinds";
+import { normalize } from "../studio-core";
+import { MEDIA_CATALOG } from "../media/catalog";
 
 /**
  * The paid-generation pipeline behind `POST /api/generations`, shared with the AI chat's confirmation.
@@ -174,6 +179,22 @@ export async function submitGeneration(input: SubmitInput): Promise<SubmitResult
     if (unavailable) throw new ApiError(unavailable, 400, { code: "model_unavailable" });
   }
 
+  /*
+   * Studio clips (docs/studio/P3-SPEC.md): the paid-video switch `video.enabled` (one switch with «Video»), then the
+   * chosen model must be sold by the Video tab AND available RIGHT NOW (provider on + keyed + not switched off in «Media
+   * modellari»), and the start / effect photo must be the user's own upload. 400 before anything is priced or charged.
+   */
+  if (tool.id === "studio-video" && !replay) {
+    if (!(await getSetting("video.enabled"))) throw new ApiError("Video yaratish hozircha mavjud emas.", 400, { code: "video_disabled" });
+    const modelId = studioVideoModelOf(values);
+    const unavailable = await modelUnavailable(STUDIO_VIDEO_PURPOSE, modelId);
+    if (unavailable) throw new ApiError(unavailable, 400, { code: "model_unavailable" });
+    const entry = MEDIA_CATALOG.byId(modelId)!;
+    const image = normalize(entry.params, values).imageAssetId;
+    const imageId = Array.isArray(image) ? image[0] : undefined;
+    if (imageId && !(await photoExists(userId, imageId))) throw new ApiError("Surat topilmadi — suratni qayta yuklang", 400);
+  }
+
   // Graduation portrait: the selfie must exist and be the user's own BEFORE anything is priced or charged.
   // (A replay is a job already created; its selfie may be deleted by now.)
   if (tool.id === "portrait" && !replay && !(await photoExists(userId, portraitInputFromValues(values).photoAssetId))) {
@@ -232,7 +253,7 @@ export async function submitGeneration(input: SubmitInput): Promise<SubmitResult
      */
     admission: await queueLimits(),
     // Bonus so'm cannot pay for video (program-17 D5): only the paid balance is charged.
-    paidOnly: tool.id === "video",
+    paidOnly: isPaidOnlyTool(tool.id),
   });
 
   if (!result.ok && result.reason === "idempotency_conflict") {

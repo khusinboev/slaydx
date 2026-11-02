@@ -14,6 +14,8 @@ import { applyPriceAdjust } from "../price-adjust";
 import { costUsd, isValidMarkup, MARKUP_MAX, MARKUP_MIN, normalize } from "../studio-core";
 import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "../media/catalog";
 import { liveCostRule, markupOf, studioImagePrice } from "../media/studio-pricing";
+import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
+import { studioVideoPrice } from "../media/studio-video-pricing";
 
 /**
  * Admin «Narxlar» → «Media modellari» (docs/studio/P1-SPEC.md «Admin»): per Studio model the provider cost of ONE unit
@@ -25,9 +27,22 @@ import { liveCostRule, markupOf, studioImagePrice } from "../media/studio-pricin
  * before/after in the same transaction, an optional `expected` state (409 `stale` when someone changed it meanwhile).
  */
 
-/** Models this block manages: the ones the Studio sells (cost × markup). Other catalog entries keep their tool prices. */
+/**
+ * Models this block manages: the ones the Studio sells (cost × markup) — the Rasm tab's, then the Video tab's (P3).
+ * Other catalog entries keep their tool prices. `google/omni-video` is also sold by «Video» at its own ladder: its
+ * switch and markup here act on the Studio only.
+ */
 export function managedModelIds(): string[] {
-  return [...MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.allowed];
+  return [...new Set([...MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.allowed, ...MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed])];
+}
+
+/** What one priced unit of a model is: a picture, a default-length clip, an effect clip. */
+function unitOf(id: string): { label: string; values: Record<string, unknown>; video: boolean } {
+  const entry = MEDIA_CATALOG.byId(id)!;
+  if (entry.kind !== "video") return { label: "rasm", values: { modelId: id, imageCount: 1 }, video: false };
+  if (entry.cost.per === "job") return { label: "effekt", values: { modelId: id }, video: true };
+  const secs = normalize(entry.params, {}).seconds;
+  return { label: `${String(secs)} soniya`, values: { modelId: id }, video: true };
 }
 
 export type MediaModelItem = {
@@ -69,22 +84,24 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function mediaModelsOverview(): Promise<MediaModelsOverview> {
   await ensureProviderKeys();
-  const [pricing, overrides, adj] = await Promise.all([mediaPricing(), readOverrides(), getToolPricing("studio-image")]);
+  const [pricing, overrides, adj, videoAdj] = await Promise.all([mediaPricing(), readOverrides(), getToolPricing("studio-image"), getToolPricing("studio-video")]);
   const models = managedModelIds().map((id): MediaModelItem => {
     const entry = MEDIA_CATALOG.byId(id)!;
-    const one = { modelId: id, imageCount: 1 };
+    const unit = unitOf(id);
+    const one = unit.values;
     // The live unit cost (admin slot model), the very number the price is built from.
     const usd = costUsd(liveCostRule(entry.cost, pricing.costUsd?.[id]), normalize(entry.params, one));
     const costSoum = round2(usd * pricing.soumPerUsd);
-    const priceBase = studioImagePrice(one, pricing)!;
-    const price = applyPriceAdjust(priceBase, adj);
+    // The SAME functions the server charges with (the Rasm tab's / the Video tab's).
+    const priceBase = unit.video ? studioVideoPrice(one, pricing)! : studioImagePrice(one, pricing)!;
+    const price = applyPriceAdjust(priceBase, unit.video ? videoAdj : adj);
     const o = overrides.get(id);
     return {
       modelId: id,
       label: entry.label,
       maker: entry.maker,
       kind: entry.kind,
-      unit: "rasm",
+      unit: unit.label,
       costUsd: usd,
       costSoum,
       providerReady: entry.routes.some((r) => isProviderEnabled(r.provider) && Boolean(getProviderKey(r.provider))),

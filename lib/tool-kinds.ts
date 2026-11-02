@@ -41,11 +41,21 @@ export const TOOL_KINDS: Readonly<Record<ToolId, ToolKind>> = {
   sorting: { group: "oyinlar", output: "docx" },
   listening: { group: "oyinlar", output: "docx" },
   "studio-image": { group: "media", output: "png" },
+  "studio-video": { group: "media", output: "mp4" },
   podcast: { group: "media", output: "mp3" },
   greeting: { group: "media", output: "mp3" },
   portrait: { group: "media", output: "png" },
   video: { group: "media", output: "mp4" },
 };
+
+/**
+ * Video tools (program-17 item 5, Studio P3): paid balance only (bonus so'm never pays for video, D5), one shared
+ * `video.max_concurrent` cap, and a wait that holds no worker slot (`video-ops.ts`).
+ */
+export const VIDEO_TOOL_IDS: readonly ToolId[] = ["video", "studio-video"];
+export const isPaidOnlyTool = (id: string): boolean => (VIDEO_TOOL_IDS as readonly string[]).includes(id);
+/** `'video', 'studio-video'` for SQL: constant ids, never user input. */
+export const VIDEO_TOOLS_SQL = VIDEO_TOOL_IDS.map((id) => `'${id}'`).join(", ");
 
 /** Every tool id, in `TOOLS` order. */
 export const TOOL_IDS = Object.keys(TOOL_KINDS) as readonly ToolId[];

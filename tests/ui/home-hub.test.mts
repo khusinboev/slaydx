@@ -34,7 +34,7 @@ import type * as Api from "../../lib/api-client.ts";
 const { HomeHub } = await import("../../components/home/HomeHub.tsx");
 const { useAppStore } = await import("../../lib/store.ts");
 const { useUi } = await import("../../lib/ui.ts");
-const { TOOLS, TOOL_BY_ID, visibleToolGroups, clientAdjustedPrice } = await import("../../lib/tools.ts");
+const { TOOLS, TOOL_BY_ID, UNLISTED_TOOL_IDS, visibleToolGroups, clientAdjustedPrice } = await import("../../lib/tools.ts");
 const { SERVICES, servicesOfGroup } = await import("../../lib/services.ts");
 const { TOOL_ICONS } = await import("../../components/shell/icons.tsx");
 const model = await import("../../components/home/hub/hub-model.ts");
@@ -416,7 +416,8 @@ test("«Barcha vositalar»: one chip per visible group (registry), the chosen gr
     assert.equal(q(`[data-hub-group="${g.id}"]`)!.getAttribute("aria-pressed"), "true");
     const shown = [...document.querySelectorAll<HTMLAnchorElement>("[data-hub-tool]")];
     const want = [
-      ...studioFirst(TOOLS.filter((t) => t.group === g.id)).map((t) => ({ id: t.id as string, href: `/uz/${t.slug}` })),
+      // P3: `studio-video` is the Studio's Video tab, not a tile of its own.
+      ...studioFirst(TOOLS.filter((t) => t.group === g.id && !UNLISTED_TOOL_IDS.has(t.id))).map((t) => ({ id: t.id as string, href: `/uz/${t.slug}` })),
       ...servicesOfGroup(g.id, null).map((v) => ({ id: v.id as string, href: v.href })),
     ];
     assert.deepEqual(shown.map((a) => a.dataset.hubTool), want.map((t) => t.id), g.id);
@@ -512,7 +513,7 @@ test("Studio is the FIRST tile of the Media group, whatever its place in the reg
     const tiles = [...document.querySelectorAll<HTMLAnchorElement>("[data-hub-group-tools] [data-hub-tool]")];
     assert.equal(tiles[0]!.dataset.hubTool, "studio-image", "MUTATSIYA: studioFirst olib tashlansa qizaradi");
     assert.equal(tiles[0]!.getAttribute("href"), "/uz/studio");
-    const rest = TOOLS.filter((t) => t.group === "media" && t !== studio).map((t) => t.id as string);
+    const rest = TOOLS.filter((t) => t.group === "media" && t !== studio && !UNLISTED_TOOL_IDS.has(t.id)).map((t) => t.id as string);
     assert.deepEqual(tiles.slice(1, 1 + rest.length).map((a) => a.dataset.hubTool), rest, "the others keep their order");
   } finally {
     TOOLS.splice(TOOLS.indexOf(studio), 1);

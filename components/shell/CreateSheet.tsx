@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useMemo } from "react";
 import { LayoutGrid, X } from "lucide-react";
-import { TOOLS, TOOL_BY_ID, visibleToolGroups } from "@/lib/tools";
+import { listedTools, TOOLS, TOOL_BY_ID, visibleToolGroups } from "@/lib/tools";
 import { servicesOfGroup, type ServiceConfig } from "@/lib/services";
 import type { ToolConfig } from "@/lib/types";
 import { useAppStore } from "@/lib/store";
@@ -111,7 +111,7 @@ export function CreateSheet() {
             <section key={g.id} data-create-group={g.id} aria-labelledby={`create-group-${g.id}`} className="mb-3">
               <SectionLabel id={`create-group-${g.id}`}>{g.label}</SectionLabel>
               <ul className="grid grid-cols-4 gap-1">
-                {TOOLS.filter((t) => t.group === g.id).map((t) => (
+                {listedTools().filter((t) => t.group === g.id).map((t) => (
                   <li key={t.id}>
                     <ToolTile tool={t} onPick={onPick} />
                   </li>

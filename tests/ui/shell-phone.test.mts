@@ -66,7 +66,7 @@ const { PayDialog } = await import("../../components/overlays/PayDialog.tsx");
 const { LoginModal } = await import("../../components/overlays/LoginModal.tsx");
 const { useAppStore } = await import("../../lib/store.ts");
 const { useUi } = await import("../../lib/ui.ts");
-const { TOOLS } = await import("../../lib/tools.ts");
+const { TOOLS, listedTools } = await import("../../lib/tools.ts");
 
 const tree = (href: string) => ["", { children: [href] }];
 const router = {
@@ -270,7 +270,8 @@ test("SearchDialog phone: 16 px input, 44 px close, ≥ 56 px rows with tool ico
   assert.ok(rows.length > TOOLS.length, "tools + balance + files");
   for (const r of rows) assert.ok(has(r, "min-h-14"), `row «${(r.textContent ?? "").slice(0, 20)}» ≥ 56 px`);
   // Every tool row shows its icon in the tool colour; the file row shows its tool's icon.
-  for (const t of TOOLS) {
+  // `studio-video` is the Studio's Video tab (P3): not a row of its own.
+  for (const t of listedTools()) {
     const chip = document.querySelector(`[data-search-tool="${t.id}"] > span[aria-hidden]`) as HTMLElement | null;
     assert.ok(chip?.querySelector("svg"), `${t.id}: icon chip`);
     assert.equal(chip!.style.getPropertyValue("--tc"), t.tc, `${t.id}: chip in the tool colour`);
