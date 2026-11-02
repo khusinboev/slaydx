@@ -379,6 +379,28 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     await runSql("DELETE FROM users WHERE telegram_id = 777000069");
     assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_audio_inputs"))!.n, "0", "069: inputs go with their user");
     await runSql(sqlOf("069_studio_audio_inputs.sql"));
+    // 070: Studio P7b favourites (docs/studio/P7-SPEC.md «P7b») -- studio_favorites (user, generation; both cascade).
+    assert.ok((await exists("studio_favorites")) && (await exists("studio_favorites_generation_idx")), "070 table + index created");
+    await runSql(`INSERT INTO users (telegram_id, username, name) VALUES (777000070, 'mig070', 'M');
+      INSERT INTO generations (id, user_id, tool_id, topic, status) SELECT '00000000-0000-4000-8000-000000000070', id, 'studio-image', 'T', 'COMPLETED' FROM users WHERE telegram_id = 777000070;
+      INSERT INTO studio_favorites (user_id, generation_id) SELECT id, '00000000-0000-4000-8000-000000000070' FROM users WHERE telegram_id = 777000070;`);
+    await assert.rejects(
+      runSql(`INSERT INTO studio_favorites (user_id, generation_id) SELECT id, '00000000-0000-4000-8000-000000000070' FROM users WHERE telegram_id = 777000070`),
+      /duplicate key|unique/i,
+      "070: one star per user and generation",
+    );
+    await assert.rejects(
+      runSql(`INSERT INTO studio_favorites (user_id, generation_id) SELECT id, '00000000-0000-4000-8000-000000000071' FROM users WHERE telegram_id = 777000070`),
+      /foreign key/i,
+      "070: a star needs an existing generation",
+    );
+    await runSql("DELETE FROM generations WHERE id = '00000000-0000-4000-8000-000000000070'");
+    assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_favorites"))!.n, "0", "070: stars go with their generation");
+    await runSql(`INSERT INTO generations (id, user_id, tool_id, topic, status) SELECT '00000000-0000-4000-8000-000000000070', id, 'studio-image', 'T', 'COMPLETED' FROM users WHERE telegram_id = 777000070;
+      INSERT INTO studio_favorites (user_id, generation_id) SELECT id, '00000000-0000-4000-8000-000000000070' FROM users WHERE telegram_id = 777000070;`);
+    await runSql("DELETE FROM users WHERE telegram_id = 777000070");
+    assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_favorites"))!.n, "0", "070: stars go with their user");
+    await runSql(sqlOf("070_studio_favorites.sql"));
     // Re-running the seed never duplicates it (ON CONFLICT (seed_key) DO NOTHING).
     await runSql(sqlOf("067_studio_library.sql"));
     assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_prompts"))!.n, "40", "067 is idempotent");
@@ -393,6 +415,8 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
           FROM (VALUES (396, TRUE), (397, FALSE), (9999999, TRUE)) AS v(id, img);
     `);
     for (const f of [
+      // 070: Studio P7b favourites (docs/studio/P7-SPEC.md) -- studio_favorites.
+      "070_studio_favorites.sql",
       // 069: Studio P6 audio inputs (docs/studio/P6-SPEC.md) -- studio_audio_inputs.
       "069_studio_audio_inputs.sql",
       // 068: Studio P5 voices (docs/studio/P5-SPEC.md) -- studio_voice_previews / studio_voices / studio_voice_samples.
@@ -472,6 +496,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
         // An id outside the list is never touched.
         assert.equal(left[2]!.text, "matn", "an id outside the list keeps its text");
       }
+      if (f === "070_studio_favorites.sql") assert.ok(!(await exists("studio_favorites")), "070 rollback drops the table");
       if (f === "069_studio_audio_inputs.sql") assert.ok(!(await exists("studio_audio_inputs")), "069 rollback drops the table");
       if (f === "067_studio_library.sql") {
         assert.ok(!(await exists("studio_prompts")) && !(await exists("studio_templates")) && !(await exists("studio_library_previews")), "067 rollback drops the three tables");
