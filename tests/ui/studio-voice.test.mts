@@ -196,6 +196,20 @@ test("price button, character line, request; every schema param has exactly one 
   assert.equal(a.posts()[1]!.body!.values && (a.posts()[1]!.body!.values as Record<string, unknown>).script, "Ali: Salom!\nVali: Xayr!");
 });
 
+test("result page: the audio viewer plays a Studio speech file and lists its lines (`doc.speech`)", async () => {
+  const { AudioViewer } = await import("../../components/viewers/AudioViewer.tsx");
+  const doc = {
+    meta: { topic: "Salom" },
+    titlePage: false,
+    toc: false,
+    sections: [],
+    speech: { model: "elevenlabs/v3-dialogue", seconds: 12, chars: 20, voices: ["Rachel", "Adam"], lines: [{ speaker: "Ali", text: "Salom!" }, { speaker: "Vali", text: "Xayr!" }], clone: false },
+  };
+  render(h(AudioViewer, { doc: doc as never, gen: { id: "g1" } }));
+  assert.equal(q("[data-audio-player] audio")?.getAttribute("src"), "/api/generations/g1/file?inline=1");
+  assert.match(q("[data-audio-transcript]")?.textContent ?? "", /AliSalom!.*ValiXayr!/);
+});
+
 test("clone: consent required; the sample carries consent=1, then studio-voice at the clone price", async () => {
   const a = api();
   // The browser decoder: a 35 s mono recording.

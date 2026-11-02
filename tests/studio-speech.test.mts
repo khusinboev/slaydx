@@ -399,6 +399,15 @@ test("browser WAV encoder: mono mix, resample, header the server reads", () => {
   assert.equal(looksLikeMp3(wav), false);
 });
 
+test("admin: the ElevenLabs «Tekshirish» line shows the voice slots the clones take", async () => {
+  const { elevenLabsMessage } = await import("../lib/server/providers/probe.ts");
+  const msg = elevenLabsMessage({ tier: "starter", character_count: 1000, character_limit: 30000, voice_slots_used: 3, voice_limit: 10 });
+  assert.match(msg, /ovoz slotlari: 3 \/ 10 band/);
+  assert.ok(!elevenLabsMessage({ tier: "starter" }).includes("slot"), "no slot line when the answer has none");
+  assert.deepEqual(el.elevenLabsSlotsOf({ voice_slots_used: 3, voice_limit: 10, can_use_instant_voice_cloning: false }), { used: 3, limit: 10, canClone: false });
+  assert.equal(el.elevenLabsSlotsOf({ voice_limit: 10 }), null);
+});
+
 test("toolBlockedReason: the «Ovoz» tools follow their own model list", () => {
   const speech = tools.TOOL_BY_ID["studio-speech"];
   const clone = tools.TOOL_BY_ID["studio-voice"];
