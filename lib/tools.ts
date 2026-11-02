@@ -1201,6 +1201,12 @@ export function missingRequired(tool: ToolConfig, values: FormValues): string[] 
    * qo'shiladi, ro'yxat emas.
    */
   if (tool.id === "translation" && filled("sourceAssetId")) return [];
+  /*
+   * Studio P2b (docs/studio/P2B-SPEC.md): an upscale / background-removal model has no prompt at all — its ParamSchema
+   * (`studioImageError`) is the contract there (the picture is its required input, `min: 1`). Models WITH a prompt keep
+   * the required check below and their schema's own minimum.
+   */
+  if (tool.id === "studio-image" && studioModelHasNoPrompt(values)) return [];
 
   // «Fayl asosida» rejimida mavzu o'rniga manba matni bo'ladi.
   const mode = String(values.mode ?? "");
@@ -1379,6 +1385,13 @@ export const IMAGE_PROMPT_MIN = 3;
  * pass the model's own ParamSchema (`validate`: an unknown style / ratio / count is refused, never mapped). Whether the
  * model is available RIGHT NOW is the server's async check (`lib/server/media/availability.ts`).
  */
+/** The chosen Studio model is a known one whose ParamSchema has no `prompt` (P2b utilities). */
+function studioModelHasNoPrompt(values: FormValues): boolean {
+  const modelId = studioModelOf(values);
+  const entry = isStudioImageModel(modelId) ? MEDIA_CATALOG.byId(modelId) : null;
+  return Boolean(entry && !entry.params.some((p) => p.name === "prompt"));
+}
+
 export function studioImageError(values: FormValues): string | null {
   const modelId = studioModelOf(values);
   const entry = isStudioImageModel(modelId) ? MEDIA_CATALOG.byId(modelId) : null;

@@ -12,7 +12,7 @@ import { invalidateMediaOverrides, readOverrides, type ModelOverride } from "./m
 import { mediaPricing } from "./media/pricing";
 import { applyPriceAdjust } from "../price-adjust";
 import { costUsd, isValidMarkup, MARKUP_MAX, MARKUP_MIN, normalize } from "../studio-core";
-import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "../media/catalog";
+import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_PURPOSES } from "../media/catalog";
 import { liveCostRule, markupOf, studioImagePrice } from "../media/studio-pricing";
 import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
 import { studioVideoPrice } from "../media/studio-video-pricing";
@@ -28,18 +28,18 @@ import { studioVideoPrice } from "../media/studio-video-pricing";
  */
 
 /**
- * Models this block manages: the ones the Studio sells (cost × markup) — the Rasm tab's, then the Video tab's (P3).
- * Other catalog entries keep their tool prices. `google/omni-video` is also sold by «Video» at its own ladder: its
- * switch and markup here act on the Studio only.
+ * Models this block manages: the ones the Studio sells (cost × markup) — the Rasm tab's (pictures and, since P2b, the
+ * edit / upscale / background-removal models), then the Video tab's (P3). Other catalog entries keep their tool prices.
+ * `google/omni-video` is also sold by «Video» at its own ladder: its switch and markup here act on the Studio only.
  */
 export function managedModelIds(): string[] {
-  return [...new Set([...MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.allowed, ...MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed])];
+  return [...new Set([...STUDIO_PURPOSES.flatMap((p) => MEDIA_PURPOSES.byId(p)!.allowed), ...MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed])];
 }
 
-/** What one priced unit of a model is: a picture, a default-length clip, an effect clip. */
+/** What one priced unit of a model is: a picture, a utility job (P2b upscale / background removal), a default-length clip, an effect clip. */
 function unitOf(id: string): { label: string; values: Record<string, unknown>; video: boolean } {
   const entry = MEDIA_CATALOG.byId(id)!;
-  if (entry.kind !== "video") return { label: "rasm", values: { modelId: id, imageCount: 1 }, video: false };
+  if (entry.kind !== "video") return { label: entry.cost.per === "job" ? "amal" : "rasm", values: { modelId: id, imageCount: 1 }, video: false };
   if (entry.cost.per === "job") return { label: "effekt", values: { modelId: id }, video: true };
   const secs = normalize(entry.params, {}).seconds;
   return { label: `${String(secs)} soniya`, values: { modelId: id }, video: true };
@@ -50,7 +50,7 @@ export type MediaModelItem = {
   label: string;
   maker: string;
   kind: string;
-  /** What one unit is (`rasm`). */
+  /** What one unit is (`rasm`; `amal` for a per-job utility such as upscale). */
   unit: string;
   costUsd: number;
   costSoum: number;

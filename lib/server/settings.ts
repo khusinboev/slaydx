@@ -103,6 +103,7 @@ export type SettingValues = {
   "media.core.video": boolean;
   "media.core.speech": boolean;
   "media.markup": number;
+  "free_llm.daily.enhance": number;
 };
 
 export type SettingKey = keyof SettingValues;
@@ -244,7 +245,7 @@ export const VIDEO_MAX_CONCURRENT_MAX = 20;
 const CHAT_PRICE_DEFAULT = 100;
 const CHAT_PRICE_MAX = 10_000;
 
-type DailyKey = "free_llm.daily.outline" | "free_llm.daily.udk" | "free_llm.daily.rewrite" | "free_llm.daily.polish" | "free_llm.daily.chat";
+type DailyKey = "free_llm.daily.outline" | "free_llm.daily.udk" | "free_llm.daily.rewrite" | "free_llm.daily.polish" | "free_llm.daily.chat" | "free_llm.daily.enhance";
 
 function dailyCap<K extends DailyKey>(key: K, label: string, envVar: string, read: () => number): SettingDef<K> {
   return {
@@ -727,6 +728,8 @@ const CATALOG: Catalog = {
     validate: numberValidator(MARKUP_MIN, MARKUP_MAX),
     envDefault: () => MEDIA_MARKUP_DEFAULT,
   },
+  // Studio «Yaxshilash (AI)» (docs/studio/P2B-SPEC.md): free prompt rewrites per user per Tashkent day.
+  "free_llm.daily.enhance": dailyCap("free_llm.daily.enhance", "Studio «Yaxshilash (AI)»: kunlik limit", "FREE_LLM_DAILY_ENHANCE", () => env.freeLlm.dailyEnhance),
 };
 
 function mediaCoreSwitch<K extends "media.core.image" | "media.core.video" | "media.core.speech">(key: K, label: string, what: string): SettingDef<K> {

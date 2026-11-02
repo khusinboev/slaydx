@@ -27,6 +27,7 @@ import { deleteAssets, extractAssets, putAssetBytes, slideViewCopies, viewCopyBu
 import { buildPreview } from "./preview";
 import { logoDataUrl } from "./logo";
 import { deleteUserPhoto, photoDataUrl, purgeOldPhotos } from "./photo";
+import { studioInputsForJob } from "./media/inputs";
 import { templateForJob } from "./template-upload";
 import { purgeOldSources, sourceForJob } from "./source-upload";
 import { LiveReporter } from "./live";
@@ -594,6 +595,8 @@ async function execute(
       tool.id === "resume" || tool.id === "portrait"
         ? await photoDataUrl(job.userId, String(job.values.photoAssetId ?? ""))
         : undefined;
+    // Studio P2b: the edit / utility job's input pictures (the user's own uploads; missing = the engine fails + refunds).
+    const studioInputs = tool.id === "studio-image" ? await studioInputsForJob(job.userId, job.values) : undefined;
     // Media engine path per kind, read ONCE so a running job never switches (docs/studio/P0-SPEC.md §6).
     const mediaCtx = { generationId: job.id, core: await mediaCoreSwitches() };
     tracked = trackJobCost(() => withMediaContext(mediaCtx, () => build(tool, job.values, {
@@ -602,6 +605,7 @@ async function execute(
       template,
       source,
       photo,
+      studioInputs,
       onStage,
       onProgress: live?.sink,
       // Tinglash o'yini TTS parchalari — shu ishning aktivlariga (`/api/o/[token]/audio/[assetId]` orqali ochiq).
@@ -1091,6 +1095,8 @@ export async function purgeHousekeeping(): Promise<void> {
    * «O'z shablonim» muddati egasi qaroriga bog'liq.
    */
   await step("source-cache", () => purgeSourceCache(60));
+  // Studio library previews no prompt / template points at, after 7 days (docs/studio/P2B-SPEC.md, review MINOR-2).
+  await step("studio-previews", async () => (await import("./admin-studio-library")).purgeUnusedPreviews(7));
   /*
    * Admin panel steps (docs/admin/02-plan.md §5.5, §6.9), after every existing
    * step so their order is unchanged. Broadcast delivery is NOT a housekeeping

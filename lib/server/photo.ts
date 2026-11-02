@@ -53,7 +53,8 @@ function parseCrop(raw: unknown): PhotoCrop | undefined {
   }
 }
 
-type PhotoOpts = { kind?: "crop" | "original"; originalAssetId?: string; crop?: PhotoCrop };
+/** `studio`: a Studio P2b input picture (upload or a copy of the user's own Studio result, lib/server/media/inputs.ts). */
+type PhotoOpts = { kind?: "crop" | "original" | "studio"; originalAssetId?: string; crop?: PhotoCrop };
 
 /**
  * Bitta surat qatori — kvota tranzaksiyasi ichida (`client`).

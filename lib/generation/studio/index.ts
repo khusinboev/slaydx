@@ -20,7 +20,8 @@ import { imageRatioById } from "../image-studio-options";
 import type { ImageModelId } from "../image-models";
 import { coreAdapterImageProvider, coreImageProvider } from "../../media/image";
 import { FAL_ADAPTER_ID, falAdapter } from "../../media/adapters/fal";
-import { IMAGE_MODEL_TO_MEDIA, MEDIA_CATALOG, STUDIO_IMAGE_PURPOSE } from "../../media/catalog";
+import { IMAGE_MODEL_TO_MEDIA, MEDIA_CATALOG, STUDIO_IMAGE_PURPOSE, studioPurposeOf } from "../../media/catalog";
+import { buildStudioTool, type StudioInputs } from "./edit";
 import { isStudioImageModel, studioModelOf } from "../../media/studio-pricing";
 import { normalize } from "../../studio-core";
 import { UserFacingError } from "../../server/user-error";
@@ -38,9 +39,15 @@ export async function buildStudioImage(
   values: FormValues,
   deadline?: number,
   onStage?: (ev: { progress: number; step: string }) => void,
+  /** P2b: the user's input pictures, resolved by the worker (`lib/server/media/inputs.ts studioInputsForJob`). */
+  inputs?: StudioInputs,
 ): Promise<BuiltFile> {
   onStage?.({ progress: 0, step: "So‘rov tayyorlanmoqda" });
   const modelId = studioModelOf(values);
+  // P2b: an edit / upscale / background-removal model runs its own job (lib/generation/studio/edit.ts).
+  const purpose = studioPurposeOf(modelId);
+  const toolEntry = purpose && purpose !== STUDIO_IMAGE_PURPOSE ? MEDIA_CATALOG.byId(modelId) : null;
+  if (purpose && toolEntry) return buildStudioTool(tool, values, toolEntry, purpose, inputs, deadline, onStage);
   const entry = isStudioImageModel(modelId) ? MEDIA_CATALOG.byId(modelId) : null;
   const baseId = entry ? BASE_OF[entry.id] : undefined;
   const native = entry?.routes[0]?.adapter === FAL_ADAPTER_ID;

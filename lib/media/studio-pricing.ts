@@ -10,7 +10,7 @@
  * Client-safe: no server imports.
  */
 import { isValidMarkup, normalize, price, roundUpTo, type CatalogEntry, type CostRule } from "../studio-core";
-import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "./catalog";
+import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE, studioPurposeOf } from "./catalog";
 import { MEDIA_MARKUP_DEFAULT, MEDIA_PRICE_STEP } from "./quote";
 import { soumPerUsd } from "../generation/llm-pricing";
 
@@ -49,9 +49,12 @@ export function studioModelOf(values: { modelId?: unknown }): string {
   return raw || MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.default;
 }
 
-/** The model is one the Studio sells (in `studio.image.allowed`); availability right now is the server's question. */
+/**
+ * The model is one the Studio sells: in `studio.image.allowed` or, since P2b, one of the edit / upscale / background
+ * purposes (`STUDIO_PURPOSES`, same tool `studio-image`). Availability right now is the server's question.
+ */
 export function isStudioImageModel(id: string): boolean {
-  return MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.allowed.includes(id);
+  return studioPurposeOf(id) !== null;
 }
 
 /** Effective markup of a model: its admin override when valid, else the global one. */

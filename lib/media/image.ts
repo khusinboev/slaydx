@@ -140,6 +140,8 @@ export function coreAdapterImageProvider(purpose: string, modelId: string, adapt
           modelId,
           values,
           extra: { prompt: ask.prompt, width: ask.size.width, height: ask.size.height },
+          // P2b edit / utility models: the user's pictures (already ownership-checked and resolved by the host).
+          assets: ask.inputImages?.length ? { inputImages: ask.inputImages } : undefined,
           step: nextMediaStep("image", tagOf(ask)),
           adapters: { [adapter.id]: adapter },
           deps: { deadline: deadline === undefined ? cap : Math.min(deadline, cap) },

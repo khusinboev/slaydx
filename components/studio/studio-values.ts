@@ -50,7 +50,11 @@ export function effective(entry: ClientEntry, raw: RawValues): Record<string, un
  * `prompt` goes out normalized (whitespace runs collapsed, trimmed), as the server will read it anyway.
  */
 export function requestValues(entry: ClientEntry, raw: RawValues): Record<string, unknown> {
-  return { modelId: entry.id, ...normalize(entry.params, raw) };
+  const out: Record<string, unknown> = { modelId: entry.id };
+  // Form values travel as scalars (`lib/server/validate.ts sanitizeValues`): a list of asset ids (an `image` param, P2b)
+  // goes out comma-separated, the form the ParamSchema reads back (`studio-core/params.ts idsOf`).
+  for (const [k, v] of Object.entries(normalize(entry.params, raw))) out[k] = Array.isArray(v) ? v.join(",") : v;
+  return out;
 }
 
 /** The text of the prompt the server will read (what the minimum length is judged on). */

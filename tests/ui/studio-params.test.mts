@@ -18,7 +18,7 @@ const { carryOver, effective, requestValues, normalizedPrompt, promptLimit, prom
  *   - `advanced` params sit under the COLLAPSED «Qo'shimcha sozlamalar» (`<details>` without `open`) and are still drawn
  *     once; a model without advanced params has no such section;
  *   - control by type: enum < 7 options → radio group, ≥ 7 → `<select>`; int ≤ 6 values → radio group, longer → stepper;
- *     number → range; bool → switch; extra text → input; image / voice → the honest note, never a dead control;
+ *     number → range; bool → switch; extra text → input; image → upload control (P2b); voice → the honest note, never a dead control;
  *   - a change reaches the model-normalized values (`effective`), the request (`requestValues` = `{modelId}` + schema);
  *   - `carryOver` keeps what the new model accepts (the prompt always) and defaults what it does not.
  *
@@ -109,7 +109,10 @@ test("control by type", () => {
   assert.ok(control("strength").querySelector('input[type="range"]'));
   assert.equal(control("hd").querySelector('[role="switch"]')?.getAttribute("aria-checked"), "false");
   assert.ok(control("negative").querySelector("input[type=text]"));
-  for (const id of ["ref", "voice"]) {
+  // P2b: an image param is a real control (upload + thumbnails, `ImageInputs`); voice is still an honest note.
+  assert.ok(control("ref").querySelector("[data-image-add]"), "image: an add button");
+  assert.ok(control("ref").querySelector('input[type="file"]'), "image: a file input");
+  for (const id of ["voice"]) {
     assert.match(control(id).textContent ?? "", /hali ishlamaydi/, `${id}: an honest note`);
     assert.equal(control(id).querySelectorAll("button, input, select, textarea").length, 0, `${id}: no dead control`);
   }

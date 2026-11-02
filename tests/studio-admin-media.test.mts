@@ -64,7 +64,14 @@ const FAL_USD: Record<string, number> = {
   "recraft/recraft": 0.035,
   "recraft/recraft-pro": 0.21,
 };
-const USD: Record<string, number> = { [NANO]: IMAGE_PRICES["gemini-3.1-flash-lite-image"]!, [GPT]: OPENAI_IMAGE_FALLBACK_USD, ...FAL_USD };
+/** P2b (docs/studio/P2B-SPEC.md): the edit / upscale / background-removal models, managed by the same block. */
+const P2B_USD: Record<string, number> = {
+  "google/nano-banana-edit": IMAGE_PRICES["gemini-3.1-flash-lite-image"]!,
+  "bytedance/seedream-edit": 0.035,
+  "bytedance/seedvr-upscale": 0.0168,
+  "bria/background-remove": 0.018,
+};
+const USD: Record<string, number> = { [NANO]: IMAGE_PRICES["gemini-3.1-flash-lite-image"]!, [GPT]: OPENAI_IMAGE_FALLBACK_USD, ...FAL_USD, ...P2B_USD };
 const STUDIO = TOOL_BY_ID["studio-image"];
 const REASON = "Provayder narxi oshgani uchun ustama tuzatildi";
 const up100 = (n: number) => Math.ceil(n / 100 - 1e-9) * 100;
@@ -158,9 +165,9 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.equal(r.body.markup, 2);
     assert.equal(r.body.soumPerUsd, rate);
-    // The block lists every Studio model by itself (catalog + purpose), the fal ones included (P2a), then the Video
-    // tab's models (P3; their per-clip numbers are checked in tests/studio-video.test.mts).
-    assert.deepEqual(r.body.models.map((m: { modelId: string }) => m.modelId), [NANO, GPT, ...Object.keys(FAL_USD), ...STUDIO_VIDEO_IDS]);
+    // The block lists every Studio model by itself (catalog + purpose): the pictures with the fal ones (P2a), the P2b
+    // edit / utility models, then the Video tab's models (P3; their per-clip numbers are checked in tests/studio-video.test.mts).
+    assert.deepEqual(r.body.models.map((m: { modelId: string }) => m.modelId), [NANO, GPT, ...Object.keys(FAL_USD), ...Object.keys(P2B_USD), ...STUDIO_VIDEO_IDS]);
     for (const m of r.body.models.filter((x) => !STUDIO_VIDEO_IDS.includes(x.modelId))) {
       const usd = USD[m.modelId]!;
       assert.equal(m.costUsd, usd);

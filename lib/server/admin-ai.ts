@@ -47,6 +47,7 @@ const FREE_ENDPOINT_TITLES: Record<FreeLlmEndpoint, string> = {
   rewrite: "qayta yozish",
   polish: "sayqal",
   chat: "AI chat",
+  enhance: "Studio prompt yaxshilash",
 };
 
 /**

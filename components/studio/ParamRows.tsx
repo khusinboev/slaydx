@@ -5,6 +5,7 @@ import type { ClientEntry, ParamSchema } from "@/lib/studio-core";
 import { Card, Row, Segmented, SelectField, Switch } from "@/components/forms/compact";
 import { Field, SettingsDetails } from "@/components/forms/shared";
 import { TextInput } from "@/components/forms/fields";
+import { ImageInputs } from "./ImageInputs";
 import { PROMPT_PARAM, effective, type RawValues } from "./studio-values";
 
 /** From this many options an enum becomes a `<select>` (the forms rule: ≥ 7 → `SelectField`, fewer → `Segmented`). */
@@ -26,8 +27,9 @@ export function intValues(p: Extract<ParamSchema, { type: "int" }>): number[] {
  * (the text param named `prompt`) is the prompt box's field, so it is the only schema param not drawn here.
  *
  * Control by type: enum — `Segmented`, or `SelectField` from 7 options; int — `Segmented` up to 6 values, else a
- * stepper; number — a slider; bool — a switch; any other text — an input. `image` / `voice` params belong to the
- * editing and speech phases and no P1 model has one: they are drawn as an honest note, never as a dead control.
+ * stepper; number — a slider; bool — a switch; any other text — an input; image — the pictures with upload / remove
+ * (P2b, `ImageInputs`). `voice` belongs to the speech phase and no Studio model has one: an honest note, never a dead
+ * control.
  */
 export function ParamRows({ entry, raw, onChange }: { entry: ClientEntry; raw: RawValues; onChange: (name: string, value: unknown) => void }) {
   const values = effective(entry, raw);
@@ -109,6 +111,7 @@ function Control({ param: p, value, onChange }: { param: ParamSchema; value: unk
     case "text":
       return <TextInput value={String(value ?? "")} onChange={(v) => onChange(v.slice(0, p.max))} />;
     case "image":
+      return <ImageInputs param={p} value={Array.isArray(value) ? (value as string[]) : []} onChange={onChange} />;
     case "voice":
       return <p className="text-muted-foreground text-[13.5px]">Bu sozlama Studio rasm bo‘limida hali ishlamaydi.</p>;
   }

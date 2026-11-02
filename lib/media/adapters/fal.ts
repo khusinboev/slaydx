@@ -29,7 +29,7 @@
  *
  * Error texts never contain the key: every message passes `scrub` (the key itself and `Key …` header shapes).
  */
-import { MediaError, checkOutput, isRetryableStatus, type AdapterDeps, type AdapterInput, type MediaAdapter, type MediaOutput, type NormalizedParams } from "../../studio-core";
+import { MediaError, checkOutput, isRetryableStatus, type AdapterAsset, type AdapterDeps, type AdapterInput, type MediaAdapter, type MediaOutput, type NormalizedParams } from "../../studio-core";
 import { IMAGE_RATIOS } from "../../generation/image-studio-options";
 import { safeFetchUrl, type LookupFn } from "../../generation/safe-fetch";
 import { getProviderKey } from "../../server/providers/resolve";
@@ -93,8 +93,15 @@ export const RECRAFT_SIZES: Readonly<Record<Ratio, string | { width: number; hei
 };
 
 export type FalModel = {
-  /** The model's input JSON from the normalized params (+ the engine's composed `prompt` in `extra`). Pure. */
-  body(p: NormalizedParams): Record<string, unknown>;
+  /**
+   * The model's input JSON from the normalized params (+ the engine's composed `prompt` in `extra`) and, for the P2b
+   * edit / utility models, the input pictures (`assets.inputImages`, resolved and ownership-checked by the host). Pure.
+   */
+  body(p: NormalizedParams, inputs?: readonly AdapterAsset[]): Record<string, unknown>;
+  /** Pictures the model needs at least (P2b); a request with fewer is a programmer error, refused before any call. */
+  minInputs?: number;
+  /** The output check, when it differs from the default (PNG / JPEG / WebP); `alpha`: a PNG must carry transparency. */
+  output?: { mimes: readonly string[]; alpha?: boolean };
 };
 
 /**
@@ -174,6 +181,89 @@ export const FAL_MODELS: Readonly<Record<string, FalModel>> = {
     }),
   },
 };
+
+/* ═════════════════════ Studio P2b: edit + utility builders (docs/studio/P2B-SPEC.md) ═════════════════════
+ * Input pictures go to fal INLINE, as `data:` URIs: «models also accept base64-encoded data URIs» (fal CDN docs,
+ * https://fal.ai/docs/documentation/model-apis/fal-cdn.md, read 2026-11-02; the page recommends CDN uploads for files
+ * over a few KB — inputs are capped at 5 MB, a CDN upload step is a listed follow-up).
+ */
+
+/** An input picture as the `data:` URI fal reads (mime as resolved by the host, never a provider URL). */
+export function dataUri(a: AdapterAsset): string {
+  return `data:${a.mime};base64,${a.base64}`;
+}
+
+/** The first input as a data URI; the builder is only reached with one (`minInputs`, checked in `buildRequest`). */
+function firstInput(inputs: readonly AdapterAsset[] | undefined): string {
+  const a = inputs?.[0];
+  if (!a) throw new MediaError(FAL_PROVIDER, "kirish rasmi yo'q");
+  return dataUri(a);
+}
+
+/** Seedream 5 Lite edit takes up to 10 inputs (its schema); the catalog allows 3. */
+export const SEEDREAM_EDIT_MAX_INPUTS = 10;
+
+export const FAL_TOOL_MODELS: Readonly<Record<string, FalModel>> = {
+  // https://fal.ai/models/bytedance/seedream/v5/lite/edit/llms.txt (2026-11-02): `image_urls` (≤ 10), `image_size`
+  // default `auto_2K` (follows the input's frame), $0.035 per picture.
+  "bytedance/seedream/v5/lite/edit": {
+    minInputs: 1,
+    body: (p, inputs) => ({
+      prompt: String(p.prompt ?? ""),
+      image_urls: (inputs ?? []).slice(0, SEEDREAM_EDIT_MAX_INPUTS).map(dataUri),
+      image_size: "auto_2K",
+      num_images: 1,
+      output_format: "jpeg",
+      enable_safety_checker: true,
+      sync_mode: true,
+    }),
+  },
+  // https://fal.ai/models/fal-ai/seedvr/upscale/image/llms.txt (2026-11-02): `upscale_mode: factor` + `upscale_factor`
+  // 1–10 (we sell 2 and 4), `output_format` jpg / png / webp.
+  "fal-ai/seedvr/upscale/image": {
+    minInputs: 1,
+    body: (p, inputs) => ({
+      image_url: firstInput(inputs),
+      upscale_mode: "factor",
+      upscale_factor: String(p.factor) === "4" ? 4 : 2,
+      output_format: "jpg",
+      enable_safety_checker: true,
+      sync_mode: true,
+    }),
+  },
+  // https://fal.ai/models/fal-ai/bria/background/remove/llms.txt (2026-11-02): `image_url`, no prompt (a prompt raises
+  // the price to $0.03), output `image` — a PNG with transparency.
+  "fal-ai/bria/background/remove": {
+    minInputs: 1,
+    output: { mimes: ["image/png"], alpha: true },
+    body: (_p, inputs) => ({ image_url: firstInput(inputs), sync_mode: true }),
+  },
+};
+
+/**
+ * Does a PNG carry transparency: an alpha colour type (4 grey + alpha, 6 RGBA) in IHDR, or a `tRNS` chunk before the
+ * first `IDAT`. `false` for anything that is not a well-formed PNG head. Pure.
+ */
+export function pngHasAlpha(bytes: Uint8Array): boolean {
+  if (bytes.byteLength < 33) return false;
+  const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  if (!sig.every((b, i) => bytes[i] === b)) return false;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const type = (at: number) => String.fromCharCode(bytes[at]!, bytes[at + 1]!, bytes[at + 2]!, bytes[at + 3]!);
+  if (type(12) !== "IHDR") return false;
+  const colour = bytes[25]!;
+  if (colour === 4 || colour === 6) return true;
+  let at = 8;
+  while (at + 8 <= bytes.byteLength) {
+    const len = view.getUint32(at);
+    const t = type(at + 4);
+    if (t === "tRNS") return true;
+    if (t === "IDAT" || t === "IEND") return false;
+    at += 12 + len;
+  }
+  return false;
+}
+/* ═════════════════════ end of the P2b block ═════════════════════ */
 
 /** Removes the key and `Key …` / `Authorization` shapes from a provider text; clips it. */
 export function scrub(text: string, key: string | null | undefined): string {
@@ -296,9 +386,11 @@ export function falAdapter(o: FalDeps = {}): MediaAdapter {
   const pollMaxMs = o.pollMaxMs ?? 3_000;
 
   function buildRequest(input: AdapterInput) {
-    const model = FAL_MODELS[input.upstreamModel];
+    const model = FAL_MODELS[input.upstreamModel] ?? FAL_TOOL_MODELS[input.upstreamModel];
     if (!model) throw new MediaError(FAL_PROVIDER, `unknown fal model ${input.upstreamModel}`);
-    return { url: `https://${FAL_QUEUE_HOST}/${input.upstreamModel}`, headers: { "Content-Type": "application/json" }, body: model.body(input.params) };
+    const inputs = input.assets?.inputImages ?? [];
+    if (inputs.length < (model.minInputs ?? 0)) throw new MediaError(FAL_PROVIDER, `${input.upstreamModel}: kirish rasmi yo'q`);
+    return { url: `https://${FAL_QUEUE_HOST}/${input.upstreamModel}`, headers: { "Content-Type": "application/json" }, body: model.body(input.params, inputs) };
   }
 
   return {
@@ -413,14 +505,16 @@ export function falAdapter(o: FalDeps = {}): MediaAdapter {
         throw accepted(`result: ${e instanceof Error ? e.message : String(e)}`, { retryable: true });
       }
       if (out.status >= 300 && out.status < 400) throw accepted(`result: ${out.status} redirect rad etildi`, { status: out.status });
-      const result = (await json(out, big("result", true))) as { images?: { url?: unknown }[]; has_nsfw_concepts?: unknown } | null;
+      const result = (await json(out, big("result", true))) as { images?: { url?: unknown }[]; image?: { url?: unknown }; has_nsfw_concepts?: unknown } | null;
       if (!out.ok) {
         const d = detailOf(result);
         const safety = d.types.includes(POLICY);
         throw accepted(`${out.status} ${d.text || "result failed"}`, { status: out.status, safety, retryable: !safety && isRetryableStatus(out.status) });
       }
       const nsfw = Array.isArray(result?.has_nsfw_concepts) ? (result!.has_nsfw_concepts as unknown[]) : [];
-      const urls = (Array.isArray(result?.images) ? result!.images : []).map((im, i) => ({ url: typeof im?.url === "string" ? im.url : "", flagged: nsfw[i] === true }));
+      // `images[]` (generate / edit) or a single `image` (upscale, background removal — P2b).
+      const listed = Array.isArray(result?.images) ? result!.images : result?.image && typeof result.image === "object" ? [result.image] : [];
+      const urls = listed.map((im, i) => ({ url: typeof im?.url === "string" ? im.url : "", flagged: nsfw[i] === true }));
       const usable = urls.filter((u) => u.url && !u.flagged);
       if (usable.length === 0) {
         if (urls.some((u) => u.flagged)) throw accepted(`${POLICY}: rasm xavfsizlik filtridan o'tmadi`, { safety: true });
@@ -442,8 +536,10 @@ export function falAdapter(o: FalDeps = {}): MediaAdapter {
           }
         }
         if (!bytes) throw accepted("rasm yuklab olinmadi", { retryable: true });
-        const check = await checkOutput(bytes, IMAGE_SPEC);
+        const spec = FAL_TOOL_MODELS[input.upstreamModel]?.output;
+        const check = await checkOutput(bytes, spec ? { mimes: spec.mimes, maxBytes: IMAGE_SPEC.maxBytes } : IMAGE_SPEC);
         if (!check.ok) throw accepted(`rasm: ${check.error}`, {});
+        if (spec?.alpha && !pngHasAlpha(bytes)) throw accepted("rasm: shaffof fon yo'q (PNG alfa kanali kutilgan edi)", {});
         outputs.push({ kind: "inline", bytes, mime: check.mime });
       }
       return { done: outputs };

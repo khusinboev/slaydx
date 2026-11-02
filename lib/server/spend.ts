@@ -40,7 +40,7 @@ import { trackJobCost, type JobCost } from "../generation/job-cost";
  * eskirgan tab egasining kunlik hisobini yemaydi.
  */
 
-export type FreeLlmEndpoint = "outline" | "udk" | "rewrite" | "polish" | "chat";
+export type FreeLlmEndpoint = "outline" | "udk" | "rewrite" | "polish" | "chat" | "enhance";
 
 export type FreeLlmPolicy = {
   disabled: boolean;
@@ -52,7 +52,7 @@ export type FreeLlmPolicy = {
 
 export const FREE_LLM_DEFAULTS: FreeLlmPolicy = {
   disabled: false,
-  daily: { outline: 20, udk: 20, rewrite: 30, polish: 10, chat: 10 },
+  daily: { outline: 20, udk: 20, rewrite: 30, polish: 10, chat: 10, enhance: 30 },
   globalDaily: 20_000,
 };
 
@@ -61,7 +61,7 @@ export function freeLlmPolicy(): FreeLlmPolicy {
   const f = env.freeLlm;
   return {
     disabled: f.disabled,
-    daily: { outline: f.dailyOutline, udk: f.dailyUdk, rewrite: f.dailyRewrite, polish: f.dailyPolish, chat: f.dailyChat },
+    daily: { outline: f.dailyOutline, udk: f.dailyUdk, rewrite: f.dailyRewrite, polish: f.dailyPolish, chat: f.dailyChat, enhance: f.dailyEnhance },
     globalDaily: f.dailyGlobal,
   };
 }
@@ -81,7 +81,7 @@ let knownDisabled: boolean | undefined;
  * or the env value — and the fail-closed buckets below are unaffected.
  */
 export async function effectiveFreeLlmPolicy(): Promise<FreeLlmPolicy> {
-  const [disabled, outline, udk, rewrite, polish, chat, globalDaily] = await Promise.all([
+  const [disabled, outline, udk, rewrite, polish, chat, globalDaily, enhance] = await Promise.all([
     getSetting("free_llm.disabled"),
     getSetting("free_llm.daily.outline"),
     getSetting("free_llm.daily.udk"),
@@ -89,9 +89,10 @@ export async function effectiveFreeLlmPolicy(): Promise<FreeLlmPolicy> {
     getSetting("free_llm.daily.polish"),
     getSetting("free_llm.daily.chat"),
     getSetting("free_llm.daily.global"),
+    getSetting("free_llm.daily.enhance"),
   ]);
   knownDisabled = disabled;
-  return { disabled, daily: { outline, udk, rewrite, polish, chat }, globalDaily };
+  return { disabled, daily: { outline, udk, rewrite, polish, chat, enhance }, globalDaily };
 }
 
 /** Kill switch for the synchronous route check: last known effective value, env until one is known. */
@@ -116,7 +117,7 @@ function disabledNow(): boolean {
  * «Hammasini tuzatish» ≤6 yozuvchi + 1 baholovchi. Shunda global shift
  * so'rov soni emas, chaqiruvlar soniga yaqin.
  */
-export const FREE_LLM_WEIGHT: Record<FreeLlmEndpoint, number> = { outline: 2, udk: 1, rewrite: 1, polish: 7, chat: 1 };
+export const FREE_LLM_WEIGHT: Record<FreeLlmEndpoint, number> = { outline: 2, udk: 1, rewrite: 1, polish: 7, chat: 1, enhance: 1 };
 
 /**
  * Qisqa oynali chegaralar — o'zgarmadi (chelak nomlari ham eskisi, ya'ni
@@ -127,6 +128,8 @@ export const FREE_LLM_BURST: Partial<Record<FreeLlmEndpoint, { count: number; wi
   outline: { count: 12, windowSec: 600 },
   udk: { count: 30, windowSec: 3600 },
   rewrite: { count: 20, windowSec: 600 },
+  // Studio «Yaxshilash (AI)»: a burst of taps is fine, a loop is not.
+  enhance: { count: 10, windowSec: 600 },
 };
 
 /** «Hammasini tuzatish» — bitta hujjatga kuniga (AUDIT-18 Q-1). */

@@ -335,6 +335,15 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     assert.ok((await exists("media_jobs_submitting_idx")) && (await exists("media_jobs_created_idx")), "066 indexes created");
     // 066 CHECK: a markup outside 1–20 is refused by the database itself.
     await assert.rejects(runSql("INSERT INTO media_model_overrides (model_id, markup) VALUES ('x/y', 0.5)"), /check/i, "066 markup CHECK");
+    // 067: Studio library (docs/studio/P2B-SPEC.md) -- three tables + the seed (40 prompts, 10 templates).
+    assert.ok((await exists("studio_prompts")) && (await exists("studio_templates")) && (await exists("studio_library_previews")), "067 tables created");
+    assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_prompts WHERE seed_key IS NOT NULL"))!.n, "40", "067 seeds 40 prompts");
+    assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_templates WHERE seed_key IS NOT NULL"))!.n, "10", "067 seeds 10 templates");
+    await assert.rejects(runSql("INSERT INTO studio_prompts (category, title, prompt) VALUES ('logo', 'x', repeat('a', 501))"), /check/i, "067 prompt length CHECK");
+    await assert.rejects(runSql("INSERT INTO studio_templates (category, title, model_id, skeleton, params) VALUES ('logo', 'x', 'a/b', 'abc', '[]')"), /check/i, "067 params must be an object");
+    // Re-running the seed never duplicates it (ON CONFLICT (seed_key) DO NOTHING).
+    await runSql(sqlOf("067_studio_library.sql"));
+    assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_prompts"))!.n, "40", "067 is idempotent");
     // 064 rollback fixtures: two questions of its id list (one image + text, one TEXT ONLY) and one outside the list.
     await runSql(`
       INSERT INTO test_banks (slug, title) VALUES ('mig064', 'x');
@@ -346,6 +355,8 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
           FROM (VALUES (396, TRUE), (397, FALSE), (9999999, TRUE)) AS v(id, img);
     `);
     for (const f of [
+      // 067: Studio library (docs/studio/P2B-SPEC.md) -- studio_prompts / studio_templates / studio_library_previews.
+      "067_studio_library.sql",
       // 066: Studio P1 admin overrides (docs/studio/P1-SPEC.md «Admin») -- media_model_overrides.
       "066_media_model_overrides.sql",
       // 065: media engine core (docs/studio/P0-SPEC.md §5) -- media_jobs.
@@ -418,6 +429,9 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
         assert.equal(left[1]!.text, "matn", "a text-only question keeps its text");
         // An id outside the list is never touched.
         assert.equal(left[2]!.text, "matn", "an id outside the list keeps its text");
+      }
+      if (f === "067_studio_library.sql") {
+        assert.ok(!(await exists("studio_prompts")) && !(await exists("studio_templates")) && !(await exists("studio_library_previews")), "067 rollback drops the three tables");
       }
       if (f === "066_media_model_overrides.sql") {
         assert.ok(!(await exists("media_model_overrides")), "066 rollback drops the table");

@@ -23,8 +23,8 @@ export type IntParam = ParamBase & { type: "int"; min: number; max: number; step
 export type NumberParam = ParamBase & { type: "number"; min: number; max: number; default: number };
 export type BoolParam = ParamBase & { type: "bool"; default: boolean };
 export type TextParam = ParamBase & { type: "text"; min: number; max: number; default?: string };
-/** Uploaded asset ids (the host checks ownership); `max` ids at most. */
-export type ImageParam = ParamBase & { type: "image"; max: number; mimes: readonly string[]; maxBytes: number };
+/** Uploaded asset ids (the host checks ownership); `min` (default 0) to `max` ids. */
+export type ImageParam = ParamBase & { type: "image"; min?: number; max: number; mimes: readonly string[]; maxBytes: number };
 export type VoiceParam = ParamBase & { type: "voice"; source: "catalog" | "user-clones"; default?: string };
 
 export type ParamSchema = EnumParam | IntParam | NumberParam | BoolParam | TextParam | ImageParam | VoiceParam;
@@ -119,6 +119,7 @@ export function validate(schema: readonly ParamSchema[], raw: Readonly<Record<st
         const ids = idsOf(v);
         if (ids.some((id) => !ASSET_ID_RE.test(id))) return `${p.label}: fayl identifikatori noto'g'ri`;
         if (ids.length > p.max) return `${p.label}: eng ko'pi ${p.max} ta`;
+        if (ids.length < (p.min ?? 0)) return `${p.label}: rasm yuklang`;
         break;
       }
       case "voice":
