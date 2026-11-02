@@ -30,6 +30,12 @@ import { inRequest } from "./helpers/next-request.mts";
  *   housekeeping interval 1 day → 30 days                                       -> "purge";
  *   (review fix) SFX call priced on `values: p` (all variants) again               -> "sfx" (cost_usd ×4);
  *   (review fix) the per-user stored-bytes check removed from `uploadAudioInput`   -> "uploads + inputs" (200, not 429).
+ * P7c -- provider cost telemetry (every delivered call is one entry of the job's meter: `generations.cost_json`, the
+ * `ai_usage` row the admin cost reports read (`spendForJobs` / `spendBy` tool + kind), and the same number as the job's
+ * succeeded `media_jobs.cost_usd`; a failed call or a failed job leaves no spend). Each turned the named test red, then restored:
+ *   `recordAudioCall` removed from the engine loop                              -> "gating + music", "sfx", "uploads + inputs", "clone";
+ *   the call recorded with `p` (all four variants) instead of one clip's values -> "sfx" (4 × the clip per call);
+ *   a failed call recorded (call in the loop's `catch`)                         -> "gating + music" (the failed job shows spend), "sfx" (4 clips, not 3).
  * Migration 069 (asserted in tests/admin-migrations.test.mts): `billed_seconds` CHECK widened to 3 000, and the
  * ROLLBACK block without its DROP TABLE — both turned that file red, then restored.
  */
@@ -161,6 +167,34 @@ async function runNext(expectId: string) {
 async function idle() {
   await (await db()).query("UPDATE generations SET status = 'REVOKED' WHERE status IN ('QUEUED', 'IN_PROGRESS')");
 }
+/* P7c: what a finished job left for the admin cost reports. */
+const usd6 = (n: number) => Number(n.toFixed(6));
+/** `credits` ElevenLabs credits on the owner's Creator plan ($22 / 121 000 credits). */
+const creditsUsd = (credits: number) => (credits * 22) / 121_000;
+type Part = { kind: string; provider: string; model: string; calls: number; inputTokens: number; outputTokens: number; units: number; usd: number };
+/**
+ * `generations.cost_json`, the admin report's canonical rows for the job (`ai_usage`, via `spendForJobs`) and the sum of
+ * its succeeded `media_jobs.cost_usd` -- three views of one number.
+ */
+async function costOf(genId: string) {
+  const { query, pool } = await db();
+  const { flushAiUsage } = await import("../lib/server/ai-usage.ts");
+  await flushAiUsage();
+  const cj = (await query<{ c: { parts?: Part[]; usd: number; calls: number } | null }>("SELECT cost_json AS c FROM generations WHERE id = $1", [genId]))[0]!.c;
+  const { spendForJobs } = await import("../lib/server/admin-cost.ts");
+  const spend = (await spendForJobs(pool(), [genId])).get(genId);
+  const mediaJobsUsd = Number((await query<{ s: string }>("SELECT COALESCE(sum(cost_usd), 0)::text AS s FROM media_jobs WHERE generation_id = $1 AND status = 'succeeded'", [genId]))[0]!.s);
+  return { cj, spend, mediaJobsUsd };
+}
+/** The admin cost report's total for one tool (`spendBy` "tool") and one part kind, around now. */
+async function reportOf(toolId: string, kind: string) {
+  const { pool } = await db();
+  const { spendBy } = await import("../lib/server/admin-cost.ts");
+  const range = { fromTs: new Date(Date.now() - 3_600_000).toISOString(), toTsExclusive: new Date(Date.now() + 3_600_000).toISOString() };
+  const tool = (await spendBy(pool(), range, "tool")).find((r) => r.key === toolId);
+  const part = (await spendBy(pool(), range, "kind")).find((r) => r.key === kind);
+  return { toolUsd: tool?.usd ?? 0, toolCalls: tool?.calls ?? 0, kindUsd: part?.usd ?? 0, kindUnits: part?.units ?? 0 };
+}
 const wav = (seconds: number) => encodeWav(new Float32Array(Math.round(24_000 * seconds)).map((_, i) => Math.sin(i / 10) * 0.3));
 const pricing = async () => (await import("../lib/server/media/pricing.ts")).mediaPricing();
 const priceOf = async (values: Record<string, unknown>): Promise<number> => (await import("../lib/media/studio-audio.ts")).studioAudioPrice(values, await pricing())!;
@@ -192,6 +226,7 @@ test("gating + music: charge → one /v1/music call → MP3 + media_jobs row + g
   assert.equal(r.status, 202, JSON.stringify(r.body));
   assert.equal(r.body.price, 2_100, "30 s of music at ×2 (P6-SPEC)");
   assert.equal(100_000 - (await balanceOf(me)), r.body.price, "charged the shown price");
+  const reportBefore = await reportOf("studio-audio", "audio");
   const gen = await runNext(r.body.id!);
   assert.equal(gen?.status, "COMPLETED", String(gen?.error));
   const music = calls.filter((c) => c.url.includes("/v1/music"));
@@ -210,6 +245,22 @@ test("gating + music: charge → one /v1/music call → MP3 + media_jobs row + g
   assert.equal(g.items[0]!.modelId, "elevenlabs/music");
   assert.equal(g.items[0]!.audio?.src, `/api/generations/${r.body.id}/file?inline=1`);
 
+  // P7c: the one delivered music call (30 s × 15 credits / s) is the job's provider cost -- in cost_json, in the admin
+  // report's rows (ai_usage), in the tool / kind totals -- and it is the number media_jobs.cost_usd holds.
+  const want = usd6(creditsUsd(30 * 15));
+  assert.ok(want > 0);
+  const c = await costOf(r.body.id!);
+  assert.deepEqual(c.cj?.parts, [{ kind: "audio", provider: "elevenlabs", model: "music_v1", calls: 1, inputTokens: 0, outputTokens: 0, units: 30, usd: want }]);
+  assert.equal(c.cj?.usd, want);
+  assert.equal(c.cj?.calls, 1);
+  assert.equal(c.spend?.usd, want, "the admin cost report sees it");
+  assert.deepEqual(c.spend?.rows.map((x) => x.outcome), ["completed"]);
+  assert.ok(Math.abs(c.mediaJobsUsd - want) < 1e-6, `cost_json == media_jobs.cost_usd (${c.mediaJobsUsd})`);
+  const reportAfter = await reportOf("studio-audio", "audio");
+  assert.ok(Math.abs(reportAfter.toolUsd - reportBefore.toolUsd - want) < 1e-6, "tool total grew by the job's cost");
+  assert.ok(Math.abs(reportAfter.kindUsd - reportBefore.kindUsd - want) < 1e-6, "audio kind total grew by the job's cost");
+  assert.equal(reportAfter.kindUnits - reportBefore.kindUnits, 30);
+
   status = 500;
   t.after(() => void (status = 200));
   await idle();
@@ -221,6 +272,10 @@ test("gating + music: charge → one /v1/music call → MP3 + media_jobs row + g
   assert.match(String(failed?.error), /Kredit qaytariladi/);
   assert.equal(await balanceOf(me), before, "full refund");
   status = 200;
+  // A failed call is not spend: no cost_json, no admin row (the user was refunded and nothing was delivered).
+  const fc = await costOf(bad.body.id!);
+  assert.equal(fc.cj, null);
+  assert.equal(fc.spend, undefined);
 });
 
 test("sfx: 4 variants, one fails → COMPLETED, `delivered` {3, 4}, a quarter back; variant assets are the owner's MP3s", { skip }, async (t) => {
@@ -254,6 +309,18 @@ test("sfx: 4 variants, one fails → COMPLETED, `delivered` {3, 4}, a quarter ba
   assert.equal(costs.length, 4);
   for (const c of costs) assert.ok(Math.abs(c - (5 * 40 * 22) / 121_000) < 1e-6, `one clip's cost, got ${c}`);
   failSfxCall = 0;
+
+  // P7c: 3 of 4 delivered -> exactly THREE clips (5 s × 40 credits each) are the job's provider cost: one `audio` part,
+  // 3 calls, 15 s; the failed variant is billed to nobody and recorded nowhere. The admin report agrees, and so do the
+  // job's three succeeded media_jobs rows (the fourth row is the failed call).
+  const clip = creditsUsd(5 * 40);
+  const c = await costOf(r.body.id!);
+  assert.deepEqual(c.cj?.parts, [{ kind: "audio", provider: "elevenlabs", model: "eleven_text_to_sound_v2", calls: 3, inputTokens: 0, outputTokens: 0, units: 15, usd: usd6(3 * clip) }]);
+  assert.equal(c.cj?.usd, usd6(3 * clip));
+  assert.equal(c.cj?.calls, 3);
+  assert.equal(c.spend?.usd, usd6(3 * clip), "the admin cost report sees three clips, not four and not one");
+  // (media_jobs.cost_usd keeps 6 decimals per row, so three rows may differ from cost_json by up to 1.5e-6.)
+  assert.ok(Math.abs(c.mediaJobsUsd - 3 * clip) < 2e-6, `succeeded media_jobs rows = cost_json (${c.mediaJobsUsd})`);
 });
 
 test("uploads + inputs: sniffed, measured, owner-only; the price follows the server-measured length", { skip }, async (t) => {
@@ -300,6 +367,12 @@ test("uploads + inputs: sniffed, measured, owner-only; the price follows the ser
   assert.equal(file.type, "audio/wav");
   assert.equal(file.size, wav(9.4).byteLength, "the uploaded bytes went to the provider");
   assert.equal(gen?.doc?.studioAudio?.inputSeconds, 10);
+  // P7c: the isolator's cost follows the SERVER-measured input (10 billed seconds × 1 000 credits / min), not the client's 3.
+  const isoUsd = usd6(creditsUsd((10 * 1000) / 60));
+  const ic = await costOf(r.body.id!);
+  assert.deepEqual(ic.cj?.parts, [{ kind: "audio", provider: "elevenlabs", model: "audio-isolation", calls: 1, inputTokens: 0, outputTokens: 0, units: 10, usd: isoUsd }]);
+  assert.equal(ic.spend?.usd, isoUsd);
+  assert.ok(Math.abs(ic.mediaJobsUsd - isoUsd) < 1e-6);
 
   // Stored bytes per user are capped (100 MB live): a user already holding ~100 MB is refused, another user is not.
   for (let i = 0; i < 4; i++) {
@@ -346,6 +419,12 @@ test("clone: the voice changer with another user's clone is refused before charg
   const sts = calls.find((c) => c.url.includes("/v1/speech-to-speech/"));
   assert.equal(sts?.url, `https://api.elevenlabs.io/v1/speech-to-speech/${RACHEL}?output_format=mp3_44100_128`);
   assert.equal((sts!.body as FormData).get("remove_background_noise"), "true");
+  // P7c: the voice changer is priced on the measured input (4 s × 1 000 credits / min).
+  const stsUsd = usd6(creditsUsd((Number(input.body.seconds) * 1000) / 60));
+  const sc = await costOf(lib.body.id!);
+  assert.deepEqual(sc.cj?.parts, [{ kind: "audio", provider: "elevenlabs", model: "eleven_multilingual_sts_v2", calls: 1, inputTokens: 0, outputTokens: 0, units: Number(input.body.seconds), usd: stsUsd }]);
+  assert.equal(sc.spend?.usd, stsUsd);
+  assert.ok(Math.abs(sc.mediaJobsUsd - stsUsd) < 1e-6);
 });
 
 test("purge: inputs older than a day are deleted", { skip }, async () => {
