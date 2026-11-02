@@ -67,8 +67,7 @@ export function speechEntryPrice(entry: PricedEntry, values: Readonly<Record<str
 
 /** The clone price from the setting (an invalid number falls back to the default; never 0). */
 export function clonePriceOf(setting: unknown): number {
-  const n = Number(setting);
-  return Number.isInteger(n) && n >= 100 && n <= STUDIO_CLONE_PRICE_MAX ? n : STUDIO_CLONE_PRICE_DEFAULT;
+  return typeof setting === "number" && Number.isInteger(setting) && setting >= 100 && setting <= STUDIO_CLONE_PRICE_MAX ? setting : STUDIO_CLONE_PRICE_DEFAULT;
 }
 
 /** The text param a model speaks (`text` or the dialogue `script`). */
