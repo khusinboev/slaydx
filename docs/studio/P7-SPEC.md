@@ -20,6 +20,44 @@ chains». Builds on P1–P6 (all on `feat/studio-next`). **No merge to `main`, n
   the same prompt). Gallery shows each generation as usual (group badge optional).
 - Limits: compare counts as N generations for the existing per-user rate / concurrency limits (no bypass).
 
+### P7a — what shipped / decisions (builder, 2026-11-03, branch `feat/studio-p7a`)
+- **Endpoint**: a new `POST /api/studio/compare` (`app/api/studio/compare/route.ts` → `lib/server/studio-compare.ts`),
+  not an extension of `POST /api/generations`. Body `{ kind: "image" | "video", members: [{ values, expectedPrice? }],
+  expectedTotal? }`, header `Idempotency-Key` (UUID, optional). 202 `{ group, total, items: [{ id, modelId, price }] }`.
+- **One pipeline**: `submitGeneration` was split into `prepareGeneration` (every check up to and including the price
+  guard, unchanged order) + the enqueue; the compare batch runs `prepareGeneration` for EVERY model before any charge,
+  so availability, inputs, channel / offer / pause gates and the price (`studioEntryPrice` + `tool_pricing` %) are the
+  single submit's, by construction. `insufficientError` (the 402 wording, video «paid balance only» included) is shared.
+- **Batch rules** (`compareRequestError`): 2–4 DISTINCT models; Rasm = `studio.image` drawing models only (edit /
+  upscale / bgremove refused), Video = `studio.video` models without the effect entry; ONE prompt (equal after the
+  server's normalization); prompt-only — a non-empty image param is refused (no start / end frame in compare).
+- **Transaction**: lock the user row (the `enqueueGeneration` lock), replay check, admission computed as N jobs
+  (`admissionDecision` with in-flight + i / queued + i for the i-th model), then N × (`chargeInTx` with the row's own id
+  as reference + INSERT). A balance below the SUM throws inside the transaction → full rollback → 402 with the sum.
+  `expectedTotal` ≠ server sum → 409 `price_changed` with `price` (sum) and `prices` (per model).
+- **Migration 071**: `generations.compare_group UUID` + `compare_index SMALLINT` (both or neither, index 0..3, CHECK
+  `NOT VALID` so the big table is not scanned under the lock) + partial index `(user_id, compare_group, compare_index)`.
+- **Idempotency**: the client key is stored on the FIRST row only (`generations_user_idem_idx` is unique per key); a
+  replay (same key, same tool, same values per index — JSONB equality) answers the whole batch with
+  `Idempotent-Replayed: true`, charging nothing; any other request under that key → 422 (also a single job's key).
+- **Rate limits**: the route takes one slot of BOTH `gen:burst` (5/min) and `gen:hour` (60/h) per model, so a
+  4-model compare uses 4 of the 5 burst slots.
+- **UI**: `components/studio/compare/*` — `CompareSwitch` (shown when the tab offers ≥ 2 compare models: Rasm in
+  drawing mode, Video), `ComparePanel` (own prompt seeded from the tab, model checklist with per-model price, shared rows
+  via `ParamRows` over a synthetic entry, sticky «Solishtirish · N model · ~X so'm»), `CompareResults` (grid: phone 1
+  column, `sm` 2, `lg` 3, `xl` 4; each cell model label + price, progress / pictures / clip, «Yuklab olish», «Shu
+  modelni tanlash»). Shared rows = same name + type and a non-empty set of values every ticked model accepts (enum
+  options intersection; int values intersection — Omni 5/8 s ∩ Kling 3–15 s = 5/8 s; number range overlap; bool);
+  every other param goes out at the model's own default (`memberValues` sends only shared values).
+- **Deviation**: the switch sits at the top of the tab's form (under the tab bar), not literally inside the model
+  picker — the Video tab's picker lives in `VideoTab.tsx` (not P7a's file). In compare mode the panel replaces the tab's
+  form and, on Rasm, also the results column (the panel spans both columns at `md+`).
+- **StudioPage.tsx hunk**: `useCompare()` + availability + `toggleCompare` / `pickCompared` (one block after the audio
+  tab state), the switch + panel ahead of the tab chain, and two `comparing` conditions (form column span, Rasm results).
+- **Open risk**: the default `queue.user_max_inflight` is 2, so with nothing in flight only 2-model compares are
+  admitted; 3–4 models need the admin to raise it (the 429 says «Solishtirish N ta ish hisoblanadi …»). No gallery
+  group badge (optional; Gallery is P7b's file).
+
 ## P7b — chains («Keyingi qadam») and favourites
 - **Chains = handoffs, not new engines**: on a finished picture (results + gallery) «Videoga aylantirish» opens the
   Video tab with that picture as the start frame of an image→video model (the picture travels as an asset the user
