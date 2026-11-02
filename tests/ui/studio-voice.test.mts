@@ -24,7 +24,7 @@ const { cloneBlocker } = await import("../../components/studio/voice/ClonePanel.
  *     no «Fon musiqa» (P6) control is drawn;
  *   - voice list: filter chips Hammasi / Erkak / Ayol / Mening ovozlarim (the last only for a model that takes clones),
  *     each chip filters the rows; a row's ▶ mounts ONE preview player for that voice (nothing before the click);
- *   - the price on the button = the server formula («Ovozlash · ElevenLabs v3 · ~2 100 so'm» for 1 000 characters), the
+ *   - the price on the button = the server formula («Ovozlash · ElevenLabs v3 · ~4 700 so'm» for 1 000 characters), the
  *     character line with «~N s»; the submit sends slug `studio-speech`, `{modelId, …schema}` and that `expectedPrice`;
  *   - «every param must work»: each schema param of the chosen model has exactly one `data-field`;
  *   - clone: the consent checkbox is REQUIRED (button disabled, the reason shown); with it, the sample upload carries
@@ -177,15 +177,15 @@ test("price button, character line, request; every schema param has exactly one 
   await type("[data-voice-text] textarea", text);
   assert.equal(txt("[data-voice-chars]"), "1 000 / 4 000 belgi · ~67 s");
   const price = studioSpeechPrice({ modelId: ids[0], text }, RATE)!;
-  assert.equal(price, 2100);
-  assert.match(txt("[data-studio-submit]"), /Ovozlash · ElevenLabs v3 · ~2 100/);
+  assert.equal(price, 4700);
+  assert.match(txt("[data-studio-submit]"), /Ovozlash · ElevenLabs v3 · ~4 700/);
   for (const p of SPEECH[0]!.params) assert.equal(qa(`[data-field="${p.name}"]`).length, 1, `data-field ${p.name}`);
   await click(q('[data-voice-pick="pNInz6obpgDQGcFmaJgB"]'));
   await click(q("[data-studio-submit]"));
   await settle();
   const post = a.posts()[0]!;
   assert.equal(post.body!.slug, "studio-speech");
-  assert.equal(post.body!.expectedPrice, 2100);
+  assert.equal(post.body!.expectedPrice, 4700);
   assert.deepEqual(post.body!.values, { modelId: "elevenlabs/eleven-v3", text, voice: "pNInz6obpgDQGcFmaJgB", speed: "1", stability: "0.5", lang: "uz" });
   // Dialogue: its params, one data-field each; the script keeps its lines in the request.
   await click(qa('[data-voice-mode] [role="radio"]').find((b) => b.textContent === "Suhbat"));

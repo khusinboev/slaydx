@@ -253,12 +253,23 @@ export type TtsPriceRow =
  * `gemini-3.1-flash-tts-preview` has no published price yet: it is deliberately
  * absent, so using it is flagged «unpriced» instead of guessed.
  */
+/** ElevenLabs Creator plan: $22 for 121 000 credits (1 credit = 1 eleven_v3 character), per 1M characters. */
+export const ELEVENLABS_CREATOR_USD_PER_M_CHARS = (22 / 121_000) * 1_000_000;
+
 export const TTS_PRICING: readonly TtsPriceRow[] = [
   { billing: "tokens", provider: "gemini", model: "gemini-2.5-flash-preview-tts", inUsdPerM: 0.5, outUsdPerM: 10, note: "Gemini 2.5 Flash TTS preview — $0.50/M text-in + $10/M audio-out" },
   { billing: "tokens", provider: "gemini", model: "gemini-2.5-pro-preview-tts", inUsdPerM: 1, outUsdPerM: 20, note: "Gemini 2.5 Pro TTS preview — $1/M text-in + $20/M audio-out" },
   { billing: "chars", provider: "azure", usdPerMChars: 16, note: "Azure Neural TTS — $16/1M chars" },
   { billing: "chars", provider: "google", usdPerMChars: 16, note: "Google Cloud TTS Neural2 — $16/1M chars" },
-  { billing: "chars", provider: "elevenlabs", usdPerMChars: 80, note: "ElevenLabs API — eleven_v3 / Multilingual v2 $0.08 per 1K chars (https://elevenlabs.io/pricing/api, checked 2026-10-24)" },
+  /*
+   * ElevenLabs: the REAL cost of the plan the owner pays (owner decision 2026-11-02): Creator $22 / month for 121 000
+   * credits (https://elevenlabs.io/pricing, read 2026-11-02), eleven_v3 = 1 credit per character →
+   * $22 / 121 000 × 1 000 000 ≈ $181.82 per 1M characters (≈ $0.182 / 1 000). The pay-as-you-go API list price
+   * ($0.08 / 1K, https://elevenlabs.io/pricing/api) is NOT what we pay. This row is cost telemetry (cost_json, admin cost
+   * reports) and the Studio «Ovoz» cost basis (`lib/media/catalog-speech.ts`); the podcast / greeting «Premium ovoz»
+   * PRICE is its own constant (`PREMIUM_VOICE_SOUM_PER_MIN`) and does not change.
+   */
+  { billing: "chars", provider: "elevenlabs", usdPerMChars: ELEVENLABS_CREATOR_USD_PER_M_CHARS, note: "ElevenLabs Creator plan — $22 / 121 000 credits ≈ $0.182 per 1K chars (owner's real plan cost, 2026-11-02)" },
   { billing: "chars", provider: "aisha", soumPerChar: 1, note: "Aisha AI — 1 so'm/char (converted with the admin rate finance.soum_per_usd, env SOUM_PER_USD by default)" },
 ];
 

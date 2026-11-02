@@ -77,7 +77,7 @@ test("runMedia: inside a job — succeeded and failed rows", { skip }, async (t)
   await withMediaContext(ctx, () => runMedia({ purpose: "podcast.voice", modelId: "elevenlabs/tts", values: { text: "x".repeat(2000) }, redact: ["text"], step: "speech:0:elevenlabs", adapters: { "elevenlabs-speech": { ...adapter([]), id: "elevenlabs-speech", submit: async () => ({ done: [{ kind: "inline", bytes: new Uint8Array([0x49, 0x44, 0x33, 3, 0, 0, 0, 0, 0, 0, 0, 0]), mime: "audio/mpeg" }] }) } } }));
   const speech = (await mediaJobsOf(gen)).find((r) => r.idempotency_key.endsWith(":speech:0:elevenlabs"))!;
   assert.deepEqual(speech.params.text, { chars: 2000 }, "redacted text is stored as its length");
-  assert.equal(Number((speech as unknown as { cost_usd: string }).cost_usd), 0.16, "the quote still prices the full text");
+  assert.equal(Number((speech as unknown as { cost_usd: string }).cost_usd), 0.363636, "the quote still prices the full text (2 000 chars × the Creator-plan $22 / 121 000, owner 2026-11-02)");
   assert.deepEqual(rows.map((r) => [r.idempotency_key, r.status]), [[`${gen}:image:0`, "succeeded"], [`${gen}:image:1`, "failed"]]);
   assert.deepEqual(rows[0].outputs, [{ mime: "image/png", size: PNG.byteLength }]);
   assert.equal(Number((rows[0] as unknown as { cost_usd: string }).cost_usd), 0.034);

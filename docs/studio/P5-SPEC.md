@@ -29,13 +29,19 @@ P1 (Studio shell, cost × markup), P3 (tab bar). Owner decisions 2026-11-02 are 
 ## Models, endpoints, prices (read 2026-11-02; so'm at ×2, 12 700 so'm/$)
 | Catalog id | Endpoint | Params (each changes request or price: probe test) | USD | so'm |
 |---|---|---|---|---|
-| `elevenlabs/eleven-v3` (default) | `POST /v1/text-to-speech/{voice}?output_format=mp3_44100_128`, `model_id: eleven_v3` | text ≤ 4 000, voice (library or own clone), speed 0.8–1.2 (`voice_settings.speed`), Kayfiyat = stability 0 / 0.5 / 1, language (16 of our 18) | 0.08 / 1 000 chars | 1 000 chars 2 100 · 140 chars 300 |
+| `elevenlabs/eleven-v3` (default) | `POST /v1/text-to-speech/{voice}?output_format=mp3_44100_128`, `model_id: eleven_v3` | text ≤ 4 000, voice (library or own clone), speed 0.8–1.2 (`voice_settings.speed`), Kayfiyat = stability 0 / 0.5 / 1, language (16 of our 18) | 0.1818 / 1 000 chars (Creator plan) | 1 000 chars 4 700 · 140 chars 700 |
 | `google/gemini-tts` | existing Gemini TTS adapter (`TTS_GEMINI_MODEL`, ≤ 1 400 chars per call, chunks joined) | text, voice (12 prebuilt) | 0.016833 / 1 000 chars (quote) | 1 000 chars 500 |
-| `elevenlabs/v3-dialogue` | `POST /v1/text-to-dialogue`, `{inputs:[{text, voice_id}], model_id: eleven_v3, settings:{stability}}` | script ≤ 2 000 («Ism: gap» lines, 2 speakers), voice1, voice2, Kayfiyat, language | 0.08 / 1 000 chars | as v3 |
+| `elevenlabs/v3-dialogue` | `POST /v1/text-to-dialogue`, `{inputs:[{text, voice_id}], model_id: eleven_v3, settings:{stability}}` | script ≤ 2 000 («Ism: gap» lines, 2 speakers), voice1, voice2, Kayfiyat, language | 0.1818 / 1 000 chars | as v3 |
 | `google/gemini-dialogue` | Gemini multi-speaker (`multiSpeakerVoiceConfig`, one call) | script ≤ 1 400, voice1, voice2 | 0.016833 / 1 000 chars | as Gemini |
 | `elevenlabs/voice-clone` | `POST /v1/voices/add` (multipart `name`, `files`, `remove_background_noise=false`) → `voice_id`; `DELETE /v1/voices/{id}`; slots `GET /v1/user/subscription` (`voice_slots_used`, `voice_limit`) | name, sample | no per-call price | fixed 5 000 |
 
-Sources: https://elevenlabs.io/pricing/api (v3 $0.08 / 1K chars), https://elevenlabs.io/pricing (Starter $6 / 30 000
+**ElevenLabs cost basis (owner decision 2026-11-02):** the REAL plan cost — Creator $22 / 121 000 credits, 1 credit per
+eleven_v3 character → $22 / 121 000 × 1 000 ≈ $0.1818 per 1 000 characters (`ELEVENLABS_CREATOR_USD_PER_M_CHARS` in
+`lib/generation/llm-pricing.ts` `TTS_PRICING`, which the Studio catalog reads). The same row is the podcast / greeting
+premium voice's COST telemetry (now truthful in admin cost reports); their PRICE (`PREMIUM_VOICE_SOUM_PER_MIN`) is
+unchanged. The $0.08 API list price is not what the owner pays.
+
+Sources: https://elevenlabs.io/pricing/api (v3 list price $0.08 / 1K chars), https://elevenlabs.io/pricing (Starter $6 / 30 000
 credits, 10 custom voice slots; Creator $22 / 121 000, 30 slots), https://elevenlabs.io/docs/overview/models (eleven_v3:
 Uzbek, 5 000 chars / request), https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert (≤ 2 000 chars, ≤ 10
 voices), …/voices/ivc/create, …/voices/delete, …/user/subscription/get, …/text-to-speech/convert (voice_settings).

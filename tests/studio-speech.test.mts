@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
  * Studio P5 «Ovoz» — pure parts (docs/studio/P5-SPEC.md). No DB, no network (every provider call is a stubbed fetch).
  *
  *   catalog     the five P5 entries + purposes `studio.speech` / `studio.clone`; costs from the price book (ElevenLabs
- *               $0.08 / 1 000 chars, Gemini Flash TTS quote); the ElevenLabs language list = the adapter's;
+ *               Creator plan $22 / 121 000 credits ≈ $0.1818 / 1 000 chars (owner 2026-11-02), Gemini Flash TTS quote); the ElevenLabs language list = the adapter's;
  *   request     golden bodies: ElevenLabs TTS (voice in the URL, eleven_v3, language, speed, stability), text-to-dialogue
  *               (one input per turn), the IVC multipart form; the Gemini single / two-speaker bodies;
  *   probe       «every param must work»: each param of each speech model changes the provider request or the price,
@@ -106,8 +106,9 @@ test("catalog: the P5 entries, their purposes and price-book costs", () => {
   assert.deepEqual(MEDIA_PURPOSES.byId("studio.clone")!.allowed, [CLONE]);
   for (const id of [EL_TTS, GM_TTS, EL_DIA, GM_DIA, CLONE]) assert.equal(MEDIA_CATALOG.byId(id)!.kind, "speech", id);
   const row = TTS_PRICING.find((r) => r.provider === "elevenlabs" && r.billing === "chars") as { usdPerMChars: number };
-  assert.equal(row.usdPerMChars, 80, "ElevenLabs v3 $0.08 / 1 000 characters (https://elevenlabs.io/pricing/api)");
-  for (const id of [EL_TTS, EL_DIA]) assert.equal((MEDIA_CATALOG.byId(id)!.cost as { usd: number }).usd, 0.08);
+  // Owner 2026-11-02: the REAL Creator-plan cost ($22 / 121 000 credits, 1 credit per eleven_v3 character), not the $0.08 list price.
+  assert.equal(row.usdPerMChars, (22 / 121_000) * 1_000_000, "ElevenLabs Creator plan ≈ $181.82 / 1M characters");
+  for (const id of [EL_TTS, EL_DIA]) assert.equal((MEDIA_CATALOG.byId(id)!.cost as { usd: number }).usd, 22 / 121, `${id}: $0.1818 / 1 000 characters`);
   // Gemini Flash TTS: 1 000 chars / 15 chars/s × 25 tokens/s × $10/M + 1 000/3 text tokens × $0.50/M.
   assert.equal(sp.geminiUsdPerKchar(), 0.016833);
   assert.equal((MEDIA_CATALOG.byId(EL_DIA)!.cost as { textParam: string }).textParam, "script");
@@ -286,18 +287,18 @@ test("errors: clone answer without a voice_id is accepted (the voice may exist);
 
 test("price goldens: characters × model × markup, rounded UP to 100; override; tool_pricing %", () => {
   const k = "x".repeat(1000);
-  assert.equal(rules.studioSpeechPrice({ modelId: EL_TTS, text: k }, PRICING), 2100, "0.08 × 12 700 × 2 = 2 032 → 2 100");
+  assert.equal(rules.studioSpeechPrice({ modelId: EL_TTS, text: k }, PRICING), 4700, "0.181818 × 12 700 × 2 = 4 618.2 → 4 700 (Creator plan)");
   assert.equal(rules.studioSpeechPrice({ modelId: EL_TTS, text: "x" }, PRICING), 100, "one character still costs a step");
-  assert.equal(rules.studioSpeechPrice({ modelId: EL_TTS, text: "x".repeat(140) }, PRICING), 300, "canvas «~280 so'm» ≈ 140 characters");
+  assert.equal(rules.studioSpeechPrice({ modelId: EL_TTS, text: "x".repeat(140) }, PRICING), 700, "140 characters: 646.5 → 700");
   assert.equal(rules.studioSpeechPrice({ modelId: GM_TTS, text: k }, PRICING), 500, "0.016833 × 25 400 = 427.6 → 500");
-  assert.equal(rules.studioSpeechPrice({ modelId: EL_DIA, script: `A: ${"x".repeat(497)}\nB: ${"y".repeat(497)}` }, PRICING), 2100, "the script's 1 000 normalized characters");
+  assert.equal(rules.studioSpeechPrice({ modelId: EL_DIA, script: `A: ${"x".repeat(497)}\nB: ${"y".repeat(497)}` }, PRICING), 4700, "the script's 1 000 normalized characters");
   // Whitespace runs collapse before pricing (the server sees the same text).
-  assert.equal(rules.studioSpeechPrice({ modelId: EL_TTS, text: `${"x".repeat(500)}      \n\n${"x".repeat(499)}` }, PRICING), 2100);
-  assert.equal(rules.studioSpeechPrice({ modelId: EL_TTS, text: k }, { ...PRICING, overrides: { [EL_TTS]: { markup: 3 } } }), 3100, "the model's markup wins");
+  assert.equal(rules.studioSpeechPrice({ modelId: EL_TTS, text: `${"x".repeat(500)}      \n\n${"x".repeat(499)}` }, PRICING), 4700);
+  assert.equal(rules.studioSpeechPrice({ modelId: EL_TTS, text: k }, { ...PRICING, overrides: { [EL_TTS]: { markup: 3 } } }), 7000, "the model's markup wins: 6 927.3 → 7 000");
   assert.equal(rules.studioSpeechPrice({ modelId: "elevenlabs/tts", text: k }, PRICING), null, "not a Studio model");
   const adj = { percent: 150, roundTo: 100 as const };
-  assert.equal(tools.basePriceFor(tools.TOOL_BY_ID["studio-speech"], { modelId: EL_TTS, text: k }, PRICING), 2100);
-  assert.equal(applyPriceAdjust(2100, adj), 3200);
+  assert.equal(tools.basePriceFor(tools.TOOL_BY_ID["studio-speech"], { modelId: EL_TTS, text: k }, PRICING), 4700);
+  assert.equal(applyPriceAdjust(4700, adj), 7100);
 });
 
 test("price: clone is the fixed setting (+ its tool %), never cost × markup", () => {

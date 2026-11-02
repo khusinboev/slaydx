@@ -215,7 +215,7 @@ test("the operator's TTS_VOICE_<LANG>=elevenlabs:<id> replaces the default premi
 
 /* ══════════════════════════ cost, registry, availability ══════════════════════════ */
 
-test("cost: recordTts books the synthesis at the ElevenLabs price ($80 per 1M characters)", async () => {
+test("cost: recordTts books the synthesis at the ElevenLabs Creator-plan cost (~$181.82 per 1M characters)", async () => {
   const { fetchImpl } = stubFetch(() => audioResponse());
   const chain = makeTtsChain({ providers: [makeElevenLabsTts({ fetchImpl, key: () => KEY })], env: {} as NodeJS.ProcessEnv, log: () => {} });
   const text = "a".repeat(800);
@@ -225,8 +225,10 @@ test("cost: recordTts books the synthesis at the ElevenLabs price ($80 per 1M ch
   const cost = tracked.snapshot().toJson();
   const part = cost.parts?.find((p) => p.provider === "elevenlabs");
   assert.ok(part, "an elevenlabs cost part was recorded");
-  assert.equal(part.usd, 0.064, "800 chars x $80/1M");
-  assert.equal(ttsCost({ provider: "elevenlabs", chars: 1_000_000 }).usd, 80);
+  // Owner 2026-11-02: 800 chars × $22 / 121 000 credits = $0.145455 (the price book rounds to 6 decimals).
+  assert.equal(part.usd, 0.145455, "800 chars x Creator-plan cost");
+  // Owner 2026-11-02: the cost telemetry is the REAL Creator-plan cost ($22 / 121 000 credits), not the $0.08 list price.
+  assert.equal(ttsCost({ provider: "elevenlabs", chars: 1_000_000 }).usd, 181.818182);
 });
 
 test("registry: elevenlabs is implemented; availability follows key AND the admin switch; no key = unavailable", () => {

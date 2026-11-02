@@ -6,10 +6,10 @@
  * Client-safe (no server imports) and NOT importing `catalog.ts` (that file imports this one).
  *
  * PROVIDER COSTS (USD), read 2026-11-02:
- *   ElevenLabs v3        $0.08 per 1 000 characters — https://elevenlabs.io/pricing/api («v3: $0.08»), the same row
- *                        `TTS_PRICING` holds for the podcast / greeting premium voice (one price book).
- *                        NOTE (owner): on the Starter plan ($6 / 30 000 credits, https://elevenlabs.io/pricing) the
- *                        effective cost is $0.20 / 1 000 — see P5-SPEC «Owner actions».
+ *   ElevenLabs v3        the REAL plan cost (owner decision 2026-11-02): Creator $22 / 121 000 credits ≈ $0.1818 per
+ *                        1 000 characters (https://elevenlabs.io/pricing) — the `TTS_PRICING` row
+ *                        (`ELEVENLABS_CREATOR_USD_PER_M_CHARS`), one price book with the podcast's cost telemetry. The
+ *                        API list price ($0.08, https://elevenlabs.io/pricing/api) is not what the owner pays.
  *   ElevenLabs dialogue  the same v3 character price (text-to-dialogue runs `eleven_v3`, its default model).
  *   Gemini TTS           token-billed: $10 / 1M audio-out tokens + $0.50 / 1M text-in (`TTS_PRICING`, Flash TTS row),
  *                        25 audio tokens / s (`GEMINI_AUDIO_TOKENS_PER_SECOND`). The quote assumes Uzbek speech at
