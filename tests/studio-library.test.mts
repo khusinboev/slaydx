@@ -445,6 +445,10 @@ test("preview route: IP rate limit (300 / min), like its sibling library routes 
     const req = new Request(`http://localhost/api/media/library/preview/${"0".repeat(24)}`, { headers: { "x-forwarded-for": ip } });
     return (await inRequest(req, () => (previewRoute.GET as Handler)(req, { params: Promise.resolve({ id: "0".repeat(24) }) }))).status;
   };
+  // The limiter is a fixed 60 s window on the wall clock: 301 calls that straddle a window boundary would start a new
+  // count (CI flake 2026-11-03). Start with at least 15 s of the current window left.
+  const left = 60_000 - (Date.now() % 60_000);
+  if (left < 15_000) await new Promise((r) => setTimeout(r, left + 50));
   for (let i = 0; i < 300; i++) assert.equal(await get(), 404, `call ${i + 1}`);
   assert.equal(await get(), 429, "the 301st call in a minute");
 });
