@@ -33,12 +33,13 @@ import { inRequest } from "./helpers/next-request.mts";
  *              "adapter: unknown output type"; cancel PUT removed -> "adapter: timeout after submit";
  *   request    Ideogram `quality` hard-coded "medium" -> "differential probe", "golden bodies"; Seedream sizes swapped to
  *              the 1K presets -> "golden bodies"; flux `aspect_ratio` fixed "1:1" -> "differential probe";
- *   price      Ideogram `by` table removed -> "price goldens"; Ideogram added to the live-cost block -> "price goldens"
- *              (live block keeps the quality price); flux price 0.048 -> 0.03 in the book -> "price goldens";
- *   available  `fal` provider check skipped (always keyed) -> "availability";
- *   flow       engine sends the fal model through `BASE_OF` fallback (Nano Banana) -> "flow"; `imageCount` passed to
- *              the per-picture values -> "flow" (row cost ×N); refusal prefix `moderation_blocked` dropped in
- *              `failureOf` -> "flow: all refused" (generic message); recordImageUsd removed -> "flow" (no fal spend part);
+ *   price      Ideogram `by` table removed -> "price goldens", "differential probe", "flow"; Ideogram added to the
+ *              live-cost block (skip removed AND a book row `ideogram/v4.5` added) -> "price goldens", "flow"; flux price
+ *              0.048 -> 0.03 in the book -> "price goldens", "probe", "flow";
+ *   flow       `imageCount` reaching the per-picture values (engine passes it AND `coreAdapterImageProvider` lets it win)
+ *              -> "flow" (row cost × N, pictures × N); refusal prefix `moderation_blocked` dropped in `failureOf` ->
+ *              "flow: all refused" (generic message), "admin wiring"; recordImageUsd removed -> "flow" (no fal spend part);
+ *              key check skipped for fal in availability -> "availability", "flow" (charged without a key);
  *   admin      `media:` branch removed from providerOfBreaker -> "admin wiring"; falMessage diff check removed ->
  *              "probe"; imageModelLabel catalog fallback removed -> "admin wiring" (viewer says nothing).
  */
@@ -87,7 +88,7 @@ const B64 = JPEG.toString("base64");
 const DATA_URI = `data:image/jpeg;base64,${B64}`;
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
 
-type Call = { url: string; method: string; headers: Record<string, string>; body: unknown };
+type Call = { url: string; method: string; headers: Record<string, string>; body: unknown; redirect?: string };
 /** A fake fal: `handler` answers each call; every call is recorded (url, method, headers, parsed body). */
 function fakeFal(handler: (c: Call, n: number) => Response | Promise<Response>) {
   const calls: Call[] = [];
@@ -97,6 +98,7 @@ function fakeFal(handler: (c: Call, n: number) => Response | Promise<Response>) 
       method: String(init.method ?? "GET"),
       headers: Object.fromEntries(Object.entries((init.headers ?? {}) as Record<string, string>)),
       body: typeof init.body === "string" ? JSON.parse(init.body) : null,
+      redirect: init.redirect,
     };
     calls.push(c);
     return handler(c, calls.length - 1);
@@ -156,6 +158,7 @@ test("adapter: submit → IN_QUEUE → IN_PROGRESS → COMPLETED → result; key
   for (const c of fal.calls) {
     assert.equal(c.headers.Authorization, `Key ${KEY}`);
     assert.ok(!c.url.includes(KEY));
+    assert.equal(c.redirect, "manual", `${c.method} ${c.url}: a redirect is never followed with the key`);
   }
   assert.equal(fal.calls[0]!.headers["X-Fal-Request-Start-Timeout"], "60", "fal drops the job if it cannot start before our deadline");
   assert.ok(!JSON.stringify(fal.calls[0]!.body).includes(KEY), "no key in the body");

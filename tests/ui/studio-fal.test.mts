@@ -27,7 +27,7 @@ const { MEDIA_CATALOG } = await import("../../lib/media/catalog.ts");
  *     high-quality price × count; the request carries `quality`; a model without the param never sends it.
  *
  * Mutations (each turned the named tests red, then restored):
- *   Ideogram's `quality` param removed from the catalog          -> «Ideogram: the Sifat row…»;
+ *   Ideogram's `quality` param removed from the catalog          -> the file fails to load (defineCatalog: cost reads an unknown param);
  *   Ideogram's cost `by` table removed                           -> «Ideogram: the Sifat row…» (price stays 1 600 × n);
  *   a fal model dropped from `studio.image.allowed`              -> «seven models…» (the real-catalog list).
  */
