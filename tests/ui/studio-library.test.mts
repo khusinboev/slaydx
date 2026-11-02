@@ -14,6 +14,7 @@ const { dropMediaCatalog } = await import("../../components/studio/studio-api.ts
 const { dropLibraryCache } = await import("../../components/studio/LibrarySheet.tsx");
 const { dropTemplatesCache } = await import("../../components/studio/TemplatesRow.tsx");
 const { formatSom } = await import("../../lib/format.ts");
+const { Gallery } = await import("../../components/studio/Gallery.tsx");
 
 /**
  * Studio P2b UI (docs/studio/P2B-SPEC.md) with the API stubbed at `fetch` and the REAL catalog entries:
@@ -27,13 +28,14 @@ const { formatSom } = await import("../../lib/format.ts");
  *              an edit without a picture sends nothing;
  *   tools      «Sifatini oshirish» on a finished picture → `POST /api/media/inputs/from-result {generationId, assetId}`
  *              → upscale mode (no prompt box), `factor` is a real control (×4 reaches the request);
- *   enhance    «Yaxshilash (AI)» sends the prompt, puts the rewrite in the box; disabled under 3 characters.
+ *   enhance    «Yaxshilash (AI)» sends the prompt, puts the rewrite in the box; disabled under 3 characters;
+ *   gallery    the picture tools are drawn on picture items only, never on a P3 video item.
  *
  * Mutations (each turned the named test(s) red, then restored) — see docs/studio/P2B-SPEC.md «Mutations»:
  *   LibrarySheet `onPick` not called -> "samples"; applyTemplate drops `t.params` -> "templates";
  *   TemplateSlots without `<Field>` -> "templates"; requestValues sends the id list as an array -> "upload", "tools";
  *   pictureTool skips `inputFromResult` -> "tools"; enterMode keeps the image catalog -> "upload" (wrong models);
- *   enhance writes nothing back -> "enhance".
+ *   enhance writes nothing back -> "enhance"; the `!it.video` guard dropped in Gallery -> "gallery".
  */
 
 Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
@@ -262,4 +264,27 @@ test("enhance: sends the prompt, writes the rewrite back; disabled under 3 chara
   assert.deepEqual(call?.body, { prompt: "Registon" });
   assert.equal(prompt()!.value, "Samarqand Registon maydoni, oltin soat, keng burchakli kadr");
   assert.equal(api.posts().length, 0, "free: nothing is generated");
+});
+
+test("gallery: the picture tools sit on picture items only, never on a video item", async () => {
+  const img = "66666660-6666-4666-8666-666666666666";
+  const vid = "66666661-6666-4666-8666-666666666666";
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown) => {
+    if (String(input).startsWith("/api/media/gallery"))
+      return json(200, {
+        items: [
+          { id: img, createdAt: "2026-11-02T10:00:00.000Z", modelId: NANO.id, modelLabel: "Nano Banana", prompt: "rasm", images: [{ url: `/api/generations/${img}/assets/abc123`, w: 1, h: 1 }], fileUrl: `/api/generations/${img}/file` },
+          { id: vid, kind: "video", video: { seconds: 5 }, createdAt: "2026-11-02T10:00:00.000Z", modelId: "google/omni-video", modelLabel: "Veo", prompt: "video", images: [{ url: `/api/generations/${vid}/assets/abc124`, w: 1, h: 1 }], fileUrl: `/api/generations/${vid}/file` },
+        ],
+        nextCursor: null,
+      });
+    return json(404, {});
+  };
+  const used: string[] = [];
+  render(h(AppRouterContext.Provider, { value: router }, h(Gallery, { onCreate: () => {}, onOtherModel: () => {}, onTool: (m: string, p: { url: string }) => void used.push(`${m} ${p.url}`) })));
+  await settle();
+  assert.ok(q(`[data-gallery-item="${img}"] [data-picture-tools]`), "a picture item has the tools");
+  assert.ok(!q(`[data-gallery-item="${vid}"] [data-picture-tools]`), "a video item has none");
+  await click(q(`[data-gallery-item="${img}"] [data-result-action="bgremove"]`));
+  assert.deepEqual(used, [`bgremove /api/generations/${img}/assets/abc123`]);
 });
