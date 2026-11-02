@@ -123,7 +123,7 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
   fal: {
     billing: "paid",
     priceNote: "Oldindan to'lanadi (balans) · rasm $0.03–0.22 / dona, modelga qarab (Studio'dagi narx = tannarx × ustama)",
-    role: "Studio «Rasm» bo'limidagi qo'shimcha modellar: FLUX 3, Seedream 5, Ideogram 4.5, Recraft 4.1, Qwen Image 3. Kalitsiz bu modellar foydalanuvchiga ko'rinmaydi.",
+    role: "Studio «Rasm» bo'limidagi qo'shimcha modellar: FLUX 3, Seedream 5 Lite / Pro, Ideogram 4.5, Recraft 4.1 / Pro. Kalitsiz bu modellar foydalanuvchiga ko'rinmaydi.",
     need: "optional",
     keyless: false,
     keyUrl: "https://fal.ai/dashboard/keys",
@@ -196,7 +196,7 @@ export const PURPOSES: readonly Purpose[] = [
     title: "AI rasm yaratish",
     summary: "«Rasm» vositasi, Studio, pro-slayddagi AI rasmlar va bitiruvchi portreti.",
     need: "required",
-    minimum: "Gemini (Nano Banana) yetarli. ChatGPT va fal.ai (Studio'dagi FLUX, Seedream, Ideogram, Recraft, Qwen) — foydalanuvchiga qo'shimcha tanlov, shart emas.",
+    minimum: "Gemini (Nano Banana) yetarli. ChatGPT va fal.ai (Studio'dagi FLUX, Seedream, Ideogram, Recraft) — foydalanuvchiga qo'shimcha tanlov, shart emas.",
     providers: ["gemini", "openai-image", "fal"],
     premium: [],
     requires: "gemini",

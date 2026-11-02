@@ -182,14 +182,18 @@ export const IMAGE_PRICES: Record<string, number> = {
    *                                            (per-MP billing: a non-square 1k frame is assumed to bill as 1 MP, UNVERIFIED;
    *                                            the admin «Tekshirish» compares fal's own unit price with this book)
    *   bytedance/seedream/v5/lite/text-to-image «$0.035 per images» (flat, any size)
+   *   bytedance/seedream/v5/pro/text-to-image  «Tentative pricing is $0.0675 per output image for an area up to and including
+   *                                            1536 × 1536 pixels» ($0.135 above) — the adapter's Pro sizes stay ≤ 2.1 MP;
+   *                                            fal marks it «Final pricing is not yet confirmed» (UNVERIFIED until final)
    *   fal-ai/recraft/v4.1/text-to-image        «Price: $0.035 per images» (flat)
-   *   alibaba/qwen-image-3/text-to-image       «$0.04 per generated image at 1K resolution» — the adapter sends ≤ 1024 px sides
+   *   fal-ai/recraft/v4.1/pro/text-to-image    «$0.21 per images» (flat)
    * Ideogram V4.5 is priced by quality, not here: `FAL_IDEOGRAM_QUALITY_USD`.
    */
   "blackforestlabs/flux-3/text-to-image": 0.048,
   "bytedance/seedream/v5/lite/text-to-image": 0.035,
+  "bytedance/seedream/v5/pro/text-to-image": 0.0675,
   "fal-ai/recraft/v4.1/text-to-image": 0.035,
-  "alibaba/qwen-image-3/text-to-image": 0.04,
+  "fal-ai/recraft/v4.1/pro/text-to-image": 0.21,
 };
 
 /**

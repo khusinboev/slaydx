@@ -111,7 +111,9 @@ export const MEDIA_ENTRIES: readonly CatalogEntry[] = [
   },
   // fal.ai models (docs/studio/P2-SPEC.md): one generic adapter (`adapters/fal.ts`), the endpoint id is the upstream.
   fal("bfl/flux", "FLUX 3", "Black Forest Labs", ["sifatli"], "blackforestlabs/flux-3/text-to-image", flatFalCost("blackforestlabs/flux-3/text-to-image"), 90_000),
-  fal("bytedance/seedream", "Seedream 5 Lite", "ByteDance", ["arzon", "sifatli"], "bytedance/seedream/v5/lite/text-to-image", flatFalCost("bytedance/seedream/v5/lite/text-to-image"), 120_000),
+  // Two tiers of one family are two models (owner 2026-11-02): the user sees and pays each tier's own price.
+  fal("bytedance/seedream", "Seedream 5 Lite", "ByteDance", ["arzon", "tez"], "bytedance/seedream/v5/lite/text-to-image", flatFalCost("bytedance/seedream/v5/lite/text-to-image"), 120_000),
+  fal("bytedance/seedream-pro", "Seedream 5 Pro", "ByteDance", ["sifatli"], "bytedance/seedream/v5/pro/text-to-image", flatFalCost("bytedance/seedream/v5/pro/text-to-image"), 120_000),
   fal(
     "ideogram/ideogram",
     "Ideogram 4.5",
@@ -138,7 +140,7 @@ export const MEDIA_ENTRIES: readonly CatalogEntry[] = [
     ],
   ),
   fal("recraft/recraft", "Recraft 4.1", "Recraft", ["arzon"], "fal-ai/recraft/v4.1/text-to-image", flatFalCost("fal-ai/recraft/v4.1/text-to-image"), 90_000),
-  fal("alibaba/qwen-image", "Qwen Image 3", "Alibaba", ["matn"], "alibaba/qwen-image-3/text-to-image", flatFalCost("alibaba/qwen-image-3/text-to-image"), 90_000),
+  fal("recraft/recraft-pro", "Recraft 4.1 Pro", "Recraft", ["sifatli"], "fal-ai/recraft/v4.1/pro/text-to-image", flatFalCost("fal-ai/recraft/v4.1/pro/text-to-image"), 120_000),
   {
     id: "google/omni-video",
     kind: "video",

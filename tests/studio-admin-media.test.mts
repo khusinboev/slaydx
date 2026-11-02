@@ -57,9 +57,10 @@ const GPT = "openai/gpt-image";
 const FAL_USD: Record<string, number> = {
   "bfl/flux": 0.048,
   "bytedance/seedream": 0.035,
+  "bytedance/seedream-pro": 0.0675,
   "ideogram/ideogram": 0.06,
   "recraft/recraft": 0.035,
-  "alibaba/qwen-image": 0.04,
+  "recraft/recraft-pro": 0.21,
 };
 const USD: Record<string, number> = { [NANO]: IMAGE_PRICES["gemini-3.1-flash-lite-image"]!, [GPT]: OPENAI_IMAGE_FALLBACK_USD, ...FAL_USD };
 const STUDIO = TOOL_BY_ID["studio-image"];

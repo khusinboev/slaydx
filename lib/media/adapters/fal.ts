@@ -56,6 +56,19 @@ export const SEEDREAM_SIZES: Readonly<Record<Ratio, { width: number; height: num
   "3:2": { width: 2400, height: 1600 },
 };
 
+/**
+ * Seedream 5 Pro bills $0.0675 up to 1536 × 1536 pixels of area and twice that above (its llms.txt, 2026-11-02); its
+ * schema wants 921 600 – 4 624 220 pixels. Each preset is the catalog ratio at ≈ 2.1 MP, under the price step with room.
+ */
+export const SEEDREAM_PRO_SIZES: Readonly<Record<Ratio, { width: number; height: number }>> = {
+  "1:1": { width: 1440, height: 1440 },
+  "16:9": { width: 1920, height: 1080 },
+  "9:16": { width: 1080, height: 1920 },
+  "4:3": { width: 1664, height: 1248 },
+  "3:4": { width: 1248, height: 1664 },
+  "3:2": { width: 1776, height: 1184 },
+};
+
 /** Ideogram V4.5 accepts 36 exact sizes (its schema, 2026-11-02); these six are in that list. */
 export const IDEOGRAM_SIZES: Readonly<Record<Ratio, { width: number; height: number }>> = {
   "1:1": { width: 1024, height: 1024 },
@@ -66,7 +79,10 @@ export const IDEOGRAM_SIZES: Readonly<Record<Ratio, { width: number; height: num
   "3:2": { width: 1248, height: 832 },
 };
 
-/** Recraft V4.1 `image_size` presets (its schema, 2026-11-02); 3:2 has none, so a custom 1536×1024 (max side 14 142). */
+/**
+ * Recraft V4.1 (standard and Pro) `image_size` presets (both schemas, 2026-11-02); 3:2 has none, so a custom 1536×1024
+ * (max side 14 142). Both tiers bill per picture whatever the size.
+ */
 export const RECRAFT_SIZES: Readonly<Record<Ratio, string | { width: number; height: number }>> = {
   "1:1": "square_hd",
   "16:9": "landscape_16_9",
@@ -116,6 +132,19 @@ export const FAL_MODELS: Readonly<Record<string, FalModel>> = {
       sync_mode: true,
     }),
   },
+  // https://fal.ai/models/bytedance/seedream/v5/pro/text-to-image/llms.txt (2026-11-02): `enhance_prompt_mode` standard
+  // = the quality mode (its default, sent explicitly so a default change at fal cannot change our picture silently).
+  "bytedance/seedream/v5/pro/text-to-image": {
+    body: (p) => ({
+      prompt: String(p.prompt ?? ""),
+      image_size: SEEDREAM_PRO_SIZES[ratioOf(p).id],
+      num_images: 1,
+      output_format: "jpeg",
+      enhance_prompt_mode: "standard",
+      enable_safety_checker: true,
+      sync_mode: true,
+    }),
+  },
   // https://fal.ai/models/ideogram/v4.5/llms.txt (2026-11-02): `quality` low / medium / high sets the price.
   "ideogram/v4.5": {
     body: (p) => ({
@@ -136,20 +165,13 @@ export const FAL_MODELS: Readonly<Record<string, FalModel>> = {
       enable_safety_checker: true,
     }),
   },
-  // https://fal.ai/models/alibaba/qwen-image-3/text-to-image/llms.txt (2026-11-02): 1K tier = sides ≤ 1024 (our presets).
-  "alibaba/qwen-image-3/text-to-image": {
-    body: (p) => {
-      const r = ratioOf(p);
-      return {
-        prompt: String(p.prompt ?? "").slice(0, 5000),
-        image_size: { width: r.w, height: r.h },
-        num_images: 1,
-        output_format: "jpeg",
-        enable_prompt_expansion: false,
-        enable_safety_checker: true,
-        sync_mode: true,
-      };
-    },
+  // https://fal.ai/models/fal-ai/recraft/v4.1/pro/text-to-image/llms.txt (2026-11-02): same inputs as the standard tier.
+  "fal-ai/recraft/v4.1/pro/text-to-image": {
+    body: (p) => ({
+      prompt: String(p.prompt ?? ""),
+      image_size: RECRAFT_SIZES[ratioOf(p).id],
+      enable_safety_checker: true,
+    }),
   },
 };
 

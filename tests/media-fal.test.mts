@@ -5,7 +5,7 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
 import { inRequest } from "./helpers/next-request.mts";
 
 /**
- * Studio P2a — fal.ai models (docs/studio/P2-SPEC.md): the generic fal adapter, the five catalog entries, their prices,
+ * Studio P2a — fal.ai models (docs/studio/P2-SPEC.md): the generic fal adapter, the six catalog entries, their prices,
  * availability, the admin probe, and a Studio job end to end through `runMedia` with a stubbed fal.
  *
  * What is proven here:
@@ -40,6 +40,13 @@ import { inRequest } from "./helpers/next-request.mts";
  *              -> "flow" (row cost × N, pictures × N); refusal prefix `moderation_blocked` dropped in `failureOf` ->
  *              "flow: all refused" (generic message), "admin wiring"; recordImageUsd removed -> "flow" (no fal spend part);
  *              key check skipped for fal in availability -> "availability", "flow" (charged without a key);
+ *   text       (P2a-2, owner 2026-11-02) no-text clause kept next to the instruction for a text model -> "text prompt",
+ *              "flow"; `allowText: true` for every Studio model -> "flow" (flux / seedream / recraft pro lose the ban);
+ *              «Rasm» always in text mode -> "«Rasm» keeps the no-text prompt", "flow"; quoted texts not passed ->
+ *              "flow"; «…» not parsed -> "text prompt", "flow";
+ *   tiers      Seedream Pro 1:1 at 2048² (over the $0.0675 step) / Lite sizes for Pro -> "golden bodies"; Recraft Pro
+ *              price 0.21 -> 0.035 -> "price goldens", "flow" (+ ui/studio-fal, studio-admin-media); Seedream Pro price
+ *              -> "price goldens"; Recraft Pro routed to the standard endpoint -> "price goldens", "probe", "flow";
  *   admin      `media:` branch removed from providerOfBreaker -> "admin wiring"; falMessage diff check removed ->
  *              "probe"; imageModelLabel catalog fallback removed -> "admin wiring" (viewer says nothing).
  */
@@ -54,13 +61,13 @@ const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.in
 const iso = hasDb ? await createIsolatedDb("mediafal") : { isolated: false, drop: async () => {} };
 const skipDb = hasDb && iso.isolated ? false : "isolated Postgres database is not available";
 
-const { falAdapter, FAL_MODELS, SEEDREAM_SIZES, IDEOGRAM_SIZES, RECRAFT_SIZES, scrub } = await import("../lib/media/adapters/fal.ts");
+const { falAdapter, FAL_MODELS, SEEDREAM_SIZES, SEEDREAM_PRO_SIZES, IDEOGRAM_SIZES, RECRAFT_SIZES, scrub } = await import("../lib/media/adapters/fal.ts");
 const { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE, FAL_IMAGE_MODELS, imageModelLabel } = await import("../lib/media/catalog.ts");
 const { studioImagePrice, studioEntryPrice } = await import("../lib/media/studio-pricing.ts");
 const { MediaError, normalize, costUsd, resetBreakers } = await import("../lib/studio-core/index.ts");
 const { IMAGE_PRICES, FAL_IDEOGRAM_QUALITY_USD } = await import("../lib/generation/llm-pricing.ts");
 const { IMAGE_RATIOS, IMAGE_STYLES } = await import("../lib/generation/image-studio-options.ts");
-const { composePrompt } = await import("../lib/generation/image-studio.ts");
+const { composePrompt, quotedTexts, textInstruction, NO_TEXT_CLAUSE } = await import("../lib/generation/image-studio.ts");
 const { failureOf } = await import("../lib/media/image.ts");
 const resolve = await import("../lib/server/providers/resolve.ts");
 const { modelAvailable } = await import("../lib/server/media/availability.ts");
@@ -71,16 +78,18 @@ const { providerOfBreaker } = await import("../lib/server/admin-providers.ts");
 const KEY = "fal0000-test-key:5ecr3t5ecr3t";
 const FLUX = "bfl/flux";
 const SEED = "bytedance/seedream";
+const SEEDP = "bytedance/seedream-pro";
 const IDEO = "ideogram/ideogram";
 const RECR = "recraft/recraft";
-const QWEN = "alibaba/qwen-image";
-const FAL_IDS = [FLUX, SEED, IDEO, RECR, QWEN];
+const RECP = "recraft/recraft-pro";
+const FAL_IDS = [FLUX, SEED, SEEDP, IDEO, RECR, RECP];
 const ENDPOINT: Record<string, string> = {
   [FLUX]: "blackforestlabs/flux-3/text-to-image",
   [SEED]: "bytedance/seedream/v5/lite/text-to-image",
   [IDEO]: "ideogram/v4.5",
   [RECR]: "fal-ai/recraft/v4.1/text-to-image",
-  [QWEN]: "alibaba/qwen-image-3/text-to-image",
+  [SEEDP]: "bytedance/seedream/v5/pro/text-to-image",
+  [RECP]: "fal-ai/recraft/v4.1/pro/text-to-image",
 };
 
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]), Buffer.alloc(3000, 7)]);
@@ -315,13 +324,17 @@ test("golden bodies: each model × ratio (sizes from the models' own schemas)", 
     assert.ok(Math.abs(s.width / s.height - r.w / r.h) < 0.02, `seedream ${r.id} keeps the ratio`);
     assert.deepEqual(body(IDEO, { imageRatio: r.id }), { prompt: "Registon", image_size: IDEOGRAM_SIZES[r.id], quality: "medium", num_images: 1, enable_prompt_expansion: false, enable_safety_checker: true, sync_mode: true });
     assert.deepEqual(body(RECR, { imageRatio: r.id }), { prompt: "Registon", image_size: RECRAFT_SIZES[r.id], enable_safety_checker: true });
-    assert.deepEqual(body(QWEN, { imageRatio: r.id }), { prompt: "Registon", image_size: { width: r.w, height: r.h }, num_images: 1, output_format: "jpeg", enable_prompt_expansion: false, enable_safety_checker: true, sync_mode: true });
+    assert.deepEqual(body(SEEDP, { imageRatio: r.id }), { prompt: "Registon", image_size: SEEDREAM_PRO_SIZES[r.id], num_images: 1, output_format: "jpeg", enhance_prompt_mode: "standard", enable_safety_checker: true, sync_mode: true });
+    const sp = SEEDREAM_PRO_SIZES[r.id];
+    // Pro's price step: $0.0675 up to 1536 × 1536 of area, $0.135 above; its schema floor is 921 600 pixels.
+    assert.ok(sp.width * sp.height <= 1536 * 1536 && sp.width * sp.height >= 921_600, `seedream pro ${r.id} stays in the $0.0675 tier`);
+    assert.ok(Math.abs(sp.width / sp.height - r.w / r.h) < 0.02, `seedream pro ${r.id} keeps the ratio`);
+    assert.deepEqual(body(RECP, { imageRatio: r.id }), { prompt: "Registon", image_size: RECRAFT_SIZES[r.id], enable_safety_checker: true });
   }
   // The 36 exact sizes Ideogram V4.5 accepts (its schema, 2026-11-02) contain our six.
   const IDEOGRAM_OK = new Set(["1024x1024", "1280x720", "720x1280", "1152x864", "864x1152", "1248x832"]);
   for (const s of Object.values(IDEOGRAM_SIZES)) assert.ok(IDEOGRAM_OK.has(`${s.width}x${s.height}`));
   assert.equal(body(IDEO, { quality: "high" }).quality, "high");
-  assert.equal(String(body(QWEN, { prompt: "x".repeat(100) }).prompt).length, 100);
 });
 
 test("differential probe: every param of every fal model changes the request or the price (as `affects` says)", () => {
@@ -350,8 +363,54 @@ test("differential probe: every param of every fal model changes the request or 
   // The model-specific param is Ideogram's only and sits under «Qo'shimcha sozlamalar».
   assert.deepEqual(MEDIA_CATALOG.byId(IDEO)!.params.map((p) => p.name), ["prompt", "imageRatio", "imageCount", "imageStyle", "quality"]);
   assert.equal(MEDIA_CATALOG.byId(IDEO)!.params.find((p) => p.name === "quality")!.advanced, true);
-  for (const id of [FLUX, SEED, RECR, QWEN]) assert.deepEqual(MEDIA_CATALOG.byId(id)!.params.map((p) => p.name), ["prompt", "imageRatio", "imageCount", "imageStyle"]);
+  for (const id of [FLUX, SEED, SEEDP, RECR, RECP]) assert.deepEqual(MEDIA_CATALOG.byId(id)!.params.map((p) => p.name), ["prompt", "imageRatio", "imageCount", "imageStyle"]);
   void IMAGE_STYLES;
+});
+
+/* ───────────────────────────── text in pictures ───────────────────────────── */
+
+test("text prompt: quoted texts, the instruction, the no-text clause kept byte for byte without `text`", () => {
+  assert.deepEqual(quotedTexts(`Afisha: «Navro'z bayrami» va "21-mart", „Добро пожаловать“ “Welcome” «Navro'z bayrami» «» ""`), ["Navro'z bayrami", "21-mart", "Добро пожаловать", "Welcome"]);
+  assert.deepEqual(quotedTexts("Registon kechqurun"), []);
+  assert.deepEqual(quotedTexts(`«${"x".repeat(121)}» «ok»`), ["ok"], "a paragraph in quotes is not a poster line");
+  assert.equal(textInstruction(["A", "B"]), 'Render exactly this text, spelled exactly as given and nowhere else in the image: "A", "B". No other text, letters, watermark or logo.');
+  assert.match(textInstruction([]), /^Add no text/);
+  // Without `text` (the «Rasm» tool, non-text Studio models): the long-standing prompt, byte for byte.
+  const RASM =
+    "MAIN SUBJECT (must appear): a red apple " +
+    IMAGE_STYLES.find((s) => s.id === "watercolor")!.suffix +
+    " Wide 1024x576 composition. Scene stretches edge to edge. No empty side panel. Fill the entire frame. No large blank paper. No random animals or faces unless named. " +
+    "Absolutely no text, letters, numbers, signage, plaques, inscriptions, watermark, logo, or UI anywhere in the image — walls and surfaces must be blank of any writing.";
+  assert.equal(composePrompt("a red apple", "watercolor", 1024, 576), RASM);
+  assert.ok(RASM.endsWith(NO_TEXT_CLAUSE));
+  // With `text`: the clause is gone, the instruction takes its place, the rest is identical.
+  const withText = composePrompt("a red apple", "watercolor", 1024, 576, { quoted: ["Olma"] });
+  assert.ok(!withText.includes("Absolutely no text"), "the ban never reaches a text model");
+  assert.equal(withText, RASM.replace(NO_TEXT_CLAUSE, textInstruction(["Olma"])));
+});
+
+test("text models: only the catalog entries sold as text-capable (badge «matn»)", () => {
+  const text = MEDIA_CATALOG.entries.filter((e) => e.kind === "image" && e.badges.includes("matn")).map((e) => e.id);
+  assert.deepEqual(text, ["openai/gpt-image", IDEO]);
+});
+
+test("«Rasm» keeps the no-text prompt: the provider request of the old tool carries the clause, even with quotes", async (t) => {
+  for (const m of ["log", "info", "warn", "error"] as const) t.mock.method(console, m, () => {});
+  const { buildImageArtifact } = await import("../lib/generation/image-studio.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+  const bodies: string[] = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (u: string | URL, init: RequestInit = {}) => {
+    const url = String(u);
+    if (url.includes(":generateContent")) return json(200, { candidates: [{ content: { parts: [{ text: '{"scene":"A poster on a wall."}' }] } }] });
+    bodies.push(typeof init.body === "string" ? init.body : "");
+    return json(200, { steps: [{ type: "message", content: [{ data: B64, mime_type: "image/jpeg" }] }] });
+  }) as unknown as typeof fetch;
+  t.after(() => void (globalThis.fetch = real));
+  await buildImageArtifact(TOOL_BY_ID.image, { prompt: "Afisha «Xush kelibsiz»", imageStyle: "photo", imageRatio: "1:1", imageCount: 1 });
+  assert.equal(bodies.length, 1);
+  assert.ok(bodies[0]!.includes(NO_TEXT_CLAUSE.slice(0, 60)), "the old tool still forbids text");
+  assert.ok(!bodies[0]!.includes("Render exactly this text"));
 });
 
 /* ───────────────────────────── price ───────────────────────────── */
@@ -362,9 +421,10 @@ test("price goldens per model × count at ×2, 12 700 so'm/$ (rounded up to 100)
   const GOLD: Record<string, number[]> = {
     [FLUX]: [1300, 2500, 3700, 4900], // 0.048 → 1 219.2 / 2 438.4 / 3 657.6 / 4 876.8
     [SEED]: [900, 1800, 2700, 3600], // 0.035 → 889 / 1 778 / 2 667 / 3 556
+    [SEEDP]: [1800, 3500, 5200, 6900], // 0.0675 → 1 714.5 / 3 429 / 5 143.5 / 6 858
     [IDEO]: [1600, 3100, 4600, 6100], // medium 0.06 → 1 524 / 3 048 / 4 572 / 6 096
     [RECR]: [900, 1800, 2700, 3600],
-    [QWEN]: [1100, 2100, 3100, 4100], // 0.04 → 1 016 / 2 032 / 3 048 / 4 064
+    [RECP]: [5400, 10700, 16100, 21400], // 0.21 → 5 334 / 10 668 / 16 002 / 21 336
   };
   const live = { ...pricing, costUsd: liveUnitCosts() };
   for (const id of FAL_IDS) {
@@ -382,9 +442,9 @@ test("price goldens per model × count at ×2, 12 700 so'm/$ (rounded up to 100)
   // The live block carries the flat fal prices (price book rows), never Ideogram's.
   assert.deepEqual(
     Object.fromEntries(FAL_IDS.filter((id) => id in live.costUsd).map((id) => [id, live.costUsd[id]])),
-    { [FLUX]: 0.048, [SEED]: 0.035, [RECR]: 0.035, [QWEN]: 0.04 },
+    { [FLUX]: 0.048, [SEED]: 0.035, [SEEDP]: 0.0675, [RECR]: 0.035, [RECP]: 0.21 },
   );
-  for (const id of [FLUX, SEED, RECR, QWEN]) assert.equal(costUsd(MEDIA_CATALOG.byId(id)!.cost, normalize(MEDIA_CATALOG.byId(id)!.params, { imageCount: 2 })), 2 * IMAGE_PRICES[ENDPOINT[id]!]!);
+  for (const id of [FLUX, SEED, SEEDP, RECR, RECP]) assert.equal(costUsd(MEDIA_CATALOG.byId(id)!.cost, normalize(MEDIA_CATALOG.byId(id)!.params, { imageCount: 2 })), 2 * IMAGE_PRICES[ENDPOINT[id]!]!);
   // Studio purpose: Nano Banana stays the default, the fal models follow in catalog order.
   assert.deepEqual(MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.allowed.slice(2), FAL_IDS);
   assert.deepEqual([...FAL_IMAGE_MODELS], FAL_IDS);
@@ -547,7 +607,7 @@ const okResult = () => json(200, { images: [{ url: DATA_URI, content_type: "imag
 const refused = () => json(422, { detail: [{ loc: ["body", "prompt"], msg: "flagged", type: "content_policy_violation" }] });
 const FLOWS: Flow[] = [
   { name: "flux, 1 picture", values: { ...VALUES, modelId: FLUX }, usd: 0.048, result: okResult, status: "COMPLETED", netShare: 1, rows: ["succeeded"] },
-  { name: "ideogram high, 2 pictures -> zip at the high price", values: { ...VALUES, modelId: IDEO, quality: "high", imageCount: 2 }, usd: 0.22, result: okResult, status: "COMPLETED", netShare: 1, rows: ["succeeded", "succeeded"] },
+  { name: "ideogram high, 2 pictures -> zip at the high price, the quoted text rendered", values: { ...VALUES, prompt: "Registon maydoni, ustida «Xush kelibsiz» yozuvi", modelId: IDEO, quality: "high", imageCount: 2 }, usd: 0.22, result: okResult, status: "COMPLETED", netShare: 1, rows: ["succeeded", "succeeded"] },
   {
     name: "seedream, one of two refused -> delivered 1/2, half refunded",
     values: { ...VALUES, modelId: SEED, imageCount: 2 },
@@ -559,9 +619,9 @@ const FLOWS: Flow[] = [
     delivered: { got: 1, want: 2 },
   },
   {
-    name: "qwen, all refused -> FAILED with the refusal message, full refund",
-    values: { ...VALUES, modelId: QWEN, imageCount: 2 },
-    usd: 0.04,
+    name: "recraft pro, all refused -> FAILED with the refusal message, full refund",
+    values: { ...VALUES, modelId: RECP, imageCount: 2 },
+    usd: 0.21,
     result: refused,
     status: "FAILED",
     netShare: 0,
@@ -634,7 +694,14 @@ test("flow: route -> claimNext -> runJob with a stubbed fal: charge, file, media
       for (const s of submits) {
         assert.equal(s.url, `https://queue.fal.run/${endpoint}`);
         assert.equal(s.headers.Authorization, `Key ${KEY}`);
-        assert.match(String((s.body as { prompt: string }).prompt), /MAIN SUBJECT \(must appear\): A wide view of Registon/, "the engine's composed prompt");
+        const sent = String((s.body as { prompt: string }).prompt);
+        assert.match(sent, /MAIN SUBJECT \(must appear\): A wide view of Registon/, "the engine's composed prompt");
+        if (modelId === IDEO) {
+          assert.ok(!sent.includes(NO_TEXT_CLAUSE), "a text model never gets the no-text clause");
+          assert.ok(sent.includes(textInstruction(["Xush kelibsiz"])), "it renders exactly the user's quoted text");
+        } else {
+          assert.ok(sent.endsWith(NO_TEXT_CLAUSE), `${modelId}: a non-text model keeps the ban`);
+        }
         if (modelId === IDEO) assert.equal((s.body as { quality: string }).quality, "high", "the model's own param reached fal");
       }
       const rows = await mediaJobsOf(r.body.id!);

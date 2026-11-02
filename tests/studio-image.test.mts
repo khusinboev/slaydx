@@ -162,7 +162,7 @@ test("preflight: Studio model and its ParamSchema, before any charge", () => {
   assert.deepEqual(MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE), {
     id: "studio.image",
     kind: "image",
-    allowed: [NANO, GPT, "bfl/flux", "bytedance/seedream", "ideogram/ideogram", "recraft/recraft", "alibaba/qwen-image"],
+    allowed: [NANO, GPT, "bfl/flux", "bytedance/seedream", "bytedance/seedream-pro", "ideogram/ideogram", "recraft/recraft", "recraft/recraft-pro"],
     default: NANO,
     userCanChoose: true,
   });
@@ -406,8 +406,9 @@ test("client preview == server price == charge (catalog pricing block + session 
   const FAL_LIVE = {
     "bfl/flux": IMAGE_PRICES["blackforestlabs/flux-3/text-to-image"],
     "bytedance/seedream": IMAGE_PRICES["bytedance/seedream/v5/lite/text-to-image"],
+    "bytedance/seedream-pro": IMAGE_PRICES["bytedance/seedream/v5/pro/text-to-image"],
     "recraft/recraft": IMAGE_PRICES["fal-ai/recraft/v4.1/text-to-image"],
-    "alibaba/qwen-image": IMAGE_PRICES["alibaba/qwen-image-3/text-to-image"],
+    "recraft/recraft-pro": IMAGE_PRICES["fal-ai/recraft/v4.1/pro/text-to-image"],
   };
   assert.deepEqual(block, { soumPerUsd: 12_900, markup: 2.5, step: 100, overrides: { [GPT]: { markup: 4 } }, costUsd: { [NANO]: USD[NANO], [GPT]: USD[GPT], ...FAL_LIVE } });
   // Server prices are taken BEFORE the simulated browser exists: with a `window` the server path would read the

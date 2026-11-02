@@ -15,11 +15,11 @@ const { formatSom, groupDigits } = await import("../../lib/format.ts");
 const { MEDIA_CATALOG } = await import("../../lib/media/catalog.ts");
 
 /**
- * Studio P2a (docs/studio/P2-SPEC.md): the page with the REAL 7-model catalog (Nano Banana, GPT Image + the five fal
+ * Studio P2a (docs/studio/P2-SPEC.md): the page with the REAL 8-model catalog (Nano Banana, GPT Image + the six fal
  * models), no UI change needed — everything is drawn from the catalog's client view.
  *
  * Locked here:
- *   - the row shows 3 cards, «Barcha modellar» lists all seven in catalog order, the chips are the badges the seven
+ *   - the row shows 3 cards, «Barcha modellar» lists all eight in catalog order, the chips are the badges the eight
  *     carry, a chip narrows the list, «Tanlash» picks a fal model;
  *   - every card / option shows the price of ONE picture per model at ×2, 12 800 so'm/$ (hand-computed, not the
  *     product's formula);
@@ -29,7 +29,7 @@ const { MEDIA_CATALOG } = await import("../../lib/media/catalog.ts");
  * Mutations (each turned the named tests red, then restored):
  *   Ideogram's `quality` param removed from the catalog          -> the file fails to load (defineCatalog: cost reads an unknown param);
  *   Ideogram's cost `by` table removed                           -> «Ideogram: the Sifat row…» (price stays 1 600 × n);
- *   a fal model dropped from `studio.image.allowed`              -> «seven models…» (the real-catalog list).
+ *   a fal model dropped from `studio.image.allowed`              -> «eight models…» (the real-catalog list).
  */
 
 Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
@@ -38,17 +38,18 @@ const router: AppRouterInstance = { back() {}, forward() {}, refresh() {}, push(
 
 const view = MEDIA_CATALOG.clientView();
 const by = (id: string) => view.find((e) => e.id === id)!;
-const FAL = ["bfl/flux", "bytedance/seedream", "ideogram/ideogram", "recraft/recraft", "alibaba/qwen-image"].map(by);
-const SEVEN: ClientEntry[] = [NANO, GPT, ...FAL];
+const FAL = ["bfl/flux", "bytedance/seedream", "bytedance/seedream-pro", "ideogram/ideogram", "recraft/recraft", "recraft/recraft-pro"].map(by);
+const EIGHT: ClientEntry[] = [NANO, GPT, ...FAL];
 /** Hand-computed price of one picture at ×2 and 12 800 so'm/$, rounded up to 100. */
 const ONE: Record<string, number> = {
   "google/nano-banana": 900, // 0.034 → 870.4
   "openai/gpt-image": 1400, // 0.053 → 1 356.8
   "bfl/flux": 1300, // 0.048 → 1 228.8
   "bytedance/seedream": 900, // 0.035 → 896
+  "bytedance/seedream-pro": 1800, // 0.0675 → 1 728
   "ideogram/ideogram": 1600, // medium 0.06 → 1 536
   "recraft/recraft": 900, // 0.035 → 896
-  "alibaba/qwen-image": 1100, // 0.04 → 1 024
+  "recraft/recraft-pro": 5400, // 0.21 → 5 376
 };
 
 beforeEach(() => {
@@ -92,24 +93,27 @@ async function choose(id: string) {
   await settle();
 }
 
-test("seven models: row of 3, the sheet lists all seven with their own price, chips from their badges, a fal pick", async () => {
-  // The real Studio purpose sells exactly these seven, in this order.
+test("eight models: row of 3, the sheet lists all eight with their own price, chips from their badges, a fal pick", async () => {
+  // The real Studio purpose sells exactly these eight, in this order.
   const { MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } = await import("../../lib/media/catalog.ts");
-  assert.deepEqual(MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.allowed, SEVEN.map((m) => m.id));
-  installApi({ catalog: catalogBody(SEVEN, PRICING, NANO.id) });
+  assert.deepEqual(MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.allowed, EIGHT.map((m) => m.id));
+  installApi({ catalog: catalogBody(EIGHT, PRICING, NANO.id) });
   await mount();
   assert.equal(qa("[data-model-picker] [data-model-card]").length, 3);
   await click(q("[data-model-all]"));
-  assert.deepEqual(options(), SEVEN.map((m) => m.id));
-  for (const m of SEVEN) {
+  assert.deepEqual(options(), EIGHT.map((m) => m.id));
+  for (const m of EIGHT) {
     assert.equal(q(`[data-model-option="${m.id}"] [data-model-price]`)?.textContent?.replace(/\D/g, ""), String(ONE[m.id]), `${m.id}: price of one picture`);
     assert.match(q(`[data-model-option="${m.id}"]`)!.textContent ?? "", new RegExp(m.label.replace(/[()]/g, ".")), `${m.id}: label`);
   }
   assert.deepEqual(qa("[data-model-chip]").map((e) => e.getAttribute("data-model-chip")), ["all", "tez", "sifatli", "arzon", "matn"]);
   await click(q('[data-model-chip="matn"]'));
-  assert.deepEqual(options(), ["openai/gpt-image", "ideogram/ideogram", "alibaba/qwen-image"]);
+  assert.deepEqual(options(), ["openai/gpt-image", "ideogram/ideogram"]);
   await click(q('[data-model-chip="arzon"]'));
   assert.deepEqual(options(), ["google/nano-banana", "bytedance/seedream", "recraft/recraft"]);
+  await click(q('[data-model-chip="sifatli"]'));
+  assert.deepEqual(options(), ["openai/gpt-image", "bfl/flux", "bytedance/seedream-pro", "ideogram/ideogram", "recraft/recraft-pro"]);
+  await click(q('[data-model-chip="arzon"]'));
   await click(q('[data-model-option="recraft/recraft"]'));
   await click(q("[data-model-confirm]"));
   await settle();
@@ -121,7 +125,7 @@ test("seven models: row of 3, the sheet lists all seven with their own price, ch
 });
 
 test("Ideogram: the «Sifat» row under «Qo'shimcha sozlamalar» changes the price and reaches the request", async () => {
-  const api = installApi({ catalog: catalogBody(SEVEN, PRICING, NANO.id) });
+  const api = installApi({ catalog: catalogBody(EIGHT, PRICING, NANO.id) });
   await mount();
   await choose("ideogram/ideogram");
   const details = q<HTMLDetailsElement>('details[data-settings="studio-advanced"]');

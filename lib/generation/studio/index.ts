@@ -73,6 +73,8 @@ export async function buildStudioImage(
     count,
     provider,
     imageModel: entry.id,
+    // Text in the picture only for the models sold as text-capable (badge «matn»); every other model keeps the ban.
+    allowText: entry.badges.includes("matn"),
     deadline,
     onStage,
   });

@@ -20,7 +20,42 @@ import type { FormValues, ToolConfig } from "../types";
 import { imageStyleById, imageRatioById } from "./image-studio-options";
 export { IMAGE_STYLES, IMAGE_RATIOS, imageStyleById, imageRatioById } from "./image-studio-options";
 
-export function composePrompt(scene: string, styleId: string, w: number, h: number) {
+/** The no-text clause of every picture prompt except a Studio text model's (`composePrompt` `text`). */
+export const NO_TEXT_CLAUSE =
+  "Absolutely no text, letters, numbers, signage, plaques, inscriptions, watermark, logo, or UI anywhere in the image — walls and surfaces must be blank of any writing.";
+
+/** Longest quoted text kept for the text instruction (a poster line, not a paragraph). */
+export const QUOTED_TEXT_MAX = 120;
+
+/**
+ * The texts the user put in quotes, in order, trimmed, de-duplicated: «…», „…“, “…”, "…" (the pairs Uzbek, Russian and
+ * English keyboards type). Empty pairs and texts over `QUOTED_TEXT_MAX` characters are dropped. Pure.
+ */
+export function quotedTexts(userPrompt: string): string[] {
+  const out: string[] = [];
+  const re = /«([^«»]+)»|„([^„“”]+)[“”]|“([^“”]+)”|"([^"]+)"/g;
+  for (const m of String(userPrompt ?? "").matchAll(re)) {
+    const t = (m[1] ?? m[2] ?? m[3] ?? m[4] ?? "").replace(/\s+/g, " ").trim();
+    if (t && t.length <= QUOTED_TEXT_MAX && !out.includes(t)) out.push(t);
+  }
+  return out;
+}
+
+/**
+ * The text instruction of a Studio TEXT model (catalog badge `matn`, docs/studio/P2-SPEC.md): render exactly the
+ * quoted texts and nothing else; without quotes, no text the user did not ask for. Pure.
+ */
+export function textInstruction(quoted: readonly string[]): string {
+  if (!quoted.length) return "Add no text, letters, watermark or logo unless the request above explicitly asks for it.";
+  return `Render exactly this text, spelled exactly as given and nowhere else in the image: ${quoted.map((t) => `"${t}"`).join(", ")}. No other text, letters, watermark or logo.`;
+}
+
+/**
+ * The provider prompt of one picture. `text` absent (the «Rasm» tool, every non-text Studio model) = the long-standing
+ * prompt with the strict no-text clause, byte for byte. `text` given (a Studio text model) = the same prompt with the
+ * no-text clause replaced by `textInstruction(text.quoted)`.
+ */
+export function composePrompt(scene: string, styleId: string, w: number, h: number, text?: { quoted: readonly string[] }) {
   const style = imageStyleById(styleId);
   const portrait = h > w;
   const frame = portrait
@@ -37,7 +72,7 @@ export function composePrompt(scene: string, styleId: string, w: number, h: numb
      * oddiy "no text" yetarli emas edi. Devor/peshtoq sirtini aniq
      * bo'sh deb belgilash ko'proq ta'sir qiladi.
      */
-    "Absolutely no text, letters, numbers, signage, plaques, inscriptions, watermark, logo, or UI anywhere in the image — walls and surfaces must be blank of any writing.",
+    text ? textInstruction(text.quoted) : NO_TEXT_CLAUSE,
   ].join(" ");
 }
 
@@ -171,6 +206,8 @@ export type ImageJob = {
   provider: ImageProvider;
   /** `doc.imageModel`: what the viewer names («Rasm»: the form's model id; Studio: the catalog id). */
   imageModel: string;
+  /** A Studio text model (catalog badge `matn`): the prompt renders the user's quoted text instead of forbidding text. */
+  allowText?: boolean;
   deadline?: number;
   onStage?: (ev: { progress: number; step: string }) => void;
 };
@@ -188,7 +225,7 @@ export async function drawImageJob(job: ImageJob): Promise<BuiltFile> {
   const imageProvider = job.provider;
   const refused: ImageResult[] = [];
   const scene = await expandPrompt(prompt, styleId, ratio.id, deadline);
-  const full = composePrompt(scene, styleId, ratio.w, ratio.h);
+  const full = composePrompt(scene, styleId, ratio.w, ratio.h, job.allowText ? { quoted: quotedTexts(prompt) } : undefined);
   stage(10, count > 1 ? `Rasm chizilmoqda · 0/${count}` : "Rasm chizilmoqda");
 
   let drawn = 0;
