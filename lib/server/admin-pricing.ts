@@ -36,6 +36,7 @@ import { PRO_SLIDE_DEFAULT, PRO_SLIDE_MAX, PRO_SLIDE_MIN, SLIDE_DEFAULT, SLIDE_I
 import { COURSEWORK_PAGES, INDEPENDENT_PAGES, KONSPEKT_PAGES, REFERAT_PAGES } from "../generation/work/registry";
 import type { FormValues, ToolGroup, ToolId } from "../types";
 import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "../media/catalog";
+import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
 import type { MediaPricing } from "../media/studio-pricing";
 import { mediaPricing } from "./media/pricing";
 
@@ -135,6 +136,7 @@ export const UNIT_OF: Record<ToolId, PricingUnit> = {
   portrait: "job",
   video: "job",
   "studio-image": "image",
+  "studio-video": "job",
 };
 
 /** Uzbek unit labels for the UI (the client never imports lib/tools). */
@@ -193,6 +195,20 @@ export type LadderStep = { label: string; base: number };
 export type LadderRow = LadderStep & { effective: number };
 
 const fmtInt = (n: number): string => n.toLocaleString("uz-UZ");
+
+/** Ladder rungs of one Studio video model, read from its own ParamSchema (never hard-coded lengths or prices). */
+function studioVideoRungs(id: string): LadderInput[] {
+  const entry = MEDIA_CATALOG.byId(id)!;
+  const effect = entry.params.find((p) => p.name === "effect");
+  if (effect && effect.type === "enum") return effect.options.map((o) => ({ label: `${entry.label} · ${o.label}`, values: { modelId: id, effect: o.value } }));
+  const secs = entry.params.find((p) => p.name === "seconds");
+  const lengths = secs && secs.type === "int" ? [...new Set([secs.min, secs.max])] : [];
+  const sound = entry.params.some((p) => p.name === "sound" && p.type === "bool");
+  return lengths.flatMap((n) => [
+    { label: `${entry.label} · ${n} soniya`, values: { modelId: id, seconds: n } as FormValues },
+    ...(sound ? [{ label: `${entry.label} · ${n} soniya · ovozli`, values: { modelId: id, seconds: n, sound: true } as FormValues }] : []),
+  ]);
+}
 
 /**
  * Representative inputs per tool, derived from the registry's own tier
@@ -254,6 +270,10 @@ export function ladderInputs(toolId: ToolId): LadderInput[] {
       return MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.allowed.flatMap((id) =>
         [1, 2, 4].map((n) => ({ label: `${n} rasm · ${MEDIA_CATALOG.byId(id)!.label}`, values: { modelId: id, imageCount: n } })),
       );
+    case "studio-video":
+      // Cost × markup per Studio video model (`studio-video-pricing.ts`): every model at its shortest and longest length
+      // (silent; Kling also with sound), one rung per effect template.
+      return MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed.flatMap((id) => studioVideoRungs(id));
     case "portrait":
       // Priced per variant: 1 and 2 variants (`portraitPrice`).
       return PORTRAIT_VARIANTS.map((n) => ({ label: `${n} variant`, values: { variants: n } }));
@@ -275,7 +295,7 @@ export function ladderFor(toolId: ToolId, media?: MediaPricing | null): LadderSt
 
 /** The Studio pricing block when `toolId` needs one (the price the server charges is cost × the CURRENT markup). */
 async function mediaPricingFor(toolId: ToolId): Promise<MediaPricing | null> {
-  return toolId === "studio-image" ? mediaPricing() : null;
+  return toolId === "studio-image" || toolId === "studio-video" ? mediaPricing() : null;
 }
 
 export function effectiveLadder(steps: ReadonlyArray<LadderStep>, adj: PriceAdjust | null): LadderRow[] {

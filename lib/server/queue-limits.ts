@@ -3,6 +3,7 @@ import type { AdmissionLimits } from "./admission";
 import { query } from "./db";
 import { env } from "./env";
 import { getSetting } from "./settings";
+import { VIDEO_TOOLS_SQL } from "../tool-kinds";
 
 /**
  * Effective admission limits = the admin's settings (`queue.*`, env as the default) + the measured mean job
@@ -37,7 +38,7 @@ async function measuredMeanSec(): Promise<number> {
         WHERE status = 'COMPLETED' AND started_at IS NOT NULL AND finished_at IS NOT NULL
           -- A video spends minutes WAITING for its provider without holding a worker slot (video-ops.ts): its wall time
           -- says nothing about the load of the slots and would inflate every other tool's queue estimate.
-          AND tool_id <> 'video'
+          AND tool_id NOT IN (${VIDEO_TOOLS_SQL})
           AND created_at > now() - interval '8 days' AND finished_at > now() - interval '7 days'
         ORDER BY finished_at DESC LIMIT $1
      )

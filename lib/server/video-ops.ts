@@ -31,8 +31,14 @@ import {
 } from "../generation/video";
 import type { AcademicDoc, CostJson, Delivered } from "../generation/types";
 import type { FormValues } from "../types";
-import { MediaError, costUsd, normalize, submitWithRoutes, type AdapterAsset, type AdapterDeps, type CatalogEntry, type NormalizedParams } from "../studio-core";
-import { videoMediaAdapters, videoRoute } from "../media/adapters/video";
+import { MediaError, costUsd, normalize, submitWithRoutes, type AdapterAsset, type AdapterDeps, type CatalogEntry, type MediaAdapter, type NormalizedParams } from "../studio-core";
+import { studioVideoAdapters, videoMediaAdapters, videoRoute } from "../media/adapters/video";
+import { MEDIA_CATALOG } from "../media/catalog";
+import { STUDIO_EFFECT_SECONDS, STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
+import { isEffectEntry, studioVideoEntry } from "../media/studio-video-pricing";
+import { VIDEO_TOOLS_SQL } from "../tool-kinds";
+import { modelAvailable } from "./media/availability";
+import { mediaOverrides } from "./media/overrides";
 import { breakerHealth } from "./media/run";
 import { mediaCoreSwitches } from "./media/switches";
 import {
@@ -80,6 +86,13 @@ import {
  * the table it started in: a row found in either table on a re-claim decides the path whatever the switch says now,
  * so `video_ops` rows drain on the old path and flipping the switch never resubmits a paid operation. Capacity
  * (`video.max_concurrent`, `videoInFlight`) counts waiting GENERATIONS, so it covers both tables by construction.
+ *
+ * STUDIO «Video» tab (docs/studio/P3-SPEC.md, tool `studio-video`). ALWAYS on the core, whatever `media.core.video`
+ * says (a core-native caller, like the Studio's pictures): `submitStudioVideoJob` writes the `media_jobs` row (purpose
+ * `studio.video`, the chosen catalog model, the same `<generationId>:video:0` key) under the same per-generation lock,
+ * submits through that model's catalog routes and parks. From there it is THIS file's one poll loop, claim lease,
+ * backoff, deadline and terminal steps — no second loop: `claimDueOps` claims both purposes, `pollerFor` picks the
+ * Studio adapter of the row's model, `finalizeVideo` / `failVideo` lock the same row and refund the same way.
  */
 
 export type VideoOpsDeps = {
@@ -89,9 +102,12 @@ export type VideoOpsDeps = {
   core?: boolean;
   /** Test seam: runs inside the submit guard, after the row checks and before the row is written. */
   afterGuard?: () => Promise<void>;
+  /** Test seam: the Studio adapters by adapter id (default `studioVideoAdapters()`). */
+  studioAdapters?: Readonly<Record<string, MediaAdapter>>;
 };
 
 const adaptersOf = (d: VideoOpsDeps): Readonly<Record<VideoProviderId, VideoAdapter>> => d.adapters ?? VIDEO_ADAPTERS;
+const studioAdaptersOf = (d: VideoOpsDeps): Readonly<Record<string, MediaAdapter>> => d.studioAdapters ?? studioVideoAdapters();
 
 /** Seconds until the next poll after `attempts` polls: 10, 15, 20, 30, 45, 60 and then every 60. */
 export function videoPollDelaySec(attempts: number): number {
@@ -324,10 +340,126 @@ async function releaseLease(job: VideoJob): Promise<void> {
   if (!res.length) log("warn", "[video] the lease was lost during the submit -- the stored operation is adopted by the next claim", { jobId: job.id });
 }
 
+/* ══════════════════════════ 1b. submit (Studio) ══════════════════════════ */
+
+/** What the Studio submit guard found or wrote, decided under the per-generation lock. */
+type StudioGuarded = { found: string; id: string } | { row: MediaJobRow; image: AdapterAsset | undefined };
+
+/**
+ * The SUBMIT half of a Studio clip (`studio-video`): the chosen catalog model (Gemini Omni, Kling 3.0, a Kling effect)
+ * through the media core, parked in `media_jobs`. Same contract as `submitVideoJob`: the row is committed BEFORE the
+ * provider call under the per-generation lock, a re-claimed job adopts a pending row and never submits twice, and any
+ * throw is a normal fail + full refund by the worker while it owns the lease.
+ */
+export async function submitStudioVideoJob(job: VideoJob, deps: VideoOpsDeps = {}): Promise<"waiting"> {
+  const entry = studioVideoEntry(job.values);
+  // The route refused unknown models before charging; a stored row with one is failed and refunded.
+  if (!entry) throw new UserFacingError(VIDEO_UNAVAILABLE_MESSAGE);
+  const params = normalize(entry.params, job.values);
+  const key = videoMediaKey(job.id);
+  const adapters = studioAdaptersOf(deps);
+
+  const g = await transaction(async (client): Promise<StudioGuarded> => {
+    await client.query("SELECT pg_advisory_xact_lock($1::int, hashtext($2))", [VIDEO_SUBMIT_LOCK_NS, job.id]);
+    const parked = await mediaJobByKeyTx(client, key);
+    if (parked) return { found: parked.status, id: parked.id };
+    await deps.afterGuard?.();
+
+    // Provider on + keyed + not switched off in «Media modellari» RIGHT NOW (the route checked it at purchase).
+    const primary = entry.routes[0]!;
+    if (!modelAvailable(entry.id, await mediaOverrides()) || !adapters[primary.adapter]?.configured()) throw new UserFacingError(VIDEO_UNAVAILABLE_MESSAGE);
+    const ids = params.imageAssetId;
+    const assetId = Array.isArray(ids) ? ids[0] : undefined;
+    let image: AdapterAsset | undefined;
+    if (assetId) {
+      // SQL ownership: another user's upload cannot be read.
+      const photo = await getPhoto(job.userId, assetId);
+      if (!photo) throw new UserFacingError(VIDEO_IMAGE_MISSING_MESSAGE);
+      image = { mime: photo.mime, base64: photo.bytes.toString("base64") };
+    } else if (isEffectEntry(entry)) {
+      throw new UserFacingError(VIDEO_IMAGE_MISSING_MESSAGE);
+    }
+    const row = await insertMediaJobTx(client, {
+      generationId: job.id,
+      purpose: STUDIO_VIDEO_PURPOSE,
+      modelId: entry.id,
+      provider: primary.provider,
+      upstreamModel: primary.upstreamModel,
+      idempotencyKey: key,
+      params: { ...params },
+      costUsd: costUsd(entry.cost, params),
+      deadlineAt: new Date(Date.now() + VIDEO_OP_DEADLINE_MS),
+    });
+    if (!row) throw new UserFacingError(VIDEO_LOST_MESSAGE);
+    return { row, image };
+  });
+
+  if ("found" in g) {
+    if (g.found === "pending") {
+      await releaseLease(job);
+      return "waiting";
+    }
+    if (g.found === "submitting") {
+      await failSubmittingMediaJob(g.id, "lost between the provider call and the update");
+      log("error", "[video] a previous Studio submit died before storing the operation id -- failing and refunding instead of paying twice", { jobId: job.id });
+      throw new UserFacingError(VIDEO_LOST_MESSAGE);
+    }
+    throw new UserFacingError(VIDEO_FAILED_MESSAGE);
+  }
+
+  const { row, image } = g;
+  let opId: string;
+  try {
+    const { route, result } = await submitWithRoutes(
+      entry.routes,
+      adapters,
+      breakerHealth,
+      { params: { ...params }, ...(image ? { assets: { imageAssetId: [image] } } : {}), idempotencyKey: row.idempotency_key },
+      coreDeps(deps),
+    );
+    if (!("opId" in result)) throw new MediaError(route.provider, "a video route answered synchronously");
+    if (route !== entry.routes[0]) await query("UPDATE media_jobs SET provider = $2, upstream_model = $3 WHERE id = $1", [row.id, route.provider, route.upstreamModel]);
+    opId = result.opId;
+  } catch (e) {
+    const err = e instanceof MediaError ? e : null;
+    log("error", "[video] Studio submit failed", { jobId: job.id, modelId: entry.id, status: err?.status, safety: err?.safety, err });
+    await failSubmittingMediaJob(row.id, (err?.message ?? "submit failed").slice(0, 300)).catch(() => undefined);
+    throw new UserFacingError(err?.safety ? VIDEO_SAFETY_MESSAGE : VIDEO_FAILED_MESSAGE);
+  }
+
+  // The op id first, whatever happens to the lease (see `submitVideoJob`).
+  await parkMediaJob(row.id, opId, new Date(Date.now() + 10_000));
+  await releaseLease(job);
+  log("info", "[video] Studio operation started", { jobId: job.id, modelId: entry.id, mediaJobId: row.id });
+  return "waiting";
+}
+
+/** Seconds a Studio row paid for: its `seconds` param; an effect is priced per clip, so it claims no seconds (no short-clip refund). */
+function studioRowSeconds(r: MediaJobRow): number {
+  return Number(r.params.seconds) || 0;
+}
+
+/** A Studio row's stored params (JSON) read back through its model's schema; unknown model = the raw values, unvalidated. */
+function rowParams(r: MediaJobRow): NormalizedParams {
+  const entry = MEDIA_CATALOG.byId(r.model_id);
+  return entry ? normalize(entry.params, r.params) : (r.params as NormalizedParams);
+}
+
 /* ══════════════════════════ 2. poll ══════════════════════════ */
 
 /** A claimed op; `mediaJobId` is set when it lives in `media_jobs` (core path), absent for a `video_ops` row. */
-type DueOp = { generation_id: string; provider: VideoProviderId; op_id: string; attempts: number; errors: number; seconds: number; mediaJobId?: string };
+type DueOp = {
+  generation_id: string;
+  provider: VideoProviderId;
+  op_id: string;
+  attempts: number;
+  errors: number;
+  seconds: number;
+  mediaJobId?: string;
+  /** `media_jobs` rows: the purpose and the catalog model (a Studio row is polled by its model's adapter). */
+  purpose?: string;
+  modelId?: string;
+};
 
 /**
  * `media_jobs.attempts` counts the submit too (`beginMediaJob` writes 1), `video_ops.attempts` only the polls: the poll
@@ -335,7 +467,17 @@ type DueOp = { generation_id: string; provider: VideoProviderId; op_id: string; 
  */
 function dueFromMediaJob(r: MediaJobRow): DueOp | null {
   if (!r.generation_id || !r.op_id) return null;
-  return { generation_id: r.generation_id, provider: r.provider as VideoProviderId, op_id: r.op_id, attempts: Math.max(0, r.attempts - 1), errors: r.errors, seconds: Number(r.params.seconds) || 0, mediaJobId: r.id };
+  return {
+    generation_id: r.generation_id,
+    provider: r.provider as VideoProviderId,
+    op_id: r.op_id,
+    attempts: Math.max(0, r.attempts - 1),
+    errors: r.errors,
+    seconds: r.purpose === STUDIO_VIDEO_PURPOSE ? studioRowSeconds(r) : Number(r.params.seconds) || 0,
+    mediaJobId: r.id,
+    purpose: r.purpose,
+    modelId: r.model_id,
+  };
 }
 
 /**
@@ -349,6 +491,8 @@ export async function claimDueOps(limit: number = VIDEO_POLL_BATCH): Promise<Due
   let parked: MediaJobRow[];
   try {
     parked = await claimDueMediaJobs(VIDEO_PURPOSE, limit - old.length, CLAIM_LEASE_SEC);
+    // Studio clips (P3) share the batch: same lease, same loop.
+    if (old.length + parked.length < limit) parked = [...parked, ...(await claimDueMediaJobs(STUDIO_VIDEO_PURPOSE, limit - old.length - parked.length, CLAIM_LEASE_SEC))];
   } catch (e) {
     // The old path must not depend on the core's table: `video_ops` keeps draining while media_jobs is broken.
     log("error", "[video] media_jobs could not be claimed -- polling video_ops only this run", { err: e });
@@ -422,6 +566,20 @@ type Polled = Exclude<VideoPollResult, { state: "done" }> | { state: "done"; dow
 /** How one op is polled: the `VideoAdapter` for a `video_ops` row, the core's `MediaAdapter` for a `media_jobs` row. */
 function pollerFor(op: DueOp, deps: VideoOpsDeps): (() => Promise<Polled>) | null {
   const t = { fetchImpl: deps.fetchImpl };
+  if (op.mediaJobId && op.purpose === STUDIO_VIDEO_PURPOSE) {
+    // The row's own model and provider name the adapter (the route that took the submit).
+    const route = (op.modelId ? MEDIA_CATALOG.byId(op.modelId) : null)?.routes.find((r) => r.provider === op.provider);
+    const adapter = route ? studioAdaptersOf(deps)[route.adapter] : undefined;
+    if (!adapter?.poll) return null;
+    const poll = adapter.poll.bind(adapter);
+    return async () => {
+      const r = await poll(op.op_id, coreDeps(deps));
+      if (r.state !== "done") return r;
+      const out = r.outputs[0];
+      if (!out) return { state: "failed", message: "the provider finished without an output", safety: false };
+      return { state: "done", download: () => adapter.fetchOutput(out, coreDeps(deps)) };
+    };
+  }
   if (op.mediaJobId) {
     let adapterId: string;
     try {
@@ -531,7 +689,7 @@ export async function pollDueVideoOps(deps: VideoOpsDeps = {}, run: PollRunOpts 
 /* ══════════════════════════ 3. terminal steps ══════════════════════════ */
 
 /** The locked pending op of a generation; `mediaJobId` set when it is a `media_jobs` row. */
-type LockedOp = { provider: VideoProviderId; seconds: number; mediaJobId: string | null };
+type LockedOp = { provider: VideoProviderId; seconds: number; mediaJobId: string | null; studio?: { modelId: string; params: NormalizedParams } };
 
 /**
  * Locks the generation's op row (`video_ops`, else its `media_jobs` row) and returns it while it is 'pending'. A job
@@ -545,7 +703,9 @@ async function lockPendingOp(client: PoolClient, generationId: string): Promise<
   const row = res.rows[0];
   if (row) return row.status === "pending" ? { provider: row.provider, seconds: Number(row.seconds), mediaJobId: null } : null;
   const m = await lockMediaJobByKey(client, videoMediaKey(generationId));
-  return m && m.status === "pending" ? { provider: m.provider as VideoProviderId, seconds: Number(m.params.seconds) || 0, mediaJobId: m.id } : null;
+  if (!m || m.status !== "pending") return null;
+  if (m.purpose === STUDIO_VIDEO_PURPOSE) return { provider: m.provider as VideoProviderId, seconds: studioRowSeconds(m), mediaJobId: m.id, studio: { modelId: m.model_id, params: rowParams(m) } };
+  return { provider: m.provider as VideoProviderId, seconds: Number(m.params.seconds) || 0, mediaJobId: m.id };
 }
 
 
@@ -569,12 +729,13 @@ export async function finalizeVideo(generationId: string, bytes: Uint8Array): Pr
       else await client.query("UPDATE video_ops SET status = 'failed', finished_at = now(), last_error = 'generation is no longer waiting' WHERE generation_id = $1", [generationId]);
       return null;
     }
-    const input = videoInputFromValues(row.values_json);
-    const tool = TOOL_BY_ID.video;
     const delivered = deliveredSeconds(mp4Seconds(bytes), op.seconds);
-    const actual = mp4Seconds(bytes) || op.seconds;
-    const { usd, priced } = videoCost(op.provider, actual);
-    const model = videoProviderById(op.provider).short;
+    const studio = op.studio ? studioResult(row.values_json, op.studio, op.provider, op.seconds, mp4Seconds(bytes)) : null;
+    const input = videoInputFromValues(row.values_json);
+    const tool = studio ? TOOL_BY_ID["studio-video"] : TOOL_BY_ID.video;
+    const actual = studio ? studio.video.seconds : mp4Seconds(bytes) || op.seconds;
+    const { usd, priced } = studio ? { usd: studio.usd, priced: true } : videoCost(op.provider, actual);
+    const model = studio ? studio.model : videoProviderById(op.provider).short;
     const cost: CostJson = {
       provider: op.provider,
       model,
@@ -588,8 +749,8 @@ export async function finalizeVideo(generationId: string, bytes: Uint8Array): Pr
       meta: extractMeta(tool, row.values_json),
       titlePage: false,
       toc: false,
-      sections: [{ id: "options", title: "Sozlamalar", blocks: [{ kind: "p", text: `${videoProviderById(op.provider).short} · ${input.seconds} soniya · ${input.aspect}` }] }],
-      video: { provider: op.provider, prompt: input.prompt, aspect: input.aspect, requestedSeconds: op.seconds, seconds: actual, fromImage: Boolean(input.imageAssetId) },
+      sections: [{ id: "options", title: "Sozlamalar", blocks: [{ kind: "p", text: studio ? studio.summary : `${videoProviderById(op.provider).short} · ${input.seconds} soniya · ${input.aspect}` }] }],
+      video: studio ? studio.video : { provider: op.provider, prompt: input.prompt, aspect: input.aspect, requestedSeconds: op.seconds, seconds: actual, fromImage: Boolean(input.imageAssetId) },
     };
     const fileName = "video.mp4";
     await putGenerationFile(generationId, { bytes, mime: "video/mp4", fileName }, client);
@@ -620,6 +781,41 @@ export async function finalizeVideo(generationId: string, bytes: Uint8Array): Pr
   log("info", "[video] finished", { jobId: generationId, bytes: bytes.byteLength });
   if (out.delivered) log("warn", "[video] short clip refunded", { jobId: generationId, ratio: out.ratio, refunded: out.refunded });
   return true;
+}
+
+/**
+ * The result facts of a Studio clip, from the row the submit wrote (catalog model + normalized params): the viewer's
+ * `video` block (with the catalog `model` and the `effect` id), the summary line, and the provider cost of what came
+ * back (the catalog cost rule at the actual length; an effect is one clip whatever its length).
+ */
+function studioResult(values: FormValues, s: { modelId: string; params: NormalizedParams }, provider: string, paidSeconds: number, mp4Sec: number) {
+  const entry = MEDIA_CATALOG.byId(s.modelId);
+  const effect = typeof s.params.effect === "string" ? s.params.effect : "";
+  const isEffect = entry ? isEffectEntry(entry) : Boolean(effect);
+  const requested = paidSeconds || (isEffect ? STUDIO_EFFECT_SECONDS : 0);
+  const seconds = mp4Sec || requested;
+  const aspect = typeof s.params.aspect === "string" ? s.params.aspect : "";
+  const ids = s.params.imageAssetId;
+  const fromImage = Array.isArray(ids) && ids.length > 0;
+  const label = entry?.label ?? s.modelId;
+  const effectParam = entry?.params.find((p) => p.name === "effect");
+  const effectName = effectParam?.type === "enum" ? (effectParam.options.find((o) => o.value === effect)?.label ?? effect) : effect;
+  const usd = entry ? Number(costUsd(entry.cost, isEffect ? s.params : { ...s.params, seconds }).toFixed(4)) : 0;
+  return {
+    model: label,
+    usd,
+    summary: isEffect ? `${label} · ${effectName} · ${seconds} soniya` : `${label} · ${requested} soniya${aspect && !fromImage ? ` · ${aspect}` : ""}${s.params.sound === true ? " · ovozli" : ""}`,
+    video: {
+      provider,
+      prompt: isEffect ? "" : String(s.params.prompt ?? values.prompt ?? ""),
+      aspect: fromImage ? "" : aspect,
+      requestedSeconds: requested,
+      seconds,
+      fromImage,
+      model: s.modelId,
+      ...(isEffect ? { effect } : {}),
+    },
+  };
 }
 
 /** `want` seconds were paid for; a clip more than a second shorter is a shortfall (a longer one is never charged extra). */
@@ -659,6 +855,6 @@ export async function failVideo(generationId: string, message: string, detail: s
  * video waiting in `video_ops` and one waiting in `media_jobs` count alike.
  */
 export async function videoInFlight(): Promise<number> {
-  const row = await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM generations WHERE tool_id = 'video' AND status = 'IN_PROGRESS'");
+  const row = await queryOne<{ n: string }>(`SELECT count(*)::text AS n FROM generations WHERE tool_id IN (${VIDEO_TOOLS_SQL}) AND status = 'IN_PROGRESS'`);
   return Number(row?.n ?? 0);
 }

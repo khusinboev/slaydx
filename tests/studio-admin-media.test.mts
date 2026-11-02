@@ -53,6 +53,8 @@ const generationsRoute = await import("../app/api/generations/route.ts");
 
 const NANO = "google/nano-banana";
 const GPT = "openai/gpt-image";
+/** P3: the Studio Video tab's models, listed after the pictures (Gemini Omni + Kling 3.0 tiers + effects). */
+const STUDIO_VIDEO_IDS = ["google/omni-video", "kling/kling-3", "kling/kling-3-pro", "kling/effects"];
 /** P2a: the fal models (key set above) — one picture at the default params (Ideogram: «Standart» quality, $0.06). */
 const FAL_USD: Record<string, number> = {
   "bfl/flux": 0.048,
@@ -156,9 +158,10 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.equal(r.body.markup, 2);
     assert.equal(r.body.soumPerUsd, rate);
-    // The block lists every Studio model by itself (catalog + purpose), the fal ones included (P2a).
-    assert.deepEqual(r.body.models.map((m: { modelId: string }) => m.modelId), [NANO, GPT, ...Object.keys(FAL_USD)]);
-    for (const m of r.body.models) {
+    // The block lists every Studio model by itself (catalog + purpose), the fal ones included (P2a), then the Video
+    // tab's models (P3; their per-clip numbers are checked in tests/studio-video.test.mts).
+    assert.deepEqual(r.body.models.map((m: { modelId: string }) => m.modelId), [NANO, GPT, ...Object.keys(FAL_USD), ...STUDIO_VIDEO_IDS]);
+    for (const m of r.body.models.filter((x: { kind: string }) => x.kind === "image")) {
       const usd = USD[m.modelId]!;
       assert.equal(m.costUsd, usd);
       assert.equal(m.costSoum, Math.round(usd * rate * 100) / 100);
@@ -205,7 +208,7 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
       [{ modelId: NANO, enabled: true, markup: "3", reason: REASON }, 400],
       [{ modelId: NANO, enabled: "yes", markup: null, reason: REASON }, 400],
       [{ modelId: NANO, enabled: true, markup: 3, reason: REASON, expected: "x" }, 400],
-      [{ modelId: "google/omni-video", enabled: true, markup: 3, reason: REASON }, 404],
+      [{ modelId: "google/tts", enabled: true, markup: 3, reason: REASON }, 404],
       [{ modelId: "nope/x", enabled: true, markup: 3, reason: REASON }, 404],
     ];
     for (const [body, status] of bad) assert.equal((await put(owner.cookie, body)).status, status, JSON.stringify(body));

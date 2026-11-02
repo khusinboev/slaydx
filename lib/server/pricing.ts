@@ -136,6 +136,6 @@ export async function getAllToolPricing(): Promise<PriceAdjustMap> {
  */
 export async function effectivePrice(tool: ToolConfig, values: FormValues): Promise<number> {
   // Studio pictures: cost × markup with the server's pricing block (the one the catalog endpoint sends the browser).
-  const media = tool.id === "studio-image" ? await mediaPricing() : null;
+  const media = tool.id === "studio-image" || tool.id === "studio-video" ? await mediaPricing() : null;
   return applyPriceAdjust(basePriceFor(tool, values, media), await getToolPricing(tool.id));
 }

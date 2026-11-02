@@ -269,9 +269,13 @@ test("kalitsiz xizmat sotilmaydi", async () => {
    * bo'lsa esa shablon hujjatni qaytaradi va TO'LIQ narx olinadi. Ya'ni
    * kalitsiz rejim dev/demo uchun, sotuv uchun emas.
    */
-  for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait" && x.custom !== "video" && x.custom !== "studio-image")) {
+  for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait" && x.custom !== "video" && x.custom !== "studio-image" && x.custom !== "studio-video")) {
     assert.ok(toolBlockedReason(t, noLlm), `${t.id}: matn kalitisiz sotilmasligi kerak`);
   }
+  // Studio video (P3): no text model in the path; its own model list decides (empty = blocked, e.g. `video.enabled` off).
+  assert.equal(toolBlockedReason(TOOL_BY_ID["studio-video"], noLlm), null, "Studio video matn kalitiga bog'liq emas");
+  assert.ok(toolBlockedReason(TOOL_BY_ID["studio-video"], { ...all, studioVideoModels: [] }), "no Studio video model -> blocked");
+  assert.equal(toolBlockedReason(TOOL_BY_ID["studio-video"], { ...noLlm, studioVideoModels: ["kling/effects"] }), null);
   // Studio (P1): like «Rasm», the prompt expansion falls back to the user's text without a text key.
   assert.equal(toolBlockedReason(TOOL_BY_ID["studio-image"], noLlm), null);
   assert.equal(toolBlockedReason(TOOL_BY_ID.video, noLlm), null, "video matn kalitiga BOG'LIQ EMAS");

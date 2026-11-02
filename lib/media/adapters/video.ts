@@ -13,7 +13,29 @@
  */
 import { MediaError, type AdapterDeps, type AdapterInput, type MediaAdapter, type MediaOutput, type PollResult } from "../../studio-core";
 import { MEDIA_CATALOG, VIDEO_PROVIDER_TO_MEDIA } from "../catalog";
-import { VIDEO_ASPECTS, VIDEO_PROVIDER_IDS, VideoProviderError, type VideoAdapter, type VideoAspect, type VideoMedia, type VideoProviderId, type VideoRequestInput } from "../../generation/video";
+import {
+  KLING_V3_ASPECTS,
+  VIDEO_ASPECTS,
+  VIDEO_PROVIDER_IDS,
+  VideoProviderError,
+  buildKlingEffectRequest,
+  buildKlingV3Request,
+  downloadKlingVideo,
+  klingKey,
+  omniAdapter,
+  parseKlingKey,
+  pollKlingTask,
+  submitKlingTask,
+  type KlingTaskRequest,
+  type KlingV3Aspect,
+  type KlingV3Input,
+  type KlingV3Mode,
+  type VideoAdapter,
+  type VideoAspect,
+  type VideoMedia,
+  type VideoProviderId,
+  type VideoRequestInput,
+} from "../../generation/video";
 
 /** The provider's own request input, from the core input (normalized params + the resolved start image). */
 export function videoRequestInput(input: Omit<AdapterInput, "upstreamModel" | "idempotencyKey">): VideoRequestInput {
@@ -71,6 +93,87 @@ export function videoRoute(provider: VideoProviderId) {
   const route = entry?.routes.find((r) => r.provider === provider);
   if (!entry || !route) throw new Error(`media catalog: no video route for ${provider}`);
   return { entry, route };
+}
+
+/* ═════════════════ Studio «Video» tab (docs/studio/P3-SPEC.md) ═════════════════ */
+
+const KLING_V3_TIERS: Readonly<Record<string, KlingV3Mode>> = { "kling-v3-std": "std", "kling-v3-pro": "pro" };
+
+/** The Kling 3.0 request of a Studio job (normalized params of a `kling/kling-3*` entry + the resolved start image). */
+export function klingV3Input(mode: KlingV3Mode, input: Omit<AdapterInput, "idempotencyKey">): KlingV3Input {
+  const p = input.params;
+  const aspect: KlingV3Aspect = (KLING_V3_ASPECTS as readonly string[]).includes(String(p.aspect)) ? (p.aspect as KlingV3Aspect) : KLING_V3_ASPECTS[0];
+  const image = input.assets?.imageAssetId?.[0];
+  return {
+    model: input.upstreamModel,
+    prompt: String(p.prompt ?? ""),
+    seconds: Number(p.seconds),
+    aspect,
+    mode,
+    sound: p.sound === true,
+    ...(image ? { image: { mime: image.mime, base64: image.base64 } } : {}),
+  };
+}
+
+/** The effect request of a Studio job; `null` without the photo (the host refuses that before charging). */
+export function klingEffectRequest(input: Omit<AdapterInput, "idempotencyKey">): KlingTaskRequest | null {
+  const image = input.assets?.imageAssetId?.[0];
+  if (!image) return null;
+  return buildKlingEffectRequest({ effect: String(input.params.effect ?? ""), image });
+}
+
+/** A Kling `MediaAdapter` over one request builder; same transport, same error mapping as the «Video» tool's adapter. */
+function klingStudioAdapter(id: string, key: () => string, build: (input: AdapterInput) => KlingTaskRequest | null): MediaAdapter {
+  const deps = (d?: AdapterDeps) => (d?.fetchImpl ? { fetchImpl: d.fetchImpl } : {});
+  return {
+    id,
+    configured: () => parseKlingKey(key()) !== null,
+    buildRequest(input) {
+      const req = build(input);
+      if (!req) throw new MediaError("kling", "the effect needs a photo");
+      return { url: req.url, headers: req.headers, body: req.body };
+    },
+    async submit(input, d) {
+      const req = build(input);
+      // Nothing was sent: the provider holds no job (the host checks the photo before charging; this is a guard).
+      if (!req) throw new MediaError("kling", "the effect needs a photo", { accepted: false });
+      try {
+        return await submitKlingTask(key, req, deps(d));
+      } catch (e) {
+        throw toMediaError(e, !(e instanceof VideoProviderError && e.status !== undefined));
+      }
+    },
+    async poll(opId, d): Promise<PollResult> {
+      let r;
+      try {
+        r = await pollKlingTask(key, opId, deps(d));
+      } catch (e) {
+        throw toMediaError(e, true);
+      }
+      if (r.state === "done") return { state: "done", outputs: [toOutput(r.media)] };
+      return r;
+    },
+    async fetchOutput(o, d) {
+      try {
+        return await downloadKlingVideo(toMedia(o), deps(d));
+      } catch (e) {
+        throw toMediaError(e, true);
+      }
+    },
+  };
+}
+
+/**
+ * The adapters of the `studio.video` routes by adapter id: `google-video` (Gemini Omni, the «Video» tool's adapter
+ * wrapped as today), `kling-v3-std` / `kling-v3-pro` (Kling 3.0 tiers) and `kling-effects`. `omni` and `klingKeyFn` are
+ * test seams; production passes nothing.
+ */
+export function studioVideoAdapters(opts: { omni?: VideoAdapter; klingKeyFn?: () => string } = {}): Record<string, MediaAdapter> {
+  const key = opts.klingKeyFn ?? klingKey;
+  const out: Record<string, MediaAdapter> = { "google-video": videoAdapter("google-video", opts.omni ?? omniAdapter) };
+  for (const [id, mode] of Object.entries(KLING_V3_TIERS)) out[id] = klingStudioAdapter(id, key, (input) => buildKlingV3Request(klingV3Input(mode, input)));
+  out["kling-effects"] = klingStudioAdapter("kling-effects", key, klingEffectRequest);
+  return out;
 }
 
 /** Every video provider's adapter under the adapter id its catalog route names (`google-video`, `kling-video`). */

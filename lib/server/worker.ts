@@ -68,7 +68,7 @@ import { claimJob as claimDomlaJob } from "./domla";
 import { domlaHousekeeping, runJob as runDomlaJob } from "./domla-engine";
 import { startProviderUsageFlush } from "./provider-usage";
 import { ensureProviderKeys, startProviderKeyRefresh } from "./providers/store";
-import { submitVideoJob } from "./video-ops";
+import { submitStudioVideoJob, submitVideoJob } from "./video-ops";
 import { startVideoPollLoop } from "./video-poll-loop";
 
 /**
@@ -475,9 +475,11 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
    * lease (`submitVideoJob`). The job then waits in `video_ops` WITHOUT a worker slot; the `video-poll` loop
    * housekeeping step finishes it. A failure here is an ordinary failure: FAILED + refund while the lease is still ours.
    */
-  if (tool.id === "video") {
+  // Studio clips (P3) take the same split, always through the media core (`submitStudioVideoJob`).
+  if (tool.id === "video" || tool.id === "studio-video") {
     try {
-      await submitVideoJob({ id: job.id, userId: job.userId, lease: job.lease, values: job.values });
+      const vjob = { id: job.id, userId: job.userId, lease: job.lease, values: job.values };
+      await (tool.id === "video" ? submitVideoJob(vjob) : submitStudioVideoJob(vjob));
     } catch (e) {
       const message = userMessage(e);
       log("error", `[worker] video job ${job.id} failed to start`, { jobId: job.id, userId: job.userId, attempt: job.attempts, userError: message, err: e });

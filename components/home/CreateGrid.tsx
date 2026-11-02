@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Search, X } from "lucide-react";
-import { TOOLS, clientAdjustedPrice, toolBlockedReason, visibleToolGroups } from "@/lib/tools";
+import { LISTED_TOOLS, clientAdjustedPrice, toolBlockedReason, visibleToolGroups } from "@/lib/tools";
 import { SERVICES, serviceVisible } from "@/lib/services";
 import { TOOL_ICONS } from "../shell/icons";
 import { PageBack } from "../shell/PageBack";
@@ -26,7 +26,7 @@ export function CreateGrid() {
   // Katalog filtri: bo'lim chipi + qidiruv (nom/tavsif bo'yicha).
   const [group, setGroup] = useState<CatalogueGroup>("all");
   const [query, setQuery] = useState("");
-  const shown = useMemo(() => filterCatalogue(TOOLS, group, query), [group, query]);
+  const shown = useMemo(() => filterCatalogue(LISTED_TOOLS, group, query), [group, query]);
   // Link-only services (chat, converters, tests, domla) are listed in their group, same filter + search as the tools.
   const services = useMemo(() => {
     const words = normalizeQuery(query).split(" ").filter(Boolean);

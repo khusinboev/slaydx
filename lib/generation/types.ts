@@ -488,6 +488,10 @@ export type VideoDocModel = {
   seconds: number;
   /** Started from the user's own picture. */
   fromImage: boolean;
+  /** Studio (P3): the catalog model id (`kling/kling-3`, `google/omni-video`…); absent on «Video» results. */
+  model?: string;
+  /** Studio (P3): the Kling effect scene id of an effect clip. */
+  effect?: string;
 };
 
 export type AcademicDoc = {

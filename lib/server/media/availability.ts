@@ -3,6 +3,8 @@ import { MEDIA_CATALOG, MEDIA_PURPOSES } from "../../media/catalog";
 import { getProviderKey, isProviderEnabled } from "../providers/resolve";
 import { ensureProviderKeys } from "../providers/store";
 import { mediaOverrides, type OverrideMap } from "./overrides";
+import { getSetting } from "../settings";
+import { STUDIO_VIDEO_PURPOSE } from "../../media/catalog-video";
 
 /**
  * Can a catalog model serve a job RIGHT NOW (docs/studio/P1-SPEC.md «Admin»): one of its routes has a provider that is
@@ -29,9 +31,19 @@ export async function availableModels(purposeId: string): Promise<string[]> {
   return MEDIA_CATALOG.entries.filter((e) => allowed.has(e.id) && modelAvailable(e.id, overrides)).map((e) => e.id);
 }
 
+/**
+ * Studio «Video» tab (docs/studio/P3-SPEC.md): the `studio.video` models available now — and NONE while the admin's
+ * paid-video switch `video.enabled` is off. One switch for paid video: «Video» and the Studio tab open and close
+ * together (`video.enabled` ships dark), then each model follows its provider + the «Media modellari» override.
+ */
+export async function studioVideoModels(): Promise<string[]> {
+  if (!(await getSetting("video.enabled"))) return [];
+  return availableModels(STUDIO_VIDEO_PURPOSE);
+}
+
 /** Why `modelId` cannot be sold for `purposeId` now (Uzbek, for a 400), `null` when it can. */
 export async function modelUnavailable(purposeId: string, modelId: string): Promise<string | null> {
   const purpose = MEDIA_PURPOSES.byId(purposeId);
-  if (!purpose || !purpose.allowed.includes(modelId)) return "Noma'lum rasm modeli — boshqa modelni tanlang.";
+  if (!purpose || !purpose.allowed.includes(modelId)) return purpose?.kind === "video" ? "Noma'lum video modeli — boshqa modelni tanlang." : "Noma'lum rasm modeli — boshqa modelni tanlang.";
   return (await availableModels(purposeId)).includes(modelId) ? null : "Tanlangan model hozir mavjud emas — boshqa modelni tanlang.";
 }

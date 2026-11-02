@@ -46,6 +46,8 @@ const FIXED: Partial<Record<ToolId, number>> = {
   portrait: 150_000,
   // Video: only the SUBMIT phase runs on a worker (the provider call + the handoff); the wait is `video_ops`, not this budget.
   video: 90_000,
+  // Studio video: the same submit-only phase on the worker (the clip waits in `media_jobs`).
+  "studio-video": 90_000,
   /*
    * Rezyume 2: prompt kattalashdi (tuzilmali faktlar JSON, 18 til uchun
    * yorliqlar, boyitish qoidalari) va qisqa summary da BIR marta STRICT

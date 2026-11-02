@@ -3,7 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { FileText, Search, Wallet } from "lucide-react";
-import { TOOLS, TOOL_BY_ID } from "@/lib/tools";
+import { LISTED_TOOLS, TOOL_BY_ID } from "@/lib/tools";
 import { useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { cn } from "@/lib/cn";
@@ -39,8 +39,8 @@ export function SearchDialog() {
 
   const tools = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return TOOLS;
-    return TOOLS.filter(
+    if (!s) return LISTED_TOOLS;
+    return LISTED_TOOLS.filter(
       (t) => t.title.toLowerCase().includes(s) || t.description.toLowerCase().includes(s),
     );
   }, [q]);

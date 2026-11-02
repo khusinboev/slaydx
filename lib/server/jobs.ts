@@ -12,6 +12,7 @@ import { env } from "./env";
 import { queueLimits } from "./queue-limits";
 import { log } from "./log";
 import { userMessage } from "./user-error";
+import { VIDEO_TOOLS_SQL, isPaidOnlyTool } from "../tool-kinds";
 import {
   admissionDecision,
   queueEtaSec,
@@ -308,7 +309,7 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
         id,
         safeSlice(`${input.toolId}: ${topic}`, 200),
         // Bonus so'm never pays for video (D5): derived HERE from the tool, so no caller can forget it (callers pass it too).
-        input.paidOnly || input.toolId === "video" ? { paidOnly: true } : {},
+        input.paidOnly || isPaidOnlyTool(input.toolId) ? { paidOnly: true } : {},
       );
       if (!charged.ok) {
         return {
@@ -817,8 +818,8 @@ export async function claimJob(
          WHERE q.status = 'QUEUED' AND q.run_after <= now()
            AND (SELECT count(*) FROM generations r
                  WHERE r.status = 'IN_PROGRESS' AND r.locked_by IS NOT NULL AND r.user_id = q.user_id) < $2
-           AND (q.tool_id <> 'video'
-                OR (SELECT count(*) FROM generations v WHERE v.status = 'IN_PROGRESS' AND v.tool_id = 'video') < $4)
+           AND (q.tool_id NOT IN (${VIDEO_TOOLS_SQL})
+                OR (SELECT count(*) FROM generations v WHERE v.status = 'IN_PROGRESS' AND v.tool_id IN (${VIDEO_TOOLS_SQL})) < $4)
          ORDER BY q.created_at
          LIMIT 1
          FOR UPDATE SKIP LOCKED
@@ -831,7 +832,7 @@ export async function claimJob(
    * under a transaction-scoped advisory lock: video claims are serialised (a count taken after the other commits sees
    * its row). Without a queued video the plain single statement runs, as before -- the hot path is unchanged.
    */
-  const videoQueued = await queryOne<{ n: number }>("SELECT 1 AS n FROM generations WHERE status = 'QUEUED' AND tool_id = 'video' LIMIT 1");
+  const videoQueued = await queryOne<{ n: number }>(`SELECT 1 AS n FROM generations WHERE status = 'QUEUED' AND tool_id IN (${VIDEO_TOOLS_SQL}) LIMIT 1`);
   const row = videoQueued
     ? await transaction(async (client) => {
         await client.query("SELECT pg_advisory_xact_lock($1)", [VIDEO_CLAIM_LOCK_ID]);
