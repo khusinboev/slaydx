@@ -46,8 +46,9 @@ export type AudioInputResult = { id: string; seconds: number; mime: string; size
 /** Uzbek reason the input cannot be used (415 / 422), `null` when it is fine. */
 export function audioInputError(s: { mime: string; seconds: number } | null): { message: string; status: number } | null {
   if (!s) return { message: "Faqat WAV yoki MP3 audio qabul qilinadi.", status: 415 };
+  // The minimum is on the measured length (2.5 s is not 3 s of audio); the maximum on the billed one (≤ 300 billed seconds).
   const billed = billedSeconds(s.seconds);
-  if (billed < AUDIO_INPUT_MIN_SECONDS) return { message: `Audio kamida ${AUDIO_INPUT_MIN_SECONDS} soniya bo‘lsin (hozir ${Math.floor(s.seconds)} s).`, status: 422 };
+  if (s.seconds < AUDIO_INPUT_MIN_SECONDS - 0.01) return { message: `Audio kamida ${AUDIO_INPUT_MIN_SECONDS} soniya bo‘lsin (hozir ${Math.floor(s.seconds)} s).`, status: 422 };
   if (billed > AUDIO_INPUT_MAX_SECONDS) return { message: `Audio ${AUDIO_INPUT_MAX_SECONDS / 60} daqiqadan oshmasin.`, status: 422 };
   return null;
 }
