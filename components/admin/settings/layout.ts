@@ -16,7 +16,7 @@ export const TAB_DEFS: readonly TabDef[] = [
     id: "features",
     label: "Funksiyalar",
     blurb: "Yangi imkoniyatlarni bir tugma bilan yoqing yoki o'chiring. Narx va chegaralar alohida tablarda.",
-    keys: ["tests.enabled", "video.enabled", "daily_quiz.enabled", "domla.enabled", "chat.enabled", "oferta.gate_enabled"],
+    keys: ["tests.enabled", "video.enabled", "daily_quiz.enabled", "domla.enabled", "chat.enabled", "oferta.gate_enabled", "studio.voice.enabled"],
   },
   {
     id: "money",
@@ -28,7 +28,7 @@ export const TAB_DEFS: readonly TabDef[] = [
     id: "pricing",
     label: "Narx va marja",
     blurb: "Hisobotlardagi marja va tavsiya etilgan narx shu qiymatlardan hisoblanadi.",
-    keys: ["pricing.payment_fee_percent", "pricing.target_markup", "finance.soum_per_usd", "media.markup", "domla.price"],
+    keys: ["pricing.payment_fee_percent", "pricing.target_markup", "finance.soum_per_usd", "media.markup", "studio.clone_price", "domla.price"],
   },
   {
     id: "queue",
@@ -128,6 +128,7 @@ export const FEATURE_EFFECT: Readonly<Record<string, string>> = {
   "domla.enabled": "Yoqilsa: «Qattiqqo'l domla» himoyasi ochiq. O'chirilsa yangi himoya boshlanmaydi (AI va ovoz sarfini to'xtatadi).",
   "chat.enabled": "Yoqilsa: AI chat sayt va botda ishlaydi. O'chirilsa darhol to'xtaydi, pul yechilmaydi.",
   "oferta.gate_enabled": "Yoqilsa: ofertani qabul qilmagan foydalanuvchi ish yarata olmaydi va to'lov qila olmaydi. Rekvizitlarsiz yoqib bo'lmaydi.",
+  "studio.voice.enabled": "Yoqilsa: Studio «Ovoz» tabi (ElevenLabs ovozlari, dialog, ovoz klonlash) hamma uchun ochiladi. Har belgi pullik provayderga ketadi.",
 };
 
 /** Emergency stops: «on» means something is switched OFF for users (shown as a warning). */
