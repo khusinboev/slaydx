@@ -20,7 +20,14 @@ adapter, `P2-SPEC.md`) and P3 (the Video tab, `media_jobs` async path, the share
     sent to a second route, refunded);
   - poll: `IN_QUEUE` / `IN_PROGRESS` → running; `COMPLETED` with `error` → failed (policy → safety, Uzbek safety message);
     result 404 / 422 / 499 / 500 / 504 → failed (the model's final answer); 429 / 502 / 503 / network → retry (the result
-    is kept ≥ 1 h); status 404 → failed; a missing key after submit → retry until the job's deadline refunds it;
+    is kept ≥ 1 h); status 404 → failed; a missing key after submit → a transient poll error: the op ends at
+    `MAX_TRANSIENT_ERRORS` (30 errors on the 10–60 s backoff) or its 20-minute deadline, whichever comes first;
+  - giving an op up (deadline or too many transient errors; review M1): `giveUp` first sends a best-effort fal CANCEL
+    (`PUT https://queue.fal.run/{owner}/{app}/requests/{id}/cancel`, same key / host / redirect / scrub rules, 5 s cap;
+    200 / 202 «cancelled», 400 «completed» = fal had finished and may bill it), then `failVideo` refunds ONCE; a failing
+    cancel never blocks the refund. The row keeps its `op_id`, and `last_error` records `provider cancel: cancelled |
+    completed | failed (op fal:…)` so a late fal success can be reconciled against fal billing. Kling / Omni ops (no
+    cancel) end exactly as before;
   - output: the `video.url` downloaded WITHOUT the key through `safeFetchUrl` (https + public host on every hop, capped at
     `VIDEO_MAX_BYTES` = 25 MB), `isMp4` checked (then `pollOp` checks size + MP4 again).
 - **Five catalog entries** (`lib/media/catalog-video.ts` `FAL_VIDEO_ENTRIES`, after Kling 3.0 in the picker, the effects
@@ -33,11 +40,17 @@ adapter, `P2-SPEC.md`) and P3 (the Video tab, `media_jobs` async path, the share
   entry gains `secondImageAssetId` (sent only for a two-photo scene). Priced as every effect.
 - **Photos**: every `image` param a job sends (start, end frame, second photo — `studioVideoImageParams`) is checked to be
   the user's own upload before charging (`submit-generation.ts`) and resolved by owner at submit (`video-ops.ts`).
+  Review N2: the Rasm tab's input checks run for them too (`studioVideoInputsError` in `lib/server/media/inputs.ts`, the
+  same code as `studioInputsError`): the type sniffed at upload must be the param's (PNG / JPEG), each photo ≤ 5 MB, the
+  job's photos together ≤ `STUDIO_INPUTS_MAX_TOTAL_BYTES` (8 MB) — else a 400 `input_invalid` before anything is charged.
   Preflight (`studioVideoError`): an end frame needs a start; «Quchoqlash» needs both photos; a one-photo scene refuses a
   second photo.
 - **UI** (`components/studio/video/VideoTab.tsx`): the sheet lists the fal models with maker, badges and «~X so'm / 5 s»;
   the form is the model's ParamSchema (Segmented «Sifat»); «Kadrlar (ixtiyoriy)» shows the end-frame upload only for a
   model that takes one (not Omni); «Quchoqlash» shows a second photo («Ikkinchi surat»), the one-photo scenes do not.
+  Review N3 / N4: with a start image set, the «O'lcham» row is hidden for Kling 3.0 and the fal models
+  (`ASPECT_FOLLOWS_IMAGE`: their image → video request follows the frame; Omni keeps the row, it sends the aspect); the
+  end-frame upload is locked until a start frame exists, and removing the start clears the end frame.
 - **Admin «Media modellari»** lists the five automatically (`managedModelIds` = the purpose's allowed list), unit «5
   soniya», price by `studioVideoPrice`; availability = fal on + keyed + not switched off; the tab itself also needs
   `video.enabled` (P3). Provider `fal` is now `kinds: ["image", "video"]`, label «fal.ai (rasm va video)». The «Narxlar»
@@ -68,13 +81,30 @@ Queue protocol: https://fal.ai/docs/api-reference/inference-api/queue/status.md 
    «Tekshirish» does not yet compare video prices (see gaps): compare fal's billed amount with `media_jobs.cost_usd`.
 2. **H3 Max Turbo** is quoted at the standard rate that starts 2026-11-16 (fal's November promotion is 30 % lower) —
    until then our margin is higher than ×2, never lower.
-3. **Inline frames**: start / end frames go to fal as `data:` URIs (≤ 5 MB upload cap ⇒ ≈ 6.7 MB of base64 in the JSON);
-   fal documents data URIs for inputs, not a body limit for these endpoints.
+3. **Inline frames**: start + end frames go to fal as `data:` URIs. Two 5 MB photos would be ≈ 13.4 MB of base64 in the
+   JSON; the job total cap (8 MB of photos, review N2) keeps it at ≈ 10.7 MB at most. fal documents data URIs for inputs,
+   not a body limit for these endpoints (a CDN upload step is the follow-up if a real body limit bites).
 4. **«Quchoqlash»** on the direct Kling API: the `images` entries as raw base64 (the single-image input documents that
    form; the dual one does not say), `model_name: kling-v1-6`, and the price (Kling's unit list is not readable; quoted
    at the effect price $0.84).
 5. **Kling 3.0 `image_tail`** on the direct API (ComfyUI's First-Last-Frame node sends it through Comfy's proxy).
 6. Result size: a 10 s 1080p clip must fit the 25 MB cap; a bigger file fails and is refunded (fal still bills it).
+
+## Owner smoke checklist (first live calls, owner's key, admin account `adkhambek_4`)
+Each item is open until a real call has answered it; record the answer here.
+1. **M2 — Seedance aspect billing**: one Seedance 2.0 Mini clip at 720p in 16:9, one in 1:1 and one in 9:16 (5 s each);
+   compare fal's billed amount per clip with `media_jobs.cost_usd` (0.7735 each). A higher 1:1 / 9:16 bill → price by
+   aspect (add `aspect` to the cost table) or drop that aspect.
+2. **M3 — «Quchoqlash» body and price**: one `hug` clip with two photos: does `/v1/videos/effects` accept
+   `input.images` as raw base64 with `model_name: kling-v1-6`, `mode: std`, `duration: "5"`? What does the Kling
+   account's unit list charge for it (we quote $0.84)? A refusal / a higher price → fix the body or raise the effects
+   markup in «Media modellari».
+3. **Kling 3.0 end frame**: one image2video clip with `image_tail` on the direct API (accepted, the clip ends on the frame).
+4. **One clip per fal model** (Wan 3.0, Seedance 2.5, Seedance 2.0 Mini, MiniMax H3, H3 Max Turbo) at the default tier:
+   fal's billed amount vs `media_jobs.cost_usd`; the file size of a 10 s clip at the top tier (< 25 MB).
+5. **Inline frames**: one image → video clip with start + end frames near 4 MB each (body size accepted by fal).
+6. **Deadline cancel**: not provokable on demand; after the first live weeks, list `media_jobs` rows with
+   `last_error LIKE '%provider cancel%'` and check them against fal's billing.
 
 ## Gaps (not built in P4)
 - **Kling motion control** (`/v1/videos/motion-control`, a reference VIDEO; ComfyUI prices kling-v3 std 0.126 / pro 0.168
@@ -91,8 +121,9 @@ Queue protocol: https://fal.ai/docs/api-reference/inference-api/queue/status.md 
 - **Video upscale** (P4 «utility»): not built (needs a video input; fal `fal-ai/seedvr/upscale/video` exists).
 - **Over 10 s**: the models take 15–30 s; 10 s keeps a 1080p clip well inside the 25 MB cap. Raise per model after the
   first live sizes are known.
-- **Deadline cancel**: the shared poll loop fails a job at its 20-minute deadline without telling fal; a clip fal finishes
-  later is billed to us and unrecorded (the 10-minute start timeout limits this to clips that started).
+- **Late fal success after a cancel** (review M1, mitigated): the deadline now cancels at fal and keeps the op id in
+  `last_error`; a running clip may still finish (fal only SIGNALS the runner) and be billed — reconcile `last_error`
+  «provider cancel: completed» / «failed» rows against fal's billing. Nothing re-delivers such a clip (the user was refunded).
 - **«Tekshirish» for video prices**: the fal probe compares only the picture endpoints' unit prices
   (`falEndpointPrices` reads `FAL_IMAGE_MODELS`); adding the ten video endpoints is a follow-up in
   `lib/server/providers/probe.ts`.

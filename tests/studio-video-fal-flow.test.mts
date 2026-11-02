@@ -26,7 +26,13 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *   2. submit resolves only `imageAssetId` (P3 code)                   -> «flow: image + end frame» (no end frame sent);
  *   3. submit-generation checks only the start photo's owner           -> «gating» (foreign end frame charged);
  *   4. `failVideo` without the refund                                  -> «refunds»;
- *   5. fal poll treats COMPLETED + error as running                    -> «refunds» (waits for the deadline instead).
+ *   5. fal poll treats COMPLETED + error as running                    -> «refunds» (waits for the deadline instead);
+ *   6. (review M1) no cancel at the deadline                           -> «deadline»;
+ *   7. a failing cancel rethrown (blocks the refund)                   -> «deadline»;
+ *   8. op id not written to `last_error`                               -> «deadline»;
+ *   9. (review N2) video photos skip the input checks                  -> «photos».
+ * Review M1 / N2: «deadline» (fal cancel once, refund once, op id kept; failing cancel still refunds; Kling unchanged) and
+ * «photos» (type / per-photo size / job total refused before charge).
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
