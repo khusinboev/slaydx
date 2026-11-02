@@ -715,14 +715,14 @@ export type CostJson = {
 };
 
 export type CostPart = {
-  kind: "llm" | "image" | "grounding" | "tts" | "video";
+  kind: "llm" | "image" | "grounding" | "tts" | "video" | "audio";
   provider: string;
   /** LLM/rasm modeli; TTS da model (Gemini) yoki `provider:ovoz`; grounding da `google_search`. */
   model: string;
   calls: number;
   inputTokens: number;
   outputTokens: number;
-  /** Rasm soni / grounding so'rovi / TTS belgisi / video soniyasi (LLM da 0). */
+  /** Rasm soni / grounding so'rovi / TTS belgisi / video soniyasi / audio soniyasi (musiqa, effekt, ovozni almashtirish, tozalash; LLM da 0). */
   units: number;
   usd: number;
   /**

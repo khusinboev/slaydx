@@ -1,9 +1,11 @@
 import "server-only";
-import type { MediaAdapter, MediaOutput } from "../../studio-core";
+import type { MediaAdapter, MediaOutput, Route } from "../../studio-core";
+import { MEDIA_CATALOG } from "../../media/catalog";
 import { ELEVENLABS_VOICES, GEMINI_VOICES, STUDIO_CLONE_PURPOSE, STUDIO_SPEECH_PURPOSE, VOICE_PREVIEW_TEXT, cloneIdOf } from "../../media/catalog-speech";
 import { studioSpeechAdapters } from "../../media/adapters/speech-studio";
 import { geminiTtsModel } from "../../generation/tts/gemini";
 import { mergeToMp3, mp3Seconds } from "../../generation/tts/mp3";
+import { recordSpeechCall } from "../../generation/studio/cost";
 import { extractMeta } from "../../generation/meta";
 import type { AcademicDoc, BuiltFile } from "../../generation/types";
 import type { FormValues, ToolConfig } from "../../types";
@@ -27,7 +29,7 @@ export const CLONE_PREVIEW_MODEL_ID = "elevenlabs/eleven-v3";
 
 export type CloneDeps = ProviderDeleteDeps & {
   adapters?: Readonly<Record<string, MediaAdapter>>;
-  run?: (i: RunInput) => Promise<{ outputs: MediaOutput[] }>;
+  run?: (i: RunInput) => Promise<{ outputs: MediaOutput[]; route?: Route }>;
 };
 
 const inline = (o: MediaOutput | undefined): Uint8Array | null => (o && o.kind === "inline" && o.bytes.length ? o.bytes : null);
@@ -77,10 +79,11 @@ export async function buildStudioClone(
     providerVoiceId = providerVoiceOf(made.outputs[0]);
     if (!providerVoiceId) throw new Error("clone answered without a voice id");
     o.onStage?.({ progress: 60, step: "Ovozga o‘girilmoqda" });
+    const previewValues = { text: VOICE_PREVIEW_TEXT, voice: `clone:${begun.voiceId}` };
     const preview = await run({
       purpose: STUDIO_SPEECH_PURPOSE,
       modelId: CLONE_PREVIEW_MODEL_ID,
-      values: { text: VOICE_PREVIEW_TEXT, voice: `clone:${begun.voiceId}` },
+      values: previewValues,
       extra: { text: VOICE_PREVIEW_TEXT, voice: providerVoiceId, lang: "uz" },
       step: "clone:preview",
       adapters,
@@ -89,6 +92,9 @@ export async function buildStudioClone(
     });
     mp3 = inline(preview.outputs[0]);
     if (!mp3 || mp3Seconds(mp3) <= 0) throw new Error("preview is not audio");
+    // The job's only billable provider call is the preview (the IVC call is free: catalog cost $0, nothing to record).
+    const previewEntry = MEDIA_CATALOG.byId(CLONE_PREVIEW_MODEL_ID);
+    if (previewEntry) recordSpeechCall(previewEntry, preview.route ?? previewEntry.routes[0]!, previewValues, VOICE_PREVIEW_TEXT.length);
     await finishClone(begun.voiceId, providerVoiceId, sampleId);
   } catch (e) {
     console.warn("[studio-clone] failed:", e instanceof Error ? e.message : e);

@@ -11,7 +11,7 @@
  * which the worker built from the job owner's own active clones (SQL ownership) — an id missing there fails the job
  * (full refund), never speaks with another voice.
  */
-import { normalize, type CatalogEntry, type MediaAdapter, type MediaOutput } from "../../studio-core";
+import { normalize, type CatalogEntry, type MediaAdapter, type MediaOutput, type Route } from "../../studio-core";
 import { chunkText, TTS_LIMITS } from "../tts/types";
 import { mergeToMp3, mp3Seconds } from "../tts/mp3";
 import { geminiTtsModel } from "../tts/gemini";
@@ -20,6 +20,7 @@ import { STUDIO_SPEECH_PURPOSE, cloneIdOf, libraryVoicesOf, voiceParamsOf } from
 import { parseDialogue, speechTextParam, spokenOverLimit, studioSpeechEntry } from "../../media/studio-speech";
 import { studioSpeechAdapters } from "../../media/adapters/speech-studio";
 import { UserFacingError } from "../../server/user-error";
+import { recordSpeechCall } from "./cost";
 import type { AcademicDoc, BuiltFile, StudioSpeechDoc } from "../types";
 import type { FormValues, ToolConfig } from "../../types";
 
@@ -35,7 +36,7 @@ export type StudioSpeechDeps = {
   /** Test seam: the adapters by id (default: the real ones). */
   adapters?: Readonly<Record<string, MediaAdapter>>;
   /** Test seam: the media call (default `runMedia`). */
-  run?: (i: Parameters<typeof import("../../server/media/run").runMedia>[0]) => Promise<{ outputs: MediaOutput[] }>;
+  run?: (i: Parameters<typeof import("../../server/media/run").runMedia>[0]) => Promise<{ outputs: MediaOutput[]; route?: Route }>;
 };
 
 const FAILED = "Ovoz yaratilmadi — provayder javob bermadi. Kredit qaytariladi.";
@@ -87,6 +88,9 @@ export async function buildStudioSpeech(
   const common = { purpose: STUDIO_SPEECH_PURPOSE, modelId: entry.id, adapters, redact: ["text", "script", "turns"] as const, ...(upstream ? { upstream } : {}), ...(o.deadline ? { deps: { deadline: o.deadline } } : {}) };
   const usedClones = voiceParamsOf(entry).map((n) => cloneIdOf(String(values[n] ?? "").trim())).filter((x): x is string => x !== null);
   const voiceRaw = (n: string) => (String(values[n] ?? "").trim() ? values[n] : p[n]);
+  // The route that answered (the real `runMedia` says which), else the primary with the same upstream swap `runMedia` applies.
+  const primary = entry.routes[0]!;
+  const routeOf = (out: { route?: Route }): Route => out.route ?? (upstream ? { ...primary, upstreamModel: upstream() } : primary);
 
   const pieces: { mp3?: Uint8Array; wav?: Uint8Array }[] = [];
   let lines: StudioSpeechDoc["lines"];
@@ -110,6 +114,8 @@ export async function buildStudioSpeech(
       const out = await run({ ...common, values: p, extra, step: "speech:0" });
       const got = bytesOf(out.outputs[0]);
       if (!got) throw new Error("bo'sh audio");
+      // Delivered: the call's catalog cost (the whole normalized script, as `media_jobs.cost_usd`) goes into the job's cost.
+      recordSpeechCall(entry, routeOf(out), p, chars);
       pieces.push(got.mime === "audio/wav" ? { wav: got.bytes } : { mp3: got.bytes });
     } else {
       const text = String(p.text ?? "");
@@ -118,9 +124,12 @@ export async function buildStudioSpeech(
       lines = [{ speaker: voices[0]!.label, text }];
       const chunks = chunkText(text, speechChunkLimit(entry));
       for (let i = 0; i < chunks.length; i++) {
-        const out = await run({ ...common, values: { ...p, text: chunks[i]! }, extra: { text: chunks[i]!, voice: voices[0]!.id, lang: String(p.lang ?? "uz") }, step: `speech:${i}` });
+        const callValues = { ...p, text: chunks[i]! };
+        const out = await run({ ...common, values: callValues, extra: { text: chunks[i]!, voice: voices[0]!.id, lang: String(p.lang ?? "uz") }, step: `speech:${i}` });
         const got = bytesOf(out.outputs[0]);
         if (!got) throw new Error("bo'sh audio");
+        // One entry per delivered chunk, priced on that chunk's text like its `media_jobs` row.
+        recordSpeechCall(entry, routeOf(out), callValues, chunks[i]!.length);
         pieces.push(got.mime === "audio/wav" ? { wav: got.bytes } : { mp3: got.bytes });
         o.onStage?.({ progress: 10 + Math.round((80 * (i + 1)) / chunks.length), step: "Ovozga o‘girilmoqda" });
       }

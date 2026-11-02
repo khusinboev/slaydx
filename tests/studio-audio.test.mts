@@ -389,3 +389,94 @@ test("toolBlockedReason: «Audio» follows its own model list", () => {
   assert.equal(tools.toolBlockedReason(TOOL, { ttsPremium: true } as never), null, "an older server: the ElevenLabs flag");
   assert.ok(tools.toolBlockedReason(TOOL, { llm: false } as never), "an older server with nothing configured: blocked");
 });
+
+/* ───────────────────────── P7c: provider cost telemetry ───────────────────────── */
+
+const usd6 = (n: number) => Number(n.toFixed(6));
+/** What `credits` ElevenLabs credits cost on the owner's Creator plan. */
+const creditsUsd = (credits: number) => credits * ELEVENLABS_CREATOR_USD_PER_CREDIT;
+
+/** Runs the real engine inside a job meter; returns what the worker would put in `cost_json` (also after a throw). */
+async function costOf(values: Record<string, unknown>, respond: (s: Seen, n: number) => Response = () => audio()) {
+  const { trackJobCost } = await import("../lib/generation/job-cost.ts");
+  const { fetchImpl } = stub(respond);
+  const priced: number[] = [];
+  core.resetBreakers();
+  const tracked = trackJobCost(() =>
+    buildStudioAudio(TOOL, values as never, ctxOf(values), { putAsset: async () => "f".repeat(24) }, {
+      adapters: studioAudioAdapters({ key: () => KEY }),
+      run: (i) => {
+        // What `runMedia` stores as this call's `media_jobs.cost_usd`: the SAME values priced with the catalog rule.
+        const entry = MEDIA_CATALOG.byId(i.modelId)!;
+        priced.push(core.costUsd(entry.cost, core.normalize(entry.params, i.values)));
+        return runMedia({ ...i, deps: { fetchImpl } });
+      },
+    }),
+  );
+  const built = await tracked.promise.then(
+    (b) => ({ ok: true as const, b }),
+    (e: unknown) => ({ ok: false as const, e }),
+  );
+  return { built, cost: tracked.snapshot().toJson(), priced };
+}
+
+test("cost: each delivered call is one `audio` entry priced as its media_jobs.cost_usd (music, effect, voice changer, isolator)", async (t) => {
+  quiet(t);
+  // Music: 30 s × 15 credits / s, ONE call.
+  const music = await costOf(BASE[MUSIC]!);
+  assert.equal(music.built.ok, true);
+  const musicUsd = creditsUsd(30 * 15);
+  assert.deepEqual(music.cost.parts, [{ kind: "audio", provider: "elevenlabs", model: "music_v1", calls: 1, inputTokens: 0, outputTokens: 0, units: 30, usd: usd6(musicUsd) }]);
+  assert.equal(music.cost.usd, usd6(musicUsd));
+  assert.equal(music.cost.calls, 1);
+  assert.deepEqual(music.priced, [musicUsd], "the same number runMedia writes to media_jobs");
+
+  // Effect: ONE clip per call (5 s × 40 credits); four variants delivered = four clips, never 4 × 4 and never 1.
+  const sfx = await costOf({ ...BASE[SFX], variants: 4 });
+  const clip = creditsUsd(5 * 40);
+  assert.deepEqual(sfx.cost.parts, [{ kind: "audio", provider: "elevenlabs", model: "eleven_text_to_sound_v2", calls: 4, inputTokens: 0, outputTokens: 0, units: 20, usd: usd6(4 * clip) }]);
+  assert.deepEqual(sfx.priced, [clip, clip, clip, clip]);
+
+  // Voice changer / isolator: priced on the server-measured input seconds (10 s × 1 000 credits / min).
+  const sts = await costOf(BASE[STS]!);
+  assert.deepEqual(sts.cost.parts, [{ kind: "audio", provider: "elevenlabs", model: "eleven_multilingual_sts_v2", calls: 1, inputTokens: 0, outputTokens: 0, units: 10, usd: usd6(creditsUsd((10 * 1000) / 60)) }]);
+  const iso = await costOf(BASE[ISO]!);
+  assert.deepEqual(iso.cost.parts, [{ kind: "audio", provider: "elevenlabs", model: "audio-isolation", calls: 1, inputTokens: 0, outputTokens: 0, units: 10, usd: usd6(creditsUsd((10 * 1000) / 60)) }]);
+  // A longer input is a bigger bill: the cost follows `inputSeconds`, not a constant.
+  const iso61 = await costOf({ ...BASE[ISO], inputSeconds: 61 });
+  assert.equal(iso61.cost.usd, usd6(creditsUsd((61 * 1000) / 60)));
+});
+
+test("cost: SFX 3 of 4 delivered -> three clips recorded; a failed call, or a lone failure, records nothing", async (t) => {
+  quiet(t);
+  const clip = creditsUsd(5 * 40);
+  const three = await costOf({ ...BASE[SFX], variants: 4 }, (_s, n) => (n === 2 ? new Response("boom", { status: 400 }) : audio()));
+  assert.equal(three.built.ok, true);
+  assert.deepEqual(three.built.ok && three.built.b.delivered, { got: 3, want: 4 });
+  assert.equal(three.priced.length, 4, "four calls were made");
+  assert.equal(three.cost.calls, 3, "the failed variant must not be recorded");
+  assert.equal(three.cost.parts![0]!.units, 15);
+  assert.equal(three.cost.usd, usd6(3 * clip));
+
+  // Every call fails: the job fails (refund), nothing delivered, nothing recorded.
+  const none = await costOf({ ...BASE[SFX], variants: 2 }, () => new Response("boom", { status: 400 }));
+  assert.equal(none.built.ok, false);
+  assert.equal(none.cost.calls, 0);
+  assert.deepEqual(none.cost.parts, []);
+  assert.equal(none.cost.usd, 0);
+
+  // One clip asked and the provider fails: the same.
+  const lone = await costOf(BASE[MUSIC]!, () => new Response("boom", { status: 500 }));
+  assert.equal(lone.built.ok, false);
+  assert.equal(lone.cost.calls, 0);
+});
+
+test("cost: with no job meter (previews, scripts) recording is a no-op and the engine is unaffected", async (t) => {
+  quiet(t);
+  const { currentJobCost } = await import("../lib/generation/job-cost.ts");
+  const { fetchImpl } = stub(() => audio());
+  core.resetBreakers();
+  const out = await buildStudioAudio(TOOL, BASE[MUSIC] as never, { input: null, clones: {} }, {}, { adapters: studioAudioAdapters({ key: () => KEY }), run: (i) => runMedia({ ...i, deps: { fetchImpl } }) });
+  assert.equal(out.mime, "audio/mpeg");
+  assert.equal(currentJobCost(), undefined);
+});

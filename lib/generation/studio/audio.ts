@@ -15,7 +15,7 @@
  * upload row (SQL ownership); a clone voice ONLY through `ctx.clones` (the owner's ready clones). Anything missing there
  * fails the job (full refund), never runs on another file or voice.
  */
-import { normalize, type MediaAdapter, type MediaOutput } from "../../studio-core";
+import { normalize, type MediaAdapter, type MediaOutput, type Route } from "../../studio-core";
 import { mp3Seconds } from "../tts/mp3";
 import { extractMeta } from "../meta";
 import { audioModeOf, takesAudioInput } from "../../media/catalog-audio";
@@ -23,6 +23,7 @@ import { ELEVENLABS_VOICES, cloneIdOf } from "../../media/catalog-speech";
 import { studioAudioEntry, studioAudioError, studioAudioPurposeOf } from "../../media/studio-audio";
 import { studioAudioAdapters } from "../../media/adapters/audio-studio";
 import { UserFacingError } from "../../server/user-error";
+import { recordAudioCall } from "./cost";
 import type { AcademicDoc, BuiltFile, StudioAudioDoc } from "../types";
 import type { FormValues, ToolConfig } from "../../types";
 
@@ -38,7 +39,7 @@ export type StudioAudioCtx = {
 
 export type StudioAudioDeps = {
   adapters?: Readonly<Record<string, MediaAdapter>>;
-  run?: (i: Parameters<typeof import("../../server/media/run").runMedia>[0]) => Promise<{ outputs: MediaOutput[] }>;
+  run?: (i: Parameters<typeof import("../../server/media/run").runMedia>[0]) => Promise<{ outputs: MediaOutput[]; route?: Route }>;
 };
 
 const FAILED = "Audio yaratilmadi — provayder javob bermadi. Kredit qaytariladi.";
@@ -99,9 +100,12 @@ export async function buildStudioAudio(
   for (let i = 0; i < want; i++) {
     try {
       // Each call makes ONE clip: its media_jobs cost is one clip's, not the whole job's (variants × clip).
-      const out = await run({ ...common, values: { ...p, variants: 1 }, ...(providerVoice ? { extra: { voice: providerVoice } } : {}), ...(assets ? { assets } : {}), step: `audio:${i}` });
+      const callValues = { ...p, variants: 1 };
+      const out = await run({ ...common, values: callValues, ...(providerVoice ? { extra: { voice: providerVoice } } : {}), ...(assets ? { assets } : {}), step: `audio:${i}` });
       const mp3 = mp3Of(out.outputs[0]);
       if (!mp3) throw new Error("bo'sh audio");
+      // Delivered: the same one-clip cost goes into the job's cost (a failed variant records nothing).
+      recordAudioCall(entry, out.route ?? entry.routes[0]!, callValues);
       clips.push(mp3);
     } catch (e) {
       console.warn("[studio-audio] call failed:", e instanceof Error ? e.message : e);
