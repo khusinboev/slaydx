@@ -57,6 +57,17 @@ const GPT = "openai/gpt-image";
 const STUDIO_VIDEO_IDS = ["google/omni-video", "kling/kling-3", "kling/kling-3-pro", "alibaba/wan-3", "bytedance/seedance-2.5", "bytedance/seedance-2-mini", "minimax/h3", "minimax/h3-max-turbo", "kling/effects"];
 /** P5: the «Ovoz» tab's speech models, listed after the video ones; one unit = 1 000 characters (the clone is a fixed price, not here). */
 const STUDIO_SPEECH_IDS = ["elevenlabs/eleven-v3", "google/gemini-tts", "elevenlabs/v3-dialogue", "google/gemini-dialogue"];
+/**
+ * P6: the «Audio» tab's four models, listed last; one unit = 1 minute of music / of input audio, 10 s of a sound effect.
+ * Prices at ×2 and the default 12 700 so'm/$ (P6-SPEC price table): 15 cr/s × 60 s, 40 cr/s × 10 s, 1 000 cr / min.
+ */
+const STUDIO_AUDIO: Record<string, { unit: string; values: Record<string, unknown>; price: number }> = {
+  "elevenlabs/music": { unit: "1 daqiqa", values: { length: "60" }, price: 4_200 },
+  "elevenlabs/sfx": { unit: "10 soniya", values: { duration: 10 }, price: 1_900 },
+  "elevenlabs/voice-changer": { unit: "1 daqiqa", values: { inputSeconds: 60 }, price: 4_700 },
+  "elevenlabs/isolator": { unit: "1 daqiqa", values: { inputSeconds: 60 }, price: 4_700 },
+};
+const STUDIO_AUDIO_IDS = Object.keys(STUDIO_AUDIO);
 /** P2a: the fal models (key set above) — one picture at the default params (Ideogram: «Standart» quality, $0.06). */
 const FAL_USD: Record<string, number> = {
   "bfl/flux": 0.048,
@@ -170,7 +181,15 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
     assert.equal(r.body.soumPerUsd, rate);
     // The block lists every Studio model by itself (catalog + purpose): the pictures with the fal ones (P2a), the P2b
     // edit / utility models, then the Video tab's models (P3; their per-clip numbers are checked in tests/studio-video.test.mts).
-    assert.deepEqual(r.body.models.map((m: { modelId: string }) => m.modelId), [NANO, GPT, ...Object.keys(FAL_USD), ...Object.keys(P2B_USD), ...STUDIO_VIDEO_IDS, ...STUDIO_SPEECH_IDS]);
+    assert.deepEqual(r.body.models.map((m: { modelId: string }) => m.modelId), [NANO, GPT, ...Object.keys(FAL_USD), ...Object.keys(P2B_USD), ...STUDIO_VIDEO_IDS, ...STUDIO_SPEECH_IDS, ...STUDIO_AUDIO_IDS]);
+    // P6: an «Audio» row is priced by the charging function of `studio-audio` (seconds × credit rate × markup).
+    for (const m of r.body.models.filter((x) => STUDIO_AUDIO_IDS.includes(x.modelId))) {
+      const want = STUDIO_AUDIO[m.modelId]!;
+      assert.equal(m.unit, want.unit, m.modelId);
+      if (rate === 12_700) assert.equal(m.price, want.price, `${m.modelId}: the P6-SPEC price`);
+      assert.equal(m.price, up100(m.costUsd * rate * 2), m.modelId);
+      assert.equal(m.price, await effectivePrice(TOOL_BY_ID["studio-audio"], { modelId: m.modelId, ...want.values }), `${m.modelId}: the charging function`);
+    }
     // P5: a speech row is priced per 1 000 characters by the charging function of `studio-speech`.
     for (const m of r.body.models.filter((x) => STUDIO_SPEECH_IDS.includes(x.modelId))) {
       const field = m.modelId.endsWith("-dialogue") ? "script" : "text";
@@ -178,7 +197,7 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
       assert.equal(m.price, up100(m.costUsd * rate * 2), m.modelId);
       assert.equal(m.price, await effectivePrice(TOOL_BY_ID["studio-speech"], { modelId: m.modelId, [field]: "x".repeat(1000) }), `${m.modelId}: the charging function`);
     }
-    for (const m of r.body.models.filter((x) => !STUDIO_VIDEO_IDS.includes(x.modelId) && !STUDIO_SPEECH_IDS.includes(x.modelId))) {
+    for (const m of r.body.models.filter((x) => !STUDIO_VIDEO_IDS.includes(x.modelId) && !STUDIO_SPEECH_IDS.includes(x.modelId) && !STUDIO_AUDIO_IDS.includes(x.modelId))) {
       const usd = USD[m.modelId]!;
       assert.equal(m.costUsd, usd);
       assert.equal(m.costSoum, Math.round(usd * rate * 100) / 100);

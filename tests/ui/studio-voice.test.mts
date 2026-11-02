@@ -128,7 +128,7 @@ async function type(sel: string, value: string) {
 test("tab: «Ovoz» is the third tab, its catalog waits for it, ?tab=ovoz opens it, no «Fon musiqa»", async () => {
   const a = api();
   await mount();
-  assert.deepEqual(qa("[data-studio-tab]").map((b) => b.textContent), ["Rasm", "Video", "Ovoz"]);
+  assert.deepEqual(qa("[data-studio-tab]").map((b) => b.textContent), ["Rasm", "Video", "Ovoz", "Audio"]);
   assert.equal(a.calls.filter((c) => c.url.includes("studio.speech")).length, 0);
   await openVoice();
   assert.ok(q("[data-voice-tab]"));

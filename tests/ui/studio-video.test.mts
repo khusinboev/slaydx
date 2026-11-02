@@ -113,7 +113,7 @@ async function type(sel: string, value: string) {
 test("tabs: «Rasm» | «Video»; switching keeps the Rasm prompt + model and the Video form; ?tab=video opens Video; catalog asked on first open", async () => {
   const a = api();
   await mount();
-  assert.deepEqual(qa("[data-studio-tab]").map((b) => b.textContent), ["Rasm", "Video", "Ovoz"]);
+  assert.deepEqual(qa("[data-studio-tab]").map((b) => b.textContent), ["Rasm", "Video", "Ovoz", "Audio"]);
   assert.equal(a.calls.filter((c) => c.url.includes("studio.video")).length, 0, "the video catalog waits for the tab");
   await type('[data-studio-prompt] textarea', "Samarqand kechasi");
   await click(q(`[data-model-card="${GPT.id}"]`));
