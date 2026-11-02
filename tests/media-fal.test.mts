@@ -47,6 +47,8 @@ import { inRequest } from "./helpers/next-request.mts";
  *   tiers      Seedream Pro 1:1 at 2048² (over the $0.0675 step) / Lite sizes for Pro -> "golden bodies"; Recraft Pro
  *              price 0.21 -> 0.035 -> "price goldens", "flow" (+ ui/studio-fal, studio-admin-media); Seedream Pro price
  *              -> "price goldens"; Recraft Pro routed to the standard endpoint -> "price goldens", "probe", "flow";
+ *   review     (MINOR-4) last look disabled (`lastLook` always false) -> "final window"; (NIT-1) the size-cap check removed
+ *              (body read and parsed whatever its size) -> "JSON cap"; (NIT-2) inner `"` kept in textInstruction -> "text prompt";
  *   admin      `media:` branch removed from providerOfBreaker -> "admin wiring"; falMessage diff check removed ->
  *              "probe"; imageModelLabel catalog fallback removed -> "admin wiring" (viewer says nothing).
  */
@@ -299,6 +301,59 @@ test("adapter: timeout after submit is accepted + retryable and cancels the queu
   assert.equal(none.calls.length, 0);
 });
 
+test("adapter: a job that completes in the final window is fetched, not cancelled (review MINOR-4)", async () => {
+  // Status every 10 s of clock; the deadline leaves 3 s after the 3rd poll — inside the final window.
+  const run = async (last: "COMPLETED" | "IN_PROGRESS") => {
+    let clock = 7_000_000;
+    let polls = 0;
+    const fal = fakeFal((c) => {
+      if (isSubmit(c)) return json(200, SUB());
+      if (isStatus(c)) {
+        polls++;
+        if (polls <= 3) {
+          clock += 10_000;
+          return json(200, { status: "IN_PROGRESS" });
+        }
+        clock += 200;
+        return json(200, { status: last });
+      }
+      if (isResult(c)) return json(200, { images: [{ url: DATA_URI }] });
+      if (c.method === "PUT") return json(202, { status: "CANCELLATION_REQUESTED" });
+      return json(404, {});
+    });
+    const p = adapter().submit(input(), { fetchImpl: fal.fetchImpl, now: () => clock, deadline: clock + 33_000 });
+    return { fal, p };
+  };
+  const done = await run("COMPLETED");
+  const out = await done.p;
+  assert.ok("done" in out && out.done.length === 1, "the picture fal finished (and bills) is delivered");
+  assert.equal(done.fal.calls.filter(isStatus).length, 4, "one last look in the final window");
+  assert.ok(!done.fal.calls.some((c) => c.method === "PUT"), "no cancel for a completed job");
+  // Still running at the last look: cancelled and refunded as before.
+  const late = await run("IN_PROGRESS");
+  const e = await err(late.p);
+  assert.deepEqual(flags(e), { retryable: true, safety: false, accepted: true, status: undefined });
+  assert.equal(late.fal.calls.filter(isStatus).length, 4);
+  assert.equal(late.fal.calls.at(-1)!.method, "PUT");
+});
+
+test("adapter: an answer over the JSON cap is refused whole, never cut and parsed (review NIT-1)", async () => {
+  const { FAL_JSON_MAX_CHARS } = await import("../lib/media/adapters/fal.ts");
+  assert.equal(FAL_JSON_MAX_CHARS, 64 * 1024 * 1024);
+  // Declared over the cap on the result: accepted (the job exists) with a clear reason.
+  const big = fakeFal((c) =>
+    isSubmit(c) ? json(200, SUB()) : isStatus(c) ? json(200, { status: "COMPLETED" }) : new Response("{}", { status: 200, headers: { "content-length": String(FAL_JSON_MAX_CHARS + 1) } }),
+  );
+  const e = await err(adapter().submit(input(), { fetchImpl: big.fetchImpl }));
+  assert.match(e.message, /result: javob juda katta/);
+  assert.equal(e.accepted, true);
+  // On a refused submit: not accepted.
+  const sub = fakeFal(() => new Response("{}", { status: 500, headers: { "content-length": String(FAL_JSON_MAX_CHARS + 10) } }));
+  const s = await err(adapter().submit(input(), { fetchImpl: sub.fetchImpl }));
+  assert.match(s.message, /submit: javob juda katta/);
+  assert.equal(s.accepted, false);
+});
+
 test("adapter: unknown output type, no key, unknown model", async () => {
   const fal = fakeFal((c) => (isSubmit(c) ? json(200, SUB()) : isStatus(c) ? json(200, { status: "COMPLETED" }) : json(200, { images: [{ url: `data:image/jpeg;base64,${Buffer.from("<html>not an image at all</html>").toString("base64")}` }] })));
   const e = await err(adapter().submit(input(), { fetchImpl: fal.fetchImpl }));
@@ -375,6 +430,9 @@ test("text prompt: quoted texts, the instruction, the no-text clause kept byte f
   assert.deepEqual(quotedTexts(`«${"x".repeat(121)}» «ok»`), ["ok"], "a paragraph in quotes is not a poster line");
   assert.equal(textInstruction(["A", "B"]), 'Render exactly this text, spelled exactly as given and nowhere else in the image: "A", "B". No other text, letters, watermark or logo.');
   assert.match(textInstruction([]), /^Add no text/);
+  // NIT-2: a `"` inside a «…» text cannot close the instruction's own quotes.
+  assert.deepEqual(quotedTexts('Afisha «Say "hi" to Tashkent»'), ['Say "hi" to Tashkent']);
+  assert.equal(textInstruction(['Say "hi"']), `Render exactly this text, spelled exactly as given and nowhere else in the image: "Say 'hi'". No other text, letters, watermark or logo.`);
   // Without `text` (the «Rasm» tool, non-text Studio models): the long-standing prompt, byte for byte.
   const RASM =
     "MAIN SUBJECT (must appear): a red apple " +

@@ -55,6 +55,18 @@ UNVERIFIED: FLUX 3 bills per megapixel; the page states «a 1K (1 MP) image cost
 next to ours. Seedream 5 Pro's price is marked «Tentative … Final pricing is not yet confirmed» by fal (the probe will
 show a change). Whether 4xx answers (content-policy refusals) are billed is not documented.
 
+## Known gaps (independent review, 2026-11-02)
+- **Timed-out accepted job (MINOR-2).** A fal job that was accepted but did not finish before our deadline is cancelled
+  (best effort) and the user is refunded; if fal still finishes it, fal may bill it and our spend meter does not record
+  it (`media_jobs` row `failed`, no `ai_usage` part). Mitigated: one last status look in the final 4 s fetches a job
+  that completed there (MINOR-4 fix). Watch fal's billing vs our `cost_json` after the first live weeks.
+- **FLUX 3 per-MP rounding (MINOR-3).** Priced at $0.048 per 1k picture; how fal rounds a non-square 1k frame is not
+  documented. Compare fal's billed amounts with `media_jobs.cost_usd` after the first live FLUX jobs.
+- **Probe request format (NIT-3).** `GET /v1/models/pricing?endpoint_id=a,b,c` (comma list) is from the docs; whether
+  the comma form and a valid key are both required is verified only at the first real «Tekshirish».
+- **Crash re-run resubmits.** fal has no submit idempotency key: a worker crash after submit and before the result
+  makes the retried job submit again (a second paid job at fal). The router never resubmits within one run.
+
 ## P2b (next)
 Prompt library + «Namuna promptlar», image templates, editing (FLUX / Seedream edit endpoints, `i2i`), utility tools
 (upscale, background removal, Recraft vectorize).

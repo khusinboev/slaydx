@@ -47,7 +47,8 @@ export function quotedTexts(userPrompt: string): string[] {
  */
 export function textInstruction(quoted: readonly string[]): string {
   if (!quoted.length) return "Add no text, letters, watermark or logo unless the request above explicitly asks for it.";
-  return `Render exactly this text, spelled exactly as given and nowhere else in the image: ${quoted.map((t) => `"${t}"`).join(", ")}. No other text, letters, watermark or logo.`;
+  // A `"` inside a quoted text («Say "hi"») would close the instruction's own quotes early: it becomes `'`.
+  return `Render exactly this text, spelled exactly as given and nowhere else in the image: ${quoted.map((t) => `"${t.replace(/"/g, "'")}"`).join(", ")}. No other text, letters, watermark or logo.`;
 }
 
 /**

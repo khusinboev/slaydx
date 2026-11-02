@@ -241,13 +241,39 @@ const MIN_BUDGET_MS = 2_000;
 /** One HTTP call of the cycle (submit / status / result / download) never waits longer than this. */
 const CALL_MS = 30_000;
 const MAX_STATUS_ERRORS = 5;
+/**
+ * Regular polling stops this long before the deadline; that tail is for ONE last status look and, if the job finished
+ * in the final window, the result fetch — so a picture fal completed (and bills) is delivered, not cancelled + refunded.
+ */
+const FINAL_MS = 4_000;
+/** The last look is made only with at least this much time left, and waits at most `LAST_LOOK_MS`. */
+const LAST_LOOK_MIN_MS = 1_000;
+const LAST_LOOK_MS = 1_500;
+/** Largest JSON answer read (a `sync_mode` data URI of a 12 MB picture is ≈ 16 MB of base64). */
+export const FAL_JSON_MAX_CHARS = 64 * 1024 * 1024;
 const IMAGE_SPEC = { mimes: ["image/png", "image/jpeg", "image/webp"], maxBytes: 12 * 1024 * 1024 };
 
 const sleepReal = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-async function json(res: Response): Promise<unknown> {
+/**
+ * The whole answer parsed as JSON; `null` when it is not JSON. An answer over `FAL_JSON_MAX_CHARS` (declared or read) is
+ * never cut and parsed: `tooLarge()` is thrown instead, so the caller fails the call with a clear reason.
+ */
+async function json(res: Response, tooLarge: (size: number) => Error): Promise<unknown> {
+  const declared = Number(res.headers?.get?.("content-length") ?? 0);
+  if (Number.isFinite(declared) && declared > FAL_JSON_MAX_CHARS) {
+    await res.body?.cancel().catch(() => {});
+    throw tooLarge(declared);
+  }
+  let text: string;
   try {
-    return JSON.parse((await res.text()).slice(0, 64 * 1024 * 1024));
+    text = await res.text();
+  } catch {
+    return null;
+  }
+  if (text.length > FAL_JSON_MAX_CHARS) throw tooLarge(text.length);
+  try {
+    return JSON.parse(text);
   } catch {
     return null;
   }
@@ -308,12 +334,13 @@ export function falAdapter(o: FalDeps = {}): MediaAdapter {
         throw fail(`submit: ${e instanceof Error ? e.message : String(e)}`, { retryable: true, accepted: true });
       }
       if (res.status >= 300 && res.status < 400) throw fail(`submit: ${res.status} redirect rad etildi`, { status: res.status });
+      const big = (where: string, isAccepted: boolean) => (n: number) => fail(`${where}: javob juda katta (${n} belgi)`, { accepted: isAccepted });
       if (!res.ok) {
-        const d = detailOf(await json(res));
+        const d = detailOf(await json(res, big("submit", false)));
         const safety = d.types.includes(POLICY);
         throw fail(`${res.status} ${d.text || "submit failed"}`, { status: res.status, retryable: !safety && isRetryableStatus(res.status), safety });
       }
-      const sub = (await json(res)) as { request_id?: unknown; status_url?: unknown; response_url?: unknown; cancel_url?: unknown } | null;
+      const sub = (await json(res, big("submit", true))) as { request_id?: unknown; status_url?: unknown; response_url?: unknown; cancel_url?: unknown } | null;
       const id = typeof sub?.request_id === "string" && REQUEST_ID.test(sub.request_id) ? sub.request_id : null;
       if (!id) throw fail("submit: javobda request_id yo'q", { accepted: true });
       const base = `https://${FAL_QUEUE_HOST}/${ownerApp(input.upstreamModel)}/requests/${id}`;
@@ -332,34 +359,49 @@ export function falAdapter(o: FalDeps = {}): MediaAdapter {
         return accepted(`vaqt tugadi (fal ${id})`, { retryable: true });
       };
 
-      // 2. Status until COMPLETED or the deadline.
+      // One last status look in the final window: `true` when the job completed there (fetch it instead of cancelling).
+      const lastLook = async (): Promise<boolean> => {
+        if (left() < LAST_LOOK_MIN_MS) return false;
+        try {
+          const st = await fetchImpl(statusUrl, { method: "GET", headers: auth, redirect: "manual", signal: AbortSignal.timeout(Math.min(LAST_LOOK_MS, left())) });
+          if (!st.ok) return false;
+          return ((await json(st, big("status", true))) as { status?: unknown } | null)?.status === "COMPLETED";
+        } catch {
+          return false;
+        }
+      };
+      const nap = (ms: number) => sleep(Math.min(ms, Math.max(0, left() - FINAL_MS)));
+
+      // 2. Status until COMPLETED or the deadline (the last FINAL_MS keep one last look + the result fetch).
       let wait = pollMs;
       let errors = 0;
       for (;;) {
-        if (left() < 500) throw await timedOut();
+        if (left() < FINAL_MS) {
+          if (await lastLook()) break;
+          throw await timedOut();
+        }
         let st: Response;
         try {
           st = await fetchImpl(statusUrl, { method: "GET", headers: auth, redirect: "manual", signal: signal() });
         } catch (e) {
-          if (left() < 500) throw await timedOut();
           if (++errors >= MAX_STATUS_ERRORS) throw accepted(`status: ${e instanceof Error ? e.message : String(e)}`, { retryable: true });
-          await sleep(Math.min(wait, Math.max(0, left() - 500)));
+          await nap(wait);
           continue;
         }
         if (st.status >= 300 && st.status < 400) throw accepted(`status: ${st.status} redirect rad etildi`, { status: st.status });
         if (!st.ok) {
-          const d = detailOf(await json(st));
+          const d = detailOf(await json(st, big("status", true)));
           if (!isRetryableStatus(st.status) || ++errors >= MAX_STATUS_ERRORS) throw accepted(`status ${st.status} ${d.text}`, { status: st.status, retryable: isRetryableStatus(st.status) });
         } else {
           errors = 0;
-          const body = (await json(st)) as { status?: unknown } | null;
+          const body = (await json(st, big("status", true))) as { status?: unknown } | null;
           if (body?.status === "COMPLETED") break;
           if (body?.status !== "IN_QUEUE" && body?.status !== "IN_PROGRESS") {
             const d = detailOf(body);
             throw accepted(`status: ${String(body?.status ?? "?")} ${d.text}`, { safety: d.types.includes(POLICY) });
           }
         }
-        await sleep(Math.min(wait, Math.max(0, left() - 500)));
+        await nap(wait);
         wait = Math.min(pollMaxMs, Math.round(wait * 1.5));
       }
 
@@ -371,7 +413,7 @@ export function falAdapter(o: FalDeps = {}): MediaAdapter {
         throw accepted(`result: ${e instanceof Error ? e.message : String(e)}`, { retryable: true });
       }
       if (out.status >= 300 && out.status < 400) throw accepted(`result: ${out.status} redirect rad etildi`, { status: out.status });
-      const result = (await json(out)) as { images?: { url?: unknown }[]; has_nsfw_concepts?: unknown } | null;
+      const result = (await json(out, big("result", true))) as { images?: { url?: unknown }[]; has_nsfw_concepts?: unknown } | null;
       if (!out.ok) {
         const d = detailOf(result);
         const safety = d.types.includes(POLICY);
