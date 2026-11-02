@@ -9,7 +9,7 @@ export const STUDIO_ENTRY = {
   /** Key of `TOOL_ICONS`. */
   icon: "sparkles",
   /** `r g b` tint, as `ToolConfig.tc`. */
-  tc: "245 158 11",
+  tc: "234 88 12", // = the studio-image tool tint (lib/tools.ts)
 } as const;
 
 /** The tool whose route is the Studio page. */

@@ -95,7 +95,8 @@ export function StudioResults({
 
 function JobCard({ job, busy, onAgain, onOtherModel }: { job: StudioJob; busy: boolean; onAgain: (j: StudioJob) => void; onOtherModel: (j: StudioJob) => void }) {
   const gen = job.gen;
-  if (job.error && !gen) return <Failure job={job} message={job.error} busy={busy} onAgain={onAgain} />;
+  // No job state: the job may still finish on the server — say so before a retry charges again.
+  if (job.error && !gen) return <Failure job={job} message={`${job.error} Oldingi ish baribir tugashi mumkin — «Ishlarim» yoki Galereyani tekshiring.`} busy={busy} onAgain={onAgain} />;
   if (!gen) {
     return (
       <div className="bg-card rounded-[20px] border p-5" data-studio-pending role="status">

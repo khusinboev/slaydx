@@ -98,9 +98,9 @@ test("shell: «Studio» header, subtitle, «Galereya» link and the «Rasm» tab
   assert.equal(text("[data-page-header] h1"), "Studio");
   assert.ok(text("[data-page-header]").length > "Studio".length, "a subtitle");
   assert.match(text("[data-studio-gallery-link]"), /Galereya/);
-  const tabs = qa('[role="tab"]');
+  const tabs = qa('[data-studio-tabs] button');
   assert.deepEqual(tabs.map((t) => t.textContent), ["Rasm"], "MUTATSIYA: Video tabi chizilsa qizaradi");
-  assert.equal(tabs[0]!.getAttribute("aria-selected"), "true");
+  assert.equal(tabs[0]!.getAttribute("aria-current"), "page");
   const page = document.body.textContent ?? "";
   for (const word of ["Video", "Ovoz", "Namuna promptlar", "Shablonlar", "tez orada"]) assert.ok(!page.includes(word), `no «${word}»`);
   assert.ok(prompt(), "the prompt box");
@@ -124,7 +124,7 @@ test("unavailable model is not offered; a stale choice falls back to the server'
   installApi({ catalog: catalogBody([GPT], PRICING, GPT.id) });
   await mount();
   assert.ok(!card(NANO), "Nano Banana is not offered");
-  assert.equal(card(GPT)?.getAttribute("aria-checked"), "true");
+  assert.equal(card(GPT)?.getAttribute("aria-pressed"), "true");
   assert.deepEqual(qa("[data-model-card]").map((e) => e.getAttribute("data-model-card")), [GPT.id]);
 });
 
@@ -138,15 +138,15 @@ test("a refused model (400 before charging) re-reads the catalog: the choice fal
   });
   await mount();
   await pickModel(GPT);
-  assert.equal(card(GPT)?.getAttribute("aria-checked"), "true");
+  assert.equal(card(GPT)?.getAttribute("aria-pressed"), "true");
   await typePrompt("Registon maydoni kechqurun");
   await submit();
   await settle();
   assert.match(text("[data-studio-error]"), /Bu model hozir mavjud emas/);
   assert.equal(api.catalogCalls().length, 2, "MUTATSIYA: 400 da katalog qayta o'qilmasa qizaradi");
   assert.ok(!card(GPT), "the model is gone from the list");
-  assert.equal(card(OTHER)?.getAttribute("aria-checked"), "true", "MUTATSIYA: default o'rniga birinchi model tanlansa qizaradi");
-  assert.equal(card(NANO)?.getAttribute("aria-checked"), "false");
+  assert.equal(card(OTHER)?.getAttribute("aria-pressed"), "true", "MUTATSIYA: default o'rniga birinchi model tanlansa qizaradi");
+  assert.equal(card(NANO)?.getAttribute("aria-pressed"), "false");
   assert.ok(!q("[data-studio-job]"), "no job");
 });
 
@@ -350,7 +350,7 @@ test("«Boshqa modelda»: the same prompt is back in the form and the model pick
   await click(q(`[data-model-option="${GPT.id}"]`));
   await click(q("[data-model-confirm]"));
   assert.ok(!q("[data-model-sheet]"));
-  assert.equal(card(GPT)?.getAttribute("aria-checked"), "true");
+  assert.equal(card(GPT)?.getAttribute("aria-pressed"), "true");
 });
 
 test("balance: a line under the button; below the price it says so BEFORE the press with the top-up link", async () => {
@@ -390,6 +390,8 @@ test("409 price_changed: the new price is in the message, no job, and the displa
   assert.match(text("[data-studio-error]"), new RegExp(`Yangi narx: ${groupDigits(1300)} so'm`));
   assert.equal(api.posts()[0]!.body!.expectedPrice, expectedPrice(NANO, 1));
   assert.ok(!q("[data-studio-job]"));
+  // The markup / override / live cost moved: the pricing block is re-read so the button shows the new price (review P1 MINOR 1).
+  assert.equal(api.catalogCalls().length, 2, "MUTATSIYA: 409 da katalog qayta o'qilmasa qizaradi");
 });
 
 test("«Galereya» switches to the gallery view and back; the form is not drawn in the gallery", async () => {

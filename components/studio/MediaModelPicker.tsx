@@ -105,7 +105,7 @@ export function MediaModelPicker({ purpose, value, onChange, values, catalog, op
           </button>
         }
       />
-      <div role="radiogroup" aria-label="Model" className="grid grid-cols-2 gap-2 sm:grid-cols-3" data-model-row>
+      <div role="group" aria-label="Model" className="grid grid-cols-2 gap-2 sm:grid-cols-3" data-model-row>
         {rowModels(models, value).map((m) => (
           <ModelCard key={m.id} model={m} selected={m.id === value} price={unitPrice(m, values, pricing)} onPick={() => onChange(m.id)} />
         ))}
@@ -141,8 +141,7 @@ function ModelCard({ model, selected, price, onPick }: { model: ClientEntry; sel
   return (
     <button
       type="button"
-      role="radio"
-      aria-checked={selected}
+      aria-pressed={selected}
       data-model-card={model.id}
       onClick={onPick}
       className={cn(

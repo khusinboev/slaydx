@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LayoutGrid, Wand2 } from "lucide-react";
-import { ApiError } from "@/lib/api-client";
+import { ApiError, PriceChangedError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
 import { creditTotal, usePricingVersion, useAppStore } from "@/lib/store";
@@ -123,6 +123,8 @@ function StudioApp() {
       setError(e instanceof Error ? e.message : "Xatolik");
       // 400 before charging: the model or a value is no longer accepted — the offered list may have changed.
       if (e instanceof ApiError && e.status === 400) reload(true);
+      // 409 price_changed: the markup / override / live cost moved — re-read the pricing block so the button shows the new price.
+      if (e instanceof PriceChangedError) reload(true);
     } finally {
       setSubmitting(false);
     }
@@ -194,8 +196,8 @@ function StudioApp() {
         ) : (
           <>
             <div data-studio-form className="min-w-0">
-              <div role="tablist" aria-label="Studio bo‘limlari" data-studio-tabs className="bg-muted/70 mb-3 inline-flex rounded-[14px] p-1">
-                <button type="button" role="tab" aria-selected="true" className="bg-card min-h-11 rounded-[10px] px-5 text-[15px] font-semibold shadow-sm">
+              <div aria-label="Studio bo‘limlari" data-studio-tabs className="bg-muted/70 mb-3 inline-flex rounded-[14px] p-1">
+                <button type="button" aria-current="page" className="bg-card min-h-11 rounded-[10px] px-5 text-[15px] font-semibold shadow-sm">
                   Rasm
                 </button>
               </div>

@@ -16,7 +16,7 @@ const { groupDigits } = await import("../../lib/format.ts");
  * MediaModelPicker (`purpose="studio.image"`): the model row, the «Barcha modellar» sheet, the filter chips.
  *
  * Locked here:
- *   - the row: cards in a radio group, the chosen one `aria-checked`, the price of ONE picture on every card (= the
+ *   - the row: cards in a group, the chosen one `aria-pressed`, the price of ONE picture on every card (= the
  *     formula, whatever the picture count is); at most 3 cards, the chosen model always among them;
  *   - the sheet lists ALL models; chips «Hammasi / Tez / Sifatli / Arzon / Matnli dizayn» are drawn ONLY for a badge some
  *     model carries; a chip narrows the list; «Tanlash» applies the highlighted model, closing any other way keeps the
@@ -110,13 +110,13 @@ const mount = (props: Parameters<typeof Host>[0]) => render(h(AppRouterContext.P
 const cards = () => qa("[data-model-card]").map((e) => e.getAttribute("data-model-card"));
 const chips = () => qa("[data-model-chip]").map((e) => e.getAttribute("data-model-chip"));
 const options = () => qa("[data-model-option]").map((e) => e.getAttribute("data-model-option"));
-const chosen = () => qa("[data-model-card]").find((e) => e.getAttribute("aria-checked") === "true")?.getAttribute("data-model-card");
+const chosen = () => qa("[data-model-card]").find((e) => e.getAttribute("aria-pressed") === "true")?.getAttribute("data-model-card");
 const open = () => click(q("[data-model-all]"));
 
-test("the row: radio cards, the chosen one checked, a click chooses; price of ONE picture on every card (the formula)", async () => {
+test("the row: toggle cards in a group, the chosen one pressed, a click chooses; price of ONE picture on every card (the formula)", async () => {
   fresh();
   mount({ models: [NANO, GPT], start: NANO.id, values: { imageCount: 4, imageRatio: "16:9" } });
-  const group = q('[role="radiogroup"]');
+  const group = q('[data-model-row][role="group"]');
   assert.ok(group);
   assert.deepEqual(cards(), [NANO.id, GPT.id]);
   assert.equal(chosen(), NANO.id);
