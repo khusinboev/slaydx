@@ -92,17 +92,19 @@ async function typePrompt(value: string) {
 const submit = () => click(q("[data-studio-submit]"));
 const label = (n: number, price: number) => `Yaratish · ${n} ta rasm · ${formatSom(price)}`;
 
-test("shell: «Studio» header, subtitle, «Galereya» link and the «Rasm» tab only — no Video / Ovoz / templates decoration", async () => {
+test("shell: «Studio» header, subtitle, «Galereya» link, the «Rasm» | «Video» tabs (P3) — no Ovoz / templates decoration", async () => {
   installApi();
   await mount();
   assert.equal(text("[data-page-header] h1"), "Studio");
   assert.ok(text("[data-page-header]").length > "Studio".length, "a subtitle");
   assert.match(text("[data-studio-gallery-link]"), /Galereya/);
   const tabs = qa('[data-studio-tabs] button');
-  assert.deepEqual(tabs.map((t) => t.textContent), ["Rasm"], "MUTATSIYA: Video tabi chizilsa qizaradi");
-  assert.equal(tabs[0]!.getAttribute("aria-current"), "page");
+  // P3 adds «Video» (tests/ui/studio-video.test.mts); «Ovoz» lands with P5.
+  assert.deepEqual(tabs.map((t) => t.textContent), ["Rasm", "Video"]);
+  assert.equal(tabs[0]!.getAttribute("aria-selected"), "true");
+  assert.equal(tabs[1]!.getAttribute("aria-selected"), "false");
   const page = document.body.textContent ?? "";
-  for (const word of ["Video", "Ovoz", "Namuna promptlar", "Shablonlar", "tez orada"]) assert.ok(!page.includes(word), `no «${word}»`);
+  for (const word of ["Ovoz", "Namuna promptlar", "Shablonlar", "tez orada"]) assert.ok(!page.includes(word), `no «${word}»`);
   assert.ok(prompt(), "the prompt box");
   assert.equal(q("[data-model-picker]")?.querySelectorAll("[data-model-card]").length, 2);
 });

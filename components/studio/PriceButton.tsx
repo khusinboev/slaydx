@@ -26,6 +26,8 @@ export function PriceButton({
   disabled,
   typing,
   onSubmit,
+  label,
+  paidOnly = false,
 }: {
   count: number;
   price: number | null;
@@ -35,6 +37,10 @@ export function PriceButton({
   disabled: boolean;
   typing: boolean;
   onSubmit: () => void;
+  /** The button text when priced (the Video tab: «Yaratish · 5 soniya · X so'm»); default = the Rasm tab's `submitLabel`. */
+  label?: string;
+  /** Video: the balance shown is the PAID one (bonus so'm never pays for video). */
+  paidOnly?: boolean;
 }) {
   const short = balance !== null && price !== null && price > balance;
   return (
@@ -51,12 +57,12 @@ export function PriceButton({
           className="bg-primary text-primary-foreground focus-visible:ring-ring flex h-14 w-full items-center justify-center rounded-[18px] px-4 text-[17px] font-bold outline-none transition-[filter,transform] hover:brightness-95 focus-visible:ring-2 focus-visible:ring-offset-2 active:scale-[0.98] disabled:opacity-50 motion-reduce:transform-none"
         >
           <span className="truncate" data-price-total>
-            {loading ? "Yaratilmoqda..." : submitLabel(count, price)}
+            {loading ? "Yaratilmoqda..." : price !== null && label ? label : submitLabel(count, price)}
           </span>
         </button>
         {balance === null ? null : short ? (
           <p className="text-muted-foreground px-2 pt-1.5 text-center text-[13px] leading-snug" data-balance-short>
-            Balansingiz: {formatSom(balance)} — {formatSom(price ?? 0)} kerak.{" "}
+            {paidOnly ? "To‘langan balansingiz" : "Balansingiz"}: {formatSom(balance)} — {formatSom(price ?? 0)} kerak.{" "}
             <Link
               href={PAY_RETURN_PATH}
               data-topup
@@ -67,7 +73,7 @@ export function PriceButton({
           </p>
         ) : (
           <p className="text-muted-foreground px-2 pt-1.5 text-center text-[12.5px]" data-studio-balance>
-            Balans: {formatSom(balance)}
+            {paidOnly ? "To‘langan balans" : "Balans"}: {formatSom(balance)}
           </p>
         )}
       </div>

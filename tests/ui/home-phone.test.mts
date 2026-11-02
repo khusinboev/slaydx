@@ -10,7 +10,7 @@ import { CreateGrid } from "../../components/home/CreateGrid.tsx";
 import { fileDateGroup, fileStatusPill, formatFileDate, formatFileWhen, groupFilesByDate } from "../../components/home/file-meta.ts";
 import { filterCatalogue } from "../../components/home/catalogue-filter.ts";
 import { useAppStore } from "../../lib/store.ts";
-import { TOOLS, visibleToolGroups } from "../../lib/tools.ts";
+import { TOOLS, listedTools, visibleToolGroups } from "../../lib/tools.ts";
 import { useUi } from "../../lib/ui.ts";
 import type * as api from "../../lib/api-client.ts";
 
@@ -582,7 +582,7 @@ test("catalogue: the chip bar is sticky, prices and routes of the cards are unch
   const links = [...document.querySelectorAll("[data-catalogue-group] a[href^='/uz/']")].map((a) => a.getAttribute("href"));
   assert.deepEqual(
     links.sort(),
-    [...TOOLS.map((t) => `/uz/${t.slug}`), "/uz/convert", "/uz/alifbo"].sort(),
+    [...listedTools().map((t) => `/uz/${t.slug}`), "/uz/convert", "/uz/alifbo"].sort(),
     "every tool (and the ungated services) reachable at its own route",
   );
   assert.ok(document.body.textContent?.includes("so'm dan"));

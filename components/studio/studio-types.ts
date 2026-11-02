@@ -18,9 +18,16 @@ export type MediaCatalog = {
   pricing: StudioPricing;
 };
 
+/** A clip in the gallery (P3): played from the result file (`/api/generations/{id}/file?inline=1`). */
+export type GalleryVideo = { src: string; seconds: number | null; aspect: string | null; effectLabel: string | null };
+
 /** One completed Studio generation in the gallery. */
 export type GalleryItem = {
   id: string;
+  /** `image` (Rasm tab) or `video` (Video tab); an older server sends no kind = pictures. */
+  kind: "image" | "video";
+  /** The clip of a video item, `null` for pictures. */
+  video: GalleryVideo | null;
   createdAt: string;
   modelId: string | null;
   modelLabel: string;

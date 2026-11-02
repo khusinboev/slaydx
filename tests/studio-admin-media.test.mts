@@ -161,7 +161,7 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
     // The block lists every Studio model by itself (catalog + purpose), the fal ones included (P2a), then the Video
     // tab's models (P3; their per-clip numbers are checked in tests/studio-video.test.mts).
     assert.deepEqual(r.body.models.map((m: { modelId: string }) => m.modelId), [NANO, GPT, ...Object.keys(FAL_USD), ...STUDIO_VIDEO_IDS]);
-    for (const m of r.body.models.filter((x: { kind: string }) => x.kind === "image")) {
+    for (const m of r.body.models.filter((x) => !STUDIO_VIDEO_IDS.includes(x.modelId))) {
       const usd = USD[m.modelId]!;
       assert.equal(m.costUsd, usd);
       assert.equal(m.costSoum, Math.round(usd * rate * 100) / 100);

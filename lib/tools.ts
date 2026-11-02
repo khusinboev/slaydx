@@ -1146,15 +1146,17 @@ export const TOOL_GROUPS: readonly { id: ToolGroup; label: string }[] = [
  * xizmatni va'da qilardi.
  */
 export function visibleToolGroups(): readonly { id: ToolGroup; label: string }[] {
-  return TOOL_GROUPS.filter((g) => LISTED_TOOLS.some((t) => t.group === g.id));
+  return TOOL_GROUPS.filter((g) => listedTools().some((t) => t.group === g.id));
 }
 
 /**
  * Tools that live INSIDE another page and get no card of their own: `studio-video` is the Studio's Video tab (the Studio
- * card already leads there). The catalogue, the create sheet, the search and the home groups list `LISTED_TOOLS`.
+ * card already leads there). The catalogue, the create sheet, the search and the home groups list `listedTools()`.
  */
 export const UNLISTED_TOOL_IDS: ReadonlySet<ToolId> = new Set<ToolId>(["studio-video"]);
-export const LISTED_TOOLS: readonly ToolConfig[] = TOOLS.filter((t) => !UNLISTED_TOOL_IDS.has(t.id));
+export function listedTools(): ToolConfig[] {
+  return TOOLS.filter((t) => !UNLISTED_TOOL_IDS.has(t.id));
+}
 
 export const TOOL_BY_SLUG = Object.fromEntries(TOOLS.map((t) => [t.slug, t])) as Record<
   string,

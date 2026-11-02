@@ -8,19 +8,22 @@ import type { GalleryItem, GalleryPage, MediaCatalog, StudioPricing } from "./st
 
 /** The catalog purpose Studio's Rasm tab reads (docs/studio/P1-SPEC.md). */
 export const STUDIO_IMAGE_PURPOSE = "studio.image";
+/** The catalog purpose of the Video tab (docs/studio/P3-SPEC.md). */
+export const STUDIO_VIDEO_PURPOSE = "studio.video";
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
 
 /* ───────────────────────── catalog ───────────────────────── */
 
-/** One model of the response, or `null` when it is not a usable image model (it is then simply not offered). */
+/** One model of the response, or `null` when it is not a usable image / video model (it is then simply not offered). */
 function parseEntry(raw: unknown): ClientEntry | null {
-  if (!isObj(raw) || !str(raw.id) || raw.kind !== "image" || !str(raw.label)) return null;
+  if (!isObj(raw) || !str(raw.id) || (raw.kind !== "image" && raw.kind !== "video") || !str(raw.label)) return null;
   if (!Array.isArray(raw.params) || !isObj(raw.cost) || typeof raw.cost.per !== "string") return null;
   if (!raw.params.every((p) => isObj(p) && str(p.name) && typeof p.type === "string")) return null;
   const badges = Array.isArray(raw.badges) ? raw.badges.filter((b): b is string => typeof b === "string") : [];
-  return { ...raw, badges, maker: typeof raw.maker === "string" ? raw.maker : "" } as unknown as ClientEntry;
+  const capabilities = Array.isArray(raw.capabilities) ? raw.capabilities.filter((c): c is string => typeof c === "string") : [];
+  return { ...raw, badges, capabilities, maker: typeof raw.maker === "string" ? raw.maker : "" } as unknown as ClientEntry;
 }
 
 /** The server's own validator (`parseMediaPricing`): an invalid block is no block — no honest price preview without it. */
@@ -31,7 +34,9 @@ export function parseCatalog(raw: unknown): MediaCatalog | null {
   if (!isObj(raw)) return null;
   const pricing = parsePricing(raw.pricing);
   if (!pricing || !Array.isArray(raw.models)) return null;
-  const models = raw.models.map(parseEntry).filter((m): m is ClientEntry => m !== null);
+  // A purpose serves one kind: an entry of another kind is not offered (a picture model never lands in the Video tab).
+  const kind = str(raw.purpose) === STUDIO_VIDEO_PURPOSE ? "video" : "image";
+  const models = raw.models.map(parseEntry).filter((m): m is ClientEntry => m !== null && m.kind === kind);
   const wanted = str(raw.defaultModelId);
   // `null` from the server = nothing available now; the picker then shows «Hozircha modellar mavjud emas».
   const defaultModelId = wanted && models.some((m) => m.id === wanted) ? wanted : (models[0]?.id ?? null);
@@ -125,8 +130,14 @@ function parseItem(raw: unknown): GalleryItem | null {
   if (!id) return null;
   const images = Array.isArray(raw.images) ? raw.images : [];
   const thumbs = images.map((im) => (isObj(im) ? str(im.url) : null)).filter((u): u is string => u !== null);
+  const v = raw.kind === "video" && isObj(raw.video) ? raw.video : null;
+  const pos = (n: unknown): number | null => (typeof n === "number" && Number.isFinite(n) && n > 0 ? n : null);
+  // Only the job's own file URL is played (never a provider URL from the wire).
+  const video = v ? { src: `/api/generations/${id}/file?inline=1`, seconds: pos(v.seconds), aspect: str(v.aspect), effectLabel: str(v.effectLabel) } : null;
   return {
     id,
+    kind: video ? "video" : "image",
+    video,
     createdAt: str(raw.createdAt) ?? "",
     modelId: str(raw.modelId),
     modelLabel: str(raw.modelLabel) ?? "",

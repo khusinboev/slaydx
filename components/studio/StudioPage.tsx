@@ -23,7 +23,8 @@ import { ParamRows } from "./ParamRows";
 import { PriceButton } from "./PriceButton";
 import { PromptBox } from "./PromptBox";
 import { StudioResults, type StudioJob } from "./StudioResults";
-import { STUDIO_IMAGE_PURPOSE, useMediaCatalog } from "./studio-api";
+import { STUDIO_IMAGE_PURPOSE, STUDIO_VIDEO_PURPOSE, useMediaCatalog } from "./studio-api";
+import { INITIAL_VIDEO_STATE, VideoTab, type VideoTabState } from "./video/VideoTab";
 import { STUDIO_TOOL_SLUG } from "./studio-entry";
 import { STUDIO_TOOL_ID, outputCount, studioPrice } from "./studio-price";
 import type { GalleryItem, MediaCatalog } from "./studio-types";
@@ -60,6 +61,19 @@ export function StudioPage() {
 }
 
 type View = "create" | "gallery";
+/** The Studio's media tabs (P1 «Rasm», P3 «Video»). */
+export type StudioTab = "rasm" | "video";
+
+/** The tab a link asks for (`/uz/studio?tab=video`, where `/uz/studio-video` redirects); anything else = «Rasm». */
+export function tabFromSearch(search: string): StudioTab {
+  return new URLSearchParams(search).get("tab") === "video" ? "video" : "rasm";
+}
+
+const TAB_LABEL: Readonly<Record<StudioTab, string>> = { rasm: "Rasm", video: "Video" };
+const SUBTITLE: Readonly<Record<StudioTab, string>> = {
+  rasm: "Eng kuchli modellar bilan rasm yarating",
+  video: "AI video va tayyor effektlar — narx yaratishdan oldin ko‘rinadi",
+};
 
 function StudioApp() {
   usePricingVersion(); // an admin price adjustment re-renders every price on the page
@@ -76,6 +90,18 @@ function StudioApp() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { jobs, track } = useStudioJobs();
+  // The Video tab (P3): its own catalog (loaded once the tab is opened), form state and jobs — kept while on «Rasm».
+  const [tab, setTab] = useState<StudioTab>("rasm");
+  const [videoSeen, setVideoSeen] = useState(false);
+  const [videoState, setVideoState] = useState<VideoTabState>(INITIAL_VIDEO_STATE);
+  const video = useMediaCatalog(STUDIO_VIDEO_PURPOSE, videoSeen);
+  const videoJobs = useStudioJobs();
+  useEffect(() => {
+    if (typeof window !== "undefined" && tabFromSearch(window.location.search) === "video") setTab("video");
+  }, []);
+  useEffect(() => {
+    if (tab === "video") setVideoSeen(true);
+  }, [tab]);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLElement>(null);
@@ -88,6 +114,8 @@ function StudioApp() {
   const price = entry && catalog ? studioPrice(entry, values, catalog.pricing) : null;
   const count = entry ? outputCount(entry, values) : 1;
   const balance = loggedIn && user ? creditTotal(user) : null;
+  // Bonus so'm never pays for video (D5): the Video tab compares with the paid balance.
+  const paidBalance = loggedIn && user ? (user.quota ?? 0) + (user.balance ?? 0) : null;
 
   function selectModel(id: string) {
     const next = catalog?.models.find((m) => m.id === id);
@@ -153,8 +181,17 @@ function StudioApp() {
   /** «Boshqa modelda»: the same prompt back in the form, the model picker open. */
   function otherModel(prompt: string) {
     setView("create");
+    setTab("rasm");
     setRaw((prev) => ({ ...prev, [PROMPT_PARAM]: entry ? prompt.slice(0, promptLimit(entry)) : prompt }));
     setPickerOpen(true);
+  }
+
+  /** «Yana yaratish» on a gallery clip: back to the Video tab — the effect grid for an effect, else its prompt in the form. */
+  function videoAgain(item: GalleryItem) {
+    setView("create");
+    setTab("video");
+    if (item.video?.effectLabel) setVideoState((s) => ({ ...s, mode: "effects" }));
+    else setVideoState((s) => ({ ...s, mode: "text", raw: { ...s.raw, [PROMPT_PARAM]: item.prompt } }));
   }
 
   const toGallery = () => setView("gallery");
@@ -175,7 +212,7 @@ function StudioApp() {
 
   return (
     <div className="flex w-full flex-col" data-studio>
-      <PageHeader back title="Studio" subtitle="Eng kuchli modellar bilan rasm yarating" contentClassName={WIDTH} actions={galleryButton} />
+      <PageHeader back title="Studio" subtitle={SUBTITLE[tab]} contentClassName={WIDTH} actions={galleryButton} />
       <div
         ref={rootRef}
         data-studio-body
@@ -191,18 +228,46 @@ function StudioApp() {
         {view === "gallery" ? (
           <section aria-label="Galereya" data-studio-gallery className="md:col-span-2">
             <h2 className="mb-3 text-[20px] font-extrabold">Galereya</h2>
-            <Gallery onCreate={toCreate} onOtherModel={(item: GalleryItem) => otherModel(item.prompt)} />
+            <Gallery onCreate={toCreate} onOtherModel={(item: GalleryItem) => (item.kind === "video" ? videoAgain(item) : otherModel(item.prompt))} />
           </section>
         ) : (
           <>
-            <div data-studio-form className="min-w-0">
-              <div aria-label="Studio bo‘limlari" data-studio-tabs className="bg-muted/70 mb-3 inline-flex rounded-[14px] p-1">
-                <button type="button" aria-current="page" className="bg-card min-h-11 rounded-[10px] px-5 text-[15px] font-semibold shadow-sm">
-                  Rasm
-                </button>
+            <div data-studio-form className={cn("min-w-0", tab === "video" && "md:col-span-2 md:max-w-[44rem]")}>
+              <div role="tablist" aria-label="Studio bo‘limlari" data-studio-tabs className="bg-muted/70 mb-3 inline-flex rounded-[14px] p-1">
+                {(["rasm", "video"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === t}
+                    data-studio-tab={t}
+                    onClick={() => {
+                      setTab(t);
+                      setError(null);
+                    }}
+                    className={cn(
+                      "focus-visible:ring-ring min-h-11 rounded-[10px] px-5 text-[15px] font-semibold outline-none focus-visible:ring-2",
+                      tab === t ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {TAB_LABEL[t]}
+                  </button>
+                ))}
               </div>
               <ChannelGate />
-              {!catalog ? (
+              {tab === "video" ? (
+                <VideoTab
+                  catalogState={video.state}
+                  reload={video.reload}
+                  state={videoState}
+                  setState={setVideoState}
+                  jobs={videoJobs.jobs}
+                  track={videoJobs.track}
+                  balance={paidBalance}
+                  typing={typing}
+                  gated={gated}
+                />
+              ) : !catalog ? (
                 <CatalogStatus status={state.status} message={state.status === "error" ? state.message : ""} onRetry={() => reload()} />
               ) : entry === null ? (
                 <MediaModelPicker purpose={STUDIO_IMAGE_PURPOSE} catalog={catalog} value="" values={{}} onChange={selectModel} />
@@ -236,9 +301,11 @@ function StudioApp() {
                 </>
               )}
             </div>
-            <section ref={resultsRef} aria-label="Natijalar" data-studio-results className={cn("min-w-0 md:mt-0", jobs.length > 0 && "mt-5")}>
-              <StudioResults jobs={jobs} busy={submitting} onAgain={again} onOtherModel={(job) => otherModel(job.prompt)} />
-            </section>
+            {tab === "rasm" ? (
+              <section ref={resultsRef} aria-label="Natijalar" data-studio-results className={cn("min-w-0 md:mt-0", jobs.length > 0 && "mt-5")}>
+                <StudioResults jobs={jobs} busy={submitting} onAgain={again} onOtherModel={(job) => otherModel(job.prompt)} />
+              </section>
+            ) : null}
           </>
         )}
       </div>

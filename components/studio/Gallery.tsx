@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Shuffle } from "lucide-react";
-import { ApiImg } from "@/lib/use-api-src";
+import { ApiImg, useApiSrc } from "@/lib/use-api-src";
 import { fetchGallery } from "./studio-api";
 import type { GalleryItem } from "./studio-types";
 
@@ -18,7 +18,21 @@ export function formatStamp(iso: string): string {
 }
 
 /**
- * «Galereya»: the user's finished Studio pictures, newest first, 24 per page (`GET /api/media/gallery?cursor=`).
+ * A clip's card face (P3): the first frame of the result file itself (`preload="metadata"`, muted, no controls — the
+ * card opens the result page), with its length.
+ */
+function VideoThumb({ src, seconds }: { src: string; seconds: number | null }) {
+  const url = useApiSrc(src);
+  return (
+    <span className="relative block" data-gallery-video>
+      <video src={url} muted playsInline preload="metadata" className="bg-muted aspect-square w-full object-cover" aria-hidden />
+      <span className="absolute top-2 left-2 rounded-full bg-black/70 px-2 py-0.5 text-[12px] font-semibold text-white">▶ {seconds ? `${Math.round(seconds)} s` : "video"}</span>
+    </span>
+  );
+}
+
+/**
+ * «Galereya»: the user's finished Studio pictures and clips, newest first, 24 per page (`GET /api/media/gallery?cursor=`).
  * The next page loads when the end of the list scrolls into view (`IntersectionObserver`) and by the «Yana
  * ko'rsatish» button (also the only way where there is no observer, and the keyboard's way). A card opens the full
  * result page; «Boshqa modelda» hands its prompt back to the form with the model picker open.
@@ -94,7 +108,7 @@ export function Gallery({ onOtherModel, onCreate }: { onOtherModel: (item: Galle
     return (
       <div className="bg-card rounded-[20px] border p-6 text-center" data-gallery-empty>
         <p className="text-[15px] font-medium">Galereya hozircha bo‘sh</p>
-        <p className="text-muted-foreground mt-1 text-[14px]">Yaratgan rasmlaringiz shu yerda saqlanadi.</p>
+        <p className="text-muted-foreground mt-1 text-[14px]">Yaratgan rasm va videolaringiz shu yerda saqlanadi.</p>
         <button type="button" onClick={onCreate} className="bg-primary text-primary-foreground mt-4 inline-flex h-11 items-center rounded-[14px] px-5 text-[14.5px] font-semibold">
           Rasm yaratish
         </button>
@@ -106,8 +120,10 @@ export function Gallery({ onOtherModel, onCreate }: { onOtherModel: (item: Galle
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3" data-gallery-list>
         {items.map((it) => (
           <li key={it.id} data-gallery-item={it.id} className="bg-card flex min-w-0 flex-col overflow-hidden rounded-[18px] border">
-            <Link href={`/uz/files/${it.id}`} aria-label={it.prompt || "Rasmni ochish"} className="focus-visible:ring-ring relative block outline-none focus-visible:ring-2">
-              {it.thumbs[0] ? (
+            <Link href={`/uz/files/${it.id}`} aria-label={it.prompt || (it.video ? "Videoni ochish" : "Rasmni ochish")} className="focus-visible:ring-ring relative block outline-none focus-visible:ring-2">
+              {it.video ? (
+                <VideoThumb src={it.video.src} seconds={it.video.seconds} />
+              ) : it.thumbs[0] ? (
                 <ApiImg src={it.thumbs[0]} alt={it.prompt} loading="lazy" className="bg-muted aspect-square w-full object-cover" />
               ) : (
                 <div aria-hidden className="bg-muted aspect-square w-full" data-gallery-no-thumb />
@@ -128,7 +144,7 @@ export function Gallery({ onOtherModel, onCreate }: { onOtherModel: (item: Galle
                 className="focus-visible:ring-ring hover:bg-muted pointer-coarse:min-h-11 mt-auto inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[10px] border text-[13px] font-semibold outline-none focus-visible:ring-2"
               >
                 <Shuffle className="size-3.5" aria-hidden />
-                Boshqa modelda
+                {it.video ? "Yana yaratish" : "Boshqa modelda"}
               </button>
             </div>
           </li>
