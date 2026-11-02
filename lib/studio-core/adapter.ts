@@ -40,5 +40,11 @@ export interface MediaAdapter {
   buildRequest?(input: AdapterInput): { url: string; headers: Record<string, string>; body: unknown };
   submit(input: AdapterInput, deps?: AdapterDeps): Promise<SubmitResult>;
   poll?(opId: string, deps?: AdapterDeps): Promise<PollResult>;
+  /**
+   * Best effort: ask the provider to drop an async op the host gave up on (its deadline passed), so a late finish is
+   * not billed. `completed`: the provider says the op had already finished (it may bill it: reconcile). May throw; the
+   * host never lets a cancel failure block its refund.
+   */
+  cancel?(opId: string, deps?: AdapterDeps): Promise<"cancelled" | "completed">;
   fetchOutput(o: MediaOutput, deps?: AdapterDeps): Promise<Uint8Array>;
 }

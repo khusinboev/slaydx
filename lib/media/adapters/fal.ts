@@ -586,6 +586,8 @@ export const FAL_VIDEO_START_TIMEOUT_SEC = 600;
 /** One status / result call of a poll never waits longer than this; the MP4 download gets a minute. */
 const VIDEO_CALL_MS = 30_000;
 const VIDEO_DOWNLOAD_MS = 60_000;
+/** A deadline cancel is best effort and must not hold the refund up. */
+const FAL_VIDEO_CANCEL_MS = 5_000;
 
 /** The start / end frames of a clip, resolved by the host (ownership checked there), sent to fal as data URIs. */
 export type FalVideoFrames = { start?: AdapterAsset; end?: AdapterAsset };
@@ -602,13 +604,15 @@ export type FalVideoModel = {
 const vInt = (p: NormalizedParams, name: string, fallback: number) => (Number.isFinite(Number(p[name])) && p[name] !== "" ? Math.round(Number(p[name])) : fallback);
 const vStr = (p: NormalizedParams, name: string, fallback: string) => (typeof p[name] === "string" && p[name] ? String(p[name]) : fallback);
 const vBool = (p: NormalizedParams, name: string, fallback: boolean) => (typeof p[name] === "boolean" ? (p[name] as boolean) : fallback);
-const endFrame = (key: string, f: FalVideoFrames) => (f.start && f.end ? { [key]: dataUri(f.end) } : {});
+/** The end frame: `falVideoFrames` is the ONE guard that it travels only with a start (review: no second copy here). */
+const endFrame = (key: string, f: FalVideoFrames) => (f.end ? { [key]: dataUri(f.end) } : {});
 
 /** Seedance 2.x: one body for text / image → video; `bitrate` only where the endpoint has `bitrate_mode` (2.5). */
 function seedanceBody(p: NormalizedParams, f: FalVideoFrames, bitrate: boolean): Record<string, unknown> {
   return {
     prompt: String(p.prompt ?? ""),
-    ...(f.start ? { image_url: dataUri(f.start), ...endFrame("end_image_url", f) } : {}),
+    ...(f.start ? { image_url: dataUri(f.start) } : {}),
+    ...endFrame("end_image_url", f),
     resolution: vStr(p, "resolution", "720p"),
     // The DurationEnum is a string ("4".."15"); never "auto": the price is per second of what we asked for.
     duration: String(vInt(p, "seconds", 5)),
@@ -626,7 +630,8 @@ function minimaxBody(p: NormalizedParams, f: FalVideoFrames): Record<string, unk
   return {
     prompt: String(p.prompt ?? ""),
     // Image → video has no aspect_ratio: «the output canvas follows this image».
-    ...(f.start ? { image_url: dataUri(f.start), ...endFrame("end_image_url", f) } : { aspect_ratio: vStr(p, "aspect", "16:9") }),
+    ...(f.start ? { image_url: dataUri(f.start) } : { aspect_ratio: vStr(p, "aspect", "16:9") }),
+    ...endFrame("end_image_url", f),
     duration: vInt(p, "seconds", 5),
     resolution: vStr(p, "resolution", "768p").toUpperCase(),
     // The endpoint's default, sent explicitly so a default change at fal cannot change our clip silently.
@@ -647,7 +652,8 @@ export const FAL_VIDEO_MODELS: Readonly<Record<string, FalVideoModel>> = {
     i2v: "alibaba/wan-3.0/image-to-video",
     body: (p, f) => ({
       prompt: String(p.prompt ?? ""),
-      ...(f.start ? { start_image_url: dataUri(f.start), ...endFrame("end_image_url", f) } : {}),
+      ...(f.start ? { start_image_url: dataUri(f.start) } : {}),
+      ...endFrame("end_image_url", f),
       resolution: vStr(p, "resolution", "720p"),
       // «adaptive» = the endpoint picks the canvas (from the start frame in image → video).
       aspect_ratio: f.start ? "adaptive" : vStr(p, "aspect", "16:9"),
@@ -800,6 +806,36 @@ export function falVideoAdapter(o: Pick<FalDeps, "key" | "lookup"> = {}): MediaA
       const url = typeof result?.video?.url === "string" ? result.video.url : "";
       if (!url) return { state: "failed", message: "fal: javobda video yo'q", safety: false };
       return { state: "done", outputs: [{ kind: "url", url, mime: "video/mp4" }] };
+    },
+
+    /**
+     * Best-effort cancel (the host's deadline passed): `PUT https://queue.fal.run/{owner}/{app}/requests/{id}/cancel`
+     * (https://fal.ai/docs/api-reference/inference-api/queue/cancel.md, read 2026-11-02) — same key / host / redirect /
+     * scrub rules. A queued request is removed, a running one gets a cancel signal. Throws on any failure; the caller
+     * logs it and refunds anyway.
+     */
+    async cancel(opId, deps: AdapterDeps = {}) {
+      const key = keyOf();
+      const fail = failOf(key);
+      const op = parseFalVideoOp(opId);
+      if (!op) throw fail("noto'g'ri operatsiya id", { accepted: true });
+      if (!key) throw fail("FAL_KEY yo'q", { accepted: true });
+      let res: Response;
+      try {
+        res = await (deps.fetchImpl ?? globalThis.fetch)(`https://${FAL_QUEUE_HOST}/${ownerApp(op.endpoint)}/requests/${op.requestId}/cancel`, {
+          method: "PUT",
+          headers: { Authorization: `Key ${key}` },
+          redirect: "manual",
+          signal: AbortSignal.timeout(FAL_VIDEO_CANCEL_MS),
+        });
+      } catch (e) {
+        throw fail(`cancel: ${e instanceof Error ? e.message : String(e)}`, { accepted: true });
+      }
+      await res.body?.cancel().catch(() => {});
+      // 200 removed from the queue / 202 cancel signal sent; 400 «already complete» (fal may bill it: reconcile).
+      if (res.status === 400) return "completed";
+      if (!res.ok) throw fail(`cancel ${res.status}`, { status: res.status, accepted: true });
+      return "cancelled";
     },
 
     async fetchOutput(output, deps: AdapterDeps = {}) {

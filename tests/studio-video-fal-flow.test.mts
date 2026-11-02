@@ -86,6 +86,7 @@ test("studio-video P4: fal models on the shared poll loop, end frame, two-photo 
     submitStatus: 200,
     submitBody: null as unknown,
     submitThrows: false,
+    cancelStatus: 202 as number | "throw",
     status: { status: "IN_PROGRESS" } as Record<string, unknown>,
     result: { video: { url: `${CDN}clip.mp4` } } as unknown,
     clipSeconds: 5,
@@ -93,7 +94,7 @@ test("studio-video P4: fal models on the shared poll loop, end frame, two-photo 
     kPoll: { code: 0, data: { task_status: "processing" } } as unknown,
   };
   const resetStub = () =>
-    Object.assign(stub, { calls: [], submitStatus: 200, submitBody: null, submitThrows: false, status: { status: "IN_PROGRESS" }, result: { video: { url: `${CDN}clip.mp4` } }, clipSeconds: 5, counter: 0, kPoll: { code: 0, data: { task_status: "processing" } } });
+    Object.assign(stub, { calls: [], submitStatus: 200, submitBody: null, submitThrows: false, cancelStatus: 202, status: { status: "IN_PROGRESS" }, result: { video: { url: `${CDN}clip.mp4` } }, clipSeconds: 5, counter: 0, kPoll: { code: 0, data: { task_status: "processing" } } });
   const reqId = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
     const url = String(input);
@@ -104,6 +105,10 @@ test("studio-video P4: fal models on the shared poll loop, end frame, two-photo 
     if (url.startsWith(`${QUEUE}/`) && method === "POST") {
       if (stub.submitThrows) throw new TypeError("socket hang up");
       return jsonRes(stub.submitBody ?? { request_id: reqId(++stub.counter) }, stub.submitStatus);
+    }
+    if (url.startsWith(`${QUEUE}/`) && method === "PUT") {
+      if (stub.cancelStatus === "throw") throw new TypeError("cancel: connection reset");
+      return jsonRes({ status: "CANCELLATION_REQUESTED" }, stub.cancelStatus);
     }
     if (url.startsWith(`${QUEUE}/`) && url.endsWith("/status")) return jsonRes(stub.status, stub.status.status === "COMPLETED" ? 200 : 202);
     if (url.startsWith(`${QUEUE}/`)) return jsonRes(stub.result);
@@ -345,6 +350,89 @@ test("studio-video P4: fal models on the shared poll loop, end frame, two-photo 
     assert.equal(submits().length, 1, "the worker's re-run did not submit either");
 
     assert.equal(await wallet(me), start, "every failed clip came back");
+  });
+
+  await t.test("deadline (review M1): fal cancel PUT once, refund once, op id kept for reconciliation; a failing cancel never blocks the refund", async () => {
+    await clearAll();
+    const me = await mkUser({ balance: 500_000 });
+    const lastError = async (id: string) => (await query<{ last_error: string | null; op_id: string | null }>(`SELECT last_error, op_id FROM media_jobs WHERE idempotency_key = $1`, [`${id}:video:0`]))[0]!;
+    const expire = (id: string) => query(`UPDATE media_jobs SET deadline_at = now() - interval '1 second', next_poll_at = now() - interval '1 second' WHERE idempotency_key = $1`, [`${id}:video:0`]);
+
+    const a = await startWaiting(me, WAN);
+    await expire(a);
+    assert.equal(await ops.pollDueVideoOps(), 1);
+    const puts = stub.calls.filter((c) => c.method === "PUT");
+    assert.equal(puts.length, 1, "MUTATSIYA: no cancel at the deadline");
+    assert.equal(puts[0]!.url, `${QUEUE}/alibaba/wan-3.0/requests/${reqId(1)}/cancel`);
+    assert.equal(puts[0]!.auth, `Key ${process.env.FAL_KEY}`);
+    assert.equal((await gen(a)).status, "FAILED");
+    assert.equal(await refunds(a), 1);
+    const row1 = await lastError(a);
+    assert.equal(row1.op_id, `fal:alibaba/wan-3.0/text-to-video:${reqId(1)}`, "the row keeps its op id");
+    assert.match(String(row1.last_error), /provider cancel: cancelled \(op fal:alibaba\/wan-3\.0\/text-to-video:/);
+    await makeDue(a);
+    assert.equal(await ops.pollDueVideoOps(), 0);
+    assert.equal(stub.calls.filter((c) => c.method === "PUT").length, 1, "cancelled once");
+    assert.equal(await refunds(a), 1, "refunded once");
+
+    // fal says it had already finished (400): still refunded, the note says «completed» for the billing check.
+    resetStub();
+    const b = await startWaiting(me, WAN);
+    stub.cancelStatus = 400;
+    await expire(b);
+    await ops.pollDueVideoOps();
+    assert.equal(await refunds(b), 1);
+    assert.match(String((await lastError(b)).last_error), /provider cancel: completed/);
+
+    // The cancel itself fails (network / 5xx): the refund still happens.
+    for (const failing of ["throw", 503] as const) {
+      resetStub();
+      const c = await startWaiting(me, WAN);
+      stub.cancelStatus = failing;
+      await expire(c);
+      assert.equal(await ops.pollDueVideoOps(), 1);
+      assert.equal((await gen(c)).status, "FAILED", "MUTATSIYA: a failing cancel blocks the refund");
+      assert.equal(await refunds(c), 1);
+      assert.match(String((await lastError(c)).last_error), /provider cancel failed \(op fal:/);
+    }
+
+    // Kling has no cancel: its deadline is exactly the P3 behaviour (no PUT, plain «deadline» detail).
+    resetStub();
+    const k = await startWaiting(me, { modelId: "kling/kling-3", prompt: "Gul ochiladi", seconds: 5 });
+    await expire(k);
+    await ops.pollDueVideoOps();
+    assert.equal(stub.calls.filter((c) => c.method === "PUT").length, 0);
+    assert.equal((await lastError(k)).last_error, "deadline");
+    assert.equal(await refunds(k), 1);
+  });
+
+  await t.test("photos (review N2): type, per-photo size and the job's total are refused (400) before any charge", async () => {
+    await clearAll();
+    const me = await mkUser({ balance: 500_000 });
+    const put = async (assetId: string, mime: string, size: number) => {
+      await query(`DELETE FROM photo_uploads WHERE asset_id = $1`, [assetId]);
+      await query(`INSERT INTO photo_uploads (user_id, asset_id, kind, mime, size_bytes, bytes) VALUES ($1,$2,'crop',$3,$4,$5)`, [me, assetId, mime, size, Buffer.from("x")]);
+    };
+    await put(ASSET, "image/gif", 100);
+    const gif = await post(me, { ...WAN, imageAssetId: ASSET });
+    assert.equal(gif.status, 400, "MUTATSIYA: video photos skip the input checks");
+    assert.equal(gif.body.code, "input_invalid");
+    await put(ASSET, "image/jpeg", 6 * 1024 * 1024);
+    assert.equal((await post(me, { ...WAN, imageAssetId: ASSET })).status, 400, "over the 5 MB photo limit");
+    await put(ASSET, "image/jpeg", 4.5 * 1024 * 1024);
+    await put(ASSET2, "image/png", 4.5 * 1024 * 1024);
+    const both = await post(me, { ...WAN, imageAssetId: ASSET, endImageAssetId: ASSET2 });
+    assert.equal(both.status, 400, "start + end over the 8 MB job total");
+    assert.match(String(both.body.error), /jami/);
+    // The second photo of a two-photo effect is checked as well.
+    await put(ASSET, "image/jpeg", 1000);
+    await put(ASSET2, "image/gif", 1000);
+    assert.equal((await post(me, { modelId: "kling/effects", effect: "hug", imageAssetId: ASSET, secondImageAssetId: ASSET2 })).status, 400);
+    assert.equal(await wallet(me), 500_000, "nothing charged");
+    assert.equal(submits().length, 0);
+    // A good pair passes.
+    await put(ASSET2, "image/png", 1000);
+    assert.equal((await post(me, { ...WAN, imageAssetId: ASSET, endImageAssetId: ASSET2 })).status, 202);
   });
 
   await t.test("kling: «Quchoqlash» sends two photos to /effects; Kling 3.0 end frame sends image_tail", async () => {

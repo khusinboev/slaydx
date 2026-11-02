@@ -23,7 +23,7 @@ import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, prom
 import type { StudioJob } from "../StudioResults";
 import { VideoResults } from "./VideoResults";
 import { STUDIO_VIDEO_SLUG, STUDIO_VIDEO_TOOL_ID, clipSeconds, isEffect, studioVideoClientPrice, videoCardPrice } from "./video-price";
-import { END_IMAGE_PARAM, SECOND_IMAGE_PARAM, effectPhotos } from "@/lib/media/catalog-video";
+import { ASPECT_FOLLOWS_IMAGE, END_IMAGE_PARAM, SECOND_IMAGE_PARAM, effectPhotos } from "@/lib/media/catalog-video";
 
 /** «Shablon effektlar» (one photo → a ready clip) or «Matndan / rasmdan» (a model + a prompt, optional start image). */
 export type VideoMode = "effects" | "text";
@@ -198,10 +198,8 @@ export function VideoTab({
       setError("Videoda nima bo‘lishini yozing (kamida 5 ta belgi)");
       return;
     }
-    if (String(sent[END_PARAM] ?? "") && !String(sent[IMAGE_PARAM] ?? "")) {
-      setError("Oxirgi kadr uchun boshlang‘ich suratni ham yuklang");
-      return;
-    }
+    // An end frame without a start cannot be built here (the upload waits for the start; removing the start clears it);
+    // the server's preflight refuses one anyway.
     void send(entry, sent, normalizedPrompt(entry, state.raw));
   }
 
@@ -238,9 +236,11 @@ export function VideoTab({
   }
 
   const textModel = model;
-  const formEntry = textModel ? { ...textModel, params: textModel.params.filter((p) => p.type !== "image") } : null;
-  const hasStart = textModel?.params.some((p) => p.name === IMAGE_PARAM) ?? false;
   const startImage = String(state.raw[IMAGE_PARAM] ?? "");
+  // P4 review N3: with a start image, Kling 3.0 / the fal models take the frame's proportions — no «O'lcham» row then.
+  const aspectHidden = Boolean(startImage) && Boolean(textModel && ASPECT_FOLLOWS_IMAGE.has(textModel.id));
+  const formEntry = textModel ? { ...textModel, params: textModel.params.filter((p) => p.type !== "image" && !(aspectHidden && p.name === "aspect")) } : null;
+  const hasStart = textModel?.params.some((p) => p.name === IMAGE_PARAM) ?? false;
   // P4: models that take a last frame (Kling 3.0, the fal models) show its upload next to the start image.
   const hasEnd = textModel?.params.some((p) => p.name === END_PARAM) ?? false;
   const endImage = String(state.raw[END_PARAM] ?? "");
@@ -344,7 +344,10 @@ export function VideoTab({
                     keepOriginal={false}
                     alt="Boshlang‘ich surat"
                     hint={photoHint()}
-                    onChange={(v) => setParam(IMAGE_PARAM, v.assetId)}
+                    onChange={(v) =>
+                      // Removing the start frame removes the end frame too (an end frame alone is never sent).
+                      setState((s) => ({ ...s, raw: { ...s.raw, [IMAGE_PARAM]: v.assetId, ...(v.assetId ? {} : { [END_PARAM]: "" }) } }))
+                    }
                   />
                 </Field>
                 <p className="text-muted-foreground mt-1 text-[13px]">Surat berilsa video shu suratdan boshlanadi; nisbat suratdan olinadi.</p>
@@ -352,15 +355,22 @@ export function VideoTab({
               {hasEnd ? (
                 <Row label="Oxirgi kadr" hint="Ixtiyoriy: video shu surat bilan tugaydi (boshlang‘ich surat bilan birga)" wide>
                   <Field id={END_PARAM}>
-                    <PhotoField
-                      assetId={endImage}
-                      originalAssetId=""
-                      shape="square"
-                      keepOriginal={false}
-                      alt="Oxirgi kadr"
-                      hint={photoHint()}
-                      onChange={(v) => setParam(END_PARAM, v.assetId)}
-                    />
+                    {startImage ? (
+                      <PhotoField
+                        assetId={endImage}
+                        originalAssetId=""
+                        shape="square"
+                        keepOriginal={false}
+                        alt="Oxirgi kadr"
+                        hint={photoHint()}
+                        onChange={(v) => setParam(END_PARAM, v.assetId)}
+                      />
+                    ) : (
+                      // P4 review N4: no upload until a start frame exists.
+                      <p className="text-muted-foreground text-[13px]" data-end-frame-locked aria-disabled="true">
+                        Avval birinchi kadrni yuklang — oxirgi kadr shundan keyin qo‘shiladi.
+                      </p>
+                    )}
                   </Field>
                 </Row>
               ) : null}

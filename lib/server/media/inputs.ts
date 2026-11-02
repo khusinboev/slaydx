@@ -54,6 +54,23 @@ type Row = { asset_id: string; mime: string; size_bytes: string; head: Buffer };
 export async function studioInputsError(userId: string, values: Readonly<Record<string, unknown>>): Promise<string | null> {
   const found = studioInputIds(values);
   if (!found) return null;
+  return inputsError(userId, found, values);
+}
+
+/**
+ * The same checks for a Studio VIDEO job's photos (P4 review N2): the start image, the end frame, the second photo of
+ * a two-photo effect — `names` are the image params the job actually sends (`studioVideoImageParams`). Type (sniffed at
+ * upload), per-photo size and the job's total (the frames travel inline as base64 too) are refused BEFORE charging.
+ */
+export async function studioVideoInputsError(userId: string, entry: CatalogEntry, values: Readonly<Record<string, unknown>>, names: readonly string[]): Promise<string | null> {
+  const p = normalize(entry.params, values);
+  const byParam: Record<string, string[]> = {};
+  for (const name of names) byParam[name] = [...((p[name] as readonly string[] | undefined) ?? [])];
+  const sent = entry.params.filter((x) => names.includes(x.name));
+  return inputsError(userId, { entry: { ...entry, params: sent }, byParam }, values);
+}
+
+async function inputsError(userId: string, found: { entry: CatalogEntry; byParam: Record<string, string[]> }, values: Readonly<Record<string, unknown>>): Promise<string | null> {
   const all = Object.values(found.byParam).flat();
   if (all.length === 0) return null;
   // The first 256 KB hold the PNG / JPEG size header (EXIF before SOF included).

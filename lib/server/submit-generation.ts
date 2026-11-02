@@ -20,7 +20,7 @@ import { videoInputFromValues } from "../generation/video/registry";
 import type { FormValues, ToolConfig, ToolId } from "../types";
 import { modelUnavailable } from "./media/availability";
 import { STUDIO_IMAGE_PURPOSE, studioPurposeOf } from "../media/catalog";
-import { studioInputsError } from "./media/inputs";
+import { studioInputsError, studioVideoInputsError } from "./media/inputs";
 import { studioModelOf } from "../media/studio-pricing";
 import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
 import { studioVideoImageParams, studioVideoModelOf } from "../media/studio-video-pricing";
@@ -203,6 +203,9 @@ export async function submitGeneration(input: SubmitInput): Promise<SubmitResult
       const imageId = Array.isArray(ids) ? ids[0] : undefined;
       if (imageId && !(await photoExists(userId, imageId))) throw new ApiError("Surat topilmadi — suratni qayta yuklang", 400);
     }
+    // P4 review N2: the Rasm tab's input checks (type, per-photo size, the job's total) before anything is charged.
+    const inputs = await studioVideoInputsError(userId, entry, values, studioVideoImageParams(entry, values));
+    if (inputs) throw new ApiError(inputs, 400, { code: "input_invalid" });
   }
 
   // Graduation portrait: the selfie must exist and be the user's own BEFORE anything is priced or charged.

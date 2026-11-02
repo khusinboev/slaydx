@@ -28,7 +28,11 @@ const { formatSom, groupDigits } = await import("../../lib/format.ts");
  *   1. VideoTab shows the second photo for every scene                  -> «effects: Quchoqlash»;
  *   2. VideoTab sends `secondImageAssetId` for one-photo scenes        -> «effects: Quchoqlash»;
  *   3. end-frame card drawn for every model (hasEnd = true)            -> «text: end frame only where the model takes one»;
- *   4. client end-frame-without-start check removed                    -> «text: end frame only …» (a request is sent).
+ *   4. (review N4) end-frame upload open without a start               -> «text: end frame only …»;
+ *   5. removing the start frame keeps the end frame                    -> «text: end frame only …»;
+ *   6. (review N3) aspect row kept with a start image (aspectHidden = false) -> «text: «O'lcham» hides …».
+ * Review N3 / N4: «O'lcham» hides while a start image is set for models that follow the frame; the end-frame upload
+ * waits for the start frame (the client's old end-without-start check became unreachable and was removed).
  */
 
 Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
@@ -197,7 +201,7 @@ test("text: a fal model's form is its ParamSchema; «Sifat» moves the price; th
   assert.ok(radio("resolution", "768p")!.getAttribute("aria-checked") === "true");
 });
 
-test("text: end frame only where the model takes one; an end frame without a start is refused before any request", async () => {
+test("text: end frame only where the model takes one; its upload waits for the start frame; removing the start clears it", async () => {
   const a = api();
   await mount();
   await tab("video");
@@ -207,18 +211,42 @@ test("text: end frame only where the model takes one; an end frame without a sta
   assert.ok(!q('[data-field="endImageAssetId"]'), "MUTATSIYA: Omni takes no end frame — no second photo input");
   await pickModel(K3.id);
   assert.ok(q('[data-field="endImageAssetId"]'), "Kling 3.0 takes an end frame");
+  // Review N4: no upload until the start frame exists.
+  assert.ok(!q('[data-field="endImageAssetId"] input[type="file"]'), "MUTATSIYA: end-frame upload open without a start");
+  assert.ok(q('[data-field="endImageAssetId"] [data-end-frame-locked]'));
   await type("[data-video-prompt] textarea", "Gul ochiladi, kamera yaqinlashadi");
-  await upload("endImageAssetId");
-  await click(q("[data-studio-submit]"));
-  await settle();
-  assert.equal(a.posts().length, 0, "MUTATSIYA: end frame without a start sent");
-  assert.match(q("[data-studio-error]")?.textContent ?? "", /boshlang‘ich suratni ham/);
   await upload("imageAssetId");
+  assert.ok(!q("[data-end-frame-locked]"));
+  await upload("endImageAssetId");
   await click(q("[data-studio-submit]"));
   await settle();
   const sent = a.posts()[0]!.body!.values as Record<string, unknown>;
   assert.equal(sent.imageAssetId, ASSET);
   assert.equal(sent.endImageAssetId, ASSET);
+  // Removing the start frame removes the end frame too: the next request carries neither.
+  await click(qa('[data-field="imageAssetId"] button').find((b) => b.textContent === "Olib tashlash"));
+  assert.ok(q('[data-field="endImageAssetId"] [data-end-frame-locked]'));
+  await click(q("[data-studio-submit]"));
+  await settle();
+  const next = a.posts()[1]!.body!.values as Record<string, unknown>;
+  assert.equal(next.imageAssetId, "");
+  assert.equal(next.endImageAssetId, "", "MUTATSIYA: an end frame left without its start");
+});
+
+test("text: «O'lcham» hides while a start image is set for Kling 3.0 / fal models (they follow the frame); Omni keeps it", async () => {
+  api();
+  await mount();
+  await tab("video");
+  await settle();
+  await mode("Matndan / rasmdan");
+  await upload("imageAssetId");
+  assert.ok(q('[data-field="aspect"]'), "Omni sends the aspect in image → video too");
+  await pickModel("alibaba/wan-3");
+  assert.ok(!q('[data-field="aspect"]'), "MUTATSIYA: Wan + start image still shows the aspect row");
+  await pickModel(K3.id);
+  assert.ok(!q('[data-field="aspect"]'));
+  await click(qa('[data-field="imageAssetId"] button').find((b) => b.textContent === "Olib tashlash"));
+  assert.ok(q('[data-field="aspect"]'), "no start image: the aspect row is back");
 });
 
 test("effects: «Quchoqlash» asks for a second photo (absent for one-photo scenes); both photos go out; one-photo scenes send one", async () => {

@@ -37,8 +37,7 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *   1. Wan builder sends `aspect_ratio` from the form in image → video        -> «golden: fal bodies»;
  *   2. Seedance `codec: "H264"` dropped                                     -> «golden: fal bodies»;
  *   3. MiniMax resolution not upper-cased                                   -> «golden: fal bodies», «probe»;
- *   4. (equivalent, not observable) `falVideoFrames` / `endFrame` passing an end frame without a start: every builder
- *      reads the end frame only inside its start-frame branch, so the request is unchanged — two guards, one behaviour;
+ *   4. `falVideoFrames` sends the end frame without a start (the ONE guard since the review) -> «golden: fal bodies»;
  *   5. cost table Seedance 2.5 720p = the 480p price                         -> «price goldens», «probe», «catalog»;
  *   6. submit maps a 4xx as accepted                                        -> «adapter: submit errors»;
  *   7. submit network error not accepted                                    -> «adapter: submit errors»;
@@ -52,7 +51,9 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *  15. result 422 content policy not safety                                -> «adapter: poll»;
  *  16. `X-Fal-Request-Start-Timeout` dropped                               -> «adapter: submit»;
  *  17. download not capped at VIDEO_MAX_BYTES                              -> «adapter: download»;
- *  18. submit without `redirect: "manual"`                                 -> «adapter: submit».
+ *  18. submit without `redirect: "manual"`                                 -> «adapter: submit»;
+ *  19. cancel maps 400 «already complete» as cancelled                     -> «adapter: cancel»;
+ *  20. cancel without `redirect: "manual"`                                 -> «adapter: cancel».
  */
 
 setSafeFetchLookup(async () => ["93.184.216.34"]);
@@ -390,6 +391,33 @@ test("adapter: download — WITHOUT the key, MP4 checked, size capped, private h
   }
   const busy = stub(() => new Response("busy", { status: 503 }));
   assert.equal(((await ad.fetchOutput(out, { fetchImpl: busy.fetchImpl }).catch((e: MediaError) => e)) as MediaError).retryable, true);
+});
+
+test("adapter: cancel (review M1) — PUT …/requests/{id}/cancel on the queue host, key header, no redirect; 200/202 cancelled, 400 completed, errors throw scrubbed", async () => {
+  const ad = all()["fal-video"]!;
+  const op = `fal:minimax/h3-max-turbo/image-to-video:${REQ}`;
+  for (const [status, want] of [[200, "cancelled"], [202, "cancelled"], [400, "completed"]] as const) {
+    const s = stub(() => jsonRes({ status: "CANCELLATION_REQUESTED" }, status));
+    assert.equal(await ad.cancel!(op, { fetchImpl: s.fetchImpl }), want, `cancel ${status}`);
+    assert.equal(s.seen.length, 1);
+    assert.equal(s.seen[0]!.url, `https://queue.fal.run/minimax/h3-max-turbo/requests/${REQ}/cancel`);
+    assert.equal(s.seen[0]!.init.method, "PUT");
+    assert.equal(s.seen[0]!.init.redirect, "manual");
+    assert.equal(authOf(s.seen[0]!), `Key ${FKEY}`);
+  }
+  for (const res of [() => jsonRes({ detail: `bad Key ${FKEY}` }, 404), () => jsonRes({}, 500), () => new Response(null, { status: 302, headers: { location: "https://evil.example" } })]) {
+    const s = stub(res);
+    const err = await ad.cancel!(op, { fetchImpl: s.fetchImpl }).then(() => null, (e: unknown) => e as MediaError);
+    assert.ok(err instanceof MediaError);
+    assert.ok(!err.message.includes("secretsecret"));
+  }
+  const net = stub(() => {
+    throw new TypeError("ECONNRESET");
+  });
+  await assert.rejects(ad.cancel!(op, { fetchImpl: net.fetchImpl }), MediaError);
+  const none = stub(() => jsonRes({}));
+  await assert.rejects(ad.cancel!(`fal:evil.example/a/b:${REQ}`, { fetchImpl: none.fetchImpl }), MediaError);
+  assert.equal(none.seen.length, 0, "a foreign op id is never cancelled (the key would follow it)");
 });
 
 test("adapter: one adapter instance per process key — falVideoAdapter reads the key at call time", async () => {

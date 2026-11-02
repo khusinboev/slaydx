@@ -250,6 +250,12 @@ export const FAL_VIDEO_ENTRIES: readonly CatalogEntry[] = [
   falVideo({ id: "minimax/h3-max-turbo", label: "MiniMax H3 Max Turbo", maker: "MiniMax", badges: ["arzon"], upstream: "minimax/h3-max-turbo", minSeconds: 2, defaultResolution: "768p", sound: false }),
 ];
 
+/**
+ * Models whose image → video request has no aspect (the canvas follows the start frame): Kling 3.0 and the fal models.
+ * The form hides their «O'lcham» row while a start image is set (P4 review N3). Gemini Omni keeps it (it sends it).
+ */
+export const ASPECT_FOLLOWS_IMAGE: ReadonlySet<string> = new Set([...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES].map((e) => e.id));
+
 /** Every Studio video entry, picker order: Kling 3.0 tiers, the fal models (P4), the effect templates last. */
 export const STUDIO_VIDEO_ENTRIES: readonly CatalogEntry[] = [...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, KLING_EFFECTS_ENTRY];
 

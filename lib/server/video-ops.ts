@@ -570,12 +570,37 @@ const fatalError = (e: unknown): e is VideoProviderError | MediaError => (e inst
 type Polled = Exclude<VideoPollResult, { state: "done" }> | { state: "done"; download(): Promise<Uint8Array> };
 
 /** How one op is polled: the `VideoAdapter` for a `video_ops` row, the core's `MediaAdapter` for a `media_jobs` row. */
+/** The Studio adapter of a `studio.video` row: its own model and provider name it (the route that took the submit). */
+function studioAdapterOf(op: DueOp, deps: VideoOpsDeps): MediaAdapter | undefined {
+  if (!op.mediaJobId || op.purpose !== STUDIO_VIDEO_PURPOSE) return undefined;
+  const route = (op.modelId ? MEDIA_CATALOG.byId(op.modelId) : null)?.routes.find((r) => r.provider === op.provider);
+  return route ? studioAdaptersOf(deps)[route.adapter] : undefined;
+}
+
+/**
+ * Gives an op up (deadline / too many transient errors): fail + refund it ONCE (`failVideo`). P4 review M1: a Studio
+ * adapter that can cancel (fal) is first asked to drop the op, best effort — a failing cancel never blocks the refund —
+ * and the op id + the cancel answer go into `last_error`, so a late provider success can be reconciled against the
+ * provider's bill (the row keeps its `op_id` too). Ops without a cancel (Kling, Omni, «Video») fail exactly as before.
+ */
+async function giveUp(op: DueOp, deps: VideoOpsDeps, message: string, detail: string): Promise<PollOutcome> {
+  const adapter = studioAdapterOf(op, deps);
+  let note = "";
+  if (adapter?.cancel) {
+    try {
+      note = ` · provider cancel: ${await adapter.cancel(op.op_id, coreDeps(deps))} (op ${op.op_id})`;
+    } catch (e) {
+      note = ` · provider cancel failed (op ${op.op_id})`;
+      log("warn", "[video] provider cancel failed, refunding anyway", { jobId: op.generation_id, provider: op.provider, err: e });
+    }
+  }
+  return (await failVideo(op.generation_id, message, `${detail}${note}`)) ? "failed" : "skipped";
+}
+
 function pollerFor(op: DueOp, deps: VideoOpsDeps): (() => Promise<Polled>) | null {
   const t = { fetchImpl: deps.fetchImpl };
   if (op.mediaJobId && op.purpose === STUDIO_VIDEO_PURPOSE) {
-    // The row's own model and provider name the adapter (the route that took the submit).
-    const route = (op.modelId ? MEDIA_CATALOG.byId(op.modelId) : null)?.routes.find((r) => r.provider === op.provider);
-    const adapter = route ? studioAdaptersOf(deps)[route.adapter] : undefined;
+    const adapter = studioAdapterOf(op, deps);
     if (!adapter?.poll) return null;
     const poll = adapter.poll.bind(adapter);
     return async () => {
@@ -624,8 +649,8 @@ export async function pollOp(op: DueOp, deps: VideoOpsDeps = {}): Promise<PollOu
 
   const transient = async (e: unknown): Promise<PollOutcome> => {
     const msg = e instanceof Error ? e.message.slice(0, 300) : "xato";
-    if (await pastDeadline(op)) return (await failVideo(op.generation_id, VIDEO_DEADLINE_MESSAGE, msg)) ? "failed" : "skipped";
-    if (op.errors + 1 >= MAX_TRANSIENT_ERRORS) return (await failVideo(op.generation_id, VIDEO_FAILED_MESSAGE, msg)) ? "failed" : "skipped";
+    if (await pastDeadline(op)) return giveUp(op, deps, VIDEO_DEADLINE_MESSAGE, msg);
+    if (op.errors + 1 >= MAX_TRANSIENT_ERRORS) return giveUp(op, deps, VIDEO_FAILED_MESSAGE, msg);
     log("warn", "[video] poll error, will retry", { jobId: op.generation_id, provider: op.provider, attempt: op.attempts + 1, err: e });
     await reschedule(op, msg);
     return "pending";
@@ -643,7 +668,7 @@ export async function pollOp(op: DueOp, deps: VideoOpsDeps = {}): Promise<PollOu
   }
 
   if (result.state === "running") {
-    if (await pastDeadline(op)) return (await failVideo(op.generation_id, VIDEO_DEADLINE_MESSAGE, "deadline")) ? "failed" : "skipped";
+    if (await pastDeadline(op)) return giveUp(op, deps, VIDEO_DEADLINE_MESSAGE, "deadline");
     await reschedule(op, null);
     return "pending";
   }
