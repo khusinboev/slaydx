@@ -401,6 +401,23 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     await runSql("DELETE FROM users WHERE telegram_id = 777000070");
     assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_favorites"))!.n, "0", "070: stars go with their user");
     await runSql(sqlOf("070_studio_favorites.sql"));
+    // 071: Studio P7a compare (docs/studio/P7-SPEC.md) -- generations.compare_group / compare_index, set together.
+    assert.ok(await exists("generations_compare_group_idx"), "071 index created");
+    await runSql(`INSERT INTO users (telegram_id, username, name) VALUES (777000071, 'mig071', 'M');`);
+    const g071 = randomUUID();
+    await assert.rejects(
+      runSql(`INSERT INTO generations (id, user_id, tool_id, compare_group) SELECT '${randomUUID()}', id, 'studio-image', '${g071}' FROM users WHERE telegram_id = 777000071`),
+      /check/i,
+      "071: a compare group without its index is refused",
+    );
+    await assert.rejects(
+      runSql(`INSERT INTO generations (id, user_id, tool_id, compare_group, compare_index) SELECT '${randomUUID()}', id, 'studio-image', '${g071}', 4 FROM users WHERE telegram_id = 777000071`),
+      /check/i,
+      "071: at most four models in a batch (index 0..3)",
+    );
+    await runSql(`INSERT INTO generations (id, user_id, tool_id, compare_group, compare_index) SELECT '${randomUUID()}', id, 'studio-image', '${g071}', 3 FROM users WHERE telegram_id = 777000071`);
+    await runSql("DELETE FROM users WHERE telegram_id = 777000071");
+    await runSql(sqlOf("071_studio_compare.sql"));
     // Re-running the seed never duplicates it (ON CONFLICT (seed_key) DO NOTHING).
     await runSql(sqlOf("067_studio_library.sql"));
     assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_prompts"))!.n, "40", "067 is idempotent");
@@ -415,6 +432,8 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
           FROM (VALUES (396, TRUE), (397, FALSE), (9999999, TRUE)) AS v(id, img);
     `);
     for (const f of [
+      // 071: Studio P7a compare (docs/studio/P7-SPEC.md) -- generations.compare_group / compare_index + CHECK + index.
+      "071_studio_compare.sql",
       // 070: Studio P7b favourites (docs/studio/P7-SPEC.md) -- studio_favorites.
       "070_studio_favorites.sql",
       // 069: Studio P6 audio inputs (docs/studio/P6-SPEC.md) -- studio_audio_inputs.
@@ -497,6 +516,11 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
         assert.equal(left[2]!.text, "matn", "an id outside the list keeps its text");
       }
       if (f === "070_studio_favorites.sql") assert.ok(!(await exists("studio_favorites")), "070 rollback drops the table");
+      if (f === "071_studio_compare.sql") {
+        assert.ok(!(await exists("generations_compare_group_idx")), "071 rollback drops the index");
+        const cols = await query<{ c: string }>("SELECT column_name AS c FROM information_schema.columns WHERE table_name = 'generations' AND column_name LIKE 'compare_%'");
+        assert.equal(cols.length, 0, "071 rollback drops both columns");
+      }
       if (f === "069_studio_audio_inputs.sql") assert.ok(!(await exists("studio_audio_inputs")), "069 rollback drops the table");
       if (f === "067_studio_library.sql") {
         assert.ok(!(await exists("studio_prompts")) && !(await exists("studio_templates")) && !(await exists("studio_library_previews")), "067 rollback drops the three tables");
