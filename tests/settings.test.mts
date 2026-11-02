@@ -91,6 +91,9 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "media.core.speech",
     "media.markup",
     "free_llm.daily.enhance",
+    // Studio P5 «Ovoz» (docs/studio/P5-SPEC.md): the dark switch of the tab and the fixed clone price.
+    "studio.voice.enabled",
+    "studio.clone_price",
   ]);
   for (const k of s.SETTING_KEYS) {
     const d = s.settingDef(k);

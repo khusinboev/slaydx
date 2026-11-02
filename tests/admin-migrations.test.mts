@@ -341,6 +341,24 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_templates WHERE seed_key IS NOT NULL"))!.n, "10", "067 seeds 10 templates");
     await assert.rejects(runSql("INSERT INTO studio_prompts (category, title, prompt) VALUES ('logo', 'x', repeat('a', 501))"), /check/i, "067 prompt length CHECK");
     await assert.rejects(runSql("INSERT INTO studio_templates (category, title, model_id, skeleton, params) VALUES ('logo', 'x', 'a/b', 'abc', '[]')"), /check/i, "067 params must be an object");
+    // 068: Studio P5 voices (docs/studio/P5-SPEC.md) -- samples, clones (one active per user), previews.
+    assert.ok((await exists("studio_voices")) && (await exists("studio_voice_samples")) && (await exists("studio_voice_previews")), "068 tables created");
+    assert.ok(await exists("studio_voices_one_active"), "068 one-active index created");
+    await runSql(`INSERT INTO users (telegram_id, username, name) VALUES (777000068, 'mig068', 'M');
+      INSERT INTO studio_voices (user_id, name, sample_sha256, sample_seconds, consent_at, consent_ip_hash, consent_version)
+        SELECT id, 'a', repeat('ab', 32), 40, now(), repeat('c', 64), 'v' FROM users WHERE telegram_id = 777000068;`);
+    await assert.rejects(
+      runSql(`INSERT INTO studio_voices (user_id, name, sample_sha256, sample_seconds, consent_at, consent_ip_hash, consent_version)
+        SELECT id, 'b', repeat('ab', 32), 40, now(), repeat('c', 64), 'v' FROM users WHERE telegram_id = 777000068`),
+      /duplicate key|unique/i,
+      "068: a second ACTIVE clone of the same user is refused by the database",
+    );
+    await assert.rejects(runSql("UPDATE studio_voices SET status = 'ready' WHERE name = 'a'"), /check/i, "068: a ready clone needs its provider voice id");
+    await runSql("UPDATE studio_voices SET deleted_at = now(), delete_reason = 'user' WHERE name = 'a'");
+    await runSql(`INSERT INTO studio_voices (user_id, name, sample_sha256, sample_seconds, consent_at, consent_ip_hash, consent_version)
+      SELECT id, 'b', repeat('ab', 32), 40, now(), repeat('c', 64), 'v' FROM users WHERE telegram_id = 777000068`);
+    await runSql("DELETE FROM users WHERE telegram_id = 777000068");
+    await runSql(sqlOf("068_studio_voices.sql"));
     // Re-running the seed never duplicates it (ON CONFLICT (seed_key) DO NOTHING).
     await runSql(sqlOf("067_studio_library.sql"));
     assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_prompts"))!.n, "40", "067 is idempotent");
@@ -355,6 +373,8 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
           FROM (VALUES (396, TRUE), (397, FALSE), (9999999, TRUE)) AS v(id, img);
     `);
     for (const f of [
+      // 068: Studio P5 voices (docs/studio/P5-SPEC.md) -- studio_voice_previews / studio_voices / studio_voice_samples.
+      "068_studio_voices.sql",
       // 067: Studio library (docs/studio/P2B-SPEC.md) -- studio_prompts / studio_templates / studio_library_previews.
       "067_studio_library.sql",
       // 066: Studio P1 admin overrides (docs/studio/P1-SPEC.md «Admin») -- media_model_overrides.

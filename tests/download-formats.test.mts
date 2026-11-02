@@ -55,6 +55,9 @@ const MATRIX: Record<string, Row> = {
   "studio-image": { format: "png", on: ["native", "jpg"], off: ["native", "jpg"] },
   // Studio clips (P3): the MP4 only, as «Video».
   "studio-video": { format: "mp4", on: ["native"], off: ["native"] },
+  // Studio speech / the voice clone's preview (P5): the MP3 only (no transcript file: the text is the user's own).
+  "studio-speech": { format: "mp3", on: ["native"], off: ["native"] },
+  "studio-voice": { format: "mp3", on: ["native"], off: ["native"] },
   podcast: { format: "mp3", on: ["native", "transcript-txt"], off: ["native", "transcript-txt"] },
   greeting: { format: "mp3", on: ["native", "transcript-txt"], off: ["native", "transcript-txt"] },
   // Program-17 item 5: the MP4 is the only file; nothing is derived from it, with or without LibreOffice.

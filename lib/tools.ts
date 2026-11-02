@@ -1659,8 +1659,11 @@ export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | nu
     return !known || known.length > 0 ? null : "Video xizmati hozircha mavjud emas.";
   }
   if (tool.custom === "studio-speech" || tool.custom === "studio-voice") {
+    // Its own model list when the server sends it (empty while `studio.voice.enabled` is off); an older server: the TTS
+    // flag, else the text-key flag (the podcast / greeting rule).
     const known = features.studioSpeechModels;
-    return !known || known.length > 0 ? null : "Ovoz xizmati hozircha mavjud emas.";
+    const ok = known ? known.length > 0 : (features.tts ?? features.llm);
+    return ok ? null : "Ovoz xizmati hozircha mavjud emas.";
   }
   if (tool.custom === "studio-image") {
     const known = features.studioImageModels ?? features.imageModels;
