@@ -161,7 +161,7 @@ async function idle() {
 }
 const wav = (seconds: number) => encodeWav(new Float32Array(Math.round(24_000 * seconds)).map((_, i) => Math.sin(i / 10) * 0.3));
 const pricing = async () => (await import("../lib/server/media/pricing.ts")).mediaPricing();
-const priceOf = async (values: Record<string, unknown>) => (await import("../lib/media/studio-audio.ts")).studioAudioPrice(values, await pricing());
+const priceOf = async (values: Record<string, unknown>): Promise<number> => (await import("../lib/media/studio-audio.ts")).studioAudioPrice(values, await pricing())!;
 
 const MUSIC = { modelId: "elevenlabs/music", prompt: "calm lo-fi piano, rainy evening", length: "30", instrumental: true };
 
