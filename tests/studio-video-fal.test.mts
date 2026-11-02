@@ -37,8 +37,9 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *   1. Wan builder sends `aspect_ratio` from the form in image → video        -> «golden: fal bodies»;
  *   2. Seedance `codec: "H264"` dropped                                     -> «golden: fal bodies»;
  *   3. MiniMax resolution not upper-cased                                   -> «golden: fal bodies», «probe»;
- *   4. `falVideoFrames` sends the end frame without a start                 -> «golden: fal bodies»;
- *   5. cost table Seedance 2.5 720p = the 480p price                         -> «price goldens», «probe»;
+ *   4. (equivalent, not observable) `falVideoFrames` / `endFrame` passing an end frame without a start: every builder
+ *      reads the end frame only inside its start-frame branch, so the request is unchanged — two guards, one behaviour;
+ *   5. cost table Seedance 2.5 720p = the 480p price                         -> «price goldens», «probe», «catalog»;
  *   6. submit maps a 4xx as accepted                                        -> «adapter: submit errors»;
  *   7. submit network error not accepted                                    -> «adapter: submit errors»;
  *   8. poll ignores COMPLETED `error` (fetches the result anyway)           -> «adapter: poll»;
@@ -46,7 +47,12 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *  10. download sends the `Authorization` header                            -> «adapter: download»;
  *  11. `buildKlingV3Request` drops `image_tail`                             -> «golden: Kling end frame + hug»;
  *  12. dual effect sends one image                                         -> «golden: Kling end frame + hug»;
- *  13. `studioVideoError` lets «Quchoqlash» through with one photo          -> «preflight».
+ *  13. `studioVideoError` lets «Quchoqlash» through with one photo          -> «preflight»;
+ *  14. status 404 not mapped to failed                                     -> «adapter: poll»;
+ *  15. result 422 content policy not safety                                -> «adapter: poll»;
+ *  16. `X-Fal-Request-Start-Timeout` dropped                               -> «adapter: submit»;
+ *  17. download not capped at VIDEO_MAX_BYTES                              -> «adapter: download»;
+ *  18. submit without `redirect: "manual"`                                 -> «adapter: submit».
  */
 
 setSafeFetchLookup(async () => ["93.184.216.34"]);
