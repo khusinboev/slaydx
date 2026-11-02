@@ -53,8 +53,8 @@ const generationsRoute = await import("../app/api/generations/route.ts");
 
 const NANO = "google/nano-banana";
 const GPT = "openai/gpt-image";
-/** P3: the Studio Video tab's models, listed after the pictures (Gemini Omni + Kling 3.0 tiers + effects). */
-const STUDIO_VIDEO_IDS = ["google/omni-video", "kling/kling-3", "kling/kling-3-pro", "kling/effects"];
+/** P3: the Studio Video tab's models, listed after the pictures (Gemini Omni + Kling 3.0 tiers + effects); P4 adds the fal models. */
+const STUDIO_VIDEO_IDS = ["google/omni-video", "kling/kling-3", "kling/kling-3-pro", "alibaba/wan-3", "bytedance/seedance-2.5", "bytedance/seedance-2-mini", "minimax/h3", "minimax/h3-max-turbo", "kling/effects"];
 /** P2a: the fal models (key set above) — one picture at the default params (Ideogram: «Standart» quality, $0.06). */
 const FAL_USD: Record<string, number> = {
   "bfl/flux": 0.048,
@@ -181,6 +181,25 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
       assert.equal(m.available, true);
       assert.equal(m.providerReady, true);
       assert.equal(m.markupOverride, null);
+    }
+    // P4: the fal video models appear by themselves (fal keyed above): one unit = a default clip (5 s at 720p / 768p),
+    // priced by the Video tab's function; availability follows the fal key (+ `video.enabled` for the tab itself).
+    const FAL_VIDEO: Record<string, { usd: number; price: number }> = {
+      "alibaba/wan-3": { usd: 0.5, price: 12_700 },
+      "bytedance/seedance-2.5": { usd: 2.365, price: 60_100 },
+      "bytedance/seedance-2-mini": { usd: 0.7735, price: 19_700 },
+      "minimax/h3": { usd: 0.3, price: 7_700 },
+      "minimax/h3-max-turbo": { usd: 0.2, price: 5_100 },
+    };
+    for (const [id, want] of Object.entries(FAL_VIDEO)) {
+      const m = r.body.models.find((x: { modelId: string }) => x.modelId === id)!;
+      assert.ok(m, id);
+      assert.equal(m.unit, "5 soniya");
+      assert.equal(Math.round(m.costUsd * 1e4) / 1e4, want.usd, id);
+      if (rate === 12_700) assert.equal(m.price, want.price, id);
+      assert.equal(m.price, up100(m.costUsd * rate * 2), id);
+      assert.equal(m.providerReady, true);
+      assert.equal(m.available, true);
     }
   });
 
