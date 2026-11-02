@@ -26,7 +26,7 @@ const { AppShell } = await import("../../components/shell/AppShell.tsx");
 const { NavProvider } = await import("../../components/nav/NavProvider.tsx");
 const { useUi } = await import("../../lib/ui.ts");
 const { useAppStore } = await import("../../lib/store.ts");
-const { TOOLS, visibleToolGroups } = await import("../../lib/tools.ts");
+const { TOOLS, listedTools, visibleToolGroups } = await import("../../lib/tools.ts");
 const { servicesOfGroup } = await import("../../lib/services.ts");
 
 const calls: string[] = [];
@@ -191,7 +191,7 @@ test("catalogue: every visible group (visibleToolGroups) with all its tools; mos
     assert.equal(section.querySelector("h3")?.textContent, g.label);
     const ids = [...section.querySelectorAll("[data-create-tool]")].map((a) => a.getAttribute("data-create-tool"));
     // Link-only services follow the group's tools; with no session features only the ungated ones show.
-    assert.deepEqual(ids, [...TOOLS.filter((t) => t.group === g.id).map((t) => t.id), ...servicesOfGroup(g.id, null).map((v) => v.id)], g.id);
+    assert.deepEqual(ids, [...listedTools().filter((t) => t.group === g.id).map((t) => t.id), ...servicesOfGroup(g.id, null).map((v) => v.id)], g.id);
   }
   const top = [...sheet()!.querySelectorAll("[data-create-top] [data-create-tool]")].map((a) => a.getAttribute("data-create-tool"));
   assert.deepEqual(top.slice(0, 2), ["crossword", "test"], "the user's most-used tools lead");
