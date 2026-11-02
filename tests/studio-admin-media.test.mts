@@ -118,6 +118,7 @@ const headers = (cookie: string | null, origin = true) => {
 /** The fields these tests read from the three endpoints (admin overview, catalog, generations). */
 type Model = {
   modelId: string;
+  unit: string;
   id: string;
   costUsd: number;
   costSoum: number;
