@@ -40,7 +40,9 @@ adapter, `P2-SPEC.md`) and P3 (the Video tab, `media_jobs` async path, the share
   model that takes one (not Omni); «Quchoqlash» shows a second photo («Ikkinchi surat»), the one-photo scenes do not.
 - **Admin «Media modellari»** lists the five automatically (`managedModelIds` = the purpose's allowed list), unit «5
   soniya», price by `studioVideoPrice`; availability = fal on + keyed + not switched off; the tab itself also needs
-  `video.enabled` (P3). Provider `fal` is now `kinds: ["image", "video"]`, label «fal.ai (rasm va video)».
+  `video.enabled` (P3). Provider `fal` is now `kinds: ["image", "video"]`, label «fal.ai (rasm va video)». The «Narxlar»
+  ladder (`admin-pricing.ts studioVideoRungs`) gives a fal model one rung per resolution tier at its shortest / longest
+  length; a sound rung only where sound changes the price (Kling), so free sound is not a duplicate row.
 
 ## Models and prices (USD per second of output; so'm = USD × s × 2 × 12 700, rounded up to 100; read 2026-11-02)
 
@@ -107,4 +109,4 @@ end, end frame, short-clip refund, refunds once for error / policy / deadline / 
 (sheet lists the models with badges + prices, «Sifat» price, submit contract, end frame only where taken, second photo
 only for «Quchoqlash»). Updated for the new entries (no assertion removed): `studio-video` (purpose list, probe fixtures +
 end-frame branch), `ui/studio-video` (10 scenes, the `endImageAssetId` value), `studio-admin-media` (the managed list +
-fal video rows), `provider-keys` (fal kinds).
+fal video rows), `provider-keys` (fal kinds), `admin-pricing` (+ the P4 rung test).
