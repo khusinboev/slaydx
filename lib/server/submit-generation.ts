@@ -55,7 +55,74 @@ export type SubmitResult =
   | { kind: "queued"; id: string; price: number; replayed: boolean }
   | { kind: "admission"; error: string; code: string; retryAfterSec: number };
 
+/** What `prepareGeneration` decided; nothing is charged or queued yet. */
+export type PreparedGeneration = {
+  /** The key is already one of this user's jobs: the enqueue answers with it (the gates below were skipped for it). */
+  replay: boolean;
+  /** The SERVER price (base formula + `tool_pricing`), already checked against `expectedPrice`. */
+  price: number;
+  topic: string;
+  budgetMs: number;
+};
+
 export async function submitGeneration(input: SubmitInput): Promise<SubmitResult> {
+  const { userId, tool, values, idempotencyKey } = input;
+  const { price, topic, budgetMs } = await prepareGeneration(input);
+
+  const result = await enqueueGeneration({
+    idempotencyKey,
+    userId: userId,
+    toolId: tool.id,
+    topic,
+    price,
+    format: tool.output,
+    values,
+    budgetMs,
+    /*
+     * Qabul qarori (C22, `audit/designs/capacity.md`) — tranzaksiya ichida,
+     * PUL YECHISHDAN OLDIN: foydalanuvchida QUEUED+IN_PROGRESS ≥
+     * `queue.user_max_inflight` yoki navbatdagi kutish > `queue.max_wait_sec` (Sozlamalar)
+     * bo'lsa 429 — pul ham, qator ham yo'q.
+     */
+    admission: await queueLimits(),
+    // Bonus so'm cannot pay for video (program-17 D5): only the paid balance is charged.
+    paidOnly: isPaidOnlyTool(tool.id),
+  });
+
+  if (!result.ok && result.reason === "idempotency_conflict") {
+    throw new ApiError("Bu Idempotency-Key boshqa so'rov uchun ishlatilgan — yangi kalit bilan yuboring", 422);
+  }
+  if (!result.ok && result.reason === "admission") {
+    const { code, retryAfterSec, error } = result.decision;
+    return { kind: "admission", error, code, retryAfterSec };
+  }
+  if (!result.ok) throw insufficientError(result);
+
+  return { kind: "queued", id: result.id, price: result.price, replayed: result.replayed };
+}
+
+/** The 402 of a balance below the price (`paidOnly`: the video wording — bonus so'm never pays for video). */
+export function insufficientError(r: { required: number; available: number; paidOnly?: true; bonus?: number }): ApiError {
+  if (r.paidOnly) {
+    const bonusNote = r.bonus ? ` Bonus so'mingiz (${r.bonus.toLocaleString("uz-UZ")}) video uchun ishlamaydi.` : "";
+    return new ApiError(
+      `Video faqat to'langan balans bilan yaratiladi. Kerak: ${r.required.toLocaleString("uz-UZ")} so'm, to'langan balansingizda: ${r.available.toLocaleString("uz-UZ")} so'm.${bonusNote} Balansni to'ldiring: /uz/wallet`,
+      402,
+      { required: r.required, available: r.available, bonus: r.bonus ?? 0, code: "paid_balance_required", topUp: "/uz/wallet" },
+    );
+  }
+  return new ApiError(
+    `Balans yetarli emas. Kerak: ${r.required.toLocaleString("uz-UZ")} so'm, mavjud: ${r.available.toLocaleString("uz-UZ")}.`,
+    402,
+    { required: r.required, available: r.available },
+  );
+}
+
+/**
+ * Every check of the pipeline up to and including the price guard — nothing is charged or queued. `submitGeneration`
+ * enqueues its answer; the Studio compare batch (`studio-compare.ts`) runs it for EVERY model before charging any.
+ */
+export async function prepareGeneration(input: SubmitInput): Promise<PreparedGeneration> {
   const { userId, tool, values, idempotencyKey, expectedPrice } = input;
   /*
    * Podcast / greeting voice choice: `female` | `male`. A missing field (an old cached
@@ -273,54 +340,10 @@ export async function submitGeneration(input: SubmitInput): Promise<SubmitResult
   }
 
   const topic = topicOf(values, tool);
-
-  const result = await enqueueGeneration({
-    idempotencyKey,
-    userId: userId,
-    toolId: tool.id,
-    topic,
-    price,
-    format: tool.output,
-    values,
-    // Byudjet ish HAJMIDAN hisoblanadi: 1 varaqlik insho 285 s lik
-    // slotni band qilmasin, 45 betlik kurs ishi esa unga sig'may
-    // yiqilmasin. `WORKER_JOB_TIMEOUT_MS` yuqori chegara bo'lib qoladi.
-    budgetMs: budgetFor(tool, values, env.worker.jobTimeoutMs),
-    /*
-     * Qabul qarori (C22, `audit/designs/capacity.md`) — tranzaksiya ichida,
-     * PUL YECHISHDAN OLDIN: foydalanuvchida QUEUED+IN_PROGRESS ≥
-     * `queue.user_max_inflight` yoki navbatdagi kutish > `queue.max_wait_sec` (Sozlamalar)
-     * bo'lsa 429 — pul ham, qator ham yo'q.
-     */
-    admission: await queueLimits(),
-    // Bonus so'm cannot pay for video (program-17 D5): only the paid balance is charged.
-    paidOnly: isPaidOnlyTool(tool.id),
-  });
-
-  if (!result.ok && result.reason === "idempotency_conflict") {
-    throw new ApiError("Bu Idempotency-Key boshqa so'rov uchun ishlatilgan — yangi kalit bilan yuboring", 422);
-  }
-  if (!result.ok && result.reason === "admission") {
-    const { code, retryAfterSec, error } = result.decision;
-    return { kind: "admission", error, code, retryAfterSec };
-  }
-  if (!result.ok && result.paidOnly) {
-    const bonusNote = result.bonus ? ` Bonus so'mingiz (${result.bonus.toLocaleString("uz-UZ")}) video uchun ishlamaydi.` : "";
-    throw new ApiError(
-      `Video faqat to'langan balans bilan yaratiladi. Kerak: ${result.required.toLocaleString("uz-UZ")} so'm, to'langan balansingizda: ${result.available.toLocaleString("uz-UZ")} so'm.${bonusNote} Balansni to'ldiring: /uz/wallet`,
-      402,
-      { required: result.required, available: result.available, bonus: result.bonus ?? 0, code: "paid_balance_required", topUp: "/uz/wallet" },
-    );
-  }
-  if (!result.ok) {
-    throw new ApiError(
-      `Balans yetarli emas. Kerak: ${result.required.toLocaleString("uz-UZ")} so'm, mavjud: ${result.available.toLocaleString("uz-UZ")}.`,
-      402,
-      { required: result.required, available: result.available },
-    );
-  }
-
-  return { kind: "queued", id: result.id, price: result.price, replayed: result.replayed };
+  // Byudjet ish HAJMIDAN hisoblanadi: 1 varaqlik insho 285 s lik
+  // slotni band qilmasin, 45 betlik kurs ishi esa unga sig'may
+  // yiqilmasin. `WORKER_JOB_TIMEOUT_MS` yuqori chegara bo'lib qoladi.
+  return { replay, price, topic, budgetMs: budgetFor(tool, values, env.worker.jobTimeoutMs) };
 }
 
 /** 503 when an admin paused all generations or this tool (§6.10). Settings reads never throw. */
