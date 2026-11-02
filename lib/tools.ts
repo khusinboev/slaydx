@@ -69,6 +69,8 @@ const TOPIC_FILE_MODES = [
 const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
   image: [{ kind: "textarea", name: "prompt", legend: "Rasm tavsifi", required: true }],
   "studio-image": [{ kind: "textarea", name: "prompt", legend: "Rasm tavsifi", required: true }],
+  // Studio «Video»: the prompt is mode-dependent (effects need only a photo), the model is not — the tab sends it in both modes.
+  "studio-video": [{ kind: "text", name: "modelId", legend: "Video modeli", required: true }],
   resume: [
     { kind: "text", name: "fullName", legend: "To'liq ism", required: true },
     { kind: "text", name: "targetRole", legend: "Maqsadli lavozim", required: true },
