@@ -98,7 +98,8 @@ export async function buildStudioAudio(
   o.onStage?.({ progress: 10, step: "Audio yaratilmoqda" });
   for (let i = 0; i < want; i++) {
     try {
-      const out = await run({ ...common, values: p, ...(providerVoice ? { extra: { voice: providerVoice } } : {}), ...(assets ? { assets } : {}), step: `audio:${i}` });
+      // Each call makes ONE clip: its media_jobs cost is one clip's, not the whole job's (variants × clip).
+      const out = await run({ ...common, values: { ...p, variants: 1 }, ...(providerVoice ? { extra: { voice: providerVoice } } : {}), ...(assets ? { assets } : {}), step: `audio:${i}` });
       const mp3 = mp3Of(out.outputs[0]);
       if (!mp3) throw new Error("bo'sh audio");
       clips.push(mp3);

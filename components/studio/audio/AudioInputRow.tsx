@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
 import { Card } from "@/components/forms/compact";
 import { Field } from "@/components/forms/shared";
 import { AUDIO_INPUT_MAX_BYTES, AUDIO_INPUT_MAX_SECONDS, AUDIO_INPUT_MIN_SECONDS } from "@/lib/media/catalog-audio";
-import { AUDIO_INPUT_TOS } from "@/lib/media/studio-audio";
+import { AUDIO_INPUT_TOS, billedSeconds } from "@/lib/media/studio-audio";
 import { prepareSample, type PreparedSample } from "../voice/wav";
 
 const BTN =
@@ -15,7 +15,7 @@ const BTN =
 /** Why a prepared input cannot be uploaded (Uzbek), `null` when it can — the server's limits, checked first in the browser. */
 export function inputBlocker(s: Pick<PreparedSample, "seconds" | "blob">): string | null {
   if (s.seconds < AUDIO_INPUT_MIN_SECONDS) return `Audio kamida ${AUDIO_INPUT_MIN_SECONDS} soniya bo‘lsin.`;
-  if (s.seconds > AUDIO_INPUT_MAX_SECONDS + 0.5) return `Audio ${AUDIO_INPUT_MAX_SECONDS / 60} daqiqadan oshmasin.`;
+  if (billedSeconds(s.seconds) > AUDIO_INPUT_MAX_SECONDS) return `Audio ${AUDIO_INPUT_MAX_SECONDS / 60} daqiqadan oshmasin.`;
   if (s.blob.size > AUDIO_INPUT_MAX_BYTES) return "Audio 25 MB dan katta.";
   return null;
 }

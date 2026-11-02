@@ -55,6 +55,8 @@ export const AUDIO_INPUT_CREDITS_PER_SECOND = 1000 / 60;
 export const AUDIO_INPUT_MIN_SECONDS = 3;
 export const AUDIO_INPUT_MAX_SECONDS = 300;
 export const AUDIO_INPUT_MAX_BYTES = 25 * 1024 * 1024;
+/** Bytes one user may keep stored at once (inputs live a day): bounds the shared database, not the user's work. */
+export const AUDIO_INPUT_USER_MAX_BYTES = 100 * 1024 * 1024;
 
 const usdPerSecond = (credits: number): number => credits * ELEVENLABS_CREATOR_USD_PER_CREDIT;
 
@@ -105,7 +107,7 @@ export const STUDIO_AUDIO_ENTRIES: readonly CatalogEntry[] = [
     ],
     cost: { per: "second", usd: usdPerSecond(MUSIC_CREDITS_PER_SECOND), secondsParam: "length" },
     routes: [{ provider: "elevenlabs", upstreamModel: ELEVENLABS_MUSIC_MODEL, adapter: "studio-elevenlabs-music" }],
-    // A 3-minute composition can take a while to render.
+    // Informational: the call's real timeout is the job deadline (budget 360 s), which a 3-minute composition must fit.
     limits: { timeoutMs: 240_000 },
     output: AUDIO_OUT,
   },

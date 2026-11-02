@@ -27,7 +27,9 @@ import { inRequest } from "./helpers/next-request.mts";
  *   ownership `AND user_id = $2` dropped from `ownAudioInput`                    -> "inputs";
  *   `assertOwnCloneIds` call dropped from `prepareAudioRequest`                  -> "clone";
  *   `audio/mpeg` removed from the assets route's types                          -> "sfx" (served as octet-stream);
- *   housekeeping interval 1 day → 30 days                                       -> "purge".
+ *   housekeeping interval 1 day → 30 days                                       -> "purge";
+ *   (review fix) SFX call priced on `values: p` (all variants) again               -> "sfx" (cost_usd ×4);
+ *   (review fix) the per-user stored-bytes check removed from `uploadAudioInput`   -> "uploads + inputs" (200, not 429).
  * Migration 069 (asserted in tests/admin-migrations.test.mts): `billed_seconds` CHECK widened to 3 000, and the
  * ROLLBACK block without its DROP TABLE — both turned that file red, then restored.
  */
@@ -246,6 +248,11 @@ test("sfx: 4 variants, one fails → COMPLETED, `delivered` {3, 4}, a quarter ba
   assert.equal(mine.status, 200);
   assert.equal(mine.type, "audio/mpeg");
   assert.equal((await asset(other, r.body.id!, variants[0]!.assetId)).status, 404, "another user never gets it");
+  // Each call's media_jobs cost is ONE clip (5 s × 40 credits), never the whole job's four.
+  const costs = (await (await db()).query<{ c: string }>("SELECT cost_usd::text AS c FROM media_jobs WHERE generation_id = $1", [r.body.id]))
+    .map((x) => Number(x.c));
+  assert.equal(costs.length, 4);
+  for (const c of costs) assert.ok(Math.abs(c - (5 * 40 * 22) / 121_000) < 1e-6, `one clip's cost, got ${c}`);
   failSfxCall = 0;
 });
 
@@ -293,6 +300,19 @@ test("uploads + inputs: sniffed, measured, owner-only; the price follows the ser
   assert.equal(file.type, "audio/wav");
   assert.equal(file.size, wav(9.4).byteLength, "the uploaded bytes went to the provider");
   assert.equal(gen?.doc?.studioAudio?.inputSeconds, 10);
+
+  // Stored bytes per user are capped (100 MB live): a user already holding ~100 MB is refused, another user is not.
+  for (let i = 0; i < 4; i++) {
+    await query("INSERT INTO studio_audio_inputs (id, user_id, mime, size_bytes, seconds, billed_seconds, bytes) VALUES ($1, $2, 'audio/wav', 26214400, 10, 10, $3)", [
+      `${"f".repeat(23)}${i}`,
+      other,
+      Buffer.from([1]),
+    ]);
+  }
+  const full = await upload(other, wav(5));
+  assert.equal(full.status, 429);
+  assert.equal(full.body.code, "input_quota");
+  assert.equal((await upload(me, wav(5))).status, 200, "the cap is per user");
 });
 
 test("clone: the voice changer with another user's clone is refused before charging", { skip }, async (t) => {

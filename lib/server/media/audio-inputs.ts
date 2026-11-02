@@ -6,7 +6,7 @@ import { getSetting } from "../settings";
 import { readUploadForm } from "../upload-body";
 import { availableModels } from "./availability";
 import { assertOwnCloneIds, cloneJobCtx, sniffAudio } from "./voices";
-import { AUDIO_INPUT_MAX_BYTES, AUDIO_INPUT_MAX_SECONDS, AUDIO_INPUT_MIN_SECONDS, AUDIO_MODES, takesAudioInput } from "../../media/catalog-audio";
+import { AUDIO_INPUT_MAX_BYTES, AUDIO_INPUT_USER_MAX_BYTES, AUDIO_INPUT_MAX_SECONDS, AUDIO_INPUT_MIN_SECONDS, AUDIO_MODES, takesAudioInput } from "../../media/catalog-audio";
 import { cloneIdOf } from "../../media/catalog-speech";
 import { billedSeconds, studioAudioEntry, studioAudioPurposeOf } from "../../media/studio-audio";
 import type { StudioAudioCtx } from "../../generation/studio/audio";
@@ -68,6 +68,10 @@ export async function uploadAudioInput(req: Request, userId: string): Promise<Au
   const sniffed = sniffAudio(new Uint8Array(bytes));
   const bad = audioInputError(sniffed);
   if (bad) throw new ApiError(bad.message, bad.status, { code: "input_invalid" });
+  const held = await query<{ n: string }>("SELECT COALESCE(SUM(size_bytes), 0)::text AS n FROM studio_audio_inputs WHERE user_id = $1", [userId]);
+  if (Number(held[0]?.n ?? 0) + bytes.byteLength > AUDIO_INPUT_USER_MAX_BYTES) {
+    throw new ApiError("Yuklangan audio fayllar hajmi chegarada. Ular 1 kundan keyin o‘chadi — keyinroq urinib ko‘ring.", 429, { code: "input_quota" });
+  }
   // Ids are made here (never the content hash): the same file of two users is two rows, each the uploader's own.
   const id = randomBytes(12).toString("hex");
   const billed = billedSeconds(sniffed!.seconds);

@@ -133,3 +133,15 @@ https://elevenlabs.io/docs/api-reference/text-to-sound-effects/convert, https://
 4. That `/v1/audio-isolation` honours `?output_format=mp3_44100_128` (the engine refuses a non-MP3 answer → refund).
 5. Browser recording → WAV conversion on real phones (Safari MP4/AAC decode) for inputs up to 5 min (14.4 MB WAV).
 6. No live provider call was made (no keys here); all requests are golden-tested against the docs' shapes.
+
+## Review fixes (2026-11-03, independent review: APPROVE WITH FIXES)
+- **m1** `media_jobs.cost_usd` per SFX call = ONE clip (the call runs with `variants: 1`); before, each of N rows held
+  N clips' cost (N² in total). Flow test asserts every row = 5 s × 40 credits.
+- **m2** stored uploads capped per user: at most 100 MB of live inputs (`AUDIO_INPUT_USER_MAX_BYTES`), else 429
+  `input_quota` («… 1 kundan keyin o'chadi …»). Bounds the shared database (25 MB × 60 / day was possible).
+- **NIT** the browser refuses > 300 s with the server's own rule (`billedSeconds`), no 300.5 s gap; the catalog
+  `timeoutMs` comment says it is informational (the job deadline is the real timeout).
+- **Not changed (documented):** m3 — Studio speech / audio jobs write no provider cost into the generation's
+  `cost_json` (same as P5; `media_jobs.cost_usd` has it) — one follow-up for P5 + P6 together; NIT — the session
+  endpoint resolves the four audio models with four `availableModels` passes (cheap, cached keys); NIT — a sync call
+  that times out at the deadline is refunded to the user while ElevenLabs may still bill (owner-side exposure, rare).
