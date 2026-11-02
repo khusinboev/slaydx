@@ -99,12 +99,13 @@ test("shell: «Studio» header, subtitle, «Galereya» link, the «Rasm» | «Vi
   assert.ok(text("[data-page-header]").length > "Studio".length, "a subtitle");
   assert.match(text("[data-studio-gallery-link]"), /Galereya/);
   const tabs = qa('[data-studio-tabs] button');
-  // P3 adds «Video» (tests/ui/studio-video.test.mts); «Ovoz» lands with P5.
-  assert.deepEqual(tabs.map((t) => t.textContent), ["Rasm", "Video"]);
+  // P3 adds «Video» (tests/ui/studio-video.test.mts); P5 adds «Ovoz» (tests/ui/studio-voice.test.mts) — a real tab now.
+  assert.deepEqual(tabs.map((t) => t.textContent), ["Rasm", "Video", "Ovoz"]);
   assert.equal(tabs[0]!.getAttribute("aria-selected"), "true");
   assert.equal(tabs[1]!.getAttribute("aria-selected"), "false");
+  assert.equal(tabs[2]!.getAttribute("aria-selected"), "false");
   const page = document.body.textContent ?? "";
-  for (const word of ["Ovoz", "tez orada"]) assert.ok(!page.includes(word), `no «${word}»`);
+  for (const word of ["tez orada", "Fon musiqa"]) assert.ok(!page.includes(word), `no «${word}»`);
   // P2b (docs/studio/P2B-SPEC.md): the prompt box's tool row is real now (each button is wired, tests/ui/studio-library.test.mts).
   assert.ok(page.includes("Namuna promptlar"), "the samples button");
   assert.ok(prompt(), "the prompt box");
