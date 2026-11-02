@@ -17,7 +17,7 @@ import { mergeToMp3, mp3Seconds } from "../tts/mp3";
 import { geminiTtsModel } from "../tts/gemini";
 import { extractMeta } from "../meta";
 import { STUDIO_SPEECH_PURPOSE, cloneIdOf, libraryVoicesOf, voiceParamsOf } from "../../media/catalog-speech";
-import { parseDialogue, speechTextParam, studioSpeechEntry } from "../../media/studio-speech";
+import { parseDialogue, speechTextParam, spokenOverLimit, studioSpeechEntry } from "../../media/studio-speech";
 import { studioSpeechAdapters } from "../../media/adapters/speech-studio";
 import { UserFacingError } from "../../server/user-error";
 import type { AcademicDoc, BuiltFile, StudioSpeechDoc } from "../types";
@@ -48,14 +48,15 @@ export function speechChunkLimit(entry: Pick<CatalogEntry, "id">): number {
 type Voice = { id: string; label: string };
 
 function voiceOf(entry: CatalogEntry, raw: unknown, ctx: StudioSpeechCtx): Voice {
-  const clone = cloneIdOf(raw);
+  // Review m4: the value as the route validated it (trimmed), never the raw form string.
+  const value = String(raw ?? "").trim();
+  const clone = cloneIdOf(value);
   if (clone) {
     const hit = ctx.clones[clone];
     if (!hit) throw new UserFacingError("Tanlangan ovoz topilmadi (o‘chirilgan bo‘lishi mumkin). Kredit qaytariladi.");
     return { id: hit.providerVoiceId, label: hit.name };
   }
-  const v = String(raw ?? "");
-  const lib = libraryVoicesOf(entry.id).find((x) => x.id === v);
+  const lib = libraryVoicesOf(entry.id).find((x) => x.id === value);
   if (!lib) throw new UserFacingError("Noma'lum ovoz. Kredit qaytariladi.");
   return { id: lib.id, label: lib.name };
 }
@@ -76,12 +77,16 @@ export async function buildStudioSpeech(
   o.onStage?.({ progress: 0, step: "So‘rov tayyorlanmoqda" });
   const entry = studioSpeechEntry(values);
   if (!entry) throw new UserFacingError("Tanlangan ovoz modeli mavjud emas. Kredit qaytariladi.");
+  // Review M1: what is spoken is exactly what was priced — a text over the model's limit is refused (refund), never cut.
+  const over = spokenOverLimit(entry, values);
+  if (over) throw new UserFacingError(`${over} Kredit qaytariladi.`);
   const p = normalize(entry.params, values);
   const adapters = deps.adapters ?? studioSpeechAdapters();
   const run = deps.run ?? defaultRun;
   const upstream = entry.routes[0]!.provider === "gemini" ? () => geminiTtsModel() || entry.routes[0]!.upstreamModel : undefined;
   const common = { purpose: STUDIO_SPEECH_PURPOSE, modelId: entry.id, adapters, redact: ["text", "script", "turns"] as const, ...(upstream ? { upstream } : {}), ...(o.deadline ? { deps: { deadline: o.deadline } } : {}) };
-  const usedClones = voiceParamsOf(entry).map((n) => cloneIdOf(values[n])).filter((x): x is string => x !== null);
+  const usedClones = voiceParamsOf(entry).map((n) => cloneIdOf(String(values[n] ?? "").trim())).filter((x): x is string => x !== null);
+  const voiceRaw = (n: string) => (String(values[n] ?? "").trim() ? values[n] : p[n]);
 
   const pieces: { mp3?: Uint8Array; wav?: Uint8Array }[] = [];
   let lines: StudioSpeechDoc["lines"];
@@ -93,9 +98,10 @@ export async function buildStudioSpeech(
     if (speechTextParam(entry) === "script") {
       const d = parseDialogue(values.script);
       if (typeof d === "string") throw new UserFacingError(`${d} Kredit qaytariladi.`);
-      voices = voiceParamsOf(entry).map((n) => voiceOf(entry, values[n] ?? p[n], ctx));
+      voices = voiceParamsOf(entry).map((n) => voiceOf(entry, voiceRaw(n), ctx));
       const spoken = d.turns.map((t) => ({ text: t.text, voiceId: voices[t.speaker]!.id }));
-      chars = String(p.script ?? "").length;
+      // What was SENT (the turns' text); the price is on the whole normalized script, names included (P5-SPEC, review m5).
+      chars = spoken.reduce((n, t) => n + t.text.length, 0);
       lines = d.turns.map((t) => ({ speaker: d.speakers[t.speaker], text: t.text }));
       const gemini = entry.id.startsWith("google/");
       const extra: Record<string, string> = gemini
@@ -108,7 +114,7 @@ export async function buildStudioSpeech(
     } else {
       const text = String(p.text ?? "");
       chars = text.length;
-      voices = [voiceOf(entry, values.voice ?? p.voice, ctx)];
+      voices = [voiceOf(entry, voiceRaw("voice"), ctx)];
       lines = [{ speaker: voices[0]!.label, text }];
       const chunks = chunkText(text, speechChunkLimit(entry));
       for (let i = 0; i < chunks.length; i++) {

@@ -31,7 +31,12 @@ import { inRequest } from "./helpers/next-request.mts";
  *   `providerDeleteVoice` call removed from `deleteUserVoice`                 -> "clone: delete";
  *   purge interval 30 → 300 days                                             -> "purge";
  *   `warned_at IS NULL` dropped from the warning claim                       -> "purge" (warned twice);
- *   `readPreview` cache read skipped                                          -> "preview" (second provider call).
+ *   `readPreview` cache read skipped                                          -> "preview" (second provider call);
+ *   review M1: route length check dropped                                     -> "review M1";
+ *   review m3: `abortClone` without the provider delete                       -> "review m3";
+ *   review m2: the «job is over» clause dropped / 10 min → 60 min             -> "review m2";
+ *   review m1: known / age / marker check dropped                             -> "review m1";
+ *   NITs: loose UUID regex, `decodeURIComponent` uncaught                     -> "review NITs".
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -415,4 +420,135 @@ test("preview: a library voice costs one provider call, then the cache serves it
   assert.equal(calls.filter((c) => c.url.includes("/text-to-speech/")).length, 1, "the second play is served from the cache");
   assert.equal((await preview(me, "elevenlabs:NotInTheLibrary1")).status, 404, "only catalog voices");
   assert.equal((await preview(me, "gemini:Kore")).status, 503, "Gemini not offered without TTS_GEMINI_MODEL");
+});
+
+/* ───────────────────────── review fixes (M1, m1, m2, m3, NITs) ───────────────────────── */
+
+test("review M1: an over-limit dialogue script is refused BEFORE the charge", { skip }, async (t) => {
+  quiet(t);
+  installFetch();
+  await setVoiceSwitch(true);
+  await refresh();
+  await idle();
+  const me = await mkUser();
+  calls.length = 0;
+  const script = `Ali: ${"a".repeat(1000)}\nVali: ${"b".repeat(1000)}`;
+  const r = await post(me, "studio-speech", { modelId: "elevenlabs/v3-dialogue", script, voice1: RACHEL, voice2: "pNInz6obpgDQGcFmaJgB" });
+  assert.equal(r.status, 400, JSON.stringify(r.body));
+  assert.match(String(r.body.error), /Matn juda uzun/);
+  assert.equal(await balanceOf(me), 100_000, "nothing charged");
+  assert.equal(calls.filter((c) => c.url.includes("text-to-dialogue")).length, 0);
+});
+
+test("review m3: IVC ok, preview fails → the ElevenLabs voice is deleted, delete_reason 'failed', full refund", { skip }, async (t) => {
+  quiet(t);
+  const { query } = await db();
+  installFetch();
+  await setVoiceSwitch(true);
+  slots = { voice_slots_used: 1, voice_limit: 10 };
+  await refresh();
+  await idle();
+  const me = await mkUser();
+  const sample = (await upload(me, wav(43), true)).body.sampleId!;  // own bytes: the same recording of another user is refused (409)
+  const r = await post(me, "studio-voice", { name: "Preview yiqiladi", sampleId: sample });
+  assert.equal(r.status, 202, JSON.stringify(r.body));
+  ttsStatus = 500;
+  t.after(() => void (ttsStatus = 200));
+  calls.length = 0;
+  const gen = await runNext(r.body.id!);
+  ttsStatus = 200;
+  assert.equal(gen?.status, "FAILED");
+  assert.equal(await balanceOf(me), 100_000, "the 5 000 refunded");
+  assert.ok(calls.some((c) => c.url.endsWith("/v1/voices/add")), "the clone was made");
+  assert.ok(calls.some((c) => c.method === "DELETE" && c.url === `https://api.elevenlabs.io/v1/voices/${PROVIDER_VOICE}`), "MUTATSIYA: the made voice must be deleted");
+  const row = (await query<{ reason: string; pdel: boolean }>("SELECT delete_reason AS reason, provider_deleted_at IS NOT NULL AS pdel FROM studio_voices WHERE user_id = $1", [me]))[0]!;
+  assert.deepEqual(row, { reason: "failed", pdel: true });
+  assert.equal((await query("SELECT 1 FROM studio_voices WHERE user_id = $1 AND deleted_at IS NULL", [me])).length, 0, "no active clone left");
+});
+
+test("review m2: a 'creating' row whose job is over, or older than 10 min, is swept; a live one stays", { skip }, async (t) => {
+  quiet(t);
+  const { query } = await db();
+  const { studioVoicesHousekeeping } = await import("../lib/server/media/voices.ts");
+  const ins = async (user: string, genStatus: string, ageMin: number) => {
+    const gen = (await query<{ id: string }>("INSERT INTO generations (id, user_id, tool_id, status) VALUES (gen_random_uuid(), $1, 'studio-voice', $2) RETURNING id::text AS id", [user, genStatus]))[0]!.id;
+    return (await query<{ id: string }>(
+      `INSERT INTO studio_voices (user_id, generation_id, name, status, sample_sha256, sample_seconds, consent_at, consent_ip_hash, consent_version, created_at)
+       VALUES ($1, $2, 'c', 'creating', repeat('ab', 32), 40, now(), repeat('c', 64), 'v', now() - $3::int * interval '1 minute') RETURNING id::text AS id`,
+      [user, gen, ageMin],
+    ))[0]!.id;
+  };
+  const failed = await ins(await mkUser(), "FAILED", 2);
+  const live = await ins(await mkUser(), "IN_PROGRESS", 2);
+  const old = await ins(await mkUser(), "IN_PROGRESS", 11);
+  await studioVoicesHousekeeping({ fetchImpl: (async () => json(200, {})) as unknown as typeof fetch, key: () => "k", notify: async () => {}, reconcile: false });
+  const left = new Set((await query<{ id: string }>("SELECT id::text AS id FROM studio_voices WHERE id = ANY($1::uuid[])", [[failed, live, old]])).map((r) => r.id));
+  assert.ok(!left.has(failed), "the job is over: swept at once");
+  assert.ok(left.has(live), "a live job keeps its row");
+  assert.ok(!left.has(old), "older than 10 min: swept");
+});
+
+test("review m1: orphan ElevenLabs clones (marked, > 1 h, unknown to us) are deleted; everything else is left", { skip }, async (t) => {
+  quiet(t);
+  const { query } = await db();
+  const { reconcileOrphanClones } = await import("../lib/server/media/voices.ts");
+  const me = await mkUser();
+  await query(
+    `INSERT INTO studio_voices (user_id, name, status, provider_voice_id, sample_sha256, sample_seconds, consent_at, consent_ip_hash, consent_version)
+     VALUES ($1, 'Bor', 'ready', 'KnownVoice000001', repeat('ab', 32), 40, now(), repeat('c', 64), 'v')`,
+    [me],
+  );
+  const now = Date.UTC(2026, 10, 2, 12);
+  const old = Math.floor(now / 1000) - 7200;
+  const marked = "SlaydX Studio (user consent recorded)";
+  const deletes: string[] = [];
+  const listed: string[] = [];
+  const fetchImpl = (async (u: string | URL, init: RequestInit = {}) => {
+    const url = String(u);
+    if (init.method === "DELETE") {
+      deletes.push(url.split("/").pop()!);
+      return json(200, { status: "ok" });
+    }
+    listed.push(url);
+    if (!url.includes("next_page_token")) {
+      return json(200, {
+        voices: [
+          { voice_id: "OrphanVoice00001", category: "cloned", description: marked, created_at_unix: old },
+          { voice_id: "KnownVoice000001", category: "cloned", description: marked, created_at_unix: old },
+          { voice_id: "YoungVoice000001", category: "cloned", description: marked, created_at_unix: Math.floor(now / 1000) - 600 },
+        ],
+        has_more: true,
+        next_page_token: "p2",
+      });
+    }
+    return json(200, {
+      voices: [
+        { voice_id: "ForeignVoice0001", category: "cloned", description: "the owner's own voice", created_at_unix: old },
+        { voice_id: "NoDateVoice00001", category: "cloned", description: marked },
+        { voice_id: "PremadeVoice0001", category: "premade", description: marked, created_at_unix: old },
+        { voice_id: "OrphanVoice00002", category: "cloned", description: marked, created_at_unix: old },
+      ],
+      has_more: false,
+    });
+  }) as unknown as typeof fetch;
+  const n = await reconcileOrphanClones({ fetchImpl, key: () => "k", now: () => now });
+  assert.equal(n, 2);
+  assert.deepEqual(deletes.sort(), ["OrphanVoice00001", "OrphanVoice00002"]);
+  assert.equal(listed.length, 2, "both pages read");
+  assert.equal(listed[0], "https://api.elevenlabs.io/v2/voices?category=cloned&page_size=100&search=SlaydX%20Studio");
+  // A failing listing deletes nothing.
+  deletes.length = 0;
+  const down = (async () => json(503, {})) as unknown as typeof fetch;
+  assert.equal(await reconcileOrphanClones({ fetchImpl: down, key: () => "k", now: () => now }), 0);
+  assert.equal(deletes.length, 0);
+});
+
+test("review NITs: a malformed voice id is a 404 (not 500); a malformed preview escape is a 404", { skip }, async (t) => {
+  quiet(t);
+  const me = await mkUser();
+  assert.equal((await del(me, "-".repeat(36))).status, 404);
+  const route = await import("../app/api/media/voices/preview/[key]/route.ts");
+  const req = new Request("http://localhost/api/media/voices/preview/x", { headers: { cookie: await cookie(me) } });
+  const r = await inRequest(req, () => route.GET(req, { params: Promise.resolve({ key: "%E0%A4%A" }) }));
+  assert.equal(r.status, 404);
 });

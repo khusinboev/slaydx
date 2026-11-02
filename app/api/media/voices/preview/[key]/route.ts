@@ -1,4 +1,4 @@
-import { handler, limit, requireUser } from "@/lib/server/api";
+import { ApiError, handler, limit, requireUser } from "@/lib/server/api";
 import { bytesBody, noStoreOnError } from "@/lib/server/http-bytes";
 import { voicePreview } from "@/lib/server/media/voice-clone";
 
@@ -17,7 +17,14 @@ export const GET = noStoreOnError(
     const { user } = await requireUser(req);
     await limit(`media:voice-preview:${user.id}`, 60, 600);
     const { key } = await ctx.params;
-    const bytes = await voicePreview(String(user.id), decodeURIComponent(key).slice(0, 120));
+    // Review NIT: a malformed escape (`%E0%A4%A`) is a 404, never a 500 from `decodeURIComponent`.
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(key);
+    } catch {
+      throw new ApiError("Ovoz topilmadi", 404);
+    }
+    const bytes = await voicePreview(String(user.id), decoded.slice(0, 120));
     return new Response(bytesBody(bytes), {
       headers: {
         "Content-Type": "audio/mpeg",

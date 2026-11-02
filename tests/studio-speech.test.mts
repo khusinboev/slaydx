@@ -29,7 +29,11 @@ import assert from "node:assert/strict";
  *   clone adapter accepts a non-string voice_id                               -> "errors: clone";
  *   `sniffAudio` MP3 frame minimum removed (≥ 10)                              -> "sniff";
  *   `CLONE_SAMPLE_MIN_SECONDS` check removed from `sampleError`               -> "sniff";
- *   `parseDialogue` accepts three speakers                                     -> "dialogue grammar".
+ *   `parseDialogue` accepts three speakers                                     -> "dialogue grammar";
+ *   review M1: `spokenOverLimit` dropped from `studioSpeechError`              -> "review M1";
+ *   review M1: the engine's over-limit check dropped                          -> "review M1" (the provider was called);
+ *   review M1: `doc.speech.chars` = the whole script                          -> "review M1";
+ *   review m4: `voiceOf` reads the untrimmed value                            -> "review m4".
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -359,6 +363,41 @@ test("studioSpeechError: refused before charging", () => {
   assert.match(String(rules.studioSpeechError({ ...BASE[EL_DIA], voice2: RACHEL })), /ikki xil ovoz/);
   assert.match(String(rules.studioSpeechError({ ...BASE[EL_DIA], script: "A: 1\nB: 2\nC: 3" })), /faqat ikki/);
   assert.ok(tools.preflightError(tools.TOOL_BY_ID["studio-speech"], { ...BASE[EL_TTS], voice: "Kore" } as never));
+});
+
+test("review M1: a text / script over the model's limit is refused before charging AND never spoken", async (t) => {
+  quiet(t);
+  const long = (n: number) => `Ali: ${"a".repeat(Math.ceil(n / 2))}\nVali: ${"b".repeat(n)}`;
+  // ElevenLabs dialogue: ≤ 2 000 normalized characters (names included, as priced).
+  assert.match(String(rules.studioSpeechError({ ...BASE[EL_DIA], script: long(2000) })), /Matn juda uzun: eng ko‘pi 2 000 belgi/);
+  assert.match(String(rules.studioSpeechError({ ...BASE[EL_TTS], text: "x".repeat(4001) })), /eng ko‘pi 4 000 belgi/);
+  assert.equal(rules.studioSpeechError({ ...BASE[EL_TTS], text: "x".repeat(4000) }), null, "exactly the limit is fine");
+  assert.match(String(rules.studioSpeechError({ ...BASE[GM_DIA], script: long(1000) })), /1 400/);
+  // The engine re-checks (a job row written by an older route): refused, nothing sent, full refund.
+  const { fetchImpl, seen } = stub(() => audio());
+  const adapters = studioSpeechAdapters({ key: () => KEY });
+  await assert.rejects(
+    buildStudioSpeech(tools.TOOL_BY_ID["studio-speech"], { ...BASE[EL_DIA], script: long(2000) } as never, { clones: {} }, {}, { adapters, run: (i) => runMedia({ ...i, deps: { fetchImpl } }) }),
+    /Matn juda uzun.*Kredit qaytariladi/,
+  );
+  assert.equal(seen.length, 0, "MUTATSIYA: over-limit script reached the provider");
+  // At the limit: what is sent is the turns' text, ≤ max, and `doc.speech.chars` counts exactly that.
+  const fit = `Ali: ${"a".repeat(900)}\nVali: ${"b".repeat(1080)}`;
+  assert.equal(rules.studioSpeechError({ ...BASE[EL_DIA], script: fit }), null);
+  const sent = stub(() => audio());
+  const built = await buildStudioSpeech(tools.TOOL_BY_ID["studio-speech"], { ...BASE[EL_DIA], script: fit } as never, { clones: {} }, {}, { adapters, run: (i) => runMedia({ ...i, deps: { fetchImpl: sent.fetchImpl } }) });
+  const inputs = (sent.seen[0]!.body as { inputs: { text: string }[] }).inputs;
+  const total = inputs.reduce((n, x) => n + x.text.length, 0);
+  assert.equal(total, 1980);
+  assert.ok(total <= 2000);
+  assert.equal(built.doc.speech!.chars, 1980, "chars = what was sent");
+});
+
+test("review m4: the worker uses the trimmed voice value (a padded library id still speaks)", async (t) => {
+  quiet(t);
+  const r = await requestsOf({ ...BASE[EL_TTS], voice: `  ${ADAM}  ` });
+  assert.equal(r[0]!.url, `https://api.elevenlabs.io/v1/text-to-speech/${ADAM}?output_format=mp3_44100_128`);
+  assert.equal(rules.studioSpeechError({ ...BASE[EL_TTS], voice: `  ${ADAM}  ` }), null, "the route accepts the same value");
 });
 
 test("4 000 characters: the speech cap is exactly what the form-field sanitizer keeps", () => {

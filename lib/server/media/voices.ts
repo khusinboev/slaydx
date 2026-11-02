@@ -23,7 +23,7 @@ import {
 } from "../../media/studio-speech";
 import { geminiTtsModel } from "../../generation/tts/gemini";
 import { mp3Frames, mp3Seconds, wavInfo, wavSeconds } from "../../generation/tts/mp3";
-import { ELEVENLABS_SUBSCRIPTION_URL, elevenLabsFetch, elevenLabsSlotsOf, elevenLabsVoiceUrl } from "../../generation/tts/elevenlabs";
+import { ELEVENLABS_CLONE_MARKER, ELEVENLABS_SUBSCRIPTION_URL, elevenLabsClonedVoicesUrl, elevenLabsFetch, elevenLabsSlotsOf, elevenLabsVoiceUrl } from "../../generation/tts/elevenlabs";
 import { TtsError } from "../../generation/tts/types";
 import type { FormValues } from "../../types";
 
@@ -301,7 +301,8 @@ export async function providerDeleteVoice(providerVoiceId: string, deps: Provide
  * when possible, else by housekeeping. Another user's id / an unknown id is a 404; a clone still being made is a 409.
  */
 export async function deleteUserVoice(userId: string, id: string, deps: ProviderDeleteDeps = {}): Promise<{ deleted: true; providerDeleted: boolean }> {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ApiError("Ovoz topilmadi", 404);
+  // Review NIT: a strict UUID (a 36-char string of dashes would reach the uuid cast and answer 500).
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new ApiError("Ovoz topilmadi", 404);
   const row = await queryOne<{ provider_voice_id: string | null; status: string }>(
     "SELECT provider_voice_id, status FROM studio_voices WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL",
     [id, userId],
@@ -398,6 +399,9 @@ export type HousekeepingDeps = ProviderDeleteDeps & {
   /** Sends the «your clone will be deleted» notice; default = the bot DM (`sendUserDm`). */
   notify?: (t: { userId: string; telegramId: string | null; language: string | null; name: string; days: number }) => Promise<void>;
   batch?: number;
+  now?: () => number;
+  /** Orphan reconciliation: `true` run now, `false` skip, absent = at most hourly. */
+  reconcile?: boolean;
 };
 
 export const CLONE_WARN_TEXT = (name: string, days: number) =>
@@ -412,9 +416,10 @@ async function botNotify(t: { userId: string; telegramId: string | null; languag
 /**
  * Leader housekeeping (one pass): warn the owners of clones unused for (30 − 3) days (once per idle period: claimed by
  * `warned_at` before sending), delete clones unused for 30 days, retry the provider deletes still owed, close 'creating'
- * rows a dead worker left (> 1 h), drop samples older than a day. Returns what it did.
+ * rows a dead worker left (job over, or > 10 min), drop samples older than a day, and (hourly) delete orphan provider
+ * clones (`reconcileOrphanClones`). Returns what it did.
  */
-export async function studioVoicesHousekeeping(deps: HousekeepingDeps = {}): Promise<{ warned: number; purged: number; providerDeleted: number; stale: number; samples: number }> {
+export async function studioVoicesHousekeeping(deps: HousekeepingDeps = {}): Promise<{ warned: number; purged: number; providerDeleted: number; stale: number; samples: number; orphans: number }> {
   const batch = deps.batch ?? 50;
   const notify = deps.notify ?? botNotify;
   const warned = await query<{ id: string; user_id: string; name: string; telegram_id: string | null; language: string | null }>(
@@ -443,8 +448,15 @@ export async function studioVoicesHousekeeping(deps: HousekeepingDeps = {}): Pro
     [CLONE_UNUSED_DAYS, batch],
   );
   if (purged.length) await query("DELETE FROM studio_voice_previews WHERE voice_key = ANY($1::text[])", [purged.map((p) => `clone:${p.id}`)]);
+  // Review m2: a 'creating' row whose job is over (FAILED / REVOKED / COMPLETED / gone) or older than 10 min (a clone
+  // job's budget is 150 s) is a dead worker's leftover: it would block the user's next clone.
   const stale = await query<{ id: string }>(
-    "DELETE FROM studio_voices WHERE status = 'creating' AND deleted_at IS NULL AND created_at < now() - interval '1 hour' RETURNING id::text AS id",
+    `DELETE FROM studio_voices v
+      WHERE v.status = 'creating' AND v.deleted_at IS NULL
+        AND (v.created_at < now() - $1::int * interval '1 minute'
+             OR NOT EXISTS (SELECT 1 FROM generations g WHERE g.id = v.generation_id AND g.status IN ('QUEUED', 'IN_PROGRESS')))
+      RETURNING v.id::text AS id`,
+    [CLONE_STALE_MINUTES],
   );
   const owed = await query<{ id: string; provider_voice_id: string }>(
     `SELECT id::text AS id, provider_voice_id FROM studio_voices
@@ -461,5 +473,62 @@ export async function studioVoicesHousekeeping(deps: HousekeepingDeps = {}): Pro
   }
   if (providerDeleted) resetSlotCache();
   const samples = await query("DELETE FROM studio_voice_samples WHERE created_at < now() - interval '1 day' RETURNING id");
-  return { warned: warned.length, purged: purged.length, providerDeleted, stale: stale.length, samples: samples.length };
+  const now = (deps.now ?? Date.now)();
+  let orphans = 0;
+  if (deps.reconcile === true || (deps.reconcile !== false && now - lastReconcileAt >= RECONCILE_EVERY_MS)) {
+    lastReconcileAt = now;
+    orphans = await reconcileOrphanClones(deps);
+  }
+  return { warned: warned.length, purged: purged.length, providerDeleted, stale: stale.length, samples: samples.length, orphans };
+}
+
+/** A 'creating' row older than this is a dead worker's leftover (review m2). */
+export const CLONE_STALE_MINUTES = 10;
+/** Orphan reconciliation runs at most this often (one provider listing per hour). */
+export const RECONCILE_EVERY_MS = 3_600_000;
+/** A provider clone younger than this may still be on its way into a row: never touched. */
+export const ORPHAN_MIN_AGE_MS = 3_600_000;
+let lastReconcileAt = 0;
+
+/**
+ * Review m1: a clone call that timed out AFTER ElevenLabs made the voice leaves a voice no row knows (the job was
+ * refunded). List our cloned voices (`category=cloned`, the description starts with `ELEVENLABS_CLONE_MARKER`), and
+ * delete those older than 1 h that no `studio_voices.provider_voice_id` names. A voice without a creation time is left
+ * alone (it cannot be proven old). Returns how many were deleted; a listing failure deletes nothing.
+ */
+export async function reconcileOrphanClones(deps: HousekeepingDeps = {}): Promise<number> {
+  const key = (deps.key ?? (() => getProviderKey("elevenlabs")))();
+  if (!key) return 0;
+  const nowSec = Math.floor((deps.now ?? Date.now)() / 1000);
+  const ours: string[] = [];
+  let token: string | undefined;
+  try {
+    for (let page = 0; page < 20; page++) {
+      const res = await elevenLabsFetch({ url: elevenLabsClonedVoicesUrl(token), method: "GET" }, { key, fetchImpl: deps.fetchImpl, timeoutMs: 15_000 });
+      const body = (await res.json().catch(() => null)) as { voices?: unknown; has_more?: unknown; next_page_token?: unknown } | null;
+      for (const v of Array.isArray(body?.voices) ? (body!.voices as Record<string, unknown>[]) : []) {
+        const id = typeof v.voice_id === "string" ? v.voice_id : "";
+        const created = typeof v.created_at_unix === "number" ? v.created_at_unix : null;
+        const marked = typeof v.description === "string" && v.description.startsWith(ELEVENLABS_CLONE_MARKER);
+        if (v.category === "cloned" && marked && /^[A-Za-z0-9]{8,64}$/.test(id) && created !== null && nowSec - created >= ORPHAN_MIN_AGE_MS / 1000) ours.push(id);
+      }
+      if (body?.has_more !== true || typeof body.next_page_token !== "string" || !body.next_page_token) break;
+      token = body.next_page_token;
+    }
+  } catch (e) {
+    console.warn("[studio-voices] clone listing failed:", e instanceof Error ? e.message : e);
+    return 0;
+  }
+  if (!ours.length) return 0;
+  const known = new Set((await query<{ v: string }>("SELECT provider_voice_id AS v FROM studio_voices WHERE provider_voice_id = ANY($1::text[])", [ours])).map((r) => r.v));
+  let deleted = 0;
+  for (const id of ours) {
+    if (known.has(id)) continue;
+    if (await providerDeleteVoice(id, deps)) deleted++;
+  }
+  if (deleted) {
+    console.warn(`[studio-voices] deleted ${deleted} orphan ElevenLabs clone(s)`);
+    resetSlotCache();
+  }
+  return deleted;
 }

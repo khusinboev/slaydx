@@ -17,6 +17,7 @@
  */
 import { MediaError, type AdapterInput, type MediaAdapter, type NormalizedParams } from "../../studio-core";
 import {
+  ELEVENLABS_CLONE_MARKER,
   ELEVENLABS_CLONE_URL,
   ELEVENLABS_DIALOGUE_URL,
   elevenLabsCloneForm,
@@ -110,7 +111,7 @@ export function cloneAdapter(deps: StudioSpeechAdapterDeps = {}): MediaAdapter {
       const name = String(input.params.name ?? "").trim();
       if (!sample || !name) throw new MediaError("elevenlabs", "clone needs a name and a sample");
       const bytes = new Uint8Array(Buffer.from(sample.base64, "base64"));
-      const form = elevenLabsCloneForm({ name, sample: bytes, mime: sample.mime, fileName: sample.mime === "audio/wav" ? "sample.wav" : "sample.mp3", description: "SlaydX Studio (user consent recorded)" });
+      const form = elevenLabsCloneForm({ name, sample: bytes, mime: sample.mime, fileName: sample.mime === "audio/wav" ? "sample.wav" : "sample.mp3", description: `${ELEVENLABS_CLONE_MARKER} (user consent recorded)` });
       let body: unknown;
       try {
         const res = await elevenLabsFetch({ url: ELEVENLABS_CLONE_URL, method: "POST", form }, { key, fetchImpl: d.fetchImpl, timeoutMs: timeoutOf(d) });

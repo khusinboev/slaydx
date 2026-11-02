@@ -151,6 +151,17 @@ export const ELEVENLABS_DIALOGUE_URL = `${ELEVENLABS_API}/text-to-dialogue?outpu
 export const ELEVENLABS_CLONE_URL = `${ELEVENLABS_API}/voices/add`;
 export const ELEVENLABS_SUBSCRIPTION_URL = `${ELEVENLABS_API}/user/subscription`;
 export const elevenLabsVoiceUrl = (voiceId: string): string => `${ELEVENLABS_API}/voices/${encodeURIComponent(voiceId)}`;
+/**
+ * Every Studio clone's description starts with this marker, so housekeeping can find a clone ElevenLabs made but whose
+ * id never reached us (a call that timed out after the voice was created) and delete it (review m1).
+ */
+export const ELEVENLABS_CLONE_MARKER = "SlaydX Studio";
+/**
+ * Our cloned voices (`GET /v2/voices?category=cloned&search=<marker>`, ≤ 100 per page, `next_page_token` while
+ * `has_more`): https://elevenlabs.io/docs/api-reference/voices/search, read 2026-11-02.
+ */
+export const elevenLabsClonedVoicesUrl = (pageToken?: string): string =>
+  `https://api.elevenlabs.io/v2/voices?category=cloned&page_size=100&search=${encodeURIComponent(ELEVENLABS_CLONE_MARKER)}${pageToken ? `&next_page_token=${encodeURIComponent(pageToken)}` : ""}`;
 
 /** The eleven_v3 languages above as a list (`lib/media/catalog-speech.ts ELEVENLABS_LANGS` must equal it). */
 export const ELEVENLABS_V3_LANGS: readonly string[] = [...V3_LANGS];

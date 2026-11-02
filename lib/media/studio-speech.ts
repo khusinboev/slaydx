@@ -75,6 +75,23 @@ export function speechTextParam(entry: Pick<CatalogEntry, "params">): string {
   return entry.params.some((p) => p.name === "script") ? "script" : "text";
 }
 
+/** Longest spoken text of a model (the text param's `max`). */
+export function spokenMax(entry: Pick<CatalogEntry, "params">): number {
+  const p = entry.params.find((x) => x.name === speechTextParam(entry));
+  return p && p.type === "text" ? p.max : 0;
+}
+
+/**
+ * Review M1: the spoken text (whitespace runs collapsed, as it is priced) is longer than the model takes → the Uzbek
+ * reason; `null` when it fits. The server refuses it before charging and the engine re-checks: what is priced is
+ * exactly what is spoken.
+ */
+export function spokenOverLimit(entry: Pick<CatalogEntry, "params">, values: Readonly<Record<string, unknown>>): string | null {
+  const max = spokenMax(entry);
+  const len = String(values[speechTextParam(entry)] ?? "").replace(/\s+/g, " ").trim().length;
+  return max > 0 && len > max ? `Matn juda uzun: eng ko‘pi ${max.toLocaleString("en-US").replace(/,/g, " ")} belgi (hozir ${len}).` : null;
+}
+
 /** «~N s»: the estimated audio length of `chars` characters (at least 1 s for any text). */
 export function estimatedSeconds(chars: number): number {
   return chars > 0 ? Math.max(1, Math.round(chars / SPEECH_CHARS_PER_SECOND)) : 0;
@@ -141,6 +158,9 @@ export function studioSpeechError(values: Readonly<Record<string, unknown>>): st
   if (!entry) return "Noma'lum ovoz modeli — boshqa modelni tanlang.";
   const bad = validate(entry.params, values);
   if (bad) return bad;
+  // Review M1: the price and what is spoken are the same text — a text longer than the model takes is refused, never cut.
+  const over = spokenOverLimit(entry, values);
+  if (over) return over;
   const p = normalize(entry.params, values);
   const eleven = entry.id.startsWith("elevenlabs/");
   for (const name of voiceParamsOf(entry)) {

@@ -70,6 +70,24 @@ Gemini: `TTS_PRICING` Flash TTS row ($10 / 1M audio tokens, 25 tokens / s) at an
 ## Previews
 `GET /api/media/voices/preview/<key>` (`elevenlabs:<id>`, `gemini:<name>`, `clone:<id>` own only): served from
 `studio_voice_previews`; a voice never heard before costs ONE provider call ever (concurrent misses share it).
+Telemetry: a preview runs outside a job, so it writes no `media_jobs` / `ai_usage` row (review NIT, documented, not
+built): the whole library is at most 22 calls × ~80 characters once (ElevenLabs 10 × ≈ $0.015, Gemini 12 × ≈ $0.0013 —
+under $0.20 in total, ever); a clone's preview is part of its clone job (metered there).
+
+## Review fixes (2026-11-02)
+- **M1** what is spoken = what is priced: `studioSpeechError` refuses a text / script whose normalized length is over the
+  model's `max` (400 «Matn juda uzun…» before the charge); the engine re-checks (refund) and sends only the parsed turns;
+  `doc.speech.chars` = the characters actually sent.
+- **m5** the dialogue PRICE stays on the whole normalized script (speaker names and line breaks included) — slightly
+  above what ElevenLabs bills (it bills the turns' text): house-favourable by design, a few characters per line.
+- **m1** orphan clones: hourly `reconcileOrphanClones` lists `GET /v2/voices?category=cloned&search=SlaydX Studio`
+  (https://elevenlabs.io/docs/api-reference/voices/search: `voice_id`, `category`, `description`, `created_at_unix`,
+  `has_more` / `next_page_token`) and deletes our marked clones older than 1 h that no `studio_voices` row names; a voice
+  without a creation time, an unmarked one, a young one or a listing failure is left alone.
+- **m2** a 'creating' row is swept when its job is over (FAILED / REVOKED / COMPLETED / gone) or after 10 min.
+- **m3** tested: IVC ok → preview fails → the ElevenLabs voice is deleted, `delete_reason = 'failed'`, full refund.
+- **m4** the worker reads the trimmed voice value (the one the route validated).
+- NITs: strict UUID on delete (404, never a 500 from the cast); a malformed preview escape is a 404.
 
 ## Migration 068 `studio_voices.sql`
 `studio_voice_samples`, `studio_voices` (+ `studio_voices_one_active` unique partial index, CHECKs: ready needs the
@@ -77,7 +95,7 @@ provider id, delete_reason with deleted_at), `studio_voice_previews`. Additive, 
 `tests/admin-migrations.test.mts`.
 
 ## Tests (mutations listed in each file header, all turned red then restored)
-`tests/studio-speech.test.mts` (pure, 19), `tests/studio-speech-flow.test.mts` (isolated DB, 5),
+`tests/studio-speech.test.mts` (pure, 21), `tests/studio-speech-flow.test.mts` (isolated DB, 10),
 `tests/ui/studio-voice.test.mts` (5); enumerations updated in settings, download-formats, viewer-kind, pricing-server,
 studio-admin-media, admin-migrations, ui/studio-page, ui/studio-video, ui/shell-phone.
 
@@ -85,8 +103,9 @@ studio-admin-media, admin-migrations, ui/studio-page, ui/studio-video, ui/shell-
 1. **Uzbek quality of each library voice** — needs a live listen (the previews are what users judge by).
 2. Gemini voice gender labels (Google's descriptions), and the Gemini quote for a **Pro** TTS model (2× the Flash price).
 3. IVC sample formats/limits are not stated on the reference page (we send WAV / MP3 ≤ 10 MB).
-4. A clone call that times out after ElevenLabs created the voice leaves an orphan voice (no id came back): the job is
-   refunded; the admin sees it in the slot count / ElevenLabs dashboard (name = the user's clone name).
+4. A clone call that times out after ElevenLabs created the voice: the job is refunded and the orphan voice is deleted
+   by the hourly reconciliation after 1 h (review m1). UNVERIFIED: that `search` matches the description marker and that
+   `created_at_unix` is set for new IVC voices (without it the voice is left for the admin).
 5. **Voice Design** (text → voice) not built: it costs preview characters, saving a designed voice takes a scarce slot
    (Starter: 10), and the pricing is not on the API price page.
 6. «AI bilan yozish» not built (no free-LLM text writer endpoint for this; a P5.1 item).
