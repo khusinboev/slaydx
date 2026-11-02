@@ -56,6 +56,7 @@ export const USAGE_KIND_LABEL: Readonly<Record<string, string>> = {
   tts: "Ovoz",
   grounding: "Internet qidiruvi",
   video: "Video",
+  audio: "Audio (musiqa, effekt)",
   requests: "So'rovlar",
   unknown: "Boshqa",
 };
@@ -64,7 +65,7 @@ export function usageKindLabel(kind: string): string {
   return USAGE_KIND_LABEL[kind] ?? kind;
 }
 
-const UNIT_LABEL: Readonly<Record<string, string>> = { image: "ta rasm", tts: "ta belgi", video: "soniya", grounding: "ta qidiruv" };
+const UNIT_LABEL: Readonly<Record<string, string>> = { image: "ta rasm", tts: "ta belgi", video: "soniya", audio: "soniya", grounding: "ta qidiruv" };
 
 /** `169 ta rasm` for a kind whose calls carry a unit (images, voice characters, video seconds); `null` otherwise. */
 export function unitText(kind: string, units: number): string | null {
