@@ -3,8 +3,13 @@ import { notFound } from "next/navigation";
 import { isToolSlug, TOOL_BY_SLUG } from "@/lib/tools";
 import { ToolWorkspace } from "@/components/forms/ToolWorkspace";
 
+/** Tool slugs that own a static route (`app/uz/<slug>/page.tsx`): the static page wins, `[slug]` must not pre-render them too. */
+const OWN_PAGE_SLUGS: readonly string[] = ["studio"];
+
 export function generateStaticParams() {
-  return Object.keys(TOOL_BY_SLUG).map((slug) => ({ slug }));
+  return Object.keys(TOOL_BY_SLUG)
+    .filter((slug) => !OWN_PAGE_SLUGS.includes(slug))
+    .map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({

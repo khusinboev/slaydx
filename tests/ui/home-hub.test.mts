@@ -38,6 +38,7 @@ const { TOOLS, TOOL_BY_ID, visibleToolGroups, clientAdjustedPrice } = await impo
 const { SERVICES, servicesOfGroup } = await import("../../lib/services.ts");
 const { TOOL_ICONS } = await import("../../components/shell/icons.tsx");
 const model = await import("../../components/home/hub/hub-model.ts");
+const { studioFirst } = await import("../../components/studio/studio-entry.ts");
 
 const pushes: string[] = [];
 const router = {
@@ -415,7 +416,7 @@ test("«Barcha vositalar»: one chip per visible group (registry), the chosen gr
     assert.equal(q(`[data-hub-group="${g.id}"]`)!.getAttribute("aria-pressed"), "true");
     const shown = [...document.querySelectorAll<HTMLAnchorElement>("[data-hub-tool]")];
     const want = [
-      ...TOOLS.filter((t) => t.group === g.id).map((t) => ({ id: t.id as string, href: `/uz/${t.slug}` })),
+      ...studioFirst(TOOLS.filter((t) => t.group === g.id)).map((t) => ({ id: t.id as string, href: `/uz/${t.slug}` })),
       ...servicesOfGroup(g.id, null).map((v) => ({ id: v.id as string, href: v.href })),
     ];
     assert.deepEqual(shown.map((a) => a.dataset.hubTool), want.map((t) => t.id), g.id);
@@ -469,6 +470,53 @@ test("promo cards: «AI yordamchi» above the quick tools, «Qattiqqo'l domla» 
   assert.ok(chat.querySelector("svg"), "icon");
   fireEvent.click(chat);
   assert.ok(!q("[data-hub-signed-out]"), "signed in: no login");
+});
+
+/*
+ * Studio (docs/studio/P1-SPEC.md «Entry»): a large card on the hub + the first tile of the Media group.
+ * Mutations: QuickStart without the Studio card -> first assertions red; `studioFirst` removed from ToolsByGroup ->
+ * «first tile of Media» red; the card not gated by login -> «gated» red.
+ */
+test("Studio: the large card comes first in «Tez boshlash» (links to /uz/studio, CTA ≥ 44 px, gated by login)", () => {
+  signIn();
+  useAppStore.setState({ features: ALL_ON });
+  mount();
+  const studio = q<HTMLAnchorElement>('[data-hub-promo="studio"]')!;
+  assert.ok(studio, "the Studio card");
+  assert.equal(studio.getAttribute("href"), "/uz/studio");
+  assert.match(studio.textContent!, /Studio/);
+  assert.match(studio.textContent!, /Eng kuchli modellar/);
+  assert.match(studio.querySelector("[data-promo-cta]")!.className, /min-h-11/);
+  assert.ok(studio.querySelector("svg"), "icon");
+  const chat = q('[data-hub-promo="chat"]')!;
+  assert.ok(studio.compareDocumentPosition(chat) & Node.DOCUMENT_POSITION_FOLLOWING, "Studio before the other promo cards");
+  assert.ok(studio.compareDocumentPosition(q("[data-hub-quick]")!) & Node.DOCUMENT_POSITION_FOLLOWING, "and before the four tools");
+  assert.ok(TOOL_ICONS.sparkles, "its icon is in the table");
+  cleanup();
+  signOut();
+  mount();
+  fireEvent.click(q('[data-hub-promo="studio"]')!);
+  assert.equal(useUi.getState().overlay, "login", "gated");
+  assert.equal(useUi.getState().returnTo, "/uz/studio");
+});
+
+test("Studio is the FIRST tile of the Media group, whatever its place in the registry", () => {
+  // The backend registers the `studio` tool (group media, slug studio); put one in the middle of the group here.
+  const studio = { ...TOOL_BY_ID.video, id: "studio-image", slug: "studio", title: "Studio" } as unknown as (typeof TOOLS)[number];
+  const at = TOOLS.findIndex((t) => t.group === "media") + 2;
+  TOOLS.splice(at, 0, studio);
+  try {
+    signIn();
+    mount();
+    fireEvent.click(q('[data-hub-group="media"]')!);
+    const tiles = [...document.querySelectorAll<HTMLAnchorElement>("[data-hub-group-tools] [data-hub-tool]")];
+    assert.equal(tiles[0]!.dataset.hubTool, "studio-image", "MUTATSIYA: studioFirst olib tashlansa qizaradi");
+    assert.equal(tiles[0]!.getAttribute("href"), "/uz/studio");
+    const rest = TOOLS.filter((t) => t.group === "media" && t !== studio).map((t) => t.id as string);
+    assert.deepEqual(tiles.slice(1, 1 + rest.length).map((a) => a.dataset.hubTool), rest, "the others keep their order");
+  } finally {
+    TOOLS.splice(TOOLS.indexOf(studio), 1);
+  }
 });
 
 test("services follow their feature switches: chat / tests / domla hidden when off or unknown; convert + alifbo always", () => {

@@ -11,6 +11,7 @@ import { renderPptx } from "./render-pptx";
 import { renderPptxWithTemplate } from "./render-pptx-template";
 import type { CustomTemplate } from "./pptx-template";
 import { buildImageArtifact } from "./image-studio";
+import { buildStudioImage } from "./studio";
 import { buildInfographicArtifact } from "./infographic/engine";
 import { buildPortraitArtifact } from "./portrait/engine";
 import { buildTranslationArtifact } from "./translate/engine";
@@ -564,6 +565,11 @@ async function buildArtifactInner(
 
   if (tool.id === "image") {
     return buildImageArtifact(tool, values, deadline, opts.onStage);
+  }
+
+  // Studio pictures (docs/studio/P1-SPEC.md): the chosen catalog model, always through the media core.
+  if (tool.id === "studio-image") {
+    return buildStudioImage(tool, values, deadline, opts.onStage);
   }
 
   /*

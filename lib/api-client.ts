@@ -266,6 +266,8 @@ export type Features = {
   ttsPremium?: boolean;
   /** `video` providers usable now (enabled + keyed, `video.enabled` on); absent on an older server (tool hidden). */
   videoProviders?: string[];
+  /** Studio picture models (catalog ids) usable now (enabled + keyed + not hidden by the admin); absent on an older server. */
+  studioImageModels?: string[];
   /** `domla.enabled` is on: «Qattiqqo'l domla» is listed among the tools; absent (older server) or false = hidden. */
   domla?: boolean;
   /** `chat.enabled` is on: «AI yordamchi» is listed; absent (older server) or false = hidden. */
@@ -548,7 +550,7 @@ export function nextPollDelay(g: GenerationDetail, delay: number): number {
 export async function createGeneration(
   slug: string,
   values: FormValues,
-  opts: { idempotencyKey?: string; expectedPrice?: number } = {},
+  opts: { idempotencyKey?: string; expectedPrice?: number; repeat?: boolean } = {},
 ) {
   /*
    * The key identifies the INTENT (tool + form values), not the price: a
@@ -560,7 +562,7 @@ export async function createGeneration(
   const intent = JSON.stringify({ slug, values });
   const body =
     opts.expectedPrice === undefined ? intent : JSON.stringify({ slug, values, expectedPrice: opts.expectedPrice });
-  const key = opts.idempotencyKey ?? submitKey(intent);
+  const key = opts.idempotencyKey ?? submitKey(intent, opts.repeat === true);
   try {
     const res = await request<{ id: string; price: number; status: JobStatus }>("/api/generations", {
       method: "POST",
@@ -653,8 +655,12 @@ function uuidV4(): string {
  * muvaffaqiyatdan keyin ({@link SUBMIT_KEY_AFTER_SUCCESS_MS}) yuborilsa —
  * o'sha kalit (bitta niyatning takrori). Boshqa forma, aniq rad
  * (4xx — hech narsa yaratilmagan) yoki muddat o'tgan — yangi kalit.
+ *
+ * `repeat` (Studio: bir xil prompt bilan ataylab yana bitta rasm): muvaffaqiyatli yuborishdan keyingi takror
+ * YANGI niyat — kalit qayta ishlatilmaydi. Hali ketayotgan (`pending`) yoki javobi yo'qolgan (`unsure`) yuborish
+ * esa baribir o'sha kalitni oladi, ya'ni ikki marta pul yechilmaydi.
  */
-function submitKey(body: string): string {
+function submitKey(body: string, repeat = false): string {
   const now = Date.now();
   const last = lastSubmit;
   const reuse =
@@ -662,7 +668,7 @@ function submitKey(body: string): string {
     last.body === body &&
     (last.state === "pending" ||
       (last.state === "unsure" && now - last.at < SUBMIT_KEY_AFTER_UNSURE_MS) ||
-      (last.state === "done" && now - last.at < SUBMIT_KEY_AFTER_SUCCESS_MS));
+      (last.state === "done" && !repeat && now - last.at < SUBMIT_KEY_AFTER_SUCCESS_MS));
   const key = reuse ? last.key : uuidV4();
   lastSubmit = { body, key, state: "pending", at: now };
   return key;

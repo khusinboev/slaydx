@@ -19,7 +19,7 @@ import { imageBasePrice, type ImageModelId } from "../generation/image-models";
 import { IMAGE_PROMPT_LIMIT } from "../generation/image-params";
 import { VIDEO_ASPECTS, VIDEO_PROMPT_MAX, VIDEO_PROMPT_MIN, videoProviderById, type VideoProviderId } from "../generation/video/registry";
 import { VIDEO_MAX_BYTES } from "../generation/video/types";
-import { PPTX_SIZE_LIMIT } from "../generation/pptx-image";
+import { PPTX_SIZE_LIMIT } from "../generation/size-limits";
 
 /** Same as `IMAGE_PROMPT_MIN` in `lib/tools.ts` (not imported: tools.ts will read this file; a test keeps them equal). */
 export const MEDIA_IMAGE_PROMPT_MIN = 3;
@@ -31,11 +31,15 @@ const OPENAI_IMAGE_DEFAULT = "gpt-image-2.5-flare";
 /** USD per second of video. Omni: $17.50 / 1M output tokens × 5 792 tokens/s (video/registry.ts). Kling: UNVERIFIED. */
 export const VIDEO_USD_PER_SECOND: Readonly<Record<VideoProviderId, number>> = { veo: 0.1, kling: 0.1 };
 
+/**
+ * Order = the Studio form's row order (P1 contract with the UI): O'lcham, Soni, then Uslub under «Qo'shimcha
+ * sozlamalar» (`advanced`). The «Rasm» tool has its own form; validation and prices do not depend on the order.
+ */
 const imageParams: readonly ParamSchema[] = [
   { name: "prompt", label: "Rasm tavsifi", type: "text", min: MEDIA_IMAGE_PROMPT_MIN, max: IMAGE_PROMPT_LIMIT, affects: "request" },
-  { name: "imageStyle", label: "Uslub", type: "enum", options: IMAGE_STYLES.map((s) => ({ value: s.id, label: s.name })), default: IMAGE_STYLES[0].id, affects: "request" },
   { name: "imageRatio", label: "O'lcham", type: "enum", options: IMAGE_RATIOS.map((r) => ({ value: r.id, label: r.label })), default: IMAGE_RATIOS[0].id, affects: "request" },
   { name: "imageCount", label: "Soni", type: "int", min: 1, max: 4, default: 1, affects: "price" },
+  { name: "imageStyle", label: "Uslub", type: "enum", options: IMAGE_STYLES.map((s) => ({ value: s.id, label: s.name })), default: IMAGE_STYLES[0].id, affects: "request", advanced: true },
 ];
 
 /**
@@ -177,6 +181,9 @@ export const LEGACY_PRICE_OVERRIDES: Readonly<Record<string, PriceOverride>> = {
 
 const SPEECH_CHAIN = ["azure/tts", "aisha/tts", "google/tts"];
 
+/** Purpose of the Studio «Rasm» tab (tool `studio-image`). */
+export const STUDIO_IMAGE_PURPOSE = "studio.image";
+
 export const MEDIA_PURPOSES = definePurposes(MEDIA_CATALOG, [
   { id: "rasm.image", kind: "image", allowed: ["google/nano-banana", "openai/gpt-image"], default: "google/nano-banana", userCanChoose: true },
   { id: "proslide.illustration", kind: "image", allowed: ["google/nano-banana"], default: "google/nano-banana", userCanChoose: false },
@@ -186,5 +193,8 @@ export const MEDIA_PURPOSES = definePurposes(MEDIA_CATALOG, [
   { id: "podcast.voice", kind: "speech", allowed: [...SPEECH_CHAIN, "elevenlabs/tts"], default: "azure/tts", userCanChoose: false },
   { id: "greeting.voice", kind: "speech", allowed: [...SPEECH_CHAIN, "elevenlabs/tts"], default: "azure/tts", userCanChoose: false },
   { id: "domla.voice", kind: "speech", allowed: ["google/tts"], default: "google/tts", userCanChoose: false },
-  { id: "listening.voice", kind: "speech", allowed: SPEECH_CHAIN, default: "azure/tts", userCanChoose: false },
+  // The operator may put ElevenLabs into `tts.order`; the listening chain then speaks through it (N3: allowed, not chosen).
+  { id: "listening.voice", kind: "speech", allowed: [...SPEECH_CHAIN, "elevenlabs/tts"], default: "azure/tts", userCanChoose: false },
+  // Studio «Rasm» tab (docs/studio/P1-SPEC.md): the user picks the model; priced cost × markup (lib/media/studio-pricing.ts).
+  { id: STUDIO_IMAGE_PURPOSE, kind: "image", allowed: ["google/nano-banana", "openai/gpt-image"], default: "google/nano-banana", userCanChoose: true },
 ]);

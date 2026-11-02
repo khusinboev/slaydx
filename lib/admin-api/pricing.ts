@@ -224,3 +224,38 @@ export function updatePricing(
 export function resetPricing(toolId: string, reason: string, opts: AdminCallOptions = {}): Promise<{ item: PricingItemResult }> {
   return adminSend<{ item: PricingItemResult }>("DELETE", pathOf(toolId), { reason }, opts);
 }
+
+/* ── «Media modellari» (docs/studio/P1-SPEC.md «Admin»): Studio models priced provider cost × markup ── */
+
+export type MediaModelItem = {
+  modelId: string;
+  label: string;
+  maker: string;
+  kind: string;
+  unit: string;
+  costUsd: number;
+  costSoum: number;
+  providerReady: boolean;
+  enabled: boolean;
+  available: boolean;
+  markupOverride: number | null;
+  markup: number;
+  priceBase: number;
+  price: number;
+  marginSoum: number;
+  marginPct: number | null;
+  updatedAt: string | null;
+};
+
+export type MediaModelsOverview = { soumPerUsd: number; markup: number; step: number; markupMin: number; markupMax: number; models: MediaModelItem[] };
+
+export type MediaModelState = { enabled: boolean; markup: number | null };
+
+export function getMediaModels(opts: AdminCallOptions = {}): Promise<MediaModelsOverview> {
+  return adminGet<MediaModelsOverview>("/api/admin/pricing/media", {}, opts);
+}
+
+/** The model's switch + markup override (`markup: null` = the global markup); step-up via the core; `expected` = 409 `stale` guard. */
+export function updateMediaModel(modelId: string, next: MediaModelState, reason: string, expected: MediaModelState, opts: AdminCallOptions = {}): Promise<MediaModelsOverview> {
+  return adminSend<MediaModelsOverview>("PUT", "/api/admin/pricing/media", { modelId, ...next, reason, expected }, opts);
+}

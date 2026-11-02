@@ -25,6 +25,7 @@ import {
   PieChart,
   Presentation,
   Puzzle,
+  Sparkles,
   Video,
 } from "lucide-react";
 
@@ -55,6 +56,8 @@ export const TOOL_ICONS: Record<string, LucideIcon> = {
   mic: Mic,
   gift: Gift,
   video: Video,
+  /* Studio (docs/studio/P1-SPEC.md): the home card and the Media group tile. */
+  sparkles: Sparkles,
   /* AUDIT-21: krossvord, flesh kartalar, infografika. */
   puzzle: Puzzle,
   layers: Layers,

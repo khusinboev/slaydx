@@ -37,6 +37,11 @@ export const MIN_BUDGET_MS = 90_000;
 /** Bet soniga bog'liq bo'lmagan xizmatlar uchun qat'iy byudjet. */
 const FIXED: Partial<Record<ToolId, number>> = {
   image: 90_000,
+  /*
+   * Studio pictures: up to 4 pictures two at a time; GPT Image takes up to 90 s a call (its catalog timeout), so two
+   * rounds need more than «Rasm»'s 90 s.
+   */
+  "studio-image": 200_000,
   // Graduation portrait: up to 2 edits (pool of 2, ~35-45 s each with the input image) + the 2 s floor.
   portrait: 150_000,
   // Video: only the SUBMIT phase runs on a worker (the provider call + the handoff); the wait is `video_ops`, not this budget.

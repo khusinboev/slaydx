@@ -5,6 +5,8 @@ import { ensureProviderKeys } from "@/lib/server/providers/store";
 import { pdfAvailable } from "@/lib/server/pdf";
 import { getAllToolPricing } from "@/lib/server/pricing";
 import { getSetting } from "@/lib/server/settings";
+import { availableModels } from "@/lib/server/media/availability";
+import { STUDIO_IMAGE_PURPOSE } from "@/lib/media/catalog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +23,8 @@ export const GET = handler("auth/session", async (req) => {
       images: imagesConfigured(),
       // `rasm` model choice: only providers that are enabled AND keyed (admin «Provayderlar»).
       imageModels: imageModelsAvailable(),
+      // Studio picture models (catalog ids): provider enabled + keyed + not switched off in «Narxlar» → «Media modellari».
+      studioImageModels: await availableModels(STUDIO_IMAGE_PURPOSE),
       tts: ttsFeature(),
       // Premium ElevenLabs voice of podcast / greeting: only when the provider is enabled AND keyed.
       ttsPremium: ttsPremiumAvailable(),

@@ -29,8 +29,16 @@ export function isImageModelId(v: unknown): v is ImageModelId {
   return typeof v === "string" && (IMAGE_MODEL_IDS as readonly string[]).includes(v);
 }
 
+/**
+ * Media catalog id → `rasm` model id, for docs drawn by the Studio (`doc.imageModel` is the catalog id there). The
+ * inverse of `IMAGE_MODEL_TO_MEDIA` (`lib/media/catalog.ts`, which imports this file); `tests/studio-image.test.mts`
+ * keeps the two equal.
+ */
+export const MEDIA_TO_IMAGE_MODEL: Readonly<Record<string, ImageModelId>> = { "google/nano-banana": "gemini", "openai/gpt-image": "openai" };
+
 export function imageModelById(id: string) {
-  return IMAGE_MODELS.find((m) => m.id === id) ?? IMAGE_MODELS[0];
+  const own = MEDIA_TO_IMAGE_MODEL[id] ?? id;
+  return IMAGE_MODELS.find((m) => m.id === own) ?? IMAGE_MODELS[0];
 }
 
 /**

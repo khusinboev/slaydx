@@ -236,7 +236,7 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     subject: s(
       values,
       "subject",
-      tool.id === "glossary" || tool.id === "keys" || tool.id === "translation" || tool.id === "image"
+      tool.id === "glossary" || tool.id === "keys" || tool.id === "translation" || tool.id === "image" || tool.id === "studio-image"
         ? topic
         : "",
     ).replace(/\s+/g, " "),

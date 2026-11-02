@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { query, queryOne } from "../db";
 import { scrubSecrets } from "../../generation/video/types";
+import { MEDIA_CATALOG } from "../../media/catalog";
 
 export type MediaJobStatus = "submitting" | "pending" | "succeeded" | "failed";
 
@@ -186,4 +187,49 @@ export async function failMediaJobTx(client: Queryable, id: string, error: strin
     "UPDATE media_jobs SET status = 'failed', errors = errors + 1, last_error = left($2, 500), next_poll_at = NULL, finished_at = now() WHERE id = $1 AND status <> 'succeeded'",
     [id, scrubSecrets(error, [])],
   );
+}
+
+/* ── M5 (P0 review): the leader's housekeeping keeps the table honest and bounded ── */
+
+/** A sync call (image, speech) never takes longer than its catalog timeout (≤ 2 min): a row still 'submitting' after this died with its process. */
+export const STUCK_SUBMITTING_MIN = 60;
+/** `media_jobs` is telemetry + idempotency for at most a job's lifetime; 90 days covers every refund / audit question. */
+export const MEDIA_JOBS_RETENTION_DAYS = 90;
+
+/** Catalog ids of the sync kinds: their 'submitting' rows are never resumed (video parks and has its own deadline). */
+export function syncMediaModelIds(): string[] {
+  return MEDIA_CATALOG.entries.filter((e) => e.kind !== "video").map((e) => e.id);
+}
+
+/**
+ * Fails the sync rows stuck in 'submitting' longer than `STUCK_SUBMITTING_MIN` (the worker died mid-call; the job itself
+ * was already failed and refunded by `reclaimStaleJobs`, this only closes the row). Async (video) rows are left to the
+ * poll loop and their deadline. Returns how many rows it closed.
+ */
+export async function failStuckMediaJobs(olderThanMin = STUCK_SUBMITTING_MIN): Promise<number> {
+  const rows = await query<{ id: string }>(
+    `UPDATE media_jobs
+        SET status = 'failed', errors = errors + 1, last_error = 'stuck in submitting (process died) — closed by housekeeping',
+            next_poll_at = NULL, finished_at = now()
+      WHERE status = 'submitting' AND created_at < now() - $1::int * interval '1 minute' AND model_id = ANY($2::text[])
+      RETURNING id`,
+    [olderThanMin, syncMediaModelIds()],
+  );
+  return rows.length;
+}
+
+/** Deletes rows older than `days`, `batch` at a time (bounded locks and WAL), at most `maxBatches` per run. */
+export async function purgeOldMediaJobs(days = MEDIA_JOBS_RETENTION_DAYS, batch = 5_000, maxBatches = 20): Promise<number> {
+  let total = 0;
+  for (let i = 0; i < maxBatches; i++) {
+    const rows = await query<{ id: string }>(
+      `DELETE FROM media_jobs WHERE id IN (
+         SELECT id FROM media_jobs WHERE created_at < now() - $1::int * interval '1 day' ORDER BY created_at LIMIT $2)
+       RETURNING id`,
+      [days, batch],
+    );
+    total += rows.length;
+    if (rows.length < batch) break;
+  }
+  return total;
 }

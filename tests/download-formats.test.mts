@@ -51,6 +51,8 @@ const MATRIX: Record<string, Row> = {
   image: { format: "png", on: ["native", "jpg"], off: ["native", "jpg"] },
   infographic: { format: "png", on: ["native", "jpg"], off: ["native", "jpg"] },
   portrait: { format: "png", on: ["native", "jpg"], off: ["native", "jpg"] },
+  // Studio pictures (P1): the «Rasm» file shape.
+  "studio-image": { format: "png", on: ["native", "jpg"], off: ["native", "jpg"] },
   podcast: { format: "mp3", on: ["native", "transcript-txt"], off: ["native", "transcript-txt"] },
   greeting: { format: "mp3", on: ["native", "transcript-txt"], off: ["native", "transcript-txt"] },
   // Program-17 item 5: the MP4 is the only file; nothing is derived from it, with or without LibreOffice.

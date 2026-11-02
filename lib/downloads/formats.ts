@@ -119,6 +119,8 @@ const TOOL_PLANS: Readonly<Record<ToolId, ToolPlan>> = {
   portrait: { extras: ["jpg"] },
   // The MP4 is the only file; nothing is derived from it.
   video: { extras: [] },
+  // Studio pictures: the same file shape as «Rasm» (one image or a zip).
+  "studio-image": { extras: ["jpg"] },
 };
 
 /** Tool ids that have a download decision (equals every `ToolId`). */
