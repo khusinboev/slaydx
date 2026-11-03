@@ -18,7 +18,7 @@
 import { normalize, type MediaAdapter, type MediaOutput, type Route } from "../../studio-core";
 import { mp3Seconds } from "../tts/mp3";
 import { extractMeta } from "../meta";
-import { audioModeOf, takesAudioInput } from "../../media/catalog-audio";
+import { LYRIA_MODEL, audioModeOf, lyriaUpstreamOf, takesAudioInput } from "../../media/catalog-audio";
 import { ELEVENLABS_VOICES, cloneIdOf } from "../../media/catalog-speech";
 import { studioAudioEntry, studioAudioError, studioAudioPurposeOf } from "../../media/studio-audio";
 import { studioAudioAdapters } from "../../media/adapters/audio-studio";
@@ -69,7 +69,9 @@ export async function buildStudioAudio(
   const p = normalize(entry.params, values);
   const adapters = deps.adapters ?? studioAudioAdapters();
   const run = deps.run ?? defaultRun;
-  const common = { purpose, modelId: entry.id, adapters, redact: ["prompt"] as const, ...(o.deadline ? { deps: { deadline: o.deadline } } : {}) };
+  // P9 Lyria: one route, two upstream models by «Turi» — the real one goes into media_jobs and cost_json.
+  const upstream = entry.id === LYRIA_MODEL ? { upstream: () => lyriaUpstreamOf(p.length) } : {};
+  const common = { purpose, modelId: entry.id, adapters, redact: ["prompt"] as const, ...upstream, ...(o.deadline ? { deps: { deadline: o.deadline } } : {}) };
 
   let assets: { audio: { mime: string; base64: string }[] } | undefined;
   if (takesAudioInput(entry)) {
@@ -105,7 +107,7 @@ export async function buildStudioAudio(
       const mp3 = mp3Of(out.outputs[0]);
       if (!mp3) throw new Error("bo'sh audio");
       // Delivered: the same one-clip cost goes into the job's cost (a failed variant records nothing).
-      recordAudioCall(entry, out.route ?? entry.routes[0]!, callValues);
+      recordAudioCall(entry, out.route ?? entry.routes[0]!, callValues, mp3Seconds(mp3));
       clips.push(mp3);
     } catch (e) {
       console.warn("[studio-audio] call failed:", e instanceof Error ? e.message : e);

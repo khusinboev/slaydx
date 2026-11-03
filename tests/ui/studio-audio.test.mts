@@ -35,7 +35,9 @@ const { studioAudioPrice } = await import("../../lib/media/studio-audio.ts");
  *   4. upload answer's seconds not stored (`inputSeconds` from raw dropped)        -> «upload»;
  *   5. `audioBlocker` ignores the missing input                                   -> «upload» (sent before the upload);
  *   6. voice list shows clones still being made (`status` filter dropped)         -> «voice changer»;
- *   7. the viewer's variant list needs > 3 variants (`length > 3`)                -> «result page».
+ *   7. the viewer's variant list needs > 3 variants (`length > 3`)                -> «result page»;
+ *   8. P9 picker: switching model resets the raw values (prompt lost)            -> «P9 model picker»;
+ *   9. P9 picker drawn for a one-model mode (`entries.length > 0`)               -> «P9 model picker».
  */
 
 Object.defineProperty(document, "hidden", { configurable: true, get: () => false });

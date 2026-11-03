@@ -43,7 +43,7 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
   gemini: {
     billing: "paid",
     priceNote: `${llmNote("gemini", "gemini-3.7-flash")} · rasm ${usd(IMAGE_PRICES["gemini-3.1-flash-lite-image"])} / dona · internet qidiruvi ${usd(GROUNDING_USD)} / so'rov`,
-    role: "Asosiy motor: barcha matn vositalari, AI rasm (Nano Banana), ovoz (TTS), domla javobini tinglash, pro-slayddagi internet qidiruvi va AI chat.",
+    role: "Asosiy motor: barcha matn vositalari, AI rasm (Nano Banana), ovoz (TTS), Studio «Musiqa»dagi Lyria (qo'shiq $0.04 / $0.08), domla javobini tinglash, pro-slayddagi internet qidiruvi va AI chat.",
     need: "required",
     keyless: false,
     keyUrl: "https://aistudio.google.com/apikey",

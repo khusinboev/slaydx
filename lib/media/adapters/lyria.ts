@@ -19,7 +19,7 @@
 import { MediaError, type AdapterInput, type MediaAdapter, type NormalizedParams } from "../../studio-core";
 import { mp3Seconds } from "../../generation/tts/mp3";
 import { geminiKey } from "../../generation/tts/gemini";
-import { LYRIA_CLIP_MODEL, LYRIA_SONG_MODEL } from "../catalog-audio";
+import { lyriaUpstreamOf } from "../catalog-audio";
 
 export const LYRIA_PROVIDER = "gemini";
 export const LYRIA_ADAPTER_ID = "studio-gemini-lyria";
@@ -28,7 +28,7 @@ export const LYRIA_API_REVISION = "2026-05-20";
 /** The prompt line that asks for no vocals (the docs' own wording). */
 export const LYRIA_INSTRUMENTAL = "Instrumental only, no vocals.";
 /** A full song is a few MB of MP3; the base64 answer is capped well above that. */
-const ANSWER_MAX_CHARS = 48 * 1024 * 1024;
+const ANSWER_MAX_BYTES = 48 * 1024 * 1024;
 const CALL_MS = 240_000;
 const BLOCKED = /safety|blocked|policy|prohibited|copyright|not allowed/i;
 
@@ -41,7 +41,7 @@ export function lyriaRequest(input: Pick<AdapterInput, "params">): { url: string
   const p: NormalizedParams = input.params;
   const prompt = String(p.prompt ?? "").trim();
   if (!prompt) throw new MediaError(LYRIA_PROVIDER, "music needs a prompt");
-  const model = p.length === "song" ? LYRIA_SONG_MODEL : LYRIA_CLIP_MODEL;
+  const model = lyriaUpstreamOf(p.length);
   return { url: LYRIA_URL, json: { model, input: bool(p.instrumental) ? `${prompt}\n\n${LYRIA_INSTRUMENTAL}` : prompt } };
 }
 
@@ -61,6 +61,29 @@ export function lyriaOutput(answer: Answer | null): { mp3: Uint8Array | null; te
   const bytes = new Uint8Array(Buffer.from(String(audio.data), "base64"));
   // Frames, not the tag or the mime: an answer that does not decode as MP3 is no result.
   return { mp3: bytes.length && mp3Seconds(bytes) > 0 ? bytes : null, text };
+}
+
+/** The body as text, read with a byte cap (`null` past it): a stated size is refused before reading. */
+async function capped(res: Response): Promise<string | null> {
+  if (Number(res.headers.get("content-length") ?? 0) > ANSWER_MAX_BYTES) {
+    await res.body?.cancel().catch(() => {});
+    return null;
+  }
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > ANSWER_MAX_BYTES) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 const scrub = (msg: string, key: string | null) => (key ? msg.split(key).join("<key>") : msg);
@@ -97,8 +120,8 @@ export function lyriaAdapter(deps: LyriaDeps = {}): MediaAdapter {
         const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
         throw fail(`lyria: ${msg}`, { retryable: !timedOut, accepted: timedOut });
       }
-      const raw = await res.text();
-      if (raw.length > ANSWER_MAX_CHARS) throw fail(`lyria: javob juda katta (${raw.length} belgi)`, { accepted: true });
+      const raw = await capped(res);
+      if (raw === null) throw fail("lyria: javob juda katta", { accepted: true });
       let answer: Answer | null = null;
       try {
         answer = JSON.parse(raw) as Answer;
@@ -108,7 +131,8 @@ export function lyriaAdapter(deps: LyriaDeps = {}): MediaAdapter {
       if (!res.ok) {
         const detail = typeof answer?.error?.message === "string" ? answer.error.message : raw.slice(0, 300);
         const retryable = res.status === 429 || res.status >= 500;
-        throw fail(`lyria ${res.status}: ${detail}`, { status: res.status, retryable, safety: !retryable && BLOCKED.test(detail) });
+        // Only a 400 is a refused prompt; a 401 / 403 «not allowed» is a key / project problem, not a content block.
+        throw fail(`lyria ${res.status}: ${detail}`, { status: res.status, retryable, safety: res.status === 400 && BLOCKED.test(detail) });
       }
       const { mp3, text } = lyriaOutput(answer);
       if (!mp3) throw fail(`lyria: javobda audio yo'q${text ? ` (${text.slice(0, 200)})` : ""}`, { safety: BLOCKED.test(text) });

@@ -45,7 +45,7 @@ const CLIENT = new Map(MEDIA_CATALOG.clientView().map((e) => [e.id, e]));
 export const CATALOG_PURPOSES: ReadonlySet<string> = new Set([...STUDIO_PURPOSES, STUDIO_VIDEO_PURPOSE, STUDIO_SPEECH_PURPOSE]);
 
 export async function mediaCatalog(purposeId: string): Promise<CatalogResponse> {
-  // P6: the «Audio» tab lists its four modes at once (one model per purpose) — a listing id, not a job purpose.
+  // P6: the «Audio» tab lists its modes at once (P9: «Musiqa» has two models) — a listing id, not a job purpose.
   if (purposeId === STUDIO_AUDIO_LISTING) {
     const [available, pricing] = await Promise.all([studioAudioModels(), mediaPricing()]);
     return {

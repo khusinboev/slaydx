@@ -30,8 +30,9 @@ export function recordSpeechCall(entry: CatalogEntry, route: Route, values: Read
 }
 
 /** One delivered audio call (music / effect / voice changer / isolator), priced on the rule's seconds. */
-export function recordAudioCall(entry: CatalogEntry, route: Route, values: Readonly<Record<string, unknown>>): void {
+export function recordAudioCall(entry: CatalogEntry, route: Route, values: Readonly<Record<string, unknown>>, measuredSeconds = 0): void {
   const p = normalize(entry.params, values);
-  const seconds = entry.cost.per === "second" ? Number(p[entry.cost.secondsParam]) : 0;
+  // Per second: the billed length; per result (P9 Lyria): the delivered clip's measured length, for the report only.
+  const seconds = entry.cost.per === "second" ? Number(p[entry.cost.secondsParam]) : measuredSeconds;
   recordAudio(route.provider, route.upstreamModel, Number.isFinite(seconds) ? seconds : 0, costUsd(entry.cost, p));
 }

@@ -4,8 +4,9 @@ import assert from "node:assert/strict";
 /**
  * Studio P6 «Audio» — pure parts (docs/studio/P6-SPEC.md). No DB, no network (every provider call is a stubbed fetch).
  *
- *   catalog     four entries (music / sfx / voice changer / isolator), four purposes with one model each, the Creator-plan
- *               credit rates ($22 / 121 000 credits): 15 / s, 40 / s, 1 000 / min, 1 000 / min;
+ *   catalog     four ElevenLabs entries (music / sfx / voice changer / isolator), four purposes (P9: «Musiqa» also allows
+ *               Lyria, tests/studio-lyria.test.mts), the Creator-plan credit rates ($22 / 121 000 credits): 15 / s,
+ *               40 / s, 1 000 / min, 1 000 / min;
  *   request     golden requests through the REAL adapters: /v1/music JSON, /v1/sound-generation JSON, speech-to-speech
  *               multipart (voice in the URL, model, noise flag, the input file), audio-isolation multipart;
  *   probe       «every param must work»: each param of each «Audio» model changes the provider request or the price, as

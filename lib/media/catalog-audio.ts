@@ -54,6 +54,10 @@ export const ELEVENLABS_STS_MODEL = "eleven_multilingual_sts_v2";
 /** Lyria upstream models, by the entry's «Turi» value. */
 export const LYRIA_CLIP_MODEL = "lyria-3-clip-preview";
 export const LYRIA_SONG_MODEL = "lyria-3.5";
+/** The Lyria model a «Turi» value asks for (the request, `media_jobs.upstream_model` and `cost_json` all use it). */
+export function lyriaUpstreamOf(length: unknown): string {
+  return length === "song" ? LYRIA_SONG_MODEL : LYRIA_CLIP_MODEL;
+}
 /** USD per result, by «Turi». */
 export const LYRIA_USD = { clip: 0.04, song: 0.08 } as const;
 

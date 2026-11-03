@@ -642,8 +642,8 @@ function minimaxBody(p: NormalizedParams, f: FalVideoFrames): Record<string, unk
 
 /**
  * Sora 2 / Sora 2 Pro (P9, `fal-ai/sora-2/…`): duration is a string enum; image → video takes `image_url` and aspect
- * «auto» (the frame decides). The resolution is ALWAYS sent (never «auto»): the price is per tier — Sora 2 has no
- * resolution param, so it is its only tier, 720p. `delete_video` is its default, true (OpenAI drops its copy; the fal
+ * «auto» (the frame decides). The resolution is ALWAYS sent (never «auto»): the price is per tier. The standard
+ * endpoint has the field too (default "720p" in its schema); our Sora 2 entry has no «Sifat» row, so it is always 720p. `delete_video` is its default, true (OpenAI drops its copy; the fal
  * result URL is what we download), and the standard endpoint's `model` is pinned to its «latest snapshot» default.
  */
 function soraBody(p: NormalizedParams, f: FalVideoFrames, pro: boolean): Record<string, unknown> {

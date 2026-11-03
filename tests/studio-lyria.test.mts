@@ -20,7 +20,10 @@ import assert from "node:assert/strict";
  *   2. the instrumental line dropped                                   -> «golden», «probe»;
  *   3. a non-MP3 audio block accepted                                  -> «answer»;
  *   4. 400 with a policy text not mapped to safety                     -> «answer»;
- *   5. song priced at the clip rate                                    -> «prices», «probe».
+ *   5. song priced at the clip rate                                    -> «prices», «probe»;
+ *   6. the engine runs Lyria without the «Turi» upstream swap          -> «golden»;
+ *   7. a 403 «not allowed» mapped to safety                            -> «answer»;
+ *   8. the byte cap checked after reading the body                     -> «answer».
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -70,12 +73,17 @@ const ctx = { input: null, clones: {} };
 
 async function build(values: Record<string, unknown>, respond: () => Response | Promise<Response> = good) {
   const s = stub(respond);
+  const routes: string[] = [];
   core.resetBreakers();
   const built = await buildStudioAudio(TOOL, values as never, ctx, {}, {
     adapters: studioAudioAdapters({ key: () => "unused-eleven", lyriaKey: () => GKEY }),
-    run: (i) => runMedia({ ...i, deps: { fetchImpl: s.fetchImpl } }),
+    run: async (i) => {
+      const out = await runMedia({ ...i, deps: { fetchImpl: s.fetchImpl } });
+      routes.push(out.route ? `${out.route.provider}:${out.route.upstreamModel}` : "?");
+      return out;
+    },
   });
-  return { built, seen: s.seen };
+  return { built, seen: s.seen, routes };
 }
 const submit = (values: Record<string, unknown>, fetchImpl: typeof fetch, extra: Record<string, unknown> = {}) => {
   const e = MEDIA_CATALOG.byId(LYRIA)!;
@@ -129,6 +137,9 @@ test("golden: the real engine sends ONE Interactions call — key in the header 
   const song = await build({ ...BASE, length: "song", instrumental: true });
   assert.deepEqual(song.seen[0]!.body, { model: "lyria-3.5", input: `${BASE.prompt}\n\n${LYRIA_INSTRUMENTAL}` }, "MUTATSIYA 1/2");
   assert.equal(LYRIA_INSTRUMENTAL, "Instrumental only, no vocals.");
+  // The real upstream model goes into media_jobs / cost_json (review M1), not the family name «lyria».
+  assert.deepEqual(clip.routes, ["gemini:lyria-3-clip-preview"]);
+  assert.deepEqual(song.routes, ["gemini:lyria-3.5"], "MUTATSIYA 6");
   // The result: the MP3 of the audio block, its measured length, the «Musiqa» mode and the Lyria model.
   assert.equal(clip.built.mime, "audio/mpeg");
   assert.deepEqual([...clip.built.bytes.subarray(0, 2)], [0xff, 0xfb]);
@@ -165,6 +176,10 @@ test("answer: audio block → MP3; no audio / not MP3 → failure; HTTP errors m
   assert.deepEqual([policy.status, policy.safety, policy.retryable], [400, true, false], "MUTATSIYA 4");
   const bad = await failOf(err(400, `API key ${GKEY} not valid`));
   assert.deepEqual([bad.safety, bad.retryable], [false, false]);
+  const denied = await failOf(err(403, "The Interactions API is not allowed for this project."));
+  assert.deepEqual([denied.status, denied.safety, denied.retryable], [403, false, false], "MUTATSIYA 7: a dead key is no content block");
+  const huge = await failOf(() => new Response("{}", { status: 200, headers: { "content-length": String(64 * 1024 * 1024) } }));
+  assert.equal(huge.accepted, true, "MUTATSIYA 8: a stated size past the cap is refused before reading");
   for (const status of [429, 500, 503]) assert.equal((await failOf(err(status, "busy"))).retryable, true, String(status));
   const down = await failOf(() => {
     throw new TypeError("socket hang up");
