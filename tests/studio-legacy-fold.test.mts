@@ -9,9 +9,9 @@ import { inRequest } from "./helpers/next-request.mts";
  * and «Video yaratish» (`/uz/video`) pages redirect to the Studio tabs (query kept), the bot keyboard «Rasm» button and
  * the AI chat knowledge link the Studio — all through ONE link builder (`lib/media/legacy-fold.ts`). Off = today.
  *
- * Pure part (no DB): the link builder and the bot keyboard. DB part (real Postgres, isolated database): the two pages
- * (server components called directly), the session flag, the chat knowledge pack, the old tool still priced and
- * charged as before.
+ * Pure part (no DB): the link builder, the bot keyboard and the two pages' wiring (from their source: they import the
+ * client `ToolWorkspace`). DB part (real Postgres, isolated database): the fold service the pages call, the session flag,
+ * the chat knowledge pack, the old tools' server price unchanged.
  *
  * Mutations (each turned a test red, then restored):
  *   M1. `legacyFoldTarget` ignores `legacyFold` (always folds) → «off: no target», «page off: the old form»;
@@ -20,7 +20,8 @@ import { inRequest } from "./helpers/next-request.mts";
  *   M4. `LEGACY_FOLD.video` mapped to `tab=rasm` → «video → video tab» (pure + page);
  *   M5. the keyboard ignores `opts.legacyFold` → «bot keyboard: fold on → Studio»;
  *   M6. the session route sends `legacyFold: false` constantly → «session: features.legacyFold follows the switch»;
- *   M7. the knowledge line printed regardless of the switch → «knowledge: Studio links only while on».
+ *   M7. the knowledge line printed regardless of the switch → «knowledge: Studio links only while on»;
+ *   M8. `if (target) redirect(target);` removed from `app/uz/video/page.tsx` → «page wiring … video: redirects».
  */
 
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
