@@ -32,6 +32,7 @@ import { studioVideoError, studioVideoPrice } from "./media/studio-video-pricing
 import { STUDIO_CLONE_PRICE_DEFAULT, studioSpeechError, studioSpeechPrice } from "./media/studio-speech";
 import { getClientClonePrice } from "./media/studio-speech-client";
 import { STUDIO_MIX_PRICE_DEFAULT, getClientMixPrice, mixModeOf, studioMixError } from "./media/catalog-mix";
+import { studioDubError, studioDubPrice, studioTranscribeError, studioTranscribePrice } from "./media/studio-transcribe";
 import { studioAudioError, studioAudioPrice } from "./media/studio-audio";
 
 const TOPIC_FILE_MODES = [
@@ -81,6 +82,9 @@ const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
   "studio-audio": [{ kind: "text", name: "modelId", legend: "Audio rejimi", required: true }],
   // Studio «Montaj» (P8c): the mode; its own schema + `studioMixError` check the two picked results.
   "studio-mix": [{ kind: "text", name: "modelId", legend: "Montaj turi", required: true }],
+  // Studio P10: the source reference; the schema + `studioTranscribeError` / `studioDubError` check the rest.
+  "studio-transcribe": [{ kind: "text", name: "source", legend: "Manba", required: true }],
+  "studio-dub": [{ kind: "text", name: "source", legend: "Manba", required: true }],
   "studio-voice": [
     { kind: "text", name: "name", legend: "Ovoz nomi", required: true },
     { kind: "text", name: "sampleId", legend: "Ovoz yozuvi", required: true },
@@ -1087,6 +1091,55 @@ export const TOOLS: ToolConfig[] = [
     fields: [],
   },
   {
+    /*
+     * Studio P10 «Transkripsiya» (docs/studio/P10-SPEC.md): ElevenLabs Speech to Text (Scribe v2) over an uploaded audio
+     * or one of the user's own results — the transcript, SRT / VTT subtitles, optionally burned into the video (ffmpeg).
+     * Per second of the source × the credit rate × markup (`lib/media/studio-transcribe.ts`). The page is the «Audio»
+     * tab's «Transkripsiya» chip; not listed on its own. Ships dark (`studio.transcribe.enabled`).
+     */
+    id: "studio-transcribe",
+    slug: "studio-transcribe",
+    title: "Transkripsiya",
+    pageTitle: "Studio transkripsiya",
+    group: "media",
+    icon: "mic",
+    tc: "234 88 12",
+    description: "Audio yoki videodagi nutqni matn va subtitrga aylantirish",
+    submitLabel: "Matnga aylantirish",
+    creatingLabel: "Matnga aylantirilmoqda...",
+    createdLabel: "transkripsiya tayyor!",
+    extraOptional: false,
+    // The stored format follows the real file: TXT, or MP4 when the subtitles are burned in.
+    output: "mp4",
+    custom: "studio-transcribe",
+    // 1 minute of source at the default pricing, for the «… dan» labels; the real price is `priceFor`.
+    basePrice: studioTranscribePrice({ sourceSeconds: 60 }, defaultMediaPricing()),
+    fields: [],
+  },
+  {
+    /*
+     * Studio P10 «Dublyaj» (docs/studio/P10-SPEC.md): ElevenLabs Dubbing of an uploaded audio or one of the user's own
+     * results into another language — MP4 for a video, MP3 for an audio. Async at the provider, polled by the worker
+     * within the job. Per second of the source × the credit rate × markup. Ships dark (`studio.dub.enabled`).
+     */
+    id: "studio-dub",
+    slug: "studio-dub",
+    title: "Dublyaj",
+    pageTitle: "Studio dublyaj",
+    group: "media",
+    icon: "mic",
+    tc: "234 88 12",
+    description: "Video yoki audioni boshqa tilga ovozli tarjima qilish",
+    submitLabel: "Dublyaj qilish",
+    creatingLabel: "Dublyaj qilinmoqda...",
+    createdLabel: "dublyaj tayyor!",
+    extraOptional: false,
+    output: "mp4",
+    custom: "studio-dub",
+    basePrice: studioDubPrice({ sourceSeconds: 60 }, defaultMediaPricing()),
+    fields: [],
+  },
+  {
     id: "podcast",
     slug: "podcast",
     title: "Podkast",
@@ -1264,7 +1317,7 @@ export function visibleToolGroups(): readonly { id: ToolGroup; label: string }[]
  * Tools that live INSIDE another page and get no card of their own: `studio-video` is the Studio's Video tab (the Studio
  * card already leads there). The catalogue, the create sheet, the search and the home groups list `listedTools()`.
  */
-export const UNLISTED_TOOL_IDS: ReadonlySet<ToolId> = new Set<ToolId>(["studio-video", "studio-speech", "studio-voice", "studio-audio", "studio-mix"]);
+export const UNLISTED_TOOL_IDS: ReadonlySet<ToolId> = new Set<ToolId>(["studio-video", "studio-speech", "studio-voice", "studio-audio", "studio-mix", "studio-transcribe", "studio-dub"]);
 export function listedTools(): ToolConfig[] {
   return TOOLS.filter((t) => !UNLISTED_TOOL_IDS.has(t.id));
 }
@@ -1524,6 +1577,8 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
   if (tool.custom === "studio-speech") return studioSpeechError(values);
   if (tool.custom === "studio-audio") return studioAudioError(values);
   if (tool.custom === "studio-mix") return studioMixError(values);
+  if (tool.custom === "studio-transcribe") return studioTranscribeError(values);
+  if (tool.custom === "studio-dub") return studioDubError(values);
   if (tool.custom === "image") {
     const n = String(values.prompt ?? "").trim().length;
     if (n > 0 && n < IMAGE_PROMPT_MIN) return "Rasm tavsifi juda qisqa — nima chizilishini yozing.";
@@ -1684,6 +1739,8 @@ export type ToolFeatures = {
   studioSpeechModels?: string[];
   /** Studio «Audio» models (catalog ids) available right now (P6). Absent = not known -> not blocked. */
   studioAudioModels?: string[];
+  /** Studio P10 «Transkripsiya» / «Dublyaj» models available right now. Absent = not known -> not blocked. */
+  studioSpeechToolModels?: string[];
 };
 
 /**
@@ -1725,6 +1782,12 @@ export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | nu
   }
   // «Montaj» (P8c) runs ffmpeg in the worker: no provider key decides it (a missing binary fails the job with a refund).
   if (tool.custom === "studio-mix") return null;
+  if (tool.custom === "studio-transcribe" || tool.custom === "studio-dub") {
+    // Its switch + ElevenLabs decide (`speech-sources.ts speechToolModels`); not known = not blocked.
+    const known = features.studioSpeechToolModels;
+    const model = tool.custom === "studio-transcribe" ? "elevenlabs/scribe-v2" : "elevenlabs/dubbing";
+    return !known || known.includes(model) ? null : tool.custom === "studio-transcribe" ? "Transkripsiya hozircha mavjud emas." : "Dublyaj hozircha mavjud emas.";
+  }
   if (tool.custom === "studio-speech" || tool.custom === "studio-voice") {
     // Its own model list when the server sends it (empty while `studio.voice.enabled` is off); an older server: the TTS
     // flag, else the text-key flag (the podcast / greeting rule).
@@ -1886,6 +1949,11 @@ export function basePriceFor(tool: ToolConfig, values: FormValues, media?: Media
     const pricing = media ?? getClientMediaPricing() ?? defaultMediaPricing();
     return studioAudioPrice(values, pricing) ?? studioAudioPrice({ ...values, modelId: "" }, pricing)!;
   }
+  if (tool.id === "studio-transcribe" || tool.id === "studio-dub") {
+    // Seconds of the source (server-set before pricing) × the credit rate × markup (`studio-transcribe.ts`).
+    const pricing = media ?? getClientMediaPricing() ?? defaultMediaPricing();
+    return tool.id === "studio-transcribe" ? studioTranscribePrice(values, pricing) : studioDubPrice(values, pricing);
+  }
   if (tool.id === "studio-mix") {
     // Fixed (`studio.mix_price`): the server passes the setting in its pricing block, the browser has the sources endpoint's number.
     return media?.mixPrice ?? getClientMixPrice() ?? STUDIO_MIX_PRICE_DEFAULT;
@@ -2038,6 +2106,8 @@ export function topicOf(values: FormValues, tool: ToolConfig) {
     return prompt || mode || "Audio";
   }
   if (tool.id === "studio-mix") return mixModeOf(values)?.label ?? "Montaj";
+  if (tool.id === "studio-transcribe") return "Transkripsiya";
+  if (tool.id === "studio-dub") return `Dublyaj · ${String(values.target || "uz").toUpperCase().slice(0, 3)}`;
   if (tool.id === "studio-voice") {
     const name = String(values.name || "").replace(/\s+/g, " ").trim().slice(0, 40);
     return name ? `Ovoz klonlash: ${name}` : "Ovoz klonlash";

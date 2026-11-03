@@ -30,6 +30,7 @@ import { MEDIA_CATALOG } from "../media/catalog";
 import { assertCloneAllowed, assertOwnClones, speechModelUnavailable } from "./media/voices";
 import { audioModelUnavailable, prepareAudioRequest } from "./media/audio-inputs";
 import { prepareMixRequest } from "./media/mix-sources";
+import { prepareSpeechToolRequest, speechToolUnavailable } from "./media/speech-sources";
 
 /**
  * The paid-generation pipeline behind `POST /api/generations`, shared with the AI chat's confirmation.
@@ -310,6 +311,18 @@ export async function prepareGeneration(input: SubmitInput): Promise<PreparedGen
    * 400 before anything is priced or charged. A replay is a job that already exists.
    */
   if (tool.id === "studio-mix" && !replay) await prepareMixRequest(userId, values);
+
+  /*
+   * Studio P10 «Transkripsiya» / «Dublyaj» (docs/studio/P10-SPEC.md): the tool's switch (default off) + ElevenLabs
+   * available now; the source must be the user's OWN upload / finished result of a kind the tool takes, within its
+   * length limit, a burn / a video dub must fit 25 MB — and the SERVER's billed seconds replace the request's
+   * `sourceSeconds` before pricing. 400 before anything is priced or charged. A replay is a job that already exists.
+   */
+  if ((tool.id === "studio-transcribe" || tool.id === "studio-dub") && !replay) {
+    const unavailable = await speechToolUnavailable(tool.id);
+    if (unavailable) throw new ApiError(unavailable, 400, { code: "model_unavailable" });
+    await prepareSpeechToolRequest(userId, tool.id, values);
+  }
 
   // Graduation portrait: the selfie must exist and be the user's own BEFORE anything is priced or charged.
   // (A replay is a job already created; its selfie may be deleted by now.)

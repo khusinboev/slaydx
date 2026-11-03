@@ -30,6 +30,9 @@ export const DOWNLOAD_FORMAT_IDS = [
   "transcript-txt",
   "glossary-csv",
   "results-csv",
+  // Studio P10 «Transkripsiya»: subtitles built from `doc.transcribe.cues` (the cues the viewer and the burn use).
+  "subtitles-srt",
+  "subtitles-vtt",
 ] as const;
 
 export type DownloadFormatId = (typeof DOWNLOAD_FORMAT_IDS)[number];
@@ -130,6 +133,10 @@ const TOOL_PLANS: Readonly<Record<ToolId, ToolPlan>> = {
   "studio-audio": { extras: [] },
   // Studio «Montaj» (P8c): the MP4 / MP3 is the only file.
   "studio-mix": { extras: [] },
+  // Studio P10: the transcript (TXT) or the subtitled MP4, then its subtitles as SRT and VTT.
+  "studio-transcribe": { extras: ["subtitles-srt", "subtitles-vtt"] },
+  // Studio P10: the dubbed MP4 / MP3 is the only file.
+  "studio-dub": { extras: [] },
 };
 
 /** Tool ids that have a download decision (equals every `ToolId`). */
@@ -237,6 +244,10 @@ function extraFormat(id: Extra, g: DownloadSubject): DownloadFormat {
         mime: "text/csv; charset=utf-8",
         cost: "instant",
       };
+    case "subtitles-srt":
+      return { id, label: "Subtitr (SRT)", hint: "Video muharrirlar va pleerlar uchun", ext: "srt", mime: "application/x-subrip; charset=utf-8", cost: "instant" };
+    case "subtitles-vtt":
+      return { id, label: "Subtitr (VTT)", hint: "Veb-saytlar va YouTube uchun", ext: "vtt", mime: "text/vtt; charset=utf-8", cost: "instant" };
   }
 }
 
@@ -257,6 +268,10 @@ function applies(id: Extra, g: DownloadSubject, features: DownloadFeatures): boo
       return fmt === "docx";
     case "results-csv":
       return g.hasResults === true;
+    case "subtitles-srt":
+    case "subtitles-vtt":
+      // The registry plan names the tool; the producer refuses a document without cues (`empty`).
+      return g.type === "studio-transcribe";
   }
 }
 

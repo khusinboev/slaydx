@@ -9,6 +9,7 @@ import { availableModels, studioVideoModels } from "@/lib/server/media/availabil
 import { STUDIO_IMAGE_PURPOSE } from "@/lib/media/catalog";
 import { studioSpeechModels } from "@/lib/server/media/voices";
 import { studioAudioModels } from "@/lib/server/media/audio-inputs";
+import { speechToolModels } from "@/lib/server/media/speech-sources";
 import { legacyFoldOn } from "@/lib/server/media/legacy-fold";
 
 export const runtime = "nodejs";
@@ -34,6 +35,8 @@ export const GET = handler("auth/session", async (req) => {
       studioSpeechModels: await studioSpeechModels(),
       // Studio «Audio» models (P6): none while `studio.audio.enabled` is off.
       studioAudioModels: await studioAudioModels(),
+      // Studio P10 «Transkripsiya» / «Dublyaj»: each needs its own switch (default off) + ElevenLabs.
+      studioSpeechToolModels: await speechToolModels(),
       // P7a «Solishtirish»: at most this many models per batch — a batch is N jobs and the admission refuses past the
       // admin's per-user in-flight cap (`queue.user_max_inflight`), so the page never offers a batch that is always 429.
       compareMax: Math.min(4, await getSetting("queue.user_max_inflight")),

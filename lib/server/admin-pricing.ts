@@ -145,6 +145,8 @@ export const UNIT_OF: Record<ToolId, PricingUnit> = {
   "studio-voice": "job",
   "studio-audio": "job",
   "studio-mix": "job",
+  "studio-transcribe": "job",
+  "studio-dub": "job",
 };
 
 /** Uzbek unit labels for the UI (the client never imports lib/tools). */
@@ -311,6 +313,12 @@ export function ladderInputs(toolId: ToolId): LadderInput[] {
         { label: "Ovozni almashtirish · 1 daq", values: { modelId: VOICE_CHANGER_MODEL, inputSeconds: 60 } },
         { label: "Shovqindan tozalash · 1 daq", values: { modelId: ISOLATOR_MODEL, inputSeconds: 60 } },
       ];
+    case "studio-transcribe":
+      // P10: seconds of the source × the STT credit rate × markup (`studio-transcribe.ts`).
+      return [30, 60, 300, 600].map((n) => ({ label: `Transkripsiya · ${n < 60 ? `${n} s` : `${n / 60} daq`}`, values: { sourceSeconds: n } }));
+    case "studio-dub":
+      // P10: seconds of the source × the dubbing credit rate × markup.
+      return [15, 60, 180].map((n) => ({ label: `Dublyaj · ${n < 60 ? `${n} s` : `${n / 60} daq`}`, values: { sourceSeconds: n } }));
     case "studio-voice":
       // The fixed clone price (`studio.clone_price`).
       return [{ label: "1 klon", values: {} }];
@@ -340,7 +348,7 @@ export function ladderFor(toolId: ToolId, media?: MediaPricing | null): LadderSt
 async function mediaPricingFor(toolId: ToolId): Promise<MediaPricing | null> {
   if (toolId === "studio-voice") return { ...(await mediaPricing()), clonePrice: clonePriceOf(await getSetting("studio.clone_price")) };
   if (toolId === "studio-mix") return { ...(await mediaPricing()), mixPrice: mixPriceOf(await getSetting("studio.mix_price")) };
-  return toolId === "studio-image" || toolId === "studio-video" || toolId === "studio-speech" || toolId === "studio-audio" ? mediaPricing() : null;
+  return toolId === "studio-image" || toolId === "studio-video" || toolId === "studio-speech" || toolId === "studio-audio" || toolId === "studio-transcribe" || toolId === "studio-dub" ? mediaPricing() : null;
 }
 
 export function effectiveLadder(steps: ReadonlyArray<LadderStep>, adj: PriceAdjust | null): LadderRow[] {

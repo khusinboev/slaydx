@@ -77,6 +77,9 @@ export function viewerKind(id: ToolId): ViewerKind {
     case "studio-voice":
     case "studio-audio":
     case "studio-mix":
+    case "studio-transcribe":
+    case "studio-dub":
+      // P10: a transcript (+ a subtitled MP4) / a dubbed MP4 or MP3 — `ArtifactViewer` picks the player from the doc.
       // P8c «Montaj»: an MP3, or an MP4 that `AudioViewer` hands to `VideoViewer` (`doc.mix.output`).
       // AUDIT-22: chiqish MP3 — pleer + transkript (`AudioViewer`).
       return "audio";
