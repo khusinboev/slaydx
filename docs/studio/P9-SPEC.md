@@ -2,7 +2,8 @@
 
 Owner decisions (2026-11-03): add **Sora 2 through fal** and **Lyria music through the existing Gemini key**; HeyGen
 waits (it needs its own account and key). Price = provider cost × `media.markup` (×2 default), like every Studio
-model. One live job per model on the admin account before the owner announces it.
+model. One live job per model on the admin account before the owner announces it. HeyGen (later the same day): built
+dark until a key exists — `docs/studio/P9-HEYGEN.md`.
 
 ## Sora 2 / Sora 2 Pro («Video» tab)
 
