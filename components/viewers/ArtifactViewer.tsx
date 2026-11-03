@@ -147,10 +147,12 @@ function viewerFor({
        * baytlari yo'q. Tahrir proplari ATAYLAB berilmaydi: transkriptni
        * tahrirlash audio bilan ajralib ketardi (fayl qayta sintez
        * qilinmaydi), ya'ni «ko'rdim = oldim» buzilardi.
+       *
+       * Studio «Montaj» (P8c): an MP4 result (`doc.mix.output`) is a video — its `doc.video` is set by the engine.
        */
       return (
         <div className="flex min-h-0 flex-1 flex-col">
-          <AudioViewer doc={doc} gen={{ id: gen.id, fileName: gen.fileName }} />
+          {doc.mix?.output === "mp4" ? <VideoViewer doc={doc} gen={{ id: gen.id }} /> : <AudioViewer doc={doc} gen={{ id: gen.id, fileName: gen.fileName }} />}
         </div>
       );
     case "image":

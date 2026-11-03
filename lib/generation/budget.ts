@@ -57,6 +57,8 @@ const FIXED: Partial<Record<ToolId, number>> = {
   // Studio «Audio» (P6): one music render (up to 3 min of audio) or ≤ 4 sound-effect calls, or one voice-changer /
   // isolator call on ≤ 5 min of input.
   "studio-audio": 360_000,
+  // Studio «Montaj» (P8c): one ffmpeg run (hard timeout 120 s) + reading / writing ≤ 25 MB files.
+  "studio-mix": 180_000,
   /*
    * Rezyume 2: prompt kattalashdi (tuzilmali faktlar JSON, 18 til uchun
    * yorliqlar, boyitish qoidalari) va qisqa summary da BIR marta STRICT

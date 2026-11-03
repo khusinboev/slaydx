@@ -28,7 +28,7 @@ export const TAB_DEFS: readonly TabDef[] = [
     id: "pricing",
     label: "Narx va marja",
     blurb: "Hisobotlardagi marja va tavsiya etilgan narx shu qiymatlardan hisoblanadi.",
-    keys: ["pricing.payment_fee_percent", "pricing.target_markup", "finance.soum_per_usd", "media.markup", "studio.clone_price", "domla.price"],
+    keys: ["pricing.payment_fee_percent", "pricing.target_markup", "finance.soum_per_usd", "media.markup", "studio.clone_price", "studio.mix_price", "domla.price"],
   },
   {
     id: "queue",

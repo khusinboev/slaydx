@@ -609,6 +609,8 @@ export type AcademicDoc = {
   speech?: StudioSpeechDoc;
   /** Studio «Audio» (P6): music / sound effect / voice changer / isolator result (`AudioViewer` plays it). */
   studioAudio?: StudioAudioDoc;
+  /** Studio «Montaj» (P8c): what was mixed and how; an MP4 result also carries `video` (the `VideoViewer` plays it). */
+  mix?: StudioMixDoc;
   /**
    * Infografika (AUDIT-21): bir betlik plakatning TO'LIQ
    * spetsifikatsiyasi. Bu oilada `sections` MATNI yo'q — chiqish bitta
@@ -644,6 +646,18 @@ export type StudioSpeechDoc = {
   lines: { speaker: string; text: string }[];
   /** A user clone spoke (or, for the clone tool, this is its preview). */
   clone: boolean;
+};
+
+/** Studio «Montaj» result (docs/studio/P8-SPEC.md «P8c»): the inputs are generation ids of the same user. */
+export type StudioMixDoc = {
+  mode: "video-voice" | "voice-music";
+  output: "mp4" | "mp3";
+  /** Length of the result file (measured). */
+  seconds: number;
+  /** The two source generations, in the mode's order (video + audio, or speech + music). */
+  sources: [string, string];
+  /** The normalized options the mix ran with (numbers / bools only). */
+  options: Record<string, number | boolean>;
 };
 
 /** Studio «Audio» result (docs/studio/P6-SPEC.md). A clone's provider id is never stored here; the input audio neither. */

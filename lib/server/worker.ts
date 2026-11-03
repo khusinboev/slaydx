@@ -606,6 +606,8 @@ async function execute(
         : undefined;
     // Studio P6: the «Audio» job's uploaded input and clone voice (the owner's own, SQL).
     const studioAudio = tool.id === "studio-audio" ? await (await import("./media/audio-inputs")).studioAudioJobCtx(job.userId, job.values) : undefined;
+    // Studio P8c: the «Montaj» job's two source files (the owner's own finished results, SQL).
+    const studioMix = tool.id === "studio-mix" ? await (await import("./media/mix-sources")).mixJobCtx(job.userId, job.values) : undefined;
     // Media engine path per kind, read ONCE so a running job never switches (docs/studio/P0-SPEC.md §6).
     const mediaCtx = { generationId: job.id, core: await mediaCoreSwitches() };
     tracked = trackJobCost(() => withMediaContext(mediaCtx, () => build(tool, job.values, {
@@ -618,6 +620,7 @@ async function execute(
       studioSpeech,
       studioClone,
       studioAudio,
+      studioMix,
       onStage,
       onProgress: live?.sink,
       // Tinglash o'yini TTS parchalari — shu ishning aktivlariga (`/api/o/[token]/audio/[assetId]` orqali ochiq).

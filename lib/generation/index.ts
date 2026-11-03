@@ -14,6 +14,7 @@ import { buildImageArtifact } from "./image-studio";
 import { buildStudioImage } from "./studio";
 import { buildStudioSpeech, type StudioSpeechCtx } from "./studio/speech";
 import { buildStudioAudio, type StudioAudioCtx } from "./studio/audio";
+import { buildStudioMix, type StudioMixCtx } from "./studio/mix";
 import { buildInfographicArtifact } from "./infographic/engine";
 import { buildPortraitArtifact } from "./portrait/engine";
 import { buildTranslationArtifact } from "./translate/engine";
@@ -212,6 +213,8 @@ export type BuildOptions = {
   studioClone?: (o: { deadline?: number; onStage?: (ev: { progress: number; step: string }) => void }) => Promise<BuiltFile>;
   /** Studio P6: the job owner's uploaded input + clone an «Audio» job names (worker: `studioAudioJobCtx`, ownership in SQL). */
   studioAudio?: StudioAudioCtx;
+  /** Studio P8c: the two source files of a «Montaj» job (worker: `mixJobCtx`, ownership in SQL). */
+  studioMix?: StudioMixCtx;
   /**
    * Tinglash o'yini (AUDIT-22 R): sintez qilingan parchani AKTIVGA yozadi
    * va id qaytaradi — worker `putAssetBytes(job.id, …)` beradi. Berilmasa
@@ -588,6 +591,10 @@ async function buildArtifactInner(
       ...(opts.onStage ? { onStage: opts.onStage } : {}),
       ...(opts.putAsset ? { putAsset: opts.putAsset } : {}),
     });
+  }
+  // Studio «Montaj» (docs/studio/P8-SPEC.md «P8c»): ffmpeg over the job owner's own results (the worker loads them).
+  if (tool.id === "studio-mix") {
+    return buildStudioMix(tool, values, opts.studioMix ?? { inputs: [null, null] }, opts.onStage ? { onStage: opts.onStage } : {});
   }
   if (tool.id === "studio-voice") {
     if (!opts.studioClone) throw new Error("Ovoz klonlash faqat navbat orqali ishlaydi");
