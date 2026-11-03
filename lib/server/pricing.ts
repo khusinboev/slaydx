@@ -7,6 +7,7 @@ import { log } from "./log";
 import { mediaPricing } from "./media/pricing";
 import { getSetting } from "./settings";
 import { clonePriceOf } from "../media/studio-speech";
+import { mixPriceOf } from "../media/catalog-mix";
 
 /**
  * Admin price adjustments read side (docs/admin/02-plan.md §17.2, §17.7).
@@ -138,6 +139,6 @@ export async function getAllToolPricing(): Promise<PriceAdjustMap> {
  */
 export async function effectivePrice(tool: ToolConfig, values: FormValues): Promise<number> {
   // Studio pictures: cost × markup with the server's pricing block (the one the catalog endpoint sends the browser).
-  const media = tool.id === "studio-image" || tool.id === "studio-video" || tool.id === "studio-speech" || tool.id === "studio-audio" ? await mediaPricing() : tool.id === "studio-voice" ? { ...(await mediaPricing()), clonePrice: clonePriceOf(await getSetting("studio.clone_price")) } : null;
+  const media = tool.id === "studio-image" || tool.id === "studio-video" || tool.id === "studio-speech" || tool.id === "studio-audio" ? await mediaPricing() : tool.id === "studio-voice" ? { ...(await mediaPricing()), clonePrice: clonePriceOf(await getSetting("studio.clone_price")) } : tool.id === "studio-mix" ? { ...(await mediaPricing()), mixPrice: mixPriceOf(await getSetting("studio.mix_price")) } : null;
   return applyPriceAdjust(basePriceFor(tool, values, media), await getToolPricing(tool.id));
 }

@@ -31,6 +31,7 @@ import { validate as validateParams } from "./studio-core";
 import { studioVideoError, studioVideoPrice } from "./media/studio-video-pricing";
 import { STUDIO_CLONE_PRICE_DEFAULT, studioSpeechError, studioSpeechPrice } from "./media/studio-speech";
 import { getClientClonePrice } from "./media/studio-speech-client";
+import { STUDIO_MIX_PRICE_DEFAULT, getClientMixPrice, mixModeOf, studioMixError } from "./media/catalog-mix";
 import { studioAudioError, studioAudioPrice } from "./media/studio-audio";
 
 const TOPIC_FILE_MODES = [
@@ -78,6 +79,8 @@ const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
   "studio-speech": [{ kind: "text", name: "modelId", legend: "Ovoz modeli", required: true }],
   // Studio «Audio» (P6): the mode's model; its own schema checks the prompt / the uploaded input.
   "studio-audio": [{ kind: "text", name: "modelId", legend: "Audio rejimi", required: true }],
+  // Studio «Montaj» (P8c): the mode; its own schema + `studioMixError` check the two picked results.
+  "studio-mix": [{ kind: "text", name: "modelId", legend: "Montaj turi", required: true }],
   "studio-voice": [
     { kind: "text", name: "name", legend: "Ovoz nomi", required: true },
     { kind: "text", name: "sampleId", legend: "Ovoz yozuvi", required: true },
@@ -1060,6 +1063,30 @@ export const TOOLS: ToolConfig[] = [
     fields: [],
   },
   {
+    /*
+     * Studio «Montaj» (docs/studio/P8-SPEC.md «P8c»): ffmpeg in the worker — a finished audio laid onto a finished video
+     * (MP4), or a finished speech over a finished music track (MP3). Inputs are the user's own results by id. No provider
+     * cost: a fixed `studio.mix_price` (default 500 so'm) + the tool's `tool_pricing` %. The page is the «Audio» tab's
+     * «Montaj» mode; not listed on its own.
+     */
+    id: "studio-mix",
+    slug: "studio-mix",
+    title: "Montaj",
+    pageTitle: "Studio montaj",
+    group: "media",
+    icon: "mic",
+    tc: "234 88 12",
+    description: "Videoga ovoz qo‘shish yoki ovozga fon musiqa qo‘yish",
+    submitLabel: "Montaj qilish",
+    creatingLabel: "Montaj qilinmoqda...",
+    createdLabel: "montaj tayyor!",
+    extraOptional: false,
+    output: "mp3",
+    custom: "studio-mix",
+    basePrice: STUDIO_MIX_PRICE_DEFAULT,
+    fields: [],
+  },
+  {
     id: "podcast",
     slug: "podcast",
     title: "Podkast",
@@ -1237,7 +1264,7 @@ export function visibleToolGroups(): readonly { id: ToolGroup; label: string }[]
  * Tools that live INSIDE another page and get no card of their own: `studio-video` is the Studio's Video tab (the Studio
  * card already leads there). The catalogue, the create sheet, the search and the home groups list `listedTools()`.
  */
-export const UNLISTED_TOOL_IDS: ReadonlySet<ToolId> = new Set<ToolId>(["studio-video", "studio-speech", "studio-voice", "studio-audio"]);
+export const UNLISTED_TOOL_IDS: ReadonlySet<ToolId> = new Set<ToolId>(["studio-video", "studio-speech", "studio-voice", "studio-audio", "studio-mix"]);
 export function listedTools(): ToolConfig[] {
   return TOOLS.filter((t) => !UNLISTED_TOOL_IDS.has(t.id));
 }
@@ -1496,6 +1523,7 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
   if (tool.custom === "studio-video") return studioVideoError(values);
   if (tool.custom === "studio-speech") return studioSpeechError(values);
   if (tool.custom === "studio-audio") return studioAudioError(values);
+  if (tool.custom === "studio-mix") return studioMixError(values);
   if (tool.custom === "image") {
     const n = String(values.prompt ?? "").trim().length;
     if (n > 0 && n < IMAGE_PROMPT_MIN) return "Rasm tavsifi juda qisqa — nima chizilishini yozing.";
@@ -1695,6 +1723,8 @@ export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | nu
     const ok = known ? known.length > 0 : (features.ttsPremium ?? features.llm);
     return ok ? null : "Audio xizmati hozircha mavjud emas.";
   }
+  // «Montaj» (P8c) runs ffmpeg in the worker: no provider key decides it (a missing binary fails the job with a refund).
+  if (tool.custom === "studio-mix") return null;
   if (tool.custom === "studio-speech" || tool.custom === "studio-voice") {
     // Its own model list when the server sends it (empty while `studio.voice.enabled` is off); an older server: the TTS
     // flag, else the text-key flag (the podcast / greeting rule).
@@ -1856,6 +1886,10 @@ export function basePriceFor(tool: ToolConfig, values: FormValues, media?: Media
     const pricing = media ?? getClientMediaPricing() ?? defaultMediaPricing();
     return studioAudioPrice(values, pricing) ?? studioAudioPrice({ ...values, modelId: "" }, pricing)!;
   }
+  if (tool.id === "studio-mix") {
+    // Fixed (`studio.mix_price`): the server passes the setting in its pricing block, the browser has the sources endpoint's number.
+    return media?.mixPrice ?? getClientMixPrice() ?? STUDIO_MIX_PRICE_DEFAULT;
+  }
   if (tool.id === "studio-voice") {
     // Fixed (`studio.clone_price`): the server passes the setting in its pricing block, the browser has the voices endpoint's number.
     return media?.clonePrice ?? getClientClonePrice() ?? STUDIO_CLONE_PRICE_DEFAULT;
@@ -2003,6 +2037,7 @@ export function topicOf(values: FormValues, tool: ToolConfig) {
     const mode = ({ "elevenlabs/voice-changer": "Ovozni almashtirish", "elevenlabs/isolator": "Shovqindan tozalash" } as Record<string, string>)[String(values.modelId ?? "")];
     return prompt || mode || "Audio";
   }
+  if (tool.id === "studio-mix") return mixModeOf(values)?.label ?? "Montaj";
   if (tool.id === "studio-voice") {
     const name = String(values.name || "").replace(/\s+/g, " ").trim().slice(0, 40);
     return name ? `Ovoz klonlash: ${name}` : "Ovoz klonlash";

@@ -76,6 +76,8 @@ export function viewerKind(id: ToolId): ViewerKind {
     case "studio-speech":
     case "studio-voice":
     case "studio-audio":
+    case "studio-mix":
+      // P8c «Montaj»: an MP3, or an MP4 that `AudioViewer` hands to `VideoViewer` (`doc.mix.output`).
       // AUDIT-22: chiqish MP3 — pleer + transkript (`AudioViewer`).
       return "audio";
     case "video":

@@ -153,6 +153,7 @@ const KIND_BY_TOOL: Record<ToolId, ProgressKind> = {
   "studio-speech": "speech",
   "studio-voice": "speech",
   "studio-audio": "sound",
+  "studio-mix": "sound",
   infographic: "infographic",
   "lesson-plan": "teacher",
   "texnologik-xarita": "teacher",

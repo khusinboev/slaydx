@@ -40,6 +40,7 @@ import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
 import { STUDIO_SPEECH_PURPOSE } from "../media/catalog-speech";
 import { ISOLATOR_MODEL, MUSIC_MODEL, SFX_MODEL, VOICE_CHANGER_MODEL } from "../media/catalog-audio";
 import { clonePriceOf } from "../media/studio-speech";
+import { MIX_VIDEO_MODEL, mixPriceOf } from "../media/catalog-mix";
 import type { MediaPricing } from "../media/studio-pricing";
 import { mediaPricing } from "./media/pricing";
 
@@ -143,6 +144,7 @@ export const UNIT_OF: Record<ToolId, PricingUnit> = {
   "studio-speech": "kchars",
   "studio-voice": "job",
   "studio-audio": "job",
+  "studio-mix": "job",
 };
 
 /** Uzbek unit labels for the UI (the client never imports lib/tools). */
@@ -310,6 +312,9 @@ export function ladderInputs(toolId: ToolId): LadderInput[] {
     case "studio-voice":
       // The fixed clone price (`studio.clone_price`).
       return [{ label: "1 klon", values: {} }];
+    case "studio-mix":
+      // The fixed «Montaj» price (`studio.mix_price`), the same for both modes.
+      return [{ label: "1 montaj", values: { modelId: MIX_VIDEO_MODEL } }];
     case "portrait":
       // Priced per variant: 1 and 2 variants (`portraitPrice`).
       return PORTRAIT_VARIANTS.map((n) => ({ label: `${n} variant`, values: { variants: n } }));
@@ -332,6 +337,7 @@ export function ladderFor(toolId: ToolId, media?: MediaPricing | null): LadderSt
 /** The Studio pricing block when `toolId` needs one (the price the server charges is cost × the CURRENT markup). */
 async function mediaPricingFor(toolId: ToolId): Promise<MediaPricing | null> {
   if (toolId === "studio-voice") return { ...(await mediaPricing()), clonePrice: clonePriceOf(await getSetting("studio.clone_price")) };
+  if (toolId === "studio-mix") return { ...(await mediaPricing()), mixPrice: mixPriceOf(await getSetting("studio.mix_price")) };
   return toolId === "studio-image" || toolId === "studio-video" || toolId === "studio-speech" || toolId === "studio-audio" ? mediaPricing() : null;
 }
 

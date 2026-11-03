@@ -97,6 +97,8 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "studio.audio.enabled",
     "studio.legacy_fold",
     "studio.clone_price",
+    // P8c «Montaj»: the fixed price of one mix (docs/studio/P8-SPEC.md).
+    "studio.mix_price",
   ]);
   for (const k of s.SETTING_KEYS) {
     const d = s.settingDef(k);
