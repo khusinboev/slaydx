@@ -16,6 +16,7 @@ import { MediaError, type AdapterDeps, type AdapterInput, type MediaAdapter, typ
 import { MEDIA_CATALOG, VIDEO_PROVIDER_TO_MEDIA } from "../catalog";
 import { END_IMAGE_PARAM, SECOND_IMAGE_PARAM, effectPhotos } from "../catalog-video";
 import { FAL_VIDEO_ADAPTER_ID, falVideoAdapter } from "./fal";
+import { HEYGEN_ADAPTER_ID, heygenVideoAdapter, type HeygenDeps } from "./heygen";
 import {
   buildKlingDualEffectRequest,
   KLING_V3_ASPECTS,
@@ -180,16 +181,18 @@ function klingStudioAdapter(id: string, key: () => string, build: (input: Adapte
 
 /**
  * The adapters of the `studio.video` routes by adapter id: `google-video` (Gemini Omni, the «Video» tool's adapter
- * wrapped as today), `kling-v3-std` / `kling-v3-pro` (Kling 3.0 tiers) and `kling-effects`. `omni` and `klingKeyFn` are
- * test seams; production passes nothing.
+ * wrapped as today), `kling-v3-std` / `kling-v3-pro` (Kling 3.0 tiers) and `kling-effects`, `fal-video` (P4) and
+ * `heygen-video` (P9). `omni`, `klingKeyFn`, `falKeyFn` and `heygen` are test seams; production passes nothing.
  */
-export function studioVideoAdapters(opts: { omni?: VideoAdapter; klingKeyFn?: () => string; falKeyFn?: () => string | null } = {}): Record<string, MediaAdapter> {
+export function studioVideoAdapters(opts: { omni?: VideoAdapter; klingKeyFn?: () => string; falKeyFn?: () => string | null; heygen?: HeygenDeps } = {}): Record<string, MediaAdapter> {
   const key = opts.klingKeyFn ?? klingKey;
   const out: Record<string, MediaAdapter> = { "google-video": videoAdapter("google-video", opts.omni ?? omniAdapter) };
   for (const [id, mode] of Object.entries(KLING_V3_TIERS)) out[id] = klingStudioAdapter(id, key, (input) => buildKlingV3Request(klingV3Input(mode, input)));
   out["kling-effects"] = klingStudioAdapter("kling-effects", key, klingEffectRequest);
   // P4: Wan / Seedance / MiniMax through the fal queue (async: submit → op id → the shared video poll loop).
   out[FAL_VIDEO_ADAPTER_ID] = falVideoAdapter(opts.falKeyFn ? { key: opts.falKeyFn } : {});
+  // P9: HeyGen avatar videos (async: submit → `heygen:<video_id>` → the shared video poll loop).
+  out[HEYGEN_ADAPTER_ID] = heygenVideoAdapter(opts.heygen ?? {});
   return out;
 }
 

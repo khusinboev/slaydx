@@ -86,6 +86,8 @@ test("catalog: studio.video = Omni (default) + Kling 3.0 + Kling 3.0 Pro + effec
     "minimax/h3-max-turbo",
     "openai/sora-2",
     "openai/sora-2-pro",
+    // P9: HeyGen avatars after Sora, before the effects (their own checks: tests/studio-video-heygen.test.mts).
+    "heygen/avatar",
     "kling/effects",
   ]);
   assert.equal(p.default, "google/omni-video");
@@ -147,6 +149,12 @@ test("probe: every param of every studio.video model changes the request or the 
     // P9 Sora (fal): 4 s and the top tier are the defaults; the probe goes to 12 s and down to 720p.
     "openai/sora-2": { prompt: "Registon at dawn", seconds: 4, aspect: "16:9" },
     "openai/sora-2-pro": { prompt: "Registon at dawn", seconds: 4, aspect: "16:9", resolution: "1080p" },
+    // P9 HeyGen: a script at the defaults; the probe swaps each enum, adds an own speech, and raises the length.
+    "heygen/avatar": { prompt: "Assalomu alaykum, do'stlar!", seconds: 3 },
+  };
+  /** Per-model probe values where the shared `alt` does not fit (HeyGen's own enums and the own-speech id). */
+  const altOf: Record<string, Record<string, unknown>> = {
+    "heygen/avatar": { avatar: "Tyler-incasualsuit-20220721", voice: "male", language: "ru", engine: "avatar_iii", audioId: "0f0e0d0c-0b0a-4908-8706-050403020100" },
   };
   const alt: Record<string, unknown> = { prompt: "A different prompt", seconds: undefined, aspect: "9:16", sound: true, effect: "snowglobe", resolution: "480p" };
   const soundOff = new Set(["alibaba/wan-3", "bytedance/seedance-2.5", "bytedance/seedance-2-mini"]);
@@ -155,7 +163,7 @@ test("probe: every param of every studio.video model changes the request or the 
     const b = base[id]!;
     const needsImage = e.capabilities.includes("effect");
     for (const p of e.params) {
-      let next: unknown = alt[p.name];
+      let next: unknown = altOf[id]?.[p.name] ?? alt[p.name];
       if (p.name === "seconds" && p.type === "int") next = p.max;
       // The fal models default to sound ON (same price): the probe flips it off.
       if (p.name === "sound" && soundOff.has(id)) next = false;

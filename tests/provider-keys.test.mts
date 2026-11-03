@@ -99,7 +99,7 @@ test("registry: unique ids, Uzbek labels, kinds, env names; reserved providers a
   assert.equal(new Set(ids).size, ids.length);
   assert.deepEqual(
     [...ids].sort(),
-    ["anthropic", "aisha", "azure", "elevenlabs", "fal", "gemini", "googlebooks", "kling", "openai-image", "openalex", "pexels", "pixabay", "veo"].sort(),
+    ["anthropic", "aisha", "azure", "elevenlabs", "fal", "gemini", "googlebooks", "heygen", "kling", "openai-image", "openalex", "pexels", "pixabay", "veo"].sort(),
   );
   // Removed providers (xAI, OpenRouter, OpenAI as a TEXT provider) are not in the registry: no key is read for them.
   for (const id of ["xai", "openrouter", "openai"]) assert.equal(registry.providerDef(id), null, `${id} is removed`);

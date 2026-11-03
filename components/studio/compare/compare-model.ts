@@ -2,6 +2,7 @@ import type { ClientEntry, ParamSchema } from "@/lib/studio-core";
 import { PROMPT_PARAM, requestValues, type RawValues } from "../studio-values";
 import { studioPrice } from "../studio-price";
 import { isEffect, studioVideoClientPrice } from "../video/video-price";
+import { isAvatarModel } from "@/lib/media/catalog-video";
 import type { StudioPricing } from "../studio-types";
 
 /**
@@ -20,9 +21,13 @@ export const COMPARE_MAX = 4;
 /** An int row with more common values than this is not shared (no ParamSchema int is that long; a guard, not a rule). */
 const INT_VALUES_MAX = 200;
 
-/** The models a tab can compare: Rasm — its drawing catalog as is; Video — the text/image → video models, no effect. */
+/**
+ * The models a tab can compare: Rasm — its drawing catalog as is; Video — the text/image → video models, no effect and
+ * no avatar (P9 HeyGen: its prompt is a script, not a scene, and its length is computed from the inputs — a shared
+ * «Davomiylik» row would be decorative and the batch price would not match the server's).
+ */
 export function compareModels(kind: CompareKind, models: readonly ClientEntry[]): ClientEntry[] {
-  return kind === "video" ? models.filter((m) => !isEffect(m)) : [...models];
+  return kind === "video" ? models.filter((m) => !isEffect(m) && !isAvatarModel(m.id)) : [...models];
 }
 
 /** One shared row, or `null` when the models cannot agree on a value. */

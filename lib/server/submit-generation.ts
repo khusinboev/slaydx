@@ -30,6 +30,7 @@ import { MEDIA_CATALOG } from "../media/catalog";
 import { assertCloneAllowed, assertOwnClones, speechModelUnavailable } from "./media/voices";
 import { audioModelUnavailable, prepareAudioRequest } from "./media/audio-inputs";
 import { prepareMixRequest } from "./media/mix-sources";
+import { prepareAvatarRequest } from "./media/avatar-audio";
 
 /**
  * The paid-generation pipeline behind `POST /api/generations`, shared with the AI chat's confirmation.
@@ -276,6 +277,9 @@ export async function prepareGeneration(input: SubmitInput): Promise<PreparedGen
     // P4 review N2: the Rasm tab's input checks (type, per-photo size, the job's total) before anything is charged.
     const inputs = await studioVideoInputsError(userId, entry, values, studioVideoImageParams(entry, values));
     if (inputs) throw new ApiError(inputs, 400, { code: "input_invalid" });
+    // P9 HeyGen avatar: the own speech is the user's own finished result (SQL); `seconds` is set from the script / the
+    // speech before pricing, never taken from the request (docs/studio/P9-HEYGEN.md).
+    await prepareAvatarRequest(userId, values);
   }
 
   /*

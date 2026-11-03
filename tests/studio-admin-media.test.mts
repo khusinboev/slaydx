@@ -54,7 +54,7 @@ const generationsRoute = await import("../app/api/generations/route.ts");
 const NANO = "google/nano-banana";
 const GPT = "openai/gpt-image";
 /** P3: the Studio Video tab's models, listed after the pictures (Gemini Omni + Kling 3.0 tiers + effects); P4 adds the fal models. */
-const STUDIO_VIDEO_IDS = ["google/omni-video", "kling/kling-3", "kling/kling-3-pro", "alibaba/wan-3", "bytedance/seedance-2.5", "bytedance/seedance-2-mini", "minimax/h3", "minimax/h3-max-turbo", "openai/sora-2", "openai/sora-2-pro", "kling/effects"];
+const STUDIO_VIDEO_IDS = ["google/omni-video", "kling/kling-3", "kling/kling-3-pro", "alibaba/wan-3", "bytedance/seedance-2.5", "bytedance/seedance-2-mini", "minimax/h3", "minimax/h3-max-turbo", "openai/sora-2", "openai/sora-2-pro", "heygen/avatar", "kling/effects"];
 /** P5: the «Ovoz» tab's speech models, listed after the video ones; one unit = 1 000 characters (the clone is a fixed price, not here). */
 const STUDIO_SPEECH_IDS = ["elevenlabs/eleven-v3", "google/gemini-tts", "elevenlabs/v3-dialogue", "google/gemini-dialogue"];
 /**

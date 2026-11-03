@@ -51,6 +51,10 @@ export function probeRequest(id: string, key: string, deps: ProbeDeps = {}): Req
       // fal Platform API price list of OUR endpoints: needs a valid key, spends nothing
       // (https://fal.ai/docs/platform-apis/v1/models/pricing, read 2026-11-02).
       return { url: `${FAL_PRICING_URL}?endpoint_id=${encodeURIComponent(falEndpoints().join(","))}`, headers: { Authorization: `Key ${key}` } };
+    case "heygen":
+      // The account behind the key and its API balance: HeyGen's own key check, nothing generated
+      // (https://developers.heygen.com/docs/api-key.md, read 2026-11-03).
+      return { url: HEYGEN_ME_URL, headers: { "x-api-key": key } };
     case "azure": {
       const region = (deps.azureRegion ?? process.env.AZURE_SPEECH_REGION ?? "").trim().toLowerCase();
       if (!REGION_RE.test(region)) return { error: "AZURE_SPEECH_REGION sozlanmagan yoki noto'g'ri" };
@@ -154,6 +158,40 @@ export function falMessage(pricing: unknown, billing: unknown): string {
   return parts.join(" · ");
 }
 
+export const HEYGEN_ME_URL = "https://api.heygen.com/v3/users/me";
+
+/**
+ * HeyGen answers with the account (`GET /v3/users/me`, docs «Get Current User»): the billing type and what is left —
+ * the wallet balance (pay-as-you-go API), the usage-based credits or the plan's premium credits. Only numbers and
+ * pattern-checked words are copied; nothing of the account's e-mail or name.
+ */
+export function heygenMessage(body: unknown): string {
+  const d = ((body as { data?: unknown } | null)?.data ?? {}) as {
+    billing_type?: unknown;
+    wallet?: { remaining_balance?: unknown; currency?: unknown };
+    usage_based?: { remaining_credits?: unknown };
+    subscription?: { plan?: unknown; credits?: { premium_credits?: { remaining?: unknown } } };
+  };
+  const parts = ["Kalit qabul qilindi"];
+  const word = (v: unknown) => (typeof v === "string" && /^[a-z_]{1,30}$/i.test(v) ? v : null);
+  const plan = word(d.subscription?.plan);
+  if (plan) parts.push(`tarif: ${plan}`);
+  const billing = word(d.billing_type);
+  if (billing) parts.push(`hisob: ${billing}`);
+  // A number or a numeric string; `null` / absent / anything else = not reported (never shown as 0).
+  const num = (v: unknown) => (typeof v === "number" ? v : typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : NaN);
+  const bal = num(d.wallet?.remaining_balance);
+  if (Number.isFinite(bal)) {
+    const cur = typeof d.wallet?.currency === "string" && /^[A-Z]{3}$/.test(d.wallet.currency) ? d.wallet.currency : "USD";
+    parts.push(`API balansi ${cur === "USD" ? `$${Number(bal.toFixed(2))}` : `${bal} ${cur}`}`);
+  }
+  const usage = num(d.usage_based?.remaining_credits);
+  if (Number.isFinite(usage)) parts.push(`qolgan kredit ${groupDigits(usage)}`);
+  const premium = num(d.subscription?.credits?.premium_credits?.remaining);
+  if (Number.isFinite(premium)) parts.push(`premium kredit ${groupDigits(premium)}`);
+  return parts.join(" · ");
+}
+
 /** Runs the probe of `id` with `key`. Never throws, never returns the key. */
 export async function probeProvider(id: string, key: string, deps: ProbeDeps = {}): Promise<ProbeResult> {
   if (!providerDef(id)) return { ok: false, message: "Noma'lum provayder" };
@@ -177,6 +215,8 @@ export async function probeProvider(id: string, key: string, deps: ProbeDeps = {
       // Built only from our endpoint ids and numbers (the unit is pattern-checked); the key cannot be in it, split anyway.
       return { ok: true, message: falMessage(pricing, billing).split(key).join("…") };
     }
+    // Built from numbers and pattern-checked words only; the key cannot be in it, split anyway.
+    if (res.ok && id === "heygen") return { ok: true, message: heygenMessage(await res.json().catch(() => null)).split(key).join("…") };
     if (res.ok) return { ok: true, message: id === "elevenlabs" ? elevenLabsMessage(await res.json().catch(() => null)) : "Kalit qabul qilindi" };
     const detail = redactProbeText(await errorText(res), key);
     return { ok: false, message: `Provayder rad etdi (HTTP ${res.status})${detail ? `: ${detail}` : ""}` };
