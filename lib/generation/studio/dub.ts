@@ -65,6 +65,15 @@ export const DUB_DOWNLOAD_RESERVE_MS = 45_000;
 /** Transient poll errors (5xx, network) tolerated before the op is given up. */
 export const DUB_MAX_TRANSIENT = 8;
 
+/**
+ * The engine's clock when the caller injects none (the worker never does): real time. Tests that run a dub through the
+ * worker swap these two functions (and restore them); product code never writes them.
+ */
+export const DUB_CLOCK: { now: () => number; sleep: (ms: number) => Promise<void> } = {
+  now: () => Date.now(),
+  sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
+};
+
 
 async function defaultStore(): Promise<DubRowStore | null> {
   const ctx = mediaContext();
@@ -128,8 +137,8 @@ export async function buildStudioDub(
   const adapter = adapters[route.adapter];
   if (!adapter || !adapter.configured()) throw new UserFacingError(`Dublyaj xizmati hozir mavjud emas. ${REFUND}`);
   const store = deps.store === undefined ? await defaultStore() : deps.store;
-  const now = deps.now ?? Date.now;
-  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const now = deps.now ?? DUB_CLOCK.now;
+  const sleep = deps.sleep ?? DUB_CLOCK.sleep;
   const gen = mediaContext()?.generationId ?? "adhoc";
   const key = `${gen}:dub:0`;
 
