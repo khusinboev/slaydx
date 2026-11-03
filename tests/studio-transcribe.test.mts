@@ -24,7 +24,7 @@ import path from "node:path";
  *                'submitting' row never resubmits, an accepted submit timeout is not retried, wrong output shape.
  *
  * Mutations (each turned the named test red, then restored):
- *   `diarize` always "false" in `sttRequest`                                   -> "golden: STT", "probe";
+ *   `diarize` always "false" in `sttRequest`                                   -> "golden: STT", "golden: STT adapter", "probe";
  *   `language_code` sent for «auto»                                             -> "golden: STT";
  *   `source_lang` sent for «auto» / `watermark` "true"                          -> "golden: dubbing";
  *   `CUE_MAX_CHARS` 42 → 60                                                     -> "subtitles: splitting";
@@ -32,12 +32,12 @@ import path from "node:path";
  *   `srtTime` with "." instead of ","                                           -> "subtitles: format";
  *   VTT `&` escape removed                                                      -> "subtitles: format";
  *   `burnVideoKbps` floor check removed (always a number)                       -> "burn: args";
- *   `-c:a copy` → `-an` in `burnArgs`                                           -> "burn: REAL ffmpeg" (audio stream lost);
+ *   `-c:a copy` → `-an` in `burnArgs`                                           -> "burn: args", "burn: REAL ffmpeg" (audio lost);
  *   the resume branch of `buildStudioDub` submits again                         -> "dub engine: resume";
  *   'submitting' re-run treated as resumable                                    -> "dub engine: resume";
  *   `giveUp` without the provider DELETE                                        -> "dub engine: failures";
  *   the video/audio shape check of the dub output removed                       -> "dub engine: failures";
- *   `sourceSeconds` taken out of the cost rule (per job)                        -> "price".
+ *   the dub cost rule made per job (`sourceSeconds` ignored)                    -> "price", "probe".
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -123,7 +123,7 @@ test("price: client preview == server basePriceFor == studioEntryPrice; exact so
     assert.equal(server, want, `${toolId} ${seconds} s`);
     assert.equal(studioEntryPrice(entry, values, PRICING), server, "the catalog client view prices the same");
     assert.equal(speechToolClientPrice(mode, entry, values, PRICING, undefined), server, "the browser preview");
-    const adj = { percent: 150, roundTo: 100 };
+    const adj = { percent: 150, roundTo: 100 } as const;
     assert.equal(speechToolClientPrice(mode, entry, values, PRICING, adj), applyPriceAdjust(server, adj), "+ tool_pricing %");
   }
   // More seconds = more money (the billed length is THE price input); a model markup override wins.

@@ -32,7 +32,7 @@ const { dropMediaCatalog } = await import("../../components/studio/studio-api.ts
  * Mutations (each turned the named test red, then restored):
  *   1. `formEntry` keeps `burn` for an audio source                             -> «fields»;
  *   2. `OWN_ROWS` emptied (ParamRows draws a text box for `source`)             -> «fields» (two `source` fields);
- *   3. `pickResult` keeps the client-side seconds unrounded (8.2, no ceil)      -> «price button» (price / sent seconds);
+ *   3. `pickResult` rounds the seconds down (`Math.floor`, not `billedSeconds`)  -> «price button» (price / sent seconds);
  *   4. the P10 chips dropped from `chips()`                                     -> «chips»;
  *   5. `speechToolBlocker` ignores the language clash                           -> «dub».
  */

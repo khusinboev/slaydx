@@ -57,7 +57,12 @@ function installFetch() {
     const url = String(u);
     const fields: Record<string, string> = {};
     let fileSize: number | null = null;
-    if (init.body instanceof FormData) for (const [k, v] of init.body.entries()) typeof v === "string" ? (fields[k] = v) : (fileSize = (v as File).size);
+    if (init.body instanceof FormData) {
+      for (const [k, v] of init.body.entries()) {
+        if (typeof v === "string") fields[k] = v;
+        else fileSize = (v as File).size;
+      }
+    }
     calls.push({ url, method: String(init.method ?? "GET"), fields, fileSize });
     if (url.endsWith("/v1/speech-to-text")) {
       if (mode.stt !== 200) return json(mode.stt, { detail: "boom" });
@@ -65,7 +70,7 @@ function installFetch() {
     }
     if (url.endsWith("/v1/dubbing") && init.method === "POST") return json(200, { dubbing_id: "dub_F1", expected_duration_sec: 3 });
     if (/\/v1\/dubbing\/[^/]+$/.test(url) && init.method === "DELETE") return json(200, {});
-    if (/\/v1\/dubbing\/[^/]+\/audio\//.test(url)) return new Response(mp3Bytes(90), { status: 200 });
+    if (/\/v1\/dubbing\/[^/]+\/audio\//.test(url)) return new Response(new Uint8Array(mp3Bytes(90)), { status: 200 });
     if (/\/v1\/dubbing\/[^/]+$/.test(url)) return json(200, { status: mode.dubStatus, ...(mode.dubStatus === "failed" ? { error: "internal" } : {}) });
     return json(404, {});
   }) as unknown as typeof fetch;
