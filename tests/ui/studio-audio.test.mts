@@ -207,7 +207,7 @@ test("P9 model picker: «Musiqa» with ElevenLabs + Lyria — picker only there,
   assert.equal(q<HTMLTextAreaElement>("[data-audio-prompt] textarea")!.value, "cheerful dutar melody, Uzbek folk style", "MUTATSIYA: the prompt carries over");
   assert.deepEqual(fields(), { prompt: 1, length: 1, instrumental: 1 });
   assert.deepEqual(qa('[data-field="length"] [role="radio"]').map((b) => b.textContent), ["Qisqa (30 s)", "To‘liq qo‘shiq"], "the ElevenLabs «1 daq» did not carry into Lyria");
-  assert.match(txt("[data-studio-submit]"), /Yaratish · Musiqa · Google Lyria 3 · ~1 100/);
+  assert.match(txt("[data-studio-submit]"), /Yaratish · Lyria 3 · ~1 100/, "short on the button: the price must fit a phone");
   await click(qa('[data-field="length"] [role="radio"]').find((b) => b.textContent === "To‘liq qo‘shiq"));
   assert.equal(studioAudioPrice({ modelId: "google/lyria-3", length: "song" }, RATE), 2100);
   assert.match(txt("[data-studio-submit]"), /~2 100/);

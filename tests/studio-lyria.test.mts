@@ -36,7 +36,7 @@ const core = await import("../lib/studio-core/index.ts");
 const tools = await import("../lib/tools.ts");
 const { applyPriceAdjust } = await import("../lib/price-adjust.ts");
 const { audioClientPrice } = await import("../components/studio/audio/audio-api.ts");
-const { audioModelLabel, offeredModes } = await import("../components/studio/audio/audio-modes.ts");
+const { audioJobLabels, audioModelLabel, offeredModes } = await import("../components/studio/audio/audio-modes.ts");
 
 const LYRIA = "google/lyria-3";
 const GKEY = "AIzaTEST_lyria_key_0123456789abcdefgh";
@@ -108,6 +108,12 @@ test("tab: «Musiqa» offers both models (ElevenLabs first = default); the picke
   const lyriaOnly = offeredModes(view.filter((e) => e.id === LYRIA)).find((m) => m.mode === "music")!;
   assert.deepEqual([lyriaOnly.entry.id, lyriaOnly.entries.length], [LYRIA, 1]);
   for (const m of both.filter((x) => x.mode !== "music")) assert.equal(m.entries.length, 1, m.mode);
+  // Labels: the button short (the price fits a phone), the results in full; a one-model mode keeps its own name.
+  assert.deepEqual(audioJobLabels(music.entries[1]!, "Musiqa", 2), { button: "Lyria 3", job: "Musiqa · Lyria 3" });
+  assert.deepEqual(audioJobLabels(music.entries[0]!, "Musiqa", 2), { button: "Musiqa", job: "Musiqa" });
+  assert.deepEqual(audioJobLabels(lyriaOnly.entry, "Musiqa", 1), { button: "Musiqa", job: "Musiqa" });
+  const sfx = both.find((m) => m.mode === "sfx")!;
+  assert.deepEqual(audioJobLabels(sfx.entry, "Effekt", 1), { button: "Effekt", job: "Effekt" }, "«Ovoz effekti» stays «Effekt»");
 });
 
 test("golden: the real engine sends ONE Interactions call — key in the header only, model by «Turi», instrumental line", async () => {

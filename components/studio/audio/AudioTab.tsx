@@ -13,7 +13,7 @@ import { Field } from "@/components/forms/shared";
 import { queueGeneration } from "@/components/forms/runGeneration";
 import { PAY_RETURN_PATH } from "@/components/overlays/pay-amount";
 import { takesAudioInput, type AudioMode } from "@/lib/media/catalog-audio";
-import { audioModelLabel, offeredModes } from "./audio-modes";
+import { audioJobLabels, audioModelLabel, offeredModes } from "./audio-modes";
 import { audioOutputCount } from "@/lib/media/studio-audio";
 import { ParamRows } from "../ParamRows";
 import { PriceButton } from "../PriceButton";
@@ -54,7 +54,7 @@ const INSUFFICIENT_RE = /balans yetarli emas|to.langan balans bilan/i;
 /** Params drawn by the tab itself (prompt box, upload row, voice list), not by `ParamRows`. */
 const OWN_ROWS = new Set(["prompt", "inputId", "inputSeconds", "voice"]);
 
-export { audioModelLabel, offeredModes } from "./audio-modes";
+export { audioJobLabels, audioModelLabel, offeredModes } from "./audio-modes";
 
 /** «Yaratish · Musiqa · ~2 100 so'm». */
 export function audioSubmitLabel(mode: string, price: number): string {
@@ -193,7 +193,8 @@ export function AudioTab({
 
   const { mode, label: modeLabel, entries } = current;
   const entry = entries.find((e) => e.id === state.models?.[mode]) ?? current.entry;
-  const label = entries.length > 1 ? `${modeLabel} · ${audioModelLabel(entry, modeLabel)}` : modeLabel;
+  // The results list names the model in full («Musiqa · Lyria 3»); the button keeps it short so the price fits a phone.
+  const { job: label, button: buttonLabel } = audioJobLabels(entry, modeLabel, entries.length);
   const raw = state.raw[mode] ?? {};
   const values = effective(entry, raw);
   const blocker = audioBlocker(entry, raw);
@@ -258,7 +259,7 @@ export function AudioTab({
   }
 
   function again(job: StudioJob) {
-    const target = modes.flatMap((m) => m.entries.map((e) => ({ e, label: m.entries.length > 1 ? `${m.label} · ${audioModelLabel(e, m.label)}` : m.label }))).find((x) => x.e.id === job.modelId);
+    const target = modes.flatMap((m) => m.entries.map((e) => ({ e, label: audioJobLabels(e, m.label, m.entries.length).job }))).find((x) => x.e.id === job.modelId);
     if (!target) {
       setError("Bu rejim hozir mavjud emas.");
       return;
@@ -356,7 +357,7 @@ export function AudioTab({
         disabled={uploading}
         typing={typing}
         onSubmit={submit}
-        label={price === null ? undefined : audioSubmitLabel(count > 1 ? `${label} ×${count}` : label, price)}
+        label={price === null ? undefined : audioSubmitLabel(count > 1 ? `${buttonLabel} ×${count}` : buttonLabel, price)}
       />
       <section aria-label="Audiolar" data-audio-results className={cn(providerJobs.length > 0 && "mt-5")}>
         <VoiceResults jobs={providerJobs} busy={submitting} onAgain={again} />

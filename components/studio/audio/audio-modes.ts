@@ -19,3 +19,13 @@ export function offeredModes(models: readonly ClientEntry[]): { mode: AudioMode;
 export function audioModelLabel(entry: Pick<ClientEntry, "label" | "maker">, modeLabel: string): string {
   return entry.label === modeLabel ? entry.maker : `${entry.maker} ${entry.label}`;
 }
+
+/**
+ * Names of a job of `entry` in a mode with `models` offered models: `button` short (the price must fit a phone), `job`
+ * for the results. One model = the mode's name only; several = the model too («Lyria 3» / «Musiqa · Lyria 3»), except
+ * the entry that carries the mode's own name.
+ */
+export function audioJobLabels(entry: Pick<ClientEntry, "label">, modeLabel: string, models: number): { button: string; job: string } {
+  if (models < 2 || entry.label === modeLabel) return { button: modeLabel, job: modeLabel };
+  return { button: entry.label, job: `${modeLabel} · ${entry.label}` };
+}
