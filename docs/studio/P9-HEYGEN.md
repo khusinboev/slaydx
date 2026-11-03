@@ -18,15 +18,23 @@ needs `video.enabled` (P3).
   charging and again at submit) — exactly one of the two; `avatar` (4 curated stock avatars), `voice` (female / male),
   `language` (uz / ru / en — picks the HeyGen voice), `engine` («Sifat»: Avatar IV / Avatar III, priced), `aspect`
   16:9 | 9:16; `seconds` is computed, never a form row.
-- Length / price BEFORE the job: `withAvatarSeconds` (one function, browser and server): script → `ceil(chars / 12)`
-  seconds (a slow pace, so the estimate is rarely short), own speech → its stored length rounded to 0.1 s, up to a whole
-  second. The server OVERWRITES the request's `seconds` before pricing (`prepareAvatarRequest`, the «Audio» tab's
+- Length / price BEFORE the job: `withAvatarSeconds` (one function, browser and server): script →
+  `ceil(spoken chars / 12)` seconds (a slow pace, so the estimate is rarely short; `avatarSpokenChars` counts a digit as
+  6 and `% $ € £ ₽ + = @ & # № °` as 8, because they are read out as words), own speech → its stored length rounded to
+  0.1 s, up to a whole second. `avatarScriptProblem` (same weights, preflight + form) refuses links / e-mails and a script
+  past a minute as spoken. Each completed clip logs `[heygen] clip completed { op, duration }` (HeyGen's own length) to
+  calibrate the pace against `media_jobs.params.seconds` / `doc_json.video.requestedSeconds`. The server OVERWRITES the request's `seconds` before pricing (`prepareAvatarRequest`, the «Audio» tab's
   `inputSeconds` rule). A clip more than 1 s shorter than paid refunds the difference (the shared video `delivered`
   rule); a longer one is never charged extra.
 - Async on THE shared video poll loop: submit = voice lookup (or own-speech asset upload) + ONE `POST /v3/videos` with
   `Idempotency-Key` = the media job key → op `heygen:<video_id>` → poll `GET /v3/videos/{id}` → MP4 downloaded without
   the key (`safeFetchUrl`, first host in `heygen.ai` / `heygen.com` / `cloudfront.net`, 25 MB cap, MP4 sniff) →
   `finalizeVideo`. Deadline / too many errors → best-effort `DELETE /v3/videos/{id}`, then one refund.
+- Review fixes (2026-11-04): a create network drop is re-POSTed ONCE with the same `Idempotency-Key` (a replayed
+  `video_id` is adopted; a second drop / 409 `request_in_progress` = accepted, refunded at the deadline); a poll 404 is
+  retried (HeyGen lag right after the create), not refunded at once; only `content_policy_violation` is a safety refusal —
+  `avatar_not_usable` / `avatar_not_found` / `avatar_expired` / `avatar_consent_required` are plain failures logged at
+  error level («[heygen] a curated avatar id was refused»); «Solishtirish» does not offer the avatar.
 - Form (`components/studio/video/VideoTab.tsx` + `avatar.ts`): the script box reads «Avatar nima desin?»; «Avatar
   ovozi» card with the own-speech picker (`GET /api/media/mix-sources` → `speech`, known length ≤ 1 min); with an own
   speech the script box, «Ovoz» and «Matn tili» hide (they would change nothing). Everything else = generic `ParamRows`.
@@ -74,7 +82,7 @@ higher figure of each is the quote, so a real bill should not exceed it. HeyGen'
    every clip fails AFTER HeyGen billed it (refunded to the user) — check on the first clip.
 5. **Billing of failures**: a `failed` render and a deadline `DELETE` — billed or not (the docs say only that
    `render_not_started` charges nothing).
-6. **Speech rate**: 12 characters / s for Uzbek text; compare the first clips' `duration` with `ceil(chars / 12)`.
+6. **Speech rate**: 12 spoken characters / s for Uzbek text and the digit / symbol weights (6 / 8); compare the logged `duration` of the first clips with `ceil(avatarSpokenChars / 12)`.
    Much shorter clips mean frequent partial refunds (fine); longer ones mean we pay seconds we did not charge.
 7. **Own audio**: the multipart upload of an MP3 (`file` field) and lip-sync with `audio_asset_id`.
 
@@ -91,9 +99,9 @@ higher figure of each is the quote, so a real bill should not exceed it. HeyGen'
 
 ## Tests
 
-`tests/studio-video-heygen.test.mts` (12 tests, 14 mutations: catalog, length, golden bodies, auth host, errors, key
-scrub, poll states, download, prices client == server, preflight, provider), `tests/studio-video-heygen-flow.test.mts`
-(isolated DB: gating by key, script + own speech flows on the shared poll loop, refunds; 4 mutations),
-`tests/ui/studio-video-heygen.test.mts` (3 tests, 4 mutations). Updated lists (no assertion removed): `studio-video`
+`tests/studio-video-heygen.test.mts` (16 tests, 22 mutations: catalog, length, golden bodies, auth host, errors, key
+scrub, poll states, download, prices client == server, preflight, provider, the review fixes),
+`tests/studio-video-heygen-flow.test.mts` (isolated DB: gating by key, script + own speech flows on the shared poll
+loop, a 404 poll keeps waiting, refunds; 5 mutations), `tests/ui/studio-video-heygen.test.mts` (4 tests, 8 mutations). Updated lists (no assertion removed): `studio-video`
 (purpose list + probe fixtures), `studio-video-sora` (picker order), `studio-admin-media` (managed list),
 `provider-keys` (registry ids).
