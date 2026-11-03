@@ -135,7 +135,7 @@ test("probe: every non-id param of each mode changes the ffmpeg argv; the id par
       const got = mixArgs(planOf(m.mode, normalize(m.entry.params, v), measured)).join(" ");
       assert.notEqual(got, ref, `${m.mode}.${p.name} changes the argv`);
       // The price is fixed: no param changes it.
-      assert.equal(tools.basePriceFor(tools.TOOL_BY_ID["studio-mix"], v, { soumPerUsd: 1, markup: 2, step: 100, overrides: {}, mixPrice: 700 }), 700);
+      assert.equal(tools.basePriceFor(tools.TOOL_BY_ID["studio-mix"], v as never, { soumPerUsd: 1, markup: 2, step: 100, overrides: {}, mixPrice: 700 }), 700);
     }
   }
 });

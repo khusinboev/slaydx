@@ -150,3 +150,8 @@ export function setClientMixPrice(raw: unknown): boolean {
 export function getClientMixPrice(): number | null {
   return clientMixPrice;
 }
+
+/** A «Montaj» job's model id (`studio/mix-video` / `studio/mix-voice`). */
+export function isMixModelId(id: string): boolean {
+  return id === MIX_VIDEO_MODEL || id === MIX_VOICE_MODEL;
+}

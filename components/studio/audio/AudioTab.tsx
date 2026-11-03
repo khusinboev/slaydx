@@ -25,10 +25,22 @@ import { fetchVoices, type VoicesData } from "../voice/voice-api";
 import type { PreparedSample } from "../voice/wav";
 import { AudioInputRow } from "./AudioInputRow";
 import { STUDIO_AUDIO_SLUG, STUDIO_AUDIO_TOOL_ID, audioClientPrice, uploadAudioInput } from "./audio-api";
+import { INITIAL_MIX_STATE, type MixTabState } from "./mix-api";
+import { MixPanel } from "./MixPanel";
+import { MIX_MODES } from "@/lib/media/catalog-mix";
 
-/** The tab's form state; the page keeps it across tab switches. Raw values are per mode (each mode is its own model). */
-export type AudioTabState = { mode: AudioMode | null; raw: Partial<Record<AudioMode, RawValues>>; filter: VoiceFilter };
+/** The «Montaj» chip's mode id (P8c). */
+export const MIX_CHIP = "mix" as const;
+/**
+ * The tab's form state; the page keeps it across tab switches. Raw values are per mode (each mode is its own model).
+ * `mode: "mix"` = the P8c «Montaj» mode (ffmpeg, no provider — offered even while no catalog mode is), its own state in
+ * `mix`.
+ */
+export type AudioTabState = { mode: AudioMode | typeof MIX_CHIP | null; raw: Partial<Record<AudioMode, RawValues>>; filter: VoiceFilter; mix?: MixTabState };
 export const INITIAL_AUDIO_STATE: AudioTabState = { mode: null, raw: {}, filter: "all" };
+const MIX_MODEL_IDS = new Set(MIX_MODES.map((m) => m.model));
+/** A job of the «Montaj» mode (its results render in the «Montaj» panel, not in the provider modes' list). */
+export const isMixJob = (job: { modelId: string }): boolean => MIX_MODEL_IDS.has(job.modelId);
 
 const INSUFFICIENT_RE = /balans yetarli emas|to.langan balans bilan/i;
 /** Params drawn by the tab itself (prompt box, upload row, voice list), not by `ParamRows`. */
@@ -94,8 +106,11 @@ export function AudioTab({
   const [voices, setVoices] = useState<VoicesData | null>(null);
   const catalog = catalogState.status === "ready" ? catalogState.catalog : null;
   const modes = offeredModes(catalog?.models ?? []);
-  const current = modes.find((m) => m.mode === state.mode) ?? modes[0] ?? null;
+  const mixOn = state.mode === MIX_CHIP;
+  const current = mixOn ? null : (modes.find((m) => m.mode === state.mode) ?? modes[0] ?? null);
   const needsVoices = current?.mode === "voice-changer";
+  const providerJobs = jobs.filter((j) => !isMixJob(j));
+  const mixJobs = jobs.filter(isMixJob);
 
   const loadVoices = useCallback(() => {
     fetchVoices().then(setVoices, (e: unknown) => setError(e instanceof Error ? e.message : "Ovozlar yuklanmadi"));
@@ -103,6 +118,50 @@ export function AudioTab({
   useEffect(() => {
     if (needsVoices && !voices) loadVoices();
   }, [needsVoices, voices, loadVoices]);
+
+  /** Mode chips: the catalog's offered modes, then «Montaj» (always offered: it needs no provider). */
+  const chips = (active: string | null) => (
+    <div role="radiogroup" aria-label="Audio turi" className="mb-3 flex flex-wrap gap-1.5" data-audio-modes>
+      {[...modes.map((m) => ({ mode: m.mode as AudioMode | typeof MIX_CHIP, label: m.label })), { mode: MIX_CHIP, label: "Montaj" }].map((m) => (
+        <button
+          key={m.mode}
+          type="button"
+          role="radio"
+          aria-checked={m.mode === active}
+          data-audio-mode-chip={m.mode}
+          onClick={() => pickMode(m.mode)}
+          className={cn(
+            "focus-visible:ring-ring min-h-11 rounded-full border px-3.5 text-[14px] font-semibold outline-none focus-visible:ring-2",
+            m.mode === active ? "bg-primary text-primary-foreground border-transparent" : "bg-card hover:bg-muted",
+          )}
+        >
+          {m.label}
+        </button>
+      ))}
+    </div>
+  );
+  function pickMode(m: AudioMode | typeof MIX_CHIP) {
+    setError(null);
+    setUploadError(null);
+    setState((s) => ({ ...s, mode: m }));
+  }
+
+  if (mixOn) {
+    return (
+      <div data-audio-tab data-audio-mode={MIX_CHIP}>
+        {chips(MIX_CHIP)}
+        <MixPanel
+          state={state.mix ?? INITIAL_MIX_STATE}
+          setState={(fn) => setState((s) => ({ ...s, mix: fn(s.mix ?? INITIAL_MIX_STATE) }))}
+          jobs={mixJobs}
+          track={track}
+          balance={balance}
+          typing={typing}
+          gated={gated}
+        />
+      </div>
+    );
+  }
 
   if (!catalog) {
     return catalogState.status === "error" ? (
@@ -121,9 +180,12 @@ export function AudioTab({
   }
   if (!current) {
     return (
-      <p className="text-muted-foreground bg-card rounded-[20px] border p-5 text-[14.5px]" data-audio-none>
-        Audio bo‘limi hozircha mavjud emas. Birozdan keyin qayta urinib ko‘ring.
-      </p>
+      <div data-audio-tab>
+        {chips(null)}
+        <p className="text-muted-foreground bg-card rounded-[20px] border p-5 text-[14.5px]" data-audio-none>
+          AI audio hozircha mavjud emas. «Montaj» bilan tayyor natijalaringizni birlashtirishingiz mumkin.
+        </p>
+      </div>
     );
   }
 
@@ -139,11 +201,6 @@ export function AudioTab({
   const formEntry = { ...entry, params: entry.params.filter((p) => !OWN_ROWS.has(p.name)) };
 
   const setParam = (name: string, value: unknown) => setState((s) => ({ ...s, raw: { ...s.raw, [mode]: { ...(s.raw[mode] ?? {}), [name]: value } } }));
-  const pickMode = (m: AudioMode) => {
-    setError(null);
-    setUploadError(null);
-    setState((s) => ({ ...s, mode: m }));
-  };
 
   async function onPrepared(s: PreparedSample) {
     setUploading(true);
@@ -203,24 +260,7 @@ export function AudioTab({
 
   return (
     <div data-audio-tab data-audio-mode={mode}>
-      <div role="radiogroup" aria-label="Audio turi" className="mb-3 flex flex-wrap gap-1.5" data-audio-modes>
-        {modes.map((m) => (
-          <button
-            key={m.mode}
-            type="button"
-            role="radio"
-            aria-checked={m.mode === mode}
-            data-audio-mode-chip={m.mode}
-            onClick={() => pickMode(m.mode)}
-            className={cn(
-              "focus-visible:ring-ring min-h-11 rounded-full border px-3.5 text-[14px] font-semibold outline-none focus-visible:ring-2",
-              m.mode === mode ? "bg-primary text-primary-foreground border-transparent" : "bg-card hover:bg-muted",
-            )}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
+      {chips(mode)}
 
       {prompt ? (
         <section aria-label="Tavsif" data-audio-prompt className="bg-card mb-3 rounded-[20px] border p-3.5 shadow-[var(--shadow-card)]">
@@ -298,8 +338,8 @@ export function AudioTab({
         onSubmit={submit}
         label={price === null ? undefined : audioSubmitLabel(count > 1 ? `${label} ×${count}` : label, price)}
       />
-      <section aria-label="Audiolar" data-audio-results className={cn(jobs.length > 0 && "mt-5")}>
-        <VoiceResults jobs={jobs} busy={submitting} onAgain={again} />
+      <section aria-label="Audiolar" data-audio-results className={cn(providerJobs.length > 0 && "mt-5")}>
+        <VoiceResults jobs={providerJobs} busy={submitting} onAgain={again} />
       </section>
     </div>
   );

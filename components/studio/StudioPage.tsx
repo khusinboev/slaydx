@@ -28,6 +28,8 @@ import { INITIAL_VIDEO_STATE, VideoTab, type VideoTabState } from "./video/Video
 import { INITIAL_VOICE_STATE, VoiceTab, type VoiceTabState } from "./voice/VoiceTab";
 import { AudioTab, INITIAL_AUDIO_STATE, type AudioTabState } from "./audio/AudioTab";
 import { HandoffAlert, useHandoffs } from "./handoff";
+import { MixHandoffContext } from "./audio/mix-handoff";
+import { INITIAL_MIX_STATE, mixFromResult, type MixHandoff } from "./audio/mix-api";
 import { LibrarySheet } from "./LibrarySheet";
 import { TemplateSlots, TemplatesRow } from "./TemplatesRow";
 import { INPUT_PARAM, MODE_LABEL, MODE_PURPOSE, applyTemplate, type StudioMode } from "./studio-modes";
@@ -171,6 +173,14 @@ function StudioApp() {
     if (typeof window !== "undefined") rootRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }, []);
   const handoff = useHandoffs({ open: openTab, setVideoState, setVoiceState, setAudioState });
+  // P8c «Keyingi qadam» → «Montaj» (docs/studio/P8-SPEC.md): the result pre-picked in the «Audio» tab's «Montaj» mode.
+  const toMix = useCallback(
+    (kind: MixHandoff, id: string) => {
+      setAudioState((s) => ({ ...s, mode: "mix", mix: mixFromResult(s.mix ?? INITIAL_MIX_STATE, kind, id) }));
+      openTab("audio");
+    },
+    [openTab],
+  );
 
   const entry = resolveEntry(catalog, chosen);
   const values = entry ? effective(entry, raw) : {};
@@ -390,6 +400,7 @@ function StudioApp() {
     );
 
   return (
+    <MixHandoffContext.Provider value={toMix}>
     <div className="flex w-full flex-col" data-studio>
       <PageHeader back title="Studio" subtitle={SUBTITLE[tab]} contentClassName={WIDTH} actions={galleryButton} />
       <div
@@ -573,6 +584,7 @@ function StudioApp() {
         )}
       </div>
     </div>
+    </MixHandoffContext.Provider>
   );
 }
 

@@ -47,6 +47,57 @@ package reads the switch on the server (and the session exposes it as `features.
   test DB with a real ffmpeg when present (CI ubuntu runners and the dev box have it; the test skips cleanly with a
   message when `ffmpeg` is missing) — output duration / streams checked with ffprobe.
 
+### P8c — what shipped / decisions (builder, 2026-11-03, branch `feat/studio-p8c`)
+- **Worker image**: `RUN apk add --no-cache ffmpeg && ffmpeg -hide_banner -version` in the `worker` stage only, before the
+  COPY layers (stable layer). The web image has no ffmpeg; nothing in the web container decodes media.
+- **Tool** `studio-mix` (unlisted, group media, `output: "mp3"` at enqueue; the stored format follows the real file —
+  `mp4` / `mp3` — via `formatOf`). `/uz/studio-mix` redirects to `/uz/studio?tab=audio`; excluded from the AI chat.
+  Modes = `modelId` `studio/mix-video` («Videoga ovoz qo'shish») / `studio/mix-voice` («Ovoz + fon musiqa»), described in
+  `lib/media/catalog-mix.ts` as `ClientEntry`-shaped entries (NOT media-catalog entries: no route, no `media_jobs` row)
+  so `ParamRows` / `requestValues` draw and send them like every tab. Purpose name `studio.mix` is a constant only (no
+  router purpose — nothing is routed).
+- **Params** (each changes the ffmpeg argv — probe test): video `videoId`, `audioId` (generation UUIDs), `keepOriginal`
+  bool (default off = replace; on = the video's own sound mixed under at a fixed 35 %; a video without a sound track is a
+  replace), `audioVolume` 10–200 % step 10 (default 100), `startOffset` 0–179 s (must be < the video's length, 400
+  otherwise). Voice: `speechId`, `musicId`, `musicVolume` 5–50 % step 5 (default 20), `ducking` bool (default on:
+  `sidechaincompress` keyed by the speech), `fadeOut` 0–10 s (default 3, at most half the speech). Output length = the
+  video (audio delayed, `apad`, cut with `-t`) / the speech (music looped with `-stream_loop -1`, cut with `-t`).
+- **ffmpeg** (`lib/generation/studio/mix-args.ts`, pure; `mix-ffmpeg.ts`, runner): `spawn` argv, no shell; `-nostdin`;
+  `-protocol_whitelist file,pipe` + an explicit demuxer (`-f mov` / `-f mp3`) before EACH input; constant file names
+  (`in-video.mp4`, …) inside a per-job `mkdtemp` dir used as `cwd` and removed in `finally`; numbers clamped and printed
+  with fixed decimals (no request text on the command line — ids never reach the argv); `-threads 2`; hard timeout
+  120 s (SIGKILL). Video stream copied (`-c:v copy`), audio AAC 160k 48 kHz + `+faststart`; MP3 libmp3lame 192k 44.1 kHz.
+  `ENOENT` → «Montaj hozircha ishlamayapti. Kredit qaytariladi.»; any other failure → «Montaj bajarilmadi…» (stderr only
+  in the log). Output checked (MP4 must have video + audio tracks; length > 0; ≤ 25 MB = `MAX_FILE_BYTES`).
+- **Inputs / ownership** (`lib/server/media/mix-sources.ts`): every lookup `g.user_id = $1 AND status = 'COMPLETED' AND
+  files_purged_at IS NULL`; roles — video: `studio-video`, `video`, a `studio-mix` MP4 (mime video/mp4); audio:
+  `studio-speech`, `studio-audio` (any mode), `podcast`, `greeting`, a `studio-mix` MP3; speech: `studio-speech`,
+  `podcast`, `greeting`, `studio-audio` voice changer / isolator; music: `studio-audio` music. Another user's id = 400
+  `input_missing` (same as missing), before pricing. Limits pre-charge from the stored `doc_json` seconds (bytes measured
+  when absent); the worker re-reads the bytes with the owner's id and MEASURES them (`mp4Seconds` / `mp3Seconds`, MP4 track
+  handlers parsed in JS) — video ≤ 180 s, audio ≤ 600 s (+0.5 s tolerance). A source gone before the run → FAILED, refund.
+- **Price**: `studio.mix_price` (Narx va marja, int 0–100 000, default 500; 0 = free) + `tool_pricing` %. Server:
+  `effectivePrice` passes `{ ...mediaPricing(), mixPrice }`, `basePriceFor` reads `media.mixPrice`; browser:
+  `GET /api/media/mix-sources` returns `price` (stored client-side like the clone price) + the session %. Admin price
+  ladder: one rung «1 montaj». `expectedPrice` mismatch → 409 as every tool. No migration (072 not needed).
+- **Cost telemetry**: nothing recorded (no provider call — the P7c rule for the clone's $0 IVC): `cost_json` stays
+  `null`, no `ai_usage` row; the flow test asserts it.
+- **UI**: «Audio» tab chips end with «Montaj» (always offered — it needs no provider; when the ElevenLabs modes are off
+  the tab shows only that chip + a line). `MixPanel`: sub-mode chips, two pickers (`<select>` of the user's results:
+  title · kind · seconds; a handed-over id not yet listed shows as «Tanlangan natija»), `ParamRows` for the options,
+  sticky «Montaj qilish · <mode> · ~X so'm»; results: MP4 via `VideoResults` (no star — not a gallery item), MP3 via
+  `VoiceResults`. Viewer: `viewerKind("studio-mix") = "audio"`; `ArtifactViewer` hands an MP4 mix (`doc.mix.output`) to
+  `VideoViewer` (the engine also writes `doc.video`), an MP3 one plays in `AudioViewer` without a transcript block.
+- **«Keyingi qadam»**: a React context (`components/studio/audio/mix-handoff.tsx`) provided by `StudioPage` and read by
+  `VideoResults` («Videoga ovoz qo'shish» on any finished clip, effects included) and `VoiceResults` («Videoga qo'shish»
+  on any audio; «Fon musiqa qo'shish» on a speech — not music / effect / mix). Deviation: the buttons live in those two
+  result components, not in `StudioResults` (that one renders pictures only); no prop threading through the tabs.
+  Gallery cards have no «Montaj» button (the pickers list the same results).
+- **Open / follow-ups**: `studio-mix` results are not in the Studio gallery / favourites (`public.ts` / `favorites.ts`
+  tool lists belong to P8b / P7b — add `studio-mix` there if wanted); no dark switch (the feature is live once the worker
+  image has ffmpeg — before that every job refunds); the fixed 35 % original-sound level and the ducking constants are
+  untuned by ear on real speech.
+
 ## File ownership (parallel agents)
 - P8a: redirects in `app/uz/[slug]` / tool pages for image + video, home / catalog cards, bot keyboard + router image /
   video entries, chat toolspec links, session `features.legacyFold`, their tests.

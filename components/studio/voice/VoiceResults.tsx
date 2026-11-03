@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, RefreshCw } from "lucide-react";
+import { AudioLines, Clapperboard, Download, RefreshCw } from "lucide-react";
 import type * as api from "@/lib/api-client";
 import { useApiSrc } from "@/lib/use-api-src";
 import { cn } from "@/lib/cn";
@@ -10,6 +10,7 @@ import { formatSom } from "@/lib/format";
 import { currentDeliveryEnv, deliver, markGesture, type ReadyFile } from "@/lib/downloads/deliver";
 import { GenerationProgress } from "@/components/files/GenerationProgress";
 import type { StudioJob } from "../StudioResults";
+import { useMixHandoff } from "../audio/mix-handoff";
 
 const ACTION =
   "focus-visible:ring-ring bg-card hover:bg-muted pointer-coarse:min-h-11 inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[12px] border px-3 text-[13.5px] font-semibold outline-none focus-visible:ring-2 disabled:opacity-50";
@@ -87,7 +88,12 @@ function Audio({ job, gen, busy, onAgain }: { job: StudioJob; gen: api.Generatio
   const page = `/uz/files/${job.id}`;
   const src = useApiSrc(`/api/generations/${job.id}/file?inline=1`);
   // P6: an «Audio» result carries `doc.studioAudio` (same player, same download).
-  const seconds = gen.doc?.speech?.seconds ?? gen.doc?.studioAudio?.seconds;
+  const seconds = gen.doc?.speech?.seconds ?? gen.doc?.studioAudio?.seconds ?? gen.doc?.mix?.seconds;
+  // P8c «Keyingi qadam» → «Montaj»: any finished audio can go onto a video; a speech (not music / an effect / a mix) can
+  // also take background music. The handoff pre-picks this result; the «Montaj» button is the priced job.
+  const toMix = useMixHandoff();
+  const mode = gen.doc?.studioAudio?.mode;
+  const speechLike = !gen.doc?.mix && mode !== "music" && mode !== "sfx";
   return (
     <article className="bg-card flex flex-col gap-2.5 rounded-[20px] border p-3.5 shadow-[var(--shadow-card)]" data-studio-audio>
       <audio className="w-full" controls preload="metadata" src={src} data-audio-result>
@@ -114,6 +120,23 @@ function Audio({ job, gen, busy, onAgain }: { job: StudioJob; gen: api.Generatio
           </button>
         ) : null}
       </div>
+      {toMix ? (
+        <div className="flex flex-col gap-1.5" data-next-step aria-label="Keyingi qadam" role="group">
+          <p className="text-muted-foreground text-[12.5px] font-semibold">Keyingi qadam</p>
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            <button type="button" data-result-action="to-mix-audio" onClick={() => toMix("audio", job.id)} className={ACTION}>
+              <Clapperboard className="size-4" aria-hidden />
+              Videoga qo‘shish
+            </button>
+            {speechLike ? (
+              <button type="button" data-result-action="to-mix-music" onClick={() => toMix("speech", job.id)} className={ACTION}>
+                <AudioLines className="size-4" aria-hidden />
+                Fon musiqa qo‘shish
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <Link href={page} data-result-open className="text-accent-soft-foreground pointer-coarse:min-h-11 pointer-coarse:inline-flex pointer-coarse:items-center w-fit text-[13.5px] font-semibold underline underline-offset-2">
         To‘liq ko‘rish va ulashish →
       </Link>

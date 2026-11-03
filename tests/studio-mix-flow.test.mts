@@ -219,7 +219,7 @@ test("sources: the caller's own finished results per role + the base price", { s
   await source(other, "studio-video", "video/mp4", FAKE, videoDoc(8), "Begona");
   const route = await import("../app/api/media/mix-sources/route.ts");
   const req = new Request("http://localhost/api/media/mix-sources", { headers: { cookie: await cookie(me) } });
-  const r = await inRequest(req, () => route.GET(req, undefined as never));
+  const r = await inRequest(req, () => route.GET(req));
   assert.equal(r.status, 200);
   const body = (await r.json()) as { price: number; video: { id: string; title: string; kind: string; seconds: number }[]; audio: { id: string }[]; speech: { id: string }[]; music: { id: string }[] };
   assert.equal(body.price, 500);

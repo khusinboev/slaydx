@@ -135,7 +135,8 @@ test("tab: «Audio» is the fourth tab, its listing waits for it, ?tab=audio ope
   await openAudio();
   assert.ok(q("[data-audio-tab]"));
   assert.equal(a.calls.filter((c) => c.url.includes("studio.audio")).length, 1);
-  assert.deepEqual(qa("[data-audio-mode-chip]").map((b) => b.textContent), ["Musiqa", "Effekt", "Ovozni almashtirish", "Shovqindan tozalash"]);
+  // P8c: «Montaj» (ffmpeg, no provider) is always the last chip (tests/ui/studio-mix.test.mts).
+  assert.deepEqual(qa("[data-audio-mode-chip]").map((b) => b.textContent), ["Musiqa", "Effekt", "Ovozni almashtirish", "Shovqindan tozalash", "Montaj"]);
   cleanup();
   dropMediaCatalog();
   window.history.replaceState(null, "", "/uz/studio?tab=audio");
@@ -144,7 +145,8 @@ test("tab: «Audio» is the fourth tab, its listing waits for it, ?tab=audio ope
   await settle();
   assert.equal(q('[data-studio-tab="audio"]')!.getAttribute("aria-selected"), "true");
   assert.ok(q("[data-audio-none]"), "switch off: the «not available» line");
-  assert.equal(qa("[data-audio-mode-chip]").length, 0);
+  // No provider mode while off; only the P8c «Montaj» chip (it needs no provider).
+  assert.deepEqual(qa("[data-audio-mode-chip]").map((b) => b.dataset.audioModeChip), ["mix"]);
 });
 
 test("modes: each mode draws exactly its own params (one data-field each), nothing of another mode", async () => {
