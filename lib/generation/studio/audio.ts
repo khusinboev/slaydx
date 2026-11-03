@@ -98,6 +98,7 @@ export async function buildStudioAudio(
 
   const want = mode.mode === "sfx" ? Number(p.variants) || 1 : 1;
   const clips: Uint8Array[] = [];
+  let lyrics: string | null = null;
   o.onStage?.({ progress: 10, step: "Audio yaratilmoqda" });
   for (let i = 0; i < want; i++) {
     try {
@@ -106,6 +107,8 @@ export async function buildStudioAudio(
       const out = await run({ ...common, values: callValues, ...(providerVoice ? { extra: { voice: providerVoice } } : {}), ...(assets ? { assets } : {}), step: `audio:${i}` });
       const mp3 = mp3Of(out.outputs[0]);
       if (!mp3) throw new Error("bo'sh audio");
+      const first = out.outputs[0];
+      if (!lyrics && first?.kind === "inline" && first.text) lyrics = first.text;
       // Delivered: the same one-clip cost goes into the job's cost (a failed variant records nothing).
       recordAudioCall(entry, out.route ?? entry.routes[0]!, callValues, mp3Seconds(mp3));
       clips.push(mp3);
@@ -136,6 +139,7 @@ export async function buildStudioAudio(
     voices: voiceLabel ? [voiceLabel] : [],
     clone: clone !== null,
     variants,
+    ...(lyrics ? { lyrics } : {}),
   };
   const doc: AcademicDoc = { meta, titlePage: false, toc: false, sections: [], studioAudio };
   return {

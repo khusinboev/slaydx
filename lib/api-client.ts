@@ -274,6 +274,8 @@ export type Features = {
   studioSpeechModels?: string[];
   /** Studio «Audio» models (catalog ids) usable now; empty while `studio.audio.enabled` is off; absent on an older server. */
   studioAudioModels?: string[];
+  /** Studio P10 «Transkripsiya» / «Dublyaj» models usable now; empty while their switches are off; absent on an older server. */
+  studioSpeechToolModels?: string[];
   /** P7a: the most models one «Solishtirish» batch may tick (≤ 4, the per-user in-flight cap); absent on an older server = 4. */
   compareMax?: number;
   /** P8 `studio.legacy_fold` is on: the old Rasm / Video cards open the Studio tabs; absent (older server) or false = old pages. */

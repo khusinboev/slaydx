@@ -135,13 +135,17 @@ test("MP3 chiqaradigan HAR vosita `audio` ko'ruvchisiga tushadi", () => {
   assert.equal(audioTools.length, 6, `audio vositalari: ${audioTools.map((t) => t.id).join(", ")}`);
   assert.deepEqual(audioTools.map((t) => t.id).sort(), ["greeting", "podcast", "studio-audio", "studio-mix", "studio-speech", "studio-voice"]);
   for (const t of audioTools) assert.equal(viewerKind(t.id), "audio", `${t.id}: ko'ruvchi ${viewerKind(t.id)}`);
-  // Boshqa hech bir vosita `audio` ga tushmasin (shox kengayib ketmasin).
+  // Boshqa hech bir vosita `audio` ga tushmasin (shox kengayib ketmasin) — except the two P10 tools, whose placeholder
+  // output is MP4 (the stored file is TXT / MP4 / MP3): `ArtifactViewer` gives them `TranscriptViewer` / `VideoViewer` /
+  // `AudioViewer` by `doc.transcribe` / `doc.dub`.
+  const P10 = ["studio-dub", "studio-transcribe"];
+  assert.deepEqual(TOOLS.filter((t) => t.output !== "mp3" && viewerKind(t.id) === "audio").map((t) => t.id).sort(), P10);
   for (const t of TOOLS) {
-    if (t.output !== "mp3") assert.notEqual(viewerKind(t.id), "audio", `${t.id}: audio bo'lmagan vosita audio ko'ruvchida`);
+    if (t.output !== "mp3" && !P10.includes(t.id)) assert.notEqual(viewerKind(t.id), "audio", `${t.id}: audio bo'lmagan vosita audio ko'ruvchida`);
   }
   // «Media» bo'limi = MP3 vositalari + bitiruvchi portreti (item 14: `image` ko'ruvchisida) + video (item 5: `video` ko'ruvchisida)
   // + Studio rasmlari (P1: `image` ko'ruvchisida) + Studio videolari (P3: `video` ko'ruvchisida).
-  assert.deepEqual(TOOLS.filter((t) => t.group === "media").map((t) => t.id).sort(), ["greeting", "podcast", "portrait", "studio-audio", "studio-image", "studio-mix", "studio-speech", "studio-video", "studio-voice", "video"]);
+  assert.deepEqual(TOOLS.filter((t) => t.group === "media").map((t) => t.id).sort(), ["greeting", "podcast", "portrait", "studio-audio", "studio-dub", "studio-image", "studio-mix", "studio-speech", "studio-transcribe", "studio-video", "studio-voice", "video"]);
   assert.equal(viewerKind("studio-video"), "video");
   assert.equal(viewerKind("portrait"), "image");
   assert.equal(viewerKind("studio-image"), "image");

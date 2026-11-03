@@ -608,6 +608,8 @@ async function execute(
     const studioAudio = tool.id === "studio-audio" ? await (await import("./media/audio-inputs")).studioAudioJobCtx(job.userId, job.values) : undefined;
     // Studio P8c: the «Montaj» job's two source files (the owner's own finished results, SQL).
     const studioMix = tool.id === "studio-mix" ? await (await import("./media/mix-sources")).mixJobCtx(job.userId, job.values) : undefined;
+    // Studio P10: the «Transkripsiya» / «Dublyaj» source (the owner's own upload or finished result, SQL).
+    const studioSpeechTool = tool.id === "studio-transcribe" || tool.id === "studio-dub" ? await (await import("./media/speech-sources")).speechToolJobCtx(job.userId, job.values) : undefined;
     // Media engine path per kind, read ONCE so a running job never switches (docs/studio/P0-SPEC.md §6).
     const mediaCtx = { generationId: job.id, core: await mediaCoreSwitches() };
     tracked = trackJobCost(() => withMediaContext(mediaCtx, () => build(tool, job.values, {
@@ -621,6 +623,7 @@ async function execute(
       studioClone,
       studioAudio,
       studioMix,
+      studioSpeechTool,
       onStage,
       onProgress: live?.sink,
       // Tinglash o'yini TTS parchalari — shu ishning aktivlariga (`/api/o/[token]/audio/[assetId]` orqali ochiq).
@@ -1143,6 +1146,8 @@ export async function purgeHousekeeping(): Promise<void> {
    * partial index keeps it cheap); rows older than 90 days go in batches on the 6 hour cadence, mark before the run.
    */
   await step("media-jobs-stuck", async () => (await import("./media/jobs")).failStuckMediaJobs());
+  // Studio P10: dub rows left 'pending' by a generation that stopped (crash → FAILED, revoked) — closed + deleted at ElevenLabs.
+  await step("studio-dub-orphans", async () => (await import("./media/speech-sources")).studioDubHousekeeping());
   // Studio P5 clones: the 30-day unused warning + purge, provider deletes still owed, stale rows, old samples.
   await step("studio-voices", async () => (await import("./media/voices")).studioVoicesHousekeeping());
   // Studio P6 «Audio» inputs (voice changer / isolator uploads): deleted after 1 day.

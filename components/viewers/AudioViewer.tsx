@@ -31,7 +31,7 @@ export function AudioViewer({ doc, gen }: { doc: AcademicDoc; gen: { id: string;
   // Studio «Audio» (P6) results carry `doc.studioAudio`: the same player for the result file, its details below.
   const audio: { seconds?: number; script: { speaker: string; text: string }[] } | undefined =
     doc.audio ??
-    (doc.speech ? { seconds: doc.speech.seconds, script: doc.speech.lines } : doc.studioAudio ? { seconds: doc.studioAudio.seconds, script: [] } : doc.mix ? { seconds: doc.mix.seconds, script: [] } : undefined);
+    (doc.speech ? { seconds: doc.speech.seconds, script: doc.speech.lines } : doc.studioAudio ? { seconds: doc.studioAudio.seconds, script: [] } : doc.mix ? { seconds: doc.mix.seconds, script: [] } : doc.dub ? { seconds: doc.dub.seconds, script: [] } : undefined);
   // Bearer-mode webviews get the bytes through a `blob:` URL (docs/auth/COOKIELESS.md); unchanged otherwise.
   const src = useApiSrc(`/api/generations/${gen.id}/file?inline=1`);
   const script = audio?.script ?? [];
@@ -113,6 +113,12 @@ function StudioAudioDetails({ doc, genId }: { doc: StudioAudioDoc; genId: string
         <p className="text-[13px] font-semibold tracking-wide text-black/50 uppercase">{MODE_LABEL[doc.mode] ?? "Audio"}</p>
         {doc.prompt ? <p className="text-[15px] leading-relaxed break-words text-black/80">{doc.prompt}</p> : null}
         {doc.voices.length ? <p className="text-[14px] text-black/70">Ovoz: {doc.voices.join(", ")}</p> : null}
+        {doc.lyrics ? (
+          <section aria-label="Qo‘shiq matni" data-audio-lyrics className="rounded-[14px] border border-black/10 p-3">
+            <p className="mb-1.5 text-[13px] font-semibold text-black/60">Qo‘shiq matni</p>
+            <p className="text-[14.5px] leading-relaxed break-words whitespace-pre-line text-black/80">{doc.lyrics}</p>
+          </section>
+        ) : null}
         {doc.inputSeconds ? <p className="text-[14px] text-black/70">Yuklangan yozuv: {formatDuration(doc.inputSeconds)}</p> : null}
         {doc.variants.length > 1 ? (
           <ol className="flex flex-col gap-3" data-audio-variants>

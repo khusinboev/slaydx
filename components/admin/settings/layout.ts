@@ -16,7 +16,7 @@ export const TAB_DEFS: readonly TabDef[] = [
     id: "features",
     label: "Funksiyalar",
     blurb: "Yangi imkoniyatlarni bir tugma bilan yoqing yoki o'chiring. Narx va chegaralar alohida tablarda.",
-    keys: ["tests.enabled", "video.enabled", "daily_quiz.enabled", "domla.enabled", "chat.enabled", "oferta.gate_enabled", "studio.voice.enabled", "studio.audio.enabled", "studio.legacy_fold"],
+    keys: ["tests.enabled", "video.enabled", "daily_quiz.enabled", "domla.enabled", "chat.enabled", "oferta.gate_enabled", "studio.voice.enabled", "studio.audio.enabled", "studio.transcribe.enabled", "studio.dub.enabled", "studio.legacy_fold"],
   },
   {
     id: "money",
@@ -130,6 +130,8 @@ export const FEATURE_EFFECT: Readonly<Record<string, string>> = {
   "oferta.gate_enabled": "Yoqilsa: ofertani qabul qilmagan foydalanuvchi ish yarata olmaydi va to'lov qila olmaydi. Rekvizitlarsiz yoqib bo'lmaydi.",
   "studio.voice.enabled": "Yoqilsa: Studio «Ovoz» tabi (ElevenLabs ovozlari, dialog, ovoz klonlash) hamma uchun ochiladi. Har belgi pullik provayderga ketadi.",
   "studio.audio.enabled": "Yoqilsa: Studio «Audio» tabi (AI musiqa, ovoz effektlari, ovozni almashtirish, shovqindan tozalash) hamma uchun ochiladi. Har soniya pullik provayderga ketadi.",
+  "studio.transcribe.enabled": "Yoqilsa: Studio «Audio» tabida «Transkripsiya» ochiladi — yuklangan audio yoki tayyor natijadagi nutq matnga, SRT/VTT subtitrga aylanadi, xohlasa videoga yopishtiriladi. Har soniya pullik provayderga (ElevenLabs) ketadi.",
+  "studio.dub.enabled": "Yoqilsa: Studio «Audio» tabida «Dublyaj» ochiladi — video yoki audio boshqa tilga ovozli tarjima qilinadi. Eng qimmat xizmatlardan (daqiqasi ~14 000 so'm) — narxni «Media modellari»da tekshiring.",
   "studio.legacy_fold": "Yoqilsa: eski «Rasm», «Video yaratish», «Podkast», «Tabriknoma» sahifalari va tugmalari Studio ichiga olib boradi. Narx va natijalar o'zgarmaydi; o'chirilsa darhol eskisiga qaytadi.",
 };
 

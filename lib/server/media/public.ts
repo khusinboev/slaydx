@@ -12,6 +12,7 @@ import { STUDIO_SPEECH_PURPOSE } from "../../media/catalog-speech";
 import { studioSpeechModels } from "./voices";
 import { MUSIC_MODEL, STUDIO_AUDIO_LISTING } from "../../media/catalog-audio";
 import { studioAudioModels } from "./audio-inputs";
+import { speechToolModels } from "./speech-sources";
 import { studioGalleryToolIds } from "./favorites";
 import { TOOL_BY_SLUG } from "../../tools";
 import { isVoiceTemplate } from "../../media/voice-templates";
@@ -47,11 +48,12 @@ export const CATALOG_PURPOSES: ReadonlySet<string> = new Set([...STUDIO_PURPOSES
 export async function mediaCatalog(purposeId: string): Promise<CatalogResponse> {
   // P6: the «Audio» tab lists its modes at once (P9: «Musiqa» has two models) — a listing id, not a job purpose.
   if (purposeId === STUDIO_AUDIO_LISTING) {
-    const [available, pricing] = await Promise.all([studioAudioModels(), mediaPricing()]);
+    // P10: + «Transkripsiya» / «Dublyaj» (their own switches; listed after the four modes, priced by the same block).
+    const [available, tools, pricing] = await Promise.all([studioAudioModels(), speechToolModels(), mediaPricing()]);
     return {
       purpose: purposeId,
       defaultModelId: available.includes(MUSIC_MODEL) ? MUSIC_MODEL : (available[0] ?? null),
-      models: available.map((id) => CLIENT.get(id)!),
+      models: [...available, ...tools].map((id) => CLIENT.get(id)!),
       pricing,
     };
   }

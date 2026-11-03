@@ -110,6 +110,8 @@ export type SettingValues = {
   "studio.mix_price": number;
   "studio.voice.enabled": boolean;
   "studio.audio.enabled": boolean;
+  "studio.transcribe.enabled": boolean;
+  "studio.dub.enabled": boolean;
   "studio.legacy_fold": boolean;
 };
 
@@ -755,6 +757,27 @@ const CATALOG: Catalog = {
     label: "Studio «Audio» bo‘limi yoqilgan",
     description:
       "Standart: O'CHIQ. Yoqilganda Studio'da «Audio» bo'limi (AI musiqa, ovoz effektlari, ovozni almashtirish, shovqindan tozalash — ElevenLabs) ishlaydi. O'chiq bo'lsa yangi ish qabul qilinmaydi, pul yechilmaydi.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => false,
+  },
+  // Studio P10 (docs/studio/P10-SPEC.md): speech to text + subtitles, and dubbing — each ships dark on its own.
+  "studio.transcribe.enabled": {
+    key: "studio.transcribe.enabled",
+    group: MEDIA_GROUP,
+    label: "Studio «Transkripsiya» yoqilgan",
+    description:
+      "Standart: O'CHIQ. Yoqilganda Studio «Audio» bo'limida «Transkripsiya» (nutqni matnga aylantirish, SRT/VTT subtitr, videoga subtitr yopishtirish — ElevenLabs Scribe) ishlaydi. O'chiq bo'lsa yangi ish qabul qilinmaydi, pul yechilmaydi.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => false,
+  },
+  "studio.dub.enabled": {
+    key: "studio.dub.enabled",
+    group: MEDIA_GROUP,
+    label: "Studio «Dublyaj» yoqilgan",
+    description:
+      "Standart: O'CHIQ. Yoqilganda Studio «Audio» bo'limida «Dublyaj» (video yoki audioni boshqa tilga ovozli tarjima qilish — ElevenLabs Dubbing) ishlaydi. O'chiq bo'lsa yangi ish qabul qilinmaydi, pul yechilmaydi.",
     type: "bool",
     validate: boolValidator,
     envDefault: () => false,

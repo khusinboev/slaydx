@@ -5,7 +5,7 @@ import { ToolWorkspace } from "@/components/forms/ToolWorkspace";
 
 /** Tool slugs that own a static route (`app/uz/<slug>/page.tsx`): the static page wins, `[slug]` must not pre-render them too. */
 const OWN_PAGE_SLUGS: readonly string[] = [
-  "studio", "studio-video", "studio-speech", "studio-voice", "studio-audio", "studio-mix", "rasm", "video", "podcast", "greeting",
+  "studio", "studio-video", "studio-speech", "studio-voice", "studio-audio", "studio-mix", "studio-transcribe", "studio-dub", "rasm", "video", "podcast", "greeting",
 ];
 
 export function generateStaticParams() {

@@ -15,6 +15,8 @@ import { buildStudioImage } from "./studio";
 import { buildStudioSpeech, type StudioSpeechCtx } from "./studio/speech";
 import { buildStudioAudio, type StudioAudioCtx } from "./studio/audio";
 import { buildStudioMix, type StudioMixCtx } from "./studio/mix";
+import { buildStudioTranscribe, type SpeechToolCtx } from "./studio/transcribe";
+import { buildStudioDub } from "./studio/dub";
 import { buildInfographicArtifact } from "./infographic/engine";
 import { buildPortraitArtifact } from "./portrait/engine";
 import { buildTranslationArtifact } from "./translate/engine";
@@ -215,6 +217,8 @@ export type BuildOptions = {
   studioAudio?: StudioAudioCtx;
   /** Studio P8c: the two source files of a «Montaj» job (worker: `mixJobCtx`, ownership in SQL). */
   studioMix?: StudioMixCtx;
+  /** Studio P10: the source of a «Transkripsiya» / «Dublyaj» job (worker: `speechToolJobCtx`, ownership in SQL). */
+  studioSpeechTool?: SpeechToolCtx;
   /**
    * Tinglash o'yini (AUDIT-22 R): sintez qilingan parchani AKTIVGA yozadi
    * va id qaytaradi — worker `putAssetBytes(job.id, …)` beradi. Berilmasa
@@ -595,6 +599,13 @@ async function buildArtifactInner(
   // Studio «Montaj» (docs/studio/P8-SPEC.md «P8c»): ffmpeg over the job owner's own results (the worker loads them).
   if (tool.id === "studio-mix") {
     return buildStudioMix(tool, values, opts.studioMix ?? { inputs: [null, null] }, opts.onStage ? { onStage: opts.onStage } : {});
+  }
+  // Studio P10 (docs/studio/P10-SPEC.md): speech to text (+ burn) and dubbing over the job owner's own source.
+  if (tool.id === "studio-transcribe") {
+    return buildStudioTranscribe(tool, values, opts.studioSpeechTool ?? { source: null }, { deadline, ...(opts.onStage ? { onStage: opts.onStage } : {}) });
+  }
+  if (tool.id === "studio-dub") {
+    return buildStudioDub(tool, values, opts.studioSpeechTool ?? { source: null }, { deadline, ...(opts.onStage ? { onStage: opts.onStage } : {}) });
   }
   if (tool.id === "studio-voice") {
     if (!opts.studioClone) throw new Error("Ovoz klonlash faqat navbat orqali ishlaydi");

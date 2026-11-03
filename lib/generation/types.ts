@@ -611,6 +611,10 @@ export type AcademicDoc = {
   studioAudio?: StudioAudioDoc;
   /** Studio «Montaj» (P8c): what was mixed and how; an MP4 result also carries `video` (the `VideoViewer` plays it). */
   mix?: StudioMixDoc;
+  /** Studio P10 «Transkripsiya»: the transcript + its cues (SRT / VTT / burn / viewer all read these); a burned MP4 also carries `video`. */
+  transcribe?: StudioTranscribeDoc;
+  /** Studio P10 «Dublyaj»: what was dubbed into what; an MP4 result also carries `video`. */
+  dub?: StudioDubDoc;
   /**
    * Infografika (AUDIT-21): bir betlik plakatning TO'LIQ
    * spetsifikatsiyasi. Bu oilada `sections` MATNI yo'q — chiqish bitta
@@ -660,6 +664,42 @@ export type StudioMixDoc = {
   options: Record<string, number | boolean>;
 };
 
+/** One subtitle cue (`lib/generation/studio/subtitles.ts`): seconds, ≤ 2 lines, the speaker's number when labelled. */
+export type SubtitleCue = { start: number; end: number; lines: string[]; speaker: number | null };
+
+/** Studio P10 «Transkripsiya» result (docs/studio/P10-SPEC.md). The source bytes are never stored here. */
+export type StudioTranscribeDoc = {
+  model: string;
+  /** Where the audio came from: an upload (no id kept) or one of the user's results (its generation id). */
+  source: "upload" | "result";
+  sourceId: string | null;
+  sourceKind: "video" | "audio";
+  /** Billed seconds of the source (server-measured). */
+  sourceSeconds: number;
+  /** What the user asked for (`auto` or a code) and what the provider detected. */
+  requestedLanguage: string;
+  language: string | null;
+  speakers: boolean;
+  burned: boolean;
+  output: "txt" | "mp4";
+  text: string;
+  cues: SubtitleCue[];
+};
+
+/** Studio P10 «Dublyaj» result (docs/studio/P10-SPEC.md). */
+export type StudioDubDoc = {
+  model: string;
+  source: "upload" | "result";
+  sourceId: string | null;
+  sourceKind: "video" | "audio";
+  sourceSeconds: number;
+  target: string;
+  sourceLang: string;
+  output: "mp4" | "mp3";
+  /** Length of the delivered file (measured). */
+  seconds: number;
+};
+
 /** Studio «Audio» result (docs/studio/P6-SPEC.md). A clone's provider id is never stored here; the input audio neither. */
 export type StudioAudioDoc = {
   mode: "music" | "sfx" | "voice-changer" | "isolate";
@@ -680,6 +720,8 @@ export type StudioAudioDoc = {
    * also the result file). Empty for a single clip.
    */
   variants: { assetId: string; seconds: number }[];
+  /** P9 Lyria: the song's lyrics as the provider wrote them; absent / `null` for an instrumental and older results. */
+  lyrics?: string | null;
 };
 
 export type BuiltFile = {

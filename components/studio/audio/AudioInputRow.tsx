@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Mic, Square, Upload } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Card } from "@/components/forms/compact";
@@ -20,6 +20,11 @@ export function inputBlocker(s: Pick<PreparedSample, "seconds" | "blob">): strin
   return null;
 }
 
+/** A probe `Field` when an id is given; the bare content otherwise (the caller owns the probe). */
+function MaybeField({ id, children }: { id: string | undefined; children: ReactNode }) {
+  return id ? <Field id={id}>{children}</Field> : <>{children}</>;
+}
+
 export const fmtSeconds = (s: number): string => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /**
@@ -33,7 +38,12 @@ export function AudioInputRow({
   uploading,
   error,
   onPrepared,
+  fieldIds = { input: "inputId", seconds: "inputSeconds" },
+  title = "Audio yozuv",
 }: {
+  /** P10: the probe ids of the two rows (the «Transkripsiya» / «Dublyaj» forms name them `source` / `sourceSeconds`). */
+  fieldIds?: { input: string; seconds: string } | null;
+  title?: string;
   /** Billed seconds of the uploaded input, `null` when none is uploaded yet. */
   seconds: number | null;
   uploading: boolean;
@@ -113,12 +123,12 @@ export function AudioInputRow({
 
   const message = local || error;
   return (
-    <Card title="Audio yozuv">
+    <Card title={title}>
       <div className="flex flex-col gap-2.5" data-audio-input>
         <p className="text-muted-foreground text-[13.5px] leading-snug">
           {AUDIO_INPUT_MIN_SECONDS} soniyadan {AUDIO_INPUT_MAX_SECONDS / 60} daqiqagacha. Narx yozuv uzunligiga qarab hisoblanadi.
         </p>
-        <Field id="inputId">
+        <MaybeField id={fieldIds?.input}>
           <div className="flex flex-wrap items-center gap-2">
             {recording ? (
               <button type="button" onClick={stop} className={cn(BTN, "border-destructive text-destructive")} data-audio-stop>
@@ -148,12 +158,12 @@ export function AudioInputRow({
               }}
             />
           </div>
-        </Field>
-        <Field id="inputSeconds">
+        </MaybeField>
+        <MaybeField id={fieldIds?.seconds}>
           <p className="text-[13.5px] font-semibold tabular-nums" data-audio-input-seconds role="status">
             {uploading ? "Yuklanmoqda..." : seconds !== null ? `Yuklandi: ${fmtSeconds(seconds)} (${seconds} s)` : "Hali audio tanlanmagan"}
           </p>
-        </Field>
+        </MaybeField>
         <p className="text-muted-foreground text-[12.5px] leading-snug" data-audio-tos>
           {AUDIO_INPUT_TOS} Birovning ovozini roziligisiz ishlatish, aldash yoki tuhmat uchun foydalanish taqiqlanadi. Yuklangan fayl 1 kundan keyin
           o‘chiriladi.

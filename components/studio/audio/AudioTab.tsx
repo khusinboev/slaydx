@@ -29,6 +29,9 @@ import { STUDIO_AUDIO_SLUG, STUDIO_AUDIO_TOOL_ID, audioClientPrice, uploadAudioI
 import { INITIAL_MIX_STATE, type MixTabState } from "./mix-api";
 import { MixPanel } from "./MixPanel";
 import { MIX_MODES } from "@/lib/media/catalog-mix";
+import { SPEECH_TOOL_MODEL_IDS, type SpeechToolMode } from "@/lib/media/catalog-transcribe";
+import { SpeechToolPanel } from "./SpeechToolPanel";
+import { INITIAL_SPEECH_TOOL, offeredSpeechTools, type SpeechToolsState } from "./speech-tool-api";
 
 /** The «Montaj» chip's mode id (P8c). */
 export const MIX_CHIP = "mix" as const;
@@ -39,16 +42,20 @@ export const MIX_CHIP = "mix" as const;
  * `mix`.
  */
 export type AudioTabState = {
-  mode: AudioMode | typeof MIX_CHIP | null;
+  mode: AudioMode | typeof MIX_CHIP | SpeechToolMode | null;
   raw: Partial<Record<AudioMode, RawValues>>;
   filter: VoiceFilter;
   models?: Partial<Record<AudioMode, string>>;
   mix?: MixTabState;
+  /** P10 «Transkripsiya» / «Dublyaj»: each tool's own form state. */
+  tools?: SpeechToolsState;
 };
 export const INITIAL_AUDIO_STATE: AudioTabState = { mode: null, raw: {}, filter: "all" };
 const MIX_MODEL_IDS = new Set(MIX_MODES.map((m) => m.model));
 /** A job of the «Montaj» mode (its results render in the «Montaj» panel, not in the provider modes' list). */
 export const isMixJob = (job: { modelId: string }): boolean => MIX_MODEL_IDS.has(job.modelId);
+/** A job of the P10 «Transkripsiya» / «Dublyaj» chips (their results render in their own panel). */
+export const isSpeechToolJob = (job: { modelId: string }): boolean => SPEECH_TOOL_MODEL_IDS.includes(job.modelId);
 
 const INSUFFICIENT_RE = /balans yetarli emas|to.langan balans bilan/i;
 /** Params drawn by the tab itself (prompt box, upload row, voice list), not by `ParamRows`. */
@@ -108,10 +115,13 @@ export function AudioTab({
   const [voices, setVoices] = useState<VoicesData | null>(null);
   const catalog = catalogState.status === "ready" ? catalogState.catalog : null;
   const modes = offeredModes(catalog?.models ?? []);
+  const speechTools = offeredSpeechTools(catalog?.models ?? []);
   const mixOn = state.mode === MIX_CHIP;
-  const current = mixOn ? null : (modes.find((m) => m.mode === state.mode) ?? modes[0] ?? null);
+  // P10: a picked tool chip; with no provider mode offered, the first tool opens by default.
+  const tool = mixOn ? undefined : (speechTools.find((t) => t.mode === state.mode) ?? (state.mode === null && modes.length === 0 ? speechTools[0] : undefined));
+  const current = mixOn || tool ? null : (modes.find((m) => m.mode === state.mode) ?? modes[0] ?? null);
   const needsVoices = current?.mode === "voice-changer";
-  const providerJobs = jobs.filter((j) => !isMixJob(j));
+  const providerJobs = jobs.filter((j) => !isMixJob(j) && !isSpeechToolJob(j));
   const mixJobs = jobs.filter(isMixJob);
 
   const loadVoices = useCallback(() => {
@@ -121,10 +131,14 @@ export function AudioTab({
     if (needsVoices && !voices) loadVoices();
   }, [needsVoices, voices, loadVoices]);
 
-  /** Mode chips: the catalog's offered modes, then «Montaj» (always offered: it needs no provider). */
+  /** Mode chips: the catalog's offered modes, the P10 tools that are on, then «Montaj» (always offered: it needs no provider). */
   const chips = (active: string | null) => (
     <div role="radiogroup" aria-label="Audio turi" className="mb-3 flex flex-wrap gap-1.5" data-audio-modes>
-      {[...modes.map((m) => ({ mode: m.mode as AudioMode | typeof MIX_CHIP, label: m.label })), { mode: MIX_CHIP, label: "Montaj" }].map((m) => (
+      {[
+        ...modes.map((m) => ({ mode: m.mode as AudioMode | typeof MIX_CHIP | SpeechToolMode, label: m.label })),
+        ...speechTools.map((t) => ({ mode: t.mode as AudioMode | typeof MIX_CHIP | SpeechToolMode, label: t.label })),
+        { mode: MIX_CHIP, label: "Montaj" },
+      ].map((m) => (
         <button
           key={m.mode}
           type="button"
@@ -142,7 +156,7 @@ export function AudioTab({
       ))}
     </div>
   );
-  function pickMode(m: AudioMode | typeof MIX_CHIP) {
+  function pickMode(m: AudioMode | typeof MIX_CHIP | SpeechToolMode) {
     setError(null);
     setUploadError(null);
     setState((s) => ({ ...s, mode: m }));
@@ -177,6 +191,27 @@ export function AudioTab({
       <div className="flex flex-col gap-3" role="status" aria-label="Audio yuklanmoqda" data-studio-loading>
         <div className="bg-muted/60 h-36 animate-pulse rounded-[20px]" />
         <div className="bg-muted/60 h-64 animate-pulse rounded-[20px]" />
+      </div>
+    );
+  }
+  if (tool) {
+    return (
+      <div data-audio-tab data-audio-mode={tool.mode}>
+        {chips(tool.mode)}
+        <SpeechToolPanel
+          key={tool.mode}
+          mode={tool.mode}
+          entry={tool.entry}
+          pricing={catalog.pricing}
+          state={state.tools?.[tool.mode]}
+          setState={(fn) => setState((s) => ({ ...s, tools: { ...s.tools, [tool.mode]: fn(s.tools?.[tool.mode] ?? INITIAL_SPEECH_TOOL) } }))}
+          jobs={jobs.filter((j) => j.modelId === tool.entry.id)}
+          track={track}
+          balance={balance}
+          typing={typing}
+          gated={gated}
+          reload={reload}
+        />
       </div>
     );
   }

@@ -221,6 +221,19 @@ test("producers (Postgres)", { skip: hasDb ? false : "DATABASE_URL yo'q" }, asyn
       doc: { meta: { ...meta, toolId: "podcast" }, sections: [], audio: { v: 1, kind: "podcast", type: "t", language: "uz", script: [{ speaker: "A", text: "Bugun fotosintez haqida gaplashamiz." }] } },
     }),
     sorting: await mkGen({ tool: "sorting", format: "docx", mime: DOCX, fileName: "Saralash.docx", bytes: Buffer.from("docx-bytes-sorting") }),
+    // Studio P10: the transcript TXT + its cues (SRT / VTT are built from `doc.transcribe.cues`).
+    transcribe: await mkGen({
+      tool: "studio-transcribe",
+      format: "txt",
+      mime: "text/plain; charset=utf-8",
+      fileName: "Transkripsiya.txt",
+      bytes: Buffer.from("Oʻzbekiston gʻalabasi.\n"),
+      doc: {
+        meta: { ...meta, toolId: "studio-transcribe" },
+        sections: [],
+        transcribe: { model: "elevenlabs/scribe-v2", source: "upload", sourceId: null, sourceKind: "audio", sourceSeconds: 3, requestedLanguage: "uz", language: "uz", speakers: false, burned: false, output: "txt", text: "Oʻzbekiston gʻalabasi.", cues: [{ start: 0.12, end: 2.5, lines: ["Oʻzbekiston gʻalabasi."], speaker: null }] },
+      },
+    }),
   };
   const session = await createGameSession(fixtures.sorting, user, "sorting");
   assert.ok(session);
@@ -292,6 +305,13 @@ test("producers (Postgres)", { skip: hasDb ? false : "DATABASE_URL yo'q" }, asyn
     const rtext = rcsv.bytes.toString("utf8");
     assert.ok(rtext.startsWith('\uFEFF"Ism","Ball","Jami","Foiz","Soniya","Sana"\r\n'), rtext.slice(0, 60));
     assert.match(rtext, /"Zulfiya","7","10","70","42","\d{4}-\d\d-\d\d \d\d:\d\d"\r\n$/);
+
+    // P10: the stored cues as SubRip / WebVTT, Uzbek apostrophes intact.
+    const srt = await produceWith(fixtures.transcribe, user, "subtitles-srt", { ensureFresh: false }, deps);
+    assert.equal(srt.bytes.toString("utf8"), "1\n00:00:00,120 --> 00:00:02,500\nOʻzbekiston gʻalabasi.\n");
+    assert.equal(srt.fileName, "Transkripsiya.srt");
+    const vtt = await produceWith(fixtures.transcribe, user, "subtitles-vtt", { ensureFresh: false }, deps);
+    assert.equal(vtt.bytes.toString("utf8"), "WEBVTT\n\n00:00:00.120 --> 00:00:02.500\nOʻzbekiston gʻalabasi.\n");
   });
 
   await t.test("derived cache: second request converts nothing; new bytes → new conversion; peek never converts", async () => {

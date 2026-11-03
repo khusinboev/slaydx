@@ -33,18 +33,20 @@ export const MIX_ROLES: Readonly<Record<MixMode, readonly [MixRole, MixRole]>> =
 };
 
 const ROLE_TOOLS: Readonly<Record<MixRole, readonly string[]>> = {
-  video: ["studio-video", "video", "studio-mix"],
-  audio: ["studio-speech", "studio-audio", "podcast", "greeting", "studio-mix"],
+  // P10: a dubbed clip and a subtitled (burned) clip are videos too; a dubbed MP3 is an audio.
+  video: ["studio-video", "video", "studio-mix", "studio-dub", "studio-transcribe"],
+  audio: ["studio-speech", "studio-audio", "podcast", "greeting", "studio-mix", "studio-dub"],
   speech: ["studio-speech", "podcast", "greeting", "studio-audio"],
   music: ["studio-audio"],
 };
 const ALL_TOOLS = [...new Set(Object.values(ROLE_TOOLS).flat())];
 
+export type MixRow = Row;
 type Row = { id: string; tool_id: string; topic: string | null; created_at: Date; mime: string; size_bytes: string | number; seconds: string | null; audio_mode: string | null; aspect: string | null };
 
 const ROW_SQL = `SELECT g.id, g.tool_id, g.topic, g.created_at, f.mime, f.size_bytes,
         COALESCE(g.doc_json->'video'->>'seconds', g.doc_json->'speech'->>'seconds', g.doc_json->'studioAudio'->>'seconds',
-                 g.doc_json->'audio'->>'seconds', g.doc_json->'mix'->>'seconds') AS seconds,
+                 g.doc_json->'audio'->>'seconds', g.doc_json->'mix'->>'seconds', g.doc_json->'dub'->>'seconds') AS seconds,
         g.doc_json->'studioAudio'->>'mode' AS audio_mode, g.doc_json->'video'->>'aspect' AS aspect
    FROM generations g JOIN generation_files f ON f.generation_id = g.id
   WHERE g.user_id = $1 AND g.status = 'COMPLETED' AND g.files_purged_at IS NULL`;
@@ -67,6 +69,8 @@ const LABEL: Readonly<Record<string, string>> = {
   podcast: "Podkast",
   greeting: "Tabriknoma",
   "studio-mix": "Montaj",
+  "studio-dub": "Dublyaj",
+  "studio-transcribe": "Subtitrli video",
 };
 const AUDIO_LABEL: Readonly<Record<string, string>> = { music: "Musiqa", sfx: "Effekt", "voice-changer": "Ovozni almashtirish", isolate: "Shovqindan tozalash" };
 
@@ -105,6 +109,15 @@ export async function listMixSources(userId: string): Promise<{ price: number } 
 
 async function ownRow(userId: string, id: string): Promise<Row | null> {
   return queryOne<Row>(`${ROW_SQL} AND g.id = $2::uuid`, [userId, id]).then((r) => r ?? null);
+}
+
+/** P10 (`speech-sources.ts`): the caller's OWN finished result with its stored file (same SQL as the mix inputs). */
+export const ownMixRow = ownRow;
+
+/** P10: a source's length as the picker shows it (stored seconds, 0.1 s), measured from the bytes when none is stored. */
+export async function rowSeconds(userId: string, row: Row): Promise<number> {
+  const stored = sourceOf(row).seconds;
+  return stored !== null && stored > 0 ? stored : measuredSeconds(userId, row.id, row.mime);
 }
 
 async function measuredSeconds(userId: string, id: string, mime: string): Promise<number> {
@@ -169,7 +182,8 @@ export async function mixJobCtx(userId: string, values: FormValues): Promise<Stu
     if (!row || !fitsRole(row, roles[i])) return null;
     const f = await queryOne<{ bytes: Buffer; mime: string }>(
       `SELECT f.bytes, f.mime FROM generation_files f JOIN generations g ON g.id = f.generation_id
-        WHERE f.generation_id = $1::uuid AND g.user_id = $2 AND g.status = 'COMPLETED'`,
+        WHERE f.generation_id = $1::uuid AND g.user_id = $2 AND g.status = 'COMPLETED'
+        LIMIT 1`,
       [id, userId],
     );
     return f ? { bytes: new Uint8Array(f.bytes), mime: f.mime, ...(row.aspect ? { aspect: row.aspect } : {}) } : null;

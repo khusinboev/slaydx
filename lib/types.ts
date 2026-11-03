@@ -59,7 +59,11 @@ export type ToolId =
   /** Studio P6 (docs/studio/P6-SPEC.md): music, sound effects, voice changer, isolator (ElevenLabs), through the media core. */
   | "studio-audio"
   /** Studio P8c (docs/studio/P8-SPEC.md): «Montaj» — ffmpeg lays an audio onto a video, or a speech over music. */
-  | "studio-mix";
+  | "studio-mix"
+  /** Studio P10 (docs/studio/P10-SPEC.md): «Transkripsiya» — ElevenLabs Speech to Text, SRT / VTT, optional burn-in. */
+  | "studio-transcribe"
+  /** Studio P10: «Dublyaj» — ElevenLabs Dubbing of a video / audio into another language. */
+  | "studio-dub";
 
 /**
  * Bo'lim (landing, nav, `CreateGrid`).
@@ -153,7 +157,7 @@ export type ToolConfig = {
    * ko'radi.
    */
   output: "docx" | "pptx" | "png" | "mp3" | "mp4";
-  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "konspekt" | "teacher" | "game" | "media" | "infographic" | "portrait" | "video" | "studio-image" | "studio-video" | "studio-speech" | "studio-voice" | "studio-audio" | "studio-mix";
+  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "konspekt" | "teacher" | "game" | "media" | "infographic" | "portrait" | "video" | "studio-image" | "studio-video" | "studio-speech" | "studio-voice" | "studio-audio" | "studio-mix" | "studio-transcribe" | "studio-dub";
   basePrice: number;
 };
 

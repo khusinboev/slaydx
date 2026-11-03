@@ -34,7 +34,8 @@ import type { FormValues } from "../types";
 import { MediaError, costUsd, normalize, submitWithRoutes, type AdapterAsset, type AdapterDeps, type CatalogEntry, type MediaAdapter, type NormalizedParams } from "../studio-core";
 import { studioVideoAdapters, videoMediaAdapters, videoRoute } from "../media/adapters/video";
 import { MEDIA_CATALOG } from "../media/catalog";
-import { SECOND_IMAGE_PARAM, STUDIO_EFFECT_SECONDS, STUDIO_VIDEO_PURPOSE, effectPhotos } from "../media/catalog-video";
+import { OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, STUDIO_EFFECT_SECONDS, STUDIO_VIDEO_PURPOSE, effectPhotos, isAvatarModel } from "../media/catalog-video";
+import { avatarAudioAsset } from "./media/avatar-audio";
 import { isEffectEntry, studioVideoEntry, studioVideoImageParams } from "../media/studio-video-pricing";
 import { VIDEO_TOOLS_SQL } from "../tool-kinds";
 import { modelAvailable } from "./media/availability";
@@ -132,6 +133,8 @@ export const VIDEO_FAILED_MESSAGE = "Provayder videoni yaratmadi. Pul qaytarildi
 export const VIDEO_UNAVAILABLE_MESSAGE = "Video xizmati hozir mavjud emas. Pul qaytarildi — keyinroq qayta urinib ko‘ring.";
 export const VIDEO_LOST_MESSAGE = "Video so‘rovi yo‘qoldi (server qayta ishga tushdi). Pul qaytarildi — qayta urinib ko‘ring.";
 export const VIDEO_IMAGE_MISSING_MESSAGE = "Boshlang‘ich surat topilmadi. Pul qaytarildi — suratni qayta yuklab, urinib ko‘ring.";
+/** P9 HeyGen: the own speech the avatar was to speak is gone (deleted / purged after the purchase). */
+export const VIDEO_AUDIO_MISSING_MESSAGE = "Tanlangan ovoz topilmadi. Pul qaytarildi — ovozni qayta tanlab, urinib ko‘ring.";
 
 /* ══════════════════════════ 1. submit ══════════════════════════ */
 
@@ -381,6 +384,12 @@ export async function submitStudioVideoJob(job: VideoJob, deps: VideoOpsDeps = {
       const photo = await getPhoto(job.userId, assetId);
       if (!photo) throw new UserFacingError(VIDEO_IMAGE_MISSING_MESSAGE);
       assets[name] = [{ mime: photo.mime, base64: photo.bytes.toString("base64") }];
+    }
+    // P9 HeyGen: the own speech the avatar lip-syncs to (SQL ownership again, with the job owner's id).
+    if (isAvatarModel(entry.id)) {
+      const audio = await avatarAudioAsset(job.userId, params);
+      if (audio === undefined) throw new UserFacingError(VIDEO_AUDIO_MISSING_MESSAGE);
+      if (audio) assets[OWN_AUDIO_PARAM] = [audio];
     }
     // An effect without the photo(s) its scene needs: the route refused it before charging; a stored one is refunded.
     if (isEffectEntry(entry) && (!assets.imageAssetId || (effectPhotos(params.effect) === 2 && !assets[SECOND_IMAGE_PARAM]))) {

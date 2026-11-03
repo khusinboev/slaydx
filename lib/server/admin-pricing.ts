@@ -145,6 +145,8 @@ export const UNIT_OF: Record<ToolId, PricingUnit> = {
   "studio-voice": "job",
   "studio-audio": "job",
   "studio-mix": "job",
+  "studio-transcribe": "job",
+  "studio-dub": "job",
 };
 
 /** Uzbek unit labels for the UI (the client never imports lib/tools). */
@@ -213,13 +215,14 @@ function studioVideoRungs(id: string): LadderInput[] {
   const lengths = secs && secs.type === "int" ? [...new Set([secs.min, secs.max])] : [];
   // A sound rung only where sound moves the price (Kling); on the fal models it is free (Studio P4).
   const sound = entry.params.some((p) => p.name === "sound" && p.type === "bool" && p.affects !== "request");
-  // P4: a priced resolution tier (fal models) gets a rung per tier; other models one rung per length.
-  const res = entry.params.find((p) => p.name === "resolution");
-  const tiers: (string | null)[] = res && res.type === "enum" && res.affects !== "request" ? res.options.map((o) => o.value) : [null];
+  // P4: a priced resolution tier (fal models) gets a rung per tier; P9: so does HeyGen's priced engine; other models one
+  // rung per length.
+  const res = entry.params.find((p) => (p.name === "resolution" || p.name === "engine") && p.type === "enum" && p.affects !== "request");
+  const tiers: ({ value: string; label: string } | null)[] = res && res.type === "enum" ? res.options.map((o) => ({ value: o.value, label: res.name === "engine" ? o.label : o.value })) : [null];
   return lengths.flatMap((n) =>
     tiers.flatMap((tier) => {
-      const at = tier ? { resolution: tier } : {};
-      const tag = tier ? ` · ${tier}` : "";
+      const at = tier && res ? { [res.name]: tier.value } : {};
+      const tag = tier ? ` · ${tier.label}` : "";
       return [
         { label: `${entry.label} · ${n} soniya${tag}`, values: { modelId: id, seconds: n, ...at } as FormValues },
         ...(sound ? [{ label: `${entry.label} · ${n} soniya${tag} · ovozli`, values: { modelId: id, seconds: n, ...at, sound: true } as FormValues }] : []),
@@ -311,6 +314,12 @@ export function ladderInputs(toolId: ToolId): LadderInput[] {
         { label: "Ovozni almashtirish · 1 daq", values: { modelId: VOICE_CHANGER_MODEL, inputSeconds: 60 } },
         { label: "Shovqindan tozalash · 1 daq", values: { modelId: ISOLATOR_MODEL, inputSeconds: 60 } },
       ];
+    case "studio-transcribe":
+      // P10: seconds of the source × the STT credit rate × markup (`studio-transcribe.ts`).
+      return [30, 60, 300, 600].map((n) => ({ label: `Transkripsiya · ${n < 60 ? `${n} s` : `${n / 60} daq`}`, values: { sourceSeconds: n } }));
+    case "studio-dub":
+      // P10: seconds of the source × the dubbing credit rate × markup.
+      return [15, 60, 180].map((n) => ({ label: `Dublyaj · ${n < 60 ? `${n} s` : `${n / 60} daq`}`, values: { sourceSeconds: n } }));
     case "studio-voice":
       // The fixed clone price (`studio.clone_price`).
       return [{ label: "1 klon", values: {} }];
@@ -340,7 +349,7 @@ export function ladderFor(toolId: ToolId, media?: MediaPricing | null): LadderSt
 async function mediaPricingFor(toolId: ToolId): Promise<MediaPricing | null> {
   if (toolId === "studio-voice") return { ...(await mediaPricing()), clonePrice: clonePriceOf(await getSetting("studio.clone_price")) };
   if (toolId === "studio-mix") return { ...(await mediaPricing()), mixPrice: mixPriceOf(await getSetting("studio.mix_price")) };
-  return toolId === "studio-image" || toolId === "studio-video" || toolId === "studio-speech" || toolId === "studio-audio" ? mediaPricing() : null;
+  return toolId === "studio-image" || toolId === "studio-video" || toolId === "studio-speech" || toolId === "studio-audio" || toolId === "studio-transcribe" || toolId === "studio-dub" ? mediaPricing() : null;
 }
 
 export function effectiveLadder(steps: ReadonlyArray<LadderStep>, adj: PriceAdjust | null): LadderRow[] {

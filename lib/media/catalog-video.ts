@@ -25,7 +25,7 @@
  * (`KLING_DUAL_EFFECTS`; fal's `hug_pro` is a ONE-image scene, not the two-photo one); Kling 3.0 takes an end frame
  * (`endImageAssetId` → `image_tail`); five more models through fal (`FAL_VIDEO_ENTRIES`, block below).
  */
-import type { CatalogEntry, ParamSchema, PurposeSpec } from "../studio-core";
+import { normalizeText, type CatalogEntry, type ParamSchema, type PurposeSpec } from "../studio-core";
 import { VIDEO_PROMPT_MAX, VIDEO_PROMPT_MIN } from "../generation/video/registry";
 import { VIDEO_MAX_BYTES } from "../generation/video/types";
 import { PHOTO_MAX_BYTES } from "../photo-accept";
@@ -310,14 +310,170 @@ export const SORA_ENTRIES: readonly CatalogEntry[] = [
   soraEntry("openai/sora-2-pro", "Sora 2 Pro", "fal-ai/sora-2/pro", ["sifatli", "ovozli"]),
 ];
 
+/* ═════════════════ Studio P9: HeyGen avatar videos (docs/studio/P9-HEYGEN.md) ═════════════════
+ * HeyGen API v3, read 2026-11-03 (developers.heygen.com): `POST https://api.heygen.com/v3/videos` `{ type: "avatar",
+ * avatar_id, script + voice_id | audio_asset_id, resolution, aspect_ratio, engine }` → `data.video_id`; then
+ * `GET /v3/videos/{id}` until `completed` (`video_url`, presigned). A stock avatar speaks either a script (HeyGen's TTS:
+ * «Uzbek (Latin, Uzbekistan)» is in HeyGen's voice-language list, help.heygen.com article 11391932) or the user's OWN
+ * finished speech result (the «Ovoz» tab), uploaded to HeyGen's asset store at submit.
+ *
+ * PRICE: HeyGen bills API video per second of output (pay-as-you-go wallet, $5 minimum). Its own pricing table is not
+ * readable without an account; the figures below are HeyGen's blog «Best AI Avatar and Talking-Head APIs» (2026-10-29),
+ * the higher figure where its table and its FAQ disagree — ALL UNVERIFIED until a live job is compared with the wallet:
+ *   Avatar IV (stock studio avatar)  $4.83 / min = $0.0805 / s (the table says $4.00 / min)
+ *   Avatar III                       $1.00 / min = $0.0167 / s (the FAQ says $0.60)
+ * The length is not a choice: it is computed from the inputs BEFORE the job (`withAvatarSeconds`) — the script at
+ * `HEYGEN_CHARS_PER_SECOND` (a slow reading pace, so the estimate is rarely short), or the own speech's stored length —
+ * and a clip more than a second shorter refunds the difference (the shared `delivered` rule of the video poll loop).
+ * 60 s at most: 720p keeps a minute well inside the 25 MB result cap.
+ */
+export const HEYGEN_MODEL = "heygen/avatar";
+export const HEYGEN_USD_PER_SECOND = { avatar_iv: 0.0805, avatar_iii: 0.0167 } as const satisfies Record<string, number>;
+/** Characters of script per second of clip the price assumes (slow speech; a faster voice is refunded the rest). */
+export const HEYGEN_CHARS_PER_SECOND = 12;
+export const HEYGEN_MAX_SECONDS = 60;
+/** The longest script: what fits `HEYGEN_MAX_SECONDS` at the priced pace (HeyGen's own cap is 5 000 characters). */
+export const HEYGEN_SCRIPT_MAX = HEYGEN_MAX_SECONDS * HEYGEN_CHARS_PER_SECOND;
+/** A script shorter than this cannot make a second of speech (HeyGen `script_too_short`). */
+export const HEYGEN_SCRIPT_MIN = 5;
+/** The own-speech param: a finished speech generation's id (ownership is checked in SQL before charging). */
+export const OWN_AUDIO_PARAM = "audioId";
+export const HEYGEN_ASPECTS = ["16:9", "9:16"] as const;
+
+/**
+ * Curated public studio avatars (ids as HeyGen's own API examples name them; UNVERIFIED in a live `GET
+ * /v3/avatars/looks?ownership=public` until the owner's key exists — an unknown id is a 4xx before acceptance = refund).
+ */
+export const HEYGEN_AVATARS: readonly { id: string; label: string }[] = [
+  { id: "Angela-inblackskirt-20220820", label: "Angela — ayol, rasmiy" },
+  { id: "Daisy-inskirt-20220818", label: "Daisy — ayol, oddiy" },
+  { id: "Tyler-incasualsuit-20220721", label: "Tyler — erkak, kostyum" },
+  { id: "Josh_lite3_20230714", label: "Josh — erkak, oddiy" },
+];
+
+/** Script language → HeyGen's voice-list `language` filter; the voice is the first public one of that language + gender. */
+export const HEYGEN_VOICE_LANGUAGES = { uz: "Uzbek", ru: "Russian", en: "English" } as const;
+
+/**
+ * Spoken weight of a script character (review MINOR 4): a digit is read out as a word («2026» → «ikki ming yigirma olti»,
+ * ≈ 5.5 characters per digit), a symbol as a word («%» → «foiz», «$» → «dollar», «+» → «plyus», «=» → «teng»).
+ */
+export const HEYGEN_DIGIT_WEIGHT = 6;
+export const HEYGEN_SYMBOL_WEIGHT = 8;
+const SPOKEN_SYMBOL = /[%$€£₽+=@&#№°]/;
+/** A link or an e-mail is read out letter by letter (or garbled): refused, the user writes it in words. */
+const URL_OR_EMAIL = /(?:\bhttps?:\/\/|\bwww\.)\S+|[^\s@]+@[^\s@]+\.[^\s@]+/i;
+
+/** The script's length as spoken, in characters: plain characters 1, digits / symbols weighted (above). */
+export function avatarSpokenChars(script: unknown): number {
+  let n = 0;
+  for (const ch of normalizeText(script, HEYGEN_SCRIPT_MAX)) n += /\d/.test(ch) ? HEYGEN_DIGIT_WEIGHT : SPOKEN_SYMBOL.test(ch) ? HEYGEN_SYMBOL_WEIGHT : 1;
+  return n;
+}
+
+/**
+ * Why a script cannot be sold (Uzbek, a 400 before charging; the form shows the same text), `null` when it can: a link /
+ * an e-mail, or a spoken length beyond `HEYGEN_MAX_SECONDS`. The SAME weights as the price (`avatarScriptSeconds`).
+ */
+export function avatarScriptProblem(script: unknown): string | null {
+  const text = normalizeText(script, HEYGEN_SCRIPT_MAX);
+  if (URL_OR_EMAIL.test(text)) return "Avatar matnida havola yoki e-pochta bo‘lmasin — so‘z bilan yozing.";
+  if (avatarSpokenChars(text) > HEYGEN_SCRIPT_MAX) return "Matn 1 daqiqaga sig‘maydi (raqam va belgilar ham so‘z bilan o‘qiladi) — qisqartiring.";
+  return null;
+}
+
+/** Clip seconds a script buys: its spoken length at the priced pace, 1 … `HEYGEN_MAX_SECONDS`. */
+export function avatarScriptSeconds(script: unknown): number {
+  return Math.min(HEYGEN_MAX_SECONDS, Math.max(1, Math.ceil(avatarSpokenChars(script) / HEYGEN_CHARS_PER_SECOND)));
+}
+
+/**
+ * Clip seconds an own speech of `raw` seconds buys: rounded to 0.1 s (what the source list shows), then up to a whole
+ * second, 1 … `HEYGEN_MAX_SECONDS` (a speech a frame over the limit is accepted by the server's tolerance).
+ */
+export function avatarAudioSeconds(raw: number): number {
+  return Math.min(HEYGEN_MAX_SECONDS, Math.max(1, Math.ceil(Math.round(raw * 10) / 10 - 1e-9)));
+}
+
+/**
+ * The values with `seconds` set from the inputs — ONE function for the browser (the price on the button) and the server
+ * (it overwrites whatever the request said, before pricing): an own speech → its length (`audioSeconds`, the stored
+ * length; the values unchanged while it is unknown), else the script's.
+ */
+export function withAvatarSeconds(values: Readonly<Record<string, unknown>>, audioSeconds: number | null): Record<string, unknown> {
+  const own = String(values[OWN_AUDIO_PARAM] ?? "").trim();
+  if (own) return audioSeconds === null ? { ...values } : { ...values, seconds: avatarAudioSeconds(audioSeconds) };
+  return { ...values, seconds: avatarScriptSeconds(values.prompt) };
+}
+
+const HEYGEN_ENTRY: CatalogEntry = {
+  id: HEYGEN_MODEL,
+  kind: "video",
+  capabilities: ["lipsync"],
+  label: "HeyGen avatar",
+  maker: "HeyGen",
+  badges: ["yangi"],
+  params: [
+    // The script is the tab's prompt box; empty when the avatar speaks the user's own speech instead.
+    { name: "prompt", label: "Avatar matni", type: "text", min: 0, max: HEYGEN_SCRIPT_MAX, affects: "request" },
+    { name: OWN_AUDIO_PARAM, label: "O‘z ovozingiz", hint: "«Ovoz» bo‘limida yaratilgan ovoz — avatar shuni gapiradi", type: "text", min: 0, max: 36, affects: "request" },
+    { name: "avatar", label: "Avatar", type: "enum", options: HEYGEN_AVATARS.map((a) => ({ value: a.id, label: a.label })), default: HEYGEN_AVATARS[0]!.id, affects: "request" },
+    {
+      name: "voice",
+      label: "Ovoz",
+      type: "enum",
+      options: [
+        { value: "female", label: "Ayol ovozi" },
+        { value: "male", label: "Erkak ovozi" },
+      ],
+      default: "female",
+      affects: "request",
+    },
+    {
+      name: "language",
+      label: "Matn tili",
+      type: "enum",
+      options: [
+        { value: "uz", label: "O‘zbekcha" },
+        { value: "ru", label: "Ruscha" },
+        { value: "en", label: "Inglizcha" },
+      ],
+      default: "uz",
+      affects: "request",
+    },
+    {
+      name: "engine",
+      label: "Sifat",
+      hint: "Avatar IV — jonliroq mimika, qimmatroq",
+      type: "enum",
+      options: [
+        { value: "avatar_iv", label: "Avatar IV" },
+        { value: "avatar_iii", label: "Avatar III (arzon)" },
+      ],
+      default: "avatar_iv",
+      affects: "both",
+    },
+    { name: "aspect", label: "O'lcham", type: "enum", options: HEYGEN_ASPECTS.map((a) => ({ value: a, label: a })), default: HEYGEN_ASPECTS[0], affects: "request" },
+    // Set from the script / the own speech (`withAvatarSeconds`) on both sides; never a form row.
+    { name: "seconds", label: "Davomiylik", hint: "Matn yoki ovoz uzunligidan hisoblanadi", type: "int", min: 1, max: HEYGEN_MAX_SECONDS, step: 1, default: 10, affects: "price" },
+  ],
+  cost: { per: "second", usd: HEYGEN_USD_PER_SECOND.avatar_iv, secondsParam: "seconds", by: { param: "engine", table: HEYGEN_USD_PER_SECOND } },
+  routes: [{ provider: "heygen", upstreamModel: "v3-avatar", adapter: "heygen-video" }],
+  limits: VIDEO_LIMITS,
+  output: VIDEO_OUT,
+};
+
+/** The avatar model: its length follows the inputs, it may take an own speech. */
+export const isAvatarModel = (id: string): boolean => id === HEYGEN_MODEL;
+
 /**
  * Models whose image → video request has no aspect (the canvas follows the start frame): Kling 3.0 and the fal models.
  * The form hides their «O'lcham» row while a start image is set (P4 review N3). Gemini Omni keeps it (it sends it).
  */
 export const ASPECT_FOLLOWS_IMAGE: ReadonlySet<string> = new Set([...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, ...SORA_ENTRIES].map((e) => e.id));
 
-/** Every Studio video entry, picker order: Kling 3.0 tiers, the fal models (P4), Sora 2 (P9), the effect templates last. */
-export const STUDIO_VIDEO_ENTRIES: readonly CatalogEntry[] = [...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, ...SORA_ENTRIES, KLING_EFFECTS_ENTRY];
+/** Every Studio video entry, picker order: Kling 3.0 tiers, the fal models (P4), Sora 2 (P9), HeyGen (P9), the effect templates last. */
+export const STUDIO_VIDEO_ENTRIES: readonly CatalogEntry[] = [...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, ...SORA_ENTRIES, HEYGEN_ENTRY, KLING_EFFECTS_ENTRY];
 
 /** Length of an effect clip (the result page, the short-clip refund). */
 export const STUDIO_EFFECT_SECONDS = KLING_EFFECT_SECONDS;

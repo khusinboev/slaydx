@@ -31,6 +31,15 @@ export const LYRIA_INSTRUMENTAL = "Instrumental only, no vocals.";
 const ANSWER_MAX_BYTES = 48 * 1024 * 1024;
 const CALL_MS = 240_000;
 const BLOCKED = /safety|blocked|policy|prohibited|copyright|not allowed/i;
+/** Lyrics kept with a song (a full song's lyrics are a few KB). */
+export const LYRICS_MAX_CHARS = 8000;
+
+/** The lyrics worth showing: none for an instrumental (Lyria answers «<instrumental>»), trimmed and capped. Pure. */
+export function lyricsOf(text: string): string | null {
+  const t = text.replace(/\r\n?/g, "\n").trim();
+  if (!t || /^<[^>]*>$/.test(t)) return null;
+  return t.slice(0, LYRICS_MAX_CHARS);
+}
 
 export type LyriaDeps = { key?: () => string };
 
@@ -136,7 +145,8 @@ export function lyriaAdapter(deps: LyriaDeps = {}): MediaAdapter {
       }
       const { mp3, text } = lyriaOutput(answer);
       if (!mp3) throw fail(`lyria: javobda audio yo'q${text ? ` (${text.slice(0, 200)})` : ""}`, { safety: BLOCKED.test(text) });
-      return { done: [{ kind: "inline", bytes: mp3, mime: "audio/mpeg" }] };
+      const lyrics = lyricsOf(text);
+      return { done: [{ kind: "inline", bytes: mp3, mime: "audio/mpeg", ...(lyrics ? { text: lyrics } : {}) }] };
     },
     async fetchOutput(o) {
       if (o.kind === "inline") return o.bytes;
