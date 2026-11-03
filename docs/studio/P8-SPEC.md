@@ -19,6 +19,33 @@ package reads the switch on the server (and the session exposes it as `features.
   (provider, seconds, aspect, start image) against the Studio tabs; a missing option is added to the Studio (catalog
   param) — never a decorative control.
 
+### P8a — what shipped / decisions
+- One link builder, client-safe: `lib/media/legacy-fold.ts` (`LEGACY_FOLD` map tool id → Studio query, `toolHref`,
+  `legacyFoldTarget`). One server read: `lib/server/media/legacy-fold.ts` (`legacyFoldOn`, `legacyFoldRedirect`). The
+  pages, the session, the bot keyboard and the chat knowledge all go through these. P8b can add `podcast` / `greeting`
+  entries to the same map (e.g. `{ tab: "ovoz", template: "podcast" }`) instead of a second mechanism.
+- The «Rasm» tool's slug is `rasm`, so the redirect is `/uz/rasm` → `/uz/studio?tab=rasm` (`/uz/image` was never a
+  route; it stays a 404). `/uz/video` → `/uz/studio?tab=video`. Both are own pages now (`app/uz/rasm`, `app/uz/video`,
+  `force-dynamic`, added to `[slug]`'s `OWN_PAGE_SLUGS`): off, they draw exactly the `[slug]` page's `ToolWorkspace`
+  with the same metadata (only difference: rendered per request instead of pre-rendered). On: the server redirect keeps
+  the WHOLE query (the bot's `?bt=` login token, Telegram's `tgWebApp…`); the fold's own `tab` wins.
+- Cards: home «Barcha vositalar» tiles, `/uz/create` catalogue, the «+» sheet and the search dialog use `toolHref`
+  with `features.legacyFold` (new session key). «Tez boshlash» does not list these tools (unchanged). Old result pages
+  («Yangi yaratish» / «Qaytadan yaratish» link to `/uz/rasm`) are untouched — the server redirect lands them in the Studio.
+- Bot: `mainKeyboard` / `keyboardMessage` take `opts.legacyFold`; the four callers pass `legacyFoldSetting()` (the same
+  server read). The «Rasm» web_app button opens `/uz/studio?tab=rasm&bt=…`; the block rule is unchanged. Keyboards
+  already on users' screens keep `/uz/rasm?bt=…` and are redirected (token kept).
+- AI chat: there are no tool-page links in proposals (a confirm enqueues the old `image` engine at the old price — kept,
+  navigation only). The knowledge pack gets one line with the two Studio links while the fold is on; off = no line.
+- Form parity (no new catalog param needed): Rasm — models (Nano Banana / ChatGPT, same availability rule) ⊂ Studio
+  models; count 1/2/4 ⊂ Studio 1–4; all 9 styles (Studio «Uslub», advanced); all 6 ratios. Video — Veo (5/8 s,
+  16:9/9:16, start image) is the same `google/omni-video` entry in the Studio; old «Kling AI» (`kling/video`, 5/10 s)
+  is not in the Studio purpose, but Kling 3.0 / Pro cover every old option (3–15 s, 16:9/9:16/1:1, start image) —
+  not re-added (a duplicate older tier); its price is the Studio's cost × markup, not the old 2 000 so'm/s ladder.
+  Both video tabs are empty while `video.enabled` is off, exactly like the old tool.
+- Tests: `tests/studio-legacy-fold.test.mts` (M1–M8), `tests/ui/home-hub.test.mts` + `tests/ui/create-sheet.test.mts`
+  (fold tiles), `tests/pricing-server.test.mts` (session key `legacyFold`).
+
 ## P8b — «Podkast» and «Tabriknoma» → Studio «Ovoz» templates
 - With the switch on: the Studio «Ovoz» tab shows a «Tayyor shablonlar» row with «Podkast» and «Tabriknoma»; each
   opens the EXISTING composer and engine (same tool id, same price, same result viewer) inside the Studio. This works
