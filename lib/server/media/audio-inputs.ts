@@ -23,11 +23,14 @@ import type { FormValues } from "../../types";
 
 /* ───────────────────────── availability ───────────────────────── */
 
-/** The «Audio» models available now (one per mode, chip order); none while `studio.audio.enabled` is off. */
+/** The «Audio» models available now (chip order, a mode's models in their order); none while `studio.audio.enabled` is off. */
 export async function studioAudioModels(): Promise<string[]> {
   if (!(await getSetting("studio.audio.enabled"))) return [];
   const out: string[] = [];
-  for (const m of AUDIO_MODES) if ((await availableModels(m.purpose)).includes(m.model)) out.push(m.model);
+  for (const m of AUDIO_MODES) {
+    const available = await availableModels(m.purpose);
+    for (const id of m.models) if (available.includes(id)) out.push(id);
+  }
   return out;
 }
 

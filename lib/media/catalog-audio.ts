@@ -20,6 +20,11 @@
  *   POST /v1/sound-generation              { text, duration_seconds, prompt_influence, loop, model_id: "eleven_text_to_sound_v2" }
  *   POST /v1/speech-to-speech/{voice_id}   multipart audio, model_id "eleven_multilingual_sts_v2", remove_background_noise
  *   POST /v1/audio-isolation               multipart audio
+ *
+ * STUDIO P9 (docs/studio/P9-SPEC.md): a second «Musiqa» model, Google Lyria on the Gemini key (`adapters/lyria.ts`) —
+ * per song, not per second (Gemini API pricing page, read 2026-11-03): Lyria 3 Clip (always 30 s) $0.04, Lyria 3.5
+ * (a full song, length steered by the prompt) $0.08. The «Musiqa» mode now offers two models (`AUDIO_MODES.models`,
+ * the first is the default).
  */
 import type { CatalogEntry, ParamSchema, PurposeSpec } from "../studio-core";
 import { ELEVENLABS_CREATOR_USD_PER_CREDIT } from "../generation/llm-pricing";
@@ -40,11 +45,17 @@ export const MUSIC_MODEL = "elevenlabs/music";
 export const SFX_MODEL = "elevenlabs/sfx";
 export const VOICE_CHANGER_MODEL = "elevenlabs/voice-changer";
 export const ISOLATOR_MODEL = "elevenlabs/isolator";
+export const LYRIA_MODEL = "google/lyria-3";
 
 /** Upstream model ids sent in the requests. */
 export const ELEVENLABS_MUSIC_MODEL = "music_v1";
 export const ELEVENLABS_SFX_MODEL = "eleven_text_to_sound_v2";
 export const ELEVENLABS_STS_MODEL = "eleven_multilingual_sts_v2";
+/** Lyria upstream models, by the entry's «Turi» value. */
+export const LYRIA_CLIP_MODEL = "lyria-3-clip-preview";
+export const LYRIA_SONG_MODEL = "lyria-3.5";
+/** USD per result, by «Turi». */
+export const LYRIA_USD = { clip: 0.04, song: 0.08 } as const;
 
 /** Credits per second of each mode (file header). */
 export const MUSIC_CREDITS_PER_SECOND = 900 / 60;
@@ -112,6 +123,33 @@ export const STUDIO_AUDIO_ENTRIES: readonly CatalogEntry[] = [
     output: AUDIO_OUT,
   },
   {
+    id: LYRIA_MODEL,
+    kind: "music",
+    capabilities: ["music"],
+    label: "Lyria 3",
+    maker: "Google",
+    badges: ["arzon", "yangi"],
+    params: [
+      { name: "prompt", label: "Musiqa tavsifi", hint: "Uslub, kayfiyat, cholg‘ular; so‘zli qo‘shiq tavsif tilida kuylanadi", type: "text", min: 5, max: 2000, affects: "request" },
+      {
+        name: "length",
+        label: "Turi",
+        type: "enum",
+        options: [
+          { value: "clip", label: "Qisqa (30 s)" },
+          { value: "song", label: "To‘liq qo‘shiq" },
+        ],
+        default: "clip",
+        affects: "both",
+      },
+      { name: "instrumental", label: "Faqat kuy (so‘zsiz)", type: "bool", default: false, affects: "request" },
+    ],
+    cost: { per: "output", usd: LYRIA_USD.clip, by: { param: "length", table: LYRIA_USD } },
+    routes: [{ provider: "gemini", upstreamModel: "lyria", adapter: "studio-gemini-lyria" }],
+    limits: { timeoutMs: 240_000 },
+    output: AUDIO_OUT,
+  },
+  {
     id: SFX_MODEL,
     kind: "sfx",
     capabilities: ["sfx"],
@@ -166,26 +204,27 @@ export const STUDIO_AUDIO_ENTRIES: readonly CatalogEntry[] = [
 const one = (id: string, kind: PurposeSpec["kind"], model: string): PurposeSpec => ({ id, kind, allowed: [model], default: model, userCanChoose: false });
 
 export const STUDIO_AUDIO_PURPOSE_SPECS: readonly PurposeSpec[] = [
-  one(STUDIO_MUSIC_PURPOSE, "music", MUSIC_MODEL),
+  // P9: two music models, the user picks (ElevenLabs stays the default).
+  { id: STUDIO_MUSIC_PURPOSE, kind: "music", allowed: [MUSIC_MODEL, LYRIA_MODEL], default: MUSIC_MODEL, userCanChoose: true },
   one(STUDIO_SFX_PURPOSE, "sfx", SFX_MODEL),
   one(STUDIO_VOICE_CHANGER_PURPOSE, "speech", VOICE_CHANGER_MODEL),
   one(STUDIO_ISOLATE_PURPOSE, "speech", ISOLATOR_MODEL),
 ];
 
-/** The tab's modes in chip order, each with its one model and purpose. */
+/** The tab's modes in chip order, each with its models (`model` = the default, first of `models`) and purpose. */
 export type AudioMode = "music" | "sfx" | "voice-changer" | "isolate";
-export const AUDIO_MODES: readonly { mode: AudioMode; label: string; model: string; purpose: string }[] = [
-  { mode: "music", label: "Musiqa", model: MUSIC_MODEL, purpose: STUDIO_MUSIC_PURPOSE },
-  { mode: "sfx", label: "Effekt", model: SFX_MODEL, purpose: STUDIO_SFX_PURPOSE },
-  { mode: "voice-changer", label: "Ovozni almashtirish", model: VOICE_CHANGER_MODEL, purpose: STUDIO_VOICE_CHANGER_PURPOSE },
-  { mode: "isolate", label: "Shovqindan tozalash", model: ISOLATOR_MODEL, purpose: STUDIO_ISOLATE_PURPOSE },
+export const AUDIO_MODES: readonly { mode: AudioMode; label: string; model: string; models: readonly string[]; purpose: string }[] = [
+  { mode: "music", label: "Musiqa", model: MUSIC_MODEL, models: [MUSIC_MODEL, LYRIA_MODEL], purpose: STUDIO_MUSIC_PURPOSE },
+  { mode: "sfx", label: "Effekt", model: SFX_MODEL, models: [SFX_MODEL], purpose: STUDIO_SFX_PURPOSE },
+  { mode: "voice-changer", label: "Ovozni almashtirish", model: VOICE_CHANGER_MODEL, models: [VOICE_CHANGER_MODEL], purpose: STUDIO_VOICE_CHANGER_PURPOSE },
+  { mode: "isolate", label: "Shovqindan tozalash", model: ISOLATOR_MODEL, models: [ISOLATOR_MODEL], purpose: STUDIO_ISOLATE_PURPOSE },
 ];
 
-export const AUDIO_MODEL_IDS: readonly string[] = AUDIO_MODES.map((m) => m.model);
+export const AUDIO_MODEL_IDS: readonly string[] = AUDIO_MODES.flatMap((m) => m.models);
 
 /** The mode of a catalog model id, `null` when it is not an «Audio» model. */
 export function audioModeOf(modelId: string): (typeof AUDIO_MODES)[number] | null {
-  return AUDIO_MODES.find((m) => m.model === modelId) ?? null;
+  return AUDIO_MODES.find((m) => m.models.includes(modelId)) ?? null;
 }
 
 /** The model takes an uploaded audio file (voice changer, isolator). */

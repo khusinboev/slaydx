@@ -250,14 +250,74 @@ export const FAL_VIDEO_ENTRIES: readonly CatalogEntry[] = [
   falVideo({ id: "minimax/h3-max-turbo", label: "MiniMax H3 Max Turbo", maker: "MiniMax", badges: ["arzon"], upstream: "minimax/h3-max-turbo", minSeconds: 2, defaultResolution: "768p", sound: false }),
 ];
 
+/* ═════════════════ Studio P9: OpenAI Sora 2 through fal (docs/studio/P9-SPEC.md) ═════════════════
+ * Endpoints (https://fal.ai/docs/model-api-reference/video-generation-api/sora-2-text-to-video and …/sora-2-image-to-video,
+ * read 2026-11-03): `fal-ai/sora-2/{text,image}-to-video` and their `/pro` twins. duration enum "4" | "8" | "12" | "16" |
+ * "20", aspect 16:9 | 9:16 (image → video: «auto», the frame decides), sound always on, no end frame.
+ * USD per second: Pro 720p 0.30 · 1080p 0.50 (fal's Pro page). Standard 720p 0.10 is OpenAI's own API rate
+ * (developers.openai.com sora-2), which fal passes through — UNVERIFIED on fal until the first live job is compared with
+ * the fal usage page. `true_1080p` is not sold. Lengths 4 / 8 / 12 s: Sora has no 10 s, and 16 / 20 s at 1080p risk the
+ * 25 MB result cap.
+ */
+export const SORA_USD_PER_SECOND = {
+  "openai/sora-2": { "720p": 0.1 },
+  "openai/sora-2-pro": { "720p": 0.3, "1080p": 0.5 },
+} as const satisfies Record<string, Record<string, number>>;
+
+/** Clip lengths Sora is sold at (its duration enum, capped as above). */
+export const SORA_SECONDS = [4, 8, 12] as const;
+export const SORA_ASPECTS = ["16:9", "9:16"] as const;
+
+function soraEntry(id: keyof typeof SORA_USD_PER_SECOND, label: string, upstream: string, badges: CatalogEntry["badges"]): CatalogEntry {
+  const table = SORA_USD_PER_SECOND[id] as Readonly<Record<string, number>>;
+  const tiers = Object.keys(table);
+  const top = tiers[tiers.length - 1]!;
+  return {
+    id,
+    kind: "video",
+    capabilities: ["t2v", "i2v"],
+    label,
+    maker: "OpenAI",
+    badges,
+    params: [
+      { name: "prompt", label: "Video tavsifi", type: "text", min: VIDEO_PROMPT_MIN, max: VIDEO_PROMPT_MAX, affects: "request" },
+      { name: "seconds", label: "Davomiylik", hint: "Soniya (4, 8 yoki 12)", type: "int", min: SORA_SECONDS[0], max: SORA_SECONDS[SORA_SECONDS.length - 1]!, step: 4, default: 4, affects: "both" },
+      // One tier (Sora 2: 720p only) = no row: a choice of one would be a decorative field.
+      ...(tiers.length > 1
+        ? [{ name: "resolution", label: "Sifat", hint: "Yuqori sifat qimmatroq", type: "enum", options: tiers.map((t) => ({ value: t, label: RESOLUTION_LABEL[t] ?? t })), default: top, affects: "both" } as const]
+        : []),
+      {
+        name: "aspect",
+        label: "O'lcham",
+        hint: "Surat bilan boshlanganda nisbat suratdan olinadi",
+        type: "enum",
+        options: SORA_ASPECTS.map((a) => ({ value: a, label: a })),
+        default: SORA_ASPECTS[0],
+        affects: "request",
+      },
+      START_IMAGE,
+    ],
+    cost: tiers.length > 1 ? { per: "second", usd: table[top]!, secondsParam: "seconds", by: { param: "resolution", table } } : { per: "second", usd: table[top]!, secondsParam: "seconds" },
+    routes: [{ provider: "fal", upstreamModel: upstream, adapter: "fal-video" }],
+    limits: VIDEO_LIMITS,
+    output: VIDEO_OUT,
+  };
+}
+
+/** Sora 2 entries, picker order (after the P4 fal models). */
+export const SORA_ENTRIES: readonly CatalogEntry[] = [
+  soraEntry("openai/sora-2", "Sora 2", "fal-ai/sora-2", ["ovozli", "yangi"]),
+  soraEntry("openai/sora-2-pro", "Sora 2 Pro", "fal-ai/sora-2/pro", ["sifatli", "ovozli"]),
+];
+
 /**
  * Models whose image → video request has no aspect (the canvas follows the start frame): Kling 3.0 and the fal models.
  * The form hides their «O'lcham» row while a start image is set (P4 review N3). Gemini Omni keeps it (it sends it).
  */
-export const ASPECT_FOLLOWS_IMAGE: ReadonlySet<string> = new Set([...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES].map((e) => e.id));
+export const ASPECT_FOLLOWS_IMAGE: ReadonlySet<string> = new Set([...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, ...SORA_ENTRIES].map((e) => e.id));
 
-/** Every Studio video entry, picker order: Kling 3.0 tiers, the fal models (P4), the effect templates last. */
-export const STUDIO_VIDEO_ENTRIES: readonly CatalogEntry[] = [...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, KLING_EFFECTS_ENTRY];
+/** Every Studio video entry, picker order: Kling 3.0 tiers, the fal models (P4), Sora 2 (P9), the effect templates last. */
+export const STUDIO_VIDEO_ENTRIES: readonly CatalogEntry[] = [...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, ...SORA_ENTRIES, KLING_EFFECTS_ENTRY];
 
 /** Length of an effect clip (the result page, the short-clip refund). */
 export const STUDIO_EFFECT_SECONDS = KLING_EFFECT_SECONDS;

@@ -16,6 +16,7 @@ import { MediaError, type AdapterInput, type MediaAdapter, type NormalizedParams
 import { ELEVENLABS_API, ELEVENLABS_OUTPUT_FORMAT, elevenLabsFetch, elevenLabsKey, elevenLabsMp3 } from "../../generation/tts/elevenlabs";
 import { ELEVENLABS_MUSIC_MODEL, ELEVENLABS_SFX_MODEL, ELEVENLABS_STS_MODEL } from "../catalog-audio";
 import { toSpeechError } from "./speech";
+import { LYRIA_ADAPTER_ID, lyriaAdapter } from "./lyria";
 
 export type AudioAdapterKind = "music" | "sfx" | "sts" | "isolate";
 export type StudioAudioAdapterDeps = { key?: () => string };
@@ -113,8 +114,12 @@ export function audioAdapter(kind: AudioAdapterKind, deps: StudioAudioAdapterDep
 }
 
 /** Every Studio «Audio» adapter by id (the catalog routes name them). */
-export function studioAudioAdapters(deps: StudioAudioAdapterDeps = {}): Record<string, MediaAdapter> {
-  return Object.fromEntries((Object.keys(ADAPTER_ID) as AudioAdapterKind[]).map((k) => [ADAPTER_ID[k], audioAdapter(k, deps)]));
+export function studioAudioAdapters(deps: StudioAudioAdapterDeps & { lyriaKey?: () => string } = {}): Record<string, MediaAdapter> {
+  return {
+    ...Object.fromEntries((Object.keys(ADAPTER_ID) as AudioAdapterKind[]).map((k) => [ADAPTER_ID[k], audioAdapter(k, deps)])),
+    // P9: Lyria on the Gemini key («Musiqa», second model).
+    [LYRIA_ADAPTER_ID]: lyriaAdapter(deps.lyriaKey ? { key: deps.lyriaKey } : {}),
+  };
 }
 
 /** The adapter kind of an «Audio» catalog model's route. */

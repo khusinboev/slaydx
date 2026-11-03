@@ -84,6 +84,8 @@ test("catalog: studio.video = Omni (default) + Kling 3.0 + Kling 3.0 Pro + effec
     "bytedance/seedance-2-mini",
     "minimax/h3",
     "minimax/h3-max-turbo",
+    "openai/sora-2",
+    "openai/sora-2-pro",
     "kling/effects",
   ]);
   assert.equal(p.default, "google/omni-video");
@@ -142,6 +144,9 @@ test("probe: every param of every studio.video model changes the request or the 
     "bytedance/seedance-2-mini": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9" },
     "minimax/h3": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9" },
     "minimax/h3-max-turbo": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9" },
+    // P9 Sora (fal): 4 s and the top tier are the defaults; the probe goes to 12 s and down to 720p.
+    "openai/sora-2": { prompt: "Registon at dawn", seconds: 4, aspect: "16:9" },
+    "openai/sora-2-pro": { prompt: "Registon at dawn", seconds: 4, aspect: "16:9", resolution: "1080p" },
   };
   const alt: Record<string, unknown> = { prompt: "A different prompt", seconds: undefined, aspect: "9:16", sound: true, effect: "snowglobe", resolution: "480p" };
   const soundOff = new Set(["alibaba/wan-3", "bytedance/seedance-2.5", "bytedance/seedance-2-mini"]);
@@ -154,6 +159,7 @@ test("probe: every param of every studio.video model changes the request or the 
       if (p.name === "seconds" && p.type === "int") next = p.max;
       // The fal models default to sound ON (same price): the probe flips it off.
       if (p.name === "sound" && soundOff.has(id)) next = false;
+      if (p.name === "resolution" && id === "openai/sora-2-pro") next = "720p";
       if (p.type === "image") {
         // The start image: with vs without (the effect's photo is required, so it is probed by its presence in the build).
         if (needsImage) continue;
