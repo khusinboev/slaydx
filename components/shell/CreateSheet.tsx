@@ -14,6 +14,7 @@ import { TOOL_ICONS } from "./icons";
 import { SAFE_BOTTOM, TOP_INSET } from "./safe-area";
 import { CREATE_SHEET_ID } from "./TabBar";
 import { mostUsedToolIds } from "./create-sheet";
+import { toolHref } from "@/lib/media/legacy-fold";
 
 const KNOWN = new Set<string>(TOOLS.map((t) => t.id));
 
@@ -101,7 +102,7 @@ export function CreateSheet() {
             <ul className="grid grid-cols-4 gap-1">
               {top.map((t) => (
                 <li key={t.id}>
-                  <ToolTile tool={t} onPick={onPick} />
+                  <ToolTile tool={t} legacyFold={features?.legacyFold} onPick={onPick} />
                 </li>
               ))}
             </ul>
@@ -113,7 +114,7 @@ export function CreateSheet() {
               <ul className="grid grid-cols-4 gap-1">
                 {listedTools().filter((t) => t.group === g.id).map((t) => (
                   <li key={t.id}>
-                    <ToolTile tool={t} onPick={onPick} />
+                    <ToolTile tool={t} legacyFold={features?.legacyFold} onPick={onPick} />
                   </li>
                 ))}
                 {servicesOfGroup(g.id, features).map((v) => (
@@ -150,8 +151,9 @@ function SectionLabel({ id, children }: { id: string; children: React.ReactNode 
   );
 }
 
-function ToolTile({ tool, onPick }: { tool: ToolConfig; onPick: (href: string) => void }) {
-  const href = `/uz/${tool.slug}`;
+function ToolTile({ tool, legacyFold, onPick }: { tool: ToolConfig; legacyFold: boolean | undefined; onPick: (href: string) => void }) {
+  // P8 fold on: «Rasm» / «Video yaratish» open their Studio tab (lib/media/legacy-fold.ts).
+  const href = toolHref(tool, legacyFold);
   const Icon = TOOL_ICONS[tool.icon];
   return (
     <Link

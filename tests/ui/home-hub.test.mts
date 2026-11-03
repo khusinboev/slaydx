@@ -520,6 +520,31 @@ test("Studio is the FIRST tile of the Media group, whatever its place in the reg
   }
 });
 
+/*
+ * Studio P8a (docs/studio/P8-SPEC.md): `features.legacyFold` on → the «Rasm» and «Video yaratish» tiles open their Studio
+ * tab; every other tile keeps `/uz/<slug>`. Off / unknown = the «Barcha vositalar» test above (today's links).
+ * Mutation: ToolsByGroup ignores `legacyFold` (`/uz/${tool.slug}` again) → red.
+ */
+test("P8 fold on: the «Rasm» / «Video yaratish» tiles open the Studio tabs; the other tiles do not move", () => {
+  signIn();
+  useAppStore.setState({ features: { ...(ALL_ON as object), legacyFold: true } as never });
+  mount();
+  const hrefs = new Map<string, string>();
+  for (const g of visibleToolGroups()) {
+    fireEvent.click(q(`[data-hub-group="${g.id}"]`)!);
+    for (const a of document.querySelectorAll<HTMLAnchorElement>("[data-hub-tool]:not([data-hub-service])")) hrefs.set(a.dataset.hubTool!, a.getAttribute("href")!);
+  }
+  assert.equal(hrefs.get("image"), "/uz/studio?tab=rasm", "MUTATSIYA: fold ignored → /uz/rasm");
+  assert.equal(hrefs.get("video"), "/uz/studio?tab=video");
+  for (const [id, href] of hrefs) if (id !== "image" && id !== "video") assert.equal(href, `/uz/${TOOL_BY_ID[id as keyof typeof TOOL_BY_ID].slug}`, id);
+  // The login gate carries the Studio target too.
+  signOut();
+  useAppStore.setState({ features: { ...(ALL_ON as object), legacyFold: true } as never });
+  fireEvent.click(q('[data-hub-group="umumiy"]')!);
+  fireEvent.click(q('[data-hub-tool="image"]')!);
+  assert.equal(useUi.getState().returnTo, "/uz/studio?tab=rasm");
+});
+
 test("services follow their feature switches: chat / tests / domla hidden when off or unknown; convert + alifbo always", () => {
   signIn();
   const cases: [unknown, string[]][] = [

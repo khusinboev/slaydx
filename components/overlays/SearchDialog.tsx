@@ -12,6 +12,7 @@ import { TOOL_ICONS } from "../shell/icons";
 import { OverlayClose, OverlayFrame, OverlayScrim } from "./OverlayFrame";
 import { PAY_RETURN_PATH } from "./pay-amount";
 import { useDialog } from "./useDialog";
+import { toolHref } from "@/lib/media/legacy-fold";
 
 const sectionLabel = "text-muted-foreground px-2 pt-2 pb-1.5 text-[13px] font-semibold tracking-[0.06em] uppercase";
 
@@ -28,6 +29,7 @@ export function SearchDialog() {
   const close = useUi((s) => s.close);
   const router = useRouter();
   const loggedIn = useAppStore((s) => s.loggedIn);
+  const legacyFold = useAppStore((s) => s.features?.legacyFold);
   const generations = useAppStore((s) => s.generations);
   // Serverda yana sahifa bor — qidiruv hamma fayllarni ko'rmaydi.
   const moreOnServer = useAppStore((s) => s.generationsCursor !== null);
@@ -99,8 +101,10 @@ export function SearchDialog() {
                 className={row}
                 onClick={() => {
                   close();
-                  router.push(`/uz/${t.slug}`);
-                  if (!loggedIn) openLogin("login", { returnTo: `/uz/${t.slug}` });
+                  // P8 fold on: «Rasm» / «Video yaratish» open their Studio tab (lib/media/legacy-fold.ts).
+                  const href = toolHref(t, legacyFold);
+                  router.push(href);
+                  if (!loggedIn) openLogin("login", { returnTo: href });
                 }}
               >
                 <IconChip tc={t.tc}>{Icon ? <Icon className="size-5 text-[rgb(var(--tc))]" aria-hidden /> : null}</IconChip>

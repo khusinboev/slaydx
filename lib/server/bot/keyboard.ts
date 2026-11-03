@@ -4,6 +4,7 @@ import { TOOL_BY_ID, toolBlockedReason, type ToolFeatures } from "../../tools";
 import { t, LANGS, type Lang, type TextKey } from "./i18n";
 import { keyboardButton, tgEmoji, type IconKey, type KeyboardButton, type Screen } from "./ui";
 import { at } from "./admin-i18n";
+import { toolHref } from "../../media/legacy-fold";
 
 /**
  * The persistent main reply keyboard (docs/bot/PLAN.md, owner decisions Q1/Q3 +
@@ -30,11 +31,17 @@ export type KeyboardAction = "slide" | "pro" | "independent" | "referat" | "imag
 type KeyboardTool = "slide" | "image" | "pro-slide" | "mustaqil-ish" | "referat" | "resume";
 
 /** `legacy`: labels of earlier keyboards still on users' screens (a tap keeps working until the keyboard is refreshed). */
-type Spec = { action: KeyboardAction; icon: IconKey; label: TextKey; tool?: KeyboardTool; path?: string; legacy?: readonly string[] };
+type Spec = { action: KeyboardAction; icon: IconKey; label: TextKey; tool?: KeyboardTool; legacy?: readonly string[] };
 
-const toolSpec = (action: KeyboardAction, icon: IconKey, label: TextKey, tool: KeyboardTool): Spec => ({ action, icon, label, tool, path: `/uz/${TOOL_BY_ID[tool].slug}` });
+const toolSpec = (action: KeyboardAction, icon: IconKey, label: TextKey, tool: KeyboardTool): Spec => ({ action, icon, label, tool });
 
-/** Paths from `lib/tools.ts` slugs (slide, pro-slide, mustaqil-ish, referat, rasm, resume). */
+/** Keyboard options: a linked admin gets the panel row; `legacyFold` = the setting `studio.legacy_fold` (P8). */
+export type KeyboardOpts = { admin?: boolean; legacyFold?: boolean };
+
+/**
+ * Tool buttons open `lib/tools.ts` slugs (slide, pro-slide, mustaqil-ish, referat, rasm, resume) through the web's own
+ * link builder (`toolHref`): with the P8 fold on, «Rasm» opens the Studio «Rasm» tab (docs/studio/P8-SPEC.md).
+ */
 const SPECS: Record<KeyboardAction, Spec> = {
   slide: toolSpec("slide", "slide", "kb.slide", "slide"),
   pro: toolSpec("pro", "pro", "kb.pro", "pro-slide"),
@@ -64,10 +71,23 @@ export function toolBlocked(action: KeyboardAction, features: ToolFeatures = bot
   return tool ? toolBlockedReason(TOOL_BY_ID[tool], features) : null;
 }
 
-function button(lang: Lang, telegramId: number | string, action: KeyboardAction, features: ToolFeatures): KeyboardButton {
+/** The switch behind `KeyboardOpts.legacyFold` (lazy import: the pure keyboard tests never load the settings store). */
+export async function legacyFoldSetting(): Promise<boolean> {
+  const { legacyFoldOn } = await import("../media/legacy-fold");
+  return legacyFoldOn();
+}
+
+/** The web path a tool button opens (`null` for a chat-screen button). */
+export function keyboardPath(action: KeyboardAction, legacyFold = false): string | null {
+  const tool = SPECS[action].tool;
+  return tool ? toolHref(TOOL_BY_ID[tool], legacyFold) : null;
+}
+
+function button(lang: Lang, telegramId: number | string, action: KeyboardAction, features: ToolFeatures, legacyFold: boolean): KeyboardButton {
   const s = SPECS[action];
   const style = action === "slide" ? "primary" : action === "profile" ? "success" : undefined;
-  const webApp = s.path && !toolBlocked(action, features) ? botAppUrl(telegramId, s.path) : null;
+  const path = keyboardPath(action, legacyFold);
+  const webApp = path && !toolBlocked(action, features) ? botAppUrl(telegramId, path) : null;
   return keyboardButton(s.icon, t(lang, s.label), { webApp, style });
 }
 
@@ -75,9 +95,9 @@ export function mainKeyboard(
   lang: Lang,
   telegramId: number | string,
   features: ToolFeatures = botFeatures(),
-  opts: { admin?: boolean } = {},
+  opts: KeyboardOpts = {},
 ): Record<string, unknown> {
-  const b = (a: KeyboardAction) => button(lang, telegramId, a, features);
+  const b = (a: KeyboardAction) => button(lang, telegramId, a, features, Boolean(opts.legacyFold));
   return {
     keyboard: [
       [b("slide"), b("pro")],
@@ -100,7 +120,7 @@ export function keyboardMessage(
   telegramId: number | string,
   kind: "note" | "refreshed",
   features?: ToolFeatures,
-  opts: { admin?: boolean } = {},
+  opts: KeyboardOpts = {},
 ): Screen {
   const text = kind === "note" ? `${tgEmoji("pointDown")} ${t(lang, "kb.note")}` : `${tgEmoji("refresh")} ${t(lang, "kb.refreshed")}`;
   return { text, reply_markup: mainKeyboard(lang, telegramId, features, opts) };
