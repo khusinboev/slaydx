@@ -37,9 +37,12 @@ type Pending =
  * reason and is audited by the server, which also validates templates against the model's ParamSchema (the error
  * shows inline). Hiding the edit controls without the permission is cosmetic only.
  */
+/** Module-level: `useLoad` re-runs when its loader changes, so an inline arrow refetched on every render (a loop). */
+const loadLibrary = (signal: AbortSignal) => getLibrary({ signal });
+
 export function StudioLibraryPage() {
   const canEdit = useCan("settings.edit");
-  const [state, reload] = useLoad<LibraryOverview>((signal) => getLibrary({ signal }));
+  const [state, reload] = useLoad<LibraryOverview>(loadLibrary);
   const [tab, setTab] = useState<Kind>("prompts");
   const [category, setCategory] = useState("");
   const [editPrompt, setEditPrompt] = useState<AdminPrompt | "new" | null>(null);
