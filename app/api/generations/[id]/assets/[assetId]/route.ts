@@ -11,8 +11,8 @@ type Ctx = { params: Promise<{ id: string; assetId: string }> };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ASSET_ID = /^[0-9a-f]{8,64}$/i;
-/** Faqat rasm turlariga ruxsat — `Content-Type` orqali XSS bo'lmasin. */
-const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+/** Pictures only, plus (Studio P6) the MP3 of a sound-effect variant — `Content-Type` never opens an XSS path (CSP sandbox, nosniff). */
+const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "audio/mpeg"]);
 
 /**
  * Slayd/rasm mediasi. Egalik SQL darajasida tekshiriladi.

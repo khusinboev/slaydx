@@ -129,8 +129,10 @@ test("har `ViewerKind` da `ArtifactViewer` shoxi bor (yangi tur unutilmasin)", (
 
 test("MP3 chiqaradigan HAR vosita `audio` ko'ruvchisiga tushadi", () => {
   const audioTools = TOOLS.filter((t) => t.output === "mp3");
-  assert.equal(audioTools.length, 2, `audio vositalari: ${audioTools.map((t) => t.id).join(", ")}`);
-  assert.deepEqual(audioTools.map((t) => t.id).sort(), ["greeting", "podcast"]);
+  // + Studio «Ovoz» (P5): speech and the voice clone (its preview MP3) — the same audio viewer, reading `doc.speech`.
+  // + Studio «Audio» (P6): music / effects / voice changer / isolator — the same viewer, reading `doc.studioAudio`.
+  assert.equal(audioTools.length, 5, `audio vositalari: ${audioTools.map((t) => t.id).join(", ")}`);
+  assert.deepEqual(audioTools.map((t) => t.id).sort(), ["greeting", "podcast", "studio-audio", "studio-speech", "studio-voice"]);
   for (const t of audioTools) assert.equal(viewerKind(t.id), "audio", `${t.id}: ko'ruvchi ${viewerKind(t.id)}`);
   // Boshqa hech bir vosita `audio` ga tushmasin (shox kengayib ketmasin).
   for (const t of TOOLS) {
@@ -138,7 +140,7 @@ test("MP3 chiqaradigan HAR vosita `audio` ko'ruvchisiga tushadi", () => {
   }
   // «Media» bo'limi = MP3 vositalari + bitiruvchi portreti (item 14: `image` ko'ruvchisida) + video (item 5: `video` ko'ruvchisida)
   // + Studio rasmlari (P1: `image` ko'ruvchisida) + Studio videolari (P3: `video` ko'ruvchisida).
-  assert.deepEqual(TOOLS.filter((t) => t.group === "media").map((t) => t.id).sort(), ["greeting", "podcast", "portrait", "studio-image", "studio-video", "video"]);
+  assert.deepEqual(TOOLS.filter((t) => t.group === "media").map((t) => t.id).sort(), ["greeting", "podcast", "portrait", "studio-audio", "studio-image", "studio-speech", "studio-video", "studio-voice", "video"]);
   assert.equal(viewerKind("studio-video"), "video");
   assert.equal(viewerKind("portrait"), "image");
   assert.equal(viewerKind("studio-image"), "image");

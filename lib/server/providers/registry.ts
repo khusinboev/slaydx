@@ -54,7 +54,8 @@ export const PROVIDERS = [
   // `FAL_KEY` is a dev/script fallback: docker-compose deliberately does NOT pass it (a stale pre-removal key in the
   // server `.env` must not switch the models on) — in production the key lives only in this store.
   // «Tekshirish» reads fal's own price list for our endpoints (free, authenticated) and the balance when the key may.
-  { id: "fal", label: "fal.ai (rasm modellari)", kinds: ["image"], envKeys: ["FAL_KEY"], keyHint: "<key_id>:<key_secret>", implemented: true, testable: true },
+  // P4 (docs/studio/P4-SPEC.md): the Studio Video tab's Wan / Seedance / MiniMax clips go through the same key (async queue).
+  { id: "fal", label: "fal.ai (rasm va video)", kinds: ["image", "video"], envKeys: ["FAL_KEY"], keyHint: "<key_id>:<key_secret>", implemented: true, testable: true },
 ] as const satisfies readonly ProviderDef[];
 
 export type ProviderId = (typeof PROVIDERS)[number]["id"];

@@ -73,6 +73,9 @@ export function viewerKind(id: ToolId): ViewerKind {
       return "game";
     case "podcast":
     case "greeting":
+    case "studio-speech":
+    case "studio-voice":
+    case "studio-audio":
       // AUDIT-22: chiqish MP3 — pleer + transkript (`AudioViewer`).
       return "audio";
     case "video":

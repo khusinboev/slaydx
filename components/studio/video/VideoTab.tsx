@@ -23,6 +23,7 @@ import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, prom
 import type { StudioJob } from "../StudioResults";
 import { VideoResults } from "./VideoResults";
 import { STUDIO_VIDEO_SLUG, STUDIO_VIDEO_TOOL_ID, clipSeconds, isEffect, studioVideoClientPrice, videoCardPrice } from "./video-price";
+import { ASPECT_FOLLOWS_IMAGE, END_IMAGE_PARAM, SECOND_IMAGE_PARAM, effectPhotos } from "@/lib/media/catalog-video";
 
 /** «Shablon effektlar» (one photo → a ready clip) or «Matndan / rasmdan» (a model + a prompt, optional start image). */
 export type VideoMode = "effects" | "text";
@@ -38,17 +39,32 @@ export type VideoTabState = {
   effect: string | null;
   /** The effect's photo (`photo_uploads.asset_id`). */
   effectImage: string;
+  /** P4: the second photo of a two-photo effect («Quchoqlash»); sent only for such a scene. */
+  effectImage2?: string;
+  /**
+   * P7b «Videoga aylantirish»: the start frame came from a Studio picture — the picker offers only the models that take
+   * a start image while it is set (removing the frame lifts the filter).
+   */
+  fromPicture?: boolean;
 };
 
-export const INITIAL_VIDEO_STATE: VideoTabState = { mode: null, chosen: null, raw: {}, effect: null, effectImage: "" };
+export const INITIAL_VIDEO_STATE: VideoTabState = { mode: null, chosen: null, raw: {}, effect: null, effectImage: "", effectImage2: "" };
 
 const INSUFFICIENT_RE = /balans yetarli emas|to.langan balans bilan/i;
 const IMAGE_PARAM = "imageAssetId";
+/** The two photos a model / scene may take besides the start image (P4). */
+const END_PARAM = END_IMAGE_PARAM;
+const SECOND_PARAM = SECOND_IMAGE_PARAM;
 
 /** The catalog split: the effect templates and the text/image → video models (each in catalog order). */
 export function splitVideoCatalog(catalog: MediaCatalog | null): { effects: ClientEntry | null; models: ClientEntry[] } {
   const all = catalog?.models ?? [];
   return { effects: all.find(isEffect) ?? null, models: all.filter((m) => !isEffect(m)) };
+}
+
+/** P7b: the text/image models that take a start image (`imageAssetId`), in catalog order. */
+export function startImageModels(models: readonly ClientEntry[]): ClientEntry[] {
+  return models.filter((m) => m.params.some((p) => p.name === IMAGE_PARAM && p.type === "image"));
 }
 
 /** The effect scenes of the effects entry (its `effect` enum), in grid order. */
@@ -69,10 +85,14 @@ export function videoSubmitLabel(what: string, price: number): string {
   return `Yaratish · ${what} · ${formatSom(price)}`;
 }
 
-/** The request carries the start image as one asset id string (the form value shape), never the normalized list. */
+/** The request carries each photo as one asset id string (the form value shape), never the normalized list. */
 function flatImage(values: Record<string, unknown>): Record<string, unknown> {
-  const v = values[IMAGE_PARAM];
-  return Array.isArray(v) ? { ...values, [IMAGE_PARAM]: String(v[0] ?? "") } : values;
+  const out = { ...values };
+  for (const name of [IMAGE_PARAM, END_PARAM]) {
+    const v = out[name];
+    if (Array.isArray(v)) out[name] = String(v[0] ?? "");
+  }
+  return out;
 }
 
 /** The tab's model: the text model chosen if still offered, else the server default when it is one, else the first. */
@@ -97,6 +117,8 @@ export function VideoTab({
   balance,
   typing,
   gated,
+  onMusic,
+  onVoice,
 }: {
   catalogState: CatalogState;
   reload: (silent?: boolean) => void;
@@ -108,12 +130,18 @@ export function VideoTab({
   balance: number | null;
   typing: boolean;
   gated: boolean;
+  /** P7b «Keyingi qadam» on a finished clip: «Musiqa yaratish» / «Ovoz qo'shish» with its prompt (absent = no button). */
+  onMusic?: (prompt: string) => void;
+  onVoice?: (text: string) => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const catalog = catalogState.status === "ready" ? catalogState.catalog : null;
-  const split = splitVideoCatalog(catalog);
+  const all = splitVideoCatalog(catalog);
+  // P7b: a picture handed over as the start frame keeps the picker on the models that take one.
+  const fromPicture = state.fromPicture === true && Boolean(state.raw[IMAGE_PARAM]);
+  const split = fromPicture ? { ...all, models: startImageModels(all.models) } : all;
   const mode = shownMode(state, split);
 
   const options = effectOptions(split.effects);
@@ -124,9 +152,11 @@ export function VideoTab({
   let entry: ClientEntry | null = null;
   let sent: Record<string, unknown> = {};
   let what = "";
+  const twoPhotos = effect ? effectPhotos(effect.value) === 2 : false;
   if (mode === "effects" && split.effects && effect) {
     entry = split.effects;
-    sent = { modelId: entry.id, effect: effect.value, [IMAGE_PARAM]: state.effectImage };
+    // The second photo goes out only for a two-photo scene (the server refuses it on a single-photo one).
+    sent = { modelId: entry.id, effect: effect.value, [IMAGE_PARAM]: state.effectImage, ...(twoPhotos ? { [SECOND_PARAM]: state.effectImage2 ?? "" } : {}) };
     what = `«${effect.label}»`;
   } else if (mode === "text" && model) {
     entry = model;
@@ -142,6 +172,7 @@ export function VideoTab({
   function selectModel(id: string) {
     const next = split.models.find((m) => m.id === id);
     if (!next) return;
+    // The photos stay across a model switch (`carryOver` keeps the end frame when the new model takes one).
     setState((s) => ({ ...s, chosen: id, raw: { ...carryOver(next, s.raw), ...(s.raw[IMAGE_PARAM] ? { [IMAGE_PARAM]: s.raw[IMAGE_PARAM] } : {}) } }));
   }
 
@@ -174,6 +205,10 @@ export function VideoTab({
         setError("Effekt uchun surat yuklang");
         return;
       }
+      if (twoPhotos && !state.effectImage2) {
+        setError("Bu effekt uchun ikkinchi suratni ham yuklang");
+        return;
+      }
       void send(entry, sent, `Effekt: ${effect?.label ?? ""}`);
       return;
     }
@@ -181,6 +216,8 @@ export function VideoTab({
       setError("Videoda nima bo‘lishini yozing (kamida 5 ta belgi)");
       return;
     }
+    // An end frame without a start cannot be built here (the upload waits for the start; removing the start clears it);
+    // the server's preflight refuses one anyway.
     void send(entry, sent, normalizedPrompt(entry, state.raw));
   }
 
@@ -217,9 +254,14 @@ export function VideoTab({
   }
 
   const textModel = model;
-  const formEntry = textModel ? { ...textModel, params: textModel.params.filter((p) => p.type !== "image") } : null;
-  const hasStart = textModel?.params.some((p) => p.name === IMAGE_PARAM) ?? false;
   const startImage = String(state.raw[IMAGE_PARAM] ?? "");
+  // P4 review N3: with a start image, Kling 3.0 / the fal models take the frame's proportions — no «O'lcham» row then.
+  const aspectHidden = Boolean(startImage) && Boolean(textModel && ASPECT_FOLLOWS_IMAGE.has(textModel.id));
+  const formEntry = textModel ? { ...textModel, params: textModel.params.filter((p) => p.type !== "image" && !(aspectHidden && p.name === "aspect")) } : null;
+  const hasStart = textModel?.params.some((p) => p.name === IMAGE_PARAM) ?? false;
+  // P4: models that take a last frame (Kling 3.0, the fal models) show its upload next to the start image.
+  const hasEnd = textModel?.params.some((p) => p.name === END_PARAM) ?? false;
+  const endImage = String(state.raw[END_PARAM] ?? "");
 
   return (
     <div data-video-tab>
@@ -278,10 +320,30 @@ export function VideoTab({
                 />
               </Field>
             </Row>
+            {twoPhotos ? (
+              <Row label="Ikkinchi surat" hint="Effekt ikki kishini birga ko‘rsatadi: har biri o‘z suratida" wide>
+                <Field id={SECOND_PARAM}>
+                  <PhotoField
+                    assetId={state.effectImage2 ?? ""}
+                    originalAssetId=""
+                    shape="square"
+                    keepOriginal={false}
+                    alt="Ikkinchi surat"
+                    hint={photoHint()}
+                    onChange={(v) => patch({ effectImage2: v.assetId })}
+                  />
+                </Field>
+              </Row>
+            ) : null}
           </Card>
         </>
       ) : textModel && formEntry ? (
         <>
+          {fromPicture ? (
+            <p className="bg-accent-soft text-accent-soft-foreground mb-3 rounded-[14px] px-3.5 py-2 text-[14px] leading-snug" data-video-from-picture>
+              Rasmdan video: rasmingiz birinchi kadr bo‘ladi. Faqat suratdan video yarata oladigan modellar ko‘rsatilgan.
+            </p>
+          ) : null}
           <VideoPromptBox value={String(state.raw[PROMPT_PARAM] ?? "")} onChange={(v) => setParam(PROMPT_PARAM, v)} limit={promptLimit(textModel)} />
           <MediaModelPicker
             purpose={STUDIO_VIDEO_PURPOSE}
@@ -295,8 +357,8 @@ export function VideoTab({
           />
           <ParamRows entry={formEntry} raw={state.raw} onChange={setParam} />
           {hasStart ? (
-            <Card title="Boshlang‘ich surat (ixtiyoriy)">
-              <Row label="Surat" wide>
+            <Card title={hasEnd ? "Kadrlar (ixtiyoriy)" : "Boshlang‘ich surat (ixtiyoriy)"}>
+              <Row label={hasEnd ? "Birinchi kadr" : "Surat"} wide>
                 <Field id={IMAGE_PARAM}>
                   <PhotoField
                     assetId={startImage}
@@ -305,11 +367,37 @@ export function VideoTab({
                     keepOriginal={false}
                     alt="Boshlang‘ich surat"
                     hint={photoHint()}
-                    onChange={(v) => setParam(IMAGE_PARAM, v.assetId)}
+                    onChange={(v) =>
+                      // Removing the start frame removes the end frame too (an end frame alone is never sent), and lifts
+                      // the P7b start-image filter of the picker.
+                      setState((s) => ({ ...s, ...(v.assetId ? {} : { fromPicture: false }), raw: { ...s.raw, [IMAGE_PARAM]: v.assetId, ...(v.assetId ? {} : { [END_PARAM]: "" }) } }))
+                    }
                   />
                 </Field>
                 <p className="text-muted-foreground mt-1 text-[13px]">Surat berilsa video shu suratdan boshlanadi; nisbat suratdan olinadi.</p>
               </Row>
+              {hasEnd ? (
+                <Row label="Oxirgi kadr" hint="Ixtiyoriy: video shu surat bilan tugaydi (boshlang‘ich surat bilan birga)" wide>
+                  <Field id={END_PARAM}>
+                    {startImage ? (
+                      <PhotoField
+                        assetId={endImage}
+                        originalAssetId=""
+                        shape="square"
+                        keepOriginal={false}
+                        alt="Oxirgi kadr"
+                        hint={photoHint()}
+                        onChange={(v) => setParam(END_PARAM, v.assetId)}
+                      />
+                    ) : (
+                      // P4 review N4: no upload until a start frame exists.
+                      <p className="text-muted-foreground text-[13px]" data-end-frame-locked aria-disabled="true">
+                        Avval birinchi kadrni yuklang — oxirgi kadr shundan keyin qo‘shiladi.
+                      </p>
+                    )}
+                  </Field>
+                </Row>
+              ) : null}
             </Card>
           ) : null}
         </>
@@ -344,7 +432,7 @@ export function VideoTab({
         paidOnly
       />
       <section aria-label="Videolar" data-video-results className={cn(jobs.length > 0 && "mt-5")}>
-        <VideoResults jobs={jobs} busy={submitting} onAgain={again} />
+        <VideoResults jobs={jobs} busy={submitting} onAgain={again} onMusic={onMusic} onVoice={onVoice} />
       </section>
     </div>
   );

@@ -22,6 +22,8 @@ import { VIDEO_MAX_BYTES } from "../generation/video/types";
 import { PPTX_SIZE_LIMIT } from "../generation/size-limits";
 import { PHOTO_MAX_BYTES } from "../photo-accept";
 import { STUDIO_VIDEO_ENTRIES, STUDIO_VIDEO_PURPOSE_SPEC } from "./catalog-video";
+import { STUDIO_CLONE_PURPOSE_SPEC, STUDIO_SPEECH_ENTRIES, STUDIO_SPEECH_PURPOSE_SPEC } from "./catalog-speech";
+import { STUDIO_AUDIO_ENTRIES, STUDIO_AUDIO_PURPOSE_SPECS } from "./catalog-audio";
 
 /** Same as `IMAGE_PROMPT_MIN` in `lib/tools.ts` (not imported: tools.ts will read this file; a test keeps them equal). */
 export const MEDIA_IMAGE_PROMPT_MIN = 3;
@@ -292,6 +294,10 @@ export const MEDIA_ENTRIES: readonly CatalogEntry[] = [
   speech("elevenlabs/tts", "ElevenLabs", "ElevenLabs", "elevenlabs", "elevenlabs-speech", charsUsd("elevenlabs")),
   speech("azure/tts", "Azure Speech", "Microsoft", "azure", "azure-speech", charsUsd("azure")),
   speech("aisha/tts", "Aisha", "Aisha", "aisha", "aisha-speech", 0.078),
+  // Studio P5 «Ovoz» tab (docs/studio/P5-SPEC.md, `catalog-speech.ts`).
+  ...STUDIO_SPEECH_ENTRIES,
+  // Studio P6 «Audio» tab (docs/studio/P6-SPEC.md, `catalog-audio.ts`).
+  ...STUDIO_AUDIO_ENTRIES,
 ];
 
 /**
@@ -406,6 +412,11 @@ export const MEDIA_PURPOSES = definePurposes(MEDIA_CATALOG, [
   // P2a: + the fal models, Nano Banana stays the default.
   { id: STUDIO_IMAGE_PURPOSE, kind: "image", allowed: ["google/nano-banana", "openai/gpt-image", ...FAL_IMAGE_MODELS], default: "google/nano-banana", userCanChoose: true },
   STUDIO_VIDEO_PURPOSE_SPEC,
+  // P5 (docs/studio/P5-SPEC.md): the «Ovoz» tab and voice cloning.
+  STUDIO_SPEECH_PURPOSE_SPEC,
+  STUDIO_CLONE_PURPOSE_SPEC,
+  // P6 (docs/studio/P6-SPEC.md): the «Audio» tab — music, sound effects, voice changer, isolator (one model each).
+  ...STUDIO_AUDIO_PURPOSE_SPECS,
   // P2b (docs/studio/P2B-SPEC.md): the Studio's edit and utility jobs — same tool, same charge / refund / gallery.
   { id: STUDIO_EDIT_PURPOSE, kind: "image", allowed: ["google/nano-banana-edit", "bytedance/seedream-edit"], default: "google/nano-banana-edit", userCanChoose: true },
   { id: STUDIO_UPSCALE_PURPOSE, kind: "image", allowed: ["bytedance/seedvr-upscale"], default: "bytedance/seedvr-upscale", userCanChoose: false },

@@ -93,6 +93,8 @@ const COST_KIND_LABEL: Record<string, string> = {
   llm: "Matn (LLM)",
   image: "Rasm",
   tts: "Ovoz (TTS)",
+  video: "Video",
+  audio: "Audio (musiqa, effekt)",
   grounding: "Google qidiruvi",
   unknown: "Turi yozilmagan",
 };

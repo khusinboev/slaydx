@@ -130,3 +130,133 @@ export function makeElevenLabsTts(deps: ElevenLabsTtsDeps = {}): TtsProvider {
 }
 
 export const elevenLabsTts = makeElevenLabsTts();
+
+/* ══════════════════════════ Studio «Ovoz» (P5) additions ══════════════════════════
+ * docs/studio/P5-SPEC.md. Everything above serves the podcast / greeting premium voice and is unchanged; the Studio
+ * speaks to the same API through these builders (pure, pinned by golden tests in `tests/studio-speech.test.mts`).
+ * References (read 2026-11-02):
+ *   text-to-speech  https://elevenlabs.io/docs/api-reference/text-to-speech/convert — `voice_settings.stability`
+ *                   (default 0.5; lower = wider emotional range) and `speed` (default 1).
+ *   dialogue        https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert — POST /v1/text-to-dialogue,
+ *                   `{ inputs: [{text, voice_id}], model_id (default eleven_v3), language_code?, settings: {stability} }`,
+ *                   ≤ 10 voices, ≤ 2 000 characters; the answer is the audio file.
+ *   voice clone     https://elevenlabs.io/docs/api-reference/voices/ivc/create — POST /v1/voices/add (multipart:
+ *                   `name`, `files`, `remove_background_noise`, `description`, `labels`) → `{ voice_id, requires_verification }`.
+ *   delete voice    https://elevenlabs.io/docs/api-reference/voices/delete — DELETE /v1/voices/{voice_id} → `{ status: "ok" }`.
+ *   subscription    https://elevenlabs.io/docs/api-reference/user/subscription/get — GET /v1/user/subscription →
+ *                   `voice_slots_used`, `voice_limit`, `can_use_instant_voice_cloning`, …
+ */
+export const ELEVENLABS_API = "https://api.elevenlabs.io/v1";
+export const ELEVENLABS_DIALOGUE_URL = `${ELEVENLABS_API}/text-to-dialogue?output_format=${ELEVENLABS_OUTPUT_FORMAT}`;
+export const ELEVENLABS_CLONE_URL = `${ELEVENLABS_API}/voices/add`;
+export const ELEVENLABS_SUBSCRIPTION_URL = `${ELEVENLABS_API}/user/subscription`;
+export const elevenLabsVoiceUrl = (voiceId: string): string => `${ELEVENLABS_API}/voices/${encodeURIComponent(voiceId)}`;
+/**
+ * Every Studio clone's description starts with this marker, so housekeeping can find a clone ElevenLabs made but whose
+ * id never reached us (a call that timed out after the voice was created) and delete it (review m1).
+ */
+export const ELEVENLABS_CLONE_MARKER = "SlaydX Studio";
+/**
+ * Our cloned voices (`GET /v2/voices?category=cloned&search=<marker>`, ≤ 100 per page, `next_page_token` while
+ * `has_more`): https://elevenlabs.io/docs/api-reference/voices/search, read 2026-11-02.
+ */
+export const elevenLabsClonedVoicesUrl = (pageToken?: string): string =>
+  `https://api.elevenlabs.io/v2/voices?category=cloned&page_size=100&search=${encodeURIComponent(ELEVENLABS_CLONE_MARKER)}${pageToken ? `&next_page_token=${encodeURIComponent(pageToken)}` : ""}`;
+
+/** The eleven_v3 languages above as a list (`lib/media/catalog-speech.ts ELEVENLABS_LANGS` must equal it). */
+export const ELEVENLABS_V3_LANGS: readonly string[] = [...V3_LANGS];
+
+/** eleven_v3 stability presets (Creative / Natural / Robust); anything else = the API default (nothing sent). */
+const STABILITY = new Set([0, 0.5, 1]);
+
+export type StudioElevenOpts = { lang?: string; speed?: number; stability?: number };
+
+function langCode(lang: unknown): Record<string, string> {
+  const l = String(lang ?? "").trim().toLowerCase();
+  return V3_LANGS.has(l) ? { language_code: l } : {};
+}
+
+const stabilityOf = (v: unknown): number | null => {
+  if (v === undefined || v === null || v === "") return null;
+  const n = Number(v);
+  return STABILITY.has(n) ? n : null;
+};
+
+/** Studio single-voice body: `elevenLabsBody`'s rules + the mood (`stability`) when it is a v3 preset. */
+export function elevenLabsStudioBody(text: string, o: StudioElevenOpts): Record<string, unknown> {
+  const speed = Number(o.speed);
+  const stability = stabilityOf(o.stability);
+  const settings: Record<string, number> = {
+    ...(stability !== null ? { stability } : {}),
+    ...(Number.isFinite(speed) && speed > 0 && Math.abs(speed - 1) >= 0.01 ? { speed: Math.max(0.7, Math.min(1.2, speed)) } : {}),
+  };
+  return { text, model_id: ELEVENLABS_MODEL, ...langCode(o.lang), ...(Object.keys(settings).length ? { voice_settings: settings } : {}) };
+}
+
+/** Studio dialogue body: one input per turn with that speaker's voice. */
+export function elevenLabsDialogueBody(turns: readonly { text: string; voiceId: string }[], o: StudioElevenOpts): Record<string, unknown> {
+  const stability = stabilityOf(o.stability);
+  return {
+    inputs: turns.map((t) => ({ text: t.text, voice_id: t.voiceId })),
+    model_id: ELEVENLABS_MODEL,
+    ...langCode(o.lang),
+    ...(stability !== null ? { settings: { stability } } : {}),
+  };
+}
+
+/** The multipart form of an Instant Voice Clone (one sample file). */
+export function elevenLabsCloneForm(o: { name: string; sample: Uint8Array; mime: string; fileName: string; description?: string }): FormData {
+  const form = new FormData();
+  form.append("name", o.name);
+  form.append("files", new Blob([o.sample as BlobPart], { type: o.mime }), o.fileName);
+  form.append("remove_background_noise", "false");
+  if (o.description) form.append("description", o.description);
+  return form;
+}
+
+/** Voice slots of the account (`GET /v1/user/subscription`), `null` when the answer does not carry them. */
+export function elevenLabsSlotsOf(body: unknown): { used: number; limit: number; canClone: boolean } | null {
+  const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const used = Number(b.voice_slots_used);
+  const limit = Number(b.voice_limit);
+  if (b.voice_slots_used === undefined || b.voice_limit === undefined || !Number.isInteger(used) || !Number.isInteger(limit) || used < 0 || limit < 0) return null;
+  return { used, limit, canClone: b.can_use_instant_voice_cloning !== false };
+}
+
+export type ElevenCall = { url: string; method: "GET" | "POST" | "DELETE"; json?: unknown; form?: FormData; accept?: string };
+
+/** One ElevenLabs HTTP call with the key in its header; a failed answer is a `TtsError` (key scrubbed, retryable 429/5xx). */
+export async function elevenLabsFetch(call: ElevenCall, o: { key: string; fetchImpl?: typeof fetch; timeoutMs?: number }): Promise<Response> {
+  const doFetch = o.fetchImpl ?? fetch;
+  const headers: Record<string, string> = {
+    "xi-api-key": o.key,
+    ...(call.accept ? { Accept: call.accept } : {}),
+    ...(call.json !== undefined ? { "Content-Type": "application/json" } : {}),
+  };
+  let res: Response;
+  try {
+    res = await doFetch(call.url, {
+      method: call.method,
+      signal: AbortSignal.timeout(Math.max(1_000, o.timeoutMs ?? TTS_LIMITS.callTimeoutMs)),
+      headers,
+      ...(call.json !== undefined ? { body: JSON.stringify(call.json) } : call.form ? { body: call.form } : {}),
+    });
+  } catch (e) {
+    throw new TtsError("elevenlabs", scrubKey(e instanceof Error ? e.message : "tarmoq xatosi", o.key), { retryable: true });
+  }
+  if (!res.ok) {
+    const raw = await res.text().catch(() => "");
+    const detail = scrubKey(raw, o.key).slice(0, 200);
+    throw new TtsError("elevenlabs", `${res.status} ${res.statusText || "xato"}${detail ? `: ${detail}` : ""}`, { retryable: elevenLabsRetryable(res.status), status: res.status });
+  }
+  return res;
+}
+
+/** The audio of a successful TTS / dialogue answer, checked to be MP3 (an error page behind a 200 is never a voice). */
+export async function elevenLabsMp3(res: Response): Promise<{ mp3: Uint8Array; seconds: number }> {
+  const mp3 = new Uint8Array(await res.arrayBuffer());
+  if (!mp3.length) throw new TtsError("elevenlabs", "bo'sh javob", { retryable: true });
+  const seconds = mp3Seconds(mp3);
+  if (seconds <= 0) throw new TtsError("elevenlabs", "javobda MP3 kadri topilmadi", { retryable: false });
+  return { mp3, seconds };
+}

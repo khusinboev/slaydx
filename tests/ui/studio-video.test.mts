@@ -113,7 +113,7 @@ async function type(sel: string, value: string) {
 test("tabs: «Rasm» | «Video»; switching keeps the Rasm prompt + model and the Video form; ?tab=video opens Video; catalog asked on first open", async () => {
   const a = api();
   await mount();
-  assert.deepEqual(qa("[data-studio-tab]").map((b) => b.textContent), ["Rasm", "Video"]);
+  assert.deepEqual(qa("[data-studio-tab]").map((b) => b.textContent), ["Rasm", "Video", "Ovoz", "Audio"]);
   assert.equal(a.calls.filter((c) => c.url.includes("studio.video")).length, 0, "the video catalog waits for the tab");
   await type('[data-studio-prompt] textarea', "Samarqand kechasi");
   await click(q(`[data-model-card="${GPT.id}"]`));
@@ -138,7 +138,7 @@ test("tabs: «Rasm» | «Video»; switching keeps the Rasm prompt + model and th
   assert.equal(q('[data-studio-tab="video"]')!.getAttribute("aria-selected"), "true");
 });
 
-test("effects grid: 9 catalog scenes with the 5 s badge, the chosen one on the button with its price; the photo is required", async () => {
+test("effects grid: 10 catalog scenes with the 5 s badge, the chosen one on the button with its price; the photo is required", async () => {
   const a = api();
   await mount();
   await tab("video");
@@ -147,7 +147,8 @@ test("effects grid: 9 catalog scenes with the 5 s badge, the chosen one on the b
   const cells = qa("[data-effects-grid] [data-effect]");
   const opts = (FX.params.find((p) => p.name === "effect") as unknown as { options: { value: string; label: string }[] }).options;
   assert.deepEqual(cells.map((c) => c.dataset.effect), opts.map((o) => o.value));
-  assert.equal(cells.length, 9);
+  // P4: the nine single-photo scenes + «Quchoqlash» (two photos).
+  assert.equal(cells.length, 10);
   for (const c of cells) assert.match(c.textContent ?? "", /5 s/);
   const fxPrice = up100(0.84 * 12_700 * 2);
   assert.equal(fxPrice, 21_400);
@@ -204,7 +205,7 @@ test("text form: video models only, «so'm / N s» cards, schema rows (one data-
   await settle();
   const sent = a.posts()[0]!.body!;
   assert.equal(sent.slug, "studio-video");
-  assert.deepEqual(sent.values, { modelId: K3.id, prompt: "Registon tongda, kamera sekin", seconds: 6, aspect: "16:9", sound: true, imageAssetId: "" });
+  assert.deepEqual(sent.values, { modelId: K3.id, prompt: "Registon tongda, kamera sekin", seconds: 6, aspect: "16:9", sound: true, imageAssetId: "", endImageAssetId: "" });
   assert.equal(sent.expectedPrice, up100(0.126 * 6 * 12_700 * 2));
 });
 

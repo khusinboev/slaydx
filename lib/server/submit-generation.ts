@@ -20,13 +20,15 @@ import { videoInputFromValues } from "../generation/video/registry";
 import type { FormValues, ToolConfig, ToolId } from "../types";
 import { modelUnavailable } from "./media/availability";
 import { STUDIO_IMAGE_PURPOSE, studioPurposeOf } from "../media/catalog";
-import { studioInputsError } from "./media/inputs";
+import { studioInputsError, studioVideoInputsError } from "./media/inputs";
 import { studioModelOf } from "../media/studio-pricing";
 import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
-import { studioVideoModelOf } from "../media/studio-video-pricing";
+import { studioVideoImageParams, studioVideoModelOf } from "../media/studio-video-pricing";
 import { isPaidOnlyTool } from "../tool-kinds";
 import { normalize } from "../studio-core";
 import { MEDIA_CATALOG } from "../media/catalog";
+import { assertCloneAllowed, assertOwnClones, speechModelUnavailable } from "./media/voices";
+import { audioModelUnavailable, prepareAudioRequest } from "./media/audio-inputs";
 
 /**
  * The paid-generation pipeline behind `POST /api/generations`, shared with the AI chat's confirmation.
@@ -53,7 +55,74 @@ export type SubmitResult =
   | { kind: "queued"; id: string; price: number; replayed: boolean }
   | { kind: "admission"; error: string; code: string; retryAfterSec: number };
 
+/** What `prepareGeneration` decided; nothing is charged or queued yet. */
+export type PreparedGeneration = {
+  /** The key is already one of this user's jobs: the enqueue answers with it (the gates below were skipped for it). */
+  replay: boolean;
+  /** The SERVER price (base formula + `tool_pricing`), already checked against `expectedPrice`. */
+  price: number;
+  topic: string;
+  budgetMs: number;
+};
+
 export async function submitGeneration(input: SubmitInput): Promise<SubmitResult> {
+  const { userId, tool, values, idempotencyKey } = input;
+  const { price, topic, budgetMs } = await prepareGeneration(input);
+
+  const result = await enqueueGeneration({
+    idempotencyKey,
+    userId: userId,
+    toolId: tool.id,
+    topic,
+    price,
+    format: tool.output,
+    values,
+    budgetMs,
+    /*
+     * Qabul qarori (C22, `audit/designs/capacity.md`) — tranzaksiya ichida,
+     * PUL YECHISHDAN OLDIN: foydalanuvchida QUEUED+IN_PROGRESS ≥
+     * `queue.user_max_inflight` yoki navbatdagi kutish > `queue.max_wait_sec` (Sozlamalar)
+     * bo'lsa 429 — pul ham, qator ham yo'q.
+     */
+    admission: await queueLimits(),
+    // Bonus so'm cannot pay for video (program-17 D5): only the paid balance is charged.
+    paidOnly: isPaidOnlyTool(tool.id),
+  });
+
+  if (!result.ok && result.reason === "idempotency_conflict") {
+    throw new ApiError("Bu Idempotency-Key boshqa so'rov uchun ishlatilgan — yangi kalit bilan yuboring", 422);
+  }
+  if (!result.ok && result.reason === "admission") {
+    const { code, retryAfterSec, error } = result.decision;
+    return { kind: "admission", error, code, retryAfterSec };
+  }
+  if (!result.ok) throw insufficientError(result);
+
+  return { kind: "queued", id: result.id, price: result.price, replayed: result.replayed };
+}
+
+/** The 402 of a balance below the price (`paidOnly`: the video wording — bonus so'm never pays for video). */
+export function insufficientError(r: { required: number; available: number; paidOnly?: true; bonus?: number }): ApiError {
+  if (r.paidOnly) {
+    const bonusNote = r.bonus ? ` Bonus so'mingiz (${r.bonus.toLocaleString("uz-UZ")}) video uchun ishlamaydi.` : "";
+    return new ApiError(
+      `Video faqat to'langan balans bilan yaratiladi. Kerak: ${r.required.toLocaleString("uz-UZ")} so'm, to'langan balansingizda: ${r.available.toLocaleString("uz-UZ")} so'm.${bonusNote} Balansni to'ldiring: /uz/wallet`,
+      402,
+      { required: r.required, available: r.available, bonus: r.bonus ?? 0, code: "paid_balance_required", topUp: "/uz/wallet" },
+    );
+  }
+  return new ApiError(
+    `Balans yetarli emas. Kerak: ${r.required.toLocaleString("uz-UZ")} so'm, mavjud: ${r.available.toLocaleString("uz-UZ")}.`,
+    402,
+    { required: r.required, available: r.available },
+  );
+}
+
+/**
+ * Every check of the pipeline up to and including the price guard — nothing is charged or queued. `submitGeneration`
+ * enqueues its answer; the Studio compare batch (`studio-compare.ts`) runs it for EVERY model before charging any.
+ */
+export async function prepareGeneration(input: SubmitInput): Promise<PreparedGeneration> {
   const { userId, tool, values, idempotencyKey, expectedPrice } = input;
   /*
    * Podcast / greeting voice choice: `female` | `male`. A missing field (an old cached
@@ -196,9 +265,42 @@ export async function submitGeneration(input: SubmitInput): Promise<SubmitResult
     const unavailable = await modelUnavailable(STUDIO_VIDEO_PURPOSE, modelId);
     if (unavailable) throw new ApiError(unavailable, 400, { code: "model_unavailable" });
     const entry = MEDIA_CATALOG.byId(modelId)!;
-    const image = normalize(entry.params, values).imageAssetId;
-    const imageId = Array.isArray(image) ? image[0] : undefined;
-    if (imageId && !(await photoExists(userId, imageId))) throw new ApiError("Surat topilmadi — suratni qayta yuklang", 400);
+    // Every photo the job sends (start, P4 end frame, the second photo of a two-photo effect): the user's own (SQL).
+    const params = normalize(entry.params, values);
+    for (const name of studioVideoImageParams(entry, values)) {
+      const ids = params[name];
+      const imageId = Array.isArray(ids) ? ids[0] : undefined;
+      if (imageId && !(await photoExists(userId, imageId))) throw new ApiError("Surat topilmadi — suratni qayta yuklang", 400);
+    }
+    // P4 review N2: the Rasm tab's input checks (type, per-photo size, the job's total) before anything is charged.
+    const inputs = await studioVideoInputsError(userId, entry, values, studioVideoImageParams(entry, values));
+    if (inputs) throw new ApiError(inputs, 400, { code: "input_invalid" });
+  }
+
+  /*
+   * Studio «Ovoz» (docs/studio/P5-SPEC.md): the tab's switch + the model available now, and every clone voice the
+   * request names must be the user's own ready clone (SQL) — 400 before anything is priced or charged. The voice clone:
+   * the tab / ElevenLabs on, the sample is the user's own (with its recorded consent), no active clone, a free voice slot
+   * at ElevenLabs. A replay is a job that already exists.
+   */
+  if (tool.id === "studio-speech" && !replay) {
+    const unavailable = await speechModelUnavailable(values);
+    if (unavailable) throw new ApiError(unavailable, 400, { code: "model_unavailable" });
+    await assertOwnClones(userId, values);
+  }
+  if (tool.id === "studio-voice" && !replay) await assertCloneAllowed(userId, values);
+
+  /*
+   * Studio «Audio» (docs/studio/P6-SPEC.md): the tab's switch + the mode's model available now; the voice changer /
+   * isolator input must be the user's own upload, and its SERVER-measured billed seconds replace the request's
+   * `inputSeconds` before pricing (the translation `sourceChars` rule: the price follows the file, never the client);
+   * a clone voice must be the user's own ready clone. 400 before anything is priced or charged. A replay is a job that
+   * already exists (its values were overwritten the same way when it was bought).
+   */
+  if (tool.id === "studio-audio" && !replay) {
+    const unavailable = await audioModelUnavailable(values);
+    if (unavailable) throw new ApiError(unavailable, 400, { code: "model_unavailable" });
+    await prepareAudioRequest(userId, values);
   }
 
   // Graduation portrait: the selfie must exist and be the user's own BEFORE anything is priced or charged.
@@ -238,54 +340,10 @@ export async function submitGeneration(input: SubmitInput): Promise<SubmitResult
   }
 
   const topic = topicOf(values, tool);
-
-  const result = await enqueueGeneration({
-    idempotencyKey,
-    userId: userId,
-    toolId: tool.id,
-    topic,
-    price,
-    format: tool.output,
-    values,
-    // Byudjet ish HAJMIDAN hisoblanadi: 1 varaqlik insho 285 s lik
-    // slotni band qilmasin, 45 betlik kurs ishi esa unga sig'may
-    // yiqilmasin. `WORKER_JOB_TIMEOUT_MS` yuqori chegara bo'lib qoladi.
-    budgetMs: budgetFor(tool, values, env.worker.jobTimeoutMs),
-    /*
-     * Qabul qarori (C22, `audit/designs/capacity.md`) — tranzaksiya ichida,
-     * PUL YECHISHDAN OLDIN: foydalanuvchida QUEUED+IN_PROGRESS ≥
-     * `queue.user_max_inflight` yoki navbatdagi kutish > `queue.max_wait_sec` (Sozlamalar)
-     * bo'lsa 429 — pul ham, qator ham yo'q.
-     */
-    admission: await queueLimits(),
-    // Bonus so'm cannot pay for video (program-17 D5): only the paid balance is charged.
-    paidOnly: isPaidOnlyTool(tool.id),
-  });
-
-  if (!result.ok && result.reason === "idempotency_conflict") {
-    throw new ApiError("Bu Idempotency-Key boshqa so'rov uchun ishlatilgan — yangi kalit bilan yuboring", 422);
-  }
-  if (!result.ok && result.reason === "admission") {
-    const { code, retryAfterSec, error } = result.decision;
-    return { kind: "admission", error, code, retryAfterSec };
-  }
-  if (!result.ok && result.paidOnly) {
-    const bonusNote = result.bonus ? ` Bonus so'mingiz (${result.bonus.toLocaleString("uz-UZ")}) video uchun ishlamaydi.` : "";
-    throw new ApiError(
-      `Video faqat to'langan balans bilan yaratiladi. Kerak: ${result.required.toLocaleString("uz-UZ")} so'm, to'langan balansingizda: ${result.available.toLocaleString("uz-UZ")} so'm.${bonusNote} Balansni to'ldiring: /uz/wallet`,
-      402,
-      { required: result.required, available: result.available, bonus: result.bonus ?? 0, code: "paid_balance_required", topUp: "/uz/wallet" },
-    );
-  }
-  if (!result.ok) {
-    throw new ApiError(
-      `Balans yetarli emas. Kerak: ${result.required.toLocaleString("uz-UZ")} so'm, mavjud: ${result.available.toLocaleString("uz-UZ")}.`,
-      402,
-      { required: result.required, available: result.available },
-    );
-  }
-
-  return { kind: "queued", id: result.id, price: result.price, replayed: result.replayed };
+  // Byudjet ish HAJMIDAN hisoblanadi: 1 varaqlik insho 285 s lik
+  // slotni band qilmasin, 45 betlik kurs ishi esa unga sig'may
+  // yiqilmasin. `WORKER_JOB_TIMEOUT_MS` yuqori chegara bo'lib qoladi.
+  return { replay, price, topic, budgetMs: budgetFor(tool, values, env.worker.jobTimeoutMs) };
 }
 
 /** 503 when an admin paused all generations or this tool (§6.10). Settings reads never throw. */

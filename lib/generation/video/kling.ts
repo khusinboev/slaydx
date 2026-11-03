@@ -40,7 +40,7 @@ import { createHmac } from "node:crypto";
 import { safeFetchUrl, UnsafeUrlError } from "../safe-fetch";
 import { getProviderKey } from "../../server/providers/resolve";
 import { isMp4 } from "./mp4";
-import { KLING_EFFECT_SECONDS, type KlingV3Aspect, type KlingV3Mode } from "./kling-options";
+import { KLING_DUAL_EFFECT_MODE, KLING_DUAL_EFFECT_MODEL, KLING_EFFECT_SECONDS, type KlingV3Aspect, type KlingV3Mode } from "./kling-options";
 import {
   VIDEO_MAX_BYTES,
   VIDEO_SAFETY_MESSAGE,
@@ -114,12 +114,21 @@ export type KlingV3Input = {
   mode: KlingV3Mode;
   sound: boolean;
   image?: { mime: string; base64: string };
+  /**
+   * End frame (Studio P4): image2video's `image_tail`, raw base64 like `image`; only together with `image`. kling-v3
+   * takes it at the same price — ComfyUI «Kling 3.0 First-Last-Frame to Video» (`KlingFirstLastFrameNode`,
+   * `ImageToVideoWithAudioRequest(image, image_tail, mode, duration, sound)`, nodes_kling.py, read 2026-11-02).
+   */
+  imageTail?: { mime: string; base64: string };
 };
 
 export function buildKlingV3Request(input: KlingV3Input): KlingTaskRequest {
   const base = { model_name: input.model, prompt: input.prompt, duration: String(input.seconds), mode: input.mode, sound: input.sound ? "on" : "off" };
   const headers = { "Content-Type": "application/json" };
-  if (input.image) return { kind: "image2video", url: `${KLING_BASE}/v1/videos/image2video`, headers, body: { ...base, image: input.image.base64 } };
+  if (input.image) {
+    const tail = input.imageTail ? { image_tail: input.imageTail.base64 } : {};
+    return { kind: "image2video", url: `${KLING_BASE}/v1/videos/image2video`, headers, body: { ...base, image: input.image.base64, ...tail } };
+  }
   return { kind: "text2video", url: `${KLING_BASE}/v1/videos/text2video`, headers, body: { ...base, aspect_ratio: input.aspect } };
 }
 
@@ -130,6 +139,23 @@ export function buildKlingEffectRequest(input: { effect: string; image: { mime: 
     url: `${KLING_BASE}/v1/videos/effects`,
     headers: { "Content-Type": "application/json" },
     body: { effect_scene: input.effect, input: { image: input.image.base64, duration: String(KLING_EFFECT_SECONDS) } },
+  };
+}
+
+/**
+ * Two photos → one 5-second scene (Studio P4, «Quchoqlash» = `hug`): the dual-character input of the same effects
+ * endpoint — `{ effect_scene, input: { model_name, mode, images: [a, b], duration } }` (kling-options.ts). The images go
+ * as raw base64, the form the single-image input documents (UNVERIFIED for `images`: checked on the first live call).
+ */
+export function buildKlingDualEffectRequest(input: { effect: string; images: readonly [{ mime: string; base64: string }, { mime: string; base64: string }] }): KlingTaskRequest {
+  return {
+    kind: "effects",
+    url: `${KLING_BASE}/v1/videos/effects`,
+    headers: { "Content-Type": "application/json" },
+    body: {
+      effect_scene: input.effect,
+      input: { model_name: KLING_DUAL_EFFECT_MODEL, mode: KLING_DUAL_EFFECT_MODE, images: input.images.map((i) => i.base64), duration: String(KLING_EFFECT_SECONDS) },
+    },
   };
 }
 

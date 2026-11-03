@@ -51,7 +51,13 @@ export type ToolId =
   /** Studio P1 (docs/studio/P1-SPEC.md): pictures from a catalog model the user picks, always through the media core. */
   | "studio-image"
   /** Studio P3 (docs/studio/P3-SPEC.md): clips from a catalog video model / Kling effect, async on the media core. */
-  | "studio-video";
+  | "studio-video"
+  /** Studio P5 (docs/studio/P5-SPEC.md): speech / dialogue from a catalog voice model, always through the media core. */
+  | "studio-speech"
+  /** Studio P5: one ElevenLabs Instant Voice Clone of the user's own voice (fixed price `studio.clone_price`). */
+  | "studio-voice"
+  /** Studio P6 (docs/studio/P6-SPEC.md): music, sound effects, voice changer, isolator (ElevenLabs), through the media core. */
+  | "studio-audio";
 
 /**
  * Bo'lim (landing, nav, `CreateGrid`).
@@ -145,7 +151,7 @@ export type ToolConfig = {
    * ko'radi.
    */
   output: "docx" | "pptx" | "png" | "mp3" | "mp4";
-  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "konspekt" | "teacher" | "game" | "media" | "infographic" | "portrait" | "video" | "studio-image" | "studio-video";
+  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "konspekt" | "teacher" | "game" | "media" | "infographic" | "portrait" | "video" | "studio-image" | "studio-video" | "studio-speech" | "studio-voice" | "studio-audio";
   basePrice: number;
 };
 

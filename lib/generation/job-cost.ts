@@ -147,6 +147,18 @@ export class JobCost {
     if (!priced) p.priced = false;
   }
 
+  /**
+   * One delivered Studio audio call (music, sound effect, voice changer, isolator). ElevenLabs bills these by the
+   * second, not by the character, so they are not a `tts` part. `units` -- the seconds the call was priced on (the
+   * catalog rule's seconds), `usd` -- the catalog cost of that one call (= its `media_jobs.cost_usd`).
+   */
+  addAudio(provider: string, model: string, seconds: number, usd: number): void {
+    const p = this.part("audio", provider, model);
+    p.calls += 1;
+    p.units += Math.max(0, Math.round(seconds));
+    p.usd += Math.max(0, usd);
+  }
+
   get calls(): number {
     let n = 0;
     for (const p of this.parts.values()) n += p.calls;
@@ -256,4 +268,9 @@ export function recordGrounding(queries = 1): void {
 
 export function recordTts(provider: string, model: string, chars: number, usd: number, extra?: Parameters<JobCost["addTts"]>[4]): void {
   store.getStore()?.addTts(provider, model, chars, usd, extra);
+}
+
+/** One delivered Studio audio call, priced by the catalog (`JobCost.addAudio`). */
+export function recordAudio(provider: string, model: string, seconds: number, usd: number): void {
+  store.getStore()?.addAudio(provider, model, seconds, usd);
 }

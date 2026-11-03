@@ -13,7 +13,7 @@ export const MEDIA_KINDS: readonly MediaKind[] = ["image", "video", "speech", "m
 export type Capability =
   | "t2i" | "i2i" | "edit" | "inpaint" | "upscale" | "bg-remove" | "vectorize"
   | "t2v" | "i2v" | "effect" | "extend" | "lipsync"
-  | "tts" | "dialogue" | "clone" | "voice-design" | "music" | "sfx" | "stt";
+  | "tts" | "dialogue" | "clone" | "voice-design" | "music" | "sfx" | "stt" | "voice-changer" | "isolate";
 
 /** A provider's output: bytes it returned inline, or a URL the host downloads (never shown to users as is). */
 export type MediaOutput = { kind: "inline"; bytes: Uint8Array; mime: string } | { kind: "url"; url: string; mime?: string };

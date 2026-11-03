@@ -99,12 +99,14 @@ test("shell: «Studio» header, subtitle, «Galereya» link, the «Rasm» | «Vi
   assert.ok(text("[data-page-header]").length > "Studio".length, "a subtitle");
   assert.match(text("[data-studio-gallery-link]"), /Galereya/);
   const tabs = qa('[data-studio-tabs] button');
-  // P3 adds «Video» (tests/ui/studio-video.test.mts); «Ovoz» lands with P5.
-  assert.deepEqual(tabs.map((t) => t.textContent), ["Rasm", "Video"]);
+  // P3 adds «Video» (tests/ui/studio-video.test.mts); P5 adds «Ovoz» (tests/ui/studio-voice.test.mts); P6 adds «Audio» (tests/ui/studio-audio.test.mts).
+  assert.deepEqual(tabs.map((t) => t.textContent), ["Rasm", "Video", "Ovoz", "Audio"]);
   assert.equal(tabs[0]!.getAttribute("aria-selected"), "true");
   assert.equal(tabs[1]!.getAttribute("aria-selected"), "false");
+  assert.equal(tabs[2]!.getAttribute("aria-selected"), "false");
+  assert.equal(tabs[3]!.getAttribute("aria-selected"), "false");
   const page = document.body.textContent ?? "";
-  for (const word of ["Ovoz", "tez orada"]) assert.ok(!page.includes(word), `no «${word}»`);
+  for (const word of ["tez orada", "Fon musiqa"]) assert.ok(!page.includes(word), `no «${word}»`);
   // P2b (docs/studio/P2B-SPEC.md): the prompt box's tool row is real now (each button is wired, tests/ui/studio-library.test.mts).
   assert.ok(page.includes("Namuna promptlar"), "the samples button");
   assert.ok(prompt(), "the prompt box");
@@ -293,7 +295,8 @@ test("a running job shows the app's progress panel; a finished one its pictures 
   assert.match(img.getAttribute("src") ?? "", /^\/api\/generations\/.+\/assets\//);
   const actions = qa("[data-result-action]").map((b) => b.getAttribute("data-result-action"));
   // P2b: + «Tahrirlash», «Sifatini oshirish», «Fonni olib tashlash» on the picture (tests/ui/studio-library.test.mts).
-  assert.deepEqual(actions, ["download", "edit", "upscale", "bgremove", "again", "other-model"]);
+  // P7b: + «Keyingi qadam» «Videoga aylantirish», «Ovoz qo'shish» (tests/ui/studio-chains.test.mts).
+  assert.deepEqual(actions, ["download", "edit", "upscale", "bgremove", "again", "other-model", "to-video", "to-voice"]);
   assert.match(text("[data-studio-job-meta]"), new RegExp(`Nano Banana · ${groupDigits(expectedPrice(NANO, 1))} so'm`));
   assert.ok(q("[data-result-open]")?.getAttribute("href")?.startsWith("/uz/files/"), "the full result page");
 });

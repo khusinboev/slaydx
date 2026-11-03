@@ -16,6 +16,10 @@ import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_PURPOSES } from "../media/catalog
 import { liveCostRule, markupOf, studioImagePrice } from "../media/studio-pricing";
 import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
 import { studioVideoPrice } from "../media/studio-video-pricing";
+import { STUDIO_SPEECH_PURPOSE } from "../media/catalog-speech";
+import { speechTextParam, studioSpeechPrice } from "../media/studio-speech";
+import { AUDIO_MODEL_IDS, MUSIC_MODEL, SFX_MODEL } from "../media/catalog-audio";
+import { studioAudioPrice } from "../media/studio-audio";
 
 /**
  * Admin «Narxlar» → «Media modellari» (docs/studio/P1-SPEC.md «Admin»): per Studio model the provider cost of ONE unit
@@ -33,12 +37,28 @@ import { studioVideoPrice } from "../media/studio-video-pricing";
  * `google/omni-video` is also sold by «Video» at its own ladder: its switch and markup here act on the Studio only.
  */
 export function managedModelIds(): string[] {
-  return [...new Set([...STUDIO_PURPOSES.flatMap((p) => MEDIA_PURPOSES.byId(p)!.allowed), ...MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed])];
+  // P5: + the «Ovoz» tab's speech models (the clone is a fixed price, `studio.clone_price`, not listed here).
+  return [
+    ...new Set([
+      ...STUDIO_PURPOSES.flatMap((p) => MEDIA_PURPOSES.byId(p)!.allowed),
+      ...MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed,
+      ...MEDIA_PURPOSES.byId(STUDIO_SPEECH_PURPOSE)!.allowed,
+      // P6: + the «Audio» tab's four models (one per mode).
+      ...AUDIO_MODEL_IDS,
+    ]),
+  ];
 }
 
 /** What one priced unit of a model is: a picture, a utility job (P2b upscale / background removal), a default-length clip, an effect clip. */
-function unitOf(id: string): { label: string; values: Record<string, unknown>; video: boolean } {
+function unitOf(id: string): { label: string; values: Record<string, unknown>; video: boolean; speech?: boolean; audio?: boolean } {
   const entry = MEDIA_CATALOG.byId(id)!;
+  // P6 «Audio»: a minute of music / of input audio, 10 s of a sound effect (one variant).
+  if (AUDIO_MODEL_IDS.includes(id)) {
+    if (id === MUSIC_MODEL) return { label: "1 daqiqa", values: { modelId: id, length: "60" }, video: false, audio: true };
+    if (id === SFX_MODEL) return { label: "10 soniya", values: { modelId: id, duration: 10, variants: 1 }, video: false, audio: true };
+    return { label: "1 daqiqa", values: { modelId: id, inputSeconds: 60 }, video: false, audio: true };
+  }
+  if (entry.kind === "speech") return { label: "1 000 belgi", values: { modelId: id, [speechTextParam(entry)]: "x".repeat(1000) }, video: false, speech: true };
   if (entry.kind !== "video") return { label: entry.cost.per === "job" ? "amal" : "rasm", values: { modelId: id, imageCount: 1 }, video: false };
   if (entry.cost.per === "job") return { label: "effekt", values: { modelId: id }, video: true };
   const secs = normalize(entry.params, {}).seconds;
@@ -84,7 +104,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function mediaModelsOverview(): Promise<MediaModelsOverview> {
   await ensureProviderKeys();
-  const [pricing, overrides, adj, videoAdj] = await Promise.all([mediaPricing(), readOverrides(), getToolPricing("studio-image"), getToolPricing("studio-video")]);
+  const [pricing, overrides, adj, videoAdj, speechAdj, audioAdj] = await Promise.all([mediaPricing(), readOverrides(), getToolPricing("studio-image"), getToolPricing("studio-video"), getToolPricing("studio-speech"), getToolPricing("studio-audio")]);
   const models = managedModelIds().map((id): MediaModelItem => {
     const entry = MEDIA_CATALOG.byId(id)!;
     const unit = unitOf(id);
@@ -93,8 +113,8 @@ export async function mediaModelsOverview(): Promise<MediaModelsOverview> {
     const usd = costUsd(liveCostRule(entry.cost, pricing.costUsd?.[id]), normalize(entry.params, one));
     const costSoum = round2(usd * pricing.soumPerUsd);
     // The SAME functions the server charges with (the Rasm tab's / the Video tab's).
-    const priceBase = unit.video ? studioVideoPrice(one, pricing)! : studioImagePrice(one, pricing)!;
-    const price = applyPriceAdjust(priceBase, unit.video ? videoAdj : adj);
+    const priceBase = unit.audio ? studioAudioPrice(one, pricing)! : unit.speech ? studioSpeechPrice(one, pricing)! : unit.video ? studioVideoPrice(one, pricing)! : studioImagePrice(one, pricing)!;
+    const price = applyPriceAdjust(priceBase, unit.audio ? audioAdj : unit.speech ? speechAdj : unit.video ? videoAdj : adj);
     const o = overrides.get(id);
     return {
       modelId: id,

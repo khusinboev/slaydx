@@ -28,10 +28,15 @@
  * why nothing here retries a submit and the router never falls back after acceptance.
  *
  * Error texts never contain the key: every message passes `scrub` (the key itself and `Key …` header shapes).
+ *
+ * VIDEO (Studio P4, docs/studio/P4-SPEC.md) is a separate ASYNC adapter at the end of this file (`falVideoAdapter`):
+ * submit only queues and returns an op id; the shared video poll loop polls it. The picture cycle above is unchanged.
  */
-import { MediaError, checkOutput, isRetryableStatus, type AdapterAsset, type AdapterDeps, type AdapterInput, type MediaAdapter, type MediaOutput, type NormalizedParams } from "../../studio-core";
+import { MediaError, checkOutput, isRetryableStatus, type AdapterAsset, type AdapterDeps, type AdapterInput, type MediaAdapter, type MediaOutput, type NormalizedParams, type PollResult } from "../../studio-core";
 import { IMAGE_RATIOS } from "../../generation/image-studio-options";
-import { safeFetchUrl, type LookupFn } from "../../generation/safe-fetch";
+import { safeFetchUrl, UnsafeUrlError, type LookupFn } from "../../generation/safe-fetch";
+import { isMp4 } from "../../generation/video/mp4";
+import { VIDEO_MAX_BYTES, looksLikeSafetyRefusal } from "../../generation/video/types";
 import { getProviderKey } from "../../server/providers/resolve";
 
 export const FAL_PROVIDER = "fal";
@@ -550,3 +555,308 @@ export function falAdapter(o: FalDeps = {}): MediaAdapter {
     },
   };
 }
+
+/* ═════════════════════ Studio P4: VIDEO through the fal queue (docs/studio/P4-SPEC.md) ═════════════════════
+ * A clip takes minutes, so a fal video is NOT the blocking cycle above: `submit` only queues the job and returns an op
+ * id that the host parks in `media_jobs`; the SHARED video poll loop (`lib/server/video-ops.ts` `pollDueVideoOps`)
+ * asks `poll` with its own backoff / deadline, then `fetchOutput` downloads the MP4. Same transport rules as the
+ * pictures: the key goes only to `queue.fal.run` (`Authorization: Key …`), no redirect is followed, every message is
+ * scrubbed, a failure after the request id exists is `accepted` (fal has no submit idempotency key: nothing resubmits).
+ *
+ *   op id    `fal:<endpoint>:<request_id>` — the endpoint (one of `FAL_VIDEO_ENDPOINTS`, never a stored free string)
+ *            gives the queue's owner/app for the status / result URLs, rebuilt as the queue docs document them
+ *            (`GET https://queue.fal.run/{owner}/{app}/requests/{request_id}/status` and `…/{request_id}`), so nothing a
+ *            database row holds can steer the key to another host;
+ *   status   200 / 202 `{ status: IN_QUEUE | IN_PROGRESS | COMPLETED, error?, error_type? }` — «a failed or cancelled
+ *            request also has the status COMPLETED» (queue OpenAPI, https://fal.ai/docs/api-reference/inference-api/
+ *            queue/status.md, read 2026-11-02); 404 = the request does not exist → failed;
+ *   result   200 `{ video: { url } }` (every endpoint below, its llms.txt output schema); 404 / 422 / 499 / 500 / 504 are
+ *            the model's final answer (https://fal.ai/docs/api-reference/inference-api/queue/result.md) → failed,
+ *            `content_policy_violation` → safety; 429 / 502 / 503 / network → retry later (the result is kept ≥ 1 h);
+ *   output   the MP4 URL downloaded WITHOUT the key through `safeFetchUrl` (https + public host on every hop, capped at
+ *            `VIDEO_MAX_BYTES`), checked to be an MP4 (`isMp4`).
+ * `X-Fal-Request-Start-Timeout` = `FAL_VIDEO_START_TIMEOUT_SEC`: a job fal could not START within that is dropped by fal
+ * (504 on the result; fal bills «only successful outputs», https://fal.ai/docs/documentation/model-apis/pricing).
+ */
+
+/** The fal video adapter's id in the catalog routes. */
+export const FAL_VIDEO_ADAPTER_ID = "fal-video";
+/** fal drops a queued clip that could not start within this (half the 20-minute job deadline). */
+export const FAL_VIDEO_START_TIMEOUT_SEC = 600;
+/** One status / result call of a poll never waits longer than this; the MP4 download gets a minute. */
+const VIDEO_CALL_MS = 30_000;
+const VIDEO_DOWNLOAD_MS = 60_000;
+/** A deadline cancel is best effort and must not hold the refund up. */
+const FAL_VIDEO_CANCEL_MS = 5_000;
+
+/** The start / end frames of a clip, resolved by the host (ownership checked there), sent to fal as data URIs. */
+export type FalVideoFrames = { start?: AdapterAsset; end?: AdapterAsset };
+
+export type FalVideoModel = {
+  /** Text → video endpoint (no start frame). */
+  t2v: string;
+  /** Image → video endpoint (a start frame, optional end frame). */
+  i2v: string;
+  /** The endpoint's input JSON from the normalized params and the frames. Pure. */
+  body(p: NormalizedParams, frames: FalVideoFrames): Record<string, unknown>;
+};
+
+const vInt = (p: NormalizedParams, name: string, fallback: number) => (Number.isFinite(Number(p[name])) && p[name] !== "" ? Math.round(Number(p[name])) : fallback);
+const vStr = (p: NormalizedParams, name: string, fallback: string) => (typeof p[name] === "string" && p[name] ? String(p[name]) : fallback);
+const vBool = (p: NormalizedParams, name: string, fallback: boolean) => (typeof p[name] === "boolean" ? (p[name] as boolean) : fallback);
+/** The end frame: `falVideoFrames` is the ONE guard that it travels only with a start (review: no second copy here). */
+const endFrame = (key: string, f: FalVideoFrames) => (f.end ? { [key]: dataUri(f.end) } : {});
+
+/** Seedance 2.x: one body for text / image → video; `bitrate` only where the endpoint has `bitrate_mode` (2.5). */
+function seedanceBody(p: NormalizedParams, f: FalVideoFrames, bitrate: boolean): Record<string, unknown> {
+  return {
+    prompt: String(p.prompt ?? ""),
+    ...(f.start ? { image_url: dataUri(f.start) } : {}),
+    ...endFrame("end_image_url", f),
+    resolution: vStr(p, "resolution", "720p"),
+    // The DurationEnum is a string ("4".."15"); never "auto": the price is per second of what we asked for.
+    duration: String(vInt(p, "seconds", 5)),
+    // Image → video: «Always "auto"» (its schema) — the frame decides the canvas.
+    aspect_ratio: f.start ? "auto" : vStr(p, "aspect", "16:9"),
+    generate_audio: vBool(p, "sound", true),
+    ...(bitrate ? { bitrate_mode: "standard" } : {}),
+    // H.264 explicitly: «auto» may return H.265, which many phones / browsers do not play.
+    codec: "H264",
+  };
+}
+
+/** MiniMax H3 (and fal's H3 Max Turbo): resolution ids are upper-case on the endpoint (`480P`, `768P`, `1080P`). */
+function minimaxBody(p: NormalizedParams, f: FalVideoFrames): Record<string, unknown> {
+  return {
+    prompt: String(p.prompt ?? ""),
+    // Image → video has no aspect_ratio: «the output canvas follows this image».
+    ...(f.start ? { image_url: dataUri(f.start) } : { aspect_ratio: vStr(p, "aspect", "16:9") }),
+    ...endFrame("end_image_url", f),
+    duration: vInt(p, "seconds", 5),
+    resolution: vStr(p, "resolution", "768p").toUpperCase(),
+    // The endpoint's default, sent explicitly so a default change at fal cannot change our clip silently.
+    prompt_expansion_mode: "balanced",
+    enable_safety_checker: true,
+  };
+}
+
+/**
+ * Video request builders, keyed by the catalog route's `upstreamModel` (a model FAMILY: the builder picks the text or
+ * the image endpoint). Every field is from the endpoint's own schema (`https://fal.ai/models/<endpoint>/llms.txt`,
+ * read 2026-11-02).
+ */
+export const FAL_VIDEO_MODELS: Readonly<Record<string, FalVideoModel>> = {
+  // https://fal.ai/models/alibaba/wan-3.0/text-to-video/llms.txt + …/image-to-video/llms.txt (2026-11-02).
+  "alibaba/wan-3.0": {
+    t2v: "alibaba/wan-3.0/text-to-video",
+    i2v: "alibaba/wan-3.0/image-to-video",
+    body: (p, f) => ({
+      prompt: String(p.prompt ?? ""),
+      ...(f.start ? { start_image_url: dataUri(f.start) } : {}),
+      ...endFrame("end_image_url", f),
+      resolution: vStr(p, "resolution", "720p"),
+      // «adaptive» = the endpoint picks the canvas (from the start frame in image → video).
+      aspect_ratio: f.start ? "adaptive" : vStr(p, "aspect", "16:9"),
+      duration: vInt(p, "seconds", 5),
+      audio: vBool(p, "sound", true),
+      enable_prompt_expansion: true,
+      enable_safety_checker: true,
+    }),
+  },
+  // https://fal.ai/models/bytedance/seedance-2.5/us/text-to-video/llms.txt + …/image-to-video/llms.txt (2026-11-02).
+  "bytedance/seedance-2.5/us": {
+    t2v: "bytedance/seedance-2.5/us/text-to-video",
+    i2v: "bytedance/seedance-2.5/us/image-to-video",
+    body: (p, f) => seedanceBody(p, f, true),
+  },
+  // https://fal.ai/models/bytedance/seedance-2.0/mini/text-to-video/llms.txt + …/image-to-video/llms.txt (2026-11-02).
+  "bytedance/seedance-2.0/mini": {
+    t2v: "bytedance/seedance-2.0/mini/text-to-video",
+    i2v: "bytedance/seedance-2.0/mini/image-to-video",
+    body: (p, f) => seedanceBody(p, f, false),
+  },
+  // https://fal.ai/models/minimax/h3/text-to-video/llms.txt + …/image-to-video/llms.txt (2026-11-02).
+  "minimax/h3": { t2v: "minimax/h3/text-to-video", i2v: "minimax/h3/image-to-video", body: minimaxBody },
+  // https://fal.ai/models/minimax/h3-max-turbo/text-to-video/llms.txt + …/image-to-video/llms.txt (2026-11-02).
+  "minimax/h3-max-turbo": { t2v: "minimax/h3-max-turbo/text-to-video", i2v: "minimax/h3-max-turbo/image-to-video", body: minimaxBody },
+};
+
+/** Every endpoint a fal video op id may name (the poll refuses anything else). */
+export const FAL_VIDEO_ENDPOINTS: ReadonlySet<string> = new Set(Object.values(FAL_VIDEO_MODELS).flatMap((m) => [m.t2v, m.i2v]));
+
+/** The frames of a job: the start image, and the end frame only together with a start (fal's rule and our form's). */
+export function falVideoFrames(input: Pick<AdapterInput, "assets">): FalVideoFrames {
+  const start = input.assets?.imageAssetId?.[0];
+  const end = input.assets?.endImageAssetId?.[0];
+  return { ...(start ? { start } : {}), ...(start && end ? { end } : {}) };
+}
+
+/** The request `submit` sends (no key inside): endpoint, URL, body. Pure. */
+export function falVideoRequest(input: Pick<AdapterInput, "upstreamModel" | "params" | "assets">): { endpoint: string; url: string; headers: Record<string, string>; body: Record<string, unknown> } {
+  const model = FAL_VIDEO_MODELS[input.upstreamModel];
+  if (!model) throw new MediaError(FAL_PROVIDER, `unknown fal video model ${input.upstreamModel}`);
+  const frames = falVideoFrames(input);
+  const endpoint = frames.start ? model.i2v : model.t2v;
+  return { endpoint, url: `https://${FAL_QUEUE_HOST}/${endpoint}`, headers: { "Content-Type": "application/json" }, body: model.body(input.params, frames) };
+}
+
+/** `fal:<endpoint>:<request_id>` → its parts; `null` for anything this adapter did not issue. */
+export function parseFalVideoOp(opId: string): { endpoint: string; requestId: string } | null {
+  if (!opId.startsWith("fal:")) return null;
+  const at = opId.lastIndexOf(":");
+  const endpoint = opId.slice(4, at);
+  const requestId = opId.slice(at + 1);
+  if (at <= 4 || !FAL_VIDEO_ENDPOINTS.has(endpoint) || !REQUEST_ID.test(requestId)) return null;
+  return { endpoint, requestId };
+}
+
+/** Result statuses that are the model's final answer (queue result OpenAPI): the clip will not come. */
+const FINAL_RESULT_STATUSES: ReadonlySet<number> = new Set([404, 422, 499, 500, 504]);
+
+export function falVideoAdapter(o: Pick<FalDeps, "key" | "lookup"> = {}): MediaAdapter {
+  const keyOf = o.key ?? (() => getProviderKey(FAL_PROVIDER));
+  const failOf = (key: string | null) => (msg: string, f: { status?: number; retryable?: boolean; safety?: boolean; accepted?: boolean }) => new MediaError(FAL_PROVIDER, scrub(msg, key), f);
+
+  return {
+    id: FAL_VIDEO_ADAPTER_ID,
+    configured: () => Boolean(keyOf()),
+    buildRequest(input) {
+      const r = falVideoRequest(input);
+      return { url: r.url, headers: r.headers, body: r.body };
+    },
+
+    async submit(input, deps: AdapterDeps = {}) {
+      const key = keyOf();
+      // Nothing was sent: fal holds no job of ours.
+      if (!key) throw new MediaError(FAL_PROVIDER, "FAL_KEY yo'q", { accepted: false });
+      const fail = failOf(key);
+      const req = falVideoRequest(input);
+      let res: Response;
+      try {
+        res = await (deps.fetchImpl ?? globalThis.fetch)(req.url, {
+          method: "POST",
+          headers: { ...req.headers, Authorization: `Key ${key}`, "X-Fal-Request-Start-Timeout": String(FAL_VIDEO_START_TIMEOUT_SEC) },
+          body: JSON.stringify(req.body),
+          redirect: "manual",
+          signal: AbortSignal.timeout(VIDEO_CALL_MS),
+        });
+      } catch (e) {
+        // No answer: the request may have reached fal and queued a paid clip (never resubmitted elsewhere).
+        throw fail(`submit: ${e instanceof Error ? e.message : String(e)}`, { retryable: true, accepted: true });
+      }
+      if (res.status >= 300 && res.status < 400) throw fail(`submit: ${res.status} redirect rad etildi`, { status: res.status });
+      const big = (isAccepted: boolean) => (n: number) => fail(`submit: javob juda katta (${n} belgi)`, { accepted: isAccepted });
+      if (!res.ok) {
+        const d = detailOf(await json(res, big(false)));
+        const safety = d.types.includes(POLICY);
+        throw fail(`${res.status} ${d.text || "submit failed"}`, { status: res.status, retryable: !safety && isRetryableStatus(res.status), safety });
+      }
+      const sub = (await json(res, big(true))) as { request_id?: unknown } | null;
+      const id = typeof sub?.request_id === "string" && REQUEST_ID.test(sub.request_id) ? sub.request_id : null;
+      if (!id) throw fail("submit: javobda request_id yo'q", { accepted: true });
+      return { opId: `fal:${req.endpoint}:${id}` };
+    },
+
+    async poll(opId, deps: AdapterDeps = {}): Promise<PollResult> {
+      const key = keyOf();
+      const fail = failOf(key);
+      const op = parseFalVideoOp(opId);
+      if (!op) throw fail("noto'g'ri operatsiya id", { accepted: true });
+      // The key was removed after the submit: wait (the admin may put it back) until the job's deadline refunds it.
+      if (!key) throw fail("FAL_KEY yo'q", { accepted: true, retryable: true });
+      const fetchImpl = deps.fetchImpl ?? globalThis.fetch;
+      const base = `https://${FAL_QUEUE_HOST}/${ownerApp(op.endpoint)}/requests/${op.requestId}`;
+      const get = (url: string) => fetchImpl(url, { method: "GET", headers: { Authorization: `Key ${key}` }, redirect: "manual", signal: AbortSignal.timeout(VIDEO_CALL_MS) });
+      const big = (where: string) => (n: number) => fail(`${where}: javob juda katta (${n} belgi)`, { accepted: true, retryable: true });
+
+      let st: Response;
+      try {
+        st = await get(`${base}/status`);
+      } catch (e) {
+        throw fail(`status: ${e instanceof Error ? e.message : String(e)}`, { retryable: true, accepted: true });
+      }
+      if (st.status >= 300 && st.status < 400) throw fail(`status: ${st.status} redirect rad etildi`, { status: st.status, accepted: true });
+      if (st.status === 404) return { state: "failed", message: "fal: so'rov topilmadi", safety: false };
+      if (!st.ok) {
+        const d = detailOf(await json(st, big("status")));
+        throw fail(`status ${st.status} ${d.text}`, { status: st.status, retryable: isRetryableStatus(st.status), accepted: true });
+      }
+      const body = (await json(st, big("status"))) as { status?: unknown; error?: unknown; error_type?: unknown } | null;
+      if (body?.status === "IN_QUEUE" || body?.status === "IN_PROGRESS") return { state: "running" };
+      if (body?.status !== "COMPLETED") throw fail(`status: ${String(body?.status ?? "?")}`, { retryable: true, accepted: true });
+      if (typeof body.error === "string" && body.error) {
+        const safety = body.error_type === POLICY || looksLikeSafetyRefusal(body.error);
+        return { state: "failed", message: scrub(body.error, key), safety };
+      }
+
+      let out: Response;
+      try {
+        out = await get(base);
+      } catch (e) {
+        throw fail(`result: ${e instanceof Error ? e.message : String(e)}`, { retryable: true, accepted: true });
+      }
+      if (out.status >= 300 && out.status < 400) throw fail(`result: ${out.status} redirect rad etildi`, { status: out.status, accepted: true });
+      const result = (await json(out, big("result"))) as { video?: { url?: unknown } } | null;
+      if (!out.ok) {
+        const d = detailOf(result);
+        const safety = d.types.includes(POLICY);
+        if (safety || FINAL_RESULT_STATUSES.has(out.status)) return { state: "failed", message: scrub(`${out.status} ${d.text || "result failed"}`, key), safety };
+        throw fail(`result ${out.status} ${d.text}`, { status: out.status, retryable: isRetryableStatus(out.status), accepted: true });
+      }
+      const url = typeof result?.video?.url === "string" ? result.video.url : "";
+      if (!url) return { state: "failed", message: "fal: javobda video yo'q", safety: false };
+      return { state: "done", outputs: [{ kind: "url", url, mime: "video/mp4" }] };
+    },
+
+    /**
+     * Best-effort cancel (the host's deadline passed): `PUT https://queue.fal.run/{owner}/{app}/requests/{id}/cancel`
+     * (https://fal.ai/docs/api-reference/inference-api/queue/cancel.md, read 2026-11-02) — same key / host / redirect /
+     * scrub rules. A queued request is removed, a running one gets a cancel signal. Throws on any failure; the caller
+     * logs it and refunds anyway.
+     */
+    async cancel(opId, deps: AdapterDeps = {}) {
+      const key = keyOf();
+      const fail = failOf(key);
+      const op = parseFalVideoOp(opId);
+      if (!op) throw fail("noto'g'ri operatsiya id", { accepted: true });
+      if (!key) throw fail("FAL_KEY yo'q", { accepted: true });
+      let res: Response;
+      try {
+        res = await (deps.fetchImpl ?? globalThis.fetch)(`https://${FAL_QUEUE_HOST}/${ownerApp(op.endpoint)}/requests/${op.requestId}/cancel`, {
+          method: "PUT",
+          headers: { Authorization: `Key ${key}` },
+          redirect: "manual",
+          signal: AbortSignal.timeout(FAL_VIDEO_CANCEL_MS),
+        });
+      } catch (e) {
+        throw fail(`cancel: ${e instanceof Error ? e.message : String(e)}`, { accepted: true });
+      }
+      await res.body?.cancel().catch(() => {});
+      // 200 removed from the queue / 202 cancel signal sent; 400 «already complete» (fal may bill it: reconcile).
+      if (res.status === 400) return "completed";
+      if (!res.ok) throw fail(`cancel ${res.status}`, { status: res.status, accepted: true });
+      return "cancelled";
+    },
+
+    async fetchOutput(output, deps: AdapterDeps = {}) {
+      const fail = failOf(keyOf());
+      if (output.kind === "inline") {
+        if (!isMp4(output.bytes)) throw fail("video: MP4 emas", { accepted: true });
+        return output.bytes;
+      }
+      let res: Response;
+      try {
+        // WITHOUT the key: a CDN URL, checked host by host, capped.
+        res = await safeFetchUrl(output.url, { timeoutMs: VIDEO_DOWNLOAD_MS, maxBytes: VIDEO_MAX_BYTES, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}), ...(o.lookup ? { lookup: o.lookup } : {}) });
+      } catch (e) {
+        if (e instanceof UnsafeUrlError) throw fail(e.reason === "size" ? "video fayli juda katta" : `video URL rad etildi (${e.reason})`, { accepted: true });
+        throw fail(`download: ${e instanceof Error ? e.message : String(e)}`, { retryable: true, accepted: true });
+      }
+      if (!res.ok) throw fail(`download ${res.status}`, { status: res.status, retryable: isRetryableStatus(res.status), accepted: true });
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (!isMp4(bytes)) throw fail("yuklangan fayl MP4 emas", { retryable: true, accepted: true });
+      return bytes;
+    },
+  };
+}
+/* ═════════════════════ end of the P4 video block ═════════════════════ */

@@ -267,7 +267,8 @@ test("SearchDialog phone: 16 px input, 44 px close, ≥ 56 px rows with tool ico
   const closeBtns = screen.getAllByLabelText("Yopish").filter((b) => b.tagName === "BUTTON" && b.querySelector("svg"));
   assert.ok(has(closeBtns[0], "size-11"), "close is 44x44");
   const rows = [...document.querySelectorAll("button")].filter((b) => has(b, "w-full") && !has(b, "absolute"));
-  assert.ok(rows.length > TOOLS.length, "tools + balance + files");
+  // The LISTED tools (P3/P5 tabs live inside the Studio, `UNLISTED_TOOL_IDS`) + balance + files.
+  assert.ok(rows.length > listedTools().length, "tools + balance + files");
   for (const r of rows) assert.ok(has(r, "min-h-14"), `row «${(r.textContent ?? "").slice(0, 20)}» ≥ 56 px`);
   // Every tool row shows its icon in the tool colour; the file row shows its tool's icon.
   // `studio-video` is the Studio's Video tab (P3): not a row of its own.

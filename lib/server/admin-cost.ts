@@ -599,6 +599,8 @@ const KIND_LABEL: Record<string, string> = {
   image: "rasm",
   grounding: "Google qidiruvi",
   tts: "ovoz (TTS)",
+  video: "video",
+  audio: "audio (musiqa, effekt)",
   unknown: "noma'lum",
 };
 

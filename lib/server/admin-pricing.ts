@@ -37,6 +37,9 @@ import { COURSEWORK_PAGES, INDEPENDENT_PAGES, KONSPEKT_PAGES, REFERAT_PAGES } fr
 import type { FormValues, ToolGroup, ToolId } from "../types";
 import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "../media/catalog";
 import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
+import { STUDIO_SPEECH_PURPOSE } from "../media/catalog-speech";
+import { ISOLATOR_MODEL, MUSIC_MODEL, SFX_MODEL, VOICE_CHANGER_MODEL } from "../media/catalog-audio";
+import { clonePriceOf } from "../media/studio-speech";
 import type { MediaPricing } from "../media/studio-pricing";
 import { mediaPricing } from "./media/pricing";
 
@@ -137,6 +140,9 @@ export const UNIT_OF: Record<ToolId, PricingUnit> = {
   video: "job",
   "studio-image": "image",
   "studio-video": "job",
+  "studio-speech": "kchars",
+  "studio-voice": "job",
+  "studio-audio": "job",
 };
 
 /** Uzbek unit labels for the UI (the client never imports lib/tools). */
@@ -203,11 +209,21 @@ function studioVideoRungs(id: string): LadderInput[] {
   if (effect && effect.type === "enum") return effect.options.map((o) => ({ label: `${entry.label} · ${o.label}`, values: { modelId: id, effect: o.value } }));
   const secs = entry.params.find((p) => p.name === "seconds");
   const lengths = secs && secs.type === "int" ? [...new Set([secs.min, secs.max])] : [];
-  const sound = entry.params.some((p) => p.name === "sound" && p.type === "bool");
-  return lengths.flatMap((n) => [
-    { label: `${entry.label} · ${n} soniya`, values: { modelId: id, seconds: n } as FormValues },
-    ...(sound ? [{ label: `${entry.label} · ${n} soniya · ovozli`, values: { modelId: id, seconds: n, sound: true } as FormValues }] : []),
-  ]);
+  // A sound rung only where sound moves the price (Kling); on the fal models it is free (Studio P4).
+  const sound = entry.params.some((p) => p.name === "sound" && p.type === "bool" && p.affects !== "request");
+  // P4: a priced resolution tier (fal models) gets a rung per tier; other models one rung per length.
+  const res = entry.params.find((p) => p.name === "resolution");
+  const tiers: (string | null)[] = res && res.type === "enum" && res.affects !== "request" ? res.options.map((o) => o.value) : [null];
+  return lengths.flatMap((n) =>
+    tiers.flatMap((tier) => {
+      const at = tier ? { resolution: tier } : {};
+      const tag = tier ? ` · ${tier}` : "";
+      return [
+        { label: `${entry.label} · ${n} soniya${tag}`, values: { modelId: id, seconds: n, ...at } as FormValues },
+        ...(sound ? [{ label: `${entry.label} · ${n} soniya${tag} · ovozli`, values: { modelId: id, seconds: n, ...at, sound: true } as FormValues }] : []),
+      ];
+    }),
+  );
 }
 
 /**
@@ -274,6 +290,26 @@ export function ladderInputs(toolId: ToolId): LadderInput[] {
       // Cost × markup per Studio video model (`studio-video-pricing.ts`): every model at its shortest and longest length
       // (silent; Kling also with sound), one rung per effect template.
       return MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed.flatMap((id) => studioVideoRungs(id));
+    case "studio-speech":
+      // Characters × provider rate × markup (`studio-speech.ts`): 1 000 characters on every «Ovoz» model.
+      return MEDIA_PURPOSES.byId(STUDIO_SPEECH_PURPOSE)!.allowed.map((id) => {
+        const field = MEDIA_CATALOG.byId(id)!.params.some((p) => p.name === "script") ? "script" : "text";
+        return { label: `1 000 belgi · ${MEDIA_CATALOG.byId(id)!.label}`, values: { modelId: id, [field]: "x".repeat(1000) } };
+      });
+    case "studio-audio":
+      // Seconds × credit rate × markup (`studio-audio.ts`): the P6-SPEC price rows, one rung each.
+      return [
+        { label: "Musiqa · 30 s", values: { modelId: MUSIC_MODEL, length: "30" } },
+        { label: "Musiqa · 1 daq", values: { modelId: MUSIC_MODEL, length: "60" } },
+        { label: "Musiqa · 3 daq", values: { modelId: MUSIC_MODEL, length: "180" } },
+        { label: "Effekt · 5 s", values: { modelId: SFX_MODEL, duration: 5 } },
+        { label: "Effekt · 30 s", values: { modelId: SFX_MODEL, duration: 30 } },
+        { label: "Ovozni almashtirish · 1 daq", values: { modelId: VOICE_CHANGER_MODEL, inputSeconds: 60 } },
+        { label: "Shovqindan tozalash · 1 daq", values: { modelId: ISOLATOR_MODEL, inputSeconds: 60 } },
+      ];
+    case "studio-voice":
+      // The fixed clone price (`studio.clone_price`).
+      return [{ label: "1 klon", values: {} }];
     case "portrait":
       // Priced per variant: 1 and 2 variants (`portraitPrice`).
       return PORTRAIT_VARIANTS.map((n) => ({ label: `${n} variant`, values: { variants: n } }));
@@ -295,7 +331,8 @@ export function ladderFor(toolId: ToolId, media?: MediaPricing | null): LadderSt
 
 /** The Studio pricing block when `toolId` needs one (the price the server charges is cost × the CURRENT markup). */
 async function mediaPricingFor(toolId: ToolId): Promise<MediaPricing | null> {
-  return toolId === "studio-image" || toolId === "studio-video" ? mediaPricing() : null;
+  if (toolId === "studio-voice") return { ...(await mediaPricing()), clonePrice: clonePriceOf(await getSetting("studio.clone_price")) };
+  return toolId === "studio-image" || toolId === "studio-video" || toolId === "studio-speech" || toolId === "studio-audio" ? mediaPricing() : null;
 }
 
 export function effectiveLadder(steps: ReadonlyArray<LadderStep>, adj: PriceAdjust | null): LadderRow[] {

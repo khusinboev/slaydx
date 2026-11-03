@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LayoutGrid, Wand2, X } from "lucide-react";
 import { ApiError, PriceChangedError } from "@/lib/api-client";
@@ -23,8 +23,11 @@ import { ParamRows } from "./ParamRows";
 import { PriceButton } from "./PriceButton";
 import { PromptBox } from "./PromptBox";
 import { StudioResults, type StudioJob } from "./StudioResults";
-import { STUDIO_VIDEO_PURPOSE, enhancePrompt, inputFromResult, loadMediaCatalog, resultAssetOf, uploadStudioInput, useMediaCatalog } from "./studio-api";
+import { STUDIO_AUDIO_LISTING, STUDIO_SPEECH_PURPOSE, STUDIO_VIDEO_PURPOSE, enhancePrompt, inputFromResult, loadMediaCatalog, resultAssetOf, uploadStudioInput, useMediaCatalog } from "./studio-api";
 import { INITIAL_VIDEO_STATE, VideoTab, type VideoTabState } from "./video/VideoTab";
+import { INITIAL_VOICE_STATE, VoiceTab, type VoiceTabState } from "./voice/VoiceTab";
+import { AudioTab, INITIAL_AUDIO_STATE, type AudioTabState } from "./audio/AudioTab";
+import { HandoffAlert, useHandoffs } from "./handoff";
 import { LibrarySheet } from "./LibrarySheet";
 import { TemplateSlots, TemplatesRow } from "./TemplatesRow";
 import { INPUT_PARAM, MODE_LABEL, MODE_PURPOSE, applyTemplate, type StudioMode } from "./studio-modes";
@@ -34,6 +37,8 @@ import { STUDIO_TOOL_ID, outputCount, studioPrice } from "./studio-price";
 import type { GalleryItem, MediaCatalog, StudioPricing } from "./studio-types";
 import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, promptMin, promptParam, requestValues, type RawValues } from "./studio-values";
 import { useStudioJobs } from "./useStudioJobs";
+import { ComparePanel, CompareSwitch } from "./compare/ComparePanel";
+import { compareAvailability, enableCompare, useCompare } from "./compare/useCompare";
 
 const WIDTH = "max-w-[1320px]";
 const LOADING = <div className="text-muted-foreground p-8 text-[15px]">Yuklanmoqda...</div>;
@@ -65,18 +70,22 @@ export function StudioPage() {
 }
 
 type View = "create" | "gallery";
-/** The Studio's media tabs (P1 «Rasm», P3 «Video»). */
-export type StudioTab = "rasm" | "video";
+/** The Studio's media tabs (P1 «Rasm», P3 «Video», P5 «Ovoz», P6 «Audio»). */
+export type StudioTab = "rasm" | "video" | "ovoz" | "audio";
+export const STUDIO_TABS: readonly StudioTab[] = ["rasm", "video", "ovoz", "audio"];
 
-/** The tab a link asks for (`/uz/studio?tab=video`, where `/uz/studio-video` redirects); anything else = «Rasm». */
+/** The tab a link asks for (`/uz/studio?tab=video`, where `/uz/studio-video` redirects; `?tab=ovoz`); anything else = «Rasm». */
 export function tabFromSearch(search: string): StudioTab {
-  return new URLSearchParams(search).get("tab") === "video" ? "video" : "rasm";
+  const t = new URLSearchParams(search).get("tab");
+  return t === "video" ? "video" : t === "ovoz" ? "ovoz" : t === "audio" ? "audio" : "rasm";
 }
 
-const TAB_LABEL: Readonly<Record<StudioTab, string>> = { rasm: "Rasm", video: "Video" };
+const TAB_LABEL: Readonly<Record<StudioTab, string>> = { rasm: "Rasm", video: "Video", ovoz: "Ovoz", audio: "Audio" };
 const SUBTITLE: Readonly<Record<StudioTab, string>> = {
   rasm: "Eng kuchli modellar bilan rasm yarating",
   video: "AI video va tayyor effektlar — narx yaratishdan oldin ko‘rinadi",
+  ovoz: "Matnni o‘zbekcha AI ovoz bilan o‘qiting — o‘z ovozingiz bilan ham",
+  audio: "AI musiqa, ovoz effektlari, ovozni almashtirish va shovqindan tozalash",
 };
 
 function StudioApp() {
@@ -108,11 +117,46 @@ function StudioApp() {
   const [videoState, setVideoState] = useState<VideoTabState>(INITIAL_VIDEO_STATE);
   const video = useMediaCatalog(STUDIO_VIDEO_PURPOSE, videoSeen);
   const videoJobs = useStudioJobs();
+  // The «Ovoz» tab (P5): its own catalog (loaded once the tab is opened), form state and jobs — kept across tabs.
+  const [voiceSeen, setVoiceSeen] = useState(false);
+  const [voiceState, setVoiceState] = useState<VoiceTabState>(INITIAL_VOICE_STATE);
+  const voiceCatalog = useMediaCatalog(STUDIO_SPEECH_PURPOSE, voiceSeen);
+  const voiceJobs = useStudioJobs();
+  // The «Audio» tab (P6): its own catalog listing (loaded once the tab is opened), form state and jobs.
+  const [audioSeen, setAudioSeen] = useState(false);
+  const [audioState, setAudioState] = useState<AudioTabState>(INITIAL_AUDIO_STATE);
+  const audioCatalog = useMediaCatalog(STUDIO_AUDIO_LISTING, audioSeen);
+  const audioJobs = useStudioJobs();
+  // P7a «Solishtirish» (docs/studio/P7-SPEC.md, compare/): the Rasm tab's drawing mode and the Video tab, ≥ 2 models.
+  const compare = useCompare();
+  const compareKind = tab === "rasm" && mode === "image" ? "image" : tab === "video" ? "video" : null;
+  const compareCatalog = compareKind === "image" ? catalog : compareKind === "video" && video.state.status === "ready" ? video.state.catalog : null;
+  const comparing = compareAvailability(compareKind, compareCatalog) && compare[compareKind].state.on;
+  function toggleCompare(on: boolean) {
+    if (!compareAvailability(compareKind, compareCatalog) || !compareCatalog) return;
+    setError(null);
+    const seed = compareKind === "image" ? { chosen, raw } : { chosen: videoState.chosen, raw: videoState.raw };
+    compare[compareKind].setState((s) => (on ? enableCompare(s, compareCatalog.models, seed.chosen, seed.raw) : { ...s, on: false }));
+  }
+  /** «Shu modelni tanlash»: compare off, that model chosen in the tab's own form with the compared prompt. */
+  function pickCompared(kind: "image" | "video", modelId: string, prompt: string) {
+    compare[kind].setState((s) => ({ ...s, on: false }));
+    if (kind === "video") {
+      setVideoState((s) => ({ ...s, mode: "text", chosen: modelId, raw: { ...s.raw, [PROMPT_PARAM]: prompt } }));
+      return;
+    }
+    const next = catalog?.models.find((m) => m.id === modelId);
+    setChosen(modelId);
+    setRaw((prev) => (next ? carryOver(next, { ...prev, [PROMPT_PARAM]: prompt }) : { ...prev, [PROMPT_PARAM]: prompt }));
+  }
   useEffect(() => {
-    if (typeof window !== "undefined" && tabFromSearch(window.location.search) === "video") setTab("video");
+    const asked = typeof window !== "undefined" ? tabFromSearch(window.location.search) : "rasm";
+    if (asked !== "rasm") setTab(asked);
   }, []);
   useEffect(() => {
     if (tab === "video") setVideoSeen(true);
+    if (tab === "ovoz") setVoiceSeen(true);
+    if (tab === "audio") setAudioSeen(true);
   }, [tab]);
 
   const rootRef = useRef<HTMLDivElement>(null);
@@ -120,6 +164,13 @@ function StudioApp() {
   const { typing } = useKeyboardInset(rootRef);
   // The gallery is a view of this page with its own history entry: back returns to the form.
   useOverlayHistory(view === "gallery", () => setView("create"));
+  // P7b «Keyingi qadam» (docs/studio/P7-SPEC.md): a result handed to the next tab, prefilled — each step is that tab's own priced job.
+  const openTab = useCallback((t: StudioTab) => {
+    setView("create");
+    setTab(t);
+    if (typeof window !== "undefined") rootRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, []);
+  const handoff = useHandoffs({ open: openTab, setVideoState, setVoiceState, setAudioState });
 
   const entry = resolveEntry(catalog, chosen);
   const values = entry ? effective(entry, raw) : {};
@@ -356,17 +407,21 @@ function StudioApp() {
         {view === "gallery" ? (
           <section aria-label="Galereya" data-studio-gallery className="md:col-span-2">
             <h2 className="mb-3 text-[20px] font-extrabold">Galereya</h2>
+            <HandoffAlert error={handoff.error} />
             <Gallery
               onCreate={toCreate}
               onOtherModel={(item: GalleryItem) => (item.kind === "video" ? videoAgain(item) : otherModel(item.prompt))}
               onTool={(m, p) => void pictureTool(m, p)}
+              onVideo={(url, prompt) => void handoff.toVideo(url, prompt)}
+              onVoice={(text) => void handoff.toVoice(text)}
+              onMusic={(prompt) => void handoff.toMusic(prompt)}
             />
           </section>
         ) : (
           <>
-            <div data-studio-form className={cn("min-w-0", tab === "video" && "md:col-span-2 md:max-w-[44rem]")}>
-              <div role="tablist" aria-label="Studio bo‘limlari" data-studio-tabs className="bg-muted/70 mb-3 inline-flex rounded-[14px] p-1">
-                {(["rasm", "video"] as const).map((t) => (
+            <div data-studio-form className={cn("min-w-0", (tab !== "rasm" || comparing) && "md:col-span-2", tab !== "rasm" && !comparing && "md:max-w-[44rem]")}>
+              <div role="tablist" aria-label="Studio bo‘limlari" data-studio-tabs className="bg-muted/70 mb-3 inline-flex max-w-full rounded-[14px] p-1">
+                {STUDIO_TABS.map((t) => (
                   <button
                     key={t}
                     type="button"
@@ -376,9 +431,10 @@ function StudioApp() {
                     onClick={() => {
                       setTab(t);
                       setError(null);
+                      handoff.clearError();
                     }}
                     className={cn(
-                      "focus-visible:ring-ring min-h-11 rounded-[10px] px-5 text-[15px] font-semibold outline-none focus-visible:ring-2",
+                      "focus-visible:ring-ring min-h-11 rounded-[10px] px-3.5 text-[15px] font-semibold sm:px-5 outline-none focus-visible:ring-2",
                       tab === t ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
@@ -387,6 +443,7 @@ function StudioApp() {
                 ))}
               </div>
               <ChannelGate />
+              <HandoffAlert error={handoff.error} />
               {tab === "rasm" && mode !== "image" ? (
                 <div className="bg-accent-soft text-accent-soft-foreground mb-3 flex items-center justify-between gap-2 rounded-[14px] px-3.5 py-2" data-studio-mode={mode}>
                   <p className="text-[14.5px] font-bold">{MODE_LABEL[mode]}</p>
@@ -401,7 +458,43 @@ function StudioApp() {
                   </button>
                 </div>
               ) : null}
-              {tab === "video" ? (
+              {compareAvailability(compareKind, compareCatalog) ? <CompareSwitch checked={comparing} onChange={toggleCompare} /> : null}
+              {comparing && compareKind && compareCatalog ? (
+                <ComparePanel
+                  kind={compareKind}
+                  catalog={compareCatalog}
+                  tab={compare[compareKind]}
+                  balance={compareKind === "video" ? paidBalance : balance}
+                  typing={typing}
+                  gated={gated}
+                  reload={compareKind === "video" ? video.reload : reload}
+                  onPick={(id, prompt) => pickCompared(compareKind, id, prompt)}
+                />
+              ) : tab === "audio" ? (
+                <AudioTab
+                  catalogState={audioCatalog.state}
+                  reload={audioCatalog.reload}
+                  state={audioState}
+                  setState={setAudioState}
+                  jobs={audioJobs.jobs}
+                  track={audioJobs.track}
+                  balance={balance}
+                  typing={typing}
+                  gated={gated}
+                />
+              ) : tab === "ovoz" ? (
+                <VoiceTab
+                  catalogState={voiceCatalog.state}
+                  reload={voiceCatalog.reload}
+                  state={voiceState}
+                  setState={setVoiceState}
+                  jobs={voiceJobs.jobs}
+                  track={voiceJobs.track}
+                  balance={balance}
+                  typing={typing}
+                  gated={gated}
+                />
+              ) : tab === "video" ? (
                 <VideoTab
                   catalogState={video.state}
                   reload={video.reload}
@@ -412,6 +505,8 @@ function StudioApp() {
                   balance={paidBalance}
                   typing={typing}
                   gated={gated}
+                  onMusic={(prompt) => void handoff.toMusic(prompt)}
+                  onVoice={(text) => void handoff.toVoice(text)}
                 />
               ) : !catalog ? (
                 <CatalogStatus status={state.status} message={state.status === "error" ? state.message : ""} onRetry={() => reload()} />
@@ -461,9 +556,17 @@ function StudioApp() {
                 </>
               )}
             </div>
-            {tab === "rasm" ? (
+            {tab === "rasm" && !comparing ? (
               <section ref={resultsRef} aria-label="Natijalar" data-studio-results className={cn("min-w-0 md:mt-0", jobs.length > 0 && "mt-5")}>
-                <StudioResults jobs={jobs} busy={submitting} onAgain={again} onOtherModel={(job) => otherModel(job.prompt)} onTool={(m, p) => void pictureTool(m, p)} />
+                <StudioResults
+                  jobs={jobs}
+                  busy={submitting}
+                  onAgain={again}
+                  onOtherModel={(job) => otherModel(job.prompt)}
+                  onTool={(m, p) => void pictureTool(m, p)}
+                  onVideo={(url, prompt) => void handoff.toVideo(url, prompt)}
+                  onVoice={(text) => void handoff.toVoice(text)}
+                />
               </section>
             ) : null}
           </>

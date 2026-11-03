@@ -37,11 +37,16 @@ export type GalleryVideo = {
   effectLabel: string | null;
 };
 
+/** A speech result in the gallery (P5): played from the job's own MP3 (`/api/generations/{id}/file?inline=1`). */
+export type GalleryAudio = { src: string; seconds: number | null; voices: string[]; clone: boolean };
+
 /** One completed Studio generation in the gallery. */
 export type GalleryItem = {
   id: string;
-  /** `image` (Rasm tab) or `video` (Video tab); an older server sends no kind = pictures. */
-  kind: "image" | "video";
+  /** `image` (Rasm tab), `video` (Video tab) or `audio` (Ovoz tab, P5); an older server sends no kind = pictures. */
+  kind: "image" | "video" | "audio";
+  /** The speech of an audio item (P5), `null` otherwise. */
+  audio: GalleryAudio | null;
   /** The clip of a video item, `null` for pictures. */
   video: GalleryVideo | null;
   createdAt: string;
@@ -54,6 +59,8 @@ export type GalleryItem = {
   thumbs: string[];
   /** The packed result (one image or a zip): `/api/generations/{id}/file`. */
   fileUrl: string;
+  /** P7b: the user starred it (the server's `studio_favorites`). */
+  favorite: boolean;
 };
 
 export type GalleryPage = { items: GalleryItem[]; nextCursor: string | null };

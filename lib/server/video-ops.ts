@@ -34,8 +34,8 @@ import type { FormValues } from "../types";
 import { MediaError, costUsd, normalize, submitWithRoutes, type AdapterAsset, type AdapterDeps, type CatalogEntry, type MediaAdapter, type NormalizedParams } from "../studio-core";
 import { studioVideoAdapters, videoMediaAdapters, videoRoute } from "../media/adapters/video";
 import { MEDIA_CATALOG } from "../media/catalog";
-import { STUDIO_EFFECT_SECONDS, STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
-import { isEffectEntry, studioVideoEntry } from "../media/studio-video-pricing";
+import { SECOND_IMAGE_PARAM, STUDIO_EFFECT_SECONDS, STUDIO_VIDEO_PURPOSE, effectPhotos } from "../media/catalog-video";
+import { isEffectEntry, studioVideoEntry, studioVideoImageParams } from "../media/studio-video-pricing";
 import { VIDEO_TOOLS_SQL } from "../tool-kinds";
 import { modelAvailable } from "./media/availability";
 import { mediaOverrides } from "./media/overrides";
@@ -346,7 +346,7 @@ async function releaseLease(job: VideoJob): Promise<void> {
 /* ══════════════════════════ 1b. submit (Studio) ══════════════════════════ */
 
 /** What the Studio submit guard found or wrote, decided under the per-generation lock. */
-type StudioGuarded = { found: string; id: string } | { row: MediaJobRow; image: AdapterAsset | undefined };
+type StudioGuarded = { found: string; id: string } | { row: MediaJobRow; assets: Record<string, AdapterAsset[]> };
 
 /**
  * The SUBMIT half of a Studio clip (`studio-video`): the chosen catalog model (Gemini Omni, Kling 3.0, a Kling effect)
@@ -371,15 +371,19 @@ export async function submitStudioVideoJob(job: VideoJob, deps: VideoOpsDeps = {
     // Provider on + keyed + not switched off in «Media modellari» RIGHT NOW (the route checked it at purchase).
     const primary = entry.routes[0]!;
     if (!modelAvailable(entry.id, await mediaOverrides()) || !adapters[primary.adapter]?.configured()) throw new UserFacingError(VIDEO_UNAVAILABLE_MESSAGE);
-    const ids = params.imageAssetId;
-    const assetId = Array.isArray(ids) ? ids[0] : undefined;
-    let image: AdapterAsset | undefined;
-    if (assetId) {
+    // Every photo the job sends (the start image; P4: the end frame, the second photo of a two-photo effect).
+    const assets: Record<string, AdapterAsset[]> = {};
+    for (const name of studioVideoImageParams(entry, params)) {
+      const ids = params[name];
+      const assetId = Array.isArray(ids) ? ids[0] : undefined;
+      if (!assetId) continue;
       // SQL ownership: another user's upload cannot be read.
       const photo = await getPhoto(job.userId, assetId);
       if (!photo) throw new UserFacingError(VIDEO_IMAGE_MISSING_MESSAGE);
-      image = { mime: photo.mime, base64: photo.bytes.toString("base64") };
-    } else if (isEffectEntry(entry)) {
+      assets[name] = [{ mime: photo.mime, base64: photo.bytes.toString("base64") }];
+    }
+    // An effect without the photo(s) its scene needs: the route refused it before charging; a stored one is refunded.
+    if (isEffectEntry(entry) && (!assets.imageAssetId || (effectPhotos(params.effect) === 2 && !assets[SECOND_IMAGE_PARAM]))) {
       throw new UserFacingError(VIDEO_IMAGE_MISSING_MESSAGE);
     }
     const row = await insertMediaJobTx(client, {
@@ -394,7 +398,7 @@ export async function submitStudioVideoJob(job: VideoJob, deps: VideoOpsDeps = {
       deadlineAt: new Date(Date.now() + VIDEO_OP_DEADLINE_MS),
     });
     if (!row) throw new UserFacingError(VIDEO_LOST_MESSAGE);
-    return { row, image };
+    return { row, assets };
   });
 
   if ("found" in g) {
@@ -410,14 +414,14 @@ export async function submitStudioVideoJob(job: VideoJob, deps: VideoOpsDeps = {
     throw new UserFacingError(VIDEO_FAILED_MESSAGE);
   }
 
-  const { row, image } = g;
+  const { row, assets } = g;
   let opId: string;
   try {
     const { route, result } = await submitWithRoutes(
       entry.routes,
       adapters,
       breakerHealth,
-      { params: { ...params }, ...(image ? { assets: { imageAssetId: [image] } } : {}), idempotencyKey: row.idempotency_key },
+      { params: { ...params }, ...(Object.keys(assets).length ? { assets } : {}), idempotencyKey: row.idempotency_key },
       coreDeps(deps),
     );
     if (!("opId" in result)) throw new MediaError(route.provider, "a video route answered synchronously");
@@ -566,12 +570,37 @@ const fatalError = (e: unknown): e is VideoProviderError | MediaError => (e inst
 type Polled = Exclude<VideoPollResult, { state: "done" }> | { state: "done"; download(): Promise<Uint8Array> };
 
 /** How one op is polled: the `VideoAdapter` for a `video_ops` row, the core's `MediaAdapter` for a `media_jobs` row. */
+/** The Studio adapter of a `studio.video` row: its own model and provider name it (the route that took the submit). */
+function studioAdapterOf(op: DueOp, deps: VideoOpsDeps): MediaAdapter | undefined {
+  if (!op.mediaJobId || op.purpose !== STUDIO_VIDEO_PURPOSE) return undefined;
+  const route = (op.modelId ? MEDIA_CATALOG.byId(op.modelId) : null)?.routes.find((r) => r.provider === op.provider);
+  return route ? studioAdaptersOf(deps)[route.adapter] : undefined;
+}
+
+/**
+ * Gives an op up (deadline / too many transient errors): fail + refund it ONCE (`failVideo`). P4 review M1: a Studio
+ * adapter that can cancel (fal) is first asked to drop the op, best effort — a failing cancel never blocks the refund —
+ * and the op id + the cancel answer go into `last_error`, so a late provider success can be reconciled against the
+ * provider's bill (the row keeps its `op_id` too). Ops without a cancel (Kling, Omni, «Video») fail exactly as before.
+ */
+async function giveUp(op: DueOp, deps: VideoOpsDeps, message: string, detail: string): Promise<PollOutcome> {
+  const adapter = studioAdapterOf(op, deps);
+  let note = "";
+  if (adapter?.cancel) {
+    try {
+      note = ` · provider cancel: ${await adapter.cancel(op.op_id, coreDeps(deps))} (op ${op.op_id})`;
+    } catch (e) {
+      note = ` · provider cancel failed (op ${op.op_id})`;
+      log("warn", "[video] provider cancel failed, refunding anyway", { jobId: op.generation_id, provider: op.provider, err: e });
+    }
+  }
+  return (await failVideo(op.generation_id, message, `${detail}${note}`)) ? "failed" : "skipped";
+}
+
 function pollerFor(op: DueOp, deps: VideoOpsDeps): (() => Promise<Polled>) | null {
   const t = { fetchImpl: deps.fetchImpl };
   if (op.mediaJobId && op.purpose === STUDIO_VIDEO_PURPOSE) {
-    // The row's own model and provider name the adapter (the route that took the submit).
-    const route = (op.modelId ? MEDIA_CATALOG.byId(op.modelId) : null)?.routes.find((r) => r.provider === op.provider);
-    const adapter = route ? studioAdaptersOf(deps)[route.adapter] : undefined;
+    const adapter = studioAdapterOf(op, deps);
     if (!adapter?.poll) return null;
     const poll = adapter.poll.bind(adapter);
     return async () => {
@@ -620,8 +649,8 @@ export async function pollOp(op: DueOp, deps: VideoOpsDeps = {}): Promise<PollOu
 
   const transient = async (e: unknown): Promise<PollOutcome> => {
     const msg = e instanceof Error ? e.message.slice(0, 300) : "xato";
-    if (await pastDeadline(op)) return (await failVideo(op.generation_id, VIDEO_DEADLINE_MESSAGE, msg)) ? "failed" : "skipped";
-    if (op.errors + 1 >= MAX_TRANSIENT_ERRORS) return (await failVideo(op.generation_id, VIDEO_FAILED_MESSAGE, msg)) ? "failed" : "skipped";
+    if (await pastDeadline(op)) return giveUp(op, deps, VIDEO_DEADLINE_MESSAGE, msg);
+    if (op.errors + 1 >= MAX_TRANSIENT_ERRORS) return giveUp(op, deps, VIDEO_FAILED_MESSAGE, msg);
     log("warn", "[video] poll error, will retry", { jobId: op.generation_id, provider: op.provider, attempt: op.attempts + 1, err: e });
     await reschedule(op, msg);
     return "pending";
@@ -639,7 +668,7 @@ export async function pollOp(op: DueOp, deps: VideoOpsDeps = {}): Promise<PollOu
   }
 
   if (result.state === "running") {
-    if (await pastDeadline(op)) return (await failVideo(op.generation_id, VIDEO_DEADLINE_MESSAGE, "deadline")) ? "failed" : "skipped";
+    if (await pastDeadline(op)) return giveUp(op, deps, VIDEO_DEADLINE_MESSAGE, "deadline");
     await reschedule(op, null);
     return "pending";
   }
@@ -806,7 +835,10 @@ function studioResult(values: FormValues, s: { modelId: string; params: Normaliz
   return {
     model: label,
     usd,
-    summary: isEffect ? `${label} · ${effectName} · ${seconds} soniya` : `${label} · ${requested} soniya${aspect && !fromImage ? ` · ${aspect}` : ""}${s.params.sound === true ? " · ovozli" : ""}`,
+    summary: isEffect
+      ? `${label} · ${effectName} · ${seconds} soniya`
+      : // P4: a fal model's resolution tier (it sets the price) is part of what was bought.
+        `${label} · ${requested} soniya${typeof s.params.resolution === "string" ? ` · ${s.params.resolution}` : ""}${aspect && !fromImage ? ` · ${aspect}` : ""}${s.params.sound === true ? " · ovozli" : ""}`,
     video: {
       provider,
       prompt: isEffect ? "" : String(s.params.prompt ?? values.prompt ?? ""),

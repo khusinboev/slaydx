@@ -605,6 +605,10 @@ export type AcademicDoc = {
    * (WP-A) — qidiruv, kartochka va eski kod uchun.
    */
   audio?: AudioModel;
+  /** Studio «Ovoz» (P5): what was spoken, by which model and voices (`AudioViewer` plays the file, lists `lines`). */
+  speech?: StudioSpeechDoc;
+  /** Studio «Audio» (P6): music / sound effect / voice changer / isolator result (`AudioViewer` plays it). */
+  studioAudio?: StudioAudioDoc;
   /**
    * Infografika (AUDIT-21): bir betlik plakatning TO'LIQ
    * spetsifikatsiyasi. Bu oilada `sections` MATNI yo'q — chiqish bitta
@@ -625,6 +629,43 @@ export type AcademicDoc = {
    * reads it for its label (no model prompt is shown for this tool); `images` holds the results.
    */
   portrait?: { gown: string; background: string; sash: string; variants: number };
+};
+
+/** Studio «Ovoz» result (docs/studio/P5-SPEC.md). `voices` are display names; a clone's provider id is never stored here. */
+export type StudioSpeechDoc = {
+  /** Catalog id of the model. */
+  model: string;
+  /** Length of the delivered MP3 (measured). */
+  seconds: number;
+  /** Characters priced (the normalized text / script). */
+  chars: number;
+  voices: string[];
+  /** What was spoken: one line for a single voice, one per turn for a dialogue. */
+  lines: { speaker: string; text: string }[];
+  /** A user clone spoke (or, for the clone tool, this is its preview). */
+  clone: boolean;
+};
+
+/** Studio «Audio» result (docs/studio/P6-SPEC.md). A clone's provider id is never stored here; the input audio neither. */
+export type StudioAudioDoc = {
+  mode: "music" | "sfx" | "voice-changer" | "isolate";
+  /** Catalog id of the model. */
+  model: string;
+  /** Length of the result file's MP3 (measured). */
+  seconds: number;
+  /** The music / effect description (`null` for the audio-input modes). */
+  prompt: string | null;
+  /** Billed input length (voice changer / isolator), `null` otherwise. */
+  inputSeconds: number | null;
+  /** The voice changer's target voice (display name). */
+  voices: string[];
+  /** A user clone was the target voice. */
+  clone: boolean;
+  /**
+   * Sound-effect variants when more than one was asked: every delivered clip as a generation asset (the first one is
+   * also the result file). Empty for a single clip.
+   */
+  variants: { assetId: string; seconds: number }[];
 };
 
 export type BuiltFile = {
@@ -674,14 +715,14 @@ export type CostJson = {
 };
 
 export type CostPart = {
-  kind: "llm" | "image" | "grounding" | "tts" | "video";
+  kind: "llm" | "image" | "grounding" | "tts" | "video" | "audio";
   provider: string;
   /** LLM/rasm modeli; TTS da model (Gemini) yoki `provider:ovoz`; grounding da `google_search`. */
   model: string;
   calls: number;
   inputTokens: number;
   outputTokens: number;
-  /** Rasm soni / grounding so'rovi / TTS belgisi / video soniyasi (LLM da 0). */
+  /** Rasm soni / grounding so'rovi / TTS belgisi / video soniyasi / audio soniyasi (musiqa, effekt, ovozni almashtirish, tozalash; LLM da 0). */
   units: number;
   usd: number;
   /**
