@@ -44,7 +44,8 @@ export function sourceMax(mode: SpeechToolMode, kind: "video" | "audio"): number
 
 /** The picker's list: the user's finished videos, then audios, within the mode's length limit (no stored length = listed). */
 export function speechSources(mode: SpeechToolMode, sources: Pick<MixSources, "video" | "audio">): (MixSource & { media: "video" | "audio" })[] {
-  const fits = (s: MixSource, kind: "video" | "audio") => s.seconds === null || s.seconds <= sourceMax(mode, kind) + 0.5;
+  // On the billed (rounded-up) length, the server's rule: a 180.3 s source bills 181 s and is not offered for a dub.
+  const fits = (s: MixSource, kind: "video" | "audio") => s.seconds === null || billedSeconds(s.seconds) <= sourceMax(mode, kind);
   return [
     ...sources.video.filter((s) => fits(s, "video")).map((s) => ({ ...s, media: "video" as const })),
     ...sources.audio.filter((s) => fits(s, "audio")).map((s) => ({ ...s, media: "audio" as const })),

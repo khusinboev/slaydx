@@ -152,7 +152,8 @@ export const STUDIO_TRANSCRIBE_ENTRIES: readonly CatalogEntry[] = [
     ],
     cost: { per: "second", usd: usdPerSecond(DUB_CREDITS_PER_SECOND), secondsParam: "sourceSeconds" },
     routes: [{ provider: "elevenlabs", upstreamModel: ELEVENLABS_DUB_UPSTREAM, adapter: "studio-elevenlabs-dub" }],
-    limits: { timeoutMs: 60_000, deadlineMs: 9 * 60_000 },
+    // Informational, like every sync entry: the dub waits inside the job deadline (budget `studio-dub`, `dub.ts`).
+    limits: { timeoutMs: 60_000 },
     output: { mimes: ["video/mp4", "audio/mpeg"], maxBytes: SPEECH_TOOL_OUTPUT_MAX_BYTES },
   },
 ];

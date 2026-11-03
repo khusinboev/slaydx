@@ -14,7 +14,7 @@
  */
 import { MediaError, type AdapterInput, type MediaAdapter, type MediaOutput, type NormalizedParams, type PollResult } from "../../studio-core";
 import { ELEVENLABS_API, elevenLabsFetch, elevenLabsKey } from "../../generation/tts/elevenlabs";
-import { AUTO_LANGUAGE, ELEVENLABS_STT_MODEL } from "../catalog-transcribe";
+import { AUTO_LANGUAGE, ELEVENLABS_STT_MODEL, SPEECH_TOOL_OUTPUT_MAX_BYTES } from "../catalog-transcribe";
 import { toSpeechError } from "./speech";
 
 export const ELEVENLABS_STT_URL = `${ELEVENLABS_API}/speech-to-text`;
@@ -140,6 +140,39 @@ export function sttAdapter(deps: TranscribeAdapterDeps = {}): MediaAdapter {
   };
 }
 
+/**
+ * The body, at most `cap` bytes: a declared `content-length` over the cap is refused before reading, and a streamed body
+ * stops (and is cancelled) the moment it passes the cap — a 25 MB result never becomes a 2 GB buffer.
+ */
+export async function readCapped(res: Response, cap: number): Promise<Uint8Array> {
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > cap) {
+    await res.body?.cancel().catch(() => undefined);
+    throw new MediaError("elevenlabs", `download ${declared} B over the ${cap} B cap`, { accepted: true });
+  }
+  if (!res.body) return new Uint8Array(await res.arrayBuffer());
+  const reader = res.body.getReader();
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > cap) {
+      await reader.cancel().catch(() => undefined);
+      throw new MediaError("elevenlabs", `download over the ${cap} B cap`, { accepted: true });
+    }
+    parts.push(value);
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const p of parts) {
+    out.set(p, at);
+    at += p.byteLength;
+  }
+  return out;
+}
+
 /** `<dubbing_id>:<target>` → its parts; `null` for anything else. */
 export function parseDubOp(opId: string): { id: string; lang: string } | null {
   const m = /^([A-Za-z0-9_-]{4,64}):([a-z]{2,3})$/.exec(opId);
@@ -208,8 +241,9 @@ export function dubAdapter(deps: TranscribeAdapterDeps = {}): MediaAdapter {
       if (!o.url.startsWith(`${ELEVENLABS_DUB_URL}/`)) throw new MediaError("elevenlabs", "unexpected download url");
       try {
         const res = await elevenLabsFetch({ url: o.url, method: "GET", accept: "*/*" }, { key: needKey(), fetchImpl: d.fetchImpl, timeoutMs: timeoutOf(d, 120_000) });
-        return new Uint8Array(await res.arrayBuffer());
+        return await readCapped(res, SPEECH_TOOL_OUTPUT_MAX_BYTES);
       } catch (e) {
+        if (e instanceof MediaError) throw e;
         throw toSpeechError(e, "elevenlabs");
       }
     },

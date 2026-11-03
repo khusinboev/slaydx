@@ -37,7 +37,13 @@ import path from "node:path";
  *   'submitting' re-run treated as resumable                                    -> "dub engine: resume";
  *   `giveUp` without the provider DELETE                                        -> "dub engine: failures";
  *   the video/audio shape check of the dub output removed                       -> "dub engine: failures";
- *   the dub cost rule made per job (`sourceSeconds` ignored)                    -> "price", "probe".
+ *   the dub cost rule made per job (`sourceSeconds` ignored)                    -> "price", "probe";
+ *   review fixes (2026-11-04):
+ *   picker limit back on raw seconds + 0.5 (`speechSources`)                    -> "client glue" (180.3 s offered);
+ *   the measured > billed + 1.5 s check removed (transcribe / dub, each)        -> "review m2";
+ *   `poll` / `fetchOutput` called without the deadline (each)                   -> "review m3";
+ *   a 'succeeded' row resumed again                                             -> "dub engine: resume";
+ *   `readCapped` content-length check / streamed cap removed (each)             -> "review NIT".
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -140,8 +146,9 @@ test("client glue: pickers set source + billed seconds, drop the burn for audio;
   assert.match(String(speechToolBlocker("transcribe", {})), /manbani tanlang/);
   assert.match(String(speechToolBlocker("dub", { source: RES, sourceSeconds: 5, target: "ru", sourceLang: "ru" })), /bir xil/);
   assert.equal(speechToolBlocker("dub", { source: RES, sourceSeconds: 5, target: "uz" }), null);
-  const list = speechSources("dub", { video: [{ ...video, seconds: 200 }, video], audio: [audio] });
-  assert.deepEqual(list.map((s) => s.id), [video.id, audio.id], "the 200 s video is not offered for a dub (≤ 180 s)");
+  // On the billed seconds (review m1): 180.3 s bills 181 s — over the dub cap, not offered; 179.9 s bills 180, offered.
+  const list = speechSources("dub", { video: [{ ...video, seconds: 200 }, { ...video, id: "x1", seconds: 180.3 }, video, { ...video, id: "x2", seconds: 179.9 }], audio: [audio] });
+  assert.deepEqual(list.map((s) => s.id), [video.id, "x2", audio.id], "200 s and 180.3 s (181 billed) are not offered for a dub (≤ 180 s)");
 });
 
 /* ───────────────────────── golden requests ───────────────────────── */
@@ -525,7 +532,8 @@ test("dub engine: resume — a re-run polls the parked op (no second POST); a 's
   assert.ok(!seen.some((s) => s.method === "POST"), "the paid dub is never submitted twice");
   assert.ok(seen.some((s) => s.url.endsWith("/v1/dubbing/dub_OLD")), "the old op is polled");
 
-  for (const row of [{ status: "submitting", opId: null, fresh: false }, { status: "failed", opId: null, fresh: false }]) {
+  // A 'succeeded' row: the file was downloaded and the project deleted — re-polling would hit a deleted project (review m4).
+  for (const row of [{ status: "submitting", opId: null, fresh: false }, { status: "failed", opId: null, fresh: false }, { status: "succeeded", opId: "dub_DONE:uz", fresh: false }]) {
     t.mock.restoreAll();
     quiet(t);
     const s2 = dubFetch(t);
@@ -581,4 +589,69 @@ test("dub engine: failures — provider failed / safety / deadline / submit 500 
 
   const tooLong = await dubMod.buildStudioDub(DUBT(), { source: RES, sourceSeconds: 2 } as never, { source: { ...audioCtx().source, seconds: 200 } }, {}, { store: null, health: HEALTH }).then(() => null, (e: Error) => e);
   assert.match(String(tooLong?.message), /3 daqiqadan uzun/);
+});
+
+/* ───────────────────────── review fixes (m2, m3, NIT) ───────────────────────── */
+
+test("review m2: the worker refuses a source that measures longer than it was billed (+1.5 s slack), both engines", async (t) => {
+  quiet(t);
+  const at = (seconds: number) => ({ source: { kind: "result" as const, id: RES.slice(7), mime: "audio/mpeg", bytes: mp3Bytes(4), seconds } });
+  // Billed 10 s: 11.5 s measured is still the same job, 11.6 s is not.
+  const ok = await buildStudioTranscribe(TR(), { source: RES, sourceSeconds: 10 } as never, at(11.5), {}, { run: runStub(sttWords("bir")) as never });
+  assert.equal(ok.mime, "text/plain; charset=utf-8");
+  let called = 0;
+  const counting = runStub(sttWords("bir"));
+  await assert.rejects(
+    buildStudioTranscribe(TR(), { source: RES, sourceSeconds: 10 } as never, at(11.6), {}, { run: (async (i: never) => (called++, counting(i))) as never }),
+    (e: Error) => e instanceof UserFacingError && /uzunroq chiqdi.*Kredit qaytariladi/.test(e.message),
+  );
+  assert.equal(called, 0, "refused before the paid call");
+  const seen = dubFetch(t);
+  await assert.rejects(
+    dubMod.buildStudioDub(DUBT(), { source: RES, sourceSeconds: 10 } as never, at(11.6), {}, { adapters: ad.transcribeAdapters({ key: () => KEY }), store: null, health: HEALTH, ...clock() }),
+    (e: Error) => e instanceof UserFacingError && e.message === dubMod.DUB_LENGTH_MISMATCH_MESSAGE,
+  );
+  assert.equal(seen.length, 0, "no provider call");
+});
+
+test("review m3: poll gets the deadline minus the download reserve, the download the deadline minus the commit margin; a failed download deletes the project", async (t) => {
+  quiet(t);
+  const got: { poll?: number; fetch?: number; cancelled: string[] } = { cancelled: [] };
+  const fake = {
+    id: "studio-elevenlabs-dub",
+    configured: () => true,
+    submit: async () => ({ opId: "dub_D1:uz" }),
+    poll: async (_op: string, d: { deadline?: number } = {}) => ((got.poll = d.deadline), { state: "done" as const, outputs: [{ kind: "url" as const, url: "https://api.elevenlabs.io/v1/dubbing/dub_D1/audio/uz" }] }),
+    fetchOutput: async (_o: unknown, d: { deadline?: number } = {}) => {
+      got.fetch = d.deadline;
+      throw new MediaError("elevenlabs", "The operation was aborted due to timeout", { accepted: true });
+    },
+    cancel: async (op: string) => (got.cancelled.push(op), "cancelled" as const),
+  };
+  const c = clock();
+  const deadline = c.now() + 300_000;
+  const err = await dubMod
+    .buildStudioDub(DUBT(), { source: RES, sourceSeconds: 2 } as never, audioCtx(), { deadline }, { adapters: { "studio-elevenlabs-dub": fake as never }, store: null, health: HEALTH, ...c })
+    .then(() => null, (e: Error) => e);
+  assert.equal(err?.message, dubMod.DUB_FAILED_MESSAGE);
+  assert.equal(got.poll, deadline - dubMod.DUB_DOWNLOAD_RESERVE_MS);
+  assert.equal(got.fetch, deadline - dubMod.DUB_COMMIT_MARGIN_MS);
+  assert.ok(dubMod.DUB_DOWNLOAD_RESERVE_MS - dubMod.DUB_COMMIT_MARGIN_MS >= 30_000, "≥ 30 s of the reserve is the download's");
+  assert.deepEqual(got.cancelled, ["dub_D1:uz"], "the project is deleted after the failed download");
+});
+
+test("review NIT: the dub download is capped — a declared size over the cap is refused unread, a streamed one stops at the cap", async () => {
+  const cap = 1000;
+  await assert.rejects(ad.readCapped(new Response(new Uint8Array(10), { headers: { "content-length": "5000" } }), cap), /over the 1000 B cap/);
+  let pulled = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    pull(ctl) {
+      pulled++;
+      ctl.enqueue(new Uint8Array(400));
+      if (pulled > 50) ctl.close();
+    },
+  });
+  await assert.rejects(ad.readCapped(new Response(stream), cap), /over the 1000 B cap/);
+  assert.ok(pulled < 10, `stopped early (${pulled} chunks)`);
+  assert.equal((await ad.readCapped(new Response(new Uint8Array(999)), cap)).length, 999);
 });

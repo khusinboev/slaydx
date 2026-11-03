@@ -51,6 +51,8 @@ export type StudioTranscribeDeps = {
 
 /** The burn re-encodes the picture: ≤ 3 min of H.264 `veryfast` on 2 threads (the runner's ceiling is 300 s). */
 export const BURN_FFMPEG_TIMEOUT_MS = 240_000;
+/** The bytes may measure this much longer than the billed (server-read, rounded-up) seconds; more = refused + refund. */
+export const MEASURED_SLACK_SECONDS = 1.5;
 
 const REFUND = "Kredit qaytariladi.";
 const FAILED = `Transkripsiya bajarilmadi — provayder javob bermadi. ${REFUND}`;
@@ -85,6 +87,11 @@ export async function buildStudioTranscribe(
   const kind = sourceKindOf(src.mime);
   const max = kind === "video" ? TRANSCRIBE_VIDEO_MAX_SECONDS : TRANSCRIBE_AUDIO_MAX_SECONDS;
   if (!(src.seconds > 0 && src.seconds <= max + MIX_SECONDS_TOLERANCE)) throw new UserFacingError(`Manba ${max / 60} daqiqadan uzun yoki o‘qilmadi. ${REFUND}`);
+  // The price was the billed seconds the server read before the charge; the bytes measured here must not be longer.
+  if (src.seconds > Number(p.sourceSeconds) + MEASURED_SLACK_SECONDS) {
+    console.warn(`[studio-transcribe] measured ${src.seconds.toFixed(2)} s > billed ${String(p.sourceSeconds)} s — refused`);
+    throw new UserFacingError(`Manba uzunligi narx hisoblangandan uzunroq chiqdi — qayta tanlang. ${REFUND}`);
+  }
   const burn = p.burn === true;
   if (burn && kind !== "video") throw new UserFacingError(`Subtitrni faqat videoga yopishtirish mumkin. ${REFUND}`);
   const kbps = burn ? burnVideoKbps(src.seconds) : null;
