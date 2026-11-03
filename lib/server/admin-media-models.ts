@@ -18,7 +18,7 @@ import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
 import { studioVideoPrice } from "../media/studio-video-pricing";
 import { STUDIO_SPEECH_PURPOSE } from "../media/catalog-speech";
 import { speechTextParam, studioSpeechPrice } from "../media/studio-speech";
-import { AUDIO_MODEL_IDS, MUSIC_MODEL, SFX_MODEL } from "../media/catalog-audio";
+import { AUDIO_MODEL_IDS, LYRIA_MODEL, MUSIC_MODEL, SFX_MODEL } from "../media/catalog-audio";
 import { studioAudioPrice } from "../media/studio-audio";
 
 /**
@@ -43,7 +43,7 @@ export function managedModelIds(): string[] {
       ...STUDIO_PURPOSES.flatMap((p) => MEDIA_PURPOSES.byId(p)!.allowed),
       ...MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed,
       ...MEDIA_PURPOSES.byId(STUDIO_SPEECH_PURPOSE)!.allowed,
-      // P6: + the «Audio» tab's four models (one per mode).
+      // P6: + the «Audio» tab's models (P9: «Musiqa» has two).
       ...AUDIO_MODEL_IDS,
     ]),
   ];
@@ -55,6 +55,8 @@ function unitOf(id: string): { label: string; values: Record<string, unknown>; v
   // P6 «Audio»: a minute of music / of input audio, 10 s of a sound effect (one variant).
   if (AUDIO_MODEL_IDS.includes(id)) {
     if (id === MUSIC_MODEL) return { label: "1 daqiqa", values: { modelId: id, length: "60" }, video: false, audio: true };
+    // P9 Lyria: per song — the full song (the dearer of its two kinds).
+    if (id === LYRIA_MODEL) return { label: "1 qo‘shiq", values: { modelId: id, length: "song" }, video: false, audio: true };
     if (id === SFX_MODEL) return { label: "10 soniya", values: { modelId: id, duration: 10, variants: 1 }, video: false, audio: true };
     return { label: "1 daqiqa", values: { modelId: id, inputSeconds: 60 }, video: false, audio: true };
   }

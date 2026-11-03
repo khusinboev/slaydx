@@ -54,7 +54,7 @@ const generationsRoute = await import("../app/api/generations/route.ts");
 const NANO = "google/nano-banana";
 const GPT = "openai/gpt-image";
 /** P3: the Studio Video tab's models, listed after the pictures (Gemini Omni + Kling 3.0 tiers + effects); P4 adds the fal models. */
-const STUDIO_VIDEO_IDS = ["google/omni-video", "kling/kling-3", "kling/kling-3-pro", "alibaba/wan-3", "bytedance/seedance-2.5", "bytedance/seedance-2-mini", "minimax/h3", "minimax/h3-max-turbo", "kling/effects"];
+const STUDIO_VIDEO_IDS = ["google/omni-video", "kling/kling-3", "kling/kling-3-pro", "alibaba/wan-3", "bytedance/seedance-2.5", "bytedance/seedance-2-mini", "minimax/h3", "minimax/h3-max-turbo", "openai/sora-2", "openai/sora-2-pro", "kling/effects"];
 /** P5: the «Ovoz» tab's speech models, listed after the video ones; one unit = 1 000 characters (the clone is a fixed price, not here). */
 const STUDIO_SPEECH_IDS = ["elevenlabs/eleven-v3", "google/gemini-tts", "elevenlabs/v3-dialogue", "google/gemini-dialogue"];
 /**
@@ -63,6 +63,8 @@ const STUDIO_SPEECH_IDS = ["elevenlabs/eleven-v3", "google/gemini-tts", "elevenl
  */
 const STUDIO_AUDIO: Record<string, { unit: string; values: Record<string, unknown>; price: number }> = {
   "elevenlabs/music": { unit: "1 daqiqa", values: { length: "60" }, price: 4_200 },
+  // P9: Lyria on the Gemini key, per song ($0.08 × 12 700 × 2 = 2 032 → 2 100).
+  "google/lyria-3": { unit: "1 qo‘shiq", values: { length: "song" }, price: 2_100 },
   "elevenlabs/sfx": { unit: "10 soniya", values: { duration: 10 }, price: 1_900 },
   "elevenlabs/voice-changer": { unit: "1 daqiqa", values: { inputSeconds: 60 }, price: 4_700 },
   "elevenlabs/isolator": { unit: "1 daqiqa", values: { inputSeconds: 60 }, price: 4_700 },

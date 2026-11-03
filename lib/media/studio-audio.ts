@@ -39,11 +39,11 @@ export function studioAudioEntry(values: { modelId?: unknown }): CatalogEntry | 
 
 /** The purpose a job of this model runs under (`studio.music`, …). */
 export function studioAudioPurposeOf(modelId: string): string | null {
-  return AUDIO_MODES.find((m) => m.model === modelId)?.purpose ?? null;
+  return AUDIO_MODES.find((m) => m.models.includes(modelId))?.purpose ?? null;
 }
 
 export function studioAudioModeOf(modelId: string): AudioMode | null {
-  return AUDIO_MODES.find((m) => m.model === modelId)?.mode ?? null;
+  return AUDIO_MODES.find((m) => m.models.includes(modelId))?.mode ?? null;
 }
 
 /** Base price (so'm) of an «Audio» job; `null` for a model the tab does not sell (the route refuses it first). */

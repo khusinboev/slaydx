@@ -8,16 +8,17 @@ import { formatSom, groupDigits } from "@/lib/format";
 import type { FormValues } from "@/lib/types";
 import type { ClientEntry } from "@/lib/studio-core";
 import { AutoTextarea } from "@/components/common/AutoTextarea";
-import { Card } from "@/components/forms/compact";
+import { Card, Segmented } from "@/components/forms/compact";
 import { Field } from "@/components/forms/shared";
 import { queueGeneration } from "@/components/forms/runGeneration";
 import { PAY_RETURN_PATH } from "@/components/overlays/pay-amount";
-import { AUDIO_MODES, takesAudioInput, type AudioMode } from "@/lib/media/catalog-audio";
+import { takesAudioInput, type AudioMode } from "@/lib/media/catalog-audio";
+import { audioJobLabels, audioModelLabel, offeredModes } from "./audio-modes";
 import { audioOutputCount } from "@/lib/media/studio-audio";
 import { ParamRows } from "../ParamRows";
 import { PriceButton } from "../PriceButton";
 import type { CatalogState } from "../studio-api";
-import { effective, requestValues, type RawValues } from "../studio-values";
+import { carryOver, effective, requestValues, type RawValues } from "../studio-values";
 import type { StudioJob } from "../StudioResults";
 import { VoiceList, voiceRows, type VoiceFilter } from "../voice/VoiceList";
 import { VoiceResults } from "../voice/VoiceResults";
@@ -32,11 +33,18 @@ import { MIX_MODES } from "@/lib/media/catalog-mix";
 /** The «Montaj» chip's mode id (P8c). */
 export const MIX_CHIP = "mix" as const;
 /**
- * The tab's form state; the page keeps it across tab switches. Raw values are per mode (each mode is its own model).
+ * The tab's form state; the page keeps it across tab switches. Raw values are per mode. `models` = the model picked in a
+ * mode that offers more than one (P9 «Musiqa»: ElevenLabs | Lyria); absent = the mode's first offered model.
  * `mode: "mix"` = the P8c «Montaj» mode (ffmpeg, no provider — offered even while no catalog mode is), its own state in
  * `mix`.
  */
-export type AudioTabState = { mode: AudioMode | typeof MIX_CHIP | null; raw: Partial<Record<AudioMode, RawValues>>; filter: VoiceFilter; mix?: MixTabState };
+export type AudioTabState = {
+  mode: AudioMode | typeof MIX_CHIP | null;
+  raw: Partial<Record<AudioMode, RawValues>>;
+  filter: VoiceFilter;
+  models?: Partial<Record<AudioMode, string>>;
+  mix?: MixTabState;
+};
 export const INITIAL_AUDIO_STATE: AudioTabState = { mode: null, raw: {}, filter: "all" };
 const MIX_MODEL_IDS = new Set(MIX_MODES.map((m) => m.model));
 /** A job of the «Montaj» mode (its results render in the «Montaj» panel, not in the provider modes' list). */
@@ -46,13 +54,7 @@ const INSUFFICIENT_RE = /balans yetarli emas|to.langan balans bilan/i;
 /** Params drawn by the tab itself (prompt box, upload row, voice list), not by `ParamRows`. */
 const OWN_ROWS = new Set(["prompt", "inputId", "inputSeconds", "voice"]);
 
-/** The modes the catalog offers now, in chip order (none while `studio.audio.enabled` is off). */
-export function offeredModes(models: readonly ClientEntry[]): { mode: AudioMode; label: string; entry: ClientEntry }[] {
-  return AUDIO_MODES.flatMap((m) => {
-    const entry = models.find((e) => e.id === m.model);
-    return entry ? [{ mode: m.mode, label: m.label, entry }] : [];
-  });
-}
+export { audioJobLabels, audioModelLabel, offeredModes } from "./audio-modes";
 
 /** «Yaratish · Musiqa · ~2 100 so'm». */
 export function audioSubmitLabel(mode: string, price: number): string {
@@ -189,7 +191,10 @@ export function AudioTab({
     );
   }
 
-  const { entry, mode, label } = current;
+  const { mode, label: modeLabel, entries } = current;
+  const entry = entries.find((e) => e.id === state.models?.[mode]) ?? current.entry;
+  // The results list names the model in full («Musiqa · Lyria 3»); the button keeps it short so the price fits a phone.
+  const { job: label, button: buttonLabel } = audioJobLabels(entry, modeLabel, entries.length);
   const raw = state.raw[mode] ?? {};
   const values = effective(entry, raw);
   const blocker = audioBlocker(entry, raw);
@@ -199,6 +204,14 @@ export function AudioTab({
   const prompt = entry.params.find((p) => p.name === "prompt");
   const promptMax = prompt && prompt.type === "text" ? prompt.max : 0;
   const formEntry = { ...entry, params: entry.params.filter((p) => !OWN_ROWS.has(p.name)) };
+
+  /** Another model of the mode: the values it also accepts carry over (the prompt, «Faqat kuy»), the rest reset. */
+  const pickModel = (id: string) => {
+    const next = entries.find((e) => e.id === id);
+    if (!next || next.id === entry.id) return;
+    setError(null);
+    setState((s) => ({ ...s, models: { ...s.models, [mode]: next.id }, raw: { ...s.raw, [mode]: carryOver(next, s.raw[mode] ?? {}) } }));
+  };
 
   const setParam = (name: string, value: unknown) => setState((s) => ({ ...s, raw: { ...s.raw, [mode]: { ...(s.raw[mode] ?? {}), [name]: value } } }));
 
@@ -246,12 +259,12 @@ export function AudioTab({
   }
 
   function again(job: StudioJob) {
-    const target = modes.find((m) => m.entry.id === job.modelId);
+    const target = modes.flatMap((m) => m.entries.map((e) => ({ e, label: audioJobLabels(e, m.label, m.entries.length).job }))).find((x) => x.e.id === job.modelId);
     if (!target) {
       setError("Bu rejim hozir mavjud emas.");
       return;
     }
-    void send(target.entry, target.label, job.sent);
+    void send(target.e, target.label, job.sent);
   }
 
   const provider = "elevenlabs" as const;
@@ -259,8 +272,16 @@ export function AudioTab({
   const typed = String(raw.prompt ?? "");
 
   return (
-    <div data-audio-tab data-audio-mode={mode}>
+    <div data-audio-tab data-audio-mode={mode} data-audio-model={entry.id}>
       {chips(mode)}
+
+      {entries.length > 1 ? (
+        <div data-audio-model-picker>
+          <Card title="Model">
+            <Segmented ariaLabel="Model" value={entry.id} onChange={pickModel} options={entries.map((e) => ({ value: e.id, label: audioModelLabel(e, modeLabel) }))} />
+          </Card>
+        </div>
+      ) : null}
 
       {prompt ? (
         <section aria-label="Tavsif" data-audio-prompt className="bg-card mb-3 rounded-[20px] border p-3.5 shadow-[var(--shadow-card)]">
@@ -336,7 +357,7 @@ export function AudioTab({
         disabled={uploading}
         typing={typing}
         onSubmit={submit}
-        label={price === null ? undefined : audioSubmitLabel(count > 1 ? `${label} ×${count}` : label, price)}
+        label={price === null ? undefined : audioSubmitLabel(count > 1 ? `${buttonLabel} ×${count}` : buttonLabel, price)}
       />
       <section aria-label="Audiolar" data-audio-results className={cn(providerJobs.length > 0 && "mt-5")}>
         <VoiceResults jobs={providerJobs} busy={submitting} onAgain={again} />

@@ -35,7 +35,9 @@ const { studioAudioPrice } = await import("../../lib/media/studio-audio.ts");
  *   4. upload answer's seconds not stored (`inputSeconds` from raw dropped)        -> «upload»;
  *   5. `audioBlocker` ignores the missing input                                   -> «upload» (sent before the upload);
  *   6. voice list shows clones still being made (`status` filter dropped)         -> «voice changer»;
- *   7. the viewer's variant list needs > 3 variants (`length > 3`)                -> «result page».
+ *   7. the viewer's variant list needs > 3 variants (`length > 3`)                -> «result page»;
+ *   8. P9 picker: switching model resets the raw values (prompt lost)            -> «P9 model picker»;
+ *   9. P9 picker drawn for a one-model mode (`entries.length > 0`)               -> «P9 model picker».
  */
 
 Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
@@ -189,6 +191,45 @@ test("price button: the server formula, the request, SFX variants", async () => 
   const three = studioAudioPrice({ modelId: IDS[1], duration: 5, variants: 3 }, RATE)!;
   assert.equal(three, 2800);
   assert.match(txt("[data-studio-submit]"), /Yaratish · Effekt ×3 · ~2 800/);
+});
+
+test("P9 model picker: «Musiqa» with ElevenLabs + Lyria — picker only there, prompt carried, Lyria's own rows, price and request", async () => {
+  const lyria = view.find((e) => e.id === "google/lyria-3")!;
+  const a = api({ models: [AUDIO[0]!, lyria, ...AUDIO.slice(1)] });
+  await mount();
+  await openAudio();
+  assert.deepEqual(qa("[data-audio-mode-chip]").map((b) => b.textContent), ["Musiqa", "Effekt", "Ovozni almashtirish", "Shovqindan tozalash", "Montaj"], "Lyria is no mode of its own");
+  const picker = () => qa('[data-audio-model-picker] [role="radio"]');
+  assert.deepEqual(picker().map((b) => b.textContent), ["ElevenLabs", "Google Lyria 3"]);
+  assert.equal(q("[data-audio-tab]")!.dataset.audioModel, "elevenlabs/music", "ElevenLabs is the default");
+  await type("[data-audio-prompt] textarea", "cheerful dutar melody, Uzbek folk style");
+  await click(qa('[data-field="length"] [role="radio"]').find((b) => b.textContent === "1 daq"));
+  await click(picker()[1]);
+  assert.equal(q("[data-audio-tab]")!.dataset.audioModel, "google/lyria-3");
+  assert.equal(q<HTMLTextAreaElement>("[data-audio-prompt] textarea")!.value, "cheerful dutar melody, Uzbek folk style", "MUTATSIYA: the prompt carries over");
+  assert.deepEqual(fields(), { prompt: 1, length: 1, instrumental: 1 });
+  assert.deepEqual(qa('[data-field="length"] [role="radio"]').map((b) => b.textContent), ["Qisqa (30 s)", "To‘liq qo‘shiq"], "the ElevenLabs «1 daq» did not carry into Lyria");
+  assert.match(txt("[data-studio-submit]"), /Yaratish · Lyria 3 · ~1 100/, "short on the button: the price must fit a phone");
+  await click(qa('[data-field="length"] [role="radio"]').find((b) => b.textContent === "To‘liq qo‘shiq"));
+  assert.equal(studioAudioPrice({ modelId: "google/lyria-3", length: "song" }, RATE), 2100);
+  assert.match(txt("[data-studio-submit]"), /~2 100/);
+  await click(q("[data-studio-submit]"));
+  await settle();
+  const post = a.posts()[0]!;
+  assert.equal(post.body!.expectedPrice, 2100);
+  assert.deepEqual(post.body!.values, { modelId: "google/lyria-3", prompt: "cheerful dutar melody, Uzbek folk style", length: "song", instrumental: false });
+  // Another mode has one model: no picker; back on «Musiqa» the pick is kept.
+  await mode("sfx");
+  assert.ok(!q("[data-audio-model-picker]"));
+  await mode("music");
+  assert.equal(q("[data-audio-tab]")!.dataset.audioModel, "google/lyria-3");
+  // ElevenLabs alone listed (no Gemini key): no picker at all.
+  cleanup();
+  dropMediaCatalog();
+  api();
+  await mount();
+  await openAudio();
+  assert.ok(!q("[data-audio-model-picker]"), "MUTATSIYA: a picker of one");
 });
 
 test("upload: no send before an upload; the browser converts, the server's seconds price the job", async () => {

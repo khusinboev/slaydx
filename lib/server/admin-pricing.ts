@@ -38,7 +38,7 @@ import type { FormValues, ToolGroup, ToolId } from "../types";
 import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "../media/catalog";
 import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
 import { STUDIO_SPEECH_PURPOSE } from "../media/catalog-speech";
-import { ISOLATOR_MODEL, MUSIC_MODEL, SFX_MODEL, VOICE_CHANGER_MODEL } from "../media/catalog-audio";
+import { ISOLATOR_MODEL, LYRIA_MODEL, MUSIC_MODEL, SFX_MODEL, VOICE_CHANGER_MODEL } from "../media/catalog-audio";
 import { clonePriceOf } from "../media/studio-speech";
 import { MIX_VIDEO_MODEL, mixPriceOf } from "../media/catalog-mix";
 import type { MediaPricing } from "../media/studio-pricing";
@@ -304,6 +304,8 @@ export function ladderInputs(toolId: ToolId): LadderInput[] {
         { label: "Musiqa · 30 s", values: { modelId: MUSIC_MODEL, length: "30" } },
         { label: "Musiqa · 1 daq", values: { modelId: MUSIC_MODEL, length: "60" } },
         { label: "Musiqa · 3 daq", values: { modelId: MUSIC_MODEL, length: "180" } },
+        { label: "Lyria · 30 s", values: { modelId: LYRIA_MODEL, length: "clip" } },
+        { label: "Lyria · qo‘shiq", values: { modelId: LYRIA_MODEL, length: "song" } },
         { label: "Effekt · 5 s", values: { modelId: SFX_MODEL, duration: 5 } },
         { label: "Effekt · 30 s", values: { modelId: SFX_MODEL, duration: 30 } },
         { label: "Ovozni almashtirish · 1 daq", values: { modelId: VOICE_CHANGER_MODEL, inputSeconds: 60 } },

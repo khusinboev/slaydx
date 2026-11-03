@@ -4,8 +4,9 @@ import assert from "node:assert/strict";
 /**
  * Studio P6 «Audio» — pure parts (docs/studio/P6-SPEC.md). No DB, no network (every provider call is a stubbed fetch).
  *
- *   catalog     four entries (music / sfx / voice changer / isolator), four purposes with one model each, the Creator-plan
- *               credit rates ($22 / 121 000 credits): 15 / s, 40 / s, 1 000 / min, 1 000 / min;
+ *   catalog     four ElevenLabs entries (music / sfx / voice changer / isolator), four purposes (P9: «Musiqa» also allows
+ *               Lyria, tests/studio-lyria.test.mts), the Creator-plan credit rates ($22 / 121 000 credits): 15 / s,
+ *               40 / s, 1 000 / min, 1 000 / min;
  *   request     golden requests through the REAL adapters: /v1/music JSON, /v1/sound-generation JSON, speech-to-speech
  *               multipart (voice in the URL, model, noise flag, the input file), audio-isolation multipart;
  *   probe       «every param must work»: each param of each «Audio» model changes the provider request or the price, as
@@ -149,20 +150,23 @@ const OTHER: Record<string, unknown> = {
 
 /* ───────────────────────── catalog ───────────────────────── */
 
-test("catalog: four entries, one model per purpose, Creator-plan credit rates", () => {
-  assert.deepEqual(au.AUDIO_MODES.map((m) => [m.mode, m.label, m.model, m.purpose]), [
-    ["music", "Musiqa", MUSIC, "studio.music"],
-    ["sfx", "Effekt", SFX, "studio.sfx"],
-    ["voice-changer", "Ovozni almashtirish", STS, "studio.voice-changer"],
-    ["isolate", "Shovqindan tozalash", ISO, "studio.isolate"],
+test("catalog: four ElevenLabs entries + P9 Lyria in «Musiqa»; a mode's purpose allows exactly its models; Creator-plan credit rates", () => {
+  assert.deepEqual(au.AUDIO_MODES.map((m) => [m.mode, m.label, m.model, m.models, m.purpose]), [
+    ["music", "Musiqa", MUSIC, [MUSIC, "google/lyria-3"], "studio.music"],
+    ["sfx", "Effekt", SFX, [SFX], "studio.sfx"],
+    ["voice-changer", "Ovozni almashtirish", STS, [STS], "studio.voice-changer"],
+    ["isolate", "Shovqindan tozalash", ISO, [ISO], "studio.isolate"],
   ]);
   for (const m of au.AUDIO_MODES) {
     const p = MEDIA_PURPOSES.byId(m.purpose)!;
-    assert.deepEqual([p.allowed, p.default, p.userCanChoose], [[m.model], m.model, false]);
+    // The default is the mode's first model; a choice exists exactly where the mode has more than one.
+    assert.deepEqual([p.allowed, p.default, p.userCanChoose], [m.models, m.model, m.models.length > 1]);
     const e = MEDIA_CATALOG.byId(m.model)!;
     assert.equal(e.routes[0]!.provider, "elevenlabs");
     assert.equal(e.cost.per, "second");
   }
+  assert.deepEqual(au.AUDIO_MODEL_IDS, [MUSIC, "google/lyria-3", SFX, STS, ISO]);
+  assert.equal(au.audioModeOf("google/lyria-3")?.mode, "music");
   assert.equal(ELEVENLABS_CREATOR_USD_PER_CREDIT, 22 / 121_000);
   const usd = (id: string) => (MEDIA_CATALOG.byId(id)!.cost as { usd: number }).usd;
   assert.equal(usd(MUSIC), 15 * ELEVENLABS_CREATOR_USD_PER_CREDIT);
