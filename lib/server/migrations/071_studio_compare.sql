@@ -20,9 +20,13 @@ ALTER TABLE generations ADD COLUMN IF NOT EXISTS compare_group UUID;
 ALTER TABLE generations ADD COLUMN IF NOT EXISTS compare_index SMALLINT;
 
 -- NOT VALID: every existing row has both NULL (true by construction), so the big table is not scanned under the lock;
--- every new or updated row is checked.
-ALTER TABLE generations DROP CONSTRAINT IF EXISTS generations_compare_pair;
-ALTER TABLE generations ADD CONSTRAINT generations_compare_pair
-  CHECK ((compare_group IS NULL) = (compare_index IS NULL) AND (compare_index IS NULL OR compare_index BETWEEN 0 AND 3)) NOT VALID;
+-- every new or updated row is checked. Added only when missing (no DROP: the deploy guard refuses destructive lines).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'generations'::regclass AND conname = 'generations_compare_pair') THEN
+    ALTER TABLE generations ADD CONSTRAINT generations_compare_pair
+      CHECK ((compare_group IS NULL) = (compare_index IS NULL) AND (compare_index IS NULL OR compare_index BETWEEN 0 AND 3)) NOT VALID;
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS generations_compare_group_idx ON generations (user_id, compare_group, compare_index) WHERE compare_group IS NOT NULL;
