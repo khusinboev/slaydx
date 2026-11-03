@@ -70,6 +70,15 @@ const STUDIO_AUDIO: Record<string, { unit: string; values: Record<string, unknow
   "elevenlabs/isolator": { unit: "1 daqiqa", values: { inputSeconds: 60 }, price: 4_700 },
 };
 const STUDIO_AUDIO_IDS = Object.keys(STUDIO_AUDIO);
+/**
+ * P10: «Transkripsiya» / «Dublyaj», listed after the «Audio» models; one unit = 1 minute of the source. At ×2 and
+ * 12 700 so'm/$ (P10-SPEC): STT 330 cr / min → 1 524 → 1 600; dubbing 3 000 cr / min → 13 854 → 13 900.
+ */
+const STUDIO_P10: Record<string, { tool: "studio-transcribe" | "studio-dub"; price: number }> = {
+  "elevenlabs/scribe-v2": { tool: "studio-transcribe", price: 1_600 },
+  "elevenlabs/dubbing": { tool: "studio-dub", price: 13_900 },
+};
+const STUDIO_P10_IDS = Object.keys(STUDIO_P10);
 /** P2a: the fal models (key set above) — one picture at the default params (Ideogram: «Standart» quality, $0.06). */
 const FAL_USD: Record<string, number> = {
   "bfl/flux": 0.048,
@@ -183,7 +192,15 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
     assert.equal(r.body.soumPerUsd, rate);
     // The block lists every Studio model by itself (catalog + purpose): the pictures with the fal ones (P2a), the P2b
     // edit / utility models, then the Video tab's models (P3; their per-clip numbers are checked in tests/studio-video.test.mts).
-    assert.deepEqual(r.body.models.map((m: { modelId: string }) => m.modelId), [NANO, GPT, ...Object.keys(FAL_USD), ...Object.keys(P2B_USD), ...STUDIO_VIDEO_IDS, ...STUDIO_SPEECH_IDS, ...STUDIO_AUDIO_IDS]);
+    assert.deepEqual(r.body.models.map((m: { modelId: string }) => m.modelId), [NANO, GPT, ...Object.keys(FAL_USD), ...Object.keys(P2B_USD), ...STUDIO_VIDEO_IDS, ...STUDIO_SPEECH_IDS, ...STUDIO_AUDIO_IDS, ...STUDIO_P10_IDS]);
+    // P10: one minute of the source, priced by the charging function of its own tool.
+    for (const m of r.body.models.filter((x) => STUDIO_P10_IDS.includes(x.modelId))) {
+      const want = STUDIO_P10[m.modelId]!;
+      assert.equal(m.unit, "1 daqiqa", m.modelId);
+      if (rate === 12_700) assert.equal(m.price, want.price, `${m.modelId}: the P10-SPEC price`);
+      assert.equal(m.price, up100(m.costUsd * rate * 2), m.modelId);
+      assert.equal(m.price, await effectivePrice(TOOL_BY_ID[want.tool], { source: "upload:" + "a".repeat(24), sourceSeconds: 60 }), `${m.modelId}: the charging function`);
+    }
     // P6: an «Audio» row is priced by the charging function of `studio-audio` (seconds × credit rate × markup).
     for (const m of r.body.models.filter((x) => STUDIO_AUDIO_IDS.includes(x.modelId))) {
       const want = STUDIO_AUDIO[m.modelId]!;
@@ -199,7 +216,7 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
       assert.equal(m.price, up100(m.costUsd * rate * 2), m.modelId);
       assert.equal(m.price, await effectivePrice(TOOL_BY_ID["studio-speech"], { modelId: m.modelId, [field]: "x".repeat(1000) }), `${m.modelId}: the charging function`);
     }
-    for (const m of r.body.models.filter((x) => !STUDIO_VIDEO_IDS.includes(x.modelId) && !STUDIO_SPEECH_IDS.includes(x.modelId) && !STUDIO_AUDIO_IDS.includes(x.modelId))) {
+    for (const m of r.body.models.filter((x) => !STUDIO_VIDEO_IDS.includes(x.modelId) && !STUDIO_SPEECH_IDS.includes(x.modelId) && !STUDIO_AUDIO_IDS.includes(x.modelId) && !STUDIO_P10_IDS.includes(x.modelId))) {
       const usd = USD[m.modelId]!;
       assert.equal(m.costUsd, usd);
       assert.equal(m.costSoum, Math.round(usd * rate * 100) / 100);

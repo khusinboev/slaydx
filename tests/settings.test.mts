@@ -95,6 +95,9 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     // P6 «Audio» dark switch (docs/studio/P6-SPEC.md).
     "studio.voice.enabled",
     "studio.audio.enabled",
+    // P10 (docs/studio/P10-SPEC.md): «Transkripsiya» / «Dublyaj», each ships dark on its own.
+    "studio.transcribe.enabled",
+    "studio.dub.enabled",
     "studio.legacy_fold",
     "studio.clone_price",
     // P8c «Montaj»: the fixed price of one mix (docs/studio/P8-SPEC.md).

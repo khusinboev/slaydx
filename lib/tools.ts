@@ -1783,10 +1783,12 @@ export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | nu
   // «Montaj» (P8c) runs ffmpeg in the worker: no provider key decides it (a missing binary fails the job with a refund).
   if (tool.custom === "studio-mix") return null;
   if (tool.custom === "studio-transcribe" || tool.custom === "studio-dub") {
-    // Its switch + ElevenLabs decide (`speech-sources.ts speechToolModels`); not known = not blocked.
+    // Its own model list when the server sends it (empty while its switch is off, `speech-sources.ts speechToolModels`);
+    // an older server: the ElevenLabs flag (`ttsPremium`), else the text-key flag (nothing configured = blocked).
     const known = features.studioSpeechToolModels;
     const model = tool.custom === "studio-transcribe" ? "elevenlabs/scribe-v2" : "elevenlabs/dubbing";
-    return !known || known.includes(model) ? null : tool.custom === "studio-transcribe" ? "Transkripsiya hozircha mavjud emas." : "Dublyaj hozircha mavjud emas.";
+    const ok = known ? known.includes(model) : (features.ttsPremium ?? features.llm);
+    return ok ? null : tool.custom === "studio-transcribe" ? "Transkripsiya hozircha mavjud emas." : "Dublyaj hozircha mavjud emas.";
   }
   if (tool.custom === "studio-speech" || tool.custom === "studio-voice") {
     // Its own model list when the server sends it (empty while `studio.voice.enabled` is off); an older server: the TTS
