@@ -23,10 +23,10 @@ import path from "node:path";
  *               missing): both modes → output streams / duration checked with ffprobe.
  *
  * Mutations (each turned the named test red, then restored):
- *   `-protocol_whitelist` dropped before the 2nd input                         -> "goldens: video-voice replace";
- *   `-t` printed from `startOffset` instead of the length                     -> "goldens: video-voice keep + volume + offset";
+ *   `-protocol_whitelist` dropped before the MP3 inputs                        -> the three "goldens" argv tests;
+ *   `-t` printed from `startOffset` instead of the length                     -> "goldens" (both video), "safety", both "engine";
  *   keepOriginal ignored (always replace)                                      -> "probe" (keepOriginal), "goldens … keep";
- *   `ducking` branch removed (always plain amix)                               -> "probe" (ducking), "goldens: voice-music";
+ *   `ducking` branch removed (always plain amix)                               -> "probe" (ducking), "goldens: voice-music (ducking + fade …)";
  *   fade clamp to half the speech removed                                      -> "goldens: voice-music fade longer than half";
  *   `ida === idb` check removed from `studioMixError`                          -> "rules: request errors";
  *   `mixPriceOf` lower bound 0 → 100                                           -> "rules: price";
