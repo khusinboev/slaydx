@@ -184,7 +184,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # ffmpeg (audio onto a video, speech over music) — in THIS image only; the web
 # image never runs it. Alpine's `ffmpeg` package brings `ffmpeg` + `ffprobe`
 # with the AAC and libmp3lame encoders. A stable layer: before the COPYs.
-RUN apk add --no-cache ffmpeg && ffmpeg -hide_banner -version >/dev/null
+# The build fails here (not every job at runtime) if a future package drops an encoder.
+RUN apk add --no-cache ffmpeg && ffmpeg -hide_banner -encoders > /tmp/enc.txt \
+    && grep -q libmp3lame /tmp/enc.txt && grep -q ' aac ' /tmp/enc.txt && rm /tmp/enc.txt
 
 # The user exists BEFORE the files, which are copied with `COPY --chown`.
 # Before: a final `chown -R worker:nodejs /app` layer rewrote every file of

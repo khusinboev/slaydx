@@ -68,7 +68,7 @@ package reads the switch on the server (and the session exposes it as `features.
 - Price: no provider cost → a fixed `studio.mix_price` setting (Narx va marja, default 500 so'm, 0–100 000) + the
   tool's `tool_pricing` %. Charge + enqueue in one transaction; ffmpeg failure / missing binary → FAILED + full refund.
 - Safety / limits: inputs ≤ 3 min video, ≤ 10 min audio; ffmpeg with a hard timeout (≤ 120 s) and `-nostdin`, no
-  network protocols (`-protocol_whitelist file,pipe`), temp files in a per-job dir removed afterwards; the arguments are
+  network protocols (`-protocol_whitelist file`), temp files in a per-job dir removed afterwards; the arguments are
   built from validated numbers only (no user text reaches the command line).
 - Tests: pure argument builder (golden args per option), probe (each param changes the args or the price), flow on the
   test DB with a real ffmpeg when present (CI ubuntu runners and the dev box have it; the test skips cleanly with a
@@ -90,7 +90,7 @@ package reads the switch on the server (and the session exposes it as `features.
   `sidechaincompress` keyed by the speech), `fadeOut` 0–10 s (default 3, at most half the speech). Output length = the
   video (audio delayed, `apad`, cut with `-t`) / the speech (music looped with `-stream_loop -1`, cut with `-t`).
 - **ffmpeg** (`lib/generation/studio/mix-args.ts`, pure; `mix-ffmpeg.ts`, runner): `spawn` argv, no shell; `-nostdin`;
-  `-protocol_whitelist file,pipe` + an explicit demuxer (`-f mov` / `-f mp3`) before EACH input; constant file names
+  `-protocol_whitelist file` + an explicit demuxer (`-f mov` / `-f mp3`) before EACH input; constant file names
   (`in-video.mp4`, …) inside a per-job `mkdtemp` dir used as `cwd` and removed in `finally`; numbers clamped and printed
   with fixed decimals (no request text on the command line — ids never reach the argv); `-threads 2`; hard timeout
   120 s (SIGKILL). Video stream copied (`-c:v copy`), audio AAC 160k 48 kHz + `+faststart`; MP3 libmp3lame 192k 44.1 kHz.

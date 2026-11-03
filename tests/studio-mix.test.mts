@@ -9,7 +9,7 @@ import path from "node:path";
  * Studio P8c «Montaj» — pure parts (docs/studio/P8-SPEC.md «P8c»). No DB, no network.
  *
  *   goldens     the full ffmpeg argv per mode and option (replace / keep, volume, offset; ducking on / off, fade on / off):
- *               `-nostdin`, `-protocol_whitelist file,pipe` + an explicit demuxer before EACH input, constant file names,
+ *               `-nostdin`, `-protocol_whitelist file` + an explicit demuxer before EACH input, constant file names,
  *               `-t` = the measured base length, video stream copied;
  *   probe       «every param must work»: each non-id param of each mode, moved off its default, changes the argv (through
  *               `normalize` → `planOf` → `mixArgs`, the engine's own path); the id params change the request (inputs);
@@ -55,10 +55,10 @@ const quiet = (t: TestContext) => {
   for (const m of ["log", "info", "warn", "error"] as const) t.mock.method(console, m, () => {});
 };
 const HEAD = ["-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-threads", "2"];
-const IN_VIDEO = ["-protocol_whitelist", "file,pipe", "-f", "mov", "-i", "in-video.mp4"];
-const IN_AUDIO = ["-protocol_whitelist", "file,pipe", "-f", "mp3", "-i", "in-audio.mp3"];
-const IN_SPEECH = ["-protocol_whitelist", "file,pipe", "-f", "mp3", "-i", "in-speech.mp3"];
-const IN_MUSIC = ["-protocol_whitelist", "file,pipe", "-stream_loop", "-1", "-f", "mp3", "-i", "in-music.mp3"];
+const IN_VIDEO = ["-protocol_whitelist", "file", "-f", "mov", "-i", "in-video.mp4"];
+const IN_AUDIO = ["-protocol_whitelist", "file", "-f", "mp3", "-i", "in-audio.mp3"];
+const IN_SPEECH = ["-protocol_whitelist", "file", "-f", "mp3", "-i", "in-speech.mp3"];
+const IN_MUSIC = ["-protocol_whitelist", "file", "-stream_loop", "-1", "-f", "mp3", "-i", "in-music.mp3"];
 const V_TAIL = (t: string) => ["-map", "0:v:0", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-t", t, "-movflags", "+faststart", "-f", "mp4", "out.mp4"];
 const A_TAIL = (t: string) => ["-map", "[a]", "-c:a", "libmp3lame", "-b:a", "192k", "-ar", "44100", "-t", t, "-f", "mp3", "out.mp3"];
 const F48 = "aformat=sample_rates=48000:channel_layouts=stereo";

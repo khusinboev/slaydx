@@ -166,6 +166,9 @@ test("refusals before the charge; price = studio.mix_price + tool %; stale price
   const myPicture = await source(me, "studio-image", "image/png", FAKE, { meta: {}, images: [] });
   const longVideo = await source(me, "studio-video", "video/mp4", FAKE, videoDoc(200));
   const theirVideo = await source(other, "studio-video", "video/mp4", FAKE, videoDoc(8));
+  // A stored size near the 25 MB file cap: copied video + the new AAC track cannot fit (review MINOR 1).
+  const bigVideo = await source(me, "studio-video", "video/mp4", FAKE, videoDoc(60));
+  await query("UPDATE generation_files SET size_bytes = $2 WHERE generation_id = $1", [bigVideo, 24 * 1024 * 1024]);
   await idle();
 
   const cases: [string, Record<string, unknown>, string][] = [
@@ -174,6 +177,7 @@ test("refusals before the charge; price = studio.mix_price + tool %; stale price
     ["a picture as the audio", { modelId: VIDEO_MODE, videoId: myVideo, audioId: myPicture }, "input_missing"],
     ["a speech as the music", { modelId: VOICE_MODE, speechId: mySpeech, musicId: mySpeech }, ""],
     ["a video over 3 min", { modelId: VIDEO_MODE, videoId: longVideo, audioId: mySpeech }, "input_invalid"],
+    ["a video whose result cannot fit 25 MB", { modelId: VIDEO_MODE, videoId: bigVideo, audioId: mySpeech }, "input_invalid"],
     ["an offset past the video", { modelId: VIDEO_MODE, videoId: myVideo, audioId: mySpeech, startOffset: 8 }, "input_invalid"],
     ["a speech as the music (distinct ids)", { modelId: VOICE_MODE, speechId: mySpeech, musicId: await source(me, "studio-speech", "audio/mpeg", FAKE, speechDoc(4)) }, "input_missing"],
   ];

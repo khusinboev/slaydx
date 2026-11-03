@@ -2,7 +2,7 @@ import "server-only";
 import { ApiError } from "../api";
 import { query, queryOne } from "../db";
 import { getSetting } from "../settings";
-import { MIX_AUDIO_MAX_SECONDS, MIX_INPUTS, MIX_SECONDS_TOLERANCE, MIX_VIDEO_MAX_SECONDS, isGenerationId, mixModeOf, mixParams, mixPriceOf, type MixMode } from "../../media/catalog-mix";
+import { MIX_AUDIO_MAX_SECONDS, MIX_INPUTS, MIX_OUTPUT_MAX_BYTES, MIX_SECONDS_TOLERANCE, MIX_VIDEO_MAX_SECONDS, isGenerationId, mixModeOf, mixParams, mixPriceOf, type MixMode } from "../../media/catalog-mix";
 import { mediaSeconds } from "../../generation/studio/mix-media";
 import type { MixInput, StudioMixCtx } from "../../generation/studio/mix";
 import type { FormValues } from "../../types";
@@ -40,9 +40,9 @@ const ROLE_TOOLS: Readonly<Record<MixRole, readonly string[]>> = {
 };
 const ALL_TOOLS = [...new Set(Object.values(ROLE_TOOLS).flat())];
 
-type Row = { id: string; tool_id: string; topic: string | null; created_at: Date; mime: string; seconds: string | null; audio_mode: string | null; aspect: string | null };
+type Row = { id: string; tool_id: string; topic: string | null; created_at: Date; mime: string; size_bytes: string | number; seconds: string | null; audio_mode: string | null; aspect: string | null };
 
-const ROW_SQL = `SELECT g.id, g.tool_id, g.topic, g.created_at, f.mime,
+const ROW_SQL = `SELECT g.id, g.tool_id, g.topic, g.created_at, f.mime, f.size_bytes,
         COALESCE(g.doc_json->'video'->>'seconds', g.doc_json->'speech'->>'seconds', g.doc_json->'studioAudio'->>'seconds',
                  g.doc_json->'audio'->>'seconds', g.doc_json->'mix'->>'seconds') AS seconds,
         g.doc_json->'studioAudio'->>'mode' AS audio_mode, g.doc_json->'video'->>'aspect' AS aspect
@@ -115,6 +115,10 @@ async function measuredSeconds(userId: string, id: string, mime: string): Promis
   return f ? mediaSeconds(new Uint8Array(f.bytes), mime) : 0;
 }
 
+/** The added AAC track (160 kb/s) and a container margin, for the pre-charge output-size estimate. */
+const MIX_AAC_BYTES_PER_SEC = 20_000;
+const MIX_SIZE_MARGIN = 256 * 1024;
+
 const WHAT: Readonly<Record<MixRole, string>> = { video: "Video", audio: "Audio", speech: "Ovoz", music: "Musiqa" };
 
 /**
@@ -129,6 +133,7 @@ export async function prepareMixRequest(userId: string, values: FormValues): Pro
   const names = MIX_INPUTS[m.mode];
   const roles = MIX_ROLES[m.mode];
   const seconds: number[] = [];
+  const sizes: number[] = [];
   for (let i = 0; i < 2; i++) {
     const id = String(values[names[i]!] ?? "").trim().toLowerCase();
     const role = roles[i]!;
@@ -139,6 +144,12 @@ export async function prepareMixRequest(userId: string, values: FormValues): Pro
     if (!(s > 0)) throw new ApiError(`${WHAT[role]} faylini o‘qib bo‘lmadi — boshqasini tanlang.`, 400, { code: "input_invalid" });
     if (s > maxOf(role) + MIX_SECONDS_TOLERANCE) throw new ApiError(`${WHAT[role]} ${maxOf(role) / 60} daqiqadan oshmasin.`, 400, { code: "input_invalid" });
     seconds.push(s);
+    sizes.push(Number(row.size_bytes));
+  }
+  // The video stream is copied as is and the new AAC track (160 kb/s = 20 000 B/s) is added: a result that cannot fit
+  // the stored-file cap is refused here, before the charge, not after a full ffmpeg run.
+  if (m.mode === "video-voice" && sizes[0]! + MIX_AAC_BYTES_PER_SEC * seconds[0]! + MIX_SIZE_MARGIN > MIX_OUTPUT_MAX_BYTES) {
+    throw new ApiError("Bu video Montaj uchun juda katta (natija 25 MB dan oshadi) — qisqaroq video tanlang.", 400, { code: "input_invalid" });
   }
   if (m.mode === "video-voice" && Number(p.startOffset) >= seconds[0]!) {
     throw new ApiError(`Audio boshlanishi videodan qisqa bo‘lsin (video ${Math.floor(seconds[0]!)} soniya).`, 400, { code: "input_invalid" });

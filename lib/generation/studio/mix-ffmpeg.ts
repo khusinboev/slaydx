@@ -70,15 +70,22 @@ function exec(bin: string, args: readonly string[], cwd: string, timeoutMs: numb
       else resolve();
     };
     const child = spawn(bin, [...args], { cwd, stdio: ["ignore", "ignore", "pipe"], shell: false, windowsHide: true });
+    // On timeout the promise settles from `close` (after the kill), so the caller removes the temp dir only once
+    // ffmpeg is gone.
+    let timedOut = false;
     const timer = setTimeout(() => {
+      timedOut = true;
       child.kill("SIGKILL");
-      done(new FfmpegFailedError(`ffmpeg timed out after ${timeoutMs} ms`, stderr));
     }, timeoutMs);
     child.stderr?.setEncoding("utf8");
     child.stderr?.on("data", (s: string) => {
       stderr = (stderr + s).slice(-2048);
     });
     child.on("error", (e: NodeJS.ErrnoException) => done(e.code === "ENOENT" ? new FfmpegMissingError() : new FfmpegFailedError(e.message, stderr)));
-    child.on("close", (code, signal) => (code === 0 ? done() : done(new FfmpegFailedError(`ffmpeg exited ${code ?? signal}`, stderr))));
+    child.on("close", (code, signal) => {
+      if (timedOut) done(new FfmpegFailedError(`ffmpeg timed out after ${timeoutMs} ms`, stderr));
+      else if (code === 0) done();
+      else done(new FfmpegFailedError(`ffmpeg exited ${code ?? signal}`, stderr));
+    });
   });
 }

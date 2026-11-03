@@ -5,7 +5,7 @@
  *   - the argv goes to `spawn` without a shell; every file name is a CONSTANT inside the job's own temp dir (the runner
  *     sets `cwd`), so no path and no user text is ever on the command line;
  *   - every number is validated (finite, clamped to the mode's range) and printed with fixed decimals;
- *   - `-nostdin`, and `-protocol_whitelist file,pipe` + an explicit demuxer (`-f mov` / `-f mp3`) before EACH input:
+ *   - `-nostdin`, and `-protocol_whitelist file` + an explicit demuxer (`-f mov` / `-f mp3`) before EACH input:
  *     no network protocol, no format guessing from the bytes;
  *   - `-t <seconds>` bounds the output (the base input's measured length), so an endless filter (`apad`, a looped
  *     music track) always ends.
@@ -61,7 +61,7 @@ const f3 = (n: number) => n.toFixed(3);
 const f2 = (n: number) => n.toFixed(2);
 
 const COMMON = ["-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-threads", String(MIX_THREADS)] as const;
-const input = (format: "mov" | "mp3", file: string, loop = false): string[] => ["-protocol_whitelist", "file,pipe", ...(loop ? ["-stream_loop", "-1"] : []), "-f", format, "-i", file];
+const input = (format: "mov" | "mp3", file: string, loop = false): string[] => ["-protocol_whitelist", "file", ...(loop ? ["-stream_loop", "-1"] : []), "-f", format, "-i", file];
 
 /** The output file name of a plan (inside the temp dir). */
 export function mixOutputFile(plan: MixPlan): string {
