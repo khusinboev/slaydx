@@ -3,7 +3,7 @@ import { createHash, createHmac, randomInt } from "node:crypto";
 import { env } from "./env";
 import { query, queryOne, transaction } from "./db";
 import { topUpInTx } from "./credits";
-import { applyReferralInTx, type ReferralClaim } from "./referrals";
+import { applyReferralInTx, notifyReferral, type ReferralClaim, type ReferralJoined } from "./referrals";
 import { rowToUser, safeEqual, userColumns, type SessionUser } from "./session";
 
 /**
@@ -258,7 +258,8 @@ async function upsertUser(
   photoOnConflict: "EXCLUDED.photo_url" | "COALESCE(EXCLUDED.photo_url, users.photo_url)",
   referral: ReferralClaim | null,
 ): Promise<SessionUser> {
-  return transaction(async (client) => {
+  let joined: ReferralJoined | null = null;
+  const user = await transaction(async (client) => {
     const res = await client.query<{ id: string; inserted: boolean }>(
       `INSERT INTO users (telegram_id, username, name, photo_url, points, author)
        VALUES ($1, $2, $3, $4, 0, $3)
@@ -273,11 +274,17 @@ async function upsertUser(
     if (inserted) {
       await topUpInTx(client, id, { points: SIGNUP_BONUS_POINTS }, `signup:${id}`, "bonus", "Ro'yxatdan o'tish bonusi");
       // The ONLY call site of the referral reward: the account was created right here.
-      if (referral) await applyReferralInTx(client, { refereeId: String(id), code: referral.code, source: referral.source });
+      if (referral) {
+        const outcome = await applyReferralInTx(client, { refereeId: String(id), code: referral.code, source: referral.source });
+        if (outcome.applied) joined = { referrerId: outcome.referrerId, refereeName: p.name, points: outcome.points };
+      }
     }
-    const user = await client.query(`SELECT ${USER_COLUMNS} FROM users WHERE id = $1`, [id]);
-    return rowToUser(user.rows[0]);
+    const row = await client.query(`SELECT ${USER_COLUMNS} FROM users WHERE id = $1`, [id]);
+    return rowToUser(row.rows[0]);
   });
+  // After COMMIT: the inviter learns about the reward only once it is really in the ledger.
+  void notifyReferral(joined);
+  return user;
 }
 
 /* ─────────────────────── OTP (zaxira / dev kirish) ─────────────────────── */

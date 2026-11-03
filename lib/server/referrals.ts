@@ -8,7 +8,9 @@ import { topUpInTx } from "./credits";
 import { log } from "./log";
 import { getSetting } from "./settings";
 import { AMBASSADOR_KEY } from "../ambassador";
+import type { Lang } from "./bot/i18n";
 import {
+  formatPoints,
   REF_CODE_ALPHABET,
   REF_CODE_LENGTH,
   REFERRAL_REWARD_POINTS,
@@ -103,6 +105,49 @@ export async function resolveReferrer(code: unknown, db: Pick<PoolClient, "query
   const sql = "SELECT id::text AS id, is_blocked FROM users WHERE ref_code = $1";
   const row = db ? (await db.query<{ id: string; is_blocked: boolean }>(sql, [c])).rows[0] : await queryOne<{ id: string; is_blocked: boolean }>(sql, [c]);
   return row ? { id: row.id, isBlocked: row.is_blocked } : null;
+}
+
+/** A rewarded invite, for the inviter's bot message after the sign-up commits. */
+export type ReferralJoined = { referrerId: string; refereeName: string; points: number };
+
+/** Messages still in flight in this process: tests (and a graceful shutdown) can wait for them. */
+const inflight = new Set<Promise<void>>();
+
+/** Resolves when every «do'stingiz qo'shildi» message started so far has finished. Never rejects. */
+export async function flushReferralNotices(): Promise<void> {
+  await Promise.allSettled([...inflight]);
+}
+
+/**
+ * «Falonchi siz orqali qo'shildi — sizga +N bonus so'm» — the inviter's bot message, AFTER the sign-up transaction
+ * committed (the reward is in the ledger by then). Only a credited reward is announced (a blocked inviter gets 0 and
+ * no message). Best effort, same shape as `notifyTopup`: never throws, the sign-up never waits on Telegram.
+ */
+export function notifyReferral(p: ReferralJoined | null | undefined): Promise<void> {
+  if (!p || p.points <= 0) return Promise.resolve();
+  const run: Promise<void> = sendReferralDm(p).finally(() => {
+    inflight.delete(run);
+  });
+  inflight.add(run);
+  return run;
+}
+
+async function sendReferralDm(p: ReferralJoined): Promise<void> {
+  try {
+    const u = await queryOne<{ telegram_id: string | null; language: string | null }>(
+      `SELECT telegram_id::text AS telegram_id, language FROM users WHERE id = $1 AND NOT is_blocked AND bot_blocked_at IS NULL`,
+      [p.referrerId],
+    );
+    if (!u?.telegram_id) return;
+    // Lazy: keeps the bot / Telegram layer out of the sign-in routes' static import graph.
+    const [{ sendUserDm }, { t }, { esc }] = await Promise.all([import("./bot-dm"), import("./bot/i18n"), import("./bot/ui")]);
+    const name = p.refereeName.replace(/\s+/g, " ").trim().slice(0, 40);
+    await sendUserDm({ userId: p.referrerId, telegramId: u.telegram_id, language: u.language }, (lang: Lang) => ({
+      text: t(lang, "ref.joinedDm", { name: `<b>${esc(name || t(lang, "ref.joinedSomeone"))}</b>`, n: formatPoints(p.points) }),
+    }));
+  } catch (e) {
+    log("warn", "[referral] inviter DM failed", { referrerId: p.referrerId, error: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 /** Ledger note the inviter sees in «Hisob harakati». */

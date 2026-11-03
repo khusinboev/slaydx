@@ -20,7 +20,9 @@ import { randomInt } from "node:crypto";
  *   2. ticket code not looked up for `/start <nonce>` → «site ticket with a captured code»;
  *   3. `createTicket` drops `ref_code` → same test;
  *   4. `/taklif` branch removed → «/taklif → own link»;
- *   5. `taklif` missing from setMyCommands → «setBotCommands lists /taklif».
+ *   5. `taklif` missing from setMyCommands → «setBotCommands lists /taklif»;
+ *   8. `notifyReferral` call removed from `upsertUser` → «… rewarded» (the inviter's «qo'shildi» DM);
+ *   9. `upsertUser` announces a blocked outcome too AND the DM query drops `NOT is_blocked` → «blocked inviter … no DM».
  */
 
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
@@ -34,7 +36,7 @@ const skip = hasDb ? false : "Postgres kerak (DATABASE_URL)";
 const { query, queryOne, pool, ensureMigrated } = await import("../lib/server/db.ts");
 const tg = await import("../lib/server/telegram.ts");
 const { upsertTelegramUser, SIGNUP_BONUS_POINTS } = await import("../lib/server/auth.ts");
-const { ensureRefCode } = await import("../lib/server/referrals.ts");
+const { ensureRefCode, flushReferralNotices } = await import("../lib/server/referrals.ts");
 if (hasDb) await ensureMigrated();
 
 type Call = { method: string; body: Record<string, unknown> };
@@ -73,7 +75,13 @@ after(async () => {
 async function inviter() {
   const id = newFromId();
   const u = await upsertTelegramUser({ telegramId: String(id), username: null, name: "Taklifchi", photoUrl: null });
-  return { id: u.id, code: await ensureRefCode(u.id) };
+  return { id: u.id, tg: String(id), code: await ensureRefCode(u.id) };
+}
+/** The calls addressed to `chat` vs the rest, once every inviter DM in flight has finished. */
+async function split(chat: string): Promise<{ dm: Call[]; rest: Call[] }> {
+  await flushReferralNotices();
+  const to = (c: Call) => String(c.body.chat_id) === chat;
+  return { dm: calls.filter(to), rest: calls.filter((c) => !to(c)) };
 }
 const userByTg = (id: number) => queryOne<{ id: string; points: string }>("SELECT id::text AS id, points FROM users WHERE telegram_id = $1", [String(id)]);
 const pointsOf = async (id: string) => Number((await queryOne<{ points: string }>("SELECT points FROM users WHERE id = $1", [id]))!.points);
@@ -97,6 +105,11 @@ test("/start ref_<code> from a brand-new person → registered, inviter rewarded
   assert.equal(Number(me.points), SIGNUP_BONUS_POINTS);
   assert.equal((await pointsOf(inv.id)) - before, 1000, "MUTATSIYA 1");
   assert.deepEqual(await referralOf(me.id), [{ referrer_user_id: inv.id, source: "bot", reward_points: 1000 }]);
+  const first = await split(inv.tg);
+  assert.equal(first.dm.length, 1, "MUTATSIYA 8: the inviter hears about the friend");
+  assert.match(String(first.dm[0]!.body.text), /<b>Do'st Botdan<\/b> sizning havolangiz orqali qo'shildi — sizga <b>\+1[\s\u00a0]?000 bonus so'm<\/b>/);
+  assert.equal(first.dm[0]!.body.parse_mode, "HTML");
+  calls = first.rest;
   assert.equal(calls.length, 2, "B2: welcome card + main keyboard");
   assert.match(String(calls[0]!.body.text), /Assalomu alaykum/);
   const b = buttons(calls[0]!.body);
@@ -112,6 +125,9 @@ test("/start ref_<code> from a brand-new person → registered, inviter rewarded
   assert.equal(await pointsOf(inv.id), p1, "never twice");
   assert.equal(await pointsOf(other.id), p2);
   assert.equal((await referralOf(me.id)).length, 1);
+  const again = await split(inv.tg);
+  assert.equal(again.dm.length, 0, "no second «qo'shildi» message");
+  assert.equal((await split(other.tg)).dm.length, 0);
   assert.equal(calls.length, 4, "still a welcome (+ keyboard) each time");
   for (const c of [calls[0]!, calls[2]!]) assert.match(String(c.body.text), /Assalomu alaykum/);
 });
@@ -126,6 +142,18 @@ test("someone who first came through the site (existing account) opens a bot ref
   assert.equal(await pointsOf(inv.id), before);
   assert.equal((await referralOf(existing.id)).length, 0);
   assert.equal((await userByTg(from))!.id, existing.id, "one shared base: the same row");
+});
+
+test("blocked inviter → the friend joins with no reward and the inviter gets no DM", { skip }, async () => {
+  const inv = await inviter();
+  await query("UPDATE users SET is_blocked = true WHERE id = $1", [inv.id]);
+  const from = newFromId();
+  installFetch();
+  await tg.handleUpdate(update(from, `/start ref_${inv.code}`));
+  const me = await userByTg(from);
+  assert.ok(me);
+  assert.deepEqual(await referralOf(me.id), [{ referrer_user_id: inv.id, source: "bot", reward_points: 0 }]);
+  assert.equal((await split(inv.tg)).dm.length, 0, "MUTATSIYA 9");
 });
 
 test("malformed ref_ payload → welcome, the account is created, no referral", { skip }, async () => {
@@ -151,6 +179,9 @@ test("site ticket with a captured code: /start <nonce> creates the account with 
   assert.ok(me);
   assert.equal((await pointsOf(inv.id)) - before, 1000, "MUTATSIYA 2");
   assert.deepEqual(await referralOf(me.id), [{ referrer_user_id: inv.id, source: "web", reward_points: 1000 }]);
+  const sent = await split(inv.tg);
+  assert.equal(sent.dm.length, 1, "the inviter's DM for a web-sourced invite too");
+  calls = sent.rest;
   // The login flow: the «🔑 Saytga kirish» one-time link, as before.
   assert.equal(calls.length, 1);
   assert.match(String(calls[0]!.body.text), /Kirish uchun quyidagi tugmani bosing/);
