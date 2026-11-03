@@ -1,6 +1,7 @@
 import "server-only";
 import { TOOL_BY_ID, TOOL_GROUPS } from "../../tools";
 import { toolHref } from "../../media/legacy-fold";
+import { legacyFoldOn } from "../media/legacy-fold";
 import { formatBonusSom, formatSom } from "../../format";
 import { REFERRAL_TIERS } from "../../referral";
 import { OFERTA_SUMMARY } from "../../oferta/text";
@@ -81,7 +82,7 @@ async function build(): Promise<string> {
     getSetting("chat.price_per_message"),
     getSetting("free_llm.daily.chat"),
     getSetting("chat.enabled"),
-    getSetting("studio.legacy_fold"),
+    legacyFoldOn(),
   ]);
   const app = env.appUrl;
   const out: string[] = [];

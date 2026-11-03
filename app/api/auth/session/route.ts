@@ -9,6 +9,7 @@ import { availableModels, studioVideoModels } from "@/lib/server/media/availabil
 import { STUDIO_IMAGE_PURPOSE } from "@/lib/media/catalog";
 import { studioSpeechModels } from "@/lib/server/media/voices";
 import { studioAudioModels } from "@/lib/server/media/audio-inputs";
+import { legacyFoldOn } from "@/lib/server/media/legacy-fold";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,7 +39,7 @@ export const GET = handler("auth/session", async (req) => {
       compareMax: Math.min(4, await getSetting("queue.user_max_inflight")),
       // P8 (docs/studio/P8-SPEC.md): `studio.legacy_fold` is on — the old media tools' cards open the Studio
       // (`lib/media/legacy-fold.ts toolHref`); their pages redirect on the server either way.
-      legacyFold: await getSetting("studio.legacy_fold"),
+      legacyFold: await legacyFoldOn(),
       tts: ttsFeature(),
       // Premium ElevenLabs voice of podcast / greeting: only when the provider is enabled AND keyed.
       ttsPremium: ttsPremiumAvailable(),

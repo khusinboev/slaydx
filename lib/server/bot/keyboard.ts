@@ -73,8 +73,8 @@ export function toolBlocked(action: KeyboardAction, features: ToolFeatures = bot
 
 /** The switch behind `KeyboardOpts.legacyFold` (lazy import: the pure keyboard tests never load the settings store). */
 export async function legacyFoldSetting(): Promise<boolean> {
-  const { getSetting } = await import("../settings");
-  return getSetting("studio.legacy_fold");
+  const { legacyFoldOn } = await import("../media/legacy-fold");
+  return legacyFoldOn();
 }
 
 /** The web path a tool button opens (`null` for a chat-screen button). */

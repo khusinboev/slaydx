@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { TOOL_BY_ID } from "@/lib/tools";
 import { ToolWorkspace } from "@/components/forms/ToolWorkspace";
-import { getSetting } from "@/lib/server/settings";
-import { legacyFoldTarget } from "@/lib/media/legacy-fold";
+import { legacyFoldRedirect } from "@/lib/server/media/legacy-fold";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -21,7 +20,7 @@ export const dynamic = "force-dynamic";
  * the `[slug]` page drew it.
  */
 export default async function Page({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const target = legacyFoldTarget(tool.id, await getSetting("studio.legacy_fold"), await searchParams);
+  const target = await legacyFoldRedirect(tool.id, await searchParams);
   if (target) redirect(target);
   return <ToolWorkspace tool={tool} />;
 }
