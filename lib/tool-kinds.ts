@@ -45,6 +45,8 @@ export const TOOL_KINDS: Readonly<Record<ToolId, ToolKind>> = {
   "studio-speech": { group: "media", output: "mp3" },
   "studio-voice": { group: "media", output: "mp3" },
   "studio-audio": { group: "media", output: "mp3" },
+  // P8c «Montaj»: MP3 (speech + music) or MP4 (audio onto a video) — the stored format follows the real file.
+  "studio-mix": { group: "media", output: "mp3" },
   podcast: { group: "media", output: "mp3" },
   greeting: { group: "media", output: "mp3" },
   portrait: { group: "media", output: "png" },

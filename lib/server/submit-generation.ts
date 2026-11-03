@@ -29,6 +29,7 @@ import { normalize } from "../studio-core";
 import { MEDIA_CATALOG } from "../media/catalog";
 import { assertCloneAllowed, assertOwnClones, speechModelUnavailable } from "./media/voices";
 import { audioModelUnavailable, prepareAudioRequest } from "./media/audio-inputs";
+import { prepareMixRequest } from "./media/mix-sources";
 
 /**
  * The paid-generation pipeline behind `POST /api/generations`, shared with the AI chat's confirmation.
@@ -302,6 +303,13 @@ export async function prepareGeneration(input: SubmitInput): Promise<PreparedGen
     if (unavailable) throw new ApiError(unavailable, 400, { code: "model_unavailable" });
     await prepareAudioRequest(userId, values);
   }
+
+  /*
+   * Studio «Montaj» (docs/studio/P8-SPEC.md «P8c»): both picked results must be the user's OWN finished generations of
+   * the right kind (SQL), within the length limits (video ≤ 3 min, audio ≤ 10 min), the start offset inside the video —
+   * 400 before anything is priced or charged. A replay is a job that already exists.
+   */
+  if (tool.id === "studio-mix" && !replay) await prepareMixRequest(userId, values);
 
   // Graduation portrait: the selfie must exist and be the user's own BEFORE anything is priced or charged.
   // (A replay is a job already created; its selfie may be deleted by now.)

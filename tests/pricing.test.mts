@@ -269,13 +269,15 @@ test("kalitsiz xizmat sotilmaydi", async () => {
    * bo'lsa esa shablon hujjatni qaytaradi va TO'LIQ narx olinadi. Ya'ni
    * kalitsiz rejim dev/demo uchun, sotuv uchun emas.
    */
-  for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait" && x.custom !== "video" && x.custom !== "studio-image" && x.custom !== "studio-video" && x.custom !== "studio-audio")) {
+  for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait" && x.custom !== "video" && x.custom !== "studio-image" && x.custom !== "studio-video" && x.custom !== "studio-audio" && x.custom !== "studio-mix")) {
     assert.ok(toolBlockedReason(t, noLlm), `${t.id}: matn kalitisiz sotilmasligi kerak`);
   }
   // Studio «Audio» (P6): no text model in the path either; its own model list decides (empty = blocked, the switch off).
   assert.equal(toolBlockedReason(TOOL_BY_ID["studio-audio"], { ...noLlm, ttsPremium: true }), null, "Studio audio matn kalitiga bog'liq emas (ElevenLabs bor)");
   assert.ok(toolBlockedReason(TOOL_BY_ID["studio-audio"], { ...all, studioAudioModels: [] }), "no Studio audio model -> blocked");
   assert.equal(toolBlockedReason(TOOL_BY_ID["studio-audio"], { ...noLlm, studioAudioModels: ["elevenlabs/sfx"] }), null);
+  // Studio «Montaj» (P8c): ffmpeg in the worker — no provider key decides it, nothing configured still sells it.
+  assert.equal(toolBlockedReason(TOOL_BY_ID["studio-mix"], noLlm), null, "Montaj matn kalitiga bog'liq emas");
   // Studio video (P3): no text model in the path; its own model list decides (empty = blocked, e.g. `video.enabled` off).
   assert.equal(toolBlockedReason(TOOL_BY_ID["studio-video"], noLlm), null, "Studio video matn kalitiga bog'liq emas");
   assert.ok(toolBlockedReason(TOOL_BY_ID["studio-video"], { ...all, studioVideoModels: [] }), "no Studio video model -> blocked");
@@ -289,8 +291,11 @@ test("kalitsiz xizmat sotilmaydi", async () => {
 
   // Hech narsa sozlanmagan — hamma vosita to'silади.
   for (const t of TOOLS) {
+    // P8c «Montaj» runs ffmpeg in the worker — no provider or key at all, so it is never blocked by the flags.
+    if (t.id === "studio-mix") continue;
     assert.ok(toolBlockedReason(t, nothing), `${t.id}: hech narsasiz sotilmasligi kerak`);
   }
+  assert.equal(toolBlockedReason(TOOL_BY_ID["studio-mix"], nothing), null, "Montaj provayderga bog'liq emas");
 
   /*
    * Bayroqlar hali kelmagan (`null`) — hech narsa to'silmaydi.

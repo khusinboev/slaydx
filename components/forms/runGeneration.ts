@@ -28,12 +28,21 @@ import { formatSom } from "@/lib/format";
  * the price that was shown to them.
  */
 export async function runGeneration(tool: ToolConfig, values: FormValues): Promise<string> {
-  const { id } = await queueGeneration(
+  const { id } = await queueToolGeneration(tool, values);
+  return id;
+}
+
+/**
+ * `runGeneration` that also answers the charged price, for a caller that follows the job itself (Studio P8b: the
+ * podcast / greeting templates inside the «Ovoz» tab). Same target, same `priceFor` price, same request.
+ */
+export function queueToolGeneration(tool: ToolConfig, values: FormValues, opts: { repeat?: boolean } = {}): Promise<{ id: string; price: number }> {
+  return queueGeneration(
     { slug: tool.slug, id: tool.id, title: String(values.topic || tool.title), output: tool.output },
     values,
     priceFor(tool, values),
+    opts,
   );
-  return id;
 }
 
 /** What `queueGeneration` needs of a tool: its route slug, id, the list title and the output format. */

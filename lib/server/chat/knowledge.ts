@@ -1,5 +1,7 @@
 import "server-only";
-import { TOOL_GROUPS } from "../../tools";
+import { TOOL_BY_ID, TOOL_GROUPS } from "../../tools";
+import { toolHref } from "../../media/legacy-fold";
+import { legacyFoldOn } from "../media/legacy-fold";
 import { formatBonusSom, formatSom } from "../../format";
 import { REFERRAL_TIERS } from "../../referral";
 import { OFERTA_SUMMARY } from "../../oferta/text";
@@ -71,7 +73,7 @@ async function toolLines(): Promise<string[]> {
 }
 
 async function build(): Promise<string> {
-  const [paymentBonus, ambassador, rating, quizOn, quizReward, price, freeDaily, enabled] = await Promise.all([
+  const [paymentBonus, ambassador, rating, quizOn, quizReward, price, freeDaily, enabled, legacyFold] = await Promise.all([
     getSetting("payment_bonus_percent"),
     getSetting("ambassador.percent"),
     getSetting("bonus.rating_points"),
@@ -80,6 +82,7 @@ async function build(): Promise<string> {
     getSetting("chat.price_per_message"),
     getSetting("free_llm.daily.chat"),
     getSetting("chat.enabled"),
+    legacyFoldOn(),
   ]);
   const app = env.appUrl;
   const out: string[] = [];
@@ -112,6 +115,11 @@ async function build(): Promise<string> {
   out.push(`- Sahifa: ${app}/uz/chat, botda /chat (to'xtatish: /stop).`);
   out.push("\nHAVOLALAR");
   out.push(`- Bosh sahifa: ${app}/uz ; Ishlarim: ${app}/uz/files ; Hamyon: ${app}/uz/wallet ; Profil: ${app}/uz/profile`);
+  // P8 fold (docs/studio/P8-SPEC.md): the old «Rasm» / «Video yaratish» pages now open the Studio — the links the
+  // assistant may give are the Studio tabs (the same link builder as the web cards). Off: no line, as before.
+  if (legacyFold) {
+    out.push(`- Rasm yaratish (Studio): ${app}${toolHref(TOOL_BY_ID.image, true)} ; Video yaratish (Studio): ${app}${toolHref(TOOL_BY_ID.video, true)}`);
+  }
   out.push(`- Yordam (admin bilan aloqa): ${env.supportUrl}`);
   out.push("\nOFERTA QISQACHA");
   for (const line of OFERTA_SUMMARY) out.push(`- ${line}`);

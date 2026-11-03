@@ -59,6 +59,8 @@ const MATRIX: Record<string, Row> = {
   "studio-speech": { format: "mp3", on: ["native"], off: ["native"] },
   "studio-voice": { format: "mp3", on: ["native"], off: ["native"] },
   "studio-audio": { format: "mp3", on: ["native"], off: ["native"] },
+  // P8c «Montaj»: the MP3 (or MP4) itself, nothing derived.
+  "studio-mix": { format: "mp3", on: ["native"], off: ["native"] },
   podcast: { format: "mp3", on: ["native", "transcript-txt"], off: ["native", "transcript-txt"] },
   greeting: { format: "mp3", on: ["native", "transcript-txt"], off: ["native", "transcript-txt"] },
   // Program-17 item 5: the MP4 is the only file; nothing is derived from it, with or without LibreOffice.

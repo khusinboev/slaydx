@@ -180,6 +180,14 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Studio «Montaj» (docs/studio/P8-SPEC.md «P8c»): the `studio-mix` job runs
+# ffmpeg (audio onto a video, speech over music) — in THIS image only; the web
+# image never runs it. Alpine's `ffmpeg` package brings `ffmpeg` + `ffprobe`
+# with the AAC and libmp3lame encoders. A stable layer: before the COPYs.
+# The build fails here (not every job at runtime) if a future package drops an encoder.
+RUN apk add --no-cache ffmpeg && ffmpeg -hide_banner -encoders > /tmp/enc.txt \
+    && grep -q libmp3lame /tmp/enc.txt && grep -q ' aac ' /tmp/enc.txt && rm /tmp/enc.txt
+
 # The user exists BEFORE the files, which are copied with `COPY --chown`.
 # Before: a final `chown -R worker:nodejs /app` layer rewrote every file of
 # node_modules (97 s on the prod box and a second full copy of node_modules in

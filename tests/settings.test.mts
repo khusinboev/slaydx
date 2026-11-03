@@ -95,7 +95,10 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     // P6 «Audio» dark switch (docs/studio/P6-SPEC.md).
     "studio.voice.enabled",
     "studio.audio.enabled",
+    "studio.legacy_fold",
     "studio.clone_price",
+    // P8c «Montaj»: the fixed price of one mix (docs/studio/P8-SPEC.md).
+    "studio.mix_price",
   ]);
   for (const k of s.SETTING_KEYS) {
     const d = s.settingDef(k);

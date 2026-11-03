@@ -31,7 +31,7 @@ export function AudioViewer({ doc, gen }: { doc: AcademicDoc; gen: { id: string;
   // Studio «Audio» (P6) results carry `doc.studioAudio`: the same player for the result file, its details below.
   const audio: { seconds?: number; script: { speaker: string; text: string }[] } | undefined =
     doc.audio ??
-    (doc.speech ? { seconds: doc.speech.seconds, script: doc.speech.lines } : doc.studioAudio ? { seconds: doc.studioAudio.seconds, script: [] } : undefined);
+    (doc.speech ? { seconds: doc.speech.seconds, script: doc.speech.lines } : doc.studioAudio ? { seconds: doc.studioAudio.seconds, script: [] } : doc.mix ? { seconds: doc.mix.seconds, script: [] } : undefined);
   // Bearer-mode webviews get the bytes through a `blob:` URL (docs/auth/COOKIELESS.md); unchanged otherwise.
   const src = useApiSrc(`/api/generations/${gen.id}/file?inline=1`);
   const script = audio?.script ?? [];
@@ -58,7 +58,7 @@ export function AudioViewer({ doc, gen }: { doc: AcademicDoc; gen: { id: string;
 
       {doc.studioAudio ? (
         <StudioAudioDetails doc={doc.studioAudio} genId={gen.id} />
-      ) : (
+      ) : doc.mix ? null : (
         <div className="flex-1 px-4 py-5 sm:px-6" data-audio-transcript>
           <div className="mx-auto max-w-3xl">
             <h2 className="mb-3 text-[13px] font-semibold tracking-wide text-black/50 uppercase">Transkript</h2>

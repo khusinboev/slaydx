@@ -28,6 +28,8 @@ export type MediaPricing = {
   costUsd?: Readonly<Record<string, number>>;
   /** Studio P5: the fixed price of one voice clone (`studio.clone_price`), server side only (the voices endpoint sends it). */
   clonePrice?: number;
+  /** Studio P8c: the fixed price of one «Montaj» job (`studio.mix_price`), server side only (the sources endpoint sends it). */
+  mixPrice?: number;
 };
 
 /** Used only when no pricing is known (a server helper outside a request, the very first render). Never charges. */

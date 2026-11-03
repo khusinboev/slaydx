@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, Mic, Music, RefreshCw } from "lucide-react";
+import { AudioLines, Download, Mic, Music, RefreshCw } from "lucide-react";
 import type * as api from "@/lib/api-client";
 import { useApiSrc } from "@/lib/use-api-src";
 import { cn } from "@/lib/cn";
@@ -11,6 +11,8 @@ import { formatSom } from "@/lib/format";
 import { currentDeliveryEnv, deliver, markGesture, type ReadyFile } from "@/lib/downloads/deliver";
 import { GenerationProgress } from "@/components/files/GenerationProgress";
 import { FavoriteButton } from "../Favorite";
+import { useMixHandoff } from "../audio/mix-handoff";
+import { isMixModelId } from "@/lib/media/catalog-mix";
 import type { StudioJob } from "../StudioResults";
 
 const ACTION =
@@ -103,6 +105,10 @@ function Clip({ job, gen, busy, onAgain, onMusic, onVoice }: { job: StudioJob; g
   const src = useApiSrc(`/api/generations/${job.id}/file?inline=1`);
   const video = gen.doc?.video;
   const short = gen.delivered && gen.delivered.got < gen.delivered.want ? gen.delivered : null;
+  // P8c «Keyingi qadam» → «Montaj»: any finished clip can take a voice / music (the handoff pre-picks this clip).
+  const toMix = useMixHandoff();
+  // A «Montaj» result is not a Studio gallery item (no star; P8c).
+  const mixed = isMixModelId(job.modelId);
   return (
     <article className="bg-card overflow-hidden rounded-[20px] border shadow-[var(--shadow-card)]" data-studio-clip>
       <video className={cn("w-full bg-black", video?.aspect === "9:16" && "mx-auto max-h-[70vh] max-w-sm")} controls playsInline preload="metadata" src={src} data-video-player>
@@ -119,7 +125,7 @@ function Clip({ job, gen, busy, onAgain, onMusic, onVoice }: { job: StudioJob; g
               {video ? ` · ${Math.round(video.seconds)} soniya` : ""} · {formatSom(job.price)}
             </p>
           </div>
-          <FavoriteButton id={job.id} onError={setFavError} />
+          {mixed ? null : <FavoriteButton id={job.id} onError={setFavError} />}
         </div>
         {favError ? (
           <p role="alert" className="text-destructive text-[13px]" data-favorite-error>
@@ -141,17 +147,23 @@ function Clip({ job, gen, busy, onAgain, onMusic, onVoice }: { job: StudioJob; g
             Qayta
           </button>
         </div>
-        {prompt && (onMusic || onVoice) ? (
+        {(prompt && (onMusic || onVoice)) || toMix ? (
           <div className="flex flex-col gap-1.5" data-next-step aria-label="Keyingi qadam" role="group">
             <p className="text-muted-foreground text-[12.5px] font-semibold">Keyingi qadam</p>
             <div className="grid gap-1.5 sm:grid-cols-2">
-              {onMusic ? (
+              {toMix ? (
+                <button type="button" data-result-action="to-mix-video" onClick={() => toMix("video", job.id)} className={ACTION}>
+                  <AudioLines className="size-4" aria-hidden />
+                  Videoga ovoz qo‘shish
+                </button>
+              ) : null}
+              {prompt && onMusic ? (
                 <button type="button" data-result-action="to-music" onClick={() => onMusic(prompt)} className={ACTION}>
                   <Music className="size-4" aria-hidden />
                   Musiqa yaratish
                 </button>
               ) : null}
-              {onVoice ? (
+              {prompt && onVoice ? (
                 <button type="button" data-result-action="to-voice" onClick={() => onVoice(prompt)} className={ACTION}>
                   <Mic className="size-4" aria-hidden />
                   Ovoz qo‘shish

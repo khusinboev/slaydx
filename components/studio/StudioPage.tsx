@@ -26,8 +26,12 @@ import { StudioResults, type StudioJob } from "./StudioResults";
 import { STUDIO_AUDIO_LISTING, STUDIO_SPEECH_PURPOSE, STUDIO_VIDEO_PURPOSE, enhancePrompt, inputFromResult, loadMediaCatalog, resultAssetOf, uploadStudioInput, useMediaCatalog } from "./studio-api";
 import { INITIAL_VIDEO_STATE, VideoTab, type VideoTabState } from "./video/VideoTab";
 import { INITIAL_VOICE_STATE, VoiceTab, type VoiceTabState } from "./voice/VoiceTab";
+import { VoiceTemplatePanel, VoiceTemplatesRow, useLegacyFold } from "./voice/VoiceTemplates";
+import { voiceTemplateFromSearch, type VoiceTemplateId } from "@/lib/media/voice-templates";
 import { AudioTab, INITIAL_AUDIO_STATE, type AudioTabState } from "./audio/AudioTab";
 import { HandoffAlert, useHandoffs } from "./handoff";
+import { MixHandoffContext } from "./audio/mix-handoff";
+import { INITIAL_MIX_STATE, mixFromResult, type MixHandoff } from "./audio/mix-api";
 import { LibrarySheet } from "./LibrarySheet";
 import { TemplateSlots, TemplatesRow } from "./TemplatesRow";
 import { INPUT_PARAM, MODE_LABEL, MODE_PURPOSE, applyTemplate, type StudioMode } from "./studio-modes";
@@ -122,6 +126,10 @@ function StudioApp() {
   const [voiceState, setVoiceState] = useState<VoiceTabState>(INITIAL_VOICE_STATE);
   const voiceCatalog = useMediaCatalog(STUDIO_SPEECH_PURPOSE, voiceSeen);
   const voiceJobs = useStudioJobs();
+  // P8b (docs/studio/P8-SPEC.md): with `studio.legacy_fold` on, «Podkast» / «Tabriknoma» open inside the «Ovoz» tab.
+  const legacyFold = useLegacyFold();
+  const [voiceTemplate, setVoiceTemplate] = useState<VoiceTemplateId | null>(null);
+  const templateJobs = useStudioJobs();
   // The «Audio» tab (P6): its own catalog listing (loaded once the tab is opened), form state and jobs.
   const [audioSeen, setAudioSeen] = useState(false);
   const [audioState, setAudioState] = useState<AudioTabState>(INITIAL_AUDIO_STATE);
@@ -152,6 +160,7 @@ function StudioApp() {
   useEffect(() => {
     const asked = typeof window !== "undefined" ? tabFromSearch(window.location.search) : "rasm";
     if (asked !== "rasm") setTab(asked);
+    if (typeof window !== "undefined") setVoiceTemplate(voiceTemplateFromSearch(window.location.search));
   }, []);
   useEffect(() => {
     if (tab === "video") setVideoSeen(true);
@@ -170,7 +179,20 @@ function StudioApp() {
     setTab(t);
     if (typeof window !== "undefined") rootRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }, []);
-  const handoff = useHandoffs({ open: openTab, setVideoState, setVoiceState, setAudioState });
+  // A text handed to «Ovoz» lands in the speech form: an open template closes.
+  const handVoice = useCallback((fn: (s: VoiceTabState) => VoiceTabState) => {
+    setVoiceTemplate(null);
+    setVoiceState(fn);
+  }, []);
+  const handoff = useHandoffs({ open: openTab, setVideoState, setVoiceState: handVoice, setAudioState });
+  // P8c «Keyingi qadam» → «Montaj» (docs/studio/P8-SPEC.md): the result pre-picked in the «Audio» tab's «Montaj» mode.
+  const toMix = useCallback(
+    (kind: MixHandoff, id: string) => {
+      setAudioState((s) => ({ ...s, mode: "mix", mix: mixFromResult(s.mix ?? INITIAL_MIX_STATE, kind, id) }));
+      openTab("audio");
+    },
+    [openTab],
+  );
 
   const entry = resolveEntry(catalog, chosen);
   const values = entry ? effective(entry, raw) : {};
@@ -390,6 +412,7 @@ function StudioApp() {
     );
 
   return (
+    <MixHandoffContext.Provider value={toMix}>
     <div className="flex w-full flex-col" data-studio>
       <PageHeader back title="Studio" subtitle={SUBTITLE[tab]} contentClassName={WIDTH} actions={galleryButton} />
       <div
@@ -483,17 +506,25 @@ function StudioApp() {
                   gated={gated}
                 />
               ) : tab === "ovoz" ? (
-                <VoiceTab
-                  catalogState={voiceCatalog.state}
-                  reload={voiceCatalog.reload}
-                  state={voiceState}
-                  setState={setVoiceState}
-                  jobs={voiceJobs.jobs}
-                  track={voiceJobs.track}
-                  balance={balance}
-                  typing={typing}
-                  gated={gated}
-                />
+                <>
+                  {legacyFold ? <VoiceTemplatesRow active={voiceTemplate} onPick={setVoiceTemplate} /> : null}
+                  {legacyFold && voiceTemplate ? (
+                    <VoiceTemplatePanel id={voiceTemplate} onClose={() => setVoiceTemplate(null)} jobs={templateJobs.jobs} track={templateJobs.track} />
+                  ) : (
+                    <VoiceTab
+                      catalogState={voiceCatalog.state}
+                      reload={voiceCatalog.reload}
+                      state={voiceState}
+                      setState={setVoiceState}
+                      jobs={voiceJobs.jobs}
+                      track={voiceJobs.track}
+                      balance={balance}
+                      typing={typing}
+                      gated={gated}
+                      quietWhenNone={legacyFold}
+                    />
+                  )}
+                </>
               ) : tab === "video" ? (
                 <VideoTab
                   catalogState={video.state}
@@ -573,6 +604,7 @@ function StudioApp() {
         )}
       </div>
     </div>
+    </MixHandoffContext.Provider>
   );
 }
 

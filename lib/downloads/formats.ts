@@ -128,6 +128,8 @@ const TOOL_PLANS: Readonly<Record<ToolId, ToolPlan>> = {
   "studio-voice": { extras: [] },
   // Studio «Audio» (P6): the MP3 is the only file (sound-effect variants play / download from the result page).
   "studio-audio": { extras: [] },
+  // Studio «Montaj» (P8c): the MP4 / MP3 is the only file.
+  "studio-mix": { extras: [] },
 };
 
 /** Tool ids that have a download decision (equals every `ToolId`). */

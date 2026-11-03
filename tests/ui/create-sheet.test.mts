@@ -303,3 +303,29 @@ test("route change closes a sheet left open (NavProvider)", async () => {
   assert.equal(useUi.getState().overlay, null);
   assert.ok(screen.getByText("sahifa"));
 });
+
+/*
+ * Studio P8a (docs/studio/P8-SPEC.md): `features.legacyFold` on → the sheet's «Rasm» / «Video yaratish» tiles open their
+ * Studio tab (`lib/media/legacy-fold.ts toolHref`), the rest keep `/uz/<slug>`. Mutation: CreateSheet's ToolTile back to
+ * `/uz/${tool.slug}` → red.
+ */
+test("P8 fold on: «Rasm» / «Video yaratish» tiles open the Studio tabs; every other tile keeps /uz/<slug>", async () => {
+  fresh("/uz");
+  signedIn();
+  useAppStore.setState({ features: { llm: true, images: true, telegram: false, telegramBot: null, legacyFold: true } as never });
+  try {
+    shell();
+    await settle();
+    await openSheet();
+    const tiles = [...sheet()!.querySelectorAll<HTMLAnchorElement>("[data-create-group] [data-create-tool]:not([data-create-service])")];
+    const href = (id: string) => tiles.find((a) => a.dataset.createTool === id)!.getAttribute("href");
+    assert.equal(href("image"), "/uz/studio?tab=rasm");
+    assert.equal(href("video"), "/uz/studio?tab=video");
+    for (const a of tiles) {
+      const t = TOOLS.find((x) => x.id === a.dataset.createTool)!;
+      if (t.id !== "image" && t.id !== "video") assert.equal(a.getAttribute("href"), `/uz/${t.slug}`, t.id);
+    }
+  } finally {
+    useAppStore.setState({ features: null });
+  }
+});

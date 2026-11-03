@@ -23,6 +23,7 @@ import { DOMLA_PRICE_DEFAULT, DOMLA_PRICE_MAX } from "../domla/rules";
 import { MARKUP_MAX, MARKUP_MIN } from "../studio-core";
 import { MEDIA_MARKUP_DEFAULT } from "../media/quote";
 import { STUDIO_CLONE_PRICE_DEFAULT, STUDIO_CLONE_PRICE_MAX } from "../media/studio-speech";
+import { STUDIO_MIX_PRICE_DEFAULT, STUDIO_MIX_PRICE_MAX } from "../media/catalog-mix";
 import {
   TESTS_ENABLED_DEFAULT,
   TESTS_FIRST_FREE_DEFAULT,
@@ -106,8 +107,10 @@ export type SettingValues = {
   "media.markup": number;
   "free_llm.daily.enhance": number;
   "studio.clone_price": number;
+  "studio.mix_price": number;
   "studio.voice.enabled": boolean;
   "studio.audio.enabled": boolean;
+  "studio.legacy_fold": boolean;
 };
 
 export type SettingKey = keyof SettingValues;
@@ -756,6 +759,17 @@ const CATALOG: Catalog = {
     validate: boolValidator,
     envDefault: () => false,
   },
+  // Studio P8 (docs/studio/P8-SPEC.md): the old Rasm / Video / Podkast / Tabriknoma pages open inside the Studio.
+  "studio.legacy_fold": {
+    key: "studio.legacy_fold",
+    group: MEDIA_GROUP,
+    label: "Eski media vositalari Studio ichida",
+    description:
+      "Standart: O'CHIQ. Yoqilganda «Rasm», «Video yaratish», «Podkast» va «Tabriknoma» sahifalari va tugmalari Studio ichidagi mos bo'limga olib boradi (narxlar o'zgarmaydi). O'chiq bo'lsa eski sahifalar avvalgidek ishlaydi.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => false,
+  },
   // Studio «Ovoz» (docs/studio/P5-SPEC.md): the fixed price of one voice clone (owner 2026-11-02: 5 000 so'm).
   "studio.clone_price": {
     key: "studio.clone_price",
@@ -768,6 +782,19 @@ const CATALOG: Catalog = {
     max: STUDIO_CLONE_PRICE_MAX,
     validate: intValidator(100, STUDIO_CLONE_PRICE_MAX),
     envDefault: () => STUDIO_CLONE_PRICE_DEFAULT,
+  },
+  // Studio «Montaj» (docs/studio/P8-SPEC.md «P8c»): ffmpeg has no provider cost — a fixed price per job (default 500 so'm).
+  "studio.mix_price": {
+    key: "studio.mix_price",
+    group: PRICING_GROUP,
+    label: "Montaj narxi (so‘m)",
+    description:
+      "Studio «Montaj»ning bitta ishi narxi: videoga ovoz qo‘shish yoki ovozga fon musiqa qo‘yish (serverda ffmpeg, provayder xarajati yo‘q). 0 — bepul. Montaj bajarilmasa pul to‘liq qaytariladi. «Narxlar»dagi vosita foizi ustidan qo‘llanadi.",
+    type: "int",
+    min: 0,
+    max: STUDIO_MIX_PRICE_MAX,
+    validate: intValidator(0, STUDIO_MIX_PRICE_MAX),
+    envDefault: () => STUDIO_MIX_PRICE_DEFAULT,
   },
 };
 
