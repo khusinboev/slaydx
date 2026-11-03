@@ -65,7 +65,6 @@ export const DUB_DOWNLOAD_RESERVE_MS = 45_000;
 /** Transient poll errors (5xx, network) tolerated before the op is given up. */
 export const DUB_MAX_TRANSIENT = 8;
 
-const NO_HEALTH: RouteHealth = { allow: () => true, success: () => undefined, failure: () => undefined };
 
 async function defaultStore(): Promise<DubRowStore | null> {
   const ctx = mediaContext();

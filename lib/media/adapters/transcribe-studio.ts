@@ -103,7 +103,9 @@ export function sttResultOf(body: unknown): SttResult | null {
       type: typeof w.type === "string" ? w.type : "word",
       speaker_id: typeof w.speaker_id === "string" ? w.speaker_id : null,
     }));
-  return { text: b.text, languageCode: typeof b.language_code === "string" ? b.language_code : null, words };
+  // The provider's `language_code`, or our own normalized `languageCode` (the engine reads back the adapter's output).
+  const lang = typeof b.language_code === "string" ? b.language_code : typeof b.languageCode === "string" ? b.languageCode : null;
+  return { text: b.text, languageCode: lang, words };
 }
 
 export function sttAdapter(deps: TranscribeAdapterDeps = {}): MediaAdapter {
