@@ -109,6 +109,19 @@ live job of each is compared with the ElevenLabs usage page. Admin: «Media mode
 mutations), `tests/ui/studio-speech-tools.test.mts` (5, 5 mutations); enumeration tests extended (download-formats,
 download-produce, viewer-kind, settings, pricing, pricing-server session keys, studio-admin-media).
 
+## Review fixes (2026-11-04, independent review: APPROVE WITH FIXES)
+
+- **m1** the length limit is checked on the BILLED (rounded-up) seconds, in the preflight and in the picker: a 180.3 s
+  source bills 181 s and is refused (`input_too_long`) — before, the schema's max normalized it to the default 1 s.
+- **m2** both engines refuse (FAILED + refund, logged) a source whose bytes measure longer than the billed seconds + 1.5 s.
+- **m3** the dub's status checks get the job deadline minus the 45 s reserve, the download the deadline minus a 10 s
+  commit margin; a failed / timed-out download deletes the project.
+- **m4** a re-run that finds the dub row 'succeeded' refunds (the project is already deleted), like 'submitting'.
+- **m5** housekeeping step `studio-dub-orphans` (every tick, after `media-jobs-stuck`): a 'pending' `studio.dub` row older
+  than 2 min whose generation is no longer QUEUED / IN_PROGRESS is closed 'failed' and its project deleted (best effort).
+- **NIT** the dub download is capped at 25 MB (declared `content-length` refused unread, a stream stops at the cap); the
+  unwired `limits.deadlineMs` dropped; `LIMIT 1` on the source-file reads (`generation_files` has one row per generation).
+
 ## UNVERIFIED (the lead's live check)
 
 1. The credit rates above vs the usage page (one 1-minute STT, one 15 s dub).

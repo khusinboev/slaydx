@@ -182,7 +182,8 @@ export async function mixJobCtx(userId: string, values: FormValues): Promise<Stu
     if (!row || !fitsRole(row, roles[i])) return null;
     const f = await queryOne<{ bytes: Buffer; mime: string }>(
       `SELECT f.bytes, f.mime FROM generation_files f JOIN generations g ON g.id = f.generation_id
-        WHERE f.generation_id = $1::uuid AND g.user_id = $2 AND g.status = 'COMPLETED'`,
+        WHERE f.generation_id = $1::uuid AND g.user_id = $2 AND g.status = 'COMPLETED'
+        LIMIT 1`,
       [id, userId],
     );
     return f ? { bytes: new Uint8Array(f.bytes), mime: f.mime, ...(row.aspect ? { aspect: row.aspect } : {}) } : null;

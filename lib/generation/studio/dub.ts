@@ -11,6 +11,8 @@
  * Exactly once at the provider: a re-run of the same job (the worker died, a deploy re-queued it) finds the row and
  *   - 'pending' with an op id → RESUMES polling that op (never submits again);
  *   - 'submitting' (died between the call and the park: a paid dub nobody knows the id of) → FAILED + refund, never resent;
+ *   - 'succeeded' (the file was downloaded and the project deleted, but the job never committed) → FAILED + refund: the
+ *     project is gone, a re-poll could only fail and a new create would be a second charge;
  *   - 'failed' → FAILED + refund.
  * Any failure, a safety refusal, the deadline → `UserFacingError` → the worker fails the job and refunds in full; an op we
  * give up on is deleted at ElevenLabs (best effort) so a late finish is not kept. Outside a job (unit tests, scripts) the
@@ -28,7 +30,7 @@ import { recordAudioCall } from "./cost";
 import { mp4HasVideo } from "./mix-media";
 import { mp4Seconds } from "../video/mp4";
 import { mp3Seconds } from "../tts/mp3";
-import { sourceKindOf, type SpeechToolCtx } from "./transcribe";
+import { MEASURED_SLACK_SECONDS, sourceKindOf, type SpeechToolCtx } from "./transcribe";
 import type { AcademicDoc, BuiltFile, StudioDubDoc } from "../types";
 import type { FormValues, ToolConfig } from "../../types";
 
@@ -64,6 +66,9 @@ export function dubPollDelaySec(n: number): number {
 export const DUB_DOWNLOAD_RESERVE_MS = 45_000;
 /** Transient poll errors (5xx, network) tolerated before the op is given up. */
 export const DUB_MAX_TRANSIENT = 8;
+/** Of the download reserve, this much is kept for the checks + the worker's commit after the download. */
+export const DUB_COMMIT_MARGIN_MS = 10_000;
+export const DUB_LENGTH_MISMATCH_MESSAGE = `Manba uzunligi narx hisoblangandan uzunroq chiqdi — qayta tanlang. ${REFUND}`;
 
 /**
  * The engine's clock when the caller injects none (the worker never does): real time. Tests that run a dub through the
@@ -130,6 +135,11 @@ export async function buildStudioDub(
   const src = ctx.source;
   if (!src || src.kind !== ref.kind || src.id !== ref.id) throw new UserFacingError(`Tanlangan manba topilmadi (o‘chirilgan yoki muddati o‘tgan bo‘lishi mumkin). ${REFUND}`);
   if (!(src.seconds > 0 && src.seconds <= DUB_MAX_SECONDS + MIX_SECONDS_TOLERANCE)) throw new UserFacingError(`Manba ${DUB_MAX_SECONDS / 60} daqiqadan uzun yoki o‘qilmadi. ${REFUND}`);
+  // The price was the billed seconds the server read before the charge; the bytes measured here must not be longer.
+  if (src.seconds > Number(p.sourceSeconds) + MEASURED_SLACK_SECONDS) {
+    console.warn(`[studio-dub] measured ${src.seconds.toFixed(2)} s > billed ${String(p.sourceSeconds)} s — refused`);
+    throw new UserFacingError(DUB_LENGTH_MISMATCH_MESSAGE);
+  }
   const kind = sourceKindOf(src.mime);
 
   const adapters = deps.adapters ?? transcribeAdapters();
@@ -150,8 +160,9 @@ export async function buildStudioDub(
 
   let opId: string;
   if (row && !row.fresh) {
-    // A re-run of this job: resume the parked op, never submit a second (paid) dub.
-    if ((row.status === "pending" || row.status === "succeeded") && row.opId) opId = row.opId;
+    // A re-run of this job: resume the parked op, never submit a second (paid) dub. A 'succeeded' row means the file
+    // was downloaded and the project already deleted at ElevenLabs — it cannot be fetched again: refund like 'submitting'.
+    if (row.status === "pending" && row.opId) opId = row.opId;
     else return fail(`re-run found the row '${row.status}' without an op id — not resubmitted`, DUB_LOST_MESSAGE);
   } else {
     o.onStage?.({ progress: 5, step: "Fayl yuborilmoqda" });
@@ -178,7 +189,9 @@ export async function buildStudioDub(
     return fail(message, userMessage);
   };
 
-  const until = (o.deadline ?? now() + 9 * 60_000) - DUB_DOWNLOAD_RESERVE_MS;
+  const deadline = o.deadline ?? now() + 9 * 60_000;
+  const until = deadline - DUB_DOWNLOAD_RESERVE_MS;
+  const downloadBy = deadline - DUB_COMMIT_MARGIN_MS;
   let output: MediaOutput | null = null;
   let transient = 0;
   for (let n = 0; !output; n++) {
@@ -188,7 +201,8 @@ export async function buildStudioDub(
     await sleep(wait);
     let r: Awaited<ReturnType<NonNullable<MediaAdapter["poll"]>>>;
     try {
-      r = await adapter.poll!(opId, {});
+      // A status check never eats the download reserve.
+      r = await adapter.poll!(opId, { deadline: until });
     } catch (e) {
       if (e instanceof MediaError && e.retryable && ++transient <= DUB_MAX_TRANSIENT) continue;
       return giveUp(e instanceof Error ? e.message : String(e), DUB_FAILED_MESSAGE);
@@ -201,7 +215,8 @@ export async function buildStudioDub(
   o.onStage?.({ progress: 90, step: "Natija yuklab olinmoqda" });
   let bytes: Uint8Array;
   try {
-    bytes = await adapter.fetchOutput(output, {});
+    // The download gets the reserve minus the commit margin (`DUB_COMMIT_MARGIN_MS`), never the whole job deadline.
+    bytes = await adapter.fetchOutput(output, { deadline: downloadBy });
   } catch (e) {
     return giveUp(e instanceof Error ? e.message : String(e), DUB_FAILED_MESSAGE);
   }

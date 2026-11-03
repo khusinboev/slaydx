@@ -1146,6 +1146,8 @@ export async function purgeHousekeeping(): Promise<void> {
    * partial index keeps it cheap); rows older than 90 days go in batches on the 6 hour cadence, mark before the run.
    */
   await step("media-jobs-stuck", async () => (await import("./media/jobs")).failStuckMediaJobs());
+  // Studio P10: dub rows left 'pending' by a generation that stopped (crash → FAILED, revoked) — closed + deleted at ElevenLabs.
+  await step("studio-dub-orphans", async () => (await import("./media/speech-sources")).studioDubHousekeeping());
   // Studio P5 clones: the 30-day unused warning + purge, provider deletes still owed, stale rows, old samples.
   await step("studio-voices", async () => (await import("./media/voices")).studioVoicesHousekeeping());
   // Studio P6 «Audio» inputs (voice changer / isolator uploads): deleted after 1 day.

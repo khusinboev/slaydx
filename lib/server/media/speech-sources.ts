@@ -1,11 +1,10 @@
 import "server-only";
 import { ApiError } from "../api";
-import { queryOne } from "../db";
+import { query, queryOne } from "../db";
 import { getSetting } from "../settings";
 import { availableModels } from "./availability";
 import { fitsRole, ownMixRow, rowSeconds } from "./mix-sources";
 import { DUB_MAX_SECONDS, DUB_MODEL, SPEECH_TOOL_OUTPUT_MAX_BYTES, STUDIO_DUB_PURPOSE, STUDIO_TRANSCRIBE_PURPOSE, TRANSCRIBE_AUDIO_MAX_SECONDS, TRANSCRIBE_MODEL, TRANSCRIBE_VIDEO_MAX_SECONDS, parseSource } from "../../media/catalog-transcribe";
-import { MIX_SECONDS_TOLERANCE } from "../../media/catalog-mix";
 import { billedSeconds } from "../../media/studio-audio";
 import { burnVideoKbps } from "../../generation/studio/burn-args";
 import { mediaSeconds } from "../../generation/studio/mix-media";
@@ -81,7 +80,9 @@ async function resolveSource(userId: string, raw: unknown): Promise<Resolved> {
 export async function prepareSpeechToolRequest(userId: string, tool: SpeechToolId, values: FormValues): Promise<void> {
   const s = await resolveSource(userId, values.source);
   const max = tool === "studio-dub" ? DUB_MAX_SECONDS : s.kind === "video" ? TRANSCRIBE_VIDEO_MAX_SECONDS : TRANSCRIBE_AUDIO_MAX_SECONDS;
-  if (s.seconds > max + MIX_SECONDS_TOLERANCE) {
+  // On the BILLED (rounded-up) length: the schema caps `sourceSeconds` at `max`, so a 180.3 s source (181 billed) would
+  // otherwise be normalized to the default and sold as 1 s.
+  if (s.billed > max) {
     throw new ApiError(`${s.kind === "video" ? "Video" : "Audio"} ${max / 60} daqiqadan oshmasin (hozir ${Math.ceil(s.seconds)} s).`, 400, { code: "input_too_long" });
   }
   const burn = values.burn === true || values.burn === "true";
@@ -108,10 +109,44 @@ export async function speechToolJobCtx(userId: string, values: FormValues): Prom
   if (!row || !(fitsRole(row, "video") || fitsRole(row, "audio"))) return { source: null };
   const f = await queryOne<{ bytes: Buffer; mime: string }>(
     `SELECT f.bytes, f.mime FROM generation_files f JOIN generations g ON g.id = f.generation_id
-      WHERE f.generation_id = $1::uuid AND g.user_id = $2 AND g.status = 'COMPLETED'`,
+      WHERE f.generation_id = $1::uuid AND g.user_id = $2 AND g.status = 'COMPLETED'
+      LIMIT 1`,
     [ref.id, userId],
   );
   if (!f) return { source: null };
   const bytes = new Uint8Array(f.bytes);
   return { source: { kind: "result", id: ref.id, mime: f.mime, bytes, seconds: mediaSeconds(bytes, f.mime), ...(row.aspect ? { aspect: row.aspect } : {}) } };
+}
+
+/** A `studio.dub` row whose generation stopped waiting is closed after this long (a re-claim resumes within seconds). */
+export const DUB_ORPHAN_GRACE_MIN = 2;
+
+/**
+ * Housekeeping (leader, every tick): a dub row still 'pending' whose generation is no longer QUEUED / IN_PROGRESS (the
+ * worker died twice → `reclaimStaleJobs` FAILED and refunded it; an admin revoked it; it is gone) is an orphan — nobody
+ * will ever poll it. It is closed as 'failed' and its ElevenLabs project is deleted (best effort), so a late finish is
+ * not kept there. A re-queued job is left alone (its re-run resumes the op).
+ */
+export async function studioDubHousekeeping(deps: { cancel?: (opId: string) => Promise<unknown> } = {}): Promise<{ closed: number; deleted: number }> {
+  const rows = await query<{ op_id: string | null }>(
+    `UPDATE media_jobs mj
+        SET status = 'failed', errors = errors + 1, next_poll_at = NULL, finished_at = now(),
+            last_error = 'orphaned: the generation stopped while the dub was pending — closed by housekeeping'
+      WHERE mj.purpose = $1 AND mj.status = 'pending' AND mj.created_at < now() - $2::int * interval '1 minute'
+        AND NOT EXISTS (SELECT 1 FROM generations g WHERE g.id = mj.generation_id AND g.status IN ('QUEUED', 'IN_PROGRESS'))
+      RETURNING mj.op_id`,
+    [STUDIO_DUB_PURPOSE, DUB_ORPHAN_GRACE_MIN],
+  );
+  const cancel = deps.cancel ?? (async (opId: string) => (await import("../../media/adapters/transcribe-studio")).dubAdapter().cancel!(opId));
+  let deleted = 0;
+  for (const r of rows) {
+    if (!r.op_id) continue;
+    try {
+      await cancel(r.op_id);
+      deleted++;
+    } catch (e) {
+      console.warn("[studio-dub] orphan delete failed:", e instanceof Error ? e.message : e);
+    }
+  }
+  return { closed: rows.length, deleted };
 }

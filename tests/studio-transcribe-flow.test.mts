@@ -27,7 +27,11 @@ import { inRequest } from "./helpers/next-request.mts";
  *   `AND user_id = $2` dropped from the upload lookup in `resolveSource`         -> "refusals" (another user's upload);
  *   `speechToolUnavailable` switch check removed                                 -> "refusals" (switch off sold);
  *   the worker's `studioSpeechTool` ctx not passed to `build`                    -> "transcribe", "dub" (FAILED);
- *   `store.park` skipped in `buildStudioDub`                                     -> "dub" (op id not stored).
+ *   `store.park` skipped in `buildStudioDub`                                     -> "dub" (op id not stored);
+ *   review fixes (2026-11-04):
+ *   the preflight limit back on raw seconds + 0.5 (not the billed value)          -> "refusals" (180.3 s sold);
+ *   the housekeeping's «generation still QUEUED / IN_PROGRESS» clause removed     -> "review m5" (live rows closed);
+ *   the housekeeping's provider DELETE removed                                    -> "review m5".
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -197,6 +201,7 @@ test("refusals before the charge: switches off, foreign / wrong / too long / too
   const picture = await source(me, "studio-image", "image/png", Buffer.from([1, 2, 3]), { meta: {}, images: [] });
   const longAudio = await source(me, "podcast", "audio/mpeg", mp3Bytes(), { meta: {}, audio: { seconds: 700, script: [] } });
   const longVideo = await source(me, "studio-video", "video/mp4", Buffer.from([0, 1]), videoDoc(200));
+  const edgeVideo = await source(me, "studio-video", "video/mp4", Buffer.from([0, 1]), videoDoc(180.3));
   const bigVideo = await source(me, "studio-video", "video/mp4", Buffer.from([0, 1]), videoDoc(60));
   await query("UPDATE generation_files SET size_bytes = $2 WHERE generation_id = $1", [bigVideo, 24.5 * 1024 * 1024]);
   const cases: [string, string, Record<string, unknown>, string][] = [
@@ -205,6 +210,8 @@ test("refusals before the charge: switches off, foreign / wrong / too long / too
     ["a picture", "studio-transcribe", { source: `result:${picture}` }, "input_missing"],
     ["audio over 10 min", "studio-transcribe", { source: `result:${longAudio}` }, "input_too_long"],
     ["a dub over 3 min", "studio-dub", { source: `result:${longVideo}` }, "input_too_long"],
+    // Review m1: 180.3 s bills 181 s — over the 180 s cap on the BILLED value (it used to be sold as 1 s).
+    ["a dub of 180.3 s (181 billed)", "studio-dub", { source: `result:${edgeVideo}` }, "input_too_long"],
     ["a burn on an audio result", "studio-transcribe", { source: `result:${mySpeech}`, burn: true }, "input_invalid"],
     ["a video dub that cannot fit 25 MB", "studio-dub", { source: `result:${bigVideo}` }, "input_too_large"],
     ["a burn on an upload (preflight)", "studio-transcribe", { source: `upload:${await upload(me, 5)}`, burn: true }, ""],
@@ -308,4 +315,37 @@ test("dub: create → poll → download through the worker; provider failed → 
   assert.equal(g3?.status, "COMPLETED", String(g3?.error));
   assert.ok(!calls.some((c) => c.method === "POST"), "the parked dub is not created again");
   assert.ok(calls.some((c) => c.url.endsWith("/v1/dubbing/dub_PARKED/audio/uz")));
+});
+
+test("review m5: housekeeping closes 'pending' dub rows of stopped generations and deletes their projects; a live one is kept", { skip }, async (t) => {
+  quiet(t);
+  const { query } = await db();
+  const jobs = await import("../lib/server/media/jobs.ts");
+  const { studioDubHousekeeping } = await import("../lib/server/media/speech-sources.ts");
+  const me = await mkUser();
+  const parked = async (status: string, op: string) => {
+    const id = randomUUID();
+    await query(`INSERT INTO generations (id, user_id, tool_id, topic, status, price, format) VALUES ($1, $2, 'studio-dub', 'Dublyaj', $3, 3500, 'mp4')`, [id, me, status]);
+    const { row } = await jobs.beginMediaJob({ generationId: id, purpose: "studio.dub", modelId: "elevenlabs/dubbing", provider: "elevenlabs", upstreamModel: "dubbing-automatic", idempotencyKey: `${id}:dub:0`, params: {} });
+    await jobs.parkMediaJob(row.id, op, new Date());
+    // Older than the grace period (a re-claim resumes within seconds).
+    await query("UPDATE media_jobs SET created_at = now() - interval '10 minutes' WHERE id = $1", [row.id]);
+    return row.id;
+  };
+  const failed = await parked("FAILED", "dub_ORPH1:uz");
+  const revoked = await parked("REVOKED", "dub_ORPH2:ru");
+  const running = await parked("IN_PROGRESS", "dub_LIVE:uz");
+  const queued = await parked("QUEUED", "dub_REQ:uz");
+  const deleted: string[] = [];
+  const r = await studioDubHousekeeping({ cancel: async (op) => void deleted.push(op) });
+  assert.equal(r.closed, 2);
+  assert.deepEqual(deleted.sort(), ["dub_ORPH1:uz", "dub_ORPH2:ru"]);
+  const status = async (id: string) => (await query<{ status: string }>("SELECT status FROM media_jobs WHERE id = $1", [id]))[0]!.status;
+  assert.equal(await status(failed), "failed");
+  assert.equal(await status(revoked), "failed");
+  assert.equal(await status(running), "pending", "a running job keeps polling its op");
+  assert.equal(await status(queued), "pending", "a re-queued job resumes its op");
+  // A second pass has nothing to do; a delete failure never stops the sweep.
+  assert.deepEqual(await studioDubHousekeeping({ cancel: async () => { throw new Error("x"); } }), { closed: 0, deleted: 0 });
+  await query("UPDATE generations SET status = 'REVOKED' WHERE status IN ('QUEUED', 'IN_PROGRESS') AND user_id = $1", [me]);
 });
