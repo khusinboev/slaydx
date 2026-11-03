@@ -10,7 +10,7 @@ import { normalizeRefCode, refCodeFromStartPayload, REFERRAL_REWARD_POINTS } fro
 import type { ReferralClaim } from "./referrals";
 import { inlineButton, tgEmoji, type Screen } from "./bot/ui";
 import { langFromTelegram, langOf, t, LANGS, type Lang, type TextKey } from "./bot/i18n";
-import { mainKeyboard } from "./bot/keyboard";
+import { legacyFoldSetting, mainKeyboard } from "./bot/keyboard";
 import { alifboScreen, blockedText, loginScreen, welcomeScreen } from "./bot/screens";
 
 /**
@@ -899,7 +899,7 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
     const known = isPrivate ? await bot.userByTelegram(msg.from.id) : null;
     const lang = langOf(known?.language);
     const { isLinkedAdmin } = await import("./bot/admin-access");
-    const keyboard = known ? mainKeyboard(lang, msg.from.id, undefined, { admin: await isLinkedAdmin(msg.from.id) }) : null;
+    const keyboard = known ? mainKeyboard(lang, msg.from.id, undefined, { admin: await isLinkedAdmin(msg.from.id), legacyFold: await legacyFoldSetting() }) : null;
     const sent = await handleContact(msg.chat.id, msg.from.id, msg.contact, forwarded, msg.chat.type === "private", lang, keyboard);
     if (sent && known) await bot.markKeyboardSent(msg.chat.id, known.id);
     return;

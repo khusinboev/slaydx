@@ -13,6 +13,7 @@ import { cn } from "@/lib/cn";
 import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
 import { filterCatalogue, normalizeQuery, type CatalogueGroup } from "./catalogue-filter";
 import { formatSom } from "@/lib/format";
+import { toolHref } from "@/lib/media/legacy-fold";
 
 export function CreateGrid() {
   const hydrated = useAppStore((s) => s.hydrated);
@@ -191,7 +192,7 @@ export function CreateGrid() {
               return (
                 <Link
                   key={t.id}
-                  href={`/uz/${t.slug}`}
+                  href={toolHref(t, features?.legacyFold)}
                   style={{ ["--tc" as string]: t.tc }}
                   className="bg-card hover:border-primary/40 overflow-hidden rounded-2xl border transition-colors"
                 >

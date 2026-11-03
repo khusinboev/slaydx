@@ -9,6 +9,7 @@ import { TOOL_ICONS } from "@/components/shell/icons";
 import { useAppStore } from "@/lib/store";
 import { servicesOfGroup, type ServiceConfig } from "@/lib/services";
 import { studioFirst } from "@/components/studio/studio-entry";
+import { toolHref } from "@/lib/media/legacy-fold";
 
 /**
  * «Barcha vositalar»: one chip per group (`visibleToolGroups()` — the one
@@ -56,7 +57,7 @@ export function ToolsByGroup({ onPick }: { onPick: (href: string) => void }) {
       >
         {tools.map((t) => (
           <li key={t.id} className="min-w-0">
-            <ToolTile tool={t} onPick={onPick} />
+            <ToolTile tool={t} legacyFold={features?.legacyFold} onPick={onPick} />
           </li>
         ))}
         {services.map((v) => (
@@ -69,8 +70,9 @@ export function ToolsByGroup({ onPick }: { onPick: (href: string) => void }) {
   );
 }
 
-function ToolTile({ tool, onPick }: { tool: ToolConfig; onPick: (href: string) => void }) {
-  const href = `/uz/${tool.slug}`;
+function ToolTile({ tool, legacyFold, onPick }: { tool: ToolConfig; legacyFold: boolean | undefined; onPick: (href: string) => void }) {
+  // P8 fold on: «Rasm» / «Video yaratish» open their Studio tab (lib/media/legacy-fold.ts).
+  const href = toolHref(tool, legacyFold);
   const Icon = TOOL_ICONS[tool.icon];
   return (
     <Link

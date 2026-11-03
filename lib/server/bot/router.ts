@@ -9,7 +9,7 @@ import { callBot, botUsername, isTransientBotFailure, sendWelcome, TelegramTrans
 import { FIELD_MAX, cleanFieldValue, fieldStep } from "../../profile/fields";
 import { FILES_MAX_PAGE, FILES_PAGE_SIZE, parseCallback, type Origin } from "./codes";
 import { t, langOf, type Lang } from "./i18n";
-import { actionLabel, keyboardMessage, mainKeyboard, matchKeyboard, toolBlocked, type KeyboardAction } from "./keyboard";
+import { actionLabel, keyboardMessage, legacyFoldSetting, mainKeyboard, matchKeyboard, toolBlocked, type KeyboardAction } from "./keyboard";
 import { profileCard, promptScreen, savedScreen, sectionScreen, type InputError } from "./profile";
 import {
   blockedText,
@@ -228,7 +228,7 @@ async function bonusRefresh(ctx: ChatCtx): Promise<{ toast: string; screen: Scre
 
 /** Sends the main keyboard (its own message) and records it. */
 export async function sendMainKeyboard(ctx: ChatCtx, kind: "note" | "refreshed"): Promise<void> {
-  await sendScreen(ctx.chatId, keyboardMessage(ctx.lang, ctx.telegramId, kind, undefined, { admin: await isLinkedAdmin(ctx.telegramId) }));
+  await sendScreen(ctx.chatId, keyboardMessage(ctx.lang, ctx.telegramId, kind, undefined, { admin: await isLinkedAdmin(ctx.telegramId), legacyFold: await legacyFoldSetting() }));
   await markKeyboard(ctx.chatId, ctx.user.id);
 }
 
@@ -247,7 +247,7 @@ export async function handleKeyboard(ctx: ChatCtx, action: KeyboardAction): Prom
       const tool = actionLabel(ctx.lang, action);
       await sendScreen(ctx.chatId, {
         text: t(ctx.lang, blocked ? "tool.blocked" : "tool.noApp", { tool }),
-        reply_markup: mainKeyboard(ctx.lang, ctx.telegramId, undefined, { admin: await isLinkedAdmin(ctx.telegramId) }),
+        reply_markup: mainKeyboard(ctx.lang, ctx.telegramId, undefined, { admin: await isLinkedAdmin(ctx.telegramId), legacyFold: await legacyFoldSetting() }),
       });
       return;
     }

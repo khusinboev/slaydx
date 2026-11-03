@@ -276,6 +276,8 @@ export type Features = {
   studioAudioModels?: string[];
   /** P7a: the most models one «Solishtirish» batch may tick (≤ 4, the per-user in-flight cap); absent on an older server = 4. */
   compareMax?: number;
+  /** P8 `studio.legacy_fold` is on: the old Rasm / Video cards open the Studio tabs; absent (older server) or false = old pages. */
+  legacyFold?: boolean;
   /** `domla.enabled` is on: «Qattiqqo'l domla» is listed among the tools; absent (older server) or false = hidden. */
   domla?: boolean;
   /** `chat.enabled` is on: «AI yordamchi» is listed; absent (older server) or false = hidden. */

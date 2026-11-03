@@ -36,6 +36,9 @@ export const GET = handler("auth/session", async (req) => {
       // P7a «Solishtirish»: at most this many models per batch — a batch is N jobs and the admission refuses past the
       // admin's per-user in-flight cap (`queue.user_max_inflight`), so the page never offers a batch that is always 429.
       compareMax: Math.min(4, await getSetting("queue.user_max_inflight")),
+      // P8 (docs/studio/P8-SPEC.md): `studio.legacy_fold` is on — the old media tools' cards open the Studio
+      // (`lib/media/legacy-fold.ts toolHref`); their pages redirect on the server either way.
+      legacyFold: await getSetting("studio.legacy_fold"),
       tts: ttsFeature(),
       // Premium ElevenLabs voice of podcast / greeting: only when the provider is enabled AND keyed.
       ttsPremium: ttsPremiumAvailable(),
