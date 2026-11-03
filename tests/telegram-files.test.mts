@@ -327,7 +327,8 @@ function growingCsv(h: ReturnType<typeof harness>): Deps {
 
 test("M1: every registry id — instant serializations never reuse a cached file_id, stored/derived ones do", { skip }, async () => {
   const { DOWNLOAD_FORMAT_IDS } = await import("../lib/downloads/formats.ts");
-  const instant = ["transcript-txt", "glossary-csv", "results-csv"];
+  // P10: the SRT / VTT subtitles are rebuilt from `doc.transcribe.cues` on every request, like the transcript.
+  const instant = ["transcript-txt", "glossary-csv", "results-csv", "subtitles-srt", "subtitles-vtt"];
   assert.deepEqual(DOWNLOAD_FORMAT_IDS.filter((f) => !tf.reusesFileId(f)).sort(), [...instant].sort());
   const u = await mkUser();
   const gen = await mkGen(u.id, { tool: "sorting", format: "docx" });
