@@ -132,8 +132,13 @@ export function compareLabel(count: number, total: number | null, format: (n: nu
   return count < COMPARE_MIN || total === null ? "Solishtirish" : `Solishtirish · ${count} model · ~${format(total)}`;
 }
 
+/** The batch cap the session allows (`features.compareMax`: the per-user in-flight cap), never above `COMPARE_MAX`. */
+export function compareCap(fromSession: number | undefined): number {
+  return typeof fromSession === "number" && Number.isFinite(fromSession) ? Math.max(0, Math.min(COMPARE_MAX, Math.floor(fromSession))) : COMPARE_MAX;
+}
+
 /** Ticking a model: on (up to the cap, in tick order) or off. */
-export function toggleModel(ticked: readonly string[], id: string): string[] {
+export function toggleModel(ticked: readonly string[], id: string, max: number = COMPARE_MAX): string[] {
   if (ticked.includes(id)) return ticked.filter((x) => x !== id);
-  return ticked.length >= COMPARE_MAX ? [...ticked] : [...ticked, id];
+  return ticked.length >= max ? [...ticked] : [...ticked, id];
 }

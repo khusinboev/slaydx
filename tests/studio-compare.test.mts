@@ -25,6 +25,7 @@ import { inRequest } from "./helpers/next-request.mts";
  *   admission loop checks only `userInflight: inflight` (the batch as ONE job)               -> "limits" (202, not 429);
  *   the route calls `limit()` once instead of once per model                                -> "limits" (third batch 202);
  *   `expectedTotal` check removed                                                            -> "guards" (202, not 409);
+ *   (review MINOR-1) per-model `expectedPrice` passed back into `prepareGeneration`             -> "guards" (409 price = one model's);
  *   `compare_group` written as a new UUID per row                                            -> "money" (two groups);
  *   replay ignores the values (`same` dropped from the check)                                -> "replay" (202, not 422);
  *   `paidOnly` not passed to `chargeInTx` for the video batch                                -> "video" (bonus paid it).
@@ -225,6 +226,8 @@ test("guards: stale price / stale total / unavailable second model / balance bel
   const stale = await compare(me, { kind: "image", members: members(a, b - 100) });
   assert.equal(stale.status, 409);
   assert.equal(stale.body.code, "price_changed");
+  assert.equal(stale.body.price, a + b, "a stale model price answers the new TOTAL, never one model's price");
+  assert.deepEqual(stale.body.prices, [a, b]);
   const staleTotal = await compare(me, { kind: "image", members: members(a, b), expectedTotal: a + b - 100 });
   assert.equal(staleTotal.status, 409, "MUTATSIYA: expectedTotal is checked");
   assert.equal(staleTotal.body.price, a + b);

@@ -147,3 +147,13 @@ chains». Builds on P1–P6 (all on `feat/studio-next`). **No merge to `main`, n
 
 ## Open (owner)
 - ffmpeg in the worker image (≈ +80 MB) to unlock: voice-over / music ON a video, voice + background-music mix.
+
+## P7a review fixes (2026-11-03, independent review: APPROVE WITH FIXES, no MAJOR)
+- **MINOR-1** a stale per-model price answers ONE 409 with the new TOTAL and every model's price (the per-model guard
+  moved out of `prepareGeneration` into the batch check); before, the message showed one model's price as «Yangi narx».
+- **MINOR-2** the batch cap follows the admin's per-user in-flight cap: the session carries `features.compareMax`
+  (= min(4, `queue.user_max_inflight`)); the panel offers at most that many ticks, and below two the switch is hidden.
+  With today's default (2) a compare is 2 models; raising «Bir foydalanuvchiga bir vaqtda» in Sozlamalar to 4 opens 3–4.
+- **NIT-1** the replay pre-check window equals the in-transaction one (24 h).
+- Not changed (documented): burst slots spent by a refused batch (N per batch, consistent with «N generations»);
+  migration 071's `CREATE INDEX` is not CONCURRENTLY (fine at today's table size); no cross-path idempotency tests.

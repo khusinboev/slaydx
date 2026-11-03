@@ -33,6 +33,9 @@ export const GET = handler("auth/session", async (req) => {
       studioSpeechModels: await studioSpeechModels(),
       // Studio «Audio» models (P6): none while `studio.audio.enabled` is off.
       studioAudioModels: await studioAudioModels(),
+      // P7a «Solishtirish»: at most this many models per batch — a batch is N jobs and the admission refuses past the
+      // admin's per-user in-flight cap (`queue.user_max_inflight`), so the page never offers a batch that is always 429.
+      compareMax: Math.min(4, await getSetting("queue.user_max_inflight")),
       tts: ttsFeature(),
       // Premium ElevenLabs voice of podcast / greeting: only when the provider is enabled AND keyed.
       ttsPremium: ttsPremiumAvailable(),

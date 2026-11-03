@@ -112,7 +112,7 @@ export async function submitCompare(input: CompareInput): Promise<CompareResult>
     const prior = await queryOne<{ ok: number }>(
       `SELECT 1 AS ok FROM generations
         WHERE user_id = $1 AND idempotency_key = $2
-          AND created_at >= now() - $3::int * interval '1 hour' + interval '5 minutes' LIMIT 1`,
+          AND created_at >= now() - $3::int * interval '1 hour' LIMIT 1`,
       [userId, key, IDEMPOTENCY_WINDOW_HOURS],
     );
     if (prior) {
@@ -123,9 +123,12 @@ export async function submitCompare(input: CompareInput): Promise<CompareResult>
 
   // EVERY model is validated and priced before anything is charged; the first refusal stops the batch.
   const prepared: PreparedGeneration[] = [];
-  for (const m of members) prepared.push(await prepareGeneration({ userId, tool, values: m.values, expectedPrice: m.expectedPrice }));
+  // The per-model price guard runs HERE, not inside `prepareGeneration`: a stale price on one model answers ONE 409 with
+  // the new TOTAL and every model's price (the single-model 409 would show one model's price as «Yangi narx»).
+  for (const m of members) prepared.push(await prepareGeneration({ userId, tool, values: m.values }));
   const total = prepared.reduce((s, p) => s + p.price, 0);
-  if (expectedTotal !== undefined && expectedTotal !== total) {
+  const stalePrice = members.some((m, i) => m.expectedPrice !== undefined && m.expectedPrice !== prepared[i]!.price);
+  if (stalePrice || (expectedTotal !== undefined && expectedTotal !== total)) {
     throw new ApiError(`Narx o'zgardi. Yangi narx: ${total.toLocaleString("uz-UZ")} so'm.`, 409, {
       code: "price_changed",
       price: total,

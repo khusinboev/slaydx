@@ -36,6 +36,8 @@ const { COMPARE_MAX, compareBatch, compareLabel, compareModels, sharedParams, to
  *   `memberValues` passes the whole bag (non-shared values leak)                       -> «shared rows»;
  *   `compareBatch` total = the first model's price × N                                 -> «Rasm: switch …» (button text);
  *   `toggleModel` without the COMPARE_MAX cap                                          -> «shared rows» (toggle);
+ *   (review MINOR-2) the panel's tick guard uses COMPARE_MAX, not the session cap        -> «… in-flight cap …» (3 ticked);
+ *   (review MINOR-2) CompareSwitch shown with a cap below two                          -> «… in-flight cap …» (switch);
  *   ComparePanel sends without `expectedTotal`                                         -> «Rasm: switch …» (request body);
  *   `pickCompared` does not turn compare off                                           -> «Rasm: switch …» (pick);
  *   `sendCompare` mints a new key after a 500                                          -> «money edges»;
@@ -94,7 +96,7 @@ afterEach(async () => {
   dropMediaCatalog();
   window.history.replaceState(null, "", "/");
   useUi.setState({ overlay: null, returnTo: null });
-  useAppStore.setState({ loggedIn: false, sessionChecked: false, user: null, generations: [] });
+  useAppStore.setState({ loggedIn: false, sessionChecked: false, user: null, generations: [], features: null });
 });
 
 const q = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector<T>(sel);
@@ -225,6 +227,23 @@ test("Rasm: one model offered → no switch; the cap of four holds in the panel"
   assert.equal(ticked().length, 4);
   assert.equal(q(`[data-compare-model="${extra[2]!.id}"]`)?.getAttribute("aria-disabled"), "true");
   assert.match(q("[data-studio-error]")?.textContent ?? "", /Ko‘pi bilan 4/);
+});
+
+test("Rasm: the session's in-flight cap bounds the batch (2 → a third tick refused; 1 → no switch)", async () => {
+  const extra = ["a/one", "a/two"].map((id, i) => withParams(NANO, id, NANO.params, `Model ${i + 1}`));
+  useAppStore.setState({ features: { compareMax: 2 } as never });
+  api({ image: catalogBody([NANO, GPT, ...extra]) });
+  await mount();
+  await switchOn();
+  for (const m of extra) await click(q(`[data-compare-model="${m.id}"]`));
+  assert.equal(ticked().length, 2, "MUTATSIYA: the panel keeps the session cap, not four");
+  assert.match(q("[data-studio-error]")?.textContent ?? "", /Ko‘pi bilan 2/);
+  cleanup();
+  dropMediaCatalog();
+  useAppStore.setState({ features: { compareMax: 1 } as never });
+  api({ image: catalogBody([NANO, GPT]) });
+  await mount();
+  assert.ok(!q("[data-compare-switch]"), "MUTATSIYA: a cap below two hides the switch (every batch would be a 429)");
 });
 
 test("money edges: 409 → the new sum, the catalog re-read, no cell; a lost answer (500) → the retry reuses the key", async () => {

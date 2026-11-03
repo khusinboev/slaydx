@@ -18,7 +18,7 @@ import type { MediaCatalog } from "../studio-types";
 import { PROMPT_PARAM, normalizedPrompt, promptLimit, promptMin } from "../studio-values";
 import { sendCompare } from "./compare-api";
 import { CompareResults } from "./CompareResults";
-import { COMPARE_MAX, COMPARE_MIN, compareBatch, compareLabel, compareModels, memberPrice, memberValues, sharedEntry, sharedParams, toggleModel, type CompareKind } from "./compare-model";
+import { COMPARE_MIN, compareBatch, compareCap, compareLabel, compareModels, memberPrice, memberValues, sharedEntry, sharedParams, toggleModel, type CompareKind } from "./compare-model";
 import type { CompareTab } from "./useCompare";
 
 const INSUFFICIENT_RE = /balans yetarli emas|to.langan balans bilan/i;
@@ -28,11 +28,14 @@ const INSUFFICIENT_RE = /balans yetarli emas|to.langan balans bilan/i;
  * and the Video tab. Shown only when the user can tick at least two models.
  */
 export function CompareSwitch({ checked, onChange }: { checked: boolean; onChange: (on: boolean) => void }) {
+  const max = compareCap(useAppStore((s) => s.features?.compareMax));
+  // A per-user in-flight cap below two makes every batch a 429: no switch at all.
+  if (max < COMPARE_MIN) return null;
   return (
     <div className="bg-card mb-3 flex items-center justify-between gap-3 rounded-[16px] border px-3.5 py-2" data-compare-switch>
       <div className="min-w-0">
         <p className="text-[15px] font-semibold">Solishtirish</p>
-        <p className="text-muted-foreground text-[12.5px] leading-snug">Bitta so‘rov — {COMPARE_MIN}–{COMPARE_MAX} ta model yonma-yon</p>
+        <p className="text-muted-foreground text-[12.5px] leading-snug">Bitta so‘rov — {COMPARE_MIN}–{max} ta model yonma-yon</p>
       </div>
       <Switch ariaLabel="Solishtirish" checked={checked} onChange={onChange} />
     </div>
@@ -73,12 +76,13 @@ export function ComparePanel({
   const models = compareModels(kind, catalog.models);
   const entries = state.ticked.map((id) => models.find((m) => m.id === id)).filter((m): m is ClientEntry => m !== undefined);
   const shared = sharedEntry(entries);
-  const ready = entries.length >= COMPARE_MIN && shared !== null;
+  const max = compareCap(useAppStore((s) => s.features?.compareMax));
+  const ready = entries.length >= COMPARE_MIN && entries.length <= max && shared !== null;
   const batch = ready ? compareBatch(kind, entries, state.raw, catalog.pricing) : null;
   const sharedRows = sharedParams(entries);
 
   const setRaw = (name: string, value: unknown) => setState((s) => ({ ...s, raw: { ...s.raw, [name]: value } }));
-  const toggle = (id: string) => setState((s) => ({ ...s, ticked: toggleModel(s.ticked, id) }));
+  const toggle = (id: string) => setState((s) => ({ ...s, ticked: toggleModel(s.ticked, id, max) }));
   const limit = shared ? promptLimit(shared) : 2000;
   const prompt = String(state.raw[PROMPT_PARAM] ?? "");
 
@@ -123,12 +127,12 @@ export function ComparePanel({
           min={shared ? promptMin(shared) : 1}
           label={kind === "video" ? "Videoda nima bo‘lsin?" : "Nimani chizamiz?"}
         />
-        <Card title="Modellar" aside={<span className="text-muted-foreground tabular-nums" data-compare-count>{entries.length} / {COMPARE_MAX}</span>}>
-          <p className="text-muted-foreground mb-2 text-[13px]">{COMPARE_MIN}–{COMPARE_MAX} ta modelni belgilang — har biri o‘z narxida alohida ish bo‘ladi.</p>
+        <Card title="Modellar" aside={<span className="text-muted-foreground tabular-nums" data-compare-count>{entries.length} / {max}</span>}>
+          <p className="text-muted-foreground mb-2 text-[13px]">{COMPARE_MIN}–{max} ta modelni belgilang — har biri o‘z narxida alohida ish bo‘ladi.</p>
           <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2" data-compare-models>
             {models.map((m) => {
               const on = state.ticked.includes(m.id);
-              const full = !on && state.ticked.length >= COMPARE_MAX;
+              const full = !on && state.ticked.length >= max;
               // The card price: that model's job at the shared values of the CURRENT tick set plus this model.
               const set = on ? entries : [...entries, m];
               const price = memberPrice(kind, m, memberValues(m, state.raw, sharedParams(set)), catalog.pricing);
@@ -140,7 +144,7 @@ export function ComparePanel({
                     aria-checked={on}
                     aria-disabled={full || undefined}
                     data-compare-model={m.id}
-                    onClick={() => (full ? setError(`Ko‘pi bilan ${COMPARE_MAX} ta model`) : toggle(m.id))}
+                    onClick={() => (full ? setError(`Ko‘pi bilan ${max} ta model`) : toggle(m.id))}
                     className={cn(
                       "focus-visible:ring-ring flex min-h-14 w-full items-center gap-2.5 rounded-[14px] border-2 px-3 py-2 text-left outline-none focus-visible:ring-2",
                       on ? "border-primary bg-accent-soft/40" : "border-transparent bg-muted/60",
