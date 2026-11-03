@@ -291,8 +291,11 @@ test("kalitsiz xizmat sotilmaydi", async () => {
 
   // Hech narsa sozlanmagan — hamma vosita to'silади.
   for (const t of TOOLS) {
+    // P8c «Montaj» runs ffmpeg in the worker — no provider or key at all, so it is never blocked by the flags.
+    if (t.id === "studio-mix") continue;
     assert.ok(toolBlockedReason(t, nothing), `${t.id}: hech narsasiz sotilmasligi kerak`);
   }
+  assert.equal(toolBlockedReason(TOOL_BY_ID["studio-mix"], nothing), null, "Montaj provayderga bog'liq emas");
 
   /*
    * Bayroqlar hali kelmagan (`null`) — hech narsa to'silmaydi.
