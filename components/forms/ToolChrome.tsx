@@ -59,6 +59,7 @@ export function ToolChrome({
   onSubmit,
   error,
   paidOnly,
+  embedded,
 }: {
   title: string;
   children: React.ReactNode;
@@ -74,6 +75,11 @@ export function ToolChrome({
   error?: string | null;
   /** Bonus so'm cannot pay for this tool (video, program-17 D5): the balance check counts the paid wallet only. */
   paidOnly?: boolean;
+  /**
+   * Studio P8b: the form sits inside another page (the Studio «Ovoz» tab template) — no page header of its own, no
+   * second channel gate (the host page draws one), the host's column width.
+   */
+  embedded?: boolean;
 }) {
   const loggedIn = useAppStore((s) => s.loggedIn);
   const user = useAppStore((s) => s.user);
@@ -103,6 +109,7 @@ export function ToolChrome({
   );
   return (
     <>
+      {embedded ? null : (
       <PageHeader
         back
         title={
@@ -124,9 +131,10 @@ export function ToolChrome({
         }
         subtitle={tool?.description}
       />
-      <div ref={rootRef} data-tool-chrome className="mx-auto w-full max-w-3xl px-4 pt-2 pb-6">
+      )}
+      <div ref={rootRef} data-tool-chrome={embedded ? "embedded" : true} className={embedded ? "w-full" : "mx-auto w-full max-w-3xl px-4 pt-2 pb-6"}>
         {/* C-Q2/C-Q3: mandatory channels / Telegram login, before the form is filled. */}
-        <ChannelGate />
+        {embedded ? null : <ChannelGate />}
         {children}
 
         {/* FE-17: qoralama saqlanmadi / fayl qayta biriktirilsin — har formada. */}

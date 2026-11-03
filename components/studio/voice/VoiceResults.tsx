@@ -87,7 +87,8 @@ function Audio({ job, gen, busy, onAgain }: { job: StudioJob; gen: api.Generatio
   const page = `/uz/files/${job.id}`;
   const src = useApiSrc(`/api/generations/${job.id}/file?inline=1`);
   // P6: an «Audio» result carries `doc.studioAudio` (same player, same download).
-  const seconds = gen.doc?.speech?.seconds ?? gen.doc?.studioAudio?.seconds;
+  // P8b: a podcast / greeting template result carries `doc.audio` (its measured length).
+  const seconds = gen.doc?.speech?.seconds ?? gen.doc?.studioAudio?.seconds ?? gen.doc?.audio?.seconds;
   return (
     <article className="bg-card flex flex-col gap-2.5 rounded-[20px] border p-3.5 shadow-[var(--shadow-card)]" data-studio-audio>
       <audio className="w-full" controls preload="metadata" src={src} data-audio-result>

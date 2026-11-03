@@ -12,6 +12,9 @@ import { STUDIO_SPEECH_PURPOSE } from "../../media/catalog-speech";
 import { studioSpeechModels } from "./voices";
 import { MUSIC_MODEL, STUDIO_AUDIO_LISTING } from "../../media/catalog-audio";
 import { studioAudioModels } from "./audio-inputs";
+import { studioGalleryToolIds } from "./favorites";
+import { TOOL_BY_SLUG } from "../../tools";
+import { isVoiceTemplate } from "../../media/voice-templates";
 
 /**
  * The two public Studio reads (docs/studio/P1-SPEC.md «Session / API»).
@@ -92,7 +95,7 @@ export type GalleryVideo = {
 export type GalleryAudio = { src: string; seconds: number | null; voices: string[]; clone: boolean };
 export type GalleryItem = {
   id: string;
-  /** `image` (Rasm tab), `video` (Video tab) or `audio` (Ovoz tab, P5). */
+  /** `image` (Rasm tab), `video` (Video tab) or `audio` (Ovoz tab, P5; P8b: also a podcast / greeting while folded). */
   kind: "image" | "video" | "audio";
   /** The speech of an audio item, `null` otherwise. */
   audio: GalleryAudio | null;
@@ -179,22 +182,24 @@ export async function studioGallery(
   limit = GALLERY_PAGE,
   opts: { favorites?: boolean } = {},
 ): Promise<{ items: GalleryItem[]; nextCursor: string | null }> {
+  // P8b: podcast / greeting results join the gallery (kind audio) only while `studio.legacy_fold` is on.
+  const tools = await studioGalleryToolIds();
   const rows = await query<Row>(
     `SELECT id, tool_id, created_at, topic,
             EXISTS (SELECT 1 FROM studio_favorites f WHERE f.user_id = $1 AND f.generation_id = generations.id) AS favorite,
             to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS cursor_ts,
             COALESCE(doc_json->>'imageModel', doc_json->'video'->>'model', doc_json->'speech'->>'model', doc_json->'studioAudio'->>'model') AS model,
             COALESCE(doc_json->>'imagePrompt', doc_json->'video'->>'prompt', doc_json->'studioAudio'->>'prompt') AS prompt,
-            doc_json->'images' AS images, doc_json->'video' AS video, COALESCE(doc_json->'speech', doc_json->'studioAudio') AS speech
+            doc_json->'images' AS images, doc_json->'video' AS video, COALESCE(doc_json->'speech', doc_json->'studioAudio', doc_json->'audio') AS speech
        FROM generations
-      WHERE user_id = $1 AND tool_id IN ('studio-image', 'studio-video', 'studio-speech', 'studio-audio') AND status = 'COMPLETED' AND files_purged_at IS NULL
+      WHERE user_id = $1 AND tool_id = ANY($6::text[]) AND status = 'COMPLETED' AND files_purged_at IS NULL
         AND ($2::timestamp IS NULL
              OR (created_at <= ($2::timestamp AT TIME ZONE 'UTC')
                  AND (created_at < ($2::timestamp AT TIME ZONE 'UTC') OR id < $3::uuid)))
         AND (NOT $5::boolean OR EXISTS (SELECT 1 FROM studio_favorites f WHERE f.user_id = $1 AND f.generation_id = generations.id))
       ORDER BY created_at DESC, id DESC
       LIMIT $4`,
-    [userId, cursor?.ts ?? null, cursor?.id ?? null, limit + 1, opts.favorites === true],
+    [userId, cursor?.ts ?? null, cursor?.id ?? null, limit + 1, opts.favorites === true, tools],
   );
   const page = rows.slice(0, limit);
   const last = page[page.length - 1];
@@ -202,14 +207,15 @@ export async function studioGallery(
     items: page.map((r) => {
       const isVideo = r.tool_id === "studio-video";
       // P6: an «Audio» result is an audio item too (the result file is always one MP3).
-      const isAudio = r.tool_id === "studio-speech" || r.tool_id === "studio-audio";
+      const isAudio = r.tool_id === "studio-speech" || r.tool_id === "studio-audio" || isVoiceTemplate(r.tool_id);
       return {
         id: r.id,
         kind: isAudio ? ("audio" as const) : isVideo ? ("video" as const) : ("image" as const),
         audio: isAudio ? audioOf(r.id, r.speech) : null,
         createdAt: new Date(r.created_at).toISOString(),
         modelId: r.model,
-        modelLabel: r.model ? (MEDIA_CATALOG.byId(r.model)?.label ?? null) : null,
+        // A podcast / greeting has no Studio model: the card names the tool («Podkast», «Tabriknoma»).
+        modelLabel: r.model ? (MEDIA_CATALOG.byId(r.model)?.label ?? null) : isVoiceTemplate(r.tool_id) ? TOOL_BY_SLUG[r.tool_id]!.title : null,
         // An effect clip has no prompt: the topic names it («Effekt: …»).
         prompt: r.prompt || r.topic,
         images: isVideo || isAudio ? [] : imagesOf(r.id, r.images),

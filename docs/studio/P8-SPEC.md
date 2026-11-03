@@ -85,3 +85,31 @@ package reads the switch on the server (and the session exposes it as `features.
 - Shared enumeration tests (document, nav-pure, admin-settings-tabs, settings, admin-migrations, migration-additive,
   pricing-server session keys, ui/studio-page, ui/shell-phone, download-formats, viewer-kind): each package adds its
   own lines; the lead merges.
+
+## P8b — what shipped / decisions
+- **Templates row** (`components/studio/voice/VoiceTemplates.tsx`): with `features.legacyFold` true the «Ovoz» tab starts
+  with «Tayyor shablonlar» — «Podkast», «Tabriknoma» (tool icon, title, description, «X so'm dan» = `priceFor(tool, {})`,
+  the standard-voice price; the premium voice adds per minute in the composer). A card opens the tool's OWN
+  `MediaComposer` in place of the speech form; «Yopish» brings the speech form back. With `studio.voice.enabled` off
+  (no speech model listed) the tab shows only the row (`VoiceTab quietWhenNone`), no «hozircha mavjud emas» card.
+  Switch off: nothing of this is drawn and `?template=` is ignored — the tab is exactly as before.
+- **Same tool, same price, same engine**: `MediaComposer` got an optional `onQueued` (embedded mode, `ToolChrome
+  embedded`: no page header, no second channel gate, the Studio column). The request is `queueToolGeneration(tool,
+  values)` = `runGeneration`'s own target + `priceFor(tool, values)` (runGeneration now delegates to it), slug
+  `podcast` / `greeting`. Without `onQueued` the composer behaves exactly as before (navigates to `/uz/files/<id>`).
+- **Results**: decision — inside the Studio the queued job is NOT navigated to; it is followed in the template's own
+  results list (`VoiceResults`: progress → MP3 player, «Yuklab olish (MP3)», «Qayta» = the same values again at the
+  same `priceFor` price, and «To'liq ko'rish va ulashish →» = the unchanged `/uz/files/<id>` result viewer). The jobs
+  also land in «Ishlarim» (the shared `upsertGeneration`). `repeat: true` as every Studio submit (the form stays on
+  screen, a second press with the same text is a new job).
+- **Redirect**: `app/uz/podcast/page.tsx`, `app/uz/greeting/page.tsx` (own static routes, `force-dynamic`, added to
+  `[slug]` `OWN_PAGE_SLUGS`) read the switch per request (`lib/server/media/voice-fold.ts voiceFoldTarget`): on →
+  `redirect("/uz/studio?tab=ovoz&template=<id>")`, every other query param of the old link kept (`?bt=`); off → the
+  same `ToolWorkspace` as before. The `[slug]` page is SSG, so reading a setting there would bake the build-time value.
+- **Gallery / favourites**: `studioGalleryToolIds()` (`lib/server/media/favorites.ts`) = the Studio tools, + `podcast`,
+  `greeting` while the switch is on. The gallery lists them as `kind: "audio"` (player `?inline=1`, seconds from
+  `doc.audio.seconds`, label = the tool title, line = the topic / recipient); the star accepts them only then. Off =
+  the old hard-coded list exactly.
+- **Session key**: the client reads `features.legacyFold` (P8a adds it; absent = off). Not added here.
+- **Tests**: `tests/studio-voice-fold.test.mts` (server, 5, 7 mutations), `tests/ui/studio-voice-fold.test.mts` (UI, 5,
+  7 mutations).
