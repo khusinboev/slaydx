@@ -28,6 +28,11 @@ const { formatSom } = await import("../../lib/format.ts");
  *   2. VideoTab prices without `avatarRequest` (default 10 s)           -> «form» (price), «own speech»;
  *   3. own speech keeps the voice / language rows                       -> «own speech»;
  *   4. `avatarSpeeches` lists a speech without a known length            -> «own speech».
+ * Review NITs (2026-11-04):
+ *   5. the avatar's picker card priced at the default 10 s              -> «review NITs»;
+ *   6. option label rounded to nearest (12 s) instead of the priced 13 s -> «own speech»;
+ *   7. «Ro‘yxatni yangilash» does not re-read the list                  -> «review NITs»;
+ *   8. a link in the script reaches the server                          -> «review NITs».
  */
 
 Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
@@ -143,6 +148,7 @@ test("own speech: only known lengths ≤ 1 min listed; picking one hides the scr
   const select = q<HTMLSelectElement>('[data-field="audioId"] select');
   assert.ok(select, "the own-speech picker");
   assert.deepEqual([...select.options].map((o) => o.value), ["", SPEECH], "MUTATSIYA: a speech without a length / over a minute listed");
+  assert.equal(select.options[1]!.textContent, "Salomlashish · 13 s", "MUTATSIYA: the label rounds while the price rounds up");
   await act(async () => void fireEvent.change(select, { target: { value: SPEECH } }));
   await settle(2);
   assert.ok(!q("[data-video-prompt]"), "the script box hides");
@@ -169,4 +175,25 @@ test("no script and no speech: refused in the form, nothing sent", async () => {
   await settle();
   assert.equal(a.posts().length, 0);
   assert.match(q("[data-studio-error]")?.textContent ?? "", /Avatar aytadigan matnni yozing/);
+});
+
+test("review NITs: the avatar card shows the script's price; the list refreshes; a link is refused in the form", async () => {
+  const a = api();
+  await open();
+  await type("[data-video-prompt] textarea", SCRIPT);
+  await click(q("[data-model-all]"));
+  assert.equal(q(`[data-model-option="${HG.id}"] [data-model-price]`)?.textContent, `~${formatSom(price(5)).replace(/ so.m$/, "")} so'm / 5 s`, "MUTATSIYA: card at the default 10 s");
+  await click(q("[data-model-confirm]"));
+  await settle();
+  const reads = () => a.calls.filter((c) => c.url.startsWith("/api/media/mix-sources")).length;
+  const before = reads();
+  await click(q("[data-avatar-speech-refresh]"));
+  await settle();
+  assert.equal(reads(), before + 1, "MUTATSIYA: refresh does not re-read");
+  assert.ok(q('[data-field="audioId"] select'), "the picker is back after the refresh");
+  await type("[data-video-prompt] textarea", "Batafsil: https://slaydx.uz/kurs sahifasida");
+  await click(q("[data-studio-submit]"));
+  await settle();
+  assert.equal(a.posts().length, 0, "MUTATSIYA: a link sent to the server");
+  assert.match(q("[data-studio-error]")?.textContent ?? "", /havola yoki e-pochta/);
 });

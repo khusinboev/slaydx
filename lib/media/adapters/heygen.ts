@@ -21,9 +21,12 @@
  *
  * Failure mapping (`MediaError`): before the create call answers, nothing is billed — voice lookup / asset upload errors
  * and a create 4xx are `accepted: false` (400 `content_policy_violation` = safety, 429 / 5xx retryable); a 3xx is
- * refused; a create network drop or an answer without `video_id` is `accepted: true` (the clip may exist: never sent to
- * a second route, refunded by the host). After acceptance every poll / download error is `accepted: true`; 429 / 5xx /
- * network / a missing key retry later (the job's deadline ends it); 404 or `failed` = the clip will not come.
+ * refused; a create network drop is retried ONCE at once with the same `Idempotency-Key` (HeyGen replays the answer),
+ * and when that fails too it — like an answer without `video_id` — is `accepted: true` (the clip may exist: never sent
+ * to a second route, refunded by the host). After acceptance every poll / download error is `accepted: true`; 404 (lag
+ * right after the create) / 429 / 5xx / network / a missing key retry later (the transient cap or the job's deadline
+ * ends it, giving up DELETEs the clip); `failed` = the clip will not come. Only `content_policy_violation` is safety; a
+ * refused curated avatar (`BAD_AVATAR_CODES`) is a plain failure, logged at error level for the admin.
  * Error texts never contain the key (`scrub`).
  */
 import { MediaError, isRetryableStatus, type AdapterAsset, type AdapterDeps, type AdapterInput, type MediaAdapter, type NormalizedParams, type PollResult } from "../../studio-core";
@@ -33,6 +36,7 @@ import { VIDEO_MAX_BYTES, looksLikeSafetyRefusal } from "../../generation/video/
 import { getProviderKey } from "../../server/providers/resolve";
 import { HEYGEN_ASPECTS, HEYGEN_AVATARS, HEYGEN_SCRIPT_MAX, HEYGEN_USD_PER_SECOND, HEYGEN_VOICE_LANGUAGES, OWN_AUDIO_PARAM } from "../catalog-video";
 import { scrub } from "./fal";
+import { log as serverLog } from "../../server/log";
 
 export const HEYGEN_PROVIDER = "heygen";
 export const HEYGEN_ADAPTER_ID = "heygen-video";
@@ -52,8 +56,13 @@ export const VOICE_CACHE_MS = 6 * 60 * 60_000;
 const JSON_MAX_CHARS = 1_000_000;
 const VIDEO_ID = /^[A-Za-z0-9_-]{4,80}$/;
 const IDEMPOTENCY = /^[A-Za-z0-9_:.-]{1,255}$/;
-/** HeyGen's codes for a refused text / avatar (docs «Error codes»). */
-const SAFETY_CODES: ReadonlySet<string> = new Set(["content_policy_violation", "avatar_not_usable"]);
+/** HeyGen's code for a refused text (docs «Error codes»): the only safety refusal. */
+const SAFETY_CODES: ReadonlySet<string> = new Set(["content_policy_violation"]);
+/**
+ * Codes that mean a curated avatar id of OURS is bad (moderated, missing, expired): a plain failure for the user (full
+ * refund, the usual message), logged at error level so the admin fixes `HEYGEN_AVATARS` (review MINOR 2).
+ */
+export const BAD_AVATAR_CODES: ReadonlySet<string> = new Set(["avatar_not_usable", "avatar_not_found", "avatar_expired", "avatar_consent_required"]);
 
 type Fail = { status?: number; retryable?: boolean; safety?: boolean; accepted?: boolean };
 
@@ -144,6 +153,8 @@ export type HeygenDeps = {
   /** Voice id cache (tests pass a fresh one); absent = the module's. */
   voiceCache?: Map<string, { id: string; at: number }>;
   now?: () => number;
+  /** Structured log (tests); absent = the server log. */
+  log?: typeof serverLog;
 };
 
 const MODULE_VOICE_CACHE = new Map<string, { id: string; at: number }>();
@@ -152,6 +163,10 @@ export function heygenVideoAdapter(o: HeygenDeps = {}): MediaAdapter {
   const keyOf = o.key ?? (() => getProviderKey(HEYGEN_PROVIDER));
   const cache = o.voiceCache ?? MODULE_VOICE_CACHE;
   const now = o.now ?? Date.now;
+  const log = o.log ?? serverLog;
+  const badAvatar = (code: string, where: string, avatar: string | null) => {
+    if (BAD_AVATAR_CODES.has(code)) log("error", "[heygen] a curated avatar id was refused — fix HEYGEN_AVATARS", { code, where, ...(avatar ? { avatar } : {}) });
+  };
   const failOf = (key: string | null) => (msg: string, f: Fail) => new MediaError(HEYGEN_PROVIDER, scrub(msg, key), f);
   const fetchOf = (deps: AdapterDeps) => deps.fetchImpl ?? globalThis.fetch;
 
@@ -230,12 +245,21 @@ export function heygenVideoAdapter(o: HeygenDeps = {}): MediaAdapter {
       }
       const headers: Record<string, string> = { "Content-Type": "application/json", "x-api-key": key };
       if (IDEMPOTENCY.test(input.idempotencyKey)) headers["Idempotency-Key"] = input.idempotencyKey;
+      const payload = JSON.stringify(heygenVideoBody(input.params, speech));
+      const create = () => fetchOf(deps)(`${API}/v3/videos`, { method: "POST", headers, body: payload, redirect: "manual", signal: AbortSignal.timeout(CALL_MS) });
       let res: Response;
       try {
-        res = await fetchOf(deps)(`${API}/v3/videos`, { method: "POST", headers, body: JSON.stringify(heygenVideoBody(input.params, speech)), redirect: "manual", signal: AbortSignal.timeout(CALL_MS) });
+        res = await create();
       } catch (e) {
-        // No answer: the clip may have been created (and billed) — never resubmitted elsewhere.
-        throw fail(`create: ${e instanceof Error ? e.message : String(e)}`, { retryable: true, accepted: true });
+        // No answer: the clip may have been created (and billed). With the Idempotency-Key ONE immediate re-POST is
+        // safe — HeyGen replays the original answer (the same video_id) or says `request_in_progress` (review MINOR 5).
+        // Without the key (never in production: the media job key always matches) or when it fails too: accepted.
+        if (!headers["Idempotency-Key"]) throw fail(`create: ${e instanceof Error ? e.message : String(e)}`, { retryable: true, accepted: true });
+        try {
+          res = await create();
+        } catch (e2) {
+          throw fail(`create (2×): ${e2 instanceof Error ? e2.message : String(e2)}`, { retryable: true, accepted: true });
+        }
       }
       if (res.status >= 300 && res.status < 400) throw fail(`create: ${res.status} redirect rad etildi`, { status: res.status });
       const body = await readJson(res, (n) => fail(`create: javob juda katta (${n} belgi)`, { accepted: res.ok }));
@@ -243,6 +267,7 @@ export function heygenVideoAdapter(o: HeygenDeps = {}): MediaAdapter {
         const err = errorOf(body);
         // 409 `request_in_progress`: the same Idempotency-Key is still running at HeyGen — a clip exists.
         const inProgress = res.status === 409 && err.code === "request_in_progress";
+        badAvatar(err.code, "create", plan.avatar);
         throw fail(`create ${res.status} ${err.code} ${err.text}`, { status: res.status, retryable: !inProgress && isRetryableStatus(res.status), safety: SAFETY_CODES.has(err.code), accepted: inProgress });
       }
       const id = (body as { data?: { video_id?: unknown } } | null)?.data?.video_id;
@@ -264,23 +289,35 @@ export function heygenVideoAdapter(o: HeygenDeps = {}): MediaAdapter {
         throw fail(`status: ${e instanceof Error ? e.message : String(e)}`, { retryable: true, accepted: true });
       }
       if (res.status >= 300 && res.status < 400) throw fail(`status: ${res.status} redirect rad etildi`, { status: res.status, accepted: true });
-      if (res.status === 404) return { state: "failed", message: "heygen: video topilmadi", safety: false };
+      // 404 right after the create can be HeyGen's own lag while it renders (and bills): retry; the transient-error cap or
+      // the deadline ends the op, and giving up asks HeyGen to DELETE it (review MINOR 1).
+      if (res.status === 404) {
+        await res.body?.cancel().catch(() => {});
+        throw fail("status 404: video hali topilmadi", { status: 404, retryable: true, accepted: true });
+      }
       const body = await readJson(res, (n) => fail(`status: javob juda katta (${n} belgi)`, { accepted: true, retryable: true }));
       if (!res.ok) {
         const err = errorOf(body);
         // 401 / 403: the key changed after the submit — transient (retry until the deadline), like a missing key.
         throw fail(`status ${res.status} ${err.code} ${err.text}`, { status: res.status, retryable: isRetryableStatus(res.status) || res.status === 401 || res.status === 403, accepted: true });
       }
-      const d = ((body as { data?: unknown } | null)?.data ?? {}) as { status?: unknown; video_url?: unknown; failure_code?: unknown; failure_message?: unknown };
+      const d = ((body as { data?: unknown } | null)?.data ?? {}) as { status?: unknown; video_url?: unknown; failure_code?: unknown; failure_message?: unknown; duration?: unknown };
       if (d.status === "pending" || d.status === "processing" || d.status === "waiting") return { state: "running" };
       if (d.status === "failed" || d.status === "cancelled") {
         const code = typeof d.failure_code === "string" ? d.failure_code : "";
         const text = typeof d.failure_message === "string" ? d.failure_message : "";
-        return { state: "failed", message: scrub(`heygen ${String(d.status)}${code ? ` ${code}` : ""}${text ? `: ${text}` : ""}`, key), safety: SAFETY_CODES.has(code) || looksLikeSafetyRefusal(text) };
+        badAvatar(code, "render", null);
+        // A bad avatar is never «safety» even when its text says «moderation»: the user did nothing wrong.
+        const safety = !BAD_AVATAR_CODES.has(code) && (SAFETY_CODES.has(code) || looksLikeSafetyRefusal(text));
+        return { state: "failed", message: scrub(`heygen ${String(d.status)}${code ? ` ${code}` : ""}${text ? `: ${text}` : ""}`, key), safety };
       }
       if (d.status !== "completed") throw fail(`status: ${String(d.status ?? "?")}`, { retryable: true, accepted: true });
       const url = typeof d.video_url === "string" ? d.video_url : "";
       if (!url) return { state: "failed", message: "heygen: javobda video yo'q", safety: false };
+      // Calibration of the priced pace (review MINOR 4): HeyGen's own length of the clip; the promised length and the
+      // script are the job's `media_jobs.params` (and `doc_json.video`: `requestedSeconds` vs the measured `seconds`).
+      const duration = typeof d.duration === "number" && Number.isFinite(d.duration) ? Math.round(d.duration * 100) / 100 : null;
+      log("info", "[heygen] clip completed", { op: opId, duration });
       return { state: "done", outputs: [{ kind: "url", url, mime: "video/mp4" }] };
     },
 

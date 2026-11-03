@@ -25,7 +25,8 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *   2. `prepareAvatarRequest` not called by submit-generation               -> «flow» (forged seconds charged), «own»;
  *   3. the own-speech SQL without `g.user_id = $2`                          -> «own» (a foreign speech accepted);
  *   4. `studioVideoAdapters` without `heygen-video`                         -> «flow», «own», «refunds» (the worker
- *      refunds «not available»; the catalog still lists it — availability is the provider key + switch).
+ *      refunds «not available»; the catalog still lists it — availability is the provider key + switch);
+ *   5. (review MINOR 1) poll 404 → failed at once                           -> «refunds» (the 404 step).
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -85,8 +86,9 @@ test("studio-video P9: HeyGen avatar — gating by key, script + own speech flow
     status: { status: "processing" } as Record<string, unknown>,
     clipSeconds: 5,
     counter: 0,
+    notFound: false,
   };
-  const resetStub = () => Object.assign(stub, { calls: [], createStatus: 200, createBody: null, status: { status: "processing" }, clipSeconds: 5, counter: 0 });
+  const resetStub = () => Object.assign(stub, { calls: [], createStatus: 200, createBody: null, status: { status: "processing" }, clipSeconds: 5, counter: 0, notFound: false });
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -97,6 +99,7 @@ test("studio-video P9: HeyGen avatar — gating by key, script + own speech flow
     if (url === `${API}/v3/assets`) return jsonRes({ data: { asset_id: "asset_flow_1" } });
     if (url === `${API}/v3/videos` && method === "POST") return jsonRes(stub.createBody ?? { data: { video_id: `v_flow_${++stub.counter}` } }, stub.createStatus);
     if (url.startsWith(`${API}/v3/videos/`) && method === "DELETE") return jsonRes({ data: { deleted: true } });
+    if (url.startsWith(`${API}/v3/videos/`) && stub.notFound) return jsonRes({ error: { code: "video_not_found" } }, 404);
     if (url.startsWith(`${API}/v3/videos/`)) {
       const id = url.slice(`${API}/v3/videos/`.length);
       return jsonRes({ data: { id, ...stub.status, ...(stub.status.status === "completed" ? { video_url: `${FILES}${id}.mp4?Expires=1` } : {}) } });
@@ -258,6 +261,12 @@ test("studio-video P9: HeyGen avatar — gating by key, script + own speech flow
     const me = await mkUser(500_000);
     const start = await wallet(me);
     const a = await startWaiting(me, SCRIPTED);
+    // Review MINOR 1: a 404 right after the create is HeyGen's lag — the job keeps waiting, nothing refunded.
+    stub.notFound = true;
+    await makeDue(a);
+    assert.equal(await ops.pollDueVideoOps(), 0);
+    assert.deepEqual([(await gen(a)).status, await refunds(a), (await row(a))!.status], ["IN_PROGRESS", 0, "pending"], "MUTATSIYA: a 404 refunded at once");
+    stub.notFound = false;
     stub.status = { status: "failed", failure_code: "content_policy_violation", failure_message: "Script rejected" };
     await makeDue(a);
     assert.equal(await ops.pollDueVideoOps(), 1);

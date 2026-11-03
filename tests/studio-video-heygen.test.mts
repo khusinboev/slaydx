@@ -11,12 +11,17 @@ import {
   HEYGEN_USD_PER_SECOND,
   OWN_AUDIO_PARAM,
   STUDIO_VIDEO_PURPOSE,
+  HEYGEN_DIGIT_WEIGHT,
+  HEYGEN_SYMBOL_WEIGHT,
   avatarAudioSeconds,
+  avatarScriptProblem,
   avatarScriptSeconds,
+  avatarSpokenChars,
   withAvatarSeconds,
 } from "../lib/media/catalog-video.ts";
 import { studioVideoAdapters } from "../lib/media/adapters/video.ts";
 import { HEYGEN_ADAPTER_ID, heygenVideoAdapter, isHeygenFileUrl, parseHeygenOp } from "../lib/media/adapters/heygen.ts";
+import { compareModels } from "../components/studio/compare/compare-model.ts";
 import { studioVideoError, studioVideoPrice } from "../lib/media/studio-video-pricing.ts";
 import { TOOL_BY_ID, basePriceFor, preflightError } from "../lib/tools.ts";
 import { studioVideoClientPrice } from "../components/studio/video/video-price.ts";
@@ -63,6 +68,15 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *  12. `withAvatarSeconds` keeps the request's `seconds`                        -> «length», «prices»;
  *  13. `studioVideoError` lets script + own speech through                      -> «preflight»;
  *  14. probe sends the key as `Authorization`                                   -> «provider».
+ * Review fixes (2026-11-04; changed assertions: poll 404 «failed» → «retryable + accepted»; nothing removed):
+ *  15. poll 404 → failed at once (old code)                                      -> «poll states»;
+ *  16. `avatar_not_usable` back in SAFETY_CODES                                  -> «errors: submit», «MINOR 2»;
+ *  17. no error log for a bad avatar code                                        -> «MINOR 2»;
+ *  18. completion without the duration log                                       -> «MINOR 2» (calibration line);
+ *  19. no re-POST after a create drop                                            -> «MINOR 5», «errors: submit»;
+ *  20. digits weighted 1                                                         -> «MINOR 4»;
+ *  21. `avatarScriptProblem` without the link check                              -> «MINOR 4»;
+ *  22. `compareModels` keeps the avatar                                          -> «MINOR 3».
  */
 
 setSafeFetchLookup(async () => ["93.184.216.34"]);
@@ -302,6 +316,10 @@ test("errors: submit — before the create nothing is billed (accepted false); c
     throw new TypeError("create: socket hang up");
   }));
   assert.deepEqual([r.e.accepted, r.e.retryable], [true, true], "MUTATSIYA: a create drop not accepted");
+  assert.equal(r.seen.filter((c) => c.url === `${API}/v3/videos`).length, 2, "review MINOR 5: one immediate re-POST, no more");
+  // Review MINOR 2: a refused curated avatar is a plain failure (not safety), logged at error level for the admin.
+  r = await run(create(() => jsonRes({ error: { code: "avatar_not_usable", message: "Avatar failed moderation" } }, 400)));
+  assert.deepEqual([r.e.status, r.e.safety, r.e.accepted, r.e.retryable], [400, false, false, false], "MUTATSIYA: avatar_not_usable as safety");
   r = await run(create(() => jsonRes({ data: { status: "waiting" } })));
   assert.equal(r.e.accepted, true, "an answer without video_id");
   // Asset upload problems: not accepted.
@@ -348,7 +366,8 @@ test("poll states: pending / processing → running; completed → URL; failed (
   assert.deepEqual([generic.state, generic.state === "failed" && generic.safety], ["failed", false]);
   assert.equal((await poll({ data: { status: "cancelled" } })).state, "failed");
   assert.equal((await poll({ data: { status: "completed" } })).state, "failed", "completed without a URL");
-  assert.equal((await poll({ error: { code: "video_not_found" } }, 404)).state, "failed");
+  // Review MINOR 1: a 404 can be HeyGen's lag right after the create — retried (the transient cap / deadline ends it).
+  await assert.rejects(poll({ error: { code: "video_not_found" } }, 404), (e: unknown) => e instanceof MediaError && e.retryable && e.accepted && e.status === 404, "MUTATSIYA: 404 failed at once");
   const s = stub(() => jsonRes({ data: { status: "pending" } }));
   await a.poll!("heygen:v_poll1", { fetchImpl: s.fetchImpl });
   assert.equal(s.seen[0]!.url, `${API}/v3/videos/v_poll1`);
@@ -479,4 +498,72 @@ test("provider: registry + catalog facts; «Tekshirish» = GET /v3/users/me, key
   assert.equal(bad.ok, false);
   assert.match(bad.message, /HTTP 401/);
   assert.ok(!bad.message.includes(KEY));
+});
+
+/* ══════════════════════════ review fixes ══════════════════════════ */
+
+test("review MINOR 5: a create drop is re-POSTed once with the same Idempotency-Key — the replayed id is adopted; 409 in progress = accepted", async () => {
+  const replay = (second: () => Response) => {
+    let n = 0;
+    return stub((url) => {
+      if (url.includes("/v3/voices")) return jsonRes(VOICES);
+      n++;
+      if (n === 1) throw new TypeError("create: timeout");
+      return second();
+    });
+  };
+  const s1 = replay(() => jsonRes({ data: { video_id: "v_replayed1" } }));
+  assert.deepEqual(await adapter().submit(input({ prompt: SCRIPT }), { fetchImpl: s1.fetchImpl }), { opId: "heygen:v_replayed1" }, "MUTATSIYA: no re-POST");
+  const posts = s1.seen.filter((c) => c.url === `${API}/v3/videos`);
+  assert.equal(posts.length, 2);
+  assert.equal(new Headers(posts[0]!.init.headers).get("idempotency-key"), new Headers(posts[1]!.init.headers).get("idempotency-key"), "the same key");
+  assert.equal(String(posts[0]!.init.body), String(posts[1]!.init.body), "the same body");
+  const s2 = replay(() => jsonRes({ error: { code: "request_in_progress" } }, 409));
+  await assert.rejects(adapter().submit(input({ prompt: SCRIPT }), { fetchImpl: s2.fetchImpl }), (e: unknown) => e instanceof MediaError && e.accepted === true && e.retryable === false);
+});
+
+test("review MINOR 2: avatar_not_usable / avatar_not_found → not safety, error log; only content_policy_violation is safety", async () => {
+  const logs: { level: string; msg: string; fields: unknown }[] = [];
+  const a = heygenVideoAdapter({ key: () => KEY, voiceCache: new Map(), log: ((level: string, msg: string, fields: unknown) => logs.push({ level, msg, fields })) as never });
+  const failed = await a.poll!("heygen:v_bad1", { fetchImpl: stub(() => jsonRes({ data: { status: "failed", failure_code: "avatar_not_usable", failure_message: "Avatar failed moderation" } })).fetchImpl });
+  assert.deepEqual([failed.state, failed.state === "failed" && failed.safety], ["failed", false], "MUTATSIYA: «moderation» text made it safety");
+  assert.ok(logs.some((l) => l.level === "error" && /curated avatar/.test(l.msg)), "MUTATSIYA: no error log for a bad avatar");
+  logs.length = 0;
+  const s = stub((url) => (url.includes("/v3/voices") ? jsonRes(VOICES) : jsonRes({ error: { code: "avatar_not_found" } }, 404)));
+  await assert.rejects(a.submit(input({ prompt: SCRIPT, avatar: "Tyler-incasualsuit-20220721" }), { fetchImpl: s.fetchImpl }), (e: unknown) => e instanceof MediaError && !e.safety && !e.accepted);
+  assert.deepEqual(logs.map((l) => [l.level, (l.fields as { avatar?: string }).avatar]), [["error", "Tyler-incasualsuit-20220721"]]);
+  // A normal failure logs nothing at error level; a policy failure is still safety.
+  logs.length = 0;
+  const policy = await a.poll!("heygen:v_bad1", { fetchImpl: stub(() => jsonRes({ data: { status: "failed", failure_code: "content_policy_violation" } })).fetchImpl });
+  assert.ok(policy.state === "failed" && policy.safety);
+  assert.ok(!logs.some((l) => l.level === "error"));
+  // Completion records HeyGen's own length (calibration of the priced pace, review MINOR 4).
+  await a.poll!("heygen:v_ok1", { fetchImpl: stub(() => jsonRes({ data: { status: "completed", video_url: "https://files.heygen.ai/v.mp4", duration: 4.237 } })).fetchImpl });
+  assert.deepEqual(logs.find((l) => /clip completed/.test(l.msg))?.fields, { op: "heygen:v_ok1", duration: 4.24 }, "MUTATSIYA: duration not recorded");
+});
+
+test("review MINOR 4: digits / symbols weighted as spoken; links / e-mails refused; one formula for price and refusal", () => {
+  assert.equal(avatarSpokenChars("abc"), 3);
+  assert.equal(avatarSpokenChars("2026"), 4 * HEYGEN_DIGIT_WEIGHT, "MUTATSIYA: digits counted as 1");
+  assert.equal(avatarSpokenChars("50%"), 2 * HEYGEN_DIGIT_WEIGHT + HEYGEN_SYMBOL_WEIGHT);
+  assert.equal(avatarSpokenChars("$ + = & € № °"), 7 * HEYGEN_SYMBOL_WEIGHT + 6);
+  // «2026-yil 15-noyabr» (18 chars) is spoken as ~50 characters: 6 digits × 6 + 12 others = 48 → 4 s, not 2 s.
+  assert.equal(avatarScriptSeconds("2026-yil 15-noyabr"), Math.ceil((6 * HEYGEN_DIGIT_WEIGHT + 12) / 12));
+  assert.equal(studioVideoPrice({ modelId: HEYGEN_MODEL, ...withAvatarSeconds({ prompt: "Narx 50%" }, null) }, PRICING), up100(0.0805 * Math.ceil((5 + 2 * 6 + 8) / 12) * RATE * 2));
+  for (const bad of ["Saytimiz: https://slaydx.uz/kurs", "Batafsil: www.slaydx.uz", "Yozing: info@slaydx.uz"]) {
+    assert.match(String(avatarScriptProblem(bad)), /havola yoki e-pochta/, bad);
+    assert.equal(studioVideoError({ modelId: HEYGEN_MODEL, prompt: bad }), avatarScriptProblem(bad), "the preflight is the same function");
+  }
+  const digits = "1".repeat(200); // 200 raw characters, 1 200 spoken: past a minute
+  assert.match(String(avatarScriptProblem(digits)), /1 daqiqaga sig‘maydi/);
+  assert.equal(studioVideoError({ modelId: HEYGEN_MODEL, prompt: digits }), avatarScriptProblem(digits));
+  assert.equal(avatarScriptProblem(SCRIPT), null);
+  assert.equal(avatarScriptProblem("x".repeat(HEYGEN_SCRIPT_MAX)), null, "the plain maximum still fits");
+});
+
+test("review MINOR 3: «Solishtirish» (video) never offers the avatar (computed length, script prompt)", () => {
+  const view = MEDIA_CATALOG.clientView();
+  const ids = compareModels("video", view.filter((e) => MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed.includes(e.id))).map((e) => e.id);
+  assert.ok(!ids.includes(HEYGEN_MODEL), "MUTATSIYA: the avatar in compare");
+  assert.ok(ids.includes("google/omni-video") && ids.includes("openai/sora-2") && !ids.includes("kling/effects"));
 });

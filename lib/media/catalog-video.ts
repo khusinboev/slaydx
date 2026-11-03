@@ -354,10 +354,37 @@ export const HEYGEN_AVATARS: readonly { id: string; label: string }[] = [
 /** Script language → HeyGen's voice-list `language` filter; the voice is the first public one of that language + gender. */
 export const HEYGEN_VOICE_LANGUAGES = { uz: "Uzbek", ru: "Russian", en: "English" } as const;
 
-/** Clip seconds a script buys: its normalized length at the priced pace, 1 … `HEYGEN_MAX_SECONDS`. */
+/**
+ * Spoken weight of a script character (review MINOR 4): a digit is read out as a word («2026» → «ikki ming yigirma olti»,
+ * ≈ 5.5 characters per digit), a symbol as a word («%» → «foiz», «$» → «dollar», «+» → «plyus», «=» → «teng»).
+ */
+export const HEYGEN_DIGIT_WEIGHT = 6;
+export const HEYGEN_SYMBOL_WEIGHT = 8;
+const SPOKEN_SYMBOL = /[%$€£₽+=@&#№°]/;
+/** A link or an e-mail is read out letter by letter (or garbled): refused, the user writes it in words. */
+const URL_OR_EMAIL = /(?:\bhttps?:\/\/|\bwww\.)\S+|[^\s@]+@[^\s@]+\.[^\s@]+/i;
+
+/** The script's length as spoken, in characters: plain characters 1, digits / symbols weighted (above). */
+export function avatarSpokenChars(script: unknown): number {
+  let n = 0;
+  for (const ch of normalizeText(script, HEYGEN_SCRIPT_MAX)) n += /\d/.test(ch) ? HEYGEN_DIGIT_WEIGHT : SPOKEN_SYMBOL.test(ch) ? HEYGEN_SYMBOL_WEIGHT : 1;
+  return n;
+}
+
+/**
+ * Why a script cannot be sold (Uzbek, a 400 before charging; the form shows the same text), `null` when it can: a link /
+ * an e-mail, or a spoken length beyond `HEYGEN_MAX_SECONDS`. The SAME weights as the price (`avatarScriptSeconds`).
+ */
+export function avatarScriptProblem(script: unknown): string | null {
+  const text = normalizeText(script, HEYGEN_SCRIPT_MAX);
+  if (URL_OR_EMAIL.test(text)) return "Avatar matnida havola yoki e-pochta bo‘lmasin — so‘z bilan yozing.";
+  if (avatarSpokenChars(text) > HEYGEN_SCRIPT_MAX) return "Matn 1 daqiqaga sig‘maydi (raqam va belgilar ham so‘z bilan o‘qiladi) — qisqartiring.";
+  return null;
+}
+
+/** Clip seconds a script buys: its spoken length at the priced pace, 1 … `HEYGEN_MAX_SECONDS`. */
 export function avatarScriptSeconds(script: unknown): number {
-  const chars = normalizeText(script, HEYGEN_SCRIPT_MAX).length;
-  return Math.min(HEYGEN_MAX_SECONDS, Math.max(1, Math.ceil(chars / HEYGEN_CHARS_PER_SECOND)));
+  return Math.min(HEYGEN_MAX_SECONDS, Math.max(1, Math.ceil(avatarSpokenChars(script) / HEYGEN_CHARS_PER_SECOND)));
 }
 
 /**

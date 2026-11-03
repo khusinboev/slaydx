@@ -8,7 +8,7 @@
  */
 import { normalizeText, validate, type CatalogEntry } from "../studio-core";
 import { MEDIA_CATALOG, MEDIA_PURPOSES } from "./catalog";
-import { END_IMAGE_PARAM, HEYGEN_SCRIPT_MAX, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, STUDIO_VIDEO_PURPOSE, effectPhotos, isAvatarModel } from "./catalog-video";
+import { END_IMAGE_PARAM, HEYGEN_SCRIPT_MAX, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, STUDIO_VIDEO_PURPOSE, avatarScriptProblem, effectPhotos, isAvatarModel } from "./catalog-video";
 import { isGenerationId } from "./catalog-mix";
 import { studioEntryPrice, type MediaPricing } from "./studio-pricing";
 
@@ -64,7 +64,7 @@ export function studioVideoError(values: Readonly<Record<string, unknown>>): str
     if (own) return isGenerationId(own.toLowerCase()) ? null : "Ovoz topilmadi — ro‘yxatdan qayta tanlang.";
     if (!script) return "Avatar aytadigan matnni yozing yoki o‘z ovozingizni tanlang.";
     if (script.length < HEYGEN_SCRIPT_MIN) return `Avatar matni kamida ${HEYGEN_SCRIPT_MIN} ta belgi bo‘lsin.`;
-    return null;
+    return avatarScriptProblem(script);
   }
   // P4: the end frame is the last frame of an image → video clip: only together with the start image.
   if (has(END_IMAGE_PARAM) && !has("imageAssetId")) return "Oxirgi kadr uchun boshlang‘ich suratni ham yuklang.";

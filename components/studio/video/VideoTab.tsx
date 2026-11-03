@@ -23,7 +23,7 @@ import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, prom
 import type { StudioJob } from "../StudioResults";
 import { VideoResults } from "./VideoResults";
 import { STUDIO_VIDEO_SLUG, STUDIO_VIDEO_TOOL_ID, clipSeconds, isEffect, studioVideoClientPrice, videoCardPrice } from "./video-price";
-import { ASPECT_FOLLOWS_IMAGE, END_IMAGE_PARAM, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, effectPhotos, isAvatarModel } from "@/lib/media/catalog-video";
+import { ASPECT_FOLLOWS_IMAGE, END_IMAGE_PARAM, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, avatarAudioSeconds, avatarScriptProblem, effectPhotos, isAvatarModel } from "@/lib/media/catalog-video";
 import { fetchMixSources } from "../audio/mix-api";
 import { avatarHiddenParams, avatarRequest, avatarSpeeches, type SpeechSource } from "./avatar";
 
@@ -240,6 +240,12 @@ export function VideoTab({
         setError(`Avatar aytadigan matnni yozing (kamida ${HEYGEN_SCRIPT_MIN} ta belgi) yoki o‘z ovozingizni tanlang`);
         return;
       }
+      // The server's own refusal (a link, a script past a minute as spoken), the same function: shown before any request.
+      const problem = own ? null : avatarScriptProblem(sent[PROMPT_PARAM]);
+      if (problem) {
+        setError(problem);
+        return;
+      }
       void send(entry, sent, own ? `Avatar: ${(speeches ?? []).find((s) => s.id === own)?.title ?? "o‘z ovozi"}` : String(sent[PROMPT_PARAM]));
       return;
     }
@@ -395,7 +401,8 @@ export function VideoTab({
             onChange={selectModel}
             open={pickerOpen}
             onOpenChange={setPickerOpen}
-            priceOf={(m) => videoCardPrice(m, effective(m, state.raw), catalog.pricing)}
+            // The avatar's card shows the length its inputs buy (`avatarRequest`), as its button does.
+            priceOf={(m) => videoCardPrice(m, isAvatarModel(m.id) ? avatarRequest(m, flatImage(requestValues(m, state.raw)), speeches ?? []) : effective(m, state.raw), catalog.pricing)}
           />
           {avatar ? (
             <Card title="Avatar ovozi">
@@ -418,12 +425,27 @@ export function VideoTab({
                       ariaLabel="O‘z ovozingiz"
                       options={[
                         { value: "", label: "Yo‘q — matnni avatar o‘qiydi" },
-                        ...speeches.map((s) => ({ value: s.id, label: `${s.title} · ${Math.round(s.seconds ?? 0)} s` })),
+                        // The seconds it is priced at (rounded up, as the button), not a rounded-to-nearest copy.
+                        ...speeches.map((s) => ({ value: s.id, label: `${s.title} · ${avatarAudioSeconds(s.seconds ?? 0)} s` })),
                       ]}
                       value={ownAudio}
                       onChange={(v) => setParam(OWN_AUDIO_PARAM, v)}
                     />
                   )}
+                  {speeches !== null || speechError ? (
+                    // A speech made in «Ovoz» meanwhile (the list is also re-read whenever the Video tab is opened again).
+                    <button
+                      type="button"
+                      data-avatar-speech-refresh
+                      onClick={() => {
+                        setSpeechError(null);
+                        setSpeeches(null);
+                      }}
+                      className="text-accent-soft-foreground pointer-coarse:min-h-11 mt-1 min-h-9 text-[13.5px] font-semibold underline underline-offset-2"
+                    >
+                      Ro‘yxatni yangilash
+                    </button>
+                  ) : null}
                 </Field>
               </Row>
             </Card>
