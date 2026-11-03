@@ -6,9 +6,10 @@
  *
  * Client-safe: no server imports.
  */
-import { validate, type CatalogEntry } from "../studio-core";
+import { normalizeText, validate, type CatalogEntry } from "../studio-core";
 import { MEDIA_CATALOG, MEDIA_PURPOSES } from "./catalog";
-import { END_IMAGE_PARAM, SECOND_IMAGE_PARAM, STUDIO_VIDEO_PURPOSE, effectPhotos } from "./catalog-video";
+import { END_IMAGE_PARAM, HEYGEN_SCRIPT_MAX, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, STUDIO_VIDEO_PURPOSE, effectPhotos, isAvatarModel } from "./catalog-video";
+import { isGenerationId } from "./catalog-mix";
 import { studioEntryPrice, type MediaPricing } from "./studio-pricing";
 
 /** The model a Studio video form asks for: blank = the purpose default; anything else verbatim. */
@@ -53,6 +54,16 @@ export function studioVideoError(values: Readonly<Record<string, unknown>>): str
     const two = effectPhotos(values.effect) === 2;
     if (two && !has(SECOND_IMAGE_PARAM)) return "Bu effekt uchun ikkinchi suratni ham yuklang.";
     if (!two && has(SECOND_IMAGE_PARAM)) return "Bu effekt bitta surat bilan ishlaydi.";
+    return null;
+  }
+  // P9 HeyGen: the avatar speaks a script OR the user's own speech result — exactly one of the two.
+  if (isAvatarModel(entry.id)) {
+    const script = normalizeText(values.prompt, HEYGEN_SCRIPT_MAX);
+    const own = String(values[OWN_AUDIO_PARAM] ?? "").trim();
+    if (script && own) return "Matn yoki o‘z ovozingizdan bittasini tanlang.";
+    if (own) return isGenerationId(own.toLowerCase()) ? null : "Ovoz topilmadi — ro‘yxatdan qayta tanlang.";
+    if (!script) return "Avatar aytadigan matnni yozing yoki o‘z ovozingizni tanlang.";
+    if (script.length < HEYGEN_SCRIPT_MIN) return `Avatar matni kamida ${HEYGEN_SCRIPT_MIN} ta belgi bo‘lsin.`;
     return null;
   }
   // P4: the end frame is the last frame of an image → video clip: only together with the start image.

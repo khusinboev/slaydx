@@ -56,6 +56,10 @@ export const PROVIDERS = [
   // «Tekshirish» reads fal's own price list for our endpoints (free, authenticated) and the balance when the key may.
   // P4 (docs/studio/P4-SPEC.md): the Studio Video tab's Wan / Seedance / MiniMax clips go through the same key (async queue).
   { id: "fal", label: "fal.ai (rasm va video)", kinds: ["image", "video"], envKeys: ["FAL_KEY"], keyHint: "<key_id>:<key_secret>", implemented: true, testable: true },
+  // HeyGen (Studio P9, docs/studio/P9-HEYGEN.md): avatar videos in the Studio Video tab (lib/media/adapters/heygen.ts).
+  // No key = the model is not listed and the route refuses it before charging. «Tekshirish» reads `GET /v3/users/me`
+  // (the account and its API balance; nothing generated).
+  { id: "heygen", label: "HeyGen (avatar video)", kinds: ["video"], envKeys: ["HEYGEN_API_KEY"], keyHint: "HeyGen API kaliti (platform.heygen.com/api-keys)", implemented: true, testable: true },
 ] as const satisfies readonly ProviderDef[];
 
 export type ProviderId = (typeof PROVIDERS)[number]["id"];

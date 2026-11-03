@@ -1,4 +1,5 @@
 import { GROUNDING_USD, IMAGE_PRICES, OPENAI_IMAGE_USD_PER_MTOK, PRICING, TTS_PRICING } from "../../generation/llm-pricing";
+import { HEYGEN_USD_PER_SECOND } from "../../media/catalog-video";
 import type { ProviderId } from "./registry";
 import type { RouteId } from "./routes";
 
@@ -144,6 +145,14 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
     keyless: false,
     keyUrl: "https://app.klingai.com/global/dev/api-key",
   },
+  heygen: {
+    billing: "paid",
+    priceNote: `Oldindan to'lanadi (API balansi, kamida $5) · Avatar IV ≈ ${usd(HEYGEN_USD_PER_SECOND.avatar_iv)} / soniya, Avatar III ≈ ${usd(HEYGEN_USD_PER_SECOND.avatar_iii)} / soniya (Studio'dagi narx = tannarx × ustama)`,
+    role: "Studio «Video» bo'limidagi gapiruvchi avatar: avatar foydalanuvchi yozgan matnni (o'zbekcha ham) yoki uning «Ovoz» bo'limidagi tayyor ovozini gapiradi. Kalitsiz bu model foydalanuvchiga ko'rinmaydi.",
+    need: "optional",
+    keyless: false,
+    keyUrl: "https://platform.heygen.com/api-keys",
+  },
 };
 
 export type PurposeId = "text" | "image" | "stock" | "tts" | "stt" | "search" | "sources" | "video";
@@ -274,8 +283,8 @@ export const PURPOSES: readonly Purpose[] = [
     title: "Video yaratish",
     summary: "Matndan qisqa video (har soniya pullik, shuning uchun ataylab yoqiladi).",
     need: "optional",
-    minimum: "Google video (Gemini kaliti bilan) yetarli. Kling — ikkinchi variant.",
-    providers: ["veo", "kling"],
+    minimum: "Google video (Gemini kaliti bilan) yetarli. Kling — ikkinchi variant. HeyGen — Studio'dagi gapiruvchi avatar (ixtiyoriy).",
+    providers: ["veo", "kling", "heygen"],
     premium: [],
     requires: null,
     routes: [],

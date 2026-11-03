@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { ApiError, PriceChangedError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
@@ -8,7 +8,7 @@ import { formatSom } from "@/lib/format";
 import type { FormValues } from "@/lib/types";
 import type { ClientEntry } from "@/lib/studio-core";
 import { AutoTextarea } from "@/components/common/AutoTextarea";
-import { Card, Row, Segmented } from "@/components/forms/compact";
+import { Card, Row, Segmented, SelectField } from "@/components/forms/compact";
 import { Counter, Field } from "@/components/forms/shared";
 import { PhotoField } from "@/components/forms/PhotoField";
 import { photoHint } from "@/lib/photo-accept";
@@ -23,7 +23,9 @@ import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, prom
 import type { StudioJob } from "../StudioResults";
 import { VideoResults } from "./VideoResults";
 import { STUDIO_VIDEO_SLUG, STUDIO_VIDEO_TOOL_ID, clipSeconds, isEffect, studioVideoClientPrice, videoCardPrice } from "./video-price";
-import { ASPECT_FOLLOWS_IMAGE, END_IMAGE_PARAM, SECOND_IMAGE_PARAM, effectPhotos } from "@/lib/media/catalog-video";
+import { ASPECT_FOLLOWS_IMAGE, END_IMAGE_PARAM, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, effectPhotos, isAvatarModel } from "@/lib/media/catalog-video";
+import { fetchMixSources } from "../audio/mix-api";
+import { avatarHiddenParams, avatarRequest, avatarSpeeches, type SpeechSource } from "./avatar";
 
 /** «Shablon effektlar» (one photo → a ready clip) or «Matndan / rasmdan» (a model + a prompt, optional start image). */
 export type VideoMode = "effects" | "text";
@@ -147,6 +149,21 @@ export function VideoTab({
   const options = effectOptions(split.effects);
   const effect = options.find((o) => o.value === state.effect) ?? options[0] ?? null;
   const model = textEntry(split.models, catalog, state.chosen);
+  // P9 HeyGen: the user's finished speech results, loaded once the avatar model is on screen (`null` = not loaded yet).
+  const avatar = mode === "text" && model !== null && isAvatarModel(model.id);
+  const [speeches, setSpeeches] = useState<SpeechSource[] | null>(null);
+  const [speechError, setSpeechError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!avatar || speeches !== null) return;
+    let live = true;
+    fetchMixSources().then(
+      (s) => live && setSpeeches(avatarSpeeches(s.speech)),
+      (e: unknown) => live && setSpeechError(e instanceof Error ? e.message : "Ovozlar yuklanmadi"),
+    );
+    return () => {
+      live = false;
+    };
+  }, [avatar, speeches]);
 
   // What goes out and what it costs, for the side on screen.
   let entry: ClientEntry | null = null;
@@ -160,7 +177,8 @@ export function VideoTab({
     what = `«${effect.label}»`;
   } else if (mode === "text" && model) {
     entry = model;
-    sent = flatImage(requestValues(model, state.raw));
+    // P9 HeyGen: the length (and so the price) follows the script / the own speech, exactly as the server computes it.
+    sent = avatarRequest(model, flatImage(requestValues(model, state.raw)), speeches ?? []);
     const secs = clipSeconds(model, sent);
     what = secs ? `${secs} soniya` : model.label;
   }
@@ -212,6 +230,19 @@ export function VideoTab({
       void send(entry, sent, `Effekt: ${effect?.label ?? ""}`);
       return;
     }
+    if (isAvatarModel(entry.id)) {
+      const own = String(sent[OWN_AUDIO_PARAM] ?? "");
+      if (own && !(speeches ?? []).some((s) => s.id === own)) {
+        setError("Tanlangan ovoz topilmadi — ro‘yxatdan qayta tanlang");
+        return;
+      }
+      if (!own && String(sent[PROMPT_PARAM] ?? "").length < HEYGEN_SCRIPT_MIN) {
+        setError(`Avatar aytadigan matnni yozing (kamida ${HEYGEN_SCRIPT_MIN} ta belgi) yoki o‘z ovozingizni tanlang`);
+        return;
+      }
+      void send(entry, sent, own ? `Avatar: ${(speeches ?? []).find((s) => s.id === own)?.title ?? "o‘z ovozi"}` : String(sent[PROMPT_PARAM]));
+      return;
+    }
     if (normalizedPrompt(entry, state.raw).length < promptMin(entry)) {
       setError("Videoda nima bo‘lishini yozing (kamida 5 ta belgi)");
       return;
@@ -257,7 +288,11 @@ export function VideoTab({
   const startImage = String(state.raw[IMAGE_PARAM] ?? "");
   // P4 review N3: with a start image, Kling 3.0 / the fal models take the frame's proportions — no «O'lcham» row then.
   const aspectHidden = Boolean(startImage) && Boolean(textModel && ASPECT_FOLLOWS_IMAGE.has(textModel.id));
-  const formEntry = textModel ? { ...textModel, params: textModel.params.filter((p) => p.type !== "image" && !(aspectHidden && p.name === "aspect")) } : null;
+  const ownAudio = avatar ? String(state.raw[OWN_AUDIO_PARAM] ?? "") : "";
+  const avatarHidden = avatar ? avatarHiddenParams(Boolean(ownAudio)) : null;
+  const formEntry = textModel
+    ? { ...textModel, params: textModel.params.filter((p) => p.type !== "image" && !(aspectHidden && p.name === "aspect") && !avatarHidden?.has(p.name)) }
+    : null;
   const hasStart = textModel?.params.some((p) => p.name === IMAGE_PARAM) ?? false;
   // P4: models that take a last frame (Kling 3.0, the fal models) show its upload next to the start image.
   const hasEnd = textModel?.params.some((p) => p.name === END_PARAM) ?? false;
@@ -344,7 +379,14 @@ export function VideoTab({
               Rasmdan video: rasmingiz birinchi kadr bo‘ladi. Faqat suratdan video yarata oladigan modellar ko‘rsatilgan.
             </p>
           ) : null}
-          <VideoPromptBox value={String(state.raw[PROMPT_PARAM] ?? "")} onChange={(v) => setParam(PROMPT_PARAM, v)} limit={promptLimit(textModel)} />
+          {avatar && ownAudio ? null : (
+            <VideoPromptBox
+              value={String(state.raw[PROMPT_PARAM] ?? "")}
+              onChange={(v) => setParam(PROMPT_PARAM, v)}
+              limit={promptLimit(textModel)}
+              {...(avatar ? { label: "Avatar nima desin?", placeholder: "Masalan: Assalomu alaykum! Bugun sizga yangi kursimiz haqida gapirib beraman." } : {})}
+            />
+          )}
           <MediaModelPicker
             purpose={STUDIO_VIDEO_PURPOSE}
             catalog={{ ...catalog, models: split.models }}
@@ -355,6 +397,37 @@ export function VideoTab({
             onOpenChange={setPickerOpen}
             priceOf={(m) => videoCardPrice(m, effective(m, state.raw), catalog.pricing)}
           />
+          {avatar ? (
+            <Card title="Avatar ovozi">
+              <Row label="O‘z ovozingiz" hint="Ixtiyoriy: «Ovoz» bo‘limidagi tayyor ovoz (1 daqiqagacha) — avatar matn o‘rniga shuni gapiradi" wide>
+                <Field id={OWN_AUDIO_PARAM}>
+                  {speechError ? (
+                    <p role="alert" className="text-destructive text-[13.5px]" data-avatar-speech-error>
+                      {speechError}
+                    </p>
+                  ) : speeches === null ? (
+                    <p className="text-muted-foreground text-[13.5px]" role="status" data-avatar-speech-loading>
+                      Ovozlar yuklanmoqda…
+                    </p>
+                  ) : speeches.length === 0 ? (
+                    <p className="text-muted-foreground text-[13.5px]" data-avatar-speech-empty>
+                      Hali tayyor ovoz yo‘q — avatar matnni o‘zi o‘qiydi. O‘z ovozingiz uchun avval «Ovoz» bo‘limida yarating.
+                    </p>
+                  ) : (
+                    <SelectField
+                      ariaLabel="O‘z ovozingiz"
+                      options={[
+                        { value: "", label: "Yo‘q — matnni avatar o‘qiydi" },
+                        ...speeches.map((s) => ({ value: s.id, label: `${s.title} · ${Math.round(s.seconds ?? 0)} s` })),
+                      ]}
+                      value={ownAudio}
+                      onChange={(v) => setParam(OWN_AUDIO_PARAM, v)}
+                    />
+                  )}
+                </Field>
+              </Row>
+            </Card>
+          ) : null}
           <ParamRows entry={formEntry} raw={state.raw} onChange={setParam} />
           {hasStart ? (
             <Card title={hasEnd ? "Kadrlar (ixtiyoriy)" : "Boshlang‘ich surat (ixtiyoriy)"}>
@@ -439,12 +512,25 @@ export function VideoTab({
 }
 
 /** The prompt card of the text form («Videoda nima bo'lsin?»): growing textarea + counter, `data-field="prompt"`. */
-function VideoPromptBox({ value, onChange, limit }: { value: string; onChange: (v: string) => void; limit: number }) {
+function VideoPromptBox({
+  value,
+  onChange,
+  limit,
+  label = "Videoda nima bo‘lsin?",
+  placeholder = "Masalan: Tong chog‘ida Registon maydoni, kamera sekin yaqinlashadi",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  limit: number;
+  /** P9 HeyGen: the avatar's script box says what it is. */
+  label?: string;
+  placeholder?: string;
+}) {
   const id = useId();
   return (
     <section aria-label="So‘rov" data-video-prompt className="bg-card mb-3 rounded-[20px] border p-3.5 shadow-[var(--shadow-card)]">
       <label htmlFor={id} className="text-muted-foreground mb-1.5 block text-[13px] font-semibold">
-        Videoda nima bo‘lsin?
+        {label}
       </label>
       <Field id={PROMPT_PARAM}>
         <AutoTextarea
@@ -454,7 +540,7 @@ function VideoPromptBox({ value, onChange, limit }: { value: string; onChange: (
           minRows={3}
           maxRows={10}
           maxLength={limit}
-          placeholder="Masalan: Tong chog‘ida Registon maydoni, kamera sekin yaqinlashadi"
+          placeholder={placeholder}
           className="placeholder:text-muted-foreground/70 w-full bg-transparent text-[16px] leading-relaxed outline-none"
         />
         <Counter len={value.length} limit={limit} />

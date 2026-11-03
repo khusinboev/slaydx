@@ -56,7 +56,8 @@ const jsonRes = (body: unknown, status = 200) => new Response(JSON.stringify(bod
 test("catalog: Sora 2 + Sora 2 Pro on fal-video; 4/8/12 s; 16:9 | 9:16; no end frame / sound row; one-tier Sora 2 has no resolution row", () => {
   assert.deepEqual(SORA_ENTRIES.map((e) => e.id), IDS);
   const allowed = MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed;
-  assert.deepEqual(allowed.slice(-3), [...IDS, "kling/effects"], "after the P4 fal models, before the effects");
+  // P9 HeyGen sits between Sora and the effects (tests/studio-video-heygen.test.mts).
+  assert.deepEqual(allowed.slice(-4), [...IDS, "heygen/avatar", "kling/effects"], "after the P4 fal models, before HeyGen and the effects");
   for (const id of IDS) {
     const e = entry(id);
     assert.equal(e.kind, "video");
