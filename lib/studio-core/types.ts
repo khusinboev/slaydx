@@ -16,7 +16,8 @@ export type Capability =
   | "tts" | "dialogue" | "clone" | "voice-design" | "music" | "sfx" | "stt" | "voice-changer" | "isolate";
 
 /** A provider's output: bytes it returned inline, or a URL the host downloads (never shown to users as is). */
-export type MediaOutput = { kind: "inline"; bytes: Uint8Array; mime: string } | { kind: "url"; url: string; mime?: string };
+/** `text` (inline only): a companion text the provider returned with the file, e.g. the lyrics of a Lyria song (P9). */
+export type MediaOutput = { kind: "inline"; bytes: Uint8Array; mime: string; text?: string } | { kind: "url"; url: string; mime?: string };
 
 /**
  * Why a provider call failed, in the terms the router and the host act on.

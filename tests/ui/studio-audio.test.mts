@@ -37,7 +37,8 @@ const { studioAudioPrice } = await import("../../lib/media/studio-audio.ts");
  *   6. voice list shows clones still being made (`status` filter dropped)         -> «voice changer»;
  *   7. the viewer's variant list needs > 3 variants (`length > 3`)                -> «result page»;
  *   8. P9 picker: switching model resets the raw values (prompt lost)            -> «P9 model picker»;
- *   9. P9 picker drawn for a one-model mode (`entries.length > 0`)               -> «P9 model picker».
+ *   9. P9 picker drawn for a one-model mode (`entries.length > 0`)               -> «P9 model picker»;
+ *  10. the viewer drops `studioAudio.lyrics`                                     -> «result page: a Lyria song».
  */
 
 Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
@@ -273,6 +274,17 @@ test("result page: the audio viewer plays the file, names the mode, lists every 
   assert.match(txt("[data-audio-details]"), /Ovoz effekti.*door creaks open/);
   assert.deepEqual(qa("[data-audio-variant] audio").map((a) => a.getAttribute("src")), variants.map((v) => `/api/generations/g1/assets/${v.assetId}`));
   assert.equal(qa("[data-variant-download]").length, 3);
+  assert.ok(!q("[data-audio-lyrics]"), "no lyrics block without lyrics");
+});
+
+test("result page: a Lyria song shows its lyrics, line breaks kept (P9)", async () => {
+  const { AudioViewer } = await import("../../components/viewers/AudioViewer.tsx");
+  const lyrics = "[Verse]\nTongda Registon\nOltin nurlar";
+  const doc = { meta: { topic: "Qo'shiq" }, titlePage: false, toc: false, sections: [], studioAudio: { mode: "music", model: "google/lyria-3", seconds: 150, prompt: "uzbek pop", inputSeconds: null, voices: [], clone: false, variants: [], lyrics } };
+  render(h(AudioViewer, { doc: doc as never, gen: { id: "g2" } }));
+  assert.ok(q("[data-audio-lyrics]"), "MUTATSIYA 10: the lyrics block");
+  assert.match(txt("[data-audio-lyrics]"), /Qo‘shiq matni.*Tongda Registon.*Oltin nurlar/);
+  assert.match(q("[data-audio-lyrics] p:last-child")!.className, /whitespace-pre-line/);
 });
 
 test("voice changer: the ElevenLabs library + ready own clones; the pick goes out as `voice`", async () => {

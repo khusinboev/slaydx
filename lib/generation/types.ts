@@ -680,6 +680,8 @@ export type StudioAudioDoc = {
    * also the result file). Empty for a single clip.
    */
   variants: { assetId: string; seconds: number }[];
+  /** P9 Lyria: the song's lyrics as the provider wrote them; absent / `null` for an instrumental and older results. */
+  lyrics?: string | null;
 };
 
 export type BuiltFile = {

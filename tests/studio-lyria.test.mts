@@ -23,7 +23,8 @@ import assert from "node:assert/strict";
  *   5. song priced at the clip rate                                    -> «prices», «probe»;
  *   6. the engine runs Lyria without the «Turi» upstream swap          -> «golden»;
  *   7. a 403 «not allowed» mapped to safety                            -> «answer»;
- *   8. the byte cap checked after reading the body                     -> «answer».
+ *   8. the byte cap checked after reading the body                     -> «answer»;
+ *   9. the engine ignores the output's `text` (no lyrics on the doc)   -> «lyrics».
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -32,7 +33,7 @@ const { MEDIA_CATALOG, MEDIA_PURPOSES } = await import("../lib/media/catalog.ts"
 const au = await import("../lib/media/catalog-audio.ts");
 const rules = await import("../lib/media/studio-audio.ts");
 const { studioAudioAdapters } = await import("../lib/media/adapters/audio-studio.ts");
-const { LYRIA_ADAPTER_ID, LYRIA_INSTRUMENTAL, LYRIA_URL, lyriaAdapter, lyriaOutput } = await import("../lib/media/adapters/lyria.ts");
+const { LYRIA_ADAPTER_ID, LYRIA_INSTRUMENTAL, LYRIA_URL, LYRICS_MAX_CHARS, lyriaAdapter, lyriaOutput, lyricsOf } = await import("../lib/media/adapters/lyria.ts");
 const { buildStudioAudio } = await import("../lib/generation/studio/audio.ts");
 const { runMedia } = await import("../lib/server/media/run.ts");
 const core = await import("../lib/studio-core/index.ts");
@@ -146,6 +147,17 @@ test("golden: the real engine sends ONE Interactions call — key in the header 
   assert.equal(clip.built.doc!.studioAudio!.mode, "music");
   assert.equal(clip.built.doc!.studioAudio!.model, LYRIA);
   assert.ok(clip.built.doc!.studioAudio!.seconds > 0);
+  // «<instrumental>» is no lyrics: nothing stored.
+  assert.equal(clip.built.doc!.studioAudio!.lyrics, undefined);
+});
+
+test("lyrics: a song's text block is kept on the result (instrumental placeholder dropped, capped)", async () => {
+  const words = "[Verse 1]\r\nTongda Registon,\r\noltin nurlar\n\n[Chorus]\nSamarqand!";
+  const sung = await build({ ...BASE, length: "song" }, () => answer([{ type: "text", text: words }, audioBlock()]));
+  assert.equal(sung.built.doc!.studioAudio!.lyrics, "[Verse 1]\nTongda Registon,\noltin nurlar\n\n[Chorus]\nSamarqand!", "MUTATSIYA 9: lyrics reach the doc");
+  assert.equal(lyricsOf("<instrumental>"), null);
+  assert.equal(lyricsOf("   "), null);
+  assert.equal(lyricsOf("x".repeat(LYRICS_MAX_CHARS + 50))!.length, LYRICS_MAX_CHARS);
 });
 
 test("answer: audio block → MP3; no audio / not MP3 → failure; HTTP errors mapped; key scrubbed", async (t) => {
