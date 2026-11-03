@@ -61,6 +61,9 @@ const MATRIX: Record<string, Row> = {
   "studio-audio": { format: "mp3", on: ["native"], off: ["native"] },
   // P8c «Montaj»: the MP3 (or MP4) itself, nothing derived.
   "studio-mix": { format: "mp3", on: ["native"], off: ["native"] },
+  // Studio P10 «Transkripsiya»: the transcript TXT (or the subtitled MP4), then its SRT / VTT; «Dublyaj»: the file only.
+  "studio-transcribe": { format: "txt", on: ["native", "subtitles-srt", "subtitles-vtt"], off: ["native", "subtitles-srt", "subtitles-vtt"] },
+  "studio-dub": { format: "mp4", on: ["native"], off: ["native"] },
   podcast: { format: "mp3", on: ["native", "transcript-txt"], off: ["native", "transcript-txt"] },
   greeting: { format: "mp3", on: ["native", "transcript-txt"], off: ["native", "transcript-txt"] },
   // Program-17 item 5: the MP4 is the only file; nothing is derived from it, with or without LibreOffice.
@@ -201,7 +204,7 @@ test("isDownloadFormatId accepts exactly the registry ids", () => {
   }
   assert.deepEqual(
     [...DOWNLOAD_FORMAT_IDS].sort(),
-    ["glossary-csv", "jpg", "native", "pdf", "results-csv", "slides-png", "transcript-txt"],
+    ["glossary-csv", "jpg", "native", "pdf", "results-csv", "slides-png", "subtitles-srt", "subtitles-vtt", "transcript-txt"],
   );
 });
 
@@ -228,6 +231,13 @@ test("labels and extensions of derived formats", () => {
   assert.equal(all.get("results-csv")!.ext, "csv");
   assert.equal(all.get("slides-png")!.cost, "convert");
   assert.equal(all.get("transcript-txt")!.cost, "instant");
+  // P10: subtitles are cheap serializations of the stored cues.
+  assert.equal(all.get("subtitles-srt")!.ext, "srt");
+  assert.equal(all.get("subtitles-vtt")!.ext, "vtt");
+  assert.equal(all.get("subtitles-vtt")!.cost, "instant");
+  // A subtitled MP4 keeps both subtitle rows; no other tool gets them.
+  assert.deepEqual(ids({ type: "studio-transcribe", format: "mp4" }), ["native", "subtitles-srt", "subtitles-vtt"]);
+  assert.deepEqual(ids({ type: "studio-dub", format: "mp3" }), ["native"]);
 });
 
 test("defaultShareFormat is the stored file, also for the resume", () => {

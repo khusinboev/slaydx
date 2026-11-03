@@ -59,6 +59,10 @@ const FIXED: Partial<Record<ToolId, number>> = {
   "studio-audio": 360_000,
   // Studio «Montaj» (P8c): one ffmpeg run (hard timeout 120 s) + reading / writing ≤ 25 MB files.
   "studio-mix": 180_000,
+  // Studio P10: one Speech-to-Text call on ≤ 10 min (≤ ~60 s) + an optional burn (ffmpeg ≤ 240 s) + ≤ 25 MB I/O.
+  "studio-transcribe": 360_000,
+  // Studio P10: the dub renders at ElevenLabs while the worker polls (≤ 3 min of source) — the cap is the job timeout (660 s).
+  "studio-dub": 600_000,
   /*
    * Rezyume 2: prompt kattalashdi (tuzilmali faktlar JSON, 18 til uchun
    * yorliqlar, boyitish qoidalari) va qisqa summary da BIR marta STRICT

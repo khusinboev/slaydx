@@ -31,7 +31,7 @@ export function AudioViewer({ doc, gen }: { doc: AcademicDoc; gen: { id: string;
   // Studio «Audio» (P6) results carry `doc.studioAudio`: the same player for the result file, its details below.
   const audio: { seconds?: number; script: { speaker: string; text: string }[] } | undefined =
     doc.audio ??
-    (doc.speech ? { seconds: doc.speech.seconds, script: doc.speech.lines } : doc.studioAudio ? { seconds: doc.studioAudio.seconds, script: [] } : doc.mix ? { seconds: doc.mix.seconds, script: [] } : undefined);
+    (doc.speech ? { seconds: doc.speech.seconds, script: doc.speech.lines } : doc.studioAudio ? { seconds: doc.studioAudio.seconds, script: [] } : doc.mix ? { seconds: doc.mix.seconds, script: [] } : doc.dub ? { seconds: doc.dub.seconds, script: [] } : undefined);
   // Bearer-mode webviews get the bytes through a `blob:` URL (docs/auth/COOKIELESS.md); unchanged otherwise.
   const src = useApiSrc(`/api/generations/${gen.id}/file?inline=1`);
   const script = audio?.script ?? [];

@@ -12,8 +12,13 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-/** Hard cap on one ffmpeg run (P8-SPEC: ≤ 120 s). */
+/** Hard cap on one ffmpeg run (P8-SPEC: ≤ 120 s) — the default of every run. */
 export const MIX_FFMPEG_TIMEOUT_MS = 120_000;
+/**
+ * The longest a caller may ask for (P10 subtitle burn re-encodes the picture: ≤ 3 min of H.264 `veryfast` on 2 threads).
+ * A «Montaj» run passes no `timeoutMs` and keeps the 120 s.
+ */
+export const FFMPEG_TIMEOUT_CEILING_MS = 300_000;
 
 export class FfmpegMissingError extends Error {
   constructor() {
@@ -43,7 +48,7 @@ export type FfmpegRun = {
   bin?: string;
 };
 
-const NAME_RE = /^[a-z0-9-]+\.(mp4|mp3)$/;
+const NAME_RE = /^[a-z0-9-]+\.(mp4|mp3|srt)$/;
 
 /** Runs ffmpeg in a fresh temp dir and returns the output bytes. Throws `FfmpegMissingError` / `FfmpegFailedError`. */
 export async function runFfmpeg(run: FfmpegRun): Promise<Uint8Array> {
@@ -51,7 +56,7 @@ export async function runFfmpeg(run: FfmpegRun): Promise<Uint8Array> {
   const dir = await mkdtemp(path.join(tmpdir(), "slaydx-mix-"));
   try {
     for (const [name, bytes] of Object.entries(run.inputs)) await writeFile(path.join(dir, name), bytes);
-    await exec(run.bin ?? "ffmpeg", run.args, dir, Math.min(run.timeoutMs ?? MIX_FFMPEG_TIMEOUT_MS, MIX_FFMPEG_TIMEOUT_MS));
+    await exec(run.bin ?? "ffmpeg", run.args, dir, Math.min(run.timeoutMs ?? MIX_FFMPEG_TIMEOUT_MS, FFMPEG_TIMEOUT_CEILING_MS));
     return new Uint8Array(await readFile(path.join(dir, run.output)));
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);

@@ -24,6 +24,7 @@ const TranslationViewer = retryableLazy(() => import("./TranslationViewer").then
 const ImageViewer = retryableLazy(() => import("./ImageViewer").then((m) => ({ default: m.ImageViewer })));
 const VideoViewer = retryableLazy(() => import("./VideoViewer").then((m) => ({ default: m.VideoViewer })));
 const AudioViewer = retryableLazy(() => import("./AudioViewer").then((m) => ({ default: m.AudioViewer })));
+const TranscriptViewer = retryableLazy(() => import("./TranscriptViewer").then((m) => ({ default: m.TranscriptViewer })));
 
 
 export function ArtifactViewer({
@@ -152,7 +153,14 @@ function viewerFor({
        */
       return (
         <div className="flex min-h-0 flex-1 flex-col">
-          {doc.mix?.output === "mp4" ? <VideoViewer doc={doc} gen={{ id: gen.id }} /> : <AudioViewer doc={doc} gen={{ id: gen.id, fileName: gen.fileName }} />}
+          {/* Studio P10: a transcript (+ its subtitled clip); a dubbed MP4 is a video, a dubbed MP3 plays as audio. */}
+          {doc.transcribe ? (
+            <TranscriptViewer doc={doc} gen={{ id: gen.id }} />
+          ) : doc.mix?.output === "mp4" || doc.dub?.output === "mp4" ? (
+            <VideoViewer doc={doc} gen={{ id: gen.id }} />
+          ) : (
+            <AudioViewer doc={doc} gen={{ id: gen.id, fileName: gen.fileName }} />
+          )}
         </div>
       );
     case "image":

@@ -239,8 +239,8 @@ the provider's docs/console before that phase (language lists and prices change)
 | Voice isolator | clean noisy recordings | ✓ P6 |
 | Sound effects (≤30 s, 4 variants) | SFX / ambience for videos | ✓ P6 |
 | Music (Eleven Music) | songs, jingles, background tracks | ✓ P6 |
-| Speech to Text (Scribe v2) — **Uzbek: verify** | transcripts, subtitles | ✓ P10 |
-| Dubbing (90+ languages) — **Uzbek: verify** | translate + re-voice a video | ✓ P10 |
+| Speech to Text (Scribe v2) — Uzbek ✓ (`P10-SPEC.md`) | transcripts, subtitles | ✓ P10 |
+| Dubbing (90+ languages) — Uzbek ✓ (`P10-SPEC.md`) | translate + re-voice a video | ✓ P10 |
 | Agents (conversational) | out of Studio scope | — |
 
 ### Google (direct)

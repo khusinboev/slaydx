@@ -20,6 +20,8 @@ import { STUDIO_SPEECH_PURPOSE } from "../media/catalog-speech";
 import { speechTextParam, studioSpeechPrice } from "../media/studio-speech";
 import { AUDIO_MODEL_IDS, LYRIA_MODEL, MUSIC_MODEL, SFX_MODEL } from "../media/catalog-audio";
 import { studioAudioPrice } from "../media/studio-audio";
+import { DUB_MODEL, SPEECH_TOOL_MODEL_IDS, TRANSCRIBE_MODEL } from "../media/catalog-transcribe";
+import { studioDubPrice, studioTranscribePrice } from "../media/studio-transcribe";
 
 /**
  * Admin «Narxlar» → «Media modellari» (docs/studio/P1-SPEC.md «Admin»): per Studio model the provider cost of ONE unit
@@ -45,13 +47,18 @@ export function managedModelIds(): string[] {
       ...MEDIA_PURPOSES.byId(STUDIO_SPEECH_PURPOSE)!.allowed,
       // P6: + the «Audio» tab's models (P9: «Musiqa» has two).
       ...AUDIO_MODEL_IDS,
+      // P10: «Transkripsiya» / «Dublyaj» (per minute of the source).
+      ...SPEECH_TOOL_MODEL_IDS,
     ]),
   ];
 }
 
 /** What one priced unit of a model is: a picture, a utility job (P2b upscale / background removal), a default-length clip, an effect clip. */
-function unitOf(id: string): { label: string; values: Record<string, unknown>; video: boolean; speech?: boolean; audio?: boolean } {
+function unitOf(id: string): { label: string; values: Record<string, unknown>; video: boolean; speech?: boolean; audio?: boolean; p10?: "studio-transcribe" | "studio-dub" } {
   const entry = MEDIA_CATALOG.byId(id)!;
+  // P10: one minute of the source.
+  if (id === TRANSCRIBE_MODEL) return { label: "1 daqiqa", values: { sourceSeconds: 60 }, video: false, p10: "studio-transcribe" };
+  if (id === DUB_MODEL) return { label: "1 daqiqa", values: { sourceSeconds: 60 }, video: false, p10: "studio-dub" };
   // P6 «Audio»: a minute of music / of input audio, 10 s of a sound effect (one variant).
   if (AUDIO_MODEL_IDS.includes(id)) {
     if (id === MUSIC_MODEL) return { label: "1 daqiqa", values: { modelId: id, length: "60" }, video: false, audio: true };
@@ -106,7 +113,16 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function mediaModelsOverview(): Promise<MediaModelsOverview> {
   await ensureProviderKeys();
-  const [pricing, overrides, adj, videoAdj, speechAdj, audioAdj] = await Promise.all([mediaPricing(), readOverrides(), getToolPricing("studio-image"), getToolPricing("studio-video"), getToolPricing("studio-speech"), getToolPricing("studio-audio")]);
+  const [pricing, overrides, adj, videoAdj, speechAdj, audioAdj, transcribeAdj, dubAdj] = await Promise.all([
+    mediaPricing(),
+    readOverrides(),
+    getToolPricing("studio-image"),
+    getToolPricing("studio-video"),
+    getToolPricing("studio-speech"),
+    getToolPricing("studio-audio"),
+    getToolPricing("studio-transcribe"),
+    getToolPricing("studio-dub"),
+  ]);
   const models = managedModelIds().map((id): MediaModelItem => {
     const entry = MEDIA_CATALOG.byId(id)!;
     const unit = unitOf(id);
@@ -115,8 +131,8 @@ export async function mediaModelsOverview(): Promise<MediaModelsOverview> {
     const usd = costUsd(liveCostRule(entry.cost, pricing.costUsd?.[id]), normalize(entry.params, one));
     const costSoum = round2(usd * pricing.soumPerUsd);
     // The SAME functions the server charges with (the Rasm tab's / the Video tab's).
-    const priceBase = unit.audio ? studioAudioPrice(one, pricing)! : unit.speech ? studioSpeechPrice(one, pricing)! : unit.video ? studioVideoPrice(one, pricing)! : studioImagePrice(one, pricing)!;
-    const price = applyPriceAdjust(priceBase, unit.audio ? audioAdj : unit.speech ? speechAdj : unit.video ? videoAdj : adj);
+    const priceBase = unit.p10 === "studio-transcribe" ? studioTranscribePrice(one, pricing) : unit.p10 === "studio-dub" ? studioDubPrice(one, pricing) : unit.audio ? studioAudioPrice(one, pricing)! : unit.speech ? studioSpeechPrice(one, pricing)! : unit.video ? studioVideoPrice(one, pricing)! : studioImagePrice(one, pricing)!;
+    const price = applyPriceAdjust(priceBase, unit.p10 === "studio-transcribe" ? transcribeAdj : unit.p10 === "studio-dub" ? dubAdj : unit.audio ? audioAdj : unit.speech ? speechAdj : unit.video ? videoAdj : adj);
     const o = overrides.get(id);
     return {
       modelId: id,

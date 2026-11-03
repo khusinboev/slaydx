@@ -185,8 +185,13 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # image never runs it. Alpine's `ffmpeg` package brings `ffmpeg` + `ffprobe`
 # with the AAC and libmp3lame encoders. A stable layer: before the COPYs.
 # The build fails here (not every job at runtime) if a future package drops an encoder.
+# Studio P10 (docs/studio/P10-SPEC.md) burns subtitles into a clip: it also needs
+# the H.264 encoder (libx264), the libass `subtitles` filter, and the Noto Sans
+# font from `os-base` (Uzbek Latin oʻ / gʻ and Cyrillic) that the filter names.
 RUN apk add --no-cache ffmpeg && ffmpeg -hide_banner -encoders > /tmp/enc.txt \
-    && grep -q libmp3lame /tmp/enc.txt && grep -q ' aac ' /tmp/enc.txt && rm /tmp/enc.txt
+    && grep -q libmp3lame /tmp/enc.txt && grep -q ' aac ' /tmp/enc.txt && grep -q libx264 /tmp/enc.txt \
+    && ffmpeg -hide_banner -filters > /tmp/flt.txt && grep -q ' subtitles ' /tmp/flt.txt \
+    && fc-list | grep -q 'Noto Sans' && rm /tmp/enc.txt /tmp/flt.txt
 
 # The user exists BEFORE the files, which are copied with `COPY --chown`.
 # Before: a final `chown -R worker:nodejs /app` layer rewrote every file of

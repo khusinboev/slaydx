@@ -276,6 +276,11 @@ test("kalitsiz xizmat sotilmaydi", async () => {
   assert.equal(toolBlockedReason(TOOL_BY_ID["studio-audio"], { ...noLlm, ttsPremium: true }), null, "Studio audio matn kalitiga bog'liq emas (ElevenLabs bor)");
   assert.ok(toolBlockedReason(TOOL_BY_ID["studio-audio"], { ...all, studioAudioModels: [] }), "no Studio audio model -> blocked");
   assert.equal(toolBlockedReason(TOOL_BY_ID["studio-audio"], { ...noLlm, studioAudioModels: ["elevenlabs/sfx"] }), null);
+  // Studio P10 «Transkripsiya» / «Dublyaj»: their own list decides (the switch off = empty = blocked; one tool on only).
+  assert.equal(toolBlockedReason(TOOL_BY_ID["studio-transcribe"], { ...noLlm, studioSpeechToolModels: ["elevenlabs/scribe-v2"] }), null);
+  assert.ok(toolBlockedReason(TOOL_BY_ID["studio-dub"], { ...all, studioSpeechToolModels: ["elevenlabs/scribe-v2"] }), "dub off while transcribe is on -> blocked");
+  assert.ok(toolBlockedReason(TOOL_BY_ID["studio-transcribe"], { ...all, studioSpeechToolModels: [] }), "both off -> blocked");
+  assert.equal(toolBlockedReason(TOOL_BY_ID["studio-dub"], { ...noLlm, ttsPremium: true }), null, "an older server: the ElevenLabs flag");
   // Studio «Montaj» (P8c): ffmpeg in the worker — no provider key decides it, nothing configured still sells it.
   assert.equal(toolBlockedReason(TOOL_BY_ID["studio-mix"], noLlm), null, "Montaj matn kalitiga bog'liq emas");
   // Studio video (P3): no text model in the path; its own model list decides (empty = blocked, e.g. `video.enabled` off).

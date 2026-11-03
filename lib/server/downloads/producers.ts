@@ -17,6 +17,7 @@ import { derivedSize, getOrConvertPdf, getOrDerive, touchDerived, type DerivedDi
 import { Gate } from "../soffice-gate";
 import { pdftoppmBin } from "../thumb";
 import { DownloadError, isDownloadError } from "./errors";
+import { toSrt, toVtt } from "@/lib/generation/studio/subtitles";
 
 const run = promisify(execFile);
 
@@ -363,6 +364,27 @@ export const PRODUCERS: Readonly<Record<DownloadFormatId, ProducerSpec>> = {
       const { meta, deps } = ctx;
       const csv = await resultsCsv((deps.results ?? iterateAllResultRows)(meta.id, meta.userId));
       return Buffer.from(csv, "utf8");
+    },
+  },
+
+  // Studio P10: the transcript's own cues (`doc.transcribe.cues`) — the same ones the viewer shows and the burn used.
+  "subtitles-srt": {
+    kind: "instant",
+    fileName: (meta) => `${baseName(meta.fileName)}.srt`,
+    async produce(ctx) {
+      const cues = ctx.meta.doc?.transcribe?.cues ?? [];
+      if (!cues.length) throw new DownloadError("empty");
+      return Buffer.from(toSrt(cues), "utf8");
+    },
+  },
+
+  "subtitles-vtt": {
+    kind: "instant",
+    fileName: (meta) => `${baseName(meta.fileName)}.vtt`,
+    async produce(ctx) {
+      const cues = ctx.meta.doc?.transcribe?.cues ?? [];
+      if (!cues.length) throw new DownloadError("empty");
+      return Buffer.from(toVtt(cues), "utf8");
     },
   },
 };
