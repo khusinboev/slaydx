@@ -18,7 +18,10 @@ import { TextInput } from "./fields";
 import { VoicePicker } from "./VoicePicker";
 import { ToolChrome } from "./ToolChrome";
 import { useFormDraft } from "./useFormDraft";
-import { runGeneration } from "./runGeneration";
+import { queueToolGeneration, runGeneration } from "./runGeneration";
+
+/** A job the composer queued while embedded in the Studio (P8b): what the host follows in its results list. */
+export type QueuedMediaJob = { id: string; price: number; title: string; values: FormValues };
 
 /**
  * MEDIA (Formalar 3 / AUDIT-24, WP-D2a) — podkast va tabriknoma
@@ -144,7 +147,12 @@ function toValues(ui: Ui, kind: AudioKind): FormValues {
   return out;
 }
 
-export function MediaComposer({ tool }: { tool: ToolConfig }) {
+/**
+ * `onQueued` (Studio P8b, docs/studio/P8-SPEC.md): the composer is a «Tayyor shablon» of the Studio «Ovoz» tab — no
+ * page header, and a queued job is handed to the Studio (its results list plays it, the result page stays one link
+ * away) instead of opening the result page. The request, the tool and the `priceFor` price are the same.
+ */
+export function MediaComposer({ tool, onQueued }: { tool: ToolConfig; onQueued?: (job: QueuedMediaJob) => void }) {
   const router = useRouter();
   const loggedIn = useAppStore((s) => s.loggedIn);
   // The premium voice is offered only when the server says its provider is enabled AND keyed.
@@ -226,8 +234,14 @@ export function MediaComposer({ tool }: { tool: ToolConfig }) {
     setLoading(true);
     flush();
     try {
-      const id = await runGeneration(tool, toValues(ui, kind));
-      router.push(`/uz/files/${id}`);
+      const sent = toValues(ui, kind);
+      if (onQueued) {
+        const { id, price: charged } = await queueToolGeneration(tool, sent, { repeat: true });
+        onQueued({ id, price: charged, title: String(sent.topic || sent.recipient || tool.title), values: sent });
+      } else {
+        const id = await runGeneration(tool, sent);
+        router.push(`/uz/files/${id}`);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Xatolik");
     } finally {
@@ -241,7 +255,7 @@ export function MediaComposer({ tool }: { tool: ToolConfig }) {
       : [occasionType.label.uz, ui.relation ? ui.relation : "", `${ui.durationMin} daqiqa`, ui.extra ? "qo‘shimcha talab bor" : ""];
 
   return (
-    <ToolChrome title={tool.pageTitle} submitLabel={tool.submitLabel} price={price} loading={loading} onSubmit={submit} error={error}>
+    <ToolChrome title={tool.pageTitle} submitLabel={tool.submitLabel} price={price} loading={loading} onSubmit={submit} error={error} embedded={Boolean(onQueued)}>
       <Card title={kind === "podcast" ? "Mavzu va rejim" : "Kimga va sabab"}>
         {kind === "podcast" ? (
           <>

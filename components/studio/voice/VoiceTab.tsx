@@ -85,6 +85,7 @@ export function VoiceTab({
   balance,
   typing,
   gated,
+  quietWhenNone = false,
 }: {
   catalogState: CatalogState;
   reload: (silent?: boolean) => void;
@@ -95,6 +96,11 @@ export function VoiceTab({
   balance: number | null;
   typing: boolean;
   gated: boolean;
+  /**
+   * P8b: the «Tayyor shablonlar» row is above (`studio.legacy_fold` on) — with no speech model listed
+   * (`studio.voice.enabled` off) the tab shows only that row, not the «hozircha mavjud emas» card.
+   */
+  quietWhenNone?: boolean;
 }) {
   const textId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -154,6 +160,7 @@ export function VoiceTab({
     );
   }
   if (!mode || !entry) {
+    if (quietWhenNone) return null;
     return (
       <p className="text-muted-foreground bg-card rounded-[20px] border p-5 text-[14.5px]" data-voice-none>
         Ovoz bo‘limi hozircha mavjud emas. Birozdan keyin qayta urinib ko‘ring.
