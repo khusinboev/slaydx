@@ -296,6 +296,13 @@ const T = {
     en: "Per friend: friends 1–{u1} — {a} bonus UZS, {u1p}–{u2} — {b} bonus UZS, from {u2p} on — {c} bonus UZS. Your next friend earns {n} bonus UZS. Counted when your friend opens the app for the first time.",
   },
   "ref.link": { uz: "Sizning havolangiz:", ru: "Ваша ссылка:", en: "Your link:" },
+  // Inviter's message right after an invited friend's account is created and the reward is credited (notifyReferral).
+  "ref.joinedDm": {
+    uz: "🎉 {name} sizning havolangiz orqali qo'shildi — sizga <b>+{n} bonus so'm</b>!",
+    ru: "🎉 {name} присоединился по вашей ссылке — вам <b>+{n} бонусных сум</b>!",
+    en: "🎉 {name} joined through your link — you get <b>+{n} bonus UZS</b>!",
+  },
+  "ref.joinedSomeone": { uz: "Do'stingiz", ru: "Ваш друг", en: "Your friend" },
   "ref.counts": {
     uz: "Taklif qilinganlar: <b>{a}</b> · Topilgan: <b>{b} bonus so'm</b>",
     ru: "Приглашено: <b>{a}</b> · Получено: <b>{b} бонусных сум</b>",
