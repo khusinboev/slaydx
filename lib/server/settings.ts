@@ -108,6 +108,7 @@ export type SettingValues = {
   "studio.clone_price": number;
   "studio.voice.enabled": boolean;
   "studio.audio.enabled": boolean;
+  "studio.legacy_fold": boolean;
 };
 
 export type SettingKey = keyof SettingValues;
@@ -752,6 +753,17 @@ const CATALOG: Catalog = {
     label: "Studio «Audio» bo‘limi yoqilgan",
     description:
       "Standart: O'CHIQ. Yoqilganda Studio'da «Audio» bo'limi (AI musiqa, ovoz effektlari, ovozni almashtirish, shovqindan tozalash — ElevenLabs) ishlaydi. O'chiq bo'lsa yangi ish qabul qilinmaydi, pul yechilmaydi.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => false,
+  },
+  // Studio P8 (docs/studio/P8-SPEC.md): the old Rasm / Video / Podkast / Tabriknoma pages open inside the Studio.
+  "studio.legacy_fold": {
+    key: "studio.legacy_fold",
+    group: MEDIA_GROUP,
+    label: "Eski media vositalari Studio ichida",
+    description:
+      "Standart: O'CHIQ. Yoqilganda «Rasm», «Video yaratish», «Podkast» va «Tabriknoma» sahifalari va tugmalari Studio ichidagi mos bo'limga olib boradi (narxlar o'zgarmaydi). O'chiq bo'lsa eski sahifalar avvalgidek ishlaydi.",
     type: "bool",
     validate: boolValidator,
     envDefault: () => false,

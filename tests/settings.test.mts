@@ -95,6 +95,7 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     // P6 «Audio» dark switch (docs/studio/P6-SPEC.md).
     "studio.voice.enabled",
     "studio.audio.enabled",
+    "studio.legacy_fold",
     "studio.clone_price",
   ]);
   for (const k of s.SETTING_KEYS) {
