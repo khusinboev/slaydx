@@ -328,8 +328,8 @@ test("PUT route: stored, audited with before/after and the reason, the snapshot 
   const route = r.body.route as Purpose["routes"][number];
   assert.equal(route.source, "db");
   assert.deepEqual(route.entries.map((e) => `${e.provider}:${e.model}`), ["anthropic:claude-sonnet-5", "gemini:gemini-3.7-flash"]);
-  assert.deepEqual(route.fallbackEntries.map((e) => `${e.provider}:${e.model}`), ["gemini:gemini-3.7-flash", "qwen:qwen3.7-plus", "deepseek:deepseek-flash"], "reset would restore the env value and its fallbacks");
-  assert.deepEqual(route.fallbackEntries[0], { provider: "gemini", model: "gemini-3.7-flash", label: "Google Gemini", usable: false });
+  assert.deepEqual((route.fallbackEntries as { provider: string; model: string }[]).map((e) => `${e.provider}:${e.model}`), ["gemini:gemini-3.7-flash", "qwen:qwen3.7-plus", "deepseek:deepseek-flash"], "reset would restore the env value and its fallbacks");
+  assert.deepEqual((route.fallbackEntries as unknown[])[0], { provider: "gemini", model: "gemini-3.7-flash", label: "Google Gemini", usable: false });
   assert.ok(route.updatedBy);
   assert.deepEqual((await storedRoute("llm.judge"))!.entries, JUDGE);
   assert.equal(effective.effectiveRoute("llm.judge").source, "db", "this process reloaded its snapshot at once");

@@ -1,6 +1,7 @@
 /**
  * Gemini orqali LLM chaqiruvlari (standart yo'l).
- * Kalit bo‘lmasa chaqiruv ketmaydi.
+ * Kalit bo‘lmasa chaqiruv ketmaydi. When Gemini fails, the direct calls walk on to the fallbacks of the text chain
+ * (`walkTextChain`, docs/ops/LLM-FALLBACK.md).
  */
 import { recordGrounding, recordLlmUsage } from "./job-cost";
 import { allowOrWait, breakerFor } from "./llm/breaker";
@@ -317,7 +318,7 @@ async function walkTextChain<T>(
     if (spec.provider === "gemini") {
       let timedOut = false;
       const hasFallback = i < specs.length - 1;
-      const res = await gemini(hasFallback || afterPrimary || spec.model !== llmModel() ? { model: spec.model, hasFallback, onTimeout: () => (timedOut = true) } : { onTimeout: () => (timedOut = true) });
+      const res = await gemini({ model: spec.model, hasFallback, onTimeout: () => (timedOut = true) });
       if (res) {
         if (afterPrimary) reportFallback({ role, provider: spec.provider, model: spec.model });
         return res;
@@ -397,7 +398,7 @@ async function runLlm(
    */
   const once = async (o: { system: string; maxTokens: number; retry?: boolean }): Promise<GroundedResult | null> =>
     opts.grounding
-      ? usableTextChain().some((s) => s.provider === "gemini")
+      ? llmProvider()
         ? gemini(o, {})
         : null
       : walkTextChain(role, opts.deadline, (step) => gemini(o, step), (specs, afterPrimary) => completeOthers(role, specs, afterPrimary, o.system, user, o.maxTokens, retryOpts(opts, o.retry), budget));

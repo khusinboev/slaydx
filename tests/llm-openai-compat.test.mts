@@ -30,6 +30,7 @@ import { modelOptions } from "../lib/server/providers/routes.ts";
 const KEY = "sk-test-secret-key-0123456789";
 const ENV = ["DASHSCOPE_API_KEY", "DEEPSEEK_API_KEY", "DASHSCOPE_BASE_URL"];
 const OPTS = { maxTokens: 5000, timeoutMs: 2_000 };
+const envOf = (e: Record<string, string>) => e as unknown as NodeJS.ProcessEnv;
 
 type Seen = { url: string; init: RequestInit; body: Record<string, unknown> };
 
@@ -59,7 +60,7 @@ const chunk = (delta: Record<string, unknown>, finish: string | null = null) => 
 
 function adapter(id: OpenAiCompatId, reply: () => Response | Promise<Response>) {
   const s = stub(reply);
-  return { ...s, a: makeOpenAiCompatAdapter(OPENAI_COMPAT_PRESETS[id], { fetchImpl: s.fetchImpl, env: {} }) };
+  return { ...s, a: makeOpenAiCompatAdapter(OPENAI_COMPAT_PRESETS[id], { fetchImpl: s.fetchImpl, env: envOf({}) }) };
 }
 
 beforeEach(() => {
@@ -110,6 +111,9 @@ test("JSON mode: response_format, the word JSON in the prompt, the schema as a h
   assert.match(system, /^SYS/);
   assert.match(system, /JSON/);
   assert.match(system, /"required":\["a"\]/);
+  const bare = adapter("qwen", () => answer('{"a":1}'));
+  await bare.a.complete("qwen3.7-plus", "SYS", "USR", { ...OPTS, json: true });
+  assert.match((bare.seen[0].body.messages as { content: string }[])[0].content, /JSON/, "both providers refuse JSON mode without the word, schema or not");
   const plain = adapter("deepseek", () => answer("x"));
   await plain.a.complete("deepseek-flash", "SYS", "USR", OPTS);
   assert.ok(!("response_format" in plain.seen[0].body));
@@ -297,10 +301,10 @@ test("no key: no request", async () => {
 
 test("base URL override: https only, trailing slash dropped", () => {
   const p = OPENAI_COMPAT_PRESETS.qwen;
-  assert.equal(presetBaseUrl(p, { DASHSCOPE_BASE_URL: "https://ws1.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/" }), "https://ws1.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1");
-  assert.equal(presetBaseUrl(p, { DASHSCOPE_BASE_URL: "http://evil.example/v1" }), p.baseUrl);
-  assert.equal(presetBaseUrl(p, {}), p.baseUrl);
-  assert.equal(presetBaseUrl(OPENAI_COMPAT_PRESETS.deepseek, { DASHSCOPE_BASE_URL: "https://x.example" }), OPENAI_COMPAT_PRESETS.deepseek.baseUrl);
+  assert.equal(presetBaseUrl(p, envOf({ DASHSCOPE_BASE_URL: "https://ws1.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/" })), "https://ws1.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1");
+  assert.equal(presetBaseUrl(p, envOf({ DASHSCOPE_BASE_URL: "http://evil.example/v1" })), p.baseUrl);
+  assert.equal(presetBaseUrl(p, envOf({})), p.baseUrl);
+  assert.equal(presetBaseUrl(OPENAI_COMPAT_PRESETS.deepseek, envOf({ DASHSCOPE_BASE_URL: "https://x.example" })), OPENAI_COMPAT_PRESETS.deepseek.baseUrl);
 });
 
 test("every preset is wired end to end: adapter, registry, catalog, price book, role spec", () => {

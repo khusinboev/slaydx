@@ -12,14 +12,9 @@
  * keyin ham yiqilsa — keyingisi). Har provayder `llm/{gemini,anthropic}.ts`
  * adapteri orqali chaqiriladi.
  *
- * ENV BERILMAGAN holat — bu BOSHQA VOSITALARGA (slayd, kurs ishi,
- * tarjimon) TA'SIR QILMASLIGI kerak bo'lgan chegara: ular `llm.ts`
- * `llmComplete`/`llmGrounded`ni TO'G'RIDAN-TO'G'RI chaqiradi va WP8 ULARGA
- * UMUMAN TEGMAGAN. `complete(role, …)` o'zi ham env yo'q bo'lsa xuddi
- * o'sha standart provayderga (`llmProvider()` — Gemini kaliti
- * bo'lsa Gemini) BITTA spec bilan tushadi — natijada xatti-harakat
- * "hozirgidek" (Gemini standart), faqat endi `usage` HAM qaytadi (buni
- * eski `llmComplete` bermas edi — token sonini bilmasdi).
+ * The direct tools (slide, course work, translation) call `llm.ts` `llmComplete`/`llmStream`, which walk the same text
+ * chain (`llm.chain`) on their own Gemini path. With no env value `complete(role, …)` uses that chain too: Gemini, then
+ * the fallbacks that have a key (docs/ops/LLM-FALLBACK.md), and it returns `usage` as well.
  */
 import { llmEnabled, type LlmOpts } from "./llm";
 import { effectiveRoute, routeSpecs, withoutKeylessFallbacks } from "../server/providers/route-effective";

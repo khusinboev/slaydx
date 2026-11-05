@@ -83,6 +83,8 @@ afterEach(() => {
   }
 });
 
+const envOf = (e: Record<string, string>) => e as unknown as NodeJS.ProcessEnv;
+
 const both = () => {
   process.env.DASHSCOPE_API_KEY = "test-qwen-key";
   process.env.DEEPSEEK_API_KEY = "test-deepseek-key";
@@ -115,7 +117,7 @@ test("no key: the role chains are what they were (golden)", () => {
 });
 
 test("the effective route shows the fallbacks to the admin even without keys", () => {
-  assert.deepEqual(effectiveRoute("llm.chain", {}), {
+  assert.deepEqual(effectiveRoute("llm.chain", envOf({})), {
     source: "default",
     entries: [
       { provider: "gemini", model: "gemini-3.7-flash" },
@@ -123,8 +125,8 @@ test("the effective route shows the fallbacks to the admin even without keys", (
       { provider: "deepseek", model: "deepseek-flash" },
     ],
   });
-  assert.deepEqual(effectiveRoute("llm.writer", {}), effectiveRoute("llm.chain", {}));
-  assert.equal(effectiveRoute("llm.chain", { GEMINI_MODEL: "gemini-3.1-pro" }).entries[0].model, "gemini-3.1-pro", "the env Gemini model leads the chain");
+  assert.deepEqual(effectiveRoute("llm.writer", envOf({})), effectiveRoute("llm.chain", envOf({})));
+  assert.equal(effectiveRoute("llm.chain", envOf({ GEMINI_MODEL: "gemini-3.1-pro" })).entries[0].model, "gemini-3.1-pro", "the env Gemini model leads the chain");
 });
 
 test("env chain gains the fallbacks after its own entries, without repeating a provider", () => {
