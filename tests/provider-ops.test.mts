@@ -25,6 +25,20 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *   M16 `refusedPermissions` ignores `updated_at`                        -> "refusedPermissions"
  *   M17 the probe reports any 401, not only `missing_permissions`        -> "probe"
  *   M18 a missing-permission 401 made retryable in `elevenLabsRetryable` -> "a missing permission fails fast"
+ *   M19 the alert query ignores the ten-minute window                    -> "alert: the window is ten minutes"
+ * Same change, caught by the neighbouring files:
+ *   M20 the admin save skips the format check                            -> provider-keys-admin
+ *   M21 the card's `usable` ignores `keyMalformed`                       -> provider-keys-admin
+ *   M22 the worker does not record the failure                           -> worker-user-error
+ *   M23 `errorWithCause` never answers with the outage message           -> worker-user-error
+ *   M24 `failVideo` records nothing                                      -> video-flow
+ *   M25 a deadline counted as a provider failure                         -> video-flow
+ *   M26 a safety refusal from the poll counted                           -> video-flow
+ *   M27 the video submit drops `cause`                                   -> video-flow
+ *   M28 the transcribe engine drops `cause`                              -> studio-transcribe
+ *   M29 the dub engine drops `cause`                                     -> studio-transcribe
+ *   M30 `keyState` ignores `keyMalformed`                                -> ui/admin-providers-keys
+ *   M31 `providerStatus` ignores `refusedPermissions`                    -> ui/admin-providers-keys
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
