@@ -20,6 +20,7 @@ import { log } from "../../server/log";
 import { parseLlmJsonDetailed } from "../json";
 import type { RepairKind } from "../json-repair";
 import { currentJobCost, type JobCost } from "../job-cost";
+import type { CircuitBreaker } from "./breaker";
 
 export type FailureKind = "http" | "timeout" | "network" | "empty" | "bad_json" | "truncated" | "safety" | "other";
 
@@ -79,11 +80,18 @@ export function isMaxTokensFinish(reason: string | undefined | null): boolean {
 }
 
 /**
- * How long ONE account-level failure keeps a provider's breaker open. The failure lasts until a human pays or fixes the
+ * How long an account-level failure keeps a provider's breaker open. The failure lasts until a human pays or fixes the
  * key (2026-11-05: Gemini answered 403 for hours), so each job should not rediscover it; one probe per minute notices
- * the recovery. Longer than `BREAKER_WAIT_MAX_MS`, so a job with no fallback fails as fast as before instead of waiting.
+ * the recovery. A job with a deadline and no fallback waits for the cooldown only once `msUntilRetry` is within
+ * `BREAKER_WAIT_MAX_MS` (35 s), so during an outage such a job can spend up to 35 s before it fails.
  */
 export const ACCOUNT_BREAKER_MS = 60_000;
+
+/** A bare 403 may be one gated model: it takes this many in a row to open the breaker. */
+export const BARE_403_STRIKES = 2;
+
+/** The refusal names the account (`Consumer … has been suspended`, «outstanding balance»), not this request. */
+const ACCOUNT_TEXT_RE = /balance|billing|payment|arrear|suspended|denied access|API[ _]key/i;
 
 /**
  * Bad key, no balance, billing or a suspended project: the provider is reachable but will refuse every request of this
@@ -92,6 +100,16 @@ export const ACCOUNT_BREAKER_MS = 60_000;
 export function isAccountFailure(status: number | undefined, message?: string): boolean {
   if (status === 401 || status === 402 || status === 403) return true;
   return status === 400 && /API[ _]key (not valid|invalid|expired)|API_KEY_(INVALID|EXPIRED)|Arrearage/i.test(message ?? "");
+}
+
+/**
+ * Feeds an account failure to the provider's breaker: at once for a bad key (401), no balance (402), a provider-flagged
+ * failure or a refusal that names the account; a bare 403 only when it repeats.
+ */
+export function accountStrike(breaker: Pick<CircuitBreaker, "trip" | "strike">, status: number | undefined, message: string | undefined, flagged = false): void {
+  const why = `hisob xatosi ${status ?? ""}`.trim();
+  if (flagged || status !== 403 || ACCOUNT_TEXT_RE.test(message ?? "")) breaker.trip(ACCOUNT_BREAKER_MS, why);
+  else breaker.strike(BARE_403_STRIKES, ACCOUNT_BREAKER_MS, why);
 }
 
 /**

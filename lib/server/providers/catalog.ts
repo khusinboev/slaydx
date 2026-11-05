@@ -356,7 +356,7 @@ export const ROUTE_INFO: Readonly<Record<RouteId, { title: string; help: string 
   },
   "llm.model": {
     title: "Gemini matn modeli",
-    help: "Matn zanjiridagi Gemini shu model bilan ishlaydi (slayd, pro-slayd, kurs ishi, referat, tarjima, rezyume va boshqalar).",
+    help: "Matn zanjiridagi Gemini shu model bilan ishlaydi (slayd, pro-slayd, kurs ishi, referat, tarjima, rezyume va boshqalar). «Matn zanjiri» saqlangan bo'lsa, undagi Gemini modeli ustun turadi va bu sozlama ishlamaydi.",
   },
   "llm.writer": {
     title: "Yozuvchi",

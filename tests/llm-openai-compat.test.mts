@@ -24,7 +24,17 @@ import { modelOptions } from "../lib/server/providers/routes.ts";
  *   - remove BAD_CONTENT_RE from `httpFailure` -> "content inspection";
  *   - remove `clean()` from `httpFailure` -> "the key never leaks";
  *   - map `finish_reason: content_filter` to ok -> "finish reasons";
- *   - accept an http:// base URL override -> "base URL override".
+ *   - accept an http:// base URL override -> "base URL override";
+ *   - drop the host suffix check -> "base URL override";
+ *   - remove `loweredLimit` -> "a 400 about max_tokens";
+ *   - take the first number instead of the largest below the request -> "a 400 about max_tokens";
+ *   - make a refused redirect retryable -> "a refused redirect is final";
+ *   - remove `foreignScript` from `finished` -> "language guard";
+ *   - drop `CJK_REQUESTED_RE` -> "language guard";
+ *   - drop `stripThink` in `finished` -> "<think> blocks";
+ *   - drop `stripThink` before `onText` -> "<think> blocks";
+ *   - remove the line cap -> "SSE caps"; remove the text cap -> "SSE caps";
+ *   - return the balance without the completion probe -> "probe: DeepSeek ...".
  */
 
 const KEY = "sk-test-secret-key-0123456789";
@@ -278,6 +288,78 @@ test("network error is retryable, timeout aborts and is final for this provider"
   assert.deepEqual([t.kind, t.retryable], ["timeout", false]);
 });
 
+test("a 400 about max_tokens: one more try with the limit the message names, else half", async () => {
+  let n = 0;
+  const named = adapter("qwen", () => (++n === 1 ? Response.json({ error: { message: "Range of max_tokens should be [1, 8192]" } }, { status: 400 }) : answer("Javob")));
+  const r = await named.a.complete("qwen3.8-flash", "s", "u", { ...OPTS, maxTokens: 20_000 });
+  assert.ok(r.ok);
+  assert.deepEqual(named.seen.map((s) => s.body.max_tokens), [20_000, 8192]);
+  n = 0;
+  const unnamed = adapter("deepseek", () => (++n === 1 ? Response.json({ error: { message: "max_tokens is too large" } }, { status: 422 }) : answer("Javob")));
+  await unnamed.a.complete("m", "s", "u", { ...OPTS, maxTokens: 20_000 });
+  assert.deepEqual(unnamed.seen.map((s) => s.body.max_tokens), [20_000, 10_000]);
+  const twice = adapter("qwen", () => Response.json({ error: { message: "max_tokens out of range" } }, { status: 400 }));
+  const f = (await twice.a.complete("m", "s", "u", { ...OPTS, maxTokens: 20_000 })) as Extract<Attempt, { ok: false }>;
+  assert.equal(twice.seen.length, 2, "once, not a loop");
+  assert.deepEqual([f.ok, f.status, f.retryable], [false, 400, false]);
+  const other = adapter("qwen", () => Response.json({ error: { message: "Invalid messages" } }, { status: 400 }));
+  await other.a.complete("m", "s", "u", OPTS);
+  assert.equal(other.seen.length, 1, "any other 400 is not retried");
+});
+
+test("a refused redirect is final: the same request gets the same redirect", async () => {
+  const d = adapter("deepseek", () => Promise.reject(new TypeError("fetch failed", { cause: new Error("unexpected redirect") })));
+  const r = (await d.a.complete("m", "s", "u", OPTS)) as Extract<Attempt, { ok: false }>;
+  assert.equal(r.ok, false);
+  assert.equal(r.retryable, false);
+});
+
+const CHINESE = "这是一个完全用中文写的答案，内容不是乌兹别克语。";
+
+test("language guard: above 2 % of letters fails like an empty answer, final for this provider, paid", async () => {
+  const d = adapter("deepseek", () => answer(CHINESE));
+  const r = (await d.a.complete("m", "O'zbekcha yozing", "suv", OPTS)) as Extract<Attempt, { ok: false }>;
+  assert.deepEqual([r.ok, r.kind, r.retryable], [false, "empty", false]);
+  assert.deepEqual(r.usage, { inputTokens: 1000, outputTokens: 500 });
+  const inJson = (await adapter("qwen", () => answer(JSON.stringify({ title: CHINESE }))).a.complete("m", "s", "u", { ...OPTS, json: true })) as Extract<Attempt, { ok: false }>;
+  assert.equal(inJson.kind, "empty", "a JSON answer is checked too");
+  const stream = (await adapter("deepseek", () => sse([chunk({ content: CHINESE }), chunk({}, "stop")])).a.complete("m", "s", "u", { ...OPTS, onText: () => {} })) as Extract<Attempt, { ok: false }>;
+  assert.equal(stream.kind, "empty", "a streamed answer is checked too");
+});
+
+test("language guard: a few quoted characters pass, and so does a request that allows CJK", async () => {
+  const term = await adapter("deepseek", () => answer("水 va 火 belgilari.")).a.complete("m", "s", "u", OPTS);
+  assert.ok(term.ok, "two characters are a quoted term, whatever their share of a short answer");
+  const ratio = await adapter("deepseek", () => answer(`${"O'zbek tilidagi uzun matn ".repeat(40)} 光合作用 atamasi`)).a.complete("m", "s", "u", OPTS);
+  assert.ok(ratio.ok, "four characters under 2 % of the letters");
+  for (const system of ["OUTPUT LANGUAGE: Chinese (Simplified) (中文). This is absolute.", "Target language: Japanese.", "OUTPUT LANGUAGE: Korean (한국어).", "Mavzu: Xitoy tarixi"]) {
+    const ok = await adapter("qwen", () => answer(CHINESE)).a.complete("m", system, "u", OPTS);
+    assert.ok(ok.ok, system);
+  }
+});
+
+test("<think> blocks: removed from the answer and from the live text, also while unclosed", async () => {
+  const plain = await adapter("qwen", () => answer("<think>MAXFIY FIKR</think>\nJavob")).a.complete("m", "s", "u", OPTS);
+  assert.ok(plain.ok);
+  assert.equal(plain.text, "Javob");
+  const only = (await adapter("qwen", () => answer("<think>MAXFIY FIKR", "length")).a.complete("m", "s", "u", OPTS)) as Extract<Attempt, { ok: false }>;
+  assert.deepEqual([only.ok, only.kind], [false, "truncated"]);
+  const seen: string[] = [];
+  const s = adapter("deepseek", () => sse([chunk({ content: "<think>MAXFIY" }), chunk({ content: " FIKR</think>Jav" }), chunk({ content: "ob" }, "stop")]));
+  const r = await s.a.complete("m", "s", "u", { ...OPTS, onText: (t) => seen.push(t) });
+  assert.ok(r.ok);
+  assert.equal(r.text, "Javob");
+  assert.deepEqual(seen, ["Jav", "Javob"]);
+});
+
+test("SSE caps: an endless line or an endless answer ends the stream, final", async () => {
+  const line = (await adapter("deepseek", () => sse([`data: ${"x".repeat(1_000_100)}`])).a.complete("m", "s", "u", { ...OPTS, onText: () => {} })) as Extract<Attempt, { ok: false }>;
+  assert.deepEqual([line.ok, line.error, line.retryable], [false, "stream too large", false]);
+  const piece = chunk({ content: "a".repeat(900_000) });
+  const text = (await adapter("deepseek", () => sse(Array.from({ length: 5 }, () => piece))).a.complete("m", "s", "u", { ...OPTS, onText: () => {} })) as Extract<Attempt, { ok: false }>;
+  assert.deepEqual([text.ok, text.error, text.retryable], [false, "stream too large", false]);
+});
+
 test("the key never leaks: an echoed key is removed from the error", async () => {
   const d = adapter("deepseek", () => Response.json({ error: { message: `Incorrect API key provided: ${KEY}` } }, { status: 401 }));
   const r = (await d.a.complete("m", "s", "u", OPTS)) as Extract<Attempt, { ok: false }>;
@@ -303,6 +385,11 @@ test("base URL override: https only, trailing slash dropped", () => {
   const p = OPENAI_COMPAT_PRESETS.qwen;
   assert.equal(presetBaseUrl(p, envOf({ DASHSCOPE_BASE_URL: "https://ws1.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/" })), "https://ws1.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1");
   assert.equal(presetBaseUrl(p, envOf({ DASHSCOPE_BASE_URL: "http://evil.example/v1" })), p.baseUrl);
+  assert.equal(presetBaseUrl(p, envOf({ DASHSCOPE_BASE_URL: "http://ws1.ap-southeast-1.maas.aliyuncs.com/v1" })), p.baseUrl, "https only");
+  assert.equal(presetBaseUrl(p, envOf({ DASHSCOPE_BASE_URL: "https://evil.example/v1" })), p.baseUrl, "Alibaba hosts only");
+  assert.equal(presetBaseUrl(p, envOf({ DASHSCOPE_BASE_URL: "https://x.aliyuncs.com.evil.example/v1" })), p.baseUrl);
+  assert.equal(presetBaseUrl(p, envOf({ DASHSCOPE_BASE_URL: "https://user:pw@x.aliyuncs.com/v1" })), p.baseUrl);
+  assert.equal(presetBaseUrl(p, envOf({ DASHSCOPE_BASE_URL: "not a url" })), p.baseUrl);
   assert.equal(presetBaseUrl(p, envOf({})), p.baseUrl);
   assert.equal(presetBaseUrl(OPENAI_COMPAT_PRESETS.deepseek, envOf({ DASHSCOPE_BASE_URL: "https://x.example" })), OPENAI_COMPAT_PRESETS.deepseek.baseUrl);
 });
@@ -332,7 +419,7 @@ test("price rows: the official figures read on 2026-11-05", () => {
   assert.deepEqual(rate("deepseek", "deepseek-v4-pro"), [1.32, 3.96], "the PEAK rate");
 });
 
-test("probe: DeepSeek reads the balance with a GET, Qwen spends one token; the key stays in the header", async () => {
+test("probe: DeepSeek reads the balance and spends one token, Qwen spends one token; the key stays in the header", async () => {
   const d = probeRequest("deepseek", KEY) as { url: string; headers: Record<string, string>; method?: string };
   assert.equal(d.url, "https://api.deepseek.com/user/balance");
   assert.equal(d.method, undefined);
@@ -350,9 +437,16 @@ test("probe: DeepSeek reads the balance with a GET, Qwen spends one token; the k
   }) as unknown as typeof fetch;
   assert.deepEqual(await probeProvider("deepseek", KEY, { fetchImpl: ok }), { ok: true, message: "Kalit qabul qilindi · balans 12.5 USD" });
   assert.equal(calls[0].method, "GET");
+  assert.equal(calls[1].method, "POST", "the configured model is called too");
+  assert.equal(JSON.parse(String(calls[1].body)).model, "deepseek-flash");
+  assert.equal(JSON.parse(String(calls[1].body)).max_tokens, 1);
   await probeProvider("qwen", KEY, { fetchImpl: ok });
-  assert.equal(calls[1].method, "POST");
-  assert.ok(calls[1].body);
+  assert.equal(calls[2].method, "POST");
+  const wrongModel = (async (_u: string, init: RequestInit) =>
+    init.method === "POST" ? Response.json({ error: { message: "Model Not Exist" } }, { status: 400 }) : Response.json({ is_available: true, balance_infos: [] })) as unknown as typeof fetch;
+  const bad = await probeProvider("deepseek", KEY, { fetchImpl: wrongModel });
+  assert.equal(bad.ok, false, "a wrong model id is caught here, not during an outage");
+  assert.match(bad.message, /HTTP 400.*Model Not Exist/);
   const denied = (async () => Response.json({ error: { message: `bad key ${KEY}` } }, { status: 401 })) as unknown as typeof fetch;
   const r = await probeProvider("qwen", KEY, { fetchImpl: denied });
   assert.equal(r.ok, false);

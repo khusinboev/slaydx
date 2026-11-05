@@ -6,7 +6,7 @@
 import { recordGrounding, recordLlmUsage } from "./job-cost";
 import { allowOrWait, breakerFor } from "./llm/breaker";
 import { BREAKER_WAIT_MAX_MS, CHAIN_MIN_ATTEMPT_MS, CHAIN_SAFETY_MS, DeadlineError, TIMEOUT_RETRY_MIN_LEFT_MS, completeWithChain } from "./llm/chain";
-import { ACCOUNT_BREAKER_MS, classifyFailure, isAccountFailure, isSafetyFinish, reportFailure, reportFallback, withJsonRetry, type FailureKind } from "./llm/failure";
+import { accountStrike, classifyFailure, isAccountFailure, isSafetyFinish, reportFailure, reportFallback, withJsonRetry, type FailureKind } from "./llm/failure";
 import { FALLBACK_ADAPTERS } from "./llm/fallback-adapters";
 import { limiterFor } from "./llm/limiter";
 import type { RoleSpec } from "./llm/types";
@@ -267,8 +267,8 @@ async function withRetry<T>(
     } else if (res.kind === "empty" || res.kind === "safety") {
       // Provider answered (empty candidate / policy block): healthy transport, not a breaker failure (review R1).
     } else if (isAccountFailure(res.status, res.message)) {
-      // Every later call would get the same refusal: one is enough to open the breaker (2026-11-05 outage).
-      breaker.trip(ACCOUNT_BREAKER_MS, `hisob xatosi ${res.status}`);
+      // Every later call would get the same refusal (2026-11-05 outage).
+      accountStrike(breaker, res.status, res.message);
     } else if (res.status === undefined ? res.retryable : res.status >= 500) {
       breaker.failure();
     } else if (res.status !== undefined && res.status !== 429) {

@@ -71,8 +71,14 @@ export function effectiveRoute(id: RouteId, env: NodeJS.ProcessEnv = process.env
     default: {
       const chain = effectiveRoute("llm.chain", env, opts).entries;
       const fromEnv = parseRoleSpec(env[LLM_ROLE_ENV[id]]);
-      // An env chain predates the fallbacks (`.env.example` lists every role), so it keeps its order and gains the providers it lacks.
-      if (fromEnv.length > 0) return { source: "env", entries: [...fromEnv.map((s) => ({ provider: s.provider, model: s.model })), ...chain.filter((e) => !fromEnv.some((s) => s.provider === e.provider))] };
+      /*
+       * An env chain predates the fallbacks (`.env.example` lists every role), so it keeps its order and gains the
+       * OpenAI-compatible fallbacks it lacks, and nothing else: `LLM_JUDGE=anthropic:…` must not start calling Gemini.
+       */
+      if (fromEnv.length > 0) {
+        const gained = chain.filter((e) => isOpenAiCompatId(e.provider) && !fromEnv.some((s) => s.provider === e.provider));
+        return { source: "env", entries: [...fromEnv.map((s) => ({ provider: s.provider, model: s.model })), ...gained] };
+      }
       return { source: "default", entries: chain };
     }
   }

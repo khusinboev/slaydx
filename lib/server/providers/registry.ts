@@ -34,7 +34,7 @@ export const PROVIDERS = [
   { id: "gemini", label: "Google Gemini", kinds: ["llm", "image", "tts"], envKeys: ["GEMINI_API_KEY"], keyHint: "AIza… (39 belgi)", implemented: true, testable: true },
   { id: "anthropic", label: "Anthropic (Claude)", kinds: ["llm"], envKeys: ["ANTHROPIC_API_KEY"], keyHint: "sk-ant-…", implemented: true, testable: true },
   // Text fallbacks after Gemini (docs/ops/LLM-FALLBACK.md): one adapter, `lib/generation/llm/openai-compat.ts`. «Tekshirish»
-  // reads DeepSeek's balance; Qwen has no documented free call, so it answers one token (a fraction of a cent).
+  // spends one token on the configured model (a fraction of a cent); DeepSeek also reads its balance.
   { id: "qwen", label: "Qwen (Alibaba)", kinds: ["llm"], envKeys: ["DASHSCOPE_API_KEY"], keyHint: "sk-… (Model Studio, Singapur hududi)", implemented: true, testable: true },
   { id: "deepseek", label: "DeepSeek", kinds: ["llm"], envKeys: ["DEEPSEEK_API_KEY"], keyHint: "sk-…", implemented: true, testable: true },
   { id: "pexels", label: "Pexels", kinds: ["image"], envKeys: ["PEXELS_API_KEY"], keyHint: "56 belgili kalit", implemented: true, testable: true },

@@ -8,9 +8,18 @@ fallback without a key is not in any chain.
 
 1. A job calls Gemini. A 401/402/403, or a 400 that says the key is bad, is an account failure: no retry on Gemini.
 2. Gemini's breaker opens for 60 s, so the rest of the job and other jobs do not rediscover the failure. One probe per
-   minute notices the recovery.
+   minute notices the recovery. It opens at once for 401, 402 or a refusal that names the account (balance, billing,
+   API key, suspended); a bare 403 may be one gated model, so that takes two in a row. Either way the job itself moves on
+   at once.
 3. The chain moves on at once: Qwen, then DeepSeek. A 5xx or 429 is retried three times on Gemini first.
 4. The job completes. The price the user paid is unchanged; `cost_json` and `ai_usage` show the provider really used.
+
+With no fallback key, a job with a deadline can wait up to 35 s for the breaker's probe once the cooldown is that close,
+then fail as before. So during an account outage such a job may fail up to 35 s later than it used to.
+
+A Gemini that HANGS falls back only inside a deadline. Generation jobs and the AI chat have one. Web and bot calls with no
+deadline (`/api/media/enhance`, `/api/article/udk`, the domla's questions) stop at the first timeout, because the caller's
+budget is unknown: they fall back on HTTP errors only, so during a hang they fail as they always did.
 
 The worker log has one line per fallback answer, metadata only: `grep "fallback used"`. Spend appears under the provider's
 own row in admin «Provayderlar» and in the AI cost pages.
@@ -45,8 +54,9 @@ limited-time 20 % discount. If the discount reading is right, the list price is 
 - **The real API.** Every test runs on a stubbed fetch. No request has been sent to Alibaba or DeepSeek: the ids, base
   URLs and parameters come from their documentation. The first real check is «Tekshirish» and the bench.
 - `enable_thinking: false` on `qwen3.7-plus` together with `response_format`. The docs say structured output works in
-  non-thinking mode; `qwen3.8-flash`'s output limit was not found (`maxOutputTokens` is 65 536, a lower limit is a 400 and
-  the chain moves on).
+  non-thinking mode.
+- The wording of a provider's `max_tokens` 400, and of Gemini's account refusals other than the suspended-consumer one
+  seen in production. A refusal that names nothing counts as a bare 403.
 - The HTTP status of some DashScope failures (`Arrearage` is listed as 403, `isv.OUT_OF_SERVICE` has none). They are
   matched by code string, so either way they count as account failures.
 - Slide quality on a fallback: prompts were written and tuned on Gemini. A deck completes; its gates may still refuse a
@@ -59,8 +69,8 @@ limited-time 20 % discount. If the discount reading is right, the list price is 
 1. **Qwen.** [Model Studio console](https://modelstudio.console.alibabacloud.com/), region **Singapore**, create an API
    key. A key from another region answers 401.
 2. **DeepSeek.** [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys), top up, create a key.
-3. **Admin → Provayderlar → Matn**, each provider: enter the key, «Tekshirish». DeepSeek shows the balance; Qwen spends
-   one token (a fraction of a cent).
+3. **Admin → Provayderlar → Matn**, each provider: enter the key, «Tekshirish». It spends one token (a fraction of a
+   cent) on the model in the chain, so a wrong model id or an empty balance shows here. DeepSeek also shows the balance.
 4. **Test Uzbek before relying on it** (a few cents, real money):
    ```
    DASHSCOPE_API_KEY=… DEEPSEEK_API_KEY=… GEMINI_API_KEY=… \
@@ -71,7 +81,8 @@ limited-time 20 % discount. If the discount reading is right, the list price is 
    Chinese model first; «Saqlash» asks for a reason and is audited.
 6. **Check the roles.** A role badged as the admin's choice runs its stored chain EXACTLY and does not gain the fallbacks:
    add them in that role or press «Standartga qaytarish». Roles from the server environment (`LLM_WRITER`…) keep their
-   order and gain the providers they lack. Production's rows were not inspected for this work.
+   order and gain only Qwen and DeepSeek, never Gemini: `LLM_JUDGE=anthropic:…` does not start calling Gemini. Production's
+   rows were not inspected for this work.
 
 To switch a fallback off: the provider's on/off switch or removing its key. The change reaches the workers within 30 s.
 
@@ -85,6 +96,18 @@ To switch a fallback off: the provider's on/off switch or removing its key. The 
 | Images, TTS, video, music | Not text. They have their own providers. |
 
 Gemini-only options degrade safely: `thinking` is ignored and thinking is off, `responseSchema` becomes a prompt hint.
+
+## Two checks on a fallback's answer
+
+- `<think>…</think>` in the answer is removed.
+- **Language guard.** An answer with more than 2 % Chinese, Korean or Japanese letters (at least 3 characters) counts as
+  failed: logged as `[llm] attempt failed` with `kind: empty`, the provider stays healthy, the chain moves on. It does not
+  apply when the request itself allows CJK: `languageDirective` and the translation prompts name the output language, so
+  a zh/ko/ja job passes. This reads the prompt, not a language field, and it fails open: a topic such as «Xitoy tarixi»
+  also switches it off. Those answers are simply not checked. Gemini and Claude are not guarded.
+
+`max_tokens` is capped at 65 536. Documented limits are higher (131 072 for `qwen3.7-plus`, 384K for DeepSeek), but none
+was found for `qwen3.8-flash`, so a 400 about the limit gets one more try with the limit the message names, else half.
 
 ## How it is built
 

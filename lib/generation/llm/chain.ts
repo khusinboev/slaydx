@@ -26,7 +26,8 @@
  * yoki 5xx/tarmoq xatosi — nosozlik, javob (ok/4xx) — salomatlik. Ochiq
  * provayder o'tkazib yuboriladi — sekin Gemini'ni har chaqiruv qaytadan
  * «kashf» qilmaydi, zaxira spec darhol ishlaydi. Account failures (bad key,
- * no balance, 401/402/403: `failure.ts isAccountFailure`) open it at once.
+ * no balance, 401/402/403: `failure.ts accountStrike`) open it at once, a bare
+ * 403 when it repeats.
  *
  * CHEKLAGICH (`limiter.ts`): provayder bo'yicha bir vaqtdagi so'rovlar
  * soni; navbatda kutilgan vaqt urinish timeout'idan ayriladi.
@@ -34,7 +35,7 @@
 import { recordLlmUsage } from "../job-cost";
 import { getProviderKey } from "../../server/providers/resolve";
 import { LLM_BREAKER, allowOrWait, breakerFor, type CircuitBreaker } from "./breaker";
-import { ACCOUNT_BREAKER_MS, classifyFailure, isAccountFailure, reportFailure, reportFallback, type FailureKind } from "./failure";
+import { accountStrike, classifyFailure, isAccountFailure, reportFailure, reportFallback, type FailureKind } from "./failure";
 import { limiterFor, type Semaphore } from "./limiter";
 import { backoffMs, equalJitterMs } from "./retry";
 import type { Attempt, ProviderAdapter, ProviderId, RoleSpec } from "./types";
@@ -232,11 +233,11 @@ async function runSpec(
      * `max_tokens`), refusal, 4xx — provayder SOG'; ularni sanash bitta
      * ishning muammoli promptlari tufayli Gemini'ni butun jarayon uchun
      * o'chirib qo'yardi (review R1). `llm.ts withRetry` bilan bir xil qoida.
-     * The exception is an account failure: every later call would get the same refusal, so one is enough to open it.
+     * The exception is an account failure: every later call would get the same refusal.
      */
     if (res.kind === "empty" || res.kind === "safety") {
       // Provider answered (empty candidate / policy block): healthy transport, not a breaker failure.
-    } else if (res.account || isAccountFailure(res.status, res.error)) breaker.trip(ACCOUNT_BREAKER_MS, `hisob xatosi ${res.status ?? ""}`.trim());
+    } else if (res.account || isAccountFailure(res.status, res.error)) accountStrike(breaker, res.status, res.error, res.account);
     else if (res.status === undefined ? res.retryable : res.status >= 500) breaker.failure();
     else if (res.status !== undefined && res.status !== 429) breaker.success();
     // Kvota: sarf chegarasi (429, retryable:false) yoki uzun `Retry-After` —

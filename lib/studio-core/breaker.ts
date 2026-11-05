@@ -69,6 +69,9 @@ export class CircuitBreaker {
   private openUntil = 0;
   /** Yarim-ochiq holatdagi sinov boshlangan payt (0 — sinov yo'q). */
   private probeAt = 0;
+  /** Consecutive `strike` calls and when the first of them fell; any success clears them. */
+  private strikes = 0;
+  private firstStrikeAt = 0;
 
   constructor(name: string, opts: BreakerOpts = {}) {
     this.name = name;
@@ -102,6 +105,7 @@ export class CircuitBreaker {
     this.firstFailureAt = 0;
     this.openUntil = 0;
     this.probeAt = 0;
+    this.strikes = 0;
   }
 
   failure(): void {
@@ -149,6 +153,24 @@ export class CircuitBreaker {
     // Uzunroq ochiq muddat allaqachon bo'lsa — qisqartirilmaydi.
     if (this.openUntil !== 0 && this.openUntil >= now + cooldownMs) return;
     this.open(now, cooldownMs, why);
+  }
+
+  /**
+   * Like `trip`, but only on the `need`-th consecutive strike inside `windowMs`: for a refusal that may concern one
+   * request rather than the whole provider. A failed half-open probe opens at once.
+   */
+  strike(need: number, cooldownMs: number, why: string): void {
+    const now = this.now();
+    if (this.openUntil !== 0) return this.trip(cooldownMs, why);
+    if (this.strikes === 0 || now - this.firstStrikeAt > this.windowMs) {
+      this.strikes = 0;
+      this.firstStrikeAt = now;
+    }
+    this.strikes += 1;
+    if (this.strikes >= need) {
+      this.strikes = 0;
+      this.trip(cooldownMs, why);
+    }
   }
 
   private open(now: number, ms: number, why: string): void {

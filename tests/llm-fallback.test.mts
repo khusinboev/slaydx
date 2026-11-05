@@ -4,10 +4,11 @@ import { TOOL_BY_ID } from "../lib/tools.ts";
 import type { FormValues } from "../lib/types.ts";
 import { buildArtifact } from "../lib/generation/index.ts";
 import { withJobCost } from "../lib/generation/job-cost.ts";
+import { languageDirective } from "../lib/generation/i18n.ts";
 import { llmComplete, llmEnabled, llmFallback, llmGrounded, llmStream } from "../lib/generation/llm.ts";
 import { complete, roleSpecs } from "../lib/generation/llm-roles.ts";
-import { breakerFor, resetBreakers } from "../lib/generation/llm/breaker.ts";
-import { ACCOUNT_BREAKER_MS, isAccountFailure, lastFailure, resetFailureCounters } from "../lib/generation/llm/failure.ts";
+import { CircuitBreaker, breakerFor, resetBreakers } from "../lib/generation/llm/breaker.ts";
+import { ACCOUNT_BREAKER_MS, accountStrike, isAccountFailure, lastFailure, resetFailureCounters } from "../lib/generation/llm/failure.ts";
 import { resetLimiters } from "../lib/generation/llm/limiter.ts";
 import { effectiveRoute, geminiTextModel, usableTextChain } from "../lib/server/providers/route-effective.ts";
 import { resetRouteSnapshot, setRouteSnapshot } from "../lib/server/providers/route-resolve.ts";
@@ -31,6 +32,11 @@ import { checkRoute } from "../lib/server/providers/routes.ts";
  *   - drop `recordLlmUsage` in `completeOthers` -> "cost_json shows the provider really used";
  *   - drop `reportFallback` -> "a fallback answer is one warn line";
  *   - env chain does not gain the fallbacks -> "env chain gains the fallbacks";
+ *   - env chain gains the whole text chain -> "an env chain with no Gemini never gains Gemini";
+ *   - `accountStrike` always trips -> "a bare 403 needs two in a row";
+ *   - `accountStrike` never trips at once on 403 -> "breaker opens on one account error";
+ *   - `strike` ignores a half-open breaker -> "a bare 403 on a half-open probe reopens at once";
+ *   - `success` keeps the strikes -> "a success between two bare 403s clears the count";
  *   - `geminiTextModel` ignores the chain -> "a stored chain can make a Chinese model primary".
  */
 
@@ -141,6 +147,14 @@ test("env chain gains the fallbacks after its own entries, without repeating a p
   assert.deepEqual(roleSpecs("writer").map((s) => `${s.provider}:${s.model}`), ["deepseek:deepseek-v4-pro", "gemini:gemini-3.7-flash", "qwen:qwen3.7-plus"]);
 });
 
+test("an env chain with no Gemini never gains Gemini, and its last spec stays last without keys", () => {
+  process.env.LLM_JUDGE = "anthropic:claude-sonnet-5";
+  assert.deepEqual(roleSpecs("judge"), [{ provider: "anthropic", model: "claude-sonnet-5" }], "golden: no key, nothing was added");
+  both();
+  assert.deepEqual(roleSpecs("judge").map((s) => s.provider), ["anthropic", "qwen", "deepseek"]);
+  assert.deepEqual(effectiveRoute("llm.judge", envOf({ LLM_JUDGE: "anthropic:claude-sonnet-5" })).entries.map((e) => e.provider), ["anthropic", "qwen", "deepseek"]);
+});
+
 test("an admin's stored role chain stays exact", () => {
   both();
   setRouteSnapshot(new Map([["llm.writer", [{ provider: "gemini", model: "gemini-3.7-flash" }]]]));
@@ -217,6 +231,61 @@ test("breaker opens on one account error (direct path), for the stream too", asy
   await llmStream("s", "u", 100, { onText: () => {} });
   assert.equal(count(GEMINI), 1);
   assert.equal(count(QWEN), 3);
+});
+
+const bare403 = () => Response.json({ error: { code: 403, message: "The caller does not have permission", status: "PERMISSION_DENIED" } }, { status: 403 });
+
+test("a bare 403 needs two in a row: one gated model does not stop Gemini", async () => {
+  both();
+  route((h) => (h.url.includes(GEMINI) ? bare403() : compatOk("Qwen javobi")));
+  assert.equal(await llmComplete("s", "u", 100), "Qwen javobi", "the job still moves on at once");
+  assert.equal(breakerFor("gemini").state, "closed");
+  assert.equal(await llmComplete("s", "u", 100), "Qwen javobi");
+  assert.equal(breakerFor("gemini").state, "open");
+  assert.equal(count(GEMINI), 2);
+  resetBreakers();
+  await complete("writer", "s", "u");
+  assert.equal(breakerFor("gemini").state, "closed", "the role chain counts the same way");
+  await complete("writer", "s", "u");
+  assert.equal(breakerFor("gemini").state, "open");
+});
+
+test("a success between two bare 403s clears the count", async () => {
+  both();
+  let n = 0;
+  route((h) => {
+    if (!h.url.includes(GEMINI)) return compatOk("Qwen javobi");
+    n += 1;
+    return n === 2 ? geminiOk("Salom") : bare403();
+  });
+  for (let i = 0; i < 3; i++) await llmComplete("s", "u", 100);
+  assert.equal(breakerFor("gemini").state, "closed");
+});
+
+test("a bare 403 on a half-open probe reopens at once", () => {
+  const b = new CircuitBreaker("t", { cooldownMs: 1, now: () => clock });
+  let clock = 1000;
+  b.trip(10, "x");
+  clock += 20;
+  assert.equal(b.state, "half-open");
+  accountStrike(b, 403, "The caller does not have permission");
+  assert.equal(b.state, "open");
+});
+
+test("accountStrike: 401, 402, a flagged failure and a refusal that names the account trip at once", () => {
+  const trips = (status: number, message: string, flagged = false) => {
+    let t = 0;
+    let s = 0;
+    accountStrike({ trip: () => void (t += 1), strike: () => void (s += 1) }, status, message, flagged);
+    return [t, s];
+  };
+  assert.deepEqual(trips(401, "x"), [1, 0]);
+  assert.deepEqual(trips(402, "x"), [1, 0]);
+  assert.deepEqual(trips(403, "AllocationQuota.FreeTierOnly", true), [1, 0], "the adapter flagged it");
+  assert.deepEqual(trips(403, "Permission denied: Consumer 'api_key:x' has been suspended."), [1, 0], "the production message");
+  assert.deepEqual(trips(403, "Your account has an outstanding balance."), [1, 0]);
+  assert.deepEqual(trips(403, "Billing is disabled for this project"), [1, 0]);
+  assert.deepEqual(trips(403, "The caller does not have permission"), [0, 1]);
 });
 
 test("breaker opens without a fallback too, and a healthy 400 still closes nothing", async () => {
@@ -334,6 +403,25 @@ test("a fallback answer is one warn line with role/provider/model and no text", 
   route(() => geminiOk("ok"));
   await llmComplete("s", "u", 100);
   assert.equal(logged.filter((l) => l.includes("[llm] fallback used")).length, 0, "a healthy Gemini logs nothing");
+});
+
+test("language guard: a Chinese answer moves on to the next provider, the first one stays healthy", async () => {
+  both();
+  route((h) => {
+    if (h.url.includes(GEMINI)) return denied();
+    return h.url.includes(QWEN) ? compatOk("这是一个中文答案，内容完全不是乌兹别克语。") : compatOk("O'zbekcha javob");
+  });
+  assert.equal(await llmComplete("O'zbek tilida yozing", "Mavzu: suv", 100), "O'zbekcha javob");
+  assert.equal(count(QWEN), 1, "no retry on the same provider");
+  assert.equal(breakerFor("qwen").state, "closed");
+  assert.ok(logged.some((l) => l.includes("[llm] attempt failed") && l.includes('"kind":"empty"') && l.includes("qwen")), "counted");
+});
+
+test("language guard: a requested Chinese document passes, through the real language directive", async () => {
+  both();
+  route((h) => (h.url.includes(GEMINI) ? denied() : compatOk("这是一个中文答案。")));
+  assert.equal(await llmComplete(languageDirective("zh"), "Mavzu: suv", 100), "这是一个中文答案。");
+  for (const code of ["ja", "ko"]) assert.match(languageDirective(code), /Japanese|Korean/);
 });
 
 test("all providers down: null, and the last failure names the last one tried", async () => {
