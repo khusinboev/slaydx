@@ -44,6 +44,25 @@ export const PRICING: PricingRow[] = [
   { provider: "anthropic", model: "claude-sonnet-5", inUsdPerM: 2, outUsdPerM: 10 },
   { provider: "anthropic", model: "claude-opus-5", inUsdPerM: 5, outUsdPerM: 25 },
   { provider: "anthropic", model: "claude-haiku-4-5", inUsdPerM: 1, outUsdPerM: 5 },
+
+  /*
+   * Text fallbacks (docs/ops/LLM-FALLBACK.md). Cached input is billed lower by both, but it is counted here as ordinary
+   * input: our prompts are one-shot, and the telemetry may only over-report, never under-report.
+   *
+   * Qwen, Singapore, up to 256K input tokens per request (our prompts never reach the next tier):
+   * https://www.alibabacloud.com/help/en/model-studio/model-pricing and .../model-studio/qwen3-7-plus, read 2026-11-05.
+   * The model page gives $0.4/$1.6 as the ORIGINAL price; the pricing page calls the same row a limited-time 20 %
+   * discount. The two pages disagree: if the discount reading is right and the promotion ends, list is about $0.5/$2.0
+   * and this row must follow. Thinking mode is off in our calls.
+   */
+  { provider: "qwen", model: "qwen3.7-plus", inUsdPerM: 0.4, outUsdPerM: 1.6 },
+  { provider: "qwen", model: "qwen3.8-flash", inUsdPerM: 0.15, outUsdPerM: 0.47 },
+  /*
+   * DeepSeek at PEAK rates (https://api-docs.deepseek.com/quick_start/pricing, read 2026-11-05): peak is 01:00-04:00 and
+   * 06:00-10:00 UTC Mon-Fri, off-peak is half. Telemetry has no clock for this, so the cost is never under-reported.
+   */
+  { provider: "deepseek", model: "deepseek-flash", inUsdPerM: 0.3, outUsdPerM: 1.2 },
+  { provider: "deepseek", model: "deepseek-v4-pro", inUsdPerM: 1.32, outUsdPerM: 3.96 },
 ];
 
 /** Bitta chaqiruv sarfi — `CostMeter`/`generations.cost_json` shakli. */

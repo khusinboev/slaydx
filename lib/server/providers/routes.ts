@@ -6,8 +6,8 @@ import { isProviderId, type ProviderId } from "./registry";
  * purpose, in priority order. The registry of slots is data only (no secrets, no I/O), so the generation layer, the
  * loader, the admin API and the tests all read one list.
  *
- *   shape  chain  an ordered list of provider:model (the LLM roles: the first that answers wins, the next is the
- *                 fallback);
+ *   shape  chain  an ordered list of provider:model (the text chain and the LLM roles: the first that answers wins, the
+ *                 next is the fallback);
  *          model  exactly one model of a fixed provider (the default Gemini text model, the test-analysis model, the
  *                 Gemini image model);
  *          order  an ordered list of providers, no models (text-to-speech: which voice provider runs first).
@@ -19,7 +19,7 @@ import { isProviderId, type ProviderId } from "./registry";
  * every cost report show a silent $0, so the admin cannot select it. Adding a priced model makes it selectable.
  */
 
-export const ROUTE_IDS = ["llm.model", "llm.writer", "llm.researcher", "llm.judge", "llm.fast", "tests.analysis", "image.gemini", "tts.order"] as const;
+export const ROUTE_IDS = ["llm.chain", "llm.model", "llm.writer", "llm.researcher", "llm.judge", "llm.fast", "tests.analysis", "image.gemini", "tts.order"] as const;
 export type RouteId = (typeof ROUTE_IDS)[number];
 
 export type RouteShape = "chain" | "model" | "order";
@@ -35,12 +35,17 @@ export type RouteSpec = {
   max: number;
 };
 
+/** The text providers of every chain slot. A new OpenAI-compatible provider is added here too. */
+const TEXT_PROVIDERS: readonly ProviderId[] = ["gemini", "qwen", "deepseek", "anthropic"];
+
 export const ROUTE_SPECS: Readonly<Record<RouteId, RouteSpec>> = {
+  /** The order the direct text tools use, and the default of every role that has no chain of its own. */
+  "llm.chain": { id: "llm.chain", shape: "chain", providers: TEXT_PROVIDERS, max: 4 },
   "llm.model": { id: "llm.model", shape: "model", providers: ["gemini"], max: 1 },
-  "llm.writer": { id: "llm.writer", shape: "chain", providers: ["gemini", "anthropic"], max: 4 },
-  "llm.researcher": { id: "llm.researcher", shape: "chain", providers: ["gemini", "anthropic"], max: 4 },
-  "llm.judge": { id: "llm.judge", shape: "chain", providers: ["gemini", "anthropic"], max: 4 },
-  "llm.fast": { id: "llm.fast", shape: "chain", providers: ["gemini", "anthropic"], max: 4 },
+  "llm.writer": { id: "llm.writer", shape: "chain", providers: TEXT_PROVIDERS, max: 4 },
+  "llm.researcher": { id: "llm.researcher", shape: "chain", providers: TEXT_PROVIDERS, max: 4 },
+  "llm.judge": { id: "llm.judge", shape: "chain", providers: TEXT_PROVIDERS, max: 4 },
+  "llm.fast": { id: "llm.fast", shape: "chain", providers: TEXT_PROVIDERS, max: 4 },
   /** «Test ishlash»: the multimodal model that explains the wrong answers (it reads the question image). */
   "tests.analysis": { id: "tests.analysis", shape: "model", providers: ["gemini"], max: 1 },
   "image.gemini": { id: "image.gemini", shape: "model", providers: ["gemini"], max: 1 },

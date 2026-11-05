@@ -78,6 +78,34 @@ export function isMaxTokensFinish(reason: string | undefined | null): boolean {
   return Boolean(reason) && /^(MAX_TOKENS|max_tokens|length)$/.test(String(reason));
 }
 
+/**
+ * How long ONE account-level failure keeps a provider's breaker open. The failure lasts until a human pays or fixes the
+ * key (2026-11-05: Gemini answered 403 for hours), so each job should not rediscover it; one probe per minute notices
+ * the recovery. Longer than `BREAKER_WAIT_MAX_MS`, so a job with no fallback fails as fast as before instead of waiting.
+ */
+export const ACCOUNT_BREAKER_MS = 60_000;
+
+/**
+ * Bad key, no balance, billing or a suspended project: the provider is reachable but will refuse every request of this
+ * account, so it is not «healthy» (other 4xx are) and retrying is useless. Gemini answers 400 for a bad key.
+ */
+export function isAccountFailure(status: number | undefined, message?: string): boolean {
+  if (status === 401 || status === 402 || status === 403) return true;
+  return status === 400 && /API[ _]key (not valid|invalid|expired)|API_KEY_(INVALID|EXPIRED)|Arrearage/i.test(message ?? "");
+}
+
+/**
+ * ONE warn line when a fallback spec answered: metadata only, greppable (`[llm] fallback used`). The admin usage tables
+ * show the same thing as spend under the new provider.
+ */
+export function reportFallback(f: { role: string; provider: string; model: string }): void {
+  try {
+    log("warn", "[llm] fallback used", { role: f.role, provider: f.provider, model: f.model });
+  } catch {
+    // Observability must never change what the call does.
+  }
+}
+
 /* ------------------------------------------------------------------ *
  * Counters + last failure
  * ------------------------------------------------------------------ */

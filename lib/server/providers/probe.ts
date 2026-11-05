@@ -2,11 +2,14 @@ import { redact } from "../log";
 import { providerDef } from "./registry";
 import { FAL_IMAGE_MODELS, MEDIA_CATALOG } from "../../media/catalog";
 import { elevenLabsSlotsOf } from "../../generation/tts/elevenlabs";
+import { OPENAI_COMPAT_PRESETS, presetBaseUrl } from "../../generation/llm/openai-compat";
+import { isOpenAiCompatId } from "../../generation/llm/types";
 
 /**
  * «Tekshirish»: ONE cheap authenticated read per provider (list models, fetch one photo...), 10 s timeout, to
  * tell the admin whether a key is accepted. Nothing is generated and no paid unit is spent; the free-tier quota
- * of the stock and research APIs loses one request.
+ * of the stock and research APIs loses one request. The one exception is a text provider with no documented free
+ * call (Qwen): it answers a ONE-token completion, a fraction of a cent, and that also proves the balance.
  *
  * The answer is `{ ok, message }`. A message never contains the key: it is built from the HTTP status and a
  * clipped provider error text, and every occurrence of the key (and of the usual key shapes, via `log.redact`)
@@ -25,12 +28,24 @@ export type ProbeDeps = {
   azureRegion?: string;
 };
 
-type Request = { url: string; headers?: Record<string, string> };
+type Request = { url: string; headers?: Record<string, string>; method?: "POST"; body?: string };
 
 const REGION_RE = /^[a-z0-9-]{2,30}$/;
 
 /** The request for `id`, or an error text when the probe cannot be built (e.g. Azure without a region). */
 export function probeRequest(id: string, key: string, deps: ProbeDeps = {}): Request | { error: string } {
+  if (isOpenAiCompatId(id)) {
+    const preset = OPENAI_COMPAT_PRESETS[id];
+    const base = presetBaseUrl(preset);
+    const auth = { Authorization: `Bearer ${key}` };
+    if (preset.probePath) return { url: `${base}${preset.probePath}`, headers: auth };
+    return {
+      url: `${base}/chat/completions`,
+      method: "POST",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: preset.defaultModel, messages: [{ role: "user", content: "1" }], max_tokens: 1, ...preset.thinkingOff }),
+    };
+  }
   switch (id) {
     case "gemini":
       return { url: "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1", headers: { "x-goog-api-key": key } };
@@ -158,6 +173,17 @@ export function falMessage(pricing: unknown, billing: unknown): string {
   return parts.join(" · ");
 }
 
+/** DeepSeek `GET /user/balance` (api-docs.deepseek.com/api/get-user-balance, read 2026-11-05): numbers and a pattern-checked currency only. */
+export function deepseekMessage(body: unknown): string {
+  const b = (body ?? {}) as { is_available?: unknown; balance_infos?: { currency?: unknown; total_balance?: unknown }[] };
+  const parts = ["Kalit qabul qilindi"];
+  const info = Array.isArray(b.balance_infos) ? b.balance_infos[0] : undefined;
+  const total = Number(info?.total_balance);
+  if (info && Number.isFinite(total)) parts.push(`balans ${total} ${typeof info.currency === "string" && /^[A-Z]{3}$/.test(info.currency) ? info.currency : ""}`.trim());
+  if (b.is_available === false) parts.push("balans yetarli emas: zaxira ishlamaydi, hisobni to'ldiring");
+  return parts.join(" · ");
+}
+
 export const HEYGEN_ME_URL = "https://api.heygen.com/v3/users/me";
 
 /**
@@ -202,7 +228,7 @@ export async function probeProvider(id: string, key: string, deps: ProbeDeps = {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), deps.timeoutMs ?? PROBE_TIMEOUT_MS);
   try {
-    const res = await fetchImpl(req.url, { method: "GET", headers: req.headers, signal: ctrl.signal, redirect: "manual" });
+    const res = await fetchImpl(req.url, { method: req.method ?? "GET", headers: req.headers, ...(req.body ? { body: req.body } : {}), signal: ctrl.signal, redirect: "manual" });
     if (res.ok && id === "fal") {
       const pricing = await res.json().catch(() => null);
       let billing: unknown = null;
@@ -216,6 +242,7 @@ export async function probeProvider(id: string, key: string, deps: ProbeDeps = {
       return { ok: true, message: falMessage(pricing, billing).split(key).join("…") };
     }
     // Built from numbers and pattern-checked words only; the key cannot be in it, split anyway.
+    if (res.ok && id === "deepseek") return { ok: true, message: deepseekMessage(await res.json().catch(() => null)).split(key).join("…") };
     if (res.ok && id === "heygen") return { ok: true, message: heygenMessage(await res.json().catch(() => null)).split(key).join("…") };
     if (res.ok) return { ok: true, message: id === "elevenlabs" ? elevenLabsMessage(await res.json().catch(() => null)) : "Kalit qabul qilindi" };
     const detail = redactProbeText(await errorText(res), key);

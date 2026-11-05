@@ -10,10 +10,26 @@
 import { log } from "../../server/log";
 import type { FailureKind } from "./failure";
 
-/** `LLM_<ROL>` env qiymatidagi bitta yozuv: `"anthropic:claude-sonnet-5"`. */
-export type ProviderId = "gemini" | "anthropic";
+/**
+ * OpenAI-compatible text providers served by the ONE adapter in `openai-compat.ts`. Adding another one = an id here plus
+ * a preset row there, a registry + catalog entry and its price rows (docs/ops/LLM-FALLBACK.md).
+ */
+export const OPENAI_COMPAT_IDS = ["qwen", "deepseek"] as const;
+export type OpenAiCompatId = (typeof OPENAI_COMPAT_IDS)[number];
 
-const PROVIDER_IDS: readonly ProviderId[] = ["gemini", "anthropic"];
+/** `LLM_<ROL>` env qiymatidagi bitta yozuv: `"anthropic:claude-sonnet-5"`. */
+export type ProviderId = "gemini" | "anthropic" | OpenAiCompatId;
+
+const PROVIDER_IDS: readonly ProviderId[] = ["gemini", "anthropic", ...OPENAI_COMPAT_IDS];
+
+export function isOpenAiCompatId(id: string): id is OpenAiCompatId {
+  return (OPENAI_COMPAT_IDS as readonly string[]).includes(id);
+}
+
+/** A provider the text layer can call (the admin routing slots are validated against the same list). */
+export function isLlmProviderId(id: string): id is ProviderId {
+  return (PROVIDER_IDS as readonly string[]).includes(id);
+}
 
 export type AdapterOpts = {
   json?: boolean;
@@ -21,6 +37,10 @@ export type AdapterOpts = {
   timeoutMs: number;
   /** Faqat Gemini o'qiydi (fixed byudjet, token). Boshqa adapterlar e'tiborsiz qoldiradi. */
   thinking?: number;
+  /** Cumulative text while the answer streams. Only `openai-compat.ts` streams; the others ignore it (the chain's caller gets the finished text). */
+  onText?: (partial: string) => void;
+  /** JSON shape of the answer (OpenAPI subset). Gemini enforces it; `openai-compat.ts` puts it in the prompt as a hint. */
+  responseSchema?: Record<string, unknown>;
 };
 
 export type Usage = { inputTokens: number; outputTokens: number };
@@ -50,6 +70,8 @@ export type Attempt =
       finishReason?: string;
       /** Tokens of a failed but PAID attempt (e.g. Gemini spent them on thinking and returned no text). */
       usage?: Usage;
+      /** Bad key / no balance / billing, whatever the status code: the breaker opens (`failure.ts isAccountFailure` covers the plain statuses). */
+      account?: boolean;
     };
 
 export type ProviderAdapter = {

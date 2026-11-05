@@ -25,7 +25,8 @@
  * SAQLAGICH (`breaker.ts`): provayder bo'yicha; to'liq (≥ 15 s) timeout
  * yoki 5xx/tarmoq xatosi — nosozlik, javob (ok/4xx) — salomatlik. Ochiq
  * provayder o'tkazib yuboriladi — sekin Gemini'ni har chaqiruv qaytadan
- * «kashf» qilmaydi, zaxira spec darhol ishlaydi.
+ * «kashf» qilmaydi, zaxira spec darhol ishlaydi. Account failures (bad key,
+ * no balance, 401/402/403: `failure.ts isAccountFailure`) open it at once.
  *
  * CHEKLAGICH (`limiter.ts`): provayder bo'yicha bir vaqtdagi so'rovlar
  * soni; navbatda kutilgan vaqt urinish timeout'idan ayriladi.
@@ -33,7 +34,7 @@
 import { recordLlmUsage } from "../job-cost";
 import { getProviderKey } from "../../server/providers/resolve";
 import { LLM_BREAKER, allowOrWait, breakerFor, type CircuitBreaker } from "./breaker";
-import { classifyFailure, reportFailure, type FailureKind } from "./failure";
+import { ACCOUNT_BREAKER_MS, classifyFailure, isAccountFailure, reportFailure, reportFallback, type FailureKind } from "./failure";
 import { limiterFor, type Semaphore } from "./limiter";
 import { backoffMs, equalJitterMs } from "./retry";
 import type { Attempt, ProviderAdapter, ProviderId, RoleSpec } from "./types";
@@ -47,6 +48,10 @@ export type ChainOpts = {
   deadline?: number;
   /** Optional improvement call: a timeout is not retried on the same provider. */
   noTimeoutRetry?: boolean;
+  /** Cumulative text while the answer streams (adapters that cannot stream ignore it). */
+  onText?: (partial: string) => void;
+  /** JSON shape of the answer, see `AdapterOpts.responseSchema`. */
+  responseSchema?: Record<string, unknown>;
 };
 
 export type ChainUsage = {
@@ -69,6 +74,8 @@ export type ChainDeps = {
   limiterFor?: (provider: ProviderId) => Semaphore;
   /** Jitter manbai (test: `() => 0`). */
   random?: () => number;
+  /** These specs run after the caller's own primary path failed (`llm.ts`): the first of them is already a fallback. */
+  afterPrimary?: boolean;
 };
 
 /** Muddatdan oldin qoldiriladigan zaxira (javobni qayta ishlash, yozish). */
@@ -169,6 +176,8 @@ async function runSpec(
         maxTokens: opts.maxTokens,
         timeoutMs,
         thinking: opts.thinking,
+        ...(opts.onText ? { onText: opts.onText } : {}),
+        ...(opts.responseSchema ? { responseSchema: opts.responseSchema } : {}),
       });
     } finally {
       release();
@@ -223,14 +232,16 @@ async function runSpec(
      * `max_tokens`), refusal, 4xx — provayder SOG'; ularni sanash bitta
      * ishning muammoli promptlari tufayli Gemini'ni butun jarayon uchun
      * o'chirib qo'yardi (review R1). `llm.ts withRetry` bilan bir xil qoida.
+     * The exception is an account failure: every later call would get the same refusal, so one is enough to open it.
      */
     if (res.kind === "empty" || res.kind === "safety") {
       // Provider answered (empty candidate / policy block): healthy transport, not a breaker failure.
-    } else if (res.status === undefined ? res.retryable : res.status >= 500) breaker.failure();
+    } else if (res.account || isAccountFailure(res.status, res.error)) breaker.trip(ACCOUNT_BREAKER_MS, `hisob xatosi ${res.status ?? ""}`.trim());
+    else if (res.status === undefined ? res.retryable : res.status >= 500) breaker.failure();
     else if (res.status !== undefined && res.status !== 429) breaker.success();
     // Kvota: sarf chegarasi (429, retryable:false) yoki uzun `Retry-After` —
     // provayder shu muddat javob bermaydi; har chaqiruvda qayta urmaslik uchun darhol ochamiz.
-    if (res.status === 429 && (!res.retryable || (res.retryAfterMs ?? 0) > RETRY_AFTER_CAP_MS)) {
+    if (res.status === 429 && !res.account && (!res.retryable || (res.retryAfterMs ?? 0) > RETRY_AFTER_CAP_MS)) {
       breaker.trip(Math.min(BREAKER_TRIP_MAX_MS, res.retryAfterMs ?? LLM_BREAKER.cooldownMs), "429 kvota");
     }
     if (!res.retryable) return null;
@@ -298,7 +309,10 @@ export async function completeWithChain(
       if (opts.deadline === undefined) return null;
       continue;
     }
-    if (result) return result;
+    if (result) {
+      if (specIndex > 0 || deps.afterPrimary) reportFallback({ role, provider: spec.provider, model: spec.model });
+      return result;
+    }
   }
   if (outOfTime) throw new DeadlineError(role, leftMs(opts));
   return null;

@@ -4,7 +4,7 @@ import { geminiTts } from "../generation/tts/gemini";
 import { wavToMp3 } from "../generation/tts/mp3";
 import { TTS_GEMINI_VOICES } from "../generation/tts/types";
 import { parseLlmJson } from "../generation/json";
-import { llmModel } from "../generation/llm";
+import { llmFallback, llmModel } from "../generation/llm";
 import { complete } from "../generation/llm-roles";
 import { recordLlmUsage } from "../generation/job-cost";
 import { QUESTIONS_SYSTEM, SCORE_SCHEMA, SCORE_SYSTEM, questionsUser, scoreUser } from "../domla/prompts";
@@ -103,8 +103,24 @@ type GeminiScoreResponse = {
   error?: { message?: string };
 };
 
-/** Transcribe + score in ONE call. The audio is sent inline and dropped with this function's scope. */
+/**
+ * Scores the answer on Gemini. A TYPED answer falls back to the text chain when Gemini fails; a voice answer cannot, the
+ * fallback providers do not take audio here, and sending only the prompt would score nothing.
+ */
 export async function scoreWithGemini(input: ScoreInput, fetchImpl: typeof fetch = fetch): Promise<ScoreResult> {
+  try {
+    return await geminiScore(input, fetchImpl);
+  } catch (e) {
+    if (input.audio) throw e;
+    const text = await llmFallback("domla.score", SCORE_SYSTEM, scoreUser(input.question, input.topic, input.deck, input.text ?? ""), 4096, { json: true, responseSchema: SCORE_SCHEMA, timeoutMs: SCORE_TIMEOUT_MS });
+    const score = text ? parseScore(parseLlmJson(text)) : null;
+    if (!score) throw e;
+    return score;
+  }
+}
+
+/** Transcribe + score in ONE call. The audio is sent inline and dropped with this function's scope. */
+async function geminiScore(input: ScoreInput, fetchImpl: typeof fetch): Promise<ScoreResult> {
   const key = getProviderKey("gemini");
   if (!key) throw new Error("GEMINI_API_KEY yo‘q");
   const model = llmModel();

@@ -22,6 +22,9 @@ export const PROVIDER_MAX_INFLIGHT: Record<string, number> = {
   // GPT Image: default Build tier allows 20 images per minute.
   "openai-image": 4,
   anthropic: 4,
+  // Fallback text providers take Gemini's whole text load during an outage.
+  qwen: 10,
+  deepseek: 10,
 };
 
 /** Jadvalda yo'q provayder uchun. */
