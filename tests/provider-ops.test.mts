@@ -1,0 +1,340 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createIsolatedDb } from "./helpers/isolated-db.mts";
+
+/**
+ * Incident 2026-11-05 (fix/provider-ops): a Kling key without `:` was sold and refused on every job, an ElevenLabs key
+ * lacked permissions nobody saw, users were invited to retry through an outage, and the owner learned of it from users.
+ *
+ * MUTATIONS (each turned this file red, see the branch report):
+ *   M1  `keyUsable` returns Boolean(key)                                 -> "keyUsable", "a malformed key is not sold"
+ *   M2  `modelAvailable` back to Boolean(getProviderKey)                 -> "a malformed key is not sold"
+ *   M3  `videoProvidersAvailable` ignores the format                     -> "a malformed key is not sold"
+ *   M4  `isOutageFailure` counts timeouts                                -> "isOutageFailure"
+ *   M5  `isOutageFailure` counts every 400                               -> "isOutageFailure"
+ *   M6  `llmOutage` uses `some` instead of `every`                       -> "errorWithCause: one healthy answer"
+ *   M7  `llmOutage` without the job-context check                        -> "errorWithCause: outside a job"
+ *   M8  `reportFailure` keeps the FIRST failure per provider             -> "errorWithCause: the latest failure"
+ *   M9  `providerFailureOf` does not stop at a safety refusal            -> "providerFailureOf"
+ *   M10 `scrubFailureText` does not remove the key                       -> "recordProviderFailure"
+ *   M11 `scrubFailureText` does not clip to 120                          -> "recordProviderFailure"
+ *   M12 alert threshold `>` instead of `>=`                              -> "alert: fires at five"
+ *   M13 alert counts all errors of a provider together                   -> "alert: different errors"
+ *   M14 `noReminders` dropped                                            -> "alert: one message per incident"
+ *   M15 a trickle (1–4 failures) counts as recovered                     -> "alert: one message per incident"
+ *   M16 `refusedPermissions` ignores `updated_at`                        -> "refusedPermissions"
+ *   M17 the probe reports any 401, not only `missing_permissions`        -> "probe"
+ *   M18 a missing-permission 401 made retryable in `elevenLabsRetryable` -> "a missing permission fails fast"
+ */
+
+process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
+process.env.WORKER_INLINE = "false";
+delete process.env.FAL_KEY;
+delete process.env.KLING_API_KEY;
+
+const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
+const iso = hasDb ? await createIsolatedDb("providerops") : { isolated: false, drop: async () => {} };
+const skip = hasDb && iso.isolated ? false : "alohida Postgres baza yo'q";
+
+const { keyFormatProblem, keyUsable } = await import("../lib/server/providers/registry.ts");
+const { parseKlingKey } = await import("../lib/generation/video/kling.ts");
+const { modelAvailable } = await import("../lib/server/media/availability.ts");
+const { MEDIA_CATALOG } = await import("../lib/media/catalog.ts");
+const { videoProvidersAvailable } = await import("../lib/server/env.ts");
+const F = await import("../lib/generation/llm/failure.ts");
+const { withJobCost } = await import("../lib/generation/job-cost.ts");
+const { AI_OUTAGE_ERROR, UserFacingError, isUserSafeText, userMessage } = await import("../lib/server/user-error.ts");
+const P = await import("../lib/server/provider-failures.ts");
+const { missingPermissionOf } = await import("../lib/generation/tts/elevenlabs.ts");
+const { MediaError } = await import("../lib/studio-core/index.ts");
+const { submitWithRoutes } = await import("../lib/studio-core/router.ts");
+const { TRANSCRIBE_MODEL } = await import("../lib/media/catalog-transcribe.ts");
+const { transcribeAdapters } = await import("../lib/media/adapters/transcribe-studio.ts");
+const { ELEVENLABS_PERMISSION_PROBES, probeProvider } = await import("../lib/server/providers/probe.ts");
+const A = await import("../lib/server/server-alerts.ts");
+
+const BAD_KLING = "noColonKlingKey1234567";
+const GOOD_KLING = "AKtestvalue:SKtestvalue";
+const MISSING = (name: string) => `401 Unauthorized: {"detail":{"status":"missing_permissions","message":"The API key you used is missing the permission ${name} to execute this operation."}}`;
+
+// ───────────────────────────── item 1: key format
+
+test("keyUsable: Kling and fal need both halves, the rest any non-empty key, and it agrees with the worker's parser", () => {
+  for (const id of ["kling", "fal"]) {
+    assert.equal(keyUsable(id, GOOD_KLING), true, id);
+    for (const bad of ["", BAD_KLING, ":secretvalue", "accessvalue:"]) assert.equal(keyUsable(id, bad), false, `${id}: ${bad}`);
+  }
+  assert.equal(keyUsable("gemini", "AIzaWithoutAColon"), true);
+  assert.equal(keyUsable("gemini", ""), false);
+  for (const k of [GOOD_KLING, BAD_KLING, ":secretvalue", "accessvalue:"]) assert.equal(keyUsable("kling", k), parseKlingKey(k) !== null, k);
+});
+
+test("keyFormatProblem: Uzbek, names the format, never echoes the key", () => {
+  const text = keyFormatProblem("kling", BAD_KLING)!;
+  assert.match(text, /Kalit formati noto‘g‘ri/);
+  assert.match(text, /<accessKey>:<secretKey>/);
+  assert.ok(!text.includes(BAD_KLING));
+  assert.equal(keyFormatProblem("kling", GOOD_KLING), null);
+  assert.equal(keyFormatProblem("gemini", "anything-goes"), null);
+});
+
+test("a malformed key is not sold: the model is not available and the old video picker hides the provider", (t) => {
+  t.after(() => void delete process.env.KLING_API_KEY);
+  const entry = MEDIA_CATALOG.entries.find((e) => e.routes.length === 1 && e.routes[0]!.provider === "kling");
+  assert.ok(entry, "the catalog has a Kling-only model");
+  const none = new Map();
+  process.env.KLING_API_KEY = BAD_KLING;
+  assert.equal(modelAvailable(entry.id, none), false, "malformed key: not listed, 400 before the charge");
+  assert.ok(!videoProvidersAvailable().includes("kling"));
+  process.env.KLING_API_KEY = GOOD_KLING;
+  assert.equal(modelAvailable(entry.id, none), true);
+  assert.ok(videoProvidersAvailable().includes("kling"));
+});
+
+// ───────────────────────────── item 3: outage verdict
+
+const attempt = (provider: string, over: Partial<Parameters<typeof F.reportFailure>[0]>) =>
+  F.reportFailure({ role: "writer", provider, model: "m", attempt: 1, durationMs: 1, kind: "http", retryable: false, message: "boom", ...over });
+
+test("isOutageFailure: account, quota, 5xx, network and an open breaker; not one request's own problem", () => {
+  const yes = [
+    { kind: "http", status: 401, message: "x" }, { kind: "http", status: 402, message: "x" }, { kind: "http", status: 403, message: "suspended" }, { kind: "http", status: 429, message: "quota" },
+    { kind: "http", status: 503, message: "x" }, { kind: "network", message: "fetch failed" }, { kind: "other", message: "circuit breaker open - call skipped" },
+    { kind: "http", status: 400, message: "Your credit balance is too low" }, { kind: "http", status: 400, message: "API key not valid" },
+  ] as const;
+  const no = [
+    { kind: "timeout", message: "timed out" }, { kind: "http", status: 400, message: "prompt is too long" }, { kind: "http", status: 404, message: "no model" },
+    { kind: "bad_json", message: "x" }, { kind: "empty", message: "x" }, { kind: "safety", message: "x" }, { kind: "truncated", message: "x" }, { kind: "other", message: "x" },
+  ] as const;
+  for (const f of yes) assert.equal(F.isOutageFailure(f as never), true, JSON.stringify(f));
+  for (const f of no) assert.equal(F.isOutageFailure(f as never), false, JSON.stringify(f));
+});
+
+test("errorWithCause: every provider down gives the outage message, safe for the user and with no invitation to retry at once", async () => {
+  await withJobCost(async () => {
+    attempt("gemini", { status: 403, message: "consumer suspended" });
+    attempt("anthropic", { status: 400, message: "Your credit balance is too low" });
+    const e = F.errorWithCause("Taqdimot matni yozilmadi. Kredit qaytariladi — qayta urinib ko‘ring.");
+    assert.ok(e instanceof UserFacingError);
+    assert.equal(e.message, AI_OUTAGE_ERROR);
+    assert.match(String((e.cause as Error).message), /kind=http status=400/);
+    assert.equal(((e.cause as { llmFailure: { provider: string } }).llmFailure).provider, "anthropic");
+  });
+  assert.equal(isUserSafeText(AI_OUTAGE_ERROR), true, "`failAndCleanup` filters the text a second time");
+  assert.equal(userMessage(AI_OUTAGE_ERROR), AI_OUTAGE_ERROR);
+  assert.match(AI_OUTAGE_ERROR, /vaqtincha/);
+  assert.match(AI_OUTAGE_ERROR, /qaytarildi/);
+  assert.ok(!/qayta urin/.test(AI_OUTAGE_ERROR));
+});
+
+test("errorWithCause: one healthy answer keeps the engine's message", async () => {
+  const MSG = "Matn yozilmadi — AI javob bermadi. Kredit qaytariladi, qayta urinib ko‘ring.";
+  await withJobCost(async () => {
+    attempt("gemini", { status: 403 });
+    attempt("anthropic", { kind: "bad_json", status: undefined });
+    const e = F.errorWithCause(MSG);
+    assert.equal(e.message, MSG);
+    assert.ok(!(e instanceof UserFacingError));
+    assert.equal(((e.cause as { llmFailure: { provider: string } }).llmFailure).provider, "anthropic", "the alert still gets the structured failure");
+  });
+});
+
+test("errorWithCause: the latest failure of a provider decides", async () => {
+  await withJobCost(async () => {
+    attempt("gemini", { status: 503 });
+    attempt("gemini", { kind: "empty", status: undefined });
+    assert.equal(F.errorWithCause("Matn yozilmadi.").message, "Matn yozilmadi.");
+  });
+});
+
+test("errorWithCause: outside a job nothing is an outage (the process-wide slot holds old failures)", () => {
+  F.resetFailureCounters();
+  attempt("gemini", { status: 403 });
+  assert.equal(F.errorWithCause("Matn yozilmadi.").message, "Matn yozilmadi.");
+  F.resetFailureCounters();
+  assert.equal(F.errorWithCause("Matn yozilmadi.").cause, undefined);
+});
+
+// ───────────────────────────── item 2 + 4: the cause chain
+
+test("providerFailureOf walks to the provider error; a content refusal and an engine error are not provider failures", () => {
+  const media = new MediaError("kling", "401 bad token", { status: 401 });
+  assert.deepEqual(P.providerFailureOf(new UserFacingError("Video yaratilmadi", { cause: media })), { provider: "kling", status: 401, message: "401 bad token" });
+  const llm = Object.assign(new Error("last LLM attempt"), { llmFailure: { provider: "gemini", status: 403, message: "suspended", kind: "http" } });
+  assert.deepEqual(P.providerFailureOf(new Error("Matn yozilmadi", { cause: llm })), { provider: "gemini", status: 403, message: "suspended" });
+  assert.equal(P.providerFailureOf(new UserFacingError("x", { cause: new MediaError("fal", "nsfw", { safety: true }) })), null);
+  assert.equal(P.providerFailureOf(Object.assign(new Error("x"), { llmFailure: { provider: "gemini", message: "blocked", kind: "safety" } })), null);
+  assert.equal(P.providerFailureOf(new UserFacingError("Sifat darvozasi")), null);
+  assert.equal(P.providerFailureOf(null), null);
+  assert.equal(P.providerFailureOf("text"), null);
+});
+
+test("missingPermissionOf reads ElevenLabs' refusal and nothing else", () => {
+  assert.equal(missingPermissionOf(MISSING("speech_to_text")), "speech_to_text");
+  assert.equal(missingPermissionOf(MISSING("dubbing_write")), "dubbing_write");
+  assert.equal(missingPermissionOf(`{"detail":{"status":"missing_permissions"}}`), "missing_permissions");
+  assert.equal(missingPermissionOf(`401: {"detail":{"status":"invalid_api_key"}}`), null);
+});
+
+test("a missing permission fails fast: one call, not retryable, the permission survives to the alert", async () => {
+  let calls = 0;
+  const fetchImpl = (async () => {
+    calls++;
+    return new Response(`{"detail":{"status":"missing_permissions","message":"The API key you used is missing the permission speech_to_text to execute this operation."}}`, { status: 401, statusText: "Unauthorized" });
+  }) as typeof fetch;
+  const adapters = transcribeAdapters({ key: () => "sk_test_permission_key" });
+  const healthy = { allow: () => true, success: () => undefined, failure: () => assert.fail("a refusal is not a provider health failure") };
+  const input = { params: { source: "result:x" }, assets: { media: [{ mime: "audio/mpeg", base64: "AAAA" }] }, idempotencyKey: "k" };
+  const err = await submitWithRoutes(MEDIA_CATALOG.byId(TRANSCRIBE_MODEL)!.routes, adapters, healthy, input as never, { fetchImpl }).then(
+    () => assert.fail("must fail"),
+    (e: unknown) => e,
+  );
+  assert.ok(err instanceof MediaError);
+  assert.equal(err.retryable, false);
+  assert.equal(calls, 1, "no retry, no second route");
+  const f = P.providerFailureOf(new UserFacingError("Transkripsiya bajarilmadi", { cause: err }));
+  assert.equal(P.failureSignature(f!, P.scrubFailureText(f!.message, "")), "missing_permission:speech_to_text");
+});
+
+test("probe: reports only an explicit missing_permissions refusal, with GET reads, and never fails a good key", async () => {
+  const KEY = "sk_probe_key_0123456789";
+  const run = async (answer: (url: string) => Response) => {
+    const seen: { url: string; method?: string }[] = [];
+    const r = await probeProvider("elevenlabs", KEY, {
+      fetchImpl: (async (url: string, init?: RequestInit) => {
+        seen.push({ url, method: init?.method });
+        return String(url).endsWith("/user/subscription") ? new Response(JSON.stringify({ tier: "creator" }), { status: 200 }) : answer(String(url));
+      }) as typeof fetch,
+    });
+    return { r, seen };
+  };
+  const refused = await run((url) => (url === ELEVENLABS_PERMISSION_PROBES[0] ? new Response(MISSING("speech_to_text").slice(17), { status: 401 }) : new Response("{}", { status: 404 })));
+  assert.equal(refused.r.ok, true, "the key itself was accepted");
+  assert.match(refused.r.message, /ruxsat yetishmaydi: speech_to_text$/);
+  assert.ok(refused.seen.every((c) => c.method === "GET"), "nothing billable");
+  assert.ok(!refused.r.message.includes(KEY));
+
+  const fine = await run(() => new Response("{}", { status: 404 }));
+  assert.ok(!/ruxsat/.test(fine.r.message), fine.r.message);
+  const otherRefusal = await run(() => new Response(`{"detail":{"status":"invalid_api_key"}}`, { status: 401 }));
+  assert.ok(!/ruxsat/.test(otherRefusal.r.message), "any other 401 proves nothing about a permission");
+  const down = await run(() => {
+    throw new Error("socket hang up");
+  });
+  assert.equal(down.r.ok, true);
+});
+
+// ───────────────────────────── item 4: the owner alert + item 2 card (database)
+
+test("the database half", { skip }, async (t) => {
+  const { migrate, pool, query } = await import("../lib/server/db.ts");
+  await migrate();
+  t.after(async () => {
+    await pool().end();
+    await iso.drop();
+  });
+  const u = await query<{ id: string }>(`INSERT INTO users (name, telegram_id) VALUES ('owner', 777001) RETURNING id::text AS id`);
+  await query(`INSERT INTO admin_accounts (user_id, role, status) VALUES ($1, 'owner', 'active')`, [u[0]!.id]);
+
+  const NOW = new Date("2026-11-05T03:00:00Z");
+  const min = (m: number) => new Date(NOW.getTime() + m * 60_000);
+  const put = async (n: number, provider: string, signature: string, at: Date, message = "403 Forbidden: suspended") => {
+    for (let i = 0; i < n; i++) await query("INSERT INTO provider_failures (at, provider, signature, message, job_id) VALUES ($1, $2, $3, $4, $5)", [at, provider, signature, message, `j${i}`]);
+  };
+  const reset = () => query("TRUNCATE provider_failures, server_alert_state");
+  const sent: string[] = [];
+  const send = async (_chat: string, text: string) => (sent.push(text), true);
+  const pass = async (at: Date) => (await A.runAlerts({ now: at, send })).sent.filter((s) => s.rule.startsWith("provider_fail:"));
+
+  await t.test("recordProviderFailure: scrubbed, clipped, grouped; never throws", async () => {
+    await reset();
+    process.env.ELEVENLABS_API_KEY = "sk_eleven_secret_value_1234";
+    t.after(() => void delete process.env.ELEVENLABS_API_KEY);
+    await P.recordProviderFailure("job-1", { provider: "elevenlabs", status: 500, message: `500 oops key=abc sk_eleven_secret_value_1234 ${"x".repeat(300)}` });
+    await P.recordProviderFailure("job-2", { provider: "gemini", status: 403, message: "Consumer 'api_key:AIzaSyA1234567890123456789012345678901234' suspended" });
+    await P.recordProviderFailure("job-3", null);
+    const rows = await query<{ provider: string; message: string; signature: string; job_id: string }>("SELECT provider, message, signature, job_id FROM provider_failures ORDER BY id");
+    assert.equal(rows.length, 2);
+    for (const r of rows) {
+      assert.ok(r.message.length <= 120, `${r.message.length}`);
+      assert.ok(!r.message.includes("sk_eleven_secret") && !r.message.includes("AIzaSy"), r.message);
+      assert.ok(!r.signature.includes("sk_eleven_secret") && !r.signature.includes("AIzaSy"), r.signature);
+    }
+    await P.recordProviderFailure("job-4", { provider: "elevenlabs", message: MISSING("dubbing_write") });
+    const last = await query<{ signature: string }>("SELECT signature FROM provider_failures WHERE job_id = 'job-4'");
+    assert.equal(last[0]!.signature, "missing_permission:dubbing_write");
+  });
+
+  await t.test("alert: fires at five on the same error, not at four, with provider and error", async () => {
+    await reset();
+    sent.length = 0;
+    await put(4, "gemini", "403|same", min(-1));
+    assert.deepEqual(await pass(NOW), []);
+    await put(1, "gemini", "403|same", min(-1), "403 Forbidden: <b>suspended</b>");
+    assert.deepEqual(await pass(NOW), [{ rule: "provider_fail:gemini", kind: "alert" }]);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0]!, /\[OGOHLANTIRISH\].*gemini.*5 ta ish.*403 Forbidden/);
+    assert.ok(!sent[0]!.includes("<b>"), "Telegram HTML is escaped");
+  });
+
+  await t.test("alert: the window is ten minutes", async () => {
+    await reset();
+    await put(5, "gemini", "403|same", min(-11));
+    assert.deepEqual(await pass(NOW), []);
+  });
+
+  await t.test("alert: different errors of a provider are not one spike; two providers are two incidents", async () => {
+    await reset();
+    await put(3, "gemini", "403|a", min(-1));
+    await put(3, "gemini", "500|b", min(-1));
+    assert.deepEqual(await pass(NOW), []);
+    await reset();
+    await put(5, "gemini", "403|a", min(-1));
+    await put(5, "anthropic", "400|credit", min(-1));
+    assert.equal((await pass(NOW)).length, 2);
+  });
+
+  await t.test("alert: one message per incident, through a trickle and hours of failures, then one recovery", async () => {
+    await reset();
+    sent.length = 0;
+    await put(6, "kling", "401|a", min(-1));
+    assert.equal((await pass(NOW)).length, 1);
+    assert.deepEqual(await pass(min(1)), [], "next minute: same incident");
+    await put(6, "kling", "401|a", min(179));
+    assert.deepEqual(await pass(min(180)), [], "three hours on: no reminder");
+    await put(1, "kling", "401|a", min(195));
+    assert.deepEqual(await pass(min(200)), [], "a trickle neither re-alerts nor recovers");
+    assert.deepEqual(await pass(min(230)), [{ rule: "provider_fail:kling", kind: "recover" }], "a quiet window recovers");
+    assert.equal(sent.length, 2);
+    assert.match(sent[1]!, /\[NORMALLASHDI\].*kling/);
+    assert.deepEqual(await pass(min(231)), []);
+  });
+
+  await t.test("alert: a spike right after a recovery waits for the cooldown", async () => {
+    await reset();
+    await put(5, "kling", "401|a", min(-1));
+    assert.equal((await pass(NOW)).length, 1);
+    assert.equal((await pass(min(20))).length, 1, "recovered");
+    await put(5, "kling", "401|a", min(29));
+    assert.deepEqual(await pass(min(30)), [], "flapping stays silent");
+    await put(5, "kling", "401|a", min(84));
+    assert.deepEqual(await pass(min(85)), [{ rule: "provider_fail:kling", kind: "alert" }]);
+  });
+
+  await t.test("refusedPermissions: lists what the current key was refused; a changed key clears it", async () => {
+    await reset();
+    await P.recordProviderFailure("j1", { provider: "elevenlabs", status: 401, message: MISSING("speech_to_text") });
+    await P.recordProviderFailure("j2", { provider: "elevenlabs", status: 401, message: MISSING("dubbing_write") });
+    await P.recordProviderFailure("j3", { provider: "elevenlabs", status: 401, message: MISSING("dubbing_write") });
+    await P.recordProviderFailure("j4", { provider: "gemini", status: 403, message: "suspended" });
+    assert.deepEqual([...(await P.refusedPermissions())], [["elevenlabs", ["dubbing_write", "speech_to_text"]]]);
+    await query("INSERT INTO provider_settings (provider, updated_at) VALUES ('elevenlabs', now() + interval '1 second')");
+    assert.equal((await P.refusedPermissions()).size, 0);
+  });
+
+  await t.test("purge keeps thirty days", async () => {
+    await reset();
+    await query("INSERT INTO provider_failures (at, provider, signature, message) VALUES (now() - interval '31 days', 'gemini', 's', 'm'), (now() - interval '29 days', 'gemini', 's', 'm')");
+    assert.equal(await P.purgeProviderFailures(), 1);
+  });
+});

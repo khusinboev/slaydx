@@ -89,6 +89,28 @@ export function isPlausibleKey(v: unknown): v is string {
   return typeof v === "string" && v.length >= KEY_MIN_LEN && v.length <= KEY_MAX_LEN && /^[\x21-\x7e]+$/.test(v);
 }
 
+/** Providers whose one stored secret is two parts, `<id>:<secret>`: without the colon no request can be signed or sent. */
+const TWO_PART_KEYS: ReadonlySet<string> = new Set(["kling", "fal"]);
+
+/**
+ * Can this key serve requests at all? `true` for any non-empty key of a provider without a known format. The ONE rule of
+ * the admin save, the admin card, model availability and the video picker: incident 2026-11-05, a Kling key without `:`
+ * was listed and charged, then refused by the worker on every job.
+ */
+export function keyUsable(id: string, key: string): boolean {
+  if (!key) return false;
+  if (!TWO_PART_KEYS.has(id)) return true;
+  const at = key.indexOf(":");
+  return at > 0 && key.slice(0, at).trim() !== "" && key.slice(at + 1).trim() !== "";
+}
+
+/** The Uzbek refusal for a key of the wrong format (names the format, never the key), `null` when the key is fine. */
+export function keyFormatProblem(id: string, key: string): string | null {
+  if (keyUsable(id, key)) return null;
+  const def = providerDef(id);
+  return `Kalit formati noto‘g‘ri: ${def?.label ?? id} kaliti ${def?.keyHint ?? ""} ko‘rinishida bo‘lishi kerak`;
+}
+
 /** `…a1B2`: the only form of a stored key that ever leaves the store. */
 export function keyHintOf(key: string): string {
   return `…${key.slice(-4)}`;

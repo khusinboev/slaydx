@@ -175,3 +175,18 @@ SELECT rule, firing, since, last_sent_at FROM server_alert_state ORDER BY rule;
   worker is down, `app` rows stop and the existing watchdog / `process_heartbeats` alarms are the signal.
 * Rollback: `049_server_metrics.sql` carries its rollback block (drops both tables); remove `/etc/cron.d/slaydx-metrics`
   and `/usr/local/bin/slaydx-metrics` first. The code tolerates an empty table (UI shows the empty state).
+
+## Provider failure alert (`provider_fail:<provider>`, added 2026-11-05)
+
+Every job that ends on a provider's own error stores one row in `provider_failures` (migration `072`; the first 120
+characters of the error, scrubbed of keys; kept 30 days). The source is the error's `cause`: `errorWithCause` for the text
+chain, `UserFacingError(text, { cause })` for media and speech, `failVideo(…, provider)` for video polling. A content
+refusal is not counted.
+
+The rule runs with the other alerts, once a minute on the housekeeping leader. It fires when 5 jobs end on the SAME error of
+one provider within 10 minutes (`ALERT_THRESHOLDS.providerFailMin` / `providerFailWindowMin`) and sends ONE message to the
+active owners. There are no reminders. It clears, with one «normallashdi» message, only when the window holds no failure of
+that provider; a recovery followed by a new spike inside the 60-minute cooldown stays silent until the cooldown ends.
+
+`missing_permission:<name>` rows also feed the admin «Provayderlar» card («Ruxsat yetishmaydi») until the provider's
+settings change.

@@ -45,6 +45,7 @@ import { refundUnrefundedFailed } from "./refund-reconcile";
 import { purgePaymentEvents } from "./payment-events";
 import { METRICS_RETENTION_DAYS, purgeServerMetrics, recordAppSample } from "./server-metrics";
 import { runAlerts } from "./server-alerts";
+import { providerFailureOf, purgeProviderFailures, recordProviderFailure } from "./provider-failures";
 import { purgeStaleCardTokens } from "./payments";
 import { query, queryOne } from "./db";
 import type { ToolConfig, ToolId } from "../types";
@@ -484,6 +485,7 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
     } catch (e) {
       const message = userMessage(e);
       log("error", `[worker] video job ${job.id} failed to start`, { jobId: job.id, userId: job.userId, attempt: job.attempts, userError: message, err: e });
+      await recordProviderFailure(job.id, providerFailureOf(e));
       await failAndCleanup(job, job.lease, message);
     }
     return;
@@ -787,6 +789,7 @@ async function execute(
       userError: message,
       err: e,
     });
+    await recordProviderFailure(job.id, providerFailureOf(e));
     // Avval jonli reporter va yo'ldagi aktiv yozuvlari — keyin tozalash (W3-A nit 2).
     await quiesce(ctl, live);
     // Tashlab ketilgan yurishda `failJob` qulf to'sig'idan o'tmaydi — pul
@@ -1032,7 +1035,7 @@ export async function purgeHousekeeping(): Promise<void> {
   if (Date.now() - lastServerMetricsPurgeAt >= RETENTION_EVERY_MS) {
     await step("server-metrics-purge", async () => {
       lastServerMetricsPurgeAt = Date.now();
-      return purgeServerMetrics(METRICS_RETENTION_DAYS);
+      return (await purgeServerMetrics(METRICS_RETENTION_DAYS)) + (await purgeProviderFailures());
     });
   }
   /*

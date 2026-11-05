@@ -153,9 +153,9 @@ export async function buildStudioDub(
   const key = `${gen}:dub:0`;
 
   const row = store ? await store.begin({ key, params: { ...p }, costUsd: costUsd(entry.cost, p) }) : null;
-  const fail = async (message: string, userMessage: string): Promise<never> => {
+  const fail = async (message: string, userMessage: string, cause?: unknown): Promise<never> => {
     if (store && row) await store.fail(row.id, message).catch(() => undefined);
-    throw new UserFacingError(userMessage);
+    throw new UserFacingError(userMessage, cause === undefined ? undefined : { cause });
   };
 
   let opId: string;
@@ -178,15 +178,15 @@ export async function buildStudioDub(
       opId = result.opId;
     } catch (e) {
       console.warn("[studio-dub] submit failed:", e instanceof Error ? e.message : e);
-      return fail(e instanceof Error ? e.message : String(e), e instanceof MediaError && e.safety ? DUB_SAFETY_MESSAGE : DUB_FAILED_MESSAGE);
+      return fail(e instanceof Error ? e.message : String(e), e instanceof MediaError && e.safety ? DUB_SAFETY_MESSAGE : DUB_FAILED_MESSAGE, e);
     }
     if (store && row) await store.park(row.id, opId);
   }
 
-  const giveUp = async (message: string, userMessage: string): Promise<never> => {
+  const giveUp = async (message: string, userMessage: string, cause?: unknown): Promise<never> => {
     // A dub we no longer wait for is deleted at ElevenLabs, so a late finish is not kept (best effort).
     await adapter.cancel?.(opId).catch(() => undefined);
-    return fail(message, userMessage);
+    return fail(message, userMessage, cause);
   };
 
   const deadline = o.deadline ?? now() + 9 * 60_000;
@@ -205,7 +205,7 @@ export async function buildStudioDub(
       r = await adapter.poll!(opId, { deadline: until });
     } catch (e) {
       if (e instanceof MediaError && e.retryable && ++transient <= DUB_MAX_TRANSIENT) continue;
-      return giveUp(e instanceof Error ? e.message : String(e), DUB_FAILED_MESSAGE);
+      return giveUp(e instanceof Error ? e.message : String(e), DUB_FAILED_MESSAGE, e);
     }
     if (r.state === "failed") return giveUp(r.message, r.safety ? DUB_SAFETY_MESSAGE : DUB_FAILED_MESSAGE);
     if (r.state === "done") output = r.outputs[0] ?? null;

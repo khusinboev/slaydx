@@ -1,12 +1,11 @@
 import "server-only";
 import { BRAND_NAME } from "../brand";
 import { acceptedPaymeKeys } from "./payme-keys";
-import { providersOfKind } from "./providers/registry";
+import { keyUsable, providersOfKind } from "./providers/registry";
 import { getProviderKey, isProviderEnabled, unreadableProviders } from "./providers/resolve";
 import { IMAGE_MODELS, imageModelOf, type ImageModelId } from "../generation/image-models";
 import { normalizeVoiceProvider } from "../generation/tts/types";
 import { VIDEO_PROVIDERS, videoInputFromValues, type VideoProviderId } from "../generation/video/registry";
-import { parseKlingKey } from "../generation/video/kling";
 import { resolveSupportUrl } from "../support";
 
 /**
@@ -480,8 +479,7 @@ export function ttsPremiumAvailable(): boolean {
 export function videoProvidersAvailable(): VideoProviderId[] {
   return VIDEO_PROVIDERS.filter((p) => {
     if (!isProviderEnabled(p.registryId)) return false;
-    const key = getProviderKey(p.registryId);
-    return p.id === "kling" ? parseKlingKey(key) !== null : Boolean(key);
+    return keyUsable(p.registryId, getProviderKey(p.registryId));
   }).map((p) => p.id);
 }
 

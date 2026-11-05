@@ -16,6 +16,8 @@ export function propagationNote(sec: number): string {
   return `O'zgarish boshqa jarayonlarga (veb va worker) ${sec} soniyagacha yetib boradi.`;
 }
 
+export const KEY_MALFORMED = "Kalit formati noto‘g‘ri";
+
 export type KeyState = { tone: "success" | "info" | "warning" | "neutral"; label: string };
 
 /**
@@ -26,6 +28,7 @@ export function keyState(item: ProviderItem): KeyState {
   if (item.hasDbKey && item.unreadable) {
     return { tone: "warning", label: item.envPresent ? "Bazadagi kalit o'qilmaydi · Env ishlatiladi" : "Bazadagi kalit o'qilmaydi" };
   }
+  if (item.keyMalformed) return { tone: "warning", label: KEY_MALFORMED };
   if (item.hasDbKey) return { tone: "success", label: item.keyHint ? `Bazada ${item.keyHint}` : "Bazada" };
   if (item.envPresent) return { tone: "info", label: "Serverda (env)" };
   // OpenAlex and Google Books work without a key (a key only raises the quota).
@@ -119,7 +122,9 @@ export type ProviderStatus = { tone: Tone; label: string; hint?: string };
 export function providerStatus(item: ProviderItem): ProviderStatus {
   if (!item.enabled) return { tone: "warning", label: "O'chirilgan", hint: "Kalit bo'lsa ham ishlatilmaydi" };
   if (item.hasDbKey && item.unreadable && !item.envPresent) return { tone: "danger", label: "Kalit o'qilmaydi", hint: "Kalitni qayta kiriting" };
+  if (item.keyMalformed) return { tone: "danger", label: KEY_MALFORMED, hint: `To'g'ri ko'rinishi: ${item.keyFormat}. Kalit tuzatilmaguncha modellar sotilmaydi` };
   if (item.breaker?.state === "open") return { tone: "danger", label: "Vaqtincha to'xtagan", hint: "Kvota yoki xato tufayli so'rovlar vaqtincha o'tkazib yuborilmoqda" };
+  if (item.usable && item.refusedPermissions.length) return { tone: "warning", label: "Ruxsat yetishmaydi", hint: `Kalit rad etildi: ${item.refusedPermissions.join(", ")}` };
   if (item.usable) return { tone: "success", label: "Ishlayapti" };
   if (item.keySource !== "none") return { tone: "warning", label: "To'liq sozlanmagan", hint: "Kalit bor, lekin serverda yana bir sozlama (masalan, region) yo'q" };
   return { tone: "neutral", label: "Kalit yo'q", hint: "Kalit kiritilmaguncha ishlamaydi" };
@@ -128,8 +133,18 @@ export function providerStatus(item: ProviderItem): ProviderStatus {
 /** Does the provider need the owner's attention? (a required/recommended one that is down, a stuck breaker, an unreadable key). */
 export function providerNeedsAttention(item: ProviderItem): boolean {
   if (item.hasDbKey && item.unreadable) return true;
+  if (item.keyMalformed) return true;
+  if (item.refusedPermissions.length) return true;
   if (item.breaker?.state === "open") return true;
   return false;
+}
+
+/** The short reason next to the provider's name in the «Diqqat talab» tile. */
+export function attentionReason(item: ProviderItem): string {
+  if (item.hasDbKey && item.unreadable) return "kalit o'qilmaydi";
+  if (item.keyMalformed) return KEY_MALFORMED.toLowerCase();
+  if (item.refusedPermissions.length) return `ruxsat yetishmaydi (${item.refusedPermissions.join(", ")})`;
+  return "vaqtincha to'xtagan";
 }
 
 /* ───────────────────────────── routes ───────────────────────────── */

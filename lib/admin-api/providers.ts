@@ -65,6 +65,10 @@ export type ProviderItem = {
   keySource: ProviderKeySource;
   /** A key is stored but cannot be decrypted (the sealing key changed): enter it again. */
   unreadable: boolean;
+  /** The key in use cannot work (Kling / fal need `<id>:<secret>`): its models are not sold. */
+  keyMalformed: boolean;
+  /** Permissions real jobs were refused with the current key. */
+  refusedPermissions: string[];
   updatedBy: string | null;
   updatedAt: string | null;
   /** Can serve requests right now: switched on and a key resolves. */

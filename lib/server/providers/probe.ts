@@ -1,7 +1,7 @@
 import { redact } from "../log";
 import { providerDef } from "./registry";
 import { FAL_IMAGE_MODELS, MEDIA_CATALOG } from "../../media/catalog";
-import { elevenLabsSlotsOf } from "../../generation/tts/elevenlabs";
+import { ELEVENLABS_API, elevenLabsSlotsOf, missingPermissionOf } from "../../generation/tts/elevenlabs";
 
 /**
  * «Tekshirish»: ONE cheap authenticated read per provider (list models, fetch one photo...), 10 s timeout, to
@@ -111,6 +111,30 @@ export function elevenLabsMessage(body: unknown): string {
   return parts.join(" · ");
 }
 
+/**
+ * Free reads of a resource that does not exist, one per product the Studio uses: a key with the permission gets a 404, a
+ * key without it the 401 `missing_permissions` that the speech-to-text and dubbing jobs would get. ElevenLabs documents no
+ * scope for these reads, so ONLY that explicit refusal is reported; silence proves nothing. A key may read dubs and still
+ * lack `dubbing_write` (no free write check exists): the admin card shows what real jobs were refused.
+ */
+export const ELEVENLABS_PERMISSION_PROBES = [`${ELEVENLABS_API}/speech-to-text/transcripts/slaydx-probe`, `${ELEVENLABS_API}/dubbing/slaydx-probe`];
+
+/** The permissions the key was refused by the free reads. Never throws: the key already passed. */
+async function elevenLabsRefusals(call: (url: string) => Promise<Response>): Promise<string[]> {
+  const out: string[] = [];
+  for (const url of ELEVENLABS_PERMISSION_PROBES) {
+    try {
+      const res = await call(url);
+      if (res.status !== 401 && res.status !== 403) continue;
+      const permission = missingPermissionOf((await res.text()).slice(0, 2000));
+      if (permission) out.push(permission);
+    } catch {
+      // Unknown is not refused: the job path reports a real refusal.
+    }
+  }
+  return out;
+}
+
 export const FAL_PRICING_URL = "https://api.fal.ai/v1/models/pricing";
 /** Balance read (`billing:usage:read`; a key without it answers 403, which is not a key problem). */
 export const FAL_BILLING_URL = "https://api.fal.ai/v1/account/billing?expand=credits";
@@ -217,7 +241,13 @@ export async function probeProvider(id: string, key: string, deps: ProbeDeps = {
     }
     // Built from numbers and pattern-checked words only; the key cannot be in it, split anyway.
     if (res.ok && id === "heygen") return { ok: true, message: heygenMessage(await res.json().catch(() => null)).split(key).join("…") };
-    if (res.ok) return { ok: true, message: id === "elevenlabs" ? elevenLabsMessage(await res.json().catch(() => null)) : "Kalit qabul qilindi" };
+    if (res.ok && id === "elevenlabs") {
+      const message = elevenLabsMessage(await res.json().catch(() => null));
+      const refused = await elevenLabsRefusals((url) => fetchImpl(url, { method: "GET", headers: req.headers, signal: ctrl.signal, redirect: "manual" }));
+      // Permission names are pattern-checked `[a-z0-9_]` words; the key cannot be in them.
+      return { ok: true, message: refused.length ? `${message} · ruxsat yetishmaydi: ${refused.join(", ")}` : message };
+    }
+    if (res.ok) return { ok: true, message: "Kalit qabul qilindi" };
     const detail = redactProbeText(await errorText(res), key);
     return { ok: false, message: `Provayder rad etdi (HTTP ${res.status})${detail ? `: ${detail}` : ""}` };
   } catch (e) {

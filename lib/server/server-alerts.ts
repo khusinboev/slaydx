@@ -16,6 +16,8 @@ import { botConfigured, sendMessage } from "./telegram";
  *   queue_stuck    oldest runnable QUEUED job older than 5 minutes
  *   fail_ratio     > 25 % of the jobs finished in the last 15 minutes failed (at least 8 jobs)
  *   container_event  a slaydx container restarted, was OOM-killed or stopped since the last sample
+ *   provider_fail:<provider>  many jobs ended on the SAME provider error (`provider_failures`): one message when it
+ *                  starts, no reminders, one "normallashdi" when the window holds no failure of that provider
  *
  * Level rules keep a row in `server_alert_state`: one message when a rule starts firing, a reminder
  * at most every COOLDOWN while it keeps firing, one "normallashdi" message when it recovers. A rule
@@ -23,6 +25,8 @@ import { botConfigured, sendMessage } from "./telegram";
  * in the DB, so a restart or a second worker never repeats a message. Messages go to every ACTIVE
  * owner with a linked Telegram.
  */
+
+const PROVIDER_RULE_PREFIX = "provider_fail:";
 
 export const ALERT_THRESHOLDS = {
   /** mem_low: fire when MemAvailable / MemTotal is below this percentage. */
@@ -43,6 +47,9 @@ export const ALERT_THRESHOLDS = {
   failWindowMin: 15,
   failMinJobs: 8,
   failMaxRatio: 0.25,
+  /** provider_fail: this many jobs on the same provider error inside the window. */
+  providerFailMin: 5,
+  providerFailWindowMin: 10,
   /** Minimum time between two messages of the same rule. */
   cooldownMin: 60,
   /** Minimum time between two container-event messages (a crash loop must not page every sample). */
@@ -212,6 +219,29 @@ export function decide(f: Finding, st: RuleState | undefined, now: Date, cooldow
   return { rule: f.rule, send: null, next: null };
 }
 
+/** Jobs that ended on one provider error inside the window. */
+export type ProviderFailureGroup = { provider: string; n: number; sample: string };
+
+/**
+ * One finding per provider. It fires on `providerFailMin` jobs with the same error and clears only when the window holds
+ * no failure of that provider at all; a trickle in between changes nothing, so an outage that users stopped trying
+ * (fewer jobs, same error) is not reported as recovered.
+ */
+export function evaluateProviderFailures(groups: ProviderFailureGroup[], firing: string[], th: Thresholds = ALERT_THRESHOLDS): Finding[] {
+  const out: Finding[] = [];
+  for (const provider of new Set([...groups.map((g) => g.provider), ...firing])) {
+    const mine = groups.filter((g) => g.provider === provider);
+    const top = mine.reduce<ProviderFailureGroup | null>((a, g) => (!a || g.n > a.n ? g : a), null);
+    out.push({
+      rule: `${PROVIDER_RULE_PREFIX}${provider}`,
+      firing: top && top.n >= th.providerFailMin ? true : mine.length === 0 ? false : null,
+      alert: top ? `AI provayder nosoz: ${provider} — oxirgi ${th.providerFailWindowMin} daqiqada ${top.n} ta ish bir xil xato bilan tugadi: ${top.sample}` : "",
+      ok: `${provider}: oxirgi ${th.providerFailWindowMin} daqiqada yangi xato yo'q.`,
+    });
+  }
+  return out;
+}
+
 // ───────────────────────────── I/O
 
 const NAME = "SlaydX";
@@ -310,36 +340,61 @@ export async function runAlerts(opts: RunAlertsOptions = {}): Promise<RunAlertsR
   await opts.afterRead?.();
 
   const findings = evaluateLevelRules({ now, host, app: toSample(appRow), jobs: jobs ?? { failed: 0, finished: 0 } }, th);
-  for (const f of findings) {
-    const row = states.get(f.rule);
-    const st: RuleState | undefined = row ? { rule: f.rule, firing: row.firing, since: row.since, lastSentAt: row.last_sent_at } : undefined;
-    const act = decide(f, st, now, th.cooldownMin);
-    if (!act.send || !act.next) continue;
-    // Compare-and-set first: if another process moved this rule, it also sent the message.
-    const claimed = await query(
-      `INSERT INTO server_alert_state (rule, firing, since, last_sent_at, updated_at)
-       VALUES ($1, $2, $3, $4, now())
-       ON CONFLICT (rule) DO UPDATE SET firing = EXCLUDED.firing, since = EXCLUDED.since, last_sent_at = EXCLUDED.last_sent_at, updated_at = now()
-        WHERE server_alert_state.last_sent_at IS NOT DISTINCT FROM $5::timestamptz
-       RETURNING rule`,
-      [f.rule, act.next.firing, act.next.since, act.next.lastSentAt, st?.lastSentAt ?? null],
-    );
-    if (claimed.length === 0) continue;
-    const sinceMin = st?.since ? (now.getTime() - st.since.getTime()) / 60_000 : undefined;
-    const delivered = await notify(renderMessage(act.send, f, sinceMin), send);
-    if (delivered) {
-      sent.push({ rule: f.rule, kind: act.send });
-    } else {
-      // Nobody got it: put the old state back so the next pass tries again.
-      await query(
-        `UPDATE server_alert_state SET firing = $2, since = $3, last_sent_at = $4, updated_at = now() WHERE rule = $1`,
-        [f.rule, st?.firing ?? false, st?.since ?? null, st?.lastSentAt ?? null],
-      );
-    }
-  }
+  for (const f of findings) await applyFinding(f, states.get(f.rule), now, th, send, sent);
 
   await runContainerEvents(hostRows, states.get("container_event"), now, th, send, sent);
+  await runProviderFailures(states, now, th, send, sent);
   return { sent };
+}
+
+/** One rule's transition: compare-and-set on its state row, the message, and the old state back when nobody got it. */
+async function applyFinding(
+  f: Finding,
+  row: StateRow | undefined,
+  now: Date,
+  th: Thresholds,
+  send: Send,
+  sent: RunAlertsResult["sent"],
+  opts: { noReminders?: boolean } = {},
+): Promise<void> {
+  const st: RuleState | undefined = row ? { rule: f.rule, firing: row.firing, since: row.since, lastSentAt: row.last_sent_at } : undefined;
+  const act = decide(f, st, now, th.cooldownMin);
+  if (!act.send || !act.next) return;
+  if (opts.noReminders && act.send === "remind") return;
+  // Compare-and-set first: if another process moved this rule, it also sent the message.
+  const claimed = await query(
+    `INSERT INTO server_alert_state (rule, firing, since, last_sent_at, updated_at)
+     VALUES ($1, $2, $3, $4, now())
+     ON CONFLICT (rule) DO UPDATE SET firing = EXCLUDED.firing, since = EXCLUDED.since, last_sent_at = EXCLUDED.last_sent_at, updated_at = now()
+      WHERE server_alert_state.last_sent_at IS NOT DISTINCT FROM $5::timestamptz
+     RETURNING rule`,
+    [f.rule, act.next.firing, act.next.since, act.next.lastSentAt, st?.lastSentAt ?? null],
+  );
+  if (claimed.length === 0) return;
+  const sinceMin = st?.since ? (now.getTime() - st.since.getTime()) / 60_000 : undefined;
+  const delivered = await notify(renderMessage(act.send, f, sinceMin), send);
+  if (delivered) {
+    sent.push({ rule: f.rule, kind: act.send });
+  } else {
+    // Nobody got it: put the old state back so the next pass tries again.
+    await query(
+      `UPDATE server_alert_state SET firing = $2, since = $3, last_sent_at = $4, updated_at = now() WHERE rule = $1`,
+      [f.rule, st?.firing ?? false, st?.since ?? null, st?.lastSentAt ?? null],
+    );
+  }
+}
+
+/** provider_fail: the failures of the window, grouped by provider and error. The stored text is clipped and scrubbed. */
+async function runProviderFailures(states: Map<string, StateRow>, now: Date, th: Thresholds, send: Send, sent: RunAlertsResult["sent"]): Promise<void> {
+  const groups = await query<ProviderFailureGroup>(
+    `SELECT provider, count(*)::int AS n, max(message) AS sample
+       FROM provider_failures
+      WHERE at > $1::timestamptz - make_interval(mins => $2) AND at <= $1
+      GROUP BY provider, signature`,
+    [now, th.providerFailWindowMin],
+  );
+  const firing = [...states.values()].filter((r) => r.firing && r.rule.startsWith(PROVIDER_RULE_PREFIX)).map((r) => r.rule.slice(PROVIDER_RULE_PREFIX.length));
+  for (const f of evaluateProviderFailures(groups, firing, th)) await applyFinding(f, states.get(f.rule), now, th, send, sent, { noReminders: true });
 }
 
 /**

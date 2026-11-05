@@ -17,6 +17,7 @@
  * as `cause` and the `[worker] job … failed` line shows the root cause.
  */
 import { log } from "../../server/log";
+import { AI_OUTAGE_ERROR, UserFacingError } from "../../server/user-error";
 import { parseLlmJsonDetailed } from "../json";
 import type { RepairKind } from "../json-repair";
 import { currentJobCost, type JobCost } from "../job-cost";
@@ -97,20 +98,21 @@ export function failureCounters(): { provider: string; kind: FailureKind; count:
 export function resetFailureCounters(): void {
   counters.clear();
   perJob = new WeakMap();
-  globalSlot = { count: 0 };
+  globalSlot = { count: 0, byProvider: new Map() };
 }
 
-type Slot = { last?: LlmFailure; count: number };
+/** `byProvider`: the latest failed attempt of each provider, for the «every provider is down» verdict. */
+type Slot = { last?: LlmFailure; count: number; byProvider: Map<string, LlmFailure> };
 let perJob = new WeakMap<JobCost, Slot>();
 // No job context (route paths, tests): one process-wide slot.
-let globalSlot: Slot = { count: 0 };
+let globalSlot: Slot = { count: 0, byProvider: new Map() };
 
 function slotFor(): Slot {
   const jc = currentJobCost();
   if (!jc) return globalSlot;
   let s = perJob.get(jc);
   if (!s) {
-    s = { count: 0 };
+    s = { count: 0, byProvider: new Map() };
     perJob.set(jc, s);
   }
   return s;
@@ -134,6 +136,7 @@ export function reportFailure(f: LlmFailure): void {
     counters.set(key, (counters.get(key) ?? 0) + 1);
     const slot = slotFor();
     slot.last = rec;
+    slot.byProvider.set(rec.provider, rec);
     slot.count += 1;
     log("warn", "[llm] attempt failed", {
       role: rec.role,
@@ -178,13 +181,42 @@ export function describeLastFailure(): string | undefined {
   return `last LLM attempt: ${parts.join(" ")}`;
 }
 
+/** Account refusals that some providers answer with a plain 400 (Anthropic credit balance, Gemini bad key). */
+const ACCOUNT_400_RE = /credit balance|billing|api[ _-]?key|suspended|spending/i;
+
 /**
- * `new Error(message, { cause })` with the last LLM failure as cause. The
- * message (shown to the user) is unchanged; the cause is only for the log.
+ * The provider itself cannot serve anyone now: account (key, balance, suspended), rate/quota, 5xx, network, open breaker.
+ * A problem of this one request (bad JSON, empty, safety, other 4xx) is not, and neither is a timeout: a long prompt can
+ * time out on a healthy provider.
+ */
+export function isOutageFailure(f: Pick<LlmFailure, "kind" | "status" | "message">): boolean {
+  if (f.kind === "network") return true;
+  if (f.kind === "other") return /^circuit breaker/.test(f.message);
+  if (f.kind !== "http" || f.status === undefined) return false;
+  return [401, 402, 403, 429].includes(f.status) || f.status >= 500 || (f.status === 400 && ACCOUNT_400_RE.test(f.message));
+}
+
+/**
+ * Every provider this job tried has an outage as its latest failure. Only inside a job: the process-wide slot of the route
+ * paths keeps failures of hours ago. A provider that answered and never failed is not in the map, which is why only the
+ * «chain gave nothing» throw sites ask this (`errorWithCause`), never a later quality gate.
+ */
+export function llmOutage(): boolean {
+  if (!currentJobCost()) return false;
+  const seen = [...slotFor().byProvider.values()];
+  return seen.length > 0 && seen.every(isOutageFailure);
+}
+
+/**
+ * The error of «the chain gave nothing», with the last LLM failure as `cause` (`cause.llmFailure` is the structured record
+ * for the owner alert; both are only for the log). The user sees `message`, or `AI_OUTAGE_ERROR` when every provider
+ * tried is down: then it is not this document that failed and an instant retry cannot help.
  */
 export function errorWithCause(message: string): Error {
   const why = describeLastFailure();
-  return why ? new Error(message, { cause: new Error(why) }) : new Error(message);
+  if (!why) return new Error(message);
+  const cause = Object.assign(new Error(why), { llmFailure: lastFailure() });
+  return llmOutage() ? new UserFacingError(AI_OUTAGE_ERROR, { cause }) : new Error(message, { cause });
 }
 
 /* ------------------------------------------------------------------ *
