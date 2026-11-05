@@ -35,7 +35,7 @@
 import { recordLlmUsage } from "../job-cost";
 import { getProviderKey } from "../../server/providers/resolve";
 import { LLM_BREAKER, allowOrWait, breakerFor, type CircuitBreaker } from "./breaker";
-import { accountStrike, classifyFailure, isAccountFailure, reportFailure, reportFallback, type FailureKind } from "./failure";
+import { accountStrike, classifyFailure, isAccountFailure, reportFailure, reportFallback, reportSuccess, type FailureKind } from "./failure";
 import { limiterFor, type Semaphore } from "./limiter";
 import { backoffMs, equalJitterMs } from "./retry";
 import type { Attempt, ProviderAdapter, ProviderId, RoleSpec } from "./types";
@@ -186,6 +186,7 @@ async function runSpec(
     const ms = Date.now() - started;
     if (res.ok) {
       breaker.success();
+      reportSuccess(spec.provider);
       log(`[llm:${role}] ${spec.provider}:${spec.model} → ok ${ms} ms`);
       return {
         text: res.text,

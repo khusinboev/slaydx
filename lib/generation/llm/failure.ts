@@ -144,21 +144,25 @@ export function failureCounters(): { provider: string; kind: FailureKind; count:
 export function resetFailureCounters(): void {
   counters.clear();
   perJob = new WeakMap();
-  globalSlot = { count: 0, byProvider: new Map() };
+  globalSlot = newSlot();
 }
 
-/** `byProvider`: the latest failed attempt of each provider, for the «every provider is down» verdict. */
-type Slot = { last?: LlmFailure; count: number; byProvider: Map<string, LlmFailure> };
+/**
+ * `byProvider`: the latest failed attempt of each provider since it last answered, for the «every provider is down»
+ * verdict. `lastAt`: when `last` happened. `answered`: some provider answered after `last`.
+ */
+type Slot = { last?: LlmFailure; count: number; byProvider: Map<string, LlmFailure>; lastAt: number; answered: boolean };
+const newSlot = (): Slot => ({ count: 0, byProvider: new Map(), lastAt: 0, answered: false });
 let perJob = new WeakMap<JobCost, Slot>();
 // No job context (route paths, tests): one process-wide slot.
-let globalSlot: Slot = { count: 0, byProvider: new Map() };
+let globalSlot: Slot = newSlot();
 
 function slotFor(): Slot {
   const jc = currentJobCost();
   if (!jc) return globalSlot;
   let s = perJob.get(jc);
   if (!s) {
-    s = { count: 0, byProvider: new Map() };
+    s = newSlot();
     perJob.set(jc, s);
   }
   return s;
@@ -183,6 +187,8 @@ export function reportFailure(f: LlmFailure): void {
     const slot = slotFor();
     slot.last = rec;
     slot.byProvider.set(rec.provider, rec);
+    slot.lastAt = Date.now();
+    slot.answered = false;
     slot.count += 1;
     log("warn", "[llm] attempt failed", {
       role: rec.role,
@@ -198,6 +204,17 @@ export function reportFailure(f: LlmFailure): void {
       inputTokens: rec.inputTokens,
       outputTokens: rec.outputTokens,
     });
+  } catch {
+    // Observability must never change what the call does.
+  }
+}
+
+/** A provider answered: its earlier failures say nothing about now. Called by every chain walk. Never throws. */
+export function reportSuccess(provider: string): void {
+  try {
+    const slot = slotFor();
+    slot.byProvider.delete(provider);
+    slot.answered = true;
   } catch {
     // Observability must never change what the call does.
   }
@@ -228,7 +245,20 @@ export function describeLastFailure(): string | undefined {
 }
 
 /** Account refusals that some providers answer with a plain 400 (Anthropic credit balance, Gemini bad key). */
-const ACCOUNT_400_RE = /credit balance|billing|api[ _-]?key|suspended|spending/i;
+const ACCOUNT_400_RE = /credit balance|billing|suspended|spending|api[ _-]?key (?:is )?(?:invalid|not valid|expired|missing)|(?:invalid|expired|missing) api[ _-]?key/i;
+
+/** A failure older than this belongs to an earlier chain run, not to the one that just gave nothing. */
+export const OUTAGE_RECENCY_MS = 60_000;
+
+/**
+ * The failure of the chain run that just ended, `undefined` when `last` is older news: a provider answered after it (a
+ * Gemini 429 in batch 1, the fallback wrote the rest, a quality gate failed later) or it is over a minute old.
+ */
+function runningFailure(): LlmFailure | undefined {
+  const slot = slotFor();
+  if (!slot.last || slot.answered || Date.now() - slot.lastAt >= OUTAGE_RECENCY_MS) return undefined;
+  return slot.last;
+}
 
 /**
  * The provider itself cannot serve anyone now: account (key, balance, suspended), rate/quota, 5xx, network, open breaker.
@@ -243,25 +273,26 @@ export function isOutageFailure(f: Pick<LlmFailure, "kind" | "status" | "message
 }
 
 /**
- * Every provider this job tried has an outage as its latest failure. Only inside a job: the process-wide slot of the route
- * paths keeps failures of hours ago. A provider that answered and never failed is not in the map, which is why only the
- * «chain gave nothing» throw sites ask this (`errorWithCause`), never a later quality gate.
+ * The chain run that just ended failed on an outage, and so did every provider this job has tried since it last answered.
+ * Only inside a job: the process-wide slot of the route paths mixes unrelated requests. Only the «chain gave nothing» throw
+ * sites ask this (`errorWithCause`), never a later quality gate.
  */
 export function llmOutage(): boolean {
   if (!currentJobCost()) return false;
-  const seen = [...slotFor().byProvider.values()];
-  return seen.length > 0 && seen.every(isOutageFailure);
+  const last = runningFailure();
+  if (!last || !isOutageFailure(last)) return false;
+  return [...slotFor().byProvider.values()].every(isOutageFailure);
 }
 
 /**
- * The error of «the chain gave nothing», with the last LLM failure as `cause` (`cause.llmFailure` is the structured record
- * for the owner alert; both are only for the log). The user sees `message`, or `AI_OUTAGE_ERROR` when every provider
+ * The error of «the chain gave nothing», with the last LLM failure as `cause` for the log. `cause.llmFailure`, the
+ * structured record for the owner alert, is set only for the run that just failed: an old failure must not count. The user sees `message`, or `AI_OUTAGE_ERROR` when every provider
  * tried is down: then it is not this document that failed and an instant retry cannot help.
  */
 export function errorWithCause(message: string): Error {
   const why = describeLastFailure();
   if (!why) return new Error(message);
-  const cause = Object.assign(new Error(why), { llmFailure: lastFailure() });
+  const cause = Object.assign(new Error(why), { llmFailure: runningFailure() });
   return llmOutage() ? new UserFacingError(AI_OUTAGE_ERROR, { cause }) : new Error(message, { cause });
 }
 

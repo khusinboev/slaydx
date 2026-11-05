@@ -195,6 +195,18 @@ test("worker: xom xato foydalanuvchiga chiqmaydi, tafsilot jurnalda (jobId, atte
     assert.deepEqual(stored, [{ provider: "gemini", message: "overloaded" }]);
   });
 
+  await t.test("a run that lost the lease records no provider failure: the job is not its to report", async (tt) => {
+    const { reportFailure, errorWithCause } = await import("../lib/generation/llm/failure.ts");
+    assert.equal(await worker.failAndCleanup({ id: "00000000-0000-4000-8000-000000000000", userId: "1" }, "boshqa-worker", "xato"), false, "the guard the record relies on");
+    const { id, gen } = await runWith(tt, async () => {
+      reportFailure({ role: "complete", provider: "gemini", model: "m", attempt: 1, durationMs: 1, kind: "http", status: 503, retryable: false, message: "overloaded" });
+      await query("UPDATE generations SET locked_by = 'boshqa-worker' WHERE status = 'IN_PROGRESS'");
+      throw errorWithCause("Matn yozilmadi.");
+    });
+    assert.equal(gen.status, "IN_PROGRESS", "the other worker owns it");
+    assert.deepEqual(await query("SELECT 1 FROM provider_failures WHERE job_id = $1", [id]), []);
+  });
+
   await t.test("LLM yiqilishi: foydalanuvchi matni o'zgarmaydi, pul qaytadi, ishchi qatori sababni (kind/status) va toolId ni chop etadi", async (tt) => {
     const { reportFailure, errorWithCause } = await import("../lib/generation/llm/failure.ts");
     const USER_MSG = "Taqdimot matni yozilmadi. Kredit qaytariladi — qayta urinib ko‘ring.";

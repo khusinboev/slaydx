@@ -21,11 +21,29 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *   M12 alert threshold `>` instead of `>=`                              -> "alert: fires at five"
  *   M13 alert counts all errors of a provider together                   -> "alert: different errors"
  *   M14 `noReminders` dropped                                            -> "alert: one message per incident"
- *   M15 a trickle (1–4 failures) counts as recovered                     -> "alert: one message per incident"
+ *   M15 an empty window counts as recovered without evidence             -> "alert: one message per incident"
  *   M16 `refusedPermissions` ignores `updated_at`                        -> "refusedPermissions"
  *   M17 the probe reports any 401, not only `missing_permissions`        -> "probe"
  *   M18 a missing-permission 401 made retryable in `elevenLabsRetryable` -> "a missing permission fails fast"
  *   M19 the alert query ignores the ten-minute window                    -> "alert: the window is ten minutes"
+ *   R1  `reportSuccess` does not drop the provider's entry               -> "reportSuccess: the provider's entry"
+ *   R2  `reportSuccess` does not mark the slot answered                  -> "a stale 429"
+ *   R3  `llmOutage` without `isOutageFailure(last)`: EQUIVALENT, survives. `runningFailure` is defined only with no answer
+ *       after `last`, so `last` is in `byProvider` and `every` already covers it; the check is kept as the stated rule.
+ *   R4  `runningFailure` without the 60 s bound                          -> "a failure over a minute old"
+ *   R5  `llmFailure` attached without the running check                  -> "a stale 429"
+ *   R6  no `reportSuccess` in `chain.ts`                                 -> "chain: an answer"
+ *   R7  no `reportSuccess` in `walkTextChain`                            -> "direct path: Gemini answered"
+ *   R8  `ai_usage` evidence ignored                                      -> "recovery needs evidence"
+ *   R9  `media_jobs` evidence ignored                                    -> "recovery needs evidence"
+ *   R10 `video_ops` evidence ignored                                     -> "recovery needs evidence"
+ *   R11 another provider's completed job accepted as evidence            -> "recovery needs evidence"
+ *   R12 no quiet path                                                    -> "alert: one message per incident"
+ *   R13 the provider cooldown kept after a recovery                      -> "a spike after a recovery"
+ *   R14 `refusedPermissions` without the 30-day bound                    -> "refusedPermissions"
+ *   R15 the record before `failAndCleanup`, unguarded by the lease       -> worker-user-error
+ *   R16 ACCOUNT_400_RE matches any mention of an API key                 -> "isOutageFailure"
+ *   R17 `sample = max(message)`                                          -> "alert: fires at five"
  * Same change, caught by the neighbouring files:
  *   M20 the admin save skips the format check                            -> provider-keys-admin
  *   M21 the card's `usable` ignores `keyMalformed`                       -> provider-keys-admin
@@ -114,10 +132,11 @@ test("isOutageFailure: account, quota, 5xx, network and an open breaker; not one
   const yes = [
     { kind: "http", status: 401, message: "x" }, { kind: "http", status: 402, message: "x" }, { kind: "http", status: 403, message: "suspended" }, { kind: "http", status: 429, message: "quota" },
     { kind: "http", status: 503, message: "x" }, { kind: "network", message: "fetch failed" }, { kind: "other", message: "circuit breaker open - call skipped" },
-    { kind: "http", status: 400, message: "Your credit balance is too low" }, { kind: "http", status: 400, message: "API key not valid" },
+    { kind: "http", status: 400, message: "Your credit balance is too low" }, { kind: "http", status: 400, message: "API key not valid" }, { kind: "http", status: 400, message: "API key expired. Please renew" }, { kind: "http", status: 400, message: "Invalid API key" },
   ] as const;
   const no = [
     { kind: "timeout", message: "timed out" }, { kind: "http", status: 400, message: "prompt is too long" }, { kind: "http", status: 404, message: "no model" },
+    { kind: "http", status: 400, message: "the api_key field must be a string" },
     { kind: "bad_json", message: "x" }, { kind: "empty", message: "x" }, { kind: "safety", message: "x" }, { kind: "truncated", message: "x" }, { kind: "other", message: "x" },
   ] as const;
   for (const f of yes) assert.equal(F.isOutageFailure(f as never), true, JSON.stringify(f));
@@ -151,6 +170,11 @@ test("errorWithCause: one healthy answer keeps the engine's message", async () =
     assert.ok(!(e instanceof UserFacingError));
     assert.equal(((e.cause as { llmFailure: { provider: string } }).llmFailure).provider, "anthropic", "the alert still gets the structured failure");
   });
+  await withJobCost(async () => {
+    attempt("anthropic", { kind: "bad_json", status: undefined });
+    attempt("gemini", { status: 403 });
+    assert.equal(F.errorWithCause(MSG).message, MSG, "the outage came last, but another provider failed for its own reason");
+  });
 });
 
 test("errorWithCause: the latest failure of a provider decides", async () => {
@@ -158,6 +182,111 @@ test("errorWithCause: the latest failure of a provider decides", async () => {
     attempt("gemini", { status: 503 });
     attempt("gemini", { kind: "empty", status: undefined });
     assert.equal(F.errorWithCause("Matn yozilmadi.").message, "Matn yozilmadi.");
+  });
+  await withJobCost(async () => {
+    attempt("gemini", { kind: "empty", status: undefined });
+    attempt("gemini", { status: 503 });
+    assert.equal(F.errorWithCause("Matn yozilmadi.").message, AI_OUTAGE_ERROR);
+  });
+});
+
+test("errorWithCause: the last failure of the run must be an outage itself", async () => {
+  await withJobCost(async () => {
+    attempt("gemini", { status: 503 });
+    attempt("anthropic", { status: 503 });
+    F.reportSuccess("anthropic");
+    attempt("gemini", { status: 503 });
+    assert.equal(F.errorWithCause("Matn yozilmadi.").message, AI_OUTAGE_ERROR, "the provider that answered is out of the verdict");
+    F.reportSuccess("gemini");
+    attempt("anthropic", { status: 400, message: "prompt is too long" });
+    attempt("gemini", { kind: "bad_json", status: undefined });
+    assert.equal(F.errorWithCause("Matn yozilmadi.").message, "Matn yozilmadi.");
+  });
+});
+
+test("reportSuccess: the provider's entry goes, so its old outage cannot speak for it", async () => {
+  await withJobCost(async () => {
+    attempt("gemini", { kind: "bad_json", status: undefined });
+    F.reportSuccess("gemini");
+    attempt("anthropic", { status: 503 });
+    assert.equal(F.errorWithCause("Matn yozilmadi.").message, AI_OUTAGE_ERROR, "gemini's bad answer was followed by a good one, the chain now fails on 503");
+  });
+});
+
+test("a stale 429: the fallback wrote the rest, a later failure is the engine's own, and no provider row is due", async () => {
+  await withJobCost(async () => {
+    attempt("gemini", { status: 429, message: "quota" });
+    F.reportSuccess("qwen");
+    const e = F.errorWithCause("Tarjima to‘liq chiqmadi. Kredit qaytariladi — qayta urinib ko‘ring.");
+    assert.equal(e.message, "Tarjima to‘liq chiqmadi. Kredit qaytariladi — qayta urinib ko‘ring.");
+    assert.ok(!(e instanceof UserFacingError));
+    assert.match(String((e.cause as Error).message), /status=429/, "the log keeps the history");
+    assert.equal(P.providerFailureOf(e), null, "a false `gemini|429` row would feed a false alert");
+  });
+});
+
+test("a failure over a minute old is not this run's: no outage, no provider row", async (t) => {
+  await withJobCost(async () => {
+    attempt("gemini", { status: 429 });
+    const later = Date.now() + F.OUTAGE_RECENCY_MS;
+    t.mock.method(Date, "now", () => later);
+    const e = F.errorWithCause("Matn yozilmadi.");
+    assert.equal(e.message, "Matn yozilmadi.");
+    assert.equal(P.providerFailureOf(e), null);
+    t.mock.restoreAll();
+  });
+});
+
+test("chain: an answer clears the provider, so a later refusal of the other one is not «all down»", async () => {
+  const { completeWithChain } = await import("../lib/generation/llm/chain.ts");
+  const { resetProviderCache } = await import("../lib/server/providers/resolve.ts");
+  process.env.GEMINI_API_KEY = "AIzaTestKeyForChain";
+  resetProviderCache();
+  const breaker = { allow: () => true, success: () => undefined, failure: () => undefined, trip: () => undefined, strike: () => undefined } as never;
+  const limiter = { active: 0, max: 9, acquire: async () => () => undefined } as never;
+  await withJobCost(async () => {
+    attempt("gemini", { status: 429 });
+    const usage = { inputTokens: 1, outputTokens: 1 };
+    const adapters = { gemini: { complete: async () => ({ ok: true, text: "javob", usage }) } } as never;
+    const r = await completeWithChain("writer", [{ provider: "gemini", model: "m" }], "s", "u", { maxTokens: 9, timeoutMs: 9_000 }, { adapters, breakerFor: () => breaker, limiterFor: () => limiter });
+    assert.equal(r?.text, "javob");
+    assert.equal(F.errorWithCause("Matn yozilmadi.").message, "Matn yozilmadi.");
+  });
+  delete process.env.GEMINI_API_KEY;
+});
+
+test("direct path: Gemini answered, so its earlier failure is over; the real fallback walk is not an outage either", async (t) => {
+  const { llmComplete } = await import("../lib/generation/llm.ts");
+  const { resetBreakers } = await import("../lib/generation/llm/breaker.ts");
+  const realFetch = globalThis.fetch;
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.DASHSCOPE_API_KEY = "test-qwen-key";
+  t.after(() => {
+    globalThis.fetch = realFetch;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.DASHSCOPE_API_KEY;
+    resetBreakers();
+  });
+  const geminiOk = () => Response.json({ candidates: [{ content: { parts: [{ text: "Gemini javobi" }] }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 } });
+  const qwenOk = () => Response.json({ choices: [{ message: { content: "Qwen javobi" }, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1 } });
+  const denied = () => Response.json({ error: { code: 403, message: "Your project has been denied access." } }, { status: 403 });
+
+  resetBreakers();
+  globalThis.fetch = (async () => geminiOk()) as typeof fetch;
+  await withJobCost(async () => {
+    attempt("gemini", { status: 503 });
+    assert.equal(await llmComplete("s", "u", 100), "Gemini javobi");
+    assert.equal(F.errorWithCause("Matn yozilmadi.").message, "Matn yozilmadi.");
+  });
+
+  // Batch 1 of the incident shape: Gemini refuses, the fallback answers, a later failure is the engine's own.
+  resetBreakers();
+  globalThis.fetch = (async (url: string | URL | Request) => (String(url).includes("generativelanguage") ? denied() : qwenOk())) as typeof fetch;
+  await withJobCost(async () => {
+    assert.equal(await llmComplete("s", "u", 100), "Qwen javobi");
+    const e = F.errorWithCause("Tarjima to‘liq chiqmadi.");
+    assert.equal(e.message, "Tarjima to‘liq chiqmadi.");
+    assert.equal(P.providerFailureOf(e), null);
   });
 });
 
@@ -255,7 +384,8 @@ test("the database half", { skip }, async (t) => {
   const put = async (n: number, provider: string, signature: string, at: Date, message = "403 Forbidden: suspended") => {
     for (let i = 0; i < n; i++) await query("INSERT INTO provider_failures (at, provider, signature, message, job_id) VALUES ($1, $2, $3, $4, $5)", [at, provider, signature, message, `j${i}`]);
   };
-  const reset = () => query("TRUNCATE provider_failures, server_alert_state");
+  const reset = () => query("TRUNCATE provider_failures, server_alert_state, ai_usage, media_jobs, video_ops");
+  const usageOf = (at: Date, provider: string, outcome = "completed") => query(`INSERT INTO ai_usage (at, source, outcome, tool_id, parts) VALUES ($1, 'job', $2, 'slide', $3::jsonb)`, [at, outcome, JSON.stringify([{ kind: "llm", provider, model: "m", calls: 1 }])]);
   const sent: string[] = [];
   const send = async (_chat: string, text: string) => (sent.push(text), true);
   const pass = async (at: Date) => (await A.runAlerts({ now: at, send })).sent.filter((s) => s.rule.startsWith("provider_fail:"));
@@ -284,10 +414,10 @@ test("the database half", { skip }, async (t) => {
     sent.length = 0;
     await put(4, "gemini", "403|same", min(-1));
     assert.deepEqual(await pass(NOW), []);
-    await put(1, "gemini", "403|same", min(-1), "403 Forbidden: <b>suspended</b>");
+    await put(1, "gemini", "403|same", min(-1), "103 Forbidden: <b>suspended</b>");
     assert.deepEqual(await pass(NOW), [{ rule: "provider_fail:gemini", kind: "alert" }]);
     assert.equal(sent.length, 1);
-    assert.match(sent[0]!, /\[OGOHLANTIRISH\].*gemini.*5 ta ish.*403 Forbidden/);
+    assert.match(sent[0]!, /\[OGOHLANTIRISH\].*gemini.*5 ta ish.*103 Forbidden/, "`min(message)`: a stable sample");
     assert.ok(!sent[0]!.includes("<b>"), "Telegram HTML is escaped");
   });
 
@@ -318,21 +448,47 @@ test("the database half", { skip }, async (t) => {
     assert.deepEqual(await pass(min(180)), [], "three hours on: no reminder");
     await put(1, "kling", "401|a", min(195));
     assert.deepEqual(await pass(min(200)), [], "a trickle neither re-alerts nor recovers");
-    assert.deepEqual(await pass(min(230)), [{ rule: "provider_fail:kling", kind: "recover" }], "a quiet window recovers");
+    assert.deepEqual(await pass(min(215)), [], "an empty ten-minute window alone proves nothing: users stopped trying");
+    assert.deepEqual(await pass(min(226)), [{ rule: "provider_fail:kling", kind: "recover" }], "thirty quiet minutes do");
     assert.equal(sent.length, 2);
-    assert.match(sent[1]!, /\[NORMALLASHDI\].*kling/);
+    assert.match(sent[1]!, /\[NORMALLASHDI\].*kling.*30 daqiqadan beri/);
     assert.deepEqual(await pass(min(231)), []);
   });
 
-  await t.test("alert: a spike right after a recovery waits for the cooldown", async () => {
+  await t.test("alert: recovery needs evidence: a COMPLETED job that used this provider, from any of the three records", async () => {
+    const fired = async (provider: string) => {
+      await reset();
+      await put(5, provider, "401|a", min(-1));
+      assert.equal((await pass(NOW)).length, 1);
+    };
+    sent.length = 0;
+    await fired("gemini");
+    await usageOf(min(14), "anthropic");
+    await usageOf(min(14), "gemini", "failed");
+    assert.deepEqual(await pass(min(15)), [], "another provider's job, or a failed one, proves nothing");
+    await usageOf(min(15), "gemini");
+    assert.deepEqual(await pass(min(16)), [{ rule: "provider_fail:gemini", kind: "recover" }]);
+    assert.match(sent.at(-1)!, /\[NORMALLASHDI\].*gemini.*muvaffaqiyatli/);
+
+    await fired("fal");
+    await query(`INSERT INTO media_jobs (id, purpose, model_id, provider, upstream_model, idempotency_key, status, finished_at) VALUES ('11111111-1111-4111-8111-111111111111', 'p', 'm', 'fal', 'u', 'k', 'succeeded', $1)`, [min(15)]);
+    assert.deepEqual(await pass(min(16)), [{ rule: "provider_fail:fal", kind: "recover" }]);
+
+    await fired("kling");
+    const gen = "22222222-2222-4222-8222-222222222222";
+    await query(`INSERT INTO generations (id, user_id, tool_id, status) VALUES ($1, $2, 'video', 'COMPLETED') ON CONFLICT DO NOTHING`, [gen, u[0]!.id]);
+    await query(`INSERT INTO video_ops (generation_id, provider, status, deadline_at, finished_at) VALUES ($1, 'kling', 'succeeded', $2, $2)`, [gen, min(15)]);
+    assert.deepEqual(await pass(min(16)), [{ rule: "provider_fail:kling", kind: "recover" }]);
+  });
+
+  await t.test("alert: a spike after a recovery is a new incident and alerts at once: the recovery had evidence", async () => {
     await reset();
-    await put(5, "kling", "401|a", min(-1));
+    await put(5, "gemini", "401|a", min(-1));
     assert.equal((await pass(NOW)).length, 1);
-    assert.equal((await pass(min(20))).length, 1, "recovered");
-    await put(5, "kling", "401|a", min(29));
-    assert.deepEqual(await pass(min(30)), [], "flapping stays silent");
-    await put(5, "kling", "401|a", min(84));
-    assert.deepEqual(await pass(min(85)), [{ rule: "provider_fail:kling", kind: "alert" }]);
+    await usageOf(min(14), "gemini");
+    assert.deepEqual(await pass(min(15)), [{ rule: "provider_fail:gemini", kind: "recover" }]);
+    await put(5, "gemini", "401|a", min(19));
+    assert.deepEqual(await pass(min(20)), [{ rule: "provider_fail:gemini", kind: "alert" }], "inside the old 60-minute cooldown");
   });
 
   await t.test("refusedPermissions: lists what the current key was refused; a changed key clears it", async () => {
@@ -342,6 +498,8 @@ test("the database half", { skip }, async (t) => {
     await P.recordProviderFailure("j3", { provider: "elevenlabs", status: 401, message: MISSING("dubbing_write") });
     await P.recordProviderFailure("j4", { provider: "gemini", status: 403, message: "suspended" });
     assert.deepEqual([...(await P.refusedPermissions())], [["elevenlabs", ["dubbing_write", "speech_to_text"]]]);
+    await query("UPDATE provider_failures SET at = now() - interval '31 days' WHERE job_id = 'j1'");
+    assert.deepEqual([...(await P.refusedPermissions())], [["elevenlabs", ["dubbing_write"]]], "older than the 30-day retention");
     await query("INSERT INTO provider_settings (provider, updated_at) VALUES ('elevenlabs', now() + interval '1 second')");
     assert.equal((await P.refusedPermissions()).size, 0);
   });

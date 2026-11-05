@@ -481,7 +481,7 @@ test("pro-slide with internet search: research is skipped, the deck is written o
   assert.ok(hits.some((h) => h.url.includes(GEMINI) && h.body.includes("google_search")), "the grounded call did try Gemini");
 });
 
-test("slide: with no fallback key the job fails as it did (the error the owner saw)", async () => {
+test("slide: with no fallback key a Gemini 403 fails the job with the outage message, not the old retry invitation", async () => {
   route(denied);
-  await assert.rejects(buildArtifact(TOOL_BY_ID.slide, { topic: "Fotosintez", slideCount: 8 } as FormValues, { deadline: Date.now() + 240_000 }), /Taqdimot matni yozilmadi/);
+  await assert.rejects(buildArtifact(TOOL_BY_ID.slide, { topic: "Fotosintez", slideCount: 8 } as FormValues, { deadline: Date.now() + 240_000 }), /AI xizmati hozir vaqtincha ishlamayapti/);
 });

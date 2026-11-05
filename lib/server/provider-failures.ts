@@ -29,17 +29,24 @@ type Shape = {
   message?: unknown;
 };
 
-/** The provider failure behind `e`, `null` when there is none. A content refusal is the user's text, not a provider fault. */
+/**
+ * The provider failure behind `e`, `null` when there is none. A content refusal is the user's text, not a provider fault.
+ * Never throws (a hostile getter on a library error): the worker calls it before the refund.
+ */
 export function providerFailureOf(e: unknown): ProviderFailure | null {
-  let cur = e as Shape | null | undefined;
-  for (let depth = 0; cur && typeof cur === "object" && depth < CAUSE_DEPTH; depth++) {
-    const llm = cur.llmFailure;
-    if (llm) return llm.kind === "safety" ? null : { provider: llm.provider, ...(llm.status !== undefined ? { status: llm.status } : {}), message: llm.message };
-    if (typeof cur.provider === "string" && cur.provider) {
-      if (cur.safety === true) return null;
-      return { provider: cur.provider, ...(typeof cur.status === "number" ? { status: cur.status } : {}), message: String(cur.message ?? "") };
+  try {
+    let cur = e as Shape | null | undefined;
+    for (let depth = 0; cur && typeof cur === "object" && depth < CAUSE_DEPTH; depth++) {
+      const llm = cur.llmFailure;
+      if (llm) return llm.kind === "safety" ? null : { provider: llm.provider, ...(llm.status !== undefined ? { status: llm.status } : {}), message: llm.message };
+      if (typeof cur.provider === "string" && cur.provider) {
+        if (cur.safety === true) return null;
+        return { provider: cur.provider, ...(typeof cur.status === "number" ? { status: cur.status } : {}), message: String(cur.message ?? "") };
+      }
+      cur = cur.cause as Shape | null | undefined;
     }
-    cur = cur.cause as Shape | null | undefined;
+  } catch {
+    // Unknown: the job still fails and refunds normally.
   }
   return null;
 }
@@ -73,13 +80,15 @@ export async function recordProviderFailure(jobId: string, f: ProviderFailure | 
   }
 }
 
-/** Permissions each provider's key was refused since its settings last changed in the admin page: `provider → names`. */
+/** Permissions each provider's key was refused in 30 days, since its settings last changed in the admin page: `provider → names`. */
 export async function refusedPermissions(): Promise<Map<string, string[]>> {
   const rows = await query<{ provider: string; signature: string }>(
     `SELECT DISTINCT f.provider, f.signature
        FROM provider_failures f
        LEFT JOIN provider_settings p ON p.provider = f.provider
-      WHERE f.signature LIKE 'missing_permission:%' AND f.at > COALESCE(p.updated_at, '-infinity'::timestamptz)
+      WHERE f.signature LIKE 'missing_permission:%'
+        AND f.at > now() - interval '30 days'
+        AND f.at > COALESCE(p.updated_at, '-infinity'::timestamptz)
       ORDER BY f.provider, f.signature`,
   );
   const out = new Map<string, string[]>();

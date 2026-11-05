@@ -6,7 +6,7 @@
 import { recordGrounding, recordLlmUsage } from "./job-cost";
 import { allowOrWait, breakerFor } from "./llm/breaker";
 import { BREAKER_WAIT_MAX_MS, CHAIN_MIN_ATTEMPT_MS, CHAIN_SAFETY_MS, DeadlineError, TIMEOUT_RETRY_MIN_LEFT_MS, completeWithChain } from "./llm/chain";
-import { accountStrike, classifyFailure, isAccountFailure, isSafetyFinish, reportFailure, reportFallback, withJsonRetry, type FailureKind } from "./llm/failure";
+import { accountStrike, classifyFailure, isAccountFailure, isSafetyFinish, reportFailure, reportFallback, reportSuccess, withJsonRetry, type FailureKind } from "./llm/failure";
 import { FALLBACK_ADAPTERS } from "./llm/fallback-adapters";
 import { limiterFor } from "./llm/limiter";
 import type { RoleSpec } from "./llm/types";
@@ -320,6 +320,7 @@ async function walkTextChain<T>(
       const hasFallback = i < specs.length - 1;
       const res = await gemini({ model: spec.model, hasFallback, onTimeout: () => (timedOut = true) });
       if (res) {
+        reportSuccess(spec.provider);
         if (afterPrimary) reportFallback({ role, provider: spec.provider, model: spec.model });
         return res;
       }

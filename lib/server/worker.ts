@@ -485,8 +485,8 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
     } catch (e) {
       const message = userMessage(e);
       log("error", `[worker] video job ${job.id} failed to start`, { jobId: job.id, userId: job.userId, attempt: job.attempts, userError: message, err: e });
-      await recordProviderFailure(job.id, providerFailureOf(e));
-      await failAndCleanup(job, job.lease, message);
+      const failure = providerFailureOf(e);
+      if (await failAndCleanup(job, job.lease, message)) await recordProviderFailure(job.id, failure);
     }
     return;
   }
@@ -789,12 +789,13 @@ async function execute(
       userError: message,
       err: e,
     });
-    await recordProviderFailure(job.id, providerFailureOf(e));
+    const failure = providerFailureOf(e);
     // Avval jonli reporter va yo'ldagi aktiv yozuvlari — keyin tozalash (W3-A nit 2).
     await quiesce(ctl, live);
     // Tashlab ketilgan yurishda `failJob` qulf to'sig'idan o'tmaydi — pul
     // ikkinchi marta qaytmaydi, yangi egasining fayliga tegilmaydi.
-    await failAndCleanup(job, job.lease, message);
+    // After the refund and only for a run that still owned the job: a slow insert never delays the money.
+    if (await failAndCleanup(job, job.lease, message)) await recordProviderFailure(job.id, failure);
   } finally {
     // No tracker = the job failed before the build started: nothing was spent.
     // A completed job flushes exactly its `cost_json`; otherwise the meter.
@@ -838,15 +839,16 @@ export async function failAndCleanup(
   job: Pick<ClaimedJob, "id" | "userId">,
   workerId: string,
   message: string,
-): Promise<void> {
+): Promise<boolean> {
   // Ikkinchi to'siq: chaqiruvchi xom matn uzatsa ham foydalanuvchiga (xato
   // ustuni, refund izohi) faqat xavfsiz o'zbekcha matn yetadi (BEA-09).
   const safe = userMessage(message);
   if (!(await failJob(job.id, workerId, safe))) {
     log("warn", `[worker] job ${job.id}: qulf boshqada — FAILED yozilmadi, pul qaytarilmadi`, { jobId: job.id, lease: workerId });
-    return;
+    return false;
   }
   await refundThenCleanup(job, cleanText(safeSlice(`Xatolik: ${safe}`, 200)));
+  return true;
 }
 
 /**
@@ -1035,8 +1037,9 @@ export async function purgeHousekeeping(): Promise<void> {
   if (Date.now() - lastServerMetricsPurgeAt >= RETENTION_EVERY_MS) {
     await step("server-metrics-purge", async () => {
       lastServerMetricsPurgeAt = Date.now();
-      return (await purgeServerMetrics(METRICS_RETENTION_DAYS)) + (await purgeProviderFailures());
+      return purgeServerMetrics(METRICS_RETENTION_DAYS);
     });
+    await step("provider-failures-purge", purgeProviderFailures);
   }
   /*
    * Saqlash muddati (C23): faqat bonus bilan to'langan tayyor ishlarning

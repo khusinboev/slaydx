@@ -17,7 +17,7 @@ import { botConfigured, sendMessage } from "./telegram";
  *   fail_ratio     > 25 % of the jobs finished in the last 15 minutes failed (at least 8 jobs)
  *   container_event  a slaydx container restarted, was OOM-killed or stopped since the last sample
  *   provider_fail:<provider>  many jobs ended on the SAME provider error (`provider_failures`): one message when it
- *                  starts, no reminders, one "normallashdi" when the window holds no failure of that provider
+ *                  starts, no reminders, one "normallashdi" on evidence (see `evaluateProviderFailures`)
  *
  * Level rules keep a row in `server_alert_state`: one message when a rule starts firing, a reminder
  * at most every COOLDOWN while it keeps firing, one "normallashdi" message when it recovers. A rule
@@ -50,6 +50,8 @@ export const ALERT_THRESHOLDS = {
   /** provider_fail: this many jobs on the same provider error inside the window. */
   providerFailMin: 5,
   providerFailWindowMin: 10,
+  /** provider_fail: this long without a failure counts as recovered even with no job to prove it. */
+  providerQuietMin: 30,
   /** Minimum time between two messages of the same rule. */
   cooldownMin: 60,
   /** Minimum time between two container-event messages (a crash loop must not page every sample). */
@@ -222,21 +224,24 @@ export function decide(f: Finding, st: RuleState | undefined, now: Date, cooldow
 /** Jobs that ended on one provider error inside the window. */
 export type ProviderFailureGroup = { provider: string; n: number; sample: string };
 
+/** Why a firing provider counts as recovered: a job really used it, or it has been quiet for `providerQuietMin`. */
+export type ProviderRecovery = "completed" | "quiet";
+
 /**
- * One finding per provider. It fires on `providerFailMin` jobs with the same error and clears only when the window holds
- * no failure of that provider at all; a trickle in between changes nothing, so an outage that users stopped trying
- * (fewer jobs, same error) is not reported as recovered.
+ * One finding per provider. It fires on `providerFailMin` jobs with the same error. An empty window alone proves nothing
+ * (users stop trying during an outage), so it clears only on `recovered` evidence and with no failure in the window; a
+ * trickle in between changes nothing.
  */
-export function evaluateProviderFailures(groups: ProviderFailureGroup[], firing: string[], th: Thresholds = ALERT_THRESHOLDS): Finding[] {
+export function evaluateProviderFailures(groups: ProviderFailureGroup[], firing: string[], recovered: ReadonlyMap<string, ProviderRecovery>, th: Thresholds = ALERT_THRESHOLDS): Finding[] {
   const out: Finding[] = [];
   for (const provider of new Set([...groups.map((g) => g.provider), ...firing])) {
     const mine = groups.filter((g) => g.provider === provider);
     const top = mine.reduce<ProviderFailureGroup | null>((a, g) => (!a || g.n > a.n ? g : a), null);
     out.push({
       rule: `${PROVIDER_RULE_PREFIX}${provider}`,
-      firing: top && top.n >= th.providerFailMin ? true : mine.length === 0 ? false : null,
+      firing: top && top.n >= th.providerFailMin ? true : mine.length === 0 && recovered.has(provider) ? false : null,
       alert: top ? `AI provayder nosoz: ${provider} — oxirgi ${th.providerFailWindowMin} daqiqada ${top.n} ta ish bir xil xato bilan tugadi: ${top.sample}` : "",
-      ok: `${provider}: oxirgi ${th.providerFailWindowMin} daqiqada yangi xato yo'q.`,
+      ok: recovered.get(provider) === "completed" ? `${provider}: yana ishlayapti, ish muvaffaqiyatli tugadi.` : `${provider}: ${th.providerQuietMin} daqiqadan beri yangi xato yo'q.`,
     });
   }
   return out;
@@ -355,12 +360,13 @@ async function applyFinding(
   th: Thresholds,
   send: Send,
   sent: RunAlertsResult["sent"],
-  opts: { noReminders?: boolean } = {},
+  opts: { incident?: boolean } = {},
 ): Promise<void> {
   const st: RuleState | undefined = row ? { rule: f.rule, firing: row.firing, since: row.since, lastSentAt: row.last_sent_at } : undefined;
-  const act = decide(f, st, now, th.cooldownMin);
+  // An incident has one message and its recovery has evidence, so a new spike after it is news: no cooldown, no reminders.
+  const act = decide(f, st, now, opts.incident ? 0 : th.cooldownMin);
   if (!act.send || !act.next) return;
-  if (opts.noReminders && act.send === "remind") return;
+  if (opts.incident && act.send === "remind") return;
   // Compare-and-set first: if another process moved this rule, it also sent the message.
   const claimed = await query(
     `INSERT INTO server_alert_state (rule, firing, since, last_sent_at, updated_at)
@@ -387,14 +393,39 @@ async function applyFinding(
 /** provider_fail: the failures of the window, grouped by provider and error. The stored text is clipped and scrubbed. */
 async function runProviderFailures(states: Map<string, StateRow>, now: Date, th: Thresholds, send: Send, sent: RunAlertsResult["sent"]): Promise<void> {
   const groups = await query<ProviderFailureGroup>(
-    `SELECT provider, count(*)::int AS n, max(message) AS sample
+    `SELECT provider, count(*)::int AS n, min(message) AS sample
        FROM provider_failures
       WHERE at > $1::timestamptz - make_interval(mins => $2) AND at <= $1
       GROUP BY provider, signature`,
     [now, th.providerFailWindowMin],
   );
   const firing = [...states.values()].filter((r) => r.firing && r.rule.startsWith(PROVIDER_RULE_PREFIX)).map((r) => r.rule.slice(PROVIDER_RULE_PREFIX.length));
-  for (const f of evaluateProviderFailures(groups, firing, th)) await applyFinding(f, states.get(f.rule), now, th, send, sent, { noReminders: true });
+  const inWindow = new Set(groups.map((g) => g.provider));
+  const recovered = new Map<string, ProviderRecovery>();
+  for (const provider of firing) {
+    if (inWindow.has(provider)) continue;
+    const proof = await providerRecovery(provider, now, th);
+    if (proof) recovered.set(provider, proof);
+  }
+  for (const f of evaluateProviderFailures(groups, firing, recovered, th)) await applyFinding(f, states.get(f.rule), now, th, send, sent, { incident: true });
+}
+
+/** The evidence that a provider with no failure in the window works again, `null` when there is none yet. */
+async function providerRecovery(provider: string, now: Date, th: Thresholds): Promise<ProviderRecovery | null> {
+  const row = await queryOne<{ completed: boolean; recent: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM ai_usage
+                     WHERE outcome = 'completed' AND at > $2::timestamptz - make_interval(mins => $3) AND at <= $2
+                       AND parts @> jsonb_build_array(jsonb_build_object('provider', $1::text)))
+         OR EXISTS (SELECT 1 FROM media_jobs
+                     WHERE provider = $1 AND status = 'succeeded' AND finished_at > $2::timestamptz - make_interval(mins => $3) AND finished_at <= $2)
+         OR EXISTS (SELECT 1 FROM video_ops
+                     WHERE provider = $1 AND status = 'succeeded' AND finished_at > $2::timestamptz - make_interval(mins => $3) AND finished_at <= $2) AS completed,
+            EXISTS (SELECT 1 FROM provider_failures
+                     WHERE provider = $1 AND at > $2::timestamptz - make_interval(mins => $4) AND at <= $2) AS recent`,
+    [provider, now, th.providerFailWindowMin, th.providerQuietMin],
+  );
+  if (row?.completed) return "completed";
+  return row && !row.recent ? "quiet" : null;
 }
 
 /**
