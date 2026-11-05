@@ -90,9 +90,9 @@ function snapshot(s: Snapshot): Snapshot {
   return { value: s.value, source: s.source };
 }
 
-/** `/test` is in the bot menu only while `tests.enabled` is true: a change of that switch re-registers the commands (best effort). */
+/** `/test` and `/market` are in the bot menu only while their switch is on: a change of it re-registers the commands (best effort). */
 function refreshBotMenuFor(key: string): void {
-  if (key !== "tests.enabled") return;
+  if (key !== "tests.enabled" && key !== "market.enabled") return;
   void import("./telegram").then((m) => (m.botConfigured() ? m.setBotCommands() : undefined)).catch(() => undefined);
 }
 

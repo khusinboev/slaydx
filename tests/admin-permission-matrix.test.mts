@@ -516,7 +516,7 @@ const planStepUp = (perm: Permission): boolean => PLAN_STEP_UP.has(perm);
 
 test("matrix: admin-rbac equals the §4.3 literal AND the §4.3 table in the plan file (role × permission × step-up)", () => {
   const literal = parseTable(PLAN_TABLE);
-  assert.equal(literal.length, 36);
+  assert.equal(literal.length, 38);
   assert.deepEqual(parseTable(planFileTable()), literal, "the transcribed literal drifted from docs/admin/02-plan.md §4.3");
   assert.deepEqual([...rbac.PERMISSIONS].filter((p) => p !== "self").sort(), literal.map((r) => r.perm).sort());
   const diffs: string[] = [];

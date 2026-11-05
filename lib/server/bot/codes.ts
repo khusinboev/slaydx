@@ -28,6 +28,7 @@ import { BOT_LANGUAGES, isProfileField, type BotLanguage, type FieldStepId, type
  *   dm:l              «Qattiqqo'l domla»: the list of works to defend (last 5 slide works)
  *   dm:s:<uuid>       start the defence of that work (generation id; ownership is checked in SQL)
  *   dm:r:<uuid>       resume the open defence (session id; ownership is checked in SQL)
+ *   m:o:<0|1>         «Mening ishlarim bozorga chiqmasin» on the profile card: the value to set
  *   l:m:<o>           language menu; o = where it came from (p profile, y help, n none)
  *   l:s:<lang>:<o>    set the language, then show screen `o`
  *   n                 no-op (a label-only button)
@@ -66,6 +67,7 @@ export const cb = {
   domlaResume: (sessionId: string) => `dm:r:${sessionId}`,
   dqOff: () => "dq:off",
   dqOn: () => "dq:on",
+  marketOptOut: (optOut: boolean) => `m:o:${optOut ? 1 : 0}`,
   noop: () => "n",
 };
 
@@ -95,6 +97,7 @@ export type Callback =
   | { kind: "domlaList" }
   | { kind: "domlaStart"; generationId: string }
   | { kind: "domlaResume"; sessionId: string }
+  | { kind: "marketOptOut"; optOut: boolean }
   | { kind: "noop" }
   | { kind: "unknown" };
 
@@ -158,6 +161,9 @@ export function parseCallback(data: string | undefined | null): Callback {
       if (parts.length === 2 && b === "l") return { kind: "domlaList" };
       if (parts.length === 3 && b === "s" && UUID_RE.test(c ?? "")) return { kind: "domlaStart", generationId: c!.toLowerCase() };
       if (parts.length === 3 && b === "r" && UUID_RE.test(c ?? "")) return { kind: "domlaResume", sessionId: c!.toLowerCase() };
+      break;
+    case "m":
+      if (parts.length === 3 && b === "o" && (c === "0" || c === "1")) return { kind: "marketOptOut", optOut: c === "1" };
       break;
     case "n":
       if (parts.length === 1) return { kind: "noop" };

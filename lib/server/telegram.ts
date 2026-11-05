@@ -10,7 +10,7 @@ import { normalizeRefCode, refCodeFromStartPayload, REFERRAL_REWARD_POINTS } fro
 import type { ReferralClaim } from "./referrals";
 import { inlineButton, tgEmoji, type Screen } from "./bot/ui";
 import { langFromTelegram, langOf, t, LANGS, type Lang, type TextKey } from "./bot/i18n";
-import { legacyFoldSetting, mainKeyboard } from "./bot/keyboard";
+import { legacyFoldSetting, mainKeyboard, marketSetting } from "./bot/keyboard";
 import { alifboScreen, blockedText, loginScreen, welcomeScreen } from "./bot/screens";
 
 /**
@@ -254,7 +254,7 @@ export async function botUsername(now: number = Date.now()): Promise<string | nu
 }
 
 /** The bot's commands, in menu order. */
-export const BOT_COMMANDS = ["start", "login", "taklif", "admin", "til", "alifbo", "savol", "obuna", "domla", "chat", "stop", "test"] as const;
+export const BOT_COMMANDS = ["start", "login", "taklif", "admin", "til", "alifbo", "savol", "obuna", "domla", "chat", "stop", "test", "market"] as const;
 
 /** Menu descriptions that live under another key prefix than `cmd.` (the AI chat and the domla keep their texts under `chat.` / `domla.`). */
 const COMMAND_TEXT: Partial<Record<(typeof BOT_COMMANDS)[number], TextKey>> = { domla: "domla.cmd", chat: "chat.cmd", stop: "chat.cmdStop", test: "tests.cmd" };
@@ -271,7 +271,9 @@ export async function setBotCommands(): Promise<boolean> {
   let ok = true;
   // `/test` is listed only while the paid tests are switched on (`tests.enabled`); the admin settings write re-runs this.
   const testsOn = await (await import("./settings")).getSetting("tests.enabled");
-  const commands = BOT_COMMANDS.filter((c) => c !== "test" || testsOn);
+  // `/market` likewise follows `market.enabled` (docs/market/PLAN.md §7).
+  const marketOn = await marketSetting();
+  const commands = BOT_COMMANDS.filter((c) => (c !== "test" || testsOn) && (c !== "market" || marketOn));
   for (const lang of LANGS) {
     const out = await call("setMyCommands", {
       commands: commands.map((command) => ({ command, description: t(lang, COMMAND_TEXT[command] ?? (`cmd.${command}` as TextKey)) })),
@@ -899,7 +901,7 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
     const known = isPrivate ? await bot.userByTelegram(msg.from.id) : null;
     const lang = langOf(known?.language);
     const { isLinkedAdmin } = await import("./bot/admin-access");
-    const keyboard = known ? mainKeyboard(lang, msg.from.id, undefined, { admin: await isLinkedAdmin(msg.from.id), legacyFold: await legacyFoldSetting() }) : null;
+    const keyboard = known ? mainKeyboard(lang, msg.from.id, undefined, { admin: await isLinkedAdmin(msg.from.id), legacyFold: await legacyFoldSetting(), market: await marketSetting() }) : null;
     const sent = await handleContact(msg.chat.id, msg.from.id, msg.contact, forwarded, msg.chat.type === "private", lang, keyboard);
     if (sent && known) await bot.markKeyboardSent(msg.chat.id, known.id);
     return;
@@ -1006,6 +1008,11 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
   if (text.startsWith("/alifbo")) {
     const screen = alifboScreen(lang);
     await sendMessage(msg.chat.id, screen.text, markupOf(screen));
+    return;
+  }
+
+  if (text.startsWith("/market")) {
+    await bot.sendMarket(msg.chat.id, lang);
     return;
   }
 

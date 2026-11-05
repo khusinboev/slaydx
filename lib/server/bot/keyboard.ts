@@ -25,18 +25,18 @@ import { toolHref } from "../../media/legacy-fold";
  */
 
 /** What a reply-keyboard text means. */
-export type KeyboardAction = "slide" | "pro" | "independent" | "referat" | "image" | "resume" | "files" | "wallet" | "profile" | "help";
+export type KeyboardAction = "slide" | "pro" | "independent" | "referat" | "image" | "resume" | "files" | "wallet" | "profile" | "help" | "market";
 
 /** Tool ids behind the web_app buttons. */
 type KeyboardTool = "slide" | "image" | "pro-slide" | "mustaqil-ish" | "referat" | "resume";
 
 /** `legacy`: labels of earlier keyboards still on users' screens (a tap keeps working until the keyboard is refreshed). */
-type Spec = { action: KeyboardAction; icon: IconKey; label: TextKey; tool?: KeyboardTool; legacy?: readonly string[] };
+type Spec = { action: KeyboardAction; icon: IconKey; label: TextKey; tool?: KeyboardTool; path?: string; legacy?: readonly string[] };
 
 const toolSpec = (action: KeyboardAction, icon: IconKey, label: TextKey, tool: KeyboardTool): Spec => ({ action, icon, label, tool });
 
-/** Keyboard options: a linked admin gets the panel row; `legacyFold` = the setting `studio.legacy_fold` (P8). */
-export type KeyboardOpts = { admin?: boolean; legacyFold?: boolean };
+/** Keyboard options: a linked admin gets the panel row; `legacyFold` = the setting `studio.legacy_fold` (P8); `market` = the setting `market.enabled`. */
+export type KeyboardOpts = { admin?: boolean; legacyFold?: boolean; market?: boolean };
 
 /**
  * Tool buttons open `lib/tools.ts` slugs (slide, pro-slide, mustaqil-ish, referat, rasm, resume) through the web's own
@@ -53,6 +53,8 @@ const SPECS: Record<KeyboardAction, Spec> = {
   wallet: { action: "wallet", icon: "wallet", label: "kb.wallet", legacy: ["Hamyon", "Кошелёк", "Wallet"] },
   profile: { action: "profile", icon: "profile", label: "kb.profile", legacy: ["Profilim", "Мой профиль", "My profile"] },
   help: { action: "help", icon: "help", label: "kb.help" },
+  // «Ishlar bozori» (docs/market/PLAN.md §7): a web_app page, not a tool; without a public URL the text button opens /market.
+  market: { action: "market", icon: "store", label: "kb.market", path: "/uz/market" },
 };
 
 /** Whether an action opens a tool (web_app) rather than a chat screen. */
@@ -77,10 +79,17 @@ export async function legacyFoldSetting(): Promise<boolean> {
   return legacyFoldOn();
 }
 
+/** The switch behind `KeyboardOpts.market` (lazy import, same reason as `legacyFoldSetting`). */
+export async function marketSetting(): Promise<boolean> {
+  const { getSetting } = await import("../settings");
+  return getSetting("market.enabled");
+}
+
 /** The web path a tool button opens (`null` for a chat-screen button). */
 export function keyboardPath(action: KeyboardAction, legacyFold = false): string | null {
-  const tool = SPECS[action].tool;
-  return tool ? toolHref(TOOL_BY_ID[tool], legacyFold) : null;
+  const s = SPECS[action];
+  if (s.path) return s.path;
+  return s.tool ? toolHref(TOOL_BY_ID[s.tool], legacyFold) : null;
 }
 
 function button(lang: Lang, telegramId: number | string, action: KeyboardAction, features: ToolFeatures, legacyFold: boolean): KeyboardButton {
@@ -105,6 +114,8 @@ export function mainKeyboard(
       [b("image"), b("resume")],
       [b("files"), b("wallet")],
       [b("profile"), b("help")],
+      // Behind the master switch: the button appears with the next keyboard refresh after the owner turns the market on.
+      ...(opts.market ? [[b("market")]] : []),
       // Linked admins only (docs/bot-admin/PLAN.md); the panel re-checks the account on every tap.
       ...(opts.admin ? [[keyboardButton("admin", at(lang, "kb.admin"), { style: "primary" })]] : []),
     ],
