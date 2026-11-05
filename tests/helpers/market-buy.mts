@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- SQL rows and JSON answers are read untyped here */
 import { randomUUID } from "node:crypto";
 import { createIsolatedDb } from "./isolated-db.mts";
 import { marketWorkDoc } from "./market-fixtures.mts";
@@ -90,7 +91,7 @@ export async function mkItem(o: ItemOpts = {}): Promise<string> {
 
 /** A sanitised-looking work document: title-page fields empty, as the sanitiser leaves them. */
 export function neutralWork(tool: string, title: string, seed = 7) {
-  const doc = marketWorkDoc(tool, title, seed, { words: 300 }) as unknown as { meta: Record<string, unknown>; work: Record<string, unknown> };
+  const doc = marketWorkDoc(tool, title, seed, { words: 300 }) as unknown as { meta: Record<string, unknown>; work: Record<string, unknown>; sections: unknown[] };
   for (const k of ["author", "university", "faculty", "department", "teacher", "city", "group", "course"]) {
     doc.meta[k] = "";
     doc.work[k] = "";

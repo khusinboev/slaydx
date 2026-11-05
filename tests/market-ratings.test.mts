@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- SQL rows and JSON answers are read untyped here */
 import "./helpers/next-request.mts";
 import test, { after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
@@ -13,7 +14,7 @@ import { buy, call, closeDb, ctxOf, db, drainJobs, marketRequest, mkItem, mkUser
  *   3. counters add the new stars on an edit      -> «an edit moves the sum, not the count»;
  *   4. refund state ignored                       -> «a refund or a flag closes it»;
  *   5. abuse flag ignored                         -> «a refund or a flag closes it»;
- *   6. ownership dropped                          -> «a foreign purchase»;
+ *   6. ownership dropped                          -> «input: whole stars» (the foreign purchase);
  *   7. hide threshold off by one                  -> «the third report hides»;
  *   8. `ON CONFLICT DO NOTHING` replaced          -> «one report per user»;
  *   9. the candidates delete removed              -> «opting out removes the waiting candidates»;

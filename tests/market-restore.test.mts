@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- SQL rows and JSON answers are read untyped here */
 import "./helpers/next-request.mts";
 import test, { after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
@@ -121,7 +122,24 @@ test("two restores at once: one copy", { skip }, async (t) => {
   await resetSettings();
   const { u, id } = await bought();
   await deleteGen(u, id);
-  const [a, b] = await Promise.all([restore(u, id, FIELDS), restore(u, id, FIELDS)]);
+  // Both read «lost» first: one then waits for the purchase row, the other for the buyer's row.
+  const { pool } = await db();
+  const client = await pool().connect();
+  let a, b;
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT 1 FROM market_purchases WHERE id = $1 FOR UPDATE", [id]);
+    const pending = Promise.all([restore(u, id, FIELDS), restore(u, id, FIELDS)]);
+    for (let i = 0; i < 200; i++) {
+      const w = await client.query<{ n: string }>("SELECT count(*) AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()");
+      if (Number(w.rows[0]!.n) >= 2) break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    await client.query("COMMIT");
+    [a, b] = await pending;
+  } finally {
+    client.release();
+  }
   assert.equal(a.status, 200, a.text);
   assert.equal(b.status, 200, b.text);
   assert.equal(a.body.generationId, b.body.generationId);

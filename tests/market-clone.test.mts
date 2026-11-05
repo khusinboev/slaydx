@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- SQL rows and JSON answers are read untyped here */
 import "./helpers/next-request.mts";
 import test, { after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
@@ -12,7 +13,7 @@ import type { AcademicDoc } from "../lib/generation/types.ts";
  *
  * Mutations (each turned the named test red, then restored):
  *   1. hook line removed from `buildArtifactInner`                     -> «no network» (the LLM path runs);
- *   2. `entitlementOf` always passes                                   -> «no purchase, no copy», «another buyer's item»;
+ *   2. a job without a purchase row renders anyway                     -> «no purchase, no copy», «another buyer's item»;
  *   3. fingerprint not stamped                                         -> «the copy of a work», «the copy of a deck»;
  *   4. `doc.work` not merged                                           -> «the copy of a work» (`titleModel`);
  *   5. footers not recomputed                                          -> «the copy of a deck»;

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- SQL rows and JSON answers are read untyped here */
 import "./helpers/next-request.mts";
 import test, { after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
@@ -10,15 +11,13 @@ import { buy, closeDb, db, jobOf, ledger, mkItem, mkUser, marketRequest, call, c
  * changes the row and commits, and the purchase must see the committed truth INSIDE the charge transaction.
  *
  * Mutations (each turned the named test red, then restored from a byte copy):
- *   1. `max_copies` condition dropped from the UPDATE               -> «last copy race», «sold out at the cap»;
+ *   1. `max_copies` condition dropped from the UPDATE               -> «a cap lowered under the sold count»;
  *   2. `inTx` called before the INSERT / outside the transaction    -> «a refusal in the transaction leaves nothing»;
  *   3. in-transaction price compare removed                         -> «price changed while waiting for the lock»;
  *   4. `price_version` compare removed                              -> «price_version alone»;
  *   5. university cap query removed                                 -> «university cap»;
  *   6. empty university counted by the cap                          -> «no university, no cap»;
- *   7. `already_owned` mapping of the UNIQUE violation removed      -> «two tabs»;
- *   8. pre-check of the own purchase removed                        -> «second click» (the UNIQUE still answers, code stays;
- *      the test also pins that no charge row ever appears);
+ *   7. `already_owned` mapping of the UNIQUE violation removed      -> «two tabs past the pre-check»;
  *   9. replay check moved behind the status check                   -> «a replay after the last copy»;
  *  10. `assertCanCreate` removed                                    -> «mandatory channels»;
  *  11. `assertOfferAccepted` removed                                -> «oferta»;
@@ -28,7 +27,8 @@ import { buy, closeDb, db, jobOf, ledger, mkItem, mkUser, marketRequest, call, c
  *  15. `sold_out` flip removed                                      -> «sold out at the cap»;
  *  16. in-transaction `market.tools_disabled` check removed         -> «tool withdrawn while waiting»;
  *  17. hidden check removed from the UPDATE                         -> «hidden while waiting»;
- *  18. purchase id ≠ generation id (default UUID)                   -> «happy path».
+ *  18. purchase id ≠ generation id (default UUID)                   -> «happy path»;
+ *  19. the `marketItemId` refusal of `prepareGeneration` removed     -> «a form cannot name an item».
  */
 
 after(closeDb);
@@ -42,8 +42,8 @@ const count = async (sql: string, params: unknown[] = []) => Number((await rows(
 const soldCount = async (id: string) => Number((await rows("SELECT sold_count FROM market_items WHERE id = $1", [id]))[0]!.sold_count);
 const statusOf = async (id: string) => (await rows("SELECT status FROM market_items WHERE id = $1", [id]))[0]!.status as string;
 
-/** Holds the item's row lock, lets `start` block on it, applies `sql`, commits. */
-async function whileLocked<T>(itemId: string, start: () => Promise<T>, sql: string): Promise<T> {
+/** Holds the item's row lock, lets `start` block on it (`waiters` backends), applies `sql`, commits. */
+async function whileLocked<T>(itemId: string, start: () => Promise<T>, sql: string, waiters = 1): Promise<T> {
   const { pool } = await db();
   const client = await pool().connect();
   try {
@@ -52,7 +52,7 @@ async function whileLocked<T>(itemId: string, start: () => Promise<T>, sql: stri
     const pending = start();
     for (let i = 0; i < 200; i++) {
       const w = await client.query<{ n: string }>("SELECT count(*) AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()");
-      if (Number(w.rows[0]!.n) > 0) break;
+      if (Number(w.rows[0]!.n) >= waiters) break;
       await new Promise((r) => setTimeout(r, 25));
     }
     await client.query(sql, sql.includes("$1") ? [itemId] : []);
@@ -177,6 +177,35 @@ test("two tabs: two keys at once are one purchase", { skip }, async (t) => {
   assert.equal((await ledger(u.id)).length, 1);
   assert.equal(await soldCount(item), 1);
   assert.equal(await count("SELECT count(*) AS n FROM generations WHERE user_id = $1", [u.id]), 1);
+});
+
+test("two tabs past the pre-check: the UNIQUE index answers already_owned and the second charge rolls back", { skip }, async (t) => {
+  quiet(t);
+  await resetSettings();
+  const u = await mkUser({ balance: 50_000 });
+  const item = await mkItem();
+  const fields = { author: "Sintetik Xaridor", university: "Sintetik Universitet" };
+  // Both requests read «not owned» first: one then waits for the item row, the other for the buyer's row.
+  const answers = await whileLocked(item, () => Promise.all([buy(u, item, { fields }), buy(u, item, { fields })]), "SELECT 1", 2);
+  assert.deepEqual(answers.map((a) => a.status).sort(), [200, 409], answers.map((a) => a.text).join("\n"));
+  const lost = answers.find((a) => a.status === 409)!;
+  assert.equal(lost.body.code, "already_owned");
+  assert.equal(lost.body.generationId, answers.find((a) => a.status === 200)!.body.generationId);
+  assert.equal((await ledger(u.id)).length, 1);
+  assert.equal(await soldCount(item), 1);
+});
+
+test("a cap lowered under the sold count: an active item refuses and reads sold out", { skip }, async (t) => {
+  quiet(t);
+  await resetSettings();
+  const item = await mkItem({ maxCopies: 5 });
+  await rows("UPDATE market_items SET sold_count = 2, max_copies = 2 WHERE id = $1", [item]);
+  const u = await mkUser();
+  const res = await buy(u, item);
+  assert.equal(res.status, 410, res.text);
+  assert.equal(res.body.code, "sold_out");
+  assert.equal((await ledger(u.id)).length, 0);
+  assert.equal(await soldCount(item), 2);
 });
 
 test("last copy race: two buyers, one copy, the loser pays nothing", { skip }, async (t) => {

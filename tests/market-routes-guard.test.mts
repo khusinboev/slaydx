@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- SQL rows and JSON answers are read untyped here */
 import "./helpers/next-request.mts";
 import test, { after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
@@ -214,7 +215,7 @@ test("the owner-only generation routes hold for a foreign user on a bought copy"
   }
   const scores = await call(results.GET as Plain, marketRequest(`/api/generations/${gen}/results`, { cookie: thief.cookie }), ctx);
   assert.deepEqual(scores.body.results, [], "scoped by owner in SQL: nothing to read");
-  const dl = await call(download.POST as Plain, marketRequest(`/api/generations/${gen}/download`, { method: "POST", cookie: thief.cookie, body: { format: "docx" } }), ctx);
+  const dl = await call(download.POST as Plain, marketRequest(`/api/generations/${gen}/download`, { method: "POST", cookie: thief.cookie, body: { format: "native" } }), ctx);
   assert.equal(dl.status, 404);
   const patch = await call(docRoute.PATCH as Plain, marketRequest(`/api/generations/${gen}/doc`, { method: "PATCH", cookie: thief.cookie, body: { baseVersion: 0, ops: [{ op: "text", path: "x", value: "y" }] } }), ctx);
   assert.equal(patch.status, 404, patch.text);
@@ -223,7 +224,7 @@ test("the owner-only generation routes hold for a foreign user on a bought copy"
   // The buyer himself reads his copy through the same route: the test above is not vacuous.
   const own = await call(detail.GET as Plain, marketRequest(`/api/generations/${gen}`, { cookie: buyer.cookie }), ctx);
   assert.equal(own.status, 200);
-  assert.equal(own.body.marketItemId, id, "the «Bozordan» badge");
+  assert.equal(own.body.generation.marketItemId, id, "the «Bozordan» badge");
   assert.ok(own.text.includes(SECRET));
 });
 
