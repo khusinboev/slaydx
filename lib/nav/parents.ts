@@ -39,6 +39,7 @@ const ADMIN_SECTIONS = [
   "settings",
   "providers",
   "studio",
+  "market",
   "admins",
   "account",
 ] as const;
