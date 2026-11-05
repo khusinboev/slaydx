@@ -374,6 +374,10 @@ const PATH_FAMILIES: ReadonlyArray<readonly [RegExp, readonly string[]]> = [
   [/^pricing\//, ["pricing"]],
   [/^bonus-channels\//, ["bonus"]],
   [/^ratings\//, ["bonus"]],
+  // docs/market/PLAN.md §6: its own namespace, prices on `pricing.edit` and the sales CSV on `finance.export`.
+  [/^market\/(items\/\[id\]\/price|tool-pricing\/\[toolId\])\//, ["pricing"]],
+  [/^market\/sales\/export\//, ["finance"]],
+  [/^market\//, ["market"]],
   [/^(me\/|auth\/reauth\/)/, ["self"]],
 ];
 
@@ -456,6 +460,8 @@ const PLAN_TABLE = `
 | pricing.edit | ✓ | ✓ | | | | | S |
 | bonus.view | ✓ | ✓ | ✓ | | | ✓ | |
 | bonus.edit | ✓ | ✓ | | | | | S |
+| market.view | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
+| market.manage | ✓ | ✓ | | | ✓ | | |
 | admins.view | ✓ | ✓ | | | | | |
 | admins.manage | ✓ | ✓ (rank-limited) | | | | | S |
 `;
@@ -551,6 +557,8 @@ function paramsFor(e: Entry, role: Role | null): Record<string, string> {
     else if (e.rel.startsWith("providers/[id]")) value = "no_such_provider";
     else if (e.rel.startsWith("providers/routes/[id]")) value = "no.such.route";
     else if (e.rel.startsWith("pricing/[toolId]")) value = PRICING_TOOL_ID;
+    else if (e.rel.startsWith("market/tool-pricing/[toolId]")) value = PRICING_TOOL_ID;
+    else if (/^market\/(items|purchases)\/\[id\]/.test(e.rel)) value = name === "assetId" ? "no-such-asset" : name === "page" ? "1" : randomUUID();
     else if (/^studio-library\/(prompts|templates|previews)\/\[id\]/.test(e.rel)) value = "900000000000";
     assert.ok(value !== null, `${e.rel}: no fixture value for dynamic segment [${name}] — extend paramsFor()`);
     out[name] = value;

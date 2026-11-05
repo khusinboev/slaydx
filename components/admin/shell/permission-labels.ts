@@ -42,6 +42,8 @@ export const PERMISSION_LABELS: Readonly<Record<Permission, string>> = Object.fr
   "pricing.edit": "Narxlarni o'zgartirish",
   "bonus.view": "Bonus kanallarni ko'rish",
   "bonus.edit": "Bonus kanallarni boshqarish",
+  "market.view": "Ishlar bozorini ko'rish",
+  "market.manage": "Ishlar bozorini boshqarish",
   "admins.view": "Adminlarni ko'rish",
   "admins.manage": "Adminlarni boshqarish",
   self: "O'z hisobim: sessiyalar va tiklash kodlari",
