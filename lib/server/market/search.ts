@@ -130,7 +130,7 @@ type PageRow = MarketItemRow & { sort_value: string };
 async function pageRows(f: ReturnType<typeof filtersOf>, tools: readonly string[], cursor: Cursor | null, limit: number, percent: number): Promise<PageRow[]> {
   const { sql, args } = whereOf(f, tools);
   const spec = sortSpec(f.sort);
-  args.push(percent);
+  if (spec.key.includes("$PCT")) args.push(percent);
   const key = spec.key.replace("$PCT", `$${args.length}::int`);
   let where = sql;
   if (cursor) {
