@@ -7,8 +7,8 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        // «Ishlar bozori» is public on purpose (M15); search result pages carry `noindex` themselves, «Xaridlarim» is private.
-        allow: ["/", "/uz/market"],
+        // «Ishlar bozori» is public on purpose (M15, covered by "/"): result pages carry `noindex` themselves, «Xaridlarim» is private.
+        allow: "/",
         /*
          * Shaxsiy sahifalar va API indekslanmasin. `/o/` — AUDIT-22 R:
          * o'yin havolalari (`app/o/[token]`) — sahifaning o'zida ham

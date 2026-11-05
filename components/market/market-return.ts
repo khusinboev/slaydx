@@ -13,7 +13,7 @@ const TTL_MS = 2 * 60 * 60 * 1000;
 
 export function rememberMarketReturn(path: string): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ path, at: Date.now() }));
+    window.localStorage.setItem(KEY, JSON.stringify({ path, at: Date.now() }));
   } catch {
     // Private window or blocked storage: the `?return=` link still works.
   }
@@ -21,7 +21,7 @@ export function rememberMarketReturn(path: string): void {
 
 export function forgetMarketReturn(): void {
   try {
-    localStorage.removeItem(KEY);
+    window.localStorage.removeItem(KEY);
   } catch {
     // Nothing to forget.
   }
@@ -29,7 +29,7 @@ export function forgetMarketReturn(): void {
 
 export function storedMarketReturn(): string | null {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = window.localStorage.getItem(KEY);
     if (!raw) return null;
     const v = JSON.parse(raw) as { path?: unknown; at?: unknown };
     if (typeof v.at !== "number" || Date.now() - v.at > TTL_MS) return null;

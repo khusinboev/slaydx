@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 type Params = Promise<{ id: string }>;
 
-/** The anonymous view: built without `doc_json`, so nothing of the body can reach this page (§3.1). */
+/** The anonymous view: built without the document, so nothing of the body can reach this page (§3.1). */
 async function publicItem(id: string): Promise<{ enabled: boolean; item: MarketItemView | null }> {
   const enabled = await marketEnabled().catch(() => false);
   if (!enabled) return { enabled, item: null };

@@ -294,10 +294,11 @@ test("ResultLayout: --app-topbar-h is where <main> starts, in px (the page count
 
 /* ───────────────────────── sitemap ───────────────────────── */
 
-test("sitemap: lists /uz/wallet (the real Hamyon page), never the /uz/purchase redirect alias", () => {
+test("sitemap: lists /uz/wallet (the real Hamyon page), never the /uz/purchase redirect alias; the dark market is not listed", async () => {
   const sitemap = (sitemapImport as unknown as { default?: typeof sitemapImport }).default ?? sitemapImport;
-  const urls = sitemap().map((e) => new URL(e.url).pathname);
+  const urls = (await sitemap()).map((e) => new URL(e.url).pathname);
   assert.ok(urls.includes("/uz/wallet"));
   assert.ok(!urls.includes("/uz/purchase"));
   assert.ok(urls.includes("/uz") && urls.includes("/uz/create"));
+  assert.ok(!urls.some((u) => u.startsWith("/uz/market")));
 });

@@ -29,3 +29,12 @@ test("robots: `/o/` (o'yin havolalari) va `/api/` disallow", () => {
   assert.ok(disallow.includes("/api/"), "«/api/» disallow ro'yxatida yo'q");
   assert.equal(rule?.allow, "/", "umumiy sayt ruxsat etilgan bo'lishi kerak");
 });
+
+/** M15: the catalog and the items are public, «Xaridlarim» is not. Mutation: `disallow` gets "/uz/market" → red. */
+test("robots: the market is open to crawlers, only «Xaridlarim» is closed", () => {
+  const r = robots();
+  const rule = Array.isArray(r.rules) ? r.rules[0] : r.rules;
+  const disallow = ([] as string[]).concat(rule?.disallow ?? []);
+  assert.ok(disallow.includes("/uz/market/purchases"));
+  assert.ok(!disallow.some((d) => "/uz/market".startsWith(d) || d === "/uz/market/"));
+});

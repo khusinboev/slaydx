@@ -92,7 +92,7 @@ export function MarketSuggest({ toolId }: { toolId: ToolId }) {
 
   // The chip lives right after the field. The host is ours: React never draws into it, so the form's tree is untouched.
   useEffect(() => {
-    if (!item) return;
+    if (!item || dismissed) return;
     const input = topicInput(toolId);
     const anchor = input?.closest('[data-field="topic"]') ?? input;
     if (!anchor) return;
@@ -104,7 +104,7 @@ export function MarketSuggest({ toolId }: { toolId: ToolId }) {
       el.remove();
       setHost(null);
     };
-  }, [item, toolId]);
+  }, [dismissed, item, toolId]);
 
   if (!item || !host || dismissed) return null;
   return createPortal(
