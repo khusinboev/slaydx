@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 import { randomUUID } from "node:crypto";
 import { query, transaction } from "./db";
 import { log } from "./log";
+import { releaseMarketCopyInTx } from "./market/release";
 
 /**
  * Kredit hisobi — endi serverda.
@@ -273,6 +274,7 @@ async function refundRatio(userId: string, reference: string, ratio: number, not
          VALUES ($1, 'refund', $2, 0, $3, $4, $5)`,
         [userId, back.points, back.balance, reference, note],
       );
+      if (ratio >= 1) await releaseMarketCopyInTx(client, reference);
       amount = back;
       return true;
     });

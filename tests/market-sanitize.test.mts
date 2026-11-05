@@ -463,6 +463,15 @@ test("the author's whole name in the topic is not protected: title, file hint an
   assertClean(clean.work!.subjectName, "subject name");
 });
 
+test("a surname left in the topic is flagged for the admin: the text alone cannot tell it from a subject", () => {
+  const doc = workDoc("referat");
+  doc.meta = { ...doc.meta, topic: "Zulfiqorov tajribasi va natijalari" };
+  const { flags, doc: clean } = run("referat", doc);
+  assert.ok(flags.some((f) => f.path === "meta.topic" && f.kind === "name"), JSON.stringify(flags));
+  assert.match(clean.meta.topic, /Zulfiqorov/, "the word stays: the admin decides");
+  assert.ok(!run("referat", workDoc("referat")).flags.some((f) => f.path === "meta.topic"), "a topic without the name raises nothing");
+});
+
 test("a title line's markers name nobody: patronymic words and course text are not name words", () => {
   const id = identityOf({ doc: { meta: { author: "Aliyev Vali o'g'li — 3-kurs, 301-guruh" } } as unknown as AcademicDoc, values: {} });
   const doc = workDoc("referat");

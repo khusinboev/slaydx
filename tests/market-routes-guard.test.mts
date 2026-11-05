@@ -38,7 +38,8 @@ import { buy, call, closeDb, ctxOf, db, drainJobs, marketRequest, mkItem, mkUser
  *   9. preview IP limit removed                           -> «rate limits»;
  *  10. suggest IP limit removed                           -> «rate limits»;
  *  11. status check dropped from `getMarketItem`          -> «no status oracle»;
- *  12. `features.market` always true                      -> «features.market».
+ *  12. `features.market` always true                      -> «features.market»;
+ *  13. a cookieless view keyed by its fresh browser key   -> «catalog limits».
  */
 
 after(closeDb);
@@ -234,7 +235,7 @@ test("cache headers: JSON and errors are private no-store; a raster is public on
   const id = await secretItem();
   const answers = await publicAnswers(id);
   for (const a of answers.slice(0, 4)) assert.equal(a.headers.get("cache-control"), "private, no-store");
-  assert.equal(answers[4]!.headers.get("cache-control"), "public, max-age=86400, immutable");
+  assert.equal(answers[4]!.headers.get("cache-control"), "public, max-age=3600, immutable");
   assert.equal(answers[4]!.headers.get("x-content-type-options"), "nosniff");
   const r = await routes();
   const stale = await get(r.preview.GET, `/api/market/items/${id}/preview/1?v=99`, ctxOf({ id, page: "1" }));
@@ -336,4 +337,8 @@ test("catalog limits: a page is at most 48 cards, unknown filters are refused or
   for (let i = 0; i < 3; i++) await get(r.item.GET, `/api/market/items/${id}`, ctxOf({ id }), u.cookie);
   assert.equal(Number((await rows("SELECT view_count FROM market_items WHERE id = $1", [id]))[0]!.view_count), 1);
   assert.equal((await get(r.list.GET as Plain, "/api/market/items?cursor=%%%")).status, 400);
+  // No cookie: every request looks like a new browser, so the IP carries the count, once a day.
+  const anon = await mkItem();
+  for (let i = 0; i < 3; i++) await get(r.item.GET, `/api/market/items/${anon}`, ctxOf({ id: anon }));
+  assert.equal(Number((await rows("SELECT view_count FROM market_items WHERE id = $1", [anon]))[0]!.view_count), 1, "cookieless requests do not inflate the counter");
 });

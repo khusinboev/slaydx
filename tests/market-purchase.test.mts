@@ -3,7 +3,7 @@ import "./helpers/next-request.mts";
 import test, { after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { buy, closeDb, db, jobOf, ledger, mkItem, mkUser, marketRequest, call, ctxOf, priceOf, resetSettings, setSetting, skip, wallet } from "./helpers/market-buy.mts";
+import { buy, closeDb, db, drainJobs, jobOf, ledger, mkItem, mkUser, marketRequest, call, ctxOf, priceOf, resetSettings, setSetting, skip, wallet } from "./helpers/market-buy.mts";
 
 /**
  * The market purchase through the real route on a real, isolated Postgres (docs/market/PLAN.md §2.1, §9, §10.3).
@@ -23,7 +23,8 @@ import { buy, closeDb, db, jobOf, ledger, mkItem, mkUser, marketRequest, call, c
  *  11. `assertOfferAccepted` removed                                -> «oferta»;
  *  12. `assertGenerationOpen` removed                               -> «admin pause»;
  *  13. `paidOnly` not passed                                        -> «market.paid_only»;
- *  14. reward skips the `≠ buyer` check                             -> «own item pays no reward»;
+ *  14. reward skips the `≠ buyer` check                             -> «author reward»;
+ *  14b. reward paid again in the charge transaction                  -> «author reward» (the charge pays nothing);
  *  15. `sold_out` flip removed                                      -> «sold out at the cap»;
  *  16. in-transaction `market.tools_disabled` check removed         -> «tool withdrawn while waiting»;
  *  17. hidden check removed from the UPDATE                         -> «hidden while waiting»;
@@ -455,18 +456,21 @@ test("mandatory channels: 403 before anything is charged", { skip }, async (t) =
   assert.equal((await ledger(u.id)).length, 0);
 });
 
-test("author reward: off by default; paid once in bonus so'm; an own item pays none", { skip }, async (t) => {
+test("author reward: off by default; paid once on COMPLETED; a cancel pays nothing; an own item pays none", { skip }, async (t) => {
   quiet(t);
   await resetSettings();
   const author = await mkUser({ balance: 0 });
   const quietItem = await mkItem({ source: author.id });
   await buy(await mkUser(), quietItem);
+  await drainJobs();
   assert.equal((await ledger(author.id)).length, 0, "reward 0: no ledger row");
 
   await setSetting("market.author_reward_percent", 10);
   const item = await mkItem({ source: author.id });
   const price = await priceOf(item);
   const res = await buy(await mkUser(), item);
+  assert.equal((await ledger(author.id)).length, 0, "the charge pays nothing: no sale yet");
+  await drainJobs();
   const led = await ledger(author.id);
   assert.equal(led.length, 1);
   assert.equal(led[0]!.kind, "bonus");
@@ -474,10 +478,32 @@ test("author reward: off by default; paid once in bonus so'm; an own item pays n
   assert.equal(Number(led[0]!.points_delta), Math.floor(price / 10));
   assert.equal((await wallet(author.id)).points, Math.floor(price / 10));
 
+  const farmed = await mkItem({ source: author.id });
+  const farmer = await mkUser();
+  const cancelled = await buy(farmer, farmed);
+  await (await import("../lib/server/jobs.ts")).cancelGeneration(cancelled.body.generationId, farmer.id);
+  await drainJobs();
+  assert.equal((await ledger(author.id)).length, 1, "buy + cancel farms nothing");
+
   const own = await mkItem({ source: author.id });
   await rows("UPDATE users SET balance = 100000 WHERE id = $1", [author.id]);
   assert.equal((await buy(author, own)).status, 200);
+  await drainJobs();
   assert.equal((await ledger(author.id)).filter((l) => l.kind === "bonus").length, 1, "own purchase pays no reward");
+});
+
+test("two buyers of each other's items: no second user's row in the charge transaction, both pass with the reward on", { skip }, async (t) => {
+  quiet(t);
+  await resetSettings({ "market.enabled": true, "market.author_reward_percent": 10 });
+  const a = await mkUser();
+  const b = await mkUser();
+  const ofA = await mkItem({ source: a.id });
+  const ofB = await mkItem({ source: b.id });
+  const [x, y] = await Promise.all([buy(a, ofB), buy(b, ofA)]);
+  assert.deepEqual([x.status, y.status], [200, 200], `${x.text}\n${y.text}`);
+  await drainJobs();
+  assert.equal((await ledger(a.id)).filter((l) => l.kind === "bonus").length, 1);
+  assert.equal((await ledger(b.id)).filter((l) => l.kind === "bonus").length, 1);
 });
 
 test("the queue is full: 429 with Retry-After, nothing charged, nothing counted", { skip }, async (t) => {

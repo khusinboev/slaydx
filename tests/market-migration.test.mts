@@ -156,6 +156,8 @@ test("generated search column: the tsvector follows search_text and its GIN inde
   const [hit] = await query<{ ok: boolean }>("SELECT search_tsv @@ plainto_tsquery('simple','tarixi') AS ok FROM market_items WHERE id=$1", [id]);
   assert.equal(hit!.ok, true);
   const idx = await query("SELECT 1 FROM pg_indexes WHERE tablename='market_items' AND indexname='market_items_search_idx'");
+  const byGen = await query<{ indexdef: string }>("SELECT indexdef FROM pg_indexes WHERE tablename='market_purchases' AND indexname='market_purchases_generation_idx'");
+  assert.match(byGen[0]?.indexdef ?? "", /\(generation_id\) WHERE \(generation_id IS NOT NULL\)/);
   assert.equal(idx.length, 1);
 });
 

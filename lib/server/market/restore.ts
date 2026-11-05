@@ -7,6 +7,7 @@ import { ApiError } from "../api";
 import { query, queryOne } from "../db";
 import { enqueueGeneration } from "../jobs";
 import { queueLimits } from "../queue-limits";
+import { assertGenerationOpen } from "../submit-generation";
 import { previewUrl } from "./items";
 import { assertRequiredFields, cleanPurchaseFields, cloneValuesOf, universityKey } from "./purchase";
 import { PURCHASE_FACTS_JOIN, PURCHASE_FACTS_SELECT, getItemRow, isUuid, purchaseFactsOf, type PurchaseFactsRow } from "./store";
@@ -61,6 +62,8 @@ export async function restorePurchase(input: { userId: string; purchaseId: strin
   const item = await getItemRow(row.item_id);
   const tool = item ? TOOL_BY_ID[item.tool_id as ToolId] : undefined;
   if (!item || !tool) throw new ApiError("Topilmadi", 404);
+  // A restore is a job for the worker: an admin pause holds it like any other. An item off sale does not (§9).
+  await assertGenerationOpen(tool.id);
   const fields = { ...(await lastFields(row.generation_id, userId)), ...input.fields };
   assertRequiredFields(tool.id, fields);
   // The copy cap counted this university: a restore is not a way to hand the same work to another one.

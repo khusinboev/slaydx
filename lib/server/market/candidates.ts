@@ -148,7 +148,8 @@ async function processOne(row: SourceRow, minQuality: number, perTopic: number):
     return "rejected";
   }
   const clean = sanitizeForMarket({ toolId, doc, values: row.values_json ?? {}, sourceId: row.id, profile: profileOf(row) });
-  const title = marketTitleOf(clean.doc.meta.topic || row.topic);
+  // Never the raw `generations.topic`: only the scrubbed topic may reach a public title.
+  const title = marketTitleOf(clean.doc.meta.topic || (TOOL_BY_ID[toolId]?.title ?? toolId));
   if (clean.userMaterial) {
     await insertRejected(row, "user_material", title);
     return "rejected";

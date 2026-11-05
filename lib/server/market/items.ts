@@ -1,4 +1,5 @@
 import "server-only";
+import { readablePages } from "../../market/preview-policy";
 import { isDeckTool, isMarketTool, requiredPurchaseFields } from "../../market/registry";
 import type { MarketCard, MarketItemView } from "../../market/types";
 import { TOOL_BY_ID } from "../../tools";
@@ -93,7 +94,7 @@ export async function getMarketItem(id: string, viewerUserId: string | null): Pr
     ...card,
     status: visible ? card.status : "sold_out",
     outline: row.outline_json,
-    previewPages: await previewPagesOf(row.tool_id),
+    previewPages: await readableOf(row),
     totalPages: row.pages ?? row.slide_count,
     owned,
     requiredFields: tool ? requiredPurchaseFields(tool.id) : [],
@@ -101,11 +102,21 @@ export async function getMarketItem(id: string, viewerUserId: string | null): Pr
   };
 }
 
-/** Counts one view per (viewer, item) per hour; a failure never touches the page. Returns whether it was counted. */
-export async function recordMarketView(itemId: string, viewerKey: string): Promise<boolean> {
+/** Readable pages the viewer gets: what the built set really holds, else the same rule over the listing's own count. */
+async function readableOf(row: MarketItemRow): Promise<number> {
+  const built = await queryOne<{ n: string }>("SELECT count(*) AS n FROM market_previews WHERE item_id = $1 AND version = $2 AND kind = 'page'", [row.id, row.preview_version]);
+  const n = Number(built?.n ?? 0);
+  return n > 0 ? n : readablePages(await previewPagesOf(row.tool_id), row.pages ?? row.slide_count);
+}
+
+/**
+ * Counts one view per (viewer, item) per window; a failure never touches the page. Returns whether it was counted.
+ * The default window is an hour; a viewer without a cookie is keyed by IP for a day, or every request would be a new viewer.
+ */
+export async function recordMarketView(itemId: string, viewerKey: string, windowSec = VIEW_WINDOW_SEC): Promise<boolean> {
   if (!isUuid(itemId)) return false;
   try {
-    const gate = await rateLimit(`market-view:${itemId}:${viewerKey}`, 1, VIEW_WINDOW_SEC);
+    const gate = await rateLimit(`market-view:${itemId}:${viewerKey}`, 1, windowSec);
     if (!gate.ok) return false;
     const updated = await query<{ id: string }>("UPDATE market_items SET view_count = view_count + 1 WHERE id = $1 AND status = ANY($2) RETURNING id", [itemId, PUBLIC_STATUSES]);
     if (!updated.length) return false;

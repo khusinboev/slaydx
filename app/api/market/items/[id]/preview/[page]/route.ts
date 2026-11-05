@@ -12,7 +12,7 @@ export const maxDuration = 60;
 
 type Ctx = { params: Promise<{ id: string; page: string }> };
 
-const PUBLIC_CACHE = "public, max-age=86400, immutable";
+const PUBLIC_CACHE = "public, max-age=3600, immutable";
 
 /**
  * A shop-window raster (docs/market/PLAN.md M8): the only item bytes a non-buyer ever gets, watermarked or blurred.

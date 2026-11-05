@@ -15,7 +15,9 @@ import { buy, call, closeDb, ctxOf, db, drainJobs, marketRequest, mkItem, mkUser
  *   4. refund state ignored                       -> «a refund or a flag closes it»;
  *   5. abuse flag ignored                         -> «a refund or a flag closes it»;
  *   6. ownership dropped                          -> «input: whole stars» (the foreign purchase);
- *   7. hide threshold off by one                  -> «the third report hides»;
+ *   7. hide threshold off by one                  -> «one report per user; counted reports»;
+ *   7b. account age not checked                   -> «three fresh accounts hide nothing»;
+ *   7c. per-day limit not applied                 -> «a burst of old accounts»;
  *   8. `ON CONFLICT DO NOTHING` replaced          -> «one report per user»;
  *   9. the candidates delete removed              -> «opting out removes the waiting candidates»;
  *  10. opt-out behind `market.enabled`            -> «the opt-out works while the market is dark»;
@@ -133,7 +135,15 @@ test("input: whole stars 1..5, text up to 300; a foreign purchase is a plain 404
   assert.equal((await rate(thief, randomUUID(), { stars: 1 })).status, 404);
 });
 
-test("one report per user; the third distinct report hides the item from everyone but its buyer", { skip }, async (t) => {
+async function reporter(ageDays = 30) {
+  const u = await mkUser();
+  await rows("UPDATE users SET created_at = now() - $2::int * interval '1 day' WHERE id = $1", [u.id, ageDays]);
+  return u;
+}
+
+const hidden = async (item: string) => (await rows("SELECT quality_json FROM market_items WHERE id = $1", [item]))[0]!.quality_json.hidden_until_review === true;
+
+test("one report per user; counted reports across two days hide the item from everyone but its buyer", { skip }, async (t) => {
   quiet(t);
   await resetSettings();
   const { getMarketItem } = await import("../lib/server/market/items.ts");
@@ -141,11 +151,12 @@ test("one report per user; the third distinct report hides the item from everyon
   const item = await mkItem();
   const owner = await mkUser();
   await buy(owner, item);
-  const [a, b, c] = [await mkUser(), await mkUser(), await mkUser()];
+  const [a, b, c] = [await reporter(), await reporter(), await reporter()];
   assert.deepEqual((await report(a, item)).body, { reported: true });
   assert.deepEqual((await report(a, item)).body, { reported: false }, "a repeat is no error and no second vote");
+  await rows("UPDATE market_reports SET created_at = now() - interval '2 days' WHERE item_id = $1", [item]);
   assert.equal((await report(b, item)).body.reported, true);
-  assert.ok(await getMarketItem(item, null), "two distinct reports do not hide");
+  assert.ok(await getMarketItem(item, null), "two counted reports do not hide");
   assert.equal((await report(c, item)).body.reported, true);
   const [row] = await rows("SELECT status, quality_json FROM market_items WHERE id = $1", [item]);
   assert.equal(row!.status, "active", "the status does not change");
@@ -153,7 +164,25 @@ test("one report per user; the third distinct report hides the item from everyon
   assert.equal(await getMarketItem(item, null), null);
   assert.ok(await getMarketItem(item, owner.id), "the buyer keeps his page");
   assert.deepEqual((await listMarketItems({})).items.filter((i) => i.id === item), []);
-  assert.equal((await report(await mkUser(), item)).status, 404, "a hidden item is 404 for a new reporter");
+  assert.equal((await report(await reporter(), item)).status, 404, "a hidden item is 404 for a new reporter");
+});
+
+test("three fresh accounts hide nothing, their reports still reach the admin", { skip }, async (t) => {
+  quiet(t);
+  await resetSettings();
+  const item = await mkItem();
+  for (let i = 0; i < 4; i++) assert.equal((await report(await reporter(1), item)).body.reported, true);
+  assert.equal(await hidden(item), false);
+  assert.equal((await rows("SELECT 1 FROM market_reports WHERE item_id = $1", [item])).length, 4, "the signal is stored");
+});
+
+test("a burst of old accounts in one day hides nothing: at most two count per day", { skip }, async (t) => {
+  quiet(t);
+  await resetSettings();
+  const item = await mkItem();
+  for (let i = 0; i < 5; i++) await report(await reporter(), item);
+  assert.equal(await hidden(item), false);
+  assert.equal((await rows("SELECT 1 FROM market_reports WHERE item_id = $1", [item])).length, 5);
 });
 
 test("a report needs a public item", { skip }, async (t) => {

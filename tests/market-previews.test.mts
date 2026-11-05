@@ -3,6 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import JSZip from "jszip";
 import sharp from "sharp";
+import { isPartialPreview, readablePages } from "../lib/market/preview-policy.ts";
 import { createIsolatedDb } from "./helpers/isolated-db.mts";
 import { marketWorkDoc } from "./helpers/market-fixtures.mts";
 import { MARKET_ASSET_PREFIX } from "../lib/market/types.ts";
@@ -122,6 +123,102 @@ test("first request builds the set: N readable pages, then stubs up to page 6, n
   assert.equal((await getMarketPreview(id, 6, o))?.kind, "stub");
   assert.equal(o.calls(), 1, "stored after the first build");
   assert.equal(await getMarketPreview(id, 7, o), null);
+});
+
+const STRIPE_W = 400;
+const STRIPE_H = 500;
+
+/** Hard black and white stripes: detail survives only where the page stays readable. */
+async function stripedPage(): Promise<Buffer> {
+  const stripes = Buffer.alloc(STRIPE_W * STRIPE_H);
+  for (let y = 0; y < STRIPE_H; y++) stripes.fill(y % 6 < 3 ? 0 : 255, y * STRIPE_W, (y + 1) * STRIPE_W);
+  return sharp(stripes, { raw: { width: STRIPE_W, height: STRIPE_H, channels: 1 } }).jpeg({ quality: 95 }).toBuffer();
+}
+
+/** Each row averaged first: the diagonal watermark falls out, the horizontal stripes do not. */
+async function detail(jpeg: Buffer, top: number, height: number): Promise<number> {
+  const w = STRIPE_W;
+  const raw = await sharp(jpeg).extract({ left: 0, top, width: w, height }).greyscale().raw().toBuffer();
+  const rows = Array.from({ length: height }, (_, y) => raw.subarray(y * w, (y + 1) * w).reduce((a, b) => a + b, 0) / w);
+  const mean = rows.reduce((a, b) => a + b, 0) / height;
+  return Math.sqrt(rows.reduce((a, b) => a + (b - mean) ** 2, 0) / height);
+}
+
+test("the half rule at each length: at most half is readable, one page is shown in part", () => {
+  const cases: [number, number, number][] = [
+    // allowed, total, readable
+    [2, 1, 1], [2, 2, 1], [2, 3, 1], [2, 4, 2], [2, 5, 2], [2, 8, 2], [2, 40, 2],
+    [3, 1, 1], [3, 2, 1], [3, 3, 1], [3, 4, 2], [3, 5, 2], [3, 6, 3], [3, 7, 3], [3, 12, 3],
+    [5, 6, 3], [5, 20, 5],
+  ];
+  for (const [allowed, total, want] of cases) assert.equal(readablePages(allowed, total), want, `${allowed} of ${total}`);
+  for (let total = 1; total <= 12; total++) assert.ok(readablePages(6, total) <= Math.max(1, total / 2), `never past half: ${total}`);
+  assert.equal(readablePages(3, null), 1, "an unknown length shows one page");
+  assert.equal(isPartialPreview(1), true);
+  assert.equal(isPartialPreview(2), false);
+});
+
+test("each document length: readable, stub and partial rasters as the rule says", { skip }, async () => {
+  const { getMarketPreview } = await previews();
+  for (let total = 1; total <= 6; total++) {
+    const id = await mkItem();
+    const o = await opts(total);
+    const kinds: (string | undefined)[] = [];
+    for (let p = 1; p <= total; p++) kinds.push((await getMarketPreview(id, p, o))?.kind);
+    const readable = total < 4 ? 1 : 2;
+    assert.deepEqual(kinds, Array.from({ length: total }, (_, i) => (i < readable ? "page" : "stub")), `${total} pages`);
+    assert.equal(await getMarketPreview(id, total + 1, o), null);
+  }
+});
+
+test("a five-slide deck shows two of five, not three", { skip }, async () => {
+  const { getMarketPreview } = await previews();
+  const deck = await mkItem({ tool: "slide" });
+  const o = await opts(5);
+  assert.equal((await getMarketPreview(deck, 2, o))?.kind, "page");
+  assert.equal((await getMarketPreview(deck, 3, o))?.kind, "stub");
+});
+
+test("documents go through at 45 dpi and 560 px, decks at 60 dpi and 720 px", { skip }, async () => {
+  const { getMarketPreview, DOC_PREVIEW_DPI, DOC_PREVIEW_MAX_WIDTH } = await previews();
+  assert.equal(DOC_PREVIEW_DPI, 45);
+  const seen: number[] = [];
+  const raw = await pageJpeg(1000, 700);
+  const o = { available: () => true, rasterize: async (_b: Uint8Array, _f: string, last: number, dpi: number) => (seen.push(dpi), Array.from({ length: last }, () => raw)) };
+  const doc = await getMarketPreview(await mkItem(), 1, o);
+  assert.equal((await sharp(doc!.bytes).metadata()).width, DOC_PREVIEW_MAX_WIDTH);
+  const deck = await getMarketPreview(await mkItem({ tool: "slide" }), 1, o);
+  assert.equal((await sharp(deck!.bytes).metadata()).width, 720);
+  assert.deepEqual(seen, [45, 60]);
+});
+
+test("one page is the whole work: the top stays, the rest is blurred away", async () => {
+  const { partialPage, watermarkPage } = await previews();
+  const h = STRIPE_H;
+  const page = await stripedPage();
+  const part = await partialPage(page, 560);
+  assert.equal((await sharp(part).metadata()).height, h);
+  assert.ok((await detail(part, 20, 150)) > 60, "the top 40 % is readable");
+  assert.ok((await detail(part, 300, 180)) < 25, "the rest holds no detail");
+  assert.ok((await detail(await watermarkPage(page, 560), 300, 180)) > 60, "the measure sees a whole page");
+});
+
+test("a one-page work is served in part, and the item page counts what was built", { skip }, async () => {
+  const { getMarketPreview } = await previews();
+  const { getMarketItem } = await import("../lib/server/market/items.ts");
+  const { query } = await db();
+  const id = await mkItem();
+  await query("UPDATE market_items SET pages = 1 WHERE id = $1", [id]);
+  assert.equal((await getMarketItem(id, null))!.previewPages, 1);
+  const striped = await stripedPage();
+  const preview = await getMarketPreview(id, 1, { available: () => true, rasterize: async () => [striped] });
+  assert.equal(preview?.kind, "page");
+  assert.ok((await detail(preview!.bytes, 300, 180)) < 25, "the bottom of the only page is gone from the served bytes");
+  const long = await mkItem();
+  await query("UPDATE market_items SET pages = 18 WHERE id = $1", [long]);
+  assert.equal((await getMarketItem(long, null))!.previewPages, 2, "before the build: the same rule over the listing's count");
+  await getMarketPreview(long, 1, await opts(3));
+  assert.equal((await getMarketItem(long, null))!.previewPages, 1, "after the build: what the set really holds");
 });
 
 test("decks show one more readable page; a short document has no pages past its end", { skip }, async () => {

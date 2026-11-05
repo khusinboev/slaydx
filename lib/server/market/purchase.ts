@@ -9,7 +9,6 @@ import { cleanText, safeSlice } from "../../generation/safe-text";
 import { TOOL_BY_ID } from "../../tools";
 import type { FormValues, ToolConfig, ToolId } from "../../types";
 import { ApiError } from "../api";
-import { topUpInTx } from "../credits";
 import { queryOne, transaction } from "../db";
 import { env } from "../env";
 import { enqueueGeneration } from "../jobs";
@@ -101,18 +100,11 @@ async function universityCapError(item: Pick<MarketItemRow, "id" | "tool_id" | "
   });
 }
 
-async function authorReward(client: PoolClient, item: MarketItemRow, buyerId: string, purchaseId: string, price: number): Promise<void> {
-  const percent = await getSettingInTx(client, "market.author_reward_percent");
-  if (!(percent > 0) || !item.source_user_id || String(item.source_user_id) === String(buyerId)) return;
-  const reward = Math.floor((price * percent) / 100);
-  if (reward > 0) await topUpInTx(client, String(item.source_user_id), { points: reward }, `market-author:${purchaseId}`, "bonus", "Ishlar bozori: ishingiz sotildi");
-}
-
 /**
  * Everything of the purchase inside the charge transaction. The `UPDATE` both takes the item's row lock and re-checks
  * status + copy cap against the committed row, so two buyers of the last copy run one after the other and the second
- * finds no row. `voidId`: the buyer's earlier purchase, refunded with nothing delivered. Its copy is already counted, so
- * this purchase replaces it without counting another one, and a sold-out item stays buyable for him.
+ * finds no row. `voidId`: the buyer's earlier purchase, refunded with nothing delivered. The refund already gave its copy
+ * back (`release.ts`), so this purchase is an ordinary new sale that takes the row's place under the UNIQUE index.
  */
 async function commitPurchase(
   client: PoolClient,
@@ -123,15 +115,14 @@ async function commitPurchase(
   voidId: string | null,
   generationId: string,
 ): Promise<void> {
-  const counted = voidId ? 0 : 1;
   const updated = await client.query<MarketItemRow>(
-    `UPDATE market_items SET sold_count = sold_count + $2::int, updated_at = now()
+    `UPDATE market_items SET sold_count = sold_count + 1, updated_at = now()
       WHERE id = $1
-        AND (status = 'active' OR ($2::int = 0 AND status = 'sold_out'))
-        AND ($2::int = 0 OR max_copies IS NULL OR sold_count < max_copies)
+        AND status = 'active'
+        AND (max_copies IS NULL OR sold_count < max_copies)
         AND COALESCE((quality_json->>'hidden_until_review')::boolean, FALSE) = FALSE
       RETURNING ${MARKET_ROW_COLUMNS}`,
-    [input.itemId, counted],
+    [input.itemId],
   );
   const item = updated.rows[0];
   if (!item) {
@@ -148,7 +139,13 @@ async function commitPurchase(
   const university = universityKey(input.fields.university);
   const cap = await getSettingInTx(client, "market.same_university_cap");
   if (cap > 0 && university) {
-    const taken = await client.query<{ n: string }>("SELECT count(*) AS n FROM market_purchases WHERE item_id = $1 AND university_norm = $2", [item.id, university]);
+    // A refunded purchase gave its slot back with its copy (`release.ts`).
+    const taken = await client.query<{ n: string }>(
+      `SELECT count(*) AS n FROM market_purchases p
+        WHERE p.item_id = $1 AND p.university_norm = $2
+          AND NOT EXISTS (SELECT 1 FROM transactions t WHERE t.kind = 'refund' AND t.reference = p.id::text)`,
+      [item.id, university],
+    );
     if (Number(taken.rows[0]?.n ?? 0) >= cap) throw new Refusal("university_cap");
   }
   // The purchase id IS the charged generation's id: the ledger link that survives deleting the generation.
@@ -158,8 +155,6 @@ async function commitPurchase(
     [generationId, item.id, input.userId, price, originalPrice, university, fingerprintCode(env.sessionSecret, generationId)],
   );
   await client.query("UPDATE generations SET market_item_id = $2 WHERE id = $1", [generationId, item.id]);
-  // A replaced purchase already paid its reward.
-  if (!voidId) await authorReward(client, item, input.userId, generationId, price);
   if (item.max_copies !== null && item.sold_count >= item.max_copies) {
     await client.query("UPDATE market_items SET status = 'sold_out', updated_at = now() WHERE id = $1 AND status = 'active'", [item.id]);
   }
@@ -170,9 +165,9 @@ function isOwnDuplicate(e: unknown): boolean {
   return err?.code === "23505" && err.constraint === PURCHASE_UNIQUE;
 }
 
-function assertOnSale(item: MarketItemRow, onSale: boolean, voidId: string | null): void {
+function assertOnSale(item: MarketItemRow, onSale: boolean): void {
   if (!onSale || isHiddenForReview(item)) throw goneError("retired");
-  if (item.status === "active" || (voidId && item.status === "sold_out")) return;
+  if (item.status === "active") return;
   throw goneError(item.status);
 }
 
@@ -196,7 +191,7 @@ export async function purchaseMarketItem(input: PurchaseInput): Promise<Purchase
       if (holdsItem(purchaseStateOf(purchaseFactsOf(own)))) throw alreadyOwned(own);
       voidId = own.id;
     }
-    assertOnSale(item, await isToolOnSale(item.tool_id), voidId);
+    assertOnSale(item, await isToolOnSale(item.tool_id));
     await assertCanCreate(userId);
     await assertOfferAccepted(userId);
     await assertGenerationOpen(tool.id);

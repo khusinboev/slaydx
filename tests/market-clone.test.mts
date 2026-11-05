@@ -266,5 +266,5 @@ test("a render failure: FAILED, full refund through the worker path, the purchas
   assert.deepEqual((await ledger(u.id)).map((l) => [l.kind, l.reference]), [["charge", gen], ["refund", gen]]);
   const [p] = await rows("SELECT generation_id FROM market_purchases WHERE id = $1", [gen]);
   assert.equal(p!.generation_id, gen);
-  assert.equal(Number((await rows("SELECT sold_count FROM market_items WHERE id = $1", [item]))[0]!.sold_count), 1, "§9: not decremented");
+  assert.equal(Number((await rows("SELECT sold_count FROM market_items WHERE id = $1", [item]))[0]!.sold_count), 0, "the refund gave the copy back");
 });

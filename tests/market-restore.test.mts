@@ -4,7 +4,7 @@ import test, { after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { purchaseStateOf, type PurchaseFacts } from "../lib/market/purchase-state.ts";
-import { buy, call, closeDb, db, drainJobs, fileOf, jobOf, ledger, marketRequest, mkItem, mkUser, resetSettings, restore, skip, wallet } from "./helpers/market-buy.mts";
+import { buy, call, closeDb, db, drainJobs, fileOf, jobOf, ledger, marketRequest, mkItem, mkUser, resetSettings, restore, setSetting, skip, wallet } from "./helpers/market-buy.mts";
 
 /**
  * The free restore and everything that must NOT be free (docs/market/PLAN.md §2.3, §9). The rule behind every test here:
@@ -14,16 +14,17 @@ import { buy, call, closeDb, db, drainJobs, fileOf, jobOf, ledger, marketRequest
  *   1. refund looked up by `generation_id` instead of the purchase id  -> «refund, delete, restore»;
  *   2. `refund_pending` state removed (a failed paid job restorable)   -> «a failed paid job is not restorable»;
  *   3. `void` treated as holding the item                              -> «rebuy after a refunded failure»;
- *   4. rebuy counts another copy                                       -> «rebuy after a refunded failure»;
- *   5. rebuy refused on a sold-out item                                -> «rebuy of the last copy»;
- *   6. rebuy pays the author reward again                              -> «rebuy pays no second reward»;
+ *   4. (moved) the counting of a rebuy                                 -> tests/market-release.test.mts;
+ *   5. reward paid while the copy failed                               -> «a failed copy pays no reward»;
+ *   6. the refund-row condition removed from `deleteGeneration`        -> «the FAILED → delete window»;
  *   7. abuse flag ignored                                              -> «abuse flag»;
  *   8. in-transaction lock re-check removed                            -> «two restores at once»;
  *   9. in-transaction refund re-check removed                          -> «refund while restoring»;
  *  10. university compare removed                                      -> «a restore cannot change the university»;
  *  11. ownership dropped from the purchase lookup                      -> «a foreign purchase»;
  *  12. `market_item_id` not set on the restored row                    -> «deleted copy»;
- *  13. `ownedBy` keeps a void purchase                                 -> «rebuy after a refunded failure» (item page).
+ *  13. `ownedBy` keeps a void purchase                                 -> «rebuy after a refunded failure» (item page);
+ *  14. `assertGenerationOpen` removed from the restore                 -> «an admin pause holds a restore too».
  */
 
 after(closeDb);
@@ -209,23 +210,25 @@ test("rebuy after a refunded failure: full price, one purchase, the copy not cou
   assert.equal((await restore(u, gen)).body.restored, false);
 });
 
-test("rebuy of the last copy: the failed buyer is not locked out of a sold-out item", { skip }, async (t) => {
+test("a refunded failure gives the last copy back: the first buyer takes it, the failed one finds it sold out", { skip }, async (t) => {
   quiet(t);
   await resetSettings();
   const u = await mkUser();
   const item = await mkItem({ maxCopies: 1 });
   await buy(u, item, { fields: FIELDS });
   await failOriginal(item);
+  const [before] = await rows("SELECT sold_count, status FROM market_items WHERE id = $1", [item]);
+  assert.equal(Number(before!.sold_count), 0);
+  assert.equal(before!.status, "active");
   const other = await buy(await mkUser(), item);
-  assert.equal(other.status, 410, "the copy is still held for him");
-  const again = await buy(u, item, { fields: FIELDS });
-  assert.equal(again.status, 200, again.text);
-  const [row] = await rows("SELECT sold_count, status FROM market_items WHERE id = $1", [item]);
-  assert.equal(Number(row!.sold_count), 1);
-  assert.equal(row!.status, "sold_out");
+  assert.equal(other.status, 200, other.text);
+  const late = await buy(u, item, { fields: FIELDS });
+  assert.equal(late.status, 410);
+  assert.equal(late.body.code, "sold_out");
+  assert.equal(Number((await rows("SELECT sold_count FROM market_items WHERE id = $1", [item]))[0]!.sold_count), 1);
 });
 
-test("rebuy pays no second reward", { skip }, async (t) => {
+test("a failed copy pays no reward; the rebuy that completes pays one", { skip }, async (t) => {
   quiet(t);
   await resetSettings({ "market.enabled": true, "market.author_reward_percent": 10 });
   const author = await mkUser({ balance: 0 });
@@ -233,8 +236,50 @@ test("rebuy pays no second reward", { skip }, async (t) => {
   const item = await mkItem({ source: author.id });
   await buy(u, item, { fields: FIELDS });
   await failOriginal(item);
+  assert.equal((await ledger(author.id)).length, 0);
   assert.equal((await buy(u, item, { fields: FIELDS })).status, 200);
+  await drainJobs();
   assert.equal((await ledger(author.id)).length, 1);
+});
+
+test("the FAILED → delete window: a failed paid copy cannot be deleted before its refund row exists", { skip }, async (t) => {
+  quiet(t);
+  await resetSettings();
+  const { deleteGeneration } = await import("../lib/server/jobs.ts");
+  const u = await mkUser({ balance: 50_000 });
+  const item = await mkItem();
+  const id = (await buy(u, item, { fields: FIELDS })).body.generationId as string;
+  await failOriginal(item);
+  await rows("DELETE FROM transactions WHERE kind = 'refund' AND reference = $1", [id]);
+  assert.equal(await deleteGeneration(id, u.id), false, "the refund has not landed: the row stays");
+  assert.equal((await restore(u, id, FIELDS)).body.code, "refund_pending");
+  const { refund } = await import("../lib/server/credits.ts");
+  assert.equal(await refund(u.id, id, "qayta"), true);
+  assert.equal(await deleteGeneration(id, u.id), true, "refund landed: it may go");
+  assert.equal((await restore(u, id, FIELDS)).body.code, "refunded");
+});
+
+test("an ordinary failed work is deleted as before", { skip }, async (t) => {
+  quiet(t);
+  await resetSettings();
+  const jobs = await import("../lib/server/jobs.ts");
+  const u = await mkUser();
+  const res = await jobs.enqueueGeneration({ userId: u.id, toolId: "referat", topic: "Oddiy", price: 500, format: "docx", values: {}, budgetMs: 60_000 });
+  assert.ok(res.ok);
+  await rows("UPDATE generations SET status = 'FAILED' WHERE id = $1", [res.id]);
+  assert.equal(await jobs.deleteGeneration(res.id, u.id), true);
+});
+
+test("an admin pause holds a restore too", { skip }, async (t) => {
+  quiet(t);
+  await resetSettings();
+  const { u, id } = await bought();
+  await deleteGen(u, id);
+  await setSetting("generation.paused", true);
+  const res = await restore(u, id, FIELDS);
+  assert.equal(res.status, 503, res.text);
+  assert.equal(res.body.code, "paused");
+  assert.equal(Number((await rows("SELECT count(*) AS n FROM generations WHERE user_id = $1", [u.id]))[0]!.n), 0);
 });
 
 test("a cancelled queued copy is refunded in the same step and reads void", { skip }, async (t) => {

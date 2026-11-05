@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 import { query, queryOne, transaction } from "./db";
 import { chargeInTx } from "./credits";
 import { refundInTx } from "./refund-tx";
+import { payMarketAuthorRewardInTx } from "./market/reward";
 import { putGenerationFile } from "./storage";
 import type { PendingAsset } from "./assets";
 import { toJsonb } from "./jsonb";
@@ -592,6 +593,9 @@ export async function deleteGeneration(id: string, userId: string): Promise<bool
   const rows = await query<{ id: string }>(
     `DELETE FROM generations
       WHERE id = $1 AND user_id = $2 AND status IN ('COMPLETED','FAILED','REVOKED')
+        -- A failed market copy waits for its refund: the row is what the refund and the free-restore refusal stand on.
+        AND NOT (market_item_id IS NOT NULL AND status = 'FAILED' AND price > 0
+                 AND NOT EXISTS (SELECT 1 FROM transactions t WHERE t.kind = 'refund' AND t.reference = generations.id::text))
       RETURNING id`,
     [id, userId],
   );
@@ -988,7 +992,7 @@ const COMPLETE_SQL = `UPDATE generations
             finished_at = now(), locked_by = NULL, locked_at = NULL, error = NULL,
             live_json = NULL
       WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS'
-      RETURNING id`;
+      RETURNING id, market_item_id`;
 
 function completeParams(id: string, workerId: string, result: JobResult): unknown[] {
   return [
@@ -1004,7 +1008,8 @@ function completeParams(id: string, workerId: string, result: JobResult): unknow
 }
 
 async function completeInTx(client: PoolClient, id: string, workerId: string, result: JobResult): Promise<boolean> {
-  const res = await client.query<{ id: string }>(COMPLETE_SQL, completeParams(id, workerId, result));
+  const res = await client.query<{ id: string; market_item_id: string | null }>(COMPLETE_SQL, completeParams(id, workerId, result));
+  if (res.rows[0]?.market_item_id) await payMarketAuthorRewardInTx(client, id);
   return res.rows.length > 0;
 }
 

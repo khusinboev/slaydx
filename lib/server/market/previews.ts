@@ -10,6 +10,8 @@ import { env } from "../env";
 import { pdfAvailable, toPdf } from "../pdf";
 import { Gate } from "../soffice-gate";
 import { pdftoppmBin } from "../thumb";
+import { isDeckTool } from "../../market/registry";
+import { isPartialPreview, PARTIAL_SHARE, readablePages } from "../../market/preview-policy";
 import { previewPagesOf, renderNeutralFile } from "./items";
 import { getItemRow, getNeutralFile, isHiddenForReview, isUuid, PUBLIC_STATUSES, putNeutralFile } from "./store";
 
@@ -26,8 +28,11 @@ const run = promisify(execFile);
 
 /** Widest raster served; decks arrive at 800 px from 60 dpi, documents at about 500. */
 export const PREVIEW_MAX_WIDTH = 720;
+/** A document page stays a shop window: the layout shows, reading the body is work. Slides carry big text and keep more. */
+export const DOC_PREVIEW_MAX_WIDTH = 560;
 export const PREVIEW_QUALITY = 60;
-const PREVIEW_DPI = 60;
+const DECK_PREVIEW_DPI = 60;
+export const DOC_PREVIEW_DPI = 45;
 /** A stub is unreadable by construction: 64 px across, then blurred. */
 export const STUB_WIDTH = 64;
 const STUB_BLUR = 1.5;
@@ -43,7 +48,7 @@ export type PreviewDeps = {
   /** Test seams; routes never pass them. */
   available?: () => boolean;
   /** Neutral file bytes → page JPEGs in page order (the standard path: LibreOffice → pdftoppm). */
-  rasterize?: (bytes: Uint8Array, fileName: string, lastPage: number) => Promise<Buffer[] | null>;
+  rasterize?: (bytes: Uint8Array, fileName: string, lastPage: number, dpi: number) => Promise<Buffer[] | null>;
 };
 
 type Globals = typeof globalThis & { __slaydxMarketPreviewGate?: Gate; __slaydxMarketPreviewInflight?: Map<string, Promise<void>> };
@@ -63,14 +68,14 @@ function inflight(): Map<string, Promise<void>> {
 export const previewsAvailable = (): boolean => pdfAvailable() && Boolean(pdftoppmBin());
 
 /** First `lastPage` pages of a PDF as JPEGs; the tool numbers its files, the order is by that number. */
-async function pdfPages(pdf: Buffer, lastPage: number): Promise<Buffer[] | null> {
+async function pdfPages(pdf: Buffer, lastPage: number, dpi: number): Promise<Buffer[] | null> {
   const bin = pdftoppmBin();
   if (!bin) return null;
   const dir = await mkdtemp(join(tmpdir(), "slaydx-market-"));
   try {
     const src = join(dir, "d.pdf");
     await writeFile(src, pdf);
-    await run(bin, ["-f", "1", "-l", String(lastPage), "-r", String(PREVIEW_DPI), "-jpeg", "-jpegopt", "quality=85", src, join(dir, "p")], { timeout: 30_000 });
+    await run(bin, ["-f", "1", "-l", String(lastPage), "-r", String(dpi), "-jpeg", "-jpegopt", "quality=85", src, join(dir, "p")], { timeout: 30_000 });
     const names = (await readdir(dir)).filter((n) => /^p-\d+\.jpg$/.test(n)).sort((a, b) => Number(/\d+/.exec(a)![0]) - Number(/\d+/.exec(b)![0]));
     return Promise.all(names.map((n) => readFile(join(dir, n))));
   } catch (e) {
@@ -81,9 +86,9 @@ async function pdfPages(pdf: Buffer, lastPage: number): Promise<Buffer[] | null>
   }
 }
 
-async function rasterizeFile(bytes: Uint8Array, fileName: string, lastPage: number): Promise<Buffer[] | null> {
+async function rasterizeFile(bytes: Uint8Array, fileName: string, lastPage: number, dpi: number): Promise<Buffer[] | null> {
   const pdf = await previewGate().run(() => toPdf(bytes, fileName));
-  return pdf ? pdfPages(pdf, lastPage) : null;
+  return pdf ? pdfPages(pdf, lastPage, dpi) : null;
 }
 
 /** Diagonal tiles over the whole page: cropping a corner does not remove the mark. */
@@ -100,12 +105,28 @@ function watermarkSvg(w: number, h: number): Buffer {
   return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${tiles.join("")}</svg>`);
 }
 
-/** A readable page: at most `PREVIEW_MAX_WIDTH` wide, tiled watermark baked in, JPEG quality 60. */
-export async function watermarkPage(jpeg: Buffer): Promise<Buffer> {
-  const resized = await sharp(jpeg).resize({ width: PREVIEW_MAX_WIDTH, withoutEnlargement: true }).toBuffer({ resolveWithObject: true });
+/** A readable page: at most `maxWidth` wide, tiled watermark baked in, JPEG quality 60. */
+export async function watermarkPage(jpeg: Buffer, maxWidth = PREVIEW_MAX_WIDTH): Promise<Buffer> {
+  const resized = await sharp(jpeg).resize({ width: maxWidth, withoutEnlargement: true }).toBuffer({ resolveWithObject: true });
   const { width, height } = resized.info;
   return sharp(resized.data)
     .composite([{ input: watermarkSvg(width, height), blend: "over" }])
+    .jpeg({ quality: PREVIEW_QUALITY })
+    .toBuffer();
+}
+
+/** One page is the whole work: its top stays readable, the rest becomes a stub stretched back over the page. */
+export async function partialPage(jpeg: Buffer, maxWidth = PREVIEW_MAX_WIDTH): Promise<Buffer> {
+  const page = await sharp(jpeg).resize({ width: maxWidth, withoutEnlargement: true }).toBuffer({ resolveWithObject: true });
+  const { width, height } = page.info;
+  const top = Math.max(1, Math.round(height * PARTIAL_SHARE));
+  const small = await sharp(page.data).extract({ left: 0, top, width, height: height - top }).resize({ width: STUB_WIDTH }).blur(STUB_BLUR).toBuffer();
+  const rest = await sharp(small).resize({ width, height: height - top, fit: "fill" }).blur(4).jpeg().toBuffer();
+  return sharp(page.data)
+    .composite([
+      { input: rest, top, left: 0 },
+      { input: watermarkSvg(width, height), blend: "over" },
+    ])
     .jpeg({ quality: PREVIEW_QUALITY })
     .toBuffer();
 }
@@ -123,13 +144,18 @@ async function buildPreviews(itemId: string, version: number, deps: PreviewDeps)
     await transaction((c) => putNeutralFile(c, itemId, rendered));
     file = { fileName: rendered.fileName, mime: rendered.mime, bytes: Buffer.from(rendered.bytes) };
   }
-  const readable = await previewPagesOf(row.tool_id);
-  const pages = await (deps.rasterize ?? rasterizeFile)(file.bytes, file.fileName, MAX_PAGE);
+  const deck = isDeckTool(row.tool_id);
+  const pages = await (deps.rasterize ?? rasterizeFile)(file.bytes, file.fileName, MAX_PAGE, deck ? DECK_PREVIEW_DPI : DOC_PREVIEW_DPI);
   if (!pages?.length) return;
+  // Fewer rasters than asked is the exact length; a full set means «at least that», so the listing's own count decides.
+  const total = pages.length < MAX_PAGE ? pages.length : Math.max(MAX_PAGE, row.pages ?? row.slide_count ?? MAX_PAGE);
+  const readable = readablePages(await previewPagesOf(row.tool_id), total);
+  const width = deck ? PREVIEW_MAX_WIDTH : DOC_PREVIEW_MAX_WIDTH;
   const rendered = await Promise.all(
     pages.map(async (jpeg, i) => {
       const kind: "page" | "stub" = i < readable ? "page" : "stub";
-      return { page: i + 1, kind, bytes: await (kind === "page" ? watermarkPage(jpeg) : blurStub(jpeg)) };
+      const bytes = kind === "stub" ? await blurStub(jpeg) : isPartialPreview(total) ? await partialPage(jpeg, width) : await watermarkPage(jpeg, width);
+      return { page: i + 1, kind, bytes };
     }),
   );
   await transaction(async (c) => {

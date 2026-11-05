@@ -12,6 +12,13 @@
 -- market_views: daily view counter (conversion stats). market_reports: «Shikoyat», one per user per item (§9); three
 --   reports auto-hide an item pending review.
 --
+-- DEPLOY NOTE: `generations_market_item_idx` is built in this transaction (migrations cannot run `CONCURRENTLY`). The
+-- predicate leaves it empty, but the build still scans `generations` under a SHARE lock, which holds writers back for
+-- the length of the scan. Decision: keep it here (030_admin_indexes.sql precedent). When the table is large enough for
+-- that to matter, run once by hand before the deploy, then this line is a no-op:
+--   ALTER TABLE generations ADD COLUMN IF NOT EXISTS market_item_id UUID;
+--   CREATE INDEX CONCURRENTLY IF NOT EXISTS generations_market_item_idx ON generations (market_item_id) WHERE market_item_id IS NOT NULL;
+--
 -- Additive only: two new columns with safe defaults, one partial index, new tables. `transactions.kind` is unchanged
 -- (a purchase is an ordinary `charge` with the generation id, an author reward an ordinary `bonus`).
 --
@@ -127,6 +134,8 @@ CREATE TABLE IF NOT EXISTS market_purchases (
 CREATE INDEX IF NOT EXISTS market_purchases_buyer_idx ON market_purchases (buyer_user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS market_purchases_item_idx  ON market_purchases (item_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS market_purchases_day_idx   ON market_purchases (created_at DESC, id DESC);
+-- The worker's entitlement read, the author reward, and the FK's SET NULL when a buyer deletes his copy.
+CREATE INDEX IF NOT EXISTS market_purchases_generation_idx ON market_purchases (generation_id) WHERE generation_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS market_ratings (
   purchase_id UUID PRIMARY KEY REFERENCES market_purchases(id) ON DELETE CASCADE,

@@ -1,6 +1,7 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import { refundShares } from "./credits";
+import { releaseMarketCopyInTx } from "./market/release";
 
 /**
  * To'liq qaytarishning TRANZAKSIYA ICHIDAGI varianti (`chargeInTx` ga juft).
@@ -56,5 +57,6 @@ export async function refundInTx(
      VALUES ($1, 'refund', $2, 0, $3, $4, $5)`,
     [userId, points, balance, reference, note],
   );
+  if (ratio >= 1) await releaseMarketCopyInTx(client, reference);
   return true;
 }

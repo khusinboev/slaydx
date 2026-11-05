@@ -107,6 +107,18 @@ const statusOf = async (genId: string) => {
   return (await query<{ status: string; reject_reason: string | null }>("SELECT status, reject_reason FROM market_items WHERE source_generation_id = $1", [genId]))[0] ?? null;
 };
 
+test("an empty document topic: the public title is the tool's name, never the raw generations.topic", { skip }, async (t) => {
+  quiet(t);
+  await clear();
+  const { query } = await db();
+  const u = await mkUser();
+  const gen = await finished(u, "referat", marketWorkDoc("referat", "Bir mavzu", 150));
+  await query(`UPDATE generations SET topic = 'Sintetik Muallif shaxsiy ishi', doc_json = jsonb_set(doc_json, '{meta,topic}', '""') WHERE id = $1`, [gen]);
+  await scan();
+  const [row] = await query<{ title: string }>("SELECT title FROM market_items WHERE source_generation_id = $1", [gen]);
+  assert.equal(row!.title, "Referat");
+});
+
 test("the happy path: a work becomes a sanitised candidate with its facts, no author on it", { skip }, async (t) => {
   quiet(t);
   await clear();

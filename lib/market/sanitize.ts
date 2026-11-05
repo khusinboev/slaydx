@@ -172,10 +172,23 @@ function isScrubbableCase(word: string): boolean {
   return first !== first.toLowerCase();
 }
 
+/**
+ * A word of a person's name that stays in the topic: «Karimov tajribasi» by Ali Karimov looks exactly like «Amir Temur»
+ * by Ali Temur, so the text cannot decide. The admin does: the title goes out only after a look.
+ */
+function nameInTopic(names: readonly string[], topicWords: ReadonlySet<string>, scrubbed: ReadonlySet<string>): boolean {
+  return names.some((raw) =>
+    normalizeText(parseAuthorLine(String(raw ?? "")).name)
+      .split(" ")
+      .some((w) => w.length >= NAME_MIN && !NAME_STOP.has(w) && topicWords.has(w) && !scrubbed.has(w)),
+  );
+}
+
 function makeScrubber(identity: MarketIdentity, topic: string, flags: PiiFlag[]): Scrubber {
   const topicNorm = normalizeText(topic);
   const topicWords = new Set(topicNorm.split(" "));
   const names = nameWords(identity.names, topicWords);
+  if (nameInTopic(identity.names, topicWords, names)) flags.push({ kind: "name", path: "meta.topic" });
   const phrases: RegExp[] = [];
   for (const raw of identity.phrases) {
     const p = String(raw ?? "").replace(/\s+/g, " ").trim();
