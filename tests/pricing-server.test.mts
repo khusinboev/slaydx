@@ -311,7 +311,7 @@ test("narx sozlamasi va to'xtatish (haqiqiy Postgres)", { skip }, async (t) => {
     assert.deepEqual(empty.features.pricing, {});
     assert.deepEqual(
       Object.keys(empty.features).sort(),
-      ["chat", "compareMax", "devLogin", "domla", "imageModels", "images", "legacyFold", "llm", "payments", "pdf", "pricing", "studioAudioModels", "studioImageModels", "studioSpeechModels", "studioSpeechToolModels", "studioVideoModels", "telegram", "telegramBot", "tests", "tts", "ttsPremium", "videoProviders"],
+      ["chat", "compareMax", "devLogin", "domla", "imageModels", "images", "legacyFold", "llm", "market", "payments", "pdf", "pricing", "studioAudioModels", "studioImageModels", "studioSpeechModels", "studioSpeechToolModels", "studioVideoModels", "telegram", "telegramBot", "tests", "tts", "ttsPremium", "videoProviders"],
       "boshqa kalitlar o'zgarmagan",
     );
     // The home hub lists chat / tests / domla by these switches: real booleans (chat on, tests off by default).

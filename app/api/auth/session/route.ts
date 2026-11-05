@@ -11,7 +11,6 @@ import { studioSpeechModels } from "@/lib/server/media/voices";
 import { studioAudioModels } from "@/lib/server/media/audio-inputs";
 import { speechToolModels } from "@/lib/server/media/speech-sources";
 import { legacyFoldOn } from "@/lib/server/media/legacy-fold";
-import { marketEnabled } from "@/lib/server/market/items";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,7 +54,7 @@ export const GET = handler("auth/session", async (req) => {
       chat: await getSetting("chat.enabled"),
       tests: await getSetting("tests.enabled"),
       // «Ishlar bozori»: dark until `market.enabled`; an admin account sees it early to check the shop before it opens.
-      market: (await marketEnabled()) || user?.isAdmin === true,
+      market: (await getSetting("market.enabled")) || user?.isAdmin === true,
       telegram: Boolean(env.telegramBotToken),
       telegramBot: env.telegramBotUsername || null,
       devLogin: env.devLoginEnabled,
