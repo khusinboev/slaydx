@@ -2,6 +2,7 @@ import "server-only";
 import type { PoolClient } from "pg";
 import type { ImageBytes } from "../../generation/slide-images";
 import type { AcademicDoc } from "../../generation/types";
+import type { PurchaseFacts } from "../../market/purchase-state";
 import { MARKET_ASSET_PREFIX, type MarketLevel, type MarketStatus, type MarketSubjectId, type PiiFlag } from "../../market/types";
 import { query, queryOne } from "../db";
 
@@ -89,6 +90,31 @@ export function marketAssetResolver(itemId: string): (url: string) => Promise<Im
     return { data: `${mime};base64,${row.bytes.toString("base64")}`, type };
   };
 }
+
+/** The columns behind `purchaseStateOf`; alias `p` is `market_purchases`. */
+export const PURCHASE_FACTS_SELECT = `p.id, p.price, p.generation_id, p.abuse_flag, g.status AS generation_status, g.files_purged_at IS NOT NULL AS purged,
+  EXISTS (SELECT 1 FROM transactions t WHERE t.kind = 'refund' AND t.reference = p.id::text) AS refunded`;
+export const PURCHASE_FACTS_JOIN = "FROM market_purchases p LEFT JOIN generations g ON g.id = p.generation_id";
+
+export type PurchaseFactsRow = {
+  id: string;
+  price: string;
+  generation_id: string | null;
+  abuse_flag: string | null;
+  generation_status: string | null;
+  purged: boolean | null;
+  refunded: boolean;
+};
+
+export const purchaseFactsOf = (r: PurchaseFactsRow): PurchaseFacts => ({
+  id: r.id,
+  price: Number(r.price),
+  generationId: r.generation_id,
+  generationStatus: r.generation_status,
+  purged: r.purged === true,
+  refunded: r.refunded,
+  abuseFlag: r.abuse_flag,
+});
 
 export type NeutralFile = { fileName: string; mime: string; bytes: Buffer };
 
