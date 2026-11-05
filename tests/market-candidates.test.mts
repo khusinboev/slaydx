@@ -41,7 +41,11 @@ import type { FormValues, ToolId } from "../lib/types.ts";
  *  22. a placeholder without bytes kept                              -> «a deleted asset»;
  *  23. re-sanitising keeps the preview version                       -> «resanitize»;
  *  24. the previews sweep ignores the status                         -> «garbage collection»;
- *  25. the rejected sweep ignores the age                            -> «garbage collection».
+ *  25. the rejected sweep ignores the age                            -> «garbage collection»;
+ *  26. the id query selects the documents again                      -> «ids first»;
+ *  27. no yield between works                                        -> «ids first»;
+ *  28. the time budget ignored                                       -> «time budget»;
+ *  29. the step runs under the inline worker                         -> «dark launch».
  *   review fix: title fallback back to `row.topic` -> «an empty document topic»;
  */
 
@@ -398,11 +402,52 @@ test("dark launch: the 6 hour step does nothing while the market is off, the adm
   const { transaction } = await db();
   const c = await import("../lib/server/market/candidates.ts");
   const id = await finished(await mkUser(), "referat", marketWorkDoc("referat", "Qorong'i ishga tushirish", 530));
-  assert.equal(await c.marketCandidatesStep(), 0);
+  assert.equal(await c.marketCandidatesStep({ inline: false }), 0);
   assert.equal(await statusOf(id), null);
   await transaction((client) => s.setSettingInTx(client, "market.enabled", true, null));
   s.invalidateSettingsCache();
-  assert.equal(await c.marketCandidatesStep(), 1);
+  assert.equal(await c.marketCandidatesStep({ inline: true }), 0, "the inline worker shares the web process: no scan there");
+  assert.equal(await statusOf(id), null);
+  assert.equal(await c.marketCandidatesStep({ inline: false }), 1);
+});
+
+test("ids first: the batch query carries no document; each document is read alone, with a turn of the loop per work", { skip }, async (t) => {
+  quiet(t);
+  await clear();
+  const { pool } = await db();
+  for (let i = 0; i < 3; i++) await finished(await mkUser(), "referat", marketWorkDoc("referat", `Bitta bitta ${i}`, 600 + i));
+  const p = pool();
+  const original = p.query.bind(p) as (...args: unknown[]) => Promise<unknown>;
+  const seen: string[] = [];
+  t.mock.method(p, "query", (...args: unknown[]) => {
+    if (typeof args[0] === "string") seen.push(args[0]);
+    return original(...args);
+  });
+  const realImmediate = globalThis.setImmediate;
+  let turns = 0;
+  t.mock.method(globalThis, "setImmediate", ((fn: (...a: unknown[]) => void, ...a: unknown[]) => {
+    turns++;
+    return realImmediate(fn, ...a);
+  }) as never);
+  assert.equal((await scan()).created, 3);
+  const batch = seen.filter((q) => q.includes("ORDER BY g.finished_at DESC"));
+  assert.equal(batch.length, 1);
+  assert.ok(!/doc_json|doc_prev|values_json AS|u\.name/.test(batch[0]!.replace(/g\.values_json\)/g, "")), "the id list holds no document");
+  assert.equal(seen.filter((q) => q.includes("COALESCE(g.doc_prev, g.doc_json) AS doc")).length, 3);
+  assert.ok(turns >= 3, `turns of the loop: ${turns}`);
+});
+
+test("time budget: a run that used it up stops and says so; the rest stays eligible and the next run takes it", { skip }, async (t) => {
+  quiet(t);
+  await clear();
+  const c = await import("../lib/server/market/candidates.ts");
+  assert.equal(c.MARKET_SCAN_BUDGET_MS, 60_000);
+  const ids: string[] = [];
+  for (let i = 0; i < 2; i++) ids.push(await finished(await mkUser(), "referat", marketWorkDoc("referat", `Byudjet ${i}`, 620 + i)));
+  assert.deepEqual(await c.scanMarketCandidates({ batch: 10, budgetMs: 0 }), { locked: false, scanned: 0, created: 0, rejected: 0, stopped: true });
+  assert.equal(await statusOf(ids[0]!), null);
+  const next = await c.scanMarketCandidates({ batch: 10 });
+  assert.deepEqual([next.created, next.stopped], [2, undefined]);
 });
 
 test("a listing stands alone: assets copied, and deleting the source, its assets and its author changes nothing", { skip }, async (t) => {

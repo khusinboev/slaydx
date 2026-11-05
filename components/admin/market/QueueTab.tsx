@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { ScanSearch } from "lucide-react";
-import { BULK_APPROVE_MAX, MARKET_SUBJECT_OPTIONS, MARKET_TOOL_OPTIONS, bulkApproveMarket, scanMarket, type MarketAdminItem, type MarketItemsQuery, type MarketOverview } from "@/lib/admin-api/market";
+import { MARKET_SUBJECT_OPTIONS, MARKET_TOOL_OPTIONS, bulkApproveInBatches, scanMarket, type MarketAdminItem, type MarketItemsQuery, type MarketOverview } from "@/lib/admin-api/market";
 import { fmtNumber, fmtRelative } from "@/lib/admin-format";
 import { Badge, Button, ConfirmDialog, FilterBar, SearchInput, Segmented, SelectFilter, toast, type Column } from "@/components/admin/ui";
 import { useCan } from "@/components/admin/shell/admin-identity";
@@ -92,6 +92,7 @@ export function QueueTab({ overview, changes, onChanged }: { overview: MarketOve
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [rows, setRows] = useState<readonly MarketAdminItem[]>([]);
   const [dialog, setDialog] = useState<"bulk" | "scan" | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   const query = useMemo<MarketItemsQuery>(() => ({ ...SCOPE[view], tool: tool || undefined, subject: subject || undefined, q: q || undefined }), [view, tool, subject, q]);
   const active = (tool ? 1 : 0) + (subject ? 1 : 0) + (q ? 1 : 0);
@@ -108,12 +109,19 @@ export function QueueTab({ overview, changes, onChanged }: { overview: MarketOve
 
   const picked = rows.filter((r) => selected.has(r.id));
   const withFlags = picked.filter((r) => r.flags > 0).length;
-  const tooMany = selected.size > BULK_APPROVE_MAX;
+  const scanned = overview?.lastScan;
 
   return (
     <div className="flex min-w-0 flex-col gap-3 pt-3">
       {overview && !overview.previews ? (
         <p className="bg-muted text-muted-foreground rounded-lg px-3 py-2 text-xs">Bu serverda LibreOffice topilmadi: oldindan ko&apos;rish rasmlari chizilmaydi.</p>
+      ) : null}
+      {scanned ? (
+        <p data-last-scan className="text-muted-foreground px-1 text-xs">
+          Oxirgi skanerlash {fmtRelative(scanned.at)}: ko&apos;rildi {fmtNumber(scanned.scanned)}, nomzod {fmtNumber(scanned.created)}, rad etildi {fmtNumber(scanned.rejected)}
+          {scanned.stopped ? ". Vaqt tugadi, qolgani keyingi skanerlashda" : ""}
+          {scanned.locked ? ". O'sha paytda boshqa skanerlash ketayotgan edi" : ""}
+        </p>
       ) : null}
       <FilterBar activeCount={active} onClear={clear}>
         <Segmented ariaLabel="Navbat bo'limi" options={VIEWS} value={view} onChange={(v) => { setView(v as QueueView); setSelected(new Set()); }} />
@@ -132,9 +140,8 @@ export function QueueTab({ overview, changes, onChanged }: { overview: MarketOve
       {canManage && selected.size > 0 ? (
         <div className="bg-muted flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-[13px]" data-bulk-bar>
           <span>{fmtNumber(selected.size)} ta tanlandi</span>
-          {tooMany ? <span className="text-destructive text-xs">Bir marta ko&apos;pi bilan {BULK_APPROVE_MAX} ta</span> : null}
           {withFlags > 0 ? <span className="text-badge-warning-text text-xs">PII topilgan {withFlags} ta ish alohida tekshiriladi</span> : null}
-          <Button size="sm" variant="primary" disabled={tooMany || withFlags === selected.size} onClick={() => setDialog("bulk")}>
+          <Button size="sm" variant="primary" disabled={withFlags === selected.size} onClick={() => setDialog("bulk")}>
             Tanlanganlarni tasdiqlash
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
@@ -162,30 +169,40 @@ export function QueueTab({ overview, changes, onChanged }: { overview: MarketOve
         open={dialog === "bulk"}
         onClose={() => setDialog(null)}
         title="Tanlangan ishlarni tasdiqlash"
-        description="Har ish uchun neytral fayl chiziladi va u katalogga chiqadi. PII topilgan ishlar o'tkazib yuboriladi."
+        description={progress ? `Tasdiqlanmoqda: ${progress.done} / ${progress.total}. Oynani yopmang.` : "Har ish uchun neytral fayl chiziladi va u katalogga chiqadi. PII topilgan ishlar o'tkazib yuboriladi. Ko'p ish kichik partiyalarda yuboriladi."}
         target={`${fmtNumber(selected.size - withFlags)} ta ish`}
         reason={{ minLength: 5 }}
         typedConfirmation={selected.size > TYPED_CONFIRM_ABOVE ? String(selected.size) : undefined}
         confirmLabel="Tasdiqlash"
         sheet
         onConfirm={async ({ reason, idempotencyKey }) => {
-          const res = await bulkApproveMarket([...selected], reason, idempotencyKey);
-          const failed = res.results.length - res.approved;
-          toast(failed ? `${res.approved} ta tasdiqlandi, ${failed} tasi o'tkazib yuborildi` : `${res.approved} ta ish tasdiqlandi`);
-          refresh();
+          const ids = [...selected];
+          setProgress({ done: 0, total: ids.length });
+          try {
+            const res = await bulkApproveInBatches(ids, reason, idempotencyKey, (done) => {
+              setProgress((p) => (p ? { ...p, done: p.done + done.length } : p));
+              // A failed request leaves only the rest selected: «Tasdiqlash» again resumes there.
+              setSelected((prev) => new Set([...prev].filter((id) => !done.includes(id))));
+            });
+            const failed = res.results.length - res.approved;
+            toast(failed ? `${res.approved} ta tasdiqlandi, ${failed} tasi o'tkazib yuborildi` : `${res.approved} ta ish tasdiqlandi`);
+            refresh();
+          } finally {
+            setProgress(null);
+          }
         }}
       />
       <ConfirmDialog
         open={dialog === "scan"}
         onClose={() => setDialog(null)}
         title="Nomzodlarni skanerlash"
-        description="Tayyor ishlardan yangi nomzodlar qidiriladi. Bozor o'chiq bo'lsa ham ishlaydi."
+        description="Tayyor ishlardan yangi nomzodlar qidiriladi, bir marta 20 tagacha. Bozor o'chiq bo'lsa ham ishlaydi."
         reason={{ minLength: 5 }}
         confirmLabel="Skanerlash"
         sheet
         onConfirm={async ({ reason, idempotencyKey }) => {
           const r = await scanMarket(reason, idempotencyKey);
-          toast(r.locked ? "Skanerlash allaqachon ketmoqda" : `Ko'rildi: ${r.scanned}, nomzod: ${r.created}, rad etildi: ${r.rejected}`);
+          toast(r.locked ? "Skanerlash allaqachon ketmoqda" : `Ko'rildi: ${r.scanned}, nomzod: ${r.created}, rad etildi: ${r.rejected}${r.stopped ? ". Qolgani keyingi skanerlashda" : ""}`);
           refresh();
         }}
       />

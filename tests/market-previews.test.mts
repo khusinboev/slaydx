@@ -24,7 +24,13 @@ import { MARKET_ASSET_PREFIX } from "../lib/market/types.ts";
  *   7. in-flight map bypassed                                          -> «one build»;
  *   8. stored lookup without `version`                                 -> «version»;
  *   9. `marketAssetResolver` without `item_id` in the WHERE            -> «images resolve»;
- *  10. the page upper bound removed                                    -> «page range».
+ *  10. the page upper bound removed                                    -> «page range»;
+ *  11. the warm-up builds every item in one call                       -> «warm-up: one item per call»;
+ *  12. the warm-up ignores the current version                         -> «warm-up: one item per call»;
+ *  13. a failed item not remembered                                    -> «warm-up: a failed item»;
+ *  14. a busy gate counted as a failure                                -> «warm-up: a failed item»;
+ *  15. the step runs without LibreOffice, or under the inline worker   -> «warm-up: the step»;
+ *  16. `warmApprovedItems` rebuilds an item that has its rasters       -> «warm-up: after approval».
  *
  * The «not on sale» assertions compare with `=== null` on purpose: a failing `assert.equal` on a value holding a Buffer
  * hangs the reporter here, and a hang is not a red test.
@@ -330,6 +336,83 @@ test("images resolve: `market-asset://` reads only this item's bytes; the deck r
   assert.equal(file.fileName, "Mavzu.pptx");
   const zip = await JSZip.loadAsync(file.bytes);
   assert.ok(Object.keys(zip.files).some((n) => /ppt\/media\/.*\.(png|jpg|jpeg)$/.test(n)), "the picture is inside the file");
+});
+
+test("warm-up: one item per call, newest first, only what lacks rasters of its current version; candidates wait", { skip }, async () => {
+  const { query } = await db();
+  const { warmOneMarketItem, getMarketPreview, bumpPreviewVersion, settleMarketWarmups } = await previews();
+  await query("DELETE FROM market_items");
+  await settleMarketWarmups();
+  const [older, newer] = [await mkItem(), await mkItem()];
+  await query("UPDATE market_items SET approved_at = now() - interval '1 day' WHERE id = $1", [older]);
+  await query("UPDATE market_items SET approved_at = now() WHERE id = $1", [newer]);
+  await mkItem({ status: "candidate" });
+  const o = await opts();
+  assert.equal(await warmOneMarketItem(o), 1);
+  assert.equal(o.calls(), 1, "one LibreOffice run per tick");
+  assert.ok((await query("SELECT 1 FROM market_previews WHERE item_id = $1", [newer])).length > 0);
+  assert.equal((await query("SELECT 1 FROM market_previews WHERE item_id = $1", [older])).length, 0);
+  assert.equal(await warmOneMarketItem(o), 1);
+  assert.equal(await warmOneMarketItem(o), 0, "nothing left: the candidate waits for its approval");
+  assert.equal(o.calls(), 2);
+  await bumpPreviewVersion(newer);
+  assert.equal(await warmOneMarketItem(o), 1, "a redraw counts as missing");
+  assert.equal((await getMarketPreview(newer, 1, o))?.version, 2);
+});
+
+test("warm-up: a failed item steps aside so it cannot hold the queue; a busy gate is no failure", { skip }, async () => {
+  const { query } = await db();
+  const { warmOneMarketItem, settleMarketWarmups } = await previews();
+  const { SofficeBusyError } = await import("../lib/server/soffice-gate.ts");
+  await query("DELETE FROM market_items");
+  await settleMarketWarmups();
+  const bad = await mkItem();
+  await query("UPDATE market_items SET approved_at = now() WHERE id = $1", [bad]);
+  const good = await mkItem();
+  await query("UPDATE market_items SET approved_at = now() - interval '1 day' WHERE id = $1", [good]);
+  const busy = { available: () => true, rasterize: async () => { throw new SofficeBusyError(15); } };
+  assert.equal(await warmOneMarketItem(busy), 0);
+  let asked = 0;
+  const nothing = { available: () => true, rasterize: async () => { asked++; return null; } };
+  assert.equal(await warmOneMarketItem(nothing), 0);
+  assert.equal(asked, 1, "busy did not put the item aside: it was taken again");
+  const o = await opts();
+  assert.equal(await warmOneMarketItem(o), 1, "the next call goes past the failed item");
+  assert.ok((await query("SELECT 1 FROM market_previews WHERE item_id = $1", [good])).length > 0);
+  assert.equal((await query("SELECT 1 FROM market_previews WHERE item_id = $1", [bad])).length, 0);
+  assert.equal(await warmOneMarketItem(o), 0);
+  await settleMarketWarmups();
+});
+
+test("warm-up: the step needs the tools and a real worker", { skip }, async () => {
+  const { query } = await db();
+  const { marketPreviewWarmStep, settleMarketWarmups } = await previews();
+  await query("DELETE FROM market_items");
+  await settleMarketWarmups();
+  await mkItem();
+  const o = await opts();
+  assert.equal(await marketPreviewWarmStep({ ...o, inline: true }), 0);
+  assert.equal(await marketPreviewWarmStep({ ...o, inline: false, available: () => false }), 0);
+  assert.equal(o.calls(), 0);
+  assert.equal(await marketPreviewWarmStep({ ...o, inline: false }), 1);
+});
+
+test("warm-up: after approval the new items build in the background, once; nothing runs under the inline worker", { skip }, async () => {
+  const { query } = await db();
+  const { warmApprovedItems, settleMarketWarmups } = await previews();
+  await query("DELETE FROM market_items");
+  await settleMarketWarmups();
+  const [a, b] = [await mkItem(), await mkItem()];
+  const o = await opts();
+  warmApprovedItems([a, b], { ...o, inline: true });
+  await settleMarketWarmups();
+  assert.equal(o.calls(), 0);
+  warmApprovedItems([a, b], { ...o, inline: false });
+  await settleMarketWarmups();
+  assert.equal(o.calls(), 2);
+  warmApprovedItems([a], { ...o, inline: false });
+  await settleMarketWarmups();
+  assert.equal(o.calls(), 2, "rasters of this version exist: no second run");
 });
 
 test("the real chain: neutral DOCX → LibreOffice → pdftoppm → watermarked JPEG, the neutral file stored once", { skip }, async (t) => {

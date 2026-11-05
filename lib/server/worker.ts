@@ -125,8 +125,13 @@ let lastServerMetricsPurgeAt = -Infinity;
 let lastChatPurgeAt = -Infinity;
 /** `media_jobs` older than 90 days (M5): same 6 hour cadence, mark before the DELETE. */
 let lastMediaJobsPurgeAt = -Infinity;
-/** «Ishlar bozori» candidate scan and its two sweeps (docs/market/PLAN.md §8.3): same 6 hour cadence, mark before the work. */
-let lastMarketScanAt = -Infinity;
+/**
+ * «Ishlar bozori» candidate scan and its two sweeps (docs/market/PLAN.md §8.3): same 6 hour cadence, mark before the work.
+ * NOT `-Infinity`: a restart must not start a scan on its first tick (deploys restart every worker). The first run comes
+ * one hour after the start, not six, so a day with several deploys still scans.
+ */
+const MARKET_SCAN_FIRST_DELAY_MS = 60 * 60_000;
+let lastMarketScanAt = Date.now() - RETENTION_EVERY_MS + MARKET_SCAN_FIRST_DELAY_MS;
 
 /**
  * Sinov uchun: keyingi `housekeeping()` 6 soatlik qadamlarni (saqlash
@@ -1080,6 +1085,7 @@ export async function purgeHousekeeping(): Promise<void> {
     await step("market-previews-gc", async () => (await import("./market/candidates")).gcMarketPreviews());
     await step("market-rejected-gc", async () => (await import("./market/candidates")).gcRejectedItems());
   }
+  await step("market-previews-warm", async () => (await import("./market/previews")).marketPreviewWarmStep());
   // AI chat: a message charged but never answered (the process died mid-send) is refunded after 5 minutes.
   await step("chat-refund", async () => (await import("./chat/service")).refundOrphanedChat());
   // AI chat retention (owner request 8): messages and proposals older than 30 days.

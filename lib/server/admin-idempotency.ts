@@ -2,7 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { ApiError, json } from "./api";
-import { transaction } from "./db";
+import { query, transaction } from "./db";
 import { toJsonb } from "./jsonb";
 import { writeAudit, type AuditActor, type AuditEntry } from "./admin-audit";
 
@@ -87,6 +87,32 @@ export function idempotencyConflict(): ApiError {
   return new ApiError("Bu Idempotency-Key boshqa so'rov uchun ishlatilgan", 422, { code: "idempotency_conflict" });
 }
 
+type IdempotencyOpts = { action: string; key: string; bodyHash: string };
+
+async function priorRequest<T>(run: (text: string, values: unknown[]) => Promise<PriorRow[]>, actorId: string, opts: IdempotencyOpts): Promise<IdempotentResult<T> | null> {
+  const rows = await run(
+    `SELECT admin_id::text AS admin_id, meta FROM admin_audit_log
+      WHERE action = $1 AND at > now() - $3::interval AND outcome = 'ok' AND meta->>'idempotencyKey' = $2
+      ORDER BY at DESC, id DESC
+      LIMIT 1`,
+    [opts.action, opts.key, LOOKUP_WINDOW],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  // Another admin's key or a different body: never replay, never re-apply.
+  if (row.admin_id !== actorId || row.meta?.bodyHash !== opts.bodyHash) throw idempotencyConflict();
+  return { replayed: true, response: row.meta.response as T };
+}
+
+/**
+ * The stored answer of an earlier request with this key, read without a transaction. For a mutation whose heavy work
+ * runs BEFORE `idempotentMutation`: a retry gets the answer without doing that work again.
+ */
+export async function findIdempotentReplay<T>(actor: AuditActor, opts: IdempotencyOpts): Promise<IdempotentResult<T> | null> {
+  if (!actor.id) throw new ApiError("Admin hisobi aniqlanmadi", 500);
+  return priorRequest<T>((text, values) => query<PriorRow>(text, values), actor.id, opts);
+}
+
 /**
  * Runs `run` once per (action, key) inside one transaction with the audit
  * row, or replays the stored response to the admin who made the original
@@ -94,7 +120,7 @@ export function idempotencyConflict(): ApiError {
  */
 export async function idempotentMutation<T>(
   actor: AuditActor,
-  opts: { action: string; key: string; bodyHash: string },
+  opts: IdempotencyOpts,
   run: (client: PoolClient) => Promise<IdempotentOutcome<T>>,
 ): Promise<IdempotentResult<T>> {
   if (!actor.id) throw new ApiError("Admin hisobi aniqlanmadi", 500);
@@ -102,19 +128,8 @@ export async function idempotentMutation<T>(
   return transaction(async (client) => {
     // Serialises same-key requests (whoever sends them); released at COMMIT/ROLLBACK.
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`admin-idem:${opts.key}`]);
-    const prior = await client.query<PriorRow>(
-      `SELECT admin_id::text AS admin_id, meta FROM admin_audit_log
-        WHERE action = $1 AND at > now() - $3::interval AND outcome = 'ok' AND meta->>'idempotencyKey' = $2
-        ORDER BY at DESC, id DESC
-        LIMIT 1`,
-      [opts.action, opts.key, LOOKUP_WINDOW],
-    );
-    const row = prior.rows[0];
-    if (row) {
-      // Another admin's key or a different body: never replay, never re-apply.
-      if (row.admin_id !== adminId || row.meta?.bodyHash !== opts.bodyHash) throw idempotencyConflict();
-      return { replayed: true, response: row.meta.response as T };
-    }
+    const prior = await priorRequest<T>(async (text, values) => (await client.query<PriorRow>(text, values)).rows, adminId, opts);
+    if (prior) return prior;
 
     const out = await run(client);
     await writeAudit(client, actor, {

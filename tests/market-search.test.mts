@@ -25,7 +25,9 @@ import { buildSearchText, normalizeTopic } from "../lib/market/normalize.ts";
  *  12. the cheap sort ignores the tool percent                    -> «sorts»;
  *  13. the first-page cache bypassed                              -> «the first page is cached»;
  *  14. the view counter not debounced                             -> «the view counter»;
- *  15. stars shown from one vote                                  -> «a card is the shop window».
+ *  15. stars shown from one vote                                  -> «a card is the shop window»;
+ *  16. the sitemap cache removed                                  -> «sitemap»;
+ *  17. the sitemap cache read before the switch                   -> «sitemap».
  */
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
@@ -343,6 +345,25 @@ test("the view counter: once per viewer per hour, per item; only public items; n
   assert.equal((await query<{ views: number }>("SELECT views FROM market_views WHERE item_id = $1", [id]))[0]!.views, 2);
   assert.equal(await recordMarketView(await item({ status: "retired" }), "viewer-a"), false);
   assert.equal(await recordMarketView("nonsense", "viewer-a"), false);
+});
+
+test("sitemap: the market entries are kept an hour in process, and vanish with the switch at once", { skip }, async () => {
+  await fresh();
+  const { query, transaction } = await db();
+  const s = await import("../lib/server/settings.ts");
+  const { default: sitemap } = await import("../app/sitemap.ts");
+  const urls = async () => (await sitemap()).filter((e) => e.url.includes("/uz/market/")).length;
+  await item({ title: "Birinchi" });
+  assert.equal(await urls(), 0, "dark: nothing");
+  await transaction((c) => s.setSettingInTx(c, "market.enabled", true, null));
+  s.invalidateSettingsCache();
+  assert.equal(await urls(), 1);
+  await item({ title: "Ikkinchi" });
+  (await search()).invalidateMarketCatalogCache();
+  assert.equal(await urls(), 1, "no catalog queries for an hour");
+  await query("DELETE FROM app_settings WHERE key = 'market.enabled'");
+  s.invalidateSettingsCache();
+  assert.equal(await urls(), 0);
 });
 
 test("market.enabled ships off", { skip }, async () => {

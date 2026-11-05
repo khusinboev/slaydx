@@ -57,7 +57,8 @@ export const MARKET_REASON_OPTIONS = [
 ] as const;
 export type MarketReasonCode = (typeof MARKET_REASON_OPTIONS)[number]["value"];
 
-export const BULK_APPROVE_MAX = 20;
+/** Per request: each item renders inside it. A longer selection goes through `bulkApproveInBatches`. */
+export const BULK_APPROVE_MAX = 5;
 export const MAX_COPIES_LIMIT = 1000;
 export const STATS_PERIODS = [7, 30, 90] as const;
 
@@ -116,6 +117,7 @@ export type MarketOverview = {
   reported: number;
   trgm: boolean;
   previews: boolean;
+  lastScan: (ScanResult & { at: string }) | null;
 };
 
 export type MarketBuyer = {
@@ -151,7 +153,7 @@ export type MarketStats = {
 };
 
 export type MarketToolPricing = { toolId: string; title: string; percent: number | null; effective: number; disabled: boolean; active: number };
-export type ScanResult = { locked: boolean; scanned: number; created: number; rejected: number };
+export type ScanResult = { locked: boolean; scanned: number; created: number; rejected: number; stopped?: true };
 export type ActionResult = { id: string; status: MarketStatus };
 export type ItemEdits = { title?: string; summary?: string; subject?: string; level?: MarketLevel; maxCopies?: number };
 export type BulkApproveResult = { results: { id: string; ok: boolean; code?: string; message?: string }[]; approved: number };
@@ -200,6 +202,27 @@ export const setMarketItemPrice = (id: string, price: number | null, reason: str
 export const editMarketItem = (id: string, edits: ItemEdits, reason: string, key: string): Promise<ActionResult> =>
   adminSend<ActionResult>("PATCH", item(id), { reason, ...edits }, { idempotencyKey: key });
 export const bulkApproveMarket = (ids: readonly string[], reason: string, key: string): Promise<BulkApproveResult> => post(`${BASE}/bulk-approve`, { ids, reason }, key);
+/**
+ * A selection of any size, `BULK_APPROVE_MAX` per request, one after another. `onBatch` gets each finished batch, so the
+ * caller can show progress and drop those ids: a failed request then resumes with what is left. The first batch uses the
+ * dialog's key, the others a fresh one.
+ */
+export async function bulkApproveInBatches(
+  ids: readonly string[],
+  reason: string,
+  key: string,
+  onBatch?: (done: readonly string[]) => void,
+): Promise<BulkApproveResult> {
+  const out: BulkApproveResult = { results: [], approved: 0 };
+  for (let i = 0; i < ids.length; i += BULK_APPROVE_MAX) {
+    const batch = ids.slice(i, i + BULK_APPROVE_MAX);
+    const res = await bulkApproveMarket(batch, reason, i === 0 ? key : crypto.randomUUID());
+    out.results.push(...res.results);
+    out.approved += res.approved;
+    onBatch?.(batch);
+  }
+  return out;
+}
 export const scanMarket = (reason: string, key: string): Promise<ScanResult> => post(`${BASE}/scan`, { reason }, key);
 export const setMarketToolPercent = (toolId: string, percent: number | null, reason: string, key: string): Promise<{ toolId: string; percent: number | null }> =>
   adminSend("PUT", `${BASE}/tool-pricing/${encodeURIComponent(toolId)}`, { percent, reason }, { idempotencyKey: key });

@@ -25,7 +25,17 @@ import { marketWorkDoc } from "./helpers/market-fixtures.mts";
  *  12. `source` returned without the `users.pii` check                                   -> «detail: the author only with users.pii»;
  *  13. `market.file_read` audit removed                                                  -> «file: audited read»;
  *  14. `marketItemDoc` returns the stored doc without the placeholder rewrite            -> «doc: images through the admin route»;
- *  15. the abuse route without the state check                                           -> «buyers: masked names …».
+ *  15. the abuse route without the state check                                           -> «buyers: masked names …»;
+ *  16. the render moved back inside the transaction                                      -> «approve: no lock during the render»;
+ *  17. the `updated_at` re-check removed                                                 -> «approve: a change during the render»;
+ *  18. a retry renders again (render before any status check)                            -> «approve: a retry renders nothing»;
+ *  19. `BULK_APPROVE_MAX` back to 20                                                     -> «bulk: … over 5 ids»;
+ *  20. a non-ApiError rethrown in bulk                                                   -> «bulk: an unexpected failure»;
+ *  21. the manual scan with the setting's batch                                          -> «scan: a small batch»;
+ *  22. `findIdempotentReplay` skipped                                                    -> «scan: a small batch»;
+ *  23. `lastScan` always null                                                            -> «scan: a small batch»;
+ *  24. the file dropped only for listed items                                            -> «re-sanitise: a candidate's stale file»;
+ *  25. the raster route without the status check                                         -> «raster: what is not on sale».
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -39,6 +49,7 @@ const iso = hasDb ? await createIsolatedDb("adminmarket") : { isolated: false, d
 const skip = hasDb && iso.isolated ? false : "isolated Postgres database is not available";
 process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://unused/unused";
 
+type AdminActor = import("../lib/server/admin-handler.ts").AdminActor;
 const { query, queryOne, ensureMigrated, transaction, pool } = await import("../lib/server/db.ts");
 const { createSession, SESSION_COOKIE } = await import("../lib/server/session.ts");
 const { createAdminSession, adminCookieName } = await import("../lib/server/admin-session.ts");
@@ -69,6 +80,7 @@ const R = {
   tools: await import("../app/api/admin/market/tool-pricing/route.ts"),
   tool: await import("../app/api/admin/market/tool-pricing/[toolId]/route.ts"),
   abuse: await import("../app/api/admin/market/purchases/[id]/abuse/route.ts"),
+  raster: await import("../app/api/admin/market/items/[id]/preview/[page]/route.ts"),
 };
 
 after(async () => {
@@ -228,6 +240,53 @@ test("approve: a failing render rolls back: still a candidate, no file, no audit
   assert.equal((await audits("market.approve", id)).length, 0);
 });
 
+const actorOf = async (s: Session): Promise<AdminActor> => {
+  const row = await queryOne<{ user_id: string }>("SELECT user_id::text AS user_id FROM admin_accounts WHERE id = $1", [s.adminId]);
+  return { id: s.adminId, userId: row!.user_id, role: "admin", ip: "10.0.0.1", userAgent: "market-test", requestId: null } as unknown as AdminActor;
+};
+const STUB_FILE = { bytes: new Uint8Array([1, 2, 3]), mime: "application/x", fileName: "s.docx" };
+
+test("approve: no lock during the render: another transaction can lock the row while the file is drawn", { skip }, async () => {
+  const s = await session("admin");
+  const id = await mkItem();
+  let locked = false;
+  const r = await svc.approveMarketItem(await actorOf(s), id, { reason: REASON }, randomUUID(), async () => {
+    await transaction((c) => c.query("SELECT 1 FROM market_items WHERE id = $1 FOR UPDATE NOWAIT", [id]));
+    locked = true;
+    return STUB_FILE;
+  });
+  assert.equal(locked, true);
+  assert.equal(r.response.status, "active");
+});
+
+test("approve: a change during the render is a 409: still a candidate, no file, no audit row", { skip }, async () => {
+  const s = await session("admin");
+  const id = await mkItem();
+  const render = async () => {
+    await query("UPDATE market_items SET updated_at = now() + interval '1 second' WHERE id = $1", [id]);
+    return STUB_FILE;
+  };
+  await assert.rejects(svc.approveMarketItem(await actorOf(s), id, { reason: REASON }, randomUUID(), render), (e: { status?: number; extra?: { code?: string } }) => e.status === 409 && e.extra?.code === "changed");
+  assert.equal(await statusOf(id), "candidate");
+  assert.equal((await queryOne<{ n: string }>("SELECT count(*) AS n FROM market_item_files WHERE item_id = $1", [id]))!.n, "0");
+  assert.equal((await audits("market.approve", id)).length, 0);
+});
+
+test("approve: a retry renders nothing: the same key answers from the audit row", { skip }, async () => {
+  const s = await session("admin");
+  const id = await mkItem();
+  const key = randomUUID();
+  let renders = 0;
+  const render = async () => {
+    renders++;
+    return STUB_FILE;
+  };
+  const actor = await actorOf(s);
+  assert.equal((await svc.approveMarketItem(actor, id, { reason: REASON }, key, render)).replayed, false);
+  assert.equal((await svc.approveMarketItem(actor, id, { reason: REASON }, key, render)).replayed, true);
+  assert.equal(renders, 1);
+});
+
 test("approve: only a candidate; the same key replays, another body is 422", { skip }, async () => {
   const s = await session("admin");
   const id = await mkItem();
@@ -357,6 +416,27 @@ test("re-sanitise: a missed phone goes, flags are stored, previews get a new ver
   assert.equal((await call(R.resanitize.POST as Handler, "POST", s, { params: { id: rejected }, body: { reason: REASON } })).status, 409);
 });
 
+test("re-sanitise: a candidate's stale file goes too, so its next rasters are drawn from the cleaned text", { skip }, async () => {
+  const s = await session("moderator");
+  const id = await mkItem();
+  await query(`INSERT INTO market_item_files (item_id, file_name, mime, size_bytes, bytes) VALUES ($1, 'old.docx', 'application/x', 1, '\\x00')`, [id]);
+  assert.equal((await call(R.resanitize.POST as Handler, "POST", s, { params: { id }, body: { reason: REASON } })).status, 200);
+  assert.equal((await queryOne<{ n: string }>("SELECT count(*) AS n FROM market_item_files WHERE item_id = $1", [id]))!.n, "0");
+  assert.equal(await statusOf(id), "candidate");
+});
+
+test("raster: what is not on sale needs market.manage; market.view keeps the shop window", { skip }, async () => {
+  const [viewer, moderator] = [await session("viewer"), await session("moderator")];
+  const raster = (s: Session, id: string, page = "9") => call(R.raster.GET as Handler, "GET", s, { params: { id, page } });
+  for (const status of ["candidate", "retired", "rejected"]) {
+    const id = await mkItem({ status });
+    assert.equal((await raster(viewer, id)).status, 403, status);
+    assert.equal((await raster(moderator, id)).status, 404, `${status}: past the gate, page 9 does not exist`);
+  }
+  const listed = await mkItem({ status: "active" });
+  assert.equal((await raster(viewer, listed)).status, 404, "past the gate, page 9 does not exist");
+});
+
 test("«Qayta chizish» bumps the preview version", { skip }, async () => {
   const s = await session("moderator");
   const id = await mkItem({ status: "active" });
@@ -443,7 +523,18 @@ test("bulk: one audit row per item; a bad render costs only that item; a retry r
   assert.equal(audit[0]!.meta!.bulk, true);
 });
 
-test("bulk: a work with PII hits is refused and stays in the queue; over 20 ids is 400", { skip }, async () => {
+test("bulk: an unexpected failure costs only that item: code `error`, the rest goes on", { skip }, async () => {
+  const s = await session("admin");
+  const [a, b] = [await mkItem(), await mkItem()];
+  const render = async (row: { id: string }) => (row.id === a ? ({} as typeof STUB_FILE) : STUB_FILE);
+  const out = await svc.bulkApproveMarketItems(await actorOf(s), { ids: [a, b], reason: REASON }, randomUUID(), render as never);
+  assert.equal(out.approved, 1);
+  assert.deepEqual(out.results.map((r) => [r.id, r.ok, r.code]), [[a, false, "error"], [b, true, undefined]]);
+  assert.equal(await statusOf(a), "candidate");
+  assert.equal(await statusOf(b), "active");
+});
+
+test("bulk: a work with PII hits is refused and stays in the queue; over 5 ids is 400", { skip }, async () => {
   const s = await session("admin");
   const flagged = await mkItem({ flags: [{ kind: "phone", path: "sections.0.blocks.0.text" }] });
   const r = await call(R.bulk.POST as Handler, "POST", s, { body: { ids: [flagged], reason: REASON } });
@@ -453,8 +544,9 @@ test("bulk: a work with PII hits is refused and stays in the queue; over 20 ids 
   assert.equal(await statusOf(flagged), "candidate");
   // One by one it passes: the admin has looked at it.
   assert.equal((await call(R.approve.POST as Handler, "POST", s, { params: { id: flagged }, body: { reason: REASON } })).status, 200);
-  const many = Array.from({ length: 21 }, () => randomUUID());
+  const many = Array.from({ length: 6 }, () => randomUUID());
   assert.equal((await call(R.bulk.POST as Handler, "POST", s, { body: { ids: many, reason: REASON } })).status, 400);
+  assert.notEqual((await call(R.bulk.POST as Handler, "POST", s, { body: { ids: many.slice(0, 5), reason: REASON } })).status, 400, "five is allowed");
   assert.equal((await call(R.bulk.POST as Handler, "POST", s, { body: { ids: ["nope"], reason: REASON } })).status, 400);
 });
 
@@ -610,6 +702,29 @@ test("scan: works while dark, audited, replayed by the key", { skip }, async () 
   const rows = await query("SELECT 1 FROM admin_audit_log WHERE action = 'market.scan' AND admin_id = $1", [s.adminId]);
   assert.equal(rows.length, 1);
   assert.equal((await call(R.scan.POST as Handler, "POST", await session("viewer"), { body: { reason: REASON } })).status, 403);
+});
+
+test("scan: a small batch, audited after; a retry scans nothing; the overview keeps the answer", { skip }, async () => {
+  const s = await session("moderator");
+  const u = await mkUser();
+  await query(
+    `INSERT INTO generations (id, user_id, tool_id, topic, status, price, format, doc_json, finished_at)
+     SELECT gen_random_uuid(), $1, 'referat', 'Eski ish ' || n, 'COMPLETED', 0, 'docx', '{}'::jsonb, now() - interval '2 days' FROM generate_series(1, 22) n`,
+    [u.id],
+  );
+  const left = () => queryOne<{ n: string }>(`SELECT count(*) AS n FROM generations g WHERE g.user_id = $1 AND NOT EXISTS (SELECT 1 FROM market_items m WHERE m.source_generation_id = g.id)`, [u.id]);
+  const key = randomUUID();
+  const r = await call(R.scan.POST as Handler, "POST", s, { body: { reason: REASON }, key });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.scanned, 20);
+  const after2 = Number((await left())!.n);
+  assert.equal(after2, 2);
+  const again = await call(R.scan.POST as Handler, "POST", s, { body: { reason: REASON }, key });
+  assert.equal(again.headers.get("Idempotent-Replayed"), "true");
+  assert.equal(Number((await left())!.n), after2, "the retry did no work");
+  const overview = (await call(R.overview.GET as Handler, "GET", s)).body as { lastScan: { scanned: number; at: string } };
+  assert.equal(overview.lastScan.scanned, 20);
+  assert.ok(Date.now() - new Date(overview.lastScan.at).getTime() < 60_000);
 });
 
 test("overview: counts by status", { skip }, async () => {

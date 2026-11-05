@@ -42,12 +42,13 @@ export type MarketItemRow = {
   created_at: Date;
   approved_at: Date | null;
   retired_at: Date | null;
+  updated_at: Date;
 };
 
 /** Every column a read path may see. `doc_json` and `search_text` are absent on purpose. */
 export const MARKET_ROW_COLUMNS = `id, source_generation_id, source_user_id, tool_id, status, title, summary, subject, level, language, pages, slide_count,
   params_json, outline_json, pii_flags, quality_json, topic_norm, original_price, price_override, price_version, max_copies, sold_count,
-  view_count, rating_sum, rating_count, preview_version, reject_reason, created_at, approved_at, retired_at`;
+  view_count, rating_sum, rating_count, preview_version, reject_reason, created_at, approved_at, retired_at, updated_at`;
 
 /** An item reachable from the public catalog: a `?v=` URL of a hidden or retired item answers 404 like an unknown id. */
 export const PUBLIC_STATUSES: readonly MarketStatus[] = ["active", "sold_out"];

@@ -8,7 +8,7 @@ import sharp from "sharp";
 import { query, queryOne, transaction } from "../db";
 import { env } from "../env";
 import { pdfAvailable, toPdf } from "../pdf";
-import { Gate } from "../soffice-gate";
+import { Gate, SofficeBusyError } from "../soffice-gate";
 import { pdftoppmBin } from "../thumb";
 import { isDeckTool } from "../../market/registry";
 import { isPartialPreview, PARTIAL_SHARE, readablePages } from "../../market/preview-policy";
@@ -21,7 +21,8 @@ const run = promisify(execFile);
  * Shop-window rasters (docs/market/PLAN.md §3.2, M8). The only body bytes that leave the server before a purchase:
  * first N pages as small watermarked JPEGs, the pages after them as blurred stubs nobody can read. Built lazily on the
  * first request (the `thumb.ts` pattern: one build per item + version, an inner gate under the shared `soffice` gate,
- * `SofficeBusyError` → the route answers 503 and the card shows its placeholder).
+ * `SofficeBusyError` → the route answers 503 and the card shows its placeholder). That on-demand path is the fallback:
+ * approval warms the rasters ahead of the first visitor (`warmApprovedItems`, `marketPreviewWarmStep`).
  *
  * `preview_version` versions the set: a new version makes every old raster unreachable by key.
  */
@@ -51,7 +52,12 @@ export type PreviewDeps = {
   rasterize?: (bytes: Uint8Array, fileName: string, lastPage: number, dpi: number) => Promise<Buffer[] | null>;
 };
 
-type Globals = typeof globalThis & { __slaydxMarketPreviewGate?: Gate; __slaydxMarketPreviewInflight?: Map<string, Promise<void>> };
+type Globals = typeof globalThis & {
+  __slaydxMarketPreviewGate?: Gate;
+  __slaydxMarketPreviewInflight?: Map<string, Promise<void>>;
+  __slaydxMarketWarmFailures?: Map<string, number>;
+  __slaydxMarketWarmQueue?: Promise<void>;
+};
 const g = globalThis as Globals;
 
 /** Previews never take the last `soffice` slot: a user's own PDF download stays first in line (same rule as thumbnails). */
@@ -66,6 +72,9 @@ function inflight(): Map<string, Promise<void>> {
 }
 
 export const previewsAvailable = (): boolean => pdfAvailable() && Boolean(pdftoppmBin());
+
+/** A failed item is left alone this long, so one bad document cannot hold the warm-up queue. */
+const WARM_RETRY_MS = 60 * 60_000;
 
 /** First `lastPage` pages of a PDF as JPEGs; the tool numbers its files, the order is by that number. */
 async function pdfPages(pdf: Buffer, lastPage: number, dpi: number): Promise<Buffer[] | null> {
@@ -190,15 +199,86 @@ export async function getMarketPreview(itemId: string, page: number, opts: Previ
   const stored = await storedPreview(itemId, page, version);
   if (stored) return stored;
   if (!(opts.available ?? previewsAvailable)()) return null;
+  await buildOnce(itemId, version, opts);
+  return storedPreview(itemId, page, version);
+}
+
+/** One build per item + version, however many callers wait for it. */
+function buildOnce(itemId: string, version: number, deps: PreviewDeps): Promise<void> {
   const key = `${itemId}:${version}`;
   const jobs = inflight();
   let job = jobs.get(key);
   if (!job) {
-    job = buildPreviews(itemId, version, opts).finally(() => jobs.delete(key));
+    job = buildPreviews(itemId, version, deps).finally(() => jobs.delete(key));
     jobs.set(key, job);
   }
-  await job;
-  return storedPreview(itemId, page, version);
+  return job;
+}
+
+const warmFailures = (): Map<string, number> => (g.__slaydxMarketWarmFailures ??= new Map());
+
+/**
+ * Builds the rasters of ONE listed item that has none at its current version, newest first; 1 when it did. Visitors then
+ * find them ready and never start LibreOffice. `SofficeBusyError` is no failure: the item is simply taken next time.
+ */
+export async function warmOneMarketItem(deps: PreviewDeps = {}): Promise<number> {
+  const failures = warmFailures();
+  const now = Date.now();
+  for (const [id, at] of failures) if (now - at >= WARM_RETRY_MS) failures.delete(id);
+  const row = await queryOne<{ id: string; preview_version: number }>(
+    `SELECT m.id, m.preview_version FROM market_items m
+      WHERE m.status IN ('active', 'sold_out') AND NOT (m.id = ANY($1::uuid[]))
+        AND NOT EXISTS (SELECT 1 FROM market_previews p WHERE p.item_id = m.id AND p.version = m.preview_version)
+      ORDER BY m.approved_at DESC NULLS LAST, m.id
+      LIMIT 1`,
+    [[...failures.keys()]],
+  );
+  if (!row) return 0;
+  try {
+    await buildOnce(row.id, row.preview_version, deps);
+  } catch (e) {
+    if (e instanceof SofficeBusyError) return 0;
+    console.warn("[market] preview warm-up", e instanceof Error ? e.message : e);
+  }
+  if (await storedPreview(row.id, 1, row.preview_version)) return 1;
+  failures.set(row.id, Date.now());
+  return 0;
+}
+
+/**
+ * Housekeeping step: one item per tick, in the worker. Where LibreOffice is not installed it does nothing (the web
+ * builds on demand behind its gate); under the inline worker (dev) it stays out of the web process.
+ */
+export async function marketPreviewWarmStep(opts: PreviewDeps & { inline?: boolean } = {}): Promise<number> {
+  if (opts.inline ?? env.worker.inline) return 0;
+  if (!(opts.available ?? previewsAvailable)()) return 0;
+  return warmOneMarketItem(opts);
+}
+
+/**
+ * Right after an approval commits: builds the new items' rasters in the background, one at a time, behind the preview
+ * gate. Never awaited by the request. The production worker image has no LibreOffice, so this is what spares the first
+ * visitor the wait; a lost queue (restart) only falls back to the on-demand path.
+ */
+export function warmApprovedItems(ids: readonly string[], opts: PreviewDeps & { inline?: boolean } = {}): void {
+  if (opts.inline ?? env.worker.inline) return;
+  if (!(opts.available ?? previewsAvailable)()) return;
+  for (const id of ids) {
+    g.__slaydxMarketWarmQueue = (g.__slaydxMarketWarmQueue ?? Promise.resolve()).then(async () => {
+      try {
+        const row = await getItemRow(id);
+        if (row && !(await storedPreview(id, 1, row.preview_version))) await buildOnce(id, row.preview_version, opts);
+      } catch (e) {
+        console.warn("[market] preview warm-up", e instanceof Error ? e.message : e);
+      }
+    });
+  }
+}
+
+/** Test seam: resolves when the background queue is empty; forgets the failed items. */
+export async function settleMarketWarmups(): Promise<void> {
+  await g.__slaydxMarketWarmQueue;
+  warmFailures().clear();
 }
 
 /** «Qayta chizish»: a new version makes the next request build fresh rasters; returns the new version. */

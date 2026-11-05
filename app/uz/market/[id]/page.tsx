@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { cache, Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { MarketItemPage } from "@/components/market/MarketItemPage";
@@ -11,12 +11,12 @@ export const dynamic = "force-dynamic";
 
 type Params = Promise<{ id: string }>;
 
-/** The anonymous view: built without the document, so nothing of the body can reach this page (§3.1). */
-async function publicItem(id: string): Promise<{ enabled: boolean; item: MarketItemView | null }> {
+/** The anonymous view: built without the document, so nothing of the body can reach this page (§3.1). One read per render: metadata and page share it. */
+const publicItem = cache(async (id: string): Promise<{ enabled: boolean; item: MarketItemView | null }> => {
   const enabled = await marketEnabled().catch(() => false);
   if (!enabled) return { enabled, item: null };
   return { enabled, item: await getMarketItem(id, null).catch(() => null) };
-}
+});
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { id } = await params;

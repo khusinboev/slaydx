@@ -14,6 +14,7 @@ import { TOOL_BY_ID } from "../../tools";
 import type { ToolId } from "../../types";
 import { pool, query, queryOne, transaction } from "../db";
 import { adapterFor } from "../edit-adapters";
+import { env } from "../env";
 import { toJsonb } from "../jsonb";
 import { log } from "../log";
 import { effectivePrice } from "../pricing";
@@ -31,12 +32,20 @@ import { isUuid } from "./store";
  *
  * Every read row ends in a `market_items` row, listed or `rejected`, so the scan makes progress and never re-evaluates
  * a work. A rejected row holds no document: `doc_json = '{}'`, only the sanitised title.
+ *
+ * The scan is polite to the process it runs in. The eligibility query returns ids only; each document is read alone,
+ * the event loop gets a turn between works, and a time budget ends the run early: what is left stays eligible and the
+ * next run takes it. Loading 100 documents in one query and sanitising them in a row stalled the loop past the 5 s
+ * Postgres connect timeout. One 12 000-word work costs about 60 ms of sanitising and hashing, so a yield per work is
+ * enough; a work is never split.
  */
 
 /** Runs behind this advisory lock; a concurrent scan (manual + cron) returns at once. */
 export const MARKET_SCAN_LOCK_ID = 727_000_006;
 /** Cancel, refund and edit settle first (§1.2). */
 const SETTLE_HOURS = 24;
+/** One housekeeping run stops after this long and resumes on the next one. */
+export const MARKET_SCAN_BUDGET_MS = 60_000;
 /** Bodies this close (bits of 64) are the same work (§1.2). */
 const SIMHASH_MAX_DISTANCE = 6;
 
@@ -48,7 +57,8 @@ export const USER_MATERIAL_KEYS = ["sourceAssetId", "sourceText", "templateAsset
 
 export type RejectReason = "quality" | "duplicate" | "per_topic" | "legacy" | "too_large" | "user_material" | "sanitize_error";
 
-export type ScanResult = { locked: boolean; scanned: number; created: number; rejected: number };
+/** `stopped`: the time budget ended the run; the rest of the batch waits for the next one. */
+export type ScanResult = { locked: boolean; scanned: number; created: number; rejected: number; stopped?: true };
 
 type SourceRow = {
   id: string;
@@ -72,10 +82,7 @@ type SourceRow = {
 
 /** The eligibility rules of §1.2, in one query. `generations_retention_idx` serves the COMPLETED + not purged + finished_at part. */
 const ELIGIBLE_SQL = `
-  SELECT g.id, g.user_id, g.tool_id, g.topic, g.values_json, COALESCE(g.doc_prev, g.doc_json) AS doc,
-         u.name AS u_name, u.username AS u_username, u.phone AS u_phone, u.author AS u_author, u.teacher AS u_teacher,
-         u.university AS u_university, u.faculty AS u_faculty, u.department AS u_department, u.organization AS u_organization,
-         u.position AS u_position, u."group" AS u_group
+  SELECT g.id
     FROM generations g
     JOIN users u ON u.id = g.user_id
    WHERE g.status = 'COMPLETED'
@@ -95,6 +102,18 @@ const ELIGIBLE_SQL = `
      )
    ORDER BY g.finished_at DESC
    LIMIT $4`;
+
+/** One source with its document: read alone, so a batch never sits in memory (or in one parse) at once. */
+const SOURCE_SQL = `
+  SELECT g.id, g.user_id, g.tool_id, g.topic, g.values_json, COALESCE(g.doc_prev, g.doc_json) AS doc,
+         u.name AS u_name, u.username AS u_username, u.phone AS u_phone, u.author AS u_author, u.teacher AS u_teacher,
+         u.university AS u_university, u.faculty AS u_faculty, u.department AS u_department, u.organization AS u_organization,
+         u.position AS u_position, u."group" AS u_group
+    FROM generations g
+    JOIN users u ON u.id = g.user_id
+   WHERE g.id = $1`;
+
+const yieldToLoop = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
 async function insertRejected(row: SourceRow, reason: RejectReason, title: string, quality: unknown = {}, detail?: string): Promise<void> {
   await query(
@@ -233,7 +252,9 @@ async function processOne(row: SourceRow, minQuality: number, perTopic: number):
  * One scan. `market.backfill_batch` rows at most (0 = off). Leader-safe: `pg_try_advisory_lock` on a dedicated
  * connection, so an admin's manual scan and the 6 hour step never run the same work twice.
  */
-export async function scanMarketCandidates(opts: { batch?: number } = {}): Promise<ScanResult> {
+export async function scanMarketCandidates(opts: { batch?: number; budgetMs?: number } = {}): Promise<ScanResult> {
+  const budgetMs = opts.budgetMs ?? MARKET_SCAN_BUDGET_MS;
+  const startedAt = Date.now();
   const batch = opts.batch ?? (await getSetting("market.backfill_batch"));
   if (batch <= 0) return { locked: false, scanned: 0, created: 0, rejected: 0 };
   const client = await pool().connect();
@@ -244,20 +265,28 @@ export async function scanMarketCandidates(opts: { batch?: number } = {}): Promi
       const disabled = new Set<string>(await getSetting("market.tools_disabled"));
       const tools = MARKET_TOOL_IDS.filter((t) => !disabled.has(t));
       const [minQuality, perTopic] = await Promise.all([getSetting("market.min_quality"), getSetting("market.per_topic_limit")]);
-      const rows = await query<SourceRow>(ELIGIBLE_SQL, [SETTLE_HOURS, tools, USER_MATERIAL_KEYS, batch]);
+      const ids = await query<{ id: string }>(ELIGIBLE_SQL, [SETTLE_HOURS, tools, USER_MATERIAL_KEYS, batch]);
+      let scanned = 0;
       let created = 0;
       let rejected = 0;
-      for (const row of rows) {
+      for (const { id } of ids) {
+        if (Date.now() - startedAt >= budgetMs) return { locked: false, scanned, created, rejected, stopped: true };
+        await yieldToLoop();
+        let row: SourceRow | null = null;
         try {
+          row = await queryOne<SourceRow>(SOURCE_SQL, [id]);
+          if (!row) continue; // Deleted since the id list was read.
+          scanned++;
           if ((await processOne(row, minQuality, perTopic)) === "created") created++;
           else rejected++;
         } catch (err) {
+          log("warn", "[market] nomzod yaratilmadi", { generationId: id, err });
+          if (!row) continue; // The read itself failed: the work stays eligible for the next run.
           rejected++;
-          log("warn", "[market] nomzod yaratilmadi", { generationId: row.id, err });
           await insertRejected(row, "sanitize_error", marketTitleOf(row.tool_id), {}, err instanceof Error ? err.name : "error").catch(() => {});
         }
       }
-      return { locked: false, scanned: rows.length, created, rejected };
+      return { locked: false, scanned, created, rejected };
     } finally {
       await client.query("SELECT pg_advisory_unlock($1)", [MARKET_SCAN_LOCK_ID]).catch(() => {});
     }
@@ -266,8 +295,12 @@ export async function scanMarketCandidates(opts: { batch?: number } = {}): Promi
   }
 }
 
-/** The 6 hour housekeeping step. Dark launch: while the market is off only the admin's manual scan fills the queue. */
-export async function marketCandidatesStep(): Promise<number> {
+/**
+ * The 6 hour housekeeping step. Dark launch: while the market is off only the admin's manual scan fills the queue. Under
+ * the inline worker (dev) housekeeping shares the web process, so the scan stays out of it.
+ */
+export async function marketCandidatesStep(opts: { inline?: boolean } = {}): Promise<number> {
+  if (opts.inline ?? env.worker.inline) return 0;
   if (!(await getSetting("market.enabled"))) return 0;
   return (await scanMarketCandidates()).created;
 }

@@ -16,7 +16,7 @@ import { log } from "./log";
 import { adminTx } from "./admin-audit";
 import { parseReason } from "./admin-accounts";
 import type { AdminActor } from "./admin-handler";
-import { bodyHashOf, idempotentMutation, type IdempotentResult } from "./admin-idempotency";
+import { bodyHashOf, findIdempotentReplay, idempotentMutation, type IdempotentResult } from "./admin-idempotency";
 import {
   buildKeyset,
   countCapped,
@@ -37,9 +37,9 @@ import { getSetting, getSettingInTx } from "./settings";
 import { candidateCount, resanitizeItemInTx, scanMarketCandidates, type ScanResult } from "./market/candidates";
 import { previewPagesOf, renderNeutralFile } from "./market/items";
 import { marketPriceForItem, marketPriceInTx, marketPricingConfig, invalidateMarketPricingCache, listToolPercents, setItemPriceOverrideInTx, setToolPercentInTx, type MarketPricingConfig } from "./market/pricing";
-import { previewsAvailable } from "./market/previews";
+import { previewsAvailable, warmApprovedItems } from "./market/previews";
 import { invalidateMarketCatalogCache, marketTrgmAvailable } from "./market/search";
-import { getItemDoc, getNeutralFile, isHiddenForReview, isUuid, MARKET_ROW_COLUMNS, putNeutralFile, type MarketItemRow, type NeutralFile } from "./market/store";
+import { getItemDoc, getItemRow, getNeutralFile, isHiddenForReview, isUuid, MARKET_ROW_COLUMNS, putNeutralFile, type MarketItemRow, type NeutralFile } from "./market/store";
 
 /**
  * Admin side of «Ishlar bozori» (docs/market/PLAN.md §6, §9). Permission checks live in `adminHandler`, never here.
@@ -48,8 +48,10 @@ import { getItemDoc, getNeutralFile, isHiddenForReview, isUuid, MARKET_ROW_COLUM
  *   - every mutation runs through `idempotentMutation`: the change and its one `market.*` audit row commit or roll
  *     back together, and the same `Idempotency-Key` replays the answer;
  *   - a refused action (4xx) writes nothing, so a retry with a corrected body is free;
- *   - approval renders the neutral file INSIDE the transaction that flips the status (row locked): a failing render
- *     leaves the item a candidate, with no file and no audit row;
+ *   - approval renders the neutral file BEFORE its transaction, so no lock is held over a render; the transaction
+ *     re-checks that the row did not change meanwhile (409 `changed`). A failing render leaves the item a candidate,
+ *     with no file and no audit row;
+ *   - a request stays well inside the admin client's 30 s: bulk approve and the manual scan are small by design;
  *   - caches are dropped AFTER the commit, never inside the transaction (another process could refill them with the
  *     old row);
  *   - list projections never select `doc_json`; `source_*` columns leave only with `users.pii`.
@@ -64,8 +66,11 @@ const LEVELS = ["maktab", "kollej", "otm"] as const satisfies readonly MarketLev
 export const MARKET_REASON_CODES = ["illegal", "medical_legal", "copyright", "low_quality", "other"] as const;
 export type MarketReasonCode = (typeof MARKET_REASON_CODES)[number];
 
-/** Bulk approve cap (§6). */
-export const BULK_APPROVE_MAX = 20;
+/** Bulk approve cap per request (renders run in the request); the UI sends a longer selection in batches. */
+export const BULK_APPROVE_MAX = 5;
+/** The manual scan runs inside an admin request: small, and well under the client's 30 s. */
+export const MANUAL_SCAN_BATCH = 20;
+export const MANUAL_SCAN_BUDGET_MS = 20_000;
 export const MAX_COPIES_LIMIT = 1000;
 /** Override ceiling: a typo must not put a nine-digit price on the shelf. */
 export const PRICE_OVERRIDE_MAX = 10_000_000;
@@ -278,13 +283,23 @@ export type MarketOverview = {
   trgm: boolean;
   /** LibreOffice + pdftoppm present, so rasters can be built here. */
   previews: boolean;
+  /** The last manual scan's answer; `null` before the first one. */
+  lastScan: (ScanResult & { at: string }) | null;
 };
 
+async function lastManualScan(): Promise<MarketOverview["lastScan"]> {
+  const row = await queryOne<{ at: Date; response: ScanResult | null }>(
+    `SELECT at, meta->'response' AS response FROM admin_audit_log WHERE action = 'market.scan' AND outcome = 'ok' ORDER BY at DESC, id DESC LIMIT 1`,
+  );
+  return row?.response ? { ...row.response, at: new Date(row.at).toISOString() } : null;
+}
+
 export async function marketOverview(): Promise<MarketOverview> {
-  const [enabled, candidates, trgm, counts] = await Promise.all([
+  const [enabled, candidates, trgm, lastScan, counts] = await Promise.all([
     getSetting("market.enabled"),
     candidateCount(),
     marketTrgmAvailable(),
+    lastManualScan(),
     queryOne<{ active: string; sold_out: string; retired: string; errors: string; reported: string }>(
       `SELECT count(*) FILTER (WHERE status = 'active') AS active,
               count(*) FILTER (WHERE status = 'sold_out') AS sold_out,
@@ -304,6 +319,7 @@ export async function marketOverview(): Promise<MarketOverview> {
     reported: Number(counts?.reported ?? 0),
     trgm,
     previews: previewsAvailable(),
+    lastScan,
   };
 }
 
@@ -551,8 +567,12 @@ type RenderFile = typeof renderNeutralFile;
 
 /**
  * One approval (§1.2 step 6): candidate → active with its neutral file, `approved_*`, the `original_price` snapshot and
- * the family's default cap, all in one transaction with the audit row. The row stays locked during the render, so a
- * concurrent re-sanitise cannot slip in between the document we rendered and the status flip.
+ * the family's default cap, all in one transaction with the audit row.
+ *
+ * The render runs first, with no transaction open: it takes seconds, and a row lock plus the key's advisory lock held
+ * that long stall every reader of the row and the pool. The transaction then compares `updated_at` with what the render
+ * saw, so a re-sanitise or an edit that slipped in between is a 409, never a file of the old text. A replay (the item is
+ * no longer a candidate) skips the render and gets its stored answer inside `idempotentMutation`.
  */
 async function approveOne(
   actor: AdminActor,
@@ -561,23 +581,31 @@ async function approveOne(
   render: RenderFile,
 ): Promise<IdempotentResult<MarketActionResult>> {
   const bodyHash = bodyHashOf({ id, reason: input.reason, ...input.edits });
+  const seen = await getItemRow(id);
+  const flagged = input.bulk && Boolean(seen?.pii_flags?.length);
+  let prepared: { file: Awaited<ReturnType<RenderFile>>; updatedAt: number } | null = null;
+  if (seen?.status === "candidate" && !flagged) {
+    try {
+      const file = await render({ id, tool_id: seen.tool_id, title: editedColumns(seen, input.edits).title });
+      prepared = { file, updatedAt: new Date(seen.updated_at).getTime() };
+    } catch (err) {
+      log("warn", "[market] neytral fayl chizilmadi", { itemId: id, err });
+      throw new ApiError("Fayl chizilmadi. Ish navbatda qoldi.", 422, { code: "render_failed" });
+    }
+  }
   return idempotentMutation<MarketActionResult>(actor, { action: "market.approve", key: input.key, bodyHash }, async (client) => {
     const row = await lockItem(client, id);
     if (row.status !== "candidate") throw stateError("Bu ish navbatda emas");
     // Bulk approval never carries a work with PII hits: those are looked at one by one.
     if (input.bulk && row.pii_flags?.length) throw new ApiError("PII topilgan ish alohida tekshiriladi", 409, { code: "has_flags" });
+    if (!prepared || new Date(row.updated_at).getTime() !== prepared.updatedAt) {
+      throw new ApiError("Ish tasdiqlash paytida o'zgardi. Qayta urinib ko'ring.", 409, { code: "changed" });
+    }
     const c = editedColumns(row, input.edits);
     const family = marketFamilyOf(row.tool_id);
     if (!family) throw stateError("Bu vosita bozorda yo'q");
     const maxCopies = input.edits.maxCopies ?? (await getSettingInTx(client, MAX_COPIES_KEY[family]));
-    let file: Awaited<ReturnType<RenderFile>>;
-    try {
-      file = await render({ id, tool_id: row.tool_id, title: c.title });
-    } catch (err) {
-      log("warn", "[market] neytral fayl chizilmadi", { itemId: id, err });
-      throw new ApiError("Fayl chizilmadi. Ish navbatda qoldi.", 422, { code: "render_failed" });
-    }
-    await putNeutralFile(client, id, file);
+    await putNeutralFile(client, id, prepared.file);
     const { originalPrice } = await marketPriceInTx(client, row);
     await client.query(
       `UPDATE market_items
@@ -611,6 +639,7 @@ export async function approveMarketItem(
   const reason = parseReason(body.reason)!;
   const out = await approveOne(actor, id, { reason, edits: parseItemEdits(body), key, bulk: false }, render);
   invalidateMarketCatalogCache();
+  if (!out.replayed) warmApprovedItems([id]);
   return out;
 }
 
@@ -618,9 +647,10 @@ export type BulkApproveResult = { results: { id: string; ok: boolean; code?: str
 
 /**
  * Bulk approve: at most `BULK_APPROVE_MAX`, one reason. Each item is its own transaction and audit row with a derived
- * key, so one bad render costs only that item, and retrying the same request replays the done ones and retries the rest.
+ * key, so one bad item costs only that item, whatever went wrong (`code: "error"` on the unexpected), and retrying the
+ * same request replays the done ones and retries the rest. A longer selection is the client's batches.
  */
-export async function bulkApproveMarketItems(actor: AdminActor, body: Record<string, unknown>, key: string): Promise<BulkApproveResult> {
+export async function bulkApproveMarketItems(actor: AdminActor, body: Record<string, unknown>, key: string, render: RenderFile = renderNeutralFile): Promise<BulkApproveResult> {
   const reason = parseReason(body.reason)!;
   const raw = body.ids;
   if (!Array.isArray(raw) || raw.length < 1 || raw.length > BULK_APPROVE_MAX) throw new ApiError(`1 dan ${BULK_APPROVE_MAX} tagacha ish tanlang`, 400);
@@ -629,15 +659,20 @@ export async function bulkApproveMarketItems(actor: AdminActor, body: Record<str
   const results: BulkApproveResult["results"] = [];
   for (const id of ids) {
     try {
-      await approveOne(actor, id, { reason, edits: {}, key: `${key}:${id}`, bulk: true }, renderNeutralFile);
+      await approveOne(actor, id, { reason, edits: {}, key: `${key}:${id}`, bulk: true }, render);
       results.push({ id, ok: true });
     } catch (err) {
-      if (!(err instanceof ApiError)) throw err;
+      if (!(err instanceof ApiError)) {
+        log("error", "[market] ommaviy tasdiqlash", { itemId: id, err });
+        results.push({ id, ok: false, code: "error", message: "Kutilmagan xato. Qayta urinib ko'ring." });
+        continue;
+      }
       const code = typeof err.extra?.code === "string" ? err.extra.code : undefined;
       results.push({ id, ok: false, code, message: err.message });
     }
   }
   invalidateMarketCatalogCache();
+  warmApprovedItems(results.filter((r) => r.ok).map((r) => r.id));
   return { results, approved: results.filter((r) => r.ok).length };
 }
 
@@ -702,9 +737,10 @@ export async function unhideMarketItem(actor: AdminActor, id: string, body: Reco
 export type ResanitizeResult = MarketActionResult & { flags: number };
 
 /**
- * «Qayta tozalash» over the stored document. On a listed item the neutral file is dropped in the transaction (nothing
- * may serve the old text) and rendered again right after the commit; a failed re-render leaves the preview builder to
- * do it on the next view, which is why it only logs.
+ * «Qayta tozalash» over the stored document. The neutral file is dropped in the transaction whatever the status: a
+ * candidate's file (the admin's rasters made one) holds the old text too, and rasters of the new version would be drawn
+ * from it. A listed item gets its file again right after the commit; a candidate at approval. A failed re-render leaves
+ * the preview builder to do it on the next view, which is why it only logs.
  */
 export async function resanitizeMarketItem(actor: AdminActor, id: string, body: Record<string, unknown>, key: string): Promise<IdempotentResult<ResanitizeResult>> {
   const reason = parseReason(body.reason)!;
@@ -714,10 +750,8 @@ export async function resanitizeMarketItem(actor: AdminActor, id: string, body: 
     if (row.status === "rejected" || row.status === "retired") throw stateError("Bu ish qayta tozalanmaydi");
     const clean = await resanitizeItemInTx(client, id);
     if (!clean) throw stateError("Ishda hujjat yo'q");
-    if (row.status !== "candidate") {
-      await client.query("DELETE FROM market_item_files WHERE item_id = $1", [id]);
-      rerender = { id, tool_id: row.tool_id, title: row.title };
-    }
+    await client.query("DELETE FROM market_item_files WHERE item_id = $1", [id]);
+    if (row.status !== "candidate") rerender = { id, tool_id: row.tool_id, title: row.title };
     return {
       response: { id, status: row.status, flags: clean.flags },
       audit: { targetType: "market_item", targetId: id, reason, before: { flags: row.pii_flags?.length ?? 0 }, after: { flags: clean.flags } },
@@ -856,13 +890,20 @@ export async function setPurchaseAbuseFlag(actor: AdminActor, id: string, body: 
 
 /* ────────────────────────── manual scan ────────────────────────── */
 
-/** The manual scan works while the market is dark: that is how the first queue is filled (§10.5). */
+/**
+ * The manual scan works while the market is dark: that is how the first queue is filled (§10.5). It runs outside any
+ * transaction, a short batch under a time cap, and the audit row comes after, so no connection or lock waits on it. A
+ * retry with the same key finds the stored answer first and scans nothing; the scan's own advisory lock covers two
+ * requests racing past that check. The answer stays in the overview (`lastScan`) if the client gave up waiting.
+ */
 export async function runMarketScan(actor: AdminActor, body: Record<string, unknown>, key: string): Promise<IdempotentResult<ScanResult>> {
   const reason = parseReason(body.reason)!;
-  return idempotentMutation<ScanResult>(actor, { action: "market.scan", key, bodyHash: bodyHashOf({ reason }) }, async () => {
-    const result = await scanMarketCandidates();
-    return { response: result, audit: { targetType: "market", reason, after: result } };
-  });
+  const opts = { action: "market.scan", key, bodyHash: bodyHashOf({ reason }) };
+  const prior = await findIdempotentReplay<ScanResult>(actor, opts);
+  if (prior) return prior;
+  const batch = Math.min(MANUAL_SCAN_BATCH, await getSetting("market.backfill_batch"));
+  const result = await scanMarketCandidates({ batch, budgetMs: MANUAL_SCAN_BUDGET_MS });
+  return idempotentMutation<ScanResult>(actor, opts, async () => ({ response: result, audit: { targetType: "market", reason, after: result } }));
 }
 
 /* ────────────────────────── stats ────────────────────────── */

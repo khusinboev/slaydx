@@ -55,7 +55,7 @@ const json = (status: number, data: unknown) => new Response(JSON.stringify(data
 type Call = { method: string; body: Record<string, unknown> | null; path: string; search: URLSearchParams; headers: Headers };
 
 const ID = "3fa1c2d4-5b6e-4f70-8a91-b2c3d4e5f607";
-const OVERVIEW = { enabled: false, candidates: 2, active: 1, soldOut: 0, retired: 0, errors: 0, reported: 0, trgm: false, previews: true };
+const OVERVIEW = { enabled: false, candidates: 2, active: 1, soldOut: 0, retired: 0, errors: 0, reported: 0, trgm: false, previews: true, lastScan: null };
 const ITEM = {
   id: ID,
   toolId: "referat",
@@ -218,7 +218,7 @@ test("the sanitised document opens in the real viewer for a reviewer; a row with
   await d.findByText(/ko'rsatiladigan hujjat yo'q/);
 });
 
-test("a view-only role sees the rasters and no action", async () => {
+test("a view-only role: no action; an unlisted work shows a note instead of rasters the server refuses", async () => {
   stub();
   mount("viewer");
   const d = await openDrawer();
@@ -226,9 +226,17 @@ test("a view-only role sees the rasters and no action", async () => {
   assert.ok(!d.queryByRole("button", { name: "Tasdiqlash" }));
   assert.ok(!d.queryByRole("button", { name: "Rad etish" }));
   assert.ok(!d.queryByLabelText("Sarlavha"));
-  const img = d.getByAltText("1-sahifa") as HTMLImageElement;
-  assert.ok(img.src.endsWith(`/api/admin/market/items/${ID}/preview/1?v=3`));
+  assert.ok(!d.queryByAltText("1-sahifa"), "a candidate's rasters need market.manage");
+  assert.ok(document.querySelector("[data-market-no-rasters]"));
   assert.ok(!screen.queryByRole("button", { name: "Skanerlash" }), "no scan without market.manage");
+});
+
+test("a view-only role sees the shop-window rasters of a listed work", async () => {
+  stub((c) => (c.path.endsWith(`/market/items/${ID}`) ? json(200, { ...DETAIL, status: "active" }) : null));
+  mount("viewer");
+  const d = await openDrawer();
+  const img = (await d.findByAltText("1-sahifa")) as HTMLImageElement;
+  assert.ok(img.src.endsWith(`/api/admin/market/items/${ID}/preview/1?v=3`));
 });
 
 test("reject needs a reason code", async () => {
@@ -275,11 +283,11 @@ test("bulk: a flagged work is named, only flagged works disable the button", asy
   assert.equal((within(bar).getByRole("button", { name: "Tanlanganlarni tasdiqlash" }) as HTMLButtonElement).disabled, true);
 });
 
-test("bulk: more than 10 needs the count typed; the request carries every id", async () => {
+test("bulk: more than 10 needs the count typed; the selection goes in batches of 5, each with its own key, every id once", async () => {
   const items = Array.from({ length: 11 }, (_, i) => ({ ...ITEM, id: `3fa1c2d4-5b6e-4f70-8a91-b2c3d4e5f6${String(i).padStart(2, "0")}`, title: `Ish ${i}` }));
   const calls = stub((c) => {
     if (c.path.endsWith("/market/items")) return json(200, list(items));
-    if (c.path.endsWith("/bulk-approve")) return json(200, { approved: 11, results: [] });
+    if (c.path.endsWith("/bulk-approve")) return json(200, { approved: (c.body!.ids as string[]).length, results: [] });
     return null;
   });
   const { container } = mount();
@@ -293,10 +301,40 @@ test("bulk: more than 10 needs the count typed; the request carries every id", a
   fireEvent.change(within(dlg).getByLabelText(/deb yozing/), { target: { value: "11" } });
   assert.equal(go.disabled, false);
   fireEvent.click(go);
-  await waitFor(() => assert.ok(calls.some((c) => c.path.endsWith("/bulk-approve"))));
-  const post = calls.find((c) => c.path.endsWith("/bulk-approve"))!;
-  assert.equal((post.body!.ids as string[]).length, 11);
-  assert.equal(post.body!.reason, "Hammasi ko'rildi");
+  const posts = () => calls.filter((c) => c.path.endsWith("/bulk-approve"));
+  await waitFor(() => assert.equal(posts().length, 3));
+  assert.deepEqual(posts().map((c) => (c.body!.ids as string[]).length), [5, 5, 1]);
+  assert.equal(new Set(posts().flatMap((c) => c.body!.ids as string[])).size, 11);
+  assert.equal(posts()[0]!.body!.reason, "Hammasi ko'rildi");
+  assert.equal(new Set(posts().map((c) => c.headers.get("Idempotency-Key"))).size, 3, "a key per request");
+});
+
+test("bulk: a failed batch keeps only the rest selected, so confirming again resumes there", async () => {
+  const items = Array.from({ length: 7 }, (_, i) => ({ ...ITEM, id: `3fa1c2d4-5b6e-4f70-8a91-b2c3d4e5f6${String(i).padStart(2, "0")}`, title: `Ish ${i}` }));
+  let n = 0;
+  stub((c) => {
+    if (c.path.endsWith("/market/items")) return json(200, list(items));
+    if (c.path.endsWith("/bulk-approve")) return ++n === 1 ? json(200, { approved: 5, results: [] }) : json(409, { error: "Xato" });
+    return null;
+  });
+  const { container } = mount();
+  await screen.findAllByText("Ish 0");
+  selectAll(container);
+  fireEvent.click(screen.getByRole("button", { name: "Tanlanganlarni tasdiqlash" }));
+  const dlg = await screen.findByRole("dialog", { name: "Tanlangan ishlarni tasdiqlash" });
+  fireEvent.change(within(dlg).getByLabelText("Sabab"), { target: { value: "Hammasi ko'rildi" } });
+  fireEvent.click(within(dlg).getByRole("button", { name: "Tasdiqlash" }));
+  await waitFor(() => assert.equal(n, 2));
+  await waitFor(() => assert.match((container.querySelector("[data-bulk-bar]") as HTMLElement).textContent ?? "", /^2 ta tanlandi/));
+});
+
+test("the queue shows the last manual scan, with a note when its time ran out", async () => {
+  stub((c) => (c.path.endsWith("/overview") ? json(200, { ...OVERVIEW, lastScan: { locked: false, scanned: 20, created: 12, rejected: 8, stopped: true, at: new Date().toISOString() } }) : null));
+  const { container } = mount();
+  await waitFor(() => assert.ok(container.querySelector("[data-last-scan]")));
+  const line = container.querySelector("[data-last-scan]")!.textContent ?? "";
+  assert.match(line, /ko'rildi 20, nomzod 12, rad etildi 8/);
+  assert.match(line, /qolgani keyingi skanerlashda/);
 });
 
 test("sales tab: the server's numbers; the CSV button needs finance.export", async () => {

@@ -53,6 +53,9 @@ export function ItemPreview({ item, canManage }: { item: MarketItemDetail; canMa
   const [mode, setMode] = useState<"doc" | "rasters">(canManage ? "doc" : "rasters");
   const deck = item.toolId === "slide" || item.toolId === "pro-slide";
   if (!item.hasDoc) return <p className="text-muted-foreground text-[13px]">Bu ishda ko&apos;rsatiladigan hujjat yo&apos;q.</p>;
+  if (!canManage && item.status !== "active" && item.status !== "sold_out") {
+    return <p data-market-no-rasters className="text-muted-foreground text-[13px]">Sotuvda bo&apos;lmagan ishning namunasi faqat bozorni boshqaruvchilarga ochiq.</p>;
+  }
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
