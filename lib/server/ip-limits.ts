@@ -63,6 +63,17 @@ export const IP_LIMITS = {
   submitPerGamePerIp: { count: 120, windowSec: 60 },
   /** O'yin natijasi — IP shipi (barcha o'yinlar). */
   submitPerIp: { count: 600, windowSec: 60 },
+
+  /** Ishlar bozori katalogi — IP shipi (NAT ga sig'adi; scraping brauzer chegarasiga uriladi). */
+  marketListPerIp: { count: 300, windowSec: 300 },
+  /** Ishlar bozori katalogi — bitta brauzer. */
+  marketListPerBrowser: { count: 120, windowSec: 300 },
+  /** Bozor namunasi (rasm) — IP shipi: bitta sahifa o'nlab kartani yuklaydi. */
+  marketPreviewPerIp: { count: 600, windowSec: 300 },
+  /** «Shu mavzuda tayyor ish» maslahati — IP shipi (forma terilayotganda chaqiriladi). */
+  marketSuggestPerIp: { count: 120, windowSec: 300 },
+  /** Bozor ishiga shikoyat — bitta IP. */
+  marketReportPerIp: { count: 20, windowSec: 3600 },
 } as const;
 
 /** Brauzer kaliti cookie'si — faqat chastota chegarasi uchun, sessiya EMAS. */

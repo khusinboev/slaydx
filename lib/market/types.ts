@@ -88,7 +88,7 @@ export const MARKET_ERROR_CODES = [
 ] as const;
 export type MarketErrorCode = (typeof MARKET_ERROR_CODES)[number];
 
-export type PiiKind = "name" | "phone" | "email" | "username" | "telegram" | "url";
+export type PiiKind = "name" | "institution" | "phone" | "email" | "username" | "telegram";
 /** One PII hit found by the sanitiser. `path` points into the source document; the matched value itself is never stored. */
 export type PiiFlag = { kind: PiiKind; path: string };
 
