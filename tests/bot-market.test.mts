@@ -14,7 +14,7 @@
  *   7. `marketOptOutState` always returns a boolean                   -> «profile: no line while the market is off»;
  *   8. the callback sets `!c.optOut`                                  -> «profile: the toggle»;
  *   9. `parseCallback` accepts `m:o:2`                                -> «callback codes»;
- *  10. `refreshBotMenuFor` without `market.enabled`, and `setBotCommands` without the filter -> «menu».
+ *  10. `setBotCommands` without the `market` filter                  -> «menu».
  */
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
 process.env.APP_URL = "https://slaydx.test";
