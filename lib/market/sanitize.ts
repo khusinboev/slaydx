@@ -129,6 +129,9 @@ type Scrubber = (text: string, path: string, mode?: { names?: boolean; username?
 
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+/** Case endings glued to the last word of an institution, in both scripts («Akademiyasida», «Академиясида»). */
+const PHRASE_SUFFIX = "-?(?:ning|ni|ga|ka|qa|da|dan|ta|нинг|ни|га|ка|қа|да|дан|та)";
+
 /** A phrase as a regex: any whitespace between words, any apostrophe, case-insensitive. */
 function phraseRe(phrase: string): RegExp {
   const body = phrase
@@ -136,7 +139,7 @@ function phraseRe(phrase: string): RegExp {
     .split(/\s+/)
     .map((w) => escapeRe(w).replace(/['ʻʼ’‘`´]/g, "['ʻʼ’‘`´]"))
     .join("\\s+");
-  return new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, "giu");
+  return new RegExp(`(?<![\\p{L}\\p{N}])${body}(?:${PHRASE_SUFFIX})?(?![\\p{L}\\p{N}])`, "giu");
 }
 
 /** The name words of a person's line: normalised, no patronymic markers, nothing the topic itself is about. */

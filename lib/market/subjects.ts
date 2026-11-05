@@ -34,7 +34,7 @@ const KEYWORDS: Readonly<Record<Exclude<MarketSubjectId, "boshqa">, readonly str
   matematika: ["matemat", "algebra", "geometr", "trigonometr", "tenglama", "integral", "hosila", "funksiya", "statistik", "ehtimol", "uravneni", "mathemat"],
   fizika: ["fizik", "mexanika", "termodinamik", "elektromagnit", "optika", "kvant", "yadro fizik", "physics"],
   kimyo: ["kimyo", "ximi", "organik", "noorganik", "kislota", "molekula", "chemistry", "reaksiya"],
-  biologiya: ["biolog", "botanik", "zoolog", "genetik", "ekolog", "hujayra", "anatomiya", "biology", "evolyutsiya"],
+  biologiya: ["biolog", "fotosintez", "botanik", "zoolog", "genetik", "ekolog", "hujayra", "anatomiya", "biology", "evolyutsiya"],
   informatika: ["informatik", "dasturlash", "algoritm", "kompyuter", "python", "java", "malumotlar bazasi", "sun iy intellekt", "suniy intellekt", "web", "tarmoq", "kiberxavfsizlik", "axborot texnolog", "programm", "software", "computer"],
   tarix: ["tarix", "istori", "temuriy", "qadimgi", "sivilizatsiya", "amir temur", "ipak yoli", "history", "arxeolog"],
   "ona-tili-adabiyot": ["ona tili", "adabiyot", "tilshunos", "morfolog", "sintaksis", "fonetik", "sheriyat", "navoiy", "alisher", "gazal", "doston", "literatur"],
