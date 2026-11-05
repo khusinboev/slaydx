@@ -188,7 +188,7 @@ test("effectiveRoute: db beats env beats default", () => {
   setRouteSnapshot(new Map([["llm.judge", [{ provider: "gemini", model: "gemini-3.1-pro" }]], ["llm.model", [{ provider: "gemini", model: "gemini-3.1-pro" }]]]));
   assert.deepEqual(effectiveRoute("llm.judge", env), { source: "db", entries: [{ provider: "gemini", model: "gemini-3.1-pro" }] }, "the stored choice beats the env value");
   assert.equal(geminiTextModel(env), "gemini-3.1-pro");
-  assert.deepEqual(effectiveRoute("llm.writer", env).entries, [{ provider: "gemini", model: "gemini-3.1-pro" }], "the writer default follows the stored text model");
+  assert.deepEqual(effectiveRoute("llm.writer", env).entries, [{ provider: "gemini", model: "gemini-3.1-pro" }, ...DEFAULT_TEXT_FALLBACKS], "the writer default follows the stored text model");
   assert.equal(effectiveRoute("llm.judge", env, { ignoreStored: true }).source, "env", "what «Standartga qaytarish» restores");
   resetRouteSnapshot();
   assert.equal(effectiveRoute("llm.judge", env).source, "env");
