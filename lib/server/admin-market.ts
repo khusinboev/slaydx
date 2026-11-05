@@ -6,6 +6,7 @@ import { isMarketTool, marketFamilyOf, MARKET_TOOL_IDS, MAX_COPIES_KEY } from ".
 import { isMarketSubject, MARKET_SUBJECTS } from "../market/subjects";
 import { MARKET_ASSET_PREFIX, type MarketLevel, type MarketStatus, type MarketSubjectId, type PiiFlag } from "../market/types";
 import { SCRUB_MARK } from "../market/sanitize";
+import { cleanText } from "../generation/safe-text";
 import { TOOL_BY_ID } from "../tools";
 import type { ToolId } from "../types";
 import type { AcademicDoc } from "../generation/types";
@@ -34,7 +35,7 @@ import {
 import { can } from "./admin-rbac";
 import { getSetting, getSettingInTx } from "./settings";
 import { candidateCount, resanitizeItemInTx, scanMarketCandidates, type ScanResult } from "./market/candidates";
-import { previewPagesOf, ratingOf, renderNeutralFile } from "./market/items";
+import { previewPagesOf, renderNeutralFile } from "./market/items";
 import { marketPriceForItem, marketPriceInTx, marketPricingConfig, invalidateMarketPricingCache, listToolPercents, setItemPriceOverrideInTx, setToolPercentInTx, type MarketPricingConfig } from "./market/pricing";
 import { previewsAvailable } from "./market/previews";
 import { invalidateMarketCatalogCache, marketTrgmAvailable } from "./market/search";
@@ -316,6 +317,8 @@ export type MarketItemDetail = MarketAdminItem & {
   flagsList: MarketFlagView[];
   previewPages: number;
   previewVersion: number;
+  /** A row the scan rejected, or one past the 90-day GC, has an empty document. */
+  hasDoc: boolean;
   neutralFile: { fileName: string; sizeBytes: number } | null;
   reportsList: { reason: string; createdAt: string }[];
   /** Only with `users.pii`. */
@@ -343,8 +346,8 @@ export function flagExcerpt(text: string | null): string | null {
 }
 
 export async function marketItemDetail(id: string, admin: Pick<AdminActor, "role">): Promise<MarketItemDetail> {
-  const r = await queryOne<ItemRow & { file_name: string | null; file_size: string | null }>(
-    `SELECT ${ITEM_SELECT}, f.file_name, f.size_bytes AS file_size
+  const r = await queryOne<ItemRow & { file_name: string | null; file_size: string | null; has_doc: boolean }>(
+    `SELECT ${ITEM_SELECT}, f.file_name, f.size_bytes AS file_size, m.doc_json ? 'meta' AS has_doc
        FROM market_items m LEFT JOIN market_item_files f ON f.item_id = m.id
       WHERE m.id = $1`,
     [id],
@@ -363,6 +366,7 @@ export async function marketItemDetail(id: string, admin: Pick<AdminActor, "role
     flagsList: (r.pii_flags ?? []).map((f) => ({ ...f, excerpt: flagExcerpt(textAtPath(doc, f.path)) })),
     previewPages,
     previewVersion: r.preview_version,
+    hasDoc: r.has_doc,
     neutralFile: r.file_name ? { fileName: r.file_name, sizeBytes: Number(r.file_size) } : null,
     reportsList: reports.map((x) => ({ reason: x.reason, createdAt: new Date(x.created_at).toISOString() })),
     source: can(admin.role, "users.pii") ? { userId: r.source_user_id, generationId: r.source_generation_id } : null,
@@ -459,12 +463,12 @@ export type ItemEdits = { title?: string; summary?: string; subject?: MarketSubj
 export function parseItemEdits(body: Record<string, unknown>): ItemEdits {
   const out: ItemEdits = {};
   if (body.title !== undefined) {
-    const title = typeof body.title === "string" ? body.title.replace(/\s+/g, " ").trim() : "";
+    const title = typeof body.title === "string" ? cleanText(body.title).replace(/\s+/g, " ").trim() : "";
     if (!title || Array.from(title).length > TITLE_MAX) throw new ApiError(`Sarlavha 1–${TITLE_MAX} belgi bo'lsin`, 400);
     out.title = title;
   }
   if (body.summary !== undefined) {
-    const summary = typeof body.summary === "string" ? body.summary.trim() : null;
+    const summary = typeof body.summary === "string" ? cleanText(body.summary).trim() : null;
     if (summary === null || Array.from(summary).length > SUMMARY_MAX) throw new ApiError(`Tavsif ${SUMMARY_MAX} belgidan oshmasin`, 400);
     out.summary = summary;
   }
@@ -1009,4 +1013,3 @@ export function salesPageFetcher(p: SalesParams) {
   };
 }
 
-export { ratingOf };

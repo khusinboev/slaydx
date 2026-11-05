@@ -52,9 +52,7 @@ function Rasters({ item }: { item: MarketItemDetail }) {
 export function ItemPreview({ item, canManage }: { item: MarketItemDetail; canManage: boolean }) {
   const [mode, setMode] = useState<"doc" | "rasters">(canManage ? "doc" : "rasters");
   const deck = item.toolId === "slide" || item.toolId === "pro-slide";
-  // A row the scan rejected has an empty document: nothing to show.
-  const hasDoc = !(item.status === "rejected" && item.quality === null);
-  if (!hasDoc) return <p className="text-muted-foreground text-[13px]">Bu ishda ko&apos;rsatiladigan hujjat yo&apos;q.</p>;
+  if (!item.hasDoc) return <p className="text-muted-foreground text-[13px]">Bu ishda ko&apos;rsatiladigan hujjat yo&apos;q.</p>;
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">

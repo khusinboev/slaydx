@@ -510,9 +510,17 @@ test("detail: flags with excerpts; the author only with users.pii", { skip }, as
   const noPii = await call(R.item.GET as Handler, "GET", await session("moderator"), { params: { id } });
   assert.equal(noPii.status, 200);
   assert.equal(noPii.body.source, null);
+  assert.equal(noPii.body.hasDoc, true);
   assert.ok(!noPii.text.includes(`"${author.id}"`));
   assert.equal((await call(R.item.GET as Handler, "GET", await session("viewer"), { params: { id: randomUUID() } })).status, 404);
   assert.equal((await call(R.item.GET as Handler, "GET", await session("viewer"), { params: { id: "1 OR 1=1" } })).status, 404);
+});
+
+test("detail: a row the scan rejected has no document", { skip }, async () => {
+  const id = await mkItem({ status: "rejected", doc: {}, rejectReason: "quality" });
+  const r = await call(R.item.GET as Handler, "GET", await session("viewer"), { params: { id } });
+  assert.equal(r.body.hasDoc, false);
+  assert.equal((await call(R.doc.GET as Handler, "GET", await session("moderator"), { params: { id } })).status, 404);
 });
 
 test("detail: an author who opted out later is marked", { skip }, async () => {

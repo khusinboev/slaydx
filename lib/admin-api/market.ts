@@ -100,6 +100,7 @@ export type MarketItemDetail = MarketAdminItem & {
   flagsList: MarketFlag[];
   previewPages: number;
   previewVersion: number;
+  hasDoc: boolean;
   neutralFile: { fileName: string; sizeBytes: number } | null;
   reportsList: { reason: string; createdAt: string }[];
   source: { userId: string | null; generationId: string | null } | null;

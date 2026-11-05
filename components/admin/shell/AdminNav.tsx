@@ -38,7 +38,7 @@ const ICONS: Record<AdminNavIcon, LucideIcon> = {
   bonus: Gift,
   ratings: Star,
   moderation: Flag,
-  market: Store,
+  store: Store,
   broadcasts: Send,
   settings: SlidersHorizontal,
   providers: KeyRound,

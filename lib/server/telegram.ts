@@ -1011,8 +1011,9 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
     return;
   }
 
-  if (text.startsWith("/market")) {
-    await bot.sendMarket(msg.chat.id, lang);
+  // Private chats only: Telegram refuses `web_app` buttons in groups.
+  if (text.startsWith("/market") && ctx) {
+    await bot.sendMarket(ctx.chatId, ctx.lang);
     return;
   }
 
