@@ -44,7 +44,7 @@ const ADMIN_SECTIONS = [
 ] as const;
 
 /** `/uz/<x>` segments that are their own pages, not tool slugs. */
-const UZ_RESERVED = ["create", "purchase", "wallet", "profile", "login", "files", "admin", "convert", "alifbo", "domla", "chat", "tests"] as const;
+const UZ_RESERVED = ["create", "purchase", "wallet", "profile", "login", "files", "admin", "convert", "alifbo", "domla", "chat", "tests", "market"] as const;
 
 /** `/uz/profile/<step>` (docs/redesign/PLAN.md; kept in sync with `lib/nav/tabs.ts PROFILE_STEPS` by a test). */
 const PROFILE_STEP_RE = "(?:shaxsiy|oqish|ish|korinish|xavfsizlik)";
@@ -75,6 +75,9 @@ export const ROUTE_RULES: readonly RouteRule[] = [
   { route: "/uz/chat", match: /^\/uz\/chat$/, parent: "/uz" },
   { route: "/uz/tests", match: /^\/uz\/tests$/, parent: "/uz" },
   { route: "/uz/admin", match: /^\/uz\/admin$/, parent: "/uz" },
+  { route: "/uz/market", match: /^\/uz\/market$/, parent: "/uz" },
+  { route: "/uz/market/purchases", match: /^\/uz\/market\/purchases$/, parent: "/uz/market" },
+  { route: "/uz/market/[id]", match: new RegExp(`^/uz/market/${SEG}$`), parent: "/uz/market" },
   { route: "/uz/files/[id]", match: new RegExp(`^/uz/files/${SEG}$`), parent: "/uz/files" },
   {
     route: "/uz/login",

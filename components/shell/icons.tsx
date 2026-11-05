@@ -26,6 +26,7 @@ import {
   Presentation,
   Puzzle,
   Sparkles,
+  Store,
   Video,
 } from "lucide-react";
 
@@ -58,6 +59,8 @@ export const TOOL_ICONS: Record<string, LucideIcon> = {
   video: Video,
   /* Studio (docs/studio/P1-SPEC.md): the home card and the Media group tile. */
   sparkles: Sparkles,
+  /* «Ishlar bozori» (docs/market/PLAN.md §5.1). */
+  store: Store,
   /* AUDIT-21: krossvord, flesh kartalar, infografika. */
   puzzle: Puzzle,
   layers: Layers,

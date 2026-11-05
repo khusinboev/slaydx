@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { isToolSlug, TOOL_BY_SLUG } from "@/lib/tools";
 import { ToolWorkspace } from "@/components/forms/ToolWorkspace";
+import { MarketSuggest } from "@/components/market/MarketSuggest";
+import { isMarketTool } from "@/lib/market/registry";
 
 /** Tool slugs that own a static route (`app/uz/<slug>/page.tsx`): the static page wins, `[slug]` must not pre-render them too. */
 const OWN_PAGE_SLUGS: readonly string[] = [
@@ -30,5 +32,11 @@ export async function generateMetadata({
 export default async function ToolPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   if (!isToolSlug(slug)) notFound();
-  return <ToolWorkspace tool={TOOL_BY_SLUG[slug]} />;
+  const tool = TOOL_BY_SLUG[slug];
+  return (
+    <>
+      <ToolWorkspace tool={tool} />
+      {isMarketTool(tool.id) ? <MarketSuggest toolId={tool.id} /> : null}
+    </>
+  );
 }

@@ -64,6 +64,8 @@ export function tabBarRoute(pathname: string): boolean {
   const p = normalize(pathname);
   if (p === "/uz" || p === "/uz/files" || p === "/uz/wallet" || p === "/uz/purchase" || p === "/uz/create") return true;
   if (p === "/uz/profile") return true;
+  // «Ishlar bozori»: the catalog, an item (its buy bar docks above the bar) and «Xaridlarim».
+  if (p === "/uz/market" || /^\/uz\/market\/[^/]+$/.test(p)) return true;
   const step = /^\/uz\/profile\/([^/]+)$/.exec(p);
   return step != null && isProfileStep(step[1]!);
 }
