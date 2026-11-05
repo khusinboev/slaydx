@@ -147,6 +147,7 @@ export type MarketStats = {
   topItems: MarketStatRow[];
   byTool: MarketStatRow[];
   bySubject: MarketStatRow[];
+  bySignupAge: MarketStatRow[];
 };
 
 export type MarketToolPricing = { toolId: string; title: string; percent: number | null; effective: number; disabled: boolean; active: number };

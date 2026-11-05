@@ -97,6 +97,7 @@ export function SalesTab() {
             <RankCard title="Vositalar bo'yicha" head="Vosita" rows={s.byTool} />
             <RankCard title="Fanlar bo'yicha" head="Fan" rows={s.bySubject} />
           </div>
+          <RankCard title="Xaridor hisobining yoshi" head="Hisob yoshi" rows={s.bySignupAge} />
         </>
       ) : null}
     </div>

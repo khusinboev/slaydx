@@ -10,9 +10,8 @@ import { marketWorkDoc } from "./helpers/market-fixtures.mts";
  * route matrix itself lives in tests/admin-permission-matrix.test.mts, which discovers these routes from the tree.
  *
  * Mutations (each turned the named test red, then restored byte for byte):
- *   1. `putNeutralFile` moved after the audit-less commit (no call in `approveOne`)      -> «approve: file, status, …»;
- *   2. the render's catch removed, so a failed render still flips the status             -> covered by «failing render»: red
- *      when `throw new ApiError(... render_failed)` is replaced by a `return`-less skip;
+ *   1. the `putNeutralFile` call removed from `approveOne`                                -> «approve: file, status, …», «file: audited read»;
+ *   2. the render failure swallowed (a stub file instead of the 422)                     -> «a failing render rolls back», «bulk: one audit row»;
  *   3. `original_price` left out of the approval UPDATE                                  -> «approve: file, status, …»;
  *   4. `invalidateMarketCatalogCache()` dropped from `approveMarketItem`                 -> «approve: the catalog shows it at once»;
  *   5. `parseReason` of reject made optional                                             -> «reason is required»;
@@ -26,7 +25,7 @@ import { marketWorkDoc } from "./helpers/market-fixtures.mts";
  *  12. `source` returned without the `users.pii` check                                   -> «detail: the author only with users.pii»;
  *  13. `market.file_read` audit removed                                                  -> «file: audited read»;
  *  14. `marketItemDoc` returns the stored doc without the placeholder rewrite            -> «doc: images through the admin route»;
- *  15. the abuse route without the state check                                           -> «abuse flag».
+ *  15. the abuse route without the state check                                           -> «buyers: masked names …».
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -661,6 +660,7 @@ test("stats: hand-computed fixture over Tashkent days", { skip }, async () => {
     topItems: { label: string; purchases: number; revenue: number }[];
     byTool: { id: string; label: string; purchases: number }[];
     bySubject: { id: string; label: string; revenue: number }[];
+    bySignupAge: { id: string; purchases: number }[];
   };
   assert.equal(st.purchases, 3);
   assert.equal(st.gross, 6000);
@@ -677,6 +677,8 @@ test("stats: hand-computed fixture over Tashkent days", { skip }, async () => {
   assert.deepEqual(st.byTool.map((t) => [t.id, t.purchases]), [["referat", 2], ["essay", 1]]);
   assert.equal(st.byTool[0]!.label, "Referat");
   assert.deepEqual(st.bySubject.map((t) => [t.id, t.label, t.revenue]), [["tarix", "Tarix", 5000], ["fizika", "Fizika", 1000]]);
+  // The fixture accounts were created a moment ago and bought «yesterday»: negative age, the youngest bucket.
+  assert.deepEqual(st.bySignupAge.map((t) => [t.id, t.purchases]), [["1", 3]]);
   assert.equal((await call(R.stats.GET as Handler, "GET", s, { qs: "?days=8" })).status, 400);
 
   // CSV: same fixture, the same refund, step-up permission, one audit row.

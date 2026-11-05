@@ -895,7 +895,17 @@ export type MarketStats = {
   topItems: MarketStatRow[];
   byTool: MarketStatRow[];
   bySubject: MarketStatRow[];
+  /** Account age at purchase: a spike of fresh accounts is the farming signal of §3.1. */
+  bySignupAge: MarketStatRow[];
 };
+
+/** Account age at the moment of purchase, youngest first. */
+const AGE_BUCKETS: readonly { id: string; label: string }[] = [
+  { id: "1", label: "1 kungacha" },
+  { id: "7", label: "1–7 kun" },
+  { id: "30", label: "8–30 kun" },
+  { id: "old", label: "30 kundan ko'p" },
+];
 
 const TK_DAY = "(p.created_at AT TIME ZONE 'Asia/Tashkent')::date";
 const IN_RANGE = "p.created_at >= $1::timestamptz AND p.created_at < $2::timestamptz";
@@ -932,6 +942,17 @@ export async function marketStats(range: DateRange): Promise<MarketStats> {
       await rank("i.tool_id AS id, i.tool_id AS label", "i.tool_id", MARKET_TOOL_IDS.length + 5),
       await rank("i.subject AS id, i.subject AS label", "i.subject", MARKET_SUBJECTS.length + 5),
     ];
+    const ages = await client.query<{ id: string; n: string; revenue: string }>(
+      `SELECT CASE WHEN p.created_at - u.created_at < interval '1 day' THEN '1'
+                   WHEN p.created_at - u.created_at < interval '7 days' THEN '7'
+                   WHEN p.created_at - u.created_at < interval '30 days' THEN '30'
+                   ELSE 'old' END AS id,
+              count(*) AS n, COALESCE(sum(p.price), 0) AS revenue
+         FROM market_purchases p JOIN users u ON u.id = p.buyer_user_id
+        WHERE ${IN_RANGE}
+        GROUP BY 1`,
+      bounds,
+    );
     const toRow = (r: { id: string; label: string; n: string; revenue: string }): MarketStatRow => ({ id: r.id, label: r.label, purchases: Number(r.n), revenue: Number(r.revenue) });
     const purchases = Number(totals?.n ?? 0);
     const gross = Number(totals?.gross ?? 0);
@@ -952,6 +973,10 @@ export async function marketStats(range: DateRange): Promise<MarketStats> {
       topItems: top.rows.map(toRow),
       byTool: tools.rows.map((r) => ({ ...toRow(r), label: TOOL_BY_ID[r.id as ToolId]?.title ?? r.id })),
       bySubject: subjects.rows.map((r) => ({ ...toRow(r), label: MARKET_SUBJECTS.find((s) => s.id === r.id)?.label ?? r.id })),
+      bySignupAge: AGE_BUCKETS.flatMap((b) => {
+        const r = ages.rows.find((x) => x.id === b.id);
+        return r ? [{ id: b.id, label: b.label, purchases: Number(r.n), revenue: Number(r.revenue) }] : [];
+      }),
     };
   });
 }

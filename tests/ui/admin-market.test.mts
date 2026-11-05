@@ -19,8 +19,8 @@ import { marketWorkDoc } from "../helpers/market-fixtures.mts";
  * the role (cosmetic; the server enforces them), bulk approve is careful, and the other tabs draw the server's numbers.
  *
  * Mutations (each turned the named test red, then restored byte for byte):
- *   1. the page's loader back to an inline arrow in `useLoad`        -> «opens with bounded requests», and the source test
- *      in admin-studio-library;
+ *   1. the page's loader back to an inline arrow in `useLoad`        -> this file hangs until heavy.sh kills it, and
+ *      «source: no admin component passes an inline arrow» in tests/ui/admin-studio-library.test.mts goes red;
  *   2. `<Flags item={item} />` removed from the drawer               -> «drawer: the PII flags»;
  *   3. `editsOf` returns the whole form                              -> «approve: only what changed»;
  *   4. `canManage` forced to true in `Loaded`                        -> «a view-only role»;
@@ -55,7 +55,6 @@ const json = (status: number, data: unknown) => new Response(JSON.stringify(data
 type Call = { method: string; body: Record<string, unknown> | null; path: string; search: URLSearchParams; headers: Headers };
 
 const ID = "3fa1c2d4-5b6e-4f70-8a91-b2c3d4e5f607";
-const ID2 = "3fa1c2d4-5b6e-4f70-8a91-b2c3d4e5f608";
 const OVERVIEW = { enabled: false, candidates: 2, active: 1, soldOut: 0, retired: 0, errors: 0, reported: 0, trgm: false, previews: true };
 const ITEM = {
   id: ID,
@@ -116,6 +115,7 @@ const STATS = {
   topItems: [{ id: ID, label: "Energetika tarixi", purchases: 3, revenue: 6000 }],
   byTool: [{ id: "referat", label: "Referat", purchases: 3, revenue: 6000 }],
   bySubject: [{ id: "tarix", label: "Tarix", purchases: 3, revenue: 6000 }],
+  bySignupAge: [{ id: "1", label: "1 kungacha", purchases: 3, revenue: 6000 }],
 };
 
 function stub(over: (c: Call) => Response | null = () => null): Call[] {
@@ -297,7 +297,6 @@ test("bulk: more than 10 needs the count typed; the request carries every id", a
   const post = calls.find((c) => c.path.endsWith("/bulk-approve"))!;
   assert.equal((post.body!.ids as string[]).length, 11);
   assert.equal(post.body!.reason, "Hammasi ko'rildi");
-  assert.ok(ID2, "fixture id kept for the single-item tests");
 });
 
 test("sales tab: the server's numbers; the CSV button needs finance.export", async () => {
