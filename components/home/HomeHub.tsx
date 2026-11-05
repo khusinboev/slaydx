@@ -65,7 +65,10 @@ export function HomeHub() {
               <HeaderIconButton label="Qidirish" title="Qidirish (Ctrl+K)" aria-keyshortcuts="Control+K Meta+K" onClick={() => open("search")}>
                 <Search className="size-[1.2rem]" aria-hidden />
               </HeaderIconButton>
-              <ThemeToggle />
+              {/* Phones: the greeting needs this width; the theme lives in Profil → Ko'rinish. */}
+              <span className="hidden sm:contents">
+                <ThemeToggle />
+              </span>
               <HeaderIconButton label="Bildirishnomalar" title="Bildirishnomalar (Alt+T)" onClick={() => open("notifications")}>
                 <Bell className="size-[1.2rem]" aria-hidden />
               </HeaderIconButton>
