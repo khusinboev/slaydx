@@ -370,6 +370,36 @@ export function helpScreen(lang: Lang, opts: { domla?: boolean } = {}): Screen {
   };
 }
 
+/* ───────────────────────── Ishlar bozori ───────────────────────── */
+
+/** How many of the newest items `/market` lists (docs/market/PLAN.md §7). */
+export const MARKET_SCREEN_ITEMS = 5;
+
+export type MarketScreenItem = { id: string; title: string; price: number };
+
+export function marketClosedScreen(lang: Lang): Screen {
+  return { text: `${tgEmoji("store")} ${t(lang, "market.closed")}` };
+}
+
+/**
+ * The newest items with a `web_app` button each: the page opens with a fresh title-page form, a purchase never happens
+ * in chat (one flow, fewer money paths). Prices are the server's; nothing is computed here.
+ */
+export function marketScreen(lang: Lang, items: readonly MarketScreenItem[]): Screen {
+  const som = (n: number) => t(lang, "unit.som", { n: formatPoints(n) });
+  const shown = items.slice(0, MARKET_SCREEN_ITEMS);
+  const all = appUrl("/uz/market");
+  const allButton = all ? [inlineButton("store", t(lang, "market.all"), { web_app: { url: all } }, "primary")] : [];
+  const head = `${tgEmoji("store")} <b>${t(lang, "market.title")}</b>`;
+  if (!shown.length) return { text: `${head}\n\n${t(lang, "market.empty")}`, reply_markup: rows(allButton) };
+  const lines = shown.map((item, i) => `${i + 1}. ${esc(clip(item.title, 80))} — <b>${esc(som(item.price))}</b>`);
+  const buttons = shown.map((item, i) => {
+    const url = appUrl(`/uz/market/${encodeURIComponent(item.id)}`);
+    return url ? [inlineButton(null, `${i + 1}. ${t(lang, "market.view", { price: som(item.price) })}`, { web_app: { url } })] : [];
+  });
+  return { text: [head, `<i>${t(lang, "market.lead")}</i>`, "", ...lines].join("\n"), reply_markup: rows(...buttons, allButton) };
+}
+
 /* ───────────────────────── Til ───────────────────────── */
 
 const FLAGS = { uz: "flagUz", ru: "flagRu", en: "flagEn" } as const satisfies Record<Lang, IconKey>;

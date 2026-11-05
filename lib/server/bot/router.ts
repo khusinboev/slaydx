@@ -9,7 +9,7 @@ import { callBot, botUsername, isTransientBotFailure, sendWelcome, TelegramTrans
 import { FIELD_MAX, cleanFieldValue, fieldStep } from "../../profile/fields";
 import { FILES_MAX_PAGE, FILES_PAGE_SIZE, parseCallback, type Origin } from "./codes";
 import { t, langOf, type Lang } from "./i18n";
-import { actionLabel, keyboardMessage, legacyFoldSetting, mainKeyboard, matchKeyboard, toolBlocked, type KeyboardAction } from "./keyboard";
+import { actionLabel, keyboardMessage, legacyFoldSetting, mainKeyboard, marketSetting, matchKeyboard, toolBlocked, type KeyboardAction } from "./keyboard";
 import { profileCard, promptScreen, savedScreen, sectionScreen, type InputError } from "./profile";
 import {
   blockedText,
@@ -17,6 +17,9 @@ import {
   helpScreen,
   languageSavedScreen,
   languageScreen,
+  MARKET_SCREEN_ITEMS,
+  marketClosedScreen,
+  marketScreen,
   referralScreen,
   walletScreen,
   WALLET_RECENT,
@@ -127,9 +130,28 @@ async function referral(userId: string) {
   return { link: s.botLink ?? s.webLink, rewardPoints: s.rewardPoints, invitedCount: s.invitedCount, earnedPoints: s.earnedPoints, ambassadorPercent: s.ambassadorPercent, code: s.code, ambassadorEarned: s.ambassadorEarned };
 }
 
+/** The opt-out line of the profile: `null` hides it while the market is off. The service is the web's (lazy: market code stays out of the webhook's static graph). */
+async function marketOptOutState(userId: string): Promise<boolean | null> {
+  if (!(await marketSetting())) return null;
+  const { getMarketOptOut } = await import("../market/opt-out");
+  return getMarketOptOut(userId);
+}
+
 async function profileScreen(ctx: Pick<ChatCtx, "user" | "lang">): Promise<Screen> {
-  const r = await referral(ctx.user.id);
-  return profileCard(ctx.user, ctx.lang, r.link, r.ambassadorPercent);
+  const [r, marketOptOut] = await Promise.all([referral(ctx.user.id), marketOptOutState(ctx.user.id)]);
+  return profileCard(ctx.user, ctx.lang, r.link, r.ambassadorPercent, marketOptOut);
+}
+
+/** `/market`: the newest items from the service the web catalog reads; no in-chat purchase (docs/market/PLAN.md §7). */
+export async function sendMarket(chatId: number, lang: Lang): Promise<void> {
+  const { marketEnabled } = await import("../market/items");
+  if (!(await marketEnabled())) {
+    await sendScreen(chatId, marketClosedScreen(lang));
+    return;
+  }
+  const { listMarketItems } = await import("../market/search");
+  const { items } = await listMarketItems({ sort: "new", limit: MARKET_SCREEN_ITEMS });
+  await sendScreen(chatId, marketScreen(lang, items));
 }
 
 async function filesPage(ctx: Pick<ChatCtx, "user" | "lang" | "telegramId">, page: number): Promise<Screen> {
@@ -226,9 +248,12 @@ async function bonusRefresh(ctx: ChatCtx): Promise<{ toast: string; screen: Scre
 
 /* ───────────────────────── Keyboard + texts ───────────────────────── */
 
+/** The per-chat switches of the main keyboard. */
+const keyboardOpts = async (telegramId: number) => ({ admin: await isLinkedAdmin(telegramId), legacyFold: await legacyFoldSetting(), market: await marketSetting() });
+
 /** Sends the main keyboard (its own message) and records it. */
 export async function sendMainKeyboard(ctx: ChatCtx, kind: "note" | "refreshed"): Promise<void> {
-  await sendScreen(ctx.chatId, keyboardMessage(ctx.lang, ctx.telegramId, kind, undefined, { admin: await isLinkedAdmin(ctx.telegramId), legacyFold: await legacyFoldSetting() }));
+  await sendScreen(ctx.chatId, keyboardMessage(ctx.lang, ctx.telegramId, kind, undefined, await keyboardOpts(ctx.telegramId)));
   await markKeyboard(ctx.chatId, ctx.user.id);
 }
 
@@ -247,7 +272,7 @@ export async function handleKeyboard(ctx: ChatCtx, action: KeyboardAction): Prom
       const tool = actionLabel(ctx.lang, action);
       await sendScreen(ctx.chatId, {
         text: t(ctx.lang, blocked ? "tool.blocked" : "tool.noApp", { tool }),
-        reply_markup: mainKeyboard(ctx.lang, ctx.telegramId, undefined, { admin: await isLinkedAdmin(ctx.telegramId), legacyFold: await legacyFoldSetting() }),
+        reply_markup: mainKeyboard(ctx.lang, ctx.telegramId, undefined, await keyboardOpts(ctx.telegramId)),
       });
       return;
     }
@@ -262,6 +287,10 @@ export async function handleKeyboard(ctx: ChatCtx, action: KeyboardAction): Prom
       break;
     case "help":
       await sendScreen(ctx.chatId, helpScreen(ctx.lang, { domla: await domlaEnabled() }));
+      break;
+    case "market":
+      // A web_app button never sends text: this is a deployment without a public URL, or a keyboard older than the switch.
+      await sendMarket(ctx.chatId, ctx.lang);
       break;
   }
   // Owner decision Q1: a chat-screen tap refreshes the keyboard when its personal links are getting old
@@ -513,6 +542,18 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
         // Qattiqqo'l domla: all rules live in lib/server/domla.ts, the screens in ./domla.
         const dm = await import("./domla");
         toast = await dm.handleDomlaCallback(ctx, msg.message_id, c);
+        return;
+      }
+      case "marketOptOut": {
+        // Same budget and same service as the web toggle; a stale button after the market closed still records the wish.
+        if (!(await rateLimit(`profile:${ctx.user.id}`, 30, 300)).ok) {
+          toast = t(ctx.lang, "err.rate");
+          return;
+        }
+        const { setMarketOptOut } = await import("../market/opt-out");
+        await setMarketOptOut(ctx.user.id, c.optOut);
+        toast = t(ctx.lang, c.optOut ? "market.optOutOn" : "market.optOutOff");
+        await edit(await profileScreen(ctx));
         return;
       }
       case "noop":

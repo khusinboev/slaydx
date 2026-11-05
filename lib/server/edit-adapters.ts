@@ -306,7 +306,7 @@ export const articleAdapter: EditAdapter = {
  */
 export const workAdapter: EditAdapter = {
   id: "work",
-  tools: new Set(["coursework", "referat", "mustaqil-ish"]),
+  tools: new Set(["coursework", "referat", "mustaqil-ish", "konspekt"]),
   hasModel: (doc) => Boolean(doc?.work && doc.sections?.length),
   prepare: (doc) => doc,
   parse: (raw) => parseWorkOps(raw),

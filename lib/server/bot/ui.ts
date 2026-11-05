@@ -31,6 +31,7 @@ const EXTRA_ICONS = {
   key: { fallback: "🔑" },
   web: { fallback: "🌐" },
   megaphone: { fallback: "📢" },
+  store: { fallback: "🛍" },
 } as const satisfies Record<string, { fallback: string; id?: string }>;
 
 export type IconKey = keyof typeof EMOJI_IDS | keyof typeof EXTRA_ICONS;

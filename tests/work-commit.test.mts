@@ -170,7 +170,8 @@ test("adapterFor: uchala talaba ishi vositasi `workAdapter` ga; maqola/slayd/rez
   // Maqola adapteri talaba ishini OLMAYDI va aksincha.
   assert.ok(!articleAdapter.tools.has("coursework"));
   assert.ok(!workAdapter.tools.has("article"));
-  for (const tool of ["coursework", "referat", "mustaqil-ish"]) assert.ok(editableTools().includes(tool));
+  for (const tool of ["coursework", "referat", "mustaqil-ish", "konspekt"]) assert.ok(editableTools().includes(tool));
+  assert.equal(adapterFor("konspekt"), workAdapter, "M14: the market re-renders konspekt from doc_json");
 });
 
 test("workAdapter.hasModel: MODELLI hujjat — ha; eski (`doc.work` yo'q) — YO'Q (409 legacy)", () => {

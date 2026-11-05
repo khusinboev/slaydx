@@ -55,6 +55,8 @@ export const PERMISSIONS = [
   "pricing.edit",
   "bonus.view",
   "bonus.edit",
+  "market.view",
+  "market.manage",
   "admins.view",
   "admins.manage",
   // §4.2: implicit for every admin — own sessions, own recovery codes, step-up.
@@ -103,6 +105,9 @@ const GRANTS: Readonly<Record<Permission, readonly Role[]>> = {
   // docs/bonus/PLAN.md K2: the bonus channel list follows the pricing rows (amounts are payouts).
   "bonus.view": ["owner", "admin", "finance", "viewer"],
   "bonus.edit": OA,
+  // docs/market/PLAN.md §6: approval is not money, so no step-up; price overrides stay on `pricing.edit`.
+  "market.view": ALL,
+  "market.manage": ["owner", "admin", "moderator"],
   "admins.view": OA,
   "admins.manage": OA,
   self: ALL,

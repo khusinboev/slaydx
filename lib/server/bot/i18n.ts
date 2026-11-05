@@ -130,6 +130,7 @@ const T = {
   "kb.wallet": { uz: "Hamyon / Bonus", ru: "Кошелёк / Бонус", en: "Wallet / Bonus" },
   "kb.profile": { uz: "Profil", ru: "Профиль", en: "Profile" },
   "kb.help": { uz: "Yordam", ru: "Помощь", en: "Help" },
+  "kb.market": { uz: "Ishlar bozori", ru: "Магазин работ", en: "Works market" },
   "kb.placeholder": {
     uz: "Vositani tanlang yoki xabar yozing…",
     ru: "Выберите инструмент или напишите сообщение…",
@@ -730,6 +731,21 @@ const T = {
     en: "The daily-questions message is on: we will send 3 questions every morning.",
   },
 
+  /* ── «Ishlar bozori» (docs/market/PLAN.md §7; every key starts with `market.`) ── */
+  "market.title": { uz: "Ishlar bozori", ru: "Магазин работ", en: "Works market" },
+  "market.lead": {
+    uz: "Tayyor ishlar — asl narxdan arzon. Titul varag‘i sizning ma’lumotlaringiz bilan tayyorlanadi.",
+    ru: "Готовые работы дешевле оригинала. Титульный лист оформляется на ваши данные.",
+    en: "Ready-made works, cheaper than the original. The title page is made out to you.",
+  },
+  "market.view": { uz: "Ko‘rish — {price}", ru: "Смотреть — {price}", en: "View — {price}" },
+  "market.all": { uz: "Hammasini ko‘rish", ru: "Смотреть все", en: "See all" },
+  "market.empty": { uz: "Hozircha sotuvda ish yo‘q. Birozdan keyin qayting.", ru: "Пока в продаже нет работ. Загляните позже.", en: "Nothing on sale yet. Please come back later." },
+  "market.closed": { uz: "Ishlar bozori hozircha yopiq. Birozdan keyin qayting.", ru: "Магазин работ пока закрыт. Загляните позже.", en: "The works market is closed for now. Please come back later." },
+  "market.optOut": { uz: "Mening ishlarim bozorga chiqmasin", ru: "Не выставлять мои работы", en: "Keep my works off the market" },
+  "market.optOutOn": { uz: "Ishlaringiz bozorga chiqmaydi", ru: "Ваши работы не попадут в магазин", en: "Your works stay off the market" },
+  "market.optOutOff": { uz: "Tanlov bekor qilindi", ru: "Выбор отменён", en: "Choice removed" },
+
   /* ── Til ── */
   "lang.title": { uz: "Bot tilini tanlang", ru: "Выберите язык бота", en: "Choose the bot language" },
   "lang.saved": { uz: "Bot tili: O‘zbekcha", ru: "Язык бота: русский", en: "Bot language: English" },
@@ -741,6 +757,7 @@ const T = {
   "cmd.admin": { uz: "Admin sifatida tasdiqlash", ru: "Подтвердить права админа", en: "Confirm admin rights" },
   "cmd.til": { uz: "Bot tilini o‘zgartirish", ru: "Сменить язык бота", en: "Change the bot language" },
   "cmd.alifbo": { uz: "Kirill ↔ Lotin ↔ Yangi lotin", ru: "Кириллица ↔ латиница ↔ новая латиница", en: "Cyrillic ↔ Latin ↔ new Latin" },
+  "cmd.market": { uz: "Tayyor ishlar bozori", ru: "Магазин готовых работ", en: "Market of ready-made works" },
   "cmd.savol": { uz: "Kunlik 3 ta savol (bonus)", ru: "3 вопроса дня (бонус)", en: "Today’s 3 questions (bonus)" },
   "help.domla": {
     uz: "🎓 «Qattiqqo‘l domla»: slaydingizni domla oldida ovoz bilan himoya qiling — /domla yoki pastdagi tugma.",

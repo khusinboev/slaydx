@@ -48,6 +48,8 @@ const PLAN_TABLE = `
 | pricing.edit | ✓ | ✓ | | | | | S |
 | bonus.view | ✓ | ✓ | ✓ | | | ✓ | |
 | bonus.edit | ✓ | ✓ | | | | | S |
+| market.view | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
+| market.manage | ✓ | ✓ | | | ✓ | | |
 | admins.view | ✓ | ✓ | | | | | |
 | admins.manage | ✓ | ✓ (rank-limited) | | | | | S |
 `;
@@ -72,7 +74,7 @@ function parseTable(): Row[] {
 
 test("matrix: every role × permission equals the plan's §4.3 table", () => {
   const rows = parseTable();
-  assert.equal(rows.length, 36);
+  assert.equal(rows.length, 38);
   const matrixPerms = rows.map((r) => r.perm);
   // `self` (§4.2) is implicit for every admin and is not a table row.
   assert.deepEqual([...rbac.PERMISSIONS].filter((p) => p !== "self").sort(), [...matrixPerms].sort());

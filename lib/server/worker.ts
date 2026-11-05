@@ -125,6 +125,8 @@ let lastServerMetricsPurgeAt = -Infinity;
 let lastChatPurgeAt = -Infinity;
 /** `media_jobs` older than 90 days (M5): same 6 hour cadence, mark before the DELETE. */
 let lastMediaJobsPurgeAt = -Infinity;
+/** «Ishlar bozori» candidate scan and its two sweeps (docs/market/PLAN.md §8.3): same 6 hour cadence, mark before the work. */
+let lastMarketScanAt = -Infinity;
 
 /**
  * Sinov uchun: keyingi `housekeeping()` 6 soatlik qadamlarni (saqlash
@@ -137,6 +139,7 @@ export function resetRetentionScan(): void {
   lastChatPurgeAt = -Infinity;
   lastStaySweepAt = -Infinity;
   lastMediaJobsPurgeAt = -Infinity;
+  lastMarketScanAt = -Infinity;
 }
 
 /**
@@ -1070,6 +1073,12 @@ export async function purgeHousekeeping(): Promise<void> {
       if (n) log("info", "[worker] payment_events tozalandi", { deleted: n, retentionDays: PAYMENT_EVENTS_RETENTION_DAYS });
       return n;
     });
+  }
+  if (Date.now() - lastMarketScanAt >= RETENTION_EVERY_MS) {
+    lastMarketScanAt = Date.now();
+    await step("market-candidates", async () => (await import("./market/candidates")).marketCandidatesStep());
+    await step("market-previews-gc", async () => (await import("./market/candidates")).gcMarketPreviews());
+    await step("market-rejected-gc", async () => (await import("./market/candidates")).gcRejectedItems());
   }
   // AI chat: a message charged but never answered (the process died mid-send) is refunded after 5 minutes.
   await step("chat-refund", async () => (await import("./chat/service")).refundOrphanedChat());

@@ -551,6 +551,8 @@ async function buildArtifactInner(
   values: FormValues,
   opts: BuildOptions,
 ): Promise<BuiltFile> {
+  // A market copy: a render of the stored listing, no LLM (docs/market/PLAN.md §2.2). Lazy: the module reaches the database.
+  if (typeof values.marketItemId === "string") return (await import("./market-copy")).buildMarketCopy(tool, values, opts);
   const meta = extractMeta(tool, values);
   const deadline = opts.deadline;
 
