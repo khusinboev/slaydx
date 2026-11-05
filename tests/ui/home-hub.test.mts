@@ -33,20 +33,25 @@ import { card, json } from "./market-fixture.ts";
  *   M5  HomeHub: keep the section for a user without files → «no files» red;
  *   M6  hub-model `recentFiles`: no sort (store order) → wrong three;
  *   M7  hub-model `fileStatus`: «Yozilmoqda» without the %;
- *   M8  homeCells: swap Slayd and Mustaqil ish → order red;
- *   M9  homeCells: a hole instead of the substitute (filter the chat cell out) → «exactly 8» red;
- *   M10 HubGrid: `onPick` dropped from the cell link → gate red;
+ *   M8  homeCells: Slayd and Mustaqil ish swapped → order red;
+ *   M9  homeCells: a cell missing → «exactly 8» red; M9b the substitute repeats Slayd → distinct-target red;
+ *   M10 HubGrid: `onPick` dropped from the cell link → gate red; M28 same on HubBanner's slide;
  *   M11 HubGrid: the blocked branch removed → disabled red;
- *   M12 homeSlides: market ignores `marketOn` → banner flag red;
+ *   M12 homeSlides: market ignores `marketOn`; M12b HomeHub: `features.market` alone (no admin) → banner flag red;
  *   M13 homeSlides: domla slide always on → banner flag red;
- *   M14 HubBanner: dots with one slide (`> 0`) → «no dots» red;
- *   M15 HubBanner: `onScroll` does not track → dot red;
+ *   M14 HubBanner: dots with one slide → «no dots» red;
+ *   M15 no `onScroll`; M15b dots do not move the list; M15c the active dot is not clamped → dots red;
  *   M16 HomeHub: `pending` always false → skeleton red;
- *   M17 hub-model games cell href without `?group=` → route red;
- *   M18 HubGrid: no emphasis on the first cell → primary red;
- *   M19 AppShell: Cmd/Ctrl+K removed → shortcut red;
- *   M20 catalogueGroupOf: any string accepted → «unknown group» red;
- *   M21 CreateGrid: `initialGroup` ignored by the login returnTo → red.
+ *   M17 hub-model: the games cell without `?group=` → route red;
+ *   M18 HubGrid: no ring on the first cell; M18b two emphasised cells → primary red;
+ *   M19 AppShell: Ctrl+K unbound → shortcut red;
+ *   M20 catalogueGroupOf: any string accepted → «wrong group» red;
+ *   M21 CreateGrid: login returnTo without the chip; M22 `initialGroup` ignored; M29 the page does not pass `?group=` → red;
+ *   M23 HomeHub: grid above the banner → order red;
+ *   M24 HomeHub: «Kirish» opens another overlay;
+ *   M25 HomeHub: no MarketRail → rail red;
+ *   M26 HubBanner: smooth scroll outside `motion-safe` → reduced-motion red;
+ *   M27 HomeHub: no balance chip in the header → header red.
  */
 
 const { HomeHub } = await import("../../components/home/HomeHub.tsx");
@@ -60,6 +65,7 @@ const { groupDigits } = await import("../../lib/format.ts");
 const { STUDIO_ENTRY } = await import("../../components/studio/studio-entry.ts");
 const { CreateGrid } = await import("../../components/home/CreateGrid.tsx");
 const { catalogueGroupOf, catalogueHref } = await import("../../components/home/catalogue-filter.ts");
+const { default: CreatePage } = await import("../../app/uz/create/page.tsx");
 
 const pushes: string[] = [];
 const router = {
@@ -353,6 +359,11 @@ test("«O'yinlar» opens the games chip of the catalogue; a wrong `?group=` is �
   for (const bad of ["nope", "", undefined, ["oyinlar"], "all", "__proto__"]) assert.equal(catalogueGroupOf(bad), "all", String(bad));
   for (const g of TOOL_GROUPS) assert.equal(catalogueGroupOf(g.id), g.id);
   assert.equal(catalogueHref("all"), "/uz/create");
+
+  // The route hands the query to the grid.
+  const page = await CreatePage({ searchParams: Promise.resolve({ group: "oyinlar" }) });
+  assert.equal(page.props.initialGroup, "oyinlar");
+  assert.equal((await CreatePage({ searchParams: Promise.resolve({}) })).props.initialGroup, "all");
 
   useAppStore.setState({ hydrated: true });
   signIn();

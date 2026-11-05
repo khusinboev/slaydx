@@ -54,3 +54,15 @@ https://claude.ai/artifact/HmDv1nFFhdeadHCxWLc8eg (variant **A**).
 | W5 Chrome & type | queued; also owns F0 hand-offs: ResultLayout `--app-topbar-h` → `var(--shell-topbar-h,0px)`, NotificationsPanel phone anchor, ResultView delete → `/uz/files`, `/uz/purchase` links → `/uz/wallet` (ToolChrome, SearchDialog, PayDialog, sitemap) |
 | W1–W6, review fixes | ✅ merged; reviews S (fable) APPROVE, R (opus) APPROVE after fixes |
 | Release | ✅ DEPLOYED prod 28e20aa (PR #21), 2026-10-07 |
+
+## Home variant C «Xizmatlar panjarasi» (owner decision 2026-11-06)
+Supersedes W1's home layout (and the W1 `Tez boshlash` / all-tools rows above). Data: 73 % of jobs are slides, 91 % slide + mustaqil ish + referat,
+92 % of users use one tool. Mock-up: https://claude.ai/artifact/51rXgVYzggQTdMHaEF5sVv (variant C). `components/home/HomeHub.tsx`, top to bottom:
+1. Header: greeting (20 px on a phone), balance chip, search icon (the shell binds Cmd/Ctrl+K; no search field in the page), theme, bell. No subtitle.
+2. `HubBanner`: one `--hero` card, fixed height, snap carousel with dots from two slides up, no auto-advance. Slides: market (`useMarketOn`), Studio, AI yordamchi, domla.
+3. `HubGrid`: 4 columns, 8 in one row from 1024 px. `homeCells` order: Slayd (ringed), Mustaqil ish, Referat, Insho, Studio, AI yordamchi, O'yinlar
+   (`/uz/create?group=oyinlar`, new query of the catalogue), Barchasi (`/uz/create`). Chat off → Kurs ishi in its place. A tool without its provider key stays, disabled.
+4. «Davom ettirish»: 3 latest files, side by side from 1024 px; signed out `SignedOutCard`; signed in without a file, no section.
+5. `MarketRail`.
+
+Until the session is known the banner and the chat cell are same-size skeletons. All links keep `useLoginGate`. The catalogue lives in «Barchasi» and the «+» sheet.
