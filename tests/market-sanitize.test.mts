@@ -442,6 +442,18 @@ test("no false positives: words of the topic, common lowercase words, cited auth
   assert.deepEqual(r.doc.references, ["Aliyev B. T. Tarix. 2020."]);
 });
 
+test("the author's whole name in the topic is not protected: title, file hint and subject are scrubbed too", () => {
+  const doc = workDoc("referat");
+  doc.meta = { ...doc.meta, topic: `Zulfiqorov Mirjalol Rustamovich ${PHONE} issiqlik`, fileNameHint: `Zulfiqorov ${PHONE}`, subject: `${AUTHOR} fani` };
+  doc.work!.subjectName = `${AUTHOR} fani`;
+  const { doc: clean } = run("referat", doc);
+  assertClean(clean.meta.topic, "topic");
+  assert.match(clean.meta.topic, /issiqlik/);
+  assertClean(clean.meta.fileNameHint, "file hint");
+  assertClean(clean.meta.subject, "subject");
+  assertClean(clean.work!.subjectName, "subject name");
+});
+
 test("a title line's markers name nobody: patronymic words and course text are not name words", () => {
   const id = identityOf({ doc: { meta: { author: "Aliyev Vali o'g'li — 3-kurs, 301-guruh" } } as unknown as AcademicDoc, values: {} });
   const doc = workDoc("referat");

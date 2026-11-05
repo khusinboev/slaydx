@@ -144,7 +144,7 @@ async function processOne(row: SourceRow, minQuality: number, perTopic: number):
   const doc = row.doc;
   const adapter = adapterFor(toolId);
   if (!doc?.meta || !adapter?.hasModel(doc)) {
-    await insertRejected(row, "legacy", marketTitleOf(row.topic || toolId));
+    await insertRejected(row, "legacy", TOOL_BY_ID[toolId]?.title ?? toolId);
     return "rejected";
   }
   const clean = sanitizeForMarket({ toolId, doc, values: row.values_json ?? {}, sourceId: row.id, profile: profileOf(row) });

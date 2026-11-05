@@ -37,6 +37,41 @@ test("formula: percent, rounding, floor, override", () => {
   assert.equal(discountPercent(1000, 0), 0);
 });
 
+test("settings: the plan's defaults and bounds; the feature ships OFF", async () => {
+  process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://unused/unused";
+  const s = await import("../lib/server/settings.ts");
+  const expected: Record<string, [unknown, number?, number?]> = {
+    "market.enabled": [false],
+    "market.percent": [50, 10, 100],
+    "market.round_to": [500, 100, 1000],
+    "market.min_price": [1000, 0, 20000],
+    "market.paid_only": [false],
+    "market.author_reward_percent": [0, 0, 50],
+    "market.max_copies_slides": [30, 1, 1000],
+    "market.max_copies_teacher": [50, 1, 1000],
+    "market.max_copies_essay": [10, 1, 1000],
+    "market.max_copies_work": [5, 1, 1000],
+    "market.max_copies_thesis": [3, 1, 1000],
+    "market.same_university_cap": [2, 0, 50],
+    "market.preview_pages": [2, 1, 5],
+    "market.min_quality": [70, 0, 100],
+    "market.per_topic_limit": [3, 1, 20],
+    "market.backfill_batch": [100, 0, 1000],
+  };
+  for (const [key, [value, min, max]] of Object.entries(expected)) {
+    const def = s.settingDef(key as never) as unknown as { envDefault(): unknown; min?: number; max?: number; validate(v: unknown): { ok: boolean } };
+    assert.equal(def.envDefault(), value, key);
+    if (min === undefined) continue;
+    assert.deepEqual([def.min, def.max], [min, max], key);
+    assert.equal(def.validate(min).ok, true, key);
+    assert.equal(def.validate(max + 1).ok, false, key);
+  }
+  assert.deepEqual(s.settingDef("market.tools_disabled").envDefault(), []);
+  assert.equal(s.validateSetting("market.round_to", 250).ok, false, "only the steps of the formula");
+  assert.equal(s.validateSetting("market.round_to", 1000).ok, true);
+  assert.equal(s.validateSetting("market.tools_disabled", ["nonsense"]).ok, false);
+});
+
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
 const iso = hasDb ? await createIsolatedDb("marketprice") : { isolated: false, drop: async () => {} };
 const skip = hasDb && iso.isolated ? false : "isolated Postgres database is not available";

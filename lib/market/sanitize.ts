@@ -93,9 +93,9 @@ const META_KEEP: ReadonlySet<string> = new Set<keyof DocMeta>([
 /** String keys inside the document that are structure, not text: never scrubbed. */
 const STRUCTURAL_KEYS: ReadonlySet<string> = new Set([
   "id", "url", "assetId", "kind", "layout", "figureId", "tableId", "sectionId", "anchor", "lang", "language", "mime", "src",
-  "doi", "isbn", "accessed", "docDate", "verified", "svg", "type", "profile", "cite", "genre", "subject", "rubric", "context",
+  "doi", "isbn", "accessed", "docDate", "verified", "svg", "type", "profile", "cite", "genre", "rubric", "context",
   "direction", "chart", "dataSource", "visual", "slideVisual", "slideTheme", "slideTemplate", "toolId", "pagesLabel",
-  "fileNameHint", "design", "from", "to", "at", "builtAt", "font", "fontSize",
+  "design", "from", "to", "at", "builtAt", "font", "fontSize",
 ]);
 
 /** Words that sit in a name line but name nobody; `q'izi` and friends arrive here without the apostrophe. */
@@ -147,10 +147,13 @@ function nameWords(names: readonly string[], topicWords: ReadonlySet<string>): S
   const out = new Set<string>();
   for (const raw of names) {
     const line = parseAuthorLine(String(raw ?? "")).name;
-    for (const w of normalizeText(line).split(" ")) {
-      if (w.length < NAME_MIN || NAME_STOP.has(w) || topicWords.has(w) || /^\d+$/.test(w)) continue;
-      out.add(w);
-    }
+    const words = normalizeText(line)
+      .split(" ")
+      .filter((w) => w.length >= NAME_MIN && !NAME_STOP.has(w) && !/^\d+$/.test(w));
+    // A work about Amir Temur keeps «Temur» when the author merely shares it. The WHOLE name in the topic is the author
+    // writing himself into it («Aliyev Ali 301-guruh, Fizika»): nothing is protected then.
+    const ownName = words.length > 1 && words.every((w) => topicWords.has(w));
+    for (const w of words) if (ownName || !topicWords.has(w)) out.add(w);
   }
   return out;
 }

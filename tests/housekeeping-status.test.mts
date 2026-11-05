@@ -99,6 +99,9 @@ test("worker housekeeping records every named step and runs the new purges", asy
     "heartbeats",
     "admin-sessions",
     "broadcast-recipients",
+    "market-candidates",
+    "market-previews-gc",
+    "market-rejected-gc",
   ]) {
     assert.ok(steps.includes(name), `status not recorded for ${name}`);
   }
@@ -113,6 +116,8 @@ test("worker housekeeping records every named step and runs the new purges", asy
   assert.ok(texts.some((q) => /DELETE FROM error_log WHERE last_seen_at < now\(\) - interval '90 days'/.test(q)));
   // Studio P2b (review MINOR-2): previews no prompt / template points at, after 7 days.
   assert.ok(texts.some((q) => /DELETE FROM studio_library_previews p\s+WHERE p\.created_at < now\(\) - \(\$1 \|\| ' days'\)::interval\s+AND NOT EXISTS \(SELECT 1 FROM studio_prompts/.test(q)), "studio preview purge");
+  assert.ok(texts.some((q) => /DELETE FROM market_previews p USING market_items i/.test(q)), "market previews sweep");
+  assert.ok(texts.some((q) => /UPDATE market_items SET doc_json = '\{\}'::jsonb/.test(q)), "market rejected sweep");
   assert.ok(texts.some((q) => /DELETE FROM process_heartbeats WHERE last_seen_at < now\(\) - interval '1 day'/.test(q)));
   assert.ok(texts.some((q) => /DELETE FROM admin_sessions WHERE expires_at < now\(\) - interval '7 days'/.test(q)));
   assert.ok(texts.some((q) => /DELETE FROM admin_enrollments WHERE created_at < now\(\) - interval '7 days' AND \(consumed_at IS NOT NULL OR expires_at < now\(\)\)/.test(q)));
@@ -128,6 +133,7 @@ test("worker housekeeping records every named step and runs the new purges", asy
   await hs.flushStepStatus();
   const again = seen.filter((q) => /INSERT INTO housekeeping_status/.test(q.text)).map((q) => q.params[0]);
   assert.ok(!again.includes("retention") && !again.includes("payment-events") && !again.includes("chat-purge"));
+  assert.ok(!again.includes("market-candidates") && !again.includes("market-previews-gc") && !again.includes("market-rejected-gc"), "the market steps run every 6 h");
   assert.ok(again.includes("sessions"));
 });
 
