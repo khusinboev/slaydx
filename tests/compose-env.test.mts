@@ -16,6 +16,10 @@ const KEYS = [
   "LLM_RESEARCHER",
   "LLM_FAST",
   "ANTHROPIC_API_KEY",
+  // Text fallbacks after Gemini: a stored key is primary, but the env fallback and the Singapore base URL must reach both services.
+  "DASHSCOPE_API_KEY",
+  "DASHSCOPE_BASE_URL",
+  "DEEPSEEK_API_KEY",
   "OPENAI_API_KEY",
   "OPENALEX_API_KEY",
   "OPENALEX_MAILTO",

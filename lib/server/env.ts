@@ -3,6 +3,7 @@ import { BRAND_NAME } from "../brand";
 import { acceptedPaymeKeys } from "./payme-keys";
 import { keyUsable, providersOfKind } from "./providers/registry";
 import { getProviderKey, isProviderEnabled, unreadableProviders } from "./providers/resolve";
+import { usableTextChain } from "./providers/route-effective";
 import { IMAGE_MODELS, imageModelOf, type ImageModelId } from "../generation/image-models";
 import { normalizeVoiceProvider } from "../generation/tts/types";
 import { VIDEO_PROVIDERS, videoInputFromValues, type VideoProviderId } from "../generation/video/registry";
@@ -405,7 +406,7 @@ export function parseAdminTotpKey(raw: string): Buffer | null {
 }
 
 export function llmConfigured(): boolean {
-  return Boolean(getProviderKey("gemini"));
+  return usableTextChain().length > 0;
 }
 
 /**

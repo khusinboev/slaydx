@@ -1,16 +1,21 @@
 /**
  * Gemini orqali LLM chaqiruvlari (standart yo'l).
- * Kalit bo‘lmasa chaqiruv ketmaydi.
+ * Kalit bo‘lmasa chaqiruv ketmaydi. When Gemini fails, the direct calls walk on to the fallbacks of the text chain
+ * (`walkTextChain`, docs/ops/LLM-FALLBACK.md).
  */
 import { recordGrounding, recordLlmUsage } from "./job-cost";
 import { allowOrWait, breakerFor } from "./llm/breaker";
-import { BREAKER_WAIT_MAX_MS, CHAIN_MIN_ATTEMPT_MS, CHAIN_SAFETY_MS, DeadlineError, TIMEOUT_RETRY_MIN_LEFT_MS } from "./llm/chain";
-import { classifyFailure, isSafetyFinish, reportFailure, withJsonRetry, type FailureKind } from "./llm/failure";
+import { BREAKER_WAIT_MAX_MS, CHAIN_MIN_ATTEMPT_MS, CHAIN_SAFETY_MS, DeadlineError, TIMEOUT_RETRY_MIN_LEFT_MS, completeWithChain } from "./llm/chain";
+import { accountStrike, classifyFailure, isAccountFailure, isSafetyFinish, reportFailure, reportFallback, withJsonRetry, type FailureKind } from "./llm/failure";
+import { FALLBACK_ADAPTERS } from "./llm/fallback-adapters";
 import { limiterFor } from "./llm/limiter";
+import type { RoleSpec } from "./llm/types";
 import { log } from "../server/log";
-import { geminiTextModel } from "../server/providers/route-effective";
+import { geminiTextModel, usableTextChain } from "../server/providers/route-effective";
 import { getProviderKey } from "../server/providers/resolve";
-import { backoffMs, equalJitterMs, geminiRetryDelayMs, parseRetryAfter } from "./llm/retry";
+import { backoffMs, describeNetError, equalJitterMs, geminiRetryDelayMs, parseRetryAfter } from "./llm/retry";
+
+export { describeNetError };
 
 type Provider = "gemini" | null;
 
@@ -18,8 +23,9 @@ export function llmProvider(): Provider {
   return getProviderKey("gemini") ? "gemini" : null;
 }
 
+/** Some text provider can answer: Gemini, or a fallback of the text chain (`llm.chain`). */
 export function llmEnabled() {
-  return llmProvider() !== null;
+  return usableTextChain().length > 0;
 }
 
 /** The default Gemini text model: the admin's choice (`llm.model` slot), else `GEMINI_MODEL`, else the built-in default. */
@@ -81,6 +87,8 @@ export type LlmOpts = {
    * unparseable first answer). The first attempt keeps the free form it always had.
    */
   retrySchema?: Record<string, unknown>;
+  /** The Gemini model of this call (a `llm.chain` entry). Absent: the default text model. */
+  model?: string;
 };
 
 /** Grounding topgan bitta sahifa. `uri` — Google redirect, `title` — domen. */
@@ -100,6 +108,9 @@ export type GroundedResult = {
   entryPoint?: string;
   /** Provider's raw stop reason (Gemini `finishReason`): `MAX_TOKENS` means the answer was cut. */
   finishReason?: string;
+  /** Who answered, when it was not Gemini (a fallback spec of the text chain). */
+  provider?: string;
+  model?: string;
 };
 
 /**
@@ -149,14 +160,6 @@ function assertGroundingMode(opts: LlmOpts): void {
   }
 }
 
-/** Tarmoq xatosi matni: undici `fetch failed` ning haqiqiy sababi (`cause.code`) bilan. */
-export function describeNetError(e: unknown): string {
-  if (!(e instanceof Error)) return "network error";
-  const cause = (e as Error & { cause?: { code?: string; message?: string } }).cause;
-  const why = cause?.code ?? cause?.message;
-  return why && !e.message.includes(why) ? `${e.message} (${why})` : e.message;
-}
-
 /**
  * O'tkinchi xatoda qayta urinish sikli — YAGONA nusxa.
  *
@@ -179,11 +182,12 @@ async function withRetry<T>(
   deadline?: number,
   role = "complete",
   noTimeoutRetry = false,
+  step: GeminiStep = {},
 ): Promise<{ value: T; finishReason?: string } | null> {
   let started = Date.now();
   const breaker = breakerFor(provider);
   const limiter = limiterFor(provider);
-  const model = llmModel();
+  const model = step.model ?? llmModel();
   const MAX_ATTEMPTS = 3;
   let timeoutRetried = false;
   // Ish muddatigacha ishlatsa bo'ladigan vaqt (`llm/chain.ts leftMs` bilan bir xil); muddatsiz — cheksiz.
@@ -202,9 +206,9 @@ async function withRetry<T>(
      * provayder sovish davrida CHAQIRILMAYDI — har chaqiruv nosozlikni
      * qaytadan «kashf qilib» to'liq timeout'ni kutmasin. Ish muddati bor
      * bo'lsa va sovish qisqa bo'lsa — kutamiz (2026-10-10: bir to'da 503
-     * saqlagichni ochdi va barcha ishlar ~2 s da yiqildi).
+     * saqlagichni ochdi va barcha ishlar ~2 s da yiqildi). A fallback spec would answer sooner than the cooldown ends.
      */
-    const waitMax = deadline !== undefined ? Math.min(BREAKER_WAIT_MAX_MS, dl - CHAIN_MIN_ATTEMPT_MS - 5_000) : 0;
+    const waitMax = deadline !== undefined && !step.hasFallback ? Math.min(BREAKER_WAIT_MAX_MS, dl - CHAIN_MIN_ATTEMPT_MS - 5_000) : 0;
     if (!(waitMax > 0 ? await allowOrWait(breaker, waitMax) : breaker.allow())) {
       console.warn(`[llm] ${provider} saqlagichi ochiq — chaqiruv o'tkazib yuborildi`);
       skipped(attempt, "other", "circuit breaker open - call skipped");
@@ -249,11 +253,12 @@ async function withRetry<T>(
       outputTokens: res.usage?.outputTokens,
     });
     if (res.timedOut) {
+      if (step.onTimeout) step.onTimeout();
       if (timeoutMs >= BREAKER_TIMEOUT_FLOOR_MS) breaker.failure();
       // Urinishni ish muddati kesgan bo'lsa — bu «vaqt tugadi», «model javob bermadi» emas.
       if (jobLeft() < CHAIN_MIN_ATTEMPT_MS) throw new DeadlineError(provider, jobLeft());
       // One retry after a timeout, only inside a job deadline with real time left (fresh per-call budget).
-      if (deadline !== undefined && !noTimeoutRetry && !timeoutRetried && attempt < MAX_ATTEMPTS - 1 && jobLeft() >= TIMEOUT_RETRY_MIN_LEFT_MS) {
+      if (deadline !== undefined && !noTimeoutRetry && !step.hasFallback && !timeoutRetried && attempt < MAX_ATTEMPTS - 1 && jobLeft() >= TIMEOUT_RETRY_MIN_LEFT_MS) {
         timeoutRetried = true;
         started = Date.now();
         await sleep(equalJitterMs(0, 500));
@@ -261,6 +266,9 @@ async function withRetry<T>(
       }
     } else if (res.kind === "empty" || res.kind === "safety") {
       // Provider answered (empty candidate / policy block): healthy transport, not a breaker failure (review R1).
+    } else if (isAccountFailure(res.status, res.message)) {
+      // Every later call would get the same refusal (2026-11-05 outage).
+      accountStrike(breaker, res.status, res.message);
     } else if (res.status === undefined ? res.retryable : res.status >= 500) {
       breaker.failure();
     } else if (res.status !== undefined && res.status !== 429) {
@@ -282,6 +290,88 @@ async function withRetry<T>(
   return null;
 }
 
+/** How `withRetry` runs inside the text chain. All absent = Gemini is the only provider, the path as it always was. */
+type GeminiStep = {
+  model?: string;
+  /** A fallback spec follows: no waiting for an open breaker, no second try after a timeout. */
+  hasFallback?: boolean;
+  onTimeout?: () => void;
+};
+
+/**
+ * Walks the text chain (`llm.chain`) for the direct tools. Gemini keeps its own path (`withRetry`: streaming, grounding,
+ * response schema); any other provider goes through `completeWithChain`, in runs of consecutive specs. With only Gemini
+ * usable (no fallback key) this is one `gemini()` call with an empty step, exactly the old path.
+ *
+ * A timeout without a job deadline stops the walk, the rule of `chain.ts`: the caller's budget is unknown.
+ */
+async function walkTextChain<T>(
+  role: string,
+  deadline: number | undefined,
+  gemini: (step: GeminiStep) => Promise<T | null>,
+  others: (specs: RoleSpec[], afterPrimary: boolean) => Promise<T | null>,
+): Promise<T | null> {
+  const specs = usableTextChain();
+  let afterPrimary = false;
+  for (let i = 0; i < specs.length; ) {
+    const spec = specs[i];
+    if (spec.provider === "gemini") {
+      let timedOut = false;
+      const hasFallback = i < specs.length - 1;
+      const res = await gemini({ model: spec.model, hasFallback, onTimeout: () => (timedOut = true) });
+      if (res) {
+        if (afterPrimary) reportFallback({ role, provider: spec.provider, model: spec.model });
+        return res;
+      }
+      if (timedOut && deadline === undefined) return null;
+      i += 1;
+    } else {
+      let end = i;
+      while (end < specs.length && specs[end].provider !== "gemini") end += 1;
+      const res = await others(specs.slice(i, end), afterPrimary);
+      if (res) return res;
+      i = end;
+    }
+    afterPrimary = true;
+  }
+  return null;
+}
+
+/** One run of non-Gemini specs of the text chain, with the spend recorded like every other answer. */
+async function completeOthers(role: string, specs: RoleSpec[], afterPrimary: boolean, system: string, user: string, maxTokens: number, opts: LlmOpts, budget: number, onText?: (partial: string) => void): Promise<GroundedResult | null> {
+  const res = await completeWithChain(
+    role,
+    specs,
+    system,
+    user,
+    {
+      json: opts.json,
+      maxTokens,
+      timeoutMs: budget,
+      thinking: opts.thinking,
+      deadline: opts.deadline,
+      noTimeoutRetry: opts.noTimeoutRetry,
+      responseSchema: opts.responseSchema,
+      onText,
+    },
+    { adapters: FALLBACK_ADAPTERS, log: (line) => console.log(line), afterPrimary },
+  );
+  if (!res) return null;
+  recordLlmUsage(res.usage);
+  return { text: res.text, queries: [], sources: [], provider: res.usage.provider, model: res.usage.model, ...(res.finishReason ? { finishReason: res.finishReason } : {}) };
+}
+
+/**
+ * A text-only request to the fallback providers, for a direct Gemini call outside the text chain (the domla's typed
+ * answer). `null` when no fallback is configured or none answered.
+ */
+export async function llmFallback(role: string, system: string, user: string, maxTokens: number, opts: LlmOpts = {}): Promise<string | null> {
+  const specs = usableTextChain().filter((s) => s.provider !== "gemini");
+  if (specs.length === 0) return null;
+  const res = await completeOthers(role, specs, true, system, user, maxTokens, opts, opts.timeoutMs ?? 40_000);
+  return res?.text ?? null;
+}
+
 /**
  * Provayderga so'rov — qayta urinish bilan.
  *
@@ -296,16 +386,24 @@ async function runLlm(
   role = "complete",
 ): Promise<GroundedResult | null> {
   assertGroundingMode(opts);
-  const provider = llmProvider();
-  if (!provider) return null;
-  const call = completeGemini;
   const budget = opts.timeoutMs ?? 40_000;
-  const once = async (o: { system: string; maxTokens: number; retry?: boolean }): Promise<GroundedResult | null> => {
-    const done = await withRetry(provider, budget, (timeoutMs) => call(o.system, user, o.maxTokens, { ...retryOpts(opts, o.retry), timeoutMs }), opts.deadline, role, opts.noTimeoutRetry);
+  const gemini = async (o: { system: string; maxTokens: number; retry?: boolean }, step: GeminiStep): Promise<GroundedResult | null> => {
+    const call = { ...retryOpts(opts, o.retry), ...(step.model ? { model: step.model } : {}) };
+    const done = await withRetry("gemini", budget, (timeoutMs) => completeGemini(o.system, user, o.maxTokens, { ...call, timeoutMs }), opts.deadline, role, opts.noTimeoutRetry, step);
     return done ? { ...done.value, ...(done.finishReason ? { finishReason: done.finishReason } : {}) } : null;
   };
+  /*
+   * Grounding exists only on Gemini and never falls back: an answer from another model's memory would enter the deck's
+   * prompt under the «verified on the internet» heading (see `llmGrounded`). The caller carries on without research.
+   */
+  const once = async (o: { system: string; maxTokens: number; retry?: boolean }): Promise<GroundedResult | null> =>
+    opts.grounding
+      ? llmProvider()
+        ? gemini(o, {})
+        : null
+      : walkTextChain(role, opts.deadline, (step) => gemini(o, step), (specs, afterPrimary) => completeOthers(role, specs, afterPrimary, o.system, user, o.maxTokens, retryOpts(opts, o.retry), budget));
   // JSON answers that are cut or unparseable get ONE stricter retry (every paid attempt is already recorded in the job meter).
-  return withJsonRetry(once, { system, maxTokens, json: opts.json, deadline: opts.deadline }, { role, provider: () => provider, model: () => llmModel() }, (winner) => winner);
+  return withJsonRetry(once, { system, maxTokens, json: opts.json, deadline: opts.deadline }, { role, provider: (r) => r.provider ?? "gemini", model: (r) => r.model ?? llmModel() }, (winner) => winner);
 }
 
 export async function llmComplete(
@@ -321,7 +419,8 @@ export async function llmComplete(
 /**
  * Internet qidiruvi bilan chaqiruv (Gemini grounding).
  *
- * Faqat Gemini yo'lida ishlaydi (qidiruv vositasi shu provayderda). Kalit
+ * Faqat Gemini yo'lida ishlaydi (qidiruv vositasi shu provayderda): the
+ * fallback providers have no search tool and are never asked. Kalit
  * yo'q bo'lsa `null` qaytadi — ataylab: grounding'siz javob oddiy model
  * bilimi bo'lardi, uni esa promptga «internetdan, TEKSHIRILGAN» sarlavhasi
  * bilan qo'yish uydirma raqamni ishonchli qilib ko'rsatishdan boshqa
@@ -434,7 +533,7 @@ async function completeGemini(
 ): Promise<Attempt<GroundedResult>> {
   const key = getProviderKey("gemini");
   if (!key) return { value: null, retryable: false, kind: "other", message: "GEMINI_API_KEY missing" };
-  const model = llmModel();
+  const model = opts.model ?? llmModel();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 40_000);
   try {
@@ -659,7 +758,7 @@ async function streamGemini(
 ): Promise<Attempt<string>> {
   const key = getProviderKey("gemini");
   if (!key) return { value: null, retryable: false, kind: "other", message: "GEMINI_API_KEY missing" };
-  const model = llmModel();
+  const model = opts.model ?? llmModel();
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
   try {
     const res = await fetch(url, {
@@ -684,6 +783,8 @@ async function streamGemini(
           retryAfterMs: retryAfterMs(res.headers) ?? geminiRetryDelayMs(err),
         };
       }
+      // The account is refused, not the streaming endpoint: the plain call would get the same answer.
+      if (isAccountFailure(res.status, err?.error?.message)) return { value: null, retryable: false, status: res.status, message: err?.error?.message ?? "request failed" };
       /*
        * Boshqa 4xx — oqim endpointining O'ZI rad etdi (proksi uni
        * bilmaydi, model oqimni qo'llamaydi, `alt=sse` bloklangan).
@@ -795,7 +896,7 @@ export async function llmStream(
 ): Promise<string | null> {
   const { onText, ...rest } = opts;
   assertGroundingMode(rest);
-  if (!llmProvider()) return null;
+  if (!llmEnabled()) return null;
   if (process.env.LLM_STREAM === "false") {
     const res = await runLlm(system, user, maxTokens, rest, "stream");
     if (!res) return null;
@@ -803,7 +904,8 @@ export async function llmStream(
     return res.text;
   }
   const budget = rest.timeoutMs ?? 40_000;
-  const once = async (o: { system: string; maxTokens: number; retry?: boolean }): Promise<{ text: string; finishReason?: string } | null> => {
+  const geminiPass = async (o: { system: string; maxTokens: number; retry?: boolean }, step: GeminiStep): Promise<{ text: string; finishReason?: string } | null> => {
+    const own = { ...rest, ...(step.model ? { model: step.model } : {}) };
     /*
      * The JSON-quality retry is NOT streamed: one plain `generateContent` call (JSON mime type, plus the
      * retry schema when the caller has one). The whole answer arrives atomically, so a bad SSE chunk or a
@@ -814,10 +916,11 @@ export async function llmStream(
       const plain = await withRetry(
         "gemini",
         budget,
-        (timeoutMs) => completeGemini(o.system, user, o.maxTokens, { ...retryOpts(rest, true), timeoutMs }),
+        (timeoutMs) => completeGemini(o.system, user, o.maxTokens, { ...retryOpts(own, true), timeoutMs }),
         rest.deadline,
         "stream",
         rest.noTimeoutRetry,
+        step,
       );
       if (!plain) return null;
       onText(plain.value.text);
@@ -826,14 +929,27 @@ export async function llmStream(
     const done = await withRetry(
       "gemini",
       budget,
-      (timeoutMs) => streamGemini(o.system, user, o.maxTokens, { ...rest, timeoutMs }, onText),
+      (timeoutMs) => streamGemini(o.system, user, o.maxTokens, { ...own, timeoutMs }, onText),
       rest.deadline,
       "stream",
       rest.noTimeoutRetry,
+      step,
     );
     return done ? { text: done.value, ...(done.finishReason ? { finishReason: done.finishReason } : {}) } : null;
   };
-  const res = await withJsonRetry(once, { system, maxTokens, json: rest.json, deadline: rest.deadline }, { role: "stream", provider: () => "gemini", model: () => llmModel() }, (winner) => winner);
+  // The stricter retry is not streamed on a fallback either: the finished text reaches `onText` once.
+  const once = (o: { system: string; maxTokens: number; retry?: boolean }): Promise<{ text: string; finishReason?: string; provider?: string; model?: string } | null> =>
+    walkTextChain(
+      "stream",
+      rest.deadline,
+      (step) => geminiPass(o, step),
+      async (specs, afterPrimary) => {
+        const r = await completeOthers("stream", specs, afterPrimary, o.system, user, o.maxTokens, retryOpts(rest, o.retry), budget, o.retry ? undefined : onText);
+        if (r && o.retry) onText(r.text);
+        return r;
+      },
+    );
+  const res = await withJsonRetry(once, { system, maxTokens, json: rest.json, deadline: rest.deadline }, { role: "stream", provider: (r) => r.provider ?? "gemini", model: (r) => r.model ?? llmModel() }, (winner) => winner);
   return res?.text ?? null;
 }
 

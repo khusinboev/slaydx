@@ -11,6 +11,14 @@
  *    daqiqalik kvota 0.5 s dan keyin qayta urilardi — aniq yiqilish.
  */
 
+/** Tarmoq xatosi matni: undici `fetch failed` ning haqiqiy sababi (`cause.code`) bilan. */
+export function describeNetError(e: unknown): string {
+  if (!(e instanceof Error)) return "network error";
+  const cause = (e as Error & { cause?: { code?: string; message?: string } }).cause;
+  const why = cause?.code ?? cause?.message;
+  return why && !e.message.includes(why) ? `${e.message} (${why})` : e.message;
+}
+
 export function backoffMs(attempt: number, baseMs: number, random: () => number = Math.random): number {
   const cap = baseMs * 2 ** Math.max(0, attempt);
   return Math.floor(Math.min(0.999_999, Math.max(0, random())) * cap);

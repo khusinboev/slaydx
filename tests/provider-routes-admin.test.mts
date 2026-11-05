@@ -228,7 +228,7 @@ test("GET: a purpose that requires Gemini is not enough with Claude alone; the v
   process.env.ANTHROPIC_API_KEY = "env-anthropic-secret";
   let r = await list(s.cookie);
   assert.equal(purposeOf(r, "text").verdict, "missing", "Claude alone cannot run the direct text path");
-  assert.match(purposeOf(r, "text").detail, /Gemini/);
+  assert.match(purposeOf(r, "text").detail, /Gemini yoki/);
   assert.equal(purposeOf(r, "image").verdict, "missing");
   process.env.GEMINI_API_KEY = "env-gemini-secret-1234";
   r = await list(s.cookie);
@@ -240,7 +240,7 @@ test("GET: a purpose that requires Gemini is not enough with Claude alone; the v
   assert.equal(tts().usable.gemini, true);
   assert.equal(itemOf(r, "gemini").usable, true);
   const text = purposeOf(r, "text").routes.find((x) => x.id === "llm.writer") as unknown as { usable: Record<string, boolean> };
-  assert.deepEqual(text.usable, { gemini: true, anthropic: true });
+  assert.deepEqual(text.usable, { gemini: true, qwen: false, deepseek: false, anthropic: true });
 });
 
 test("GET: slots carry source, entries with their state, the fallback and the model prices", { skip }, async () => {
@@ -250,10 +250,10 @@ test("GET: slots carry source, entries with their state, the fallback and the mo
   const r = await list(s.cookie);
   const judge = purposeOf(r, "text").routes.find((x) => x.id === "llm.judge")!;
   assert.equal(judge.source, "env");
-  assert.deepEqual(judge.entries.map((e) => `${e.provider}:${e.model}:${e.usable}`), ["anthropic:claude-sonnet-5:false", "gemini:gemini-3.7-flash:true"]);
+  assert.deepEqual(judge.entries.map((e) => `${e.provider}:${e.model}:${e.usable}`), ["anthropic:claude-sonnet-5:false", "gemini:gemini-3.7-flash:true", "qwen:qwen3.7-plus:false", "deepseek:deepseek-flash:false"], "the page shows the keyless fallbacks as not working");
   const writer = purposeOf(r, "text").routes.find((x) => x.id === "llm.writer")!;
   assert.equal(writer.source, "default");
-  assert.equal((r.body.purposes as Purpose[]).flatMap((p) => p.routes).length, 8, "every slot is shown once");
+  assert.equal((r.body.purposes as Purpose[]).flatMap((p) => p.routes).length, 9, "every slot is shown once");
   const analysis = purposeOf(r, "text").routes.find((x) => x.id === "tests.analysis")!;
   assert.deepEqual([analysis.source, analysis.entries.map((e) => `${e.provider}:${e.model}`)], ["default", ["gemini:gemini-3.1-pro"]], "the test-analysis slot defaults to Gemini 3.1 Pro");
   const tts = purposeOf(r, "tts").routes[0];
@@ -328,7 +328,8 @@ test("PUT route: stored, audited with before/after and the reason, the snapshot 
   const route = r.body.route as Purpose["routes"][number];
   assert.equal(route.source, "db");
   assert.deepEqual(route.entries.map((e) => `${e.provider}:${e.model}`), ["anthropic:claude-sonnet-5", "gemini:gemini-3.7-flash"]);
-  assert.deepEqual(route.fallbackEntries, [{ provider: "gemini", model: "gemini-3.7-flash", label: "Google Gemini", usable: false }], "reset would restore the env value");
+  assert.deepEqual((route.fallbackEntries as { provider: string; model: string }[]).map((e) => `${e.provider}:${e.model}`), ["gemini:gemini-3.7-flash", "qwen:qwen3.7-plus", "deepseek:deepseek-flash"], "reset would restore the env value and its fallbacks");
+  assert.deepEqual((route.fallbackEntries as unknown[])[0], { provider: "gemini", model: "gemini-3.7-flash", label: "Google Gemini", usable: false });
   assert.ok(route.updatedBy);
   assert.deepEqual((await storedRoute("llm.judge"))!.entries, JUDGE);
   assert.equal(effective.effectiveRoute("llm.judge").source, "db", "this process reloaded its snapshot at once");

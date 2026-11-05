@@ -208,7 +208,7 @@ export async function aiCost(range: DateRange, groupBy: AiGroupBy): Promise<AiCo
 // ---------------------------------------------------------------------------
 // Providers
 
-export const PROVIDER_KEY_NAMES = ["gemini", "anthropic", "openai", "pexels", "pixabay", "azureTts", "aisha"] as const;
+export const PROVIDER_KEY_NAMES = ["gemini", "anthropic", "qwen", "deepseek", "openai", "pexels", "pixabay", "azureTts", "aisha"] as const;
 export type ProviderKeyName = (typeof PROVIDER_KEY_NAMES)[number];
 export type ProviderKeys = Record<ProviderKeyName, boolean>;
 
@@ -227,6 +227,8 @@ export function providerKeys(): ProviderKeys {
   return {
     gemini: present(geminiKey()),
     anthropic: present(getProviderKey("anthropic")),
+    qwen: present(getProviderKey("qwen")),
+    deepseek: present(getProviderKey("deepseek")),
     // OpenAI is used for the «ChatGPT» image choice only (registry id `openai-image`).
     openai: present(getProviderKey("openai-image")),
     pexels: present(pexelsKey()),
