@@ -74,6 +74,32 @@ export type MarketCloneValues = PurchaseFields & { marketItemId: string; languag
 
 export const isMarketCopyValues = (v: Record<string, unknown>): v is MarketCloneValues => typeof v.marketItemId === "string";
 
+/**
+ * Where a purchase stands (`lib/market/purchase-state.ts`). `ready`: the copy is there or on its way. `refunded`: the
+ * money went back, the copy stays. `void`: the money went back and there is no copy, so the item may be bought again at
+ * its price. `restorable`: paid, the copy is gone, restore is free. `refund_pending`: the paid job failed and its refund
+ * has not landed yet. `blocked`: the copy is gone and an abuse flag stops the restore.
+ */
+export type PurchaseState = "ready" | "refunded" | "void" | "restorable" | "refund_pending" | "blocked";
+
+/** One row of «Xaridlarim». */
+export type MarketPurchaseView = {
+  id: string;
+  itemId: string;
+  toolId: ToolId;
+  title: string;
+  cover: string;
+  price: number;
+  originalPrice: number;
+  createdAt: string;
+  generationId: string | null;
+  generationStatus: string | null;
+  state: PurchaseState;
+  canRestore: boolean;
+  canRate: boolean;
+  rating: { stars: number; text: string; editableUntil: string } | null;
+};
+
 /** The API error codes of the market (`ApiError` body `code`). */
 export const MARKET_ERROR_CODES = [
   "market_disabled",
@@ -85,6 +111,13 @@ export const MARKET_ERROR_CODES = [
   "offer_required",
   "channel_required",
   "paused",
+  "fields_required",
+  "refunded",
+  "refund_pending",
+  "restore_blocked",
+  "university_changed",
+  "rating_not_open",
+  "rating_closed",
 ] as const;
 export type MarketErrorCode = (typeof MARKET_ERROR_CODES)[number];
 

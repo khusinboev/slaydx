@@ -8,6 +8,8 @@ import { adapterFor, type RenderedFile } from "../edit-adapters";
 import { rateLimit } from "../ratelimit";
 import { getSetting } from "../settings";
 import { marketPriceForItem, type MarketPricingConfig } from "./pricing";
+import { holdsItem, purchaseStateOf } from "../../market/purchase-state";
+import { PURCHASE_FACTS_JOIN, PURCHASE_FACTS_SELECT, purchaseFactsOf, type PurchaseFactsRow } from "./store";
 import { getItemDoc, getItemRow, isHiddenForReview, isUuid, marketAssetResolver, PUBLIC_STATUSES, type MarketItemRow } from "./store";
 
 /**
@@ -65,11 +67,13 @@ export async function toCard(row: MarketItemRow, cfg?: MarketPricingConfig): Pro
 
 async function ownedBy(itemId: string, userId: string | null): Promise<MarketItemView["owned"]> {
   if (!userId) return null;
-  const row = await queryOne<{ id: string; generation_id: string | null }>(
-    "SELECT id, generation_id FROM market_purchases WHERE item_id = $1 AND buyer_user_id = $2",
+  const row = await queryOne<PurchaseFactsRow>(
+    `SELECT ${PURCHASE_FACTS_SELECT} ${PURCHASE_FACTS_JOIN} WHERE p.item_id = $1 AND p.buyer_user_id = $2`,
     [itemId, userId],
   );
-  return row ? { generationId: row.generation_id, purchaseId: row.id } : null;
+  // A refunded purchase without a file holds nothing: the page offers the item for sale again.
+  if (!row || !holdsItem(purchaseStateOf(purchaseFactsOf(row)))) return null;
+  return { generationId: row.generation_id, purchaseId: row.id };
 }
 
 /**
@@ -116,7 +120,7 @@ export async function recordMarketView(itemId: string, viewerKey: string): Promi
   }
 }
 
-const safeFileName = (title: string, ext: string): string => `${title.replace(/[^\p{L}\p{N}\- ]/gu, "").replace(/\s+/g, " ").trim().slice(0, 60) || "ish"}.${ext}`;
+export const safeFileName = (title: string, ext: string): string => `${title.replace(/[^\p{L}\p{N}\- ]/gu, "").replace(/\s+/g, " ").trim().slice(0, 60) || "ish"}.${ext}`;
 
 /**
  * The neutral file of an item: the sanitised document through the tool's own renderer, images from the item's own
