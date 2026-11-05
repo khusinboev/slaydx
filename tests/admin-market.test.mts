@@ -202,7 +202,7 @@ test("approve: file, status, approved_*, price snapshot, the family's cap and on
   assert.ok(row!.approved_at);
   assert.equal(row!.approved_by, s.adminId);
   assert.ok(Number(row!.original_price) > 0, "the snapshot of the original price");
-  assert.equal(row!.max_copies, 5, "work family default");
+  assert.equal(row!.max_copies, null, "no cap by default (owner 2026-11-06)");
   assert.equal(row!.title, "Yangi sarlavha");
   assert.equal(row!.subject, "tarix");
   assert.equal(row!.level, "kollej");
@@ -215,7 +215,27 @@ test("approve: file, status, approved_*, price snapshot, the family's cap and on
   assert.equal(a.length, 1);
   assert.equal(a[0]!.reason, REASON);
   assert.equal(a[0]!.after!.status, "active");
-  assert.equal(a[0]!.after!.maxCopies, 5);
+  assert.equal(a[0]!.after!.maxCopies, null);
+});
+
+test("approve: an admin's family cap applies; an explicit «no cap» beats it; clearing a cap reopens a sold-out item", { skip }, async () => {
+  const s = await session("moderator");
+  await setSetting("market.max_copies_work", 7);
+  try {
+    const capped = await mkItem({ tool: "referat" });
+    assert.equal((await call(R.approve.POST as Handler, "POST", s, { params: { id: capped }, body: { reason: REASON } })).status, 200);
+    assert.equal((await getItemRow(capped))?.max_copies, 7, "MUTATSIYA: the family setting is ignored");
+    const free = await mkItem({ tool: "referat" });
+    assert.equal((await call(R.approve.POST as Handler, "POST", s, { params: { id: free }, body: { reason: REASON, maxCopies: null } })).status, 200);
+    assert.equal((await getItemRow(free))?.max_copies, null, "MUTATSIYA: null falls back to the setting");
+  } finally {
+    await setSetting("market.max_copies_work", 0);
+  }
+  const sold = await mkItem({ status: "sold_out", soldCount: 5, maxCopies: 5 });
+  const r = await call(R.item.PATCH as Handler, "PATCH", s, { params: { id: sold }, body: { reason: REASON, maxCopies: null } });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.status, "active", "MUTATSIYA: no cap reopens the item");
+  assert.equal((await getItemRow(sold))?.max_copies, null);
 });
 
 test("approve: the catalog shows it at once", { skip }, async () => {

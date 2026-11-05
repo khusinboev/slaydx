@@ -155,7 +155,7 @@ export type MarketStats = {
 export type MarketToolPricing = { toolId: string; title: string; percent: number | null; effective: number; disabled: boolean; active: number };
 export type ScanResult = { locked: boolean; scanned: number; created: number; rejected: number; stopped?: true };
 export type ActionResult = { id: string; status: MarketStatus };
-export type ItemEdits = { title?: string; summary?: string; subject?: string; level?: MarketLevel; maxCopies?: number };
+export type ItemEdits = { title?: string; summary?: string; subject?: string; level?: MarketLevel; maxCopies?: number | null };
 export type BulkApproveResult = { results: { id: string; ok: boolean; code?: string; message?: string }[]; approved: number };
 
 export type MarketItemsQuery = {

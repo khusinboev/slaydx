@@ -344,9 +344,9 @@ test("bonus so'm pays by default; market.paid_only hides it", { skip }, async (t
   assert.equal((await wallet(v.id)).points, 50_000);
 });
 
-test("university cap: spelled any way, per item; other universities pass; 0 switches it off", { skip }, async (t) => {
+test("university cap: off by default; once set, spelled any way, per item; other universities pass; 0 switches it off", { skip }, async (t) => {
   quiet(t);
-  await resetSettings();
+  await resetSettings({ "market.enabled": true, "market.same_university_cap": 2 });
   const item = await mkItem({ title: "Issiqlik dvigatellari" });
   const twin = await mkItem({ title: "Issiqlik dvigatellari tarixi" });
   await buy(await mkUser(), item, { fields: { author: "A", university: "Toshkent Davlat Universiteti" } });
