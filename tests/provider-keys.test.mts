@@ -99,7 +99,7 @@ test("registry: unique ids, Uzbek labels, kinds, env names; reserved providers a
   assert.equal(new Set(ids).size, ids.length);
   assert.deepEqual(
     [...ids].sort(),
-    ["anthropic", "aisha", "azure", "elevenlabs", "fal", "gemini", "googlebooks", "heygen", "kling", "openai-image", "openalex", "pexels", "pixabay", "veo"].sort(),
+    ["anthropic", "aisha", "azure", "deepseek", "elevenlabs", "fal", "gemini", "googlebooks", "heygen", "kling", "openai-image", "openalex", "pexels", "pixabay", "qwen", "veo"].sort(),
   );
   // Removed providers (xAI, OpenRouter, OpenAI as a TEXT provider) are not in the registry: no key is read for them.
   for (const id of ["xai", "openrouter", "openai"]) assert.equal(registry.providerDef(id), null, `${id} is removed`);
@@ -132,7 +132,7 @@ test("registry: unique ids, Uzbek labels, kinds, env names; reserved providers a
 
 test("registry: every LLM adapter id exists with kind llm; non-LLM and removed ids are not valid LLM role specs", () => {
   const llmIds = registry.PROVIDERS.filter((p) => (p.kinds as readonly string[]).includes("llm")).map((p) => p.id);
-  assert.deepEqual([...llmIds].sort(), ["anthropic", "gemini"], "the LLM providers are gemini and anthropic only");
+  assert.deepEqual([...llmIds].sort(), ["anthropic", "deepseek", "gemini", "qwen"], "the LLM providers are exactly the ones with an adapter");
   for (const id of llmIds) assert.equal(parseRoleSpec(`${id}:m`).length, 1, id);
   for (const id of ["fal", "xai", "openrouter", "openai", "pexels", "azure", "kling"]) assert.deepEqual(parseRoleSpec(`${id}:m`), [], id);
 });

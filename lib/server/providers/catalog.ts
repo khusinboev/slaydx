@@ -186,10 +186,10 @@ export type Purpose = {
   /** Providers shown with it but never part of the standard chain (the premium voice): they do not count for the verdict. */
   premium: readonly ProviderId[];
   /**
-   * A provider the purpose cannot work WITHOUT, whatever else is switched on (the direct text path and the image
-   * tools are Gemini-only). `null` = any listed provider will do.
+   * The purpose needs ONE of these, whatever else is switched on: the image tools are Gemini-only, and the default text
+   * chain does not contain Claude, so a working Claude alone cannot write a slide. `null` = any listed provider will do.
    */
-  requires: ProviderId | null;
+  requires: readonly ProviderId[] | null;
   /** Routing slots editable inside this purpose. */
   routes: readonly RouteId[];
   /**
@@ -211,7 +211,7 @@ export const PURPOSES: readonly Purpose[] = [
     minimum: "Kamida bitta matn provayderi ishlashi shart (asosiysi Gemini). Qwen va DeepSeek — Gemini to'xtaganda ishlaydigan arzon zaxira, Claude — baholovchi.",
     providers: ["gemini", "qwen", "deepseek", "anthropic"],
     premium: [],
-    requires: null,
+    requires: ["gemini", "qwen", "deepseek"],
     routes: ["llm.chain", "llm.model", "llm.writer", "llm.researcher", "llm.judge", "llm.fast", "tests.analysis"],
     fallback: true,
     setting: null,
@@ -224,7 +224,7 @@ export const PURPOSES: readonly Purpose[] = [
     minimum: "Gemini (Nano Banana) yetarli. ChatGPT va fal.ai (Studio'dagi FLUX, Seedream, Ideogram, Recraft) — foydalanuvchiga qo'shimcha tanlov, shart emas.",
     providers: ["gemini", "openai-image", "fal"],
     premium: [],
-    requires: "gemini",
+    requires: ["gemini"],
     routes: ["image.gemini"],
     fallback: false,
     setting: null,
@@ -322,12 +322,12 @@ export type VerdictInfo = { verdict: Verdict; headline: string; detail: string }
  */
 export function purposeVerdict(purpose: Purpose, usable: readonly ProviderId[], labelOf: (id: ProviderId) => string): VerdictInfo {
   const working = purpose.providers.filter((p) => usable.includes(p));
-  if (purpose.requires && !usable.includes(purpose.requires)) {
-    const must = labelOf(purpose.requires);
+  if (purpose.requires && !purpose.requires.some((p) => usable.includes(p))) {
+    const must = purpose.requires.map(labelOf).join(" yoki ");
     return {
       verdict: "missing",
       headline: "Yetarli emas",
-      detail: `${must} ishlamayapti — bu vazifa usiz bajarilmaydi${working.length > 0 ? `, boshqa provayderlar (${working.map(labelOf).join(", ")}) uning o'rnini bosa olmaydi` : ""}. ${must}ni yoqing yoki kalitini kiriting.`,
+      detail: `${must} ishlamayapti — bu vazifa ularsiz bajarilmaydi${working.length > 0 ? `, boshqa provayderlar (${working.map(labelOf).join(", ")}) uning o'rnini bosa olmaydi` : ""}. Kamida bittasini yoqing yoki kalitini kiriting: ${must}.`,
     };
   }
   if (working.length === 0) {

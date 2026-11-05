@@ -445,6 +445,8 @@ test("providers: keys are booleans, true exactly for the configured ones, and no
   assert.deepEqual(r.body.keys, {
     gemini: true,
     anthropic: true,
+    qwen: false,
+    deepseek: false,
     openai: true,
     pexels: true,
     pixabay: false,

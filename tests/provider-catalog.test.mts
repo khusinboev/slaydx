@@ -6,7 +6,7 @@ process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://unused/unused
 const { PROVIDERS, PROVIDER_IDS } = await import("../lib/server/providers/registry.ts");
 const { PROVIDER_META, PURPOSES, ROUTE_INFO, purposeVerdict } = await import("../lib/server/providers/catalog.ts");
 const { ROUTE_IDS, ROUTE_SPECS, checkRoute, isRouteId, modelOptions } = await import("../lib/server/providers/routes.ts");
-const { effectiveRoute, geminiImageModelName, geminiTextModel, testsAnalysisModel, ttsProviderRank, DEFAULT_GEMINI_MODEL, DEFAULT_GEMINI_IMAGE_MODEL, DEFAULT_TESTS_ANALYSIS_MODEL } = await import("../lib/server/providers/route-effective.ts");
+const { effectiveRoute, geminiImageModelName, geminiTextModel, testsAnalysisModel, ttsProviderRank, DEFAULT_TEXT_FALLBACKS, DEFAULT_GEMINI_MODEL, DEFAULT_GEMINI_IMAGE_MODEL, DEFAULT_TESTS_ANALYSIS_MODEL } = await import("../lib/server/providers/route-effective.ts");
 const { resetRouteSnapshot, setRouteSnapshot } = await import("../lib/server/providers/route-resolve.ts");
 const { foldUsage, registryIdOf, tashkentDay, usageDays, SERIES_DAYS } = await import("../lib/server/admin-provider-usage.ts");
 const { providerOfUrl, recordProviderCall, registerProviderCallSink } = await import("../lib/generation/provider-calls.ts");
@@ -91,11 +91,13 @@ test("verdict: missing / single / ok / off follow the rules", () => {
 
 test("verdict: a purpose that REQUIRES a provider is not enough without it, whatever else works", () => {
   const text = P("text");
-  assert.equal(text.requires, "gemini");
+  assert.deepEqual(text.requires, ["gemini", "qwen", "deepseek"]);
   const only = purposeVerdict(text, ["anthropic"], label);
-  assert.equal(only.verdict, "missing", "the direct text path is Gemini-only: Claude alone cannot write a slide");
-  assert.match(only.detail, /GEMINI ishlamayapti/);
+  assert.equal(only.verdict, "missing", "Claude is not in the default text chain: alone it cannot write a slide");
+  assert.match(only.detail, /GEMINI yoki QWEN yoki DEEPSEEK ishlamayapti/);
   assert.match(only.detail, /ANTHROPIC/, "says what could not replace it");
+  assert.equal(purposeVerdict(text, ["qwen"], label).verdict, "single", "a fallback alone keeps text running, with no reserve");
+  assert.equal(purposeVerdict(text, ["gemini", "qwen"], label).verdict, "ok", "Gemini plus a fallback is enough");
   assert.equal(purposeVerdict(P("image"), ["openai-image"], label).verdict, "missing", "pro-slide and portrait images need Gemini");
   assert.equal(purposeVerdict(text, ["gemini"], label).verdict, "single", "with Gemini the usual rules apply");
 });
@@ -115,7 +117,7 @@ test("verdict: premium voice does not count", () => {
 test("modelOptions: only priced models, current price, none for the voice order", () => {
   const writer = modelOptions("llm.writer");
   assert.ok(writer.length >= 4);
-  assert.deepEqual([...new Set(writer.map((o) => o.provider))].sort(), ["anthropic", "gemini"]);
+  assert.deepEqual([...new Set(writer.map((o) => o.provider))].sort(), ["anthropic", "deepseek", "gemini", "qwen"]);
   for (const o of writer) {
     assert.ok(costUsd({ provider: o.provider, model: o.model, inputTokens: 1_000_000, outputTokens: 0 }) > 0, `${o.model} is in the price book`);
     assert.ok(o.inUsdPerM! > 0 && o.outUsdPerM! > 0 && o.perImageUsd === null);
@@ -169,19 +171,19 @@ test("checkRoute rejects a model that is not in the price book, an unknown or fo
 test("effectiveRoute: db beats env beats default", () => {
   const env = envOf({ GEMINI_MODEL: "gemini-3.5-flash-lite", LLM_JUDGE: "anthropic:claude-sonnet-5,gemini:gemini-3.7-flash", GEMINI_IMAGE_MODEL: "gemini-3.1-flash-image" });
   // default
-  assert.deepEqual(effectiveRoute("llm.writer", envOf({})), { source: "default", entries: [{ provider: "gemini", model: DEFAULT_GEMINI_MODEL }] });
+  assert.deepEqual(effectiveRoute("llm.writer", envOf({})), { source: "default", entries: [{ provider: "gemini", model: DEFAULT_GEMINI_MODEL }, ...DEFAULT_TEXT_FALLBACKS] });
   assert.equal(geminiTextModel(envOf({})), DEFAULT_GEMINI_MODEL);
   assert.equal(geminiImageModelName(envOf({})), DEFAULT_GEMINI_IMAGE_MODEL);
   assert.deepEqual(effectiveRoute("tts.order", envOf({})).entries.map((e) => e.provider), ["azure", "aisha", "gemini"]);
   // env
   assert.deepEqual(effectiveRoute("llm.judge", env), {
     source: "env",
-    entries: [{ provider: "anthropic", model: "claude-sonnet-5" }, { provider: "gemini", model: "gemini-3.7-flash" }],
+    entries: [{ provider: "anthropic", model: "claude-sonnet-5" }, { provider: "gemini", model: "gemini-3.7-flash" }, ...DEFAULT_TEXT_FALLBACKS],
   });
   assert.equal(effectiveRoute("llm.model", env).source, "env");
   assert.equal(geminiTextModel(env), "gemini-3.5-flash-lite");
   assert.equal(geminiImageModelName(env), "gemini-3.1-flash-image");
-  assert.deepEqual(effectiveRoute("llm.writer", env).entries, [{ provider: "gemini", model: "gemini-3.5-flash-lite" }], "a role with no env value follows the env text model");
+  assert.deepEqual(effectiveRoute("llm.writer", env).entries, [{ provider: "gemini", model: "gemini-3.5-flash-lite" }, ...DEFAULT_TEXT_FALLBACKS], "a role with no env value follows the env text model");
   // db
   setRouteSnapshot(new Map([["llm.judge", [{ provider: "gemini", model: "gemini-3.1-pro" }]], ["llm.model", [{ provider: "gemini", model: "gemini-3.1-pro" }]]]));
   assert.deepEqual(effectiveRoute("llm.judge", env), { source: "db", entries: [{ provider: "gemini", model: "gemini-3.1-pro" }] }, "the stored choice beats the env value");
@@ -214,7 +216,7 @@ test("tests.analysis: one Gemini text model, default Gemini 3.1 Pro, stored choi
 
 test("an env chain naming a provider that was removed keeps the valid entries", () => {
   const env = envOf({ LLM_WRITER: "openrouter:x/y,gemini:gemini-3.7-flash" });
-  assert.deepEqual(effectiveRoute("llm.writer", env), { source: "env", entries: [{ provider: "gemini", model: "gemini-3.7-flash" }] });
+  assert.deepEqual(effectiveRoute("llm.writer", env), { source: "env", entries: [{ provider: "gemini", model: "gemini-3.7-flash" }, ...DEFAULT_TEXT_FALLBACKS] });
 });
 
 test("ttsProviderRank: null without a stored order; listed providers first, the rest after", () => {
