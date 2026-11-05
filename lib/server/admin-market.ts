@@ -473,7 +473,7 @@ export async function marketItemBuyers(id: string): Promise<{ items: MarketBuyer
 
 /* ────────────────────────── edits ────────────────────────── */
 
-export type ItemEdits = { title?: string; summary?: string; subject?: MarketSubjectId; level?: MarketLevel; maxCopies?: number };
+export type ItemEdits = { title?: string; summary?: string; subject?: MarketSubjectId; level?: MarketLevel; maxCopies?: number | null };
 
 /** The optional listing fields of an approve / edit body; bad input is a 400, unknown keys are ignored. */
 export function parseItemEdits(body: Record<string, unknown>): ItemEdits {
@@ -498,7 +498,8 @@ export function parseItemEdits(body: Record<string, unknown>): ItemEdits {
   }
   if (body.maxCopies !== undefined) {
     const n = body.maxCopies;
-    if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 1 || n > MAX_COPIES_LIMIT) throw new ApiError(`Nusxa soni 1 dan ${MAX_COPIES_LIMIT} gacha bo'lsin`, 400);
+    // `null` = no cap.
+    if (n !== null && (typeof n !== "number" || !Number.isSafeInteger(n) || n < 1 || n > MAX_COPIES_LIMIT)) throw new ApiError(`Nusxa soni 1 dan ${MAX_COPIES_LIMIT} gacha bo'lsin`, 400);
     out.maxCopies = n;
   }
   return out;
@@ -527,7 +528,7 @@ export type MarketActionResult = { id: string; status: MarketStatus };
 
 /** Status after a `max_copies` change: raising a sold-out cap reopens the item (§9), lowering it to the sold count closes it. */
 export function statusForCap(status: MarketStatus, maxCopies: number | null, soldCount: number): MarketStatus {
-  if (maxCopies === null) return status;
+  if (maxCopies === null) return status === "sold_out" ? "active" : status;
   if (status === "sold_out" && maxCopies > soldCount) return "active";
   if (status === "active" && maxCopies <= soldCount) return "sold_out";
   return status;
@@ -543,7 +544,7 @@ export async function editMarketItem(actor: AdminActor, id: string, body: Record
     const { before, after } = diffOf(row, edits);
     if (!Object.keys(after).length) throw new ApiError("Hech narsa o'zgarmadi", 400, { code: "unchanged" });
     const c = editedColumns(row, edits);
-    const maxCopies = edits.maxCopies ?? row.max_copies;
+    const maxCopies = edits.maxCopies !== undefined ? edits.maxCopies : row.max_copies;
     const status = statusForCap(row.status, maxCopies, row.sold_count);
     await client.query(
       `UPDATE market_items
@@ -604,7 +605,9 @@ async function approveOne(
     const c = editedColumns(row, input.edits);
     const family = marketFamilyOf(row.tool_id);
     if (!family) throw stateError("Bu vosita bozorda yo'q");
-    const maxCopies = input.edits.maxCopies ?? (await getSettingInTx(client, MAX_COPIES_KEY[family]));
+    // An explicit choice wins (`null` = no cap); otherwise the family's setting, where 0 = no cap.
+    const familyCap = await getSettingInTx(client, MAX_COPIES_KEY[family]);
+    const maxCopies = input.edits.maxCopies !== undefined ? input.edits.maxCopies : familyCap > 0 ? familyCap : null;
     await putNeutralFile(client, id, prepared.file);
     const { originalPrice } = await marketPriceInTx(client, row);
     await client.query(
