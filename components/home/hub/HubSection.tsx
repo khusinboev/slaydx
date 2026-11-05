@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
-/** Entrance stagger step; the last of the hub's 4 sections starts at 150 ms (≤ 200 ms). */
+/** Entrance stagger step; the last of the hub's 5 sections starts at 200 ms (≤ 200 ms). */
 export const HUB_STAGGER_MS = 50;
 
 /**

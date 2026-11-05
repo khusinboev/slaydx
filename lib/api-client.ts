@@ -7,6 +7,7 @@ import type { SlideAudience, SlideTemplateId, SlideVisual } from "./generation/s
 import type { BodyRules } from "./generation/slide-audience";
 import type { DownloadFormatId } from "./downloads/formats";
 import type { ClickMethod } from "./click-input";
+import type { MarketCard, MarketItemView, MarketLevel, MarketListResponse, MarketSort, PurchaseRequest, PurchaseResponse } from "./market/types";
 import { reportGate, type GateChannel } from "./channel-gate";
 import { askOffer, isOfferRequired } from "./offer-gate";
 import {
@@ -286,6 +287,8 @@ export type Features = {
   chat?: boolean;
   /** `tests.enabled` is on: «Test ishlash» is listed; absent (older server) or false = hidden. */
   tests?: boolean;
+  /** `market.enabled` is on: «Ishlar bozori» is listed; absent (older server) or false = every entry point hidden. */
+  market?: boolean;
   telegram: boolean;
   telegramBot: string | null;
   devLogin: boolean;
@@ -475,6 +478,8 @@ export type ServerGeneration = Omit<Generation, "values" | "doc" | "html"> & {
    * eskiz/fayl havolalari o'chgan aktivga olib boradi — UI ularni chizmaydi.
    */
   filesPurgedAt?: string | null;
+  /** The copy was bought in «Ishlar bozori» (the «Bozordan» badge); absent / null for the user's own works. */
+  marketItemId?: string | null;
 };
 
 export type GenerationDetail = ServerGeneration & {
@@ -1267,3 +1272,97 @@ export async function draftOutline(slug: string, values: FormValues) {
 }
 
 export type { ToolId };
+
+/* ─────────────────────────── «Ishlar bozori» (docs/market/PLAN.md) ─────────────────────────── */
+
+export type MarketListParams = {
+  tool?: string;
+  subject?: string;
+  level?: MarketLevel | "";
+  sort?: MarketSort;
+  q?: string;
+  cursor?: string | null;
+  limit?: number;
+};
+
+/** What «Xaridlarim» may offer on a purchase (`lib/market/purchase-state.ts`, the server decides). */
+export type MarketPurchaseState = "ready" | "refunded" | "void" | "restorable" | "refund_pending" | "blocked";
+
+/** A row of «Xaridlarim» (`GET /api/market/purchases`). */
+export type MarketPurchase = {
+  id: string;
+  itemId: string;
+  toolId: ToolId;
+  title: string;
+  cover: string;
+  price: number;
+  originalPrice: number;
+  createdAt: string;
+  generationId: string | null;
+  generationStatus: string | null;
+  state: MarketPurchaseState;
+  canRestore: boolean;
+  canRate: boolean;
+  rating: { stars: number; text: string; editableUntil: string } | null;
+};
+
+function marketQuery(p: MarketListParams): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(p)) if (v !== undefined && v !== null && v !== "") q.set(k, String(v));
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
+
+export function marketList(params: MarketListParams = {}, opts: { signal?: AbortSignal } = {}) {
+  return request<MarketListResponse>(`/api/market/items${marketQuery(params)}`, { signal: opts.signal });
+}
+
+export function marketItem(id: string, opts: { signal?: AbortSignal } = {}) {
+  return request<MarketItemView>(`/api/market/items/${id}`, { signal: opts.signal });
+}
+
+export function marketSuggest(tool: string, q: string, opts: { signal?: AbortSignal } = {}) {
+  return request<{ items: MarketCard[] }>(`/api/market/suggest${marketQuery({ tool, q })}`, { signal: opts.signal });
+}
+
+/** A fresh `Idempotency-Key`: one per confirmed «Tasdiqlash» (a lost answer retries with the same key). */
+export const marketPurchaseKey = (): string => uuidV4();
+
+/** 409 `price_changed` becomes `PriceChangedError`, as on `/api/generations`; 403 channel gates are reported to the gate store. */
+export async function purchaseMarketItem(id: string, body: PurchaseRequest, idempotencyKey: string) {
+  try {
+    return await request<PurchaseResponse>(`/api/market/items/${id}/purchase`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "Idempotency-Key": idempotencyKey },
+      timeoutMs: 60_000,
+    });
+  } catch (e) {
+    if (e instanceof ApiError) reportGate(e.status, e.data);
+    throw priceChangedOf(e) ?? e;
+  }
+}
+
+export function marketPurchases() {
+  return request<{ purchases: MarketPurchase[] }>("/api/market/purchases");
+}
+
+export function restoreMarketPurchase(id: string) {
+  return request<{ generationId: string; restored: boolean }>(`/api/market/purchases/${id}/restore`, { method: "POST", body: "{}" });
+}
+
+export function rateMarketPurchase(id: string, body: { stars: number; text: string }) {
+  return request<{ stars: number; text: string }>(`/api/market/purchases/${id}/rating`, { method: "POST", body: JSON.stringify(body) });
+}
+
+export function reportMarketItem(id: string, reason: string) {
+  return request<{ reported: boolean }>(`/api/market/items/${id}/report`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+
+export function getMarketOptOut() {
+  return request<{ optOut: boolean }>("/api/market/opt-out");
+}
+
+export function setMarketOptOut(optOut: boolean) {
+  return request<{ optOut: boolean }>("/api/market/opt-out", { method: "PUT", body: JSON.stringify({ optOut }) });
+}

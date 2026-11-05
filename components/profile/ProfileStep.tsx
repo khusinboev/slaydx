@@ -6,6 +6,7 @@ import * as api from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { useAppStore } from "@/lib/store";
 import { useHideInAppBack } from "@/components/telegram/useMiniAppShell";
+import { MarketOptOut } from "@/components/market/MarketOptOut";
 import { ACCENT_INK, ACCENT_SOFT, Group, IconChip, PRIMARY_BUTTON, ProfileSkeleton, SignedOutCard, StepProgress } from "./parts";
 import {
   FIELD_MAX,
@@ -397,6 +398,8 @@ function SecurityStep({ user, onNavigate }: { user: api.ServerUser; onNavigate: 
           shuni bosing.
         </p>
       </div>
+
+      <MarketOptOut />
 
       <div className="mt-6 flex flex-col gap-3">
         {confirmOut ? (

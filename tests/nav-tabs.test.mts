@@ -222,10 +222,10 @@ test("tabOf: nested routes keep their tab; tool pages have none", () => {
 });
 
 test("tabBarRoute: shown on the shell pages, hidden on tool forms, the result page, login and unknown routes", () => {
-  for (const p of ["/uz", "/uz/files", "/uz/wallet", "/uz/profile", "/uz/profile/shaxsiy", "/uz/profile/xavfsizlik", "/uz/create", "/uz/files?filter=docs"]) {
+  for (const p of ["/uz", "/uz/files", "/uz/wallet", "/uz/profile", "/uz/profile/shaxsiy", "/uz/profile/xavfsizlik", "/uz/create", "/uz/files?filter=docs", "/uz/market", "/uz/market?tool=slide", "/uz/market/purchases", "/uz/market/3f1c2a9e"]) {
     assert.equal(tabBarRoute(p), true, `shown on ${p}`);
   }
-  for (const p of ["/uz/slide", "/uz/pro-slide", "/uz/referat", "/uz/files/3f1c2a9e", "/uz/login", "/uz/admin", "/uz/profile/nope", "/o/abc", "/admin"]) {
+  for (const p of ["/uz/slide", "/uz/pro-slide", "/uz/referat", "/uz/files/3f1c2a9e", "/uz/login", "/uz/admin", "/uz/profile/nope", "/uz/market/a/b", "/o/abc", "/admin"]) {
     assert.equal(tabBarRoute(p), false, `hidden on ${p}`);
   }
 });

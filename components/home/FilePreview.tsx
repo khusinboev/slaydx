@@ -43,6 +43,20 @@ function SlideThumbUnavailable() {
  * bo'lib qoladi (`lib/store.ts` `keepUnchanged`) — karta qayta chizilmaydi.
  */
 export const FilePreview = memo(function FilePreview({ gen }: { gen: ServerGeneration }) {
+  return (
+    <>
+      <PreviewFace gen={gen} />
+      {/* A copy bought in «Ishlar bozori» (§2.3); the card's thumbnail box is the positioned parent. */}
+      {gen.marketItemId ? (
+        <span data-market-badge className="bg-card/95 text-foreground absolute bottom-1 left-1 rounded-full px-1.5 py-0.5 text-[11.5px] leading-none font-semibold shadow-sm">
+          Bozordan
+        </span>
+      ) : null}
+    </>
+  );
+});
+
+function PreviewFace({ gen }: { gen: ServerGeneration }) {
   const running = gen.status === "QUEUED" || gen.status === "IN_PROGRESS";
 
   if (running) {
@@ -138,7 +152,7 @@ export const FilePreview = memo(function FilePreview({ gen }: { gen: ServerGener
     return linesView;
   }
   return <KindPlaceholder type={gen.type} />;
-});
+}
 
 /**
  * Nothing to draw (no thumbnail, no text lines): a themed surface with the

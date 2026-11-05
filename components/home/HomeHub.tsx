@@ -11,6 +11,7 @@ import { useReturnToLogin } from "@/components/shell/useReturnToLogin";
 import { greetingTitle } from "./hub/hub-model";
 import { HubSection, HUB_STAGGER_MS, SECTION_LINK_CLASS } from "./hub/HubSection";
 import { HubSearch } from "./hub/HubSearch";
+import { MarketRail } from "./hub/MarketRail";
 import { QuickStart } from "./hub/QuickStart";
 import { RecentFiles } from "./hub/RecentFiles";
 import { SignedOutCard } from "./hub/SignedOutCard";
@@ -31,6 +32,7 @@ const WIDTH = "max-w-[1040px]";
  *   - «Tez boshlash»: the «AI yordamchi» promo card, Slayd, Referat, Insho, Rezyume, the «Qattiqqo'l domla» promo;
  *   - «Davom ettirish»: the 3 latest files + «Barchasi →» Ishlarim; signed out,
  *     a login card instead;
+ *   - «Ishlar bozori»: a rail of popular ready works (`MarketRail`, behind `features.market`);
  *   - «Barcha vositalar» by group (tools + link-only services, `lib/services.ts`) + «Hammasi» → `/uz/create`.
  * Tool links keep the «+» sheet's login gate. ≥ 1024 px: quick start and
  * recent files side by side. `?returnTo=` opens the login (`useReturnToLogin`).
@@ -103,10 +105,12 @@ export function HomeHub() {
           )}
         </div>
 
+        <MarketRail index={3} />
+
         <HubSection
           id="tools"
           title="Barcha vositalar"
-          index={3}
+          index={4}
           action={
             <Link href="/uz/create" data-hub-catalogue onClick={() => gate("/uz/create")} className={SECTION_LINK_CLASS}>
               Hammasi

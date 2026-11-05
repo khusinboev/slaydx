@@ -7,7 +7,8 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        allow: "/",
+        // «Ishlar bozori» is public on purpose (M15); search result pages carry `noindex` themselves, «Xaridlarim» is private.
+        allow: ["/", "/uz/market"],
         /*
          * Shaxsiy sahifalar va API indekslanmasin. `/o/` — AUDIT-22 R:
          * o'yin havolalari (`app/o/[token]`) — sahifaning o'zida ham
@@ -15,7 +16,7 @@ export default function robots(): MetadataRoute.Robots {
          * ROBOTI havolaga umuman KIRMASIN (loginsiz, token bilan ochiq
          * — indekslansa boshqa sinfning o'yini qidiruvda chiqib qolardi).
          */
-        disallow: ["/api/", "/uz/files/", "/uz/profile", "/o/"],
+        disallow: ["/api/", "/uz/files/", "/uz/profile", "/o/", "/uz/market/purchases"],
       },
     ],
     sitemap: `${APP_URL}/sitemap.xml`,
