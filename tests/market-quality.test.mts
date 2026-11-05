@@ -17,9 +17,8 @@ import { bodyText, marketWorkDoc } from "./helpers/market-fixtures.mts";
  *   4. volume share 0.9 → 0.1                                    -> «volume»;
  *   5. bookend check removed                                     -> «structure»;
  *   6. simhash on whole words instead of 3-shingles (span = 1)   -> «unrelated bodies»;
- *   7. murmur finaliser removed                                  -> «unrelated bodies»;
- *   8. `summaryOf` takes the first body sentence                 -> «public text»;
- *   9. Cyrillic share 0.6 → 0                                    -> «language».
+ *   7. `summaryOf` takes a body sentence                         -> «public text»;
+ *   8. Cyrillic share 0.6 → 0                                    -> «language».
  */
 
 const slides = (n: number, over: Partial<SlideModel> = {}): SlideModel[] =>

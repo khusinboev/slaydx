@@ -32,7 +32,7 @@ const GRID: Record<string, FormValues[]> = {
   "pro-slide": [4, 12, 30].map((slideCount) => ({ slideCount })),
   referat: ["10-15", "15-20", "20-25", "25-30"].map((pages) => ({ pages, workKind: "informative" })),
   "mustaqil-ish": ["10-15", "15-20", "20-25", "25-30"].map((pages) => ({ pages, workKind: "written" })),
-  coursework: ["10-15", "20-25", "30-35", "40-45"].flatMap((pages) => [{ pages, workKind: "theory" }, { pages, workKind: "applied" }, { pages, kind: "project" }]),
+  coursework: ["10-15", "20-25", "30-35", "40-45"].flatMap((pages): FormValues[] => [{ pages, workKind: "theory" }, { pages, workKind: "applied" }, { pages, kind: "project" }]),
   konspekt: ["5-10", "10-20", "20-30"].map((pages) => ({ pages })),
   essay: [
     ...[1, 2, 3, 4, 5].map((pages) => ({ essayContext: "school_dtm", pages })),

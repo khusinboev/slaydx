@@ -35,7 +35,13 @@ import type { FormValues, ToolId } from "../lib/types.ts";
  *  16. advisory lock not taken                                       -> «advisory lock»;
  *  17. `marketCandidatesStep` runs while the market is off           -> «dark launch»;
  *  18. rejected row stores the raw topic instead of the sanitised    -> «rejected rows hold no document»;
- *  19. assets not copied                                             -> «a listing stands alone».
+ *  19. assets not copied                                             -> «a listing stands alone»;
+ *  20. every asset of the source copied                              -> «a listing stands alone»;
+ *  21. `market.tools_disabled` ignored by the scan                   -> «market.tools_disabled»;
+ *  22. a placeholder without bytes kept                              -> «a deleted asset»;
+ *  23. re-sanitising keeps the preview version                       -> «resanitize»;
+ *  24. the previews sweep ignores the status                         -> «garbage collection»;
+ *  25. the rejected sweep ignores the age                            -> «garbage collection».
  */
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");

@@ -24,6 +24,9 @@ import { MARKET_ASSET_PREFIX } from "../lib/market/types.ts";
  *   8. stored lookup without `version`                                 -> «version»;
  *   9. `marketAssetResolver` without `item_id` in the WHERE            -> «images resolve»;
  *  10. the page upper bound removed                                    -> «page range».
+ *
+ * The «not on sale» assertions compare with `=== null` on purpose: a failing `assert.equal` on a value holding a Buffer
+ * hangs the reporter here, and a hang is not a red test.
  */
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
@@ -146,8 +149,8 @@ test("market.preview_pages steers the count", { skip }, async () => {
 test("not on sale: retired, rejected, candidates, report-hidden and unknown items are 404 to the public; the admin reaches a candidate", { skip }, async () => {
   const { getMarketPreview } = await previews();
   const o = await opts();
-  for (const status of ["candidate", "retired", "rejected"]) assert.equal(await getMarketPreview(await mkItem({ status }), 1, o), null, status);
-  assert.equal(await getMarketPreview(await mkItem({ hidden: true }), 1, o), null);
+  for (const status of ["candidate", "retired", "rejected"]) assert.ok((await getMarketPreview(await mkItem({ status }), 1, o)) === null, status);
+  assert.ok((await getMarketPreview(await mkItem({ hidden: true }), 1, o)) === null, "hidden");
   assert.equal(await getMarketPreview("00000000-0000-4000-8000-000000000000", 1, o), null);
   assert.equal(await getMarketPreview("nope", 1, o), null);
   assert.equal(o.calls(), 0, "nothing was rendered for them");

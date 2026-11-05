@@ -23,20 +23,28 @@ import { adapterFor } from "../lib/server/edit-adapters.ts";
  * The check runs twice: over the sanitised JSON and over the XML of the file really rendered from it (`docProps` too).
  *
  * Mutations (each turned the named test red, then restored from a byte copy):
- *   1. `w[k] = ""` skips "teacher" in `structure`                  -> «every tool» (work tools);
- *   2. phone regexes removed from PATTERNS                         -> «body text»;
+ *   1. `w[k] = ""` skips "teacher" in `structure`                  -> «title-page fields» (the text layer still hides it: two layers);
+ *   2. phone regexes removed from PATTERNS                         -> «every tool», «body text»;
  *   3. `delete w.userFacts` removed                                -> «user material»;
- *   4. `delete t.approver` semantic: approver kept in school       -> «every tool» (lesson-plan);
- *   5. article `authors: []` removed                               -> «every tool» (thesis);
- *   6. footer not recomputed (`{ ...slide }`)                      -> «every tool» (slide, pro-slide);
+ *   4. approver kept in the school block                           -> «title-page fields»;
+ *   5. article `authors: []` removed                               -> «title-page fields»;
+ *   6. footer not recomputed (`{ ...slide }`)                      -> «footers»;
  *   7. `if (s.imageOrig) s.image = s.imageOrig` removed            -> «uploaded image»;
  *   8. "slideLogo" added to DOC_KEEP                               -> «logo and custom template»;
- *   9. NAME_SUFFIX emptied                                         -> «inflected names»;
- *  10. meta allow-list: `else if (typeof value === "string") out[key] = ""` → keep value -> «unknown meta key»;
- *  11. phrase scrub loop removed                                   -> «institution in the body»;
- *  12. references `names: false` child mode removed                -> «no false positives» (cited author);
- *  13. topic-word protection removed in `nameWords`                -> «no false positives» (topic word);
- *  14. foreign-URL branch keeps the URL                            -> «asset URLs».
+ *   9. name suffix matching removed                                -> «every tool», «inflected names»;
+ *  10. unknown string meta key keeps its value                     -> «every tool», «allow-list»;
+ *  11. phrase scrub loop removed                                   -> «every tool», «institution in the body»;
+ *  12. phrase suffix tolerance removed                             -> «every tool» (essay: «Akademiyasida»);
+ *  13. references `names: false` child mode removed                -> «no false positives» (cited author);
+ *  14. topic-word protection removed in `nameWords`                -> «no false positives» (topic word);
+ *  15. whole-name-in-topic rule removed                            -> «the author's whole name»;
+ *  16. foreign-URL branch keeps the URL                            -> «asset URLs»;
+ *  17. every top-level document key passes                         -> «allow-list», «logo and custom template»;
+ *  18. `delete w.review` removed                                   -> «reports with free text»;
+ *  19. title-slide subtitle kept                                   -> «footers»;
+ *  20. `code` blocks scrubbed for usernames                        -> «no false positives»;
+ *  21. `formula` blocks scrubbed                                   -> «no false positives»;
+ *  22. the account's exact values not scrubbed                     -> «every tool» (a bare username).
  */
 
 const AUTHOR = "Zulfiqorov Mirjalol Rustamovich";
@@ -108,6 +116,7 @@ const LEAKY_TEXTS = [
   `Bog'lanish: ${PHONE}, +998 90 123 45 67, 90-111-22-33, 90 111 22 33.`,
   `Pochta: ${EMAIL}, telegram: @${USERNAME}, https://t.me/${USERNAME}, t.me/canary_user77`,
   `${UNIVERSITY}, ${FACULTY}, ${DEPARTMENT}, ${ORGANIZATION}, ${POSITION}, guruh ${GROUP}.`,
+  `Akkaunt nomi ${USERNAME} edi.`,
 ];
 
 const plantBody = (doc: AcademicDoc): AcademicDoc => ({

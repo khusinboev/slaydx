@@ -20,9 +20,12 @@ import { buildSearchText, normalizeTopic } from "../lib/market/normalize.ts";
  *   7. `skip` ignored in `whereOf`                                -> «facets»;
  *   8. fuzzy branch never taken                                   -> «trigram fallback»;
  *   9. owner check removed in `getMarketItem`                     -> «a buyer keeps reaching»;
- *  10. `isUuid` guard removed in `getMarketItem`                  -> «no oracle» (a bad id makes SQL throw);
+ *  10. visibility check removed in `getMarketItem`                -> «item page», «a buyer keeps reaching»;
  *  11. limit cap removed                                          -> «page size»;
- *  12. the cheap sort ignores the tool percent                    -> «sorts».
+ *  12. the cheap sort ignores the tool percent                    -> «sorts»;
+ *  13. the first-page cache bypassed                              -> «the first page is cached»;
+ *  14. the view counter not debounced                             -> «the view counter»;
+ *  15. stars shown from one vote                                  -> «a card is the shop window».
  */
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");

@@ -10,15 +10,16 @@ import { discountPercent, marketPriceOf, roundToStep } from "../lib/market/prici
  * floor, and the transaction-level read that makes mid-checkout changes visible.
  *
  * Mutations (each turned the named test red, then restored):
- *   1. `raw` uses `override ?? …` without the override branch               -> «formula»;
- *   2. `Math.max(minPrice, …)` removed                                      -> «formula»;
- *   3. `tool_pricing` compounded: percent applied on `base` then the price  -> «once, not twice»;
+ *   1. `raw` ignores the override                                           -> «formula», «override»;
+ *   2. `Math.max(minPrice, …)` removed                                      -> «formula», «per-tool»;
+ *   3. `originalOf` reads the snapshot instead of `effectivePrice`          -> «defaults», «once, not twice», «the market follows»;
  *   4. `toolPercents.get` ignored                                           -> «per-tool»;
  *   5. `setItemPriceOverrideInTx` without `price_version + 1`               -> «price_version»;
  *   6. `setToolPercentInTx` without the items UPDATE                        -> «price_version»;
  *   7. `marketPriceInTx` reads `getSetting` (cached) instead of InTx        -> «mid-checkout»;
- *   8. `originalOf` reads the snapshot instead of `effectivePrice`          -> «the market follows»;
- *   9. negative override accepted                                           -> «override input».
+ *   8. `marketPriceInTx` ignores `tool_pricing`                             -> «mid-checkout»;
+ *   9. negative override accepted                                           -> «override input»;
+ *  10. `market.enabled` defaults to true                                    -> «settings».
  */
 
 test("formula: percent, rounding, floor, override", () => {
@@ -64,7 +65,7 @@ test("settings: the plan's defaults and bounds; the feature ships OFF", async ()
     if (min === undefined) continue;
     assert.deepEqual([def.min, def.max], [min, max], key);
     assert.equal(def.validate(min).ok, true, key);
-    assert.equal(def.validate(max + 1).ok, false, key);
+    assert.equal(def.validate(max! + 1).ok, false, key);
   }
   assert.deepEqual(s.settingDef("market.tools_disabled").envDefault(), []);
   assert.equal(s.validateSetting("market.round_to", 250).ok, false, "only the steps of the formula");

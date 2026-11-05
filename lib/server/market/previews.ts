@@ -124,8 +124,7 @@ async function buildPreviews(itemId: string, version: number, deps: PreviewDeps)
     file = { fileName: rendered.fileName, mime: rendered.mime, bytes: Buffer.from(rendered.bytes) };
   }
   const readable = await previewPagesOf(row.tool_id);
-  const lastPage = Math.min(MAX_PAGE, Math.max(readable, MAX_PAGE));
-  const pages = await (deps.rasterize ?? rasterizeFile)(file.bytes, file.fileName, lastPage);
+  const pages = await (deps.rasterize ?? rasterizeFile)(file.bytes, file.fileName, MAX_PAGE);
   if (!pages?.length) return;
   const rendered = await Promise.all(
     pages.map(async (jpeg, i) => {
