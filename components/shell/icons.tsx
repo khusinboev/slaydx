@@ -18,6 +18,7 @@ import {
   KeyRound,
   Languages,
   Layers,
+  LayoutGrid,
   ListChecks,
   Newspaper,
   NotebookPen,
@@ -57,6 +58,8 @@ export const TOOL_ICONS: Record<string, LucideIcon> = {
   mic: Mic,
   gift: Gift,
   video: Video,
+  /* «Barchasi», the last cell of the home grid. */
+  "layout-grid": LayoutGrid,
   /* Studio (docs/studio/P1-SPEC.md): the home card and the Media group tile. */
   sparkles: Sparkles,
   /* «Ishlar bozori» (docs/market/PLAN.md §5.1). */

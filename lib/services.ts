@@ -3,8 +3,8 @@ import type { ToolGroup } from "./types";
 
 /**
  * Link-only services: they have their own page but no `ToolId` (no form, price
- * table or generation), so they are not in `TOOLS`. The hub tool grid
- * (`ToolsByGroup`), the «+» sheet and the `/uz/create` catalogue draw them from
+ * table or generation), so they are not in `TOOLS`. The home grid and banner
+ * (`hub-model`), the «+» sheet and the `/uz/create` catalogue draw them from
  * here next to the real tools, in the group named below. One list, one
  * visibility rule (`serviceVisible`): a service behind an admin switch is
  * hidden while the session does not report that switch as on.

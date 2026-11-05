@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FileX, FolderOpen, Plus, RotateCw } from "lucide-react";
+import { FileX, RotateCw } from "lucide-react";
 import type { ServerGeneration } from "@/lib/api-client";
 import { TOOL_BY_ID } from "@/lib/tools";
 import { cn } from "@/lib/cn";
@@ -17,20 +17,23 @@ const PILL: Record<FileTone, string> = {
   muted: "bg-muted text-muted-foreground",
 };
 
+const LIST = "flex flex-col gap-2.5 lg:grid lg:grid-cols-3";
+
 const ROW =
   "bg-card hover:border-primary/40 focus-visible:ring-ring flex min-h-[4.25rem] items-center gap-3 rounded-[18px] border p-2.5 shadow-[var(--shadow-card)] outline-none transition-colors focus-visible:ring-2";
 
 /**
  * «Davom ettirish» body: up to three latest files (thumbnail, title, status
  * pill, kind · date) → the result page; a skeleton while the list loads; an
- * honest error with «Qayta urinish»; an empty state whose CTA opens the «+»
- * sheet. Signed out, the section is not drawn (the hub shows its login card).
+ * honest error with «Qayta urinish». The hub does not draw this section signed
+ * out (its login card stands there) or without a single file (nothing hollow).
+ * ≥ 1024 px: the three rows side by side, under the full-width grid.
  */
-export function RecentFiles({ state, onCreate }: { state: RecentState; onCreate: () => void }) {
+export function RecentFiles({ state }: { state: RecentState }) {
   if (state.phase === "signed-out") return null;
   if (state.phase === "loading") {
     return (
-      <ul data-hub-recent="loading" aria-busy="true" aria-label="Fayllar yuklanmoqda" className="flex flex-col gap-2.5">
+      <ul data-hub-recent="loading" aria-busy="true" aria-label="Fayllar yuklanmoqda" className={LIST}>
         {[0, 1, 2].map((i) => (
           <li key={i} className={cn(ROW, "pointer-events-none")}>
             <span className="bg-muted slx-shimmer h-[45px] w-20 shrink-0 rounded-[10px]" />
@@ -60,28 +63,8 @@ export function RecentFiles({ state, onCreate }: { state: RecentState; onCreate:
       </div>
     );
   }
-  if (!state.files.length) {
-    return (
-      <div data-hub-recent="empty" className="bg-card rounded-[var(--radius-card)] border px-5 py-6 text-center">
-        <span className="bg-accent-soft text-accent-soft-foreground mx-auto flex size-12 items-center justify-center rounded-2xl">
-          <FolderOpen className="size-6" aria-hidden />
-        </span>
-        <p className="mt-3 text-[15.5px] font-semibold">Hozircha fayl yo‘q</p>
-        <p className="text-muted-foreground mt-1 text-[13.5px]">Yaratgan ishlaringiz shu yerda chiqadi — davom ettirish bir bosishda.</p>
-        <button
-          type="button"
-          data-hub-empty-create
-          onClick={onCreate}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring mt-4 inline-flex h-11 items-center gap-2 rounded-2xl px-5 text-[15px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-        >
-          <Plus className="size-[18px]" aria-hidden />
-          Birinchi ishni yaratish
-        </button>
-      </div>
-    );
-  }
   return (
-    <ul data-hub-recent="ready" className="flex flex-col gap-2.5">
+    <ul data-hub-recent="ready" className={LIST}>
       {state.files.map((g) => (
         <li key={g.id}>
           <RecentRow gen={g} />

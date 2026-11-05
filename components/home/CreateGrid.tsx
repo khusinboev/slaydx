@@ -11,11 +11,11 @@ import { useAppStore, usePricingVersion } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { cn } from "@/lib/cn";
 import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
-import { filterCatalogue, normalizeQuery, type CatalogueGroup } from "./catalogue-filter";
+import { catalogueHref, filterCatalogue, normalizeQuery, type CatalogueGroup } from "./catalogue-filter";
 import { formatSom } from "@/lib/format";
 import { toolHref } from "@/lib/media/legacy-fold";
 
-export function CreateGrid() {
+export function CreateGrid({ initialGroup = "all" }: { initialGroup?: CatalogueGroup }) {
   const hydrated = useAppStore((s) => s.hydrated);
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const loggedIn = useAppStore((s) => s.loggedIn);
@@ -25,7 +25,7 @@ export function CreateGrid() {
   const open = useUi((s) => s.open);
   const phone = useCoarsePointer();
   // Katalog filtri: bo'lim chipi + qidiruv (nom/tavsif bo'yicha).
-  const [group, setGroup] = useState<CatalogueGroup>("all");
+  const [group, setGroup] = useState<CatalogueGroup>(initialGroup);
   const [query, setQuery] = useState("");
   const shown = useMemo(() => filterCatalogue(listedTools(), group, query), [group, query]);
   // Link-only services (chat, converters, tests, domla) are listed in their group, same filter + search as the tools.
@@ -46,8 +46,8 @@ export function CreateGrid() {
    * `/uz/create` ni yangilaganda kirish oynasini ko'rardi.
    */
   useEffect(() => {
-    if (sessionChecked && !loggedIn) open("login", { returnTo: "/uz/create" });
-  }, [sessionChecked, loggedIn, open]);
+    if (sessionChecked && !loggedIn) open("login", { returnTo: catalogueHref(initialGroup) });
+  }, [sessionChecked, loggedIn, open, initialGroup]);
 
   if (!hydrated) return <div className="text-muted-foreground p-8 text-sm">Yuklanmoqda...</div>;
 

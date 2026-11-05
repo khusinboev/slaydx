@@ -23,10 +23,10 @@ const POLL_MAX_MS = 15_000;
  *   - `loading` until the session and the first page are known;
  *   - while a file is queued / being written the store is refreshed with the
  *     Ishlarim back-off (hidden tab: no requests), so «Yozilmoqda N%» moves;
- *   - an EMPTY page is confirmed with one `limit=1` request before the empty
- *     state is shown: the store keeps an empty list when its load failed
- *     (`refreshGenerations` swallows the error), and «Hozircha fayl yo'q» must
- *     not be said to someone whose files did not load. That request failing
+ *   - an EMPTY page is confirmed with one `limit=1` request before the section
+ *     is dropped: the store keeps an empty list when its load failed
+ *     (`refreshGenerations` swallows the error), and someone whose files did
+ *     not load must be told so, not shown nothing. That request failing
  *     is the `error` phase (with «Qayta urinish»); if it finds files the store
  *     is refreshed.
  */
