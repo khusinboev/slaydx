@@ -14,6 +14,7 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *   4. `ON DELETE RESTRICT` on market_purchases.item_id → CASCADE       -> «an item with buyers cannot be deleted»;
  *   5. `ON DELETE SET NULL` on source_generation_id → CASCADE           -> «a listing survives its source»;
  *   6. search_tsv index removed from 074                                -> «generated search column».
+ *   review fix: `market_purchases_generation_idx` removed from 073 -> the search migration test;
  */
 
 const script = readFileSync(new URL("../deploy/deploy-pull.sh", import.meta.url), "utf8");

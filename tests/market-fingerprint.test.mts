@@ -15,8 +15,7 @@ import { FINGERPRINT_PROPERTY, fingerprintCode, readFingerprint, stampFingerprin
  *   4. relationship not added                     -> «a bare package gets its parts listed»;
  *   5. HMAC keyed by a constant                   -> «the code»;
  *   6. existing keywords replaced                 -> «kept keywords»;
- *   7. pid not advanced past the existing ones    -> «an existing custom part»;
- *   8. every entry re-encoded through a text read -> «nothing else changes».
+ *   7. pid not advanced past the existing ones    -> «an existing custom part».
  */
 
 const SECRET = "test-session-secret-at-least-32-characters";

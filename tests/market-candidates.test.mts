@@ -42,6 +42,7 @@ import type { FormValues, ToolId } from "../lib/types.ts";
  *  23. re-sanitising keeps the preview version                       -> «resanitize»;
  *  24. the previews sweep ignores the status                         -> «garbage collection»;
  *  25. the rejected sweep ignores the age                            -> «garbage collection».
+ *   review fix: title fallback back to `row.topic` -> «an empty document topic»;
  */
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");

@@ -40,6 +40,7 @@ import { buy, call, closeDb, ctxOf, db, drainJobs, marketRequest, mkItem, mkUser
  *  11. status check dropped from `getMarketItem`          -> «no status oracle»;
  *  12. `features.market` always true                      -> «features.market»;
  *  13. a cookieless view keyed by its fresh browser key   -> «catalog limits».
+ *   review fix: preview max-age back to 86400 -> «cache headers»;
  */
 
 after(closeDb);

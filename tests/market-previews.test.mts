@@ -28,6 +28,12 @@ import { MARKET_ASSET_PREFIX } from "../lib/market/types.ts";
  *
  * The «not on sale» assertions compare with `=== null` on purpose: a failing `assert.equal` on a value holding a Buffer
  * hangs the reporter here, and a hang is not a red test.
+ *   review fix: half rule back to `min(allowed, total)`      -> «the half rule at each length», «each document length», «a five-slide deck»;
+ *   review fix: partial page not used for a one-page work    -> «a one-page work is served in part»;
+ *   review fix: document dpi 60                              -> «documents go through at 45 dpi»;
+ *   review fix: document width 720                           -> «documents go through at 45 dpi»;
+ *   review fix: item page ignores the built set              -> «a one-page work is served in part»;
+ *   review fix: blurred lower part not composited            -> «one page is the whole work»;
  */
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");

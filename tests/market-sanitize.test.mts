@@ -45,6 +45,7 @@ import { adapterFor } from "../lib/server/edit-adapters.ts";
  *  20. `code` blocks scrubbed for usernames                        -> «no false positives»;
  *  21. `formula` blocks scrubbed                                   -> «no false positives»;
  *  22. the account's exact values not scrubbed                     -> «every tool» (a bare username).
+ *   review fix: topic flag removed -> «a surname left in the topic»;
  */
 
 const AUTHOR = "Zulfiqorov Mirjalol Rustamovich";
