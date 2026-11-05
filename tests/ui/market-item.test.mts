@@ -89,6 +89,16 @@ test("?buy=1 (back from the wallet) reopens the sheet with the fresh price, once
   assert.equal(window.location.search, "");
 });
 
+test("a tap before the session is known is remembered: the sheet opens once it is (a slow phone)", async () => {
+  useAppStore.setState({ sessionChecked: false, loggedIn: false, user: null });
+  api(item());
+  mount();
+  await act(async () => void fireEvent.click(q("[data-market-buy]")!));
+  assert.ok(!q("[data-market-buy-sheet]"), "not yet: the session is unknown");
+  await act(async () => signIn());
+  await waitFor(() => assert.ok(q("[data-market-buy-sheet]"), "MUTATSIYA: the tap was lost"));
+});
+
 test("the page shows the title, price, facts, benefits, outline and summary; the client refreshes the view", async () => {
   useAppStore.setState({ sessionChecked: true });
   const { reqs } = api(item({ price: 1000, soldCount: 3 }));

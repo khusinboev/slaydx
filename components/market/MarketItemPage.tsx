@@ -277,7 +277,12 @@ export function MarketItemPage({ id, enabled, initial }: { id: string; enabled: 
   const owned = view.owned;
   const soldOut = view.status === "sold_out" || phase === "missing";
   const onBuy = () => {
-    if (!sessionChecked || needLogin()) return;
+    // A tap before the session is known is remembered, never lost: the effect below opens the sheet once it is.
+    if (!sessionChecked) {
+      buyAsked.current = true;
+      return;
+    }
+    if (needLogin()) return;
     setNote(null);
     setBuy(true);
   };

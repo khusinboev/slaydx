@@ -86,7 +86,7 @@ export const SERVICES: readonly ServiceConfig[] = [
     id: "market",
     href: "/uz/market",
     title: "Ishlar bozori",
-    description: "Tayyor slayd, referat, insho · 2 barobar arzon",
+    description: "Tayyor slayd, referat, insho · arzon narxda",
     icon: "store",
     tc: "16 185 129",
     group: "talaba",

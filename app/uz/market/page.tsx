@@ -22,7 +22,7 @@ export async function generateMetadata({ searchParams }: { searchParams: SearchP
   const open = await marketEnabled().catch(() => false);
   return {
     title: "Ishlar bozori",
-    description: "Tayyor slayd, referat, insho, konspekt va boshqa ishlar: asl narxdan 2 barobar arzon, titul sahifasi o‘z ismingiz bilan.",
+    description: "Tayyor slayd, referat, insho, konspekt va boshqa ishlar: asl narxdan arzon, titul sahifasi o‘z ismingiz bilan.",
     alternates: { canonical: "/uz/market" },
     robots: open && !filters.q ? undefined : { index: false, follow: true },
   };

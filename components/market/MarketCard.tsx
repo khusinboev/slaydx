@@ -124,7 +124,7 @@ export function MarketCardView({ card, eager }: { card: Card; eager?: boolean })
       <MarketCover card={card} eager={eager} />
       <span className="absolute top-2 left-2 inline-flex max-w-[calc(100%-4.5rem)] items-center gap-1 rounded-full bg-[var(--card)]/90 px-2 py-1 text-[12.5px] font-semibold shadow-sm backdrop-blur-sm">
         {Icon ? <Icon className="size-3.5 shrink-0 text-[rgb(var(--tc))]" aria-hidden /> : null}
-        <span className="truncate">{toolTitle(card.toolId)}</span>
+        <span className="truncate max-[420px]:hidden">{toolTitle(card.toolId)}</span>
       </span>
       {soldOut ? (
         <span data-market-soldout className="bg-foreground text-background absolute top-2 right-2 rounded-full px-2 py-1 text-[12.5px] font-semibold">

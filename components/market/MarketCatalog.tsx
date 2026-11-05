@@ -171,7 +171,7 @@ export function MarketCatalog({ enabled, initial }: { enabled: boolean; initial:
         back
         backFallback="/uz"
         title="Ishlar bozori"
-        subtitle="Tayyor ishlar — asl narxdan 2 barobar arzon"
+        subtitle="Tayyor ishlar — asl narxdan arzon"
         contentClassName={WIDTH}
         actions={
           loggedIn ? (
