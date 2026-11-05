@@ -25,6 +25,15 @@ import { MEDIA_MARKUP_DEFAULT } from "../media/quote";
 import { STUDIO_CLONE_PRICE_DEFAULT, STUDIO_CLONE_PRICE_MAX } from "../media/studio-speech";
 import { STUDIO_MIX_PRICE_DEFAULT, STUDIO_MIX_PRICE_MAX } from "../media/catalog-mix";
 import {
+  MARKET_MIN_PRICE_DEFAULT,
+  MARKET_MIN_PRICE_MAX,
+  MARKET_PERCENT_DEFAULT,
+  MARKET_PERCENT_MAX,
+  MARKET_PERCENT_MIN,
+  MARKET_ROUND_TO,
+  MARKET_ROUND_TO_DEFAULT,
+} from "../market/pricing";
+import {
   TESTS_ENABLED_DEFAULT,
   TESTS_FIRST_FREE_DEFAULT,
   TESTS_MINUTES_ALL_DEFAULT,
@@ -113,6 +122,23 @@ export type SettingValues = {
   "studio.transcribe.enabled": boolean;
   "studio.dub.enabled": boolean;
   "studio.legacy_fold": boolean;
+  "market.enabled": boolean;
+  "market.percent": number;
+  "market.round_to": number;
+  "market.min_price": number;
+  "market.paid_only": boolean;
+  "market.author_reward_percent": number;
+  "market.max_copies_slides": number;
+  "market.max_copies_teacher": number;
+  "market.max_copies_essay": number;
+  "market.max_copies_work": number;
+  "market.max_copies_thesis": number;
+  "market.same_university_cap": number;
+  "market.preview_pages": number;
+  "market.min_quality": number;
+  "market.per_topic_limit": number;
+  "market.backfill_batch": number;
+  "market.tools_disabled": ToolId[];
 };
 
 export type SettingKey = keyof SettingValues;
@@ -247,6 +273,7 @@ const CHAT_GROUP = "AI chat";
 const TESTS_GROUP = "Test ishlash";
 const VIDEO_GROUP = "Video";
 const MEDIA_GROUP = "Media dvigateli";
+const MARKET_GROUP = "Ishlar bozori";
 /** Default / ceiling of videos in flight at once (submitting + waiting for the provider), across all users. */
 export const VIDEO_MAX_CONCURRENT_DEFAULT = 2;
 export const VIDEO_MAX_CONCURRENT_MAX = 20;
@@ -269,6 +296,32 @@ function dailyCap<K extends DailyKey>(key: K, label: string, envVar: string, rea
     validate: intValidator(0, INT_MAX),
     envDefault: read,
   };
+}
+
+/** An integer setting of the «Bozor» tab. */
+function marketInt<K extends MarketIntKey>(key: K, label: string, description: string, min: number, max: number, fallback: number): SettingDef<K> {
+  return {
+    key,
+    group: MARKET_GROUP,
+    label,
+    description,
+    type: "int",
+    min,
+    max,
+    validate: intValidator(min, max),
+    envDefault: () => fallback,
+  } as SettingDef<K>;
+}
+
+type MarketIntKey = {
+  [K in SettingKey]: K extends `market.${string}` ? (SettingValues[K] extends number ? K : never) : never;
+}[SettingKey];
+
+/** `market.round_to` accepts exactly the steps of the price formula. */
+function marketRoundValidator(raw: unknown): Validation<number> {
+  return typeof raw === "number" && (MARKET_ROUND_TO as readonly number[]).includes(raw)
+    ? { ok: true, value: raw }
+    : { ok: false, error: `Qiymat ${MARKET_ROUND_TO.join(", ")} dan biri bo'lishi kerak` };
 }
 
 type Catalog = { [K in SettingKey]: SettingDef<K> };
@@ -818,6 +871,80 @@ const CATALOG: Catalog = {
     max: STUDIO_MIX_PRICE_MAX,
     validate: intValidator(0, STUDIO_MIX_PRICE_MAX),
     envDefault: () => STUDIO_MIX_PRICE_DEFAULT,
+  },
+  // «Ishlar bozori» (docs/market/PLAN.md §6). Ships dark: `market.enabled` stays off until the owner switches it on.
+  "market.enabled": {
+    key: "market.enabled",
+    group: MARKET_GROUP,
+    label: "Ishlar bozori yoqilgan",
+    description:
+      "Standart: O'CHIQ. Yoqilganda foydalanuvchilar tozalangan tayyor ishlarni arzon narxda sotib oladi. O'chiq bo'lsa bo'lim ko'rinmaydi va bozor so'rovlari rad etiladi; sotib olingan nusxalar «Ishlarim»da qoladi.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => false,
+  },
+  "market.percent": marketInt(
+    "market.percent",
+    "Bozor narxi: asl narxdan ulush (%)",
+    "Har ishning bozordagi narxi joriy asl narxining shuncha foizi. 50 — ikki barobar arzon. Vosita foizi va ish narxi bundan ustun.",
+    MARKET_PERCENT_MIN,
+    MARKET_PERCENT_MAX,
+    MARKET_PERCENT_DEFAULT,
+  ),
+  "market.round_to": {
+    key: "market.round_to",
+    group: MARKET_GROUP,
+    label: "Narxni yaxlitlash (so'm)",
+    description: "Bozor narxi shu qadamga yaxlitlanadi: 100, 500 yoki 1000 so'm.",
+    type: "int",
+    min: 100,
+    max: 1000,
+    validate: marketRoundValidator,
+    envDefault: () => MARKET_ROUND_TO_DEFAULT,
+  },
+  "market.min_price": marketInt("market.min_price", "Eng past narx (so'm)", "Hisoblangan narx bundan past bo'lsa shu narx olinadi.", 0, MARKET_MIN_PRICE_MAX, MARKET_MIN_PRICE_DEFAULT),
+  "market.paid_only": {
+    key: "market.paid_only",
+    group: MARKET_GROUP,
+    label: "Faqat to'langan pul bilan",
+    description: "Yoqilsa bonus so'm bilan bozordan sotib olib bo'lmaydi. Standart: o'chiq, bonus ham o'tadi.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => false,
+  },
+  "market.author_reward_percent": marketInt(
+    "market.author_reward_percent",
+    "Muallifga mukofot (%)",
+    "Har sotuvdan asl muallifga shuncha foiz bonus so'm beriladi. 0 — mukofot yo'q.",
+    0,
+    50,
+    0,
+  ),
+  "market.max_copies_slides": marketInt("market.max_copies_slides", "Nusxa chegarasi: slayd va konspekt", "Tasdiqlashda slayd va konspekt uchun qo'yiladigan nusxalar soni. Har ishda alohida o'zgartirish mumkin.", 1, 1000, 30),
+  "market.max_copies_teacher": marketInt("market.max_copies_teacher", "Nusxa chegarasi: o'qituvchi hujjati", "Tasdiqlashda dars rejasi uchun qo'yiladigan nusxalar soni.", 1, 1000, 50),
+  "market.max_copies_essay": marketInt("market.max_copies_essay", "Nusxa chegarasi: insho", "Tasdiqlashda insho uchun qo'yiladigan nusxalar soni.", 1, 1000, 10),
+  "market.max_copies_work": marketInt("market.max_copies_work", "Nusxa chegarasi: talaba ishi", "Tasdiqlashda referat, mustaqil ish va kurs ishi uchun qo'yiladigan nusxalar soni.", 1, 1000, 5),
+  "market.max_copies_thesis": marketInt("market.max_copies_thesis", "Nusxa chegarasi: tezis", "Tasdiqlashda tezis uchun qo'yiladigan nusxalar soni.", 1, 1000, 3),
+  "market.same_university_cap": marketInt(
+    "market.same_university_cap",
+    "Bitta muassasaga nusxa",
+    "Bitta ishni bitta muassasadan nechta xaridor olishi mumkin. 0 — cheklov yo'q.",
+    0,
+    50,
+    2,
+  ),
+  "market.preview_pages": marketInt("market.preview_pages", "Namuna sahifalari", "Xariddan oldin ko'rinadigan sahifalar soni (slaydlarda bittaga ko'p). Qolgani xiralashtirilgan.", 1, 5, 2),
+  "market.min_quality": marketInt("market.min_quality", "Sifat chegarasi (0–100)", "Shundan past baholangan ish tasdiqlash navbatiga tushmaydi.", 0, 100, 70),
+  "market.per_topic_limit": marketInt("market.per_topic_limit", "Bitta mavzuga ish", "Bitta vositada bitta mavzu bo'yicha ko'pi bilan shuncha ish sotuvda turadi.", 1, 20, 3),
+  "market.backfill_batch": marketInt("market.backfill_batch", "Skanerlash hajmi", "Har 6 soatda navbatga ko'rib chiqiladigan ishlar soni. 0 — skaner to'xtaydi.", 0, 1000, 100),
+  "market.tools_disabled": {
+    key: "market.tools_disabled",
+    group: MARKET_GROUP,
+    label: "Bozordan olingan vositalar",
+    description: "Shu vositalarning ishlari katalogdan yashiriladi va sotilmaydi. Sotib olganlarda nusxalar qoladi.",
+    type: "tool_ids",
+    validate: toolIdsValidator,
+    envDefault: () => [],
   },
 };
 

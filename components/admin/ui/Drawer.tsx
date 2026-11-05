@@ -15,7 +15,10 @@ export function Drawer({
   footer,
   history = true,
   sheet = false,
+  wide = false,
 }: {
+  /** From `lg` a wider panel, for two columns side by side (review with a document preview). */
+  wide?: boolean;
   /** Below `sm`: a bottom sheet (92 % of the screen, rounded top) instead of a full-screen side panel. */
   sheet?: boolean;
   /**
@@ -51,6 +54,7 @@ export function Drawer({
         aria-labelledby={titleId}
         className={cn(
           "bg-card relative z-10 flex w-full max-w-lg flex-col shadow-xl",
+          wide && "lg:max-w-5xl",
           sheet
             ? "h-[92dvh] rounded-t-2xl border-t pb-[env(safe-area-inset-bottom)] sm:h-full sm:rounded-none sm:border-t-0 sm:border-l sm:pb-0"
             : "h-full border-l",

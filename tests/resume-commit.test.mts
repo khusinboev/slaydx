@@ -170,14 +170,14 @@ test("adapterFor: vosita → adapter; tahrirlanmaydigan vosita — null", () => 
    * Maqola 2 (WP7): `article` reyestrda — `tests/article-commit` sinaydi;
    * tezis (AUDIT-19) maqola adapterida, insho — `essayAdapter`
    * (`essay-wiring`), kurs ishi/referat/mustaqil ish — `workAdapter`
-   * (`tests/work-commit`, WP-C), beshala o'qituvchi vositasi —
+   * (`tests/work-commit`, WP-C; konspekt — market nusxasi uchun, docs/market/PLAN.md M14), beshala o'qituvchi vositasi —
    * `teacherAdapter` (`tests/teacher-commit`, AUDIT-20 WP-D).
    */
   assert.deepEqual(
     new Set(editableTools()),
     new Set([
       "slide", "pro-slide", "resume", "article", "thesis", "essay",
-      "coursework", "referat", "mustaqil-ish",
+      "coursework", "referat", "mustaqil-ish", "konspekt",
       "lesson-plan", "texnologik-xarita", "glossary", "keys", "test",
     ]),
   );

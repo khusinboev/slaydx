@@ -432,6 +432,10 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
           FROM (VALUES (396, TRUE), (397, FALSE), (9999999, TRUE)) AS v(id, img);
     `);
     for (const f of [
+      // 074: market search (docs/market/PLAN.md §8.2).
+      "074_market_search.sql",
+      // 073: market core (docs/market/PLAN.md §8.1).
+      "073_market_core.sql",
       // 072: provider failure log (docs/ops/METRICS.md) -- provider_failures.
       "072_provider_failures.sql",
       // 071: Studio P7a compare (docs/studio/P7-SPEC.md) -- generations.compare_group / compare_index + CHECK + index.
@@ -518,6 +522,9 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
         assert.equal(left[2]!.text, "matn", "an id outside the list keeps its text");
       }
       if (f === "070_studio_favorites.sql") assert.ok(!(await exists("studio_favorites")), "070 rollback drops the table");
+      if (f === "073_market_core.sql") {
+        for (const tb of ["market_items", "market_purchases", "market_reports"]) assert.ok(!(await exists(tb)), `073 rollback drops ${tb}`);
+      }
       if (f === "072_provider_failures.sql") assert.ok(!(await exists("provider_failures")), "072 rollback drops the table");
       if (f === "071_studio_compare.sql") {
         assert.ok(!(await exists("generations_compare_group_idx")), "071 rollback drops the index");

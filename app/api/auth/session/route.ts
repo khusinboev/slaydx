@@ -53,6 +53,8 @@ export const GET = handler("auth/session", async (req) => {
       // «AI yordamchi» / «Test ishlash» are listed only while `chat.enabled` / `tests.enabled` are on.
       chat: await getSetting("chat.enabled"),
       tests: await getSetting("tests.enabled"),
+      // «Ishlar bozori»: dark until `market.enabled`; an admin account sees it early to check the shop before it opens.
+      market: (await getSetting("market.enabled")) || user?.isAdmin === true,
       telegram: Boolean(env.telegramBotToken),
       telegramBot: env.telegramBotUsername || null,
       devLogin: env.devLoginEnabled,

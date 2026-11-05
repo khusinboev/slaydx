@@ -198,6 +198,8 @@ Roles are a fixed set defined in code. `admin_accounts.role` carries a CHECK con
 | `audit.export` | CSV of the audit log |
 | `bonus.view` | bonus channel list with claim stats, resolve preview, bot admin re-check (docs/bonus/PLAN.md K2) |
 | `bonus.edit` | add, edit, (de)activate and delete bonus channels; delete only without claims |
+| `market.view` | «Ishlar bozori»: queue, catalog, sales stats, previews (docs/market/PLAN.md §6) |
+| `market.manage` | approve, reject, edit, retire, re-sanitise, scan, read a neutral file, flag a purchase; prices stay on `pricing.edit` |
 | `admins.view` | admin account list |
 | `admins.manage` | create, disable, change role, reset 2FA, revoke sessions, within rank limits |
 | `self` | implicit for every admin: own sessions, own recovery codes |
@@ -242,6 +244,8 @@ Roles are a fixed set defined in code. `admin_accounts.role` carries a CHECK con
 | pricing.edit | ✓ | ✓ | | | | | S |
 | bonus.view | ✓ | ✓ | ✓ | | | ✓ | |
 | bonus.edit | ✓ | ✓ | | | | | S |
+| market.view | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
+| market.manage | ✓ | ✓ | | | ✓ | | |
 | admins.view | ✓ | ✓ | | | | | |
 | admins.manage | ✓ | ✓ (rank-limited) | | | | | S |
 

@@ -32,12 +32,12 @@ const { useAppStore } = req("../../lib/store.ts") as typeof StoreModule;
  * `server-only` modules. tests/admin-nav-registry.test.mts fails if this drifts.
  */
 const ROLE_FIXTURE: Record<Role, readonly Permission[]> = /* ROLE_FIXTURE_BEGIN */ {
-  "owner": ["dashboard.view","users.view","users.pii","users.export","users.block","users.sessions","users.wallet","users.message","jobs.view","jobs.input","jobs.export","jobs.cancel","jobs.refund","payments.view","payments.export","payments.refund_record","finance.view","finance.export","ai.view","moderation.view","moderation.act","broadcasts.view","broadcasts.send","settings.view","settings.edit","system.view","errors.view","errors.resolve","audit.view","audit.export","pricing.view","pricing.edit","bonus.view","bonus.edit","admins.view","admins.manage","self"],
-  "admin": ["dashboard.view","users.view","users.pii","users.export","users.block","users.sessions","users.wallet","users.message","jobs.view","jobs.input","jobs.export","jobs.cancel","jobs.refund","payments.view","payments.export","payments.refund_record","finance.view","finance.export","ai.view","moderation.view","moderation.act","broadcasts.view","broadcasts.send","settings.view","settings.edit","system.view","errors.view","errors.resolve","audit.view","pricing.view","pricing.edit","bonus.view","bonus.edit","admins.view","admins.manage","self"],
-  "finance": ["dashboard.view","users.view","users.export","users.wallet","jobs.view","jobs.export","jobs.refund","payments.view","payments.export","payments.refund_record","finance.view","finance.export","ai.view","settings.view","system.view","pricing.view","bonus.view","self"],
-  "support": ["dashboard.view","users.view","users.pii","users.block","users.sessions","users.message","jobs.view","jobs.input","jobs.cancel","jobs.refund","payments.view","moderation.view","broadcasts.view","system.view","errors.view","self"],
-  "moderator": ["dashboard.view","users.view","users.block","jobs.view","moderation.view","moderation.act","self"],
-  "viewer": ["dashboard.view","users.view","jobs.view","payments.view","finance.view","ai.view","settings.view","system.view","errors.view","pricing.view","bonus.view","self"]
+  "owner": ["dashboard.view","users.view","users.pii","users.export","users.block","users.sessions","users.wallet","users.message","jobs.view","jobs.input","jobs.export","jobs.cancel","jobs.refund","payments.view","payments.export","payments.refund_record","finance.view","finance.export","ai.view","moderation.view","moderation.act","broadcasts.view","broadcasts.send","settings.view","settings.edit","system.view","errors.view","errors.resolve","audit.view","audit.export","pricing.view","pricing.edit","bonus.view","bonus.edit","market.view","market.manage","admins.view","admins.manage","self"],
+  "admin": ["dashboard.view","users.view","users.pii","users.export","users.block","users.sessions","users.wallet","users.message","jobs.view","jobs.input","jobs.export","jobs.cancel","jobs.refund","payments.view","payments.export","payments.refund_record","finance.view","finance.export","ai.view","moderation.view","moderation.act","broadcasts.view","broadcasts.send","settings.view","settings.edit","system.view","errors.view","errors.resolve","audit.view","pricing.view","pricing.edit","bonus.view","bonus.edit","market.view","market.manage","admins.view","admins.manage","self"],
+  "finance": ["dashboard.view","users.view","users.export","users.wallet","jobs.view","jobs.export","jobs.refund","payments.view","payments.export","payments.refund_record","finance.view","finance.export","ai.view","settings.view","system.view","pricing.view","bonus.view","market.view","self"],
+  "support": ["dashboard.view","users.view","users.pii","users.block","users.sessions","users.message","jobs.view","jobs.input","jobs.cancel","jobs.refund","payments.view","moderation.view","broadcasts.view","system.view","errors.view","market.view","self"],
+  "moderator": ["dashboard.view","users.view","users.block","jobs.view","moderation.view","moderation.act","market.view","market.manage","self"],
+  "viewer": ["dashboard.view","users.view","jobs.view","payments.view","finance.view","ai.view","settings.view","system.view","errors.view","pricing.view","bonus.view","market.view","self"]
 } /* ROLE_FIXTURE_END */;
 
 type RouterCalls = { replace: string[]; push: string[] };
@@ -109,10 +109,10 @@ const json = (status: number, data: unknown) =>
 const EXPECTED_BY_ROLE: Record<Role, string[]> = {
   owner: ADMIN_NAV.map((i) => i.href),
   admin: ADMIN_NAV.map((i) => i.href),
-  finance: ["/admin", "/admin/users", "/admin/generations", "/admin/payments", "/admin/finance", "/admin/ai", "/admin/pricing", "/admin/bonus", "/admin/ratings", "/admin/settings", "/admin/providers", "/admin/studio", "/admin/system", "/admin/account"],
-  support: ["/admin", "/admin/users", "/admin/generations", "/admin/payments", "/admin/moderation", "/admin/broadcasts", "/admin/system", "/admin/errors", "/admin/account"],
-  moderator: ["/admin", "/admin/users", "/admin/generations", "/admin/moderation", "/admin/account"],
-  viewer: ["/admin", "/admin/users", "/admin/generations", "/admin/payments", "/admin/finance", "/admin/ai", "/admin/pricing", "/admin/bonus", "/admin/ratings", "/admin/settings", "/admin/providers", "/admin/studio", "/admin/system", "/admin/errors", "/admin/account"],
+  finance: ["/admin", "/admin/users", "/admin/generations", "/admin/payments", "/admin/finance", "/admin/ai", "/admin/pricing", "/admin/bonus", "/admin/ratings", "/admin/market", "/admin/settings", "/admin/providers", "/admin/studio", "/admin/system", "/admin/account"],
+  support: ["/admin", "/admin/users", "/admin/generations", "/admin/payments", "/admin/moderation", "/admin/market", "/admin/broadcasts", "/admin/system", "/admin/errors", "/admin/account"],
+  moderator: ["/admin", "/admin/users", "/admin/generations", "/admin/moderation", "/admin/market", "/admin/account"],
+  viewer: ["/admin", "/admin/users", "/admin/generations", "/admin/payments", "/admin/finance", "/admin/ai", "/admin/pricing", "/admin/bonus", "/admin/ratings", "/admin/market", "/admin/settings", "/admin/providers", "/admin/studio", "/admin/system", "/admin/errors", "/admin/account"],
 };
 
 for (const role of Object.keys(ROLE_FIXTURE) as Role[]) {

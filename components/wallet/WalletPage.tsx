@@ -10,6 +10,7 @@ import { useUi } from "@/lib/ui";
 import { ReferralCard } from "../profile/ReferralCard";
 import { DEFAULT_TOPUP, TOPUP_PRESETS, openPay } from "../overlays/pay-amount";
 import { formatBonusSom, groupDigits } from "@/lib/format";
+import { WalletReturnCard } from "@/components/market/WalletReturnCard";
 import { PaymentBanner } from "./PaymentBanner";
 import { usePaymentReturn } from "./usePaymentReturn";
 import { isPaymentBonusPercent, paymentBonusHint } from "@/lib/payment-bonus";
@@ -63,6 +64,7 @@ export function WalletPage() {
   return (
     <div className="mx-auto w-full max-w-2xl px-4 pb-10 text-[15.5px]" data-wallet>
       <PaymentBanner pay={pay} className="mb-4" />
+      <WalletReturnCard />
 
       {!sessionChecked || (loggedIn && !user) ? (
         <section

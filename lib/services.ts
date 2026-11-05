@@ -10,9 +10,9 @@ import type { ToolGroup } from "./types";
  * hidden while the session does not report that switch as on.
  *
  * Groups: «Umumiy» holds what any user needs (chat, converters); «Talaba» the
- * study aids (defence rehearsal, tests).
+ * study aids (defence rehearsal, tests, the market of ready works).
  */
-export type ServiceId = "chat" | "convert" | "alifbo" | "tests" | "domla";
+export type ServiceId = "chat" | "convert" | "alifbo" | "tests" | "domla" | "market";
 
 export type ServiceConfig = {
   id: ServiceId;
@@ -27,7 +27,7 @@ export type ServiceConfig = {
   /** Short badge on compact tiles and catalogue cards. */
   badge?: string;
   /** Session feature switch that must be on; absent = always listed. */
-  flag?: "chat" | "tests" | "domla";
+  flag?: "chat" | "tests" | "domla" | "market";
 };
 
 export const SERVICES: readonly ServiceConfig[] = [
@@ -82,12 +82,23 @@ export const SERVICES: readonly ServiceConfig[] = [
     group: "talaba",
     flag: "domla",
   },
+  {
+    id: "market",
+    href: "/uz/market",
+    title: "Ishlar bozori",
+    description: "Tayyor slayd, referat, insho · arzon narxda",
+    icon: "store",
+    tc: "16 185 129",
+    group: "talaba",
+    badge: "−50 %",
+    flag: "market",
+  },
 ];
 
 export const SERVICE_BY_ID = Object.fromEntries(SERVICES.map((s) => [s.id, s])) as Record<ServiceId, ServiceConfig>;
 
 /** Listed now? Ungated services always; a gated one only while the session says its switch is on. */
-export function serviceVisible(s: ServiceConfig, features: Pick<Features, "chat" | "tests" | "domla"> | null | undefined): boolean {
+export function serviceVisible(s: ServiceConfig, features: Pick<Features, "chat" | "tests" | "domla" | "market"> | null | undefined): boolean {
   return !s.flag || features?.[s.flag] === true;
 }
 

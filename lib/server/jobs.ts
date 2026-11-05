@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 import { query, queryOne, transaction } from "./db";
 import { chargeInTx } from "./credits";
 import { refundInTx } from "./refund-tx";
+import { payMarketAuthorRewardInTx } from "./market/reward";
 import { putGenerationFile } from "./storage";
 import type { PendingAsset } from "./assets";
 import { toJsonb } from "./jsonb";
@@ -85,6 +86,8 @@ export type GenerationRow = {
   has_prev?: boolean;
   /** Bonus fayllari saqlash muddati tugab o'chirilgan payt (022_retention.sql, W2-D2). */
   files_purged_at?: Date | null;
+  /** Set on a copy bought from the market (073_market_core.sql). `?`: hand-built rows of old tests. */
+  market_item_id?: string | null;
   /** Faqat `getGeneration`: QUEUED bo'lsa navbatdagi o'rni (1 dan), aks holda NULL. */
   queue_position?: string | number | null;
 };
@@ -103,7 +106,7 @@ const SUMMARY_COLUMNS = `
   id, user_id, tool_id, topic, status, price, format, progress, step,
   file_name, error, preview, delivered_json, created_at, started_at, finished_at, expires_at,
   doc_version, file_version, image_redraws, edited_at, live_seq, doc_prev IS NOT NULL AS has_prev,
-  files_purged_at
+  files_purged_at, market_item_id
 `;
 
 /**
@@ -138,6 +141,8 @@ export type GenerationSummary = Omit<Generation, "values" | "doc" | "html"> & {
   hasPrev: boolean;
   /** Bonus fayllari saqlash muddati tugab o'chirilgan bo'lsa — qachon (UI sababini tushuntiradi). */
   filesPurgedAt: string | null;
+  /** The market item this copy was bought from («Bozordan» badge); `null` for an ordinary work. */
+  marketItemId: string | null;
 };
 
 export function rowToSummary(
@@ -169,6 +174,7 @@ export function rowToSummary(
     liveSeq: r.live_seq ?? 0,
     hasPrev: r.has_prev ?? false,
     filesPurgedAt: r.files_purged_at ? new Date(r.files_purged_at).toISOString() : null,
+    marketItemId: r.market_item_id ?? null,
   };
 }
 
@@ -195,6 +201,11 @@ export type EnqueueInput = {
   idempotencyKey?: string;
   /** Bonus so'm cannot pay for this job (video, program-17 D5): only the paid balance is charged. */
   paidOnly?: boolean;
+  /**
+   * Runs right after the generations INSERT, inside the same transaction (market purchase, docs/market/PLAN.md §2.1):
+   * a throw rolls back the charge and the row. Never runs on a replay or on a refused request.
+   */
+  inTx?: (client: PoolClient, generationId: string) => Promise<void>;
 };
 
 /** Qabul qarorisiz natija (seed skriptlari shu toraygan tipga tayanadi). */
@@ -349,6 +360,7 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
           params,
         );
       }
+      if (input.inTx) await input.inTx(client, id);
       return { ok: true as const, id, price: input.price, replayed: false };
     });
     logEnqueue(input, res);
@@ -581,6 +593,9 @@ export async function deleteGeneration(id: string, userId: string): Promise<bool
   const rows = await query<{ id: string }>(
     `DELETE FROM generations
       WHERE id = $1 AND user_id = $2 AND status IN ('COMPLETED','FAILED','REVOKED')
+        -- A failed market copy waits for its refund: the row is what the refund and the free-restore refusal stand on.
+        AND NOT (market_item_id IS NOT NULL AND status = 'FAILED' AND price > 0
+                 AND NOT EXISTS (SELECT 1 FROM transactions t WHERE t.kind = 'refund' AND t.reference = generations.id::text))
       RETURNING id`,
     [id, userId],
   );
@@ -977,7 +992,7 @@ const COMPLETE_SQL = `UPDATE generations
             finished_at = now(), locked_by = NULL, locked_at = NULL, error = NULL,
             live_json = NULL
       WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS'
-      RETURNING id`;
+      RETURNING id, market_item_id`;
 
 function completeParams(id: string, workerId: string, result: JobResult): unknown[] {
   return [
@@ -993,7 +1008,8 @@ function completeParams(id: string, workerId: string, result: JobResult): unknow
 }
 
 async function completeInTx(client: PoolClient, id: string, workerId: string, result: JobResult): Promise<boolean> {
-  const res = await client.query<{ id: string }>(COMPLETE_SQL, completeParams(id, workerId, result));
+  const res = await client.query<{ id: string; market_item_id: string | null }>(COMPLETE_SQL, completeParams(id, workerId, result));
+  if (res.rows[0]?.market_item_id) await payMarketAuthorRewardInTx(client, id);
   return res.rows.length > 0;
 }
 

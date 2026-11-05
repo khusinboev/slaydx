@@ -102,6 +102,24 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "studio.clone_price",
     // P8c «Montaj»: the fixed price of one mix (docs/studio/P8-SPEC.md).
     "studio.mix_price",
+    // «Ishlar bozori» (docs/market/PLAN.md §6): ships dark.
+    "market.enabled",
+    "market.percent",
+    "market.round_to",
+    "market.min_price",
+    "market.paid_only",
+    "market.author_reward_percent",
+    "market.max_copies_slides",
+    "market.max_copies_teacher",
+    "market.max_copies_essay",
+    "market.max_copies_work",
+    "market.max_copies_thesis",
+    "market.same_university_cap",
+    "market.preview_pages",
+    "market.min_quality",
+    "market.per_topic_limit",
+    "market.backfill_batch",
+    "market.tools_disabled",
   ]);
   for (const k of s.SETTING_KEYS) {
     const d = s.settingDef(k);

@@ -52,7 +52,7 @@ import { getPaymentBonusPercent, setPaymentBonusPercent } from "../payment-bonus
 import { isPaymentBonusPercent } from "../../payment-bonus";
 import { cancelInput } from "./state";
 import { editScreen, sendScreen } from "./router";
-import { keyboardMessage, legacyFoldSetting, matchKeyboard } from "./keyboard";
+import { keyboardMessage, legacyFoldSetting, marketSetting, matchKeyboard } from "./keyboard";
 import { at, ADMIN_TEXT_KEYS } from "./admin-i18n";
 import { LANGS, langOf, type Lang } from "./i18n";
 import { actorOf, allowed, lookupAdmin, type BotAdmin } from "./admin-access";
@@ -308,7 +308,7 @@ export async function handleAdminReplyText(chatId: number, telegramId: number, t
   if (action === "main") {
     await clearState(chatId);
     await writeKeys(chatId, admin.adminId, []);
-    await sendScreen(chatId, keyboardMessage(admin.lang, telegramId, "note", undefined, { admin: true, legacyFold: await legacyFoldSetting() }));
+    await sendScreen(chatId, keyboardMessage(admin.lang, telegramId, "note", undefined, { admin: true, legacyFold: await legacyFoldSetting(), market: await marketSetting() }));
     return true;
   }
   const toast = await handleAdminCallback(telegramId, chatId, null, action, updateId);

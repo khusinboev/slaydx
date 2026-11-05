@@ -127,6 +127,8 @@ export function insufficientError(r: { required: number; available: number; paid
  */
 export async function prepareGeneration(input: SubmitInput): Promise<PreparedGeneration> {
   const { userId, tool, values, idempotencyKey, expectedPrice } = input;
+  // A market copy exists only through the purchase path: a form must not be able to name an item (the worker refuses too).
+  if (Object.prototype.hasOwnProperty.call(values, "marketItemId")) throw new ApiError("Forma qiymatlari noto'g'ri", 400);
   /*
    * Podcast / greeting voice choice: `female` | `male`. A missing field (an old cached
    * client) or an unknown value becomes `female` — the audio params normalize, never
@@ -372,7 +374,7 @@ export async function prepareGeneration(input: SubmitInput): Promise<PreparedGen
 }
 
 /** 503 when an admin paused all generations or this tool (§6.10). Settings reads never throw. */
-async function assertGenerationOpen(toolId: ToolId): Promise<void> {
+export async function assertGenerationOpen(toolId: ToolId): Promise<void> {
   const [paused, pausedTools] = await Promise.all([getSetting("generation.paused"), getSetting("generation.paused_tools")]);
   if (paused || pausedTools.includes(toolId)) {
     throw new ApiError("Xizmat vaqtincha to'xtatilgan. Birozdan keyin urinib ko'ring.", 503, { code: "paused" });
@@ -387,7 +389,7 @@ async function assertGenerationOpen(toolId: ToolId): Promise<void> {
  * at enqueue time. A concurrent first request that has not committed yet is
  * not seen; that request is a new purchase and is guarded like any other.
  */
-async function idempotencyKeyTaken(userId: string, key: string): Promise<boolean> {
+export async function idempotencyKeyTaken(userId: string, key: string): Promise<boolean> {
   const row = await queryOne<{ taken: number }>(
     `SELECT 1 AS taken FROM generations
       WHERE user_id = $1 AND idempotency_key = $2

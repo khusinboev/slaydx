@@ -27,6 +27,8 @@ const EXPECTED: ReadonlyArray<[string, string]> = [
   ["/admin/bonus", "bonus.view"],
   ["/admin/ratings", "bonus.view"],
   ["/admin/moderation", "moderation.view"],
+  // docs/market/PLAN.md §6.
+  ["/admin/market", "market.view"],
   ["/admin/broadcasts", "broadcasts.view"],
   ["/admin/settings", "settings.view"],
   ["/admin/providers", "settings.view"],
@@ -79,7 +81,7 @@ test("nav registry: per-role visibility follows the server matrix", () => {
   }
   assert.equal(reg.visibleNav(rbac.permissionsOf("owner")).length, EXPECTED.length);
   const moderator = reg.visibleNav(rbac.permissionsOf("moderator")).map((i) => i.href);
-  assert.deepEqual(moderator, ["/admin", "/admin/users", "/admin/generations", "/admin/moderation", "/admin/account"]);
+  assert.deepEqual(moderator, ["/admin", "/admin/users", "/admin/generations", "/admin/moderation", "/admin/market", "/admin/account"]);
   assert.deepEqual(reg.visibleNav([]), [], "no permissions, no nav");
   assert.deepEqual(reg.visibleNav(rbac.permissionsOf("intruder")), [], "unknown role sees nothing");
 });
