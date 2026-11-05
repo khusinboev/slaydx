@@ -5,8 +5,8 @@ import { BRAND_NAME } from "@/lib/brand";
 
 /**
  * Signed-out Bosh: a friendly login card instead of «Davom ettirish». The
- * tools above and below stay browsable (their links open the login over the
- * tool with `returnTo`); this button opens the plain login.
+ * banner and the grid above stay browsable (their links open the login over
+ * the target with `returnTo`); this button opens the plain login.
  */
 export function SignedOutCard({ onLogin }: { onLogin: () => void }) {
   return (

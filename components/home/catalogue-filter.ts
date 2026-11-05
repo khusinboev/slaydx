@@ -1,7 +1,18 @@
+import { visibleToolGroups } from "@/lib/tools";
 import type { ToolConfig, ToolGroup } from "@/lib/types";
 
 /** Group chip id: a tool group or «all». */
 export type CatalogueGroup = ToolGroup | "all";
+
+/** `/uz/create?group=<id>` (the home «O'yinlar» cell): a group that has tools, else «all». */
+export function catalogueGroupOf(raw: unknown): CatalogueGroup {
+  return visibleToolGroups().find((g) => g.id === raw)?.id ?? "all";
+}
+
+/** The catalogue URL with that chip chosen. */
+export function catalogueHref(group: CatalogueGroup): string {
+  return group === "all" ? "/uz/create" : `/uz/create?group=${group}`;
+}
 
 /** Lower-case and unify the apostrophe look-alikes used in Uzbek copy (ʻ ’ ‘ `). */
 export function normalizeQuery(s: string): string {

@@ -9,7 +9,7 @@ import { groupDigits } from "@/lib/format";
 /**
  * Balance pill → Hamyon (UX-03: the balance is one tap away; it used to live
  * in the removed TopBar). For page headers (Bosh). Signed out: nothing.
- * 44 px tall; the digits truncate instead of overflowing a 360 px header.
+ * 44 px tall and tight: it shares the Bosh header row with the greeting and three icons at 360 px.
  */
 export function BalanceChip({ className }: { className?: string }) {
   const loggedIn = useAppStore((s) => s.loggedIn);
@@ -23,7 +23,7 @@ export function BalanceChip({ className }: { className?: string }) {
       title="Hamyon — balansni to'ldirish"
       aria-label={`Balans: ${total} so'm. Hamyon`}
       className={cn(
-        "bg-accent-soft text-foreground hover:bg-accent focus-visible:ring-ring inline-flex h-11 min-w-11 shrink items-center justify-center gap-1.5 rounded-[14px] px-3 text-[15px] font-semibold tabular-nums outline-none focus-visible:ring-2",
+        "bg-accent-soft text-foreground hover:bg-accent focus-visible:ring-ring inline-flex h-11 min-w-11 shrink items-center justify-center gap-1 rounded-[14px] px-2 text-[14.5px] font-semibold tabular-nums outline-none focus-visible:ring-2",
         className,
       )}
     >

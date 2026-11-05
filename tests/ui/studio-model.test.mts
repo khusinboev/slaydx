@@ -6,7 +6,8 @@ import { GPT, NANO, PRICING, catalogBody, expectedPrice } from "./studio-fixture
 const { parseCatalog } = await import("../../components/studio/studio-api.ts");
 const { studioBasePrice, studioPrice, unitPrice, outputCount, badgeText, initials, BADGE_LABEL, FILTER_BADGES } = await import("../../components/studio/studio-price.ts");
 const { resolveEntry } = await import("../../components/studio/StudioPage.tsx");
-const { STUDIO_ENTRY, studioFirst } = await import("../../components/studio/studio-entry.ts");
+const { STUDIO_ENTRY } = await import("../../components/studio/studio-entry.ts");
+const { listedTools } = await import("../../lib/tools.ts");
 const { TOOL_BY_ID, applyPriceAdjust, basePriceFor } = await import("../../lib/tools.ts");
 
 /**
@@ -20,7 +21,7 @@ const { TOOL_BY_ID, applyPriceAdjust, basePriceFor } = await import("../../lib/t
  *   - PRICE = the formula, independently re-computed: cost × markup rounded UP to the step, the model's override wins,
  *     a ≥ 1 result; the admin's per-tool adjustment is applied AFTER (`applyPriceAdjust`); `unitPrice` is one picture;
  *   - `resolveEntry`: chosen → default → first;
- *   - `studioFirst` moves the studio tool first and keeps the others in order.
+ *   - Studio is the first tool of the Media group in the registry (the catalogue and the «+» sheet list it there).
  *
  * Mutations (each turned the named tests red, then restored):
  *   parseEntry accepts `kind: "video"`                                      -> «parser keeps the usable image models»;
@@ -157,10 +158,7 @@ test("badge words, filter order and avatar initials", () => {
   assert.equal(initials(""), "");
 });
 
-test("studioFirst moves the studio tool to the front of its group and keeps the rest in order; the entry points at /uz/studio", () => {
-  const tools = [{ slug: "podcast" }, { slug: "studio" }, { slug: "video" }];
-  assert.deepEqual(studioFirst(tools).map((t) => t.slug), ["studio", "podcast", "video"]);
-  assert.deepEqual(studioFirst([{ slug: "a" }, { slug: "b" }]).map((t) => t.slug), ["a", "b"], "no studio: unchanged");
+test("Studio is the first Media tool of the registry; the entry points at /uz/studio", () => {
+  assert.equal(listedTools().find((t) => t.group === "media")!.slug, "studio");
   assert.equal(STUDIO_ENTRY.href, "/uz/studio");
-  assert.equal(studioFirst(tools).length, 3);
 });

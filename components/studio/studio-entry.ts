@@ -1,6 +1,6 @@
 /**
- * Studio's entry points outside its own page (docs/studio/P1-SPEC.md «Entry»): the large card on the home hub and the
- * first place in the Media group. Plain data, no React: the hub, the catalogue and their tests read it.
+ * Studio's entry points outside its own page (docs/studio/P1-SPEC.md «Entry»): the home banner slide and grid cell.
+ * Plain data, no React: the hub and its tests read it.
  */
 export const STUDIO_ENTRY = {
   id: "studio",
@@ -14,8 +14,3 @@ export const STUDIO_ENTRY = {
 
 /** The tool whose route is the Studio page. */
 export const STUDIO_TOOL_SLUG = "studio";
-
-/** A group's tools with Studio first (a stable move: the others keep their order). */
-export function studioFirst<T extends { slug: string }>(tools: readonly T[]): T[] {
-  return [...tools.filter((t) => t.slug === STUDIO_TOOL_SLUG), ...tools.filter((t) => t.slug !== STUDIO_TOOL_SLUG)];
-}

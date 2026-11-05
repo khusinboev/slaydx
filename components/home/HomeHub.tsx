@@ -8,118 +8,94 @@ import { PageHeader, HeaderIconButton } from "@/components/shell/PageHeader";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { BalanceChip } from "@/components/shell/BalanceChip";
 import { useReturnToLogin } from "@/components/shell/useReturnToLogin";
-import { greetingTitle } from "./hub/hub-model";
-import { HubSection, HUB_STAGGER_MS, SECTION_LINK_CLASS } from "./hub/HubSection";
-import { HubSearch } from "./hub/HubSearch";
+import { useMarketOn } from "@/components/market/MarketClosed";
+import { greetingTitle, homeCells, homeSlides } from "./hub/hub-model";
+import { HubBanner } from "./hub/HubBanner";
+import { HubGrid } from "./hub/HubGrid";
+import { HubSection, HUB_ENTER, HUB_STAGGER_MS, SECTION_LINK_CLASS } from "./hub/HubSection";
 import { MarketRail } from "./hub/MarketRail";
-import { QuickStart } from "./hub/QuickStart";
 import { RecentFiles } from "./hub/RecentFiles";
 import { SignedOutCard } from "./hub/SignedOutCard";
-import { ToolsByGroup } from "./hub/ToolsByGroup";
 import { useLoginGate } from "./hub/useLoginGate";
 import { useRecentFiles } from "./hub/useRecentFiles";
 
-/** Hub content width (PLAN W1: centred ~1040 px on a desktop); the header row matches it. */
+/** Hub content width (centred 1040 px on a desktop); the header row matches it. */
 const WIDTH = "max-w-[1040px]";
 
 /**
- * Bosh (`/uz`) — the home hub, variant A «Iliq» (docs/redesign/PLAN.md W1):
+ * Bosh (`/uz`) — the home hub, variant C «Xizmatlar panjarasi» (owner decision
+ * 2026-11-06, docs/redesign/PLAN.md), top to bottom:
  *
  *   - header: «Salom, <first name>» (never a phone number — «Salom!» when the
- *     account has no real name), «Bugun nima yaratamiz?», search / quick theme
- *     / notifications; the balance chip (→ Hamyon) beside the search field;
- *   - «Vosita yoki fayl qidirish» → the search dialog (Cmd/Ctrl+K hint);
- *   - «Tez boshlash»: the «AI yordamchi» promo card, Slayd, Referat, Insho, Rezyume, the «Qattiqqo'l domla» promo;
+ *     account has no real name), balance chip (→ Hamyon), search (the shell
+ *     binds Cmd/Ctrl+K), quick theme, notifications;
+ *   - the promo banner (`HubBanner`): market, Studio, AI yordamchi, domla, by their switches;
+ *   - the service grid (`HubGrid`): eight cells, Slayd emphasised, «Barchasi» → `/uz/create`;
  *   - «Davom ettirish»: the 3 latest files + «Barchasi →» Ishlarim; signed out,
- *     a login card instead;
- *   - «Ishlar bozori»: a rail of popular ready works (`MarketRail`, behind `features.market`);
- *   - «Barcha vositalar» by group (tools + link-only services, `lib/services.ts`) + «Hammasi» → `/uz/create`.
- * Tool links keep the «+» sheet's login gate. ≥ 1024 px: quick start and
- * recent files side by side. `?returnTo=` opens the login (`useReturnToLogin`).
+ *     a login card instead; signed in without a file, nothing;
+ *   - «Ishlar bozori»: a rail of popular ready works (`MarketRail`, behind `features.market`).
+ *
+ * Banner and grid links keep the «+» sheet's login gate. Until the session is
+ * known what depends on a switch is a skeleton of the same size. `?returnTo=`
+ * opens the login (`useReturnToLogin`).
  */
 export function HomeHub() {
   useReturnToLogin();
   const user = useAppStore((s) => s.user);
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const loggedIn = useAppStore((s) => s.loggedIn);
+  const features = useAppStore((s) => s.features);
   const open = useUi((s) => s.open);
   const gate = useLoginGate();
+  const marketOn = useMarketOn();
   const recent = useRecentFiles();
   const signedOut = sessionChecked && !loggedIn;
+  const pending = !sessionChecked && !features;
+  const noFiles = recent.phase === "ready" && recent.files.length === 0;
 
   return (
     <div className="flex w-full flex-col" data-home-hub>
       <PageHeader
-        title={greetingTitle(user)}
-        subtitle="Bugun nima yaratamiz?"
+        title={<span className="text-[20px] sm:text-[24px]">{greetingTitle(user)}</span>}
         contentClassName={WIDTH}
         actions={
           <>
-            <HeaderIconButton label="Qidirish" onClick={() => open("search")}>
-              <Search className="size-[1.2rem]" aria-hidden />
-            </HeaderIconButton>
-            <ThemeToggle />
-            <HeaderIconButton label="Bildirishnomalar" title="Bildirishnomalar (Alt+T)" onClick={() => open("notifications")}>
-              <Bell className="size-[1.2rem]" aria-hidden />
-            </HeaderIconButton>
+            <BalanceChip />
+            <div className="flex items-center">
+              <HeaderIconButton label="Qidirish" title="Qidirish (Ctrl+K)" aria-keyshortcuts="Control+K Meta+K" onClick={() => open("search")}>
+                <Search className="size-[1.2rem]" aria-hidden />
+              </HeaderIconButton>
+              <ThemeToggle />
+              <HeaderIconButton label="Bildirishnomalar" title="Bildirishnomalar (Alt+T)" onClick={() => open("notifications")}>
+                <Bell className="size-[1.2rem]" aria-hidden />
+              </HeaderIconButton>
+            </div>
           </>
         }
       />
       <div className={`mx-auto flex w-full ${WIDTH} flex-col gap-5 px-4 pt-1 pb-6 text-[15.5px]`}>
-        <div
-          className="flex items-center gap-2 motion-safe:animate-[slx-enter-fade_240ms_ease-out_backwards]"
-          data-hub-top
-        >
-          <div className="min-w-0 flex-1">
-            <HubSearch onOpen={() => open("search")} />
+        <HubBanner slides={homeSlides(features, marketOn)} pending={pending} onPick={gate} index={0} />
+        <HubGrid cells={homeCells(features)} pending={pending} onPick={gate} index={1} />
+        {signedOut ? (
+          <div className={HUB_ENTER} style={{ animationDelay: `${2 * HUB_STAGGER_MS}ms` }}>
+            <SignedOutCard onLogin={() => open("login")} />
           </div>
-          <BalanceChip />
-        </div>
-
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
-          {signedOut ? (
-            <div
-              className="motion-safe:animate-[slx-enter-fade_240ms_ease-out_backwards] lg:order-2 lg:pt-[3.375rem]"
-              style={{ animationDelay: `${HUB_STAGGER_MS}ms` }}
-            >
-              <SignedOutCard onLogin={() => open("login")} />
-            </div>
-          ) : null}
-          <HubSection id="quick" title="Tez boshlash" index={1}>
-            <QuickStart onPick={gate} />
+        ) : noFiles ? null : (
+          <HubSection
+            id="recent"
+            title="Davom ettirish"
+            index={2}
+            action={
+              <Link href="/uz/files" data-hub-all-files className={SECTION_LINK_CLASS}>
+                Barchasi
+                <ArrowRight className="size-4" aria-hidden />
+              </Link>
+            }
+          >
+            <RecentFiles state={recent} />
           </HubSection>
-          {signedOut ? null : (
-            <HubSection
-              id="recent"
-              title="Davom ettirish"
-              index={2}
-              action={
-                <Link href="/uz/files" data-hub-all-files className={SECTION_LINK_CLASS}>
-                  Barchasi
-                  <ArrowRight className="size-4" aria-hidden />
-                </Link>
-              }
-            >
-              <RecentFiles state={recent} onCreate={() => open("create")} />
-            </HubSection>
-          )}
-        </div>
-
+        )}
         <MarketRail index={3} />
-
-        <HubSection
-          id="tools"
-          title="Barcha vositalar"
-          index={4}
-          action={
-            <Link href="/uz/create" data-hub-catalogue onClick={() => gate("/uz/create")} className={SECTION_LINK_CLASS}>
-              Hammasi
-              <ArrowRight className="size-4" aria-hidden />
-            </Link>
-          }
-        >
-          <ToolsByGroup onPick={gate} />
-        </HubSection>
       </div>
     </div>
   );
