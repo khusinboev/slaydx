@@ -67,6 +67,16 @@ export function elevenLabsRetryable(status: number): boolean {
   return status === 429 || status >= 500;
 }
 
+/**
+ * The permission a key lacks, from a 401 `missing_permissions` answer ("…is missing the permission speech_to_text…"):
+ * its name, `missing_permissions` when the answer does not name one, `null` for any other text.
+ */
+export function missingPermissionOf(text: string): string | null {
+  const named = /missing the permission\s+["'`]?([a-z][a-z0-9_]*)/i.exec(text);
+  if (named) return named[1]!.toLowerCase();
+  return /missing_permissions/.test(text) ? "missing_permissions" : null;
+}
+
 /** Error text with the key (and any `xi-api-key` echo) removed. Never throws. */
 export function scrubKey(text: string, key: string): string {
   let out = String(text ?? "");

@@ -57,6 +57,22 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
     keyless: false,
     keyUrl: "https://console.anthropic.com/settings/keys",
   },
+  qwen: {
+    billing: "paid",
+    priceNote: `${llmNote("qwen", "qwen3.7-plus")} · ${llmNote("qwen", "qwen3.8-flash")}`,
+    role: "Gemini ishlamay qolganda birinchi zaxira: barcha matn vositalari shu model bilan yakunlanadi. Internet qidiruvi va ovozni baholash zaxiraga o'tmaydi. O'zbekcha sifatini avval sinab ko'ring.",
+    need: "optional",
+    keyless: false,
+    keyUrl: "https://modelstudio.console.alibabacloud.com/",
+  },
+  deepseek: {
+    billing: "paid",
+    priceNote: `${llmNote("deepseek", "deepseek-flash")} · ${llmNote("deepseek", "deepseek-v4-pro")} · tungi soatlarda yarim narx`,
+    role: "Ikkinchi arzon zaxira: Gemini va Qwen javob bermasa matnni yozadi. O'zbekcha sifatini avval sinab ko'ring.",
+    need: "optional",
+    keyless: false,
+    keyUrl: "https://platform.deepseek.com/api_keys",
+  },
   pexels: {
     billing: "free",
     priceNote: "Bepul · soatiga 200 so'rov limiti bor",
@@ -170,10 +186,10 @@ export type Purpose = {
   /** Providers shown with it but never part of the standard chain (the premium voice): they do not count for the verdict. */
   premium: readonly ProviderId[];
   /**
-   * A provider the purpose cannot work WITHOUT, whatever else is switched on (the direct text path and the image
-   * tools are Gemini-only: a working Claude alone cannot write a slide). `null` = any listed provider will do.
+   * The purpose needs ONE of these, whatever else is switched on: the image tools are Gemini-only, and the default text
+   * chain does not contain Claude, so a working Claude alone cannot write a slide. `null` = any listed provider will do.
    */
-  requires: ProviderId | null;
+  requires: readonly ProviderId[] | null;
   /** Routing slots editable inside this purpose. */
   routes: readonly RouteId[];
   /**
@@ -192,11 +208,11 @@ export const PURPOSES: readonly Purpose[] = [
     title: "Matn yozish va baholash",
     summary: "Slayd, kurs ishi, referat, insho, maqola, tarjima, rezyume, AI chat, domla savollari, test xatolari tahlili va hujjat tahriri — barcha matn shu yerdan keladi.",
     need: "required",
-    minimum: "Kamida bitta matn provayderi (Gemini) ishlashi shart. Ikkinchisi (Claude) — baholovchi va zaxira sifatida tavsiya etiladi.",
-    providers: ["gemini", "anthropic"],
+    minimum: "Kamida bitta matn provayderi ishlashi shart (asosiysi Gemini). Qwen va DeepSeek — Gemini to'xtaganda ishlaydigan arzon zaxira, Claude — baholovchi.",
+    providers: ["gemini", "qwen", "deepseek", "anthropic"],
     premium: [],
-    requires: "gemini",
-    routes: ["llm.model", "llm.writer", "llm.researcher", "llm.judge", "llm.fast", "tests.analysis"],
+    requires: ["gemini", "qwen", "deepseek"],
+    routes: ["llm.chain", "llm.model", "llm.writer", "llm.researcher", "llm.judge", "llm.fast", "tests.analysis"],
     fallback: true,
     setting: null,
   },
@@ -208,7 +224,7 @@ export const PURPOSES: readonly Purpose[] = [
     minimum: "Gemini (Nano Banana) yetarli. ChatGPT va fal.ai (Studio'dagi FLUX, Seedream, Ideogram, Recraft) — foydalanuvchiga qo'shimcha tanlov, shart emas.",
     providers: ["gemini", "openai-image", "fal"],
     premium: [],
-    requires: "gemini",
+    requires: ["gemini"],
     routes: ["image.gemini"],
     fallback: false,
     setting: null,
@@ -306,12 +322,12 @@ export type VerdictInfo = { verdict: Verdict; headline: string; detail: string }
  */
 export function purposeVerdict(purpose: Purpose, usable: readonly ProviderId[], labelOf: (id: ProviderId) => string): VerdictInfo {
   const working = purpose.providers.filter((p) => usable.includes(p));
-  if (purpose.requires && !usable.includes(purpose.requires)) {
-    const must = labelOf(purpose.requires);
+  if (purpose.requires && !purpose.requires.some((p) => usable.includes(p))) {
+    const must = purpose.requires.map(labelOf).join(" yoki ");
     return {
       verdict: "missing",
       headline: "Yetarli emas",
-      detail: `${must} ishlamayapti — bu vazifa usiz bajarilmaydi${working.length > 0 ? `, boshqa provayderlar (${working.map(labelOf).join(", ")}) uning o'rnini bosa olmaydi` : ""}. ${must}ni yoqing yoki kalitini kiriting.`,
+      detail: `${must} ishlamayapti — bu vazifa ularsiz bajarilmaydi${working.length > 0 ? `, boshqa provayderlar (${working.map(labelOf).join(", ")}) uning o'rnini bosa olmaydi` : ""}. Kamida bittasini yoqing yoki kalitini kiriting: ${must}.`,
     };
   }
   if (working.length === 0) {
@@ -334,9 +350,13 @@ export function purposeVerdict(purpose: Purpose, usable: readonly ProviderId[], 
 
 /** Plain-language name and help of each routing slot (the admin page; `routes.ts` holds the rules). */
 export const ROUTE_INFO: Readonly<Record<RouteId, { title: string; help: string }>> = {
+  "llm.chain": {
+    title: "Matn zanjiri (asosiy va zaxira)",
+    help: "Barcha matn shu tartibda yoziladi: birinchisi javob bermasa (hisob, balans yoki uzilish) keyingisi yozadi. Xitoy modelini birinchi qo'yish ham mumkin. Kaliti yo'q yoki o'chirilgan provayder o'tkazib yuboriladi. Quyidagi rollarda o'z tartibi saqlangan bo'lsa, u rol o'z tartibida ishlaydi.",
+  },
   "llm.model": {
-    title: "Asosiy matn modeli",
-    help: "Slayd, pro-slayd, kurs ishi, referat, tarjima, rezyume va boshqa asosiy vositalar shu modelda yoziladi.",
+    title: "Gemini matn modeli",
+    help: "Matn zanjiridagi Gemini shu model bilan ishlaydi (slayd, pro-slayd, kurs ishi, referat, tarjima, rezyume va boshqalar). «Matn zanjiri» saqlangan bo'lsa, undagi Gemini modeli ustun turadi va bu sozlama ishlamaydi.",
   },
   "llm.writer": {
     title: "Yozuvchi",

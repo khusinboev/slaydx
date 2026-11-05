@@ -447,7 +447,7 @@ test("transcribe engine: TXT result + cues; no speech is a result (not burned); 
   const failing = async () => {
     throw new MediaError("elevenlabs", "500 boom", { retryable: true });
   };
-  await assert.rejects(buildStudioTranscribe(TR(), { source: RES, sourceSeconds: 2 } as never, audioCtx(), {}, { run: failing as never }), (e: Error) => e instanceof UserFacingError && /Transkripsiya bajarilmadi.*Kredit qaytariladi/.test(e.message));
+  await assert.rejects(buildStudioTranscribe(TR(), { source: RES, sourceSeconds: 2 } as never, audioCtx(), {}, { run: failing as never }), (e: Error) => e instanceof UserFacingError && /Transkripsiya bajarilmadi.*Kredit qaytariladi/.test(e.message) && e.cause instanceof MediaError);
   await assert.rejects(buildStudioTranscribe(TR(), { source: RES, sourceSeconds: 2 } as never, audioCtx(RES2), {}, { run: runStub(sttWords("a")) as never }), /manba topilmadi/);
   await assert.rejects(buildStudioTranscribe(TR(), { source: RES, sourceSeconds: 2 } as never, { source: null }, {}, { run: runStub(sttWords("a")) as never }), /Kredit qaytariladi/);
   await assert.rejects(buildStudioTranscribe(TR(), { source: UP, sourceSeconds: 2, burn: true } as never, { source: { ...audioCtx().source, kind: "upload", id: "a".repeat(24) } }, {}, { run: runStub(sttWords("a")) as never }), /faqat videoga/);
@@ -575,6 +575,7 @@ test("dub engine: failures — provider failed / safety / deadline / submit 500 
 
   const boom = await run({ create: () => json(500, { detail: "boom" }) });
   assert.equal(boom.err?.message, dubMod.DUB_FAILED_MESSAGE);
+  assert.equal((boom.err?.cause as { provider?: string } | undefined)?.provider, "elevenlabs", "the provider error stays behind the user text, for the owner alert");
   assert.equal(boom.seen.filter((s) => s.method === "POST").length, 1, "one route: a 5xx is not resent elsewhere");
   assert.deepEqual(boom.calls.map((x) => x[0]), ["begin", "fail"]);
 

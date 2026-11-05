@@ -1,6 +1,7 @@
 import "server-only";
 import { MEDIA_CATALOG, MEDIA_PURPOSES } from "../../media/catalog";
 import { getProviderKey, isProviderEnabled } from "../providers/resolve";
+import { keyUsable } from "../providers/registry";
 import { ensureProviderKeys } from "../providers/store";
 import { mediaOverrides, type OverrideMap } from "./overrides";
 import { getSetting } from "../settings";
@@ -8,7 +9,7 @@ import { STUDIO_VIDEO_PURPOSE } from "../../media/catalog-video";
 
 /**
  * Can a catalog model serve a job RIGHT NOW (docs/studio/P1-SPEC.md «Admin»): one of its routes has a provider that is
- * switched on in «Provayderlar» AND keyed (DB or env), and the admin did not switch the model off
+ * switched on in «Provayderlar» AND keyed (DB or env) with a key of a usable format (`keyUsable`), and the admin did not switch the model off
  * (`media_model_overrides.enabled = false`; no row = on).
  *
  * ONE function for both sides: `GET /api/media/catalog` lists only what passes, and `submitGeneration` refuses (400,
@@ -18,7 +19,7 @@ export function modelAvailable(modelId: string, overrides: OverrideMap): boolean
   const entry = MEDIA_CATALOG.byId(modelId);
   if (!entry) return false;
   if (overrides.get(modelId)?.enabled === false) return false;
-  return entry.routes.some((r) => isProviderEnabled(r.provider) && Boolean(getProviderKey(r.provider)));
+  return entry.routes.some((r) => isProviderEnabled(r.provider) && keyUsable(r.provider, getProviderKey(r.provider)));
 }
 
 /** The purpose's allowed models available now, in the purpose's (catalog) order. */

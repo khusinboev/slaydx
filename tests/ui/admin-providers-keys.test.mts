@@ -13,7 +13,7 @@ import { ProvidersPage } from "../../components/admin/providers/ProvidersPage.ts
 import { keyProblem } from "../../components/admin/providers/ProviderDialogs.tsx";
 import { buildCategories, kpis, parseTab, providerFigures, worstVerdict } from "../../components/admin/providers/categories.ts";
 import { fmtSoum } from "../../lib/admin-format.ts";
-import { compact, keyState, moneyText, providerStatus, routeText, sameEntries, unitText, usageLine } from "../../components/admin/providers/format.ts";
+import { attentionReason, compact, keyState, moneyText, providerNeedsAttention, providerStatus, routeText, sameEntries, unitText, usageLine } from "../../components/admin/providers/format.ts";
 
 /**
  * `/admin/providers` «Provayderlar va AI sozlamalari» (program-17 decision D7, redesigned 2026-10-31):
@@ -89,6 +89,8 @@ const item = (p: Partial<ProviderItem> & Pick<ProviderItem, "id" | "label">): Pr
   envPresent: false,
   keySource: "none",
   unreadable: false,
+  keyMalformed: false,
+  refusedPermissions: [],
   updatedBy: null,
   updatedAt: null,
   usable: false,
@@ -300,6 +302,27 @@ test("keyState: Bazada …a1B2 / Serverda (env) / Yo'q / unreadable", () => {
   assert.deepEqual(keyState(KLING), { tone: "neutral", label: "Yo'q" });
   assert.equal(keyState({ ...ANTHROPIC, unreadable: true, envPresent: true }).tone, "warning");
   assert.match(keyState({ ...ANTHROPIC, unreadable: true, envPresent: true }).label, /Env ishlatiladi/);
+});
+
+test("a stored key of the wrong format is called out on the card, the status and the attention tile", () => {
+  const bad = { ...KLING, hasDbKey: true, keyHint: "…1234", keySource: "db" as const, keyMalformed: true, keyFormat: "<accessKey>:<secretKey>" };
+  assert.deepEqual(keyState(bad), { tone: "warning", label: "Kalit formati noto‘g‘ri" });
+  const status = providerStatus(bad);
+  assert.equal(status.tone, "danger");
+  assert.equal(status.label, "Kalit formati noto‘g‘ri");
+  assert.match(status.hint ?? "", /<accessKey>:<secretKey>/);
+  assert.equal(providerNeedsAttention(bad), true);
+  assert.equal(attentionReason(bad), "kalit formati noto‘g‘ri");
+});
+
+test("permissions real jobs were refused show on a working provider", () => {
+  const refused = { ...GEMINI, refusedPermissions: ["speech_to_text", "dubbing_write"] };
+  const status = providerStatus(refused);
+  assert.equal(status.label, "Ruxsat yetishmaydi");
+  assert.match(status.hint ?? "", /speech_to_text, dubbing_write/);
+  assert.equal(providerNeedsAttention(refused), true);
+  assert.match(attentionReason(refused), /speech_to_text/);
+  assert.equal(providerNeedsAttention(GEMINI), false);
 });
 
 test("providerStatus tells what the provider can do now and why not", () => {

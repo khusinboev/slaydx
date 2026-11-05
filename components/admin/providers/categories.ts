@@ -1,5 +1,5 @@
 import type { ProviderItem, ProvidersResponse, PurposeId, PurposeItem, RouteItem, Verdict } from "@/lib/admin-api/providers";
-import { providerNeedsAttention, totalsOf, usageKindLabel, type Period } from "./format";
+import { attentionReason, providerNeedsAttention, totalsOf, usageKindLabel, type Period } from "./format";
 
 /**
  * The page groups the server's eight PURPOSES into seven tabs (the owner's mental model): one «Umumiy» overview and a
@@ -217,7 +217,7 @@ export function kpis(data: ProvidersResponse, categories: readonly Category[]) {
   const issues: string[] = [];
   for (const p of data.purposes) if (p.verdict === "missing" || p.verdict === "single") issues.push(`${p.title}: ${p.headline.toLowerCase()}`);
   const purposeIssues = issues.length;
-  for (const i of data.items) if (providerNeedsAttention(i)) issues.push(`${i.label}: ${i.hasDbKey && i.unreadable ? "kalit o'qilmaydi" : "vaqtincha to'xtagan"}`);
+  for (const i of data.items) if (providerNeedsAttention(i)) issues.push(`${i.label}: ${attentionReason(i)}`);
   return {
     usable: usable.length,
     total: data.items.length,

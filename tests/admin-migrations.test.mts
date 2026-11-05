@@ -432,6 +432,8 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
           FROM (VALUES (396, TRUE), (397, FALSE), (9999999, TRUE)) AS v(id, img);
     `);
     for (const f of [
+      // 072: provider failure log (docs/ops/METRICS.md) -- provider_failures.
+      "072_provider_failures.sql",
       // 071: Studio P7a compare (docs/studio/P7-SPEC.md) -- generations.compare_group / compare_index + CHECK + index.
       "071_studio_compare.sql",
       // 070: Studio P7b favourites (docs/studio/P7-SPEC.md) -- studio_favorites.
@@ -516,6 +518,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
         assert.equal(left[2]!.text, "matn", "an id outside the list keeps its text");
       }
       if (f === "070_studio_favorites.sql") assert.ok(!(await exists("studio_favorites")), "070 rollback drops the table");
+      if (f === "072_provider_failures.sql") assert.ok(!(await exists("provider_failures")), "072 rollback drops the table");
       if (f === "071_studio_compare.sql") {
         assert.ok(!(await exists("generations_compare_group_idx")), "071 rollback drops the index");
         const cols = await query<{ c: string }>("SELECT column_name AS c FROM information_schema.columns WHERE table_name = 'generations' AND column_name LIKE 'compare_%'");

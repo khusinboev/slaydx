@@ -181,12 +181,38 @@ test("worker: xom xato foydalanuvchiga chiqmaydi, tafsilot jurnalda (jobId, atte
     assert.ok(rows.some((r) => r.jobId === id && /qaytarildi/.test(String(r.msg))), "refund jurnali yo'q");
   });
 
+  await t.test("all providers down: the outage message reaches the user, the money returns, the provider row is stored for the owner alert", async (tt) => {
+    const { reportFailure, errorWithCause } = await import("../lib/generation/llm/failure.ts");
+    const { AI_OUTAGE_ERROR } = await import("../lib/server/user-error.ts");
+    const { id, gen, tx } = await runWith(tt, async () => {
+      reportFailure({ role: "complete", provider: "gemini", model: "gemini-3.7-flash", attempt: 3, durationMs: 1200, kind: "http", status: 503, retryable: true, message: "overloaded" });
+      throw errorWithCause("Taqdimot matni yozilmadi. Kredit qaytariladi — qayta urinib ko‘ring.");
+    });
+    assert.equal(gen.status, "FAILED");
+    assert.equal(gen.error, AI_OUTAGE_ERROR);
+    assert.ok(tx.find((x) => x.kind === "refund"), "pul qaytmadi");
+    const stored = await query<{ provider: string; message: string }>("SELECT provider, message FROM provider_failures WHERE job_id = $1", [id]);
+    assert.deepEqual(stored, [{ provider: "gemini", message: "overloaded" }]);
+  });
+
+  await t.test("a run that lost the lease records no provider failure: the job is not its to report", async (tt) => {
+    const { reportFailure, errorWithCause } = await import("../lib/generation/llm/failure.ts");
+    assert.equal(await worker.failAndCleanup({ id: "00000000-0000-4000-8000-000000000000", userId: "1" }, "boshqa-worker", "xato"), false, "the guard the record relies on");
+    const { id, gen } = await runWith(tt, async () => {
+      reportFailure({ role: "complete", provider: "gemini", model: "m", attempt: 1, durationMs: 1, kind: "http", status: 503, retryable: false, message: "overloaded" });
+      await query("UPDATE generations SET locked_by = 'boshqa-worker' WHERE status = 'IN_PROGRESS'");
+      throw errorWithCause("Matn yozilmadi.");
+    });
+    assert.equal(gen.status, "IN_PROGRESS", "the other worker owns it");
+    assert.deepEqual(await query("SELECT 1 FROM provider_failures WHERE job_id = $1", [id]), []);
+  });
+
   await t.test("LLM yiqilishi: foydalanuvchi matni o'zgarmaydi, pul qaytadi, ishchi qatori sababni (kind/status) va toolId ni chop etadi", async (tt) => {
     const { reportFailure, errorWithCause } = await import("../lib/generation/llm/failure.ts");
     const USER_MSG = "Taqdimot matni yozilmadi. Kredit qaytariladi — qayta urinib ko‘ring.";
     const { id, gen, tx, rows } = await runWith(tt, async () => {
-      // Dvigatel ichida: provayder 503 berdi, hamma urinish yiqildi → umumiy xato `cause` bilan.
-      reportFailure({ role: "complete", provider: "gemini", model: "gemini-3.7-flash", attempt: 3, durationMs: 1200, kind: "http", status: 503, retryable: true, message: "overloaded" });
+      // Dvigatel ichida: provayder shu so'rovni rad etdi (400, nosozlik emas), hamma urinish yiqildi → umumiy xato `cause` bilan.
+      reportFailure({ role: "complete", provider: "gemini", model: "gemini-3.7-flash", attempt: 3, durationMs: 1200, kind: "http", status: 400, retryable: false, message: "prompt rejected" });
       throw errorWithCause(USER_MSG);
     });
     assert.equal(gen.status, "FAILED");
@@ -195,7 +221,7 @@ test("worker: xom xato foydalanuvchiga chiqmaydi, tafsilot jurnalda (jobId, atte
     const fail = rows.find((r) => r.level === "error" && r.jobId === id && r.err);
     assert.ok(fail, `jurnalda ish xatosi qatori yo'q: ${JSON.stringify(rows)}`);
     // MUTATSIYA: `cause` olib tashlansa yoki `serializeError` uni yozmasa — shu qator qizaradi.
-    assert.match(String(((fail.err as Row).cause as Row | undefined)?.message), /kind=http status=503/);
+    assert.match(String(((fail.err as Row).cause as Row | undefined)?.message), /kind=http status=400/);
     assert.equal(fail.toolId, "translation");
     const attempt = rows.find((r) => r.msg === "[llm] attempt failed" && r.jobId === id);
     assert.ok(attempt, "urinish qatori ish konteksti (jobId) bilan chiqishi kerak");

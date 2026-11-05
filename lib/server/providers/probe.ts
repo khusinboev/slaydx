@@ -1,12 +1,16 @@
 import { redact } from "../log";
 import { providerDef } from "./registry";
 import { FAL_IMAGE_MODELS, MEDIA_CATALOG } from "../../media/catalog";
-import { elevenLabsSlotsOf } from "../../generation/tts/elevenlabs";
+import { ELEVENLABS_API, elevenLabsSlotsOf, missingPermissionOf } from "../../generation/tts/elevenlabs";
+import { OPENAI_COMPAT_PRESETS, presetBaseUrl } from "../../generation/llm/openai-compat";
+import { isOpenAiCompatId, type OpenAiCompatId } from "../../generation/llm/types";
+import { effectiveRoute } from "./route-effective";
 
 /**
  * «Tekshirish»: ONE cheap authenticated read per provider (list models, fetch one photo...), 10 s timeout, to
  * tell the admin whether a key is accepted. Nothing is generated and no paid unit is spent; the free-tier quota
- * of the stock and research APIs loses one request.
+ * of the stock and research APIs loses one request. The exception is the OpenAI-compatible text providers: they answer
+ * a ONE-token completion with the configured model, a fraction of a cent, which proves the model id and the balance.
  *
  * The answer is `{ ok, message }`. A message never contains the key: it is built from the HTTP status and a
  * clipped provider error text, and every occurrence of the key (and of the usual key shapes, via `log.redact`)
@@ -25,12 +29,16 @@ export type ProbeDeps = {
   azureRegion?: string;
 };
 
-type Request = { url: string; headers?: Record<string, string> };
+type Request = { url: string; headers?: Record<string, string>; method?: "POST"; body?: string };
 
 const REGION_RE = /^[a-z0-9-]{2,30}$/;
 
 /** The request for `id`, or an error text when the probe cannot be built (e.g. Azure without a region). */
 export function probeRequest(id: string, key: string, deps: ProbeDeps = {}): Request | { error: string } {
+  if (isOpenAiCompatId(id)) {
+    const preset = OPENAI_COMPAT_PRESETS[id];
+    return preset.probePath ? { url: `${presetBaseUrl(preset)}${preset.probePath}`, headers: { Authorization: `Bearer ${key}` } } : completionProbe(id, key);
+  }
   switch (id) {
     case "gemini":
       return { url: "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1", headers: { "x-goog-api-key": key } };
@@ -63,6 +71,18 @@ export function probeRequest(id: string, key: string, deps: ProbeDeps = {}): Req
     default:
       return { error: "Bu provayder uchun tekshiruv yo'q" };
   }
+}
+
+/** One token from the model the text chain would call, so a wrong model id shows here and not during an outage. */
+function completionProbe(id: OpenAiCompatId, key: string): Request {
+  const preset = OPENAI_COMPAT_PRESETS[id];
+  const model = effectiveRoute("llm.chain").entries.find((e) => e.provider === id)?.model ?? preset.defaultModel;
+  return {
+    url: `${presetBaseUrl(preset)}/chat/completions`,
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model, messages: [{ role: "user", content: "1" }], max_tokens: 1, ...preset.thinkingOff }),
+  };
 }
 
 /** Replaces the key itself and the usual key shapes; clips to 160 chars. */
@@ -109,6 +129,30 @@ export function elevenLabsMessage(body: unknown): string {
   const slots = elevenLabsSlotsOf(body);
   if (slots) parts.push(`ovoz slotlari: ${slots.used} / ${slots.limit} band`);
   return parts.join(" · ");
+}
+
+/**
+ * Free reads of a resource that does not exist, one per product the Studio uses: a key with the permission gets a 404, a
+ * key without it the 401 `missing_permissions` that the speech-to-text and dubbing jobs would get. ElevenLabs documents no
+ * scope for these reads, so ONLY that explicit refusal is reported; silence proves nothing. A key may read dubs and still
+ * lack `dubbing_write` (no free write check exists): the admin card shows what real jobs were refused.
+ */
+export const ELEVENLABS_PERMISSION_PROBES = [`${ELEVENLABS_API}/speech-to-text/transcripts/slaydx-probe`, `${ELEVENLABS_API}/dubbing/slaydx-probe`];
+
+/** The permissions the key was refused by the free reads. Never throws: the key already passed. */
+async function elevenLabsRefusals(call: (url: string) => Promise<Response>): Promise<string[]> {
+  const out: string[] = [];
+  for (const url of ELEVENLABS_PERMISSION_PROBES) {
+    try {
+      const res = await call(url);
+      if (res.status !== 401 && res.status !== 403) continue;
+      const permission = missingPermissionOf((await res.text()).slice(0, 2000));
+      if (permission) out.push(permission);
+    } catch {
+      // Unknown is not refused: the job path reports a real refusal.
+    }
+  }
+  return out;
 }
 
 export const FAL_PRICING_URL = "https://api.fal.ai/v1/models/pricing";
@@ -158,6 +202,17 @@ export function falMessage(pricing: unknown, billing: unknown): string {
   return parts.join(" · ");
 }
 
+/** DeepSeek `GET /user/balance` (api-docs.deepseek.com/api/get-user-balance, read 2026-11-05): numbers and a pattern-checked currency only. */
+export function deepseekMessage(body: unknown): string {
+  const b = (body ?? {}) as { is_available?: unknown; balance_infos?: { currency?: unknown; total_balance?: unknown }[] };
+  const parts = ["Kalit qabul qilindi"];
+  const info = Array.isArray(b.balance_infos) ? b.balance_infos[0] : undefined;
+  const total = Number(info?.total_balance);
+  if (info && Number.isFinite(total)) parts.push(`balans ${total} ${typeof info.currency === "string" && /^[A-Z]{3}$/.test(info.currency) ? info.currency : ""}`.trim());
+  if (b.is_available === false) parts.push("balans yetarli emas: zaxira ishlamaydi, hisobni to'ldiring");
+  return parts.join(" · ");
+}
+
 export const HEYGEN_ME_URL = "https://api.heygen.com/v3/users/me";
 
 /**
@@ -202,7 +257,7 @@ export async function probeProvider(id: string, key: string, deps: ProbeDeps = {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), deps.timeoutMs ?? PROBE_TIMEOUT_MS);
   try {
-    const res = await fetchImpl(req.url, { method: "GET", headers: req.headers, signal: ctrl.signal, redirect: "manual" });
+    const res = await fetchImpl(req.url, { method: req.method ?? "GET", headers: req.headers, ...(req.body ? { body: req.body } : {}), signal: ctrl.signal, redirect: "manual" });
     if (res.ok && id === "fal") {
       const pricing = await res.json().catch(() => null);
       let billing: unknown = null;
@@ -216,8 +271,22 @@ export async function probeProvider(id: string, key: string, deps: ProbeDeps = {
       return { ok: true, message: falMessage(pricing, billing).split(key).join("…") };
     }
     // Built from numbers and pattern-checked words only; the key cannot be in it, split anyway.
+    if (res.ok && id === "deepseek") {
+      const message = deepseekMessage(await res.json().catch(() => null)).split(key).join("…");
+      const c = completionProbe(id, key);
+      const r = await fetchImpl(c.url, { method: c.method, headers: c.headers, body: c.body, signal: ctrl.signal, redirect: "manual" });
+      if (r.ok) return { ok: true, message };
+      const detail = redactProbeText(await errorText(r), key);
+      return { ok: false, message: `Kalit qabul qilindi, lekin model rad etdi (HTTP ${r.status})${detail ? `: ${detail}` : ""}` };
+    }
     if (res.ok && id === "heygen") return { ok: true, message: heygenMessage(await res.json().catch(() => null)).split(key).join("…") };
-    if (res.ok) return { ok: true, message: id === "elevenlabs" ? elevenLabsMessage(await res.json().catch(() => null)) : "Kalit qabul qilindi" };
+    if (res.ok && id === "elevenlabs") {
+      const message = elevenLabsMessage(await res.json().catch(() => null));
+      const refused = await elevenLabsRefusals((url) => fetchImpl(url, { method: "GET", headers: req.headers, signal: ctrl.signal, redirect: "manual" }));
+      // Permission names are pattern-checked `[a-z0-9_]` words; the key cannot be in them.
+      return { ok: true, message: refused.length ? `${message} · ruxsat yetishmaydi: ${refused.join(", ")}` : message };
+    }
+    if (res.ok) return { ok: true, message: "Kalit qabul qilindi" };
     const detail = redactProbeText(await errorText(res), key);
     return { ok: false, message: `Provayder rad etdi (HTTP ${res.status})${detail ? `: ${detail}` : ""}` };
   } catch (e) {

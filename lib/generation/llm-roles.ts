@@ -12,21 +12,16 @@
  * keyin ham yiqilsa — keyingisi). Har provayder `llm/{gemini,anthropic}.ts`
  * adapteri orqali chaqiriladi.
  *
- * ENV BERILMAGAN holat — bu BOSHQA VOSITALARGA (slayd, kurs ishi,
- * tarjimon) TA'SIR QILMASLIGI kerak bo'lgan chegara: ular `llm.ts`
- * `llmComplete`/`llmGrounded`ni TO'G'RIDAN-TO'G'RI chaqiradi va WP8 ULARGA
- * UMUMAN TEGMAGAN. `complete(role, …)` o'zi ham env yo'q bo'lsa xuddi
- * o'sha standart provayderga (`llmProvider()` — Gemini kaliti
- * bo'lsa Gemini) BITTA spec bilan tushadi — natijada xatti-harakat
- * "hozirgidek" (Gemini standart), faqat endi `usage` HAM qaytadi (buni
- * eski `llmComplete` bermas edi — token sonini bilmasdi).
+ * The direct tools (slide, course work, translation) call `llm.ts` `llmComplete`/`llmStream`, which walk the same text
+ * chain (`llm.chain`) on their own Gemini path. With no env value `complete(role, …)` uses that chain too: Gemini, then
+ * the fallbacks that have a key (docs/ops/LLM-FALLBACK.md), and it returns `usage` as well.
  */
-import { llmProvider, type LlmOpts } from "./llm";
-import { effectiveRoute } from "../server/providers/route-effective";
+import { llmEnabled, type LlmOpts } from "./llm";
+import { effectiveRoute, routeSpecs, withoutKeylessFallbacks } from "../server/providers/route-effective";
 import { completeWithChain, type ChainResult, type ChainUsage } from "./llm/chain";
 import { withJsonRetry } from "./llm/failure";
 export { DeadlineError } from "./llm/chain";
-import { anthropicAdapter } from "./llm/anthropic";
+import { FALLBACK_ADAPTERS } from "./llm/fallback-adapters";
 import { geminiAdapter } from "./llm/gemini";
 import type { ProviderAdapter, ProviderId, RoleSpec } from "./llm/types";
 import { costUsd } from "./llm-pricing";
@@ -49,7 +44,7 @@ export type LlmUsage = {
 
 export type RoleResult = { text: string; usage?: LlmUsage };
 
-export type RoleOpts = Pick<LlmOpts, "json" | "timeoutMs" | "thinking"> & {
+export type RoleOpts = Pick<LlmOpts, "json" | "timeoutMs" | "thinking" | "responseSchema"> & {
   maxTokens?: number;
   /**
    * Ish muddati (epoch ms, audit C28/W3 shartnomasi). Berilsa har urinish
@@ -64,21 +59,22 @@ export type RoleOpts = Pick<LlmOpts, "json" | "timeoutMs" | "thinking"> & {
 
 const ADAPTERS: Partial<Record<ProviderId, ProviderAdapter>> = {
   gemini: geminiAdapter,
-  anthropic: anthropicAdapter,
+  ...FALLBACK_ADAPTERS,
 };
 
 /**
  * The provider:model chain of `role`, first = preferred, the rest = fallbacks. Precedence (admin «Provayderlar»):
  * the admin's stored choice, else the `LLM_<ROL>` environment variable (how it ran before the page existed), else the
- * current default provider (`llm.ts llmProvider()`: Gemini when its key resolves) with the default text model.
+ * text chain (`llm.chain`: Gemini, then the fallbacks). An OpenAI-compatible provider nobody configured is not in the
+ * result at all, so without those keys every chain is what it was before they existed.
  * No key at all gives `[]`, so `complete()` returns `null` exactly like the old `llmComplete` did without a key.
  * `route-effective.ts` is the ONE place that decides this; the admin page shows the same result.
  */
 export function roleSpecs(role: LlmRole): RoleSpec[] {
   const eff = effectiveRoute(`llm.${role}`);
-  if (eff.source === "default" && !llmProvider()) return [];
+  if (eff.source === "default" && !llmEnabled()) return [];
   // A slot entry whose provider has no adapter (a provider that was removed) is dropped instead of failing the call.
-  return eff.entries.flatMap((e) => (e.model && ADAPTERS[e.provider as ProviderId] ? [{ provider: e.provider as ProviderId, model: e.model }] : []));
+  return withoutKeylessFallbacks(routeSpecs(eff.entries).filter((s) => ADAPTERS[s.provider]));
 }
 
 /**

@@ -56,8 +56,8 @@ test("noma'lum model — 0, xato tashlamaydi", () => {
   assert.equal(usd, 0);
 });
 
-test("narx jadvali faqat Gemini va Anthropic qatorlarini saqlaydi (olib tashlangan provayderlar yo'q)", () => {
-  assert.deepEqual([...new Set(PRICING.map((r) => r.provider))].sort(), ["anthropic", "gemini"]);
+test("narx jadvali faqat ishlaydigan matn provayderlari qatorlarini saqlaydi (olib tashlangan provayderlar yo'q)", () => {
+  assert.deepEqual([...new Set(PRICING.map((r) => r.provider))].sort(), ["anthropic", "deepseek", "gemini", "qwen"]);
   // Eski qatorlar narxlanmaydi: ularning `usd` qiymati yozilgan paytda saqlangan va hisobotlar SHUNI yig'adi.
   assert.equal(costUsd({ provider: "xai", model: "grok-4.3", inputTokens: 1_000_000, outputTokens: 1_000_000 }, new Date("2026-06-01")), 0);
 });

@@ -286,6 +286,8 @@ test("video: money (paid only), async submit/poll, exactly-once, refunds, recove
     assert.equal((await op(id))?.op_id, "int_1");
   });
 
+  const failures = async (jobId: string) => (await query<{ provider: string }>("SELECT provider FROM provider_failures WHERE job_id = $1", [jobId])).map((r) => r.provider);
+
   await t.test("submit: a provider safety refusal / an outage fails the job with a clear message and refunds it", async () => {
     await clearAll();
     resetStub();
@@ -309,6 +311,8 @@ test("video: money (paid only), async submit/poll, exactly-once, refunds, recove
     assert.match(String(gb.error), /Pul qaytarildi/);
     assert.equal(await refunds(b.body.id!), "1");
     assert.equal((await wallet(me)).balance, 100_000, "everything came back");
+    assert.deepEqual(await failures(a.body.id!), [], "a safety refusal is the user's text, not a provider failure");
+    assert.equal((await failures(b.body.id!)).length, 1, "an outage counts towards the owner alert");
   });
 
   /* ═════════════ poll: success, exactly once ═════════════ */
@@ -422,7 +426,9 @@ test("video: money (paid only), async submit/poll, exactly-once, refunds, recove
     assert.equal(await refunds(id), "1", "MUTATSIYA: failVideo'dan qaytarish olib tashlansa qizaradi");
     assert.equal((await wallet(me)).balance, 100_000);
     assert.equal((await op(id))?.status, "failed");
-    assert.equal(await ops.failVideo(id, "again", "again"), false, "a second failure is a no-op");
+    assert.equal((await failures(id)).length, 1, "the provider's failure reaches the owner alert");
+    assert.equal(await ops.failVideo(id, "again", "again", "kling"), false, "a second failure is a no-op");
+    assert.equal((await failures(id)).length, 1, "and records nothing");
     assert.equal(await ops.pollDueVideoOps(), 0);
     assert.equal(await refunds(id), "1");
     assert.equal(await getGenerationFile(id, g.user_id), null);
@@ -438,6 +444,7 @@ test("video: money (paid only), async submit/poll, exactly-once, refunds, recove
     await ops.pollDueVideoOps();
     assert.equal((await gen(a)).error, VIDEO_SAFETY_MESSAGE);
     assert.equal(await refunds(a), "1");
+    assert.deepEqual(await failures(a), [], "not a provider failure");
 
     resetStub();
     const b = await startWaiting(me);
@@ -463,6 +470,7 @@ test("video: money (paid only), async submit/poll, exactly-once, refunds, recove
     assert.equal(await refunds(id), "1", "MUTATSIYA: muddatda qaytarish yo'q bo'lsa qizaradi");
     assert.equal((await wallet(me)).balance, 100_000);
     assert.equal(await ops.pollDueVideoOps(), 0);
+    assert.deepEqual(await failures(id), [], "a deadline is not a provider error");
 
     // Transient errors past the deadline also end in a refund (the provider is unreachable, not just slow).
     resetStub();

@@ -33,6 +33,10 @@ export type ProviderDef = {
 export const PROVIDERS = [
   { id: "gemini", label: "Google Gemini", kinds: ["llm", "image", "tts"], envKeys: ["GEMINI_API_KEY"], keyHint: "AIza… (39 belgi)", implemented: true, testable: true },
   { id: "anthropic", label: "Anthropic (Claude)", kinds: ["llm"], envKeys: ["ANTHROPIC_API_KEY"], keyHint: "sk-ant-…", implemented: true, testable: true },
+  // Text fallbacks after Gemini (docs/ops/LLM-FALLBACK.md): one adapter, `lib/generation/llm/openai-compat.ts`. «Tekshirish»
+  // spends one token on the configured model (a fraction of a cent); DeepSeek also reads its balance.
+  { id: "qwen", label: "Qwen (Alibaba)", kinds: ["llm"], envKeys: ["DASHSCOPE_API_KEY"], keyHint: "sk-… (Model Studio, Singapur hududi)", implemented: true, testable: true },
+  { id: "deepseek", label: "DeepSeek", kinds: ["llm"], envKeys: ["DEEPSEEK_API_KEY"], keyHint: "sk-…", implemented: true, testable: true },
   { id: "pexels", label: "Pexels", kinds: ["image"], envKeys: ["PEXELS_API_KEY"], keyHint: "56 belgili kalit", implemented: true, testable: true },
   { id: "pixabay", label: "Pixabay", kinds: ["image"], envKeys: ["PIXABAY_API_KEY"], keyHint: "12345678-abcdef…", implemented: true, testable: true },
   { id: "azure", label: "Azure Speech", kinds: ["tts"], envKeys: ["AZURE_SPEECH_KEY"], keyHint: "32 ta hex belgi (region AZURE_SPEECH_REGION muhitida)", implemented: true, testable: true },
@@ -87,6 +91,28 @@ export const KEY_MAX_LEN = 512;
 
 export function isPlausibleKey(v: unknown): v is string {
   return typeof v === "string" && v.length >= KEY_MIN_LEN && v.length <= KEY_MAX_LEN && /^[\x21-\x7e]+$/.test(v);
+}
+
+/** Providers whose one stored secret is two parts, `<id>:<secret>`: without the colon no request can be signed or sent. */
+const TWO_PART_KEYS: ReadonlySet<string> = new Set(["kling", "fal"]);
+
+/**
+ * Can this key serve requests at all? `true` for any non-empty key of a provider without a known format. The ONE rule of
+ * the admin save, the admin card, model availability and the video picker: incident 2026-11-05, a Kling key without `:`
+ * was listed and charged, then refused by the worker on every job.
+ */
+export function keyUsable(id: string, key: string): boolean {
+  if (!key) return false;
+  if (!TWO_PART_KEYS.has(id)) return true;
+  const at = key.indexOf(":");
+  return at > 0 && key.slice(0, at).trim() !== "" && key.slice(at + 1).trim() !== "";
+}
+
+/** The Uzbek refusal for a key of the wrong format (names the format, never the key), `null` when the key is fine. */
+export function keyFormatProblem(id: string, key: string): string | null {
+  if (keyUsable(id, key)) return null;
+  const def = providerDef(id);
+  return `Kalit formati noto‘g‘ri: ${def?.label ?? id} kaliti ${def?.keyHint ?? ""} ko‘rinishida bo‘lishi kerak`;
 }
 
 /** `…a1B2`: the only form of a stored key that ever leaves the store. */

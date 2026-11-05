@@ -198,6 +198,8 @@ type Item = {
   envPresent: boolean;
   keySource: string;
   unreadable: boolean;
+  keyMalformed: boolean;
+  usable: boolean;
   updatedBy: string | null;
   updatedAt: string | null;
 };
@@ -238,8 +240,8 @@ test("GET: every registry provider with the exact shape; no key anywhere", { ski
     assert.deepEqual(
       Object.keys(i).sort(),
       [
-        "billing", "breaker", "enabled", "envPresent", "hasDbKey", "id", "implemented", "keyFormat", "keyHint", "keySource", "keyUrl", "keyless", "kinds", "label", "need",
-        "priceNote", "purposes", "role", "testable", "unreadable", "updatedAt", "updatedBy", "usable", "usage",
+        "billing", "breaker", "enabled", "envPresent", "hasDbKey", "id", "implemented", "keyFormat", "keyHint", "keyMalformed", "keySource", "keyUrl", "keyless", "kinds", "label", "need",
+        "priceNote", "purposes", "refusedPermissions", "role", "testable", "unreadable", "updatedAt", "updatedBy", "usable", "usage",
       ],
     );
     assert.equal(i.enabled, true);
@@ -391,6 +393,32 @@ test("PUT key: Kling (video) accepts an <accessKey>:<secretKey> key and is imple
   assert.equal(item.implemented, true);
   assert.equal(item.hasDbKey, true);
   assert.equal(resolve.getProviderKey("kling"), K);
+});
+
+test("PUT key: a key of the wrong format is refused with a clear 400; one already stored is reported and not usable", { skip }, async () => {
+  const s = await session("owner");
+  for (const id of ["kling", "fal"]) {
+    const K = `noColon${fresh()}`;
+    const r = await putKey(s.cookie, id, { key: K, reason: REASON });
+    assert.equal(r.status, 400, id);
+    assert.match(r.text, /Kalit formati noto‘g‘ri/);
+    assert.match(r.text, /key_format/);
+    assert.ok(!r.text.includes(K), "the key is never echoed");
+    assert.equal(await rowOf(id), null, "nothing stored");
+  }
+  // A key stored before this check existed (incident 2026-11-05).
+  const K = `noColon${fresh()}`;
+  await query("INSERT INTO provider_settings (provider, key_ciphertext, key_hint) VALUES ('kling', $1, $2)", [crypto.sealProviderKey("kling", K), `…${K.slice(-4)}`]);
+  const r = await list(s.cookie);
+  const kling = itemOf(r, "kling");
+  assert.equal(kling.keyMalformed, true);
+  assert.equal(kling.usable, false, "«Ishlayapti» would be a lie");
+  assert.equal(kling.keySource, "db");
+  assert.ok(!r.text.includes(K));
+  assert.equal(itemOf(r, "gemini").keyMalformed, false);
+  const fixed = await putKey(s.cookie, "kling", { key: `AK${fresh()}:SK${fresh()}`, reason: REASON });
+  assert.equal(fixed.status, 200);
+  assert.equal(itemOf(await list(s.cookie), "kling").keyMalformed, false, "a good key clears it");
 });
 
 test("step-up: every write needs a fresh re-authentication (401 reauth) and writes nothing without it", { skip }, async () => {

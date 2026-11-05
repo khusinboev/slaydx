@@ -10,6 +10,7 @@ import { log } from "./log";
 import { openProviderKey, sealProviderKey, sealingKeySource } from "./providers/crypto";
 import { probeProvider, type ProbeResult } from "./providers/probe";
 import { providerUsage, type ProviderUsage, type ProviderUsageBody } from "./admin-provider-usage";
+import { refusedPermissions } from "./provider-failures";
 import { parseBreakers, parseLimiters, type AiBreaker, type AiLimiter, type AiProcess } from "./admin-ai";
 import { isStale } from "./admin-heartbeat";
 import { soumPerUsd } from "./admin-cost";
@@ -23,7 +24,9 @@ import {
   PROVIDERS,
   isPlausibleKey,
   isProviderId,
+  keyFormatProblem,
   keyHintOf,
+  keyUsable,
   providerDef,
   type ProviderId,
   type ProviderKind,
@@ -66,7 +69,11 @@ export type AdminProviderItem = {
   unreadable: boolean;
   updatedBy: string | null;
   updatedAt: string | null;
-  /** The provider can serve requests right now: switched on and a key resolves (Azure also needs its region). */
+  /** The key in use cannot work (Kling / fal need `<id>:<secret>`): models are not sold, the card says «Kalit formati noto'g'ri». */
+  keyMalformed: boolean;
+  /** Permissions real jobs were refused with the current key (`provider_failures`): the provider key lacks them. */
+  refusedPermissions: string[];
+  /** The provider can serve requests right now: switched on and a usable key resolves (Azure also needs its region). */
   usable: boolean;
   billing: Billing;
   priceNote: string;
@@ -170,19 +177,29 @@ export function requireProviderId(raw: unknown): ProviderId {
   return raw;
 }
 
-function isReadable(id: string, blob: Buffer): boolean {
+/** The stored key, `null` when it cannot be decrypted. Stays in this process: only verdicts about it leave. */
+function openedKey(id: string, blob: Buffer): string | null {
   try {
-    openProviderKey(id, blob);
-    return true;
+    return openProviderKey(id, blob);
   } catch {
-    return false;
+    return null;
   }
+}
+
+/** The first non-empty fallback env var of the provider. */
+function envKeyOf(id: ProviderId): string {
+  for (const name of providerDef(id)!.envKeys) {
+    const v = process.env[name]?.trim();
+    if (v) return v;
+  }
+  return "";
 }
 
 type ItemCtx = {
   showHint: boolean;
   usage: ProviderUsageBody;
   system: AdminSystemBody;
+  refused: ReadonlyMap<string, string[]>;
 };
 
 /**
@@ -219,11 +236,15 @@ function toItem(id: ProviderId, row: DbRow | undefined, ctx: ItemCtx): AdminProv
   const meta = PROVIDER_META[id];
   const enabled = row?.enabled ?? true;
   const hasDbKey = Boolean(row?.key_ciphertext);
-  const unreadable = hasDbKey && !isReadable(id, row!.key_ciphertext!);
+  const dbKey = hasDbKey ? openedKey(id, row!.key_ciphertext!) : null;
+  const unreadable = hasDbKey && dbKey === null;
   const envPresent = hasEnvKey(id);
   const keySource = !enabled ? "none" : hasDbKey && !unreadable ? "db" : envPresent ? "env" : "none";
+  // Whatever would serve when switched on: a stored bad key is called out on a switched-off provider too.
+  const candidate = dbKey ?? envKeyOf(id);
+  const keyMalformed = candidate !== "" && !keyUsable(id, candidate);
   // A keyless provider (OpenAlex, Google Books) works switched on without a key; Azure Speech is a key plus a region.
-  const usable = enabled && (keySource !== "none" || meta.keyless) && (id !== "azure" || Boolean(azureRegion()));
+  const usable = enabled && (keySource !== "none" || meta.keyless) && !keyMalformed && (id !== "azure" || Boolean(azureRegion()));
   return {
     id,
     label: def.label,
@@ -237,6 +258,8 @@ function toItem(id: ProviderId, row: DbRow | undefined, ctx: ItemCtx): AdminProv
     envPresent,
     keySource,
     unreadable,
+    keyMalformed,
+    refusedPermissions: ctx.refused.get(id) ?? [],
     updatedBy: row ? (row.updated_by_name?.trim() || null) : null,
     updatedAt: row ? new Date(row.updated_at).toISOString() : null,
     usable,
@@ -260,6 +283,16 @@ async function readRows(): Promise<Map<string, DbRow>> {
        LEFT JOIN users u ON u.id = a.user_id`,
   );
   return new Map(rows.map((r) => [r.provider, r]));
+}
+
+/** A diagnostic line must not take the page down: without it the card only loses the permission note. */
+async function readRefused(): Promise<ReadonlyMap<string, string[]>> {
+  try {
+    return await refusedPermissions();
+  } catch (e) {
+    log("warn", "[providers] rad etilgan ruxsatlar o'qilmadi", { err: e });
+    return new Map();
+  }
 }
 
 type HeartbeatRow = { process_id: string; role: string; last_seen_at: Date | string; breakers: unknown; limiters: unknown };
@@ -358,8 +391,8 @@ async function buildPurposes(items: ReadonlyMap<string, AdminProviderItem>, rows
 /** Every registry provider and purpose with its stored state, usage and health. `role` decides whether the masked hint is included. */
 export async function listAdminProviders(role: string, now: Date = new Date()): Promise<AdminProvidersBody> {
   await ensureProviderKeys();
-  const [rows, routeRows, usage, system, rate] = await Promise.all([readRows(), readRouteRows(), providerUsage(now), readSystem(now.getTime()), soumPerUsd()]);
-  const ctx: ItemCtx = { showHint: can(role, "settings.edit"), usage, system };
+  const [rows, routeRows, usage, system, rate, refused] = await Promise.all([readRows(), readRouteRows(), providerUsage(now), readSystem(now.getTime()), soumPerUsd(), readRefused()]);
+  const ctx: ItemCtx = { showHint: can(role, "settings.edit"), usage, system, refused };
   const items = PROVIDERS.map((p) => toItem(p.id, rows.get(p.id), ctx));
   const byId = new Map<string, AdminProviderItem>(items.map((i) => [i.id, i]));
   return {
@@ -378,8 +411,8 @@ export async function listAdminProviders(role: string, now: Date = new Date()): 
 
 async function itemOf(id: ProviderId, role: string): Promise<AdminProviderItem> {
   const now = new Date();
-  const [rows, usage, system] = await Promise.all([readRows(), providerUsage(now), readSystem(now.getTime())]);
-  return toItem(id, rows.get(id), { showHint: can(role, "settings.edit"), usage, system });
+  const [rows, usage, system, refused] = await Promise.all([readRows(), providerUsage(now), readSystem(now.getTime()), readRefused()]);
+  return toItem(id, rows.get(id), { showHint: can(role, "settings.edit"), usage, system, refused });
 }
 
 type Client = Parameters<Parameters<typeof adminTx>[1]>[0];
@@ -434,6 +467,8 @@ export async function setAdminProviderKey(admin: AdminActor, rawId: unknown, bod
   const reason = parseReason(body.reason)!;
   const key = typeof body.key === "string" ? body.key.trim() : "";
   if (!isPlausibleKey(key)) throw new ApiError("Kalit noto'g'ri: 8–512 belgi, bo'sh joysiz, faqat ASCII", 400);
+  const formatProblem = keyFormatProblem(id, key);
+  if (formatProblem) throw new ApiError(formatProblem, 400, { code: "key_format" });
   let sealed: Buffer;
   try {
     sealed = sealProviderKey(id, key);
@@ -500,12 +535,7 @@ async function keyForProbe(id: ProviderId): Promise<string> {
       return "";
     }
   }
-  const def = providerDef(id)!;
-  for (const name of def.envKeys) {
-    const v = process.env[name]?.trim();
-    if (v) return v;
-  }
-  return "";
+  return envKeyOf(id);
 }
 
 /** POST: one cheap live call with the key in use. Audited (`providers.test`, `meta.ok`); the key is never in the answer. */
@@ -533,8 +563,8 @@ export function requireRouteId(raw: unknown): RouteId {
 
 async function routeItemOf(id: RouteId, role: string): Promise<AdminRouteItem> {
   const now = new Date();
-  const [rows, routeRows, usage, system] = await Promise.all([readRows(), readRouteRows(), providerUsage(now), readSystem(now.getTime())]);
-  const ctx: ItemCtx = { showHint: can(role, "settings.edit"), usage, system };
+  const [rows, routeRows, usage, system, refused] = await Promise.all([readRows(), readRouteRows(), providerUsage(now), readSystem(now.getTime()), readRefused()]);
+  const ctx: ItemCtx = { showHint: can(role, "settings.edit"), usage, system, refused };
   const items = new Map<string, AdminProviderItem>(PROVIDERS.map((p) => [p.id, toItem(p.id, rows.get(p.id), ctx)]));
   return routeItem(id, items, routeRows);
 }

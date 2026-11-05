@@ -5,6 +5,7 @@ import { adminTx } from "./admin-audit";
 import { parseReason } from "./admin-accounts";
 import type { AdminActor } from "./admin-handler";
 import { getToolPricing } from "./pricing";
+import { keyUsable } from "./providers/registry";
 import { ensureProviderKeys } from "./providers/store";
 import { getProviderKey, isProviderEnabled } from "./providers/resolve";
 import { modelAvailable } from "./media/availability";
@@ -142,7 +143,7 @@ export async function mediaModelsOverview(): Promise<MediaModelsOverview> {
       unit: unit.label,
       costUsd: usd,
       costSoum,
-      providerReady: entry.routes.some((r) => isProviderEnabled(r.provider) && Boolean(getProviderKey(r.provider))),
+      providerReady: entry.routes.some((r) => isProviderEnabled(r.provider) && keyUsable(r.provider, getProviderKey(r.provider))),
       enabled: o?.enabled !== false,
       available: modelAvailable(id, overrides),
       markupOverride: o?.markup ?? null,

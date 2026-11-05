@@ -51,8 +51,10 @@ Prices: one place, `priceFor` (server); admin «Narxlar» page adjusts 25–1000
 - **Paynet** (JSON-RPC provider endpoint `/api/payments/paynet`, `docs/payments/PAYNET.md`): live, one service `serviceId 1`, payer = SlaydX ID; no IP allow-list (Paynet's real source differs from the document's ranges). Shared with Bandlik.uz by payer prefix `vk-` behind `PAYNET_SHARED_WITH_VAKANT` (OFF until Bandlik serves its endpoint). Commission 0 %.
 
 ## 5. AI providers
-- Text/LLM: only **Gemini** (default) and **Anthropic** (via `ANTHROPIC_WORKSPACE_ID` header when set); roles `LLM_WRITER/RESEARCHER/JUDGE/FAST`
-  with fallbacks. xAI/Grok, OpenRouter and OpenAI-as-text were removed (2026-10-31); a leftover `LLM_<ROLE>` entry naming one of them is skipped with a
+- Text/LLM: **Gemini** (default), **Anthropic** (via `ANTHROPIC_WORKSPACE_ID` header when set) and, since 2026-11-05, **Qwen** and **DeepSeek** as text
+  fallbacks after Gemini (`docs/ops/LLM-FALLBACK.md`: one OpenAI-compatible adapter, slot `llm.chain`, no key = nothing changes; Uzbek quality UNVERIFIED,
+  `scripts/llm-uz-bench.mts`; an account failure 401/402/403 opens the breaker for 60 s; grounding, voice scoring and test analysis stay on Gemini);
+  roles `LLM_WRITER/RESEARCHER/JUDGE/FAST` with fallbacks. xAI/Grok, OpenRouter and OpenAI-as-text were removed (2026-10-31); a leftover `LLM_<ROLE>` entry naming one of them is skipped with a
   warn line and the valid entries keep working. Old `ai_usage`/`cost_json` rows of those providers stay readable in the admin cost reports.
   Images: Gemini lite image for «Rasm»/pro slides, OpenAI gpt-image («ChatGPT» choice of «Rasm», `OPENAI_API_KEY`, registry id `openai-image`),
   free stock Pexels → Pixabay for plain slides (the old fal.ai rasm provider was removed 2026-10-31; fal is back 2026-11-02 ONLY as the Studio aggregator, key in the admin store only — compose does not pass `FAL_KEY` on purpose); TTS: **Gemini** (`TTS_GEMINI_MODEL`, two voices: female Kore / male Charon,
@@ -62,7 +64,7 @@ Prices: one place, `priceFor` (server); admin «Narxlar» page adjusts 25–1000
   (To'lovli / Bepul / Bepul limit bilan, real status, price note from the price book, usage today/7/30 days from `ai_usage`, free providers' request
   counters from `provider_calls`), key in/replace/delete, on/off, live test, and system health (breakers, limiters). The old «AI xarajat → Provayderlar»
   tab is gone (`?tab=providers` forwards here). **Routing slots** (`ai_routes`, migration 062, `lib/server/providers/routes.ts`): `llm.model` (default Gemini
-  text model), `llm.writer/researcher/judge/fast` (provider:model chains), `image.gemini` (image model), `tts.order` (voice-provider order). Precedence:
+  text model), `llm.chain` (the order of the direct tools and the default of every role), `llm.writer/researcher/judge/fast` (provider:model chains), `image.gemini` (image model), `tts.order` (voice-provider order). Precedence:
   admin's stored choice > `LLM_*`/`GEMINI_*` env > built-in default, decided in ONE place (`providers/route-effective.ts`) which the generation layer
   and the page both read; changes reach the other process within ~30 s. Only models of the price book can be chosen. `TTS_VOICE_<LANG>` still beats
   the stored voice order. Writes need `settings.edit` + step-up + reason and are audited (`routes.set` / `routes.reset`).

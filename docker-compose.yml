@@ -185,6 +185,10 @@ services:
       LLM_FAST: ${LLM_FAST:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_WORKSPACE_ID: ${ANTHROPIC_WORKSPACE_ID:-}
+      # Text fallbacks after Gemini (docs/ops/LLM-FALLBACK.md): the admin «Provayderlar» store is primary, these are the env fallback.
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       # OpenAI: faqat «ChatGPT» rasm tanlovi (image-provider-openai.ts).
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
@@ -361,6 +365,10 @@ services:
       LLM_FAST: ${LLM_FAST:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_WORKSPACE_ID: ${ANTHROPIC_WORKSPACE_ID:-}
+      # Text fallbacks after Gemini (docs/ops/LLM-FALLBACK.md): the admin «Provayderlar» store is primary, these are the env fallback.
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       # OpenAI: faqat «ChatGPT» rasm tanlovi (image-provider-openai.ts).
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}

@@ -8,6 +8,7 @@ import { putGenerationFile } from "./storage";
 import { refundInTx } from "./refund-tx";
 import { toJsonb } from "./jsonb";
 import { UserFacingError, userMessage } from "./user-error";
+import { recordProviderFailure } from "./provider-failures";
 import { isProviderEnabled } from "./providers/resolve";
 import { extractMeta } from "../generation/meta";
 import { TOOL_BY_ID } from "../tools";
@@ -279,7 +280,7 @@ export async function submitVideoJob(job: VideoJob, deps: VideoOpsDeps = {}): Pr
     const err = e instanceof VideoProviderError ? e : null;
     log("error", "[video] submit failed", { jobId: job.id, provider: input.provider, status: err?.status, safety: err?.safety, err });
     await query("UPDATE video_ops SET status = 'failed', finished_at = now(), last_error = $2 WHERE generation_id = $1 AND status = 'submitting'", [job.id, (err?.message ?? "submit failed").slice(0, 300)]).catch(() => undefined);
-    throw new UserFacingError(err?.safety ? VIDEO_SAFETY_MESSAGE : VIDEO_FAILED_MESSAGE);
+    throw new UserFacingError(err?.safety ? VIDEO_SAFETY_MESSAGE : VIDEO_FAILED_MESSAGE, { cause: e });
   }
 
   /*
@@ -320,7 +321,7 @@ async function submitThroughCore(job: VideoJob, input: VideoInput, g: Extract<Gu
     const err = e instanceof MediaError ? e : null;
     log("error", "[video] submit failed", { jobId: job.id, provider: input.provider, status: err?.status, safety: err?.safety, err });
     await failSubmittingMediaJob(row.id, (err?.message ?? "submit failed").slice(0, 300)).catch(() => undefined);
-    throw new UserFacingError(err?.safety ? VIDEO_SAFETY_MESSAGE : VIDEO_FAILED_MESSAGE);
+    throw new UserFacingError(err?.safety ? VIDEO_SAFETY_MESSAGE : VIDEO_FAILED_MESSAGE, { cause: e });
   }
 
   // The op id first, whatever happens to the lease (see `submitVideoJob`).
@@ -440,7 +441,7 @@ export async function submitStudioVideoJob(job: VideoJob, deps: VideoOpsDeps = {
     const err = e instanceof MediaError ? e : null;
     log("error", "[video] Studio submit failed", { jobId: job.id, modelId: entry.id, status: err?.status, safety: err?.safety, err });
     await failSubmittingMediaJob(row.id, (err?.message ?? "submit failed").slice(0, 300)).catch(() => undefined);
-    throw new UserFacingError(err?.safety ? VIDEO_SAFETY_MESSAGE : VIDEO_FAILED_MESSAGE);
+    throw new UserFacingError(err?.safety ? VIDEO_SAFETY_MESSAGE : VIDEO_FAILED_MESSAGE, { cause: e });
   }
 
   // The op id first, whatever happens to the lease (see `submitVideoJob`).
@@ -603,7 +604,8 @@ async function giveUp(op: DueOp, deps: VideoOpsDeps, message: string, detail: st
       log("warn", "[video] provider cancel failed, refunding anyway", { jobId: op.generation_id, provider: op.provider, err: e });
     }
   }
-  return (await failVideo(op.generation_id, message, `${detail}${note}`)) ? "failed" : "skipped";
+  // A deadline is not a provider error: only the real failure counts towards the owner alert.
+  return (await failVideo(op.generation_id, message, `${detail}${note}`, message === VIDEO_FAILED_MESSAGE ? op.provider : undefined)) ? "failed" : "skipped";
 }
 
 function pollerFor(op: DueOp, deps: VideoOpsDeps): (() => Promise<Polled>) | null {
@@ -671,7 +673,7 @@ export async function pollOp(op: DueOp, deps: VideoOpsDeps = {}): Promise<PollOu
   } catch (e) {
     if (fatalError(e)) {
       log("error", "[video] poll refused", { jobId: op.generation_id, provider: op.provider, status: e.status, err: e });
-      return (await failVideo(op.generation_id, e.safety ? VIDEO_SAFETY_MESSAGE : VIDEO_FAILED_MESSAGE, e.message)) ? "failed" : "skipped";
+      return (await failVideo(op.generation_id, e.safety ? VIDEO_SAFETY_MESSAGE : VIDEO_FAILED_MESSAGE, e.message, e.safety ? undefined : op.provider)) ? "failed" : "skipped";
     }
     return transient(e);
   }
@@ -683,7 +685,7 @@ export async function pollOp(op: DueOp, deps: VideoOpsDeps = {}): Promise<PollOu
   }
   if (result.state === "failed") {
     log("warn", "[video] provider failed the operation", { jobId: op.generation_id, provider: op.provider, safety: result.safety, detail: result.message.slice(0, 200) });
-    return (await failVideo(op.generation_id, result.safety ? VIDEO_SAFETY_MESSAGE : userMessage(result.message, VIDEO_FAILED_MESSAGE), result.message)) ? "failed" : "skipped";
+    return (await failVideo(op.generation_id, result.safety ? VIDEO_SAFETY_MESSAGE : userMessage(result.message, VIDEO_FAILED_MESSAGE), result.message, result.safety ? undefined : op.provider)) ? "failed" : "skipped";
   }
 
   let bytes: Uint8Array;
@@ -691,7 +693,7 @@ export async function pollOp(op: DueOp, deps: VideoOpsDeps = {}): Promise<PollOu
     bytes = await result.download();
   } catch (e) {
     if (fatalError(e)) {
-      return (await failVideo(op.generation_id, VIDEO_FAILED_MESSAGE, e.message)) ? "failed" : "skipped";
+      return (await failVideo(op.generation_id, VIDEO_FAILED_MESSAGE, e.message, op.provider)) ? "failed" : "skipped";
     }
     return transient(e);
   }
@@ -873,9 +875,9 @@ export function deliveredSeconds(actual: number, want: number): Delivered | unde
  * with a late success is decided by whoever locks the row first). `message` is what the user sees (Uzbek, safe);
  * `detail` is the raw reason, kept in `video_ops.last_error` / `media_jobs.last_error` for the operator only.
  */
-export async function failVideo(generationId: string, message: string, detail: string): Promise<boolean> {
+export async function failVideo(generationId: string, message: string, detail: string, provider?: string): Promise<boolean> {
   const safe = userMessage(message, VIDEO_FAILED_MESSAGE);
-  return transaction(async (client) => {
+  const failed = await transaction(async (client) => {
     const op = await lockPendingOp(client, generationId);
     if (!op) return false;
     const g = await client.query<{ user_id: string }>(
@@ -892,6 +894,9 @@ export async function failVideo(generationId: string, message: string, detail: s
     if (row) await refundInTx(client, String(row.user_id), generationId, `Xatolik: ${safe}`.slice(0, 200));
     return true;
   });
+  // `provider` = a provider's own failure (the owner alert counts these); after the commit, so it can never undo the refund.
+  if (failed && provider) await recordProviderFailure(generationId, { provider, message: detail });
+  return failed;
 }
 
 /**

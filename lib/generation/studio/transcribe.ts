@@ -116,7 +116,7 @@ export async function buildStudioTranscribe(
     result = json && json.kind === "inline" ? sttResultOf(JSON.parse(new TextDecoder().decode(json.bytes))) : null;
   } catch (e) {
     console.warn("[studio-transcribe] call failed:", e instanceof Error ? e.message : e);
-    throw new UserFacingError(FAILED);
+    throw new UserFacingError(FAILED, { cause: e });
   }
   if (!result) throw new UserFacingError(FAILED);
   recordAudioCall(entry, route, p);
