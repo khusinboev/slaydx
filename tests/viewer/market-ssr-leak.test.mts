@@ -18,8 +18,8 @@ import { ID, card, item, list, withRouter } from "../ui/market-fixture.ts";
  * page component, so a listing that started quoting the body turns this red as well as a page that did.
  *
  * Mutations (each turned this file red, restored byte for byte):
- *   M1 `lib/market/listing.ts summaryOf`: append the first paragraph → «no body sentence»;
- *   M2 `MarketItemPage`: pass the doc through and draw a section's first block → the same;
+ *   M1 `lib/market/listing.ts outlineOf`: a heading + its first paragraph → «no body sentence»;
+ *   M2 `MarketItemPage`: draw a `sections` field that came along → «the page never holds a body field»;
  *   M3 `MarketItemPage`: `enabled`/`live` check removed → «dark: the page holds nothing of an item»;
  *   M4 `app/uz/market/[id]/page.tsx`: import `getItemDoc` → «the page module never reads a document».
  */

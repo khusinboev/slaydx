@@ -14,11 +14,10 @@ import type { MarketItemView } from "../../lib/market/types.ts";
  *   M2 `confirm`: new key on every click → «a lost answer retries with the same key»;
  *   M3 `confirm`: keep the key after a refusal → «a refusal gets a new key»;
  *   M4 `onPrice`: not wired → «409 price_changed: the new price…»;
- *   M5 sheet: `expectedPrice` from the initial prop → the same test;
  *   M6 `missing` check removed → «required fields»;
  *   M7 top-up link: plain `/uz/wallet` → «402 opens the top-up path»;
  *   M8 `needTopUp`: ignore `short` → «a short balance is told before the click»;
- *   M9 `buyAsked`: no check of `fresh` → «?buy=1 reopens the sheet with the fresh price»;
+ *   M9 `buyAsked`: no check of `fresh` → «?buy=1 waits for the viewer's own view»;
  *   M10 `needLogin`: return false always → «signed out: the login, and back here»;
  *   M11 `action`: drop the `owned` branch → «owned»;
  *   M12 `Slide`: stub without blur → «stubs are blurred with a lock»;
@@ -276,6 +275,15 @@ test("a short balance is told before the click: no request", async () => {
   assert.ok(q("[data-buy-topup]"));
   assert.ok(!q("[data-buy-confirm]"));
   assert.equal(buys(reqs).length, 0);
+});
+
+test("?buy=1 waits for the viewer's own view: the anonymous page cannot know he already owns it", async () => {
+  signIn();
+  api(item({ owned: { generationId: "g5", purchaseId: "p5" } }));
+  mount({ search: "buy=1" });
+  await waitFor(() => assert.ok(all("[data-market-open-owned]").length));
+  await tick();
+  assert.ok(!q("[data-market-buy-sheet]"));
 });
 
 test("?buy=1 on an owned or sold-out item does not open a sheet", async () => {

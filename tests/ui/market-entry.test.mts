@@ -19,7 +19,8 @@ import type { ServerGeneration, MarketPurchase } from "../../lib/api-client.ts";
  *   M7 `MarketSuggest`: no `SUGGEST_MIN_CHARS` → «suggest waits for 8 characters»;
  *   M8 `MarketSuggest`: no `isMarketTool` → «a tool the market does not sell»;
  *   M9 `WalletReturnCard`: trust `?return=` → «an outside target is ignored»;
- *   M10 `PurchaseRow`: offer restore always → «what a row offers comes from the server».
+ *   M10 `PurchaseRow`: offer restore always → «what a row offers comes from the server»;
+ *   M11 `SimilarWorks`: no `sold` check → «three cards for a sold tool…».
  */
 
 const { servicesOfGroup, SERVICE_BY_ID, serviceVisible } = await import("../../lib/services.ts");
