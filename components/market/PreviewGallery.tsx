@@ -110,6 +110,7 @@ export function PreviewGallery({ view }: { view: Pick<MarketItemView, "cover" | 
       <div className={cn("bg-muted/60 relative overflow-hidden rounded-[22px] border", wide ? "aspect-[16/10]" : "aspect-[5/6] sm:aspect-[6/5]")}>
         <div
           ref={track}
+          role="group"
           tabIndex={many ? 0 : undefined}
           aria-label={`${index + 1}-sahifa, jami ${pages.length}`}
           data-gallery-track

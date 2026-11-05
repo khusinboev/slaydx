@@ -15,7 +15,7 @@ export function useMarketOn(): boolean {
 /** A calm centred note with one way out: the closed market, an empty catalog, an unknown item. */
 export function MarketNote({ title, text, action }: { title: string; text?: string; action?: React.ReactNode }) {
   return (
-    <div data-market-note className="mx-auto flex max-w-sm flex-col items-center gap-3 px-4 py-14 text-center motion-safe:animate-[slx-enter-fade_240ms_ease-out_backwards]">
+    <div role="status" data-market-note className="mx-auto flex max-w-sm flex-col items-center gap-3 px-4 py-14 text-center motion-safe:animate-[slx-enter-fade_240ms_ease-out_backwards]">
       <span aria-hidden className="bg-accent-soft text-accent-soft-foreground flex size-16 items-center justify-center rounded-[22px]">
         <Store className="size-8" />
       </span>

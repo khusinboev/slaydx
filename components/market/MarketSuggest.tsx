@@ -111,8 +111,8 @@ export function MarketSuggest({ toolId }: { toolId: ToolId }) {
     <div data-market-suggest className="bg-accent-soft mt-2 flex min-w-0 items-center gap-1 rounded-[14px] pr-1">
       <Link href={itemHref(item.id)} data-market-suggest-link className="focus-visible:ring-ring flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-[14px] py-1.5 pl-3 text-[14.5px] leading-snug outline-none focus-visible:ring-2">
         <Store className="text-accent-soft-foreground size-4 shrink-0" aria-hidden />
-        <span className="min-w-0 flex-1">
-          <span className="font-semibold">Tayyor varianti bor:</span> <span className="line-clamp-1 inline break-words">«{item.title}»</span> — <span className="font-semibold whitespace-nowrap tabular-nums">{formatSom(item.price)}</span>
+        <span className="line-clamp-2 min-w-0 flex-1">
+          <span className="font-semibold">Tayyor varianti bor:</span> <span className="break-words">«{item.title}»</span> — <span className="font-semibold whitespace-nowrap tabular-nums">{formatSom(item.price)}</span>
         </span>
         <ArrowRight className="text-accent-soft-foreground size-4 shrink-0" aria-hidden />
       </Link>
