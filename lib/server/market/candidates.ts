@@ -202,7 +202,9 @@ async function processOne(row: SourceRow, minQuality: number, perTopic: number):
   const outline = outlineOf(finalDoc);
   const summary = summaryOf(toolId, title, outline, clean.params);
   const family = marketFamilyOf(toolId);
-  const maxCopies = family ? await getSetting(MAX_COPIES_KEY[family]) : null;
+  // 0 = no cap (the default): the admin sets one if he wants it, per family or per item.
+  const cap = family ? await getSetting(MAX_COPIES_KEY[family]) : 0;
+  const maxCopies = cap > 0 ? cap : null;
   const tool = TOOL_BY_ID[toolId];
   const original = await effectivePrice(tool, paramsAsFormValues(toolId, clean.params));
   const deck = isDeckTool(toolId);

@@ -150,7 +150,7 @@ test("the happy path: a work becomes a sanitised candidate with its facts, no au
   assert.equal(row!.topic_norm, "fotosintez jarayoni va osimliklar");
   assert.notEqual(row!.simhash, "0");
   assert.equal(row!.original_price, "4000");
-  assert.equal(row!.max_copies, 5, "the family's default cap");
+  assert.equal(row!.max_copies, null, "no sales cap unless the admin sets one (owner 2026-11-06)");
   assert.match(row!.search_text as string, /fotosintez/);
   const stored = row!.doc_json as AcademicDoc;
   assert.equal(stored.meta.author, "");

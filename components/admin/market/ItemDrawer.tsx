@@ -53,8 +53,9 @@ function editsOf(i: MarketItemDetail, f: Form): ItemEdits {
   if (f.summary.trim() !== i.summary) e.summary = f.summary.trim();
   if (f.subject !== i.subject) e.subject = f.subject;
   if (f.level !== i.level) e.level = f.level;
-  const copies = Number(f.maxCopies);
-  if (f.maxCopies !== "" && copies !== i.maxCopies) e.maxCopies = copies;
+  // Empty = no cap.
+  const copies = f.maxCopies === "" ? null : Number(f.maxCopies);
+  if (copies !== i.maxCopies) e.maxCopies = copies;
   return e;
 }
 
@@ -158,7 +159,7 @@ function ListingForm({ form, onChange }: { form: Form; onChange: (f: Form) => vo
             id={`${ids}-c`}
             value={form.maxCopies}
             inputMode="numeric"
-            placeholder="standart"
+            placeholder="cheklovsiz"
             onChange={(e) => set({ maxCopies: e.target.value.replace(/\D/g, "").slice(0, 4) })}
             className={FIELD}
           />
