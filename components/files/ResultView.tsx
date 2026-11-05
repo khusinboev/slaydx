@@ -1,5 +1,6 @@
 "use client";
 
+import { SimilarWorks } from "@/components/market/SimilarWorks";
 import Link from "next/link";
 import { BackLink } from "@/components/nav/BackLink";
 import { cn } from "@/lib/cn";
@@ -660,6 +661,8 @@ export function ResultView({ id }: { id: string }) {
             onEditState={setEditState}
             pdf={Boolean(features?.pdf)}
           />
+          {/* Only under a flowing document (a filling viewer owns the whole frame), never under a copy bought in the market. */}
+          {frame.mode === "flow" && !gen.marketItemId ? <SimilarWorks toolId={gen.type} topic={gen.topic} /> : null}
         </>
       ) : null}
     </ResultLayout>

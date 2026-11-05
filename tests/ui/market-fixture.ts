@@ -1,7 +1,7 @@
 import { createElement as h, type ReactElement } from "react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
-import type { MarketCard, MarketItemView } from "../../lib/market/types.ts";
+import type { MarketCard, MarketItemView, MarketListResponse } from "../../lib/market/types.ts";
 
 /** Shared fixtures of the market UI tests: a request log over a stubbed `fetch`, a card, an item and the router contexts. */
 
@@ -44,7 +44,7 @@ export function item(patch: Partial<MarketItemView> = {}): MarketItemView {
   };
 }
 
-export const list = (items: MarketCard[], nextCursor: string | null = null) => ({ items, nextCursor, facets: { tools: [{ id: "referat", count: items.length }], subjects: [{ id: "tarix", count: items.length }] } });
+export const list = (items: MarketCard[], nextCursor: string | null = null): MarketListResponse => ({ items, nextCursor, facets: { tools: [{ id: "referat", count: items.length }], subjects: [{ id: "tarix", count: items.length }] } });
 
 export type Req = { method: string; url: string; body: Record<string, unknown> | null; key: string | null };
 

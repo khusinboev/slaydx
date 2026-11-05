@@ -29,6 +29,7 @@ const { FilePreview } = await import("../../components/home/FilePreview.tsx");
 const { MarketOptOut } = await import("../../components/market/MarketOptOut.tsx");
 const { MarketSuggest } = await import("../../components/market/MarketSuggest.tsx");
 const { WalletReturnCard } = await import("../../components/market/WalletReturnCard.tsx");
+const { SimilarWorks } = await import("../../components/market/SimilarWorks.tsx");
 const { PurchasesPage } = await import("../../components/market/PurchasesPage.tsx");
 const { forgetMarketReturn, rememberMarketReturn } = await import("../../components/market/market-return.ts");
 const { useAppStore } = await import("../../lib/store.ts");
@@ -245,6 +246,33 @@ test("wallet: `?return=` shows the way back and survives the payment trip; an ou
   render(withRouter(h(WalletReturnCard)));
   await tick();
   assert.ok(!q("[data-market-return]"), "an old trip is forgotten");
+});
+
+test("«Shunga o'xshash tayyor ishlar»: three cards for a sold tool; nothing dark, for other tools, or when none exist", async () => {
+  useAppStore.setState({ features: ON });
+  const { reqs } = stubFetch(() => json(200, { items: ["a", "b", "c", "d"].map((i) => card(i)) }));
+  const first = render(withRouter(h(SimilarWorks, { toolId: "referat", topic: "Amir Temur" })));
+  await waitFor(() => assert.equal(all("[data-market-similar] [data-market-card]").length, 3));
+  assert.match(reqs[0]!.url, /tool=referat/);
+  first.unmount();
+
+  const other = stubFetch(() => undefined);
+  const second = render(withRouter(h(SimilarWorks, { toolId: "resume", topic: "Amir Temur" })));
+  await tick();
+  assert.equal(other.reqs.length, 0);
+  second.unmount();
+
+  stubFetch(() => json(200, { items: [] }));
+  const third = render(withRouter(h(SimilarWorks, { toolId: "referat", topic: "Amir Temur" })));
+  await tick();
+  assert.ok(!q("[data-market-similar]"));
+  third.unmount();
+
+  useAppStore.setState({ features: OFF });
+  const dark = stubFetch(() => undefined);
+  render(withRouter(h(SimilarWorks, { toolId: "referat", topic: "Amir Temur" })));
+  await tick();
+  assert.equal(dark.reqs.length, 0);
 });
 
 function purchase(id: string, patch: Partial<MarketPurchase> = {}): MarketPurchase {

@@ -86,6 +86,7 @@ export function MarketCover({ card, className, eager }: { card: Pick<Card, "cove
         </span>
       ) : (
         // Public watermarked rasters from our own API: a plain `<img>` (§3.1), `next/image` would only re-encode them.
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={card.cover}
           alt={`${card.title} — 1-sahifa namunasi`}
@@ -108,7 +109,7 @@ export function MarketCover({ card, className, eager }: { card: Pick<Card, "cove
  * A catalog card: cover-led, the tool on top of the plate, the discount in the corner, then the price, the title and one
  * meta line. The whole card is one link, so the 44 px rule is met by the card itself.
  */
-export function MarketCardView({ card, eager, onPick }: { card: Card; eager?: boolean; onPick?: () => void }) {
+export function MarketCardView({ card, eager }: { card: Card; eager?: boolean }) {
   const off = discountPercent(card);
   const soldOut = card.status === "sold_out";
   const tool = TOOL_BY_ID[card.toolId];
@@ -116,7 +117,6 @@ export function MarketCardView({ card, eager, onPick }: { card: Card; eager?: bo
   return (
     <Link
       href={itemHref(card.id)}
-      onClick={onPick}
       data-market-card={card.id}
       style={toolTint(card.toolId)}
       className="group bg-card focus-visible:ring-ring relative flex h-full min-w-0 flex-col overflow-hidden rounded-[20px] border shadow-[var(--shadow-card)] outline-none transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-[rgb(var(--tc)/0.45)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--page-bg)] motion-reduce:transition-none motion-reduce:hover:translate-y-0"

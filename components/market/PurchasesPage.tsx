@@ -121,6 +121,7 @@ function PurchaseRow({ row, onChange }: { row: api.MarketPurchase; onChange: (pa
     <li data-purchase={row.id} className="bg-card rounded-[20px] border p-3 shadow-[var(--shadow-card)]">
       <div className="flex min-w-0 gap-3">
         <Link href={itemHref(row.itemId)} aria-label={row.title} className="bg-muted focus-visible:ring-ring block h-[84px] w-[72px] shrink-0 overflow-hidden rounded-[12px] border outline-none focus-visible:ring-2">
+          {/* eslint-disable-next-line @next/next/no-img-element -- public raster */}
           <img src={row.cover} alt="" loading="lazy" decoding="async" draggable={false} onError={(e) => (e.currentTarget.style.visibility = "hidden")} className={cn("h-full w-full bg-white object-top", wide ? "object-contain" : "object-cover")} />
         </Link>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">

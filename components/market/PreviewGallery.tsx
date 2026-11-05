@@ -32,6 +32,7 @@ function Slide({ page, title, wide, eager }: { page: GalleryPage; title: string;
         </span>
       ) : (
         // Public watermarked rasters, never the document (§3.1, §5.3). A stub is 64 px wide on the server: CSS only scales it.
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={page.url}
           alt={stub ? `${title} — ${page.page}-sahifa (yopiq)` : `${title} — ${page.page}-sahifa namunasi`}
@@ -148,6 +149,7 @@ export function PreviewGallery({ view }: { view: Pick<MarketItemView, "cover" | 
                   i === index ? "border-primary" : "border-transparent opacity-80 hover:opacity-100",
                 )}
               >
+                {/* eslint-disable-next-line @next/next/no-img-element -- public raster */}
                 <img src={p.url} alt="" loading="lazy" decoding="async" draggable={false} onError={(e) => (e.currentTarget.style.visibility = "hidden")} className={cn("h-full w-full object-cover object-top", p.kind === "stub" && "blur-[2px]")} />
                 {p.kind === "stub" ? (
                   <span aria-hidden className="absolute inset-0 grid place-items-center bg-black/20 text-white">
