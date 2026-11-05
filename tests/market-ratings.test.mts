@@ -171,7 +171,12 @@ test("three fresh accounts hide nothing, their reports still reach the admin", {
   quiet(t);
   await resetSettings();
   const item = await mkItem();
-  for (let i = 0; i < 4; i++) assert.equal((await report(await reporter(1), item)).body.reported, true);
+  // Each on its own day, so the per-day limit stays out of it: only the accounts' age keeps the item up.
+  for (const daysAgo of [6, 4, 2, 0]) {
+    const u = await reporter(daysAgo + 1);
+    assert.equal((await report(u, item)).body.reported, true, `${daysAgo} days ago`);
+    await rows("UPDATE market_reports SET created_at = now() - $2::int * interval '1 day' WHERE item_id = $1 AND user_id = $3", [item, daysAgo, u.id]);
+  }
   assert.equal(await hidden(item), false);
   assert.equal((await rows("SELECT 1 FROM market_reports WHERE item_id = $1", [item])).length, 4, "the signal is stored");
 });

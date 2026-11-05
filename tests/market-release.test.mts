@@ -104,9 +104,13 @@ test("no double release: cancel and refunds racing behind the item lock release 
   assert.equal((await ledger(u.id)).filter((l) => l.kind === "refund").length, 1);
   assert.equal((await wallet(u.id)).balance, 50_000);
   assert.equal((await itemOf(item)).sold, 1, "exactly one copy came back");
+  // The race above may end either way; a repeat after it is deterministic, on both refund functions.
   const { refund: again } = await import("../lib/server/credits.ts");
+  const { refundInTx } = await import("../lib/server/refund-tx.ts");
+  const { transaction } = await db();
   assert.equal(await again(u.id, id, "c"), false);
-  assert.equal((await itemOf(item)).sold, 1);
+  assert.equal(await transaction((c) => refundInTx(c, u.id, id, "d")), false);
+  assert.equal((await itemOf(item)).sold, 1, "a repeated refund releases nothing");
 });
 
 test("last copy after a cancel: a stranger and the refunded buyer race, one new sale", { skip }, async (t) => {
@@ -245,12 +249,18 @@ test("an ordinary refund touches no item; a reference that is no purchase is ign
   const jobs = await import("../lib/server/jobs.ts");
   const { refund } = await import("../lib/server/credits.ts");
   const { transaction } = await db();
+  // Alone in the table: a lookup that ignored the id would land on exactly this sale.
+  await rows("DELETE FROM market_purchases");
+  await rows("UPDATE market_items SET sold_count = 0");
   const item = await mkItem();
   await buy(await mkUser(), item, { fields: FIELDS });
   const u = await mkUser();
   const res = await jobs.enqueueGeneration({ userId: u.id, toolId: "referat", topic: "Oddiy", price: 500, format: "docx", values: {}, budgetMs: 60_000 });
   assert.ok(res.ok);
+  const allSold = async () => Number((await rows("SELECT COALESCE(sum(sold_count), 0) AS n FROM market_items"))[0]!.n);
+  const before = await allSold();
+  assert.ok(before > 0);
   assert.equal(await refund(u.id, res.id, "oddiy"), true);
-  assert.equal((await itemOf(item)).sold, 1);
+  assert.equal(await allSold(), before, "no item of the whole market moved");
   assert.equal(await transaction((c) => releaseMarketCopyInTx(c, "not-a-uuid")), false);
 });

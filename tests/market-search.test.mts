@@ -293,6 +293,8 @@ test("item page: the view is the card + headings + the buyer's state; no oracle 
   await fresh();
   const { getMarketItem } = await import("../lib/server/market/items.ts");
   const id = await item({ title: "Sahifa", outline: ["Kirish", "Xulosa"], params: { pages: "15-20" } });
+  const { query } = await db();
+  await query("UPDATE market_items SET pages = 18 WHERE id = $1", [id]);
   const view = (await getMarketItem(id, null))!;
   assert.deepEqual(view.outline, ["Kirish", "Xulosa"]);
   assert.equal(view.previewPages, 2);
@@ -300,7 +302,9 @@ test("item page: the view is the card + headings + the buyer's state; no oracle 
   assert.deepEqual(view.createTool, { slug: "referat", topic: "Sahifa" });
   assert.equal(view.owned, null);
   assert.ok(!JSON.stringify(view).includes("MAXFIY"));
-  const deck = (await getMarketItem(await item({ tool: "slide", params: { slideCount: 10 } }), null))!;
+  const deckId = await item({ tool: "slide", params: { slideCount: 10 } });
+  await query("UPDATE market_items SET slide_count = 10 WHERE id = $1", [deckId]);
+  const deck = (await getMarketItem(deckId, null))!;
   assert.equal(deck.previewPages, 3, "decks show one more");
   assert.deepEqual(deck.requiredFields, []);
   for (const bad of ["x", "' OR 1=1", randomUUID()]) assert.equal(await getMarketItem(bad, null), null, bad);
