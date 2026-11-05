@@ -426,7 +426,7 @@ test("ids first: the batch query carries no document; each document is read alon
   const realImmediate = globalThis.setImmediate;
   let turns = 0;
   t.mock.method(globalThis, "setImmediate", ((fn: (...a: unknown[]) => void, ...a: unknown[]) => {
-    turns++;
+    if (/native code/.test(String(fn))) turns++; // A promise resolver: the scan's own yield, not a driver's callback.
     return realImmediate(fn, ...a);
   }) as never);
   assert.equal((await scan()).created, 3);
