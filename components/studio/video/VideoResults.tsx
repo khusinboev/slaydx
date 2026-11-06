@@ -20,7 +20,7 @@ type Next = { onMusic?: (prompt: string) => void; onVoice?: (text: string) => vo
 /**
  * The Video tab's results, newest first: a waiting clip shows the app's progress panel (`GenerationProgress`, the
  * video stage list with its minutes ETA), a finished one plays here (the result file itself, `?inline=1`, as the
- * result page's `VideoViewer`) with «Yuklab olish» and «Qayta», the P7b star and — for a clip made from a prompt —
+ * result page's `VideoViewer`) with «Yuklab olish» and «Qayta yaratish», the P7b star and — for a clip made from a prompt —
  * «Keyingi qadam»: «Musiqa yaratish» / «Ovoz qo'shish»; a failed one says why (the refund is automatic).
  */
 export function VideoResults({

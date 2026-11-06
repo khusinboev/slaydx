@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { MEDIA_CATALOG } from "../../lib/media/catalog.ts";
 import { ELEVENLABS_VOICES, GEMINI_VOICES } from "../../lib/media/catalog-speech.ts";
-import { GPT, NANO, PRICING, USER, catalogBody, generationDetail, installApi, json } from "./studio-fixtures.ts";
+import { GPT, NANO, PRICING, USER, catalogBody, generationDetail, installApi, json, withParams } from "./studio-fixtures.ts";
 
 const { StudioPage } = await import("../../components/studio/StudioPage.tsx");
 const { VoiceResults } = await import("../../components/studio/voice/VoiceResults.tsx");
@@ -255,6 +255,43 @@ test("Video: the switch's line is shown, closable, replaced by the next switch, 
   assert.equal(q("[data-switch-notice]")!.textContent, "Google Veo (Gemini): Ovoz (ha) bu modelda yo‘q", "MUTATSIYA: the silent reset");
   await click(q('[data-switch-notice] button[aria-label="Yopish"]'));
   assert.ok(!q("[data-switch-notice]"), "closed");
+});
+
+test("Audio: the switch's line goes with the mode it was about", async () => {
+  api();
+  const inner = globalThis.fetch;
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) =>
+    String(input).startsWith("/api/media/catalog?purpose=studio.audio")
+      ? json(200, { purpose: "studio.audio", defaultModelId: AUDIO[0]!.id, models: [AUDIO[0], by("google/lyria-3"), AUDIO[1]], pricing: RATE })
+      : inner(input as never, init);
+  await mount();
+  await tab("audio");
+  await click(qa('[data-field="length"] [role="radio"]').find((b) => b.textContent === "1 daq"));
+  await click(q('[data-model-card="google/lyria-3"]'));
+  assert.ok(q("[data-switch-notice]"), "the switch said what it dropped");
+  await click(q('[data-audio-mode-chip="sfx"]'));
+  await click(q('[data-audio-mode-chip="music"]'));
+  assert.ok(!q("[data-switch-notice]"), "MUTATSIYA: a stale line after leaving the mode");
+});
+
+test("Rasm: the switch's line goes with the form it was about (a mode entered and left)", async () => {
+  const ONE = withParams(NANO, "x/one", NANO.params.filter((p) => p.name !== "imageCount"), "Bitta");
+  installApi({ catalog: catalogBody([NANO, ONE]) });
+  const inner = globalThis.fetch;
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) =>
+    String(input) === "/api/media/inputs" ? json(200, { assetId: "0123456789abcdef01234567", url: "/x", w: 10, h: 10 }) : inner(input as never, init);
+  await mount();
+  await click(qa('[data-field="imageCount"] [role="radio"]').find((b) => b.textContent === "2"));
+  await click(q('[data-model-card="x/one"]'));
+  assert.ok(q("[data-switch-notice]"), "the switch said what it dropped");
+  const file = q<HTMLInputElement>("[data-prompt-upload-file]");
+  assert.ok(file);
+  await act(async () => void fireEvent.change(file, { target: { files: [new File([new Uint8Array(9)], "r.png", { type: "image/png" })] } }));
+  await settle();
+  await click(q("[data-studio-mode-exit]"));
+  await settle();
+  assert.ok(q("[data-studio-submit]"), "back on the drawing form");
+  assert.ok(!q("[data-switch-notice]"), "MUTATSIYA: a stale line after a mode change");
 });
 
 test("result cards: the running card names the model and the price; SFX variants each play and download; the star on audio", async () => {

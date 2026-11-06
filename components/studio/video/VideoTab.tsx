@@ -19,6 +19,7 @@ import { PriceButton } from "../PriceButton";
 import { STUDIO_VIDEO_PURPOSE, type CatalogLoad } from "../studio-api";
 import { SubmitError } from "../SubmitError";
 import { useStudioSend } from "../useStudioSend";
+import { specLine } from "../model-specs";
 import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
 import type { MediaCatalog } from "../studio-types";
 import { PROMPT_BYTES_MESSAGE, PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptBytes, promptLimit, promptMin, requestValues, switchNotice, type PromptBytes, type RawValues } from "../studio-values";
@@ -377,6 +378,9 @@ export function VideoTab({
                       >
                         <span className="text-[13.5px] leading-tight font-semibold">{m.label}</span>
                         <span className="text-muted-foreground text-[12.5px] tabular-nums">{videoCardPrice(m, {}, catalog.pricing)}</span>
+                        <span className="text-muted-foreground text-[12px] leading-snug" data-model-specs>
+                          {specLine(m)}
+                        </span>
                       </button>
                     );
                   })}
@@ -410,7 +414,7 @@ export function VideoTab({
             </Field>
           </Card>
           <Card title="Surat">
-            <Row label="Surat" hint={effectPhotoHint(effect?.value, effectEntry?.id ?? "")} wide>
+            <Row label="Surat" hint={effectPhotoHint(effect?.value, effectEntry?.id ?? "")} wide stack>
               <Field id={IMAGE_PARAM}>
                 <PhotoField
                   assetId={state.effectImage}
@@ -429,7 +433,7 @@ export function VideoTab({
               ) : null}
             </Row>
             {twoPhotos ? (
-              <Row label="Ikkinchi surat" hint="Effekt ikki kishini birga ko‘rsatadi: har biri o‘z suratida" wide>
+              <Row label="Ikkinchi surat" hint="Effekt ikki kishini birga ko‘rsatadi: har biri o‘z suratida" wide stack>
                 <Field id={SECOND_PARAM}>
                   <PhotoField
                     assetId={state.effectImage2 ?? ""}
@@ -484,6 +488,7 @@ export function VideoTab({
                     : "Ixtiyoriy: «Ovoz» bo‘limidagi tayyor ovoz (1 daqiqagacha) — avatar matn o‘rniga shuni gapiradi"
                 }
                 wide
+                stack
               >
                 <Field id={OWN_AUDIO_PARAM}>
                   {speechError ? (
@@ -531,7 +536,7 @@ export function VideoTab({
           {formEntry.params.length > 0 ? <ParamRows entry={formEntry} raw={state.raw} onChange={setParam} /> : null}
           {hasStart ? (
             <Card title={photoAvatar ? "Avatar surati" : hasEnd ? "Kadrlar (ixtiyoriy)" : "Boshlang‘ich surat (ixtiyoriy)"}>
-              <Row label={hasEnd ? "Birinchi kadr" : "Surat"} wide>
+              <Row label={hasEnd ? "Birinchi kadr" : "Surat"} wide stack>
                 <Field id={IMAGE_PARAM}>
                   <PhotoField
                     assetId={startImage}
@@ -552,7 +557,7 @@ export function VideoTab({
                 </p>
               </Row>
               {hasEnd ? (
-                <Row label="Oxirgi kadr" hint="Ixtiyoriy: video shu surat bilan tugaydi (boshlang‘ich surat bilan birga)" wide>
+                <Row label="Oxirgi kadr" hint="Ixtiyoriy: video shu surat bilan tugaydi (boshlang‘ich surat bilan birga)" wide stack>
                   <Field id={END_PARAM}>
                     {startImage ? (
                       <PhotoField

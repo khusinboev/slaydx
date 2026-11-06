@@ -87,7 +87,7 @@ export function audioBlocker(entry: ClientEntry, raw: RawValues): string | null 
  * (only the offered ones), per mode only its controls — the description box (music / effect), the upload row with the
  * recorder (voice changer / isolator), the voice list (voice changer: the ElevenLabs library + «Mening ovozlarim»), the
  * rest generated from the catalog (`ParamRows`) — the sticky «Yaratish · <mode> · ~X so'm», and the results with an MP3
- * player, «Yuklab olish (MP3)» and «Qayta».
+ * player, «Yuklab olish (MP3)» and «Qayta yaratish».
  */
 export function AudioTab({
   catalogState,
@@ -169,6 +169,8 @@ export function AudioTab({
   function pickMode(m: AudioMode | typeof MIX_CHIP | SpeechToolMode) {
     setError(null);
     setUploadError(null);
+    // The line was about the mode being left.
+    setSwitchText(null);
     setState((s) => ({ ...s, mode: m }));
   }
 

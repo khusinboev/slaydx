@@ -42,7 +42,7 @@ import { fillSkeleton, type StudioTemplate } from "@/lib/media/library";
 import { STUDIO_TOOL_SLUG } from "./studio-entry";
 import { STUDIO_TOOL_ID, outputCount, studioPrice } from "./studio-price";
 import type { GalleryItem, MediaCatalog, StudioPricing } from "./studio-types";
-import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, promptMin, promptParam, requestValues, switchNotice, type RawValues } from "./studio-values";
+import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptBytes, promptLimit, promptMin, promptParam, requestValues, switchNotice, type RawValues } from "./studio-values";
 import { SwitchNotice } from "./SwitchNotice";
 import { draftKey, useDraft } from "./useDraft";
 import { parseAudioDraft, parseRasmDraft, parseVideoDraft, parseVoiceDraft } from "./studio-drafts";
@@ -333,6 +333,8 @@ function StudioApp() {
   function enterMode(next: StudioMode, assetId?: string, keepPrompt = false) {
     setError(null);
     setTemplate(null);
+    // The line was about the form being left.
+    setSwitchText(null);
     setRasm((s) => enterRasmMode(s, next, assetId, keepPrompt));
     setView("create");
     setTab("rasm");
@@ -443,7 +445,7 @@ function StudioApp() {
   }
 
   /**
-   * «Yana yaratish» on a gallery clip: back to the Video tab at what was bought — the effect scene for an effect; else
+   * «Qayta yaratish» on a gallery clip: back to the Video tab at what was bought — the effect scene for an effect; else
    * the clip's model, prompt, length, aspect and sound (so the button shows the same price). A model the tab no longer
    * offers falls back to the default as any stale choice does; the photo is never re-used (it may be purged).
    */
@@ -452,7 +454,7 @@ function StudioApp() {
     setTab("video");
     const v = item.video;
     if (v?.effect) {
-      setVideoState((s) => ({ ...s, mode: "effects", effect: v.effect }));
+      setVideoState((s) => ({ ...s, mode: "effects", effect: v.effect, effectModel: item.modelId ?? null }));
       return;
     }
     const next: RawValues = { [PROMPT_PARAM]: item.prompt };
@@ -491,6 +493,7 @@ function StudioApp() {
           value={String(raw[PROMPT_PARAM] ?? "")}
           onChange={setPrompt}
           limit={promptLimit(entry)}
+          bytes={promptBytes([entry], String(raw[PROMPT_PARAM] ?? ""))}
           min={promptMin(entry)}
           label={mode === "edit" ? "Nimani o‘zgartiramiz?" : "Nimani chizamiz?"}
           onEnhance={() => void enhance()}
