@@ -250,6 +250,24 @@ test("a forged MP4 is refused: `mvhd` alone, `mvhd` + `mdhd`, every table; fragm
   forgeDuration(c, "mdhd", 1);
   forgeStts(c, 6);
   assert.equal((await billedOf(c)).status, 422, "MUTATSIYA: the frames are counted against the timeline");
+  // No sound to count and every table agrees on 1 s, but a minute's worth of pictures cannot fit it.
+  const squeezed = make("v.mp4", ["-f", "lavfi", "-i", "color=c=blue:size=64x48:rate=60", "-t", "6", "-c:v", "libx264", "-pix_fmt", "yuv420p"]);
+  forgeDuration(squeezed, "mvhd", 1);
+  forgeDuration(squeezed, "mdhd", 1);
+  forgeStts(squeezed, 6);
+  assert.equal((await billedOf(squeezed)).status, 422, "MUTATSIYA: more pictures a second than a camera makes");
+  // A codec neither a provider nor our ffmpeg is promised: the first `stsd` is the picture's, the second the sound's.
+  const forgeCodec = (track: number) => {
+    const f = six();
+    Buffer.from(f.buffer, f.byteOffset, f.byteLength).write("xxxx", offsets(f, "stsd")[track]! + 12, "latin1");
+    return f;
+  };
+  const badPicture = await billedOf(forgeCodec(0));
+  assert.equal(badPicture.status, 422);
+  assert.match(badPicture.body.error ?? "", /video kodeki/, "MUTATSIYA: the picture's codec");
+  const badSound = await billedOf(forgeCodec(1));
+  assert.equal(badSound.status, 422);
+  assert.match(badSound.body.error ?? "", /ovoz kodeki/, "MUTATSIYA: the sound's codec");
   const frag = await billedOf(make("v.mp4", [...SIX, "-movflags", "frag_keyframe+empty_moov"]));
   assert.equal(frag.status, 422);
   assert.match(frag.body.error ?? "", /fragmented/, "MUTATSIYA: a fragmented file has no sample tables to trust");
