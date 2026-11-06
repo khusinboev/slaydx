@@ -340,7 +340,9 @@ test("studio-video P11 F: gating, effects, the input image's cost, photo avatars
     const job = await worker.claimNext();
     assert.equal(job?.id, r.body.id);
     await worker.runJob(job!);
-    assert.equal((await gen(r.body.id!)).status, "FAILED");
+    const g = await gen(r.body.id!);
+    assert.equal(g.status, "FAILED");
+    assert.equal(g.error, ops.VIDEO_AUDIO_MISSING_MESSAGE, "the speech is named, not a generic failure");
     assert.equal(await wallet(me), 500_000);
     assert.equal(stub.calls.length, 0);
   });

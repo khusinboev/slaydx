@@ -47,13 +47,29 @@ import { setSafeFetchLookup } from "../lib/generation/safe-fetch.ts";
  * Every endpoint, param and price below is what the model's own llms.txt page states (read 2026-11-06); the comment of each
  * block names the page. A golden body here is the page's schema, so a builder cannot drift from it unnoticed.
  *
- * Mutations (each turned the named test red, then restored): listed at the end of this header as they are made.
+ * Mutations (each turned the named test red, then restored):
  *   1. PixVerse `duration` "8" instead of "5"                       -> «effects: bodies»;
  *   2. Kling `input_image_urls` a string, not a list                 -> «effects: bodies»;
  *   3. `effectPhotos` ignores the model (hug always two photos)      -> «effects: the hug takes one photo on fal»;
- *   4. fal effect entry without `defaultOff`                         -> «effects: catalog»;
- *   5. `needsStart` guard removed                                    -> «effects: bodies» (a job without the photo);
- *   6. cost of Kling 1.6 $0.056 instead of 5 × $0.056                -> «effects: prices».
+ *   4. fal effect entry without `defaultOff`                         -> «effects: catalog», «every package F entry»;
+ *   5. `needsStart` guard removed                                    -> «effects: bodies»;
+ *   6. Kling 1.6 clip priced $0.056, not 5 × $0.056                  -> «effects: prices»;
+ *   7. `plus` left out of `costUsd`                                  -> «video: prices»;
+ *   8. `costParams` does not read `plus.param`                       -> «video: prices»;
+ *   9. PixVerse's prompt without `maxBytes`                          -> «video: PixVerse's prompt limit»;
+ *  10. `validate` compares bytes with 4 × `maxBytes`                 -> «video: PixVerse's prompt limit»;
+ *  11. PixVerse `generate_audio_switch` always false                 -> «video: bodies»;
+ *  12. `aspect_ratio` also sent in image → video                     -> «video: bodies»;
+ *  13. Happy Horse 1080p at the 720p rate                            -> «video: prices»;
+ *  14. Klein 16:9 at 1280 × 720 (above 1K by side)                   -> «image: bodies»;
+ *  15. Klein edit quoted at $0.009                                   -> «image: catalog», «image: edit bodies»;
+ *  16. Klein edit `enable_prompt_expansion: false`                   -> «image: edit bodies»;
+ *  17. OmniHuman's audio cap doubled                                 -> «avatars: the stated audio limits»;
+ *  18. the audio type check removed                                  -> «avatars: the stated audio limits»;
+ *  19. a refused submit keeps the upload                             -> «avatars: a refused submit»;
+ *  20. the avatar adapter accepts a clip's op id                     -> «avatars: a refused submit»;
+ *  21. a photo avatar priced by an empty script                      -> «avatars: the length»;
+ *  22. a photo avatar without a speech passes the preflight          -> «avatars: the length».
  */
 
 setSafeFetchLookup(async () => ["93.184.216.34"]);
@@ -227,7 +243,7 @@ test("video: prices — seconds × the page's rate, Grok's input image is billed
   // What the row stores, for the margin (`media_jobs.cost_usd`, the admin table).
   const e = entry(GROK);
   assert.ok(Math.abs(costUsd(e.cost, normalize(e.params, { seconds: 5, imageAssetId: ASSET })) - 0.16) < 1e-9);
-  assert.throws(() => defineCatalog([{ ...e, id: "a/b", params: [], cost: { per: "second", usd: 1, secondsParam: "seconds", plus: { param: "nope", usd: 1 } } }]), /unknown param/);
+  assert.throws(() => defineCatalog([{ ...e, id: "a/b", params: e.params.filter((x) => x.name === "seconds"), cost: { per: "second", usd: 1, secondsParam: "seconds", plus: { param: "nope", usd: 1 } } }]), /unknown param/);
 });
 
 test("video: PixVerse's prompt limit counts UTF-8 bytes, so a Cyrillic or apostrophe-heavy prompt is refused before charging", () => {
@@ -404,7 +420,8 @@ test("avatars: the stated audio limits refuse before anything is uploaded", asyn
     assert.equal(seen.length, 0, "no upload, no submit");
   };
   const overCap = "A".repeat(Math.ceil(((OMNIHUMAN_AUDIO_MAX_BYTES + 3) * 4) / 3));
-  await refused(OMNIHUMAN_MODEL, { mime: "audio/ogg", base64: "AAAA" }, /audio\/ogg/);
+  // A type fal storage would take, so this is the model's own rule.
+  await refused(OMNIHUMAN_MODEL, { mime: "video/mp4", base64: "AAAA" }, /video\/mp4/);
   await refused(OMNIHUMAN_MODEL, { mime: "audio/mpeg", base64: overCap }, /15 MB/);
   const noPhoto = falStub();
   await assert.rejects(adapters()[FAL_AVATAR_ADAPTER_ID]!.submit(input(OMNIHUMAN_MODEL, AV, { [OWN_AUDIO_PARAM]: [MP3] }), { fetchImpl: noPhoto.fetchImpl }), MediaError);
@@ -424,7 +441,9 @@ test("avatars: a refused submit deletes the upload, the op's protocol is the cli
   assert.equal(seen.at(-1)!.url, FAL_STORAGE_DELETE_URL);
   assert.ok(FAL_AVATAR_ENDPOINTS.has("bytedance/omnihuman/v2") && !FAL_VIDEO_ENDPOINTS.has("bytedance/omnihuman/v2"), "each adapter names only its own ops");
   const a = adapters()[FAL_AVATAR_ADAPTER_ID]!;
-  await assert.rejects(a.poll!(`fal:alibaba/wan-3.0/text-to-video:${REQ}`), MediaError, "a clip's op is not this adapter's");
+  const foreign = falStub();
+  await assert.rejects(a.poll!(`fal:alibaba/wan-3.0/text-to-video:${REQ}`, { fetchImpl: foreign.fetchImpl }), MediaError, "a clip's op is not this adapter's");
+  assert.equal(foreign.seen.length, 0, "the key goes nowhere for a foreign op");
   const polled = falStub((url) => (url.endsWith("/status") ? new Response(JSON.stringify({ status: "COMPLETED" }), { status: 200 }) : new Response(JSON.stringify({ video: { url: "https://v3b.fal.media/files/out.mp4" }, duration: 6.2 }), { status: 200 })));
   assert.deepEqual(await a.poll!(`fal:bytedance/omnihuman/v2:${REQ}`, { fetchImpl: polled.fetchImpl }), { state: "done", outputs: [{ kind: "url", url: "https://v3b.fal.media/files/out.mp4" }] });
   assert.equal(polled.seen[0]!.url, `https://queue.fal.run/bytedance/omnihuman/requests/${REQ}/status`, "the queue's owner/app");
