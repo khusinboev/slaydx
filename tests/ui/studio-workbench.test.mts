@@ -231,10 +231,77 @@ test("the submit scrolls the results into view in one column, never in two", asy
   }
 });
 
+test("switchChanges: effective values on both sides — a default that differs is named, untouched or not", () => {
+  const a = withParams(OMNI, "x/a", [{ name: "seconds", label: "Davomiylik", type: "enum", options: [{ value: "5", label: "5" }, { value: "8", label: "8" }], default: "5", affects: "price" }] as never, "A");
+  const b = withParams(OMNI, "x/b", [{ name: "seconds", label: "Davomiylik", type: "enum", options: [{ value: "5", label: "5" }, { value: "8", label: "8" }], default: "8", affects: "price" }] as never, "B");
+  assert.deepEqual(switchChanges(a, b, {}), [{ name: "seconds", label: "Davomiylik", from: "5", to: "8" }], "MUTATSIYA: an untouched 5 s became 8 s, and the price with it");
+  assert.equal(switchNotice(a, b, { seconds: "8" }), null, "the same value on both sides: nothing to say");
+});
+
+test("source on another tab: neither priced nor sent; its own tab brings it back", async () => {
+  const a = api();
+  await mount();
+  await tab("audio");
+  await click(q('[data-audio-mode-chip="transcribe"]'));
+  await settle();
+  const select = q<HTMLSelectElement>("[data-speech-sources] select");
+  assert.ok(select);
+  await act(async () => void fireEvent.change(select, { target: { value: VID } }));
+  assert.match(q("[data-studio-submit]")!.textContent ?? "", /so'm/, "priced on its own tab");
+  await click(qa('[data-field="source"] [role="radio"]').find((b) => b.textContent === "Audio yuklash"));
+  assert.ok(!/so'm/.test(q("[data-studio-submit]")!.textContent ?? ""), "MUTATSIYA: the hidden result is not bought");
+  await click(q("[data-studio-submit]"));
+  await settle();
+  assert.match(q("[data-studio-error]")!.textContent ?? "", /shu bo‘limdan/);
+  assert.equal(a.posts().length, 0);
+  await click(qa('[data-field="source"] [role="radio"]').find((b) => b.textContent === "Natijalarimdan"));
+  assert.match(q("[data-studio-submit]")!.textContent ?? "", /so'm/);
+});
+
+test("a dub's own video states and keeps the dub's real size limit", async () => {
+  const { videoBlocker } = await import("../../components/studio/audio/audio-api.ts");
+  const { DUB_VIDEO_MAX_BYTES } = await import("../../lib/media/catalog-transcribe.ts");
+  const file = (size: number, name = "a.mp4", type = "video/mp4") => ({ size, name, type });
+  assert.equal(DUB_VIDEO_MAX_BYTES, 24 * 1024 * 1024);
+  assert.match(String(videoBlocker(file(DUB_VIDEO_MAX_BYTES + 1), DUB_VIDEO_MAX_BYTES)), /24 MB/, "MUTATSIYA: the limit the server holds");
+  assert.equal(videoBlocker(file(DUB_VIDEO_MAX_BYTES + 1)), null, "25 MB for a transcript");
+  assert.equal(videoBlocker(file(10, "IMG_0001.MOV", "video/quicktime")), null, "MUTATSIYA: an iPhone's MOV");
+  assert.match(String(videoBlocker(file(10, "a.avi", "video/x-msvideo"))), /MP4 yoki MOV/);
+});
+
+test("SwitchNotice: the live region is on the page before its text; SubmitError comes into view when it is off the screen", async () => {
+  const { SwitchNotice } = await import("../../components/studio/SwitchNotice.tsx");
+  const { SubmitError } = await import("../../components/studio/SubmitError.tsx");
+  const close = () => {};
+  const view = render(h(SwitchNotice, { text: null, onClose: close }));
+  assert.ok(q('[data-switch-notice-region][role="status"]'), "MUTATSIYA: mounted while empty");
+  assert.ok(!q("[data-switch-notice]"));
+  view.rerender(h(SwitchNotice, { text: "A: Sifat 1 → 2", onClose: close }));
+  assert.ok(q('[role="status"] [data-switch-notice]'));
+  cleanup();
+  const seen: unknown[] = [];
+  const proto = window.HTMLElement.prototype as unknown as { scrollIntoView?: (o?: unknown) => void; getBoundingClientRect: () => unknown };
+  const realScroll = proto.scrollIntoView;
+  const realRect = proto.getBoundingClientRect;
+  let top = 100;
+  proto.scrollIntoView = (o?: unknown) => void seen.push(o);
+  proto.getBoundingClientRect = () => ({ top, bottom: top + 20 });
+  try {
+    const e = render(h(SubmitError, { error: "Birinchi" }));
+    assert.equal(seen.length, 0, "on the screen: nothing moves");
+    top = -900;
+    e.rerender(h(SubmitError, { error: "Ikkinchi" }));
+    assert.equal(seen.length, 1, "MUTATSIYA: a refused retry down the page must not stay out of view");
+  } finally {
+    proto.scrollIntoView = realScroll;
+    proto.getBoundingClientRect = realRect;
+  }
+});
+
 test("switchChanges: a lacking or refused setting is named with its old value; untouched defaults and the prompt are not", () => {
   // Kling 3 with sound on and 9:16 → Omni: no `sound` param (dropped, old value named); 9:16 accepted (silent); prompt silent.
   assert.deepEqual(switchChanges(K3, OMNI, { prompt: "x", sound: true, aspect: "9:16" }), [{ name: "sound", label: "Ovoz", from: "ha", to: null }]);
-  assert.equal(switchNotice(K3, OMNI, { prompt: "x", sound: true, aspect: "9:16" }), "Google Veo (Gemini): Ovoz (ha) bu modelda yo‘q");
+  assert.equal(switchNotice(K3, OMNI, { prompt: "x", sound: true, aspect: "9:16" }), "Google Veo (Gemini): Ovoz: ha — bu modelda yo‘q");
   // Kling 4 at 1080p → Flash (720p only): the quality is lacking; 15 s is accepted by both.
   const k4 = switchChanges(K4, K4F, { resolution: "1080p", seconds: 15 });
   assert.deepEqual(k4.map((c) => c.name), ["resolution"]);
@@ -257,7 +324,7 @@ test("Video: the switch's line is shown, closable, replaced by the next switch, 
   assert.ok(!q("[data-switch-notice]"), "Omni → Kling 3 with an empty form: nothing changed");
   await click(q('[data-field="sound"] [role="switch"]'));
   await click(q(`[data-model-card="${OMNI.id}"]`));
-  assert.equal(q("[data-switch-notice]")!.textContent, "Google Veo (Gemini): Ovoz (ha) bu modelda yo‘q", "MUTATSIYA: the silent reset");
+  assert.equal(q("[data-switch-notice]")!.textContent, "Google Veo (Gemini): Ovoz: ha — bu modelda yo‘q", "MUTATSIYA: the silent reset");
   await click(q('[data-switch-notice] button[aria-label="Yopish"]'));
   assert.ok(!q("[data-switch-notice]"), "closed");
 });
@@ -331,14 +398,14 @@ test("result cards: the running card names the model and the price; SFX variants
 });
 
 test("Transkripsiya / Dublyaj take the user's own video: the «Video yuklash» tab, the MP4 check, the upload with kind=video, the billed seconds", async () => {
-  const uploads: { kind: string | null; name: string }[] = [];
+  const uploads: { kind: string | null; tool: string | null; name: string }[] = [];
   const base = api();
   const inner = globalThis.fetch;
   (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) => {
     if (String(input) === "/api/media/audio-inputs" && init?.method === "POST") {
       const form = init.body as FormData;
       const file = form.get("file") as File;
-      uploads.push({ kind: (form.get("kind") as string | null) ?? null, name: file.name });
+      uploads.push({ kind: (form.get("kind") as string | null) ?? null, tool: (form.get("tool") as string | null) ?? null, name: file.name });
       return json(200, { id: "a".repeat(24), seconds: 7, mime: "video/mp4", size: 1000 });
     }
     return inner(input as never, init);
@@ -354,15 +421,17 @@ test("Transkripsiya / Dublyaj take the user's own video: the «Video yuklash» t
   assert.ok(q("[data-video-input]"), "the video row");
   assert.match(q("[data-video-input-seconds]")!.textContent ?? "", /Hali video tanlanmagan/);
   const input = q<HTMLInputElement>("[data-video-file]")!;
-  // Not an MP4: refused in the browser, nothing uploaded.
-  await act(async () => void fireEvent.change(input, { target: { files: [new File([new Uint8Array(10)], "a.mov", { type: "video/quicktime" })] } }));
+  assert.match(input.accept, /video\/quicktime/, "MUTATSIYA: an iPhone's MOV can be picked");
+  assert.match(q("[data-video-input]")!.textContent ?? "", /MP4 yoki MOV, 3 daqiqagacha, 25 MB gacha/);
+  // Not an MP4 or a MOV: refused in the browser, nothing uploaded.
+  await act(async () => void fireEvent.change(input, { target: { files: [new File([new Uint8Array(10)], "a.avi", { type: "video/x-msvideo" })] } }));
   await settle(2);
   assert.match(q("[data-video-input-error]")!.textContent ?? "", /Faqat MP4/);
   assert.equal(uploads.length, 0, "MUTATSIYA: no request for a refused file");
   // An MP4: uploaded with kind=video; the server's seconds show and price the job; the burn row appears (a video source).
   await act(async () => void fireEvent.change(input, { target: { files: [new File([new Uint8Array(10)], "clip.mp4", { type: "video/mp4" })] } }));
   await settle(4);
-  assert.deepEqual(uploads, [{ kind: "video", name: "clip.mp4" }], "MUTATSIYA: the upload says it is a video");
+  assert.deepEqual(uploads, [{ kind: "video", tool: "transcribe", name: "clip.mp4" }], "MUTATSIYA: the upload says it is a video, for which tool");
   assert.match(q("[data-video-input-seconds]")!.textContent ?? "", /Yuklandi: 0:07 \(7 s\)/);
   assert.equal(q("[data-speech-seconds]")!.textContent, "Narx 7 soniya uchun hisoblanadi.", "the server's seconds price the job");
   assert.ok(q('[data-field="burn"]'), "a video source may be burned");

@@ -120,7 +120,7 @@ test("control by type", () => {
   }
 });
 
-test("a long int: preset chips are the round values the range accepts (ends included); the input applies an accepted value at once and snaps the rest on blur", async () => {
+test("a long int: preset chips are the round values the range accepts (ends included); the input applies the snapped value at every keystroke", async () => {
   mount(SYNTH);
   const range = q('[data-field="length"]')!;
   const chips = () => [...range.querySelectorAll<HTMLButtonElement>("[data-preset]")];
@@ -137,14 +137,24 @@ test("a long int: preset chips are the round values the range accepts (ends incl
   assert.equal(input.value, "8", "the box follows");
   await act(async () => void fireEvent.change(input, { target: { value: "6" } }));
   assert.equal(shown().length, 6, "MUTATSIYA: an accepted typed value applies at once");
+  // A value off the step applies snapped at every keystroke: the button already shows what a press will send.
   await act(async () => void fireEvent.change(input, { target: { value: "7" } }));
-  assert.equal(shown().length, 6, "7 is off the step: nothing sent while typing");
+  assert.equal(shown().length, 8, "MUTATSIYA: snapped while typing, the price on the button is the price charged");
+  assert.equal(input.value, "7", "the box keeps the digits so far");
   await act(async () => void fireEvent.blur(input));
-  assert.equal(shown().length, 8, "MUTATSIYA: snapped to the step on blur");
+  assert.equal(input.value, "8", "MUTATSIYA: the box says the snapped value on blur");
+  // Over the range: clamped at once, in the box too.
   await act(async () => void fireEvent.change(input, { target: { value: "99" } }));
-  await act(async () => void fireEvent.keyDown(input, { key: "Enter" }));
-  assert.equal(shown().length, 20, "clamped to the max on Enter");
+  assert.equal(shown().length, 20, "MUTATSIYA: clamped to the max while typing");
   assert.equal(input.value, "20");
+  // Under the range on the way to a longer number: the value holds the minimum, the digit stays to be continued.
+  await act(async () => void fireEvent.change(input, { target: { value: "1" } }));
+  assert.equal(shown().length, 2);
+  assert.equal(input.value, "1", "MUTATSIYA: «1» on the way to «12» must not be overwritten");
+  await act(async () => void fireEvent.change(input, { target: { value: "12" } }));
+  assert.equal(shown().length, 12);
+  await act(async () => void fireEvent.keyDown(input, { key: "Enter" }));
+  assert.equal(input.value, "12");
   assert.deepEqual(intValues({ name: "x", label: "x", type: "int", min: 2, max: 8, step: 2, default: 2, affects: "price" }), [2, 4, 6, 8]);
   // The real ranges: a Kling clip, an effect, a volume by tens, a long offset.
   assert.deepEqual(presetsOf(3, 15), [3, 5, 8, 10, 15]);

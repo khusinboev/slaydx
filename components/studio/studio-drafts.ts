@@ -68,7 +68,7 @@ function parseMix(v: unknown): MixTabState | undefined {
 }
 
 function parseTool(t: Record<string, unknown>): SpeechToolState {
-  return { raw: raw(t.raw), tab: oneOf(t.tab, ["upload", "video"] as const) ?? "result", kind: oneOf(t.kind, ["video", "audio"] as const) };
+  return { raw: raw(t.raw), tab: oneOf(t.tab, ["upload", "video"] as const) ?? "result", kind: oneOf(t.kind, ["video", "audio"] as const), ...(str(t.model) ? { model: str(t.model)! } : {}) };
 }
 
 export function parseAudioDraft(v: unknown): AudioTabState | null {

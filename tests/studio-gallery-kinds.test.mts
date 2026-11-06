@@ -120,6 +120,9 @@ test("kinds: image / video / audio / text by tool and output; the mix is labelle
   const mix = page.items.find((i) => i.id === s.mixMp4)!;
   assert.equal(mix.modelLabel, "Montaj");
   assert.ok(mix.video, "the mix plays as a clip");
+  // Only the three tools that can hold one look inside the document: a stray `video` key does not make a speech a clip.
+  const stray = await gen(me, "studio-speech", { speech: { model: "x", seconds: 2 }, video: video("x") }, 90, "mp3");
+  assert.equal((await gallery(await cookieOf(me), "?kind=audio")).page.items.some((i) => i.id === stray), true, "MUTATSIYA: `doc_json ? 'video'` on every tool");
   const derived = (id: string) => (page.items.find((i) => i.id === id)!.video as { derived: boolean }).derived;
   assert.equal(derived(s.clip), false, "a Video tab clip re-opens in its form");
   for (const id of [s.mixMp4, s.dubMp4, s.burned]) assert.equal(derived(id), true, "MUTATSIYA: another tool's clip has nothing to re-open");

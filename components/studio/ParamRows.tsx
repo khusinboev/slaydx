@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import type { ClientEntry, ParamSchema } from "@/lib/studio-core";
 import { IMAGE_RATIOS, IMAGE_STYLES } from "@/lib/generation/image-studio-options";
@@ -203,9 +203,14 @@ const CHIP =
 function PresetRange({ value, min, max, step, onChange, ariaLabel }: { value: number; min: number; max: number; step: number; onChange: (v: number) => void; ariaLabel: string }) {
   const presets = presetsOf(min, max, step);
   const [typed, setTyped] = useState(String(value));
+  // While typing, the box keeps the digits so far («1» on the way to «12» in a 3–15 range).
+  const editing = useRef(false);
   // A value set elsewhere (a preset, a model switch, a cap) shows in the box.
-  useEffect(() => setTyped(String(value)), [value]);
+  useEffect(() => {
+    if (!editing.current) setTyped(String(value));
+  }, [value]);
   const commit = () => {
+    editing.current = false;
     const n = snapInt(Number(typed), min, max, step);
     setTyped(String(n));
     if (n !== value) onChange(n);
@@ -214,7 +219,14 @@ function PresetRange({ value, min, max, step, onChange, ariaLabel }: { value: nu
     <div role="group" aria-label={ariaLabel} className="flex flex-wrap items-center gap-2" data-presets>
       <div className="bg-muted/70 inline-flex max-w-full flex-wrap gap-0.5 rounded-[12px] p-1">
         {presets.map((n) => (
-          <button key={n} type="button" aria-pressed={value === n} data-preset={n} onClick={() => onChange(n)} className={cn(CHIP, value === n ? "bg-card text-foreground font-semibold shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+          <button key={n} type="button" aria-pressed={value === n}
+            data-preset={n}
+            onClick={() => {
+              editing.current = false;
+              setTyped(String(n));
+              onChange(n);
+            }}
+            className={cn(CHIP, value === n ? "bg-card text-foreground font-semibold shadow-sm" : "text-muted-foreground hover:text-foreground")}>
             {n}
           </button>
         ))}
@@ -228,10 +240,15 @@ function PresetRange({ value, min, max, step, onChange, ariaLabel }: { value: nu
         step={step}
         value={typed}
         onChange={(e) => {
-          setTyped(e.target.value);
+          // The value applies at every keystroke, snapped to the range: the button always shows the price of what a
+          // press will send, never the old number until the blur. Above the range the box itself says the cap.
           const n = Number(e.target.value);
-          // A value the range accepts as typed applies at once; anything else waits for the blur to be snapped.
-          if (e.target.value !== "" && Number.isInteger(n) && n >= min && n <= max && (n - min) % step === 0) onChange(n);
+          const blank = e.target.value === "" || !Number.isFinite(n);
+          editing.current = true;
+          setTyped(!blank && n > max ? String(max) : e.target.value);
+          if (blank) return;
+          const snapped = snapInt(n, min, max, step);
+          if (snapped !== value) onChange(snapped);
         }}
         onBlur={commit}
         onKeyDown={(e) => {

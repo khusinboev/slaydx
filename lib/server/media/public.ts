@@ -210,12 +210,14 @@ export function parseGalleryCursor(raw: string | null): ListCursor | null {
 }
 
 /**
- * The kind of a stored result, in SQL (the filter and the item read the same expression): the Rasm tool's pictures, any
- * result with a `video` document (the Video tool, a «Montaj» / «Dublyaj» MP4, a burned «Transkripsiya»), a transcript
+ * The kind of a stored result, in SQL (the filter and the item read the same expression): the Rasm tool's pictures, the
+ * Video tool's clips, a «Montaj» / «Dublyaj» MP4 or a burned «Transkripsiya» (only these three look inside `doc_json`, so
+ * the common tools never pay for reading a large document), a transcript
  * without a burn, else an audio (Ovoz, Audio, a «Montaj» / «Dublyaj» MP3, a folded podcast / greeting).
  */
 const KIND_SQL = `CASE WHEN tool_id = 'studio-image' THEN 'image'
-                       WHEN tool_id = 'studio-video' OR doc_json ? 'video' THEN 'video'
+                       WHEN tool_id = 'studio-video' THEN 'video'
+                       WHEN tool_id IN ('studio-mix', 'studio-dub', 'studio-transcribe') AND doc_json ? 'video' THEN 'video'
                        WHEN tool_id = 'studio-transcribe' THEN 'text'
                        ELSE 'audio' END`;
 

@@ -25,7 +25,7 @@ const { dropMediaCatalog } = await import("../../components/studio/studio-api.ts
  *     results per role + the base price); two sub-modes, each draws EXACTLY its schema (one `data-field` per param: the
  *     two pickers + the options), nothing of the other;
  *   - no price and no send before both pickers hold a result (the blocker names the missing one); then the button reads
- *     «Montaj qilish · <mode> · ~<server base + tool %>», the submit sends slug `studio-mix`, `{modelId, …schema}` and
+ *     «Montaj qilish · ~<server base + tool %>», the submit sends slug `studio-mix`, `{modelId, …schema}` and
  *     that `expectedPrice`;
  *   - «Keyingi qadam»: a finished clip offers «Videoga ovoz qo'shish»; a finished speech «Videoga qo'shish» + «Fon musiqa
  *     qo'shish»; music / an effect only «Videoga qo'shish»; without the Studio's provider no «Montaj» button; on the page
@@ -167,7 +167,7 @@ test("price button: no price / no send before both picks; then the server base +
   assert.match(txt("[data-studio-error]"), /Audioni tanlang/);
   assert.equal(a.posts().length, 0, "nothing sent");
   await pick("audioId", SPEECH);
-  assert.match(txt("[data-studio-submit]"), /Montaj qilish · Videoga ovoz qo‘shish · ~700/);
+  assert.match(txt("[data-studio-submit]"), /Montaj qilish · ~700/);
   await click(q('[data-field="keepOriginal"] [role="switch"], [data-field="keepOriginal"] button'));
   await click(q("[data-studio-submit]"));
   await settle();

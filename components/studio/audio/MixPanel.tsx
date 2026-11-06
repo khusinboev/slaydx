@@ -58,15 +58,15 @@ function SourceAudition({ id, role }: { id: string; role: MixRole }) {
   );
 }
 
-/** «Montaj qilish · Videoga ovoz qo'shish · ~500 so'm». */
-export function mixSubmitLabel(label: string, price: number): string {
-  return `Montaj qilish · ${label} · ~${formatSom(price)}`;
+/** «Montaj qilish · ~500 so'm»: the mode is the chip above, and the words fit the form column whole. */
+export function mixSubmitLabel(price: number): string {
+  return `Montaj qilish · ~${formatSom(price)}`;
 }
 
 /**
  * The «Audio» tab's «Montaj» mode (docs/studio/P8-SPEC.md «P8c»): two sub-modes «Videoga ovoz qo'shish» / «Ovoz + fon
  * musiqa», two pickers from the user's OWN finished results (ids only — the server checks ownership and kind again),
- * the options generated from the mode's schema (`ParamRows`), the sticky «Montaj qilish · <mode> · ~X so'm» and the
+ * the options generated from the mode's schema (`ParamRows`), the sticky «Montaj qilish · ~X so'm» and the
  * results (an MP4 plays as a clip, an MP3 as audio).
  */
 export function MixPanel({
@@ -258,7 +258,7 @@ export function MixPanel({
         disabled={!sources}
         typing={typing}
         onSubmit={submit}
-        label={price === null || blocker ? undefined : mixSubmitLabel(m.label, price)}
+        label={price === null || blocker ? undefined : mixSubmitLabel(price)}
       />
           </>
         }

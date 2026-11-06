@@ -268,6 +268,8 @@ test("a draft of the wrong shape never reaches a tab", () => {
   const own = parseAudioDraft({ tools: { transcribe: { raw: { source: "upload:a", sourceSeconds: 5 }, tab: "video", kind: "video" }, dub: { raw: {}, tab: "junk" } } });
   assert.equal(own?.tools?.transcribe?.tab, "video", "MUTATSIYA: the own video's tab is lost on a refresh");
   assert.equal(own?.tools?.dub?.tab, "result");
+  const picked = parseAudioDraft({ tools: { dub: { raw: {}, tab: "result", model: "heygen/translate-speed" } } });
+  assert.equal(picked?.tools?.dub?.model, "heygen/translate-speed", "MUTATSIYA: the picked model survives a refresh");
 });
 
 test("another user on the same browser sees none of the draft", async () => {

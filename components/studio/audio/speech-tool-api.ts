@@ -94,6 +94,17 @@ export function pickVideoUpload(raw: RawValues, r: { id: string; seconds: number
   return { ...raw, source: `upload:${r.id}`, sourceSeconds: r.seconds };
 }
 
+/**
+ * The source the form holds belongs to the tab on screen: a source left on another tab is not shown, so it is never sent
+ * or priced (P11 review); going back to its tab brings it back.
+ */
+export function sourceOnTab(st: Pick<SpeechToolState, "raw" | "tab" | "kind">): boolean {
+  const ref = parseSource(st.raw.source);
+  if (!ref) return true;
+  if (ref.kind === "result") return st.tab === "result";
+  return st.tab === (st.kind === "video" ? "video" : "upload");
+}
+
 /** Why the button cannot send yet (Uzbek), `null` when it can. */
 export function speechToolBlocker(mode: SpeechToolMode, raw: RawValues): string | null {
   if (!parseSource(raw.source)) return "Avval manbani tanlang: natijalaringizdan birini yoki o‘z faylingizni.";

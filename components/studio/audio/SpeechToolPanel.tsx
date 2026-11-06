@@ -9,7 +9,7 @@ import { formatSom, groupDigits } from "@/lib/format";
 import { FavoriteButton } from "../Favorite";
 import { useApiSrc } from "@/lib/use-api-src";
 import type { ClientEntry } from "@/lib/studio-core";
-import { languageLabel, videoOnlySource, type SpeechToolMode } from "@/lib/media/catalog-transcribe";
+import { DUB_VIDEO_MAX_BYTES, languageLabel, videoOnlySource, type SpeechToolMode } from "@/lib/media/catalog-transcribe";
 import { downloadToDevice, deliverErrorText } from "@/lib/downloads/deliver";
 import type { DownloadFormatId } from "@/lib/downloads/formats";
 import { Card, Segmented, SelectField } from "@/components/forms/compact";
@@ -27,7 +27,7 @@ import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
 import type { StudioJob } from "../StudioResults";
 import type { StudioPricing } from "../studio-types";
 import { AudioInputRow, fmtSeconds } from "./AudioInputRow";
-import { VIDEO_INPUT_MAX_SECONDS, uploadAudioInput, uploadVideoInput, videoBlocker } from "./audio-api";
+import { VIDEO_INPUT_MAX_BYTES, VIDEO_INPUT_MAX_SECONDS, uploadAudioInput, uploadVideoInput, videoBlocker } from "./audio-api";
 import { audioModelLabel } from "./audio-modes";
 import { fetchMixSources, type MixSources } from "./mix-api";
 import { sourceLabel } from "./MixPanel";
@@ -38,6 +38,7 @@ import {
   pickSpeechModel,
   pickUpload,
   pickVideoUpload,
+  sourceOnTab,
   speechSources,
   speechToolBlocker,
   speechToolClientPrice,
@@ -120,12 +121,15 @@ export function SpeechToolPanel({
 
   const raw = st.raw;
   const videoOnly = videoOnlySource(entry.id);
+  const videoLimit = mode === "dub" ? DUB_VIDEO_MAX_BYTES : VIDEO_INPUT_MAX_BYTES;
   const list = sources ? speechSources(mode, sources, videoOnly) : [];
   const picked = typeof raw.source === "string" && raw.source.startsWith("result:") ? raw.source.slice(7) : "";
   const isVideo = st.kind === "video";
   // «Subtitrni videoga yopishtirish» only where it can work: a video source.
   const formEntry = { ...entry, params: entry.params.filter((p) => !OWN_ROWS.has(p.name) && (p.name !== "burn" || isVideo)) };
-  const blocker = speechToolBlocker(mode, raw);
+  const shownTab: SourceTab = st.tab === "upload" && videoOnly ? "result" : st.tab;
+  // A source left on another tab is neither named on screen nor bought: the tab on screen decides.
+  const blocker = sourceOnTab({ raw, tab: shownTab, kind: st.kind }) ? speechToolBlocker(mode, raw) : "Avval shu bo‘limdan manbani tanlang.";
   const sent = requestValues(entry, raw);
   const price = blocker ? null : speechToolClientPrice(mode, entry, sent, pricing);
   const toolId = toolIdOf(mode);
@@ -160,14 +164,14 @@ export function SpeechToolPanel({
   /** P11 §D: the user's own MP4 (the same upload path, `kind=video`): the source is a video, so the burn stays offered. */
   async function onVideo(file: File) {
     setUploadError(null);
-    const bad = videoBlocker(file);
+    const bad = videoBlocker(file, videoLimit);
     if (bad) {
       setUploadError(bad);
       return;
     }
     setUploading(true);
     try {
-      const r = await uploadVideoInput(file, file.name || "video.mp4");
+      const r = await uploadVideoInput(file, file.name || "video.mp4", mode);
       setState((x) => ({ ...x, kind: "video", raw: pickVideoUpload(x.raw, r) }));
     } catch (e) {
       setUploadError(e instanceof Error ? e.message : "Video yuklanmadi");
@@ -259,7 +263,7 @@ export function SpeechToolPanel({
           <div className="flex flex-col gap-3">
             <Segmented
               ariaLabel="Manba turi"
-              value={st.tab === "upload" && videoOnly ? "result" : st.tab}
+              value={shownTab}
               onChange={(v) => setTab(v as SourceTab)}
               options={[
                 { value: "result", label: "Natijalarimdan" },
@@ -269,7 +273,7 @@ export function SpeechToolPanel({
               ]}
             />
             {st.tab === "video" ? (
-              <VideoInputRow seconds={videoSeconds} uploading={uploading} error={uploadError} onFile={(f) => void onVideo(f)} />
+              <VideoInputRow maxBytes={videoLimit} seconds={videoSeconds} uploading={uploading} error={uploadError} onFile={(f) => void onVideo(f)} />
             ) : st.tab === "result" || videoOnly ? (
               <div className="flex flex-col gap-1.5" data-speech-sources>
                 {loadError ? (
@@ -359,14 +363,14 @@ export function SpeechToolResults({
 }
 
 /**
- * P11 §D: the user's own video for «Dublyaj» / «Transkripsiya» — one MP4 file (≤ 3 min, ≤ 25 MB), uploaded through the
+ * P11 §D: the user's own video for «Dublyaj» / «Transkripsiya» — one MP4 or MOV file (≤ 3 min, the tool's size limit), uploaded through the
  * audio-inputs path with `kind=video`; the server measures it and bills its whole seconds, shown here once uploaded.
  */
-function VideoInputRow({ seconds, uploading, error, onFile }: { seconds: number | null; uploading: boolean; error: string | null; onFile: (f: File) => void }) {
+function VideoInputRow({ maxBytes, seconds, uploading, error, onFile }: { maxBytes: number; seconds: number | null; uploading: boolean; error: string | null; onFile: (f: File) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   return (
     <div className="flex flex-col gap-2" data-video-input>
-      <p className="text-muted-foreground text-[13.5px] leading-snug">MP4, {VIDEO_INPUT_MAX_SECONDS / 60} daqiqagacha, 25 MB gacha. Narx video uzunligiga qarab hisoblanadi.</p>
+      <p className="text-muted-foreground text-[13.5px] leading-snug">MP4 yoki MOV, {VIDEO_INPUT_MAX_SECONDS / 60} daqiqagacha, {maxBytes / 1024 / 1024} MB gacha. Narx video uzunligiga qarab hisoblanadi.</p>
       <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading} className={cn(ACTION, "w-fit")} data-video-upload>
         <Upload className="size-4" aria-hidden />
         {uploading ? "Yuklanmoqda…" : "Video tanlash"}
@@ -374,7 +378,7 @@ function VideoInputRow({ seconds, uploading, error, onFile }: { seconds: number 
       <input
         ref={fileRef}
         type="file"
-        accept="video/mp4,.mp4"
+        accept="video/mp4,video/quicktime,.mp4,.m4v,.mov"
         hidden
         data-video-file
         onChange={(e) => {

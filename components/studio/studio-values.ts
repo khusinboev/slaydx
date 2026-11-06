@@ -76,32 +76,33 @@ function shownValue(p: ParamSchema, v: unknown): string {
 }
 
 /**
- * What `carryOver(to, prev)` silently drops or changes when the user switches from `from` to `to` (docs/studio/P11-SPEC.md
- * §D): every setting the user had set away from `from`'s default that `to` lacks, or does not accept (then it takes `to`'s
- * default). The prompt, images and voices are not settings of this kind (the tabs keep or re-ask them themselves).
+ * What a switch from `from` to `to` changes (docs/studio/P11-SPEC.md §D), by the EFFECTIVE values on both sides: a setting
+ * both models have whose value differs after the switch, touched or not (one model's default of 5 s is another's 4 s, and
+ * that changes the clip and its price); a setting `to` lacks, when it stood away from `from`'s default. The prompt, images
+ * and voices are not settings of this kind (the tabs keep or re-ask them themselves).
  */
 export function switchChanges(from: ClientEntry, to: ClientEntry, prev: RawValues): SwitchChange[] {
   const out: SwitchChange[] = [];
+  const before = effective(from, prev);
+  const after = effective(to, carryOver(to, prev));
   for (const p of from.params) {
     if (p.type === "text" || p.type === "image" || p.type === "voice") continue;
-    if (!(p.name in prev)) continue;
-    const v = prev[p.name];
-    // Untouched (still the old model's default): nothing the user chose is lost.
-    if (v === undefined || v === null || v === "" || normalize([p], { [p.name]: v })[p.name] === p.default) continue;
+    const v = before[p.name];
     const q = to.params.find((x) => x.name === p.name);
     if (!q) {
-      out.push({ name: p.name, label: p.label, from: shownValue(p, v), to: null });
+      // At the old model's default nothing the user chose is lost.
+      if (v !== p.default) out.push({ name: p.name, label: p.label, from: shownValue(p, v), to: null });
       continue;
     }
     if (q.type === "text" || q.type === "image" || q.type === "voice") continue;
-    if (validate([q], { [q.name]: v }) !== null) out.push({ name: p.name, label: p.label, from: shownValue(p, v), to: shownValue(q, q.default) });
+    if (String(v) !== String(after[q.name])) out.push({ name: p.name, label: p.label, from: shownValue(p, v), to: shownValue(q, after[q.name]) });
   }
   return out;
 }
 
-/** Each change as the notice words it: «Sifat 1080p → 720p», «Oxirgi kadr (…) bu modelda yo‘q». */
+/** Each change as the notice words it: «Sifat 1080p → 720p», «Sifat: 1080p (Full HD) — bu modelda yo‘q». */
 export function switchParts(from: ClientEntry, to: ClientEntry, prev: RawValues): string[] {
-  return switchChanges(from, to, prev).map((c) => (c.to === null ? `${c.label} (${c.from}) bu modelda yo‘q` : `${c.label} ${c.from} → ${c.to}`));
+  return switchChanges(from, to, prev).map((c) => (c.to === null ? `${c.label}: ${c.from} — bu modelda yo‘q` : `${c.label} ${c.from} → ${c.to}`));
 }
 
 /** The one line of `parts` for a switch to `to`: «Kling 4.0 Flash: Sifat 1080p → 720p · …»; `null` with nothing to say. */
