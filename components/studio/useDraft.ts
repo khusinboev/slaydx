@@ -49,6 +49,7 @@ export function useDraft<T>(key: string | null, value: T, parse: (stored: unknow
   // The value the storage already reflects: the initial one, a restored one, or one just cleared.
   const clean = useRef<T>(value);
   const latest = useRef<T>(value);
+  const replaced = useRef<T | null>(null);
   const pending = useRef<{ key: string; value: T } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handlers = useRef({ parse, apply });
@@ -70,15 +71,16 @@ export function useDraft<T>(key: string | null, value: T, parse: (stored: unknow
     if (key === null) return;
     const stored = readDraft(key);
     const draft = stored === null ? null : handlers.current.parse(stored);
+    // The value on screen until `apply` lands is not the user's: it must never overwrite the draft just read, not even
+    // through the `flush` of a StrictMode remount.
+    replaced.current = latest.current;
     clean.current = draft ?? latest.current;
     if (draft !== null) handlers.current.apply(draft);
   }, [key]);
 
   useEffect(() => {
     if (key === null) return;
-    if (value === clean.current) {
-      // Back at the stored value. Also the render after a restore: the restore's own pass saw the pre-restore value, and
-      // that write must never land on the draft it just read.
+    if (value === clean.current || value === replaced.current) {
       if (timer.current !== null) clearTimeout(timer.current);
       timer.current = null;
       pending.current = null;

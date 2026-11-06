@@ -1,7 +1,7 @@
 import "./setup.ts";
 import test, { afterEach, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { createElement as h } from "react";
+import { StrictMode, createElement as h } from "react";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { MEDIA_CATALOG, studioPurposeOf } from "../../lib/media/catalog.ts";
@@ -61,7 +61,7 @@ const { REFUND_PHRASE } = await import("../../lib/refund-phrase.ts");
  *  20. `modelNoun` always «Rasm»                                                          -> «the sheet's noun», «the Ovoz picker»;
  *  21. `startImageHint` always «nisbat suratdan olinadi»                                  -> «the start image hint»;
  *  22. the empty column back to `xl:block`                                                -> «the tablet's»;
- *  23. `useDraft` keeps the write queued by the restore's own pass                          -> «refresh: the prompt»;
+ *  23. `useDraft` keeps the write queued by the restore's own pass (`replaced` ignored)     -> «refresh under StrictMode»;
  *  24. the tabs start without the link's mode (applied only after the first URL write)    -> «the login keeps».
  */
 
@@ -166,6 +166,19 @@ test("refresh: the prompt and the tab come back", async () => {
   await click(tab("rasm"));
   await settle();
   assert.equal(promptBox()?.value, "Registon maydoni kechqurun", "each tab keeps its own draft");
+});
+
+test("refresh under StrictMode: the remount's flush does not overwrite the draft with the empty form", async () => {
+  api();
+  await mount();
+  await type(promptBox(), "Registon maydoni kechqurun");
+  cleanup();
+  dropMediaCatalog();
+  render(h(StrictMode, null, h(AppRouterContext.Provider, { value: router }, h(StudioPage))));
+  await settle();
+  assert.equal(promptBox()?.value, "Registon maydoni kechqurun");
+  cleanup();
+  assert.equal((readDraft(draftKey(USER.id, "rasm")) as { forms: { image: { raw: { prompt: string } } } }).forms.image.raw.prompt, "Registon maydoni kechqurun");
 });
 
 test("a good submit clears the draft; the failed one keeps it", async () => {
