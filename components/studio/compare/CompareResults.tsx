@@ -10,8 +10,8 @@ import { ApiImg, useApiSrc } from "@/lib/use-api-src";
 import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
 import { imageExt } from "@/lib/viewers/kind";
-import { currentDeliveryEnv, deliver, markGesture, type ReadyFile } from "@/lib/downloads/deliver";
 import { GenerationProgress } from "@/components/files/GenerationProgress";
+import { downloadStudioFile } from "../studio-download";
 import type { StudioJob } from "../StudioResults";
 import type { CompareKind } from "./compare-model";
 
@@ -24,24 +24,6 @@ const ACTION =
 /** Columns of a batch of `n`: phone one column; from `sm` two; from `lg` one per model (2–4). */
 export function gridCols(n: number): string {
   return cn("grid grid-cols-1 gap-3 sm:grid-cols-2", n >= 3 && "lg:grid-cols-3", n >= 4 && "xl:grid-cols-4");
-}
-
-/**
- * Downloads through the delivery driver (session fetch → blob → `<a download>`); inside Telegram there is no signed,
- * cookie-free URL for one asset, so the result page (with its «Yuklab olish» sheet) opens instead.
- */
-async function download(file: Omit<ReadyFile, "format" | "size" | "expiresAt">, openPage: () => void): Promise<void> {
-  markGesture();
-  const env = currentDeliveryEnv();
-  if (env.capability !== "browser") {
-    openPage();
-    return;
-  }
-  try {
-    await deliver({ ...file, format: "native", size: 0, expiresAt: new Date(Date.now() + 15 * 60_000).toISOString() }, env);
-  } catch {
-    openPage();
-  }
 }
 
 /**
@@ -155,7 +137,7 @@ function Pictures({ job, gen }: { job: StudioJob; gen: api.GenerationDetail }) {
             type="button"
             data-compare-action="download"
             aria-label={images.length > 1 ? `${job.modelLabel}: ${i + 1}-rasmni yuklab olish` : `${job.modelLabel}: yuklab olish`}
-            onClick={() => void download({ url: im.url, fileName: `studio-${i + 1}.${imageExt(im.mime)}`, mime: im.mime ?? "image/png" }, () => router.push(page))}
+            onClick={() => void downloadStudioFile({ url: im.url, fileName: `studio-${i + 1}.${imageExt(im.mime)}`, mime: im.mime ?? "image/png" }, () => router.push(page))}
             className="focus-visible:ring-ring absolute right-2 bottom-2 inline-flex size-11 items-center justify-center rounded-lg bg-black/70 text-white outline-none hover:bg-black/85 focus-visible:ring-2"
           >
             <Download className="size-[18px]" aria-hidden />
@@ -184,7 +166,7 @@ function Clip({ job, gen }: { job: StudioJob; gen: api.GenerationDetail }) {
         <button
           type="button"
           data-compare-action="download"
-          onClick={() => void download({ url: `/api/generations/${job.id}/file`, fileName: "studio-video.mp4", mime: "video/mp4" }, () => router.push(page))}
+          onClick={() => void downloadStudioFile({ url: `/api/generations/${job.id}/file`, fileName: "studio-video.mp4", mime: "video/mp4" }, () => router.push(page))}
           className={ACTION}
         >
           <Download className="size-4" aria-hidden />

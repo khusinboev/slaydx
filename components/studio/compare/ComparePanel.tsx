@@ -1,19 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
 import { Check } from "lucide-react";
-import { ApiError, PriceChangedError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { formatSom, groupDigits } from "@/lib/format";
 import { useAppStore } from "@/lib/store";
 import type { ClientEntry } from "@/lib/studio-core";
 import { Card, Switch } from "@/components/forms/compact";
-import { PAY_RETURN_PATH } from "@/components/overlays/pay-amount";
 import { ParamRows } from "../ParamRows";
 import { PriceButton } from "../PriceButton";
 import { PromptBox } from "../PromptBox";
+import { SubmitError } from "../SubmitError";
 import { usePromptEnhance } from "../usePromptEnhance";
+import { useStudioSend } from "../useStudioSend";
 import { badgeText } from "../studio-price";
 import type { MediaCatalog } from "../studio-types";
 import { PROMPT_PARAM, normalizedPrompt, promptLimit, promptMin } from "../studio-values";
@@ -21,8 +19,6 @@ import { sendCompare } from "./compare-api";
 import { CompareResults } from "./CompareResults";
 import { COMPARE_MIN, compareBatch, compareCap, compareLabel, compareModels, memberPrice, memberValues, sharedEntry, sharedParams, toggleModel, type CompareKind } from "./compare-model";
 import type { CompareTab } from "./useCompare";
-
-const INSUFFICIENT_RE = /balans yetarli emas|to.langan balans bilan/i;
 
 /**
  * The «Solishtirish» switch (docs/studio/P7-SPEC.md P7a): above the tab's model picker, on the Rasm tab's drawing mode
@@ -71,8 +67,11 @@ export function ComparePanel({
   /** «Shu modelni tanlash»: compare off, that model chosen in the tab's own form, the same prompt. */
   onPick: (modelId: string, prompt: string) => void;
 }) {
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // 400: a model or value is no longer accepted — the offered list may have changed; 409: a price moved.
+  const { submitting, error, setError, run } = useStudioSend((refused) => {
+    reload(true);
+    if (!refused) void useAppStore.getState().refreshSession();
+  });
   const { state, setState } = tab;
   const models = compareModels(kind, catalog.models);
   const entries = state.ticked.map((id) => models.find((m) => m.id === id)).filter((m): m is ClientEntry => m !== undefined);
@@ -102,10 +101,8 @@ export function ComparePanel({
       setError(kind === "video" ? "Videoda nima bo‘lishini yozing" : "Nima chizish kerakligini yozing");
       return;
     }
-    setError(null);
-    setSubmitting(true);
     const text = normalizedPrompt(shared, state.raw);
-    try {
+    await run(async () => {
       const res = await sendCompare({ kind, members: batch.members.map((m) => ({ values: m.values, expectedPrice: m.price })), expectedTotal: batch.total });
       for (const [i, item] of res.items.entries()) {
         const m = batch.members[i];
@@ -114,14 +111,7 @@ export function ComparePanel({
       setState((s) => ({ ...s, batches: [{ group: res.group, prompt: text, ids: res.items.map((x) => x.id) }, ...s.batches.filter((b) => b.group !== res.group)] }));
       // The balance line follows the charge.
       void useAppStore.getState().refreshSession();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Xatolik");
-      // 400: a model or value is no longer accepted — the offered list may have changed; 409: a price moved.
-      if ((e instanceof ApiError && e.status === 400) || e instanceof PriceChangedError) reload(true);
-      if (e instanceof PriceChangedError) void useAppStore.getState().refreshSession();
-    } finally {
-      setSubmitting(false);
-    }
+    });
   }
 
   return (
@@ -181,19 +171,7 @@ export function ComparePanel({
             Har video alohida ish: bir necha daqiqada tayyor bo‘ladi, faqat to‘langan balans bilan; biror model tayyorlay olmasa, faqat o‘sha videoning puli qaytariladi.
           </p>
         ) : null}
-        {error && !gated ? (
-          <p role="alert" data-studio-error className="text-destructive mb-3 text-[14.5px] leading-snug">
-            {error}
-            {INSUFFICIENT_RE.test(error) ? (
-              <>
-                {" "}
-                <Link href={PAY_RETURN_PATH} data-topup className="text-accent-soft-foreground pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center font-semibold whitespace-nowrap underline underline-offset-2">
-                  Balansni to‘ldirish →
-                </Link>
-              </>
-            ) : null}
-          </p>
-        ) : null}
+        <SubmitError error={error} gated={gated} />
         <PriceButton
           count={entries.length}
           // Never `null`: the button keeps the compare wording («Solishtirish») while fewer than two models are ticked.
