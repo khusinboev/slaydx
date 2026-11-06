@@ -163,7 +163,7 @@ const fal = () => falAdapter({ key: () => KEY, lookup, sleep: async () => {}, po
 const falDeps = { key: () => KEY, lookup, sleep: async () => {}, pollMs: 1, pollMaxMs: 1 };
 const bodyOf = (id: string, values: Record<string, unknown>, assets?: Record<string, { mime: string; base64: string }[]>) => {
   const e = entry(id);
-  return fal().buildRequest!({ upstreamModel: e.routes[0]!.upstreamModel, params: normalize(e.params, values), ...(assets ? { assets } : {}) }).body as Record<string, unknown>;
+  return fal().buildRequest!({ idempotencyKey: "k", upstreamModel: e.routes[0]!.upstreamModel, params: normalize(e.params, values), ...(assets ? { assets } : {}) }).body as Record<string, unknown>;
 };
 const queueBody = (id: string, values: Record<string, unknown>, mime = "video/mp4") => {
   const e = entry(id);
@@ -429,7 +429,7 @@ test("storage: failures are never `accepted`; no key, signature or user data in 
 
 test("storage: delete — after the call, also when the model failed; a failed delete changes nothing", async (t) => {
   quiet(t);
-  const input = { upstreamModel: entry(cat.FAL_SCRIBE_MODEL).routes[0]!.upstreamModel, params: normalize(entry(cat.FAL_SCRIBE_MODEL).params, { source: RES }), assets: MEDIA_ASSET };
+  const input = { idempotencyKey: "k", upstreamModel: entry(cat.FAL_SCRIBE_MODEL).routes[0]!.upstreamModel, params: normalize(entry(cat.FAL_SCRIBE_MODEL).params, { source: RES }), assets: MEDIA_ASSET };
   const deletes = (calls: Call[]) => calls.filter((c) => c.url === storage.FAL_STORAGE_DELETE_URL);
   const ok = fakeFal({ result: stt });
   await fal().submit(input, { fetchImpl: ok.fetchImpl });
@@ -464,7 +464,7 @@ test("storage: delete — after the call, also when the model failed; a failed d
 test("adapter: Scribe — upload, submit with retention, the file's URL in the body, a normalized transcript", async () => {
   const { calls, fetchImpl } = fakeFal({ result: { ...stt, language_probability: 1 } });
   const e = entry(cat.FAL_SCRIBE_MODEL);
-  const r = await fal().submit({ upstreamModel: e.routes[0]!.upstreamModel, params: normalize(e.params, { source: RES, language: "uz" }), assets: MEDIA_ASSET }, { fetchImpl });
+  const r = await fal().submit({ idempotencyKey: "k", upstreamModel: e.routes[0]!.upstreamModel, params: normalize(e.params, { source: RES, language: "uz" }), assets: MEDIA_ASSET }, { fetchImpl });
   assert.ok("done" in r);
   const submit = calls.find((c) => c.method === "POST" && c.url.startsWith("https://queue.fal.run/"))!;
   assert.equal(submit.url, "https://queue.fal.run/fal-ai/elevenlabs/speech-to-text/scribe-v2");
@@ -483,12 +483,12 @@ test("adapter: Scribe answers — the page's one-object example reads; no text =
   for (const bad of [null, [], {}, { text: 1, words: [] }, { text: "x" }]) assert.equal(models.falSttResult(bad), null, JSON.stringify(bad));
   const { fetchImpl } = fakeFal({ result: { detail: "nothing" } });
   const e = entry(cat.FAL_SCRIBE_MODEL);
-  await assert.rejects(fal().submit({ upstreamModel: e.routes[0]!.upstreamModel, params: normalize(e.params, { source: RES }), assets: MEDIA_ASSET }, { fetchImpl }), (x: unknown) => x instanceof MediaError && x.accepted === true);
+  await assert.rejects(fal().submit({ idempotencyKey: "k", upstreamModel: e.routes[0]!.upstreamModel, params: normalize(e.params, { source: RES }), assets: MEDIA_ASSET }, { fetchImpl }), (x: unknown) => x instanceof MediaError && x.accepted === true);
 });
 
 test("adapter: sniff — a lying content type is beaten, the output's download carries no key, a wrong file fails `accepted`", async () => {
   const e = entry(au.FAL_SFX_MODEL);
-  const input = { upstreamModel: e.routes[0]!.upstreamModel, params: normalize(e.params, { prompt: "eshik", duration: 3 }) };
+  const input = { idempotencyKey: "k", upstreamModel: e.routes[0]!.upstreamModel, params: normalize(e.params, { prompt: "eshik", duration: 3 }) };
   const good = fakeFal({ result: { audio: { url: "https://v3.fal.media/out/s.mp3", content_type: "text/plain" } } });
   const r = await fal().submit(input, { fetchImpl: good.fetchImpl });
   assert.ok("done" in r);
@@ -509,7 +509,7 @@ test("adapter: sniff — a lying content type is beaten, the output's download c
 
 test("adapter: the shared failure rules hold — safety on the result, retryable before acceptance, the key scrubbed", async () => {
   const e = entry(au.FAL_SFX_MODEL);
-  const input = { upstreamModel: e.routes[0]!.upstreamModel, params: normalize(e.params, { prompt: "eshik", duration: 3 }) };
+  const input = { idempotencyKey: "k", upstreamModel: e.routes[0]!.upstreamModel, params: normalize(e.params, { prompt: "eshik", duration: 3 }) };
   const policy = fakeFal({ resultStatus: 422, result: { detail: [{ type: "content_policy_violation", msg: "refused" }] } });
   await assert.rejects(fal().submit(input, { fetchImpl: policy.fetchImpl }), (x: unknown) => x instanceof MediaError && x.safety === true && x.accepted === true);
   const busy = fakeFal({ submit: () => json(503, { detail: `down ${KEY}` }) });

@@ -15,7 +15,7 @@ import type { FalModel } from "./fal";
 
 const bool = (v: unknown): boolean => v === true || v === "true";
 const AUDIO_MP3 = { mimes: ["audio/mpeg"], maxBytes: SPEECH_TOOL_OUTPUT_MAX_BYTES } as const;
-/** The only format of the two ElevenLabs TTS pages that names MP3 explicitly; also the SFX page's default. */
+/** The `output_format` value of the SFX and v4 Turbo pages (their default, sent so a change at fal cannot change our file). */
 const MP3_FORMAT = "mp3_44100_128";
 
 /**
