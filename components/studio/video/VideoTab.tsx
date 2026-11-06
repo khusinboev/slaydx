@@ -128,6 +128,7 @@ export function VideoTab({
   gated,
   onMusic,
   onVoice,
+  onSubmitted,
 }: {
   catalogState: CatalogLoad;
   reload: (silent?: boolean) => void;
@@ -142,6 +143,8 @@ export function VideoTab({
   /** P7b «Keyingi qadam» on a finished clip: «Musiqa yaratish» / «Ovoz qo'shish» with its prompt (absent = no button). */
   onMusic?: (prompt: string) => void;
   onVoice?: (text: string) => void;
+  /** The form's own job was queued (not a retry of an old one): the page drops the draft. */
+  onSubmitted?: () => void;
 }) {
   // 400 before charging: the model / a value / the switch changed — re-read what is offered; 409: the price moved.
   const { submitting, error, setError, send: queue } = useStudioSend(() => reload(true));
@@ -214,6 +217,8 @@ export function VideoTab({
     );
   }
 
+  const sendForm = (target: ClientEntry, label: string) => void send(target, sent, label).then((ok) => ok && onSubmitted?.());
+
   function submit() {
     if (!entry) return;
     if (mode === "effects") {
@@ -225,7 +230,7 @@ export function VideoTab({
         setError("Bu effekt uchun ikkinchi suratni ham yuklang");
         return;
       }
-      void send(entry, sent, `Effekt: ${effect?.label ?? ""}`);
+      sendForm(entry, `Effekt: ${effect?.label ?? ""}`);
       return;
     }
     if (isAvatarModel(entry.id)) {
@@ -244,7 +249,7 @@ export function VideoTab({
         setError(problem);
         return;
       }
-      void send(entry, sent, own ? `Avatar: ${(speeches ?? []).find((s) => s.id === own)?.title ?? "o‘z ovozi"}` : String(sent[PROMPT_PARAM]));
+      sendForm(entry, own ? `Avatar: ${(speeches ?? []).find((s) => s.id === own)?.title ?? "o‘z ovozi"}` : String(sent[PROMPT_PARAM]));
       return;
     }
     if (normalizedPrompt(entry, state.raw).length < promptMin(entry)) {
@@ -253,7 +258,7 @@ export function VideoTab({
     }
     // An end frame without a start cannot be built here (the upload waits for the start; removing the start clears it);
     // the server's preflight refuses one anyway.
-    void send(entry, sent, normalizedPrompt(entry, state.raw));
+    sendForm(entry, normalizedPrompt(entry, state.raw));
   }
 
   function again(job: StudioJob) {

@@ -278,3 +278,24 @@ export async function enhancePrompt(prompt: string, kind: EnhanceKind = "image")
   if (!out) throw new Error("Tavsif yaxshilanmadi");
   return out;
 }
+
+/* ───────────────────────── unfinished jobs ───────────────────────── */
+
+/** One unfinished job of `GET /api/media/active-jobs`, as the tabs follow it. */
+export type ActiveJob = { id: string; tool: string; modelId: string; modelLabel: string; prompt: string; price: number; purpose: string | null; sent: Record<string, unknown> };
+
+/** Untrusted JSON → typed: a row without an id or a model cannot be followed, it stays in «Ishlarim». */
+export function parseActiveJobs(raw: unknown): ActiveJob[] {
+  const list = isObj(raw) && Array.isArray(raw.items) ? raw.items : [];
+  return list.flatMap((j): ActiveJob[] => {
+    const id = isObj(j) ? str(j.id) : null;
+    const tool = isObj(j) ? str(j.tool) : null;
+    const modelId = isObj(j) ? str(j.modelId) : null;
+    if (!isObj(j) || !id || !tool || !modelId) return [];
+    return [{ id, tool, modelId, modelLabel: str(j.modelLabel) ?? "", prompt: str(j.prompt) ?? "", price: typeof j.price === "number" ? j.price : 0, purpose: str(j.purpose), sent: isObj(j.sent) ? j.sent : {} }];
+  });
+}
+
+export async function fetchActiveJobs(): Promise<ActiveJob[]> {
+  return parseActiveJobs(await request<unknown>("/api/media/active-jobs"));
+}
