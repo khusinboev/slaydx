@@ -2,17 +2,29 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, Clapperboard, Mic, Music, Shuffle } from "lucide-react";
+import { ChevronDown, Clapperboard, FileText, Mic, Music, Shuffle } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { ApiImg, useApiSrc } from "@/lib/use-api-src";
+import { languageLabel } from "@/lib/media/catalog-transcribe";
 import { FavoriteButton } from "./Favorite";
+import { AGAIN_LABEL } from "./JobResult";
 import { PictureTools, type PictureTool } from "./StudioResults";
 import { fetchGallery } from "./studio-api";
-import type { GalleryItem } from "./studio-types";
+import { GALLERY_KINDS, type GalleryItem, type GalleryKind } from "./studio-types";
 
 type Status = "loading" | "ready" | "error";
-/** P7b: the whole gallery or only the starred items («Sevimlilar»). */
-type Filter = "all" | "favorites";
+/** P7b: the whole gallery or only the starred items («Sevimlilar»); P11 §D: one kind (Rasm / Video / Audio / Matn). */
+type Filter = "all" | "favorites" | GalleryKind;
+const isKind = (f: Filter): f is GalleryKind => (GALLERY_KINDS as readonly string[]).includes(f);
+/** The chips, in order: everything, each kind, the stars. */
+export const GALLERY_FILTERS: readonly { value: Filter; label: string }[] = [
+  { value: "all", label: "Hammasi" },
+  { value: "image", label: "Rasm" },
+  { value: "video", label: "Video" },
+  { value: "audio", label: "Audio" },
+  { value: "text", label: "Matn" },
+  { value: "favorites", label: "Sevimlilar" },
+];
 
 /** P7b «Keyingi qadam» from a gallery card (absent = no button). */
 export type GalleryNext = {
@@ -34,8 +46,8 @@ const NEXT_BTN =
  */
 function NextStep({ item, onVideo, onVoice, onMusic }: { item: GalleryItem } & GalleryNext) {
   const [open, setOpen] = useState(false);
-  const prompt = item.video?.effect ? "" : item.prompt.trim();
-  const picture = !item.video && !item.audio ? (item.thumbs[0] ?? null) : null;
+  const prompt = item.video?.effect || item.video?.derived || item.text ? "" : item.prompt.trim();
+  const picture = !item.video && !item.audio && !item.text ? (item.thumbs[0] ?? null) : null;
   const actions: { key: string; label: string; Icon: typeof Mic; run: () => void }[] = [];
   if (picture && onVideo) actions.push({ key: "to-video", label: "Videoga aylantirish", Icon: Clapperboard, run: () => onVideo(picture, prompt) });
   if (item.video && prompt && onMusic) actions.push({ key: "to-music", label: "Musiqa yaratish", Icon: Music, run: () => onMusic(prompt) });
@@ -94,6 +106,19 @@ function AudioThumb({ seconds, voices }: { seconds: number | null; voices: strin
   );
 }
 
+/** A transcript's card face (P11 §D): the text's head on a tile; the result page has the whole text and the subtitles. */
+function TextThumb({ excerpt, language }: { excerpt: string; language: string | null }) {
+  return (
+    <span className="bg-muted flex aspect-square w-full flex-col gap-1.5 p-3 text-left" data-gallery-text>
+      <span className="text-muted-foreground flex items-center gap-1 text-[12px] font-semibold">
+        <FileText className="size-3.5" aria-hidden />
+        Matn{language ? ` · ${languageLabel(language)}` : ""}
+      </span>
+      <span className="line-clamp-6 text-[13px] leading-snug break-words">{excerpt || "Nutq topilmadi."}</span>
+    </span>
+  );
+}
+
 /** The card's player: the job's own MP3, nothing loaded until play (`preload="none"`). */
 function AudioPlayer({ src }: { src: string }) {
   const url = useApiSrc(src);
@@ -137,7 +162,7 @@ export function Gallery({
     if (from === null) setStatus("loading");
     else setMore(true);
     try {
-      const page = await fetchGallery(from, { favorites: filter === "favorites" });
+      const page = await fetchGallery(from, { favorites: filter === "favorites", kind: isKind(filter) ? filter : null });
       if (mine !== epoch.current) return;
       setItems((prev) => {
         const seen = new Set(prev.map((i) => i.id));
@@ -186,12 +211,7 @@ export function Gallery({
 
   const chips = (
     <div role="radiogroup" aria-label="Galereya filtri" className="mb-3 flex flex-wrap gap-2" data-gallery-filter>
-      {(
-        [
-          ["all", "Hammasi"],
-          ["favorites", "Sevimlilar"],
-        ] as const
-      ).map(([value, label]) => (
+      {GALLERY_FILTERS.map(({ value, label }) => (
         <button
           key={value}
           type="button"
@@ -244,6 +264,14 @@ export function Gallery({
           <p className="text-muted-foreground mt-1 text-[14px]">Natija yoki galereya kartasidagi yulduzchani bosing — u shu yerda saqlanadi.</p>
         </div>
       </>
+    ) : isKind(filter) ? (
+      <>
+        {chips}
+        <div className="bg-card rounded-[20px] border p-6 text-center" data-gallery-empty={filter}>
+          <p className="text-[15px] font-medium">Bu turda hozircha natija yo‘q</p>
+          <p className="text-muted-foreground mt-1 text-[14px]">{GALLERY_FILTERS.find((f) => f.value === filter)?.label} natijalaringiz shu yerda saqlanadi.</p>
+        </div>
+      </>
     ) : (
       <>
         {chips}
@@ -263,8 +291,10 @@ export function Gallery({
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3" data-gallery-list>
         {items.map((it) => (
           <li key={it.id} data-gallery-item={it.id} className="bg-card flex min-w-0 flex-col overflow-hidden rounded-[18px] border">
-            <Link href={`/uz/files/${it.id}`} aria-label={it.prompt || (it.audio ? "Audioni ochish" : it.video ? "Videoni ochish" : "Rasmni ochish")} className="focus-visible:ring-ring relative block outline-none focus-visible:ring-2">
-              {it.audio ? (
+            <Link href={`/uz/files/${it.id}`} aria-label={it.prompt || (it.text ? "Matnni ochish" : it.audio ? "Audioni ochish" : it.video ? "Videoni ochish" : "Rasmni ochish")} className="focus-visible:ring-ring relative block outline-none focus-visible:ring-2">
+              {it.text ? (
+                <TextThumb excerpt={it.text.excerpt} language={it.text.language} />
+              ) : it.audio ? (
                 <AudioThumb seconds={it.audio.seconds} voices={it.audio.voices} />
               ) : it.video ? (
                 <VideoThumb src={it.video.src} seconds={it.video.seconds} />
@@ -288,8 +318,8 @@ export function Gallery({
                 <FavoriteButton id={it.id} initial={it.favorite} onError={setError} className="-mt-1 -mr-1" />
               </div>
               {it.audio ? <AudioPlayer src={it.audio.src} /> : null}
-              {/* An audio card has no «again» action: the gallery does not carry the full text (the result page has it). */}
-              {it.audio ? null : (
+              {/* An audio, a text or a derived clip's card has no «again» action: the gallery does not carry the source (the result page has it). */}
+              {it.audio || it.text || it.video?.derived ? null : (
               <button
                 type="button"
                 data-gallery-other-model
@@ -297,7 +327,7 @@ export function Gallery({
                 className="focus-visible:ring-ring hover:bg-muted pointer-coarse:min-h-11 mt-auto inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[10px] border text-[13px] font-semibold outline-none focus-visible:ring-2"
               >
                 <Shuffle className="size-3.5" aria-hidden />
-                {it.video ? "Yana yaratish" : "Boshqa modelda"}
+                {it.video ? AGAIN_LABEL : "Boshqa modelda"}
               </button>
               )}
               {/* P2b: the tools work on the card's first picture (the result page shows every picture); never on a video. */}

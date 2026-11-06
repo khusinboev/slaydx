@@ -78,7 +78,7 @@ export const GALLERY_PAGE = 24;
 export type GalleryImage = { url: string; w: number | null; h: number | null };
 /**
  * A clip in the gallery (P3): played from the result file itself (`?inline=1`, HTTP Range). `requestedSeconds`, `aspect`,
- * `sound` and `effect` are what was BOUGHT, so «Yana yaratish» re-opens the form at the same settings and price.
+ * `sound` and `effect` are what was BOUGHT, so «Qayta yaratish» re-opens the form at the same settings and price.
  */
 export type GalleryVideo = {
   src: string;
@@ -92,15 +92,30 @@ export type GalleryVideo = {
   /** Kling `effect_scene` id of an effect clip. */
   effect: string | null;
   effectLabel: string | null;
+  /**
+   * P11 §D: a clip of another tool («Montaj», «Dublyaj», a burned «Transkripsiya»): its `prompt` only names the job
+   * («Subtitrli video») and its model is no Video tab model, so the card offers neither a repeat nor a next step.
+   */
+  derived: boolean;
 };
 /** A speech result in the gallery (P5): played from the MP3 itself (`?inline=1`). */
 export type GalleryAudio = { src: string; seconds: number | null; voices: string[]; clone: boolean };
+/** A transcript in the gallery (P11 §D): the text's head and its language; the result page has the whole text and the subtitles. */
+export type GalleryText = { excerpt: string; language: string | null };
+/**
+ * What a gallery item is, by its tool and result: `image` (Rasm), `video` (Video; a «Montaj» / «Dublyaj» / burned
+ * «Transkripsiya» MP4), `audio` (Ovoz, Audio, a «Montaj» / «Dublyaj» MP3; P8b: a podcast / greeting while folded),
+ * `text` (a «Transkripsiya» without a burn). The gallery filters by it (`?kind=`).
+ */
+export type GalleryKind = "image" | "video" | "audio" | "text";
+export const GALLERY_KINDS: readonly GalleryKind[] = ["image", "video", "audio", "text"];
 export type GalleryItem = {
   id: string;
-  /** `image` (Rasm tab), `video` (Video tab) or `audio` (Ovoz tab, P5; P8b: also a podcast / greeting while folded). */
-  kind: "image" | "video" | "audio";
+  kind: GalleryKind;
   /** The speech of an audio item, `null` otherwise. */
   audio: GalleryAudio | null;
+  /** The transcript of a text item, `null` otherwise. */
+  text: GalleryText | null;
   createdAt: string;
   modelId: string | null;
   modelLabel: string | null;
@@ -118,6 +133,7 @@ export type GalleryItem = {
 type Row = {
   id: string;
   tool_id: string;
+  kind: string;
   created_at: Date;
   cursor_ts: string;
   topic: string;
@@ -126,6 +142,7 @@ type Row = {
   images: unknown;
   video: unknown;
   speech: unknown;
+  transcribe: unknown;
   favorite: boolean;
 };
 
@@ -135,9 +152,26 @@ function audioOf(id: string, raw: unknown): GalleryAudio {
   return { src: `/api/generations/${id}/file?inline=1`, seconds: num(s.seconds), voices, clone: s.clone === true };
 }
 
+/** How much of a transcript the gallery card shows. */
+export const GALLERY_TEXT_EXCERPT = 280;
+
+function textOf(raw: unknown): GalleryText {
+  const t = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const text = typeof t.text === "string" ? t.text.replace(/\s+/g, " ").trim() : "";
+  const language = typeof t.language === "string" && t.language ? t.language : typeof t.requestedLanguage === "string" && t.requestedLanguage ? t.requestedLanguage : null;
+  return { excerpt: text.length > GALLERY_TEXT_EXCERPT ? `${text.slice(0, GALLERY_TEXT_EXCERPT - 1)}…` : text, language };
+}
+
+/** The `?kind=` of the gallery route: one of the kinds, or none; anything else is a 400. */
+export function parseGalleryKind(raw: string | null): GalleryKind | null {
+  if (raw === null || raw === "") return null;
+  if ((GALLERY_KINDS as readonly string[]).includes(raw)) return raw as GalleryKind;
+  throw new ApiError("Noto'g'ri tur", 400);
+}
+
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
 
-function videoOf(id: string, raw: unknown): GalleryVideo {
+function videoOf(id: string, raw: unknown, derived: boolean): GalleryVideo {
   const v = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const effect = ALL_EFFECT_SCENES.find((e) => e.id === v.effect) ?? null;
   return {
@@ -148,6 +182,7 @@ function videoOf(id: string, raw: unknown): GalleryVideo {
     sound: typeof v.sound === "boolean" ? v.sound : null,
     effect: effect?.id ?? null,
     effectLabel: effect?.label ?? null,
+    derived,
   };
 }
 
@@ -175,53 +210,72 @@ export function parseGalleryCursor(raw: string | null): ListCursor | null {
 }
 
 /**
+ * The kind of a stored result, in SQL (the filter and the item read the same expression): the Rasm tool's pictures, the
+ * Video tool's clips, a «Montaj» / «Dublyaj» MP4 or a burned «Transkripsiya» (only these three look inside `doc_json`, so
+ * the common tools never pay for reading a large document), a transcript
+ * without a burn, else an audio (Ovoz, Audio, a «Montaj» / «Dublyaj» MP3, a folded podcast / greeting).
+ */
+const KIND_SQL = `CASE WHEN tool_id = 'studio-image' THEN 'image'
+                       WHEN tool_id = 'studio-video' THEN 'video'
+                       WHEN tool_id IN ('studio-mix', 'studio-dub', 'studio-transcribe') AND doc_json ? 'video' THEN 'video'
+                       WHEN tool_id = 'studio-transcribe' THEN 'text'
+                       ELSE 'audio' END`;
+
+/**
  * P7b «Sevimlilar» (`favorites: true`): only the starred items, with the same order and keyset cursor (a cursor of
- * the full list is a valid starting point of the filtered one — both are ordered by `created_at, id`).
+ * the full list is a valid starting point of the filtered one — both are ordered by `created_at, id`). P11 §D `kind`:
+ * only the items of that kind, the same way. Ownership stays in the inner WHERE (`user_id = $1`): no filter widens it.
  */
 export async function studioGallery(
   userId: string,
   cursor: ListCursor | null,
   limit = GALLERY_PAGE,
-  opts: { favorites?: boolean } = {},
+  opts: { favorites?: boolean; kind?: GalleryKind | null } = {},
 ): Promise<{ items: GalleryItem[]; nextCursor: string | null }> {
   // P8b: podcast / greeting results join the gallery (kind audio) only while `studio.legacy_fold` is on.
   const tools = await studioGalleryToolIds();
   const rows = await query<Row>(
-    `SELECT id, tool_id, created_at, topic,
-            EXISTS (SELECT 1 FROM studio_favorites f WHERE f.user_id = $1 AND f.generation_id = generations.id) AS favorite,
-            to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS cursor_ts,
-            COALESCE(doc_json->>'imageModel', doc_json->'video'->>'model', doc_json->'speech'->>'model', doc_json->'studioAudio'->>'model') AS model,
-            COALESCE(doc_json->>'imagePrompt', doc_json->'video'->>'prompt', doc_json->'studioAudio'->>'prompt') AS prompt,
-            doc_json->'images' AS images, doc_json->'video' AS video, COALESCE(doc_json->'speech', doc_json->'studioAudio', doc_json->'audio') AS speech
-       FROM generations
-      WHERE user_id = $1 AND tool_id = ANY($6::text[]) AND status = 'COMPLETED' AND files_purged_at IS NULL
-        AND ($2::timestamp IS NULL
-             OR (created_at <= ($2::timestamp AT TIME ZONE 'UTC')
-                 AND (created_at < ($2::timestamp AT TIME ZONE 'UTC') OR id < $3::uuid)))
-        AND (NOT $5::boolean OR EXISTS (SELECT 1 FROM studio_favorites f WHERE f.user_id = $1 AND f.generation_id = generations.id))
-      ORDER BY created_at DESC, id DESC
+    `SELECT g.id, g.tool_id, g.kind, g.created_at, g.topic,
+            EXISTS (SELECT 1 FROM studio_favorites f WHERE f.user_id = $1 AND f.generation_id = g.id) AS favorite,
+            to_char(g.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS cursor_ts,
+            COALESCE(g.doc_json->>'imageModel', g.doc_json->'video'->>'model', g.doc_json->'speech'->>'model', g.doc_json->'studioAudio'->>'model',
+                     g.doc_json->'transcribe'->>'model', g.doc_json->'dub'->>'model') AS model,
+            COALESCE(g.doc_json->>'imagePrompt', g.doc_json->'video'->>'prompt', g.doc_json->'studioAudio'->>'prompt') AS prompt,
+            g.doc_json->'images' AS images, g.doc_json->'video' AS video,
+            COALESCE(g.doc_json->'speech', g.doc_json->'studioAudio', g.doc_json->'audio', g.doc_json->'mix', g.doc_json->'dub') AS speech,
+            g.doc_json->'transcribe' AS transcribe
+       FROM (SELECT id, tool_id, created_at, topic, doc_json, ${KIND_SQL} AS kind
+               FROM generations
+              WHERE user_id = $1 AND tool_id = ANY($6::text[]) AND status = 'COMPLETED' AND files_purged_at IS NULL) g
+      WHERE ($2::timestamp IS NULL
+             OR (g.created_at <= ($2::timestamp AT TIME ZONE 'UTC')
+                 AND (g.created_at < ($2::timestamp AT TIME ZONE 'UTC') OR g.id < $3::uuid)))
+        AND (NOT $5::boolean OR EXISTS (SELECT 1 FROM studio_favorites f WHERE f.user_id = $1 AND f.generation_id = g.id))
+        AND ($7::text IS NULL OR g.kind = $7)
+      ORDER BY g.created_at DESC, g.id DESC
       LIMIT $4`,
-    [userId, cursor?.ts ?? null, cursor?.id ?? null, limit + 1, opts.favorites === true, tools],
+    [userId, cursor?.ts ?? null, cursor?.id ?? null, limit + 1, opts.favorites === true, tools, opts.kind ?? null],
   );
   const page = rows.slice(0, limit);
   const last = page[page.length - 1];
   return {
     items: page.map((r) => {
-      const isVideo = r.tool_id === "studio-video";
-      // P6: an «Audio» result is an audio item too (the result file is always one MP3).
-      const isAudio = r.tool_id === "studio-speech" || r.tool_id === "studio-audio" || isVoiceTemplate(r.tool_id);
+      const kind: GalleryKind = r.kind === "video" ? "video" : r.kind === "text" ? "text" : r.kind === "image" ? "image" : "audio";
       return {
         id: r.id,
-        kind: isAudio ? ("audio" as const) : isVideo ? ("video" as const) : ("image" as const),
-        audio: isAudio ? audioOf(r.id, r.speech) : null,
+        kind,
+        // P6: an «Audio» result is an audio item too (the result file is always one MP3).
+        audio: kind === "audio" ? audioOf(r.id, r.speech) : null,
+        text: kind === "text" ? textOf(r.transcribe) : null,
         createdAt: new Date(r.created_at).toISOString(),
         modelId: r.model,
-        // A podcast / greeting has no Studio model: the card names the tool («Podkast», «Tabriknoma»).
-        modelLabel: r.model ? (MEDIA_CATALOG.byId(r.model)?.label ?? null) : isVoiceTemplate(r.tool_id) ? TOOL_BY_SLUG[r.tool_id]!.title : null,
+        // A podcast / greeting has no Studio model: the card names the tool («Podkast», «Tabriknoma»); a «Montaj» (its
+        // `studio/mix-*` id is no catalog model) names itself.
+        modelLabel: (r.model ? MEDIA_CATALOG.byId(r.model)?.label : null) ?? (isVoiceTemplate(r.tool_id) ? TOOL_BY_SLUG[r.tool_id]!.title : r.tool_id === "studio-mix" ? "Montaj" : null),
         // An effect clip has no prompt: the topic names it («Effekt: …»).
         prompt: r.prompt || r.topic,
-        images: isVideo || isAudio ? [] : imagesOf(r.id, r.images),
-        video: isVideo ? videoOf(r.id, r.video) : null,
+        images: kind === "image" ? imagesOf(r.id, r.images) : [],
+        video: kind === "video" ? videoOf(r.id, r.video, r.tool_id !== "studio-video") : null,
         fileUrl: `/api/generations/${r.id}/file`,
         favorite: r.favorite === true,
       };

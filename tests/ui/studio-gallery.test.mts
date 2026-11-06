@@ -187,6 +187,77 @@ test("cards: the first stored picture (or a placeholder); «×N»; prompt, model
   assert.equal(card.querySelector("a")?.getAttribute("href"), "/uz/files/t1");
 });
 
+test("kind chips (P11 §D): six filters; a kind asks ?kind=; a transcript card shows its text and offers no «again»; an empty kind says so", async () => {
+  const api = installApi({
+    gallery: {
+      "": {
+        items: [
+          item("k1"),
+          item("k2", { kind: "text", images: [], modelId: "elevenlabs/scribe-v2", modelLabel: "Transkripsiya", prompt: "Dars", text: { excerpt: "Assalomu alaykum, oʻrtoqlar…", language: "uz" } }),
+          item("k3", { kind: "video", images: [], modelId: null, modelLabel: "Montaj", prompt: "Videoga ovoz", video: { seconds: 5, requestedSeconds: null, aspect: "16:9", sound: null, effect: null, effectLabel: null } }),
+        ],
+        nextCursor: null,
+      },
+    },
+  });
+  mount();
+  await settle();
+  assert.deepEqual(qa("[data-gallery-filter-chip]").map((b) => b.dataset.galleryFilterChip), ["all", "image", "video", "audio", "text", "favorites"]);
+  assert.deepEqual(qa("[data-gallery-filter-chip]").map((b) => b.textContent), ["Hammasi", "Rasm", "Video", "Audio", "Matn", "Sevimlilar"]);
+  const text = q('[data-gallery-item="k2"]')!;
+  assert.ok(text.querySelector("[data-gallery-text]"), "a transcript tile");
+  assert.match(text.textContent ?? "", /Matn · O‘zbekcha/);
+  assert.match(text.textContent ?? "", /Assalomu alaykum, oʻrtoqlar/);
+  assert.ok(!text.querySelector("[data-gallery-other-model]"), "MUTATSIYA: no «again» without the source");
+  assert.ok(!text.querySelector("[data-gallery-next]"), "no chain from a transcript");
+  assert.ok(q('[data-gallery-item="k3"] [data-gallery-video]'), "a «Montaj» clip is a video card");
+  assert.match(q('[data-gallery-item="k3"]')!.textContent ?? "", /Montaj/);
+  // A kind chip asks the server for that kind only; the request carries it.
+  const before = api.calls.filter((c) => c.url.startsWith("/api/media/gallery")).length;
+  await click(q('[data-gallery-filter-chip="text"]'));
+  await settle();
+  const urls = api.calls.filter((c) => c.url.startsWith("/api/media/gallery")).map((c) => c.url);
+  assert.equal(urls.length, before + 1);
+  assert.equal(urls.at(-1), "/api/media/gallery?kind=text", "MUTATSIYA: the kind must reach the server");
+  assert.equal(q('[data-gallery-filter-chip="text"]')!.getAttribute("aria-checked"), "true");
+  // «Sevimlilar» asks for the stars, not a kind.
+  await click(q('[data-gallery-filter-chip="favorites"]'));
+  await settle();
+  assert.equal(api.calls.filter((c) => c.url.startsWith("/api/media/gallery")).map((c) => c.url).at(-1), "/api/media/gallery?favorites=1");
+  // An empty kind: its own empty text, the chips stay.
+  cleanup();
+  installApi({ gallery: { "": { items: [], nextCursor: null } } });
+  mount();
+  await settle();
+  await click(q('[data-gallery-filter-chip="audio"]'));
+  await settle();
+  assert.ok(q('[data-gallery-empty="audio"]'), "the empty text of a kind");
+  assert.ok(!q('[data-gallery-empty=""]'), "not the whole gallery's");
+  assert.equal(qa("[data-gallery-filter-chip]").length, 6);
+});
+
+test("a derived clip («Montaj», «Dublyaj», a burned transcript) offers no repeat and no next step; a Video tab clip offers both, as «Qayta yaratish»", async () => {
+  const clip = (derived: boolean) => ({ src: "/x", seconds: 5, requestedSeconds: 5, aspect: "16:9", sound: null, effect: null, effectLabel: null, derived });
+  installApi({
+    gallery: {
+      "": {
+        items: [
+          item("own", { kind: "video", images: [], prompt: "Tog‘ tepasi", video: clip(false) }),
+          item("sub", { kind: "video", images: [], modelId: "elevenlabs/scribe-v2", prompt: "Subtitrli video", video: clip(true) }),
+        ],
+        nextCursor: null,
+      },
+    },
+  });
+  mount({ onVoice: () => {}, onMusic: () => {} });
+  await settle();
+  assert.equal(q('[data-gallery-item="own"] [data-gallery-other-model]')!.textContent, "Qayta yaratish", "MUTATSIYA: one name of a repeat");
+  assert.ok(q('[data-gallery-item="own"] [data-gallery-next]'));
+  assert.ok(q('[data-gallery-item="sub"] [data-gallery-video]'), "it still plays");
+  assert.ok(!q('[data-gallery-item="sub"] [data-gallery-other-model]'), "MUTATSIYA: «Subtitrli video» would open the Video form as a prompt");
+  assert.ok(!q('[data-gallery-item="sub"] [data-gallery-next]'), "MUTATSIYA: the job's name would go to «Ovoz» as a text");
+});
+
 test("«Boshqa modelda» hands the item (its prompt) back to the page", async () => {
   installApi({ gallery: { "": { items: [item("o1"), item("o2")], nextCursor: null } } });
   const got: string[] = [];

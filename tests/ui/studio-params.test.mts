@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import type { ClientEntry, ParamSchema } from "../../lib/studio-core/index.ts";
 import { GPT, NANO, withParams } from "./studio-fixtures.ts";
 
-const { ParamRows, intValues, SELECT_FROM, SEGMENT_MAX } = await import("../../components/studio/ParamRows.tsx");
+const { ParamRows, intValues, presetsOf, snapInt, aspectHint, styleBlurb, SELECT_FROM, SEGMENT_MAX } = await import("../../components/studio/ParamRows.tsx");
 const { carryOver, effective, requestValues, normalizedPrompt, promptLimit, promptMin } = await import("../../components/studio/studio-values.ts");
 
 /**
@@ -104,7 +104,9 @@ test("control by type", () => {
   assert.equal(control("many").querySelectorAll("option").length, SELECT_FROM);
   assert.ok(control("count").querySelector('[role="radiogroup"]'), `int of ${SEGMENT_MAX} values is a radio group`);
   assert.equal(control("count").querySelectorAll('[role="radio"]').length, SEGMENT_MAX);
-  assert.ok(control("length").querySelector('[role="group"] output'), "a long int is a stepper");
+  // P11 §D: a long int is preset chips + a direct number input (the stepper of P0 made a 15 s clip twelve presses away).
+  assert.ok(control("length").querySelector('[role="group"][data-presets]'), "a long int is presets + an input");
+  assert.ok(control("length").querySelector('input[type="number"]'), "…with a direct input");
   assert.ok(!control("length").querySelector('[role="radiogroup"]'));
   assert.ok(control("strength").querySelector('input[type="range"]'));
   assert.equal(control("hd").querySelector('[role="switch"]')?.getAttribute("aria-checked"), "false");
@@ -118,19 +120,83 @@ test("control by type", () => {
   }
 });
 
-test("the stepper moves by the schema's step and stops at its bounds", async () => {
+test("a long int: preset chips are the round values the range accepts (ends included); the input applies the snapped value at every keystroke", async () => {
   mount(SYNTH);
-  const stepper = q('[data-field="length"]')!;
-  const more = stepper.querySelector<HTMLButtonElement>('button[aria-label$="ko‘paytirish"]')!;
-  const less = stepper.querySelector<HTMLButtonElement>('button[aria-label$="kamaytirish"]')!;
-  assert.equal(stepper.querySelector("output")!.textContent, "4");
-  await act(async () => void fireEvent.click(more));
-  assert.equal(shown().length, 6, "step 2");
-  await act(async () => void fireEvent.click(less));
-  await act(async () => void fireEvent.click(less));
+  const range = q('[data-field="length"]')!;
+  const chips = () => [...range.querySelectorAll<HTMLButtonElement>("[data-preset]")];
+  const input = range.querySelector<HTMLInputElement>('input[type="number"]')!;
+  // 2–20 by 2: the round numbers it accepts between the ends are 8 and 10.
+  assert.deepEqual(chips().map((b) => Number(b.dataset.preset)), [2, 8, 10, 20]);
+  assert.equal(chips().find((b) => b.getAttribute("aria-pressed") === "true"), undefined, "4 is no preset: none pressed");
+  assert.equal(input.value, "4");
+  assert.equal(input.min, "2");
+  assert.equal(input.max, "20");
+  assert.equal(input.step, "2");
+  await act(async () => void fireEvent.click(chips()[1]!));
+  assert.equal(shown().length, 8, "a chip applies its value");
+  assert.equal(input.value, "8", "the box follows");
+  await act(async () => void fireEvent.change(input, { target: { value: "6" } }));
+  assert.equal(shown().length, 6, "MUTATSIYA: an accepted typed value applies at once");
+  // A value off the step applies snapped at every keystroke: the button already shows what a press will send.
+  await act(async () => void fireEvent.change(input, { target: { value: "7" } }));
+  assert.equal(shown().length, 8, "MUTATSIYA: snapped while typing, the price on the button is the price charged");
+  assert.equal(input.value, "7", "the box keeps the digits so far");
+  await act(async () => void fireEvent.blur(input));
+  assert.equal(input.value, "8", "MUTATSIYA: the box says the snapped value on blur");
+  // Over the range: clamped at once, in the box too.
+  await act(async () => void fireEvent.change(input, { target: { value: "99" } }));
+  assert.equal(shown().length, 20, "MUTATSIYA: clamped to the max while typing");
+  assert.equal(input.value, "20");
+  // Under the range on the way to a longer number: the value holds the minimum, the digit stays to be continued.
+  await act(async () => void fireEvent.change(input, { target: { value: "1" } }));
   assert.equal(shown().length, 2);
-  assert.ok(less.disabled, "min reached");
+  assert.equal(input.value, "1", "MUTATSIYA: «1» on the way to «12» must not be overwritten");
+  await act(async () => void fireEvent.change(input, { target: { value: "12" } }));
+  assert.equal(shown().length, 12);
+  await act(async () => void fireEvent.keyDown(input, { key: "Enter" }));
+  assert.equal(input.value, "12");
+  // A cleared box: the value is the minimum at once, as the blur will make it.
+  await act(async () => void fireEvent.change(input, { target: { value: "" } }));
+  assert.equal(shown().length, 2, "MUTATSIYA: a cleared box kept the old value and price");
+  assert.equal(input.value, "");
+  await act(async () => void fireEvent.change(input, { target: { value: "12" } }));
   assert.deepEqual(intValues({ name: "x", label: "x", type: "int", min: 2, max: 8, step: 2, default: 2, affects: "price" }), [2, 4, 6, 8]);
+  // The real ranges: a Kling clip, an effect, a volume by tens, a long offset.
+  assert.deepEqual(presetsOf(3, 15), [3, 5, 8, 10, 15]);
+  assert.deepEqual(presetsOf(1, 30), [1, 10, 15, 20, 30]);
+  assert.deepEqual(presetsOf(10, 200, 10), [10, 60, 100, 150, 200], "MUTATSIYA: every chip must sit on the step");
+  assert.deepEqual(presetsOf(0, 179), [0, 45, 90, 120, 179]);
+  assert.deepEqual(presetsOf(4, 12, 4), [4, 8, 12]);
+  assert.deepEqual(presetsOf(5, 50, 5), [5, 15, 30, 45, 50]);
+  assert.equal(snapInt(7, 2, 20, 2), 8);
+  assert.equal(snapInt(-5, 2, 20, 2), 2);
+  assert.equal(snapInt(Number.NaN, 2, 20, 2), 2);
+});
+
+test("a host cap below the schema's max bounds the range (the «Montaj» start offset ends with the video)", async () => {
+  const entry = withParams(NANO, "x/cap", [{ name: "startOffset", label: "Boshlanish", type: "int", min: 0, max: 179, default: 0, affects: "request" }]);
+  render(h(ParamRows, { entry, raw: { startOffset: 0 }, onChange: () => {}, limits: { startOffset: { max: 29 } } }));
+  const range = q('[data-field="startOffset"]')!;
+  assert.equal(range.querySelector<HTMLInputElement>('input[type="number"]')!.max, "29", "MUTATSIYA: the schema's 179 must not stay");
+  assert.deepEqual([...range.querySelectorAll<HTMLButtonElement>("[data-preset]")].map((b) => Number(b.dataset.preset)), [0, 5, 15, 20, 29]);
+});
+
+test("a ratio enum is shapes with the catalog's hint under it; the picture style says what it is", async () => {
+  mount(NANO, { imageRatio: "9:16" });
+  const ratio = q('[data-field="imageRatio"]')!;
+  assert.ok(ratio.querySelector("[data-aspect-picker]"), "shapes, not a plain segmented control");
+  const radios = [...ratio.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+  assert.deepEqual(radios.map((b) => b.textContent), ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2"], "the label is the only text (the shape is aria-hidden)");
+  assert.equal(ratio.querySelector("[data-aspect-hint]")!.textContent, "9:16 · Stories", "MUTATSIYA: the hint of the chosen ratio, from IMAGE_RATIOS");
+  await act(async () => void fireEvent.click(radios[1]!));
+  assert.equal(ratio.querySelector("[data-aspect-hint]")!.textContent, "16:9 · Slayd");
+  assert.equal(aspectHint("21:9"), null, "a ratio the image catalog does not hold has no hint");
+  const style = q('[data-field="imageStyle"]')!;
+  assert.ok(style.querySelector("select"), "nine styles: a select");
+  assert.equal(style.querySelector("[data-style-blurb]")!.textContent, "Foto — Haqiqiy surat");
+  await act(async () => void fireEvent.change(style.querySelector("select")!, { target: { value: "watercolor" } }));
+  assert.equal(style.querySelector("[data-style-blurb]")!.textContent, "Akvarel — Suv bo‘yoq", "MUTATSIYA: the description follows the pick");
+  assert.equal(styleBlurb("nope"), null);
 });
 
 test("a change reaches the normalized values; an enum / int / bool / text each round-trip", async () => {

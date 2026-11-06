@@ -105,9 +105,9 @@ async function open() {
   await settle();
   await click(q('[data-studio-tab="video"]'));
   await settle();
-  await click(q("[data-model-all]"));
-  await click(q(`[data-model-option="${HG.id}"]`));
-  await click(q("[data-model-confirm]"));
+  // P11 §D: two models both sit on the row as cards — there is no «Barcha modellar» sheet to open.
+  assert.ok(!q("[data-model-all]"), "no sheet button with two models");
+  await click(q(`[data-model-card="${HG.id}"]`));
   await settle();
 }
 const button = () => q("[data-studio-submit]")?.textContent ?? "";
@@ -182,9 +182,8 @@ test("review NITs: the avatar card shows the script's price; the list refreshes;
   const a = api();
   await open();
   await type("[data-video-prompt] textarea", SCRIPT);
-  await click(q("[data-model-all]"));
-  assert.equal(q(`[data-model-option="${HG.id}"] [data-model-price]`)?.textContent, `~${formatSom(price(5)).replace(/ so.m$/, "")} so'm / 5 s`, "MUTATSIYA: card at the default 10 s");
-  await click(q("[data-model-confirm]"));
+  // The card on the row (no sheet with two models) prices the script's length, not the schema default.
+  assert.equal(q(`[data-model-card="${HG.id}"] [data-model-price]`)?.textContent, `~${formatSom(price(5)).replace(/ so.m$/, "")} so'm / 5 s`, "MUTATSIYA: card at the default 10 s");
   await settle();
   const reads = () => a.calls.filter((c) => c.url.startsWith("/api/media/mix-sources")).length;
   const before = reads();

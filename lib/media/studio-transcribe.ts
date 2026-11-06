@@ -11,7 +11,7 @@
  */
 import { validate, type CatalogEntry } from "../studio-core";
 import { MEDIA_CATALOG } from "./catalog";
-import { AUTO_LANGUAGE, DUB_MODEL, DUB_MODELS, SPEECH_TOOL_MODES, TRANSCRIBE_MODEL, TRANSCRIBE_MODELS, parseSource, videoOnlySource } from "./catalog-transcribe";
+import { AUTO_LANGUAGE, DUB_MODEL, DUB_MODELS, SPEECH_TOOL_MODES, TRANSCRIBE_MODEL, TRANSCRIBE_MODELS, parseSource } from "./catalog-transcribe";
 import { studioEntryPrice, type MediaPricing } from "./studio-pricing";
 
 type Values = Readonly<Record<string, unknown>>;
@@ -60,23 +60,19 @@ function schemaError(entry: CatalogEntry, models: readonly string[], values: Rea
 
 /**
  * Why the server must refuse a «Transkripsiya» request BEFORE charging (Uzbek, a 400), `null` when it is fine: a missing
- * / malformed source, a value outside the schema (an unknown language…), «Subtitrni videoga yopishtirish» on an uploaded
- * audio (an upload is always audio). Ownership, kind and length of a result source are the server's SQL check.
+ * / malformed source, a value outside the schema (an unknown language…). Ownership, length and KIND of a source are the
+ * server's SQL check (`speech-sources.ts`): an `upload:` reference may be an audio or the user's own video, so whether a
+ * burn fits is known only there, and in the worker from the stored mime (`sourceKindOf`).
  */
 export function studioTranscribeError(values: Readonly<Record<string, unknown>>): string | null {
-  const bad = schemaError(transcribeEntry(values), TRANSCRIBE_MODELS, values);
-  if (bad) return bad;
-  const burn = values.burn === true || values.burn === "true";
-  if (burn && parseSource(values.source)?.kind === "upload") return "Subtitrni faqat videoga yopishtirish mumkin — video natijani tanlang.";
-  return null;
+  return schemaError(transcribeEntry(values), TRANSCRIBE_MODELS, values);
 }
 
-/** The same for «Dublyaj»: + the target language must differ from a chosen source language; an upload is audio. */
+/** The same for «Dublyaj»: + the target language must differ from a chosen source language. A video-only model's source is the same SQL check. */
 export function studioDubError(values: Readonly<Record<string, unknown>>): string | null {
   const entry = dubEntry(values);
   const bad = schemaError(entry, DUB_MODELS, values);
   if (bad) return bad;
-  if (videoOnlySource(entry.id) && parseSource(values.source)?.kind === "upload") return "Bu model faqat videoni tarjima qiladi — video natijani tanlang.";
   // A model without the field (HeyGen detects the language itself) never compares a value left over from another model.
   const src = entry.params.some((p) => p.name === "sourceLang") ? String(values.sourceLang ?? AUTO_LANGUAGE).trim() || AUTO_LANGUAGE : AUTO_LANGUAGE;
   const target = String(values.target ?? "").trim() || "uz";

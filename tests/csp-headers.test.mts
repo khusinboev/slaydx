@@ -36,7 +36,7 @@ test("fayl marshruti: sayt CSP'si o'rniga faqat frame-ancestors 'self' (PDF ko'r
 });
 
 test("Content-Disposition: standart attachment, inline faqat so'ralganda; nom UTF-8 bilan", async () => {
-  const { contentDisposition } = await import("../app/api/generations/[id]/file/route.ts");
+  const { contentDisposition } = await import("../lib/server/pdf-serve.ts");
   assert.match(contentDisposition("hisobot-ja.pdf"), /^attachment; filename="hisobot-ja\.pdf"; filename\*=UTF-8''hisobot-ja\.pdf$/);
   assert.match(contentDisposition("hisobot-ja.pdf", "inline"), /^inline; filename="hisobot-ja\.pdf"/);
   // RFC 8187 attr-char excludes "(" and ")": they are percent-encoded in filename* (mobile sprint ABF n3).

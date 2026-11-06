@@ -8,25 +8,28 @@ import { cn } from "@/lib/cn";
 import { formatSom, groupDigits } from "@/lib/format";
 import type { ClientEntry } from "@/lib/studio-core";
 import { AutoTextarea } from "@/components/common/AutoTextarea";
-import { Card, Segmented } from "@/components/forms/compact";
+import { Card } from "@/components/forms/compact";
 import { Field } from "@/components/forms/shared";
+import { MediaModelPicker } from "../MediaModelPicker";
 import { takesAudioInput, type AudioMode } from "@/lib/media/catalog-audio";
 import { audioJobLabels, audioModelLabel, offeredModes } from "./audio-modes";
 import { audioOutputCount } from "@/lib/media/studio-audio";
 import { CatalogState } from "../CatalogState";
 import { ParamRows } from "../ParamRows";
 import { PriceButton } from "../PriceButton";
-import type { CatalogLoad } from "../studio-api";
+import { STUDIO_AUDIO_LISTING, type CatalogLoad } from "../studio-api";
 import { SubmitError } from "../SubmitError";
 import { useStudioSend } from "../useStudioSend";
-import { carryOver, effective, requestValues, type RawValues } from "../studio-values";
+import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
+import { carryOver, effective, requestValues, switchNotice, type RawValues } from "../studio-values";
+import { SwitchNotice } from "../SwitchNotice";
 import type { StudioJob } from "../StudioResults";
 import { VoiceList, VoicesState, voiceRows, type VoiceFilter } from "../voice/VoiceList";
 import { VoiceResults } from "../voice/VoiceResults";
 import { useVoices } from "../voice/voice-api";
 import type { PreparedSample } from "../voice/wav";
 import { AudioInputRow } from "./AudioInputRow";
-import { STUDIO_AUDIO_SLUG, STUDIO_AUDIO_TOOL_ID, audioClientPrice, uploadAudioInput } from "./audio-api";
+import { STUDIO_AUDIO_SLUG, STUDIO_AUDIO_TOOL_ID, audioCardPrice, audioClientPrice, uploadAudioInput } from "./audio-api";
 import { INITIAL_MIX_STATE, type MixTabState } from "./mix-api";
 import { MixPanel } from "./MixPanel";
 import { MIX_MODES } from "@/lib/media/catalog-mix";
@@ -84,7 +87,7 @@ export function audioBlocker(entry: ClientEntry, raw: RawValues): string | null 
  * (only the offered ones), per mode only its controls — the description box (music / effect), the upload row with the
  * recorder (voice changer / isolator), the voice list (voice changer: the ElevenLabs library + «Mening ovozlarim»), the
  * rest generated from the catalog (`ParamRows`) — the sticky «Yaratish · <mode> · ~X so'm», and the results with an MP3
- * player, «Yuklab olish (MP3)» and «Qayta».
+ * player, «Yuklab olish (MP3)» and «Qayta yaratish».
  */
 export function AudioTab({
   catalogState,
@@ -113,10 +116,12 @@ export function AudioTab({
   const promptId = useId();
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [switchText, setSwitchText] = useState<string | null>(null);
   const { submitting, error, setError, send: queue } = useStudioSend((refused) => {
     reload(true);
     if (refused && needsVoices) loadVoices();
   });
+  const { resultsRef, scrollToResults } = useResultsScroll();
   const catalog = catalogState.status === "ready" ? catalogState.catalog : null;
   const modes = offeredModes(catalog?.models ?? []);
   const speechTools = offeredSpeechTools(catalog?.models ?? []);
@@ -164,14 +169,16 @@ export function AudioTab({
   function pickMode(m: AudioMode | typeof MIX_CHIP | SpeechToolMode) {
     setError(null);
     setUploadError(null);
+    // The line was about the mode being left.
+    setSwitchText(null);
     setState((s) => ({ ...s, mode: m }));
   }
 
   if (mixOn) {
     return (
       <div data-audio-tab data-audio-mode={MIX_CHIP}>
-        {chips(MIX_CHIP)}
         <MixPanel
+          before={chips(MIX_CHIP)}
           state={state.mix ?? INITIAL_MIX_STATE}
           setState={(fn) => setState((s) => ({ ...s, mix: fn(s.mix ?? INITIAL_MIX_STATE) }))}
           jobs={mixJobs}
@@ -189,9 +196,9 @@ export function AudioTab({
   if (tool) {
     return (
       <div data-audio-tab data-audio-mode={tool.mode}>
-        {chips(tool.mode)}
         <SpeechToolPanel
           key={tool.mode}
+          before={chips(tool.mode)}
           mode={tool.mode}
           modeLabel={tool.label}
           entry={tool.entries.find((e) => e.id === state.tools?.[tool.mode]?.model) ?? tool.entry}
@@ -240,6 +247,8 @@ export function AudioTab({
     const next = entries.find((e) => e.id === id);
     if (!next || next.id === entry.id) return;
     setError(null);
+    // P11 §D: a setting the new model drops or changes is said in one line (the ElevenLabs «1 daq» has no Lyria value).
+    setSwitchText(switchNotice(entry, next, raw));
     setState((s) => ({ ...s, models: { ...s.models, [mode]: next.id }, raw: { ...s.raw, [mode]: carryOver(next, s.raw[mode] ?? {}) } }));
   };
 
@@ -261,9 +270,10 @@ export function AudioTab({
   function send(target: ClientEntry, targetLabel: string, out: Record<string, unknown>) {
     if (!catalog) return Promise.resolve(false);
     const title = (String(out.prompt ?? "").trim() || targetLabel).slice(0, 72);
-    return queue({ slug: STUDIO_AUDIO_SLUG, id: STUDIO_AUDIO_TOOL_ID, title, output: "mp3" }, out, audioClientPrice(target, out, catalog.pricing), ({ id, price: charged }) =>
-      track({ id, modelId: target.id, modelLabel: targetLabel, prompt: title, price: charged, sent: out }),
-    );
+    return queue({ slug: STUDIO_AUDIO_SLUG, id: STUDIO_AUDIO_TOOL_ID, title, output: "mp3" }, out, audioClientPrice(target, out, catalog.pricing), ({ id, price: charged }) => {
+      track({ id, modelId: target.id, modelLabel: targetLabel, prompt: title, price: charged, sent: out });
+      scrollToResults();
+    });
   }
 
   function submit() {
@@ -296,13 +306,33 @@ export function AudioTab({
 
   return (
     <div data-audio-tab data-audio-mode={mode} data-audio-model={entry.id}>
+      <StudioWorkbench
+        resultsRef={resultsRef}
+        hasResults={providerJobs.length > 0}
+        empty="Yaratilgan audiolar shu yerda ko‘rinadi."
+        label="Audiolar"
+        results={
+          <section aria-label="Audiolar" data-audio-results className="min-w-0">
+            <VoiceResults jobs={providerJobs} busy={submitting} onAgain={again} retryPrice={retryPrice} failed="Audio yaratilmadi" />
+          </section>
+        }
+        form={
+          <>
       {chips(mode)}
 
       {entries.length > 1 ? (
+        // P11 §D: cards with the price and the specs (a bare segmented control said neither).
         <div data-audio-model-picker>
-          <Card title="Model">
-            <Segmented ariaLabel="Model" value={entry.id} onChange={pickModel} options={entries.map((e) => ({ value: e.id, label: audioModelLabel(e, modeLabel) }))} />
-          </Card>
+          <MediaModelPicker
+            purpose={STUDIO_AUDIO_LISTING}
+            catalog={{ ...catalog, models: entries }}
+            value={entry.id}
+            values={values}
+            onChange={pickModel}
+            priceOf={(m) => audioCardPrice(m, raw, catalog.pricing)}
+            labelOf={(m) => audioModelLabel(m, modeLabel)}
+          />
+          <SwitchNotice text={switchText} onClose={() => setSwitchText(null)} />
         </div>
       ) : null}
 
@@ -371,9 +401,9 @@ export function AudioTab({
         onSubmit={submit}
         label={price === null ? undefined : audioSubmitLabel(count > 1 ? `${buttonLabel} ×${count}` : buttonLabel, price)}
       />
-      <section aria-label="Audiolar" data-audio-results className={cn(providerJobs.length > 0 && "mt-5")}>
-        <VoiceResults jobs={providerJobs} busy={submitting} onAgain={again} retryPrice={retryPrice} failed="Audio yaratilmadi" />
-      </section>
+          </>
+        }
+      />
     </div>
   );
 }

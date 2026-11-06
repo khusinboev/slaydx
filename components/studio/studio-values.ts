@@ -1,4 +1,5 @@
 import { normalize, normalizeText, validate, type ClientEntry, type ParamSchema } from "@/lib/studio-core";
+import { isAvatarModel } from "@/lib/media/catalog-video";
 
 /**
  * Form state of the Studio is a bag of RAW values keyed by the model's param names (`prompt` is the text exactly as
@@ -58,6 +59,66 @@ export function carryOver(to: ClientEntry, prev: RawValues): RawValues {
     else if (validate([p], { [p.name]: v }) === null) next[p.name] = v;
   }
   return next;
+}
+
+/** One setting a model switch could not keep: the new model lacks it (`to: null`) or takes another value (`to`). */
+export type SwitchChange = { name: string; label: string; from: string; to: string | null };
+
+/** A value as the notice names it: the option's label, «ha» / «yo‘q», the number. */
+function shownValue(p: ParamSchema, v: unknown): string {
+  switch (p.type) {
+    case "enum":
+      return p.options.find((o) => o.value === v)?.label ?? String(v);
+    case "bool":
+      return v === true || v === "true" ? "ha" : "yo‘q";
+    default:
+      return String(v);
+  }
+}
+
+/** Lengths the server measures from the source: never a setting, so a notice never names them. */
+const SERVER_SET_PARAMS: ReadonlySet<string> = new Set(["inputSeconds", "sourceSeconds"]);
+
+/**
+ * What a switch from `from` to `to` changes (docs/studio/P11-SPEC.md §D), by the EFFECTIVE values on both sides: a setting
+ * both models have whose value differs after the switch, touched or not (one model's default of 5 s is another's 4 s, and
+ * that changes the clip and its price); a setting `to` lacks, when it stood away from `from`'s default. The prompt, images
+ * and voices are not settings of this kind (the tabs keep or re-ask them themselves).
+ */
+export function switchChanges(from: ClientEntry, to: ClientEntry, prev: RawValues): SwitchChange[] {
+  const out: SwitchChange[] = [];
+  const before = effective(from, prev);
+  const after = effective(to, carryOver(to, prev));
+  // An avatar's length follows its script or speech: no row of the form sets it.
+  const avatar = isAvatarModel(from.id) || isAvatarModel(to.id);
+  for (const p of from.params) {
+    if (p.type === "text" || p.type === "image" || p.type === "voice" || SERVER_SET_PARAMS.has(p.name) || (avatar && p.name === "seconds")) continue;
+    const v = before[p.name];
+    const q = to.params.find((x) => x.name === p.name);
+    if (!q) {
+      // At the old model's default nothing the user chose is lost.
+      if (v !== p.default) out.push({ name: p.name, label: p.label, from: shownValue(p, v), to: null });
+      continue;
+    }
+    if (q.type === "text" || q.type === "image" || q.type === "voice") continue;
+    if (String(v) !== String(after[q.name])) out.push({ name: p.name, label: p.label, from: shownValue(p, v), to: shownValue(q, after[q.name]) });
+  }
+  return out;
+}
+
+/** Each change as the notice words it: «Sifat 1080p → 720p», «Sifat: 1080p (Full HD) — bu modelda yo‘q». */
+export function switchParts(from: ClientEntry, to: ClientEntry, prev: RawValues): string[] {
+  return switchChanges(from, to, prev).map((c) => (c.to === null ? `${c.label}: ${c.from} — bu modelda yo‘q` : `${c.label} ${c.from} → ${c.to}`));
+}
+
+/** The one line of `parts` for a switch to `to`: «Kling 4.0 Flash: Sifat 1080p → 720p · …»; `null` with nothing to say. */
+export function noticeLine(to: Pick<ClientEntry, "label">, parts: readonly string[]): string | null {
+  return parts.length ? `${to.label}: ${parts.join(" · ")}` : null;
+}
+
+/** The one line the tab shows after a switch; `null` when the new model keeps every setting. */
+export function switchNotice(from: ClientEntry, to: ClientEntry, prev: RawValues): string | null {
+  return noticeLine(to, switchParts(from, to, prev));
 }
 
 /** What the user sees and what is priced: the model's normalized values of the raw state. */

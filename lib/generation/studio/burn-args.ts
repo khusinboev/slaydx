@@ -5,9 +5,12 @@
  * test pins every argument.
  *
  *   input   `-protocol_whitelist file -f mov -i in-video.mp4` (the same demuxer rule as «Montaj»)
- *   video   libass `subtitles` filter (the worker image checks it at build time) with Noto Sans (Uzbek Latin incl. ʻ ’,
- *           Cyrillic), re-encoded H.264 `veryfast` CRF 23, capped by `-maxrate` so the result fits 25 MB
- *   audio   copied as is (`0:a?` — a silent clip stays silent)
+ *   video   a picture of at most `BURN_MAX_SIDE` px on its long side (`scale`), a decoder that refuses more than
+ *           `BURN_MAX_PIXELS` whatever the file's headers say; libass `subtitles` filter (the worker image checks it at
+ *           build time) with Noto Sans (Uzbek Latin incl. ʻ ’, Cyrillic), re-encoded H.264 `veryfast` CRF 23, capped by
+ *           `-maxrate` so the result fits 25 MB
+ *   audio   AAC at `BURN_AUDIO_KBPS` or below (`0:a?` — a silent clip stays silent): a copied track of an upload could be
+ *           any bitrate, and the result must fit 25 MB
  *   output  `+faststart` MP4, `-t` = the measured length
  */
 
@@ -15,12 +18,22 @@ export const BURN_FILES = { video: "in-video.mp4", subs: "subs.srt", out: "out-b
 
 /** Bytes the result may take (the stored-file cap is 25 MB; ~1 MB kept for the container and the rate control's slack). */
 export const BURN_TARGET_BYTES = 24 * 1024 * 1024;
-/** The copied audio track is counted at this rate (our clips carry AAC ≤ 192 kb/s). */
-export const BURN_AUDIO_KBPS = 192;
+/** The audio track is re-encoded at this rate, so the room left for the picture is known. */
+export const BURN_AUDIO_KBPS = 160;
 /** Below this the picture is not worth delivering: the job is refused before charging instead. */
 export const BURN_MIN_VIDEO_KBPS = 800;
 export const BURN_MAX_VIDEO_KBPS = 6000;
 export const BURN_FONT = "Noto Sans";
+/**
+ * The long side a burned picture may have. Only a burn decodes the picture: «Transkripsiya» without one and «Dublyaj» copy
+ * it, so a 4K phone clip stays usable there.
+ */
+export const BURN_MAX_SIDE = 1920;
+/** What `BURN_FFMPEG_TIMEOUT_MS` can re-encode on 2 threads, in pixels × frames: 3 minutes of 1080p at 30 frames a second. */
+export const BURN_MAX_WORK = 1920 * 1080 * 30 * 180;
+/** What the decoder accepts at all: a stream can lie in its headers, and the worker has 2 GB. 4K fits, our results are smaller. */
+export const BURN_MAX_PIXELS = 3840 * 2160;
+const BURN_SCALE = `scale=w='min(${BURN_MAX_SIDE}\\,iw)':h='min(${BURN_MAX_SIDE}\\,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2`;
 
 /**
  * The H.264 rate cap (kb/s) that keeps a `seconds`-long result within `BURN_TARGET_BYTES`, at most `BURN_MAX_VIDEO_KBPS`;
@@ -32,6 +45,16 @@ export function burnVideoKbps(seconds: number): number | null {
   const video = Math.floor(total - BURN_AUDIO_KBPS);
   if (video < BURN_MIN_VIDEO_KBPS) return null;
   return Math.min(BURN_MAX_VIDEO_KBPS, video);
+}
+
+/**
+ * Why this picture cannot be burned (Uzbek), `null` when it can: too large a frame, or more work than the burn's timeout
+ * allows. Said before the paid speech call: a burn that fails after it has already cost the provider.
+ */
+export function burnProblem(picture: { width: number; height: number; samples: number }): string | null {
+  if (Math.max(picture.width, picture.height) > BURN_MAX_SIDE) return `Subtitr yopishtirish uchun video uzun tomoni ${BURN_MAX_SIDE} px gacha bo‘lsin.`;
+  if (picture.width * picture.height * picture.samples > BURN_MAX_WORK) return "Bu video subtitr yopishtirish uchun juda og‘ir — qisqaroq yoki kamroq kadrli video tanlang.";
+  return null;
 }
 
 export type BurnPlan = { seconds: number; vertical: boolean; videoKbps: number };
@@ -52,6 +75,8 @@ export function burnArgs(plan: BurnPlan): string[] {
     "error",
     "-protocol_whitelist",
     "file",
+    "-max_pixels",
+    String(BURN_MAX_PIXELS),
     "-f",
     "mov",
     "-i",
@@ -61,7 +86,7 @@ export function burnArgs(plan: BurnPlan): string[] {
     "-map",
     "0:a?",
     "-vf",
-    `subtitles=filename=${BURN_FILES.subs}:charenc=UTF-8:force_style='${burnStyle(plan.vertical)}'`,
+    `${BURN_SCALE},subtitles=filename=${BURN_FILES.subs}:charenc=UTF-8:force_style='${burnStyle(plan.vertical)}'`,
     "-c:v",
     "libx264",
     "-preset",
@@ -75,7 +100,9 @@ export function burnArgs(plan: BurnPlan): string[] {
     "-pix_fmt",
     "yuv420p",
     "-c:a",
-    "copy",
+    "aac",
+    "-b:a",
+    `${BURN_AUDIO_KBPS}k`,
     "-movflags",
     "+faststart",
     "-threads",
@@ -84,6 +111,115 @@ export function burnArgs(plan: BurnPlan): string[] {
     plan.seconds.toFixed(3),
     "-y",
     BURN_FILES.out,
+  ];
+}
+
+export const BURN_CHECK_FILES = { video: "in-video.mp4", out: "out-check.mp4" } as const;
+
+/**
+ * Decodes and scales the FIRST frame the way the burn will (no subtitles yet): run before the paid speech call, so a
+ * picture ffmpeg cannot read or that is too large is a refund with nothing spent.
+ */
+export function burnCheckArgs(): string[] {
+  return [
+    "-nostdin",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-protocol_whitelist",
+    "file",
+    "-max_pixels",
+    String(BURN_MAX_PIXELS),
+    "-f",
+    "mov",
+    "-i",
+    BURN_CHECK_FILES.video,
+    "-map",
+    "0:v:0",
+    "-frames:v",
+    "1",
+    "-vf",
+    BURN_SCALE,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "ultrafast",
+    "-pix_fmt",
+    "yuv420p",
+    "-threads",
+    "2",
+    "-y",
+    BURN_CHECK_FILES.out,
+  ];
+}
+
+export const CAP_FILES = { video: "in-video.mp4", out: "out-cap.mp4" } as const;
+
+/**
+ * An own upload cut to its billed seconds, no re-encode (`own-video.ts`): the first picture and the first sound track
+ * only, so nothing else in the file travels on.
+ */
+export function capArgs(seconds: number): string[] {
+  return [
+    "-nostdin",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-protocol_whitelist",
+    "file",
+    "-max_pixels",
+    String(BURN_MAX_PIXELS),
+    "-f",
+    "mov",
+    "-i",
+    CAP_FILES.video,
+    "-map",
+    "0:v:0",
+    "-map",
+    "0:a:0?",
+    "-c",
+    "copy",
+    "-movflags",
+    "+faststart",
+    "-t",
+    seconds.toFixed(3),
+    "-y",
+    CAP_FILES.out,
+  ];
+}
+
+export const MEASURE_FILES = { video: "in-video.mp4", out: "out-measure.mp3" } as const;
+
+/** The sound of a cut decoded to a small MP3 with no length limit: its frames say how long it really is (`own-video.ts`). */
+export function measureArgs(): string[] {
+  return [
+    "-nostdin",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-protocol_whitelist",
+    "file",
+    "-max_pixels",
+    String(BURN_MAX_PIXELS),
+    "-f",
+    "mov",
+    "-i",
+    MEASURE_FILES.video,
+    "-map",
+    "0:a:0",
+    "-vn",
+    "-ac",
+    "1",
+    "-ar",
+    "16000",
+    "-c:a",
+    "libmp3lame",
+    "-b:a",
+    "32k",
+    "-threads",
+    "2",
+    "-y",
+    MEASURE_FILES.out,
   ];
 }
 
@@ -98,6 +234,8 @@ export function audioTrackArgs(seconds: number): string[] {
     "error",
     "-protocol_whitelist",
     "file",
+    "-max_pixels",
+    String(BURN_MAX_PIXELS),
     "-f",
     "mov",
     "-i",

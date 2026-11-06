@@ -6,7 +6,8 @@
  * Client-safe (no server imports) and NOT importing `catalog.ts` (that file imports this one).
  *
  * SOURCE: one of the user's OWN inputs, named by a typed reference (never a URL):
- *   `upload:<24 hex>`   an uploaded audio file (`studio_audio_inputs`, P6 upload, WAV / MP3, 3–300 s);
+ *   `upload:<24 hex>`   an uploaded audio file (`studio_audio_inputs`, P6 upload, WAV / MP3, 3–300 s) or the user's own
+ *                       video (`studio_video_inputs`, P11, MP4 / MOV, 1 s – 3 min);
  *   `result:<uuid>`     one of the user's finished Studio / legacy media results (video or audio — the «Montaj» source
  *                       list, `lib/server/media/mix-sources.ts`).
  * Ownership is the server's SQL check, before charging and again when the worker loads the bytes.
@@ -83,6 +84,11 @@ export const TRANSCRIBE_AUDIO_MAX_SECONDS = 600;
 export const DUB_MAX_SECONDS = 180;
 /** Results are stored like every file (`MAX_FILE_BYTES` = 25 MB). */
 export const SPEECH_TOOL_OUTPUT_MAX_BYTES = 25 * 1024 * 1024;
+/**
+ * The largest video a dub takes: the dubbed file is about the source's size (the same picture, a new voice track), and it
+ * must fit the stored-file cap with room left. The upload, the form and the pre-charge check read this one number.
+ */
+export const DUB_VIDEO_MAX_BYTES = SPEECH_TOOL_OUTPUT_MAX_BYTES - 1024 * 1024;
 
 /**
  * Languages offered (both lists — Scribe and Dubbing — name every one; Turkmen is NOT in the dubbing list, so it is not

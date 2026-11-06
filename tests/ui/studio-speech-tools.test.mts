@@ -184,7 +184,7 @@ test("dub: the same source and target language is refused in the browser; then s
   assert.deepEqual(post.body!.values, { modelId: "elevenlabs/dubbing", source: `result:${SPEECH}`, sourceSeconds: 30, target: "ru", sourceLang: "uz" });
 });
 
-test("results: a transcript shows its text + SRT / VTT / TXT; a dubbed MP4 plays as a video", () => {
+test("results: a transcript shows its text + SRT / VTT / TXT, opens in full and copies; a dubbed MP4 plays as a video", async () => {
   const cue = { start: 0, end: 1, lines: ["Salom"], speaker: null };
   const transcript = generationDetail(VID, {
     type: "studio-transcribe",
@@ -201,8 +201,29 @@ test("results: a transcript shows its text + SRT / VTT / TXT; a dubbed MP4 plays
   const cards = qa("[data-speech-result]");
   assert.equal(cards.length, 2);
   assert.match(cards[0]!.querySelector("[data-speech-text]")?.textContent ?? "", /Salom, oʻrtoqlar/);
-  assert.deepEqual([...cards[0]!.querySelectorAll<HTMLElement>("[data-result-action]")].map((b) => b.dataset.resultAction), ["srt", "vtt", "download", "again"]);
+  // P11 §D: «To‘liq matn» and «Nusxalash» sit above the subtitle downloads; the repeat is «Qayta yaratish» everywhere.
+  assert.deepEqual([...cards[0]!.querySelectorAll<HTMLElement>("[data-result-action]")].map((b) => b.dataset.resultAction), ["full-text", "copy", "srt", "vtt", "download", "again"]);
+  assert.equal(cards[0]!.querySelector('[data-result-action="again"]')!.textContent, "Qayta yaratish");
+  const text = cards[0]!.querySelector<HTMLElement>("[data-speech-text]")!;
+  assert.equal(text.dataset.speechTextFull, "false", "clamped first");
+  assert.ok(text.className.includes("line-clamp-6"));
+  await click(cards[0]!.querySelector('[data-result-action="full-text"]'));
+  assert.equal(text.dataset.speechTextFull, "true", "MUTATSIYA: the full text opens");
+  assert.ok(!text.className.includes("line-clamp-6"));
+  assert.equal(cards[0]!.querySelector('[data-result-action="full-text"]')!.textContent, "Qisqartirish");
+  // The copy goes through the clipboard with the whole text; the button says so.
+  const written: string[] = [];
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (s: string) => void written.push(s) } });
+  try {
+    await click(cards[0]!.querySelector('[data-result-action="copy"]'));
+    await settle(2);
+    assert.deepEqual(written, ["Salom, oʻrtoqlar"], "MUTATSIYA: the transcript, as the provider wrote it");
+    assert.equal(cards[0]!.querySelector('[data-result-action="copy"]')!.textContent, "Nusxalandi");
+  } finally {
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
+  }
   assert.ok(!cards[0]!.querySelector("video"), "no burned clip: no video");
   assert.ok(cards[1]!.querySelector("[data-speech-video]"), "a dubbed MP4 plays as a video");
   assert.deepEqual([...cards[1]!.querySelectorAll<HTMLElement>("[data-result-action]")].map((b) => b.dataset.resultAction), ["download", "again"]);
+  assert.ok(cards[1]!.querySelector("[data-favorite]"), "the star on a speech-tool result (a gallery item now)");
 });

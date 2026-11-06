@@ -26,6 +26,8 @@
  * A fal source lives on fal's CDN while the op runs: its URL is written to the row BEFORE the paid call, so whoever ends the
  * op deletes it, this worker, the one that resumes it, or housekeeping (`studioDubHousekeeping`).
  */
+import { FfmpegMissingError, runFfmpeg, type FfmpegRun } from "./mix-ffmpeg";
+import { capOwnVideo } from "./own-video";
 import { MediaError, costUsd, normalize, submitWithRoutes, type CatalogEntry, type MediaAdapter, type MediaOutput, type RouteHealth } from "../../studio-core";
 import { AUTO_LANGUAGE, DUB_MAX_SECONDS, HEYGEN_TRANSLATE_MODEL, HEYGEN_TRANSLATE_USD_PER_SECOND, SPEECH_TOOL_OUTPUT_MAX_BYTES, STUDIO_DUB_PURPOSE, parseSource, videoOnlySource } from "../../media/catalog-transcribe";
 import { MIX_SECONDS_TOLERANCE } from "../../media/catalog-mix";
@@ -63,6 +65,8 @@ export type StudioDubDeps = {
   now?: () => number;
   /** Test seam: a delivered file longer than the quote (default: `recordProviderFailure` inside a job). */
   overrun?: (message: string) => Promise<void>;
+  /** Test seam: the ffmpeg that cuts an own video to its billed seconds. */
+  ffmpeg?: (run: FfmpegRun) => Promise<Uint8Array>;
 };
 
 const REFUND = "Pul balansingizga qaytariladi.";
@@ -201,12 +205,22 @@ export async function buildStudioDub(
     else return fail(`re-run found the row '${row.status}' without an op id — not resubmitted`, DUB_LOST_MESSAGE);
   } else {
     o.onStage?.({ progress: 5, step: "Fayl yuborilmoqda" });
+    // P11 review: an own video is cut to what was billed before any provider sees it; a stored result is our own file.
+    let sourceBytes = src.bytes;
+    if (kind === "video" && ref.kind === "upload") {
+      try {
+        sourceBytes = await capOwnVideo(src.bytes, Number(p.sourceSeconds), deps.ffmpeg ?? runFfmpeg);
+      } catch (e) {
+        console.warn("[studio-dub] own video cap failed:", e instanceof Error ? e.message : e, (e as { stderr?: string })?.stderr ?? "");
+        return fail(`own video cap failed: ${e instanceof Error ? e.message : String(e)}`, e instanceof FfmpegMissingError ? `Video xizmati hozircha ishlamayapti. ${REFUND}` : `Yuklangan videoni o‘qib bo‘lmadi. ${REFUND}`);
+      }
+    }
     try {
       const { result } = await submitWithRoutes(
         [route],
         adapters,
         deps.health ?? (await defaultHealth()),
-        { params: p, assets: { media: [{ mime: src.mime, base64: Buffer.from(src.bytes).toString("base64") }] }, idempotencyKey: key },
+        { params: p, assets: { media: [{ mime: src.mime, base64: Buffer.from(sourceBytes).toString("base64") }] }, idempotencyKey: key },
         {
           ...(o.deadline ? { deadline: o.deadline } : {}),
           onInputStored: async (url) => {

@@ -10,7 +10,7 @@ import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
 import { imageExt } from "@/lib/viewers/kind";
 import { FavoriteButton } from "./Favorite";
-import { JobList, JobResult, RESULT_ACTION as ACTION } from "./JobResult";
+import { AGAIN_LABEL, JobList, JobResult, RESULT_ACTION as ACTION } from "./JobResult";
 import { downloadStudioFile } from "./studio-download";
 import { MODE_LABEL, MODE_PURPOSE, TOOL_MODES, type StudioMode } from "./studio-modes";
 
@@ -97,13 +97,8 @@ export function StudioResults({
   /** P2b: edit / upscale / remove the background of one picture (absent = no tool buttons). */
   onTool?: PictureTool;
 } & PictureNext) {
-  if (jobs.length === 0) {
-    return (
-      <p className="text-muted-foreground bg-card hidden rounded-[20px] border p-6 text-center text-[14.5px] md:block" data-studio-empty>
-        Yaratilgan rasmlar shu yerda ko‘rinadi.
-      </p>
-    );
-  }
+  // The empty column is the workbench's (`StudioWorkbench`): the same wording and place on every tab.
+  if (jobs.length === 0) return null;
   return (
     <JobList jobs={jobs} label="Natijalar">
       {(job) => (
@@ -191,7 +186,7 @@ function Pictures({
         <div className="grid grid-cols-2 gap-1.5">
           <button type="button" data-result-action="again" disabled={busy} onClick={() => onAgain(job)} className={ACTION}>
             <RefreshCw className="size-4" aria-hidden />
-            Qayta
+            {AGAIN_LABEL}
           </button>
           <button type="button" data-result-action="other-model" onClick={() => onOtherModel(job)} className={ACTION}>
             <Shuffle className="size-4" aria-hidden />

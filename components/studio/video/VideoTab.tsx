@@ -19,8 +19,11 @@ import { PriceButton } from "../PriceButton";
 import { STUDIO_VIDEO_PURPOSE, type CatalogLoad } from "../studio-api";
 import { SubmitError } from "../SubmitError";
 import { useStudioSend } from "../useStudioSend";
+import { specLine } from "../model-specs";
+import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
 import type { MediaCatalog } from "../studio-types";
-import { PROMPT_BYTES_MESSAGE, PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptBytes, promptLimit, promptMin, requestValues, type PromptBytes, type RawValues } from "../studio-values";
+import { PROMPT_BYTES_MESSAGE, PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptBytes, promptLimit, promptMin, requestValues, switchNotice, type PromptBytes, type RawValues } from "../studio-values";
+import { SwitchNotice } from "../SwitchNotice";
 import type { StudioJob } from "../StudioResults";
 import { VideoResults } from "./VideoResults";
 import { STUDIO_VIDEO_SLUG, STUDIO_VIDEO_TOOL_ID, clipSeconds, isEffect, studioVideoClientPrice, videoCardPrice } from "./video-price";
@@ -151,6 +154,7 @@ export function VideoTab({
 }) {
   // 400 before charging: the model / a value / the switch changed — re-read what is offered; 409: the price moved.
   const { submitting, error, setError, send: queue } = useStudioSend(() => reload(true));
+  const { resultsRef, scrollToResults } = useResultsScroll();
   const [pickerOpen, setPickerOpen] = useState(false);
   const catalog = catalogState.status === "ready" ? catalogState.catalog : null;
   const all = splitVideoCatalog(catalog);
@@ -211,18 +215,22 @@ export function VideoTab({
     setError,
   );
 
+  const [switchText, setSwitchText] = useState<string | null>(null);
   function selectModel(id: string) {
     const next = split.models.find((m) => m.id === id);
     if (!next) return;
+    // P11 §D: what the new model drops or changes is said in one line, not reset in silence.
+    setSwitchText(model && model.id !== next.id ? switchNotice(model, next, state.raw) : null);
     // The photos stay across a model switch (`carryOver` keeps the end frame when the new model takes one).
     setState((s) => ({ ...s, chosen: id, raw: { ...carryOver(next, s.raw), ...(s.raw[IMAGE_PARAM] ? { [IMAGE_PARAM]: s.raw[IMAGE_PARAM] } : {}) } }));
   }
 
   async function send(target: ClientEntry, values: Record<string, unknown>, label: string) {
     if (!catalog) return false;
-    return queue({ slug: STUDIO_VIDEO_SLUG, id: STUDIO_VIDEO_TOOL_ID, title: label.slice(0, 72), output: "mp4" }, values, studioVideoClientPrice(target, values, catalog.pricing), ({ id, price: charged }) =>
-      track({ id, modelId: target.id, modelLabel: target.label, prompt: label, price: charged, sent: values }),
-    );
+    return queue({ slug: STUDIO_VIDEO_SLUG, id: STUDIO_VIDEO_TOOL_ID, title: label.slice(0, 72), output: "mp4" }, values, studioVideoClientPrice(target, values, catalog.pricing), ({ id, price: charged }) => {
+      track({ id, modelId: target.id, modelLabel: target.label, prompt: label, price: charged, sent: values });
+      scrollToResults();
+    });
   }
 
   const sendForm = (target: ClientEntry, label: string) => void send(target, sent, label).then((ok) => ok && onSubmitted?.());
@@ -318,8 +326,22 @@ export function VideoTab({
   const hasEnd = textModel?.params.some((p) => p.name === END_PARAM) ?? false;
   const endImage = String(state.raw[END_PARAM] ?? "");
 
+  const results = (
+    <section aria-label="Videolar" data-video-results className="min-w-0">
+      <VideoResults jobs={jobs} busy={submitting} onAgain={again} retryPrice={retryPrice} onMusic={onMusic} onVoice={onVoice} />
+    </section>
+  );
+
   return (
     <div data-video-tab>
+      <StudioWorkbench
+        resultsRef={resultsRef}
+        hasResults={jobs.length > 0}
+        empty="Yaratilgan videolar shu yerda ko‘rinadi."
+        label="Videolar"
+        results={results}
+        form={
+          <>
       {split.effects && split.models.length > 0 ? (
         <div className="mb-3" data-video-mode>
           <Segmented
@@ -356,6 +378,9 @@ export function VideoTab({
                       >
                         <span className="text-[13.5px] leading-tight font-semibold">{m.label}</span>
                         <span className="text-muted-foreground text-[12.5px] tabular-nums">{videoCardPrice(m, {}, catalog.pricing)}</span>
+                        <span className="text-muted-foreground text-[12px] leading-snug" data-model-specs>
+                          {specLine(m)}
+                        </span>
                       </button>
                     );
                   })}
@@ -389,7 +414,7 @@ export function VideoTab({
             </Field>
           </Card>
           <Card title="Surat">
-            <Row label="Surat" hint={effectPhotoHint(effect?.value, effectEntry?.id ?? "")} wide>
+            <Row label="Surat" hint={effectPhotoHint(effect?.value, effectEntry?.id ?? "")} wide stack>
               <Field id={IMAGE_PARAM}>
                 <PhotoField
                   assetId={state.effectImage}
@@ -408,7 +433,7 @@ export function VideoTab({
               ) : null}
             </Row>
             {twoPhotos ? (
-              <Row label="Ikkinchi surat" hint="Effekt ikki kishini birga ko‘rsatadi: har biri o‘z suratida" wide>
+              <Row label="Ikkinchi surat" hint="Effekt ikki kishini birga ko‘rsatadi: har biri o‘z suratida" wide stack>
                 <Field id={SECOND_PARAM}>
                   <PhotoField
                     assetId={state.effectImage2 ?? ""}
@@ -452,6 +477,7 @@ export function VideoTab({
             // The avatar's card shows the length its inputs buy (`avatarRequest`), as its button does.
             priceOf={(m) => videoCardPrice(m, isAvatarModel(m.id) ? avatarRequest(m, flatImage(requestValues(m, state.raw)), speeches ?? []) : effective(m, state.raw), catalog.pricing)}
           />
+          <SwitchNotice text={switchText} onClose={() => setSwitchText(null)} />
           {avatar ? (
             <Card title="Avatar ovozi">
               <Row
@@ -462,6 +488,7 @@ export function VideoTab({
                     : "Ixtiyoriy: «Ovoz» bo‘limidagi tayyor ovoz (1 daqiqagacha) — avatar matn o‘rniga shuni gapiradi"
                 }
                 wide
+                stack
               >
                 <Field id={OWN_AUDIO_PARAM}>
                   {speechError ? (
@@ -509,7 +536,7 @@ export function VideoTab({
           {formEntry.params.length > 0 ? <ParamRows entry={formEntry} raw={state.raw} onChange={setParam} /> : null}
           {hasStart ? (
             <Card title={photoAvatar ? "Avatar surati" : hasEnd ? "Kadrlar (ixtiyoriy)" : "Boshlang‘ich surat (ixtiyoriy)"}>
-              <Row label={hasEnd ? "Birinchi kadr" : "Surat"} wide>
+              <Row label={hasEnd ? "Birinchi kadr" : "Surat"} wide stack>
                 <Field id={IMAGE_PARAM}>
                   <PhotoField
                     assetId={startImage}
@@ -530,7 +557,7 @@ export function VideoTab({
                 </p>
               </Row>
               {hasEnd ? (
-                <Row label="Oxirgi kadr" hint="Ixtiyoriy: video shu surat bilan tugaydi (boshlang‘ich surat bilan birga)" wide>
+                <Row label="Oxirgi kadr" hint="Ixtiyoriy: video shu surat bilan tugaydi (boshlang‘ich surat bilan birga)" wide stack>
                   <Field id={END_PARAM}>
                     {startImage ? (
                       <PhotoField
@@ -572,9 +599,9 @@ export function VideoTab({
         label={price === null ? undefined : videoSubmitLabel(what, price)}
         paidOnly
       />
-      <section aria-label="Videolar" data-video-results className={cn(jobs.length > 0 && "mt-5")}>
-        <VideoResults jobs={jobs} busy={submitting} onAgain={again} retryPrice={retryPrice} onMusic={onMusic} onVoice={onVoice} />
-      </section>
+          </>
+        }
+      />
     </div>
   );
 }

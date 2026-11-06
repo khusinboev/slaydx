@@ -8,7 +8,6 @@ import { bytesBody } from "@/lib/server/http-bytes";
 import { parseByteRange } from "@/lib/server/http-range";
 import { cachedVideo, rememberVideo } from "@/lib/server/video-file-cache";
 
-export { contentDisposition };
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

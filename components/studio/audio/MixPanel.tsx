@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
@@ -12,37 +12,65 @@ import { PriceButton } from "../PriceButton";
 import { SubmitError } from "../SubmitError";
 import { requestValues, type RawValues } from "../studio-values";
 import { useStudioSend } from "../useStudioSend";
+import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
 import type { StudioJob } from "../StudioResults";
 import { VideoResults } from "../video/VideoResults";
 import { VoiceResults } from "../voice/VoiceResults";
-import { MIX_PICKERS, STUDIO_MIX_SLUG, STUDIO_MIX_TOOL_ID, fetchMixSources, mixClientPrice, mixEntryOf, type MixSource, type MixSources, type MixTabState } from "./mix-api";
+import { useApiSrc } from "@/lib/use-api-src";
+import { MIX_PICKERS, STUDIO_MIX_SLUG, STUDIO_MIX_TOOL_ID, fetchMixSources, mixClientPrice, mixEntryOf, type MixRole, type MixSource, type MixSources, type MixTabState } from "./mix-api";
 
 /** «Kuy · Musiqa · 30 s». */
 export function sourceLabel(s: MixSource): string {
   return `${s.title} · ${s.kind}${s.seconds ? ` · ${Math.round(s.seconds)} s` : ""}`;
 }
 
-/** Why «Montaj qilish» cannot send yet (Uzbek), `null` when it can: both pickers need a result. */
-export function mixBlocker(mode: MixMode, raw: RawValues): string | null {
+/**
+ * Why «Montaj qilish» cannot send yet (Uzbek), `null` when it can: both pickers need a result; the audio must start inside
+ * the video (`videoSeconds` = the picked video's length when known — the server's own rule, said before the press).
+ */
+export function mixBlocker(mode: MixMode, raw: RawValues, videoSeconds: number | null = null): string | null {
   const [a, b] = MIX_INPUTS[mode];
   const [pa, pb] = MIX_PICKERS[mode];
   if (!raw[a]) return `${pa.label}ni tanlang.`;
   if (!raw[b]) return `${pb.label}ni tanlang.`;
+  if (mode === "video-voice" && videoSeconds !== null && Number(raw.startOffset ?? 0) >= videoSeconds) {
+    return `Audio boshlanishi videodan qisqa bo‘lsin (video ${Math.floor(videoSeconds)} soniya).`;
+  }
   return null;
 }
 
-/** «Montaj qilish · Videoga ovoz qo'shish · ~500 so'm». */
-export function mixSubmitLabel(label: string, price: number): string {
-  return `Montaj qilish · ${label} · ~${formatSom(price)}`;
+/** The last second the audio may start at inside a video of `seconds` (the schema's own cap when the length is unknown). */
+export function startOffsetMax(videoSeconds: number | null): number | undefined {
+  return videoSeconds === null ? undefined : Math.max(0, Math.ceil(videoSeconds) - 1);
+}
+
+/** The picked source's own file, played in place («audition»): a clip for the video role, a player for the rest. */
+function SourceAudition({ id, role }: { id: string; role: MixRole }) {
+  const src = useApiSrc(`/api/generations/${id}/file?inline=1`);
+  return role === "video" ? (
+    <video className="mt-1.5 w-full rounded-[12px] bg-black" controls playsInline preload="none" src={src} data-mix-audition={role}>
+      Brauzeringiz videoni qo‘llab-quvvatlamaydi.
+    </video>
+  ) : (
+    <audio className="mt-1.5 w-full" controls preload="none" src={src} data-mix-audition={role}>
+      Brauzeringiz audio pleerni qo‘llab-quvvatlamaydi.
+    </audio>
+  );
+}
+
+/** «Montaj qilish · ~500 so'm»: the mode is the chip above, and the words fit the form column whole. */
+export function mixSubmitLabel(price: number): string {
+  return `Montaj qilish · ~${formatSom(price)}`;
 }
 
 /**
  * The «Audio» tab's «Montaj» mode (docs/studio/P8-SPEC.md «P8c»): two sub-modes «Videoga ovoz qo'shish» / «Ovoz + fon
  * musiqa», two pickers from the user's OWN finished results (ids only — the server checks ownership and kind again),
- * the options generated from the mode's schema (`ParamRows`), the sticky «Montaj qilish · <mode> · ~X so'm» and the
+ * the options generated from the mode's schema (`ParamRows`), the sticky «Montaj qilish · ~X so'm» and the
  * results (an MP4 plays as a clip, an MP3 as audio).
  */
 export function MixPanel({
+  before,
   state,
   setState,
   jobs,
@@ -52,6 +80,8 @@ export function MixPanel({
   gated,
   onSubmitted,
 }: {
+  /** The «Audio» tab's mode chips: drawn on top of the form column. */
+  before?: ReactNode;
   state: MixTabState;
   setState: (fn: (s: MixTabState) => MixTabState) => void;
   jobs: readonly StudioJob[];
@@ -70,6 +100,7 @@ export function MixPanel({
     fetchMixSources().then(setSources, (e: unknown) => setLoadError(e instanceof Error ? e.message : "Natijalar yuklanmadi"));
   }, []);
   const { submitting, error, setError, send: queue } = useStudioSend(load);
+  const { resultsRef, scrollToResults } = useResultsScroll();
   // Every finished «Montaj» job is a possible source too: reload on mount and when that count changes.
   const finished = jobs.filter((j) => j.gen?.status === "COMPLETED").length;
   useEffect(() => {
@@ -82,7 +113,9 @@ export function MixPanel({
   const pickers = MIX_PICKERS[mode];
   const ids = MIX_INPUTS[mode];
   const formEntry = { ...m.entry, params: m.entry.params.filter((p) => !ids.includes(p.name)) };
-  const blocker = mixBlocker(mode, raw);
+  // The picked video's length (when the list knows it): the start offset is capped to it, in the row and before the press.
+  const videoSeconds = mode === "video-voice" ? (sources?.video.find((s) => s.id === String(raw[ids[0]] ?? ""))?.seconds ?? null) : null;
+  const blocker = mixBlocker(mode, raw, videoSeconds);
   const price = sources ? mixClientPrice() : null;
 
   const setParam = (name: string, value: unknown) => setState((s) => ({ ...s, raw: { ...s.raw, [mode]: { ...(s.raw[mode] ?? {}), [name]: value } } }));
@@ -92,9 +125,10 @@ export function MixPanel({
   };
 
   function send(target: (typeof MIX_MODES)[number], out: Record<string, unknown>) {
-    return queue({ slug: STUDIO_MIX_SLUG, id: STUDIO_MIX_TOOL_ID, title: target.label, output: target.mode === "video-voice" ? "mp4" : "mp3" }, out, mixClientPrice(), ({ id, price: charged }) =>
-      track({ id, modelId: target.model, modelLabel: "Montaj", prompt: target.label, price: charged, sent: out }),
-    );
+    return queue({ slug: STUDIO_MIX_SLUG, id: STUDIO_MIX_TOOL_ID, title: target.label, output: target.mode === "video-voice" ? "mp4" : "mp3" }, out, mixClientPrice(), ({ id, price: charged }) => {
+      track({ id, modelId: target.model, modelLabel: "Montaj", prompt: target.label, price: charged, sent: out });
+      scrollToResults();
+    });
   }
 
   function submit() {
@@ -115,6 +149,20 @@ export function MixPanel({
 
   return (
     <div data-mix-panel data-mix-mode={mode}>
+      <StudioWorkbench
+        resultsRef={resultsRef}
+        hasResults={jobs.length > 0}
+        empty="Montaj natijalari shu yerda ko‘rinadi."
+        label="Montaj natijalari"
+        results={
+          <section aria-label="Montaj natijalari" data-mix-results className="flex min-w-0 flex-col gap-4">
+            <VideoResults jobs={videoJobs} busy={submitting} onAgain={again} retryPrice={() => mixClientPrice()} failed="Montaj bajarilmadi" />
+            <VoiceResults jobs={audioJobs} busy={submitting} onAgain={again} retryPrice={() => mixClientPrice()} failed="Montaj bajarilmadi" />
+          </section>
+        }
+        form={
+          <>
+      {before}
       <div role="radiogroup" aria-label="Montaj turi" className="mb-3 flex flex-wrap gap-1.5" data-mix-modes>
         {MIX_MODES.map((x) => (
           <button
@@ -185,6 +233,7 @@ export function MixPanel({
                     ) : (
                       <SelectField ariaLabel={pk.label} options={options} value={value} onChange={(v) => setParam(name, v)} />
                     )}
+                    {value ? <SourceAudition id={value} role={pk.role} /> : null}
                   </Field>
                 </div>
               );
@@ -198,7 +247,7 @@ export function MixPanel({
         )}
       </Card>
 
-      <ParamRows entry={formEntry} raw={raw} onChange={setParam} />
+      <ParamRows entry={formEntry} raw={raw} onChange={setParam} limits={{ startOffset: { max: startOffsetMax(videoSeconds) } }} />
 
       <SubmitError error={error} gated={gated} />
       <PriceButton
@@ -209,12 +258,11 @@ export function MixPanel({
         disabled={!sources}
         typing={typing}
         onSubmit={submit}
-        label={price === null || blocker ? undefined : mixSubmitLabel(m.label, price)}
+        label={price === null || blocker ? undefined : mixSubmitLabel(price)}
       />
-      <section aria-label="Montaj natijalari" data-mix-results className={cn(jobs.length > 0 && "mt-5 flex flex-col gap-4")}>
-        <VideoResults jobs={videoJobs} busy={submitting} onAgain={again} retryPrice={() => mixClientPrice()} failed="Montaj bajarilmadi" />
-        <VoiceResults jobs={audioJobs} busy={submitting} onAgain={again} retryPrice={() => mixClientPrice()} failed="Montaj bajarilmadi" />
-      </section>
+          </>
+        }
+      />
     </div>
   );
 }

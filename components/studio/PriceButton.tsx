@@ -56,9 +56,7 @@ export function PriceButton({
           onClick={onSubmit}
           className="bg-primary text-primary-foreground focus-visible:ring-ring flex h-14 w-full items-center justify-center rounded-[18px] px-4 text-[17px] font-bold outline-none transition-[filter,transform] hover:brightness-95 focus-visible:ring-2 focus-visible:ring-offset-2 active:scale-[0.98] disabled:opacity-50 motion-reduce:transform-none"
         >
-          <span className="truncate" data-price-total>
-            {loading ? "Yaratilmoqda..." : price !== null && label ? label : submitLabel(count, price)}
-          </span>
+          <PriceText text={loading ? "Yaratilmoqda..." : price !== null && label ? label : submitLabel(count, price)} />
         </button>
         {balance === null ? null : short ? (
           <p className="text-muted-foreground px-2 pt-1.5 text-center text-[13px] leading-snug" data-balance-short>
@@ -78,5 +76,25 @@ export function PriceButton({
         )}
       </div>
     </div>
+  );
+}
+
+/** The button's text on one line: on a narrow phone the words give way, the price after the last « · » never does. */
+function PriceText({ text }: { text: string }) {
+  const cut = text.lastIndexOf(" · ");
+  if (cut < 0) {
+    return (
+      <span className="truncate" data-price-total>
+        {text}
+      </span>
+    );
+  }
+  return (
+    <span className="flex min-w-0 max-w-full" data-price-total>
+      <span className="truncate">{text.slice(0, cut)}</span>
+      <span className="shrink-0 whitespace-pre" data-price-tail>
+        {text.slice(cut)}
+      </span>
+    </span>
   );
 }

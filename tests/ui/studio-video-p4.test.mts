@@ -157,9 +157,11 @@ test("sheet: the five fal models with maker, honest badges and «~X so'm / 5 s»
   assert.deepEqual(options, [OMNI.id, K3.id, K3P.id, ...FAL.map((e) => e.id)], "video models only, catalog order; the effects are not a picker model");
   const text = (id: string) => q(`[data-model-option="${id}"]`)!.textContent ?? "";
   const price = (id: string) => q(`[data-model-option="${id}"] [data-model-price]`)!.textContent ?? "";
-  assert.match(text("alibaba/wan-3"), /Wan 3\.0.*Alibaba · Ovozli/);
-  assert.match(text("bytedance/seedance-2.5"), /Seedance 2\.5.*ByteDance · Sifatli, Ovozli/);
-  assert.match(text("minimax/h3-max-turbo"), /MiniMax H3 Max Turbo.*MiniMax · Arzon/);
+  // P11 §D ModelSpecs: the maker, then what the schema allows (seconds.max, the top resolution, the sound default, the
+  // frames it takes), then the badges as words — never a hand-written line per model.
+  assert.match(text("alibaba/wan-3"), /Wan 3\.0.*Alibaba · 10 s gacha · 1080p · ovoz bilan · suratdan · oxirgi kadr · Ovozli/);
+  assert.match(text("bytedance/seedance-2.5"), /Seedance 2\.5.*ByteDance · 10 s gacha · 720p · ovoz bilan · suratdan · oxirgi kadr · Sifatli, Ovozli/);
+  assert.match(text("minimax/h3-max-turbo"), /MiniMax H3 Max Turbo.*MiniMax · 10 s gacha · 1080p · suratdan · oxirgi kadr · Arzon/);
   // Default lengths (5 s) and tiers (720p / 768p): $/s × 5 × 12 700 × 2.
   assert.equal(price("alibaba/wan-3"), `~${groupDigits(12_700)} so'm / 5 s`);
   assert.equal(price("bytedance/seedance-2.5"), `~${groupDigits(60_100)} so'm / 5 s`);

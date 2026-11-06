@@ -53,11 +53,14 @@ export function Row({
   label,
   hint,
   wide,
+  stack,
   children,
 }: {
   label: string;
   hint?: string;
   wide?: boolean;
+  /** Yorliq doim boshqaruv USTIDA (tor ustunli formalar — Studio «Ish stoli»); standart: `sm`dan yonma-yon. */
+  stack?: boolean;
   children: ReactNode;
 }) {
   const coarse = useCoarsePointer();
@@ -65,7 +68,7 @@ export function Row({
   const hintId = useId();
   const touchHint = coarse && Boolean(hint);
   return (
-    <div className={cn("grid grid-cols-1 items-center gap-1.5 py-2 sm:grid-cols-[8.5rem_1fr] sm:gap-3", wide && "sm:col-span-2")}>
+    <div className={cn("grid grid-cols-1 items-center gap-1.5 py-2", !stack && "sm:grid-cols-[8.5rem_1fr] sm:gap-3", wide && "sm:col-span-2")}>
       <span className="flex items-center gap-1 text-[14.5px] leading-snug font-medium">
         {label}
         {hint && !coarse ? (

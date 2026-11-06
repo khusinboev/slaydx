@@ -432,6 +432,8 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
           FROM (VALUES (396, TRUE), (397, FALSE), (9999999, TRUE)) AS v(id, img);
     `);
     for (const f of [
+      // 075: Studio P11 §D own video upload (docs/studio/P11-SPEC.md) -- studio_video_inputs.
+      "075_studio_video_inputs.sql",
       // 074: market search (docs/market/PLAN.md §8.2).
       "074_market_search.sql",
       // 073: market core (docs/market/PLAN.md §8.1).
@@ -531,6 +533,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
         const cols = await query<{ c: string }>("SELECT column_name AS c FROM information_schema.columns WHERE table_name = 'generations' AND column_name LIKE 'compare_%'");
         assert.equal(cols.length, 0, "071 rollback drops both columns");
       }
+      if (f === "075_studio_video_inputs.sql") assert.ok(!(await exists("studio_video_inputs")) && !(await exists("studio_video_inputs_user_idx")), "075 rollback drops the table and its index");
       if (f === "069_studio_audio_inputs.sql") assert.ok(!(await exists("studio_audio_inputs")), "069 rollback drops the table");
       if (f === "067_studio_library.sql") {
         assert.ok(!(await exists("studio_prompts")) && !(await exists("studio_templates")) && !(await exists("studio_library_previews")), "067 rollback drops the three tables");

@@ -264,6 +264,12 @@ test("a draft of the wrong shape never reaches a tab", () => {
   assert.deepEqual(audio?.models, { music: "a" });
   assert.deepEqual(audio?.mix, { mode: "video-voice", raw: { "voice-music": { a: 1 } } });
   assert.deepEqual(audio?.tools, { dub: { raw: {}, tab: "upload", kind: null } });
+  // P11 §D: the «Video yuklash» tab survives a refresh with its upload; anything else falls back to the results.
+  const own = parseAudioDraft({ tools: { transcribe: { raw: { source: "upload:a", sourceSeconds: 5 }, tab: "video", kind: "video" }, dub: { raw: {}, tab: "junk" } } });
+  assert.equal(own?.tools?.transcribe?.tab, "video", "MUTATSIYA: the own video's tab is lost on a refresh");
+  assert.equal(own?.tools?.dub?.tab, "result");
+  const picked = parseAudioDraft({ tools: { dub: { raw: {}, tab: "result", model: "heygen/translate-speed" } } });
+  assert.equal(picked?.tools?.dub?.model, "heygen/translate-speed", "MUTATSIYA: the picked model survives a refresh");
 });
 
 test("another user on the same browser sees none of the draft", async () => {
@@ -713,8 +719,9 @@ test("a retry says its price: the catalog's price now, not an old one", async ()
 });
 
 test("retryLabel: a job with no price offers a plain retry", () => {
-  assert.equal(retryLabel(2600), `Qayta urinish · ${formatSom(2600)}`);
-  assert.equal(retryLabel(0), "Qayta urinish");
+  // P11 §D: one name for a repeat on every card («Qayta yaratish»), the retry of a failed job included.
+  assert.equal(retryLabel(2600), `Qayta yaratish · ${formatSom(2600)}`);
+  assert.equal(retryLabel(0), "Qayta yaratish");
 });
 
 test("music: a failure without a server text does not say «Ovoz»", async () => {
@@ -739,6 +746,11 @@ test("the sheet's noun follows the catalog", () => {
 
 test("the Ovoz picker's sheet says «Ovoz modeli»", async () => {
   api();
+  // P11 §D: the sheet opens only when the row cannot hold every model — four speech models here.
+  const inner = globalThis.fetch;
+  const four = [...SPEECH, by("elevenlabs/eleven-v3-fal"), by("elevenlabs/eleven-v4-turbo-fal")];
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) =>
+    String(input) === "/api/media/catalog?purpose=studio.speech" ? json(200, { purpose: "studio.speech", defaultModelId: four[0]!.id, models: four, pricing: PRICING }) : inner(input as never, init);
   await mount();
   await click(tab("ovoz"));
   await settle();

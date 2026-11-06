@@ -3,7 +3,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { FileText, Plus } from "lucide-react";
 import { PriceChangedError } from "@/lib/api-client";
-import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
 import type { FormValues } from "@/lib/types";
 import type { ClientEntry } from "@/lib/studio-core";
@@ -20,10 +19,12 @@ import { PriceButton } from "../PriceButton";
 import { STUDIO_SPEECH_PURPOSE, type CatalogLoad } from "../studio-api";
 import { SubmitError } from "../SubmitError";
 import type { MediaCatalog } from "../studio-types";
-import { carryOver, effective, type RawValues } from "../studio-values";
+import { carryOver, effective, switchNotice, type RawValues } from "../studio-values";
+import { SwitchNotice } from "../SwitchNotice";
 import type { StudioJob } from "../StudioResults";
 import { useStudioJobs } from "../useStudioJobs";
 import { useStudioSend } from "../useStudioSend";
+import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
 import { ClonePanel, type CloneRequest } from "./ClonePanel";
 import { VoiceList, VoicesState, voiceRows, type VoiceFilter, type VoiceRow } from "./VoiceList";
 import { VoiceResults } from "./VoiceResults";
@@ -124,6 +125,7 @@ export function VoiceTab({
     reload(true);
     if (refused) loadVoices();
   });
+  const { resultsRef, scrollToResults } = useResultsScroll();
 
   // A finished clone job: the list shows the new voice (and the server's state of it).
   const doneClones = cloneJobs.jobs.filter((j) => j.gen && j.gen.status !== "QUEUED" && j.gen.status !== "IN_PROGRESS").length;
@@ -134,9 +136,12 @@ export function VoiceTab({
   const patch = (change: Partial<VoiceTabState>) => setState((s) => ({ ...s, ...change }));
   const setParam = (name: string, value: unknown) => setState((s) => ({ ...s, raw: { ...s.raw, [name]: value } }));
 
+  const [switchText, setSwitchText] = useState<string | null>(null);
   function selectModel(id: string) {
     const next = models.find((m) => m.id === id);
     if (!next) return;
+    // P11 §D: a setting the new model drops or changes is said in one line.
+    setSwitchText(entry && entry.id !== next.id ? switchNotice(entry, next, state.raw) : null);
     setState((s) => {
       const kept = carryOver(next, s.raw);
       // The spoken text stays as typed (carryOver clips text params; line breaks matter for a dialogue).
@@ -179,9 +184,10 @@ export function VoiceTab({
   async function send(target: ClientEntry, values: Record<string, unknown>) {
     if (!catalog) return false;
     const label = spokenText(target, values).replace(/\s+/g, " ").slice(0, 72);
-    return queue({ slug: STUDIO_SPEECH_SLUG, id: STUDIO_SPEECH_TOOL_ID, title: label, output: "mp3" }, values, speechClientPrice(target, values, catalog.pricing), ({ id, price: charged }) =>
-      track({ id, modelId: target.id, modelLabel: target.label, prompt: label, price: charged, sent: values }),
-    );
+    return queue({ slug: STUDIO_SPEECH_SLUG, id: STUDIO_SPEECH_TOOL_ID, title: label, output: "mp3" }, values, speechClientPrice(target, values, catalog.pricing), ({ id, price: charged }) => {
+      track({ id, modelId: target.id, modelLabel: target.label, prompt: label, price: charged, sent: values });
+      scrollToResults();
+    });
   }
 
   function submit() {
@@ -263,6 +269,18 @@ export function VoiceTab({
 
   return (
     <div data-voice-tab>
+      <StudioWorkbench
+        resultsRef={resultsRef}
+        hasResults={jobs.length > 0}
+        empty="Ovozlangan audiolar shu yerda ko‘rinadi."
+        label="Audiolar"
+        results={
+          <section aria-label="Audiolar" data-voice-results className="min-w-0">
+            <VoiceResults jobs={jobs} busy={submitting} onAgain={again} retryPrice={retryPrice} />
+          </section>
+        }
+        form={
+          <>
       {split.text.length > 0 && split.dialogue.length > 0 ? (
         <div className="mb-3" data-voice-mode>
           <Segmented
@@ -330,6 +348,7 @@ export function VoiceTab({
         onOpenChange={setPickerOpen}
         priceOf={(m) => speechCardPrice(m, catalog.pricing)}
       />
+      <SwitchNotice text={switchText} onClose={() => setSwitchText(null)} />
 
       <Card title="Ovoz">
         {vparams.length > 1 ? (
@@ -414,9 +433,9 @@ export function VoiceTab({
         onSubmit={submit}
         label={price === null ? "Ovozlash" : voiceSubmitLabel(entry.label, price)}
       />
-      <section aria-label="Audiolar" data-voice-results className={cn(jobs.length > 0 && "mt-5")}>
-        <VoiceResults jobs={jobs} busy={submitting} onAgain={again} retryPrice={retryPrice} />
-      </section>
+          </>
+        }
+      />
     </div>
   );
 }

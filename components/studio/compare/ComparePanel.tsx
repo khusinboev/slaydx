@@ -12,13 +12,21 @@ import { PromptBox } from "../PromptBox";
 import { SubmitError } from "../SubmitError";
 import { usePromptEnhance } from "../usePromptEnhance";
 import { useStudioSend } from "../useStudioSend";
+import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
+import { specLine } from "../model-specs";
 import { badgeText } from "../studio-price";
 import type { MediaCatalog } from "../studio-types";
 import { PROMPT_BYTES_MESSAGE, PROMPT_PARAM, normalizedPrompt, promptBytes, promptLimit, promptMin } from "../studio-values";
 import { sendCompare } from "./compare-api";
 import { CompareResults } from "./CompareResults";
-import { COMPARE_MIN, compareBatch, compareCap, compareLabel, compareModels, memberPrice, memberValues, sharedEntry, sharedParams, toggleModel, type CompareKind } from "./compare-model";
+import { COMPARE_MIN, compareBatch, compareCap, compareLabel, compareModels, compareRange, droppedLine, memberPrice, memberValues, sharedEntry, sharedParams, toggleModel, type CompareKind } from "./compare-model";
 import type { CompareTab } from "./useCompare";
+import type { StudioJob } from "../StudioResults";
+import { queueGeneration } from "@/components/forms/runGeneration";
+import type { FormValues } from "@/lib/types";
+import { STUDIO_TOOL_SLUG } from "../studio-entry";
+import { STUDIO_TOOL_ID } from "../studio-price";
+import { STUDIO_VIDEO_SLUG, STUDIO_VIDEO_TOOL_ID } from "../video/video-price";
 
 /**
  * The «Solishtirish» switch (docs/studio/P7-SPEC.md P7a): above the tab's model picker, on the Rasm tab's drawing mode
@@ -32,7 +40,7 @@ export function CompareSwitch({ checked, onChange }: { checked: boolean; onChang
     <div className="bg-card mb-3 flex items-center justify-between gap-3 rounded-[16px] border px-3.5 py-2" data-compare-switch>
       <div className="min-w-0">
         <p className="text-[15px] font-semibold">Solishtirish</p>
-        <p className="text-muted-foreground text-[12.5px] leading-snug">Bitta so‘rov — {COMPARE_MIN}–{max} ta model yonma-yon</p>
+        <p className="text-muted-foreground text-[12.5px] leading-snug">Bitta so‘rov — {compareRange(max)} ta model yonma-yon</p>
       </div>
       <Switch ariaLabel="Solishtirish" checked={checked} onChange={onChange} />
     </div>
@@ -72,6 +80,7 @@ export function ComparePanel({
     reload(true);
     if (!refused) void useAppStore.getState().refreshSession();
   });
+  const { resultsRef, scrollToResults } = useResultsScroll();
   const { state, setState } = tab;
   const models = compareModels(kind, catalog.models);
   const entries = state.ticked.map((id) => models.find((m) => m.id === id)).filter((m): m is ClientEntry => m !== undefined);
@@ -93,6 +102,31 @@ export function ComparePanel({
     (v) => setRaw(PROMPT_PARAM, v.slice(0, limit)),
     setError,
   );
+
+  /** What a cell's retry costs now: that model's job at the values it was sent (the same preview as the batch). */
+  function retryPrice(job: StudioJob): number {
+    const target = models.find((m) => m.id === job.modelId);
+    return target ? memberPrice(kind, target, job.sent, catalog.pricing) : job.price;
+  }
+
+  /**
+   * P11 §D: a failed cell is retried alone — one new job of that model with the values it was sent, at the price shown,
+   * through the tab's own tool (not a second batch); the new job takes the cell's place in the batch.
+   */
+  async function retry(job: StudioJob) {
+    const target = models.find((m) => m.id === job.modelId);
+    if (!target) {
+      setError("Bu model hozir mavjud emas — boshqa modelni tanlang.");
+      return;
+    }
+    const tool = kind === "video" ? { slug: STUDIO_VIDEO_SLUG, id: STUDIO_VIDEO_TOOL_ID, title: job.prompt.slice(0, 72), output: "mp4" as const } : { slug: STUDIO_TOOL_SLUG, id: STUDIO_TOOL_ID, title: job.prompt.slice(0, 72), output: "png" as const };
+    await run(async () => {
+      const queued = await queueGeneration(tool, job.sent as unknown as FormValues, retryPrice(job), { repeat: true });
+      tab.track({ id: queued.id, modelId: target.id, modelLabel: target.label, prompt: job.prompt, price: queued.price, sent: job.sent });
+      setState((s) => ({ ...s, batches: s.batches.map((b) => (b.ids.includes(job.id) ? { ...b, ids: b.ids.map((id) => (id === job.id ? queued.id : id)) } : b)) }));
+      void useAppStore.getState().refreshSession();
+    });
+  }
 
   async function submit() {
     if (!batch || !shared) {
@@ -117,12 +151,20 @@ export function ComparePanel({
       setState((s) => ({ ...s, batches: [{ group: res.group, prompt: text, ids: res.items.map((x) => x.id) }, ...s.batches.filter((b) => b.group !== res.group)] }));
       // The balance line follows the charge.
       void useAppStore.getState().refreshSession();
+      scrollToResults();
     });
   }
 
   return (
     <div data-compare-panel={kind} className="min-w-0">
-      <div className="md:max-w-[44rem]">
+      <StudioWorkbench
+        resultsRef={resultsRef}
+        hasResults={state.batches.length > 0}
+        empty="Solishtirish natijalari shu yerda yonma-yon ko‘rinadi."
+        label="Solishtirish natijalari"
+        results={<CompareResults kind={kind} batches={state.batches} jobs={tab.jobs} onPick={onPick} onRetry={(j) => void retry(j)} retryPrice={retryPrice} busy={submitting} />}
+        form={
+          <>
         <PromptBox
           value={prompt}
           onChange={(v) => setRaw(PROMPT_PARAM, v.slice(0, limit))}
@@ -134,8 +176,8 @@ export function ComparePanel({
           enhancing={enhancing}
         />
         <Card title="Modellar" aside={<span className="text-muted-foreground tabular-nums" data-compare-count>{entries.length} / {max}</span>}>
-          <p className="text-muted-foreground mb-2 text-[13px]">{COMPARE_MIN}–{max} ta modelni belgilang — har biri o‘z narxida alohida ish bo‘ladi.</p>
-          <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2" data-compare-models>
+          <p className="text-muted-foreground mb-2 text-[13px]">{compareRange(max)} ta modelni belgilang — har biri o‘z narxida alohida ish bo‘ladi.</p>
+          <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 md:grid-cols-1" data-compare-models>
             {models.map((m) => {
               const on = state.ticked.includes(m.id);
               const full = !on && state.ticked.length >= max;
@@ -165,6 +207,16 @@ export function ComparePanel({
                       <span className="text-muted-foreground block truncate text-[12.5px]">
                         ~{groupDigits(price)} so‘m{m.badges.length ? ` · ${badgeText(m)}` : ""}
                       </span>
+                      {/* P11 §D: the same spec words as the picker's card, from the same schema. */}
+                      <span className="text-muted-foreground block text-[12px] leading-snug" data-model-specs>
+                        {specLine(m)}
+                      </span>
+                      {/* P11 §D: what this ticked model runs at its own default, since the shared rows do not ask for it. */}
+                      {on && droppedLine(m, sharedRows) ? (
+                        <span className="text-muted-foreground block text-[12px] leading-snug" data-compare-dropped={m.id}>
+                          {droppedLine(m, sharedRows)}
+                        </span>
+                      ) : null}
                     </span>
                   </button>
                 </li>
@@ -191,10 +243,9 @@ export function ComparePanel({
           label={compareLabel(entries.length, batch ? batch.total : null, formatSom)}
           paidOnly={kind === "video"}
         />
-      </div>
-      <div className={cn(state.batches.length > 0 && "mt-5")}>
-        <CompareResults kind={kind} batches={state.batches} jobs={tab.jobs} onPick={onPick} />
-      </div>
+          </>
+        }
+      />
     </div>
   );
 }

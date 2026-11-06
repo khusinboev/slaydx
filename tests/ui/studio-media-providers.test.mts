@@ -8,6 +8,7 @@ import { MEDIA_CATALOG } from "../../lib/media/catalog.ts";
 import { GPT, NANO, PRICING, USER, catalogBody, installApi, json } from "./studio-fixtures.ts";
 
 const { StudioPage } = await import("../../components/studio/StudioPage.tsx");
+const { specLine } = await import("../../components/studio/model-specs.ts");
 const { useAppStore } = await import("../../lib/store.ts");
 const { useUi } = await import("../../lib/ui.ts");
 const { dropMediaCatalog } = await import("../../components/studio/studio-api.ts");
@@ -49,6 +50,7 @@ const by = (id: string) => view.find((e) => e.id === id)!;
 const OMNI = by("google/omni-video");
 const PIXFX = by("pixverse/effects");
 const KFX = by("kling/effects-v16");
+const KFX_SCENE = (KFX.params.find((p) => p.name === "effect") as unknown as { options: { value: string }[] }).options[0]!.value;
 const GROK = by("xai/grok-imagine-lite");
 const HORSE = by("alibaba/happy-horse");
 const PIX6 = by("pixverse/v6");
@@ -121,10 +123,14 @@ async function open() {
 }
 const button = () => q("[data-studio-submit]")?.textContent ?? "";
 const mode = (label: string) => click(qa('[data-video-mode] [role="radio"]').find((b) => b.textContent === label));
+/** With three models or fewer every card is on the row and the picker draws no «Barcha modellar» (P11 §D): the card is the way. */
 async function pickModel(id: string) {
-  await click(q("[data-model-all]"));
-  await click(q(`[data-model-option="${id}"]`));
-  await click(q("[data-model-confirm]"));
+  const all = q("[data-model-all]");
+  if (all) {
+    await click(all);
+    await click(q(`[data-model-option="${id}"]`));
+    await click(q("[data-model-confirm]"));
+  } else await click(q(`[data-model-card="${id}"]`));
   await settle();
 }
 function stubCanvas() {
@@ -199,6 +205,26 @@ test("effects: the provider, then its effects; the price and the request follow 
   const sent = a.posts()[0]!.body!;
   assert.deepEqual(sent.values, { modelId: KFX.id, effect: "snowglobe", imageAssetId: ASSET });
   assert.equal(sent.expectedPrice, 7_200);
+});
+
+test("effects: a provider button says the picker's specs; a gallery clip re-opens on ITS provider, not the first one", async () => {
+  const fx = "44444444-4444-4444-8444-444444444444";
+  installApi({ catalog: catalogBody([NANO, GPT]) });
+  api([OMNI, PIXFX, KFX]);
+  const inner = globalThis.fetch;
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) =>
+    String(input).startsWith("/api/media/gallery")
+      ? json(200, { items: [{ id: fx, kind: "video", createdAt: "2026-11-02T10:00:00.000Z", modelId: KFX.id, modelLabel: KFX.label, prompt: "Effekt", images: [], fileUrl: `/api/generations/${fx}/file`, video: { src: "x", seconds: 5, requestedSeconds: null, aspect: null, sound: null, effect: KFX_SCENE, effectLabel: "E", derived: false } }], nextCursor: null })
+      : inner(input as never, init);
+  await open();
+  await mode("Shablon effektlar");
+  assert.equal(q(`[data-effect-provider="${KFX.id}"] [data-model-specs]`)!.textContent, specLine(KFX), "MUTATSIYA: the provider button's specs");
+  assert.equal(q(`[data-effect-provider="${PIXFX.id}"]`)!.getAttribute("aria-pressed"), "true", "the first provider by default");
+  await click(q("[data-studio-gallery-link]"));
+  await settle();
+  await click(q(`[data-gallery-item="${fx}"] [data-gallery-other-model]`));
+  await settle();
+  assert.equal(q(`[data-effect-provider="${KFX.id}"]`)!.getAttribute("aria-pressed"), "true", "MUTATSIYA: the merge lost `effectModel` of `videoAgain`");
 });
 
 test("effects: the fal hug is one photo, and the hint asks for two people in it", async () => {
