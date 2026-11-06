@@ -31,7 +31,7 @@ export type StudioMixCtx = { inputs: readonly [MixInput | null, MixInput | null]
 
 export type StudioMixDeps = { ffmpeg?: (run: FfmpegRun) => Promise<Uint8Array> };
 
-const REFUND = "Kredit qaytariladi.";
+const REFUND = "Pul balansingizga qaytariladi.";
 const FAILED = `Montaj bajarilmadi. ${REFUND}`;
 const round1 = (n: number) => Math.round(n * 10) / 10;
 

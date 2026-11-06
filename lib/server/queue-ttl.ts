@@ -27,7 +27,7 @@ import { refundInTx } from "./refund-tx";
  *     daqiqada qayta uriniladi.
  */
 
-export const QUEUE_TTL_MESSAGE = "Navbat juda uzun edi — pul qaytarildi";
+export const QUEUE_TTL_MESSAGE = "Navbat juda uzun edi. Pul balansingizga qaytariladi.";
 
 /** Bitta chaqiruvda nechta ish (har biri o'z tranzaksiyasida). */
 const MAX_PER_RUN = 100;

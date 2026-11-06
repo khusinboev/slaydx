@@ -52,12 +52,12 @@ const geminiCore = () =>
 /** The user-facing reason for an all-failed run. */
 export function portraitFailureMessage(fails: ImageFail[]): string {
   if (fails.some((f) => f.detail.startsWith("javobda rasm yo'q"))) {
-    return "Suratda bitta aniq yuz topilmadi. Yuzingiz yaxshi ko‘rinadigan, yolg‘iz o‘zingiz tushgan suratni yuklang. Pul qaytariladi.";
+    return "Suratda bitta aniq yuz topilmadi. Yuzingiz yaxshi ko‘rinadigan, yolg‘iz o‘zingiz tushgan suratni yuklang. Pul balansingizga qaytariladi.";
   }
   if (fails.some((f) => f.reason === "no-key" || f.reason === "blocked")) {
-    return "Rasm xizmati vaqtincha ishlamayapti. Keyinroq urinib ko‘ring. Pul qaytariladi.";
+    return "Rasm xizmati vaqtincha ishlamayapti. Keyinroq urinib ko‘ring. Pul balansingizga qaytariladi.";
   }
-  return "Portret yaratilmadi. Pul qaytariladi — qayta urinib ko‘ring.";
+  return "Portret yaratilmadi. Pul balansingizga qaytariladi — qayta urinib ko‘ring.";
 }
 
 export async function buildPortraitArtifact(tool: ToolConfig, values: FormValues, opts: PortraitBuildOptions = {}): Promise<BuiltFile> {
@@ -66,7 +66,7 @@ export async function buildPortraitArtifact(tool: ToolConfig, values: FormValues
   const input = portraitInputFromValues(values);
 
   const src = opts.photo?.url ? await fetchImageBytes(opts.photo.url) : null;
-  if (!src) throw new UserFacingError("Surat topilmadi. Suratni qayta yuklang. Pul qaytariladi.");
+  if (!src) throw new UserFacingError("Surat topilmadi. Suratni qayta yuklang. Pul balansingizga qaytariladi.");
   const mime = src.type === "png" ? "image/png" : "image/jpeg";
   const base64 = src.data.slice(src.data.indexOf("base64,") + "base64,".length);
 

@@ -141,7 +141,7 @@ export function parseGeminiQuota(body: string): GeminiQuotaInfo {
 }
 
 /** What the user reads when the daily quota is gone (the chain turns the `dailyQuota` TtsError into this). */
-export const GEMINI_DAILY_QUOTA_MESSAGE = "Ovoz xizmati bugungi limitga yetdi, birozdan keyin urinib ko‘ring. Kredit qaytariladi.";
+export const GEMINI_DAILY_QUOTA_MESSAGE = "Ovoz xizmati bugungi limitga yetdi, birozdan keyin urinib ko‘ring. Pul balansingizga qaytariladi.";
 
 /** TtsError for a failed HTTP response: 429 RESOURCE_EXHAUSTED carries wait time + quota id. */
 export function geminiHttpError(status: number, statusText: string, detail: string): TtsError {

@@ -39,7 +39,7 @@ export type StudioSpeechDeps = {
   run?: (i: Parameters<typeof import("../../server/media/run").runMedia>[0]) => Promise<{ outputs: MediaOutput[]; route?: Route }>;
 };
 
-const FAILED = "Ovoz yaratilmadi — provayder javob bermadi. Kredit qaytariladi.";
+const FAILED = "Ovoz yaratilmadi — provayder javob bermadi. Pul balansingizga qaytariladi.";
 
 /** Largest text of one provider call for this model. */
 export function speechChunkLimit(entry: Pick<CatalogEntry, "id">): number {
@@ -54,11 +54,11 @@ function voiceOf(entry: CatalogEntry, raw: unknown, ctx: StudioSpeechCtx): Voice
   const clone = cloneIdOf(value);
   if (clone) {
     const hit = ctx.clones[clone];
-    if (!hit) throw new UserFacingError("Tanlangan ovoz topilmadi (o‘chirilgan bo‘lishi mumkin). Kredit qaytariladi.");
+    if (!hit) throw new UserFacingError("Tanlangan ovoz topilmadi (o‘chirilgan bo‘lishi mumkin). Pul balansingizga qaytariladi.");
     return { id: hit.providerVoiceId, label: hit.name };
   }
   const lib = libraryVoicesOf(entry.id).find((x) => x.id === value);
-  if (!lib) throw new UserFacingError("Noma'lum ovoz. Kredit qaytariladi.");
+  if (!lib) throw new UserFacingError("Noma'lum ovoz. Pul balansingizga qaytariladi.");
   return { id: lib.id, label: lib.name };
 }
 
@@ -77,10 +77,10 @@ export async function buildStudioSpeech(
 ): Promise<BuiltFile> {
   o.onStage?.({ progress: 0, step: "So‘rov tayyorlanmoqda" });
   const entry = studioSpeechEntry(values);
-  if (!entry) throw new UserFacingError("Tanlangan ovoz modeli mavjud emas. Kredit qaytariladi.");
+  if (!entry) throw new UserFacingError("Tanlangan ovoz modeli mavjud emas. Pul balansingizga qaytariladi.");
   // Review M1: what is spoken is exactly what was priced — a text over the model's limit is refused (refund), never cut.
   const over = spokenOverLimit(entry, values);
-  if (over) throw new UserFacingError(`${over} Kredit qaytariladi.`);
+  if (over) throw new UserFacingError(`${over} Pul balansingizga qaytariladi.`);
   const p = normalize(entry.params, values);
   const adapters = deps.adapters ?? studioSpeechAdapters();
   const run = deps.run ?? defaultRun;
@@ -101,7 +101,7 @@ export async function buildStudioSpeech(
   try {
     if (speechTextParam(entry) === "script") {
       const d = parseDialogue(values.script);
-      if (typeof d === "string") throw new UserFacingError(`${d} Kredit qaytariladi.`);
+      if (typeof d === "string") throw new UserFacingError(`${d} Pul balansingizga qaytariladi.`);
       voices = voiceParamsOf(entry).map((n) => voiceOf(entry, voiceRaw(n), ctx));
       const spoken = d.turns.map((t) => ({ text: t.text, voiceId: voices[t.speaker]!.id }));
       // What was SENT (the turns' text); the price is on the whole normalized script, names included (P5-SPEC, review m5).
@@ -142,7 +142,7 @@ export async function buildStudioSpeech(
 
   o.onStage?.({ progress: 90, step: "Audio yig‘ilmoqda" });
   const mp3 = await mergeToMp3(pieces);
-  if (!mp3) throw new UserFacingError("Audio yig‘ilmadi. Kredit qaytariladi.");
+  if (!mp3) throw new UserFacingError("Audio yig‘ilmadi. Pul balansingizga qaytariladi.");
   const seconds = mp3Seconds(mp3);
   if (usedClones.length) await ctx.touch?.(usedClones).catch(() => undefined);
 

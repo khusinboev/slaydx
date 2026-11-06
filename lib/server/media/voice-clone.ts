@@ -57,7 +57,7 @@ export async function buildStudioClone(
   try {
     begun = await beginClone(job.userId, job.generationId, values);
   } catch (e) {
-    if (e instanceof CloneRefused) throw new UserFacingError(`${e.message} Kredit qaytariladi.`);
+    if (e instanceof CloneRefused) throw new UserFacingError(`${e.message} Pul balansingizga qaytariladi.`);
     throw e;
   }
   const adapters = deps.adapters ?? studioSpeechAdapters();
@@ -99,7 +99,7 @@ export async function buildStudioClone(
   } catch (e) {
     console.warn("[studio-clone] failed:", e instanceof Error ? e.message : e);
     await abortClone(begun.voiceId, providerVoiceId, deps).catch((x: unknown) => console.warn("[studio-clone] abort:", x instanceof Error ? x.message : x));
-    throw new UserFacingError("Ovoz klonlanmadi — provayder javob bermadi yoki yozuvni qabul qilmadi. Kredit qaytariladi.");
+    throw new UserFacingError("Ovoz klonlanmadi — provayder javob bermadi yoki yozuvni qabul qilmadi. Pul balansingizga qaytariladi.");
   }
   await storePreview(`clone:${begun.voiceId}`, mp3).catch(() => undefined);
   o.onStage?.({ progress: 90, step: "Audio yig‘ilmoqda" });

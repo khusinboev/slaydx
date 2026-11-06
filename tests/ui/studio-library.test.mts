@@ -128,6 +128,9 @@ afterEach(async () => {
   });
   globalThis.fetch = realFetch;
   dropMediaCatalog();
+  // The page keeps its mode in the URL and its form in a draft: neither may reach the next test.
+  window.localStorage.clear();
+  window.history.replaceState(null, "", "/");
   useUi.setState({ overlay: null, returnTo: null });
   useAppStore.setState({ loggedIn: false, sessionChecked: false, user: null, generations: [] });
 });

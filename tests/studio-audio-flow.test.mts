@@ -269,7 +269,7 @@ test("gating + music: charge → one /v1/music call → MP3 + media_jobs row + g
   assert.equal(bad.status, 202);
   const failed = await runNext(bad.body.id!);
   assert.equal(failed?.status, "FAILED");
-  assert.match(String(failed?.error), /Kredit qaytariladi/);
+  assert.match(String(failed?.error), /Pul balansingizga qaytariladi/);
   assert.equal(await balanceOf(me), before, "full refund");
   status = 200;
   // A failed call is not spend: no cost_json, no admin row (the user was refunded and nothing was delivered).

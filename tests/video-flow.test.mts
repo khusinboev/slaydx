@@ -308,7 +308,7 @@ test("video: money (paid only), async submit/poll, exactly-once, refunds, recove
     await worker.runJob((await worker.claimNext())!);
     const gb = await gen(b.body.id!);
     assert.equal(gb.status, "FAILED");
-    assert.match(String(gb.error), /Pul qaytarildi/);
+    assert.match(String(gb.error), /Pul balansingizga qaytariladi/);
     assert.equal(await refunds(b.body.id!), "1");
     assert.equal((await wallet(me)).balance, 100_000, "everything came back");
     assert.deepEqual(await failures(a.body.id!), [], "a safety refusal is the user's text, not a provider failure");
@@ -422,7 +422,7 @@ test("video: money (paid only), async submit/poll, exactly-once, refunds, recove
     assert.equal(await ops.pollDueVideoOps(), 1);
     const g = await gen(id);
     assert.equal(g.status, "FAILED");
-    assert.match(String(g.error), /Pul qaytarildi/);
+    assert.match(String(g.error), /Pul balansingizga qaytariladi/);
     assert.equal(await refunds(id), "1", "MUTATSIYA: failVideo'dan qaytarish olib tashlansa qizaradi");
     assert.equal((await wallet(me)).balance, 100_000);
     assert.equal((await op(id))?.status, "failed");
@@ -761,7 +761,7 @@ test("video: money (paid only), async submit/poll, exactly-once, refunds, recove
     assert.equal(stub.submits, 0, "no second paid operation");
     const g = await gen(r.body.id!);
     assert.equal(g.status, "FAILED");
-    assert.match(String(g.error), /Pul qaytarildi/);
+    assert.match(String(g.error), /Pul balansingizga qaytariladi/);
     assert.equal(await refunds(r.body.id!), "1");
     assert.equal((await wallet(me)).balance, 100_000);
     assert.equal((await op(r.body.id!))?.status, "failed");

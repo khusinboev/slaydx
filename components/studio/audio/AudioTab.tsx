@@ -3,29 +3,27 @@
 import { ENHANCE_MIN } from "@/lib/media/enhance";
 import { EnhanceTool } from "../PromptBox";
 import { usePromptEnhance } from "../usePromptEnhance";
-import { useCallback, useEffect, useId, useState } from "react";
-import Link from "next/link";
-import { ApiError, PriceChangedError } from "@/lib/api-client";
+import { useId, useState } from "react";
 import { cn } from "@/lib/cn";
 import { formatSom, groupDigits } from "@/lib/format";
-import type { FormValues } from "@/lib/types";
 import type { ClientEntry } from "@/lib/studio-core";
 import { AutoTextarea } from "@/components/common/AutoTextarea";
 import { Card, Segmented } from "@/components/forms/compact";
 import { Field } from "@/components/forms/shared";
-import { queueGeneration } from "@/components/forms/runGeneration";
-import { PAY_RETURN_PATH } from "@/components/overlays/pay-amount";
 import { takesAudioInput, type AudioMode } from "@/lib/media/catalog-audio";
 import { audioJobLabels, audioModelLabel, offeredModes } from "./audio-modes";
 import { audioOutputCount } from "@/lib/media/studio-audio";
+import { CatalogState } from "../CatalogState";
 import { ParamRows } from "../ParamRows";
 import { PriceButton } from "../PriceButton";
-import type { CatalogState } from "../studio-api";
+import type { CatalogLoad } from "../studio-api";
+import { SubmitError } from "../SubmitError";
+import { useStudioSend } from "../useStudioSend";
 import { carryOver, effective, requestValues, type RawValues } from "../studio-values";
 import type { StudioJob } from "../StudioResults";
-import { VoiceList, voiceRows, type VoiceFilter } from "../voice/VoiceList";
+import { VoiceList, VoicesState, voiceRows, type VoiceFilter } from "../voice/VoiceList";
 import { VoiceResults } from "../voice/VoiceResults";
-import { fetchVoices, type VoicesData } from "../voice/voice-api";
+import { useVoices } from "../voice/voice-api";
 import type { PreparedSample } from "../voice/wav";
 import { AudioInputRow } from "./AudioInputRow";
 import { STUDIO_AUDIO_SLUG, STUDIO_AUDIO_TOOL_ID, audioClientPrice, uploadAudioInput } from "./audio-api";
@@ -60,7 +58,6 @@ export const isMixJob = (job: { modelId: string }): boolean => MIX_MODEL_IDS.has
 /** A job of the P10 «Transkripsiya» / «Dublyaj» chips (their results render in their own panel). */
 export const isSpeechToolJob = (job: { modelId: string }): boolean => SPEECH_TOOL_MODEL_IDS.includes(job.modelId);
 
-const INSUFFICIENT_RE = /balans yetarli emas|to.langan balans bilan/i;
 /** Params drawn by the tab itself (prompt box, upload row, voice list), not by `ParamRows`. */
 const OWN_ROWS = new Set(["prompt", "inputId", "inputSeconds", "voice"]);
 
@@ -99,8 +96,9 @@ export function AudioTab({
   balance,
   typing,
   gated,
+  onSubmitted,
 }: {
-  catalogState: CatalogState;
+  catalogState: CatalogLoad;
   reload: (silent?: boolean) => void;
   state: AudioTabState;
   setState: (fn: (s: AudioTabState) => AudioTabState) => void;
@@ -109,13 +107,16 @@ export function AudioTab({
   balance: number | null;
   typing: boolean;
   gated: boolean;
+  /** The form's own job was queued (not a retry of an old one): the page drops the draft. */
+  onSubmitted?: () => void;
 }) {
   const promptId = useId();
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [voices, setVoices] = useState<VoicesData | null>(null);
+  const { submitting, error, setError, send: queue } = useStudioSend((refused) => {
+    reload(true);
+    if (refused && needsVoices) loadVoices();
+  });
   const catalog = catalogState.status === "ready" ? catalogState.catalog : null;
   const modes = offeredModes(catalog?.models ?? []);
   const speechTools = offeredSpeechTools(catalog?.models ?? []);
@@ -133,12 +134,7 @@ export function AudioTab({
   const providerJobs = jobs.filter((j) => !isMixJob(j) && !isSpeechToolJob(j));
   const mixJobs = jobs.filter(isMixJob);
 
-  const loadVoices = useCallback(() => {
-    fetchVoices().then(setVoices, (e: unknown) => setError(e instanceof Error ? e.message : "Ovozlar yuklanmadi"));
-  }, []);
-  useEffect(() => {
-    if (needsVoices && !voices) loadVoices();
-  }, [needsVoices, voices, loadVoices]);
+  const { voices, error: voicesError, load: loadVoices } = useVoices(needsVoices);
 
   /** Mode chips: the catalog's offered modes, the P10 tools that are on, then «Montaj» (always offered: it needs no provider). */
   const chips = (active: string | null) => (
@@ -183,26 +179,13 @@ export function AudioTab({
           balance={balance}
           typing={typing}
           gated={gated}
+          onSubmitted={onSubmitted}
         />
       </div>
     );
   }
 
-  if (!catalog) {
-    return catalogState.status === "error" ? (
-      <p role="alert" className="text-destructive text-[14.5px]" data-studio-catalog-error>
-        {catalogState.message}{" "}
-        <button type="button" onClick={() => reload()} className="pointer-coarse:min-h-11 font-semibold underline underline-offset-2">
-          Qayta urinish
-        </button>
-      </p>
-    ) : (
-      <div className="flex flex-col gap-3" role="status" aria-label="Audio yuklanmoqda" data-studio-loading>
-        <div className="bg-muted/60 h-36 animate-pulse rounded-[20px]" />
-        <div className="bg-muted/60 h-64 animate-pulse rounded-[20px]" />
-      </div>
-    );
-  }
+  if (!catalog) return <CatalogState state={catalogState} onRetry={() => reload()} label="Audio yuklanmoqda" blocks={["h-36 rounded-[20px]", "h-64 rounded-[20px]"]} />;
   if (tool) {
     return (
       <div data-audio-tab data-audio-mode={tool.mode}>
@@ -222,6 +205,7 @@ export function AudioTab({
           typing={typing}
           gated={gated}
           reload={reload}
+          onSubmitted={onSubmitted}
         />
       </div>
     );
@@ -274,26 +258,12 @@ export function AudioTab({
     }
   }
 
-  async function send(target: ClientEntry, targetLabel: string, out: Record<string, unknown>) {
-    if (!catalog) return;
-    setError(null);
-    setSubmitting(true);
+  function send(target: ClientEntry, targetLabel: string, out: Record<string, unknown>) {
+    if (!catalog) return Promise.resolve(false);
     const title = (String(out.prompt ?? "").trim() || targetLabel).slice(0, 72);
-    try {
-      const { id, price: charged } = await queueGeneration(
-        { slug: STUDIO_AUDIO_SLUG, id: STUDIO_AUDIO_TOOL_ID, title, output: "mp3" },
-        out as unknown as FormValues,
-        audioClientPrice(target, out, catalog.pricing),
-        { repeat: true },
-      );
-      track({ id, modelId: target.id, modelLabel: targetLabel, prompt: title, price: charged, sent: out });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Xatolik");
-      if ((e instanceof ApiError && e.status === 400) || e instanceof PriceChangedError) reload(true);
-      if (e instanceof ApiError && e.status === 400 && needsVoices) loadVoices();
-    } finally {
-      setSubmitting(false);
-    }
+    return queue({ slug: STUDIO_AUDIO_SLUG, id: STUDIO_AUDIO_TOOL_ID, title, output: "mp3" }, out, audioClientPrice(target, out, catalog.pricing), ({ id, price: charged }) =>
+      track({ id, modelId: target.id, modelLabel: targetLabel, prompt: title, price: charged, sent: out }),
+    );
   }
 
   function submit() {
@@ -301,16 +271,23 @@ export function AudioTab({
       setError(blocker);
       return;
     }
-    void send(entry, label, sent);
+    void send(entry, label, sent).then((ok) => ok && onSubmitted?.());
   }
 
+  const jobTarget = (job: StudioJob) => modes.flatMap((m) => m.entries.map((e) => ({ e, label: audioJobLabels(e, m.label, m.entries.length).job }))).find((x) => x.e.id === job.modelId);
+
   function again(job: StudioJob) {
-    const target = modes.flatMap((m) => m.entries.map((e) => ({ e, label: audioJobLabels(e, m.label, m.entries.length).job }))).find((x) => x.e.id === job.modelId);
+    const target = jobTarget(job);
     if (!target) {
       setError("Bu rejim hozir mavjud emas.");
       return;
     }
     void send(target.e, target.label, job.sent);
+  }
+
+  function retryPrice(job: StudioJob): number {
+    const target = jobTarget(job);
+    return target && catalog ? audioClientPrice(target.e, job.sent, catalog.pricing) : job.price;
   }
 
   const provider = "elevenlabs" as const;
@@ -365,7 +342,9 @@ export function AudioTab({
       {mode === "voice-changer" ? (
         <Card title="Yangi ovoz">
           <Field id="voice">
-            {voices ? (
+            {voicesError || !voices ? (
+              <VoicesState error={voicesError} onRetry={loadVoices} />
+            ) : (
               <VoiceList
                 rows={rows}
                 value={String(values.voice ?? "")}
@@ -374,10 +353,6 @@ export function AudioTab({
                 onFilter={(f) => setState((s) => ({ ...s, filter: f }))}
                 filters={["all", "male", "female", "mine"]}
               />
-            ) : (
-              <p className="text-muted-foreground text-[13.5px]" role="status">
-                Ovozlar yuklanmoqda...
-              </p>
             )}
           </Field>
         </Card>
@@ -385,19 +360,7 @@ export function AudioTab({
 
       <ParamRows entry={formEntry} raw={raw} onChange={setParam} />
 
-      {error && !gated ? (
-        <p role="alert" data-studio-error className="text-destructive mb-3 text-[14.5px] leading-snug">
-          {error}
-          {INSUFFICIENT_RE.test(error) ? (
-            <>
-              {" "}
-              <Link href={PAY_RETURN_PATH} data-topup className="text-accent-soft-foreground font-semibold whitespace-nowrap underline underline-offset-2">
-                Balansni to‘ldirish →
-              </Link>
-            </>
-          ) : null}
-        </p>
-      ) : null}
+      <SubmitError error={error} gated={gated} />
       <PriceButton
         count={count}
         price={price}
@@ -409,7 +372,7 @@ export function AudioTab({
         label={price === null ? undefined : audioSubmitLabel(count > 1 ? `${buttonLabel} ×${count}` : buttonLabel, price)}
       />
       <section aria-label="Audiolar" data-audio-results className={cn(providerJobs.length > 0 && "mt-5")}>
-        <VoiceResults jobs={providerJobs} busy={submitting} onAgain={again} />
+        <VoiceResults jobs={providerJobs} busy={submitting} onAgain={again} retryPrice={retryPrice} failed="Audio yaratilmadi" />
       </section>
     </div>
   );

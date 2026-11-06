@@ -51,7 +51,7 @@ export async function buildStudioImage(
   const entry = isStudioImageModel(modelId) ? MEDIA_CATALOG.byId(modelId) : null;
   const baseId = entry ? BASE_OF[entry.id] : undefined;
   const native = entry?.routes[0]?.adapter === FAL_ADAPTER_ID;
-  if (!entry || (!baseId && !native)) throw new UserFacingError("Tanlangan rasm modeli mavjud emas. Kredit qaytariladi.");
+  if (!entry || (!baseId && !native)) throw new UserFacingError("Tanlangan rasm modeli mavjud emas. Pul balansingizga qaytariladi.");
   const p = normalize(entry.params, values);
   const prompt = String(p.prompt ?? "").trim();
   if (prompt.length < 3) throw new Error("Rasm uchun tavsif yozing");

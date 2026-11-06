@@ -93,7 +93,7 @@ export function loadMediaCatalog(purpose: string, opts: { fresh?: boolean } = {}
   return p;
 }
 
-export type CatalogState =
+export type CatalogLoad =
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "ready"; catalog: MediaCatalog };
@@ -102,8 +102,8 @@ export type CatalogState =
  * The model catalog of a purpose. `enabled: false` skips the request (an embedding host that already holds the
  * catalog passes it down instead). `reload` asks the server again, past the cache.
  */
-export function useMediaCatalog(purpose: string, enabled = true): { state: CatalogState; reload: (silent?: boolean) => void } {
-  const [state, setState] = useState<CatalogState>({ status: "loading" });
+export function useMediaCatalog(purpose: string, enabled = true): { state: CatalogLoad; reload: (silent?: boolean) => void } {
+  const [state, setState] = useState<CatalogLoad>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!enabled) return;
@@ -277,4 +277,25 @@ export async function enhancePrompt(prompt: string, kind: EnhanceKind = "image")
   const out = isObj(r) ? str(r.prompt) : null;
   if (!out) throw new Error("Tavsif yaxshilanmadi");
   return out;
+}
+
+/* ───────────────────────── unfinished jobs ───────────────────────── */
+
+/** One unfinished job of `GET /api/media/active-jobs`, as the tabs follow it. */
+export type ActiveJob = { id: string; tool: string; modelId: string; modelLabel: string; prompt: string; price: number; purpose: string | null; sent: Record<string, unknown> };
+
+/** Untrusted JSON → typed: a row without an id or a model cannot be followed, it stays in «Ishlarim». */
+export function parseActiveJobs(raw: unknown): ActiveJob[] {
+  const list = isObj(raw) && Array.isArray(raw.items) ? raw.items : [];
+  return list.flatMap((j): ActiveJob[] => {
+    const id = isObj(j) ? str(j.id) : null;
+    const tool = isObj(j) ? str(j.tool) : null;
+    const modelId = isObj(j) ? str(j.modelId) : null;
+    if (!isObj(j) || !id || !tool || !modelId) return [];
+    return [{ id, tool, modelId, modelLabel: str(j.modelLabel) ?? "", prompt: str(j.prompt) ?? "", price: typeof j.price === "number" ? j.price : 0, purpose: str(j.purpose), sent: isObj(j.sent) ? j.sent : {} }];
+  });
+}
+
+export async function fetchActiveJobs(): Promise<ActiveJob[]> {
+  return parseActiveJobs(await request<unknown>("/api/media/active-jobs"));
 }

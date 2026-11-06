@@ -386,7 +386,7 @@ test("review M1: a text / script over the model's limit is refused before chargi
   const adapters = studioSpeechAdapters({ key: () => KEY });
   await assert.rejects(
     buildStudioSpeech(tools.TOOL_BY_ID["studio-speech"], { ...BASE[EL_DIA], script: long(2000) } as never, { clones: {} }, {}, { adapters, run: (i) => runMedia({ ...i, deps: { fetchImpl } }) }),
-    /Matn juda uzun.*Kredit qaytariladi/,
+    /Matn juda uzun.*Pul balansingizga qaytariladi/,
   );
   assert.equal(seen.length, 0, "MUTATSIYA: over-limit script reached the provider");
   // At the limit: what is sent is the turns' text, ≤ max, and `doc.speech.chars` counts exactly that.

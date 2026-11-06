@@ -1,26 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { RefreshCw } from "lucide-react";
-import { ApiError, PriceChangedError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
-import type { FormValues } from "@/lib/types";
 import { MIX_INPUTS, MIX_MODES, type MixMode } from "@/lib/media/catalog-mix";
 import { Card, SelectField } from "@/components/forms/compact";
 import { Field } from "@/components/forms/shared";
-import { queueGeneration } from "@/components/forms/runGeneration";
-import { PAY_RETURN_PATH } from "@/components/overlays/pay-amount";
 import { ParamRows } from "../ParamRows";
 import { PriceButton } from "../PriceButton";
+import { SubmitError } from "../SubmitError";
 import { requestValues, type RawValues } from "../studio-values";
+import { useStudioSend } from "../useStudioSend";
 import type { StudioJob } from "../StudioResults";
 import { VideoResults } from "../video/VideoResults";
 import { VoiceResults } from "../voice/VoiceResults";
 import { MIX_PICKERS, STUDIO_MIX_SLUG, STUDIO_MIX_TOOL_ID, fetchMixSources, mixClientPrice, mixEntryOf, type MixSource, type MixSources, type MixTabState } from "./mix-api";
-
-const INSUFFICIENT_RE = /balans yetarli emas|to.langan balans bilan/i;
 
 /** «Kuy · Musiqa · 30 s». */
 export function sourceLabel(s: MixSource): string {
@@ -55,6 +50,7 @@ export function MixPanel({
   balance,
   typing,
   gated,
+  onSubmitted,
 }: {
   state: MixTabState;
   setState: (fn: (s: MixTabState) => MixTabState) => void;
@@ -63,16 +59,17 @@ export function MixPanel({
   balance: number | null;
   typing: boolean;
   gated: boolean;
+  /** The form's own job was queued (not a retry of an old one): the page drops the draft. */
+  onSubmitted?: () => void;
 }) {
   const [sources, setSources] = useState<MixSources | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoadError(null);
     fetchMixSources().then(setSources, (e: unknown) => setLoadError(e instanceof Error ? e.message : "Natijalar yuklanmadi"));
   }, []);
+  const { submitting, error, setError, send: queue } = useStudioSend(load);
   // Every finished «Montaj» job is a possible source too: reload on mount and when that count changes.
   const finished = jobs.filter((j) => j.gen?.status === "COMPLETED").length;
   useEffect(() => {
@@ -94,23 +91,10 @@ export function MixPanel({
     setState((s) => ({ ...s, mode: next }));
   };
 
-  async function send(target: (typeof MIX_MODES)[number], out: Record<string, unknown>) {
-    setError(null);
-    setSubmitting(true);
-    try {
-      const { id, price: charged } = await queueGeneration(
-        { slug: STUDIO_MIX_SLUG, id: STUDIO_MIX_TOOL_ID, title: target.label, output: target.mode === "video-voice" ? "mp4" : "mp3" },
-        out as unknown as FormValues,
-        mixClientPrice(),
-        { repeat: true },
-      );
-      track({ id, modelId: target.model, modelLabel: "Montaj", prompt: target.label, price: charged, sent: out });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Xatolik");
-      if ((e instanceof ApiError && e.status === 400) || e instanceof PriceChangedError) load();
-    } finally {
-      setSubmitting(false);
-    }
+  function send(target: (typeof MIX_MODES)[number], out: Record<string, unknown>) {
+    return queue({ slug: STUDIO_MIX_SLUG, id: STUDIO_MIX_TOOL_ID, title: target.label, output: target.mode === "video-voice" ? "mp4" : "mp3" }, out, mixClientPrice(), ({ id, price: charged }) =>
+      track({ id, modelId: target.model, modelLabel: "Montaj", prompt: target.label, price: charged, sent: out }),
+    );
   }
 
   function submit() {
@@ -118,7 +102,7 @@ export function MixPanel({
       setError(blocker);
       return;
     }
-    void send(m, requestValues(m.entry, raw));
+    void send(m, requestValues(m.entry, raw)).then((ok) => ok && onSubmitted?.());
   }
 
   function again(job: StudioJob) {
@@ -165,13 +149,19 @@ export function MixPanel({
         }
       >
         {loadError ? (
-          <p role="alert" className="text-destructive text-[14px]" data-mix-sources-error>
-            {loadError}
+          <p role="alert" className="text-destructive mb-2 text-[14px]" data-mix-sources-error>
+            {loadError}{" "}
+            <button type="button" data-mix-retry onClick={load} className="pointer-coarse:min-h-11 font-semibold underline underline-offset-2">
+              Qayta urinish
+            </button>
           </p>
-        ) : !sources ? (
-          <p className="text-muted-foreground text-[13.5px]" role="status" data-mix-sources-loading>
-            Natijalar yuklanmoqda...
-          </p>
+        ) : null}
+        {!sources ? (
+          loadError ? null : (
+            <p className="text-muted-foreground text-[13.5px]" role="status" data-mix-sources-loading>
+              Natijalar yuklanmoqda...
+            </p>
+          )
         ) : (
           <div className="flex flex-col gap-3">
             {pickers.map((pk, i) => {
@@ -210,19 +200,7 @@ export function MixPanel({
 
       <ParamRows entry={formEntry} raw={raw} onChange={setParam} />
 
-      {error && !gated ? (
-        <p role="alert" data-studio-error className="text-destructive mb-3 text-[14.5px] leading-snug">
-          {error}
-          {INSUFFICIENT_RE.test(error) ? (
-            <>
-              {" "}
-              <Link href={PAY_RETURN_PATH} data-topup className="text-accent-soft-foreground font-semibold whitespace-nowrap underline underline-offset-2">
-                Balansni to‘ldirish →
-              </Link>
-            </>
-          ) : null}
-        </p>
-      ) : null}
+      <SubmitError error={error} gated={gated} />
       <PriceButton
         count={1}
         price={blocker ? null : price}
@@ -234,8 +212,8 @@ export function MixPanel({
         label={price === null || blocker ? undefined : mixSubmitLabel(m.label, price)}
       />
       <section aria-label="Montaj natijalari" data-mix-results className={cn(jobs.length > 0 && "mt-5 flex flex-col gap-4")}>
-        <VideoResults jobs={videoJobs} busy={submitting} onAgain={again} />
-        <VoiceResults jobs={audioJobs} busy={submitting} onAgain={again} />
+        <VideoResults jobs={videoJobs} busy={submitting} onAgain={again} retryPrice={() => mixClientPrice()} failed="Montaj bajarilmadi" />
+        <VoiceResults jobs={audioJobs} busy={submitting} onAgain={again} retryPrice={() => mixClientPrice()} failed="Montaj bajarilmadi" />
       </section>
     </div>
   );

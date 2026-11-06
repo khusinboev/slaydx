@@ -208,8 +208,8 @@ test("xato `cause`: foydalanuvchi matni o'zgarmaydi, ishchi qatori sababni ko'ra
     // Hamma urinish yiqiladi (qayta urinishlar tugaydi) → null.
     const out = await withLogContext({ jobId: "j" }, () => llmComplete("S", "U", 500, {}));
     assert.equal(out, null);
-    const e = errorWithCause("Taqdimot matni yozilmadi. Kredit qaytariladi — qayta urinib ko‘ring.");
-    assert.equal(e.message, "Taqdimot matni yozilmadi. Kredit qaytariladi — qayta urinib ko‘ring.");
+    const e = errorWithCause("Taqdimot matni yozilmadi. Pul balansingizga qaytariladi — qayta urinib ko‘ring.");
+    assert.equal(e.message, "Taqdimot matni yozilmadi. Pul balansingizga qaytariladi — qayta urinib ko‘ring.");
     assert.match(String((e.cause as Error).message), /kind=http status=500/);
     const ser = serializeError(e);
     assert.match(String((ser.cause as { message: string }).message), /kind=http status=500/, "ishchining `failed` qatori sababni chop etadi");

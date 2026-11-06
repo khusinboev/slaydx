@@ -366,7 +366,7 @@ test("engine: SFX variants — 3 of 4 delivered → `delivered` {3, 4}, 3 assets
   const none = stub(() => new Response("boom", { status: 400 }));
   await assert.rejects(
     buildStudioAudio(TOOL, { ...BASE[SFX], variants: 2 } as never, { input: null, clones: {} }, { putAsset }, { adapters: studioAudioAdapters({ key: () => KEY }), run: (i) => runMedia({ ...i, deps: { fetchImpl: none.fetchImpl } }) }),
-    (e: unknown) => e instanceof UserFacingError && /Kredit qaytariladi/.test(e.message),
+    (e: unknown) => e instanceof UserFacingError && /Pul balansingizga qaytariladi/.test(e.message),
   );
   // One clip asked: a full delivery has no `delivered` and stores no extra asset.
   const before = assets.length;

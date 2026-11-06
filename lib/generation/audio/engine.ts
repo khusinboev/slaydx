@@ -231,7 +231,7 @@ export const buildAudioArtifact: AudioBuilder = async (tool, meta, values, opts)
   const premium = input.voiceProvider === "elevenlabs";
   const voiceReady = premium ? (chain.providerReady?.("elevenlabs") ?? false) : chain.configured() && chain.providersFor(input.language).length > 0;
   if (!voiceReady) {
-    throw new Error("Ovoz provayderi sozlanmagan. Yordam xizmatiga murojaat qiling: t.me/SlaydX_support — to‘lov qaytarildi.");
+    throw new Error("Ovoz provayderi sozlanmagan. Yordam xizmatiga murojaat qiling: t.me/SlaydX_support — pul balansingizga qaytariladi.");
   }
 
   /* ── 2. ssenariy ── */

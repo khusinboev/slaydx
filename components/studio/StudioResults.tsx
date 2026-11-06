@@ -5,14 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Clapperboard, Download, Eraser, Mic, Pencil, RefreshCw, Shuffle, ZoomIn } from "lucide-react";
 import type * as api from "@/lib/api-client";
-import type { GenImage } from "@/lib/generation/types";
 import { ApiImg } from "@/lib/use-api-src";
 import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
 import { imageExt } from "@/lib/viewers/kind";
-import { currentDeliveryEnv, deliver, markGesture, type ReadyFile } from "@/lib/downloads/deliver";
-import { GenerationProgress } from "@/components/files/GenerationProgress";
 import { FavoriteButton } from "./Favorite";
+import { JobList, JobResult, RESULT_ACTION as ACTION } from "./JobResult";
+import { downloadStudioFile } from "./studio-download";
 import { MODE_LABEL, MODE_PURPOSE, TOOL_MODES, type StudioMode } from "./studio-modes";
 
 /** A P2b action on one finished picture: «Tahrirlash», «Sifatini oshirish», «Fonni olib tashlash». */
@@ -73,36 +72,6 @@ export type StudioJob = {
   error: string | null;
 };
 
-const ACTION =
-  "focus-visible:ring-ring bg-card hover:bg-muted pointer-coarse:min-h-11 inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[12px] border px-3 text-[13.5px] font-semibold outline-none focus-visible:ring-2 disabled:opacity-50";
-
-/**
- * Where a finished image goes in the browser: through the delivery driver (fetch with the session → blob →
- * `<a download>`), like the viewer's tiles. Inside Telegram a single asset has no signed, cookie-free URL, so the
- * result page (with its «Yuklab olish» sheet) opens instead.
- */
-async function downloadPicture(im: GenImage, index: number, openPage: () => void): Promise<void> {
-  markGesture();
-  const env = currentDeliveryEnv();
-  if (env.capability !== "browser") {
-    openPage();
-    return;
-  }
-  const file: ReadyFile = {
-    format: "native",
-    url: im.url,
-    fileName: `studio-${index + 1}.${imageExt(im.mime)}`,
-    size: 0,
-    mime: im.mime ?? "image/png",
-    expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
-  };
-  try {
-    await deliver(file, env);
-  } catch {
-    openPage();
-  }
-}
-
 /**
  * The Studio's result column: newest job first. A queued / running job shows the app's progress panel
  * (`GenerationProgress`), a finished one its pictures with «Yuklab olish» on every picture and, per job, «Qayta» (the
@@ -112,6 +81,7 @@ export function StudioResults({
   jobs,
   busy,
   onAgain,
+  retryPrice,
   onOtherModel,
   onTool,
   onVideo,
@@ -121,65 +91,27 @@ export function StudioResults({
   /** A submit is in flight: «Qayta» waits. */
   busy: boolean;
   onAgain: (job: StudioJob) => void;
+  /** What a retry costs now; default = what the job cost. */
+  retryPrice?: (job: StudioJob) => number;
   onOtherModel: (job: StudioJob) => void;
   /** P2b: edit / upscale / remove the background of one picture (absent = no tool buttons). */
   onTool?: PictureTool;
 } & PictureNext) {
   if (jobs.length === 0) {
     return (
-      <p className="text-muted-foreground bg-card hidden rounded-[20px] border p-6 text-center text-[14.5px] xl:block" data-studio-empty>
+      <p className="text-muted-foreground bg-card hidden rounded-[20px] border p-6 text-center text-[14.5px] md:block" data-studio-empty>
         Yaratilgan rasmlar shu yerda ko‘rinadi.
       </p>
     );
   }
   return (
-    <ul className="flex flex-col gap-4" data-studio-jobs aria-label="Natijalar">
-      {jobs.map((job) => (
-        <li key={job.id} data-studio-job={job.id} data-job-status={job.gen?.status ?? "QUEUED"}>
-          <JobCard job={job} busy={busy} onAgain={onAgain} onOtherModel={onOtherModel} onTool={onTool} onVideo={onVideo} onVoice={onVoice} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function JobCard({
-  job,
-  busy,
-  onAgain,
-  onOtherModel,
-  onTool,
-  onVideo,
-  onVoice,
-}: { job: StudioJob; busy: boolean; onAgain: (j: StudioJob) => void; onOtherModel: (j: StudioJob) => void; onTool?: PictureTool } & PictureNext) {
-  const gen = job.gen;
-  // No job state: the job may still finish on the server — say so before a retry charges again.
-  if (job.error && !gen) return <Failure job={job} message={`${job.error} Oldingi ish baribir tugashi mumkin — «Ishlarim» yoki Galereyani tekshiring.`} busy={busy} onAgain={onAgain} />;
-  if (!gen) {
-    return (
-      <div className="bg-card rounded-[20px] border p-5" data-studio-pending role="status">
-        <p className="font-medium">Navbatga qo‘yildi</p>
-        <p className="text-muted-foreground mt-0.5 text-[14px]">{job.modelLabel} · {formatSom(job.price)}</p>
-      </div>
-    );
-  }
-  if (gen.status === "QUEUED" || gen.status === "IN_PROGRESS") return <GenerationProgress gen={gen} />;
-  if (gen.status === "COMPLETED") return <Pictures job={job} gen={gen} busy={busy} onAgain={onAgain} onOtherModel={onOtherModel} onTool={onTool} onVideo={onVideo} onVoice={onVoice} />;
-  const message = gen.status === "FAILED" ? gen.error || "Rasm yaratilmadi. Pul balansingizga qaytarildi." : "Ish bekor qilindi.";
-  return <Failure job={job} message={message} busy={busy} onAgain={onAgain} />;
-}
-
-function Failure({ job, message, busy, onAgain }: { job: StudioJob; message: string; busy: boolean; onAgain: (j: StudioJob) => void }) {
-  return (
-    <div className="bg-card rounded-[20px] border p-5" data-studio-failed>
-      <p role="alert" className="text-destructive text-[14.5px] leading-snug">
-        {message}
-      </p>
-      <button type="button" data-result-action="again" disabled={busy} onClick={() => onAgain(job)} className={cn(ACTION, "mt-3")}>
-        <RefreshCw className="size-4" aria-hidden />
-        Qayta urinish
-      </button>
-    </div>
+    <JobList jobs={jobs} label="Natijalar">
+      {(job) => (
+        <JobResult job={job} busy={busy} onAgain={onAgain} retryPrice={retryPrice} failed="Rasm yaratilmadi" lost="Oldingi ish baribir tugashi mumkin — «Ishlarim» yoki Galereyani tekshiring.">
+          {(gen) => <Pictures job={job} gen={gen} busy={busy} onAgain={onAgain} onOtherModel={onOtherModel} onTool={onTool} onVideo={onVideo} onVoice={onVoice} />}
+        </JobResult>
+      )}
+    </JobList>
   );
 }
 
@@ -224,7 +156,7 @@ function Pictures({
                 type="button"
                 data-result-action="download"
                 aria-label={images.length > 1 ? `${i + 1}-rasmni yuklab olish` : "Yuklab olish"}
-                onClick={() => void downloadPicture(im, i, () => router.push(page))}
+                onClick={() => void downloadStudioFile({ url: im.url, fileName: `studio-${i + 1}.${imageExt(im.mime)}`, mime: im.mime ?? "image/png" }, () => router.push(page))}
                 className="focus-visible:ring-ring absolute right-2 bottom-2 inline-flex size-11 items-center justify-center rounded-lg bg-black/70 text-white outline-none hover:bg-black/85 focus-visible:ring-2"
               >
                 <Download className="size-[18px]" aria-hidden />

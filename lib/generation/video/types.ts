@@ -69,7 +69,7 @@ export const VIDEO_MAX_BYTES = 25 * 1024 * 1024;
 
 /** Uzbek text of a provider safety refusal: shown to the user as is. No technical words (see `user-error.ts`). */
 export const VIDEO_SAFETY_MESSAGE =
-  "Provayder tavsifni xavfsizlik qoidalariga ko‘ra rad etdi. Pul qaytarildi — tavsifni o‘zgartirib, qayta urinib ko‘ring.";
+  "Provayder tavsifni xavfsizlik qoidalariga ko‘ra rad etdi. Pul balansingizga qaytariladi — tavsifni o‘zgartirib, qayta urinib ko‘ring.";
 
 /** Heuristic over a provider's own refusal text (neither API documents a machine-readable code we could rely on). */
 export function looksLikeSafetyRefusal(text: string): boolean {
