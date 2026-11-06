@@ -1,6 +1,6 @@
 import { ApiError, handler, json, readJson, requireUser } from "@/lib/server/api";
 import { assertFreeLlmEnabled, withFreeLlm } from "@/lib/server/spend";
-import { ENHANCE_INPUT_MAX, ENHANCE_MIN, enhanceSystemPrompt, enhanceUserPrompt, isEnhanceKind, parseEnhanced } from "@/lib/media/enhance";
+import { ENHANCE_INPUT_MAX, ENHANCE_MIN, enhanceSystemPrompt, enhanceUserPrompt, isEnhanceKind, parseEnhanced, restoreQuoted } from "@/lib/media/enhance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,5 +27,5 @@ export const POST = handler("media/enhance", async (req) => {
   );
   const out = parseEnhanced(r?.text, kind);
   if (!out) throw new ApiError("Tavsif yaxshilanmadi — qayta urinib ko'ring", 503);
-  return json({ prompt: out });
+  return json({ prompt: restoreQuoted(prompt, out, kind) });
 });

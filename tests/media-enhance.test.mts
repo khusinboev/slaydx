@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ENHANCE_INPUT_MAX, ENHANCE_KINDS, ENHANCE_OUTPUT_MAX, enhanceSystemPrompt, isEnhanceKind, parseEnhanced } from "../lib/media/enhance.ts";
+import { ENHANCE_INPUT_MAX, ENHANCE_KINDS, ENHANCE_OUTPUT_MAX, enhanceSystemPrompt, isEnhanceKind, parseEnhanced, quotedTexts, restoreQuoted } from "../lib/media/enhance.ts";
 import { IMAGE_PROMPT_LIMIT } from "../lib/generation/image-params.ts";
 import { VIDEO_PROMPT_MAX } from "../lib/generation/video/registry.ts";
 import { MEDIA_CATALOG } from "../lib/media/catalog.ts";
@@ -12,7 +12,10 @@ import { MEDIA_CATALOG } from "../lib/media/catalog.ts";
  *   1. the English rule dropped from the system prompt    -> «every kind asks for English»;
  *   2. the verbatim rule dropped                          -> «every kind asks for English»;
  *   3. `parseEnhanced` clips at the image limit           -> «the rewrite is clipped by its kind»;
- *   4. the sfx output limit raised above its tool's limit -> «limits fit the tools».
+ *   4. the sfx output limit raised above its tool's limit -> «limits fit the tools»;
+ *   5. `restoreQuoted` returns the rewrite unchanged       -> «quoted text survives»;
+ *   6. the rewrite does not give way to the quote          -> «quoted text survives»;
+ *   7. `clipWords` cuts at the limit, mid-word             -> «the rewrite is clipped by its kind».
  */
 
 test("every kind asks for English from any language, keeps quoted text verbatim, and has its own role", () => {
@@ -30,8 +33,10 @@ test("every kind asks for English from any language, keeps quoted text verbatim,
 test("the rewrite is clipped by its kind, whitespace collapsed; junk is null", () => {
   const long = "a ".repeat(800);
   const json = JSON.stringify({ prompt: long });
-  assert.equal(parseEnhanced(json, "image")!.length, ENHANCE_OUTPUT_MAX.image);
-  assert.equal(parseEnhanced(json, "video")!.length, ENHANCE_OUTPUT_MAX.video);
+  assert.ok(parseEnhanced(json, "image")!.length <= ENHANCE_OUTPUT_MAX.image);
+  assert.ok(parseEnhanced(json, "video")!.length > ENHANCE_OUTPUT_MAX.image, "the video limit is the video's own");
+  assert.ok(parseEnhanced(json, "video")!.length <= ENHANCE_OUTPUT_MAX.video);
+  assert.equal(parseEnhanced(JSON.stringify({ prompt: `${"x".repeat(495)} wordcut more` })), "x".repeat(495), "cut at a word end");
   assert.equal(parseEnhanced('x {"prompt":"Sunset   over\\n Registon"} y'), "Sunset over Registon");
   for (const bad of [null, "", "not json", '{"prompt":"ab"}', '{"prompt":5}']) assert.equal(parseEnhanced(bad), null);
 });
@@ -47,4 +52,16 @@ test("limits fit the tools: a rewrite never exceeds the shortest prompt limit of
   assert.ok(ENHANCE_OUTPUT_MAX.sfx <= promptMax("elevenlabs/sfx"));
   assert.ok(ENHANCE_INPUT_MAX.sfx >= promptMax("elevenlabs/sfx"));
   assert.ok(isEnhanceKind("sfx") && !isEnhanceKind("speech") && !isEnhanceKind(undefined));
+});
+
+test("quoted text survives: a lost or translated quote comes back verbatim, the rewrite gives way, the limit holds", () => {
+  assert.deepEqual(quotedTexts('sign "Xush kelibsiz" and «Bozor» and “Non”'), ["Xush kelibsiz", "Bozor", "Non"]);
+  assert.equal(restoreQuoted("no quotes here", "A rewrite"), "A rewrite");
+  assert.equal(restoreQuoted('sign "Xush kelibsiz"', 'A sign reading "Xush kelibsiz"'), 'A sign reading "Xush kelibsiz"', "already there");
+  assert.equal(restoreQuoted('sign "Xush kelibsiz"', 'A sign reading "Welcome"'), 'A sign reading "Welcome" "Xush kelibsiz"');
+  const out = restoreQuoted('sign "Xush kelibsiz"', `${"word ".repeat(100)}end`.slice(0, 500));
+  assert.ok(out.length <= ENHANCE_OUTPUT_MAX.image);
+  assert.ok(out.endsWith(' "Xush kelibsiz"'));
+  const huge = "q".repeat(600);
+  assert.equal(restoreQuoted(`"${huge}"`, "A rewrite"), "A rewrite", "a quote that cannot fit leaves the rewrite");
 });

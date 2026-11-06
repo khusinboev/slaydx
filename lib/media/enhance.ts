@@ -54,6 +54,31 @@ export function parseEnhanced(text: unknown, kind: EnhanceKind = "image"): strin
     value = null;
   }
   if (typeof value !== "string") return null;
-  const out = value.replace(/\s+/g, " ").trim().slice(0, ENHANCE_OUTPUT_MAX[kind]);
+  const out = clipWords(value.replace(/\s+/g, " ").trim(), ENHANCE_OUTPUT_MAX[kind]);
   return out.length >= ENHANCE_MIN ? out : null;
+}
+
+/** At most `max` characters, cut at a word end. */
+function clipWords(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  return cut.slice(0, Math.max(cut.lastIndexOf(" "), 1)).trimEnd();
+}
+
+/** The user's quoted text, in straight, curly or guillemet quotes. */
+export function quotedTexts(prompt: string): string[] {
+  return [...prompt.matchAll(/"([^"]+)"|“([^”]+)”|«([^»]+)»/g)].map((m) => (m[1] ?? m[2] ?? m[3])!.trim()).filter(Boolean);
+}
+
+/**
+ * The model is told to keep quoted text verbatim; this makes it certain. Quoted text the rewrite lost or translated is
+ * put back at its end, the rewrite giving way to it. A quote that cannot fit leaves the rewrite as it is.
+ */
+export function restoreQuoted(input: string, output: string, kind: EnhanceKind = "image"): string {
+  const missing = quotedTexts(input).filter((q) => !output.includes(q));
+  if (missing.length === 0) return output;
+  const tail = missing.map((q) => `"${q}"`).join(" ");
+  const room = ENHANCE_OUTPUT_MAX[kind] - tail.length - 1;
+  if (room < ENHANCE_MIN) return output;
+  return `${clipWords(output, room)} ${tail}`;
 }
