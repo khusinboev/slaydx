@@ -335,8 +335,10 @@ test("video: two clip models charged from the PAID balance only; bonus so'm → 
   quiet(t);
   const { query } = await db();
   await query("INSERT INTO app_settings (key, value) VALUES ('video.enabled', 'true'::jsonb) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value");
+  await query("INSERT INTO media_model_overrides (model_id, enabled) VALUES ($1, true) ON CONFLICT (model_id) DO UPDATE SET enabled = true", [K3]);
   t.after(async () => {
     await query("DELETE FROM app_settings WHERE key = 'video.enabled'");
+    await query("DELETE FROM media_model_overrides WHERE model_id = $1", [K3]);
     await refresh();
   });
   await refresh();

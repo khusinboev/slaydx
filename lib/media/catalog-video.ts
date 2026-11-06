@@ -5,12 +5,15 @@
  *
  * Client-safe (no server imports, and NOT importing `catalog.ts`: that file imports this one).
  *
- * PROVIDER COSTS (USD), read 2026-11-02 — Kling's own price page (kling.ai/document-api, a JavaScript app) could not
- * be read, so every Kling number below is UNVERIFIED against the account's unit price list:
- *   Kling 3.0  per second, by mode × sound — ComfyUI's «Kling 3.0 Video» partner-node price badge
- *              (github.com/comfyanonymous/ComfyUI comfy_api_nodes/nodes_kling.py `KlingVideoNode`, commit de37ca2,
- *              2026-10-26): 720p (std) $0.084 / s silent, $0.126 / s with sound; 1080p (pro) $0.112 / $0.168.
- *              4K ($0.42 / s) is not sold: a 4K clip does not fit the 25 MB result cap.
+ * PROVIDER COSTS (USD), Kling's own price table (https://kling.ai/document-api/pricing/base/video.md, read 2026-11-06):
+ *   Kling 4.0        per second without an input video: 720p $0.157 (1.0 unit), 1080p $0.235 (1.5 units).
+ *   Kling 4.0 Flash  per second without an input video: 720p $0.094 (0.6 units).
+ *   Kling 3.0        per second, by resolution × sound: 720p $0.084 / s silent, $0.126 / s with sound; 1080p $0.112 / $0.168.
+ *                    4K ($0.42 / s) is not sold: a 4K clip does not fit the 25 MB result cap.
+ *
+ * The account's resource pack (2026-11-06) is «available only for Kling 4.0 and Kling 4.0 Flash»: Kling 3.0 and the effects
+ * answer 1102, so they are `defaultOff` until a pack covers them and the admin switches them on.
+ *
  *   effects    per clip: $0.84 — WaveSpeed's Kling Effects page («most effects start at $0.84»,
  *              https://wavespeed.ai/docs/docs-api/kwaivgi/kwaivgi-kling-effects) and docs/studio/PLAN.md §3
  *              («effects ~$0.84 each»). fal's v1.6 effects endpoint bills $0.056 / s (= $0.28 per 5 s) for the same
@@ -29,7 +32,7 @@ import { normalizeText, type CatalogEntry, type ParamSchema, type PurposeSpec } 
 import { VIDEO_PROMPT_MAX, VIDEO_PROMPT_MIN } from "../generation/video/registry";
 import { VIDEO_MAX_BYTES } from "../generation/video/types";
 import { PHOTO_MAX_BYTES } from "../photo-accept";
-import { KLING_EFFECT_SECONDS, KLING_V3_ASPECTS, KLING_V3_MODEL, KLING_V3_SECONDS } from "../generation/video/kling-options";
+import { KLING_EFFECT_SECONDS, KLING_V3_ASPECTS, KLING_V3_MODEL, KLING_V3_SECONDS, KLING_V4_ASPECTS, KLING_V4_FLASH_MODEL, KLING_V4_MODEL, KLING_V4_SECONDS } from "../generation/video/kling-options";
 
 /** Purpose of the Studio «Video» tab (tool `studio-video`). */
 export const STUDIO_VIDEO_PURPOSE = "studio.video";
@@ -39,6 +42,9 @@ export const KLING_V3_USD_PER_SECOND = {
   std: { silent: 0.084, sound: 0.126 },
   pro: { silent: 0.112, sound: 0.168 },
 } as const;
+
+export const KLING_V4_USD_PER_SECOND = { "720p": 0.157, "1080p": 0.235 } as const;
+export const KLING_V4_FLASH_USD_PER_SECOND = 0.094;
 
 /** USD of one effect clip. */
 export const KLING_EFFECT_USD = 0.84;
@@ -124,10 +130,72 @@ function klingV3(id: string, label: string, badges: CatalogEntry["badges"], tier
     cost: { per: "second", usd: usd.silent, secondsParam: "seconds", by: { param: "sound", table: { false: usd.silent, true: usd.sound } } },
     // One adapter per tier: the mode (`std` / `pro`) is part of the route, the upstream is the model name.
     routes: [{ provider: "kling", upstreamModel: KLING_V3_MODEL, adapter: `kling-v3-${tier}` }],
+    defaultOff: true,
     limits: VIDEO_LIMITS,
     output: VIDEO_OUT,
   };
 }
+
+function klingV4Base(): readonly ParamSchema[] {
+  return [
+    { name: "prompt", label: "Video tavsifi", type: "text", min: VIDEO_PROMPT_MIN, max: VIDEO_PROMPT_MAX, affects: "request" },
+    { name: "seconds", label: "Davomiylik", hint: "Soniya", type: "int", min: KLING_V4_SECONDS.min, max: KLING_V4_SECONDS.max, step: 1, default: 5, affects: "both" },
+    {
+      name: "aspect",
+      label: "O'lcham",
+      hint: "Surat bilan boshlanganda nisbat suratdan olinadi",
+      type: "enum",
+      options: KLING_V4_ASPECTS.map((a) => ({ value: a, label: a })),
+      default: KLING_V4_ASPECTS[0],
+      affects: "request",
+    },
+  ];
+}
+
+const KLING_V4_ENTRIES: readonly CatalogEntry[] = [
+  {
+    id: "kling/kling-4",
+    kind: "video",
+    capabilities: ["t2v", "i2v"],
+    label: "Kling 4.0",
+    maker: "Kuaishou",
+    badges: ["sifatli"],
+    params: [
+      ...klingV4Base(),
+      {
+        name: "resolution",
+        label: "Sifat",
+        hint: "Yuqori sifat qimmatroq",
+        type: "enum",
+        options: [
+          { value: "720p", label: "720p (HD)" },
+          { value: "1080p", label: "1080p (Full HD)" },
+        ],
+        default: "720p",
+        affects: "both",
+      },
+      START_IMAGE,
+      END_IMAGE,
+    ],
+    cost: { per: "second", usd: KLING_V4_USD_PER_SECOND["720p"], secondsParam: "seconds", by: { param: "resolution", table: KLING_V4_USD_PER_SECOND } },
+    routes: [{ provider: "kling", upstreamModel: KLING_V4_MODEL, adapter: "kling-v4" }],
+    limits: VIDEO_LIMITS,
+    output: VIDEO_OUT,
+  },
+  {
+    id: "kling/kling-4-flash",
+    kind: "video",
+    capabilities: ["t2v", "i2v"],
+    label: "Kling 4.0 Flash",
+    maker: "Kuaishou",
+    badges: ["arzon"],
+    params: [...klingV4Base(), START_IMAGE],
+    cost: { per: "second", usd: KLING_V4_FLASH_USD_PER_SECOND, secondsParam: "seconds" },
+    routes: [{ provider: "kling", upstreamModel: KLING_V4_FLASH_MODEL, adapter: "kling-v4" }],
+    limits: VIDEO_LIMITS,
+    output: VIDEO_OUT,
+  },
+];
 
 const KLING_V3_ENTRIES: readonly CatalogEntry[] = [
   klingV3("kling/kling-3", "Kling 3.0", ["arzon"], "std"),
@@ -149,6 +217,7 @@ const KLING_EFFECTS_ENTRY: CatalogEntry = {
   ],
   cost: { per: "job", usd: KLING_EFFECT_USD },
   routes: [{ provider: "kling", upstreamModel: "effects", adapter: "kling-effects" }],
+  defaultOff: true,
   limits: VIDEO_LIMITS,
   output: VIDEO_OUT,
 };
@@ -467,13 +536,13 @@ const HEYGEN_ENTRY: CatalogEntry = {
 export const isAvatarModel = (id: string): boolean => id === HEYGEN_MODEL;
 
 /**
- * Models whose image → video request has no aspect (the canvas follows the start frame): Kling 3.0 and the fal models.
+ * Models whose image → video request has no aspect (the canvas follows the start frame): Kling 4.0, Kling 3.0 and the fal models.
  * The form hides their «O'lcham» row while a start image is set (P4 review N3). Gemini Omni keeps it (it sends it).
  */
-export const ASPECT_FOLLOWS_IMAGE: ReadonlySet<string> = new Set([...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, ...SORA_ENTRIES].map((e) => e.id));
+export const ASPECT_FOLLOWS_IMAGE: ReadonlySet<string> = new Set([...KLING_V4_ENTRIES, ...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, ...SORA_ENTRIES].map((e) => e.id));
 
-/** Every Studio video entry, picker order: Kling 3.0 tiers, the fal models (P4), Sora 2 (P9), HeyGen (P9), the effect templates last. */
-export const STUDIO_VIDEO_ENTRIES: readonly CatalogEntry[] = [...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, ...SORA_ENTRIES, HEYGEN_ENTRY, KLING_EFFECTS_ENTRY];
+/** Every Studio video entry, picker order: Kling 4.0, Kling 3.0 tiers, the fal models (P4), Sora 2 (P9), HeyGen (P9), the effect templates last. */
+export const STUDIO_VIDEO_ENTRIES: readonly CatalogEntry[] = [...KLING_V4_ENTRIES, ...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, ...SORA_ENTRIES, HEYGEN_ENTRY, KLING_EFFECTS_ENTRY];
 
 /** Length of an effect clip (the result page, the short-clip refund). */
 export const STUDIO_EFFECT_SECONDS = KLING_EFFECT_SECONDS;

@@ -646,7 +646,7 @@ test("video on media_jobs: parity with the video_ops path, tables, drain, capaci
     assert.equal(job?.id, id);
     await ops.submitVideoJob({ id, userId: me, lease: job!.lease, values: job!.values }, { adapters });
     const [row] = await query<{ model_id: string; provider: string; upstream_model: string }>(`SELECT model_id, provider, upstream_model FROM media_jobs WHERE generation_id = $1`, [id]);
-    assert.deepEqual([row!.model_id, row!.provider, row!.upstream_model], ["kling/video", "kling", "kling-v2-master"]);
+    assert.deepEqual([row!.model_id, row!.provider, row!.upstream_model], ["kling/video", "kling", "kling-4.0-flash"]);
     await makeDue(id);
     assert.equal(await ops.pollDueVideoOps({ adapters }), 1);
     assert.deepEqual(calls, ["submit:10", "poll:t2v:task1", "download:inline"]);

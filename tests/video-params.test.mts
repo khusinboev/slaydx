@@ -102,14 +102,14 @@ test("every provider's own lengths reach its request and its price", () => {
 test("the prompt reaches the provider, the aspect too (text to video), the image only when one was chosen", () => {
   const req = JSON.parse(requestOf({ ...BASE, provider: "kling", prompt: "Hello unique prompt 123" })) as { body: Record<string, unknown> };
   assert.equal(req.body.prompt, "Hello unique prompt 123");
-  assert.equal(req.body.aspect_ratio, "16:9");
-  assert.equal(req.body.duration, "5");
-  assert.equal(req.body.image, undefined);
+  assert.deepEqual(req.body.settings, { resolution: "720p", duration: 5, aspect_ratio: "16:9" });
+  assert.equal(req.body.contents, undefined);
   assert.match(JSON.stringify(JSON.parse(requestOf({ ...BASE, provider: "veo", aspect: "9:16" }))), /"aspect_ratio":"9:16"/);
   const withImage = JSON.parse(requestOf({ ...BASE, provider: "kling", imageAssetId: IMG_A })) as { url: string; body: Record<string, unknown> };
-  assert.match(withImage.url, /image2video$/);
-  assert.ok(typeof withImage.body.image === "string" && withImage.body.image.length > 10);
-  assert.equal(withImage.body.aspect_ratio, undefined, "Kling image-to-video takes the picture's proportions");
+  assert.match(withImage.url, /image-to-video\/kling-4\.0-flash$/);
+  const frame = (withImage.body.contents as { type: string; url?: string }[]).find((c) => c.type === "first_frame");
+  assert.ok(typeof frame?.url === "string" && frame.url.length > 10);
+  assert.equal((withImage.body.settings as Record<string, unknown>).aspect_ratio, undefined, "Kling image-to-video takes the picture's proportions");
 });
 
 /* ══════════════════════════ price ══════════════════════════ */

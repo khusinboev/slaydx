@@ -33,8 +33,8 @@ export const MEDIA_IMAGE_PROMPT_MIN = 3;
 const GEMINI_IMAGE_DEFAULT = "gemini-3.1-flash-lite-image";
 const OPENAI_IMAGE_DEFAULT = "gpt-image-2.5-flare";
 
-/** USD per second of video. Omni: $17.50 / 1M output tokens × 5 792 tokens/s (video/registry.ts). Kling: UNVERIFIED. */
-export const VIDEO_USD_PER_SECOND: Readonly<Record<VideoProviderId, number>> = { veo: 0.1, kling: 0.1 };
+/** USD per second of video. Omni: $17.50 / 1M output tokens × 5 792 tokens/s (video/registry.ts). Kling: 4.0 Flash 720p (Kling's price table). */
+export const VIDEO_USD_PER_SECOND: Readonly<Record<VideoProviderId, number>> = { veo: 0.1, kling: 0.094 };
 
 /**
  * Order = the Studio form's row order (P1 contract with the UI): O'lcham, Soni, then Uslub under «Qo'shimcha
@@ -284,7 +284,7 @@ export const MEDIA_ENTRIES: readonly CatalogEntry[] = [
     badges: ["arzon"],
     params: videoParams("kling"),
     cost: { per: "second", usd: VIDEO_USD_PER_SECOND.kling, secondsParam: "seconds" },
-    routes: [{ provider: "kling", upstreamModel: "kling-v2-master", adapter: "kling-video" }],
+    routes: [{ provider: "kling", upstreamModel: "kling-4.0-flash", adapter: "kling-video" }],
     limits: { timeoutMs: 60_000, deadlineMs: 20 * 60_000 },
     output: { mimes: ["video/mp4"], maxBytes: VIDEO_MAX_BYTES },
   },

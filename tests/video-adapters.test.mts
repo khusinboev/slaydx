@@ -189,25 +189,25 @@ test("Kling key: one token; empty, spaced or the retired <access>:<secret> pair 
   assert.equal(makeKlingAdapter({ key: () => KKEY }).configured(), true);
 });
 
-test("Kling request shape: text2video vs image2video, duration as a string, std mode", () => {
+test("Kling request shape: Kling 4.0 Flash text and image to video, duration as a number, 720p", () => {
   const t = buildKlingRequest({ prompt: "A cat", seconds: 10, aspect: "9:16" });
-  assert.equal(t.url, "https://api-singapore.klingai.com/v1/videos/text2video");
-  assert.deepEqual(t.body, { model_name: KLING_MODEL, prompt: "A cat", duration: "10", mode: "std", aspect_ratio: "9:16" });
+  assert.equal(t.url, `https://api-singapore.klingai.com/text-to-video/${KLING_MODEL}`);
+  assert.deepEqual(t.body, { prompt: "A cat", settings: { resolution: "720p", duration: 10, aspect_ratio: "9:16" } });
   const i = buildKlingRequest({ prompt: "Animate", seconds: 5, aspect: "16:9", image: { mime: "image/png", base64: "QUJD" } });
-  assert.equal(i.url, "https://api-singapore.klingai.com/v1/videos/image2video");
-  assert.deepEqual(i.body, { model_name: KLING_MODEL, prompt: "Animate", duration: "5", mode: "std", image: "QUJD" });
+  assert.equal(i.url, `https://api-singapore.klingai.com/image-to-video/${KLING_MODEL}`);
+  assert.deepEqual(i.body, { contents: [{ type: "prompt", text: "Animate" }, { type: "first_frame", url: "QUJD" }], settings: { resolution: "720p", duration: 5 } });
 });
 
 test("Kling submit / poll: the API key as Bearer, the op id carries the kind, statuses map", async () => {
   const a = makeKlingAdapter({ key: () => KKEY });
-  const sub = stub(() => jsonRes({ code: 0, message: "SUCCEED", data: { task_id: "tsk_9", task_status: "submitted" } }));
+  const sub = stub(() => jsonRes({ code: 0, message: "SUCCEED", data: { id: "tsk_9", status: "submitted" } }));
   const out = await a.submit({ prompt: "A cat", seconds: 5, aspect: "16:9" }, { fetchImpl: sub.fetchImpl, now: () => 1_000_000_000 });
-  assert.deepEqual(out, { opId: "text2video:tsk_9" });
+  assert.deepEqual(out, { opId: "task:tsk_9" });
   assert.equal((sub.seen[0]!.init.headers as Record<string, string>).Authorization, `Bearer ${KKEY}`);
   assert.ok(!String(sub.seen[0]!.init.body).includes(KKEY));
 
   const img = stub(() => jsonRes({ code: 0, data: { task_id: "tsk_10" } }));
-  assert.deepEqual(await a.submit({ prompt: "x animate", seconds: 5, aspect: "16:9", image: { mime: "image/jpeg", base64: "QQ==" } }, { fetchImpl: img.fetchImpl }), { opId: "image2video:tsk_10" });
+  assert.deepEqual(await a.submit({ prompt: "x animate", seconds: 5, aspect: "16:9", image: { mime: "image/jpeg", base64: "QQ==" } }, { fetchImpl: img.fetchImpl }), { opId: "task:tsk_10" });
 
   const poll = async (data: unknown) => {
     const s = stub(() => jsonRes({ code: 0, data }));

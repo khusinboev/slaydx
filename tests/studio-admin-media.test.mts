@@ -54,7 +54,7 @@ const generationsRoute = await import("../app/api/generations/route.ts");
 const NANO = "google/nano-banana";
 const GPT = "openai/gpt-image";
 /** P3: the Studio Video tab's models, listed after the pictures (Gemini Omni + Kling 3.0 tiers + effects); P4 adds the fal models. */
-const STUDIO_VIDEO_IDS = ["google/omni-video", "kling/kling-3", "kling/kling-3-pro", "alibaba/wan-3", "bytedance/seedance-2.5", "bytedance/seedance-2-mini", "minimax/h3", "minimax/h3-max-turbo", "openai/sora-2", "openai/sora-2-pro", "heygen/avatar", "kling/effects"];
+const STUDIO_VIDEO_IDS = ["google/omni-video", "kling/kling-4", "kling/kling-4-flash", "kling/kling-3", "kling/kling-3-pro", "alibaba/wan-3", "bytedance/seedance-2.5", "bytedance/seedance-2-mini", "minimax/h3", "minimax/h3-max-turbo", "openai/sora-2", "openai/sora-2-pro", "heygen/avatar", "kling/effects"];
 /** P5: the «Ovoz» tab's speech models, listed after the video ones; one unit = 1 000 characters (the clone is a fixed price, not here). */
 const STUDIO_SPEECH_IDS = ["elevenlabs/eleven-v3", "google/gemini-tts", "elevenlabs/v3-dialogue", "google/gemini-dialogue"];
 /**
@@ -396,4 +396,21 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
   invalidateMediaOverrides();
   invalidateSettingsCache();
   invalidatePricingCache();
+});
+
+test("a defaultOff model: off with no row, the admin's switch stores true and shows it, off again leaves no row", { skip }, async () => {
+  const s = await session("owner");
+  const id = "kling/effects";
+  await query("DELETE FROM media_model_overrides WHERE model_id = $1", [id]);
+  invalidateMediaOverrides();
+  const item = (r: { body: { models: { modelId: string; enabled: boolean }[] } }) => r.body.models.find((m) => m.modelId === id)!;
+  assert.equal(item(await get(s.cookie)).enabled, false);
+  const on = await put(s.cookie, { modelId: id, enabled: true, markup: null, reason: REASON });
+  assert.equal(on.status, 200, JSON.stringify(on.body));
+  assert.equal(item(on).enabled, true);
+  assert.deepEqual((await rows()).filter((r) => r.model_id === id).map((r) => r.enabled), [true]);
+  const off = await put(s.cookie, { modelId: id, enabled: false, markup: null, reason: REASON });
+  assert.equal(off.status, 200, JSON.stringify(off.body));
+  assert.equal(item(off).enabled, false);
+  assert.deepEqual((await rows()).filter((r) => r.model_id === id), [], "the default state is no row");
 });

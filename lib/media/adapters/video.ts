@@ -20,11 +20,13 @@ import { HEYGEN_ADAPTER_ID, heygenVideoAdapter, type HeygenDeps } from "./heygen
 import {
   buildKlingDualEffectRequest,
   KLING_V3_ASPECTS,
+  KLING_V4_ASPECTS,
   VIDEO_ASPECTS,
   VIDEO_PROVIDER_IDS,
   VideoProviderError,
   buildKlingEffectRequest,
   buildKlingV3Request,
+  buildKlingV4Request,
   downloadKlingVideo,
   klingKey,
   omniAdapter,
@@ -34,6 +36,7 @@ import {
   type KlingV3Aspect,
   type KlingV3Input,
   type KlingV3Mode,
+  type KlingV4Input,
   type VideoAdapter,
   type VideoAspect,
   type VideoMedia,
@@ -101,6 +104,7 @@ export function videoRoute(provider: VideoProviderId) {
 
 /* ═════════════════ Studio «Video» tab (docs/studio/P3-SPEC.md) ═════════════════ */
 
+const KLING_V4_ADAPTER_ID = "kling-v4";
 const KLING_V3_TIERS: Readonly<Record<string, KlingV3Mode>> = { "kling-v3-std": "std", "kling-v3-pro": "pro" };
 
 /** The Kling 3.0 request of a Studio job (normalized params of a `kling/kling-3*` entry + the resolved start image). */
@@ -117,6 +121,23 @@ export function klingV3Input(mode: KlingV3Mode, input: Omit<AdapterInput, "idemp
     aspect,
     mode,
     sound: p.sound === true,
+    ...(image ? { image: { mime: image.mime, base64: image.base64 } } : {}),
+    ...(tail ? { imageTail: { mime: tail.mime, base64: tail.base64 } } : {}),
+  };
+}
+
+/** The Kling 4.0 / 4.0 Flash request of a Studio job. A model without a quality row (Flash) renders 720p. */
+export function klingV4Input(input: Omit<AdapterInput, "idempotencyKey">): KlingV4Input {
+  const p = input.params;
+  const aspect = KLING_V4_ASPECTS.find((a) => a === p.aspect) ?? KLING_V4_ASPECTS[0];
+  const image = input.assets?.imageAssetId?.[0];
+  const tail = image ? input.assets?.[END_IMAGE_PARAM]?.[0] : undefined;
+  return {
+    model: input.upstreamModel,
+    prompt: String(p.prompt ?? ""),
+    seconds: Number(p.seconds),
+    aspect,
+    resolution: p.resolution === "1080p" ? "1080p" : "720p",
     ...(image ? { image: { mime: image.mime, base64: image.base64 } } : {}),
     ...(tail ? { imageTail: { mime: tail.mime, base64: tail.base64 } } : {}),
   };
@@ -180,13 +201,14 @@ function klingStudioAdapter(id: string, key: () => string, build: (input: Adapte
 
 /**
  * The adapters of the `studio.video` routes by adapter id: `google-video` (Gemini Omni, the «Video» tool's adapter
- * wrapped as today), `kling-v3-std` / `kling-v3-pro` (Kling 3.0 tiers) and `kling-effects`, `fal-video` (P4) and
+ * wrapped as today), `kling-v4` (Kling 4.0, 4.0 Flash), `kling-v3-std` / `kling-v3-pro` (Kling 3.0 tiers), `kling-effects`, `fal-video` (P4) and
  * `heygen-video` (P9). `omni`, `klingKeyFn`, `falKeyFn` and `heygen` are test seams; production passes nothing.
  */
 export function studioVideoAdapters(opts: { omni?: VideoAdapter; klingKeyFn?: () => string; falKeyFn?: () => string | null; heygen?: HeygenDeps } = {}): Record<string, MediaAdapter> {
   const key = opts.klingKeyFn ?? klingKey;
   const out: Record<string, MediaAdapter> = { "google-video": videoAdapter("google-video", opts.omni ?? omniAdapter) };
   for (const [id, mode] of Object.entries(KLING_V3_TIERS)) out[id] = klingStudioAdapter(id, key, (input) => buildKlingV3Request(klingV3Input(mode, input)));
+  out[KLING_V4_ADAPTER_ID] = klingStudioAdapter(KLING_V4_ADAPTER_ID, key, (input) => buildKlingV4Request(klingV4Input(input)));
   out["kling-effects"] = klingStudioAdapter("kling-effects", key, klingEffectRequest);
   // P4: Wan / Seedance / MiniMax through the fal queue (async: submit → op id → the shared video poll loop).
   out[FAL_VIDEO_ADAPTER_ID] = falVideoAdapter(opts.falKeyFn ? { key: opts.falKeyFn } : {});

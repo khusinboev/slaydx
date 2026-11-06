@@ -153,12 +153,16 @@ test("studio-video: gating, money, async submit/poll on media_jobs, refunds, gal
     if (enabled !== null) await query("INSERT INTO media_model_overrides (model_id, enabled) VALUES ($1, $2)", [modelId, enabled]);
     invalidateMediaOverrides();
   };
+  /** Kling 3.0 and the effects are `defaultOff`: this suite runs them with the admin's switch on. */
+  const switchOnDark = async () => {
+    for (const id of ["kling/kling-3", "kling/kling-3-pro", "kling/effects"]) await setOverride(id, true);
+  };
   const clearAll = async () => {
     await query(`UPDATE generations SET status = 'REVOKED' WHERE status IN ('QUEUED','IN_PROGRESS')`);
     await query(`UPDATE media_jobs SET status = 'failed' WHERE status IN ('pending','submitting')`);
     await setSetting("video.enabled", true);
     await setSwitch("kling", null);
-    await setOverride("kling/effects", null);
+    await switchOnDark();
     await query("DELETE FROM rate_limits WHERE bucket LIKE 'gen:%'").catch(() => undefined);
     resetStub();
   };
@@ -192,9 +196,9 @@ test("studio-video: gating, money, async submit/poll on media_jobs, refunds, gal
     assert.deepEqual(await wallet(me), { points: 0, balance: 500_000 }, "nothing charged");
 
     await setSetting("video.enabled", true);
-    assert.deepEqual((await catalog()).models.map((m) => m.id), ["google/omni-video", "kling/kling-3", "kling/kling-3-pro", "kling/effects"]);
+    assert.deepEqual((await catalog()).models.map((m) => m.id), ["google/omni-video", "kling/kling-4", "kling/kling-4-flash", "kling/kling-3", "kling/kling-3-pro", "kling/effects"]);
     assert.equal((await catalog()).defaultModelId, "google/omni-video");
-    assert.deepEqual((await features(me)).studioVideoModels, ["google/omni-video", "kling/kling-3", "kling/kling-3-pro", "kling/effects"]);
+    assert.deepEqual((await features(me)).studioVideoModels, ["google/omni-video", "kling/kling-4", "kling/kling-4-flash", "kling/kling-3", "kling/kling-3-pro", "kling/effects"]);
 
     await setSwitch("kling", false);
     assert.deepEqual((await catalog()).models.map((m) => m.id), ["google/omni-video"], "Kling switched off in «Provayderlar»");
@@ -207,7 +211,7 @@ test("studio-video: gating, money, async submit/poll on media_jobs, refunds, gal
     assert.ok(!(await catalog()).models.some((m) => m.id === "kling/effects"), "switched off in «Media modellari»");
     const fx = await post(me, { modelId: "kling/effects", effect: "happy_birthday", imageAssetId: ASSET });
     assert.equal(fx.status, 400);
-    await setOverride("kling/effects", null);
+    await switchOnDark();
 
     assert.equal((await post(me, { modelId: "openai/gpt-image", prompt: "Registon" })).status, 400, "not a video model");
     assert.equal((await post(me, { modelId: "kling/effects", effect: "happy_birthday" })).status, 400, "effect without its photo");

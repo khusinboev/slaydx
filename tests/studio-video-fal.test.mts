@@ -96,7 +96,7 @@ const authOf = (s: Seen) => new Headers(s.init.headers).get("authorization");
 test("catalog: five fal video entries on the fal-video route, per-second tables, ≤ 10 s, between Kling 3.0 and the effects", () => {
   assert.deepEqual(FAL_VIDEO_ENTRIES.map((e) => e.id), FAL_IDS);
   const allowed = MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed;
-  assert.deepEqual(allowed.slice(3, 8), FAL_IDS);
+  assert.deepEqual(allowed.slice(5, 10), FAL_IDS);
   assert.equal(allowed.at(-1), "kling/effects", "the effects stay last");
   const upstream: Record<string, string> = {
     "alibaba/wan-3": "alibaba/wan-3.0",
