@@ -108,6 +108,8 @@ const P2B_USD: Record<string, number> = {
   "bytedance/seedvr-upscale": 0.0168,
   "bria/background-remove": 0.018,
 };
+/** P11 package F: listed and priced here, but `defaultOff`: off with no row until the admin's switch. */
+const HIDDEN_IMAGE_IDS = ["meta/muse", "bfl/flux-klein", "meta/muse-edit", "bfl/flux-klein-edit"];
 const USD: Record<string, number> = { [NANO]: IMAGE_PRICES["gemini-3.1-flash-lite-image"]!, [GPT]: OPENAI_IMAGE_FALLBACK_USD, ...FAL_USD, ...P2B_USD };
 const STUDIO = TOOL_BY_ID["studio-image"];
 const REASON = "Provayder narxi oshgani uchun ustama tuzatildi";
@@ -238,8 +240,8 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
       assert.equal(m.price, await effectivePrice(STUDIO, { modelId: m.modelId, imageCount: 1 }), "the charging function");
       assert.equal(m.marginSoum, Math.round((m.price - m.costSoum) * 100) / 100);
       assert.ok(m.marginPct > 0 && m.marginPct < 100);
-      assert.equal(m.enabled, true);
-      assert.equal(m.available, true);
+      assert.equal(m.enabled, !HIDDEN_IMAGE_IDS.includes(m.modelId), m.modelId);
+      assert.equal(m.available, !HIDDEN_IMAGE_IDS.includes(m.modelId), m.modelId);
       assert.equal(m.providerReady, true);
       assert.equal(m.markupOverride, null);
     }
@@ -369,7 +371,7 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
     assert.equal(nano.enabled, false);
     assert.equal(nano.available, false);
     const c = await catalog();
-    assert.deepEqual(c.body.models.map((m: { id: string }) => m.id), [GPT, ...Object.keys(FAL_USD)]);
+    assert.deepEqual(c.body.models.map((m: { id: string }) => m.id), [GPT, ...Object.keys(FAL_USD).filter((id) => !HIDDEN_IMAGE_IDS.includes(id))]);
     assert.equal(c.body.defaultModelId, GPT);
     const buyer = await mkUser(100_000);
     await query("DELETE FROM rate_limits WHERE bucket LIKE 'gen:%'");
