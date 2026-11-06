@@ -2,7 +2,7 @@ import "./setup.ts";
 import test, { afterEach, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { StrictMode, createElement as h } from "react";
-import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { MEDIA_CATALOG, studioPurposeOf } from "../../lib/media/catalog.ts";
 import { ASPECT_FOLLOWS_IMAGE } from "../../lib/media/catalog-video.ts";
@@ -25,6 +25,9 @@ const { modelNoun } = await import("../../components/studio/MediaModelPicker.tsx
 const { startImageHint } = await import("../../components/studio/video/VideoTab.tsx");
 const { retryLabel } = await import("../../components/studio/JobResult.tsx");
 const { REFUND_PHRASE } = await import("../../lib/refund-phrase.ts");
+const { useStudioJobs } = await import("../../components/studio/useStudioJobs.ts");
+const { installNav } = await import("../../lib/nav/history.ts");
+const { studioPrice } = await import("../../components/studio/studio-price.ts");
 
 /**
  * Studio reliability (docs/studio/P11-SPEC.md «C. Reliability»), the page with the API stubbed at `fetch`.
@@ -62,7 +65,16 @@ const { REFUND_PHRASE } = await import("../../lib/refund-phrase.ts");
  *  21. `startImageHint` always «nisbat suratdan olinadi»                                  -> «the start image hint»;
  *  22. the empty column back to `xl:block`                                                -> «the tablet's»;
  *  23. `useDraft` keeps the write queued by the restore's own pass (`replaced` ignored)     -> «refresh under StrictMode»;
- *  24. the tabs start without the link's mode (applied only after the first URL write)    -> «the login keeps».
+ *  24. the tabs start without the link's mode (applied only after the first URL write)    -> «the login keeps»;
+ *  25. `retryPrice` back to `job.price` for another purpose                               -> «cross-purpose retry: the label»;
+ *  26. `again` drops `shown` (the catalog's price goes out)                               -> «cross-purpose retry: a price not known yet»;
+ *  27. `<StudioApp />` without the key                                                    -> «an account switched in place»;
+ *  28. `onNavigate` subscription removed                                                  -> «a soft navigation»;
+ *  29. `useStudioJobs` ignores `open` (restored jobs always polled)                       -> «refresh: running jobs», «restored jobs stop»;
+ *  30. `track` without the early return                                                   -> «track: a live card»;
+ *  31. `restore` without the early return                                                 -> «restore: a live card»;
+ *  32. `signOut` does not drop the drafts                                                 -> «logout»;
+ *  33. `onDraftsDropped` not honoured (the pending write lands after the logout)          -> «logout».
  */
 
 Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
@@ -318,6 +330,7 @@ test("a link's mode wins over the draft's; a mode the tab does not have is ignor
 });
 
 test("back follows the URL: the tab it left comes back", async () => {
+  window.history.replaceState(null, "", "/uz/studio");
   api();
   await mount();
   await click(tab("video"));
@@ -354,10 +367,14 @@ test("refresh: running jobs come back, each to its tab, and keep being followed"
   assert.ok(q(`[data-studio-job="${JOB(2)}"]`), "the picture job is in «Rasm»");
   assert.ok(!q(`[data-studio-job="${JOB(1)}"]`), "the clip is not");
   assert.equal(q(`[data-studio-job="${JOB(2)}"]`)?.getAttribute("data-job-status"), "IN_PROGRESS");
-  assert.ok(a.polls.get(JOB(1))! > 0, "every job is polled again, the open tab's or not");
+  // Rule changed on purpose (review of Package C): a refresh must not start one loop per job for tabs nobody is looking at.
+  assert.ok(a.polls.get(JOB(2))! > 0, "the open tab's job is followed");
+  assert.equal(a.polls.get(JOB(1)) ?? 0, 0, "a closed tab's job is not polled");
+  assert.equal(a.polls.get(JOB(3)) ?? 0, 0, "neither is this one");
 
   await click(tab("video"));
   await settle();
+  assert.ok(a.polls.get(JOB(1))! > 0, "opening the tab starts its job");
   assert.ok(q(`[data-video-results] [data-studio-job="${JOB(1)}"]`), "the clip is in «Video»");
   await click(tab("ovoz"));
   await settle();
@@ -371,6 +388,154 @@ test("refresh: running jobs come back, each to its tab, and keep being followed"
   await click(q('[data-audio-mode-chip="transcribe"]'));
   await settle();
   assert.ok(q(`[data-speech-results] [data-studio-job="${JOB(5)}"]`), "the transcript is in its panel");
+});
+
+test("restored jobs stop being polled when their tab closes, and start again when it opens", async () => {
+  const a = api({
+    activeJobs: [{ id: JOB(1), tool: "studio-video", modelId: OMNI.id, modelLabel: OMNI.label, prompt: "klip", price: 21400, purpose: null, sent: { modelId: OMNI.id } }],
+    generation: (id) => generationDetail(id, { status: "IN_PROGRESS", progress: 40, step: "Ishlanmoqda", doc: null }),
+  });
+  window.history.replaceState(null, "", "/uz/studio?tab=video");
+  await mount();
+  const first = a.polls.get(JOB(1))!;
+  assert.ok(first > 0);
+  await click(tab("rasm"));
+  await settle();
+  const closed = a.polls.get(JOB(1))!;
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 1300));
+  });
+  assert.equal(a.polls.get(JOB(1)), closed, "no polls while the tab is closed");
+  await click(tab("video"));
+  await settle();
+  assert.ok(a.polls.get(JOB(1))! > closed, "polled again on opening");
+});
+
+test("track: a live card survives the same id coming in again", async () => {
+  api({ generation: (id) => generationDetail(id, { status: "IN_PROGRESS", progress: 40, step: "Ishlanmoqda", doc: null }) });
+  const { result } = renderHook(() => useStudioJobs());
+  const job = { id: JOB(1), modelId: NANO.id, modelLabel: NANO.label, prompt: "p", price: 100, sent: {} };
+  await act(async () => void result.current.track(job));
+  await settle();
+  assert.equal(result.current.jobs[0]?.gen?.status, "IN_PROGRESS");
+  await act(async () => void result.current.track(job));
+  assert.equal(result.current.jobs.length, 1);
+  assert.equal(result.current.jobs[0]?.gen?.status, "IN_PROGRESS", "the card keeps its state");
+});
+
+test("restore: a live card survives restore running again", async () => {
+  api({ generation: (id) => generationDetail(id, { status: "IN_PROGRESS", progress: 40, step: "Ishlanmoqda", doc: null }) });
+  const { result } = renderHook(() => useStudioJobs());
+  const job = { id: JOB(1), modelId: NANO.id, modelLabel: NANO.label, prompt: "p", price: 100, sent: {} };
+  await act(async () => void result.current.restore(job));
+  await settle();
+  assert.equal(result.current.jobs[0]?.gen?.status, "IN_PROGRESS");
+  await act(async () => void result.current.restore(job));
+  assert.equal(result.current.jobs.length, 1);
+  assert.equal(result.current.jobs[0]?.gen?.status, "IN_PROGRESS");
+});
+
+test("an account switched in place keeps no form, job or poller of the one before it", async () => {
+  // The server's answer follows the session: the second user has no jobs.
+  const rows = [{ id: JOB(1), tool: "studio-image", modelId: NANO.id, modelLabel: NANO.label, prompt: "birinchi", price: 1000, purpose: "studio.image", sent: { modelId: NANO.id } }];
+  const a = api({
+    activeJobs: () => json(200, { items: useAppStore.getState().user?.id === USER.id ? rows : [] }),
+    generation: (id) => generationDetail(id, { status: "IN_PROGRESS", progress: 40, step: "Ishlanmoqda", doc: null }),
+  });
+  await mount();
+  await type(promptBox(), "Birinchi foydalanuvchi matni");
+  assert.ok(q(`[data-studio-job="${JOB(1)}"]`));
+  // No cleanup() here: the same tree stays mounted, only the session changes.
+  await act(async () => void useAppStore.setState({ user: { ...USER, id: "u2", balance: 90_000 } as never }));
+  await settle();
+  assert.equal(promptBox()?.value, "", "the form is the new user's");
+  assert.ok(!q(`[data-studio-job="${JOB(1)}"]`), "the job card is gone");
+  const polls = a.polls.get(JOB(1))!;
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 1300));
+  });
+  assert.equal(a.polls.get(JOB(1)), polls, "the old user's poller stopped");
+});
+
+test("a soft navigation to /uz/studio from the Video tab lands on Rasm", async () => {
+  installNav();
+  window.history.replaceState(null, "", "/uz/studio?tab=video");
+  api();
+  await mount();
+  assert.equal(selected(), "video");
+  // What Next does for a `<Link href="/uz/studio">` on this very page: a pushState, no popstate, no remount.
+  await act(async () => void window.history.pushState(null, "", "/uz/studio"));
+  await settle();
+  assert.equal(selected(), "rasm");
+  assert.equal(window.location.search, "");
+});
+
+test("logout: this user's drafts leave the browser, a pending write included; another user's stay", async () => {
+  api();
+  writeDraft(draftKey("other", "rasm"), { mode: "image", forms: {} });
+  await mount();
+  await type(promptBox(), "Saqlangan matn");
+  cleanup();
+  dropMediaCatalog();
+  assert.ok(readDraft(draftKey(USER.id, "rasm")), "the draft is stored");
+  await mount();
+  await type(promptBox(), "Hali yozilmagan matn");
+  await act(async () => {
+    await useAppStore.getState().signOut().catch(() => {});
+  });
+  await settle();
+  cleanup();
+  assert.equal(readDraft(draftKey(USER.id, "rasm")), null);
+  assert.ok(readDraft(draftKey("other", "rasm")), "only this user's");
+});
+
+test("cross-purpose retry: the label and the charge are one number, from the job's own catalog", async () => {
+  const entry = EDIT[0]!;
+  const moved = { ...PRICING, markup: 5 };
+  const job = { id: JOB(1), tool: "studio-image", modelId: entry.id, modelLabel: entry.label, prompt: "fon", price: 100, purpose: "studio.edit", sent: { modelId: entry.id, prompt: "fon", inputImages: "abcdef012345" } };
+  const a = api({ activeJobs: [job], generation: (id) => generationDetail(id, { status: "FAILED", error: "Yiqildi", doc: null }), create: (b) => json(202, { id: JOB(2), price: b.expectedPrice, status: "QUEUED" }) });
+  const inner = globalThis.fetch;
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) =>
+    String(input) === "/api/media/catalog?purpose=studio.edit" ? json(200, { purpose: "studio.edit", defaultModelId: entry.id, models: EDIT, pricing: moved }) : inner(input as never, init);
+  await mount();
+  await settle(20);
+  const now = studioPrice(entry, job.sent, moved);
+  assert.notEqual(now, job.price, "the markup moved since the job was bought");
+  const retry = q('[data-studio-failed] [data-result-action="again"]');
+  assert.ok(retry);
+  assert.ok(retry.textContent?.includes(formatSom(now)), `${retry.textContent} ~ ${formatSom(now)}`);
+  await click(retry);
+  await settle();
+  assert.equal(a.posts()[0]?.body?.expectedPrice, now, "the charge is the label");
+});
+
+test("cross-purpose retry: a price not known yet goes out as shown, and the guard refuses a change", async () => {
+  const entry = EDIT[0]!;
+  const moved = { ...PRICING, markup: 5 };
+  const job = { id: JOB(1), tool: "studio-image", modelId: entry.id, modelLabel: entry.label, prompt: "fon", price: 100, purpose: "studio.edit", sent: { modelId: entry.id, prompt: "fon", inputImages: "abcdef012345" } };
+  const a = api({
+    activeJobs: [job],
+    generation: (id) => generationDetail(id, { status: "FAILED", error: "Yiqildi", doc: null }),
+    create: () => json(409, { error: "Narx o‘zgardi", code: "price_changed", price: 999 }),
+  });
+  let release = () => {};
+  const gate = new Promise<void>((r) => (release = r));
+  const inner = globalThis.fetch;
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) => {
+    if (String(input) !== "/api/media/catalog?purpose=studio.edit") return inner(input as never, init);
+    await gate;
+    return json(200, { purpose: "studio.edit", defaultModelId: entry.id, models: EDIT, pricing: moved });
+  };
+  await mount();
+  await settle(20);
+  const retry = q('[data-studio-failed] [data-result-action="again"]');
+  assert.ok(retry?.textContent?.includes(formatSom(job.price)), "until the catalog is read: what the job cost");
+  await click(retry);
+  release();
+  await settle(20);
+  assert.equal(a.posts()[0]?.body?.expectedPrice, job.price, "the price on the button, not the catalog's newer one");
+  assert.ok(q("[data-studio-error]"), "the refusal is said");
+  assert.equal(q("[data-studio-job]")?.getAttribute("data-studio-job"), JOB(1), "no new job, nothing charged");
 });
 
 test("the jobs' list failing is said, and its retry brings them back", async () => {

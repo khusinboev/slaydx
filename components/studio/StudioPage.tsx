@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { onNavigate } from "@/lib/nav/history";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { LayoutGrid, Wand2, X } from "lucide-react";
@@ -68,13 +69,15 @@ export function StudioPage() {
   const loggedIn = useAppStore((s) => s.loggedIn);
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const open = useUi((s) => s.open);
+  const userKey = useAppStore((s) => s.user?.id ?? "anon");
   // The session is checked on the server first: never open the login for a signed-in user (as `ToolWorkspace`).
   useEffect(() => {
     // The link's tab and mode survive the login.
     if (sessionChecked && !loggedIn) open("login", { returnTo: `/uz/studio${window.location.search}` });
   }, [sessionChecked, loggedIn, open]);
   if (!sessionChecked) return LOADING;
-  return <StudioApp />;
+  // Keyed by the user: an account switched in place keeps no form, job or poller of the one before it.
+  return <StudioApp key={userKey} />;
 }
 
 type View = "create" | "gallery";
@@ -119,22 +122,43 @@ function StudioApp() {
   const setRaw = useCallback((fn: (prev: RawValues) => RawValues) => setRasm((s) => patchRasmForm(s, (f) => ({ ...f, raw: fn(f.raw) }))), []);
   const [view, setView] = useState<View>("create");
   const [pickerOpen, setPickerOpen] = useState(false);
-  // 400 before charging: the model or a value is no longer accepted; 409 price_changed: the markup / override / live
-  // cost moved. Either way the catalog (and with it the button's price) is read again.
-  const { submitting, error, setError, send: queue } = useStudioSend(() => reload(true));
-  const { jobs, track } = useStudioJobs();
-  // The Video tab (P3): its own catalog (loaded once the tab is opened), form state and jobs — kept while on «Rasm».
   // Client only: `StudioPage` renders this after the session check, never on the server.
   const [tab, setTab] = useState<StudioTab>(() => tabFromSearch(window.location.search));
+  const onScreen = (t: StudioTab) => view === "create" && tab === t;
+  // The catalogs of other modes' jobs: a retry there is priced by the purpose it was bought under.
+  const [jobCatalogs, setJobCatalogs] = useState<Readonly<Record<string, MediaCatalog>>>({});
+  const [jobCatalogsRead, setJobCatalogsRead] = useState(0);
+  // 400 before charging: the model or a value is no longer accepted; 409 price_changed: the markup / override / live
+  // cost moved. Either way the catalogs (and with them the prices on the buttons) are read again.
+  const { submitting, error, setError, send: queue } = useStudioSend(() => {
+    reload(true);
+    setJobCatalogsRead((n) => n + 1);
+  });
+  const { jobs, track, restore: restoreRasm } = useStudioJobs(onScreen("rasm"));
+  const otherPurposes = [...new Set(jobs.flatMap((j) => (j.purpose && j.purpose !== purpose ? [j.purpose] : [])))].sort().join(" ");
+  useEffect(() => {
+    let live = true;
+    for (const p of otherPurposes.split(" ").filter(Boolean)) {
+      loadMediaCatalog(p, { fresh: jobCatalogsRead > 0 }).then(
+        (c) => live && setJobCatalogs((m) => ({ ...m, [p]: c })),
+        // Not known: the card keeps what the job cost, and the server's price guard refuses anything else.
+        () => {},
+      );
+    }
+    return () => {
+      live = false;
+    };
+  }, [otherPurposes, jobCatalogsRead]);
+  // The Video tab (P3): its own catalog (loaded once the tab is opened), form state and jobs — kept while on «Rasm».
   const [videoSeen, setVideoSeen] = useState(false);
   const [videoState, setVideoState] = useState<VideoTabState>(() => ({ ...INITIAL_VIDEO_STATE, mode: linkMode("video") as VideoTabState["mode"] }));
   const video = useMediaCatalog(STUDIO_VIDEO_PURPOSE, videoSeen);
-  const videoJobs = useStudioJobs();
+  const videoJobs = useStudioJobs(onScreen("video"));
   // The «Ovoz» tab (P5): its own catalog (loaded once the tab is opened), form state and jobs — kept across tabs.
   const [voiceSeen, setVoiceSeen] = useState(false);
   const [voiceState, setVoiceState] = useState<VoiceTabState>(() => ({ ...INITIAL_VOICE_STATE, mode: linkMode("ovoz") as VoiceTabState["mode"] }));
   const voiceCatalog = useMediaCatalog(STUDIO_SPEECH_PURPOSE, voiceSeen);
-  const voiceJobs = useStudioJobs();
+  const voiceJobs = useStudioJobs(onScreen("ovoz"));
   // P8b (docs/studio/P8-SPEC.md): with `studio.legacy_fold` on, «Podkast» / «Tabriknoma» open inside the «Ovoz» tab.
   const legacyFold = useLegacyFold();
   const [voiceTemplate, setVoiceTemplate] = useState<VoiceTemplateId | null>(null);
@@ -143,7 +167,7 @@ function StudioApp() {
   const [audioSeen, setAudioSeen] = useState(false);
   const [audioState, setAudioState] = useState<AudioTabState>(() => ({ ...INITIAL_AUDIO_STATE, mode: linkMode("audio") as AudioTabState["mode"] }));
   const audioCatalog = useMediaCatalog(STUDIO_AUDIO_LISTING, audioSeen);
-  const audioJobs = useStudioJobs();
+  const audioJobs = useStudioJobs(onScreen("audio"));
   // P7a «Solishtirish» (docs/studio/P7-SPEC.md, compare/): the Rasm tab's drawing mode and the Video tab, ≥ 2 models.
   const compare = useCompare();
   const compareKind = tab === "rasm" && mode === "image" ? "image" : tab === "video" ? "video" : null;
@@ -175,7 +199,10 @@ function StudioApp() {
 
   // The URL says where the user is: a link, a back press or a refresh lands on the same tab and mode.
   const urlSearch = useSearchParams()?.toString() ?? null;
+  const home = useRef(window.location.pathname);
   const applyUrl = useCallback(() => {
+    // A navigation away reaches this listener too: another page's query says nothing about the Studio.
+    if (window.location.pathname !== home.current) return;
     const search = window.location.search;
     const asked = tabFromSearch(search);
     const askedMode = modeFromSearch(asked, search);
@@ -189,13 +216,19 @@ function StudioApp() {
   // After the drafts' restore (the effects above run first): a link's mode wins over the draft's.
   useEffect(applyUrl, [applyUrl, urlSearch, userId]);
   useEffect(() => {
+    // A soft navigation to this same page (a link to `/uz/studio`) changes no state of its own.
+    const off = onNavigate(applyUrl);
     window.addEventListener("popstate", applyUrl);
-    return () => window.removeEventListener("popstate", applyUrl);
+    return () => {
+      off();
+      window.removeEventListener("popstate", applyUrl);
+    };
   }, [applyUrl]);
   useEffect(() => setVoiceTemplate(voiceTemplateFromSearch(window.location.search)), []);
   const activeMode = tab === "rasm" ? mode : tab === "video" ? videoState.mode : tab === "ovoz" ? voiceState.mode : audioState.mode;
   useEffect(() => {
     const { pathname, search, hash } = window.location;
+    if (pathname !== home.current) return;
     const next = studioSearch(search, tab, activeMode);
     // `history.state` stays: it carries the router's tree and the overlay layers of `lib/nav`.
     if (next !== search) window.history.replaceState(window.history.state, "", `${pathname}${next}${hash}`);
@@ -204,29 +237,28 @@ function StudioApp() {
   // A refresh keeps the running jobs too: the server knows them, each goes back to its tab.
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
-  const trackRasm = track;
-  const trackVideo = videoJobs.track;
-  const trackVoice = voiceJobs.track;
-  const trackAudio = audioJobs.track;
+  const restoreVideo = videoJobs.restore;
+  const restoreVoice = voiceJobs.restore;
+  const restoreAudio = audioJobs.restore;
   useEffect(() => {
     if (!userId) return;
     let live = true;
     const follow = (j: ActiveJob) => {
       const job = { id: j.id, modelId: j.modelId, modelLabel: j.modelLabel, prompt: j.prompt, price: j.price, sent: j.sent };
-      if (j.tool === "studio-image") trackRasm({ ...job, prompt: j.prompt || (j.purpose && j.purpose !== MODE_PURPOSE.image ? jobLabel(j.purpose) : ""), ...(j.purpose ? { purpose: j.purpose } : {}) });
-      else if (j.tool === "studio-video") trackVideo(job);
-      else if (j.tool === "studio-speech") trackVoice(job);
-      else trackAudio(job);
+      if (j.tool === "studio-image") restoreRasm({ ...job, prompt: j.prompt || (j.purpose && j.purpose !== MODE_PURPOSE.image ? jobLabel(j.purpose) : ""), ...(j.purpose ? { purpose: j.purpose } : {}) });
+      else if (j.tool === "studio-video") restoreVideo(job);
+      else if (j.tool === "studio-speech") restoreVoice(job);
+      else restoreAudio(job);
     };
     fetchActiveJobs().then(
-      // Oldest first: `track` puts each on top, so the newest ends up first.
+      // Oldest first: each goes on top, so the newest ends up first.
       (list) => live && [...list].reverse().forEach(follow),
       (e: unknown) => live && setRestoreError(e instanceof Error ? e.message : "Xatolik"),
     );
     return () => {
       live = false;
     };
-  }, [userId, restoreAttempt, trackRasm, trackVideo, trackVoice, trackAudio]);
+  }, [userId, restoreAttempt, restoreRasm, restoreVideo, restoreVoice, restoreAudio]);
 
   useEffect(() => {
     if (tab === "video") setVideoSeen(true);
@@ -352,10 +384,11 @@ function StudioApp() {
     resultsRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }
 
-  async function send(target: ClientEntry, sent: Record<string, unknown>, pricing: StudioPricing | undefined = catalog?.pricing, jobPurpose: string = purpose) {
+  /** `shown`: the number the pressed button says; the server's price guard refuses a job at any other price. */
+  async function send(target: ClientEntry, sent: Record<string, unknown>, pricing: StudioPricing | undefined = catalog?.pricing, jobPurpose: string = purpose, shown?: number) {
     if (!pricing) return false;
     const prompt = String(sent[PROMPT_PARAM] ?? "");
-    return queue({ slug: STUDIO_TOOL_SLUG, id: STUDIO_TOOL_ID, title: prompt.slice(0, 72), output: "png" }, sent, studioPrice(target, sent, pricing), ({ id, price: charged }) => {
+    return queue({ slug: STUDIO_TOOL_SLUG, id: STUDIO_TOOL_ID, title: prompt.slice(0, 72), output: "png" }, sent, shown ?? studioPrice(target, sent, pricing), ({ id, price: charged }) => {
       track({ id, modelId: target.id, modelLabel: target.label, prompt: prompt || (jobPurpose !== MODE_PURPOSE.image ? jobLabel(jobPurpose) : ""), price: charged, sent, purpose: jobPurpose });
       scrollToResults();
     });
@@ -375,12 +408,13 @@ function StudioApp() {
   }
 
   function again(job: StudioJob) {
+    const shown = retryPrice(job);
     // A job of another mode (an upscale while drawing) is repeated with ITS purpose's catalog and pricing.
     if (job.purpose && job.purpose !== purpose) {
       void loadMediaCatalog(job.purpose).then(
         (c) => {
           const m = c.models.find((x) => x.id === job.modelId);
-          if (m) void send(m, job.sent, c.pricing, c.purpose);
+          if (m) void send(m, job.sent, c.pricing, c.purpose, shown);
           else setError("Bu model hozir mavjud emas.");
         },
         (e: unknown) => setError(e instanceof Error ? e.message : "Xatolik"),
@@ -394,7 +428,7 @@ function StudioApp() {
       otherModel(job.prompt);
       return;
     }
-    void send(model, job.sent);
+    void send(model, job.sent, undefined, undefined, shown);
   }
 
   /** «Boshqa modelda»: the same prompt back in the form, the model picker open. */
@@ -434,10 +468,14 @@ function StudioApp() {
   const toGallery = () => showView("gallery");
   const toCreate = () => showView("create");
 
-  /** What «Qayta urinish» costs now: the same formula as the button, for a job of this mode's catalog. */
+  /**
+   * What «Qayta urinish» costs now, from the catalog of the job's own purpose; `again` sends this very number. Until that
+   * catalog is read the card says what the job cost, and a price that has moved is refused, never charged.
+   */
   function retryPrice(job: StudioJob): number {
-    const model = !job.purpose || job.purpose === purpose ? catalog?.models.find((m) => m.id === job.modelId) : undefined;
-    return model && catalog ? studioPrice(model, job.sent, catalog.pricing) : job.price;
+    const own = job.purpose && job.purpose !== purpose ? jobCatalogs[job.purpose] : catalog;
+    const model = own?.models.find((m) => m.id === job.modelId);
+    return model && own ? studioPrice(model, job.sent, own.pricing) : job.price;
   }
 
   const galleryButton =

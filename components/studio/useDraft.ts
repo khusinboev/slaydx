@@ -1,44 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import { onDraftsDropped, readDraft, removeDraft, writeDraft } from "@/lib/studio-draft-store";
 
-/**
- * A Studio form's draft in `localStorage` (docs/studio/P11-SPEC.md «C. Reliability»): a refresh keeps what was typed.
- *
- * Storage is a convenience here: every read and write is guarded, and a private window, blocked site data or a full
- * quota simply means no draft. The key names the user, so a shared browser never shows one account's text to another.
- */
-const PREFIX = "slaydx.studio.draft.v1";
+export { draftKey, readDraft, removeDraft, writeDraft } from "@/lib/studio-draft-store";
+
 /** Typing stays cheap; `pagehide` / a hidden tab / leaving the page write what is pending at once. */
 export const DRAFT_DEBOUNCE_MS = 400;
-
-export const draftKey = (userId: string, tab: string): string => `${PREFIX}.${userId}.${tab}`;
-
-/** The stored value, or `null`: nothing stored, storage unavailable, or a value that is not JSON. */
-export function readDraft(key: string): unknown {
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw === null ? null : (JSON.parse(raw) as unknown);
-  } catch {
-    return null;
-  }
-}
-
-export function writeDraft(key: string, value: unknown): void {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // No storage, or the quota is full: the form goes on without a draft.
-  }
-}
-
-export function removeDraft(key: string): void {
-  try {
-    window.localStorage.removeItem(key);
-  } catch {
-    // No storage: there is nothing to remove.
-  }
-}
 
 /**
  * Keeps `value` in the draft `key` (`null` = no draft: signed out). On a new key the stored draft goes through `parse`
@@ -103,6 +71,18 @@ export function useDraft<T>(key: string | null, value: T, parse: (stored: unknow
       flush();
     };
   }, [flush]);
+
+  // A logout: this user's write still on the way must not bring the draft back.
+  useEffect(
+    () =>
+      onDraftsDropped((prefix) => {
+        if (!pending.current?.key.startsWith(prefix)) return;
+        if (timer.current !== null) clearTimeout(timer.current);
+        timer.current = null;
+        pending.current = null;
+      }),
+    [],
+  );
 
   const clear = useCallback(() => {
     if (timer.current !== null) clearTimeout(timer.current);

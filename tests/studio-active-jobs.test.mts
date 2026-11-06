@@ -14,7 +14,10 @@ import { inRequest } from "./helpers/next-request.mts";
  *   `status IN (...)` dropped                                                 -> «only unfinished»;
  *   `tool_id = ANY` dropped                                                   -> «only Studio tools»;
  *   `ORDER BY created_at DESC` -> `ASC`                                       -> «newest first»;
- *   `purpose` no longer read from `studioPurposeOf`                           -> «what a tab needs».
+ *   `purpose` no longer read from `studioPurposeOf`                           -> «what a tab needs»;
+ *   `compare_group IS NULL` dropped                                           -> «compare rows»;
+ *   `sentOf` echoes the stored values                                         -> «the answer is bounded»;
+ *   `LEFT(topic, $4)` -> `topic`                                              -> «the answer is bounded».
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -88,6 +91,34 @@ test("newest first", { skip }, async () => {
   const old = await mkJob(me, "studio-speech", "QUEUED", {}, "a", 60);
   const fresh = await mkJob(me, "studio-speech", "QUEUED", {}, "b", 1);
   assert.deepEqual((await get(me)).body.items.map((j) => j.id), [fresh, old]);
+});
+
+test("compare rows stay out: a member is a cell of its batch, not a card with its own retry", { skip }, async () => {
+  const me = await mkUser();
+  const { query } = await db();
+  const single = await mkJob(me, "studio-image", "QUEUED");
+  const member = await mkJob(me, "studio-image", "QUEUED");
+  await query("UPDATE generations SET compare_group = $1, compare_index = 0 WHERE id = $2", [randomUUID(), member]);
+  assert.deepEqual((await get(me)).body.items.map((j) => j.id), [single]);
+});
+
+test("the answer is bounded: only the model's own params, each within its schema", { skip }, async () => {
+  const me = await mkUser();
+  const { MEDIA_CATALOG, studioPurposeOf, STUDIO_IMAGE_PURPOSE } = await import("../lib/media/catalog.ts");
+  const { ACTIVE_TOPIC_MAX } = await import("../lib/server/media/active-jobs.ts");
+  const draw = MEDIA_CATALOG.clientView().find((e) => studioPurposeOf(e.id) === STUDIO_IMAGE_PURPOSE)!;
+  const max = (draw.params.find((p) => p.name === "prompt") as { max: number }).max;
+  const big = "x".repeat(1_000_000);
+  const a = await mkJob(me, "studio-image", "QUEUED", { modelId: draw.id, prompt: big, junk: big, imageRatio: big }, big, 2);
+  const b = await mkJob(me, "studio-image", "QUEUED", { modelId: "gone/model", prompt: big }, "t", 1);
+  const res = await get(me);
+  const one = res.body.items.find((j) => j.id === a)!;
+  assert.equal("junk" in one.sent, false, "a key outside the schema is not echoed");
+  assert.equal((one.sent.prompt as string).length, max);
+  assert.ok((one.sent.imageRatio as string).length <= 512);
+  assert.equal(one.prompt.length, ACTIVE_TOPIC_MAX);
+  assert.deepEqual(res.body.items.find((j) => j.id === b)!.sent, { modelId: "gone/model" });
+  assert.ok(JSON.stringify(res.body).length < 20_000, "one call cannot return megabytes");
 });
 
 test("what a tab needs: the model, the price, the request, the purpose of a picture job", { skip }, async () => {

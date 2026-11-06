@@ -13,7 +13,8 @@ import { AI_OUTAGE_ERROR, GENERIC_JOB_ERROR, TIMEOUT_JOB_ERROR, VOICE_JOB_ERROR,
  *   GENERIC_JOB_ERROR back to «Kredit qaytariladi»                                 -> «the shared messages»;
  *   `lib/generation/studio/mix.ts` REFUND back to «Kredit qaytariladi.»            -> «no other wording»;
  *   VIDEO_DEADLINE_MESSAGE back to «Pul qaytarildi»                                -> «no other wording»;
- *   CompareResults JSX text with «pul balansingizga qaytarildi»                    -> «no other wording».
+ *   CompareResults JSX text with «pul balansingizga qaytarildi»                    -> «no other wording»;
+ *   a `log("x"); throw new Error("Pul qaytarildi")` line in the engine              -> «no other wording».
  */
 
 test("the shared messages carry the phrase, and the phrase passes the user-text filter", () => {
@@ -23,6 +24,8 @@ test("the shared messages carry the phrase, and the phrase passes the user-text 
   }
   assert.ok(!/qaytarildi/.test(REFUND_PHRASE), "the error row is written before the refund: never the past tense");
 });
+
+const LOG_MESSAGE = /\b(?:log|console\.\w+)\(\s*(?:"[^"]*"|`[^`]*`|'[^']*')/g;
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -38,7 +41,9 @@ test("no other wording of a failed job's refund in the engine, the job layer or 
   const hits = files.flatMap((f) =>
     readFileSync(f, "utf8")
       .split("\n")
-      .filter((line) => failedJobText.test(line) && !/\blog\(|console\.|^\s*(\*|\/\/)/.test(line))
+      .filter((line) => !/^\s*(\*|\/\/)/.test(line))
+      // Only the logger's own message is exempt: text after it on the same line is still read.
+      .filter((line) => failedJobText.test(line.replace(LOG_MESSAGE, "")))
       .map((line) => `${f}: ${line.trim().slice(0, 120)}`),
   );
   assert.deepEqual(hits, []);
