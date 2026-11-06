@@ -487,6 +487,9 @@ for (const name of Object.keys(FORGED)) {
     quiet(t);
     await allOn();
     const bytes = forged(name);
+    // What the upload can already see of it: the rate of (a), the `stsz` count of (c).
+    const seen = (await import("../lib/server/media/audio-inputs.ts")).sniffVideo(bytes);
+    if (name.startsWith("(a)") || name.startsWith("(c)")) assert.ok(seen?.problem, "MUTATSIYA: refused at the upload already");
     const { capOwnVideo } = await import("../lib/generation/studio/own-video.ts");
     await assert.rejects(capOwnVideo(bytes, 10), /refused|decodes|measures/, "MUTATSIYA: 300 s of sound left the worker under a 10 s label");
     const { buildStudioTranscribe } = await import("../lib/generation/studio/transcribe.ts");
@@ -570,6 +573,17 @@ test("false refusals: a large picture, QuickTime v2 sound, a second sound track,
   const { burnProblem } = await import("../lib/generation/studio/burn-args.ts");
   assert.match(String(burnProblem({ width: 1920, height: 1080, samples: 240 * 180 })), /og‘ir/, "MUTATSIYA: a burn that would time out after the paid call");
   assert.equal(burnProblem({ width: 1920, height: 1080, samples: 30 * 180 }), null);
+  // Every ffmpeg that opens an upload holds the decoder's limit.
+  const { capArgs, measureArgs, burnCheckArgs } = await import("../lib/generation/studio/burn-args.ts");
+  for (const args of [capArgs(2), measureArgs(), burnCheckArgs()]) assert.equal(args[args.indexOf("-max_pixels") + 1], "8294400", "MUTATSIYA: no picture limit");
+  // The worker holds the burn's limits too, before the paid call: a result never passed the upload's check.
+  let burnPaid = false;
+  const rid = "11111111-1111-4111-8111-111111111111";
+  await assert.rejects(
+    (await import("../lib/generation/studio/transcribe.ts")).buildStudioTranscribe((await import("../lib/tools.ts")).TOOL_BY_ID["studio-transcribe"], { source: `result:${rid}`, sourceSeconds: 2, burn: true } as never, { source: { kind: "result", id: rid, mime: "video/mp4", bytes: large, seconds: 2 } }, {}, { run: (async () => ((burnPaid = true), { outputs: [] })) as never }),
+    /1920 px/,
+  );
+  assert.equal(burnPaid, false, "MUTATSIYA: the worker's picture limit comes before the speech call");
   // A missing ffmpeg is the service's fault, not the file's.
   const { buildStudioTranscribe } = await import("../lib/generation/studio/transcribe.ts");
   const { FfmpegMissingError } = await import("../lib/generation/studio/mix-ffmpeg.ts");
@@ -577,6 +591,13 @@ test("false refusals: a large picture, QuickTime v2 sound, a second sound track,
   const id = "a".repeat(24);
   const ctx = { source: { kind: "upload" as const, id, mime: "video/mp4", bytes: videoMp4(), seconds: 2 } };
   await assert.rejects(buildStudioTranscribe(TOOL_BY_ID["studio-transcribe"], { source: `upload:${id}`, sourceSeconds: 2 } as never, ctx, {}, { ffmpeg: async () => { throw new FfmpegMissingError(); } }), /xizmati hozircha/, "MUTATSIYA: the user's file was blamed");
+  const { buildStudioDub } = await import("../lib/generation/studio/dub.ts");
+  const adapter = { id: "x", configured: () => true, submit: async () => ({ opId: "x" }) };
+  await assert.rejects(
+    buildStudioDub(TOOL_BY_ID["studio-dub"], { source: `upload:${id}`, sourceSeconds: 2, target: "uz" } as never, ctx, {}, { adapters: new Proxy({}, { get: () => adapter }) as never, store: null, health: { allow: () => true, success: () => undefined, failure: () => undefined }, ffmpeg: async () => { throw new FfmpegMissingError(); } }),
+    /xizmati hozircha/,
+    "MUTATSIYA: the dub blamed the user's file",
+  );
 });
 
 test("the parser is bounded: 3 million empty `trak` boxes cost no memory and throw nothing", async () => {
