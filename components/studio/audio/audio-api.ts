@@ -49,13 +49,34 @@ export function audioCardPrice(entry: ClientEntry, raw: RawValues, pricing: Stud
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
-/** The converted recording / upload → `{ id, seconds }` (`seconds` = the billed whole seconds the server prices with). */
-export async function uploadAudioInput(blob: Blob, fileName: string): Promise<{ id: string; seconds: number }> {
+async function uploadInput(blob: Blob, fileName: string, kind: "audio" | "video"): Promise<{ id: string; seconds: number }> {
   const form = new FormData();
   form.append("file", blob, fileName);
+  if (kind === "video") form.append("kind", "video");
   const r = await request<unknown>("/api/media/audio-inputs", { method: "POST", body: form, timeoutMs: 120_000 });
   const id = isObj(r) && typeof r.id === "string" && /^[0-9a-f]{24}$/.test(r.id) ? r.id : null;
   const seconds = isObj(r) && typeof r.seconds === "number" && Number.isInteger(r.seconds) ? r.seconds : null;
-  if (!id || seconds === null) throw new Error("Audio yuklanmadi");
+  if (!id || seconds === null) throw new Error(kind === "video" ? "Video yuklanmadi" : "Audio yuklanmadi");
   return { id, seconds };
+}
+
+/** The converted recording / upload → `{ id, seconds }` (`seconds` = the billed whole seconds the server prices with). */
+export function uploadAudioInput(blob: Blob, fileName: string): Promise<{ id: string; seconds: number }> {
+  return uploadInput(blob, fileName, "audio");
+}
+
+/** The longest video a speech tool takes (the same bound the server holds: 3 minutes) and the upload size cap. */
+export const VIDEO_INPUT_MAX_SECONDS = 180;
+export const VIDEO_INPUT_MAX_BYTES = 25 * 1024 * 1024;
+
+/** Why a picked video cannot be uploaded (Uzbek), `null` when it can — the server's limits, checked first in the browser. */
+export function videoBlocker(file: Pick<File, "size" | "type" | "name">): string | null {
+  if (!(file.type === "video/mp4" || /\.(mp4|m4v)$/i.test(file.name))) return "Faqat MP4 video qabul qilinadi.";
+  if (file.size > VIDEO_INPUT_MAX_BYTES) return "Video 25 MB dan katta.";
+  return null;
+}
+
+/** P11 §D: the user's own MP4 for «Dublyaj» / «Transkripsiya» — the same upload path as the audio inputs, `kind=video`. */
+export function uploadVideoInput(file: Blob, fileName: string): Promise<{ id: string; seconds: number }> {
+  return uploadInput(file, fileName, "video");
 }

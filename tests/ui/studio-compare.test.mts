@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { MEDIA_CATALOG } from "../../lib/media/catalog.ts";
 import type { ClientEntry, ParamSchema } from "../../lib/studio-core/index.ts";
-import { GPT, NANO, PRICING, USER, catalogBody, expectedPrice, installApi, json, withParams } from "./studio-fixtures.ts";
+import { GPT, NANO, PRICING, USER, catalogBody, expectedPrice, generationDetail, installApi, json, withParams } from "./studio-fixtures.ts";
 
 const { StudioPage } = await import("../../components/studio/StudioPage.tsx");
 const { useAppStore } = await import("../../lib/store.ts");
@@ -14,7 +14,7 @@ const { useUi } = await import("../../lib/ui.ts");
 const { dropMediaCatalog } = await import("../../components/studio/studio-api.ts");
 const { formatSom } = await import("../../lib/format.ts");
 const { resetCompareKey } = await import("../../components/studio/compare/compare-api.ts");
-const { COMPARE_MAX, compareBatch, compareLabel, compareModels, sharedParams, toggleModel } = await import("../../components/studio/compare/compare-model.ts");
+const { COMPARE_MAX, compareBatch, compareLabel, compareModels, droppedLine, droppedParams, sharedParams, toggleModel } = await import("../../components/studio/compare/compare-model.ts");
 
 /**
  * Studio P7a «Solishtirish» (docs/studio/P7-SPEC.md) with the API stubbed at `fetch` and the REAL catalog entries.
@@ -56,8 +56,8 @@ const FX = view.find((e) => e.id === "kling/effects")!;
 const videoCatalog = { purpose: "studio.video", defaultModelId: OMNI.id, models: [OMNI, K3, K3P, FX], pricing: PRICING };
 
 type Compare = { status: number; body: unknown };
-function api(opts: { image?: unknown; compare?: (body: Record<string, unknown>, n: number) => Compare } = {}) {
-  const base = installApi({ catalog: opts.image ?? catalogBody([NANO, GPT]) });
+function api(opts: { image?: unknown; compare?: (body: Record<string, unknown>, n: number) => Compare; generation?: (id: string, n: number) => Record<string, unknown> } = {}) {
+  const base = installApi({ catalog: opts.image ?? catalogBody([NANO, GPT]), generation: opts.generation });
   const inner = globalThis.fetch;
   const posts: { body: Record<string, unknown>; key: string | null }[] = [];
   (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) => {
@@ -271,6 +271,62 @@ test("money edges: 409 → the new sum, the catalog re-read, no cell; a lost ans
   assert.equal(a.comparePosts.length, 3);
   assert.notEqual(a.comparePosts[1]!.key, a.comparePosts[0]!.key, "a refusal frees the key");
   assert.equal(a.comparePosts[2]!.key, a.comparePosts[1]!.key, "MUTATSIYA: after a lost answer the same key");
+});
+
+test("P11 §D: a failed cell is retried alone through the tab's tool at its own price and takes the cell's place; the others keep their state", async () => {
+  // The first model's compare job fails, the second finishes; every job queued through /api/generations finishes.
+  const a = api({ generation: (id) => (id.startsWith("c10") ? { ...generationDetail(id), status: "FAILED", error: "Model rad etdi." } : generationDetail(id)) });
+  await mount();
+  await type('[data-field="prompt"] textarea', "Registon maydoni erta tongda");
+  await switchOn();
+  await click(q("[data-studio-submit]"));
+  await settle(12);
+  const cells = () => qa("[data-compare-cell]");
+  assert.equal(cells().length, 2);
+  assert.equal(cells()[0]!.dataset.jobStatus, "FAILED");
+  assert.equal(cells()[1]!.dataset.jobStatus, "COMPLETED");
+  assert.ok(!cells()[1]!.querySelector('[data-compare-action="retry"]'), "a finished cell offers no retry");
+  const retry = cells()[0]!.querySelector<HTMLButtonElement>('[data-compare-action="retry"]');
+  assert.ok(retry, "MUTATSIYA: the failed cell offers a retry");
+  const member = a.comparePosts[0]!.body.members as { values: Record<string, unknown>; expectedPrice: number }[];
+  assert.equal(retry.textContent, `Qayta yaratish · ${formatSom(member[0]!.expectedPrice)}`, "the retry says its price: that model's job at the sent values");
+  await click(retry);
+  await settle(12);
+  // One ordinary job of the Rasm tool, the member's values and price; not a second batch.
+  assert.equal(a.comparePosts.length, 1);
+  const post = a.posts()[0]!;
+  assert.equal(post.body!.slug, "studio");
+  assert.deepEqual(post.body!.values, member[0]!.values, "MUTATSIYA: the cell's own request again");
+  assert.equal(post.body!.expectedPrice, member[0]!.expectedPrice);
+  // The new job sits where the failed one was and is followed to its end; the other cell is untouched.
+  assert.equal(cells().length, 2);
+  assert.equal(cells()[0]!.dataset.compareCell, NANO.id);
+  assert.equal(cells()[0]!.dataset.jobStatus, "COMPLETED", "the retried job's own state");
+  assert.ok(!cells()[0]!.querySelector('[data-compare-action="retry"]'));
+  assert.equal(cells()[1]!.dataset.jobStatus, "COMPLETED");
+});
+
+test("P11 §D: each ticked model names the params the shared rows do not ask for («o‘z standartida»)", async () => {
+  // Pure: Kling 3 has `sound`, Omni has not — the shared rows lack it, so Kling runs it at its own default.
+  assert.deepEqual(droppedParams(K3, sharedParams([OMNI, K3])).map((p) => p.name), ["sound"]);
+  assert.deepEqual(droppedParams(OMNI, sharedParams([OMNI, K3])), []);
+  assert.equal(droppedLine(K3, sharedParams([OMNI, K3])), "Ovoz — o‘z standartida");
+  assert.equal(droppedLine(OMNI, sharedParams([OMNI, K3])), null);
+  assert.deepEqual(droppedParams(K3, sharedParams([K3, K3P])), [], "two alike models share every row");
+  // The image params never count (compare is prompt-only), nor the prompt itself.
+  assert.ok(!droppedParams(K3, []).some((p) => p.type === "image" || p.name === "prompt"), "MUTATSIYA: image / prompt must not be named");
+  // On the panel: the line sits under the ticked Kling card, not under Omni.
+  api();
+  useAppStore.setState({ user: { ...USER, points: 0, quota: 0, balance: 200_000 } as never });
+  await mount();
+  await click(q('[data-studio-tab="video"]'));
+  await settle();
+  await click(qa('[data-video-mode] [role="radio"]').find((b) => b.textContent === "Matndan / rasmdan"));
+  await settle();
+  await switchOn();
+  assert.deepEqual(ticked(), [OMNI.id, K3.id]);
+  assert.equal(q(`[data-compare-dropped="${K3.id}"]`)!.textContent, "Ovoz — o‘z standartida", "MUTATSIYA: the dropped line");
+  assert.ok(!q(`[data-compare-dropped="${OMNI.id}"]`));
 });
 
 /* ───────────────────────────── Video ───────────────────────────── */

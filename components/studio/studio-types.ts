@@ -40,13 +40,22 @@ export type GalleryVideo = {
 /** A speech result in the gallery (P5): played from the job's own MP3 (`/api/generations/{id}/file?inline=1`). */
 export type GalleryAudio = { src: string; seconds: number | null; voices: string[]; clone: boolean };
 
+/** A transcript in the gallery (P11 §D): the text's head and its language code. */
+export type GalleryText = { excerpt: string; language: string | null };
+
+/** What an item is: pictures, a clip (a «Montaj» / «Dublyaj» MP4 included), an audio, or a transcript (`text`). */
+export type GalleryKind = "image" | "video" | "audio" | "text";
+export const GALLERY_KINDS: readonly GalleryKind[] = ["image", "video", "audio", "text"];
+
 /** One completed Studio generation in the gallery. */
 export type GalleryItem = {
   id: string;
-  /** `image` (Rasm tab), `video` (Video tab) or `audio` (Ovoz tab, P5); an older server sends no kind = pictures. */
-  kind: "image" | "video" | "audio";
+  /** The server's kind; an older server sends no kind = pictures. */
+  kind: GalleryKind;
   /** The speech of an audio item (P5), `null` otherwise. */
   audio: GalleryAudio | null;
+  /** The transcript of a text item (P11 §D), `null` otherwise. */
+  text: GalleryText | null;
   /** The clip of a video item, `null` for pictures. */
   video: GalleryVideo | null;
   createdAt: string;

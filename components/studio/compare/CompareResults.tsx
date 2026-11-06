@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Download } from "lucide-react";
+import { Check, Download, RefreshCw } from "lucide-react";
 import type * as api from "@/lib/api-client";
 import type { GenImage } from "@/lib/generation/types";
 import { ApiImg, useApiSrc } from "@/lib/use-api-src";
@@ -13,6 +13,7 @@ import { imageExt } from "@/lib/viewers/kind";
 import { GenerationProgress } from "@/components/files/GenerationProgress";
 import { REFUND_PHRASE } from "@/lib/refund-phrase";
 import { downloadStudioFile } from "../studio-download";
+import { retryLabel } from "../JobResult";
 import type { StudioJob } from "../StudioResults";
 import type { CompareKind } from "./compare-model";
 
@@ -38,11 +39,20 @@ export function CompareResults({
   batches,
   jobs,
   onPick,
+  onRetry,
+  retryPrice,
+  busy = false,
 }: {
   kind: CompareKind;
   batches: readonly CompareBatch[];
   jobs: readonly StudioJob[];
   onPick: (modelId: string, prompt: string) => void;
+  /** P11 §D: a failed cell is retried alone (absent = no retry button). */
+  onRetry?: (job: StudioJob) => void;
+  /** What that retry costs now; default = what the job cost. */
+  retryPrice?: (job: StudioJob) => number;
+  /** A submit is in flight: the retry waits. */
+  busy?: boolean;
 }) {
   if (batches.length === 0) return null;
   const byId = new Map(jobs.map((j) => [j.id, j]));
@@ -58,7 +68,7 @@ export function CompareResults({
               const job = byId.get(id);
               return job ? (
                 <li key={id} className="min-w-0" data-compare-cell={job.modelId} data-job-status={job.gen?.status ?? "QUEUED"}>
-                  <Cell kind={kind} job={job} onPick={onPick} />
+                  <Cell kind={kind} job={job} onPick={onPick} onRetry={onRetry} retryPrice={retryPrice} busy={busy} />
                 </li>
               ) : null;
             })}
@@ -69,8 +79,16 @@ export function CompareResults({
   );
 }
 
-function Cell({ kind, job, onPick }: { kind: CompareKind; job: StudioJob; onPick: (modelId: string, prompt: string) => void }) {
+function Cell({ kind, job, onPick, onRetry, retryPrice, busy }: { kind: CompareKind; job: StudioJob; onPick: (modelId: string, prompt: string) => void; onRetry?: (job: StudioJob) => void; retryPrice?: (job: StudioJob) => number; busy: boolean }) {
   const gen = job.gen;
+  const failed = (job.error && !gen) || (gen && gen.status !== "QUEUED" && gen.status !== "IN_PROGRESS" && gen.status !== "COMPLETED");
+  const retryButton =
+    failed && onRetry ? (
+      <button type="button" data-compare-action="retry" disabled={busy} onClick={() => onRetry(job)} className={ACTION}>
+        <RefreshCw className="size-4" aria-hidden />
+        {retryLabel(retryPrice?.(job) ?? job.price)}
+      </button>
+    ) : null;
   const head = (
     <div className="flex items-baseline justify-between gap-2 px-3.5 pt-3">
       <p className="min-w-0 truncate text-[15px] font-bold" data-compare-model>
@@ -113,7 +131,10 @@ function Cell({ kind, job, onPick }: { kind: CompareKind; job: StudioJob; onPick
     <article className="bg-card flex h-full flex-col gap-3 overflow-hidden rounded-[20px] border pb-3.5 shadow-[var(--shadow-card)]">
       {head}
       <div className="flex-1">{body}</div>
-      <div className="flex flex-col gap-1.5 px-3.5">{pick}</div>
+      <div className="flex flex-col gap-1.5 px-3.5">
+        {retryButton}
+        {pick}
+      </div>
     </article>
   );
 }

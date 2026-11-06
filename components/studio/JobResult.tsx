@@ -13,9 +13,22 @@ import type { StudioJob } from "./StudioResults";
 export const RESULT_ACTION =
   "focus-visible:ring-ring bg-card hover:bg-muted pointer-coarse:min-h-11 inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[12px] border px-3 text-[13.5px] font-semibold outline-none focus-visible:ring-2 disabled:opacity-50";
 
+/** The one name of a repeat on every result card (P11 §D): a new job, the same request. */
+export const AGAIN_LABEL = "Qayta yaratish";
+
 /** A retry is a new charge: the button says how much. */
 export function retryLabel(price: number): string {
-  return price > 0 ? `Qayta urinish · ${formatSom(price)}` : "Qayta urinish";
+  return price > 0 ? `${AGAIN_LABEL} · ${formatSom(price)}` : AGAIN_LABEL;
+}
+
+/** The line every card starts with, the running ones included: which model, what it cost. */
+export function JobMeta({ job, extra }: { job: Pick<StudioJob, "modelLabel" | "price">; extra?: string }) {
+  return (
+    <p className="text-muted-foreground text-[12.5px]" data-studio-job-meta>
+      {job.modelLabel}
+      {extra ? ` · ${extra}` : ""} · {formatSom(job.price)}
+    </p>
+  );
 }
 
 /** The tab's results, newest first. The `data-*` hooks are the shared contract of every Studio results list. */
@@ -65,13 +78,26 @@ export function JobResult({
     return (
       <div className="bg-card rounded-[20px] border p-5" data-studio-pending role="status">
         <p className="font-medium">Navbatga qo‘yildi</p>
-        <p className="text-muted-foreground mt-0.5 text-[14px]">
-          {job.modelLabel} · {formatSom(job.price)}
-        </p>
+        <div className="mt-0.5">
+          <JobMeta job={job} />
+        </div>
       </div>
     );
   }
-  if (gen.status === "QUEUED" || gen.status === "IN_PROGRESS") return <GenerationProgress gen={gen} />;
+  // The waiting card names the model and the price too (the progress panel alone said neither).
+  if (gen.status === "QUEUED" || gen.status === "IN_PROGRESS") {
+    return (
+      <div data-studio-running>
+        <div className="px-4 pt-3 sm:px-5">
+          <p className="line-clamp-1 text-[14px] font-medium break-words" data-studio-job-prompt>
+            {job.prompt}
+          </p>
+          <JobMeta job={job} />
+        </div>
+        <GenerationProgress gen={gen} />
+      </div>
+    );
+  }
   if (gen.status === "COMPLETED") return children(gen);
   const message = gen.status === "FAILED" ? gen.error || `${failed}. ${REFUND_PHRASE}.` : "Ish bekor qilindi.";
   return <Failure job={job} message={message} busy={busy} again={again} />;

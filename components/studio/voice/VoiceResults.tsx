@@ -1,20 +1,23 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AudioLines, Clapperboard, Download, RefreshCw } from "lucide-react";
 import type * as api from "@/lib/api-client";
 import { useApiSrc } from "@/lib/use-api-src";
 import { cn } from "@/lib/cn";
-import { formatSom } from "@/lib/format";
-import { JobList, JobResult, RESULT_ACTION as ACTION } from "../JobResult";
+import { FavoriteButton } from "../Favorite";
+import { AGAIN_LABEL, JobList, JobMeta, JobResult, RESULT_ACTION as ACTION } from "../JobResult";
 import { downloadStudioFile } from "../studio-download";
 import type { StudioJob } from "../StudioResults";
 import { useMixHandoff } from "../audio/mix-handoff";
 
 /**
- * The «Ovoz» tab's results, newest first: a waiting job shows the app's progress panel, a finished one plays here (the
- * result file itself, `?inline=1`) with «Yuklab olish (MP3)» and «Qayta»; a failed one says why (refunded in full).
+ * The «Ovoz» and «Audio» tabs' results, newest first: a waiting job shows the model, the price and the app's progress
+ * panel; a finished one plays here (the result file itself, `?inline=1`) with «Yuklab olish (MP3)», «Qayta yaratish» and
+ * the star; a sound effect bought in several variants plays every one of them (P11 §D — each was paid for); a failed one
+ * says why (refunded in full).
  */
 export function VoiceResults({
   jobs,
@@ -41,8 +44,34 @@ export function VoiceResults({
   );
 }
 
+/** One more clip of a sound effect bought in variants: its own asset, its own player and download. */
+function Variant({ jobId, index, assetId, seconds }: { jobId: string; index: number; assetId: string; seconds: number }) {
+  const router = useRouter();
+  const src = useApiSrc(`/api/generations/${jobId}/assets/${assetId}`);
+  return (
+    <li className="flex items-center gap-2" data-result-variant={index}>
+      <span className="text-muted-foreground w-16 shrink-0 text-[12.5px] tabular-nums">
+        {index + 1}-variant · {Math.round(seconds)} s
+      </span>
+      <audio className="min-w-0 flex-1" controls preload="none" src={src} data-result-variant-audio>
+        Brauzeringiz audio pleerni qo‘llab-quvvatlamaydi.
+      </audio>
+      <button
+        type="button"
+        data-result-action="download-variant"
+        aria-label={`${index + 1}-variantni yuklab olish`}
+        onClick={() => void downloadStudioFile({ url: `/api/generations/${jobId}/assets/${assetId}`, fileName: `studio-sfx-${index + 1}.mp3`, mime: "audio/mpeg" }, () => router.push(`/uz/files/${jobId}`))}
+        className={cn(ACTION, "size-11 shrink-0 px-0")}
+      >
+        <Download className="size-4" aria-hidden />
+      </button>
+    </li>
+  );
+}
+
 function Audio({ job, gen, busy, onAgain }: { job: StudioJob; gen: api.GenerationDetail; busy: boolean; onAgain?: (j: StudioJob) => void }) {
   const router = useRouter();
+  const [favError, setFavError] = useState<string | null>(null);
   const page = `/uz/files/${job.id}`;
   const src = useApiSrc(`/api/generations/${job.id}/file?inline=1`);
   // P6: an «Audio» result carries `doc.studioAudio` (same player, same download).
@@ -53,20 +82,36 @@ function Audio({ job, gen, busy, onAgain }: { job: StudioJob; gen: api.Generatio
   const toMix = useMixHandoff();
   const mode = gen.doc?.studioAudio?.mode;
   const speechLike = !gen.doc?.mix && mode !== "music" && mode !== "sfx";
+  // Sound-effect variants (2–4): the first one is the result file itself, every one is an asset of the job.
+  const variants = gen.doc?.studioAudio?.variants ?? [];
   return (
     <article className="bg-card flex flex-col gap-2.5 rounded-[20px] border p-3.5 shadow-[var(--shadow-card)]" data-studio-audio>
       <audio className="w-full" controls preload="metadata" src={src} data-audio-result>
         Brauzeringiz audio pleerni qo‘llab-quvvatlamaydi.
       </audio>
-      <div className="min-w-0">
-        <p className="line-clamp-2 text-[14.5px] leading-snug break-words" data-studio-job-prompt>
-          {job.prompt}
-        </p>
-        <p className="text-muted-foreground mt-0.5 text-[12.5px]" data-studio-job-meta>
-          {job.modelLabel}
-          {seconds ? ` · ${Math.round(seconds)} s` : ""} · {formatSom(job.price)}
-        </p>
+      {variants.length > 1 ? (
+        <ul className="flex flex-col gap-1.5" aria-label="Variantlar" data-result-variants>
+          {variants.map((v, i) => (
+            <Variant key={v.assetId} jobId={job.id} index={i} assetId={v.assetId} seconds={v.seconds} />
+          ))}
+        </ul>
+      ) : null}
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="line-clamp-2 text-[14.5px] leading-snug break-words" data-studio-job-prompt>
+            {job.prompt}
+          </p>
+          <div className="mt-0.5">
+            <JobMeta job={job} extra={seconds ? `${Math.round(seconds)} s` : undefined} />
+          </div>
+        </div>
+        <FavoriteButton id={job.id} onError={setFavError} />
       </div>
+      {favError ? (
+        <p role="alert" className="text-destructive text-[13px]" data-favorite-error>
+          {favError}
+        </p>
+      ) : null}
       <div className={cn("grid gap-1.5", onAgain ? "grid-cols-2" : "grid-cols-1")}>
         <button type="button" data-result-action="download" onClick={() => void downloadStudioFile({ url: `/api/generations/${job.id}/file`, fileName: "studio-audio.mp3", mime: "audio/mpeg" }, () => router.push(page))} className={ACTION}>
           <Download className="size-4" aria-hidden />
@@ -75,7 +120,7 @@ function Audio({ job, gen, busy, onAgain }: { job: StudioJob; gen: api.Generatio
         {onAgain ? (
           <button type="button" data-result-action="again" disabled={busy} onClick={() => onAgain(job)} className={ACTION}>
             <RefreshCw className="size-4" aria-hidden />
-            Qayta
+            {AGAIN_LABEL}
           </button>
         ) : null}
       </div>

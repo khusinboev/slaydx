@@ -713,8 +713,9 @@ test("a retry says its price: the catalog's price now, not an old one", async ()
 });
 
 test("retryLabel: a job with no price offers a plain retry", () => {
-  assert.equal(retryLabel(2600), `Qayta urinish · ${formatSom(2600)}`);
-  assert.equal(retryLabel(0), "Qayta urinish");
+  // P11 §D: one name for a repeat on every card («Qayta yaratish»), the retry of a failed job included.
+  assert.equal(retryLabel(2600), `Qayta yaratish · ${formatSom(2600)}`);
+  assert.equal(retryLabel(0), "Qayta yaratish");
 });
 
 test("music: a failure without a server text does not say «Ovoz»", async () => {

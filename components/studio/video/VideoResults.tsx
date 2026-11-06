@@ -9,10 +9,9 @@ import { useApiSrc } from "@/lib/use-api-src";
 import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
 import { FavoriteButton } from "../Favorite";
-import { JobList, JobResult, RESULT_ACTION as ACTION } from "../JobResult";
+import { AGAIN_LABEL, JobList, JobResult, RESULT_ACTION as ACTION } from "../JobResult";
 import { downloadStudioFile } from "../studio-download";
 import { useMixHandoff } from "../audio/mix-handoff";
-import { isMixModelId } from "@/lib/media/catalog-mix";
 import type { StudioJob } from "../StudioResults";
 
 /** P7b «Keyingi qadam» on a finished clip (absent = no button). */
@@ -62,8 +61,6 @@ function Clip({ job, gen, busy, onAgain, onMusic, onVoice }: { job: StudioJob; g
   const short = gen.delivered && gen.delivered.got < gen.delivered.want ? gen.delivered : null;
   // P8c «Keyingi qadam» → «Montaj»: any finished clip can take a voice / music (the handoff pre-picks this clip).
   const toMix = useMixHandoff();
-  // A «Montaj» result is not a Studio gallery item (no star; P8c).
-  const mixed = isMixModelId(job.modelId);
   return (
     <article className="bg-card overflow-hidden rounded-[20px] border shadow-[var(--shadow-card)]" data-studio-clip>
       <video className={cn("w-full bg-black", video?.aspect === "9:16" && "mx-auto max-h-[70vh] max-w-sm")} controls playsInline preload="metadata" src={src} data-video-player>
@@ -80,7 +77,8 @@ function Clip({ job, gen, busy, onAgain, onMusic, onVoice }: { job: StudioJob; g
               {video ? ` · ${Math.round(video.seconds)} soniya` : ""} · {formatSom(job.price)}
             </p>
           </div>
-          {mixed ? null : <FavoriteButton id={job.id} onError={setFavError} />}
+          {/* P11 §D: a «Montaj» result is a gallery item too, so it takes the star like every clip. */}
+          <FavoriteButton id={job.id} onError={setFavError} />
         </div>
         {favError ? (
           <p role="alert" className="text-destructive text-[13px]" data-favorite-error>
@@ -99,7 +97,7 @@ function Clip({ job, gen, busy, onAgain, onMusic, onVoice }: { job: StudioJob; g
           </button>
           <button type="button" data-result-action="again" disabled={busy} onClick={() => onAgain(job)} className={ACTION}>
             <RefreshCw className="size-4" aria-hidden />
-            Qayta
+            {AGAIN_LABEL}
           </button>
         </div>
         {(prompt && (onMusic || onVoice)) || toMix ? (

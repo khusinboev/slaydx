@@ -8,7 +8,10 @@ import { availableModels } from "./availability";
 import { assertOwnCloneIds, cloneJobCtx, sniffAudio } from "./voices";
 import { AUDIO_INPUT_MAX_BYTES, AUDIO_INPUT_USER_MAX_BYTES, AUDIO_INPUT_MAX_SECONDS, AUDIO_INPUT_MIN_SECONDS, AUDIO_MODES, takesAudioInput } from "../../media/catalog-audio";
 import { cloneIdOf } from "../../media/catalog-speech";
+import { DUB_MAX_SECONDS, TRANSCRIBE_VIDEO_MAX_SECONDS } from "../../media/catalog-transcribe";
 import { billedSeconds, studioAudioEntry, studioAudioPurposeOf } from "../../media/studio-audio";
+import { isMp4, mp4Seconds } from "../../generation/video/mp4";
+import { mp4HasVideo } from "../../generation/studio/mix-media";
 import type { StudioAudioCtx } from "../../generation/studio/audio";
 import type { FormValues } from "../../types";
 
@@ -57,19 +60,47 @@ export function audioInputError(s: { mime: string; seconds: number } | null): { 
 }
 
 /**
+ * P11 §D: a video upload for «Dublyaj» / «Transkripsiya» (`kind=video` in the form). The longest a speech tool takes of a
+ * video: 3 min (`DUB_MAX_SECONDS` = `TRANSCRIBE_VIDEO_MAX_SECONDS`); the shortest, one second.
+ */
+export const VIDEO_INPUT_MIN_SECONDS = 1;
+export const VIDEO_INPUT_MAX_SECONDS = Math.min(DUB_MAX_SECONDS, TRANSCRIBE_VIDEO_MAX_SECONDS);
+export const VIDEO_INPUT_MIME = "video/mp4";
+
+/** An MP4 with a picture track and a readable length (`moov/mvhd`), else `null` — the type is read from the bytes, never from the browser. */
+export function sniffVideo(bytes: Uint8Array): { mime: typeof VIDEO_INPUT_MIME; seconds: number } | null {
+  if (!isMp4(bytes) || !mp4HasVideo(bytes)) return null;
+  const seconds = mp4Seconds(bytes);
+  return seconds > 0 ? { mime: VIDEO_INPUT_MIME, seconds } : null;
+}
+
+/** Uzbek reason a video upload cannot be used (415 / 422), `null` when it is fine. */
+export function videoInputError(s: { mime: string; seconds: number } | null): { message: string; status: number } | null {
+  if (!s) return { message: "Faqat MP4 video qabul qilinadi.", status: 415 };
+  if (s.seconds < VIDEO_INPUT_MIN_SECONDS) return { message: `Video kamida ${VIDEO_INPUT_MIN_SECONDS} soniya bo‘lsin.`, status: 422 };
+  if (billedSeconds(s.seconds) > VIDEO_INPUT_MAX_SECONDS) return { message: `Video ${VIDEO_INPUT_MAX_SECONDS / 60} daqiqadan oshmasin (hozir ${Math.ceil(s.seconds)} s).`, status: 422 };
+  return null;
+}
+
+/**
  * `POST /api/media/audio-inputs` body: `file` (the browser converts a recording / any upload to 16-bit mono WAV, an MP3
  * goes as is). Answer: `{ id, seconds }` — `seconds` is the BILLED length (whole seconds, rounded up), the same number
  * the server will price with.
+ *
+ * P11 §D: with `kind=video` the file is an MP4 for «Dublyaj» / «Transkripsiya» (the same row, `mime` 'video/mp4', the
+ * same owner-only reads and housekeeping); without it a video is refused as before, so the P6 audio modes never see one.
  */
 export async function uploadAudioInput(req: Request, userId: string): Promise<AudioInputResult> {
-  const form = await readUploadForm(req, AUDIO_INPUT_MAX_BYTES + 64 * 1024, "Audio 25 MB dan katta");
+  const form = await readUploadForm(req, AUDIO_INPUT_MAX_BYTES + 64 * 1024, "Fayl 25 MB dan katta");
   const file = form?.get("file");
-  if (!(file instanceof File)) throw new ApiError("Audio yuborilmadi", 400);
-  if (file.size === 0) throw new ApiError("Audio bo‘sh", 400);
-  if (file.size > AUDIO_INPUT_MAX_BYTES) throw new ApiError("Audio 25 MB dan katta", 413);
+  const video = form?.get("kind") === "video";
+  const what = video ? "Video" : "Audio";
+  if (!(file instanceof File)) throw new ApiError(`${what} yuborilmadi`, 400);
+  if (file.size === 0) throw new ApiError(`${what} bo‘sh`, 400);
+  if (file.size > AUDIO_INPUT_MAX_BYTES) throw new ApiError(`${what} 25 MB dan katta`, 413);
   const bytes = Buffer.from(await file.arrayBuffer());
-  const sniffed = sniffAudio(new Uint8Array(bytes));
-  const bad = audioInputError(sniffed);
+  const sniffed = video ? sniffVideo(new Uint8Array(bytes)) : sniffAudio(new Uint8Array(bytes));
+  const bad = video ? videoInputError(sniffed) : audioInputError(sniffed);
   if (bad) throw new ApiError(bad.message, bad.status, { code: "input_invalid" });
   const held = await query<{ n: string }>("SELECT COALESCE(SUM(size_bytes), 0)::text AS n FROM studio_audio_inputs WHERE user_id = $1", [userId]);
   if (Number(held[0]?.n ?? 0) + bytes.byteLength > AUDIO_INPUT_USER_MAX_BYTES) {
@@ -87,10 +118,13 @@ export async function uploadAudioInput(req: Request, userId: string): Promise<Au
 
 const ID_RE = /^[0-9a-f]{24}$/;
 
-/** The user's own input: its billed seconds (owner-only, SQL), `null` when it is not theirs / gone. */
+/**
+ * The user's own AUDIO input: its billed seconds (owner-only, SQL), `null` when it is not theirs / gone — or a video
+ * (P11: a video upload belongs to the speech tools; the voice changer and the isolator take audio only).
+ */
 export async function ownAudioInput(userId: string, id: string): Promise<{ billedSeconds: number } | null> {
   if (!ID_RE.test(id)) return null;
-  const row = await queryOne<{ billed_seconds: number }>("SELECT billed_seconds FROM studio_audio_inputs WHERE id = $1 AND user_id = $2", [id, userId]);
+  const row = await queryOne<{ billed_seconds: number }>("SELECT billed_seconds FROM studio_audio_inputs WHERE id = $1 AND user_id = $2 AND mime <> $3", [id, userId, VIDEO_INPUT_MIME]);
   return row ? { billedSeconds: Number(row.billed_seconds) } : null;
 }
 
@@ -120,7 +154,7 @@ export async function studioAudioJobCtx(userId: string, values: FormValues): Pro
   if (entry && takesAudioInput(entry)) {
     const id = String(values.inputId ?? "").trim();
     const row = ID_RE.test(id)
-      ? await queryOne<{ mime: string; bytes: Buffer; billed_seconds: number }>("SELECT mime, bytes, billed_seconds FROM studio_audio_inputs WHERE id = $1 AND user_id = $2", [id, userId])
+      ? await queryOne<{ mime: string; bytes: Buffer; billed_seconds: number }>("SELECT mime, bytes, billed_seconds FROM studio_audio_inputs WHERE id = $1 AND user_id = $2 AND mime <> $3", [id, userId, VIDEO_INPUT_MIME])
       : null;
     if (row) input = { mime: row.mime, base64: row.bytes.toString("base64"), seconds: Number(row.billed_seconds) };
   }

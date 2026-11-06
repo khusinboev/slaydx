@@ -18,7 +18,8 @@ import type { MixSource, MixSources } from "./mix-api";
  * server sets its own number before pricing, so a stale preview is a 409, never a wrong charge.
  */
 
-export type SourceTab = "result" | "upload";
+/** Where the source comes from: a finished result, an audio upload / recording, or (P11 §D) the user's own video file. */
+export type SourceTab = "result" | "upload" | "video";
 /** Per mode: the raw values, the source picker's tab, the picked source's kind (the burn row needs a video), the picked model. */
 export type SpeechToolState = { raw: RawValues; tab: SourceTab; kind: "video" | "audio" | null; model?: string };
 export type SpeechToolsState = Partial<Record<SpeechToolMode, SpeechToolState>>;
@@ -43,7 +44,8 @@ export function offeredSpeechTools(models: readonly ClientEntry[]): { mode: Spee
 export function pickSpeechModel(st: SpeechToolState, next: ClientEntry): SpeechToolState {
   const raw = carryOver(next, st.raw);
   if (!videoOnlySource(next.id)) return { ...st, model: next.id, raw };
-  if (st.kind === "video") return { ...st, model: next.id, raw, tab: "result" };
+  // A video-only model: a picked video (a result or an own upload) stays on its tab; an audio source goes.
+  if (st.kind === "video") return { ...st, model: next.id, raw, tab: st.tab === "upload" ? "result" : st.tab };
   delete raw.source;
   delete raw.sourceSeconds;
   return { ...st, model: next.id, raw, tab: "result", kind: null };
@@ -80,11 +82,16 @@ export function pickResult(raw: RawValues, s: MixSource & { media: "video" | "au
   return next;
 }
 
-/** The raw values after an upload (`upload:<id>`, the server's billed seconds; an upload is audio: no burn). */
+/** The raw values after an audio upload (`upload:<id>`, the server's billed seconds; an audio: no burn). */
 export function pickUpload(raw: RawValues, r: { id: string; seconds: number }): RawValues {
   const next: RawValues = { ...raw, source: `upload:${r.id}`, sourceSeconds: r.seconds };
   delete next.burn;
   return next;
+}
+
+/** P11 §D: the raw values after a VIDEO upload — the same reference shape, the burn stays possible (it is a video). */
+export function pickVideoUpload(raw: RawValues, r: { id: string; seconds: number }): RawValues {
+  return { ...raw, source: `upload:${r.id}`, sourceSeconds: r.seconds };
 }
 
 /** Why the button cannot send yet (Uzbek), `null` when it can. */

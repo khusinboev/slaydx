@@ -18,8 +18,14 @@ import type { MediaCatalog } from "../studio-types";
 import { PROMPT_PARAM, normalizedPrompt, promptLimit, promptMin } from "../studio-values";
 import { sendCompare } from "./compare-api";
 import { CompareResults } from "./CompareResults";
-import { COMPARE_MIN, compareBatch, compareCap, compareLabel, compareModels, memberPrice, memberValues, sharedEntry, sharedParams, toggleModel, type CompareKind } from "./compare-model";
+import { COMPARE_MIN, compareBatch, compareCap, compareLabel, compareModels, droppedLine, memberPrice, memberValues, sharedEntry, sharedParams, toggleModel, type CompareKind } from "./compare-model";
 import type { CompareTab } from "./useCompare";
+import type { StudioJob } from "../StudioResults";
+import { queueGeneration } from "@/components/forms/runGeneration";
+import type { FormValues } from "@/lib/types";
+import { STUDIO_TOOL_SLUG } from "../studio-entry";
+import { STUDIO_TOOL_ID } from "../studio-price";
+import { STUDIO_VIDEO_SLUG, STUDIO_VIDEO_TOOL_ID } from "../video/video-price";
 
 /**
  * The «Solishtirish» switch (docs/studio/P7-SPEC.md P7a): above the tab's model picker, on the Rasm tab's drawing mode
@@ -94,6 +100,31 @@ export function ComparePanel({
     setError,
   );
 
+  /** What a cell's retry costs now: that model's job at the values it was sent (the same preview as the batch). */
+  function retryPrice(job: StudioJob): number {
+    const target = models.find((m) => m.id === job.modelId);
+    return target ? memberPrice(kind, target, job.sent, catalog.pricing) : job.price;
+  }
+
+  /**
+   * P11 §D: a failed cell is retried alone — one new job of that model with the values it was sent, at the price shown,
+   * through the tab's own tool (not a second batch); the new job takes the cell's place in the batch.
+   */
+  async function retry(job: StudioJob) {
+    const target = models.find((m) => m.id === job.modelId);
+    if (!target) {
+      setError("Bu model hozir mavjud emas — boshqa modelni tanlang.");
+      return;
+    }
+    const tool = kind === "video" ? { slug: STUDIO_VIDEO_SLUG, id: STUDIO_VIDEO_TOOL_ID, title: job.prompt.slice(0, 72), output: "mp4" as const } : { slug: STUDIO_TOOL_SLUG, id: STUDIO_TOOL_ID, title: job.prompt.slice(0, 72), output: "png" as const };
+    await run(async () => {
+      const queued = await queueGeneration(tool, job.sent as unknown as FormValues, retryPrice(job), { repeat: true });
+      tab.track({ id: queued.id, modelId: target.id, modelLabel: target.label, prompt: job.prompt, price: queued.price, sent: job.sent });
+      setState((s) => ({ ...s, batches: s.batches.map((b) => (b.ids.includes(job.id) ? { ...b, ids: b.ids.map((id) => (id === job.id ? queued.id : id)) } : b)) }));
+      void useAppStore.getState().refreshSession();
+    });
+  }
+
   async function submit() {
     if (!batch || !shared) {
       setError(`Kamida ${COMPARE_MIN} ta model belgilang`);
@@ -124,7 +155,7 @@ export function ComparePanel({
         hasResults={state.batches.length > 0}
         empty="Solishtirish natijalari shu yerda yonma-yon ko‘rinadi."
         label="Solishtirish natijalari"
-        results={<CompareResults kind={kind} batches={state.batches} jobs={tab.jobs} onPick={onPick} />}
+        results={<CompareResults kind={kind} batches={state.batches} jobs={tab.jobs} onPick={onPick} onRetry={(j) => void retry(j)} retryPrice={retryPrice} busy={submitting} />}
         form={
           <>
         <PromptBox
@@ -168,6 +199,12 @@ export function ComparePanel({
                       <span className="text-muted-foreground block truncate text-[12.5px]">
                         ~{groupDigits(price)} so‘m{m.badges.length ? ` · ${badgeText(m)}` : ""}
                       </span>
+                      {/* P11 §D: what this ticked model runs at its own default, since the shared rows do not ask for it. */}
+                      {on && droppedLine(m, sharedRows) ? (
+                        <span className="text-muted-foreground block text-[12px] leading-snug" data-compare-dropped={m.id}>
+                          {droppedLine(m, sharedRows)}
+                        </span>
+                      ) : null}
                     </span>
                   </button>
                 </li>

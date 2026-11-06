@@ -10,7 +10,7 @@ import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
 import { imageExt } from "@/lib/viewers/kind";
 import { FavoriteButton } from "./Favorite";
-import { JobList, JobResult, RESULT_ACTION as ACTION } from "./JobResult";
+import { AGAIN_LABEL, JobList, JobResult, RESULT_ACTION as ACTION } from "./JobResult";
 import { downloadStudioFile } from "./studio-download";
 import { MODE_LABEL, MODE_PURPOSE, TOOL_MODES, type StudioMode } from "./studio-modes";
 
@@ -186,7 +186,7 @@ function Pictures({
         <div className="grid grid-cols-2 gap-1.5">
           <button type="button" data-result-action="again" disabled={busy} onClick={() => onAgain(job)} className={ACTION}>
             <RefreshCw className="size-4" aria-hidden />
-            Qayta
+            {AGAIN_LABEL}
           </button>
           <button type="button" data-result-action="other-model" onClick={() => onOtherModel(job)} className={ACTION}>
             <Shuffle className="size-4" aria-hidden />

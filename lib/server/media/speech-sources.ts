@@ -19,7 +19,8 @@ import type { FormValues } from "../../types";
  * BEFORE anything is charged, and the worker's view of a job's source.
  *
  * A source is the caller's OWN input, by reference (`catalog-transcribe.ts parseSource`):
- *   `upload:<id>`   a `studio_audio_inputs` row (`WHERE id = $1 AND user_id = $2`) — WAV / MP3, its billed seconds;
+ *   `upload:<id>`   a `studio_audio_inputs` row (`WHERE id = $1 AND user_id = $2`) — WAV / MP3, or (P11 §D) the user's
+ *                   own MP4 uploaded with `kind=video`; its billed seconds, its kind from the row's mime;
  *   `result:<id>`   a finished result that fits the «Montaj» `video` or `audio` role (`mix-sources.ts`, the same SQL:
  *                   `g.user_id = $1 AND status = 'COMPLETED' AND files_purged_at IS NULL`).
  * Another user's id is the same answer as a missing one (400 `input_missing`). The BILLED seconds come from the server
@@ -59,12 +60,13 @@ async function resolveSource(userId: string, raw: unknown): Promise<Resolved> {
   const ref = parseSource(raw);
   if (!ref) throw new ApiError("Avval manbani tanlang: audio yuklang yoki natijalaringizdan birini tanlang.", 400, { code: "input_invalid" });
   if (ref.kind === "upload") {
-    const row = await queryOne<{ seconds: string; billed_seconds: number; size_bytes: string }>(
-      "SELECT seconds, billed_seconds, size_bytes FROM studio_audio_inputs WHERE id = $1 AND user_id = $2",
+    const row = await queryOne<{ mime: string; seconds: string; billed_seconds: number; size_bytes: string }>(
+      "SELECT mime, seconds, billed_seconds, size_bytes FROM studio_audio_inputs WHERE id = $1 AND user_id = $2",
       [ref.id, userId],
     );
-    if (!row) throw MISSING("Yuklangan audio");
-    return { kind: "audio", seconds: Number(row.seconds), billed: Number(row.billed_seconds), size: Number(row.size_bytes) };
+    if (!row) throw MISSING("Yuklangan fayl");
+    // P11 §D: an upload is a video when its row says so (`kind=video` at upload, the bytes sniffed as an MP4).
+    return { kind: row.mime === "video/mp4" ? "video" : "audio", seconds: Number(row.seconds), billed: Number(row.billed_seconds), size: Number(row.size_bytes) };
   }
   const row = await ownMixRow(userId, ref.id);
   const kind = row && fitsRole(row, "video") ? "video" : row && fitsRole(row, "audio") ? "audio" : null;

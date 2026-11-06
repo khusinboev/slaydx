@@ -94,6 +94,21 @@ export function sharedParams(entries: readonly ClientEntry[]): ParamSchema[] {
 }
 
 /**
+ * P11 §D: the params of one ticked model the compare form does NOT ask for — it lacks a shared row for them, so that
+ * model runs them at its own default (images aside: compare is prompt-only, and the prompt is always shared).
+ */
+export function droppedParams(entry: ClientEntry, shared: readonly ParamSchema[]): ParamSchema[] {
+  const names = new Set(shared.map((p) => p.name));
+  return entry.params.filter((p) => p.type !== "image" && p.name !== PROMPT_PARAM && !names.has(p.name));
+}
+
+/** «Sifat, Ovoz — o‘z standartida»: the line under a ticked model naming what it runs at its own default; `null` when nothing. */
+export function droppedLine(entry: ClientEntry, shared: readonly ParamSchema[]): string | null {
+  const dropped = droppedParams(entry, shared);
+  return dropped.length ? `${dropped.map((p) => p.label).join(", ")} — o‘z standartida` : null;
+}
+
+/**
  * The entry the shared rows are drawn from: the first ticked model with only the shared params (the prompt box and
  * `ParamRows` read it exactly as they read a real model).
  */

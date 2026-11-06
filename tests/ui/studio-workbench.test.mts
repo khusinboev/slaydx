@@ -9,6 +9,7 @@ import { ELEVENLABS_VOICES, GEMINI_VOICES } from "../../lib/media/catalog-speech
 import { GPT, NANO, PRICING, USER, catalogBody, generationDetail, installApi, json } from "./studio-fixtures.ts";
 
 const { StudioPage } = await import("../../components/studio/StudioPage.tsx");
+const { VoiceResults } = await import("../../components/studio/voice/VoiceResults.tsx");
 const { switchChanges, switchNotice } = await import("../../components/studio/studio-values.ts");
 const { mixBlocker, startOffsetMax } = await import("../../components/studio/audio/MixPanel.tsx");
 const { useAppStore } = await import("../../lib/store.ts");
@@ -254,6 +255,76 @@ test("Video: the switch's line is shown, closable, replaced by the next switch, 
   assert.equal(q("[data-switch-notice]")!.textContent, "Google Veo (Gemini): Ovoz (ha) bu modelda yo‘q", "MUTATSIYA: the silent reset");
   await click(q('[data-switch-notice] button[aria-label="Yopish"]'));
   assert.ok(!q("[data-switch-notice]"), "closed");
+});
+
+test("result cards: the running card names the model and the price; SFX variants each play and download; the star on audio", async () => {
+  const running = { id: "r1", modelId: "elevenlabs/sfx", modelLabel: "Ovoz effekti", prompt: "eshik g‘ichirlaydi", price: 1600, sent: {}, error: null, gen: generationDetail("r1", { type: "studio-audio", status: "IN_PROGRESS", progress: 40, step: "Yaratilmoqda" }) };
+  const variants = [1, 2, 3].map((n) => ({ assetId: String(n).repeat(24), seconds: 5 }));
+  const done = {
+    id: "d1",
+    modelId: "elevenlabs/sfx",
+    modelLabel: "Ovoz effekti",
+    prompt: "eshik g‘ichirlaydi",
+    price: 4800,
+    sent: {},
+    error: null,
+    gen: generationDetail("d1", { type: "studio-audio", format: "mp3", doc: { meta: { topic: "x" }, studioAudio: { mode: "sfx", model: "elevenlabs/sfx", seconds: 5, prompt: "eshik", inputSeconds: null, voices: [], clone: false, variants } } }),
+  };
+  render(h(AppRouterContext.Provider, { value: router }, h(VoiceResults, { jobs: [running, done] as never, busy: false, onAgain: () => {} })));
+  const card = q("[data-studio-running]")!;
+  assert.ok(card, "the waiting card");
+  assert.equal(card.querySelector("[data-studio-job-meta]")!.textContent, `Ovoz effekti · ${formatSom(1600)}`, "MUTATSIYA: the progress panel alone said neither");
+  assert.ok(card.querySelector("[data-generation-progress]"), "…above the app's progress panel");
+  assert.match(card.querySelector("[data-studio-job-prompt]")!.textContent ?? "", /eshik/);
+  const audio = q("[data-studio-audio]")!;
+  assert.deepEqual([...audio.querySelectorAll("[data-result-variant] audio")].map((a) => a.getAttribute("src")), variants.map((v) => `/api/generations/d1/assets/${v.assetId}`), "MUTATSIYA: every paid variant plays");
+  assert.equal(audio.querySelectorAll('[data-result-action="download-variant"]').length, 3);
+  assert.ok(audio.querySelector("[data-favorite]"), "the star on an audio card");
+  assert.equal(audio.querySelector('[data-result-action="again"]')!.textContent, "Qayta yaratish");
+  cleanup();
+  // One clip: no variant list (the result file is the clip).
+  const one = { ...done, gen: generationDetail("d2", { type: "studio-audio", format: "mp3", doc: { meta: { topic: "x" }, studioAudio: { mode: "sfx", model: "elevenlabs/sfx", seconds: 5, prompt: "eshik", inputSeconds: null, voices: [], clone: false, variants: [] } } }) };
+  render(h(AppRouterContext.Provider, { value: router }, h(VoiceResults, { jobs: [one] as never, busy: false })));
+  assert.ok(!q("[data-result-variants]"));
+});
+
+test("Transkripsiya / Dublyaj take the user's own video: the «Video yuklash» tab, the MP4 check, the upload with kind=video, the billed seconds", async () => {
+  const uploads: { kind: string | null; name: string }[] = [];
+  const base = api();
+  const inner = globalThis.fetch;
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) => {
+    if (String(input) === "/api/media/audio-inputs" && init?.method === "POST") {
+      const form = init.body as FormData;
+      const file = form.get("file") as File;
+      uploads.push({ kind: (form.get("kind") as string | null) ?? null, name: file.name });
+      return json(200, { id: "a".repeat(24), seconds: 7, mime: "video/mp4", size: 1000 });
+    }
+    return inner(input as never, init);
+  };
+  void base;
+  await mount();
+  await tab("audio");
+  await click(q('[data-audio-mode-chip="transcribe"]'));
+  await settle();
+  const tabs = () => qa('[data-field="source"] [role="radio"]').map((b) => b.textContent);
+  assert.deepEqual(tabs(), ["Natijalarimdan", "Audio yuklash", "Video yuklash"], "MUTATSIYA: the video tab");
+  await click(qa('[data-field="source"] [role="radio"]').find((b) => b.textContent === "Video yuklash"));
+  assert.ok(q("[data-video-input]"), "the video row");
+  assert.match(q("[data-video-input-seconds]")!.textContent ?? "", /Hali video tanlanmagan/);
+  const input = q<HTMLInputElement>("[data-video-file]")!;
+  // Not an MP4: refused in the browser, nothing uploaded.
+  await act(async () => void fireEvent.change(input, { target: { files: [new File([new Uint8Array(10)], "a.mov", { type: "video/quicktime" })] } }));
+  await settle(2);
+  assert.match(q("[data-video-input-error]")!.textContent ?? "", /Faqat MP4/);
+  assert.equal(uploads.length, 0, "MUTATSIYA: no request for a refused file");
+  // An MP4: uploaded with kind=video; the server's seconds show and price the job; the burn row appears (a video source).
+  await act(async () => void fireEvent.change(input, { target: { files: [new File([new Uint8Array(10)], "clip.mp4", { type: "video/mp4" })] } }));
+  await settle(4);
+  assert.deepEqual(uploads, [{ kind: "video", name: "clip.mp4" }], "MUTATSIYA: the upload says it is a video");
+  assert.match(q("[data-video-input-seconds]")!.textContent ?? "", /Yuklandi: 0:07 \(7 s\)/);
+  assert.equal(q("[data-speech-seconds]")!.textContent, "Narx 7 soniya uchun hisoblanadi.", "the server's seconds price the job");
+  assert.ok(q('[data-field="burn"]'), "a video source may be burned");
+  assert.ok(!q("[data-video-input-error]"));
 });
 
 test("Montaj: the start offset ends where the picked video ends (the row, the blocker); a picked source plays in place", async () => {

@@ -13,8 +13,11 @@ import { VOICE_TEMPLATE_TOOLS } from "../../media/voice-templates";
  * row. The gallery reads the stars with the owner in its WHERE (`lib/server/media/public.ts`).
  */
 
-/** The tools whose finished generations the Studio gallery lists — the same set `studioGallery` reads. */
-export const STUDIO_GALLERY_TOOLS = ["studio-image", "studio-video", "studio-speech", "studio-audio"] as const;
+/**
+ * The tools whose finished generations the Studio gallery lists — the same set `studioGallery` reads. P11 §D: the
+ * «Montaj», «Transkripsiya» and «Dublyaj» results are gallery items too (a clip, an audio or a text), so they take the star.
+ */
+export const STUDIO_GALLERY_TOOLS = ["studio-image", "studio-video", "studio-speech", "studio-audio", "studio-mix", "studio-transcribe", "studio-dub"] as const;
 
 /**
  * The tools the gallery and the stars read NOW: the Studio's own, plus podcast / greeting (P8b, kind audio) while the

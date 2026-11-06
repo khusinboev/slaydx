@@ -6,7 +6,7 @@ import { request } from "@/lib/api-client";
 import { parseMediaPricing, setClientMediaPricing } from "@/lib/media/studio-pricing";
 import type { ClientEntry } from "@/lib/studio-core";
 import type { LibraryItem, StudioTemplate } from "@/lib/media/library";
-import type { GalleryItem, GalleryPage, LibraryData, MediaCatalog, StudioPricing } from "./studio-types";
+import type { GalleryItem, GalleryKind, GalleryPage, LibraryData, MediaCatalog, StudioPricing } from "./studio-types";
 
 /** The catalog purpose Studio's Rasm tab reads (docs/studio/P1-SPEC.md). */
 export const STUDIO_IMAGE_PURPOSE = "studio.image";
@@ -162,10 +162,14 @@ function parseItem(raw: unknown): GalleryItem | null {
         clone: a.clone === true,
       }
     : null;
+  // P11 §D: a transcript (no file to play — the text's head, the result page has the rest).
+  const t = raw.kind === "text" && isObj(raw.text) ? raw.text : null;
+  const text = t ? { excerpt: str(t.excerpt) ?? "", language: str(t.language) } : null;
   return {
     id,
-    kind: audio ? "audio" : video ? "video" : "image",
+    kind: text ? "text" : audio ? "audio" : video ? "video" : "image",
     audio,
+    text,
     video,
     createdAt: str(raw.createdAt) ?? "",
     modelId: str(raw.modelId),
@@ -184,11 +188,12 @@ export function parseGalleryPage(raw: unknown): GalleryPage {
   return { items, nextCursor: isObj(raw) ? str(raw.nextCursor) : null };
 }
 
-/** One gallery page; `favorites` (P7b «Sevimlilar») lists only the starred items. */
-export async function fetchGallery(cursor: string | null, opts: { favorites?: boolean; signal?: AbortSignal } = {}): Promise<GalleryPage> {
+/** One gallery page; `favorites` (P7b «Sevimlilar») lists only the starred items; `kind` (P11 §D) only one kind. */
+export async function fetchGallery(cursor: string | null, opts: { favorites?: boolean; kind?: GalleryKind | null; signal?: AbortSignal } = {}): Promise<GalleryPage> {
   const q = new URLSearchParams();
   if (cursor) q.set("cursor", cursor);
   if (opts.favorites) q.set("favorites", "1");
+  if (opts.kind) q.set("kind", opts.kind);
   const qs = q.toString();
   return parseGalleryPage(await request<unknown>(`/api/media/gallery${qs ? `?${qs}` : ""}`, opts.signal ? { signal: opts.signal } : {}));
 }
