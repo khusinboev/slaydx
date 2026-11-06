@@ -26,7 +26,7 @@ import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, prom
 import type { StudioJob } from "../StudioResults";
 import { VideoResults } from "./VideoResults";
 import { STUDIO_VIDEO_SLUG, STUDIO_VIDEO_TOOL_ID, clipSeconds, isEffect, studioVideoClientPrice, videoCardPrice } from "./video-price";
-import { ASPECT_FOLLOWS_IMAGE, END_IMAGE_PARAM, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, avatarAudioSeconds, avatarScriptProblem, effectPhotos, isAvatarModel } from "@/lib/media/catalog-video";
+import { ASPECT_FOLLOWS_IMAGE, END_IMAGE_PARAM, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, avatarAudioSeconds, avatarScriptProblem, effectPhotoHint, effectPhotos, isAvatarModel } from "@/lib/media/catalog-video";
 import { fetchMixSources } from "../audio/mix-api";
 import { avatarHiddenParams, avatarRequest, avatarSpeeches, type SpeechSource } from "./avatar";
 
@@ -42,6 +42,8 @@ export type VideoTabState = {
   raw: RawValues;
   /** Chosen effect scene id (`null` = the first one). */
   effect: string | null;
+  /** P11: the provider of the effects, when several are on (`null` / absent = the first one). */
+  effectModel?: string | null;
   /** The effect's photo (`photo_uploads.asset_id`). */
   effectImage: string;
   /** P4: the second photo of a two-photo effect («Quchoqlash»); sent only for such a scene. */
@@ -62,9 +64,10 @@ const END_PARAM = END_IMAGE_PARAM;
 const SECOND_PARAM = SECOND_IMAGE_PARAM;
 
 /** The catalog split: the effect templates and the text/image → video models (each in catalog order). */
-export function splitVideoCatalog(catalog: MediaCatalog | null): { effects: ClientEntry | null; models: ClientEntry[] } {
+export function splitVideoCatalog(catalog: MediaCatalog | null): { effects: ClientEntry | null; effectModels: ClientEntry[]; models: ClientEntry[] } {
   const all = catalog?.models ?? [];
-  return { effects: all.find(isEffect) ?? null, models: all.filter((m) => !isEffect(m)) };
+  const effectModels = all.filter(isEffect);
+  return { effects: effectModels[0] ?? null, effectModels, models: all.filter((m) => !isEffect(m)) };
 }
 
 /** P7b: the text/image models that take a start image (`imageAssetId`), in catalog order. */
@@ -149,7 +152,9 @@ export function VideoTab({
   const split = fromPicture ? { ...all, models: startImageModels(all.models) } : all;
   const mode = shownMode(state, split);
 
-  const options = effectOptions(split.effects);
+  // P11: the user picks a provider, then one of its effects; a scene the provider does not sell falls back to its first.
+  const effectEntry = split.effectModels.find((m) => m.id === state.effectModel) ?? split.effects;
+  const options = effectOptions(effectEntry);
   const effect = options.find((o) => o.value === state.effect) ?? options[0] ?? null;
   const model = textEntry(split.models, catalog, state.chosen);
   // P9 HeyGen: the user's finished speech results, loaded once the avatar model is on screen (`null` = not loaded yet).
@@ -172,9 +177,9 @@ export function VideoTab({
   let entry: ClientEntry | null = null;
   let sent: Record<string, unknown> = {};
   let what = "";
-  const twoPhotos = effect ? effectPhotos(effect.value) === 2 : false;
-  if (mode === "effects" && split.effects && effect) {
-    entry = split.effects;
+  const twoPhotos = effect && effectEntry ? effectPhotos(effect.value, effectEntry.id) === 2 : false;
+  if (mode === "effects" && effectEntry && effect) {
+    entry = effectEntry;
     // The second photo goes out only for a two-photo scene (the server refuses it on a single-photo one).
     sent = { modelId: entry.id, effect: effect.value, [IMAGE_PARAM]: state.effectImage, ...(twoPhotos ? { [SECOND_PARAM]: state.effectImage2 ?? "" } : {}) };
     what = `«${effect.label}»`;
@@ -331,6 +336,33 @@ export function VideoTab({
 
       {mode === "effects" ? (
         <>
+          {split.effectModels.length > 1 ? (
+            <Card title="Provayder">
+              <Field id="modelId">
+                <div role="group" aria-label="Provayder" className="grid grid-cols-2 gap-2" data-effect-providers>
+                  {split.effectModels.map((m) => {
+                    const on = effectEntry?.id === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        aria-pressed={on}
+                        data-effect-provider={m.id}
+                        onClick={() => patch({ effectModel: m.id })}
+                        className={cn(
+                          "bg-muted/60 focus-visible:ring-ring flex min-h-11 flex-col justify-center rounded-[14px] border-2 px-2.5 py-1.5 text-left outline-none focus-visible:ring-2",
+                          on ? "border-primary" : "border-transparent",
+                        )}
+                      >
+                        <span className="text-[13.5px] leading-tight font-semibold">{m.label}</span>
+                        <span className="text-muted-foreground text-[12.5px] tabular-nums">{videoCardPrice(m, {}, catalog.pricing)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+            </Card>
+          ) : null}
           <Card title="Effekt">
             <Field id="effect">
               <div role="group" aria-label="Effekt" className="grid grid-cols-3 gap-2" data-effects-grid>
@@ -357,7 +389,7 @@ export function VideoTab({
             </Field>
           </Card>
           <Card title="Surat">
-            <Row label="Surat" hint="Yuz yoki odam aniq ko‘rinsin" wide>
+            <Row label="Surat" hint={effectPhotoHint(effect?.value, effectEntry?.id ?? "")} wide>
               <Field id={IMAGE_PARAM}>
                 <PhotoField
                   assetId={state.effectImage}

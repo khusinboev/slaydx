@@ -90,9 +90,15 @@ export const KLING_DUAL_EFFECTS: readonly { id: string; label: string }[] = [{ i
 /** Every effect scene the Studio sells, grid order: the single-photo ones, then the two-photo ones. */
 export const KLING_EFFECT_SCENES: readonly { id: string; label: string }[] = [...KLING_EFFECTS, ...KLING_DUAL_EFFECTS];
 
-/** Photos an effect scene needs (2 for a dual-character scene). */
-export function effectPhotos(effect: unknown): 1 | 2 {
-  return KLING_DUAL_EFFECTS.some((e) => e.id === effect) ? 2 : 1;
+/** The direct Kling effects entry (hidden until a pack covers it): the only one with two-photo scenes. */
+export const KLING_EFFECTS_MODEL = "kling/effects";
+
+/**
+ * Photos an effect scene needs on a model: 2 for a dual-character scene of the direct Kling API. fal's Kling endpoint takes
+ * the same `hug_pro` id with exactly one image (see `FAL_EFFECT_ENTRIES`), so the model decides, not the scene id alone.
+ */
+export function effectPhotos(effect: unknown, modelId: string = KLING_EFFECTS_MODEL): 1 | 2 {
+  return modelId === KLING_EFFECTS_MODEL && KLING_DUAL_EFFECTS.some((e) => e.id === effect) ? 2 : 1;
 }
 
 function klingV3Params(): readonly ParamSchema[] {
@@ -203,7 +209,7 @@ const KLING_V3_ENTRIES: readonly CatalogEntry[] = [
 ];
 
 const KLING_EFFECTS_ENTRY: CatalogEntry = {
-  id: "kling/effects",
+  id: KLING_EFFECTS_MODEL,
   kind: "video",
   capabilities: ["effect"],
   label: "Kling effektlar",
@@ -317,6 +323,74 @@ export const FAL_VIDEO_ENTRIES: readonly CatalogEntry[] = [
   falVideo({ id: "bytedance/seedance-2-mini", label: "Seedance 2.0 Mini", maker: "ByteDance", badges: ["ovozli"], upstream: "bytedance/seedance-2.0/mini", minSeconds: 4, defaultResolution: "720p", sound: true }),
   falVideo({ id: "minimax/h3", label: "MiniMax H3", maker: "MiniMax", badges: ["arzon"], upstream: "minimax/h3", minSeconds: 5, defaultResolution: "768p", sound: false }),
   falVideo({ id: "minimax/h3-max-turbo", label: "MiniMax H3 Max Turbo", maker: "MiniMax", badges: ["arzon"], upstream: "minimax/h3-max-turbo", minSeconds: 2, defaultResolution: "768p", sound: false }),
+];
+
+/* ═════════════════ Studio P11 package F: effects through fal ═════════════════
+ * A fixed 5 s clip from one photo, sold per clip as the direct Kling effects are. Both pages read 2026-11-06:
+ *   PixVerse   https://fal.ai/models/fal-ai/pixverse/v5.5/effects/llms.txt  «a 5s video in single-clip mode without audio …
+ *              $0.20 for 720p». The page bills audio +$0.05 but its schema has no audio switch, so nothing we send turns it
+ *              on (UNVERIFIED that no effect carries sound on its own: compare the first bills).
+ *   Kling 1.6  https://fal.ai/models/fal-ai/kling-video/v1.6/standard/effects/llms.txt  «$0.056 per seconds», `duration` "5":
+ *              $0.28 a clip. «heart_gesture requires exactly two images; all other effects require exactly one image», so
+ *              here `hug_pro` takes ONE photo (of two people), unlike the direct API.
+ */
+export const FAL_EFFECT_USD = { pixverse: 0.2, kling: 0.28 } as const;
+export const PIXVERSE_EFFECTS_MODEL = "pixverse/effects";
+export const KLING_FAL_EFFECTS_MODEL = "kling/effects-v16";
+export const PIXVERSE_EFFECTS_ENDPOINT = "fal-ai/pixverse/v5.5/effects";
+export const KLING_FAL_EFFECTS_ENDPOINT = "fal-ai/kling-video/v1.6/standard/effects";
+
+/** The dozen PixVerse effects we sell (exact `effect` enum values, grid order): striking, and fit for every audience. */
+export const PIXVERSE_EFFECTS: readonly { id: string; label: string }[] = [
+  { id: "Anything, Robot", label: "Robotga aylanish" },
+  { id: "Liquid Metal", label: "Suyuq metall" },
+  { id: "Dust Me Away", label: "Changga aylanish" },
+  { id: "Earth Zoom", label: "Yer kurrasigacha" },
+  { id: "Dragon Evoker", label: "Ajdaho chaqirish" },
+  { id: "Fin-tastic Mermaid", label: "Suv parisi" },
+  { id: "I believe I can fly", label: "Osmonga uchish" },
+  { id: "Long Hair Magic", label: "Uzun soch" },
+  { id: "The Age Ripple", label: "Yillar to‘lqini" },
+  { id: "3D Figurine Factory", label: "3D haykalcha" },
+  { id: "Pixel World", label: "Piksel dunyosi" },
+  { id: "Hitchcock Dolly Zoom", label: "Hichkok kadri" },
+];
+
+/** The nine scenes the Studio already sells, plus the hug in its one-photo form. */
+export const KLING_FAL_EFFECTS: readonly { id: string; label: string }[] = [...KLING_EFFECTS, ...KLING_DUAL_EFFECTS];
+
+/** Every effect a stored job may name, for labels (a scene sold by two providers keeps one label). */
+export const ALL_EFFECT_SCENES: readonly { id: string; label: string }[] = [...KLING_EFFECT_SCENES, ...PIXVERSE_EFFECTS];
+
+/** The upload row's hint when a scene wants more than a clear face. */
+export function effectPhotoHint(effect: unknown, modelId: string): string {
+  return modelId === KLING_FAL_EFFECTS_MODEL && effect === "hug_pro" ? "Bitta suratda ikki kishi birga ko‘rinsin" : "Yuz yoki odam aniq ko‘rinsin";
+}
+
+function falEffect(id: string, label: string, maker: string, endpoint: string, usd: number, scenes: readonly { id: string; label: string }[]): CatalogEntry {
+  return {
+    id,
+    kind: "video",
+    capabilities: ["effect"],
+    label,
+    maker,
+    badges: ["arzon"],
+    params: [
+      { name: "effect", label: "Effekt", type: "enum", options: scenes.map((e) => ({ value: e.id, label: e.label })), default: scenes[0]!.id, affects: "request" },
+      { ...START_IMAGE, label: "Surat" },
+    ],
+    cost: { per: "job", usd },
+    routes: [{ provider: "fal", upstreamModel: endpoint, adapter: "fal-video" }],
+    defaultOff: true,
+    limits: VIDEO_LIMITS,
+    output: VIDEO_OUT,
+  };
+}
+
+/** The fal effect models, in the provider row's order. */
+export const FAL_EFFECT_ENTRIES: readonly CatalogEntry[] = [
+  falEffect(PIXVERSE_EFFECTS_MODEL, "PixVerse", "PixVerse", PIXVERSE_EFFECTS_ENDPOINT, FAL_EFFECT_USD.pixverse, PIXVERSE_EFFECTS),
+  falEffect(KLING_FAL_EFFECTS_MODEL, "Kling 1.6", "Kuaishou", KLING_FAL_EFFECTS_ENDPOINT, FAL_EFFECT_USD.kling, KLING_FAL_EFFECTS),
 ];
 
 /* ═════════════════ Studio P9: OpenAI Sora 2 through fal (docs/studio/P9-SPEC.md) ═════════════════
@@ -541,8 +615,8 @@ export const isAvatarModel = (id: string): boolean => id === HEYGEN_MODEL;
  */
 export const ASPECT_FOLLOWS_IMAGE: ReadonlySet<string> = new Set([...KLING_V4_ENTRIES, ...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, ...SORA_ENTRIES].map((e) => e.id));
 
-/** Every Studio video entry, picker order: Kling 4.0, Kling 3.0 tiers, the fal models (P4), Sora 2 (P9), HeyGen (P9), the effect templates last. */
-export const STUDIO_VIDEO_ENTRIES: readonly CatalogEntry[] = [...KLING_V4_ENTRIES, ...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, ...SORA_ENTRIES, HEYGEN_ENTRY, KLING_EFFECTS_ENTRY];
+/** Every Studio video entry, picker order: Kling 4.0, Kling 3.0 tiers, the fal models (P4), Sora 2 (P9), HeyGen (P9), the effect templates last (fal's first). */
+export const STUDIO_VIDEO_ENTRIES: readonly CatalogEntry[] = [...KLING_V4_ENTRIES, ...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, ...SORA_ENTRIES, HEYGEN_ENTRY, ...FAL_EFFECT_ENTRIES, KLING_EFFECTS_ENTRY];
 
 /** Length of an effect clip (the result page, the short-clip refund). */
 export const STUDIO_EFFECT_SECONDS = KLING_EFFECT_SECONDS;

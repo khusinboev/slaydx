@@ -51,7 +51,7 @@ export function studioVideoError(values: Readonly<Record<string, unknown>>): str
   if (isEffectEntry(entry)) {
     if (!has("imageAssetId")) return "Effekt uchun surat yuklang.";
     // P4: a two-photo scene («Quchoqlash») needs the second photo; a single-photo scene must not carry one.
-    const two = effectPhotos(values.effect) === 2;
+    const two = effectPhotos(values.effect, entry.id) === 2;
     if (two && !has(SECOND_IMAGE_PARAM)) return "Bu effekt uchun ikkinchi suratni ham yuklang.";
     if (!two && has(SECOND_IMAGE_PARAM)) return "Bu effekt bitta surat bilan ishlaydi.";
     return null;
@@ -76,9 +76,9 @@ export function studioVideoError(values: Readonly<Record<string, unknown>>): str
  * second photo of a single-photo effect). The server checks ownership of exactly these before charging and resolves
  * exactly these at submit.
  */
-export function studioVideoImageParams(entry: Pick<CatalogEntry, "params" | "capabilities">, values: Readonly<Record<string, unknown>>): string[] {
+export function studioVideoImageParams(entry: Pick<CatalogEntry, "id" | "params" | "capabilities">, values: Readonly<Record<string, unknown>>): string[] {
   return entry.params
     .filter((p) => p.type === "image")
     .map((p) => p.name)
-    .filter((name) => !(isEffectEntry(entry) && name === SECOND_IMAGE_PARAM && effectPhotos(values.effect) !== 2));
+    .filter((name) => !(isEffectEntry(entry) && name === SECOND_IMAGE_PARAM && effectPhotos(values.effect, entry.id) !== 2));
 }

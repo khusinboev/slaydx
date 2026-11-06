@@ -39,6 +39,7 @@
  */
 import { MediaError, checkOutput, isRetryableStatus, type AdapterAsset, type AdapterDeps, type AdapterInput, type MediaAdapter, type MediaOutput, type NormalizedParams, type PollResult } from "../../studio-core";
 import { FAL_AUDIO_MODELS } from "./fal-audio-models";
+import { KLING_FAL_EFFECTS_ENDPOINT, PIXVERSE_EFFECTS_ENDPOINT } from "../catalog-video";
 import { FAL_FILE_PENDING, deleteFalFile, falFileAsset, falLifecycleHeader, uploadFalFile } from "./fal-storage";
 import { IMAGE_RATIOS } from "../../generation/image-studio-options";
 import { safeFetchUrl, UnsafeUrlError, type LookupFn } from "../../generation/safe-fetch";
@@ -650,6 +651,8 @@ export type FalVideoModel = {
   i2v: string;
   /** The endpoint's input JSON from the normalized params and the frames. Pure. */
   body(p: NormalizedParams, frames: FalVideoFrames): Record<string, unknown>;
+  /** An effect: the photo is the whole input, there is no text → video side (`t2v` and `i2v` are the same endpoint). */
+  needsStart?: boolean;
 };
 
 const vInt = (p: NormalizedParams, name: string, fallback: number) => (Number.isFinite(Number(p[name])) && p[name] !== "" ? Math.round(Number(p[name])) : fallback);
@@ -709,6 +712,9 @@ function soraBody(p: NormalizedParams, f: FalVideoFrames, pro: boolean): Record<
   };
 }
 
+/** The start frame of a `needsStart` model; `falVideoRequest` refused the request before a builder needs it. */
+const startUri = (f: FalVideoFrames) => (f.start ? dataUri(f.start) : "");
+
 /**
  * Video request builders, keyed by the catalog route's `upstreamModel` (a model FAMILY: the builder picks the text or
  * the image endpoint). Every field is from the endpoint's own schema (`https://fal.ai/models/<endpoint>/llms.txt`,
@@ -751,6 +757,20 @@ export const FAL_VIDEO_MODELS: Readonly<Record<string, FalVideoModel>> = {
   // https://fal.ai/docs/model-api-reference/video-generation-api/sora-2-text-to-video + …/sora-2-image-to-video (2026-11-03).
   "fal-ai/sora-2": { t2v: "fal-ai/sora-2/text-to-video", i2v: "fal-ai/sora-2/image-to-video", body: (p, f) => soraBody(p, f, false) },
   "fal-ai/sora-2/pro": { t2v: "fal-ai/sora-2/text-to-video/pro", i2v: "fal-ai/sora-2/image-to-video/pro", body: (p, f) => soraBody(p, f, true) },
+  // https://fal.ai/models/fal-ai/pixverse/v5.5/effects/llms.txt (2026-11-06): the sold clip is 720p, 5 s, one image.
+  [PIXVERSE_EFFECTS_ENDPOINT]: {
+    t2v: PIXVERSE_EFFECTS_ENDPOINT,
+    i2v: PIXVERSE_EFFECTS_ENDPOINT,
+    needsStart: true,
+    body: (p, f) => ({ effect: vStr(p, "effect", ""), image_url: startUri(f), resolution: "720p", duration: "5", enable_safety_checker: true }),
+  },
+  // https://fal.ai/models/fal-ai/kling-video/v1.6/standard/effects/llms.txt (2026-11-06): one image in `input_image_urls`.
+  [KLING_FAL_EFFECTS_ENDPOINT]: {
+    t2v: KLING_FAL_EFFECTS_ENDPOINT,
+    i2v: KLING_FAL_EFFECTS_ENDPOINT,
+    needsStart: true,
+    body: (p, f) => ({ effect_scene: vStr(p, "effect", ""), input_image_urls: [startUri(f)], duration: "5", enable_safety_checker: true }),
+  },
 };
 
 /** Every endpoint a fal video op id may name (the poll refuses anything else). */
@@ -768,6 +788,8 @@ export function falVideoRequest(input: Pick<AdapterInput, "upstreamModel" | "par
   const model = FAL_VIDEO_MODELS[input.upstreamModel];
   if (!model) throw new MediaError(FAL_PROVIDER, `unknown fal video model ${input.upstreamModel}`);
   const frames = falVideoFrames(input);
+  // Nothing was sent (the host checks the photo before charging; this is a guard).
+  if (model.needsStart && !frames.start) throw new MediaError(FAL_PROVIDER, `${input.upstreamModel}: surat yo'q`);
   const endpoint = frames.start ? model.i2v : model.t2v;
   return { endpoint, url: `https://${FAL_QUEUE_HOST}/${endpoint}`, headers: { "Content-Type": "application/json" }, body: model.body(input.params, frames) };
 }

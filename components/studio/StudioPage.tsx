@@ -376,7 +376,7 @@ function StudioApp() {
     setTab("video");
     const v = item.video;
     if (v?.effect) {
-      setVideoState((s) => ({ ...s, mode: "effects", effect: v.effect }));
+      setVideoState((s) => ({ ...s, mode: "effects", effect: v.effect, effectModel: item.modelId ?? null }));
       return;
     }
     const next: RawValues = { [PROMPT_PARAM]: item.prompt };

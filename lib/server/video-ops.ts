@@ -393,7 +393,7 @@ export async function submitStudioVideoJob(job: VideoJob, deps: VideoOpsDeps = {
       if (audio) assets[OWN_AUDIO_PARAM] = [audio];
     }
     // An effect without the photo(s) its scene needs: the route refused it before charging; a stored one is refunded.
-    if (isEffectEntry(entry) && (!assets.imageAssetId || (effectPhotos(params.effect) === 2 && !assets[SECOND_IMAGE_PARAM]))) {
+    if (isEffectEntry(entry) && (!assets.imageAssetId || (effectPhotos(params.effect, entry.id) === 2 && !assets[SECOND_IMAGE_PARAM]))) {
       throw new UserFacingError(VIDEO_IMAGE_MISSING_MESSAGE);
     }
     const row = await insertMediaJobTx(client, {
