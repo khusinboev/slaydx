@@ -46,10 +46,10 @@ export const PROVIDERS = [
   // `openai-image`: «ChatGPT» choice of the `rasm` tool (image-provider-openai.ts); the only OpenAI use (no OpenAI text provider).
   { id: "openai-image", label: "OpenAI (rasm)", kinds: ["image"], envKeys: ["OPENAI_API_KEY"], keyHint: "sk-…", implemented: true, testable: false },
   // Video (lib/generation/video/): `veo` runs on Gemini Omni Flash through the Interactions API (Google shut the Veo REST
-  // models down in the Gemini API on 2026-10-22, see omni.ts), so it shares the Gemini key; `kling` signs a JWT, so its
-  // one secret is stored as `<accessKey>:<secretKey>`.
+  // models down in the Gemini API on 2026-10-22, see omni.ts), so it shares the Gemini key. `kling` takes one API key as
+  // Bearer; «Tekshirish» reads the account's resource packs (free).
   { id: "veo", label: "Google Veo (video)", kinds: ["video"], envKeys: ["GEMINI_API_KEY"], keyHint: "AIza… (Gemini kaliti)", implemented: true, testable: false },
-  { id: "kling", label: "Kling (video)", kinds: ["video"], envKeys: ["KLING_API_KEY"], keyHint: "<accessKey>:<secretKey>", implemented: true, testable: false },
+  { id: "kling", label: "Kling (video)", kinds: ["video"], envKeys: ["KLING_API_KEY"], keyHint: "bitta API kalit (ikki nuqtasiz)", implemented: true, testable: true },
   // ElevenLabs: the «Premium ovoz» of podcast / greeting (lib/generation/tts/elevenlabs.ts); never part of the default chain.
   // «Tekshirish» reads the subscription (free): plan + credits left.
   { id: "elevenlabs", label: "ElevenLabs (ovoz)", kinds: ["tts"], envKeys: ["ELEVENLABS_API_KEY"], keyHint: "sk_…", implemented: true, testable: true },
@@ -94,15 +94,16 @@ export function isPlausibleKey(v: unknown): v is string {
 }
 
 /** Providers whose one stored secret is two parts, `<id>:<secret>`: without the colon no request can be signed or sent. */
-const TWO_PART_KEYS: ReadonlySet<string> = new Set(["kling", "fal"]);
+const TWO_PART_KEYS: ReadonlySet<string> = new Set(["fal"]);
 
 /**
  * Can this key serve requests at all? `true` for any non-empty key of a provider without a known format. The ONE rule of
- * the admin save, the admin card, model availability and the video picker: incident 2026-11-05, a Kling key without `:`
- * was listed and charged, then refused by the worker on every job.
+ * the admin save, the admin card, model availability and the video picker: a key that cannot work must not be listed and charged, then
+ * refused by the worker on every job. A Kling key is one token; `<id>:<secret>` is its retired pair, refused by the API.
  */
 export function keyUsable(id: string, key: string): boolean {
   if (!key) return false;
+  if (id === "kling") return /^[^\s:]+$/.test(key.trim());
   if (!TWO_PART_KEYS.has(id)) return true;
   const at = key.indexOf(":");
   return at > 0 && key.slice(0, at).trim() !== "" && key.slice(at + 1).trim() !== "";

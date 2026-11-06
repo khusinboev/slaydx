@@ -36,14 +36,15 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 process.env.WORKER_INLINE = "false";
 process.env.GEMINI_API_KEY = "AIza-test-gemini-key-0123456789";
-process.env.KLING_API_KEY = "AKtest:SKtest";
+process.env.KLING_API_KEY = "klingtestkey";
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
 const iso = hasDb ? await createIsolatedDb("studiovideo") : { isolated: false, drop: async () => {} };
 const skip = hasDb && iso.isolated ? false : "isolated Postgres database is not available";
 
 const jsonRes = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-const KBASE = "https://api-singapore.klingai.com/v1/videos";
+const KHOST = "https://api-singapore.klingai.com";
+const KBASE = `${KHOST}/v1/videos`;
 const ASSET = "0123456789abcdef01234567";
 
 test("studio-video: gating, money, async submit/poll on media_jobs, refunds, gallery", { skip }, async (t) => {
@@ -85,10 +86,20 @@ test("studio-video: gating, money, async submit/poll on media_jobs, refunds, gal
   const stub: Stub = { submits: [], polls: [], submitStatus: 200, submitBody: null, pollBody: { code: 0, data: { task_status: "processing" } }, counter: 0 };
   const resetStub = () => Object.assign(stub, { submits: [], polls: [], submitStatus: 200, submitBody: null, pollBody: { code: 0, data: { task_status: "processing" } }, counter: 0 });
   const succeed = (url = "https://cdn.klingai.example/v.mp4") => ({ code: 0, data: { task_status: "succeed", task_result: { videos: [{ url, duration: "5" }] } } });
+  /** The `/tasks` row of a scripted effect-style poll answer: same state, the shape the Kling 3.0 query returns. */
+  const asTaskRow = (body: unknown) => {
+    const d = (body as { data: { task_status: string; task_status_msg?: string; task_result?: { videos: { url: string }[] } } }).data;
+    const status = d.task_status === "succeed" ? "succeeded" : d.task_status;
+    return { code: 0, data: [{ status, message: d.task_status_msg, outputs: d.task_result?.videos.map((v) => ({ type: "video", url: v.url })) }] };
+  };
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
-    if (url.startsWith(KBASE) && method === "POST") {
+    if (url.startsWith(`${KHOST}/tasks`)) {
+      stub.polls.push(url);
+      return jsonRes(asTaskRow(stub.pollBody));
+    }
+    if (url.startsWith(`${KHOST}/text-to-video/`) || url.startsWith(`${KHOST}/image-to-video/`) || (url.startsWith(KBASE) && method === "POST")) {
       stub.submits.push({ url, body: JSON.parse(String(init?.body)) });
       return jsonRes(stub.submitBody ?? { code: 0, data: { task_id: `K${++stub.counter}` } }, stub.submitStatus);
     }
@@ -241,12 +252,12 @@ test("studio-video: gating, money, async submit/poll on media_jobs, refunds, gal
     const me = await mkUser({ balance: 500_000 });
     const id = await startWaiting(me, K3);
     assert.equal(stub.submits.length, 1);
-    assert.deepEqual(stub.submits[0], { url: `${KBASE}/text2video`, body: { model_name: "kling-v3", prompt: K3.prompt, duration: "5", mode: "std", sound: "on", aspect_ratio: "16:9" } });
+    assert.deepEqual(stub.submits[0], { url: `${KHOST}/text-to-video/kling-3.0`, body: { prompt: K3.prompt, settings: { multi_shot: false, audio: "native", resolution: "720p", duration: 5, aspect_ratio: "16:9" } } });
     const g = await gen(id);
     assert.equal(g.status, "IN_PROGRESS");
     assert.equal(g.locked_by, null, "waiting holds no worker slot");
     const r = (await row(id))!;
-    assert.deepEqual([r.status, r.purpose, r.model_id, r.provider, r.upstream_model, r.op_id], ["pending", "studio.video", "kling/kling-3", "kling", "kling-v3", "text2video:K1"]);
+    assert.deepEqual([r.status, r.purpose, r.model_id, r.provider, r.upstream_model, r.op_id], ["pending", "studio.video", "kling/kling-3", "kling", "kling-3.0", "task:K1"]);
     assert.equal(Number(r.cost_usd), 0.63);
     assert.equal(await ops.videoInFlight(), 1, "counted in the shared video cap");
 
@@ -256,7 +267,7 @@ test("studio-video: gating, money, async submit/poll on media_jobs, refunds, gal
 
     await makeDue(id);
     assert.equal(await ops.pollDueVideoOps(), 0);
-    assert.equal(stub.polls.at(-1), `${KBASE}/text2video/K1`);
+    assert.equal(stub.polls.at(-1), `${KHOST}/tasks?task_ids=K1`);
     assert.equal((await gen(id)).status, "IN_PROGRESS");
 
     stub.pollBody = succeed();
@@ -285,7 +296,7 @@ test("studio-video: gating, money, async submit/poll on media_jobs, refunds, gal
     await query(`DELETE FROM photo_uploads WHERE asset_id = $1`, [ASSET]);
     await query(`INSERT INTO photo_uploads (user_id, asset_id, kind, mime, size_bytes, bytes) VALUES ($1,$2,'crop','image/png',4,$3)`, [me, ASSET, Buffer.from("png!")]);
     const id = await startWaiting(me, { modelId: "kling/effects", effect: "glamour_photo_shoot", imageAssetId: ASSET });
-    assert.deepEqual(stub.submits[0], { url: `${KBASE}/effects`, body: { effect_scene: "glamour_photo_shoot", input: { image: Buffer.from("png!").toString("base64"), duration: "5" } } });
+    assert.deepEqual(stub.submits[0], { url: `${KBASE}/effects`, body: { effect_scene: "glamour_photo_shoot", input: { image: Buffer.from("png!").toString("base64") } } });
     assert.equal((await row(id))!.op_id, "effects:K1");
     stub.pollBody = succeed();
     await makeDue(id);

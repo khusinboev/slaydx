@@ -36,7 +36,7 @@ import { inRequest } from "./helpers/next-request.mts";
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 process.env.WORKER_INLINE = "false";
 process.env.GEMINI_API_KEY = "test-gemini-key";
-process.env.KLING_API_KEY = "AKtest:SKtest";
+process.env.KLING_API_KEY = "klingtestkey";
 delete process.env.OPENAI_API_KEY;
 delete process.env.GEMINI_IMAGE_MODEL;
 delete process.env.OPENAI_IMAGE_MODEL;
@@ -157,7 +157,7 @@ test("request: 2–4 distinct prompt models of the tab, one prompt, no input pic
   // Edit / upscale / background removal have no compare; a video model is not a Rasm model.
   assert.match(compareRequestError("image", [m(img(NANO)), m(img("google/nano-banana-edit"))])!, /ishlamaydi/);
   assert.match(compareRequestError("image", [m(img(NANO)), m(vid(OMNI))])!, /ishlamaydi/);
-  assert.match(compareRequestError("video", [m(vid(OMNI)), m({ modelId: "kling/effects", effect: "hug" })])!, /ishlamaydi/);
+  assert.match(compareRequestError("video", [m(vid(OMNI)), m({ modelId: "kling/effects", effect: "hug_pro" })])!, /ishlamaydi/);
   assert.equal(compareRequestError("video", [m(vid(OMNI)), m(vid(K3))]), null);
   // One prompt: compared as the server normalizes it (whitespace runs collapse), anything else differs.
   assert.equal(compareRequestError("image", [m(img(NANO)), m(img(GPT, { prompt: `  ${PROMPT.replace(" ", "   ")} ` }))]), null);

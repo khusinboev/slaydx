@@ -73,7 +73,7 @@ export const VIDEO_SAFETY_MESSAGE =
 
 /** Heuristic over a provider's own refusal text (neither API documents a machine-readable code we could rely on). */
 export function looksLikeSafetyRefusal(text: string): boolean {
-  return /safety|policy|moderat|sensitive|prohibited|blocked|violat|harm|unsafe|inappropriate|illegal|content[_ ]filter|responsible ai/i.test(text);
+  return /safety|policy|moderat|sensitive|prohibited|blocked|violat|harm|unsafe|inappropriate|illegal|content[_ ]filter|risk control|responsible ai/i.test(text);
 }
 
 /** Error text with the key (and any bearer token) removed. Never throws. */

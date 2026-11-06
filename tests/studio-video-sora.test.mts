@@ -44,7 +44,7 @@ const REQ = "4f1c2b3a-9d8e-4c7b-a6f5-0123456789ab";
 const Q = "https://queue.fal.run";
 
 const entry = (id: string): CatalogEntry => MEDIA_CATALOG.byId(id)!;
-const all = () => studioVideoAdapters({ klingKeyFn: () => "AK:SK", falKeyFn: () => FKEY });
+const all = () => studioVideoAdapters({ klingKeyFn: () => "klingkey", falKeyFn: () => FKEY });
 function input(id: string, values: Record<string, unknown>, assets: Record<string, AdapterAsset[]> = {}): AdapterInput {
   const e = entry(id);
   return { upstreamModel: e.routes[0]!.upstreamModel, params: normalize(e.params, values), ...(Object.keys(assets).length ? { assets } : {}), idempotencyKey: "g:video:0" };

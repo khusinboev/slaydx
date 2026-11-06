@@ -305,12 +305,12 @@ test("keyState: Bazada …a1B2 / Serverda (env) / Yo'q / unreadable", () => {
 });
 
 test("a stored key of the wrong format is called out on the card, the status and the attention tile", () => {
-  const bad = { ...KLING, hasDbKey: true, keyHint: "…1234", keySource: "db" as const, keyMalformed: true, keyFormat: "<accessKey>:<secretKey>" };
+  const bad = { ...KLING, hasDbKey: true, keyHint: "…1234", keySource: "db" as const, keyMalformed: true, keyFormat: "<id>:<secret>" };
   assert.deepEqual(keyState(bad), { tone: "warning", label: "Kalit formati noto‘g‘ri" });
   const status = providerStatus(bad);
   assert.equal(status.tone, "danger");
   assert.equal(status.label, "Kalit formati noto‘g‘ri");
-  assert.match(status.hint ?? "", /<accessKey>:<secretKey>/);
+  assert.match(status.hint ?? "", /<id>:<secret>/);
   assert.equal(providerNeedsAttention(bad), true);
   assert.equal(attentionReason(bad), "kalit formati noto‘g‘ri");
 });
@@ -511,7 +511,7 @@ test("category tab: banner, provider rows with billing / status / key / usage, r
   assert.ok(within(cardOf("azure")).getByText("Bepul limit bilan"));
   assert.match(document.querySelector<HTMLElement>('[aria-label="Toifa holati"]')!.textContent ?? "", /to'xtasa bu vazifa ham to'xtaydi/);
   openTab("video");
-  assert.ok(!within(cardOf("kling")).queryByRole("button", { name: "Tekshirish" }), "no live test for kling");
+  assert.ok(!within(cardOf("kling")).queryByRole("button", { name: "Tekshirish" }), "a provider that is not testable has no button");
   assert.ok(screen.getByText("Sozlamalar", { selector: "a" }), "the flag lives in Sozlamalar");
   assert.ok(screen.getByText(/30 kunda bu toifada so'rov bo'lmagan/));
 });

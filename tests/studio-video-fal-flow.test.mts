@@ -19,7 +19,7 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *   refunds  COMPLETED with `error`, a content-policy refusal and the deadline each fail + refund ONCE (a second poll /
  *            terminal step does nothing); a submit 4xx and a submit network drop refund at once; a `submitting` row
  *            found on a re-claim is failed, never submitted again;
- *   kling    «Quchoqlash» (two photos → `/v1/videos/effects` dual body) and the Kling 3.0 end frame (`image_tail`).
+ *   kling    «Quchoqlash» (two photos → `/v1/videos/effects` dual body) and the Kling 3.0 end frame (`last_frame`).
  *
  * Mutations (each turned the named test red, then restored):
  *   1. `studioVideoAdapters` without the `fal-video` adapter            -> «gating» (unavailable: not configured) and «flow»;
@@ -38,7 +38,7 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 process.env.WORKER_INLINE = "false";
 process.env.GEMINI_API_KEY = "AIza-test-gemini-key-0123456789";
-process.env.KLING_API_KEY = "AKtest:SKtest";
+process.env.KLING_API_KEY = "klingtestkey";
 process.env.FAL_KEY = "fal-flow-key-0000:flowsecretvalue";
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
@@ -48,7 +48,8 @@ const skip = hasDb && iso.isolated ? false : "isolated Postgres database is not 
 const jsonRes = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const QUEUE = "https://queue.fal.run";
 const CDN = "https://v3b.fal.media/files/flow/";
-const KBASE = "https://api-singapore.klingai.com/v1/videos";
+const KHOST = "https://api-singapore.klingai.com";
+const KBASE = `${KHOST}/v1/videos`;
 const ASSET = "0123456789abcdef01234567";
 const ASSET2 = "abcdef0123456789abcdef01";
 const FAL_IDS = ["alibaba/wan-3", "bytedance/seedance-2.5", "bytedance/seedance-2-mini", "minimax/h3", "minimax/h3-max-turbo"];
@@ -119,7 +120,8 @@ test("studio-video P4: fal models on the shared poll loop, end frame, two-photo 
     if (url.startsWith(`${QUEUE}/`) && url.endsWith("/status")) return jsonRes(stub.status, stub.status.status === "COMPLETED" ? 200 : 202);
     if (url.startsWith(`${QUEUE}/`)) return jsonRes(stub.result);
     if (url.startsWith(CDN)) return new Response(Buffer.from(fakeMp4(stub.clipSeconds)), { status: 200, headers: { "content-type": "video/mp4" } });
-    if (url.startsWith(KBASE) && method === "POST") return jsonRes({ code: 0, data: { task_id: `K${++stub.counter}` } });
+    if (method === "POST" && (url.startsWith(KBASE) || url.startsWith(`${KHOST}/image-to-video/`) || url.startsWith(`${KHOST}/text-to-video/`))) return jsonRes({ code: 0, data: { task_id: `K${++stub.counter}` } });
+    if (url.startsWith(`${KHOST}/tasks`)) return jsonRes({ code: 0, data: [{ status: "processing" }] });
     if (url.startsWith(KBASE)) return jsonRes(stub.kPoll);
     if (url.startsWith("https://cdn.klingai.example/")) return new Response(Buffer.from(fakeMp4(5)), { status: 200, headers: { "content-type": "video/mp4" } });
     throw new Error(`unexpected fetch ${method} ${url}`);
@@ -433,7 +435,7 @@ test("studio-video P4: fal models on the shared poll loop, end frame, two-photo 
     // The second photo of a two-photo effect is checked as well.
     await put(ASSET, "image/jpeg", 1000);
     await put(ASSET2, "image/gif", 1000);
-    assert.equal((await post(me, { modelId: "kling/effects", effect: "hug", imageAssetId: ASSET, secondImageAssetId: ASSET2 })).status, 400);
+    assert.equal((await post(me, { modelId: "kling/effects", effect: "hug_pro", imageAssetId: ASSET, secondImageAssetId: ASSET2 })).status, 400);
     assert.equal(await wallet(me), 500_000, "nothing charged");
     assert.equal(submits().length, 0);
     // A good pair passes.
@@ -441,29 +443,32 @@ test("studio-video P4: fal models on the shared poll loop, end frame, two-photo 
     assert.equal((await post(me, { ...WAN, imageAssetId: ASSET, endImageAssetId: ASSET2 })).status, 202);
   });
 
-  await t.test("kling: «Quchoqlash» sends two photos to /effects; Kling 3.0 end frame sends image_tail", async () => {
+  await t.test("kling: «Quchoqlash» sends two photos to /effects; Kling 3.0 end frame sends last_frame", async () => {
     await clearAll();
     const me = await mkUser({ balance: 500_000 });
     await photo(me, ASSET, "first!");
     await photo(me, ASSET2, "second");
-    assert.equal((await post(me, { modelId: "kling/effects", effect: "hug", imageAssetId: ASSET })).status, 400, "hug needs two photos");
-    const hug = await startWaiting(me, { modelId: "kling/effects", effect: "hug", imageAssetId: ASSET, secondImageAssetId: ASSET2 });
+    assert.equal((await post(me, { modelId: "kling/effects", effect: "hug_pro", imageAssetId: ASSET })).status, 400, "hug needs two photos");
+    const hug = await startWaiting(me, { modelId: "kling/effects", effect: "hug_pro", imageAssetId: ASSET, secondImageAssetId: ASSET2 });
     const sub = submits()[0]!;
     assert.equal(sub.url, `${KBASE}/effects`);
-    assert.deepEqual(sub.body, { effect_scene: "hug", input: { model_name: "kling-v1-6", mode: "std", images: [Buffer.from("first!").toString("base64"), Buffer.from("second").toString("base64")], duration: "5" } });
+    assert.deepEqual(sub.body, { effect_scene: "hug_pro", input: { images: [Buffer.from("first!").toString("base64"), Buffer.from("second").toString("base64")] } });
     stub.kPoll = { code: 0, data: { task_status: "succeed", task_result: { videos: [{ url: "https://cdn.klingai.example/hug.mp4" }] } } };
     await makeDue(hug);
     assert.equal(await ops.pollDueVideoOps(), 1);
     const done = await gen(hug);
     assert.equal(done.status, "COMPLETED");
-    assert.equal(done.doc_json!.video!.effect, "hug");
+    assert.equal(done.doc_json!.video!.effect, "hug_pro");
     assert.equal(done.cost_json!.usd, 0.84);
 
     resetStub();
     await startWaiting(me, { modelId: "kling/kling-3", prompt: "Gul ochiladi", seconds: 5, imageAssetId: ASSET, endImageAssetId: ASSET2 });
     const k = submits()[0]!;
-    assert.equal(k.url, `${KBASE}/image2video`);
-    assert.equal(k.body!.image, Buffer.from("first!").toString("base64"));
-    assert.equal(k.body!.image_tail, Buffer.from("second").toString("base64"));
+    assert.equal(k.url, `${KHOST}/image-to-video/kling-3.0`);
+    assert.deepEqual(k.body!.contents, [
+      { type: "prompt", text: "Gul ochiladi" },
+      { type: "first_frame", url: Buffer.from("first!").toString("base64") },
+      { type: "last_frame", url: Buffer.from("second").toString("base64") },
+    ]);
   });
 });

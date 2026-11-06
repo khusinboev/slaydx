@@ -1,8 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
 import { makeOmniAdapter, buildOmniRequest, omniDownloadUrl, OMNI_MODEL } from "../lib/generation/video/omni.ts";
-import { makeKlingAdapter, buildKlingRequest, parseKlingKey, signKlingJwt, KLING_MODEL } from "../lib/generation/video/kling.ts";
+import { makeKlingAdapter, buildKlingRequest, KLING_MODEL } from "../lib/generation/video/kling.ts";
 import { VIDEO_SAFETY_MESSAGE, VideoProviderError, looksLikeSafetyRefusal, scrubSecrets } from "../lib/generation/video/types.ts";
 import { isMp4, mp4Seconds } from "../lib/generation/video/mp4.ts";
 import { setSafeFetchLookup } from "../lib/generation/safe-fetch.ts";
@@ -18,14 +17,14 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *   2. the Gemini key sent to a non-Google download host                      -> «Omni download sends the key only to Google»;
  *   3. a `completed` interaction without a video part treated as «running»    -> «Omni poll: completed without a video is a refusal»;
  *   4. `scrubSecrets` made a no-op                                            -> «secrets never reach an error message»;
- *   5. Kling JWT signed with the access key instead of the secret             -> «Kling JWT is HS256 over the secret»;
+ *   5. Kling Bearer built from anything but the key                           -> «Kling submit / poll»;
  *   6. Kling `code !== 0` ignored                                              -> «Kling: a non-zero code is an error, 1301 is a safety refusal».
  */
 
 setSafeFetchLookup(async () => ["93.184.216.34"]);
 
 const GKEY = "AIzaSyTESTKEY0123456789abcdefghij";
-const KKEY = "AKtestaccess:SKtestsecretvalue";
+const KKEY = "klingtestsecretvalue0123456789";
 
 type Seen = { url: string; init: RequestInit };
 function stub(respond: (n: number, url: string) => Response): { fetchImpl: typeof fetch; seen: Seen[] } {
@@ -185,20 +184,9 @@ test("Omni without a key: not configured, submit refuses before any request", as
 
 /* ══════════════════════════ Kling ══════════════════════════ */
 
-test("Kling key: <accessKey>:<secretKey> only", () => {
-  assert.deepEqual(parseKlingKey("AK:SK"), { accessKey: "AK", secretKey: "SK" });
-  assert.deepEqual(parseKlingKey("AK:S:K"), { accessKey: "AK", secretKey: "S:K" });
-  for (const bad of ["", "nocolon", ":SK", "AK:"]) assert.equal(parseKlingKey(bad), null, bad);
-  assert.equal(makeKlingAdapter({ key: () => "nocolon" }).configured(), false);
+test("Kling key: one token; empty, spaced or the retired <access>:<secret> pair is not configured", () => {
+  for (const bad of ["", "   ", "AK:SK", "two tokens"]) assert.equal(makeKlingAdapter({ key: () => bad }).configured(), false, bad);
   assert.equal(makeKlingAdapter({ key: () => KKEY }).configured(), true);
-});
-
-test("Kling JWT is HS256 over the secret: header, payload {iss, exp = +1800, nbf = -5}, signature", () => {
-  const jwt = signKlingJwt("AKtestaccess", "SKtestsecretvalue", 1_000_000);
-  const [h, p, s] = jwt.split(".");
-  assert.deepEqual(JSON.parse(Buffer.from(h!, "base64url").toString()), { alg: "HS256", typ: "JWT" });
-  assert.deepEqual(JSON.parse(Buffer.from(p!, "base64url").toString()), { iss: "AKtestaccess", exp: 1_001_800, nbf: 999_995 });
-  assert.equal(s, createHmac("sha256", "SKtestsecretvalue").update(`${h}.${p}`).digest("base64url"), "MUTATSIYA: maxfiy kalit o'rniga access key bilan imzolansa qizaradi");
 });
 
 test("Kling request shape: text2video vs image2video, duration as a string, std mode", () => {
@@ -210,15 +198,13 @@ test("Kling request shape: text2video vs image2video, duration as a string, std 
   assert.deepEqual(i.body, { model_name: KLING_MODEL, prompt: "Animate", duration: "5", mode: "std", image: "QUJD" });
 });
 
-test("Kling submit / poll: Bearer JWT, the op id carries the kind, statuses map", async () => {
+test("Kling submit / poll: the API key as Bearer, the op id carries the kind, statuses map", async () => {
   const a = makeKlingAdapter({ key: () => KKEY });
   const sub = stub(() => jsonRes({ code: 0, message: "SUCCEED", data: { task_id: "tsk_9", task_status: "submitted" } }));
   const out = await a.submit({ prompt: "A cat", seconds: 5, aspect: "16:9" }, { fetchImpl: sub.fetchImpl, now: () => 1_000_000_000 });
   assert.deepEqual(out, { opId: "text2video:tsk_9" });
-  const auth = (sub.seen[0]!.init.headers as Record<string, string>).Authorization!;
-  assert.match(auth, /^Bearer [\w-]+\.[\w-]+\.[\w-]+$/);
-  assert.equal(auth.slice(7), signKlingJwt("AKtestaccess", "SKtestsecretvalue", 1_000_000));
-  assert.ok(!String(sub.seen[0]!.init.body).includes("SKtestsecretvalue"));
+  assert.equal((sub.seen[0]!.init.headers as Record<string, string>).Authorization, `Bearer ${KKEY}`);
+  assert.ok(!String(sub.seen[0]!.init.body).includes(KKEY));
 
   const img = stub(() => jsonRes({ code: 0, data: { task_id: "tsk_10" } }));
   assert.deepEqual(await a.submit({ prompt: "x animate", seconds: 5, aspect: "16:9", image: { mime: "image/jpeg", base64: "QQ==" } }, { fetchImpl: img.fetchImpl }), { opId: "image2video:tsk_10" });
@@ -254,8 +240,8 @@ test("Kling: a non-zero code is an error, 1301 is a safety refusal, 429 retryabl
   assert.ok(balance instanceof VideoProviderError && !balance.safety && !balance.retryable);
   const limited = await run(429, { code: 1303, message: "parallel task over resource pack limit" });
   assert.ok(limited instanceof VideoProviderError && limited.retryable);
-  const leak = await run(401, { code: 1000, message: `bad token ${KKEY} / SKtestsecretvalue` });
-  assert.ok(leak instanceof VideoProviderError && !leak.message.includes("SKtestsecretvalue") && !leak.message.includes(KKEY));
+  const leak = await run(401, { code: 1000, message: `bad token ${KKEY}` });
+  assert.ok(leak instanceof VideoProviderError && !leak.message.includes(KKEY));
 });
 
 test("Kling download: only a real MP4, size-capped; 5xx retryable", async () => {

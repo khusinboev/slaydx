@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
 import { normalize, MediaError, type AdapterInput, type CatalogEntry } from "../lib/studio-core/index.ts";
 import { MEDIA_CATALOG, MEDIA_PURPOSES } from "../lib/media/catalog.ts";
 import { KLING_EFFECTS, KLING_EFFECT_USD, KLING_V3_USD_PER_SECOND, STUDIO_VIDEO_PURPOSE } from "../lib/media/catalog-video.ts";
@@ -30,8 +29,8 @@ import { groupDigits } from "../lib/format.ts";
  *   preflight unknown model, effect without a photo, a length / aspect the model does not offer → refused before charge.
  *
  * Mutations (each turned the named test red, then restored):
- *   1. `buildKlingV3Request` drops `sound`                          -> «Kling 3.0 golden», «probe»;
- *   2. tier adapter `kling-v3-pro` sends mode `std`                 -> «Kling 3.0 golden»;
+ *   1. `buildKlingV3Request` drops `audio`                          -> «Kling 3.0 golden», «probe»;
+ *   2. tier adapter `kling-v3-pro` sends 720p                       -> «Kling 3.0 golden»;
  *   3. effect body without `effect_scene`                           -> «effects golden», «probe»;
  *   4. cost table `sound.true` = the silent price                   -> «price goldens», «probe»;
  *   5. klingStudioAdapter submit maps a 4xx as accepted             -> «error mapping»;
@@ -42,7 +41,7 @@ import { groupDigits } from "../lib/format.ts";
 
 setSafeFetchLookup(async () => ["93.184.216.34"]);
 
-const KKEY = "AKstudioaccess:SKstudiosecretvalue";
+const KKEY = "klingstudiosecretvalue0123456789";
 const IMG = { mime: "image/png", base64: "aW1hZ2UtYnl0ZXM=" };
 const ASSET = "0123456789abcdef01234567";
 const RATE = 12_700;
@@ -101,35 +100,38 @@ test("catalog: studio.video = Omni (default) + Kling 3.0 + Kling 3.0 Pro + effec
     ["happy_birthday", "surprise_bouquet", "glamour_photo_shoot", "box_of_joy", "zombie_transform", "pure_white_wings", "bullet_time_360", "throne_of_king", "snowglobe"],
   );
   assert.ok(entry("kling/effects").capabilities.includes("effect"));
-  assert.deepEqual(entry("kling/kling-3").routes, [{ provider: "kling", upstreamModel: "kling-v3", adapter: "kling-v3-std" }]);
-  assert.deepEqual(entry("kling/kling-3-pro").routes, [{ provider: "kling", upstreamModel: "kling-v3", adapter: "kling-v3-pro" }]);
+  assert.deepEqual(entry("kling/kling-3").routes, [{ provider: "kling", upstreamModel: "kling-3.0", adapter: "kling-v3-std" }]);
+  assert.deepEqual(entry("kling/kling-3-pro").routes, [{ provider: "kling", upstreamModel: "kling-3.0", adapter: "kling-v3-pro" }]);
 });
 
 /* ══════════════════════════ builders ══════════════════════════ */
 
-test("Kling 3.0 golden: text2video (std / pro, sound, aspect) and image2video (no aspect, raw base64)", () => {
+test("Kling 3.0 golden: documented create paths, settings (tier → resolution, sound, aspect), first frame as raw base64", () => {
   const t2v = requestOf("kling/kling-3", { prompt: "Registon at dawn", seconds: 7, aspect: "1:1", sound: true });
   assert.deepEqual(t2v, {
-    url: "https://api-singapore.klingai.com/v1/videos/text2video",
+    url: "https://api-singapore.klingai.com/text-to-video/kling-3.0",
     headers: { "Content-Type": "application/json" },
-    body: { model_name: "kling-v3", prompt: "Registon at dawn", duration: "7", mode: "std", sound: "on", aspect_ratio: "1:1" },
+    body: { prompt: "Registon at dawn", settings: { multi_shot: false, audio: "native", resolution: "720p", duration: 7, aspect_ratio: "1:1" } },
   });
   const pro = requestOf("kling/kling-3-pro", { prompt: "Registon at dawn", seconds: 15 });
-  assert.deepEqual(pro.body, { model_name: "kling-v3", prompt: "Registon at dawn", duration: "15", mode: "pro", sound: "off", aspect_ratio: "16:9" });
+  assert.deepEqual(pro.body, { prompt: "Registon at dawn", settings: { multi_shot: false, audio: "off", resolution: "1080p", duration: 15, aspect_ratio: "16:9" } });
   const i2v = requestOf("kling/kling-3-pro", { prompt: "Animate it", seconds: 5, aspect: "9:16", imageAssetId: ASSET }, true);
-  assert.equal(i2v.url, "https://api-singapore.klingai.com/v1/videos/image2video");
-  assert.deepEqual(i2v.body, { model_name: "kling-v3", prompt: "Animate it", duration: "5", mode: "pro", sound: "off", image: IMG.base64 });
+  assert.equal(i2v.url, "https://api-singapore.klingai.com/image-to-video/kling-3.0");
+  assert.deepEqual(i2v.body, {
+    contents: [{ type: "prompt", text: "Animate it" }, { type: "first_frame", url: IMG.base64 }],
+    settings: { multi_shot: false, audio: "off", resolution: "1080p", duration: 5 },
+  });
   // The old «Video» tool's request is untouched.
   assert.equal(KLING_MODEL, "kling-v2-master");
   assert.deepEqual(buildKlingRequest({ prompt: "abcde", seconds: 5, aspect: "16:9" }).body, { model_name: "kling-v2-master", prompt: "abcde", duration: "5", mode: "std", aspect_ratio: "16:9" });
 });
 
-test("effects golden: POST /v1/videos/effects { effect_scene, input: { image, duration: '5' } }; no photo = no request", () => {
+test("effects golden: POST /v1/videos/effects { effect_scene, input: { image } }; no photo = no request", () => {
   const r = requestOf("kling/effects", { effect: "zombie_transform", imageAssetId: ASSET }, true);
   assert.deepEqual(r, {
     url: "https://api-singapore.klingai.com/v1/videos/effects",
     headers: { "Content-Type": "application/json" },
-    body: { effect_scene: "zombie_transform", input: { image: IMG.base64, duration: "5" } },
+    body: { effect_scene: "zombie_transform", input: { image: IMG.base64 } },
   });
   assert.throws(() => requestOf("kling/effects", { effect: "zombie_transform" }), MediaError);
 });
@@ -198,19 +200,33 @@ test("probe: every param of every studio.video model changes the request or the 
 
 /* ══════════════════════════ auth + errors ══════════════════════════ */
 
-test("auth: HS256 JWT over the secret half, fresh per call; the key is in no body", async () => {
-  const s = stub(() => jsonRes({ code: 0, data: { task_id: "T1" } }));
+test("auth: the API key as Bearer; the key is in no body; a task id from the new create answer", async () => {
+  const s = stub(() => jsonRes({ code: 0, data: { id: "T1", status: "submitted" } }));
   const { all } = adapters();
   const e = entry("kling/kling-3");
   const r = await all["kling-v3-std"]!.submit(input(e, { prompt: "Registon at dawn", seconds: 5 }), { fetchImpl: s.fetchImpl });
-  assert.deepEqual(r, { opId: "text2video:T1" });
-  const auth = new Headers(s.seen[0]!.init.headers).get("authorization")!;
-  const [head, body, sig] = auth.replace(/^Bearer /, "").split(".");
-  assert.equal(sig, createHmac("sha256", "SKstudiosecretvalue").update(`${head}.${body}`).digest("base64url"));
-  assert.equal(JSON.parse(Buffer.from(body!, "base64url").toString()).iss, "AKstudioaccess");
-  assert.ok(!String(s.seen[0]!.init.body).includes("SKstudio"), "no secret in the body");
+  assert.deepEqual(r, { opId: "task:T1" });
+  assert.equal(new Headers(s.seen[0]!.init.headers).get("authorization"), `Bearer ${KKEY}`);
+  assert.ok(!String(s.seen[0]!.init.body).includes(KKEY), "no secret in the body");
   assert.equal(all["kling-v3-std"]!.configured(), true);
-  assert.equal(studioVideoAdapters({ klingKeyFn: () => "no-colon" })["kling-effects"]!.configured(), false);
+  assert.equal(studioVideoAdapters({ klingKeyFn: () => "AK:SK" })["kling-effects"]!.configured(), false);
+});
+
+test("Kling 3.0 poll: GET /tasks?task_ids=, `data` is an array, the video output is picked, statuses map", async () => {
+  const { all } = adapters();
+  const poll = async (row: unknown) => {
+    const s = stub(() => jsonRes({ code: 0, data: row === null ? [] : [row] }));
+    const r = await all["kling-v3-std"]!.poll!("task:T1", { fetchImpl: s.fetchImpl });
+    assert.equal(s.seen[0]!.url, "https://api-singapore.klingai.com/tasks?task_ids=T1");
+    return r;
+  };
+  for (const status of ["submitted", "processing"]) assert.deepEqual(await poll({ status }), { state: "running" });
+  await assert.rejects(poll(null), (e: unknown) => e instanceof MediaError && e.retryable, "no row: a transient error, counted by the poll loop");
+  const done = await poll({ status: "succeeded", outputs: [{ type: "image", url: "https://cdn.example.com/c.png" }, { type: "video", url: "https://cdn.example.com/k.mp4", duration: "5" }] });
+  assert.ok(done.state === "done" && done.outputs[0]!.kind === "url" && done.outputs[0]!.url === "https://cdn.example.com/k.mp4", JSON.stringify(done));
+  assert.equal((await poll({ status: "succeeded", outputs: [] })).state, "failed");
+  assert.deepEqual(await poll({ status: "failed", message: "content risk control" }), { state: "failed", message: VIDEO_SAFETY_MESSAGE, safety: true });
+  assert.deepEqual(await poll({ status: "failed", message: "render error" }), { state: "failed", message: "render error", safety: false });
 });
 
 test("error mapping: 4xx refused (not accepted), 429/5xx retryable, network = accepted, 1301 safety; effect poll path", async () => {
@@ -237,7 +253,7 @@ test("error mapping: 4xx refused (not accepted), 429/5xx retryable, network = ac
   assert.equal(down.accepted, true, "a network drop may have started a paid job: never resubmitted elsewhere");
   const safety = await fail(() => jsonRes({ code: 1301, message: "risk" }, 400));
   assert.equal(safety.safety, true);
-  for (const err of [bad, busy, down, safety]) assert.ok(!err.message.includes("SKstudio"), "no secret in a message");
+  for (const err of [bad, busy, down, safety]) assert.ok(!err.message.includes(KKEY), "no secret in a message");
 
   // Submit → op id with the effects kind; poll asks the effects path; done → url output → MP4 download.
   const s = stub((n, url) => {

@@ -59,7 +59,7 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
 setSafeFetchLookup(async () => ["93.184.216.34"]);
 
 const FKEY = "fal-test-key-0123:secretsecretvalue";
-const KKEY = "AKstudioaccess:SKstudiosecretvalue";
+const KKEY = "klingstudiosecretvalue0123456789";
 const START: AdapterAsset = { mime: "image/png", base64: "c3RhcnQtZnJhbWU=" };
 const END: AdapterAsset = { mime: "image/jpeg", base64: "ZW5kLWZyYW1l" };
 const ASSET = "0123456789abcdef01234567";
@@ -135,9 +135,9 @@ test("catalog: five fal video entries on the fal-video route, per-second tables,
   // Kling 3.0 tiers take an end frame; the effects entry a second photo; «Quchoqlash» is the two-photo scene.
   assert.ok(entry("kling/kling-3").params.some((p) => p.name === "endImageAssetId"));
   assert.ok(entry("kling/effects").params.some((p) => p.name === "secondImageAssetId"));
-  assert.deepEqual(KLING_DUAL_EFFECTS, [{ id: "hug", label: "Quchoqlash" }]);
+  assert.deepEqual(KLING_DUAL_EFFECTS, [{ id: "hug_pro", label: "Quchoqlash" }]);
   const fx = entry("kling/effects").params.find((p) => p.name === "effect")!;
-  assert.ok(fx.type === "enum" && fx.options.some((o) => o.value === "hug" && o.label === "Quchoqlash"));
+  assert.ok(fx.type === "enum" && fx.options.some((o) => o.value === "hug_pro" && o.label === "Quchoqlash"));
 });
 
 /* ══════════════════════════ goldens ══════════════════════════ */
@@ -203,26 +203,29 @@ test("golden: fal bodies per model × text / image / image + end frame (queue UR
   assert.equal(FAL_VIDEO_ENDPOINTS.size, 14, "P4: 5 models × 2 + P9 Sora: 2 × 2");
 });
 
-test("golden: Kling end frame (`image_tail`) + «Quchoqlash» dual-character body; missing second photo = no request", () => {
+test("golden: Kling end frame (`last_frame`) + «Quchoqlash» two-photo body; missing second photo = no request", () => {
   const k = req("kling/kling-3-pro", { ...T, imageAssetId: ASSET, endImageAssetId: ASSET2 }, { imageAssetId: [START], endImageAssetId: [END] });
   assert.deepEqual(k, {
-    url: "https://api-singapore.klingai.com/v1/videos/image2video",
+    url: "https://api-singapore.klingai.com/image-to-video/kling-3.0",
     headers: { "Content-Type": "application/json" },
-    body: { model_name: "kling-v3", prompt: "Registon at dawn", duration: "6", mode: "pro", sound: "off", image: START.base64, image_tail: END.base64 },
+    body: {
+      contents: [{ type: "prompt", text: "Registon at dawn" }, { type: "first_frame", url: START.base64 }, { type: "last_frame", url: END.base64 }],
+      settings: { multi_shot: false, audio: "off", resolution: "1080p", duration: 6 },
+    },
   });
-  // Without a start the tail is never sent (text2video, as before).
+  // Without a start the end frame is never sent (text to video, as before).
   const t2v = req("kling/kling-3", T, { endImageAssetId: [END] });
-  assert.equal(t2v.url, "https://api-singapore.klingai.com/v1/videos/text2video");
-  assert.ok(!("image_tail" in (t2v.body as object)));
-  const hug = req("kling/effects", { effect: "hug", imageAssetId: ASSET, secondImageAssetId: ASSET2 }, { imageAssetId: [START], secondImageAssetId: [END] });
+  assert.equal(t2v.url, "https://api-singapore.klingai.com/text-to-video/kling-3.0");
+  assert.ok(!JSON.stringify(t2v.body).includes(END.base64));
+  const hug = req("kling/effects", { effect: "hug_pro", imageAssetId: ASSET, secondImageAssetId: ASSET2 }, { imageAssetId: [START], secondImageAssetId: [END] });
   assert.deepEqual(hug, {
     url: "https://api-singapore.klingai.com/v1/videos/effects",
     headers: { "Content-Type": "application/json" },
-    body: { effect_scene: "hug", input: { model_name: "kling-v1-6", mode: "std", images: [START.base64, END.base64], duration: "5" } },
+    body: { effect_scene: "hug_pro", input: { images: [START.base64, END.base64] } },
   });
-  assert.throws(() => req("kling/effects", { effect: "hug", imageAssetId: ASSET }, { imageAssetId: [START] }), MediaError, "hug needs both photos");
+  assert.throws(() => req("kling/effects", { effect: "hug_pro", imageAssetId: ASSET }, { imageAssetId: [START] }), MediaError, "hug needs both photos");
   // A one-photo scene ignores a stray second photo (the preflight refuses it before charging anyway).
-  assert.deepEqual(req("kling/effects", { effect: "snowglobe", imageAssetId: ASSET }, { imageAssetId: [START], secondImageAssetId: [END] }).body, { effect_scene: "snowglobe", input: { image: START.base64, duration: "5" } });
+  assert.deepEqual(req("kling/effects", { effect: "snowglobe", imageAssetId: ASSET }, { imageAssetId: [START], secondImageAssetId: [END] }).body, { effect_scene: "snowglobe", input: { image: START.base64 } });
 });
 
 /* ══════════════════════════ probe ══════════════════════════ */
@@ -468,8 +471,8 @@ test("price goldens at ×2 and 12 700 so'm/$ (rounded UP to 100): seconds × res
   // The model override wins.
   assert.equal(studioVideoPrice({ modelId: "minimax/h3", seconds: 5 }, { ...PRICING, overrides: { "minimax/h3": { markup: 3 } } }), up100(0.06 * 5 * RATE * 3));
   // «Quchoqlash» is one effect clip.
-  assert.equal(p("kling/effects", { effect: "hug" }), up100(KLING_EFFECT_USD * RATE * 2));
-  assert.equal(p("kling/effects", { effect: "hug" }), 21_400);
+  assert.equal(p("kling/effects", { effect: "hug_pro" }), up100(KLING_EFFECT_USD * RATE * 2));
+  assert.equal(p("kling/effects", { effect: "hug_pro" }), 21_400);
 });
 
 test("client preview == server price (basePriceFor) for every fal model × resolution × seconds × override × tool %", () => {
@@ -480,7 +483,7 @@ test("client preview == server price (basePriceFor) for every fal model × resol
     for (const id of [...FAL_IDS, "kling/effects"]) {
       const e = view.get(id)!;
       const table = FAL_VIDEO_USD_PER_SECOND[id as keyof typeof FAL_VIDEO_USD_PER_SECOND] as Record<string, number> | undefined;
-      const variants: Record<string, unknown>[] = table ? Object.keys(table).flatMap((resolution) => [2, 4, 5, 7, 10].map((seconds) => ({ seconds, resolution }))) : [{ effect: "hug" }];
+      const variants: Record<string, unknown>[] = table ? Object.keys(table).flatMap((resolution) => [2, 4, 5, 7, 10].map((seconds) => ({ seconds, resolution }))) : [{ effect: "hug_pro" }];
       for (const v of variants) {
         const values = { modelId: id, ...v };
         const server = basePriceFor(tool, values as never, pricing);
@@ -500,10 +503,10 @@ test("preflight: end frame needs a start; «Quchoqlash» needs two photos; a one
   assert.equal(studioVideoError({ modelId: "alibaba/wan-3", prompt: "Registon at dawn", endImageAssetId: ASSET2 }), "Oxirgi kadr uchun boshlang‘ich suratni ham yuklang.");
   assert.equal(studioVideoError({ modelId: "kling/kling-3", prompt: "Registon at dawn", endImageAssetId: ASSET2 }), "Oxirgi kadr uchun boshlang‘ich suratni ham yuklang.");
   assert.equal(studioVideoError({ modelId: "alibaba/wan-3", prompt: "Registon at dawn", imageAssetId: ASSET, endImageAssetId: ASSET2 }), null);
-  assert.equal(studioVideoError({ modelId: "kling/effects", effect: "hug", imageAssetId: ASSET }), "Bu effekt uchun ikkinchi suratni ham yuklang.");
-  assert.equal(studioVideoError({ modelId: "kling/effects", effect: "hug", imageAssetId: ASSET, secondImageAssetId: ASSET2 }), null);
+  assert.equal(studioVideoError({ modelId: "kling/effects", effect: "hug_pro", imageAssetId: ASSET }), "Bu effekt uchun ikkinchi suratni ham yuklang.");
+  assert.equal(studioVideoError({ modelId: "kling/effects", effect: "hug_pro", imageAssetId: ASSET, secondImageAssetId: ASSET2 }), null);
   assert.equal(studioVideoError({ modelId: "kling/effects", effect: "snowglobe", imageAssetId: ASSET, secondImageAssetId: ASSET2 }), "Bu effekt bitta surat bilan ishlaydi.");
-  assert.equal(studioVideoError({ modelId: "kling/effects", effect: "hug" }), "Effekt uchun surat yuklang.");
+  assert.equal(studioVideoError({ modelId: "kling/effects", effect: "hug_pro" }), "Effekt uchun surat yuklang.");
   assert.ok(studioVideoError({ modelId: "alibaba/wan-3", prompt: "Registon at dawn", seconds: 11 }), "over 10 s is not sold");
   assert.ok(studioVideoError({ modelId: "minimax/h3", prompt: "Registon at dawn", seconds: 4 }), "H3 starts at 5 s");
   assert.ok(studioVideoError({ modelId: "minimax/h3", prompt: "Registon at dawn", resolution: "1080p" }), "H3 sells 480p / 768p");
@@ -511,7 +514,7 @@ test("preflight: end frame needs a start; «Quchoqlash» needs two photos; a one
   assert.ok(studioVideoError({ modelId: "minimax/h3", prompt: "Registon at dawn", sound: true }) === null, "an unknown key is ignored, as for every model");
   // The photos a job sends (ownership-checked before charging, resolved at submit).
   assert.deepEqual(studioVideoImageParams(entry("alibaba/wan-3"), {}), ["imageAssetId", "endImageAssetId"]);
-  assert.deepEqual(studioVideoImageParams(entry("kling/effects"), { effect: "hug" }), ["imageAssetId", "secondImageAssetId"]);
+  assert.deepEqual(studioVideoImageParams(entry("kling/effects"), { effect: "hug_pro" }), ["imageAssetId", "secondImageAssetId"]);
   assert.deepEqual(studioVideoImageParams(entry("kling/effects"), { effect: "snowglobe" }), ["imageAssetId"]);
-  assert.equal(topicOf({ modelId: "kling/effects", effect: "hug" }, tool), "Effekt: Quchoqlash");
+  assert.equal(topicOf({ modelId: "kling/effects", effect: "hug_pro" }, tool), "Effekt: Quchoqlash");
 });
