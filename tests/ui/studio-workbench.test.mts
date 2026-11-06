@@ -37,6 +37,7 @@ const { formatSom } = await import("../../lib/format.ts");
  * Mutations (each turned the named test red, then restored):
  *   `useResultsScroll` without the `twoColumns()` early return                 -> «the submit scrolls…» (two columns);
  *   `scrollToResults()` dropped from the Rasm `send`                            -> «the submit scrolls…» (one column);
+ *   `useResultsScroll` scrolling at the call, before the commit (found by the browser smoke) -> «the submit scrolls…»;
  *   `switchChanges` skips the default check (`normalize(...) === p.default`)     -> «switchChanges» (the untouched aspect);
  *   `switchChanges` forgets `to: null` for a missing param                       -> «switchChanges» (the sound on Omni);
  *   `startOffsetMax` returns `undefined` always                                 -> «Montaj: the start offset…»;
@@ -192,10 +193,13 @@ test("the bar: four tabs, «Galereya» ↔ «Yaratish», the balance link; no fo
 
 test("the submit scrolls the results into view in one column, never in two", async () => {
   const calls: Element[] = [];
+  // What the pane held when the scroll ran: an empty pane sits at the page's very end, and the browser clamps there.
+  const drawn: boolean[] = [];
   const proto = window.HTMLElement.prototype as unknown as { scrollIntoView?: (o?: unknown) => void };
   const realScroll = proto.scrollIntoView;
   proto.scrollIntoView = function (this: Element) {
     calls.push(this);
+    if (this.matches('[data-studio-pane="results"]')) drawn.push(Boolean(this.querySelector("[data-studio-job]")));
   };
   let wide = false;
   window.matchMedia = ((query: string) => ({ matches: wide && query === "(min-width: 768px)", media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false })) as typeof window.matchMedia;
@@ -206,6 +210,7 @@ test("the submit scrolls the results into view in one column, never in two", asy
     await click(q("[data-studio-submit]"));
     await settle();
     assert.ok(calls.some((el) => el.matches('[data-studio-pane="results"]')), "MUTATSIYA: one column — the results pane scrolled into view");
+    assert.deepEqual(drawn, [true], "MUTATSIYA: the scroll runs after the job is drawn, once");
     // Two columns: the results are beside the form.
     calls.length = 0;
     wide = true;
