@@ -727,8 +727,18 @@ export const OMNIHUMAN_MIN_SECONDS = 4;
 /** OmniHuman's stated audio limit (the format limit is `FAL_AVATAR_AUDIO_MIMES`). */
 export const OMNIHUMAN_AUDIO_MAX_BYTES = 15 * 1024 * 1024;
 export const FAL_AVATAR_AUDIO_MIMES: readonly string[] = ["audio/mpeg", "audio/wav"];
+/** OmniHuman's stated picture limits (its page, above). */
+export const OMNIHUMAN_IMAGE_DIMS = { minSide: 300, maxSide: 6000, minAspect: 0.4, maxAspect: 2.5 } as const;
 
-function falAvatar(id: keyof typeof FAL_AVATAR_USD_PER_SECOND, label: string, maker: string, badges: CatalogEntry["badges"], endpoint: string, minSeconds: number): CatalogEntry {
+function falAvatar(
+  id: keyof typeof FAL_AVATAR_USD_PER_SECOND,
+  label: string,
+  maker: string,
+  badges: CatalogEntry["badges"],
+  endpoint: string,
+  minSeconds: number,
+  dims?: typeof OMNIHUMAN_IMAGE_DIMS,
+): CatalogEntry {
   return {
     id,
     kind: "video",
@@ -738,7 +748,7 @@ function falAvatar(id: keyof typeof FAL_AVATAR_USD_PER_SECOND, label: string, ma
     badges,
     params: [
       { name: OWN_AUDIO_PARAM, label: "O‘z ovozingiz", hint: "«Ovoz» bo‘limida yaratilgan ovoz — surat shuni gapiradi", type: "text", min: 0, max: 36, affects: "request" },
-      { ...START_IMAGE, label: "Avatar surati", min: 1 },
+      { ...START_IMAGE, label: "Avatar surati", min: 1, ...(dims ? { dims } : {}) },
       // Set from the speech's length (`withAvatarSeconds`) on both sides; never a form row.
       { name: "seconds", label: "Davomiylik", hint: "Ovoz uzunligidan hisoblanadi", type: "int", min: minSeconds, max: FAL_AVATAR_MAX_SECONDS, step: 1, default: 10, affects: "price" },
     ],
@@ -751,7 +761,7 @@ function falAvatar(id: keyof typeof FAL_AVATAR_USD_PER_SECOND, label: string, ma
 }
 
 export const FAL_AVATAR_ENTRIES: readonly CatalogEntry[] = [
-  falAvatar(OMNIHUMAN_MODEL, "OmniHuman v2", "ByteDance", ["sifatli", "yangi"], "bytedance/omnihuman/v2", OMNIHUMAN_MIN_SECONDS),
+  falAvatar(OMNIHUMAN_MODEL, "OmniHuman v2", "ByteDance", ["sifatli", "yangi"], "bytedance/omnihuman/v2", OMNIHUMAN_MIN_SECONDS, OMNIHUMAN_IMAGE_DIMS),
   falAvatar(KLING_AVATAR_MODEL, "Kling Avatar v2", "Kuaishou", ["arzon", "yangi"], "fal-ai/kling-video/ai-avatar/v2/standard", 1),
 ];
 

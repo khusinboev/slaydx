@@ -292,7 +292,7 @@ export const FAL_TOOL_MODELS: Readonly<Record<string, FalModel>> = {
   },
   // https://fal.ai/models/blackforestlabs/flux-3/klein/edit-image/llms.txt (2026-11-06): the prompt must be «a complete caption
   // of the target image»; ours is an instruction, so the expansion stays on here («grounded in the reference images when
-  // editing», its default). No `image_size`: the output follows the reference, priced at the 2K tier (`IMAGE_PRICES`).
+  // editing», its default). No `image_size`: the output follows the reference, so the quote is the page's top tier (`IMAGE_PRICES`).
   "blackforestlabs/flux-3/klein/edit-image": {
     minInputs: 1,
     body: (p, inputs) => ({

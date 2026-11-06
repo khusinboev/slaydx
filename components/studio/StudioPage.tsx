@@ -41,7 +41,7 @@ import { fillSkeleton, type StudioTemplate } from "@/lib/media/library";
 import { STUDIO_TOOL_SLUG } from "./studio-entry";
 import { STUDIO_TOOL_ID, outputCount, studioPrice } from "./studio-price";
 import type { GalleryItem, MediaCatalog, StudioPricing } from "./studio-types";
-import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, promptMin, promptParam, requestValues, type RawValues } from "./studio-values";
+import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptBytes, promptLimit, promptMin, promptParam, requestValues, type RawValues } from "./studio-values";
 import { draftKey, useDraft } from "./useDraft";
 import { parseAudioDraft, parseRasmDraft, parseVideoDraft, parseVoiceDraft } from "./studio-drafts";
 import { STUDIO_TABS, modeFromSearch, studioSearch, tabFromSearch, type StudioTab } from "./studio-url";
@@ -650,6 +650,7 @@ function StudioApp() {
                       value={String(raw[PROMPT_PARAM] ?? "")}
                       onChange={setPrompt}
                       limit={promptLimit(entry)}
+                      bytes={promptBytes([entry], String(raw[PROMPT_PARAM] ?? ""))}
                       min={promptMin(entry)}
                       label={mode === "edit" ? "Nimani o‘zgartiramiz?" : "Nimani chizamiz?"}
                       onEnhance={() => void enhance()}

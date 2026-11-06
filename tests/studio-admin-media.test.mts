@@ -104,7 +104,7 @@ const P2B_USD: Record<string, number> = {
   "google/nano-banana-edit": IMAGE_PRICES["gemini-3.1-flash-lite-image"]!,
   "bytedance/seedream-edit": 0.035,
   "meta/muse-edit": 0.01,
-  "bfl/flux-klein-edit": 0.014,
+  "bfl/flux-klein-edit": 0.036,
   "bytedance/seedvr-upscale": 0.0168,
   "bria/background-remove": 0.018,
 };

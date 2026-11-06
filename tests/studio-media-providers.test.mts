@@ -40,6 +40,7 @@ import { VIDEO_PROMPT_MAX } from "../lib/generation/video/registry.ts";
 import { VIDEO_MAX_BYTES } from "../lib/generation/video/types.ts";
 import { TOOL_BY_ID, topicOf } from "../lib/tools.ts";
 import { compareModels } from "../components/studio/compare/compare-model.ts";
+import { avatarOverQuote } from "../lib/server/video-ops.ts";
 import { setSafeFetchLookup } from "../lib/generation/safe-fetch.ts";
 
 /**
@@ -62,14 +63,17 @@ import { setSafeFetchLookup } from "../lib/generation/safe-fetch.ts";
  *  12. `aspect_ratio` also sent in image → video                     -> «video: bodies»;
  *  13. Happy Horse 1080p at the 720p rate                            -> «video: prices»;
  *  14. Klein 16:9 at 1280 × 720 (above 1K by side)                   -> «image: bodies»;
- *  15. Klein edit quoted at $0.009                                   -> «image: catalog», «image: edit bodies»;
+ *  15. Klein edit quoted at $0.014                                   -> «image: catalog», «image: edit bodies»;
  *  16. Klein edit `enable_prompt_expansion: false`                   -> «image: edit bodies»;
  *  17. OmniHuman's audio cap doubled                                 -> «avatars: the stated audio limits»;
  *  18. the audio type check removed                                  -> «avatars: the stated audio limits»;
  *  19. a refused submit keeps the upload                             -> «avatars: a refused submit»;
  *  20. the avatar adapter accepts a clip's op id                     -> «avatars: a refused submit»;
  *  21. a photo avatar priced by an empty script                      -> «avatars: the length»;
- *  22. a photo avatar without a speech passes the preflight          -> «avatars: the length».
+ *  22. a photo avatar without a speech passes the preflight          -> «avatars: the length»;
+ *  23. `avatarOverQuote` covers only HeyGen                           -> «avatars: a clip over its quote»;
+ *  24. `avatarOverQuote` drops the one-second tolerance               -> «avatars: a clip over its quote»;
+ *  25. OmniHuman's picture limits off the catalog entry               -> «avatars: OmniHuman's picture limits».
  */
 
 setSafeFetchLookup(async () => ["93.184.216.34"]);
@@ -276,7 +280,7 @@ test("image: catalog — four defaultOff entries, two pictures and two edits, ea
     ["meta/muse", "studio.image", "meta/muse-image/text-to-image", 0.01],
     ["bfl/flux-klein", "studio.image", "blackforestlabs/flux-3/klein/text-to-image", 0.009],
     ["meta/muse-edit", "studio.edit", "meta/muse-image/edit", 0.01],
-    ["bfl/flux-klein-edit", "studio.edit", "blackforestlabs/flux-3/klein/edit-image", 0.014],
+    ["bfl/flux-klein-edit", "studio.edit", "blackforestlabs/flux-3/klein/edit-image", 0.036],
   ] as const) {
     const e = entry(id);
     assert.equal(e.defaultOff, true, `${id} ships hidden`);
@@ -316,15 +320,17 @@ test("image: bodies are the pages' schemas; every ratio changes the request; Kle
   }
 });
 
-test("image: edit bodies — references as data URLs; Klein expands the instruction and follows the reference, priced at its 2K tier", () => {
+test("image: edit bodies — references as data URLs; Klein expands the instruction and follows the reference, priced at the page's top tier", () => {
   const edit = { prompt: "Make the sky red", inputImages: ASSET, imageCount: 1 };
   assert.deepEqual(IMG("meta/muse-edit", edit, [START]).body, { prompt: edit.prompt, image_urls: [DATA], num_images: 1, output_format: "jpeg", sync_mode: true });
   const klein = IMG("bfl/flux-klein-edit", edit, [START]);
   assert.equal(klein.url, "https://queue.fal.run/blackforestlabs/flux-3/klein/edit-image");
   assert.deepEqual(klein.body, { prompt: edit.prompt, image_urls: [DATA], num_images: 1, output_format: "jpeg", enable_prompt_expansion: true, enable_safety_checker: true, sync_mode: true });
   assert.ok(!("image_size" in (klein.body as object)), "the reference's own size");
-  // The page's «$0.009 at 1K» is not what an unset size bills: the output keeps up to 4 MP.
-  assert.ok(IMAGE_PRICES["blackforestlabs/flux-3/klein/edit-image"]! > IMAGE_PRICES["blackforestlabs/flux-3/klein/text-to-image"]!);
+  // An unset size keeps up to 4 MP and the page names no tier for that: the quote covers the dearest one it lists.
+  assert.equal(IMAGE_PRICES["blackforestlabs/flux-3/klein/edit-image"], 0.036);
+  assert.equal(studioImagePrice({ modelId: "bfl/flux-klein-edit", imageCount: 1 }, PRICING), up100(0.036 * RATE * 2));
+  assert.equal(studioImagePrice({ modelId: "bfl/flux-klein-edit", imageCount: 1 }, PRICING), 1000, "$0.036 × 12 700 × 2 = 914.4 → 1 000");
   const three = IMG("meta/muse-edit", { ...edit, inputImages: `${ASSET},${ASSET2}` }, [START, START, START]);
   assert.equal((three.body as { image_urls: string[] }).image_urls.length, 3);
   assert.throws(() => IMG("meta/muse-edit", edit, []), MediaError, "no picture, no request");
@@ -477,4 +483,23 @@ test("every package F entry: defaultOff, on fal, an MP4 cap for a clip, and an u
     const known = e.kind === "video" ? up in FAL_VIDEO_MODELS || FAL_AVATAR_ENDPOINTS.has(up) : up in FAL_MODELS || up in FAL_TOOL_MODELS;
     assert.ok(known, `${id}: a builder for ${up}`);
   }
+});
+
+test("avatars: a clip over its quote is named for the owner's alert; within a second, or on another model, it is not", () => {
+  assert.match(avatarOverQuote(KLING_AVATAR_MODEL, 9.2, 7)!, /kling\/ai-avatar-2: clip longer than quoted, 10 s against 7 s/);
+  assert.ok(avatarOverQuote(OMNIHUMAN_MODEL, 9, 7));
+  assert.ok(avatarOverQuote("heygen/avatar", 9, 7));
+  assert.equal(avatarOverQuote(KLING_AVATAR_MODEL, 8, 7), null, "the same one-second tolerance as a short clip");
+  assert.equal(avatarOverQuote(KLING_AVATAR_MODEL, 5, 7), null);
+  assert.equal(avatarOverQuote("alibaba/wan-3", 9, 5), null, "a chosen length, not a computed one");
+  assert.equal(avatarOverQuote(undefined, 9, 5), null, "not a Studio row");
+});
+
+test("avatars: OmniHuman's picture limits are the page's, on its photo param only", () => {
+  const dims = (id: string) => {
+    const p = entry(id).params.find((x) => x.name === "imageAssetId")!;
+    return p.type === "image" ? p.dims : undefined;
+  };
+  assert.deepEqual(dims(OMNIHUMAN_MODEL), { minSide: 300, maxSide: 6000, minAspect: 0.4, maxAspect: 2.5 });
+  assert.equal(dims(KLING_AVATAR_MODEL), undefined, "its page states none");
 });

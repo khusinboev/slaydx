@@ -445,6 +445,8 @@ export async function submitStudioVideoJob(job: VideoJob, deps: VideoOpsDeps = {
   } catch (e) {
     const err = e instanceof MediaError ? e : null;
     log("error", "[video] Studio submit failed", { jobId: job.id, modelId: entry.id, status: err?.status, safety: err?.safety, err });
+    // The adapter deleted what it uploaded: nothing is left for housekeeping.
+    await clearMediaUpload(row.id).catch(() => undefined);
     await failSubmittingMediaJob(row.id, (err?.message ?? "submit failed").slice(0, 300)).catch(() => undefined);
     throw new UserFacingError(err?.safety ? VIDEO_SAFETY_MESSAGE : VIDEO_FAILED_MESSAGE, { cause: e });
   }
@@ -843,12 +845,16 @@ export async function finalizeVideo(generationId: string, bytes: Uint8Array): Pr
     if (delivered && ratio !== null) {
       refunded = await refundInTx(client, String(row.user_id), generationId, `${delivered.want} soniyadan ${delivered.got} soniya yaratildi — farq qaytarildi`, ratio);
     }
-    return { delivered, ratio, refunded };
+    return { delivered, ratio, refunded, over: avatarOverQuote(op.studio?.modelId, mp4Seconds(bytes), op.seconds), provider: op.provider };
   });
   if (!out) return false;
 
   log("info", "[video] finished", { jobId: generationId, bytes: bytes.byteLength });
   if (out.delivered) log("warn", "[video] short clip refunded", { jobId: generationId, ratio: out.ratio, refunded: out.refunded });
+  if (out.over) {
+    log("warn", "[video] a clip over its quote", { jobId: generationId, detail: out.over });
+    await recordProviderFailure(generationId, { provider: out.provider, message: out.over });
+  }
   return true;
 }
 
@@ -889,6 +895,16 @@ function studioResult(values: FormValues, s: { modelId: string; params: Normaliz
       ...(typeof s.params.sound === "boolean" ? { sound: s.params.sound } : {}),
     },
   };
+}
+
+/**
+ * An avatar's length is computed before the job, but the provider bills what it delivers (Kling Avatar v2 bills output
+ * seconds), and a longer clip is never charged extra. More than a second over the quote, the margin is ours to watch: the text
+ * for the provider-failure row, which is what the owner's `provider_fail` alert counts. Its numbers are grouped away.
+ */
+export function avatarOverQuote(modelId: string | undefined, actual: number, want: number): string | null {
+  if (!modelId || !isAvatarModel(modelId) || !(want > 0) || !(actual > want + 1)) return null;
+  return `${modelId}: clip longer than quoted, ${Math.ceil(actual)} s against ${want} s`;
 }
 
 /** `want` seconds were paid for; a clip more than a second shorter is a shortfall (a longer one is never charged extra). */

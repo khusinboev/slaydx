@@ -23,7 +23,15 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *   3. `onInputStored` not passed by the Studio submit                 -> «avatars: flow» (no URL on the row, nothing deleted);
  *   4. `pollOp` does not drop the stored input                         -> «avatars: flow», «avatars: a failed op»;
  *   5. video-ops lets a photo avatar through without its speech        -> «avatars: a stored job without its speech»;
- *   6. `studioVideoAdapters` without `fal-avatar`                      -> «avatars: flow».
+ *   6. `studioVideoAdapters` without `fal-avatar`                      -> «avatars: flow»;
+ *   7. the sweeper keeps only the dub purpose                          -> «avatars: an upload left by a dead worker»;
+ *   8. `finalizeVideo` records nothing for a clip over its quote       -> «avatars: a clip over its quote»;
+ *   9. `inputsError` ignores `dims`                                    -> «avatars: OmniHuman's picture limits»;
+ *  10. a failed submit keeps its upload note                           -> «avatars: a failed op»;
+ *  11. the sweeper ignores a live generation                          -> «avatars: an upload left by a dead worker»;
+ *  12. the aspect check removed                                       -> «avatars: OmniHuman's picture limits»;
+ *  13. the longest-side check removed                                 -> «avatars: OmniHuman's picture limits»;
+ *  14. an unreadable photo passes                                     -> «avatars: OmniHuman's picture limits».
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -50,6 +58,18 @@ const KAVATAR = "kling/ai-avatar-2";
 const PIXFX = "pixverse/effects";
 const KFX = "kling/effects-v16";
 const GROK = "xai/grok-imagine-lite";
+/** A PNG head with real dimensions: enough for `imageDims`, the same bytes as any stored photo. */
+function pngHead(w: number, h: number): Buffer {
+  const b = Buffer.alloc(33);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(b, 0);
+  b.writeUInt32BE(13, 8);
+  b.write("IHDR", 12, "ascii");
+  b.writeUInt32BE(w, 16);
+  b.writeUInt32BE(h, 20);
+  return b;
+}
+const PHOTO = pngHead(800, 1000);
+const PHOTO_URI = `data:image/png;base64,${PHOTO.toString("base64")}`;
 const NEW_VIDEO = [GROK, "pixverse/v6", "alibaba/happy-horse", OMNI, KAVATAR, PIXFX, KFX];
 
 test("studio-video P11 F: gating, effects, the input image's cost, photo avatars on the shared poll loop", { skip }, async (t) => {
@@ -132,9 +152,9 @@ test("studio-video P11 F: gating, effects, the input image's cost, photo avatars
     if (enabled !== null) await query("INSERT INTO media_model_overrides (model_id, enabled) VALUES ($1, $2)", [modelId, enabled]);
     invalidateMediaOverrides();
   };
-  const photo = async (userId: string, assetId = ASSET) => {
+  const photo = async (userId: string, assetId = ASSET, bytes: Buffer = PHOTO) => {
     await query(`DELETE FROM photo_uploads WHERE asset_id = $1`, [assetId]);
-    await query(`INSERT INTO photo_uploads (user_id, asset_id, kind, mime, size_bytes, bytes) VALUES ($1,$2,'crop','image/png',5,$3)`, [userId, assetId, Buffer.from("start")]);
+    await query(`INSERT INTO photo_uploads (user_id, asset_id, kind, mime, size_bytes, bytes) VALUES ($1,$2,'crop','image/png',$3,$4)`, [userId, assetId, bytes.length, bytes]);
   };
   const speech = async (userId: string, seconds: number) => {
     const id = randomUUID();
@@ -197,7 +217,7 @@ test("studio-video P11 F: gating, effects, the input image's cost, photo avatars
     const c = submits()[0]!;
     assert.equal(c.url, `${QUEUE}/fal-ai/kling-video/v1.6/standard/effects`);
     assert.equal(c.auth, `Key ${FKEY}`);
-    assert.deepEqual(c.body, { effect_scene: "hug_pro", input_image_urls: [`data:image/png;base64,${Buffer.from("start").toString("base64")}`], duration: "5", enable_safety_checker: true });
+    assert.deepEqual(c.body, { effect_scene: "hug_pro", input_image_urls: [PHOTO_URI], duration: "5", enable_safety_checker: true });
     const r = (await row(id))!;
     assert.equal(r.op_id, `fal:fal-ai/kling-video/v1.6/standard/effects:${reqId(1)}`);
     assert.equal(Number(r.cost_usd), 0.28);
@@ -259,7 +279,7 @@ test("studio-video P11 F: gating, effects, the input image's cost, photo avatars
     const id = await startWaiting(me, values);
     assert.equal(await wallet(me), 500_000 - price, "the forged 4 s is not charged");
     assert.deepEqual(stub.calls.map((c) => c.url), [INITIATE, UPLOAD, `${QUEUE}/bytedance/omnihuman/v2`]);
-    assert.deepEqual(submits()[0]!.body, { image_url: `data:image/png;base64,${Buffer.from("start").toString("base64")}`, audio_url: FILE });
+    assert.deepEqual(submits()[0]!.body, { image_url: PHOTO_URI, audio_url: FILE });
     const r = (await row(id))!;
     assert.deepEqual([r.status, r.op_id, r.params.seconds, r.params.falUpload], ["pending", `fal:bytedance/omnihuman/v2:${reqId(1)}`, 7, FILE]);
     assert.ok(Math.abs(Number(r.cost_usd) - 0.735) < 1e-9);
@@ -302,6 +322,93 @@ test("studio-video P11 F: gating, effects, the input image's cost, photo avatars
     assert.equal((await gen(r2)).status, "FAILED");
     assert.equal(await wallet(me), 500_000);
     assert.equal(deletes().length, 1, "the adapter deleted its own upload");
+    assert.equal((await row(r2))!.params.falUpload, undefined, "nothing is left for housekeeping to delete twice");
+  });
+
+  await t.test("avatars: an upload left by a dead worker is deleted by the sweeper once the job has stopped; a live one is left alone", async () => {
+    const { studioDubHousekeeping } = await import("../lib/server/media/speech-sources.ts");
+    await clearAll();
+    const me = await mkUser(500_000);
+    await photo(me);
+    const audioId = await speech(me, 6);
+    // The worker's state at its death: the file noted on a `submitting` row, nothing parked.
+    const id = await startWaiting(me, { modelId: OMNI, audioId, imageAssetId: ASSET });
+    await query(`UPDATE media_jobs SET status = 'submitting', op_id = NULL, created_at = now() - interval '10 minutes' WHERE idempotency_key = $1`, [`${id}:video:0`]);
+    assert.equal((await row(id))!.params.falUpload, FILE);
+    stub.calls.length = 0;
+
+    await studioDubHousekeeping();
+    assert.equal(deletes().length, 0, "the generation is still IN_PROGRESS: a re-claim may need it");
+    assert.equal((await row(id))!.params.falUpload, FILE);
+
+    await query(`UPDATE generations SET status = 'FAILED' WHERE id = $1`, [id]);
+    await studioDubHousekeeping();
+    assert.equal(deletes().length, 1, "the orphan is deleted");
+    assert.equal(deletes()[0]!.body!.file_url, FILE);
+    assert.equal((await row(id))!.params.falUpload, undefined);
+    await studioDubHousekeeping();
+    assert.equal(deletes().length, 1, "once");
+  });
+
+  await t.test("avatars: a clip over its quote is logged and counted for the owner's alert, the charge stands", async () => {
+    await clearAll();
+    await query("DELETE FROM provider_failures");
+    const me = await mkUser(500_000);
+    await photo(me);
+    const audioId = await speech(me, 6);
+    const values = { modelId: KAVATAR, audioId, imageAssetId: ASSET };
+    const price = studioVideoPrice({ ...values, seconds: 6 }, await mediaPricing())!;
+    const id = await startWaiting(me, values);
+    stub.status = { status: "COMPLETED" };
+    stub.clipSeconds = 9;
+    await makeDue(id);
+    assert.equal(await ops.pollDueVideoOps(), 1);
+    const done = await gen(id);
+    assert.equal(done.status, "COMPLETED");
+    assert.equal(await wallet(me), 500_000 - price, "a longer clip is never charged extra");
+    assert.ok(Math.abs(done.cost_json!.usd - 9 * 0.0562) < 1e-6, "the margin sees what fal billed");
+    const rows = await query<{ provider: string; message: string; job_id: string }>("SELECT provider, message, job_id FROM provider_failures");
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.provider, "fal");
+    assert.equal(String(rows[0]!.job_id), id);
+    assert.match(rows[0]!.message, /kling\/ai-avatar-2: clip longer than quoted, 9 s against 6 s/);
+
+    // Within the tolerance: nothing to report.
+    resetStub();
+    await query("DELETE FROM provider_failures");
+    const on = await startWaiting(me, values);
+    stub.status = { status: "COMPLETED" };
+    stub.clipSeconds = 6;
+    await makeDue(on);
+    assert.equal(await ops.pollDueVideoOps(), 1);
+    assert.equal((await query("SELECT 1 FROM provider_failures")).length, 0);
+  });
+
+  await t.test("avatars: OmniHuman's picture limits refuse before anything is charged or uploaded; Kling states none", async () => {
+    await clearAll();
+    const me = await mkUser(500_000);
+    const audioId = await speech(me, 6);
+    const v = { modelId: OMNI, audioId, imageAssetId: ASSET };
+    await photo(me, ASSET, pngHead(200, 400));
+    const small = await post(me, v);
+    assert.equal(small.status, 400);
+    assert.match(small.body.error!, /300–6000 piksel/);
+    await photo(me, ASSET, pngHead(7000, 6000));
+    assert.equal((await post(me, v)).status, 400);
+    await photo(me, ASSET, pngHead(3000, 1000));
+    const wide = await post(me, v);
+    assert.equal(wide.status, 400);
+    assert.match(wide.body.error!, /cho‘ziq/);
+    await photo(me, ASSET, pngHead(1000, 3000));
+    assert.equal((await post(me, v)).status, 400);
+    await photo(me, ASSET, Buffer.from("not an image"));
+    assert.match((await post(me, v)).body.error!, /aniqlab bo‘lmadi/);
+    assert.equal(await wallet(me), 500_000, "nothing charged");
+    assert.equal(stub.calls.length, 0, "nothing uploaded");
+    await photo(me, ASSET, pngHead(2500, 1000));
+    assert.equal((await post(me, v)).status, 202, "the limit itself is allowed");
+    await photo(me, ASSET, pngHead(200, 400));
+    assert.equal((await post(me, { ...v, modelId: KAVATAR })).status, 202, "Kling's page states no picture limit");
   });
 
   await t.test("avatars: limits — another user's speech, too short for OmniHuman, over 30 s: 400, nothing charged, nothing sent", async () => {

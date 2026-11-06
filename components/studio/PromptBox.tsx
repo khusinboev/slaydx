@@ -4,10 +4,22 @@ import { useId, useRef } from "react";
 import { BookOpen, ImagePlus, Sparkles } from "lucide-react";
 import { AutoTextarea } from "@/components/common/AutoTextarea";
 import { Counter, Field } from "@/components/forms/shared";
+import { groupDigits } from "@/lib/format";
 import { STUDIO_INPUT_ACCEPT } from "./ImageInputs";
+import { PROMPT_BYTES_MESSAGE, type PromptBytes } from "./studio-values";
 
 const TOOL =
   "focus-visible:ring-ring bg-muted/70 hover:bg-muted pointer-coarse:min-h-11 inline-flex min-h-9 items-center gap-1.5 rounded-[12px] px-3 text-[13.5px] font-semibold outline-none focus-visible:ring-2 disabled:opacity-50";
+
+/** Under the counter: Cyrillic letters and «‘» take more than one byte, so a prompt can break the limit below the character count. */
+export function PromptBytesNote({ bytes }: { bytes: PromptBytes | null }) {
+  if (!bytes) return null;
+  return (
+    <p role="alert" data-prompt-bytes className="text-destructive mt-1 text-[13px] leading-snug">
+      {PROMPT_BYTES_MESSAGE} ({groupDigits(bytes.used)} / {groupDigits(bytes.max)} bayt).
+    </p>
+  );
+}
 
 /** «Yaxshilash (AI)»: one button for every prompt box of the Studio. */
 export function EnhanceTool({ disabled, enhancing, onClick }: { disabled: boolean; enhancing: boolean; onClick: () => void }) {
@@ -32,6 +44,7 @@ export function PromptBox({
   value,
   onChange,
   limit,
+  bytes = null,
   label = "Nimani chizamiz?",
   min = 3,
   onSamples,
@@ -43,6 +56,8 @@ export function PromptBox({
   value: string;
   onChange: (v: string) => void;
   limit: number;
+  /** The prompt is over the model's byte limit (`promptBytes`). */
+  bytes?: PromptBytes | null;
   label?: string;
   min?: number;
   onSamples?: () => void;
@@ -71,6 +86,7 @@ export function PromptBox({
           className="placeholder:text-muted-foreground/70 w-full bg-transparent text-[16px] leading-relaxed outline-none"
         />
         <Counter len={value.length} limit={limit} />
+        <PromptBytesNote bytes={bytes} />
       </Field>
       {tools ? (
         <div className="mt-2 flex flex-wrap gap-1.5" data-prompt-tools>

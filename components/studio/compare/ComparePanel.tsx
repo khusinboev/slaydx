@@ -14,7 +14,7 @@ import { usePromptEnhance } from "../usePromptEnhance";
 import { useStudioSend } from "../useStudioSend";
 import { badgeText } from "../studio-price";
 import type { MediaCatalog } from "../studio-types";
-import { PROMPT_PARAM, normalizedPrompt, promptLimit, promptMin } from "../studio-values";
+import { PROMPT_BYTES_MESSAGE, PROMPT_PARAM, normalizedPrompt, promptBytes, promptLimit, promptMin } from "../studio-values";
 import { sendCompare } from "./compare-api";
 import { CompareResults } from "./CompareResults";
 import { COMPARE_MIN, compareBatch, compareCap, compareLabel, compareModels, memberPrice, memberValues, sharedEntry, sharedParams, toggleModel, type CompareKind } from "./compare-model";
@@ -85,6 +85,8 @@ export function ComparePanel({
   const toggle = (id: string) => setState((s) => ({ ...s, ticked: toggleModel(s.ticked, id, max) }));
   const limit = shared ? promptLimit(shared) : 2000;
   const prompt = String(state.raw[PROMPT_PARAM] ?? "");
+  // Every ticked model: the prompt goes to each, and the tightest byte limit decides.
+  const bytes = promptBytes(entries, prompt);
   const { enhance, enhancing } = usePromptEnhance(
     kind,
     () => prompt.replace(/\s+/g, " ").trim(),
@@ -102,6 +104,10 @@ export function ComparePanel({
       return;
     }
     const text = normalizedPrompt(shared, state.raw);
+    if (bytes) {
+      setError(PROMPT_BYTES_MESSAGE);
+      return;
+    }
     await run(async () => {
       const res = await sendCompare({ kind, members: batch.members.map((m) => ({ values: m.values, expectedPrice: m.price })), expectedTotal: batch.total });
       for (const [i, item] of res.items.entries()) {
@@ -121,6 +127,7 @@ export function ComparePanel({
           value={prompt}
           onChange={(v) => setRaw(PROMPT_PARAM, v.slice(0, limit))}
           limit={limit}
+          bytes={bytes}
           min={shared ? promptMin(shared) : 1}
           label={kind === "video" ? "Videoda nima bo‘lsin?" : "Nimani chizamiz?"}
           onEnhance={() => void enhance()}

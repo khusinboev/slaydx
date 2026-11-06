@@ -12,6 +12,7 @@ const { useAppStore } = await import("../../lib/store.ts");
 const { useUi } = await import("../../lib/ui.ts");
 const { dropMediaCatalog } = await import("../../components/studio/studio-api.ts");
 const { formatSom } = await import("../../lib/format.ts");
+const { promptBytes } = await import("../../components/studio/studio-values.ts");
 
 /**
  * Studio P11 package F in the Video tab, the API stubbed at `fetch`, the REAL catalog entries (the admin's switches are the
@@ -29,7 +30,14 @@ const { formatSom } = await import("../../lib/format.ts");
  *   4. the prompt box stays for a photo avatar                         -> «photo avatars: form»;
  *   5. the photo avatar's speech list keeps a 3 s speech (OmniHuman)   -> «photo avatars: form»;
  *   6. a photo avatar without its photo reaches the server             -> «photo avatars: refused in the form»;
- *   7. «Yo‘q — matnni avatar o‘qiydi» offered on a photo avatar        -> «photo avatars: form».
+ *   7. «Yo‘q — matnni avatar o‘qiydi» offered on a photo avatar        -> «photo avatars: form»;
+ *   8. the Video tab's box without `bytes`                             -> «byte limit: the Video box»;
+ *   9. the Video tab's submit ignores the byte limit                   -> «byte limit: the Video box»;
+ *  10. compare mode reads only the first model's limit                 -> «byte limit: unit»;
+ *  11. compare's submit ignores the byte limit                         -> «byte limit: compare»;
+ *  12. the image tab's box without `bytes`                             -> «byte limit: the image box»;
+ *  13. `promptBytes` measures the raw text, not the normalized one     -> «byte limit: unit»;
+ *  14. compare's box without `bytes`                                   -> «byte limit: compare».
  */
 
 Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
@@ -226,6 +234,59 @@ test("video: one data-field per row, no «Sifat» row for one tier, Happy Horse'
   await pickModel(HORSE.id);
   assert.ok(q('[data-field="resolution"]'));
   assert.equal(button(), `Yaratish · 5 soniya · ${formatSom(up100(0.7 * 12_700 * 2))}`);
+});
+
+/* ── the byte limit in the form ── */
+
+test("byte limit: unit — the tightest of the entries decides, on the normalized text", () => {
+  const over = "‘".repeat(700);
+  assert.deepEqual(promptBytes([PIX6], over), { used: 2100, max: 2048 });
+  assert.equal(promptBytes([PIX6], "я".repeat(1000)), null, "2000 bytes fit");
+  assert.equal(promptBytes([GROK, HORSE], over), null, "no byte limit on these");
+  assert.deepEqual(promptBytes([GROK, PIX6], over), { used: 2100, max: 2048 }, "any ticked model");
+  assert.equal(promptBytes([PIX6], `  ${"a".repeat(990)}${" ".repeat(3000)}  `), null, "whitespace runs are not sent");
+});
+
+test("byte limit: the Video box says it before the click, and the click sends nothing", async () => {
+  const a = api([OMNI, GROK, PIX6]);
+  await open();
+  await pickModel(PIX6.id);
+  const box = q<HTMLTextAreaElement>("[data-video-prompt] textarea")!;
+  await act(async () => void fireEvent.change(box, { target: { value: "Registon tongda" } }));
+  assert.ok(!q("[data-prompt-bytes]"), "silent while it fits");
+  await act(async () => void fireEvent.change(box, { target: { value: "‘".repeat(700) } }));
+  assert.match(q("[data-prompt-bytes]")!.textContent!, /2\s*100 \/ 2\s*048 bayt/);
+  await click(q("[data-studio-submit]"));
+  await settle();
+  assert.match(q("[data-studio-error]")!.textContent!, /juda uzun/);
+  assert.equal(a.posts().length, 0);
+  await pickModel(GROK.id);
+  assert.ok(!q("[data-prompt-bytes]"), "another model, no limit");
+});
+
+test("byte limit: the image box draws the same note for a model with a limit", async () => {
+  const limited = { ...NANO, params: NANO.params.map((p) => (p.name === "prompt" ? { ...p, maxBytes: 10 } : p)) };
+  installApi({ catalog: catalogBody([limited, GPT]) });
+  render(h(AppRouterContext.Provider, { value: router }, h(StudioPage)));
+  await settle();
+  await act(async () => void fireEvent.change(q<HTMLTextAreaElement>('[data-field="prompt"] textarea')!, { target: { value: "Registon maydoni tongda" } }));
+  assert.match(q("[data-prompt-bytes]")!.textContent!, /23 \/ 10 bayt/);
+});
+
+test("byte limit: compare mode refuses for any ticked model", async () => {
+  const a = api([OMNI, GROK, PIX6]);
+  useAppStore.setState({ features: { compareMax: 3 } as never });
+  await open();
+  await click(q('[data-compare-switch] [role="switch"]'));
+  await settle();
+  for (const id of [GROK.id, PIX6.id]) await click(q(`[data-compare-model="${id}"]`));
+  await settle();
+  await act(async () => void fireEvent.change(q<HTMLTextAreaElement>('[data-compare-panel] [data-field="prompt"] textarea')!, { target: { value: "‘".repeat(700) } }));
+  assert.ok(q("[data-prompt-bytes]"));
+  await click(q("[data-studio-submit]"));
+  await settle();
+  assert.match(q("[data-studio-error]")?.textContent ?? document.body.textContent!, /juda uzun/);
+  assert.equal(a.posts().length, 0);
 });
 
 /* ── photo avatars ── */

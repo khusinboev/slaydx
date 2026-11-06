@@ -9,7 +9,7 @@ import { Card, Row, Segmented, SelectField } from "@/components/forms/compact";
 import { Counter, Field } from "@/components/forms/shared";
 import { PhotoField } from "@/components/forms/PhotoField";
 import { ENHANCE_MIN } from "@/lib/media/enhance";
-import { EnhanceTool } from "../PromptBox";
+import { EnhanceTool, PromptBytesNote } from "../PromptBox";
 import { usePromptEnhance } from "../usePromptEnhance";
 import { photoHint } from "@/lib/photo-accept";
 import { CatalogState } from "../CatalogState";
@@ -20,7 +20,7 @@ import { STUDIO_VIDEO_PURPOSE, type CatalogLoad } from "../studio-api";
 import { SubmitError } from "../SubmitError";
 import { useStudioSend } from "../useStudioSend";
 import type { MediaCatalog } from "../studio-types";
-import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, promptMin, requestValues, type RawValues } from "../studio-values";
+import { PROMPT_BYTES_MESSAGE, PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptBytes, promptLimit, promptMin, requestValues, type PromptBytes, type RawValues } from "../studio-values";
 import type { StudioJob } from "../StudioResults";
 import { VideoResults } from "./VideoResults";
 import { STUDIO_VIDEO_SLUG, STUDIO_VIDEO_TOOL_ID, clipSeconds, isEffect, studioVideoClientPrice, videoCardPrice } from "./video-price";
@@ -272,6 +272,10 @@ export function VideoTab({
       setError("Videoda nima bo‘lishini yozing (kamida 5 ta belgi)");
       return;
     }
+    if (promptBytes([entry], String(state.raw[PROMPT_PARAM] ?? ""))) {
+      setError(PROMPT_BYTES_MESSAGE);
+      return;
+    }
     // An end frame without a start cannot be built here (the upload waits for the start; removing the start clears it);
     // the server's preflight refuses one anyway.
     sendForm(entry, normalizedPrompt(entry, state.raw));
@@ -432,6 +436,7 @@ export function VideoTab({
               value={String(state.raw[PROMPT_PARAM] ?? "")}
               onChange={(v) => setParam(PROMPT_PARAM, v)}
               limit={promptLimit(textModel)}
+              bytes={promptBytes([textModel], String(state.raw[PROMPT_PARAM] ?? ""))}
               {...(avatar ? {} : { onEnhance: () => void enhance(), enhancing })}
               {...(avatar ? { label: "Avatar nima desin?", placeholder: "Masalan: Assalomu alaykum! Bugun sizga yangi kursimiz haqida gapirib beraman." } : {})}
             />
@@ -579,6 +584,7 @@ function VideoPromptBox({
   value,
   onChange,
   limit,
+  bytes,
   label = "Videoda nima bo‘lsin?",
   placeholder = "Masalan: Tong chog‘ida Registon maydoni, kamera sekin yaqinlashadi",
   onEnhance,
@@ -587,6 +593,7 @@ function VideoPromptBox({
   value: string;
   onChange: (v: string) => void;
   limit: number;
+  bytes: PromptBytes | null;
   /** P9 HeyGen: the avatar's script box says what it is. */
   label?: string;
   placeholder?: string;
@@ -612,6 +619,7 @@ function VideoPromptBox({
           className="placeholder:text-muted-foreground/70 w-full bg-transparent text-[16px] leading-relaxed outline-none"
         />
         <Counter len={value.length} limit={limit} />
+        <PromptBytesNote bytes={bytes} />
       </Field>
       {onEnhance ? (
         <div className="mt-2 flex flex-wrap gap-1.5" data-prompt-tools>
