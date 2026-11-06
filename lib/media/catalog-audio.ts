@@ -25,6 +25,12 @@
  * per song, not per second (Gemini API pricing page, read 2026-11-03): Lyria 3 Clip (always 30 s) $0.04, Lyria 3.5
  * (a full song, length steered by the prompt) $0.08. The «Musiqa» mode now offers two models (`AUDIO_MODES.models`,
  * the first is the default).
+ *
+ * STUDIO P11 package E (docs/studio/P11-SPEC.md): second models of «Effekt» and «Shovqindan tozalash» on the fal key, both
+ * `defaultOff` until the admin enables them after a live job:
+ *   SFX v3        $0.002 / second                        https://fal.ai/models/elevenlabs/sound-effects/v3/llms.txt (read 2026-11-06)
+ *   VEED clean    $0.0125 / minute of input, whole seconds rounded up to full minutes, one minute at least
+ *                                                         https://fal.ai/models/veed/clean-audio/llms.txt (read 2026-11-06)
  */
 import type { CatalogEntry, ParamSchema, PurposeSpec } from "../studio-core";
 import { ELEVENLABS_CREATOR_USD_PER_CREDIT } from "../generation/llm-pricing";
@@ -46,6 +52,15 @@ export const SFX_MODEL = "elevenlabs/sfx";
 export const VOICE_CHANGER_MODEL = "elevenlabs/voice-changer";
 export const ISOLATOR_MODEL = "elevenlabs/isolator";
 export const LYRIA_MODEL = "google/lyria-3";
+export const FAL_SFX_MODEL = "elevenlabs/sfx-v3-fal";
+export const VEED_CLEAN_MODEL = "veed/clean-audio";
+
+/** fal endpoint ids (the routes' upstream model). */
+export const FAL_SFX_ENDPOINT = "elevenlabs/sound-effects/v3";
+export const VEED_CLEAN_ENDPOINT = "veed/clean-audio";
+/** USD per second of the fal models (file header, each page's price). */
+export const FAL_SFX_USD_PER_SECOND = 0.002;
+export const VEED_CLEAN_USD_PER_SECOND = 0.0125 / 60;
 
 /** Upstream model ids sent in the requests. */
 export const ELEVENLABS_MUSIC_MODEL = "music_v1";
@@ -72,6 +87,8 @@ export const AUDIO_INPUT_MAX_SECONDS = 300;
 export const AUDIO_INPUT_MAX_BYTES = 25 * 1024 * 1024;
 /** Bytes one user may keep stored at once (inputs live a day): bounds the shared database, not the user's work. */
 export const AUDIO_INPUT_USER_MAX_BYTES = 100 * 1024 * 1024;
+/** The cleaned WAV before it becomes an MP3: 5 minutes of the stated 48 kHz mono 16-bit are 28.8 MB. */
+export const VEED_CLEAN_MAX_OUTPUT_BYTES = 40 * 1024 * 1024;
 
 const usdPerSecond = (credits: number): number => credits * ELEVENLABS_CREATOR_USD_PER_CREDIT;
 
@@ -98,6 +115,13 @@ export const SFX_INFLUENCE = [
   { value: "0.3", label: "Erkin" },
   { value: "0.5", label: "O‘rta" },
   { value: "0.8", label: "Aniq" },
+] as const;
+
+/** «Tozalash kuchi»: `strength`, how much of the original stays under speech (0.874 is the page's validated −18 dB). */
+export const VEED_STRENGTH = [
+  { value: "0.5", label: "Yengil" },
+  { value: "0.874", label: "O‘rta" },
+  { value: "1", label: "Kuchli" },
 ] as const;
 
 export const STUDIO_AUDIO_ENTRIES: readonly CatalogEntry[] = [
@@ -173,6 +197,26 @@ export const STUDIO_AUDIO_ENTRIES: readonly CatalogEntry[] = [
     output: AUDIO_OUT,
   },
   {
+    id: FAL_SFX_MODEL,
+    kind: "sfx",
+    capabilities: ["sfx"],
+    label: "SFX v3 · fal",
+    maker: "ElevenLabs",
+    badges: ["arzon", "yangi"],
+    defaultOff: true,
+    params: [
+      { name: "prompt", label: "Effekt tavsifi", hint: "Masalan: eshik g‘ichirlab ochiladi, uzoqda it huradi", type: "text", min: 3, max: 450, affects: "request" },
+      { name: "duration", label: "Davomiyligi (s)", type: "int", min: 1, max: 30, default: 5, affects: "both" },
+      { name: "influence", label: "Aniqlik", hint: "Tavsifga qanchalik qat’iy amal qilinadi", type: "enum", options: SFX_INFLUENCE, default: "0.5", affects: "request" },
+      { name: "loop", label: "Takrorlanuvchi (loop)", hint: "Uzluksiz aylanib chalinadigan effekt", type: "bool", default: false, affects: "request" },
+      { name: "variants", label: "Variantlar", type: "int", min: 1, max: 4, default: 1, affects: "both" },
+    ],
+    cost: { per: "second", usd: FAL_SFX_USD_PER_SECOND, secondsParam: "duration", countParam: "variants" },
+    routes: [{ provider: "fal", upstreamModel: FAL_SFX_ENDPOINT, adapter: "fal" }],
+    limits: { timeoutMs: 120_000 },
+    output: AUDIO_OUT,
+  },
+  {
     id: VOICE_CHANGER_MODEL,
     kind: "speech",
     capabilities: ["voice-changer"],
@@ -203,6 +247,25 @@ export const STUDIO_AUDIO_ENTRIES: readonly CatalogEntry[] = [
     limits: { timeoutMs: 180_000 },
     output: AUDIO_OUT,
   },
+  {
+    id: VEED_CLEAN_MODEL,
+    kind: "speech",
+    capabilities: ["isolate"],
+    label: "Clean Audio · fal",
+    maker: "VEED",
+    badges: ["arzon", "yangi"],
+    defaultOff: true,
+    params: [
+      inputParam,
+      inputSecondsParam,
+      { name: "strength", label: "Tozalash kuchi", hint: "Yengil — nutq ortidagi muhit ovozi biroz qoladi", type: "enum", options: VEED_STRENGTH, default: "0.874", affects: "request" },
+    ],
+    cost: { per: "second", usd: VEED_CLEAN_USD_PER_SECOND, secondsParam: "inputSeconds", unitSeconds: 60 },
+    routes: [{ provider: "fal", upstreamModel: VEED_CLEAN_ENDPOINT, adapter: "fal" }],
+    limits: { timeoutMs: 180_000 },
+    // The provider's WAV: the engine encodes the result file, an MP3 like every «Audio» result.
+    output: { mimes: ["audio/wav"], maxBytes: VEED_CLEAN_MAX_OUTPUT_BYTES },
+  },
 ];
 
 const one = (id: string, kind: PurposeSpec["kind"], model: string): PurposeSpec => ({ id, kind, allowed: [model], default: model, userCanChoose: false });
@@ -210,18 +273,19 @@ const one = (id: string, kind: PurposeSpec["kind"], model: string): PurposeSpec 
 export const STUDIO_AUDIO_PURPOSE_SPECS: readonly PurposeSpec[] = [
   // P9: two music models, the user picks (ElevenLabs stays the default).
   { id: STUDIO_MUSIC_PURPOSE, kind: "music", allowed: [MUSIC_MODEL, LYRIA_MODEL], default: MUSIC_MODEL, userCanChoose: true },
-  one(STUDIO_SFX_PURPOSE, "sfx", SFX_MODEL),
+  // P11: a second model each, on the fal key; the ElevenLabs model stays the default.
+  { id: STUDIO_SFX_PURPOSE, kind: "sfx", allowed: [SFX_MODEL, FAL_SFX_MODEL], default: SFX_MODEL, userCanChoose: true },
   one(STUDIO_VOICE_CHANGER_PURPOSE, "speech", VOICE_CHANGER_MODEL),
-  one(STUDIO_ISOLATE_PURPOSE, "speech", ISOLATOR_MODEL),
+  { id: STUDIO_ISOLATE_PURPOSE, kind: "speech", allowed: [ISOLATOR_MODEL, VEED_CLEAN_MODEL], default: ISOLATOR_MODEL, userCanChoose: true },
 ];
 
 /** The tab's modes in chip order, each with its models (`model` = the default, first of `models`) and purpose. */
 export type AudioMode = "music" | "sfx" | "voice-changer" | "isolate";
 export const AUDIO_MODES: readonly { mode: AudioMode; label: string; model: string; models: readonly string[]; purpose: string }[] = [
   { mode: "music", label: "Musiqa", model: MUSIC_MODEL, models: [MUSIC_MODEL, LYRIA_MODEL], purpose: STUDIO_MUSIC_PURPOSE },
-  { mode: "sfx", label: "Effekt", model: SFX_MODEL, models: [SFX_MODEL], purpose: STUDIO_SFX_PURPOSE },
+  { mode: "sfx", label: "Effekt", model: SFX_MODEL, models: [SFX_MODEL, FAL_SFX_MODEL], purpose: STUDIO_SFX_PURPOSE },
   { mode: "voice-changer", label: "Ovozni almashtirish", model: VOICE_CHANGER_MODEL, models: [VOICE_CHANGER_MODEL], purpose: STUDIO_VOICE_CHANGER_PURPOSE },
-  { mode: "isolate", label: "Shovqindan tozalash", model: ISOLATOR_MODEL, models: [ISOLATOR_MODEL], purpose: STUDIO_ISOLATE_PURPOSE },
+  { mode: "isolate", label: "Shovqindan tozalash", model: ISOLATOR_MODEL, models: [ISOLATOR_MODEL, VEED_CLEAN_MODEL], purpose: STUDIO_ISOLATE_PURPOSE },
 ];
 
 export const AUDIO_MODEL_IDS: readonly string[] = AUDIO_MODES.flatMap((m) => m.models);

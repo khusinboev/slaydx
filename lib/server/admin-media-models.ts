@@ -19,9 +19,9 @@ import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
 import { studioVideoPrice } from "../media/studio-video-pricing";
 import { STUDIO_SPEECH_PURPOSE } from "../media/catalog-speech";
 import { speechTextParam, studioSpeechPrice } from "../media/studio-speech";
-import { AUDIO_MODEL_IDS, LYRIA_MODEL, MUSIC_MODEL, SFX_MODEL } from "../media/catalog-audio";
+import { AUDIO_MODEL_IDS, LYRIA_MODEL, MUSIC_MODEL, audioModeOf } from "../media/catalog-audio";
 import { studioAudioPrice } from "../media/studio-audio";
-import { DUB_MODEL, SPEECH_TOOL_MODEL_IDS, TRANSCRIBE_MODEL } from "../media/catalog-transcribe";
+import { DUB_MODELS, SPEECH_TOOL_MODEL_IDS, TRANSCRIBE_MODELS } from "../media/catalog-transcribe";
 import { studioDubPrice, studioTranscribePrice } from "../media/studio-transcribe";
 
 /**
@@ -58,14 +58,14 @@ export function managedModelIds(): string[] {
 function unitOf(id: string): { label: string; values: Record<string, unknown>; video: boolean; speech?: boolean; audio?: boolean; p10?: "studio-transcribe" | "studio-dub" } {
   const entry = MEDIA_CATALOG.byId(id)!;
   // P10: one minute of the source.
-  if (id === TRANSCRIBE_MODEL) return { label: "1 daqiqa", values: { sourceSeconds: 60 }, video: false, p10: "studio-transcribe" };
-  if (id === DUB_MODEL) return { label: "1 daqiqa", values: { sourceSeconds: 60 }, video: false, p10: "studio-dub" };
+  if (TRANSCRIBE_MODELS.includes(id)) return { label: "1 daqiqa", values: { modelId: id, sourceSeconds: 60 }, video: false, p10: "studio-transcribe" };
+  if (DUB_MODELS.includes(id)) return { label: "1 daqiqa", values: { modelId: id, sourceSeconds: 60 }, video: false, p10: "studio-dub" };
   // P6 «Audio»: a minute of music / of input audio, 10 s of a sound effect (one variant).
   if (AUDIO_MODEL_IDS.includes(id)) {
     if (id === MUSIC_MODEL) return { label: "1 daqiqa", values: { modelId: id, length: "60" }, video: false, audio: true };
     // P9 Lyria: per song — the full song (the dearer of its two kinds).
     if (id === LYRIA_MODEL) return { label: "1 qo‘shiq", values: { modelId: id, length: "song" }, video: false, audio: true };
-    if (id === SFX_MODEL) return { label: "10 soniya", values: { modelId: id, duration: 10, variants: 1 }, video: false, audio: true };
+    if (audioModeOf(id)?.mode === "sfx") return { label: "10 soniya", values: { modelId: id, duration: 10, variants: 1 }, video: false, audio: true };
     return { label: "1 daqiqa", values: { modelId: id, inputSeconds: 60 }, video: false, audio: true };
   }
   if (entry.kind === "speech") return { label: "1 000 belgi", values: { modelId: id, [speechTextParam(entry)]: "x".repeat(1000) }, video: false, speech: true };

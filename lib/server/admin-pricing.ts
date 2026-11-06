@@ -38,7 +38,8 @@ import type { FormValues, ToolGroup, ToolId } from "../types";
 import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } from "../media/catalog";
 import { STUDIO_VIDEO_PURPOSE } from "../media/catalog-video";
 import { STUDIO_SPEECH_PURPOSE } from "../media/catalog-speech";
-import { ISOLATOR_MODEL, LYRIA_MODEL, MUSIC_MODEL, SFX_MODEL, VOICE_CHANGER_MODEL } from "../media/catalog-audio";
+import { FAL_SFX_MODEL, ISOLATOR_MODEL, LYRIA_MODEL, MUSIC_MODEL, SFX_MODEL, VEED_CLEAN_MODEL, VOICE_CHANGER_MODEL } from "../media/catalog-audio";
+import { FAL_DUB_MODEL, FAL_SCRIBE_MODEL, HEYGEN_TRANSLATE_MODEL } from "../media/catalog-transcribe";
 import { clonePriceOf } from "../media/studio-speech";
 import { MIX_VIDEO_MODEL, mixPriceOf } from "../media/catalog-mix";
 import type { MediaPricing } from "../media/studio-pricing";
@@ -313,13 +314,26 @@ export function ladderInputs(toolId: ToolId): LadderInput[] {
         { label: "Effekt · 30 s", values: { modelId: SFX_MODEL, duration: 30 } },
         { label: "Ovozni almashtirish · 1 daq", values: { modelId: VOICE_CHANGER_MODEL, inputSeconds: 60 } },
         { label: "Shovqindan tozalash · 1 daq", values: { modelId: ISOLATOR_MODEL, inputSeconds: 60 } },
+        { label: "Effekt (fal) · 5 s", values: { modelId: FAL_SFX_MODEL, duration: 5 } },
+        { label: "Effekt (fal) · 30 s", values: { modelId: FAL_SFX_MODEL, duration: 30 } },
+        { label: "Tozalash (VEED) · 1 daq", values: { modelId: VEED_CLEAN_MODEL, inputSeconds: 60 } },
+        { label: "Tozalash (VEED) · 5 daq", values: { modelId: VEED_CLEAN_MODEL, inputSeconds: 300 } },
       ];
     case "studio-transcribe":
       // P10: seconds of the source × the STT credit rate × markup (`studio-transcribe.ts`).
-      return [30, 60, 300, 600].map((n) => ({ label: `Transkripsiya · ${n < 60 ? `${n} s` : `${n / 60} daq`}`, values: { sourceSeconds: n } }));
+      return [
+        ...[30, 60, 300, 600].map((n) => ({ label: `Transkripsiya · ${n < 60 ? `${n} s` : `${n / 60} daq`}`, values: { sourceSeconds: n } })),
+        // P11: the fal model, the same lengths.
+        ...[60, 600].map((n) => ({ label: `Scribe (fal) · ${n / 60} daq`, values: { modelId: FAL_SCRIBE_MODEL, sourceSeconds: n } })),
+      ];
     case "studio-dub":
       // P10: seconds of the source × the dubbing credit rate × markup.
-      return [15, 60, 180].map((n) => ({ label: `Dublyaj · ${n < 60 ? `${n} s` : `${n / 60} daq`}`, values: { sourceSeconds: n } }));
+      return [
+        ...[15, 60, 180].map((n) => ({ label: `Dublyaj · ${n < 60 ? `${n} s` : `${n / 60} daq`}`, values: { sourceSeconds: n } })),
+        // P11: fal bills whole minutes (15 s = 1 minute), HeyGen per second.
+        ...[15, 60, 180].map((n) => ({ label: `Dublyaj (fal) · ${n < 60 ? `${n} s` : `${n / 60} daq`}`, values: { modelId: FAL_DUB_MODEL, sourceSeconds: n } })),
+        ...[15, 60, 180].map((n) => ({ label: `HeyGen · ${n < 60 ? `${n} s` : `${n / 60} daq`}`, values: { modelId: HEYGEN_TRANSLATE_MODEL, sourceSeconds: n } })),
+      ];
     case "studio-voice":
       // The fixed clone price (`studio.clone_price`).
       return [{ label: "1 klon", values: {} }];

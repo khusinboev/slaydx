@@ -210,11 +210,13 @@ export function AudioTab({
         <SpeechToolPanel
           key={tool.mode}
           mode={tool.mode}
-          entry={tool.entry}
+          modeLabel={tool.label}
+          entry={tool.entries.find((e) => e.id === state.tools?.[tool.mode]?.model) ?? tool.entry}
+          entries={tool.entries}
           pricing={catalog.pricing}
           state={state.tools?.[tool.mode]}
           setState={(fn) => setState((s) => ({ ...s, tools: { ...s.tools, [tool.mode]: fn(s.tools?.[tool.mode] ?? INITIAL_SPEECH_TOOL) } }))}
-          jobs={jobs.filter((j) => j.modelId === tool.entry.id)}
+          jobs={jobs.filter((j) => tool.entries.some((e) => e.id === j.modelId))}
           track={track}
           balance={balance}
           typing={typing}

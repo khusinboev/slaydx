@@ -319,13 +319,13 @@ export async function prepareGeneration(input: SubmitInput): Promise<PreparedGen
   if (tool.id === "studio-mix" && !replay) await prepareMixRequest(userId, values);
 
   /*
-   * Studio P10 «Transkripsiya» / «Dublyaj» (docs/studio/P10-SPEC.md): the tool's switch (default off) + ElevenLabs
+   * Studio P10 «Transkripsiya» / «Dublyaj» (docs/studio/P10-SPEC.md): the tool's switch (default off) + the chosen model
    * available now; the source must be the user's OWN upload / finished result of a kind the tool takes, within its
    * length limit, a burn / a video dub must fit 25 MB — and the SERVER's billed seconds replace the request's
    * `sourceSeconds` before pricing. 400 before anything is priced or charged. A replay is a job that already exists.
    */
   if ((tool.id === "studio-transcribe" || tool.id === "studio-dub") && !replay) {
-    const unavailable = await speechToolUnavailable(tool.id);
+    const unavailable = await speechToolUnavailable(tool.id, typeof values.modelId === "string" ? values.modelId : "");
     if (unavailable) throw new ApiError(unavailable, 400, { code: "model_unavailable" });
     await prepareSpeechToolRequest(userId, tool.id, values);
   }

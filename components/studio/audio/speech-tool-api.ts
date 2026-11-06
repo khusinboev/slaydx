@@ -3,10 +3,10 @@
 import type { ClientEntry } from "@/lib/studio-core";
 import { applyPriceAdjust, getClientPriceAdjust, type PriceAdjust } from "@/lib/price-adjust";
 import { studioEntryPrice } from "@/lib/media/studio-pricing";
-import { AUTO_LANGUAGE, DUB_MAX_SECONDS, SPEECH_TOOL_MODES, TRANSCRIBE_AUDIO_MAX_SECONDS, TRANSCRIBE_VIDEO_MAX_SECONDS, parseSource, type SpeechToolMode } from "@/lib/media/catalog-transcribe";
+import { AUTO_LANGUAGE, DUB_MAX_SECONDS, SPEECH_TOOL_MODES, TRANSCRIBE_AUDIO_MAX_SECONDS, TRANSCRIBE_VIDEO_MAX_SECONDS, parseSource, videoOnlySource, type SpeechToolMode } from "@/lib/media/catalog-transcribe";
 import { billedSeconds } from "@/lib/media/studio-audio";
 import type { ToolId } from "@/lib/types";
-import type { RawValues } from "../studio-values";
+import { carryOver, type RawValues } from "../studio-values";
 import type { StudioPricing } from "../studio-types";
 import type { MixSource, MixSources } from "./mix-api";
 
@@ -19,8 +19,8 @@ import type { MixSource, MixSources } from "./mix-api";
  */
 
 export type SourceTab = "result" | "upload";
-/** Per mode: the raw values, the source picker's tab, and the picked source's kind (the burn row needs a video). */
-export type SpeechToolState = { raw: RawValues; tab: SourceTab; kind: "video" | "audio" | null };
+/** Per mode: the raw values, the source picker's tab, the picked source's kind (the burn row needs a video), the picked model. */
+export type SpeechToolState = { raw: RawValues; tab: SourceTab; kind: "video" | "audio" | null; model?: string };
 export type SpeechToolsState = Partial<Record<SpeechToolMode, SpeechToolState>>;
 export const INITIAL_SPEECH_TOOL: SpeechToolState = { raw: {}, tab: "result", kind: null };
 
@@ -28,12 +28,31 @@ export function toolIdOf(mode: SpeechToolMode): ToolId {
   return SPEECH_TOOL_MODES.find((m) => m.mode === mode)!.toolId;
 }
 
-/** The modes the catalog lists now (their entries), in chip order. */
-export function offeredSpeechTools(models: readonly ClientEntry[]): { mode: SpeechToolMode; label: string; entry: ClientEntry }[] {
+/** The modes the catalog lists now, in chip order: `entries` = the mode's offered models, `entry` = the first (the default). */
+export function offeredSpeechTools(models: readonly ClientEntry[]): { mode: SpeechToolMode; label: string; entry: ClientEntry; entries: ClientEntry[] }[] {
   return SPEECH_TOOL_MODES.flatMap((m) => {
-    const entry = models.find((e) => e.id === m.model);
-    return entry ? [{ mode: m.mode, label: m.label, entry }] : [];
+    const entries = m.models.flatMap((id) => models.filter((e) => e.id === id));
+    return entries.length ? [{ mode: m.mode, label: m.label, entry: entries[0]!, entries }] : [];
   });
+}
+
+/**
+ * The form after picking another model of the mode: the values it also accepts stay, the rest fall back to its defaults
+ * (`carryOver`). The picked source goes when the model cannot take it (an audio on a video-only model).
+ */
+export function pickSpeechModel(st: SpeechToolState, next: ClientEntry): SpeechToolState {
+  const raw = carryOver(next, st.raw);
+  if (!videoOnlySource(next.id)) return { ...st, model: next.id, raw };
+  if (st.kind === "video") return { ...st, model: next.id, raw, tab: "result" };
+  delete raw.source;
+  delete raw.sourceSeconds;
+  return { ...st, model: next.id, raw, tab: "result", kind: null };
+}
+
+/** The price line under the source: per started minute where the provider bills so (the button shows the price itself). */
+export function billedLine(entry: Pick<ClientEntry, "cost">, seconds: number): string {
+  const unit = entry.cost.per === "second" ? entry.cost.unitSeconds : undefined;
+  return unit ? `Narx to‘liq daqiqalar bilan hisoblanadi: ${Math.max(1, Math.ceil(seconds / unit))} daqiqa.` : `Narx ${seconds} soniya uchun hisoblanadi.`;
 }
 
 /** The longest source a mode takes for a kind (seconds). */
@@ -43,12 +62,12 @@ export function sourceMax(mode: SpeechToolMode, kind: "video" | "audio"): number
 }
 
 /** The picker's list: the user's finished videos, then audios, within the mode's length limit (no stored length = listed). */
-export function speechSources(mode: SpeechToolMode, sources: Pick<MixSources, "video" | "audio">): (MixSource & { media: "video" | "audio" })[] {
+export function speechSources(mode: SpeechToolMode, sources: Pick<MixSources, "video" | "audio">, videoOnly = false): (MixSource & { media: "video" | "audio" })[] {
   // On the billed (rounded-up) length, the server's rule: a 180.3 s source bills 181 s and is not offered for a dub.
   const fits = (s: MixSource, kind: "video" | "audio") => s.seconds === null || billedSeconds(s.seconds) <= sourceMax(mode, kind);
   return [
     ...sources.video.filter((s) => fits(s, "video")).map((s) => ({ ...s, media: "video" as const })),
-    ...sources.audio.filter((s) => fits(s, "audio")).map((s) => ({ ...s, media: "audio" as const })),
+    ...(videoOnly ? [] : sources.audio.filter((s) => fits(s, "audio")).map((s) => ({ ...s, media: "audio" as const }))),
   ];
 }
 

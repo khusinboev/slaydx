@@ -17,6 +17,7 @@ import { ELEVENLABS_API, ELEVENLABS_OUTPUT_FORMAT, elevenLabsFetch, elevenLabsKe
 import { ELEVENLABS_MUSIC_MODEL, ELEVENLABS_SFX_MODEL, ELEVENLABS_STS_MODEL } from "../catalog-audio";
 import { toSpeechError } from "./speech";
 import { LYRIA_ADAPTER_ID, lyriaAdapter } from "./lyria";
+import { FAL_ADAPTER_ID, falAdapter, type FalDeps } from "./fal";
 
 export type AudioAdapterKind = "music" | "sfx" | "sts" | "isolate";
 export type StudioAudioAdapterDeps = { key?: () => string };
@@ -114,11 +115,13 @@ export function audioAdapter(kind: AudioAdapterKind, deps: StudioAudioAdapterDep
 }
 
 /** Every Studio «Audio» adapter by id (the catalog routes name them). */
-export function studioAudioAdapters(deps: StudioAudioAdapterDeps & { lyriaKey?: () => string } = {}): Record<string, MediaAdapter> {
+export function studioAudioAdapters(deps: StudioAudioAdapterDeps & { lyriaKey?: () => string; fal?: FalDeps } = {}): Record<string, MediaAdapter> {
   return {
     ...Object.fromEntries((Object.keys(ADAPTER_ID) as AudioAdapterKind[]).map((k) => [ADAPTER_ID[k], audioAdapter(k, deps)])),
     // P9: Lyria on the Gemini key («Musiqa», second model).
     [LYRIA_ADAPTER_ID]: lyriaAdapter(deps.lyriaKey ? { key: deps.lyriaKey } : {}),
+    // P11: the second models of «Effekt» and «Shovqindan tozalash».
+    [FAL_ADAPTER_ID]: falAdapter(deps.fal),
   };
 }
 

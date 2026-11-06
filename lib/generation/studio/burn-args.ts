@@ -86,3 +86,37 @@ export function burnArgs(plan: BurnPlan): string[] {
     BURN_FILES.out,
   ];
 }
+
+/** The audio track of a video (fal Scribe: its page states an audio file, `audio_url`). The same input rules as above. */
+export const AUDIO_TRACK_FILES = { video: "in-video.mp4", out: "out-track.mp3" } as const;
+
+export function audioTrackArgs(seconds: number): string[] {
+  return [
+    "-nostdin",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-protocol_whitelist",
+    "file",
+    "-f",
+    "mov",
+    "-i",
+    AUDIO_TRACK_FILES.video,
+    // No `?`: a silent clip has no speech to transcribe, ffmpeg fails and the job refunds before any provider call.
+    "-map",
+    "0:a:0",
+    "-vn",
+    "-ac",
+    "1",
+    "-c:a",
+    "libmp3lame",
+    "-b:a",
+    "128k",
+    "-threads",
+    "2",
+    "-t",
+    seconds.toFixed(3),
+    "-y",
+    AUDIO_TRACK_FILES.out,
+  ];
+}
