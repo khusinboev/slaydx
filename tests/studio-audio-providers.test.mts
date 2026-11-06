@@ -672,7 +672,7 @@ test("dub engine: an audio source comes back as MP3 from `audio`; failures refun
 
   // The model failed at fal: refund + the upload deleted.
   const failed = fakeFal({ status: () => ({ status: "COMPLETED", error: "dubbing failed" }) });
-  await assert.rejects(run(failed), (e: unknown) => e instanceof UserFacingError && /Kredit qaytariladi/.test(e.message));
+  await assert.rejects(run(failed), (e: unknown) => e instanceof UserFacingError && /Pul balansingizga qaytariladi/.test(e.message));
   assert.equal(failed.calls.filter((x) => x.url === storage.FAL_STORAGE_DELETE_URL).length, 1);
 
   // A content-policy refusal says so.
@@ -681,7 +681,7 @@ test("dub engine: an audio source comes back as MP3 from `audio`; failures refun
 
   // A file of another kind than the source: refused by the bytes, whatever the answer claimed.
   const wrong = fakeFal({ result: dubOutputResult("audio"), download: new TextEncoder().encode("<html>nope, this is not a media file</html>") });
-  await assert.rejects(run(wrong), (e: unknown) => e instanceof UserFacingError && /Kredit qaytariladi/.test(e.message));
+  await assert.rejects(run(wrong), (e: unknown) => e instanceof UserFacingError && /Pul balansingizga qaytariladi/.test(e.message));
   assert.equal(falDubOutput({ video: { url: "https://v/1" }, audio: { url: "https://a/2" } }), "https://v/1", "a video source's file is the video");
   assert.equal(falDubOutput({ target_lang: "uz" }), null);
 });
@@ -691,7 +691,7 @@ test("dub engine: HeyGen — video only, its enum name sent, the cost on the DEL
   const c = clock();
   await assert.rejects(
     dubMod.buildStudioDub(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.HEYGEN_TRANSLATE_MODEL, source: RES, sourceSeconds: 2 } as never, audioCtx(), { deadline: c.now() + 500_000 }, { adapters: { "fal-dub": wrapped(fakeFal()) }, store: null, health: HEALTH, ...c }),
-    (e: unknown) => e instanceof UserFacingError && /faqat videoni/.test(e.message) && /Kredit qaytariladi/.test(e.message),
+    (e: unknown) => e instanceof UserFacingError && /faqat videoni/.test(e.message) && /Pul balansingizga qaytariladi/.test(e.message),
   );
 
   const f = fakeFal({ result: { video: { url: "https://v3.fal.media/out/h.mp4" } }, download: videoMp4() });
@@ -751,7 +751,7 @@ test("transcribe engine: a fal video goes as its audio track (ffmpeg before the 
   seen.length = 0;
   await assert.rejects(
     buildStudioTranscribe(tools.TOOL_BY_ID["studio-transcribe"], { modelId: cat.FAL_SCRIBE_MODEL, source: RES, sourceSeconds: 3 } as never, video, {}, { run, ffmpeg: async () => Promise.reject(new Error("no stream")) }),
-    (e: unknown) => e instanceof UserFacingError && /ovozni ajratib/.test(e.message) && /Kredit qaytariladi/.test(e.message),
+    (e: unknown) => e instanceof UserFacingError && /ovozni ajratib/.test(e.message) && /Pul balansingizga qaytariladi/.test(e.message),
   );
   assert.equal(seen.length, 0);
 

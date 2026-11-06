@@ -289,7 +289,7 @@ test("transcribe: charged the fal price, the upload and the row say fal, cost_js
   const r2 = await post(me, "studio-transcribe", values, price);
   const g2 = await runNext(r2.body.id!);
   assert.equal(g2?.status, "FAILED");
-  assert.match(String(g2?.error), /Kredit qaytariladi/);
+  assert.match(String(g2?.error), /Pul balansingizga qaytariladi/);
   assert.equal(await balanceOf(me), 500_000 - price, "the failed job was refunded in full");
 });
 
