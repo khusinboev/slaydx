@@ -99,7 +99,7 @@ export function StudioResults({
 } & PictureNext) {
   if (jobs.length === 0) {
     return (
-      <p className="text-muted-foreground bg-card hidden rounded-[20px] border p-6 text-center text-[14.5px] xl:block" data-studio-empty>
+      <p className="text-muted-foreground bg-card hidden rounded-[20px] border p-6 text-center text-[14.5px] md:block" data-studio-empty>
         Yaratilgan rasmlar shu yerda ko‘rinadi.
       </p>
     );

@@ -176,7 +176,7 @@ test("darvoza — dars rejasi: bosqich soni tur minimumidan kam bo'lsa yiqiladi"
   assert.equal(teacherGateFail(meta, { duration: 45 }, lessonDoc({ stages: 6, minutes: 45 })), null);
   const fail = teacherGateFail(meta, { duration: 45 }, lessonDoc({ stages: 3, minutes: 45 }));
   assert.equal(fail?.rule, "lesson.stages");
-  assert.match(fail!.message, /Kredit qaytariladi/);
+  assert.match(fail!.message, /Pul balansingizga qaytariladi/);
 });
 
 test("darvoza — dars rejasi: daqiqa yig'indisi ± 5 dan chiqsa yiqiladi (tolerans mutatsiyasi)", () => {

@@ -447,9 +447,9 @@ test("transcribe engine: TXT result + cues; no speech is a result (not burned); 
   const failing = async () => {
     throw new MediaError("elevenlabs", "500 boom", { retryable: true });
   };
-  await assert.rejects(buildStudioTranscribe(TR(), { source: RES, sourceSeconds: 2 } as never, audioCtx(), {}, { run: failing as never }), (e: Error) => e instanceof UserFacingError && /Transkripsiya bajarilmadi.*Kredit qaytariladi/.test(e.message) && e.cause instanceof MediaError);
+  await assert.rejects(buildStudioTranscribe(TR(), { source: RES, sourceSeconds: 2 } as never, audioCtx(), {}, { run: failing as never }), (e: Error) => e instanceof UserFacingError && /Transkripsiya bajarilmadi.*Pul balansingizga qaytariladi/.test(e.message) && e.cause instanceof MediaError);
   await assert.rejects(buildStudioTranscribe(TR(), { source: RES, sourceSeconds: 2 } as never, audioCtx(RES2), {}, { run: runStub(sttWords("a")) as never }), /manba topilmadi/);
-  await assert.rejects(buildStudioTranscribe(TR(), { source: RES, sourceSeconds: 2 } as never, { source: null }, {}, { run: runStub(sttWords("a")) as never }), /Kredit qaytariladi/);
+  await assert.rejects(buildStudioTranscribe(TR(), { source: RES, sourceSeconds: 2 } as never, { source: null }, {}, { run: runStub(sttWords("a")) as never }), /Pul balansingizga qaytariladi/);
   await assert.rejects(buildStudioTranscribe(TR(), { source: UP, sourceSeconds: 2, burn: true } as never, { source: { ...audioCtx().source, kind: "upload", id: "a".repeat(24) } }, {}, { run: runStub(sttWords("a")) as never }), /faqat videoga/);
   const long = { source: { kind: "result" as const, id: RES.slice(7), mime: "video/mp4", bytes: new Uint8Array(9), seconds: 200 } };
   await assert.rejects(buildStudioTranscribe(TR(), { source: RES, sourceSeconds: 3 } as never, long, {}, { run: runStub(sttWords("a")) as never }), /3 daqiqadan uzun/);
@@ -604,7 +604,7 @@ test("review m2: the worker refuses a source that measures longer than it was bi
   const counting = runStub(sttWords("bir"));
   await assert.rejects(
     buildStudioTranscribe(TR(), { source: RES, sourceSeconds: 10 } as never, at(11.6), {}, { run: (async (i: never) => (called++, counting(i))) as never }),
-    (e: Error) => e instanceof UserFacingError && /uzunroq chiqdi.*Kredit qaytariladi/.test(e.message),
+    (e: Error) => e instanceof UserFacingError && /uzunroq chiqdi.*Pul balansingizga qaytariladi/.test(e.message),
   );
   assert.equal(called, 0, "refused before the paid call");
   const seen = dubFetch(t);

@@ -368,8 +368,19 @@ function StudioApp() {
     setVideoState((s) => ({ ...s, mode: "text", chosen: item.modelId ?? s.chosen, raw: next }));
   }
 
-  const toGallery = () => setView("gallery");
-  const toCreate = () => setView("create");
+  // An error belongs to the view it happened in.
+  const showView = (v: View) => {
+    setError(null);
+    setView(v);
+  };
+  const toGallery = () => showView("gallery");
+  const toCreate = () => showView("create");
+
+  /** What «Qayta urinish» costs now: the same formula as the button, for a job of this mode's catalog. */
+  function retryPrice(job: StudioJob): number {
+    const model = !job.purpose || job.purpose === purpose ? catalog?.models.find((m) => m.id === job.modelId) : undefined;
+    return model && catalog ? studioPrice(model, job.sent, catalog.pricing) : job.price;
+  }
 
   const galleryButton =
     view === "gallery" ? (
@@ -398,12 +409,13 @@ function StudioApp() {
           "xl:grid-cols-[14.5rem_minmax(0,27.5rem)_minmax(0,1fr)]",
         )}
       >
-        <StudioNav view={view} onView={setView} balance={balance} />
+        <StudioNav view={view} onView={showView} balance={balance} />
 
         {view === "gallery" ? (
           <section aria-label="Galereya" data-studio-gallery className="md:col-span-2">
             <h2 className="mb-3 text-[20px] font-extrabold">Galereya</h2>
             <HandoffAlert error={handoff.error} />
+            <SubmitError error={error} gated={gated} />
             <Gallery
               onCreate={toCreate}
               onOtherModel={(item: GalleryItem) => (item.kind === "video" ? videoAgain(item) : otherModel(item.prompt))}
@@ -554,6 +566,7 @@ function StudioApp() {
                   jobs={jobs}
                   busy={submitting}
                   onAgain={again}
+                  retryPrice={retryPrice}
                   onOtherModel={(job) => otherModel(job.prompt)}
                   onTool={(m, p) => void pictureTool(m, p)}
                   onVideo={(url, prompt) => void handoff.toVideo(url, prompt)}

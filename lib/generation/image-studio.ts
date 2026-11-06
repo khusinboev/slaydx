@@ -259,7 +259,7 @@ export async function drawImageJob(job: ImageJob): Promise<BuiltFile> {
   const images = raw.filter((x): x is GenImage => Boolean(x));
   if (!images.length) {
     // A content-policy refusal gets its own message (the prompt has to change; a plain retry would be refused again).
-    if (refused.length) throw new UserFacingError("Tavsif rasm modelining kontent qoidalariga mos kelmadi — mazmunini o‘zgartirib, qayta urinib ko‘ring. Kredit qaytariladi.");
+    if (refused.length) throw new UserFacingError("Tavsif rasm modelining kontent qoidalariga mos kelmadi — mazmunini o‘zgartirib, qayta urinib ko‘ring. Pul balansingizga qaytariladi.");
     throw new Error("Rasm yaratilmadi. Qayta urinib ko‘ring.");
   }
   stage(85, "Fayl saqlanmoqda");

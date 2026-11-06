@@ -439,7 +439,7 @@ export async function translateSegments(segs: Segment[], opts: TranslateOpts, de
   if (failedCount > allowed) {
     // Yetishmovchilik muddat tufayli — foydalanuvchiga «vaqt tugadi» (worker `DeadlineError` ni taniydi).
     if ([...failed.values()].some((f) => f.detail === TIME_OUT)) throw new DeadlineError("translate", remaining());
-    throw errorWithCause(`Tarjima to‘liq chiqmadi: ${total} banddan ${failedCount} tasi tarjima qilinmadi. Kredit qaytariladi — qayta urinib ko‘ring.`);
+    throw errorWithCause(`Tarjima to‘liq chiqmadi: ${total} banddan ${failedCount} tasi tarjima qilinmadi. Pul balansingizga qaytariladi — qayta urinib ko‘ring.`);
   }
   const byId = new Map(work.map((s) => [s.id, s]));
   for (const [id] of failed) {
@@ -546,14 +546,14 @@ export async function buildTranslationArtifact(meta: DocMeta, values: FormValues
   let extracted: Extracted;
   let kind: SourceKind | "text";
   if (wantsFile || opts.source) {
-    if (!opts.source) throw new Error("Yuklangan fayl topilmadi — kredit qaytariladi. Faylni qayta yuklab ko‘ring.");
+    if (!opts.source) throw new Error("Yuklangan fayl topilmadi. Pul balansingizga qaytariladi. Faylni qayta yuklab ko‘ring.");
     kind = opts.source.kind;
     extracted = await extractSegments(opts.source.kind, opts.source.bytes);
   } else {
     kind = "text";
     extracted = textToSegments(String(values.sourceText ?? meta.sourceText ?? ""));
   }
-  if (!extracted.chars) throw new Error("Tarjima qilinadigan matn topilmadi. Kredit qaytariladi.");
+  if (!extracted.chars) throw new Error("Tarjima qilinadigan matn topilmadi. Pul balansingizga qaytariladi.");
 
   const { map, report, delivered } = await translateSegments(extracted.segments, {
     target,

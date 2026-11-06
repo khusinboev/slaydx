@@ -266,7 +266,7 @@ test("transcribe: through the worker — the stored source is sent, TXT + SRT / 
   assert.equal(r2.status, 202, JSON.stringify(r2.body));
   const g2 = await runNext(r2.body.id!);
   assert.equal(g2?.status, "FAILED");
-  assert.match(String(g2?.error), /Kredit qaytariladi/);
+  assert.match(String(g2?.error), /Pul balansingizga qaytariladi/);
   assert.equal(await balanceOf(me), 100_000 - price, "the failed job was refunded in full");
   mode = { stt: 200, dubStatus: "dubbed" };
 });

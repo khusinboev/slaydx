@@ -320,7 +320,7 @@ export const MAP_WEEK_RATIO = 0.9;
 export type TeacherGateFail = { rule: string; message: string };
 
 const short = (what: string, got: number, need: number, unit: string): string =>
-  `${what} yetarli chiqmadi (${got} ${unit}, kerak: kamida ${need}). Kredit qaytariladi — qayta urinib ko‘ring.`;
+  `${what} yetarli chiqmadi (${got} ${unit}, kerak: kamida ${need}). Pul balansingizga qaytariladi — qayta urinib ko‘ring.`;
 
 /**
  * O'qituvchi hujjatining ELEMENT darvozasi — `null` bo'lsa o'tdi.
@@ -351,7 +351,7 @@ export function teacherGateFail(meta: DocMeta, values: FormValues, doc: Academic
      */
     const badKey = m.variants.filter((v) => (m.key[v.id]?.length ?? 0) !== m.questions.length).map((v) => v.id);
     if (!m.variants.length || badKey.length) {
-      return { rule: "test.key", message: `Javoblar kaliti to‘liq chiqmadi${badKey.length ? ` (${badKey.join(", ")} varianti)` : ""}. Kredit qaytariladi — qayta urinib ko‘ring.` };
+      return { rule: "test.key", message: `Javoblar kaliti to‘liq chiqmadi${badKey.length ? ` (${badKey.join(", ")} varianti)` : ""}. Pul balansingizga qaytariladi — qayta urinib ko‘ring.` };
     }
     return null;
   }
@@ -368,7 +368,7 @@ export function teacherGateFail(meta: DocMeta, values: FormValues, doc: Academic
       if (Math.abs(sum - m.durationMin) > TEACHER_MINUTES_TOLERANCE) {
         return {
           rule: "lesson.minutes",
-          message: `Bosqich daqiqalari dars davomiyligiga mos kelmadi (${sum} daqiqa, kerak: ${m.durationMin} ± ${TEACHER_MINUTES_TOLERANCE}). Kredit qaytariladi — qayta urinib ko‘ring.`,
+          message: `Bosqich daqiqalari dars davomiyligiga mos kelmadi (${sum} daqiqa, kerak: ${m.durationMin} ± ${TEACHER_MINUTES_TOLERANCE}). Pul balansingizga qaytariladi — qayta urinib ko‘ring.`,
         };
       }
       return null;
@@ -378,7 +378,7 @@ export function teacherGateFail(meta: DocMeta, values: FormValues, doc: Academic
       if (!m) return { rule: "map.model", message: short("Xarita haftalari", 0, 1, "hafta") };
       // Choraklik xarita — TO'RTTA blok; uchtasi «yil rejasi» emas.
       if (m.type === "choraklik" && m.quarters.length !== TEACHER_LIMITS.quarters) {
-        return { rule: "map.quarters", message: `Choraklik xaritada ${m.quarters.length} chorak chiqdi (kerak: ${TEACHER_LIMITS.quarters}). Kredit qaytariladi — qayta urinib ko‘ring.` };
+        return { rule: "map.quarters", message: `Choraklik xaritada ${m.quarters.length} chorak chiqdi (kerak: ${TEACHER_LIMITS.quarters}). Pul balansingizga qaytariladi — qayta urinib ko‘ring.` };
       }
       const got = m.quarters.reduce((n, q) => n + q.weeks.length, 0);
       const need = Math.ceil(weeksFor(m.weeklyHours || input.weeklyHours, m.totalHours || input.totalHours) * MAP_WEEK_RATIO);
@@ -728,7 +728,7 @@ async function buildArtifactInner(
    */
   if (!llmDoc && llmKeyPresent()) {
     // The user text stays; the last LLM failure rides along as `cause` for the worker log.
-    throw errorWithCause("Matn yozilmadi — AI javob bermadi. Kredit qaytariladi, qayta urinib ko‘ring.");
+    throw errorWithCause("Matn yozilmadi — AI javob bermadi. Pul balansingizga qaytariladi, qayta urinib ko‘ring.");
   }
 
   let academic = llmDoc ?? buildAcademicDoc(meta, values);
@@ -760,9 +760,9 @@ async function buildArtifactInner(
       throw new Error(
         essayNeed
           ? `Insho hajmi yetarli chiqmadi (${got} so'z, kerak: kamida ${need}). ` +
-            `Kredit qaytariladi — qayta urinib ko‘ring.`
+            `Pul balansingizga qaytariladi — qayta urinib ko‘ring.`
           : `Matn hajmi yetarli chiqmadi (~${pages} bet, kerak: ${meta.pagesLabel} bet). ` +
-            `Kredit qaytariladi — qayta urinib ko‘ring yoki kichikroq hajm tanlang.`,
+            `Pul balansingizga qaytariladi — qayta urinib ko‘ring yoki kichikroq hajm tanlang.`,
       );
     }
   }
@@ -817,7 +817,7 @@ async function buildArtifactInner(
     if (hard.length) {
       throw new Error(
         `Hujjat tuzilmasi to'liq chiqmadi (${hard.map(needLabel).join(", ")} yo'q). ` +
-          `Kredit qaytariladi — qayta urinib ko‘ring.`,
+          `Pul balansingizga qaytariladi — qayta urinib ko‘ring.`,
       );
     }
   }
@@ -857,7 +857,7 @@ async function buildArtifactInner(
           console.warn(`[gen] page gate: ${tool.id} ${proxy.numPages}/${wantMin} bet (renderlangan)`);
           throw new Error(
             `Hujjat sahifa soni yetarli chiqmadi (renderlangan ${proxy.numPages} bet, kerak: ${meta.pagesLabel} bet). ` +
-              `Kredit qaytariladi — qayta urinib ko‘ring yoki kichikroq hajm tanlang.`,
+              `Pul balansingizga qaytariladi — qayta urinib ko‘ring yoki kichikroq hajm tanlang.`,
           );
         }
       } catch (e) {
@@ -891,7 +891,7 @@ async function buildArtifactInner(
       if (pages <= maxP) {
         if (pages < Math.floor(minP * 0.8)) {
           console.warn(`[gen] konspekt fit: ${pages}/${minP}-${maxP} pages (rendered)`);
-          throw new Error(`Konspekt hajmi yetarli chiqmadi (renderlangan ${pages} sahifa, kerak: ${minP}–${maxP}). Kredit qaytariladi — qayta urinib ko‘ring.`);
+          throw new Error(`Konspekt hajmi yetarli chiqmadi (renderlangan ${pages} sahifa, kerak: ${minP}–${maxP}). Pul balansingizga qaytariladi — qayta urinib ko‘ring.`);
         }
         break;
       }

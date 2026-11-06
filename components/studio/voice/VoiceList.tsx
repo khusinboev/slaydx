@@ -58,6 +58,8 @@ export function VoiceList({
   deleting?: boolean;
 }) {
   const [playing, setPlaying] = useState<string | null>(null);
+  const [previewFailed, setPreviewFailed] = useState<string | null>(null);
+  const failedName = rows.find((r) => r.previewKey === previewFailed)?.name ?? null;
   return (
     <div data-voice-list>
       <div role="group" aria-label="Ovoz turi" className="mb-2.5 flex flex-wrap gap-1.5" data-voice-filters>
@@ -94,7 +96,10 @@ export function VoiceList({
                   aria-label={playing === r.previewKey ? `${r.name}: to‘xtatish` : `${r.name}: namunani tinglash`}
                   data-voice-play={r.previewKey}
                   disabled={!ready}
-                  onClick={() => setPlaying((p) => (p === r.previewKey ? null : r.previewKey))}
+                  onClick={() => {
+                    setPreviewFailed(null);
+                    setPlaying((p) => (p === r.previewKey ? null : r.previewKey));
+                  }}
                   className="bg-card focus-visible:ring-ring flex size-11 shrink-0 items-center justify-center rounded-full border outline-none focus-visible:ring-2 disabled:opacity-40"
                 >
                   {playing === r.previewKey ? <Pause className="size-4" aria-hidden /> : <Play className="size-4" aria-hidden />}
@@ -130,13 +135,47 @@ export function VoiceList({
           })}
         </ul>
       )}
-      {playing ? <PreviewPlayer key={playing} previewKey={playing} onEnd={() => setPlaying(null)} /> : null}
+      {failedName ? (
+        <p role="alert" className="text-destructive mt-2 text-[13.5px] leading-snug" data-voice-preview-error>
+          «{failedName}» namunasi ochilmadi — qayta bosib ko‘ring.
+        </p>
+      ) : null}
+      {playing ? (
+        <PreviewPlayer
+          key={playing}
+          previewKey={playing}
+          onEnd={() => setPlaying(null)}
+          onFail={() => {
+            setPreviewFailed(playing);
+            setPlaying(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
 /** The one preview playing now (mounted only while playing, so nothing is fetched before a click). */
-function PreviewPlayer({ previewKey, onEnd }: { previewKey: string; onEnd: () => void }) {
+function PreviewPlayer({ previewKey, onEnd, onFail }: { previewKey: string; onEnd: () => void; onFail: () => void }) {
   const src = useApiSrc(previewUrl(previewKey));
-  return <audio autoPlay src={src} onEnded={onEnd} onError={onEnd} className="hidden" data-voice-preview={previewKey} />;
+  return <audio autoPlay src={src} onEnded={onEnd} onError={onFail} className="hidden" data-voice-preview={previewKey} />;
+}
+
+/** The voice list before it is usable: the failure with its retry, or the loading line. */
+export function VoicesState({ error, onRetry }: { error: string | null; onRetry: () => void }) {
+  if (error) {
+    return (
+      <p role="alert" className="text-destructive text-[14px]" data-voices-error>
+        {error}{" "}
+        <button type="button" data-voices-retry onClick={onRetry} className="pointer-coarse:min-h-11 font-semibold underline underline-offset-2">
+          Qayta urinish
+        </button>
+      </p>
+    );
+  }
+  return (
+    <p className="text-muted-foreground text-[13.5px]" role="status" data-voices-loading>
+      Ovozlar yuklanmoqda...
+    </p>
+  );
 }

@@ -12,6 +12,12 @@ import { useMediaCatalog } from "./studio-api";
 import { BADGE_LABEL, FILTER_BADGES, badgeText, initials, unitPrice } from "./studio-price";
 import type { MediaCatalog, StudioPricing } from "./studio-types";
 
+/** What the sheet lists, by the catalog's kind: «<noun> modeli» / «<noun> modelini tanlash». */
+export function modelNoun(models: readonly Pick<ClientEntry, "kind">[]): string {
+  const kind = models[0]?.kind;
+  return kind === "video" ? "Video" : kind === "speech" ? "Ovoz" : kind === "music" || kind === "sfx" ? "Audio" : "Rasm";
+}
+
 /** How many model cards the row shows before «Barcha modellar». */
 export const ROW_CARDS = 3;
 
@@ -185,14 +191,14 @@ function ModelSheet({
   // A chip is drawn only when some model carries its badge (no chip that leads to an empty list).
   const chips = FILTER_BADGES.filter((b) => models.some((m) => m.badges.includes(b)));
   const shown = filter ? models.filter((m) => m.badges.includes(filter)) : models;
-  const video = models.some((m) => m.kind === "video");
+  const noun = modelNoun(models);
   const chip = "pointer-coarse:min-h-11 focus-visible:ring-ring rounded-[12px] px-3 py-1.5 text-[13.5px] outline-none focus-visible:ring-2";
   return (
-    <OverlayFrame label={video ? "Video modelini tanlash" : "Rasm modelini tanlash"} phone={phone} sheet className={phone ? "flex items-end justify-center" : "flex items-center justify-center p-4"}>
+    <OverlayFrame label={`${noun} modelini tanlash`} phone={phone} sheet className={phone ? "flex items-end justify-center" : "flex items-center justify-center p-4"}>
       <OverlayScrim onClose={onClose} />
       <OverlayPanel ref={panelRef} phone={phone} sheet className={phone ? "min-h-[70svh]" : "max-h-[85vh] max-w-lg overflow-y-auto overscroll-contain"}>
         <div data-model-sheet>
-          <OverlayHeader title={video ? "Video modeli" : "Rasm modeli"} phone={phone} onClose={onClose} className="mb-2" />
+          <OverlayHeader title={`${noun} modeli`} phone={phone} onClose={onClose} className="mb-2" />
           <div role="group" aria-label="Filtr" className="mb-3 flex flex-wrap gap-1.5" data-model-chips>
             <button type="button" data-model-chip="all" aria-pressed={filter === null} onClick={() => setFilter(null)} className={cn(chip, filter === null ? "bg-foreground text-background font-semibold" : "bg-muted")}>
               Hammasi

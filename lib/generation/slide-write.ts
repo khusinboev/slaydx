@@ -1188,7 +1188,7 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
   // yaratadi va foydalanuvchi buni to'lagan ishi deb oladi. Xato bo'lsa
   // worker kreditni qaytaradi.
   if (!written && llmEnabled()) {
-    throw errorWithCause("Taqdimot matni yozilmadi. Kredit qaytariladi — qayta urinib ko‘ring.");
+    throw errorWithCause("Taqdimot matni yozilmadi. Pul balansingizga qaytariladi — qayta urinib ko‘ring.");
   }
   const slides = written ?? fallbackSlides(meta, tpl, beats);
   /*

@@ -74,13 +74,13 @@ test("userMessage: TTS va muddat xatolari — o'z qisqa o'zbekcha matni (xom tan
 test("userMessage: dvigatelning ATAYIN yozgan o'zbekcha xabari o'zgarmaydi", () => {
   const keep = [
     "Fayl bo'sh chiqdi — qayta urinib ko'ring",
-    "Tarjima qilinadigan matn topilmadi. Kredit qaytariladi.",
-    "Ovoz provayderi sozlanmagan. Yordam xizmatiga murojaat qiling: t.me/SlaydX_support — to‘lov qaytarildi.",
-    "Bosqich daqiqalari dars davomiyligiga mos kelmadi (40 daqiqa, kerak: 80 ± 5). Kredit qaytariladi — qayta urinib ko‘ring.",
+    "Tarjima qilinadigan matn topilmadi. Pul balansingizga qaytariladi.",
+    "Ovoz provayderi sozlanmagan. Yordam xizmatiga murojaat qiling: t.me/SlaydX_support — pul balansingizga qaytariladi.",
+    "Bosqich daqiqalari dars davomiyligiga mos kelmadi (40 daqiqa, kerak: 80 ± 5). Pul balansingizga qaytariladi — qayta urinib ko‘ring.",
     "PDF juda uzun: 400 sahifa (chegara 300). Hujjatni bo'lib yuboring.",
     "Ish vaqti tugadi",
     "Noma'lum vosita",
-    "Navbat juda uzun edi — pul qaytarildi",
+    "Navbat juda uzun edi. Pul balansingizga qaytariladi.",
     // `image-studio.ts` — foydalanuvchi validatsiyasi (review nit 1).
     "Rasm uchun tavsif yozing",
   ];
@@ -186,7 +186,7 @@ test("worker: xom xato foydalanuvchiga chiqmaydi, tafsilot jurnalda (jobId, atte
     const { AI_OUTAGE_ERROR } = await import("../lib/server/user-error.ts");
     const { id, gen, tx } = await runWith(tt, async () => {
       reportFailure({ role: "complete", provider: "gemini", model: "gemini-3.7-flash", attempt: 3, durationMs: 1200, kind: "http", status: 503, retryable: true, message: "overloaded" });
-      throw errorWithCause("Taqdimot matni yozilmadi. Kredit qaytariladi — qayta urinib ko‘ring.");
+      throw errorWithCause("Taqdimot matni yozilmadi. Pul balansingizga qaytariladi — qayta urinib ko‘ring.");
     });
     assert.equal(gen.status, "FAILED");
     assert.equal(gen.error, AI_OUTAGE_ERROR);
@@ -209,7 +209,7 @@ test("worker: xom xato foydalanuvchiga chiqmaydi, tafsilot jurnalda (jobId, atte
 
   await t.test("LLM yiqilishi: foydalanuvchi matni o'zgarmaydi, pul qaytadi, ishchi qatori sababni (kind/status) va toolId ni chop etadi", async (tt) => {
     const { reportFailure, errorWithCause } = await import("../lib/generation/llm/failure.ts");
-    const USER_MSG = "Taqdimot matni yozilmadi. Kredit qaytariladi — qayta urinib ko‘ring.";
+    const USER_MSG = "Taqdimot matni yozilmadi. Pul balansingizga qaytariladi — qayta urinib ko‘ring.";
     const { id, gen, tx, rows } = await runWith(tt, async () => {
       // Dvigatel ichida: provayder shu so'rovni rad etdi (400, nosozlik emas), hamma urinish yiqildi → umumiy xato `cause` bilan.
       reportFailure({ role: "complete", provider: "gemini", model: "gemini-3.7-flash", attempt: 3, durationMs: 1200, kind: "http", status: 400, retryable: false, message: "prompt rejected" });
@@ -248,7 +248,7 @@ test("worker: xom xato foydalanuvchiga chiqmaydi, tafsilot jurnalda (jobId, atte
     let res!: Awaited<ReturnType<typeof runWith>>;
     await withLogContext({ reqId: "req-stale-123", userId: "999999" }, async () => {
       res = await runWith(tt, async () => {
-        throw new Error("Tarjima qilinadigan matn topilmadi. Kredit qaytariladi.");
+        throw new Error("Tarjima qilinadigan matn topilmadi. Pul balansingizga qaytariladi.");
       });
     });
     const jobLines = res.rows.filter((r) => r.jobId === res.id);
@@ -261,7 +261,7 @@ test("worker: xom xato foydalanuvchiga chiqmaydi, tafsilot jurnalda (jobId, atte
   });
 
   await t.test("dvigatelning o'zbekcha xabari foydalanuvchiga aynan boradi", async (tt) => {
-    const msg = "Tarjima qilinadigan matn topilmadi. Kredit qaytariladi.";
+    const msg = "Tarjima qilinadigan matn topilmadi. Pul balansingizga qaytariladi.";
     const { gen } = await runWith(tt, async () => {
       throw new Error(msg);
     });

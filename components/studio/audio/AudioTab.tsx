@@ -3,7 +3,7 @@
 import { ENHANCE_MIN } from "@/lib/media/enhance";
 import { EnhanceTool } from "../PromptBox";
 import { usePromptEnhance } from "../usePromptEnhance";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import { cn } from "@/lib/cn";
 import { formatSom, groupDigits } from "@/lib/format";
 import type { ClientEntry } from "@/lib/studio-core";
@@ -21,9 +21,9 @@ import { SubmitError } from "../SubmitError";
 import { useStudioSend } from "../useStudioSend";
 import { carryOver, effective, requestValues, type RawValues } from "../studio-values";
 import type { StudioJob } from "../StudioResults";
-import { VoiceList, voiceRows, type VoiceFilter } from "../voice/VoiceList";
+import { VoiceList, VoicesState, voiceRows, type VoiceFilter } from "../voice/VoiceList";
 import { VoiceResults } from "../voice/VoiceResults";
-import { fetchVoices, type VoicesData } from "../voice/voice-api";
+import { useVoices } from "../voice/voice-api";
 import type { PreparedSample } from "../voice/wav";
 import { AudioInputRow } from "./AudioInputRow";
 import { STUDIO_AUDIO_SLUG, STUDIO_AUDIO_TOOL_ID, audioClientPrice, uploadAudioInput } from "./audio-api";
@@ -110,7 +110,6 @@ export function AudioTab({
   const promptId = useId();
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [voices, setVoices] = useState<VoicesData | null>(null);
   const { submitting, error, setError, send: queue } = useStudioSend((refused) => {
     reload(true);
     if (refused && needsVoices) loadVoices();
@@ -132,12 +131,7 @@ export function AudioTab({
   const providerJobs = jobs.filter((j) => !isMixJob(j) && !isSpeechToolJob(j));
   const mixJobs = jobs.filter(isMixJob);
 
-  const loadVoices = useCallback(() => {
-    fetchVoices().then(setVoices, (e: unknown) => setError(e instanceof Error ? e.message : "Ovozlar yuklanmadi"));
-  }, []);
-  useEffect(() => {
-    if (needsVoices && !voices) loadVoices();
-  }, [needsVoices, voices, loadVoices]);
+  const { voices, error: voicesError, load: loadVoices } = useVoices(needsVoices);
 
   /** Mode chips: the catalog's offered modes, the P10 tools that are on, then «Montaj» (always offered: it needs no provider). */
   const chips = (active: string | null) => (
@@ -273,13 +267,20 @@ export function AudioTab({
     void send(entry, label, sent);
   }
 
+  const jobTarget = (job: StudioJob) => modes.flatMap((m) => m.entries.map((e) => ({ e, label: audioJobLabels(e, m.label, m.entries.length).job }))).find((x) => x.e.id === job.modelId);
+
   function again(job: StudioJob) {
-    const target = modes.flatMap((m) => m.entries.map((e) => ({ e, label: audioJobLabels(e, m.label, m.entries.length).job }))).find((x) => x.e.id === job.modelId);
+    const target = jobTarget(job);
     if (!target) {
       setError("Bu rejim hozir mavjud emas.");
       return;
     }
     void send(target.e, target.label, job.sent);
+  }
+
+  function retryPrice(job: StudioJob): number {
+    const target = jobTarget(job);
+    return target && catalog ? audioClientPrice(target.e, job.sent, catalog.pricing) : job.price;
   }
 
   const provider = "elevenlabs" as const;
@@ -334,7 +335,9 @@ export function AudioTab({
       {mode === "voice-changer" ? (
         <Card title="Yangi ovoz">
           <Field id="voice">
-            {voices ? (
+            {voicesError || !voices ? (
+              <VoicesState error={voicesError} onRetry={loadVoices} />
+            ) : (
               <VoiceList
                 rows={rows}
                 value={String(values.voice ?? "")}
@@ -343,10 +346,6 @@ export function AudioTab({
                 onFilter={(f) => setState((s) => ({ ...s, filter: f }))}
                 filters={["all", "male", "female", "mine"]}
               />
-            ) : (
-              <p className="text-muted-foreground text-[13.5px]" role="status">
-                Ovozlar yuklanmoqda...
-              </p>
             )}
           </Field>
         </Card>
@@ -366,7 +365,7 @@ export function AudioTab({
         label={price === null ? undefined : audioSubmitLabel(count > 1 ? `${buttonLabel} ×${count}` : buttonLabel, price)}
       />
       <section aria-label="Audiolar" data-audio-results className={cn(providerJobs.length > 0 && "mt-5")}>
-        <VoiceResults jobs={providerJobs} busy={submitting} onAgain={again} />
+        <VoiceResults jobs={providerJobs} busy={submitting} onAgain={again} retryPrice={retryPrice} failed="Audio yaratilmadi" />
       </section>
     </div>
   );
