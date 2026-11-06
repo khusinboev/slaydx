@@ -14,7 +14,8 @@ const { useUi } = await import("../../lib/ui.ts");
 const { dropMediaCatalog } = await import("../../components/studio/studio-api.ts");
 const { formatSom } = await import("../../lib/format.ts");
 const { resetCompareKey } = await import("../../components/studio/compare/compare-api.ts");
-const { COMPARE_MAX, compareBatch, compareLabel, compareModels, droppedLine, droppedParams, sharedParams, toggleModel } = await import("../../components/studio/compare/compare-model.ts");
+const { specLine } = await import("../../components/studio/model-specs.ts");
+const { COMPARE_MAX, compareBatch, compareLabel, compareModels, compareRange, droppedLine, droppedParams, sharedParams, toggleModel } = await import("../../components/studio/compare/compare-model.ts");
 
 /**
  * Studio P7a «Solishtirish» (docs/studio/P7-SPEC.md) with the API stubbed at `fetch` and the REAL catalog entries.
@@ -306,6 +307,11 @@ test("P11 §D: a failed cell is retried alone through the tab's tool at its own 
   assert.equal(cells()[1]!.dataset.jobStatus, "COMPLETED");
 });
 
+test("P11 §D: the tick range reads «2–4», and just «2» when the session's cap leaves no range", () => {
+  assert.equal(compareRange(4), "2–4");
+  assert.equal(compareRange(2), "2", "MUTATSIYA: «2–2 ta model»");
+});
+
 test("P11 §D: each ticked model names the params the shared rows do not ask for («o‘z standartida»)", async () => {
   // Pure: Kling 3 has `sound`, Omni has not — the shared rows lack it, so Kling runs it at its own default.
   assert.deepEqual(droppedParams(K3, sharedParams([OMNI, K3])).map((p) => p.name), ["sound"]);
@@ -326,6 +332,7 @@ test("P11 §D: each ticked model names the params the shared rows do not ask for
   await switchOn();
   assert.deepEqual(ticked(), [OMNI.id, K3.id]);
   assert.equal(q(`[data-compare-dropped="${K3.id}"]`)!.textContent, "Ovoz — o‘z standartida", "MUTATSIYA: the dropped line");
+  assert.equal(q(`[data-compare-model="${K3.id}"] [data-model-specs]`)!.textContent, specLine(K3), "MUTATSIYA: the compare card says the picker's specs");
   assert.ok(!q(`[data-compare-dropped="${OMNI.id}"]`));
 });
 

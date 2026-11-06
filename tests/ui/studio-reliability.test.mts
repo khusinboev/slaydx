@@ -264,6 +264,10 @@ test("a draft of the wrong shape never reaches a tab", () => {
   assert.deepEqual(audio?.models, { music: "a" });
   assert.deepEqual(audio?.mix, { mode: "video-voice", raw: { "voice-music": { a: 1 } } });
   assert.deepEqual(audio?.tools, { dub: { raw: {}, tab: "upload", kind: null } });
+  // P11 §D: the «Video yuklash» tab survives a refresh with its upload; anything else falls back to the results.
+  const own = parseAudioDraft({ tools: { transcribe: { raw: { source: "upload:a", sourceSeconds: 5 }, tab: "video", kind: "video" }, dub: { raw: {}, tab: "junk" } } });
+  assert.equal(own?.tools?.transcribe?.tab, "video", "MUTATSIYA: the own video's tab is lost on a refresh");
+  assert.equal(own?.tools?.dub?.tab, "result");
 });
 
 test("another user on the same browser sees none of the draft", async () => {

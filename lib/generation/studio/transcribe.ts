@@ -69,7 +69,7 @@ async function defaultRun(i: Parameters<RunFn>[0]) {
   return (await import("../../server/media/run")).runMedia(i);
 }
 
-/** The source's kind by its stored mime (an upload is always audio). */
+/** The source's kind by its stored mime (an upload is audio, or the user's own MP4). */
 export function sourceKindOf(mime: string): "video" | "audio" {
   return mime === "video/mp4" ? "video" : "audio";
 }

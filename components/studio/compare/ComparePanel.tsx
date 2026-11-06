@@ -13,12 +13,13 @@ import { SubmitError } from "../SubmitError";
 import { usePromptEnhance } from "../usePromptEnhance";
 import { useStudioSend } from "../useStudioSend";
 import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
+import { specLine } from "../model-specs";
 import { badgeText } from "../studio-price";
 import type { MediaCatalog } from "../studio-types";
 import { PROMPT_BYTES_MESSAGE, PROMPT_PARAM, normalizedPrompt, promptBytes, promptLimit, promptMin } from "../studio-values";
 import { sendCompare } from "./compare-api";
 import { CompareResults } from "./CompareResults";
-import { COMPARE_MIN, compareBatch, compareCap, compareLabel, compareModels, droppedLine, memberPrice, memberValues, sharedEntry, sharedParams, toggleModel, type CompareKind } from "./compare-model";
+import { COMPARE_MIN, compareBatch, compareCap, compareLabel, compareModels, compareRange, droppedLine, memberPrice, memberValues, sharedEntry, sharedParams, toggleModel, type CompareKind } from "./compare-model";
 import type { CompareTab } from "./useCompare";
 import type { StudioJob } from "../StudioResults";
 import { queueGeneration } from "@/components/forms/runGeneration";
@@ -39,7 +40,7 @@ export function CompareSwitch({ checked, onChange }: { checked: boolean; onChang
     <div className="bg-card mb-3 flex items-center justify-between gap-3 rounded-[16px] border px-3.5 py-2" data-compare-switch>
       <div className="min-w-0">
         <p className="text-[15px] font-semibold">Solishtirish</p>
-        <p className="text-muted-foreground text-[12.5px] leading-snug">Bitta so‘rov — {COMPARE_MIN}–{max} ta model yonma-yon</p>
+        <p className="text-muted-foreground text-[12.5px] leading-snug">Bitta so‘rov — {compareRange(max)} ta model yonma-yon</p>
       </div>
       <Switch ariaLabel="Solishtirish" checked={checked} onChange={onChange} />
     </div>
@@ -175,8 +176,8 @@ export function ComparePanel({
           enhancing={enhancing}
         />
         <Card title="Modellar" aside={<span className="text-muted-foreground tabular-nums" data-compare-count>{entries.length} / {max}</span>}>
-          <p className="text-muted-foreground mb-2 text-[13px]">{COMPARE_MIN}–{max} ta modelni belgilang — har biri o‘z narxida alohida ish bo‘ladi.</p>
-          <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2" data-compare-models>
+          <p className="text-muted-foreground mb-2 text-[13px]">{compareRange(max)} ta modelni belgilang — har biri o‘z narxida alohida ish bo‘ladi.</p>
+          <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 md:grid-cols-1" data-compare-models>
             {models.map((m) => {
               const on = state.ticked.includes(m.id);
               const full = !on && state.ticked.length >= max;
@@ -205,6 +206,10 @@ export function ComparePanel({
                       <span className="block truncate text-[14.5px] font-semibold">{m.label}</span>
                       <span className="text-muted-foreground block truncate text-[12.5px]">
                         ~{groupDigits(price)} so‘m{m.badges.length ? ` · ${badgeText(m)}` : ""}
+                      </span>
+                      {/* P11 §D: the same spec words as the picker's card, from the same schema. */}
+                      <span className="text-muted-foreground block text-[12px] leading-snug" data-model-specs>
+                        {specLine(m)}
                       </span>
                       {/* P11 §D: what this ticked model runs at its own default, since the shared rows do not ask for it. */}
                       {on && droppedLine(m, sharedRows) ? (

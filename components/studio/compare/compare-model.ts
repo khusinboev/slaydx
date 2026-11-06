@@ -157,6 +157,11 @@ export function compareCap(fromSession: number | undefined): number {
   return typeof fromSession === "number" && Number.isFinite(fromSession) ? Math.max(0, Math.min(COMPARE_MAX, Math.floor(fromSession))) : COMPARE_MAX;
 }
 
+/** The tick range as the panel says it: «2–4», or just «2» when the cap leaves no range. */
+export function compareRange(max: number): string {
+  return max > COMPARE_MIN ? `${COMPARE_MIN}–${max}` : String(COMPARE_MIN);
+}
+
 /** Ticking a model: on (up to the cap, in tick order) or off. */
 export function toggleModel(ticked: readonly string[], id: string, max: number = COMPARE_MAX): string[] {
   if (ticked.includes(id)) return ticked.filter((x) => x !== id);

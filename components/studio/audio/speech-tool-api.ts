@@ -96,7 +96,7 @@ export function pickVideoUpload(raw: RawValues, r: { id: string; seconds: number
 
 /** Why the button cannot send yet (Uzbek), `null` when it can. */
 export function speechToolBlocker(mode: SpeechToolMode, raw: RawValues): string | null {
-  if (!parseSource(raw.source)) return "Avval manbani tanlang: natijalaringizdan birini yoki audio fayl.";
+  if (!parseSource(raw.source)) return "Avval manbani tanlang: natijalaringizdan birini yoki o‘z faylingizni.";
   if (typeof raw.sourceSeconds !== "number") return "Manba uzunligi noma’lum — boshqa natijani tanlang.";
   if (mode === "dub") {
     const src = String(raw.sourceLang ?? AUTO_LANGUAGE);

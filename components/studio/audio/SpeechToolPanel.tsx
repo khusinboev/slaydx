@@ -285,7 +285,7 @@ export function SpeechToolPanel({
                   </p>
                 ) : list.length === 0 && !picked ? (
                   <p className="text-muted-foreground text-[13.5px]" data-speech-sources-empty>
-                    Hali tayyor video yoki audio yo‘q — avval «Video», «Ovoz» yoki «Audio» bo‘limida yarating, yoki audio yuklang.
+                    Hali tayyor video yoki audio yo‘q — avval «Video», «Ovoz» yoki «Audio» bo‘limida yarating, yoki o‘z faylingizni yuklang.
                   </p>
                 ) : (
                   <SelectField
