@@ -25,6 +25,8 @@ export type CatalogEntry = {
   params: readonly ParamSchema[];
   cost: CostRule;
   routes: readonly Route[];
+  /** Hidden until the admin switches it on in «Media modellari»; without the flag a model is on until switched off. */
+  defaultOff?: boolean;
   limits: { timeoutMs: number; deadlineMs?: number };
   output: { mimes: readonly string[]; maxBytes: number };
 };

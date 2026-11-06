@@ -14,10 +14,8 @@
  *   - veo   3 000 so'm / s. The provider bills Gemini Omni Flash at $17.50 per 1M output tokens, 5 792 tokens per
  *           second of 720p video = about $0.10 / s (https://ai.google.dev/gemini-api/docs/pricing, 2026-10-24),
  *           i.e. ~1 270 so'm / s at 12 700 so'm per USD: the default is ~2.4x the cost.
- *   - kling 2 000 / s. Kling's own price list could not be read (the developer site is a JS app). Third-party guides
- *           put the API at roughly $0.07-0.14 per second (std mode, 5 s clip about $0.28-0.70 depending on the model),
- *           i.e. ~900-1 800 so'm / s at 12 700: the 2 000 default covers only ~1.1x of the top of that range. UNVERIFIED --
- *           check the account's real per-second cost on the first key before selling (the admin «Narxlar» % moves it).
+ *   - kling 2 000 / s. Kling 4.0 Flash costs $0.094 / s at 720p (https://kling.ai/document-api/pricing/base/video.md,
+ *           2026-11-06), i.e. ~1 194 so'm / s at 12 700: the default is ~1.7x the cost (the admin «Narxlar» % moves it).
  *
  * Every option here changes the provider request (`adapters/*.buildRequest`) or the price; `lib/generation/video-params.ts`
  * declares the same set and `tests/video-params.test.mts` proves it with a differential probe ("every param must work").

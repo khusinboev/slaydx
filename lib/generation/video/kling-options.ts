@@ -13,5 +13,16 @@ export const KLING_V3_ASPECTS = ["16:9", "9:16", "1:1"] as const;
 export type KlingV3Aspect = (typeof KLING_V3_ASPECTS)[number];
 /** Clip lengths Kling 3.0 accepts, whole seconds. */
 export const KLING_V3_SECONDS = { min: 3, max: 15 } as const;
+/** Kling 4.0 models: the last segment of their create paths. */
+export const KLING_V4_MODEL = "kling-4.0";
+export const KLING_V4_FLASH_MODEL = "kling-4.0-flash";
+/** Text to video aspect ratios of both (image to video takes the picture's own). */
+export const KLING_V4_ASPECTS = ["16:9", "9:16", "1:1", "21:9"] as const;
+export type KlingV4Aspect = (typeof KLING_V4_ASPECTS)[number];
+/**
+ * Clip lengths sold, whole seconds. The API takes 30 s (Flash 20 s); a longer 1080p clip risks the 25 MB result cap, and
+ * Kling bills a clip we then cannot store.
+ */
+export const KLING_V4_SECONDS = { min: 3, max: 15 } as const;
 /** An effect scene renders one fixed 5-second clip. */
 export const KLING_EFFECT_SECONDS = 5;

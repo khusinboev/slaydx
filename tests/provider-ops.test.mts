@@ -528,6 +528,8 @@ test("Kling «Tekshirish»: the free account read, Bearer, packs summed, no pack
   const live = await run(200, { code: 0, data: { resource_pack_subscribe_infos: [pack("Trial-Video-Flagship", "online", 64), pack("Video-Old", "expired", 900), pack("Image-Pack", "online", 50), pack("Kling-3.0-Pack", "online", 6)] } });
   assert.equal(live.ok, true);
   assert.match(live.message, /70 birlik/);
+  const scoped = await run(200, { code: 0, data: { resource_pack_subscribe_infos: [{ ...pack("Trial-Video", "online", 64), resource_pack_applicable_models: "Available only for Kling 4.0 and Kling 4.0 Flash" }] } });
+  assert.match(scoped.message, /only for Kling 4\.0 and Kling 4\.0 Flash/);
   const empty = await run(200, { code: 0, data: { resource_pack_subscribe_infos: [pack("Video-Old", "runOut", 0)] } });
   assert.equal(empty.ok, true);
   assert.match(empty.message, /faol video paket yo‘q/);

@@ -21,7 +21,7 @@ import { groupDigits } from "../lib/format.ts";
  *   builders  Kling 3.0 t2v / i2v and the effects endpoint: golden bodies; a differential probe over EVERY param of
  *             every `studio.video` model (each changes the request or the price, as its `affects` says);
  *   auth      the Studio adapters sign the same HS256 JWT over the secret half of `<access>:<secret>`, the key never in
- *             a body / message; the old «Video» request is byte-identical (`kling-v2-master`);
+ *             a body / message; the old «Video» tool sells Kling 4.0 Flash;
  *   errors    HTTP 4xx = not accepted / not retryable, 429 / 5xx retryable, network = accepted (maybe started), code 1301 =
  *             safety; poll of an effect op asks `/v1/videos/effects/<id>`;
  *   prices    cost × markup × rate, rounded UP to 100 — goldens at ×2 and 12 700 so'm/$ for seconds × tier × sound and
@@ -71,11 +71,13 @@ const jsonRes = (body: unknown, status = 200) => new Response(JSON.stringify(bod
 
 /* ══════════════════════════ catalog ══════════════════════════ */
 
-test("catalog: studio.video = Omni (default) + Kling 3.0 + Kling 3.0 Pro + effects; client view has no routes", () => {
+test("catalog: studio.video = Omni (default) + Kling 4.0 + Flash + Kling 3.0 + Kling 3.0 Pro + effects; client view has no routes", () => {
   const p = MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!;
   // P4 adds the fal models between Kling 3.0 and the effects (their own checks: tests/studio-video-fal.test.mts).
   assert.deepEqual(p.allowed, [
     "google/omni-video",
+    "kling/kling-4",
+    "kling/kling-4-flash",
     "kling/kling-3",
     "kling/kling-3-pro",
     "alibaba/wan-3",
@@ -121,9 +123,51 @@ test("Kling 3.0 golden: documented create paths, settings (tier → resolution, 
     contents: [{ type: "prompt", text: "Animate it" }, { type: "first_frame", url: IMG.base64 }],
     settings: { multi_shot: false, audio: "off", resolution: "1080p", duration: 5 },
   });
-  // The old «Video» tool's request is untouched.
-  assert.equal(KLING_MODEL, "kling-v2-master");
-  assert.deepEqual(buildKlingRequest({ prompt: "abcde", seconds: 5, aspect: "16:9" }).body, { model_name: "kling-v2-master", prompt: "abcde", duration: "5", mode: "std", aspect_ratio: "16:9" });
+  // The old «Video» tool sells Kling 4.0 Flash.
+  assert.equal(KLING_MODEL, "kling-4.0-flash");
+  assert.deepEqual(buildKlingRequest({ prompt: "abcde", seconds: 5, aspect: "16:9" }).body, { prompt: "abcde", settings: { resolution: "720p", duration: 5, aspect_ratio: "16:9" } });
+});
+
+test("Kling 4.0 golden: paths by model, resolution, 21:9, no sound setting; Flash 720p and no last frame; prices from Kling's table", () => {
+  const k4 = requestOf("kling/kling-4", { prompt: "Registon at dawn", seconds: 7, aspect: "21:9", resolution: "1080p" });
+  assert.deepEqual(k4, {
+    url: "https://api-singapore.klingai.com/text-to-video/kling-4.0",
+    headers: { "Content-Type": "application/json" },
+    body: { prompt: "Registon at dawn", settings: { resolution: "1080p", duration: 7, aspect_ratio: "21:9" } },
+  });
+  const flash = requestOf("kling/kling-4-flash", { prompt: "Registon at dawn", seconds: 15, aspect: "9:16" });
+  assert.deepEqual(flash, {
+    url: "https://api-singapore.klingai.com/text-to-video/kling-4.0-flash",
+    headers: { "Content-Type": "application/json" },
+    body: { prompt: "Registon at dawn", settings: { resolution: "720p", duration: 15, aspect_ratio: "9:16" } },
+  });
+  const i2v = requestOf("kling/kling-4-flash", { prompt: "Animate it", seconds: 5, imageAssetId: ASSET }, true);
+  assert.equal(i2v.url, "https://api-singapore.klingai.com/image-to-video/kling-4.0-flash");
+  assert.deepEqual(i2v.body, { contents: [{ type: "prompt", text: "Animate it" }, { type: "first_frame", url: IMG.base64 }], settings: { resolution: "720p", duration: 5 } });
+  assert.ok(!entry("kling/kling-4-flash").params.some((p) => p.name === "resolution" || p.name === "endImageAssetId" || p.name === "sound"));
+  assert.ok(!entry("kling/kling-4").params.some((p) => p.name === "sound"), "the API has no sound setting");
+  for (const id of ["kling/kling-4", "kling/kling-4-flash"]) {
+    const seconds = entry(id).params.find((p) => p.name === "seconds");
+    assert.ok(seconds?.type === "int" && seconds.max === 15, `${id}: the 25 MB result cap`);
+  }
+  // $0.157 × 5 × 2 × 12 700 = 19 939 → 20 000; 1080p $0.235 → 29 900; Flash $0.094 → 12 000.
+  assert.equal(studioVideoPrice({ modelId: "kling/kling-4", prompt: "x", seconds: 5, resolution: "720p" }, PRICING), 20_000);
+  assert.equal(studioVideoPrice({ modelId: "kling/kling-4", prompt: "x", seconds: 5, resolution: "1080p" }, PRICING), 29_900);
+  assert.equal(studioVideoPrice({ modelId: "kling/kling-4-flash", prompt: "x", seconds: 5 }, PRICING), 12_000);
+});
+
+test("old «Video» tool: Kling refuses WebP before the charge (the API takes JPEG and PNG), Veo keeps it", () => {
+  const mimes = (id: string) => {
+    const p = entry(id).params.find((x) => x.name === "imageAssetId");
+    return p?.type === "image" ? p.mimes : [];
+  };
+  assert.ok(!mimes("kling/video").includes("image/webp"));
+  assert.ok(mimes("google/omni-video").includes("image/webp"));
+});
+
+test("defaultOff: the models the account's pack does not cover ship hidden, the rest do not", () => {
+  const off = MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed.filter((id) => entry(id).defaultOff);
+  assert.deepEqual(off, ["kling/kling-3", "kling/kling-3-pro", "kling/effects"]);
 });
 
 test("effects golden: POST /v1/videos/effects { effect_scene, input: { image } }; no photo = no request", () => {
@@ -139,6 +183,8 @@ test("effects golden: POST /v1/videos/effects { effect_scene, input: { image } }
 test("probe: every param of every studio.video model changes the request or the price, as its `affects` says", () => {
   const base: Record<string, Record<string, unknown>> = {
     "google/omni-video": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9" },
+    "kling/kling-4": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9" },
+    "kling/kling-4-flash": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9" },
     "kling/kling-3": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9", sound: false },
     "kling/kling-3-pro": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9", sound: false },
     "kling/effects": { effect: "happy_birthday", imageAssetId: ASSET },
@@ -156,6 +202,7 @@ test("probe: every param of every studio.video model changes the request or the 
   };
   /** Per-model probe values where the shared `alt` does not fit (HeyGen's own enums and the own-speech id). */
   const altOf: Record<string, Record<string, unknown>> = {
+    "kling/kling-4": { resolution: "1080p" },
     "heygen/avatar": { avatar: "Tyler-incasualsuit-20220721", voice: "male", language: "ru", engine: "avatar_iii", audioId: "0f0e0d0c-0b0a-4908-8706-050403020100" },
   };
   const alt: Record<string, unknown> = { prompt: "A different prompt", seconds: undefined, aspect: "9:16", sound: true, effect: "snowglobe", resolution: "480p" };

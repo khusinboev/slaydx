@@ -11,15 +11,17 @@ export {
   buildKlingDualEffectRequest,
   buildKlingEffectRequest,
   buildKlingV3Request,
+  buildKlingV4Request,
   downloadKlingVideo,
   klingKey,
   pollKlingTask,
   submitKlingTask,
   type KlingTaskRequest,
   type KlingV3Input,
+  type KlingV4Input,
 } from "./kling";
-export { KLING_EFFECT_SECONDS, KLING_V3_ASPECTS, KLING_V3_MODEL, KLING_V3_MODES, KLING_V3_SECONDS } from "./kling-options";
-export type { KlingV3Aspect, KlingV3Mode } from "./kling-options";
+export { KLING_V4_ASPECTS, KLING_V4_FLASH_MODEL, KLING_V4_MODEL, KLING_V4_SECONDS, KLING_EFFECT_SECONDS, KLING_V3_ASPECTS, KLING_V3_MODEL, KLING_V3_MODES, KLING_V3_SECONDS } from "./kling-options";
+export type { KlingV3Aspect, KlingV3Mode, KlingV4Aspect } from "./kling-options";
 export { omniAdapter, makeOmniAdapter, buildOmniRequest, OMNI_MODEL, OMNI_BASE } from "./omni";
 
 /** The adapters by registry id; tests pass their own map to `video-ops` instead. */

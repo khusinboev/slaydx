@@ -7,6 +7,9 @@
  *   Kling 3.0 POST {BASE}/text-to-video/kling-3.0   { prompt, settings: { multi_shot, audio, resolution, aspect_ratio, duration } }
  *             POST {BASE}/image-to-video/kling-3.0  { contents: [{ type: "prompt", text }, { type: "first_frame", url },
  *             { type: "last_frame", url }], settings } (api/video/3-0-omni/*.md); `url` takes a link or raw base64.
+ *   Kling 4.0 POST {BASE}/text-to-video/kling-4.0 | kling-4.0-flash  { prompt, settings: { resolution, aspect_ratio, duration } }
+ *             POST {BASE}/image-to-video/kling-4.0 | kling-4.0-flash  { contents: [...], settings: { resolution, duration } }
+ *             (api/video/4-0/*.md, 4-0-flash/*.md); no sound setting; Flash is 720p only and takes no last frame.
  *   query     GET {BASE}/tasks?task_ids=<id>, `data` is an ARRAY of { id, status: submitted|processing|succeeded|failed,
  *             message, outputs: [{ type: "video", url, duration }], billing }.
  *   effects   POST {BASE}/v1/videos/effects  { effect_scene, input: { image } | { images: [a, b] } }; query GET
@@ -14,10 +17,9 @@
  *             task_result.videos (api/effects/video-effects.md, 219 scenes). The page lists no other `input` field.
  *   The result URL is a CDN link that expires, so the finalizer downloads it at once.
  *
- * The old «Video» tool keeps `buildKlingRequest` and its op ids byte for byte: POST {BASE}/v1/videos/text2video |
- * image2video with `model_name`, query GET {BASE}/v1/videos/{kind}/{task_id}. The docs index no longer lists these
- * paths; a real key is accepted by the list read of text2video (live, 2026-11-06), and creating a task there has not
- * been tried live. The `{ code, message, data }` envelope and its error mapping are the same on every path.
+ * The old «Video» tool sells Kling 4.0 Flash at its own price ladder. Ops created on the retired `/v1/videos/text2video`
+ * and `image2video` paths stay pollable. The `{ code, message, data }` envelope and its error mapping are the same on
+ * every path.
  *
  * In image-to-video the aspect ratio comes from the picture (the endpoint has no `aspect_ratio`); the form says so.
  */
@@ -25,7 +27,7 @@ import { safeFetchUrl, UnsafeUrlError } from "../safe-fetch";
 import { keyUsable } from "../../server/providers/registry";
 import { getProviderKey } from "../../server/providers/resolve";
 import { isMp4 } from "./mp4";
-import type { KlingV3Aspect, KlingV3Mode } from "./kling-options";
+import { KLING_V4_FLASH_MODEL, type KlingV3Aspect, type KlingV3Mode, type KlingV4Aspect } from "./kling-options";
 import {
   VIDEO_MAX_BYTES,
   VIDEO_SAFETY_MESSAGE,
@@ -41,8 +43,8 @@ import {
 } from "./types";
 
 export const KLING_BASE = "https://api-singapore.klingai.com";
-export const KLING_MODEL = "kling-v2-master";
-export const KLING_MODE = "std";
+/** The old «Video» tool's model. */
+export const KLING_MODEL = KLING_V4_FLASH_MODEL;
 /** The Studio tiers on the new API, which names the resolution instead of a mode. */
 const KLING_V3_RESOLUTION: Readonly<Record<KlingV3Mode, string>> = { std: "720p", pro: "1080p" };
 /** Kling's code for a prompt / image that tripped its content-safety policy. */
@@ -51,25 +53,21 @@ const KLING_SAFETY_CODES: ReadonlySet<number> = new Set([1301]);
 
 /** The query of an op; the kind is the part of the op id before the colon (`<kind>:<task_id>`). `task` = `GET /tasks`. */
 export type KlingTaskKind = "text2video" | "image2video" | "effects" | "task";
-const OLD_KINDS: readonly KlingTaskKind[] = ["text2video", "image2video"];
-export const KLING_TASK_KINDS: readonly KlingTaskKind[] = [...OLD_KINDS, "effects", "task"];
+const CLIP_KINDS: readonly KlingTaskKind[] = ["text2video", "image2video", "task"];
+export const KLING_TASK_KINDS: readonly KlingTaskKind[] = [...CLIP_KINDS, "effects"];
 
 export const klingKey = (): string => getProviderKey("kling");
 
 export function buildKlingRequest(input: VideoRequestInput): VideoRequest {
-  const base = { model_name: KLING_MODEL, prompt: input.prompt, duration: String(input.seconds), mode: KLING_MODE };
-  if (input.image) {
-    return {
-      url: `${KLING_BASE}/v1/videos/image2video`,
-      headers: { "Content-Type": "application/json" },
-      body: { ...base, image: input.image.base64 },
-    };
-  }
-  return {
-    url: `${KLING_BASE}/v1/videos/text2video`,
-    headers: { "Content-Type": "application/json" },
-    body: { ...base, aspect_ratio: input.aspect },
-  };
+  const { url, headers, body } = buildKlingV4Request({
+    model: KLING_MODEL,
+    prompt: input.prompt,
+    seconds: input.seconds,
+    aspect: input.aspect,
+    resolution: "720p",
+    ...(input.image ? { image: input.image } : {}),
+  });
+  return { url, headers, body };
 }
 
 /** A built request plus the query kind its op id will carry. */
@@ -98,6 +96,32 @@ export function buildKlingV3Request(input: KlingV3Input): KlingTaskRequest {
   if (input.image) {
     const contents = [
       ...(input.prompt ? [{ type: "prompt", text: input.prompt }] : []),
+      { type: "first_frame", url: input.image.base64 },
+      ...(input.imageTail ? [{ type: "last_frame", url: input.imageTail.base64 }] : []),
+    ];
+    return { kind: "task", url: `${KLING_BASE}/image-to-video/${input.model}`, headers, body: { contents, settings } };
+  }
+  return { kind: "task", url: `${KLING_BASE}/text-to-video/${input.model}`, headers, body: { prompt: input.prompt, settings: { ...settings, aspect_ratio: input.aspect } } };
+}
+
+/** One Kling 4.0 or 4.0 Flash clip. With `image` it is image to video and the aspect comes from the picture. */
+export type KlingV4Input = {
+  model: string;
+  prompt: string;
+  seconds: number;
+  aspect: KlingV4Aspect;
+  resolution: string;
+  image?: { mime: string; base64: string };
+  /** Kling 4.0 only: the `last_frame` item, only together with `image`. */
+  imageTail?: { mime: string; base64: string };
+};
+
+export function buildKlingV4Request(input: KlingV4Input): KlingTaskRequest {
+  const headers = { "Content-Type": "application/json" };
+  const settings = { resolution: input.resolution, duration: input.seconds };
+  if (input.image) {
+    const contents = [
+      { type: "prompt", text: input.prompt },
       { type: "first_frame", url: input.image.base64 },
       ...(input.imageTail ? [{ type: "last_frame", url: input.imageTail.base64 }] : []),
     ];
@@ -244,9 +268,8 @@ export function makeKlingAdapter(opts: { key?: () => string } = {}): VideoAdapte
     configured: () => keyUsable("kling", key()),
     buildRequest: buildKlingRequest,
     submit: (input, deps = {}) =>
-      // The kind is part of the op id: the query path differs between text2video and image2video.
-      submitKlingTask(key, { ...buildKlingRequest(input), kind: input.image ? "image2video" : "text2video" }, deps),
-    poll: (opId, deps = {}) => pollKlingTask(key, opId, deps, OLD_KINDS),
+      submitKlingTask(key, { ...buildKlingRequest(input), kind: "task" }, deps),
+    poll: (opId, deps = {}) => pollKlingTask(key, opId, deps, CLIP_KINDS),
     download: (media, deps = {}) => downloadKlingVideo(media, deps),
   };
 }

@@ -227,11 +227,13 @@ export function klingMessage(body: unknown): string {
     resource_pack_name?: unknown;
     status?: unknown;
     remaining_quantity?: unknown;
+    resource_pack_applicable_models?: unknown;
   }[];
   const live = (Array.isArray(packs) ? packs : []).filter((p) => p.status === "online" && !/image|audio/i.test(String(p.resource_pack_name ?? "")));
   if (live.length === 0) return "Kalit qabul qilindi · faol video paket yo‘q, video yaratilmaydi";
   const units = live.reduce((sum, p) => sum + (Number(p.remaining_quantity) || 0), 0);
-  return `Kalit qabul qilindi · video paket qoldig‘i: ${units} birlik (12 soatgacha kechikishi mumkin)`;
+  const scope = live.map((p) => p.resource_pack_applicable_models).filter((m): m is string => typeof m === "string" && /^[\w .,&+-]{1,100}$/.test(m));
+  return `Kalit qabul qilindi · video paket qoldig‘i: ${units} birlik (12 soatgacha kechikishi mumkin)${scope.length ? ` · ${scope.join("; ")}` : ""}`;
 }
 
 export const HEYGEN_ME_URL = "https://api.heygen.com/v3/users/me";

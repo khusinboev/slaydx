@@ -8,7 +8,7 @@ import { getToolPricing } from "./pricing";
 import { keyUsable } from "./providers/registry";
 import { ensureProviderKeys } from "./providers/store";
 import { getProviderKey, isProviderEnabled } from "./providers/resolve";
-import { modelAvailable } from "./media/availability";
+import { modelAvailable, modelSwitchedOn } from "./media/availability";
 import { invalidateMediaOverrides, readOverrides, type ModelOverride } from "./media/overrides";
 import { mediaPricing } from "./media/pricing";
 import { applyPriceAdjust } from "../price-adjust";
@@ -144,7 +144,7 @@ export async function mediaModelsOverview(): Promise<MediaModelsOverview> {
       costUsd: usd,
       costSoum,
       providerReady: entry.routes.some((r) => isProviderEnabled(r.provider) && keyUsable(r.provider, getProviderKey(r.provider))),
-      enabled: o?.enabled !== false,
+      enabled: modelSwitchedOn(entry, o?.enabled),
       available: modelAvailable(id, overrides),
       markupOverride: o?.markup ?? null,
       markup: markupOf(pricing, id),
@@ -160,8 +160,8 @@ export async function mediaModelsOverview(): Promise<MediaModelsOverview> {
 
 type State = { enabled: boolean; markup: number | null };
 
-function stateOf(o: ModelOverride | undefined): State {
-  return { enabled: o?.enabled !== false, markup: o?.markup ?? null };
+function stateOf(id: string, o: ModelOverride | undefined): State {
+  return { enabled: modelSwitchedOn(MEDIA_CATALOG.byId(id)!, o?.enabled), markup: o?.markup ?? null };
 }
 
 const sameState = (a: State, b: State) => a.enabled === b.enabled && a.markup === b.markup;
@@ -189,12 +189,12 @@ function parseExpectedState(raw: unknown): State | null {
 
 async function lockModel(client: PoolClient, modelId: string): Promise<State> {
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`media_model_overrides:${modelId}`]);
-  return stateOf((await readOverrides(client)).get(modelId));
+  return stateOf(modelId, (await readOverrides(client)).get(modelId));
 }
 
 /**
  * PUT `{modelId, enabled, markup, reason, expected?}`. In ONE transaction: upsert / delete the override row (the
- * default state — on, global markup — is «no row») and write the audit row `media_model.update` with before/after.
+ * default state — the model's default switch, global markup — is «no row») and write the audit row `media_model.update` with before/after.
  * Unchanged → 409 `state`; `expected` no longer current → 409 `stale`; both write nothing. After COMMIT this process's
  * override cache is dropped (others within 30 s; the `expectedPrice` guard covers the gap).
  */
@@ -209,7 +209,9 @@ export async function updateMediaModel(admin: AdminActor, body: Record<string, u
       throw new ApiError("Model sozlamasi boshqa admin tomonidan o'zgartirilgan. Sahifani yangilab, qayta ko'rib chiqing.", 409, { code: "stale" });
     }
     if (sameState(prev, next)) throw new ApiError("Model sozlamasi allaqachon shunday", 409, { code: "state" });
-    if (next.enabled && next.markup === null) {
+    // The stored switch says only what differs from the model's default: on, or off for a `defaultOff` model.
+    const defaultOn = !MEDIA_CATALOG.byId(modelId)!.defaultOff;
+    if (next.enabled === defaultOn && next.markup === null) {
       await client.query("DELETE FROM media_model_overrides WHERE model_id = $1", [modelId]);
     } else {
       await client.query(
@@ -217,7 +219,7 @@ export async function updateMediaModel(admin: AdminActor, body: Record<string, u
          VALUES ($1, $2, $3, $4, now())
          ON CONFLICT (model_id) DO UPDATE SET enabled = EXCLUDED.enabled, markup = EXCLUDED.markup,
            updated_by = EXCLUDED.updated_by, updated_at = now()`,
-        [modelId, next.enabled ? null : false, next.markup, admin.id],
+        [modelId, next.enabled === defaultOn ? null : next.enabled, next.markup, admin.id],
       );
     }
     await audit({ action: "media_model.update", targetType: "media_model", targetId: modelId, reason, before: prev, after: next });

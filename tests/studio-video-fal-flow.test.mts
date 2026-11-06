@@ -169,6 +169,8 @@ test("studio-video P4: fal models on the shared poll loop, end frame, two-photo 
     await setSetting("video.enabled", true);
     await setSwitch("fal", null);
     for (const id of FAL_IDS) await setOverride(id, null);
+    // `defaultOff`: this suite runs them with the admin's switch on.
+    for (const id of ["kling/kling-3", "kling/kling-3-pro", "kling/effects"]) await setOverride(id, true);
     resetStub();
   };
   const gen = async (id: string) =>
