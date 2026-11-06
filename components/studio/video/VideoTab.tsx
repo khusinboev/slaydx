@@ -1,11 +1,8 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import Link from "next/link";
-import { ApiError, PriceChangedError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
-import type { FormValues } from "@/lib/types";
 import type { ClientEntry } from "@/lib/studio-core";
 import { AutoTextarea } from "@/components/common/AutoTextarea";
 import { Card, Row, Segmented, SelectField } from "@/components/forms/compact";
@@ -15,12 +12,13 @@ import { ENHANCE_MIN } from "@/lib/media/enhance";
 import { EnhanceTool } from "../PromptBox";
 import { usePromptEnhance } from "../usePromptEnhance";
 import { photoHint } from "@/lib/photo-accept";
-import { queueGeneration } from "@/components/forms/runGeneration";
-import { PAY_RETURN_PATH } from "@/components/overlays/pay-amount";
+import { CatalogState } from "../CatalogState";
 import { MediaModelPicker } from "../MediaModelPicker";
 import { ParamRows } from "../ParamRows";
 import { PriceButton } from "../PriceButton";
-import { STUDIO_VIDEO_PURPOSE, type CatalogState } from "../studio-api";
+import { STUDIO_VIDEO_PURPOSE, type CatalogLoad } from "../studio-api";
+import { SubmitError } from "../SubmitError";
+import { useStudioSend } from "../useStudioSend";
 import type { MediaCatalog } from "../studio-types";
 import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, promptMin, requestValues, type RawValues } from "../studio-values";
 import type { StudioJob } from "../StudioResults";
@@ -57,7 +55,6 @@ export type VideoTabState = {
 
 export const INITIAL_VIDEO_STATE: VideoTabState = { mode: null, chosen: null, raw: {}, effect: null, effectImage: "", effectImage2: "" };
 
-const INSUFFICIENT_RE = /balans yetarli emas|to.langan balans bilan/i;
 const IMAGE_PARAM = "imageAssetId";
 /** The two photos a model / scene may take besides the start image (P4). */
 const END_PARAM = END_IMAGE_PARAM;
@@ -103,6 +100,13 @@ function flatImage(values: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
+/** The line under the start image: where the clip's proportions come from with this model. */
+export function startImageHint(model: Pick<ClientEntry, "id" | "params">): string {
+  const start = "Surat berilsa video shu suratdan boshlanadi";
+  if (ASPECT_FOLLOWS_IMAGE.has(model.id)) return `${start}; nisbat suratdan olinadi.`;
+  return model.params.some((p) => p.name === "aspect") ? `${start}; o‘lcham yuqoridagi «O‘lcham» qatoridan olinadi.` : `${start}.`;
+}
+
 /** The tab's model: the text model chosen if still offered, else the server default when it is one, else the first. */
 function textEntry(models: ClientEntry[], catalog: MediaCatalog | null, chosen: string | null): ClientEntry | null {
   return models.find((m) => m.id === chosen) ?? models.find((m) => m.id === catalog?.defaultModelId) ?? models[0] ?? null;
@@ -127,8 +131,9 @@ export function VideoTab({
   gated,
   onMusic,
   onVoice,
+  onSubmitted,
 }: {
-  catalogState: CatalogState;
+  catalogState: CatalogLoad;
   reload: (silent?: boolean) => void;
   state: VideoTabState;
   setState: (fn: (s: VideoTabState) => VideoTabState) => void;
@@ -141,9 +146,11 @@ export function VideoTab({
   /** P7b «Keyingi qadam» on a finished clip: «Musiqa yaratish» / «Ovoz qo'shish» with its prompt (absent = no button). */
   onMusic?: (prompt: string) => void;
   onVoice?: (text: string) => void;
+  /** The form's own job was queued (not a retry of an old one): the page drops the draft. */
+  onSubmitted?: () => void;
 }) {
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // 400 before charging: the model / a value / the switch changed — re-read what is offered; 409: the price moved.
+  const { submitting, error, setError, send: queue } = useStudioSend(() => reload(true));
   const [pickerOpen, setPickerOpen] = useState(false);
   const catalog = catalogState.status === "ready" ? catalogState.catalog : null;
   const all = splitVideoCatalog(catalog);
@@ -212,26 +219,13 @@ export function VideoTab({
   }
 
   async function send(target: ClientEntry, values: Record<string, unknown>, label: string) {
-    if (!catalog) return;
-    setError(null);
-    setSubmitting(true);
-    try {
-      const { id, price: charged } = await queueGeneration(
-        { slug: STUDIO_VIDEO_SLUG, id: STUDIO_VIDEO_TOOL_ID, title: label.slice(0, 72), output: "mp4" },
-        values as unknown as FormValues,
-        studioVideoClientPrice(target, values, catalog.pricing),
-        // A second press is a new clip, not a double click.
-        { repeat: true },
-      );
-      track({ id, modelId: target.id, modelLabel: target.label, prompt: label, price: charged, sent: values });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Xatolik");
-      // 400 before charging: the model / a value / the switch changed — re-read what is offered; 409: the price moved.
-      if ((e instanceof ApiError && e.status === 400) || e instanceof PriceChangedError) reload(true);
-    } finally {
-      setSubmitting(false);
-    }
+    if (!catalog) return false;
+    return queue({ slug: STUDIO_VIDEO_SLUG, id: STUDIO_VIDEO_TOOL_ID, title: label.slice(0, 72), output: "mp4" }, values, studioVideoClientPrice(target, values, catalog.pricing), ({ id, price: charged }) =>
+      track({ id, modelId: target.id, modelLabel: target.label, prompt: label, price: charged, sent: values }),
+    );
   }
+
+  const sendForm = (target: ClientEntry, label: string) => void send(target, sent, label).then((ok) => ok && onSubmitted?.());
 
   function submit() {
     if (!entry) return;
@@ -244,7 +238,7 @@ export function VideoTab({
         setError("Bu effekt uchun ikkinchi suratni ham yuklang");
         return;
       }
-      void send(entry, sent, `Effekt: ${effect?.label ?? ""}`);
+      sendForm(entry, `Effekt: ${effect?.label ?? ""}`);
       return;
     }
     if (isAvatarModel(entry.id)) {
@@ -271,7 +265,7 @@ export function VideoTab({
         setError(problem);
         return;
       }
-      void send(entry, sent, own ? `Avatar: ${(speeches ?? []).find((s) => s.id === own)?.title ?? "o‘z ovozi"}` : String(sent[PROMPT_PARAM]));
+      sendForm(entry, own ? `Avatar: ${(speeches ?? []).find((s) => s.id === own)?.title ?? "o‘z ovozi"}` : String(sent[PROMPT_PARAM]));
       return;
     }
     if (normalizedPrompt(entry, state.raw).length < promptMin(entry)) {
@@ -280,7 +274,7 @@ export function VideoTab({
     }
     // An end frame without a start cannot be built here (the upload waits for the start; removing the start clears it);
     // the server's preflight refuses one anyway.
-    void send(entry, sent, normalizedPrompt(entry, state.raw));
+    sendForm(entry, normalizedPrompt(entry, state.raw));
   }
 
   function again(job: StudioJob) {
@@ -292,21 +286,12 @@ export function VideoTab({
     void send(target, job.sent, job.prompt);
   }
 
-  if (!catalog) {
-    return catalogState.status === "error" ? (
-      <p role="alert" className="text-destructive text-[14.5px]" data-studio-catalog-error>
-        {catalogState.message}{" "}
-        <button type="button" onClick={() => reload()} className="pointer-coarse:min-h-11 font-semibold underline underline-offset-2">
-          Qayta urinish
-        </button>
-      </p>
-    ) : (
-      <div className="flex flex-col gap-3" role="status" aria-label="Video yuklanmoqda" data-studio-loading>
-        <div className="bg-muted/60 h-11 animate-pulse rounded-[14px]" />
-        <div className="bg-muted/60 h-64 animate-pulse rounded-[20px]" />
-      </div>
-    );
+  function retryPrice(job: StudioJob): number {
+    const target = catalog?.models.find((m) => m.id === job.modelId);
+    return target && catalog ? studioVideoClientPrice(target, job.sent, catalog.pricing) : job.price;
   }
+
+  if (!catalog) return <CatalogState state={catalogState} onRetry={() => reload()} label="Video yuklanmoqda" blocks={["h-11 rounded-[14px]", "h-64 rounded-[20px]"]} />;
   if (mode === null) {
     return (
       <p className="text-muted-foreground bg-card rounded-[20px] border p-5 text-[14.5px]" data-video-none>
@@ -535,7 +520,9 @@ export function VideoTab({
                     }
                   />
                 </Field>
-                <p className="text-muted-foreground mt-1 text-[13px]">{photoAvatar ? "Yuz aniq ko‘rinsin: shu surat gapiradi." : "Surat berilsa video shu suratdan boshlanadi; nisbat suratdan olinadi."}</p>
+                <p className="text-muted-foreground mt-1 text-[13px]" data-start-image-hint>
+                  {photoAvatar ? "Yuz aniq ko‘rinsin: shu surat gapiradi." : startImageHint(textModel)}
+                </p>
               </Row>
               {hasEnd ? (
                 <Row label="Oxirgi kadr" hint="Ixtiyoriy: video shu surat bilan tugaydi (boshlang‘ich surat bilan birga)" wide>
@@ -568,19 +555,7 @@ export function VideoTab({
         Video bir necha daqiqada tayyor bo‘ladi — sahifani yopsangiz ham davom etadi, natija «Ishlarim» va Galereyada. Faqat to‘langan balans bilan (bonus so‘m
         ishlamaydi); provayder rad etsa yoki tayyorlay olmasa, pul to‘liq qaytariladi.
       </p>
-      {error && !gated ? (
-        <p role="alert" data-studio-error className="text-destructive mb-3 text-[14.5px] leading-snug">
-          {error}
-          {INSUFFICIENT_RE.test(error) ? (
-            <>
-              {" "}
-              <Link href={PAY_RETURN_PATH} data-topup className="text-accent-soft-foreground font-semibold whitespace-nowrap underline underline-offset-2">
-                Balansni to‘ldirish →
-              </Link>
-            </>
-          ) : null}
-        </p>
-      ) : null}
+      <SubmitError error={error} gated={gated} />
       <PriceButton
         count={1}
         price={price}
@@ -593,7 +568,7 @@ export function VideoTab({
         paidOnly
       />
       <section aria-label="Videolar" data-video-results className={cn(jobs.length > 0 && "mt-5")}>
-        <VideoResults jobs={jobs} busy={submitting} onAgain={again} onMusic={onMusic} onVoice={onVoice} />
+        <VideoResults jobs={jobs} busy={submitting} onAgain={again} retryPrice={retryPrice} onMusic={onMusic} onVoice={onVoice} />
       </section>
     </div>
   );

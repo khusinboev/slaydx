@@ -1,5 +1,6 @@
 "use client";
 
+import { dropUserDrafts } from "./studio-draft-store";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import * as api from "./api-client";
@@ -336,9 +337,12 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ generations: s.generations.filter((g) => g.id !== id) })),
 
       signOut: async (all = false) => {
+        const userId = get().user?.id;
         try {
           await api.logout(all);
         } finally {
+          // What this user typed in the Studio does not stay on a shared browser.
+          if (userId !== undefined) dropUserDrafts(String(userId));
           set({ user: null, loggedIn: false, generations: [], generationsLoaded: false, generationsError: false, generationsCursor: null });
         }
       },

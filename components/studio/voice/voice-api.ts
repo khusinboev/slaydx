@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import { request } from "@/lib/api-client";
 import { setClientClonePrice } from "@/lib/media/studio-speech-client";
 import type { LibraryVoice, VoiceGender } from "@/lib/media/catalog-speech";
@@ -69,6 +70,24 @@ export async function fetchVoices(signal?: AbortSignal): Promise<VoicesData> {
   // `priceFor(studio-voice)` now shows what the server charges.
   setClientClonePrice(data.clone.price);
   return data;
+}
+
+/**
+ * The voices of a tab: `voices` keeps the last good list across a failed reload, `error` is the failure to show with its
+ * retry (`load`). `enabled: false` asks nothing until the tab needs them.
+ */
+export function useVoices(enabled = true): { voices: VoicesData | null; error: string | null; load: () => void } {
+  const [voices, setVoices] = useState<VoicesData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(() => {
+    setError(null);
+    fetchVoices().then(setVoices, (e: unknown) => setError(e instanceof Error ? e.message : "Ovozlar yuklanmadi"));
+  }, []);
+  const asked = enabled && voices === null;
+  useEffect(() => {
+    if (asked) load();
+  }, [asked, load]);
+  return { voices, error, load };
 }
 
 /** The recording + the consent checkbox (`consent=1`) → `{ sampleId, seconds }`. */

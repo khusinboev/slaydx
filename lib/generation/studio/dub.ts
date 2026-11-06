@@ -65,7 +65,7 @@ export type StudioDubDeps = {
   overrun?: (message: string) => Promise<void>;
 };
 
-const REFUND = "Kredit qaytariladi.";
+const REFUND = "Pul balansingizga qaytariladi.";
 export const DUB_FAILED_MESSAGE = `Dublyaj bajarilmadi — provayder javob bermadi. ${REFUND}`;
 export const DUB_DEADLINE_MESSAGE = `Dublyaj belgilangan vaqtda tayyor bo‘lmadi. ${REFUND}`;
 export const DUB_LOST_MESSAGE = `Dublyaj so‘rovi uzilib qoldi (server qayta ishga tushdi). ${REFUND}`;

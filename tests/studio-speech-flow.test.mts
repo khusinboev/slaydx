@@ -288,7 +288,7 @@ test("gating + speech: charge → one ElevenLabs call → MP3 + media_jobs row +
   assert.equal(bad.status, 202);
   const failed = await runNext(bad.body.id!);
   assert.equal(failed?.status, "FAILED");
-  assert.match(String(failed?.error), /Kredit qaytariladi/);
+  assert.match(String(failed?.error), /Pul balansingizga qaytariladi/);
   assert.equal(await balanceOf(me), before, "full refund");
   ttsStatus = 200;
   // A failed call is not spend: no cost_json, no admin row (the user was refunded and nothing was delivered).
@@ -453,7 +453,7 @@ test("clone: slots, success, one active, speak with it, ownership, delete, new c
   const before = await balanceOf(me);
   const failed = await runNext(again.body.id!);
   assert.equal(failed?.status, "FAILED");
-  assert.match(String(failed?.error), /Kredit qaytariladi/);
+  assert.match(String(failed?.error), /Pul balansingizga qaytariladi/);
   assert.equal(await balanceOf(me), before + 5000);
   assert.equal((await query("SELECT 1 FROM studio_voices WHERE user_id = $1 AND deleted_at IS NULL", [me])).length, 0);
   // P7c: the IVC call failed before any preview was billed: nothing recorded.

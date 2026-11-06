@@ -98,7 +98,7 @@ export async function buildStudioTool(
   const ids = Array.isArray(p[INPUT_IMAGES_PARAM]) ? (p[INPUT_IMAGES_PARAM] as readonly string[]) : [];
   const pictures = inputs?.[INPUT_IMAGES_PARAM] ?? [];
   if (ids.length === 0 || pictures.length !== ids.length) {
-    throw new UserFacingError("Yuklangan rasm topilmadi — rasmni qayta yuklang. Kredit qaytariladi.");
+    throw new UserFacingError("Yuklangan rasm topilmadi — rasmni qayta yuklang. Pul balansingizga qaytariladi.");
   }
   const editing = purpose === STUDIO_EDIT_PURPOSE;
   const userPrompt = editing ? String(p.prompt ?? "").trim() : "";
@@ -117,7 +117,7 @@ export async function buildStudioTool(
     const base = CORE_BASES.gemini;
     provider = limitedProvider(coreImageProvider(purpose, entry.id, base.provider, { upstream: base.upstream, values: { prompt: userPrompt, [INPUT_IMAGES_PARAM]: ids, imageCount: 1 } }));
   } else {
-    throw new UserFacingError("Tanlangan model mavjud emas. Kredit qaytariladi.");
+    throw new UserFacingError("Tanlangan model mavjud emas. Pul balansingizga qaytariladi.");
   }
 
   // Utility jobs carry no prompt: the provider ask is tagged with the op + inputs (idempotency step tag only).
@@ -140,7 +140,7 @@ export async function buildStudioTool(
   });
   const images = raw.filter((x): x is GenImage => Boolean(x));
   if (!images.length) {
-    if (refused.length) throw new UserFacingError("So‘rov rasm modelining kontent qoidalariga mos kelmadi — mazmunini o‘zgartirib, qayta urinib ko‘ring. Kredit qaytariladi.");
+    if (refused.length) throw new UserFacingError("So‘rov rasm modelining kontent qoidalariga mos kelmadi — mazmunini o‘zgartirib, qayta urinib ko‘ring. Pul balansingizga qaytariladi.");
     throw new Error("Rasm ishlanmadi. Qayta urinib ko‘ring.");
   }
   stage(85, "Fayl saqlanmoqda");

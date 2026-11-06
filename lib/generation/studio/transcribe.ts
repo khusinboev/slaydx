@@ -59,7 +59,7 @@ export const MEASURED_SLACK_SECONDS = 1.5;
 /** Copying out one track of ≤ 3 minutes. */
 export const AUDIO_TRACK_FFMPEG_TIMEOUT_MS = 60_000;
 
-const REFUND = "Kredit qaytariladi.";
+const REFUND = "Pul balansingizga qaytariladi.";
 const FAILED = `Transkripsiya bajarilmadi — provayder javob bermadi. ${REFUND}`;
 const BURN_FAILED = `Subtitrni videoga yopishtirib bo‘lmadi. ${REFUND}`;
 const TRACK_FAILED = `Videodan ovozni ajratib bo‘lmadi (video ovozsiz bo‘lishi mumkin). ${REFUND}`;

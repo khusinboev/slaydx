@@ -223,9 +223,9 @@ test("engine: stubbed ffmpeg — missing binary, failure, missing input, too lon
   const f = fixtures();
   try {
     const ctx = { inputs: [{ bytes: f.video, mime: "video/mp4" }, { bytes: f.speech, mime: "audio/mpeg" }] as const };
-    await assert.rejects(buildStudioMix(TOOL, V_VALUES as never, ctx, {}, { ffmpeg: async () => { throw new FfmpegMissingError(); } }), (e: Error) => e instanceof UserFacingError && /hozircha ishlamayapti\. Kredit qaytariladi/.test(e.message));
-    await assert.rejects(buildStudioMix(TOOL, V_VALUES as never, ctx, {}, { ffmpeg: async () => { throw new FfmpegFailedError("exit 1", "boom"); } }), (e: Error) => e instanceof UserFacingError && e.message === "Montaj bajarilmadi. Kredit qaytariladi.");
-    await assert.rejects(buildStudioMix(TOOL, V_VALUES as never, { inputs: [ctx.inputs[0], null] }, {}, { ffmpeg: async () => f.video }), /topilmadi .* Kredit qaytariladi/);
+    await assert.rejects(buildStudioMix(TOOL, V_VALUES as never, ctx, {}, { ffmpeg: async () => { throw new FfmpegMissingError(); } }), (e: Error) => e instanceof UserFacingError && /hozircha ishlamayapti\. Pul balansingizga qaytariladi/.test(e.message));
+    await assert.rejects(buildStudioMix(TOOL, V_VALUES as never, ctx, {}, { ffmpeg: async () => { throw new FfmpegFailedError("exit 1", "boom"); } }), (e: Error) => e instanceof UserFacingError && e.message === "Montaj bajarilmadi. Pul balansingizga qaytariladi.");
+    await assert.rejects(buildStudioMix(TOOL, V_VALUES as never, { inputs: [ctx.inputs[0], null] }, {}, { ffmpeg: async () => f.video }), /topilmadi .* Pul balansingizga qaytariladi/);
     await assert.rejects(buildStudioMix(TOOL, V_VALUES as never, { inputs: [{ bytes: f.speech, mime: "audio/mpeg" }, ctx.inputs[1]] }, {}, { ffmpeg: async () => f.video }), /video o‘qilmadi/);
     await assert.rejects(buildStudioMix(TOOL, { ...V_VALUES, startOffset: 7 } as never, ctx, {}, { ffmpeg: async () => f.video }), /boshlanishi video uzunligidan katta/);
     // An output without a sound track (ffmpeg «succeeded» but dropped the audio) is a failure, not a result.

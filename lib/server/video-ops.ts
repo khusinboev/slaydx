@@ -132,13 +132,13 @@ export const VIDEO_POLL_BUDGET_MS = 45_000;
 /** Transient errors (download not ready, 5xx), counted on their own, tolerated before the op is failed ahead of its deadline. */
 export const MAX_TRANSIENT_ERRORS = 30;
 
-export const VIDEO_DEADLINE_MESSAGE = "Video belgilangan vaqtda tayyor bo‘lmadi. Pul qaytarildi — qayta urinib ko‘ring.";
-export const VIDEO_FAILED_MESSAGE = "Provayder videoni yaratmadi. Pul qaytarildi — qayta urinib ko‘ring.";
-export const VIDEO_UNAVAILABLE_MESSAGE = "Video xizmati hozir mavjud emas. Pul qaytarildi — keyinroq qayta urinib ko‘ring.";
-export const VIDEO_LOST_MESSAGE = "Video so‘rovi yo‘qoldi (server qayta ishga tushdi). Pul qaytarildi — qayta urinib ko‘ring.";
-export const VIDEO_IMAGE_MISSING_MESSAGE = "Boshlang‘ich surat topilmadi. Pul qaytarildi — suratni qayta yuklab, urinib ko‘ring.";
+export const VIDEO_DEADLINE_MESSAGE = "Video belgilangan vaqtda tayyor bo‘lmadi. Pul balansingizga qaytariladi — qayta urinib ko‘ring.";
+export const VIDEO_FAILED_MESSAGE = "Provayder videoni yaratmadi. Pul balansingizga qaytariladi — qayta urinib ko‘ring.";
+export const VIDEO_UNAVAILABLE_MESSAGE = "Video xizmati hozir mavjud emas. Pul balansingizga qaytariladi — keyinroq qayta urinib ko‘ring.";
+export const VIDEO_LOST_MESSAGE = "Video so‘rovi yo‘qoldi (server qayta ishga tushdi). Pul balansingizga qaytariladi — qayta urinib ko‘ring.";
+export const VIDEO_IMAGE_MISSING_MESSAGE = "Boshlang‘ich surat topilmadi. Pul balansingizga qaytariladi — suratni qayta yuklab, urinib ko‘ring.";
 /** P9 HeyGen: the own speech the avatar was to speak is gone (deleted / purged after the purchase). */
-export const VIDEO_AUDIO_MISSING_MESSAGE = "Tanlangan ovoz topilmadi. Pul qaytarildi — ovozni qayta tanlab, urinib ko‘ring.";
+export const VIDEO_AUDIO_MISSING_MESSAGE = "Tanlangan ovoz topilmadi. Pul balansingizga qaytariladi — ovozni qayta tanlab, urinib ko‘ring.";
 
 /* ══════════════════════════ 1. submit ══════════════════════════ */
 

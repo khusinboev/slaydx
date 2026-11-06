@@ -23,6 +23,6 @@ test("override must be an https://t.me/ URL, otherwise the default", () => {
 
 test("user-facing texts that mention the group agree with SUPPORT_URL", () => {
   const engine = readFileSync(new URL("../lib/generation/audio/engine.ts", import.meta.url), "utf8");
-  assert.ok(engine.includes(`Yordam xizmatiga murojaat qiling: ${supportHandle()} — to‘lov qaytarildi.`));
+  assert.ok(engine.includes(`Yordam xizmatiga murojaat qiling: ${supportHandle()} — pul balansingizga qaytariladi.`));
   assert.ok(!/Administrator bilan bog/.test(engine));
 });

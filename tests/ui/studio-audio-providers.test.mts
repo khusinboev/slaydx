@@ -174,7 +174,7 @@ test("send: the picked model is priced and sent; the fields follow it", async ()
 });
 
 test("retry: «Qayta urinish» resends the job's own model at its own price, whichever is picked now", async () => {
-  const failed = (id: string) => generationDetail(id, { status: "FAILED", error: "Dublyaj bajarilmadi. Kredit qaytariladi." });
+  const failed = (id: string) => generationDetail(id, { status: "FAILED", error: "Dublyaj bajarilmadi. Pul balansingizga qaytariladi." });
   const a = api([DUB, FAL_DUB], [], failed);
   await openTab("audio");
   await click(q('[data-audio-mode-chip="dub"]'));

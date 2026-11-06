@@ -4,23 +4,21 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Download, RefreshCw } from "lucide-react";
 import type * as api from "@/lib/api-client";
-import { ApiError, PriceChangedError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
 import { useApiSrc } from "@/lib/use-api-src";
-import type { FormValues } from "@/lib/types";
 import type { ClientEntry } from "@/lib/studio-core";
 import { languageLabel, videoOnlySource, type SpeechToolMode } from "@/lib/media/catalog-transcribe";
 import { downloadToDevice, deliverErrorText } from "@/lib/downloads/deliver";
 import type { DownloadFormatId } from "@/lib/downloads/formats";
 import { Card, Segmented, SelectField } from "@/components/forms/compact";
 import { Field } from "@/components/forms/shared";
-import { queueGeneration } from "@/components/forms/runGeneration";
-import { PAY_RETURN_PATH } from "@/components/overlays/pay-amount";
-import { GenerationProgress } from "@/components/files/GenerationProgress";
+import { JobList, JobResult, RESULT_ACTION as ACTION } from "../JobResult";
 import { ParamRows } from "../ParamRows";
 import { PriceButton } from "../PriceButton";
+import { SubmitError } from "../SubmitError";
 import { requestValues } from "../studio-values";
+import { useStudioSend } from "../useStudioSend";
 import type { StudioJob } from "../StudioResults";
 import type { StudioPricing } from "../studio-types";
 import { AudioInputRow } from "./AudioInputRow";
@@ -43,9 +41,6 @@ import {
 } from "./speech-tool-api";
 import type { PreparedSample } from "../voice/wav";
 
-const INSUFFICIENT_RE = /balans yetarli emas|to.langan balans bilan/i;
-const ACTION =
-  "focus-visible:ring-ring bg-card hover:bg-muted pointer-coarse:min-h-11 inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[12px] border px-3 text-[13.5px] font-semibold outline-none focus-visible:ring-2 disabled:opacity-50";
 /** Rows the panel draws itself (the source card), not `ParamRows`. */
 const OWN_ROWS = new Set(["source", "sourceSeconds"]);
 
@@ -75,6 +70,7 @@ export function SpeechToolPanel({
   typing,
   gated,
   reload,
+  onSubmitted,
 }: {
   mode: SpeechToolMode;
   modeLabel: string;
@@ -90,12 +86,12 @@ export function SpeechToolPanel({
   typing: boolean;
   gated: boolean;
   reload: (silent?: boolean) => void;
+  /** The form's own job was queued (not a retry of an old one): the page drops the draft. */
+  onSubmitted?: () => void;
 }) {
   const st = state ?? INITIAL_SPEECH_TOOL;
   const [sources, setSources] = useState<MixSources | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -103,6 +99,10 @@ export function SpeechToolPanel({
     setLoadError(null);
     fetchMixSources().then(setSources, (e: unknown) => setLoadError(e instanceof Error ? e.message : "Natijalar yuklanmadi"));
   }, []);
+  const { submitting, error, setError, send: queue } = useStudioSend(() => {
+    reload(true);
+    load();
+  });
   const finished = jobs.filter((j) => j.gen?.status === "COMPLETED").length;
   useEffect(() => {
     load();
@@ -147,22 +147,11 @@ export function SpeechToolPanel({
     }
   }
 
-  async function send(out: Record<string, unknown>, target: ClientEntry = entry) {
-    setError(null);
-    setSubmitting(true);
+  function send(out: Record<string, unknown>, target: ClientEntry = entry) {
     const title = target.label;
-    try {
-      const { id, price: charged } = await queueGeneration({ slug: toolId, id: toolId, title, output: "mp4" }, out as unknown as FormValues, speechToolClientPrice(mode, target, out, pricing), { repeat: true });
-      track({ id, modelId: target.id, modelLabel: target.label, prompt: title, price: charged, sent: out });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Xatolik");
-      if ((e instanceof ApiError && e.status === 400) || e instanceof PriceChangedError) {
-        reload(true);
-        load();
-      }
-    } finally {
-      setSubmitting(false);
-    }
+    return queue({ slug: toolId, id: toolId, title, output: "mp4" }, out, speechToolClientPrice(mode, target, out, pricing), ({ id, price: charged }) =>
+      track({ id, modelId: target.id, modelLabel: target.label, prompt: title, price: charged, sent: out }),
+    );
   }
 
   function submit() {
@@ -170,7 +159,13 @@ export function SpeechToolPanel({
       setError(blocker);
       return;
     }
-    void send(sent);
+    void send(sent).then((ok) => ok && onSubmitted?.());
+  }
+
+  /** The price of a retry on the job's own model: the same number `send` charges. */
+  function retryPrice(job: StudioJob): number {
+    const target = entries.find((e) => e.id === job.modelId);
+    return target ? speechToolClientPrice(mode, target, job.sent, pricing) : job.price;
   }
 
   function again(job: StudioJob) {
@@ -261,19 +256,7 @@ export function SpeechToolPanel({
 
       <ParamRows entry={formEntry} raw={raw} onChange={setParam} />
 
-      {error && !gated ? (
-        <p role="alert" data-studio-error className="text-destructive mb-3 text-[14.5px] leading-snug">
-          {error}
-          {INSUFFICIENT_RE.test(error) ? (
-            <>
-              {" "}
-              <Link href={PAY_RETURN_PATH} data-topup className="text-accent-soft-foreground font-semibold whitespace-nowrap underline underline-offset-2">
-                Balansni to‘ldirish →
-              </Link>
-            </>
-          ) : null}
-        </p>
-      ) : null}
+      <SubmitError error={error} gated={gated} />
       <PriceButton
         count={1}
         price={price}
@@ -285,50 +268,32 @@ export function SpeechToolPanel({
         label={price === null ? undefined : speechToolSubmitLabel(mode, price)}
       />
       <section aria-label={mode === "dub" ? "Dublyajlar" : "Transkripsiyalar"} data-speech-results className={cn(jobs.length > 0 && "mt-5")}>
-        <SpeechToolResults jobs={jobs} busy={submitting} onAgain={again} />
+        <SpeechToolResults jobs={jobs} busy={submitting} onAgain={again} retryPrice={retryPrice} />
       </section>
     </div>
   );
 }
 
 /** The panel's results, newest first: progress → the transcript (+ subtitle downloads) / the dubbed file; a failure says why. */
-export function SpeechToolResults({ jobs, busy, onAgain }: { jobs: readonly StudioJob[]; busy: boolean; onAgain: (job: StudioJob) => void }) {
-  if (jobs.length === 0) return null;
+export function SpeechToolResults({
+  jobs,
+  busy,
+  onAgain,
+  retryPrice,
+}: {
+  jobs: readonly StudioJob[];
+  busy: boolean;
+  onAgain: (job: StudioJob) => void;
+  retryPrice?: (job: StudioJob) => number;
+}) {
   return (
-    <ul className="flex flex-col gap-4" data-studio-jobs>
-      {jobs.map((job) => (
-        <li key={job.id} data-studio-job={job.id} data-job-status={job.gen?.status ?? "QUEUED"}>
-          <JobCard job={job} busy={busy} onAgain={onAgain} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function JobCard({ job, busy, onAgain }: { job: StudioJob; busy: boolean; onAgain: (j: StudioJob) => void }) {
-  const gen = job.gen;
-  if (!gen) {
-    return (
-      <div className="bg-card rounded-[20px] border p-5" role="status" data-studio-pending>
-        <p className="font-medium">{job.error ? job.error : "Navbatga qo‘yildi"}</p>
-        <p className="text-muted-foreground mt-0.5 text-[14px]">
-          {job.modelLabel} · {formatSom(job.price)}
-        </p>
-      </div>
-    );
-  }
-  if (gen.status === "QUEUED" || gen.status === "IN_PROGRESS") return <GenerationProgress gen={gen} />;
-  if (gen.status === "COMPLETED") return <Done job={job} gen={gen} busy={busy} onAgain={onAgain} />;
-  return (
-    <div className="bg-card rounded-[20px] border p-5" data-studio-failed>
-      <p role="alert" className="text-destructive text-[14.5px] leading-snug">
-        {gen.status === "FAILED" ? gen.error || "Bajarilmadi. Pul balansingizga qaytarildi." : "Ish bekor qilindi."}
-      </p>
-      <button type="button" data-result-action="again" disabled={busy} onClick={() => onAgain(job)} className={cn(ACTION, "mt-3")}>
-        <RefreshCw className="size-4" aria-hidden />
-        Qayta urinish
-      </button>
-    </div>
+    <JobList jobs={jobs}>
+      {(job) => (
+        <JobResult job={job} busy={busy} onAgain={onAgain} retryPrice={retryPrice} failed="Bajarilmadi" lost="Natija baribir tayyor bo‘lishi mumkin — «Ishlarim»ni tekshiring.">
+          {(gen) => <Done job={job} gen={gen} busy={busy} onAgain={onAgain} />}
+        </JobResult>
+      )}
+    </JobList>
   );
 }
 
