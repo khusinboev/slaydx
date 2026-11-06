@@ -355,8 +355,8 @@ test("subtitles: splitting — ≤ 42 chars × 2 lines, ≤ 6 s, a pause, a sent
 /* ───────────────────────── burn ───────────────────────── */
 
 test("burn: args (golden), the 25 MB rate cap, the vertical style", () => {
-  assert.equal(burn.burnVideoKbps(60), 3_163);
-  assert.equal(burn.burnVideoKbps(180), 926);
+  assert.equal(burn.burnVideoKbps(60), 3_195);
+  assert.equal(burn.burnVideoKbps(180), 958);
   assert.equal(burn.burnVideoKbps(10), 6_000, "capped");
   assert.equal(burn.burnVideoKbps(300), null, "even 800 kb/s cannot fit 25 MB — refused before charging");
   assert.equal(burn.burnVideoKbps(0), null);
@@ -366,7 +366,7 @@ test("burn: args (golden), the 25 MB rate cap, the vertical style", () => {
     "-map", "0:v:0", "-map", "0:a?",
     "-vf", "scale=w='min(1920\\,iw)':h='min(1920\\,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,subtitles=filename=subs.srt:charenc=UTF-8:force_style='FontName=Noto Sans,FontSize=16,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=1.2,Shadow=0,MarginV=18'",
     "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-maxrate", "3000k", "-bufsize", "6000k", "-pix_fmt", "yuv420p",
-    "-c:a", "copy", "-movflags", "+faststart", "-threads", "2", "-t", "5.000", "-y", "out-burn.mp4",
+    "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-threads", "2", "-t", "5.000", "-y", "out-burn.mp4",
   ]);
   assert.match(burn.burnArgs({ seconds: 5, vertical: true, videoKbps: 99_999 }).join(" "), /FontSize=9,.*MarginV=40.*-maxrate 6000k/);
 });

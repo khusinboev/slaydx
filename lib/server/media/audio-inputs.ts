@@ -11,8 +11,7 @@ import { cloneIdOf } from "../../media/catalog-speech";
 import { DUB_MAX_SECONDS, DUB_VIDEO_MAX_BYTES, TRANSCRIBE_VIDEO_MAX_SECONDS } from "../../media/catalog-transcribe";
 import { billedSeconds, studioAudioEntry, studioAudioPurposeOf } from "../../media/studio-audio";
 import { isMp4 } from "../../generation/video/mp4";
-import { BURN_MAX_SIDE } from "../../generation/studio/burn-args";
-import { mp4HasVideo, mp4Probe, type Mp4Probe } from "../../generation/studio/mix-media";
+import { mappedTracks, mp4Probe, mp4Problem } from "../../generation/studio/mix-media";
 import type { StudioAudioCtx } from "../../generation/studio/audio";
 import type { FormValues } from "../../types";
 
@@ -68,48 +67,22 @@ export const VIDEO_INPUT_MIN_SECONDS = 1;
 export const VIDEO_INPUT_MAX_SECONDS = Math.min(DUB_MAX_SECONDS, TRANSCRIBE_VIDEO_MAX_SECONDS);
 export const VIDEO_INPUT_MIME = "video/mp4";
 
-/** How far a track's own tables may stand from `mvhd` (an AAC track ends a few frames off the picture). */
-const VIDEO_TRACK_SLACK_SECONDS = 1;
-/** Every picture codec a phone or an editor writes, and only those: a provider and our ffmpeg can read them. */
-const VIDEO_CODECS: ReadonlySet<string> = new Set(["avc1", "avc3", "hvc1", "hev1", "av01", "vp09", "mp4v"]);
-const AUDIO_CODECS: ReadonlySet<string> = new Set(["mp4a"]);
-/** More pictures a second than any camera: the sample tables were squeezed to make a long clip look short. */
-const VIDEO_MAX_FPS = 240;
-/** Samples an AAC frame decodes to (HE-AAC states half the rate with twice the samples: the product holds). */
-const AAC_FRAME_SAMPLES = 1024;
-
-/** Why this MP4's own tables cannot be trusted or used (Uzbek), `null` when they can. */
-function videoProblem(probe: Mp4Probe, longest: number): string | null {
-  if (probe.fragmented) return "Bo‘laklangan (fragmented) MP4 qabul qilinmaydi — videoni oddiy MP4 qilib saqlang.";
-  const picture = probe.tracks.filter((t) => t.handler === "vide");
-  const sound = probe.tracks.filter((t) => t.handler === "soun");
-  if (picture.some((t) => !VIDEO_CODECS.has(t.codec))) return "Bu video kodeki qo‘llab-quvvatlanmaydi — H.264 yoki HEVC bilan saqlang.";
-  if (sound.some((t) => !AUDIO_CODECS.has(t.codec))) return "Bu ovoz kodeki qo‘llab-quvvatlanmaydi — AAC bilan saqlang.";
-  if (picture.some((t) => Math.max(t.width, t.height) > BURN_MAX_SIDE)) return `Video o‘lchami katta — uzun tomoni ${BURN_MAX_SIDE} px gacha bo‘lsin.`;
-  const lying =
-    Math.abs(longest - probe.movieSeconds) > VIDEO_TRACK_SLACK_SECONDS ||
-    picture.some((t) => t.seconds > 0 && t.samples / t.seconds > VIDEO_MAX_FPS) ||
-    sound.some((t) => t.sampleRate > 0 && (t.samples * AAC_FRAME_SAMPLES) / t.sampleRate > t.seconds * 1.5 + VIDEO_TRACK_SLACK_SECONDS);
-  return lying ? "Video fayli buzilgan: uzunligi fayl ichida bir xil yozilmagan. Videoni qayta saqlang." : null;
-}
-
 /**
  * An MP4 / MOV with a picture track and a readable length, else `null` — the type is read from the bytes, never from the
  * browser. `mvhd` is one number a forged file can set to anything, so `seconds` counts only when every track's own tables
- * (`mdhd`, `stts`, the frames themselves) agree with it. `problem`: the file is one but cannot be taken (`videoInputError`).
+ * (`mdhd`, `stts`, `stsz`, the frames themselves) agree with it. This reads the forger's own bytes, so the worker's cut
+ * checks again on what ffmpeg really kept (`own-video.ts`). `problem`: the file is one but cannot be taken (`videoInputError`).
  */
 export function sniffVideo(bytes: Uint8Array): { mime: typeof VIDEO_INPUT_MIME; seconds: number; problem: string | null } | null {
-  if (!isMp4(bytes) || !mp4HasVideo(bytes)) {
-    // A fragmented file still says so (its tracks may be empty); anything else is no video at all.
-    return isMp4(bytes) && mp4Probe(bytes)?.fragmented ? { mime: VIDEO_INPUT_MIME, seconds: 1, problem: videoProblem(mp4Probe(bytes)!, 0) } : null;
-  }
-  const probe = mp4Probe(bytes);
+  const probe = isMp4(bytes) ? mp4Probe(bytes) : null;
   if (!probe) return null;
-  const longest = Math.max(0, ...probe.tracks.map((t) => t.seconds));
+  // A fragmented file says so even when its tracks are empty.
+  if (probe.fragmented) return { mime: VIDEO_INPUT_MIME, seconds: Math.max(probe.movieSeconds, 1), problem: mp4Problem(probe) };
+  const { picture, sound } = mappedTracks(probe);
+  if (!picture) return null;
   // Consistent tables differ by a few audio frames, and `mvhd` is the length players show; a file where they do not agree is refused.
-  const seconds = probe.movieSeconds || longest;
-  if (probe.fragmented) return { mime: VIDEO_INPUT_MIME, seconds: Math.max(seconds, 1), problem: videoProblem(probe, longest) };
-  return seconds > 0 ? { mime: VIDEO_INPUT_MIME, seconds, problem: videoProblem(probe, longest) } : null;
+  const seconds = probe.movieSeconds || Math.max(picture.seconds, sound?.seconds ?? 0);
+  return seconds > 0 ? { mime: VIDEO_INPUT_MIME, seconds, problem: mp4Problem(probe) } : null;
 }
 
 /** Uzbek reason a video upload cannot be used (415 / 422), `null` when it is fine. */

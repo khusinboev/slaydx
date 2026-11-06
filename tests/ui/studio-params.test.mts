@@ -155,6 +155,11 @@ test("a long int: preset chips are the round values the range accepts (ends incl
   assert.equal(shown().length, 12);
   await act(async () => void fireEvent.keyDown(input, { key: "Enter" }));
   assert.equal(input.value, "12");
+  // A cleared box: the value is the minimum at once, as the blur will make it.
+  await act(async () => void fireEvent.change(input, { target: { value: "" } }));
+  assert.equal(shown().length, 2, "MUTATSIYA: a cleared box kept the old value and price");
+  assert.equal(input.value, "");
+  await act(async () => void fireEvent.change(input, { target: { value: "12" } }));
   assert.deepEqual(intValues({ name: "x", label: "x", type: "int", min: 2, max: 8, step: 2, default: 2, affects: "price" }), [2, 4, 6, 8]);
   // The real ranges: a Kling clip, an effect, a volume by tens, a long offset.
   assert.deepEqual(presetsOf(3, 15), [3, 5, 8, 10, 15]);

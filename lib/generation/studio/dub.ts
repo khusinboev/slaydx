@@ -26,7 +26,7 @@
  * A fal source lives on fal's CDN while the op runs: its URL is written to the row BEFORE the paid call, so whoever ends the
  * op deletes it, this worker, the one that resumes it, or housekeeping (`studioDubHousekeeping`).
  */
-import { runFfmpeg, type FfmpegRun } from "./mix-ffmpeg";
+import { FfmpegMissingError, runFfmpeg, type FfmpegRun } from "./mix-ffmpeg";
 import { capOwnVideo } from "./own-video";
 import { MediaError, costUsd, normalize, submitWithRoutes, type CatalogEntry, type MediaAdapter, type MediaOutput, type RouteHealth } from "../../studio-core";
 import { AUTO_LANGUAGE, DUB_MAX_SECONDS, HEYGEN_TRANSLATE_MODEL, HEYGEN_TRANSLATE_USD_PER_SECOND, SPEECH_TOOL_OUTPUT_MAX_BYTES, STUDIO_DUB_PURPOSE, parseSource, videoOnlySource } from "../../media/catalog-transcribe";
@@ -212,7 +212,7 @@ export async function buildStudioDub(
         sourceBytes = await capOwnVideo(src.bytes, Number(p.sourceSeconds), deps.ffmpeg ?? runFfmpeg);
       } catch (e) {
         console.warn("[studio-dub] own video cap failed:", e instanceof Error ? e.message : e, (e as { stderr?: string })?.stderr ?? "");
-        return fail(`own video cap failed: ${e instanceof Error ? e.message : String(e)}`, `Yuklangan videoni o‘qib bo‘lmadi. ${REFUND}`);
+        return fail(`own video cap failed: ${e instanceof Error ? e.message : String(e)}`, e instanceof FfmpegMissingError ? `Video xizmati hozircha ishlamayapti. ${REFUND}` : `Yuklangan videoni o‘qib bo‘lmadi. ${REFUND}`);
       }
     }
     try {

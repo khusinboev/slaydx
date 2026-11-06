@@ -442,6 +442,7 @@ test("Transkripsiya / Dublyaj take the user's own video: the «Video yuklash» t
   const input = q<HTMLInputElement>("[data-video-file]")!;
   assert.match(input.accept, /video\/quicktime/, "MUTATSIYA: an iPhone's MOV can be picked");
   assert.match(q("[data-video-input]")!.textContent ?? "", /MP4 yoki MOV, 3 daqiqagacha, 25 MB gacha/);
+  assert.match(q("[data-video-burn-note]")?.textContent ?? "", /1920 px/, "MUTATSIYA: the burn's limit is said");
   // Not an MP4 or a MOV: refused in the browser, nothing uploaded.
   await act(async () => void fireEvent.change(input, { target: { files: [new File([new Uint8Array(10)], "a.avi", { type: "video/x-msvideo" })] } }));
   await settle(2);

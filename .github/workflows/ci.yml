@@ -147,6 +147,9 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      # The Studio's media proofs need real files: without ffmpeg they used to pass as skipped.
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
       # Same flags as the package.json "test" script, but `--test-shard` MUST come before the file list:
       # after the glob (e.g. `npm run test -- --test-shard=1/4`) node silently ignores it and runs every file.
       - name: npm test (shard ${{ matrix.shard }}/${{ strategy.job-total }})

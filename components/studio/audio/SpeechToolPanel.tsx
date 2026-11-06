@@ -26,6 +26,7 @@ import { useStudioSend } from "../useStudioSend";
 import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
 import type { StudioJob } from "../StudioResults";
 import type { StudioPricing } from "../studio-types";
+import { BURN_MAX_SIDE } from "@/lib/generation/studio/burn-args";
 import { AudioInputRow, fmtSeconds } from "./AudioInputRow";
 import { VIDEO_INPUT_MAX_BYTES, VIDEO_INPUT_MAX_SECONDS, uploadAudioInput, uploadVideoInput, videoBlocker } from "./audio-api";
 import { audioModelLabel } from "./audio-modes";
@@ -273,7 +274,7 @@ export function SpeechToolPanel({
               ]}
             />
             {st.tab === "video" ? (
-              <VideoInputRow maxBytes={videoLimit} seconds={videoSeconds} uploading={uploading} error={uploadError} onFile={(f) => void onVideo(f)} />
+              <VideoInputRow burnNote={mode === "transcribe"} maxBytes={videoLimit} seconds={videoSeconds} uploading={uploading} error={uploadError} onFile={(f) => void onVideo(f)} />
             ) : st.tab === "result" || videoOnly ? (
               <div className="flex flex-col gap-1.5" data-speech-sources>
                 {loadError ? (
@@ -366,7 +367,7 @@ export function SpeechToolResults({
  * P11 §D: the user's own video for «Dublyaj» / «Transkripsiya» — one MP4 or MOV file (≤ 3 min, the tool's size limit), uploaded through the
  * audio-inputs path with `kind=video`; the server measures it and bills its whole seconds, shown here once uploaded.
  */
-function VideoInputRow({ maxBytes, seconds, uploading, error, onFile }: { maxBytes: number; seconds: number | null; uploading: boolean; error: string | null; onFile: (f: File) => void }) {
+function VideoInputRow({ burnNote, maxBytes, seconds, uploading, error, onFile }: { burnNote: boolean; maxBytes: number; seconds: number | null; uploading: boolean; error: string | null; onFile: (f: File) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   return (
     <div className="flex flex-col gap-2" data-video-input>
@@ -391,6 +392,11 @@ function VideoInputRow({ maxBytes, seconds, uploading, error, onFile }: { maxByt
         {uploading ? "Yuklanmoqda..." : seconds !== null ? `Yuklandi: ${fmtSeconds(seconds)} (${seconds} s)` : "Hali video tanlanmagan"}
       </p>
       <p className="text-muted-foreground text-[12.5px] leading-snug">Yuklangan fayl 1 kundan keyin o‘chiriladi.</p>
+      {burnNote ? (
+        <p className="text-muted-foreground text-[12.5px] leading-snug" data-video-burn-note>
+          Subtitr yopishtirish uchun video uzun tomoni {BURN_MAX_SIDE} px gacha bo‘lsin.
+        </p>
+      ) : null}
       {error ? (
         <p role="alert" className="text-destructive text-[14px]" data-video-input-error>
           {error}

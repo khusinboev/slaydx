@@ -246,8 +246,8 @@ function PresetRange({ value, min, max, step, onChange, ariaLabel }: { value: nu
           const blank = e.target.value === "" || !Number.isFinite(n);
           editing.current = true;
           setTyped(!blank && n > max ? String(max) : e.target.value);
-          if (blank) return;
-          const snapped = snapInt(n, min, max, step);
+          // A cleared box is the minimum, as a blur makes it: the button never keeps the old price.
+          const snapped = snapInt(blank ? min : n, min, max, step);
           if (snapped !== value) onChange(snapped);
         }}
         onBlur={commit}

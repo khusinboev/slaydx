@@ -9,11 +9,16 @@ import { mp3Seconds } from "../tts/mp3";
 const u32 = (b: Uint8Array, o: number) => ((b[o]! << 24) | (b[o + 1]! << 16) | (b[o + 2]! << 8) | b[o + 3]!) >>> 0;
 const type = (b: Uint8Array, o: number) => String.fromCharCode(b[o + 4]!, b[o + 5]!, b[o + 6]!, b[o + 7]!);
 
-/** Child boxes of `[start, end)`: `[type, payloadStart, boxEnd]`. Stops at the first malformed size. */
+/** More boxes on one level than any real file holds: untrusted bytes must not become millions of objects in the web process. */
+const MAX_BOXES = 1024;
+/** A real clip has a few tracks; only the first picture and sound are ever used. */
+const MAX_TRACKS = 16;
+
+/** Child boxes of `[start, end)`: `[type, payloadStart, boxEnd]`. Stops at the first malformed size, and at `MAX_BOXES`. */
 function boxes(b: Uint8Array, start: number, end: number): [string, number, number][] {
   const out: [string, number, number][] = [];
   let o = start;
-  while (o + 8 <= end) {
+  while (o + 8 <= end && out.length < MAX_BOXES) {
     let size = u32(b, o);
     let header = 8;
     if (size === 1) {
@@ -65,14 +70,14 @@ export type Mp4Track = {
   codec: string;
   /** The track's length (s): the longer of `mdhd` and the sum of `stts`. */
   seconds: number;
-  /** Samples (the `stts` count). */
+  /** Samples: the larger of what `stts` and `stsz` count (a short `stts` is stretched by the demuxer to `stsz`). */
   samples: number;
   /** Stored picture size: the larger of `tkhd` and the `stsd` entry, per side; 0 for a non-picture track. */
   width: number;
   height: number;
   /** The picture turned by a quarter (the `tkhd` matrix): a phone's portrait clip stores 1920×1080 and turns it. */
   rotated: boolean;
-  /** An audio entry's sample rate (Hz), 0 for other tracks. */
+  /** An audio entry's sample rate (Hz), 0 for other tracks (a QuickTime v2 entry states it in its own float field). */
   sampleRate: number;
 };
 export type Mp4Probe = { movieSeconds: number; fragmented: boolean; tracks: Mp4Track[] };
@@ -120,6 +125,9 @@ function trackOf(b: Uint8Array, trak: readonly [string, number, number]): Mp4Tra
     }
     if (timescale > 0) out.seconds = Math.max(out.seconds, total / timescale);
   }
+  const stsz = childOf(b, stbl, "stsz");
+  // stsz payload: version+flags (4), a fixed size (4), the sample count (4).
+  if (stsz && stsz[1] + 12 <= stsz[2]) out.samples = Math.max(out.samples, u32(b, stsz[1] + 8));
   const stsd = childOf(b, stbl, "stsd");
   // stsd payload: version+flags (4), entry count (4), then the first entry: size (4), format (4), its fields.
   if (stsd && stsd[1] + 16 <= stsd[2]) {
@@ -131,7 +139,12 @@ function trackOf(b: Uint8Array, trak: readonly [string, number, number]): Mp4Tra
       out.height = Math.max(out.height, (b[entry + 34]! << 8) | b[entry + 35]!);
     }
     // AudioSampleEntry: the 16.16 sample rate after 24 bytes of the fixed fields.
-    if (out.handler === "soun" && entry + 36 <= stsd[2]) out.sampleRate = u32(b, entry + 32) >>> 16;
+    if (out.handler === "soun" && entry + 36 <= stsd[2]) {
+      const version = (b[entry + 16]! << 8) | b[entry + 17]!;
+      out.sampleRate = u32(b, entry + 32) >>> 16;
+      // QuickTime v2: that field is a constant 1; the real rate is a float64 after the extension's size.
+      if (version === 2 && entry + 48 <= stsd[2]) out.sampleRate = Math.round(new DataView(b.buffer, b.byteOffset, b.byteLength).getFloat64(entry + 40));
+    }
   }
   return out;
 }
@@ -149,8 +162,44 @@ export function mp4Probe(b: Uint8Array): Mp4Probe | null {
   return {
     movieSeconds: mp4Seconds(b),
     fragmented: top.some((x) => x[0] === "moof") || inside.some((x) => x[0] === "mvex"),
-    tracks: inside.filter((x) => x[0] === "trak").map((t) => trackOf(b, t)),
+    tracks: inside
+      .filter((x) => x[0] === "trak")
+      .slice(0, MAX_TRACKS)
+      .map((t) => trackOf(b, t)),
   };
+}
+
+/** The tracks a job really uses (`capArgs` maps `0:v:0` and `0:a:0?`): a second sound track or a phone's metadata track never leaves. */
+export function mappedTracks(probe: Mp4Probe): { picture: Mp4Track | null; sound: Mp4Track | null } {
+  return { picture: probe.tracks.find((t) => t.handler === "vide") ?? null, sound: probe.tracks.find((t) => t.handler === "soun") ?? null };
+}
+
+/** How far a track's own tables may stand from `mvhd` (an AAC track ends a few frames off the picture). */
+const TRACK_SLACK_SECONDS = 1;
+/** Every picture codec a phone or an editor writes, and only those: a provider and our ffmpeg can read them. */
+const PICTURE_CODECS: ReadonlySet<string> = new Set(["avc1", "avc3", "hvc1", "hev1", "dvh1", "dvhe", "av01", "vp09", "mp4v"]);
+const SOUND_CODECS: ReadonlySet<string> = new Set(["mp4a"]);
+/** More pictures a second than any camera: the sample tables were squeezed to make a long clip look short. */
+const MAX_FPS = 240;
+/** Samples an AAC frame decodes to (HE-AAC states half the rate with twice the samples: the product holds). */
+const AAC_FRAME_SAMPLES = 1024;
+
+/**
+ * Why these tables cannot be trusted or used (Uzbek), `null` when they can. Read on the upload, where a forger wrote them,
+ * and again on the worker's cut, where ffmpeg wrote them from the packets it really carried: that second reading is what
+ * holds, whatever a parser here and the demuxer there disagree on. Only the tracks the job uses count.
+ */
+export function mp4Problem(probe: Mp4Probe): string | null {
+  if (probe.fragmented) return "Bo‘laklangan (fragmented) MP4 qabul qilinmaydi — videoni oddiy MP4 qilib saqlang.";
+  const { picture, sound } = mappedTracks(probe);
+  if (picture && !PICTURE_CODECS.has(picture.codec)) return "Bu video kodeki qo‘llab-quvvatlanmaydi — H.264 yoki HEVC bilan saqlang.";
+  if (sound && !SOUND_CODECS.has(sound.codec)) return "Bu ovoz kodeki qo‘llab-quvvatlanmaydi — AAC bilan saqlang.";
+  const longest = Math.max(picture?.seconds ?? 0, sound?.seconds ?? 0);
+  const lying =
+    Math.abs(longest - probe.movieSeconds) > TRACK_SLACK_SECONDS ||
+    (picture !== null && picture.seconds > 0 && picture.samples / picture.seconds > MAX_FPS) ||
+    (sound !== null && (sound.sampleRate <= 0 || (sound.samples * AAC_FRAME_SAMPLES) / sound.sampleRate > sound.seconds * 1.5 + TRACK_SLACK_SECONDS));
+  return lying ? "Video fayli buzilgan: uzunligi fayl ichida bir xil yozilmagan. Videoni qayta saqlang." : null;
 }
 
 /** The clip's shape as it is SHOWN (the `tkhd` turn applied), in the document's words; `null` without a sized picture. */

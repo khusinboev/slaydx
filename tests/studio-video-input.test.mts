@@ -40,7 +40,8 @@ process.env.ELEVENLABS_API_KEY = "sk_flow_key";
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
 const iso = hasDb ? await createIsolatedDb("studiovin") : { isolated: false, drop: async () => {} };
 const HAS_FFMPEG = spawnSync("ffmpeg", ["-version"]).status === 0;
-const skip = !(hasDb && iso.isolated) ? "isolated Postgres database is not available" : !HAS_FFMPEG ? "ffmpeg not installed — a real MP4 is needed" : false;
+// In CI a missing ffmpeg is a failure, not a skip: these are the proofs of what a forged file can buy.
+const skip = !(hasDb && iso.isolated) ? "isolated Postgres database is not available" : !HAS_FFMPEG && !process.env.CI ? "ffmpeg not installed — a real MP4 is needed" : false;
 
 const quiet = (t: TestContext) => {
   for (const m of ["log", "info", "warn", "error"] as const) t.mock.method(console, m, () => {});
@@ -271,9 +272,11 @@ test("a forged MP4 is refused: `mvhd` alone, `mvhd` + `mdhd`, every table; fragm
   const frag = await billedOf(make("v.mp4", [...SIX, "-movflags", "frag_keyframe+empty_moov"]));
   assert.equal(frag.status, 422);
   assert.match(frag.body.error ?? "", /fragmented/, "MUTATSIYA: a fragmented file has no sample tables to trust");
-  const big = await billedOf(make("v.mp4", ["-f", "lavfi", "-i", "color=c=red:size=2000x100:rate=2", "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p"]));
-  assert.equal(big.status, 422);
-  assert.match(big.body.error ?? "", /1920 px/, "MUTATSIYA: the long side is capped at the upload");
+  // No `moov` table can be trusted for a count: `stts` cut to two entries, `stsz` still counts every sample.
+  const short = six();
+  new DataView(short.buffer, short.byteOffset, short.byteLength).setUint32(offsets(short, "stts")[1]! + 4, 2);
+  const { mp4Probe } = await import("../lib/generation/studio/mix-media.ts");
+  assert.ok(mp4Probe(short)!.tracks[1]!.samples > 2, "MUTATSIYA: `stsz` is read");
   // An iPhone's MOV goes through the same path.
   const mov = await upload(cookie, make("v.mov", SIX), "IMG_0001.MOV", "video");
   assert.equal(mov.status, 200, JSON.stringify(mov.body));
@@ -447,4 +450,157 @@ test("dark switches, the dub's size at the upload, the quota under a lock", { sk
   await waiting;
   const raced = await Promise.all([upload(cookieR, file, "a.mp4", "video"), upload(cookieR, file, "b.mp4", "video")]);
   assert.deepEqual(raced.map((r) => r.status).sort(), [200, 429], "MUTATSIYA: two uploads at once both passed the quota");
+});
+
+/* ── the cut: what ffmpeg really kept (second review) ── */
+
+let LONG: Uint8Array | null = null;
+/** 10 s of picture, 300 s of 8 kHz AAC, the sound's `stts` and every length squeezed to 10 s: billed 10 s. */
+function squeezed(): Uint8Array {
+  LONG ??= make("l.mp4", ["-f", "lavfi", "-t", "10", "-i", "color=c=blue:size=64x48:rate=5", "-f", "lavfi", "-t", "300", "-i", "sine=frequency=300:sample_rate=8000", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "16k", "-movflags", "+faststart"]);
+  const b = LONG.slice();
+  const v = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const unit = v.getUint32(offsets(b, "mvhd")[0]! + 12);
+  forgeDuration(b, "mvhd", 10);
+  forgeDuration(b, "mdhd", 10);
+  const a = offsets(b, "stts")[1]!;
+  for (let i = 0; i < v.getUint32(a + 4); i++) v.setUint32(a + 8 + i * 8 + 4, 34);
+  for (const at of offsets(b, "elst")) if (v.getUint32(at + 8) > 10 * unit) v.setUint32(at + 8, 10 * unit);
+  return b;
+}
+const FORGED: Record<string, (b: Uint8Array, v: DataView) => void> = {
+  "(a) stsd sample rate 0": (b, v) => v.setUint32(offsets(b, "stsd")[1]! + 8 + 32, 0),
+  "(b) hdlr says text, stsd says mp4a": (b) => void Buffer.from(b.buffer, b.byteOffset, b.byteLength).write("text", offsets(b, "hdlr")[1]! + 8, "latin1"),
+  "(c) stts entry count 2": (b, v) => v.setUint32(offsets(b, "stts")[1]! + 4, 2),
+  "(d) trak overruns moov": (b, v) => {
+    const at = offsets(b, "trak").at(-1)! - 8;
+    v.setUint32(at, v.getUint32(at) + 4096);
+  },
+};
+function forged(name: string): Uint8Array {
+  const b = squeezed();
+  FORGED[name]!(b, new DataView(b.buffer, b.byteOffset, b.byteLength));
+  return b;
+}
+for (const name of Object.keys(FORGED)) {
+  test(`forged ${name}: the cut refuses it, and no provider is reached on any path`, { skip }, async (t) => {
+    quiet(t);
+    await allOn();
+    const bytes = forged(name);
+    const { capOwnVideo } = await import("../lib/generation/studio/own-video.ts");
+    await assert.rejects(capOwnVideo(bytes, 10), /refused|decodes|measures/, "MUTATSIYA: 300 s of sound left the worker under a 10 s label");
+    const { buildStudioTranscribe } = await import("../lib/generation/studio/transcribe.ts");
+    const { buildStudioDub } = await import("../lib/generation/studio/dub.ts");
+    const { FAL_SCRIBE_MODEL, HEYGEN_TRANSLATE_MODEL } = await import("../lib/media/catalog-transcribe.ts");
+    const { TOOL_BY_ID } = await import("../lib/tools.ts");
+    const id = "a".repeat(24);
+    const ctx = { source: { kind: "upload" as const, id, mime: "video/mp4", bytes, seconds: 10, aspect: "16:9" } };
+    let reached = 0;
+    const run = async () => (reached++, { outputs: [] });
+    for (const modelId of ["", FAL_SCRIBE_MODEL]) {
+      const values = { ...(modelId ? { modelId } : {}), source: `upload:${id}`, sourceSeconds: 10 };
+      await assert.rejects(buildStudioTranscribe(TOOL_BY_ID["studio-transcribe"], values as never, ctx, {}, { run: run as never }), /qaytariladi/);
+    }
+    const adapter = { id: "x", configured: () => true, submit: async () => (reached++, { opId: "x" }), poll: async () => ({ state: "failed", message: "no" }) };
+    const adapters = new Proxy({}, { get: () => adapter });
+    const health = { allow: () => true, success: () => undefined, failure: () => undefined };
+    await assert.rejects(buildStudioDub(TOOL_BY_ID["studio-dub"], { modelId: HEYGEN_TRANSLATE_MODEL, source: `upload:${id}`, sourceSeconds: 10, target: "uz" } as never, ctx, {}, { adapters: adapters as never, store: null, health }), /qaytariladi/);
+    assert.equal(reached, 0, "MUTATSIYA: a provider received the forged file");
+  });
+}
+
+test("HeyGen's picture path: 3000 frames squeezed into 10 s are refused on the cut; the decoded length is the last word over the tables", { skip }, async (t) => {
+  quiet(t);
+  const picture = make("p.mp4", ["-f", "lavfi", "-t", "300", "-i", "color=c=blue:size=64x48:rate=10", "-c:v", "libx264", "-pix_fmt", "yuv420p"]);
+  forgeDuration(picture, "mvhd", 10);
+  forgeDuration(picture, "mdhd", 10);
+  forgeStts(picture, 30);
+  const { capOwnVideo } = await import("../lib/generation/studio/own-video.ts");
+  await assert.rejects(capOwnVideo(picture, 10), /refused/, "MUTATSIYA: the picture's frames are counted on the cut");
+  // Tables that pass but a sound that decodes longer (HE-AAC states half its frames): only the decode can tell.
+  const { runFfmpeg } = await import("../lib/generation/studio/mix-ffmpeg.ts");
+  const long = new Uint8Array(417 * 1000);
+  for (let i = 0; i < 1000; i++) long.set([0xff, 0xfb, 0x90, 0x00], i * 417);
+  const ff = async (r: { output: string }) => (r.output === "out-measure.mp3" ? long : runFfmpeg(r as never));
+  await assert.rejects(capOwnVideo(videoMp4(), 2, ff as never), /decodes to/, "MUTATSIYA: the real seconds are measured");
+  assert.ok((await capOwnVideo(videoMp4(), 2)).length > 0, "an honest file passes both");
+});
+
+test("the fal path's audio track is held to the billed seconds before the provider is paid", { skip }, async (t) => {
+  quiet(t);
+  await allOn();
+  const { buildStudioTranscribe } = await import("../lib/generation/studio/transcribe.ts");
+  const { FAL_SCRIBE_MODEL } = await import("../lib/media/catalog-transcribe.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+  const id = "e".repeat(32).slice(0, 8) + "-eeee-4eee-8eee-" + "e".repeat(12);
+  const ctx = { source: { kind: "result" as const, id, mime: "video/mp4", bytes: videoMp4(), seconds: 2 } };
+  let paid = false;
+  const long = new Uint8Array(417 * 1000);
+  for (let i = 0; i < 1000; i++) long.set([0xff, 0xfb, 0x90, 0x00], i * 417);
+  await assert.rejects(
+    buildStudioTranscribe(TOOL_BY_ID["studio-transcribe"], { modelId: FAL_SCRIBE_MODEL, source: `result:${id}`, sourceSeconds: 2 } as never, ctx, {}, { run: (async () => ((paid = true), { outputs: [] })) as never, ffmpeg: (async () => long) as never }),
+    /qaytariladi/,
+  );
+  assert.equal(paid, false, "MUTATSIYA: the Scribe MP3 has a length check");
+});
+
+test("false refusals: a large picture, QuickTime v2 sound, a second sound track, what a burn refuses and when", { skip }, async (t) => {
+  quiet(t);
+  await allOn();
+  const me = await mkUser();
+  const cookie = await cookieOf(me);
+  const { capOwnVideo } = await import("../lib/generation/studio/own-video.ts");
+  const large = make("v.mp4", ["-f", "lavfi", "-i", "color=c=red:size=2000x100:rate=2", "-f", "lavfi", "-i", "sine", "-t", "2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest"]);
+  const up = await upload(cookie, large, "v.mp4", "video");
+  assert.equal(up.status, 200, `MUTATSIYA: only a burn decodes the picture: ${JSON.stringify(up.body)}`);
+  assert.ok((await capOwnVideo(large, 2)).length > 0);
+  const { prepareSpeechToolRequest } = await import("../lib/server/media/speech-sources.ts");
+  await prepareSpeechToolRequest(me, "studio-transcribe", { source: `upload:${up.body.id}`, sourceSeconds: 2 } as never);
+  await assert.rejects(prepareSpeechToolRequest(me, "studio-transcribe", { source: `upload:${up.body.id}`, sourceSeconds: 2, burn: true } as never), /1920 px/, "MUTATSIYA: a burn refuses it before the charge");
+  // 96 kHz in a MOV: the muxer writes a v2 sound entry, whose old rate field is the constant 1.
+  const v2 = make("v.mov", ["-f", "lavfi", "-i", "color=c=red:size=64x48:rate=2", "-f", "lavfi", "-i", "sine=sample_rate=96000", "-t", "3", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest"]);
+  const r2 = await upload(cookie, v2, "v.mov", "video");
+  assert.equal(r2.status, 200, `MUTATSIYA: a QuickTime v2 entry was refused: ${JSON.stringify(r2.body)}`);
+  // A second sound track the cut never maps: another codec does not matter.
+  const two = make("v.mov", ["-f", "lavfi", "-i", "color=c=red:size=64x48:rate=2", "-f", "lavfi", "-i", "sine", "-f", "lavfi", "-i", "sine=frequency=500", "-map", "0", "-map", "1", "-map", "2", "-t", "2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a:0", "aac", "-c:a:1", "pcm_s16le"]);
+  const r3 = await upload(cookie, two, "v.mov", "video");
+  assert.equal(r3.status, 200, `MUTATSIYA: the check follows what the cut maps: ${JSON.stringify(r3.body)}`);
+  assert.ok((await capOwnVideo(two, 2)).length > 0);
+  // Heavy for the burn's timeout: 240 frames a second for 3 minutes at 1080p; 3 minutes at 30 passes.
+  const { burnProblem } = await import("../lib/generation/studio/burn-args.ts");
+  assert.match(String(burnProblem({ width: 1920, height: 1080, samples: 240 * 180 })), /og‘ir/, "MUTATSIYA: a burn that would time out after the paid call");
+  assert.equal(burnProblem({ width: 1920, height: 1080, samples: 30 * 180 }), null);
+  // A missing ffmpeg is the service's fault, not the file's.
+  const { buildStudioTranscribe } = await import("../lib/generation/studio/transcribe.ts");
+  const { FfmpegMissingError } = await import("../lib/generation/studio/mix-ffmpeg.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+  const id = "a".repeat(24);
+  const ctx = { source: { kind: "upload" as const, id, mime: "video/mp4", bytes: videoMp4(), seconds: 2 } };
+  await assert.rejects(buildStudioTranscribe(TOOL_BY_ID["studio-transcribe"], { source: `upload:${id}`, sourceSeconds: 2 } as never, ctx, {}, { ffmpeg: async () => { throw new FfmpegMissingError(); } }), /xizmati hozircha/, "MUTATSIYA: the user's file was blamed");
+});
+
+test("the parser is bounded: 3 million empty `trak` boxes cost no memory and throw nothing", async () => {
+  const { mp4Probe } = await import("../lib/generation/studio/mix-media.ts");
+  const n = 3_000_000;
+  const b = new Uint8Array(8 + 8 + 8 * n);
+  const v = new DataView(b.buffer);
+  b.set(new TextEncoder().encode("ftypisom"), 4);
+  v.setUint32(0, 16);
+  v.setUint32(16 - 0, 0);
+  const moov = 16;
+  const out = new Uint8Array(moov + 8 + 8 * n);
+  out.set(b.subarray(0, 16));
+  const w = new DataView(out.buffer);
+  w.setUint32(moov, out.length - moov);
+  out.set(new TextEncoder().encode("moov"), moov + 4);
+  for (let i = 0; i < n; i++) {
+    const at = moov + 8 + i * 8;
+    w.setUint32(at, 8);
+    out[at + 4] = 0x74; out[at + 5] = 0x72; out[at + 6] = 0x61; out[at + 7] = 0x6b;
+  }
+  const p = mp4Probe(out);
+  assert.ok(p);
+  assert.ok(p.tracks.length <= 16, "MUTATSIYA: the track count is capped");
+  const { sniffVideo } = await import("../lib/server/media/audio-inputs.ts");
+  assert.equal(sniffVideo(out), null, "no picture: no video, and no throw");
 });

@@ -24,10 +24,11 @@ import { MIX_SECONDS_TOLERANCE } from "../../media/catalog-mix";
 import { UserFacingError } from "../../server/user-error";
 import { extractMeta } from "../meta";
 import { recordAudioCall } from "./cost";
-import { AUDIO_TRACK_FILES, BURN_CHECK_FILES, BURN_FILES, audioTrackArgs, burnArgs, burnCheckArgs, burnVideoKbps } from "./burn-args";
+import { AUDIO_TRACK_FILES, BURN_CHECK_FILES, BURN_FILES, audioTrackArgs, burnArgs, burnCheckArgs, burnProblem, burnVideoKbps } from "./burn-args";
 import { capOwnVideo } from "./own-video";
 import { FfmpegMissingError, runFfmpeg, type FfmpegRun } from "./mix-ffmpeg";
-import { mp4HasVideo } from "./mix-media";
+import { mappedTracks, mp4HasVideo, mp4Probe } from "./mix-media";
+import { mp3Seconds } from "../tts/mp3";
 import { mp4Seconds } from "../video/mp4";
 import { buildCues, toSrt, transcriptOf } from "./subtitles";
 import type { AcademicDoc, BuiltFile, StudioTranscribeDoc } from "../types";
@@ -112,11 +113,15 @@ export async function buildStudioTranscribe(
       sourceBytes = await capOwnVideo(src.bytes, Number(p.sourceSeconds), deps.ffmpeg ?? runFfmpeg);
     } catch (e) {
       console.warn("[studio-transcribe] own video cap failed:", e instanceof Error ? e.message : e, (e as { stderr?: string })?.stderr ?? "");
-      throw new UserFacingError(OWN_VIDEO_FAILED);
+      throw new UserFacingError(e instanceof FfmpegMissingError ? `Video xizmati hozircha ishlamayapti. ${REFUND}` : OWN_VIDEO_FAILED);
     }
   }
   // The picture is checked before the paid call: a burn that cannot read it must not cost the speech call too.
   if (burn) {
+    const probe = mp4Probe(sourceBytes);
+    const picture = probe ? mappedTracks(probe).picture : null;
+    const heavy = picture ? burnProblem(picture) : null;
+    if (heavy) throw new UserFacingError(`${heavy} ${REFUND}`);
     try {
       await (deps.ffmpeg ?? runFfmpeg)({ inputs: { [BURN_CHECK_FILES.video]: sourceBytes }, args: burnCheckArgs(), output: BURN_CHECK_FILES.out, timeoutMs: AUDIO_TRACK_FFMPEG_TIMEOUT_MS });
     } catch (e) {
@@ -132,6 +137,9 @@ export async function buildStudioTranscribe(
     try {
       const track = await (deps.ffmpeg ?? runFfmpeg)({ inputs: { [AUDIO_TRACK_FILES.video]: sourceBytes }, args: audioTrackArgs(src.seconds), output: AUDIO_TRACK_FILES.out, timeoutMs: AUDIO_TRACK_FFMPEG_TIMEOUT_MS });
       if (!track.length) throw new Error("empty audio track");
+      // The provider is paid for what it hears: the track's own frames, against the seconds billed.
+      const heard = mp3Seconds(track);
+      if (heard > Number(p.sourceSeconds) + MEASURED_SLACK_SECONDS) throw new Error(`audio track ${heard} s for ${String(p.sourceSeconds)} s billed`);
       media = { mime: "audio/mpeg", bytes: track };
     } catch (e) {
       console.warn("[studio-transcribe] audio track failed:", e instanceof Error ? e.message : e, (e as { stderr?: string })?.stderr ?? "");

@@ -8,8 +8,8 @@ import { DUB_MAX_SECONDS, DUB_MODEL, DUB_VIDEO_MAX_BYTES, STUDIO_DUB_PURPOSE, ST
 import { billedSeconds } from "../../media/studio-audio";
 import { dubEntry } from "../../media/studio-transcribe";
 import { stripUrls } from "../../generation/video/types";
-import { burnVideoKbps } from "../../generation/studio/burn-args";
-import { mediaSeconds, mp4Aspect } from "../../generation/studio/mix-media";
+import { burnProblem, burnVideoKbps } from "../../generation/studio/burn-args";
+import { mappedTracks, mediaSeconds, mp4Aspect, mp4Probe } from "../../generation/studio/mix-media";
 import type { SpeechToolCtx } from "../../generation/studio/transcribe";
 import { MEDIA_UPLOAD_PARAM, clearMediaUpload } from "./jobs";
 import { ownVideoInput, videoInputBytes } from "./audio-inputs";
@@ -101,6 +101,13 @@ export async function prepareSpeechToolRequest(userId: string, tool: SpeechToolI
   if (tool === "studio-transcribe" && burn) {
     if (s.kind !== "video") throw new ApiError("Subtitrni faqat videoga yopishtirish mumkin — video natijani tanlang.", 400, { code: "input_invalid" });
     if (burnVideoKbps(s.seconds) === null) throw new ApiError("Bu video subtitr bilan 25 MB ga sig‘maydi — qisqaroq video tanlang.", 400, { code: "input_too_large" });
+    // An own upload's picture is known only from its bytes; the worker checks again before the paid call.
+    const ref = parseSource(values.source);
+    const clip = ref?.kind === "upload" ? await videoInputBytes(userId, ref.id) : null;
+    const probe = clip ? mp4Probe(clip.bytes) : null;
+    const picture = probe ? mappedTracks(probe).picture : null;
+    const heavy = picture ? burnProblem(picture) : null;
+    if (heavy) throw new ApiError(heavy, 400, { code: "input_too_large" });
   }
   // The dubbed file is about the source's size (same picture, a new voice track): no room under the cap → refused now.
   if (tool === "studio-dub" && s.kind === "video" && s.size > DUB_VIDEO_MAX_BYTES) {

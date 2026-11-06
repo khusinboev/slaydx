@@ -764,7 +764,7 @@ test("transcribe engine: a fal video goes as its audio track (ffmpeg before the 
 
 test("transcribe: the audio-track argv is pinned, and really extracts a track", { skip: ffSkip }, async () => {
   assert.deepEqual(audioTrackArgs(5), [
-    "-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "file", "-f", "mov", "-i", "in-video.mp4",
+    "-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "file", "-max_pixels", "8294400", "-f", "mov", "-i", "in-video.mp4",
     "-map", "0:a:0", "-vn", "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", "-threads", "2", "-t", "5.000", "-y", "out-track.mp3",
   ]);
   const { runFfmpeg } = await import("../lib/generation/studio/mix-ffmpeg.ts");
