@@ -16,6 +16,10 @@
  *                        15 characters / s (`SPEECH_CHARS_PER_SECOND`, a slow reading pace so the quote errs high) and
  *                        3 characters / text token → $0.016833 per 1 000 characters. UNVERIFIED for a Pro TTS model
  *                        (twice the price) in `TTS_GEMINI_MODEL`.
+ *   fal ElevenLabs       P11 package E, `defaultOff`, the fal key alone:
+ *                        Eleven v3 $0.10 / 1 000 characters, https://fal.ai/models/fal-ai/elevenlabs/tts/eleven-v3/llms.txt
+ *                        Eleven v4 Turbo $0.04 / 1 000 characters, https://fal.ai/models/elevenlabs/tts/eleven-v4-turbo/llms.txt
+ *                        (both read 2026-11-06). Neither page lists Uzbek: a live Uzbek test comes before the admin's switch.
  *   Voice cloning (IVC)  no per-call provider price (included in the plan, uses a voice slot); the user pays the
  *                        fixed `studio.clone_price` setting (owner 2026-11-02: 5 000 so'm), not cost × markup.
  *
@@ -50,6 +54,12 @@ export const SPEECH_CHARS_PER_SECOND = 15;
 
 export const ELEVENLABS_V3_MODEL = "eleven_v3";
 
+export const FAL_ELEVEN_V3_MODEL = "elevenlabs/eleven-v3-fal";
+export const FAL_ELEVEN_V4_TURBO_MODEL = "elevenlabs/eleven-v4-turbo-fal";
+/** fal endpoint ids (the routes' upstream model). */
+export const FAL_ELEVEN_V3_ENDPOINT = "fal-ai/elevenlabs/tts/eleven-v3";
+export const FAL_ELEVEN_V4_TURBO_ENDPOINT = "elevenlabs/tts/eleven-v4-turbo";
+
 /** The sentence every voice preview speaks (library voices once each, a clone right after it is made). */
 export const VOICE_PREVIEW_TEXT = "Assalomu alaykum! Matningiz shu ovoz bilan o‘zbek tilida mana shunday yangraydi.";
 
@@ -72,6 +82,13 @@ export const ELEVENLABS_VOICES: readonly LibraryVoice[] = [
   { id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", gender: "male" },
   { id: "TX3LPaxmHKxFdv7VOQHJ", name: "Liam", gender: "male" },
 ];
+
+/**
+ * The library voices fal's ElevenLabs models can speak: those both pages name, by name (Rachel is their default). Adam is in
+ * neither list, and a user's clone lives in an account fal does not reach. Those two pages say nothing on other voices.
+ */
+const FAL_ELEVEN_VOICE_NAMES: ReadonlySet<string> = new Set(["Rachel", "Sarah", "Laura", "Alice", "Matilda", "George", "Brian", "Daniel", "Liam"]);
+export const FAL_ELEVEN_VOICES: readonly LibraryVoice[] = ELEVENLABS_VOICES.filter((v) => FAL_ELEVEN_VOICE_NAMES.has(v.name));
 
 /** Gemini prebuilt voices (language-neutral; `Kore` / `Charon` are the podcast's female / male voices). */
 export const GEMINI_VOICES: readonly LibraryVoice[] = [
@@ -185,6 +202,9 @@ const speedParam: ParamSchema = {
 const AUDIO_OUT = { mimes: ["audio/mpeg"], maxBytes: 25 * 1024 * 1024 } as const;
 const TIMEOUT = { timeoutMs: 120_000 } as const;
 
+/** A voice of the fal models: a list, not a `voice` param, so no clone can be picked or sent. */
+const falVoiceParam: ParamSchema = { name: "voice", label: "Ovoz", type: "enum", options: FAL_ELEVEN_VOICES.map((v) => ({ value: v.id, label: v.name })), default: FAL_ELEVEN_VOICES[0]!.id, affects: "request" };
+
 export const STUDIO_SPEECH_ENTRIES: readonly CatalogEntry[] = [
   {
     id: "google/gemini-tts",
@@ -210,6 +230,34 @@ export const STUDIO_SPEECH_ENTRIES: readonly CatalogEntry[] = [
     params: [textParam("text", "Matn", STUDIO_SPEECH_MAX_CHARS), elevenVoice("voice", "Ovoz", ELEVENLABS_VOICES[0]!.id), speedParam, moodParam, langParam],
     cost: { per: "kchar", usd: elevenLabsUsdPerKchar(), textParam: "text" },
     routes: [{ provider: "elevenlabs", upstreamModel: ELEVENLABS_V3_MODEL, adapter: "studio-elevenlabs-tts" }],
+    limits: TIMEOUT,
+    output: AUDIO_OUT,
+  },
+  {
+    id: FAL_ELEVEN_V3_MODEL,
+    kind: "speech",
+    capabilities: ["tts"],
+    label: "ElevenLabs v3 · fal",
+    maker: "ElevenLabs",
+    badges: ["sifatli", "yangi"],
+    defaultOff: true,
+    params: [textParam("text", "Matn", STUDIO_SPEECH_MAX_CHARS), falVoiceParam, moodParam, langParam],
+    cost: { per: "kchar", usd: 0.1, textParam: "text" },
+    routes: [{ provider: "fal", upstreamModel: FAL_ELEVEN_V3_ENDPOINT, adapter: "fal" }],
+    limits: TIMEOUT,
+    output: AUDIO_OUT,
+  },
+  {
+    id: FAL_ELEVEN_V4_TURBO_MODEL,
+    kind: "speech",
+    capabilities: ["tts"],
+    label: "ElevenLabs v4 Turbo · fal",
+    maker: "ElevenLabs",
+    badges: ["arzon", "tez", "yangi"],
+    defaultOff: true,
+    params: [textParam("text", "Matn", STUDIO_SPEECH_MAX_CHARS), falVoiceParam, moodParam, langParam],
+    cost: { per: "kchar", usd: 0.04, textParam: "text" },
+    routes: [{ provider: "fal", upstreamModel: FAL_ELEVEN_V4_TURBO_ENDPOINT, adapter: "fal" }],
     limits: TIMEOUT,
     output: AUDIO_OUT,
   },
@@ -268,7 +316,7 @@ export const STUDIO_SPEECH_ENTRIES: readonly CatalogEntry[] = [
 export const STUDIO_SPEECH_PURPOSE_SPEC: PurposeSpec = {
   id: STUDIO_SPEECH_PURPOSE,
   kind: "speech",
-  allowed: ["elevenlabs/eleven-v3", "google/gemini-tts", "elevenlabs/v3-dialogue", "google/gemini-dialogue"],
+  allowed: ["elevenlabs/eleven-v3", "google/gemini-tts", FAL_ELEVEN_V3_MODEL, FAL_ELEVEN_V4_TURBO_MODEL, "elevenlabs/v3-dialogue", "google/gemini-dialogue"],
   default: "elevenlabs/eleven-v3",
   userCanChoose: true,
 };
@@ -283,7 +331,14 @@ export const STUDIO_CLONE_PURPOSE_SPEC: PurposeSpec = {
 
 /** Library voices a speech model offers (ElevenLabs models also take the user's clone). */
 export function libraryVoicesOf(modelId: string): readonly LibraryVoice[] {
+  if (modelId === FAL_ELEVEN_V3_MODEL || modelId === FAL_ELEVEN_V4_TURBO_MODEL) return FAL_ELEVEN_VOICES;
   return modelId.startsWith("elevenlabs/") ? ELEVENLABS_VOICES : modelId.startsWith("google/") ? GEMINI_VOICES : [];
+}
+
+/** Of the library the voices endpoint listed, what this model can speak. */
+export function offeredVoices(modelId: string, listed: readonly LibraryVoice[]): readonly LibraryVoice[] {
+  if (modelId !== FAL_ELEVEN_V3_MODEL && modelId !== FAL_ELEVEN_V4_TURBO_MODEL) return listed;
+  return listed.filter((v) => FAL_ELEVEN_VOICE_NAMES.has(v.name));
 }
 
 /** The speech model takes a user clone as a voice (its voice params are `type: "voice"`). */

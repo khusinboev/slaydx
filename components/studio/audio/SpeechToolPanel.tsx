@@ -10,7 +10,7 @@ import { formatSom } from "@/lib/format";
 import { useApiSrc } from "@/lib/use-api-src";
 import type { FormValues } from "@/lib/types";
 import type { ClientEntry } from "@/lib/studio-core";
-import { languageLabel, type SpeechToolMode } from "@/lib/media/catalog-transcribe";
+import { languageLabel, videoOnlySource, type SpeechToolMode } from "@/lib/media/catalog-transcribe";
 import { downloadToDevice, deliverErrorText } from "@/lib/downloads/deliver";
 import type { DownloadFormatId } from "@/lib/downloads/formats";
 import { Card, Segmented, SelectField } from "@/components/forms/compact";
@@ -25,11 +25,14 @@ import type { StudioJob } from "../StudioResults";
 import type { StudioPricing } from "../studio-types";
 import { AudioInputRow } from "./AudioInputRow";
 import { uploadAudioInput } from "./audio-api";
+import { audioModelLabel } from "./audio-modes";
 import { fetchMixSources, type MixSources } from "./mix-api";
 import { sourceLabel } from "./MixPanel";
 import {
   INITIAL_SPEECH_TOOL,
+  billedLine,
   pickResult,
+  pickSpeechModel,
   pickUpload,
   speechSources,
   speechToolBlocker,
@@ -60,7 +63,9 @@ export function speechToolSubmitLabel(mode: SpeechToolMode, price: number): stri
  */
 export function SpeechToolPanel({
   mode,
+  modeLabel,
   entry,
+  entries,
   pricing,
   state,
   setState,
@@ -72,7 +77,10 @@ export function SpeechToolPanel({
   reload,
 }: {
   mode: SpeechToolMode;
+  modeLabel: string;
   entry: ClientEntry;
+  /** The mode's offered models; a picker shows with two or more. */
+  entries: readonly ClientEntry[];
   pricing: StudioPricing;
   state: SpeechToolState | undefined;
   setState: (fn: (s: SpeechToolState) => SpeechToolState) => void;
@@ -101,7 +109,8 @@ export function SpeechToolPanel({
   }, [load, finished]);
 
   const raw = st.raw;
-  const list = sources ? speechSources(mode, sources) : [];
+  const videoOnly = videoOnlySource(entry.id);
+  const list = sources ? speechSources(mode, sources, videoOnly) : [];
   const picked = typeof raw.source === "string" && raw.source.startsWith("result:") ? raw.source.slice(7) : "";
   const isVideo = st.kind === "video";
   // «Subtitrni videoga yopishtirish» only where it can work: a video source.
@@ -138,13 +147,13 @@ export function SpeechToolPanel({
     }
   }
 
-  async function send(out: Record<string, unknown>) {
+  async function send(out: Record<string, unknown>, target: ClientEntry = entry) {
     setError(null);
     setSubmitting(true);
-    const title = entry.label;
+    const title = target.label;
     try {
-      const { id, price: charged } = await queueGeneration({ slug: toolId, id: toolId, title, output: "mp4" }, out as unknown as FormValues, speechToolClientPrice(mode, entry, out, pricing), { repeat: true });
-      track({ id, modelId: entry.id, modelLabel: entry.label, prompt: title, price: charged, sent: out });
+      const { id, price: charged } = await queueGeneration({ slug: toolId, id: toolId, title, output: "mp4" }, out as unknown as FormValues, speechToolClientPrice(mode, target, out, pricing), { repeat: true });
+      track({ id, modelId: target.id, modelLabel: target.label, prompt: title, price: charged, sent: out });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Xatolik");
       if ((e instanceof ApiError && e.status === 400) || e instanceof PriceChangedError) {
@@ -164,23 +173,48 @@ export function SpeechToolPanel({
     void send(sent);
   }
 
+  function again(job: StudioJob) {
+    const target = entries.find((e) => e.id === job.modelId);
+    if (!target) {
+      setError("Bu model hozir mavjud emas — boshqa modelni tanlang.");
+      return;
+    }
+    void send(job.sent, target);
+  }
+
+  function pickModel(id: string) {
+    const next = entries.find((e) => e.id === id);
+    if (!next || next.id === entry.id) return;
+    setError(null);
+    setState((s) => pickSpeechModel(s, next));
+  }
+
   const uploadSeconds = typeof raw.sourceSeconds === "number" && typeof raw.source === "string" && raw.source.startsWith("upload:") ? raw.sourceSeconds : null;
 
   return (
-    <div data-speech-tool={mode}>
+    <div data-speech-tool={mode} data-speech-model={entry.id}>
+      {entries.length > 1 ? (
+        <div data-audio-model-picker>
+          <Card title="Model">
+            <Segmented ariaLabel="Model" value={entry.id} onChange={pickModel} options={entries.map((e) => ({ value: e.id, label: audioModelLabel(e, modeLabel) }))} />
+          </Card>
+        </div>
+      ) : null}
       <Card title="Manba">
         <Field id="source">
           <div className="flex flex-col gap-3">
-            <Segmented
-              ariaLabel="Manba turi"
-              value={st.tab}
-              onChange={(v) => setTab(v as SourceTab)}
-              options={[
-                { value: "result", label: "Natijalarimdan" },
-                { value: "upload", label: "Audio yuklash" },
-              ]}
-            />
-            {st.tab === "result" ? (
+            {videoOnly ? null : (
+              <Segmented
+                ariaLabel="Manba turi"
+                value={st.tab}
+                onChange={(v) => setTab(v as SourceTab)}
+                options={[
+                  { value: "result", label: "Natijalarimdan" },
+                  { value: "upload", label: "Audio yuklash" },
+                ]}
+              />
+            )}
+            {st.tab === "result" || videoOnly ? (
               <div className="flex flex-col gap-1.5" data-speech-sources>
                 {loadError ? (
                   <p role="alert" className="text-destructive text-[14px]">
@@ -210,7 +244,7 @@ export function SpeechToolPanel({
                   />
                 )}
                 <p className="text-muted-foreground text-[12.5px] leading-snug">
-                  {mode === "dub" ? "Video yoki audio ≤ 3 daqiqa. Natija — video uchun MP4, audio uchun MP3." : "Video ≤ 3 daqiqa, audio ≤ 10 daqiqa. Natija — matn, SRT va VTT subtitr."}
+                  {videoOnly ? "Faqat video, ≤ 3 daqiqa. Natija — MP4." : mode === "dub" ? "Video yoki audio ≤ 3 daqiqa. Natija — video uchun MP4, audio uchun MP3." : "Video ≤ 3 daqiqa, audio ≤ 10 daqiqa. Natija — matn, SRT va VTT subtitr."}
                 </p>
               </div>
             ) : (
@@ -220,7 +254,7 @@ export function SpeechToolPanel({
         </Field>
         <Field id="sourceSeconds">
           <p className="text-muted-foreground mt-2 text-[13px] tabular-nums" data-speech-seconds role="status">
-            {typeof raw.sourceSeconds === "number" && raw.source ? `Narx ${raw.sourceSeconds} soniya uchun hisoblanadi.` : "Narx manba uzunligiga qarab hisoblanadi."}
+            {typeof raw.sourceSeconds === "number" && raw.source ? billedLine(entry, raw.sourceSeconds) : "Narx manba uzunligiga qarab hisoblanadi."}
           </p>
         </Field>
       </Card>
@@ -251,7 +285,7 @@ export function SpeechToolPanel({
         label={price === null ? undefined : speechToolSubmitLabel(mode, price)}
       />
       <section aria-label={mode === "dub" ? "Dublyajlar" : "Transkripsiyalar"} data-speech-results className={cn(jobs.length > 0 && "mt-5")}>
-        <SpeechToolResults jobs={jobs} busy={submitting} onAgain={(j) => void send(j.sent)} />
+        <SpeechToolResults jobs={jobs} busy={submitting} onAgain={again} />
       </section>
     </div>
   );

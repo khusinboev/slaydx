@@ -31,8 +31,15 @@
  *
  * VIDEO (Studio P4, docs/studio/P4-SPEC.md) is a separate ASYNC adapter at the end of this file (`falVideoAdapter`):
  * submit only queues and returns an op id; the shared video poll loop polls it. The picture cycle above is unchanged.
+ *
+ * AUDIO (Studio P11 package E, `fal-audio-models.ts`): the same blocking cycle for speech-to-text, sound effects, noise
+ * cleaning and text-to-speech. Only the model's shape differs: an input file travels through fal storage (`fal-storage.ts`,
+ * uploaded after every pure check, deleted after the call), the output is `audio` or a JSON answer, and the bytes are
+ * sniffed as for a picture. Dubbing is async: `fal-dub.ts`, a variant of the video adapter.
  */
 import { MediaError, checkOutput, isRetryableStatus, type AdapterAsset, type AdapterDeps, type AdapterInput, type MediaAdapter, type MediaOutput, type NormalizedParams, type PollResult } from "../../studio-core";
+import { FAL_AUDIO_MODELS } from "./fal-audio-models";
+import { FAL_FILE_PENDING, deleteFalFile, falFileAsset, falLifecycleHeader, uploadFalFile } from "./fal-storage";
 import { IMAGE_RATIOS } from "../../generation/image-studio-options";
 import { safeFetchUrl, UnsafeUrlError, type LookupFn } from "../../generation/safe-fetch";
 import { isMp4 } from "../../generation/video/mp4";
@@ -101,12 +108,21 @@ export type FalModel = {
   /**
    * The model's input JSON from the normalized params (+ the engine's composed `prompt` in `extra`) and, for the P2b
    * edit / utility models, the input pictures (`assets.inputImages`, resolved and ownership-checked by the host). Pure.
+   * `fileUrl`: the uploaded input of a `fileInput` model.
    */
-  body(p: NormalizedParams, inputs?: readonly AdapterAsset[]): Record<string, unknown>;
+  body(p: NormalizedParams, inputs?: readonly AdapterAsset[], fileUrl?: string): Record<string, unknown>;
   /** Pictures the model needs at least (P2b); a request with fewer is a programmer error, refused before any call. */
   minInputs?: number;
   /** The output check, when it differs from the default (PNG / JPEG / WebP); `alpha`: a PNG must carry transparency. */
-  output?: { mimes: readonly string[]; alpha?: boolean };
+  output?: { mimes: readonly string[]; alpha?: boolean; maxBytes?: number };
+  /** The input is a file (`assets.audio` / `assets.media`) that travels by URL through fal storage. */
+  fileInput?: boolean;
+  /** The result's single file field, when it is not `images[]` / `image`. */
+  resultFile?: "audio";
+  /** The model answers with data, not a file: the normalized answer (handed back as inline JSON), `null` when unusable. */
+  json?: (result: unknown) => unknown;
+  /** How long fal keeps the files this call makes (`X-Fal-Object-Lifecycle-Preference`). */
+  retentionSec?: number;
 };
 
 /**
@@ -390,21 +406,25 @@ export function falAdapter(o: FalDeps = {}): MediaAdapter {
   const pollMs = o.pollMs ?? 1_000;
   const pollMaxMs = o.pollMaxMs ?? 3_000;
 
-  function buildRequest(input: AdapterInput) {
-    const model = FAL_MODELS[input.upstreamModel] ?? FAL_TOOL_MODELS[input.upstreamModel];
+  function modelOf(upstreamModel: string): FalModel | undefined {
+    return FAL_MODELS[upstreamModel] ?? FAL_TOOL_MODELS[upstreamModel] ?? FAL_AUDIO_MODELS[upstreamModel];
+  }
+
+  function buildRequest(input: AdapterInput, fileUrl: string = FAL_FILE_PENDING) {
+    const model = modelOf(input.upstreamModel);
     if (!model) throw new MediaError(FAL_PROVIDER, `unknown fal model ${input.upstreamModel}`);
     const inputs = input.assets?.inputImages ?? [];
     if (inputs.length < (model.minInputs ?? 0)) throw new MediaError(FAL_PROVIDER, `${input.upstreamModel}: kirish rasmi yo'q`);
-    return { url: `https://${FAL_QUEUE_HOST}/${input.upstreamModel}`, headers: { "Content-Type": "application/json" }, body: model.body(input.params, inputs) };
+    if (model.fileInput && !falFileAsset(input)) throw new MediaError(FAL_PROVIDER, `${input.upstreamModel}: kirish fayli yo'q`);
+    return {
+      url: `https://${FAL_QUEUE_HOST}/${input.upstreamModel}`,
+      headers: { "Content-Type": "application/json", ...(model.retentionSec ? falLifecycleHeader(model.retentionSec) : {}) },
+      body: model.body(input.params, inputs, fileUrl),
+    };
   }
 
-  return {
-    id: FAL_ADAPTER_ID,
-    configured: () => Boolean(keyOf()),
-    buildRequest,
-    async submit(input, deps: AdapterDeps = {}) {
-      const key = keyOf();
-      if (!key) throw new MediaError(FAL_PROVIDER, "FAL_KEY yo'q");
+  /** The whole queue cycle of one call; `fileUrl` is the uploaded input of a `fileInput` model. */
+  async function cycle(input: AdapterInput, deps: AdapterDeps, key: string, fileUrl?: string): Promise<{ done: MediaOutput[] }> {
       const fetchImpl = deps.fetchImpl ?? globalThis.fetch;
       const now = deps.now ?? Date.now;
       const deadline = deps.deadline ?? now() + DEFAULT_BUDGET_MS;
@@ -414,7 +434,8 @@ export function falAdapter(o: FalDeps = {}): MediaAdapter {
       const auth = { Authorization: `Key ${key}` };
 
       if (left() < MIN_BUDGET_MS) throw fail("byudjet 2 s dan kam", { retryable: true });
-      const req = buildRequest(input);
+      const req = buildRequest(input, fileUrl);
+      const model = modelOf(input.upstreamModel);
 
       // 1. Submit. The start timeout makes fal drop the job when it could not start before our deadline.
       let res: Response;
@@ -510,23 +531,32 @@ export function falAdapter(o: FalDeps = {}): MediaAdapter {
         throw accepted(`result: ${e instanceof Error ? e.message : String(e)}`, { retryable: true });
       }
       if (out.status >= 300 && out.status < 400) throw accepted(`result: ${out.status} redirect rad etildi`, { status: out.status });
-      const result = (await json(out, big("result", true))) as { images?: { url?: unknown }[]; image?: { url?: unknown }; has_nsfw_concepts?: unknown } | null;
+      const result = (await json(out, big("result", true))) as { images?: { url?: unknown }[]; image?: { url?: unknown }; audio?: { url?: unknown }; has_nsfw_concepts?: unknown } | null;
       if (!out.ok) {
         const d = detailOf(result);
         const safety = d.types.includes(POLICY);
         throw accepted(`${out.status} ${d.text || "result failed"}`, { status: out.status, safety, retryable: !safety && isRetryableStatus(out.status) });
       }
+      // A data answer (speech-to-text): nothing to download; an unusable one was still billed, so it stays `accepted`.
+      if (model?.json) {
+        const data = model.json(result);
+        if (data === null || data === undefined) throw accepted("javobda ma'lumot yo'q", {});
+        return { done: [{ kind: "inline", bytes: new TextEncoder().encode(JSON.stringify(data)), mime: "application/json" }] };
+      }
       const nsfw = Array.isArray(result?.has_nsfw_concepts) ? (result!.has_nsfw_concepts as unknown[]) : [];
-      // `images[]` (generate / edit) or a single `image` (upscale, background removal — P2b).
-      const listed = Array.isArray(result?.images) ? result!.images : result?.image && typeof result.image === "object" ? [result.image] : [];
+      // `images[]` (generate / edit), a single `image` (upscale, background removal — P2b) or the audio models' `audio`.
+      const single = model?.resultFile ? result?.[model.resultFile] : result?.image;
+      const listed = Array.isArray(result?.images) && !model?.resultFile ? result!.images : single && typeof single === "object" ? [single] : [];
       const urls = listed.map((im, i) => ({ url: typeof im?.url === "string" ? im.url : "", flagged: nsfw[i] === true }));
       const usable = urls.filter((u) => u.url && !u.flagged);
       if (usable.length === 0) {
         if (urls.some((u) => u.flagged)) throw accepted(`${POLICY}: rasm xavfsizlik filtridan o'tmadi`, { safety: true });
-        throw accepted("javobda rasm yo'q", {});
+        throw accepted(model?.resultFile ? "javobda fayl yo'q" : "javobda rasm yo'q", {});
       }
 
       // 4. Bytes: a data URI decoded, a URL downloaded WITHOUT the key; the type sniffed, never trusted.
+      const spec = model?.output;
+      const maxBytes = spec?.maxBytes ?? IMAGE_SPEC.maxBytes;
       const outputs: MediaOutput[] = [];
       for (const u of usable) {
         let bytes: Uint8Array | null;
@@ -534,20 +564,41 @@ export function falAdapter(o: FalDeps = {}): MediaAdapter {
           bytes = decodeDataUri(u.url);
         } else {
           try {
-            const got = await safeFetchUrl(u.url, { timeoutMs: Math.max(1, Math.min(CALL_MS, left())), maxBytes: IMAGE_SPEC.maxBytes, fetchImpl, ...(o.lookup ? { lookup: o.lookup } : {}) });
+            const got = await safeFetchUrl(u.url, { timeoutMs: Math.max(1, Math.min(CALL_MS, left())), maxBytes, fetchImpl, ...(o.lookup ? { lookup: o.lookup } : {}) });
             bytes = got.ok ? new Uint8Array(await got.arrayBuffer()) : null;
           } catch (e) {
             throw accepted(`download: ${e instanceof Error ? e.message : String(e)}`, { retryable: true });
           }
         }
         if (!bytes) throw accepted("rasm yuklab olinmadi", { retryable: true });
-        const spec = FAL_TOOL_MODELS[input.upstreamModel]?.output;
-        const check = await checkOutput(bytes, spec ? { mimes: spec.mimes, maxBytes: IMAGE_SPEC.maxBytes } : IMAGE_SPEC);
+        const check = await checkOutput(bytes, spec ? { mimes: spec.mimes, maxBytes } : IMAGE_SPEC);
         if (!check.ok) throw accepted(`rasm: ${check.error}`, {});
         if (spec?.alpha && !pngHasAlpha(bytes)) throw accepted("rasm: shaffof fon yo'q (PNG alfa kanali kutilgan edi)", {});
         outputs.push({ kind: "inline", bytes, mime: check.mime });
       }
       return { done: outputs };
+  }
+
+  return {
+    id: FAL_ADAPTER_ID,
+    configured: () => Boolean(keyOf()),
+    buildRequest: (input) => buildRequest(input),
+    async submit(input, deps: AdapterDeps = {}) {
+      const key = keyOf();
+      if (!key) throw new MediaError(FAL_PROVIDER, "FAL_KEY yo'q");
+      if (!modelOf(input.upstreamModel)?.fileInput) return cycle(input, deps, key);
+      // Every pure check first: nothing is uploaded for a request that cannot be sent.
+      buildRequest(input);
+      const fetchImpl = deps.fetchImpl ?? globalThis.fetch;
+      const now = deps.now ?? Date.now;
+      const budget = (deps.deadline ?? now() + DEFAULT_BUDGET_MS) - now();
+      const fileUrl = await uploadFalFile(falFileAsset(input)!, { key, fetchImpl, timeoutMs: budget, ...(o.lookup ? { lookup: o.lookup } : {}) });
+      try {
+        return await cycle(input, deps, key, fileUrl);
+      } finally {
+        // The URL is readable by anyone who has it: gone with the call (its expiry covers a failed delete).
+        await deleteFalFile(fileUrl, { key, fetchImpl });
+      }
     },
     async fetchOutput(o2) {
       if (o2.kind === "inline") return o2.bytes;
@@ -721,28 +772,47 @@ export function falVideoRequest(input: Pick<AdapterInput, "upstreamModel" | "par
   return { endpoint, url: `https://${FAL_QUEUE_HOST}/${endpoint}`, headers: { "Content-Type": "application/json" }, body: model.body(input.params, frames) };
 }
 
+/**
+ * What differs when the same queue protocol serves another async kind (`fal-dub.ts`): the request and which endpoints an op
+ * may name, the result's file, the download's check and cap. Absent = the clip behaviour above.
+ */
+export type FalQueueVariant = {
+  id: string;
+  endpoints: ReadonlySet<string>;
+  request(input: Pick<AdapterInput, "upstreamModel" | "params" | "assets">): { endpoint: string; url: string; headers: Record<string, string>; body: Record<string, unknown> };
+  startTimeoutSec: number;
+  /** The result's file URL, `null` when it has none. */
+  outputOf(result: unknown): string | null;
+  /** The downloaded bytes are what this kind delivers (sniffed: a page's or an answer's content type is never trusted). */
+  accepts(bytes: Uint8Array): boolean;
+  maxBytes: number;
+};
+
 /** `fal:<endpoint>:<request_id>` → its parts; `null` for anything this adapter did not issue. */
-export function parseFalVideoOp(opId: string): { endpoint: string; requestId: string } | null {
+export function parseFalVideoOp(opId: string, endpoints: ReadonlySet<string> = FAL_VIDEO_ENDPOINTS): { endpoint: string; requestId: string } | null {
   if (!opId.startsWith("fal:")) return null;
   const at = opId.lastIndexOf(":");
   const endpoint = opId.slice(4, at);
   const requestId = opId.slice(at + 1);
-  if (at <= 4 || !FAL_VIDEO_ENDPOINTS.has(endpoint) || !REQUEST_ID.test(requestId)) return null;
+  if (at <= 4 || !endpoints.has(endpoint) || !REQUEST_ID.test(requestId)) return null;
   return { endpoint, requestId };
 }
 
 /** Result statuses that are the model's final answer (queue result OpenAPI): the clip will not come. */
 const FINAL_RESULT_STATUSES: ReadonlySet<number> = new Set([404, 422, 499, 500, 504]);
 
-export function falVideoAdapter(o: Pick<FalDeps, "key" | "lookup"> = {}): MediaAdapter {
+export function falVideoAdapter(o: Pick<FalDeps, "key" | "lookup"> & { variant?: FalQueueVariant } = {}): MediaAdapter {
   const keyOf = o.key ?? (() => getProviderKey(FAL_PROVIDER));
+  const variant = o.variant;
+  const requestOf = variant?.request ?? falVideoRequest;
+  const endpoints = variant?.endpoints ?? FAL_VIDEO_ENDPOINTS;
   const failOf = (key: string | null) => (msg: string, f: { status?: number; retryable?: boolean; safety?: boolean; accepted?: boolean }) => new MediaError(FAL_PROVIDER, scrub(msg, key), f);
 
   return {
-    id: FAL_VIDEO_ADAPTER_ID,
+    id: variant?.id ?? FAL_VIDEO_ADAPTER_ID,
     configured: () => Boolean(keyOf()),
     buildRequest(input) {
-      const r = falVideoRequest(input);
+      const r = requestOf(input);
       return { url: r.url, headers: r.headers, body: r.body };
     },
 
@@ -751,12 +821,12 @@ export function falVideoAdapter(o: Pick<FalDeps, "key" | "lookup"> = {}): MediaA
       // Nothing was sent: fal holds no job of ours.
       if (!key) throw new MediaError(FAL_PROVIDER, "FAL_KEY yo'q", { accepted: false });
       const fail = failOf(key);
-      const req = falVideoRequest(input);
+      const req = requestOf(input);
       let res: Response;
       try {
         res = await (deps.fetchImpl ?? globalThis.fetch)(req.url, {
           method: "POST",
-          headers: { ...req.headers, Authorization: `Key ${key}`, "X-Fal-Request-Start-Timeout": String(FAL_VIDEO_START_TIMEOUT_SEC) },
+          headers: { ...req.headers, Authorization: `Key ${key}`, "X-Fal-Request-Start-Timeout": String(variant?.startTimeoutSec ?? FAL_VIDEO_START_TIMEOUT_SEC) },
           body: JSON.stringify(req.body),
           redirect: "manual",
           signal: AbortSignal.timeout(VIDEO_CALL_MS),
@@ -781,7 +851,7 @@ export function falVideoAdapter(o: Pick<FalDeps, "key" | "lookup"> = {}): MediaA
     async poll(opId, deps: AdapterDeps = {}): Promise<PollResult> {
       const key = keyOf();
       const fail = failOf(key);
-      const op = parseFalVideoOp(opId);
+      const op = parseFalVideoOp(opId, endpoints);
       if (!op) throw fail("noto'g'ri operatsiya id", { accepted: true });
       // The key was removed after the submit: wait (the admin may put it back) until the job's deadline refunds it.
       if (!key) throw fail("FAL_KEY yo'q", { accepted: true, retryable: true });
@@ -824,9 +894,9 @@ export function falVideoAdapter(o: Pick<FalDeps, "key" | "lookup"> = {}): MediaA
         if (safety || FINAL_RESULT_STATUSES.has(out.status)) return { state: "failed", message: scrub(`${out.status} ${d.text || "result failed"}`, key), safety };
         throw fail(`result ${out.status} ${d.text}`, { status: out.status, retryable: isRetryableStatus(out.status), accepted: true });
       }
-      const url = typeof result?.video?.url === "string" ? result.video.url : "";
+      const url = variant ? (variant.outputOf(result) ?? "") : typeof result?.video?.url === "string" ? result.video.url : "";
       if (!url) return { state: "failed", message: "fal: javobda video yo'q", safety: false };
-      return { state: "done", outputs: [{ kind: "url", url, mime: "video/mp4" }] };
+      return { state: "done", outputs: [{ kind: "url", url, ...(variant ? {} : { mime: "video/mp4" }) }] };
     },
 
     /**
@@ -838,7 +908,7 @@ export function falVideoAdapter(o: Pick<FalDeps, "key" | "lookup"> = {}): MediaA
     async cancel(opId, deps: AdapterDeps = {}) {
       const key = keyOf();
       const fail = failOf(key);
-      const op = parseFalVideoOp(opId);
+      const op = parseFalVideoOp(opId, endpoints);
       if (!op) throw fail("noto'g'ri operatsiya id", { accepted: true });
       if (!key) throw fail("FAL_KEY yo'q", { accepted: true });
       let res: Response;
@@ -861,21 +931,22 @@ export function falVideoAdapter(o: Pick<FalDeps, "key" | "lookup"> = {}): MediaA
 
     async fetchOutput(output, deps: AdapterDeps = {}) {
       const fail = failOf(keyOf());
+      const accepts = variant?.accepts ?? isMp4;
       if (output.kind === "inline") {
-        if (!isMp4(output.bytes)) throw fail("video: MP4 emas", { accepted: true });
+        if (!accepts(output.bytes)) throw fail("video: MP4 emas", { accepted: true });
         return output.bytes;
       }
       let res: Response;
       try {
         // WITHOUT the key: a CDN URL, checked host by host, capped.
-        res = await safeFetchUrl(output.url, { timeoutMs: VIDEO_DOWNLOAD_MS, maxBytes: VIDEO_MAX_BYTES, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}), ...(o.lookup ? { lookup: o.lookup } : {}) });
+        res = await safeFetchUrl(output.url, { timeoutMs: VIDEO_DOWNLOAD_MS, maxBytes: variant?.maxBytes ?? VIDEO_MAX_BYTES, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}), ...(o.lookup ? { lookup: o.lookup } : {}) });
       } catch (e) {
         if (e instanceof UnsafeUrlError) throw fail(e.reason === "size" ? "video fayli juda katta" : `video URL rad etildi (${e.reason})`, { accepted: true });
         throw fail(`download: ${e instanceof Error ? e.message : String(e)}`, { retryable: true, accepted: true });
       }
       if (!res.ok) throw fail(`download ${res.status}`, { status: res.status, retryable: isRetryableStatus(res.status), accepted: true });
       const bytes = new Uint8Array(await res.arrayBuffer());
-      if (!isMp4(bytes)) throw fail("yuklangan fayl MP4 emas", { retryable: true, accepted: true });
+      if (!accepts(bytes)) throw fail("yuklangan fayl MP4 emas", { retryable: true, accepted: true });
       return bytes;
     },
   };

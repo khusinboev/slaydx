@@ -153,9 +153,9 @@ const OTHER: Record<string, unknown> = {
 test("catalog: four ElevenLabs entries + P9 Lyria in «Musiqa»; a mode's purpose allows exactly its models; Creator-plan credit rates", () => {
   assert.deepEqual(au.AUDIO_MODES.map((m) => [m.mode, m.label, m.model, m.models, m.purpose]), [
     ["music", "Musiqa", MUSIC, [MUSIC, "google/lyria-3"], "studio.music"],
-    ["sfx", "Effekt", SFX, [SFX], "studio.sfx"],
+    ["sfx", "Effekt", SFX, [SFX, "elevenlabs/sfx-v3-fal"], "studio.sfx"],
     ["voice-changer", "Ovozni almashtirish", STS, [STS], "studio.voice-changer"],
-    ["isolate", "Shovqindan tozalash", ISO, [ISO], "studio.isolate"],
+    ["isolate", "Shovqindan tozalash", ISO, [ISO, "veed/clean-audio"], "studio.isolate"],
   ]);
   for (const m of au.AUDIO_MODES) {
     const p = MEDIA_PURPOSES.byId(m.purpose)!;
@@ -165,7 +165,7 @@ test("catalog: four ElevenLabs entries + P9 Lyria in «Musiqa»; a mode's purpos
     assert.equal(e.routes[0]!.provider, "elevenlabs");
     assert.equal(e.cost.per, "second");
   }
-  assert.deepEqual(au.AUDIO_MODEL_IDS, [MUSIC, "google/lyria-3", SFX, STS, ISO]);
+  assert.deepEqual(au.AUDIO_MODEL_IDS, [MUSIC, "google/lyria-3", SFX, "elevenlabs/sfx-v3-fal", STS, ISO, "veed/clean-audio"]);
   assert.equal(au.audioModeOf("google/lyria-3")?.mode, "music");
   assert.equal(ELEVENLABS_CREATOR_USD_PER_CREDIT, 22 / 121_000);
   const usd = (id: string) => (MEDIA_CATALOG.byId(id)!.cost as { usd: number }).usd;

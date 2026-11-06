@@ -14,7 +14,7 @@ import { Field } from "@/components/forms/shared";
 import { queueGeneration } from "@/components/forms/runGeneration";
 import { PAY_RETURN_PATH } from "@/components/overlays/pay-amount";
 import { speechTextParam } from "@/lib/media/studio-speech";
-import { takesClones, voiceParamsOf } from "@/lib/media/catalog-speech";
+import { offeredVoices, takesClones, voiceParamsOf } from "@/lib/media/catalog-speech";
 import { MediaModelPicker } from "../MediaModelPicker";
 import { ParamRows } from "../ParamRows";
 import { PriceButton } from "../PriceButton";
@@ -179,8 +179,10 @@ export function VoiceTab({
   const values = effective(entry, state.raw);
   const provider = entry.id.startsWith("elevenlabs/") ? "elevenlabs" : "gemini";
   const clones = takesClones(entry);
-  const library = voices ? (provider === "elevenlabs" ? voices.library.elevenlabs : voices.library.gemini) : [];
-  const rows = voiceRows(library, provider, voices?.mine ?? [], clones, state.filter);
+  const library = voices ? offeredVoices(entry.id, provider === "elevenlabs" ? voices.library.elevenlabs : voices.library.gemini) : [];
+  // «Mening ovozlarim» has no chip on a model without clones: its list would be empty with nothing to leave it by.
+  const filter = state.filter === "mine" && !clones ? "all" : state.filter;
+  const rows = voiceRows(library, provider, voices?.mine ?? [], clones, filter);
   const filters: VoiceFilter[] = clones ? ["all", "male", "female", "mine"] : ["all", "male", "female"];
   const hasClone = (voices?.mine.length ?? 0) > 0;
   const cloneOffer = voices?.clone ?? null;
@@ -367,7 +369,7 @@ export function VoiceTab({
             rows={rows}
             value={String(values[speakerParam] ?? "")}
             onPick={(v) => setParam(speakerParam, v)}
-            filter={state.filter}
+            filter={filter}
             onFilter={(f) => patch({ filter: f })}
             filters={filters}
             onDelete={(r) => void remove(r)}

@@ -116,7 +116,8 @@ test("tab: «Musiqa» offers both models (ElevenLabs first = default); the picke
   // Only Lyria listed (no ElevenLabs key): the mode stays, with Lyria as its only model.
   const lyriaOnly = offeredModes(view.filter((e) => e.id === LYRIA)).find((m) => m.mode === "music")!;
   assert.deepEqual([lyriaOnly.entry.id, lyriaOnly.entries.length], [LYRIA, 1]);
-  for (const m of both.filter((x) => x.mode !== "music")) assert.equal(m.entries.length, 1, m.mode);
+  // P11: «Effekt» and «Shovqindan tozalash» gained a fal model each; the voice changer has one.
+  assert.deepEqual(both.filter((x) => x.mode !== "music").map((m) => [m.mode, m.entries.length]), [["sfx", 2], ["voice-changer", 1], ["isolate", 2]]);
   // Labels: the button short (the price fits a phone), the results in full; a one-model mode keeps its own name.
   assert.deepEqual(audioJobLabels(music.entries[1]!, "Musiqa", 2), { button: "Lyria 3", job: "Musiqa · Lyria 3" });
   assert.deepEqual(audioJobLabels(music.entries[0]!, "Musiqa", 2), { button: "Musiqa", job: "Musiqa" });

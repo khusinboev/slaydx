@@ -56,7 +56,7 @@ const GPT = "openai/gpt-image";
 /** P3: the Studio Video tab's models, listed after the pictures (Gemini Omni + Kling 3.0 tiers + effects); P4 adds the fal models. */
 const STUDIO_VIDEO_IDS = ["google/omni-video", "kling/kling-4", "kling/kling-4-flash", "kling/kling-3", "kling/kling-3-pro", "alibaba/wan-3", "bytedance/seedance-2.5", "bytedance/seedance-2-mini", "minimax/h3", "minimax/h3-max-turbo", "openai/sora-2", "openai/sora-2-pro", "heygen/avatar", "kling/effects"];
 /** P5: the «Ovoz» tab's speech models, listed after the video ones; one unit = 1 000 characters (the clone is a fixed price, not here). */
-const STUDIO_SPEECH_IDS = ["elevenlabs/eleven-v3", "google/gemini-tts", "elevenlabs/v3-dialogue", "google/gemini-dialogue"];
+const STUDIO_SPEECH_IDS = ["elevenlabs/eleven-v3", "google/gemini-tts", "elevenlabs/eleven-v3-fal", "elevenlabs/eleven-v4-turbo-fal", "elevenlabs/v3-dialogue", "google/gemini-dialogue"];
 /**
  * P6: the «Audio» tab's four models, listed last; one unit = 1 minute of music / of input audio, 10 s of a sound effect.
  * Prices at ×2 and the default 12 700 so'm/$ (P6-SPEC price table): 15 cr/s × 60 s, 40 cr/s × 10 s, 1 000 cr / min.
@@ -66,8 +66,12 @@ const STUDIO_AUDIO: Record<string, { unit: string; values: Record<string, unknow
   // P9: Lyria on the Gemini key, per song ($0.08 × 12 700 × 2 = 2 032 → 2 100).
   "google/lyria-3": { unit: "1 qo‘shiq", values: { length: "song" }, price: 2_100 },
   "elevenlabs/sfx": { unit: "10 soniya", values: { duration: 10 }, price: 1_900 },
+  // P11: fal, $0.002 / s × 10 s = 508 → 600.
+  "elevenlabs/sfx-v3-fal": { unit: "10 soniya", values: { duration: 10 }, price: 600 },
   "elevenlabs/voice-changer": { unit: "1 daqiqa", values: { inputSeconds: 60 }, price: 4_700 },
   "elevenlabs/isolator": { unit: "1 daqiqa", values: { inputSeconds: 60 }, price: 4_700 },
+  // P11: VEED, $0.0125 / min = 317.5 → 400.
+  "veed/clean-audio": { unit: "1 daqiqa", values: { inputSeconds: 60 }, price: 400 },
 };
 const STUDIO_AUDIO_IDS = Object.keys(STUDIO_AUDIO);
 /**
@@ -76,7 +80,12 @@ const STUDIO_AUDIO_IDS = Object.keys(STUDIO_AUDIO);
  */
 const STUDIO_P10: Record<string, { tool: "studio-transcribe" | "studio-dub"; price: number }> = {
   "elevenlabs/scribe-v2": { tool: "studio-transcribe", price: 1_600 },
+  // P11: fal Scribe, $0.008 / min = 203.2 → 300.
+  "elevenlabs/scribe-v2-fal": { tool: "studio-transcribe", price: 300 },
   "elevenlabs/dubbing": { tool: "studio-dub", price: 13_900 },
+  // P11: fal dubbing $0.6 / min = 15 240 → 15 300; HeyGen $0.05 / s × 60 s = 76 200.
+  "elevenlabs/dubbing-fal": { tool: "studio-dub", price: 15_300 },
+  "heygen/translate-speed": { tool: "studio-dub", price: 76_200 },
 };
 const STUDIO_P10_IDS = Object.keys(STUDIO_P10);
 /** P2a: the fal models (key set above) — one picture at the default params (Ideogram: «Standart» quality, $0.06). */
@@ -199,7 +208,7 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
       assert.equal(m.unit, "1 daqiqa", m.modelId);
       if (rate === 12_700) assert.equal(m.price, want.price, `${m.modelId}: the P10-SPEC price`);
       assert.equal(m.price, up100(m.costUsd * rate * 2), m.modelId);
-      assert.equal(m.price, await effectivePrice(TOOL_BY_ID[want.tool], { source: "upload:" + "a".repeat(24), sourceSeconds: 60 }), `${m.modelId}: the charging function`);
+      assert.equal(m.price, await effectivePrice(TOOL_BY_ID[want.tool], { modelId: m.modelId, source: "upload:" + "a".repeat(24), sourceSeconds: 60 }), `${m.modelId}: the charging function`);
     }
     // P6: an «Audio» row is priced by the charging function of `studio-audio` (seconds × credit rate × markup).
     for (const m of r.body.models.filter((x) => STUDIO_AUDIO_IDS.includes(x.modelId))) {

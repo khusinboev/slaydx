@@ -16,6 +16,8 @@ import { MediaError, type AdapterInput, type MediaAdapter, type MediaOutput, typ
 import { ELEVENLABS_API, elevenLabsFetch, elevenLabsKey } from "../../generation/tts/elevenlabs";
 import { AUTO_LANGUAGE, ELEVENLABS_STT_MODEL, SPEECH_TOOL_OUTPUT_MAX_BYTES } from "../catalog-transcribe";
 import { toSpeechError } from "./speech";
+import { FAL_ADAPTER_ID, falAdapter, type FalDeps } from "./fal";
+import { FAL_DUB_ADAPTER_ID, falDubAdapter } from "./fal-dub";
 
 export const ELEVENLABS_STT_URL = `${ELEVENLABS_API}/speech-to-text`;
 export const ELEVENLABS_DUB_URL = `${ELEVENLABS_API}/dubbing`;
@@ -251,6 +253,6 @@ export function dubAdapter(deps: TranscribeAdapterDeps = {}): MediaAdapter {
 }
 
 /** Every P10 adapter by id (the catalog routes name them). */
-export function transcribeAdapters(deps: TranscribeAdapterDeps = {}): Record<string, MediaAdapter> {
-  return { [STT_ADAPTER_ID]: sttAdapter(deps), [DUB_ADAPTER_ID]: dubAdapter(deps) };
+export function transcribeAdapters(deps: TranscribeAdapterDeps & { fal?: FalDeps } = {}): Record<string, MediaAdapter> {
+  return { [STT_ADAPTER_ID]: sttAdapter(deps), [DUB_ADAPTER_ID]: dubAdapter(deps), [FAL_ADAPTER_ID]: falAdapter(deps.fal), [FAL_DUB_ADAPTER_ID]: falDubAdapter(deps.fal) };
 }
