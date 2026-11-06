@@ -187,7 +187,7 @@ export async function submitKlingTask(key: () => string, req: KlingTaskRequest, 
 
 /** The state of a task from a provider-side status and failure text; shared by both query shapes. */
 function failedTask(key: () => string, text: string | undefined): VideoPollResult {
-  const msg = scrubSecrets(String(text ?? ""), [key()]);
+  const msg = scrubSecrets(String(text ?? ""), [key().trim()]);
   const safety = looksLikeSafetyRefusal(msg);
   return { state: "failed", message: safety ? VIDEO_SAFETY_MESSAGE : msg || "Provayder videoni yaratmadi", safety };
 }
@@ -195,12 +195,15 @@ function failedTask(key: () => string, text: string | undefined): VideoPollResul
 async function pollTaskRow(key: () => string, id: string, deps: VideoAdapterDeps): Promise<VideoPollResult> {
   const env = await klingCall<TaskRow[]>(key, "GET", `${KLING_BASE}/tasks?task_ids=${encodeURIComponent(id)}`, undefined, deps);
   const row = Array.isArray(env.data) ? env.data[0] : undefined;
-  if (row?.status === "succeeded") {
+  // A task Kling does not list: retryable, so a brief lag after the create is forgiven and a dead op stops at the
+  // transient-error limit (`MAX_TRANSIENT_ERRORS`) with its refund, without being failed on one empty answer.
+  if (!row) throw new VideoProviderError("kling", "vazifa topilmadi", { retryable: true });
+  if (row.status === "succeeded") {
     const url = row.outputs?.find((o) => o.type === "video")?.url;
     if (!url) return { state: "failed", message: "Provayder videoni qaytarmadi", safety: false };
     return { state: "done", media: { kind: "url", url } };
   }
-  return row?.status === "failed" ? failedTask(key, row.message) : { state: "running" };
+  return row.status === "failed" ? failedTask(key, row.message) : { state: "running" };
 }
 
 /** Asks Kling about an op (`<kind>:<task_id>`); `kinds` = the queries this caller may ask. */

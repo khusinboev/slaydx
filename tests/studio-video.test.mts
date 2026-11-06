@@ -221,7 +221,7 @@ test("Kling 3.0 poll: GET /tasks?task_ids=, `data` is an array, the video output
     return r;
   };
   for (const status of ["submitted", "processing"]) assert.deepEqual(await poll({ status }), { state: "running" });
-  assert.deepEqual(await poll(null), { state: "running" }, "no row yet");
+  await assert.rejects(poll(null), (e: unknown) => e instanceof MediaError && e.retryable, "no row: a transient error, counted by the poll loop");
   const done = await poll({ status: "succeeded", outputs: [{ type: "image", url: "https://cdn.example.com/c.png" }, { type: "video", url: "https://cdn.example.com/k.mp4", duration: "5" }] });
   assert.ok(done.state === "done" && done.outputs[0]!.kind === "url" && done.outputs[0]!.url === "https://cdn.example.com/k.mp4", JSON.stringify(done));
   assert.equal((await poll({ status: "succeeded", outputs: [] })).state, "failed");

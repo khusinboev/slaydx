@@ -75,9 +75,9 @@ const END_IMAGE: ParamSchema = { ...START_IMAGE, name: END_IMAGE_PARAM, label: "
 export const SECOND_IMAGE_PARAM = "secondImageAssetId";
 
 /**
- * Two-photo effect scenes (Studio P4): `hug` is a documented dual-character scene of the direct API (Kling OpenAPI as
- * vendored by ComfyUI, `KlingDualCharacterEffectsScene`: hug / kiss / heart_gesture, `images` exactly two; read
- * 2026-11-02). Only «Quchoqlash» is sold (the owner's canvas); priced as every effect (UNVERIFIED, see P4-SPEC).
+ * Two-photo effect scenes (Studio P4): `hug_pro` is one of the 15 dual-image scenes of the direct API, `images` exactly
+ * two (api/effects/video-effects.md, read 2026-11-06). Only «Quchoqlash» is sold (the owner's canvas); priced as every
+ * effect (UNVERIFIED, see P4-SPEC).
  */
 export const KLING_DUAL_EFFECTS: readonly { id: string; label: string }[] = [{ id: "hug_pro", label: "Quchoqlash" }];
 

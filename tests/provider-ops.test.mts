@@ -525,7 +525,7 @@ test("Kling «Tekshirish»: the free account read, Bearer, packs summed, no pack
   const run = (status: number, body: unknown) =>
     probeProvider("kling", GOOD_KLING, { fetchImpl: (async () => new Response(JSON.stringify(body), { status })) as typeof fetch });
   const pack = (name: string, status: string, remaining_quantity: number) => ({ resource_pack_name: name, status, remaining_quantity });
-  const live = await run(200, { code: 0, data: { resource_pack_subscribe_infos: [pack("Trial-Video-Flagship", "online", 64), pack("Video-Old", "expired", 900), pack("Image-Pack", "online", 50), pack("Video-B", "online", 6)] } });
+  const live = await run(200, { code: 0, data: { resource_pack_subscribe_infos: [pack("Trial-Video-Flagship", "online", 64), pack("Video-Old", "expired", 900), pack("Image-Pack", "online", 50), pack("Kling-3.0-Pack", "online", 6)] } });
   assert.equal(live.ok, true);
   assert.match(live.message, /70 birlik/);
   const empty = await run(200, { code: 0, data: { resource_pack_subscribe_infos: [pack("Video-Old", "runOut", 0)] } });

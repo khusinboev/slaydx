@@ -221,14 +221,14 @@ export function deepseekMessage(body: unknown): string {
   return parts.join(" · ");
 }
 
-/** The sum of the online video packs: only a number and fixed text, nothing of the account. */
+/** The sum of the online packs a video can spend, by name (image and audio packs are not): a number and fixed text only. */
 export function klingMessage(body: unknown): string {
   const packs = ((body as { data?: { resource_pack_subscribe_infos?: unknown } } | null)?.data?.resource_pack_subscribe_infos ?? []) as {
     resource_pack_name?: unknown;
     status?: unknown;
     remaining_quantity?: unknown;
   }[];
-  const live = (Array.isArray(packs) ? packs : []).filter((p) => p.status === "online" && /video/i.test(String(p.resource_pack_name ?? "")));
+  const live = (Array.isArray(packs) ? packs : []).filter((p) => p.status === "online" && !/image|audio/i.test(String(p.resource_pack_name ?? "")));
   if (live.length === 0) return "Kalit qabul qilindi · faol video paket yo‘q, video yaratilmaydi";
   const units = live.reduce((sum, p) => sum + (Number(p.remaining_quantity) || 0), 0);
   return `Kalit qabul qilindi · video paket qoldig‘i: ${units} birlik (12 soatgacha kechikishi mumkin)`;
