@@ -156,6 +156,15 @@ test("Kling 4.0 golden: paths by model, resolution, 21:9, no sound setting; Flas
   assert.equal(studioVideoPrice({ modelId: "kling/kling-4-flash", prompt: "x", seconds: 5 }, PRICING), 12_000);
 });
 
+test("old «Video» tool: Kling refuses WebP before the charge (the API takes JPEG and PNG), Veo keeps it", () => {
+  const mimes = (id: string) => {
+    const p = entry(id).params.find((x) => x.name === "imageAssetId");
+    return p?.type === "image" ? p.mimes : [];
+  };
+  assert.ok(!mimes("kling/video").includes("image/webp"));
+  assert.ok(mimes("google/omni-video").includes("image/webp"));
+});
+
 test("defaultOff: the models the account's pack does not cover ship hidden, the rest do not", () => {
   const off = MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed.filter((id) => entry(id).defaultOff);
   assert.deepEqual(off, ["kling/kling-3", "kling/kling-3-pro", "kling/effects"]);

@@ -7,7 +7,8 @@ Owner decisions:
 - Layout: variant A «Ish stoli», https://claude.ai/artifact/VW19kEkeYAfsEzSRV8TQGc.
 - Kling 4.0 and 4.0 Flash sold; Kling 3.0 and effects hidden (`defaultOff`) until a pack covers them.
 - Providers: existing keys plus fal.ai. No new accounts.
-- New models are live-tested before users see them. They ship `defaultOff`; the admin switches them on.
+- Kling 4.0 and Flash ship on: the owner asked for them, and the first real clip proves the path. Every other new model is
+  live-tested before users see it: it ships `defaultOff` and the admin switches it on.
 - Prompt rewriting in every prompt box: detects the language itself and writes the English prompt.
 
 ## Packages, in merge order

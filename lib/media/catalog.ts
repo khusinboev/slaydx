@@ -70,7 +70,7 @@ function videoParams(id: VideoProviderId): readonly ParamSchema[] {
     { name: "prompt", label: "Video tavsifi", type: "text", min: VIDEO_PROMPT_MIN, max: VIDEO_PROMPT_MAX, affects: "request" },
     videoSecondsParam(secs),
     { name: "aspect", label: "O'lcham", type: "enum", options: VIDEO_ASPECTS.map((a) => ({ value: a, label: a })), default: VIDEO_ASPECTS[0], affects: "request" },
-    { name: "imageAssetId", label: "Boshlang'ich surat", type: "image", max: 1, mimes: ["image/jpeg", "image/png", "image/webp"], maxBytes: 10 * 1024 * 1024, affects: "request" },
+    { name: "imageAssetId", label: "Boshlang'ich surat", type: "image", max: 1, mimes: id === "kling" ? ["image/jpeg", "image/png"] : ["image/jpeg", "image/png", "image/webp"], maxBytes: 10 * 1024 * 1024, affects: "request" },
   ];
 }
 
