@@ -103,7 +103,7 @@ test("engine: the model answers with text only (no clear face) -> user-facing re
         (e: Error) => {
           assert.equal(e.name, "UserFacingError");
           assert.match(e.message, /aniq yuz/);
-          assert.match(e.message, /Pul qaytariladi/);
+          assert.match(e.message, /Pul balansingizga qaytariladi/);
           assert.ok(isUserSafeText(e.message));
           return true;
         },
@@ -137,7 +137,7 @@ test("engine: 2 variants, one fails -> 1 picture + delivered {got:1, want:2}; bo
   await withGemini(
     () => res(500, { error: "boom" }),
     async () => {
-      await assert.rejects(buildPortraitArtifact(tool, { ...VALUES, variants: 2 }, { photo, provider: geminiProvider }), /Pul qaytariladi/);
+      await assert.rejects(buildPortraitArtifact(tool, { ...VALUES, variants: 2 }, { photo, provider: geminiProvider }), /Pul balansingizga qaytariladi/);
     },
   );
 });
