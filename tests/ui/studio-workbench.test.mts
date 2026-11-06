@@ -231,6 +231,15 @@ test("the submit scrolls the results into view in one column, never in two", asy
   }
 });
 
+test("switchChanges: a length the server measures or an avatar's derived length is never named", () => {
+  const seconds = { name: "seconds", label: "Davomiylik", type: "int", min: 1, max: 60, default: 5, affects: "both" };
+  const measured = { name: "sourceSeconds", label: "Manba", type: "int", min: 0, max: 600, default: 0, affects: "price" };
+  const entry = (id: string, params: unknown[]) => ({ id, label: id, params }) as never;
+  assert.deepEqual(switchChanges(entry("a/one", [measured]), entry("a/two", []), { sourceSeconds: 60 }), []);
+  assert.deepEqual(switchChanges(entry("a/one", [seconds]), entry("heygen/avatar", [{ ...seconds, default: 10 }]), {}), []);
+  assert.equal(switchChanges(entry("a/one", [seconds]), entry("a/two", [{ ...seconds, default: 10 }]), {}).length, 1, "an ordinary length still counts");
+});
+
 test("switchChanges: effective values on both sides — a default that differs is named, untouched or not", () => {
   const a = withParams(OMNI, "x/a", [{ name: "seconds", label: "Davomiylik", type: "enum", options: [{ value: "5", label: "5" }, { value: "8", label: "8" }], default: "5", affects: "price" }] as never, "A");
   const b = withParams(OMNI, "x/b", [{ name: "seconds", label: "Davomiylik", type: "enum", options: [{ value: "5", label: "5" }, { value: "8", label: "8" }], default: "8", affects: "price" }] as never, "B");

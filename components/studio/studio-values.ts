@@ -1,4 +1,5 @@
 import { normalize, normalizeText, validate, type ClientEntry, type ParamSchema } from "@/lib/studio-core";
+import { isAvatarModel } from "@/lib/media/catalog-video";
 
 /**
  * Form state of the Studio is a bag of RAW values keyed by the model's param names (`prompt` is the text exactly as
@@ -75,6 +76,9 @@ function shownValue(p: ParamSchema, v: unknown): string {
   }
 }
 
+/** Lengths the server measures from the source: never a setting, so a notice never names them. */
+const SERVER_SET_PARAMS: ReadonlySet<string> = new Set(["inputSeconds", "sourceSeconds"]);
+
 /**
  * What a switch from `from` to `to` changes (docs/studio/P11-SPEC.md §D), by the EFFECTIVE values on both sides: a setting
  * both models have whose value differs after the switch, touched or not (one model's default of 5 s is another's 4 s, and
@@ -85,8 +89,10 @@ export function switchChanges(from: ClientEntry, to: ClientEntry, prev: RawValue
   const out: SwitchChange[] = [];
   const before = effective(from, prev);
   const after = effective(to, carryOver(to, prev));
+  // An avatar's length follows its script or speech: no row of the form sets it.
+  const avatar = isAvatarModel(from.id) || isAvatarModel(to.id);
   for (const p of from.params) {
-    if (p.type === "text" || p.type === "image" || p.type === "voice") continue;
+    if (p.type === "text" || p.type === "image" || p.type === "voice" || SERVER_SET_PARAMS.has(p.name) || (avatar && p.name === "seconds")) continue;
     const v = before[p.name];
     const q = to.params.find((x) => x.name === p.name);
     if (!q) {
