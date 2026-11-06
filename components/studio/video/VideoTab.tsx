@@ -26,7 +26,7 @@ import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, prom
 import type { StudioJob } from "../StudioResults";
 import { VideoResults } from "./VideoResults";
 import { STUDIO_VIDEO_SLUG, STUDIO_VIDEO_TOOL_ID, clipSeconds, isEffect, studioVideoClientPrice, videoCardPrice } from "./video-price";
-import { ASPECT_FOLLOWS_IMAGE, END_IMAGE_PARAM, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, avatarAudioSeconds, avatarMaxSeconds, avatarMinSeconds, avatarScriptProblem, effectPhotoHint, effectPhotos, isAvatarModel, isPhotoAvatarModel } from "@/lib/media/catalog-video";
+import { ASPECT_FOLLOWS_IMAGE, END_IMAGE_PARAM, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, avatarAudioSeconds, avatarMaxSeconds, avatarMinSeconds, avatarScriptProblem, effectNeedsPair, effectPhotoHint, effectPhotos, isAvatarModel, isPhotoAvatarModel } from "@/lib/media/catalog-video";
 import { fetchMixSources } from "../audio/mix-api";
 import { avatarHiddenParams, avatarRequest, avatarSpeeches, avatarSpeechesFor, type SpeechSource } from "./avatar";
 
@@ -412,6 +412,11 @@ export function VideoTab({
                   onChange={(v) => patch({ effectImage: v.assetId })}
                 />
               </Field>
+              {effectNeedsPair(effect?.value, effectEntry?.id ?? "") ? (
+                <p className="text-muted-foreground mt-1 text-[13px]" data-effect-note>
+                  {effectPhotoHint(effect?.value, effectEntry?.id ?? "")}
+                </p>
+              ) : null}
             </Row>
             {twoPhotos ? (
               <Row label="Ikkinchi surat" hint="Effekt ikki kishini birga ko‘rsatadi: har biri o‘z suratida" wide>

@@ -1,5 +1,5 @@
 import type { ClientEntry } from "@/lib/studio-core";
-import { HEYGEN_MAX_SECONDS, OWN_AUDIO_PARAM, avatarMaxSeconds, avatarMinSeconds, isAvatarModel, withAvatarSeconds } from "@/lib/media/catalog-video";
+import { HEYGEN_MAX_SECONDS, OWN_AUDIO_PARAM, avatarMaxSeconds, avatarMinSeconds, isAvatarModel, isPhotoAvatarModel, withAvatarSeconds } from "@/lib/media/catalog-video";
 import { MIX_SECONDS_TOLERANCE } from "@/lib/media/catalog-mix";
 import { PROMPT_PARAM } from "../studio-values";
 
@@ -39,5 +39,5 @@ export function avatarRequest(entry: Pick<ClientEntry, "id">, sent: Record<strin
   const own = String(sent[OWN_AUDIO_PARAM] ?? "").trim();
   if (!own) return withAvatarSeconds({ ...sent, [OWN_AUDIO_PARAM]: "" }, null);
   const src = speeches.find((s) => s.id === own);
-  return withAvatarSeconds({ ...sent, [PROMPT_PARAM]: "" }, src?.seconds ?? null);
+  return withAvatarSeconds(isPhotoAvatarModel(entry.id) ? sent : { ...sent, [PROMPT_PARAM]: "" }, src?.seconds ?? null);
 }

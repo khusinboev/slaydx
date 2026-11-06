@@ -457,9 +457,12 @@ export const KLING_FAL_EFFECTS: readonly { id: string; label: string }[] = [...K
 /** Every effect a stored job may name, for labels (a scene sold by two providers keeps one label). */
 export const ALL_EFFECT_SCENES: readonly { id: string; label: string }[] = [...KLING_EFFECT_SCENES, ...PIXVERSE_EFFECTS];
 
-/** The upload row's hint when a scene wants more than a clear face. */
+/** A scene whose one photo must show two people (fal's hug): a wrong photo costs the user a clip, so the form says it aloud. */
+export const effectNeedsPair = (effect: unknown, modelId: string): boolean => modelId === KLING_FAL_EFFECTS_MODEL && effect === "hug_pro";
+
+/** The upload row's hint. */
 export function effectPhotoHint(effect: unknown, modelId: string): string {
-  return modelId === KLING_FAL_EFFECTS_MODEL && effect === "hug_pro" ? "Bitta suratda ikki kishi birga ko‘rinsin" : "Yuz yoki odam aniq ko‘rinsin";
+  return effectNeedsPair(effect, modelId) ? "Bitta suratda ikki kishi birga ko‘rinsin" : "Yuz yoki odam aniq ko‘rinsin";
 }
 
 function falEffect(id: string, label: string, maker: string, endpoint: string, usd: number, scenes: readonly { id: string; label: string }[]): CatalogEntry {

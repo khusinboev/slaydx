@@ -200,7 +200,7 @@ test("golden: fal bodies per model × text / image / image + end frame (queue UR
   assert.equal(endOnly.url, `${Q}/alibaba/wan-3.0/text-to-video`);
   assert.ok(!JSON.stringify(endOnly.body).includes(END.base64), "MUTATSIYA: end frame without a start");
   for (const id of FAL_IDS) assert.ok(!JSON.stringify(req(id, T)).includes("fal-test-key"), `${id}: no key in the built request`);
-  assert.equal(FAL_VIDEO_ENDPOINTS.size, 14, "P4: 5 models × 2 + P9 Sora: 2 × 2");
+  assert.equal(FAL_VIDEO_ENDPOINTS.size, 22, "P4: 5 models × 2 + P9 Sora: 2 × 2 + P11: 3 models × 2 + 2 effects");
 });
 
 test("golden: Kling end frame (`last_frame`) + «Quchoqlash» two-photo body; missing second photo = no request", () => {
