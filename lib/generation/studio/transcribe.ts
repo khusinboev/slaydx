@@ -24,7 +24,8 @@ import { MIX_SECONDS_TOLERANCE } from "../../media/catalog-mix";
 import { UserFacingError } from "../../server/user-error";
 import { extractMeta } from "../meta";
 import { recordAudioCall } from "./cost";
-import { AUDIO_TRACK_FILES, BURN_FILES, audioTrackArgs, burnArgs, burnVideoKbps } from "./burn-args";
+import { AUDIO_TRACK_FILES, BURN_CHECK_FILES, BURN_FILES, audioTrackArgs, burnArgs, burnCheckArgs, burnVideoKbps } from "./burn-args";
+import { capOwnVideo } from "./own-video";
 import { FfmpegMissingError, runFfmpeg, type FfmpegRun } from "./mix-ffmpeg";
 import { mp4HasVideo } from "./mix-media";
 import { mp4Seconds } from "../video/mp4";
@@ -62,6 +63,7 @@ export const AUDIO_TRACK_FFMPEG_TIMEOUT_MS = 60_000;
 const REFUND = "Pul balansingizga qaytariladi.";
 const FAILED = `Transkripsiya bajarilmadi — provayder javob bermadi. ${REFUND}`;
 const BURN_FAILED = `Subtitrni videoga yopishtirib bo‘lmadi. ${REFUND}`;
+const OWN_VIDEO_FAILED = `Yuklangan videoni o‘qib bo‘lmadi. ${REFUND}`;
 const TRACK_FAILED = `Videodan ovozni ajratib bo‘lmadi (video ovozsiz bo‘lishi mumkin). ${REFUND}`;
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -69,7 +71,7 @@ async function defaultRun(i: Parameters<RunFn>[0]) {
   return (await import("../../server/media/run")).runMedia(i);
 }
 
-/** The source's kind by its stored mime (an upload is audio, or the user's own MP4). */
+/** The source's kind by its stored mime (an upload is audio, or the user's own video). */
 export function sourceKindOf(mime: string): "video" | "audio" {
   return mime === "video/mp4" ? "video" : "audio";
 }
@@ -103,11 +105,32 @@ export async function buildStudioTranscribe(
   const kbps = burn ? burnVideoKbps(src.seconds) : null;
   if (burn && kbps === null) throw new UserFacingError(`Bu video subtitr bilan 25 MB ga sig‘maydi. ${REFUND}`);
 
-  // The file the provider reads: the stored source, or a video's audio track for the model that takes audio only.
-  let media = { mime: src.mime, bytes: src.bytes };
+  // P11 review: an own video is cut to what was billed before anything reads it; a stored result is our own file.
+  let sourceBytes = src.bytes;
+  if (kind === "video" && ref.kind === "upload") {
+    try {
+      sourceBytes = await capOwnVideo(src.bytes, Number(p.sourceSeconds), deps.ffmpeg ?? runFfmpeg);
+    } catch (e) {
+      console.warn("[studio-transcribe] own video cap failed:", e instanceof Error ? e.message : e, (e as { stderr?: string })?.stderr ?? "");
+      throw new UserFacingError(OWN_VIDEO_FAILED);
+    }
+  }
+  // The picture is checked before the paid call: a burn that cannot read it must not cost the speech call too.
+  if (burn) {
+    try {
+      await (deps.ffmpeg ?? runFfmpeg)({ inputs: { [BURN_CHECK_FILES.video]: sourceBytes }, args: burnCheckArgs(), output: BURN_CHECK_FILES.out, timeoutMs: AUDIO_TRACK_FFMPEG_TIMEOUT_MS });
+    } catch (e) {
+      console.warn("[studio-transcribe] picture check failed:", e instanceof Error ? e.message : e, (e as { stderr?: string })?.stderr ?? "");
+      if (e instanceof FfmpegMissingError) throw new UserFacingError(`Subtitr yopishtirish hozircha ishlamayapti. ${REFUND}`);
+      throw new UserFacingError(BURN_FAILED);
+    }
+  }
+
+  // The file the provider reads: the source, or a video's audio track for the model that takes audio only.
+  let media = { mime: src.mime, bytes: sourceBytes };
   if (kind === "video" && entry.routes[0]!.provider === "fal") {
     try {
-      const track = await (deps.ffmpeg ?? runFfmpeg)({ inputs: { [AUDIO_TRACK_FILES.video]: src.bytes }, args: audioTrackArgs(src.seconds), output: AUDIO_TRACK_FILES.out, timeoutMs: AUDIO_TRACK_FFMPEG_TIMEOUT_MS });
+      const track = await (deps.ffmpeg ?? runFfmpeg)({ inputs: { [AUDIO_TRACK_FILES.video]: sourceBytes }, args: audioTrackArgs(src.seconds), output: AUDIO_TRACK_FILES.out, timeoutMs: AUDIO_TRACK_FFMPEG_TIMEOUT_MS });
       if (!track.length) throw new Error("empty audio track");
       media = { mime: "audio/mpeg", bytes: track };
     } catch (e) {
@@ -154,7 +177,7 @@ export async function buildStudioTranscribe(
     const vertical = src.aspect === "9:16";
     try {
       bytes = await (deps.ffmpeg ?? runFfmpeg)({
-        inputs: { [BURN_FILES.video]: src.bytes, [BURN_FILES.subs]: new TextEncoder().encode(toSrt(cues, { forBurn: true })) },
+        inputs: { [BURN_FILES.video]: sourceBytes, [BURN_FILES.subs]: new TextEncoder().encode(toSrt(cues, { forBurn: true })) },
         args: burnArgs({ seconds: src.seconds, vertical, videoKbps: kbps! }),
         output: BURN_FILES.out,
         timeoutMs: BURN_FFMPEG_TIMEOUT_MS,

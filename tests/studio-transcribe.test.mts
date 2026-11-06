@@ -106,7 +106,8 @@ test("catalog: entries, purposes, languages, source references, the shared refus
   assert.equal(rules.studioTranscribeError({}), "Avval manbani tanlang: audio yuklang yoki natijalaringizdan birini tanlang.");
   assert.equal(rules.studioTranscribeError({ source: RES, sourceSeconds: 10 }), null);
   assert.match(String(rules.studioTranscribeError({ source: RES, language: "xx" })), /Nutq tili/);
-  assert.match(String(rules.studioTranscribeError({ source: UP, burn: true })), /faqat videoga/);
+  // An upload may be the user's own video: whether a burn fits is the SQL check (`prepareSpeechToolRequest`), not a rule of the reference.
+  assert.equal(rules.studioTranscribeError({ source: UP, burn: true }), null, "MUTATSIYA: an own video's burn was refused by this rule");
   assert.match(String(rules.studioDubError({ source: RES, sourceSeconds: 200 })), /1–180/);
   assert.match(String(rules.studioDubError({ source: RES, target: "ru", sourceLang: "ru" })), /bir xil/);
   assert.equal(rules.studioDubError({ source: RES, target: "uz", sourceLang: "ru" }), null);
@@ -361,9 +362,9 @@ test("burn: args (golden), the 25 MB rate cap, the vertical style", () => {
   assert.equal(burn.burnVideoKbps(0), null);
   assert.deepEqual(burn.burnArgs({ seconds: 5, vertical: false, videoKbps: 3000 }), [
     "-nostdin", "-hide_banner", "-loglevel", "error",
-    "-protocol_whitelist", "file", "-f", "mov", "-i", "in-video.mp4",
+    "-protocol_whitelist", "file", "-max_pixels", "8294400", "-f", "mov", "-i", "in-video.mp4",
     "-map", "0:v:0", "-map", "0:a?",
-    "-vf", "subtitles=filename=subs.srt:charenc=UTF-8:force_style='FontName=Noto Sans,FontSize=16,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=1.2,Shadow=0,MarginV=18'",
+    "-vf", "scale=w='min(1920\\,iw)':h='min(1920\\,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,subtitles=filename=subs.srt:charenc=UTF-8:force_style='FontName=Noto Sans,FontSize=16,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=1.2,Shadow=0,MarginV=18'",
     "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-maxrate", "3000k", "-bufsize", "6000k", "-pix_fmt", "yuv420p",
     "-c:a", "copy", "-movflags", "+faststart", "-threads", "2", "-t", "5.000", "-y", "out-burn.mp4",
   ]);
@@ -441,7 +442,8 @@ test("transcribe engine: TXT result + cues; no speech is a result (not burned); 
   let ffRan = false;
   const silent = await buildStudioTranscribe(TR(), { source: RES, sourceSeconds: 3, burn: true } as never, { source: { kind: "result", id: RES.slice(7), mime: "video/mp4", bytes: new Uint8Array(9), seconds: 3 } }, {}, {
     run: runStub({ language_code: "uz", text: "", words: [] }) as never,
-    ffmpeg: async () => ((ffRan = true), new Uint8Array(0)),
+    // The picture check runs first, whatever is said; only a burn is what «nothing to burn» means.
+    ffmpeg: async (r: { output: string }) => ((ffRan = ffRan || r.output === "out-burn.mp4"), new Uint8Array(0)),
   });
   assert.equal(silent.doc?.transcribe?.burned, false);
   assert.equal(ffRan, false, "nothing to burn");

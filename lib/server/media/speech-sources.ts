@@ -4,12 +4,12 @@ import { query, queryOne } from "../db";
 import { getSetting } from "../settings";
 import { availableModels } from "./availability";
 import { fitsRole, ownMixRow, rowSeconds } from "./mix-sources";
-import { DUB_MAX_SECONDS, DUB_MODEL, SPEECH_TOOL_OUTPUT_MAX_BYTES, STUDIO_DUB_PURPOSE, STUDIO_TRANSCRIBE_PURPOSE, TRANSCRIBE_AUDIO_MAX_SECONDS, TRANSCRIBE_MODEL, TRANSCRIBE_VIDEO_MAX_SECONDS, parseSource, videoOnlySource } from "../../media/catalog-transcribe";
+import { DUB_MAX_SECONDS, DUB_MODEL, DUB_VIDEO_MAX_BYTES, STUDIO_DUB_PURPOSE, STUDIO_TRANSCRIBE_PURPOSE, TRANSCRIBE_AUDIO_MAX_SECONDS, TRANSCRIBE_MODEL, TRANSCRIBE_VIDEO_MAX_SECONDS, parseSource, videoOnlySource } from "../../media/catalog-transcribe";
 import { billedSeconds } from "../../media/studio-audio";
 import { dubEntry } from "../../media/studio-transcribe";
 import { stripUrls } from "../../generation/video/types";
 import { burnVideoKbps } from "../../generation/studio/burn-args";
-import { mediaSeconds } from "../../generation/studio/mix-media";
+import { mediaSeconds, mp4Aspect } from "../../generation/studio/mix-media";
 import type { SpeechToolCtx } from "../../generation/studio/transcribe";
 import { MEDIA_UPLOAD_PARAM, clearMediaUpload } from "./jobs";
 import { ownVideoInput, videoInputBytes } from "./audio-inputs";
@@ -103,8 +103,8 @@ export async function prepareSpeechToolRequest(userId: string, tool: SpeechToolI
     if (burnVideoKbps(s.seconds) === null) throw new ApiError("Bu video subtitr bilan 25 MB ga sig‘maydi — qisqaroq video tanlang.", 400, { code: "input_too_large" });
   }
   // The dubbed file is about the source's size (same picture, a new voice track): no room under the cap → refused now.
-  if (tool === "studio-dub" && s.kind === "video" && s.size + 1024 * 1024 > SPEECH_TOOL_OUTPUT_MAX_BYTES) {
-    throw new ApiError("Bu video dublyaj uchun juda katta (natija 25 MB dan oshadi) — qisqaroq video tanlang.", 400, { code: "input_too_large" });
+  if (tool === "studio-dub" && s.kind === "video" && s.size > DUB_VIDEO_MAX_BYTES) {
+    throw new ApiError(`Bu video dublyaj uchun juda katta (${DUB_VIDEO_MAX_BYTES / 1024 / 1024} MB gacha) — qisqaroq video tanlang.`, 400, { code: "input_too_large" });
   }
   values.sourceSeconds = s.billed;
 }
@@ -117,7 +117,9 @@ export async function speechToolJobCtx(userId: string, values: FormValues): Prom
     const row = await queryOne<{ mime: string; bytes: Buffer; seconds: string }>("SELECT mime, bytes, seconds FROM studio_audio_inputs WHERE id = $1 AND user_id = $2", [ref.id, userId]);
     if (row) return { source: { kind: "upload", id: ref.id, mime: row.mime, bytes: new Uint8Array(row.bytes), seconds: Number(row.seconds) } };
     const clip = await videoInputBytes(userId, ref.id);
-    return { source: clip ? { kind: "upload", id: ref.id, mime: clip.mime, bytes: clip.bytes, seconds: clip.seconds } : null };
+    if (!clip) return { source: null };
+    const aspect = mp4Aspect(clip.bytes);
+    return { source: { kind: "upload", id: ref.id, mime: clip.mime, bytes: clip.bytes, seconds: clip.seconds, ...(aspect ? { aspect } : {}) } };
   }
   const row = await ownMixRow(userId, ref.id);
   if (!row || !(fitsRole(row, "video") || fitsRole(row, "audio"))) return { source: null };

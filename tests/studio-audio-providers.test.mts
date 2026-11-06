@@ -824,14 +824,16 @@ test("rules: the chosen model decides; an unknown model and HeyGen's audio sourc
   assert.match(String(rules.studioTranscribeError({ modelId: cat.DUB_MODEL, source: RES })), /Noma'lum model/, "another tool's model");
   assert.match(String(rules.studioDubError({ modelId: "x/y", source: RES })), /Noma'lum model/);
   assert.equal(rules.studioDubError({ modelId: cat.HEYGEN_TRANSLATE_MODEL, source: RES, sourceSeconds: 10 }), null);
-  assert.match(String(rules.studioDubError({ modelId: cat.HEYGEN_TRANSLATE_MODEL, source: UP, sourceSeconds: 10 })), /faqat videoni/);
+  // An upload may be the user's own video: the video-only model is the SQL check (`prepareSpeechToolRequest`, the flow test).
+  assert.equal(rules.studioDubError({ modelId: cat.HEYGEN_TRANSLATE_MODEL, source: UP, sourceSeconds: 10 }), null, "MUTATSIYA: an own video on HeyGen was refused by this rule");
   assert.equal(rules.studioDubError({ modelId: cat.FAL_DUB_MODEL, source: UP, sourceSeconds: 10 }), null, "fal dubbing takes audio");
   assert.match(String(rules.studioDubError({ modelId: cat.HEYGEN_TRANSLATE_MODEL, source: RES, target: "tg" })), /Qaysi tilga/, "not in HeyGen's enum");
   // A value left over from another model does not refuse a model without the field.
   assert.equal(rules.studioDubError({ modelId: cat.HEYGEN_TRANSLATE_MODEL, source: RES, target: "ru", sourceLang: "ru" }), null);
   assert.match(String(rules.studioDubError({ modelId: cat.FAL_DUB_MODEL, source: RES, target: "ru", sourceLang: "ru" })), /bir xil/);
   // The registry calls the same rules.
-  assert.match(String(tools.preflightError(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.HEYGEN_TRANSLATE_MODEL, source: UP } as never)), /faqat videoni/);
+  assert.match(String(tools.preflightError(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.HEYGEN_TRANSLATE_MODEL, source: RES, target: "tg" } as never)), /Qaysi tilga/);
+  assert.equal(tools.preflightError(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.HEYGEN_TRANSLATE_MODEL, source: UP } as never), null);
 });
 
 test("glue: the tool opens on the fal model alone; pickers, the model switch, the minute line", () => {
