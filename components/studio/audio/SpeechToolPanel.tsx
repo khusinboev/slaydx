@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Download, RefreshCw } from "lucide-react";
 import type * as api from "@/lib/api-client";
-import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
 import { useApiSrc } from "@/lib/use-api-src";
 import type { ClientEntry } from "@/lib/studio-core";
@@ -19,6 +18,7 @@ import { PriceButton } from "../PriceButton";
 import { SubmitError } from "../SubmitError";
 import { requestValues } from "../studio-values";
 import { useStudioSend } from "../useStudioSend";
+import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
 import type { StudioJob } from "../StudioResults";
 import type { StudioPricing } from "../studio-types";
 import { AudioInputRow } from "./AudioInputRow";
@@ -57,6 +57,7 @@ export function speechToolSubmitLabel(mode: SpeechToolMode, price: number): stri
  * videoga yopishtirish» only for a video source), the sticky button with the price, and the results.
  */
 export function SpeechToolPanel({
+  before,
   mode,
   modeLabel,
   entry,
@@ -72,6 +73,8 @@ export function SpeechToolPanel({
   reload,
   onSubmitted,
 }: {
+  /** The «Audio» tab's mode chips: drawn on top of the form column. */
+  before?: ReactNode;
   mode: SpeechToolMode;
   modeLabel: string;
   entry: ClientEntry;
@@ -103,6 +106,7 @@ export function SpeechToolPanel({
     reload(true);
     load();
   });
+  const { resultsRef, scrollToResults } = useResultsScroll();
   const finished = jobs.filter((j) => j.gen?.status === "COMPLETED").length;
   useEffect(() => {
     load();
@@ -149,9 +153,10 @@ export function SpeechToolPanel({
 
   function send(out: Record<string, unknown>, target: ClientEntry = entry) {
     const title = target.label;
-    return queue({ slug: toolId, id: toolId, title, output: "mp4" }, out, speechToolClientPrice(mode, target, out, pricing), ({ id, price: charged }) =>
-      track({ id, modelId: target.id, modelLabel: target.label, prompt: title, price: charged, sent: out }),
-    );
+    return queue({ slug: toolId, id: toolId, title, output: "mp4" }, out, speechToolClientPrice(mode, target, out, pricing), ({ id, price: charged }) => {
+      track({ id, modelId: target.id, modelLabel: target.label, prompt: title, price: charged, sent: out });
+      scrollToResults();
+    });
   }
 
   function submit() {
@@ -186,8 +191,22 @@ export function SpeechToolPanel({
 
   const uploadSeconds = typeof raw.sourceSeconds === "number" && typeof raw.source === "string" && raw.source.startsWith("upload:") ? raw.sourceSeconds : null;
 
+  const resultsLabel = mode === "dub" ? "Dublyajlar" : "Transkripsiyalar";
   return (
     <div data-speech-tool={mode} data-speech-model={entry.id}>
+      <StudioWorkbench
+        resultsRef={resultsRef}
+        hasResults={jobs.length > 0}
+        empty={mode === "dub" ? "Dublyaj natijalari shu yerda ko‘rinadi." : "Transkripsiyalar shu yerda ko‘rinadi."}
+        label={resultsLabel}
+        results={
+          <section aria-label={resultsLabel} data-speech-results className="min-w-0">
+            <SpeechToolResults jobs={jobs} busy={submitting} onAgain={again} retryPrice={retryPrice} />
+          </section>
+        }
+        form={
+          <>
+      {before}
       {entries.length > 1 ? (
         <div data-audio-model-picker>
           <Card title="Model">
@@ -267,9 +286,9 @@ export function SpeechToolPanel({
         onSubmit={submit}
         label={price === null ? undefined : speechToolSubmitLabel(mode, price)}
       />
-      <section aria-label={mode === "dub" ? "Dublyajlar" : "Transkripsiyalar"} data-speech-results className={cn(jobs.length > 0 && "mt-5")}>
-        <SpeechToolResults jobs={jobs} busy={submitting} onAgain={again} retryPrice={retryPrice} />
-      </section>
+          </>
+        }
+      />
     </div>
   );
 }

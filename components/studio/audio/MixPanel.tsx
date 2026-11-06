@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
@@ -12,6 +12,7 @@ import { PriceButton } from "../PriceButton";
 import { SubmitError } from "../SubmitError";
 import { requestValues, type RawValues } from "../studio-values";
 import { useStudioSend } from "../useStudioSend";
+import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
 import type { StudioJob } from "../StudioResults";
 import { VideoResults } from "../video/VideoResults";
 import { VoiceResults } from "../voice/VoiceResults";
@@ -43,6 +44,7 @@ export function mixSubmitLabel(label: string, price: number): string {
  * results (an MP4 plays as a clip, an MP3 as audio).
  */
 export function MixPanel({
+  before,
   state,
   setState,
   jobs,
@@ -52,6 +54,8 @@ export function MixPanel({
   gated,
   onSubmitted,
 }: {
+  /** The «Audio» tab's mode chips: drawn on top of the form column. */
+  before?: ReactNode;
   state: MixTabState;
   setState: (fn: (s: MixTabState) => MixTabState) => void;
   jobs: readonly StudioJob[];
@@ -70,6 +74,7 @@ export function MixPanel({
     fetchMixSources().then(setSources, (e: unknown) => setLoadError(e instanceof Error ? e.message : "Natijalar yuklanmadi"));
   }, []);
   const { submitting, error, setError, send: queue } = useStudioSend(load);
+  const { resultsRef, scrollToResults } = useResultsScroll();
   // Every finished «Montaj» job is a possible source too: reload on mount and when that count changes.
   const finished = jobs.filter((j) => j.gen?.status === "COMPLETED").length;
   useEffect(() => {
@@ -92,9 +97,10 @@ export function MixPanel({
   };
 
   function send(target: (typeof MIX_MODES)[number], out: Record<string, unknown>) {
-    return queue({ slug: STUDIO_MIX_SLUG, id: STUDIO_MIX_TOOL_ID, title: target.label, output: target.mode === "video-voice" ? "mp4" : "mp3" }, out, mixClientPrice(), ({ id, price: charged }) =>
-      track({ id, modelId: target.model, modelLabel: "Montaj", prompt: target.label, price: charged, sent: out }),
-    );
+    return queue({ slug: STUDIO_MIX_SLUG, id: STUDIO_MIX_TOOL_ID, title: target.label, output: target.mode === "video-voice" ? "mp4" : "mp3" }, out, mixClientPrice(), ({ id, price: charged }) => {
+      track({ id, modelId: target.model, modelLabel: "Montaj", prompt: target.label, price: charged, sent: out });
+      scrollToResults();
+    });
   }
 
   function submit() {
@@ -115,6 +121,20 @@ export function MixPanel({
 
   return (
     <div data-mix-panel data-mix-mode={mode}>
+      <StudioWorkbench
+        resultsRef={resultsRef}
+        hasResults={jobs.length > 0}
+        empty="Montaj natijalari shu yerda ko‘rinadi."
+        label="Montaj natijalari"
+        results={
+          <section aria-label="Montaj natijalari" data-mix-results className="flex min-w-0 flex-col gap-4">
+            <VideoResults jobs={videoJobs} busy={submitting} onAgain={again} retryPrice={() => mixClientPrice()} failed="Montaj bajarilmadi" />
+            <VoiceResults jobs={audioJobs} busy={submitting} onAgain={again} retryPrice={() => mixClientPrice()} failed="Montaj bajarilmadi" />
+          </section>
+        }
+        form={
+          <>
+      {before}
       <div role="radiogroup" aria-label="Montaj turi" className="mb-3 flex flex-wrap gap-1.5" data-mix-modes>
         {MIX_MODES.map((x) => (
           <button
@@ -211,10 +231,9 @@ export function MixPanel({
         onSubmit={submit}
         label={price === null || blocker ? undefined : mixSubmitLabel(m.label, price)}
       />
-      <section aria-label="Montaj natijalari" data-mix-results className={cn(jobs.length > 0 && "mt-5 flex flex-col gap-4")}>
-        <VideoResults jobs={videoJobs} busy={submitting} onAgain={again} retryPrice={() => mixClientPrice()} failed="Montaj bajarilmadi" />
-        <VoiceResults jobs={audioJobs} busy={submitting} onAgain={again} retryPrice={() => mixClientPrice()} failed="Montaj bajarilmadi" />
-      </section>
+          </>
+        }
+      />
     </div>
   );
 }

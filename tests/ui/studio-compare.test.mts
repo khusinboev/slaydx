@@ -281,6 +281,10 @@ test("Video: the switch on the Video tab, no effect offered, the clip values and
   await mount();
   await click(q('[data-studio-tab="video"]'));
   await settle();
+  // P11 D: the Video tab lands on «Shablon effektlar» — one photo, one fixed clip, nothing to compare: no switch there.
+  assert.ok(!q("[data-compare-switch]"), "MUTATSIYA: no switch on the effects mode");
+  await click(qa('[data-video-mode] [role="radio"]').find((b) => b.textContent === "Matndan / rasmdan"));
+  await settle();
   await switchOn();
   assert.ok(q('[data-compare-panel="video"]'));
   assert.deepEqual(qa("[data-compare-model]").map((e) => e.getAttribute("data-compare-model")), [OMNI.id, K3.id, K3P.id], "MUTATSIYA: effects are never compared");

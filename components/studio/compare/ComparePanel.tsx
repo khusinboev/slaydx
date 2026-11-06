@@ -12,6 +12,7 @@ import { PromptBox } from "../PromptBox";
 import { SubmitError } from "../SubmitError";
 import { usePromptEnhance } from "../usePromptEnhance";
 import { useStudioSend } from "../useStudioSend";
+import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
 import { badgeText } from "../studio-price";
 import type { MediaCatalog } from "../studio-types";
 import { PROMPT_PARAM, normalizedPrompt, promptLimit, promptMin } from "../studio-values";
@@ -72,6 +73,7 @@ export function ComparePanel({
     reload(true);
     if (!refused) void useAppStore.getState().refreshSession();
   });
+  const { resultsRef, scrollToResults } = useResultsScroll();
   const { state, setState } = tab;
   const models = compareModels(kind, catalog.models);
   const entries = state.ticked.map((id) => models.find((m) => m.id === id)).filter((m): m is ClientEntry => m !== undefined);
@@ -111,12 +113,20 @@ export function ComparePanel({
       setState((s) => ({ ...s, batches: [{ group: res.group, prompt: text, ids: res.items.map((x) => x.id) }, ...s.batches.filter((b) => b.group !== res.group)] }));
       // The balance line follows the charge.
       void useAppStore.getState().refreshSession();
+      scrollToResults();
     });
   }
 
   return (
     <div data-compare-panel={kind} className="min-w-0">
-      <div className="md:max-w-[44rem]">
+      <StudioWorkbench
+        resultsRef={resultsRef}
+        hasResults={state.batches.length > 0}
+        empty="Solishtirish natijalari shu yerda yonma-yon ko‘rinadi."
+        label="Solishtirish natijalari"
+        results={<CompareResults kind={kind} batches={state.batches} jobs={tab.jobs} onPick={onPick} />}
+        form={
+          <>
         <PromptBox
           value={prompt}
           onChange={(v) => setRaw(PROMPT_PARAM, v.slice(0, limit))}
@@ -184,10 +194,9 @@ export function ComparePanel({
           label={compareLabel(entries.length, batch ? batch.total : null, formatSom)}
           paidOnly={kind === "video"}
         />
-      </div>
-      <div className={cn(state.batches.length > 0 && "mt-5")}>
-        <CompareResults kind={kind} batches={state.batches} jobs={tab.jobs} onPick={onPick} />
-      </div>
+          </>
+        }
+      />
     </div>
   );
 }

@@ -26,7 +26,8 @@ import { usePromptEnhance } from "./usePromptEnhance";
 import { StudioResults, type StudioJob } from "./StudioResults";
 import { SubmitError } from "./SubmitError";
 import { STUDIO_AUDIO_LISTING, STUDIO_SPEECH_PURPOSE, STUDIO_VIDEO_PURPOSE, fetchActiveJobs, inputFromResult, loadMediaCatalog, resultAssetOf, uploadStudioInput, useMediaCatalog, type ActiveJob } from "./studio-api";
-import { INITIAL_VIDEO_STATE, VideoTab, type VideoTabState } from "./video/VideoTab";
+import { INITIAL_VIDEO_STATE, VideoTab, shownMode, splitVideoCatalog, type VideoTabState } from "./video/VideoTab";
+import { StudioWorkbench, useResultsScroll } from "./StudioWorkbench";
 import { INITIAL_VOICE_STATE, VoiceTab, type VoiceTabState } from "./voice/VoiceTab";
 import { VoiceTemplatePanel, VoiceTemplatesRow, useLegacyFold } from "./voice/VoiceTemplates";
 import { voiceTemplateFromSearch, type VoiceTemplateId } from "@/lib/media/voice-templates";
@@ -60,10 +61,10 @@ export function resolveEntry(catalog: MediaCatalog | null, id: string | null): C
 }
 
 /**
- * Studio (`/uz/studio`, docs/studio/P1-SPEC.md): the «Rasm» tab. Phone: one column — prompt, model cards (+ «Barcha
- * modellar» sheet), the settings generated from the model's ParamSchema, results below, the sticky «Yaratish · N ta
- * rasm · X so'm» bar. Tablet: form and results side by side. Desktop (≥ 1280 px): navigation, form and results as
- * three columns, as in the design canvas.
+ * Studio (`/uz/studio`, docs/studio/P1-SPEC.md; layout «Ish stoli», docs/studio/P11-SPEC.md §D): the tab bar on top with
+ * the balance at its right, then every tab on the same `StudioWorkbench` — the settings on the left (prompt, model cards,
+ * the rows generated from the model's ParamSchema, the price button), the results on the right (the running job on top,
+ * the recent work under it). Phone: one column, the sticky «Yaratish · …» bar, a scroll to the result after a submit.
  */
 export function StudioPage() {
   const loggedIn = useAppStore((s) => s.loggedIn);
@@ -170,7 +171,10 @@ function StudioApp() {
   const audioJobs = useStudioJobs(onScreen("audio"));
   // P7a «Solishtirish» (docs/studio/P7-SPEC.md, compare/): the Rasm tab's drawing mode and the Video tab, ≥ 2 models.
   const compare = useCompare();
-  const compareKind = tab === "rasm" && mode === "image" ? "image" : tab === "video" ? "video" : null;
+  // The Video tab offers the switch on its text/image mode only: an effect is one photo and one fixed clip, nothing to compare.
+  const videoCatalog = video.state.status === "ready" ? video.state.catalog : null;
+  const videoOnEffects = tab === "video" && shownMode(videoState, splitVideoCatalog(videoCatalog)) === "effects";
+  const compareKind = tab === "rasm" && mode === "image" ? "image" : tab === "video" && !videoOnEffects ? "video" : null;
   const compareCatalog = compareKind === "image" ? catalog : compareKind === "video" && video.state.status === "ready" ? video.state.catalog : null;
   const comparing = compareAvailability(compareKind, compareCatalog) && compare[compareKind].state.on;
   function toggleCompare(on: boolean) {
@@ -267,7 +271,7 @@ function StudioApp() {
   }, [tab]);
 
   const rootRef = useRef<HTMLDivElement>(null);
-  const resultsRef = useRef<HTMLElement>(null);
+  const { resultsRef, scrollToResults } = useResultsScroll();
   const { typing } = useKeyboardInset(rootRef);
   // The gallery is a view of this page with its own history entry: back returns to the form.
   useOverlayHistory(view === "gallery", () => setView("create"));
@@ -378,12 +382,6 @@ function StudioApp() {
     setParam(PROMPT_PARAM, fillSkeleton(template.t.skeleton, template.t.slots, slots).slice(0, promptLimit(entry)));
   }
 
-  function scrollToResults() {
-    // The three-column layout shows the results beside the form; below it they are under the form.
-    if (typeof window.matchMedia === "function" && window.matchMedia("(min-width: 1280px)").matches) return;
-    resultsRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
-  }
-
   /** `shown`: the number the pressed button says; the server's price guard refuses a job at any other price. */
   async function send(target: ClientEntry, sent: Record<string, unknown>, pricing: StudioPricing | undefined = catalog?.pricing, jobPurpose: string = purpose, shown?: number) {
     if (!pricing) return false;
@@ -478,37 +476,55 @@ function StudioApp() {
     return model && own ? studioPrice(model, job.sent, own.pricing) : job.price;
   }
 
-  const galleryButton =
-    view === "gallery" ? (
-      <button type="button" data-studio-create-link onClick={toCreate} className={cn(HEADER_BTN, "xl:hidden")}>
-        <Wand2 className="size-[18px]" aria-hidden />
-        Yaratish
-      </button>
-    ) : (
-      <button type="button" data-studio-gallery-link onClick={toGallery} className={cn(HEADER_BTN, "xl:hidden")}>
-        <LayoutGrid className="size-[18px]" aria-hidden />
-        Galereya
-      </button>
-    );
+  const rasmFormView = !catalog ? (
+    <CatalogState state={state} onRetry={() => reload()} label="Studio yuklanmoqda" blocks={["h-36 rounded-[20px]", "h-[5.25rem] rounded-[18px]", "h-40 rounded-[20px]"]} />
+  ) : entry === null ? (
+    <MediaModelPicker purpose={purpose} catalog={catalog} value="" values={{}} onChange={selectModel} />
+  ) : (
+    <>
+      {promptParam(entry) ? (
+        <PromptBox
+          value={String(raw[PROMPT_PARAM] ?? "")}
+          onChange={setPrompt}
+          limit={promptLimit(entry)}
+          min={promptMin(entry)}
+          label={mode === "edit" ? "Nimani o‘zgartiramiz?" : "Nimani chizamiz?"}
+          onEnhance={() => void enhance()}
+          enhancing={enhancing}
+          {...(mode === "image" ? { onSamples: () => setLibraryOpen(true), onUpload: (f: File) => void uploadForEdit(f), uploading } : {})}
+        />
+      ) : null}
+      {mode === "image" ? <TemplatesRow modelIds={catalog.models.map((m) => m.id)} activeId={template?.t.id ?? null} onPick={pickTemplate} /> : null}
+      {template ? <TemplateSlots template={template.t} values={template.slots} onChange={setSlot} onClose={() => setTemplate(null)} /> : null}
+      {libraryOpen ? <LibrarySheet onPick={setPrompt} onClose={() => setLibraryOpen(false)} /> : null}
+      <MediaModelPicker purpose={purpose} catalog={catalog} value={entry.id} values={values} onChange={selectModel} open={pickerOpen} onOpenChange={setPickerOpen} />
+      <ParamRows entry={entry} raw={raw} onChange={setParam} />
+      <SubmitError error={error} gated={gated} />
+      <PriceButton count={count} price={price} balance={balance} loading={submitting} disabled={false} typing={typing} onSubmit={submit} />
+    </>
+  );
 
   return (
     <MixHandoffContext.Provider value={toMix}>
     <div className="flex w-full flex-col" data-studio>
-      <PageHeader back title="Studio" subtitle={SUBTITLE[tab]} contentClassName={WIDTH} actions={galleryButton} />
-      <div
-        ref={rootRef}
-        data-studio-body
-        className={cn(
-          "mx-auto w-full px-4 pt-2 pb-6",
-          WIDTH,
-          "md:grid md:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] md:items-start md:gap-6",
-          "xl:grid-cols-[14.5rem_minmax(0,27.5rem)_minmax(0,1fr)]",
-        )}
-      >
-        <StudioNav view={view} onView={showView} balance={balance} />
+      <PageHeader back title="Studio" subtitle={SUBTITLE[tab]} contentClassName={WIDTH} />
+      <div ref={rootRef} data-studio-body className={cn("mx-auto w-full px-4 pt-2 pb-6", WIDTH)}>
+        <StudioBar
+          tab={tab}
+          view={view}
+          onTab={(t) => {
+            setView("create");
+            setTab(t);
+            setError(null);
+            handoff.clearError();
+          }}
+          onGallery={toGallery}
+          onCreate={toCreate}
+          balance={balance}
+        />
 
         {view === "gallery" ? (
-          <section aria-label="Galereya" data-studio-gallery className="md:col-span-2">
+          <section aria-label="Galereya" data-studio-gallery>
             <h2 className="mb-3 text-[20px] font-extrabold">Galereya</h2>
             <HandoffAlert error={handoff.error} />
             <SubmitError error={error} gated={gated} />
@@ -522,174 +538,127 @@ function StudioApp() {
             />
           </section>
         ) : (
-          <>
-            <div data-studio-form className={cn("min-w-0", (tab !== "rasm" || comparing) && "md:col-span-2", tab !== "rasm" && !comparing && "md:max-w-[44rem]")}>
-              <div role="tablist" aria-label="Studio bo‘limlari" data-studio-tabs className="bg-muted/70 mb-3 inline-flex max-w-full rounded-[14px] p-1">
-                {STUDIO_TABS.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    role="tab"
-                    aria-selected={tab === t}
-                    data-studio-tab={t}
-                    onClick={() => {
-                      setTab(t);
-                      setError(null);
-                      handoff.clearError();
-                    }}
-                    className={cn(
-                      "focus-visible:ring-ring min-h-11 rounded-[10px] px-3.5 text-[15px] font-semibold sm:px-5 outline-none focus-visible:ring-2",
-                      tab === t ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {TAB_LABEL[t]}
-                  </button>
-                ))}
-              </div>
-              <ChannelGate />
-              <HandoffAlert error={handoff.error} />
-              {restoreError ? (
-                <p role="alert" data-studio-restore-error className="text-destructive mb-3 text-[14.5px] leading-snug">
-                  Davom etayotgan ishlar yuklanmadi: {restoreError}{" "}
-                  <button
-                    type="button"
-                    data-studio-restore-retry
-                    onClick={() => {
-                      setRestoreError(null);
-                      setRestoreAttempt((n) => n + 1);
-                    }}
-                    className="pointer-coarse:min-h-11 font-semibold underline underline-offset-2"
-                  >
-                    Qayta urinish
-                  </button>
-                </p>
-              ) : null}
-              {tab === "rasm" && mode !== "image" ? (
-                <div className="bg-accent-soft text-accent-soft-foreground mb-3 flex items-center justify-between gap-2 rounded-[14px] px-3.5 py-2" data-studio-mode={mode}>
-                  <p className="text-[14.5px] font-bold">{MODE_LABEL[mode]}</p>
-                  <button
-                    type="button"
-                    data-studio-mode-exit
-                    onClick={() => enterMode("image")}
-                    className="focus-visible:ring-ring inline-flex min-h-11 items-center gap-1 rounded-[10px] px-2 text-[13.5px] font-semibold outline-none focus-visible:ring-2"
-                  >
-                    <X className="size-4" aria-hidden />
-                    Yangi rasm
-                  </button>
-                </div>
-              ) : null}
-              {compareAvailability(compareKind, compareCatalog) ? <CompareSwitch checked={comparing} onChange={toggleCompare} /> : null}
-              {comparing && compareKind && compareCatalog ? (
-                <ComparePanel
-                  kind={compareKind}
-                  catalog={compareCatalog}
-                  tab={compare[compareKind]}
-                  balance={compareKind === "video" ? paidBalance : balance}
-                  typing={typing}
-                  gated={gated}
-                  reload={compareKind === "video" ? video.reload : reload}
-                  onPick={(id, prompt) => pickCompared(compareKind, id, prompt)}
-                />
-              ) : tab === "audio" ? (
-                <AudioTab
-                  catalogState={audioCatalog.state}
-                  reload={audioCatalog.reload}
-                  state={audioState}
-                  setState={setAudioState}
-                  jobs={audioJobs.jobs}
-                  track={audioJobs.track}
-                  balance={balance}
-                  typing={typing}
-                  gated={gated}
-                  onSubmitted={audioDraft.clear}
-                />
-              ) : tab === "ovoz" ? (
-                <>
-                  {legacyFold ? <VoiceTemplatesRow active={voiceTemplate} onPick={setVoiceTemplate} /> : null}
-                  {legacyFold && voiceTemplate ? (
-                    <VoiceTemplatePanel id={voiceTemplate} onClose={() => setVoiceTemplate(null)} jobs={templateJobs.jobs} track={templateJobs.track} />
-                  ) : (
-                    <VoiceTab
-                      catalogState={voiceCatalog.state}
-                      reload={voiceCatalog.reload}
-                      state={voiceState}
-                      setState={setVoiceState}
-                      jobs={voiceJobs.jobs}
-                      track={voiceJobs.track}
-                      balance={balance}
-                      typing={typing}
-                      gated={gated}
-                      quietWhenNone={legacyFold}
-                      onSubmitted={voiceDraft.clear}
-                    />
-                  )}
-                </>
-              ) : tab === "video" ? (
-                <VideoTab
-                  catalogState={video.state}
-                  reload={video.reload}
-                  state={videoState}
-                  setState={setVideoState}
-                  jobs={videoJobs.jobs}
-                  track={videoJobs.track}
-                  balance={paidBalance}
-                  typing={typing}
-                  gated={gated}
-                  onMusic={(prompt) => void handoff.toMusic(prompt)}
-                  onVoice={(text) => void handoff.toVoice(text)}
-                  onSubmitted={videoDraft.clear}
-                />
-              ) : !catalog ? (
-                <CatalogState state={state} onRetry={() => reload()} label="Studio yuklanmoqda" blocks={["h-36 rounded-[20px]", "h-[5.25rem] rounded-[18px]", "h-40 rounded-[20px]"]} />
-              ) : entry === null ? (
-                <MediaModelPicker purpose={purpose} catalog={catalog} value="" values={{}} onChange={selectModel} />
-              ) : (
-                <>
-                  {promptParam(entry) ? (
-                    <PromptBox
-                      value={String(raw[PROMPT_PARAM] ?? "")}
-                      onChange={setPrompt}
-                      limit={promptLimit(entry)}
-                      min={promptMin(entry)}
-                      label={mode === "edit" ? "Nimani o‘zgartiramiz?" : "Nimani chizamiz?"}
-                      onEnhance={() => void enhance()}
-                      enhancing={enhancing}
-                      {...(mode === "image" ? { onSamples: () => setLibraryOpen(true), onUpload: (f: File) => void uploadForEdit(f), uploading } : {})}
-                    />
-                  ) : null}
-                  {mode === "image" ? <TemplatesRow modelIds={catalog.models.map((m) => m.id)} activeId={template?.t.id ?? null} onPick={pickTemplate} /> : null}
-                  {template ? <TemplateSlots template={template.t} values={template.slots} onChange={setSlot} onClose={() => setTemplate(null)} /> : null}
-                  {libraryOpen ? <LibrarySheet onPick={setPrompt} onClose={() => setLibraryOpen(false)} /> : null}
-                  <MediaModelPicker
-                    purpose={purpose}
-                    catalog={catalog}
-                    value={entry.id}
-                    values={values}
-                    onChange={selectModel}
-                    open={pickerOpen}
-                    onOpenChange={setPickerOpen}
-                  />
-                  <ParamRows entry={entry} raw={raw} onChange={setParam} />
-                  <SubmitError error={error} gated={gated} />
-                  <PriceButton count={count} price={price} balance={balance} loading={submitting} disabled={false} typing={typing} onSubmit={submit} />
-                </>
-              )}
-            </div>
-            {tab === "rasm" && !comparing ? (
-              <section ref={resultsRef} aria-label="Natijalar" data-studio-results className={cn("min-w-0 md:mt-0", jobs.length > 0 && "mt-5")}>
-                <StudioResults
-                  jobs={jobs}
-                  busy={submitting}
-                  onAgain={again}
-                  retryPrice={retryPrice}
-                  onOtherModel={(job) => otherModel(job.prompt)}
-                  onTool={(m, p) => void pictureTool(m, p)}
-                  onVideo={(url, prompt) => void handoff.toVideo(url, prompt)}
-                  onVoice={(text) => void handoff.toVoice(text)}
-                />
-              </section>
+          <div data-studio-create className="min-w-0">
+            <ChannelGate />
+            <HandoffAlert error={handoff.error} />
+            {restoreError ? (
+              <p role="alert" data-studio-restore-error className="text-destructive mb-3 text-[14.5px] leading-snug">
+                Davom etayotgan ishlar yuklanmadi: {restoreError}{" "}
+                <button
+                  type="button"
+                  data-studio-restore-retry
+                  onClick={() => {
+                    setRestoreError(null);
+                    setRestoreAttempt((n) => n + 1);
+                  }}
+                  className="pointer-coarse:min-h-11 font-semibold underline underline-offset-2"
+                >
+                  Qayta urinish
+                </button>
+              </p>
             ) : null}
-          </>
+            {compareAvailability(compareKind, compareCatalog) ? <CompareSwitch checked={comparing} onChange={toggleCompare} /> : null}
+            {comparing && compareKind && compareCatalog ? (
+              <ComparePanel
+                kind={compareKind}
+                catalog={compareCatalog}
+                tab={compare[compareKind]}
+                balance={compareKind === "video" ? paidBalance : balance}
+                typing={typing}
+                gated={gated}
+                reload={compareKind === "video" ? video.reload : reload}
+                onPick={(id, prompt) => pickCompared(compareKind, id, prompt)}
+              />
+            ) : tab === "audio" ? (
+              <AudioTab
+                catalogState={audioCatalog.state}
+                reload={audioCatalog.reload}
+                state={audioState}
+                setState={setAudioState}
+                jobs={audioJobs.jobs}
+                track={audioJobs.track}
+                balance={balance}
+                typing={typing}
+                gated={gated}
+                onSubmitted={audioDraft.clear}
+              />
+            ) : tab === "ovoz" ? (
+              <>
+                {legacyFold ? <VoiceTemplatesRow active={voiceTemplate} onPick={setVoiceTemplate} /> : null}
+                {legacyFold && voiceTemplate ? (
+                  <VoiceTemplatePanel id={voiceTemplate} onClose={() => setVoiceTemplate(null)} jobs={templateJobs.jobs} track={templateJobs.track} />
+                ) : (
+                  <VoiceTab
+                    catalogState={voiceCatalog.state}
+                    reload={voiceCatalog.reload}
+                    state={voiceState}
+                    setState={setVoiceState}
+                    jobs={voiceJobs.jobs}
+                    track={voiceJobs.track}
+                    balance={balance}
+                    typing={typing}
+                    gated={gated}
+                    quietWhenNone={legacyFold}
+                    onSubmitted={voiceDraft.clear}
+                  />
+                )}
+              </>
+            ) : tab === "video" ? (
+              <VideoTab
+                catalogState={video.state}
+                reload={video.reload}
+                state={videoState}
+                setState={setVideoState}
+                jobs={videoJobs.jobs}
+                track={videoJobs.track}
+                balance={paidBalance}
+                typing={typing}
+                gated={gated}
+                onMusic={(prompt) => void handoff.toMusic(prompt)}
+                onVoice={(text) => void handoff.toVoice(text)}
+                onSubmitted={videoDraft.clear}
+              />
+            ) : (
+              <StudioWorkbench
+                resultsRef={resultsRef}
+                hasResults={jobs.length > 0}
+                empty="Yaratilgan rasmlar shu yerda ko‘rinadi."
+                form={
+                  <>
+                    {mode !== "image" ? (
+                      <div className="bg-accent-soft text-accent-soft-foreground mb-3 flex items-center justify-between gap-2 rounded-[14px] px-3.5 py-2" data-studio-mode={mode}>
+                        <p className="text-[14.5px] font-bold">{MODE_LABEL[mode]}</p>
+                        <button
+                          type="button"
+                          data-studio-mode-exit
+                          onClick={() => enterMode("image")}
+                          className="focus-visible:ring-ring inline-flex min-h-11 items-center gap-1 rounded-[10px] px-2 text-[13.5px] font-semibold outline-none focus-visible:ring-2"
+                        >
+                          <X className="size-4" aria-hidden />
+                          Yangi rasm
+                        </button>
+                      </div>
+                    ) : null}
+                    {rasmFormView}
+                  </>
+                }
+                results={
+                  <section aria-label="Natijalar" data-studio-results className="min-w-0">
+                    <StudioResults
+                      jobs={jobs}
+                      busy={submitting}
+                      onAgain={again}
+                      retryPrice={retryPrice}
+                      onOtherModel={(job) => otherModel(job.prompt)}
+                      onTool={(m, p) => void pictureTool(m, p)}
+                      onVideo={(url, prompt) => void handoff.toVideo(url, prompt)}
+                      onVoice={(text) => void handoff.toVoice(text)}
+                    />
+                  </section>
+                }
+              />
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -704,41 +673,55 @@ function jobLabel(jobPurpose: string): string {
   return MODE_LABEL.edit;
 }
 
-const HEADER_BTN =
-  "bg-card hover:bg-muted focus-visible:ring-ring pointer-coarse:min-h-11 inline-flex h-11 items-center gap-1.5 rounded-[14px] border px-3 text-[14px] font-semibold outline-none focus-visible:ring-2";
+const BAR_BTN =
+  "bg-card hover:bg-muted focus-visible:ring-ring inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-[12px] border px-3 text-[14px] font-semibold outline-none focus-visible:ring-2";
 
-/** Desktop navigation column: where you are (Yaratish / Galereya) and the balance with its top-up link. */
-function StudioNav({ view, onView, balance }: { view: View; onView: (v: View) => void; balance: number | null }) {
-  const item = (v: View, label: string) => (
-    <button
-      type="button"
-      data-studio-nav={v}
-      aria-current={view === v ? "page" : undefined}
-      onClick={() => onView(v)}
-      className={cn(
-        "focus-visible:ring-ring h-11 rounded-[12px] px-3 text-left text-[15px] outline-none focus-visible:ring-2",
-        view === v ? "bg-muted font-bold" : "hover:bg-muted/60 font-medium",
-      )}
-    >
-      {label}
-    </button>
-  );
+/**
+ * The bar on top of the workbench (variant A): the four tabs, «Galereya» (or «Yaratish» while the gallery is open) and
+ * the balance with its top-up link at the right. On a phone the bar scrolls sideways rather than wrapping.
+ */
+function StudioBar({ tab, view, onTab, onGallery, onCreate, balance }: { tab: StudioTab; view: View; onTab: (t: StudioTab) => void; onGallery: () => void; onCreate: () => void; balance: number | null }) {
   return (
-    <nav aria-label="Studio menyusi" data-studio-menu className="hidden flex-col gap-1 xl:sticky xl:top-20 xl:flex">
-      <p className="mb-3 px-3 text-[20px] font-extrabold">Studio</p>
-      {item("create", "Yaratish")}
-      {item("gallery", "Galereya")}
-      {balance === null ? null : (
-        <div className="bg-card mt-6 rounded-[14px] border p-3">
-          <p className="text-muted-foreground text-[12.5px]">Balans</p>
-          <p className="mt-0.5 mb-2 text-[20px] font-extrabold tabular-nums" data-studio-nav-balance>
-            {formatSom(balance)}
-          </p>
-          <Link href={PAY_RETURN_PATH} className="text-accent-soft-foreground text-[13.5px] font-semibold underline underline-offset-2">
-            To‘ldirish
-          </Link>
-        </div>
+    <div data-studio-bar className="-mx-4 mb-3 flex items-center gap-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div role="tablist" aria-label="Studio bo‘limlari" data-studio-tabs className="bg-muted/70 inline-flex shrink-0 rounded-[14px] p-1">
+        {STUDIO_TABS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={view === "create" && tab === t}
+            data-studio-tab={t}
+            onClick={() => onTab(t)}
+            className={cn(
+              "focus-visible:ring-ring min-h-11 rounded-[10px] px-3.5 text-[15px] font-semibold outline-none focus-visible:ring-2 sm:px-5",
+              view === "create" && tab === t ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {TAB_LABEL[t]}
+          </button>
+        ))}
+      </div>
+      {view === "gallery" ? (
+        <button type="button" data-studio-create-link onClick={onCreate} className={BAR_BTN}>
+          <Wand2 className="size-[18px]" aria-hidden />
+          Yaratish
+        </button>
+      ) : (
+        <button type="button" data-studio-gallery-link onClick={onGallery} className={BAR_BTN}>
+          <LayoutGrid className="size-[18px]" aria-hidden />
+          Galereya
+        </button>
       )}
-    </nav>
+      {balance === null ? null : (
+        <Link
+          href={PAY_RETURN_PATH}
+          data-studio-bar-balance
+          title="Balansni to‘ldirish"
+          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring ml-auto inline-flex min-h-11 shrink-0 items-center rounded-[12px] px-2 text-[13.5px] font-semibold tabular-nums whitespace-nowrap outline-none focus-visible:ring-2"
+        >
+          {formatSom(balance)}
+        </Link>
+      )}
+    </div>
   );
 }

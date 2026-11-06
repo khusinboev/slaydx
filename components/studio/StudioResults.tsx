@@ -97,13 +97,8 @@ export function StudioResults({
   /** P2b: edit / upscale / remove the background of one picture (absent = no tool buttons). */
   onTool?: PictureTool;
 } & PictureNext) {
-  if (jobs.length === 0) {
-    return (
-      <p className="text-muted-foreground bg-card hidden rounded-[20px] border p-6 text-center text-[14.5px] md:block" data-studio-empty>
-        Yaratilgan rasmlar shu yerda ko‘rinadi.
-      </p>
-    );
-  }
+  // The empty column is the workbench's (`StudioWorkbench`): the same wording and place on every tab.
+  if (jobs.length === 0) return null;
   return (
     <JobList jobs={jobs} label="Natijalar">
       {(job) => (

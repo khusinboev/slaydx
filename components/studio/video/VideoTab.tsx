@@ -19,6 +19,7 @@ import { PriceButton } from "../PriceButton";
 import { STUDIO_VIDEO_PURPOSE, type CatalogLoad } from "../studio-api";
 import { SubmitError } from "../SubmitError";
 import { useStudioSend } from "../useStudioSend";
+import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
 import type { MediaCatalog } from "../studio-types";
 import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, promptMin, requestValues, type RawValues } from "../studio-values";
 import type { StudioJob } from "../StudioResults";
@@ -148,6 +149,7 @@ export function VideoTab({
 }) {
   // 400 before charging: the model / a value / the switch changed — re-read what is offered; 409: the price moved.
   const { submitting, error, setError, send: queue } = useStudioSend(() => reload(true));
+  const { resultsRef, scrollToResults } = useResultsScroll();
   const [pickerOpen, setPickerOpen] = useState(false);
   const catalog = catalogState.status === "ready" ? catalogState.catalog : null;
   const all = splitVideoCatalog(catalog);
@@ -212,9 +214,10 @@ export function VideoTab({
 
   async function send(target: ClientEntry, values: Record<string, unknown>, label: string) {
     if (!catalog) return false;
-    return queue({ slug: STUDIO_VIDEO_SLUG, id: STUDIO_VIDEO_TOOL_ID, title: label.slice(0, 72), output: "mp4" }, values, studioVideoClientPrice(target, values, catalog.pricing), ({ id, price: charged }) =>
-      track({ id, modelId: target.id, modelLabel: target.label, prompt: label, price: charged, sent: values }),
-    );
+    return queue({ slug: STUDIO_VIDEO_SLUG, id: STUDIO_VIDEO_TOOL_ID, title: label.slice(0, 72), output: "mp4" }, values, studioVideoClientPrice(target, values, catalog.pricing), ({ id, price: charged }) => {
+      track({ id, modelId: target.id, modelLabel: target.label, prompt: label, price: charged, sent: values });
+      scrollToResults();
+    });
   }
 
   const sendForm = (target: ClientEntry, label: string) => void send(target, sent, label).then((ok) => ok && onSubmitted?.());
@@ -298,8 +301,22 @@ export function VideoTab({
   const hasEnd = textModel?.params.some((p) => p.name === END_PARAM) ?? false;
   const endImage = String(state.raw[END_PARAM] ?? "");
 
+  const results = (
+    <section aria-label="Videolar" data-video-results className="min-w-0">
+      <VideoResults jobs={jobs} busy={submitting} onAgain={again} retryPrice={retryPrice} onMusic={onMusic} onVoice={onVoice} />
+    </section>
+  );
+
   return (
     <div data-video-tab>
+      <StudioWorkbench
+        resultsRef={resultsRef}
+        hasResults={jobs.length > 0}
+        empty="Yaratilgan videolar shu yerda ko‘rinadi."
+        label="Videolar"
+        results={results}
+        form={
+          <>
       {split.effects && split.models.length > 0 ? (
         <div className="mb-3" data-video-mode>
           <Segmented
@@ -511,9 +528,9 @@ export function VideoTab({
         label={price === null ? undefined : videoSubmitLabel(what, price)}
         paidOnly
       />
-      <section aria-label="Videolar" data-video-results className={cn(jobs.length > 0 && "mt-5")}>
-        <VideoResults jobs={jobs} busy={submitting} onAgain={again} retryPrice={retryPrice} onMusic={onMusic} onVoice={onVoice} />
-      </section>
+          </>
+        }
+      />
     </div>
   );
 }

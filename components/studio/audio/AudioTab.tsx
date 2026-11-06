@@ -19,6 +19,7 @@ import { PriceButton } from "../PriceButton";
 import type { CatalogLoad } from "../studio-api";
 import { SubmitError } from "../SubmitError";
 import { useStudioSend } from "../useStudioSend";
+import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
 import { carryOver, effective, requestValues, type RawValues } from "../studio-values";
 import type { StudioJob } from "../StudioResults";
 import { VoiceList, VoicesState, voiceRows, type VoiceFilter } from "../voice/VoiceList";
@@ -117,6 +118,7 @@ export function AudioTab({
     reload(true);
     if (refused && needsVoices) loadVoices();
   });
+  const { resultsRef, scrollToResults } = useResultsScroll();
   const catalog = catalogState.status === "ready" ? catalogState.catalog : null;
   const modes = offeredModes(catalog?.models ?? []);
   const speechTools = offeredSpeechTools(catalog?.models ?? []);
@@ -170,8 +172,8 @@ export function AudioTab({
   if (mixOn) {
     return (
       <div data-audio-tab data-audio-mode={MIX_CHIP}>
-        {chips(MIX_CHIP)}
         <MixPanel
+          before={chips(MIX_CHIP)}
           state={state.mix ?? INITIAL_MIX_STATE}
           setState={(fn) => setState((s) => ({ ...s, mix: fn(s.mix ?? INITIAL_MIX_STATE) }))}
           jobs={mixJobs}
@@ -189,9 +191,9 @@ export function AudioTab({
   if (tool) {
     return (
       <div data-audio-tab data-audio-mode={tool.mode}>
-        {chips(tool.mode)}
         <SpeechToolPanel
           key={tool.mode}
+          before={chips(tool.mode)}
           mode={tool.mode}
           modeLabel={tool.label}
           entry={tool.entries.find((e) => e.id === state.tools?.[tool.mode]?.model) ?? tool.entry}
@@ -261,9 +263,10 @@ export function AudioTab({
   function send(target: ClientEntry, targetLabel: string, out: Record<string, unknown>) {
     if (!catalog) return Promise.resolve(false);
     const title = (String(out.prompt ?? "").trim() || targetLabel).slice(0, 72);
-    return queue({ slug: STUDIO_AUDIO_SLUG, id: STUDIO_AUDIO_TOOL_ID, title, output: "mp3" }, out, audioClientPrice(target, out, catalog.pricing), ({ id, price: charged }) =>
-      track({ id, modelId: target.id, modelLabel: targetLabel, prompt: title, price: charged, sent: out }),
-    );
+    return queue({ slug: STUDIO_AUDIO_SLUG, id: STUDIO_AUDIO_TOOL_ID, title, output: "mp3" }, out, audioClientPrice(target, out, catalog.pricing), ({ id, price: charged }) => {
+      track({ id, modelId: target.id, modelLabel: targetLabel, prompt: title, price: charged, sent: out });
+      scrollToResults();
+    });
   }
 
   function submit() {
@@ -296,6 +299,18 @@ export function AudioTab({
 
   return (
     <div data-audio-tab data-audio-mode={mode} data-audio-model={entry.id}>
+      <StudioWorkbench
+        resultsRef={resultsRef}
+        hasResults={providerJobs.length > 0}
+        empty="Yaratilgan audiolar shu yerda ko‘rinadi."
+        label="Audiolar"
+        results={
+          <section aria-label="Audiolar" data-audio-results className="min-w-0">
+            <VoiceResults jobs={providerJobs} busy={submitting} onAgain={again} retryPrice={retryPrice} failed="Audio yaratilmadi" />
+          </section>
+        }
+        form={
+          <>
       {chips(mode)}
 
       {entries.length > 1 ? (
@@ -371,9 +386,9 @@ export function AudioTab({
         onSubmit={submit}
         label={price === null ? undefined : audioSubmitLabel(count > 1 ? `${buttonLabel} ×${count}` : buttonLabel, price)}
       />
-      <section aria-label="Audiolar" data-audio-results className={cn(providerJobs.length > 0 && "mt-5")}>
-        <VoiceResults jobs={providerJobs} busy={submitting} onAgain={again} retryPrice={retryPrice} failed="Audio yaratilmadi" />
-      </section>
+          </>
+        }
+      />
     </div>
   );
 }
