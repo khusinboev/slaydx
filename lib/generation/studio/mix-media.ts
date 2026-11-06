@@ -15,7 +15,7 @@ const MAX_BOXES = 1024;
 const MAX_TRACKS = 16;
 
 /** Child boxes of `[start, end)`: `[type, payloadStart, boxEnd]`. Stops at the first malformed size, and at `MAX_BOXES`. */
-function boxes(b: Uint8Array, start: number, end: number): [string, number, number][] {
+export function mp4Boxes(b: Uint8Array, start: number, end: number): [string, number, number][] {
   const out: [string, number, number][] = [];
   let o = start;
   while (o + 8 <= end && out.length < MAX_BOXES) {
@@ -33,6 +33,8 @@ function boxes(b: Uint8Array, start: number, end: number): [string, number, numb
   }
   return out;
 }
+
+const boxes = mp4Boxes;
 
 /** The handler types of every track (`vide`, `soun`, …) of an MP4. */
 export function mp4TrackHandlers(b: Uint8Array): string[] {

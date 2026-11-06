@@ -274,7 +274,11 @@ test("a forged MP4 is refused: `mvhd` alone, `mvhd` + `mdhd`, every table; fragm
   assert.match(frag.body.error ?? "", /fragmented/, "MUTATSIYA: a fragmented file has no sample tables to trust");
   // No `moov` table can be trusted for a count: `stts` cut to two entries, `stsz` still counts every sample.
   const short = six();
-  new DataView(short.buffer, short.byteOffset, short.byteLength).setUint32(offsets(short, "stts")[1]! + 4, 2);
+  const sv = new DataView(short.buffer, short.byteOffset, short.byteLength);
+  const st = offsets(short, "stts")[1]!;
+  sv.setUint32(st + 4, 2);
+  sv.setUint32(st + 8, 1);
+  sv.setUint32(st + 16, 1);
   const { mp4Probe } = await import("../lib/generation/studio/mix-media.ts");
   assert.ok(mp4Probe(short)!.tracks[1]!.samples > 2, "MUTATSIYA: `stsz` is read");
   // An iPhone's MOV goes through the same path.
@@ -471,7 +475,12 @@ function squeezed(): Uint8Array {
 const FORGED: Record<string, (b: Uint8Array, v: DataView) => void> = {
   "(a) stsd sample rate 0": (b, v) => v.setUint32(offsets(b, "stsd")[1]! + 8 + 32, 0),
   "(b) hdlr says text, stsd says mp4a": (b) => void Buffer.from(b.buffer, b.byteOffset, b.byteLength).write("text", offsets(b, "hdlr")[1]! + 8, "latin1"),
-  "(c) stts entry count 2": (b, v) => v.setUint32(offsets(b, "stts")[1]! + 4, 2),
+  "(c) stts entry count 2": (b, v) => {
+    const a = offsets(b, "stts")[1]!;
+    v.setUint32(a + 4, 2);
+    v.setUint32(a + 8, 1);
+    v.setUint32(a + 16, 1);
+  },
   "(d) trak overruns moov": (b, v) => {
     const at = offsets(b, "trak").at(-1)! - 8;
     v.setUint32(at, v.getUint32(at) + 4096);
@@ -601,7 +610,7 @@ test("false refusals: a large picture, QuickTime v2 sound, a second sound track,
 });
 
 test("the parser is bounded: 3 million empty `trak` boxes cost no memory and throw nothing", async () => {
-  const { mp4Probe } = await import("../lib/generation/studio/mix-media.ts");
+  const { mp4Boxes, mp4Probe } = await import("../lib/generation/studio/mix-media.ts");
   const n = 3_000_000;
   const b = new Uint8Array(8 + 8 + 8 * n);
   const v = new DataView(b.buffer);
@@ -622,6 +631,7 @@ test("the parser is bounded: 3 million empty `trak` boxes cost no memory and thr
   const p = mp4Probe(out);
   assert.ok(p);
   assert.ok(p.tracks.length <= 16, "MUTATSIYA: the track count is capped");
+  assert.equal(mp4Boxes(out, moov + 8, out.length).length, 1024, "MUTATSIYA: the walk itself stops");
   const { sniffVideo } = await import("../lib/server/media/audio-inputs.ts");
   assert.equal(sniffVideo(out), null, "no picture: no video, and no throw");
 });
