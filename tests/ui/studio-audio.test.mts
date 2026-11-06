@@ -13,6 +13,7 @@ const { useAppStore } = await import("../../lib/store.ts");
 const { useUi } = await import("../../lib/ui.ts");
 const { dropMediaCatalog } = await import("../../components/studio/studio-api.ts");
 const { studioAudioPrice } = await import("../../lib/media/studio-audio.ts");
+const { groupDigits } = await import("../../lib/format.ts");
 
 /**
  * Studio «Audio» tab (docs/studio/P6-SPEC.md) with the API stubbed at `fetch` and the REAL catalog entries.
@@ -225,11 +226,16 @@ test("P9 model picker: «Musiqa» with ElevenLabs + Lyria — picker only there,
   await mount();
   await openAudio();
   assert.deepEqual(qa("[data-audio-mode-chip]").map((b) => b.textContent), ["Musiqa", "Effekt", "Ovozni almashtirish", "Shovqindan tozalash", "Montaj"], "Lyria is no mode of its own");
-  const picker = () => qa('[data-audio-model-picker] [role="radio"]');
-  assert.deepEqual(picker().map((b) => b.textContent), ["ElevenLabs", "Google Lyria 3"]);
+  // P11 §D: model CARDS with the price of the chosen length and the specs, not a bare segmented control.
+  const picker = () => qa("[data-audio-model-picker] [data-model-card]");
+  assert.deepEqual(picker().map((b) => b.dataset.modelCard), ["elevenlabs/music", "google/lyria-3"]);
+  assert.deepEqual(picker().map((b) => b.querySelector("span span")!.textContent), ["ElevenLabs", "Google Lyria 3"]);
   assert.equal(q("[data-audio-tab]")!.dataset.audioModel, "elevenlabs/music", "ElevenLabs is the default");
   await type("[data-audio-prompt] textarea", "cheerful dutar melody, Uzbek folk style");
+  assert.equal(q('[data-model-card="elevenlabs/music"] [data-model-price]')!.textContent, `~${groupDigits(studioAudioPrice({ modelId: "elevenlabs/music", length: "30" }, RATE)!)} so'm / 30 s`, "the card: the price of the chosen length");
   await click(qa('[data-field="length"] [role="radio"]').find((b) => b.textContent === "1 daq"));
+  assert.equal(q('[data-model-card="elevenlabs/music"] [data-model-price]')!.textContent, `~${groupDigits(studioAudioPrice({ modelId: "elevenlabs/music", length: "60" }, RATE)!)} so'm / 1 daq`, "MUTATSIYA: the card follows the length");
+  assert.match(q('[data-model-card="google/lyria-3"] [data-model-specs]')!.textContent ?? "", /Google · To‘liq qo‘shiq/, "the specs from the schema");
   await click(picker()[1]);
   assert.equal(q("[data-audio-tab]")!.dataset.audioModel, "google/lyria-3");
   assert.equal(q<HTMLTextAreaElement>("[data-audio-prompt] textarea")!.value, "cheerful dutar melody, Uzbek folk style", "MUTATSIYA: the prompt carries over");

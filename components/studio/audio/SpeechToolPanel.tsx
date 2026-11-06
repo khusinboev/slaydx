@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Download, RefreshCw } from "lucide-react";
 import type * as api from "@/lib/api-client";
-import { formatSom } from "@/lib/format";
+import { formatSom, groupDigits } from "@/lib/format";
 import { useApiSrc } from "@/lib/use-api-src";
 import type { ClientEntry } from "@/lib/studio-core";
 import { languageLabel, videoOnlySource, type SpeechToolMode } from "@/lib/media/catalog-transcribe";
@@ -13,6 +13,8 @@ import type { DownloadFormatId } from "@/lib/downloads/formats";
 import { Card, Segmented, SelectField } from "@/components/forms/compact";
 import { Field } from "@/components/forms/shared";
 import { JobList, JobResult, RESULT_ACTION as ACTION } from "../JobResult";
+import { MediaModelPicker } from "../MediaModelPicker";
+import { STUDIO_AUDIO_LISTING } from "../studio-api";
 import { ParamRows } from "../ParamRows";
 import { PriceButton } from "../PriceButton";
 import { SubmitError } from "../SubmitError";
@@ -208,10 +210,17 @@ export function SpeechToolPanel({
           <>
       {before}
       {entries.length > 1 ? (
+        // P11 §D: cards with the price of a minute of source and the specs, not a bare segmented control.
         <div data-audio-model-picker>
-          <Card title="Model">
-            <Segmented ariaLabel="Model" value={entry.id} onChange={pickModel} options={entries.map((e) => ({ value: e.id, label: audioModelLabel(e, modeLabel) }))} />
-          </Card>
+          <MediaModelPicker
+            purpose={STUDIO_AUDIO_LISTING}
+            catalog={{ purpose: STUDIO_AUDIO_LISTING, defaultModelId: entries[0]?.id ?? null, models: [...entries], pricing }}
+            value={entry.id}
+            values={raw}
+            onChange={pickModel}
+            priceOf={(m) => `~${groupDigits(speechToolClientPrice(mode, m, requestValues(m, { ...raw, sourceSeconds: 60 }), pricing))} so'm / 1 daq`}
+            labelOf={(m) => audioModelLabel(m, modeLabel)}
+          />
         </div>
       ) : null}
       <Card title="Manba">

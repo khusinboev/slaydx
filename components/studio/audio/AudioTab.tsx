@@ -8,15 +8,16 @@ import { cn } from "@/lib/cn";
 import { formatSom, groupDigits } from "@/lib/format";
 import type { ClientEntry } from "@/lib/studio-core";
 import { AutoTextarea } from "@/components/common/AutoTextarea";
-import { Card, Segmented } from "@/components/forms/compact";
+import { Card } from "@/components/forms/compact";
 import { Field } from "@/components/forms/shared";
+import { MediaModelPicker } from "../MediaModelPicker";
 import { takesAudioInput, type AudioMode } from "@/lib/media/catalog-audio";
 import { audioJobLabels, audioModelLabel, offeredModes } from "./audio-modes";
 import { audioOutputCount } from "@/lib/media/studio-audio";
 import { CatalogState } from "../CatalogState";
 import { ParamRows } from "../ParamRows";
 import { PriceButton } from "../PriceButton";
-import type { CatalogLoad } from "../studio-api";
+import { STUDIO_AUDIO_LISTING, type CatalogLoad } from "../studio-api";
 import { SubmitError } from "../SubmitError";
 import { useStudioSend } from "../useStudioSend";
 import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
@@ -27,7 +28,7 @@ import { VoiceResults } from "../voice/VoiceResults";
 import { useVoices } from "../voice/voice-api";
 import type { PreparedSample } from "../voice/wav";
 import { AudioInputRow } from "./AudioInputRow";
-import { STUDIO_AUDIO_SLUG, STUDIO_AUDIO_TOOL_ID, audioClientPrice, uploadAudioInput } from "./audio-api";
+import { STUDIO_AUDIO_SLUG, STUDIO_AUDIO_TOOL_ID, audioCardPrice, audioClientPrice, uploadAudioInput } from "./audio-api";
 import { INITIAL_MIX_STATE, type MixTabState } from "./mix-api";
 import { MixPanel } from "./MixPanel";
 import { MIX_MODES } from "@/lib/media/catalog-mix";
@@ -314,10 +315,17 @@ export function AudioTab({
       {chips(mode)}
 
       {entries.length > 1 ? (
+        // P11 §D: cards with the price and the specs (a bare segmented control said neither).
         <div data-audio-model-picker>
-          <Card title="Model">
-            <Segmented ariaLabel="Model" value={entry.id} onChange={pickModel} options={entries.map((e) => ({ value: e.id, label: audioModelLabel(e, modeLabel) }))} />
-          </Card>
+          <MediaModelPicker
+            purpose={STUDIO_AUDIO_LISTING}
+            catalog={{ ...catalog, models: entries }}
+            value={entry.id}
+            values={values}
+            onChange={pickModel}
+            priceOf={(m) => audioCardPrice(m, raw, catalog.pricing)}
+            labelOf={(m) => audioModelLabel(m, modeLabel)}
+          />
         </div>
       ) : null}
 

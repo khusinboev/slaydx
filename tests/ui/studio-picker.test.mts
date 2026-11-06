@@ -125,6 +125,8 @@ test("the row: toggle cards in a group, the chosen one pressed, a click chooses;
     assert.equal(price, `~${groupDigits(expectedPrice(m, 1))} so'm / rasm`, `${m.id}: MUTATSIYA: butun values (soni 4) narxi chiqsa qizaradi`);
   }
   assert.match(q(`[data-model-card="${NANO.id}"]`)!.textContent ?? "", /Tez, Arzon/, "the badges as words");
+  // P11 §D ModelSpecs: the card's specs come from the schema (Nano: 4 pictures at most, Google, edit), never typed by hand.
+  assert.match(q(`[data-model-card="${NANO.id}"] [data-model-specs]`)!.textContent ?? "", /^Google · 4 tagacha · tahrir · Tez, Arzon$/);
   await click(q(`[data-model-card="${GPT.id}"]`));
   assert.equal(chosen(), GPT.id);
   assert.ok(!q("[data-model-sheet]"), "the sheet is closed");
@@ -153,16 +155,21 @@ test("the sheet lists ALL models; chips only for a badge some model carries; a c
   assert.equal(options().length, 5);
   cleanup();
   fresh();
-  // Two models without «arzon» / «matn»: those chips would lead to an empty list and are not drawn.
-  mount({ models: [model("b/one", "Bir", ["tez"]), model("b/two", "Ikki", ["sifatli"])], start: "b/one" });
+  // Four models without «arzon» / «matn»: those chips would lead to an empty list and are not drawn; a badge EVERY model
+  // carries («yangi» is not a filter badge; here «tez» on all four) changes nothing and is not drawn either.
+  mount({ models: [model("b/one", "Bir", ["tez"]), model("b/two", "Ikki", ["tez", "sifatli"]), model("b/three", "Uch", ["tez"]), model("b/four", "To'rt", ["tez", "sifatli"])], start: "b/one" });
   await open();
-  assert.deepEqual(chips(), ["all", "tez", "sifatli"], "MUTATSIYA: har bir chip chizilsa qizaradi");
+  assert.deepEqual(chips(), ["all", "sifatli"], "MUTATSIYA: har bir chip chizilsa qizaradi");
 });
 
-test("the real catalog's two models give all four chips (Nano: tez, arzon · GPT: sifatli, matn)", async () => {
+test("the real catalog's two models give all four chips (Nano: tez, arzon · GPT: sifatli, matn); no «Barcha modellar» when the row holds every model", async () => {
   fresh();
-  mount({ models: [NANO, GPT], start: NANO.id });
-  await open();
+  // P11 §D: two models both sit on the row — the sheet's button is not drawn; the host («Boshqa modelda») may still open it.
+  const { rerender } = mount({ models: [NANO, GPT], start: NANO.id, open: false });
+  assert.ok(!q("[data-model-all]"), "MUTATSIYA: «Barcha modellar» with two models");
+  rerender(h(AppRouterContext.Provider, { value: router }, h(Host, { models: [NANO, GPT], start: NANO.id, open: true })));
+  await settle();
+  assert.ok(q("[data-model-sheet]"));
   assert.deepEqual(chips(), ["all", "tez", "sifatli", "arzon", "matn"]);
   assert.deepEqual(qa("[data-model-chip]").map((e) => e.textContent), ["Hammasi", "Tez", "Sifatli", "Arzon", "Matnli dizayn"]);
   await click(q('[data-model-chip="matn"]'));
@@ -194,7 +201,7 @@ test("«Tanlash» applies the highlighted model; closing any other way keeps the
 
 test("back closes the sheet (its own history entry) and leaves the page where it is", async () => {
   fresh("/uz/studio");
-  mount({ models: [NANO, GPT], start: NANO.id });
+  mount({ models: FIVE, start: "a/one" });
   const sx = () => (window.history.state as { sx?: { i: number; o?: string } } | null)?.sx;
   await open();
   assert.ok(q("[data-model-sheet]"));

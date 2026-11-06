@@ -739,6 +739,11 @@ test("the sheet's noun follows the catalog", () => {
 
 test("the Ovoz picker's sheet says «Ovoz modeli»", async () => {
   api();
+  // P11 §D: the sheet opens only when the row cannot hold every model — four speech models here.
+  const inner = globalThis.fetch;
+  const four = [...SPEECH, by("elevenlabs/eleven-v3-fal"), by("elevenlabs/eleven-v4-turbo-fal")];
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) =>
+    String(input) === "/api/media/catalog?purpose=studio.speech" ? json(200, { purpose: "studio.speech", defaultModelId: four[0]!.id, models: four, pricing: PRICING }) : inner(input as never, init);
   await mount();
   await click(tab("ovoz"));
   await settle();

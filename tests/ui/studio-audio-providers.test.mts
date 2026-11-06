@@ -127,9 +127,11 @@ async function pick(value: string) {
   await act(async () => void fireEvent.change(el, { target: { value } }));
   await settle(2);
 }
-const modelButtons = () => qa('[data-audio-model-picker] [role="radio"]');
+// P11 §D: the mode's models are cards (price + specs); `cardName` is the card's name line.
+const modelButtons = () => qa("[data-audio-model-picker] [data-model-card]");
+const cardName = (b: HTMLElement) => b.querySelector("span span")!.textContent;
 async function pickModel(label: RegExp) {
-  await click(modelButtons().find((b) => label.test(b.textContent ?? "")));
+  await click(modelButtons().find((b) => label.test(cardName(b) ?? "")));
   await settle(2);
 }
 const fieldNames = (root: string) => [...new Set(qa(`${root} [data-field]`).map((el) => el.dataset.field!))].sort();
@@ -144,7 +146,7 @@ test("picker: one offered model draws none; two draw it, default first; the fal 
 
   api([STT, FAL_STT]);
   await openTab("audio");
-  assert.deepEqual(modelButtons().map((b) => b.textContent), ["ElevenLabs", "ElevenLabs Scribe v2 · fal"]);
+  assert.deepEqual(modelButtons().map(cardName), ["ElevenLabs", "ElevenLabs Scribe v2 · fal"]);
   assert.equal(q("[data-speech-tool]")!.dataset.speechModel, STT.id, "the first is the default");
   cleanup();
   dropMediaCatalog();
@@ -246,7 +248,7 @@ test("«Effekt» and «Shovqindan tozalash»: the same picker, each model's own 
   const a = api([SFX, FAL_SFX, ISO, VEED]);
   await openTab("audio");
   assert.equal(q("[data-audio-tab]")!.dataset.audioMode, "sfx");
-  assert.deepEqual(modelButtons().map((b) => b.textContent), ["ElevenLabs Ovoz effekti", "ElevenLabs SFX v3 · fal"]);
+  assert.deepEqual(modelButtons().map(cardName), ["ElevenLabs Ovoz effekti", "ElevenLabs SFX v3 · fal"]);
   await pickModel(/fal/);
   assert.equal(q("[data-audio-tab]")!.dataset.audioModel, FAL_SFX.id);
   await act(async () => void fireEvent.change(q<HTMLTextAreaElement>("[data-audio-prompt] textarea")!, { target: { value: "eshik ochiladi" } }));
@@ -258,7 +260,7 @@ test("«Effekt» and «Shovqindan tozalash»: the same picker, each model's own 
 
   await click(q('[data-audio-mode-chip="isolate"]'));
   await settle();
-  assert.deepEqual(modelButtons().map((b) => b.textContent), ["ElevenLabs", "VEED Clean Audio · fal"]);
+  assert.deepEqual(modelButtons().map(cardName), ["ElevenLabs", "VEED Clean Audio · fal"]);
   assert.ok(!q('[data-field="strength"]'), "the ElevenLabs model has no such row");
   await pickModel(/VEED/);
   assert.ok(q('[data-field="strength"]'), "VEED's own row");
