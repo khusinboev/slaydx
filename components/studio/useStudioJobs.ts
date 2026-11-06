@@ -70,7 +70,7 @@ export function useStudioJobs(open = true): { jobs: StudioJob[]; track: (job: Ne
   );
 
   const restore = useCallback((job: NewJob) => {
-    if (polls.current.has(job.id)) return;
+    // Running this again keeps a card that is already live.
     setJobs((list) => (list.some((j) => j.id === job.id) ? list : [{ ...job, gen: null, error: null }, ...list]));
     restored.current.add(job.id);
     setRestoredTick((n) => n + 1);
