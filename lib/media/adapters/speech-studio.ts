@@ -32,8 +32,9 @@ import {
 import { geminiTts } from "../../generation/tts/gemini";
 import type { TtsProvider } from "../../generation/tts/types";
 import { speechAdapter, toSpeechError } from "./speech";
+import { FAL_ADAPTER_ID, falAdapter, type FalDeps } from "./fal";
 
-export type StudioSpeechAdapterDeps = { key?: () => string; gemini?: TtsProvider };
+export type StudioSpeechAdapterDeps = { key?: () => string; gemini?: TtsProvider; fal?: FalDeps };
 
 const opts = (p: NormalizedParams): StudioElevenOpts => ({
   lang: typeof p.lang === "string" ? p.lang : undefined,
@@ -140,5 +141,7 @@ export function studioSpeechAdapters(deps: StudioSpeechAdapterDeps = {}): Record
     "studio-gemini-tts": speechAdapter("studio-gemini-tts", gemini),
     "studio-gemini-dialogue": speechAdapter("studio-gemini-dialogue", gemini),
     "elevenlabs-clone": cloneAdapter(deps),
+    // P11: ElevenLabs v3 and v4 Turbo through fal.
+    [FAL_ADAPTER_ID]: falAdapter(deps.fal),
   };
 }

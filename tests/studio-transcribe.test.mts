@@ -91,8 +91,11 @@ test("catalog: entries, purposes, languages, source references, the shared refus
   assert.equal(STT.kind, "speech");
   assert.deepEqual(STT.capabilities, ["stt"]);
   assert.deepEqual(DUB.capabilities, ["dub"]);
-  assert.deepEqual(MEDIA_PURPOSES.byId(cat.STUDIO_TRANSCRIBE_PURPOSE)!.allowed, [cat.TRANSCRIBE_MODEL]);
-  assert.deepEqual(MEDIA_PURPOSES.byId(cat.STUDIO_DUB_PURPOSE)!.allowed, [cat.DUB_MODEL]);
+  // P11: the fal models after the default (`tests/studio-audio-providers.test.mts` holds their rules).
+  assert.deepEqual(MEDIA_PURPOSES.byId(cat.STUDIO_TRANSCRIBE_PURPOSE)!.allowed, [cat.TRANSCRIBE_MODEL, cat.FAL_SCRIBE_MODEL]);
+  assert.deepEqual(MEDIA_PURPOSES.byId(cat.STUDIO_DUB_PURPOSE)!.allowed, [cat.DUB_MODEL, cat.FAL_DUB_MODEL, cat.HEYGEN_TRANSLATE_MODEL]);
+  assert.equal(MEDIA_PURPOSES.byId(cat.STUDIO_TRANSCRIBE_PURPOSE)!.default, cat.TRANSCRIBE_MODEL);
+  assert.equal(MEDIA_PURPOSES.byId(cat.STUDIO_DUB_PURPOSE)!.default, cat.DUB_MODEL);
   const codes = cat.SPEECH_LANGUAGES.map((l) => l.value);
   for (const c of ["uz", "ru", "en", "tr", "kk", "ky", "tg"]) assert.ok(codes.includes(c), c);
   assert.ok(!codes.includes("tk"), "Turkmen is not in the ElevenLabs dubbing list");

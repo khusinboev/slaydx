@@ -9,19 +9,22 @@
  * Result file: the burned MP4, else the transcript as UTF-8 TXT. The SRT / VTT downloads are built from `doc.transcribe.cues`
  * by the download registry (`subtitles-srt`, `subtitles-vtt`) — the same cues the burn and the viewer use.
  *
+ * P11 package E: a second model on the fal key (`FAL_SCRIBE_MODEL`, the request's `modelId`). Its page states an audio file, so
+ * a video source goes as its audio track (ffmpeg, before the paid call). The rest of the engine does not know the difference.
+ *
  * Input bytes reach the engine ONLY through `ctx.source`, which the worker read from the job owner's own upload / result
  * (SQL ownership, `lib/server/media/speech-sources.ts`). Missing, wrong kind, too long, a provider or ffmpeg failure →
  * `UserFacingError` → FAILED + full refund. No speech at all is not a failure: the result says so (and nothing is burned).
  */
 import { normalize, type MediaAdapter, type MediaOutput, type Route } from "../../studio-core";
-import { STUDIO_TRANSCRIBE_PURPOSE, SPEECH_TOOL_OUTPUT_MAX_BYTES, TRANSCRIBE_AUDIO_MAX_SECONDS, TRANSCRIBE_MODEL, TRANSCRIBE_VIDEO_MAX_SECONDS, parseSource } from "../../media/catalog-transcribe";
+import { STUDIO_TRANSCRIBE_PURPOSE, SPEECH_TOOL_OUTPUT_MAX_BYTES, TRANSCRIBE_AUDIO_MAX_SECONDS, TRANSCRIBE_VIDEO_MAX_SECONDS, parseSource } from "../../media/catalog-transcribe";
 import { studioTranscribeError, transcribeEntry } from "../../media/studio-transcribe";
 import { sttResultOf, transcribeAdapters } from "../../media/adapters/transcribe-studio";
 import { MIX_SECONDS_TOLERANCE } from "../../media/catalog-mix";
 import { UserFacingError } from "../../server/user-error";
 import { extractMeta } from "../meta";
 import { recordAudioCall } from "./cost";
-import { BURN_FILES, burnArgs, burnVideoKbps } from "./burn-args";
+import { AUDIO_TRACK_FILES, BURN_FILES, audioTrackArgs, burnArgs, burnVideoKbps } from "./burn-args";
 import { FfmpegMissingError, runFfmpeg, type FfmpegRun } from "./mix-ffmpeg";
 import { mp4HasVideo } from "./mix-media";
 import { mp4Seconds } from "../video/mp4";
@@ -53,10 +56,13 @@ export type StudioTranscribeDeps = {
 export const BURN_FFMPEG_TIMEOUT_MS = 240_000;
 /** The bytes may measure this much longer than the billed (server-read, rounded-up) seconds; more = refused + refund. */
 export const MEASURED_SLACK_SECONDS = 1.5;
+/** Copying out one track of ≤ 3 minutes. */
+export const AUDIO_TRACK_FFMPEG_TIMEOUT_MS = 60_000;
 
 const REFUND = "Pul balansingizga qaytariladi.";
 const FAILED = `Transkripsiya bajarilmadi — provayder javob bermadi. ${REFUND}`;
 const BURN_FAILED = `Subtitrni videoga yopishtirib bo‘lmadi. ${REFUND}`;
+const TRACK_FAILED = `Videodan ovozni ajratib bo‘lmadi (video ovozsiz bo‘lishi mumkin). ${REFUND}`;
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 async function defaultRun(i: Parameters<RunFn>[0]) {
@@ -79,7 +85,7 @@ export async function buildStudioTranscribe(
   // The route refused these before charging; a job row from before a rule change fails here (refund), never runs.
   const bad = studioTranscribeError(values);
   if (bad) throw new UserFacingError(`${bad} ${REFUND}`);
-  const entry = transcribeEntry();
+  const entry = transcribeEntry(values);
   const p = normalize(entry.params, values);
   const ref = parseSource(values.source)!;
   const src = ctx.source;
@@ -97,6 +103,19 @@ export async function buildStudioTranscribe(
   const kbps = burn ? burnVideoKbps(src.seconds) : null;
   if (burn && kbps === null) throw new UserFacingError(`Bu video subtitr bilan 25 MB ga sig‘maydi. ${REFUND}`);
 
+  // The file the provider reads: the stored source, or a video's audio track for the model that takes audio only.
+  let media = { mime: src.mime, bytes: src.bytes };
+  if (kind === "video" && entry.routes[0]!.provider === "fal") {
+    try {
+      const track = await (deps.ffmpeg ?? runFfmpeg)({ inputs: { [AUDIO_TRACK_FILES.video]: src.bytes }, args: audioTrackArgs(src.seconds), output: AUDIO_TRACK_FILES.out, timeoutMs: AUDIO_TRACK_FFMPEG_TIMEOUT_MS });
+      if (!track.length) throw new Error("empty audio track");
+      media = { mime: "audio/mpeg", bytes: track };
+    } catch (e) {
+      console.warn("[studio-transcribe] audio track failed:", e instanceof Error ? e.message : e, (e as { stderr?: string })?.stderr ?? "");
+      throw new UserFacingError(TRACK_FAILED);
+    }
+  }
+
   o.onStage?.({ progress: 10, step: "Nutq matnga aylantirilmoqda" });
   const run = deps.run ?? defaultRun;
   let result: ReturnType<typeof sttResultOf>;
@@ -104,9 +123,9 @@ export async function buildStudioTranscribe(
   try {
     const out = await run({
       purpose: STUDIO_TRANSCRIBE_PURPOSE,
-      modelId: TRANSCRIBE_MODEL,
+      modelId: entry.id,
       values: p,
-      assets: { media: [{ mime: src.mime, base64: Buffer.from(src.bytes).toString("base64") }] },
+      assets: { media: [{ mime: media.mime, base64: Buffer.from(media.bytes).toString("base64") }] },
       step: "stt:0",
       adapters: deps.adapters ?? transcribeAdapters(),
       ...(o.deadline ? { deps: { deadline: o.deadline } } : {}),

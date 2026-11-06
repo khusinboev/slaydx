@@ -33,6 +33,19 @@
  *   DELETE /v1/dubbing/{id}          best-effort cleanup after download / give-up
  *                                    https://elevenlabs.io/docs/api-reference/dubbing/create
  * Languages: Uzbek is in both lists (Scribe «Good» WER tier; Dubbing https://elevenlabs.io/docs/capabilities/dubbing).
+ *
+ * STUDIO P11 package E (docs/studio/P11-SPEC.md): the same two tools on the fal key alone, for an ElevenLabs key without the
+ * speech-to-text or dubbing permission. Each is a model of its own, not a second route: the costs differ, and a user picks.
+ * All three ship `defaultOff`; the admin enables one after its live check.
+ *   Scribe v2      $0.008 / minute of input audio        https://fal.ai/models/fal-ai/elevenlabs/speech-to-text/scribe-v2/llms.txt
+ *                  (read 2026-11-06). UNVERIFIED: the page states no rounding and no minimum, so the quote takes the safe
+ *                  side, whole started minutes like fal's dubbing, until one live job shows what is really billed.
+ *   Dubbing        $0.6 / minute, the closest minute rounding up: 15 s costs $0.6
+ *                                                         https://fal.ai/models/fal-ai/elevenlabs/dubbing/llms.txt (2026-11-06)
+ *   HeyGen speed   $0.05 / OUTPUT second; the one model stating «Uzbek (Latin, Uzbekistan)»
+ *                                                         https://fal.ai/models/fal-ai/heygen/v2/translate/speed/llms.txt (2026-11-06)
+ *                  Video only, 8 minutes at most there; our 3-minute cap holds. The request keeps the output at the source's
+ *                  length (`fal-audio-models.ts falDubBody`), so the source's seconds are the quote. UNVERIFIED until live.
  */
 import type { CatalogEntry, ParamSchema, PurposeSpec } from "../studio-core";
 import { ELEVENLABS_CREATOR_USD_PER_CREDIT } from "../generation/llm-pricing";
@@ -42,10 +55,23 @@ export const STUDIO_DUB_PURPOSE = "studio.dub";
 
 export const TRANSCRIBE_MODEL = "elevenlabs/scribe-v2";
 export const DUB_MODEL = "elevenlabs/dubbing";
+export const FAL_SCRIBE_MODEL = "elevenlabs/scribe-v2-fal";
+export const FAL_DUB_MODEL = "elevenlabs/dubbing-fal";
+export const HEYGEN_TRANSLATE_MODEL = "heygen/translate-speed";
+
+/** fal endpoint ids (the routes' upstream model). */
+export const FAL_SCRIBE_ENDPOINT = "fal-ai/elevenlabs/speech-to-text/scribe-v2";
+export const FAL_DUB_ENDPOINT = "fal-ai/elevenlabs/dubbing";
+export const HEYGEN_TRANSLATE_ENDPOINT = "fal-ai/heygen/v2/translate/speed";
 
 /** Upstream ids sent in the requests. */
 export const ELEVENLABS_STT_MODEL = "scribe_v2";
 export const ELEVENLABS_DUB_UPSTREAM = "dubbing-automatic";
+
+/** USD per billed second of the fal models (file header, each page's price). */
+export const FAL_SCRIBE_USD_PER_SECOND = 0.008 / 60;
+export const FAL_DUB_USD_PER_SECOND = 0.6 / 60;
+export const HEYGEN_TRANSLATE_USD_PER_SECOND = 0.05;
 
 export const STT_CREDITS_PER_SECOND = 330 / 60;
 export const DUB_CREDITS_PER_SECOND = 3000 / 60;
@@ -83,6 +109,27 @@ export const SPEECH_LANGUAGES: readonly { value: string; label: string }[] = [
 export const AUTO_LANGUAGE = "auto";
 const withAuto = [{ value: AUTO_LANGUAGE, label: "Avtomatik aniqlash" }, ...SPEECH_LANGUAGES];
 
+/**
+ * Our language codes as HeyGen's `output_language` enum names them (its page, 2026-11-06). Kyrgyz and Tajik are not in that
+ * enum, so they are not offered on this model.
+ */
+export const HEYGEN_LANGUAGE: Readonly<Record<string, string>> = {
+  uz: "Uzbek (Latin, Uzbekistan)",
+  ru: "Russian (Russia)",
+  en: "English",
+  tr: "Turkish (Türkiye)",
+  kk: "Kazakh (Kazakhstan)",
+  az: "Azerbaijani (Latin, Azerbaijan)",
+  ar: "Arabic",
+  de: "German (Germany)",
+  fr: "French (France)",
+  es: "Spanish (Spain)",
+  zh: "Chinese (Mandarin, Simplified)",
+  ko: "Korean (Korea)",
+  ja: "Japanese (Japan)",
+  hi: "Hindi (India)",
+};
+
 const usdPerSecond = (credits: number): number => credits * ELEVENLABS_CREATOR_USD_PER_CREDIT;
 
 /** `upload:<24 hex>` | `result:<uuid>`. */
@@ -109,6 +156,28 @@ const sourceSecondsParam: ParamSchema = {
   affects: "price",
 };
 
+const transcribeParams: readonly ParamSchema[] = [
+  sourceParam,
+  sourceSecondsParam,
+  { name: "language", label: "Nutq tili", type: "enum", options: withAuto, default: AUTO_LANGUAGE, affects: "request" },
+  { name: "speakers", label: "Gapiruvchilarni ajratish", hint: "Har replika oldida «1:», «2:» — kim gapirgani", type: "bool", default: false, affects: "request" },
+  {
+    name: "burn",
+    label: "Subtitrni videoga yopishtirish",
+    hint: "Natija — subtitr yozilgan MP4 (faqat video manbada)",
+    type: "bool",
+    default: false,
+    affects: "request",
+  },
+];
+
+const dubParams: readonly ParamSchema[] = [
+  sourceParam,
+  { ...sourceSecondsParam, max: DUB_MAX_SECONDS },
+  { name: "target", label: "Qaysi tilga", type: "enum", options: SPEECH_LANGUAGES, default: "uz", affects: "request" },
+  { name: "sourceLang", label: "Asl tili", type: "enum", options: withAuto, default: AUTO_LANGUAGE, affects: "request" },
+];
+
 export const STUDIO_TRANSCRIBE_ENTRIES: readonly CatalogEntry[] = [
   {
     id: TRANSCRIBE_MODEL,
@@ -117,20 +186,7 @@ export const STUDIO_TRANSCRIBE_ENTRIES: readonly CatalogEntry[] = [
     label: "Transkripsiya",
     maker: "ElevenLabs",
     badges: ["yangi"],
-    params: [
-      sourceParam,
-      sourceSecondsParam,
-      { name: "language", label: "Nutq tili", type: "enum", options: withAuto, default: AUTO_LANGUAGE, affects: "request" },
-      { name: "speakers", label: "Gapiruvchilarni ajratish", hint: "Har replika oldida «1:», «2:» — kim gapirgani", type: "bool", default: false, affects: "request" },
-      {
-        name: "burn",
-        label: "Subtitrni videoga yopishtirish",
-        hint: "Natija — subtitr yozilgan MP4 (faqat video manbada)",
-        type: "bool",
-        default: false,
-        affects: "request",
-      },
-    ],
+    params: transcribeParams,
     cost: { per: "second", usd: usdPerSecond(STT_CREDITS_PER_SECOND), secondsParam: "sourceSeconds" },
     routes: [{ provider: "elevenlabs", upstreamModel: ELEVENLABS_STT_MODEL, adapter: "studio-elevenlabs-stt" }],
     // Informational: the call's real timeout is the job deadline (budget `studio-transcribe`).
@@ -144,33 +200,82 @@ export const STUDIO_TRANSCRIBE_ENTRIES: readonly CatalogEntry[] = [
     label: "Dublyaj",
     maker: "ElevenLabs",
     badges: ["yangi"],
-    params: [
-      sourceParam,
-      { ...sourceSecondsParam, max: DUB_MAX_SECONDS },
-      { name: "target", label: "Qaysi tilga", type: "enum", options: SPEECH_LANGUAGES, default: "uz", affects: "request" },
-      { name: "sourceLang", label: "Asl tili", type: "enum", options: withAuto, default: AUTO_LANGUAGE, affects: "request" },
-    ],
+    params: dubParams,
     cost: { per: "second", usd: usdPerSecond(DUB_CREDITS_PER_SECOND), secondsParam: "sourceSeconds" },
     routes: [{ provider: "elevenlabs", upstreamModel: ELEVENLABS_DUB_UPSTREAM, adapter: "studio-elevenlabs-dub" }],
     // Informational, like every sync entry: the dub waits inside the job deadline (budget `studio-dub`, `dub.ts`).
     limits: { timeoutMs: 60_000 },
     output: { mimes: ["video/mp4", "audio/mpeg"], maxBytes: SPEECH_TOOL_OUTPUT_MAX_BYTES },
   },
+  {
+    id: FAL_SCRIBE_MODEL,
+    kind: "speech",
+    capabilities: ["stt"],
+    label: "Scribe v2 · fal",
+    maker: "ElevenLabs",
+    badges: ["arzon", "yangi"],
+    defaultOff: true,
+    params: transcribeParams,
+    cost: { per: "second", usd: FAL_SCRIBE_USD_PER_SECOND, secondsParam: "sourceSeconds", unitSeconds: 60 },
+    routes: [{ provider: "fal", upstreamModel: FAL_SCRIBE_ENDPOINT, adapter: "fal" }],
+    limits: { timeoutMs: 180_000 },
+    output: { mimes: ["application/json"], maxBytes: SPEECH_TOOL_OUTPUT_MAX_BYTES },
+  },
+  {
+    id: FAL_DUB_MODEL,
+    kind: "speech",
+    capabilities: ["dub"],
+    label: "Dublyaj · fal",
+    maker: "ElevenLabs",
+    badges: ["yangi"],
+    defaultOff: true,
+    params: dubParams,
+    cost: { per: "second", usd: FAL_DUB_USD_PER_SECOND, secondsParam: "sourceSeconds", unitSeconds: 60 },
+    routes: [{ provider: "fal", upstreamModel: FAL_DUB_ENDPOINT, adapter: "fal-dub" }],
+    limits: { timeoutMs: 60_000 },
+    output: { mimes: ["video/mp4", "audio/mpeg"], maxBytes: SPEECH_TOOL_OUTPUT_MAX_BYTES },
+  },
+  {
+    id: HEYGEN_TRANSLATE_MODEL,
+    kind: "speech",
+    capabilities: ["dub"],
+    label: "Tez tarjima",
+    maker: "HeyGen",
+    badges: ["yangi"],
+    defaultOff: true,
+    params: [
+      sourceParam,
+      { ...sourceSecondsParam, max: DUB_MAX_SECONDS },
+      { name: "target", label: "Qaysi tilga", type: "enum", options: SPEECH_LANGUAGES.filter((l) => HEYGEN_LANGUAGE[l.value]), default: "uz", affects: "request" },
+      { name: "translateAudioOnly", label: "Faqat ovozni tarjima qilish", hint: "Yuz va lab harakati o‘zgarmaydi", type: "bool", default: false, affects: "request" },
+    ],
+    cost: { per: "second", usd: HEYGEN_TRANSLATE_USD_PER_SECOND, secondsParam: "sourceSeconds" },
+    routes: [{ provider: "fal", upstreamModel: HEYGEN_TRANSLATE_ENDPOINT, adapter: "fal-dub" }],
+    limits: { timeoutMs: 60_000 },
+    output: { mimes: ["video/mp4"], maxBytes: SPEECH_TOOL_OUTPUT_MAX_BYTES },
+  },
 ];
 
+/** The models of each tool in the picker's order: the first one is the default of a request that names none. */
+export const TRANSCRIBE_MODELS: readonly string[] = [TRANSCRIBE_MODEL, FAL_SCRIBE_MODEL];
+export const DUB_MODELS: readonly string[] = [DUB_MODEL, FAL_DUB_MODEL, HEYGEN_TRANSLATE_MODEL];
+
+/** The model takes a video only (HeyGen: `video_url` is required, there is no audio input). */
+export const videoOnlySource = (modelId: string): boolean => modelId === HEYGEN_TRANSLATE_MODEL;
+
 export const STUDIO_TRANSCRIBE_PURPOSE_SPECS: readonly PurposeSpec[] = [
-  { id: STUDIO_TRANSCRIBE_PURPOSE, kind: "speech", allowed: [TRANSCRIBE_MODEL], default: TRANSCRIBE_MODEL, userCanChoose: false },
-  { id: STUDIO_DUB_PURPOSE, kind: "speech", allowed: [DUB_MODEL], default: DUB_MODEL, userCanChoose: false },
+  { id: STUDIO_TRANSCRIBE_PURPOSE, kind: "speech", allowed: TRANSCRIBE_MODELS, default: TRANSCRIBE_MODEL, userCanChoose: true },
+  { id: STUDIO_DUB_PURPOSE, kind: "speech", allowed: DUB_MODELS, default: DUB_MODEL, userCanChoose: true },
 ];
 
 /** The two P10 tools in the «Audio» tab's chip order (after the provider modes, before «Montaj»). */
 export type SpeechToolMode = "transcribe" | "dub";
-export const SPEECH_TOOL_MODES: readonly { mode: SpeechToolMode; label: string; model: string; purpose: string; toolId: "studio-transcribe" | "studio-dub" }[] = [
-  { mode: "transcribe", label: "Transkripsiya", model: TRANSCRIBE_MODEL, purpose: STUDIO_TRANSCRIBE_PURPOSE, toolId: "studio-transcribe" },
-  { mode: "dub", label: "Dublyaj", model: DUB_MODEL, purpose: STUDIO_DUB_PURPOSE, toolId: "studio-dub" },
+export const SPEECH_TOOL_MODES: readonly { mode: SpeechToolMode; label: string; model: string; models: readonly string[]; purpose: string; toolId: "studio-transcribe" | "studio-dub" }[] = [
+  { mode: "transcribe", label: "Transkripsiya", model: TRANSCRIBE_MODEL, models: TRANSCRIBE_MODELS, purpose: STUDIO_TRANSCRIBE_PURPOSE, toolId: "studio-transcribe" },
+  { mode: "dub", label: "Dublyaj", model: DUB_MODEL, models: DUB_MODELS, purpose: STUDIO_DUB_PURPOSE, toolId: "studio-dub" },
 ];
 
-export const SPEECH_TOOL_MODEL_IDS: readonly string[] = SPEECH_TOOL_MODES.map((m) => m.model);
+export const SPEECH_TOOL_MODEL_IDS: readonly string[] = SPEECH_TOOL_MODES.flatMap((m) => m.models);
 
 /** The language label of a code (the viewer, the result line). */
 export function languageLabel(code: string | null | undefined): string {

@@ -113,7 +113,7 @@ async function requestsOf(values: Record<string, unknown>): Promise<Seen[]> {
 /* ───────────────────────── catalog ───────────────────────── */
 
 test("catalog: the P5 entries, their purposes and price-book costs", () => {
-  assert.deepEqual(MEDIA_PURPOSES.byId("studio.speech")!.allowed, [EL_TTS, GM_TTS, EL_DIA, GM_DIA]);
+  assert.deepEqual(MEDIA_PURPOSES.byId("studio.speech")!.allowed, [EL_TTS, GM_TTS, "elevenlabs/eleven-v3-fal", "elevenlabs/eleven-v4-turbo-fal", EL_DIA, GM_DIA]);
   assert.equal(MEDIA_PURPOSES.byId("studio.speech")!.default, EL_TTS);
   assert.deepEqual(MEDIA_PURPOSES.byId("studio.clone")!.allowed, [CLONE]);
   for (const id of [EL_TTS, GM_TTS, EL_DIA, GM_DIA, CLONE]) assert.equal(MEDIA_CATALOG.byId(id)!.kind, "speech", id);

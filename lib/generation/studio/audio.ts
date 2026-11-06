@@ -10,13 +10,15 @@
  *                                      is also stored as a generation asset (`putAsset`) for the player list. Fewer
  *                                      than asked → `delivered` (the worker's partial refund); none → failure (refund).
  *
+ * P11 package E: a mode may offer a fal model. VEED Clean Audio answers WAV, encoded here into the MP3 every result is.
+ *
  * Input: the chosen catalog model (`modelId`) and its ParamSchema values, normalized with the schema the route validated
  * with. The uploaded input reaches the provider ONLY through `ctx.input`, which the worker read from the job owner's own
  * upload row (SQL ownership); a clone voice ONLY through `ctx.clones` (the owner's ready clones). Anything missing there
  * fails the job (full refund), never runs on another file or voice.
  */
 import { normalize, type MediaAdapter, type MediaOutput, type Route } from "../../studio-core";
-import { mp3Seconds } from "../tts/mp3";
+import { mp3Seconds, wavToMp3 } from "../tts/mp3";
 import { extractMeta } from "../meta";
 import { LYRIA_MODEL, audioModeOf, lyriaUpstreamOf, takesAudioInput } from "../../media/catalog-audio";
 import { ELEVENLABS_VOICES, cloneIdOf } from "../../media/catalog-speech";
@@ -49,6 +51,11 @@ async function defaultRun(i: Parameters<typeof import("../../server/media/run").
 }
 
 const mp3Of = (o: MediaOutput | undefined): Uint8Array | null => (o && o.kind === "inline" && o.bytes.length && o.mime === "audio/mpeg" ? o.bytes : null);
+/** The clip as MP3: as it came, or the provider's WAV encoded; `null` when it is neither. */
+async function clipOf(o: MediaOutput | undefined): Promise<Uint8Array | null> {
+  if (o && o.kind === "inline" && o.mime === "audio/wav" && o.bytes.length) return wavToMp3(o.bytes);
+  return mp3Of(o);
+}
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 export async function buildStudioAudio(
@@ -105,7 +112,7 @@ export async function buildStudioAudio(
       // Each call makes ONE clip: its media_jobs cost is one clip's, not the whole job's (variants × clip).
       const callValues = { ...p, variants: 1 };
       const out = await run({ ...common, values: callValues, ...(providerVoice ? { extra: { voice: providerVoice } } : {}), ...(assets ? { assets } : {}), step: `audio:${i}` });
-      const mp3 = mp3Of(out.outputs[0]);
+      const mp3 = await clipOf(out.outputs[0]);
       if (!mp3) throw new Error("bo'sh audio");
       const first = out.outputs[0];
       if (!lyrics && first?.kind === "inline" && first.text) lyrics = first.text;

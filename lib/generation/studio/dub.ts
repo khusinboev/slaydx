@@ -17,16 +17,25 @@
  * Any failure, a safety refusal, the deadline → `UserFacingError` → the worker fails the job and refunds in full; an op we
  * give up on is deleted at ElevenLabs (best effort) so a late finish is not kept. Outside a job (unit tests, scripts) the
  * row store is injected or absent.
+ *
+ * P11 package E: the request's `modelId` picks ElevenLabs direct, ElevenLabs through fal or HeyGen through fal (`fal-dub.ts`).
+ * Same engine, same exactly-once row: only the adapter differs. HeyGen bills the seconds it DELIVERS, so the job's cost
+ * telemetry reads the delivered file (the quote read the source; `media_jobs.cost_usd` stays that quote), and a file longer
+ * than the quote is logged and counted as a provider failure, the owner's existing alert (`server-alerts.ts provider_fail`).
+ *
+ * A fal source lives on fal's CDN while the op runs: its URL is written to the row BEFORE the paid call, so whoever ends the
+ * op deletes it, this worker, the one that resumes it, or housekeeping (`studioDubHousekeeping`).
  */
-import { MediaError, costUsd, normalize, submitWithRoutes, type MediaAdapter, type MediaOutput, type RouteHealth } from "../../studio-core";
-import { DUB_MAX_SECONDS, DUB_MODEL, SPEECH_TOOL_OUTPUT_MAX_BYTES, STUDIO_DUB_PURPOSE, parseSource } from "../../media/catalog-transcribe";
+import { MediaError, costUsd, normalize, submitWithRoutes, type CatalogEntry, type MediaAdapter, type MediaOutput, type RouteHealth } from "../../studio-core";
+import { AUTO_LANGUAGE, DUB_MAX_SECONDS, HEYGEN_TRANSLATE_MODEL, HEYGEN_TRANSLATE_USD_PER_SECOND, SPEECH_TOOL_OUTPUT_MAX_BYTES, STUDIO_DUB_PURPOSE, parseSource, videoOnlySource } from "../../media/catalog-transcribe";
 import { MIX_SECONDS_TOLERANCE } from "../../media/catalog-mix";
 import { dubEntry, studioDubError } from "../../media/studio-transcribe";
 import { transcribeAdapters } from "../../media/adapters/transcribe-studio";
 import { mediaContext } from "../../media/context";
 import { UserFacingError } from "../../server/user-error";
 import { extractMeta } from "../meta";
-import { recordAudioCall } from "./cost";
+import { recordAudioCall, recordDeliveredSeconds } from "./cost";
+import { stripUrls } from "../video/types";
 import { mp4HasVideo } from "./mix-media";
 import { mp4Seconds } from "../video/mp4";
 import { mp3Seconds } from "../tts/mp3";
@@ -36,8 +45,11 @@ import type { FormValues, ToolConfig } from "../../types";
 
 /** The `media_jobs` side the engine needs (default: `lib/server/media/jobs.ts` inside a job). */
 export type DubRowStore = {
-  begin(i: { key: string; params: Record<string, unknown>; costUsd: number }): Promise<{ id: string; status: string; opId: string | null; fresh: boolean }>;
+  /** `uploadUrl`: an input an earlier run left at the provider, still to delete. */
+  begin(i: { key: string; params: Record<string, unknown>; costUsd: number }): Promise<{ id: string; status: string; opId: string | null; fresh: boolean; uploadUrl?: string | null }>;
   park(id: string, opId: string): Promise<void>;
+  noteUpload?(id: string, url: string): Promise<void>;
+  clearUpload?(id: string): Promise<void>;
   finish(id: string, meta: { mime: string; size: number }): Promise<void>;
   fail(id: string, message: string): Promise<void>;
 };
@@ -49,6 +61,8 @@ export type StudioDubDeps = {
   health?: RouteHealth;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
+  /** Test seam: a delivered file longer than the quote (default: `recordProviderFailure` inside a job). */
+  overrun?: (message: string) => Promise<void>;
 };
 
 const REFUND = "Pul balansingizga qaytariladi.";
@@ -80,11 +94,10 @@ export const DUB_CLOCK: { now: () => number; sleep: (ms: number) => Promise<void
 };
 
 
-async function defaultStore(): Promise<DubRowStore | null> {
+async function defaultStore(entry: CatalogEntry): Promise<DubRowStore | null> {
   const ctx = mediaContext();
   if (!ctx) return null;
   const jobs = await import("../../server/media/jobs");
-  const entry = dubEntry();
   const route = entry.routes[0]!;
   return {
     begin: async (i) => {
@@ -98,12 +111,22 @@ async function defaultStore(): Promise<DubRowStore | null> {
         params: i.params,
         costUsd: i.costUsd,
       });
-      return { id: row.id, status: row.status, opId: row.op_id, fresh };
+      const upload = row.params[jobs.MEDIA_UPLOAD_PARAM];
+      return { id: row.id, status: row.status, opId: row.op_id, fresh, uploadUrl: typeof upload === "string" ? upload : null };
     },
     park: (id, opId) => jobs.parkMediaJob(id, opId, new Date(Date.now() + 10_000)),
+    noteUpload: (id, url) => jobs.noteMediaUpload(id, url),
+    clearUpload: (id) => jobs.clearMediaUpload(id),
     finish: (id, meta) => jobs.finishMediaJob(id, [meta]),
     fail: (id, message) => jobs.failMediaJob(id, message),
   };
+}
+
+/** Counts toward the owner's `provider_fail` alert (5 equal errors in 10 minutes); the job itself is delivered. */
+async function defaultOverrun(provider: string, message: string): Promise<void> {
+  const ctx = mediaContext();
+  if (!ctx) return;
+  await (await import("../../server/provider-failures")).recordProviderFailure(ctx.generationId, { provider, message });
 }
 
 async function defaultHealth(): Promise<RouteHealth> {
@@ -129,7 +152,7 @@ export async function buildStudioDub(
   o.onStage?.({ progress: 0, step: "So‘rov tayyorlanmoqda" });
   const bad = studioDubError(values);
   if (bad) throw new UserFacingError(`${bad} ${REFUND}`);
-  const entry = dubEntry();
+  const entry = dubEntry(values);
   const p = normalize(entry.params, values);
   const ref = parseSource(values.source)!;
   const src = ctx.source;
@@ -141,19 +164,31 @@ export async function buildStudioDub(
     throw new UserFacingError(DUB_LENGTH_MISMATCH_MESSAGE);
   }
   const kind = sourceKindOf(src.mime);
+  if (videoOnlySource(entry.id) && kind !== "video") throw new UserFacingError(`Bu model faqat videoni tarjima qiladi. ${REFUND}`);
 
   const adapters = deps.adapters ?? transcribeAdapters();
   const route = entry.routes[0]!;
   const adapter = adapters[route.adapter];
   if (!adapter || !adapter.configured()) throw new UserFacingError(`Dublyaj xizmati hozir mavjud emas. ${REFUND}`);
-  const store = deps.store === undefined ? await defaultStore() : deps.store;
+  const store = deps.store === undefined ? await defaultStore(entry) : deps.store;
   const now = deps.now ?? DUB_CLOCK.now;
   const sleep = deps.sleep ?? DUB_CLOCK.sleep;
   const gen = mediaContext()?.generationId ?? "adhoc";
   const key = `${gen}:dub:0`;
 
   const row = store ? await store.begin({ key, params: { ...p }, costUsd: costUsd(entry.cost, p) }) : null;
+  let inputUrl = row?.uploadUrl ?? null;
+  const forgetUpload = async () => {
+    inputUrl = null;
+    if (row) await store?.clearUpload?.(row.id).catch(() => undefined);
+  };
+  const dropUpload = async () => {
+    if (!inputUrl) return;
+    await adapter.dropInput?.(inputUrl).catch(() => undefined);
+    await forgetUpload();
+  };
   const fail = async (message: string, userMessage: string, cause?: unknown): Promise<never> => {
+    await dropUpload();
     if (store && row) await store.fail(row.id, message).catch(() => undefined);
     throw new UserFacingError(userMessage, cause === undefined ? undefined : { cause });
   };
@@ -172,12 +207,20 @@ export async function buildStudioDub(
         adapters,
         deps.health ?? (await defaultHealth()),
         { params: p, assets: { media: [{ mime: src.mime, base64: Buffer.from(src.bytes).toString("base64") }] }, idempotencyKey: key },
-        o.deadline ? { deadline: o.deadline } : {},
+        {
+          ...(o.deadline ? { deadline: o.deadline } : {}),
+          onInputStored: async (url) => {
+            inputUrl = url;
+            if (row) await store?.noteUpload?.(row.id, url);
+          },
+        },
       );
       if (!("opId" in result)) throw new MediaError(route.provider, "dubbing answered synchronously");
       opId = result.opId;
     } catch (e) {
-      console.warn("[studio-dub] submit failed:", e instanceof Error ? e.message : e);
+      console.warn("[studio-dub] submit failed:", stripUrls(e instanceof Error ? e.message : String(e)));
+      // The adapter deleted what it uploaded.
+      await forgetUpload();
       return fail(e instanceof Error ? e.message : String(e), e instanceof MediaError && e.safety ? DUB_SAFETY_MESSAGE : DUB_FAILED_MESSAGE, e);
     }
     if (store && row) await store.park(row.id, opId);
@@ -227,25 +270,33 @@ export async function buildStudioDub(
   if (store && row) await store.finish(row.id, { mime: shape.mime, size: bytes.length }).catch(() => undefined);
   // The project is deleted at ElevenLabs once we hold the file (privacy; nothing is kept there).
   await adapter.cancel?.(opId).catch(() => undefined);
-  recordAudioCall(entry, route, p);
+  await dropUpload();
+  if (entry.id === HEYGEN_TRANSLATE_MODEL) {
+    recordDeliveredSeconds(route, shape.seconds || Number(p.sourceSeconds), HEYGEN_TRANSLATE_USD_PER_SECOND);
+    if (shape.seconds > Number(p.sourceSeconds) + MEASURED_SLACK_SECONDS) {
+      const message = `heygen output ${round1(shape.seconds)} s over the quoted ${String(p.sourceSeconds)} s: billed per output second`;
+      console.warn(`[studio-dub] ${message}`);
+      await (deps.overrun ?? ((m: string) => defaultOverrun(route.provider, m)))(message).catch(() => undefined);
+    }
+  } else recordAudioCall(entry, route, p);
 
   const target = String(p.target);
   const output2: StudioDubDoc["output"] = shape.mime === "video/mp4" ? "mp4" : "mp3";
   const dub: StudioDubDoc = {
-    model: DUB_MODEL,
+    model: entry.id,
     source: ref.kind,
     sourceId: ref.kind === "result" ? ref.id : null,
     sourceKind: kind,
     sourceSeconds: Number(p.sourceSeconds),
     target,
-    sourceLang: String(p.sourceLang),
+    sourceLang: String(p.sourceLang ?? AUTO_LANGUAGE),
     output: output2,
     seconds: round1(shape.seconds),
   };
   const label = `Dublyaj · ${target.toUpperCase()}`;
   const meta = extractMeta(tool, { ...values, topic: label });
   const doc: AcademicDoc = { meta, titlePage: false, toc: false, sections: [], dub };
-  if (output2 === "mp4") doc.video = { provider: "elevenlabs", prompt: label, aspect: src.aspect ?? "16:9", requestedSeconds: round1(shape.seconds), seconds: round1(shape.seconds), fromImage: false, model: DUB_MODEL };
+  if (output2 === "mp4") doc.video = { provider: route.provider, prompt: label, aspect: src.aspect ?? "16:9", requestedSeconds: round1(shape.seconds), seconds: round1(shape.seconds), fromImage: false, model: entry.id };
   return {
     html: `<article><h1>${label}</h1><p>${Math.round(shape.seconds)} s</p></article>`,
     bytes,

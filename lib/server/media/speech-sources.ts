@@ -4,11 +4,14 @@ import { query, queryOne } from "../db";
 import { getSetting } from "../settings";
 import { availableModels } from "./availability";
 import { fitsRole, ownMixRow, rowSeconds } from "./mix-sources";
-import { DUB_MAX_SECONDS, DUB_MODEL, SPEECH_TOOL_OUTPUT_MAX_BYTES, STUDIO_DUB_PURPOSE, STUDIO_TRANSCRIBE_PURPOSE, TRANSCRIBE_AUDIO_MAX_SECONDS, TRANSCRIBE_MODEL, TRANSCRIBE_VIDEO_MAX_SECONDS, parseSource } from "../../media/catalog-transcribe";
+import { DUB_MAX_SECONDS, DUB_MODEL, SPEECH_TOOL_OUTPUT_MAX_BYTES, STUDIO_DUB_PURPOSE, STUDIO_TRANSCRIBE_PURPOSE, TRANSCRIBE_AUDIO_MAX_SECONDS, TRANSCRIBE_MODEL, TRANSCRIBE_VIDEO_MAX_SECONDS, parseSource, videoOnlySource } from "../../media/catalog-transcribe";
 import { billedSeconds } from "../../media/studio-audio";
+import { dubEntry } from "../../media/studio-transcribe";
+import { stripUrls } from "../../generation/video/types";
 import { burnVideoKbps } from "../../generation/studio/burn-args";
 import { mediaSeconds } from "../../generation/studio/mix-media";
 import type { SpeechToolCtx } from "../../generation/studio/transcribe";
+import { MEDIA_UPLOAD_PARAM, clearMediaUpload } from "./jobs";
 import type { FormValues } from "../../types";
 
 /**
@@ -31,20 +34,20 @@ const PURPOSE = { "studio-transcribe": STUDIO_TRANSCRIBE_PURPOSE, "studio-dub": 
 const MODEL = { "studio-transcribe": TRANSCRIBE_MODEL, "studio-dub": DUB_MODEL } as const;
 const NAME = { "studio-transcribe": "Transkripsiya", "studio-dub": "Dublyaj" } as const;
 
-/** The P10 models offered now (chip order): each needs its switch ON (default off) and its model available. */
+/** The P10 models offered now (chip order, a tool's models in their order): each tool needs its switch ON (default off). */
 export async function speechToolModels(): Promise<string[]> {
   const out: string[] = [];
   for (const tool of ["studio-transcribe", "studio-dub"] as const) {
     if (!(await getSetting(SWITCH[tool]))) continue;
-    if ((await availableModels(PURPOSE[tool])).includes(MODEL[tool])) out.push(MODEL[tool]);
+    out.push(...(await availableModels(PURPOSE[tool])));
   }
   return out;
 }
 
-/** Why the tool cannot be sold now (Uzbek, a 400 before charging), `null` when it can. */
-export async function speechToolUnavailable(tool: SpeechToolId): Promise<string | null> {
+/** Why the tool cannot be sold now with this model (blank = its default) (Uzbek, a 400 before charging), `null` when it can. */
+export async function speechToolUnavailable(tool: SpeechToolId, modelId: string = ""): Promise<string | null> {
   if (!(await getSetting(SWITCH[tool]))) return `${NAME[tool]} hozircha mavjud emas.`;
-  return (await availableModels(PURPOSE[tool])).includes(MODEL[tool]) ? null : `${NAME[tool]} xizmati hozir mavjud emas — keyinroq urinib ko‘ring.`;
+  return (await availableModels(PURPOSE[tool])).includes(modelId.trim() || MODEL[tool]) ? null : `${NAME[tool]} xizmati hozir mavjud emas — keyinroq urinib ko‘ring.`;
 }
 
 type Resolved = { kind: "video" | "audio"; seconds: number; billed: number; size: number };
@@ -79,6 +82,9 @@ async function resolveSource(userId: string, raw: unknown): Promise<Resolved> {
  */
 export async function prepareSpeechToolRequest(userId: string, tool: SpeechToolId, values: FormValues): Promise<void> {
   const s = await resolveSource(userId, values.source);
+  if (tool === "studio-dub" && s.kind !== "video" && videoOnlySource(dubEntry(values).id)) {
+    throw new ApiError("Bu model faqat videoni tarjima qiladi — video natijani tanlang.", 400, { code: "input_invalid" });
+  }
   const max = tool === "studio-dub" ? DUB_MAX_SECONDS : s.kind === "video" ? TRANSCRIBE_VIDEO_MAX_SECONDS : TRANSCRIBE_AUDIO_MAX_SECONDS;
   // On the BILLED (rounded-up) length: the schema caps `sourceSeconds` at `max`, so a 180.3 s source (181 billed) would
   // otherwise be normalized to the default and sold as 1 s.
@@ -126,8 +132,11 @@ export const DUB_ORPHAN_GRACE_MIN = 2;
  * worker died twice → `reclaimStaleJobs` FAILED and refunded it; an admin revoked it; it is gone) is an orphan — nobody
  * will ever poll it. It is closed as 'failed' and its ElevenLabs project is deleted (best effort), so a late finish is
  * not kept there. A re-queued job is left alone (its re-run resumes the op).
+ *
+ * P11: then the sources those stopped jobs left on fal's CDN, whatever their row's status (a worker can die between the upload
+ * and the park). The window is the files' own expiry and a little more: after that there is nothing to delete.
  */
-export async function studioDubHousekeeping(deps: { cancel?: (opId: string) => Promise<unknown> } = {}): Promise<{ closed: number; deleted: number }> {
+export async function studioDubHousekeeping(deps: { cancel?: (opId: string) => Promise<unknown>; dropUpload?: (url: string) => Promise<unknown> } = {}): Promise<{ closed: number; deleted: number; uploads: number }> {
   const rows = await query<{ op_id: string | null }>(
     `UPDATE media_jobs mj
         SET status = 'failed', errors = errors + 1, next_poll_at = NULL, finished_at = now(),
@@ -137,7 +146,10 @@ export async function studioDubHousekeeping(deps: { cancel?: (opId: string) => P
       RETURNING mj.op_id`,
     [STUDIO_DUB_PURPOSE, DUB_ORPHAN_GRACE_MIN],
   );
-  const cancel = deps.cancel ?? (async (opId: string) => (await import("../../media/adapters/transcribe-studio")).dubAdapter().cancel!(opId));
+  // The op says whose it is: `fal:…` (P11) or an ElevenLabs dubbing id.
+  const cancel =
+    deps.cancel ??
+    (async (opId: string) => (opId.startsWith("fal:") ? (await import("../../media/adapters/fal-dub")).falDubAdapter() : (await import("../../media/adapters/transcribe-studio")).dubAdapter()).cancel!(opId));
   let deleted = 0;
   for (const r of rows) {
     if (!r.op_id) continue;
@@ -145,8 +157,21 @@ export async function studioDubHousekeeping(deps: { cancel?: (opId: string) => P
       await cancel(r.op_id);
       deleted++;
     } catch (e) {
-      console.warn("[studio-dub] orphan delete failed:", e instanceof Error ? e.message : e);
+      console.warn("[studio-dub] orphan delete failed:", stripUrls(e instanceof Error ? e.message : String(e)));
     }
   }
-  return { closed: rows.length, deleted };
+  const left = await query<{ id: string; url: string }>(
+    `SELECT mj.id, mj.params ->> $1 AS url
+       FROM media_jobs mj
+      WHERE mj.provider = 'fal' AND mj.purpose = $2 AND mj.params ? $1
+        AND mj.created_at < now() - $3::int * interval '1 minute' AND mj.created_at > now() - interval '2 hours'
+        AND NOT EXISTS (SELECT 1 FROM generations g WHERE g.id = mj.generation_id AND g.status IN ('QUEUED', 'IN_PROGRESS'))`,
+    [MEDIA_UPLOAD_PARAM, STUDIO_DUB_PURPOSE, DUB_ORPHAN_GRACE_MIN],
+  );
+  const drop = deps.dropUpload ?? (async (url: string) => (await import("../../media/adapters/fal-dub")).falDubAdapter().dropInput!(url));
+  for (const r of left) {
+    await drop(r.url).catch(() => undefined);
+    await clearMediaUpload(r.id);
+  }
+  return { closed: rows.length, deleted, uploads: left.length };
 }

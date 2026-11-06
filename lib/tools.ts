@@ -32,7 +32,7 @@ import { studioVideoError, studioVideoPrice } from "./media/studio-video-pricing
 import { STUDIO_CLONE_PRICE_DEFAULT, studioSpeechError, studioSpeechPrice } from "./media/studio-speech";
 import { getClientClonePrice } from "./media/studio-speech-client";
 import { STUDIO_MIX_PRICE_DEFAULT, getClientMixPrice, mixModeOf, studioMixError } from "./media/catalog-mix";
-import { studioDubError, studioDubPrice, studioTranscribeError, studioTranscribePrice } from "./media/studio-transcribe";
+import { speechToolOffered, studioDubError, studioDubPrice, studioTranscribeError, studioTranscribePrice } from "./media/studio-transcribe";
 import { studioAudioError, studioAudioPrice } from "./media/studio-audio";
 
 const TOPIC_FILE_MODES = [
@@ -1786,8 +1786,7 @@ export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | nu
     // Its own model list when the server sends it (empty while its switch is off, `speech-sources.ts speechToolModels`);
     // an older server: the ElevenLabs flag (`ttsPremium`), else the text-key flag (nothing configured = blocked).
     const known = features.studioSpeechToolModels;
-    const model = tool.custom === "studio-transcribe" ? "elevenlabs/scribe-v2" : "elevenlabs/dubbing";
-    const ok = known ? known.includes(model) : (features.ttsPremium ?? features.llm);
+    const ok = known ? speechToolOffered(tool.custom, known) : (features.ttsPremium ?? features.llm);
     return ok ? null : tool.custom === "studio-transcribe" ? "Transkripsiya hozircha mavjud emas." : "Dublyaj hozircha mavjud emas.";
   }
   if (tool.custom === "studio-speech" || tool.custom === "studio-voice") {
@@ -2104,7 +2103,7 @@ export function topicOf(values: FormValues, tool: ToolConfig) {
   }
   if (tool.id === "studio-audio") {
     const prompt = String(values.prompt || "").replace(/\s+/g, " ").trim().slice(0, 72);
-    const mode = ({ "elevenlabs/voice-changer": "Ovozni almashtirish", "elevenlabs/isolator": "Shovqindan tozalash" } as Record<string, string>)[String(values.modelId ?? "")];
+    const mode = ({ "elevenlabs/voice-changer": "Ovozni almashtirish", "elevenlabs/isolator": "Shovqindan tozalash", "veed/clean-audio": "Shovqindan tozalash" } as Record<string, string>)[String(values.modelId ?? "")];
     return prompt || mode || "Audio";
   }
   if (tool.id === "studio-mix") return mixModeOf(values)?.label ?? "Montaj";

@@ -77,6 +77,17 @@ export function looksLikeSafetyRefusal(text: string): boolean {
 }
 
 /** Error text with the key (and any bearer token) removed. Never throws. */
+/**
+ * `text` without any URL. A provider's error may quote the request back, and for fal that is the user's upload: a link
+ * anyone can open. Every scheme, a `data:` URI (the file itself), and fal's own hosts written without a scheme.
+ */
+export function stripUrls(text: string): string {
+  return String(text ?? "")
+    .replace(/\bdata:[\w.+-]+\/[\w.+-]+(?:;[\w=.-]+)*,\S*/gi, "[url]")
+    .replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, "[url]")
+    .replace(/\b(?:[a-z0-9-]+\.)*fal\.(?:media|ai|run)(?:\/\S*)?/gi, "[url]");
+}
+
 export function scrubSecrets(text: string, secrets: readonly string[]): string {
   let out = String(text ?? "");
   for (const s of secrets) if (s && s.length >= 6) out = out.split(s).join("[key]");

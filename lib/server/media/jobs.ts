@@ -10,7 +10,7 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { query, queryOne } from "../db";
-import { scrubSecrets } from "../../generation/video/types";
+import { scrubSecrets, stripUrls } from "../../generation/video/types";
 import { MEDIA_CATALOG } from "../../media/catalog";
 
 export type MediaJobStatus = "submitting" | "pending" | "succeeded" | "failed";
@@ -80,8 +80,22 @@ export async function finishMediaJob(id: string, outputs: readonly MediaOutputMe
 export async function failMediaJob(id: string, error: string, secrets: readonly string[] = []): Promise<void> {
   await query(
     "UPDATE media_jobs SET status = 'failed', errors = errors + 1, last_error = left($2, 500), next_poll_at = NULL, finished_at = now() WHERE id = $1 AND status <> 'succeeded'",
-    [id, scrubSecrets(error, secrets)],
+    [id, stripUrls(scrubSecrets(error, secrets))],
   );
+}
+
+/**
+ * The op's input file at the provider, kept on the row in `params` (nothing shows that column, no migration): a worker that
+ * dies leaves its successor, or housekeeping, the URL to delete. Written before the paid call, removed once deleted.
+ */
+export const MEDIA_UPLOAD_PARAM = "falUpload";
+
+export async function noteMediaUpload(id: string, url: string): Promise<void> {
+  await query("UPDATE media_jobs SET params = params || jsonb_build_object($2::text, $3::text) WHERE id = $1", [id, MEDIA_UPLOAD_PARAM, url]);
+}
+
+export async function clearMediaUpload(id: string): Promise<void> {
+  await query("UPDATE media_jobs SET params = params - $2::text WHERE id = $1", [id, MEDIA_UPLOAD_PARAM]);
 }
 
 /** Rows of one generation, oldest first (admin / tests). */
@@ -124,7 +138,7 @@ export async function insertMediaJobTx(client: Queryable, i: BeginInput): Promis
 export async function failSubmittingMediaJob(id: string, error: string): Promise<boolean> {
   const res = await query<{ id: string }>(
     "UPDATE media_jobs SET status = 'failed', errors = errors + 1, last_error = left($2, 500), next_poll_at = NULL, finished_at = now() WHERE id = $1 AND status = 'submitting' RETURNING id",
-    [id, scrubSecrets(error, [])],
+    [id, stripUrls(scrubSecrets(error, []))],
   );
   return res.length > 0;
 }

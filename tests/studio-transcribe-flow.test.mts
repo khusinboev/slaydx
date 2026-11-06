@@ -346,6 +346,6 @@ test("review m5: housekeeping closes 'pending' dub rows of stopped generations a
   assert.equal(await status(running), "pending", "a running job keeps polling its op");
   assert.equal(await status(queued), "pending", "a re-queued job resumes its op");
   // A second pass has nothing to do; a delete failure never stops the sweep.
-  assert.deepEqual(await studioDubHousekeeping({ cancel: async () => { throw new Error("x"); } }), { closed: 0, deleted: 0 });
+  assert.deepEqual(await studioDubHousekeeping({ cancel: async () => { throw new Error("x"); } }), { closed: 0, deleted: 0, uploads: 0 });
   await query("UPDATE generations SET status = 'REVOKED' WHERE status IN ('QUEUED', 'IN_PROGRESS') AND user_id = $1", [me]);
 });

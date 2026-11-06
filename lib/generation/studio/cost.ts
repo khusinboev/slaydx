@@ -29,6 +29,11 @@ export function recordSpeechCall(entry: CatalogEntry, route: Route, values: Read
   recordTts(route.provider, route.upstreamModel, chars, callCostUsd(entry, values), route.provider === "gemini" ? { estimated: true } : undefined);
 }
 
+/** One delivered call billed on the seconds it PRODUCED, which only the file knows (HeyGen translate, per output second). */
+export function recordDeliveredSeconds(route: Route, seconds: number, usdPerSecond: number): void {
+  recordAudio(route.provider, route.upstreamModel, seconds, seconds * usdPerSecond);
+}
+
 /** One delivered audio call (music / effect / voice changer / isolator), priced on the rule's seconds. */
 export function recordAudioCall(entry: CatalogEntry, route: Route, values: Readonly<Record<string, unknown>>, measuredSeconds = 0): void {
   const p = normalize(entry.params, values);
