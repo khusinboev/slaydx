@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { LayoutGrid, Wand2, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
@@ -23,7 +24,7 @@ import { PromptBox } from "./PromptBox";
 import { usePromptEnhance } from "./usePromptEnhance";
 import { StudioResults, type StudioJob } from "./StudioResults";
 import { SubmitError } from "./SubmitError";
-import { STUDIO_AUDIO_LISTING, STUDIO_SPEECH_PURPOSE, STUDIO_VIDEO_PURPOSE, inputFromResult, loadMediaCatalog, resultAssetOf, uploadStudioInput, useMediaCatalog } from "./studio-api";
+import { STUDIO_AUDIO_LISTING, STUDIO_SPEECH_PURPOSE, STUDIO_VIDEO_PURPOSE, fetchActiveJobs, inputFromResult, loadMediaCatalog, resultAssetOf, uploadStudioInput, useMediaCatalog, type ActiveJob } from "./studio-api";
 import { INITIAL_VIDEO_STATE, VideoTab, type VideoTabState } from "./video/VideoTab";
 import { INITIAL_VOICE_STATE, VoiceTab, type VoiceTabState } from "./voice/VoiceTab";
 import { VoiceTemplatePanel, VoiceTemplatesRow, useLegacyFold } from "./voice/VoiceTemplates";
@@ -34,12 +35,15 @@ import { MixHandoffContext } from "./audio/mix-handoff";
 import { INITIAL_MIX_STATE, mixFromResult, type MixHandoff } from "./audio/mix-api";
 import { LibrarySheet } from "./LibrarySheet";
 import { TemplateSlots, TemplatesRow } from "./TemplatesRow";
-import { INPUT_PARAM, MODE_LABEL, MODE_PURPOSE, applyTemplate, type StudioMode } from "./studio-modes";
+import { INITIAL_RASM, INPUT_PARAM, MODE_LABEL, MODE_PURPOSE, applyTemplate, enterRasmMode, patchRasmForm, rasmForm, type RasmState, type StudioMode } from "./studio-modes";
 import { fillSkeleton, type StudioTemplate } from "@/lib/media/library";
 import { STUDIO_TOOL_SLUG } from "./studio-entry";
 import { STUDIO_TOOL_ID, outputCount, studioPrice } from "./studio-price";
 import type { GalleryItem, MediaCatalog, StudioPricing } from "./studio-types";
 import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, promptMin, promptParam, requestValues, type RawValues } from "./studio-values";
+import { draftKey, useDraft } from "./useDraft";
+import { parseAudioDraft, parseRasmDraft, parseVideoDraft, parseVoiceDraft } from "./studio-drafts";
+import { STUDIO_TABS, modeFromSearch, studioSearch, tabFromSearch, type StudioTab } from "./studio-url";
 import { useStudioJobs } from "./useStudioJobs";
 import { useStudioSend } from "./useStudioSend";
 import { ComparePanel, CompareSwitch } from "./compare/ComparePanel";
@@ -66,22 +70,15 @@ export function StudioPage() {
   const open = useUi((s) => s.open);
   // The session is checked on the server first: never open the login for a signed-in user (as `ToolWorkspace`).
   useEffect(() => {
-    if (sessionChecked && !loggedIn) open("login", { returnTo: "/uz/studio" });
+    // The link's tab and mode survive the login.
+    if (sessionChecked && !loggedIn) open("login", { returnTo: `/uz/studio${window.location.search}` });
   }, [sessionChecked, loggedIn, open]);
   if (!sessionChecked) return LOADING;
   return <StudioApp />;
 }
 
 type View = "create" | "gallery";
-/** The Studio's media tabs (P1 «Rasm», P3 «Video», P5 «Ovoz», P6 «Audio»). */
-export type StudioTab = "rasm" | "video" | "ovoz" | "audio";
-export const STUDIO_TABS: readonly StudioTab[] = ["rasm", "video", "ovoz", "audio"];
-
-/** The tab a link asks for (`/uz/studio?tab=video`, where `/uz/studio-video` redirects; `?tab=ovoz`); anything else = «Rasm». */
-export function tabFromSearch(search: string): StudioTab {
-  const t = new URLSearchParams(search).get("tab");
-  return t === "video" ? "video" : t === "ovoz" ? "ovoz" : t === "audio" ? "audio" : "rasm";
-}
+export { STUDIO_TABS, tabFromSearch, type StudioTab };
 
 const TAB_LABEL: Readonly<Record<StudioTab, string>> = { rasm: "Rasm", video: "Video", ovoz: "Ovoz", audio: "Audio" };
 const SUBTITLE: Readonly<Record<StudioTab, string>> = {
@@ -91,13 +88,25 @@ const SUBTITLE: Readonly<Record<StudioTab, string>> = {
   audio: "AI musiqa, ovoz effektlari, ovozni almashtirish va shovqindan tozalash",
 };
 
+/** The mode the page's link asks for on `tab`; `null` when the link is about another tab or names none. Client only. */
+function linkMode(tab: StudioTab): string | null {
+  const { search } = window.location;
+  return tabFromSearch(search) === tab ? modeFromSearch(tab, search) : null;
+}
+
 function StudioApp() {
   usePricingVersion(); // an admin price adjustment re-renders every price on the page
   const loggedIn = useAppStore((s) => s.loggedIn);
   const user = useAppStore((s) => s.user);
   const gated = useChannelGate((s) => s.gate !== null);
   // P2b (docs/studio/P2B-SPEC.md): drawing, or an edit / upscale / background removal of the user's own picture.
-  const [mode, setMode] = useState<StudioMode>("image");
+  // One form per mode (`studio-modes.ts`). Every tab starts on the mode its link asks for, so the first URL write keeps it.
+  const [rasm, setRasm] = useState<RasmState>(() => {
+    const m = linkMode("rasm");
+    return m ? enterRasmMode(INITIAL_RASM, m as StudioMode) : INITIAL_RASM;
+  });
+  const { mode } = rasm;
+  const { chosen, raw } = rasmForm(rasm);
   const purpose = MODE_PURPOSE[mode];
   const { state, reload } = useMediaCatalog(purpose);
   // A catalog of the previous mode is never used for this one (the hook keeps the last answer until the next arrives).
@@ -106,8 +115,8 @@ function StudioApp() {
   const [template, setTemplate] = useState<{ t: StudioTemplate; slots: Record<string, string> } | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  const [chosen, setChosen] = useState<string | null>(null);
-  const [raw, setRaw] = useState<RawValues>({});
+  const setChosen = useCallback((id: string) => setRasm((s) => patchRasmForm(s, (f) => ({ ...f, chosen: id }))), []);
+  const setRaw = useCallback((fn: (prev: RawValues) => RawValues) => setRasm((s) => patchRasmForm(s, (f) => ({ ...f, raw: fn(f.raw) }))), []);
   const [view, setView] = useState<View>("create");
   const [pickerOpen, setPickerOpen] = useState(false);
   // 400 before charging: the model or a value is no longer accepted; 409 price_changed: the markup / override / live
@@ -115,14 +124,15 @@ function StudioApp() {
   const { submitting, error, setError, send: queue } = useStudioSend(() => reload(true));
   const { jobs, track } = useStudioJobs();
   // The Video tab (P3): its own catalog (loaded once the tab is opened), form state and jobs — kept while on «Rasm».
-  const [tab, setTab] = useState<StudioTab>("rasm");
+  // Client only: `StudioPage` renders this after the session check, never on the server.
+  const [tab, setTab] = useState<StudioTab>(() => tabFromSearch(window.location.search));
   const [videoSeen, setVideoSeen] = useState(false);
-  const [videoState, setVideoState] = useState<VideoTabState>(INITIAL_VIDEO_STATE);
+  const [videoState, setVideoState] = useState<VideoTabState>(() => ({ ...INITIAL_VIDEO_STATE, mode: linkMode("video") as VideoTabState["mode"] }));
   const video = useMediaCatalog(STUDIO_VIDEO_PURPOSE, videoSeen);
   const videoJobs = useStudioJobs();
   // The «Ovoz» tab (P5): its own catalog (loaded once the tab is opened), form state and jobs — kept across tabs.
   const [voiceSeen, setVoiceSeen] = useState(false);
-  const [voiceState, setVoiceState] = useState<VoiceTabState>(INITIAL_VOICE_STATE);
+  const [voiceState, setVoiceState] = useState<VoiceTabState>(() => ({ ...INITIAL_VOICE_STATE, mode: linkMode("ovoz") as VoiceTabState["mode"] }));
   const voiceCatalog = useMediaCatalog(STUDIO_SPEECH_PURPOSE, voiceSeen);
   const voiceJobs = useStudioJobs();
   // P8b (docs/studio/P8-SPEC.md): with `studio.legacy_fold` on, «Podkast» / «Tabriknoma» open inside the «Ovoz» tab.
@@ -131,7 +141,7 @@ function StudioApp() {
   const templateJobs = useStudioJobs();
   // The «Audio» tab (P6): its own catalog listing (loaded once the tab is opened), form state and jobs.
   const [audioSeen, setAudioSeen] = useState(false);
-  const [audioState, setAudioState] = useState<AudioTabState>(INITIAL_AUDIO_STATE);
+  const [audioState, setAudioState] = useState<AudioTabState>(() => ({ ...INITIAL_AUDIO_STATE, mode: linkMode("audio") as AudioTabState["mode"] }));
   const audioCatalog = useMediaCatalog(STUDIO_AUDIO_LISTING, audioSeen);
   const audioJobs = useStudioJobs();
   // P7a «Solishtirish» (docs/studio/P7-SPEC.md, compare/): the Rasm tab's drawing mode and the Video tab, ≥ 2 models.
@@ -156,11 +166,68 @@ function StudioApp() {
     setChosen(modelId);
     setRaw((prev) => (next ? carryOver(next, { ...prev, [PROMPT_PARAM]: prompt }) : { ...prev, [PROMPT_PARAM]: prompt }));
   }
-  useEffect(() => {
-    const asked = typeof window !== "undefined" ? tabFromSearch(window.location.search) : "rasm";
-    if (asked !== "rasm") setTab(asked);
-    if (typeof window !== "undefined") setVoiceTemplate(voiceTemplateFromSearch(window.location.search));
+  // A refresh keeps the work: one draft per tab, per user (`useDraft.ts`); gone once the form's job is queued.
+  const userId = loggedIn && user ? String(user.id) : null;
+  const rasmDraft = useDraft(userId && draftKey(userId, "rasm"), rasm, parseRasmDraft, setRasm);
+  const videoDraft = useDraft(userId && draftKey(userId, "video"), videoState, parseVideoDraft, setVideoState);
+  const voiceDraft = useDraft(userId && draftKey(userId, "ovoz"), voiceState, parseVoiceDraft, setVoiceState);
+  const audioDraft = useDraft(userId && draftKey(userId, "audio"), audioState, parseAudioDraft, setAudioState);
+
+  // The URL says where the user is: a link, a back press or a refresh lands on the same tab and mode.
+  const urlSearch = useSearchParams()?.toString() ?? null;
+  const applyUrl = useCallback(() => {
+    const search = window.location.search;
+    const asked = tabFromSearch(search);
+    const askedMode = modeFromSearch(asked, search);
+    setTab(asked);
+    if (askedMode === null) return;
+    if (asked === "rasm") setRasm((s) => (s.mode === askedMode ? s : enterRasmMode(s, askedMode as StudioMode)));
+    if (asked === "video") setVideoState((s) => (s.mode === askedMode ? s : { ...s, mode: askedMode as VideoTabState["mode"] }));
+    if (asked === "ovoz") setVoiceState((s) => (s.mode === askedMode ? s : { ...s, mode: askedMode as VoiceTabState["mode"] }));
+    if (asked === "audio") setAudioState((s) => (s.mode === askedMode ? s : { ...s, mode: askedMode as AudioTabState["mode"] }));
   }, []);
+  // After the drafts' restore (the effects above run first): a link's mode wins over the draft's.
+  useEffect(applyUrl, [applyUrl, urlSearch, userId]);
+  useEffect(() => {
+    window.addEventListener("popstate", applyUrl);
+    return () => window.removeEventListener("popstate", applyUrl);
+  }, [applyUrl]);
+  useEffect(() => setVoiceTemplate(voiceTemplateFromSearch(window.location.search)), []);
+  const activeMode = tab === "rasm" ? mode : tab === "video" ? videoState.mode : tab === "ovoz" ? voiceState.mode : audioState.mode;
+  useEffect(() => {
+    const { pathname, search, hash } = window.location;
+    const next = studioSearch(search, tab, activeMode);
+    // `history.state` stays: it carries the router's tree and the overlay layers of `lib/nav`.
+    if (next !== search) window.history.replaceState(window.history.state, "", `${pathname}${next}${hash}`);
+  }, [tab, activeMode]);
+
+  // A refresh keeps the running jobs too: the server knows them, each goes back to its tab.
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
+  const trackRasm = track;
+  const trackVideo = videoJobs.track;
+  const trackVoice = voiceJobs.track;
+  const trackAudio = audioJobs.track;
+  useEffect(() => {
+    if (!userId) return;
+    let live = true;
+    const follow = (j: ActiveJob) => {
+      const job = { id: j.id, modelId: j.modelId, modelLabel: j.modelLabel, prompt: j.prompt, price: j.price, sent: j.sent };
+      if (j.tool === "studio-image") trackRasm({ ...job, prompt: j.prompt || (j.purpose && j.purpose !== MODE_PURPOSE.image ? jobLabel(j.purpose) : ""), ...(j.purpose ? { purpose: j.purpose } : {}) });
+      else if (j.tool === "studio-video") trackVideo(job);
+      else if (j.tool === "studio-speech") trackVoice(job);
+      else trackAudio(job);
+    };
+    fetchActiveJobs().then(
+      // Oldest first: `track` puts each on top, so the newest ends up first.
+      (list) => live && [...list].reverse().forEach(follow),
+      (e: unknown) => live && setRestoreError(e instanceof Error ? e.message : "Xatolik"),
+    );
+    return () => {
+      live = false;
+    };
+  }, [userId, restoreAttempt, trackRasm, trackVideo, trackVoice, trackAudio]);
+
   useEffect(() => {
     if (tab === "video") setVideoSeen(true);
     if (tab === "ovoz") setVoiceSeen(true);
@@ -222,22 +289,13 @@ function StudioApp() {
     setParam(PROMPT_PARAM, v);
   };
 
-  /**
-   * Switch the tab's mode: P2b modes start with the given picture. `keepPrompt` («Rasm yuklash» only): the text typed so
-   * far becomes the edit instruction; from a result card the instruction starts empty (the old prompt described the
-   * picture, it is not an edit — review NIT-9).
-   */
+  /** Switch the tab's mode: P2b modes start with the given picture; the form being left stays (`enterRasmMode`). */
   function enterMode(next: StudioMode, assetId?: string, keepPrompt = false) {
     setError(null);
     setTemplate(null);
-    setChosen(null);
-    setMode(next);
+    setRasm((s) => enterRasmMode(s, next, assetId, keepPrompt));
     setView("create");
     setTab("rasm");
-    setRaw((prev) => {
-      const prompt = typeof prev[PROMPT_PARAM] === "string" ? { [PROMPT_PARAM]: prev[PROMPT_PARAM] } : {};
-      return next === "image" ? prompt : { ...(next === "edit" && keepPrompt ? prompt : {}), [INPUT_PARAM]: assetId ? [assetId] : [] };
-    });
     if (typeof window !== "undefined") rootRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }
 
@@ -278,7 +336,7 @@ function StudioApp() {
     setError(null);
     setChosen(target.id);
     setTemplate({ t, slots: {} });
-    setRaw(applyTemplate(target, t, {}));
+    setRaw(() => applyTemplate(target, t, {}));
   }
 
   function setSlot(name: string, value: string) {
@@ -313,7 +371,7 @@ function StudioApp() {
       setError(mode === "edit" ? "Nimani o‘zgartirish kerakligini yozing" : "Nima chizish kerakligini yozing");
       return;
     }
-    void send(entry, requestValues(entry, raw));
+    void send(entry, requestValues(entry, raw)).then((ok) => ok && rasmDraft.clear());
   }
 
   function again(job: StudioJob) {
@@ -452,6 +510,22 @@ function StudioApp() {
               </div>
               <ChannelGate />
               <HandoffAlert error={handoff.error} />
+              {restoreError ? (
+                <p role="alert" data-studio-restore-error className="text-destructive mb-3 text-[14.5px] leading-snug">
+                  Davom etayotgan ishlar yuklanmadi: {restoreError}{" "}
+                  <button
+                    type="button"
+                    data-studio-restore-retry
+                    onClick={() => {
+                      setRestoreError(null);
+                      setRestoreAttempt((n) => n + 1);
+                    }}
+                    className="pointer-coarse:min-h-11 font-semibold underline underline-offset-2"
+                  >
+                    Qayta urinish
+                  </button>
+                </p>
+              ) : null}
               {tab === "rasm" && mode !== "image" ? (
                 <div className="bg-accent-soft text-accent-soft-foreground mb-3 flex items-center justify-between gap-2 rounded-[14px] px-3.5 py-2" data-studio-mode={mode}>
                   <p className="text-[14.5px] font-bold">{MODE_LABEL[mode]}</p>
@@ -489,6 +563,7 @@ function StudioApp() {
                   balance={balance}
                   typing={typing}
                   gated={gated}
+                  onSubmitted={audioDraft.clear}
                 />
               ) : tab === "ovoz" ? (
                 <>
@@ -507,6 +582,7 @@ function StudioApp() {
                       typing={typing}
                       gated={gated}
                       quietWhenNone={legacyFold}
+                      onSubmitted={voiceDraft.clear}
                     />
                   )}
                 </>
@@ -523,6 +599,7 @@ function StudioApp() {
                   gated={gated}
                   onMusic={(prompt) => void handoff.toMusic(prompt)}
                   onVoice={(text) => void handoff.toVoice(text)}
+                  onSubmitted={videoDraft.clear}
                 />
               ) : !catalog ? (
                 <CatalogState state={state} onRetry={() => reload()} label="Studio yuklanmoqda" blocks={["h-36 rounded-[20px]", "h-[5.25rem] rounded-[18px]", "h-40 rounded-[20px]"]} />

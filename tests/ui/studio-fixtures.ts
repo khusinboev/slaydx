@@ -58,10 +58,14 @@ export type ApiOptions = {
   create?: (body: Record<string, unknown>, n: number) => Response;
   /** Gallery pages by cursor (`""` = first). */
   gallery?: Record<string, unknown>;
+  /** `GET /api/media/active-jobs` rows, or the whole answer; default none. */
+  activeJobs?: unknown[] | (() => Response);
 };
 
 /** Installs a `fetch` stub for the whole Studio API; returns the call log. Restore with `globalThis.fetch = real`. */
 export function installApi(opts: ApiOptions = {}) {
+  // Each test starts without the drafts an earlier test left: `useDraft` is storage-backed by design.
+  window.localStorage.clear();
   const calls: Call[] = [];
   const created: string[] = [];
   const polls = new Map<string, number>();
@@ -100,6 +104,7 @@ export function installApi(opts: ApiOptions = {}) {
       polls.set(one[1]!, n + 1);
       return json(200, { generation: opts.generation ? opts.generation(one[1]!, n) : generationDetail(one[1]!) });
     }
+    if (url === "/api/media/active-jobs") return typeof opts.activeJobs === "function" ? opts.activeJobs() : json(200, { items: opts.activeJobs ?? [] });
     if (url === "/api/auth/session") return json(200, { user: USER, features: { llm: true, images: true, telegram: false, telegramBot: null, devLogin: false, pdf: false, payments: { click: false, payme: false } } });
     if (url.startsWith("/api/channels/required")) return json(200, { ok: true, needsTelegram: false, channels: [] });
     if (url.startsWith("/api/generations")) return json(200, { generations: [], nextCursor: null });

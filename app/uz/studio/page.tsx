@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { StudioPage } from "@/components/studio/StudioPage";
 
@@ -8,5 +9,10 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <StudioPage />;
+  // `useSearchParams` (the tab and the mode in the URL) needs a Suspense boundary.
+  return (
+    <Suspense>
+      <StudioPage />
+    </Suspense>
+  );
 }

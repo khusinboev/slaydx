@@ -86,6 +86,7 @@ export function VoiceTab({
   typing,
   gated,
   quietWhenNone = false,
+  onSubmitted,
 }: {
   catalogState: CatalogLoad;
   reload: (silent?: boolean) => void;
@@ -101,6 +102,8 @@ export function VoiceTab({
    * (`studio.voice.enabled` off) the tab shows only that row, not the «hozircha mavjud emas» card.
    */
   quietWhenNone?: boolean;
+  /** The form's own job was queued (not a retry of an old one): the page drops the draft. */
+  onSubmitted?: () => void;
 }) {
   const textId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -185,7 +188,7 @@ export function VoiceTab({
       setError(mode === "dialogue" ? "Suhbat matnini yozing («Ism: gap» qatorlari)" : "Ovozlanadigan matnni yozing");
       return;
     }
-    void send(entry, sent);
+    void send(entry, sent).then((ok) => ok && onSubmitted?.());
   }
 
   function again(job: StudioJob) {

@@ -65,6 +65,7 @@ export function SpeechToolPanel({
   typing,
   gated,
   reload,
+  onSubmitted,
 }: {
   mode: SpeechToolMode;
   entry: ClientEntry;
@@ -77,6 +78,8 @@ export function SpeechToolPanel({
   typing: boolean;
   gated: boolean;
   reload: (silent?: boolean) => void;
+  /** The form's own job was queued (not a retry of an old one): the page drops the draft. */
+  onSubmitted?: () => void;
 }) {
   const st = state ?? INITIAL_SPEECH_TOOL;
   const [sources, setSources] = useState<MixSources | null>(null);
@@ -147,7 +150,7 @@ export function SpeechToolPanel({
       setError(blocker);
       return;
     }
-    void send(sent);
+    void send(sent).then((ok) => ok && onSubmitted?.());
   }
 
   const uploadSeconds = typeof raw.sourceSeconds === "number" && typeof raw.source === "string" && raw.source.startsWith("upload:") ? raw.sourceSeconds : null;

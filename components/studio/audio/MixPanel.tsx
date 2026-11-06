@@ -50,6 +50,7 @@ export function MixPanel({
   balance,
   typing,
   gated,
+  onSubmitted,
 }: {
   state: MixTabState;
   setState: (fn: (s: MixTabState) => MixTabState) => void;
@@ -58,6 +59,8 @@ export function MixPanel({
   balance: number | null;
   typing: boolean;
   gated: boolean;
+  /** The form's own job was queued (not a retry of an old one): the page drops the draft. */
+  onSubmitted?: () => void;
 }) {
   const [sources, setSources] = useState<MixSources | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -99,7 +102,7 @@ export function MixPanel({
       setError(blocker);
       return;
     }
-    void send(m, requestValues(m.entry, raw));
+    void send(m, requestValues(m.entry, raw)).then((ok) => ok && onSubmitted?.());
   }
 
   function again(job: StudioJob) {

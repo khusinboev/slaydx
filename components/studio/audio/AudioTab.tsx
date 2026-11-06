@@ -96,6 +96,7 @@ export function AudioTab({
   balance,
   typing,
   gated,
+  onSubmitted,
 }: {
   catalogState: CatalogLoad;
   reload: (silent?: boolean) => void;
@@ -106,6 +107,8 @@ export function AudioTab({
   balance: number | null;
   typing: boolean;
   gated: boolean;
+  /** The form's own job was queued (not a retry of an old one): the page drops the draft. */
+  onSubmitted?: () => void;
 }) {
   const promptId = useId();
   const [uploading, setUploading] = useState(false);
@@ -176,6 +179,7 @@ export function AudioTab({
           balance={balance}
           typing={typing}
           gated={gated}
+          onSubmitted={onSubmitted}
         />
       </div>
     );
@@ -199,6 +203,7 @@ export function AudioTab({
           typing={typing}
           gated={gated}
           reload={reload}
+          onSubmitted={onSubmitted}
         />
       </div>
     );
@@ -264,7 +269,7 @@ export function AudioTab({
       setError(blocker);
       return;
     }
-    void send(entry, label, sent);
+    void send(entry, label, sent).then((ok) => ok && onSubmitted?.());
   }
 
   const jobTarget = (job: StudioJob) => modes.flatMap((m) => m.entries.map((e) => ({ e, label: audioJobLabels(e, m.label, m.entries.length).job }))).find((x) => x.e.id === job.modelId);
