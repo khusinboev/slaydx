@@ -239,6 +239,11 @@ test("a forged MP4 is refused: `mvhd` alone, `mvhd` + `mdhd`, every table; fragm
   forgeDuration(b, "mvhd", 1);
   forgeDuration(b, "mdhd", 1);
   assert.equal((await billedOf(b)).status, 422, "MUTATSIYA: `stts` is read too");
+  // No sound to count: a silent clip's `mvhd` and `mdhd` agree on 1 s, only its `stts` says 6.
+  const mute = make("v.mp4", ["-f", "lavfi", "-i", "color=c=blue:size=64x48:rate=6", "-t", "6", "-c:v", "libx264", "-pix_fmt", "yuv420p"]);
+  forgeDuration(mute, "mvhd", 1);
+  forgeDuration(mute, "mdhd", 1);
+  assert.equal((await billedOf(mute)).status, 422, "MUTATSIYA: `stts` is the samples' own clock");
   // Every table says 1 s; the AAC frames still decode to 6 s of sound.
   const c = six();
   forgeDuration(c, "mvhd", 1);
@@ -255,6 +260,10 @@ test("a forged MP4 is refused: `mvhd` alone, `mvhd` + `mdhd`, every table; fragm
   const mov = await upload(cookie, make("v.mov", SIX), "IMG_0001.MOV", "video");
   assert.equal(mov.status, 200, JSON.stringify(mov.body));
   assert.equal(mov.body.seconds, 6);
+  // …and leaves the worker as a real MP4: what a provider receives is never the phone's container.
+  const { capOwnVideo } = await import("../lib/generation/studio/own-video.ts");
+  const capped = await capOwnVideo(make("v.mov", SIX), 6);
+  assert.notEqual(Buffer.from(capped.slice(8, 12)).toString(), "qt  ", "MUTATSIYA: the cut rewrites the container");
   // The shape as shown: a stored portrait, and a landscape turned by a quarter.
   const { mp4Aspect } = await import("../lib/generation/studio/mix-media.ts");
   assert.equal(mp4Aspect(make("v.mp4", ["-f", "lavfi", "-i", "color=c=red:size=48x64:rate=2", "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p"])), "9:16", "MUTATSIYA: a portrait upload is no 16:9");
@@ -404,7 +413,20 @@ test("dark switches, the dub's size at the upload, the quota under a lock", { sk
   await query("INSERT INTO studio_video_inputs (id, user_id, mime, size_bytes, seconds, billed_seconds, bytes) VALUES ($1, $2, 'video/mp4', $3, 2, 2, '\\x00')", ["d".repeat(24), racer, 26214400]);
   await query("INSERT INTO studio_video_inputs (id, user_id, mime, size_bytes, seconds, billed_seconds, bytes) VALUES ($1, $2, 'video/mp4', $3, 2, 2, '\\x00')", ["e".repeat(24), racer, 26214400]);
   await query("INSERT INTO studio_video_inputs (id, user_id, mime, size_bytes, seconds, billed_seconds, bytes) VALUES ($1, $2, 'video/mp4', $3, 2, 2, '\\x00')", ["f".repeat(24), racer, 26214400]);
-  await query("INSERT INTO studio_audio_inputs (id, user_id, mime, size_bytes, seconds, billed_seconds, bytes) VALUES ($1, $2, 'audio/mpeg', $3, 3, 3, '\\x00')", ["9".repeat(24), racer, AUDIO_INPUT_USER_MAX_BYTES - 3 * 26214400 - Math.floor(file.length * 1.5)]);
+  await query("INSERT INTO studio_audio_inputs (id, user_id, mime, size_bytes, seconds, billed_seconds, bytes) VALUES ($1, $2, 'audio/mpeg', $3, 3, 3, '\\x00')", ["9".repeat(24), racer, AUDIO_INPUT_USER_MAX_BYTES - 3 * 26214400 - mp3Bytes(200).length - Math.floor(file.length * 1.5)]);
+  let waiting: Promise<unknown> = Promise.resolve();
+  // The check and the insert wait for the user's lock: while another upload holds it, this one cannot pass the quota.
+  const { transaction } = await db();
+  await transaction(async (client) => {
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`studio_inputs:${racer}`]);
+    let done = false;
+    const held = upload(cookieR, mp3Bytes(200), "w.mp3").then((r) => ((done = true), r));
+    await new Promise((r) => setTimeout(r, 400));
+    assert.equal(done, false, "MUTATSIYA: the quota's check and insert run under the per-user lock");
+    void held.catch(() => undefined);
+    waiting = held;
+  });
+  await waiting;
   const raced = await Promise.all([upload(cookieR, file, "a.mp4", "video"), upload(cookieR, file, "b.mp4", "video")]);
   assert.deepEqual(raced.map((r) => r.status).sort(), [200, 429], "MUTATSIYA: two uploads at once both passed the quota");
 });
