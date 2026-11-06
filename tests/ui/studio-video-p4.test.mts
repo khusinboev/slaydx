@@ -254,9 +254,9 @@ test("effects: «Quchoqlash» asks for a second photo (absent for one-photo scen
   await mount();
   await tab("video");
   await settle();
-  assert.ok(q('[data-effect="hug"]'), "the scene is in the grid");
+  assert.ok(q('[data-effect="hug_pro"]'), "the scene is in the grid");
   assert.ok(!q('[data-field="secondImageAssetId"]'), "MUTATSIYA: a one-photo scene shows no second input");
-  await click(q('[data-effect="hug"]'));
+  await click(q('[data-effect="hug_pro"]'));
   assert.ok(q('[data-field="secondImageAssetId"]'));
   assert.equal(button(), `Yaratish · «Quchoqlash» · ${formatSom(21_400)}`);
   await upload("imageAssetId");
@@ -267,7 +267,7 @@ test("effects: «Quchoqlash» asks for a second photo (absent for one-photo scen
   await upload("secondImageAssetId");
   await click(q("[data-studio-submit]"));
   await settle();
-  assert.deepEqual(a.posts()[0]!.body!.values, { modelId: FX.id, effect: "hug", imageAssetId: ASSET, secondImageAssetId: ASSET });
+  assert.deepEqual(a.posts()[0]!.body!.values, { modelId: FX.id, effect: "hug_pro", imageAssetId: ASSET, secondImageAssetId: ASSET });
   // Back to a one-photo scene: no second input, and the request carries one photo only.
   await click(q('[data-effect="snowglobe"]'));
   assert.ok(!q('[data-field="secondImageAssetId"]'));

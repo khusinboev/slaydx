@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createIsolatedDb } from "./helpers/isolated-db.mts";
 
 /**
- * Incident 2026-11-05 (fix/provider-ops): a Kling key without `:` was sold and refused on every job, an ElevenLabs key
+ * Incident 2026-11-05 (fix/provider-ops): a Kling key was sold and refused on every job, an ElevenLabs key
  * lacked permissions nobody saw, users were invited to retry through an outage, and the owner learned of it from users.
  *
  * MUTATIONS (each turned this file red, see the branch report):
@@ -69,7 +69,7 @@ const iso = hasDb ? await createIsolatedDb("providerops") : { isolated: false, d
 const skip = hasDb && iso.isolated ? false : "alohida Postgres baza yo'q";
 
 const { keyFormatProblem, keyUsable } = await import("../lib/server/providers/registry.ts");
-const { parseKlingKey } = await import("../lib/generation/video/kling.ts");
+const { makeKlingAdapter } = await import("../lib/generation/video/kling.ts");
 const { modelAvailable } = await import("../lib/server/media/availability.ts");
 const { MEDIA_CATALOG } = await import("../lib/media/catalog.ts");
 const { videoProvidersAvailable } = await import("../lib/server/env.ts");
@@ -85,26 +85,29 @@ const { transcribeAdapters } = await import("../lib/media/adapters/transcribe-st
 const { ELEVENLABS_PERMISSION_PROBES, probeProvider } = await import("../lib/server/providers/probe.ts");
 const A = await import("../lib/server/server-alerts.ts");
 
-const BAD_KLING = "noColonKlingKey1234567";
-const GOOD_KLING = "AKtestvalue:SKtestvalue";
+const BAD_KLING = "AKtestvalue:SKtestvalue";
+const GOOD_KLING = "oneKlingApiKey1234567";
+const BAD_FAL = "noColonFalKey1234567";
+const GOOD_FAL = "id-value:secret-value";
 const MISSING = (name: string) => `401 Unauthorized: {"detail":{"status":"missing_permissions","message":"The API key you used is missing the permission ${name} to execute this operation."}}`;
 
 // ───────────────────────────── item 1: key format
 
-test("keyUsable: Kling and fal need both halves, the rest any non-empty key, and it agrees with the worker's parser", () => {
-  for (const id of ["kling", "fal"]) {
-    assert.equal(keyUsable(id, GOOD_KLING), true, id);
-    for (const bad of ["", BAD_KLING, ":secretvalue", "accessvalue:"]) assert.equal(keyUsable(id, bad), false, `${id}: ${bad}`);
-  }
+test("keyUsable: fal needs both halves, Kling one token, the rest any non-empty key; it agrees with the worker's adapter", () => {
+  assert.equal(keyUsable("fal", GOOD_FAL), true);
+  for (const bad of ["", BAD_FAL, ":secretvalue", "accessvalue:"]) assert.equal(keyUsable("fal", bad), false, bad);
+  assert.equal(keyUsable("kling", GOOD_KLING), true);
+  assert.equal(keyUsable("kling", ` ${GOOD_KLING}\n`), true, "surrounding space is trimmed before use");
+  for (const bad of ["", "   ", BAD_KLING, "two tokens"]) assert.equal(keyUsable("kling", bad), false, bad);
   assert.equal(keyUsable("gemini", "AIzaWithoutAColon"), true);
   assert.equal(keyUsable("gemini", ""), false);
-  for (const k of [GOOD_KLING, BAD_KLING, ":secretvalue", "accessvalue:"]) assert.equal(keyUsable("kling", k), parseKlingKey(k) !== null, k);
+  for (const k of [GOOD_KLING, BAD_KLING, "two tokens"]) assert.equal(keyUsable("kling", k), makeKlingAdapter({ key: () => k }).configured(), k);
 });
 
 test("keyFormatProblem: Uzbek, names the format, never echoes the key", () => {
   const text = keyFormatProblem("kling", BAD_KLING)!;
   assert.match(text, /Kalit formati noto‘g‘ri/);
-  assert.match(text, /<accessKey>:<secretKey>/);
+  assert.match(text, /bitta API kalit/);
   assert.ok(!text.includes(BAD_KLING));
   assert.equal(keyFormatProblem("kling", GOOD_KLING), null);
   assert.equal(keyFormatProblem("gemini", "anything-goes"), null);
@@ -509,4 +512,29 @@ test("the database half", { skip }, async (t) => {
     await query("INSERT INTO provider_failures (at, provider, signature, message) VALUES (now() - interval '31 days', 'gemini', 's', 'm'), (now() - interval '29 days', 'gemini', 's', 'm')");
     assert.equal(await P.purgeProviderFailures(), 1);
   });
+});
+
+test("Kling «Tekshirish»: the free account read, Bearer, packs summed, no pack and a refusal said plainly", async () => {
+  const { probeProvider, probeRequest } = await import("../lib/server/providers/probe.ts");
+  const { providerDef } = await import("../lib/server/providers/registry.ts");
+  assert.equal(providerDef("kling")!.testable, true);
+  const req = probeRequest("kling", GOOD_KLING) as { url: string; headers: Record<string, string>; method?: string };
+  assert.match(req.url, /^https:\/\/api-singapore\.klingai\.com\/account\/costs\?start_time=\d+&end_time=\d+$/);
+  assert.equal(req.headers.Authorization, `Bearer ${GOOD_KLING}`);
+  assert.equal(req.method, undefined, "a read: nothing generated");
+  const run = (status: number, body: unknown) =>
+    probeProvider("kling", GOOD_KLING, { fetchImpl: (async () => new Response(JSON.stringify(body), { status })) as typeof fetch });
+  const pack = (name: string, status: string, remaining_quantity: number) => ({ resource_pack_name: name, status, remaining_quantity });
+  const live = await run(200, { code: 0, data: { resource_pack_subscribe_infos: [pack("Trial-Video-Flagship", "online", 64), pack("Video-Old", "expired", 900), pack("Image-Pack", "online", 50), pack("Video-B", "online", 6)] } });
+  assert.equal(live.ok, true);
+  assert.match(live.message, /70 birlik/);
+  const empty = await run(200, { code: 0, data: { resource_pack_subscribe_infos: [pack("Video-Old", "runOut", 0)] } });
+  assert.equal(empty.ok, true);
+  assert.match(empty.message, /faol video paket yo‘q/);
+  const code = await run(200, { code: 1100, message: `bad ${GOOD_KLING}` });
+  assert.equal(code.ok, false);
+  assert.ok(!code.message.includes(GOOD_KLING));
+  const refused = await run(401, { code: 1000, message: "auth failed" });
+  assert.equal(refused.ok, false);
+  assert.match(refused.message, /HTTP 401/);
 });

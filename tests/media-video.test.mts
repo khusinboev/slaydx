@@ -48,7 +48,7 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 process.env.WORKER_INLINE = "false";
 process.env.GEMINI_API_KEY = "AIza-test-gemini-key-0123456789";
-process.env.KLING_API_KEY = "AKtest:SKtest";
+process.env.KLING_API_KEY = "klingtestkey";
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
 const iso = hasDb ? await createIsolatedDb("mediavideo") : { isolated: false, drop: async () => {} };

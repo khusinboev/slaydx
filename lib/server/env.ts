@@ -474,7 +474,7 @@ export function ttsPremiumAvailable(): boolean {
 
 /**
  * The `video` providers a user may pick right now: each provider ENABLED in the admin «Provayderlar» page, with a key
- * (DB or env), and -- for Kling -- a key of the `<accessKey>:<secretKey>` shape. The caller adds the `video.enabled`
+ * (DB or env), and of a usable format (`keyUsable`). The caller adds the `video.enabled`
  * setting (async). The session sends it as `features.videoProviders`; the tool is hidden when it is empty.
  */
 export function videoProvidersAvailable(): VideoProviderId[] {

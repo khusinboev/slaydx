@@ -29,6 +29,9 @@ export type ProbeDeps = {
   azureRegion?: string;
 };
 
+const KLING_COSTS_URL = "https://api-singapore.klingai.com/account/costs";
+const KLING_COSTS_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
+
 type Request = { url: string; headers?: Record<string, string>; method?: "POST"; body?: string };
 
 const REGION_RE = /^[a-z0-9-]{2,30}$/;
@@ -59,6 +62,11 @@ export function probeRequest(id: string, key: string, deps: ProbeDeps = {}): Req
       // fal Platform API price list of OUR endpoints: needs a valid key, spends nothing
       // (https://fal.ai/docs/platform-apis/v1/models/pricing, read 2026-11-02).
       return { url: `${FAL_PRICING_URL}?endpoint_id=${encodeURIComponent(falEndpoints().join(","))}`, headers: { Authorization: `Key ${key}` } };
+    case "kling": {
+      // The account's resource packs: free, nothing generated (api/assets/account-usage.md, read 2026-11-06).
+      const now = Date.now();
+      return { url: `${KLING_COSTS_URL}?start_time=${now - KLING_COSTS_WINDOW_MS}&end_time=${now}`, headers: { Authorization: `Bearer ${key}` } };
+    }
     case "heygen":
       // The account behind the key and its API balance: HeyGen's own key check, nothing generated
       // (https://developers.heygen.com/docs/api-key.md, read 2026-11-03).
@@ -213,6 +221,19 @@ export function deepseekMessage(body: unknown): string {
   return parts.join(" · ");
 }
 
+/** The sum of the online video packs: only a number and fixed text, nothing of the account. */
+export function klingMessage(body: unknown): string {
+  const packs = ((body as { data?: { resource_pack_subscribe_infos?: unknown } } | null)?.data?.resource_pack_subscribe_infos ?? []) as {
+    resource_pack_name?: unknown;
+    status?: unknown;
+    remaining_quantity?: unknown;
+  }[];
+  const live = (Array.isArray(packs) ? packs : []).filter((p) => p.status === "online" && /video/i.test(String(p.resource_pack_name ?? "")));
+  if (live.length === 0) return "Kalit qabul qilindi · faol video paket yo‘q, video yaratilmaydi";
+  const units = live.reduce((sum, p) => sum + (Number(p.remaining_quantity) || 0), 0);
+  return `Kalit qabul qilindi · video paket qoldig‘i: ${units} birlik (12 soatgacha kechikishi mumkin)`;
+}
+
 export const HEYGEN_ME_URL = "https://api.heygen.com/v3/users/me";
 
 /**
@@ -278,6 +299,12 @@ export async function probeProvider(id: string, key: string, deps: ProbeDeps = {
       if (r.ok) return { ok: true, message };
       const detail = redactProbeText(await errorText(r), key);
       return { ok: false, message: `Kalit qabul qilindi, lekin model rad etdi (HTTP ${r.status})${detail ? `: ${detail}` : ""}` };
+    }
+    if (res.ok && id === "kling") {
+      const body = (await res.json().catch(() => null)) as { code?: unknown } | null;
+      // Built from a number and fixed text; the key cannot be in it, split anyway.
+      if (body?.code === 0) return { ok: true, message: klingMessage(body).split(key).join("…") };
+      return { ok: false, message: `Provayder rad etdi (kod ${Number(body?.code) || "noma’lum"})` };
     }
     if (res.ok && id === "heygen") return { ok: true, message: heygenMessage(await res.json().catch(() => null)).split(key).join("…") };
     if (res.ok && id === "elevenlabs") {

@@ -9,10 +9,10 @@
  * provider and started a paid job we never heard about, so it is `accepted: true` -- the router must not send the same
  * clip to a second route. Errors of `poll` / `fetchOutput` are always `accepted: true` (the operation exists).
  *
- * Server-side: the wrapped adapters read provider keys (`lib/server/providers/resolve`) and Kling signs with
- * `node:crypto`, so this file is NOT client-safe; the browser reads only the catalog (`catalog.ts`, `catalog-video.ts`).
+ * Server-side: the wrapped adapters read provider keys (`lib/server/providers/resolve`), so this file is NOT client-safe; the browser reads only the catalog (`catalog.ts`, `catalog-video.ts`).
  */
 import { MediaError, type AdapterDeps, type AdapterInput, type MediaAdapter, type MediaOutput, type PollResult } from "../../studio-core";
+import { keyUsable } from "../../server/providers/registry";
 import { MEDIA_CATALOG, VIDEO_PROVIDER_TO_MEDIA } from "../catalog";
 import { END_IMAGE_PARAM, SECOND_IMAGE_PARAM, effectPhotos } from "../catalog-video";
 import { FAL_VIDEO_ADAPTER_ID, falVideoAdapter } from "./fal";
@@ -28,7 +28,6 @@ import {
   downloadKlingVideo,
   klingKey,
   omniAdapter,
-  parseKlingKey,
   pollKlingTask,
   submitKlingTask,
   type KlingTaskRequest,
@@ -109,7 +108,7 @@ export function klingV3Input(mode: KlingV3Mode, input: Omit<AdapterInput, "idemp
   const p = input.params;
   const aspect: KlingV3Aspect = (KLING_V3_ASPECTS as readonly string[]).includes(String(p.aspect)) ? (p.aspect as KlingV3Aspect) : KLING_V3_ASPECTS[0];
   const image = input.assets?.imageAssetId?.[0];
-  // P4: the end frame only together with the start (image2video's `image_tail`).
+  // P4: the end frame only together with the start (the docs refuse a last frame alone).
   const tail = image ? input.assets?.[END_IMAGE_PARAM]?.[0] : undefined;
   return {
     model: input.upstreamModel,
@@ -143,7 +142,7 @@ function klingStudioAdapter(id: string, key: () => string, build: (input: Adapte
   const deps = (d?: AdapterDeps) => (d?.fetchImpl ? { fetchImpl: d.fetchImpl } : {});
   return {
     id,
-    configured: () => parseKlingKey(key()) !== null,
+    configured: () => keyUsable("kling", key()),
     buildRequest(input) {
       const req = build(input);
       if (!req) throw new MediaError("kling", "the effect needs a photo");

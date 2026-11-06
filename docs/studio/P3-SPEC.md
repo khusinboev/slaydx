@@ -1,5 +1,10 @@
 # Studio P3 — «Video» tab: Gemini Omni + Kling 3.0 + Kling effect templates (spec, 2026-11-02)
 
+> **Superseded for Kling on 2026-11-06.** The direct Kling calls below were written before the official docs were readable.
+> The contract now lives in the header of `lib/generation/video/kling.ts`: one API key as Bearer, `/text-to-video/kling-3.0`
+> and `/image-to-video/kling-3.0` with `settings`, `GET /tasks`, effects with `input.image` / `input.images` only, and the
+> two-photo scene `hug_pro`.
+
 Parent: `docs/studio/PLAN.md` §3 (video), §11–§13, §15 (P3), §17 (Google + Kling rows). Builds on P0 (core +
 `media_jobs`), P1 (Studio shell, cost × markup) and P2a (fal). Design: canvas «TelegramVideo» (Video tab: «Shablon
 effektlar» | «Matndan / rasmdan», 3×3 effect grid with a 5 s badge, upload box, «Yaratish · «Tug‘ilgan kun» · … so'm»).

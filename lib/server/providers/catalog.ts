@@ -159,7 +159,7 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
     role: "Video yaratishning ikkinchi varianti (Kling AI). Google video yetarli bo'lsa shart emas.",
     need: "optional",
     keyless: false,
-    keyUrl: "https://app.klingai.com/global/dev/api-key",
+    keyUrl: "https://kling.ai/dev/api-key",
   },
   heygen: {
     billing: "paid",

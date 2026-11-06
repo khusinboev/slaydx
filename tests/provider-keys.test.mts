@@ -118,12 +118,10 @@ test("registry: unique ids, Uzbek labels, kinds, env names; reserved providers a
   // `elevenlabs` became real with the premium voice (tts/elevenlabs.ts); «Tekshirish» reads its free subscription endpoint.
   assert.equal(registry.providerDef("elevenlabs")!.implemented, true);
   assert.equal(registry.providerDef("elevenlabs")!.testable, true);
-  // Program-17 item 5: the video adapters exist (Veo on Gemini Omni, Kling with a JWT); neither has a cheap probe call.
-  for (const id of ["veo", "kling"]) {
-    const def = registry.providerDef(id)!;
-    assert.equal(def.implemented, true, `${id}: implemented`);
-    assert.equal(def.testable, false);
-  }
+  // Program-17 item 5: the video adapters exist. Veo (on Gemini Omni) has no cheap probe call; Kling reads its account.
+  for (const id of ["veo", "kling"]) assert.equal(registry.providerDef(id)!.implemented, true, `${id}: implemented`);
+  assert.equal(registry.providerDef("veo")!.testable, false);
+  assert.equal(registry.providerDef("kling")!.testable, true);
   assert.deepEqual(registry.providerDef("veo")!.envKeys, ["GEMINI_API_KEY"], "Veo uses the Gemini key");
   assert.equal(registry.providerDef("nope"), null);
   assert.equal(registry.providerDef("__proto__"), null);

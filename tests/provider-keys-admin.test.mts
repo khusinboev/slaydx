@@ -384,9 +384,9 @@ test("PUT key: sealed in the DB, masked in the answer and the audit row, DB wins
   assert.equal((await audits(s.admin.adminId, "providers.key_delete")).length, 1, "a refused delete writes no audit row");
 });
 
-test("PUT key: Kling (video) accepts an <accessKey>:<secretKey> key and is implemented", { skip }, async () => {
+test("PUT key: Kling (video) accepts one API key and is implemented", { skip }, async () => {
   const s = await session("admin");
-  const K = `AK${fresh()}:SK${fresh()}`;
+  const K = `kling${fresh()}`;
   const r = await putKey(s.cookie, "kling", { key: K, reason: REASON });
   assert.equal(r.status, 200, r.text);
   const item = r.body.item as Item;
@@ -397,8 +397,7 @@ test("PUT key: Kling (video) accepts an <accessKey>:<secretKey> key and is imple
 
 test("PUT key: a key of the wrong format is refused with a clear 400; one already stored is reported and not usable", { skip }, async () => {
   const s = await session("owner");
-  for (const id of ["kling", "fal"]) {
-    const K = `noColon${fresh()}`;
+  for (const [id, K] of [["kling", `AK${fresh()}:SK${fresh()}`], ["fal", `noColon${fresh()}`]] as const) {
     const r = await putKey(s.cookie, id, { key: K, reason: REASON });
     assert.equal(r.status, 400, id);
     assert.match(r.text, /Kalit formati noto‘g‘ri/);
@@ -406,8 +405,8 @@ test("PUT key: a key of the wrong format is refused with a clear 400; one alread
     assert.ok(!r.text.includes(K), "the key is never echoed");
     assert.equal(await rowOf(id), null, "nothing stored");
   }
-  // A key stored before this check existed (incident 2026-11-05).
-  const K = `noColon${fresh()}`;
+  // A key stored before this check existed.
+  const K = `AK${fresh()}:SK${fresh()}`;
   await query("INSERT INTO provider_settings (provider, key_ciphertext, key_hint) VALUES ('kling', $1, $2)", [crypto.sealProviderKey("kling", K), `…${K.slice(-4)}`]);
   const r = await list(s.cookie);
   const kling = itemOf(r, "kling");
@@ -416,7 +415,7 @@ test("PUT key: a key of the wrong format is refused with a clear 400; one alread
   assert.equal(kling.keySource, "db");
   assert.ok(!r.text.includes(K));
   assert.equal(itemOf(r, "gemini").keyMalformed, false);
-  const fixed = await putKey(s.cookie, "kling", { key: `AK${fresh()}:SK${fresh()}`, reason: REASON });
+  const fixed = await putKey(s.cookie, "kling", { key: `kling${fresh()}`, reason: REASON });
   assert.equal(fixed.status, 200);
   assert.equal(itemOf(await list(s.cookie), "kling").keyMalformed, false, "a good key clears it");
 });

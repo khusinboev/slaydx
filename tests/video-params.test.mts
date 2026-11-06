@@ -186,7 +186,7 @@ test("registry: veo and kling are implemented video providers; Veo uses the Gemi
   assert.deepEqual(providerDef("veo")!.envKeys, ["GEMINI_API_KEY"]);
 });
 
-test("availability: enabled AND keyed; a switched-off provider or a malformed Kling key is not offered", () => {
+test("availability: enabled AND keyed; a switched-off provider or a retired two-part Kling key is not offered", () => {
   const prev = { g: process.env.GEMINI_API_KEY, k: process.env.KLING_API_KEY };
   try {
     delete process.env.GEMINI_API_KEY;
@@ -200,14 +200,14 @@ test("availability: enabled AND keyed; a switched-off provider or a malformed Kl
     assert.equal(videoProviderUnavailable({ provider: "veo" }), null);
     assert.notEqual(videoProviderUnavailable({ provider: "kling" }), null, "the user picked a provider that is not offered");
 
-    process.env.KLING_API_KEY = "justonetoken";
-    assert.deepEqual(videoProvidersAvailable(), ["veo"], "Kling needs <accessKey>:<secretKey>");
     process.env.KLING_API_KEY = "AK123:SK456";
+    assert.deepEqual(videoProvidersAvailable(), ["veo"], "Kling takes one API key");
+    process.env.KLING_API_KEY = "justonetoken";
     assert.deepEqual(videoProvidersAvailable(), ["veo", "kling"]);
 
     setProviderSnapshot(new Map([["veo", { enabled: false, key: null, unreadable: false }]]));
     assert.deepEqual(videoProvidersAvailable(), ["kling"], "switched off in «Provayderlar»");
-    setProviderSnapshot(new Map([["kling", { enabled: true, key: "DBAK:DBSK", unreadable: false }]]));
+    setProviderSnapshot(new Map([["kling", { enabled: true, key: "dbklingkey", unreadable: false }]]));
     assert.deepEqual(videoProvidersAvailable(), ["veo", "kling"], "DB key");
   } finally {
     if (prev.g === undefined) delete process.env.GEMINI_API_KEY;

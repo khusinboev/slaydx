@@ -69,7 +69,7 @@ export type AdminProviderItem = {
   unreadable: boolean;
   updatedBy: string | null;
   updatedAt: string | null;
-  /** The key in use cannot work (Kling / fal need `<id>:<secret>`): models are not sold, the card says «Kalit formati noto'g'ri». */
+  /** The key in use cannot work (fal needs `<id>:<secret>`, Kling one token): models are not sold, the card says «Kalit formati noto'g'ri». */
   keyMalformed: boolean;
   /** Permissions real jobs were refused with the current key (`provider_failures`): the provider key lacks them. */
   refusedPermissions: string[];

@@ -21,9 +21,9 @@
  * (https://fal.ai/models/fal-ai/kling-video/v1.6/standard/effects/llms.txt) and WaveSpeed `kwaivgi/kling-effects`
  * (URL above). «Xotira tiriladi», «Trampolin» and «Kiyim» have no scene with a documented id and are not sold.
  *
- * STUDIO P4 (docs/studio/P4-SPEC.md): «Quchoqlash» is the direct API's documented TWO-photo scene `hug`
- * (`KLING_DUAL_EFFECTS`; fal's `hug_pro` is a ONE-image scene, not the two-photo one); Kling 3.0 takes an end frame
- * (`endImageAssetId` → `image_tail`); five more models through fal (`FAL_VIDEO_ENTRIES`, block below).
+ * STUDIO P4 (docs/studio/P4-SPEC.md): «Quchoqlash» is the direct API's documented TWO-photo scene `hug_pro`
+ * (`KLING_DUAL_EFFECTS`, api/effects/video-effects.md, read 2026-11-06); Kling 3.0 takes an end frame
+ * (`endImageAssetId` → the `last_frame` item); five more models through fal (`FAL_VIDEO_ENTRIES`, block below).
  */
 import { normalizeText, type CatalogEntry, type ParamSchema, type PurposeSpec } from "../studio-core";
 import { VIDEO_PROMPT_MAX, VIDEO_PROMPT_MIN } from "../generation/video/registry";
@@ -79,7 +79,7 @@ export const SECOND_IMAGE_PARAM = "secondImageAssetId";
  * vendored by ComfyUI, `KlingDualCharacterEffectsScene`: hug / kiss / heart_gesture, `images` exactly two; read
  * 2026-11-02). Only «Quchoqlash» is sold (the owner's canvas); priced as every effect (UNVERIFIED, see P4-SPEC).
  */
-export const KLING_DUAL_EFFECTS: readonly { id: string; label: string }[] = [{ id: "hug", label: "Quchoqlash" }];
+export const KLING_DUAL_EFFECTS: readonly { id: string; label: string }[] = [{ id: "hug_pro", label: "Quchoqlash" }];
 
 /** Every effect scene the Studio sells, grid order: the single-photo ones, then the two-photo ones. */
 export const KLING_EFFECT_SCENES: readonly { id: string; label: string }[] = [...KLING_EFFECTS, ...KLING_DUAL_EFFECTS];

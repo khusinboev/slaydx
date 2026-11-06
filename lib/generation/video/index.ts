@@ -6,7 +6,7 @@ import type { VideoProviderId } from "./registry";
 export * from "./registry";
 export * from "./types";
 export { isMp4, mp4Seconds } from "./mp4";
-export { klingAdapter, makeKlingAdapter, parseKlingKey, signKlingJwt, buildKlingRequest, KLING_MODEL, KLING_BASE } from "./kling";
+export { klingAdapter, makeKlingAdapter, buildKlingRequest, KLING_MODEL, KLING_BASE } from "./kling";
 export {
   buildKlingDualEffectRequest,
   buildKlingEffectRequest,
@@ -18,7 +18,7 @@ export {
   type KlingTaskRequest,
   type KlingV3Input,
 } from "./kling";
-export { KLING_DUAL_EFFECT_MODE, KLING_DUAL_EFFECT_MODEL, KLING_EFFECT_SECONDS, KLING_V3_ASPECTS, KLING_V3_MODEL, KLING_V3_MODES, KLING_V3_SECONDS } from "./kling-options";
+export { KLING_EFFECT_SECONDS, KLING_V3_ASPECTS, KLING_V3_MODEL, KLING_V3_MODES, KLING_V3_SECONDS } from "./kling-options";
 export type { KlingV3Aspect, KlingV3Mode } from "./kling-options";
 export { omniAdapter, makeOmniAdapter, buildOmniRequest, OMNI_MODEL, OMNI_BASE } from "./omni";
 
