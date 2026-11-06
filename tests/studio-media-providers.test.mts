@@ -113,6 +113,7 @@ test("effects: catalog — two fal providers, hidden until the admin's switch, t
 test("effects: PixVerse sells twelve scenes by their exact enum values, Kling 1.6 the nine plus the hug", () => {
   assert.equal(PIXVERSE_EFFECTS.length, 12);
   assert.equal(new Set(PIXVERSE_EFFECTS.map((e) => e.label)).size, 12, "labels stay distinct");
+  for (const e of PIXVERSE_EFFECTS) assert.ok(e.label.length <= 10, `${e.label}: the phone's button must still show the price`);
   const options = (id: string) => {
     const p = entry(id).params.find((x) => x.name === "effect")!;
     return p.type === "enum" ? p.options.map((o) => o.value) : [];
@@ -163,7 +164,7 @@ test("effects: prices are the pages' clip prices × markup; a job needs its phot
   assert.equal(studioVideoError({ modelId: PIXVERSE_EFFECTS_MODEL, effect: "Liquid Metal" }), "Effekt uchun surat yuklang.");
   assert.ok(studioVideoError({ modelId: PIXVERSE_EFFECTS_MODEL, effect: "snowglobe", imageAssetId: ASSET }), "a Kling scene on PixVerse");
   assert.ok(studioVideoError({ modelId: PIXVERSE_EFFECTS_MODEL, effect: "Kiss", imageAssetId: ASSET }), "a page effect we do not sell");
-  assert.equal(topicOf({ modelId: PIXVERSE_EFFECTS_MODEL, effect: "Liquid Metal" }, TOOL_BY_ID["studio-video"]), "Effekt: Suyuq metall");
+  assert.equal(topicOf({ modelId: PIXVERSE_EFFECTS_MODEL, effect: "Liquid Metal" }, TOOL_BY_ID["studio-video"]), "Effekt: Metall");
 });
 
 /* ══════════════════════════ 2. video ══════════════════════════ */

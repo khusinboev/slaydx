@@ -435,20 +435,23 @@ export const KLING_FAL_EFFECTS_MODEL = "kling/effects-v16";
 export const PIXVERSE_EFFECTS_ENDPOINT = "fal-ai/pixverse/v5.5/effects";
 export const KLING_FAL_EFFECTS_ENDPOINT = "fal-ai/kling-video/v1.6/standard/effects";
 
-/** The dozen PixVerse effects we sell (exact `effect` enum values, grid order): striking, and fit for every audience. */
+/**
+ * The dozen PixVerse effects we sell (exact `effect` enum values, grid order): striking, and fit for every audience. A label
+ * stays within 10 characters: the phone's submit button repeats it next to the price, and a longer one cuts the price off.
+ */
 export const PIXVERSE_EFFECTS: readonly { id: string; label: string }[] = [
-  { id: "Anything, Robot", label: "Robotga aylanish" },
-  { id: "Liquid Metal", label: "Suyuq metall" },
-  { id: "Dust Me Away", label: "Changga aylanish" },
-  { id: "Earth Zoom", label: "Yer kurrasigacha" },
-  { id: "Dragon Evoker", label: "Ajdaho chaqirish" },
+  { id: "Anything, Robot", label: "Robot" },
+  { id: "Liquid Metal", label: "Metall" },
+  { id: "Dust Me Away", label: "Chang" },
+  { id: "Earth Zoom", label: "Yer shari" },
+  { id: "Dragon Evoker", label: "Ajdaho" },
   { id: "Fin-tastic Mermaid", label: "Suv parisi" },
-  { id: "I believe I can fly", label: "Osmonga uchish" },
+  { id: "I believe I can fly", label: "Parvoz" },
   { id: "Long Hair Magic", label: "Uzun soch" },
-  { id: "The Age Ripple", label: "Yillar to‘lqini" },
-  { id: "3D Figurine Factory", label: "3D haykalcha" },
-  { id: "Pixel World", label: "Piksel dunyosi" },
-  { id: "Hitchcock Dolly Zoom", label: "Hichkok kadri" },
+  { id: "The Age Ripple", label: "Yosh oqimi" },
+  { id: "3D Figurine Factory", label: "3D haykal" },
+  { id: "Pixel World", label: "Piksel" },
+  { id: "Hitchcock Dolly Zoom", label: "Hichkok" },
 ];
 
 /** The nine scenes the Studio already sells, plus the hug in its one-photo form. */

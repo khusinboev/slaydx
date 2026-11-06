@@ -174,7 +174,7 @@ test("effects: the provider, then its effects; the price and the request follow 
   assert.match(row[1]!.textContent!, /7\s*200/, "$0.28 × 12 700 × 2 = 7 112 → 7 200");
   assert.equal(row[0]!.getAttribute("aria-pressed"), "true");
   assert.equal(qa("[data-effect]").length, 12);
-  assert.match(button(), new RegExp(`Robotga aylanish.*${formatSom(5_100).replace(/\s/g, "\\s")}`));
+  assert.match(button(), new RegExp(`«Robot».*${formatSom(5_100).replace(/\s/g, "\\s")}`));
 
   await click(row[1]);
   assert.equal(qa("[data-effect-provider]")[1]!.getAttribute("aria-pressed"), "true");
