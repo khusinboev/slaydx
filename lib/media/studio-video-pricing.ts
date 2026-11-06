@@ -8,7 +8,7 @@
  */
 import { normalizeText, validate, type CatalogEntry } from "../studio-core";
 import { MEDIA_CATALOG, MEDIA_PURPOSES } from "./catalog";
-import { END_IMAGE_PARAM, HEYGEN_SCRIPT_MAX, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, STUDIO_VIDEO_PURPOSE, avatarScriptProblem, effectPhotos, isAvatarModel } from "./catalog-video";
+import { END_IMAGE_PARAM, HEYGEN_SCRIPT_MAX, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, STUDIO_VIDEO_PURPOSE, avatarScriptProblem, effectPhotos, isAvatarModel, isPhotoAvatarModel } from "./catalog-video";
 import { isGenerationId } from "./catalog-mix";
 import { studioEntryPrice, type MediaPricing } from "./studio-pricing";
 
@@ -51,10 +51,16 @@ export function studioVideoError(values: Readonly<Record<string, unknown>>): str
   if (isEffectEntry(entry)) {
     if (!has("imageAssetId")) return "Effekt uchun surat yuklang.";
     // P4: a two-photo scene («Quchoqlash») needs the second photo; a single-photo scene must not carry one.
-    const two = effectPhotos(values.effect) === 2;
+    const two = effectPhotos(values.effect, entry.id) === 2;
     if (two && !has(SECOND_IMAGE_PARAM)) return "Bu effekt uchun ikkinchi suratni ham yuklang.";
     if (!two && has(SECOND_IMAGE_PARAM)) return "Bu effekt bitta surat bilan ishlaydi.";
     return null;
+  }
+  // P11 photo avatars: the user's own speech is the only input besides the photo (`validate` requires the photo).
+  if (isPhotoAvatarModel(entry.id)) {
+    const own = String(values[OWN_AUDIO_PARAM] ?? "").trim();
+    if (!own) return "Avatar uchun «Ovoz» bo‘limidagi ovozingizni tanlang.";
+    return isGenerationId(own.toLowerCase()) ? null : "Ovoz topilmadi — ro‘yxatdan qayta tanlang.";
   }
   // P9 HeyGen: the avatar speaks a script OR the user's own speech result — exactly one of the two.
   if (isAvatarModel(entry.id)) {
@@ -76,9 +82,9 @@ export function studioVideoError(values: Readonly<Record<string, unknown>>): str
  * second photo of a single-photo effect). The server checks ownership of exactly these before charging and resolves
  * exactly these at submit.
  */
-export function studioVideoImageParams(entry: Pick<CatalogEntry, "params" | "capabilities">, values: Readonly<Record<string, unknown>>): string[] {
+export function studioVideoImageParams(entry: Pick<CatalogEntry, "id" | "params" | "capabilities">, values: Readonly<Record<string, unknown>>): string[] {
   return entry.params
     .filter((p) => p.type === "image")
     .map((p) => p.name)
-    .filter((name) => !(isEffectEntry(entry) && name === SECOND_IMAGE_PARAM && effectPhotos(values.effect) !== 2));
+    .filter((name) => !(isEffectEntry(entry) && name === SECOND_IMAGE_PARAM && effectPhotos(values.effect, entry.id) !== 2));
 }

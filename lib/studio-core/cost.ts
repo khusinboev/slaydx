@@ -11,15 +11,19 @@ import type { NormalizedParams } from "./params";
  *   second  per second of output (video, music), × the `secondsParam` value; `by` as above; × the `countParam` value
  *           (1 when absent) when one job makes several clips (Studio P6 sound-effect variants); `unitSeconds`: the
  *           provider bills whole units of that many seconds, rounded up, at least one (fal dubbing, VEED: per started
- *           minute, so 15 s costs a full minute and the quote must say so);
+ *           minute, so 15 s costs a full minute and the quote must say so); `plus`: a flat charge when that param is
+ *           filled (Grok bills every input image on top of the seconds);
  *   kchar   per 1 000 characters of the `textParam` value (speech).
  */
 export type CostTable = { param: string; table: Readonly<Record<string, number>> };
 
+/** A flat charge, once per job, when `param` holds a value (a non-empty list or a non-empty string). */
+export type CostPlus = { param: string; usd: number };
+
 export type CostRule =
   | { per: "job"; usd: number }
   | { per: "output"; usd: number; countParam?: string; by?: CostTable }
-  | { per: "second"; usd: number; secondsParam: string; countParam?: string; by?: CostTable; unitSeconds?: number }
+  | { per: "second"; usd: number; secondsParam: string; countParam?: string; by?: CostTable; unitSeconds?: number; plus?: CostPlus }
   | { per: "kchar"; usd: number; textParam: string };
 
 function unit(usd: number, by: CostTable | undefined, p: NormalizedParams): number {
@@ -38,6 +42,12 @@ function billed(seconds: number, unitSeconds: number | undefined): number {
   return unitSeconds ? Math.max(1, Math.ceil(seconds / unitSeconds)) * unitSeconds : seconds;
 }
 
+function plusUsd(plus: CostPlus | undefined, p: NormalizedParams): number {
+  if (!plus) return 0;
+  const v = p[plus.param];
+  return (Array.isArray(v) ? v.length > 0 : typeof v === "string" && v.trim() !== "") ? plus.usd : 0;
+}
+
 export function costUsd(rule: CostRule, p: NormalizedParams): number {
   switch (rule.per) {
     case "job":
@@ -45,7 +55,7 @@ export function costUsd(rule: CostRule, p: NormalizedParams): number {
     case "output":
       return unit(rule.usd, rule.by, p) * (rule.countParam ? num(p[rule.countParam], 1) : 1);
     case "second":
-      return unit(rule.usd, rule.by, p) * billed(num(p[rule.secondsParam], 0), rule.unitSeconds) * (rule.countParam ? num(p[rule.countParam], 1) : 1);
+      return unit(rule.usd, rule.by, p) * billed(num(p[rule.secondsParam], 0), rule.unitSeconds) * (rule.countParam ? num(p[rule.countParam], 1) : 1) + plusUsd(rule.plus, p);
     case "kchar":
       return (rule.usd * String(p[rule.textParam] ?? "").length) / 1000;
   }

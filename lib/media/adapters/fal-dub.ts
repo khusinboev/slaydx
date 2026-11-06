@@ -10,12 +10,12 @@
  *
  * Op id: `fal:<endpoint>:<request_id>`, as for a clip, so a re-run of the job resumes it; `FAL_DUB_ENDPOINTS` bounds it.
  */
-import { MediaError, sniffMime, type AdapterDeps, type AdapterInput, type MediaAdapter } from "../../studio-core";
-import { getProviderKey } from "../../server/providers/resolve";
+import { MediaError, sniffMime, type MediaAdapter } from "../../studio-core";
 import { SPEECH_TOOL_OUTPUT_MAX_BYTES } from "../catalog-transcribe";
-import { FAL_QUEUE_HOST, falVideoAdapter, type FalDeps, type FalQueueVariant } from "./fal";
+import { FAL_QUEUE_HOST, type FalDeps, type FalQueueVariant } from "./fal";
 import { FAL_DUB_ENDPOINTS, falDubBody } from "./fal-audio-models";
-import { FAL_FILE_PENDING, FAL_RETENTION_SEC, deleteFalFile, falFileAsset, falLifecycleHeader, uploadFalFile } from "./fal-storage";
+import { FAL_RETENTION_SEC, falFileAsset, falLifecycleHeader } from "./fal-storage";
+import { falStoredInputAdapter } from "./fal-stored-input";
 
 export const FAL_DUB_ADAPTER_ID = "fal-dub";
 /** fal drops a dub it could not start within this: the job's whole budget is 600 s, and rendering needs most of it. */
@@ -56,31 +56,5 @@ function variant(fileUrl: string): FalQueueVariant {
 }
 
 export function falDubAdapter(o: Pick<FalDeps, "key" | "lookup"> = {}): MediaAdapter {
-  const keyOf = o.key ?? (() => getProviderKey("fal"));
-  const queue = falVideoAdapter({ ...o, variant: variant(FAL_FILE_PENDING) });
-
-  return {
-    ...queue,
-    async submit(input: AdapterInput, deps: AdapterDeps = {}) {
-      const key = keyOf();
-      if (!key) throw new MediaError("fal", "FAL_KEY yo'q", { accepted: false });
-      // Every pure check first: nothing is uploaded for a request that cannot be sent.
-      queue.buildRequest!(input);
-      const fetchImpl = deps.fetchImpl ?? globalThis.fetch;
-      const budget = deps.deadline ? deps.deadline - (deps.now ?? Date.now)() : undefined;
-      const fileUrl = await uploadFalFile(falFileAsset(input)!, { key, fetchImpl, ...(budget !== undefined ? { timeoutMs: budget } : {}), ...(o.lookup ? { lookup: o.lookup } : {}) });
-      try {
-        // A failed note must not cost the job: the expiry still removes the file.
-        await deps.onInputStored?.(fileUrl).catch(() => undefined);
-        return await falVideoAdapter({ ...o, variant: variant(fileUrl) }).submit(input, deps);
-      } catch (e) {
-        await deleteFalFile(fileUrl, { key, fetchImpl });
-        throw e;
-      }
-    },
-    async dropInput(url, deps: AdapterDeps = {}) {
-      const key = keyOf();
-      if (key) await deleteFalFile(url, { key, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) });
-    },
-  };
+  return falStoredInputAdapter(o, variant, falFileAsset);
 }

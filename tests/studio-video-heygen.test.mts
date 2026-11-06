@@ -129,7 +129,8 @@ const happy = () =>
 
 test("catalog: heygen/avatar after Sora, before the effects; route heygen; params; priced by engine; client view has no routes", () => {
   const allowed = MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed;
-  assert.deepEqual(allowed.slice(-3), ["openai/sora-2-pro", HEYGEN_MODEL, "kling/effects"]);
+  // P11: package F's models sit between Sora and HeyGen, its photo avatars and fal effects before the direct effects.
+  assert.deepEqual(allowed.slice(-7), ["alibaba/happy-horse", HEYGEN_MODEL, "bytedance/omnihuman-2", "kling/ai-avatar-2", "pixverse/effects", "kling/effects-v16", "kling/effects"]);
   const e = entry();
   assert.equal(e.kind, "video");
   assert.equal(e.maker, "HeyGen");

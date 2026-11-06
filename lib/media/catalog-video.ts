@@ -62,7 +62,7 @@ export const KLING_EFFECTS: readonly { id: string; label: string }[] = [
   { id: "snowglobe", label: "Qorli shar" },
 ];
 
-const START_IMAGE: ParamSchema = {
+const START_IMAGE: Extract<ParamSchema, { type: "image" }> = {
   name: "imageAssetId",
   label: "Boshlang'ich surat",
   type: "image",
@@ -90,9 +90,15 @@ export const KLING_DUAL_EFFECTS: readonly { id: string; label: string }[] = [{ i
 /** Every effect scene the Studio sells, grid order: the single-photo ones, then the two-photo ones. */
 export const KLING_EFFECT_SCENES: readonly { id: string; label: string }[] = [...KLING_EFFECTS, ...KLING_DUAL_EFFECTS];
 
-/** Photos an effect scene needs (2 for a dual-character scene). */
-export function effectPhotos(effect: unknown): 1 | 2 {
-  return KLING_DUAL_EFFECTS.some((e) => e.id === effect) ? 2 : 1;
+/** The direct Kling effects entry (hidden until a pack covers it): the only one with two-photo scenes. */
+export const KLING_EFFECTS_MODEL = "kling/effects";
+
+/**
+ * Photos an effect scene needs on a model: 2 for a dual-character scene of the direct Kling API. fal's Kling endpoint takes
+ * the same `hug_pro` id with exactly one image (see `FAL_EFFECT_ENTRIES`), so the model decides, not the scene id alone.
+ */
+export function effectPhotos(effect: unknown, modelId: string = KLING_EFFECTS_MODEL): 1 | 2 {
+  return modelId === KLING_EFFECTS_MODEL && KLING_DUAL_EFFECTS.some((e) => e.id === effect) ? 2 : 1;
 }
 
 function klingV3Params(): readonly ParamSchema[] {
@@ -203,7 +209,7 @@ const KLING_V3_ENTRIES: readonly CatalogEntry[] = [
 ];
 
 const KLING_EFFECTS_ENTRY: CatalogEntry = {
-  id: "kling/effects",
+  id: KLING_EFFECTS_MODEL,
   kind: "video",
   capabilities: ["effect"],
   label: "Kling effektlar",
@@ -317,6 +323,175 @@ export const FAL_VIDEO_ENTRIES: readonly CatalogEntry[] = [
   falVideo({ id: "bytedance/seedance-2-mini", label: "Seedance 2.0 Mini", maker: "ByteDance", badges: ["ovozli"], upstream: "bytedance/seedance-2.0/mini", minSeconds: 4, defaultResolution: "720p", sound: true }),
   falVideo({ id: "minimax/h3", label: "MiniMax H3", maker: "MiniMax", badges: ["arzon"], upstream: "minimax/h3", minSeconds: 5, defaultResolution: "768p", sound: false }),
   falVideo({ id: "minimax/h3-max-turbo", label: "MiniMax H3 Max Turbo", maker: "MiniMax", badges: ["arzon"], upstream: "minimax/h3-max-turbo", minSeconds: 2, defaultResolution: "768p", sound: false }),
+];
+
+/* ═════════════════ Studio P11 package F: more video through fal ═════════════════
+ * USD per second of output, each from the endpoint's own page (read 2026-11-06). Text and image endpoints state the same rates.
+ *   Grok Imagine Lite  https://fal.ai/models/xai/grok-imagine-video/v1.5/lite/text-to-video/llms.txt and …/image-to-video/llms.txt
+ *                      720p $0.03 / s; the image endpoint bills «$0.01» per input image on top (`plus`). 480p ($0.02) and
+ *                      1080p ($0.14) are not sold: the owner's list names 720p.
+ *   PixVerse V6        https://fal.ai/models/fal-ai/pixverse/v6/text-to-video/llms.txt and …/image-to-video/llms.txt
+ *                      720p $0.045 / s without audio, $0.06 with. The prompt limit counts UTF-8 BYTES (2048): `maxBytes`.
+ *   Happy Horse 1.1    https://fal.ai/models/alibaba/happy-horse/v1.1/text-to-video/llms.txt and …/image-to-video/llms.txt
+ *                      720p $0.14 / s, 1080p $0.18 / s. Sound is native, no switch. 3–15 s, prompt ≤ 2500 characters.
+ * Billing rounds are not stated. Grok's example clip of 6 s measures 6.04 s, so a clip may bill a fraction more than quoted:
+ * the quote stays per requested second, the markup covers it (UNVERIFIED until the first bills are compared).
+ * Grok's prompt limit is not stated (UNVERIFIED): `VIDEO_PROMPT_MAX` holds. None of these models takes an end frame.
+ */
+export const GROK_LITE_USD_PER_SECOND = 0.03;
+export const GROK_LITE_USD_PER_IMAGE = 0.01;
+export const PIXVERSE_V6_USD_PER_SECOND = { false: 0.045, true: 0.06 } as const;
+export const HAPPY_HORSE_USD_PER_SECOND = { "720p": 0.14, "1080p": 0.18 } as const;
+/** PixVerse's stated prompt limit, in UTF-8 bytes. */
+export const PIXVERSE_PROMPT_MAX_BYTES = 2048;
+
+const SECONDS_ROW = (min: number): ParamSchema => ({ name: "seconds", label: "Davomiylik", hint: "Soniya", type: "int", min, max: FAL_VIDEO_MAX_SECONDS, step: 1, default: 5, affects: "both" });
+const FAL_ASPECT_ROW: ParamSchema = {
+  name: "aspect",
+  label: "O'lcham",
+  hint: "Surat bilan boshlanganda nisbat suratdan olinadi",
+  type: "enum",
+  options: FAL_VIDEO_ASPECTS.map((a) => ({ value: a, label: a })),
+  default: FAL_VIDEO_ASPECTS[0],
+  affects: "request",
+};
+const VIDEO_PROMPT: Extract<ParamSchema, { type: "text" }> = { name: "prompt", label: "Video tavsifi", type: "text", min: VIDEO_PROMPT_MIN, max: VIDEO_PROMPT_MAX, affects: "request" };
+
+function falVideoP11(id: string, label: string, maker: string, badges: CatalogEntry["badges"], upstream: string, params: readonly ParamSchema[], cost: CatalogEntry["cost"]): CatalogEntry {
+  return {
+    id,
+    kind: "video",
+    capabilities: ["t2v", "i2v"],
+    label,
+    maker,
+    badges,
+    params: [...params, START_IMAGE],
+    cost,
+    routes: [{ provider: "fal", upstreamModel: upstream, adapter: "fal-video" }],
+    defaultOff: true,
+    limits: VIDEO_LIMITS,
+    output: VIDEO_OUT,
+  };
+}
+
+/** Package F's text / image → video models, picker order (after the P4 fal models and Sora). */
+export const FAL_VIDEO_P11_ENTRIES: readonly CatalogEntry[] = [
+  falVideoP11("xai/grok-imagine-lite", "Grok Imagine Lite", "xAI", ["arzon", "yangi"], "xai/grok-imagine-video/v1.5/lite", [VIDEO_PROMPT, SECONDS_ROW(1), FAL_ASPECT_ROW], {
+    per: "second",
+    usd: GROK_LITE_USD_PER_SECOND,
+    secondsParam: "seconds",
+    plus: { param: "imageAssetId", usd: GROK_LITE_USD_PER_IMAGE },
+  }),
+  falVideoP11(
+    "pixverse/v6",
+    "PixVerse V6",
+    "PixVerse",
+    ["arzon", "yangi"],
+    "fal-ai/pixverse/v6",
+    [
+      { ...VIDEO_PROMPT, maxBytes: PIXVERSE_PROMPT_MAX_BYTES },
+      SECONDS_ROW(1),
+      FAL_ASPECT_ROW,
+      { name: "sound", label: "Ovoz", hint: "Video bilan birga ovoz yaratiladi (qimmatroq)", type: "bool", default: false, affects: "both" },
+    ],
+    { per: "second", usd: PIXVERSE_V6_USD_PER_SECOND.false, secondsParam: "seconds", by: { param: "sound", table: PIXVERSE_V6_USD_PER_SECOND } },
+  ),
+  falVideoP11(
+    "alibaba/happy-horse",
+    "Happy Horse 1.1",
+    "Alibaba",
+    ["sifatli", "ovozli", "yangi"],
+    "alibaba/happy-horse/v1.1",
+    [
+      VIDEO_PROMPT,
+      SECONDS_ROW(3),
+      {
+        name: "resolution",
+        label: "Sifat",
+        hint: "Yuqori sifat qimmatroq",
+        type: "enum",
+        options: Object.keys(HAPPY_HORSE_USD_PER_SECOND).map((t) => ({ value: t, label: RESOLUTION_LABEL[t] ?? t })),
+        default: "720p",
+        affects: "both",
+      },
+      FAL_ASPECT_ROW,
+    ],
+    { per: "second", usd: HAPPY_HORSE_USD_PER_SECOND["720p"], secondsParam: "seconds", by: { param: "resolution", table: HAPPY_HORSE_USD_PER_SECOND } },
+  ),
+];
+
+/* ═════════════════ Studio P11 package F: effects through fal ═════════════════
+ * A fixed 5 s clip from one photo, sold per clip as the direct Kling effects are. Both pages read 2026-11-06:
+ *   PixVerse   https://fal.ai/models/fal-ai/pixverse/v5.5/effects/llms.txt  «a 5s video in single-clip mode without audio …
+ *              $0.20 for 720p». The page bills audio +$0.05 but its schema has no audio switch, so nothing we send turns it
+ *              on (UNVERIFIED that no effect carries sound on its own: compare the first bills).
+ *   Kling 1.6  https://fal.ai/models/fal-ai/kling-video/v1.6/standard/effects/llms.txt  «$0.056 per seconds», `duration` "5":
+ *              $0.28 a clip. «heart_gesture requires exactly two images; all other effects require exactly one image», so
+ *              here `hug_pro` takes ONE photo (of two people), unlike the direct API.
+ */
+export const FAL_EFFECT_USD = { pixverse: 0.2, kling: 0.28 } as const;
+export const PIXVERSE_EFFECTS_MODEL = "pixverse/effects";
+export const KLING_FAL_EFFECTS_MODEL = "kling/effects-v16";
+export const PIXVERSE_EFFECTS_ENDPOINT = "fal-ai/pixverse/v5.5/effects";
+export const KLING_FAL_EFFECTS_ENDPOINT = "fal-ai/kling-video/v1.6/standard/effects";
+
+/**
+ * The dozen PixVerse effects we sell (exact `effect` enum values, grid order): striking, and fit for every audience. A label
+ * stays within 10 characters: the phone's submit button repeats it next to the price, and a longer one cuts the price off.
+ */
+export const PIXVERSE_EFFECTS: readonly { id: string; label: string }[] = [
+  { id: "Anything, Robot", label: "Robot" },
+  { id: "Liquid Metal", label: "Metall" },
+  { id: "Dust Me Away", label: "Chang" },
+  { id: "Earth Zoom", label: "Yer shari" },
+  { id: "Dragon Evoker", label: "Ajdaho" },
+  { id: "Fin-tastic Mermaid", label: "Suv parisi" },
+  { id: "I believe I can fly", label: "Parvoz" },
+  { id: "Long Hair Magic", label: "Uzun soch" },
+  { id: "The Age Ripple", label: "Yosh oqimi" },
+  { id: "3D Figurine Factory", label: "3D haykal" },
+  { id: "Pixel World", label: "Piksel" },
+  { id: "Hitchcock Dolly Zoom", label: "Hichkok" },
+];
+
+/** The nine scenes the Studio already sells, plus the hug in its one-photo form. */
+export const KLING_FAL_EFFECTS: readonly { id: string; label: string }[] = [...KLING_EFFECTS, ...KLING_DUAL_EFFECTS];
+
+/** Every effect a stored job may name, for labels (a scene sold by two providers keeps one label). */
+export const ALL_EFFECT_SCENES: readonly { id: string; label: string }[] = [...KLING_EFFECT_SCENES, ...PIXVERSE_EFFECTS];
+
+/** A scene whose one photo must show two people (fal's hug): a wrong photo costs the user a clip, so the form says it aloud. */
+export const effectNeedsPair = (effect: unknown, modelId: string): boolean => modelId === KLING_FAL_EFFECTS_MODEL && effect === "hug_pro";
+
+/** The upload row's hint. */
+export function effectPhotoHint(effect: unknown, modelId: string): string {
+  return effectNeedsPair(effect, modelId) ? "Bitta suratda ikki kishi birga ko‘rinsin" : "Yuz yoki odam aniq ko‘rinsin";
+}
+
+function falEffect(id: string, label: string, maker: string, endpoint: string, usd: number, scenes: readonly { id: string; label: string }[]): CatalogEntry {
+  return {
+    id,
+    kind: "video",
+    capabilities: ["effect"],
+    label,
+    maker,
+    badges: ["arzon"],
+    params: [
+      { name: "effect", label: "Effekt", type: "enum", options: scenes.map((e) => ({ value: e.id, label: e.label })), default: scenes[0]!.id, affects: "request" },
+      { ...START_IMAGE, label: "Surat" },
+    ],
+    cost: { per: "job", usd },
+    routes: [{ provider: "fal", upstreamModel: endpoint, adapter: "fal-video" }],
+    defaultOff: true,
+    limits: VIDEO_LIMITS,
+    output: VIDEO_OUT,
+  };
+}
+
+/** The fal effect models, in the provider row's order. */
+export const FAL_EFFECT_ENTRIES: readonly CatalogEntry[] = [
+  falEffect(PIXVERSE_EFFECTS_MODEL, "PixVerse", "PixVerse", PIXVERSE_EFFECTS_ENDPOINT, FAL_EFFECT_USD.pixverse, PIXVERSE_EFFECTS),
+  falEffect(KLING_FAL_EFFECTS_MODEL, "Kling 1.6", "Kuaishou", KLING_FAL_EFFECTS_ENDPOINT, FAL_EFFECT_USD.kling, KLING_FAL_EFFECTS),
 ];
 
 /* ═════════════════ Studio P9: OpenAI Sora 2 through fal (docs/studio/P9-SPEC.md) ═════════════════
@@ -458,21 +633,22 @@ export function avatarScriptSeconds(script: unknown): number {
 
 /**
  * Clip seconds an own speech of `raw` seconds buys: rounded to 0.1 s (what the source list shows), then up to a whole
- * second, 1 … `HEYGEN_MAX_SECONDS` (a speech a frame over the limit is accepted by the server's tolerance).
+ * second, 1 … `max` (a speech a frame over the limit is accepted by the server's tolerance).
  */
-export function avatarAudioSeconds(raw: number): number {
-  return Math.min(HEYGEN_MAX_SECONDS, Math.max(1, Math.ceil(Math.round(raw * 10) / 10 - 1e-9)));
+export function avatarAudioSeconds(raw: number, max: number = HEYGEN_MAX_SECONDS): number {
+  return Math.min(max, Math.max(1, Math.ceil(Math.round(raw * 10) / 10 - 1e-9)));
 }
 
 /**
  * The values with `seconds` set from the inputs — ONE function for the browser (the price on the button) and the server
  * (it overwrites whatever the request said, before pricing): an own speech → its length (`audioSeconds`, the stored
- * length; the values unchanged while it is unknown), else the script's.
+ * length; the values unchanged while it is unknown), else the script's. A photo avatar has no script: it waits for its speech.
  */
 export function withAvatarSeconds(values: Readonly<Record<string, unknown>>, audioSeconds: number | null): Record<string, unknown> {
   const own = String(values[OWN_AUDIO_PARAM] ?? "").trim();
-  if (own) return audioSeconds === null ? { ...values } : { ...values, seconds: avatarAudioSeconds(audioSeconds) };
-  return { ...values, seconds: avatarScriptSeconds(values.prompt) };
+  const id = String(values.modelId ?? "");
+  if (own) return audioSeconds === null ? { ...values } : { ...values, seconds: avatarAudioSeconds(audioSeconds, avatarMaxSeconds(id)) };
+  return isPhotoAvatarModel(id) ? { ...values } : { ...values, seconds: avatarScriptSeconds(values.prompt) };
 }
 
 const HEYGEN_ENTRY: CatalogEntry = {
@@ -532,17 +708,82 @@ const HEYGEN_ENTRY: CatalogEntry = {
   output: VIDEO_OUT,
 };
 
-/** The avatar model: its length follows the inputs, it may take an own speech. */
-export const isAvatarModel = (id: string): boolean => id === HEYGEN_MODEL;
+/* ═════════════════ Studio P11 package F: photo avatars through fal ═════════════════
+ * A photo speaks the user's OWN speech result (the `audioId` path of HeyGen): no script, so no prompt box. Pages read 2026-11-06:
+ *   OmniHuman v2     https://fal.ai/models/bytedance/omnihuman/v2/llms.txt  «$0.105 per seconds»; billed on the `duration` of
+ *                    the audio; audio «wav or mp3. Max size: 15 MB. Duration between 4 and 300 seconds»; image ≤ 30 MB, aspect
+ *                    0.4–2.5, sides 300–6000 px. Its optional prompt lists six languages, Uzbek is not one, so none is sent.
+ *   Kling Avatar v2  https://fal.ai/models/fal-ai/kling-video/ai-avatar/v2/standard/llms.txt  «$0.0562 per seconds». No audio
+ *                    limit is stated (UNVERIFIED): the length rule below holds, the format as OmniHuman's.
+ * Billing keeps the audio's fractional length, the quote takes whole seconds rounded up from the length to 0.1 s
+ * (`avatarAudioSeconds`, as HeyGen). Output resolution and bitrate are not stated on either page (UNVERIFIED), so 30 s is the
+ * cap until live clip sizes are known: 300 s would never fit the 25 MB result cap, and fal bills a clip we cannot store.
+ */
+export const OMNIHUMAN_MODEL = "bytedance/omnihuman-2";
+export const KLING_AVATAR_MODEL = "kling/ai-avatar-2";
+export const FAL_AVATAR_USD_PER_SECOND = { [OMNIHUMAN_MODEL]: 0.105, [KLING_AVATAR_MODEL]: 0.0562 } as const;
+export const FAL_AVATAR_MAX_SECONDS = 30;
+export const OMNIHUMAN_MIN_SECONDS = 4;
+/** OmniHuman's stated audio limit (the format limit is `FAL_AVATAR_AUDIO_MIMES`). */
+export const OMNIHUMAN_AUDIO_MAX_BYTES = 15 * 1024 * 1024;
+export const FAL_AVATAR_AUDIO_MIMES: readonly string[] = ["audio/mpeg", "audio/wav"];
+/** OmniHuman's stated picture limits (its page, above). */
+export const OMNIHUMAN_IMAGE_DIMS = { minSide: 300, maxSide: 6000, minAspect: 0.4, maxAspect: 2.5 } as const;
+
+function falAvatar(
+  id: keyof typeof FAL_AVATAR_USD_PER_SECOND,
+  label: string,
+  maker: string,
+  badges: CatalogEntry["badges"],
+  endpoint: string,
+  minSeconds: number,
+  dims?: typeof OMNIHUMAN_IMAGE_DIMS,
+): CatalogEntry {
+  return {
+    id,
+    kind: "video",
+    capabilities: ["lipsync"],
+    label,
+    maker,
+    badges,
+    params: [
+      { name: OWN_AUDIO_PARAM, label: "O‘z ovozingiz", hint: "«Ovoz» bo‘limida yaratilgan ovoz — surat shuni gapiradi", type: "text", min: 0, max: 36, affects: "request" },
+      { ...START_IMAGE, label: "Avatar surati", min: 1, ...(dims ? { dims } : {}) },
+      // Set from the speech's length (`withAvatarSeconds`) on both sides; never a form row.
+      { name: "seconds", label: "Davomiylik", hint: "Ovoz uzunligidan hisoblanadi", type: "int", min: minSeconds, max: FAL_AVATAR_MAX_SECONDS, step: 1, default: 10, affects: "price" },
+    ],
+    cost: { per: "second", usd: FAL_AVATAR_USD_PER_SECOND[id], secondsParam: "seconds" },
+    routes: [{ provider: "fal", upstreamModel: endpoint, adapter: "fal-avatar" }],
+    defaultOff: true,
+    limits: VIDEO_LIMITS,
+    output: VIDEO_OUT,
+  };
+}
+
+export const FAL_AVATAR_ENTRIES: readonly CatalogEntry[] = [
+  falAvatar(OMNIHUMAN_MODEL, "OmniHuman v2", "ByteDance", ["sifatli", "yangi"], "bytedance/omnihuman/v2", OMNIHUMAN_MIN_SECONDS, OMNIHUMAN_IMAGE_DIMS),
+  falAvatar(KLING_AVATAR_MODEL, "Kling Avatar v2", "Kuaishou", ["arzon", "yangi"], "fal-ai/kling-video/ai-avatar/v2/standard", 1),
+];
+
+/** The photo avatars: they speak only an own speech, a photo is required. */
+export const isPhotoAvatarModel = (id: string): boolean => FAL_AVATAR_ENTRIES.some((e) => e.id === id);
+
+/** An avatar model: its length follows the inputs, it may take an own speech. */
+export const isAvatarModel = (id: string): boolean => id === HEYGEN_MODEL || isPhotoAvatarModel(id);
+
+/** The shortest own speech a model takes (seconds). */
+export const avatarMinSeconds = (id: string): number => (id === OMNIHUMAN_MODEL ? OMNIHUMAN_MIN_SECONDS : 1);
+/** The longest own speech a model takes (seconds). */
+export const avatarMaxSeconds = (id: string): number => (isPhotoAvatarModel(id) ? FAL_AVATAR_MAX_SECONDS : HEYGEN_MAX_SECONDS);
 
 /**
  * Models whose image → video request has no aspect (the canvas follows the start frame): Kling 4.0, Kling 3.0 and the fal models.
  * The form hides their «O'lcham» row while a start image is set (P4 review N3). Gemini Omni keeps it (it sends it).
  */
-export const ASPECT_FOLLOWS_IMAGE: ReadonlySet<string> = new Set([...KLING_V4_ENTRIES, ...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, ...SORA_ENTRIES].map((e) => e.id));
+export const ASPECT_FOLLOWS_IMAGE: ReadonlySet<string> = new Set([...KLING_V4_ENTRIES, ...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, ...SORA_ENTRIES, ...FAL_VIDEO_P11_ENTRIES].map((e) => e.id));
 
-/** Every Studio video entry, picker order: Kling 4.0, Kling 3.0 tiers, the fal models (P4), Sora 2 (P9), HeyGen (P9), the effect templates last. */
-export const STUDIO_VIDEO_ENTRIES: readonly CatalogEntry[] = [...KLING_V4_ENTRIES, ...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, ...SORA_ENTRIES, HEYGEN_ENTRY, KLING_EFFECTS_ENTRY];
+/** Every Studio video entry, picker order: Kling 4.0, Kling 3.0 tiers, the fal models (P4), Sora 2 (P9), package F's models, the avatars (HeyGen, then fal's), the effect templates last (fal's first). */
+export const STUDIO_VIDEO_ENTRIES: readonly CatalogEntry[] = [...KLING_V4_ENTRIES, ...KLING_V3_ENTRIES, ...FAL_VIDEO_ENTRIES, ...SORA_ENTRIES, ...FAL_VIDEO_P11_ENTRIES, HEYGEN_ENTRY, ...FAL_AVATAR_ENTRIES, ...FAL_EFFECT_ENTRIES, KLING_EFFECTS_ENTRY];
 
 /** Length of an effect clip (the result page, the short-clip refund). */
 export const STUDIO_EFFECT_SECONDS = KLING_EFFECT_SECONDS;

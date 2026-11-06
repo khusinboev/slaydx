@@ -132,7 +132,7 @@ async function err(p: Promise<unknown>): Promise<InstanceType<typeof MediaError>
 /* ───────────────────────── pure ───────────────────────── */
 
 test("catalog: four P2b entries in their own purposes; the picture list is unchanged", () => {
-  assert.deepEqual(MEDIA_PURPOSES.byId("studio.edit")!.allowed, [NANO_EDIT, SEED_EDIT]);
+  assert.deepEqual(MEDIA_PURPOSES.byId("studio.edit")!.allowed, [NANO_EDIT, SEED_EDIT, "meta/muse-edit", "bfl/flux-klein-edit"]);
   assert.deepEqual(MEDIA_PURPOSES.byId("studio.upscale")!.allowed, [UPSCALE]);
   assert.deepEqual(MEDIA_PURPOSES.byId("studio.bgremove")!.allowed, [BRIA]);
   assert.deepEqual(MEDIA_CATALOG.byId(NANO_EDIT)!.capabilities, ["edit"]);
@@ -140,7 +140,7 @@ test("catalog: four P2b entries in their own purposes; the picture list is uncha
   assert.deepEqual(MEDIA_CATALOG.byId(BRIA)!.capabilities, ["bg-remove"]);
   assert.deepEqual(MEDIA_CATALOG.byId(BRIA)!.output.mimes, ["image/png"]);
   for (const id of [NANO_EDIT, SEED_EDIT, UPSCALE, BRIA]) assert.ok(!MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.allowed.includes(id), `${id} is not a picture model`);
-  assert.equal(FAL_IMAGE_MODELS.length, 6, "the six P2a models only");
+  assert.equal(FAL_IMAGE_MODELS.length, 8, "the six P2a models and package F's two, no edit model");
   // Each Studio model belongs to exactly one Studio purpose (the route and the engine rely on it).
   const all = STUDIO_PURPOSES.flatMap((p) => MEDIA_PURPOSES.byId(p)!.allowed);
   assert.equal(new Set(all).size, all.length);

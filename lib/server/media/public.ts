@@ -1,7 +1,7 @@
 import "server-only";
 import { resolveModel, type ClientEntry } from "../../studio-core";
 import { MEDIA_CATALOG, MEDIA_PURPOSES, STUDIO_PURPOSES } from "../../media/catalog";
-import { KLING_EFFECT_SCENES, STUDIO_VIDEO_PURPOSE } from "../../media/catalog-video";
+import { ALL_EFFECT_SCENES, STUDIO_VIDEO_PURPOSE } from "../../media/catalog-video";
 import type { MediaPricing } from "../../media/studio-pricing";
 import { ApiError } from "../api";
 import { query } from "../db";
@@ -139,7 +139,7 @@ const num = (v: unknown): number | null => (typeof v === "number" && Number.isFi
 
 function videoOf(id: string, raw: unknown): GalleryVideo {
   const v = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-  const effect = KLING_EFFECT_SCENES.find((e) => e.id === v.effect) ?? null;
+  const effect = ALL_EFFECT_SCENES.find((e) => e.id === v.effect) ?? null;
   return {
     src: `/api/generations/${id}/file?inline=1`,
     seconds: num(v.seconds),

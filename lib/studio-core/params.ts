@@ -22,9 +22,18 @@ export type EnumParam = ParamBase & { type: "enum"; options: readonly { value: s
 export type IntParam = ParamBase & { type: "int"; min: number; max: number; step?: number; default: number };
 export type NumberParam = ParamBase & { type: "number"; min: number; max: number; default: number };
 export type BoolParam = ParamBase & { type: "bool"; default: boolean };
-export type TextParam = ParamBase & { type: "text"; min: number; max: number; default?: string };
+/** `maxBytes`: the provider counts UTF-8 bytes, not characters (a Cyrillic letter is 2, «ʻ» 3, an emoji 4). */
+export type TextParam = ParamBase & { type: "text"; min: number; max: number; maxBytes?: number; default?: string };
 /** Uploaded asset ids (the host checks ownership); `min` (default 0) to `max` ids. */
-export type ImageParam = ParamBase & { type: "image"; min?: number; max: number; mimes: readonly string[]; maxBytes: number };
+export type ImageParam = ParamBase & {
+  type: "image";
+  min?: number;
+  max: number;
+  mimes: readonly string[];
+  maxBytes: number;
+  /** The provider's picture limits, read from the uploaded bytes before charging (`lib/server/media/inputs.ts`). */
+  dims?: { minSide: number; maxSide: number; minAspect: number; maxAspect: number };
+};
 export type VoiceParam = ParamBase & { type: "voice"; source: "catalog" | "user-clones"; default?: string };
 
 export type ParamSchema = EnumParam | IntParam | NumberParam | BoolParam | TextParam | ImageParam | VoiceParam;
@@ -114,6 +123,7 @@ export function validate(schema: readonly ParamSchema[], raw: Readonly<Record<st
         break;
       case "text":
         if (normalizeText(v, p.max).length < p.min) return `${p.label}: kamida ${p.min} ta belgi yozing`;
+        if (p.maxBytes !== undefined && new TextEncoder().encode(normalizeText(v, p.max)).length > p.maxBytes) return `${p.label}: matn juda uzun — qisqartiring`;
         break;
       case "image": {
         const ids = idsOf(v);

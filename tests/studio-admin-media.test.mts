@@ -54,7 +54,7 @@ const generationsRoute = await import("../app/api/generations/route.ts");
 const NANO = "google/nano-banana";
 const GPT = "openai/gpt-image";
 /** P3: the Studio Video tab's models, listed after the pictures (Gemini Omni + Kling 3.0 tiers + effects); P4 adds the fal models. */
-const STUDIO_VIDEO_IDS = ["google/omni-video", "kling/kling-4", "kling/kling-4-flash", "kling/kling-3", "kling/kling-3-pro", "alibaba/wan-3", "bytedance/seedance-2.5", "bytedance/seedance-2-mini", "minimax/h3", "minimax/h3-max-turbo", "openai/sora-2", "openai/sora-2-pro", "heygen/avatar", "kling/effects"];
+const STUDIO_VIDEO_IDS = ["google/omni-video", "kling/kling-4", "kling/kling-4-flash", "kling/kling-3", "kling/kling-3-pro", "alibaba/wan-3", "bytedance/seedance-2.5", "bytedance/seedance-2-mini", "minimax/h3", "minimax/h3-max-turbo", "openai/sora-2", "openai/sora-2-pro", "xai/grok-imagine-lite", "pixverse/v6", "alibaba/happy-horse", "heygen/avatar", "bytedance/omnihuman-2", "kling/ai-avatar-2", "pixverse/effects", "kling/effects-v16", "kling/effects"];
 /** P5: the «Ovoz» tab's speech models, listed after the video ones; one unit = 1 000 characters (the clone is a fixed price, not here). */
 const STUDIO_SPEECH_IDS = ["elevenlabs/eleven-v3", "google/gemini-tts", "elevenlabs/eleven-v3-fal", "elevenlabs/eleven-v4-turbo-fal", "elevenlabs/v3-dialogue", "google/gemini-dialogue"];
 /**
@@ -96,14 +96,20 @@ const FAL_USD: Record<string, number> = {
   "ideogram/ideogram": 0.06,
   "recraft/recraft": 0.035,
   "recraft/recraft-pro": 0.21,
+  "meta/muse": 0.01,
+  "bfl/flux-klein": 0.009,
 };
 /** P2b (docs/studio/P2B-SPEC.md): the edit / upscale / background-removal models, managed by the same block. */
 const P2B_USD: Record<string, number> = {
   "google/nano-banana-edit": IMAGE_PRICES["gemini-3.1-flash-lite-image"]!,
   "bytedance/seedream-edit": 0.035,
+  "meta/muse-edit": 0.01,
+  "bfl/flux-klein-edit": 0.036,
   "bytedance/seedvr-upscale": 0.0168,
   "bria/background-remove": 0.018,
 };
+/** P11 package F: listed and priced here, but `defaultOff`: off with no row until the admin's switch. */
+const HIDDEN_IMAGE_IDS = ["meta/muse", "bfl/flux-klein", "meta/muse-edit", "bfl/flux-klein-edit"];
 const USD: Record<string, number> = { [NANO]: IMAGE_PRICES["gemini-3.1-flash-lite-image"]!, [GPT]: OPENAI_IMAGE_FALLBACK_USD, ...FAL_USD, ...P2B_USD };
 const STUDIO = TOOL_BY_ID["studio-image"];
 const REASON = "Provayder narxi oshgani uchun ustama tuzatildi";
@@ -234,8 +240,8 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
       assert.equal(m.price, await effectivePrice(STUDIO, { modelId: m.modelId, imageCount: 1 }), "the charging function");
       assert.equal(m.marginSoum, Math.round((m.price - m.costSoum) * 100) / 100);
       assert.ok(m.marginPct > 0 && m.marginPct < 100);
-      assert.equal(m.enabled, true);
-      assert.equal(m.available, true);
+      assert.equal(m.enabled, !HIDDEN_IMAGE_IDS.includes(m.modelId), m.modelId);
+      assert.equal(m.available, !HIDDEN_IMAGE_IDS.includes(m.modelId), m.modelId);
       assert.equal(m.providerReady, true);
       assert.equal(m.markupOverride, null);
     }
@@ -365,7 +371,7 @@ test("Media modellari: read, roles, write + audit, conflicts, effect on the pric
     assert.equal(nano.enabled, false);
     assert.equal(nano.available, false);
     const c = await catalog();
-    assert.deepEqual(c.body.models.map((m: { id: string }) => m.id), [GPT, ...Object.keys(FAL_USD)]);
+    assert.deepEqual(c.body.models.map((m: { id: string }) => m.id), [GPT, ...Object.keys(FAL_USD).filter((id) => !HIDDEN_IMAGE_IDS.includes(id))]);
     assert.equal(c.body.defaultModelId, GPT);
     const buyer = await mkUser(100_000);
     await query("DELETE FROM rate_limits WHERE bucket LIKE 'gen:%'");

@@ -85,6 +85,9 @@ const IDEO = "ideogram/ideogram";
 const RECR = "recraft/recraft";
 const RECP = "recraft/recraft-pro";
 const FAL_IDS = [FLUX, SEED, SEEDP, IDEO, RECR, RECP];
+/** Studio P11 package F: hidden until the admin's switch, so the availability checks below stay on the six (own checks: studio-media-providers). */
+const MUSE = "meta/muse";
+const KLEIN = "bfl/flux-klein";
 const ENDPOINT: Record<string, string> = {
   [FLUX]: "blackforestlabs/flux-3/text-to-image",
   [SEED]: "bytedance/seedream/v5/lite/text-to-image",
@@ -92,6 +95,8 @@ const ENDPOINT: Record<string, string> = {
   [RECR]: "fal-ai/recraft/v4.1/text-to-image",
   [SEEDP]: "bytedance/seedream/v5/pro/text-to-image",
   [RECP]: "fal-ai/recraft/v4.1/pro/text-to-image",
+  [MUSE]: "meta/muse-image/text-to-image",
+  [KLEIN]: "blackforestlabs/flux-3/klein/text-to-image",
 };
 
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]), Buffer.alloc(3000, 7)]);
@@ -449,7 +454,7 @@ test("text prompt: quoted texts, the instruction, the no-text clause kept byte f
 
 test("text models: only the catalog entries sold as text-capable (badge «matn»)", () => {
   const text = MEDIA_CATALOG.entries.filter((e) => e.kind === "image" && e.badges.includes("matn")).map((e) => e.id);
-  assert.deepEqual(text, ["openai/gpt-image", IDEO]);
+  assert.deepEqual(text, ["openai/gpt-image", IDEO, MUSE, "meta/muse-edit"]);
 });
 
 test("«Rasm» keeps the no-text prompt: the provider request of the old tool carries the clause, even with quotes", async (t) => {
@@ -504,8 +509,8 @@ test("price goldens per model × count at ×2, 12 700 so'm/$ (rounded up to 100)
   );
   for (const id of [FLUX, SEED, SEEDP, RECR, RECP]) assert.equal(costUsd(MEDIA_CATALOG.byId(id)!.cost, normalize(MEDIA_CATALOG.byId(id)!.params, { imageCount: 2 })), 2 * IMAGE_PRICES[ENDPOINT[id]!]!);
   // Studio purpose: Nano Banana stays the default, the fal models follow in catalog order.
-  assert.deepEqual(MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.allowed.slice(2), FAL_IDS);
-  assert.deepEqual([...FAL_IMAGE_MODELS], FAL_IDS);
+  assert.deepEqual(MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.allowed.slice(2), [...FAL_IDS, MUSE, KLEIN]);
+  assert.deepEqual([...FAL_IMAGE_MODELS], [...FAL_IDS, MUSE, KLEIN]);
   assert.equal(MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.default, "google/nano-banana");
   for (const id of FAL_IDS) {
     const e = MEDIA_CATALOG.byId(id)!;

@@ -12,6 +12,7 @@ import { burnVideoKbps } from "../../generation/studio/burn-args";
 import { mediaSeconds } from "../../generation/studio/mix-media";
 import type { SpeechToolCtx } from "../../generation/studio/transcribe";
 import { MEDIA_UPLOAD_PARAM, clearMediaUpload } from "./jobs";
+import { STUDIO_VIDEO_PURPOSE } from "../../media/catalog-video";
 import type { FormValues } from "../../types";
 
 /**
@@ -134,7 +135,8 @@ export const DUB_ORPHAN_GRACE_MIN = 2;
  * not kept there. A re-queued job is left alone (its re-run resumes the op).
  *
  * P11: then the sources those stopped jobs left on fal's CDN, whatever their row's status (a worker can die between the upload
- * and the park). The window is the files' own expiry and a little more: after that there is nothing to delete.
+ * and the park). The window is the files' own expiry and a little more: after that there is nothing to delete. A photo avatar's
+ * audio (`studio.video`) is swept here too; a live clip is left alone, its generation stays IN_PROGRESS while the op runs.
  */
 export async function studioDubHousekeeping(deps: { cancel?: (opId: string) => Promise<unknown>; dropUpload?: (url: string) => Promise<unknown> } = {}): Promise<{ closed: number; deleted: number; uploads: number }> {
   const rows = await query<{ op_id: string | null }>(
@@ -163,10 +165,10 @@ export async function studioDubHousekeeping(deps: { cancel?: (opId: string) => P
   const left = await query<{ id: string; url: string }>(
     `SELECT mj.id, mj.params ->> $1 AS url
        FROM media_jobs mj
-      WHERE mj.provider = 'fal' AND mj.purpose = $2 AND mj.params ? $1
+      WHERE mj.provider = 'fal' AND mj.purpose = ANY($2::text[]) AND mj.params ? $1
         AND mj.created_at < now() - $3::int * interval '1 minute' AND mj.created_at > now() - interval '2 hours'
         AND NOT EXISTS (SELECT 1 FROM generations g WHERE g.id = mj.generation_id AND g.status IN ('QUEUED', 'IN_PROGRESS'))`,
-    [MEDIA_UPLOAD_PARAM, STUDIO_DUB_PURPOSE, DUB_ORPHAN_GRACE_MIN],
+    [MEDIA_UPLOAD_PARAM, [STUDIO_DUB_PURPOSE, STUDIO_VIDEO_PURPOSE], DUB_ORPHAN_GRACE_MIN],
   );
   const drop = deps.dropUpload ?? (async (url: string) => (await import("../../media/adapters/fal-dub")).falDubAdapter().dropInput!(url));
   for (const r of left) {
