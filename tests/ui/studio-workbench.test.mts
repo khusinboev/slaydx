@@ -259,6 +259,16 @@ test("source on another tab: neither priced nor sent; its own tab brings it back
 });
 
 test("a dub's own video states and keeps the dub's real size limit", async () => {
+  api();
+  const inner = globalThis.fetch;
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) =>
+    String(input).startsWith("/api/media/catalog?purpose=studio.audio") ? json(200, { purpose: "studio.audio", defaultModelId: AUDIO[0]!.id, models: [...AUDIO, by("elevenlabs/dubbing")], pricing: RATE }) : inner(input as never, init);
+  await mount();
+  await tab("audio");
+  await click(q('[data-audio-mode-chip="dub"]'));
+  await settle();
+  await click(qa('[data-field="source"] [role="radio"]').find((b) => b.textContent === "Video yuklash"));
+  assert.match(q("[data-video-input]")!.textContent ?? "", /24 MB gacha/, "MUTATSIYA: the form states the dub's limit, not 25 MB");
   const { videoBlocker } = await import("../../components/studio/audio/audio-api.ts");
   const { DUB_VIDEO_MAX_BYTES } = await import("../../lib/media/catalog-transcribe.ts");
   const file = (size: number, name = "a.mp4", type = "video/mp4") => ({ size, name, type });
