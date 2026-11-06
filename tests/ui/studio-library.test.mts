@@ -274,7 +274,7 @@ test("enhance: sends the prompt, writes the rewrite back; disabled under 3 chara
   await click(q('[data-prompt-tool="enhance"]'));
   await settle();
   const call = api.calls.find((c) => c.url === "/api/media/enhance");
-  assert.deepEqual(call?.body, { prompt: "Registon" });
+  assert.deepEqual(call?.body, { prompt: "Registon", kind: "image" });
   assert.equal(prompt()!.value, "Samarqand Registon maydoni, oltin soat, keng burchakli kadr");
   assert.equal(api.posts().length, 0, "free: nothing is generated");
 });

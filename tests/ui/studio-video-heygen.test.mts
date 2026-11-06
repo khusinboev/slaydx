@@ -154,6 +154,7 @@ test("own speech: only known lengths ≤ 1 min listed; picking one hides the scr
   assert.ok(!q("[data-video-prompt]"), "the script box hides");
   assert.ok(!q('[data-field="voice"]') && !q('[data-field="language"]'), "MUTATSIYA: voice / language rows kept with an own speech");
   assert.ok(q('[data-field="avatar"]') && q('[data-field="engine"]') && q('[data-field="aspect"]'));
+  assert.ok(!q('[data-prompt-tool="enhance"]'), "the script is the product: no rewrite");
   assert.equal(button(), `Yaratish · 13 soniya · ${formatSom(price(13))}`, "12.3 s → 13 s");
   await click(q("[data-studio-submit]"));
   await settle();

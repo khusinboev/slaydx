@@ -9,6 +9,16 @@ import { STUDIO_INPUT_ACCEPT } from "./ImageInputs";
 const TOOL =
   "focus-visible:ring-ring bg-muted/70 hover:bg-muted pointer-coarse:min-h-11 inline-flex min-h-9 items-center gap-1.5 rounded-[12px] px-3 text-[13.5px] font-semibold outline-none focus-visible:ring-2 disabled:opacity-50";
 
+/** «Yaxshilash (AI)»: one button for every prompt box of the Studio. */
+export function EnhanceTool({ disabled, enhancing, onClick }: { disabled: boolean; enhancing: boolean; onClick: () => void }) {
+  return (
+    <button type="button" data-prompt-tool="enhance" disabled={disabled || enhancing} onClick={onClick} className={TOOL} title="Tilni o‘zi aniqlaydi va inglizcha yozadi. Bepul, kuniga cheklangan marta">
+      <Sparkles className="size-4" aria-hidden />
+      {enhancing ? "Yaxshilanmoqda…" : "Yaxshilash (AI)"}
+    </button>
+  );
+}
+
 /**
  * The prompt box of the Studio (canvas «Nimani chizamiz?»): a card with a growing textarea (`AutoTextarea`, no resize
  * handle) and the character counter. `limit` is the `max` of the chosen model's `prompt` text param. The text is kept
@@ -16,7 +26,7 @@ const TOOL =
  *
  * P2b (docs/studio/P2B-SPEC.md) — the canvas's tool row under the text, each button drawn only when the page wires it:
  * «Namuna promptlar» (`onSamples`, the library sheet), «Rasm yuklash» (`onUpload`, a picture → the edit mode) and
- * «Yaxshilash (AI)» (`onEnhance`, a free rewrite the user sees and edits; needs a prompt of at least `min` characters).
+ * «Yaxshilash (AI)» (`onEnhance`, a free English rewrite the user sees and edits; needs a prompt of at least `min` characters).
  */
 export function PromptBox({
   value,
@@ -90,12 +100,7 @@ export function PromptBox({
               />
             </>
           ) : null}
-          {onEnhance ? (
-            <button type="button" data-prompt-tool="enhance" disabled={enhancing || value.trim().length < min} onClick={onEnhance} className={TOOL} title="Bepul, kuniga cheklangan marta">
-              <Sparkles className="size-4" aria-hidden />
-              {enhancing ? "Yaxshilanmoqda…" : "Yaxshilash (AI)"}
-            </button>
-          ) : null}
+          {onEnhance ? <EnhanceTool disabled={value.trim().length < min} enhancing={enhancing} onClick={onEnhance} /> : null}
         </div>
       ) : null}
     </section>

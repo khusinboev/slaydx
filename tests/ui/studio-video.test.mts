@@ -209,6 +209,28 @@ test("text form: video models only, «so'm / N s» cards, schema rows (one data-
   assert.equal(sent.expectedPrice, up100(0.126 * 6 * 12_700 * 2));
 });
 
+test("«Yaxshilash (AI)» in the Video box: sends the prompt as kind video, writes the rewrite back; nothing generated", async () => {
+  const a = api({ video: { ...videoCatalog(), models: [OMNI, K3, K3P, FX] } });
+  const inner = globalThis.fetch;
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) => {
+    if (String(input) !== "/api/media/enhance") return inner(input as never, init);
+    a.calls.push({ url: String(input), method: "POST", body: JSON.parse(String(init?.body)), key: null });
+    return json(200, { prompt: "Slow dolly toward Registon at dawn" });
+  };
+  await mount();
+  await tab("video");
+  await settle();
+  await mode("Matndan / rasmdan");
+  const box = q<HTMLTextAreaElement>("[data-video-prompt] textarea")!;
+  assert.equal(q<HTMLButtonElement>('[data-video-prompt] [data-prompt-tool="enhance"]')!.disabled, true, "empty box");
+  await act(async () => void fireEvent.change(box, { target: { value: "Tongda  Registon" } }));
+  await click(q('[data-video-prompt] [data-prompt-tool="enhance"]'));
+  await settle();
+  assert.deepEqual(a.calls.find((c) => c.url === "/api/media/enhance")?.body, { prompt: "Tongda Registon", kind: "video" });
+  assert.equal(q<HTMLTextAreaElement>("[data-video-prompt] textarea")!.value, "Slow dolly toward Registon at dawn");
+  assert.equal(a.posts().length, 0);
+});
+
 test("results: a running clip shows the progress panel, a finished one plays its own file + download; the bar shows the PAID balance", async () => {
   api();
   useAppStore.setState({ user: { ...USER, points: 900_000, balance: 30_000 } as never });
