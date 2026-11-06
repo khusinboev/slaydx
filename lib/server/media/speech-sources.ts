@@ -12,6 +12,7 @@ import { burnVideoKbps } from "../../generation/studio/burn-args";
 import { mediaSeconds } from "../../generation/studio/mix-media";
 import type { SpeechToolCtx } from "../../generation/studio/transcribe";
 import { MEDIA_UPLOAD_PARAM, clearMediaUpload } from "./jobs";
+import { ownVideoInput, videoInputBytes } from "./audio-inputs";
 import type { FormValues } from "../../types";
 
 /**
@@ -19,8 +20,8 @@ import type { FormValues } from "../../types";
  * BEFORE anything is charged, and the worker's view of a job's source.
  *
  * A source is the caller's OWN input, by reference (`catalog-transcribe.ts parseSource`):
- *   `upload:<id>`   a `studio_audio_inputs` row (`WHERE id = $1 AND user_id = $2`) — WAV / MP3, or (P11 §D) the user's
- *                   own MP4 uploaded with `kind=video`; its billed seconds, its kind from the row's mime;
+ *   `upload:<id>`   a `studio_audio_inputs` row (`WHERE id = $1 AND user_id = $2`) — WAV / MP3 — or (P11 §D) a
+ *                   `studio_video_inputs` row, the user's own MP4 uploaded with `kind=video`; its billed seconds;
  *   `result:<id>`   a finished result that fits the «Montaj» `video` or `audio` role (`mix-sources.ts`, the same SQL:
  *                   `g.user_id = $1 AND status = 'COMPLETED' AND files_purged_at IS NULL`).
  * Another user's id is the same answer as a missing one (400 `input_missing`). The BILLED seconds come from the server
@@ -60,13 +61,15 @@ async function resolveSource(userId: string, raw: unknown): Promise<Resolved> {
   const ref = parseSource(raw);
   if (!ref) throw new ApiError("Avval manbani tanlang: audio yuklang yoki natijalaringizdan birini tanlang.", 400, { code: "input_invalid" });
   if (ref.kind === "upload") {
-    const row = await queryOne<{ mime: string; seconds: string; billed_seconds: number; size_bytes: string }>(
-      "SELECT mime, seconds, billed_seconds, size_bytes FROM studio_audio_inputs WHERE id = $1 AND user_id = $2",
+    const row = await queryOne<{ seconds: string; billed_seconds: number; size_bytes: string }>(
+      "SELECT seconds, billed_seconds, size_bytes FROM studio_audio_inputs WHERE id = $1 AND user_id = $2",
       [ref.id, userId],
     );
-    if (!row) throw MISSING("Yuklangan fayl");
-    // P11 §D: an upload is a video when its row says so (`kind=video` at upload, the bytes sniffed as an MP4).
-    return { kind: row.mime === "video/mp4" ? "video" : "audio", seconds: Number(row.seconds), billed: Number(row.billed_seconds), size: Number(row.size_bytes) };
+    if (row) return { kind: "audio", seconds: Number(row.seconds), billed: Number(row.billed_seconds), size: Number(row.size_bytes) };
+    // P11 §D: the user's own video upload (`studio_video_inputs`, the same owner-only SQL).
+    const clip = await ownVideoInput(userId, ref.id);
+    if (!clip) throw MISSING("Yuklangan fayl");
+    return { kind: "video", seconds: clip.seconds, billed: clip.billedSeconds, size: clip.size };
   }
   const row = await ownMixRow(userId, ref.id);
   const kind = row && fitsRole(row, "video") ? "video" : row && fitsRole(row, "audio") ? "audio" : null;
@@ -111,7 +114,9 @@ export async function speechToolJobCtx(userId: string, values: FormValues): Prom
   if (!ref) return { source: null };
   if (ref.kind === "upload") {
     const row = await queryOne<{ mime: string; bytes: Buffer; seconds: string }>("SELECT mime, bytes, seconds FROM studio_audio_inputs WHERE id = $1 AND user_id = $2", [ref.id, userId]);
-    return { source: row ? { kind: "upload", id: ref.id, mime: row.mime, bytes: new Uint8Array(row.bytes), seconds: Number(row.seconds) } : null };
+    if (row) return { source: { kind: "upload", id: ref.id, mime: row.mime, bytes: new Uint8Array(row.bytes), seconds: Number(row.seconds) } };
+    const clip = await videoInputBytes(userId, ref.id);
+    return { source: clip ? { kind: "upload", id: ref.id, mime: clip.mime, bytes: clip.bytes, seconds: clip.seconds } : null };
   }
   const row = await ownMixRow(userId, ref.id);
   if (!row || !(fitsRole(row, "video") || fitsRole(row, "audio"))) return { source: null };

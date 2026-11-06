@@ -10,12 +10,12 @@ import { inRequest } from "./helpers/next-request.mts";
 
 /**
  * Studio P11 §D: «Dublyaj» and «Transkripsiya» take the user's OWN video upload through the P6 audio-inputs path
- * (`POST /api/media/audio-inputs` with `kind=video`, the same `studio_audio_inputs` row, migration 075 widens its mime).
+ * (`POST /api/media/audio-inputs` with `kind=video`), stored in the sibling table `studio_video_inputs` (migration 075).
  *
  * Locked here:
- *   - `kind=video` + a real MP4 → 200 `{ id, seconds, mime: video/mp4 }`, the row's mime is 'video/mp4', the billed seconds
- *     are the whole seconds of `moov/mvhd`; without `kind=video` the same MP4 is a 415 (the P6 modes never see a video);
- *     `kind=video` + an MP3 is a 415;
+ *   - `kind=video` + a real MP4 → 200 `{ id, seconds, mime: video/mp4 }`, a `studio_video_inputs` row (never an audio
+ *     row), the billed seconds are the whole seconds of `moov/mvhd`; without `kind=video` the same MP4 is a 415 (the P6
+ *     modes never see a video); `kind=video` + an MP3 is a 415;
  *   - the speech tools resolve the upload as a VIDEO source: a burn is allowed on it, the video-only HeyGen model takes it,
  *     the server's billed seconds replace the request's; the worker reads it back with its mime;
  *   - the P6 voice changer / isolator REFUSE a video upload as their input (400 `input_missing`);
@@ -24,9 +24,9 @@ import { inRequest } from "./helpers/next-request.mts";
  * Mutations (each turned the named test red, then restored):
  *   `uploadAudioInput` sniffs audio whatever `kind` says                         -> «upload» (the 200);
  *   `uploadAudioInput` sniffs video without `kind=video`                         -> «upload» (the 415 of the plain MP4);
- *   `resolveSource` returns kind "audio" for every upload                        -> «speech tools» (the burn is refused);
- *   `ownAudioInput` without `AND mime <> 'video/mp4'`                            -> «P6 modes refuse»;
- *   `resolveSource` upload lookup without `AND user_id = $2`                     -> «ownership».
+ *   `resolveSource` without the video-table fallback                             -> «speech tools» (the source is missing);
+ *   `ownAudioInput` reading the video table too                                  -> «P6 modes refuse»;
+ *   `ownVideoInput` without `AND user_id = $2`                                   -> «ownership».
  */
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
@@ -102,10 +102,11 @@ test("upload: kind=video + a real MP4 is stored as video/mp4 with its seconds; t
   assert.equal(ok.body.mime, "video/mp4", "MUTATSIYA: the row is a video");
   assert.equal(ok.body.seconds, 2, "the whole seconds of moov/mvhd");
   const { query } = await db();
-  const row = (await query<{ mime: string; billed_seconds: number; user_id: string }>("SELECT mime, billed_seconds, user_id::text FROM studio_audio_inputs WHERE id = $1", [ok.body.id]))[0]!;
-  assert.equal(row.mime, "video/mp4");
+  const row = (await query<{ mime: string; billed_seconds: number; user_id: string }>("SELECT mime, billed_seconds, user_id::text FROM studio_video_inputs WHERE id = $1", [ok.body.id]))[0]!;
+  assert.equal(row.mime, "video/mp4", "the sibling table of the audio inputs (migration 075)");
   assert.equal(Number(row.billed_seconds), 2);
   assert.equal(row.user_id, me);
+  assert.equal((await query("SELECT 1 FROM studio_audio_inputs WHERE id = $1", [ok.body.id])).length, 0, "MUTATSIYA: never an audio row");
   // Without `kind=video` the MP4 is no audio: the P6 modes never receive a video through the plain path.
   const plain = await upload(cookie, videoMp4(), "clip.mp4");
   assert.equal(plain.status, 415, "MUTATSIYA: a video through the audio path");

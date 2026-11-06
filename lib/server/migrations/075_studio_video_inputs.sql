@@ -1,23 +1,29 @@
 -- Studio P11 §D (docs/studio/P11-SPEC.md): «Dublyaj» and «Transkripsiya» accept the user's OWN video upload, through the
--- same upload path and table as the P6 audio inputs (`studio_audio_inputs`): the row's `mime` may now be 'video/mp4'
--- (type sniffed from the bytes, length read from `moov/mvhd`, 1 s – 3 min, ≤ 25 MB). The P6 modes (voice changer,
--- isolator) still read audio rows only (`lib/server/media/audio-inputs.ts ownAudioInput`) and still refuse audio under 3 s
--- in the app; ownership stays `user_id` in every SQL.
+-- same upload route and reader as the P6 audio inputs (`POST /api/media/audio-inputs` with `kind=video`,
+-- `lib/server/media/audio-inputs.ts`), stored in a sibling table of `studio_audio_inputs` (069) with the same shape:
 --
--- Additive only: the CHECK on `mime` widens by one value, the CHECK on `billed_seconds` lowers its floor to 1 (a one-second
--- clip); no column, row or index changes. The constraints keep the names Postgres gave them at creation (069), so a
--- rollback restores the exact old shape.
+-- studio_video_inputs: one MP4 (type sniffed from the bytes, a picture track required, length read from `moov/mvhd`,
+--   1 s – 3 min, ≤ 25 MB). `id` is 24 random hex characters made by the app (never the content hash). `seconds` is the
+--   measured length, `billed_seconds` the whole seconds the job is priced on (rounded up). Reads are owner-only (SQL
+--   `user_id`); the P6 audio modes never read this table, so a video can never become a voice-changer input.
+--   Housekeeping deletes rows older than 1 day, as for the audio inputs.
+--
+-- Additive only: one new table and its indexes, nothing existing changes.
 --
 -- ROLLBACK:
---   DELETE FROM studio_audio_inputs WHERE mime = 'video/mp4' OR billed_seconds < 3;
---   ALTER TABLE studio_audio_inputs DROP CONSTRAINT IF EXISTS studio_audio_inputs_mime_check;
---   ALTER TABLE studio_audio_inputs ADD CONSTRAINT studio_audio_inputs_mime_check CHECK (mime IN ('audio/wav', 'audio/mpeg'));
---   ALTER TABLE studio_audio_inputs DROP CONSTRAINT IF EXISTS studio_audio_inputs_billed_seconds_check;
---   ALTER TABLE studio_audio_inputs ADD CONSTRAINT studio_audio_inputs_billed_seconds_check CHECK (billed_seconds BETWEEN 3 AND 300);
+--   DROP TABLE IF EXISTS studio_video_inputs;
 --   DELETE FROM schema_migrations WHERE name = '075_studio_video_inputs.sql';
 SET LOCAL lock_timeout = '5s';
 
-ALTER TABLE studio_audio_inputs DROP CONSTRAINT IF EXISTS studio_audio_inputs_mime_check;
-ALTER TABLE studio_audio_inputs ADD CONSTRAINT studio_audio_inputs_mime_check CHECK (mime IN ('audio/wav', 'audio/mpeg', 'video/mp4'));
-ALTER TABLE studio_audio_inputs DROP CONSTRAINT IF EXISTS studio_audio_inputs_billed_seconds_check;
-ALTER TABLE studio_audio_inputs ADD CONSTRAINT studio_audio_inputs_billed_seconds_check CHECK (billed_seconds BETWEEN 1 AND 300);
+CREATE TABLE IF NOT EXISTS studio_video_inputs (
+  id              TEXT         PRIMARY KEY CHECK (id ~ '^[0-9a-f]{24}$'),
+  user_id         BIGINT       NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  mime            TEXT         NOT NULL CHECK (mime = 'video/mp4'),
+  size_bytes      INTEGER      NOT NULL CHECK (size_bytes BETWEEN 1 AND 26214400),
+  seconds         NUMERIC(7,2) NOT NULL CHECK (seconds > 0),
+  billed_seconds  INTEGER      NOT NULL CHECK (billed_seconds BETWEEN 1 AND 180),
+  bytes           BYTEA        NOT NULL,
+  created_at      TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS studio_video_inputs_user_idx ON studio_video_inputs (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS studio_video_inputs_age_idx ON studio_video_inputs (created_at);

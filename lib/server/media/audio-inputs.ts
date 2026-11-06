@@ -87,8 +87,9 @@ export function videoInputError(s: { mime: string; seconds: number } | null): { 
  * goes as is). Answer: `{ id, seconds }` — `seconds` is the BILLED length (whole seconds, rounded up), the same number
  * the server will price with.
  *
- * P11 §D: with `kind=video` the file is an MP4 for «Dublyaj» / «Transkripsiya» (the same row, `mime` 'video/mp4', the
- * same owner-only reads and housekeeping); without it a video is refused as before, so the P6 audio modes never see one.
+ * P11 §D: with `kind=video` the file is an MP4 for «Dublyaj» / «Transkripsiya», stored in the sibling table
+ * `studio_video_inputs` (migration 075; the same shape, the same owner-only reads and housekeeping); without it a video is
+ * refused as before, and the P6 audio modes read the audio table only, so they never see one.
  */
 export async function uploadAudioInput(req: Request, userId: string): Promise<AudioInputResult> {
   const form = await readUploadForm(req, AUDIO_INPUT_MAX_BYTES + 64 * 1024, "Fayl 25 MB dan katta");
@@ -102,15 +103,19 @@ export async function uploadAudioInput(req: Request, userId: string): Promise<Au
   const sniffed = video ? sniffVideo(new Uint8Array(bytes)) : sniffAudio(new Uint8Array(bytes));
   const bad = video ? videoInputError(sniffed) : audioInputError(sniffed);
   if (bad) throw new ApiError(bad.message, bad.status, { code: "input_invalid" });
-  const held = await query<{ n: string }>("SELECT COALESCE(SUM(size_bytes), 0)::text AS n FROM studio_audio_inputs WHERE user_id = $1", [userId]);
+  // One quota over both tables: the user's held uploads, audio and video together.
+  const held = await query<{ n: string }>(
+    "SELECT (COALESCE((SELECT SUM(size_bytes) FROM studio_audio_inputs WHERE user_id = $1), 0) + COALESCE((SELECT SUM(size_bytes) FROM studio_video_inputs WHERE user_id = $1), 0))::text AS n",
+    [userId],
+  );
   if (Number(held[0]?.n ?? 0) + bytes.byteLength > AUDIO_INPUT_USER_MAX_BYTES) {
-    throw new ApiError("Yuklangan audio fayllar hajmi chegarada. Ular 1 kundan keyin o‘chadi — keyinroq urinib ko‘ring.", 429, { code: "input_quota" });
+    throw new ApiError("Yuklangan fayllar hajmi chegarada. Ular 1 kundan keyin o‘chadi — keyinroq urinib ko‘ring.", 429, { code: "input_quota" });
   }
   // Ids are made here (never the content hash): the same file of two users is two rows, each the uploader's own.
   const id = randomBytes(12).toString("hex");
   const billed = billedSeconds(sniffed!.seconds);
   await query(
-    "INSERT INTO studio_audio_inputs (id, user_id, mime, size_bytes, seconds, billed_seconds, bytes) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+    `INSERT INTO ${video ? "studio_video_inputs" : "studio_audio_inputs"} (id, user_id, mime, size_bytes, seconds, billed_seconds, bytes) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [id, userId, sniffed!.mime, bytes.byteLength, Math.round(sniffed!.seconds * 100) / 100, billed, bytes],
   );
   return { id, seconds: billed, mime: sniffed!.mime, size: bytes.byteLength };
@@ -119,13 +124,27 @@ export async function uploadAudioInput(req: Request, userId: string): Promise<Au
 const ID_RE = /^[0-9a-f]{24}$/;
 
 /**
- * The user's own AUDIO input: its billed seconds (owner-only, SQL), `null` when it is not theirs / gone — or a video
- * (P11: a video upload belongs to the speech tools; the voice changer and the isolator take audio only).
+ * The user's own AUDIO input: its billed seconds (owner-only, SQL), `null` when it is not theirs / gone. A video upload
+ * (P11, `studio_video_inputs`) is never one: the voice changer and the isolator take audio only.
  */
 export async function ownAudioInput(userId: string, id: string): Promise<{ billedSeconds: number } | null> {
   if (!ID_RE.test(id)) return null;
-  const row = await queryOne<{ billed_seconds: number }>("SELECT billed_seconds FROM studio_audio_inputs WHERE id = $1 AND user_id = $2 AND mime <> $3", [id, userId, VIDEO_INPUT_MIME]);
+  const row = await queryOne<{ billed_seconds: number }>("SELECT billed_seconds FROM studio_audio_inputs WHERE id = $1 AND user_id = $2", [id, userId]);
   return row ? { billedSeconds: Number(row.billed_seconds) } : null;
+}
+
+/** P11 §D: the user's own video upload (owner-only, SQL), `null` when it is not theirs / gone. */
+export async function ownVideoInput(userId: string, id: string): Promise<{ seconds: number; billedSeconds: number; size: number } | null> {
+  if (!ID_RE.test(id)) return null;
+  const row = await queryOne<{ seconds: string; billed_seconds: number; size_bytes: string }>("SELECT seconds, billed_seconds, size_bytes FROM studio_video_inputs WHERE id = $1 AND user_id = $2", [id, userId]);
+  return row ? { seconds: Number(row.seconds), billedSeconds: Number(row.billed_seconds), size: Number(row.size_bytes) } : null;
+}
+
+/** The worker's read of a video upload: the owner's own bytes (SQL), `null` when gone / not theirs. */
+export async function videoInputBytes(userId: string, id: string): Promise<{ mime: string; bytes: Uint8Array; seconds: number } | null> {
+  if (!ID_RE.test(id)) return null;
+  const row = await queryOne<{ mime: string; bytes: Buffer; seconds: string }>("SELECT mime, bytes, seconds FROM studio_video_inputs WHERE id = $1 AND user_id = $2", [id, userId]);
+  return row ? { mime: row.mime, bytes: new Uint8Array(row.bytes), seconds: Number(row.seconds) } : null;
 }
 
 /**
@@ -154,7 +173,7 @@ export async function studioAudioJobCtx(userId: string, values: FormValues): Pro
   if (entry && takesAudioInput(entry)) {
     const id = String(values.inputId ?? "").trim();
     const row = ID_RE.test(id)
-      ? await queryOne<{ mime: string; bytes: Buffer; billed_seconds: number }>("SELECT mime, bytes, billed_seconds FROM studio_audio_inputs WHERE id = $1 AND user_id = $2 AND mime <> $3", [id, userId, VIDEO_INPUT_MIME])
+      ? await queryOne<{ mime: string; bytes: Buffer; billed_seconds: number }>("SELECT mime, bytes, billed_seconds FROM studio_audio_inputs WHERE id = $1 AND user_id = $2", [id, userId])
       : null;
     if (row) input = { mime: row.mime, base64: row.bytes.toString("base64"), seconds: Number(row.billed_seconds) };
   }
@@ -163,8 +182,9 @@ export async function studioAudioJobCtx(userId: string, values: FormValues): Pro
   return { input, clones: clones.clones, touch: clones.touch };
 }
 
-/** Housekeeping: inputs older than a day are deleted (a job runs within minutes of its upload). */
+/** Housekeeping: inputs older than a day are deleted (a job runs within minutes of its upload) — the video uploads too. */
 export async function studioAudioInputsHousekeeping(): Promise<{ deleted: number }> {
   const rows = await query("DELETE FROM studio_audio_inputs WHERE created_at < now() - interval '1 day' RETURNING id");
-  return { deleted: rows.length };
+  const videos = await query("DELETE FROM studio_video_inputs WHERE created_at < now() - interval '1 day' RETURNING id");
+  return { deleted: rows.length + videos.length };
 }
