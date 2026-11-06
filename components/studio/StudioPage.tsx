@@ -42,7 +42,8 @@ import { fillSkeleton, type StudioTemplate } from "@/lib/media/library";
 import { STUDIO_TOOL_SLUG } from "./studio-entry";
 import { STUDIO_TOOL_ID, outputCount, studioPrice } from "./studio-price";
 import type { GalleryItem, MediaCatalog, StudioPricing } from "./studio-types";
-import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, promptMin, promptParam, requestValues, type RawValues } from "./studio-values";
+import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, promptMin, promptParam, requestValues, switchNotice, type RawValues } from "./studio-values";
+import { SwitchNotice } from "./SwitchNotice";
 import { draftKey, useDraft } from "./useDraft";
 import { parseAudioDraft, parseRasmDraft, parseVideoDraft, parseVoiceDraft } from "./studio-drafts";
 import { STUDIO_TABS, modeFromSearch, studioSearch, tabFromSearch, type StudioTab } from "./studio-url";
@@ -118,6 +119,7 @@ function StudioApp() {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [template, setTemplate] = useState<{ t: StudioTemplate; slots: Record<string, string> } | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [switchText, setSwitchText] = useState<string | null>(null);
 
   const setChosen = useCallback((id: string) => setRasm((s) => patchRasmForm(s, (f) => ({ ...f, chosen: id }))), []);
   const setRaw = useCallback((fn: (prev: RawValues) => RawValues) => setRasm((s) => patchRasmForm(s, (f) => ({ ...f, raw: fn(f.raw) }))), []);
@@ -307,6 +309,8 @@ function StudioApp() {
   function selectModel(id: string) {
     const next = catalog?.models.find((m) => m.id === id);
     if (!next) return;
+    // P11 §D: what the new model drops or changes is said in one line, not reset in silence.
+    setSwitchText(entry && entry.id !== next.id ? switchNotice(entry, next, raw) : null);
     setChosen(id);
     setRaw((prev) => carryOver(next, prev));
   }
@@ -498,6 +502,7 @@ function StudioApp() {
       {template ? <TemplateSlots template={template.t} values={template.slots} onChange={setSlot} onClose={() => setTemplate(null)} /> : null}
       {libraryOpen ? <LibrarySheet onPick={setPrompt} onClose={() => setLibraryOpen(false)} /> : null}
       <MediaModelPicker purpose={purpose} catalog={catalog} value={entry.id} values={values} onChange={selectModel} open={pickerOpen} onOpenChange={setPickerOpen} />
+      <SwitchNotice text={switchText} onClose={() => setSwitchText(null)} />
       <ParamRows entry={entry} raw={raw} onChange={setParam} />
       <SubmitError error={error} gated={gated} />
       <PriceButton count={count} price={price} balance={balance} loading={submitting} disabled={false} typing={typing} onSubmit={submit} />

@@ -16,20 +16,46 @@ import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
 import type { StudioJob } from "../StudioResults";
 import { VideoResults } from "../video/VideoResults";
 import { VoiceResults } from "../voice/VoiceResults";
-import { MIX_PICKERS, STUDIO_MIX_SLUG, STUDIO_MIX_TOOL_ID, fetchMixSources, mixClientPrice, mixEntryOf, type MixSource, type MixSources, type MixTabState } from "./mix-api";
+import { useApiSrc } from "@/lib/use-api-src";
+import { MIX_PICKERS, STUDIO_MIX_SLUG, STUDIO_MIX_TOOL_ID, fetchMixSources, mixClientPrice, mixEntryOf, type MixRole, type MixSource, type MixSources, type MixTabState } from "./mix-api";
 
 /** «Kuy · Musiqa · 30 s». */
 export function sourceLabel(s: MixSource): string {
   return `${s.title} · ${s.kind}${s.seconds ? ` · ${Math.round(s.seconds)} s` : ""}`;
 }
 
-/** Why «Montaj qilish» cannot send yet (Uzbek), `null` when it can: both pickers need a result. */
-export function mixBlocker(mode: MixMode, raw: RawValues): string | null {
+/**
+ * Why «Montaj qilish» cannot send yet (Uzbek), `null` when it can: both pickers need a result; the audio must start inside
+ * the video (`videoSeconds` = the picked video's length when known — the server's own rule, said before the press).
+ */
+export function mixBlocker(mode: MixMode, raw: RawValues, videoSeconds: number | null = null): string | null {
   const [a, b] = MIX_INPUTS[mode];
   const [pa, pb] = MIX_PICKERS[mode];
   if (!raw[a]) return `${pa.label}ni tanlang.`;
   if (!raw[b]) return `${pb.label}ni tanlang.`;
+  if (mode === "video-voice" && videoSeconds !== null && Number(raw.startOffset ?? 0) >= videoSeconds) {
+    return `Audio boshlanishi videodan qisqa bo‘lsin (video ${Math.floor(videoSeconds)} soniya).`;
+  }
   return null;
+}
+
+/** The last second the audio may start at inside a video of `seconds` (the schema's own cap when the length is unknown). */
+export function startOffsetMax(videoSeconds: number | null): number | undefined {
+  return videoSeconds === null ? undefined : Math.max(0, Math.ceil(videoSeconds) - 1);
+}
+
+/** The picked source's own file, played in place («audition»): a clip for the video role, a player for the rest. */
+function SourceAudition({ id, role }: { id: string; role: MixRole }) {
+  const src = useApiSrc(`/api/generations/${id}/file?inline=1`);
+  return role === "video" ? (
+    <video className="mt-1.5 w-full rounded-[12px] bg-black" controls playsInline preload="none" src={src} data-mix-audition={role}>
+      Brauzeringiz videoni qo‘llab-quvvatlamaydi.
+    </video>
+  ) : (
+    <audio className="mt-1.5 w-full" controls preload="none" src={src} data-mix-audition={role}>
+      Brauzeringiz audio pleerni qo‘llab-quvvatlamaydi.
+    </audio>
+  );
 }
 
 /** «Montaj qilish · Videoga ovoz qo'shish · ~500 so'm». */
@@ -87,7 +113,9 @@ export function MixPanel({
   const pickers = MIX_PICKERS[mode];
   const ids = MIX_INPUTS[mode];
   const formEntry = { ...m.entry, params: m.entry.params.filter((p) => !ids.includes(p.name)) };
-  const blocker = mixBlocker(mode, raw);
+  // The picked video's length (when the list knows it): the start offset is capped to it, in the row and before the press.
+  const videoSeconds = mode === "video-voice" ? (sources?.video.find((s) => s.id === String(raw[ids[0]] ?? ""))?.seconds ?? null) : null;
+  const blocker = mixBlocker(mode, raw, videoSeconds);
   const price = sources ? mixClientPrice() : null;
 
   const setParam = (name: string, value: unknown) => setState((s) => ({ ...s, raw: { ...s.raw, [mode]: { ...(s.raw[mode] ?? {}), [name]: value } } }));
@@ -205,6 +233,7 @@ export function MixPanel({
                     ) : (
                       <SelectField ariaLabel={pk.label} options={options} value={value} onChange={(v) => setParam(name, v)} />
                     )}
+                    {value ? <SourceAudition id={value} role={pk.role} /> : null}
                   </Field>
                 </div>
               );
@@ -218,7 +247,7 @@ export function MixPanel({
         )}
       </Card>
 
-      <ParamRows entry={formEntry} raw={raw} onChange={setParam} />
+      <ParamRows entry={formEntry} raw={raw} onChange={setParam} limits={{ startOffset: { max: startOffsetMax(videoSeconds) } }} />
 
       <SubmitError error={error} gated={gated} />
       <PriceButton

@@ -18,7 +18,8 @@ import { STUDIO_AUDIO_LISTING } from "../studio-api";
 import { ParamRows } from "../ParamRows";
 import { PriceButton } from "../PriceButton";
 import { SubmitError } from "../SubmitError";
-import { requestValues } from "../studio-values";
+import { noticeLine, requestValues, switchParts } from "../studio-values";
+import { SwitchNotice } from "../SwitchNotice";
 import { useStudioSend } from "../useStudioSend";
 import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
 import type { StudioJob } from "../StudioResults";
@@ -184,10 +185,14 @@ export function SpeechToolPanel({
     void send(job.sent, target);
   }
 
+  const [switchText, setSwitchText] = useState<string | null>(null);
   function pickModel(id: string) {
     const next = entries.find((e) => e.id === id);
     if (!next || next.id === entry.id) return;
     setError(null);
+    // P11 §D: what the switch drops is said — a setting, or the audio source a video-only model cannot take.
+    const dropsSource = videoOnlySource(next.id) && Boolean(raw.source) && st.kind !== "video";
+    setSwitchText(noticeLine(next, [...switchParts(entry, next, raw), ...(dropsSource ? ["manba olib tashlandi — bu model faqat videoni oladi"] : [])]));
     setState((s) => pickSpeechModel(s, next));
   }
 
@@ -221,6 +226,7 @@ export function SpeechToolPanel({
             priceOf={(m) => `~${groupDigits(speechToolClientPrice(mode, m, requestValues(m, { ...raw, sourceSeconds: 60 }), pricing))} so'm / 1 daq`}
             labelOf={(m) => audioModelLabel(m, modeLabel)}
           />
+          <SwitchNotice text={switchText} onClose={() => setSwitchText(null)} />
         </div>
       ) : null}
       <Card title="Manba">

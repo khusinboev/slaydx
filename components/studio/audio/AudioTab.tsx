@@ -21,7 +21,8 @@ import { STUDIO_AUDIO_LISTING, type CatalogLoad } from "../studio-api";
 import { SubmitError } from "../SubmitError";
 import { useStudioSend } from "../useStudioSend";
 import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
-import { carryOver, effective, requestValues, type RawValues } from "../studio-values";
+import { carryOver, effective, requestValues, switchNotice, type RawValues } from "../studio-values";
+import { SwitchNotice } from "../SwitchNotice";
 import type { StudioJob } from "../StudioResults";
 import { VoiceList, VoicesState, voiceRows, type VoiceFilter } from "../voice/VoiceList";
 import { VoiceResults } from "../voice/VoiceResults";
@@ -115,6 +116,7 @@ export function AudioTab({
   const promptId = useId();
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [switchText, setSwitchText] = useState<string | null>(null);
   const { submitting, error, setError, send: queue } = useStudioSend((refused) => {
     reload(true);
     if (refused && needsVoices) loadVoices();
@@ -243,6 +245,8 @@ export function AudioTab({
     const next = entries.find((e) => e.id === id);
     if (!next || next.id === entry.id) return;
     setError(null);
+    // P11 §D: a setting the new model drops or changes is said in one line (the ElevenLabs «1 daq» has no Lyria value).
+    setSwitchText(switchNotice(entry, next, raw));
     setState((s) => ({ ...s, models: { ...s.models, [mode]: next.id }, raw: { ...s.raw, [mode]: carryOver(next, s.raw[mode] ?? {}) } }));
   };
 
@@ -326,6 +330,7 @@ export function AudioTab({
             priceOf={(m) => audioCardPrice(m, raw, catalog.pricing)}
             labelOf={(m) => audioModelLabel(m, modeLabel)}
           />
+          <SwitchNotice text={switchText} onClose={() => setSwitchText(null)} />
         </div>
       ) : null}
 

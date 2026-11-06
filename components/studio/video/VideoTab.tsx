@@ -21,7 +21,8 @@ import { SubmitError } from "../SubmitError";
 import { useStudioSend } from "../useStudioSend";
 import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
 import type { MediaCatalog } from "../studio-types";
-import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, promptMin, requestValues, type RawValues } from "../studio-values";
+import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, promptMin, requestValues, switchNotice, type RawValues } from "../studio-values";
+import { SwitchNotice } from "../SwitchNotice";
 import type { StudioJob } from "../StudioResults";
 import { VideoResults } from "./VideoResults";
 import { STUDIO_VIDEO_SLUG, STUDIO_VIDEO_TOOL_ID, clipSeconds, isEffect, studioVideoClientPrice, videoCardPrice } from "./video-price";
@@ -205,9 +206,12 @@ export function VideoTab({
     setError,
   );
 
+  const [switchText, setSwitchText] = useState<string | null>(null);
   function selectModel(id: string) {
     const next = split.models.find((m) => m.id === id);
     if (!next) return;
+    // P11 §D: what the new model drops or changes is said in one line, not reset in silence.
+    setSwitchText(model && model.id !== next.id ? switchNotice(model, next, state.raw) : null);
     // The photos stay across a model switch (`carryOver` keeps the end frame when the new model takes one).
     setState((s) => ({ ...s, chosen: id, raw: { ...carryOver(next, s.raw), ...(s.raw[IMAGE_PARAM] ? { [IMAGE_PARAM]: s.raw[IMAGE_PARAM] } : {}) } }));
   }
@@ -416,6 +420,7 @@ export function VideoTab({
             // The avatar's card shows the length its inputs buy (`avatarRequest`), as its button does.
             priceOf={(m) => videoCardPrice(m, isAvatarModel(m.id) ? avatarRequest(m, flatImage(requestValues(m, state.raw)), speeches ?? []) : effective(m, state.raw), catalog.pricing)}
           />
+          <SwitchNotice text={switchText} onClose={() => setSwitchText(null)} />
           {avatar ? (
             <Card title="Avatar ovozi">
               <Row label="O‘z ovozingiz" hint="Ixtiyoriy: «Ovoz» bo‘limidagi tayyor ovoz (1 daqiqagacha) — avatar matn o‘rniga shuni gapiradi" wide>

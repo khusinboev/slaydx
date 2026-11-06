@@ -19,7 +19,8 @@ import { PriceButton } from "../PriceButton";
 import { STUDIO_SPEECH_PURPOSE, type CatalogLoad } from "../studio-api";
 import { SubmitError } from "../SubmitError";
 import type { MediaCatalog } from "../studio-types";
-import { carryOver, effective, type RawValues } from "../studio-values";
+import { carryOver, effective, switchNotice, type RawValues } from "../studio-values";
+import { SwitchNotice } from "../SwitchNotice";
 import type { StudioJob } from "../StudioResults";
 import { useStudioJobs } from "../useStudioJobs";
 import { useStudioSend } from "../useStudioSend";
@@ -135,9 +136,12 @@ export function VoiceTab({
   const patch = (change: Partial<VoiceTabState>) => setState((s) => ({ ...s, ...change }));
   const setParam = (name: string, value: unknown) => setState((s) => ({ ...s, raw: { ...s.raw, [name]: value } }));
 
+  const [switchText, setSwitchText] = useState<string | null>(null);
   function selectModel(id: string) {
     const next = models.find((m) => m.id === id);
     if (!next) return;
+    // P11 §D: a setting the new model drops or changes is said in one line.
+    setSwitchText(entry && entry.id !== next.id ? switchNotice(entry, next, state.raw) : null);
     setState((s) => {
       const kept = carryOver(next, s.raw);
       // The spoken text stays as typed (carryOver clips text params; line breaks matter for a dialogue).
@@ -344,6 +348,7 @@ export function VoiceTab({
         onOpenChange={setPickerOpen}
         priceOf={(m) => speechCardPrice(m, catalog.pricing)}
       />
+      <SwitchNotice text={switchText} onClose={() => setSwitchText(null)} />
 
       <Card title="Ovoz">
         {vparams.length > 1 ? (

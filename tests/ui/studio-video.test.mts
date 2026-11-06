@@ -192,7 +192,9 @@ test("text form: video models only, «so'm / N s» cards, schema rows (one data-
   assert.deepEqual(names, K3.params.map((p) => p.name).sort(), "one data-field per schema param");
   assert.equal(new Set(names).size, names.length);
   assert.equal(button(), `Yaratish · 5 soniya · ${formatSom(10_700)}`);
-  await click(q('[data-field="seconds"] [aria-label="Davomiylik: ko‘paytirish"]'));
+  // P11 §D: a long range is preset chips + a direct input; 6 is no preset of 3–15, it is typed.
+  assert.deepEqual(qa('[data-field="seconds"] [data-preset]').map((b) => b.textContent), ["3", "5", "8", "10", "15"]);
+  await act(async () => void fireEvent.change(q('[data-field="seconds"] input[type="number"]')!, { target: { value: "6" } }));
   assert.equal(button(), `Yaratish · 6 soniya · ${formatSom(up100(0.084 * 6 * 12_700 * 2))}`);
   await click(q('[data-field="sound"] [role="switch"]'));
   assert.equal(button(), `Yaratish · 6 soniya · ${formatSom(up100(0.126 * 6 * 12_700 * 2))}`);
