@@ -23,9 +23,12 @@ export type CompareBatch = { group: string; prompt: string; ids: string[] };
 const ACTION =
   "focus-visible:ring-ring bg-card hover:bg-muted inline-flex min-h-11 items-center justify-center gap-1.5 rounded-[12px] border px-3 text-[13.5px] font-semibold outline-none focus-visible:ring-2 disabled:opacity-50";
 
-/** Columns of a batch of `n`: phone one column; from `sm` two; from `lg` one per model (2–4). */
+/**
+ * Columns of a batch of `n`, by the width of the results COLUMN, not of the screen (beside the form on a tablet it is
+ * 360 px): one until 32 rem, then two; three models from 56 rem, a fourth wraps. A cell stays wide enough for its progress panel.
+ */
 export function gridCols(n: number): string {
-  return cn("grid grid-cols-1 gap-3 sm:grid-cols-2", n >= 3 && "lg:grid-cols-3", n >= 4 && "xl:grid-cols-4");
+  return cn("grid grid-cols-1 gap-3 @lg:grid-cols-2", n >= 3 && "@4xl:grid-cols-3");
 }
 
 /**
@@ -57,7 +60,7 @@ export function CompareResults({
   if (batches.length === 0) return null;
   const byId = new Map(jobs.map((j) => [j.id, j]));
   return (
-    <div className="flex flex-col gap-5" data-compare-results aria-label="Solishtirish natijalari">
+    <div className="@container flex flex-col gap-5" data-compare-results aria-label="Solishtirish natijalari">
       {batches.map((b) => (
         <section key={b.group} data-compare-batch={b.group} aria-label={`Solishtirish: ${b.prompt}`}>
           <p className="text-muted-foreground mb-2 line-clamp-2 text-[13.5px] break-words" data-compare-prompt>

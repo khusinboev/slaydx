@@ -15,6 +15,7 @@ const { dropMediaCatalog } = await import("../../components/studio/studio-api.ts
 const { formatSom } = await import("../../lib/format.ts");
 const { resetCompareKey } = await import("../../components/studio/compare/compare-api.ts");
 const { specLine } = await import("../../components/studio/model-specs.ts");
+const { gridCols } = await import("../../components/studio/compare/CompareResults.tsx");
 const { COMPARE_MAX, compareBatch, compareLabel, compareModels, compareRange, droppedLine, droppedParams, sharedParams, toggleModel } = await import("../../components/studio/compare/compare-model.ts");
 
 /**
@@ -305,6 +306,13 @@ test("P11 §D: a failed cell is retried alone through the tab's tool at its own 
   assert.equal(cells()[0]!.dataset.jobStatus, "COMPLETED", "the retried job's own state");
   assert.ok(!cells()[0]!.querySelector('[data-compare-action="retry"]'));
   assert.equal(cells()[1]!.dataset.jobStatus, "COMPLETED");
+});
+
+test("P11 §D: a batch's columns follow the results column, never the screen (a tablet's column is 360 px)", () => {
+  for (const n of [2, 3, 4]) assert.ok(!/(^|\s)(sm|md|lg|xl):grid-cols/.test(gridCols(n)), "MUTATSIYA: the progress panel crushed in a narrow column");
+  assert.match(gridCols(2), /@lg:grid-cols-2/);
+  assert.ok(!gridCols(2).includes("grid-cols-3"), "two models, two columns");
+  assert.match(gridCols(3), /@4xl:grid-cols-3/);
 });
 
 test("P11 §D: the tick range reads «2–4», and just «2» when the session's cap leaves no range", () => {
