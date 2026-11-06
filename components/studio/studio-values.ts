@@ -1,4 +1,4 @@
-import { normalize, validate, type ClientEntry, type ParamSchema } from "@/lib/studio-core";
+import { normalize, normalizeText, validate, type ClientEntry, type ParamSchema } from "@/lib/studio-core";
 
 /**
  * Form state of the Studio is a bag of RAW values keyed by the model's param names (`prompt` is the text exactly as
@@ -19,6 +19,26 @@ export function promptParam(entry: ClientEntry): Extract<ParamSchema, { type: "t
 export function promptLimit(entry: ClientEntry): number {
   return promptParam(entry)?.max ?? 2000;
 }
+
+/** A prompt over a model's `maxBytes` (the provider counts UTF-8 bytes): what the box says before the click. */
+export type PromptBytes = { used: number; max: number };
+
+/**
+ * The first of `entries` whose byte limit the prompt breaks, as the server will read it (normalized), `null` when it fits. The
+ * same rule as `validate`, so the form and the server's 400 agree. Compare mode passes every ticked model.
+ */
+export function promptBytes(entries: readonly ClientEntry[], text: string): PromptBytes | null {
+  for (const entry of entries) {
+    const max = promptParam(entry)?.maxBytes;
+    if (max === undefined) continue;
+    const used = new TextEncoder().encode(normalizeText(text, promptLimit(entry))).length;
+    if (used > max) return { used, max };
+  }
+  return null;
+}
+
+/** The refusal of a prompt over its byte limit (the note under the box, the submit's error). */
+export const PROMPT_BYTES_MESSAGE = "Matn bu model uchun juda uzun — qisqartiring";
 
 export function promptMin(entry: ClientEntry): number {
   return promptParam(entry)?.min ?? 1;

@@ -48,7 +48,7 @@ function costParams(rule: CostRule): string[] {
     case "output":
       return [rule.countParam, rule.by?.param].filter((x): x is string => !!x);
     case "second":
-      return [rule.secondsParam, rule.countParam, rule.by?.param].filter((x): x is string => !!x);
+      return [rule.secondsParam, rule.countParam, rule.by?.param, rule.plus?.param].filter((x): x is string => !!x);
     case "kchar":
       return [rule.textParam];
   }

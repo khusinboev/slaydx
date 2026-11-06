@@ -94,9 +94,9 @@ async function choose(id: string) {
 }
 
 test("eight models: row of 3, the sheet lists all eight with their own price, chips from their badges, a fal pick", async () => {
-  // The real Studio purpose sells exactly these eight, in this order.
+  // The real Studio purpose sells these eight, in this order; P11 package F's two follow, hidden until the admin's switch.
   const { MEDIA_PURPOSES, STUDIO_IMAGE_PURPOSE } = await import("../../lib/media/catalog.ts");
-  assert.deepEqual(MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.allowed, EIGHT.map((m) => m.id));
+  assert.deepEqual(MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE)!.allowed, [...EIGHT.map((m) => m.id), "meta/muse", "bfl/flux-klein"]);
   installApi({ catalog: catalogBody(EIGHT, PRICING, NANO.id) });
   await mount();
   assert.equal(qa("[data-model-picker] [data-model-card]").length, 3);

@@ -9,7 +9,7 @@ import { Card, Row, Segmented, SelectField } from "@/components/forms/compact";
 import { Counter, Field } from "@/components/forms/shared";
 import { PhotoField } from "@/components/forms/PhotoField";
 import { ENHANCE_MIN } from "@/lib/media/enhance";
-import { EnhanceTool } from "../PromptBox";
+import { EnhanceTool, PromptBytesNote } from "../PromptBox";
 import { usePromptEnhance } from "../usePromptEnhance";
 import { photoHint } from "@/lib/photo-accept";
 import { CatalogState } from "../CatalogState";
@@ -21,14 +21,14 @@ import { SubmitError } from "../SubmitError";
 import { useStudioSend } from "../useStudioSend";
 import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
 import type { MediaCatalog } from "../studio-types";
-import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, promptMin, requestValues, switchNotice, type RawValues } from "../studio-values";
+import { PROMPT_BYTES_MESSAGE, PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptBytes, promptLimit, promptMin, requestValues, switchNotice, type PromptBytes, type RawValues } from "../studio-values";
 import { SwitchNotice } from "../SwitchNotice";
 import type { StudioJob } from "../StudioResults";
 import { VideoResults } from "./VideoResults";
 import { STUDIO_VIDEO_SLUG, STUDIO_VIDEO_TOOL_ID, clipSeconds, isEffect, studioVideoClientPrice, videoCardPrice } from "./video-price";
-import { ASPECT_FOLLOWS_IMAGE, END_IMAGE_PARAM, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, avatarAudioSeconds, avatarScriptProblem, effectPhotos, isAvatarModel } from "@/lib/media/catalog-video";
+import { ASPECT_FOLLOWS_IMAGE, END_IMAGE_PARAM, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, avatarAudioSeconds, avatarMaxSeconds, avatarMinSeconds, avatarScriptProblem, effectNeedsPair, effectPhotoHint, effectPhotos, isAvatarModel, isPhotoAvatarModel } from "@/lib/media/catalog-video";
 import { fetchMixSources } from "../audio/mix-api";
-import { avatarHiddenParams, avatarRequest, avatarSpeeches, type SpeechSource } from "./avatar";
+import { avatarHiddenParams, avatarRequest, avatarSpeeches, avatarSpeechesFor, type SpeechSource } from "./avatar";
 
 /** «Shablon effektlar» (one photo → a ready clip) or «Matndan / rasmdan» (a model + a prompt, optional start image). */
 export type VideoMode = "effects" | "text";
@@ -42,6 +42,8 @@ export type VideoTabState = {
   raw: RawValues;
   /** Chosen effect scene id (`null` = the first one). */
   effect: string | null;
+  /** P11: the provider of the effects, when several are on (`null` / absent = the first one). */
+  effectModel?: string | null;
   /** The effect's photo (`photo_uploads.asset_id`). */
   effectImage: string;
   /** P4: the second photo of a two-photo effect («Quchoqlash»); sent only for such a scene. */
@@ -61,9 +63,10 @@ const END_PARAM = END_IMAGE_PARAM;
 const SECOND_PARAM = SECOND_IMAGE_PARAM;
 
 /** The catalog split: the effect templates and the text/image → video models (each in catalog order). */
-export function splitVideoCatalog(catalog: MediaCatalog | null): { effects: ClientEntry | null; models: ClientEntry[] } {
+export function splitVideoCatalog(catalog: MediaCatalog | null): { effects: ClientEntry | null; effectModels: ClientEntry[]; models: ClientEntry[] } {
   const all = catalog?.models ?? [];
-  return { effects: all.find(isEffect) ?? null, models: all.filter((m) => !isEffect(m)) };
+  const effectModels = all.filter(isEffect);
+  return { effects: effectModels[0] ?? null, effectModels, models: all.filter((m) => !isEffect(m)) };
 }
 
 /** P7b: the text/image models that take a start image (`imageAssetId`), in catalog order. */
@@ -159,11 +162,15 @@ export function VideoTab({
   const split = fromPicture ? { ...all, models: startImageModels(all.models) } : all;
   const mode = shownMode(state, split);
 
-  const options = effectOptions(split.effects);
+  // P11: the user picks a provider, then one of its effects; a scene the provider does not sell falls back to its first.
+  const effectEntry = split.effectModels.find((m) => m.id === state.effectModel) ?? split.effects;
+  const options = effectOptions(effectEntry);
   const effect = options.find((o) => o.value === state.effect) ?? options[0] ?? null;
   const model = textEntry(split.models, catalog, state.chosen);
   // P9 HeyGen: the user's finished speech results, loaded once the avatar model is on screen (`null` = not loaded yet).
   const avatar = mode === "text" && model !== null && isAvatarModel(model.id);
+  // P11: a photo avatar speaks only an own speech, within its length limits, and needs its photo.
+  const photoAvatar = avatar && isPhotoAvatarModel(model.id);
   const [speeches, setSpeeches] = useState<SpeechSource[] | null>(null);
   const [speechError, setSpeechError] = useState<string | null>(null);
   useEffect(() => {
@@ -177,14 +184,15 @@ export function VideoTab({
       live = false;
     };
   }, [avatar, speeches]);
+  const fitting = avatar ? avatarSpeechesFor(speeches ?? [], model.id) : [];
 
   // What goes out and what it costs, for the side on screen.
   let entry: ClientEntry | null = null;
   let sent: Record<string, unknown> = {};
   let what = "";
-  const twoPhotos = effect ? effectPhotos(effect.value) === 2 : false;
-  if (mode === "effects" && split.effects && effect) {
-    entry = split.effects;
+  const twoPhotos = effect && effectEntry ? effectPhotos(effect.value, effectEntry.id) === 2 : false;
+  if (mode === "effects" && effectEntry && effect) {
+    entry = effectEntry;
     // The second photo goes out only for a two-photo scene (the server refuses it on a single-photo one).
     sent = { modelId: entry.id, effect: effect.value, [IMAGE_PARAM]: state.effectImage, ...(twoPhotos ? { [SECOND_PARAM]: state.effectImage2 ?? "" } : {}) };
     what = `«${effect.label}»`;
@@ -242,11 +250,19 @@ export function VideoTab({
     }
     if (isAvatarModel(entry.id)) {
       const own = String(sent[OWN_AUDIO_PARAM] ?? "");
-      if (own && !(speeches ?? []).some((s) => s.id === own)) {
+      if (own && !fitting.some((s) => s.id === own)) {
         setError("Tanlangan ovoz topilmadi — ro‘yxatdan qayta tanlang");
         return;
       }
-      if (!own && String(sent[PROMPT_PARAM] ?? "").length < HEYGEN_SCRIPT_MIN) {
+      if (photoAvatar && !own) {
+        setError("Avatar uchun «Ovoz» bo‘limidagi ovozingizni tanlang");
+        return;
+      }
+      if (photoAvatar && !state.raw[IMAGE_PARAM]) {
+        setError("Avatar suratini yuklang");
+        return;
+      }
+      if (!own && !photoAvatar && String(sent[PROMPT_PARAM] ?? "").length < HEYGEN_SCRIPT_MIN) {
         setError(`Avatar aytadigan matnni yozing (kamida ${HEYGEN_SCRIPT_MIN} ta belgi) yoki o‘z ovozingizni tanlang`);
         return;
       }
@@ -261,6 +277,10 @@ export function VideoTab({
     }
     if (normalizedPrompt(entry, state.raw).length < promptMin(entry)) {
       setError("Videoda nima bo‘lishini yozing (kamida 5 ta belgi)");
+      return;
+    }
+    if (promptBytes([entry], String(state.raw[PROMPT_PARAM] ?? ""))) {
+      setError(PROMPT_BYTES_MESSAGE);
       return;
     }
     // An end frame without a start cannot be built here (the upload waits for the start; removing the start clears it);
@@ -337,6 +357,33 @@ export function VideoTab({
 
       {mode === "effects" ? (
         <>
+          {split.effectModels.length > 1 ? (
+            <Card title="Provayder">
+              <Field id="modelId">
+                <div role="group" aria-label="Provayder" className="grid grid-cols-2 gap-2" data-effect-providers>
+                  {split.effectModels.map((m) => {
+                    const on = effectEntry?.id === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        aria-pressed={on}
+                        data-effect-provider={m.id}
+                        onClick={() => patch({ effectModel: m.id })}
+                        className={cn(
+                          "bg-muted/60 focus-visible:ring-ring flex min-h-11 flex-col justify-center rounded-[14px] border-2 px-2.5 py-1.5 text-left outline-none focus-visible:ring-2",
+                          on ? "border-primary" : "border-transparent",
+                        )}
+                      >
+                        <span className="text-[13.5px] leading-tight font-semibold">{m.label}</span>
+                        <span className="text-muted-foreground text-[12.5px] tabular-nums">{videoCardPrice(m, {}, catalog.pricing)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+            </Card>
+          ) : null}
           <Card title="Effekt">
             <Field id="effect">
               <div role="group" aria-label="Effekt" className="grid grid-cols-3 gap-2" data-effects-grid>
@@ -363,7 +410,7 @@ export function VideoTab({
             </Field>
           </Card>
           <Card title="Surat">
-            <Row label="Surat" hint="Yuz yoki odam aniq ko‘rinsin" wide>
+            <Row label="Surat" hint={effectPhotoHint(effect?.value, effectEntry?.id ?? "")} wide>
               <Field id={IMAGE_PARAM}>
                 <PhotoField
                   assetId={state.effectImage}
@@ -375,6 +422,11 @@ export function VideoTab({
                   onChange={(v) => patch({ effectImage: v.assetId })}
                 />
               </Field>
+              {effectNeedsPair(effect?.value, effectEntry?.id ?? "") ? (
+                <p className="text-muted-foreground mt-1 text-[13px]" data-effect-note>
+                  {effectPhotoHint(effect?.value, effectEntry?.id ?? "")}
+                </p>
+              ) : null}
             </Row>
             {twoPhotos ? (
               <Row label="Ikkinchi surat" hint="Effekt ikki kishini birga ko‘rsatadi: har biri o‘z suratida" wide>
@@ -400,11 +452,12 @@ export function VideoTab({
               Rasmdan video: rasmingiz birinchi kadr bo‘ladi. Faqat suratdan video yarata oladigan modellar ko‘rsatilgan.
             </p>
           ) : null}
-          {avatar && ownAudio ? null : (
+          {avatar && (ownAudio || photoAvatar) ? null : (
             <VideoPromptBox
               value={String(state.raw[PROMPT_PARAM] ?? "")}
               onChange={(v) => setParam(PROMPT_PARAM, v)}
               limit={promptLimit(textModel)}
+              bytes={promptBytes([textModel], String(state.raw[PROMPT_PARAM] ?? ""))}
               {...(avatar ? {} : { onEnhance: () => void enhance(), enhancing })}
               {...(avatar ? { label: "Avatar nima desin?", placeholder: "Masalan: Assalomu alaykum! Bugun sizga yangi kursimiz haqida gapirib beraman." } : {})}
             />
@@ -423,7 +476,15 @@ export function VideoTab({
           <SwitchNotice text={switchText} onClose={() => setSwitchText(null)} />
           {avatar ? (
             <Card title="Avatar ovozi">
-              <Row label="O‘z ovozingiz" hint="Ixtiyoriy: «Ovoz» bo‘limidagi tayyor ovoz (1 daqiqagacha) — avatar matn o‘rniga shuni gapiradi" wide>
+              <Row
+                label="O‘z ovozingiz"
+                hint={
+                  photoAvatar
+                    ? `«Ovoz» bo‘limidagi tayyor ovoz (${avatarMinSeconds(textModel.id)}–${avatarMaxSeconds(textModel.id)} soniya) — surat shuni gapiradi`
+                    : "Ixtiyoriy: «Ovoz» bo‘limidagi tayyor ovoz (1 daqiqagacha) — avatar matn o‘rniga shuni gapiradi"
+                }
+                wide
+              >
                 <Field id={OWN_AUDIO_PARAM}>
                   {speechError ? (
                     <p role="alert" className="text-destructive text-[13.5px]" data-avatar-speech-error>
@@ -433,17 +494,17 @@ export function VideoTab({
                     <p className="text-muted-foreground text-[13.5px]" role="status" data-avatar-speech-loading>
                       Ovozlar yuklanmoqda…
                     </p>
-                  ) : speeches.length === 0 ? (
+                  ) : fitting.length === 0 ? (
                     <p className="text-muted-foreground text-[13.5px]" data-avatar-speech-empty>
-                      Hali tayyor ovoz yo‘q — avatar matnni o‘zi o‘qiydi. O‘z ovozingiz uchun avval «Ovoz» bo‘limida yarating.
+                      {photoAvatar ? "Bu avatarga mos ovoz yo‘q — avval «Ovoz» bo‘limida yarating." : "Hali tayyor ovoz yo‘q — avatar matnni o‘zi o‘qiydi. O‘z ovozingiz uchun avval «Ovoz» bo‘limida yarating."}
                     </p>
                   ) : (
                     <SelectField
                       ariaLabel="O‘z ovozingiz"
                       options={[
-                        { value: "", label: "Yo‘q — matnni avatar o‘qiydi" },
+                        { value: "", label: photoAvatar ? "Ovozni tanlang" : "Yo‘q — matnni avatar o‘qiydi" },
                         // The seconds it is priced at (rounded up, as the button), not a rounded-to-nearest copy.
-                        ...speeches.map((s) => ({ value: s.id, label: `${s.title} · ${avatarAudioSeconds(s.seconds ?? 0)} s` })),
+                        ...fitting.map((s) => ({ value: s.id, label: `${s.title} · ${avatarAudioSeconds(s.seconds ?? 0, avatarMaxSeconds(textModel.id))} s` })),
                       ]}
                       value={ownAudio}
                       onChange={(v) => setParam(OWN_AUDIO_PARAM, v)}
@@ -467,9 +528,9 @@ export function VideoTab({
               </Row>
             </Card>
           ) : null}
-          <ParamRows entry={formEntry} raw={state.raw} onChange={setParam} />
+          {formEntry.params.length > 0 ? <ParamRows entry={formEntry} raw={state.raw} onChange={setParam} /> : null}
           {hasStart ? (
-            <Card title={hasEnd ? "Kadrlar (ixtiyoriy)" : "Boshlang‘ich surat (ixtiyoriy)"}>
+            <Card title={photoAvatar ? "Avatar surati" : hasEnd ? "Kadrlar (ixtiyoriy)" : "Boshlang‘ich surat (ixtiyoriy)"}>
               <Row label={hasEnd ? "Birinchi kadr" : "Surat"} wide>
                 <Field id={IMAGE_PARAM}>
                   <PhotoField
@@ -477,7 +538,7 @@ export function VideoTab({
                     originalAssetId=""
                     shape="square"
                     keepOriginal={false}
-                    alt="Boshlang‘ich surat"
+                    alt={photoAvatar ? "Avatar surati" : "Boshlang‘ich surat"}
                     hint={photoHint()}
                     onChange={(v) =>
                       // Removing the start frame removes the end frame too (an end frame alone is never sent), and lifts
@@ -487,7 +548,7 @@ export function VideoTab({
                   />
                 </Field>
                 <p className="text-muted-foreground mt-1 text-[13px]" data-start-image-hint>
-                  {startImageHint(textModel)}
+                  {photoAvatar ? "Yuz aniq ko‘rinsin: shu surat gapiradi." : startImageHint(textModel)}
                 </p>
               </Row>
               {hasEnd ? (
@@ -545,6 +606,7 @@ function VideoPromptBox({
   value,
   onChange,
   limit,
+  bytes,
   label = "Videoda nima bo‘lsin?",
   placeholder = "Masalan: Tong chog‘ida Registon maydoni, kamera sekin yaqinlashadi",
   onEnhance,
@@ -553,6 +615,7 @@ function VideoPromptBox({
   value: string;
   onChange: (v: string) => void;
   limit: number;
+  bytes: PromptBytes | null;
   /** P9 HeyGen: the avatar's script box says what it is. */
   label?: string;
   placeholder?: string;
@@ -578,6 +641,7 @@ function VideoPromptBox({
           className="placeholder:text-muted-foreground/70 w-full bg-transparent text-[16px] leading-relaxed outline-none"
         />
         <Counter len={value.length} limit={limit} />
+        <PromptBytesNote bytes={bytes} />
       </Field>
       {onEnhance ? (
         <div className="mt-2 flex flex-wrap gap-1.5" data-prompt-tools>

@@ -86,6 +86,14 @@ async function inputsError(userId: string, found: { entry: CatalogEntry; byParam
       if (!row) return "Rasm topilmadi — rasmni qayta yuklang.";
       if (!param.mimes.includes(row.mime)) return `${param.label}: faqat PNG yoki JPEG`;
       if (Number(row.size_bytes) > param.maxBytes) return `${param.label}: fayl ${Math.round(param.maxBytes / (1024 * 1024))} MB dan katta`;
+      const limits = param.dims;
+      if (limits) {
+        const d = imageDims(row.head);
+        if (!d) return "Rasm o‘lchamini aniqlab bo‘lmadi — boshqa rasm tanlang.";
+        if (Math.min(d.w, d.h) < limits.minSide || Math.max(d.w, d.h) > limits.maxSide) return `${param.label}: tomonlari ${limits.minSide}–${limits.maxSide} piksel bo‘lsin (hozir ${d.w}×${d.h}).`;
+        const aspect = d.w / d.h;
+        if (aspect < limits.minAspect || aspect > limits.maxAspect) return `${param.label}: juda cho‘ziq — nisbati ${limits.minAspect} dan ${limits.maxAspect} gacha bo‘lsin.`;
+      }
     }
   }
   const total = all.reduce((sum, id) => sum + Number(byId.get(id)?.size_bytes ?? 0), 0);

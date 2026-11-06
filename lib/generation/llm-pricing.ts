@@ -214,6 +214,20 @@ export const IMAGE_PRICES: Record<string, number> = {
   "fal-ai/recraft/v4.1/text-to-image": 0.035,
   "fal-ai/recraft/v4.1/pro/text-to-image": 0.21,
   /*
+   * Studio P11 package F (each endpoint's llms.txt, read 2026-11-06):
+   *   meta/muse-image/text-to-image, …/edit        «$0.01 per images», any aspect, one fixed size of ≈ 2.5 MP;
+   *   blackforestlabs/flux-3/klein/text-to-image   «$0.009 at 1K»: the adapter always asks a size of at most 1024 px a side;
+   *   blackforestlabs/flux-3/klein/edit-image      https://fal.ai/models/blackforestlabs/flux-3/klein/edit-image/llms.txt
+   *                                                Quoted at the page's top tier, «$0.036 at 4K». Without `image_size` the
+   *                                                output follows a single reference «scaled to at most 4 megapixels», and the
+   *                                                page does not say which tier 4 MP bills. UNVERIFIED: lower this to the tier
+   *                                                a real bill proves ($0.014 at 2K is the likely one), never before.
+   */
+  "meta/muse-image/text-to-image": 0.01,
+  "meta/muse-image/edit": 0.01,
+  "blackforestlabs/flux-3/klein/text-to-image": 0.009,
+  "blackforestlabs/flux-3/klein/edit-image": 0.036,
+  /*
    * Studio P2b edit + utility endpoints (docs/studio/P2B-SPEC.md), read from each `llms.txt` on 2026-11-02:
    *   bytedance/seedream/v5/lite/edit  «$0.035 per image» (flat) — per output picture;
    *   fal-ai/seedvr/upscale/image      «$0.001 per megapixel» (input or output MP not stated, UNVERIFIED): the inputs are

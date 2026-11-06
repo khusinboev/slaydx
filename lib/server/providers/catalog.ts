@@ -140,7 +140,7 @@ export const PROVIDER_META: Readonly<Record<string, ProviderMeta>> = {
   fal: {
     billing: "paid",
     priceNote: "Oldindan to'lanadi (balans) · rasm $0.03–0.22 / dona, modelga qarab (Studio'dagi narx = tannarx × ustama)",
-    role: "Studio «Rasm» bo'limidagi qo'shimcha modellar: FLUX 3, Seedream 5 Lite / Pro, Ideogram 4.5, Recraft 4.1 / Pro. «Ovoz» va «Audio» bo'limlarining fal modellari ham shu kalit bilan ishlaydi (ular «Media modellari»da yoqilgandan keyin ko'rinadi). Kalitsiz bu modellar foydalanuvchiga ko'rinmaydi.",
+    role: "Studio «Rasm» bo'limidagi qo'shimcha modellar: FLUX 3, Seedream 5 Lite / Pro, Ideogram 4.5, Recraft 4.1 / Pro. «Ovoz», «Audio» va «Video» bo'limlarining yangi fal modellari (effektlar, Grok, PixVerse, Happy Horse, surat-avatarlar), Muse va FLUX Klein ham shu kalit bilan ishlaydi (ular «Media modellari»da yoqilgandan keyin ko'rinadi). Kalitsiz bu modellar foydalanuvchiga ko'rinmaydi.",
     need: "optional",
     keyless: false,
     keyUrl: "https://fal.ai/dashboard/keys",

@@ -35,7 +35,7 @@ import type { FormValues } from "../types";
 import { MediaError, costUsd, normalize, submitWithRoutes, type AdapterAsset, type AdapterDeps, type CatalogEntry, type MediaAdapter, type NormalizedParams } from "../studio-core";
 import { studioVideoAdapters, videoMediaAdapters, videoRoute } from "../media/adapters/video";
 import { MEDIA_CATALOG } from "../media/catalog";
-import { OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, STUDIO_EFFECT_SECONDS, STUDIO_VIDEO_PURPOSE, effectPhotos, isAvatarModel } from "../media/catalog-video";
+import { OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, STUDIO_EFFECT_SECONDS, STUDIO_VIDEO_PURPOSE, effectPhotos, isAvatarModel, isPhotoAvatarModel } from "../media/catalog-video";
 import { avatarAudioAsset } from "./media/avatar-audio";
 import { isEffectEntry, studioVideoEntry, studioVideoImageParams } from "../media/studio-video-pricing";
 import { VIDEO_TOOLS_SQL } from "../tool-kinds";
@@ -46,9 +46,12 @@ import { mediaCoreSwitches } from "./media/switches";
 import {
   claimDueMediaJobs,
   failMediaJobTx,
+  MEDIA_UPLOAD_PARAM,
+  clearMediaUpload,
   failSubmittingMediaJob,
   finishMediaJobTx,
   insertMediaJobTx,
+  noteMediaUpload,
   lockMediaJobByKey,
   mediaJobByKeyTx,
   mediaJobPastDeadline,
@@ -389,11 +392,12 @@ export async function submitStudioVideoJob(job: VideoJob, deps: VideoOpsDeps = {
     // P9 HeyGen: the own speech the avatar lip-syncs to (SQL ownership again, with the job owner's id).
     if (isAvatarModel(entry.id)) {
       const audio = await avatarAudioAsset(job.userId, params);
-      if (audio === undefined) throw new UserFacingError(VIDEO_AUDIO_MISSING_MESSAGE);
+      // P11: a photo avatar has nothing else to say, so its speech is required (the route refused its absence before charging).
+      if (audio === undefined || (audio === null && isPhotoAvatarModel(entry.id))) throw new UserFacingError(VIDEO_AUDIO_MISSING_MESSAGE);
       if (audio) assets[OWN_AUDIO_PARAM] = [audio];
     }
     // An effect without the photo(s) its scene needs: the route refused it before charging; a stored one is refunded.
-    if (isEffectEntry(entry) && (!assets.imageAssetId || (effectPhotos(params.effect) === 2 && !assets[SECOND_IMAGE_PARAM]))) {
+    if (isEffectEntry(entry) && (!assets.imageAssetId || (effectPhotos(params.effect, entry.id) === 2 && !assets[SECOND_IMAGE_PARAM]))) {
       throw new UserFacingError(VIDEO_IMAGE_MISSING_MESSAGE);
     }
     const row = await insertMediaJobTx(client, {
@@ -432,7 +436,8 @@ export async function submitStudioVideoJob(job: VideoJob, deps: VideoOpsDeps = {
       adapters,
       breakerHealth,
       { params: { ...params }, ...(Object.keys(assets).length ? { assets } : {}), idempotencyKey: row.idempotency_key },
-      coreDeps(deps),
+      // P11: an input the adapter stored at the provider (a photo avatar's audio) is noted before the paid call.
+      { ...coreDeps(deps), onInputStored: (url) => noteMediaUpload(row.id, url) },
     );
     if (!("opId" in result)) throw new MediaError(route.provider, "a video route answered synchronously");
     if (route !== entry.routes[0]) await query("UPDATE media_jobs SET provider = $2, upstream_model = $3 WHERE id = $1", [row.id, route.provider, route.upstreamModel]);
@@ -440,6 +445,8 @@ export async function submitStudioVideoJob(job: VideoJob, deps: VideoOpsDeps = {
   } catch (e) {
     const err = e instanceof MediaError ? e : null;
     log("error", "[video] Studio submit failed", { jobId: job.id, modelId: entry.id, status: err?.status, safety: err?.safety, err });
+    // The adapter deleted what it uploaded: nothing is left for housekeeping.
+    await clearMediaUpload(row.id).catch(() => undefined);
     await failSubmittingMediaJob(row.id, (err?.message ?? "submit failed").slice(0, 300)).catch(() => undefined);
     throw new UserFacingError(err?.safety ? VIDEO_SAFETY_MESSAGE : VIDEO_FAILED_MESSAGE, { cause: e });
   }
@@ -648,7 +655,29 @@ function pollerFor(op: DueOp, deps: VideoOpsDeps): (() => Promise<Polled>) | nul
   };
 }
 
+/**
+ * P11: an op that ended no longer needs the input stored for it (a photo avatar's audio, readable by anyone with the URL).
+ * Best effort: the file's expiry removes it anyway, so nothing here may touch the job's outcome.
+ */
+async function dropStoredInput(op: DueOp, deps: VideoOpsDeps): Promise<void> {
+  if (!op.mediaJobId) return;
+  try {
+    const row = await queryOne<{ url: string | null }>("SELECT params ->> $2 AS url FROM media_jobs WHERE id = $1", [op.mediaJobId, MEDIA_UPLOAD_PARAM]);
+    if (!row?.url) return;
+    await studioAdapterOf(op, deps)?.dropInput?.(row.url, coreDeps(deps));
+    await clearMediaUpload(op.mediaJobId);
+  } catch (e) {
+    log("warn", "[video] stored input not deleted", { jobId: op.generation_id, err: e });
+  }
+}
+
 export async function pollOp(op: DueOp, deps: VideoOpsDeps = {}): Promise<PollOutcome> {
+  const outcome = await pollOpOnce(op, deps);
+  if (outcome === "succeeded" || outcome === "failed") await dropStoredInput(op, deps);
+  return outcome;
+}
+
+async function pollOpOnce(op: DueOp, deps: VideoOpsDeps): Promise<PollOutcome> {
   const poller = pollerFor(op, deps);
   if (!poller) {
     // No way to ask the provider (unknown route / adapter): the op must still end at its deadline, refunded -- never
@@ -816,12 +845,16 @@ export async function finalizeVideo(generationId: string, bytes: Uint8Array): Pr
     if (delivered && ratio !== null) {
       refunded = await refundInTx(client, String(row.user_id), generationId, `${delivered.want} soniyadan ${delivered.got} soniya yaratildi — farq qaytarildi`, ratio);
     }
-    return { delivered, ratio, refunded };
+    return { delivered, ratio, refunded, over: avatarOverQuote(op.studio?.modelId, mp4Seconds(bytes), op.seconds), provider: op.provider };
   });
   if (!out) return false;
 
   log("info", "[video] finished", { jobId: generationId, bytes: bytes.byteLength });
   if (out.delivered) log("warn", "[video] short clip refunded", { jobId: generationId, ratio: out.ratio, refunded: out.refunded });
+  if (out.over) {
+    log("warn", "[video] a clip over its quote", { jobId: generationId, detail: out.over });
+    await recordProviderFailure(generationId, { provider: out.provider, message: out.over });
+  }
   return true;
 }
 
@@ -862,6 +895,16 @@ function studioResult(values: FormValues, s: { modelId: string; params: Normaliz
       ...(typeof s.params.sound === "boolean" ? { sound: s.params.sound } : {}),
     },
   };
+}
+
+/**
+ * An avatar's length is computed before the job, but the provider bills what it delivers (Kling Avatar v2 bills output
+ * seconds), and a longer clip is never charged extra. More than a second over the quote, the margin is ours to watch: the text
+ * for the provider-failure row, which is what the owner's `provider_fail` alert counts. Its numbers are grouped away.
+ */
+export function avatarOverQuote(modelId: string | undefined, actual: number, want: number): string | null {
+  if (!modelId || !isAvatarModel(modelId) || !(want > 0) || !(actual > want + 1)) return null;
+  return `${modelId}: clip longer than quoted, ${Math.ceil(actual)} s against ${want} s`;
 }
 
 /** `want` seconds were paid for; a clip more than a second shorter is a shortfall (a longer one is never charged extra). */

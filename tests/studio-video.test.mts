@@ -87,8 +87,16 @@ test("catalog: studio.video = Omni (default) + Kling 4.0 + Flash + Kling 3.0 + K
     "minimax/h3-max-turbo",
     "openai/sora-2",
     "openai/sora-2-pro",
+    // P11 package F (its own checks: tests/studio-media-providers.test.mts).
+    "xai/grok-imagine-lite",
+    "pixverse/v6",
+    "alibaba/happy-horse",
     // P9: HeyGen avatars after Sora, before the effects (their own checks: tests/studio-video-heygen.test.mts).
     "heygen/avatar",
+    "bytedance/omnihuman-2",
+    "kling/ai-avatar-2",
+    "pixverse/effects",
+    "kling/effects-v16",
     "kling/effects",
   ]);
   assert.equal(p.default, "google/omni-video");
@@ -167,7 +175,8 @@ test("old «Video» tool: Kling refuses WebP before the charge (the API takes JP
 
 test("defaultOff: the models the account's pack does not cover ship hidden, the rest do not", () => {
   const off = MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed.filter((id) => entry(id).defaultOff);
-  assert.deepEqual(off, ["kling/kling-3", "kling/kling-3-pro", "kling/effects"]);
+  // P11 package F: every new model waits for its live test.
+  assert.deepEqual(off, ["kling/kling-3", "kling/kling-3-pro", "xai/grok-imagine-lite", "pixverse/v6", "alibaba/happy-horse", "bytedance/omnihuman-2", "kling/ai-avatar-2", "pixverse/effects", "kling/effects-v16", "kling/effects"]);
 });
 
 test("effects golden: POST /v1/videos/effects { effect_scene, input: { image } }; no photo = no request", () => {
@@ -199,15 +208,25 @@ test("probe: every param of every studio.video model changes the request or the 
     "openai/sora-2-pro": { prompt: "Registon at dawn", seconds: 4, aspect: "16:9", resolution: "1080p" },
     // P9 HeyGen: a script at the defaults; the probe swaps each enum, adds an own speech, and raises the length.
     "heygen/avatar": { prompt: "Assalomu alaykum, do'stlar!", seconds: 3 },
+    // P11 package F.
+    "xai/grok-imagine-lite": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9" },
+    "pixverse/v6": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9" },
+    "alibaba/happy-horse": { prompt: "Registon at dawn", seconds: 5, aspect: "16:9" },
+    "pixverse/effects": { effect: "Liquid Metal", imageAssetId: ASSET },
+    "kling/effects-v16": { effect: "happy_birthday", imageAssetId: ASSET },
   };
   /** Per-model probe values where the shared `alt` does not fit (HeyGen's own enums and the own-speech id). */
   const altOf: Record<string, Record<string, unknown>> = {
     "kling/kling-4": { resolution: "1080p" },
+    "alibaba/happy-horse": { resolution: "1080p" },
+    "pixverse/effects": { effect: "Earth Zoom" },
     "heygen/avatar": { avatar: "Tyler-incasualsuit-20220721", voice: "male", language: "ru", engine: "avatar_iii", audioId: "0f0e0d0c-0b0a-4908-8706-050403020100" },
   };
   const alt: Record<string, unknown> = { prompt: "A different prompt", seconds: undefined, aspect: "9:16", sound: true, effect: "snowglobe", resolution: "480p" };
   const soundOff = new Set(["alibaba/wan-3", "bytedance/seedance-2.5", "bytedance/seedance-2-mini"]);
   for (const id of MEDIA_PURPOSES.byId(STUDIO_VIDEO_PURPOSE)!.allowed) {
+    // The photo avatars need an uploaded audio: their differential probe is in tests/studio-media-providers.test.mts.
+    if (id === "bytedance/omnihuman-2" || id === "kling/ai-avatar-2") continue;
     const e = entry(id);
     const b = base[id]!;
     const needsImage = e.capabilities.includes("effect");

@@ -162,7 +162,7 @@ test("preflight: Studio model and its ParamSchema, before any charge", () => {
   assert.deepEqual(MEDIA_PURPOSES.byId(STUDIO_IMAGE_PURPOSE), {
     id: "studio.image",
     kind: "image",
-    allowed: [NANO, GPT, "bfl/flux", "bytedance/seedream", "bytedance/seedream-pro", "ideogram/ideogram", "recraft/recraft", "recraft/recraft-pro"],
+    allowed: [NANO, GPT, "bfl/flux", "bytedance/seedream", "bytedance/seedream-pro", "ideogram/ideogram", "recraft/recraft", "recraft/recraft-pro", "meta/muse", "bfl/flux-klein"],
     default: NANO,
     userCanChoose: true,
   });
@@ -409,6 +409,11 @@ test("client preview == server price == charge (catalog pricing block + session 
     "bytedance/seedream-pro": IMAGE_PRICES["bytedance/seedream/v5/pro/text-to-image"],
     "recraft/recraft": IMAGE_PRICES["fal-ai/recraft/v4.1/text-to-image"],
     "recraft/recraft-pro": IMAGE_PRICES["fal-ai/recraft/v4.1/pro/text-to-image"],
+    // P11 package F: priced like the rest while hidden, so the admin sees the margin before switching them on.
+    "meta/muse": IMAGE_PRICES["meta/muse-image/text-to-image"],
+    "bfl/flux-klein": IMAGE_PRICES["blackforestlabs/flux-3/klein/text-to-image"],
+    "meta/muse-edit": IMAGE_PRICES["meta/muse-image/edit"],
+    "bfl/flux-klein-edit": IMAGE_PRICES["blackforestlabs/flux-3/klein/edit-image"],
     // P2b (docs/studio/P2B-SPEC.md): the edit / utility models are in the same block (a per-job rule ignores it).
     "bytedance/seedream-edit": IMAGE_PRICES["bytedance/seedream/v5/lite/edit"],
     "bytedance/seedvr-upscale": IMAGE_PRICES["fal-ai/seedvr/upscale/image"],
