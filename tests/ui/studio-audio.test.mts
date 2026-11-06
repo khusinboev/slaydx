@@ -168,6 +168,31 @@ test("modes: each mode draws exactly its own params (one data-field each), nothi
   assert.ok(!q('[data-audio-input] input[type="checkbox"]'));
 });
 
+test("«Yaxshilash (AI)» in Audio: music and effects send their own kind; a mode with no prompt has no button", async () => {
+  const a = api();
+  const inner = globalThis.fetch;
+  const sent: unknown[] = [];
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) => {
+    if (String(input) !== "/api/media/enhance") return inner(input as never, init);
+    sent.push(JSON.parse(String(init?.body)));
+    return json(200, { prompt: "Warm lo-fi piano, 70 BPM" });
+  };
+  await mount();
+  await openAudio();
+  await type("[data-audio-prompt] textarea", "yomg‘irli oqshom");
+  await click(q('[data-audio-prompt] [data-prompt-tool="enhance"]'));
+  await settle();
+  assert.equal(q<HTMLTextAreaElement>("[data-audio-prompt] textarea")!.value, "Warm lo-fi piano, 70 BPM");
+  await mode("sfx");
+  await type("[data-audio-prompt] textarea", "eshik ochiladi");
+  await click(q('[data-audio-prompt] [data-prompt-tool="enhance"]'));
+  await settle();
+  assert.deepEqual(sent, [{ prompt: "yomg‘irli oqshom", kind: "music" }, { prompt: "eshik ochiladi", kind: "sfx" }]);
+  await mode("voice-changer");
+  assert.ok(!q('[data-prompt-tool="enhance"]'));
+  assert.equal(a.posts().length, 0);
+});
+
 test("price button: the server formula, the request, SFX variants", async () => {
   const a = api();
   await mount();

@@ -366,6 +366,8 @@ test("enhance: free, the rewrite returned, burst limit 10 / 10 min → 429", { s
     return read(await inRequest(req, () => (enhanceRoute.POST as Handler)(req, undefined)));
   };
   assert.equal((await post("ab")).status, 400, "too short");
+  const wrongKind = new Request("http://localhost/api/media/enhance", { method: "POST", headers: { cookie: `${SESSION_COOKIE}=${u.token}`, "content-type": "application/json", origin: "http://localhost" }, body: JSON.stringify({ prompt: "Registon", kind: "speech" }) });
+  assert.equal((await read(await inRequest(wrongKind, () => (enhanceRoute.POST as Handler)(wrongKind, undefined)))).status, 400, "speech is never rewritten");
   const r = await post("Registon");
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.prompt, "Samarqand Registon maydoni, oltin soat, keng burchakli kadr");

@@ -13,6 +13,7 @@ import { PAY_RETURN_PATH } from "@/components/overlays/pay-amount";
 import { ParamRows } from "../ParamRows";
 import { PriceButton } from "../PriceButton";
 import { PromptBox } from "../PromptBox";
+import { usePromptEnhance } from "../usePromptEnhance";
 import { badgeText } from "../studio-price";
 import type { MediaCatalog } from "../studio-types";
 import { PROMPT_PARAM, normalizedPrompt, promptLimit, promptMin } from "../studio-values";
@@ -85,6 +86,12 @@ export function ComparePanel({
   const toggle = (id: string) => setState((s) => ({ ...s, ticked: toggleModel(s.ticked, id, max) }));
   const limit = shared ? promptLimit(shared) : 2000;
   const prompt = String(state.raw[PROMPT_PARAM] ?? "");
+  const { enhance, enhancing } = usePromptEnhance(
+    kind,
+    () => prompt.replace(/\s+/g, " ").trim(),
+    (v) => setRaw(PROMPT_PARAM, v.slice(0, limit)),
+    setError,
+  );
 
   async function submit() {
     if (!batch || !shared) {
@@ -126,6 +133,8 @@ export function ComparePanel({
           limit={limit}
           min={shared ? promptMin(shared) : 1}
           label={kind === "video" ? "Videoda nima bo‘lsin?" : "Nimani chizamiz?"}
+          onEnhance={() => void enhance()}
+          enhancing={enhancing}
         />
         <Card title="Modellar" aside={<span className="text-muted-foreground tabular-nums" data-compare-count>{entries.length} / {max}</span>}>
           <p className="text-muted-foreground mb-2 text-[13px]">{COMPARE_MIN}–{max} ta modelni belgilang — har biri o‘z narxida alohida ish bo‘ladi.</p>

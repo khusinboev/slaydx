@@ -1,5 +1,6 @@
 "use client";
 
+import type { EnhanceKind } from "@/lib/media/enhance";
 import { useCallback, useEffect, useState } from "react";
 import { request } from "@/lib/api-client";
 import { parseMediaPricing, setClientMediaPricing } from "@/lib/media/studio-pricing";
@@ -271,8 +272,8 @@ export function resultAssetOf(url: string): { generationId: string; assetId: str
 }
 
 /** «Yaxshilash (AI)»: `POST /api/media/enhance` — free, rate-limited; the answer goes back into the prompt box. */
-export async function enhancePrompt(prompt: string): Promise<string> {
-  const r = await request<unknown>("/api/media/enhance", { method: "POST", body: JSON.stringify({ prompt }), timeoutMs: 30_000 });
+export async function enhancePrompt(prompt: string, kind: EnhanceKind = "image"): Promise<string> {
+  const r = await request<unknown>("/api/media/enhance", { method: "POST", body: JSON.stringify({ prompt, kind }), timeoutMs: 30_000 });
   const out = isObj(r) ? str(r.prompt) : null;
   if (!out) throw new Error("Tavsif yaxshilanmadi");
   return out;

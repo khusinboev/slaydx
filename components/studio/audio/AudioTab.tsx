@@ -1,5 +1,8 @@
 "use client";
 
+import { ENHANCE_MIN } from "@/lib/media/enhance";
+import { EnhanceTool } from "../PromptBox";
+import { usePromptEnhance } from "../usePromptEnhance";
 import { useCallback, useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { ApiError, PriceChangedError } from "@/lib/api-client";
@@ -120,6 +123,12 @@ export function AudioTab({
   // P10: a picked tool chip; with no provider mode offered, the first tool opens by default.
   const tool = mixOn ? undefined : (speechTools.find((t) => t.mode === state.mode) ?? (state.mode === null && modes.length === 0 ? speechTools[0] : undefined));
   const current = mixOn || tool ? null : (modes.find((m) => m.mode === state.mode) ?? modes[0] ?? null);
+  const { enhance, enhancing } = usePromptEnhance(
+    current?.mode === "sfx" ? "sfx" : "music",
+    () => String((current && state.raw[current.mode]?.prompt) ?? "").replace(/\s+/g, " ").trim(),
+    (v) => setParam("prompt", v.slice(0, promptMax)),
+    setError,
+  );
   const needsVoices = current?.mode === "voice-changer";
   const providerJobs = jobs.filter((j) => !isMixJob(j) && !isSpeechToolJob(j));
   const mixJobs = jobs.filter(isMixJob);
@@ -340,6 +349,9 @@ export function AudioTab({
             <span className="text-muted-foreground text-[12.5px] tabular-nums" data-audio-chars>
               {groupDigits(typed.length)} / {groupDigits(promptMax)}
             </span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5" data-prompt-tools>
+            <EnhanceTool disabled={typed.trim().length < ENHANCE_MIN} enhancing={enhancing} onClick={() => void enhance()} />
           </div>
         </section>
       ) : null}

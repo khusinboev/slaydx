@@ -31,10 +31,10 @@ Owner decisions:
   video, genre, tempo and instruments for music, source and acoustics for sound effects.
 - Text meant to be seen or heard stays verbatim in its own language: anything in quotes, and signs or captions the user asks for.
 - No real people's names, brands or logos the user did not ask for.
-- The answer is `{"prompt":"...","language":"uz"}`. The result goes back into the box for the user to edit; nothing is charged.
+- The answer is `{"prompt":"..."}`. The result goes back into the box for the user to edit; nothing is charged.
 - `max` comes from the `kind` and never exceeds that tool's prompt limit. It stays free, under the `enhance` daily bucket.
 
-Not rewritten: speech text, dialogue, song lyrics, dubbing and transcripts. There the words are the product.
+Not rewritten: speech text, dialogue, song lyrics, avatar scripts, dubbing and transcripts. There the words are the product.
 
 ## C. Reliability
 

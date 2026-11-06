@@ -22,8 +22,9 @@ import { MediaModelPicker } from "./MediaModelPicker";
 import { ParamRows } from "./ParamRows";
 import { PriceButton } from "./PriceButton";
 import { PromptBox } from "./PromptBox";
+import { usePromptEnhance } from "./usePromptEnhance";
 import { StudioResults, type StudioJob } from "./StudioResults";
-import { STUDIO_AUDIO_LISTING, STUDIO_SPEECH_PURPOSE, STUDIO_VIDEO_PURPOSE, enhancePrompt, inputFromResult, loadMediaCatalog, resultAssetOf, uploadStudioInput, useMediaCatalog } from "./studio-api";
+import { STUDIO_AUDIO_LISTING, STUDIO_SPEECH_PURPOSE, STUDIO_VIDEO_PURPOSE, inputFromResult, loadMediaCatalog, resultAssetOf, uploadStudioInput, useMediaCatalog } from "./studio-api";
 import { INITIAL_VIDEO_STATE, VideoTab, type VideoTabState } from "./video/VideoTab";
 import { INITIAL_VOICE_STATE, VoiceTab, type VoiceTabState } from "./voice/VoiceTab";
 import { VoiceTemplatePanel, VoiceTemplatesRow, useLegacyFold } from "./voice/VoiceTemplates";
@@ -106,7 +107,6 @@ function StudioApp() {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [template, setTemplate] = useState<{ t: StudioTemplate; slots: Record<string, string> } | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [enhancing, setEnhancing] = useState(false);
 
   const [chosen, setChosen] = useState<string | null>(null);
   const [raw, setRaw] = useState<RawValues>({});
@@ -212,6 +212,12 @@ function StudioApp() {
   const setParam = (name: string, value: unknown) => setRaw((prev) => ({ ...prev, [name]: value }));
 
   /** Typing the prompt by hand leaves the template (its slots would overwrite the text). */
+  const { enhance, enhancing } = usePromptEnhance(
+    "image",
+    () => (entry ? normalizedPrompt(entry, raw) : ""),
+    (v) => (entry ? setPrompt(v.slice(0, promptLimit(entry))) : undefined),
+    setError,
+  );
   const setPrompt = (v: string) => {
     setTemplate(null);
     setParam(PROMPT_PARAM, v);
@@ -281,21 +287,6 @@ function StudioApp() {
     const slots = { ...template.slots, [name]: value };
     setTemplate({ t: template.t, slots });
     setParam(PROMPT_PARAM, fillSkeleton(template.t.skeleton, template.t.slots, slots).slice(0, promptLimit(entry)));
-  }
-
-  /** «Yaxshilash (AI)»: a free rewrite shown in the box (editable); the template is left. */
-  async function enhance() {
-    if (!entry) return;
-    setEnhancing(true);
-    setError(null);
-    try {
-      const better = await enhancePrompt(normalizedPrompt(entry, raw));
-      setPrompt(better.slice(0, promptLimit(entry)));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Tavsif yaxshilanmadi");
-    } finally {
-      setEnhancing(false);
-    }
   }
 
   function scrollToResults() {
@@ -552,9 +543,9 @@ function StudioApp() {
                       limit={promptLimit(entry)}
                       min={promptMin(entry)}
                       label={mode === "edit" ? "Nimani o‘zgartiramiz?" : "Nimani chizamiz?"}
-                      {...(mode === "image"
-                        ? { onSamples: () => setLibraryOpen(true), onUpload: (f: File) => void uploadForEdit(f), uploading, onEnhance: () => void enhance(), enhancing }
-                        : {})}
+                      onEnhance={() => void enhance()}
+                      enhancing={enhancing}
+                      {...(mode === "image" ? { onSamples: () => setLibraryOpen(true), onUpload: (f: File) => void uploadForEdit(f), uploading } : {})}
                     />
                   ) : null}
                   {mode === "image" ? <TemplatesRow modelIds={catalog.models.map((m) => m.id)} activeId={template?.t.id ?? null} onPick={pickTemplate} /> : null}

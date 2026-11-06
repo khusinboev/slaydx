@@ -11,6 +11,9 @@ import { AutoTextarea } from "@/components/common/AutoTextarea";
 import { Card, Row, Segmented, SelectField } from "@/components/forms/compact";
 import { Counter, Field } from "@/components/forms/shared";
 import { PhotoField } from "@/components/forms/PhotoField";
+import { ENHANCE_MIN } from "@/lib/media/enhance";
+import { EnhanceTool } from "../PromptBox";
+import { usePromptEnhance } from "../usePromptEnhance";
 import { photoHint } from "@/lib/photo-accept";
 import { queueGeneration } from "@/components/forms/runGeneration";
 import { PAY_RETURN_PATH } from "@/components/overlays/pay-amount";
@@ -186,6 +189,12 @@ export function VideoTab({
 
   const patch = (change: Partial<VideoTabState>) => setState((s) => ({ ...s, ...change }));
   const setParam = (name: string, value: unknown) => setState((s) => ({ ...s, raw: { ...s.raw, [name]: value } }));
+  const { enhance, enhancing } = usePromptEnhance(
+    "video",
+    () => String(state.raw[PROMPT_PARAM] ?? "").replace(/\s+/g, " ").trim(),
+    (v) => setParam(PROMPT_PARAM, textModel ? v.slice(0, promptLimit(textModel)) : v),
+    setError,
+  );
 
   function selectModel(id: string) {
     const next = split.models.find((m) => m.id === id);
@@ -390,6 +399,7 @@ export function VideoTab({
               value={String(state.raw[PROMPT_PARAM] ?? "")}
               onChange={(v) => setParam(PROMPT_PARAM, v)}
               limit={promptLimit(textModel)}
+              {...(avatar ? {} : { onEnhance: () => void enhance(), enhancing })}
               {...(avatar ? { label: "Avatar nima desin?", placeholder: "Masalan: Assalomu alaykum! Bugun sizga yangi kursimiz haqida gapirib beraman." } : {})}
             />
           )}
@@ -540,6 +550,8 @@ function VideoPromptBox({
   limit,
   label = "Videoda nima bo‘lsin?",
   placeholder = "Masalan: Tong chog‘ida Registon maydoni, kamera sekin yaqinlashadi",
+  onEnhance,
+  enhancing = false,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -547,6 +559,9 @@ function VideoPromptBox({
   /** P9 HeyGen: the avatar's script box says what it is. */
   label?: string;
   placeholder?: string;
+  /** Absent for an avatar script: there the words are the product. */
+  onEnhance?: () => void;
+  enhancing?: boolean;
 }) {
   const id = useId();
   return (
@@ -567,6 +582,11 @@ function VideoPromptBox({
         />
         <Counter len={value.length} limit={limit} />
       </Field>
+      {onEnhance ? (
+        <div className="mt-2 flex flex-wrap gap-1.5" data-prompt-tools>
+          <EnhanceTool disabled={value.trim().length < ENHANCE_MIN} enhancing={enhancing} onClick={onEnhance} />
+        </div>
+      ) : null}
     </section>
   );
 }
