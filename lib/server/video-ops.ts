@@ -35,7 +35,7 @@ import type { FormValues } from "../types";
 import { MediaError, costUsd, normalize, submitWithRoutes, type AdapterAsset, type AdapterDeps, type CatalogEntry, type MediaAdapter, type NormalizedParams } from "../studio-core";
 import { studioVideoAdapters, videoMediaAdapters, videoRoute } from "../media/adapters/video";
 import { MEDIA_CATALOG } from "../media/catalog";
-import { OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, STUDIO_EFFECT_SECONDS, STUDIO_VIDEO_PURPOSE, effectPhotos, isAvatarModel } from "../media/catalog-video";
+import { OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, STUDIO_EFFECT_SECONDS, STUDIO_VIDEO_PURPOSE, effectPhotos, isAvatarModel, isPhotoAvatarModel } from "../media/catalog-video";
 import { avatarAudioAsset } from "./media/avatar-audio";
 import { isEffectEntry, studioVideoEntry, studioVideoImageParams } from "../media/studio-video-pricing";
 import { VIDEO_TOOLS_SQL } from "../tool-kinds";
@@ -46,9 +46,12 @@ import { mediaCoreSwitches } from "./media/switches";
 import {
   claimDueMediaJobs,
   failMediaJobTx,
+  MEDIA_UPLOAD_PARAM,
+  clearMediaUpload,
   failSubmittingMediaJob,
   finishMediaJobTx,
   insertMediaJobTx,
+  noteMediaUpload,
   lockMediaJobByKey,
   mediaJobByKeyTx,
   mediaJobPastDeadline,
@@ -389,7 +392,8 @@ export async function submitStudioVideoJob(job: VideoJob, deps: VideoOpsDeps = {
     // P9 HeyGen: the own speech the avatar lip-syncs to (SQL ownership again, with the job owner's id).
     if (isAvatarModel(entry.id)) {
       const audio = await avatarAudioAsset(job.userId, params);
-      if (audio === undefined) throw new UserFacingError(VIDEO_AUDIO_MISSING_MESSAGE);
+      // P11: a photo avatar has nothing else to say, so its speech is required (the route refused its absence before charging).
+      if (audio === undefined || (audio === null && isPhotoAvatarModel(entry.id))) throw new UserFacingError(VIDEO_AUDIO_MISSING_MESSAGE);
       if (audio) assets[OWN_AUDIO_PARAM] = [audio];
     }
     // An effect without the photo(s) its scene needs: the route refused it before charging; a stored one is refunded.
@@ -432,7 +436,8 @@ export async function submitStudioVideoJob(job: VideoJob, deps: VideoOpsDeps = {
       adapters,
       breakerHealth,
       { params: { ...params }, ...(Object.keys(assets).length ? { assets } : {}), idempotencyKey: row.idempotency_key },
-      coreDeps(deps),
+      // P11: an input the adapter stored at the provider (a photo avatar's audio) is noted before the paid call.
+      { ...coreDeps(deps), onInputStored: (url) => noteMediaUpload(row.id, url) },
     );
     if (!("opId" in result)) throw new MediaError(route.provider, "a video route answered synchronously");
     if (route !== entry.routes[0]) await query("UPDATE media_jobs SET provider = $2, upstream_model = $3 WHERE id = $1", [row.id, route.provider, route.upstreamModel]);
@@ -648,7 +653,29 @@ function pollerFor(op: DueOp, deps: VideoOpsDeps): (() => Promise<Polled>) | nul
   };
 }
 
+/**
+ * P11: an op that ended no longer needs the input stored for it (a photo avatar's audio, readable by anyone with the URL).
+ * Best effort: the file's expiry removes it anyway, so nothing here may touch the job's outcome.
+ */
+async function dropStoredInput(op: DueOp, deps: VideoOpsDeps): Promise<void> {
+  if (!op.mediaJobId) return;
+  try {
+    const row = await queryOne<{ url: string | null }>("SELECT params ->> $2 AS url FROM media_jobs WHERE id = $1", [op.mediaJobId, MEDIA_UPLOAD_PARAM]);
+    if (!row?.url) return;
+    await studioAdapterOf(op, deps)?.dropInput?.(row.url, coreDeps(deps));
+    await clearMediaUpload(op.mediaJobId);
+  } catch (e) {
+    log("warn", "[video] stored input not deleted", { jobId: op.generation_id, err: e });
+  }
+}
+
 export async function pollOp(op: DueOp, deps: VideoOpsDeps = {}): Promise<PollOutcome> {
+  const outcome = await pollOpOnce(op, deps);
+  if (outcome === "succeeded" || outcome === "failed") await dropStoredInput(op, deps);
+  return outcome;
+}
+
+async function pollOpOnce(op: DueOp, deps: VideoOpsDeps): Promise<PollOutcome> {
   const poller = pollerFor(op, deps);
   if (!poller) {
     // No way to ask the provider (unknown route / adapter): the op must still end at its deadline, refunded -- never

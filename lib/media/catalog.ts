@@ -158,6 +158,35 @@ function studioToolEntries(): CatalogEntry[] {
       limits: { timeoutMs: 120_000 },
       output: IMAGE_OUT,
     },
+    // Studio P11 package F: hidden until the admin's switch (a live Uzbek test first).
+    {
+      id: "meta/muse-edit",
+      kind: "image",
+      capabilities: ["edit"],
+      label: "Muse Image",
+      maker: "Meta",
+      badges: ["arzon", "matn"],
+      params: editParams(3),
+      cost: { per: "output", usd: bookPrice("meta/muse-image/edit"), countParam: "imageCount" },
+      routes: [{ provider: "fal", upstreamModel: "meta/muse-image/edit", adapter: "fal" }],
+      defaultOff: true,
+      limits: { timeoutMs: 120_000 },
+      output: IMAGE_OUT,
+    },
+    {
+      id: "bfl/flux-klein-edit",
+      kind: "image",
+      capabilities: ["edit"],
+      label: "FLUX 3 Klein",
+      maker: "Black Forest Labs",
+      badges: ["arzon"],
+      params: editParams(3),
+      cost: { per: "output", usd: bookPrice("blackforestlabs/flux-3/klein/edit-image"), countParam: "imageCount" },
+      routes: [{ provider: "fal", upstreamModel: "blackforestlabs/flux-3/klein/edit-image", adapter: "fal" }],
+      defaultOff: true,
+      limits: { timeoutMs: 120_000 },
+      output: IMAGE_OUT,
+    },
     {
       id: "bytedance/seedvr-upscale",
       kind: "image",
@@ -262,6 +291,9 @@ export const MEDIA_ENTRIES: readonly CatalogEntry[] = [
   ),
   fal("recraft/recraft", "Recraft 4.1", "Recraft", ["arzon"], "fal-ai/recraft/v4.1/text-to-image", flatFalCost("fal-ai/recraft/v4.1/text-to-image"), 90_000),
   fal("recraft/recraft-pro", "Recraft 4.1 Pro", "Recraft", ["sifatli"], "fal-ai/recraft/v4.1/pro/text-to-image", flatFalCost("fal-ai/recraft/v4.1/pro/text-to-image"), 120_000),
+  // Studio P11 package F: hidden until the admin's switch (a live Uzbek test first).
+  fal("meta/muse", "Muse Image", "Meta", ["arzon", "matn"], "meta/muse-image/text-to-image", flatFalCost("meta/muse-image/text-to-image"), 120_000, [], true),
+  fal("bfl/flux-klein", "FLUX 3 Klein", "Black Forest Labs", ["arzon"], "blackforestlabs/flux-3/klein/text-to-image", flatFalCost("blackforestlabs/flux-3/klein/text-to-image"), 120_000, [], true),
   {
     id: "google/omni-video",
     kind: "video",
@@ -345,6 +377,7 @@ function fal(
   cost: CatalogEntry["cost"],
   timeoutMs: number,
   extra: readonly ParamSchema[] = [],
+  defaultOff = false,
 ): CatalogEntry {
   return {
     id,
@@ -356,6 +389,7 @@ function fal(
     params: [...imageParams, ...extra],
     cost,
     routes: [{ provider: "fal", upstreamModel: endpoint, adapter: "fal" }],
+    ...(defaultOff ? { defaultOff } : {}),
     limits: { timeoutMs },
     output: IMAGE_OUT,
   };
@@ -423,7 +457,7 @@ export const MEDIA_PURPOSES = definePurposes(MEDIA_CATALOG, [
   // P10 (docs/studio/P10-SPEC.md): speech to text and dubbing (one model each).
   ...STUDIO_TRANSCRIBE_PURPOSE_SPECS,
   // P2b (docs/studio/P2B-SPEC.md): the Studio's edit and utility jobs — same tool, same charge / refund / gallery.
-  { id: STUDIO_EDIT_PURPOSE, kind: "image", allowed: ["google/nano-banana-edit", "bytedance/seedream-edit"], default: "google/nano-banana-edit", userCanChoose: true },
+  { id: STUDIO_EDIT_PURPOSE, kind: "image", allowed: ["google/nano-banana-edit", "bytedance/seedream-edit", "meta/muse-edit", "bfl/flux-klein-edit"], default: "google/nano-banana-edit", userCanChoose: true },
   { id: STUDIO_UPSCALE_PURPOSE, kind: "image", allowed: ["bytedance/seedvr-upscale"], default: "bytedance/seedvr-upscale", userCanChoose: false },
   { id: STUDIO_BGREMOVE_PURPOSE, kind: "image", allowed: ["bria/background-remove"], default: "bria/background-remove", userCanChoose: false },
 ]);

@@ -26,9 +26,9 @@ import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, prom
 import type { StudioJob } from "../StudioResults";
 import { VideoResults } from "./VideoResults";
 import { STUDIO_VIDEO_SLUG, STUDIO_VIDEO_TOOL_ID, clipSeconds, isEffect, studioVideoClientPrice, videoCardPrice } from "./video-price";
-import { ASPECT_FOLLOWS_IMAGE, END_IMAGE_PARAM, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, avatarAudioSeconds, avatarScriptProblem, effectPhotoHint, effectPhotos, isAvatarModel } from "@/lib/media/catalog-video";
+import { ASPECT_FOLLOWS_IMAGE, END_IMAGE_PARAM, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, avatarAudioSeconds, avatarMaxSeconds, avatarMinSeconds, avatarScriptProblem, effectPhotoHint, effectPhotos, isAvatarModel, isPhotoAvatarModel } from "@/lib/media/catalog-video";
 import { fetchMixSources } from "../audio/mix-api";
-import { avatarHiddenParams, avatarRequest, avatarSpeeches, type SpeechSource } from "./avatar";
+import { avatarHiddenParams, avatarRequest, avatarSpeeches, avatarSpeechesFor, type SpeechSource } from "./avatar";
 
 /** «Shablon effektlar» (one photo → a ready clip) or «Matndan / rasmdan» (a model + a prompt, optional start image). */
 export type VideoMode = "effects" | "text";
@@ -159,6 +159,8 @@ export function VideoTab({
   const model = textEntry(split.models, catalog, state.chosen);
   // P9 HeyGen: the user's finished speech results, loaded once the avatar model is on screen (`null` = not loaded yet).
   const avatar = mode === "text" && model !== null && isAvatarModel(model.id);
+  // P11: a photo avatar speaks only an own speech, within its length limits, and needs its photo.
+  const photoAvatar = avatar && isPhotoAvatarModel(model.id);
   const [speeches, setSpeeches] = useState<SpeechSource[] | null>(null);
   const [speechError, setSpeechError] = useState<string | null>(null);
   useEffect(() => {
@@ -172,6 +174,7 @@ export function VideoTab({
       live = false;
     };
   }, [avatar, speeches]);
+  const fitting = avatar ? avatarSpeechesFor(speeches ?? [], model.id) : [];
 
   // What goes out and what it costs, for the side on screen.
   let entry: ClientEntry | null = null;
@@ -246,11 +249,19 @@ export function VideoTab({
     }
     if (isAvatarModel(entry.id)) {
       const own = String(sent[OWN_AUDIO_PARAM] ?? "");
-      if (own && !(speeches ?? []).some((s) => s.id === own)) {
+      if (own && !fitting.some((s) => s.id === own)) {
         setError("Tanlangan ovoz topilmadi — ro‘yxatdan qayta tanlang");
         return;
       }
-      if (!own && String(sent[PROMPT_PARAM] ?? "").length < HEYGEN_SCRIPT_MIN) {
+      if (photoAvatar && !own) {
+        setError("Avatar uchun «Ovoz» bo‘limidagi ovozingizni tanlang");
+        return;
+      }
+      if (photoAvatar && !state.raw[IMAGE_PARAM]) {
+        setError("Avatar suratini yuklang");
+        return;
+      }
+      if (!own && !photoAvatar && String(sent[PROMPT_PARAM] ?? "").length < HEYGEN_SCRIPT_MIN) {
         setError(`Avatar aytadigan matnni yozing (kamida ${HEYGEN_SCRIPT_MIN} ta belgi) yoki o‘z ovozingizni tanlang`);
         return;
       }
@@ -426,7 +437,7 @@ export function VideoTab({
               Rasmdan video: rasmingiz birinchi kadr bo‘ladi. Faqat suratdan video yarata oladigan modellar ko‘rsatilgan.
             </p>
           ) : null}
-          {avatar && ownAudio ? null : (
+          {avatar && (ownAudio || photoAvatar) ? null : (
             <VideoPromptBox
               value={String(state.raw[PROMPT_PARAM] ?? "")}
               onChange={(v) => setParam(PROMPT_PARAM, v)}
@@ -448,7 +459,15 @@ export function VideoTab({
           />
           {avatar ? (
             <Card title="Avatar ovozi">
-              <Row label="O‘z ovozingiz" hint="Ixtiyoriy: «Ovoz» bo‘limidagi tayyor ovoz (1 daqiqagacha) — avatar matn o‘rniga shuni gapiradi" wide>
+              <Row
+                label="O‘z ovozingiz"
+                hint={
+                  photoAvatar
+                    ? `«Ovoz» bo‘limidagi tayyor ovoz (${avatarMinSeconds(textModel.id)}–${avatarMaxSeconds(textModel.id)} soniya) — surat shuni gapiradi`
+                    : "Ixtiyoriy: «Ovoz» bo‘limidagi tayyor ovoz (1 daqiqagacha) — avatar matn o‘rniga shuni gapiradi"
+                }
+                wide
+              >
                 <Field id={OWN_AUDIO_PARAM}>
                   {speechError ? (
                     <p role="alert" className="text-destructive text-[13.5px]" data-avatar-speech-error>
@@ -458,17 +477,17 @@ export function VideoTab({
                     <p className="text-muted-foreground text-[13.5px]" role="status" data-avatar-speech-loading>
                       Ovozlar yuklanmoqda…
                     </p>
-                  ) : speeches.length === 0 ? (
+                  ) : fitting.length === 0 ? (
                     <p className="text-muted-foreground text-[13.5px]" data-avatar-speech-empty>
-                      Hali tayyor ovoz yo‘q — avatar matnni o‘zi o‘qiydi. O‘z ovozingiz uchun avval «Ovoz» bo‘limida yarating.
+                      {photoAvatar ? "Bu avatarga mos ovoz yo‘q — avval «Ovoz» bo‘limida yarating." : "Hali tayyor ovoz yo‘q — avatar matnni o‘zi o‘qiydi. O‘z ovozingiz uchun avval «Ovoz» bo‘limida yarating."}
                     </p>
                   ) : (
                     <SelectField
                       ariaLabel="O‘z ovozingiz"
                       options={[
-                        { value: "", label: "Yo‘q — matnni avatar o‘qiydi" },
+                        { value: "", label: photoAvatar ? "Ovozni tanlang" : "Yo‘q — matnni avatar o‘qiydi" },
                         // The seconds it is priced at (rounded up, as the button), not a rounded-to-nearest copy.
-                        ...speeches.map((s) => ({ value: s.id, label: `${s.title} · ${avatarAudioSeconds(s.seconds ?? 0)} s` })),
+                        ...fitting.map((s) => ({ value: s.id, label: `${s.title} · ${avatarAudioSeconds(s.seconds ?? 0, avatarMaxSeconds(textModel.id))} s` })),
                       ]}
                       value={ownAudio}
                       onChange={(v) => setParam(OWN_AUDIO_PARAM, v)}
@@ -492,9 +511,9 @@ export function VideoTab({
               </Row>
             </Card>
           ) : null}
-          <ParamRows entry={formEntry} raw={state.raw} onChange={setParam} />
+          {formEntry.params.length > 0 ? <ParamRows entry={formEntry} raw={state.raw} onChange={setParam} /> : null}
           {hasStart ? (
-            <Card title={hasEnd ? "Kadrlar (ixtiyoriy)" : "Boshlang‘ich surat (ixtiyoriy)"}>
+            <Card title={photoAvatar ? "Avatar surati" : hasEnd ? "Kadrlar (ixtiyoriy)" : "Boshlang‘ich surat (ixtiyoriy)"}>
               <Row label={hasEnd ? "Birinchi kadr" : "Surat"} wide>
                 <Field id={IMAGE_PARAM}>
                   <PhotoField
@@ -502,7 +521,7 @@ export function VideoTab({
                     originalAssetId=""
                     shape="square"
                     keepOriginal={false}
-                    alt="Boshlang‘ich surat"
+                    alt={photoAvatar ? "Avatar surati" : "Boshlang‘ich surat"}
                     hint={photoHint()}
                     onChange={(v) =>
                       // Removing the start frame removes the end frame too (an end frame alone is never sent), and lifts
@@ -511,7 +530,7 @@ export function VideoTab({
                     }
                   />
                 </Field>
-                <p className="text-muted-foreground mt-1 text-[13px]">Surat berilsa video shu suratdan boshlanadi; nisbat suratdan olinadi.</p>
+                <p className="text-muted-foreground mt-1 text-[13px]">{photoAvatar ? "Yuz aniq ko‘rinsin: shu surat gapiradi." : "Surat berilsa video shu suratdan boshlanadi; nisbat suratdan olinadi."}</p>
               </Row>
               {hasEnd ? (
                 <Row label="Oxirgi kadr" hint="Ixtiyoriy: video shu surat bilan tugaydi (boshlang‘ich surat bilan birga)" wide>

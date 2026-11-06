@@ -1,5 +1,5 @@
 import type { ClientEntry } from "@/lib/studio-core";
-import { HEYGEN_MAX_SECONDS, OWN_AUDIO_PARAM, isAvatarModel, withAvatarSeconds } from "@/lib/media/catalog-video";
+import { HEYGEN_MAX_SECONDS, OWN_AUDIO_PARAM, avatarMaxSeconds, avatarMinSeconds, isAvatarModel, withAvatarSeconds } from "@/lib/media/catalog-video";
 import { MIX_SECONDS_TOLERANCE } from "@/lib/media/catalog-mix";
 import { PROMPT_PARAM } from "../studio-values";
 
@@ -15,6 +15,13 @@ export type SpeechSource = { id: string; title: string; kind: string; seconds: n
 /** The speeches an avatar can speak: a known length (the price needs it) within `HEYGEN_MAX_SECONDS`. */
 export function avatarSpeeches(list: readonly SpeechSource[]): SpeechSource[] {
   return list.filter((s) => typeof s.seconds === "number" && s.seconds > 0 && s.seconds <= HEYGEN_MAX_SECONDS + MIX_SECONDS_TOLERANCE);
+}
+
+/** The speeches this model takes: within its own length limits (P11: OmniHuman wants 4 s at least, the photo avatars stop at 30 s). */
+export function avatarSpeechesFor(list: readonly SpeechSource[], modelId: string): SpeechSource[] {
+  const min = avatarMinSeconds(modelId);
+  const max = avatarMaxSeconds(modelId);
+  return list.filter((s) => typeof s.seconds === "number" && s.seconds >= min && s.seconds <= max + MIX_SECONDS_TOLERANCE);
 }
 
 /** Params the generic rows never draw for the avatar: the length (computed), the own speech (its own picker) and — when

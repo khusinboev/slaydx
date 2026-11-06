@@ -105,6 +105,19 @@ export const RECRAFT_SIZES: Readonly<Record<Ratio, string | { width: number; hei
   "3:2": { width: 1536, height: 1024 },
 };
 
+/**
+ * FLUX 3 Klein bills by size tier and states no tier's pixel bound: every side stays at or under 1024 px, so the picture is
+ * the «1K» tier by side and by area alike. The schema takes each side from 256 to 4096 px (llms.txt, 2026-11-06).
+ */
+export const KLEIN_SIZES: Readonly<Record<Ratio, { width: number; height: number }>> = {
+  "1:1": { width: 1024, height: 1024 },
+  "16:9": { width: 1024, height: 576 },
+  "9:16": { width: 576, height: 1024 },
+  "4:3": { width: 1024, height: 768 },
+  "3:4": { width: 768, height: 1024 },
+  "3:2": { width: 1020, height: 680 },
+};
+
 export type FalModel = {
   /**
    * The model's input JSON from the normalized params (+ the engine's composed `prompt` in `extra`) and, for the P2b
@@ -202,6 +215,29 @@ export const FAL_MODELS: Readonly<Record<string, FalModel>> = {
       enable_safety_checker: true,
     }),
   },
+  // https://fal.ai/models/meta/muse-image/text-to-image/llms.txt (2026-11-06): `aspect_ratio` names our six ratios, the size is
+  // Muse's own (≈ 2.5 MP). The page has no safety switch and no `has_nsfw_concepts` (UNVERIFIED how it refuses: a live check).
+  "meta/muse-image/text-to-image": {
+    body: (p) => ({
+      prompt: String(p.prompt ?? ""),
+      aspect_ratio: ratioOf(p).id,
+      num_images: 1,
+      output_format: "jpeg",
+      sync_mode: true,
+    }),
+  },
+  // https://fal.ai/models/blackforestlabs/flux-3/klein/text-to-image/llms.txt (2026-11-06).
+  "blackforestlabs/flux-3/klein/text-to-image": {
+    body: (p) => ({
+      prompt: String(p.prompt ?? ""),
+      image_size: KLEIN_SIZES[ratioOf(p).id],
+      num_images: 1,
+      output_format: "jpeg",
+      enable_prompt_expansion: false,
+      enable_safety_checker: true,
+      sync_mode: true,
+    }),
+  },
 };
 
 /* ═════════════════════ Studio P2b: edit + utility builders (docs/studio/P2B-SPEC.md) ═════════════════════
@@ -224,6 +260,8 @@ function firstInput(inputs: readonly AdapterAsset[] | undefined): string {
 
 /** Seedream 5 Lite edit takes up to 10 inputs (its schema); the catalog allows 3. */
 export const SEEDREAM_EDIT_MAX_INPUTS = 10;
+/** Muse and Klein edit both state up to 10 references; the catalog allows 3. */
+export const FAL_EDIT_MAX_INPUTS = 10;
 
 export const FAL_TOOL_MODELS: Readonly<Record<string, FalModel>> = {
   // https://fal.ai/models/bytedance/seedream/v5/lite/edit/llms.txt (2026-11-02): `image_urls` (≤ 10), `image_size`
@@ -236,6 +274,33 @@ export const FAL_TOOL_MODELS: Readonly<Record<string, FalModel>> = {
       image_size: "auto_2K",
       num_images: 1,
       output_format: "jpeg",
+      enable_safety_checker: true,
+      sync_mode: true,
+    }),
+  },
+  // https://fal.ai/models/meta/muse-image/edit/llms.txt (2026-11-06): `image_urls` 1–10 «HTTP(S) or data URLs»; no aspect
+  // sent: Muse follows the references.
+  "meta/muse-image/edit": {
+    minInputs: 1,
+    body: (p, inputs) => ({
+      prompt: String(p.prompt ?? ""),
+      image_urls: (inputs ?? []).slice(0, FAL_EDIT_MAX_INPUTS).map(dataUri),
+      num_images: 1,
+      output_format: "jpeg",
+      sync_mode: true,
+    }),
+  },
+  // https://fal.ai/models/blackforestlabs/flux-3/klein/edit-image/llms.txt (2026-11-06): the prompt must be «a complete caption
+  // of the target image»; ours is an instruction, so the expansion stays on here («grounded in the reference images when
+  // editing», its default). No `image_size`: the output follows the reference, priced at the 2K tier (`IMAGE_PRICES`).
+  "blackforestlabs/flux-3/klein/edit-image": {
+    minInputs: 1,
+    body: (p, inputs) => ({
+      prompt: String(p.prompt ?? ""),
+      image_urls: (inputs ?? []).slice(0, FAL_EDIT_MAX_INPUTS).map(dataUri),
+      num_images: 1,
+      output_format: "jpeg",
+      enable_prompt_expansion: true,
       enable_safety_checker: true,
       sync_mode: true,
     }),
@@ -712,6 +777,15 @@ function soraBody(p: NormalizedParams, f: FalVideoFrames, pro: boolean): Record<
   };
 }
 
+/**
+ * Package F's text / image → video models: same shape. Image → video has no `aspect_ratio` on any of the three (the frame
+ * decides); `duration` is an integer on the three (Happy Horse's page calls it an enum but lists bare numbers and its example
+ * sends `5`, UNVERIFIED until the first clip).
+ */
+function aspectOrFrame(p: NormalizedParams, f: FalVideoFrames): Record<string, unknown> {
+  return f.start ? { image_url: dataUri(f.start) } : { aspect_ratio: vStr(p, "aspect", "16:9") };
+}
+
 /** The start frame of a `needsStart` model; `falVideoRequest` refused the request before a builder needs it. */
 const startUri = (f: FalVideoFrames) => (f.start ? dataUri(f.start) : "");
 
@@ -757,6 +831,33 @@ export const FAL_VIDEO_MODELS: Readonly<Record<string, FalVideoModel>> = {
   // https://fal.ai/docs/model-api-reference/video-generation-api/sora-2-text-to-video + …/sora-2-image-to-video (2026-11-03).
   "fal-ai/sora-2": { t2v: "fal-ai/sora-2/text-to-video", i2v: "fal-ai/sora-2/image-to-video", body: (p, f) => soraBody(p, f, false) },
   "fal-ai/sora-2/pro": { t2v: "fal-ai/sora-2/text-to-video/pro", i2v: "fal-ai/sora-2/image-to-video/pro", body: (p, f) => soraBody(p, f, true) },
+  // https://fal.ai/models/xai/grok-imagine-video/v1.5/lite/text-to-video/llms.txt + …/image-to-video/llms.txt (2026-11-06).
+  "xai/grok-imagine-video/v1.5/lite": {
+    t2v: "xai/grok-imagine-video/v1.5/lite/text-to-video",
+    i2v: "xai/grok-imagine-video/v1.5/lite/image-to-video",
+    body: (p, f) => ({ prompt: String(p.prompt ?? ""), ...aspectOrFrame(p, f), duration: vInt(p, "seconds", 5), resolution: "720p", enable_safety_checker: true }),
+  },
+  // https://fal.ai/models/fal-ai/pixverse/v6/text-to-video/llms.txt + …/image-to-video/llms.txt (2026-11-06): `generate_audio_switch`
+  // sets the price; multi-clip is sent off so a default change at fal cannot change our clip silently.
+  "fal-ai/pixverse/v6": {
+    t2v: "fal-ai/pixverse/v6/text-to-video",
+    i2v: "fal-ai/pixverse/v6/image-to-video",
+    body: (p, f) => ({
+      prompt: String(p.prompt ?? ""),
+      ...aspectOrFrame(p, f),
+      resolution: "720p",
+      duration: vInt(p, "seconds", 5),
+      generate_audio_switch: vBool(p, "sound", false),
+      generate_multi_clip_switch: false,
+      enable_safety_checker: true,
+    }),
+  },
+  // https://fal.ai/models/alibaba/happy-horse/v1.1/text-to-video/llms.txt + …/image-to-video/llms.txt (2026-11-06).
+  "alibaba/happy-horse/v1.1": {
+    t2v: "alibaba/happy-horse/v1.1/text-to-video",
+    i2v: "alibaba/happy-horse/v1.1/image-to-video",
+    body: (p, f) => ({ prompt: String(p.prompt ?? ""), ...aspectOrFrame(p, f), resolution: vStr(p, "resolution", "720p"), duration: vInt(p, "seconds", 5), enable_safety_checker: true }),
+  },
   // https://fal.ai/models/fal-ai/pixverse/v5.5/effects/llms.txt (2026-11-06): the sold clip is 720p, 5 s, one image.
   [PIXVERSE_EFFECTS_ENDPOINT]: {
     t2v: PIXVERSE_EFFECTS_ENDPOINT,

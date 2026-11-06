@@ -2,7 +2,7 @@ import "server-only";
 import { ApiError } from "../api";
 import { queryOne } from "../db";
 import type { AdapterAsset } from "../../studio-core";
-import { HEYGEN_MAX_SECONDS, OWN_AUDIO_PARAM, isAvatarModel, withAvatarSeconds } from "../../media/catalog-video";
+import { FAL_AVATAR_AUDIO_MIMES, OWN_AUDIO_PARAM, avatarMaxSeconds, avatarMinSeconds, isAvatarModel, isPhotoAvatarModel, withAvatarSeconds } from "../../media/catalog-video";
 import { isGenerationId, MIX_SECONDS_TOLERANCE } from "../../media/catalog-mix";
 import { studioVideoModelOf } from "../../media/studio-video-pricing";
 import { mediaSeconds } from "../../generation/studio/mix-media";
@@ -48,13 +48,14 @@ const ownId = (values: Readonly<Record<string, unknown>>) => String(values[OWN_A
 
 /**
  * Before pricing / charging (400): for the avatar model, the own speech (if any) is the caller's own finished speech
- * within `HEYGEN_MAX_SECONDS`, and `values.seconds` is OVERWRITTEN from the inputs (`withAvatarSeconds`, the function the
+ * within the model's limits (`avatarMinSeconds` … `avatarMaxSeconds`), and `values.seconds` is OVERWRITTEN from the inputs (`withAvatarSeconds`, the function the
  * browser prices with) — the price follows the script / the file, never the request's number (the «Audio» tab's
  * `inputSeconds` rule). Other models: nothing. A replay is a job that already exists (the caller skips this).
  */
 export async function prepareAvatarRequest(userId: string, values: FormValues): Promise<void> {
   const v = values as unknown as Record<string, unknown>;
-  if (!isAvatarModel(studioVideoModelOf(v))) return;
+  const modelId = studioVideoModelOf(v);
+  if (!isAvatarModel(modelId)) return;
   const id = ownId(v);
   let audioSeconds: number | null = null;
   if (id) {
@@ -66,7 +67,11 @@ export async function prepareAvatarRequest(userId: string, values: FormValues): 
       s = f ? mediaSeconds(new Uint8Array(f.bytes), f.mime) : 0;
     }
     if (!(s > 0)) throw new ApiError("Ovoz faylini o‘qib bo‘lmadi — boshqasini tanlang.", 400, { code: "input_invalid" });
-    if (s > HEYGEN_MAX_SECONDS + MIX_SECONDS_TOLERANCE) throw new ApiError(`Avatar uchun ovoz ${HEYGEN_MAX_SECONDS} soniyadan oshmasin.`, 400, { code: "input_invalid" });
+    const max = avatarMaxSeconds(modelId);
+    if (s > max + MIX_SECONDS_TOLERANCE) throw new ApiError(`Avatar uchun ovoz ${max} soniyadan oshmasin.`, 400, { code: "input_invalid" });
+    if (s < avatarMinSeconds(modelId)) throw new ApiError(`Bu avatar uchun ovoz kamida ${avatarMinSeconds(modelId)} soniya bo‘lsin.`, 400, { code: "input_invalid" });
+    // The stated formats (OmniHuman: wav or mp3); a speech result is stored as MP3, so this guards an old or foreign row.
+    if (isPhotoAvatarModel(modelId) && !FAL_AVATAR_AUDIO_MIMES.includes(row.mime)) throw new ApiError("Bu ovoz formati avatarga mos emas — boshqasini tanlang.", 400, { code: "input_invalid" });
     audioSeconds = s;
   }
   const next = withAvatarSeconds(v, audioSeconds);

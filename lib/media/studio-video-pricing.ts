@@ -8,7 +8,7 @@
  */
 import { normalizeText, validate, type CatalogEntry } from "../studio-core";
 import { MEDIA_CATALOG, MEDIA_PURPOSES } from "./catalog";
-import { END_IMAGE_PARAM, HEYGEN_SCRIPT_MAX, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, STUDIO_VIDEO_PURPOSE, avatarScriptProblem, effectPhotos, isAvatarModel } from "./catalog-video";
+import { END_IMAGE_PARAM, HEYGEN_SCRIPT_MAX, HEYGEN_SCRIPT_MIN, OWN_AUDIO_PARAM, SECOND_IMAGE_PARAM, STUDIO_VIDEO_PURPOSE, avatarScriptProblem, effectPhotos, isAvatarModel, isPhotoAvatarModel } from "./catalog-video";
 import { isGenerationId } from "./catalog-mix";
 import { studioEntryPrice, type MediaPricing } from "./studio-pricing";
 
@@ -55,6 +55,12 @@ export function studioVideoError(values: Readonly<Record<string, unknown>>): str
     if (two && !has(SECOND_IMAGE_PARAM)) return "Bu effekt uchun ikkinchi suratni ham yuklang.";
     if (!two && has(SECOND_IMAGE_PARAM)) return "Bu effekt bitta surat bilan ishlaydi.";
     return null;
+  }
+  // P11 photo avatars: the user's own speech is the only input besides the photo (`validate` requires the photo).
+  if (isPhotoAvatarModel(entry.id)) {
+    const own = String(values[OWN_AUDIO_PARAM] ?? "").trim();
+    if (!own) return "Avatar uchun «Ovoz» bo‘limidagi ovozingizni tanlang.";
+    return isGenerationId(own.toLowerCase()) ? null : "Ovoz topilmadi — ro‘yxatdan qayta tanlang.";
   }
   // P9 HeyGen: the avatar speaks a script OR the user's own speech result — exactly one of the two.
   if (isAvatarModel(entry.id)) {

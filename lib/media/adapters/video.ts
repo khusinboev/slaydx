@@ -16,6 +16,7 @@ import { keyUsable } from "../../server/providers/registry";
 import { MEDIA_CATALOG, VIDEO_PROVIDER_TO_MEDIA } from "../catalog";
 import { END_IMAGE_PARAM, SECOND_IMAGE_PARAM, effectPhotos } from "../catalog-video";
 import { FAL_VIDEO_ADAPTER_ID, falVideoAdapter } from "./fal";
+import { FAL_AVATAR_ADAPTER_ID, falAvatarAdapter } from "./fal-avatar";
 import { HEYGEN_ADAPTER_ID, heygenVideoAdapter, type HeygenDeps } from "./heygen";
 import {
   buildKlingDualEffectRequest,
@@ -212,6 +213,8 @@ export function studioVideoAdapters(opts: { omni?: VideoAdapter; klingKeyFn?: ()
   out["kling-effects"] = klingStudioAdapter("kling-effects", key, klingEffectRequest);
   // P4: Wan / Seedance / MiniMax through the fal queue (async: submit → op id → the shared video poll loop).
   out[FAL_VIDEO_ADAPTER_ID] = falVideoAdapter(opts.falKeyFn ? { key: opts.falKeyFn } : {});
+  // P11: photo avatars, the same queue with the speech uploaded to fal storage first.
+  out[FAL_AVATAR_ADAPTER_ID] = falAvatarAdapter(opts.falKeyFn ? { key: opts.falKeyFn } : {});
   // P9: HeyGen avatar videos (async: submit → `heygen:<video_id>` → the shared video poll loop).
   out[HEYGEN_ADAPTER_ID] = heygenVideoAdapter(opts.heygen ?? {});
   return out;
