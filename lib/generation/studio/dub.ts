@@ -20,7 +20,11 @@
  *
  * P11 package E: the request's `modelId` picks ElevenLabs direct, ElevenLabs through fal or HeyGen through fal (`fal-dub.ts`).
  * Same engine, same exactly-once row: only the adapter differs. HeyGen bills the seconds it DELIVERS, so the job's cost
- * telemetry reads the delivered file (the quote read the source; `media_jobs.cost_usd` stays that quote).
+ * telemetry reads the delivered file (the quote read the source; `media_jobs.cost_usd` stays that quote), and a file longer
+ * than the quote is logged and counted as a provider failure, the owner's existing alert (`server-alerts.ts provider_fail`).
+ *
+ * A fal source lives on fal's CDN while the op runs: its URL is written to the row BEFORE the paid call, so whoever ends the
+ * op deletes it, this worker, the one that resumes it, or housekeeping (`studioDubHousekeeping`).
  */
 import { MediaError, costUsd, normalize, submitWithRoutes, type CatalogEntry, type MediaAdapter, type MediaOutput, type RouteHealth } from "../../studio-core";
 import { AUTO_LANGUAGE, DUB_MAX_SECONDS, HEYGEN_TRANSLATE_MODEL, HEYGEN_TRANSLATE_USD_PER_SECOND, SPEECH_TOOL_OUTPUT_MAX_BYTES, STUDIO_DUB_PURPOSE, parseSource, videoOnlySource } from "../../media/catalog-transcribe";
@@ -31,6 +35,7 @@ import { mediaContext } from "../../media/context";
 import { UserFacingError } from "../../server/user-error";
 import { extractMeta } from "../meta";
 import { recordAudioCall, recordDeliveredSeconds } from "./cost";
+import { stripUrls } from "../video/types";
 import { mp4HasVideo } from "./mix-media";
 import { mp4Seconds } from "../video/mp4";
 import { mp3Seconds } from "../tts/mp3";
@@ -40,8 +45,11 @@ import type { FormValues, ToolConfig } from "../../types";
 
 /** The `media_jobs` side the engine needs (default: `lib/server/media/jobs.ts` inside a job). */
 export type DubRowStore = {
-  begin(i: { key: string; params: Record<string, unknown>; costUsd: number }): Promise<{ id: string; status: string; opId: string | null; fresh: boolean }>;
+  /** `uploadUrl`: an input an earlier run left at the provider, still to delete. */
+  begin(i: { key: string; params: Record<string, unknown>; costUsd: number }): Promise<{ id: string; status: string; opId: string | null; fresh: boolean; uploadUrl?: string | null }>;
   park(id: string, opId: string): Promise<void>;
+  noteUpload?(id: string, url: string): Promise<void>;
+  clearUpload?(id: string): Promise<void>;
   finish(id: string, meta: { mime: string; size: number }): Promise<void>;
   fail(id: string, message: string): Promise<void>;
 };
@@ -53,6 +61,8 @@ export type StudioDubDeps = {
   health?: RouteHealth;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
+  /** Test seam: a delivered file longer than the quote (default: `recordProviderFailure` inside a job). */
+  overrun?: (message: string) => Promise<void>;
 };
 
 const REFUND = "Kredit qaytariladi.";
@@ -101,12 +111,22 @@ async function defaultStore(entry: CatalogEntry): Promise<DubRowStore | null> {
         params: i.params,
         costUsd: i.costUsd,
       });
-      return { id: row.id, status: row.status, opId: row.op_id, fresh };
+      const upload = row.params[jobs.MEDIA_UPLOAD_PARAM];
+      return { id: row.id, status: row.status, opId: row.op_id, fresh, uploadUrl: typeof upload === "string" ? upload : null };
     },
     park: (id, opId) => jobs.parkMediaJob(id, opId, new Date(Date.now() + 10_000)),
+    noteUpload: (id, url) => jobs.noteMediaUpload(id, url),
+    clearUpload: (id) => jobs.clearMediaUpload(id),
     finish: (id, meta) => jobs.finishMediaJob(id, [meta]),
     fail: (id, message) => jobs.failMediaJob(id, message),
   };
+}
+
+/** Counts toward the owner's `provider_fail` alert (5 equal errors in 10 minutes); the job itself is delivered. */
+async function defaultOverrun(provider: string, message: string): Promise<void> {
+  const ctx = mediaContext();
+  if (!ctx) return;
+  await (await import("../../server/provider-failures")).recordProviderFailure(ctx.generationId, { provider, message });
 }
 
 async function defaultHealth(): Promise<RouteHealth> {
@@ -157,7 +177,18 @@ export async function buildStudioDub(
   const key = `${gen}:dub:0`;
 
   const row = store ? await store.begin({ key, params: { ...p }, costUsd: costUsd(entry.cost, p) }) : null;
+  let inputUrl = row?.uploadUrl ?? null;
+  const forgetUpload = async () => {
+    inputUrl = null;
+    if (row) await store?.clearUpload?.(row.id).catch(() => undefined);
+  };
+  const dropUpload = async () => {
+    if (!inputUrl) return;
+    await adapter.dropInput?.(inputUrl).catch(() => undefined);
+    await forgetUpload();
+  };
   const fail = async (message: string, userMessage: string, cause?: unknown): Promise<never> => {
+    await dropUpload();
     if (store && row) await store.fail(row.id, message).catch(() => undefined);
     throw new UserFacingError(userMessage, cause === undefined ? undefined : { cause });
   };
@@ -176,12 +207,20 @@ export async function buildStudioDub(
         adapters,
         deps.health ?? (await defaultHealth()),
         { params: p, assets: { media: [{ mime: src.mime, base64: Buffer.from(src.bytes).toString("base64") }] }, idempotencyKey: key },
-        o.deadline ? { deadline: o.deadline } : {},
+        {
+          ...(o.deadline ? { deadline: o.deadline } : {}),
+          onInputStored: async (url) => {
+            inputUrl = url;
+            if (row) await store?.noteUpload?.(row.id, url);
+          },
+        },
       );
       if (!("opId" in result)) throw new MediaError(route.provider, "dubbing answered synchronously");
       opId = result.opId;
     } catch (e) {
-      console.warn("[studio-dub] submit failed:", e instanceof Error ? e.message : e);
+      console.warn("[studio-dub] submit failed:", stripUrls(e instanceof Error ? e.message : String(e)));
+      // The adapter deleted what it uploaded.
+      await forgetUpload();
       return fail(e instanceof Error ? e.message : String(e), e instanceof MediaError && e.safety ? DUB_SAFETY_MESSAGE : DUB_FAILED_MESSAGE, e);
     }
     if (store && row) await store.park(row.id, opId);
@@ -231,8 +270,15 @@ export async function buildStudioDub(
   if (store && row) await store.finish(row.id, { mime: shape.mime, size: bytes.length }).catch(() => undefined);
   // The project is deleted at ElevenLabs once we hold the file (privacy; nothing is kept there).
   await adapter.cancel?.(opId).catch(() => undefined);
-  if (entry.id === HEYGEN_TRANSLATE_MODEL) recordDeliveredSeconds(route, shape.seconds || Number(p.sourceSeconds), HEYGEN_TRANSLATE_USD_PER_SECOND);
-  else recordAudioCall(entry, route, p);
+  await dropUpload();
+  if (entry.id === HEYGEN_TRANSLATE_MODEL) {
+    recordDeliveredSeconds(route, shape.seconds || Number(p.sourceSeconds), HEYGEN_TRANSLATE_USD_PER_SECOND);
+    if (shape.seconds > Number(p.sourceSeconds) + MEASURED_SLACK_SECONDS) {
+      const message = `heygen output ${round1(shape.seconds)} s over the quoted ${String(p.sourceSeconds)} s: billed per output second`;
+      console.warn(`[studio-dub] ${message}`);
+      await (deps.overrun ?? ((m: string) => defaultOverrun(route.provider, m)))(message).catch(() => undefined);
+    }
+  } else recordAudioCall(entry, route, p);
 
   const target = String(p.target);
   const output2: StudioDubDoc["output"] = shape.mime === "video/mp4" ? "mp4" : "mp3";

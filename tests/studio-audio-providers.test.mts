@@ -32,7 +32,7 @@ import path from "node:path";
  *   9. `assertPublicHttpsUrl` removed from the upload                            -> "storage: failures";
  *  10. `deleteFalFile` removed from the `finally` of `submit`                    -> "storage: delete";
  *  11. the sniff replaced by trusting the answer (`checkOutput` skipped)         -> "adapter: sniff";
- *  12. the fal `cancel` no longer deletes the upload                             -> "dub engine";
+ *  12. the engine no longer deletes the upload after the download                -> "dub engine: fal";
  *  13. the resume branch of the dub uploads again                                -> "dub engine: resume";
  *  14. a fal video goes to Scribe whole (no audio track)                         -> "transcribe engine";
  *  15. `clipOf` keeps the WAV                                                    -> "audio engine";
@@ -40,7 +40,19 @@ import path from "node:path";
  *  17. the video-only check removed from `studioDubError`                        -> "rules";
  *  18. Adam left in the fal voice list                                           -> "voices";
  *  19. `speechToolOffered` looks at the default model only                       -> "glue";
- *  20. `pickSpeechModel` keeps an audio source on HeyGen                         -> "glue".
+ *  20. `pickSpeechModel` keeps an audio source on HeyGen                         -> "glue";
+ *  review fixes:
+ *  21. Scribe's `unitSeconds` removed                                            -> "price";
+ *  22. `stripUrls` leaves a bare fal host / a `data:` URI / a scheme (each)      -> "URLs: the helper";
+ *  23. `scrub` no longer strips URLs                                             -> "URLs: fal errors";
+ *  24. the dub's log line not stripped                                           -> "URLs: the dub";
+ *  25. `scrubFailureText` no longer strips URLs                                  -> "URLs: the helper";
+ *  26. no delete after a failed PUT (status / network, each)                     -> "storage: failures";
+ *  27. `onInputStored` called after the submit                                   -> "dub engine: fal";
+ *  28. a resumed job ignores the row's upload                                    -> "dub engine: resume";
+ *  29. the lost-job path keeps the upload (`fail` without `dropUpload`)          -> "dub engine: a re-run";
+ *  30. the overrun not reported / not logged (each)                              -> "dub engine: overrun";
+ *  31. the overrun check without the slack                                       -> "dub engine: overrun".
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -70,6 +82,8 @@ const { buildStudioTranscribe } = await import("../lib/generation/studio/transcr
 const { buildStudioAudio } = await import("../lib/generation/studio/audio.ts");
 const { buildStudioSpeech } = await import("../lib/generation/studio/speech.ts");
 const dubMod = await import("../lib/generation/studio/dub.ts");
+const { stripUrls } = await import("../lib/generation/video/types.ts");
+const { scrubFailureText } = await import("../lib/server/provider-failures.ts");
 const jobCost = await import("../lib/generation/job-cost.ts");
 const glue = await import("../components/studio/audio/speech-tool-api.ts");
 
@@ -104,15 +118,18 @@ function mp3Bytes(frames = 80): Uint8Array {
 const wavBytes = (seconds = 1) => pcmToWav(new Uint8Array(48_000 * 2 * seconds), { sampleRate: 48_000 });
 const b64 = (b: Uint8Array) => Buffer.from(b).toString("base64");
 const assetOf = (mime: string, bytes: Uint8Array) => ({ mime, base64: b64(bytes) });
-let VIDEO: Uint8Array | null = null;
-function videoMp4(): Uint8Array {
-  if (VIDEO) return VIDEO;
+const VIDEOS = new Map<number, Uint8Array>();
+function videoMp4(seconds = 2): Uint8Array {
+  const known = VIDEOS.get(seconds);
+  if (known) return known;
   const dir = mkdtempSync(path.join(tmpdir(), "p11-e-"));
   try {
     const f = path.join(dir, "v.mp4");
-    const r = spawnSync("ffmpeg", ["-nostdin", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=c=blue:size=64x48:rate=6", "-f", "lavfi", "-i", "sine", "-t", "2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", f]);
+    const r = spawnSync("ffmpeg", ["-nostdin", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=c=blue:size=64x48:rate=6", "-f", "lavfi", "-i", "sine", "-t", String(seconds), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", f]);
     assert.equal(r.status, 0);
-    return (VIDEO = new Uint8Array(readFileSync(f)));
+    const bytes = new Uint8Array(readFileSync(f));
+    VIDEOS.set(seconds, bytes);
+    return bytes;
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -220,7 +237,10 @@ test("cost rule: `unitSeconds` bills whole started units, at least one; absent i
 
 test("price: each page's price, whole-minute billing, client preview == server", () => {
   near(usd(cat.FAL_SCRIBE_MODEL, { sourceSeconds: 60 }), 0.008, "Scribe, 1 min");
-  near(usd(cat.FAL_SCRIBE_MODEL, { sourceSeconds: 30 }), 0.004, "Scribe, 30 s");
+  // Per-second billing is not stated: until a live job shows it, a started minute is a whole one.
+  near(usd(cat.FAL_SCRIBE_MODEL, { sourceSeconds: 10 }), 0.008, "Scribe, a 10 s clip bills a full minute");
+  near(usd(cat.FAL_SCRIBE_MODEL, { sourceSeconds: 30 }), 0.008, "Scribe, 30 s");
+  near(usd(cat.FAL_SCRIBE_MODEL, { sourceSeconds: 61 }), 0.016, "Scribe, 61 s");
   near(usd(cat.FAL_DUB_MODEL, { sourceSeconds: 15 }), 0.6, "dubbing, 15 s rounds up to a minute");
   near(usd(cat.FAL_DUB_MODEL, { sourceSeconds: 60 }), 0.6, "dubbing, 1 min");
   near(usd(cat.FAL_DUB_MODEL, { sourceSeconds: 61 }), 1.2, "dubbing, 61 s");
@@ -238,6 +258,7 @@ test("price: each page's price, whole-minute billing, client preview == server",
   // At ×2 and 12 700 so'm/$: never under cost, and the short dub pays for the minute fal bills.
   const som = (id: string, v: Record<string, unknown>) => studioEntryPrice(entry(id), v, PRICING);
   assert.equal(som(cat.FAL_DUB_MODEL, { sourceSeconds: 15 }), 15_300);
+  assert.equal(som(cat.FAL_SCRIBE_MODEL, { sourceSeconds: 10 }), som(cat.FAL_SCRIBE_MODEL, { sourceSeconds: 60 }), "10 s and 60 s are the same minute");
   assert.equal(som(au.VEED_CLEAN_MODEL, { inputSeconds: 3 }), 400);
   assert.equal(som(cat.HEYGEN_TRANSLATE_MODEL, { sourceSeconds: 60 }), 76_200);
 
@@ -415,8 +436,18 @@ test("storage: failures are never `accepted`; no key, signature or user data in 
   };
   assert.equal((await failure({ initiate: () => json(401, { detail: KEY }) })).e.retryable, false);
   assert.equal((await failure({ initiate: () => json(503, {}) })).e.retryable, true);
-  assert.equal((await failure({ put: () => new Response(null, { status: 500 }) })).e.retryable, true);
+  // A failed PUT may leave part of the file: the delete is tried, with the key, on the file's URL.
+  const failedPut = await failure({ put: () => new Response(null, { status: 500 }) });
+  assert.equal(failedPut.e.retryable, true);
+  assert.deepEqual(failedPut.calls.filter((c) => c.url === storage.FAL_STORAGE_DELETE_URL).map((c) => c.body), [{ file_url: FILE_URL }]);
   assert.equal((await failure({ put: () => new Response(null, { status: 403 }) })).e.retryable, false);
+  const dropped = await failure({
+    put: () => {
+      throw new Error("socket hang up");
+    },
+  });
+  assert.equal(dropped.e.retryable, true);
+  assert.equal(dropped.calls.filter((c) => c.url === storage.FAL_STORAGE_DELETE_URL).length, 1, "a dropped connection too");
   await failure({ initiate: () => json(200, { upload_url: UPLOAD_URL }) });
   await failure({ initiate: () => json(200, { upload_url: UPLOAD_URL, file_url: "http://plain/x" }) });
   for (const bad of ["http://v3.fal.media/up", "https://evil.internal/up", "https://127.0.0.1/up"]) {
@@ -521,13 +552,15 @@ test("adapter: the shared failure rules hold — safety on the result, retryable
 
 const HEALTH = { allow: () => true, success: () => undefined, failure: () => undefined };
 type StoreCall = [string, ...unknown[]];
-function fakeStore(row: { status: string; opId: string | null; fresh: boolean } = { status: "submitting", opId: null, fresh: true }) {
+function fakeStore(row: { status: string; opId: string | null; fresh: boolean; uploadUrl?: string | null } = { status: "submitting", opId: null, fresh: true }) {
   const calls: StoreCall[] = [];
   return {
     calls,
     store: {
       begin: async (i: { key: string }) => (calls.push(["begin", i.key]), { id: "row1", ...row }),
       park: async (id: string, opId: string) => void calls.push(["park", id, opId]),
+      noteUpload: async (_id: string, url: string) => void calls.push(["noteUpload", url]),
+      clearUpload: async () => void calls.push(["clearUpload"]),
       finish: async (id: string, meta: { mime: string }) => void calls.push(["finish", id, meta.mime]),
       fail: async (id: string, message: string) => void calls.push(["fail", id, message]),
     },
@@ -555,6 +588,13 @@ test("dub engine: fal — upload, op parked, poll, download by sniff, upload del
   quiet(t);
   const f = fakeFal({ result: dubOutputResult("video"), download: videoMp4(), status: () => ({ status: "COMPLETED" }) });
   const { store, calls } = fakeStore();
+  // The note lands before the paid call: a worker dying in between leaves the URL on the row.
+  const note = store.noteUpload;
+  let submitsBeforeNote = -1;
+  store.noteUpload = async (id, url) => {
+    submitsBeforeNote = f.calls.filter((x) => x.method === "POST" && x.url.startsWith("https://queue.fal.run/")).length;
+    await note(id, url);
+  };
   const c = clock();
   const out = await dubMod.buildStudioDub(
     tools.TOOL_BY_ID["studio-dub"],
@@ -567,12 +607,14 @@ test("dub engine: fal — upload, op parked, poll, download by sniff, upload del
   assert.equal(out.doc?.dub?.model, cat.FAL_DUB_MODEL);
   assert.equal(out.doc?.video?.provider, "fal");
   assert.equal(out.doc?.video?.model, cat.FAL_DUB_MODEL);
-  assert.deepEqual(calls.map((x) => x[0]), ["begin", "park", "finish"]);
-  assert.equal(calls[1]![2], `fal:${cat.FAL_DUB_ENDPOINT}:${REQ}`);
+  assert.deepEqual(calls.map((x) => x[0]), ["begin", "noteUpload", "park", "finish", "clearUpload"], "the URL is on the row until the file is gone");
+  assert.equal(calls[1]![1], FILE_URL);
+  assert.equal(calls[2]![2], `fal:${cat.FAL_DUB_ENDPOINT}:${REQ}`);
   const submit = f.calls.find((x) => x.method === "POST" && x.url === `https://queue.fal.run/${cat.FAL_DUB_ENDPOINT}`)!;
   assert.deepEqual(submit.body, { video_url: FILE_URL, target_lang: "ru", highest_resolution: false });
   assert.equal(submit.headers["X-Fal-Request-Start-Timeout"], "180");
   assert.ok(!f.calls.some((x) => x.url.includes("elevenlabs.io")));
+  assert.equal(submitsBeforeNote, 0, "noted before the submit");
   assert.equal(f.calls.filter((x) => x.url === storage.FAL_STORAGE_DELETE_URL).length, 1, "the source does not stay on fal");
   const dl = f.calls.find((x) => x.url.startsWith("https://v3.fal.media/out"))!;
   assert.equal(dl.headers.Authorization, undefined);
@@ -581,7 +623,7 @@ test("dub engine: fal — upload, op parked, poll, download by sniff, upload del
 test("dub engine: resume — a parked fal op is polled, never uploaded or submitted again", { skip: ffSkip }, async (t) => {
   quiet(t);
   const f = fakeFal({ result: dubOutputResult("video"), download: videoMp4() });
-  const { store } = fakeStore({ status: "pending", opId: `fal:${cat.FAL_DUB_ENDPOINT}:${REQ}`, fresh: false });
+  const { store, calls } = fakeStore({ status: "pending", opId: `fal:${cat.FAL_DUB_ENDPOINT}:${REQ}`, fresh: false, uploadUrl: FILE_URL });
   const c = clock();
   const out = await dubMod.buildStudioDub(
     tools.TOOL_BY_ID["studio-dub"],
@@ -593,9 +635,28 @@ test("dub engine: resume — a parked fal op is polled, never uploaded or submit
   assert.equal(out.mime, "video/mp4");
   assert.ok(!f.calls.some((x) => x.url === storage.FAL_STORAGE_INITIATE_URL), "nothing uploaded");
   assert.ok(!f.calls.some((x) => x.method === "POST" && x.url.startsWith("https://queue.fal.run/")), "nothing resubmitted");
+  // Another worker uploaded it; this one read the URL from the row and deletes it.
+  assert.deepEqual(f.calls.filter((x) => x.url === storage.FAL_STORAGE_DELETE_URL).map((x) => x.body), [{ file_url: FILE_URL }]);
+  assert.ok(calls.some((x) => x[0] === "clearUpload"));
   // An op id for an endpoint outside the dub list is refused, so a stored row cannot steer the key.
   assert.equal(parseFalVideoOp(`fal:${cat.FAL_DUB_ENDPOINT}:${REQ}`), null, "the clip list does not know a dub");
   assert.deepEqual(parseFalVideoOp(`fal:${cat.FAL_DUB_ENDPOINT}:${REQ}`, models.FAL_DUB_ENDPOINTS), { endpoint: cat.FAL_DUB_ENDPOINT, requestId: REQ });
+});
+
+test("dub engine: a re-run that cannot resume refunds and still deletes the upload the dead worker left", async (t) => {
+  quiet(t);
+  for (const row of [{ status: "submitting", opId: null, fresh: false, uploadUrl: FILE_URL }, { status: "succeeded", opId: `fal:${cat.FAL_DUB_ENDPOINT}:${REQ}`, fresh: false, uploadUrl: FILE_URL }]) {
+    const f = fakeFal();
+    const { store, calls } = fakeStore(row);
+    const c = clock();
+    await assert.rejects(
+      dubMod.buildStudioDub(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.FAL_DUB_MODEL, source: RES, sourceSeconds: 2, target: "uz" } as never, audioCtx(), { deadline: c.now() + 500_000 }, { adapters: { "fal-dub": wrapped(f) }, store, health: HEALTH, ...c }),
+      (e: unknown) => e instanceof UserFacingError && e.message === dubMod.DUB_LOST_MESSAGE,
+      row.status,
+    );
+    assert.deepEqual(f.calls.map((x) => x.url), [storage.FAL_STORAGE_DELETE_URL], `${row.status}: nothing sent but the delete`);
+    assert.ok(calls.some((x) => x[0] === "clearUpload"));
+  }
 });
 
 test("dub engine: an audio source comes back as MP3 from `audio`; failures refund and clean up", async (t) => {
@@ -662,6 +723,7 @@ function wrapped(f: ReturnType<typeof fakeFal>) {
     submit: (i: never, d: object) => a.submit(i, deps(d)),
     poll: (o: string, d: object) => a.poll!(o, deps(d)),
     cancel: (o: string, d?: object) => a.cancel!(o, deps(d)),
+    dropInput: (u: string, d?: object) => a.dropInput!(u, deps(d)),
     fetchOutput: (o: never, d: object) => a.fetchOutput(o, deps(d)),
   } as never;
 }
@@ -806,5 +868,94 @@ test("glue: the tool opens on the fal model alone; pickers, the model switch, th
 
   assert.match(glue.billedLine(clientOf(cat.FAL_DUB_MODEL), 15), /to‘liq daqiqalar.*1 daqiqa/);
   assert.match(glue.billedLine(clientOf(cat.FAL_DUB_MODEL), 61), /2 daqiqa/);
-  assert.equal(glue.billedLine(clientOf(cat.FAL_SCRIBE_MODEL), 15), "Narx 15 soniya uchun hisoblanadi.");
+  assert.match(glue.billedLine(clientOf(cat.FAL_SCRIBE_MODEL), 10), /to‘liq daqiqalar.*1 daqiqa/, "fal Scribe shows the billed minutes");
+  assert.equal(glue.billedLine(clientOf(cat.HEYGEN_TRANSLATE_MODEL), 15), "Narx 15 soniya uchun hisoblanadi.");
+});
+
+/* ───────────────────────── review fixes ───────────────────────── */
+
+const PUBLIC = "https://v3.fal.media/files/lion/user-voice.mp3?token=abc";
+
+test("URLs: the helper takes every shape out, and the failure text the owner's alert stores", () => {
+  for (const [text, gone] of [
+    [`Could not read ${PUBLIC}: 422`, "user-voice"],
+    ["see http://example.com/a/b, thanks", "example.com"],
+    ["bad input v3b.fal.media/files/b/0a/x.mp3 here", "x.mp3"],
+    ["from queue.fal.run/fal-ai/x/requests/1", "fal-ai"],
+    ["got data:audio/mpeg;base64,SUQzBAAAAAAA and stopped", "SUQz"],
+    ["ftp://host/file failed", "host/file"],
+  ] as const) {
+    const out = stripUrls(text);
+    assert.ok(!out.includes(gone), `${text} -> ${out}`);
+    assert.match(out, /\[url\]/);
+  }
+  assert.equal(stripUrls("422 audio too short: 3.5 s of 10:30"), "422 audio too short: 3.5 s of 10:30", "ordinary text stays");
+  assert.equal(stripUrls("rate limit, try again"), "rate limit, try again");
+  assert.equal(scrubFailureText(`422 could not fetch ${PUBLIC}`, KEY), "422 could not fetch [url]");
+});
+
+test("URLs: fal errors, a 422 quoting the v3.fal.media link: on submit, on the result, in a queue status", async () => {
+  const e = entry(cat.FAL_SCRIBE_MODEL);
+  const input = { idempotencyKey: "k", upstreamModel: e.routes[0]!.upstreamModel, params: normalize(e.params, { source: RES }), assets: MEDIA_ASSET };
+  const clean = (x: unknown) => x instanceof MediaError && /\[url\]/.test(x.message) && !x.message.includes("fal.media") && !x.message.includes("user-voice");
+  const detail = [{ type: "file_download_error", msg: `Failed to download ${PUBLIC}` }];
+  await assert.rejects(fal().submit(input, { fetchImpl: fakeFal({ submit: () => json(422, { detail }) }).fetchImpl }), clean);
+  await assert.rejects(fal().submit(input, { fetchImpl: fakeFal({ resultStatus: 422, result: { detail } }).fetchImpl }), clean);
+  await assert.rejects(fal().submit(input, { fetchImpl: fakeFal({ resultStatus: 422, result: { detail: `Failed to download ${PUBLIC}` } }).fetchImpl }), clean);
+  // The async queue: a final `error` in the status.
+  const op = `fal:${cat.FAL_DUB_ENDPOINT}:${REQ}`;
+  const polled = await falDubAdapter({ key: () => KEY, lookup }).poll!(op, { fetchImpl: fakeFal({ status: () => ({ status: "COMPLETED", error: `cannot read ${PUBLIC}` }) }).fetchImpl });
+  assert.equal(polled.state, "failed");
+  assert.ok(polled.state === "failed" && !polled.message.includes("fal.media"), JSON.stringify(polled));
+});
+
+test("URLs: the dub — neither the row's error nor the log carries the user's link", async (t) => {
+  const warn = t.mock.method(console, "warn", () => {});
+  const c = clock();
+  const run = (f: ReturnType<typeof fakeFal>, store: unknown) =>
+    dubMod.buildStudioDub(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.FAL_DUB_MODEL, source: RES, sourceSeconds: 2, target: "uz" } as never, audioCtx(), { deadline: c.now() + 500_000 }, { adapters: { "fal-dub": wrapped(f) }, store: store as never, health: HEALTH, ...c });
+  const refused = fakeStore();
+  await assert.rejects(run(fakeFal({ submit: () => json(422, { detail: `Failed to download ${PUBLIC}` }) }), refused.store), UserFacingError);
+  const failed = fakeStore();
+  await assert.rejects(run(fakeFal({ status: () => ({ status: "COMPLETED", error: `cannot read ${PUBLIC}` }) }), failed.store), UserFacingError);
+  for (const calls of [refused.calls, failed.calls]) {
+    const row = calls.find((x) => x[0] === "fail")!;
+    assert.ok(!String(row[2]).includes("fal.media"), String(row[2]));
+  }
+  // Even an error that reached the engine unscrubbed (another adapter's) stays out of the log.
+  const raw = { id: "fal-dub", configured: () => true, submit: async () => Promise.reject(new MediaError("x", `boom ${PUBLIC}`)), fetchOutput: async () => new Uint8Array(), poll: async () => ({ state: "running" as const }) };
+  await assert.rejects(dubMod.buildStudioDub(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.FAL_DUB_MODEL, source: RES, sourceSeconds: 2, target: "uz" } as never, audioCtx(), { deadline: c.now() + 500_000 }, { adapters: { "fal-dub": raw as never }, store: null, health: HEALTH, ...c }), UserFacingError);
+  const logged = warn.mock.calls.map((x) => x.arguments.join(" ")).join("\n");
+  assert.ok(logged.includes("[studio-dub]"), "the failures were logged");
+  assert.ok(!logged.includes("fal.media"), logged);
+});
+
+test("dub engine: overrun — HeyGen delivering past the quote + slack warns and reaches the alert; within it, silence", { skip: ffSkip }, async (t) => {
+  const warn = t.mock.method(console, "warn", () => {});
+  const c = clock();
+  const run = async (seconds: number, quoted: number) => {
+    const reports: string[] = [];
+    const f = fakeFal({ result: { video: { url: "https://v3.fal.media/out/h.mp4" } }, download: videoMp4(seconds) });
+    const out = await dubMod.buildStudioDub(
+      tools.TOOL_BY_ID["studio-dub"],
+      { modelId: cat.HEYGEN_TRANSLATE_MODEL, source: RES, sourceSeconds: quoted, target: "uz" } as never,
+      { source: { kind: "result", id: RES.slice(7), mime: "video/mp4", bytes: videoMp4(2), seconds: quoted } },
+      { deadline: c.now() + 500_000 },
+      { adapters: { "fal-dub": wrapped(f) }, store: null, health: HEALTH, ...c, overrun: async (m) => void reports.push(m) },
+    );
+    return { out, reports };
+  };
+  const over = await run(5, 2);
+  assert.equal(over.reports.length, 1, "5 s delivered for 2 s quoted");
+  assert.match(over.reports[0]!, /heygen output 5 s over the quoted 2 s/);
+  assert.equal(over.out.mime, "video/mp4", "the user still gets the file");
+  assert.ok(warn.mock.calls.some((x) => /heygen output/.test(String(x.arguments[0]))), "logged");
+  const within = await run(2, 1);
+  assert.deepEqual(within.reports, [], "2 s for 1 s quoted is inside the 1.5 s slack");
+
+  // ElevenLabs through fal bills the source's minutes: no such check.
+  const f = fakeFal({ result: dubOutputResult("video"), download: videoMp4(5) });
+  const reports: string[] = [];
+  await dubMod.buildStudioDub(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.FAL_DUB_MODEL, source: RES, sourceSeconds: 2, target: "uz" } as never, { source: { kind: "result", id: RES.slice(7), mime: "video/mp4", bytes: videoMp4(2), seconds: 2 } }, { deadline: c.now() + 500_000 }, { adapters: { "fal-dub": wrapped(f) }, store: null, health: HEALTH, ...c, overrun: async (m) => void reports.push(m) });
+  assert.deepEqual(reports, []);
 });

@@ -38,7 +38,8 @@
  * speech-to-text or dubbing permission. Each is a model of its own, not a second route: the costs differ, and a user picks.
  * All three ship `defaultOff`; the admin enables one after its live check.
  *   Scribe v2      $0.008 / minute of input audio        https://fal.ai/models/fal-ai/elevenlabs/speech-to-text/scribe-v2/llms.txt
- *                  (read 2026-11-06). UNVERIFIED: the page states no rounding and no minimum; per second is assumed.
+ *                  (read 2026-11-06). UNVERIFIED: the page states no rounding and no minimum, so the quote takes the safe
+ *                  side, whole started minutes like fal's dubbing, until one live job shows what is really billed.
  *   Dubbing        $0.6 / minute, the closest minute rounding up: 15 s costs $0.6
  *                                                         https://fal.ai/models/fal-ai/elevenlabs/dubbing/llms.txt (2026-11-06)
  *   HeyGen speed   $0.05 / OUTPUT second; the one model stating «Uzbek (Latin, Uzbekistan)»
@@ -215,7 +216,7 @@ export const STUDIO_TRANSCRIBE_ENTRIES: readonly CatalogEntry[] = [
     badges: ["arzon", "yangi"],
     defaultOff: true,
     params: transcribeParams,
-    cost: { per: "second", usd: FAL_SCRIBE_USD_PER_SECOND, secondsParam: "sourceSeconds" },
+    cost: { per: "second", usd: FAL_SCRIBE_USD_PER_SECOND, secondsParam: "sourceSeconds", unitSeconds: 60 },
     routes: [{ provider: "fal", upstreamModel: FAL_SCRIBE_ENDPOINT, adapter: "fal" }],
     limits: { timeoutMs: 180_000 },
     output: { mimes: ["application/json"], maxBytes: SPEECH_TOOL_OUTPUT_MAX_BYTES },

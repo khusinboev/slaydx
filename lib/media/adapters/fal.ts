@@ -43,7 +43,7 @@ import { FAL_FILE_PENDING, deleteFalFile, falFileAsset, falLifecycleHeader, uplo
 import { IMAGE_RATIOS } from "../../generation/image-studio-options";
 import { safeFetchUrl, UnsafeUrlError, type LookupFn } from "../../generation/safe-fetch";
 import { isMp4 } from "../../generation/video/mp4";
-import { VIDEO_MAX_BYTES, looksLikeSafetyRefusal } from "../../generation/video/types";
+import { VIDEO_MAX_BYTES, looksLikeSafetyRefusal, stripUrls } from "../../generation/video/types";
 import { getProviderKey } from "../../server/providers/resolve";
 
 export const FAL_PROVIDER = "fal";
@@ -286,9 +286,9 @@ export function pngHasAlpha(bytes: Uint8Array): boolean {
 }
 /* ═════════════════════ end of the P2b block ═════════════════════ */
 
-/** Removes the key and `Key …` / `Authorization` shapes from a provider text; clips it. */
+/** Removes the key, `Key …` / `Authorization` shapes and every URL (a user's upload may be quoted) from a provider text; clips it. */
 export function scrub(text: string, key: string | null | undefined): string {
-  let out = String(text ?? "");
+  let out = stripUrls(String(text ?? ""));
   if (key) out = out.split(key).join("…");
   out = out.replace(/\bKey\s+[\x21-\x7e]{8,}/gi, "Key …").replace(/(authorization["']?\s*[:=]\s*["']?)[^\s"',}]+/gi, "$1…");
   out = out.replace(/\s+/g, " ").trim();

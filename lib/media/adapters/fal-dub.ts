@@ -4,8 +4,9 @@
  *
  * It is the fal video adapter's queue protocol with another request and output (`FalQueueVariant`): the same key, host,
  * redirect, scrub and `accepted` rules, the same status and result mapping, the same safe download. Only two things are
- * added around it. The source is uploaded to fal storage before the submit, and the upload is removed when the op ends:
- * the engine calls `cancel` after the download and on giving up, the file's expiry covers a worker that died in between.
+ * added around it. The source is uploaded to fal storage before the submit, and `dropInput` removes it. This adapter keeps no
+ * state: `onInputStored` hands the URL to the host before the paid call, the host keeps it on the `media_jobs` row, so a
+ * resumed job or housekeeping can delete a file another worker uploaded. The file's expiry covers the rest.
  *
  * Op id: `fal:<endpoint>:<request_id>`, as for a clip, so a re-run of the job resumes it; `FAL_DUB_ENDPOINTS` bounds it.
  */
@@ -57,8 +58,6 @@ function variant(fileUrl: string): FalQueueVariant {
 export function falDubAdapter(o: Pick<FalDeps, "key" | "lookup"> = {}): MediaAdapter {
   const keyOf = o.key ?? (() => getProviderKey("fal"));
   const queue = falVideoAdapter({ ...o, variant: variant(FAL_FILE_PENDING) });
-  /** op id → its uploaded source, while this worker holds the job. */
-  const uploads = new Map<string, string>();
 
   return {
     ...queue,
@@ -71,23 +70,17 @@ export function falDubAdapter(o: Pick<FalDeps, "key" | "lookup"> = {}): MediaAda
       const budget = deps.deadline ? deps.deadline - (deps.now ?? Date.now)() : undefined;
       const fileUrl = await uploadFalFile(falFileAsset(input)!, { key, fetchImpl, ...(budget !== undefined ? { timeoutMs: budget } : {}), ...(o.lookup ? { lookup: o.lookup } : {}) });
       try {
-        const out = await falVideoAdapter({ ...o, variant: variant(fileUrl) }).submit(input, deps);
-        if ("opId" in out) uploads.set(out.opId, fileUrl);
-        return out;
+        // A failed note must not cost the job: the expiry still removes the file.
+        await deps.onInputStored?.(fileUrl).catch(() => undefined);
+        return await falVideoAdapter({ ...o, variant: variant(fileUrl) }).submit(input, deps);
       } catch (e) {
         await deleteFalFile(fileUrl, { key, fetchImpl });
         throw e;
       }
     },
-    async cancel(opId, deps: AdapterDeps = {}) {
-      const fileUrl = uploads.get(opId);
-      uploads.delete(opId);
-      try {
-        return await queue.cancel!(opId, deps);
-      } finally {
-        const key = keyOf();
-        if (fileUrl && key) await deleteFalFile(fileUrl, { key, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) });
-      }
+    async dropInput(url, deps: AdapterDeps = {}) {
+      const key = keyOf();
+      if (key) await deleteFalFile(url, { key, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) });
     },
   };
 }

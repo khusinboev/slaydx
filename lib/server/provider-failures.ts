@@ -5,6 +5,7 @@ import { log, redact } from "./log";
 import { getProviderKey } from "./providers/resolve";
 import { isProviderId } from "./providers/registry";
 import { missingPermissionOf } from "../generation/tts/elevenlabs";
+import { stripUrls } from "../generation/video/types";
 
 /**
  * «Which provider broke this job, and how» for the owner alert (`server-alerts.ts provider_fail`) and the admin card.
@@ -51,9 +52,9 @@ export function providerFailureOf(e: unknown): ProviderFailure | null {
   return null;
 }
 
-/** `text` without the provider's key (the whole key and, for `<id>:<secret>`, each half) or the usual key shapes. */
+/** `text` without any URL, the provider's key (the whole key and, for `<id>:<secret>`, each half) or the usual key shapes. */
 export function scrubFailureText(text: string, key: string): string {
-  let out = text;
+  let out = stripUrls(text);
   for (const secret of [key, ...key.split(":").filter((p) => p.length >= 8)]) if (secret) out = out.split(secret).join("…");
   return redact(out).replace(/\s+/g, " ").trim().slice(0, MESSAGE_MAX);
 }

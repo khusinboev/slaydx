@@ -27,7 +27,14 @@ import { inRequest } from "./helpers/next-request.mts";
  *   3. `transcribeEntry` always the default in the engine                        -> "transcribe";
  *   4. the HeyGen refusal removed from `prepareSpeechToolRequest`                -> "dub: HeyGen";
  *   5. `defaultStore` built from the default entry (provider "elevenlabs")       -> "dub: HeyGen";
- *   6. the housekeeping's `fal:` routing removed                                 -> "housekeeping".
+ *   6. the housekeeping's `fal:` routing removed                                 -> "housekeeping";
+ *   review fixes:
+ *   7. `failMediaJob` no longer strips URLs                                      -> "URLs";
+ *   8. `failSubmittingMediaJob` no longer strips URLs                            -> "URLs";
+ *   9. the upload not noted on the row                                           -> "upload: the row";
+ *  10. the row's upload ignored on resume                                        -> "dub: fal";
+ *  11. housekeeping leaves the upload / keeps it on the row / takes a live job's -> "upload: housekeeping";
+ *  12. the overrun's default report removed                                      -> "dub: HeyGen".
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -62,15 +69,18 @@ function mp3Bytes(frames = 80): Buffer {
   for (let i = 0; i < frames; i++) out.set([0xff, 0xfb, 0x90, 0x00], i * 417);
   return out;
 }
-let VIDEO: Buffer | null = null;
-function videoMp4(): Buffer {
-  if (VIDEO) return VIDEO;
+const VIDEOS = new Map<number, Buffer>();
+function videoMp4(seconds = 2): Buffer {
+  const known = VIDEOS.get(seconds);
+  if (known) return known;
   const dir = mkdtempSync(path.join(tmpdir(), "p11-flow-"));
   try {
     const f = path.join(dir, "v.mp4");
-    const r = spawnSync("ffmpeg", ["-nostdin", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=c=blue:size=64x48:rate=6", "-f", "lavfi", "-i", "sine", "-t", "2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", f]);
+    const r = spawnSync("ffmpeg", ["-nostdin", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=c=blue:size=64x48:rate=6", "-f", "lavfi", "-i", "sine", "-t", String(seconds), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", f]);
     assert.equal(r.status, 0);
-    return (VIDEO = readFileSync(f));
+    const bytes = readFileSync(f);
+    VIDEOS.set(seconds, bytes);
+    return bytes;
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -79,7 +89,7 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
 
 type Call = { url: string; method: string; body: unknown };
 const calls: Call[] = [];
-let mode: { result: unknown; resultStatus: number; download: Uint8Array } = { result: {}, resultStatus: 200, download: mp3Bytes() };
+let mode: { result: unknown; resultStatus: number; download: Uint8Array; submit?: () => Response } = { result: {}, resultStatus: 200, download: mp3Bytes() };
 function installFetch() {
   globalThis.fetch = (async (u: string | URL, init: RequestInit = {}) => {
     const url = String(u);
@@ -93,7 +103,7 @@ function installFetch() {
     if (url.endsWith("/cancel")) return json(200, {});
     if (url.endsWith("/status")) return json(200, { status: "COMPLETED" });
     if (url.includes(`/requests/${REQ}`)) return json(mode.resultStatus, mode.result);
-    if (url.startsWith("https://queue.fal.run/")) return json(200, { request_id: REQ });
+    if (url.startsWith("https://queue.fal.run/")) return mode.submit?.() ?? json(200, { request_id: REQ });
     if (url.startsWith("https://v3.fal.media/out")) return new Response(new Uint8Array(mode.download), { status: 200 });
     return json(404, {});
   }) as unknown as typeof fetch;
@@ -255,7 +265,7 @@ test("transcribe: charged the fal price, the upload and the row say fal, cost_js
   await idle();
   const values = { modelId: FAL_SCRIBE, source: `result:${src}`, sourceSeconds: 3, language: "uz" };
   const price = await priceOf("studio-transcribe", values);
-  assert.equal(price, 100, "$0.008 / min × 3 s, far below the 800 of the ElevenLabs model");
+  assert.equal(price, 300, "3 s bill a whole minute at $0.008, still below the 800 of the ElevenLabs model");
   const r = await post(me, "studio-transcribe", values, price);
   assert.equal(r.status, 202, JSON.stringify(r.body));
   assert.equal(await balanceOf(me), 500_000 - price);
@@ -271,7 +281,7 @@ test("transcribe: charged the fal price, the upload and the row say fal, cost_js
   assert.ok(calls.some((c) => c.url === "https://rest.fal.ai/storage/files/delete"));
   const rows = await query<{ provider: string; model_id: string; status: string; cost_usd: string }>("SELECT provider, model_id, status, cost_usd FROM media_jobs WHERE generation_id = $1", [r.body.id]);
   assert.deepEqual(rows.map((x) => [x.provider, x.model_id, x.status]), [["fal", FAL_SCRIBE, "succeeded"]]);
-  assert.ok(Math.abs(Number(rows[0]!.cost_usd) - (0.008 * 3) / 60) < 1e-6);
+  assert.ok(Math.abs(Number(rows[0]!.cost_usd) - 0.008) < 1e-6, "the quoted cost is the billed minute");
   const cost = (await query<{ c: { provider: string; parts: { provider: string }[] } }>("SELECT cost_json AS c FROM generations WHERE id = $1", [r.body.id]))[0]!.c;
   assert.equal(cost.parts[0]!.provider, "fal");
 
@@ -318,6 +328,18 @@ test("dub: HeyGen refuses audio before charging; a video is translated, its row 
   assert.deepEqual(calls.find((c) => c.url === "https://queue.fal.run/fal-ai/heygen/v2/translate/speed")!.body, { video_url: FILE, output_language: "Uzbek (Latin, Uzbekistan)", translate_audio_only: false, enable_dynamic_duration: false });
   const row = (await query<{ provider: string; upstream_model: string; model_id: string; status: string; op_id: string }>("SELECT provider, upstream_model, model_id, status, op_id FROM media_jobs WHERE idempotency_key = $1", [`${r.body.id}:dub:0`]))[0]!;
   assert.deepEqual(row, { provider: "fal", upstream_model: "fal-ai/heygen/v2/translate/speed", model_id: HEYGEN, status: "succeeded", op_id: `fal:fal-ai/heygen/v2/translate/speed:${REQ}` });
+  const failures = async (id: string) => query<{ provider: string; message: string }>("SELECT provider, message FROM provider_failures WHERE job_id = $1", [id]);
+  assert.deepEqual(await failures(r.body.id!), [], "2 s delivered for 2 s quoted: nothing to report");
+
+  // Delivered far past the quote: the user gets the file, the owner's alert counts it.
+  const r2 = await post(me, "studio-dub", values, price);
+  mode = { result: { video: { url: "https://v3.fal.media/out/h.mp4" } }, resultStatus: 200, download: videoMp4(6) };
+  const g2 = await runNext(r2.body.id!);
+  assert.equal(g2?.status, "COMPLETED", String(g2?.error));
+  const rows = await failures(r2.body.id!);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]!.provider, "fal");
+  assert.match(rows[0]!.message, /heygen output 6 s over the quoted 2 s/);
 });
 
 test("dub: fal — a 2-second clip is charged the whole minute fal bills; a parked op resumes, nothing is sent twice", { skip }, async (t) => {
@@ -348,10 +370,127 @@ test("dub: fal — a 2-second clip is charged the whole minute fal bills; a park
   const jobs = await import("../lib/server/media/jobs.ts");
   const { row } = await jobs.beginMediaJob({ generationId: r2.body.id!, purpose: "studio.dub", modelId: FAL_DUB, provider: "fal", upstreamModel: "fal-ai/elevenlabs/dubbing", idempotencyKey: `${r2.body.id}:dub:0`, params: {} });
   await jobs.parkMediaJob(row.id, `fal:fal-ai/elevenlabs/dubbing:${REQ}`, new Date());
+  // The worker that uploaded the source died: only the row knows its URL.
+  await jobs.noteMediaUpload(row.id, FILE);
   calls.length = 0;
   const g2 = await runNext(r2.body.id!);
   assert.equal(g2?.status, "COMPLETED", String(g2?.error));
-  assert.ok(!calls.some((c) => c.method === "POST"), "no upload and no second dub");
+  assert.ok(!calls.some((c) => c.url.includes("/upload/initiate") || (c.method === "POST" && c.url.startsWith("https://queue.fal.run/"))), "no upload and no second dub");
+  assert.deepEqual(calls.filter((c) => c.url === "https://rest.fal.ai/storage/files/delete").map((c) => c.body), [{ file_url: FILE }], "the resuming worker deleted it");
+  const { query } = await db();
+  assert.deepEqual((await query<{ params: Record<string, unknown> }>("SELECT params FROM media_jobs WHERE id = $1", [row.id]))[0]!.params.falUpload, undefined, "gone from the row");
+});
+
+test("upload: the row holds the URL from before the paid call until the file is deleted", { skip }, async (t) => {
+  quiet(t);
+  installFetch();
+  await settings(true);
+  await adminSwitch(true);
+  const { DUB_CLOCK } = await import("../lib/generation/studio/dub.ts");
+  const sleep0 = DUB_CLOCK.sleep;
+  DUB_CLOCK.sleep = async () => {};
+  t.after(() => void (DUB_CLOCK.sleep = sleep0));
+  const { query } = await db();
+  const me = await mkUser();
+  const up = await upload(me, 5);
+  await idle();
+  const values = { modelId: FAL_DUB, source: `upload:${up}`, sourceSeconds: 5, target: "ru" };
+  const r = await post(me, "studio-dub", values, await priceOf("studio-dub", values));
+  assert.equal(r.status, 202, JSON.stringify(r.body));
+  const seen: unknown[] = [];
+  // The moment fal is asked to dub, the row must already name the upload.
+  mode = {
+    result: { audio: { url: "https://v3.fal.media/out/d.mp3" } },
+    resultStatus: 200,
+    download: mp3Bytes(90),
+    submit: () => {
+      seen.push("submit");
+      return json(200, { request_id: REQ });
+    },
+  };
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (u: string | URL, init?: RequestInit) => {
+    if (String(u) === "https://queue.fal.run/fal-ai/elevenlabs/dubbing" && init?.method === "POST") {
+      seen.push((await query<{ url: string }>("SELECT params ->> 'falUpload' AS url FROM media_jobs WHERE idempotency_key = $1", [`${r.body.id}:dub:0`]))[0]?.url);
+    }
+    return real(u, init);
+  }) as typeof fetch;
+  t.after(() => void (globalThis.fetch = real));
+  const gen = await runNext(r.body.id!);
+  mode = { result: {}, resultStatus: 200, download: mp3Bytes() };
+  assert.equal(gen?.status, "COMPLETED", String(gen?.error));
+  assert.deepEqual(seen, [FILE, "submit"], "the URL was on the row before the submit");
+  const params = (await query<{ params: Record<string, unknown> }>("SELECT params FROM media_jobs WHERE idempotency_key = $1", [`${r.body.id}:dub:0`]))[0]!.params;
+  assert.equal(params.falUpload, undefined, "removed once deleted");
+});
+
+test("upload: housekeeping deletes what a dead job left, whatever its row's status; a live job's file stays", { skip }, async (t) => {
+  quiet(t);
+  installFetch();
+  const { query } = await db();
+  const jobs = await import("../lib/server/media/jobs.ts");
+  const { studioDubHousekeeping } = await import("../lib/server/media/speech-sources.ts");
+  const me = await mkUser();
+  const left = async (genStatus: string, rowStatus: "pending" | "submitting" | "failed", url: string) => {
+    const id = randomUUID();
+    await query(`INSERT INTO generations (id, user_id, tool_id, topic, status, price, format) VALUES ($1, $2, 'studio-dub', 'Dublyaj', $3, 3500, 'mp4')`, [id, me, genStatus]);
+    const { row } = await jobs.beginMediaJob({ generationId: id, purpose: "studio.dub", modelId: FAL_DUB, provider: "fal", upstreamModel: "fal-ai/elevenlabs/dubbing", idempotencyKey: `${id}:dub:0`, params: {} });
+    await jobs.noteMediaUpload(row.id, url);
+    if (rowStatus === "pending") await jobs.parkMediaJob(row.id, `fal:fal-ai/elevenlabs/dubbing:${REQ}`, new Date());
+    if (rowStatus === "failed") await jobs.failMediaJob(row.id, "x");
+    await query("UPDATE media_jobs SET created_at = now() - interval '10 minutes' WHERE id = $1", [row.id]);
+    return row.id;
+  };
+  const parked = await left("FAILED", "pending", "https://v3b.fal.media/files/b/0a/parked.mp3");
+  const died = await left("FAILED", "submitting", "https://v3b.fal.media/files/b/0a/died.mp3");
+  const closed = await left("REVOKED", "failed", "https://v3b.fal.media/files/b/0a/closed.mp3");
+  const live = await left("IN_PROGRESS", "pending", "https://v3b.fal.media/files/b/0a/live.mp3");
+  calls.length = 0;
+  const r = await studioDubHousekeeping();
+  assert.equal(r.uploads, 3);
+  const deleted = calls.filter((c) => c.url === "https://rest.fal.ai/storage/files/delete").map((c) => (c.body as { file_url: string }).file_url.split("/").pop()).sort();
+  assert.deepEqual(deleted, ["closed.mp3", "died.mp3", "parked.mp3"], "by the default fal path, not a stub");
+  const param = async (id: string) => (await query<{ url: string | null }>("SELECT params ->> 'falUpload' AS url FROM media_jobs WHERE id = $1", [id]))[0]!.url;
+  for (const id of [parked, died, closed]) assert.equal(await param(id), null, "cleared: the next tick does not repeat it");
+  assert.equal(await param(live), "https://v3b.fal.media/files/b/0a/live.mp3", "a running job keeps its file");
+  calls.length = 0;
+  assert.equal((await studioDubHousekeeping()).uploads, 0);
+  assert.equal(calls.length, 0);
+  await query("UPDATE generations SET status = 'REVOKED' WHERE status = 'IN_PROGRESS' AND user_id = $1", [me]);
+  await studioDubHousekeeping();
+});
+
+test("URLs: a 422 quoting the v3.fal.media link reaches neither `last_error` nor `provider_failures`", { skip }, async (t) => {
+  quiet(t);
+  installFetch();
+  await settings(true);
+  await adminSwitch(true);
+  const { query } = await db();
+  const jobs = await import("../lib/server/media/jobs.ts");
+  const me = await mkUser();
+  const src = await source(me, "studio-speech", "audio/mpeg", mp3Bytes(), speechDoc(3));
+  await idle();
+  const link = "https://v3.fal.media/files/lion/user-voice.mp3";
+  mode = { result: {}, resultStatus: 200, download: mp3Bytes(), submit: () => json(422, { detail: `Failed to download ${link}` }) };
+  const values = { modelId: FAL_SCRIBE, source: `result:${src}`, sourceSeconds: 3 };
+  const r = await post(me, "studio-transcribe", values, await priceOf("studio-transcribe", values));
+  const g = await runNext(r.body.id!);
+  mode = { result: {}, resultStatus: 200, download: mp3Bytes() };
+  assert.equal(g?.status, "FAILED");
+  const row = (await query<{ last_error: string }>("SELECT last_error FROM media_jobs WHERE generation_id = $1", [r.body.id]))[0]!;
+  assert.match(row.last_error, /422 Failed to download \[url\]/);
+  const failure = (await query<{ message: string }>("SELECT message FROM provider_failures WHERE job_id = $1", [r.body.id]))[0]!;
+  assert.ok(!failure.message.includes("fal.media"), failure.message);
+
+  // The store's own guard, for an error that did not pass through the fal adapter.
+  const direct = async (fail: (id: string) => Promise<unknown>) => {
+    const key = randomUUID();
+    const { row: x } = await jobs.beginMediaJob({ generationId: null, purpose: "studio.dub", modelId: FAL_DUB, provider: "fal", upstreamModel: "m", idempotencyKey: key, params: {} });
+    await fail(x.id);
+    return (await query<{ last_error: string }>("SELECT last_error FROM media_jobs WHERE id = $1", [x.id]))[0]!.last_error;
+  };
+  assert.equal(await direct((id) => jobs.failMediaJob(id, `boom ${link}`)), "boom [url]");
+  assert.equal(await direct((id) => jobs.failSubmittingMediaJob(id, `boom ${link}`)), "boom [url]");
 });
 
 test("audio: VEED and SFX v3 through the worker, stored as MP3", { skip }, async (t) => {

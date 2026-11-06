@@ -7,9 +7,11 @@ import { fitsRole, ownMixRow, rowSeconds } from "./mix-sources";
 import { DUB_MAX_SECONDS, DUB_MODEL, SPEECH_TOOL_OUTPUT_MAX_BYTES, STUDIO_DUB_PURPOSE, STUDIO_TRANSCRIBE_PURPOSE, TRANSCRIBE_AUDIO_MAX_SECONDS, TRANSCRIBE_MODEL, TRANSCRIBE_VIDEO_MAX_SECONDS, parseSource, videoOnlySource } from "../../media/catalog-transcribe";
 import { billedSeconds } from "../../media/studio-audio";
 import { dubEntry } from "../../media/studio-transcribe";
+import { stripUrls } from "../../generation/video/types";
 import { burnVideoKbps } from "../../generation/studio/burn-args";
 import { mediaSeconds } from "../../generation/studio/mix-media";
 import type { SpeechToolCtx } from "../../generation/studio/transcribe";
+import { MEDIA_UPLOAD_PARAM, clearMediaUpload } from "./jobs";
 import type { FormValues } from "../../types";
 
 /**
@@ -130,8 +132,11 @@ export const DUB_ORPHAN_GRACE_MIN = 2;
  * worker died twice → `reclaimStaleJobs` FAILED and refunded it; an admin revoked it; it is gone) is an orphan — nobody
  * will ever poll it. It is closed as 'failed' and its ElevenLabs project is deleted (best effort), so a late finish is
  * not kept there. A re-queued job is left alone (its re-run resumes the op).
+ *
+ * P11: then the sources those stopped jobs left on fal's CDN, whatever their row's status (a worker can die between the upload
+ * and the park). The window is the files' own expiry and a little more: after that there is nothing to delete.
  */
-export async function studioDubHousekeeping(deps: { cancel?: (opId: string) => Promise<unknown> } = {}): Promise<{ closed: number; deleted: number }> {
+export async function studioDubHousekeeping(deps: { cancel?: (opId: string) => Promise<unknown>; dropUpload?: (url: string) => Promise<unknown> } = {}): Promise<{ closed: number; deleted: number; uploads: number }> {
   const rows = await query<{ op_id: string | null }>(
     `UPDATE media_jobs mj
         SET status = 'failed', errors = errors + 1, next_poll_at = NULL, finished_at = now(),
@@ -152,8 +157,21 @@ export async function studioDubHousekeeping(deps: { cancel?: (opId: string) => P
       await cancel(r.op_id);
       deleted++;
     } catch (e) {
-      console.warn("[studio-dub] orphan delete failed:", e instanceof Error ? e.message : e);
+      console.warn("[studio-dub] orphan delete failed:", stripUrls(e instanceof Error ? e.message : String(e)));
     }
   }
-  return { closed: rows.length, deleted };
+  const left = await query<{ id: string; url: string }>(
+    `SELECT mj.id, mj.params ->> $1 AS url
+       FROM media_jobs mj
+      WHERE mj.provider = 'fal' AND mj.purpose = $2 AND mj.params ? $1
+        AND mj.created_at < now() - $3::int * interval '1 minute' AND mj.created_at > now() - interval '2 hours'
+        AND NOT EXISTS (SELECT 1 FROM generations g WHERE g.id = mj.generation_id AND g.status IN ('QUEUED', 'IN_PROGRESS'))`,
+    [MEDIA_UPLOAD_PARAM, STUDIO_DUB_PURPOSE, DUB_ORPHAN_GRACE_MIN],
+  );
+  const drop = deps.dropUpload ?? (async (url: string) => (await import("../../media/adapters/fal-dub")).falDubAdapter().dropInput!(url));
+  for (const r of left) {
+    await drop(r.url).catch(() => undefined);
+    await clearMediaUpload(r.id);
+  }
+  return { closed: rows.length, deleted, uploads: left.length };
 }

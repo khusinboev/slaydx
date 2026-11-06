@@ -230,6 +230,18 @@ test("price line: fal dubbing says whole minutes, the per-second models say seco
   assert.ok(txt("[data-studio-submit]").includes("15 300"), txt("[data-studio-submit]"));
 });
 
+test("price line: fal Scribe shows the billed minute on a short source, and its price", async () => {
+  api([STT, FAL_STT]);
+  await openTab("audio");
+  await pick(VID);
+  assert.match(txt("[data-speech-seconds]"), /9 soniya/, "ElevenLabs bills seconds");
+  await pickModel(/fal/);
+  assert.match(txt("[data-speech-seconds]"), /to‘liq daqiqalar.*1 daqiqa/);
+  const want = studioEntryPrice(FAL_STT, { sourceSeconds: 60 }, RATE);
+  assert.equal(studioEntryPrice(FAL_STT, { sourceSeconds: 9 }, RATE), want, "9 s pay the full minute");
+  assert.ok(txt("[data-studio-submit]").includes(`~${want}`), txt("[data-studio-submit]"));
+});
+
 test("«Effekt» and «Shovqindan tozalash»: the same picker, each model's own fields and price", async () => {
   const a = api([SFX, FAL_SFX, ISO, VEED]);
   await openTab("audio");

@@ -86,10 +86,15 @@ export async function uploadFalFile(asset: AdapterAsset, deps: FalStorageDeps): 
       signal: AbortSignal.timeout(Math.max(1_000, Math.min(UPLOAD_MAX_MS, deps.timeoutMs ?? UPLOAD_MAX_MS))),
     });
   } catch {
+    // Part of the bytes may be there.
+    await deleteFalFile(fileUrl, deps);
     throw refused("upload: fayl yuborilmadi", { retryable: true });
   }
   await put.body?.cancel().catch(() => undefined);
-  if (!put.ok) throw refused(`upload: PUT ${put.status}`, { status: put.status, retryable: isRetryableStatus(put.status) });
+  if (!put.ok) {
+    await deleteFalFile(fileUrl, deps);
+    throw refused(`upload: PUT ${put.status}`, { status: put.status, retryable: isRetryableStatus(put.status) });
+  }
   return fileUrl;
 }
 

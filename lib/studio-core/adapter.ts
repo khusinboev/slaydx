@@ -24,6 +24,8 @@ export type AdapterDeps = {
   now?: () => number;
   /** Epoch ms the call must finish by (the job's remaining budget). */
   deadline?: number;
+  /** An input now lives at the provider under this URL: the host records it, awaited BEFORE the paid call, to delete it later. */
+  onInputStored?: (url: string) => Promise<void>;
 };
 
 export type PollResult =
@@ -46,5 +48,7 @@ export interface MediaAdapter {
    * host never lets a cancel failure block its refund.
    */
   cancel?(opId: string, deps?: AdapterDeps): Promise<"cancelled" | "completed">;
+  /** Best effort, never throws: deletes an input stored for an op (`onInputStored`). Needs no state of the worker that stored it. */
+  dropInput?(url: string, deps?: AdapterDeps): Promise<void>;
   fetchOutput(o: MediaOutput, deps?: AdapterDeps): Promise<Uint8Array>;
 }
