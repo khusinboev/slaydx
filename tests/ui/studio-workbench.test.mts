@@ -355,3 +355,16 @@ test("Montaj: the start offset ends where the picked video ends (the row, the bl
   await settle(2);
   assert.ok(q('[data-mix-audition="audio"]'), "the picked audio plays in place");
 });
+
+test("price button: on a narrow phone the words give way, the price keeps its own box, the text reads the same", async () => {
+  const { PriceButton } = await import("../../components/studio/PriceButton.tsx");
+  const label = `Yaratish · «Juda uzun effekt nomi» · ${formatSom(21_400)}`;
+  render(h(PriceButton, { count: 1, price: 21_400, balance: null, loading: false, disabled: false, typing: false, label, onSubmit: () => {} }));
+  const total = document.querySelector("[data-price-total]")!;
+  assert.equal(total.textContent, label);
+  const tail = total.querySelector<HTMLElement>("[data-price-tail]");
+  assert.ok(tail, "the price is its own box");
+  assert.equal(tail.textContent, ` · ${formatSom(21_400)}`);
+  assert.match(tail.className, /shrink-0/);
+});
+
