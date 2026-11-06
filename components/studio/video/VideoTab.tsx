@@ -97,6 +97,13 @@ function flatImage(values: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
+/** The line under the start image: where the clip's proportions come from with this model. */
+export function startImageHint(model: Pick<ClientEntry, "id" | "params">): string {
+  const start = "Surat berilsa video shu suratdan boshlanadi";
+  if (ASPECT_FOLLOWS_IMAGE.has(model.id)) return `${start}; nisbat suratdan olinadi.`;
+  return model.params.some((p) => p.name === "aspect") ? `${start}; o‘lcham yuqoridagi «O‘lcham» qatoridan olinadi.` : `${start}.`;
+}
+
 /** The tab's model: the text model chosen if still offered, else the server default when it is one, else the first. */
 function textEntry(models: ClientEntry[], catalog: MediaCatalog | null, chosen: string | null): ClientEntry | null {
   return models.find((m) => m.id === chosen) ?? models.find((m) => m.id === catalog?.defaultModelId) ?? models[0] ?? null;
@@ -256,6 +263,11 @@ export function VideoTab({
       return;
     }
     void send(target, job.sent, job.prompt);
+  }
+
+  function retryPrice(job: StudioJob): number {
+    const target = catalog?.models.find((m) => m.id === job.modelId);
+    return target && catalog ? studioVideoClientPrice(target, job.sent, catalog.pricing) : job.price;
   }
 
   if (!catalog) return <CatalogState state={catalogState} onRetry={() => reload()} label="Video yuklanmoqda" blocks={["h-11 rounded-[14px]", "h-64 rounded-[20px]"]} />;
@@ -447,7 +459,9 @@ export function VideoTab({
                     }
                   />
                 </Field>
-                <p className="text-muted-foreground mt-1 text-[13px]">Surat berilsa video shu suratdan boshlanadi; nisbat suratdan olinadi.</p>
+                <p className="text-muted-foreground mt-1 text-[13px]" data-start-image-hint>
+                  {startImageHint(textModel)}
+                </p>
               </Row>
               {hasEnd ? (
                 <Row label="Oxirgi kadr" hint="Ixtiyoriy: video shu surat bilan tugaydi (boshlang‘ich surat bilan birga)" wide>
@@ -493,7 +507,7 @@ export function VideoTab({
         paidOnly
       />
       <section aria-label="Videolar" data-video-results className={cn(jobs.length > 0 && "mt-5")}>
-        <VideoResults jobs={jobs} busy={submitting} onAgain={again} onMusic={onMusic} onVoice={onVoice} />
+        <VideoResults jobs={jobs} busy={submitting} onAgain={again} retryPrice={retryPrice} onMusic={onMusic} onVoice={onVoice} />
       </section>
     </div>
   );

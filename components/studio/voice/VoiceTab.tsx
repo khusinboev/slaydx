@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { FileText, Plus } from "lucide-react";
 import { PriceChangedError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
@@ -25,9 +25,9 @@ import type { StudioJob } from "../StudioResults";
 import { useStudioJobs } from "../useStudioJobs";
 import { useStudioSend } from "../useStudioSend";
 import { ClonePanel, type CloneRequest } from "./ClonePanel";
-import { VoiceList, voiceRows, type VoiceFilter, type VoiceRow } from "./VoiceList";
+import { VoiceList, VoicesState, voiceRows, type VoiceFilter, type VoiceRow } from "./VoiceList";
 import { VoiceResults } from "./VoiceResults";
-import { deleteVoice, fetchVoices, uploadSample, type VoicesData } from "./voice-api";
+import { deleteVoice, uploadSample, useVoices } from "./voice-api";
 import { STUDIO_SPEECH_SLUG, STUDIO_SPEECH_TOOL_ID, STUDIO_VOICE_SLUG, STUDIO_VOICE_TOOL_ID, charLine, cloneClientPrice, speechCardPrice, speechClientPrice, spokenText } from "./voice-price";
 
 /** «Matn» (one voice reads the text) or «Suhbat» (two speakers, one line per turn). */
@@ -105,7 +105,6 @@ export function VoiceTab({
   const textId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [voices, setVoices] = useState<VoicesData | null>(null);
   const [cloneOpen, setCloneOpen] = useState(false);
   const [cloneBusy, setCloneBusy] = useState(false);
   const [cloneError, setCloneError] = useState<string | null>(null);
@@ -117,10 +116,7 @@ export function VoiceTab({
   const models = mode === "dialogue" ? split.dialogue : split.text;
   const entry = models.find((m) => m.id === state.chosen) ?? models.find((m) => m.id === catalog?.defaultModelId) ?? models[0] ?? null;
 
-  const loadVoices = useCallback(() => {
-    fetchVoices().then(setVoices, (e: unknown) => setError(e instanceof Error ? e.message : "Ovozlar yuklanmadi"));
-  }, []);
-  useEffect(() => loadVoices(), [loadVoices]);
+  const { voices, error: voicesError, load: loadVoices } = useVoices();
   const { submitting, error, setError, send: queue } = useStudioSend((refused) => {
     reload(true);
     if (refused) loadVoices();
@@ -253,6 +249,11 @@ export function VoiceTab({
     setParam(field, t.slice(0, textMax));
   }
 
+  function retryPrice(job: StudioJob): number {
+    const target = catalog?.models.find((m) => m.id === job.modelId);
+    return target && catalog ? speechClientPrice(target, job.sent, catalog.pricing) : job.price;
+  }
+
   const busyClone = cloneJobs.jobs.some((j) => !j.gen || j.gen.status === "QUEUED" || j.gen.status === "IN_PROGRESS");
 
   return (
@@ -337,16 +338,20 @@ export function VoiceTab({
           </div>
         ) : null}
         <Field id={speakerParam}>
-          <VoiceList
-            rows={rows}
-            value={String(values[speakerParam] ?? "")}
-            onPick={(v) => setParam(speakerParam, v)}
-            filter={state.filter}
-            onFilter={(f) => patch({ filter: f })}
-            filters={filters}
-            onDelete={(r) => void remove(r)}
-            deleting={deleting}
-          />
+          {voicesError || !voices ? (
+            <VoicesState error={voicesError} onRetry={loadVoices} />
+          ) : (
+            <VoiceList
+              rows={rows}
+              value={String(values[speakerParam] ?? "")}
+              onPick={(v) => setParam(speakerParam, v)}
+              filter={state.filter}
+              onFilter={(f) => patch({ filter: f })}
+              filters={filters}
+              onDelete={(r) => void remove(r)}
+              deleting={deleting}
+            />
+          )}
         </Field>
         {vparams.length > 1
           ? vparams
@@ -405,7 +410,7 @@ export function VoiceTab({
         label={price === null ? "Ovozlash" : voiceSubmitLabel(entry.label, price)}
       />
       <section aria-label="Audiolar" data-voice-results className={cn(jobs.length > 0 && "mt-5")}>
-        <VoiceResults jobs={jobs} busy={submitting} onAgain={again} />
+        <VoiceResults jobs={jobs} busy={submitting} onAgain={again} retryPrice={retryPrice} />
       </section>
     </div>
   );

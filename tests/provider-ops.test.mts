@@ -150,7 +150,7 @@ test("errorWithCause: every provider down gives the outage message, safe for the
   await withJobCost(async () => {
     attempt("gemini", { status: 403, message: "consumer suspended" });
     attempt("anthropic", { status: 400, message: "Your credit balance is too low" });
-    const e = F.errorWithCause("Taqdimot matni yozilmadi. Kredit qaytariladi — qayta urinib ko‘ring.");
+    const e = F.errorWithCause("Taqdimot matni yozilmadi. Pul balansingizga qaytariladi — qayta urinib ko‘ring.");
     assert.ok(e instanceof UserFacingError);
     assert.equal(e.message, AI_OUTAGE_ERROR);
     assert.match(String((e.cause as Error).message), /kind=http status=400/);
@@ -159,12 +159,12 @@ test("errorWithCause: every provider down gives the outage message, safe for the
   assert.equal(isUserSafeText(AI_OUTAGE_ERROR), true, "`failAndCleanup` filters the text a second time");
   assert.equal(userMessage(AI_OUTAGE_ERROR), AI_OUTAGE_ERROR);
   assert.match(AI_OUTAGE_ERROR, /vaqtincha/);
-  assert.match(AI_OUTAGE_ERROR, /qaytarildi/);
+  assert.match(AI_OUTAGE_ERROR, /qaytariladi/);
   assert.ok(!/qayta urin/.test(AI_OUTAGE_ERROR));
 });
 
 test("errorWithCause: one healthy answer keeps the engine's message", async () => {
-  const MSG = "Matn yozilmadi — AI javob bermadi. Kredit qaytariladi, qayta urinib ko‘ring.";
+  const MSG = "Matn yozilmadi — AI javob bermadi. Pul balansingizga qaytariladi, qayta urinib ko‘ring.";
   await withJobCost(async () => {
     attempt("gemini", { status: 403 });
     attempt("anthropic", { kind: "bad_json", status: undefined });
@@ -220,8 +220,8 @@ test("a stale 429: the fallback wrote the rest, a later failure is the engine's 
   await withJobCost(async () => {
     attempt("gemini", { status: 429, message: "quota" });
     F.reportSuccess("qwen");
-    const e = F.errorWithCause("Tarjima to‘liq chiqmadi. Kredit qaytariladi — qayta urinib ko‘ring.");
-    assert.equal(e.message, "Tarjima to‘liq chiqmadi. Kredit qaytariladi — qayta urinib ko‘ring.");
+    const e = F.errorWithCause("Tarjima to‘liq chiqmadi. Pul balansingizga qaytariladi — qayta urinib ko‘ring.");
+    assert.equal(e.message, "Tarjima to‘liq chiqmadi. Pul balansingizga qaytariladi — qayta urinib ko‘ring.");
     assert.ok(!(e instanceof UserFacingError));
     assert.match(String((e.cause as Error).message), /status=429/, "the log keeps the history");
     assert.equal(P.providerFailureOf(e), null, "a false `gemini|429` row would feed a false alert");

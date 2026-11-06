@@ -82,7 +82,7 @@ test("darvoza — krossvord: so'z 0.7 ulushi", () => {
   // MUTATSIYA: nisbat 0.6 ga tushirilsa 6 ham o'tib ketardi.
   const fail = gameGateFail(meta, v, crosswordDoc(meta, 6));
   assert.equal(fail?.rule, "crossword.words");
-  assert.match(fail!.message, /Kredit qaytariladi/);
+  assert.match(fail!.message, /Pul balansingizga qaytariladi/);
 });
 
 test("darvoza — flesh kartalar: karta 0.7 ulushi", () => {

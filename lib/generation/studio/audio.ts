@@ -42,7 +42,7 @@ export type StudioAudioDeps = {
   run?: (i: Parameters<typeof import("../../server/media/run").runMedia>[0]) => Promise<{ outputs: MediaOutput[]; route?: Route }>;
 };
 
-const FAILED = "Audio yaratilmadi — provayder javob bermadi. Kredit qaytariladi.";
+const FAILED = "Audio yaratilmadi — provayder javob bermadi. Pul balansingizga qaytariladi.";
 
 async function defaultRun(i: Parameters<typeof import("../../server/media/run").runMedia>[0]) {
   return (await import("../../server/media/run")).runMedia(i);
@@ -62,10 +62,10 @@ export async function buildStudioAudio(
   const entry = studioAudioEntry(values);
   const mode = entry ? audioModeOf(entry.id) : null;
   const purpose = entry ? studioAudioPurposeOf(entry.id) : null;
-  if (!entry || !mode || !purpose) throw new UserFacingError("Tanlangan audio rejimi mavjud emas. Kredit qaytariladi.");
+  if (!entry || !mode || !purpose) throw new UserFacingError("Tanlangan audio rejimi mavjud emas. Pul balansingizga qaytariladi.");
   // The route refused these before charging; a job row from before a catalog change fails here (refund), never runs.
   const bad = studioAudioError(values);
-  if (bad) throw new UserFacingError(`${bad} Kredit qaytariladi.`);
+  if (bad) throw new UserFacingError(`${bad} Pul balansingizga qaytariladi.`);
   const p = normalize(entry.params, values);
   const adapters = deps.adapters ?? studioAudioAdapters();
   const run = deps.run ?? defaultRun;
@@ -75,7 +75,7 @@ export async function buildStudioAudio(
 
   let assets: { audio: { mime: string; base64: string }[] } | undefined;
   if (takesAudioInput(entry)) {
-    if (!ctx.input) throw new UserFacingError("Yuklangan audio topilmadi (muddati o‘tgan bo‘lishi mumkin). Kredit qaytariladi.");
+    if (!ctx.input) throw new UserFacingError("Yuklangan audio topilmadi (muddati o‘tgan bo‘lishi mumkin). Pul balansingizga qaytariladi.");
     assets = { audio: [{ mime: ctx.input.mime, base64: ctx.input.base64 }] };
   }
   let voiceLabel: string | null = null;
@@ -85,12 +85,12 @@ export async function buildStudioAudio(
     const v = String(values.voice ?? "").trim() || String(p.voice ?? "");
     if (clone) {
       const hit = ctx.clones[clone];
-      if (!hit) throw new UserFacingError("Tanlangan ovoz topilmadi (o‘chirilgan bo‘lishi mumkin). Kredit qaytariladi.");
+      if (!hit) throw new UserFacingError("Tanlangan ovoz topilmadi (o‘chirilgan bo‘lishi mumkin). Pul balansingizga qaytariladi.");
       providerVoice = hit.providerVoiceId;
       voiceLabel = hit.name;
     } else {
       const lib = ELEVENLABS_VOICES.find((x) => x.id === v);
-      if (!lib) throw new UserFacingError("Noma'lum ovoz. Kredit qaytariladi.");
+      if (!lib) throw new UserFacingError("Noma'lum ovoz. Pul balansingizga qaytariladi.");
       providerVoice = lib.id;
       voiceLabel = lib.name;
     }

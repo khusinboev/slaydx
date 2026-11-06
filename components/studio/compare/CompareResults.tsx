@@ -11,6 +11,7 @@ import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
 import { imageExt } from "@/lib/viewers/kind";
 import { GenerationProgress } from "@/components/files/GenerationProgress";
+import { REFUND_PHRASE } from "@/lib/refund-phrase";
 import { downloadStudioFile } from "../studio-download";
 import type { StudioJob } from "../StudioResults";
 import type { CompareKind } from "./compare-model";
@@ -104,7 +105,7 @@ function Cell({ kind, job, onPick }: { kind: CompareKind; job: StudioJob; onPick
   } else {
     body = (
       <p role="alert" className="text-destructive px-3.5 text-[14px] leading-snug" data-compare-failed>
-        {gen.status === "FAILED" ? gen.error || "Bu model natija bermadi. Pul balansingizga qaytarildi." : "Ish bekor qilindi."}
+        {gen.status === "FAILED" ? gen.error || `Bu model natija bermadi. ${REFUND_PHRASE}.` : "Ish bekor qilindi."}
       </p>
     );
   }
@@ -124,7 +125,7 @@ function Pictures({ job, gen }: { job: StudioJob; gen: api.GenerationDetail }) {
   if (images.length === 0) {
     return (
       <p className="text-muted-foreground px-3.5 text-[14px]" data-compare-no-images>
-        Rasm yaratilmadi — pul balansingizga qaytarildi.
+        Rasm yaratilmadi. {REFUND_PHRASE}.
       </p>
     );
   }

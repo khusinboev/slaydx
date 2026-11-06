@@ -31,14 +31,14 @@ export class UserFacingError extends Error {
   }
 }
 
-export const GENERIC_JOB_ERROR = "Yaratishda xatolik yuz berdi. Kredit qaytariladi — qayta urinib ko‘ring.";
-export const TIMEOUT_JOB_ERROR = "Ish vaqti tugadi. Kredit qaytariladi — qayta urinib ko‘ring.";
+export const GENERIC_JOB_ERROR = "Yaratishda xatolik yuz berdi. Pul balansingizga qaytariladi — qayta urinib ko‘ring.";
+export const TIMEOUT_JOB_ERROR = "Ish vaqti tugadi. Pul balansingizga qaytariladi — qayta urinib ko‘ring.";
 /**
  * Every provider of the text chain refused for an account or outage reason (incident 2026-11-05): retrying at once cannot
  * help, so unlike the other messages this one does not invite it.
  */
-export const AI_OUTAGE_ERROR = "AI xizmati hozir vaqtincha ishlamayapti. Kredit to‘liq qaytarildi — 15–20 daqiqadan so‘ng urinib ko‘ring.";
-export const VOICE_JOB_ERROR = "Ovoz yaratilmadi. Kredit qaytariladi — qayta urinib ko‘ring.";
+export const AI_OUTAGE_ERROR = "AI xizmati hozir vaqtincha ishlamayapti. Pul balansingizga qaytariladi — 15–20 daqiqadan so‘ng urinib ko‘ring.";
+export const VOICE_JOB_ERROR = "Ovoz yaratilmadi. Pul balansingizga qaytariladi — qayta urinib ko‘ring.";
 
 const MAX_LEN = 300;
 

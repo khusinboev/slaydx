@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 /**
  * NAVBAT MUDDATI (`audit/designs/capacity.md` §4) — haqiqiy Postgres ga qarshi.
  *
- * QUEUED qator `ttlSec` dan eski bo'lsa → FAILED («Navbat juda uzun edi —
- * pul qaytarildi») va pul qaytadi — BITTA tranzaksiyada va FAQAT BIR MARTA,
+ * QUEUED qator `ttlSec` dan eski bo'lsa → FAILED («Navbat juda uzun edi. Pul balansingizga
+ * qaytariladi.») va pul qaytadi — BITTA tranzaksiyada va FAQAT BIR MARTA,
  * ikki housekeeper parallel yursa ham. Yosh ishga tegilmaydi.
  *
  * Boshqa agentlar/testlar ham shu bazadan foydalanishi mumkin, shuning
@@ -112,7 +112,7 @@ test("expireQueuedJobs", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t
     );
     assert.equal(g!.status, "FAILED");
     assert.equal(g!.error, QUEUE_TTL_MESSAGE);
-    assert.equal(QUEUE_TTL_MESSAGE, "Navbat juda uzun edi — pul qaytarildi");
+    assert.equal(QUEUE_TTL_MESSAGE, "Navbat juda uzun edi. Pul balansingizga qaytariladi.");
     assert.ok(g!.finished_at);
 
     const refunds = await query<{ points_delta: string; balance_delta: string; note: string }>(

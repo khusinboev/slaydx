@@ -146,13 +146,19 @@ export function MixPanel({
         }
       >
         {loadError ? (
-          <p role="alert" className="text-destructive text-[14px]" data-mix-sources-error>
-            {loadError}
+          <p role="alert" className="text-destructive mb-2 text-[14px]" data-mix-sources-error>
+            {loadError}{" "}
+            <button type="button" data-mix-retry onClick={load} className="pointer-coarse:min-h-11 font-semibold underline underline-offset-2">
+              Qayta urinish
+            </button>
           </p>
-        ) : !sources ? (
-          <p className="text-muted-foreground text-[13.5px]" role="status" data-mix-sources-loading>
-            Natijalar yuklanmoqda...
-          </p>
+        ) : null}
+        {!sources ? (
+          loadError ? null : (
+            <p className="text-muted-foreground text-[13.5px]" role="status" data-mix-sources-loading>
+              Natijalar yuklanmoqda...
+            </p>
+          )
         ) : (
           <div className="flex flex-col gap-3">
             {pickers.map((pk, i) => {
@@ -203,8 +209,8 @@ export function MixPanel({
         label={price === null || blocker ? undefined : mixSubmitLabel(m.label, price)}
       />
       <section aria-label="Montaj natijalari" data-mix-results className={cn(jobs.length > 0 && "mt-5 flex flex-col gap-4")}>
-        <VideoResults jobs={videoJobs} busy={submitting} onAgain={again} />
-        <VoiceResults jobs={audioJobs} busy={submitting} onAgain={again} />
+        <VideoResults jobs={videoJobs} busy={submitting} onAgain={again} retryPrice={() => mixClientPrice()} failed="Montaj bajarilmadi" />
+        <VoiceResults jobs={audioJobs} busy={submitting} onAgain={again} retryPrice={() => mixClientPrice()} failed="Montaj bajarilmadi" />
       </section>
     </div>
   );

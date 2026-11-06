@@ -54,7 +54,7 @@ export const BURN_FFMPEG_TIMEOUT_MS = 240_000;
 /** The bytes may measure this much longer than the billed (server-read, rounded-up) seconds; more = refused + refund. */
 export const MEASURED_SLACK_SECONDS = 1.5;
 
-const REFUND = "Kredit qaytariladi.";
+const REFUND = "Pul balansingizga qaytariladi.";
 const FAILED = `Transkripsiya bajarilmadi — provayder javob bermadi. ${REFUND}`;
 const BURN_FAILED = `Subtitrni videoga yopishtirib bo‘lmadi. ${REFUND}`;
 const round1 = (n: number) => Math.round(n * 10) / 10;
