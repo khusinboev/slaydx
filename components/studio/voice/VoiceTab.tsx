@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import Link from "next/link";
 import { FileText, Plus } from "lucide-react";
-import { ApiError, PriceChangedError } from "@/lib/api-client";
+import { PriceChangedError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
 import type { FormValues } from "@/lib/types";
@@ -12,17 +11,19 @@ import { AutoTextarea } from "@/components/common/AutoTextarea";
 import { Card, Segmented } from "@/components/forms/compact";
 import { Field } from "@/components/forms/shared";
 import { queueGeneration } from "@/components/forms/runGeneration";
-import { PAY_RETURN_PATH } from "@/components/overlays/pay-amount";
 import { speechTextParam } from "@/lib/media/studio-speech";
 import { takesClones, voiceParamsOf } from "@/lib/media/catalog-speech";
+import { CatalogState } from "../CatalogState";
 import { MediaModelPicker } from "../MediaModelPicker";
 import { ParamRows } from "../ParamRows";
 import { PriceButton } from "../PriceButton";
-import { STUDIO_SPEECH_PURPOSE, type CatalogState } from "../studio-api";
+import { STUDIO_SPEECH_PURPOSE, type CatalogLoad } from "../studio-api";
+import { SubmitError } from "../SubmitError";
 import type { MediaCatalog } from "../studio-types";
 import { carryOver, effective, type RawValues } from "../studio-values";
 import type { StudioJob } from "../StudioResults";
 import { useStudioJobs } from "../useStudioJobs";
+import { useStudioSend } from "../useStudioSend";
 import { ClonePanel, type CloneRequest } from "./ClonePanel";
 import { VoiceList, voiceRows, type VoiceFilter, type VoiceRow } from "./VoiceList";
 import { VoiceResults } from "./VoiceResults";
@@ -36,7 +37,6 @@ export type VoiceMode = "text" | "dialogue";
 export type VoiceTabState = { mode: VoiceMode | null; chosen: string | null; raw: RawValues; filter: VoiceFilter; speaker: number };
 export const INITIAL_VOICE_STATE: VoiceTabState = { mode: null, chosen: null, raw: {}, filter: "all", speaker: 0 };
 
-const INSUFFICIENT_RE = /balans yetarli emas|to.langan balans bilan/i;
 export const isDialogue = (e: Pick<ClientEntry, "capabilities">): boolean => e.capabilities.includes("dialogue");
 
 /** The catalog split by what a model does (clones are never in this catalog: purpose `studio.speech`). */
@@ -87,7 +87,7 @@ export function VoiceTab({
   gated,
   quietWhenNone = false,
 }: {
-  catalogState: CatalogState;
+  catalogState: CatalogLoad;
   reload: (silent?: boolean) => void;
   state: VoiceTabState;
   setState: (fn: (s: VoiceTabState) => VoiceTabState) => void;
@@ -104,8 +104,6 @@ export function VoiceTab({
 }) {
   const textId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [voices, setVoices] = useState<VoicesData | null>(null);
   const [cloneOpen, setCloneOpen] = useState(false);
@@ -123,6 +121,10 @@ export function VoiceTab({
     fetchVoices().then(setVoices, (e: unknown) => setError(e instanceof Error ? e.message : "Ovozlar yuklanmadi"));
   }, []);
   useEffect(() => loadVoices(), [loadVoices]);
+  const { submitting, error, setError, send: queue } = useStudioSend((refused) => {
+    reload(true);
+    if (refused) loadVoices();
+  });
 
   // A finished clone job: the list shows the new voice (and the server's state of it).
   const doneClones = cloneJobs.jobs.filter((j) => j.gen && j.gen.status !== "QUEUED" && j.gen.status !== "IN_PROGRESS").length;
@@ -144,21 +146,7 @@ export function VoiceTab({
     });
   }
 
-  if (!catalog) {
-    return catalogState.status === "error" ? (
-      <p role="alert" className="text-destructive text-[14.5px]" data-studio-catalog-error>
-        {catalogState.message}{" "}
-        <button type="button" onClick={() => reload()} className="pointer-coarse:min-h-11 font-semibold underline underline-offset-2">
-          Qayta urinish
-        </button>
-      </p>
-    ) : (
-      <div className="flex flex-col gap-3" role="status" aria-label="Ovoz yuklanmoqda" data-studio-loading>
-        <div className="bg-muted/60 h-36 animate-pulse rounded-[20px]" />
-        <div className="bg-muted/60 h-64 animate-pulse rounded-[20px]" />
-      </div>
-    );
-  }
+  if (!catalog) return <CatalogState state={catalogState} onRetry={() => reload()} label="Ovoz yuklanmoqda" blocks={["h-36 rounded-[20px]", "h-64 rounded-[20px]"]} />;
   if (!mode || !entry) {
     if (quietWhenNone) return null;
     return (
@@ -188,25 +176,11 @@ export function VoiceTab({
   const formEntry = { ...entry, params: entry.params.filter((p) => p.type !== "voice" && p.name !== field && !/^voice\d?$/.test(p.name)) };
 
   async function send(target: ClientEntry, values: Record<string, unknown>) {
-    if (!catalog) return;
-    setError(null);
-    setSubmitting(true);
+    if (!catalog) return false;
     const label = spokenText(target, values).replace(/\s+/g, " ").slice(0, 72);
-    try {
-      const { id, price: charged } = await queueGeneration(
-        { slug: STUDIO_SPEECH_SLUG, id: STUDIO_SPEECH_TOOL_ID, title: label, output: "mp3" },
-        values as unknown as FormValues,
-        speechClientPrice(target, values, catalog.pricing),
-        { repeat: true },
-      );
-      track({ id, modelId: target.id, modelLabel: target.label, prompt: label, price: charged, sent: values });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Xatolik");
-      if ((e instanceof ApiError && e.status === 400) || e instanceof PriceChangedError) reload(true);
-      if (e instanceof ApiError && e.status === 400) loadVoices();
-    } finally {
-      setSubmitting(false);
-    }
+    return queue({ slug: STUDIO_SPEECH_SLUG, id: STUDIO_SPEECH_TOOL_ID, title: label, output: "mp3" }, values, speechClientPrice(target, values, catalog.pricing), ({ id, price: charged }) =>
+      track({ id, modelId: target.id, modelLabel: target.label, prompt: label, price: charged, sent: values }),
+    );
   }
 
   function submit() {
@@ -419,19 +393,7 @@ export function VoiceTab({
 
       <ParamRows entry={formEntry} raw={state.raw} onChange={setParam} />
 
-      {error && !gated ? (
-        <p role="alert" data-studio-error className="text-destructive mb-3 text-[14.5px] leading-snug">
-          {error}
-          {INSUFFICIENT_RE.test(error) ? (
-            <>
-              {" "}
-              <Link href={PAY_RETURN_PATH} data-topup className="text-accent-soft-foreground font-semibold whitespace-nowrap underline underline-offset-2">
-                Balansni to‘ldirish →
-              </Link>
-            </>
-          ) : null}
-        </p>
-      ) : null}
+      <SubmitError error={error} gated={gated} />
       <PriceButton
         count={1}
         price={price}

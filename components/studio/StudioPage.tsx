@@ -3,20 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LayoutGrid, Wand2, X } from "lucide-react";
-import { ApiError, PriceChangedError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
 import { creditTotal, usePricingVersion, useAppStore } from "@/lib/store";
 import { useChannelGate } from "@/lib/channel-gate";
 import { useUi } from "@/lib/ui";
-import type { FormValues } from "@/lib/types";
 import type { ClientEntry } from "@/lib/studio-core";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { ChannelGate } from "@/components/forms/ChannelGate";
-import { queueGeneration } from "@/components/forms/runGeneration";
 import { useKeyboardInset } from "@/components/forms/useKeyboardInset";
 import { useOverlayHistory } from "@/components/nav/useOverlayHistory";
 import { PAY_RETURN_PATH } from "@/components/overlays/pay-amount";
+import { CatalogState } from "./CatalogState";
 import { Gallery } from "./Gallery";
 import { MediaModelPicker } from "./MediaModelPicker";
 import { ParamRows } from "./ParamRows";
@@ -24,6 +22,7 @@ import { PriceButton } from "./PriceButton";
 import { PromptBox } from "./PromptBox";
 import { usePromptEnhance } from "./usePromptEnhance";
 import { StudioResults, type StudioJob } from "./StudioResults";
+import { SubmitError } from "./SubmitError";
 import { STUDIO_AUDIO_LISTING, STUDIO_SPEECH_PURPOSE, STUDIO_VIDEO_PURPOSE, inputFromResult, loadMediaCatalog, resultAssetOf, uploadStudioInput, useMediaCatalog } from "./studio-api";
 import { INITIAL_VIDEO_STATE, VideoTab, type VideoTabState } from "./video/VideoTab";
 import { INITIAL_VOICE_STATE, VoiceTab, type VoiceTabState } from "./voice/VoiceTab";
@@ -42,13 +41,12 @@ import { STUDIO_TOOL_ID, outputCount, studioPrice } from "./studio-price";
 import type { GalleryItem, MediaCatalog, StudioPricing } from "./studio-types";
 import { PROMPT_PARAM, carryOver, effective, normalizedPrompt, promptLimit, promptMin, promptParam, requestValues, type RawValues } from "./studio-values";
 import { useStudioJobs } from "./useStudioJobs";
+import { useStudioSend } from "./useStudioSend";
 import { ComparePanel, CompareSwitch } from "./compare/ComparePanel";
 import { compareAvailability, enableCompare, useCompare } from "./compare/useCompare";
 
 const WIDTH = "max-w-[1320px]";
 const LOADING = <div className="text-muted-foreground p-8 text-[15px]">Yuklanmoqda...</div>;
-/** The server's 402 wording (`app/api/generations/route.ts`), as the tool forms recognise it. */
-const INSUFFICIENT_RE = /balans yetarli emas|to.langan balans bilan/i;
 
 /** The chosen model if the catalog still offers it, else the server's default, else the first one. */
 export function resolveEntry(catalog: MediaCatalog | null, id: string | null): ClientEntry | null {
@@ -112,8 +110,9 @@ function StudioApp() {
   const [raw, setRaw] = useState<RawValues>({});
   const [view, setView] = useState<View>("create");
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // 400 before charging: the model or a value is no longer accepted; 409 price_changed: the markup / override / live
+  // cost moved. Either way the catalog (and with it the button's price) is read again.
+  const { submitting, error, setError, send: queue } = useStudioSend(() => reload(true));
   const { jobs, track } = useStudioJobs();
   // The Video tab (P3): its own catalog (loaded once the tab is opened), form state and jobs — kept while on «Rasm».
   const [tab, setTab] = useState<StudioTab>("rasm");
@@ -296,29 +295,12 @@ function StudioApp() {
   }
 
   async function send(target: ClientEntry, sent: Record<string, unknown>, pricing: StudioPricing | undefined = catalog?.pricing, jobPurpose: string = purpose) {
-    if (!pricing) return;
-    setError(null);
-    setSubmitting(true);
+    if (!pricing) return false;
     const prompt = String(sent[PROMPT_PARAM] ?? "");
-    try {
-      const { id, price: charged } = await queueGeneration(
-        { slug: STUDIO_TOOL_SLUG, id: STUDIO_TOOL_ID, title: prompt.slice(0, 72), output: "png" },
-        sent as unknown as FormValues,
-        studioPrice(target, sent, pricing),
-        // A second press with the same prompt is a new picture, not a double click.
-        { repeat: true },
-      );
+    return queue({ slug: STUDIO_TOOL_SLUG, id: STUDIO_TOOL_ID, title: prompt.slice(0, 72), output: "png" }, sent, studioPrice(target, sent, pricing), ({ id, price: charged }) => {
       track({ id, modelId: target.id, modelLabel: target.label, prompt: prompt || (jobPurpose !== MODE_PURPOSE.image ? jobLabel(jobPurpose) : ""), price: charged, sent, purpose: jobPurpose });
       scrollToResults();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Xatolik");
-      // 400 before charging: the model or a value is no longer accepted — the offered list may have changed.
-      if (e instanceof ApiError && e.status === 400) reload(true);
-      // 409 price_changed: the markup / override / live cost moved — re-read the pricing block so the button shows the new price.
-      if (e instanceof PriceChangedError) reload(true);
-    } finally {
-      setSubmitting(false);
-    }
+    });
   }
 
   function submit() {
@@ -531,7 +513,7 @@ function StudioApp() {
                   onVoice={(text) => void handoff.toVoice(text)}
                 />
               ) : !catalog ? (
-                <CatalogStatus status={state.status} message={state.status === "error" ? state.message : ""} onRetry={() => reload()} />
+                <CatalogState state={state} onRetry={() => reload()} label="Studio yuklanmoqda" blocks={["h-36 rounded-[20px]", "h-[5.25rem] rounded-[18px]", "h-40 rounded-[20px]"]} />
               ) : entry === null ? (
                 <MediaModelPicker purpose={purpose} catalog={catalog} value="" values={{}} onChange={selectModel} />
               ) : (
@@ -561,19 +543,7 @@ function StudioApp() {
                     onOpenChange={setPickerOpen}
                   />
                   <ParamRows entry={entry} raw={raw} onChange={setParam} />
-                  {error && !gated ? (
-                    <p role="alert" data-studio-error className="text-destructive mb-3 text-[14.5px] leading-snug">
-                      {error}
-                      {INSUFFICIENT_RE.test(error) ? (
-                        <>
-                          {" "}
-                          <Link href={PAY_RETURN_PATH} data-topup className="text-accent-soft-foreground pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center font-semibold whitespace-nowrap underline underline-offset-2">
-                            Balansni to‘ldirish →
-                          </Link>
-                        </>
-                      ) : null}
-                    </p>
-                  ) : null}
+                  <SubmitError error={error} gated={gated} />
                   <PriceButton count={count} price={price} balance={balance} loading={submitting} disabled={false} typing={typing} onSubmit={submit} />
                 </>
               )}
@@ -608,27 +578,6 @@ function jobLabel(jobPurpose: string): string {
 
 const HEADER_BTN =
   "bg-card hover:bg-muted focus-visible:ring-ring pointer-coarse:min-h-11 inline-flex h-11 items-center gap-1.5 rounded-[14px] border px-3 text-[14px] font-semibold outline-none focus-visible:ring-2";
-
-/** Loading / failed catalog in place of the form (the picker shows its own states when embedded alone). */
-function CatalogStatus({ status, message, onRetry }: { status: "loading" | "error" | "ready"; message: string; onRetry: () => void }) {
-  if (status === "error") {
-    return (
-      <p role="alert" className="text-destructive text-[14.5px]" data-studio-catalog-error>
-        {message}{" "}
-        <button type="button" onClick={onRetry} className="pointer-coarse:min-h-11 font-semibold underline underline-offset-2">
-          Qayta urinish
-        </button>
-      </p>
-    );
-  }
-  return (
-    <div className="flex flex-col gap-3" role="status" aria-label="Studio yuklanmoqda" data-studio-loading>
-      <div className="bg-muted/60 h-36 animate-pulse rounded-[20px]" />
-      <div className="bg-muted/60 h-[5.25rem] animate-pulse rounded-[18px]" />
-      <div className="bg-muted/60 h-40 animate-pulse rounded-[20px]" />
-    </div>
-  );
-}
 
 /** Desktop navigation column: where you are (Yaratish / Galereya) and the balance with its top-up link. */
 function StudioNav({ view, onView, balance }: { view: View; onView: (v: View) => void; balance: number | null }) {

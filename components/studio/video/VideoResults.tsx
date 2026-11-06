@@ -8,38 +8,12 @@ import type * as api from "@/lib/api-client";
 import { useApiSrc } from "@/lib/use-api-src";
 import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
-import { currentDeliveryEnv, deliver, markGesture, type ReadyFile } from "@/lib/downloads/deliver";
-import { GenerationProgress } from "@/components/files/GenerationProgress";
 import { FavoriteButton } from "../Favorite";
+import { JobList, JobResult, RESULT_ACTION as ACTION } from "../JobResult";
+import { downloadStudioFile } from "../studio-download";
 import { useMixHandoff } from "../audio/mix-handoff";
 import { isMixModelId } from "@/lib/media/catalog-mix";
 import type { StudioJob } from "../StudioResults";
-
-const ACTION =
-  "focus-visible:ring-ring bg-card hover:bg-muted pointer-coarse:min-h-11 inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[12px] border px-3 text-[13.5px] font-semibold outline-none focus-visible:ring-2 disabled:opacity-50";
-
-/** The MP4 through the delivery driver (session fetch → blob → download); inside Telegram the result page opens instead. */
-async function downloadClip(id: string, openPage: () => void): Promise<void> {
-  markGesture();
-  const env = currentDeliveryEnv();
-  if (env.capability !== "browser") {
-    openPage();
-    return;
-  }
-  const file: ReadyFile = {
-    format: "native",
-    url: `/api/generations/${id}/file`,
-    fileName: "studio-video.mp4",
-    size: 0,
-    mime: "video/mp4",
-    expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
-  };
-  try {
-    await deliver(file, env);
-  } catch {
-    openPage();
-  }
-}
 
 /** P7b «Keyingi qadam» on a finished clip (absent = no button). */
 type Next = { onMusic?: (prompt: string) => void; onVoice?: (text: string) => void };
@@ -50,49 +24,30 @@ type Next = { onMusic?: (prompt: string) => void; onVoice?: (text: string) => vo
  * result page's `VideoViewer`) with «Yuklab olish» and «Qayta», the P7b star and — for a clip made from a prompt —
  * «Keyingi qadam»: «Musiqa yaratish» / «Ovoz qo'shish»; a failed one says why (the refund is automatic).
  */
-export function VideoResults({ jobs, busy, onAgain, onMusic, onVoice }: { jobs: readonly StudioJob[]; busy: boolean; onAgain: (job: StudioJob) => void } & Next) {
-  if (jobs.length === 0) return null;
+export function VideoResults({
+  jobs,
+  busy,
+  onAgain,
+  retryPrice,
+  failed = "Video yaratilmadi",
+  onMusic,
+  onVoice,
+}: {
+  jobs: readonly StudioJob[];
+  busy: boolean;
+  onAgain: (job: StudioJob) => void;
+  retryPrice?: (job: StudioJob) => number;
+  /** The failure's first sentence when the server left no text. */
+  failed?: string;
+} & Next) {
   return (
-    <ul className="flex flex-col gap-4" data-studio-jobs aria-label="Videolar">
-      {jobs.map((job) => (
-        <li key={job.id} data-studio-job={job.id} data-job-status={job.gen?.status ?? "QUEUED"}>
-          <JobCard job={job} busy={busy} onAgain={onAgain} onMusic={onMusic} onVoice={onVoice} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function JobCard({ job, busy, onAgain, onMusic, onVoice }: { job: StudioJob; busy: boolean; onAgain: (j: StudioJob) => void } & Next) {
-  const gen = job.gen;
-  if (job.error && !gen) return <Failure job={job} message={`${job.error} Video baribir tayyor bo‘lishi mumkin — «Ishlarim» yoki Galereyani tekshiring.`} busy={busy} onAgain={onAgain} />;
-  if (!gen) {
-    return (
-      <div className="bg-card rounded-[20px] border p-5" data-studio-pending role="status">
-        <p className="font-medium">Navbatga qo‘yildi</p>
-        <p className="text-muted-foreground mt-0.5 text-[14px]">
-          {job.modelLabel} · {formatSom(job.price)}
-        </p>
-      </div>
-    );
-  }
-  if (gen.status === "QUEUED" || gen.status === "IN_PROGRESS") return <GenerationProgress gen={gen} />;
-  if (gen.status === "COMPLETED") return <Clip job={job} gen={gen} busy={busy} onAgain={onAgain} onMusic={onMusic} onVoice={onVoice} />;
-  const message = gen.status === "FAILED" ? gen.error || "Video yaratilmadi. Pul balansingizga qaytarildi." : "Ish bekor qilindi.";
-  return <Failure job={job} message={message} busy={busy} onAgain={onAgain} />;
-}
-
-function Failure({ job, message, busy, onAgain }: { job: StudioJob; message: string; busy: boolean; onAgain: (j: StudioJob) => void }) {
-  return (
-    <div className="bg-card rounded-[20px] border p-5" data-studio-failed>
-      <p role="alert" className="text-destructive text-[14.5px] leading-snug">
-        {message}
-      </p>
-      <button type="button" data-result-action="again" disabled={busy} onClick={() => onAgain(job)} className={cn(ACTION, "mt-3")}>
-        <RefreshCw className="size-4" aria-hidden />
-        Qayta urinish
-      </button>
-    </div>
+    <JobList jobs={jobs} label="Videolar">
+      {(job) => (
+        <JobResult job={job} busy={busy} onAgain={onAgain} retryPrice={retryPrice} failed={failed} lost="Video baribir tayyor bo‘lishi mumkin — «Ishlarim» yoki Galereyani tekshiring.">
+          {(gen) => <Clip job={job} gen={gen} busy={busy} onAgain={onAgain} onMusic={onMusic} onVoice={onVoice} />}
+        </JobResult>
+      )}
+    </JobList>
   );
 }
 
@@ -138,7 +93,7 @@ function Clip({ job, gen, busy, onAgain, onMusic, onVoice }: { job: StudioJob; g
           </p>
         ) : null}
         <div className="grid grid-cols-2 gap-1.5">
-          <button type="button" data-result-action="download" onClick={() => void downloadClip(job.id, () => router.push(page))} className={ACTION}>
+          <button type="button" data-result-action="download" onClick={() => void downloadStudioFile({ url: `/api/generations/${job.id}/file`, fileName: "studio-video.mp4", mime: "video/mp4" }, () => router.push(page))} className={ACTION}>
             <Download className="size-4" aria-hidden />
             Yuklab olish
           </button>

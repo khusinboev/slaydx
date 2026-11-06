@@ -93,7 +93,7 @@ export function loadMediaCatalog(purpose: string, opts: { fresh?: boolean } = {}
   return p;
 }
 
-export type CatalogState =
+export type CatalogLoad =
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "ready"; catalog: MediaCatalog };
@@ -102,8 +102,8 @@ export type CatalogState =
  * The model catalog of a purpose. `enabled: false` skips the request (an embedding host that already holds the
  * catalog passes it down instead). `reload` asks the server again, past the cache.
  */
-export function useMediaCatalog(purpose: string, enabled = true): { state: CatalogState; reload: (silent?: boolean) => void } {
-  const [state, setState] = useState<CatalogState>({ status: "loading" });
+export function useMediaCatalog(purpose: string, enabled = true): { state: CatalogLoad; reload: (silent?: boolean) => void } {
+  const [state, setState] = useState<CatalogLoad>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!enabled) return;
