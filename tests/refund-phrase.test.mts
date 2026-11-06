@@ -13,7 +13,7 @@ import { AI_OUTAGE_ERROR, GENERIC_JOB_ERROR, TIMEOUT_JOB_ERROR, VOICE_JOB_ERROR,
  *   GENERIC_JOB_ERROR back to «Kredit qaytariladi»                                 -> «the shared messages»;
  *   `lib/generation/studio/mix.ts` REFUND back to «Kredit qaytariladi.»            -> «no other wording»;
  *   VIDEO_DEADLINE_MESSAGE back to «Pul qaytarildi»                                -> «no other wording»;
- *   StudioResults fallback text with «Pul balansingizga qaytarildi»                -> «no other wording».
+ *   CompareResults JSX text with «pul balansingizga qaytarildi»                    -> «no other wording».
  */
 
 test("the shared messages carry the phrase, and the phrase passes the user-text filter", () => {
@@ -33,7 +33,7 @@ function sources(dir: string): string[] {
 
 test("no other wording of a failed job's refund in the engine, the job layer or the Studio", () => {
   // «Pul qaytarildi» stays a ledger line (a refund that happened): the wallet, the admin and the log lines say it there.
-  const failedJobText = /["`‘].*(?:kredit qaytar|kredit to.liq qaytar|to.lov qaytarildi|pul qaytarildi|pul qaytariladi|pul balansingizga qaytarildi)/i;
+  const failedJobText = /(?:kredit qaytar|kredit to.liq qaytar|to.lov qaytarildi|pul qaytarildi|pul qaytariladi|pul balansingizga qaytarildi)/i;
   const files = [...sources("lib/generation"), ...sources("lib/server/media"), ...sources("components/studio"), "lib/server/user-error.ts", "lib/server/video-ops.ts", "lib/server/queue-ttl.ts"];
   const hits = files.flatMap((f) =>
     readFileSync(f, "utf8")

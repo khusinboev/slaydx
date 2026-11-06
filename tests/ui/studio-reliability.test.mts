@@ -52,7 +52,7 @@ const { REFUND_PHRASE } = await import("../../lib/refund-phrase.ts");
  *  11. `enterRasmMode` starts the mode from an empty `forms` (the old wipe)               -> «leaving a mode», «enterRasmMode»;
  *  12. `enterRasmMode` carries the prompt into every tool mode                            -> «enterRasmMode», studio-library NIT-9;
  *  13. gallery `SubmitError` removed                                                      -> «gallery tools»;
- *  14. `VoicesState` not drawn (the empty list again)                                     -> «voices» (both tabs);
+ *  14. `VoicesState` not drawn in VoiceTab, then in AudioTab                               -> «voices» (each);
  *  15. `onError={onFail}` back to `onEnd`                                                 -> «a voice preview»;
  *  16. `JobResult` hides the failure for a job with an error and no state                 -> «a lost speech tool job»;
  *  17. MixPanel without the retry button                                                  -> «Montaj sources»;
@@ -60,7 +60,9 @@ const { REFUND_PHRASE } = await import("../../lib/refund-phrase.ts");
  *  19. AudioTab's `failed` prop removed                                                   -> «music»;
  *  20. `modelNoun` always «Rasm»                                                          -> «the sheet's noun», «the Ovoz picker»;
  *  21. `startImageHint` always «nisbat suratdan olinadi»                                  -> «the start image hint»;
- *  22. the empty column back to `xl:block`                                                -> «the tablet's».
+ *  22. the empty column back to `xl:block`                                                -> «the tablet's»;
+ *  23. `useDraft` keeps the write queued by the restore's own pass                          -> «refresh: the prompt»;
+ *  24. the tabs start without the link's mode (applied only after the first URL write)    -> «the login keeps».
  */
 
 Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
