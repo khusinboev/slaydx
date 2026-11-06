@@ -151,6 +151,7 @@ function parseItem(raw: unknown): GalleryItem | null {
         sound: typeof v.sound === "boolean" ? v.sound : null,
         effect: str(v.effect),
         effectLabel: str(v.effectLabel),
+        derived: v.derived === true,
       }
     : null;
   const a = raw.kind === "audio" && isObj(raw.audio) ? raw.audio : null;

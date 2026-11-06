@@ -236,6 +236,28 @@ test("kind chips (P11 §D): six filters; a kind asks ?kind=; a transcript card s
   assert.equal(qa("[data-gallery-filter-chip]").length, 6);
 });
 
+test("a derived clip («Montaj», «Dublyaj», a burned transcript) offers no repeat and no next step; a Video tab clip offers both, as «Qayta yaratish»", async () => {
+  const clip = (derived: boolean) => ({ src: "/x", seconds: 5, requestedSeconds: 5, aspect: "16:9", sound: null, effect: null, effectLabel: null, derived });
+  installApi({
+    gallery: {
+      "": {
+        items: [
+          item("own", { kind: "video", images: [], prompt: "Tog‘ tepasi", video: clip(false) }),
+          item("sub", { kind: "video", images: [], modelId: "elevenlabs/scribe-v2", prompt: "Subtitrli video", video: clip(true) }),
+        ],
+        nextCursor: null,
+      },
+    },
+  });
+  mount({ onVoice: () => {}, onMusic: () => {} });
+  await settle();
+  assert.equal(q('[data-gallery-item="own"] [data-gallery-other-model]')!.textContent, "Qayta yaratish", "MUTATSIYA: one name of a repeat");
+  assert.ok(q('[data-gallery-item="own"] [data-gallery-next]'));
+  assert.ok(q('[data-gallery-item="sub"] [data-gallery-video]'), "it still plays");
+  assert.ok(!q('[data-gallery-item="sub"] [data-gallery-other-model]'), "MUTATSIYA: «Subtitrli video» would open the Video form as a prompt");
+  assert.ok(!q('[data-gallery-item="sub"] [data-gallery-next]'), "MUTATSIYA: the job's name would go to «Ovoz» as a text");
+});
+
 test("«Boshqa modelda» hands the item (its prompt) back to the page", async () => {
   installApi({ gallery: { "": { items: [item("o1"), item("o2")], nextCursor: null } } });
   const got: string[] = [];

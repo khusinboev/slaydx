@@ -120,6 +120,9 @@ test("kinds: image / video / audio / text by tool and output; the mix is labelle
   const mix = page.items.find((i) => i.id === s.mixMp4)!;
   assert.equal(mix.modelLabel, "Montaj");
   assert.ok(mix.video, "the mix plays as a clip");
+  const derived = (id: string) => (page.items.find((i) => i.id === id)!.video as { derived: boolean }).derived;
+  assert.equal(derived(s.clip), false, "a Video tab clip re-opens in its form");
+  for (const id of [s.mixMp4, s.dubMp4, s.burned]) assert.equal(derived(id), true, "MUTATSIYA: another tool's clip has nothing to re-open");
   const text = page.items.find((i) => i.id === s.text)!;
   assert.ok(text.text);
   assert.equal(text.text!.language, "uz");

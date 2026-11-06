@@ -21,7 +21,7 @@ export type MediaCatalog = {
 
 /**
  * A clip in the gallery (P3): played from the result file itself (`/api/generations/{id}/file?inline=1`). `requestedSeconds`, `aspect`,
- * `sound` and `effect` are what was BOUGHT, so «Yana yaratish» re-opens the form at the same settings and price.
+ * `sound` and `effect` are what was BOUGHT, so «Qayta yaratish» re-opens the form at the same settings and price.
  */
 export type GalleryVideo = {
   src: string;
@@ -35,6 +35,8 @@ export type GalleryVideo = {
   /** Kling `effect_scene` id of an effect clip. */
   effect: string | null;
   effectLabel: string | null;
+  /** A clip of another tool («Montaj», «Dublyaj», a burned «Transkripsiya»): nothing to re-open in the Video form. */
+  derived: boolean;
 };
 
 /** A speech result in the gallery (P5): played from the job's own MP3 (`/api/generations/{id}/file?inline=1`). */

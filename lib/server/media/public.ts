@@ -78,7 +78,7 @@ export const GALLERY_PAGE = 24;
 export type GalleryImage = { url: string; w: number | null; h: number | null };
 /**
  * A clip in the gallery (P3): played from the result file itself (`?inline=1`, HTTP Range). `requestedSeconds`, `aspect`,
- * `sound` and `effect` are what was BOUGHT, so «Yana yaratish» re-opens the form at the same settings and price.
+ * `sound` and `effect` are what was BOUGHT, so «Qayta yaratish» re-opens the form at the same settings and price.
  */
 export type GalleryVideo = {
   src: string;
@@ -92,6 +92,11 @@ export type GalleryVideo = {
   /** Kling `effect_scene` id of an effect clip. */
   effect: string | null;
   effectLabel: string | null;
+  /**
+   * P11 §D: a clip of another tool («Montaj», «Dublyaj», a burned «Transkripsiya»): its `prompt` only names the job
+   * («Subtitrli video») and its model is no Video tab model, so the card offers neither a repeat nor a next step.
+   */
+  derived: boolean;
 };
 /** A speech result in the gallery (P5): played from the MP3 itself (`?inline=1`). */
 export type GalleryAudio = { src: string; seconds: number | null; voices: string[]; clone: boolean };
@@ -166,7 +171,7 @@ export function parseGalleryKind(raw: string | null): GalleryKind | null {
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
 
-function videoOf(id: string, raw: unknown): GalleryVideo {
+function videoOf(id: string, raw: unknown, derived: boolean): GalleryVideo {
   const v = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const effect = ALL_EFFECT_SCENES.find((e) => e.id === v.effect) ?? null;
   return {
@@ -177,6 +182,7 @@ function videoOf(id: string, raw: unknown): GalleryVideo {
     sound: typeof v.sound === "boolean" ? v.sound : null,
     effect: effect?.id ?? null,
     effectLabel: effect?.label ?? null,
+    derived,
   };
 }
 
@@ -267,7 +273,7 @@ export async function studioGallery(
         // An effect clip has no prompt: the topic names it («Effekt: …»).
         prompt: r.prompt || r.topic,
         images: kind === "image" ? imagesOf(r.id, r.images) : [],
-        video: kind === "video" ? videoOf(r.id, r.video) : null,
+        video: kind === "video" ? videoOf(r.id, r.video, r.tool_id !== "studio-video") : null,
         fileUrl: `/api/generations/${r.id}/file`,
         favorite: r.favorite === true,
       };

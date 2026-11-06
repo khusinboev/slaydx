@@ -34,8 +34,8 @@ const { PHOTO_MAX_BYTES, photoHint } = await import("../../lib/photo-accept.ts")
  *   3. the button names «effekt» instead of the chosen scene                   -> «effects grid»;
  *   4. picker cards without the video `priceOf` («so'm / rasm» wording)          -> «text form»;
  *   5. `parseCatalog` keeps picture models in the video purpose                -> «text form»;
- *   6. `videoAgain` without `chosen: item.modelId`                             -> «gallery Yana yaratish»;
- *   7. `videoAgain` without the stored length / sound                          -> «gallery Yana yaratish»;
+ *   6. `videoAgain` without `chosen: item.modelId`                             -> «gallery Qayta yaratish»;
+ *   7. `videoAgain` without the stored length / sound                          -> «gallery Qayta yaratish»;
  *   8. effect cells without `aria-pressed`                                     -> «effects grid»;
  *   9. upload hint hard-coded («10 MB»)                                         -> «effects grid».
  */
@@ -261,7 +261,7 @@ test("results: a running clip shows the progress panel, a finished one plays its
   assert.match(cards[1]!.querySelector("[data-studio-job-meta]")!.textContent ?? "", /5 soniya/);
 });
 
-test("gallery «Yana yaratish»: a text clip re-opens with ITS model, prompt, length, aspect and sound (same price); an effect with its scene", async () => {
+test("gallery «Qayta yaratish»: a text clip re-opens with ITS model, prompt, length, aspect and sound (same price); an effect with its scene", async () => {
   const clip = "33333333-3333-4333-8333-333333333333";
   const fx = "44444444-4444-4444-8444-444444444444";
   const item = (id: string, patch: Record<string, unknown>) => ({ id, kind: "video", createdAt: "2026-11-02T10:00:00.000Z", images: [], fileUrl: `/api/generations/${id}/file`, ...patch });
@@ -280,7 +280,7 @@ test("gallery «Yana yaratish»: a text clip re-opens with ITS model, prompt, le
   await click(q("[data-studio-gallery-link]"));
   await settle();
   const again = (id: string) => q(`[data-gallery-item="${id}"] [data-gallery-other-model]`);
-  assert.match(again(clip)?.textContent ?? "", /Yana yaratish/);
+  assert.match(again(clip)?.textContent ?? "", /Qayta yaratish/);
   await click(again(clip));
   await settle();
   assert.equal(q('[data-studio-tab="video"]')!.getAttribute("aria-selected"), "true");

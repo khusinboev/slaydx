@@ -400,7 +400,7 @@ test("studio-video: gating, money, async submit/poll on media_jobs, refunds, gal
     assert.equal(v.modelLabel, "Kling 3.0");
     assert.equal(v.prompt, K3.prompt);
     assert.deepEqual(v.images, []);
-    // What was bought (length, aspect, sound) travels with the clip: «Yana yaratish» re-opens the form at the same price.
+    // What was bought (length, aspect, sound) travels with the clip: «Qayta yaratish» re-opens the form at the same price.
     assert.deepEqual(v.video, { src: `/api/generations/${clip}/file?inline=1`, seconds: 5, requestedSeconds: 5, aspect: "16:9", sound: true, effect: null, effectLabel: null });
     assert.equal(body.items[1]!.video, null);
   });

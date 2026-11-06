@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { ApiImg, useApiSrc } from "@/lib/use-api-src";
 import { languageLabel } from "@/lib/media/catalog-transcribe";
 import { FavoriteButton } from "./Favorite";
+import { AGAIN_LABEL } from "./JobResult";
 import { PictureTools, type PictureTool } from "./StudioResults";
 import { fetchGallery } from "./studio-api";
 import { GALLERY_KINDS, type GalleryItem, type GalleryKind } from "./studio-types";
@@ -45,7 +46,7 @@ const NEXT_BTN =
  */
 function NextStep({ item, onVideo, onVoice, onMusic }: { item: GalleryItem } & GalleryNext) {
   const [open, setOpen] = useState(false);
-  const prompt = item.video?.effect || item.text ? "" : item.prompt.trim();
+  const prompt = item.video?.effect || item.video?.derived || item.text ? "" : item.prompt.trim();
   const picture = !item.video && !item.audio && !item.text ? (item.thumbs[0] ?? null) : null;
   const actions: { key: string; label: string; Icon: typeof Mic; run: () => void }[] = [];
   if (picture && onVideo) actions.push({ key: "to-video", label: "Videoga aylantirish", Icon: Clapperboard, run: () => onVideo(picture, prompt) });
@@ -317,8 +318,8 @@ export function Gallery({
                 <FavoriteButton id={it.id} initial={it.favorite} onError={setError} className="-mt-1 -mr-1" />
               </div>
               {it.audio ? <AudioPlayer src={it.audio.src} /> : null}
-              {/* An audio or a text card has no «again» action: the gallery does not carry the source (the result page has it). */}
-              {it.audio || it.text ? null : (
+              {/* An audio, a text or a derived clip's card has no «again» action: the gallery does not carry the source (the result page has it). */}
+              {it.audio || it.text || it.video?.derived ? null : (
               <button
                 type="button"
                 data-gallery-other-model
@@ -326,7 +327,7 @@ export function Gallery({
                 className="focus-visible:ring-ring hover:bg-muted pointer-coarse:min-h-11 mt-auto inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[10px] border text-[13px] font-semibold outline-none focus-visible:ring-2"
               >
                 <Shuffle className="size-3.5" aria-hidden />
-                {it.video ? "Yana yaratish" : "Boshqa modelda"}
+                {it.video ? AGAIN_LABEL : "Boshqa modelda"}
               </button>
               )}
               {/* P2b: the tools work on the card's first picture (the result page shows every picture); never on a video. */}
