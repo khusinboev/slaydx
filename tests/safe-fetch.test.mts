@@ -207,3 +207,14 @@ test("setSafeFetchLookup(null) tizim DNS iga qaytadi (seam oqmaydi)", async () =
   // IP-literal DNS siz tekshiriladi — tarmoqsiz ham aniq javob.
   await assert.rejects(safeFetchUrl("https://127.0.0.1/"), UnsafeUrlError);
 });
+
+test("a resolver failure is no refusal: `DnsLookupError`, not `UnsafeUrlError`, so a paid result is fetched again later", async () => {
+  const { DnsLookupError, UnsafeUrlError, safeFetchUrl } = await import("../lib/generation/safe-fetch.ts");
+  const lookup = async () => {
+    throw new Error("getaddrinfo EAI_AGAIN cdn.example.com");
+  };
+  const err = await safeFetchUrl("https://cdn.example.com/v.mp4", { lookup, fetchImpl: (async () => new Response("x")) as never } as never).catch((e: unknown) => e);
+  assert.ok(err instanceof DnsLookupError, String(err));
+  assert.ok(!(err instanceof UnsafeUrlError));
+});
+

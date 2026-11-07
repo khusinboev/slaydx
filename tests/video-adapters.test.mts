@@ -268,3 +268,17 @@ test("secrets never reach an error message; safety heuristic", () => {
   assert.equal(looksLikeSafetyRefusal("Blocked by safety filters"), true);
   assert.equal(looksLikeSafetyRefusal("internal error"), false);
 });
+
+test("Kling download: a DNS hiccup on a finished, paid clip is retryable (live 2026-11-07: EAI_AGAIN lost one)", async () => {
+  const { setSafeFetchLookup } = await import("../lib/generation/safe-fetch.ts");
+  setSafeFetchLookup(async () => {
+    throw new Error("getaddrinfo EAI_AGAIN cdn.example.com");
+  });
+  try {
+    const e = await makeKlingAdapter({ key: () => KKEY }).download({ kind: "url", url: "https://cdn.example.com/v.mp4" }).catch((x: unknown) => x);
+    assert.ok(e instanceof VideoProviderError && e.retryable, String(e));
+  } finally {
+    setSafeFetchLookup(async () => ["93.184.216.34"]);
+  }
+});
+
