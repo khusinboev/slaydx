@@ -218,7 +218,7 @@ test("golden: dubbing create body, op id, poll states, download URL, DELETE", as
   const seen = stubFetch(t, (s) => {
     if (s.method === "POST") return json(200, { dubbing_id: "dub_ABC123", expected_duration_sec: 12 });
     if (s.method === "DELETE") return json(200, { status: "ok" });
-    if (s.url.endsWith("/audio/uz")) return new Response(Buffer.from(mp3Bytes(4)), { status: 200 });
+    if (s.url.endsWith("/audio/ru")) return new Response(Buffer.from(mp3Bytes(4)), { status: 200 });
     return json(200, { status: "dubbing" });
   });
   const a = ad.dubAdapter({ key: () => KEY });
@@ -238,7 +238,7 @@ test("golden: dubbing create body, op id, poll states, download URL, DELETE", as
   assert.equal(seen[1]!.method, "GET");
   const bytes = await a.fetchOutput({ kind: "url", url: ad.elevenLabsDubAudioUrl("dub_ABC123", "ru") });
   assert.equal(bytes.length, 417 * 4);
-  assert.equal(seen[2]!.url, "https://api.elevenlabs.io/v1/dubbing/dub_ABC123/audio/uz");
+  assert.equal(seen[2]!.url, "https://api.elevenlabs.io/v1/dubbing/dub_ABC123/audio/ru");
   await assert.rejects(a.fetchOutput({ kind: "url", url: "https://evil.example/x" }), /unexpected download url/);
   assert.equal(await a.cancel!("dub_ABC123:ru"), "cancelled");
   assert.equal(seen.at(-1)!.method, "DELETE");
