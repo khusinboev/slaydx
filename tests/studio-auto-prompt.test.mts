@@ -16,7 +16,7 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *   once        a re-claim never rewrites or pays again; a pending row left by a dead worker is never called again;
  *   failure     an LLM error, an unusable answer: the user's own prompt goes, no failure, no refund;
  *   limits      `maxBytes` (Pixverse) and the quoted text survive;
- *   never       an effect, an avatar script, an edit instruction, pasted lyrics are not rewritten;
+ *   never       an avatar script, an edit instruction, pasted lyrics are not rewritten;
  *   compare     a batch makes ONE rewrite and every model gets it; a batch cannot mix the switch.
  *
  * Mutations (each turned the named test red, then restored):
@@ -338,7 +338,7 @@ test("studio auto prompt", { skip }, async (t) => {
     assert.equal(down.doc!.sentPrompt, undefined);
   });
 
-  await t.test("switch: music and effect; pasted lyrics and the words of a voice job are never rewritten", async () => {
+  await t.test("switch: music and effect; pasted lyrics are never rewritten", async () => {
     await reset();
     const tool = TOOL_BY_ID["studio-audio"]!;
     const mp3 = new Uint8Array([0xff, 0xfb, 0x90, 0x00, ...new Array(600).fill(0)]);
@@ -367,7 +367,7 @@ test("studio auto prompt", { skip }, async (t) => {
     assert.equal(stub.llm, 2);
   });
 
-  await t.test("never: an avatar's script, an effect and an edit instruction", async () => {
+  await t.test("never: an avatar's script and an edit instruction", async () => {
     await reset();
     const me = await mkUser();
     // Any adapter will do: the check is what reaches it and whether the LLM was called.

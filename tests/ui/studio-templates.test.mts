@@ -5,7 +5,7 @@ import { createElement as h } from "react";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { MEDIA_CATALOG } from "../../lib/media/catalog.ts";
-import { GPT, NANO, PRICING, USER, catalogBody, installApi, json } from "./studio-fixtures.ts";
+import { GPT, NANO, PRICING, USER, catalogBody, generationDetail, installApi, json } from "./studio-fixtures.ts";
 
 const { StudioPage } = await import("../../components/studio/StudioPage.tsx");
 const { useAppStore } = await import("../../lib/store.ts");
@@ -28,9 +28,11 @@ const { SentPrompt } = await import("../../components/studio/JobResult.tsx");
  *   4. `setPrompt` does not leave the template                                   -> «video templates: suggested»;
  *   5. `LibrarySheet` ignores `media` (the cache shared by kinds)                -> «samples»;
  *   6. the switch's value not sent from the Video tab                            -> «switch: video»;
- *   7. the preference kept in the form's draft (a submit turns it back on)        -> «switch: remembered»;
+ *   7. the choice not stored                                                      -> «switch: remembered»;
  *   8. the button's own answer rewritten again (`shown` ignored)                  -> «switch: the button's answer»;
- *   9. the switch shown on the edit box                                           -> «switch: where it shows».
+ *   9. the switch shown on the edit box                                           -> «switch: where it shows»;
+ *  10. `parseTemplates` drops `fallback`                                          -> «video templates: suggested»;
+ *  11. `SentPrompt` left out of a results list                                    -> «card».
  */
 
 Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
@@ -217,12 +219,12 @@ test("switch: video — on by default, the job says so; off, it says that", asyn
   await act(async () => void fireEvent.change(videoPrompt(), { target: { value: "Registon tongda, kamera sekin" } }));
   await click(q("[data-studio-submit]"));
   await settle(12);
-  assert.equal(a.posts()[0]!.body!.values!.aiImprove, true, "MUTATSIYA: the switch must reach the job");
+  assert.equal((a.posts()[0]!.body!.values as Record<string, unknown>).aiImprove, true, "MUTATSIYA: the switch must reach the job");
   await click(aiSwitch());
   await act(async () => void fireEvent.change(videoPrompt(), { target: { value: "Registon tongda, kamera tez" } }));
   await click(q("[data-studio-submit]"));
   await settle(12);
-  assert.equal(a.posts()[1]!.body!.values!.aiImprove, false);
+  assert.equal((a.posts()[1]!.body!.values as Record<string, unknown>).aiImprove, false);
 });
 
 test("switch: remembered — per user, across the tabs, past a submit that clears the form's draft", async () => {
@@ -262,11 +264,11 @@ test("switch: the button's answer — the text the user read goes as it is; an e
   assert.equal(videoPrompt().value, "An improved English prompt");
   await click(q("[data-studio-submit]"));
   await settle(12);
-  assert.equal(a.posts()[0]!.body!.values!.aiImprove, false, "MUTATSIYA: the reviewed text must not be rewritten behind the user's back");
+  assert.equal((a.posts()[0]!.body!.values as Record<string, unknown>).aiImprove, false, "MUTATSIYA: the reviewed text must not be rewritten behind the user's back");
   await act(async () => void fireEvent.change(videoPrompt(), { target: { value: "An improved English prompt, at night" } }));
   await click(q("[data-studio-submit]"));
   await settle(12);
-  assert.equal(a.posts()[1]!.body!.values!.aiImprove, true);
+  assert.equal((a.posts()[1]!.body!.values as Record<string, unknown>).aiImprove, true);
 });
 
 test("switch: where it shows — drawing, music and effect; not the edit box, whose job is to change only what was asked", async () => {
@@ -276,7 +278,7 @@ test("switch: where it shows — drawing, music and effect; not the edit box, wh
   await act(async () => void fireEvent.change(q<HTMLTextAreaElement>("[data-studio-prompt] textarea")!, { target: { value: "Samarqand kechasi" } }));
   await click(q("[data-studio-submit]"));
   await settle(12);
-  assert.equal(a.posts()[0]!.body!.values!.aiImprove, true);
+  assert.equal((a.posts()[0]!.body!.values as Record<string, unknown>).aiImprove, true);
   cleanup();
   await mount("?tab=rasm&mode=edit");
   await settle(12);
@@ -291,10 +293,25 @@ test("switch: where it shows — drawing, music and effect; not the edit box, wh
   assert.ok(aiSwitch(), "effect");
 });
 
-test("card: the English prompt shows only when there is one", async () => {
+test("card: every results list shows the English under the user's own words, only when there is one", async () => {
   render(h(SentPrompt, { text: undefined }));
   assert.ok(!q("[data-sent-prompt]"));
   cleanup();
-  render(h(SentPrompt, { text: "A wide shot" }));
-  assert.match(q("[data-sent-prompt]")!.textContent!, /Yuborilgan prompt.*A wide shot/s);
+  const { VideoResults } = await import("../../components/studio/video/VideoResults.tsx");
+  const { VoiceResults } = await import("../../components/studio/voice/VoiceResults.tsx");
+  const { StudioResults } = await import("../../components/studio/StudioResults.tsx");
+  const id = "11111111-1111-4111-8111-111111111111";
+  const job = (doc: Record<string, unknown>) => ({ id, modelId: FLASH.id, modelLabel: FLASH.label, prompt: "Registon tongda", price: 21_400, sent: {}, error: null, gen: generationDetail(id, { format: "mp4", fileName: "x.mp4", doc: { meta: { topic: "x", language: "uz" }, sentPrompt: "A wide shot", ...doc } }) as never });
+  const lists = [
+    h(VideoResults, { jobs: [job({ video: { provider: "kling", prompt: "Registon tongda", aspect: "16:9", requestedSeconds: 5, seconds: 5 } })], busy: false, onAgain: () => {} }),
+    h(VoiceResults, { jobs: [job({ studioAudio: { mode: "music", model: "elevenlabs/music", seconds: 5, prompt: "Registon tongda", inputSeconds: null, voices: [], clone: false, variants: [] } })], busy: false, onAgain: () => {}, failed: "x" }),
+    h(StudioResults, { jobs: [job({ images: [{ id: "img1", url: "/x.png", alt: "", w: 10, h: 10 }] })], busy: false, onAgain: () => {}, onOtherModel: () => {}, onTool: () => {}, onVideo: () => {}, onVoice: () => {} }),
+  ];
+  for (const list of lists) {
+    render(h(AppRouterContext.Provider, { value: router }, list));
+    await settle();
+    assert.equal(q("[data-studio-job-prompt]")!.textContent!.trim(), "Registon tongda", "the card keeps the user's text");
+    assert.match(q("[data-sent-prompt]")?.textContent ?? "", /Yuborilgan prompt[\s\S]*A wide shot/, "MUTATSIYA: the list must show what was sent");
+    cleanup();
+  }
 });
