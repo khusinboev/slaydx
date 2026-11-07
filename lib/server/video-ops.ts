@@ -11,6 +11,10 @@ import { UserFacingError, userMessage } from "./user-error";
 import { recordProviderFailure } from "./provider-failures";
 import { isProviderEnabled } from "./providers/resolve";
 import { extractMeta } from "../generation/meta";
+import { withJobCost } from "../generation/job-cost";
+import { autoPrompt } from "../generation/studio/auto-prompt";
+import { promptLimitOf } from "../generation/studio/prompt-limit";
+import { aiImproveOf } from "../media/enhance";
 import { TOOL_BY_ID } from "../tools";
 import { refundRatio } from "../generation/delivered";
 import { videoCost } from "../generation/llm-pricing";
@@ -361,11 +365,44 @@ type StudioGuarded = { found: string; id: string } | { row: MediaJobRow; assets:
  * provider call under the per-generation lock, a re-claimed job adopts a pending row and never submits twice, and any
  * throw is a normal fail + full refund by the worker while it owns the lease.
  */
+/**
+ * The clip's params with the prompt the provider gets (docs/studio/P11-SPEC.md «G», «AI yaxshilash»). Outside the submit
+ * transaction: an LLM call never holds a connection. An effect has no prompt and an avatar's prompt is a script.
+ *
+ * This job path has no build meter, and `finalizeVideo` writes `cost_json`: the call's cost is stored now, while the lease is
+ * ours (so a clip that fails later keeps it), and the finish adds the clip to it. A re-claim makes no call, so it adds nothing.
+ */
+async function improvedParams(job: VideoJob, entry: CatalogEntry): Promise<NormalizedParams> {
+  const params = normalize(entry.params, job.values);
+  const prompt = typeof params.prompt === "string" ? params.prompt : "";
+  if (!prompt || aiImproveOf(job.values) !== true || isEffectEntry(entry) || isAvatarModel(entry.id)) return params;
+  const { value: sent, cost } = await withJobCost(() => autoPrompt({ kind: "video", prompt, limit: promptLimitOf(entry), generationId: job.id }));
+  if (cost.calls > 0) {
+    await query("UPDATE generations SET cost_json = $2 WHERE id = $1 AND locked_by = $3", [job.id, toJsonb(cost.toJson()), job.lease]).catch((e: unknown) => {
+      log("warn", "[video] rewrite cost not stored", { jobId: job.id, err: e });
+    });
+  }
+  return { ...params, prompt: sent };
+}
+
+/** The finished clip's cost, with what the job already spent on its prompt. */
+export function withPriorCost(prior: CostJson | null, clip: CostJson): CostJson {
+  if (!prior?.parts?.length) return clip;
+  return {
+    ...clip,
+    inputTokens: clip.inputTokens + prior.inputTokens,
+    outputTokens: clip.outputTokens + prior.outputTokens,
+    calls: clip.calls + prior.calls,
+    usd: Number((clip.usd + prior.usd).toFixed(6)),
+    parts: [...(clip.parts ?? []), ...prior.parts],
+  };
+}
+
 export async function submitStudioVideoJob(job: VideoJob, deps: VideoOpsDeps = {}): Promise<"waiting"> {
   const entry = studioVideoEntry(job.values);
   // The route refused unknown models before charging; a stored row with one is failed and refunded.
   if (!entry) throw new UserFacingError(VIDEO_UNAVAILABLE_MESSAGE);
-  const params = normalize(entry.params, job.values);
+  const params = await improvedParams(job, entry);
   const key = videoMediaKey(job.id);
   const adapters = studioAdaptersOf(deps);
 
@@ -789,8 +826,8 @@ export async function finalizeVideo(generationId: string, bytes: Uint8Array): Pr
     const op = await lockPendingOp(client, generationId);
     if (!op) return null;
 
-    const g = await client.query<{ user_id: string; values_json: FormValues }>(
-      "SELECT user_id, values_json FROM generations WHERE id = $1 AND status = 'IN_PROGRESS' AND locked_by IS NULL FOR UPDATE",
+    const g = await client.query<{ user_id: string; values_json: FormValues; cost_json: CostJson | null }>(
+      "SELECT user_id, values_json, cost_json FROM generations WHERE id = $1 AND status = 'IN_PROGRESS' AND locked_by IS NULL FOR UPDATE",
       [generationId],
     );
     const row = g.rows[0];
@@ -822,6 +859,7 @@ export async function finalizeVideo(generationId: string, bytes: Uint8Array): Pr
       toc: false,
       sections: [{ id: "options", title: "Sozlamalar", blocks: [{ kind: "p", text: studio ? studio.summary : `${videoProviderById(op.provider).short} · ${input.seconds} soniya · ${input.aspect}` }] }],
       video: studio ? studio.video : { provider: op.provider, prompt: input.prompt, aspect: input.aspect, requestedSeconds: op.seconds, seconds: actual, fromImage: Boolean(input.imageAssetId) },
+      ...(studio?.sentPrompt ? { sentPrompt: studio.sentPrompt } : {}),
     };
     const fileName = "video.mp4";
     await putGenerationFile(generationId, { bytes, mime: "video/mp4", fileName }, client);
@@ -831,7 +869,7 @@ export async function finalizeVideo(generationId: string, bytes: Uint8Array): Pr
               preview = NULL, format = 'mp4', delivered_json = $4, cost_json = $5,
               finished_at = now(), locked_by = NULL, locked_at = NULL, error = NULL, live_json = NULL
         WHERE id = $1`,
-      [generationId, toJsonb(doc), fileName, delivered ? toJsonb(delivered) : null, toJsonb(cost)],
+      [generationId, toJsonb(doc), fileName, delivered ? toJsonb(delivered) : null, toJsonb(withPriorCost(row.cost_json, cost))],
     );
     if (op.mediaJobId) await finishMediaJobTx(client, op.mediaJobId, [{ mime: "video/mp4", size: bytes.byteLength, sha256: createHash("sha256").update(bytes).digest("hex") }]);
     else await client.query("UPDATE video_ops SET status = 'succeeded', finished_at = now() WHERE generation_id = $1", [generationId]);
@@ -876,16 +914,20 @@ function studioResult(values: FormValues, s: { modelId: string; params: Normaliz
   const effectParam = entry?.params.find((p) => p.name === "effect");
   const effectName = effectParam?.type === "enum" ? (effectParam.options.find((o) => o.value === effect)?.label ?? effect) : effect;
   const usd = entry ? Number(costUsd(entry.cost, isEffect ? s.params : { ...s.params, seconds }).toFixed(4)) : 0;
+  // The row holds what the provider got; the result keeps what the user wrote (`improvedParams`).
+  const sent = String(s.params.prompt ?? "");
+  const own = entry ? String(normalize(entry.params, values).prompt ?? "") : sent || String(values.prompt ?? "");
   return {
     model: label,
     usd,
+    sentPrompt: !isEffect && sent && sent !== own ? sent : null,
     summary: isEffect
       ? `${label} · ${effectName} · ${seconds} soniya`
       : // P4: a fal model's resolution tier (it sets the price) is part of what was bought.
         `${label} · ${requested} soniya${typeof s.params.resolution === "string" ? ` · ${s.params.resolution}` : ""}${aspect && !fromImage ? ` · ${aspect}` : ""}${s.params.sound === true ? " · ovozli" : ""}`,
     video: {
       provider,
-      prompt: isEffect ? "" : String(s.params.prompt ?? values.prompt ?? ""),
+      prompt: isEffect ? "" : own,
       aspect: fromImage ? "" : aspect,
       requestedSeconds: requested,
       seconds,

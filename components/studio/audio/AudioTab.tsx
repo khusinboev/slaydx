@@ -1,7 +1,8 @@
 "use client";
 
-import { ENHANCE_MIN } from "@/lib/media/enhance";
-import { EnhanceTool, SamplesTool } from "../PromptBox";
+import { AI_IMPROVE_PARAM, ENHANCE_MIN } from "@/lib/media/enhance";
+import { AiImproveTool, EnhanceTool, SamplesTool } from "../PromptBox";
+import { useAiImprove } from "../useAiImprove";
 import { LibrarySheet } from "../LibrarySheet";
 import { usePromptEnhance } from "../usePromptEnhance";
 import { useId, useState } from "react";
@@ -131,7 +132,8 @@ export function AudioTab({
   // P10: a picked tool chip; with no provider mode offered, the first tool opens by default.
   const tool = mixOn ? undefined : (speechTools.find((t) => t.mode === state.mode) ?? (state.mode === null && modes.length === 0 ? speechTools[0] : undefined));
   const current = mixOn || tool ? null : (modes.find((m) => m.mode === state.mode) ?? modes[0] ?? null);
-  const { enhance, enhancing } = usePromptEnhance(
+  const ai = useAiImprove();
+  const { enhance, enhancing, shown: enhanced } = usePromptEnhance(
     current?.mode === "sfx" ? "sfx" : "music",
     () => String((current && state.raw[current.mode]?.prompt) ?? "").replace(/\s+/g, " ").trim(),
     (v) => setParam("prompt", v.slice(0, promptMax)),
@@ -283,7 +285,8 @@ export function AudioTab({
       setError(blocker);
       return;
     }
-    void send(entry, label, sent).then((ok) => ok && onSubmitted?.());
+    const improvable = mode === "music" || mode === "sfx";
+    void send(entry, label, improvable ? { ...sent, [AI_IMPROVE_PARAM]: ai.on && !enhanced(String(sent.prompt ?? "")) } : sent).then((ok) => ok && onSubmitted?.());
   }
 
   const jobTarget = (job: StudioJob) => modes.flatMap((m) => m.entries.map((e) => ({ e, label: audioJobLabels(e, m.label, m.entries.length).job }))).find((x) => x.e.id === job.modelId);
@@ -364,6 +367,7 @@ export function AudioTab({
           <div className="mt-2 flex flex-wrap gap-1.5" data-prompt-tools>
             {mode === "music" || mode === "sfx" ? <SamplesTool onClick={() => setLibraryOpen(true)} /> : null}
             <EnhanceTool disabled={typed.trim().length < ENHANCE_MIN} enhancing={enhancing} onClick={() => void enhance()} />
+            {mode === "music" || mode === "sfx" ? <AiImproveTool checked={ai.on} onChange={ai.setOn} /> : null}
           </div>
         </section>
       ) : null}

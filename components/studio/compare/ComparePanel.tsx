@@ -11,6 +11,8 @@ import { PriceButton } from "../PriceButton";
 import { PromptBox } from "../PromptBox";
 import { SubmitError } from "../SubmitError";
 import { usePromptEnhance } from "../usePromptEnhance";
+import { useAiImprove } from "../useAiImprove";
+import { AI_IMPROVE_PARAM } from "@/lib/media/enhance";
 import { useStudioSend } from "../useStudioSend";
 import { StudioWorkbench, useResultsScroll } from "../StudioWorkbench";
 import { specLine } from "../model-specs";
@@ -96,7 +98,8 @@ export function ComparePanel({
   const prompt = String(state.raw[PROMPT_PARAM] ?? "");
   // Every ticked model: the prompt goes to each, and the tightest byte limit decides.
   const bytes = promptBytes(entries, prompt);
-  const { enhance, enhancing } = usePromptEnhance(
+  const ai = useAiImprove();
+  const { enhance, enhancing, shown: enhanced } = usePromptEnhance(
     kind,
     () => prompt.replace(/\s+/g, " ").trim(),
     (v) => setRaw(PROMPT_PARAM, v.slice(0, limit)),
@@ -142,11 +145,13 @@ export function ComparePanel({
       setError(PROMPT_BYTES_MESSAGE);
       return;
     }
+    // One switch for the batch: the server rewrites once and every model gets that one prompt.
+    const improve = { [AI_IMPROVE_PARAM]: ai.on && !enhanced(text) };
     await run(async () => {
-      const res = await sendCompare({ kind, members: batch.members.map((m) => ({ values: m.values, expectedPrice: m.price })), expectedTotal: batch.total });
+      const res = await sendCompare({ kind, members: batch.members.map((m) => ({ values: { ...m.values, ...improve }, expectedPrice: m.price })), expectedTotal: batch.total });
       for (const [i, item] of res.items.entries()) {
         const m = batch.members[i];
-        tab.track({ id: item.id, modelId: item.modelId, modelLabel: m?.entry.label ?? item.modelId, prompt: text, price: item.price, sent: m?.values ?? {} });
+        tab.track({ id: item.id, modelId: item.modelId, modelLabel: m?.entry.label ?? item.modelId, prompt: text, price: item.price, sent: { ...m?.values, ...improve } });
       }
       setState((s) => ({ ...s, batches: [{ group: res.group, prompt: text, ids: res.items.map((x) => x.id) }, ...s.batches.filter((b) => b.group !== res.group)] }));
       // The balance line follows the charge.
@@ -174,6 +179,7 @@ export function ComparePanel({
           label={kind === "video" ? "Videoda nima bo‘lsin?" : "Nimani chizamiz?"}
           onEnhance={() => void enhance()}
           enhancing={enhancing}
+          ai={ai}
         />
         <Card title="Modellar" aside={<span className="text-muted-foreground tabular-nums" data-compare-count>{entries.length} / {max}</span>}>
           <p className="text-muted-foreground mb-2 text-[13px]">{compareRange(max)} ta modelni belgilang — har biri o‘z narxida alohida ish bo‘ladi.</p>

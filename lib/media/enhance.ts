@@ -12,6 +12,17 @@ export type EnhanceKind = (typeof ENHANCE_KINDS)[number];
 
 export const isEnhanceKind = (v: unknown): v is EnhanceKind => (ENHANCE_KINDS as readonly unknown[]).includes(v);
 
+/**
+ * The «AI yaxshilash» switch in the request values (docs/studio/P11-SPEC.md «G»), beside the model's ParamSchema: it changes no
+ * price. Absent = a job from before the switch or from another client, which keeps its old prompt path.
+ */
+export const AI_IMPROVE_PARAM = "aiImprove";
+
+export function aiImproveOf(values: Readonly<Record<string, unknown>>): boolean | null {
+  const v = values[AI_IMPROVE_PARAM];
+  return typeof v === "boolean" ? v : null;
+}
+
 /** Shortest prompt worth rewriting. */
 export const ENHANCE_MIN = 3;
 /** Longest prompt of a kind: the tool's own prompt limit. */
@@ -63,6 +74,36 @@ function clipWords(text: string, max: number): string {
   if (text.length <= max) return text;
   const cut = text.slice(0, max);
   return cut.slice(0, Math.max(cut.lastIndexOf(" "), 1)).trimEnd();
+}
+
+/** A model's prompt limits, as its ParamSchema states them. */
+export type PromptLimit = { min: number; max: number; maxBytes?: number };
+
+const utf8Bytes = (text: string): number => new TextEncoder().encode(text).length;
+
+/**
+ * A rewrite within the chosen model's limits, cut at a word end. A cut that loses text the user quoted, or leaves too little,
+ * gives the user's own prompt back: the route already accepted that one for this model.
+ */
+export function fitPrompt(rewrite: string, own: string, limit: PromptLimit): string {
+  let out = clipWords(rewrite, limit.max);
+  if (limit.maxBytes !== undefined) {
+    while (utf8Bytes(out) > limit.maxBytes) {
+      const end = out.lastIndexOf(" ");
+      if (end < 1) return own;
+      out = out.slice(0, end).trimEnd();
+    }
+  }
+  if (out.length < Math.max(limit.min, ENHANCE_MIN)) return own;
+  return quotedTexts(own).every((q) => out.includes(q)) ? out : own;
+}
+
+/**
+ * A music prompt that carries the song's words: section tags, or a label in front of them. There is no lyrics field, so users
+ * paste them into the box, and lyrics are never rewritten.
+ */
+export function looksLikeLyrics(prompt: string): boolean {
+  return /\[\s*(verse|chorus|bridge|hook|intro|outro|naqorat|naqarot|band|куплет|припев)[^\]]*\]/i.test(prompt) || /(lyrics|so[''ʻ‘]?zlari|qo[''ʻ‘]?shiq matni|текст песни|слова песни)\s*:/i.test(prompt);
 }
 
 /** The user's quoted text, in straight, curly or guillemet quotes. */

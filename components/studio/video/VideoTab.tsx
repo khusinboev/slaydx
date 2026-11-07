@@ -8,8 +8,9 @@ import { AutoTextarea } from "@/components/common/AutoTextarea";
 import { Card, Row, Segmented, SelectField } from "@/components/forms/compact";
 import { Counter, Field } from "@/components/forms/shared";
 import { PhotoField } from "@/components/forms/PhotoField";
-import { ENHANCE_MIN } from "@/lib/media/enhance";
-import { EnhanceTool, PromptBytesNote, SamplesTool } from "../PromptBox";
+import { AiImproveTool, EnhanceTool, PromptBytesNote, SamplesTool } from "../PromptBox";
+import { useAiImprove } from "../useAiImprove";
+import { AI_IMPROVE_PARAM, ENHANCE_MIN } from "@/lib/media/enhance";
 import { LibrarySheet } from "../LibrarySheet";
 import { TemplateSlots, TemplatesRow } from "../TemplatesRow";
 import { applyVideoTemplate, videoTemplateTarget } from "../studio-modes";
@@ -216,7 +217,8 @@ export function VideoTab({
   const setParam = (name: string, value: unknown) => setState((s) => ({ ...s, raw: { ...s.raw, [name]: value } }));
   /** Typing the prompt by hand leaves the template (its slots would overwrite the text). */
   const setPrompt = (value: string) => setState((s) => ({ ...s, template: null, raw: { ...s.raw, [PROMPT_PARAM]: value } }));
-  const { enhance, enhancing } = usePromptEnhance(
+  const ai = useAiImprove();
+  const { enhance, enhancing, shown: enhanced } = usePromptEnhance(
     "video",
     () => String(state.raw[PROMPT_PARAM] ?? "").replace(/\s+/g, " ").trim(),
     (v) => setPrompt(textModel ? v.slice(0, promptLimit(textModel)) : v),
@@ -319,7 +321,8 @@ export function VideoTab({
     }
     // An end frame without a start cannot be built here (the upload waits for the start; removing the start clears it);
     // the server's preflight refuses one anyway.
-    sendForm(entry, normalizedPrompt(entry, state.raw));
+    const label = normalizedPrompt(entry, state.raw);
+    void send(entry, { ...sent, [AI_IMPROVE_PARAM]: ai.on && !enhanced(label) }, label).then((ok) => ok && onSubmitted?.());
   }
 
   function again(job: StudioJob) {
@@ -495,7 +498,7 @@ export function VideoTab({
               onChange={setPrompt}
               limit={promptLimit(textModel)}
               bytes={promptBytes([textModel], String(state.raw[PROMPT_PARAM] ?? ""))}
-              {...(avatar ? {} : { onEnhance: () => void enhance(), enhancing, onSamples: () => setLibraryOpen(true) })}
+              {...(avatar ? {} : { onEnhance: () => void enhance(), enhancing, onSamples: () => setLibraryOpen(true), ai })}
               {...(avatar ? { label: "Avatar nima desin?", placeholder: "Masalan: Assalomu alaykum! Bugun sizga yangi kursimiz haqida gapirib beraman." } : {})}
             />
           )}
@@ -653,6 +656,7 @@ function VideoPromptBox({
   onEnhance,
   enhancing = false,
   onSamples,
+  ai,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -666,6 +670,8 @@ function VideoPromptBox({
   enhancing?: boolean;
   /** «Namuna promptlar» (absent for an avatar script). */
   onSamples?: () => void;
+  /** «AI yaxshilash» (absent for an avatar script). */
+  ai?: { on: boolean; setOn: (v: boolean) => void };
 }) {
   const id = useId();
   return (
@@ -691,6 +697,7 @@ function VideoPromptBox({
         <div className="mt-2 flex flex-wrap gap-1.5" data-prompt-tools>
           {onSamples ? <SamplesTool onClick={onSamples} /> : null}
           <EnhanceTool disabled={value.trim().length < ENHANCE_MIN} enhancing={enhancing} onClick={onEnhance} />
+          {ai ? <AiImproveTool checked={ai.on} onChange={ai.setOn} /> : null}
         </div>
       ) : null}
     </section>

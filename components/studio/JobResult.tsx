@@ -31,6 +31,17 @@ export function JobMeta({ job, extra }: { job: Pick<StudioJob, "modelLabel" | "p
   );
 }
 
+/** Under a finished card: the English prompt «AI yaxshilash» sent. The card itself keeps the user's words. */
+export function SentPrompt({ text }: { text: string | undefined }) {
+  if (!text) return null;
+  return (
+    <details data-sent-prompt className="text-muted-foreground mt-1 text-[12.5px] leading-snug">
+      <summary className="pointer-coarse:min-h-11 cursor-pointer font-semibold">Yuborilgan prompt</summary>
+      <p className="mt-1 break-words">{text}</p>
+    </details>
+  );
+}
+
 /** The tab's results, newest first. The `data-*` hooks are the shared contract of every Studio results list. */
 export function JobList({ jobs, label, children }: { jobs: readonly StudioJob[]; label?: string; children: (job: StudioJob) => ReactNode }) {
   if (jobs.length === 0) return null;

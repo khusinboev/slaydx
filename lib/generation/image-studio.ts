@@ -209,6 +209,8 @@ export type ImageJob = {
   imageModel: string;
   /** A Studio text model (catalog badge `matn`): the prompt renders the user's quoted text instead of forbidding text. */
   allowText?: boolean;
+  /** The scene as decided before the job (Studio «AI yaxshilash»); absent = `expandPrompt` writes it. */
+  scene?: string;
   deadline?: number;
   onStage?: (ev: { progress: number; step: string }) => void;
 };
@@ -225,7 +227,7 @@ export async function drawImageJob(job: ImageJob): Promise<BuiltFile> {
   const size = { width: ratio.w, height: ratio.h };
   const imageProvider = job.provider;
   const refused: ImageResult[] = [];
-  const scene = await expandPrompt(prompt, styleId, ratio.id, deadline);
+  const scene = job.scene ?? (await expandPrompt(prompt, styleId, ratio.id, deadline));
   const full = composePrompt(scene, styleId, ratio.w, ratio.h, job.allowText ? { quoted: quotedTexts(prompt) } : undefined);
   stage(10, count > 1 ? `Rasm chizilmoqda · 0/${count}` : "Rasm chizilmoqda");
 

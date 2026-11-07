@@ -13,7 +13,7 @@ import { imageExt } from "@/lib/viewers/kind";
 import { GenerationProgress } from "@/components/files/GenerationProgress";
 import { REFUND_PHRASE } from "@/lib/refund-phrase";
 import { downloadStudioFile } from "../studio-download";
-import { retryLabel } from "../JobResult";
+import { SentPrompt, retryLabel } from "../JobResult";
 import type { StudioJob } from "../StudioResults";
 import type { CompareKind } from "./compare-model";
 
@@ -134,6 +134,11 @@ function Cell({ kind, job, onPick, onRetry, retryPrice, busy }: { kind: CompareK
     <article className="bg-card flex h-full flex-col gap-3 overflow-hidden rounded-[20px] border pb-3.5 shadow-[var(--shadow-card)]">
       {head}
       <div className="flex-1">{body}</div>
+      {gen?.status === "COMPLETED" && gen.doc?.sentPrompt ? (
+        <div className="px-3.5">
+          <SentPrompt text={gen.doc.sentPrompt} />
+        </div>
+      ) : null}
       <div className="flex flex-col gap-1.5 px-3.5">
         {retryButton}
         {pick}

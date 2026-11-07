@@ -624,6 +624,11 @@ export type AcademicDoc = {
    */
   infographic?: InfographicModel;
   images?: GenImage[];
+  /**
+   * Studio «AI yaxshilash»: the English prompt that went to the provider, present only when it differs from the user's text.
+   * The user's text stays where it always was (`imagePrompt`, `video.prompt`, `studioAudio.prompt`, the gallery).
+   */
+  sentPrompt?: string;
   imagePrompt?: string;
   imageScene?: string;
   imageStyle?: string;

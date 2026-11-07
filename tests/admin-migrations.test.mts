@@ -432,6 +432,8 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
           FROM (VALUES (396, TRUE), (397, FALSE), (9999999, TRUE)) AS v(id, img);
     `);
     for (const f of [
+      // 077: Studio package G (docs/studio/P11-SPEC.md) -- studio_prompt_rewrites.
+      "077_studio_prompt_rewrites.sql",
       // 076: Studio package G (docs/studio/P11-SPEC.md) -- library kinds, video seeds, English text.
       "076_studio_library_media.sql",
       // 075: Studio P11 §D own video upload (docs/studio/P11-SPEC.md) -- studio_video_inputs.
@@ -535,6 +537,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
         const cols = await query<{ c: string }>("SELECT column_name AS c FROM information_schema.columns WHERE table_name = 'generations' AND column_name LIKE 'compare_%'");
         assert.equal(cols.length, 0, "071 rollback drops both columns");
       }
+      if (f === "077_studio_prompt_rewrites.sql") assert.ok(!(await exists("studio_prompt_rewrites")) && !(await exists("studio_prompt_rewrites_group_idx")), "077 rollback drops the table and its index");
       if (f === "076_studio_library_media.sql") {
         const cols = await query<{ c: string }>("SELECT column_name AS c FROM information_schema.columns WHERE table_name IN ('studio_prompts', 'studio_templates') AND column_name = 'media'");
         assert.equal(cols.length, 0, "076 rollback drops both columns");

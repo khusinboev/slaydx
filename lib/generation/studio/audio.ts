@@ -25,6 +25,9 @@ import { ELEVENLABS_VOICES, cloneIdOf } from "../../media/catalog-speech";
 import { studioAudioEntry, studioAudioError, studioAudioPurposeOf } from "../../media/studio-audio";
 import { studioAudioAdapters } from "../../media/adapters/audio-studio";
 import { UserFacingError } from "../../server/user-error";
+import { aiImproveOf } from "../../media/enhance";
+import { autoPrompt } from "./auto-prompt";
+import { promptLimitOf } from "./prompt-limit";
 import { recordAudioCall } from "./cost";
 import type { AcademicDoc, BuiltFile, StudioAudioDoc } from "../types";
 import type { FormValues, ToolConfig } from "../../types";
@@ -103,6 +106,9 @@ export async function buildStudioAudio(
     }
   }
 
+  // «AI yaxshilash»: the box's description, in the worker. The user's text stays in the doc and the gallery.
+  const own = typeof p.prompt === "string" ? p.prompt : "";
+  const sent = own && aiImproveOf(values) === true && (mode.mode === "music" || mode.mode === "sfx") ? await autoPrompt({ kind: mode.mode, prompt: own, limit: promptLimitOf(entry), deadline: o.deadline }) : own;
   const want = mode.mode === "sfx" ? Number(p.variants) || 1 : 1;
   const clips: Uint8Array[] = [];
   let lyrics: string | null = null;
@@ -110,7 +116,7 @@ export async function buildStudioAudio(
   for (let i = 0; i < want; i++) {
     try {
       // Each call makes ONE clip: its media_jobs cost is one clip's, not the whole job's (variants × clip).
-      const callValues = { ...p, variants: 1 };
+      const callValues = { ...p, variants: 1, ...(sent ? { prompt: sent } : {}) };
       const out = await run({ ...common, values: callValues, ...(providerVoice ? { extra: { voice: providerVoice } } : {}), ...(assets ? { assets } : {}), step: `audio:${i}` });
       const mp3 = await clipOf(out.outputs[0]);
       if (!mp3) throw new Error("bo'sh audio");
@@ -148,7 +154,7 @@ export async function buildStudioAudio(
     variants,
     ...(lyrics ? { lyrics } : {}),
   };
-  const doc: AcademicDoc = { meta, titlePage: false, toc: false, sections: [], studioAudio };
+  const doc: AcademicDoc = { meta, titlePage: false, toc: false, sections: [], studioAudio, ...(sent !== own ? { sentPrompt: sent } : {}) };
   return {
     html: `<article><h1>${escapeHtml(meta.topic)}</h1><p>${Math.round(studioAudio.seconds)} s · ${escapeHtml(mode.label)}</p></article>`,
     bytes: clips[0]!,
