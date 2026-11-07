@@ -1,4 +1,4 @@
-import { handler, json, limit } from "@/lib/server/api";
+import { handler, json, limit, optionalUser } from "@/lib/server/api";
 import { clientIp } from "@/lib/server/ratelimit";
 import { mediaCatalog } from "@/lib/server/media/public";
 
@@ -13,6 +13,8 @@ export const dynamic = "force-dynamic";
  */
 export const GET = handler("media/catalog", async (req) => {
   await limit(`media:catalog:${clientIp(req)}`, 120, 60);
+  // An admin also sees the models still off, marked «sinov» (`media/availability.ts`).
+  await optionalUser(req);
   const purpose = new URL(req.url).searchParams.get("purpose") ?? "";
   return json(await mediaCatalog(purpose));
 });

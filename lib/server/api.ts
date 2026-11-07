@@ -176,7 +176,7 @@ export async function requireUser(req: Request): Promise<AuthedContext> {
   const user = await currentUser(req);
   if (!user) throw new ApiError("Kirish talab qilinadi", 401);
   // Shu so'rovning keyingi jurnal qatorlari kimniki ekanini biladi (OBS-02).
-  addLogContext({ userId: String(user.id) });
+  addLogContext({ userId: String(user.id), ...(user.isAdmin ? { adminPreview: true } : {}) });
   return { user, ip: clientIp(req) };
 }
 
@@ -184,6 +184,7 @@ export async function requireUser(req: Request): Promise<AuthedContext> {
 export async function optionalUser(req: Request): Promise<{ user: SessionUser | null; ip: string }> {
   await ensureMigrated();
   const user = await currentUser(req).catch(() => null);
+  if (user?.isAdmin) addLogContext({ adminPreview: true });
   return { user, ip: clientIp(req) };
 }
 
