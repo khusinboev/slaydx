@@ -65,6 +65,14 @@ export class UnsafeUrlError extends Error {
   }
 }
 
+/** The resolver gave no answer (`EAI_AGAIN`, a timeout). Not an `UnsafeUrlError`: the URL was not refused, only not reached yet. */
+export class DnsLookupError extends Error {
+  constructor(message: string) {
+    super(`[safe-fetch] ${message}`);
+    this.name = "DnsLookupError";
+  }
+}
+
 const systemLookup: LookupFn = async (host) => (await dnsLookup(host, { all: true, verbatim: true })).map((a) => a.address);
 
 let defaultLookup: LookupFn = systemLookup;
@@ -171,7 +179,8 @@ export async function assertPublicHttpsUrl(raw: string, lookup: LookupFn = defau
     // DNS ham umumiy timeout ichida (review N4): sekin resolver «3 s jami» byudjetni yemasin.
     addrs = await raceSignal(lookup(host), signal);
   } catch (e) {
-    throw new UnsafeUrlError("host", `DNS ochilmadi: ${host} (${e instanceof Error ? e.message : "xato"})`);
+    // A resolver failure says nothing about the address: it is no refusal, and a caller may try again later.
+    throw new DnsLookupError(`DNS ochilmadi: ${host} (${e instanceof Error ? e.message : "xato"})`);
   }
   if (!addrs.length) throw new UnsafeUrlError("host", `DNS bo'sh: ${host}`);
   const bad = addrs.find(isPrivateAddress);
