@@ -130,7 +130,11 @@ if [ "${#files[@]}" -gt 0 ] && [ "$skip_all" = 1 ]; then
   printf '%s\n' "$tip" > "$STATE_DIR/auto-seen"
   log "$short: only docs/tests/CI/deploy files changed — no deploy (checkout updated)"
   if [ "$deploy_scripts_changed" = 1 ]; then
-    notify "ℹ️ SlaydX: $short da deploy/ skriptlari o'zgargan — serverga qo'lda o'rnating: bash /opt/slaydx/deploy/install-deploy.sh && bash /opt/slaydx/deploy/install-ops.sh"
+    if bash "$APP_DIR/deploy/install-deploy.sh" >/dev/null 2>&1; then
+      log "$short: deploy scripts reinstalled"
+    else
+      notify "⚠️ SlaydX: $short da deploy/ skriptlarini o'rnatib bo'lmadi: bash /opt/slaydx/deploy/install-deploy.sh"
+    fi
   fi
   exit 0
 fi

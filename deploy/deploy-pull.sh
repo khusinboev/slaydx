@@ -338,6 +338,10 @@ run_deploy() {
   printf 'sha=%s\ntag=%s\nmode=pull\nat=%s\n' "$SHA" "$SHA" "$(date -Is)" > "$STATE_DIR/current.env"
   printf '%s %s ok %ss prev=%s\n' "$(date -Is)" "$SHA" "$(( $(date +%s) - T0 ))" "$PREV_SHA" >> "$STATE_DIR/history.log"
   log "deployed ${SHA:0:7} in $(( $(date +%s) - T0 ))s —$TIMINGS"
+  # The checkout is at this release: keep the installed copies of these scripts with it, or a fix to them never runs.
+  if [ -f "$APP_DIR/deploy/install-deploy.sh" ]; then
+    bash "$APP_DIR/deploy/install-deploy.sh" >/dev/null 2>&1 || log "WARNING: deploy scripts not reinstalled"
+  fi
 }
 
 # Print the bytes of $1 between offset $2 and its current size; echo the new offset.

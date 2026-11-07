@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { existsSync, execFileSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -354,6 +354,17 @@ test("deploy-pull: a failing migration aborts before the swap and restores the c
   const back = idx(calls, (c) => c.tool === "git" && c.args === `reset --quiet --hard ${PREV}`);
   assert.ok(fwd >= 0 && back > fwd);
   assert.ok(!existsSync(path.join(sb.state, "current")));
+});
+
+test("deploy-pull: a successful release reinstalls the deploy scripts, and a failed install does not fail it", (t) => {
+  const sb = sandbox(t);
+  mkdirSync(path.join(sb.app, "deploy"), { recursive: true });
+  const mark = `${sb.state}.reinstalled`;
+  writeFileSync(path.join(sb.app, "deploy/install-deploy.sh"), `touch "${mark}"\nexit 1\n`);
+  const r = run(PULL, [SHA], sb);
+  assert.equal(r.code, 0, r.out);
+  assert.ok(existsSync(mark));
+  assert.match(r.out, /deploy scripts not reinstalled/);
 });
 
 test("deploy-pull: a pull that fails once is retried, and the release goes on", (t) => {
