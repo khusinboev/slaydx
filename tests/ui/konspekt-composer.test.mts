@@ -80,7 +80,7 @@ test("the paper for a real notebook says plainly that the file has no grid; the 
   mount();
   assert.ok(!document.querySelector("[data-print-paper-note]"), "the default grid paper");
   await pick("Qog‘oz", "Kataksiz (chop uchun)");
-  assert.match(document.querySelector("[data-print-paper-note]")?.textContent ?? "", /katak chizilmaydi.*«Katakli»/is);
+  assert.match(document.querySelector("[data-print-paper-note]")?.textContent ?? "", /katak chizilmaydi[\s\S]*«Katakli»/i);
   await pick("Qog‘oz", "Katakli");
   assert.ok(!document.querySelector("[data-print-paper-note]"));
 });
