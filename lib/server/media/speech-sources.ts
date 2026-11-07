@@ -2,6 +2,7 @@ import "server-only";
 import { ApiError } from "../api";
 import { query, queryOne } from "../db";
 import { getSetting } from "../settings";
+import { inAdminPreview } from "../log";
 import { availableModels } from "./availability";
 import { fitsRole, ownMixRow, rowSeconds } from "./mix-sources";
 import { DUB_MAX_SECONDS, DUB_MODEL, DUB_VIDEO_MAX_BYTES, STUDIO_DUB_PURPOSE, STUDIO_TRANSCRIBE_PURPOSE, TRANSCRIBE_AUDIO_MAX_SECONDS, TRANSCRIBE_MODEL, TRANSCRIBE_VIDEO_MAX_SECONDS, parseSource, videoOnlySource } from "../../media/catalog-transcribe";
@@ -41,15 +42,20 @@ const NAME = { "studio-transcribe": "Transkripsiya", "studio-dub": "Dublyaj" } a
 export async function speechToolModels(): Promise<string[]> {
   const out: string[] = [];
   for (const tool of ["studio-transcribe", "studio-dub"] as const) {
-    if (!(await getSetting(SWITCH[tool]))) continue;
+    if (!(await switchedOn(tool))) continue;
     out.push(...(await availableModels(PURPOSE[tool])));
   }
   return out;
 }
 
+/** The tool's own switch; an admin tries a tool that is still off on their own account. */
+async function switchedOn(tool: SpeechToolId): Promise<boolean> {
+  return inAdminPreview() || (await getSetting(SWITCH[tool]));
+}
+
 /** Why the tool cannot be sold now with this model (blank = its default) (Uzbek, a 400 before charging), `null` when it can. */
 export async function speechToolUnavailable(tool: SpeechToolId, modelId: string = ""): Promise<string | null> {
-  if (!(await getSetting(SWITCH[tool]))) return `${NAME[tool]} hozircha mavjud emas.`;
+  if (!(await switchedOn(tool))) return `${NAME[tool]} hozircha mavjud emas.`;
   return (await availableModels(PURPOSE[tool])).includes(modelId.trim() || MODEL[tool]) ? null : `${NAME[tool]} xizmati hozir mavjud emas — keyinroq urinib ko‘ring.`;
 }
 

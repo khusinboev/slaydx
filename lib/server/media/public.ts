@@ -6,7 +6,9 @@ import type { MediaPricing } from "../../media/studio-pricing";
 import { ApiError } from "../api";
 import { query } from "../db";
 import { decodeCursor, encodeCursor, type ListCursor } from "../jobs";
-import { availableModels, studioVideoModels } from "./availability";
+import { inAdminPreview } from "../log";
+import { availableModels, modelSwitchedOn, studioVideoModels } from "./availability";
+import { mediaOverrides, type OverrideMap } from "./overrides";
 import { mediaPricing } from "./pricing";
 import { STUDIO_SPEECH_PURPOSE } from "../../media/catalog-speech";
 import { studioSpeechModels } from "./voices";
@@ -38,6 +40,14 @@ export type CatalogResponse = {
 
 const CLIENT = new Map(MEDIA_CATALOG.clientView().map((e) => [e.id, e]));
 
+/** A model only an admin can see right now says so on its card. */
+function clientEntry(id: string, overrides: OverrideMap): ClientEntry {
+  const view = CLIENT.get(id)!;
+  const entry = MEDIA_CATALOG.byId(id)!;
+  if (!inAdminPreview() || modelSwitchedOn(entry, overrides.get(id)?.enabled)) return view;
+  return { ...view, label: `${view.label} · sinov` };
+}
+
 /**
  * Purposes this endpoint serves: Studio pickers, priced cost × markup by `studio-pricing.ts` (the `pricing` block is
  * only true for them). «Rasm» / «Video» keep their own forms and ladders; internal purposes are never public.
@@ -49,26 +59,27 @@ export async function mediaCatalog(purposeId: string): Promise<CatalogResponse> 
   // P6: the «Audio» tab lists its modes at once (P9: «Musiqa» has two models) — a listing id, not a job purpose.
   if (purposeId === STUDIO_AUDIO_LISTING) {
     // P10: + «Transkripsiya» / «Dublyaj» (their own switches; listed after the four modes, priced by the same block).
-    const [available, tools, pricing] = await Promise.all([studioAudioModels(), speechToolModels(), mediaPricing()]);
+    const [available, tools, pricing, overrides] = await Promise.all([studioAudioModels(), speechToolModels(), mediaPricing(), mediaOverrides()]);
     return {
       purpose: purposeId,
       defaultModelId: available.includes(MUSIC_MODEL) ? MUSIC_MODEL : (available[0] ?? null),
-      models: [...available, ...tools].map((id) => CLIENT.get(id)!),
+      models: [...available, ...tools].map((id) => clientEntry(id, overrides)),
       pricing,
     };
   }
   if (!CATALOG_PURPOSES.has(purposeId) || !MEDIA_PURPOSES.byId(purposeId)) throw new ApiError("Noma'lum maqsad", 400);
   // The Video tab also follows the paid-video switch `video.enabled` (off = no model listed, the route refuses too).
   // P5: the «Ovoz» tab follows `studio.voice.enabled` and Gemini's `TTS_GEMINI_MODEL` (`studioSpeechModels`).
-  const [available, pricing] = await Promise.all([
+  const [available, pricing, overrides] = await Promise.all([
     purposeId === STUDIO_VIDEO_PURPOSE ? studioVideoModels() : purposeId === STUDIO_SPEECH_PURPOSE ? studioSpeechModels() : availableModels(purposeId),
     mediaPricing(),
+    mediaOverrides(),
   ]);
   const resolved = resolveModel(MEDIA_PURPOSES, purposeId, { available: (id) => available.includes(id) });
   return {
     purpose: purposeId,
     defaultModelId: resolved.ok ? resolved.modelId : null,
-    models: available.map((id) => CLIENT.get(id)!),
+    models: available.map((id) => clientEntry(id, overrides)),
     pricing,
   };
 }
