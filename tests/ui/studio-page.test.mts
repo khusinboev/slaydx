@@ -242,6 +242,7 @@ test("SUBMIT sends exactly the contract: slug studio, {modelId, prompt, imageSty
   const body = posts[0]!.body!;
   assert.equal(body.slug, "studio");
   assert.deepEqual(body.values, {
+    aiImprove: true,
     modelId: GPT.id,
     prompt: "Registon maydoni, kechqurun",
     imageStyle: "cinematic",

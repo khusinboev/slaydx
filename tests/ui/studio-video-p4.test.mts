@@ -195,7 +195,7 @@ test("text: a fal model's form is its ParamSchema; «Sifat» moves the price; th
   await click(q("[data-studio-submit]"));
   await settle();
   const sent = a.posts()[0]!.body!;
-  assert.deepEqual(sent.values, { modelId: "alibaba/wan-3", prompt: "Registon tongda, kamera sekin", seconds: 5, resolution: "1080p", aspect: "16:9", sound: false, imageAssetId: "", endImageAssetId: "" });
+  assert.deepEqual(sent.values, { modelId: "alibaba/wan-3", prompt: "Registon tongda, kamera sekin", seconds: 5, resolution: "1080p", aspect: "16:9", sound: false, imageAssetId: "", endImageAssetId: "", aiImprove: true });
   assert.equal(sent.expectedPrice, 25_400);
   // MiniMax H3: no sound row (the model makes none), 768p default.
   await pickModel("minimax/h3");

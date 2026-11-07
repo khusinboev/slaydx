@@ -207,7 +207,7 @@ test("text form: video models only, «so'm / N s» cards, schema rows (one data-
   await settle();
   const sent = a.posts()[0]!.body!;
   assert.equal(sent.slug, "studio-video");
-  assert.deepEqual(sent.values, { modelId: K3.id, prompt: "Registon tongda, kamera sekin", seconds: 6, aspect: "16:9", sound: true, imageAssetId: "", endImageAssetId: "" });
+  assert.deepEqual(sent.values, { modelId: K3.id, prompt: "Registon tongda, kamera sekin", seconds: 6, aspect: "16:9", sound: true, imageAssetId: "", endImageAssetId: "", aiImprove: true });
   assert.equal(sent.expectedPrice, up100(0.126 * 6 * 12_700 * 2));
 });
 

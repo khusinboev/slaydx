@@ -9,6 +9,7 @@ import { useAppStore } from "@/lib/store";
  * the user's drafts but outlives them: a submit clears the form's draft, and must not turn the switch back on. A logout
  * forgets it, as it forgets every draft. Storage is a convenience: without it the choice lasts for the page visit.
  */
+/** The choice of a browser that refuses storage. */
 const held = new Map<string, boolean>();
 const listeners = new Set<() => void>();
 
@@ -29,8 +30,10 @@ export function useAiImprove(): { on: boolean; setOn: (v: boolean) => void } {
   const on = useSyncExternalStore(subscribe, () => current(key), () => true);
   const setOn = useCallback(
     (v: boolean) => {
-      held.set(key, v);
       writeDraft(key, v);
+      // Held only while storage refuses: a value kept beside a working storage would outlive a logout.
+      if (readDraft(key) === v) held.delete(key);
+      else held.set(key, v);
       for (const fn of listeners) fn();
     },
     [key],
