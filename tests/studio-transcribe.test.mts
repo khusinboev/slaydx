@@ -110,7 +110,8 @@ test("catalog: entries, purposes, languages, source references, the shared refus
   assert.equal(rules.studioTranscribeError({ source: UP, burn: true }), null, "MUTATSIYA: an own video's burn was refused by this rule");
   assert.match(String(rules.studioDubError({ source: RES, sourceSeconds: 200 })), /1–180/);
   assert.match(String(rules.studioDubError({ source: RES, target: "ru", sourceLang: "ru" })), /bir xil/);
-  assert.equal(rules.studioDubError({ source: RES, target: "uz", sourceLang: "ru" }), null);
+  assert.equal(rules.studioDubError({ source: RES, target: "en", sourceLang: "ru" }), null);
+  assert.match(String(rules.studioDubError({ source: RES, target: "uz" })), /noma.lum qiymat/, "ElevenLabs refuses Uzbek as a target: live 2026-11-07");
   // The tool registry calls the same rules (preflight before charging).
   assert.equal(tools.preflightError(tools.TOOL_BY_ID["studio-dub"], { source: RES, target: "en", sourceLang: "en" } as never), "Asl til va dublyaj tili bir xil — boshqa tilni tanlang.");
   assert.ok(tools.UNLISTED_TOOL_IDS.has("studio-transcribe") && tools.UNLISTED_TOOL_IDS.has("studio-dub"));
@@ -149,7 +150,7 @@ test("client glue: pickers set source + billed seconds, drop the burn for audio;
   assert.deepEqual(pickUpload({ burn: true, language: "uz" }, { id: "b".repeat(24), seconds: 12 }), { language: "uz", source: "upload:" + "b".repeat(24), sourceSeconds: 12 });
   assert.match(String(speechToolBlocker("transcribe", {})), /manbani tanlang/);
   assert.match(String(speechToolBlocker("dub", { source: RES, sourceSeconds: 5, target: "ru", sourceLang: "ru" })), /bir xil/);
-  assert.equal(speechToolBlocker("dub", { source: RES, sourceSeconds: 5, target: "uz" }), null);
+  assert.equal(speechToolBlocker("dub", { source: RES, sourceSeconds: 5, target: "ru" }), null);
   // On the billed seconds (review m1): 180.3 s bills 181 s — over the dub cap, not offered; 179.9 s bills 180, offered.
   const list = speechSources("dub", { video: [{ ...video, seconds: 200 }, { ...video, id: "x1", seconds: 180.3 }, video, { ...video, id: "x2", seconds: 179.9 }], audio: [audio] });
   assert.deepEqual(list.map((s) => s.id), [video.id, "x2", audio.id], "200 s and 180.3 s (181 billed) are not offered for a dub (≤ 180 s)");
@@ -222,24 +223,24 @@ test("golden: dubbing create body, op id, poll states, download URL, DELETE", as
   });
   const a = ad.dubAdapter({ key: () => KEY });
   const auto = ad.dubRequest({ params: normalize(DUB.params, { source: RES }), assets: asset("video/mp4", new Uint8Array(50)) });
-  assert.deepEqual(auto.form.fields, { target_lang: "uz", num_speakers: "0", watermark: "false", name: "SlaydX Studio" });
+  assert.deepEqual(auto.form.fields, { target_lang: "ru", num_speakers: "0", watermark: "false", name: "SlaydX Studio" });
   const chosen = ad.dubRequest({ params: normalize(DUB.params, { source: RES, target: "ru", sourceLang: "uz" }), assets: asset("video/mp4", new Uint8Array(50)) });
   assert.deepEqual(chosen.form.fields, { target_lang: "ru", source_lang: "uz", num_speakers: "0", watermark: "false", name: "SlaydX Studio" });
 
   const r = await a.submit({ upstreamModel: "dubbing-automatic", params: normalize(DUB.params, { source: RES }), assets: asset("audio/mpeg", mp3Bytes(2)), idempotencyKey: "k" });
-  assert.deepEqual(r, { opId: "dub_ABC123:uz" });
+  assert.deepEqual(r, { opId: "dub_ABC123:ru" });
   assert.equal(seen[0]!.url, "https://api.elevenlabs.io/v1/dubbing");
   assert.equal(seen[0]!.key, KEY);
-  assert.equal(seen[0]!.fields.target_lang, "uz");
+  assert.equal(seen[0]!.fields.target_lang, "ru");
   assert.ok(seen[0]!.file?.startsWith("file:input.mp3:audio/mpeg"));
-  assert.deepEqual(await a.poll!("dub_ABC123:uz"), { state: "running" });
+  assert.deepEqual(await a.poll!("dub_ABC123:ru"), { state: "running" });
   assert.equal(seen[1]!.url, "https://api.elevenlabs.io/v1/dubbing/dub_ABC123");
   assert.equal(seen[1]!.method, "GET");
-  const bytes = await a.fetchOutput({ kind: "url", url: ad.elevenLabsDubAudioUrl("dub_ABC123", "uz") });
+  const bytes = await a.fetchOutput({ kind: "url", url: ad.elevenLabsDubAudioUrl("dub_ABC123", "ru") });
   assert.equal(bytes.length, 417 * 4);
   assert.equal(seen[2]!.url, "https://api.elevenlabs.io/v1/dubbing/dub_ABC123/audio/uz");
   await assert.rejects(a.fetchOutput({ kind: "url", url: "https://evil.example/x" }), /unexpected download url/);
-  assert.equal(await a.cancel!("dub_ABC123:uz"), "cancelled");
+  assert.equal(await a.cancel!("dub_ABC123:ru"), "cancelled");
   assert.equal(seen.at(-1)!.method, "DELETE");
   assert.equal(seen.at(-1)!.url, "https://api.elevenlabs.io/v1/dubbing/dub_ABC123");
 
@@ -248,7 +249,7 @@ test("golden: dubbing create body, op id, poll states, download URL, DELETE", as
   assert.deepEqual(await a.poll!("dub_ABC123:ru"), { state: "done", outputs: [{ kind: "url", url: "https://api.elevenlabs.io/v1/dubbing/dub_ABC123/audio/ru" }] });
   t.mock.restoreAll();
   stubFetch(t, () => json(200, { status: "failed", error: "Content moderation: not allowed" }));
-  assert.deepEqual(await a.poll!("dub_ABC123:uz"), { state: "failed", message: "Content moderation: not allowed", safety: true });
+  assert.deepEqual(await a.poll!("dub_ABC123:ru"), { state: "failed", message: "Content moderation: not allowed", safety: true });
   assert.deepEqual(await a.poll!("bad op"), { state: "failed", message: "bad dubbing op id", safety: false });
 });
 

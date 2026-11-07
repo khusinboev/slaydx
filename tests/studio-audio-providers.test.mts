@@ -283,7 +283,7 @@ test("golden: Scribe — audio_url, both defaults switched explicitly, three-let
 
 test("golden: dubbing — fal by source kind; HeyGen's enum name and a fixed output length", () => {
   assert.deepEqual(queueBody(cat.FAL_DUB_MODEL, { source: RES, target: "ru" }), { video_url: "https://f/x", target_lang: "ru", highest_resolution: false });
-  assert.deepEqual(queueBody(cat.FAL_DUB_MODEL, { source: UP, target: "uz", sourceLang: "en" }, "audio/mpeg"), { audio_url: "https://f/x", target_lang: "uz", source_lang: "en", highest_resolution: false });
+  assert.deepEqual(queueBody(cat.FAL_DUB_MODEL, { source: UP, target: "ru", sourceLang: "en" }, "audio/mpeg"), { audio_url: "https://f/x", target_lang: "ru", source_lang: "en", highest_resolution: false });
   assert.deepEqual(queueBody(cat.HEYGEN_TRANSLATE_MODEL, { source: RES }), { video_url: "https://f/x", output_language: "Uzbek (Latin, Uzbekistan)", translate_audio_only: false, enable_dynamic_duration: false });
   const heygen = entry(cat.HEYGEN_TRANSLATE_MODEL).params.find((p) => p.name === "target");
   assert.ok(heygen?.type === "enum");
@@ -651,7 +651,7 @@ test("dub engine: a re-run that cannot resume refunds and still deletes the uplo
     const { store, calls } = fakeStore(row);
     const c = clock();
     await assert.rejects(
-      dubMod.buildStudioDub(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.FAL_DUB_MODEL, source: RES, sourceSeconds: 2, target: "uz" } as never, audioCtx(), { deadline: c.now() + 500_000 }, { adapters: { "fal-dub": wrapped(f) }, store, health: HEALTH, ...c }),
+      dubMod.buildStudioDub(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.FAL_DUB_MODEL, source: RES, sourceSeconds: 2, target: "ru" } as never, audioCtx(), { deadline: c.now() + 500_000 }, { adapters: { "fal-dub": wrapped(f) }, store, health: HEALTH, ...c }),
       (e: unknown) => e instanceof UserFacingError && e.message === dubMod.DUB_LOST_MESSAGE,
       row.status,
     );
@@ -665,7 +665,7 @@ test("dub engine: an audio source comes back as MP3 from `audio`; failures refun
   const f = fakeFal({ result: dubOutputResult("audio"), download: mp3Bytes(90) });
   const c = clock();
   const run = (ff: ReturnType<typeof fakeFal>, ctx = audioCtx()) =>
-    dubMod.buildStudioDub(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.FAL_DUB_MODEL, source: RES, sourceSeconds: 2, target: "uz" } as never, ctx, { deadline: c.now() + 500_000 }, { adapters: { "fal-dub": wrapped(ff) }, store: null, health: HEALTH, ...c });
+    dubMod.buildStudioDub(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.FAL_DUB_MODEL, source: RES, sourceSeconds: 2, target: "ru" } as never, ctx, { deadline: c.now() + 500_000 }, { adapters: { "fal-dub": wrapped(ff) }, store: null, health: HEALTH, ...c });
   const out = await run(f);
   assert.equal(out.mime, "audio/mpeg");
   assert.equal(out.doc?.dub?.output, "mp3");
@@ -916,7 +916,7 @@ test("URLs: the dub — neither the row's error nor the log carries the user's l
   const warn = t.mock.method(console, "warn", () => {});
   const c = clock();
   const run = (f: ReturnType<typeof fakeFal>, store: unknown) =>
-    dubMod.buildStudioDub(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.FAL_DUB_MODEL, source: RES, sourceSeconds: 2, target: "uz" } as never, audioCtx(), { deadline: c.now() + 500_000 }, { adapters: { "fal-dub": wrapped(f) }, store: store as never, health: HEALTH, ...c });
+    dubMod.buildStudioDub(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.FAL_DUB_MODEL, source: RES, sourceSeconds: 2, target: "ru" } as never, audioCtx(), { deadline: c.now() + 500_000 }, { adapters: { "fal-dub": wrapped(f) }, store: store as never, health: HEALTH, ...c });
   const refused = fakeStore();
   await assert.rejects(run(fakeFal({ submit: () => json(422, { detail: `Failed to download ${PUBLIC}` }) }), refused.store), UserFacingError);
   const failed = fakeStore();
@@ -927,7 +927,7 @@ test("URLs: the dub — neither the row's error nor the log carries the user's l
   }
   // Even an error that reached the engine unscrubbed (another adapter's) stays out of the log.
   const raw = { id: "fal-dub", configured: () => true, submit: async () => Promise.reject(new MediaError("x", `boom ${PUBLIC}`)), fetchOutput: async () => new Uint8Array(), poll: async () => ({ state: "running" as const }) };
-  await assert.rejects(dubMod.buildStudioDub(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.FAL_DUB_MODEL, source: RES, sourceSeconds: 2, target: "uz" } as never, audioCtx(), { deadline: c.now() + 500_000 }, { adapters: { "fal-dub": raw as never }, store: null, health: HEALTH, ...c }), UserFacingError);
+  await assert.rejects(dubMod.buildStudioDub(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.FAL_DUB_MODEL, source: RES, sourceSeconds: 2, target: "ru" } as never, audioCtx(), { deadline: c.now() + 500_000 }, { adapters: { "fal-dub": raw as never }, store: null, health: HEALTH, ...c }), UserFacingError);
   const logged = warn.mock.calls.map((x) => x.arguments.join(" ")).join("\n");
   assert.ok(logged.includes("[studio-dub]"), "the failures were logged");
   assert.ok(!logged.includes("fal.media"), logged);
@@ -959,6 +959,6 @@ test("dub engine: overrun — HeyGen delivering past the quote + slack warns and
   // ElevenLabs through fal bills the source's minutes: no such check.
   const f = fakeFal({ result: dubOutputResult("video"), download: videoMp4(5) });
   const reports: string[] = [];
-  await dubMod.buildStudioDub(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.FAL_DUB_MODEL, source: RES, sourceSeconds: 2, target: "uz" } as never, { source: { kind: "result", id: RES.slice(7), mime: "video/mp4", bytes: videoMp4(2), seconds: 2 } }, { deadline: c.now() + 500_000 }, { adapters: { "fal-dub": wrapped(f) }, store: null, health: HEALTH, ...c, overrun: async (m) => void reports.push(m) });
+  await dubMod.buildStudioDub(tools.TOOL_BY_ID["studio-dub"], { modelId: cat.FAL_DUB_MODEL, source: RES, sourceSeconds: 2, target: "ru" } as never, { source: { kind: "result", id: RES.slice(7), mime: "video/mp4", bytes: videoMp4(2), seconds: 2 } }, { deadline: c.now() + 500_000 }, { adapters: { "fal-dub": wrapped(f) }, store: null, health: HEALTH, ...c, overrun: async (m) => void reports.push(m) });
   assert.deepEqual(reports, []);
 });

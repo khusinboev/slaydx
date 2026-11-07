@@ -319,7 +319,7 @@ test("the worker cuts an own video to the billed seconds before any provider see
   const { buildStudioDub } = await import("../lib/generation/studio/dub.ts");
   const { mp4Probe } = await import("../lib/generation/studio/mix-media.ts");
   const { TOOL_BY_ID } = await import("../lib/tools.ts");
-  const values = { source: `upload:${id}`, sourceSeconds: 2, target: "uz" };
+  const values = { source: `upload:${id}`, sourceSeconds: 2, target: "ru" };
   const ctx = await speechToolJobCtx(me, values as never);
   const longest = (b64: string) => Math.max(...mp4Probe(new Uint8Array(Buffer.from(b64, "base64")))!.tracks.map((x) => x.seconds));
   let sent = "";
@@ -603,7 +603,7 @@ test("false refusals: a large picture, QuickTime v2 sound, a second sound track,
   const { buildStudioDub } = await import("../lib/generation/studio/dub.ts");
   const adapter = { id: "x", configured: () => true, submit: async () => ({ opId: "x" }) };
   await assert.rejects(
-    buildStudioDub(TOOL_BY_ID["studio-dub"], { source: `upload:${id}`, sourceSeconds: 2, target: "uz" } as never, ctx, {}, { adapters: new Proxy({}, { get: () => adapter }) as never, store: null, health: { allow: () => true, success: () => undefined, failure: () => undefined }, ffmpeg: async () => { throw new FfmpegMissingError(); } }),
+    buildStudioDub(TOOL_BY_ID["studio-dub"], { source: `upload:${id}`, sourceSeconds: 2, target: "ru" } as never, ctx, {}, { adapters: new Proxy({}, { get: () => adapter }) as never, store: null, health: { allow: () => true, success: () => undefined, failure: () => undefined }, ffmpeg: async () => { throw new FfmpegMissingError(); } }),
     /xizmati hozircha/,
     "MUTATSIYA: the dub blamed the user's file",
   );

@@ -180,7 +180,8 @@ const transcribeParams: readonly ParamSchema[] = [
 const dubParams: readonly ParamSchema[] = [
   sourceParam,
   { ...sourceSecondsParam, max: DUB_MAX_SECONDS },
-  { name: "target", label: "Qaysi tilga", type: "enum", options: SPEECH_LANGUAGES, default: "uz", affects: "request" },
+  // Live 2026-11-07: ElevenLabs dubbing answers 422 «Target language 'uz' is not supported». Uzbek as a target goes through HeyGen.
+  { name: "target", label: "Qaysi tilga", type: "enum", options: SPEECH_LANGUAGES.filter((l) => l.value !== "uz"), default: "ru", affects: "request" },
   { name: "sourceLang", label: "Asl tili", type: "enum", options: withAuto, default: AUTO_LANGUAGE, affects: "request" },
 ];
 
