@@ -289,7 +289,7 @@ run_deploy() {
   for try in 1 2 3 4 5; do
     if dc pull web worker; then pulled=1; break; fi
     log "pull try $try failed, retrying"
-    sleep $((try * 15))
+    sleep $((try * ${SLAYDX_PULL_PAUSE:-15}))
   done
   [ "$pulled" = 1 ] || die "pull failed"
   local rev

@@ -54,7 +54,9 @@ case "$args" in
   "inspect -f {{.Image}} cid-web") echo sha256:oldweb ;;
   "inspect -f {{.Image}} cid-worker1") echo sha256:oldworker ;;
   "compose -p slaydx run "*) exit "${"$"}{STUB_MIGRATE_RC:-0}" ;;
-  "compose -p slaydx pull "*) exit "${"$"}{STUB_PULL_RC:-0}" ;;
+  "compose -p slaydx pull "*)
+    if [ -n "${"$"}{STUB_PULL_FAIL_ONCE:-}" ] && [ ! -e "${"$"}STUB_PULL_FAIL_ONCE" ]; then : > "${"$"}STUB_PULL_FAIL_ONCE"; exit 1; fi
+    exit "${"$"}{STUB_PULL_RC:-0}" ;;
   "image inspect -f "*) printf '%s\n' "${"$"}{STUB_REVISION-$STUB_SHA}" ;;
   "image inspect "*) [ -z "${"$"}{STUB_IMAGE_ABSENT:-}" ] ;;
   "ps -aq --filter label=com.docker.compose.project=slaydx --filter label=com.docker.compose.oneoff=True --filter status=exited")
@@ -138,6 +140,7 @@ function sandbox(t: { after(fn: () => void): void }, extra: Record<string, strin
   writeFileSync(log, "");
   const lock = path.join(dir, "deploy.lock");
   const env: NodeJS.ProcessEnv = {
+    SLAYDX_PULL_PAUSE: "0",
     NODE_ENV: "test",
     PATH: `${bin}:/usr/bin:/bin`,
     HOME: dir,
@@ -351,6 +354,14 @@ test("deploy-pull: a failing migration aborts before the swap and restores the c
   const back = idx(calls, (c) => c.tool === "git" && c.args === `reset --quiet --hard ${PREV}`);
   assert.ok(fwd >= 0 && back > fwd);
   assert.ok(!existsSync(path.join(sb.state, "current")));
+});
+
+test("deploy-pull: a pull that fails once is retried, and the release goes on", (t) => {
+  const sb = sandbox(t);
+  sb.env.STUB_PULL_FAIL_ONCE = `${sb.state}.pull-failed-once`;
+  const r = run(PULL, [SHA], sb);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /pull try 1 failed, retrying/);
 });
 
 test("deploy-pull: a failed pull (or an image still absent after it) aborts before the swap and restores the checkout", (t) => {
