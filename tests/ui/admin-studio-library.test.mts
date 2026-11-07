@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { createElement as h } from "react";
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { LibraryOverview } from "../../lib/admin-api/studio-library.ts";
 import { AdminIdentityProvider } from "../../components/admin/shell/admin-identity.tsx";
 import { StudioLibraryPage } from "../../components/admin/studio/StudioLibraryPage.tsx";
@@ -36,6 +36,29 @@ const OVERVIEW: LibraryOverview = {
   ],
   templates: [],
 };
+
+test("page: the kind selector filters the list, the editor offers only that kind's models", async () => {
+  const data: LibraryOverview = {
+    ...OVERVIEW,
+    categories: [...OVERVIEW.categories, { id: "sayohat", label: "Sayohat", media: "video" }],
+    models: [...OVERVIEW.models, { id: "kling/kling-4-flash", media: "video", label: "Kling 4.0 Flash", available: true, params: [] }],
+    prompts: [...OVERVIEW.prompts, { ...OVERVIEW.prompts[0]!, id: "p2", media: "video", category: "sayohat", title: "Tog‘ yo‘lida" }],
+  };
+  globalThis.fetch = (async () => {
+    return new Response(JSON.stringify(data), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  render(h(AdminIdentityProvider, { value: { adminId: "1", role: "owner", permissions: ["settings.view", "settings.edit"], name: "Test", username: null, twoFactor: true }, children: h(StudioLibraryPage) }));
+  await waitFor(() => assert.ok(document.querySelector('[data-lib-prompt="p1"]')));
+  assert.ok(!document.querySelector('[data-lib-prompt="p2"]'), "pictures first");
+  await act(async () => void fireEvent.change(document.querySelector("[data-lib-media]")!, { target: { value: "video" } }));
+  assert.ok(document.querySelector('[data-lib-prompt="p2"]'));
+  assert.ok(!document.querySelector('[data-lib-prompt="p1"]'));
+  await act(async () => void fireEvent.click(screen.getByRole("tab", { name: /Shablonlar/ })));
+  await act(async () => void fireEvent.click(screen.getByRole("button", { name: /Qo.shish/ })));
+  const model = document.querySelector<HTMLSelectElement>("[data-lib-model]")!;
+  assert.deepEqual([...model.options].map((o) => o.value), ["kling/kling-4-flash"], "only the kind's models");
+  assert.equal(document.querySelector<HTMLSelectElement>("[data-lib-template-media]")!.value, "video");
+});
 
 test("page: «Studio kutubxonasi» loads with ONE request and shows the prompts (no refetch loop)", async () => {
   const calls: string[] = [];

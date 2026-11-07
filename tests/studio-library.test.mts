@@ -2,6 +2,7 @@ import "./helpers/next-request.mts";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomInt } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { createIsolatedDb } from "./helpers/isolated-db.mts";
 import { inRequest } from "./helpers/next-request.mts";
 
@@ -22,7 +23,15 @@ import { inRequest } from "./helpers/next-request.mts";
  *              the public read follows a write at once (cache dropped);
  *   enhance    `POST /api/media/enhance`: free (no charge), the rewrite returned, burst limit 10 / 10 min → 429.
  *
+ *   kinds      (docs/studio/P11-SPEC.md «G») video / music / sfx rows, a clip template listed whichever models are on, the
+ *              English seed and its «only the seeded text» rule, the kind checked against the model and the category.
+ *
  * Mutations (each turned the named test(s) red, then restored) — see docs/studio/P2B-SPEC.md «Mutations»:
+ *   the `AND p.prompt = v.seeded` condition removed from 076 -> "seed: the English rewrite";
+ *   `publicTemplates` filters clips by their model -> "public: kinds";
+ *   `templateModel` allows avatars and effects -> "admin: the kind";
+ *   reorder without the `media` check -> "admin: the kind";
+ *   `fillSkeleton` without `fallback` -> "pure: an empty slot" and "seed: video, music and effect rows";
  *   `templateError` validate() call removed -> "pure: templateError", "admin: template validation";
  *   public templates without the availability filter -> "public: templates";
  *   public library without `WHERE enabled` -> "public: library";
@@ -192,6 +201,123 @@ test("seed: 40 prompts across every category; every seeded template validates ag
   assert.deepEqual([...new Set(templates.map((t) => t.model_id))].sort(), [NANO, "bfl/flux", "bytedance/seedream", "bytedance/seedream-pro", "ideogram/ideogram", "recraft/recraft", "recraft/recraft-pro"].sort());
 });
 
+test("pure: an empty slot takes the English fallback before the Uzbek example", () => {
+  const slots = [{ name: "joy", label: "Joy", placeholder: "tog‘ qishlog‘i", fallback: "a mountain village", max: 40 }];
+  assert.equal(lib.fillSkeleton("A walk through {joy}", slots, {}), "A walk through a mountain village");
+  assert.equal(lib.fillSkeleton("A walk through {joy}", slots, { joy: "Xiva" }), "A walk through Xiva", "the user's value wins");
+  assert.match(String(lib.slotsError([{ ...slots[0], fallback: "x".repeat(81) }])), /zaxira/);
+  assert.equal(lib.slotsError(slots), null);
+  assert.deepEqual(lib.cleanSlots(slots), slots, "the stored shape keeps it");
+});
+
+test("pure: a template presets no picture", () => {
+  const flash = MEDIA_CATALOG.byId("kling/kling-4-flash")!;
+  const t = { modelId: flash.id, params: { imageAssetId: "0123456789abcdef01234567" }, skeleton: "A clip of {x}", slots: [{ name: "x", label: "X", max: 40 }] };
+  assert.match(String(lib.templateError(t, flash)), /Surat/);
+});
+
+test("seed: video, music and effect rows; English text, Uzbek titles and labels, quoted text verbatim", { skip }, async () => {
+  const { templateModel } = await import("../lib/server/media/library.ts");
+  const looksUzbek = /\b(va|bilan|uchun|yozuvi|rangli|fon|kechasi|tabriknomasi|logotip|shablon)\b/i;
+  const rows = await query<{ seed_key: string; media: string; category: string; title: string; prompt: string }>("SELECT seed_key, media, category, title, prompt FROM studio_prompts WHERE seed_key IS NOT NULL");
+  const of = (m: string) => rows.filter((r) => r.media === m);
+  assert.equal(of("video").length, 24);
+  assert.equal(of("music").length, 8);
+  assert.equal(of("sfx").length, 8);
+  for (const c of lib.categoriesOf("video")) assert.equal(of("video").filter((r) => r.category === c.id).length, 4, c.id);
+  for (const m of lib.LIBRARY_MEDIA) for (const r of of(m)) assert.ok(lib.isLibraryCategory(r.category, m), `${r.seed_key}: ${r.category} is a ${m} category`);
+  for (const r of of("video")) {
+    assert.match(r.prompt, /^One continuous shot: /, `${r.seed_key}: one shot`);
+    assert.match(r.prompt, /camera|drone/i, `${r.seed_key}: camera`);
+    assert.match(r.prompt, /light|lanterns|sunbeams/i, `${r.seed_key}: light`);
+  }
+  for (const r of rows) assert.ok(!looksUzbek.test(r.prompt.replace(/«[^»]*»/g, "")), `${r.seed_key} reads Uzbek: ${r.prompt}`);
+  // The 40 old rows: quoted on-screen text kept verbatim, Uzbek titles unchanged.
+  const sql = await readFile(new URL("../lib/server/migrations/067_studio_library.sql", import.meta.url), "utf8");
+  for (const r of of("image")) {
+    const line = sql.split("\n").find((l) => l.includes(`('${r.seed_key}', '`))!;
+    assert.ok(line.includes(`'${r.title.replace(/'/g, "''")}'`), `${r.seed_key}: the title stays`);
+    for (const q of line.matchAll(/«([^»]+)»/g)) assert.ok(r.prompt.includes(q[1]!.replace(/''/g, "'")), `${r.seed_key}: «${q[1]}» stays verbatim`);
+  }
+  const templates = await query<{ seed_key: string; media: "image" | "video"; title: string; model_id: string; params: unknown; skeleton: string; slots: { label: string; fallback?: string; placeholder?: string }[] }>(
+    "SELECT seed_key, media, title, model_id, params, skeleton, slots FROM studio_templates WHERE seed_key IS NOT NULL ORDER BY seed_key",
+  );
+  assert.equal(templates.filter((t) => t.media === "video").length, 12);
+  for (const t of templates) {
+    assert.equal(lib.templateError({ modelId: t.model_id, params: t.params, skeleton: t.skeleton, slots: t.slots }, templateModel(t.media, t.model_id)), null, t.seed_key);
+    assert.ok(!looksUzbek.test(t.skeleton.replace(/«[^»]*»|\{\w+\}/g, "")), `${t.seed_key}: ${t.skeleton}`);
+    // A slot left empty must not put Uzbek into the English prompt, unless the slot IS on-screen text.
+    const text = lib.fillSkeleton(t.skeleton, lib.cleanSlots(t.slots as never), {});
+    assert.ok(!/[ʻ‘]/.test(text.replace(/«[^»]*»/g, "")), `${t.seed_key}: ${text}`);
+    for (const s of t.slots) assert.ok(t.skeleton.includes(`«`) || s.fallback, `${t.seed_key}.${s.label}: an English fallback`);
+  }
+  for (const t of templates.filter((x) => x.media === "video")) assert.match(t.skeleton, /^One continuous shot: .*(camera|drone)/i, t.seed_key);
+  assert.ok(new Set(templates.filter((t) => t.media === "video").map((t) => t.model_id)).size >= 2, "more than one suggested model");
+});
+
+test("seed: the English rewrite touches only rows still holding the seeded text, and running it again changes nothing", { skip }, async () => {
+  const sql = await readFile(new URL("../lib/server/migrations/076_studio_library_media.sql", import.meta.url), "utf8");
+  const seeded = await readFile(new URL("../lib/server/migrations/067_studio_library.sql", import.meta.url), "utf8");
+  const uzPrompt = /\('p01', 'portret', 10, '[^']*', '((?:[^']|'')*)'\)/.exec(seeded)![1]!.replace(/''/g, "'");
+  const uzSkeleton = /'Logotip', 'recraft\/recraft',\s*'[^']*',\s*'((?:[^']|'')*)',/.exec(seeded)![1]!.replace(/''/g, "'");
+  const prompt = (k: string) => queryOne<{ prompt: string }>("SELECT prompt FROM studio_prompts WHERE seed_key = $1", [k]);
+  const tpl = (k: string) => queryOne<{ skeleton: string; slots: { fallback?: string }[] }>("SELECT skeleton, slots FROM studio_templates WHERE seed_key = $1", [k]);
+  const english = (await prompt("p01"))!.prompt;
+  const englishSkeleton = (await tpl("t03"))!.skeleton;
+  const row = { p: await query("SELECT count(*) FROM studio_prompts"), t: await query("SELECT count(*) FROM studio_templates") };
+  // p01 and t03 are back at the seeded text; p02 and t04 carry an admin's own words; a seeded video row was edited too.
+  await query("UPDATE studio_prompts SET prompt = $1 WHERE seed_key = 'p01'", [uzPrompt]);
+  await query("UPDATE studio_templates SET skeleton = $1 WHERE seed_key = 't03'", [uzSkeleton]);
+  await query("UPDATE studio_prompts SET prompt = 'Admin yozgan matn' WHERE seed_key = 'p02'");
+  await query("UPDATE studio_templates SET skeleton = 'Admin skeleti {nom} {belgi} {ranglar}' WHERE seed_key = 't04'");
+  await query("UPDATE studio_prompts SET prompt = 'Admin edited clip' WHERE seed_key = 'vp01'");
+  await transaction((c) => c.query(sql));
+  assert.equal((await prompt("p01"))!.prompt, english, "still the seeded text: rewritten");
+  assert.equal((await tpl("t03"))!.skeleton, englishSkeleton);
+  assert.equal((await prompt("p02"))!.prompt, "Admin yozgan matn", "MUTATSIYA: an admin's edit survives");
+  assert.equal((await tpl("t04"))!.skeleton, "Admin skeleti {nom} {belgi} {ranglar}");
+  assert.equal((await prompt("vp01"))!.prompt, "Admin edited clip", "a re-run never overwrites a new seed");
+  assert.deepEqual({ p: await query("SELECT count(*) FROM studio_prompts"), t: await query("SELECT count(*) FROM studio_templates") }, row, "no duplicates");
+  await query("UPDATE studio_prompts SET prompt = 'One continuous shot: a perfume bottle turns slowly, the camera orbits it, a thin line of warm light' WHERE seed_key = 'vp01'");
+});
+
+test("public: kinds — each asks for its own rows; a clip template stays listed whichever models are on", { skip }, async (t) => {
+  await refresh();
+  const video = await publicGet(libraryRoute.GET as Handler, "/api/media/library?media=video");
+  assert.equal(video.status, 200);
+  assert.equal(video.body.items.length, 24);
+  assert.ok(video.body.items.every((i: Any) => i.media === "video"));
+  assert.deepEqual(video.body.categories.map((c: Any) => c.id), ["reklama", "tabrik", "talim", "tabiat", "sayohat", "shahar"]);
+  assert.equal(video.body.categories[0].count, 4, "the count is the kind's own");
+  assert.equal((await publicGet(libraryRoute.GET as Handler, "/api/media/library?media=video&category=sayohat")).body.items.length, 4);
+  assert.equal((await publicGet(libraryRoute.GET as Handler, "/api/media/library?media=video&category=logo")).status, 400, "a picture category");
+  assert.equal((await publicGet(libraryRoute.GET as Handler, "/api/media/library?media=music")).body.items.length, 8);
+  assert.equal((await publicGet(libraryRoute.GET as Handler, "/api/media/library?media=sfx")).body.items.length, 8);
+  assert.equal((await publicGet(libraryRoute.GET as Handler, "/api/media/library?media=nope")).status, 400);
+  assert.equal((await publicGet(libraryRoute.GET as Handler, "/api/media/library")).body.items.filter((i: Any) => i.media !== "image").length, 0, "the Rasm sheet stays as it was");
+  assert.equal((await publicGet(templatesRoute.GET as Handler, "/api/media/templates?media=music")).status, 400, "no music templates");
+  // Paid video off: nothing can be sold, nothing is listed.
+  const setVideo = async (on: boolean) => {
+    await query("INSERT INTO app_settings (key, value) VALUES ('video.enabled', $1::jsonb) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", [JSON.stringify(on)]);
+    (await import("../lib/server/settings.ts")).invalidateSettingsCache();
+  };
+  t.after(() => setVideo(false));
+  await setVideo(false);
+  assert.equal((await publicGet(templatesRoute.GET as Handler, "/api/media/templates?media=video")).body.items.length, 0);
+  // On, with only the Gemini key: the suggested Kling models are off, the templates stay and name them.
+  await setVideo(true);
+  const clips = await publicGet(templatesRoute.GET as Handler, "/api/media/templates?media=video");
+  assert.equal(clips.body.items.length, 12, "MUTATSIYA: a clip template never hides with its suggested model");
+  assert.ok(clips.body.items.every((i: Any) => i.media === "video" && i.modelId.startsWith("kling/")));
+  assert.equal(clips.body.items[0].slots[0].fallback !== undefined, true, "the browser needs the fallback");
+  assert.deepEqual((await publicGet(templatesRoute.GET as Handler, "/api/media/templates")).body.items.map((i: Any) => i.modelId), [NANO], "the picture rule is unchanged");
+  // A clip template that stopped validating is hidden as a picture one is.
+  await query(`UPDATE studio_templates SET params = '{"seconds": 999}'::jsonb WHERE seed_key = 'vt01'`);
+  t.after(async () => void (await query(`UPDATE studio_templates SET params = '{"seconds": 5, "aspect": "9:16"}'::jsonb WHERE seed_key = 'vt01'`)));
+  await refresh();
+  assert.equal((await publicGet(templatesRoute.GET as Handler, "/api/media/templates?media=video")).body.items.length, 11);
+});
+
 test("public: library — enabled only, public fields only, category filter, unknown category 400", { skip }, async () => {
   await refresh();
   await query("UPDATE studio_prompts SET enabled = FALSE WHERE seed_key = 'p01'");
@@ -241,6 +367,43 @@ test("public: templates — enabled, valid and model available now", { skip }, a
   const after3 = await publicGet(templatesRoute.GET as Handler, "/api/media/templates");
   assert.ok(!after3.body.items.some((i: Any) => i.title === "Manzara"), "unknown category hidden");
   assert.equal(after3.body.items.length, 7);
+});
+
+test("admin: the kind of a row is checked against its model and its category", { skip }, async (t) => {
+  for (const m of ["warn", "error"] as const) t.mock.method(console, m, () => {});
+  await refresh();
+  const owner = await session("owner");
+  const read = await call(adminRoot.GET as Handler, "GET", "/api/admin/studio-library", owner.cookie);
+  assert.ok(read.body.models.some((m: Any) => m.id === "kling/kling-4-flash" && m.media === "video"), "the clip models are offered");
+  assert.ok(!read.body.models.some((m: Any) => m.id === "kling/effects" || m.id === "heygen/avatar"), "an effect or an avatar cannot carry a skeleton");
+  assert.ok(read.body.categories.some((c: Any) => c.id === "sayohat" && c.media === "video"));
+  const body = { media: "video", category: "sayohat", title: "Yangi lavha", modelId: "kling/kling-4-flash", params: { seconds: 5, aspect: "9:16" }, skeleton: "One shot of {joy}", slots: [{ name: "joy", label: "Joy", max: 40 }], reason: REASON };
+  const post = (b: Record<string, unknown>) => call(adminTemplates.POST as Handler, "POST", "/api/admin/studio-library/templates", owner.cookie, b);
+  const made = await post(body);
+  assert.equal(made.status, 200, JSON.stringify(made.body));
+  assert.equal(made.body.media, "video");
+  assert.equal((await post({ ...body, modelId: NANO, params: {} })).body.code, "template_invalid", "a picture model on a clip template");
+  assert.equal((await post({ ...body, media: "image" })).body.code, "template_invalid", "a clip model on a picture template");
+  assert.equal((await post({ ...body, modelId: "kling/effects", params: {} })).body.code, "template_invalid");
+  assert.equal((await post({ ...body, modelId: "heygen/avatar", params: {} })).body.code, "template_invalid");
+  assert.equal((await post({ ...body, media: "music" })).status, 400, "no music templates");
+  assert.equal((await post({ ...body, category: "logo" })).status, 400, "a picture category");
+  const prompt = await call(adminPrompts.POST as Handler, "POST", "/api/admin/studio-library/prompts", owner.cookie, { media: "sfx", category: "interfeys", title: "Klik", prompt: "A soft click", reason: REASON });
+  assert.equal(prompt.status, 200);
+  assert.equal(prompt.body.media, "sfx");
+  assert.equal((await call(adminPrompts.POST as Handler, "POST", "/api/admin/studio-library/prompts", owner.cookie, { media: "sfx", category: "logo", title: "x", prompt: "abcd", reason: REASON })).status, 400);
+  assert.equal((await call(adminPrompts.POST as Handler, "POST", "/api/admin/studio-library/prompts", owner.cookie, { media: "nope", category: "logo", title: "x", prompt: "abcd", reason: REASON })).status, 400);
+  // An update keeps the kind it did not name.
+  const edited = await call(adminPrompt.PUT as Handler, "PUT", `/api/admin/studio-library/prompts/${prompt.body.id}`, owner.cookie, { title: "Klik 2", reason: REASON }, { id: prompt.body.id });
+  assert.equal(edited.body.media, "sfx");
+  // Reorder stays inside one kind: `reklama` exists for pictures and clips alike.
+  const ids = await query<{ id: string }>("SELECT id::text AS id FROM studio_prompts WHERE seed_key IN ('p25', 'vp01')");
+  assert.equal((await call(adminReorder.POST as Handler, "POST", "/api/admin/studio-library/reorder", owner.cookie, { kind: "prompts", ids: ids.map((r) => r.id), reason: REASON })).status, 400);
+  const tids = await query<{ id: string }>("SELECT id::text AS id FROM studio_templates WHERE seed_key IN ('t01', 'vt01')");
+  assert.equal((await call(adminReorder.POST as Handler, "POST", "/api/admin/studio-library/reorder", owner.cookie, { kind: "templates", ids: tids.map((r) => r.id), reason: REASON })).status, 400);
+  await query("DELETE FROM studio_templates WHERE id = $1", [made.body.id]);
+  await query("DELETE FROM studio_prompts WHERE id = $1", [prompt.body.id]);
+  invalidateLibrary();
 });
 
 test("admin: roles, reason, template validation", { skip }, async (t) => {
