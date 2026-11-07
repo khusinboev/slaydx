@@ -37,7 +37,8 @@ import { fakeMp4 } from "./helpers/fake-mp4.mts";
  *  15. the retry also runs on any failure                                  -> «refused: picture»;
  *  16. `sentPrompt` kept after every picture fell back                     -> «refused: picture»;
  *  17. audio without the retry; the retry on any error                     -> «refused: audio»;
- *  18. video without the retry; the retry on an accepted refusal           -> «refused: clip»;
+ *  18. video without the retry; on any error                               -> «refused: clip at the door»;
+ *  25. video retry on a refusal the provider had accepted                  -> «refused: clip after acceptance»;
  *  19. the media row keeps the refused rewrite                             -> «refused: clip»;
  *  20. `failedSentPrompt` drops the rewrite check                          -> «refused: clip after acceptance»;
  *  21. the kill switch not read                                            -> «kill switch»;
@@ -601,6 +602,27 @@ test("studio auto prompt", { skip }, async (t) => {
     stub.videoResult = SAFETY();
     await finish(plain);
     assert.equal((await read(plain)).sentPrompt, undefined, "MUTATSIYA: only a rewrite is shown");
+    // A safety refusal the provider had already accepted, right at the submit: the same rule.
+    await reset();
+    const { MediaError } = await import("../lib/studio-core/index.ts");
+    let sends = 0;
+    const adapter = {
+      id: "x",
+      configured: () => true,
+      submit: async () => {
+        sends++;
+        throw new MediaError("fal", "refused", { safety: true, accepted: true });
+      },
+      poll: async () => ({ status: "pending" }),
+    };
+    const wan = MEDIA_CATALOG.byId(WAN.modelId)!;
+    const held = "22222222-2222-4222-8222-222222222222";
+    await query(`INSERT INTO generations (id, user_id, tool_id, topic, price, format, values_json, status, locked_by, locked_at) VALUES ($1, $2, 'studio-video', 'x', 1000, 'mp4', '{}', 'IN_PROGRESS', 'lease-2', now())`, [held, me]);
+    await assert.rejects(
+      ops.submitStudioVideoJob({ id: held, userId: me, lease: "lease-2", values: { ...WAN, aiImprove: true } as never }, { studioAdapters: Object.fromEntries(wan.routes.map((r) => [r.adapter, adapter])) as never }),
+      /xavfsizlik/,
+    );
+    assert.equal(sends, 1, "MUTATSIYA: accepted means billed, never a second call");
     // Another user's job reads nothing.
     const { failedSentPrompt } = await import("../lib/server/media/prompt-rewrites.ts");
     assert.equal(await failedSentPrompt(id, await mkUser()), null);
