@@ -173,12 +173,12 @@ async function refresh() {
 }
 
 test("seed: 40 prompts across every category; every seeded template validates against the current catalog", { skip }, async () => {
-  const prompts = await query<{ category: string; prompt: string }>("SELECT category, prompt FROM studio_prompts WHERE seed_key IS NOT NULL");
+  const prompts = await query<{ category: string; prompt: string }>("SELECT category, prompt FROM studio_prompts WHERE seed_key IS NOT NULL AND media = 'image'");
   assert.equal(prompts.length, 40);
   for (const c of lib.LIBRARY_CATEGORIES) assert.equal(prompts.filter((p) => p.category === c.id).length, 4, c.id);
   for (const p of prompts) assert.ok(p.prompt.length >= 3 && p.prompt.length <= 500);
   const templates = await query<{ seed_key: string; category: string; model_id: string; params: unknown; skeleton: string; slots: unknown }>(
-    "SELECT seed_key, category, model_id, params, skeleton, slots FROM studio_templates WHERE seed_key IS NOT NULL ORDER BY seed_key",
+    "SELECT seed_key, category, model_id, params, skeleton, slots FROM studio_templates WHERE seed_key IS NOT NULL AND media = 'image' ORDER BY seed_key",
   );
   assert.equal(templates.length, 10);
   const { MEDIA_PURPOSES } = await import("../lib/media/catalog.ts");
@@ -200,7 +200,7 @@ test("public: library — enabled only, public fields only, category filter, unk
   assert.equal(all.status, 200);
   assert.equal(all.body.items.length, 39, "the disabled prompt is hidden");
   assert.ok(!all.body.items.some((i: Any) => i.title === "Studiyadagi portret"));
-  for (const i of all.body.items) assert.deepEqual(Object.keys(i).sort(), ["category", "id", "previewUrl", "prompt", "title"], "no seed key, sort, writer, timestamps");
+  for (const i of all.body.items) assert.deepEqual(Object.keys(i).sort(), ["category", "id", "media", "previewUrl", "prompt", "title"], "no seed key, sort, writer, timestamps");
   assert.equal(all.body.categories.find((c: Any) => c.id === "portret").count, 3);
   const logos = await publicGet(libraryRoute.GET as Handler, "/api/media/library?category=logo");
   assert.equal(logos.body.items.length, 4);
@@ -216,7 +216,7 @@ test("public: templates — enabled, valid and model available now", { skip }, a
   const noFal = await publicGet(templatesRoute.GET as Handler, "/api/media/templates");
   assert.equal(noFal.status, 200);
   assert.deepEqual(noFal.body.items.map((i: Any) => i.modelId), [NANO]);
-  assert.deepEqual(Object.keys(noFal.body.items[0]).sort(), ["category", "id", "modelId", "params", "previewUrl", "skeleton", "slots", "title"]);
+  assert.deepEqual(Object.keys(noFal.body.items[0]).sort(), ["category", "id", "media", "modelId", "params", "previewUrl", "skeleton", "slots", "title"]);
   process.env.FAL_KEY = "test-fal-key-0000:abcdef";
   t.after(() => void delete process.env.FAL_KEY);
   await refresh();
@@ -250,8 +250,10 @@ test("admin: roles, reason, template validation", { skip }, async (t) => {
   const viewer = await session("viewer");
   const read1 = await call(adminRoot.GET as Handler, "GET", "/api/admin/studio-library", viewer.cookie);
   assert.equal(read1.status, 200, "viewer reads");
-  assert.equal(read1.body.prompts.length, 40);
-  assert.equal(read1.body.templates.length, 10);
+  assert.equal(read1.body.prompts.filter((p: Any) => p.media === "image").length, 40);
+  assert.equal(read1.body.templates.filter((x: Any) => x.media === "image").length, 10);
+  assert.equal(read1.body.prompts.length, 80, "pictures, clips, music and sound effects");
+  assert.equal(read1.body.templates.length, 22);
   assert.ok(read1.body.models.some((m: Any) => m.id === NANO && Array.isArray(m.params)));
   const denied = await call(adminPrompts.POST as Handler, "POST", "/api/admin/studio-library/prompts", viewer.cookie, { category: "logo", title: "x", prompt: "abcd", reason: REASON });
   assert.equal(denied.status, 403);

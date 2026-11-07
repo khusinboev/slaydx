@@ -1,7 +1,8 @@
 "use client";
 
 import { ENHANCE_MIN } from "@/lib/media/enhance";
-import { EnhanceTool } from "../PromptBox";
+import { EnhanceTool, SamplesTool } from "../PromptBox";
+import { LibrarySheet } from "../LibrarySheet";
 import { usePromptEnhance } from "../usePromptEnhance";
 import { useId, useState } from "react";
 import { cn } from "@/lib/cn";
@@ -117,6 +118,7 @@ export function AudioTab({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [switchText, setSwitchText] = useState<string | null>(null);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const { submitting, error, setError, send: queue } = useStudioSend((refused) => {
     reload(true);
     if (refused && needsVoices) loadVoices();
@@ -360,10 +362,12 @@ export function AudioTab({
             </span>
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5" data-prompt-tools>
+            {mode === "music" || mode === "sfx" ? <SamplesTool onClick={() => setLibraryOpen(true)} /> : null}
             <EnhanceTool disabled={typed.trim().length < ENHANCE_MIN} enhancing={enhancing} onClick={() => void enhance()} />
           </div>
         </section>
       ) : null}
+      {libraryOpen && (mode === "music" || mode === "sfx") ? <LibrarySheet media={mode} onPick={(p) => setParam("prompt", p.slice(0, promptMax))} onClose={() => setLibraryOpen(false)} /> : null}
 
       {takesAudioInput(entry) ? (
         <AudioInputRow seconds={typeof raw.inputSeconds === "number" && raw.inputId ? raw.inputSeconds : null} uploading={uploading} error={uploadError} onPrepared={(s) => void onPrepared(s)} />

@@ -3,44 +3,58 @@
 import { useEffect, useId, useState } from "react";
 import { LayoutTemplate, X } from "lucide-react";
 import { ApiImg } from "@/lib/use-api-src";
-import { categoryLabel, type StudioTemplate } from "@/lib/media/library";
+import { categoryLabel, type StudioTemplate, type TemplateMedia } from "@/lib/media/library";
 import { Field } from "@/components/forms/shared";
 import { fetchTemplates } from "./studio-api";
 
-/** Templates change rarely and depend on availability (the server checks it): one load per page visit. */
-let loaded: Promise<StudioTemplate[]> | null = null;
+/** Templates change rarely and depend on availability (the server checks it): one load per kind per page visit. */
+const loaded = new Map<TemplateMedia, Promise<StudioTemplate[]>>();
 
 export function dropTemplatesCache(): void {
-  loaded = null;
+  loaded.clear();
 }
 
-function loadTemplates(): Promise<StudioTemplate[]> {
-  loaded ??= fetchTemplates().catch((e: unknown) => {
-    loaded = null;
+function loadTemplates(media: TemplateMedia): Promise<StudioTemplate[]> {
+  const hit = loaded.get(media);
+  if (hit) return hit;
+  const load = fetchTemplates(media).catch((e: unknown) => {
+    loaded.delete(media);
     throw e;
   });
-  return loaded;
+  loaded.set(media, load);
+  return load;
 }
 
 /**
- * «Shablonlar» row (docs/studio/P2B-SPEC.md, canvas phone «Rasm»): one card per template whose model the picker offers
- * (`modelIds`; the server already hid unavailable / invalid ones). A tap hands the template to the page, which picks
- * its model, applies its preset values and builds the prompt from the slots. Nothing shows while loading or when the
+ * «Shablonlar» row (docs/studio/P2B-SPEC.md, canvas phone «Rasm»): one card per template of `media`. A picture template
+ * shows when the picker offers its model (`modelIds`; the server already hid unavailable / invalid ones); a clip template
+ * only suggests a model, so `modelIds` is `null` and every card shows. A tap hands the template to the page, which picks
+ * the model, applies its preset values and builds the prompt from the slots. Nothing shows while loading or when the
  * list is empty or failed: the row is a shortcut, never a blocker of the form.
  */
-export function TemplatesRow({ modelIds, activeId, onPick }: { modelIds: readonly string[]; activeId: string | null; onPick: (t: StudioTemplate) => void }) {
+export function TemplatesRow({
+  media = "image",
+  modelIds,
+  activeId,
+  onPick,
+}: {
+  media?: TemplateMedia;
+  modelIds: readonly string[] | null;
+  activeId: string | null;
+  onPick: (t: StudioTemplate) => void;
+}) {
   const [list, setList] = useState<StudioTemplate[] | null>(null);
   useEffect(() => {
     let live = true;
-    loadTemplates().then(
+    loadTemplates(media).then(
       (l) => live && setList(l),
       () => live && setList([]),
     );
     return () => {
       live = false;
     };
-  }, []);
-  const shown = (list ?? []).filter((t) => modelIds.includes(t.modelId));
+  }, [media]);
+  const shown = (list ?? []).filter((t) => modelIds === null || modelIds.includes(t.modelId));
   if (shown.length === 0) return null;
   return (
     <section aria-label="Shablonlar" data-studio-templates className="mb-3">

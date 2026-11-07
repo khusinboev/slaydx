@@ -9,7 +9,11 @@ import { Card, Row, Segmented, SelectField } from "@/components/forms/compact";
 import { Counter, Field } from "@/components/forms/shared";
 import { PhotoField } from "@/components/forms/PhotoField";
 import { ENHANCE_MIN } from "@/lib/media/enhance";
-import { EnhanceTool, PromptBytesNote } from "../PromptBox";
+import { EnhanceTool, PromptBytesNote, SamplesTool } from "../PromptBox";
+import { LibrarySheet } from "../LibrarySheet";
+import { TemplateSlots, TemplatesRow } from "../TemplatesRow";
+import { applyVideoTemplate, videoTemplateTarget } from "../studio-modes";
+import { fillSkeleton, type StudioTemplate } from "@/lib/media/library";
 import { usePromptEnhance } from "../usePromptEnhance";
 import { photoHint } from "@/lib/photo-accept";
 import { CatalogState } from "../CatalogState";
@@ -54,6 +58,8 @@ export type VideoTabState = {
    * a start image while it is set (removing the frame lifts the filter).
    */
   fromPicture?: boolean;
+  /** The chosen «Shablonlar» card and its slot values; typing in the prompt box leaves it. Never part of a draft. */
+  template?: { t: StudioTemplate; slots: Record<string, string> } | null;
 };
 
 export const INITIAL_VIDEO_STATE: VideoTabState = { mode: null, chosen: null, raw: {}, effect: null, effectImage: "", effectImage2: "" };
@@ -208,12 +214,15 @@ export function VideoTab({
 
   const patch = (change: Partial<VideoTabState>) => setState((s) => ({ ...s, ...change }));
   const setParam = (name: string, value: unknown) => setState((s) => ({ ...s, raw: { ...s.raw, [name]: value } }));
+  /** Typing the prompt by hand leaves the template (its slots would overwrite the text). */
+  const setPrompt = (value: string) => setState((s) => ({ ...s, template: null, raw: { ...s.raw, [PROMPT_PARAM]: value } }));
   const { enhance, enhancing } = usePromptEnhance(
     "video",
     () => String(state.raw[PROMPT_PARAM] ?? "").replace(/\s+/g, " ").trim(),
-    (v) => setParam(PROMPT_PARAM, textModel ? v.slice(0, promptLimit(textModel)) : v),
+    (v) => setPrompt(textModel ? v.slice(0, promptLimit(textModel)) : v),
     setError,
   );
+  const [libraryOpen, setLibraryOpen] = useState(false);
 
   const [switchText, setSwitchText] = useState<string | null>(null);
   function selectModel(id: string) {
@@ -223,6 +232,30 @@ export function VideoTab({
     setSwitchText(model && model.id !== next.id ? switchNotice(model, next, state.raw) : null);
     // The photos stay across a model switch (`carryOver` keeps the end frame when the new model takes one).
     setState((s) => ({ ...s, chosen: id, raw: { ...carryOver(next, s.raw), ...(s.raw[IMAGE_PARAM] ? { [IMAGE_PARAM]: s.raw[IMAGE_PARAM] } : {}) } }));
+  }
+
+  /**
+   * «Shablonlar»: the suggested model when the admin keeps it on, else the model on screen, so a template works whichever
+   * models are sold. What the new model cannot take is dropped; the fallback says which model the card landed on.
+   */
+  function pickTemplate(t: StudioTemplate) {
+    const target = videoTemplateTarget(split.models, t.modelId, model?.id ?? null);
+    if (!target) return;
+    setError(null);
+    setSwitchText(target.id === t.modelId ? null : `«${t.title}» shabloni ${target.label} modelida ishlaydi: tavsiya etilgan model hozir mavjud emas.`);
+    setState((s) => ({
+      ...s,
+      chosen: target.id,
+      template: { t, slots: {} },
+      raw: { ...applyVideoTemplate(target, t, {}, s.raw), ...(s.raw[IMAGE_PARAM] ? { [IMAGE_PARAM]: s.raw[IMAGE_PARAM] } : {}) },
+    }));
+  }
+
+  function setSlot(name: string, value: string) {
+    const held = state.template;
+    if (!held || !model) return;
+    const slots = { ...held.slots, [name]: value };
+    setState((s) => ({ ...s, template: { t: held.t, slots }, raw: { ...s.raw, [PROMPT_PARAM]: fillSkeleton(held.t.skeleton, held.t.slots, slots).slice(0, promptLimit(model)) } }));
   }
 
   async function send(target: ClientEntry, values: Record<string, unknown>, label: string) {
@@ -459,13 +492,16 @@ export function VideoTab({
           {avatar && (ownAudio || photoAvatar) ? null : (
             <VideoPromptBox
               value={String(state.raw[PROMPT_PARAM] ?? "")}
-              onChange={(v) => setParam(PROMPT_PARAM, v)}
+              onChange={setPrompt}
               limit={promptLimit(textModel)}
               bytes={promptBytes([textModel], String(state.raw[PROMPT_PARAM] ?? ""))}
-              {...(avatar ? {} : { onEnhance: () => void enhance(), enhancing })}
+              {...(avatar ? {} : { onEnhance: () => void enhance(), enhancing, onSamples: () => setLibraryOpen(true) })}
               {...(avatar ? { label: "Avatar nima desin?", placeholder: "Masalan: Assalomu alaykum! Bugun sizga yangi kursimiz haqida gapirib beraman." } : {})}
             />
           )}
+          {avatar ? null : <TemplatesRow media="video" modelIds={null} activeId={state.template?.t.id ?? null} onPick={pickTemplate} />}
+          {state.template && !avatar ? <TemplateSlots template={state.template.t} values={state.template.slots} onChange={setSlot} onClose={() => patch({ template: null })} /> : null}
+          {libraryOpen ? <LibrarySheet media="video" onPick={(p) => setPrompt(p.slice(0, promptLimit(textModel)))} onClose={() => setLibraryOpen(false)} /> : null}
           <MediaModelPicker
             purpose={STUDIO_VIDEO_PURPOSE}
             catalog={{ ...catalog, models: split.models }}
@@ -616,6 +652,7 @@ function VideoPromptBox({
   placeholder = "Masalan: Tong chog‘ida Registon maydoni, kamera sekin yaqinlashadi",
   onEnhance,
   enhancing = false,
+  onSamples,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -627,6 +664,8 @@ function VideoPromptBox({
   /** Absent for an avatar script: there the words are the product. */
   onEnhance?: () => void;
   enhancing?: boolean;
+  /** «Namuna promptlar» (absent for an avatar script). */
+  onSamples?: () => void;
 }) {
   const id = useId();
   return (
@@ -650,6 +689,7 @@ function VideoPromptBox({
       </Field>
       {onEnhance ? (
         <div className="mt-2 flex flex-wrap gap-1.5" data-prompt-tools>
+          {onSamples ? <SamplesTool onClick={onSamples} /> : null}
           <EnhanceTool disabled={value.trim().length < ENHANCE_MIN} enhancing={enhancing} onClick={onEnhance} />
         </div>
       ) : null}

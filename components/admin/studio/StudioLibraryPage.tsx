@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { LIBRARY_MEDIA, MEDIA_LABEL, TEMPLATE_MEDIA, type LibraryMedia, type TemplateMedia } from "@/lib/media/library";
 import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCan } from "@/components/admin/shell";
 import { Badge, Button, Card, CardHeader, ConfirmDialog, EmptyState, ErrorState, Forbidden, Modal, Skeleton, TabPanel, Tabs, toast, useLoad } from "@/components/admin/ui";
@@ -26,14 +27,16 @@ const INPUT = "bg-background focus-visible:ring-ring h-10 w-full rounded-lg bord
 const AREA = "bg-background focus-visible:ring-ring w-full rounded-lg border px-3 py-2 text-[14px] outline-none focus-visible:ring-2";
 
 type Kind = "prompts" | "templates";
+
+const MEDIA_OPTIONS = LIBRARY_MEDIA.map((m) => ({ id: m, label: MEDIA_LABEL[m] }));
 type Pending =
   | { type: "toggle"; kind: Kind; id: string; title: string; enabled: boolean; updatedAt: string }
   | { type: "delete"; kind: Kind; id: string; title: string; updatedAt: string }
   | { type: "move"; kind: Kind; ids: string[]; title: string };
 
 /**
- * `/admin/studio` «Studio kutubxonasi» (docs/studio/P2B-SPEC.md): the Studio's prompt library («Namuna promptlar») and
- * image templates («Shablonlar»). `settings.view` reads, `settings.edit` (step-up) writes; every write asks for a
+ * `/admin/studio` «Studio kutubxonasi» (docs/studio/P2B-SPEC.md, P11-SPEC.md package G): the Studio's prompt library
+ * («Namuna promptlar») and templates («Shablonlar») of every kind: picture, clip, music, sound effect. `settings.view` reads, `settings.edit` (step-up) writes; every write asks for a
  * reason and is audited by the server, which also validates templates against the model's ParamSchema (the error
  * shows inline). Hiding the edit controls without the permission is cosmetic only.
  */
@@ -45,6 +48,7 @@ export function StudioLibraryPage() {
   const [state, reload] = useLoad<LibraryOverview>(loadLibrary);
   const [tab, setTab] = useState<Kind>("prompts");
   const [category, setCategory] = useState("");
+  const [media, setMedia] = useState<LibraryMedia>("image");
   const [editPrompt, setEditPrompt] = useState<AdminPrompt | "new" | null>(null);
   const [editTemplate, setEditTemplate] = useState<AdminTemplate | "new" | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
@@ -69,7 +73,9 @@ export function StudioLibraryPage() {
   }
   const data = state.data;
   const catLabel = (id: string) => data.categories.find((c) => c.id === id)?.label ?? id;
-  const prompts = data.prompts.filter((p) => !category || p.category === category);
+  const prompts = data.prompts.filter((p) => p.media === media && (!category || p.category === category));
+  const templates = data.templates.filter((t) => t.media === media);
+  const mediaCategories = data.categories.filter((c) => c.media === media);
 
   /** Swaps a row with its neighbour inside the visible list (prompts: one category). */
   function move(kind: Kind, list: readonly { id: string; title: string }[], index: number, dir: -1 | 1) {
@@ -118,20 +124,43 @@ export function StudioLibraryPage() {
       <header className="flex flex-col gap-1">
         <h1 className="text-[22px] font-semibold tracking-tight">Studio kutubxonasi</h1>
         <p className="text-muted-foreground text-[13px]">
-          Studio «Rasm» bo&apos;limidagi «Namuna promptlar» va «Shablonlar». Shablon parametrlari model katalogi bo&apos;yicha tekshiriladi; modeli hozir mavjud
-          bo&apos;lmagan shablon foydalanuvchiga ko&apos;rinmaydi.{canEdit ? "" : " Sizda faqat ko'rish huquqi bor."}
+          Studio bo&apos;limlaridagi «Namuna promptlar» va «Shablonlar». Shablon parametrlari model katalogi bo&apos;yicha tekshiriladi. Modeli hozir mavjud
+          bo&apos;lmagan rasm shabloni foydalanuvchiga ko&apos;rinmaydi; video shabloni esa joriy modelda ishlaydi.{canEdit ? "" : " Sizda faqat ko'rish huquqi bor."}
         </p>
       </header>
       <Tabs
         idPrefix={ID}
         ariaLabel="Kutubxona bo'limlari"
         value={tab}
-        onChange={(v) => setTab(v as Kind)}
+        onChange={(v) => {
+          setTab(v as Kind);
+          // Music and sound effects have no templates: the list would be empty with no way to see why.
+          if (v === "templates" && !(TEMPLATE_MEDIA as readonly string[]).includes(media)) setMedia("image");
+        }}
         tabs={[
           { id: "prompts", label: "Namuna promptlar", badge: data.prompts.length },
           { id: "templates", label: "Shablonlar", badge: data.templates.length },
         ]}
       />
+      <label className="flex max-w-xs flex-col gap-1 text-[13px] font-medium">
+        Turi
+        <select
+          aria-label="Turi"
+          data-lib-media
+          className={INPUT}
+          value={media}
+          onChange={(e) => {
+            setMedia(e.target.value as LibraryMedia);
+            setCategory("");
+          }}
+        >
+          {MEDIA_OPTIONS.filter((m) => tab === "prompts" || (TEMPLATE_MEDIA as readonly string[]).includes(m.id)).map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </label>
       {tab === "prompts" ? (
         <TabPanel idPrefix={ID} id="prompts">
           <Card>
@@ -142,7 +171,7 @@ export function StudioLibraryPage() {
                 <div className="flex items-center gap-2">
                   <select aria-label="Toifa" className={INPUT + " w-44"} value={category} onChange={(e) => setCategory(e.target.value)}>
                     <option value="">Barcha toifalar</option>
-                    {data.categories.map((c) => (
+                    {mediaCategories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.label}
                       </option>
@@ -188,16 +217,16 @@ export function StudioLibraryPage() {
                 ) : null
               }
             />
-            {data.templates.length === 0 ? (
+            {templates.length === 0 ? (
               <EmptyState title="Shablon yo'q" description="Yangi shablon qo'shing." />
             ) : (
               <ul>
-                {data.templates.map((t, i) => (
+                {templates.map((t, i) => (
                   <li key={t.id} data-lib-template={t.id} className="flex flex-wrap items-start justify-between gap-3 border-t px-4 py-3 first:border-t-0">
                     <div className="min-w-0 flex-1">
                       <p className="text-[14px] font-semibold">
                         {t.title} <Badge tone="neutral">{catLabel(t.category)}</Badge> <Badge tone="info">{t.modelLabel ?? t.modelId}</Badge>{" "}
-                        {t.enabled ? null : <Badge tone="warning">o&apos;chiq</Badge>} {t.modelAvailable ? null : <Badge tone="warning">model mavjud emas</Badge>}
+                        {t.enabled ? null : <Badge tone="warning">o&apos;chiq</Badge>} {t.modelAvailable ? null : <Badge tone={t.media === "video" ? "neutral" : "warning"}>{t.media === "video" ? "joriy modelda ishlaydi" : "model mavjud emas"}</Badge>}
                       </p>
                       <p className="text-muted-foreground mt-0.5 line-clamp-2 text-[13px]">{t.skeleton}</p>
                       {t.error ? (
@@ -206,7 +235,7 @@ export function StudioLibraryPage() {
                         </p>
                       ) : null}
                     </div>
-                    {rowActions("templates", t, data.templates, i, () => setEditTemplate(t))}
+                    {rowActions("templates", t, templates, i, () => setEditTemplate(t))}
                   </li>
                 ))}
               </ul>
@@ -215,8 +244,8 @@ export function StudioLibraryPage() {
         </TabPanel>
       )}
 
-      {editPrompt ? <PromptDialog item={editPrompt === "new" ? null : editPrompt} data={data} onClose={() => setEditPrompt(null)} onSaved={() => (setEditPrompt(null), reload())} /> : null}
-      {editTemplate ? <TemplateDialog item={editTemplate === "new" ? null : editTemplate} data={data} onClose={() => setEditTemplate(null)} onSaved={() => (setEditTemplate(null), reload())} /> : null}
+      {editPrompt ? <PromptDialog item={editPrompt === "new" ? null : editPrompt} media={media} data={data} onClose={() => setEditPrompt(null)} onSaved={() => (setEditPrompt(null), reload())} /> : null}
+      {editTemplate ? <TemplateDialog item={editTemplate === "new" ? null : editTemplate} media={media === "video" ? "video" : "image"} data={data} onClose={() => setEditTemplate(null)} onSaved={() => (setEditTemplate(null), reload())} /> : null}
       <ConfirmDialog
         open={pending !== null}
         onClose={() => setPending(null)}
@@ -318,21 +347,41 @@ function useSave(run: () => Promise<unknown>, onSaved: () => void) {
   return { busy, error, save, setError };
 }
 
-function PromptDialog({ item, data, onClose, onSaved }: { item: AdminPrompt | null; data: LibraryOverview; onClose: () => void; onSaved: () => void }) {
-  const [category, setCategory] = useState(item?.category ?? data.categories[0]?.id ?? "");
+function PromptDialog({ item, media: listed, data, onClose, onSaved }: { item: AdminPrompt | null; media: LibraryMedia; data: LibraryOverview; onClose: () => void; onSaved: () => void }) {
+  const [media, setMedia] = useState<LibraryMedia>(item?.media ?? listed);
+  const categories = data.categories.filter((c) => c.media === media);
+  const [category, setCategory] = useState(item?.category ?? categories[0]?.id ?? "");
   const [title, setTitle] = useState(item?.title ?? "");
   const [prompt, setPrompt] = useState(item?.prompt ?? "");
   const [enabled, setEnabled] = useState(item?.enabled ?? true);
   const [preview, setPreview] = useState<{ id: string | null; url: string | null }>({ id: item?.previewId ?? null, url: item?.previewUrl ?? null });
   const [reason, setReason] = useState("");
-  const body = { category, title, prompt, enabled, previewId: preview.id, reason: reason.trim() };
+  const body = { media, category, title, prompt, enabled, previewId: preview.id, reason: reason.trim() };
   const { busy, error, save } = useSave(() => (item ? updatePrompt(item.id, { ...body, expectedUpdatedAt: item.updatedAt }) : createPrompt(body)), onSaved);
   return (
     <Modal open onClose={onClose} dismissible={!busy} title={item ? "Promptni tahrirlash" : "Yangi prompt"} footer={<SaveFooter busy={busy} error={error} onSave={save} onClose={onClose} disabled={reason.trim().length < 5} />}>
       <div className="flex flex-col gap-3" data-lib-prompt-dialog>
+        <Labeled label="Turi">
+          <select
+            className={INPUT}
+            value={media}
+            data-lib-prompt-media
+            onChange={(e) => {
+              const next = e.target.value as LibraryMedia;
+              setMedia(next);
+              setCategory(data.categories.find((c) => c.media === next)?.id ?? "");
+            }}
+          >
+            {MEDIA_OPTIONS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </Labeled>
         <Labeled label="Toifa">
           <select className={INPUT} value={category} onChange={(e) => setCategory(e.target.value)}>
-            {data.categories.map((c) => (
+            {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}
               </option>
@@ -359,6 +408,9 @@ function PromptDialog({ item, data, onClose, onSaved }: { item: AdminPrompt | nu
   );
 }
 
+/** A new template's starting presets. */
+const DEFAULT_PARAMS: Readonly<Record<TemplateMedia, Record<string, unknown>>> = { image: { imageRatio: "1:1", imageCount: 1 }, video: { seconds: 5, aspect: "16:9" } };
+
 function parseJson(text: string, label: string): unknown {
   try {
     return JSON.parse(text);
@@ -367,11 +419,14 @@ function parseJson(text: string, label: string): unknown {
   }
 }
 
-function TemplateDialog({ item, data, onClose, onSaved }: { item: AdminTemplate | null; data: LibraryOverview; onClose: () => void; onSaved: () => void }) {
-  const [category, setCategory] = useState(item?.category ?? data.categories[0]?.id ?? "");
+function TemplateDialog({ item, media: listed, data, onClose, onSaved }: { item: AdminTemplate | null; media: TemplateMedia; data: LibraryOverview; onClose: () => void; onSaved: () => void }) {
+  const [media, setMedia] = useState<TemplateMedia>(item?.media ?? listed);
+  const categories = data.categories.filter((c) => c.media === media);
+  const models = data.models.filter((m) => m.media === media);
+  const [category, setCategory] = useState(item?.category ?? categories[0]?.id ?? "");
   const [title, setTitle] = useState(item?.title ?? "");
-  const [modelId, setModelId] = useState(item?.modelId ?? data.models[0]?.id ?? "");
-  const [params, setParams] = useState(JSON.stringify(item?.params ?? { imageRatio: "1:1", imageCount: 1 }, null, 2));
+  const [modelId, setModelId] = useState(item?.modelId ?? models[0]?.id ?? "");
+  const [params, setParams] = useState(JSON.stringify(item?.params ?? DEFAULT_PARAMS[media], null, 2));
   const [skeleton, setSkeleton] = useState(item?.skeleton ?? "");
   const [slots, setSlots] = useState(JSON.stringify(item?.slots ?? [{ name: "mavzu", label: "Mavzu", placeholder: "", max: 60 }], null, 2));
   const [enabled, setEnabled] = useState(item?.enabled ?? true);
@@ -380,6 +435,7 @@ function TemplateDialog({ item, data, onClose, onSaved }: { item: AdminTemplate 
   const model = data.models.find((m) => m.id === modelId);
   const { busy, error, save } = useSave(async () => {
     const body = {
+      media,
       category,
       title,
       modelId,
@@ -396,19 +452,39 @@ function TemplateDialog({ item, data, onClose, onSaved }: { item: AdminTemplate 
   return (
     <Modal open size="lg" onClose={onClose} dismissible={!busy} title={item ? "Shablonni tahrirlash" : "Yangi shablon"} footer={<SaveFooter busy={busy} error={error} onSave={save} onClose={onClose} disabled={reason.trim().length < 5} />}>
       <div className="flex flex-col gap-3" data-lib-template-dialog>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Labeled label="Turi">
+            <select
+              className={INPUT}
+              value={media}
+              data-lib-template-media
+              onChange={(e) => {
+                const next = e.target.value as TemplateMedia;
+                setMedia(next);
+                setCategory(data.categories.find((c) => c.media === next)?.id ?? "");
+                setModelId(data.models.find((m) => m.media === next)?.id ?? "");
+                setParams(JSON.stringify(DEFAULT_PARAMS[next], null, 2));
+              }}
+            >
+              {TEMPLATE_MEDIA.map((m) => (
+                <option key={m} value={m}>
+                  {MEDIA_LABEL[m]}
+                </option>
+              ))}
+            </select>
+          </Labeled>
           <Labeled label="Toifa">
             <select className={INPUT} value={category} onChange={(e) => setCategory(e.target.value)}>
-              {data.categories.map((c) => (
+              {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.label}
                 </option>
               ))}
             </select>
           </Labeled>
-          <Labeled label="Model">
+          <Labeled label={media === "video" ? "Tavsiya etilgan model" : "Model"}>
             <select className={INPUT} value={modelId} onChange={(e) => setModelId(e.target.value)} data-lib-model>
-              {data.models.map((m) => (
+              {models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
                   {m.available ? "" : " (hozir mavjud emas)"}
@@ -426,7 +502,7 @@ function TemplateDialog({ item, data, onClose, onSaved }: { item: AdminTemplate 
         <Labeled label="Prompt skeleti ({slot} bilan)">
           <AutoTextarea className={AREA} value={skeleton} maxLength={500} minRows={2} onChange={(e) => setSkeleton(e.target.value)} />
         </Labeled>
-        <Labeled label='Slotlar (JSON: [{"name","label","placeholder","max"}])'>
+        <Labeled label='Slotlar (JSON: [{"name","label","placeholder","max","fallback"}]; fallback — bo&apos;sh qolgan slot o&apos;rniga inglizcha matn)'>
           <AutoTextarea className={AREA + " font-mono"} value={slots} minRows={3} onChange={(e) => setSlots(e.target.value)} />
         </Labeled>
         <label className="flex items-center gap-2 text-[13px]">

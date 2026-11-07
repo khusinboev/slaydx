@@ -29,10 +29,10 @@ afterEach(() => {
 });
 
 const OVERVIEW: LibraryOverview = {
-  categories: [{ id: "portret", label: "Portret" }],
-  models: [{ id: "google/nano-banana", label: "Nano Banana", available: true, params: [] }],
+  categories: [{ id: "portret", label: "Portret", media: "image" }],
+  models: [{ id: "google/nano-banana", media: "image", label: "Nano Banana", available: true, params: [] }],
   prompts: [
-    { id: "p1", category: "portret", title: "Studiya portreti", prompt: "studio portrait, soft light", previewId: null, previewUrl: null, sort: 10, enabled: true, updatedAt: "2026-11-03T10:00:00Z" },
+    { id: "p1", media: "image", category: "portret", title: "Studiya portreti", prompt: "studio portrait, soft light", previewId: null, previewUrl: null, sort: 10, enabled: true, updatedAt: "2026-11-03T10:00:00Z" },
   ],
   templates: [],
 };

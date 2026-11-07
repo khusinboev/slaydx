@@ -31,6 +31,16 @@ export function EnhanceTool({ disabled, enhancing, onClick }: { disabled: boolea
   );
 }
 
+/** «Namuna promptlar»: one button for every prompt box that has a library. */
+export function SamplesTool({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" data-prompt-tool="samples" onClick={onClick} className={TOOL}>
+      <BookOpen className="size-4" aria-hidden />
+      Namuna promptlar
+    </button>
+  );
+}
+
 /**
  * The prompt box of the Studio (canvas «Nimani chizamiz?»): a card with a growing textarea (`AutoTextarea`, no resize
  * handle) and the character counter. `limit` is the `max` of the chosen model's `prompt` text param. The text is kept
@@ -90,12 +100,7 @@ export function PromptBox({
       </Field>
       {tools ? (
         <div className="mt-2 flex flex-wrap gap-1.5" data-prompt-tools>
-          {onSamples ? (
-            <button type="button" data-prompt-tool="samples" onClick={onSamples} className={TOOL}>
-              <BookOpen className="size-4" aria-hidden />
-              Namuna promptlar
-            </button>
-          ) : null}
+          {onSamples ? <SamplesTool onClick={onSamples} /> : null}
           {onUpload ? (
             <>
               <button type="button" data-prompt-tool="upload" disabled={uploading} onClick={() => fileRef.current?.click()} className={TOOL}>
