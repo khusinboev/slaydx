@@ -296,7 +296,8 @@ test("golden: sound effects, clean audio, the two speech models", () => {
   assert.deepEqual(bodyOf(au.FAL_SFX_MODEL, { prompt: "eshik ochiladi", duration: 4, influence: "0.8", loop: true }), { text: "eshik ochiladi", duration_seconds: 4, prompt_influence: 0.8, loop: true, output_format: "mp3_44100_128" });
   assert.deepEqual(bodyOf(au.VEED_CLEAN_MODEL, { inputId: "a".repeat(24), inputSeconds: 10 }, MP3_ASSET), { audio_url: storage.FAL_FILE_PENDING, strength: 0.874, output_format: "wav" });
   const speech = { text: "Salom", voice: RACHEL, stability: "0.5", lang: "uz" };
-  assert.deepEqual(bodyOf(sp.FAL_ELEVEN_V3_MODEL, speech), { text: "Salom", voice: "Rachel", stability: 0.5, language_code: "uz", apply_text_normalization: "auto" });
+  assert.deepEqual(bodyOf(sp.FAL_ELEVEN_V3_MODEL, speech), { text: "Salom", voice: "Rachel", stability: 0.5, apply_text_normalization: "auto" }, "v3 refuses `uz` live");
+  assert.equal(bodyOf(sp.FAL_ELEVEN_V3_MODEL, { ...speech, lang: "ru" }).language_code, "ru", "another language keeps its code");
   assert.deepEqual(bodyOf(sp.FAL_ELEVEN_V4_TURBO_MODEL, speech), { text: "Salom", voice: "Rachel", stability: 0.5, language_code: "uz", apply_text_normalization: "auto", output_format: "mp3_44100_128" });
 });
 

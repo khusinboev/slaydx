@@ -80,6 +80,16 @@ function speechBody(p: NormalizedParams): Record<string, unknown> {
   };
 }
 
+/**
+ * Live 2026-11-07: Eleven v3 on fal answers 422 «Unsupported language code: uz», while v4 Turbo takes it. Uzbek goes
+ * without a code on v3: the model reads the language from the text.
+ */
+function v3SpeechBody(p: NormalizedParams): Record<string, unknown> {
+  const body = speechBody(p);
+  if (body.language_code === "uz") delete body.language_code;
+  return body;
+}
+
 export const FAL_AUDIO_MODELS: Readonly<Record<string, FalModel>> = {
   // https://fal.ai/models/fal-ai/elevenlabs/speech-to-text/scribe-v2/llms.txt (2026-11-06). `tag_audio_events` and `diarize`
   // default to true there; both are sent. `keyterms` is not offered (it adds 30 % to the price).
@@ -116,7 +126,7 @@ export const FAL_AUDIO_MODELS: Readonly<Record<string, FalModel>> = {
   },
   // https://fal.ai/models/fal-ai/elevenlabs/tts/eleven-v3/llms.txt (2026-11-06): no `output_format`, the example is an .mp3
   // URL, the format itself is not stated (UNVERIFIED; anything else fails the sniff and refunds).
-  [FAL_ELEVEN_V3_ENDPOINT]: { resultFile: "audio", retentionSec: FAL_RETENTION_SEC, output: AUDIO_MP3, body: speechBody },
+  [FAL_ELEVEN_V3_ENDPOINT]: { resultFile: "audio", retentionSec: FAL_RETENTION_SEC, output: AUDIO_MP3, body: v3SpeechBody },
   // https://fal.ai/models/elevenlabs/tts/eleven-v4-turbo/llms.txt (2026-11-06): up to 5 000 characters per request.
   [FAL_ELEVEN_V4_TURBO_ENDPOINT]: { resultFile: "audio", retentionSec: FAL_RETENTION_SEC, output: AUDIO_MP3, body: (p) => ({ ...speechBody(p), output_format: MP3_FORMAT }) },
 };
