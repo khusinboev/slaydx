@@ -74,6 +74,17 @@ test("conditional rows: blank paper has cells but no margin line; lined paper ha
   assert.ok(!fields().includes("handCells") && fields().includes("handMargin"));
 });
 
+test("the paper for a real notebook says plainly that the file has no grid; the other papers say nothing", async () => {
+  stubApi();
+  await login();
+  mount();
+  assert.ok(!document.querySelector("[data-print-paper-note]"), "the default grid paper");
+  await pick("Qog‘oz", "Kataksiz (chop uchun)");
+  assert.match(document.querySelector("[data-print-paper-note]")?.textContent ?? "", /katak chizilmaydi.*«Katakli»/is);
+  await pick("Qog‘oz", "Katakli");
+  assert.ok(!document.querySelector("[data-print-paper-note]"));
+});
+
 test("submit: defaults reach the server (grid, A5×2, alternate, 1 cell, lively), the tier sets the price, the topic falls back to the file name", async () => {
   const calls = stubApi();
   await login();

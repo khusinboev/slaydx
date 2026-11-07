@@ -42,7 +42,7 @@ export const HAND_INK_HEX: Record<HandInk, string> = { blue: "1B3AA6", black: "1
  */
 export const HAND_PAPERS = ["lined", "grid", "blank", "print"] as const;
 export type HandPaper = (typeof HAND_PAPERS)[number];
-export const HAND_PAPER_LABELS: Record<HandPaper, string> = { lined: "Chiziqli", grid: "Katakli", blank: "Oq qog‘oz", print: "Daftarga chop etish" };
+export const HAND_PAPER_LABELS: Record<HandPaper, string> = { lined: "Chiziqli", grid: "Katakli", blank: "Oq qog‘oz", print: "Kataksiz (chop uchun)" };
 
 /** Sheet format. `a5x2` = two A5 pages side by side on one A4 landscape sheet (export wrapper only, 100 % scale). */
 export const HAND_FORMATS = ["a4", "a5", "a5x2"] as const;
