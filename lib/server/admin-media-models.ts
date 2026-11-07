@@ -145,7 +145,7 @@ export async function mediaModelsOverview(): Promise<MediaModelsOverview> {
       costSoum,
       providerReady: entry.routes.some((r) => isProviderEnabled(r.provider) && keyUsable(r.provider, getProviderKey(r.provider))),
       enabled: modelSwitchedOn(entry, o?.enabled),
-      available: modelAvailable(id, overrides),
+      available: modelAvailable(id, overrides, false),
       markupOverride: o?.markup ?? null,
       markup: markupOf(pricing, id),
       priceBase,

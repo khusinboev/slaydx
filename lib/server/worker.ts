@@ -53,7 +53,7 @@ import { refundRatio } from "../generation/delivered";
 import { cleanText, safeSlice } from "../generation/safe-text";
 import type { CostJson, Delivered } from "../generation/types";
 import { trackJobCost, type TrackedJobCost } from "../generation/job-cost";
-import { log, withFreshLogContext, type LogFields } from "./log";
+import { addLogContext, log, withFreshLogContext, type LogFields } from "./log";
 import { withMediaContext } from "../media/context";
 import { mediaCoreSwitches } from "./media/switches";
 import { providerOf, userMessage } from "./user-error";
@@ -445,6 +445,11 @@ const inflight = new Map<string, { job: ClaimedJob; ctl: RunCtl; done: Promise<v
  * Bitta claimni bajaradi. Promise qurilish tugaganda YOKI qattiq muddat
  * o'tganda qaytadi — shu paytda slot bo'shaydi (`tick` `running--`).
  */
+async function isAdminUser(userId: string): Promise<boolean> {
+  const row = await queryOne<{ admin: boolean }>("SELECT EXISTS (SELECT 1 FROM admin_accounts WHERE user_id = $1 AND status IN ('active', 'pending')) AS admin", [userId]);
+  return row?.admin === true;
+}
+
 export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<void> {
   const ctl: RunCtl = { abandoned: false, assetWrites: new Set(), hardStopAt: Number.POSITIVE_INFINITY };
   // Shu ish ichidagi HAR jurnal qatori (`credits.ts` refund va h.k.) `jobId`/`userId` ni o'zi oladi (OBS-02).
@@ -460,6 +465,8 @@ export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<vo
 async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): Promise<void> {
   const build = opts.build ?? buildArtifact;
   const tool = TOOL_BY_ID[job.toolId as ToolId];
+  // An admin's Studio job may name a model still off for everyone (`media/availability.ts`): the worker re-checks it.
+  if (job.toolId.startsWith("studio-") && (await isAdminUser(job.userId))) addLogContext({ adminPreview: true });
   log("info", "[worker] ish olindi", {
     jobId: job.id,
     userId: job.userId,

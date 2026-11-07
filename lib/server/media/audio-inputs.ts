@@ -4,6 +4,7 @@ import { ApiError } from "../api";
 import { query, queryOne, transaction } from "../db";
 import { getSetting } from "../settings";
 import { readUploadForm } from "../upload-body";
+import { inAdminPreview } from "../log";
 import { availableModels } from "./availability";
 import { assertOwnCloneIds, cloneJobCtx, sniffAudio } from "./voices";
 import { AUDIO_INPUT_MAX_BYTES, AUDIO_INPUT_USER_MAX_BYTES, AUDIO_INPUT_MAX_SECONDS, AUDIO_INPUT_MIN_SECONDS, AUDIO_MODES, takesAudioInput } from "../../media/catalog-audio";
@@ -113,8 +114,8 @@ export async function uploadAudioInput(req: Request, userId: string): Promise<Au
   const tool = form?.get("tool");
   const on = {
     audio: await getSetting("studio.audio.enabled"),
-    transcribe: await getSetting("studio.transcribe.enabled"),
-    dub: await getSetting("studio.dub.enabled"),
+    transcribe: inAdminPreview() || (await getSetting("studio.transcribe.enabled")),
+    dub: inAdminPreview() || (await getSetting("studio.dub.enabled")),
   };
   const open = !video ? on.audio || on.transcribe || on.dub : tool === "dub" ? on.dub : tool === "transcribe" ? on.transcribe : on.dub || on.transcribe;
   if (!open) throw new ApiError(`${what} yuklash hozircha mavjud emas.`, 400, { code: "tool_off" });

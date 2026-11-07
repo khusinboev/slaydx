@@ -1,5 +1,6 @@
 import "server-only";
 import { MEDIA_CATALOG, MEDIA_PURPOSES } from "../../media/catalog";
+import { inAdminPreview } from "../log";
 import type { CatalogEntry } from "../../studio-core";
 import { getProviderKey, isProviderEnabled } from "../providers/resolve";
 import { keyUsable } from "../providers/registry";
@@ -7,6 +8,14 @@ import { ensureProviderKeys } from "../providers/store";
 import { mediaOverrides, type OverrideMap } from "./overrides";
 import { getSetting } from "../settings";
 import { STUDIO_VIDEO_PURPOSE } from "../../media/catalog-video";
+
+/**
+ * A `defaultOff` model nobody has decided on: an admin can try it on their own account before it is switched on for
+ * everyone. `inAdminPreview` holds only inside an admin's request or job. A model the admin stored as off stays off.
+ */
+export function inPreview(entry: CatalogEntry, enabled: boolean | null | undefined): boolean {
+  return entry.defaultOff === true && (enabled === null || enabled === undefined);
+}
 
 /** The admin's switch of a model; `enabled` is its override, absent or null while untouched. */
 export function modelSwitchedOn(entry: CatalogEntry, enabled: boolean | null | undefined): boolean {
@@ -21,10 +30,11 @@ export function modelSwitchedOn(entry: CatalogEntry, enabled: boolean | null | u
  * ONE function for both sides: `GET /api/media/catalog` lists only what passes, and `submitGeneration` refuses (400,
  * nothing charged) what does not — a stale page or a direct POST cannot buy a model the admin hid.
  */
-export function modelAvailable(modelId: string, overrides: OverrideMap): boolean {
+export function modelAvailable(modelId: string, overrides: OverrideMap, preview: boolean = inAdminPreview()): boolean {
   const entry = MEDIA_CATALOG.byId(modelId);
   if (!entry) return false;
-  if (!modelSwitchedOn(entry, overrides.get(modelId)?.enabled)) return false;
+  const enabled = overrides.get(modelId)?.enabled;
+  if (!modelSwitchedOn(entry, enabled) && !(preview && inPreview(entry, enabled))) return false;
   return entry.routes.some((r) => isProviderEnabled(r.provider) && keyUsable(r.provider, getProviderKey(r.provider)));
 }
 

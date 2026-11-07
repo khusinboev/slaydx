@@ -88,6 +88,9 @@ export function handOfForm(form: HandForm, caps: ReadonlySet<HandParamId>): Work
   return restrictHand(normalizeHand(form), caps);
 }
 
+/** Why the sheet looks empty: this paper is for feeding a real notebook into a printer. */
+export const PRINT_PAPER_HINT = "Faylda katak chizilmaydi: matn haqiqiy 5 mm katakli daftarga printerda bosish uchun joylanadi. Faylning o‘zida katak kerak bo‘lsa, «Katakli»ni tanlang.";
+
 export function HandRows({ caps, value, onChange }: { caps: ReadonlySet<HandParamId>; value: HandForm; onChange: <K extends keyof HandForm>(key: K, v: HandForm[K]) => void }) {
   const has = (id: HandParamId) => caps.has(id);
   const effPaper = has("paper") ? value.paper : HAND_DEFAULTS.paper;
@@ -107,6 +110,11 @@ export function HandRows({ caps, value, onChange }: { caps: ReadonlySet<HandPara
               <Segmented ariaLabel="Qog‘oz" options={HAND_PAPERS.map((v) => ({ value: v, label: HAND_PAPER_LABELS[v] }))} value={value.paper} onChange={(v) => onChange("paper", v as HandPaper)} />
             </Field>
           </Row>
+        ) : null}
+        {has("paper") && effPaper === "print" ? (
+          <p className="text-muted-foreground px-1 pb-1 text-[13px] leading-snug" data-print-paper-note>
+            {PRINT_PAPER_HINT}
+          </p>
         ) : null}
         {has("format") ? (
           <Row label="Format" hint="A5 × 2 — bitta A4 yuziga ikkita A5 sahifa; 100 % o‘lchamda chop eting, katak va qatorlar o‘zgarmaydi" wide>

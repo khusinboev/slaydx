@@ -36,6 +36,8 @@ export type LogContext = {
   provider?: string;
   /** Tool of the running job (worker sets it), so LLM/engine lines carry it. */
   toolId?: string;
+  /** An active admin's request or job: `defaultOff` models are open to them (`media/availability.ts`). */
+  adminPreview?: boolean;
 };
 
 export type LogFields = LogContext & { err?: unknown; [key: string]: unknown };
@@ -64,6 +66,11 @@ export function withFreshLogContext<T>(ctx: LogContext, fn: () => T): T {
 export function addLogContext(ctx: LogContext): void {
   const cur = store.getStore();
   if (cur) Object.assign(cur, ctx);
+}
+
+/** Is this code running inside an admin's request or job? */
+export function inAdminPreview(): boolean {
+  return store.getStore()?.adminPreview === true;
 }
 
 export function currentLogContext(): LogContext {
