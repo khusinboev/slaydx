@@ -10,7 +10,7 @@ import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
 import { imageExt } from "@/lib/viewers/kind";
 import { FavoriteButton } from "./Favorite";
-import { AGAIN_LABEL, JobList, JobResult, RESULT_ACTION as ACTION } from "./JobResult";
+import { AGAIN_LABEL, JobList, JobResult, RESULT_ACTION as ACTION, SentPrompt } from "./JobResult";
 import { downloadStudioFile } from "./studio-download";
 import { MODE_LABEL, MODE_PURPOSE, TOOL_MODES, type StudioMode } from "./studio-modes";
 
@@ -170,6 +170,7 @@ function Pictures({
             <p className="text-muted-foreground mt-0.5 text-[12.5px]" data-studio-job-meta>
               {job.modelLabel} · {formatSom(job.price)}
             </p>
+            <SentPrompt text={gen.doc?.sentPrompt} />
           </div>
           <FavoriteButton id={job.id} onError={setFavError} />
         </div>

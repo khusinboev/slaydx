@@ -193,7 +193,7 @@ test("templates: offered models only; a tap applies model + values + slots; ever
   assert.equal(prompt()!.value, "olma sharbati reklamasi, yozgi bog'");
   await submit();
   const sent = api.posts()[0]!.body!;
-  assert.deepEqual(sent.values, { modelId: GPT.id, prompt: "olma sharbati reklamasi, yozgi bog'", imageRatio: "16:9", imageCount: 2, imageStyle: "photo" });
+  assert.deepEqual(sent.values, { modelId: GPT.id, prompt: "olma sharbati reklamasi, yozgi bog'", imageRatio: "16:9", imageCount: 2, imageStyle: "photo", aiImprove: true });
   assert.equal(sent.expectedPrice, expectedPrice(GPT, 2));
   // Typing the prompt by hand leaves the template.
   await type(prompt(), "boshqa tavsif matni");

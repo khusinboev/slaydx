@@ -1,13 +1,14 @@
 /**
- * Studio prompt library + image templates (docs/studio/PLAN.md §5.6, docs/studio/P2B-SPEC.md) — the shared rules the
- * server (public reads, admin writes) and the browser (sheet, template card) both use. Client-safe, pure.
+ * Studio prompt library + templates (docs/studio/PLAN.md §5.6, docs/studio/P2B-SPEC.md, docs/studio/P11-SPEC.md package G) —
+ * the shared rules the server (public reads, admin writes) and the browser (sheet, template card) both use. Client-safe, pure.
  *
  *   library item  a curated prompt by category; tapping it fills the prompt box.
- *   template      a Studio picture model + preset values of THAT model's ParamSchema + a prompt skeleton with `{slot}`
+ *   template      a Studio model + preset values of THAT model's ParamSchema + a prompt skeleton with `{slot}`
  *                 placeholders; each slot is a labelled input. Tapping it picks the model, applies the values and
- *                 builds the prompt from the slots (`fillSkeleton`).
+ *                 builds the prompt from the slots (`fillSkeleton`). A picture template is bound to its model; a clip
+ *                 template only suggests one and applies to the model on screen when that one is off.
  *
- * A template is valid only against the live catalog (`templateError`): its model is a Studio picture model, its preset
+ * A template is valid only against the live catalog (`templateError`): its model is a Studio model of its kind, its preset
  * values pass the model's own `validate` (an unknown ratio / style / count is refused, never mapped), it presets no
  * prompt, and its skeleton uses exactly the declared slots. The admin cannot save an invalid one; the public read
  * hides one that became invalid (catalog change) or whose model is unavailable right now.
@@ -27,12 +28,49 @@ export const LIBRARY_CATEGORIES = [
   { id: "illyustratsiya", label: "Illyustratsiya" },
 ] as const;
 
-export type LibraryCategory = (typeof LIBRARY_CATEGORIES)[number]["id"];
+/**
+ * What a library row is for (docs/studio/P11-SPEC.md, package G): the box it opens from. Prompts exist for all four kinds;
+ * templates for pictures and clips only (a music or effect job has no preset worth a template).
+ */
+export const LIBRARY_MEDIA = ["image", "video", "music", "sfx"] as const;
+export type LibraryMedia = (typeof LIBRARY_MEDIA)[number];
+export const TEMPLATE_MEDIA = ["image", "video"] as const;
+export type TemplateMedia = (typeof TEMPLATE_MEDIA)[number];
 
-export const isLibraryCategory = (v: unknown): v is LibraryCategory => typeof v === "string" && LIBRARY_CATEGORIES.some((c) => c.id === v);
+export const isLibraryMedia = (v: unknown): v is LibraryMedia => (LIBRARY_MEDIA as readonly unknown[]).includes(v);
+export const isTemplateMedia = (v: unknown): v is TemplateMedia => (TEMPLATE_MEDIA as readonly unknown[]).includes(v);
+
+export const MEDIA_LABEL: Readonly<Record<LibraryMedia, string>> = { image: "Rasm", video: "Video", music: "Musiqa", sfx: "Effekt" };
+
+/** The chips of each kind's sheet, in display order. An id means the same thing in every kind that uses it. */
+const CATEGORIES: Readonly<Record<LibraryMedia, readonly { id: string; label: string }[]>> = {
+  image: LIBRARY_CATEGORIES,
+  video: [
+    { id: "reklama", label: "Reklama" },
+    { id: "tabrik", label: "Tabrik" },
+    { id: "talim", label: "Ta'lim" },
+    { id: "tabiat", label: "Tabiat" },
+    { id: "sayohat", label: "Sayohat" },
+    { id: "shahar", label: "Shahar va madaniyat" },
+  ],
+  music: [
+    { id: "fon", label: "Fon musiqasi" },
+    { id: "reklama", label: "Reklama" },
+    { id: "milliy", label: "Milliy" },
+  ],
+  sfx: [
+    { id: "tabiat", label: "Tabiat" },
+    { id: "shahar", label: "Shahar va madaniyat" },
+    { id: "interfeys", label: "Interfeys" },
+  ],
+};
+
+export const categoriesOf = (media: LibraryMedia): readonly { id: string; label: string }[] => CATEGORIES[media];
+
+export const isLibraryCategory = (v: unknown, media: LibraryMedia = "image"): boolean => typeof v === "string" && CATEGORIES[media].some((c) => c.id === v);
 
 export function categoryLabel(id: string): string {
-  return LIBRARY_CATEGORIES.find((c) => c.id === id)?.label ?? id;
+  return LIBRARY_MEDIA.flatMap((m) => CATEGORIES[m]).find((c) => c.id === id)?.label ?? id;
 }
 
 /** Field limits (the migration's CHECKs say the same). */
@@ -46,16 +84,23 @@ export type TemplateSlot = {
   placeholder?: string;
   /** Longest value (characters). */
   max: number;
+  /**
+   * The value of a slot left empty, in the language of the skeleton (English). `placeholder` is what the input shows the
+   * user (Uzbek); without a `fallback` an empty slot takes the placeholder.
+   */
+  fallback?: string;
 };
 
 /** Public library item (`GET /api/media/library`). */
-export type LibraryItem = { id: string; category: string; title: string; prompt: string; previewUrl: string | null };
+export type LibraryItem = { id: string; media: LibraryMedia; category: string; title: string; prompt: string; previewUrl: string | null };
 
 /** Public template (`GET /api/media/templates`). */
 export type StudioTemplate = {
   id: string;
+  media: TemplateMedia;
   category: string;
   title: string;
+  /** A picture template's model, always offered; a clip's SUGGESTED model, replaced by the page when it is off. */
   modelId: string;
   /** Preset values of the model's ParamSchema (never `prompt`). */
   params: Record<string, unknown>;
@@ -85,14 +130,14 @@ export function slotValue(raw: unknown, max: number): string {
 
 /**
  * The prompt of a template: every `{slot}` replaced by its value (`slotValue`); an empty slot falls back to its
- * placeholder, else to nothing (then the doubled spaces / dangling commas are tidied). Pure.
+ * `fallback`, then its placeholder, else to nothing (then the doubled spaces / dangling commas are tidied). Pure.
  */
 export function fillSkeleton(skeleton: string, slots: readonly TemplateSlot[], values: Readonly<Record<string, unknown>>): string {
   const byName = new Map(slots.map((s) => [s.name, s]));
   const filled = String(skeleton ?? "").replace(SLOT_IN_TEXT, (whole, name: string) => {
     const slot = byName.get(name);
     if (!slot) return whole;
-    return slotValue(values[name], slot.max) || slotValue(slot.placeholder, slot.max);
+    return slotValue(values[name], slot.max) || slotValue(slot.fallback, slot.max) || slotValue(slot.placeholder, slot.max);
   });
   return filled
     .replace(/\s+([,.;:!?])/g, "$1")
@@ -116,6 +161,7 @@ export function slotsError(raw: unknown): string | null {
     seen.add(o.name);
     if (typeof o.label !== "string" || !o.label.trim() || o.label.length > LIBRARY_LIMITS.slotLabel) return `«${o.name}» slotining yorlig'i 1–${LIBRARY_LIMITS.slotLabel} belgi bo'lsin`;
     if (o.placeholder !== undefined && o.placeholder !== null && (typeof o.placeholder !== "string" || o.placeholder.length > LIBRARY_LIMITS.slotPlaceholder)) return `«${o.name}» namunasi ${LIBRARY_LIMITS.slotPlaceholder} belgidan oshmasin`;
+    if (o.fallback !== undefined && o.fallback !== null && (typeof o.fallback !== "string" || o.fallback.length > LIBRARY_LIMITS.slotPlaceholder)) return `«${o.name}» zaxira qiymati ${LIBRARY_LIMITS.slotPlaceholder} belgidan oshmasin`;
     if (!Number.isInteger(o.max) || (o.max as number) < LIBRARY_LIMITS.slotMaxMin || (o.max as number) > LIBRARY_LIMITS.slotMaxMax) return `«${o.name}» uzunligi ${LIBRARY_LIMITS.slotMaxMin}–${LIBRARY_LIMITS.slotMaxMax} bo'lsin`;
   }
   return null;
@@ -128,6 +174,7 @@ export function cleanSlots(raw: readonly Record<string, unknown>[]): TemplateSlo
     label: String(o.label).trim(),
     ...(typeof o.placeholder === "string" && o.placeholder.trim() ? { placeholder: o.placeholder.trim() } : {}),
     max: Number(o.max),
+    ...(typeof o.fallback === "string" && o.fallback.trim() ? { fallback: o.fallback.trim() } : {}),
   }));
 }
 
@@ -151,6 +198,8 @@ export function templateError(
   for (const k of Object.keys(params)) {
     if (k === "prompt") return "Prompt parametrlarda emas, skeletda yoziladi";
     if (!names.has(k)) return `«${k}» parametri bu modelda yo'q`;
+    // A preset picture would be somebody else's upload.
+    if (model.params.find((p) => p.name === k)?.type === "image") return "Surat shablonda oldindan belgilanmaydi";
   }
   const onlyGiven = model.params.filter((p) => p.name in params);
   const bad = validate(onlyGiven, params);

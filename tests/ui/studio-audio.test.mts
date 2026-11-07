@@ -160,7 +160,9 @@ test("modes: each mode draws exactly its own params (one data-field each), nothi
   for (const [m, id] of [["music", IDS[0]], ["sfx", IDS[1]], ["voice-changer", IDS[2]], ["isolate", IDS[3]]] as const) {
     await mode(m);
     await settle();
-    const want = Object.fromEntries(MEDIA_CATALOG.byId(id)!.params.map((p) => [p.name, 1]));
+    const want: Record<string, number> = Object.fromEntries(MEDIA_CATALOG.byId(id)!.params.map((p) => [p.name, 1]));
+    // «AI yaxshilash» sits on the two modes with a description to improve.
+    if (m === "music" || m === "sfx") want.aiImprove = 1;
     assert.deepEqual(fields(), want, `${m}: one data-field per param`);
     assert.equal(q("[data-audio-tab]")!.dataset.audioMode, m);
   }
@@ -210,7 +212,7 @@ test("price button: the server formula, the request, SFX variants", async () => 
   const post = a.posts()[0]!;
   assert.equal(post.body!.slug, "studio-audio");
   assert.equal(post.body!.expectedPrice, 4200);
-  assert.deepEqual(post.body!.values, { modelId: "elevenlabs/music", prompt: "calm lo-fi piano, rainy evening", length: "60", instrumental: false });
+  assert.deepEqual(post.body!.values, { modelId: "elevenlabs/music", prompt: "calm lo-fi piano, rainy evening", length: "60", instrumental: false, aiImprove: true });
   // Effekt: its own text, 3 variants → ×3 and three times the price of one.
   await mode("sfx");
   await type("[data-audio-prompt] textarea", "door creaks open");
@@ -239,7 +241,7 @@ test("P9 model picker: «Musiqa» with ElevenLabs + Lyria — picker only there,
   await click(picker()[1]);
   assert.equal(q("[data-audio-tab]")!.dataset.audioModel, "google/lyria-3");
   assert.equal(q<HTMLTextAreaElement>("[data-audio-prompt] textarea")!.value, "cheerful dutar melody, Uzbek folk style", "MUTATSIYA: the prompt carries over");
-  assert.deepEqual(fields(), { prompt: 1, length: 1, instrumental: 1 });
+  assert.deepEqual(fields(), { prompt: 1, aiImprove: 1, length: 1, instrumental: 1 });
   assert.deepEqual(qa('[data-field="length"] [role="radio"]').map((b) => b.textContent), ["Qisqa (30 s)", "To‘liq qo‘shiq"], "the ElevenLabs «1 daq» did not carry into Lyria");
   assert.match(txt("[data-studio-submit]"), /Yaratish · Lyria 3 · ~1 100/, "short on the button: the price must fit a phone");
   await click(qa('[data-field="length"] [role="radio"]').find((b) => b.textContent === "To‘liq qo‘shiq"));
@@ -249,7 +251,7 @@ test("P9 model picker: «Musiqa» with ElevenLabs + Lyria — picker only there,
   await settle();
   const post = a.posts()[0]!;
   assert.equal(post.body!.expectedPrice, 2100);
-  assert.deepEqual(post.body!.values, { modelId: "google/lyria-3", prompt: "cheerful dutar melody, Uzbek folk style", length: "song", instrumental: false });
+  assert.deepEqual(post.body!.values, { modelId: "google/lyria-3", prompt: "cheerful dutar melody, Uzbek folk style", length: "song", instrumental: false, aiImprove: true });
   // Another mode has one model: no picker; back on «Musiqa» the pick is kept.
   await mode("sfx");
   assert.ok(!q("[data-audio-model-picker]"));

@@ -209,6 +209,10 @@ export type ImageJob = {
   imageModel: string;
   /** A Studio text model (catalog badge `matn`): the prompt renders the user's quoted text instead of forbidding text. */
   allowText?: boolean;
+  /** The scene as decided before the job (Studio «AI yaxshilash»); absent = `expandPrompt` writes it. */
+  scene?: string;
+  /** The user's own scene, when `scene` is a rewrite: a picture the provider refuses on safety is asked once more with it. */
+  ownScene?: string;
   deadline?: number;
   onStage?: (ev: { progress: number; step: string }) => void;
 };
@@ -225,8 +229,10 @@ export async function drawImageJob(job: ImageJob): Promise<BuiltFile> {
   const size = { width: ratio.w, height: ratio.h };
   const imageProvider = job.provider;
   const refused: ImageResult[] = [];
-  const scene = await expandPrompt(prompt, styleId, ratio.id, deadline);
-  const full = composePrompt(scene, styleId, ratio.w, ratio.h, job.allowText ? { quoted: quotedTexts(prompt) } : undefined);
+  const scene = job.scene ?? (await expandPrompt(prompt, styleId, ratio.id, deadline));
+  const compose = (text: string) => composePrompt(text, styleId, ratio.w, ratio.h, job.allowText ? { quoted: quotedTexts(prompt) } : undefined);
+  const full = compose(scene);
+  let fromScene = 0;
   stage(10, count > 1 ? `Rasm chizilmoqda · 0/${count}` : "Rasm chizilmoqda");
 
   let drawn = 0;
@@ -238,7 +244,10 @@ export async function drawImageJob(job: ImageJob): Promise<BuiltFile> {
      * uslub farqi asosan promptga bog'liq (yuqoridagi izoh).
      */
     // Muddat (EXT-03): har so'rov byudjeti ish muddati bilan cheklanadi (ilgari 120 s shift, muddatsiz).
-    const res = await imageProvider.fetchImage({ prompt: full, size, styleId: "photo" }, deadline);
+    const first = await imageProvider.fetchImage({ prompt: full, size, styleId: "photo" }, deadline);
+    if (first.ok) fromScene++;
+    // Only a true refusal of a rewrite: the user never saw that text. No charge either way, the job is one purchase.
+    const res = job.ownScene !== undefined && isRefusal(first) ? await imageProvider.fetchImage({ prompt: compose(job.ownScene), size, styleId: "photo" }, deadline) : first;
     const im = res.ok ? res.image : null;
     if (isRefusal(res)) refused.push(res);
     drawn++;
@@ -277,7 +286,7 @@ export async function drawImageJob(job: ImageJob): Promise<BuiltFile> {
     ],
     images,
     imagePrompt: prompt,
-    imageScene: scene,
+    imageScene: job.ownScene !== undefined && fromScene === 0 ? job.ownScene : scene,
     imageStyle: styleId,
     imageRatio: ratio.id,
     // Which model drew the pictures: the viewer names it.

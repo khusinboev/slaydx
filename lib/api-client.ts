@@ -486,6 +486,8 @@ export type GenerationDetail = ServerGeneration & {
   html: string | null;
   doc: AcademicDoc | null;
   hasFile: boolean;
+  /** Faqat `FAILED` Studio klipi: «AI yaxshilash» yuborgan inglizcha prompt (karta shuni ko'rsatadi). */
+  sentPrompt?: string;
   /**
    * Faqat `QUEUED` da, ixtiyoriy (W2-B shartnomasi): navbatdagi o'rin
    * (1 dan) va taxminiy kutish (s). Eski server yubormaydi — UI

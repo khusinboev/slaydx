@@ -2,6 +2,7 @@ import "server-only";
 import { query } from "../db";
 import { MEDIA_CATALOG, studioPurposeOf } from "../../media/catalog";
 import { MIX_MODES } from "../../media/catalog-mix";
+import { AI_IMPROVE_PARAM, aiImproveOf } from "../../media/enhance";
 
 /**
  * The signed-in user's unfinished Studio jobs (docs/studio/P11-SPEC.md «C. Reliability»): a refresh brings them back to
@@ -50,6 +51,9 @@ export function sentOf(values: Readonly<Record<string, unknown>>, modelId: strin
     if (v === undefined) continue;
     out[p.name] = typeof v === "string" ? v.slice(0, p.type === "text" ? p.max : SENT_VALUE_MAX) : v;
   }
+  // «AI yaxshilash» is no schema param, and a retry must ask for what the job asked for.
+  const improve = aiImproveOf(values);
+  if (improve !== null) out[AI_IMPROVE_PARAM] = improve;
   return out;
 }
 

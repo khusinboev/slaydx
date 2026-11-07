@@ -142,6 +142,6 @@ test("Ideogram: the «Sifat» row under «Qo'shimcha sozlamalar» changes the pr
   await click(q("[data-studio-submit]"));
   await settle();
   const body = api.posts()[0]!.body!;
-  assert.deepEqual(body.values, { modelId: "ideogram/ideogram", prompt: "Navro'z afishasi", imageStyle: "photo", imageRatio: "1:1", imageCount: 2, quality: "high" });
+  assert.deepEqual(body.values, { modelId: "ideogram/ideogram", prompt: "Navro'z afishasi", imageStyle: "photo", imageRatio: "1:1", imageCount: 2, quality: "high", aiImprove: true });
   assert.equal(body.expectedPrice, 11300);
 });

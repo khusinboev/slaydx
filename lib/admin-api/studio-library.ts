@@ -2,7 +2,7 @@
 
 import { ApiError, request } from "../api-client";
 import { adminGet, adminSend, runStepUp, AdminReauthCancelledError, type AdminCallOptions } from "./core";
-import type { TemplateSlot } from "../media/library";
+import type { LibraryMedia, TemplateMedia, TemplateSlot } from "../media/library";
 
 /**
  * «Studio kutubxonasi» API (docs/studio/P2B-SPEC.md; `settings.view` / `settings.edit` with step-up). Thin typed
@@ -11,6 +11,7 @@ import type { TemplateSlot } from "../media/library";
 
 export type AdminPrompt = {
   id: string;
+  media: LibraryMedia;
   category: string;
   title: string;
   prompt: string;
@@ -23,6 +24,7 @@ export type AdminPrompt = {
 
 export type AdminTemplate = {
   id: string;
+  media: TemplateMedia;
   category: string;
   title: string;
   modelId: string;
@@ -39,10 +41,10 @@ export type AdminTemplate = {
   modelAvailable: boolean;
 };
 
-export type LibraryModel = { id: string; label: string; available: boolean; params: unknown };
+export type LibraryModel = { id: string; media: TemplateMedia; label: string; available: boolean; params: unknown };
 
 export type LibraryOverview = {
-  categories: { id: string; label: string }[];
+  categories: { id: string; label: string; media: LibraryMedia }[];
   models: LibraryModel[];
   prompts: AdminPrompt[];
   templates: AdminTemplate[];

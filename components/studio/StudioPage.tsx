@@ -23,10 +23,12 @@ import { ParamRows } from "./ParamRows";
 import { PriceButton } from "./PriceButton";
 import { PromptBox } from "./PromptBox";
 import { usePromptEnhance } from "./usePromptEnhance";
+import { useAiImprove } from "./useAiImprove";
+import { AI_IMPROVE_PARAM } from "@/lib/media/enhance";
 import { StudioResults, type StudioJob } from "./StudioResults";
 import { SubmitError } from "./SubmitError";
 import { STUDIO_AUDIO_LISTING, STUDIO_SPEECH_PURPOSE, STUDIO_VIDEO_PURPOSE, fetchActiveJobs, inputFromResult, loadMediaCatalog, resultAssetOf, uploadStudioInput, useMediaCatalog, type ActiveJob } from "./studio-api";
-import { INITIAL_VIDEO_STATE, VideoTab, shownMode, splitVideoCatalog, type VideoTabState } from "./video/VideoTab";
+import { INITIAL_VIDEO_STATE, VideoTab, shownMode, splitVideoCatalog, type VideoTabState, type VideoTemplateState } from "./video/VideoTab";
 import { StudioWorkbench, useResultsScroll } from "./StudioWorkbench";
 import { INITIAL_VOICE_STATE, VoiceTab, type VoiceTabState } from "./voice/VoiceTab";
 import { VoiceTemplatePanel, VoiceTemplatesRow, useLegacyFold } from "./voice/VoiceTemplates";
@@ -120,6 +122,7 @@ function StudioApp() {
   const [template, setTemplate] = useState<{ t: StudioTemplate; slots: Record<string, string> } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [switchText, setSwitchText] = useState<string | null>(null);
+  const ai = useAiImprove();
 
   const setChosen = useCallback((id: string) => setRasm((s) => patchRasmForm(s, (f) => ({ ...f, chosen: id }))), []);
   const setRaw = useCallback((fn: (prev: RawValues) => RawValues) => setRasm((s) => patchRasmForm(s, (f) => ({ ...f, raw: fn(f.raw) }))), []);
@@ -155,6 +158,7 @@ function StudioApp() {
   // The Video tab (P3): its own catalog (loaded once the tab is opened), form state and jobs — kept while on «Rasm».
   const [videoSeen, setVideoSeen] = useState(false);
   const [videoState, setVideoState] = useState<VideoTabState>(() => ({ ...INITIAL_VIDEO_STATE, mode: linkMode("video") as VideoTabState["mode"] }));
+  const [videoTemplate, setVideoTemplate] = useState<VideoTemplateState>(null);
   const video = useMediaCatalog(STUDIO_VIDEO_PURPOSE, videoSeen);
   const videoJobs = useStudioJobs(onScreen("video"));
   // The «Ovoz» tab (P5): its own catalog (loaded once the tab is opened), form state and jobs — kept across tabs.
@@ -318,7 +322,7 @@ function StudioApp() {
   const setParam = (name: string, value: unknown) => setRaw((prev) => ({ ...prev, [name]: value }));
 
   /** Typing the prompt by hand leaves the template (its slots would overwrite the text). */
-  const { enhance, enhancing } = usePromptEnhance(
+  const { enhance, enhancing, shown: enhanced } = usePromptEnhance(
     "image",
     () => (entry ? normalizedPrompt(entry, raw) : ""),
     (v) => (entry ? setPrompt(v.slice(0, promptLimit(entry))) : undefined),
@@ -408,7 +412,9 @@ function StudioApp() {
       setError(mode === "edit" ? "Nimani o‘zgartirish kerakligini yozing" : "Nima chizish kerakligini yozing");
       return;
     }
-    void send(entry, requestValues(entry, raw)).then((ok) => ok && rasmDraft.clear());
+    // An edit instruction is never improved (`auto-prompt.ts`): it carries no switch.
+    const sent = requestValues(entry, raw);
+    void send(entry, mode === "image" ? { ...sent, [AI_IMPROVE_PARAM]: ai.on && !enhanced(String(sent[PROMPT_PARAM] ?? "")) } : sent).then((ok) => ok && rasmDraft.clear());
   }
 
   function again(job: StudioJob) {
@@ -498,7 +504,7 @@ function StudioApp() {
           label={mode === "edit" ? "Nimani o‘zgartiramiz?" : "Nimani chizamiz?"}
           onEnhance={() => void enhance()}
           enhancing={enhancing}
-          {...(mode === "image" ? { onSamples: () => setLibraryOpen(true), onUpload: (f: File) => void uploadForEdit(f), uploading } : {})}
+          {...(mode === "image" ? { onSamples: () => setLibraryOpen(true), onUpload: (f: File) => void uploadForEdit(f), uploading, ai } : {})}
         />
       ) : null}
       {mode === "image" ? <TemplatesRow modelIds={catalog.models.map((m) => m.id)} activeId={template?.t.id ?? null} onPick={pickTemplate} /> : null}
@@ -625,6 +631,8 @@ function StudioApp() {
                 onMusic={(prompt) => void handoff.toMusic(prompt)}
                 onVoice={(text) => void handoff.toVoice(text)}
                 onSubmitted={videoDraft.clear}
+                template={videoTemplate}
+                setTemplate={setVideoTemplate}
               />
             ) : (
               <StudioWorkbench

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { request } from "@/lib/api-client";
 import { parseMediaPricing, setClientMediaPricing } from "@/lib/media/studio-pricing";
 import type { ClientEntry } from "@/lib/studio-core";
-import type { LibraryItem, StudioTemplate } from "@/lib/media/library";
+import { isLibraryMedia, isTemplateMedia, type LibraryItem, type LibraryMedia, type StudioTemplate, type TemplateMedia } from "@/lib/media/library";
 import type { GalleryItem, GalleryKind, GalleryPage, LibraryData, MediaCatalog, StudioPricing } from "./studio-types";
 
 /** The catalog purpose Studio's Rasm tab reads (docs/studio/P1-SPEC.md). */
@@ -210,15 +210,15 @@ export function parseLibrary(raw: unknown): LibraryData {
   const items = (Array.isArray(r.items) ? r.items : [])
     .map((i) =>
       isObj(i) && str(i.id) && str(i.category) && str(i.title) && str(i.prompt)
-        ? { id: i.id as string, category: i.category as string, title: i.title as string, prompt: i.prompt as string, previewUrl: str(i.previewUrl) }
+        ? { id: i.id as string, media: isLibraryMedia(i.media) ? i.media : "image", category: i.category as string, title: i.title as string, prompt: i.prompt as string, previewUrl: str(i.previewUrl) }
         : null,
     )
     .filter((i): i is LibraryItem => i !== null);
   return { categories, items };
 }
 
-export async function fetchLibrary(signal?: AbortSignal): Promise<LibraryData> {
-  return parseLibrary(await request<unknown>("/api/media/library", signal ? { signal } : {}));
+export async function fetchLibrary(media: LibraryMedia = "image", signal?: AbortSignal): Promise<LibraryData> {
+  return parseLibrary(await request<unknown>(media === "image" ? "/api/media/library" : `/api/media/library?media=${media}`, signal ? { signal } : {}));
 }
 
 /** `GET /api/media/templates` → templates (a row without a usable shape is dropped). */
@@ -230,12 +230,13 @@ export function parseTemplates(raw: unknown): StudioTemplate[] {
       const slots = t.slots
         .map((s) =>
           isObj(s) && str(s.name) && str(s.label) && typeof s.max === "number"
-            ? { name: s.name as string, label: s.label as string, max: s.max, ...(str(s.placeholder) ? { placeholder: s.placeholder as string } : {}) }
+            ? { name: s.name as string, label: s.label as string, max: s.max, ...(str(s.placeholder) ? { placeholder: s.placeholder as string } : {}), ...(str(s.fallback) ? { fallback: s.fallback as string } : {}) }
             : null,
         )
         .filter((s): s is StudioTemplate["slots"][number] => s !== null);
       return {
         id: t.id as string,
+        media: isTemplateMedia(t.media) ? t.media : "image",
         category: str(t.category) ?? "",
         title: t.title as string,
         modelId: t.modelId as string,
@@ -248,8 +249,8 @@ export function parseTemplates(raw: unknown): StudioTemplate[] {
     .filter((t): t is StudioTemplate => t !== null);
 }
 
-export async function fetchTemplates(signal?: AbortSignal): Promise<StudioTemplate[]> {
-  return parseTemplates(await request<unknown>("/api/media/templates", signal ? { signal } : {}));
+export async function fetchTemplates(media: TemplateMedia = "image", signal?: AbortSignal): Promise<StudioTemplate[]> {
+  return parseTemplates(await request<unknown>(media === "image" ? "/api/media/templates" : `/api/media/templates?media=${media}`, signal ? { signal } : {}));
 }
 
 export type StudioInput = { assetId: string; mime: string; w: number | null; h: number | null };

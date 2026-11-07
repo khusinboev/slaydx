@@ -1,6 +1,7 @@
 import type { ClientEntry } from "@/lib/studio-core";
 import { fillSkeleton, type StudioTemplate } from "@/lib/media/library";
-import { PROMPT_PARAM, promptLimit, type RawValues } from "./studio-values";
+import { isAvatarModel } from "@/lib/media/catalog-video";
+import { PROMPT_PARAM, carryOver, promptLimit, type RawValues } from "./studio-values";
 
 /**
  * The Studio «Rasm» tab's modes (docs/studio/P2B-SPEC.md): drawing from a prompt (P1) and the P2b jobs on a picture the
@@ -34,6 +35,23 @@ export const INPUT_PARAM = "inputImages";
  */
 export function applyTemplate(entry: ClientEntry, t: StudioTemplate, slots: Readonly<Record<string, unknown>>): RawValues {
   return { ...t.params, [PROMPT_PARAM]: fillSkeleton(t.skeleton, t.slots, slots).slice(0, promptLimit(entry)) };
+}
+
+/**
+ * The model a clip template lands on (docs/studio/P11-SPEC.md package G): its suggested model when on offer, else the model
+ * on screen, else the first. Only a model whose prompt describes a scene: an avatar's prompt is a script. Pure.
+ */
+export function videoTemplateTarget(models: readonly ClientEntry[], suggested: string, current: string | null): ClientEntry | null {
+  const fit = models.filter((m) => !isAvatarModel(m.id) && m.params.some((p) => p.name === PROMPT_PARAM));
+  return fit.find((m) => m.id === suggested) ?? fit.find((m) => m.id === current) ?? fit[0] ?? null;
+}
+
+/**
+ * The raw values a clip template puts into the form on `entry`, which may not be the model it was written for: every value
+ * of `prev` and of the template that `entry` accepts, the prompt built from the slots. Pure.
+ */
+export function applyVideoTemplate(entry: ClientEntry, t: StudioTemplate, slots: Readonly<Record<string, unknown>>, prev: RawValues): RawValues {
+  return { ...carryOver(entry, { ...prev, ...t.params }), [PROMPT_PARAM]: fillSkeleton(t.skeleton, t.slots, slots).slice(0, promptLimit(entry)) };
 }
 
 /** One mode's form: its model and values. */

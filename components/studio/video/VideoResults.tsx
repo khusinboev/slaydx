@@ -9,7 +9,7 @@ import { useApiSrc } from "@/lib/use-api-src";
 import { cn } from "@/lib/cn";
 import { formatSom } from "@/lib/format";
 import { FavoriteButton } from "../Favorite";
-import { AGAIN_LABEL, JobList, JobResult, RESULT_ACTION as ACTION } from "../JobResult";
+import { AGAIN_LABEL, JobList, JobResult, RESULT_ACTION as ACTION, SentPrompt } from "../JobResult";
 import { downloadStudioFile } from "../studio-download";
 import { useMixHandoff } from "../audio/mix-handoff";
 import type { StudioJob } from "../StudioResults";
@@ -76,6 +76,7 @@ function Clip({ job, gen, busy, onAgain, onMusic, onVoice }: { job: StudioJob; g
               {job.modelLabel}
               {video ? ` · ${Math.round(video.seconds)} soniya` : ""} · {formatSom(job.price)}
             </p>
+            <SentPrompt text={gen.doc?.sentPrompt} />
           </div>
           {/* P11 §D: a «Montaj» result is a gallery item too, so it takes the star like every clip. */}
           <FavoriteButton id={job.id} onError={setFavError} />

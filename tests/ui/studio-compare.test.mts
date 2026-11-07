@@ -195,8 +195,8 @@ test("Rasm: switch → seeded prompt, 2 ticked, sum on the button; submit = the 
   assert.deepEqual(a.comparePosts[0]!.body, {
     kind: "image",
     members: [
-      { values: expectValues(NANO, shared), expectedPrice: expectedPrice(NANO, 2) },
-      { values: expectValues(GPT, shared), expectedPrice: expectedPrice(GPT, 2) },
+      { values: { ...expectValues(NANO, shared), aiImprove: true }, expectedPrice: expectedPrice(NANO, 2) },
+      { values: { ...expectValues(GPT, shared), aiImprove: true }, expectedPrice: expectedPrice(GPT, 2) },
     ],
     expectedTotal: sum2,
   }, "MUTATSIYA: the request carries each model's price and the total");
@@ -368,7 +368,7 @@ test("Video: the switch on the Video tab, no effect offered, the clip values and
   const body = a.comparePosts[0]!.body as { kind: string; members: { values: Record<string, unknown>; expectedPrice: number }[]; expectedTotal: number };
   assert.equal(body.kind, "video");
   const shared = { prompt: "Tong chog‘ida Registon, kamera sekin yaqinlashadi", seconds: 5, aspect: "16:9" };
-  assert.deepEqual(body.members.map((m) => m.values), [expectValues(OMNI, shared), expectValues(K3, shared), expectValues(K3P, shared)]);
+  assert.deepEqual(body.members.map((m) => m.values), [OMNI, K3, K3P].map((e) => ({ ...expectValues(e, shared), aiImprove: true })));
   assert.equal(body.expectedTotal, body.members.reduce((s, m) => s + m.expectedPrice, 0));
   assert.equal(qa("[data-compare-cell]").length, 3);
 });

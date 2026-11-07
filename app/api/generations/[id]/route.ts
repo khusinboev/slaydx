@@ -3,6 +3,7 @@ import { cancelGeneration, deleteGeneration, generationStatus, getGeneration } f
 import { hasGenerationFile } from "@/lib/server/storage";
 import { log } from "@/lib/server/log";
 import { typicalDurationSec } from "@/lib/server/typical-duration";
+import { failedSentPrompt } from "@/lib/server/media/prompt-rewrites";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,6 +54,8 @@ export const GET = handler("generations/get", async (req, ctx: Ctx) => {
   if (!gen) throw new ApiError("Topilmadi", 404);
 
   const hasFile = gen.status === "COMPLETED" ? await hasGenerationFile(id, user.id) : false;
+  // A refused clip tells the user to change a text: the card shows the one that was sent (Studio «AI yaxshilash»).
+  const sentPrompt = gen.status === "FAILED" ? await failedSentPrompt(id, user.id) : null;
   // Running panel: elapsed clock + the tool's median duration (cached 10 min, `typical-duration.ts`).
   const timing =
     gen.status === "IN_PROGRESS" && gen.startedAt
@@ -64,7 +67,8 @@ export const GET = handler("generations/get", async (req, ctx: Ctx) => {
   // `live` faqat `getGeneration` uni qaytarganda qo'shiladi — kalit
   // umuman yo'q bo'lsa klient eskisini saqlaydi (`mergeLive`).
   const { live, ...rest } = gen;
-  const body = "live" in gen ? { ...rest, live, hasFile, ...timing } : { ...rest, hasFile, ...timing };
+  const sent = sentPrompt ? { sentPrompt } : {};
+  const body = "live" in gen ? { ...rest, live, hasFile, ...timing, ...sent } : { ...rest, hasFile, ...timing, ...sent };
   return json({ generation: body });
 });
 

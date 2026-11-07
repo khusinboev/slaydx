@@ -337,8 +337,14 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     await assert.rejects(runSql("INSERT INTO media_model_overrides (model_id, markup) VALUES ('x/y', 0.5)"), /check/i, "066 markup CHECK");
     // 067: Studio library (docs/studio/P2B-SPEC.md) -- three tables + the seed (40 prompts, 10 templates).
     assert.ok((await exists("studio_prompts")) && (await exists("studio_templates")) && (await exists("studio_library_previews")), "067 tables created");
-    assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_prompts WHERE seed_key IS NOT NULL"))!.n, "40", "067 seeds 40 prompts");
-    assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_templates WHERE seed_key IS NOT NULL"))!.n, "10", "067 seeds 10 templates");
+    assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_prompts WHERE seed_key ~ '^p[0-9]'"))!.n, "40", "067 seeds 40 prompts");
+    assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_templates WHERE seed_key ~ '^t[0-9]'"))!.n, "10", "067 seeds 10 templates");
+    // 076: library kinds (docs/studio/P11-SPEC.md) -- 12 video templates, 24 video, 8 music and 8 effect prompts.
+    assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_prompts WHERE media <> 'image'"))!.n, "40", "076 seeds 40 prompts of the new kinds");
+    assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_templates WHERE media = 'video'"))!.n, "12", "076 seeds 12 video templates");
+    await assert.rejects(runSql("INSERT INTO studio_templates (media, category, title, model_id, skeleton) VALUES ('music', 'fon', 'x', 'a/b', 'abc')"), /check/i, "076 a template is a picture or a clip");
+    // 077: one rewrite per compare batch (docs/studio/P11-SPEC.md).
+    assert.ok((await exists("studio_prompt_rewrites")) && (await exists("studio_prompt_rewrites_group_idx")), "077 table and index created");
     await assert.rejects(runSql("INSERT INTO studio_prompts (category, title, prompt) VALUES ('logo', 'x', repeat('a', 501))"), /check/i, "067 prompt length CHECK");
     await assert.rejects(runSql("INSERT INTO studio_templates (category, title, model_id, skeleton, params) VALUES ('logo', 'x', 'a/b', 'abc', '[]')"), /check/i, "067 params must be an object");
     // 068: Studio P5 voices (docs/studio/P5-SPEC.md) -- samples, clones (one active per user), previews.
@@ -420,7 +426,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     await runSql(sqlOf("071_studio_compare.sql"));
     // Re-running the seed never duplicates it (ON CONFLICT (seed_key) DO NOTHING).
     await runSql(sqlOf("067_studio_library.sql"));
-    assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_prompts"))!.n, "40", "067 is idempotent");
+    assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_prompts"))!.n, "80", "067 is idempotent: the 40 it seeded and the 40 of 076, no more");
     // 064 rollback fixtures: two questions of its id list (one image + text, one TEXT ONLY) and one outside the list.
     await runSql(`
       INSERT INTO test_banks (slug, title) VALUES ('mig064', 'x');
@@ -431,7 +437,12 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
                '["a","b","c","d"]'::jsonb, 0, TRUE, 'mig064:' || v.id
           FROM (VALUES (396, TRUE), (397, FALSE), (9999999, TRUE)) AS v(id, img);
     `);
+    await runSql("INSERT INTO studio_prompts (media, category, title, prompt) VALUES ('video', 'tabiat', 'Admin klipi', 'One shot of a river')");
     for (const f of [
+      // 077: Studio package G (docs/studio/P11-SPEC.md) -- studio_prompt_rewrites.
+      "077_studio_prompt_rewrites.sql",
+      // 076: Studio package G (docs/studio/P11-SPEC.md) -- library kinds, video seeds, English text.
+      "076_studio_library_media.sql",
       // 075: Studio P11 §D own video upload (docs/studio/P11-SPEC.md) -- studio_video_inputs.
       "075_studio_video_inputs.sql",
       // 074: market search (docs/market/PLAN.md §8.2).
@@ -532,6 +543,12 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
         assert.ok(!(await exists("generations_compare_group_idx")), "071 rollback drops the index");
         const cols = await query<{ c: string }>("SELECT column_name AS c FROM information_schema.columns WHERE table_name = 'generations' AND column_name LIKE 'compare_%'");
         assert.equal(cols.length, 0, "071 rollback drops both columns");
+      }
+      if (f === "077_studio_prompt_rewrites.sql") assert.ok(!(await exists("studio_prompt_rewrites")) && !(await exists("studio_prompt_rewrites_group_idx")), "077 rollback drops the table and its index");
+      if (f === "076_studio_library_media.sql") {
+        assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_prompts WHERE title = 'Admin klipi'"))!.n, "0", "076 rollback removes an admin's video row: it would turn into a picture row");
+        const cols = await query<{ c: string }>("SELECT column_name AS c FROM information_schema.columns WHERE table_name IN ('studio_prompts', 'studio_templates') AND column_name = 'media'");
+        assert.equal(cols.length, 0, "076 rollback drops both columns");
       }
       if (f === "075_studio_video_inputs.sql") assert.ok(!(await exists("studio_video_inputs")) && !(await exists("studio_video_inputs_user_idx")), "075 rollback drops the table and its index");
       if (f === "069_studio_audio_inputs.sql") assert.ok(!(await exists("studio_audio_inputs")), "069 rollback drops the table");

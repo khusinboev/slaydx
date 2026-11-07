@@ -31,6 +31,17 @@ export function JobMeta({ job, extra }: { job: Pick<StudioJob, "modelLabel" | "p
   );
 }
 
+/** Under a finished card: the English prompt «AI yaxshilash» sent. The card itself keeps the user's words. */
+export function SentPrompt({ text }: { text: string | undefined }) {
+  if (!text) return null;
+  return (
+    <details data-sent-prompt className="text-muted-foreground mt-1 text-[12.5px] leading-snug">
+      <summary className="pointer-coarse:min-h-11 cursor-pointer font-semibold">Yuborilgan prompt</summary>
+      <p className="mt-1 break-words">{text}</p>
+    </details>
+  );
+}
+
 /** The tab's results, newest first. The `data-*` hooks are the shared contract of every Studio results list. */
 export function JobList({ jobs, label, children }: { jobs: readonly StudioJob[]; label?: string; children: (job: StudioJob) => ReactNode }) {
   if (jobs.length === 0) return null;
@@ -100,15 +111,16 @@ export function JobResult({
   }
   if (gen.status === "COMPLETED") return children(gen);
   const message = gen.status === "FAILED" ? gen.error || `${failed}. ${REFUND_PHRASE}.` : "Ish bekor qilindi.";
-  return <Failure job={job} message={message} busy={busy} again={again} />;
+  return <Failure job={job} message={message} busy={busy} again={again} sent={gen.sentPrompt} />;
 }
 
-function Failure({ job, message, busy, again }: { job: StudioJob; message: string; busy: boolean; again: { onAgain: (j: StudioJob) => void; price: number } | null }) {
+function Failure({ job, message, busy, again, sent }: { job: StudioJob; message: string; busy: boolean; again: { onAgain: (j: StudioJob) => void; price: number } | null; sent?: string | undefined }) {
   return (
     <div className="bg-card rounded-[20px] border p-5" data-studio-failed>
       <p role="alert" className="text-destructive text-[14.5px] leading-snug">
         {message}
       </p>
+      <SentPrompt text={sent} />
       {again ? (
         <button type="button" data-result-action="again" disabled={busy} onClick={() => again.onAgain(job)} className={cn(RESULT_ACTION, "mt-3")}>
           <RefreshCw className="size-4" aria-hidden />

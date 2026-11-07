@@ -17,7 +17,7 @@
  * upload row (SQL ownership); a clone voice ONLY through `ctx.clones` (the owner's ready clones). Anything missing there
  * fails the job (full refund), never runs on another file or voice.
  */
-import { normalize, type MediaAdapter, type MediaOutput, type Route } from "../../studio-core";
+import { MediaError, normalize, type MediaAdapter, type MediaOutput, type Route } from "../../studio-core";
 import { mp3Seconds, wavToMp3 } from "../tts/mp3";
 import { extractMeta } from "../meta";
 import { LYRIA_MODEL, audioModeOf, lyriaUpstreamOf, takesAudioInput } from "../../media/catalog-audio";
@@ -25,6 +25,9 @@ import { ELEVENLABS_VOICES, cloneIdOf } from "../../media/catalog-speech";
 import { studioAudioEntry, studioAudioError, studioAudioPurposeOf } from "../../media/studio-audio";
 import { studioAudioAdapters } from "../../media/adapters/audio-studio";
 import { UserFacingError } from "../../server/user-error";
+import { aiImproveOf, looksLikeLyrics } from "../../media/enhance";
+import { autoPrompt } from "./auto-prompt";
+import { promptLimitOf } from "./prompt-limit";
 import { recordAudioCall } from "./cost";
 import type { AcademicDoc, BuiltFile, StudioAudioDoc } from "../types";
 import type { FormValues, ToolConfig } from "../../types";
@@ -103,6 +106,12 @@ export async function buildStudioAudio(
     }
   }
 
+  // «AI yaxshilash»: the box's description, in the worker. The user's text stays in the doc and the gallery.
+  const own = typeof p.prompt === "string" ? p.prompt : "";
+  // Lyrics are read on the text as typed: `normalize` above collapsed the lines that give an untagged verse away.
+  const improves = own && aiImproveOf(values) === true && (mode.mode === "sfx" || (mode.mode === "music" && !looksLikeLyrics(String(values.prompt ?? ""))));
+  let sent = improves && (mode.mode === "music" || mode.mode === "sfx") ? await autoPrompt({ kind: mode.mode, prompt: own, limit: promptLimitOf(entry), deadline: o.deadline }) : own;
+  let usedRewrite = false;
   const want = mode.mode === "sfx" ? Number(p.variants) || 1 : 1;
   const clips: Uint8Array[] = [];
   let lyrics: string | null = null;
@@ -110,8 +119,17 @@ export async function buildStudioAudio(
   for (let i = 0; i < want; i++) {
     try {
       // Each call makes ONE clip: its media_jobs cost is one clip's, not the whole job's (variants × clip).
-      const callValues = { ...p, variants: 1 };
-      const out = await run({ ...common, values: callValues, ...(providerVoice ? { extra: { voice: providerVoice } } : {}), ...(assets ? { assets } : {}), step: `audio:${i}` });
+      const call = (prompt: string, step: string) => {
+        const callValues = { ...p, variants: 1, ...(prompt ? { prompt } : {}) };
+        return run({ ...common, values: callValues, ...(providerVoice ? { extra: { voice: providerVoice } } : {}), ...(assets ? { assets } : {}), step }).then((res) => ({ res, callValues }));
+      };
+      const { res: out, callValues } = await call(sent, `audio:${i}`).catch((e: unknown) => {
+        // A safety refusal of the rewrite: the user's own words, once. The remaining variants go with them too.
+        if (sent === own || !(e instanceof MediaError) || !e.safety) throw e;
+        sent = own;
+        return call(own, `audio:${i}:own`);
+      });
+      if (sent !== own) usedRewrite = true;
       const mp3 = await clipOf(out.outputs[0]);
       if (!mp3) throw new Error("bo'sh audio");
       const first = out.outputs[0];
@@ -148,7 +166,7 @@ export async function buildStudioAudio(
     variants,
     ...(lyrics ? { lyrics } : {}),
   };
-  const doc: AcademicDoc = { meta, titlePage: false, toc: false, sections: [], studioAudio };
+  const doc: AcademicDoc = { meta, titlePage: false, toc: false, sections: [], studioAudio, ...(usedRewrite ? { sentPrompt: sent } : {}) };
   return {
     html: `<article><h1>${escapeHtml(meta.topic)}</h1><p>${Math.round(studioAudio.seconds)} s · ${escapeHtml(mode.label)}</p></article>`,
     bytes: clips[0]!,

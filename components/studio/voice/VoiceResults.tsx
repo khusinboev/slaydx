@@ -8,7 +8,7 @@ import type * as api from "@/lib/api-client";
 import { useApiSrc } from "@/lib/use-api-src";
 import { cn } from "@/lib/cn";
 import { FavoriteButton } from "../Favorite";
-import { AGAIN_LABEL, JobList, JobMeta, JobResult, RESULT_ACTION as ACTION } from "../JobResult";
+import { AGAIN_LABEL, JobList, JobMeta, JobResult, RESULT_ACTION as ACTION, SentPrompt } from "../JobResult";
 import { downloadStudioFile } from "../studio-download";
 import type { StudioJob } from "../StudioResults";
 import { useMixHandoff } from "../audio/mix-handoff";
@@ -104,6 +104,7 @@ function Audio({ job, gen, busy, onAgain }: { job: StudioJob; gen: api.Generatio
           <div className="mt-0.5">
             <JobMeta job={job} extra={seconds ? `${Math.round(seconds)} s` : undefined} />
           </div>
+          <SentPrompt text={gen.doc?.sentPrompt} />
         </div>
         <FavoriteButton id={job.id} onError={setFavError} />
       </div>

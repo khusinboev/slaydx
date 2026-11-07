@@ -12,6 +12,7 @@ import { log } from "./log";
 import { insufficientError, prepareGeneration, type PreparedGeneration } from "./submit-generation";
 import { cleanText, safeSlice } from "../generation/safe-text";
 import { MEDIA_CATALOG, STUDIO_IMAGE_PURPOSE, studioPurposeOf } from "../media/catalog";
+import { aiImproveOf } from "../media/enhance";
 import { isStudioVideoModel } from "../media/studio-video-pricing";
 import { normalize } from "../studio-core";
 import { TOOL_BY_ID } from "../tools";
@@ -74,6 +75,8 @@ export function compareRequestError(kind: CompareKind, members: readonly { value
   const ids = members.map((m) => modelIdOf(m.values));
   if (ids.some((id) => !id)) return "Har model uchun modelId kerak";
   if (new Set(ids).size !== ids.length) return "Bir model ikki marta tanlangan";
+  // One batch, one rewrite (`prompt-rewrites.ts`): the switch cannot differ between its models.
+  if (new Set(members.map((m) => aiImproveOf(m.values))).size > 1) return "Hamma modelga bitta so‘rov yuboriladi";
   let prompt: string | null = null;
   for (const [i, m] of members.entries()) {
     const id = ids[i]!;

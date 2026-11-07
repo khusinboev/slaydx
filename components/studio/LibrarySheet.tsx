@@ -6,31 +6,36 @@ import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
 import { ApiImg } from "@/lib/use-api-src";
 import { OverlayFrame, OverlayHeader, OverlayPanel, OverlayScrim } from "@/components/overlays/OverlayFrame";
 import { useDialog } from "@/components/overlays/useDialog";
+import type { LibraryMedia } from "@/lib/media/library";
 import { fetchLibrary } from "./studio-api";
 import type { LibraryData } from "./studio-types";
 
-/** The library is the same for everyone and changes rarely: one load per page visit (the server caches 30 s). */
-let loaded: Promise<LibraryData> | null = null;
+/** The library is the same for everyone and changes rarely: one load per kind per page visit (the server caches 30 s). */
+const loaded = new Map<LibraryMedia, Promise<LibraryData>>();
 
 /** Forget the cached library (tests). */
 export function dropLibraryCache(): void {
-  loaded = null;
+  loaded.clear();
 }
 
-function loadLibrary(): Promise<LibraryData> {
-  loaded ??= fetchLibrary().catch((e: unknown) => {
-    loaded = null;
+function loadLibrary(media: LibraryMedia): Promise<LibraryData> {
+  const hit = loaded.get(media);
+  if (hit) return hit;
+  const load = fetchLibrary(media).catch((e: unknown) => {
+    loaded.delete(media);
     throw e;
   });
-  return loaded;
+  loaded.set(media, load);
+  return load;
 }
 
 /**
  * «Namuna promptlar» (docs/studio/P2B-SPEC.md, canvas phone «Rasm»): a bottom sheet (a centred dialog on a desktop) with
  * category chips and the curated prompts. Tapping a prompt hands its text to the form (`onPick`) and closes the sheet;
- * nothing is charged. A `useDialog` overlay: the back button closes it first.
+ * nothing is charged. `media` says which box opened it: each kind has its own prompts and chips. A `useDialog` overlay: the
+ * back button closes it first.
  */
-export function LibrarySheet({ onPick, onClose }: { onPick: (prompt: string) => void; onClose: () => void }) {
+export function LibrarySheet({ media = "image", onPick, onClose }: { media?: LibraryMedia; onPick: (prompt: string) => void; onClose: () => void }) {
   const phone = useCoarsePointer();
   const panelRef = useDialog(true, onClose);
   const [data, setData] = useState<LibraryData | null>(null);
@@ -40,14 +45,14 @@ export function LibrarySheet({ onPick, onClose }: { onPick: (prompt: string) => 
 
   useEffect(() => {
     let live = true;
-    loadLibrary().then(
+    loadLibrary(media).then(
       (d) => live && setData(d),
       (e: unknown) => live && setError(e instanceof Error ? e.message : "Namunalar yuklanmadi"),
     );
     return () => {
       live = false;
     };
-  }, [attempt]);
+  }, [attempt, media]);
 
   const items = data ? data.items.filter((i) => !category || i.category === category) : [];
   const chip = "pointer-coarse:min-h-11 focus-visible:ring-ring shrink-0 rounded-[12px] px-3 py-1.5 text-[13.5px] outline-none focus-visible:ring-2";
