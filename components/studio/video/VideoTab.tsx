@@ -59,9 +59,10 @@ export type VideoTabState = {
    * a start image while it is set (removing the frame lifts the filter).
    */
   fromPicture?: boolean;
-  /** The chosen «Shablonlar» card and its slot values; typing in the prompt box leaves it. Never part of a draft. */
-  template?: { t: StudioTemplate; slots: Record<string, string> } | null;
 };
+
+/** The chosen «Shablonlar» card and its slot values. The page keeps it, outside the form state: it is no part of a draft. */
+export type VideoTemplateState = { t: StudioTemplate; slots: Record<string, string> } | null;
 
 export const INITIAL_VIDEO_STATE: VideoTabState = { mode: null, chosen: null, raw: {}, effect: null, effectImage: "", effectImage2: "" };
 
@@ -142,6 +143,8 @@ export function VideoTab({
   onMusic,
   onVoice,
   onSubmitted,
+  template = null,
+  setTemplate = () => {},
 }: {
   catalogState: CatalogLoad;
   reload: (silent?: boolean) => void;
@@ -158,6 +161,8 @@ export function VideoTab({
   onVoice?: (text: string) => void;
   /** The form's own job was queued (not a retry of an old one): the page drops the draft. */
   onSubmitted?: () => void;
+  template?: VideoTemplateState;
+  setTemplate?: (t: VideoTemplateState) => void;
 }) {
   // 400 before charging: the model / a value / the switch changed — re-read what is offered; 409: the price moved.
   const { submitting, error, setError, send: queue } = useStudioSend(() => reload(true));
@@ -216,7 +221,10 @@ export function VideoTab({
   const patch = (change: Partial<VideoTabState>) => setState((s) => ({ ...s, ...change }));
   const setParam = (name: string, value: unknown) => setState((s) => ({ ...s, raw: { ...s.raw, [name]: value } }));
   /** Typing the prompt by hand leaves the template (its slots would overwrite the text). */
-  const setPrompt = (value: string) => setState((s) => ({ ...s, template: null, raw: { ...s.raw, [PROMPT_PARAM]: value } }));
+  const setPrompt = (value: string) => {
+    setTemplate(null);
+    setParam(PROMPT_PARAM, value);
+  };
   const ai = useAiImprove();
   const { enhance, enhancing, shown: enhanced } = usePromptEnhance(
     "video",
@@ -245,19 +253,19 @@ export function VideoTab({
     if (!target) return;
     setError(null);
     setSwitchText(target.id === t.modelId ? null : `«${t.title}» shabloni ${target.label} modelida ishlaydi: tavsiya etilgan model hozir mavjud emas.`);
+    setTemplate({ t, slots: {} });
     setState((s) => ({
       ...s,
       chosen: target.id,
-      template: { t, slots: {} },
       raw: { ...applyVideoTemplate(target, t, {}, s.raw), ...(s.raw[IMAGE_PARAM] ? { [IMAGE_PARAM]: s.raw[IMAGE_PARAM] } : {}) },
     }));
   }
 
   function setSlot(name: string, value: string) {
-    const held = state.template;
-    if (!held || !model) return;
-    const slots = { ...held.slots, [name]: value };
-    setState((s) => ({ ...s, template: { t: held.t, slots }, raw: { ...s.raw, [PROMPT_PARAM]: fillSkeleton(held.t.skeleton, held.t.slots, slots).slice(0, promptLimit(model)) } }));
+    if (!template || !model) return;
+    const slots = { ...template.slots, [name]: value };
+    setTemplate({ t: template.t, slots });
+    setParam(PROMPT_PARAM, fillSkeleton(template.t.skeleton, template.t.slots, slots).slice(0, promptLimit(model)));
   }
 
   async function send(target: ClientEntry, values: Record<string, unknown>, label: string) {
@@ -502,8 +510,8 @@ export function VideoTab({
               {...(avatar ? { label: "Avatar nima desin?", placeholder: "Masalan: Assalomu alaykum! Bugun sizga yangi kursimiz haqida gapirib beraman." } : {})}
             />
           )}
-          {avatar ? null : <TemplatesRow media="video" modelIds={null} activeId={state.template?.t.id ?? null} onPick={pickTemplate} />}
-          {state.template && !avatar ? <TemplateSlots template={state.template.t} values={state.template.slots} onChange={setSlot} onClose={() => patch({ template: null })} /> : null}
+          {avatar ? null : <TemplatesRow media="video" modelIds={null} activeId={template?.t.id ?? null} onPick={pickTemplate} />}
+          {template && !avatar ? <TemplateSlots template={template.t} values={template.slots} onChange={setSlot} onClose={() => setTemplate(null)} /> : null}
           {libraryOpen ? <LibrarySheet media="video" onPick={(p) => setPrompt(p.slice(0, promptLimit(textModel)))} onClose={() => setLibraryOpen(false)} /> : null}
           <MediaModelPicker
             purpose={STUDIO_VIDEO_PURPOSE}

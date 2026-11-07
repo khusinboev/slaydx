@@ -194,7 +194,7 @@ test("switching the model re-renders the settings and the price; the prompt and 
   assert.equal(count?.textContent, "2", "the count both accept stays");
   assert.notEqual(text("[data-studio-submit]"), before, "the price follows the model");
   assert.equal(text("[data-studio-submit]"), label(2, expectedPrice(narrow, 2)));
-  assert.deepEqual(fieldNames().sort(), ["imageCount", "imageRatio", "imageStyle", "prompt"], "each param once");
+  assert.deepEqual(fieldNames().sort(), ["aiImprove", "imageCount", "imageRatio", "imageStyle", "prompt"], "each param once");
 });
 
 test("PRICE: the button and every card equal the formula (cost × markup, rounded up to 100) for each model × count", async () => {

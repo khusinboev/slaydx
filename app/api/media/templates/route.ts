@@ -1,4 +1,4 @@
-import { ApiError, handler, json, limit } from "@/lib/server/api";
+import { ApiError, handler, json, limit, optionalUser } from "@/lib/server/api";
 import { clientIp } from "@/lib/server/ratelimit";
 import { publicTemplates } from "@/lib/server/media/library";
 import { isTemplateMedia } from "@/lib/media/library";
@@ -13,6 +13,8 @@ export const dynamic = "force-dynamic";
  */
 export const GET = handler("media/templates", async (req) => {
   await limit(`media:templates:${clientIp(req)}`, 120, 60);
+  // The session opens an admin's preview of hidden models, as in `GET /api/media/catalog`.
+  await optionalUser(req);
   const media = new URL(req.url).searchParams.get("media") ?? "image";
   if (!isTemplateMedia(media)) throw new ApiError("Noma'lum tur", 400);
   return json(await publicTemplates(media));

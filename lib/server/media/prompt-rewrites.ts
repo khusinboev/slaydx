@@ -33,6 +33,23 @@ async function claim(generationId: string, kind: EnhanceKind): Promise<boolean> 
   return rows.length > 0;
 }
 
+/**
+ * What a failed clip sent, when that was a rewrite: the provider may refuse it after accepting the job, and that clip is not
+ * retried (`submitStudioVideoJob`). The user is told to change a text, so the card shows which. Ownership in the SQL.
+ */
+export async function failedSentPrompt(generationId: string, userId: string): Promise<string | null> {
+  const row = await queryOne<{ sent: string | null }>(
+    `SELECT m.params->>'prompt' AS sent
+       FROM generations g
+       JOIN media_jobs m ON m.generation_id = g.id
+       JOIN studio_prompt_rewrites r ON r.generation_id = g.id OR r.compare_group = g.compare_group
+      WHERE g.id = $1 AND g.user_id = $2 AND g.status = 'FAILED' AND g.tool_id = 'studio-video' AND r.status = 'done'
+      LIMIT 1`,
+    [generationId, userId],
+  );
+  return row?.sent ?? null;
+}
+
 /** The row this job reads: its own, or its batch's. */
 function read(generationId: string): Promise<Row | null> {
   return queryOne<Row>(

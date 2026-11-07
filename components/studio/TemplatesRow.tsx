@@ -59,7 +59,7 @@ export function TemplatesRow({
   return (
     <section aria-label="Shablonlar" data-studio-templates className="mb-3">
       <h2 className="text-muted-foreground mb-2 text-[13px] font-semibold tracking-[0.06em] uppercase">Shablonlar</h2>
-      <ul className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+      <ul className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
         {shown.map((t) => (
           <li key={t.id} className="w-[8.5rem] shrink-0">
             <button

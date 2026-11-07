@@ -1,6 +1,6 @@
 import { ApiError, handler, json, readJson, requireUser } from "@/lib/server/api";
 import { assertFreeLlmEnabled, withFreeLlm } from "@/lib/server/spend";
-import { ENHANCE_INPUT_MAX, ENHANCE_MIN, enhanceSystemPrompt, enhanceUserPrompt, isEnhanceKind, parseEnhanced, restoreQuoted } from "@/lib/media/enhance";
+import { ENHANCE_INPUT_MAX, ENHANCE_MIN, enhanceSystemPrompt, enhanceUserPrompt, isEnhanceKind, looksLikeLyrics, parseEnhanced, restoreQuoted } from "@/lib/media/enhance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +19,8 @@ export const POST = handler("media/enhance", async (req) => {
   const body = await readJson<{ prompt?: unknown; kind?: unknown }>(req, 16 * 1024);
   const kind = body?.kind === undefined ? "image" : body.kind;
   if (!isEnhanceKind(kind)) throw new ApiError("Noma'lum tavsif turi", 400);
+  // The words of a song are never rewritten; read before the lines are collapsed.
+  if (kind === "music" && typeof body?.prompt === "string" && looksLikeLyrics(body.prompt)) throw new ApiError("Qo‘shiq matni o‘zgartirilmaydi — u qanday yozilgan bo‘lsa, shunday yuboriladi", 400);
   const prompt = typeof body?.prompt === "string" ? body.prompt.replace(/\s+/g, " ").trim() : "";
   if (prompt.length < ENHANCE_MIN) throw new ApiError("Avval nimani chizish kerakligini yozing", 400);
   if (prompt.length > ENHANCE_INPUT_MAX[kind]) throw new ApiError(`Tavsif ${ENHANCE_INPUT_MAX[kind]} belgidan uzun`, 400);

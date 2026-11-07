@@ -32,7 +32,13 @@ const { SentPrompt } = await import("../../components/studio/JobResult.tsx");
  *   8. the button's own answer rewritten again (`shown` ignored)                  -> «switch: the button's answer»;
  *   9. the switch shown on the edit box                                           -> «switch: where it shows»;
  *  10. `parseTemplates` drops `fallback`                                          -> «video templates: suggested»;
- *  11. `SentPrompt` left out of a results list                                    -> «card».
+ *  11. `SentPrompt` left out of a results list                                    -> «card»;
+ *  12. `AiImproveTool` without its `Field`                                        -> «one data-field»;
+ *  13. the template back in the form state                                        -> «one data-field»;
+ *  14. the row without its `md:` classes                                          -> «one data-field»;
+ *  15. the button's answer not stored                                             -> «survives a refresh»;
+ *  16. the form does not judge lyrics                                             -> «lyrics»;
+ *  17. `Failure` without the sent text                                            -> «a failed clip».
  */
 
 Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
@@ -271,6 +277,51 @@ test("switch: the button's answer — the text the user read goes as it is; an e
   assert.equal((a.posts()[1]!.body!.values as Record<string, unknown>).aiImprove, true);
 });
 
+test("switch: the button's answer survives a refresh of the restored box", async () => {
+  const a = api();
+  const inner = globalThis.fetch;
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) => (String(input) === "/api/media/enhance" ? json(200, { prompt: "An improved English prompt" }) : inner(input as never, init));
+  await mount();
+  await textMode();
+  await act(async () => void fireEvent.change(videoPrompt(), { target: { value: "Registon tongda, kamera sekin" } }));
+  await click(q('[data-prompt-tool="enhance"]'));
+  await settle(12);
+  cleanup();
+  await mount();
+  await textMode();
+  await act(async () => void fireEvent.change(videoPrompt(), { target: { value: "An improved English prompt" } }));
+  await click(q("[data-studio-submit]"));
+  await settle(12);
+  assert.equal((a.posts()[0]!.body!.values as Record<string, unknown>).aiImprove, false, "MUTATSIYA: the answer must outlive the page");
+});
+
+test("switch: one data-field; the template stays out of the draft; the row keeps inside its column", async () => {
+  api();
+  await mount();
+  await textMode();
+  assert.equal(qa('[data-field="aiImprove"]').length, 1, "MUTATSIYA: the every-param rule");
+  assert.ok(q('[data-field="aiImprove"] [role="switch"]'));
+  await click(q('[data-template-card="9"]'));
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 450));
+  });
+  const stored = readDraft(draftKey(String(USER.id), "video")) as Record<string, unknown>;
+  assert.ok(stored, "the draft was written");
+  assert.ok(!("template" in stored), "MUTATSIYA: no template in a draft");
+  const row = q("[data-studio-templates] ul")!;
+  assert.ok(row.classList.contains("md:mx-0") && row.classList.contains("md:px-0"), "MUTATSIYA: the phone's bleed stops at the two-column layout");
+});
+
+test("lyrics: several short lines typed into «Musiqa» go without a rewrite", async () => {
+  const a = api();
+  await mount("?tab=audio");
+  await settle(12);
+  await act(async () => void fireEvent.change(q<HTMLTextAreaElement>("[data-audio-prompt] textarea")!, { target: { value: "Bahor keldi yurtimga\nGullar ochdi har yonda\nQushlar sayrar bog‘larda" } }));
+  await click(q("[data-studio-submit]"));
+  await settle(12);
+  assert.equal((a.posts()[0]!.body!.values as Record<string, unknown>).aiImprove, false, "MUTATSIYA: the request collapses the lines, the form must judge them");
+});
+
 test("switch: where it shows — drawing, music and effect; not the edit box, whose job is to change only what was asked", async () => {
   const a = api();
   await mount("?tab=rasm");
@@ -291,6 +342,15 @@ test("switch: where it shows — drawing, music and effect; not the edit box, wh
   await click(q('[data-audio-mode-chip="sfx"]'));
   await settle();
   assert.ok(aiSwitch(), "effect");
+});
+
+test("card: a failed clip shows the text that was sent, under the refusal", async () => {
+  const { VideoResults } = await import("../../components/studio/video/VideoResults.tsx");
+  const id = "11111111-1111-4111-8111-111111111111";
+  const gen = generationDetail(id, { status: "FAILED", error: "Provayder tavsifni rad etdi", sentPrompt: "A wide shot", doc: null });
+  render(h(AppRouterContext.Provider, { value: router }, h(VideoResults, { jobs: [{ id, modelId: FLASH.id, modelLabel: FLASH.label, prompt: "Registon", price: 21_400, sent: {}, error: null, gen: gen as never }], busy: false, onAgain: () => {} })));
+  await settle();
+  assert.match(q("[data-studio-failed]")!.textContent!, /rad etdi[\s\S]*A wide shot/, "MUTATSIYA: the user is told to change a text they must see");
 });
 
 test("card: every results list shows the English under the user's own words, only when there is one", async () => {

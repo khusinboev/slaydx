@@ -134,9 +134,9 @@ function Cell({ kind, job, onPick, onRetry, retryPrice, busy }: { kind: CompareK
     <article className="bg-card flex h-full flex-col gap-3 overflow-hidden rounded-[20px] border pb-3.5 shadow-[var(--shadow-card)]">
       {head}
       <div className="flex-1">{body}</div>
-      {gen?.status === "COMPLETED" && gen.doc?.sentPrompt ? (
+      {gen?.doc?.sentPrompt || gen?.sentPrompt ? (
         <div className="px-3.5">
-          <SentPrompt text={gen.doc.sentPrompt} />
+          <SentPrompt text={gen.doc?.sentPrompt ?? gen.sentPrompt} />
         </div>
       ) : null}
       <div className="flex flex-col gap-1.5 px-3.5">

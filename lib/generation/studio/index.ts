@@ -24,7 +24,7 @@ import { FAL_ADAPTER_ID, falAdapter } from "../../media/adapters/fal";
 import { IMAGE_MODEL_TO_MEDIA, MEDIA_CATALOG, STUDIO_IMAGE_PURPOSE, studioPurposeOf } from "../../media/catalog";
 import { buildStudioTool, type StudioInputs } from "./edit";
 import { isStudioImageModel, studioModelOf } from "../../media/studio-pricing";
-import { aiImproveOf } from "../../media/enhance";
+import { aiImproveOf, workerRewriteRule } from "../../media/enhance";
 import { normalize } from "../../studio-core";
 import { autoPrompt } from "./auto-prompt";
 import { promptLimitOf } from "./prompt-limit";
@@ -80,8 +80,12 @@ export async function buildStudioImage(
    * (a job from before the switch), `expandPrompt` writes the scene as it always did. Either way one LLM pass at most.
    */
   const improve = aiImproveOf(values);
-  const sent = improve === true ? await autoPrompt({ kind: "image", prompt, limit: promptLimitOf(entry), deadline }) : prompt;
-  const scene = improve === null ? {} : { scene: improve ? withGrounding(sent, groundUzbekScene(prompt)) : prompt };
+  const allowText = entry.badges.includes("matn");
+  // In a compare batch the first model's rule writes the one rewrite; `composePrompt` still holds each model to its own text rule.
+  const sent = improve === true ? await autoPrompt({ kind: "image", prompt, limit: promptLimitOf(entry), rule: workerRewriteRule("image", { text: allowText }), deadline }) : prompt;
+  const ownScene = withGrounding(prompt, groundUzbekScene(prompt));
+  const rewritten = sent !== prompt;
+  const scene = improve === null ? {} : { scene: improve ? withGrounding(sent, groundUzbekScene(prompt)) : prompt, ...(rewritten ? { ownScene } : {}) };
   const built = await drawImageJob({
     tool,
     values: { ...values, prompt, imageStyle: styleId, imageRatio: ratio.id, imageCount: count },
@@ -92,11 +96,12 @@ export async function buildStudioImage(
     provider,
     imageModel: entry.id,
     // Text in the picture only for the models sold as text-capable (badge «matn»); every other model keeps the ban.
-    allowText: entry.badges.includes("matn"),
+    allowText,
     deadline,
     onStage,
     ...scene,
   });
-  if (sent !== prompt && built.doc) built.doc.sentPrompt = sent;
+  // Every picture came from the user's own words after a refusal: nothing English was used.
+  if (rewritten && built.doc && built.doc.imageScene !== ownScene) built.doc.sentPrompt = sent;
   return built;
 }

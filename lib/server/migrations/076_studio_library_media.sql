@@ -17,11 +17,12 @@
 --     seeded template against the catalog.
 --
 -- Additive: two columns with a default, new rows. The English text replaces seeded data only, which 067 still holds; a
--- rollback keeps it (the same content in English).
+-- rollback keeps it (the same content in English). A rollback deletes every non-image row, an admin's too: without the column
+-- such a row would turn into a picture row.
 --
 -- ROLLBACK:
---   DELETE FROM studio_templates WHERE seed_key LIKE 'vt%';
---   DELETE FROM studio_prompts WHERE seed_key LIKE 'vp%' OR seed_key LIKE 'mp%' OR seed_key LIKE 'sp%';
+--   DELETE FROM studio_templates WHERE media <> 'image';
+--   DELETE FROM studio_prompts WHERE media <> 'image';
 --   ALTER TABLE studio_templates DROP COLUMN IF EXISTS media;
 --   ALTER TABLE studio_prompts DROP COLUMN IF EXISTS media;
 --   DELETE FROM schema_migrations WHERE name = '076_studio_library_media.sql';

@@ -437,6 +437,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
                '["a","b","c","d"]'::jsonb, 0, TRUE, 'mig064:' || v.id
           FROM (VALUES (396, TRUE), (397, FALSE), (9999999, TRUE)) AS v(id, img);
     `);
+    await runSql("INSERT INTO studio_prompts (media, category, title, prompt) VALUES ('video', 'tabiat', 'Admin klipi', 'One shot of a river')");
     for (const f of [
       // 077: Studio package G (docs/studio/P11-SPEC.md) -- studio_prompt_rewrites.
       "077_studio_prompt_rewrites.sql",
@@ -545,6 +546,7 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
       }
       if (f === "077_studio_prompt_rewrites.sql") assert.ok(!(await exists("studio_prompt_rewrites")) && !(await exists("studio_prompt_rewrites_group_idx")), "077 rollback drops the table and its index");
       if (f === "076_studio_library_media.sql") {
+        assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM studio_prompts WHERE title = 'Admin klipi'"))!.n, "0", "076 rollback removes an admin's video row: it would turn into a picture row");
         const cols = await query<{ c: string }>("SELECT column_name AS c FROM information_schema.columns WHERE table_name IN ('studio_prompts', 'studio_templates') AND column_name = 'media'");
         assert.equal(cols.length, 0, "076 rollback drops both columns");
       }

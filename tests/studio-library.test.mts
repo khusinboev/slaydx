@@ -514,6 +514,24 @@ test("admin: templates create / update / delete with audit; the public read foll
   assert.ok(!(await publicGet(templatesRoute.GET as Handler, "/api/media/templates")).body.items.some((i: Any) => i.id === id));
 });
 
+test("templates: the session opens an admin's preview of a hidden model", { skip }, async (t) => {
+  await refresh();
+  const hidden = MEDIA_CATALOG.entries.find((e) => e.kind === "image" && e.defaultOff && e.routes.some((r) => r.provider === "fal") && lib.templateError({ modelId: e.id, params: {}, skeleton: "A picture of {x}", slots: [{ name: "x", label: "X", max: 40 }] }, e) === null);
+  assert.ok(hidden, "a defaultOff picture model");
+  process.env.FAL_KEY = "test-fal-key-0000:abcdef";
+  t.after(() => void delete process.env.FAL_KEY);
+  await refresh();
+  await query("INSERT INTO studio_templates (category, title, model_id, skeleton, slots) VALUES ('logo', 'Sinov shabloni', $1, 'A picture of {x}', '[{\"name\": \"x\", \"label\": \"X\", \"max\": 40}]')", [hidden.id]);
+  t.after(async () => void (await query("DELETE FROM studio_templates WHERE title = 'Sinov shabloni'")));
+  invalidateLibrary();
+  const titles = (b: Any) => b.items.map((i: Any) => i.title);
+  assert.ok(!titles((await publicGet(templatesRoute.GET as Handler, "/api/media/templates")).body).includes("Sinov shabloni"), "a visitor does not see it");
+  const owner = await session("owner");
+  const req = new Request("http://localhost/api/media/templates", { headers: { cookie: owner.cookie, "x-forwarded-for": "10.9.9.9" } });
+  const res = await read(await inRequest(req, () => (templatesRoute.GET as Handler)(req, undefined)));
+  assert.ok(titles(res.body).includes("Sinov shabloni"), "MUTATSIYA: without `optionalUser` no preview opens");
+});
+
 test("enhance: free, the rewrite returned, burst limit 10 / 10 min → 429", { skip }, async (t) => {
   for (const m of ["warn", "error", "info", "log"] as const) t.mock.method(console, m, () => {});
   let llm = 0;
@@ -532,6 +550,8 @@ test("enhance: free, the rewrite returned, burst limit 10 / 10 min → 429", { s
   };
   assert.equal((await post("ab")).status, 400, "too short");
   assert.equal((await post("Registon", "speech")).status, 400, "speech is never rewritten");
+  assert.equal((await post("Naqorat: yur, yur, bahor keldi", "music")).status, 400, "MUTATSIYA: lyrics are never rewritten, by the button either");
+  assert.equal(llm, 0);
   const r = await post("Registon");
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.prompt, "Samarqand Registon maydoni, oltin soat, keng burchakli kadr");

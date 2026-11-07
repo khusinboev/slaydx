@@ -11,7 +11,8 @@ import { UserFacingError, userMessage } from "./user-error";
 import { recordProviderFailure } from "./provider-failures";
 import { isProviderEnabled } from "./providers/resolve";
 import { extractMeta } from "../generation/meta";
-import { withJobCost } from "../generation/job-cost";
+import { recordAiUsage } from "./ai-usage";
+import { trackJobCost } from "../generation/job-cost";
 import { autoPrompt } from "../generation/studio/auto-prompt";
 import { promptLimitOf } from "../generation/studio/prompt-limit";
 import { aiImproveOf } from "../media/enhance";
@@ -371,16 +372,20 @@ type StudioGuarded = { found: string; id: string } | { row: MediaJobRow; assets:
  *
  * This job path has no build meter, and `finalizeVideo` writes `cost_json`: the call's cost is stored now, while the lease is
  * ours (so a clip that fails later keeps it), and the finish adds the clip to it. A re-claim makes no call, so it adds nothing.
+ * The worker's usage flush does not run here either, so the spend goes to `ai_usage` from here.
  */
 async function improvedParams(job: VideoJob, entry: CatalogEntry): Promise<NormalizedParams> {
   const params = normalize(entry.params, job.values);
   const prompt = typeof params.prompt === "string" ? params.prompt : "";
   if (!prompt || aiImproveOf(job.values) !== true || isEffectEntry(entry) || isAvatarModel(entry.id)) return params;
-  const { value: sent, cost } = await withJobCost(() => autoPrompt({ kind: "video", prompt, limit: promptLimitOf(entry), generationId: job.id }));
+  const tracked = trackJobCost(() => autoPrompt({ kind: "video", prompt, limit: promptLimitOf(entry), generationId: job.id }));
+  const sent = await tracked.promise;
+  const cost = tracked.snapshot().toJson();
   if (cost.calls > 0) {
-    await query("UPDATE generations SET cost_json = $2 WHERE id = $1 AND locked_by = $3", [job.id, toJsonb(cost.toJson()), job.lease]).catch((e: unknown) => {
+    await query("UPDATE generations SET cost_json = $2 WHERE id = $1 AND locked_by = $3", [job.id, toJsonb(cost), job.lease]).catch((e: unknown) => {
       log("warn", "[video] rewrite cost not stored", { jobId: job.id, err: e });
     });
+    void recordAiUsage({ source: "job", outcome: "completed", generationId: job.id, userId: job.userId, toolId: "studio-video", cost });
   }
   return { ...params, prompt: sent };
 }
@@ -468,14 +473,27 @@ export async function submitStudioVideoJob(job: VideoJob, deps: VideoOpsDeps = {
   const { row, assets } = g;
   let opId: string;
   try {
-    const { route, result } = await submitWithRoutes(
-      entry.routes,
-      adapters,
-      breakerHealth,
-      { params: { ...params }, ...(Object.keys(assets).length ? { assets } : {}), idempotencyKey: row.idempotency_key },
-      // P11: an input the adapter stored at the provider (a photo avatar's audio) is noted before the paid call.
-      { ...coreDeps(deps), onInputStored: (url) => noteMediaUpload(row.id, url) },
-    );
+    const submit = (p: NormalizedParams, idempotencyKey: string) =>
+      submitWithRoutes(
+        entry.routes,
+        adapters,
+        breakerHealth,
+        { params: { ...p }, ...(Object.keys(assets).length ? { assets } : {}), idempotencyKey },
+        // P11: an input the adapter stored at the provider (a photo avatar's audio) is noted before the paid call.
+        { ...coreDeps(deps), onInputStored: (url) => noteMediaUpload(row.id, url) },
+      );
+    const own = normalize(entry.params, job.values);
+    const { route, result } = await submit(params, row.idempotency_key).catch(async (e: unknown) => {
+      /*
+       * «AI yaxshilash»: the provider refused the REWRITE at the door, so nothing is running and nothing is billed. The user's own
+       * words go once, on this same row and purchase. A refusal AFTER acceptance is never retried: that clip was a paid
+       * operation, and a second one would be a second bill (`failedSentPrompt` shows the text on the failed card instead).
+       */
+      if (!(e instanceof MediaError) || !e.safety || e.accepted || params.prompt === own.prompt) throw e;
+      log("warn", "[video] the rewrite was refused, sending the user's own prompt", { jobId: job.id, modelId: entry.id });
+      await query("UPDATE media_jobs SET params = params || jsonb_build_object('prompt', $2::text) WHERE id = $1", [row.id, String(own.prompt ?? "")]);
+      return submit({ ...params, prompt: own.prompt! }, `${row.idempotency_key}:own`);
+    });
     if (!("opId" in result)) throw new MediaError(route.provider, "a video route answered synchronously");
     if (route !== entry.routes[0]) await query("UPDATE media_jobs SET provider = $2, upstream_model = $3 WHERE id = $1", [row.id, route.provider, route.upstreamModel]);
     opId = result.opId;

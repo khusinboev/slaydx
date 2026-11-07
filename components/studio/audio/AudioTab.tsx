@@ -1,6 +1,6 @@
 "use client";
 
-import { AI_IMPROVE_PARAM, ENHANCE_MIN } from "@/lib/media/enhance";
+import { AI_IMPROVE_PARAM, ENHANCE_MIN, looksLikeLyrics } from "@/lib/media/enhance";
 import { AiImproveTool, EnhanceTool, SamplesTool } from "../PromptBox";
 import { useAiImprove } from "../useAiImprove";
 import { LibrarySheet } from "../LibrarySheet";
@@ -286,7 +286,9 @@ export function AudioTab({
       return;
     }
     const improvable = mode === "music" || mode === "sfx";
-    void send(entry, label, improvable ? { ...sent, [AI_IMPROVE_PARAM]: ai.on && !enhanced(String(sent.prompt ?? "")) } : sent).then((ok) => ok && onSubmitted?.());
+    // The request collapses the lines that give an untagged verse away: lyrics are judged here, on the text as typed.
+    const lyrics = mode === "music" && looksLikeLyrics(typed);
+    void send(entry, label, improvable ? { ...sent, [AI_IMPROVE_PARAM]: ai.on && !lyrics && !enhanced(String(sent.prompt ?? "")) } : sent).then((ok) => ok && onSubmitted?.());
   }
 
   const jobTarget = (job: StudioJob) => modes.flatMap((m) => m.entries.map((e) => ({ e, label: audioJobLabels(e, m.label, m.entries.length).job }))).find((x) => x.e.id === job.modelId);

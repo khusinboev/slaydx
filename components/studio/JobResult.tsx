@@ -111,15 +111,16 @@ export function JobResult({
   }
   if (gen.status === "COMPLETED") return children(gen);
   const message = gen.status === "FAILED" ? gen.error || `${failed}. ${REFUND_PHRASE}.` : "Ish bekor qilindi.";
-  return <Failure job={job} message={message} busy={busy} again={again} />;
+  return <Failure job={job} message={message} busy={busy} again={again} sent={gen.sentPrompt} />;
 }
 
-function Failure({ job, message, busy, again }: { job: StudioJob; message: string; busy: boolean; again: { onAgain: (j: StudioJob) => void; price: number } | null }) {
+function Failure({ job, message, busy, again, sent }: { job: StudioJob; message: string; busy: boolean; again: { onAgain: (j: StudioJob) => void; price: number } | null; sent?: string | undefined }) {
   return (
     <div className="bg-card rounded-[20px] border p-5" data-studio-failed>
       <p role="alert" className="text-destructive text-[14.5px] leading-snug">
         {message}
       </p>
+      <SentPrompt text={sent} />
       {again ? (
         <button type="button" data-result-action="again" disabled={busy} onClick={() => again.onAgain(job)} className={cn(RESULT_ACTION, "mt-3")}>
           <RefreshCw className="size-4" aria-hidden />

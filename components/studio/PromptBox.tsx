@@ -6,6 +6,7 @@ import { AutoTextarea } from "@/components/common/AutoTextarea";
 import { Switch } from "@/components/forms/compact";
 import { Counter, Field } from "@/components/forms/shared";
 import { groupDigits } from "@/lib/format";
+import { AI_IMPROVE_PARAM } from "@/lib/media/enhance";
 import { STUDIO_INPUT_ACCEPT } from "./ImageInputs";
 import { PROMPT_BYTES_MESSAGE, type PromptBytes } from "./studio-values";
 
@@ -38,10 +39,12 @@ export function EnhanceTool({ disabled, enhancing, onClick }: { disabled: boolea
  */
 export function AiImproveTool({ checked, onChange }: { checked: boolean; onChange: (on: boolean) => void }) {
   return (
-    <div data-prompt-tool="ai-improve" className="bg-muted/70 pointer-coarse:min-h-11 inline-flex min-h-9 items-center gap-2 rounded-[12px] px-3 text-[13.5px] font-semibold" title="Tavsifingiz inglizchaga tarjima qilinib, yaxshilangan holda modelga yuboriladi. Bepul">
-      <span>AI yaxshilash</span>
-      <Switch ariaLabel="AI yaxshilash" checked={checked} onChange={onChange} />
-    </div>
+    <Field id={AI_IMPROVE_PARAM} className="inline-flex">
+      <span data-prompt-tool="ai-improve" className="bg-muted/70 pointer-coarse:min-h-11 inline-flex min-h-9 items-center gap-2 rounded-[12px] px-3 text-[13.5px] font-semibold" title="Tavsifingiz inglizchaga tarjima qilinib, yaxshilangan holda modelga yuboriladi. Bepul">
+        <span>AI yaxshilash</span>
+        <Switch ariaLabel="AI yaxshilash" checked={checked} onChange={onChange} />
+      </span>
+    </Field>
   );
 }
 

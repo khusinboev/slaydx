@@ -189,7 +189,7 @@ test("text form: video models only, «so'm / N s» cards, schema rows (one data-
   assert.match(q(`[data-model-card="${K3.id}"] [data-model-price]`)!.textContent ?? "", /so'm \/ 5 s$/);
   await click(q(`[data-model-card="${K3.id}"]`));
   const names = qa("[data-field]").map((e) => e.getAttribute("data-field")).sort();
-  assert.deepEqual(names, K3.params.map((p) => p.name).sort(), "one data-field per schema param");
+  assert.deepEqual(names, ["aiImprove", ...K3.params.map((p) => p.name)].sort(), "one data-field per schema param");
   assert.equal(new Set(names).size, names.length);
   assert.equal(button(), `Yaratish · 5 soniya · ${formatSom(10_700)}`);
   // P11 §D: a long range is preset chips + a direct input; 6 is no preset of 3–15, it is typed.
