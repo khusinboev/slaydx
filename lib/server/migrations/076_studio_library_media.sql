@@ -200,7 +200,7 @@ INSERT INTO studio_prompts (seed_key, media, category, sort, title, prompt) VALU
    'One continuous shot: the Milky Way wheels slowly above desert dunes in a time-lapse, the camera creeps forward along a dune ridge, deep blue night, faint moonlight on the sand, mysterious mood'),
   ('vp17', 'video', 'sayohat', 10, 'Tog'' yo''lida',
    'One continuous shot: a small car drives along a winding mountain road, the drone camera follows from behind and rises over the pass, long afternoon shadows, golden light, sense of freedom'),
-  ('vp18', 'video', 'sayohat', 20, 'Tog'' bozori',
+  ('vp18', 'video', 'sayohat', 20, 'Qishloq bozori',
    'One continuous shot: the camera walks through a village market at a slow pace, piles of dried fruit and spices, sellers in the background, warm sunlight through canvas awnings, lively documentary feel'),
   ('vp19', 'video', 'sayohat', 30, 'Poyezd oynasidan',
    'One continuous shot: from inside a moving train, the camera looks through the window at steppe rolling past, rain drops streak the glass, soft grey light, then the sun breaks through the clouds, quiet mood'),
