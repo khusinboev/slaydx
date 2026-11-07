@@ -284,7 +284,14 @@ run_deploy() {
 
   # 7) Pull while the old containers keep serving. The OCI revision label must name this commit
   #    (tags are mutable for anyone with packages:write); a missing label is only a warning.
-  dc pull web worker || die "pull failed"
+  # GHCR over IPv6 resets long downloads now and then; finished layers stay, so a new try resumes.
+  pulled=0
+  for try in 1 2 3 4 5; do
+    if dc pull web worker; then pulled=1; break; fi
+    log "pull try $try failed, retrying"
+    sleep $((try * ${SLAYDX_PULL_PAUSE:-15}))
+  done
+  [ "$pulled" = 1 ] || die "pull failed"
   local rev
   for s in web worker; do
     docker image inspect "$REG/slaydx-$s:$SHA" >/dev/null 2>&1 || die "$REG/slaydx-$s:$SHA missing after pull"
