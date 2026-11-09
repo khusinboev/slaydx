@@ -18,6 +18,7 @@ export function baseLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlidePromptCtx
     `Bandlar bir-birini takrorlamasin — har biri yangi qirra: ta’rif, sabab, misol, oqibat, cheklov.`,
     `Sarlavha to‘liq fikr, ${TITLE_WORDS.min}–${TITLE_WORDS.max} so‘z, ≤ ${TITLE_CHARS} belgi.`,
     `title slaydning title maydoni foydalanuvchi mavzusini saqlasin.`,
+    `Formulalarni (kimyo, matematika, fizika, geometriya) Unicode belgilari bilan yozing: H₂O, CₙH₂ₙ₊₁COOH, Ca²⁺, x² + y² = r², √2, π, sin²α, E = mc², v = v₀ + at, F = m·a, 30°, ∠ABC, △ABC, a ⊥ b, a ∥ b, Σ, ∫, ≤, ≠, →. Formulada LaTeX, «_» va «^» yozmang (C_n, x^2, \\frac emas).`,
     `kicker qisqa (2–4 so‘z), masalan «Biologiya» yoki «Taqdimot». Qo‘shimcha talabni kicker qilmang.`,
     `Har slaydda imageHint: 12–20 so‘z, ANIQ vizual (inglizcha yoki o‘zbekcha), shu slayd mazmunidagi narsa/joy/asbob. Mavzudan chiqib ketmasin.`,
   ];
