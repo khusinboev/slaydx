@@ -1,4 +1,5 @@
 import { languageDirective } from "./i18n";
+import { prettyFormulasDeep } from "./formula-text";
 import { parseLlmJson } from "./json";
 import { llmComplete, llmEnabled } from "./llm";
 import { isDeadlineError } from "./deadline";
@@ -1219,7 +1220,7 @@ export async function repairThinSlides(
       console.warn(`[slide-quality] ta’mir rad etildi: index=${index} layout=${out[index].layout} — ${why}`);
     for (const item of data.slides) {
       if (!item || typeof item !== "object") continue;
-      const o = item as Record<string, unknown>;
+      const o = prettyFormulasDeep(item) as Record<string, unknown>;
       const index = Number(o.index);
       const reasons = Number.isInteger(index) ? wanted.get(index) : undefined;
       if (!reasons) continue;

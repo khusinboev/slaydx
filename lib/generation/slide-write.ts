@@ -1,4 +1,5 @@
 import { slideLabels } from "./i18n";
+import { prettyFormulasDeep } from "./formula-text";
 import { parseLlmJson } from "./json";
 import { llmComplete, llmEnabled, llmStream } from "./llm";
 import { errorWithCause } from "./llm/failure";
@@ -184,7 +185,8 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
    * noma'lum bo'lsa — auditoriya ruxsati (zaxira).
    */
   const lim = counts(rules, visual);
-  const o = raw as Record<string, unknown>;
+  // Formulas as the reader writes them (H₂O, CₙH₂ₙ₊₁COOH), not as LaTeX or bare digits.
+  const o = prettyFormulasDeep(raw) as Record<string, unknown>;
   const layout = asLayout(o.layout, "bullets");
   const title = clipTo(stripOrdinal(String(o.title ?? "").replace(/[ \t\n\r\f\v]+/g, " ").trim()), SLIDE_LIMITS.title);
   if (!title && layout !== "closing") return null;
