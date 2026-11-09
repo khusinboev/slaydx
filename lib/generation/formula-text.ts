@@ -47,7 +47,7 @@ const ELEMENTS = new Set(
 const DIATOMIC = new Set(["H2", "N2", "O2", "O3", "Cl2", "Br2", "I2"]);
 
 /** Element-shaped names of products, protocols and viruses. */
-const NOT_CHEM = /^(?:PS\d|CSS\d|B2[BCG]|P2P|W3C|Y2K|I2C|FC\d+|HP\d+|H\d+N\d+)$/;
+const NOT_CHEM = /^(?:PS\d|CSS\d|B2[BCG]|P2P|W3C|Y2K|I2C|FC\d+|HP\d+|H\d+N\d+|COP\d+|PC\d|OS\d|NFC\d|SSH\d|SOS\d|CN\d)$/;
 
 /** Spans never rewritten: URLs, e-mails, Windows and Unix paths, file names with an extension. */
 const PROTECTED =
@@ -66,7 +66,8 @@ const LATEX: [RegExp, string][] = [
   [new RegExp(`\\\\(?:neq|ne)${NL}`, "g"), "≠"],
   [new RegExp(`\\\\approx${NL}`, "g"), "≈"],
   [new RegExp(`\\\\infty${NL}`, "g"), "∞"],
-  [new RegExp(`\\\\Delta${NL}`, "g"), "Δ"],
+  // `\\Delta x` → `Δx`, `\\angle ABC` → `∠ABC`: the symbol binds to what follows.
+  [new RegExp(`\\\\Delta${NL} ?`, "g"), "Δ"],
   [new RegExp(`\\\\alpha${NL}`, "g"), "α"],
   [new RegExp(`\\\\beta${NL}`, "g"), "β"],
   [new RegExp(`\\\\gamma${NL}`, "g"), "γ"],
@@ -103,8 +104,8 @@ const LATEX: [RegExp, string][] = [
   [new RegExp(`\\\\oint${NL}`, "g"), "∮"],
   [new RegExp(`\\\\partial${NL}`, "g"), "∂"],
   [new RegExp(`\\\\nabla${NL}`, "g"), "∇"],
-  [new RegExp(`\\\\angle${NL}`, "g"), "∠"],
-  [new RegExp(`\\\\triangle${NL}`, "g"), "△"],
+  [new RegExp(`\\\\angle${NL} ?`, "g"), "∠"],
+  [new RegExp(`\\\\triangle${NL} ?`, "g"), "△"],
   [new RegExp(`\\\\perp${NL}`, "g"), "⊥"],
   [new RegExp(`\\\\parallel${NL}`, "g"), "∥"],
   [new RegExp(`\\\\cdots${NL}`, "g"), "⋯"],
@@ -187,51 +188,104 @@ function subscriptBareDigits(token: string): string {
 }
 
 /**
- * A formula symbol right before `_`: a lone letter, two capitals (`SO_4`, not `API_2`), an element-like `Na`, a Greek letter, a digit, a group or a script.
- * The body may be followed by a capital (`C_nH`, the next element) but not by a small letter (`max_len`).
+ * A formula symbol right before `_`: a lone letter (`x_i`), an element-like `Na`, two capitals (`SO_4`, checked to be
+ * elements in `subBody`), a Greek letter, a group, an integral or sum, or `log`. Never a digit or a longer word, so
+ * `max_len`, `item_2`, `var1_a` and `ID_1` stay. The body may be followed by a capital (`C_nH`, the next element)
+ * but not by a small letter or digit.
  */
-const BEFORE = `(?<=(?:^|[^A-Za-z])[A-Za-z]|(?:^|[^A-Za-z])[A-Z]{2}|[A-Z][a-z]|[0-9)\\]α-ωΑ-Ω${SUB_ANY}${SUP_ANY}])`;
+const BEFORE = `(?<=(?:^|[^A-Za-z])(?:[A-Za-z]|[A-Z][a-z]|[A-Z]{2})|[)\\]α-ωΑ-Ω∫∮Σ∑∏]|(?:^|[^A-Za-z])(?:log|lg|ln))`;
 const SUB_RE = new RegExp(
   `${BEFORE}_(?:\\{([^{}]{1,12})\\}|(\\d+(?:[a-z](?:[+-]\\d+)?)?|[a-z](?:[+-]\\d+)?)(?![a-z0-9]))`,
   "g",
 );
 /** `^` is never prose, so any symbol may carry a power: `mc^2`, `at^2`, `sin^2`. */
 const SUP_RE = new RegExp(
-  `(?<=[A-Za-z0-9)\\]${SUB_ANY}${SUP_ANY}])\\^(?:\\{([^{}]{1,12})\\}|\\(([^()]{1,10})\\)|(\\d*[+-](?![A-Za-z0-9(])|\\d+|[a-z](?![A-Za-z0-9])))`,
+  `(?<=[A-Za-z0-9)\\]${SUB_ANY}${SUP_ANY}])\\^(?:\\{([^{}]{1,12})\\}|\\(([^()]{1,10})\\)|(\\d*[+-](?![A-Za-z0-9(])|-?\\d+|-?[a-z](?![A-Za-z0-9])))`,
   "g",
 );
 const TOKEN_RE = new RegExp(
   `(?<![\\p{L}\\p{N}_])[0-9A-Z()[\\]][0-9A-Za-z()[\\]${SUB_ANY}${SUP_ANY}]*(?![\\p{L}\\p{N}_])`,
   "gu",
 );
+// Bounded runs: an unbounded `run*[var]run*` is cubic on long unspaced text.
 const RUN = `[A-Za-z0-9()${SUB_ANY}]`;
-const JOIN_RE = new RegExp(`(${RUN}*[${SUB_VARS}]${RUN}*) (?=([A-Z(]${RUN}*))`, "g");
+const JOIN_RE = new RegExp(`(${RUN}{0,30}[${SUB_VARS}]${RUN}{0,30}) (?=([A-Z(]${RUN}{0,30}))`, "g");
 const HAS_COUNT = new RegExp(`[0-9${SUB_ANY}]`);
 
-function prettySpan(text: string): string {
-  if (!/[_^\\\d$]/.test(text)) return text;
-  // `$x^2$` / `$$x^2$$` inline math markers: tight against a formula, never a price or a variable.
-  let s = text.replace(/(?<![\w$])(\${1,2})(?=\S)([^$\n]{1,80}?[_^\\][^$\n]{0,80}?)(?<=\S)\1(?![\w$])/g, "$2");
-  if (s.includes("\\")) {
-    for (const [re, to] of LATEX) s = s.replace(re, to);
-    s = s.replace(/\\(sin|cos|tan|cot|tg|ctg|log|ln|lg|exp|lim|max|min|arcsin|arccos|arctan)(?![A-Za-z])/g, "$1");
-    s = s.replace(/\\(?:vec|overrightarrow|bar|overline|hat|mathbf|mathit)\{([^{}]{1,12})\}/g, "$1");
-    s = s.replace(/\\sqrt\[3\]\{([^{}]{1,20})\}/g, (_a, x: string) => (/^\w+$/.test(x) ? `∛${x}` : `∛(${x})`));
-    s = s.replace(/\\[dt]?frac\{([^{}]{1,20})\}\{([^{}]{1,20})\}/g, (_a, a: string, b: string) => `${wrap(a)}/${wrap(b)}`);
-    s = s.replace(/\\sqrt\{([^{}]{1,20})\}/g, (_a, x: string) => (/^\w+$/.test(x) ? `√${x}` : `√(${x})`));
-    // `\left(`, `\,` spacing and leftover `\{ \}` braces.
-    s = s.replace(/\\(?:left|right)(?=[()[\]|])/g, "").replace(/\\[,;:! ]/g, " ").replace(/\\([{}])/g, "$1");
-  }
+/** The text before `_` when it is two capitals: they must be element symbols (`SO_4`, `NH_4`; not `ID_1`, `TV_2`). */
+function twoCapsOk(whole: string, offset: number): boolean {
+  const word = whole.slice(Math.max(0, offset - 3), offset).match(/(?:^|[^A-Za-z])([A-Z]{2})$/)?.[1];
+  if (!word) return true;
+  const els = chemElements(word);
+  return Boolean(els && els.length === 2 && !NOT_CHEM.test(`${word}2`));
+}
+
+/**
+ * A model that writes one backslash inside JSON gets `\f`, `\t`, `\b`, `\n` or `\r` from the parser: `\frac` arrives
+ * as a form feed and `rac`. A control character followed by a command tail is turned back into the command.
+ */
+const CONTROL_LATEX =
+  /\f(?=rac\{)|\t(?=(?:imes|heta|riangle|au|ext\{|frac\{|o)(?![A-Za-z]))|\x08(?=(?:eta|ar\{|eta)(?![A-Za-z]))|\n(?=(?:eq|abla|otin|eg)(?![A-Za-z]))|\r(?=(?:ightarrow|ight[)\]|]|ho)(?![A-Za-z]))/g;
+const CONTROL_NAME: Record<string, string> = { "\f": "f", "\t": "t", "\x08": "b", "\n": "n", "\r": "r" };
+
+const FUNCS = /\\(sin|cos|tan|cot|tg|ctg|log|ln|lg|exp|lim|max|min|arcsin|arccos|arctan)(?![A-Za-z])/g;
+
+/** One pass of LaTeX structures; repeated until nothing changes, so nested `\frac{\sqrt{3}}{2}` resolves inside out. */
+function latexStructures(s: string): string {
+  return s
+    .replace(/lim_\{([^{}]{1,20})\}/g, (_a, x: string) => `lim(${x.replace(/\s+/g, "")})`)
+    .replace(/\\(?:vec|overrightarrow)\{([^{}]{1,12})\}/g, "$1\u20D7")
+    .replace(/\\(?:bar|overline)\{([^{}]{1,12})\}/g, (_a, x: string) => [...x].map((c) => `${c}\u0305`).join(""))
+    .replace(/\\(?:hat|widehat)\{([^{}]{1,12})\}/g, "$1\u0302")
+    .replace(/\\(?:mathbf|mathit|mathrm|textbf|textit|text|ce|operatorname)\{([^{}]{1,40})\}/g, "$1")
+    .replace(/\\sqrt\[3\]\{([^{}]{1,30})\}/g, (_a, x: string) => (/^\w+$/.test(x) ? `∛${x}` : `∛(${x})`))
+    .replace(/\\[dt]?frac\{([^{}]{1,30})\}\{([^{}]{1,30})\}/g, (_a, a: string, b: string, offset: number, whole: string) => {
+      const out = `${wrap(a)}/${wrap(b)}`;
+      // `\frac{4}{3}\pi r^3` must not read as 4/(3π).
+      return /^[A-Za-zα-ωΑ-Ω√(\\]/.test(whole.slice(offset + _a.length)) ? `(${out})` : out;
+    })
+    .replace(/\\sqrt\{([^{}]{1,30})\}/g, (_a, x: string) => (/^[\w.]+$/.test(x) ? `√${x}` : `√(${x})`));
+}
+
+function scripts(s: string): string {
   // Twice: in `C_nH_{2n+1}` the `H` is a lone symbol only once `C_n` became `Cₙ`.
   for (let pass = 0; pass < 2; pass += 1) {
-    s = s.replace(SUB_RE, (all, braced?: string, bare?: string) => mapAll((braced ?? bare ?? "").replace(/\s+/g, ""), SUB) ?? all);
+    s = s.replace(SUB_RE, (all, braced: string | undefined, bare: string | undefined, offset: number, whole: string) => {
+      if (!twoCapsOk(whole, offset)) return all;
+      return mapAll((braced ?? bare ?? "").replace(/\s+/g, ""), SUB) ?? all;
+    });
   }
-  s = s.replace(SUP_RE, (all, braced?: string, paren?: string, bare?: string) => {
+  return s.replace(SUP_RE, (all, braced?: string, paren?: string, bare?: string) => {
     const body = (braced ?? paren ?? bare ?? "").replace(/\s+/g, "");
     return mapAll(body, SUP) ?? all;
   });
-  // `\mathrm{H_{2}O}` unwraps once its inner braces are gone.
-  if (s.includes("\\")) s = s.replace(/\\(?:mathrm|text|ce)\{([^{}]{1,40})\}/g, "$1");
+}
+
+function prettySpan(text: string): string {
+  if (!/[_^\\\d$\f\t\x08\n\r]/.test(text)) return text;
+  let s = text.replace(CONTROL_LATEX, (c) => `\\${CONTROL_NAME[c]}`);
+  // `$x^2$` / `$$x^2$$` inline math markers: tight against a formula, never a price or a variable.
+  s = s.replace(/(?<![\w$])(\${1,2})(?=\S)([^$\n]{1,80}?[_^\\][^$\n]{0,80}?)(?<=\S)\1(?![\w$])/g, "$2");
+  if (s.includes("\\")) {
+    const raw = s;
+    for (const [re, to] of LATEX) s = s.replace(re, to);
+    // `2ab\cos\gamma` → `2ab cos γ`: a function name never runs into its neighbours.
+    s = s.replace(FUNCS, (_a, name: string, offset: number, whole: string) => {
+      const before = /[A-Za-z0-9)α-ω]/.test(whole[offset - 1] ?? "") ? " " : "";
+      const after = /^[A-Za-zα-ωΑ-Ω\d(]/.test(whole.slice(offset + _a.length)) ? " " : "";
+      return `${before}${name}${after}`;
+    });
+    for (let pass = 0; pass < 4; pass += 1) {
+      const next = scripts(latexStructures(s));
+      if (next === s) break;
+      s = next;
+    }
+    // `\left(`, `\,` spacing and `\{ \}` braces, only in a span that really was LaTeX (never a shell line).
+    if (s !== raw) {
+      s = s.replace(/\\(?:left|right)(?=[()[\]|])/g, "").replace(/\\[,;:! ]/g, " ").replace(/\\([{}])/g, "$1");
+    }
+  }
+  s = scripts(s);
 
   // Bare counts inside chemical tokens: C6H8O7, Ca(OH)2, (CH2).
   s = s.replace(TOKEN_RE, (tok) => subscriptBareDigits(tok));
@@ -248,7 +302,7 @@ function prettySpan(text: string): string {
 
 /** One string: LaTeX habits and bare chemical counts to Unicode. Text without them comes back as is. */
 export function prettyFormula(text: string): string {
-  if (!/[_^\\\d$]/.test(text)) return text;
+  if (!/[_^\\\d$\f\t\x08\n\r]/.test(text)) return text;
   let out = "";
   let last = 0;
   for (const m of text.matchAll(PROTECTED)) {

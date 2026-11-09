@@ -42,12 +42,24 @@ test("math, physics and geometry", () => {
     ["\\sqrt{2} va \\sqrt{x^2+y^2}", "√2 va √(x²+y²)"],
     ["\\frac{a+b}{2} va \\frac{\\pi}{2}", "(a+b)/2 va π/2"],
     ["\\sin^2\\alpha + \\cos^2\\alpha = 1", "sin²α + cos²α = 1"],
-    ["\\angle ABC = 90^\\circ", "∠ ABC = 90°"],
-    ["\\triangle ABC \\cong \\triangle DEF", "△ ABC ≅ △ DEF"],
+    ["\\angle ABC = 90^\\circ", "∠ABC = 90°"],
+    ["\\triangle ABC \\cong \\triangle DEF", "△ABC ≅ △DEF"],
     ["a \\perp b, c \\parallel d", "a ⊥ b, c ∥ d"],
     ["\\lambda_1 \\le \\lambda_2", "λ₁ ≤ λ₂"],
-    ["\\Delta H^\\circ < 0", "Δ H° < 0"],
+    ["\\Delta H^\\circ < 0", "ΔH° < 0"],
     ["F_{ish} = \\mu N", "Fᵢₛₕ = μ N"],
+    ["x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}", "x = (-b ± √(b²-4ac))/2a"],
+    ["\\frac{\\sqrt{3}}{2}", "√3/2"],
+    ["\\frac{1}{\\sqrt{2}}", "1/√2"],
+    ["\\frac{x^{2}}{2}", "x²/2"],
+    ["V = \\frac{4}{3}\\pi r^3", "V = (4/3)π r³"],
+    ["10^-3 va s^-1, e^-x", "10⁻³ va s⁻¹, e⁻ˣ"],
+    ["c^2 = a^2 + b^2 - 2ab\\cos\\gamma", "c² = a² + b² - 2ab cos γ"],
+    ["\\int_0^1 x dx", "∫₀¹ x dx"],
+    ["\\log_2 8 = 3", "log₂ 8 = 3"],
+    ["\\lim_{x \\to 0} f(x)", "lim(x→0) f(x)"],
+    ["\\vec{F} = m\\vec{a}", "F\u20D7 = ma\u20D7"],
+    ["\\bar{x}", "x\u0305"],
   ]);
 });
 
@@ -58,11 +70,26 @@ test("prose, code, links and product names stay", () => {
     "F2 tugmasi", "Galaxy S8", "KS2 dasturi", "API_2", "iPhone 15", "5G", "N95",
     "max_len", "file_name", "n_samples", "is_open", "item_2", "image_2.png", "test_1.py", "$user_name = $_POST['x'];",
     "narxi $5 va $10 x_y $20",
+    "ID_1", "DB_1", "AI_2", "TV_2", "PC_2", "WiFi_6", "isOk_1", "item_1_a", "var1_a", "COP26", "COP29", "OS2", "SSH2",
+    "find . -exec rm {} \\;", "ls a\\ b",
     "https://en.wikipedia.org/wiki/Windows_11", "https://example.com/a?id=ab_2", "user_1@gmail.com", "www.CO2.org/H2O",
     "C:\\total\\to\\path",
   ]) {
     assert.equal(prettyFormula(s), s, s);
   }
+});
+
+test("a backslash eaten by JSON parsing comes back", () => {
+  const parsed = JSON.parse('{"t":"\\frac{1}{2} \\times b \\theta \\beta"}') as { t: string };
+  assert.ok(parsed.t.includes("\f"));
+  assert.equal(prettyFormula(parsed.t), "1/2 × b θ β");
+  assert.equal(prettyFormula("birinchi qator\nikkinchi\tustun"), "birinchi qator\nikkinchi\tustun");
+});
+
+test("long unspaced runs stay fast", () => {
+  const t = Date.now();
+  prettyFormula("a_".repeat(2000));
+  assert.ok(Date.now() - t < 500, `${Date.now() - t} ms`);
 });
 
 test("a list of formulas keeps its spaces", () => {
