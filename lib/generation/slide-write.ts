@@ -1,5 +1,5 @@
 import { slideLabels } from "./i18n";
-import { prettyFormulasDeep } from "./formula-text";
+import { prettyFormula, prettyFormulasDeep } from "./formula-text";
 import { parseLlmJson } from "./json";
 import { llmComplete, llmEnabled, llmStream } from "./llm";
 import { errorWithCause } from "./llm/failure";
@@ -1002,7 +1002,7 @@ export async function writeSlidesWithLlm(
     slides.unshift({
       id: "title-fix",
       layout: "title",
-      title: meta.topic,
+      title: prettyFormula(meta.topic),
       subtitle: meta.workLabel,
       kicker: meta.subject && meta.subject !== meta.workLabel ? meta.subject : L.presentation,
       footer,
@@ -1012,7 +1012,7 @@ export async function writeSlidesWithLlm(
     const same = kick.toLowerCase() === meta.topic.toLowerCase();
     slides[0] = {
       ...slides[0],
-      title: meta.topic,
+      title: prettyFormula(meta.topic),
       kicker: same ? clipTo(meta.subject || meta.workLabel || L.presentation, 28) : kick,
     };
   }
