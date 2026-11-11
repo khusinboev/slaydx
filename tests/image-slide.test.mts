@@ -19,7 +19,8 @@ import { PICTURE_LIMITS, clip, normalizePictureSlide, parsePictureDeck, pinTitle
 import { slidePrompt } from "../lib/generation/image-slide/prompt.ts";
 import { drawBody, usageUsd } from "../lib/generation/image-slide/draw.ts";
 import { expectedTexts, fixNote, parseIssues } from "../lib/generation/image-slide/check.ts";
-import { buildImageSlideDoc, ImageSlideError } from "../lib/generation/image-slide/build.ts";
+import { buildImageSlideDoc, ImageSlideError, ASSEMBLY_RESERVE_MS, drawDeadlineOf } from "../lib/generation/image-slide/build.ts";
+import { applyLiveEvent, type LiveDeck } from "../lib/generation/slide-progress.ts";
 
 const tool = TOOL_BY_ID["image-slide"];
 const pricing = { soumPerUsd: 12_700, markup: 2, step: 100 };
@@ -300,4 +301,52 @@ test("a slide whose text came out wrong is redrawn once with the exact spelling"
   } finally {
     s.restore();
   }
+});
+
+test("the worker's live reducer accepts every event of a build, in order (review M1)", async () => {
+  const s = stub(5, () => 200);
+  try {
+    let state: LiveDeck | undefined;
+    const built = await buildImageSlideDoc(extractMeta(tool, values), values, Date.now() + 600_000, {
+      // Exactly what `LiveReporter.sink` does: a reducer that throws on an out-of-order event.
+      onProgress: (ev) => {
+        state = applyLiveEvent(state, ev);
+      },
+    });
+    assert.ok(state, "live state built");
+    assert.equal(state!.slides.length, 5);
+    assert.equal(state!.images.got, 5);
+    assert.ok(state!.slides.every((x) => x.fullImage && x.image?.url.startsWith("data:image/jpeg;base64,")));
+    assert.equal(built.doc.slides!.length, 5);
+  } finally {
+    s.restore();
+  }
+});
+
+test("no draw starts inside the assembly reserve: a deck without time fails before any paid draw", async () => {
+  const s = stub(5, () => 200);
+  try {
+    // Only the reserve + a little is left: the job fails (full refund) and no paid draw starts.
+    await assert.rejects(buildImageSlideDoc(extractMeta(tool, values), values, Date.now() + ASSEMBLY_RESERVE_MS + 30_000));
+    assert.equal(s.calls.filter((c) => c.kind === "draw").length, 0);
+  } finally {
+    s.restore();
+  }
+});
+
+test("draws end at least the assembly reserve before the job deadline (review m2)", () => {
+  assert.ok(ASSEMBLY_RESERVE_MS >= 45_000);
+  assert.equal(drawDeadlineOf(1_000_000), 1_000_000 - ASSEMBLY_RESERVE_MS);
+});
+
+test("admin «Narxlar»: the ladder prices count × model with the live pricing block (review m1)", async () => {
+  const { ladderInputs, ladderFor } = await import("../lib/server/admin-pricing.ts");
+  const inputs = ladderInputs("image-slide");
+  assert.equal(inputs.length, IMAGE_SLIDE_MODELS.length * 3);
+  assert.ok(inputs.every((i) => typeof i.values.imageModel === "string" && typeof i.values.slideCount === "number"));
+  const ladder = ladderFor("image-slide", media);
+  const price = (n: number, m: string) => ladder[inputs.findIndex((i) => i.values.slideCount === n && i.values.imageModel === m)].base;
+  assert.equal(price(10, "nb21"), imageSlidePrice({ slideCount: 10, imageModel: "nb21" }, pricing));
+  assert.ok(price(10, "pro") > price(10, "nb21"));
+  assert.ok(price(30, "nb21") > price(10, "nb21"));
 });

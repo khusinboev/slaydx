@@ -27,10 +27,10 @@ spike is the evidence.
 |---|---|---|
 | Slayd | 3 000 | flat up to 20 |
 | Pro slayd | 24 000 | 2 000 |
-| AI slayd, Nano Banana 2.1 | ≈ 21 000 | ≈ 1 800 |
-| AI slayd, Nano Banana Pro | ≈ 64 000 | ≈ 5 400 |
+| AI slayd, Nano Banana 2.1 | ≈ 31 300 | ≈ 2 540 |
+| AI slayd, Nano Banana Pro | ≈ 86 100 | ≈ 7 100 |
 
-(at 12 800 so'm / $ and markup 2). It is a per-slide product like Pro slayd, so it lives on the Pro slayd page as a second
+(at 12 700 so'm / $ and markup 2). It is a per-slide product like Pro slayd, so it lives on the Pro slayd page as a second
 kind: a switch «Pro slayd · AI slayd» on top of both forms. Its own tool id (`image-slide`, slug `ai-slayd`, unlisted)
 keeps price, budget, refunds, editing and the admin price row apart from Pro slayd.
 
@@ -38,8 +38,8 @@ Price (`imageSlidePrice`, one function for server and form):
 
     so'm = roundUp100( (TEXT_USD + slides × model.usdPerSlide) × media.markup × finance.soum_per_usd )
 
-`TEXT_USD` = 0.03 (the writer call), `usdPerSlide` = the measured cost above with a small reserve (2.1: 0.07,
-Pro: 0.21). The admin «Narxlar» % applies on top, as for every tool.
+`TEXT_USD` = 0.03 (the writer call), `usdPerSlide` = the measured cost per delivered slide including proofreading and
+redraws (2.1: 0.10, measured 0.090–0.093; Pro: 0.28). The admin «Narxlar» % applies on top, as for every tool.
 
 ## Engine (`lib/generation/image-slide/`)
 
@@ -49,20 +49,24 @@ Pro: 0.21). The admin «Narxlar» % applies on top, as for every tool.
    long paragraphs are where image models fail. Formulas pass `prettyFormula`. The count is clamped to the order.
 2. **Prompt.** Built in code, no second LLM: one design block for the whole deck (the chosen style: palette, type,
    layout grammar), the exact text block («render character for character, keep ʻ ʼ»), the visual, `n / N`.
-3. **Draw.** Slide 1 first; the others in parallel (6 lanes) with slide 1 as a style reference image, so the deck
-   looks like one deck. One retry per slide on a failed call (never on a blocked key). 2K, 16:9, JPEG; stored as
-   1920×1080 JPEG q86.
-4. **Assemble.** `SlideModel` with the new layout `picture` (one full-bleed image layer), title and notes kept for
-   search and accessibility. A slide whose picture failed falls back to a plain text slide and is refunded.
+3. **Draw.** Slide 1 first (at most 200 s); the others in parallel (10 lanes) with slide 1 as a style reference image,
+   so the deck looks like one deck. One retry per slide on a failed call (never on a blocked key). 2K, 16:9, JPEG;
+   stored as 1920 px JPEG q86. Draws stop 45 s before the job deadline (PPTX, assets and commit need it).
+4. **Proofread.** The text model reads each drawn slide against its text items and lists wrong words and extra text
+   (the second live deck drew «Slide 1 of 12», «16:9» and «Print-ready» badges). One redraw with the exact spelling;
+   the picture with fewer issues is kept.
+5. **Assemble.** `SlideModel.fullImage` with the picture in `image` (one full-bleed image layer), title and notes kept
+   for search and accessibility. A slide whose picture failed falls back to its text layout and is refunded.
 
 ## Money
 
 Charged up front by the formula. A slide without its picture is refunded proportionally (`delivered`: unit «slayd»,
-want = ordered slides, got = drawn slides). Real spend goes to `cost_json` from the usage tokens of each call.
+«AI slayd», want = ordered slides, got = drawn slides). Real spend goes to `cost_json` from the usage tokens of each call.
 
 ## Viewer, files, editing
 
-Slides viewer and thumbnails unchanged (the `picture` layout is one image layer). PPTX: one picture per slide plus
+Slides viewer and thumbnails unchanged (a `fullImage` slide is one image layer; no 1024 px screen copy, it would blur
+the text). PPTX: one picture per slide plus
 speaker notes; PDF and PNG downloads work as for any deck. No text editing: the text is inside the picture (the tool
 has no edit adapter).
 

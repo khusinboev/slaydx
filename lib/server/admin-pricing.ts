@@ -1,4 +1,5 @@
 import "server-only";
+import { IMAGE_SLIDE_DEFAULT, IMAGE_SLIDE_MAX, IMAGE_SLIDE_MIN, IMAGE_SLIDE_MODELS } from "../generation/image-slide/models";
 import type { PoolClient } from "pg";
 import { ApiError } from "./api";
 import { adminTx } from "./admin-audit";
@@ -248,6 +249,11 @@ export function ladderInputs(toolId: ToolId): LadderInput[] {
       const counts = [...new Set([PRO_SLIDE_MIN, PRO_SLIDE_DEFAULT, PRO_SLIDE_MAX])].sort((a, b) => a - b);
       return counts.map((n) => ({ label: `${n} slayd`, values: { slideCount: n } }));
     }
+    case "image-slide":
+      // Count × model (`image-slide/models.ts`): both change the price.
+      return IMAGE_SLIDE_MODELS.flatMap((m) =>
+        [IMAGE_SLIDE_MIN, IMAGE_SLIDE_DEFAULT, IMAGE_SLIDE_MAX].map((n) => ({ label: `${n} slayd · ${m.label}`, values: { slideCount: n, imageModel: m.id } })),
+      );
     case "image":
       // `basePriceFor` prices 1, 2–3 and 4+ images, per model (`image-models.ts`): Gemini first (today's labels), then each other model.
       return IMAGE_MODELS.flatMap((m) =>
@@ -364,7 +370,7 @@ export function ladderFor(toolId: ToolId, media?: MediaPricing | null): LadderSt
 async function mediaPricingFor(toolId: ToolId): Promise<MediaPricing | null> {
   if (toolId === "studio-voice") return { ...(await mediaPricing()), clonePrice: clonePriceOf(await getSetting("studio.clone_price")) };
   if (toolId === "studio-mix") return { ...(await mediaPricing()), mixPrice: mixPriceOf(await getSetting("studio.mix_price")) };
-  return toolId === "studio-image" || toolId === "studio-video" || toolId === "studio-speech" || toolId === "studio-audio" || toolId === "studio-transcribe" || toolId === "studio-dub" ? mediaPricing() : null;
+  return toolId === "image-slide" || toolId === "studio-image" || toolId === "studio-video" || toolId === "studio-speech" || toolId === "studio-audio" || toolId === "studio-transcribe" || toolId === "studio-dub" ? mediaPricing() : null;
 }
 
 export function effectiveLadder(steps: ReadonlyArray<LadderStep>, adj: PriceAdjust | null): LadderRow[] {
@@ -1307,7 +1313,7 @@ const PRICE_INPUTS_SQL = `jsonb_strip_nulls(jsonb_build_object(
     'slideCount', g.values_json->'slideCount', 'imageCount', g.values_json->'imageCount',
     'essayContext', g.values_json->'essayContext', 'essayKind', g.values_json->'essayKind', 'wordTarget', g.values_json->'wordTarget',
     'articleType', g.values_json->'articleType', 'termCount', g.values_json->'termCount', 'glossaryType', g.values_json->'glossaryType',
-    'type', g.values_json->'type', 'modelId', g.values_json->'modelId',
+    'type', g.values_json->'type', 'modelId', g.values_json->'modelId', 'imageModel', g.values_json->'imageModel',
     'sourceChars', COALESCE(g.values_json->'sourceChars', to_jsonb(length(g.values_json->>'sourceText'))),
     'sourceAssetId', CASE WHEN g.tool_id = 'translation' THEN to_jsonb('projection'::text) END))`;
 

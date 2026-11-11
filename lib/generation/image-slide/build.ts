@@ -29,7 +29,20 @@ const REFERENCE_WIDTH = 1024;
 
 export class ImageSlideError extends Error {}
 
-export type PictureJpeg = { base64: string; mime: "image/jpeg" };
+/**
+ * Time kept free after the last draw for the PPTX (sharp re-encodes every picture), the HTML, the asset swap and the
+ * commit: the worker's hard stop is only 30 s past the deadline.
+ */
+export const ASSEMBLY_RESERVE_MS = 45_000;
+/** The last moment a draw, a retry or a redraw may run until: the job deadline minus the assembly reserve. */
+export function drawDeadlineOf(deadline: number): number {
+  return deadline - ASSEMBLY_RESERVE_MS;
+}
+
+/** Slide 1 (the style reference) may take at most this long, retries and redraw included: the rest wait for it. */
+export const FIRST_SLIDE_CAP_MS = 200_000;
+/** The picture sent to the live view: small, so many finished slides fit the live state (`LIVE_MAX_BYTES`). */
+const LIVE_WIDTH = 640;
 
 /** Re-encode a drawn slide (2752×1536) to the stored size. Falls back to the original bytes if sharp fails. */
 export async function storePicture(base64: string, mime: string, width = PICTURE_WIDTH, quality = PICTURE_QUALITY): Promise<{ base64: string; mime: string }> {
@@ -110,9 +123,10 @@ export async function buildImageSlideDoc(
   const style = imageSlideStyleOf(values);
   const footer = [meta.author, meta.organization].filter(Boolean).join(" · ");
 
-  live?.({ type: "stage", stage: "text" });
+  // No live event before `plan`: the live reducer refuses a stage that comes first (`slide-progress.ts`).
+  const drawDeadline = drawDeadlineOf(deadline);
   // The text must leave time for at least the first slide and one parallel round.
-  const textDeadline = deadline - 2 * SLIDE_DRAW_MIN_MS - 20_000;
+  const textDeadline = drawDeadline - 2 * SLIDE_DRAW_MIN_MS - 20_000;
   const pictures = await writePictureDeck(meta, values, want, textDeadline);
   if (!pictures.length) throw new ImageSlideError("AI taqdimot matnini yozmadi");
 
@@ -130,12 +144,15 @@ export async function buildImageSlideDoc(
   let redrawn = 0;
   let flagged = 0;
 
-  /** Store a finished picture on its slide and show it live. */
+  /** Store a finished picture on its slide and show a light copy of it live. */
   const put = async (i: number, stored: { base64: string; mime: string }) => {
     const url = `data:${stored.mime};base64,${stored.base64}`;
     slides[i] = { ...slides[i], image: { url, alt: pictures[i].title } };
     drawn += 1;
-    live?.({ type: "image", index: i, url });
+    if (live) {
+      const small = await storePicture(stored.base64, stored.mime, LIVE_WIDTH, 72);
+      live({ type: "image", index: i, url: `data:${small.mime};base64,${small.base64}` });
+    }
   };
 
   /**
@@ -143,8 +160,8 @@ export async function buildImageSlideDoc(
    * call still fits). Of the two pictures the one with fewer wrong items is kept. Returns the kept draw (for the
    * style reference), or `null` when the slide has no picture.
    */
-  const produce = async (i: number, refImage: DrawRef | null): Promise<{ base64: string; mime: string } | null> => {
-    const first = await drawWithRetry(model, prompts[i], refImage, deadline);
+  const produce = async (i: number, refImage: DrawRef | null, until: number): Promise<{ base64: string; mime: string } | null> => {
+    const first = await drawWithRetry(model, prompts[i], refImage, until);
     if (!first.ok) {
       failures.push(`${i + 1}: ${first.reason} ${first.detail}`.slice(0, 200));
       if (first.reason === "blocked" || first.reason === "no-key") blocked = true;
@@ -152,13 +169,14 @@ export async function buildImageSlideDoc(
     }
     const expected = expectedTexts(pictures[i], i, pictures.length);
     let kept = await storePicture(first.base64, first.mime);
-    let issues = await checkSlideText(kept.base64, kept.mime, expected, deadline);
-    if (issues.length && !blocked && deadline - Date.now() > SLIDE_DRAW_MIN_MS + 20_000) {
+    let issues = await checkSlideText(kept.base64, kept.mime, expected, until);
+    // A redraw only while a full call plus its check still fits before `until`.
+    if (issues.length && !blocked && until - Date.now() > SLIDE_DRAW_MIN_MS + 30_000) {
       redrawn += 1;
-      const again = await drawSlide(model, `${prompts[i]}\n\n${fixNote(issues)}`, refImage, deadline);
+      const again = await drawSlide(model, `${prompts[i]}\n\n${fixNote(issues)}`, refImage, until);
       if (again.ok) {
         const second = await storePicture(again.base64, again.mime);
-        const issues2 = await checkSlideText(second.base64, second.mime, expected, deadline);
+        const issues2 = await checkSlideText(second.base64, second.mime, expected, until);
         if (issues2.length < issues.length) {
           kept = second;
           issues = issues2;
@@ -174,7 +192,7 @@ export async function buildImageSlideDoc(
   };
 
   // Slide 1 alone: it becomes the style reference of the rest.
-  const firstKept = await produce(0, null);
+  const firstKept = await produce(0, null, Math.min(drawDeadline, Date.now() + FIRST_SLIDE_CAP_MS));
   let ref: DrawRef | null = null;
   if (firstKept) {
     const small = await storePicture(firstKept.base64, firstKept.mime, REFERENCE_WIDTH, 80);
@@ -192,7 +210,7 @@ export async function buildImageSlideDoc(
     while (next < rest.length && !blocked) {
       const i = rest[next];
       next += 1;
-      await produce(i, ref);
+      await produce(i, ref, drawDeadline);
     }
   }
   await Promise.all(Array.from({ length: Math.min(DRAW_LANES, rest.length) }, () => lane()));
