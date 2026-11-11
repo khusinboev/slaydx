@@ -116,6 +116,7 @@ export type PricingUnit = "slide" | "page" | "kchars" | "image" | "term" | "job"
 export const UNIT_OF: Record<ToolId, PricingUnit> = {
   slide: "slide",
   "pro-slide": "slide",
+  "image-slide": "slide",
   coursework: "page",
   referat: "page",
   "mustaqil-ish": "page",

@@ -86,6 +86,12 @@ export type SlideModel = {
    * (`imageRestore` op) uni qaytaradi. `planSlide` bu maydonni CHIZMAYDI.
    */
   imageOrig?: { url: string; alt?: string };
+  /**
+   * AI slide (`image-slide`, docs/ai-slide/SPEC.md): `image` IS the whole slide — text, formulas and illustration drawn
+   * by the image model. `planSlide` then draws only that picture, edge to edge; without a picture (the draw failed)
+   * the slide falls back to its text layout, so the deck stays whole.
+   */
+  fullImage?: boolean;
 };
 
 export type SlideDeck = {

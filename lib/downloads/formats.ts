@@ -97,6 +97,7 @@ const DOC: ToolPlan = { extras: ["pdf"] };
 const TOOL_PLANS: Readonly<Record<ToolId, ToolPlan>> = {
   slide: { extras: ["pdf", "slides-png"] },
   "pro-slide": { extras: ["pdf", "slides-png"] },
+  "image-slide": { extras: ["pdf", "slides-png"] },
   coursework: DOC,
   referat: DOC,
   "mustaqil-ish": DOC,

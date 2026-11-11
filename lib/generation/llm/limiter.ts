@@ -19,6 +19,8 @@
 export const PROVIDER_MAX_INFLIGHT: Record<string, number> = {
   gemini: 10,
   "gemini-image": 6,
+  // AI slide whole-slide draws (`image-slide/draw.ts`): one deck uses up to 10 lanes (`DRAW_LANES`).
+  "gemini-slide": 12,
   // GPT Image: default Build tier allows 20 images per minute.
   "openai-image": 4,
   anthropic: 4,

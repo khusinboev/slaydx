@@ -34,6 +34,7 @@ import { getClientClonePrice } from "./media/studio-speech-client";
 import { STUDIO_MIX_PRICE_DEFAULT, getClientMixPrice, mixModeOf, studioMixError } from "./media/catalog-mix";
 import { speechToolOffered, studioDubError, studioDubPrice, studioTranscribeError, studioTranscribePrice } from "./media/studio-transcribe";
 import { studioAudioError, studioAudioPrice } from "./media/studio-audio";
+import { imageSlideError, imageSlidePrice } from "./generation/image-slide/models";
 
 const TOPIC_FILE_MODES = [
   {
@@ -72,6 +73,7 @@ const TOPIC_FILE_MODES = [
  * shuning uchun u foydalanuvchi tilida yozilgan.
  */
 const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
+  "image-slide": [{ kind: "text", name: "topic", legend: "Taqdimot mavzusi", required: true }],
   image: [{ kind: "textarea", name: "prompt", legend: "Rasm tavsifi", required: true }],
   "studio-image": [{ kind: "textarea", name: "prompt", legend: "Rasm tavsifi", required: true }],
   // Studio «Video»: the prompt is mode-dependent (effects need only a photo), the model is not — the tab sends it in both modes.
@@ -443,6 +445,31 @@ export const TOOLS: ToolConfig[] = [
     output: "pptx",
     custom: "pro-slide",
     basePrice: PRO_SLIDE_PER_SLIDE * PRO_SLIDE_MIN,
+    fields: [],
+  },
+  {
+    /*
+     * AI SLAYD (docs/ai-slide/SPEC.md): every slide is one picture drawn by a Gemini image model, with the exact text,
+     * formulas and illustrations inside. Lives on the Pro slayd page (a switch on top of both forms), so it is not
+     * listed on its own (`UNLISTED_TOOL_IDS`). Priced per slide from the model's cost × markup (`imageSlidePrice`).
+     */
+    id: "image-slide",
+    slug: "ai-slayd",
+    title: "AI slayd",
+    pageTitle: "AI slayd",
+    group: "umumiy",
+    icon: "presentation",
+    tc: "124 58 237",
+    description: "Har slayd — AI chizgan tiniq rasm: aniq matn, formula, sxema va illyustratsiya",
+    submitLabel: "AI slaydlarni yaratish",
+    creatingLabel: "AI slaydlar chizilmoqda...",
+    createdLabel: "AI taqdimot tayyor!",
+    topicLegend: "Taqdimot mavzusini kiriting",
+    topicPlaceholder: "Masalan: Kislotalarning turlari va xossalari",
+    extraOptional: true,
+    output: "pptx",
+    custom: "image-slide",
+    basePrice: 20_000,
     fields: [],
   },
   {
@@ -1317,7 +1344,7 @@ export function visibleToolGroups(): readonly { id: ToolGroup; label: string }[]
  * Tools that live INSIDE another page and get no card of their own: `studio-video` is the Studio's Video tab (the Studio
  * card already leads there). The catalogue, the create sheet, the search and the home groups list `listedTools()`.
  */
-export const UNLISTED_TOOL_IDS: ReadonlySet<ToolId> = new Set<ToolId>(["studio-video", "studio-speech", "studio-voice", "studio-audio", "studio-mix", "studio-transcribe", "studio-dub"]);
+export const UNLISTED_TOOL_IDS: ReadonlySet<ToolId> = new Set<ToolId>(["image-slide", "studio-video", "studio-speech", "studio-voice", "studio-audio", "studio-mix", "studio-transcribe", "studio-dub"]);
 export function listedTools(): ToolConfig[] {
   return TOOLS.filter((t) => !UNLISTED_TOOL_IDS.has(t.id));
 }
@@ -1572,6 +1599,7 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
    * to'g'ridan-to'g'ri yuborilgan so'rov ularni chetlab o'tardi.
    */
   if (tool.custom === "video") return videoParamsError(values);
+  if (tool.custom === "image-slide") return imageSlideError(values);
   if (tool.custom === "studio-image") return studioImageError(values);
   if (tool.custom === "studio-video") return studioVideoError(values);
   if (tool.custom === "studio-speech") return studioSpeechError(values);
@@ -1725,6 +1753,8 @@ export type ToolFeatures = {
    * `video.enabled` off. The tool is hidden when the list is empty (or the server did not send it).
    */
   videoProviders?: string[];
+  /** «AI slayd» can be ordered (`image_slide.enabled` and the Gemini key). Absent = not known -> the `images` flag decides. */
+  imageSlide?: boolean;
   /**
    * Studio picture models (catalog ids) available right now (`lib/server/media/availability.ts`). Optional: absent =
    * not known -> the `rasm` model list (or the `images` flag) decides.
@@ -1765,6 +1795,11 @@ export type ToolFeatures = {
  */
 export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | null): string | null {
   if (!features) return null;
+  if (tool.custom === "image-slide") {
+    // The writer needs the text key, the drawing the Gemini image key (and the admin switch, `features.imageSlide`).
+    const ok = (features.imageSlide ?? features.images) && features.llm;
+    return ok ? null : "AI slayd hozircha mavjud emas.";
+  }
   if (tool.custom === "video") {
     return features.videoProviders && features.videoProviders.length > 0 ? null : "Video xizmati hozircha mavjud emas: provayder sozlanmagan.";
   }
@@ -1926,6 +1961,11 @@ function essayPricePages(values: FormValues): number {
  * `lib/server/pricing.ts`; it never reads the client registry below.
  */
 export function basePriceFor(tool: ToolConfig, values: FormValues, media?: MediaPricing | null): number {
+  if (tool.id === "image-slide") {
+    // Cost × markup × rate per slide (`image-slide/models.ts`), with the server's pricing block or the form's copy of it.
+    const pricing = media ?? getClientMediaPricing() ?? defaultMediaPricing();
+    return imageSlidePrice(values, pricing);
+  }
   if (tool.id === "studio-image") {
     /*
      * Cost × markup (`studio-pricing.ts`), with the pricing block the caller passes (server: settings + overrides,

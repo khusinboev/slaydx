@@ -20,6 +20,7 @@ export type ToolKind = Pick<ToolConfig, "group" | "output">;
 export const TOOL_KINDS: Readonly<Record<ToolId, ToolKind>> = {
   slide: { group: "umumiy", output: "pptx" },
   "pro-slide": { group: "umumiy", output: "pptx" },
+  "image-slide": { group: "umumiy", output: "pptx" },
   image: { group: "umumiy", output: "png" },
   coursework: { group: "talaba", output: "docx" },
   referat: { group: "talaba", output: "docx" },

@@ -96,7 +96,7 @@ export function aspectFor(size: { width: number; height: number }): GeminiAspect
  * `blocked`, ya'ni `attachSlideImages` qolgan so'rovlarni umuman
  * yubormaydi. 429 — vaqtinchalik chastota chegarasi.
  */
-function geminiReason(status: number): ImageFailure {
+export function geminiReason(status: number): ImageFailure {
   if (status === 401 || status === 402 || status === 403) return "blocked";
   if (status === 429) return "rate";
   return "failed";
@@ -111,7 +111,7 @@ type ImagePart = { data: string; mime: string };
  * kelajakdagi metadata bloklarida tasodifan base64 satr uchrasa u
  * rasm deb olinmasin.
  */
-function findImagePart(node: unknown, depth = 0): ImagePart | null {
+export function findImagePart(node: unknown, depth = 0): ImagePart | null {
   if (node == null || depth > 8) return null;
   if (Array.isArray(node)) {
     for (const item of node) {
@@ -136,7 +136,7 @@ function findImagePart(node: unknown, depth = 0): ImagePart | null {
 }
 
 /** Javobdagi birinchi matn bo'lagi — rad etish sababini ko'rsatadi. */
-function firstText(node: unknown, depth = 0): string {
+export function firstText(node: unknown, depth = 0): string {
   if (node == null || depth > 8) return "";
   if (Array.isArray(node)) {
     for (const item of node) {
@@ -155,7 +155,7 @@ function firstText(node: unknown, depth = 0): string {
   return "";
 }
 
-function errorDetail(body: unknown): string {
+export function errorDetail(body: unknown): string {
   if (!body || typeof body !== "object") return "request failed";
   const rec = body as Record<string, unknown>;
   const err = rec.error;

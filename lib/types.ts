@@ -3,6 +3,8 @@ import type { AcademicDoc, Delivered } from "./generation/types";
 export type ToolId =
   | "slide"
   | "pro-slide"
+  /** AI slide (docs/ai-slide/SPEC.md): every slide drawn as one picture by a Gemini image model; lives on the Pro slayd page. */
+  | "image-slide"
   | "coursework"
   | "referat"
   | "essay"
@@ -157,7 +159,7 @@ export type ToolConfig = {
    * ko'radi.
    */
   output: "docx" | "pptx" | "png" | "mp3" | "mp4";
-  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "konspekt" | "teacher" | "game" | "media" | "infographic" | "portrait" | "video" | "studio-image" | "studio-video" | "studio-speech" | "studio-voice" | "studio-audio" | "studio-mix" | "studio-transcribe" | "studio-dub";
+  custom?: "slide" | "pro-slide" | "image-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "konspekt" | "teacher" | "game" | "media" | "infographic" | "portrait" | "video" | "studio-image" | "studio-video" | "studio-speech" | "studio-voice" | "studio-audio" | "studio-mix" | "studio-transcribe" | "studio-dub";
   basePrice: number;
 };
 

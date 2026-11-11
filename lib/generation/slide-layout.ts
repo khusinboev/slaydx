@@ -2941,6 +2941,10 @@ export function planSlide(
    * «O'z shablonim»: fon va qutilar namunadan (`slide-custom.ts`), tasma/
    * logotip YO'Q (namunaning o'z bezagi bor); shrift ustidan yozish qoladi.
    */
+  // AI slide: the picture is the slide (title, text and page number are inside it). No strip, logo or font overrides.
+  if (s.fullImage && s.image?.url) {
+    return { bg: "FFFFFF", layers: [{ t: "image", box: { x: 0, y: 0, w: W, h: H }, url: s.image.url, fit: "cover" }] };
+  }
   if (opts.custom) {
     const plan = planCustom(s, opts.custom, index, total);
     applyFontOverrides(plan, s);

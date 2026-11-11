@@ -582,6 +582,18 @@ async function buildArtifactInner(
     return file;
   }
 
+  // AI slide (docs/ai-slide/SPEC.md): every slide is one picture; same PPTX renderer and viewer as the other decks.
+  if (tool.id === "image-slide") {
+    const { buildImageSlideDoc } = await import("./image-slide/build");
+    const built = await buildImageSlideDoc(meta, values, deadline ?? Date.now() + 600_000, { onProgress: opts.onProgress });
+    const file = await renderPptx(built.doc, `${meta.fileNameHint}.pptx`);
+    file.html = renderHtml(built.doc);
+    file.doc = built.doc;
+    if (built.delivered) file.delivered = built.delivered;
+    opts.onProgress?.({ type: "done" });
+    return file;
+  }
+
   if (tool.id === "image") {
     return buildImageArtifact(tool, values, deadline, opts.onStage);
   }

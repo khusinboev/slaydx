@@ -109,6 +109,7 @@ export type SettingValues = {
   "tests.minutes_all": number;
   "tests.points_per_correct": number;
   "video.enabled": boolean;
+  "image_slide.enabled": boolean;
   "video.max_concurrent": number;
   "media.core.image": boolean;
   "media.core.video": boolean;
@@ -743,6 +744,16 @@ const CATALOG: Catalog = {
     max: TESTS_POINTS_MAX,
     validate: stepNumberValidator(0.1, TESTS_POINTS_MAX, 0.1),
     envDefault: () => TESTS_POINTS_DEFAULT,
+  },
+  "image_slide.enabled": {
+    key: "image_slide.enabled",
+    group: GEN_GROUP,
+    label: "AI slayd yoqilgan",
+    description:
+      "«Pro slayd» sahifasidagi «AI slayd» turi: har slayd Gemini rasm modeli chizgan bitta rasm (aniq matn, formula, illyustratsiya). Narx = provayder xarajati × «Studio ustamasi» × dollar kursi, har slayd uchun. O'chiq bo'lsa yangi ish qabul qilinmaydi va tanlov yashiriladi. Gemini kaliti bo'lmasa baribir ishlamaydi.",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => true,
   },
   "video.enabled": {
     key: "video.enabled",

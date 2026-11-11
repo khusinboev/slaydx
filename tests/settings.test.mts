@@ -84,6 +84,7 @@ test("katalog: kalitlar, guruh/yorliq/tavsif bor", () => {
     "tests.minutes_per_subject",
     "tests.minutes_all",
     "tests.points_per_correct",
+    "image_slide.enabled",
     "video.enabled",
     "video.max_concurrent",
     "media.core.image",
