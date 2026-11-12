@@ -187,6 +187,8 @@ export async function judgeStockCandidates(
           temperature: 0,
           maxOutputTokens: 1024,
           thinkingConfig: { thinkingBudget: 0 },
+          // A thumbnail is judged, not read: low resolution (measured live: ~1 100 → ~70 tokens per preview).
+          mediaResolution: "MEDIA_RESOLUTION_LOW",
           responseMimeType: "application/json",
           responseSchema: JUDGE_SCHEMA,
         },
@@ -334,7 +336,8 @@ export async function attachHybridImages(topic: string, jobs: HybridJob[], deadl
       else report.failed += 1;
       return null;
     }
-    const kept = await opts.persist(res.image);
+    // Alt text = what the picture shows (the scene), not the provider's echo of the prompt.
+    const kept = await opts.persist({ url: res.image.url, alt: (slot.plan.scene || slot.s.title).slice(0, 160) });
     if (!kept) {
       report.failed += 1;
       return null;
