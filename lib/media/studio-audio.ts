@@ -12,7 +12,7 @@
 import { normalize, validate, type CatalogEntry } from "../studio-core";
 import { MEDIA_CATALOG } from "./catalog";
 import { AUDIO_MODEL_IDS, AUDIO_MODES, MUSIC_MODEL, type AudioMode, takesAudioInput } from "./catalog-audio";
-import { CLONE_VOICE_PREFIX, ELEVENLABS_VOICES, cloneIdOf } from "./catalog-speech";
+import { CLONE_VOICE_PREFIX, ELEVENLABS_STS_VOICES, cloneIdOf } from "./catalog-speech";
 import { studioEntryPrice, type MediaPricing, type PricedEntry } from "./studio-pricing";
 
 /** The ToS line of the voice changer (P5 wording; text, no checkbox — the consent checkbox stays clone-only). */
@@ -68,7 +68,8 @@ export function audioOutputCount(entry: Pick<CatalogEntry, "params">, values: Re
   return Number(normalize(entry.params, values).variants) || 1;
 }
 
-const ELEVEN_IDS = new Set(ELEVENLABS_VOICES.map((v) => v.id));
+/** The voice changer (speech-to-speech) takes the premade library voices and clones only (`ELEVENLABS_STS_VOICES`). */
+const ELEVEN_IDS = new Set(ELEVENLABS_STS_VOICES.map((v) => v.id));
 
 /**
  * Why the server must refuse an «Audio» request BEFORE charging (Uzbek, a 400), `null` when it is fine: an unknown

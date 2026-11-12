@@ -4,21 +4,44 @@ import { useState } from "react";
 import { Pause, Play, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useApiSrc } from "@/lib/use-api-src";
-import type { LibraryVoice } from "@/lib/media/catalog-speech";
+import { uzbekFirst, type LibraryVoice } from "@/lib/media/catalog-speech";
 import { previewUrl, type UserVoice } from "./voice-api";
 
 /** The filter chips of the voice list (canvas): «Mening ovozlarim» only where the model takes clones. */
 export type VoiceFilter = "all" | "male" | "female" | "mine";
 export const FILTER_LABEL: Readonly<Record<VoiceFilter, string>> = { all: "Hammasi", male: "Erkak", female: "Ayol", mine: "Mening ovozlarim" };
 
-export type VoiceRow = { value: string; name: string; gender: "female" | "male" | null; previewKey: string; mine: boolean; status?: "creating" | "ready"; expiresAt?: string | null };
+export type VoiceRow = {
+  value: string;
+  name: string;
+  gender: "female" | "male" | null;
+  previewKey: string;
+  mine: boolean;
+  status?: "creating" | "ready";
+  expiresAt?: string | null;
+  /** A native Uzbek speaker (the «O‘zbekcha» badge, listed first). */
+  native?: boolean;
+  /** Short Uzbek style line («Diktor», «Suhbat»…). */
+  note?: string;
+};
 
-/** The rows a filter shows: library voices (by gender) and the user's own clones («Mening ovozlarim», also in «Hammasi»). */
+/**
+ * The rows a filter shows: the user's own clones («Mening ovozlarim», also in «Hammasi»), then the library voices (by
+ * gender) with the native Uzbek voices first.
+ */
 export function voiceRows(library: readonly LibraryVoice[], provider: "elevenlabs" | "gemini", mine: readonly UserVoice[], takesClones: boolean, filter: VoiceFilter): VoiceRow[] {
   const own: VoiceRow[] = takesClones
     ? mine.map((v) => ({ value: v.voice, name: v.name, gender: null, previewKey: v.voice, mine: true, status: v.status, expiresAt: v.expiresAt }))
     : [];
-  const lib: VoiceRow[] = library.map((v) => ({ value: v.id, name: v.name, gender: v.gender, previewKey: `${provider}:${v.id}`, mine: false }));
+  const lib: VoiceRow[] = uzbekFirst(library).map((v) => ({
+    value: v.id,
+    name: v.name,
+    gender: v.gender,
+    previewKey: `${provider}:${v.id}`,
+    mine: false,
+    ...(v.native ? { native: true } : {}),
+    ...(v.note ? { note: v.note } : {}),
+  }));
   if (filter === "mine") return own;
   if (filter === "all") return [...own, ...lib];
   return lib.filter((r) => r.gender === filter);
@@ -32,6 +55,18 @@ export function daysLeft(expiresAt: string | null | undefined, now = Date.now())
 }
 
 const GENDER_LABEL = { female: "Ayol", male: "Erkak" } as const;
+
+/** Section header before row `i`: «O‘zbek tilidagi ovozlar» at the first native row, «Boshqa ovozlar» after them. */
+export function groupHeaderAt(rows: readonly VoiceRow[], i: number): string | null {
+  const r = rows[i];
+  if (!r || r.mine || !rows.some((x) => x.native)) return null;
+  if (i === rows.findIndex((x) => x.native)) return "O‘zbek tilidagi ovozlar";
+  if (i === rows.findIndex((x) => !x.mine && !x.native)) return "Boshqa ovozlar";
+  return null;
+}
+
+/** «Ayol» on a library with native Uzbek voices (all male): why no female voice is native. */
+export const FEMALE_UZ_HINT = "O‘zbek tilida so‘zlovchi ayol ovozi hozircha yo‘q — bu ovozlar o‘zbekchani biroz chet el talaffuzi bilan o‘qiydi.";
 
 /**
  * The voice list with its filter chips and one preview player: a row's ▶ plays the cached Uzbek preview
@@ -47,6 +82,7 @@ export function VoiceList({
   filters,
   onDelete,
   deleting,
+  uzbekHint = false,
 }: {
   rows: readonly VoiceRow[];
   value: string;
@@ -56,6 +92,8 @@ export function VoiceList({
   filters: readonly VoiceFilter[];
   onDelete?: (row: VoiceRow) => void;
   deleting?: boolean;
+  /** The library has native Uzbek voices (all male): «Ayol» says how the female voices read Uzbek. */
+  uzbekHint?: boolean;
 }) {
   const [playing, setPlaying] = useState<string | null>(null);
   const [previewFailed, setPreviewFailed] = useState<string | null>(null);
@@ -79,17 +117,28 @@ export function VoiceList({
           </button>
         ))}
       </div>
+      {uzbekHint && filter === "female" ? (
+        <p className="text-muted-foreground mb-2 text-[13px] leading-snug" data-voice-female-hint>
+          {FEMALE_UZ_HINT}
+        </p>
+      ) : null}
       {rows.length === 0 ? (
         <p className="text-muted-foreground text-[14px]" data-voice-empty>
           {filter === "mine" ? "Sizda hali klon ovoz yo‘q." : "Bu turda ovoz yo‘q."}
         </p>
       ) : (
         <ul role="radiogroup" aria-label="Ovoz" className="flex flex-col gap-1.5">
-          {rows.map((r) => {
+          {rows.flatMap((r, i) => {
             const on = r.value === value;
             const ready = r.status !== "creating";
             const left = r.mine ? daysLeft(r.expiresAt) : null;
-            return (
+            const header = groupHeaderAt(rows, i);
+            const head = header ? (
+              <li key={`group:${header}`} role="presentation" className="text-muted-foreground px-1 pt-1.5 text-[12.5px] font-semibold" data-voice-group={r.native ? "uz" : "other"}>
+                {header}
+              </li>
+            ) : null;
+            const row = (
               <li key={r.value} className={cn("flex items-center gap-2 rounded-[14px] border-2 p-1.5", on ? "border-primary" : "border-transparent bg-muted/50")} data-voice-row={r.value}>
                 <button
                   type="button"
@@ -113,9 +162,22 @@ export function VoiceList({
                   onClick={() => onPick(r.value)}
                   className="focus-visible:ring-ring flex min-h-11 min-w-0 flex-1 flex-col justify-center rounded-[10px] px-1 text-left outline-none focus-visible:ring-2 disabled:opacity-60"
                 >
-                  <span className="truncate text-[15px] font-semibold">{r.name}</span>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate text-[15px] font-semibold">{r.name}</span>
+                    {r.native ? (
+                      <span className="bg-primary/10 text-primary shrink-0 rounded-full px-1.5 py-px text-[11.5px] font-semibold" data-voice-badge="uz">
+                        O‘zbekcha
+                      </span>
+                    ) : null}
+                  </span>
                   <span className="text-muted-foreground text-[12.5px]">
-                    {r.mine ? (ready ? (left !== null ? `Mening ovozim · ishlatilmasa ${left} kundan keyin o‘chadi` : "Mening ovozim") : "Tayyorlanmoqda…") : r.gender ? GENDER_LABEL[r.gender] : ""}
+                    {r.mine
+                      ? ready
+                        ? left !== null
+                          ? `Mening ovozim · ishlatilmasa ${left} kundan keyin o‘chadi`
+                          : "Mening ovozim"
+                        : "Tayyorlanmoqda…"
+                      : [r.note, r.gender ? GENDER_LABEL[r.gender] : ""].filter(Boolean).join(" · ")}
                   </span>
                 </button>
                 {r.mine && onDelete && ready ? (
@@ -132,6 +194,7 @@ export function VoiceList({
                 ) : null}
               </li>
             );
+            return head ? [head, row] : [row];
           })}
         </ul>
       )}

@@ -21,7 +21,7 @@ import { MediaError, normalize, type MediaAdapter, type MediaOutput, type Route 
 import { mp3Seconds, wavToMp3 } from "../tts/mp3";
 import { extractMeta } from "../meta";
 import { LYRIA_MODEL, audioModeOf, lyriaUpstreamOf, takesAudioInput } from "../../media/catalog-audio";
-import { ELEVENLABS_VOICES, cloneIdOf } from "../../media/catalog-speech";
+import { ELEVENLABS_STS_VOICES, cloneIdOf } from "../../media/catalog-speech";
 import { studioAudioEntry, studioAudioError, studioAudioPurposeOf } from "../../media/studio-audio";
 import { studioAudioAdapters } from "../../media/adapters/audio-studio";
 import { UserFacingError } from "../../server/user-error";
@@ -99,7 +99,7 @@ export async function buildStudioAudio(
       providerVoice = hit.providerVoiceId;
       voiceLabel = hit.name;
     } else {
-      const lib = ELEVENLABS_VOICES.find((x) => x.id === v);
+      const lib = ELEVENLABS_STS_VOICES.find((x) => x.id === v);
       if (!lib) throw new UserFacingError("Noma'lum ovoz. Pul balansingizga qaytariladi.");
       providerVoice = lib.id;
       voiceLabel = lib.name;
