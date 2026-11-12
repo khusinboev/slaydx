@@ -156,7 +156,13 @@ async function mount(s: Server, resume = false) {
 }
 
 const pinned = () => document.querySelector("[data-toolbar-pinned]") as HTMLElement | null;
-const editToggle = () => screen.getByText("Tahrirlash").closest("button") as HTMLButtonElement;
+/*
+ * The shared `EditToggle` (2026-11-12) reads «Tahrirlash» while off and
+ * «Tayyor» while on, so the toggle is found by its hook, not by its label.
+ * Phone: the pinned one (the right group may also hold a copy in «⋯»).
+ */
+const editToggle = () =>
+  ((pinned() ?? document).querySelector("[data-edit-toggle]") as HTMLButtonElement | null) ?? (screen.getByText("Tahrirlash").closest("button") as HTMLButtonElement);
 const bar = () => document.querySelector("[data-edit-done-bar]") as HTMLElement | null;
 const saveBtn = () => screen.queryByText(/^Saqlash · /);
 const HOMEWORK = "sections.3.blocks.0";
@@ -215,6 +221,7 @@ test("phone «O‘qish»: «Tahrirlash» is visible and one tap switches to «Va
   assert.equal(document.querySelector("[data-view-toggle]")!.getAttribute("data-view-mode"), "page", "switched to «Varaq»");
   assert.ok(document.querySelector("[data-article-editor]"), "editing enabled");
   assert.equal(editToggle().getAttribute("aria-pressed"), "true");
+  assert.equal(editToggle().textContent, "Tayyor", "same wording as the slide toggle: on → «Tayyor»");
 });
 
 test("resume on a phone: «Tahrirlash» pinned too; desktop keeps it in the right group", async () => {

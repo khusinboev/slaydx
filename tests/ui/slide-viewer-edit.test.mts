@@ -164,14 +164,17 @@ function Page({ doc, gen }: { doc: AcademicDoc; gen: unknown }) {
 }
 
 /**
- * Ko'ruvchini TAHRIRGA TAYYOR holda ochadi.
- *
- * «Tahrirlash» tugmasi YO'Q (AUDIT-10): tayyor deka ochilishi bilan
- * tahrir yoqiq. Shu funksiya ataylab bitta `render` — kelajakda kimdir
- * «rejimga kirish» qadamini qaytarsa, quyidagi testlar darhol yiqiladi.
+ * Opens the viewer of an editable deck — in VIEW mode (explicit edit mode,
+ * 2026-11-12). Deck-level edits (reorder, delete, save) need no mode; text
+ * tests open a text with a double click, which is the view-mode shortcut
+ * into edit mode on that text. `enterEdit` presses «Tahrirlash».
  */
 function openEditor(s: Server) {
   render(h(Page, { doc: s.doc, gen: generation(s) }));
+}
+function enterEdit() {
+  fireEvent.click(document.querySelector("[data-slide-edit-toggle]") as HTMLElement);
+  assert.equal(document.querySelector("[data-slide-edit-mode]")?.getAttribute("data-slide-edit-mode"), "on");
 }
 
 /** Sarlavhadagi «Saqlash · N» tugmasi (yo'q bo'lsa `null`). */
@@ -191,10 +194,14 @@ function moveLeft() {
   fireEvent.click(screen.getByLabelText("Slaydni chapga surish"));
 }
 
-test("asboblar paneli minimal: faqat «O‘chirish» — chip, «+ Slayd», ▲/▼, Eslatma, Saqlash YO'Q", () => {
+test("asboblar paneli minimal: «Tahrirlash» va «O‘chirish» — chip, «+ Slayd», ▲/▼, Eslatma, Saqlash YO'Q", () => {
   const s = stubServer();
   openEditor(s);
-  assert.equal(screen.queryByText("Tahrirlash") === null, true, "tahrir rejimi tugmasi olib tashlangan");
+  // Explicit edit mode (owner 2026-11-12): ONE visible labelled toggle on the toolbar (desktop).
+  const toggles = screen.getAllByText("Tahrirlash");
+  assert.equal(toggles.length, 1, "exactly one «Tahrirlash»");
+  assert.ok(document.querySelector("[data-slide-toolbar]")!.contains(toggles[0]), "the toggle is on the slide toolbar");
+  assert.equal(toggles[0].closest("button")!.getAttribute("aria-pressed"), "false", "starts in view mode");
   assert.ok(screen.getByText("O‘chirish"), "o'chirish tugmasi qoladi");
   assert.equal(screen.queryByText("Slayd") === null, true, "«+ Slayd» yo'q");
   assert.equal(screen.queryByText("Bo‘lim") === null, true, "maket chiplari yo'q");
@@ -473,6 +480,9 @@ test("test javobi ✓ bilan almashadi va javoblar kaliti qayta yig'iladi", async
   const key: SlideModel = { id: "s1", layout: "answers", title: "Javoblar", bullets: ["1 — A"] };
   const s = stubServer(makeDoc([quiz, key]));
   openEditor(s);
+  // The answer marks are edit controls: none in view mode (a clean viewer never shows the key).
+  assert.ok(!document.querySelector("[data-answer-mark]"), "no answer marks in view mode");
+  enterEdit();
   fireEvent.click(screen.getByLabelText("C — to‘g‘ri javob"));
   assert.equal(s.calls.length, 0, "javob ham «Saqlash» gacha kutadi");
   await act(async () => {

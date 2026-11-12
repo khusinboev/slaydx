@@ -1,7 +1,7 @@
 "use client";
 
 import katex from "katex";
-import { Pencil, Redo2, Undo2 } from "lucide-react";
+import { Redo2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { planArticle, type CiteSpan } from "@/lib/generation/article/layout";
 import { planWork } from "@/lib/generation/work/layout";
@@ -30,6 +30,7 @@ import { PageRow, ZoomFrame, Workspace } from "./sheet";
 import { HandCover, TitlePage } from "./TitlePage";
 import { TOUCH_BOX, VIEWER_TOOLBAR_H, ViewerToolbar } from "./toolbar";
 import { DocEditHint, EditDoneBar, useDocEditHint, useEditFocusZoom } from "./EditDoneBar";
+import { EditToggle } from "./EditToggle";
 import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
 import { useDocView, type DocView } from "./reading/prefs";
 import { ReadingScroll, ReadingTitle, ReadingView } from "./reading/ReadingView";
@@ -271,8 +272,16 @@ export function WordViewer({
   gen,
   onGen,
   onEditState,
+  initialEdit = false,
 }: {
   doc: AcademicDoc;
+  /**
+   * Open with «Tahrirlash» already on (`/uz/files/<id>?edit=1`, the bot's
+   * «Tahrirlash» button — `ResultView`). Read once on mount; ignored when
+   * the document is not editable. On a phone that opens in «O‘qish» it also
+   * switches to «Varaq», exactly like pressing the button there.
+   */
+  initialEdit?: boolean;
   /** Tayyor generatsiya (`api.GenerationDetail`) — MAQOLA tahriri shu bilan yoqiladi (WP7); boshqa hujjatlarda e'tiborsiz. */
   gen?: unknown;
   /** Tahrirdan keyin yangilangan generatsiya — sahifa holatiga qaytariladi. */
@@ -443,7 +452,7 @@ export function WordViewer({
   }
 
   /* ═══ tahrir (Maqola 2 WP7; talaba ishi — AUDIT-19 WP-C) ═══ */
-  const [editOn, setEditOn] = useState(false);
+  const [editOn, setEditOn] = useState(initialEdit);
   /** Faol tahrir oqimi: maqola yoki talaba ishi (ikkalasi birga bo'lmaydi). */
   const active = ed.editable ? ed : wed.editable ? wed : ted.editable ? ted : null;
   /*
@@ -530,6 +539,17 @@ export function WordViewer({
     }
     setEditOn((v) => !v);
   }
+  /*
+   * `?edit=1` on a phone that opened in «O‘qish»: editing lives on the sheets
+   * only, so go to «Varaq» once — the same step the button takes there.
+   */
+  const initialEditRef = useRef(initialEdit);
+  useEffect(() => {
+    if (!initialEditRef.current) return;
+    initialEditRef.current = false;
+    if (editable && reading) changeView("page");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on mount.
+  }, []);
   useEditFocusZoom({
     active: coarse && editing,
     zoom,
@@ -568,17 +588,13 @@ export function WordViewer({
   }, [editing, undo, redo, save, pending]);
 
   const editButton = editable ? (
-    <button
-      type="button"
-      aria-pressed={editing}
+    <EditToggle
+      on={editing}
       title="Ikki bosib tahrirlang · Enter — saqlash · Esc — bekor · bo‘sh qoldirib Enter — blokni o‘chirish · iqtibos ustida ikki bosish — manbani olib tashlash"
-      className={cn("rounded px-2 py-1 text-[12px]", TOUCH_BOX, "pointer-coarse:gap-1.5 pointer-coarse:text-[13px]", editing ? "bg-sky-500 text-white" : "hover:bg-white/10")}
+      // Under 24rem of toolbar (a 360 px phone) only the icon shows; the name stays for screen readers.
+      narrowIconOnly={coarse}
       onClick={toggleEdit}
-    >
-      {coarse ? <Pencil className="size-4 shrink-0" aria-hidden /> : null}
-      {/* Under 24rem of toolbar (a 360 px phone) only the pencil shows; the name stays for screen readers. */}
-      <span className={coarse ? "@max-sm:sr-only" : undefined}>Tahrirlash</span>
-    </button>
+    />
   ) : null;
   const right = editable ? (
     <>

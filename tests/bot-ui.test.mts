@@ -317,6 +317,12 @@ test("callback codes: round trip, ≤ 64 bytes, unknown/forged codes rejected", 
     ...codes.SECTIONS.map((s) => codes.cb.section(s)),
     ...fields.PROFILE_FIELDS.map((f) => codes.cb.edit(f)),
     ...(["p", "y", "n"] as const).flatMap((o) => [codes.cb.langMenu(o), ...LANGS.map((l) => codes.cb.langSet(l, o))]),
+    // Work rating under the file message (the longest format id; every format: tests/work-rating-bot.test.mts).
+    codes.cb.workRate("ffffffff-ffff-4fff-bfff-ffffffffffff", "transcript-txt"),
+    codes.cb.workStars("ffffffff-ffff-4fff-bfff-ffffffffffff", "transcript-txt", 5),
+    codes.cb.workReason("ffffffff-ffff-4fff-bfff-ffffffffffff", "transcript-txt", "errors"),
+    codes.cb.workReason("ffffffff-ffff-4fff-bfff-ffffffffffff", "transcript-txt", null),
+    codes.cb.workBack("ffffffff-ffff-4fff-bfff-ffffffffffff", "transcript-txt"),
   ];
   for (const c of all) {
     assert.ok(Buffer.byteLength(c) <= 64, c);

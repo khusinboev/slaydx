@@ -134,3 +134,14 @@ test("a blank signature line can be filled in place", async () => {
   assert.equal(byPath("author.value").textContent, "Valiyev A.");
   assert.ok(saveBtn());
 });
+
+test("`initialEdit` (the bot's «Tahrirlash» → `/uz/files/<id>?edit=1`): the sheet opens with editing already on", () => {
+  const s = stubServer();
+  render(h(TitulViewer, { doc: s.doc, gen: generation(s), initialEdit: true }));
+  // MUTATION: `useState(false)` instead of `useState(initialEdit)` -> the toggle is not pressed and no editor is mounted.
+  assert.equal(screen.getByText("Tahrirlash").closest("button")?.getAttribute("aria-pressed"), "true");
+  assert.ok(document.querySelector("[data-titul-editor]"), "the in-place editor is mounted");
+  cleanup();
+  render(h(TitulViewer, { doc: s.doc, gen: generation(s) }));
+  assert.equal(screen.getByText("Tahrirlash").closest("button")?.getAttribute("aria-pressed"), "false", "default: view mode");
+});

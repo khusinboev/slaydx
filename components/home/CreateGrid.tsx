@@ -13,6 +13,7 @@ import { cn } from "@/lib/cn";
 import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
 import { catalogueHref, filterCatalogue, normalizeQuery, type CatalogueGroup } from "./catalogue-filter";
 import { formatSom } from "@/lib/format";
+import { FreeBadge } from "./FreeBadge";
 import { toolHref } from "@/lib/media/legacy-fold";
 
 export function CreateGrid({ initialGroup = "all" }: { initialGroup?: CatalogueGroup }) {
@@ -156,6 +157,8 @@ export function CreateGrid({ initialGroup = "all" }: { initialGroup?: CatalogueG
                * — sabab ochiq yozilib, bosish o'chiriladi.
                */
               const blocked = toolBlockedReason(t, features);
+              // A free tool («Titul», `basePrice: 0`) shows «Bepul», never «0 so'm dan».
+              const from = clientAdjustedPrice(t.id, t.basePrice);
               const body = (
                 <>
                   <div className="h-1 bg-[rgb(var(--tc))]" />
@@ -167,9 +170,13 @@ export function CreateGrid({ initialGroup = "all" }: { initialGroup?: CatalogueG
                     <p className="text-muted-foreground text-sm">{t.description}</p>
                     {blocked ? (
                       <p className="mt-3 text-[13px] font-medium text-amber-600 dark:text-amber-500">{blocked}</p>
+                    ) : from <= 0 ? (
+                      <p data-tool-price="free" className="mt-3">
+                        <FreeBadge />
+                      </p>
                     ) : (
-                      <p className="mt-3 text-[13px] font-medium">
-                        {formatSom(clientAdjustedPrice(t.id, t.basePrice))} dan
+                      <p data-tool-price className="mt-3 text-[13px] font-medium">
+                        {formatSom(from)} dan
                       </p>
                     )}
                   </div>

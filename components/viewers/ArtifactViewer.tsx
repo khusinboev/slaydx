@@ -34,8 +34,14 @@ export function ArtifactViewer({
   onDetail,
   onEditState,
   pdf = false,
+  initialEdit = false,
 }: {
   gen: Generation;
+  /**
+   * `/uz/files/<id>?edit=1` (`ResultView`): the editable viewers (slides,
+   * Word, resume) open with editing already on. Non-editable kinds ignore it.
+   */
+  initialEdit?: boolean;
   /** Serverda LibreOffice bor (`features.pdf`) — tarjima ko'ruvchisi PDF ko'rinishini shunda ko'rsatadi. */
   pdf?: boolean;
   /**
@@ -77,7 +83,7 @@ export function ArtifactViewer({
         rad etilgan `lazy` o'rniga yangisini beradi → `import()` qayta bajariladi.
       */}
       <ViewerBoundary key={attempt} attempt={attempt} onRetry={retry}>
-        <Suspense fallback={<ViewerLoading onRetry={retry} />}>{viewerFor({ gen, doc, detail, onDetail, onEditState, pdf })}</Suspense>
+        <Suspense fallback={<ViewerLoading onRetry={retry} />}>{viewerFor({ gen, doc, detail, onDetail, onEditState, pdf, initialEdit })}</Suspense>
       </ViewerBoundary>
     </div>
   );
@@ -91,6 +97,7 @@ function viewerFor({
   onDetail,
   onEditState,
   pdf,
+  initialEdit,
 }: {
   gen: Generation;
   doc: AcademicDoc;
@@ -98,23 +105,24 @@ function viewerFor({
   onDetail?: (g: unknown) => void;
   onEditState?: (s: EditActionsState | null) => void;
   pdf: boolean;
+  initialEdit: boolean;
 }) {
   const kind = viewerKind(gen.type);
   switch (kind) {
     case "slides":
       return (
         <div className="flex min-h-0 flex-1 flex-col">
-          <SlideViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />
+          <SlideViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} initialEdit={initialEdit} />
         </div>
       );
     case "resume":
       // Tahrir proplari `SlideViewer` bilan AYNAN bir xil uzatiladi —
       // ilgari rezyume ko'ruvchisiga hech narsa berilmasdi va tahrir
       // umuman yoqilmasdi (Rezyume 2, AUDIT-15).
-      return <ResumeViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
+      return <ResumeViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} initialEdit={initialEdit} />;
     case "titul":
       // «Titul»: one sheet from `planTitlePage` (the DOCX draws the same plan); edit props as for the resume.
-      return <TitulViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
+      return <TitulViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} initialEdit={initialEdit} />;
     case "teacher":
       /*
        * O'qituvchi hujjatlari 2 (AUDIT-20 WP-C): beshala vosita umumiy
@@ -130,7 +138,7 @@ function viewerFor({
        * OLDINDAN berilgan edi — talaba ishlaridagi xato aynan shu edi
        * (proplar berilmagani uchun tahrir jimgina o'chiq qolgandi).
        */
-      return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
+      return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} initialEdit={initialEdit} />;
     case "game":
       /*
        * Bosma o'yinlar (AUDIT-21 R0): krossvord va flesh kartalar umumiy
@@ -143,7 +151,7 @@ function viewerFor({
        * qolgandi va buni faqat smoke topgan edi. `WordViewer` R0 da
        * `doc.game` ni bilmaydi va `editable` false bo'lib qoladi.
        */
-      return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
+      return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} initialEdit={initialEdit} />;
     case "audio":
       /*
        * AUDIO (AUDIT-22 R0): podkast va tabriknoma — pleer + transkript.
@@ -185,11 +193,11 @@ function viewerFor({
     case "essay":
       // AUDIT-19: inshoda ham tahrir — `design` ramkasi va bitta bo'lim
       // o'zgarmaydi, proplar maqola bilan AYNAN bir xil (`useArticleEdit`).
-      return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
+      return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} initialEdit={initialEdit} />;
     case "article":
       // Maqola 2 (WP7): tahrir proplari slayd/rezyume bilan bir xil — `WordViewer`
       // ularni faqat maqola dvigateli generatsiyasida ishlatadi (tezis ham — `viewerKind`, AUDIT-19).
-      return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
+      return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} initialEdit={initialEdit} />;
     default:
       /*
        * AUDIT-19: kurs ishi/referat/mustaqil ish `academic` turida qoladi
@@ -198,6 +206,6 @@ function viewerFor({
        * `editable` false (dars rejasi va h.k. avvalgidek). Smoke: propsiz
        * `[data-path]` chiqmas, «Tahrirlash» ko'rinmas edi.
        */
-      return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
+      return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} initialEdit={initialEdit} />;
   }
 }

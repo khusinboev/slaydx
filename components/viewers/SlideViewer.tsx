@@ -31,6 +31,8 @@ import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
 import type { VisualViewportState } from "@/lib/hooks/useVisualViewport";
 import { useCompactHeaderWhile } from "../files/ResultLayout";
 import { SlideEditHint, readEditHintSeen, writeEditHintSeen } from "./slide-edit/EditHint";
+import { SlideEditModeRow } from "./slide-edit/EditModeRow";
+import { EditToggle } from "./EditToggle";
 import { VisualViewportWatch } from "./slide-edit/viewport";
 import type { FocusBox } from "./slide-edit/geometry";
 
@@ -54,8 +56,8 @@ export { asLiveView };
  * Yupqa kompozitor: holatni ushlaydi va `SlideRail`, `SlideStage`,
  * `useSlideKeys` bo'laklarini bog'laydi.
  *
- * Asboblar paneli ATAYLAB minimal (Muharrir 2): sahifa/zoom/to'liq ekran
- * va slayd «O‘chirish». Saqlash/bekor qilish sahifa SARLAVHASIDA
+ * Asboblar paneli ATAYLAB minimal (Muharrir 2): sahifa/zoom/to'liq ekran,
+ * «Tahrirlash» va slayd «O‘chirish». Saqlash/bekor qilish sahifa SARLAVHASIDA
  * (`EditActions`, `onEditState` orqali), eslatma paneli yo'q (taqdimotchi
  * rejimida qoladi), maket chiplari, «+ Slayd», ▲/▼ yo'q — matn tahriri
  * to'g'ridan-to'g'ri slaydning o'zida (`SlideEditor`).
@@ -67,6 +69,7 @@ export function SlideViewer({
   gen,
   onGen,
   onEditState,
+  initialEdit = false,
 }: {
   doc: AcademicDoc;
   /**
@@ -91,6 +94,12 @@ export function SlideViewer({
    * slaydni EMAS, eski faylni yuklab ketardi. `null` — tahrir yo'q.
    */
   onEditState?: (s: EditActionsState | null) => void;
+  /**
+   * Start in edit mode (`/uz/files/<id>?edit=1` — the bot's «Tahrirlash»
+   * button, read by `ResultView`). Only takes effect while the deck is
+   * editable and not live.
+   */
+  initialEdit?: boolean;
 }) {
   const ed = useSlideEdit({ gen, onGen });
   /*
@@ -261,12 +270,23 @@ export function SlideViewer({
   /*
    * ═══ TAHRIR ═══
    *
-   * Tahrir TUGMASI YO'Q — tayyor dekada u DOIM yoqiq: foydalanuvchi matn
-   * ustiga ikki marta bosadi va yozadi. Faqat ikki holatda o'chadi:
-   * taqdimotda (ekranda tinglovchi bor) va jonli generatsiyada (hujjat
-   * hali serverda yozilmoqda — PATCH uni ustidan yozib yuborardi).
+   * `editOn` — the deck CAN be edited: a finished, editable deck, not in live
+   * generation (the document is still being written on the server — a PATCH
+   * would overwrite it). It drives what does not need the mode: the header
+   * save state, slide delete/reorder in the rail and toolbar, Ctrl+Z/S.
+   *
+   * `editMode` — the EXPLICIT edit mode (owner request 2026-11-12: the
+   * hidden double click was not discoverable). «Tahrirlash» turns it on:
+   * every editable box is outlined, a single click/tap opens a text, the
+   * image/answer controls show. «Tayyor» (or phone back, or Escape) turns it
+   * off and commits the open text. It persists across slides, pauses in the
+   * presentation and never exists in live generation. Outside it the slide
+   * is a clean viewer; a double click / double tap on a text is the shortcut
+   * into edit mode on that text.
    */
   const editOn = ed.editable && !lv;
+  const [editModeWanted, setEditModeWanted] = useState(initialEdit);
+  const editMode = editOn && editModeWanted && !present;
   const { run: runOps, undo, redo, save, pending, discard, saving, saveFailed, justSaved } = ed;
 
   const onText = useCallback(
@@ -362,10 +382,10 @@ export function SlideViewer({
    * the thumbnail strip and the status row are hidden, the result header
    * takes its compact form, and the viewer is capped to the visible
    * viewport (keyboard) so the stage never runs under it. Before the first
-   * edit a one-time hint tells touch users about the double tap.
+   * edit a one-time hint points touch users at the «Tahrirlash» button.
    */
   const coarse = useCoarsePointer();
-  const phoneEditing = coarse && editOn && !present && editingKey !== null;
+  const phoneEditing = coarse && editMode && editingKey !== null;
   const [barSlot, setBarSlot] = useState<HTMLElement | null>(null);
   useCompactHeaderWhile(phoneEditing);
 
@@ -387,6 +407,46 @@ export function SlideViewer({
     [coarse, dismissHint],
   );
 
+  /*
+   * Leaving edit mode with unsaved changes: saving stays explicit (no
+   * auto-PATCH), so the row under the stage says «O‘zgarishlarni saqlang»
+   * with its own «Saqlash», and the header's «Saqlash · N» is highlighted
+   * (`attention`) until the queue is saved or discarded.
+   */
+  const [remind, setRemind] = useState(false);
+  const enterEdit = useCallback(() => {
+    setEditModeWanted(true);
+    setRemind(false);
+    dismissHint();
+  }, [dismissHint]);
+  const exitEdit = useCallback(() => {
+    setEditModeWanted(false);
+    setRemind(true);
+  }, []);
+  useEffect(() => {
+    if (pending === 0) setRemind(false);
+  }, [pending]);
+  const remindNow = editOn && remind && pending > 0 && !editMode && !present;
+
+  /*
+   * Phone back leaves edit mode: one history layer, ABOVE the page's leave
+   * guard. `useSlideEdit` → `useLeaveGuard` pushes the guard's own entry
+   * when the deck turns dirty — typically while edit mode is on (a text is
+   * committed by the first back). Pushed later, the guard would sit on top
+   * and the next back would auto-save and leave instead of ending edit mode
+   * (real-browser smoke 2026-11-12). So the mode's entry is owned by one of
+   * two hooks keyed on `dirty`: when `dirty` flips, the old one releases its
+   * entry and the guard (an earlier hook of this component, so its effect
+   * runs first in the same commit) takes that entry over, then the new one
+   * pushes a fresh entry on top. These hooks run after every child effect,
+   * so a text opened in the SAME commit would land below the mode — the
+   * view-mode shortcut therefore enters edit mode in its own commit first
+   * (`SlideEditor.openFromGesture`).
+   */
+  const dirty = pending > 0;
+  useOverlayHistory(coarse && editMode && !dirty, exitEdit);
+  useOverlayHistory(coarse && editMode && dirty, exitEdit);
+
   const rootRef = useRef<HTMLDivElement>(null);
   const capToViewport = useCallback((vv: VisualViewportState) => {
     const el = rootRef.current;
@@ -406,6 +466,12 @@ export function SlideViewer({
   const keysExtra = useCallback(
     (e: KeyboardEvent) => {
       if (!editOn) return false;
+      // Escape with no text open (the open field handles its own Escape) leaves edit mode.
+      if (e.key === "Escape" && editMode && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        exitEdit();
+        return true;
+      }
       if (!(e.ctrlKey || e.metaKey)) return false;
       const k = e.key.toLowerCase();
       if (k === "z" && !e.shiftKey) {
@@ -420,7 +486,7 @@ export function SlideViewer({
       }
       return false;
     },
-    [editOn, undo, redo],
+    [editOn, editMode, exitEdit, undo, redo],
   );
 
   /*
@@ -431,8 +497,8 @@ export function SlideViewer({
   const onEditStateRef = useRef(onEditState);
   onEditStateRef.current = onEditState;
   useEffect(() => {
-    onEditStateRef.current?.(editOn ? { pending, saving, saveFailed, justSaved, save, discard } : null);
-  }, [editOn, pending, saving, saveFailed, justSaved, save, discard]);
+    onEditStateRef.current?.(editOn ? { pending, saving, saveFailed, justSaved, save, discard, attention: remindNow } : null);
+  }, [editOn, pending, saving, saveFailed, justSaved, save, discard, remindNow]);
   useEffect(() => () => onEditStateRef.current?.(null), []);
 
   /*
@@ -500,6 +566,19 @@ export function SlideViewer({
     return () => ro.disconnect();
   }, [present, presenter, i]);
 
+  const toggleEdit = () => (editMode ? exitEdit() : enterEdit());
+  const editToggle = (variant: "toolbar" | "pill") => (
+    <EditToggle
+      on={editMode}
+      variant={variant}
+      data-slide-edit-toggle={variant}
+      title={editMode ? "Tahrirni tugatish" : "Slayddagi matn va rasmlarni o‘zgartirish"}
+      onClick={toggleEdit}
+    />
+  );
+  /** The row under the stage: always on phones (it holds the toggle), on desktop only when it has something to say. */
+  const showEditRow = editOn && !present && !phoneEditing && (coarse || editMode || remindNow);
+
   const slide = slides[i];
   const next = slides[i + 1];
   // Eslatma FAQAT taqdimotchi paneliga — pastki panel yo'q (Muharrir 2).
@@ -510,6 +589,7 @@ export function SlideViewer({
       ref={rootRef}
       className={cn("flex min-h-0 flex-1 flex-col", present && "fixed inset-0 z-50 bg-black")}
       data-slide-editing={phoneEditing ? "" : undefined}
+      data-slide-edit-mode={editOn ? (editMode ? "on" : "off") : undefined}
     >
       {phoneEditing ? <VisualViewportWatch onChange={capToViewport} /> : null}
       {present ? (
@@ -559,6 +639,7 @@ export function SlideViewer({
           editBar={
             phoneEditing ? <div ref={setBarSlot} data-slide-editbar-slot className="flex w-full min-w-0 flex-col" /> : undefined
           }
+          editToggle={editOn && !coarse ? editToggle("toolbar") : undefined}
         />
       )}
 
@@ -598,7 +679,7 @@ export function SlideViewer({
             presenter={presenter}
             onFitScale={setFitScale}
             onStep={(dir) => go(i + dir)}
-            hideSrc={editOn && !present && editingKey ? editingKey : undefined}
+            hideSrc={editMode && editingKey ? editingKey : undefined}
             focus={phoneEditing ? editBox : null}
             /*
               Tahrir qatlami — `overlay` slotida. Tashqi `overlay` propi
@@ -632,6 +713,8 @@ export function SlideViewer({
                       onUpload={(f) => void ed.uploadImage(ctx.index, f)}
                       onEditing={onEditing}
                       editBarSlot={phoneEditing ? barSlot : null}
+                      editMode={editMode}
+                      onEnterEdit={enterEdit}
                     />
                   )
                 : undefined)
@@ -655,7 +738,18 @@ export function SlideViewer({
             One-time touch hint — in-flow under the stage (never over the
             slide), only before the first edit.
           */}
-          {coarse && editOn && !present && !hintSeen && !phoneEditing ? <SlideEditHint onDismiss={dismissHint} /> : null}
+          {coarse && editOn && !present && !editMode && !hintSeen && !phoneEditing ? <SlideEditHint onDismiss={dismissHint} /> : null}
+
+          {showEditRow ? (
+            <SlideEditModeRow
+              editMode={editMode}
+              remind={remindNow}
+              pending={pending}
+              saving={saving}
+              onSave={() => void save()}
+              toggle={coarse ? editToggle("pill") : undefined}
+            />
+          ) : null}
 
           {/*
             Phone editing hides the strip (kept mounted: its scroll position
@@ -789,3 +883,4 @@ export function SlideViewer({
     </div>
   );
 }
+

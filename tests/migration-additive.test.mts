@@ -74,3 +74,24 @@ test("every migration from 060 on is additive (the deploy guard's rule, applied 
   assert.ok(files.includes("060_video_ops.sql"));
   for (const f of files) assert.deepEqual(guardHits(readFileSync(new URL(f, dir), "utf8")), [], f);
 });
+
+test("078 (work ratings) is additive: one new table, CHECKs added only when missing, indexes; rollback documented", () => {
+  const sql = readFileSync(new URL("../lib/server/migrations/078_generation_ratings.sql", import.meta.url), "utf8");
+  assert.deepEqual(guardHits(sql), [], "MUTATSIYA: a DROP / ALTER COLUMN .. TYPE in 078 turns this red");
+  assert.match(sql, /^-- ROLLBACK:/m);
+  assert.match(sql, /^--   DROP TABLE IF EXISTS generation_ratings;/m);
+  assert.match(sql, /^--   DELETE FROM schema_migrations WHERE name = '078_generation_ratings\.sql';/m);
+  const code = sql.replace(/--.*$/gm, "");
+  assert.match(code, /CREATE TABLE IF NOT EXISTS generation_ratings \(/);
+  // Every ALTER TABLE adds a constraint to the NEW table, guarded by a pg_constraint lookup (idempotent).
+  const alters = [...code.matchAll(/ALTER TABLE (\w+) ADD CONSTRAINT (\w+)/g)];
+  assert.equal(alters.length, 4);
+  for (const [, table, name] of alters) {
+    assert.equal(table, "generation_ratings");
+    assert.match(code, new RegExp(`IF NOT EXISTS \\(SELECT 1 FROM pg_constraint WHERE conrelid = 'generation_ratings'::regclass AND conname = '${name}'\\)`), name);
+  }
+  assert.equal((code.match(/ALTER TABLE/g) ?? []).length, 4, "no other table is altered");
+  for (const ix of ["generation_ratings_created_idx", "generation_ratings_updated_idx", "generation_ratings_user_idx"]) {
+    assert.match(code, new RegExp(`CREATE INDEX IF NOT EXISTS ${ix} `), ix);
+  }
+});

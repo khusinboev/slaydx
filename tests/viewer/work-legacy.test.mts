@@ -126,5 +126,5 @@ test("ko'ruvchi eski hujjatni yiqilmasdan chizadi va `word-article` varag'ini QO
 test("ArtifactViewer: academic (talaba ishi) shoxi ham tahrir proplarini beradi", () => {
   const src = readFileSync(new URL("../../components/viewers/ArtifactViewer.tsx", import.meta.url), "utf8");
   const tail = src.slice(src.lastIndexOf("default:"));
-  assert.match(tail, /<WordViewer doc=\{doc\} gen=\{detail\} onGen=\{onDetail\} onEditState=\{onEditState\} \/>/);
+  assert.match(tail, /<WordViewer doc=\{doc\} gen=\{detail\} onGen=\{onDetail\} onEditState=\{onEditState\} initialEdit=\{initialEdit\} \/>/);
 });

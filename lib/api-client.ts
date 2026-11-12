@@ -1359,6 +1359,30 @@ export function rateMarketPurchase(id: string, body: { stars: number; text: stri
   return request<{ stars: number; text: string }>(`/api/market/purchases/${id}/rating`, { method: "POST", body: JSON.stringify(body) });
 }
 
+/** The user's rating of one work (docs/ratings/GENERATION-RATING.md); the same service as the bot's «⭐ Baholash». */
+export type GenerationRatingView = {
+  generationId: string;
+  stars: number;
+  reason: import("./generation-rating").RatingReason | null;
+  comment: string | null;
+  source: import("./generation-rating").RatingSource;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** `GET /api/generations/{id}/rating` — `rating: null` until rated; `rateable` only once COMPLETED. */
+export function getGenerationRating(id: string, opts: { signal?: AbortSignal } = {}) {
+  return request<{ rating: GenerationRatingView | null; rateable: boolean }>(`/api/generations/${id}/rating`, { signal: opts.signal });
+}
+
+/** `PUT /api/generations/{id}/rating` — rate or re-rate (the whole value is replaced); `reason` only for 1–3 stars. */
+export function rateGeneration(
+  id: string,
+  body: { stars: number; reason?: import("./generation-rating").RatingReason | null; comment?: string | null },
+) {
+  return request<{ rating: GenerationRatingView }>(`/api/generations/${id}/rating`, { method: "PUT", body: JSON.stringify(body) });
+}
+
 export function reportMarketItem(id: string, reason: string) {
   return request<{ reported: boolean }>(`/api/market/items/${id}/report`, { method: "POST", body: JSON.stringify({ reason }) });
 }

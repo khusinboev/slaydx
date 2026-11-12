@@ -110,7 +110,7 @@ test("`ArtifactViewer` insho uchun ham tahrir proplarini uzatadi (`useArticleEdi
    * doc={doc} />`), ko'ruvchi tahrirni umuman yoqmasdi — server
    * (`essayAdapter`) tayyor bo'lsa ham tugma chiqmasdi.
    */
-  assert.match(viewer, /case "essay":[\s\S]{0,400}?<WordViewer doc=\{doc\} gen=\{detail\} onGen=\{onDetail\} onEditState=\{onEditState\} \/>/, "insho tahrir proplarisiz");
+  assert.match(viewer, /case "essay":[\s\S]{0,400}?<WordViewer doc=\{doc\} gen=\{detail\} onGen=\{onDetail\} onEditState=\{onEditState\} initialEdit=\{initialEdit\} \/>/, "insho tahrir proplarisiz");
 
   const hook = readFileSync(new URL("../../components/files/useArticleEdit.ts", import.meta.url), "utf8");
   assert.match(hook, /const ARTICLE_TOOLS = \["article", "thesis", "essay"\] as const;/, "tahrir hooki inshoni bilishi kerak");

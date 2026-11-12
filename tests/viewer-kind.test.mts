@@ -70,7 +70,7 @@ test("`teacher` ko'ruvchisi `ArtifactViewer` da tahrir proplari bilan ulangan", 
    */
   const src = readFileSync(new URL("../components/viewers/ArtifactViewer.tsx", import.meta.url), "utf8");
   assert.match(src, /case "teacher":/);
-  assert.match(src, /case "teacher":[\s\S]{0,1200}?<WordViewer doc=\{doc\} gen=\{detail\} onGen=\{onDetail\} onEditState=\{onEditState\} \/>/);
+  assert.match(src, /case "teacher":[\s\S]{0,1200}?<WordViewer doc=\{doc\} gen=\{detail\} onGen=\{onDetail\} onEditState=\{onEditState\} initialEdit=\{initialEdit\} \/>/);
 });
 
 /* ────────────────── Bosma o'yinlar + infografika (AUDIT-21 R0) ────────────────── */
@@ -100,7 +100,7 @@ test("o'yin vositalari `game` ko'ruvchisiga tushadi, boshqa hech kim tushmaydi",
 test("`game` ko'ruvchisi `ArtifactViewer` da tahrir proplari bilan ulangan", () => {
   const src = readFileSync(new URL("../components/viewers/ArtifactViewer.tsx", import.meta.url), "utf8");
   assert.match(src, /case "game":/);
-  assert.match(src, /case "game":[\s\S]{0,1200}?<WordViewer doc=\{doc\} gen=\{detail\} onGen=\{onDetail\} onEditState=\{onEditState\} \/>/);
+  assert.match(src, /case "game":[\s\S]{0,1200}?<WordViewer doc=\{doc\} gen=\{detail\} onGen=\{onDetail\} onEditState=\{onEditState\} initialEdit=\{initialEdit\} \/>/);
 });
 
 test("har `ViewerKind` da `ArtifactViewer` shoxi bor (yangi tur unutilmasin)", () => {

@@ -5,6 +5,7 @@ import { Star } from "lucide-react";
 import { Card, CardHeader, EmptyState, ErrorState, Forbidden, Skeleton } from "@/components/admin/ui";
 import { fmtDateTime, fmtNumber } from "@/lib/admin-format";
 import { AdminAuthRequiredError, AdminForbiddenError, adminErrorMessage, adminGet, adminRequestId, isAbortError } from "@/lib/admin-api/core";
+import { WorkRatings } from "./WorkRatings";
 
 type RatingItem = { userId: string; name: string; username: string | null; stars: number; feedback: string; createdAt: string };
 type RatingsData = { count: number; average: number | null; distribution: number[]; items: RatingItem[] };
@@ -53,6 +54,10 @@ export function RatingsPage() {
         <h1 className="text-[22px] font-semibold tracking-tight">Baholar</h1>
         <p className="text-muted-foreground text-[13px]">Foydalanuvchilar ilovani baholab yozgan fikrlar (faqat ko&apos;rish).</p>
       </header>
+
+      <WorkRatings />
+
+      <h2 className="text-[15px] font-semibold">Ilova bahosi</h2>
 
       {state.status === "loading" ? (
         <Card>

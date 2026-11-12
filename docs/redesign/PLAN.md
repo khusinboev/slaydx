@@ -59,10 +59,24 @@ https://claude.ai/artifact/HmDv1nFFhdeadHCxWLc8eg (variant **A**).
 Supersedes W1's home layout (and the W1 `Tez boshlash` / all-tools rows above). Data: 73 % of jobs are slides, 91 % slide + mustaqil ish + referat,
 92 % of users use one tool. Mock-up: https://claude.ai/artifact/51rXgVYzggQTdMHaEF5sVv (variant C). `components/home/HomeHub.tsx`, top to bottom:
 1. Header: greeting (20 px on a phone), balance chip, search icon (the shell binds Cmd/Ctrl+K; no search field in the page), theme, bell. No subtitle.
-2. `HubBanner`: one `--hero` card, fixed height, snap carousel with dots from two slides up, no auto-advance. Slides: market (`useMarketOn`), Studio, AI yordamchi, domla.
-3. `HubGrid`: 4 columns, 8 in one row from 1024 px. `homeCells` order: Slayd (ringed), Mustaqil ish, Referat, Insho, Studio, AI yordamchi, O'yinlar
-   (`/uz/create?group=oyinlar`, new query of the catalogue), Barchasi (`/uz/create`). Chat off → Kurs ishi in its place. A tool without its provider key stays, disabled.
-4. «Davom ettirish»: 3 latest files, side by side from 1024 px; signed out `SignedOutCard`; signed in without a file, no section.
-5. `MarketRail`.
+2. `HubBanner`: one `--hero` card, fixed height, snap carousel with dots from two slides up. **Auto-advance (owner 2026-11-12):** every 5 s
+   (`BANNER_ROTATE_MS`) to the next slide, wrapping after the last; a dot or a swipe restarts the period. Holds while the mouse is over it, keyboard
+   focus is inside (not the focus a tap leaves on a dot), a finger / mouse button is down (until released anywhere), the document is hidden, or
+   within 800 ms of the user's own scroll; one slide or the skeleton = no timer; the timer is cleared on unmount. Reduced motion: still turns, but
+   jumps (`motion-safe:scroll-smooth`). `aria-roledescription="carousel"`, slides `role="group"` labelled «N / M», `aria-live` off while turning,
+   polite while held. Slides, in order: market (`useMarketOn`), Titul («Titul varag‘i — bepul», always), AI yordamchi (`chat`), Test ishlash
+   (`tests`), Studio (always), domla (`domla`).
+3. `HubGrid` (owner 2026-11-12): 12 cells, 4 × 3 on a phone, 6 × 2 from 1024 px, equal heights, labels on up to two lines. `homeCells` order:
+   Slayd (ringed), Pro slayd, Mustaqil ish, Referat, Konspekt, Kurs ishi, Insho, Test ishlash, Studio, AI yordamchi, Qattiqqo‘l domla, Barchasi
+   (`/uz/create`, always last). A switched-off service (tests, chat, domla) takes the next fallback, in grid order, from `homeFallbackCells`:
+   O'yinlar (`/uz/create?group=oyinlar`), Rezyume, Tarjimon, Maqola — always 12 distinct targets. O'yinlar is no longer a fixed cell (reachable
+   via «Barchasi»). A tool without its provider key stays, disabled.
+4. «Bepul xizmatlar» (`FreeRow`, `homeFreeItems`): compact cards with icon, name, one-line promise and a «Bepul» badge — Titul, AI yordamchi
+   (`chat` only), Fayl konvertatsiya, Alifbo o'giruvchi; routes from the tool / service registries. One sideways-scrolling snap row on a phone,
+   wrapping from 640 px; drawn even with one card.
+5. «Davom ettirish»: 3 latest files, side by side from 1024 px; signed out `SignedOutCard`; signed in without a file, no section.
+6. `MarketRail`.
 
-Until the session is known the banner and the chat cell are same-size skeletons. All links keep `useLoginGate`. The catalogue lives in «Barchasi» and the «+» sheet.
+Until the session is known the banner and the three switch cells (Test ishlash, AI yordamchi, Qattiqqo‘l domla) are same-size skeletons. All
+links (banner, grid, free row) keep `useLoginGate`. The catalogue lives in «Barchasi» and the «+» sheet; a free tool there shows the «Bepul»
+badge (`FreeBadge`, `formatPrice(0)`) instead of «0 so'm dan».

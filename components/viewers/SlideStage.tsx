@@ -104,12 +104,12 @@ export function SlideStage({
   const nav = useSlideNav({ enabled: present, step: onStep });
   const [fitScale, setFitScale] = useState(0.6);
   /*
-   * Sensorli tanlov: teginish qurilmasida rasm tugmalari («O‘z rasmim»,
-   * «Rasmsiz») slayd ustida DOIM turmaydi — slaydga tegilganda chiqadi.
-   * Sichqoncha uchun hech narsa o'zgarmaydi (CSS `hover: none` bilan
-   * cheklangan, pastda).
+   * The image buttons («O‘z rasmim», «Rasmsiz») used to hide on touch until
+   * the slide was tapped (editing was always on, so they covered the picture
+   * while reading). Since the explicit edit mode (2026-11-12) the editor
+   * draws them ONLY in edit mode, where they must be visible at once — the
+   * touch-selection state is gone.
    */
-  const [touchSel, setTouchSel] = useState(false);
 
   useEffect(() => {
     const el = stageRef.current;
@@ -201,9 +201,6 @@ export function SlideStage({
     onFitScale?.(fitEff);
   }, [fitEff, onFitScale]);
 
-  // Boshqa slaydga o'tilganda tanlov tushadi.
-  useEffect(() => setTouchSel(false), [index]);
-
   /*
    * `m-auto` (justify/items-center EMAS): kontent sig'sa markazda, sig'masa
    * (over-zoom) chap/yuqori chetdan boshlanadi va aylantirgich bilan
@@ -245,24 +242,11 @@ export function SlideStage({
       onPointerMove={nav.onPointerMove}
       onPointerUp={nav.onPointerUp}
       onPointerCancel={nav.onPointerCancel}
-      onPointerDown={(e) => {
-        nav.onPointerDown(e);
-        // Slayd tashqarisiga (qora maydonga) tegilsa tanlov tushadi.
-        if (!present && e.target === e.currentTarget) setTouchSel(false);
-      }}
+      onPointerDown={nav.onPointerDown}
     >
       <div
         style={{ width: SLIDE.w * scale, height: SLIDE.h * scale }}
-        className={cn(
-          "relative m-auto shrink-0",
-          !present && "shadow-2xl",
-          // Sensorli qurilmada rasm tugmalari faqat slayd tanlanganda ko'rinadi.
-          !present && "[@media(hover:none)]:[&:not([data-touch-sel])_[data-slide-image-controls]]:hidden",
-        )}
-        data-touch-sel={touchSel ? "" : undefined}
-        onPointerDown={(e) => {
-          if (!present && e.pointerType !== "mouse") setTouchSel(true);
-        }}
+        className={cn("relative m-auto shrink-0", !present && "shadow-2xl")}
         /*
           Tahrir qatlami hodisalarni SHU ramkada tinglaydi: bu yagona
           tugun bo'lib, ichida ham slayd (`data-src` li matnlar), ham

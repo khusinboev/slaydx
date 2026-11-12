@@ -21,6 +21,8 @@ export type BotStats = {
   at: Date;
   users: { total: number; today: number; week: number; active30: number };
   docs: { today: number; week: number; top: Array<{ toolId: string; count: number }> };
+  /** Work ratings whose current value was given in the last 30 days (`generation_ratings.updated_at`). */
+  ratings: { count: number; average: number | null; low: number };
   money: { today: number; todayN: number; week: number; weekN: number; month: number; monthN: number };
   bonuses: Array<{ kind: BonusKind; sum: number; count: number }>;
   channels: Array<{ id: string; chatId: string; title: string; joined: number; members: number | null }>;
@@ -67,6 +69,12 @@ SELECT g.tool_id, count(*) AS n
  ORDER BY count(*) DESC, g.tool_id
  LIMIT 5`;
 
+/** Work ratings (docs/ratings/GENERATION-RATING.md), the same 30 Tashkent days as «30 kun» above; ≤ 3 stars = low. */
+const RATINGS_SQL = `
+SELECT count(*) AS n, avg(stars)::float8 AS avg, count(*) FILTER (WHERE stars <= 3) AS low
+  FROM generation_ratings
+ WHERE updated_at >= (date_trunc('day', now() AT TIME ZONE 'Asia/Tashkent') AT TIME ZONE 'Asia/Tashkent') - interval '29 days'`;
+
 const BONUS_SQL = `
 SELECT CASE
          WHEN reference LIKE 'channel:%:join' THEN 'join'
@@ -100,8 +108,10 @@ export async function botStats(opts: { channelMembers?: boolean } = {}): Promise
     const top = (await c.query<{ tool_id: string; n: string }>(TOP_SQL)).rows;
     const bonus = (await c.query<{ kind: BonusKind; sum: string; n: string }>(BONUS_SQL)).rows;
     const channels = (await c.query<{ id: string; chat_id: string; title: string; joined: string }>(CHANNELS_SQL)).rows;
-    return { s, top, bonus, channels };
+    const ratings = (await c.query<{ n: string; avg: number | null; low: string }>(RATINGS_SQL)).rows[0];
+    return { s, top, bonus, channels, ratings };
   });
+  const ratingCount = n(data.ratings?.n);
   const { s } = data;
   const bonuses = data.bonus
     .map((r) => ({ kind: r.kind, sum: n(r.sum), count: n(r.n) }))
@@ -120,6 +130,11 @@ export async function botStats(opts: { channelMembers?: boolean } = {}): Promise
     at: new Date(),
     users: { total: n(s.users_total), today: n(s.users_today), week: n(s.users_week), active30: n(s.active30) },
     docs: { today: n(s.docs_today), week: n(s.docs_week), top: data.top.map((r) => ({ toolId: r.tool_id, count: n(r.n) })) },
+    ratings: {
+      count: ratingCount,
+      average: ratingCount && data.ratings?.avg != null ? Math.round(Number(data.ratings.avg) * 100) / 100 : null,
+      low: n(data.ratings?.low),
+    },
     money: {
       today: n(s.today_sum),
       todayN: n(s.today_n),
