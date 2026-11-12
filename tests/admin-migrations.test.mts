@@ -345,6 +345,29 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     await assert.rejects(runSql("INSERT INTO studio_templates (media, category, title, model_id, skeleton) VALUES ('music', 'fon', 'x', 'a/b', 'abc')"), /check/i, "076 a template is a picture or a clip");
     // 077: one rewrite per compare batch (docs/studio/P11-SPEC.md).
     assert.ok((await exists("studio_prompt_rewrites")) && (await exists("studio_prompt_rewrites_group_idx")), "077 table and index created");
+    // 078: work ratings (docs/ratings/GENERATION-RATING.md) -- one row per (generation, user), CHECKs in the database.
+    assert.ok(await exists("generation_ratings"), "078 table created");
+    for (const ix of ["generation_ratings_created_idx", "generation_ratings_updated_idx", "generation_ratings_user_idx"]) assert.ok(await exists(ix), `078 ${ix}`);
+    await runSql(`INSERT INTO users (telegram_id, username, name) VALUES (777000078, 'mig078', 'M');
+      INSERT INTO generations (id, user_id, tool_id, topic, status, format) SELECT '00000000-0000-4000-8000-000000000078', id, 'slide', 't', 'COMPLETED', 'pptx' FROM users WHERE telegram_id = 777000078;
+      INSERT INTO generation_ratings (generation_id, user_id, stars, reason, source) SELECT '00000000-0000-4000-8000-000000000078', id, 2, 'images', 'bot' FROM users WHERE telegram_id = 777000078;`);
+    const rate = (stars: number, reason: string | null, source = "web", comment: string | null = null) =>
+      runSql(`UPDATE generation_ratings SET stars = ${stars}, reason = ${reason === null ? "NULL" : `'${reason}'`}, source = '${source}', comment = ${comment === null ? "NULL" : `'${comment}'`}
+               WHERE generation_id = '00000000-0000-4000-8000-000000000078'`);
+    await assert.rejects(rate(6, null), /generation_ratings_stars_check/, "078 stars 1-5");
+    await assert.rejects(rate(0, null), /generation_ratings_stars_check/, "078 stars 1-5");
+    await assert.rejects(rate(2, "price"), /generation_ratings_reason_check/, "078 the reason set is fixed");
+    await assert.rejects(rate(5, "design"), /generation_ratings_reason_check/, "078 a reason only for 1-3 stars");
+    await assert.rejects(rate(2, null, "admin"), /generation_ratings_source_check/, "078 source bot|web");
+    await assert.rejects(rate(2, null, "web", "x".repeat(501)), /generation_ratings_comment_check/, "078 comment <= 500");
+    await rate(5, null, "web", "x".repeat(500));
+    await assert.rejects(
+      runSql(`INSERT INTO generation_ratings (generation_id, user_id, stars, source) SELECT '00000000-0000-4000-8000-000000000078', id, 3, 'bot' FROM users WHERE telegram_id = 777000078`),
+      /duplicate key|unique/i,
+      "078 one row per (generation, user)",
+    );
+    await runSql("DELETE FROM generations WHERE id = '00000000-0000-4000-8000-000000000078'");
+    assert.equal((await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM generation_ratings"))!.n, "0", "078 the rating goes with its generation");
     await assert.rejects(runSql("INSERT INTO studio_prompts (category, title, prompt) VALUES ('logo', 'x', repeat('a', 501))"), /check/i, "067 prompt length CHECK");
     await assert.rejects(runSql("INSERT INTO studio_templates (category, title, model_id, skeleton, params) VALUES ('logo', 'x', 'a/b', 'abc', '[]')"), /check/i, "067 params must be an object");
     // 068: Studio P5 voices (docs/studio/P5-SPEC.md) -- samples, clones (one active per user), previews.
@@ -439,6 +462,8 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     `);
     await runSql("INSERT INTO studio_prompts (media, category, title, prompt) VALUES ('video', 'tabiat', 'Admin klipi', 'One shot of a river')");
     for (const f of [
+      // 078: work ratings (docs/ratings/GENERATION-RATING.md) -- generation_ratings.
+      "078_generation_ratings.sql",
       // 077: Studio package G (docs/studio/P11-SPEC.md) -- studio_prompt_rewrites.
       "077_studio_prompt_rewrites.sql",
       // 076: Studio package G (docs/studio/P11-SPEC.md) -- library kinds, video seeds, English text.
@@ -543,6 +568,10 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
         assert.ok(!(await exists("generations_compare_group_idx")), "071 rollback drops the index");
         const cols = await query<{ c: string }>("SELECT column_name AS c FROM information_schema.columns WHERE table_name = 'generations' AND column_name LIKE 'compare_%'");
         assert.equal(cols.length, 0, "071 rollback drops both columns");
+      }
+      if (f === "078_generation_ratings.sql") {
+        assert.ok(!(await exists("generation_ratings")), "078 rollback drops the table");
+        for (const ix of ["generation_ratings_created_idx", "generation_ratings_updated_idx", "generation_ratings_user_idx"]) assert.ok(!(await exists(ix)), `078 rollback drops ${ix}`);
       }
       if (f === "077_studio_prompt_rewrites.sql") assert.ok(!(await exists("studio_prompt_rewrites")) && !(await exists("studio_prompt_rewrites_group_idx")), "077 rollback drops the table and its index");
       if (f === "076_studio_library_media.sql") {
