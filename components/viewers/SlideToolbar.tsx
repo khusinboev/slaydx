@@ -38,6 +38,7 @@ export function SlideToolbar({
   legacy = false,
   info,
   editBar,
+  editToggle,
 }: {
   page: number;
   pages: number;
@@ -66,6 +67,12 @@ export function SlideToolbar({
    * into. In-flow, same place as the toolbar, so nothing covers the slide.
    */
   editBar?: ReactNode;
+  /**
+   * Desktop «Tahrirlash» / «Tayyor» toggle (`EditToggle`, explicit edit mode
+   * 2026-11-12) — first in the right-hand group. Phones get it under the
+   * stage instead (`SlideEditModeRow`): this row has no room for a label.
+   */
+  editToggle?: ReactNode;
 }) {
   const btn = "hover:bg-white/10 rounded p-1.5 disabled:opacity-30";
 
@@ -132,6 +139,7 @@ export function SlideToolbar({
 
       {/* ── O'ng chet: kengda inline, mobilda menyu ── */}
       <div className="ml-auto flex min-w-0 items-center gap-2">
+        {editToggle}
         {legacy ? (
           <span className="hidden text-xs text-white/40 md:inline">Bu deka eski formatda — tahrirlab bo‘lmaydi</span>
         ) : null}

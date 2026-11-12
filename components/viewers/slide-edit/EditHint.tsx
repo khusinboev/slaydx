@@ -3,14 +3,16 @@
 import { Pencil, X } from "lucide-react";
 
 /**
- * One-time touch hint (PLAN §3 O4): «Matnni tahrirlash uchun ikki marta
- * bosing». Shown below the stage (in-flow, never over the slide) on touch
- * devices until the user dismisses it or opens a text once. The «seen» flag
- * lives in `localStorage`; every access is wrapped (private mode, blocked
- * storage, thumbnails) — without storage the hint simply shows again next time.
+ * One-time touch hint (PLAN §3 O4). Since the explicit edit mode
+ * (2026-11-12) it points at the «Tahrirlash» button under the slide instead
+ * of the hidden double tap. Shown below the stage (in-flow, never over the
+ * slide) on touch devices until the user dismisses it, enters edit mode or
+ * opens a text once. The «seen» flag lives in `localStorage`; every access is
+ * wrapped (private mode, blocked storage, thumbnails) — without storage the
+ * hint simply shows again next time.
  */
 export const EDIT_HINT_KEY = "slaydx:slide-edit-hint";
-export const EDIT_HINT_TEXT = "Matnni tahrirlash uchun ikki marta bosing";
+export const EDIT_HINT_TEXT = "Slaydni o‘zgartirish uchun «Tahrirlash» tugmasini bosing";
 
 export function readEditHintSeen(): boolean {
   try {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ImagePlus, Pencil, Redo2, Trash2, Undo2 } from "lucide-react";
+import { ImagePlus, Redo2, Trash2, Undo2 } from "lucide-react";
 import type { AcademicDoc } from "@/lib/generation/types";
 import type { ResumeOp } from "@/lib/generation/resume/edit";
 import { planResume, type ResumeItem, type ResumeLayout } from "@/lib/generation/resume/layout";
@@ -24,6 +24,7 @@ import { useMeasuredPages } from "./measure";
 import { PageRow, ZoomFrame, Workspace } from "./sheet";
 import { TOUCH_BOX, VIEWER_TOOLBAR_H, ViewerToolbar } from "./toolbar";
 import { DocEditHint, EditDoneBar, useDocEditHint, useEditFocusZoom } from "./EditDoneBar";
+import { EditToggle } from "./EditToggle";
 import { useCoarsePointer } from "@/lib/hooks/useCoarsePointer";
 import { useFitZoom } from "./useFitZoom";
 import { useVisiblePage } from "./useVisiblePage";
@@ -61,8 +62,11 @@ export function ResumeViewer({
   gen,
   onGen,
   onEditState,
+  initialEdit = false,
 }: {
   doc: AcademicDoc;
+  /** Open with «Tahrirlash» already on (`/uz/files/<id>?edit=1`, `ResultView`); read once, ignored when not editable. */
+  initialEdit?: boolean;
   /** Tayyor generatsiya (`api.GenerationDetail`) — TAHRIR shu bilan yoqiladi. */
   gen?: unknown;
   /** Tahrirdan keyin yangilangan generatsiya — sahifa holatiga qaytariladi. */
@@ -82,7 +86,7 @@ export function ResumeViewer({
    */
   const workRef = useRef<HTMLDivElement>(null);
   const { zoom, setZoom, fit, wide } = useFitZoom(workRef, A4.wPx);
-  const [editOn, setEditOn] = useState(false);
+  const [editOn, setEditOn] = useState(initialEdit);
   const editable = ed.editable && !ed.legacy;
   const editing = editOn && editable;
   /** The user picked a zoom by hand (toolbar «−/+»); «%» goes back to fit. The phone focus zoom restores either. */
@@ -208,16 +212,8 @@ export function ResumeViewer({
   }, [editing, undo, redo, save, pending]);
 
   const editButton = editable ? (
-    <button
-      type="button"
-      aria-pressed={editing}
-      className={cn("rounded px-2 py-1 text-[12px]", TOUCH_BOX, "pointer-coarse:gap-1.5 pointer-coarse:text-[13px]", editing ? "bg-sky-500 text-white" : "hover:bg-white/10")}
-      onClick={() => setEditOn((v) => !v)}
-    >
-      {coarse ? <Pencil className="size-4 shrink-0" aria-hidden /> : null}
-      {/* Under 24rem of toolbar (a 360 px phone) only the pencil shows; the name stays for screen readers. */}
-      <span className={coarse ? "@max-sm:sr-only" : undefined}>Tahrirlash</span>
-    </button>
+    // Under 24rem of toolbar (a 360 px phone) only the icon shows; the name stays for screen readers.
+    <EditToggle on={editing} narrowIconOnly={coarse} onClick={() => setEditOn((v) => !v)} />
   ) : null;
   const right = editable ? (
     <>

@@ -29,6 +29,12 @@ export type EditActionsState = {
   save: () => Promise<boolean | void> | void;
   /** Saqlanmagan o'zgarishlarni bekor qilish (faqat klientda). */
   discard: () => void;
+  /**
+   * The viewer's edit mode was just left with unsaved changes (slide
+   * «Tayyor», 2026-11-12): «Saqlash · N» is highlighted so saving is obvious.
+   * Never saves by itself — the explicit save model stays.
+   */
+  attention?: boolean;
 };
 
 export function EditActions({ state }: { state: EditActionsState | null }) {
@@ -39,7 +45,7 @@ export function EditActions({ state }: { state: EditActionsState | null }) {
    */
   const discard = useConfirmClick(() => state?.discard());
   if (!state) return null;
-  const { pending, saving, saveFailed, justSaved, save } = state;
+  const { pending, saving, saveFailed, justSaved, save, attention } = state;
   if (pending === 0 && !saving) {
     return justSaved ? (
       <span className="inline-flex items-center gap-1 text-xs text-emerald-600" data-edit-saved>
@@ -67,8 +73,12 @@ export function EditActions({ state }: { state: EditActionsState | null }) {
         type="button"
         title={saveFailed ? "Saqlanmadi — qayta urinish (Ctrl+S)" : "Saqlash (Ctrl+S)"}
         data-save-failed={saveFailed ? "" : undefined}
+        data-edit-attention={attention ? "" : undefined}
         disabled={saving || pending === 0}
-        className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-sky-500 px-3 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-60"
+        className={cn(
+          "inline-flex h-9 items-center gap-1.5 rounded-lg bg-sky-500 px-3 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-60",
+          attention && "ring-2 ring-amber-400 ring-offset-2 ring-offset-background motion-safe:animate-pulse",
+        )}
         onClick={() => void save()}
       >
         <Save className="size-4" />

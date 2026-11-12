@@ -41,6 +41,34 @@ import { liveDocOf, type LiveDeck } from "@/lib/generation/slide-progress";
 import { viewerKind } from "@/lib/viewers/kind";
 import type { Generation } from "@/lib/types";
 import { formatPrice } from "@/lib/format";
+import { replaceSearch } from "@/lib/ui";
+
+/** `/uz/files/<id>?edit=1` — the bot's «Tahrirlash» button: open the viewer straight in edit mode. */
+export const EDIT_QUERY = "edit";
+
+/** Whether the current URL asks for edit mode (`?edit=1`). `false` on the server. */
+export function readEditQuery(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return new URLSearchParams(window.location.search).get(EDIT_QUERY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Drops `edit` from the address bar without a history entry (`replaceSearch`
+ * keeps the nav engine's history stamp and lets Next sync `useSearchParams`):
+ * a refresh or a back/forward visit must not re-enter edit mode, and a link
+ * copied from the address bar stays clean.
+ */
+export function clearEditQuery(): void {
+  if (typeof window === "undefined") return;
+  const next = new URLSearchParams(window.location.search);
+  if (!next.has(EDIT_QUERY)) return;
+  next.delete(EDIT_QUERY);
+  replaceSearch(next);
+}
 
 /**
  * Where a deleted document's page goes (redesign F0 hand-off): the «Ishlarim»
@@ -90,6 +118,16 @@ export function ResultView({ id }: { id: string }) {
    * yerda ko'radi («ko'rdim = oldim»). Holatning o'zi `SlideViewer` da.
    */
   const [editState, setEditState] = useState<EditActionsState | null>(null);
+  /**
+   * `?edit=1` (bot «Tahrirlash»): read ONCE, then removed from the URL. The
+   * finished viewer starts in edit mode when it first mounts — the viewers
+   * themselves ignore it when the document is not editable, and the live
+   * (`RunningPanel`) viewer never gets it.
+   */
+  const [initialEdit] = useState(readEditQuery);
+  useEffect(() => {
+    clearEditQuery();
+  }, []);
   /**
    * «Tuzatish» (Maqola 2, WP7): hozir bajarilayotgan `fix.target`; panel
    * tugmalarini o'chiradi. `genRef` — `onFix` ichida `await` dan keyin
@@ -659,6 +697,7 @@ export function ResultView({ id }: { id: string }) {
             detail={gen}
             onDetail={adoptDetail}
             onEditState={setEditState}
+            initialEdit={initialEdit}
             pdf={Boolean(features?.pdf)}
           />
           {/* Only under a flowing document (a filling viewer owns the whole frame), never under a copy bought in the market. */}

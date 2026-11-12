@@ -31,11 +31,14 @@ export function TitulViewer({
   gen,
   onGen,
   onEditState,
+  initialEdit = false,
 }: {
   doc: AcademicDoc;
   gen?: unknown;
   onGen?: (g: unknown) => void;
   onEditState?: (s: EditActionsState | null) => void;
+  /** `/uz/files/<id>?edit=1` (the bot's «Tahrirlash» button): start with editing on, as the other viewers do. */
+  initialEdit?: boolean;
 }) {
   const ed = useTitulEdit({ gen, onGen });
   const docNow = ed.doc ?? doc;
@@ -43,7 +46,7 @@ export function TitulViewer({
 
   const workRef = useRef<HTMLDivElement>(null);
   const { zoom, setZoom, fit, wide } = useFitZoom(workRef, A4.wPx);
-  const [editOn, setEditOn] = useState(false);
+  const [editOn, setEditOn] = useState(initialEdit);
   const editable = ed.editable && !ed.legacy;
   const editing = editOn && editable;
   const coarse = useCoarsePointer();
