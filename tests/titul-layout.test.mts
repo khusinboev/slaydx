@@ -15,7 +15,7 @@ import type { FormValues } from "../lib/types.ts";
  *   M2. classic signature value `inp.author` replaced by `inp.author || "?"` -> «signature line stays blank»;
  *   M3. `topicPhrase.before` ignored (phrase always after) -> «Russian: на тему before the topic»;
  *   M4. `titulEditableIds` built from the CURRENT plan (with overrides) -> «undo of a cleared run»;
- *   M5. SLACK_MM set to 0 and a zone share +10 -> «zones + tail fit the page».
+ *   M5. SLACK_MM set to 0 -> «every type × offered layout … fits the page».
  */
 
 const SAMPLE: FormValues = {
