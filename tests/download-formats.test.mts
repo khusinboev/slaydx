@@ -35,6 +35,7 @@ const MATRIX: Record<string, Row> = {
   referat: { format: "docx", on: ["native", "pdf"], off: ["native"] },
   "mustaqil-ish": { format: "docx", on: ["native", "pdf"], off: ["native"] },
   konspekt: { format: "docx", on: ["native", "pdf"], off: ["native"] },
+  "title-page": { format: "docx", on: ["native", "pdf"], off: ["native"] },
   essay: { format: "docx", on: ["native", "pdf"], off: ["native"] },
   article: { format: "docx", on: ["native", "pdf"], off: ["native"] },
   thesis: { format: "docx", on: ["native", "pdf"], off: ["native"] },

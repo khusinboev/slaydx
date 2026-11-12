@@ -21,10 +21,14 @@ import {
  */
 
 test("har bir vosita uchun narx musbat va butun son", () => {
+  // «Titul» is the ONE free tool (owner request); every other tool keeps a positive integer price.
+  const FREE = new Set(["title-page"]);
   for (const tool of TOOLS) {
     const price = priceFor(tool, {});
-    assert.ok(Number.isInteger(price) && price > 0, `${tool.id}: ${price}`);
+    if (FREE.has(tool.id)) assert.equal(price, 0, `${tool.id} must be free`);
+    else assert.ok(Number.isInteger(price) && price > 0, `${tool.id}: ${price}`);
   }
+  assert.deepEqual(TOOLS.filter((t) => priceFor(t, {}) === 0).map((t) => t.id), [...FREE], "no other tool became free");
 });
 
 test("klient yuborgan 'price' e'tiborga olinmaydi", () => {
@@ -271,9 +275,11 @@ test("kalitsiz xizmat sotilmaydi", async () => {
    * bo'lsa esa shablon hujjatni qaytaradi va TO'LIQ narx olinadi. Ya'ni
    * kalitsiz rejim dev/demo uchun, sotuv uchun emas.
    */
-  for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait" && x.custom !== "video" && x.custom !== "studio-image" && x.custom !== "studio-video" && x.custom !== "studio-audio" && x.custom !== "studio-mix")) {
+  for (const t of TOOLS.filter((x) => x.custom !== "image" && x.custom !== "portrait" && x.custom !== "video" && x.custom !== "studio-image" && x.custom !== "studio-video" && x.custom !== "studio-audio" && x.custom !== "studio-mix" && x.custom !== "titul")) {
     assert.ok(toolBlockedReason(t, noLlm), `${t.id}: matn kalitisiz sotilmasligi kerak`);
   }
+  // «Titul» is a template render: no LLM, no key — it stays open without any provider.
+  assert.equal(toolBlockedReason(TOOL_BY_ID["title-page"], noLlm), null, "Titul matn kalitiga bog'liq emas");
   // Studio «Audio» (P6): no text model in the path either; its own model list decides (empty = blocked, the switch off).
   assert.equal(toolBlockedReason(TOOL_BY_ID["studio-audio"], { ...noLlm, ttsPremium: true }), null, "Studio audio matn kalitiga bog'liq emas (ElevenLabs bor)");
   assert.ok(toolBlockedReason(TOOL_BY_ID["studio-audio"], { ...all, studioAudioModels: [] }), "no Studio audio model -> blocked");
@@ -299,9 +305,10 @@ test("kalitsiz xizmat sotilmaydi", async () => {
   // Hech narsa sozlanmagan — hamma vosita to'silади.
   for (const t of TOOLS) {
     // P8c «Montaj» runs ffmpeg in the worker — no provider or key at all, so it is never blocked by the flags.
-    if (t.id === "studio-mix") continue;
+    if (t.id === "studio-mix" || t.id === "title-page") continue;
     assert.ok(toolBlockedReason(t, nothing), `${t.id}: hech narsasiz sotilmasligi kerak`);
   }
+  assert.equal(toolBlockedReason(TOOL_BY_ID["title-page"], nothing), null, "Titul hech qanday provayderga bog'liq emas");
   assert.equal(toolBlockedReason(TOOL_BY_ID["studio-mix"], nothing), null, "Montaj provayderga bog'liq emas");
 
   /*
