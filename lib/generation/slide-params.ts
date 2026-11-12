@@ -42,11 +42,11 @@ export function isSlideImageStyle(v: string): v is SlideImageStyle {
   return (SLIDE_IMAGE_STYLES as readonly string[]).includes(v);
 }
 
-/** Pro-slayd: slaydlar soni chegarasi va narxi (har slaydga). */
+/** Pro-slayd: slaydlar soni chegarasi va narxi (har slaydga; 2026-11-12 egasi qarori: 2 000 → 1 600, −20 %). */
 export const PRO_SLIDE_MIN = 4;
 export const PRO_SLIDE_MAX = 30;
 export const PRO_SLIDE_DEFAULT = 12;
-export const PRO_SLIDE_PER_SLIDE = 2000;
+export const PRO_SLIDE_PER_SLIDE = 1600;
 /** Dvigatel qabul qiladigan eng ko'p slayd (ilgari `wantSlides` 20 da qirqardi). */
 export const SLIDE_MAX = PRO_SLIDE_MAX;
 

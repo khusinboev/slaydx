@@ -136,7 +136,7 @@ test("every tool has a ladder whose base is exactly basePriceFor/priceFor of its
   }
   // Tier tables, not constants: the ladders follow the registry.
   assert.deepEqual(ap.ladderFor("slide").map((s) => s.base), [3000, 3000, 3000, 8000]);
-  assert.deepEqual(ap.ladderFor("pro-slide").map((s) => s.base), [8000, 24000, 60000]);
+  assert.deepEqual(ap.ladderFor("pro-slide").map((s) => s.base), [6400, 19200, 48000]);
   // `rasm`: Gemini (today's labels and prices) first, then the ChatGPT table (2x).
   assert.deepEqual(ap.ladderFor("image").map((s) => s.base), [2000, 3500, 6000, 4000, 7000, 12000]);
   assert.deepEqual(ap.ladderFor("image").map((s) => s.label), ["1 rasm", "2 rasm", "4 rasm", "1 rasm · ChatGPT", "2 rasm · ChatGPT", "4 rasm · ChatGPT"]);

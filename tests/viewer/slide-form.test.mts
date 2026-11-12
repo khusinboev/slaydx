@@ -188,7 +188,7 @@ test("SlideForm: tuzilma bloklari (blocks) chip'i YO'Q — faqat pro slaydda", (
 test("pro-slide narxi slideCount bilan chiziqli o'zgaradi (priceFor)", () => {
   const min = priceFor(proTool, { slideCount: PRO_SLIDE_MIN });
   const max = priceFor(proTool, { slideCount: PRO_SLIDE_MAX });
-  assert.equal(min, PRO_SLIDE_MIN * 2000);
-  assert.equal(max, PRO_SLIDE_MAX * 2000);
+  assert.equal(min, PRO_SLIDE_MIN * 1600);
+  assert.equal(max, PRO_SLIDE_MAX * 1600);
   assert.notEqual(min, max);
 });
