@@ -357,15 +357,17 @@ export function PayDialog() {
         ) : null}
 
         {view === "wait" && order ? (
-          <WaitStep
-            orderId={order.id}
-            amount={order.amount}
-            source={source}
-            initial={waitInitial}
-            onBack={stepBack}
-            onDone={close}
-            onReopen={source === "app" ? () => openClickApp(order.checkoutUrl) : undefined}
-          />
+          <div data-pay-step="wait">
+            <WaitStep
+              orderId={order.id}
+              amount={order.amount}
+              source={source}
+              initial={waitInitial}
+              onBack={stepBack}
+              onDone={close}
+              onReopen={source === "app" ? () => openClickApp(order.checkoutUrl) : undefined}
+            />
+          </div>
         ) : null}
 
         {view === "paynet" && user ? <PaynetStep userId={user.id} amount={amount} appUrl={paynetLink} prefilled={paynetPrefill && paynetLink !== paynetBase} /> : null}
