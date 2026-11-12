@@ -81,8 +81,11 @@ What changed:
   other language → Rachel (+ Adam).
 - Not offered to the voice changer (speech-to-speech: untested with a voice outside the account) nor to fal (voices by name).
 - Previews: the cache key is `elevenlabs:<voice id>` (nothing model-specific). Every library / clone preview was spoken with
-  v3 + `uz`, which always failed, and a failed preview is never stored — so no stale v3 ElevenLabs preview can exist in
-  `studio_voice_previews` and nothing needs invalidating (the lead confirms with a `SELECT voice_key …` on production).
+  v3 + `uz` (`extra.lang = "uz"`), and a failed preview is never stored (`storePreview` runs only after an MP3 came back). If v3
+  refused `uz` for the whole life of the tab, no `elevenlabs:*` / `clone:*` row exists; a row that does exist was made while v3
+  still took `uz` (real Uzbek audio, only an older model). Nothing is invalidated in code; the lead checks
+  `SELECT voice_key, created_at FROM studio_voice_previews WHERE voice_key NOT LIKE 'gemini:%'` and may delete those rows to
+  re-record them with v4.
 
 ## Voice cloning (owner 2026-11-02)
 - **Sample**: `POST /api/media/voices/samples` — `file` + `consent=1` (mandatory «Bu ovozdan foydalanishga haqqim bor»).
