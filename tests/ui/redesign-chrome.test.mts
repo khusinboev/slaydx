@@ -2,7 +2,7 @@ import "./setup.ts";
 import test, { afterEach, before } from "node:test";
 import assert from "node:assert/strict";
 import { createElement as h } from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 import { WalletPage } from "../../components/wallet/WalletPage.tsx";
