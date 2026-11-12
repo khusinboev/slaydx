@@ -661,12 +661,17 @@ test("PayDialog sends the user to the checkout with location.replace", async () 
     });
     await settle();
     assert.ok(sx()?.o);
+    // Owner 2026-11-12: the method → «Summa» (one more history entry) → «Davom etish».
     const click = Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.includes("Click"))!;
     fireEvent.click(click);
     await settle();
+    assert.ok(sx()?.o, "the amount step owns an entry too");
+    fireEvent.change(document.querySelector("[data-pay-amount-input]")!, { target: { value: "25000" } });
+    fireEvent.click(document.querySelector("[data-pay-continue]")!);
+    await settle();
     await settle();
     assert.deepEqual(exits, [["https://my.click.uz/pay?x=1", true]]);
-    assert.equal(sx()?.o, undefined, "dialog entry popped first");
+    assert.equal(sx()?.o, undefined, "the dialog's and the step's entries are popped first");
   } finally {
     nav.__setLeaveSiteForTests(null);
     globalThis.fetch = realFetch;

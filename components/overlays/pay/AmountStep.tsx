@@ -7,10 +7,14 @@ import { paymentBonusHint, paymentBonusPoints } from "@/lib/payment-bonus";
 import { MAX_TOPUP_SOUM, MIN_TOPUP_SOUM, topupAmountError } from "@/lib/topup-limits";
 import { TOPUP_PRESETS } from "../pay-amount";
 import { MethodBadge, type PayMethod } from "./methods";
-import { fieldError, inputCls, primaryBtn } from "./ui";
+import { fieldError, primaryBtn } from "./ui";
 
 /** Longest typed amount: `10 000 000` has 8 digits; one spare digit lets the error message show. */
 const MAX_DIGITS = 9;
+
+/** The shared input look (`inputCls`) at 56 px with 22 px digits (≥ 16 px: iOS does not zoom on focus). */
+const amountInputCls =
+  "border-input bg-background focus:ring-ring h-14 w-full rounded-[14px] border px-3.5 pr-16 text-[22px] font-semibold tracking-[-0.01em] tabular-nums outline-none focus:ring-2 disabled:opacity-60 aria-[invalid=true]:border-destructive";
 
 /**
  * Step 1 «Summa» of the top-up sheet (owner 2026-11-12): the chosen method on top, an EMPTY amount
@@ -89,7 +93,7 @@ export function AmountStep({
             onChange(digits ? Number(digits) : 0);
           }}
           onBlur={() => setTouched(true)}
-          className={cn(inputCls, "h-14 pr-16 text-[22px] font-semibold tracking-[-0.01em]")}
+          className={amountInputCls}
         />
         <span aria-hidden className="text-muted-foreground pointer-events-none absolute inset-y-0 right-4 flex items-center text-[15px] font-medium">
           so&apos;m
