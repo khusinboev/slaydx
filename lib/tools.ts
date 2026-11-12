@@ -2033,7 +2033,7 @@ export function basePriceFor(tool: ToolConfig, values: FormValues, media?: Media
     return imageBasePrice(imageModelOf(values), Number(values.imageCount || 1));
   }
   if (tool.id === "slide") {
-    // Slayder (4–30): 20 tagacha 3 000, keyingi har slayd +500 — `extractMeta`
+    // Slayder (4–30): 5 tagacha 3 000, 6-slayddan har biri +550 — `extractMeta`
     // bilan bir xil klamp (`slidePrice` ichida), narx va deka uzunligi ajralmasin.
     return slidePrice(Number(values.slideCount));
   }

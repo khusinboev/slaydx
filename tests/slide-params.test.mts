@@ -71,7 +71,7 @@ test("pro-slide: slaydlar soni slayderdan, 4–30 ga qisiladi, narx har slaydga"
   assert.equal(priceFor(pro, { slideCount: 99 }), 48000, "narx ham qisiladi — deka bilan ajralmasin");
 });
 
-test("oddiy slide: slayder 4–30 (standart 10), 20 tagacha 3 000, keyingi har slayd +500", () => {
+test("oddiy slide: slayder 4–30 (standart 10), 5 tagacha 3 000, 6-slayddan har biri +550", () => {
   assert.equal(meta({}, slide).targetPages, SLIDE_DEFAULT, "slayder yuborilmasa standart 10");
   assert.equal(meta({ slideCount: 25 }, slide).targetPages, 25);
   assert.equal(meta({ slideCount: 1 }, slide).targetPages, SLIDE_MIN);
@@ -79,21 +79,23 @@ test("oddiy slide: slayder 4–30 (standart 10), 20 tagacha 3 000, keyingi har s
   // Eski paket qiymati endi e'tiborsiz — narx faqat slayderdan.
   assert.equal(meta({ quality: "premium_long" }, slide).targetPages, SLIDE_DEFAULT);
   const table: [unknown, number][] = [
-    [undefined, 3000],
+    [undefined, 5750],
     [4, 3000],
-    [10, 3000],
-    [20, 3000],
-    [21, 3500],
-    [25, 5500],
-    [30, 8000],
-    [99, 8000],
-    ["abc", 3000],
+    [5, 3000],
+    [6, 3550],
+    [10, 5750],
+    [20, 11250],
+    [21, 11800],
+    [25, 14000],
+    [30, 16750],
+    [99, 16750],
+    ["abc", 5750],
   ];
   for (const [n, want] of table) {
     assert.equal(priceFor(slide, { slideCount: n as never }), want, `${String(n)} slayd`);
     assert.equal(slidePrice(Number(n)), want);
   }
-  assert.equal(priceFor(slide, { quality: "premium_long" }), 3000, "paket narxga ta'sir qilmaydi");
+  assert.equal(priceFor(slide, { quality: "premium_long" }), 5750, "paket narxga ta'sir qilmaydi (standart 10 slayd)");
   // Oddiy slaydda premium yo'q, uslub doim foto (bepul stock).
   assert.equal(meta({ slideImageStyle: "chalk" }, slide).premiumVisuals, false);
   assert.equal(meta({ slideImageStyle: "chalk" }, slide).slideImageStyle, "photo", "stock faqat foto — uslub majburlanadi");

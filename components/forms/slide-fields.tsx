@@ -179,10 +179,10 @@ function SlideCountField({ values, set, tool }: { values: FormValues; set: Slide
         {getClientPriceAdjust(tool)
           ? pro
             ? `${PRO_SLIDE_MIN} ta — ${formatSom(priceFor(TOOL_BY_ID[tool], { slideCount: PRO_SLIDE_MIN }))} … ${PRO_SLIDE_MAX} ta — ${formatSom(priceFor(TOOL_BY_ID[tool], { slideCount: PRO_SLIDE_MAX }))} · 1 slayd ≈ 2 daqiqa`
-            : `${SLIDE_INCLUDED} tagacha ${formatSom(priceFor(TOOL_BY_ID[tool], { slideCount: SLIDE_INCLUDED }))} · ${SLIDE_MAX} ta — ${formatSom(priceFor(TOOL_BY_ID[tool], { slideCount: SLIDE_MAX }))} · 1 slayd ≈ 2 daqiqa`
+            : `${SLIDE_INCLUDED} slaydgacha ${formatSom(priceFor(TOOL_BY_ID[tool], { slideCount: SLIDE_INCLUDED }))} · ${SLIDE_MAX} ta — ${formatSom(priceFor(TOOL_BY_ID[tool], { slideCount: SLIDE_MAX }))} · 1 slayd ≈ 2 daqiqa`
           : pro
             ? `Har slayd ${formatSom(PRO_SLIDE_PER_SLIDE)} · 1 slayd ≈ 2 daqiqa`
-            : `${SLIDE_INCLUDED} tagacha ${formatSom(SLIDE_BASE_PRICE)} · keyingi har biri +${SLIDE_EXTRA_PRICE} · 1 slayd ≈ 2 daqiqa`}
+            : `${SLIDE_INCLUDED} slaydgacha ${formatSom(SLIDE_BASE_PRICE)} · ${SLIDE_INCLUDED + 1}-slayddan har biri +${formatSom(SLIDE_EXTRA_PRICE)} · 1 slayd ≈ 2 daqiqa`}
       </p>
     </div>
   );

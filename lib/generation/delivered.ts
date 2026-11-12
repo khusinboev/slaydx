@@ -60,13 +60,22 @@ export type { Delivered } from "./types";
  * 2 000 tanga: 2 000/6 000 = 1/3 va 2 000/8 000 = 1/4. Ulush eng
  * KICHIGI bo'yicha olinadi — qaytarish hech qachon haqiqiy ustamadan
  * oshmasin.
+ *
+ * The table above is the removed package-era pricing (Formalar 2). Today
+ * `extractMeta` always sets `premiumVisuals: false`, so this share is only
+ * reached by old documents; a plain slide deck's partial image shortfall
+ * refunds nothing (`IMAGE_PRICE_SHARE_STANDARD`). The SLIDE-count shortfall
+ * refunds `(1 − got / want) × price`: with the 2026-11-12 price (3 000 up to
+ * 5 slides, +550 each after) a 20-slide deck (11 250) that comes out with 18
+ * slides gets 1 125 back — close to the 2 × 550 the missing slides cost
+ * (under the old flat 3 000 it was 300, for slides that had cost nothing).
  */
 const IMAGE_PRICE_SHARE = 0.25;
 
 /**
  * Standart/uzun paketda QISMAN kamomad uchun ulush NOL.
  *
- * Yorliqda («Standart · 10 slayd · 3 000») rasm haqida so'z yo'q va
+ * Yorliqda («10 slayd · 5 750 so'm») rasm haqida so'z yo'q va
  * narxda unga ustama ham yo'q — 4 tadan 3 tasi chiqqani pul qaytarishga
  * asos bo'lmaydi. Kamomad baribir QAYD ETILADI: natija sahifasi rasm
  * kam chiqqanini aytadi va sabab bazada qoladi.
