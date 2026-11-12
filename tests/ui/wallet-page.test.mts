@@ -212,7 +212,7 @@ test("Hamyon methods: names and hints of each row", async () => {
   mount();
   const text = (id: string) => document.querySelector(`[data-wallet-method="${id}"]`)!.textContent;
   assert.equal(text("app"), "Click ilovasiClick ilovasida bir bosishda");
-  assert.equal(text("card"), "Bank kartasiUzcard / Humo, SMS kod bilan");
+  assert.equal(text("card"), "Bank kartasiUzcard, Humo va boshqa kartalar · SMS kod bilan");
   assert.equal(text("phone"), "Telefon raqamClick hisob-fakturasi telefoningizga keladi");
   assert.equal(text("paynet"), "PaynetPaynet ilovasi yoki terminali orqali");
   assert.equal(text("payme"), "PaymePayme sahifasiga o'tasiz");

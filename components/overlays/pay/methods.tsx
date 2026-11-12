@@ -27,7 +27,7 @@ export type PayMethod = {
 
 const CATALOG: Record<PayMethodId, PayMethod> = {
   app: { id: "app", name: "Click ilovasi", hint: "Click ilovasida bir bosishda", steps: ["Tasdiqlash"] },
-  card: { id: "card", name: "Bank kartasi", hint: "Uzcard / Humo, SMS kod bilan", steps: ["Karta", "Tasdiqlash"] },
+  card: { id: "card", name: "Bank kartasi", hint: "Uzcard, Humo va boshqa kartalar · SMS kod bilan", steps: ["Karta", "Tasdiqlash"] },
   phone: { id: "phone", name: "Telefon raqam", hint: "Click hisob-fakturasi telefoningizga keladi", steps: ["Telefon", "Tasdiqlash"] },
   click: { id: "click", name: "Click", hint: "Click sahifasida to'laysiz", steps: ["To'lov"] },
   paynet: { id: "paynet", name: "Paynet", hint: "Paynet ilovasi yoki terminali orqali", steps: ["Paynet"] },
