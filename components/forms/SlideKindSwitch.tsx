@@ -24,7 +24,7 @@ export function SlideKindSwitch({ current }: { current: "pro" | "ai" }) {
         className={`flex min-h-11 flex-1 flex-col justify-center rounded-[10px] px-3 py-1.5 text-center transition-colors ${on ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
       >
         <span className="text-[14.5px] font-semibold">{label}</span>
-        <span className="text-[12px] leading-tight opacity-80">{hint}</span>
+        <span className="text-[13px] leading-tight opacity-80">{hint}</span>
       </Link>
     );
   };
