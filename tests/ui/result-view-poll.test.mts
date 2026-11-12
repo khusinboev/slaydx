@@ -260,6 +260,8 @@ test("resultSubtitle: empty parts dropped (no «· ·»), FAILED → «Xato», R
   assert.equal(resultSubtitle({ status: "QUEUED", step: "  ", price: 3000 }, undefined, false, false), p);
   assert.equal(resultSubtitle({ status: "FAILED", step: "", price: 3000 }, "Kurs ishi", false, false), `Kurs ishi · Xato · ${p}`);
   assert.equal(resultSubtitle({ status: "REVOKED", step: "", price: 3000 }, "Kurs ishi", false, false), `Kurs ishi · Bekor qilindi · ${p}`);
+  // A free work (the «Titul» tool) reads «Bepul», never «0 so'm». MUTATION: formatSom here prints «0 so'm».
+  assert.equal(resultSubtitle({ status: "COMPLETED", step: "", price: 0 }, "Titul", true, false), "Titul · Tayyor · Bepul");
   assert.equal(resultSubtitle({ status: "COMPLETED", step: "Tayyor", price: 3000 }, "Slayd", true, false), `Slayd · Tayyor · ${p}`);
   assert.equal(resultSubtitle({ status: "COMPLETED", step: "", price: 3000 }, "Slayd", true, true), `Slayd · Topilmadi · ${p}`);
 });

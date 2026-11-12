@@ -272,7 +272,11 @@ test("PayDialog: provayderga ketishdan oldin dialog tarix yozuvi olib tashlanadi
   });
   await settle();
   assert.ok(sx()?.o, "dialog yozuvi turibdi");
+  // Owner 2026-11-12: usul → summa qadami (o'z tarix yozuvi bilan) → «Davom etish».
   fireEvent.click(document.querySelector("[data-pay-method=\"click\"]")!);
+  await settle();
+  fireEvent.change(document.querySelector("[data-pay-amount-input]")!, { target: { value: "25000" } });
+  fireEvent.click(document.querySelector("[data-pay-continue]")!);
   await settle();
   await settle();
   assert.equal(window.location.hash, "#provayder", "provayder sahifasiga o'tildi");

@@ -35,6 +35,18 @@ export function xmlEscape(s: string): string {
     .replace(FORBIDDEN, "");
 }
 
+/** Lone UTF-16 surrogates (a high not followed by a low, or a low not preceded by a high) — invalid in XML too. */
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+/**
+ * User text that a library will put into XML for us (`docx` escapes only `&<>"'`): drops the XML-forbidden control
+ * characters (the same set as `xmlEscape`) and lone surrogates, keeps everything else. Text pasted from a PDF often
+ * carries e.g. U+0002 — left in, Word calls the file corrupt and LibreOffice refuses to convert it.
+ */
+export function xmlSafeText(s: string): string {
+  return String(s ?? "").replace(FORBIDDEN, "").replace(LONE_SURROGATE, "");
+}
+
 const ENTITIES: Record<string, string> = {
   amp: "&",
   lt: "<",

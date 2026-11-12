@@ -11,6 +11,7 @@ import { titulInputFromValues } from "../lib/generation/title-page/input.ts";
 import { planTitlePage, titulRuns } from "../lib/generation/title-page/layout.ts";
 import { renderTitulDocx } from "../lib/generation/title-page/render-docx.ts";
 import { renderDocx } from "../lib/generation/render-docx.ts";
+import { applyTitulOps, titulEditableIds, titulEditLimit } from "../lib/generation/title-page/edit.ts";
 import { TITUL_LAYOUTS_OF, TITUL_LIMITS, TITUL_WORK_TYPES, type TitulModel } from "../lib/generation/title-page/types.ts";
 import type { AcademicDoc } from "../lib/generation/types.ts";
 import type { FormValues } from "../lib/types.ts";
@@ -24,7 +25,10 @@ import type { FormValues } from "../lib/types.ts";
  *   M1. `lineRule: LineRuleType.AUTO` dropped from `paragraph()` -> «lineRule auto on every spacing»;
  *   M2. border style `DOUBLE` -> `SINGLE` -> «double page border»;
  *   M3. the zone rows' `HeightRule.ATLEAST` height doubled -> «one page at maximal lengths» (LibreOffice: 2 pages);
- *   M4. `renderDocx` without the `doc.titul` branch -> «renderDocx draws the titul plan».
+ *   M4. `renderDocx` without the `doc.titul` branch -> «renderDocx draws the titul plan»;
+ *   M5. `xmlSafeText` dropped from `input.ts line()` -> «control characters …» (and LibreOffice: no PDF);
+ *   M6. `xmlSafeText` dropped from `edit.ts clean` -> «control characters …» (edit path);
+ *   M7. `clean` cuts at `TITUL_EDIT_MAX` instead of `titulEditLimit(id)` -> «over-long in-place edit» + LibreOffice 1 page.
  */
 
 const run = promisify(execFile);
@@ -134,6 +138,72 @@ test("ONE page in LibreOffice for every type × layout at maximal field lengths"
   await run("soffice", ["--headless", "--norestore", `-env:UserInstallation=file://${join(dir, "profile")}`, "--convert-to", "pdf", "--outdir", dir, ...files], { timeout: 600_000 });
   for (const f of files) {
     const { stdout } = await run("pdfinfo", [f.replace(/\.docx$/, ".pdf")]);
+    assert.equal(Number(stdout.match(/Pages:\s+(\d+)/)?.[1]), 1, f);
+  }
+});
+
+/* ── review fixes: XML-forbidden characters, per-field edit limits ── */
+
+/** XML 1.0 forbids C0 controls except \t \n \r, and lone surrogates. */
+const BAD = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+const TEXT_FIELDS = ["ministryCustom", "university", "faculty", "department", "subject", "topic", "author", "group", "direction", "directionCode", "supervisor", "supervisorRole", "approver", "reviewer", "udk", "specialityCode", "speciality", "city"];
+const dirty = (v: unknown) => `\u0002${String(v)}\u0001\u000B\u001F\uD800`;
+const DIRTY: FormValues = { ...SAMPLE, ...Object.fromEntries(TEXT_FIELDS.map((f) => [f, dirty(MAX[f] ?? "Matn")])), ministry: "custom", course: "\u00023", labNumber: "\u00027" };
+
+test("control characters pasted into any text field never reach the model or document.xml", async () => {
+  for (const t of TITUL_WORK_TYPES) {
+    for (const layout of TITUL_LAYOUTS_OF[t]) {
+      const m = model({ ...DIRTY, workType: t, layout });
+      for (const [k, v] of Object.entries(m.input)) if (typeof v === "string") assert.ok(!BAD.test(v), `${t}/${layout}: input.${k}`);
+      for (const r of titulRuns(planTitlePage(m))) assert.ok(!BAD.test(r.text), `${t}/${layout}: run ${r.id}`);
+      assert.ok(!BAD.test(await documentXml(await renderTitulDocx(m))), `${t}/${layout}: document.xml`);
+    }
+  }
+  // The in-place edit path too.
+  const doc = { meta: {}, titlePage: false, toc: false, sections: [], titul: model(SAMPLE) } as unknown as AcademicDoc;
+  const r = applyTitulOps(doc, [{ op: "text", id: "topic.value", value: "Yangi\u0002 mavzu\uDC00\u0007" }]);
+  assert.ok(r.ok);
+  assert.equal(r.doc.titul!.overrides["topic.value"], "Yangi mavzu");
+});
+
+/** Every editable run of a maximal page, edited to 500 characters. */
+function overlongEdits(m: TitulModel): TitulModel {
+  const ops = [...titulEditableIds(m)].map((id) => ({ op: "text" as const, id, value: "Uzunmatn ".repeat(60) }));
+  const doc = { meta: {}, titlePage: false, toc: false, sections: [], titul: m } as unknown as AcademicDoc;
+  const r = applyTitulOps(doc, ops);
+  assert.ok(r.ok);
+  return r.doc.titul!;
+}
+
+test("an over-long in-place edit is cut to its own field's limit (300 only as the ceiling)", () => {
+  const m = overlongEdits(model({ ...MAX, workType: "bmi", layout: "bmi-official" }));
+  for (const [id, text] of Object.entries(m.overrides)) assert.ok(text.length <= titulEditLimit(id), `${id}: ${text.length} > ${titulEditLimit(id)}`);
+  assert.equal(titulEditLimit("author.value"), TITUL_LIMITS.name);
+  assert.equal(titulEditLimit("supervisor.value"), TITUL_LIMITS.name);
+  assert.equal(titulEditLimit("topic.value"), TITUL_LIMITS.topic);
+  assert.equal(titulEditLimit("udk.value"), TITUL_LIMITS.udk);
+  assert.ok(titulEditLimit("author.label") <= 30 && titulEditLimit("purpose") <= 300);
+  assert.ok(m.overrides["author.value"]!.length <= TITUL_LIMITS.name);
+  assert.ok(m.overrides["approve.value"]!.length <= TITUL_LIMITS.name);
+});
+
+test("ONE page in LibreOffice with control characters everywhere and with every run edited to its limit", { skip: hasLo ? false : "LibreOffice yo'q" }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "slaydx-titul-edit-"));
+  const files: string[] = [];
+  for (const t of TITUL_WORK_TYPES) {
+    for (const layout of TITUL_LAYOUTS_OF[t]) {
+      const fe = join(dir, `${t}-${layout}-edited.docx`);
+      await writeFile(fe, await renderTitulDocx(overlongEdits(model({ ...MAX, workType: t, layout }))));
+      const fd = join(dir, `${t}-${layout}-dirty.docx`);
+      await writeFile(fd, await renderTitulDocx(model({ ...DIRTY, workType: t, layout })));
+      files.push(fe, fd);
+    }
+  }
+  await run("soffice", ["--headless", "--norestore", `-env:UserInstallation=file://${join(dir, "profile")}`, "--convert-to", "pdf", "--outdir", dir, ...files], { timeout: 600_000 });
+  for (const f of files) {
+    const pdf = f.replace(/\.docx$/, ".pdf");
+    assert.ok(existsSync(pdf), `${f}: LibreOffice could not open the file`);
+    const { stdout } = await run("pdfinfo", [pdf]);
     assert.equal(Number(stdout.match(/Pages:\s+(\d+)/)?.[1]), 1, f);
   }
 });
