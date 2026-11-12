@@ -27,6 +27,7 @@ export const VIEWER_FRAME: Record<ViewerKind, FrameSpec> = {
   teacher: { mode: "flow", boxed: false }, // V1
   game: { mode: "flow", boxed: false }, // V1
   resume: { mode: "flow", boxed: false }, // V1
+  titul: { mode: "flow", boxed: false }, // «Titul» — one A4 sheet in the result page's scroll
   image: { mode: "flow", boxed: false }, // V4
   audio: { mode: "flow", boxed: false }, // V4
   video: { mode: "flow", boxed: false }, // program-17 item 5

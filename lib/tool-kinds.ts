@@ -34,6 +34,7 @@ export const TOOL_KINDS: Readonly<Record<ToolId, ToolKind>> = {
   keys: { group: "oqituvchi", output: "docx" },
   "mustaqil-ish": { group: "talaba", output: "docx" },
   konspekt: { group: "talaba", output: "docx" },
+  "title-page": { group: "talaba", output: "docx" },
   "lesson-plan": { group: "oqituvchi", output: "docx" },
   test: { group: "oqituvchi", output: "docx" },
   crossword: { group: "oyinlar", output: "docx" },

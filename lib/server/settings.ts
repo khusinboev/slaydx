@@ -89,6 +89,7 @@ export type SettingValues = {
   "queue.total_slots": number;
   "queue.mean_service_sec": number;
   "convert.daily_limit": number;
+  "title.daily_limit": number;
   "convert.disabled": boolean;
   "daily_quiz.enabled": boolean;
   "daily_quiz.reward": number;
@@ -548,6 +549,17 @@ const CATALOG: Catalog = {
     max: 1000,
     validate: intValidator(0, 1000),
     envDefault: () => 20,
+  },
+  "title.daily_limit": {
+    key: "title.daily_limit",
+    group: GEN_GROUP,
+    label: "«Titul»: kunlik limit (bitta foydalanuvchi)",
+    description: "Bepul «Titul» xizmatida bitta foydalanuvchi kuniga (Toshkent kuni) nechta titul yarata oladi. 0 — cheklov yo'q.",
+    type: "int",
+    min: 0,
+    max: 1000,
+    validate: intValidator(0, 1000),
+    envDefault: () => 30,
   },
   "convert.disabled": {
     key: "convert.disabled",

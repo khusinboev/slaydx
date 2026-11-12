@@ -617,7 +617,10 @@ test("maxsus formali vositalar serverda ham tekshiriladi", async () => {
    * majburiy kirish bo'lishi (P0-5). Istisno ro'yxati BITTA joyda tursin.
    */
   /* `konspekt`: the topic (`topicLegend`) is the required input; the form fills it from the file name when only a file is given. */
-  const TOPIC_LEGEND_CUSTOMS = new Set(["slide", "pro-slide", "game", "media", "infographic", "konspekt"]);
+  /* `titul` (free title page): the topic (`topicLegend`) is the one required input; every other field may be empty. */
+  const TOPIC_LEGEND_CUSTOMS = new Set(["slide", "pro-slide", "game", "media", "infographic", "konspekt", "titul"]);
+  assert.deepEqual(missingRequired(TOOL_BY_ID["title-page"], {} as FormValues), ["Ish mavzusi"], "titul: an empty request is refused on the server");
+  assert.deepEqual(missingRequired(TOOL_BY_ID["title-page"], { topic: "Sun'iy intellekt" } as FormValues), []);
   for (const tool of TOOLS.filter((t) => t.custom && TOPIC_LEGEND_CUSTOMS.has(t.custom))) {
     assert.ok(
       tool.topicLegend || tool.fields.some((f) => f.required && !f.extra),

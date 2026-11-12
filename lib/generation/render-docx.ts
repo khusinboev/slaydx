@@ -40,6 +40,7 @@ import { legacyResumeModel } from "./resume/model";
 import { renderResumeDocx, type ResumeDocxOpts } from "./resume/render-docx";
 import type { ImageBytes } from "./slide-images";
 import { titleModel } from "./title-model";
+import { renderTitulDocx } from "./title-page/render-docx";
 import { tocRows } from "./toc-model";
 import type { AcademicDoc, Block, DocTable } from "./types";
 
@@ -1495,6 +1496,8 @@ async function drawGame(plan: GamePlan, K: Kit, P: DocProfile, opts: ResumeDocxO
  * ikkala rendererga bitta hal qiluvchini uzata oladi.
  */
 export async function renderDocx(doc: AcademicDoc, opts: ResumeDocxOpts = {}): Promise<Uint8Array> {
+  // «Titul»: one page drawn from its own plan (`title-page/layout.ts`), nothing of the academic flow applies.
+  if (doc.titul) return renderTitulDocx(doc.titul);
   const { meta } = doc;
   const base = profileFor(meta);
   /*

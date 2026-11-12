@@ -71,6 +71,13 @@ test("applyPriceAdjust: scale, round to roundTo (half up), never below roundTo",
   }
 });
 
+test("applyPriceAdjust: a FREE base stays 0 under any admin percentage («Titul»)", () => {
+  for (const percent of [25, 80, 101, 333, 1000]) {
+    for (const roundTo of [100, 500, 1000] as const) assert.equal(applyPriceAdjust(0, { percent, roundTo }), 0, `${percent} ${roundTo}`);
+  }
+  assert.equal(applyPriceAdjust(0, null), 0);
+});
+
 test("applyPriceAdjust: an out-of-bounds adjustment is ignored (base price)", () => {
   const bad = [
     { percent: 24, roundTo: 500 },

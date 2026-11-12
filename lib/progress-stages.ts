@@ -141,6 +141,7 @@ const KIND_BY_TOOL: Record<ToolId, ProgressKind> = {
   referat: "doc",
   "mustaqil-ish": "doc",
   konspekt: "doc",
+  "title-page": "doc",
   thesis: "article",
   article: "article",
   essay: "essay",

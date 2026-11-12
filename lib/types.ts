@@ -17,6 +17,8 @@ export type ToolId =
   | "glossary"
   | "keys"
   | "mustaqil-ish"
+  /** «Titul» — FREE title-page builder (`title-page/`): a pure template render, no LLM; own composer and viewer. */
+  | "title-page"
   /** Lecture notes (konspekt) — `work/` genre `konspekt`, hand-written by default; own composer. */
   | "konspekt"
   | "lesson-plan"
@@ -159,7 +161,7 @@ export type ToolConfig = {
    * ko'radi.
    */
   output: "docx" | "pptx" | "png" | "mp3" | "mp4";
-  custom?: "slide" | "pro-slide" | "image-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "konspekt" | "teacher" | "game" | "media" | "infographic" | "portrait" | "video" | "studio-image" | "studio-video" | "studio-speech" | "studio-voice" | "studio-audio" | "studio-mix" | "studio-transcribe" | "studio-dub";
+  custom?: "slide" | "pro-slide" | "image-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "konspekt" | "titul" | "teacher" | "game" | "media" | "infographic" | "portrait" | "video" | "studio-image" | "studio-video" | "studio-speech" | "studio-voice" | "studio-audio" | "studio-mix" | "studio-transcribe" | "studio-dub";
   basePrice: number;
 };
 

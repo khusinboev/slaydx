@@ -122,6 +122,7 @@ export const UNIT_OF: Record<ToolId, PricingUnit> = {
   referat: "page",
   "mustaqil-ish": "page",
   konspekt: "page",
+  "title-page": "job",
   essay: "page",
   article: "page",
   thesis: "page",
