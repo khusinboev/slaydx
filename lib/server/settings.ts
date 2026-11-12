@@ -110,6 +110,8 @@ export type SettingValues = {
   "tests.points_per_correct": number;
   "video.enabled": boolean;
   "image_slide.enabled": boolean;
+  "slide.image_ai_fallback": boolean;
+  "slide.image_ai_max": number;
   "video.max_concurrent": number;
   "media.core.image": boolean;
   "media.core.video": boolean;
@@ -278,6 +280,9 @@ const MARKET_GROUP = "Ishlar bozori";
 /** Default / ceiling of videos in flight at once (submitting + waiting for the provider), across all users. */
 export const VIDEO_MAX_CONCURRENT_DEFAULT = 2;
 export const VIDEO_MAX_CONCURRENT_MAX = 20;
+/** Plain «Slayd» AI picture fallback (docs/slide-quality/SPEC.md §B): per-deck cap. */
+export const SLIDE_IMAGE_AI_MAX_DEFAULT = 8;
+export const SLIDE_IMAGE_AI_MAX_MAX = 30;
 /** AI chat price per message after the free ones: default 100 so'm; the cap stops a typo from charging a fortune per message. */
 const CHAT_PRICE_DEFAULT = 100;
 const CHAT_PRICE_MAX = 10_000;
@@ -754,6 +759,28 @@ const CATALOG: Catalog = {
     type: "bool",
     validate: boolValidator,
     envDefault: () => true,
+  },
+  "slide.image_ai_fallback": {
+    key: "slide.image_ai_fallback",
+    group: GEN_GROUP,
+    label: "Oddiy slayd: mos stok rasm topilmasa AI chizsin",
+    description:
+      "Oddiy «Slayd»da rasm avval bepul stok manbalardan (Pexels, Pixabay) olinadi va AI tekshiruvchi mavzuga mosini tanlaydi. Mos rasm topilmasa yoki stok ishlamasa — shu slayd rasmi Gemini bilan chiziladi (≈ 0,034 $ bitta rasm). O'chiq bo'lsa mos rasm topilmagan slayd rasmsiz qoladi (pul qaytmaydi).",
+    type: "bool",
+    validate: boolValidator,
+    envDefault: () => true,
+  },
+  "slide.image_ai_max": {
+    key: "slide.image_ai_max",
+    group: GEN_GROUP,
+    label: "Oddiy slayd: bitta dekada eng ko'p AI rasm",
+    description:
+      "Bitta oddiy slayd dekasida AI chizadigan rasmlarning eng ko'p soni (qolganlari stok yoki rasmsiz). 0 — AI umuman chizmaydi. Har AI rasm ≈ 0,034 $.",
+    type: "int",
+    min: 0,
+    max: SLIDE_IMAGE_AI_MAX_MAX,
+    validate: intValidator(0, SLIDE_IMAGE_AI_MAX_MAX),
+    envDefault: () => SLIDE_IMAGE_AI_MAX_DEFAULT,
   },
   "video.enabled": {
     key: "video.enabled",

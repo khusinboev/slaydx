@@ -13,6 +13,7 @@ import { deckFooter } from "./slide-identity";
 import { purposeDefaults } from "./slide-purpose";
 import { finalizeQuiz } from "./slide-quiz";
 import { attachSlideImages } from "./slide-images";
+import { slideImagePolicy } from "./slide-stock";
 import { SLIDE_MAX } from "./slide-params";
 import { deckJsonSchema, deckResponseSchema, slideSystem, type SlidePromptCtx } from "./slide-prompt";
 import type { SlideProgressSink } from "./slide-progress";
@@ -1251,6 +1252,8 @@ export async function buildSlideAcademicDoc(metaIn: DocMeta, deadline?: number, 
     meta,
     // P8: matni rasmli qutiga sig'maydigan slayd rasm olmaydi — `normalizeSlide` bilan BIR qoida.
     rules: bodyRules(meta, tpl.id),
+    // Plain «Slayd»: hybrid stock + AI pictures under the admin policy (docs/slide-quality/SPEC.md §B).
+    ...(meta.toolId === "pro-slide" ? {} : { hybrid: slideImagePolicy }),
     onPlanned: live ? (indexes) => live({ type: "images", wait: [...indexes] }) : undefined,
     onImage: live ? (index, url) => live({ type: "image", index, url }) : undefined,
   });

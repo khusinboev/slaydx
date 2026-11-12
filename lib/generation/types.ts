@@ -483,6 +483,14 @@ export type SlideImageReport = {
   failed: number;
   /** Bloklash sababi — jurnal uchun (masalan «403 User is locked»). */
   blockReason?: string;
+  /**
+   * Plain «Slayd» hybrid stage (docs/slide-quality/SPEC.md §B): pictures from stock / drawn by AI, and slots left
+   * without a picture because no stock photo fitted and AI was not allowed (setting off or per-deck cap) — those are
+   * already subtracted from `want` (a policy outcome like D1, never a refund).
+   */
+  stock?: number;
+  ai?: number;
+  declined?: number;
 };
 
 export type VideoDocModel = {

@@ -110,6 +110,15 @@ export type ImageAsk = {
   seen?: Set<string>;
 };
 
+/**
+ * One stock search hit (docs/slide-quality/SPEC.md §B): the full picture (`url`, what gets persisted) and the
+ * provider's own small preview (`thumb`, a few KB — what the relevance judge looks at).
+ */
+export type StockCandidate = { url: string; thumb: string; alt: string; provider: "pexels" | "pixabay" };
+
+/** Result of a candidate search: the hits, or the same failure classes as `fetchImage`. */
+export type StockSearch = { ok: true; candidates: StockCandidate[] } | ImageFail;
+
 /** `slide-images.ts` `persistImage` ga beriladigan manzil: `https:` yoki `data:`. */
 export type ImageOk = { ok: true; image: SlideImage };
 

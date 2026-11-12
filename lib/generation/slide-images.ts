@@ -3,6 +3,7 @@ import { pickProvider, type ImageSize, type SlideImage, type VisualTier } from "
 import { photoSlot, slotPixels } from "./slide-layout";
 import { composeSlideImagePrompt, writeSlideImagePrompts } from "./slide-image-prompts";
 import { searchQueryFor } from "./image-search-query";
+import { attachHybridImages, type SlideImagePolicy } from "./slide-stock";
 import type { BodyRules } from "./slide-audience";
 import { imageYieldField } from "./slide-quality";
 import { safeFetchUrl, UnsafeUrlError } from "./safe-fetch";
@@ -287,6 +288,12 @@ export type AttachImageOpts = VisualTier & {
    * yozilgan slayd rasm tasmasi bilan qutidan chiqadi (P8 sharhi, N2).
    */
   rules?: BodyRules;
+  /**
+   * Plain «Slayd» hybrid stage (docs/slide-quality/SPEC.md §B): LLM stock queries, both stock providers, a vision
+   * judge and the Gemini fallback under this policy. Only the generation path (`buildSlideAcademicDoc`) passes it;
+   * without it the legacy single stock chain runs (old callers, `image-lab`, the chain tests). Ignored for pro-slide.
+   */
+  hybrid?: SlideImagePolicy | (() => Promise<SlideImagePolicy>);
 };
 
 /**
@@ -309,6 +316,7 @@ export async function attachSlideImages(
   opts: AttachImageOpts = {},
 ): Promise<SlideImageReport> {
   const pro = opts.meta?.toolId === "pro-slide";
+  if (opts.hybrid && !pro) return attachPlainHybrid(slides, topic, visual, budgetMs, { ...opts, hybrid: opts.hybrid });
   const provider = pickProvider(opts.meta);
   // Rasm matnga joy beradi (P8) — `want` shu chiqarishdan KEYIN sanaladi.
   const planned = plannedImageSlots(slides, visual, Boolean(opts.premium), pro, opts.rules);
@@ -443,5 +451,45 @@ export async function attachSlideImages(
   if (report.failed) {
     console.warn(`${tag} ${report.failed} so‘rov boshqa sabab bilan yiqildi (${report.got}/${report.want})`);
   }
+  return report;
+}
+
+/**
+ * Plain deck, hybrid stage (`AttachImageOpts.hybrid`). Same plan (`plannedImageSlots`, D1 yield) and report shape as
+ * the legacy path; the promise is made only when something can deliver (a stock key, or AI allowed with a key).
+ */
+async function attachPlainHybrid(
+  slides: SlideModel[],
+  topic: string,
+  visual: SlideVisual,
+  budgetMs: number,
+  opts: AttachImageOpts & { hybrid: SlideImagePolicy | (() => Promise<SlideImagePolicy>) },
+): Promise<SlideImageReport> {
+  const planned = plannedImageSlots(slides, visual, Boolean(opts.premium), false, opts.rules);
+  const report: SlideImageReport = { want: planned.length, got: 0, blocked: 0, skipped: 0, failed: 0, stock: 0, ai: 0, declined: 0 };
+  const stockKey = pickProvider(opts.meta).hasKey();
+  const geminiKey = pickProvider({ toolId: "pro-slide" }).hasKey();
+  // The admin policy is read only when something could deliver (a key-less box/test never touches settings).
+  const policy = !stockKey && !geminiKey ? null : typeof opts.hybrid === "function" ? await opts.hybrid() : opts.hybrid;
+  const aiKey = Boolean(policy && policy.aiFallback && policy.aiMax > 0 && geminiKey);
+  if (!policy || (!stockKey && !aiKey)) {
+    console.warn("[stock] skip images: no key");
+    opts.onPlanned?.([]);
+    return { ...report, want: 0 };
+  }
+  if (opts.rules) logYielded(slides, visual, opts.rules);
+  if (!report.want) {
+    opts.onPlanned?.([]);
+    return report;
+  }
+  const jobs = planned.filter(({ s }) => !s.image);
+  report.got = report.want - jobs.length;
+  opts.onPlanned?.(jobs.map(({ s }) => slides.indexOf(s)));
+  await attachHybridImages(topic, jobs, Date.now() + budgetMs, report, {
+    meta: opts.meta,
+    policy,
+    persist: persistImage,
+    onImage: opts.onImage ? (s, url) => opts.onImage!(slides.indexOf(s), url) : undefined,
+  });
   return report;
 }

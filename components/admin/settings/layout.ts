@@ -16,7 +16,7 @@ export const TAB_DEFS: readonly TabDef[] = [
     id: "features",
     label: "Funksiyalar",
     blurb: "Yangi imkoniyatlarni bir tugma bilan yoqing yoki o'chiring. Narx va chegaralar alohida tablarda.",
-    keys: ["tests.enabled", "image_slide.enabled", "video.enabled", "daily_quiz.enabled", "domla.enabled", "chat.enabled", "oferta.gate_enabled", "studio.voice.enabled", "studio.audio.enabled", "studio.transcribe.enabled", "studio.dub.enabled", "studio.legacy_fold", "market.enabled"],
+    keys: ["tests.enabled", "image_slide.enabled", "slide.image_ai_fallback", "video.enabled", "daily_quiz.enabled", "domla.enabled", "chat.enabled", "oferta.gate_enabled", "studio.voice.enabled", "studio.audio.enabled", "studio.transcribe.enabled", "studio.dub.enabled", "studio.legacy_fold", "market.enabled"],
   },
   {
     id: "money",
@@ -43,6 +43,7 @@ export const TAB_DEFS: readonly TabDef[] = [
       "queue.mean_service_sec",
       "convert.disabled",
       "convert.daily_limit",
+      "slide.image_ai_max",
     ],
   },
   {
@@ -147,6 +148,7 @@ export function keysForTab<T extends { key: string }>(tab: TabDef, items: Readon
 export const FEATURE_EFFECT: Readonly<Record<string, string>> = {
   "tests.enabled": "Yoqilsa: foydalanuvchilar sayt va botda pullik test topshira oladi. Boshlangan urinishlar yakunlanadi.",
   "image_slide.enabled": "Yoqilsa: «Pro slayd» sahifasida «AI slayd» turi ko'rinadi (har slayd AI chizgan rasm). Narx = xarajat × Studio ustamasi.",
+  "slide.image_ai_fallback": "Yoqilsa: oddiy «Slayd»da mos stok rasm topilmagan slayd rasmi Gemini bilan chiziladi (dekada eng ko'pi «Navbat» tabidagi chegara). O'chirilsa bunday slayd rasmsiz qoladi.",
   "video.enabled": "Yoqilsa: «Video yaratish» hamma uchun ochiladi. Har soniya pullik provayderga ketadi — ehtiyot bo'ling.",
   "daily_quiz.enabled": "Yoqilsa: bot har kuni faol foydalanuvchilarga 3 ta savol yuboradi va 3/3 uchun bonus beradi.",
   "domla.enabled": "Yoqilsa: «Qattiqqo'l domla» himoyasi ochiq. O'chirilsa yangi himoya boshlanmaydi (AI va ovoz sarfini to'xtatadi).",

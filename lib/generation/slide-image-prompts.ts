@@ -180,16 +180,107 @@ export async function writeSlideImagePrompts(
     const scene = String(p.scene || "").trim();
     const job = jobs.find((j) => j.s.id === id);
     if (!id || scene.length < 16 || !job) continue;
-    out[id] = [
-      styleSuffix(meta),
-      scene,
-      frameLine(job.size),
-      `Must depict the topic «${topic}», not a substitute subject.`,
-      localLine(meta, `${topic} ${scene}`),
-      "No text, letters, watermark, logo, UI.",
-    ]
-      .filter(Boolean)
-      .join(" ");
+    out[id] = composeSceneImagePrompt(topic, scene, job.size, meta);
   }
   return out;
+}
+
+/**
+ * The AI prompt for one LLM-written scene — the Pro slayd wording, shared so the plain-deck AI fallback draws the
+ * same way (docs/slide-quality/SPEC.md §B). Byte-identical to what `writeSlideImagePrompts` always produced.
+ */
+export function composeSceneImagePrompt(topic: string, scene: string, size: ImageSize, meta?: SlideImageMeta): string {
+  return [
+    styleSuffix(meta),
+    scene,
+    frameLine(size),
+    `Must depict the topic «${topic}», not a substitute subject.`,
+    localLine(meta, `${topic} ${scene}`),
+    "No text, letters, watermark, logo, UI.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/**
+ * What the plain «Slayd» picture stage needs per slot (docs/slide-quality/SPEC.md §B): an English stock query a photo
+ * site understands, a broader fallback query and a one-sentence scene for the AI fallback.
+ */
+export type StockPlan = { query: string; altQuery: string; scene: string };
+
+const QUERY_WORDS = { min: 1, max: 5 } as const;
+/** Abstract words a stock site cannot depict — a query made only of them is useless. */
+const ABSTRACT = /\b(concept|importance|significance|role|impact|overview|introduction|conclusion|abstract|idea|ideas|essence|definition|meaning|process|system|development|analysis)\b/gi;
+
+/** A stock query as the model wrote it -> safe, short English words, or "" when nothing usable is left. */
+export function cleanStockQuery(raw: unknown): string {
+  const words = String(raw ?? "")
+    .replace(ABSTRACT, " ")
+    .replace(/[^A-Za-z0-9' -]+/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 2)
+    .slice(0, QUERY_WORDS.max);
+  return words.length >= QUERY_WORDS.min ? words.join(" ").toLowerCase() : "";
+}
+
+/** The `{ "plans": [...] }` answer -> plans by slide id; unknown ids, empty queries and short scenes are dropped. */
+export function parseStockPlans(raw: string | null, ids: readonly string[]): Record<string, StockPlan> {
+  const data = raw ? (parseLlmJson(raw) as { plans?: unknown } | null) : null;
+  const out: Record<string, StockPlan> = {};
+  if (!data || !Array.isArray(data.plans)) return out;
+  const known = new Set(ids);
+  for (const item of data.plans) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const id = String(o.id ?? "");
+    if (!known.has(id) || out[id]) continue;
+    const query = cleanStockQuery(o.query);
+    if (!query) continue;
+    const scene = String(o.scene ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
+    out[id] = { query, altQuery: cleanStockQuery(o.altQuery) || query, scene: scene.length >= 16 ? scene : "" };
+  }
+  return out;
+}
+
+/**
+ * One LLM call -> stock query + fallback query + AI scene per picture slot of a plain deck. Replaces the uz->en
+ * `WORD_MAP` path (`searchQueryFor`), which left unmapped Uzbek words in the query and made Pexels/Pixabay return
+ * random pictures; `searchQueryFor` stays as the no-LLM / bad-answer fallback per slot (the caller fills gaps).
+ * Never throws: no key, a failed call or a broken answer give `{}`.
+ */
+export async function writeStockPlans(
+  topic: string,
+  jobs: readonly { s: SlideModel; size: ImageSize }[],
+  meta?: SlideImageMeta,
+): Promise<Record<string, StockPlan>> {
+  if (!jobs.length || !llmEnabled()) return {};
+  const list = jobs
+    .map(({ s, size }, i) => {
+      const gist = [s.subtitle, ...(s.bullets ?? []).slice(0, 2), s.quote].filter(Boolean).join(" / ").slice(0, 220);
+      return `${i + 1}) id=${s.id} layout=${s.layout} ${size.width > size.height ? "landscape" : "portrait"} title=«${s.title}» gist=«${gist}» hint=«${s.imageHint || ""}»`;
+    })
+    .join("\n");
+  try {
+    const raw = await llmComplete(
+      [
+        "You choose photographs for presentation slides. The slides may be in Uzbek or Russian: translate the meaning.",
+        "For every slide return:",
+        "- query: 2-4 concrete English nouns a stock photo site (Pexels, Pixabay) can find, showing the slide's ACTUAL subject: an object, place, organism, tool, building, person type or activity. No abstract words (concept, importance, role, impact, process), no verbs, no text-in-image requests.",
+        "- altQuery: a broader 1-3 word English query for the same subject in case the first finds nothing.",
+        "- scene: one English sentence describing a realistic photograph of that subject, for an AI image model. Describe WHAT is in the frame, not the camera.",
+        "History or a person: things of that era and region (architecture, manuscripts, artefacts), never a modern statue unless the slide is about it. Science: the real organism, substance or apparatus.",
+        meta?.localExamples ? "Prefer Uzbekistan settings when the topic allows it." : "",
+        'JSON only: {"plans":[{"id":"s0","query":"","altQuery":"","scene":""}]}',
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      `Deck topic: «${topic}».\nSlides:\n${list}`,
+      Math.min(4000, 400 + jobs.length * 140),
+      { json: true, timeoutMs: 30_000, noTimeoutRetry: true },
+    );
+    return parseStockPlans(raw, jobs.map((j) => j.s.id));
+  } catch (e) {
+    console.warn("[rasm] stok so'rovlari yozilmadi:", e instanceof Error ? e.message : e);
+    return {};
+  }
 }
