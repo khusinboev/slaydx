@@ -161,7 +161,9 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
       : clampInt(values.slideCount, SLIDE_MIN, SLIDE_MAX, defaultSlideCount("slide"));
   const authorParts = parseAuthorLine(s(values, "author", s(values, "fullName")));
   // Untouched form / API without the field = «auto» (docs/slide-quality/SPEC.md §A): the engine picks the palette.
-  const themeRaw = s(values, "slideTheme", AUTO_THEME);
+  // «auto» is a PLAIN-slide value (review M2): pro slayd keeps main's rule — absent/unknown/«auto» → atlas.
+  const themeDefault = tool.id === "slide" ? AUTO_THEME : "atlas";
+  const themeRaw = s(values, "slideTheme", themeDefault);
   const templateRaw = s(values, "slideTemplate", "auto");
   const purposeRaw = s(values, "slidePurpose", "general");
   const slidePurpose = isSlidePurpose(purposeRaw) ? purposeRaw : "general";
@@ -257,7 +259,7 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     kind: s(values, "kind", "standard"),
     pagesLabel: tool.id === "slide" || tool.id === "pro-slide" ? String(slidePages) : pagesLabel,
     targetPages: tool.id === "slide" || tool.id === "pro-slide" ? slidePages : parsePages(pagesLabel, fallbackPages),
-    slideTheme: isSlideThemeChoice(themeRaw) ? themeRaw : AUTO_THEME,
+    slideTheme: isSlideThemeChoice(themeRaw) && (tool.id === "slide" || themeRaw !== AUTO_THEME) ? themeRaw : themeDefault,
     // Eski (olib tashlangan) id ham qabul qilinadi: `normalizeTemplateId`
     // uni o‘rnini bosgan shablonga yo‘naltiradi, «auto» ga tashlamaydi.
     slideTemplate: normalizeTemplateId(templateRaw),

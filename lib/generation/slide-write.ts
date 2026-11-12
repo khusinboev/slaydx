@@ -20,7 +20,8 @@ import type { SlideProgressSink } from "./slide-progress";
 import { isGoogleRedirect, runSlideResearch } from "./slide-research";
 import { expandBeats, resolveSlideTemplate, type SlideBeat, type SlideTemplate, type SlideVisual } from "./slide-templates";
 import { getSlideTheme } from "./slide-themes";
-import { chooseDeckDesign, newSlideSeed } from "./slide-design";
+import { chooseDeckDesign, newSlideSeed, seedFromId } from "./slide-design";
+import { mediaContext } from "../media/context";
 import { isSlideLayout, type SlideLayout, type SlideModel, type SlideThemeId } from "./slide-types";
 import type { AcademicDoc, DocMeta, DocSection } from "./types";
 
@@ -1104,7 +1105,7 @@ export function resolveDeckDesign(meta: DocMeta): { tpl: SlideTemplate; theme: S
   const wanted = !meta.slideTemplate || meta.slideTemplate === "auto" ? purpose.templateId : meta.slideTemplate;
   const content = resolveSlideTemplate(wanted, meta.topic, meta.extra);
   const design = chooseDeckDesign(
-    { topic: meta.topic, extra: meta.extra, subject: meta.subject, slideTemplate: meta.slideTemplate, slideTheme: meta.slideTheme, slideSeed: meta.slideSeed },
+    { topic: meta.topic, extra: meta.extra, subject: meta.subject, slideTemplate: meta.slideTemplate, slideTheme: meta.slideTheme, slideSeed: meta.slideSeed, toolId: meta.toolId },
     content,
   );
   return { tpl: design.visual === content.visual ? content : { ...content, visual: design.visual }, theme: design.theme };
@@ -1149,7 +1150,12 @@ export async function buildSlideAcademicDoc(metaIn: DocMeta, deadline?: number, 
    * §A): together with the pinned `slideTemplate`/`slideVisual`/`slideTheme` below it keeps a rebuild or an edit of
    * this deck on the same design. A caller that already has a seed (tests, a deliberate re-run) keeps it.
    */
-  const meta: DocMeta = metaIn.slideSeed === undefined ? { ...metaIn, slideSeed: opts.seed ?? newSlideSeed() } : metaIn;
+  // Plain «Slayd» only (review M2); the seed comes from the generation id (review m6: stable across worker retries).
+  const generationId = mediaContext()?.generationId;
+  const meta: DocMeta =
+    metaIn.toolId === "slide" && metaIn.slideSeed === undefined
+      ? { ...metaIn, slideSeed: opts.seed ?? (generationId ? seedFromId(generationId) : newSlideSeed()) }
+      : metaIn;
   const design = resolveDeckDesign(meta);
   const themeId = design.theme;
   getSlideTheme(themeId);
@@ -1253,7 +1259,8 @@ export async function buildSlideAcademicDoc(metaIn: DocMeta, deadline?: number, 
     // P8: matni rasmli qutiga sig'maydigan slayd rasm olmaydi — `normalizeSlide` bilan BIR qoida.
     rules: bodyRules(meta, tpl.id),
     // Plain «Slayd»: hybrid stock + AI pictures under the admin policy (docs/slide-quality/SPEC.md §B).
-    ...(meta.toolId === "pro-slide" ? {} : { hybrid: slideImagePolicy }),
+    ...(meta.toolId === "slide" ? { hybrid: slideImagePolicy } : {}),
+    onPhase: live ? (phase) => live({ type: "stage", stage: "images", phase }) : undefined,
     onPlanned: live ? (indexes) => live({ type: "images", wait: [...indexes] }) : undefined,
     onImage: live ? (index, url) => live({ type: "image", index, url }) : undefined,
   });

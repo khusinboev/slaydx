@@ -252,8 +252,12 @@ export async function writeStockPlans(
   topic: string,
   jobs: readonly { s: SlideModel; size: ImageSize }[],
   meta?: SlideImageMeta,
+  /** Absolute end of the picture stage: the call never runs past it (too little time → `{}`, the fallback queries). */
+  deadline?: number,
 ): Promise<Record<string, StockPlan>> {
   if (!jobs.length || !llmEnabled()) return {};
+  const left = deadline === undefined ? 30_000 : deadline - Date.now() - 5_000;
+  if (left < 6_000) return {};
   const list = jobs
     .map(({ s, size }, i) => {
       const gist = [s.subtitle, ...(s.bullets ?? []).slice(0, 2), s.quote].filter(Boolean).join(" / ").slice(0, 220);
@@ -276,7 +280,7 @@ export async function writeStockPlans(
         .join("\n"),
       `Deck topic: «${topic}».\nSlides:\n${list}`,
       Math.min(4000, 400 + jobs.length * 140),
-      { json: true, timeoutMs: 30_000, noTimeoutRetry: true },
+      { json: true, timeoutMs: Math.min(30_000, left), noTimeoutRetry: true, ...(deadline === undefined ? {} : { deadline }) },
     );
     return parseStockPlans(raw, jobs.map((j) => j.s.id));
   } catch (e) {

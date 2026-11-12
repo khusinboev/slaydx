@@ -87,7 +87,14 @@ const PER_PAGE_MS = 9_000;
  * (`slideStageBudget` 62/38 bo'ladi). Slayd boshiga 11 s shu ikkisini
  * qoplaydi; 120 s tayanch esa reja, tema va PPTX yig'ish uchun.
  */
-const SLIDE_BASE_MS = 120_000;
+/*
+ * Slide quality (docs/slide-quality/SPEC.md §B): the plain picture stage gained the query call, the vision judge and
+ * up to `slide.image_ai_max` Gemini draws (one parallel wave). +75 s keeps a default 10-slide deck's worst case
+ * (one writer chunk at its 90 s cap + the 45 s repair + `PLAIN_PICTURE_WORST_MS` + assembly) inside the budget;
+ * every picture step is also capped by its own deadline, so a slow provider costs pictures, never the job.
+ */
+const SLIDE_PICTURE_STAGE_MS = 75_000;
+const SLIDE_BASE_MS = 120_000 + SLIDE_PICTURE_STAGE_MS;
 const SLIDE_PER_SLIDE_MS = 11_000;
 /*
  * Pro slayd: 30 slayd × har mos slaydda rasm + ixtiyoriy tadqiqot

@@ -114,7 +114,7 @@ function sanitizeRestoredDraft(draft: FormValues, pro: boolean): FormValues {
    * v3 (slide quality): before it the form always wrote `slideTheme: "atlas"` — with an «Avtomatik» template that was
    * the untouched default, not a choice, so such a draft restores to «auto». A palette picked with a template stays.
    */
-  if (v < 3 && out.slideTheme === "atlas" && (out.slideTemplate === undefined || out.slideTemplate === "auto")) delete out.slideTheme;
+  if (!pro && v < 3 && out.slideTheme === "atlas" && (out.slideTemplate === undefined || out.slideTemplate === "auto")) delete out.slideTheme;
   delete out.v;
   return out;
 }
@@ -173,7 +173,7 @@ export function SlideComposer({
       logoAssetId: "",
       templateAssetId: "",
       // «Avtomatik» palette (docs/slide-quality/SPEC.md §A): untouched = the engine picks; a dot click is explicit.
-      slideTheme: "auto",
+      slideTheme: pro ? "atlas" : "auto",
       slideTemplate: "auto",
     };
   }
@@ -314,7 +314,9 @@ export function SlideComposer({
       <Card title="Shablon va rang" aside={<span className="text-muted-foreground text-[13.5px]">preview — haqiqiy slaydlar</span>}>
         <TemplateGallery
           value={String(values.slideTemplate || "auto")}
-          theme={String(values.slideTheme || "auto")}
+          theme={String(values.slideTheme || (pro ? "atlas" : "auto"))}
+          // «Avtomatik» palette dot: plain «Slayd» only (review M2).
+          allowAutoTheme={!pro}
           onChange={(id) => set("slideTemplate", id)}
           onTheme={(id) => set("slideTheme", id)}
           // «O'z shablonim» — faqat pro (ustamasiz, PPTX ≤ 20 MB).

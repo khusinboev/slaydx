@@ -66,6 +66,24 @@ test("untouched form: the «Avtomatik» dot is checked and the request sends sli
   }
 });
 
+test("pro slayd keeps main's defaults: no «Avtomatik» dot, untouched form sends atlas (review M2)", async () => {
+  const { ProSlideForm } = await import("../../components/forms/ProSlideForm.tsx");
+  const cap = stubFetch(null);
+  try {
+    render(h(AppRouterContext.Provider, { value: router }, h(ProSlideForm, { tool: TOOL_BY_ID["pro-slide"], profile })));
+    const radios = within(screen.getByRole("radiogroup", { name: "Rang" })).getAllByRole("radio");
+    // MUTATION: `allowAutoTheme` always true → the dot appears on pro.
+    assert.ok(!radios.some((r) => r.getAttribute("aria-label") === AUTO_LABEL));
+    assert.equal(radios.find((r) => r.getAttribute("aria-checked") === "true")?.getAttribute("aria-label"), "Universitet Atlas");
+    fireEvent.change(screen.getByPlaceholderText(TOOL_BY_ID["pro-slide"].topicPlaceholder ?? ""), { target: { value: "Mavzu" } });
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(String(TOOL_BY_ID["pro-slide"].submitLabel)) }));
+    await waitFor(() => assert.ok(cap.posts.length > 0));
+    assert.equal(cap.posts[0].slideTheme, "atlas");
+  } finally {
+    cap.restore();
+  }
+});
+
 test("an explicit palette dot wins over «auto»", async () => {
   const cap = stubFetch(null);
   try {

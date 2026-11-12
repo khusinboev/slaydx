@@ -281,7 +281,7 @@ const MARKET_GROUP = "Ishlar bozori";
 export const VIDEO_MAX_CONCURRENT_DEFAULT = 2;
 export const VIDEO_MAX_CONCURRENT_MAX = 20;
 /** Plain «Slayd» AI picture fallback (docs/slide-quality/SPEC.md §B): per-deck cap. */
-export const SLIDE_IMAGE_AI_MAX_DEFAULT = 8;
+export const SLIDE_IMAGE_AI_MAX_DEFAULT = 4;
 export const SLIDE_IMAGE_AI_MAX_MAX = 30;
 /** AI chat price per message after the free ones: default 100 so'm; the cap stops a typo from charging a fortune per message. */
 const CHAT_PRICE_DEFAULT = 100;

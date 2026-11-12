@@ -136,7 +136,7 @@ export const SLIDE_PARAMS: SlideParam[] = [
   { id: "internetSearch", tools: ["slide", "pro-slide"], encode: "boolean", probeA: false, probeB: true, impacts: ["research", "beats"] },
   { id: "speakerNotes", tools: ["slide", "pro-slide"], encode: "boolean", probeA: true, probeB: false, impacts: ["prompt"] },
   { id: "extra", tools: ["slide", "pro-slide"], encode: "string", probeA: "", probeB: "ko‘proq diagramma bo‘lsin", impacts: ["prompt"] },
-  // Faqat pro: oddiy slayd rasmlari DOIM bepul stock (Pexels/Pixabay) — u faqat `photo` uslubini biladi.
+  // Faqat pro: oddiy slayd uslubi doim `photo` — rasmlar stock (Pexels/Pixabay) + mos topilmasa Gemini foto (docs/slide-quality/SPEC.md §B).
   { id: "slideImageStyle", tools: ["pro-slide"], encode: "string", probeA: "minimal", probeB: "chalk", impacts: ["images"] },
   { id: "slideTemplate", tools: ["slide", "pro-slide"], encode: "string", probeA: "lecture", probeB: "report", impacts: ["beats", "layout"] },
   { id: "slideTheme", tools: ["slide", "pro-slide"], encode: "string", probeA: "atlas", probeB: "graphite", impacts: ["layout"] },

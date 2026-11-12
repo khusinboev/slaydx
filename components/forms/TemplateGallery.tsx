@@ -63,9 +63,12 @@ export function TemplateGallery({
   onChange,
   onTheme,
   custom,
+  allowAutoTheme = false,
 }: {
   value: string;
   theme: string;
+  /** Show the «Avtomatik» palette dot (plain «Slayd» only). */
+  allowAutoTheme?: boolean;
   onChange: (templateId: SlideTemplateId) => void;
   onTheme: (themeId: SlideThemeChoice) => void;
   /**
@@ -76,7 +79,7 @@ export function TemplateGallery({
   custom?: { value: string; onChange: (assetId: string) => void };
 }) {
   const current = normalizeTemplateId(value);
-  const autoTheme = theme === AUTO_THEME;
+  const autoTheme = allowAutoTheme && theme === AUTO_THEME;
   // Previews need real colours: with «Avtomatik» the chosen template is shown in its own default palette.
   const themeObj = getSlideTheme(autoTheme ? SLIDE_TEMPLATE_BY_ID[current].defaultTheme : (theme as SlideThemeId));
   const customOn = Boolean(custom?.value);
@@ -135,7 +138,7 @@ export function TemplateGallery({
                 : "Palitra — tanlangan shablonning barcha slaydlariga; preview ham shu rangda."
             }
           >
-            <ColorDots ariaLabel="Rang" options={THEME_COLOR_OPTIONS} value={autoTheme ? AUTO_THEME : themeObj.id} onChange={(id) => onTheme(id as SlideThemeChoice)} />
+            <ColorDots ariaLabel="Rang" options={allowAutoTheme ? THEME_COLOR_OPTIONS : THEME_COLOR_OPTIONS.slice(1)} value={autoTheme ? AUTO_THEME : themeObj.id} onChange={(id) => onTheme(id as SlideThemeChoice)} />
           </Row>
         )}
       </div>

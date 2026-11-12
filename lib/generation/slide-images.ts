@@ -4,6 +4,7 @@ import { photoSlot, slotPixels } from "./slide-layout";
 import { composeSlideImagePrompt, writeSlideImagePrompts } from "./slide-image-prompts";
 import { searchQueryFor } from "./image-search-query";
 import { attachHybridImages, type SlideImagePolicy } from "./slide-stock";
+import type { ImagePhase } from "./slide-progress";
 import type { BodyRules } from "./slide-audience";
 import { imageYieldField } from "./slide-quality";
 import { safeFetchUrl, UnsafeUrlError } from "./safe-fetch";
@@ -142,7 +143,7 @@ const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 
 export { sniffImageType };
 
-export async function fetchImageBytes(url: string): Promise<ImageBytes | null> {
+export async function fetchImageBytes(url: string, timeoutMs = 20_000): Promise<ImageBytes | null> {
   if (url.startsWith("data:")) return decodeDataUrl(url);
   // Faqat HTTPS: provayder javobidagi URL o'zgarib ketsa ham ichki
   // tarmoqqa so'rov ketmasin (SSRF).
@@ -153,7 +154,7 @@ export async function fetchImageBytes(url: string): Promise<ImageBytes | null> {
      * qadamida qayta tekshiriladi (ilgari `redirect: "follow"` birinchi
      * URL dan keyin istalgan manzilga borardi), tana 12 MB bilan cheklanadi.
      */
-    const res = await safeFetchUrl(url, { timeoutMs: 20_000, maxBytes: MAX_IMAGE_BYTES });
+    const res = await safeFetchUrl(url, { timeoutMs: Math.max(1_000, timeoutMs), maxBytes: MAX_IMAGE_BYTES });
     if (!res.ok) return null;
 
     const buf = Buffer.from(await res.arrayBuffer());
@@ -185,8 +186,8 @@ export async function fetchImageBytes(url: string): Promise<ImageBytes | null> {
  * keyin 404 bo'lardi — foydalanuvchi ochgan taqdimotda rasm o'rnida
  * bo'shliq qolardi. Endi bunday rasm umuman biriktirilmaydi.
  */
-async function persistImage(remote: SlideImage): Promise<SlideImage | null> {
-  const bytes = await fetchImageBytes(remote.url);
+async function persistImage(remote: SlideImage, timeoutMs?: number): Promise<SlideImage | null> {
+  const bytes = await fetchImageBytes(remote.url, timeoutMs);
   if (!bytes) {
     console.warn("[rasm] rasm saqlanmadi, tashlandi");
     return null;
@@ -294,6 +295,8 @@ export type AttachImageOpts = VisualTier & {
    * without it the legacy single stock chain runs (old callers, `image-lab`, the chain tests). Ignored for pro-slide.
    */
   hybrid?: SlideImagePolicy | (() => Promise<SlideImagePolicy>);
+  /** Picture sub-step for the live bar (hybrid stage only). */
+  onPhase?: (phase: ImagePhase) => void;
 };
 
 /**
@@ -489,6 +492,7 @@ async function attachPlainHybrid(
     meta: opts.meta,
     policy,
     persist: persistImage,
+    onPhase: opts.onPhase,
     onImage: opts.onImage ? (s, url) => opts.onImage!(slides.indexOf(s), url) : undefined,
   });
   return report;

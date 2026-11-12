@@ -122,3 +122,49 @@ test("buildSlideDeck: an old doc whose meta says «auto» but has no pinned pale
   const deck = buildSlideDeck({ meta: { ...meta({}), slideTheme: "auto" }, titlePage: false, toc: false, sections: [], slides: [{ id: "s0", layout: "title", title: "X" }] });
   assert.equal(deck.themeId, "atlas");
 });
+
+test("scope (review M2): pro slayd with default form values resolves exactly as on main — own visual, atlas, no seed", async () => {
+  const proValues = { topic: "Fotosintez", slideTemplate: "auto", slideTheme: "atlas" };
+  const pm = extractMeta(TOOL_BY_ID["pro-slide"], proValues);
+  assert.equal(pm.slideTheme, "atlas");
+  // An «auto» sent to pro (API, old client) is main's default, not an auto palette.
+  assert.equal(extractMeta(TOOL_BY_ID["pro-slide"], { topic: "X", slideTheme: "auto" }).slideTheme, "atlas");
+  assert.equal(extractMeta(TOOL_BY_ID["pro-slide"], { topic: "X" }).slideTheme, "atlas");
+  for (let seed = 0; seed < 30; seed += 1) {
+    const d = resolveDeckDesign({ ...pm, slideSeed: seed });
+    // MUTATION: drop the `toolId === "slide"` gate in `chooseDeckDesign` → pro gets pool visuals.
+    assert.equal(d.tpl.visual, SLIDE_TEMPLATE_BY_ID.lecture.visual);
+    assert.equal(d.theme, "atlas");
+  }
+  const prev = process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  try {
+    const doc = await buildSlideAcademicDoc(pm, Date.now() + 60_000);
+    assert.equal(doc.meta.slideSeed, undefined, "no seed drawn for pro");
+    assert.equal(doc.slideVisual, "academic");
+    assert.equal(doc.slideTheme, "atlas");
+  } finally {
+    if (prev !== undefined) process.env.GEMINI_API_KEY = prev;
+  }
+});
+
+test("seed (review m6): derived from the generation id — the same id gives the same design on a retry", async () => {
+  const { withMediaContext } = await import("../lib/media/context.ts");
+  const { seedFromId } = await import("../lib/generation/slide-design.ts");
+  const prev = process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  try {
+    const run = () =>
+      withMediaContext({ generationId: "11111111-2222-3333-4444-555555555555", core: { image: false, video: false, speech: false } }, () =>
+        buildSlideAcademicDoc(meta({ topic: "Amir Temur saltanati" }), Date.now() + 60_000),
+      );
+    const [a, b] = [await run(), await run()];
+    // MUTATION: draw `newSlideSeed()` even with a generation id → the two seeds differ.
+    assert.equal(a.meta.slideSeed, seedFromId("11111111-2222-3333-4444-555555555555"));
+    assert.equal(b.meta.slideSeed, a.meta.slideSeed);
+    assert.equal(`${a.slideVisual}/${a.slideTheme}`, `${b.slideVisual}/${b.slideTheme}`);
+    assert.notEqual(seedFromId("a"), seedFromId("b"));
+  } finally {
+    if (prev !== undefined) process.env.GEMINI_API_KEY = prev;
+  }
+});

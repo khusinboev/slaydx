@@ -242,6 +242,8 @@ export type DesignInput = {
   slideTemplate?: string;
   slideTheme?: string;
   slideSeed?: number;
+  /** Only the plain «Slayd» tool gets the auto design/palette (review M2); every other tool resolves as on main. */
+  toolId?: string;
 };
 
 export type DeckDesign = { visual: SlideVisual; theme: SlideThemeId; areas: SubjectAreaId[] };
@@ -257,7 +259,8 @@ export function chooseDeckDesign(input: DesignInput, content: SlideTemplate): De
   const areas = subjectScores(input.topic, input.extra, input.subject);
   const weightOf = (pick: (a: SubjectArea) => number) => (seedWeight: number) =>
     areas.reduce((n, a, i) => n + pick(AREA_BY_ID[a.id]) * (i === 0 ? 2 : 1), seedWeight);
-  const autoTemplate = !input.slideTemplate || input.slideTemplate === "auto";
+  const plain = input.toolId === "slide";
+  const autoTemplate = plain && (!input.slideTemplate || input.slideTemplate === "auto");
   // No seed = legacy call (old doc, preview, probe): the content template's own visual, never a re-roll.
   const pool = autoTemplate && content.id !== "auto" && input.slideSeed !== undefined ? DESIGN_POOL[content.id] : [content.visual];
   const visual = weightedPick(
@@ -266,7 +269,7 @@ export function chooseDeckDesign(input: DesignInput, content: SlideTemplate): De
     input.slideSeed,
     "visual",
   );
-  const explicit = input.slideTheme && input.slideTheme !== AUTO_THEME && isSlideThemeId(input.slideTheme) ? input.slideTheme : null;
+  const explicit = input.slideTheme && input.slideTheme !== AUTO_THEME && isSlideThemeId(input.slideTheme) ? input.slideTheme : plain ? null : "atlas";
   const palettes = VISUAL_PALETTES[visual];
   const theme =
     explicit ??
@@ -279,7 +282,12 @@ export function chooseDeckDesign(input: DesignInput, content: SlideTemplate): De
   return { visual, theme, areas: areas.map((a) => a.id) };
 }
 
-/** A fresh per-generation seed (31 bits; JSON-safe). */
+/** The design seed of a generation: derived from its id, so a worker retry (and the live preview) gets the same design. */
+export function seedFromId(id: string): number {
+  return seedHash(0, id) & 0x7fffffff;
+}
+
+/** A fresh per-generation seed (31 bits; JSON-safe) — only when there is no generation id (scripts, tests). */
 export function newSlideSeed(rand: () => number = Math.random): number {
   return Math.floor(rand() * 0x7fffffff);
 }
