@@ -544,6 +544,15 @@ export async function handleCallback(q: CallbackQuery, updateId: number): Promis
         toast = await dm.handleDomlaCallback(ctx, msg.message_id, c);
         return;
       }
+      case "workRate":
+      case "workStars":
+      case "workReason":
+      case "workBack": {
+        // «⭐ Baholash» under the owner's file message: all rules live in lib/server/generation-ratings.ts, the keyboards in ./work-rating.
+        const wr = await import("./work-rating");
+        toast = await wr.handleWorkRatingCallback(ctx, msg.message_id, c);
+        return;
+      }
       case "marketOptOut": {
         // Same budget and same service as the web toggle; a stale button after the market closed still records the wish.
         if (!(await rateLimit(`profile:${ctx.user.id}`, 30, 300)).ok) {
