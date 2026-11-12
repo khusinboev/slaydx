@@ -3,14 +3,16 @@ import { deckFooter } from "./slide-identity";
 import { resolveSlideTemplate, type SlideVisual } from "./slide-templates";
 import { DESIGN_VISUALS, LEGACY_VISUALS } from "./visuals/spec";
 import { getSlideTheme } from "./slide-themes";
-import type { SlideDeck, SlideModel, SlideThemeId } from "./slide-types";
+import { isSlideThemeId, type SlideDeck, type SlideModel, type SlideThemeId } from "./slide-types";
 import type { AcademicDoc } from "./types";
 import { safeSlice } from "./safe-text";
 
 export type { SlideDeck, SlideLayout, SlideModel, SlideThemeId } from "./slide-types";
 
 export function buildSlideDeck(doc: AcademicDoc): SlideDeck {
-  const themeId = (doc.slideTheme || doc.meta.slideTheme || "atlas") as SlideThemeId;
+  // `doc.slideTheme` is the pinned (resolved) palette; `meta.slideTheme` may be «auto» — never a theme id by itself.
+  const metaTheme = doc.meta.slideTheme && isSlideThemeId(doc.meta.slideTheme) ? doc.meta.slideTheme : undefined;
+  const themeId: SlideThemeId = doc.slideTheme || metaTheme || "atlas";
   getSlideTheme(themeId);
   const tpl = resolveSlideTemplate(doc.slideTemplate || doc.meta.slideTemplate, doc.meta.topic, doc.meta.extra);
   /*

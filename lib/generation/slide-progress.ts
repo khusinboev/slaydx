@@ -1,5 +1,5 @@
 import type { SlideThemeId, SlideModel } from "./slide-types";
-import type { SlideTemplateId } from "./slide-templates";
+import type { SlideTemplateId, SlideVisual } from "./slide-templates";
 import type { AcademicDoc, DocMeta } from "./types";
 import { safeSlice } from "./safe-text";
 
@@ -21,7 +21,7 @@ export type LiveStage = "plan" | "research" | "text" | "images" | "assembly" | "
  * barqaror ko'rsatkich, `id` emas.
  */
 export type SlideProgressEvent =
-  | { type: "plan"; slides: SlideModel[]; roles: string[]; meta: DocMeta; theme: SlideThemeId; template: SlideTemplateId; logo?: string }
+  | { type: "plan"; slides: SlideModel[]; roles: string[]; meta: DocMeta; theme: SlideThemeId; template: SlideTemplateId; visual?: SlideVisual; logo?: string }
   | { type: "stage"; stage: LiveStage }
   | { type: "research"; sources: number }
   | { type: "slide"; index: number; slide: SlideModel }
@@ -42,6 +42,8 @@ export type LiveDeck = {
   meta: DocMeta;
   theme: SlideThemeId;
   template: SlideTemplateId;
+  /** The deck's design (auto may give a content template another visual) — the live view draws with it. */
+  visual?: SlideVisual;
   logo?: string;
   roles: string[];
   slides: SlideModel[];
@@ -78,6 +80,7 @@ export function applyLiveEvent(state: LiveDeck | undefined, ev: SlideProgressEve
         meta: ev.meta,
         theme: ev.theme,
         template: ev.template,
+        ...(ev.visual ? { visual: ev.visual } : {}),
         logo: ev.logo,
         roles: [...ev.roles],
         slides: ev.slides.map(cloneSlide),
@@ -237,6 +240,7 @@ export function liveDocOf(s: LiveDeck): AcademicDoc {
     slides: s.slides.map(cloneSlide),
     slideTheme: s.theme,
     slideTemplate: s.template,
+    ...(s.visual ? { slideVisual: s.visual } : {}),
     slideLogo: s.logo ? { url: s.logo } : undefined,
   };
 }

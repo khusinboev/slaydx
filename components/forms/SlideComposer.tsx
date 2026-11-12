@@ -92,7 +92,7 @@ const draftOf = (v: FormValues): FormValues => Object.fromEntries(Object.entries
  * versiyasiz qoralama tiklanganda ular E'TIBORGA OLINMAYDI (xuddi
  * foydalanuvchi hech qachon tegmagandek).
  */
-const DRAFT_VERSION = 2;
+const DRAFT_VERSION = 3;
 
 /**
  * Tiklangan qoralamani joriy qoidalarga moslaydi:
@@ -104,11 +104,17 @@ const DRAFT_VERSION = 2;
 function sanitizeRestoredDraft(draft: FormValues, pro: boolean): FormValues {
   const out = { ...draft };
   if (!pro) delete out.blocks;
-  if (out.v !== DRAFT_VERSION) {
+  const v = Number(out.v) || 1;
+  if (v < 2) {
     delete out.planItems;
     delete out.quizCount;
     delete out.agendaSlide;
   }
+  /*
+   * v3 (slide quality): before it the form always wrote `slideTheme: "atlas"` — with an «Avtomatik» template that was
+   * the untouched default, not a choice, so such a draft restores to «auto». A palette picked with a template stays.
+   */
+  if (v < 3 && out.slideTheme === "atlas" && (out.slideTemplate === undefined || out.slideTemplate === "auto")) delete out.slideTheme;
   delete out.v;
   return out;
 }
@@ -166,7 +172,8 @@ export function SlideComposer({
       keyIdeas: "",
       logoAssetId: "",
       templateAssetId: "",
-      slideTheme: "atlas",
+      // «Avtomatik» palette (docs/slide-quality/SPEC.md §A): untouched = the engine picks; a dot click is explicit.
+      slideTheme: "auto",
       slideTemplate: "auto",
     };
   }
@@ -307,7 +314,7 @@ export function SlideComposer({
       <Card title="Shablon va rang" aside={<span className="text-muted-foreground text-[13.5px]">preview — haqiqiy slaydlar</span>}>
         <TemplateGallery
           value={String(values.slideTemplate || "auto")}
-          theme={String(values.slideTheme || "atlas")}
+          theme={String(values.slideTheme || "auto")}
           onChange={(id) => set("slideTemplate", id)}
           onTheme={(id) => set("slideTheme", id)}
           // «O'z shablonim» — faqat pro (ustamasiz, PPTX ≤ 20 MB).

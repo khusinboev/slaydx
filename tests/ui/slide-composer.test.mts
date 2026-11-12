@@ -641,7 +641,7 @@ test("qoralama PUT tanasida sourceText/logoAssetId/templateAssetId YO'Q (katta m
     for (const k of ["sourceText", "logoAssetId", "templateAssetId"]) assert.ok(!(k in last), `${k} qoralamaga tushmasin`);
     // AUDIT-25 N3: yangi saqlanadigan qoralamalar versiya belgisi bilan — eski (versiyasiz)
     // qoralamalardan farqlash uchun (MUTATSIYA: `v: DRAFT_VERSION` olib tashlansa qizaradi).
-    assert.equal(last.v, 2, `qoralama versiya belgisi bilan saqlanishi kerak: ${JSON.stringify(last)}`);
+    assert.equal(last.v, 3, `qoralama versiya belgisi bilan saqlanishi kerak: ${JSON.stringify(last)}`);
   } finally {
     globalThis.fetch = realFetch;
   }

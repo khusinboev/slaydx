@@ -3,6 +3,7 @@ import type { TranslationReport } from "./translate/report";
 import type { FormValues, ToolConfig, ToolId } from "../types";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "./slide-templates";
 import type { SlideModel, SlideThemeId } from "./slide-types";
+import type { SlideThemeChoice } from "./slide-design";
 import type { SlideBlockId } from "./slide-blocks";
 import type { SlideImageStyle, SlideTextVolume } from "./slide-params";
 import type { SlidePurpose } from "./slide-purpose";
@@ -331,8 +332,14 @@ export type DocMeta = {
   /** Taqdimot kim uchun: himoya, ma'ruza, maktab darsi yoki pitch. */
   slideAudience?: SlideAudience;
   design: string;
-  slideTheme?: SlideThemeId;
+  /** The form's palette: an id, or «auto» (the engine picks; the resolved id is pinned in `AcademicDoc.slideTheme`). */
+  slideTheme?: SlideThemeChoice;
   slideTemplate?: SlideTemplateId;
+  /**
+   * Per-generation seed of the «Avtomatik» design/palette choice (`slide-design.ts`) — set once by
+   * `buildSlideAcademicDoc`, stored with the doc, never re-rolled on rebuild/edit.
+   */
+  slideSeed?: number;
   /*
    * ── Slayd parametrlari (AUDIT-9). Har biri `lib/generation/slide-params.ts`
    * reyestrida e'lon qilingan va differensial test bilan qulflangan —
