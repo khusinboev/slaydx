@@ -57,7 +57,7 @@ function other<T extends string>(list: readonly T[], cur: T): T {
 }
 
 /** A different valid value of one field. */
-function changed(input: TitulInput, id: TitulFieldId): Partial<FormValues> {
+function changed(input: TitulInput, id: TitulFieldId): FormValues {
   switch (id) {
     case "workType":
       return { workType: other(TITUL_WORK_TYPES, input.workType) };
