@@ -492,10 +492,22 @@ export function SlideEditor({
     editModeRef.current = editMode;
     enterRef.current = onEnterEdit;
   });
-  /** View mode: the shortcut gesture enters edit mode first, then opens the text (same commit). */
+  /**
+   * Opens a text from a gesture, synchronously (the tap path focuses inside
+   * the gesture — iOS raises the keyboard only then). View mode: the
+   * shortcut first enters edit mode in its OWN commit, then opens the text
+   * in a second one. Order matters for phone back: the viewer's edit-mode
+   * history entry (pushed by the viewer's effects, which run after this
+   * layer's) must be below the open text's entry — React flushes the first
+   * commit's effects before it renders the second.
+   */
   const openFromGesture = useCallback((src: SlideSrc): boolean => {
-    if (!editModeRef.current) enterRef.current?.();
-    return openRef.current(src);
+    if (!editModeRef.current && enterRef.current) flushSync(() => enterRef.current?.());
+    let opened = false;
+    flushSync(() => {
+      opened = openRef.current(src);
+    });
+    return opened;
   }, []);
   // Bound once: slide edits (new `open`) must not rebuild the detector mid-gesture.
   useEffect(() => {
@@ -549,11 +561,7 @@ export function SlideEditor({
       if (!(editModeRef.current ? tap : double)) return;
       const src = srcAt(e.target);
       if (!src) return;
-      let opened = false;
-      flushSync(() => {
-        opened = openFromGesture(src);
-      });
-      if (!opened) return;
+      if (!openFromGesture(src)) return;
       // Only a finger produces the compat `touchend` to cancel; pen/mouse never arm it.
       swallowTouchEnd = e.pointerType === "touch";
       swallowUntilRef.current = now() + TAP_SWALLOW_MS;

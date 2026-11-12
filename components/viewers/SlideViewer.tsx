@@ -428,6 +428,25 @@ export function SlideViewer({
   }, [pending]);
   const remindNow = editOn && remind && pending > 0 && !editMode && !present;
 
+  /*
+   * Phone back leaves edit mode: one history layer, ABOVE the page's leave
+   * guard. `useSlideEdit` → `useLeaveGuard` pushes the guard's own entry
+   * when the deck turns dirty — typically while edit mode is on (a text is
+   * committed by the first back). Pushed later, the guard would sit on top
+   * and the next back would auto-save and leave instead of ending edit mode
+   * (real-browser smoke 2026-11-12). So the mode's entry is owned by one of
+   * two hooks keyed on `dirty`: when `dirty` flips, the old one releases its
+   * entry and the guard (an earlier hook of this component, so its effect
+   * runs first in the same commit) takes that entry over, then the new one
+   * pushes a fresh entry on top. These hooks run after every child effect,
+   * so a text opened in the SAME commit would land below the mode — the
+   * view-mode shortcut therefore enters edit mode in its own commit first
+   * (`SlideEditor.openFromGesture`).
+   */
+  const dirty = pending > 0;
+  useOverlayHistory(coarse && editMode && !dirty, exitEdit);
+  useOverlayHistory(coarse && editMode && dirty, exitEdit);
+
   const rootRef = useRef<HTMLDivElement>(null);
   const capToViewport = useCallback((vv: VisualViewportState) => {
     const el = rootRef.current;
@@ -572,13 +591,6 @@ export function SlideViewer({
       data-slide-editing={phoneEditing ? "" : undefined}
       data-slide-edit-mode={editOn ? (editMode ? "on" : "off") : undefined}
     >
-      {/*
-        Phone back leaves edit mode (one history layer). Rendered FIRST so its
-        entry is pushed before the open text's own entry when both start in
-        the same commit (double-tap shortcut): back then closes the text
-        first, edit mode second — LIFO.
-      */}
-      <OverlayHistoryLayer open={coarse && editMode} onClose={exitEdit} />
       {phoneEditing ? <VisualViewportWatch onChange={capToViewport} /> : null}
       {present ? (
         <PresentBar
@@ -872,8 +884,3 @@ export function SlideViewer({
   );
 }
 
-/** `useOverlayHistory` as a node, so its effect order can be chosen by tree position (see the call site). */
-function OverlayHistoryLayer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  useOverlayHistory(open, onClose);
-  return null;
-}

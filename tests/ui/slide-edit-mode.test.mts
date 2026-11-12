@@ -2,7 +2,7 @@ import "./setup.ts";
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createElement as h, act, useState } from "react";
-import { render, fireEvent, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, fireEvent, screen, cleanup, waitFor, within } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { SlideViewer } from "../../components/viewers/SlideViewer.tsx";
 import { EditActions, type EditActionsState } from "../../components/files/EditActions.tsx";
@@ -386,11 +386,88 @@ test("phone back: closes the open text first (commit), then leaves edit mode, th
   assert.ok(!boxOpen(), "first back ended the text edit");
   assert.equal(mode(), "on", "…and only the text");
   assert.equal(saveBtn()?.textContent, "Saqlash · 1", "committed, not dropped");
-  // MUTATION: remove the `OverlayHistoryLayer` → back leaves the page instead.
+  /*
+   * The commit made the deck dirty: the page's leave guard (`useLeaveGuard`,
+   * auto-save then leave) pushed ITS entry now — after the edit-mode entry.
+   * The edit-mode entry must be re-stacked above it, or the next back is the
+   * guard's (real-browser smoke 2026-11-12: «Saqlanmoqda…» instead of leaving
+   * edit mode).
+   */
+  const kinds = nav.__layersForTests().filter((l) => l.index >= 0 && !l.dead).map((l) => l.kind);
+  // MUTATION: mode layer back in a child before the stage (`OverlayHistoryLayer`) → ["overlay", "guard"].
+  assert.deepEqual(kinds, ["guard", "overlay"], "edit mode on top of the leave guard");
   window.history.back();
   await pause(40);
   assert.equal(mode(), "off", "second back left edit mode");
   assert.equal(window.location.pathname, "/uz/files/1", "still on the page");
+  assert.equal(s.calls.filter((c) => c.method === "PATCH").length, 0, "leaving edit mode neither saves…");
+  assert.equal(saveBtn()?.textContent, "Saqlash · 1", "…nor discards");
+  assert.ok(document.querySelector("[data-slide-save-prompt]"), "the save prompt is shown");
+  // Only a further back reaches the page's own behaviour (the leave guard: auto-save, then leave).
+  window.history.back();
+  await pause(80);
+  assert.equal(s.calls.filter((c) => c.method === "PATCH").length, 1, "third back = the leave guard's save");
+});
+
+test("phone: text committed with the style bar's «Tayyor» (same commit releases the text layer) — back still ends edit mode first, no save", async () => {
+  phone();
+  nav.__resetNavForTests();
+  window.history.pushState(null, "", "/uz/files/4");
+  nav.installNav();
+  const s = stubServer();
+  open(s);
+  await sizeStage();
+  await act(async () => {
+    fireEvent.click(toggle()!);
+  });
+  await pause(20);
+  await act(async () => {
+    tap(titleEl(), 1);
+  });
+  await pause(20);
+  box().textContent = "Bar bilan";
+  await act(async () => {
+    fireEvent.click(within(document.querySelector("[data-slide-edit-bar]") as HTMLElement).getByText("Tayyor"));
+  });
+  await pause(40);
+  assert.equal(saveBtn()?.textContent, "Saqlash · 1");
+  assert.equal(mode(), "on");
+  window.history.back();
+  await pause(60);
+  assert.equal(mode(), "off", "back ended edit mode");
+  assert.equal(s.calls.filter((c) => c.method === "PATCH").length, 0, "no save on that back");
+  assert.equal(window.location.pathname, "/uz/files/4");
+  window.history.back();
+  await pause(80);
+  assert.equal(s.calls.filter((c) => c.method === "PATCH").length, 1, "the next back is the leave guard's");
+});
+
+test("phone back with NO change typed: text closes, then edit mode, no save, page stays", async () => {
+  phone();
+  nav.__resetNavForTests();
+  window.history.pushState(null, "", "/uz/files/3");
+  nav.installNav();
+  const s = stubServer();
+  open(s);
+  await sizeStage();
+  await act(async () => {
+    fireEvent.click(toggle()!);
+  });
+  await pause(20);
+  await act(async () => {
+    tap(titleEl(), 1);
+  });
+  await pause(20);
+  window.history.back();
+  await pause(40);
+  assert.ok(!boxOpen());
+  assert.equal(mode(), "on");
+  window.history.back();
+  await pause(40);
+  assert.equal(mode(), "off");
+  assert.equal(window.location.pathname, "/uz/files/3");
+  assert.equal(s.calls.length, 0, "nothing to save, nothing sent");
+  assert.ok(!document.querySelector("[data-slide-save-prompt]"));
 });
 
 test("phone back after the double-tap shortcut (mode + text in ONE commit): text first, then mode", async () => {
