@@ -49,10 +49,12 @@ type Calls = {
   upload: number;
   restore: number;
   editing: (string | null)[];
+  enter: number;
 };
 
-function mount(slide: SlideModel, scale = 1) {
-  const calls: Calls = { text: [], list: [], footer: [], answer: [], style: [], image: [], upload: 0, restore: 0, editing: [] };
+type MountOpts = { editMode?: boolean };
+
+function editorTree(slide: SlideModel, scale: number, calls: Calls, opts: MountOpts) {
   const common = {
     slide,
     theme,
@@ -63,7 +65,7 @@ function mount(slide: SlideModel, scale = 1) {
     index: 1,
     total: 3,
   };
-  render(
+  return (
     // Sahna ramkasi: `SlideCanvas` va overlay BITTA ota tugunda —
     // `SlideStage` dagi tuzilma ayni shunday, hodisa shu tugunda ushlanadi.
     h(
@@ -83,11 +85,22 @@ function mount(slide: SlideModel, scale = 1) {
         onUpload: () => calls.upload++,
         onRestoreImage: () => calls.restore++,
         onEditing: (key: string | null) => calls.editing.push(key),
+        editMode: opts.editMode,
+        onEnterEdit: () => calls.enter++,
       }),
-    ),
+    )
   );
+}
+
+function mount(slide: SlideModel, scale = 1, opts: MountOpts = {}) {
+  const calls: Calls = { text: [], list: [], footer: [], answer: [], style: [], image: [], upload: 0, restore: 0, editing: [], enter: 0 };
+  const r = render(editorTree(slide, scale, calls, opts));
+  mounted = { calls, rerender: (o: MountOpts) => r.rerender(editorTree(slide, scale, calls, o)) };
   return calls;
 }
+let mounted: { calls: Calls; rerender: (o: MountOpts) => void } | null = null;
+/** Edit mode ON (the viewer's «Tahrirlash»): outlines, image/answer controls, single click opens. */
+const EDIT = { editMode: true } as const;
 
 /** Ochiq tahrir maydoni (contentEditable div yoki ul). */
 function box(): HTMLElement {
@@ -445,22 +458,25 @@ test("kolontitulsiz slaydda maydon BO'SH ochiladi (qo'shish yo'li); o'zgarmasa o
 
 // ══════════════════════════════════ Rasm tugmalari
 
-test("rasm boshqaruvi: «Qayta chizish» YO'Q, «Rasmsiz» faqat rasm bor bo'lsa", () => {
-  mount(bulletsSlide());
+test("rasm boshqaruvi: ko'rish rejimida YO'Q; tahrir rejimida «Qayta chizish» YO'Q, «Rasmsiz» faqat rasm bor bo'lsa", () => {
+  mount({ ...bulletsSlide(), image: { url: "/api/generations/gen1/assets/abcdef0123456789" } });
+  assert.ok(!document.querySelector("[data-slide-image-controls]"), "view mode: a clean viewer, no image buttons over the picture");
+  cleanup();
+  mount(bulletsSlide(), 1, EDIT);
   assert.ok(screen.getByText("O‘z rasmim"), "rasm joyi bor maketda yuklash tugmasi chiqadi");
   assert.equal(screen.queryByText(/Qayta chizish/) === null, true, "AI qayta chizish olib tashlangan");
   assert.equal(screen.queryByText("Rasmsiz") === null, true, "rasmi yo'q slaydda «Rasmsiz» kerak emas");
   cleanup();
-  const c2 = mount({ ...bulletsSlide(), image: { url: "/api/generations/gen1/assets/abcdef0123456789" } });
+  const c2 = mount({ ...bulletsSlide(), image: { url: "/api/generations/gen1/assets/abcdef0123456789" } }, 1, EDIT);
   fireEvent.click(screen.getByText("Rasmsiz"));
   assert.deepEqual(c2.image, [null]);
 });
 
 test("«Rasmni qaytarish» FAQAT asl rasm (`imageOrig`) bo'lganda chiqadi va `onRestoreImage` beradi", () => {
-  mount(bulletsSlide());
+  mount(bulletsSlide(), 1, EDIT);
   assert.equal(screen.queryByText("Rasmni qaytarish") === null, true, "qaytaradigan narsa yo'q — tugma yo'q");
   cleanup();
-  const calls = mount({ ...bulletsSlide(), imageOrig: { url: "/api/generations/gen1/assets/abcdef0123456789" } });
+  const calls = mount({ ...bulletsSlide(), imageOrig: { url: "/api/generations/gen1/assets/abcdef0123456789" } }, 1, EDIT);
   assert.equal(screen.queryByText("Rasmsiz") === null, true, "rasm yo'q — «Rasmsiz» ham yo'q");
   fireEvent.click(screen.getByText("Rasmni qaytarish"));
   // MUTATSIYA: tugma `onImage(null)` ga ulansa — `calls.image` to'ladi, `restore` 0 qoladi.
@@ -471,7 +487,7 @@ test("«Rasmni qaytarish» FAQAT asl rasm (`imageOrig`) bo'lganda chiqadi va `on
 test("maketda rasm joyi bo'lmasa rasm tugmalari CHIQMAYDI", () => {
   // DIQQAT: DOM tugunini `assert.equal(el, null)` bilan solishtirmang — jsdom
   // tugunini `util.inspect` chizishga urinib jarayon qotadi (AUDIT-10 Y-2).
-  mount({ id: "s0", layout: "answers", title: "Javoblar", bullets: ["1 — A", "2 — C"] });
+  mount({ id: "s0", layout: "answers", title: "Javoblar", bullets: ["1 — A", "2 — C"] }, 1, EDIT);
   assert.equal(screen.queryByText("O‘z rasmim") === null, true, "rasm joyi yo'q maketda rasm tugmasi chiqmasligi kerak");
 });
 
@@ -486,8 +502,11 @@ function quizSlide(answer = 0): SlideModel {
   };
 }
 
-test("quiz: joriy to'g'ri javob belgilangan, boshqalari oddiy tugma", () => {
+test("quiz: joriy to'g'ri javob belgilangan, boshqalari oddiy tugma (faqat tahrir rejimida)", () => {
   mount(quizSlide(0));
+  assert.ok(!document.querySelector("[data-answer-mark]"), "view mode: the answer key is never shown");
+  cleanup();
+  mount(quizSlide(0), 1, EDIT);
   assert.equal(document.querySelectorAll("[data-answer-mark]").length, 4, "har variantga bitta belgi");
   assert.equal(document.querySelectorAll('[data-answer-mark="current"]').length, 1, "to'g'ri javob BITTA");
   const cur = screen.getByLabelText("A — to‘g‘ri javob");
@@ -496,16 +515,110 @@ test("quiz: joriy to'g'ri javob belgilangan, boshqalari oddiy tugma", () => {
 });
 
 test("quiz: variant belgisiga bosish `onAnswer` beradi; belgi modelga ERGASHADI; boshqa slaydda yo'q", () => {
-  const calls = mount(quizSlide(0));
+  const calls = mount(quizSlide(0), 1, EDIT);
   fireEvent.click(screen.getByLabelText("C — to‘g‘ri javob"));
   assert.deepEqual(calls.answer, [[0, 2]]);
   assert.deepEqual(calls.text, [], "javob tanlash matnni o'zgartirmaydi");
   cleanup();
-  mount(quizSlide(3));
+  mount(quizSlide(3), 1, EDIT);
   assert.equal(screen.getByLabelText("D — to‘g‘ri javob").getAttribute("data-answer-mark"), "current", "answer=3 → D");
   cleanup();
-  mount(bulletsSlide());
+  mount(bulletsSlide(), 1, EDIT);
   assert.equal(document.querySelector("[data-answer-mark]") === null, true);
+});
+
+// ══════════════════════════════════ Explicit edit mode (owner request 2026-11-12)
+
+/** Text layers of the slide that the canvas marks as editable (one per single field or whole list). */
+function editableLayers(): number {
+  const lists = document.querySelectorAll("[data-src-list]").length;
+  const singles = Array.from(document.querySelectorAll("[data-src]")).filter((el) => !el.closest("[data-src-list]")).length;
+  return lists + singles;
+}
+
+test("view mode: a single click on a text opens NOTHING and no outlines are drawn", () => {
+  const calls = mount(bulletsSlide());
+  fireEvent.click(titleEl());
+  fireEvent.click(firstBullet());
+  // MUTATION: drop the `editModeRef` guard in `onClick` → the title opens.
+  assert.ok(!boxOpen(), "single click does not edit outside edit mode");
+  assert.deepEqual(calls.editing, []);
+  assert.equal(document.querySelectorAll("[data-slide-edit-target]").length, 0, "no outlines in view mode");
+  assert.equal(document.querySelector("[data-slide-editor]")!.getAttribute("data-slide-editor-mode"), "view");
+});
+
+test("view mode: double click is the shortcut — asks the viewer to enter edit mode AND opens that text", () => {
+  const calls = mount(bulletsSlide());
+  fireEvent.doubleClick(titleEl());
+  // MUTATION: drop `enterRef.current?.()` in `openFromGesture` → enter stays 0.
+  assert.equal(calls.enter, 1, "onEnterEdit called once");
+  assert.equal(box().textContent, "Sarlavha matni", "the double-clicked text is open");
+});
+
+test("edit mode: every editable box of the slide is outlined (dashed, tinted), the open one is not", () => {
+  mount({ ...bulletsSlide(), footer: "Aliyev · TDPU" }, 1, EDIT);
+  const targets = Array.from(document.querySelectorAll<HTMLElement>("[data-slide-edit-target]:not([data-slide-edit-target='image'])"));
+  const n = editableLayers();
+  assert.ok(n >= 3, `title + list + footer at least (${n})`);
+  // MUTATION: skip list layers (`l.src` only) → fewer targets than editable layers.
+  assert.equal(targets.length, n, "one outline per editable text layer");
+  for (const t of targets) {
+    const cls = t.className.split(/\s+/);
+    assert.ok(cls.includes("outline-dashed"), "dashed — not colour alone");
+    assert.ok(cls.includes("bg-sky-400/10"), "tinted");
+    assert.ok(cls.includes("pointer-events-none"), "pointer goes through to the text under it");
+    assert.ok(parseFloat(t.style.width) > 0 && parseFloat(t.style.height) > 0, "sized like the layer");
+  }
+  assert.ok(document.querySelector("[data-slide-edit-target='image']"), "the picture slot is outlined too");
+  assert.equal(document.querySelector("[data-slide-editor]")!.getAttribute("data-slide-editor-mode"), "edit");
+  fireEvent.click(titleEl());
+  assert.ok(!document.querySelector(`[data-slide-edit-target='{"f":"title"}']`), "the open text has its own solid frame, not the dashed one");
+  assert.equal(document.querySelectorAll("[data-slide-edit-target]:not([data-slide-edit-target='image'])").length, n - 1);
+});
+
+test("edit mode: a SINGLE click opens a text; clicking another one saves the first and switches", () => {
+  const calls = mount(bulletsSlide(), 1, EDIT);
+  fireEvent.click(titleEl());
+  assert.equal(box().textContent, "Sarlavha matni", "single click opened the title");
+  assert.equal(calls.enter, 0, "already in edit mode — no enter request");
+  type(box(), "Bitta bosish");
+  fireEvent.mouseDown(firstBullet());
+  fireEvent.click(firstBullet());
+  assert.deepEqual(calls.text, [[{ f: "title" }, "Bitta bosish"]], "first text saved");
+  assert.equal(box().tagName, "UL", "the list is open now");
+});
+
+test("edit mode: keyboard — an outline is a focusable button, Enter/click opens its text", () => {
+  mount(bulletsSlide(), 1, EDIT);
+  const t = document.querySelector(`[data-slide-edit-target='{"f":"title"}']`) as HTMLButtonElement;
+  assert.equal(t.tagName, "BUTTON");
+  assert.match(t.getAttribute("aria-label") ?? "", /^Matnni o‘zgartirish: Sarlavha matni$/);
+  fireEvent.click(t);
+  assert.equal(box().textContent, "Sarlavha matni");
+});
+
+test("edit mode: one touch TAP opens the text (no double tap needed); a moved finger (swipe) does not", () => {
+  mount(bulletsSlide(), 1, EDIT);
+  const at = { clientX: 50, clientY: 40 };
+  fireEvent.pointerDown(titleEl(), { pointerType: "touch", pointerId: 1, isPrimary: true, ...at });
+  fireEvent.pointerUp(titleEl(), { pointerType: "touch", pointerId: 1, isPrimary: true, clientX: 140, clientY: 40 });
+  assert.ok(!boxOpen(), "a swipe is not a tap");
+  fireEvent.pointerDown(titleEl(), { pointerType: "touch", pointerId: 2, isPrimary: true, ...at });
+  fireEvent.pointerUp(titleEl(), { pointerType: "touch", pointerId: 2, isPrimary: true, ...at });
+  // MUTATION: `editModeRef.current ? tap : double` → `double` → stays closed.
+  assert.ok(boxOpen(), "single tap opened");
+  assert.ok(document.activeElement === box(), "focused inside the gesture (iOS keyboard)");
+});
+
+test("leaving edit mode commits the open text (never drops it)", () => {
+  const calls = mount(bulletsSlide(), 1, EDIT);
+  fireEvent.click(titleEl());
+  type(box(), "Tayyor bilan");
+  mounted!.rerender({ editMode: false });
+  // MUTATION: remove the `editMode` → commit effect → text lost, box stays open.
+  assert.deepEqual(calls.text, [[{ f: "title" }, "Tayyor bilan"]]);
+  assert.ok(!boxOpen());
+  assert.equal(document.querySelectorAll("[data-slide-edit-target]").length, 0, "outlines gone");
 });
 
 // ══════════════════════════════════ readText / readItems (brauzer DOM shakllari)

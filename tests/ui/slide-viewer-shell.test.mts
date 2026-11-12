@@ -240,28 +240,32 @@ test("mobil eskiz tasmasi: moslashda to'r (qolgan joyni egallaydi), kattalashtir
   assert.equal(strip().querySelectorAll("[data-strip-index]").length, slides.length);
 });
 
-test("rasm tugmalari sensorli qurilmada slayd ustida DOIM turmaydi: tegilganda chiqadi", () => {
+/*
+ * Rewritten for the explicit edit mode (2026-11-12). Before: editing was
+ * always on, so on touch the image buttons hid until the slide was tapped
+ * (`data-touch-sel`). Now the slide is a clean viewer — the buttons do not
+ * exist in view mode at all — and «Tahrirlash» shows them at once, on every
+ * slide, with no tap-to-reveal rule left that could hide them.
+ */
+test("rasm tugmalari ko'rish rejimida slayd ustida YO'Q; «Tahrirlash» da darhol ko'rinadi (har slaydda)", () => {
   const withImg: SlideModel[] = [
     { id: "s0", layout: "title", title: "Muqova", subtitle: "Izoh", image: { url: "data:image/png;base64,AAAA" } } as SlideModel,
-    ...slides.slice(1),
+    { ...slides[1], image: { url: "data:image/png;base64,AAAA" } } as SlideModel,
+    slides[2],
   ];
   render(h(SlideViewer, { doc: makeDoc(withImg), gen: gen(makeDoc(withImg)) }));
+  // MUTATION: render the controls regardless of `editMode` → present in view mode.
+  assert.ok(!document.querySelector("[data-slide-image-controls]"), "view mode: nothing covers the picture");
+  fireEvent.pointerDown(frame(), { pointerType: "touch" });
+  assert.ok(!document.querySelector("[data-slide-image-controls]"), "a tap in view mode does not reveal edit buttons");
+  fireEvent.click(document.querySelector("[data-slide-edit-toggle]") as HTMLElement);
   const controls = document.querySelector("[data-slide-image-controls]");
-  assert.ok(controls, "rasm tugmalari qatlami bor");
+  assert.ok(controls, "edit mode: image buttons drawn");
   assert.ok(controls!.textContent?.includes("O‘z rasmim"));
-  const f = frame();
-  // MUTATSIYA: CSS qoidasi olib tashlansa — sensorli qurilmada tugmalar slaydni doim yopadi.
-  assert.ok(f.className.includes("[@media(hover:none)]:[&:not([data-touch-sel])_[data-slide-image-controls]]:hidden"), "sensorli yashirish qoidasi");
-  assert.equal(f.hasAttribute("data-touch-sel"), false, "dastlab tanlanmagan");
-  fireEvent.pointerDown(f, { pointerType: "mouse" });
-  assert.equal(f.hasAttribute("data-touch-sel"), false, "sichqoncha tanlov holatini o'zgartirmaydi");
-  fireEvent.pointerDown(f, { pointerType: "touch" });
-  assert.equal(f.hasAttribute("data-touch-sel"), true, "slaydga tegilganda tugmalar chiqadi");
-  fireEvent.pointerDown(stage(), { pointerType: "touch" });
-  assert.equal(f.hasAttribute("data-touch-sel"), false, "sahnaning bo'sh joyiga tegilsa tushadi");
-  fireEvent.pointerDown(f, { pointerType: "touch" });
+  assert.ok(!frame().className.includes("data-touch-sel"), "no tap-to-reveal hiding rule on the frame");
+  assert.ok(!frame().hasAttribute("data-touch-sel"));
   fireEvent.click(screen.getByLabelText("Keyingi sahifa"));
-  assert.equal(frame().hasAttribute("data-touch-sel"), false, "boshqa slaydga o'tilganda tushadi");
+  assert.ok(document.querySelector("[data-slide-image-controls]"), "still visible on the next slide (edit mode persists)");
 });
 
 // ══════════════════════════════════ (e) Taqdimot

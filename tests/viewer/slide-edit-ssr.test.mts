@@ -15,11 +15,12 @@ import type { SlideModel } from "../../lib/generation/slide-types.ts";
  * boshqaruv chiqsa, foydalanuvchi bosadi va server 409 `legacy`
  * qaytaradi.
  *
- * AUDIT-10 dan keyin «Tahrirlash» TUGMASI YO'Q — tahrir tayyor dekada
- * doim yoqiq. Shuning uchun belgi sifatida tugma emas, tahrir
- * BOSHQARUVI (maket chipi, «+ Slayd», tahrir qatlami) tekshiriladi va
- * «Tahrirlash» so'zining o'zi HTML da bo'lmasligi alohida qulflanadi:
- * u qaytsa, foydalanuvchi yana ikki qadamli tahrirga qaytardi.
+ * Explicit edit mode (owner request 2026-11-12): the hidden "always on"
+ * double-click editing of AUDIT-10 was not discoverable, so an editable deck
+ * now shows ONE «Tahrirlash» toggle (`data-slide-edit-toggle`) and starts in
+ * VIEW mode (`data-slide-edit-mode="off"`); `initialEdit` (`?edit=1`) starts
+ * it "on". The edit layer (`data-slide-editor`) is still mounted in view
+ * mode — it carries the double-click shortcut into edit mode.
  */
 
 /** Tahrir boshqaruvi chizilganmi (tahrir qatlami + slayd «O‘chirish»). */
@@ -88,12 +89,39 @@ test("gen berilsa (COMPLETED, doc.slides bor) — tahrir DARHOL yoqiq", () => {
   );
 });
 
-test("«Tahrirlash» tugmasi HTML da UMUMAN yo'q", () => {
+test("«Tahrirlash» tugmasi: tahrirlanadigan dekada BITTA, ko'rish rejimida; boshqa holatlarda yo'q", () => {
   const doc = docWithSlides();
-  for (const gen of [completedGen(doc), completedGen(doc, { type: "pro-slide" }), undefined]) {
+  for (const gen of [completedGen(doc), completedGen(doc, { type: "pro-slide" })]) {
     const html = renderToStaticMarkup(h(SlideViewer, { doc, gen }));
-    assert.ok(!html.includes("Tahrirlash"), "tahrir rejimi tugmasi olib tashlangan");
+    assert.equal((html.match(/data-slide-edit-toggle=/g) ?? []).length, 1, "exactly one toggle");
+    assert.ok(html.includes("Tahrirlash"), "labelled");
+    assert.match(html, /aria-pressed="false"[^>]*data-slide-edit-toggle/, "not pressed");
+    assert.ok(html.includes('data-slide-edit-mode="off"'), "starts in view mode");
+    assert.ok(html.includes('data-slide-editor-mode="view"'), "edit layer in view mode: no outlines");
+    assert.ok(!html.includes("data-slide-edit-target"), "no outlines in view mode");
   }
+  const legacy = legacyDoc();
+  for (const [doc2, gen] of [
+    [doc, undefined],
+    [legacy, completedGen(legacy)],
+    [doc, completedGen(doc, { status: "IN_PROGRESS" })],
+    [doc, completedGen(doc, { type: "essay" })],
+  ] as const) {
+    const html = renderToStaticMarkup(h(SlideViewer, { doc: doc2, gen }));
+    assert.ok(!html.includes("data-slide-edit-toggle"), "no toggle where editing is impossible");
+    assert.ok(!html.includes("data-slide-edit-mode"), "no edit-mode state either");
+  }
+});
+
+test("`initialEdit` (?edit=1): editable deck starts in edit mode with outlines; ignored when not editable or live", () => {
+  const doc = docWithSlides();
+  const html = renderToStaticMarkup(h(SlideViewer, { doc, gen: completedGen(doc), initialEdit: true }));
+  assert.ok(html.includes('data-slide-edit-mode="on"'));
+  assert.match(html, /aria-pressed="true"[^>]*data-slide-edit-toggle/, "toggle pressed");
+  assert.ok(html.includes("Tayyor"), "toggle reads «Tayyor»");
+  assert.ok(html.includes("data-slide-edit-target"), "editable boxes outlined");
+  const passive = renderToStaticMarkup(h(SlideViewer, { doc, initialEdit: true }));
+  assert.ok(!passive.includes("data-slide-edit-mode") && !passive.includes("data-slide-edit-target"), "passive viewer ignores it");
 });
 
 test("«Saqlash» tugmasi o'zgarishsiz KO'RINMAYDI", () => {

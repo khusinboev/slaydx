@@ -40,7 +40,7 @@ import type { VisualViewportState } from "@/lib/hooks/useVisualViewport";
 import { useOverlayHistory } from "../nav/useOverlayHistory";
 import { SlideEditFloatingPanel, SlideEditStyleBar, keepEditorFocus } from "./slide-edit/StyleBar";
 import { SlideEditFontSheet } from "./slide-edit/FontSheet";
-import { createDoubleTapDetector } from "./slide-edit/doubleTap";
+import { TAP_MAX_MS, TAP_SLOP_PX, createDoubleTapDetector } from "./slide-edit/doubleTap";
 import { placeFloatingPanel, type FocusBox } from "./slide-edit/geometry";
 import { VisualViewportWatch, scrollEditBoxIntoView } from "./slide-edit/viewport";
 
@@ -143,6 +143,20 @@ export type SlideEditorProps = {
    * mounts) no phone bar is drawn.
    */
   editBarSlot?: HTMLElement | null;
+  /**
+   * Explicit edit mode (owner request 2026-11-12, `SlideViewer` «Tahrirlash»).
+   *
+   * - `true`: every editable box gets a dashed outline + tint, the image and
+   *   answer controls show, and a SINGLE click / tap opens a text.
+   * - `false` (default): a clean viewer — no outlines or controls, a single
+   *   click/tap does nothing; a double click / double tap is the shortcut
+   *   that calls `onEnterEdit` and opens that text at once.
+   *
+   * Turning it off while a text is open commits the text.
+   */
+  editMode?: boolean;
+  /** View-mode shortcut (double click / double tap on a text) asks the viewer to enter edit mode. */
+  onEnterEdit?: () => void;
 };
 
 /** Mobile UI parts that belong to the edit (a press there is not "outside"). */
@@ -296,6 +310,8 @@ export function SlideEditor({
   onUpload,
   onEditing,
   editBarSlot,
+  editMode = false,
+  onEnterEdit,
 }: SlideEditorProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -463,10 +479,19 @@ export function SlideEditor({
    * keyboard only then), and cancels the second tap's `touchend` so its
    * compat `mousedown`/`click`/`dblclick` neither blur nor close the box.
    */
+  const editModeRef = useRef(editMode);
+  const enterRef = useRef(onEnterEdit);
   useLayoutEffect(() => {
     commitRef.current = commit;
     openRef.current = open;
+    editModeRef.current = editMode;
+    enterRef.current = onEnterEdit;
   });
+  /** View mode: the shortcut gesture enters edit mode first, then opens the text (same commit). */
+  const openFromGesture = useCallback((src: SlideSrc): boolean => {
+    if (!editModeRef.current) enterRef.current?.();
+    return openRef.current(src);
+  }, []);
   // Bound once: slide edits (new `open`) must not rebuild the detector mid-gesture.
   useEffect(() => {
     const host = rootRef.current?.closest("[data-slide-frame]") ?? rootRef.current?.parentElement;
@@ -475,23 +500,53 @@ export function SlideEditor({
       const src = srcAt(ev.target);
       if (!src) return;
       ev.preventDefault();
-      openRef.current(src);
+      openFromGesture(src);
+    };
+    /*
+     * Edit mode: a single click opens the text (mouse; a touch tap is opened
+     * on `pointerup` below and its compat click then finds the same text
+     * already open — `open` keeps the session).
+     */
+    const onClick = (ev: Event) => {
+      if (!editModeRef.current) return;
+      const src = srcAt(ev.target);
+      if (src) openRef.current(src);
     };
     const taps = createDoubleTapDetector();
+    /** Edit mode single taps: where/when the finger went down, and how many are down (pinch is not a tap). */
+    let tapDown: { id: number; x: number; y: number; t: number } | null = null;
+    const down = new Set<number>();
     let swallowTouchEnd = false;
     const touchy = (e: PointerEvent) => e.pointerType === "touch" || e.pointerType === "pen";
     const onDown = (e: PointerEvent) => {
       // A new contact: a `touchend` that never came (pen, webview quirk) must not eat this one.
       swallowTouchEnd = false;
-      if (touchy(e)) taps.down(e.pointerId, e.clientX, e.clientY, e.timeStamp);
+      if (!touchy(e)) return;
+      taps.down(e.pointerId, e.clientX, e.clientY, e.timeStamp);
+      // The first finger of a new gesture: forget contacts whose `pointerup` never came.
+      if (e.isPrimary) down.clear();
+      down.add(e.pointerId);
+      tapDown = down.size === 1 ? { id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp } : null;
+    };
+    const singleTap = (e: PointerEvent): boolean => {
+      const d = tapDown;
+      tapDown = null;
+      return Boolean(
+        d && d.id === e.pointerId && Math.hypot(d.x - e.clientX, d.y - e.clientY) <= TAP_SLOP_PX && e.timeStamp - d.t <= TAP_MAX_MS,
+      );
     };
     const onUp = (e: PointerEvent) => {
-      if (!touchy(e) || !taps.up(e.pointerId, e.clientX, e.clientY, e.timeStamp)) return;
+      if (!touchy(e)) return;
+      down.delete(e.pointerId);
+      const tap = singleTap(e);
+      const double = taps.up(e.pointerId, e.clientX, e.clientY, e.timeStamp);
+      // Edit mode: one tap is enough. View mode: only the double-tap shortcut.
+      if (!(editModeRef.current ? tap : double)) return;
       const src = srcAt(e.target);
       if (!src) return;
       let opened = false;
       flushSync(() => {
-        opened = openRef.current(src);
+        opened = openFromGesture(src);
       });
       if (!opened) return;
       // Only a finger produces the compat `touchend` to cancel; pen/mouse never arm it.
@@ -501,7 +556,10 @@ export function SlideEditor({
       if (el && document.activeElement !== el) focusAtEnd(el);
     };
     const onCancel = (e: PointerEvent) => {
-      if (touchy(e)) taps.cancel(e.pointerId);
+      if (!touchy(e)) return;
+      taps.cancel(e.pointerId);
+      down.delete(e.pointerId);
+      tapDown = null;
     };
     const onTouchEnd = (e: TouchEvent) => {
       if (!swallowTouchEnd) return;
@@ -509,18 +567,25 @@ export function SlideEditor({
       if (e.cancelable) e.preventDefault();
     };
     host.addEventListener("dblclick", onDbl);
+    host.addEventListener("click", onClick);
     host.addEventListener("pointerdown", onDown as EventListener);
     host.addEventListener("pointerup", onUp as EventListener);
     host.addEventListener("pointercancel", onCancel as EventListener);
     host.addEventListener("touchend", onTouchEnd as EventListener, { passive: false });
     return () => {
       host.removeEventListener("dblclick", onDbl);
+      host.removeEventListener("click", onClick);
       host.removeEventListener("pointerdown", onDown as EventListener);
       host.removeEventListener("pointerup", onUp as EventListener);
       host.removeEventListener("pointercancel", onCancel as EventListener);
       host.removeEventListener("touchend", onTouchEnd as EventListener);
     };
-  }, []);
+  }, [openFromGesture]);
+
+  // Leaving edit mode («Tayyor», phone back, Escape) saves the open text — never drops it.
+  useEffect(() => {
+    if (!editMode && editRef.current) commitRef.current();
+  }, [editMode]);
 
   /*
    * TASHQARIGA BITTA bosish tahrirni yopadi (va saqlaydi). Shrift
@@ -707,8 +772,36 @@ export function SlideEditor({
       (l) => l.t === "image" && !(l.box.x === LOGO_BOX.x && l.box.y === LOGO_BOX.y && l.box.w === LOGO_BOX.w),
     );
     const b = boxStyle(imageLayer ? imageLayer.box : slot);
-    return { left: b.left * scale, top: b.top * scale, width: b.width * scale };
+    return { left: b.left * scale, top: b.top * scale, width: b.width * scale, height: b.height * scale };
   }, [slot, plan.layers, scale]);
+
+  /*
+   * EDIT MODE OUTLINES — one per editable text layer of THIS slide (a single
+   * field `src` or a whole list `srcLines`), in screen px (outside the scaled
+   * twin, so the dashed line stays 2 px at any zoom). They are focusable
+   * buttons for the keyboard (Tab → Enter opens the text) but
+   * `pointer-events-none` for the pointer: a click / tap goes through to the
+   * `SlideCanvas` text under it (`[data-src]`), as before.
+   */
+  const targets = useMemo(() => {
+    if (!editMode) return [];
+    const out: { key: string; src: SlideSrc; label: string; pos: { left: number; top: number; width: number; height: number } }[] = [];
+    for (const l of plan.layers) {
+      if (l.t !== "text") continue;
+      const src = l.src ?? l.srcLines?.find(Boolean);
+      const key = layerKey(l);
+      if (!src || !key) continue;
+      const b = boxStyle(l.box);
+      const text = (l.src ? readSlideField(slide, l.src) : (l.srcLines ?? []).map((s) => (s ? readSlideField(slide, s) : "")).join(" ")) ?? "";
+      out.push({
+        key,
+        src,
+        label: text.trim().slice(0, 60) || (src.f === "footer" ? "kolontitul" : "bo‘sh matn"),
+        pos: { left: b.left * scale, top: b.top * scale, width: b.width * scale, height: b.height * scale },
+      });
+    }
+    return out;
+  }, [editMode, plan.layers, slide, scale]);
 
   /*
    * Tahrir qutisi — QATLAM BILAN BIR XIL stil (`textLayerStyle`), faqat
@@ -739,8 +832,29 @@ export function SlideEditor({
       : null;
 
   return (
-    <div ref={rootRef} className="pointer-events-none absolute inset-0" data-slide-editor>
-      {answerSpots.map(({ q, j, pos }) => {
+    <div ref={rootRef} className="pointer-events-none absolute inset-0" data-slide-editor data-slide-editor-mode={editMode ? "edit" : "view"}>
+      {targets.map(({ key, src, label, pos }) =>
+        edit?.key === key ? null : (
+          <button
+            key={`t-${key}`}
+            type="button"
+            data-slide-edit-target={key}
+            aria-label={`Matnni o‘zgartirish: ${label}`}
+            className="pointer-events-none absolute rounded-[2px] bg-sky-400/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)] outline-2 outline-offset-1 outline-sky-400 outline-dashed focus-visible:bg-sky-400/20 focus-visible:outline-[3px] focus-visible:outline-sky-200 focus-visible:outline-solid"
+            style={pos}
+            onClick={() => open(src)}
+          />
+        ),
+      )}
+      {editMode && imgPos ? (
+        <div
+          data-slide-edit-target="image"
+          aria-hidden
+          className="pointer-events-none absolute rounded-[2px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)] outline-2 outline-offset-1 outline-sky-400 outline-dashed"
+          style={imgPos}
+        />
+      ) : null}
+      {(editMode ? answerSpots : []).map(({ q, j, pos }) => {
         const cur = slide.quiz?.[q]?.answer === j;
         return (
           <div
@@ -767,7 +881,7 @@ export function SlideEditor({
         );
       })}
 
-      {imgPos ? (
+      {editMode && imgPos ? (
         <div
           data-slide-image-controls
           className="pointer-events-auto absolute flex flex-wrap items-start gap-1 p-1"
@@ -776,7 +890,7 @@ export function SlideEditor({
           <button
             type="button"
             disabled={busy}
-            className="inline-flex items-center gap-1 rounded bg-black/65 px-1.5 py-1 text-[11px] text-white hover:bg-black/85 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded bg-black/65 px-1.5 py-1 text-[11px] text-white hover:bg-black/85 disabled:opacity-50 pointer-coarse:min-h-11 pointer-coarse:px-3 pointer-coarse:text-[13px]"
             onClick={() => fileRef.current?.click()}
           >
             <ImagePlus className="size-3" />
@@ -786,7 +900,7 @@ export function SlideEditor({
             <button
               type="button"
               disabled={busy}
-              className="inline-flex items-center gap-1 rounded bg-black/65 px-1.5 py-1 text-[11px] text-white hover:bg-black/85 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded bg-black/65 px-1.5 py-1 text-[11px] text-white hover:bg-black/85 disabled:opacity-50 pointer-coarse:min-h-11 pointer-coarse:px-3 pointer-coarse:text-[13px]"
               onClick={() => onImage(null)}
             >
               <XCircle className="size-3" />
@@ -798,7 +912,7 @@ export function SlideEditor({
               type="button"
               disabled={busy}
               title="Asl (AI chizgan) rasmni qaytarish"
-              className="inline-flex items-center gap-1 rounded bg-black/65 px-1.5 py-1 text-[11px] text-white hover:bg-black/85 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded bg-black/65 px-1.5 py-1 text-[11px] text-white hover:bg-black/85 disabled:opacity-50 pointer-coarse:min-h-11 pointer-coarse:px-3 pointer-coarse:text-[13px]"
               onClick={onRestoreImage}
             >
               <RotateCcw className="size-3" />
