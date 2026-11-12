@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
  *
  *   catalog     the five P5 entries + purposes `studio.speech` / `studio.clone`; costs from the price book (ElevenLabs
  *               Creator plan $22 / 121 000 credits ≈ $0.1818 / 1 000 chars (owner 2026-11-02), Gemini Flash TTS quote); the ElevenLabs language list = the adapter's;
- *   request     golden bodies: ElevenLabs TTS (voice in the URL, eleven_v3, language, speed, stability), text-to-dialogue
+ *   request     golden bodies: ElevenLabs TTS (voice in the URL, eleven_v4, language, speed, stability), text-to-dialogue
  *               (one input per turn), the IVC multipart form; the Gemini single / two-speaker bodies;
  *   probe       «every param must work»: each param of each speech model changes the provider request or the price,
  *               as its `affects` says (through the REAL engine → runMedia → adapter, fetch stubbed);
@@ -34,6 +34,11 @@ import assert from "node:assert/strict";
  *   review M1: the engine's over-limit check dropped                          -> "review M1" (the provider was called);
  *   review M1: `doc.speech.chars` = the whole script                          -> "review M1";
  *   review m4: `voiceOf` reads the untrimmed value                            -> "review m4".
+ *
+ * eleven_v4 + Uzbek voices (2026-11-12), each turned red, then restored:
+ *   `ELEVEN_IDS` (studio-speech.ts) without the native voices                -> "whitelist";
+ *   `elevenLabsFetch` no longer retries an unsupported_language 400          -> "Studio adapters: … unsupported_language";
+ *   the TTS catalog default voice = the non-Uzbek default (Rachel)           -> "default voices".
  *
  * P7c (provider cost into the job meter -> cost_json / ai_usage; tests "cost: …"), each turned red, then restored:
  *   `recordSpeechCall` removed from the single-voice branch                    -> "cost: ElevenLabs", "cost: Gemini chunks", "cost: a chunk that failed";
@@ -118,7 +123,7 @@ test("catalog: the P5 entries, their purposes and price-book costs", () => {
   assert.deepEqual(MEDIA_PURPOSES.byId("studio.clone")!.allowed, [CLONE]);
   for (const id of [EL_TTS, GM_TTS, EL_DIA, GM_DIA, CLONE]) assert.equal(MEDIA_CATALOG.byId(id)!.kind, "speech", id);
   const row = TTS_PRICING.find((r) => r.provider === "elevenlabs" && r.billing === "chars") as { usdPerMChars: number };
-  // Owner 2026-11-02: the REAL Creator-plan cost ($22 / 121 000 credits, 1 credit per eleven_v3 character), not the $0.08 list price.
+  // Owner 2026-11-02: the REAL Creator-plan cost ($22 / 121 000 credits, 1 credit per character, kept for eleven_v4), not the $0.08 list price.
   assert.equal(row.usdPerMChars, (22 / 121_000) * 1_000_000, "ElevenLabs Creator plan ≈ $181.82 / 1M characters");
   for (const id of [EL_TTS, EL_DIA]) assert.equal((MEDIA_CATALOG.byId(id)!.cost as { usd: number }).usd, 22 / 121, `${id}: $0.1818 / 1 000 characters`);
   // Gemini Flash TTS: 1 000 chars / 15 chars/s × 25 tokens/s × $10/M + 1 000/3 text tokens × $0.50/M.
@@ -130,13 +135,89 @@ test("catalog: the P5 entries, their purposes and price-book costs", () => {
   assert.deepEqual(MEDIA_PURPOSES.byId("podcast.voice")!.allowed, ["azure/tts", "aisha/tts", "google/tts", "elevenlabs/tts"]);
 });
 
-test("catalog: ElevenLabs language list = the adapter's eleven_v3 list; voices; clone ids", () => {
-  assert.deepEqual(sp.ELEVENLABS_LANGS.map((l) => l.value).sort(), [...el.ELEVENLABS_V3_LANGS].sort());
-  assert.equal(sp.ELEVENLABS_VOICES[0]!.id, RACHEL);
+test("catalog: ElevenLabs language list = the adapter's language_code list; voices; clone ids", () => {
+  assert.deepEqual(sp.ELEVENLABS_LANGS.map((l) => l.value).sort(), [...el.ELEVENLABS_LANG_CODES].sort());
+  assert.equal(sp.ELEVENLABS_VOICES[0]!.id, RACHEL, "premade first in the data (the voice changer's default); the UI lists native first");
   assert.ok(sp.ELEVENLABS_VOICES.some((v) => v.gender === "male") && sp.GEMINI_VOICES.some((v) => v.gender === "female"));
   assert.equal(sp.cloneIdOf("clone:0e7a1d3c-9b1f-4b6a-8a52-1f2e3d4c5b6a"), "0e7a1d3c-9b1f-4b6a-8a52-1f2e3d4c5b6a");
   assert.equal(sp.cloneIdOf("clone:../../x"), null);
   assert.equal(sp.cloneIdOf(RACHEL), null);
+});
+
+/** The 14 native Uzbek voices of the ElevenLabs library (`GET /v1/shared-voices?language=uz`, production 2026-11-12). */
+const UZ_IDS = [
+  "AgD9yC0DyOI1g9AP3l45", "ehTFHBkERkWR22A3sR8M", "tQBN3grEhnGrrqn0n2Rw", "cfWx14ZbaEUT4BjIA5tH", "tsHbvXAh0M61xzsgDqlk", "1xZ621W54CwGT3dITE48", "nXdUXfIGcAbTyJ2kC04t",
+  "GChwNsPvTsqD6tAAORVU", "CBeZJ4EnTnrJmhtlMCNC", "rwtcHtZgYU6HN2zLNBlf", "fytsqG6MLzC2aCSw7MLa", "RaNVfTYq3HYeFPLng6XN", "agoC45V78njTIxYzwmSb", "GcnlXfqDudh5dSQpZVll",
+];
+const DAVRONBEK = "agoC45V78njTIxYzwmSb";
+const JAVOHIR = "AgD9yC0DyOI1g9AP3l45";
+
+test("eleven_v4 (live 2026-11-12: v3 refuses `uz`): both direct routes, the label, ids kept for persisted rows", () => {
+  assert.equal(sp.ELEVENLABS_DIRECT_MODEL, "eleven_v4");
+  assert.equal(sp.ELEVENLABS_DIRECT_MODEL, el.ELEVENLABS_MODEL, "catalog and adapter name one model");
+  assert.equal(sp.ELEVENLABS_DIRECT_MAX_CHARS, 10_000);
+  for (const id of [EL_TTS, EL_DIA]) assert.equal(MEDIA_CATALOG.byId(id)!.routes[0]!.upstreamModel, "eleven_v4", id);
+  assert.equal(MEDIA_CATALOG.byId(EL_TTS)!.label, "ElevenLabs v4");
+  // The fal-routed models are a separate scope: untouched.
+  assert.equal(MEDIA_CATALOG.byId(sp.FAL_ELEVEN_V3_MODEL)!.routes[0]!.upstreamModel, sp.FAL_ELEVEN_V3_ENDPOINT);
+});
+
+test("Uzbek voices: the 14 native library voices, male, `native` + `lang: uz` + a note; premade kept; fal subset unchanged", () => {
+  assert.deepEqual(sp.ELEVENLABS_UZBEK_VOICES.map((v) => v.id).sort(), [...UZ_IDS].sort());
+  for (const v of sp.ELEVENLABS_UZBEK_VOICES) {
+    assert.equal(v.gender, "male", v.name);
+    assert.equal(v.native, true, v.name);
+    assert.equal(v.lang, "uz", v.name);
+    assert.ok(v.note && v.note.length <= 40, v.name);
+  }
+  assert.equal(sp.ELEVENLABS_VOICES.length, 10 + 14, "the ten premade voices stay");
+  assert.ok(sp.ELEVENLABS_VOICES.some((v) => v.id === RACHEL) && sp.ELEVENLABS_VOICES.some((v) => v.id === ADAM));
+  assert.equal(sp.FAL_ELEVEN_VOICES.length, 9, "fal still speaks the nine named premade voices");
+  assert.ok(!sp.FAL_ELEVEN_VOICES.some((v) => v.native), "no native library voice through fal");
+  assert.ok(!sp.ELEVENLABS_STS_VOICES.some((v) => v.native), "the voice changer keeps the premade voices only");
+  assert.deepEqual(sp.uzbekFirst(sp.ELEVENLABS_VOICES).slice(0, 14).map((v) => v.id).sort(), [...UZ_IDS].sort(), "native first");
+  assert.equal(sp.libraryVoicesOf(EL_TTS).filter((v) => v.native).length, 14);
+});
+
+test("default voices: Davronbek (+ Javohir) for Uzbek text, Rachel (+ Adam) otherwise; the catalog defaults are Uzbek", () => {
+  assert.equal(sp.defaultElevenVoice("uz"), DAVRONBEK);
+  assert.equal(sp.defaultElevenVoice(""), DAVRONBEK, "blank = the default language, Uzbek");
+  assert.equal(sp.defaultElevenVoice("uz", 1), JAVOHIR);
+  assert.equal(sp.defaultElevenVoice("ru"), RACHEL);
+  assert.equal(sp.defaultElevenVoice("en", 1), ADAM);
+  const p = core.normalize(MEDIA_CATALOG.byId(EL_TTS)!.params, { text: "Salom" });
+  assert.equal(p.voice, DAVRONBEK, "MUTATSIYA: katalog standart ovozi Rachel bo'lsa qizaradi");
+  const d = core.normalize(MEDIA_CATALOG.byId(EL_DIA)!.params, { script: "Ali: a\nVali: b" });
+  assert.deepEqual([d.voice1, d.voice2], [DAVRONBEK, JAVOHIR]);
+});
+
+test("whitelist: every native Uzbek voice is accepted by the speech request check; an unknown id is not", () => {
+  for (const id of UZ_IDS) {
+    assert.equal(rules.studioSpeechError({ modelId: EL_TTS, text: "Salom", voice: id }), null, id);
+    assert.equal(rules.studioSpeechError({ modelId: EL_DIA, script: "Ali: Salom!\nVali: Xayr!", voice1: id, voice2: RACHEL }), null, id);
+  }
+  assert.match(String(rules.studioSpeechError({ modelId: EL_TTS, text: "Salom", voice: "ZZZZZZZZZZZZZZZZZZZZ" })), /Noma'lum ovoz/);
+  // A native voice is not a Gemini voice nor a fal voice (the fal param is an enum of the nine).
+  assert.ok(rules.studioSpeechError({ modelId: GM_TTS, text: "Salom", voice: DAVRONBEK }), "Gemini refuses a native ElevenLabs voice");
+  assert.ok(rules.studioSpeechError({ modelId: sp.FAL_ELEVEN_V3_MODEL, text: "Salom", voice: DAVRONBEK }), "fal refuses a native voice");
+});
+
+test("Studio adapters: a 400 unsupported_language is sent once more without language_code (TTS and dialogue)", async (t) => {
+  quiet(t);
+  const refused = JSON.stringify({ detail: { code: "invalid_parameters", message: "Model 'eleven_v3' does not support language_code 'uz'.", status: "unsupported_language" } });
+  const adapters = studioSpeechAdapters({ key: () => KEY });
+  for (const [kind, params] of [
+    ["studio-elevenlabs-tts", { text: "Salom", voice: DAVRONBEK, lang: "uz", stability: "0.5" }],
+    ["studio-elevenlabs-dialogue", { turns: JSON.stringify([{ text: "Salom!", voiceId: DAVRONBEK }, { text: "Xayr!", voiceId: JAVOHIR }]), lang: "uz" }],
+  ] as const) {
+    const { fetchImpl, seen } = stub((_s, n) => (n === 1 ? new Response(refused, { status: 400 }) : audio()));
+    const out = await adapters[kind]!.submit({ upstreamModel: "eleven_v4", params, idempotencyKey: "g:x" } as never, { fetchImpl });
+    assert.ok("done" in out && out.done.length === 1, kind);
+    assert.equal(seen.length, 2, `${kind}: MUTATSIYA: elevenLabsFetch qayta urinmasa 1 bo'ladi`);
+    assert.equal((seen[0]!.body as { language_code?: string }).language_code, "uz");
+    assert.ok(!("language_code" in (seen[1]!.body as object)), kind);
+    assert.equal((seen[1]!.body as { model_id: string }).model_id, "eleven_v4");
+  }
 });
 
 /* ───────────────────────── golden requests ───────────────────────── */
@@ -145,9 +226,9 @@ test("golden: ElevenLabs TTS body / URL", () => {
   const p = core.normalize(MEDIA_CATALOG.byId(EL_TTS)!.params, { text: "Salom", voice: RACHEL, speed: "1.2", stability: "0", lang: "ru" });
   const r = studioElevenRequest("tts", { params: { ...p, voice: RACHEL } });
   assert.equal(r.url, `https://api.elevenlabs.io/v1/text-to-speech/${RACHEL}?output_format=mp3_44100_128`);
-  assert.deepEqual(r.body, { text: "Salom", model_id: "eleven_v3", language_code: "ru", voice_settings: { stability: 0, speed: 1.2 } });
+  assert.deepEqual(r.body, { text: "Salom", model_id: "eleven_v4", language_code: "ru", voice_settings: { stability: 0, speed: 1.2 } });
   const d = studioElevenRequest("tts", { params: core.normalize(MEDIA_CATALOG.byId(EL_TTS)!.params, { text: "Salom" }) });
-  assert.deepEqual(d.body, { text: "Salom", model_id: "eleven_v3", language_code: "uz", voice_settings: { stability: 0.5 } }, "defaults: Uzbek, Natural");
+  assert.deepEqual(d.body, { text: "Salom", model_id: "eleven_v4", language_code: "uz", voice_settings: { stability: 0.5 } }, "defaults: Uzbek, Natural");
   assert.ok(!JSON.stringify(r).includes(KEY), "no key in the pure request");
 });
 
@@ -163,7 +244,7 @@ test("golden: ElevenLabs text-to-dialogue body", () => {
       { text: "Salom!", voice_id: RACHEL },
       { text: "Assalomu alaykum.", voice_id: ADAM },
     ],
-    model_id: "eleven_v3",
+    model_id: "eleven_v4",
     language_code: "uz",
     settings: { stability: 1 },
   });
@@ -178,7 +259,7 @@ test("golden: IVC multipart form; the podcast body is unchanged", async () => {
   assert.equal(f.type, "audio/wav");
   assert.deepEqual([...new Uint8Array(await f.arrayBuffer())], [1, 2, 3]);
   // The premium voice of the podcast keeps its own body (no stability, speed only when asked).
-  assert.deepEqual(el.elevenLabsBody("Salom", { lang: "uz" }), { text: "Salom", model_id: "eleven_v3", language_code: "uz" });
+  assert.deepEqual(el.elevenLabsBody("Salom", { lang: "uz" }), { text: "Salom", model_id: "eleven_v4", language_code: "uz" });
 });
 
 test("golden: Gemini single and two-speaker requests through the engine", async () => {
@@ -245,7 +326,7 @@ test("probe: every param of every speech model changes the request or the price 
 async function failOf(respond: (s: Seen) => Response, kind: "tts" | "clone" = "tts") {
   const { fetchImpl } = stub(respond);
   const input = {
-    upstreamModel: "eleven_v3",
+    upstreamModel: "eleven_v4",
     params: { text: "Salom", voice: RACHEL, name: "Men" },
     idempotencyKey: "g:speech:0",
     assets: { sample: [{ mime: "audio/wav", base64: "AAAA" }] },
@@ -411,7 +492,7 @@ test("review m4: the worker uses the trimmed voice value (a padded library id st
 /* ───────────────────────── P7c: provider cost telemetry ───────────────────────── */
 
 const usd6 = (n: number) => Number(n.toFixed(6));
-/** ElevenLabs eleven_v3 on the owner's Creator plan: 1 credit per character, $22 / 121 000 credits. */
+/** ElevenLabs (eleven_v4) on the owner's Creator plan: 1 credit per character (kept conservative), $22 / 121 000 credits. */
 const EL_USD_PER_CHAR = 22 / 121_000;
 const GM_MODEL = "gemini-2.5-flash-preview-tts";
 
@@ -454,7 +535,7 @@ test("cost: an ElevenLabs speech job records ONE `tts` entry = chars × the Crea
   const r = await speechCost({ ...BASE[EL_TTS], text }, okAudio);
   assert.equal(r.built.ok, true);
   assert.equal(r.calls, 1);
-  assert.deepEqual(r.cost.parts, [{ kind: "tts", provider: "elevenlabs", model: "eleven_v3", calls: 1, inputTokens: 0, outputTokens: 0, units: text.length, usd: usd6(text.length * EL_USD_PER_CHAR) }]);
+  assert.deepEqual(r.cost.parts, [{ kind: "tts", provider: "elevenlabs", model: "eleven_v4", calls: 1, inputTokens: 0, outputTokens: 0, units: text.length, usd: usd6(text.length * EL_USD_PER_CHAR) }]);
   assert.equal(r.cost.usd, usd6(text.length * EL_USD_PER_CHAR));
   assert.equal(r.cost.calls, 1);
   assert.ok(Math.abs(r.priced[0]!.usd - text.length * EL_USD_PER_CHAR) < 1e-9, "the number runMedia writes to media_jobs");
@@ -468,7 +549,7 @@ test("cost: a dialogue is ONE call priced on the whole normalized script (names 
   const r = await speechCost(values, okAudio);
   assert.equal(r.built.ok, true);
   assert.equal(r.calls, 1);
-  assert.deepEqual(r.cost.parts, [{ kind: "tts", provider: "elevenlabs", model: "eleven_v3", calls: 1, inputTokens: 0, outputTokens: 0, units: 11, usd: usd6(23 * EL_USD_PER_CHAR) }]);
+  assert.deepEqual(r.cost.parts, [{ kind: "tts", provider: "elevenlabs", model: "eleven_v4", calls: 1, inputTokens: 0, outputTokens: 0, units: 11, usd: usd6(23 * EL_USD_PER_CHAR) }]);
   assert.equal(r.cost.usd, usd6(23 * EL_USD_PER_CHAR));
 });
 
