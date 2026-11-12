@@ -323,8 +323,9 @@ async function sizeStage() {
     for (const o of [...observers]) if (o.el === el) o.cb();
   });
 }
-function tap(el: HTMLElement, id: number) {
-  const at = { clientX: 50, clientY: 40 };
+/** One finger tap at `x` (taps ≥ 24 px apart never form a double tap). */
+function tap(el: HTMLElement, id: number, x = 50) {
+  const at = { clientX: x, clientY: 40 };
   fireEvent.pointerDown(el, { pointerType: "touch", pointerId: id, isPrimary: true, ...at });
   fireEvent.pointerUp(el, { pointerType: "touch", pointerId: id, isPrimary: true, ...at });
   fireEvent.touchEnd(el, { cancelable: true });
@@ -355,7 +356,7 @@ test("phone: one tap opens a text in edit mode; one tap in view mode does nothin
   const s = stubServer();
   open(s);
   await sizeStage();
-  tap(titleEl(), 1);
+  tap(titleEl(), 1, 200);
   assert.ok(!boxOpen(), "view mode: a tap is just a tap");
   fireEvent.click(toggle()!);
   tap(titleEl(), 2);
