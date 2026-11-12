@@ -1,5 +1,6 @@
 import type { FormValues } from "../../types";
 import { tashkentYear } from "../tashkent-year";
+import { xmlSafeText } from "../xml";
 import {
   TITUL_APPROVER_ROLES,
   TITUL_CHECKER_LABELS,
@@ -56,8 +57,9 @@ export const TITUL_FIELD_IDS = [
 ] as const satisfies readonly (keyof TitulInput)[];
 export type TitulFieldId = (typeof TITUL_FIELD_IDS)[number];
 
+/** One line of user text: XML-forbidden characters out (`xmlSafeText`), whitespace collapsed, cut to `max`. */
 const line = (v: unknown, max: number): string =>
-  String(v ?? "")
+  xmlSafeText(String(v ?? ""))
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, max)
