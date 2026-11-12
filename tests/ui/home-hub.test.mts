@@ -44,15 +44,17 @@ import { card, json } from "./market-fixture.ts";
  *   N6  HubBanner: no `% count` (no wrap) → wrap red;
  *   N7  HubBanner: hover hold ignored → hover red; N7b any pointer type holds → «touch hover» red;
  *   N8  HubBanner: focus hold ignored → focus red; N8b focus after a tap holds → tap red;
- *   N9  HubBanner: touch hold ignored → touch red; N9c drag release not listened → drag red;
+ *   N9  HubBanner: touch hold ignored; N9b touchend ignored; N9c the window `pointerup` not listened → drag red;
  *   N10 HubBanner: visibility ignored → hidden red;
  *   N11 HubBanner: no `kick` on a dot → restart red;
- *   N12 HubBanner: timer not cleared on unmount / runs with one slide → timers red;
- *   N13 HubBanner: the mid-scroll check removed → mid-scroll red;
- *   N14 homeSlides: titul after chat → slide order red; N14b tests slide ignores its switch → red;
+ *   N12 HubBanner: timer not cleared → timers red; N12b runs with one slide; N12c runs while pending → red;
+ *   N13 HubBanner: the mid-scroll check removed → mid-scroll red; N13b live region always polite; N13c slides
+ *       labelled by title instead of «N / M» → red;
+ *   N14 homeSlides: the chat slide dropped → slide order red; N14b tests slide ignores its switch → red;
  *   N15 homeFreeItems: chat ignores its switch → free row red; N15b FreeRow without `onPick` → gate red;
- *   N16 HomeHub: free row under the files → section order red;
- *   N17 CreateGrid: «Bepul» branch removed → «0 so'm dan» red.
+ *       N15c no `sm:flex-wrap` → row red;
+ *   N16 HomeHub: no free row → section order red;
+ *   N17 CreateGrid: the «Bepul» branch never taken → «0 so'm dan» red; N18 FreeBadge says «Tekin» → badge red.
  *
  * Mutations (each turned this file red):
  *   M1  hub-model `nameWord`: drop the digit/@ filter → «greetingName» red;
