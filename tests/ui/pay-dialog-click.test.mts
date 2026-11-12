@@ -203,7 +203,7 @@ test("chooser: open(\"pay\") lists only the enabled methods in the wallet order;
   assert.equal(step(), "choose");
   assert.deepEqual(chooserIds(), ["app", "card", "phone", "paynet", "payme"]);
   assert.match(method("app")!.textContent ?? "", /^Click ilovasiClick ilovasida bir bosishda/);
-  assert.match(method("card")!.textContent ?? "", /^Bank kartasiUzcard \/ Humo, SMS kod bilan/);
+  assert.match(method("card")!.textContent ?? "", /^Bank kartasiUzcard, Humo va boshqa kartalar · SMS kod bilan/);
   assert.match(method("phone")!.textContent ?? "", /^Telefon raqamClick hisob-fakturasi telefoningizga keladi/);
   assert.match(method("paynet")!.textContent ?? "", /^PaynetPaynet ilovasi yoki terminali orqali/);
   assert.ok(method("app")!.querySelector("svg") && method("paynet")!.querySelector("svg"), "brand marks");
